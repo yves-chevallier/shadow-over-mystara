@@ -1,5 +1,5 @@
-//! Effets des joueurs (PEFF), neuvième série : types 30 (tempête), 31 (tourbillon) et 32 (cible de la
-//! foudre). Voir `docs/families/player.md`.
+//! Player effects (PEFF), ninth series: types 30 (storm), 31 (whirlwind) and 32 (lightning target). See
+//! `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -14,9 +14,9 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Type 30 (0x4e79c) : la tempête (magie 18, kind 0x1e). La variante 0 est le nuage (état `+5` : 0 gronde,
-/// 4 attend la fin, 8 secoue, 0xc se dissipe) qui crée seize éclairs (variante 1, rang `+2f`) puis
-/// quatre étincelles (variante 2) ; les éclairs rejoignent un point de la cible de façon aléatoire.
+/// Type 30 (0x4e79c): the storm (magic 18, kind 0x1e). Variant 0 is the cloud (state `+5`: 0 rumbles, 4 waits for the
+/// end, 8 shakes, 0xc dissipates) which creates sixteen bolts (variant 1, rank `+2f`) then four sparks (variant 2); the
+/// bolts reach a random point of the target.
 mod storm {
     use super::*;
 
@@ -101,7 +101,7 @@ mod storm {
         x.reinsert();
     }
 
-    // --- états actifs -------------------------------------------------------------------------------
+    // --- active states -------------------------------------------------------------------------------
 
     fn cloud<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
@@ -154,7 +154,7 @@ mod storm {
         x.set8(off, v);
     }
 
-    /// Sous-état 0xc : la tempête continue de trembler tant que le jeu est figé.
+    /// Substate 0xc: the storm keeps shaking as long as the game is frozen.
     fn shake_tail<R: Bench>(x: &mut Cx<'_, R>) {
         toggle(x, 0x9, 1);
         toggle(x, 0xd, 1);
@@ -170,7 +170,7 @@ mod storm {
         crate::sound::play(x.b, SFX_END, x.o);
     }
 
-    /// `0x4ec02` : seize éclairs.
+    /// `0x4ec02`: sixteen bolts.
     fn spawn_bolts<R: Bench>(x: &mut Cx<'_, R>) {
         for rank in (0..16u8).rev() {
             let Some(o) = x.alloc(&pools::PEFF) else { return };
@@ -185,7 +185,7 @@ mod storm {
         }
     }
 
-    /// `0x4ec36` : quatre étincelles.
+    /// `0x4ec36`: four sparks.
     fn spawn_sparks<R: Bench>(x: &mut Cx<'_, R>) {
         for rank in (0..4u8).rev() {
             let Some(o) = x.alloc(&pools::PEFF) else { return };
@@ -295,8 +295,8 @@ mod storm {
     }
 }
 
-/// Type 31 (0x4ec82) : tourbillon (magie 19, kind 0x1f) : variante 0 = l'œil qui aspire (`+5` : 0 grandit,
-/// puis il balaie la zone), variante 1 = un satellite (rang `+0x5a`, angle `+0x2d`) qui est tiré en spirale.
+/// Type 31 (0x4ec82): whirlwind (magic 19, kind 0x1f): variant 0 = the sucking eye (`+5`: 0 grows, then it sweeps the
+/// zone), variant 1 = a satellite (rank `+0x5a`, angle `+0x2d`) that is pulled in a spiral.
 mod whirl {
     use super::*;
 
@@ -395,7 +395,7 @@ mod whirl {
                 x.anim(ANIMS, 0x20);
                 return x.reinsert();
             }
-            // le tourbillon se forme : un satellite par image
+            // the whirlwind forms: one satellite per frame
             let k = x.u8(0x59) as u32;
             x.add8(0x59, 1);
             let n = x.u8(0x59) & 0x1f;
@@ -435,7 +435,7 @@ mod whirl {
         sweep(x);
     }
 
-    /// `0x4eefe` : attire (et blesse) tous les monstres (boss, puis ennemis) dans la zone devant le lanceur.
+    /// `0x4eefe`: attracts (and hurts) all the monsters (bosses, then enemies) in the zone in front of the caster.
     fn sweep<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
         for (first, count) in [(0x3a1eu32, 3u32), (0x299e, 22)] {
@@ -486,8 +486,8 @@ mod whirl {
     }
 }
 
-/// Type 32 (0x4f026) : cible de la foudre (kind 0x20) : un point lancé du lanceur qui retombe sur le sol et
-/// reste dans l'écran avant de disparaître après `+0x58` images.
+/// Type 32 (0x4f026): lightning target (kind 0x20): a point thrown from the caster that falls back to the ground and
+/// stays on screen before disappearing after `+0x58` frames.
 mod target {
     use super::*;
 

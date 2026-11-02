@@ -1,13 +1,13 @@
-//! Boss 6, groupe `+5` = 2 : le combat. Attente, demi-tour, marche vers un joueur, puis selon la distance une
-//! attaque (`decide`), une charge ou un tir en bond.
+//! Boss 6, group `+5` = 2: the combat. Wait, about-face, walk toward a player, then depending on the distance an
+//! attack (`decide`), a charge or a shot in a leap.
 //!
-//! | `+6` | Rôle |
+//! | `+6` | Role |
 //! |---|---|
-//! | 0 | debout, attend |
-//! | 2 | demi-tour |
-//! | 4, 6 | marche (rapide, lente) |
-//! | 8 | charge (vers la caméra, ou vers la position mémorisée de la cible si `+0xb2`) |
-//! | 10 | tir en bond : crée un ESHL 0x2a, saute et le lâche |
+//! | 0 | standing, waits |
+//! | 2 | about-face |
+//! | 4, 6 | walk (fast, slow) |
+//! | 8 | charge (toward the camera, or toward the target's saved position if `+0xb2`) |
+//! | 10 | shot in a leap: creates an ESHL 0x2a, jumps and releases it |
 
 use crate::families::cx::Bench;
 use super::decide;
@@ -16,7 +16,7 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Jeux d'animations de marche (0x103e0) : le premier si le boss ne regarde pas dans le sens où il avance.
+/// Walk animation sets (0x103e0): the first if the boss is not facing the direction it is moving in.
 const WALK_SIDEWAYS: u32 = 0x177992;
 const WALK_FORWARD: u32 = 0x177a36;
 
@@ -44,7 +44,7 @@ fn facing_forward<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::moving_forward(x)
 }
 
-/// Le boss est-il hors de la fenêtre `[caméra - 0x50, caméra + 0x1d0]` (0x104a2) ?
+/// Is the boss outside the window `[camera - 0x50, camera + 0x1d0]` (0x104a2)?
 fn off_screen<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::outside_band(x, -0x50, 0x1d0)
 }
@@ -261,7 +261,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x84930 : le boss est arrivé : il freine.
+/// 0x84930: the boss has arrived: it brakes.
 fn charge_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set16(TIMER, 0x14);
@@ -277,7 +277,7 @@ fn charge_end<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 5);
 }
 
-// --- +6 = 10 : tir en bond ------------------------------------------------------------------------
+// --- +6 = 10: shot in a leap ------------------------------------------------------------------------
 
 fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
@@ -353,7 +353,7 @@ fn step_only<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// 0x84ad0 : fin du tir : retour à la marche.
+/// 0x84ad0: end of the shot: return to the walk.
 fn resume<R: Bench>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return decide::wait(x);

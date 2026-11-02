@@ -1,14 +1,14 @@
-//! Réactions aux coups : joueur touché (`+5` = 4), joueur à terre (`+4` = 4), mort (P4).
+//! Reactions to hits: player hit (`+5` = 4), player on the ground (`+4` = 4), dead (P4).
 //!
-//! Quand un coup touche un joueur (`combat`), il passe dans l'état « touché » (`0x02040000`, voir
-//! `states`) ou, s'il n'a plus de points de vie, « à terre » (`0x0400xxxx`). L'octet `+6` choisit alors la
-//! *réaction* (recul, projection, chute...), chacune étant un petit automate dont `+7` est le pas.
-//! Réactions et pas sont des routines du code d'origine, atteintes par des tables de décalages ;
-//! beaucoup de pas sont partagés (projection en l'air, rebond, relevé, clignotement d'invulnérabilité).
+//! When a hit strikes a player (`combat`), they enter the "hit" state (`0x02040000`, see
+//! `states`) or, if they have no hit points left, "on the ground" (`0x0400xxxx`). Byte `+6` then selects the
+//! *reaction* (recoil, throw, fall...), each being a small automaton whose step is `+7`.
+//! Reactions and steps are routines of the original code, reached through offset tables;
+//! many steps are shared (airborne throw, bounce, getting up, invulnerability blinking).
 //!
-//! La table `HANDLERS` donne, pour une adresse d'origine, la version Rust ; toute adresse absente
-//! est exécutée telle quelle (`Ctx::rom`). Les tables d'origine restent donc la source de vérité de
-//! l'aiguillage et les réactions non réécrites continuent de fonctionner.
+//! The `HANDLERS` table gives, for an original address, the Rust version; any absent address
+//! is executed as it is (`Ctx::rom`). The original tables therefore remain the source of truth for
+//! the dispatch and the reactions not rewritten keep working.
 
 use crate::machine::Machine;
 use super::actions::to_stand;
@@ -21,19 +21,19 @@ use crate::objects::Obj;
 
 type Handler = fn(&mut Ctx, Player);
 
-/// Routines d'origine encore appelées telles quelles.
+/// Original routines still called as they are.
 mod rom {
     pub const BEFORE_HURT_A: u32 = 0xe2100;
-    /// Effets de la mort (son, points).
+    /// Death effects (sound, points).
     pub const DEATH_EFFECT: u32 = 0xe21a0;
-    /// Poussière et son à l'atterrissage.
+    /// Dust and sound on landing.
     pub const LANDING_EFFECT: u32 = 0xe7a12;
-    /// Sons de relevé.
+    /// Get-up sounds.
     pub const GET_UP_SOUND_A: u32 = 0xe22e8;
     pub const GET_UP_SOUND_B: u32 = 0xe2240;
 }
 
-/// Tables de pas (mots : décalages relatifs à la table, indexés par `+7`).
+/// Step tables (words: offsets relative to the table, indexed by `+7`).
 mod steps {
     pub const R6: u32 = 0x3a4d2;
     pub const R14: u32 = 0x3a858;
@@ -43,14 +43,14 @@ mod steps {
     pub const DOWN_A: u32 = 0x3b890;
 }
 
-/// Tables d'aiguillage par action (`+6`).
+/// Dispatch tables per action (`+6`).
 const HURT_ACTIONS: u32 = 0x3a0f4;
 const DOWN_ACTIONS: u32 = 0x3b820;
 
-/// Animations de réaction (jeux d'entrées longues par personnage, lus comme des données).
+/// Reaction animations (sets of long entries per character, read as data).
 const HURT_ANIMATIONS: u32 = 0x3bb52;
 
-/// Réactions et pas réécrits : adresse d'origine -> routine Rust.
+/// Rewritten reactions and steps: original address -> Rust routine.
 const HANDLERS: &[(u32, Handler)] = &[
     (0x3a136, reaction_0),
     (0x3a79e, reaction_10),
@@ -287,8 +287,8 @@ const HANDLERS: &[(u32, Handler)] = &[
     }),
 ];
 
-/// Pas 0 des réactions 0x26, 0x2e et 0x30 : touché de nouveau pendant la réaction (`+0x185`), la réaction
-/// `action` reprend à son début (vrai) ; sinon la marque est posée, et sans PV le joueur tombe (vrai).
+/// Step 0 of reactions 0x26, 0x2e and 0x30: hit again during the reaction (`+0x185`), reaction
+/// `action` restarts from its beginning (true); otherwise the mark is set, and with no HP the player falls (true).
 fn rehit(g: &mut Ctx, p: Player, action: u8, reaction: u32) -> bool {
     if p.u8(g, REHIT) != 0 {
         p.set_u8(g, REHIT, 0);
@@ -307,10 +307,10 @@ fn rehit(g: &mut Ctx, p: Player, action: u8, reaction: u32) -> bool {
     false
 }
 
-/// Marque « touché pendant la réaction » (effacée à la fin de la réaction, `recover`).
+/// "Hit during the reaction" mark (cleared at the end of the reaction, `recover`).
 const REHIT: u32 = 0x185;
 
-/// Vitesses d'une projection sans toucher au gel du coup (`+0x53`).
+/// Speeds of a throw without touching the hit freeze (`+0x53`).
 fn set_launch_keep(g: &mut Ctx, p: Player, vx: u16, vz: u16) {
     p.set_u16(g, Obj::VX, vx);
     p.set_u16(g, Obj::AX, 0);
@@ -318,8 +318,8 @@ fn set_launch_keep(g: &mut Ctx, p: Player, vx: u16, vz: u16) {
     p.set_u16(g, Obj::AZ, (-0x40i16) as u16);
 }
 
-/// 0x3a98e (réaction 0x14, aussi prise par les réactions 0 et 10 en marche lente) : recul en tremblant
-/// (`flinch`) ; sans PV, chute (0x3b8a6).
+/// 0x3a98e (reaction 0x14, also taken by reactions 0 and 10 in slow walk): trembling recoil
+/// (`flinch`); with no HP, fall (0x3b8a6).
 fn hurt_slow(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::STEP) != 0 {
         return flinch(g, p);
@@ -340,7 +340,7 @@ fn hurt_slow(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, 2);
 }
 
-/// 0x3b2c2 (réaction 0x2a) : courte secousse sur place, puis retour à la pose ; sans PV, chute (0x3b8c4).
+/// 0x3b2c2 (reaction 0x2a): short shake in place, then return to the pose; with no HP, fall (0x3b8c4).
 fn hurt_short(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::STEP) != 0 {
         if animation::step(g, p) {
@@ -362,8 +362,8 @@ fn hurt_short(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, 0);
 }
 
-/// Réactions qui aiguillent leurs pas par une table (`+7` -> décalage relatif à la table) : adresse de la
-/// réaction, adresse de sa table. Les pas partagés entre réactions sont ainsi atteints par `HANDLERS`.
+/// Reactions that dispatch their steps through a table (`+7` -> offset relative to the table): address of the
+/// reaction, address of its table. The steps shared between reactions are thus reached through `HANDLERS`.
 const STEP_TABLES: &[(u32, u32)] = &[
     (0x3a1f0, 0x3a1fc),
     (0x3a274, 0x3a280),
@@ -393,10 +393,10 @@ const STEP_TABLES: &[(u32, u32)] = &[
     (0x3b8c4, 0x3b8d0),
 ];
 
-/// Pas vide (un simple RTS), partagé par plusieurs réactions.
+/// Empty step (a simple RTS), shared by several reactions.
 const IDLE_STEP: u32 = 0x3a1a6;
 
-/// Exécute la routine d'origine à `addr`, réécrite si possible.
+/// Runs the original routine at `addr`, rewritten if possible.
 pub fn run_at(g: &mut Ctx, p: Player, addr: u32) {
     cov!();
     if let Some(&(_, f)) = HANDLERS.iter().find(|h| h.0 == addr) {
@@ -408,8 +408,8 @@ pub fn run_at(g: &mut Ctx, p: Player, addr: u32) {
     }
 }
 
-/// Saut par table de décalages : l'entrée `index` de la table `base` donne l'adresse de la suite. Comme
-/// l'original, D0 = `index` et D1 = décalage à l'entrée de la suite.
+/// Jump by offset table: entry `index` of table `base` gives the address of what follows. Like
+/// the original, D0 = `index` and D1 = offset at the entry of what follows.
 fn jump_table(g: &mut Ctx, p: Player, base: u32, index: u8) {
     cov!();
     let offset = g.prog16(base + index as u32);
@@ -418,16 +418,16 @@ fn jump_table(g: &mut Ctx, p: Player, base: u32, index: u8) {
     run_at(g, p, base.wrapping_add(offset as i16 as i32 as u32));
 }
 
-/// Réaction à pas : aiguille selon `+7`.
+/// Stepped reaction: dispatches according to `+7`.
 fn jump(g: &mut Ctx, p: Player, base: u32) {
     cov!();
     let step = p.u8(g, Player::STEP);
     jump_table(g, p, base, step);
 }
 
-// ---- outils communs -------------------------------------------------------------------------
+// ---- common tools -------------------------------------------------------------------------
 
-/// 0x3bb16 : démarre l'animation de réaction `n` du personnage.
+/// 0x3bb16: starts the character's reaction animation `n`.
 pub fn hurt_animation(g: &mut Ctx, p: Player, n: u16) {
     cov!();
     let character = p.u8(g, Player::CHARACTER) as u32;
@@ -436,8 +436,8 @@ pub fn hurt_animation(g: &mut Ctx, p: Player, n: u16) {
     load_entry(g.b, p.obj(), script, true);
 }
 
-/// 0x3b93c : le joueur se retourne face à l'agresseur (`+0x56` = orientation de l'agresseur,
-/// inversée) et sa vitesse horizontale s'inverse en conséquence.
+/// 0x3b93c: the player turns to face the aggressor (`+0x56` = aggressor's orientation,
+/// inverted) and their horizontal speed inverts accordingly.
 fn face_attacker(g: &mut Ctx, p: Player) {
     cov!();
     let facing = p.u8(g, 0x56) ^ 0x20;
@@ -448,13 +448,13 @@ fn face_attacker(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Le joueur n'a plus de points de vie ?
+/// Has the player no hit points left?
 fn is_dead(g: &mut Ctx, p: Player) -> bool {
     cov!();
     (p.u16(g, Player::HP) as i16) <= 0
 }
 
-/// 0x3b91c : s'il n'a plus de points de vie, le joueur passe à terre (état principal 4).
+/// 0x3b91c: if they have no hit points left, the player goes to the ground (main state 4).
 fn knock_down_if_dead(g: &mut Ctx, p: Player) {
     cov!();
     if is_dead(g, p) {
@@ -470,7 +470,7 @@ fn knock_down(g: &mut Ctx, p: Player) {
     g.sound(rom::DEATH_EFFECT, p);
 }
 
-/// 0x3a1e2 : fin de la réaction, retour à l'état immobile.
+/// 0x3a1e2: end of the reaction, return to the standing state.
 fn recover(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u8(g, Player::ACTIVE, 1);
@@ -478,7 +478,7 @@ fn recover(g: &mut Ctx, p: Player) {
     to_stand(g, p);
 }
 
-/// Pose les vitesses d'une projection (vx, vz, accélérations), mémorise le gel du coup (`+0x57`).
+/// Sets the speeds of a throw (vx, vz, accelerations), stores the hit freeze (`+0x57`).
 fn set_launch(g: &mut Ctx, p: Player, vx: u16, vz: u16) {
     cov!();
     p.set_u16(g, Obj::VX, vx);
@@ -495,10 +495,10 @@ fn next_step(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::STEP, step);
 }
 
-// ---- réactions simples ------------------------------------------------------------------------
+// ---- simple reactions ------------------------------------------------------------------------
 
-/// 0x3a17e : glissement de recul. Tant que `+0x6f` dure, le joueur tremble de 2 pixels ; ensuite
-/// l'animation se déroule et la vitesse horizontale le fait glisser.
+/// 0x3a17e: recoil slide. As long as `+0x6f` lasts, the player trembles by 2 pixels; then
+/// the animation plays and the horizontal speed makes them slide.
 fn flinch(g: &mut Ctx, p: Player) {
     cov!();
     let left = p.u8(g, Player::TIMER_6F);
@@ -523,7 +523,7 @@ fn flinch(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Début commun de la réaction 0 et 10 : recul avec l'animation `anim`.
+/// Common start of reactions 0 and 10: recoil with animation `anim`.
 fn start_flinch(g: &mut Ctx, p: Player, anim: u16) {
     cov!();
     next_step(g, p);
@@ -536,7 +536,7 @@ fn start_flinch(g: &mut Ctx, p: Player, anim: u16) {
     hurt_animation(g, p, anim);
 }
 
-/// 0x3a136 : recul simple.
+/// 0x3a136: simple recoil.
 fn reaction_0(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) != 0 {
@@ -547,14 +547,14 @@ fn reaction_0(g: &mut Ctx, p: Player) {
         return hurt_slow(g, p);
     }
     if is_dead(g, p) {
-        // 0x3b8f6 : à terre tout de suite, et le gestionnaire « à terre » s'exécute dans la foulée
+        // 0x3b8f6: on the ground right away, and the "on the ground" handler runs immediately after
         knock_down(g, p);
         return downed(g, p);
     }
     start_flinch(g, p, 0);
 }
 
-/// 0x3a79e : recul avec animation 1.
+/// 0x3a79e: recoil with animation 1.
 fn reaction_10(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) != 0 {
@@ -572,9 +572,9 @@ fn reaction_10(g: &mut Ctx, p: Player) {
     start_flinch(g, p, 1);
 }
 
-// ---- projections en l'air (pas partagés) --------------------------------------------------------
+// ---- airborne throws (shared steps) --------------------------------------------------------
 
-/// Pas 0 des projections : animation, puis vitesse (vx 0x200, vz 0x480).
+/// Step 0 of the throws: animation, then speed (vx 0x200, vz 0x480).
 fn launch_with_anim(g: &mut Ctx, p: Player, anim: u16) {
     cov!();
     hurt_animation(g, p, anim);
@@ -584,14 +584,14 @@ fn launch_with_anim(g: &mut Ctx, p: Player, anim: u16) {
     knock_down_if_dead(g, p);
 }
 
-/// 0x3a2ae : projection (vx 0x180, vz 0x400), animation 0xa.
+/// 0x3a2ae: throw (vx 0x180, vz 0x400), animation 0xa.
 fn launch_a(g: &mut Ctx, p: Player) {
     cov!();
     hurt_animation(g, p, 0xa);
     launch_common(g, p);
 }
 
-/// 0x3a2b4 : projection (vx 0x180, vz 0x400).
+/// 0x3a2b4: throw (vx 0x180, vz 0x400).
 fn launch_common(g: &mut Ctx, p: Player) {
     cov!();
     next_step(g, p);
@@ -600,7 +600,7 @@ fn launch_common(g: &mut Ctx, p: Player) {
     knock_down_if_dead(g, p);
 }
 
-/// 0x3aaac : projection (vx 0x200, vz 0x200), animation 0x16 ou 0x17 une image sur deux.
+/// 0x3aaac: throw (vx 0x200, vz 0x200), animation 0x16 or 0x17 every other frame.
 fn launch_b(g: &mut Ctx, p: Player) {
     cov!();
     next_step(g, p);
@@ -611,7 +611,7 @@ fn launch_b(g: &mut Ctx, p: Player) {
     knock_down_if_dead(g, p);
 }
 
-/// 0x3ad4c : projection comme `launch_common`, puis vitesse en profondeur (`VY` 0x80), animation 0x12.
+/// 0x3ad4c: throw like `launch_common`, then depth speed (`VY` 0x80), animation 0x12.
 fn launch_c(g: &mut Ctx, p: Player) {
     cov!();
     launch_common(g, p);
@@ -621,7 +621,7 @@ fn launch_c(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, 0x12);
 }
 
-/// Contact avec un obstacle (`+0x29`) : la vitesse horizontale s'annule.
+/// Contact with an obstacle (`+0x29`): the horizontal speed is cancelled.
 fn stop_at_wall(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::BLOCKED) != 0 {
@@ -629,13 +629,13 @@ fn stop_at_wall(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Altitude (mot haut de `Z`, signée).
+/// Altitude (high word of `Z`, signed).
 fn altitude(g: &mut Ctx, p: Player) -> i16 {
     cov!();
     p.u16(g, Obj::Z) as i16
 }
 
-/// 0x3a2e6 : attend la fin de l'animation, puis enchaîne l'animation `anim`.
+/// 0x3a2e6: waits for the end of the animation, then chains animation `anim`.
 fn next_animation(g: &mut Ctx, p: Player, anim: u16) {
     cov!();
     if animation::step(g, p) {
@@ -644,7 +644,7 @@ fn next_animation(g: &mut Ctx, p: Player, anim: u16) {
     }
 }
 
-/// 0x3a300 : en l'air, jusqu'au sommet (vitesse verticale devenue négative).
+/// 0x3a300: airborne, up to the peak (vertical speed turned negative).
 fn fall_to_apex(g: &mut Ctx, p: Player, anim: u16) {
     cov!();
     animation::step(g, p);
@@ -657,7 +657,7 @@ fn fall_to_apex(g: &mut Ctx, p: Player, anim: u16) {
     hurt_animation(g, p, anim);
 }
 
-/// 0x3a330 : retombe jusqu'au sol.
+/// 0x3a330: falls back to the ground.
 fn land(g: &mut Ctx, p: Player, anim: u16) {
     cov!();
     animation::step(g, p);
@@ -672,7 +672,7 @@ fn land(g: &mut Ctx, p: Player, anim: u16) {
     g.sound(rom::LANDING_EFFECT, p);
 }
 
-/// 0x3a522 : fin de la chute, petit rebond (vz 0x240).
+/// 0x3a522: end of the fall, small bounce (vz 0x240).
 fn bounce_up(g: &mut Ctx, p: Player) {
     cov!();
     if animation::step(g, p) {
@@ -683,7 +683,7 @@ fn bounce_up(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x3a362 : rebond plus haut (vz 0x1c0).
+/// 0x3a362: higher bounce (vz 0x1c0).
 fn bounce_up_small(g: &mut Ctx, p: Player) {
     cov!();
     if animation::step(g, p) {
@@ -694,7 +694,7 @@ fn bounce_up_small(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x3a384 : retombe du rebond.
+/// 0x3a384: falls back from the bounce.
 fn land_with_effect(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -708,13 +708,13 @@ fn land_with_effect(g: &mut Ctx, p: Player) {
     g.sound(rom::LANDING_EFFECT, p);
 }
 
-/// 0x3a544 : début du glissement au sol (vx 0x300 dans le sens du recul).
+/// 0x3a544: start of the slide on the ground (vx 0x300 in the recoil direction).
 fn slide_start(g: &mut Ctx, p: Player) {
     cov!();
     start_slide(g, p, 0x300);
 }
 
-/// 0x3a3ae : idem avec vx 0x280.
+/// 0x3a3ae: same with vx 0x280.
 fn slide_start_short(g: &mut Ctx, p: Player) {
     cov!();
     start_slide(g, p, 0x280);
@@ -730,14 +730,14 @@ fn start_slide(g: &mut Ctx, p: Player, vx: u16) {
     p.set_u16(g, Obj::VX, vx);
     p.set_u16(g, Obj::AX, (-0x40i16) as u16);
     if p.faces_left(g) {
-        // `neg.l` sur le couple (vitesse, accélération) : les deux mots sont négués ensemble
+        // `neg.l` on the (speed, acceleration) pair: both words are negated together
         let both = p.u32(g, Obj::VX).wrapping_neg();
         p.set_u32(g, Obj::VX, both);
     }
     hurt_animation(g, p, 0xf);
 }
 
-/// 0x3a3e2 : glissement ; poussière une image sur deux ; s'arrête quand la vitesse tombe à zéro.
+/// 0x3a3e2: slide; dust every other frame; stops when the speed drops to zero.
 fn slide(g: &mut Ctx, p: Player) {
     cov!();
     move_x(g, p);
@@ -754,9 +754,9 @@ fn slide(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x3b960 : chute scénarisée (cinématique 0x2447e) : le joueur est projeté sans perdre de vie (PV gardés en
-/// `+0x64`, ramenés à 1), monte, retombe, rebondit, atterrit puis glisse ; à l'arrêt, action suivante (`+6`).
-/// Les variantes impaires du personnage (`+2`) prennent les animations de la seconde série (+4).
+/// 0x3b960: scripted fall (cinematic 0x2447e): the player is thrown without losing life (HP kept in
+/// `+0x64`, brought back to 1), rises, falls back, bounces, lands then slides; at rest, next action (`+6`).
+/// The odd variants of the character (`+2`) take the animations of the second series (+4).
 pub fn fall(g: &mut Ctx, p: Player) {
     cov!();
     let second = p.u8(g, Player::INDEX) & 1 != 0;
@@ -830,7 +830,7 @@ pub fn fall(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x3b9ec : en l'air (déplacement sur les trois axes), jusqu'au sommet.
+/// 0x3b9ec: airborne (movement on the three axes), up to the peak.
 fn fall_to_apex_xyz(g: &mut Ctx, p: Player, anim: u16) {
     cov!();
     animation::step(g, p);
@@ -842,7 +842,7 @@ fn fall_to_apex_xyz(g: &mut Ctx, p: Player, anim: u16) {
     }
 }
 
-/// Contre un mur (`+0x29`), plus de vitesse en x ni en profondeur.
+/// Against a wall (`+0x29`), no more speed in x or in depth.
 fn stop_xy_at_wall(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::BLOCKED) != 0 {
         p.set_u32(g, Obj::VX, 0);
@@ -850,11 +850,11 @@ fn stop_xy_at_wall(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x3a424 : attend `+0x6f` images à terre puis se relève (animation 0x10 et son).
+/// 0x3a424: waits `+0x6f` frames on the ground then gets up (animation 0x10 and sound).
 fn get_up(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::MAIN) == 4 {
-        // mort : le joueur reste à terre un moment, puis le clignotement de résurrection commence
+        // death: the player stays on the ground for a while, then the resurrection blinking begins
         let step = p.u8(g, Player::STEP).wrapping_add(4);
         p.set_u8(g, Player::STEP, step);
         p.set_u8(g, Player::TIMER_6F, 0x3c);
@@ -871,7 +871,7 @@ fn get_up(g: &mut Ctx, p: Player) {
     g.sound(sound, p);
 }
 
-/// 0x3a466 : fin de l'animation de relevé : retour à l'état immobile.
+/// 0x3a466: end of the get-up animation: return to the standing state.
 fn finish_get_up(g: &mut Ctx, p: Player) {
     cov!();
     if animation::step(g, p) {
@@ -879,8 +879,8 @@ fn finish_get_up(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x3a472 : clignotement d'invulnérabilité pendant `+0x6f` images (le joueur est masqué une
-/// image sur quatre dans les 40 dernières) ; à la fin, les effets de statut sont effacés.
+/// 0x3a472: invulnerability blinking for `+0x6f` frames (the player is hidden one
+/// frame out of four in the last 40); at the end, the status effects are cleared.
 fn invulnerable_blink(g: &mut Ctx, p: Player) {
     cov!();
     let flags = p.u8(g, Player::FLAGS) & !2;
@@ -905,7 +905,7 @@ fn invulnerable_blink(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::FLAGS, flags);
 }
 
-/// 0x3ad66 : projection avec glissement en profondeur.
+/// 0x3ad66: throw with slide in depth.
 fn fall_c(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -919,7 +919,7 @@ fn fall_c(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, 0xd);
 }
 
-/// 0x3aae8 : projection (réaction 26) : retombe.
+/// 0x3aae8: throw (reaction 26): falls back.
 fn fall_b(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -933,10 +933,10 @@ fn fall_b(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, 9);
 }
 
-// ---- réaction 0x34 (0x3b4c4) : chute violente ------------------------------------------------------
+// ---- reaction 0x34 (0x3b4c4): violent fall ------------------------------------------------------
 
-/// 0x3b504 : à l'atterrissage, l'écran tremble (0x2824, D0 = 10) et le joueur perd `+0x6f` PV (hors
-/// cinématique) ; à zéro il meurt.
+/// 0x3b504: on landing, the screen shakes (0x2824, D0 = 10) and the player loses `+0x6f` HP (outside
+/// cinematics); at zero they die.
 fn crash_landing(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -964,10 +964,10 @@ fn crash_landing(g: &mut Ctx, p: Player) {
     g.sound(rom::LANDING_EFFECT, p);
 }
 
-// ---- réaction 0x3e (0x3a62a) : projeté au loin -------------------------------------------------------
+// ---- reaction 0x3e (0x3a62a): thrown far away -------------------------------------------------------
 
-/// Le joueur, projeté, a quitté la zone de l'écran (plus de 320 pixels après le bord gauche + 32) ou
-/// heurté un obstacle.
+/// The thrown player has left the screen area (more than 320 pixels after the left edge + 32) or
+/// hit an obstacle.
 fn hurled_out(g: &mut Ctx, p: Player) -> bool {
     cov!();
     if p.u8(g, Player::BLOCKED) != 0 {
@@ -978,7 +978,7 @@ fn hurled_out(g: &mut Ctx, p: Player) -> bool {
     gap > 320
 }
 
-/// 0x3a656, 0x3ab7c : projection au ras du sol (vx 0x800, vitesse verticale `vz`, 18 images), animation `anim`.
+/// 0x3a656, 0x3ab7c: throw along the ground (vx 0x800, vertical speed `vz`, 18 frames), animation `anim`.
 fn hurl(g: &mut Ctx, p: Player, vz: u16, anim: u16) {
     cov!();
     next_step(g, p);
@@ -994,8 +994,8 @@ fn hurl(g: &mut Ctx, p: Player, vz: u16, anim: u16) {
     knock_down_if_dead(g, p);
 }
 
-/// 0x3a68a, 0x3abb0 : vol bas (18 images), puis freinage (animation `brake`) ; un obstacle ou le bord de
-/// l'écran arrêtent net le vol (chute au pas `out`, animation 25).
+/// 0x3a68a, 0x3abb0: low flight (18 frames), then braking (animation `brake`); an obstacle or the edge of
+/// the screen stops the flight dead (fall at step `out`, animation 25).
 fn hurled(g: &mut Ctx, p: Player, brake: u16, out: u8) {
     cov!();
     animation::step(g, p);
@@ -1019,8 +1019,8 @@ fn hurled(g: &mut Ctx, p: Player, brake: u16, out: u8) {
     hurt_animation(g, p, 25);
 }
 
-/// 0x3a706, 0x3ac2c : retombe ; au sol, animation `anim` (et poussière si `effect`) ; un obstacle ou le bord
-/// arrêtent le glissement.
+/// 0x3a706, 0x3ac2c: falls back; on the ground, animation `anim` (and dust if `effect`); an obstacle or the edge
+/// stops the slide.
 fn hurled_landing(g: &mut Ctx, p: Player, anim: u16, effect: bool) {
     cov!();
     animation::step(g, p);
@@ -1039,7 +1039,7 @@ fn hurled_landing(g: &mut Ctx, p: Player, anim: u16, effect: bool) {
     }
 }
 
-/// 0x3a75a, 0x3acba : glissade au sol (poussière une image sur deux) ; à l'arrêt, pas `stop`.
+/// 0x3a75a, 0x3acba: slide on the ground (dust every other frame); at rest, step `stop`.
 fn hurled_slide(g: &mut Ctx, p: Player, stop: u8) {
     cov!();
     move_x(g, p);
@@ -1056,17 +1056,17 @@ fn hurled_slide(g: &mut Ctx, p: Player, stop: u8) {
     }
 }
 
-// ---- réaction 0x22 (0x3ad96) : pris (h) — projeté, puis il se débat --------------------------------
+// ---- reaction 0x22 (0x3ad96): grabbed (h) — thrown, then struggles --------------------------------
 
-/// Changement des directions maintenues depuis l'image précédente (le joueur « se débat »).
+/// Change of the held directions since the previous frame (the player "struggles").
 fn struggling(g: &mut Ctx, p: Player) -> bool {
     p.u8(g, Player::KEYS_HELD) & 15 != p.u8(g, Player::KEYS_PREV) & 15
 }
 
-/// Durée de la prise, décomptée par les secousses.
+/// Duration of the hold, counted down by the jolts.
 const HOLD: u32 = 0x1f0;
 
-/// 0x3adbe : petite projection, palette 1/19, 30 images ; s'il n'a plus de PV, à terre.
+/// 0x3adbe: small throw, palette 1/19, 30 frames; if no HP left, on the ground.
 fn shock_start(g: &mut Ctx, p: Player) {
     cov!();
     if is_dead(g, p) {
@@ -1088,7 +1088,7 @@ fn shock_start(g: &mut Ctx, p: Player) {
     g.sound(0xebbda, p);
 }
 
-/// 0x3ae0e : retombe (sans animation).
+/// 0x3ae0e: falls back (without animation).
 fn shock_fall(g: &mut Ctx, p: Player) {
     cov!();
     move_xz(g, p);
@@ -1100,8 +1100,8 @@ fn shock_fall(g: &mut Ctx, p: Player) {
     next_step(g, p);
 }
 
-/// 0x3ae32 : chaque secousse avance l'animation et use la prise ; prise usée : libéré. Au bout de
-/// `+0x6f` images, la suite (`shock_release`).
+/// 0x3ae32: each jolt advances the animation and wears down the hold; hold worn out: released. After
+/// `+0x6f` frames, what follows (`shock_release`).
 fn shock_struggle(g: &mut Ctx, p: Player) {
     cov!();
     if struggling(g, p) {
@@ -1125,7 +1125,7 @@ fn shock_struggle(g: &mut Ctx, p: Player) {
     crate::families::effects_creators::for_players::debris_68k(g.c, g.b, p.obj(), 1);
 }
 
-/// 0x3ae7a : palette rétablie, projection.
+/// 0x3ae7a: palette restored, throw.
 fn shock_release(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u16(g, Player::PALETTE_GROUP, 0);
@@ -1133,9 +1133,9 @@ fn shock_release(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::HITSTOP, 1);
 }
 
-// ---- réaction 0x24 (0x3ae8a) : étourdi -----------------------------------------------------------
+// ---- reaction 0x24 (0x3ae8a): stunned -----------------------------------------------------------
 
-/// 0x3aeaa : étoiles, 40 images d'étourdissement.
+/// 0x3aeaa: stars, 40 frames of stun.
 fn dizzy_start(g: &mut Ctx, p: Player) {
     cov!();
     g.c.d[0] = 0;
@@ -1147,8 +1147,8 @@ fn dizzy_start(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, 0);
 }
 
-/// 0x3aeca : le joueur vacille d'un pixel à gauche et à droite (parfois de nouvelles étoiles), puis tombe
-/// en arrière (animation 22 ou 23 une image sur deux).
+/// 0x3aeca: the player staggers one pixel left and right (sometimes new stars), then falls
+/// backward (animation 22 or 23 every other frame).
 fn dizzy(g: &mut Ctx, p: Player) {
     cov!();
     let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
@@ -1178,7 +1178,7 @@ fn dizzy(g: &mut Ctx, p: Player) {
     p.set_u16(g, Obj::VZ, 0x400);
     p.set_u16(g, Obj::AZ, (-64i16) as u16);
     if p.faces_left(g) {
-        // 0x3b952 : `neg.l` du couple (vitesse, accélération)
+        // 0x3b952: `neg.l` of the (speed, acceleration) pair
         let pair = p.u32(g, Obj::VX).wrapping_neg();
         p.set_u32(g, Obj::VX, pair);
     }
@@ -1188,10 +1188,10 @@ fn dizzy(g: &mut Ctx, p: Player) {
     knock_down_if_dead(g, p);
 }
 
-// ---- réaction 0x38 (0x3b66e) : renversé, étoiles, puis relevé ---------------------------------------
+// ---- reaction 0x38 (0x3b66e): knocked over, stars, then gets up ---------------------------------------
 
-/// 0x3b684 : sans PV, à terre tout de suite (0x3b8f6). Sinon 240 images d'étoiles (`+0x6f`) ; en l'air, le
-/// joueur retombe (animation 3), au sol il se couche aussitôt.
+/// 0x3b684: with no HP, on the ground right away (0x3b8f6). Otherwise 240 frames of stars (`+0x6f`); airborne, the
+/// player falls back (animation 3), on the ground they lie down at once.
 fn fallen_start(g: &mut Ctx, p: Player) {
     cov!();
     if is_dead(g, p) {
@@ -1209,7 +1209,7 @@ fn fallen_start(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, 3);
 }
 
-/// 0x3b6b2 : couché (animation 0x23) ; ralenti (`+0x66`), il passe directement aux étoiles (0x3b6c4).
+/// 0x3b6b2: lying down (animation 0x23); slowed (`+0x66`), they go straight to the stars (0x3b6c4).
 fn fallen_lie_down(g: &mut Ctx, p: Player) {
     cov!();
     next_step(g, p);
@@ -1219,7 +1219,7 @@ fn fallen_lie_down(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, 0x23);
 }
 
-/// 0x3b6c4 : étoiles au-dessus du joueur couché (animation 0x1c).
+/// 0x3b6c4: stars above the lying player (animation 0x1c).
 fn fallen_stars_start(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u8(g, Player::ACTIVE, 1);
@@ -1228,7 +1228,7 @@ fn fallen_stars_start(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, 0x1c);
 }
 
-/// 0x3b6da : la chute jusqu'au sol.
+/// 0x3b6da: the fall down to the ground.
 fn fallen_drop(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -1240,7 +1240,7 @@ fn fallen_drop(g: &mut Ctx, p: Player) {
     fallen_lie_down(g, p);
 }
 
-/// 0x3b6f4 : attend la fin de l'animation du joueur couché.
+/// 0x3b6f4: waits for the end of the lying player's animation.
 fn fallen_lie(g: &mut Ctx, p: Player) {
     cov!();
     if animation::step(g, p) {
@@ -1248,8 +1248,8 @@ fn fallen_lie(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x3b700 : nouvelles étoiles toutes les 16 images (0xb378a, D0 = 3 ; D1, le réglage, est le décalage laissé
-/// par l'aiguillage) ; à la fin du compte, le joueur se relève (animation 0x21).
+/// 0x3b700: new stars every 16 frames (0xb378a, D0 = 3; D1, the setting, is the offset left
+/// by the dispatch); at the end of the count, the player gets up (animation 0x21).
 fn fallen_stars(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -1269,7 +1269,7 @@ fn fallen_stars(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, 0x21);
 }
 
-// ---- réaction 0x28 (0x3b1e4) : assis par terre, il se débat pour se relever ------------------------------
+// ---- reaction 0x28 (0x3b1e4): sitting on the ground, struggles to get up ------------------------------
 
 /// 0x3b1fa.
 fn sit_start(g: &mut Ctx, p: Player) {
@@ -1291,7 +1291,7 @@ fn sit_start(g: &mut Ctx, p: Player) {
     sit(g, p);
 }
 
-/// 0x3b23c : assis (animation 35), ou en marche lente directement relevé (0x3b24e).
+/// 0x3b23c: sitting (animation 35), or in slow walk directly up (0x3b24e).
 fn sit(g: &mut Ctx, p: Player) {
     cov!();
     next_step(g, p);
@@ -1301,7 +1301,7 @@ fn sit(g: &mut Ctx, p: Player) {
     sit_down(g, p);
 }
 
-/// 0x3b24e : la lutte commence (animation 34), plus d'invulnérabilité.
+/// 0x3b24e: the struggle begins (animation 34), no more invulnerability.
 fn sit_down(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u8(g, Player::ACTIVE, 1);
@@ -1310,7 +1310,7 @@ fn sit_down(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, 34);
 }
 
-/// 0x3b264 : retombe, puis s'assied.
+/// 0x3b264: falls back, then sits down.
 fn sit_fall(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -1322,8 +1322,8 @@ fn sit_fall(g: &mut Ctx, p: Player) {
     sit(g, p);
 }
 
-/// 0x3b28a : chaque secousse use deux images de `+0x6f` (une sinon) ; au bout, il se relève (animation 32,
-/// 48 images d'invulnérabilité).
+/// 0x3b28a: each jolt uses two frames of `+0x6f` (one otherwise); at the end, they get up (animation 32,
+/// 48 frames of invulnerability).
 fn sit_struggle(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -1335,7 +1335,7 @@ fn sit_struggle(g: &mut Ctx, p: Player) {
     hurt_animation(g, p, 32);
 }
 
-/// `+0x6f` baisse d'une image, de deux si le joueur se débat ; vrai quand il est épuisé.
+/// `+0x6f` drops by one frame, by two if the player struggles; true when exhausted.
 fn struggle_out(g: &mut Ctx, p: Player) -> bool {
     cov!();
     let mut left = p.u8(g, Player::TIMER_6F);
@@ -1347,25 +1347,26 @@ fn struggle_out(g: &mut Ctx, p: Player) -> bool {
     (left as i8) <= 0
 }
 
-// ---- réaction à pas 0x3b30e (0x3b326..0x3b44a) -------------------------------------------------------
+// ---- stepped reaction 0x3b30e (0x3b326..0x3b44a) -------------------------------------------------------
 
-/// Sounds of the reaction: 0xe21a0 (death), 0xe7b3c (hit); 0xb6ba8 (`effects_creators::for_players::type_57_68k`) creates the step-end effect.
+/// Sounds of the reaction: 0xe21a0 (death), 0xe7b3c (hit); 0xb6ba8 (`effects_creators::for_players::type_57_68k`)
+/// creates the step-end effect.
 const FROZEN_DEATH_SOUND: u32 = 0xe21a0;
 const FROZEN_SOUND: u32 = 0xe7b3c;
-/// Octets de comparaison des pas d'attente (`+0x6c`, `+0x6d`) et compteur d'animation (`+0x1f0`).
+/// Comparison bytes of the wait steps (`+0x6c`, `+0x6d`) and animation counter (`+0x1f0`).
 const WAIT_LEFT: u32 = 0x6c;
 const WAIT_RIGHT: u32 = 0x6d;
 const WAIT_ANIMATIONS: u32 = 0x1f0;
 
-/// Vitesses nulles (X et Z) et accélération verticale de -0x80 : fin commune de l'entrée.
+/// Zero speeds (X and Z) and vertical acceleration of -0x80: common end of the entry.
 fn frozen_drift(g: &mut Ctx, p: Player) {
     p.set_u16(g, Obj::VZ, 0);
     p.set_u16(g, Obj::AZ, (-0x80i16) as u16);
     p.set_u32(g, Obj::VX, 0);
 }
 
-/// 0x3b326 : pas 0. Avec des points de vie, entrée normale (animation 19, 60 images) ; sinon mort sur place
-/// (animation 21) avec un son.
+/// 0x3b326: step 0. With hit points, normal entry (animation 19, 60 frames); otherwise death on the spot
+/// (animation 21) with a sound.
 fn frozen_start(g: &mut Ctx, p: Player) {
     cov!();
     if (p.u16(g, Player::HP) as i16) > 0 {
@@ -1396,7 +1397,8 @@ fn frozen_start(g: &mut Ctx, p: Player) {
     frozen_drift(g, p);
 }
 
-/// 0x3b3aa : pas 2, chute ; au sol, pas 10 si le joueur est à terre (état principal 4), sinon pas suivant et effet.
+/// 0x3b3aa: step 2, fall; on the ground, step 10 if the player is on the ground (main state 4), otherwise next step
+/// and effect.
 fn frozen_fall(g: &mut Ctx, p: Player) {
     cov!();
     move_xz(g, p);
@@ -1409,16 +1411,16 @@ fn frozen_fall(g: &mut Ctx, p: Player) {
         return;
     }
     next_step(g, p);
-    // le créateur prend la variante dans D0.b : celui que laisse le mouvement 0x1da6 (`swap` puis `asr.l #8` de
-    // la vitesse verticale), dont l'octet bas est nul
+    // the creator takes the variant from D0.b: the one left by the movement 0x1da6 (`swap` then `asr.l #8` of
+    // the vertical speed), whose low byte is zero
     g.c.d[0] = ((p.u16(g, Obj::VZ) as i16 as i32) << 8) as u32;
     let (variant, setting) = (g.c.d[0] as u8, g.c.d[1] as u8);
     crate::families::effects_creators::for_players::type_57_68k(g.c, g.b, p.obj(), variant, setting);
 }
 
-/// 0x3b3d8 / 0x3b3de : pas 4 / 6, attente. Tant que les deux octets de comparaison diffèrent, l'animation
-/// avance et décompte `+0x1f0` (à zéro : fin de la réaction) ; puis 60 images de pause avant l'animation
-/// `next` du pas suivant.
+/// 0x3b3d8 / 0x3b3de: step 4 / 6, wait. As long as the two comparison bytes differ, the animation
+/// advances and counts down `+0x1f0` (at zero: end of the reaction); then 60 frames of pause before the animation
+/// `next` of the following step.
 fn frozen_wait(g: &mut Ctx, p: Player, next: u16) {
     cov!();
     if p.u8(g, WAIT_LEFT) & 15 != p.u8(g, WAIT_RIGHT) & 15 {
@@ -1438,8 +1440,8 @@ fn frozen_wait(g: &mut Ctx, p: Player, next: u16) {
     }
 }
 
-/// 0x3b420 : pas 8. Jeu à l'arrêt (`A5+0x42`) : fin de la réaction ; sinon un compteur (`A5+0x35`) baisse et
-/// le joueur passe à l'état principal 4.
+/// 0x3b420: step 8. Game stopped (`A5+0x42`): end of the reaction; otherwise a counter (`A5+0x35`) drops and
+/// the player goes to main state 4.
 fn frozen_end(g: &mut Ctx, p: Player) {
     cov!();
     if ram::FROZEN.get(g.b) != 0 {
@@ -1454,16 +1456,16 @@ fn frozen_end(g: &mut Ctx, p: Player) {
     p.set_u16(g, Player::HP, 0);
 }
 
-// ---- réaction 0x32 (0x3b44c) : tenu par un ennemi ----------------------------------------------------
+// ---- reaction 0x32 (0x3b44c): held by an enemy ----------------------------------------------------
 
-/// Ennemi qui tient le joueur (pointeur de 16 bits) et drapeau « tenu ».
+/// Enemy holding the player (16-bit pointer) and "held" flag.
 const HOLDER: u32 = 0x186;
 const HELD: u32 = 0x188;
-/// État de l'ennemi qui tient sa prise.
+/// State of the enemy holding its grip.
 const HOLDING: u16 = 0x020c;
 
-/// 0x3b44c : le joueur, tenu, se débat : 20 nouvelles directions le libèrent ; il est aussi libéré si
-/// l'ennemi lâche prise (son état n'est plus 0x020c).
+/// 0x3b44c: the held player struggles: 20 new directions free them; they are also freed if
+/// the enemy lets go (its state is no longer 0x020c).
 fn held(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
@@ -1486,7 +1488,7 @@ fn held(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Libéré : réaction 0x34 (relâché).
+/// Freed: reaction 0x34 (released).
 fn break_free(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u8(g, HELD, 0);
@@ -1495,9 +1497,9 @@ fn break_free(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::TIMER_6F, 0);
 }
 
-// ---- gestionnaires par sous-état ---------------------------------------------------------------
+// ---- handlers by sub-state ---------------------------------------------------------------
 
-/// 0x3a0a8 : joueur touché (`+5` = 4).
+/// 0x3a0a8: player hit (`+5` = 4).
 pub fn hurt(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
@@ -1518,7 +1520,7 @@ pub fn hurt(g: &mut Ctx, p: Player) {
     clamp_to_screen(g.b, p);
 }
 
-/// 0x3b7f4 : joueur à terre (`+4` = 4).
+/// 0x3b7f4: player on the ground (`+4` = 4).
 pub fn downed(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u8(g, 0x192, 0);

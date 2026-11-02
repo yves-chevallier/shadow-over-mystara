@@ -1,16 +1,16 @@
-//! Contrôle bit à bit du rendu et de l'audio (phase d'optimisation, lot F).
+//! Bit-for-bit check of the rendering and the audio (optimisation phase, batch F).
 //!
-//! render_check <roms> <eeprom> <scénario> <images> [sortie]
+//! render_check <roms> <eeprom> <scenario> <frames> [output]
 //!
-//! Fait tourner le jeu sans 68000 avec le rendu et l'audio (`DDSOM_SON_RUST=1` : pilote son Rust ; sinon Z80 émulé)
-//! et imprime une ligne par image : hachage des pixels, hachage des échantillons audio produits. Avec `exit`, écrit
-//! ces lignes dans un fichier ; sinon seule la ligne de synthèse est imprimée. Comparer deux sorties avec `cmp`/`diff`.
+//! Runs the game without 68000 with rendering and audio (`DDSOM_SON_RUST=1`: Rust sound driver; otherwise emulated Z80)
+//! and prints one line per frame: hash of the pixels, hash of the audio samples produced. With `exit`, writes
+//! these lines to a file; otherwise only the summary line is printed. Compare two outputs with `cmp`/`diff`.
 
 use std::hash::Hasher;
 use std::io::Write;
 use std::path::Path;
 
-/// FNV-1a 64 bits : simple, stable, sans dépendance.
+/// FNV-1a 64 bits: simple, stable, dependency-free.
 struct Fnv(u64);
 impl Hasher for Fnv {
     fn finish(&self) -> u64 {
@@ -26,7 +26,7 @@ impl Hasher for Fnv {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 5 {
-        eprintln!("usage : render_check <roms> <eeprom> <scenario> <images> [sortie]");
+        eprintln!("usage: render_check <roms> <eeprom> <scenario> <frames> [output]");
         std::process::exit(2);
     }
     let ee = std::fs::read(&a[2]).ok();
@@ -37,7 +37,7 @@ fn main() {
     }
     ddsom_game::install_no_68k(&mut m);
     m.rendering = true;
-    let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).expect("scenario");
     let frames: usize = a[4].parse().unwrap();
     let mut out: Option<std::io::BufWriter<std::fs::File>> = a.get(5).map(|p| std::io::BufWriter::new(std::fs::File::create(p).unwrap()));
     let mut total = Fnv(0xcbf29ce484222325);
@@ -60,5 +60,5 @@ fn main() {
         total.write(&hi.finish().to_le_bytes());
         total.write(&ha.finish().to_le_bytes());
     }
-    println!("{} images, synthèse {:016x}, {:.0} images/s", frames, total.finish(), frames as f64 / t0.elapsed().as_secs_f64());
+    println!("{} frames, summary {:016x}, {:.0} frames/s", frames, total.finish(), frames as f64 / t0.elapsed().as_secs_f64());
 }

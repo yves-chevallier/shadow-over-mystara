@@ -1,13 +1,13 @@
-//! Boss 18, groupe `+5` = 2 : le combat. Le Lich attend, se retourne, marche vers un joueur et, selon la distance,
-//! choisit une attaque (`decide`) ; ou fonce en ligne droite.
+//! Boss 18, group `+5` = 2: the combat. The Lich waits, turns around, walks toward a player and, depending on the
+//! distance, chooses an attack (`decide`); or rushes in a straight line.
 //!
-//! | `+6` | Rôle |
+//! | `+6` | Role |
 //! |---|---|
-//! | 0 | debout, attend (animation 2) |
-//! | 2 | demi-tour (continue d'avancer s'il marchait) |
-//! | 4, 6 | marche vers un joueur (4 : pas rapides, 6 : lents) |
+//! | 0 | standing, waits (animation 2) |
+//! | 2 | about-face (keeps advancing if it was walking) |
+//! | 4, 6 | walk toward a player (4: fast steps, 6: slow) |
 //! | 8 | charge |
-//! | 10 | geste de reprise (animation 6) |
+//! | 10 | recovery gesture (animation 6) |
 
 use crate::families::cx::Bench;
 use super::decide;
@@ -62,7 +62,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 : demi-tour ------------------------------------------------------------------------
 
-/// Le boss marchait (état mémorisé `0x0202_04xx` ou `06xx`) : il avance pendant le demi-tour.
+/// The boss was walking (saved state `0x0202_04xx` or `06xx`): it advances during the about-face.
 fn was_walking<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.u16(SAVED_STATE) == 0x0202 && matches!(x.u8(SAVED_STATE + 2), 4 | 6)
 }
@@ -97,7 +97,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 2);
 }
 
-// --- +6 = 4 et 6 : marche -----------------------------------------------------------------------
+// --- +6 = 4 and 6: walk -----------------------------------------------------------------------
 
 fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
     if !players_alive(x) {
@@ -130,8 +130,8 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
     }
 }
 
-/// 0x97a0a : un pas de marche de plus ; à la fin des pas, la marche s'arrête (`chase_b`) ; tant qu'une
-/// attaque est possible, le boss la déclenche.
+/// 0x97a0a: one more walk step; at the end of the steps, the walk stops (`chase_b`); as long as an
+/// attack is possible, the boss triggers it.
 fn keep_walking<R: Bench>(x: &mut Cx<'_, R>) {
     if !sub8(x, WALK_DELAY, 1).pl() {
         if sub8(x, WALK_STEPS, 1).le() {

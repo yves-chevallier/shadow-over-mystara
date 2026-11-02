@@ -1,14 +1,14 @@
-//! Analyse statique des « lecteurs de restes » : pour chaque gestionnaire des tables d'objets, cherche
-//! les registres D1-D6 et A2-A4 lus avant d'avoir été écrits, sur au moins un chemin du code d'origine.
-//! La boucle de dispatch ne fixe que A0, A5, D7, D0 (type × 4) et A1 (adresse du gestionnaire) : les autres
-//! registres sont ceux que le gestionnaire précédent a laissés.
+//! Static analysis of the « leftover readers »: for each handler of the object tables, looks for
+//! the registers D1-D6 and A2-A4 read before being written, on at least one path of the original code.
+//! The dispatch loop only sets A0, A5, D7, D0 (type × 4) and A1 (handler address): the other
+//! registers are those the previous handler left behind.
 //!
 //!   static_leftovers <roms>
 //!
-//! L'analyse suit les branchements, les tables de sauts et les `bsr`/`jsr` locaux (le corps de la
-//! sous-routine est analysé avec l'état de l'appelant) ; un `jsr` vers une routine commune hors de
-//! la plage n'est pas suivi (ses lectures éventuelles échappent : le contrôle dynamique
-//! `DDSOM_RESTES=1 fuzz families` les couvre). Un appel est supposé définir D0, D1 et A1 (résultats).
+//! The analysis follows branches, jump tables and local `bsr`/`jsr` (the body of the
+//! subroutine is analysed with the caller's state); a `jsr` to a common routine outside
+//! the range is not followed (its possible reads escape: the dynamic check
+//! `DDSOM_RESTES=1 fuzz families` covers them). A call is assumed to define D0, D1 and A1 (results).
 
 use m68k::decode::{Ea, Fetch, Op, ShiftCount};
 use std::collections::BTreeMap;
@@ -25,7 +25,7 @@ fn name(bit: u32) -> String {
     if bit < 8 { format!("D{bit}") } else { format!("A{}", bit - 8) }
 }
 
-/// Registres utilisés par un opérande (adresse, indice, ou valeur si registre).
+/// Registers used by an operand (address, index, or value if register).
 fn regs_ea(ea: Ea) -> u16 {
     let idx = |ext: u16| if ext & 0x8000 != 0 { a((ext >> 12 & 7) as u8) } else { d((ext >> 12 & 7) as u8) };
     match ea {
@@ -37,7 +37,7 @@ fn regs_ea(ea: Ea) -> u16 {
     }
 }
 
-/// Registre écrit si l'opérande est un registre de données ou d'adresses.
+/// Register written if the operand is a data or address register.
 fn written_ea(ea: Ea) -> u16 {
     match ea {
         Ea::Dn(n) => d(n),
@@ -46,12 +46,12 @@ fn written_ea(ea: Ea) -> u16 {
     }
 }
 
-/// (registres lus, registres écrits) d'une instruction.
+/// (registers read, registers written) of an instruction.
 fn effects(op: &Op) -> (u16, u16) {
     use Op::*;
-    // destination en lecture-modification-écriture
+    // read-modify-write destination
     let rmw = |src: Ea, dst: Ea| (regs_ea(src) | regs_ea(dst), written_ea(dst));
-    // destination en écriture seule : seuls les registres d'adresse de l'opérande sont lus
+    // write-only destination: only the operand's address registers are read
     let wo = |src: u16, dst: Ea| (src | if matches!(dst, Ea::Dn(_) | Ea::An(_)) { 0 } else { regs_ea(dst) }, written_ea(dst));
     match *op {
         Add(_, s, t) | Sub(_, s, t) | And(_, s, t) | Or(_, s, t) | Eor(_, s, t) | Addx(_, s, t) | Subx(_, s, t) | Abcd(s, t)
@@ -78,7 +78,7 @@ fn effects(op: &Op) -> (u16, u16) {
         Moveq(_, n) => (0, d(n)),
         Lea(e, n) => (regs_ea(e), a(n)),
         Movem { to_mem, mask, ea, size: _ } => {
-            // masque : bit 0 = D0 ... bit 15 = A7 (sauf prédécrément, ordre inversé)
+            // mask: bit 0 = D0 ... bit 15 = A7 (except predecrement, reversed order)
             let m = if matches!(ea, Ea::PreDec(_)) { mask.reverse_bits() } else { mask };
             if to_mem { (regs_ea(ea) | m, 0) } else { (regs_ea(ea), m) }
         }
@@ -103,11 +103,11 @@ fn main() {
         ("BOX", 0x39e76, 4),
         ("EFFCT", 0x39ce0, 64),
     ];
-    // registres suivis : D1-D6, A2-A4 (D0, A0, A1, A5, D7 sont posés par le dispatch)
+    // tracked registers: D1-D6, A2-A4 (D0, A0, A1, A5, D7 are set by the dispatch)
     let followed: u16 = (1..=6).fold(0, |s, n| s | d(n)) | a(2) | a(3) | a(4);
     let initial: u16 = d(0) | d(7) | a(0) | a(1) | a(5) | a(7);
     let (lo, hi) = (0x98000u32, 0xe1000u32);
-    // toutes les entrées, triées : la plage d'un gestionnaire va de son entrée à la suivante
+    // all entries, sorted: a handler's range goes from its entry to the next one
     let mut all: Vec<u32> = Vec::new();
     for (_, table, n) in tables {
         for k in 0..n {
@@ -124,7 +124,7 @@ fn main() {
             }
             let range_end = all.iter().copied().find(|&e| e > entry).unwrap_or(hi);
             let inside = |t: u32| (entry..range_end).contains(&t) && t % 2 == 0;
-            // état « définitivement écrit » minimal par adresse, point fixe
+            // minimal « definitely written » state per address, fixed point
             let mut state: BTreeMap<u32, u16> = BTreeMap::new();
             let mut todo = vec![(entry, initial)];
             let mut reads: BTreeMap<(u32, u32), String> = BTreeMap::new();
@@ -137,7 +137,7 @@ fn main() {
                         break;
                     }
                     match state.get(&pc) {
-                        Some(&e) if e & !def == 0 => break, // déjà vu avec un état au moins aussi pauvre
+                        Some(&e) if e & !def == 0 => break, // already seen with an at least as poor state
                         Some(&e) => {
                             def &= e;
                             state.insert(pc, def);

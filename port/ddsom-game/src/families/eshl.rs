@@ -1,17 +1,16 @@
-//! Tirs et attaques des ennemis (classe ESHL, pool de 38 objets de 0x60 octets, table 0x39b96).
+//! Enemy shots and attacks (ESHL class, pool of 38 objects of 0x60 bytes, table 0x39b96).
 //!
-//! Un objet ESHL est créé par un ennemi, un boss ou un effet : `+0x50` désigne son propriétaire
-//! (adresse RAM sur 16 bits), `+0x03` est la variante choisie par le créateur, `+0x2c` l'orientation
-//! héritée du propriétaire. Les boîtes de collision (jeu `+0x2e`, puissance `+0x44/+0x45`) sont lues
-//! par `combat`. Chaque type est une machine à états : `+4` état principal, `+5` / `+6` sous-états
-//! (octets pairs, indices d'une table de sauts de l'original).
+//! An ESHL object is created by an enemy, a boss or an effect: `+0x50` designates its owner (RAM address on 16 bits),
+//! `+0x03` is the variant chosen by the creator, `+0x2c` the orientation inherited from the owner. The collision boxes
+//! (set `+0x2e`, power `+0x44/+0x45`) are read by `combat`. Each type is a state machine: `+4` main state, `+5` / `+6`
+//! substates (even bytes, indices of a jump table of the original).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::shell::*;
 use crate::objects::Obj;
 
-/// Sons (wrappers de la zone 0xe0836-0xee080).
+/// Sounds (wrappers of the 0xe0836-0xee080 area).
 mod sfx {
     pub const E7376: u32 = 0xe7376;
     pub const E73E8: u32 = 0xe73e8;
@@ -28,17 +27,16 @@ use crate::objects::pools;
 use crate::objects::Current;
 
 // ---------------------------------------------------------------------------------------------
-// Type 0 (0x9dbfc) : projectile horizontal, deux variantes (+3)
+// Type 0 (0x9dbfc): horizontal projectile, two variants (+3)
 // ---------------------------------------------------------------------------------------------
 
-/// Projectile qui part du côté du propriétaire à 5 pixels par image. Il s'arrête quand il touche
-/// quelque chose (drapeaux `+0x57`) ou certains terrains, puis retombe en clignotant avant de
-/// disparaître.
+/// Projectile that leaves from the owner's side at 5 pixels per frame. It stops when it hits something (flags `+0x57`)
+/// or certain terrains, then falls back blinking before disappearing.
 mod shot0 {
     use super::*;
 
     pub const ANIMS: u32 = 0x160350;
-    /// Sous-états de la chute (`+6`).
+    /// Substates of the fall (`+6`).
     const FALL_START: u8 = 0;
     const FALL_DROP: u8 = 2;
     const FALL_BLINK: u8 = 4;
@@ -57,7 +55,7 @@ mod shot0 {
         }
     }
 
-    /// Création : place le projectile devant le propriétaire. Faux si celui-ci a disparu.
+    /// Creation: places the projectile in front of the owner. False if the owner has disappeared.
     fn spawn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         x.add8(0x4, 2);
         x.set8(f::BOX_SET, 7);
@@ -81,7 +79,7 @@ mod shot0 {
         true
     }
 
-    /// Vol : détruit au contact, s'arrête sur les terrains 5 à 8 sans mur (bit 6), sinon avance.
+    /// Flight: destroyed on contact, stops on terrains 5 to 8 without a wall (bit 6), otherwise advances.
     fn fly<R: Bench>(x: &mut Cx<'_, R>) {
         let hit = x.u8(f::HIT_FLAGS);
         if hit & 0x08 != 0 {
@@ -105,7 +103,7 @@ mod shot0 {
         x.reinsert();
     }
 
-    /// Chute après l'impact : tombe, puis clignote 20 images avant de disparaître.
+    /// Fall after the impact: falls, then blinks for 20 frames before disappearing.
     fn fall<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x6) {
             FALL_START => {
@@ -142,15 +140,14 @@ mod shot0 {
 }
 
 
-/// Tir 1 (0x9de10) : boule lancée en cloche. Deux modes selon `+0x2f` : 0, le propriétaire la
-/// lance devant lui ; sinon elle jaillit avec une vitesse tirée d'une table à 8 lignes (variante
-/// `+3`). Elle retombe, rebondit au sol (Z < 0 : Z remis à 0), attend 80 images dans une
-/// animation puis clignote 80 images avant de disparaître.
+/// Shot 1 (0x9de10): ball thrown in a lob. Two modes according to `+0x2f`: 0, the owner throws it in front of itself;
+/// otherwise it springs out with a speed drawn from an 8-row table (variant `+3`). It falls back, bounces on the ground
+/// (Z < 0: Z reset to 0), waits 80 frames in an animation then blinks for 80 frames before disappearing.
 mod shot1 {
     use super::*;
 
     const ANIMS: u32 = 0x16c946;
-    /// Table de vitesses (16 octets par variante : VX AX VZ AZ VY AY).
+    /// Speed table (16 bytes per variant: VX AX VZ AZ VY AY).
     const SPEEDS: u32 = 0x9dfe2;
     const LOB: u8 = 0;
     const LANDED: u8 = 2;
@@ -177,7 +174,7 @@ mod shot1 {
         }
     }
 
-    /// Lancé par le propriétaire : devant lui, vitesse horizontale 2,5 pixels par image.
+    /// Thrown by the owner: in front of it, horizontal speed 2.5 pixels per frame.
     fn lob<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
         place_in_front(x, owner, 0x40, 0x20);
@@ -190,7 +187,7 @@ mod shot1 {
         x.set16(0x1e, 0);
     }
 
-    /// Jaillissement : position du propriétaire, vitesses de la ligne `+3` de la table.
+    /// Spring-out: position of the owner, speeds of row `+3` of the table.
     fn burst<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
         copy_position(x, owner);
@@ -243,7 +240,7 @@ mod shot1 {
         finish(x);
     }
 
-    /// Fin du gestionnaire quand l'état est inchangé : liste triée puis retrait hors écran.
+    /// End of the handler when the state is unchanged: sorted list then removal off the screen.
     fn finish<R: Bench>(x: &mut Cx<'_, R>) {
         x.reinsert();
         x.cull_offscreen();
@@ -251,8 +248,8 @@ mod shot1 {
 }
 
 
-/// Tir 2 (0x9e0aa) : projectile horizontal sans animation propre (le sprite est celui de la
-/// variante du propriétaire). Détruit au contact (son), ou sur un terrain bloquant.
+/// Shot 2 (0x9e0aa): horizontal projectile without its own animation (the sprite is that of the owner's variant).
+/// Destroyed on contact (sound), or on a blocking terrain.
 mod shot2 {
     use super::*;
 
@@ -295,10 +292,9 @@ mod shot2 {
     }
 }
 
-/// Tir 3 (0x9e1b6) : projectile attaché à un propriétaire (le créateur est vivant tant que son
-/// état `+4` est inférieur à 4). Quatre variantes lancées en éventail : décalage (dx, dz) et
-/// vitesses (vx, vy) lus dans une table de 8 octets par variante. Disparaît avec la fin de son
-/// animation ou quand le propriétaire n'est plus en jeu normal.
+/// Shot 3 (0x9e1b6): projectile attached to an owner (the creator is alive as long as its state `+4` is below 4). Four
+/// variants launched in a fan: offset (dx, dz) and speeds (vx, vy) read from an 8-byte table per variant. Disappears
+/// with the end of its animation or when the owner is no longer in normal play.
 mod shot3 {
     use super::*;
 
@@ -350,9 +346,9 @@ mod shot3 {
     }
 }
 
-/// Tir 4 (0x9e2dc) : bombe lancée par un ennemi (sans propriétaire : position et sens fixés par le
-/// créateur). Elle retombe selon une table de vitesses, rebondit au sol une fois avec les
-/// vitesses mises de côté en `+0x42` / `+0x50`, puis explose en fin d'animation.
+/// Shot 4 (0x9e2dc): bomb thrown by an enemy (no owner: position and direction set by the creator). It falls back
+/// according to a speed table, bounces once on the ground with the speeds set aside in `+0x42` / `+0x50`, then explodes
+/// at the end of the animation.
 mod shot4 {
     use super::*;
 
@@ -371,8 +367,8 @@ mod shot4 {
                     EXPLODING => explode(x),
                     _ => {}
                 }
-                // l'original cherche ici le terrain sous le tir (0x24b0) sans en lire le résultat ; les registres qu'il
-                // laisse ne sont relus par personne (sonde `exit`) : la recherche, sans effet, est omise
+                // the original looks here for the terrain under the shot (0x24b0) without reading the result; the
+                // registers it leaves are reread by no one (`exit` probe): the search, without effect, is omitted
                 x.reinsert();
             }
             _ => x.free_eshl(),
@@ -439,8 +435,8 @@ mod shot4 {
     }
 }
 
-/// Tir 6 (0x9ebca) : effet de contact collé devant le propriétaire (2 variantes de puissance 6 et
-/// 7). Il reste tant que son animation dure et que le propriétaire est en jeu normal.
+/// Shot 6 (0x9ebca): contact effect stuck in front of the owner (2 variants of power 6 and 7). It stays as long as its
+/// animation lasts and the owner is in normal play.
 mod shot6 {
     use super::*;
 
@@ -485,8 +481,8 @@ mod shot6 {
     }
 }
 
-/// Tir 7 (0x9ecc0) : étincelle posée sur le propriétaire (décalage lu dans une table à 4 octets
-/// par variante) ; disparaît en fin d'animation.
+/// Shot 7 (0x9ecc0): spark placed on the owner (offset read from a 4-byte table per variant); disappears at the end of
+/// the animation.
 mod shot7 {
     use super::*;
 
@@ -526,8 +522,8 @@ mod shot7 {
     }
 }
 
-/// Tir 8 (0x9ee00) : coup de pointe horizontal devant le propriétaire. Avance (X, Y, Z) jusqu'à
-/// ce que l'animation lève `+0x33`, puis termine l'animation.
+/// Shot 8 (0x9ee00): horizontal thrust in front of the owner. Advances (X, Y, Z) until the animation sets `+0x33`, then
+/// finishes the animation.
 mod shot8 {
     use super::*;
 
@@ -537,7 +533,7 @@ mod shot8 {
         match x.u8(0x4) {
             0 => {
                 if x.u16(f::OWNER) == 0 {
-                    // 0x9ee16 : sans propriétaire, l'effet passe à l'état 6
+                    // 0x9ee16: without an owner, the effect goes to state 6
                     x.set32(0x4, 0x0600_0000);
                     return;
                 }
@@ -581,8 +577,8 @@ mod shot8 {
     }
 }
 
-/// Tir 9 (0x9ef46) : attaque à trois formes selon la variante `+3` (boule qui retombe, souffle
-/// collé à un ennemi, étincelle posée sur un ennemi).
+/// Shot 9 (0x9ef46): attack with three forms according to the variant `+3` (ball that falls back, breath stuck to an
+/// enemy, spark placed on an enemy).
 mod shot9 {
     use super::*;
 
@@ -600,10 +596,10 @@ mod shot9 {
         x.set8(0x4, st::FREE);
     }
 
-    // ----- variante 0 : boule qui retombe -----
+    // ----- variant 0: ball that falls back -----
 
-    /// Se cale sur le propriétaire (devant lui, légèrement plus profond). Sans propriétaire,
-    /// l'objet est marqué à détruire (et l'appelant poursuit quand même son initialisation).
+    /// Aligns on the owner (in front of it, slightly deeper). Without an owner, the object is marked for destruction
+    /// (and the caller still continues its initialization).
     fn attach<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(f::OWNER) == 0 {
             return die(x);
@@ -629,7 +625,7 @@ mod shot9 {
                 x.set8(f::ATTACK_ID, 0x20);
                 x.set16(0x18, -0x400i16 as u16);
                 x.set16(0x1a, 0);
-                // particularité de l'original : lecture à un décalage fixe de l'objet (A0 - 0x7f92)
+                // peculiarity of the original: read at a fixed offset of the object (A0 - 0x7f92)
                 let phase = x.data16(x.o.0.wrapping_sub(0x7f92)) as u32;
                 let mut index = (phase >> 2 & 3) + 6;
                 if x.u8(f::FLIP) == 0 {
@@ -652,7 +648,7 @@ mod shot9 {
                             } else {
                                 x.add8(0x5, 2);
                                 x.set16(0xc, 0);
-                                // l'original lit ici le mot bas du long +0x14 (l'accélération)
+                                // the original reads here the low word of the long +0x14 (the acceleration)
                                 let (vx, vy) = (x.u16(0x16) as i16 >> 1, x.u16(0x1c) as i16 >> 1);
                                 x.set16(0x14, vx as u16);
                                 x.set16(0x1c, vy as u16);
@@ -676,15 +672,15 @@ mod shot9 {
         }
     }
 
-    // ----- variante 1 : souffle collé à un ennemi de type 7 -----
+    // ----- variant 1: breath stuck to an enemy of type 7 -----
 
     const FIRE_FRAMES: u32 = 0x16d676;
     const END_FRAMES: u32 = 0x16d684;
-    /// Hauteurs limites (mots) de la montée du souffle, par valeur de `+0x3e`.
+    /// Limit heights (words) of the rise of the breath, by value of `+0x3e`.
     const RISE_LIMITS: u32 = 0x9f14c;
 
-    /// Le créateur doit être un ennemi (classe 2) de type 7, variante 0, dans l'état 0x208, lui-même
-    /// lié à un joueur encore en jeu ; sinon le souffle disparaît.
+    /// The creator must be an enemy (class 2) of type 7, variant 0, in state 0x208, itself linked to a player still in
+    /// play; otherwise the breath disappears.
     fn breath<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
@@ -762,7 +758,7 @@ mod shot9 {
         pick_frame(x, END_FRAMES);
     }
 
-    /// Colle le souffle à son créateur : position, orientation, un cran plus profond.
+    /// Sticks the breath to its creator: position, orientation, one notch deeper.
     fn follow<R: Bench>(x: &mut Cx<'_, R>, enemy: Obj) {
         for off in [0x8, 0xc, 0x10] {
             let v = enemy.u32(x.b, off);
@@ -775,7 +771,7 @@ mod shot9 {
         x.add16(0xc, -0x1fi16 as u16);
     }
 
-    /// Cadre de sprite du souffle : jeu choisi selon la hauteur, cadre selon `+0x3e`.
+    /// Sprite frame of the breath: set chosen according to the height, frame according to `+0x3e`.
     fn pick_frame<R: Bench>(x: &mut Cx<'_, R>, set: u32) {
         let n = ((x.u16(0xc) >> 4).min(0xa) as i16 - 4).max(0);
         x.set8(0x2f, n as u8);
@@ -786,7 +782,7 @@ mod shot9 {
         x.set32(0x38, b);
     }
 
-    // ----- variante 2 : étincelle posée sur un ennemi -----
+    // ----- variant 2: spark placed on an enemy -----
 
     fn sparkle<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
@@ -831,9 +827,8 @@ mod shot9 {
     }
 }
 
-/// Tir 10 (0x9f376) : projectile de bord (puissance 0x10), posé selon une ligne de table choisie
-/// par le registre D5 du dispatch (particularité de l'original). Attend un état du propriétaire,
-/// puis laisse 240 images avant de disparaître.
+/// Shot 10 (0x9f376): edge projectile (power 0x10), placed according to a table row chosen by the register D5 of the
+/// dispatch (peculiarity of the original). Waits for a state of the owner, then leaves 240 frames before disappearing.
 mod shot10 {
     use super::*;
 
@@ -887,15 +882,15 @@ mod shot10 {
     }
 }
 
-/// Tir 11 (0x9f426) : halo collé à un ennemi (déplacement lu dans une table à 4 octets par
-/// variante). Son animation avance selon les bits 0 et 1 de `+0xb0` du propriétaire ; il peut
-/// aussi mettre le propriétaire dans l'état 4 (étourdi) après avoir été gelé (`+0x53`).
+/// Shot 11 (0x9f426): halo stuck to an enemy (displacement read from a 4-byte table per variant). Its animation
+/// advances according to bits 0 and 1 of `+0xb0` of the owner; it can also put the owner in state 4 (stunned) after
+/// having been frozen (`+0x53`).
 mod shot11 {
     use super::*;
 
     const ANIMS: u32 = 0x169fb0;
     const OFFSETS: u32 = 0x9f524;
-    /// Variable `A5+0x6f` : bit 0 = cadence d'animation forcée.
+    /// Variable `A5+0x6f`: bit 0 = forced animation rate.
     const FORCE_ANIM: u32 = 0x6f;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -940,7 +935,7 @@ mod shot11 {
         }
     }
 
-    /// Compte à rebours `+0x53` positif : décompté, et le halo reste figé.
+    /// Countdown `+0x53` positive: decremented, and the halo stays frozen.
     fn frozen<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let n = x.u8(0x53);
         if (n as i8) > 0 {
@@ -964,15 +959,15 @@ mod shot11 {
     }
 }
 
-/// Tir 12 (0x9f5a8) : marque posée sur le point d'attache `+0x5a` (décalage en X et Z lu dans
-/// une table, selon la variante) ; l'animation vient d'une table d'octets en ROM.
+/// Shot 12 (0x9f5a8): mark placed on the attachment point `+0x5a` (offset in X and Z read from a table, according to
+/// the variant); the animation comes from a byte table in ROM.
 mod shot12 {
     use super::*;
 
     const ANIMS: u32 = 0x16dda2;
     const OFFSETS: u32 = 0x9f654;
     const ANIM_OF_VARIANT: u32 = 0x9f5e0;
-    /// Point d'attache (adresse RAM sur 16 bits).
+    /// Attachment point (RAM address on 16 bits).
     const ANCHOR: u32 = 0x5a;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1012,9 +1007,8 @@ mod shot12 {
     }
 }
 
-/// Tir 13 (0x9f67c) : effet collé au propriétaire (position, orientation et décalage par
-/// variante lus dans une table de 8 octets), dont l'animation (0xc ou 0xe) suit l'octet `+0xa1`
-/// du propriétaire. En pause, il suit seulement la position.
+/// Shot 13 (0x9f67c): effect stuck to the owner (position, orientation and offset per variant read from an 8-byte
+/// table), whose animation (0xc or 0xe) follows byte `+0xa1` of the owner. When paused, it only follows the position.
 mod shot13 {
     use super::*;
 
@@ -1083,10 +1077,10 @@ mod shot13 {
     }
 }
 
-/// Tir 14 (0x9f786) : partie d'attaque d'un ennemi composite (variante `+3` de 0 à 7, 9 types de
-/// formes) attachée à son propriétaire (`+0x50`). Elle lit les drapeaux d'attaque du propriétaire
-/// (`+0xa8` : attaque lancée, `+0xa9` : attaque en préparation, un bit par variante) et le pousse
-/// dans l'état correspondant, joue l'animation de la phase et crée des tirs de type 15.
+/// Shot 14 (0x9f786): attack part of a composite enemy (variant `+3` from 0 to 7, 9 types of forms) attached to its
+/// owner (`+0x50`). It reads the owner's attack flags (`+0xa8`: attack launched, `+0xa9`: attack in preparation, one
+/// bit per variant) and pushes it into the corresponding state, plays the phase's animation and creates shots of type
+/// 15.
 mod shot14 {
     use super::*;
 
@@ -1095,9 +1089,9 @@ mod shot14 {
     const ANIMS_END: u32 = 0x17a2b4;
     const ANIM_OF_VARIANT: u32 = 0x9f7dc;
     const OFFSETS: u32 = 0x9fd50;
-    /// Table d'octets (espace de données) des animations du tir de bord.
+    /// Byte table (data space) of the edge shot animations.
     const BREATH_ANIMS: u32 = 0x9fe00;
-    /// Drapeaux d'attaque du propriétaire.
+    /// Attack flags of the owner.
     const LAUNCHED: u32 = 0xa8;
     const PREPARING: u32 = 0xa9;
 
@@ -1150,10 +1144,10 @@ mod shot14 {
         }
     }
 
-    /// Colle la partie au propriétaire : position, orientation et décalage selon la variante.
+    /// Sticks the part to the owner: position, orientation and offset according to the variant.
     fn attach<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(f::OWNER) == 0 {
-            // l'original se rappelle lui-même indéfiniment ; ce cas n'existe pas en jeu
+            // the original calls itself indefinitely; this case does not exist in play
             return;
         }
         let owner = x.linked(f::OWNER);
@@ -1179,8 +1173,8 @@ mod shot14 {
         x.add16(0xc, dz);
     }
 
-    /// Premier sous-état de la phase active : selon la variante et les drapeaux d'attaque du
-    /// propriétaire, fixe les états (`+4..+7`) de la partie, puis anime.
+    /// First substate of the active phase: according to the variant and the owner's attack flags, sets the part's
+    /// states (`+4..+7`), then animates.
     fn enter<R: Bench>(x: &mut Cx<'_, R>, owner: Obj) {
         attach(x);
         let v = x.u8(0x3);
@@ -1250,9 +1244,9 @@ mod shot14 {
         x.reinsert();
     }
 
-    /// Crée un tir de type 15 lié à cette partie ; l'original n'examine pas l'échec d'allocation.
+    /// Creates a type 15 shot linked to this part; the original does not examine the allocation failure.
     fn spawn_child<R: Bench>(x: &mut Cx<'_, R>, variant: u8) -> Obj {
-        // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+        // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
         let child = x.alloc_unchecked(&pools::ESHL);
         let active = x.u8(0);
         child.set_u8(x.b, 0, active);
@@ -1262,7 +1256,7 @@ mod shot14 {
         child
     }
 
-    /// Sous-état 2 de la phase active : cinq enchaînements d'animations selon `+6` / `+7`.
+    /// Substate 2 of the active phase: five animation sequences according to `+6` / `+7`.
     fn attack<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x6) {
             0 => match x.u8(0x7) {
@@ -1344,7 +1338,7 @@ mod shot14 {
                     attach(x);
                     x.anim_step();
                 }
-                // 0x9fbd4 : le troisième mot de la table de sauts (0x9fbe2) mène à 0x9fb1e, la fin des autres séries
+                // 0x9fbd4: the third word of the jump table (0x9fbe2) leads to 0x9fb1e, the end of the other series
                 _ => close(x, 7),
             },
         }
@@ -1366,7 +1360,7 @@ mod shot14 {
         }
     }
 
-    /// Fin d'une charge : rend la main au propriétaire (état 2) et lance l'animation de clôture.
+    /// End of a charge: cedes control to the owner (state 2) and starts the closing animation.
     fn close<R: Bench>(x: &mut Cx<'_, R>, anim: u32) {
         attach(x);
         if x.anim_step() {
@@ -1379,7 +1373,7 @@ mod shot14 {
         }
     }
 
-    /// Animation du souffle selon la distance entre le propriétaire et sa cible.
+    /// Breath animation according to the distance between the owner and its target.
     fn breath_anim<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(f::OWNER) == 0 {
             return;
@@ -1403,8 +1397,7 @@ mod shot14 {
         x.anim_start(ANIMS_CHARGE, (anim as u32) as u16);
     }
 
-    /// Phase 4, sous-état 0 : relâche le drapeau de préparation du propriétaire et lance
-    /// l'animation de fin choisie par `+6`.
+    /// Phase 4, substate 0: releases the owner's preparation flag and starts the end animation chosen by `+6`.
     fn finish<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x5, 2);
         let v = x.u8(0x3);
@@ -1424,22 +1417,21 @@ mod shot14 {
     }
 }
 
-/// Tir 5 (0x9e458) : zone de contact d'un grand ennemi (lien `+0x46` vers cet ennemi). Elle
-/// recopie les drapeaux de visibilité de l'ennemi, choisit à chaque image son cadre de sprite
-/// (deux tables, l'une pour les images paires, l'autre, avec retournement, pour les impaires quand
-/// `+0xb2` de l'ennemi est nul) et ses boîtes de collision (corps, poussée, attaque) selon l'état
-/// d'attaque `+0xa0/+0xa1` de l'ennemi. Elle disparaît avec lui.
+/// Shot 5 (0x9e458): contact zone of a large enemy (link `+0x46` to that enemy). It copies the enemy's visibility
+/// flags, chooses its sprite frame at each frame (two tables, one for even frames, the other, with flipping, for odd
+/// frames when `+0xb2` of the enemy is zero) and its collision boxes (body, push, attack) according to the enemy's
+/// attack state `+0xa0/+0xa1`. It disappears with it.
 mod shot5 {
     use super::*;
 
     const ANIMS: u32 = 0x17b9c2;
-    /// Tables de décalages (mots, espace programme) vers des tableaux de cadres (longs).
+    /// Offset tables (words, program space) to frame arrays (longs).
     const FRAMES_EVEN: u32 = 0x9e638;
     const FRAMES_ODD: u32 = 0x9e6a4;
-    /// Choix du cadre impair : octets (cadre, retournement) indexés par `+0x42`, `+0x43`.
+    /// Choice of the odd frame: bytes (frame, flip) indexed by `+0x42`, `+0x43`.
     const MIRRORED: u32 = 0x9e6bc;
-    /// Boîtes par valeur de `+0x2f` : 4 octets (indice du corps, de la poussée, de l'attaque, puis
-    /// un indice mémorisé en `+0x3b`).
+    /// Boxes per value of `+0x2f`: 4 bytes (index of the body, of the push, of the attack, then an index stored in
+    /// `+0x3b`).
     const BOXES: u32 = 0x9e55c;
     const HOST: u32 = 0x46;
 
@@ -1488,7 +1480,7 @@ mod shot5 {
         x.set8(0x5, 0);
     }
 
-    /// Boîtes de collision selon l'état d'attaque de l'ennemi : désarmées (0) pour certains états.
+    /// Collision boxes according to the enemy's attack state: disarmed (0) for some states.
     fn boxes<R: Bench>(x: &mut Cx<'_, R>, host: Obj) {
         let row = 4 * x.u8(0x2f) as u32;
         let index = x.rom8(BOXES + 3 + row);
@@ -1510,12 +1502,12 @@ mod shot5 {
         }
     }
 
-    /// Tableau de cadres numéro `set` d'une table de décalages (mots, relatifs à la table).
+    /// Frame array number `set` of an offset table (words, relative to the table).
     fn table<R: Bench>(x: &mut Cx<'_, R>, base: u32, set: u32) -> u32 {
         base.wrapping_add(x.rom16(base + 2 * set) as i16 as i32 as u32)
     }
 
-    /// Choisit le cadre du sprite (`+0x34`) ; `+0x2d` est un compteur 1..=0x11.
+    /// Chooses the sprite frame (`+0x34`); `+0x2d` is a counter 1..=0x11.
     fn select_frame<R: Bench>(x: &mut Cx<'_, R>) {
         let mut n = x.u8(0x2d) as u16;
         if n >= 0x11 {
@@ -1533,7 +1525,7 @@ mod shot5 {
             let row = (x.u8(0x42) as u32 >> 1 << 5) + 2 * (x.u8(0x43) as u32 >> 1);
             let flip = x.data8(MIRRORED + row + 1);
             x.set8(f::FLIP, flip);
-            // l'original efface D0 avant cette lecture : le cadre vient toujours de la première ligne
+            // the original clears D0 before this read: the frame always comes from the first row
             let slot = 4 * x.data8(MIRRORED) as u32;
             let frames = table(x, FRAMES_ODD, set);
             let frame = x.data32(frames + slot);

@@ -1,19 +1,19 @@
-//! Ennemi « Troll » (ENEMY type 14, 0x6c4d6). Voir `docs/families/enemy.md`.
+//! "Troll" enemy (ENEMY type 14, 0x6c4d6). See `docs/families/enemy.md`.
 //!
-//! Même charpente que le Goblin (`enemy_goblin`) : il marche vers le joueur, choisit un geste dans des rangées de
-//! 32 octets (une par niveau de difficulté `A5+0x7f92 / 2`) et se place à côté de sa cible. Il saute au lieu de
-//! s'accroupir, lance un objet dans sa série de coups (`+6` = 4) et s'enfuit en marchant quand un joueur le saisit.
+//! Same framework as the Goblin (`enemy_goblin`): it walks toward the player, chooses a move from rows of 32 bytes (one
+//! per difficulty level `A5+0x7f92 / 2`) and positions itself next to its target. It jumps instead of crouching, throws
+//! an object in its series of attacks (`+6` = 4) and runs away walking when a player grabs it.
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `arrival` | arrivée selon la variante `+3` (0 marche, 2 et 4 chute) |
-//! | 2 | `stance` | debout : approche, demi-tour, attente, sortie d'écran |
-//! | 4, 6, 8 | `attacks` | gestes (`+6` = 0 à 20), lancer, sauts, téléportation |
-//! | 10 | `stance` | attend tant qu'aucun joueur n'est en vie |
-//! | état 4 | `hit` | réactions aux coups, recul, chute, fuite |
+//! | 0 | `arrival` | arrival according to variant `+3` (0 walk, 2 and 4 fall) |
+//! | 2 | `stance` | standing: approach, turn-around, wait, screen exit |
+//! | 4, 6, 8 | `attacks` | moves (`+6` = 0 to 20), throw, jumps, teleportation |
+//! | 10 | `stance` | waits as long as no player is alive |
+//! | state 4 | `hit` | reactions to hits, recoil, fall, flight |
 //!
-//! Animations 0x16570e (mouvements), 0x16571c (lancer) et 0x165726 (chute). L'état d'initialisation enchaîne
-//! directement sur le corps de l'état actif (la même image).
+//! Animations 0x16570e (movements), 0x16571c (throw) and 0x165726 (fall). The initialization state chains directly into
+//! the body of the active state (the same frame).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -37,15 +37,15 @@ pub(self) mod g {
     /// Minuterie (octet) d'un geste.
     pub const TIMER: u32 = 0xa2;
     pub const COOLDOWN: u32 = 0xa4;
-    /// Geste choisi (valeur de `+6` à reprendre).
+    /// Chosen move (value of `+6` to resume).
     pub const CHOSEN: u32 = 0xaa;
-    /// Non nul : pas de test de zone (arrivée par la course d'entrée).
+    /// Non-zero: no zone test (arrival by the run-in).
     pub const NO_ZONE: u32 = 0xae;
-    /// Charges de lancer restantes (octet, par pas de 0x10).
+    /// Remaining throw charges (byte, in steps of 0x10).
     pub const AMMO: u32 = 0xab;
-    /// Objet lancé (adresse complète).
+    /// Thrown object (full address).
     pub const THROWN: u32 = 0xa6;
-    /// Compte à rebours (poids fort) de l'attente après le lancer.
+    /// Countdown (high part) of the wait after the throw.
     pub const AFTER_THROW: u32 = 0xac;
 }
 use g::*;
@@ -81,12 +81,12 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-/// Démarre l'animation `n` du jeu des mouvements.
+/// Starts animation `n` of the movement set.
 pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
-/// Démarre l'animation `n` du jeu du lancer.
+/// Starts animation `n` of the throw set.
 pub(self) fn throw_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_THROW, n as u16);
 }
@@ -95,7 +95,7 @@ pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
-/// Octet tiré au hasard dans la rangée de difficulté de `table` (rangées de 32 octets).
+/// Byte drawn at random from the difficulty row of `table` (rows of 32 bytes).
 pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
@@ -103,7 +103,7 @@ pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     x.data8(at + r)
 }
 
-/// 0x6eb04 : fin d'un geste ; debout, et si le tirage le veut, attente (`+5 = 10`).
+/// 0x6eb04: end of a move; standing, and if the draw says so, wait (`+5 = 10`).
 pub(self) fn done_attack<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
@@ -111,8 +111,8 @@ pub(self) fn done_attack<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6eb34 : un joueur est-il dans la boîte `(d0, d1, d2)` et accepté par les portes d'IA (0xa4b4, et 0xa4c2 s'il
-/// regarde dans le même sens) ?
+/// 0x6eb34: is a player in box `(d0, d1, d2)` and accepted by the AI gates (0xa4b4, and 0xa4c2 if it looks in the same
+/// direction)?
 fn box_check<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
@@ -130,17 +130,17 @@ fn box_check<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     true
 }
 
-/// 0x6eb2a : joueur tout près.
+/// 0x6eb2a: player very close.
 pub(self) fn near_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_check(x, 0, 0x70, 0x10)
 }
 
-/// 0x6eb1c : joueur à une courte distance, devant.
+/// 0x6eb1c: player at a short distance, in front.
 pub(self) fn far_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_check(x, -0xd0, 0x60, 0x10)
 }
 
-/// 0x6eb62 : le Troll tourne le dos à sa cible.
+/// 0x6eb62: the Troll has its back to its target.
 pub(self) fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
@@ -154,10 +154,10 @@ pub(self) fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 pub(self) const NEAR_TABLE: u32 = 0x6d620;
 pub(self) const FAR_TABLE: u32 = 0x6d820;
-/// Rangées de gestes qui suivent une série (sous-état 8).
+/// Rows of moves that follow a series (substate 8).
 pub(self) const FOLLOW_TABLE: u32 = 0x6d364;
 
-/// 0x6eb8a (série lointaine) / 0x6eb90 (série proche) : choisit le geste (`+5 = 4`, `+6 = 0`).
+/// 0x6eb8a (far series) / 0x6eb90 (near series): chooses the move (`+5 = 4`, `+6 = 0`).
 pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let b = row_byte(x, table);
     x.set8(f::SUB, 4);
@@ -166,7 +166,7 @@ pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     b
 }
 
-/// 0x6e8d6 : après une série, choisit le geste de repli (sous-état 8).
+/// 0x6e8d6: after a series, chooses the fallback move (substate 8).
 pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     let b = row_byte(x, FOLLOW_TABLE);
@@ -175,7 +175,7 @@ pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 0);
 }
 
-/// 0x6d08c : le Troll est saisi par un joueur : il s'enfuit en marchant hors de l'écran, puis disparaît.
+/// 0x6d08c: the Troll is grabbed by a player: it runs away walking off the screen, then disappears.
 pub(self) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -196,9 +196,9 @@ pub(self) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
-/// Faux si le jeu est en pause (rien n'est fait) ; sinon le corps de l'état actif suit dans la même image.
+/// False if the game is paused (nothing is done); otherwise the body of the active state follows within the same frame.
 fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if paused(x) {
         return false;
@@ -238,7 +238,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;

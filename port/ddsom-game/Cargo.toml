@@ -2,7 +2,7 @@
 name = "ddsom-game"
 version = "0.1.0"
 edition = "2021"
-description = "Logique de jeu de ddsom réécrite en Rust idiomatique (routines natives remplaçant le code 68000)"
+description = "ddsom game logic rewritten in idiomatic Rust (native routines replacing the 68000 code)"
 
 [dependencies]
 m68k = { path = "../m68k" }
@@ -15,10 +15,10 @@ cps2-gfx = { path = "../cps2-gfx" }
 ddsom-assets = { path = "../ddsom-assets" }
 
 [features]
-# Journal des lectures de la ROM programme par le code Rust (examples/rom_reads.rs).
+# Log of the program ROM reads made by the Rust code (examples/rom_reads.rs).
 rom-trace = ["cps2/rom-trace"]
-# Pile d'appels des écritures à une adresse (examples/fuzz_couv, FUZZ_SURVEILLE).
-surveille = []
+# Call stack of the writes to an address (examples/fuzz_couv, FUZZ_SURVEILLE).
+watch_writes = []
 
 [[example]]
 name = "rom_reads"

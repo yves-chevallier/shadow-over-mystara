@@ -1,11 +1,11 @@
-//! Boss 18, groupe `+5` = 0 : arrivée (quatre temps minutés par `+0xa6`, avec leurs sons), puis le combat commence.
+//! Boss 18, group `+5` = 0: arrival (four beats timed by `+0xa6`, with their sounds), then the combat begins.
 //!
-//! | `+6` | Rôle |
+//! | `+6` | Role |
 //! |---|---|
-//! | 0 | attend (0x3c images), son 0x3e |
-//! | 2 | apparaît (le boss devient visible), son 0x7a, animation 0 |
-//! | 4 | son 0x24, animation 1 |
-//! | 6 | prend la main : immunités, puis marche vers un joueur |
+//! | 0 | waits (0x3c frames), sound 0x3e |
+//! | 2 | appears (the boss becomes visible), sound 0x7a, animation 0 |
+//! | 4 | sound 0x24, animation 1 |
+//! | 6 | takes over: immunities, then walks toward a player |
 
 use super::decide;
 use crate::families::cx::Bench;

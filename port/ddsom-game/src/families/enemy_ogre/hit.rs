@@ -1,5 +1,5 @@
-//! Type 18, état touché (`+4 = 4`, 0x7157e). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
-//! 6 mort en plusieurs temps, 8 fuite (saisi par un joueur), 10 reprise du combat.
+//! Type 18, hit state (`+4 = 4`, 0x7157e). `+5`: 0 reaction by table (`+0x49`), 2 recoil, 4 fall and get up, 6 death in
+//! several stages, 8 flight (grabbed by a player), 10 fight resumes.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -7,7 +7,7 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Table de réactions communes aux coups, indexée par le code `+0x49`.
+/// Table of reactions shared by the hits, indexed by code `+0x49`.
 const REACTIONS: u32 = 0x715d4;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -30,7 +30,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x71e24 : plus de PV → mort (sous-état 6, état 2 le temps de la chute) ; vrai si l'ogre meurt.
+/// 0x71e24: no more HP → death (substate 6, state 2 during the fall); true if the ogre dies.
 fn death_check<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
@@ -50,7 +50,7 @@ fn first<R: Bench>(x: &mut Cx<'_, R>) {
     react(x, REACTIONS);
 }
 
-// --- sous-état 2 : recul ----------------------------------------------------------------------------------
+// --- substate 2: recoil ----------------------------------------------------------------------------------
 
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -86,7 +86,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 4 : chute et relevé ---------------------------------------------------------------------------
+// --- substate 4: fall and get up ---------------------------------------------------------------------------
 
 fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -119,7 +119,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x717ea : le combat reprend : cible choisie, palier de PV franchi, nouveau geste.
+/// 0x717ea: the fight resumes: target chosen, HP threshold crossed, new move.
 pub(crate) fn regroup<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(LOOK_PREV, 0xff);
@@ -141,7 +141,7 @@ pub(crate) fn regroup<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 6 : mort --------------------------------------------------------------------------------------
+// --- substate 6: death --------------------------------------------------------------------------------------
 
 fn dying<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -203,7 +203,7 @@ fn dying<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 : fuite --------------------------------------------------------------------------------------
+// --- substate 8: flight --------------------------------------------------------------------------------------
 
 fn flee<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {

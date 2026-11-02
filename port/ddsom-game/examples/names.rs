@@ -1,6 +1,6 @@
-//! Liste des routines natives : « adresse nom forme », une par ligne (forme du corps : `P` processeur, `E` processeur
-//! avec son entrée, `M` mémoire seule, `G` gestionnaire
-//! d'objet sans registres).
+//! List of the native routines: « address name shape », one per line (body shape: `P` processor, `E` processor
+//! with its entry, `M` memory only, `G` object handler
+//! without registers).
 fn main() {
     for n in ddsom_game::all_natives() {
         let shape = match n.run {

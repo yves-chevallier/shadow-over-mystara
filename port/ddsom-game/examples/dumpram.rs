@@ -1,5 +1,6 @@
-//! Affiche des octets de RAM à la fin de chaque image d'une plage, avec ou sans natives.
-//!   dumpram <roms> <eeprom> <scénario> <image début> <image fin> <adresse hex (RAM ff0000-ffffff ou GFX RAM 900000-afffff)> <longueur> <natives 0|1>
+//! Prints RAM bytes at the end of each frame of a range, with or without natives.
+//!   dumpram <roms> <eeprom> <scenario> <start frame> <end frame>
+//!     <hex address (RAM ff0000-ffffff or GFX RAM 900000-afffff)> <length> <natives 0|1>
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();

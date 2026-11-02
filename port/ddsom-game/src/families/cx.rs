@@ -1,13 +1,12 @@
-//! Contexte d'exécution d'un gestionnaire d'objet (ESHL, SET, SOBJ).
+//! Execution context of an object handler (ESHL, SET, SOBJ).
 //!
-//! Un gestionnaire est appelé par la boucle de dispatch de sa classe (`jsr (table + type * 4)`)
-//! avec A0 = l'objet, A5 = 0xFF8000 et D7 = compteur de la boucle ; il rend la main par RTS en
-//! laissant A0 et D7 intacts. `Cx` regroupe le processeur, le bus et l'objet courant. Le moteur d'objets
-//! (animation, mouvement, listes, écran, pools) s'appelle par le trait `objects::Current` (`x.move_xz()`,
-//! `x.anim_step()`, `x.reinsert()`...), les services communs par `machine::Machine` (`x.random()`).
+//! A handler is called by the dispatch loop of its class (`jsr (table + type * 4)`) with A0 = the object, A5 = 0xFF8000
+//! and D7 = loop counter; it yields with RTS, leaving A0 and D7 intact. `Cx` groups the processor, the bus and the
+//! current object. The object engine (animation, movement, lists, screen, pools) is called through the
+//! `objects::Current` trait (`x.move_xz()`, `x.anim_step()`, `x.reinsert()`...), the common services through
+//! `machine::Machine` (`x.random()`).
 //!
-//! Les sous-routines encore appelées par adresse (`call`) sont exécutées par `crate::call`, qui retrouve leur
-//! native.
+//! The subroutines still called by address (`call`) are executed by `crate::call`, which finds their native.
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
@@ -19,30 +18,30 @@ use crate::objects::pools;
 use crate::objects::{Current, Obj};
 use crate::{call, regs, Native};
 
-/// Contexte d'un gestionnaire : l'objet courant (A0) et la machine.
+/// Context of a handler: the current object (A0) and the machine.
 ///
-/// `R` est le banc de registres : le processeur (`&mut Cpu`, par défaut) tant que le gestionnaire lit ou laisse des
-/// registres de l'original, ou [`SansRegistres`] pour un gestionnaire converti, dont rien n'entre ni ne sort par les
-/// registres (le compilateur le garantit : `x.c.d[0]` n'existe pas). Les fonctions qui n'utilisent pas les registres
-/// s'écrivent pour les deux (`fn f<R>(x: &mut Cx<'_, R>)`).
+/// `R` is the register bench: the processor (`&mut Cpu`, by default) as long as the handler reads or leaves registers
+/// of the original, or [`SansRegistres`] for a converted handler, of which nothing enters or leaves through the
+/// registers (the compiler guarantees it: `x.c.d[0]` does not exist). Functions that do not use registers are written
+/// for both (`fn f<R>(x: &mut Cx<'_, R>)`).
 pub struct Cx<'a, R = &'a mut Cpu> {
     pub c: R,
     pub b: &'a mut Cps2Bus,
-    /// L'objet que le dispatch fait traiter (A0).
+    /// The object that the dispatch has processed (A0).
     pub o: Obj,
 }
 
-/// Contexte d'un gestionnaire sans registres : ce que la boucle d'aiguillage lui passe (`dispatch::Dispatch`).
+/// Context of a handler without registers: what the dispatch loop passes to it (`dispatch::Dispatch`).
 pub type Gx<'a> = Cx<'a, &'a mut Dispatch>;
 
 impl<'a> Gx<'a> {
-    /// Contexte du gestionnaire appelé par la boucle d'aiguillage.
+    /// Context of the handler called by the dispatch loop.
     pub fn aiguille(b: &'a mut Cps2Bus, a: &'a mut Dispatch) -> Self {
         let o = a.object;
         Cx { c: a, b, o }
     }
 
-    /// Restes de registres que les gestionnaires se transmettent (glitches d'origine).
+    /// Leftover registers that handlers pass to each other (original glitches).
     pub fn leftovers(&mut self) -> &mut Leftovers {
         &mut self.c.leftovers
     }
@@ -60,18 +59,18 @@ impl crate::machine::Processeur for Cx<'_> {
     }
 }
 
-/// Banc de registres d'un gestionnaire : ce qui change selon qu'il travaille encore sur le processeur ou non.
+/// Register bench of a handler: what changes depending on whether it still works on the processor or not.
 pub trait Bench {
-    /// Remise en liste (0x1ee1a / 0x1ef6c, `foreground`) : sur le processeur, l'adaptateur laisse les registres de
-    /// l'original au gestionnaire suivant ; sans registres, le cœur.
+    /// Re-listing (0x1ee1a / 0x1ef6c, `foreground`): on the processor, the adapter leaves the original's registers to
+    /// the next handler; without registers, the core.
     fn relink(&mut self, b: &mut Cps2Bus, o: Obj, foreground: bool);
-    /// Les restes D2 à D5 (voir `dispatch::Leftovers`) : le registre du processeur, ou le reste de la boucle
-    /// d'aiguillage.
+    /// The leftovers D2 to D5 (see `dispatch::Leftovers`): the processor register, or the leftover of the dispatch
+    /// loop.
     fn d2(&mut self) -> &mut u32;
     fn d3(&mut self) -> &mut u32;
     fn d4(&mut self) -> &mut u32;
     fn d5(&mut self) -> &mut u32;
-    /// Compteur de la boucle d'aiguillage (D7.w de l'original) : phase des clignotements « une image sur deux ».
+    /// Dispatch loop counter (D7.w of the original): phase of the "every other frame" blinking.
     fn counter(&self) -> u16;
 }
 
@@ -101,7 +100,7 @@ impl Bench for &mut Cpu {
 impl Bench for &mut Dispatch {
     fn relink(&mut self, b: &mut Cps2Bus, o: Obj, foreground: bool) {
         let list = if foreground { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
-        // Glitch d'origine : la remise en liste laisse D2 (le lien quitté) au gestionnaire suivant
+        // Original glitch: the re-listing leaves D2 (the link left) to the next handler
         list.reinsert_leftovers(b, o, &mut self.leftovers.d2);
     }
     fn d2(&mut self) -> &mut u32 {
@@ -122,38 +121,38 @@ impl Bench for &mut Dispatch {
 }
 
 impl<R: Bench> Cx<'_, R> {
-    /// Compteur de la boucle d'aiguillage (D7.w de l'original).
+    /// Dispatch loop counter (D7.w of the original).
     pub fn counter(&self) -> u16 {
         self.c.counter()
     }
 
-    /// 0x1ee1a : remet l'objet à sa place dans la liste des acteurs (fin ordinaire d'un gestionnaire ; voir [`Bench`]).
+    /// 0x1ee1a: puts the object back in its place in the actor list (ordinary end of a handler; see [`Bench`]).
     #[track_caller]
     pub fn reinsert(&mut self) {
         self.c.relink(self.b, self.o, false);
     }
 
-    /// 0x1ef6c : remet l'objet à sa place dans la liste du premier plan (voir [`Bench`]).
+    /// 0x1ef6c: puts the object back in its place in the foreground list (see [`Bench`]).
     #[track_caller]
     pub fn reinsert_foreground(&mut self) {
         self.c.relink(self.b, self.o, true);
     }
 
-    /// 0xfbb0 : garde l'objet dans l'écran à `margin` pixels près ; vrai s'il a été déplacé.
-    /// Glitch d'origine : le résultat reste dans D5 (0 ou 1), que relit la rangée d'éclats d'une caisse (`Leftovers::d5`).
+    /// 0xfbb0: keeps the object on the screen within `margin` pixels; true if it was moved. Original glitch: the result
+    /// stays in D5 (0 or 1), which the burst row of a crate rereads (`Leftovers::d5`).
     pub fn keep_on_screen(&mut self, margin: u16) -> bool {
         let moved = crate::ai::keep_on_screen(self.b, self.o, margin);
         *self.c.d5() = moved as u32;
         moved
     }
 
-    /// 0xfbae : `keep_on_screen` avec la marge de la zone de jeu (0x30).
+    /// 0xfbae: `keep_on_screen` with the play area margin (0x30).
     pub fn keep_in_zone(&mut self) -> bool {
         self.keep_on_screen(crate::ai::ZONE_MARGIN)
     }
 
-    /// 0x33fe4 : collision avec le décor (`terrain::push`) ; rend le drapeau Z de l'original.
-    /// Glitch d'origine : la recherche du terrain laisse D2 et D3, et un choc D5 = 1 (`Leftovers`).
+    /// 0x33fe4: collision with the terrain (`terrain::push`); returns the original's Z flag. Original glitch: the
+    /// terrain lookup leaves D2 and D3, and a hit D5 = 1 (`Leftovers`).
     pub fn push_terrain(&mut self) -> bool {
         let (mut d2, mut d3, mut d5) = (*self.c.d2(), *self.c.d3(), *self.c.d5());
         let z = crate::terrain::push_leftovers(self.b, self.o, &mut d2, &mut d3, &mut d5);
@@ -162,21 +161,21 @@ impl<R: Bench> Cx<'_, R> {
     }
 }
 
-/// Sous-routines appelées par adresse (le moteur d'objets, lui, s'appelle par `objects::Current`).
+/// Subroutines called by address (the object engine, for its part, is called through `objects::Current`).
 pub mod sub {
-    /// Attribut du terrain sous l'objet (D2) ; `terrain_at` prend (D0, D1) = (x, y).
+    /// Attribute of the terrain under the object (D2); `terrain_at` takes (D0, D1) = (x, y).
     pub const TERRAIN_OF_OBJECT: u32 = 0x24a8;
     pub const TERRAIN_AT: u32 = 0x24b0;
 }
 
 impl<'a> Cx<'a> {
-    /// Contexte pour l'objet désigné par A0.
+    /// Context for the object designated by A0.
     pub fn new(c: &'a mut Cpu, b: &'a mut Cps2Bus) -> Self {
         let o = Obj(c.a[0]);
         Cx { c, b, o }
     }
 
-    /// Appelle la fonction convertie `f` sur le même objet, sans registres (les restes passent par le processeur).
+    /// Calls the converted function `f` on the same object, without registers (the leftovers go through the processor).
     pub fn without<T>(&mut self, f: impl FnOnce(&mut Gx) -> T) -> T {
         let mut a = Dispatch::from_cpu(self.c);
         a.object = self.o;
@@ -185,9 +184,9 @@ impl<'a> Cx<'a> {
         r
     }
 
-    // --- sous-routines -------------------------------------------------------------------------
+    // --- subroutines ---------------------------------------------------------------------------
 
-    /// JSR `addr` avec A0 = l'objet et A5 = base de la RAM de travail.
+    /// JSR `addr` with A0 = the object and A5 = base of the work RAM.
     #[track_caller]
     pub fn call(&mut self, addr: u32) {
         self.c.a[0] = self.o.0;
@@ -202,7 +201,7 @@ impl<'a> Cx<'a> {
 }
 
 impl<R> Cx<'_, R> {
-    // --- champs de l'objet courant -----------------------------------------------------------
+    // --- fields of the current object --------------------------------------------------------
 
     pub fn u8(&mut self, off: u32) -> u8 {
         rd8(self.b, self.o.0 + off)
@@ -222,7 +221,7 @@ impl<R> Cx<'_, R> {
     pub fn set32(&mut self, off: u32, v: u32) {
         wr32(self.b, self.o.0 + off, v)
     }
-    /// `add.w #v,(off,A0)` : addition modulo 2^16 sur place.
+    /// `add.w #v,(off,A0)`: in-place addition modulo 2^16.
     pub fn add16(&mut self, off: u32, v: u16) {
         let x = self.u16(off).wrapping_add(v);
         self.set16(off, x)
@@ -235,7 +234,7 @@ impl<R> Cx<'_, R> {
         let x = self.u32(off).wrapping_add(v);
         self.set32(off, x)
     }
-    /// Remplace un bit d'un octet du record (`bset` / `bclr`).
+    /// Replaces a bit of a byte of the record (`bset` / `bclr`).
     pub fn set_bit(&mut self, off: u32, bit: u8, on: bool) {
         let v = self.u8(off);
         self.set8(off, if on { v | 1 << bit } else { v & !(1 << bit) });
@@ -244,9 +243,9 @@ impl<R> Cx<'_, R> {
         self.u8(off) >> bit & 1 != 0
     }
 
-    // --- autres objets et variables du jeu --------------------------------------------------
+    // --- other objects and game variables ---------------------------------------------------
 
-    /// Objet pointé par un champ de 16 bits (`movea.w (off,A0),A1` : adresse étendue en signe).
+    /// Object pointed to by a 16-bit field (`movea.w (off,A0),A1`: sign-extended address).
     pub fn linked(&mut self, off: u32) -> Obj {
         Obj(self.u16(off) as i16 as i32 as u32 & 0xff_ffff)
     }
@@ -268,14 +267,14 @@ impl<R> Cx<'_, R> {
     pub fn set_a5_u32(&mut self, off: u32, v: u32) {
         wr32(self.b, A5 + off, v)
     }
-    /// Mot et long lus en espace de données (tables de la ROM adressées en absolu).
+    /// Word and long read in data space (ROM tables addressed in absolute).
     pub fn data16(&mut self, addr: u32) -> u16 {
         rd16(self.b, addr)
     }
     pub fn data32(&mut self, addr: u32) -> u32 {
         rd32(self.b, addr)
     }
-    /// Mot lu dans l'espace programme (table adressée relativement au PC).
+    /// Word read in program space (PC-relative addressed table).
     pub fn rom16(&mut self, addr: u32) -> u16 {
         self.b.fetch16(addr)
     }
@@ -310,7 +309,7 @@ impl<R> Cx<'_, R> {
         }
     }
 
-    /// Fin du gestionnaire : l'objet est libéré (tir détruit).
+    /// End of the handler: the object is freed (shot destroyed).
     pub fn free_eshl(&mut self)
     where
         Self: Current,
@@ -319,18 +318,18 @@ impl<R> Cx<'_, R> {
     }
 }
 
-/// Native d'un gestionnaire : contrat de la boucle de dispatch (A0 et D7 conservés).
+/// Native of a handler: contract of the dispatch loop (A0 and D7 preserved).
 pub const fn handler(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
     Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
 }
 
-/// Native d'un gestionnaire converti (`Gx`, sans registres) : ce que passe la boucle d'aiguillage en argument.
+/// Native of a converted handler (`Gx`, without registers): what the dispatch loop passes as argument.
 pub const fn handler_sans(entry: u32, name: &'static str, run: fn(&mut Cps2Bus, &mut Dispatch)) -> Native {
     Native { entry, name, run: crate::Body::Handler(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
 }
 
-/// Déclare la table `NATIVES` d'un fichier de types : `address "name" chemin::du::handler` (sur `Cx`), ou
-/// `address "name" #[without] chemin::du::handler` (sur `Gx`, sans registres).
+/// Declares the `NATIVES` table of a type file: `address "name" path::to::handler` (on `Cx`), or `address "name"
+/// #[without] path::to::handler` (on `Gx`, without registers).
 macro_rules! handlers {
     ($( $entry:literal $name:literal $(#[$without:ident])? $f:path ),* $(,)?) => {
         pub const NATIVES: &[$crate::Native] = &[ $(

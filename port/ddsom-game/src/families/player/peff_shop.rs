@@ -1,10 +1,10 @@
-//! Boutique : le second comptoir (PEFF 42, 0x50b9c) et l'interprète des dialogues du marchand (0x514ac /
-//! 0x514cc) que lance le comptoir PEFF 43 (`peff.rs`). Voir `docs/families/player.md`.
+//! Shop: the second counter (PEFF 42, 0x50b9c) and the merchant's dialogue interpreter (0x514ac / 0x514cc) that PEFF
+//! counter 43 (`peff.rs`) starts. See `docs/families/player.md`.
 //!
-//! Le client est l'objet A2 lu dans la liste des quatre joueurs (`0xff2aa4`) ; son `+0x58` positif veut dire
-//! « il s'adresse au marchand » (remis à -1 dès qu'il est servi), son `+0x50` désigne l'enregistrement du
-//! joueur : bourse BCD `+0x112..+0x117` (long `+0x114` comparé aux prix), six cases d'inventaire `+0x140`
-//! (0x56 : vide) et leurs quantités `+0x148`, état du dialogue de la boutique `+0x167`.
+//! The customer is object A2 read from the list of the four players (`0xff2aa4`); its positive `+0x58` means "it is
+//! addressing the merchant" (reset to -1 as soon as it is served), its `+0x50` designates the player's record: BCD
+//! purse `+0x112..+0x117` (long `+0x114` compared with the prices), six inventory slots `+0x140` (0x56: empty) and
+//! their quantities `+0x148`, shop dialogue state `+0x167`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -13,15 +13,14 @@ use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::Current;
 
-/// Message du marchand à afficher (mot, A5 - 0x554e) et les deux sons de la boutique (D0 inutile : le
-/// message est lu en RAM).
+/// Merchant message to display (word, A5 - 0x554e) and the two shop sounds (D0 unused: the message is read from RAM).
 const MESSAGE: u32 = A5 - 0x554e;
 const SOUND_OK: u32 = 0xea57e;
 const SOUND_MESSAGE: u32 = 0xea5f0;
-/// Liste des quatre clients (mots d'adresse, 0 = absent).
+/// List of the four customers (address words, 0 = absent).
 const CUSTOMERS: u32 = 0xff2aa4;
 
-/// Champs du client et de son joueur.
+/// Fields of the customer and of its player.
 mod c {
     pub const READY: u32 = 0x58;
     pub const PLAYER: u32 = 0x50;
@@ -38,18 +37,18 @@ mod p {
 const SLOTS: u32 = 6;
 const EMPTY: u8 = 0x56;
 
-/// Joueur du client (`movea.w (0x50,A2),A6`).
+/// Customer's player (`movea.w (0x50,A2),A6`).
 fn player_of<R: Bench>(x: &mut Cx<'_, R>, customer: Obj) -> Obj {
     let w = customer.u16(x.b, c::PLAYER);
     Obj(w as i16 as i32 as u32 & 0xff_ffff)
 }
 
-/// Première case de l'inventaire qui contient `item`.
+/// First inventory slot that contains `item`.
 fn find_slot<R: Bench>(x: &mut Cx<'_, R>, player: Obj, item: u8) -> Option<u32> {
     (0..SLOTS).find(|&k| player.u8(x.b, p::SLOTS + k) == item)
 }
 
-/// Pose le message et joue le son du message.
+/// Sets the message and plays the message sound.
 fn say<R: Bench>(x: &mut Cx<'_, R>, message: u16) {
     wr16(x.b, MESSAGE, message);
     crate::sound::play(x.b, SOUND_MESSAGE, x.o);
@@ -58,12 +57,11 @@ fn say<R: Bench>(x: &mut Cx<'_, R>, message: u16) {
 // ---------------------------------------------------------------------------------------------
 // Type 42 (0x50b9c) : article en vitrine
 
-/// Type 42 : un article posé sur le comptoir (variante `+3` : 0 à 11). Il apparaît quand son comptoir parent
-/// (`+0x5c`) est dans l'état 2 (et, pour les variantes 0 et 7, quand la boutique le propose : octets
-/// `A5-0x553f` / `A5-0x5540`), suit le défilement, et guette les clients dans sa zone (`+0x14..+0x16` en X,
-/// `+0x54..+0x56` en profondeur) : il affiche son message (`+0x5a`) et vend au client qui s'adresse au
-/// marchand. Prix BCD `+0x4e..+0x53` (long `+0x50`), article `+0x59`, case de la table des achats `+0x58`,
-/// stock `+0x2f` (négatif : épuisé).
+/// Type 42: an article placed on the counter (variant `+3`: 0 to 11). It appears when its parent counter (`+0x5c`) is
+/// in state 2 (and, for variants 0 and 7, when the shop offers it: bytes `A5-0x553f` / `A5-0x5540`), follows the
+/// scroll, and watches for customers in its zone (`+0x14..+0x16` in X, `+0x54..+0x56` in depth): it displays its
+/// message (`+0x5a`) and sells to the customer who addresses the merchant. BCD price `+0x4e..+0x53` (long `+0x50`),
+/// article `+0x59`, slot of the purchase table `+0x58`, stock `+0x2f` (negative: sold out).
 mod item {
     use super::*;
 
@@ -79,7 +77,7 @@ mod item {
     const PURCHASE_INDEX: u32 = 0x58;
     const ITEM: u32 = 0x59;
     const OWN_MESSAGE: u32 = 0x5a;
-    /// Zone de vente (quatre mots, espace programme) et tables par variante.
+    /// Sales zone (four words, program space) and per-variant tables.
     const ZONE_SIZES: u32 = 0x50cf0;
     const MESSAGES: u32 = 0x50c78;
     const PRICES: u32 = 0x50c90;
@@ -87,10 +85,10 @@ mod item {
     const PURCHASES: u32 = 0x50cd8;
     const ANIMS: u32 = 0x1980e4;
     const ANIMS_ALT: u32 = 0x1980fc;
-    /// Variantes 0 et 7 : proposées seulement si la boutique les a (octets en A5).
+    /// Variants 0 and 7: offered only if the shop has them (bytes in A5).
     const OFFER_0: u32 = A5 - 0x553f;
     const OFFER_7: u32 = A5 - 0x5540;
-    /// Achats faits dans la partie (un octet par article).
+    /// Purchases made in the game (one byte per article).
     const PURCHASED: u32 = A5 - 0x5b88;
     const MAX_COUNT: i8 = 9;
 
@@ -176,7 +174,7 @@ mod item {
         }
     }
 
-    /// Le client est-il dans la zone de vente ?
+    /// Is the customer in the sales zone?
     fn in_zone<R: Bench>(x: &mut Cx<'_, R>, customer: Obj) -> bool {
         let dx = x.u16(0x8).wrapping_sub(customer.u16(x.b, 0x8)).wrapping_add(x.u16(ZONE));
         if dx > x.u16(ZONE + 2) {
@@ -191,18 +189,18 @@ mod item {
         dz <= x.u16(DEPTH + 2)
     }
 
-    /// Le client s'adresse au marchand (0x50d9c) : selon la variante, l'article est refusé (message 0x86 :
-    /// déjà équipé ; 0x84 : pas pour ce personnage) ou vendu.
+    /// The customer addresses the merchant (0x50d9c): depending on the variant, the article is refused (message 0x86:
+    /// already equipped; 0x84: not for this character) or sold.
     fn sell<R: Bench>(x: &mut Cx<'_, R>, customer: Obj) {
         customer.set_u8(x.b, c::READY, 0xff);
         let variant = x.u8(0x3);
         let player = player_of(x, customer);
         let state = player.u8(x.b, p::STATE_10D);
         let character = player.u8(x.b, p::CHARACTER);
-        // D0 = 4 * variante, octet bas remplacé par le personnage, puis D0.w >> 1 : 4 * variante < 0x100 pour les
-        // variantes qui s'en servent (0 à 11), la « classe » est le personnage divisé par deux
+        // D0 = 4 * variant, low byte replaced by the character, then D0.w >> 1: 4 * variant < 0x100 for the variants
+        // that use it (0 to 11), the "class" is the character divided by two
         let class = character >> 1;
-        // équipement (variantes 0 et 5 à 11) : refusé s'il est déjà porté ou interdit au personnage
+        // equipment (variants 0 and 5 to 11): refused if already worn or forbidden to the character
         let equipment = match variant {
             0 => Some((Some(8), class != 0)),
             5 => Some((Some(9), class == 1 || class == 4)),
@@ -225,7 +223,7 @@ mod item {
         }
     }
 
-    /// Achat (0x50f2a équipement, 0x50f94 consommable empilable) : stock, bourse, case libre, puis paiement.
+    /// Purchase (0x50f2a equipment, 0x50f94 stackable consumable): stock, purse, free slot, then payment.
     fn buy<R: Bench>(x: &mut Cx<'_, R>, player: Obj, stackable: bool) {
         if (x.u8(STOCK) as i8) < 0 {
             return crate::sound::play(x.b, SOUND_MESSAGE, x.o);
@@ -264,7 +262,7 @@ mod item {
         crate::sound::play(x.b, SOUND_OK, x.o);
     }
 
-    /// Bourse du joueur (six octets BCD `+0x112..+0x117`) moins le prix (`+0x4e..+0x53`), par `sbcd`.
+    /// The player's purse (six BCD bytes `+0x112..+0x117`) minus the price (`+0x4e..+0x53`), by `sbcd`.
     fn pay<R: Bench>(x: &mut Cx<'_, R>, player: Obj) {
         let mut borrow = false;
         for k in 1..=6 {
@@ -274,21 +272,21 @@ mod item {
             borrow = b;
             player.set_u8(x.b, p::GOLD_END - k, v);
         }
-        // Glitch d'origine : le compteur épuisé du `dbf` reste dans D5 (`dispatch::Leftovers`)
+        // Original glitch: the exhausted `dbf` counter remains in D5 (`dispatch::Leftovers`)
         *x.c.d5() = *x.c.d5() & 0xffff_0000 | 0xffff;
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// Dialogue du marchand (0x514ac, 0x514cc)
+// Merchant dialogue (0x514ac, 0x514cc)
 
-/// Interprète d'un script de dialogue du comptoir (PEFF 43) : `field` = `+0x1c` (zone A) ou `+0x58` (zone B),
-/// pointeur du script, que l'interprète avance et range. Une commande = opcode (`+5`), paramètre (`+6`), mot
-/// D1 (message ou saut relatif). L'état du dialogue du joueur (`+0x167`) est posé par le menu de la boutique.
+/// Interpreter of a counter dialogue script (PEFF 43): `field` = `+0x1c` (zone A) or `+0x58` (zone B), script pointer,
+/// which the interpreter advances and stores. A command = opcode (`+5`), parameter (`+6`), word D1 (message or relative
+/// jump). The player's dialogue state (`+0x167`) is set by the shop menu.
 mod talk {
     use super::*;
 
-    /// Commandes (opcode = décalage dans la table de sauts 0x514ec).
+    /// Commands (opcode = offset in the jump table 0x514ec).
     const SAY: u8 = 0x00;
     const STOP: u8 = 0x04;
     const SAY_NEXT_UNLESS: u8 = 0x08;
@@ -316,15 +314,15 @@ mod talk {
         run(x, customer, 0x58);
     }
 
-    /// Lecture du script : position (A3 de l'original), champ du comptoir qui la range (A4), mot de la commande
-    /// courante (D1.w : message ou saut relatif).
+    /// Script reading: position (A3 of the original), counter field that stores it (A4), word of the current command
+    /// (D1.w: message or relative jump).
     struct Script {
         pos: u32,
         field: u32,
         word: u16,
     }
 
-    /// Prochaine commande : `+5`, `+6`, mot ; position avancée.
+    /// Next command: `+5`, `+6`, word; position advanced.
     fn fetch<R: Bench>(x: &mut Cx<'_, R>, s: &mut Script) -> u8 {
         let (op, param) = (rd8(x.b, s.pos), rd8(x.b, s.pos + 1));
         x.set8(0x5, op);
@@ -334,18 +332,18 @@ mod talk {
         op
     }
 
-    /// Saut relatif du mot (`lea (0,A3,D1.w),A3`).
+    /// Relative jump of the word (`lea (0,A3,D1.w),A3`).
     fn skip(s: &mut Script) {
         s.pos = s.pos.wrapping_add(s.word as i16 as i32 as u32);
     }
 
-    /// Range la position du script (`move.l A3,(A4)`).
+    /// Stores the script position (`move.l A3,(A4)`).
     fn save<R: Bench>(x: &mut Cx<'_, R>, s: &Script) {
         let field = s.field;
         x.set32(field, s.pos);
     }
 
-    /// Le client entre dans le menu (état 2 du joueur, sous-état 5) : son, menu ouvert.
+    /// The customer enters the menu (player state 2, substate 5): sound, menu open.
     fn open_menu<R: Bench>(x: &mut Cx<'_, R>, s: &mut Script, player: Obj) {
         crate::sound::play(x.b, SOUND_OK, x.o);
         player.set_u8(x.b, 0x162, 2);
@@ -361,9 +359,9 @@ mod talk {
         let s = &mut Script { pos, field, word: 0 };
         let mut op = fetch(x, s);
         loop {
-            // l'original indexe sa table par D0.w, dont l'octet haut vient de l'appelant : le comptoir y laisse
-            // un écart en profondeur au plus égal à l'étendue de la zone, inférieure à 0x100 (0x51306, 0x51376),
-            // donc nul : seul l'octet de commande compte
+            // the original indexes its table by D0.w, whose high byte comes from the caller: the counter leaves there a
+            // depth offset at most equal to the extent of the zone, below 0x100 (0x51306, 0x51376), hence zero: only
+            // the command byte counts
             match op {
                 SAY => {
                     if rd16(x.b, MESSAGE) == 0 {
@@ -416,8 +414,8 @@ mod talk {
                     let player = player_of(x, customer);
                     if player.u8(x.b, p::SHOP) == 3 {
                         let character = player.u8(x.b, p::CHARACTER);
-                        // D0.w = personnage : l'octet haut est celui de l'écart en profondeur que le comptoir y
-                        // laisse, nul (étendues de 0x51306 / 0x51376 toutes inférieures à 0x100)
+                        // D0.w = character: the high byte is that of the depth offset the counter leaves there, zero
+                        // (extents of 0x51306 / 0x51376 all below 0x100)
                         if character < 8 {
                             player.set_u8(x.b, p::SHOP, IDLE);
                             player.set_u8(x.b, 0x164, 4);
@@ -461,8 +459,8 @@ mod talk {
         }
     }
 
-    /// Arme offerte selon la classe (0x5164c) dans la première case vide ; sans place, message 0x87 et la
-    /// lecture continue. Vrai quand le dialogue s'arrête.
+    /// Weapon offered according to the class (0x5164c) in the first empty slot; with no room, message 0x87 and the
+    /// reading continues. True when the dialogue stops.
     fn give_weapon<R: Bench>(x: &mut Cx<'_, R>, s: &Script, player: Obj) -> bool {
         let Some(k) = find_slot(x, player, EMPTY) else {
             wr16(x.b, MESSAGE, 0x87);
@@ -472,7 +470,7 @@ mod talk {
         player.set_u8(x.b, p::SHOP, IDLE);
         crate::sound::play(x.b, SOUND_OK, x.o);
         let character = player.u8(x.b, p::CHARACTER);
-        // D0.w = personnage (octet haut nul, voir `LEARN`), divisé par deux
+        // D0.w = character (high byte zero, see `LEARN`), divided by two
         let class = character >> 1;
         let (item, flag) = match class {
             4 => (0x4e, A5 - 0x5b76),
@@ -487,8 +485,8 @@ mod talk {
         true
     }
 
-    /// Objet 0x2b offert (0x51706) : déjà possédé, le dialogue s'arrête sur un son ; sinon dans la première
-    /// case vide (message 0xfa), et sans place, message 0x87 et la lecture continue.
+    /// Item 0x2b offered (0x51706): already owned, the dialogue stops on a sound; otherwise in the first empty slot
+    /// (message 0xfa), and with no room, message 0x87 and the reading continues.
     fn give_item_2b<R: Bench>(x: &mut Cx<'_, R>, s: &Script, player: Obj) -> bool {
         const ITEM: u8 = 0x2b;
         if find_slot(x, player, ITEM).is_some() {
@@ -517,8 +515,8 @@ handlers! {
     0x50b9c "peff_42" #[without] item::run,
 }
 
-/// Interprètes du dialogue (0x514ac, 0x514cc) : appelés par le comptoir (PEFF 43, `peff.rs`) avec x.o = le comptoir,
-/// `customer` = le client (A2 de l'original).
+/// Dialogue interpreters (0x514ac, 0x514cc): called by the counter (PEFF 43, `peff.rs`) with x.o = the counter,
+/// `customer` = the customer (A2 of the original).
 pub fn talk_a<R: Bench>(x: &mut Cx<'_, R>, customer: Obj) {
     talk::zone_a(x, customer);
 }

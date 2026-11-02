@@ -1,8 +1,8 @@
-//! Touches configurables : `keys.cfg` (créé avec les touches par défaut s'il manque) associe à chaque
-//! action une liste de noms de touches minifb (`Left`, `LeftCtrl`, `A`, `Key1`, `NumPad0`...) ou de boutons
-//! de manette (`Pad1A`, `Pad1Haut`... : `gamepad.rs`).
-//! Les lettres et les chiffres suivent la disposition du clavier (en AZERTY, `Key1` demande Maj) ;
-//! `DDSOM_TOUCHES=1` affiche le nom des touches pressées pour remplir le fichier.
+//! Configurable keys: `keys.cfg` (created with the default keys if missing) maps each
+//! action to a list of minifb key names (`Left`, `LeftCtrl`, `A`, `Key1`, `NumPad0`...) or gamepad
+//! buttons (`Pad1A`, `Pad1Haut`... : `gamepad.rs`).
+//! Letters and digits follow the keyboard layout (on AZERTY, `Key1` needs Shift);
+//! `DDSOM_TOUCHES=1` prints the name of the pressed keys to fill in the file.
 
 use std::path::Path;
 
@@ -10,7 +10,7 @@ use minifb::Window;
 
 use crate::gamepad::Gamepads;
 
-/// Port d'entrée CPS2 touché par une action (actif à 0).
+/// CPS2 input port touched by an action (active low).
 #[derive(Clone, Copy)]
 pub enum Port {
     In0(u16),
@@ -23,7 +23,7 @@ pub enum Port {
     Quit,
 }
 
-/// Actions : nom dans le fichier, effet, touches par défaut (comme MAME).
+/// Actions: name in the file, effect, default keys (as in MAME).
 const ACTIONS: &[(&str, Port, &str)] = &[
     ("j1.droite", Port::In0(0x01), "Right Pad1Droite"),
     ("j1.gauche", Port::In0(0x02), "Left Pad1Gauche"),
@@ -55,22 +55,22 @@ const ACTIONS: &[(&str, Port, &str)] = &[
     ("quitter", Port::Quit, "Escape"),
 ];
 
-/// Touches de chaque action, par nom minifb.
+/// Keys of each action, by minifb name.
 pub struct Keys {
     actions: Vec<(Port, Vec<String>)>,
     gamepads: Gamepads,
     trace: bool,
     before: Vec<String>,
-    /// Pause, sauver, charger, plein écran tenus à l'image précédente (ils agissent à l'appui).
+    /// Pause, save, load, full screen held on the previous frame (they act on press).
     before_press: [bool; 4],
 }
 
-/// Lecture du clavier pour une image.
+/// Keyboard reading for one frame.
 pub struct State {
-    /// Ports d'entrée CPS2 (actifs à 0).
+    /// CPS2 input ports (active low).
     pub in0: u16,
     pub in2: u16,
-    /// Pause, sauver, charger, plein écran viennent d'être pressés.
+    /// Pause, save, load, full screen have just been pressed.
     pub pause: bool,
     pub save: bool,
     pub load: bool,
@@ -80,14 +80,14 @@ pub struct State {
 }
 
 impl Keys {
-    /// Lit `file` (lignes `action = keys...`, `#` commentaire) ; l'écrit avec les défauts s'il manque.
+    /// Reads `file` (lines `action = keys...`, `#` comment); writes it with the defaults if missing.
     pub fn charge(file: &Path) -> Self {
         let mut actions: Vec<(Port, Vec<String>)> =
             ACTIONS.iter().map(|&(_, port, keys)| (port, names(keys))).collect();
         match std::fs::read_to_string(file) {
             Ok(text) => {
                 if !text.contains("Pad1") {
-                    eprintln!("{} ne nomme aucun bouton de manette : supprimez-le pour le recréer.", file.display());
+                    eprintln!("{} names no gamepad button: delete it to recreate it.", file.display());
                 }
                 for (n, line) in text.lines().enumerate() {
                     let line = line.split('#').next().unwrap_or("").trim();
@@ -95,18 +95,18 @@ impl Keys {
                         continue;
                     }
                     let Some((name, keys)) = line.split_once('=') else {
-                        eprintln!("{}:{} : « action = touches » attendu", file.display(), n + 1);
+                        eprintln!("{}:{}: « action = keys » expected", file.display(), n + 1);
                         continue;
                     };
                     match ACTIONS.iter().position(|a| a.0 == name.trim()) {
                         Some(i) => actions[i].1 = names(keys),
-                        None => eprintln!("{}:{} : action inconnue « {} »", file.display(), n + 1, name.trim()),
+                        None => eprintln!("{}:{}: unknown action « {} »", file.display(), n + 1, name.trim()),
                     }
                 }
             }
             Err(_) => {
                 if let Err(e) = std::fs::write(file, defaults()) {
-                    eprintln!("Écriture de {} impossible : {e}", file.display());
+                    eprintln!("Cannot write {}: {e}", file.display());
                 }
             }
         }
@@ -114,7 +114,7 @@ impl Keys {
         Keys { actions, gamepads: Gamepads::opens(), trace, before: Vec::new(), before_press: [false; 4] }
     }
 
-    /// État des actions d'après les touches et les boutons tenus.
+    /// State of the actions from the held keys and buttons.
     pub fn lit(&mut self, win: &Window) -> State {
         let mut low: Vec<String> = win.get_keys().iter().map(|k| format!("{k:?}")).collect();
         low.extend(self.gamepads.held());
@@ -160,15 +160,15 @@ fn names(keys: &str) -> Vec<String> {
     keys.split_whitespace().map(String::from).collect()
 }
 
-/// Contenu du fichier créé quand il manque.
+/// Contents of the file created when it is missing.
 fn defaults() -> String {
     let mut s = String::from(
-        "# Touches du port ddsom : action = noms de touches minifb séparés par des espaces (vide = aucune).\n\
+        "# ddsom port keys: action = minifb key names separated by spaces (empty = none).\n\
          # Noms : Left Right Up Down, LeftCtrl RightCtrl LeftAlt LeftShift Space Enter Tab Escape,\n\
-         # A..Z, Key0..Key9, NumPad0..NumPad9, F1..F12... Lettres et chiffres suivent la disposition du clavier.\n\
+         # A..Z, Key0..Key9, NumPad0..NumPad9, F1..F12... Letters and digits follow the keyboard layout.\n\
          # Manettes Xbox (Windows) : Pad1A Pad1B Pad1X Pad1Y Pad1LB Pad1RB Pad1Start Pad1Back,\n\
-         # Pad1Haut Pad1Bas Pad1Gauche Pad1Droite (croix ou stick gauche) ; Pad2... pour la deuxième.\n\
-         # DDSOM_TOUCHES=1 affiche le nom des touches et boutons pressés.\n\n",
+         # Pad1Haut Pad1Bas Pad1Gauche Pad1Droite (d-pad or left stick); Pad2... for the second.\n\
+         # DDSOM_TOUCHES=1 prints the name of the pressed keys and buttons.\n\n",
     );
     for (name, _, keys) in ACTIONS {
         s += &format!("{name} = {keys}\n");

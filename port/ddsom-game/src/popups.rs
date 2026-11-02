@@ -1,20 +1,20 @@
-//! Pop-ups (U1) : machine à états qui sort les textes flottants de leur file, un à la fois, et les dessine.
+//! Pop-ups (U1): state machine that takes the floating texts out of their queue, one at a time, and draws them.
 //!
-//! `A5-0x6e80` : pop-up courant (4 mots : identifiant, deux paramètres, durée restante en images).
-//! La file (`A5+0x20e`, entrées de 8 octets, lecture en `A5+0x20d`) est remplie par `create_popup`
-//! (0x19dce, voir `events.rs`). À chaque image (0x19e20) :
+//! `A5-0x6e80`: current pop-up (4 words: identifier, two parameters, remaining duration in frames).
+//! The queue (`A5+0x20e`, 8-byte entries, read at `A5+0x20d`) is filled by `create_popup`
+//! (0x19dce, see `events.rs`). At each frame (0x19e20):
 //!
-//! * pas de pop-up courant (durée nulle) : le suivant, s'il y en a un, devient courant (sa case est
-//!   libérée), son dessin est lancé (0x19f24) ; sans second paramètre sa durée est de 0x60 images ;
-//! * pop-up courant : sa durée diminue ; à zéro il est effacé (0x19ee0) puis remplacé par le suivant ;
-//!   si un autre attend et que la durée restante est d'au moins 4 images, elle est ramenée à 4.
+//! * no current pop-up (zero duration): the next one, if any, becomes current (its slot is
+//!   freed), its drawing is started (0x19f24); without a second parameter its duration is 0x60 frames;
+//! * current pop-up: its duration decreases; at zero it is erased (0x19ee0) and then replaced by the next one;
+//!   if another one is waiting and the remaining duration is at least 4 frames, it is brought down to 4.
 //!
-//! ## Dessin
+//! ## Drawing
 //!
-//! L'identifiant (mot) donne dans son octet haut l'emplacement de la bulle sur la couche de texte
-//! (bit 1 : décalage d'une case) et dans son octet bas le numéro du texte. Une bulle est un cadre
-//! de tuiles 8x8 (largeur et hauteur en pixels : 2e et 3e mots) avec le texte en haut ; en jeu à deux
-//! joueurs (`A5+0x20` bit 0) la bulle est réduite de moitié.
+//! The identifier (word) gives in its high byte the location of the bubble on the text layer
+//! (bit 1: shift of one cell) and in its low byte the text number. A bubble is a frame
+//! of 8x8 tiles (width and height in pixels: 2nd and 3rd words) with the text at the top; in a two-player
+//! game (`A5+0x20` bit 0) the bubble is halved.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -24,36 +24,36 @@ use crate::text::clear_cells;
 use crate::Native;
 
 const EMPTY: u16 = 0xffff;
-/// Pop-up courant (4 mots) ; la durée restante est le dernier.
+/// Current pop-up (4 words); the remaining duration is the last one.
 const CURRENT: u32 = 0xffff_9180;
 const DURATION: u32 = 6;
 const INPUTS: u32 = 0x20e;
 const READ: u32 = 0x20d;
 const ENTRY_SIZE: u8 = 8;
-/// Durée par défaut d'un pop-up sans second paramètre (images), et durée raccourcie.
+/// Default duration of a pop-up without a second parameter (frames), and shortened duration.
 const DEFAULT_DURATION: u16 = 0x60;
 const SHORT_DURATION: u16 = 4;
-/// Bit 0 : bulles réduites.
+/// Bit 0: reduced bubbles.
 const REDUCED: u32 = 0x20;
 
-/// Données de la ROM programme.
+/// Program ROM data.
 mod rom {
-    /// Rectangles à effacer (colonne, ligne, largeur, hauteur), un par emplacement : grands, puis réduits.
+    /// Rectangles to erase (column, row, width, height), one per slot: large, then reduced.
     pub const CLEARS: [u32; 2] = [0x19f02, 0x19f12];
-    /// Origine de la bulle dans la couche de texte, par emplacement (4 grands, puis 4 réduits) : lue
-    /// comme une table relative au PC, donc dans le programme déchiffré.
+    /// Origin of the bubble in the text layer, per slot (4 large, then 4 reduced): read
+    /// as a PC-relative table, hence in the decrypted program.
     pub const ORIGINALS: u32 = 0x19f6c;
-    /// Déplacements des textes (par numéro) vers des chaînes d'indices de tuiles terminées par `/`.
+    /// Offsets of the texts (by number) to strings of tile indices terminated by `/`.
     pub const TEXTS: u32 = 0x1a01a;
-    /// Tuiles du bord bas du cadre (par reste de hauteur de 1 à 8 pixels).
+    /// Tiles of the bottom edge of the frame (by height remainder from 1 to 8 pixels).
     pub const EDGES: u32 = 0x1a25e;
 }
 
 const TEXT_LAYER: u32 = 0x912000;
 const COLUMN: u32 = 0x80;
-/// Fin de chaîne d'un texte.
+/// End of a text string.
 const TEXT_END: u8 = 0x2f;
-/// Cases du cadre (tuile, attribut 0xd) : bord de la dernière colonne, bord plein, et base de la case d'angle.
+/// Frame cells (tile, attribute 0xd): edge of the last column, full edge, and base of the corner cell.
 const EDGE_CURRENT: u32 = 0x1318_000d;
 const EDGE_FULL: u32 = 0x1310_000d;
 const EDGE_COIN: u16 = 0x1310;
@@ -64,7 +64,7 @@ fn reduced(b: &mut Cps2Bus, a5: u32) -> bool {
     rd8(b, a5 + REDUCED) & 1 != 0
 }
 
-/// 0x19ee0 : efface la bulle du pop-up `entry`.
+/// 0x19ee0: erases the bubble of pop-up `entry`.
 fn clear(b: &mut Cps2Bus, a5: u32, entry: u32) {
     let table = rom::CLEARS[reduced(b, a5) as usize];
     let case = table + 4 * rd8(b, entry) as u32;
@@ -72,13 +72,13 @@ fn clear(b: &mut Cps2Bus, a5: u32, entry: u32) {
     clear_cells(b, col, row, width, height);
 }
 
-/// 0x19f24 : dessine la bulle du pop-up `entry`.
+/// 0x19f24: draws the bubble of pop-up `entry`.
 fn draw(b: &mut Cps2Bus, a5: u32, entry: u32) {
     let id = rd16(b, entry);
     let mut width = rd16(b, entry + 2);
     let mut height = rd16(b, entry + 4);
     if (height as i16) < 0 {
-        // paramètre absent
+        // parameter absent
         height = 0;
     }
     let mut slot = (id >> 8) << 1;
@@ -98,12 +98,12 @@ fn draw(b: &mut Cps2Bus, a5: u32, entry: u32) {
     frame(b, a4, id, small, width as i16, height as i16);
 }
 
-/// Colonne du texte et du cadre : décalée d'une case quand le bit 9 de l'identifiant est posé.
+/// Column of the text and of the frame: shifted by one cell when bit 9 of the identifier is set.
 fn shifted(id: u16, small: bool) -> bool {
     !small && id & 0x200 != 0
 }
 
-/// 0x19fd2 : le texte, une tuile par case, en colonne.
+/// 0x19fd2: the text, one tile per cell, in a column.
 fn text(b: &mut Cps2Bus, a4: u32, id: u16, small: bool) {
     let mut case = a4 + 0x100 + if shifted(id, small) { 4 } else { 0 };
     let start = prog16(b, rom::TEXTS + 2 * (id & 0xff) as u32) as i16 as i32 as u32;
@@ -120,8 +120,8 @@ fn text(b: &mut Cps2Bus, a4: u32, id: u16, small: bool) {
     }
 }
 
-/// 0x1a20e : le cadre sous le texte. `width` et `height` en pixels : des colonnes entières de bord, puis
-/// la colonne du reste (une tuile choisie par le nombre de pixels restants).
+/// 0x1a20e: the frame under the text. `width` and `height` in pixels: whole edge columns, then
+/// the remainder column (a tile chosen by the number of remaining pixels).
 fn frame(b: &mut Cps2Bus, a4: u32, id: u16, small: bool, mut d1: i16, mut d2: i16) {
     let mut case = a4 + 0x104 - if shifted(id, small) { 4 } else { 0 };
     loop {
@@ -161,8 +161,8 @@ fn frame(b: &mut Cps2Bus, a4: u32, id: u16, small: bool, mut d1: i16, mut d2: i1
     }
 }
 
-/// Fait du prochain pop-up de la file le pop-up courant (s'il y en a un) et lance son dessin. Rend l'index de
-/// lecture lu.
+/// Makes the next pop-up of the queue the current pop-up (if there is one) and starts its drawing. Returns the read
+/// index read.
 fn next(b: &mut Cps2Bus, current: u32) -> u8 {
     let index = rd8(b, A5 + READ);
     let case = A5 + INPUTS + index as u32;
@@ -182,8 +182,8 @@ fn next(b: &mut Cps2Bus, current: u32) -> u8 {
     index
 }
 
-/// 0x19e20 : un pas de la machine à états des pop-ups. Rend l'index de lecture de la file s'il a été lu (le D0.b de
-/// l'original). Cœur.
+/// 0x19e20: one step of the pop-up state machine. Returns the queue read index if it was read (the D0.b of the
+/// original). Core.
 pub fn animer(b: &mut Cps2Bus) -> Option<u8> {
     let current = A5.wrapping_add(CURRENT);
     let duration = rd16(b, current + DURATION);
@@ -191,7 +191,7 @@ pub fn animer(b: &mut Cps2Bus) -> Option<u8> {
         let duration = duration - 1;
         wr16(b, current + DURATION, duration);
         if duration != 0 {
-            // le pop-up courant continue ; s'il y en a un autre en attente, on abrège
+            // the current pop-up continues; if another is waiting, it is cut short
             if duration < SHORT_DURATION {
                 return None;
             }
@@ -206,8 +206,8 @@ pub fn animer(b: &mut Cps2Bus) -> Option<u8> {
     Some(next(b, current))
 }
 
-/// `animer` avec les registres de l'original : A0 = le pop-up courant, A2 = la file, D0 = l'index lu.
-/// `animer` avec les registres de l'original (A0 = le pop-up courant, A2 = la file, D0 = l'index lu).
+/// `animer` with the registers of the original: A0 = the current pop-up, A2 = the queue, D0 = the index read.
+/// `animer` with the registers of the original (A0 = the current pop-up, A2 = the queue, D0 = the index read).
 pub fn animer_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[0] = A5.wrapping_add(CURRENT);
     c.a[2] = A5 + INPUTS;
@@ -216,8 +216,8 @@ pub fn animer_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-/// 0x19eb0 : efface les bulles de tous les emplacements (4, ou 3 réduits), du dernier au premier. Rend la table
-/// des effacements lue (l'A2 de l'original). Cœur.
+/// 0x19eb0: erases the bubbles of all slots (4, or 3 reduced), from last to first. Returns the erase table
+/// read (the A2 of the original). Core.
 pub fn clear_all(b: &mut Cps2Bus) -> u32 {
     let small = reduced(b, A5);
     let table = rom::CLEARS[small as usize];

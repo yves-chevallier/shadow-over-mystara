@@ -1,8 +1,8 @@
-//! Gestionnaires des types d'ennemis de la classe ENEMY (C02). Voir `docs/families/enemy.md`.
+//! Handlers of the enemy types of the ENEMY class (C02). See `docs/families/enemy.md`.
 //!
-//! Même cadre que les familles ESHL / SET / SOBJ (`cx.rs`) : un type est un `mod` avec une fonction
-//! `run`, des constantes nommées pour ses tables et ses jeux d'animation, et un commentaire de rôle.
-//! Les noms de rôle sont des hypothèses (h) tirées du comportement et des noms de debug du jeu.
+//! Same framework as the ESHL / SET / SOBJ families (`cx.rs`): a type is a `mod` with a `run` function, named constants
+//! for its tables and animation sets, and a role comment. The role names are hypotheses (h) drawn from the behaviour
+//! and the debug names of the game.
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -13,15 +13,14 @@ use crate::objects::pools;
 use crate::objects::Current;
 
 // ---------------------------------------------------------------------------------------------
-// Type 20 (0x74fc0) : « ManScorpion » (h), ennemi composite greffé sur un ennemi de type 19
+// Type 20 (0x74fc0): "ManScorpion" (h), composite enemy grafted on an enemy of type 19
 // ---------------------------------------------------------------------------------------------
 
-/// Créé par un ennemi de type 19 (parent en `+0x50`), il engendre ses halos (ESHL type 11 en
-/// `+0xa4/+0xa6`), une ombre (EFFCT 0x20 en `+0xb4`), deux flammes (ITEM type 6 en `+0xa8/+0xaa`) et,
-/// pour la variante 1, deux bras (ENEMY type 19, `+0xac/+0xae`, `+0xb0` = bras présents).
-/// Variantes 0 et 1 : vol vers le bord gauche en jetant des étincelles ; variante 2 : vol vers le
-/// bord droit ; quand les bras sont tombés le parent est averti. États : 0 création, 2 vol,
-/// 4 touché (recul de 15 images puis mort en plusieurs temps), 6 libération des parties.
+/// Created by an enemy of type 19 (parent in `+0x50`), it spawns its halos (ESHL type 11 in `+0xa4/+0xa6`), a shadow
+/// (EFFCT 0x20 in `+0xb4`), two flames (ITEM type 6 in `+0xa8/+0xaa`) and, for variant 1, two arms (ENEMY type 19,
+/// `+0xac/+0xae`, `+0xb0` = arms present). Variants 0 and 1: flight toward the left edge throwing sparks; variant 2:
+/// flight toward the right edge; when the arms have fallen the parent is notified. States: 0 creation, 2 flight, 4 hit
+/// (15-frame recoil then death in several steps), 6 release of the parts.
 mod man_scorpion {
     use super::*;
 
@@ -30,12 +29,12 @@ mod man_scorpion {
     const ARM_TYPE: u8 = 0x13;
     const SHADOW_TYPE: u8 = 0x20;
     const FLAME_TYPE: u8 = 6;
-    /// État long d'un bras lâché (état 2, sous-état 6, sous-sous-état 0xc).
+    /// Long state of a dropped arm (state 2, substate 6, sub-substate 0xc).
     const ARM_RELEASED: u32 = 0x0206_0c00;
-    /// Touché, mort en cours (état 4, sous-état 2).
+    /// Hit, death in progress (state 4, substate 2).
     const DYING: u32 = 0x0402_0600;
 
-    /// Champs propres à ce type.
+    /// Fields specific to this type.
     mod p {
         pub const LIMBS: u32 = 0xa4;
         pub const FLAMES: u32 = 0xa8;
@@ -57,14 +56,14 @@ mod man_scorpion {
         }
     }
 
-    // --- création ------------------------------------------------------------------------------
+    // --- creation ------------------------------------------------------------------------------
 
     fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.set32(f::IMMUNITY, 0xffff_ffff);
         x.set8(0x7e, 0xb);
         let r = random(x);
         x.set8(p::COUNTER, r as u8);
-        // au moins deux joueurs vivants, et pas plus d'un ennemi composite déjà en scène
+        // at least two living players, and no more than one composite enemy already on the scene
         let w = |x: &mut Cx<'_, R>, off: u32| x.a5_u16(off) as i16;
         if w(x, 0x7e64) < 2 || w(x, 0x7e6e) < 2 {
             return;
@@ -88,7 +87,7 @@ mod man_scorpion {
         lib::sound(x, 0xea8be);
     }
 
-    /// Crée les parties ; `flame_kind` est la variante des flammes ; la variante 1 crée aussi les bras.
+    /// Creates the parts; `flame_kind` is the variant of the flames; variant 1 also creates the arms.
     fn spawn<R: Bench>(x: &mut Cx<'_, R>, flame_kind: u8, with_arms: bool) {
         spawn_limbs(x);
         spawn_shadow(x);
@@ -118,7 +117,7 @@ mod man_scorpion {
         x.set16(0x14, 0xfb00);
     }
 
-    /// Deux halos (ESHL type 11, variantes 1 puis 0) rangés en `+0xa4`, `+0xa6`.
+    /// Two halos (ESHL type 11, variants 1 then 0) stored in `+0xa4`, `+0xa6`.
     fn spawn_limbs<R: Bench>(x: &mut Cx<'_, R>) {
         let mut at = x.o.0 + p::LIMBS;
         for d5 in [1u8, 0] {
@@ -142,7 +141,7 @@ mod man_scorpion {
         x.set16(p::SHADOW, o.0 as u16);
     }
 
-    /// Deux flammes (ITEM type 6, orientation 0x20 puis 0) rangées en `+0xa8`, `+0xaa`.
+    /// Two flames (ITEM type 6, orientation 0x20 then 0) stored in `+0xa8`, `+0xaa`.
     fn spawn_flames<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
         let mut at = x.o.0 + p::FLAMES;
         for d5 in [1u8, 0] {
@@ -160,7 +159,7 @@ mod man_scorpion {
         }
     }
 
-    // --- état 2 : vol --------------------------------------------------------------------------
+    // --- state 2: flight -----------------------------------------------------------------------
 
     fn active<R: Bench>(x: &mut Cx<'_, R>) {
         check_arms(x);
@@ -187,14 +186,14 @@ mod man_scorpion {
         x.reinsert();
     }
 
-    /// Plus de bras : sous-état 2, puis tentative de passage à l'état « mort en cours ».
+    /// No more arms: substate 2, then attempt to switch to the "death in progress" state.
     fn stop_flight<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB, 2);
         detach_from_host(x);
         take_from_parent(x);
     }
 
-    /// Le coup de grâce n'est possible que tant que le parent a des coups en réserve (`+0x32`).
+    /// The finishing blow is possible only while the parent has hits in reserve (`+0x32`).
     fn take_from_parent<R: Bench>(x: &mut Cx<'_, R>) {
         let parent = x.linked(f::OWNER);
         let left = parent.u8(x.b, 0x32);
@@ -206,7 +205,7 @@ mod man_scorpion {
         x.set32(f::STATE, DYING);
     }
 
-    /// Étincelles : tous les 8 pas, tous les 16 s'il n'y a qu'un bras.
+    /// Sparks: every 8 steps, every 16 if there is only one arm.
     fn sparkles<R: Bench>(x: &mut Cx<'_, R>) {
         let mask = x.u8(p::ARMS_MASK);
         let one_arm = (mask & 1 != 0) != (mask & 2 != 0);
@@ -218,7 +217,7 @@ mod man_scorpion {
         }
     }
 
-    /// Vol vers le bord gauche : mort (état 6) une fois sorti de l'écran.
+    /// Flight toward the left edge: death (state 6) once off the screen.
     fn fly_left<R: Bench>(x: &mut Cx<'_, R>) {
         sparkles(x);
         x.move_x();
@@ -229,7 +228,7 @@ mod man_scorpion {
         x.anim_step();
     }
 
-    /// Vol vers le bord droit ; à l'arrivée, lâche les bras et rend la main au parent.
+    /// Flight toward the right edge; on arrival, drops the arms and cedes control to the parent.
     fn fly_right<R: Bench>(x: &mut Cx<'_, R>) {
         sparkles(x);
         x.move_x();
@@ -251,8 +250,8 @@ mod man_scorpion {
         x.anim_step();
     }
 
-    /// Un bras dont l'état est >= 4 est détaché ; sans plus de bras, le parent est libéré de son
-    /// attente (`+0x24`). Laisse D0 = 0 comme l'original.
+    /// An arm whose state is >= 4 is detached; with no arms left, the parent is released from its wait (`+0x24`).
+    /// Leaves D0 = 0 like the original.
     fn check_arms<R: Bench>(x: &mut Cx<'_, R>) {
         let mut left = x.u8(p::ARMS_MASK);
         if left != 0 {
@@ -282,7 +281,7 @@ mod man_scorpion {
         }
     }
 
-    // --- état 4 : touché -----------------------------------------------------------------------
+    // --- state 4: hit --------------------------------------------------------------------------
 
     fn hit<R: Bench>(x: &mut Cx<'_, R>) {
         check_arms(x);
@@ -314,14 +313,14 @@ mod man_scorpion {
         }
     }
 
-    /// Copie le gel (`+0x58` long, `+0x53`) sur une partie.
+    /// Copies the freeze (`+0x58` long, `+0x53`) onto a part.
     fn share_freeze<R: Bench>(x: &mut Cx<'_, R>, o: Obj) {
         let (l, g) = (x.u32(0x58), x.u8(f::FREEZE));
         o.set_u32(x.b, 0x58, l);
         o.set_u8(x.b, f::FREEZE, g);
     }
 
-    /// Début d'un coup : gèle les parties, démarre le recul (15 images) et l'effet `0xab7d8`.
+    /// Start of a hit: freezes the parts, starts the recoil (15 frames) and the `0xab7d8` effect.
     fn react<R: Bench>(x: &mut Cx<'_, R>) {
         let freeze = x.u8(p::HIT_FREEZE);
         x.set8(f::FREEZE, freeze);
@@ -341,7 +340,7 @@ mod man_scorpion {
         lib::debris_spray(x, 0);
     }
 
-    /// Recul de 15 images (2 pixels, sens alterné), puis retour à l'état 2.
+    /// 15-frame recoil (2 pixels, alternating direction), then back to state 2.
     fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
         let left = x.u8(p::DELAY);
         if left != 0 {
@@ -367,8 +366,8 @@ mod man_scorpion {
         }
     }
 
-    /// Sous-état 2 : mort en plusieurs temps (`+6` : 0 lance la mort d'une variante 0, 6 celle
-    /// d'une autre variante ; 2 et 8 attendent ; 4 et 10 finissent).
+    /// Substate 2: death in several steps (`+6`: 0 starts the death of a variant 0, 6 that of another variant; 2 and 8
+    /// wait; 4 and 10 finish).
     fn dying<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(f::SUB2) {
             0 => death_start(x),
@@ -468,16 +467,16 @@ mod man_scorpion {
         free(x);
     }
 
-    /// Clignote pendant l'attente (caché quand `(+0xa2) & 3 != 0`), puis remet l'objet en liste.
+    /// Blinks while waiting (hidden when `(+0xa2) & 3 != 0`), then puts the object back in the list.
     fn blink<R: Bench>(x: &mut Cx<'_, R>) {
         let hidden = x.u8(p::DELAY) & 3 != 0;
         x.set_bit(0x1, 1, hidden);
         x.reinsert();
     }
 
-    // --- état 6 : libération -------------------------------------------------------------------
+    // --- state 6: release ----------------------------------------------------------------------
 
-    /// Libère les parties ; la variante 0 rend aussi ses compteurs au parent et à l'hôte.
+    /// Releases the parts; variant 0 also gives its counters back to the parent and to the host.
     fn die<R: Bench>(x: &mut Cx<'_, R>) {
         let first = x.u8(0x3) == 0;
         let mut host = None;
@@ -515,18 +514,18 @@ mod man_scorpion {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 28 (0x79300) : « Nagpa » (h), personnage de scène qui apparaît quand un joueur approche
+// Type 28 (0x79300): "Nagpa" (h), scene character that appears when a player approaches
 // ---------------------------------------------------------------------------------------------
 
-/// Caché au départ (bit 1 de `+1`), il se montre quand un joueur vivant passe à moins de 0x30 pixels
-/// (0x50 pour la variante 1), joue son animation d'apparition, puis redevient caché quand plus
-/// personne n'est à portée. Le bit de la variante dans l'octet `0xff2064` (`A5-0x5f9c`, bit 1 variante 0, bit 0 variante 1) indique
-/// qu'il est visible. Sous-états (`+5`) : 0 attente, 2 apparition, 4 visible, 6 disparition.
+/// Hidden at the start (bit 1 of `+1`), it shows itself when a living player comes within 0x30 pixels (0x50 for variant
+/// 1), plays its appearance animation, then becomes hidden again when no one is in range any more. The variant's bit in
+/// byte `0xff2064` (`A5-0x5f9c`, bit 1 variant 0, bit 0 variant 1) indicates that it is visible. Substates (`+5`): 0
+/// wait, 2 appearance, 4 visible, 6 disappearance.
 mod nagpa {
     use super::*;
 
     const ANIMS: u32 = 0x16c7fc;
-    /// Octet de visibilité : bit 1 pour la variante 0, bit 0 pour la variante 1.
+    /// Visibility byte: bit 1 for variant 0, bit 0 for variant 1.
     const VISIBLE_FLAGS: u32 = 0xff8000 - 0x5f9c;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {

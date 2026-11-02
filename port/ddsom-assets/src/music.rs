@@ -1,13 +1,13 @@
-//! Musiques et effets du pilote son (Z80) : table des sons, pistes, instruments, échantillons et tables du
-//! pilote. Format : `assets/sound/music.json`, voir docs/assets.md et docs/son.md.
+//! Music and effects of the sound driver (Z80): sound table, tracks, instruments, samples and driver
+//! tables. Format: `assets/sound/music.json`, see docs/assets.md and docs/son.md.
 //!
-//! Adresses « linéaires » du pilote (`ddsom_sound::Rom`) : décalage dans `dd2.01`, puis `dd2.02` à sa suite.
+//! « Linear » driver addresses (`ddsom_sound::Rom`): offset in `dd2.01`, then `dd2.02` following it.
 //!
-//! Une piste est écrite comme une suite de jetons séparés par des espaces, un par instruction :
-//! * note (octet >= 0x20) : `durée:note`, durée 1 à 7 (bits 7-5), note 0 à 31 (bits 4-0, 0 = silence) ;
-//! * instruction (octet < 0x20) : son nom (`OPS`), suivi de `=` et de ses paramètres séparés par des
-//!   virgules : octets en décimal, `step` en mot, déplacements des sauts (`loopK`, `exitK`, `jump`) en mot
-//!   signé relatif à l'adresse qui suit le déplacement.
+//! A track is written as a sequence of space-separated tokens, one per instruction:
+//! * note (byte >= 0x20): `duration:note`, duration 1 to 7 (bits 7-5), note 0 to 31 (bits 4-0, 0 = rest);
+//! * instruction (byte < 0x20): its name (`OPS`), followed by `=` and its comma-separated parameters:
+//!   bytes in decimal, `step` as a word, jump offsets (`loopK`, `exitK`, `jump`) as a signed word
+//!   relative to the address following the offset.
 
 use std::io;
 use std::path::Path;
@@ -16,14 +16,14 @@ use serde::{Deserialize, Serialize};
 
 use crate::json::hex;
 
-/// Noms des instructions 0 à 31 (docs/son.md §6).
+/// Names of instructions 0 to 31 (docs/son.md §6).
 pub const OPS: [&str; 32] = [
     "triplet", "tie", "dot", "up2", "mode", "step", "gate", "amp", "inst", "oct", "mtrans", "trans", "detune", "glide",
     "loop0", "loop1", "loop2", "loop3", "exit0", "exit1", "exit2", "exit3", "jump", "end", "pan", "echo", "vol", "vib",
     "trem", "lfo", "lfomode", "bank",
 ];
 
-/// Octets de paramètres de l'instruction `op`.
+/// Parameter bytes of instruction `op`.
 pub fn param_len(op: u8) -> usize {
     match op {
         0..=3 | 23 => 0,
@@ -33,7 +33,7 @@ pub fn param_len(op: u8) -> usize {
     }
 }
 
-/// Jeton de l'instruction qui commence à `bytes[0]` (et sa longueur), `None` si les octets manquent.
+/// Token of the instruction starting at `bytes[0]` (and its length), `None` if bytes are missing.
 pub fn decode_op(bytes: &[u8]) -> Option<(String, usize)> {
     let b = *bytes.first()?;
     if b >= 0x20 {
@@ -53,7 +53,7 @@ pub fn decode_op(bytes: &[u8]) -> Option<(String, usize)> {
     Some((tok, 1 + n))
 }
 
-/// Octets d'un jeton.
+/// Bytes of a token.
 pub fn encode_op(tok: &str) -> Option<Vec<u8>> {
     if let Some((d, n)) = tok.split_once(':') {
         let (d, n): (u8, u8) = (d.parse().ok()?, n.parse().ok()?);
@@ -76,18 +76,18 @@ pub fn encode_op(tok: &str) -> Option<Vec<u8>> {
     Some(out)
 }
 
-/// Définition d'un son (entrée non nulle de la table des sons).
+/// Definition of a sound (non-null entry of the sound table).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Song {
     #[serde(with = "hex")]
     pub rom: u32,
-    /// Premier octet : 0 musique ; 1 à 0x7f effet (priorité) ; 0x80-0x8f note simple (voie) ; 0x90-0x92 ADPCM.
+    /// First byte: 0 music; 1 to 0x7f effect (priority); 0x80-0x8f single note (channel); 0x90-0x92 ADPCM.
     pub kind: u8,
-    /// Musique, effet : 16 déplacements (depuis `rom`, 0 = pas de piste sur ce canal).
+    /// Music, effect: 16 offsets (from `rom`, 0 = no track on this channel).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tracks: Vec<u16>,
-    /// Note simple (10 octets : drapeaux, durée, tenue, amplitude, instrument, note, accord) ou ADPCM
-    /// (7 octets : drapeaux, 4 octets ignorés... voir docs/son.md §5).
+    /// Single note (10 bytes: flags, duration, hold, amplitude, instrument, note, tuning) or ADPCM
+    /// (7 bytes: flags, 4 ignored bytes... see docs/son.md §5).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub body: Vec<u8>,
 }
@@ -102,13 +102,13 @@ impl Song {
         b
     }
 
-    /// Adresses des pistes (canal, adresse).
+    /// Track addresses (channel, address).
     pub fn track_starts(&self) -> impl Iterator<Item = (usize, u32)> + '_ {
         self.tracks.iter().enumerate().filter(|(_, &o)| o != 0).map(|(c, &o)| (c, self.rom + o as u32))
     }
 }
 
-/// Instructions de pistes à la suite en ROM (tout ce qu'atteignent les pistes, en suivant les sauts).
+/// Track instructions contiguous in ROM (everything the tracks reach, following the jumps).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct CodeBlock {
     #[serde(with = "hex")]
@@ -126,8 +126,8 @@ impl CodeBlock {
     }
 }
 
-/// Banc d'instruments : fiches de 8 octets (échantillon (mot petit-boutiste, bit 15 = suit la variation
-/// de hauteur), accord fin, 5 index d'enveloppe : attaque, decay, tenue, chute lente, relâchement).
+/// Instrument bank: 8-byte records (sample (little-endian word, bit 15 = follows the pitch
+/// variation), fine tuning, 5 envelope indices: attack, decay, sustain, slow fall, release).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Bank {
     #[serde(with = "hex")]
@@ -135,7 +135,7 @@ pub struct Bank {
     pub instruments: Vec<[u8; 8]>,
 }
 
-/// Table du pilote (octets, ou mots petit-boutistes).
+/// Driver table (bytes, or little-endian words).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct DriverTable {
     pub name: String,
@@ -157,36 +157,36 @@ impl DriverTable {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Music {
-    /// Mot (ROM fixe) qui donne l'adresse de l'en-tête des sons.
+    /// Word (fixed ROM) giving the address of the sound header.
     #[serde(with = "hex")]
     pub header_ptr: u32,
     #[serde(with = "hex")]
     pub header: u32,
-    /// En-tête : nombre de sons (mot grand-boutiste), index du facteur de volume de la musique et du volume
-    /// de base des effets (table `levels`), deux octets non lus ; la table des sons suit (4 octets par son :
-    /// adresse grand-boutiste sur 3 octets, 0).
+    /// Header: number of sounds (big-endian word), index of the music volume factor and of the base
+    /// effects volume (`levels` table), two unread bytes; the sound table follows (4 bytes per sound:
+    /// big-endian 3-byte address, 0).
     pub count: u16,
     pub music_factor: u8,
     pub sfx_volume: u8,
     pub header_rest: [u8; 2],
-    /// Un son par numéro (`null` : entrée vide).
+    /// One sound per number (`null`: empty entry).
     pub songs: Vec<Option<Song>>,
     pub code: Vec<CodeBlock>,
-    /// Table des bancs d'instruments (mots petit-boutistes, adresse de chaque banc).
+    /// Table of instrument banks (little-endian words, address of each bank).
     #[serde(with = "hex")]
     pub banks_table: u32,
     pub banks: Vec<Bank>,
-    /// Table des échantillons : mot en `samples_ptr` ; fiches de 8 octets (banque, début, boucle, fin en
-    /// mots petit-boutistes, note de référence).
+    /// Sample table: word at `samples_ptr`; 8-byte records (bank, start, loop, end as
+    /// little-endian words, reference note).
     #[serde(with = "hex")]
     pub samples_ptr: u32,
     #[serde(with = "hex")]
     pub samples_rom: u32,
     pub samples: Vec<[u8; 8]>,
-    /// Octets qui suivent la fin de chaque échantillon dans la ROM d'échantillons (hexadécimal, zéros finaux
-    /// omis), jusqu'au prochain échantillon de la banque ou à la fin de la banque (`sample_tail_end`) : une
-    /// voix qui ne boucle pas continue de lire après la fin tant que le Z80 ne l'arrête pas. Absents des
-    /// fichiers WAV, qui s'arrêtent à la fin déclarée.
+    /// Bytes following the end of each sample in the sample ROM (hexadecimal, trailing zeros
+    /// omitted), up to the next sample of the bank or the end of the bank (`sample_tail_end`): a
+    /// voice that does not loop keeps reading past the end until the Z80 stops it. Absent from the
+    /// WAV files, which stop at the declared end.
     #[serde(default)]
     pub sample_tails: Vec<String>,
     pub tables: Vec<DriverTable>,
@@ -197,14 +197,14 @@ impl Music {
         crate::json::load(path)
     }
 
-    /// Début (adresse dans la ROM d'échantillons) et fin incluse de l'échantillon `i`.
+    /// Start (address in the sample ROM) and inclusive end of sample `i`.
     pub fn sample_span(&self, i: usize) -> (usize, usize) {
         let e = &self.samples[i];
         let bank = (e[0] as usize) << 16;
         (bank | u16::from_le_bytes([e[1], e[2]]) as usize, bank | u16::from_le_bytes([e[5], e[6]]) as usize)
     }
 
-    /// Fiche valide : banque dans la ROM, début, boucle et fin dans l'ordre (sinon aucun fichier WAV).
+    /// Valid record: bank within the ROM, start, loop and end in order (otherwise no WAV file).
     pub fn sample_valid(&self, i: usize) -> bool {
         let e = &self.samples[i];
         let (start, end) = self.sample_span(i);
@@ -212,8 +212,8 @@ impl Music {
         e[0] < 0x40 && start <= end && (start..=end).contains(&lp)
     }
 
-    /// Fin (exclue) de la zone qui suit l'échantillon `i` : début du prochain échantillon de sa banque, sinon
-    /// fin de la banque.
+    /// End (exclusive) of the area following sample `i`: start of the next sample of its bank, otherwise
+    /// end of the bank.
     pub fn sample_tail_end(&self, i: usize) -> usize {
         let end = self.sample_span(i).1;
         let limit = (end >> 16) + 1 << 16;
@@ -224,7 +224,7 @@ impl Music {
         self.tables.iter().find(|t| t.name == name)
     }
 
-    /// Jetons de la piste qui commence en `at`, jusqu'à sa fin ou son premier saut inconditionnel.
+    /// Tokens of the track starting at `at`, up to its end or its first unconditional jump.
     pub fn track(&self, at: u32) -> Option<Vec<&str>> {
         let i = self.code.partition_point(|b| b.rom <= at).checked_sub(1)?;
         let block = &self.code[i];
@@ -244,8 +244,8 @@ impl Music {
     }
 }
 
-/// Tables du programme du DSP QSound (`sound/qsound_dsp.json`) : pan, pas de l'ADPCM, coefficients des filtres.
-/// `rom` est une adresse en mots du DSP ; `words` vaut toujours vrai.
+/// Tables of the QSound DSP program (`sound/qsound_dsp.json`): pan, ADPCM steps, filter coefficients.
+/// `rom` is a DSP word address; `words` is always true.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DspTables {
     pub tables: Vec<DriverTable>,

@@ -1,9 +1,9 @@
-//! Actions secondaires du jeu normal (`+4` = 2, `+5` = 0) : course, portage, accroupi, poussée, saut
-//! d'attaque propre à chaque famille de personnages, et les actions lancées par les coups spéciaux
+//! Secondary actions of the normal game (`+4` = 2, `+5` = 0): run, carry, crouch, push, attack
+//! jump specific to each family of characters, and the actions launched by the special moves
 //! (`combos`).
 //!
-//! Comme les actions communes (`actions`), chacune est un petit automate dont `+7` est le pas. Les
-//! routines d'origine encore appelées (sons, effets) passent par `Ctx::rom`.
+//! Like the common actions (`actions`), each is a small automaton whose step is `+7`. The
+//! original routines still called (sounds, effects) go through `Ctx::rom`.
 
 use super::actions::to_stand;
 use super::checks::{attack_button, item_curse, jump_button};
@@ -16,25 +16,25 @@ use crate::objects::{pools, Obj};
 use crate::machine::Machine;
 use crate::player::external as ext;
 
-/// Routines d'origine encore appelées telles quelles.
+/// Original routines still called as they are.
 mod rom {
-    /// Son de la poussée.
+    /// Push sound.
     pub const PUSH_SOUND: u32 = 0xeae14;
-    /// Pose rare 0x26 : son, éclat, création d'un objet SET (D0.b = genre ; A1 et retenue en retour).
+    /// Rare pose 0x26: sound, flash, creation of a SET object (D0.b = kind; A1 and carry on return).
     pub const CREATE_SET: u32 = 0xc8312;
 }
 
-/// Champs propres à ces actions.
+/// Fields specific to these actions.
 mod field {
-    /// Événement d'animation (octet posé par le script, consommé par l'action).
+    /// Animation event (byte set by the script, consumed by the action).
     pub const ANIM_EVENT: u32 = 0x46;
-    /// Le joueur est en l'air pour une attaque sautée (h).
+    /// The player is airborne for a jumping attack (h).
     pub const AIRBORNE: u32 = 0x67;
-    /// Attaque en l'air déjà donnée.
+    /// Aerial attack already given.
     pub const AIR_ATTACK: u32 = 0x6b;
-    /// Événement de geste du script d'animation.
+    /// Gesture event of the animation script.
     pub const GESTURE: u32 = 0x33;
-    /// Sens mémorisé au début d'une action (orientation inverse de celle d'origine).
+    /// Direction stored at the start of an action (orientation opposite to the original one).
     pub const HELD_FACING: u32 = 0x1e8;
 }
 
@@ -43,7 +43,7 @@ fn next_step(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::STEP, step);
 }
 
-/// Sens demandé par les directions : bit 0 (droite) -> 0x20.
+/// Direction requested by the directions: bit 0 (right) -> 0x20.
 fn facing_for(keys: u8) -> u8 {
     if keys & 1 != 0 {
         0x20
@@ -52,7 +52,7 @@ fn facing_for(keys: u8) -> u8 {
     }
 }
 
-/// Vitesse horizontale et accélération (mots), retournées (`neg.l` du couple) si le joueur regarde à gauche.
+/// Horizontal speed and acceleration (words), reversed (`neg.l` of the pair) if the player faces left.
 fn set_vx_pair(g: &mut Ctx, p: Player, vx: u16, ax: u16) {
     p.set_u16(g, Obj::VX, vx);
     p.set_u16(g, Obj::AX, ax);
@@ -62,7 +62,7 @@ fn set_vx_pair(g: &mut Ctx, p: Player, vx: u16, ax: u16) {
     }
 }
 
-/// Une image sur quatre (selon le personnage), poussière sous les pieds : variante D0, réglages D1, vitesses D2/D3.
+/// One frame out of four (depending on the character), dust under the feet: variant D0, settings D1, speeds D2/D3.
 fn dust(g: &mut Ctx, p: Player, d0: u16, d1: u16, d2: u16, d3: u16) {
     let set = |r: &mut u32, v: u16| *r = *r & 0xffff_0000 | v as u32;
     set(&mut g.c.d[0], d0);
@@ -76,14 +76,14 @@ fn dust_turn(g: &mut Ctx, p: Player) -> bool {
     p.u8(g, Player::CHARACTER).wrapping_add(ram::FRAME_COUNTER.get(g.b)) & 3 == 0
 }
 
-// ---- course (action 6, 0x3573e) ----------------------------------------------------------------
+// ---- run (action 6, 0x3573e) ----------------------------------------------------------------
 
-/// Durée de la course (images) et champ qui la décompte.
+/// Run duration (frames) and the field that counts it down.
 const RUN_TIME: u8 = 200;
 const RUN_LEFT: u32 = Player::PARAM;
 
-/// 0x3573e : course. Pas 0 : départ ; 2 : course (le compteur baisse de 2 par image) ; 4 : dérapage
-/// d'arrêt ; 6 : dérapage de demi-tour.
+/// 0x3573e: run. Step 0: start; 2: run (the counter drops by 2 per frame); 4: stopping
+/// skid; 6: turning skid.
 pub fn run(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
@@ -95,7 +95,7 @@ pub fn run(g: &mut Ctx, p: Player) {
         2 => running(g, p),
         4 => skid_stop(g, p),
         6 => skid_turn(g, p),
-        v => unreachable!("0x3573e : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x3573e : value {v:#x} outside the original jump table"),
     }
 }
 
@@ -115,15 +115,15 @@ fn running(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// Dérapage : pas `step`, vitesse -0x480 (accélération `ax`), animation `anim`.
+/// Skid: step `step`, speed -0x480 (acceleration `ax`), animation `anim`.
 fn start_skid(g: &mut Ctx, p: Player, step: u8, ax: u16, anim: u16) {
     p.set_u8(g, Player::STEP, step);
     set_vx_pair(g, p, (-0x480i16) as u16, ax);
     animation::start(g, p, anim);
 }
 
-/// 0x35814 : fin de course (compteur épuisé ou plus de direction) ou demi-tour demandé : dérapage. Vrai
-/// si la course s'interrompt.
+/// 0x35814: end of run (counter exhausted or no more direction) or turn requested: skid. True
+/// if the run is interrupted.
 fn run_steer(g: &mut Ctx, p: Player) -> bool {
     let left = p.u8(g, RUN_LEFT).wrapping_sub(1);
     p.set_u8(g, RUN_LEFT, left);
@@ -140,7 +140,7 @@ fn run_steer(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// 0x358a4 : poussière du dérapage tant que la vitesse dépasse 1,5 pixel par image.
+/// 0x358a4: skid dust as long as the speed exceeds 1.5 pixels per frame.
 fn skid_dust(g: &mut Ctx, p: Player) {
     let speed = (p.u16(g, Obj::VX) as i16).wrapping_abs() as u16;
     if dust_turn(g, p) && speed > 0x180 {
@@ -148,7 +148,7 @@ fn skid_dust(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x35792 : dérapage d'arrêt ; un demi-tour reste possible tant que `+0x69` dure.
+/// 0x35792: stopping skid; a turn remains possible as long as `+0x69` lasts.
 fn skid_stop(g: &mut Ctx, p: Player) {
     move_x(g, p);
     skid_dust(g, p);
@@ -168,7 +168,7 @@ fn skid_stop(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x357f6 : dérapage de demi-tour ; à la fin, le joueur s'est retourné.
+/// 0x357f6: turning skid; at the end, the player has turned around.
 fn skid_turn(g: &mut Ctx, p: Player) {
     move_x(g, p);
     skid_dust(g, p);
@@ -178,12 +178,12 @@ fn skid_turn(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- portage (action 0x14, 0x35c26) -------------------------------------------------------------
+// ---- carry (action 0x14, 0x35c26) -------------------------------------------------------------
 
-/// Objet porté (`+0x86`) : son état (`+5`, `+6`).
+/// Carried object (`+0x86`): its state (`+5`, `+6`).
 const HELD: u32 = Player::LINK;
 
-/// 0x35c26 : prendre (`+0x8b` = 0) ou lâcher (2) l'objet porté.
+/// 0x35c26: pick up (`+0x8b` = 0) or drop (2) the carried object.
 pub fn carry(g: &mut Ctx, p: Player) {
     match p.u8(g, 0x8b) {
         0 => {}
@@ -194,7 +194,7 @@ pub fn carry(g: &mut Ctx, p: Player) {
             return;
         }
         4 => return throw(g, p),
-        v => unreachable!("0x35c26 : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x35c26 : value {v:#x} outside the original jump table"),
     }
     match p.u8(g, Player::STEP) {
         0 => {
@@ -227,12 +227,12 @@ pub fn carry(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        v => unreachable!("0x35c38 : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x35c38 : value {v:#x} outside the original jump table"),
     }
 }
 
-/// 0x35d08 : (`+0x8b` = 4) lance l'objet porté. Pas 0 : animation 41 (42 en marche lente). Pas 2 : au geste
-/// (`field::GESTURE`) l'objet repasse à l'état 2, puis l'animation se termine sur l'immobilité.
+/// 0x35d08: (`+0x8b` = 4) throws the carried object. Step 0: animation 41 (42 in slow walk). Step 2: at the gesture
+/// (`field::GESTURE`) the object returns to state 2, then the animation ends on standing.
 fn throw(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
@@ -255,7 +255,7 @@ fn throw(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x35ca8 : pose l'objet devant le joueur (décalages par classe, table 0x35ce2).
+/// 0x35ca8: puts the object in front of the player (offsets per class, table 0x35ce2).
 fn put_down(g: &mut Ctx, p: Player, held: u32) {
     let at = 0x35ce2 + 4 * p.class(g) as u32;
     let (mut dx, dz) = (g.prog16(at), g.prog16(at + 2));
@@ -268,18 +268,18 @@ fn put_down(g: &mut Ctx, p: Player, held: u32) {
     wr16(g.b, held + Obj::Y, y.wrapping_sub(8));
 }
 
-// ---- pauses de 0x1a images (actions 0x1c et 0x1e, 0x3626c et 0x362d0) -------------------------------
+// ---- pauses of 0x1a frames (actions 0x1c and 0x1e, 0x3626c and 0x362d0) -------------------------------
 
-/// Compteur d'images de la pause.
+/// Frame counter of the pause.
 const PAUSE_TIMER: u32 = 0x1e8;
 
-/// Actions 0x1c (0x3626c, `last` = 34) et 0x1e (0x362d0, `last` = 33) : animation 0, pause de 0x1a images
-/// puis animation `last` tant que le jeu est arrêté (`A5+0x3d`) ; le joueur redevient alors actif,
-/// invulnérable 16 images, et immobile. Pendant l'arrêt, seule l'action 0x1c fait avancer son animation : 0x362d0
-/// rend la main sans rien faire (`rts` en 0x3632a ; bot `longue_h`, image 19 500).
+/// Actions 0x1c (0x3626c, `last` = 34) and 0x1e (0x362d0, `last` = 33): animation 0, pause of 0x1a frames
+/// then animation `last` while the game is stopped (`A5+0x3d`); the player then becomes active again,
+/// invulnerable for 16 frames, and standing. During the stop, only action 0x1c advances its animation: 0x362d0
+/// hands back control doing nothing (`rts` at 0x3632a; bot `longue_h`, frame 19,500).
 pub fn pause(g: &mut Ctx, p: Player, last: u16) {
     match p.u8(g, Player::STEP) {
-        // la table de 0x3626c répète les pas 0 et 4 aux pas 6 et 8 (celle de 0x362d0 s'arrête au pas 4)
+        // the table of 0x3626c repeats steps 0 and 4 at steps 6 and 8 (that of 0x362d0 stops at step 4)
         0 | 6 => {
             next_step(g, p);
             p.set_u8(g, PAUSE_TIMER, 0x1a);
@@ -313,29 +313,29 @@ pub fn pause(g: &mut Ctx, p: Player, last: u16) {
     }
 }
 
-// ---- grimper (action 0x1a, 0x35e56) (h) ---------------------------------------------------------
+// ---- climb (action 0x1a, 0x35e56) (h) ---------------------------------------------------------
 
-/// Champs de l'escalade.
+/// Climbing fields.
 mod climb_field {
-    /// Phase du pas (0 : à préparer).
+    /// Step phase (0: to prepare).
     pub const PHASE: u32 = 0x1e0;
-    /// Images avant le pas d'oscillation suivant (modulo 4).
+    /// Frames before the next oscillation step (modulo 4).
     pub const SWAY_TIMER: u32 = 0x1e1;
-    /// Orientation au début du déplacement latéral.
+    /// Orientation at the start of the lateral movement.
     pub const SIDE: u32 = 0x1e2;
-    /// Rang dans la table d'oscillation (`+0x4c`), modulo 32.
+    /// Rank in the oscillation table (`+0x4c`), modulo 32.
     pub const SWAY: u32 = 0x2d;
     pub const SPEED_TABLE: u32 = 0x4c;
-    /// Objet en main (`+0x140`) et nombre d'utilisations (`+0x15d`) du coup spécial de l'elfe.
+    /// Object in hand (`+0x140`) and number of uses (`+0x15d`) of the elf's special move.
     pub const HELD_ITEM: u32 = 0x140;
 }
 
-/// Animation de l'attaque depuis l'escalade, par personnage (seconde table).
+/// Attack animation from the climb, per character (second table).
 const CLIMB_ATTACKS: u32 = 0x35eee;
 
-/// Action 0x1a (0x35e56) : grimper (h). Le joueur monte en Z par une table d'oscillation, se déplace
-/// selon les directions (haut : monte, bas : descend jusqu'au sol, côtés : marche ou course), et peut
-/// attaquer (bouton 1) ou, elfe muni d'une baguette, lancer un sort (bouton 4).
+/// Action 0x1a (0x35e56): climb (h). The player rises in Z through an oscillation table, moves
+/// according to the directions (up: climbs, down: descends to the ground, sides: walk or run), and can
+/// attack (button 1) or, as an elf with a wand, cast a spell (button 4).
 pub fn climb(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => climb_start(g, p),
@@ -345,7 +345,7 @@ pub fn climb(g: &mut Ctx, p: Player) {
         n @ (8 | 0xa | 0xc | 0xe) => climb_side(g, p, n),
         0x10 => climb_attack(g, p),
         0x12 => climb_spell(g, p),
-        v => unreachable!("0x35e56 : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x35e56 : value {v:#x} outside the original jump table"),
     }
     if matches!(p.u8(g, Player::STEP), 0 | 0x10 | 0x12) {
         return;
@@ -367,13 +367,13 @@ pub fn climb(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Retour au maintien (pas 2), phase à préparer.
+/// Return to hold (step 2), phase to prepare.
 fn climb_to_hold(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::STEP, 2);
     p.set_u8(g, climb_field::PHASE, 0);
 }
 
-/// Pas 0 : départ (vitesse de montée, table d'oscillation 1), puis montée jusqu'à 0x18 de hauteur.
+/// Step 0: start (climb speed, oscillation table 1), then climb up to a height of 0x18.
 fn climb_start(g: &mut Ctx, p: Player) {
     if p.u8(g, climb_field::PHASE) == 0 {
         p.set_u8(g, climb_field::PHASE, 2);
@@ -391,7 +391,7 @@ fn climb_start(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// Pas 2 : maintien : le joueur oscille en hauteur (table `+0x4c`) ; au sol, il reprend la pose.
+/// Step 2: hold: the player oscillates in height (table `+0x4c`); on the ground, they resume the pose.
 fn climb_hold(g: &mut Ctx, p: Player) {
     if p.u8(g, climb_field::PHASE) == 0 {
         p.set_u8(g, climb_field::PHASE, 2);
@@ -418,7 +418,7 @@ fn climb_hold(g: &mut Ctx, p: Player) {
     climb_directions(g, p);
 }
 
-/// `0x35f92` : choix du pas selon les directions maintenues (jeu gelé : descendre).
+/// `0x35f92`: choice of the step according to the held directions (frozen game: descend).
 fn climb_directions(g: &mut Ctx, p: Player) {
     if ram::FROZEN.get(g.b) != 0 {
         p.set_u8(g, Player::STEP, 6);
@@ -431,7 +431,7 @@ fn climb_directions(g: &mut Ctx, p: Player) {
     }
     p.set_u8(g, climb_field::PHASE, 0);
     if dir & 3 == 0 {
-        // vertical : bit 3 monte, sinon descend
+        // vertical: bit 3 climbs, otherwise descends
         let (step, anim) = if dir & 8 != 0 { (4, 0x3c) } else { (6, 0x3d) };
         p.set_u8(g, Player::STEP, step);
         return animation::start(g, p, anim);
@@ -444,7 +444,7 @@ fn climb_directions(g: &mut Ctx, p: Player) {
     animation::start(g, p, anim);
 }
 
-/// Pas 4 : monter tant que haut est maintenu (jusqu'à 0x80 au-dessus du haut de la caméra).
+/// Step 4: climb as long as up is held (up to 0x80 above the top of the camera).
 fn climb_up(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::KEYS_HELD) & 0xf {
         0 => {
@@ -465,7 +465,7 @@ fn climb_up(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pas 6 : descendre tant que bas est maintenu (ou jeu gelé) ; au sol, la pose.
+/// Step 6: descend as long as down is held (or game frozen); on the ground, the pose.
 fn climb_down(g: &mut Ctx, p: Player) {
     if ram::FROZEN.get(g.b) == 0 {
         match p.u8(g, Player::KEYS_HELD) & 0xf {
@@ -488,8 +488,8 @@ fn climb_down(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// Pas 8 et 0xa (marche), 0xc et 0xe (course, limitée par `+0x69`) : déplacement latéral tant que la
-/// direction de départ (8, 0xc) ou l'opposée (0xa, 0xe) est maintenue ; sinon changement de sens.
+/// Steps 8 and 0xa (walk), 0xc and 0xe (run, limited by `+0x69`): lateral movement as long as the
+/// starting direction (8, 0xc) or the opposite one (0xa, 0xe) is held; otherwise change of direction.
 fn climb_side(g: &mut Ctx, p: Player, step: u8) {
     let run = step >= 0xc;
     if run {
@@ -527,7 +527,7 @@ fn climb_side(g: &mut Ctx, p: Player, step: u8) {
     animation::step(g, p);
 }
 
-/// Pas 0x10 : attaque depuis l'escalade ; l'événement d'animation lance son effet.
+/// Step 0x10: attack from the climb; the animation event launches its effect.
 fn climb_attack(g: &mut Ctx, p: Player) {
     if animation::step(g, p) {
         climb_to_hold(g, p);
@@ -541,7 +541,7 @@ fn climb_attack(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pas 0x12 : sort de la baguette de l'elfe (`+0x140` = 0x24 à 0x26), lancé au geste.
+/// Step 0x12: elf's wand spell (`+0x140` = 0x24 to 0x26), cast at the gesture.
 fn climb_spell(g: &mut Ctx, p: Player) {
     animation::step(g, p);
     let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
@@ -562,26 +562,26 @@ fn climb_spell(g: &mut Ctx, p: Player) {
     super::spawn::thrown(g, p, shot);
 }
 
-// ---- sortie (action 0x20, 0x3632c) (h) ----------------------------------------------------------
+// ---- exit (action 0x20, 0x3632c) (h) ----------------------------------------------------------
 
-/// Champs de la sortie.
+/// Exit fields.
 mod exit_field {
-    /// Images restantes avant que le joueur soit masqué.
+    /// Frames remaining before the player is hidden.
     pub const TIMER: u32 = 0x1e8;
-    /// Étape du fondu de sa palette (0 à 3) et images avant l'étape suivante.
+    /// Fade step of their palette (0 to 3) and frames before the next step.
     pub const FADE: u32 = 0x1e9;
     pub const FADE_TIMER: u32 = 0x1ea;
-    /// Objet vers lequel le joueur saute (mot, `+0x86`).
+    /// Object toward which the player jumps (word, `+0x86`).
     pub const TARGET: u32 = 0x86;
 }
 
-/// Palettes du fondu : par étape (0x180 octets), par personnage (32 octets) ; destination par personnage.
+/// Fade palettes: per step (0x180 bytes), per character (32 bytes); destination per character.
 pub(super) const EXIT_PALETTES: u32 = 0x3663e;
 pub(super) const EXIT_PALETTE_SLOTS: u32 = 0x36626;
 
-/// Action 0x20 (0x3632c) : le joueur quitte la scène (h). Le pas de départ choisit la sortie : marche vers
-/// le bas, le haut, la gauche, la droite ou sur place (0 à 8), enfoncement (0xa) ou saut vers l'objet
-/// `+0x86` (0xc) ; le joueur est masqué au bout du délai, pendant que sa palette s'éteint en trois étapes.
+/// Action 0x20 (0x3632c): the player leaves the scene (h). The starting step selects the exit: walk
+/// down, up, left, right or in place (0 to 8), sinking (0xa) or jump toward the object
+/// `+0x86` (0xc); the player is hidden at the end of the delay, while their palette fades out in three steps.
 pub fn exit_scene(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => exit_walk(g, p, 0x1e, 0, 0x0001_0000, None, 0x25),
@@ -649,11 +649,11 @@ pub fn exit_scene(g: &mut Ctx, p: Player) {
             p.set_u8(g, 0x3b, 0);
             exit_fade(g, p);
         }
-        v => unreachable!("0x3632c : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x3632c : value {v:#x} outside the original jump table"),
     }
 }
 
-/// Début d'une sortie : pas suivant `step`, joueur affiché sans ombre, délai, fondu prêt.
+/// Start of an exit: next step `step`, player displayed without shadow, delay, fade ready.
 fn exit_start(g: &mut Ctx, p: Player, step: u8, timer: u8) {
     p.set_u8(g, Player::STEP, step);
     p.set_u8(g, Obj::ACTIVE, 2);
@@ -662,7 +662,7 @@ fn exit_start(g: &mut Ctx, p: Player, step: u8, timer: u8) {
     p.set_u8(g, exit_field::FADE_TIMER, 1);
 }
 
-/// Sortie en marchant (vitesses X et Y en longs, orientation éventuelle) ; en mode ralenti, animation 0x35.
+/// Exit by walking (X and Y speeds as longs, optional orientation); in slow-motion mode, animation 0x35.
 fn exit_walk(g: &mut Ctx, p: Player, timer: u8, vx: u32, vy: u32, facing: Option<u8>, anim: u16) {
     exit_start(g, p, 0xe, timer);
     if let Some(f) = facing {
@@ -674,7 +674,7 @@ fn exit_walk(g: &mut Ctx, p: Player, timer: u8, vx: u32, vy: u32, facing: Option
     animation::start(g, p, anim);
 }
 
-/// Le délai s'écoule ; à zéro, le joueur est masqué (vrai).
+/// The delay runs out; at zero, the player is hidden (true).
 fn exit_countdown(g: &mut Ctx, p: Player) -> bool {
     let left = p.u8(g, exit_field::TIMER).wrapping_sub(1);
     p.set_u8(g, exit_field::TIMER, left);
@@ -686,7 +686,7 @@ fn exit_countdown(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// Une étape du fondu toutes les 12 images (trois étapes) : palette du personnage recopiée de la table.
+/// One fade step every 12 frames (three steps): the character's palette copied from the table.
 fn exit_fade(g: &mut Ctx, p: Player) {
     let stage = p.u8(g, exit_field::FADE);
     if stage > 2 {
@@ -709,11 +709,11 @@ fn exit_fade(g: &mut Ctx, p: Player) {
     p.set_u8(g, exit_field::FADE, stage + 1);
 }
 
-// ---- garde (actions 0x16 et 0x18, 0x35d52 et 0x35dca) ---------------------------------------------
+// ---- guard (actions 0x16 and 0x18, 0x35d52 and 0x35dca) ---------------------------------------------
 
-/// Garde au bouclier tant que le bouton `held` (bit 7 : spécial, bit 4 : attaque) est maintenu : le
-/// joueur recule lentement (directions opposées à son sens d'origine, ou verticales) sans se
-/// retourner ; relâché, il reprend la pose (ou attaque, ou saute).
+/// Shield guard as long as the button `held` (bit 7: special, bit 4: attack) is held: the
+/// player slowly backs away (directions opposite to their original direction, or vertical) without
+/// turning; when released, they resume the pose (or attack, or jump).
 pub fn guard(g: &mut Ctx, p: Player, held: u8) {
     if p.u8(g, Player::STEP) == 0 {
         next_step(g, p);
@@ -741,13 +741,13 @@ pub fn guard(g: &mut Ctx, p: Player, held: u8) {
     animation::step(g, p);
 }
 
-// ---- action 0x28 (0x36be0) : fin du ralentissement (h) --------------------------------------------
+// ---- action 0x28 (0x36be0): end of slowdown (h) --------------------------------------------
 
-/// Compte à rebours de l'action 0x28 (`+0x1e8`).
+/// Countdown of action 0x28 (`+0x1e8`).
 const SLOW_END_TIMER: u32 = 0x1e8;
 
-/// 0x36be0 : le joueur ralenti reste 64 images dans la pose 0x39, puis le ralentissement (`+0x66`) cesse et il se
-/// remet debout.
+/// 0x36be0: the slowed player stays 64 frames in pose 0x39, then the slowdown (`+0x66`) ends and they
+/// stand back up.
 pub fn slow_end(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
@@ -763,18 +763,18 @@ pub fn slow_end(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        v => unreachable!("0x36be0 : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x36be0 : value {v:#x} outside the original jump table"),
     }
 }
 
-// ---- actions 0x26, 0x2c et 0x30 : poses rares ----------------------------------------------------
+// ---- actions 0x26, 0x2c and 0x30: rare poses ----------------------------------------------------
 
-/// Compte à rebours des poses rares (`+0x1e8`, octet) et numéro de la bouffée suivante.
+/// Countdown of the rare poses (`+0x1e8`, byte) and number of the next puff.
 const RARE_TIMER: u32 = 0x1e8;
 
-/// 0x36b88 : action 0x26, l'arme maudite tombe (`checks::item_curse`, `common::curse_check`, `combat`) : pose 0x23
-/// et son 0xe24d8, puis 192 images d'animation ; à chaque geste (`+0x33`), éclat (0xb97ba) et objet SET 0x29
-/// (0xc8312) marqué en `+0x42`. À la fin, le ralentissement (`+0x66`) cesse et le joueur se remet debout.
+/// 0x36b88: action 0x26, the cursed weapon falls (`checks::item_curse`, `common::curse_check`, `combat`): pose 0x23
+/// and sound 0xe24d8, then 192 frames of animation; at each gesture (`+0x33`), flash (0xb97ba) and SET object 0x29
+/// (0xc8312) marked at `+0x42`. At the end, the slowdown (`+0x66`) ends and the player stands back up.
 pub fn curse_drop(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::STEP) == 0 {
         next_step(g, p);
@@ -803,11 +803,11 @@ pub fn curse_drop(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Bouffées de poussière de l'action 0x2c (0x36d2c, lignes de 4 mots : D0, D1, D2 de 0xb10c8, hauteur).
+/// Dust puffs of action 0x2c (0x36d2c, rows of 4 words: D0, D1, D2 of 0xb10c8, height).
 const PUFFS: u32 = 0x36d2c;
 
-/// 0x36cb8 : action 0x2c (un effet la donne au joueur, `families/effects_f.rs`) : pose 0x35, six bouffées de
-/// poussière (0xb10c8) espacées de 6 images, puis 6 images d'attente avant de se remettre debout.
+/// 0x36cb8: action 0x2c (an effect gives it to the player, `families/effects_f.rs`): pose 0x35, six puffs of
+/// dust (0xb10c8) spaced 6 frames apart, then 6 frames of waiting before standing back up.
 pub fn dust_puffs(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
@@ -850,12 +850,12 @@ pub fn dust_puffs(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        v => unreachable!("0x36cb8 : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x36cb8 : value {v:#x} outside the original jump table"),
     }
 }
 
-/// 0x36f1a : action 0x30 (le joueur a frappé une caisse, `families/boxes.rs`) : pose 0x36 jusqu'à sa fin, puis le
-/// ralentissement (`+0x66`) cesse et le joueur se remet debout.
+/// 0x36f1a: action 0x30 (the player hit a crate, `families/boxes.rs`): pose 0x36 until its end, then the
+/// slowdown (`+0x66`) ends and the player stands back up.
 pub fn box_recoil(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
@@ -868,12 +868,12 @@ pub fn box_recoil(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        v => unreachable!("0x36f1a : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x36f1a : value {v:#x} outside the original jump table"),
     }
 }
 
-/// Natives des poses rares, pour la validation différentielle (`fuzz_player player_action`) : `actions::act` les
-/// appelle directement.
+/// Natives of the rare poses, for the differential validation (`fuzz_player player_action`): `actions::act` calls them
+/// directly.
 macro_rules! rare_native {
     ($name:ident, $entry:expr, $label:expr, $f:path) => {
         pub const $name: crate::Native = crate::Native {
@@ -893,9 +893,9 @@ rare_native!(CURSE_DROP, 0x36b88, "player_action_26", curse_drop);
 rare_native!(DUST_PUFFS, 0x36cb8, "player_action_2c", dust_puffs);
 rare_native!(BOX_RECOIL, 0x36f1a, "player_action_30", box_recoil);
 
-// ---- action 0x2a (0x36c12) : saut sur place avec rebond (h) ---------------------------------------
+// ---- action 0x2a (0x36c12): jump in place with bounce (h) ---------------------------------------
 
-/// 0x36c12 : décollage, retombée puis marche sur la hauteur ; la hauteur oscille de 2 pixels.
+/// 0x36c12: takeoff, landing then walk on the height; the height oscillates by 2 pixels.
 pub fn hop(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
@@ -924,7 +924,7 @@ pub fn hop(g: &mut Ctx, p: Player) {
             p.set_u8(g, 0x3b, 0);
             clamp_x(g.b, p);
         }
-        v => unreachable!("0x36c12 : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x36c12 : value {v:#x} outside the original jump table"),
     }
     p.set_u8(g, 0x3b, 0);
     let z = p.u16(g, Obj::Z).wrapping_add(2);
@@ -937,11 +937,11 @@ pub fn hop(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- action 0x24 (0x36b26) : chute jusqu'au sol (h) -----------------------------------------------
+// ---- action 0x24 (0x36b26): fall to the ground (h) -----------------------------------------------
 
-/// 0x36b26 : le joueur tombe (animation 13), la chute suit la vitesse en X, Y et Z jusqu'à ce que la hauteur
-/// ne soit plus positive ; il touche alors le sol (animation 14, son d'atterrissage) puis, l'animation finie,
-/// se remet debout. Le pas 2 (animation 18) n'est jamais atteint : le pas 0 avance de deux crans.
+/// 0x36b26: the player falls (animation 13), the fall follows the speed in X, Y and Z until the height
+/// is no longer positive; they then touch the ground (animation 14, landing sound) then, the animation over,
+/// stand back up. Step 2 (animation 18) is never reached: step 0 advances by two notches.
 pub fn fall_in(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
@@ -968,14 +968,14 @@ pub fn fall_in(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        v => unreachable!("0x36b26 : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x36b26 : value {v:#x} outside the original jump table"),
     }
 }
 
-// ---- poussée (action 0x2e, 0x36d68) ------------------------------------------------------------
+// ---- push (action 0x2e, 0x36d68) ------------------------------------------------------------
 
-/// 0x36d68 : pousse l'objet lié (`+0x86`) dans une des quatre directions (pas 2 à 8 : haut, bas,
-/// gauche, droite) tant que la direction est maintenue.
+/// 0x36d68: pushes the linked object (`+0x86`) in one of the four directions (steps 2 to 8: up, down,
+/// left, right) as long as the direction is held.
 pub fn push(g: &mut Ctx, p: Player) {
     let step = p.u8(g, Player::STEP);
     let key = match step {
@@ -991,7 +991,7 @@ pub fn push(g: &mut Ctx, p: Player) {
         4 => 4,
         6 => 2,
         8 => 1,
-        v => unreachable!("0x36d68 : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x36d68 : value {v:#x} outside the original jump table"),
     };
     if p.u8(g, Player::KEYS_HELD) & key == 0 {
         let held = p.u32(g, HELD);
@@ -1018,7 +1018,7 @@ pub fn push(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x36eb0 : poussière du geste de poussée (réglages par classe, table 0x36eea).
+/// 0x36eb0: dust of the pushing gesture (settings per class, table 0x36eea).
 fn push_dust(g: &mut Ctx, p: Player) {
     if !dust_turn(g, p) || p.u8(g, field::GESTURE) == 0 {
         return;
@@ -1031,7 +1031,7 @@ fn push_dust(g: &mut Ctx, p: Player) {
 
 // ---- action 0x32 (0x36f48) ---------------------------------------------------------------------
 
-/// 0x36f48 : animation 55 pendant 24 images, puis fin de la marche lente.
+/// 0x36f48: animation 55 for 24 frames, then end of the slow walk.
 pub fn spell_fizzle(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::STEP) == 0 {
         next_step(g, p);
@@ -1049,9 +1049,9 @@ pub fn spell_fizzle(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- action 0x12 des personnages : bonds ---------------------------------------------------------
+// ---- action 0x12 of the characters: leaps ---------------------------------------------------------
 
-/// 0x35a78 (combattant, clerc, elfe) : bond en avant, avec une attaque possible en l'air.
+/// 0x35a78 (fighter, cleric, elf): forward leap, with a possible aerial attack.
 pub fn leap_attack(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
@@ -1085,7 +1085,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        v => unreachable!("0x35a78 : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x35a78 : value {v:#x} outside the original jump table"),
     }
     let event = p.u8(g, field::ANIM_EVENT);
     if event != 0 {
@@ -1094,8 +1094,8 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x3769c : pendant le bond, le bouton 1 donne une attaque en l'air (animation par personnage, table
-/// 0x376d6, ou 0x376e2 avec bas maintenu).
+/// 0x3769c: during the leap, button 1 gives an aerial attack (animation per character, table
+/// 0x376d6, or 0x376e2 with down held).
 fn air_attack(g: &mut Ctx, p: Player) {
     if p.u8(g, field::AIR_ATTACK) != 0 || p.u8(g, Player::KEYS_NEW) & 0x10 == 0 {
         return;
@@ -1108,7 +1108,7 @@ fn air_attack(g: &mut Ctx, p: Player) {
     item_curse(g, p);
 }
 
-/// 0x35b96 (magicien) : petit saut en arrière (le recul s'arrête devant un obstacle du décor).
+/// 0x35b96 (magic-user): small backward jump (the recoil stops in front of a terrain obstacle).
 pub fn hop_back(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::STEP) {
         0 => {
@@ -1147,12 +1147,12 @@ pub fn hop_back(g: &mut Ctx, p: Player) {
                 animation::step(g, p);
             }
         }
-        v => unreachable!("0x35b96 : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x35b96 : value {v:#x} outside the original jump table"),
     }
 }
 
-/// Natives des actions 0x12 de personnages (table `characters::Slot::Action12`) : la fonction Rust reçoit
-/// le joueur (A0) ; les appelants ne lisent aucun registre.
+/// Natives of the characters' actions 0x12 (table `characters::Slot::Action12`): the Rust function receives
+/// the player (A0); the callers read no register.
 pub const LEAP: crate::Native = crate::Native {
     entry: 0x35a78,
     name: "leap_attack",
@@ -1177,14 +1177,14 @@ pub const HOP_BACK: crate::Native = crate::Native {
     outputs: 0,
 };
 
-// ---- parade (`+5` = 8, 0x39ff0) ----------------------------------------------------------------------
+// ---- parry (`+5` = 8, 0x39ff0) ----------------------------------------------------------------------
 
-/// Riposte après une parade : sous-action d'attaque par classe (octets du code).
+/// Counterattack after a parry: attack sub-action per class (code bytes).
 const RIPOSTE: u32 = 0x3a0a2;
 
-/// 0x39ff0 : après une parade, le joueur glisse en arrière (vitesse 0x400 freinée de 0x40 par image) ; à
-/// l'arrêt, il reprend le jeu à l'action `+0x6f`. Pendant la glissade, la direction de l'adversaire
-/// maintenue enchaîne une riposte (sauf le magicien). Puis décor et limites de l'écran.
+/// 0x39ff0: after a parry, the player slides backward (speed 0x400 braked by 0x40 per frame); at
+/// rest, they resume the game at the action `+0x6f`. During the slide, the opponent's direction
+/// held chains a counterattack (except the magic-user). Then terrain and screen limits.
 pub fn parry(g: &mut Ctx, p: Player) {
     match p.u8(g, Player::ACTION) {
         0 => {
@@ -1194,7 +1194,7 @@ pub fn parry(g: &mut Ctx, p: Player) {
             parry_slide(g, p);
         }
         2 => parry_slide(g, p),
-        v => unreachable!("0x39ff0 : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x39ff0 : value {v:#x} outside the original jump table"),
     }
     crate::terrain::push(g.b, p.obj());
     super::walk::clamp_to_screen(g.b, p);
@@ -1228,9 +1228,9 @@ fn parry_slide(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- actions des coups spéciaux (appelées par `combos`) --------------------------------------------
+// ---- special-move actions (called by `combos`) --------------------------------------------
 
-/// Attaque (action 0xc) de sous-action `kind` dans le sens mémorisé `facing_from` (ou le sens courant).
+/// Attack (action 0xc) of sub-action `kind` in the stored direction `facing_from` (or the current direction).
 fn combo_attack(g: &mut Ctx, p: Player, kind: u8, facing_from: Option<u32>) -> bool {
     p.set_u8(g, Player::HITSTOP, 0);
     p.set_state(g, State::pack(2, 0, 0xc, 0).0);
@@ -1243,28 +1243,28 @@ fn combo_attack(g: &mut Ctx, p: Player, kind: u8, facing_from: Option<u32>) -> b
     true
 }
 
-/// Une action de coup spécial ; renvoie vrai si elle a changé l'état (Z à 0 dans l'original).
+/// A special-move action; returns true if it changed the state (Z at 0 in the original).
 #[derive(Clone, Copy, Debug)]
 pub enum Combo {
-    /// 0x37386 : course dans le sens de la séquence (vrai seulement vers la gauche : Z accidentel).
+    /// 0x37386: run in the direction of the sequence (true only to the left: accidental Z).
     Dash,
-    /// 0x373a8 : action 0x10, au sol et hors attaque.
+    /// 0x373a8: action 0x10, on the ground and outside an attack.
     Action10,
-    /// 0x373cc : action 0x12 (ou 0x1a avec la classe de vitesse 2).
+    /// 0x373cc: action 0x12 (or 0x1a with speed class 2).
     Action12,
-    /// 0x3733c : attaque de sous-action 10.
+    /// 0x3733c: attack of sub-action 10.
     Attack10,
-    /// 0x37366 : attaque de sous-action 12.
+    /// 0x37366: attack of sub-action 12.
     Attack12,
-    /// 0x373f4 : attaque de sous-action 22.
+    /// 0x373f4: attack of sub-action 22.
     Attack22,
-    /// 0x3740e : attaque de sous-action 24 (sauf avec 8 PV ou moins, clerc excepté).
+    /// 0x3740e: attack of sub-action 24 (except with 8 HP or less, cleric excepted).
     Attack24,
-    /// 0x3743e : attaque de sous-action 26 du nain, en pleine attaque.
+    /// 0x3743e: attack of sub-action 26 of the dwarf, in the middle of an attack.
     DwarfAttack26,
-    /// 0x3746a : attaque de sous-action 30 (sort 36 ou 44 en ligne 2).
+    /// 0x3746a: attack of sub-action 30 (spell 36 or 44 in row 2).
     Attack30,
-    /// 0x374aa : le voleur saisit un ennemi de dos.
+    /// 0x374aa: the thief grabs an enemy from behind.
     Backstab,
 }
 
@@ -1329,16 +1329,16 @@ pub fn combo(g: &mut Ctx, p: Player, which: Combo) -> bool {
     }
 }
 
-/// Orientation d'un objet (0 ou 0x20).
+/// Orientation of an object (0 or 0x20).
 const FACING: u32 = 0x2c;
 
-/// Table (code, 0x37588) : non nul pour les types d'ennemis qui ne se laissent pas saisir.
+/// Table (code, 0x37588): non-zero for the enemy types that cannot be grabbed.
 const UNGRABBABLE: u32 = 0x37588;
-/// Boîtes de corps (données) : un pointeur par jeu de boîtes, entrées de 8 octets.
+/// Body boxes (data): one pointer per box set, 8-byte entries.
 const BODY_BOXES: u32 = 0x11bffa;
 
-/// 0x374aa : un ennemi au sol, tourné dans le même sens que le joueur (donc de dos), saisissable et
-/// assez proche est saisi ; le joueur passe à l'attaque de sous-action 26.
+/// 0x374aa: an enemy on the ground, facing the same direction as the player (hence from behind), grabbable and
+/// close enough is grabbed; the player goes to attack of sub-action 26.
 fn backstab(g: &mut Ctx, p: Player) -> bool {
     if ram::FROZEN.get(g.b) != 0 {
         return false;
@@ -1385,8 +1385,8 @@ fn backstab(g: &mut Ctx, p: Player) -> bool {
     false
 }
 
-/// 0x375a8 : l'ennemi `e` (boîte de corps `body`) est-il à portée de saisie du joueur `me` ? (en
-/// profondeur ±(16 + demi-profondeur), en x devant le joueur ±(48 + l'octet `+1` de l'ennemi, comme l'original)).
+/// 0x375a8: is enemy `e` (body box `body`) within grabbing range of player `me`? (in
+/// depth ±(16 + half-depth), in x in front of the player ±(48 + the enemy's byte `+1`, like the original)).
 fn within_reach(b: &mut cps2::Cps2Bus, me: u32, e: u32, body: u32) -> bool {
     let sbyte = |b: &mut cps2::Cps2Bus, a: u32| rd8(b, a) as i8 as i16 as u16;
     let near = |gap: u16, half: u16| gap.wrapping_add(half) <= half.wrapping_add(half);

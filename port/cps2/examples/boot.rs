@@ -1,4 +1,4 @@
-//! Démarre ddsom et écrit des captures PNG aux images demandées.
+//! Starts ddsom and writes PNG screenshots at the requested frames.
 //! cargo run --release -p cps2 --example boot -- <roms> <eeprom> <dossier_sortie> f1 f2 ...
 
 use std::path::Path;

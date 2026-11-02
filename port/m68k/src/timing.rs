@@ -1,10 +1,10 @@
-//! Durée des instructions en cycles (tables du manuel utilisateur 68000, sans états d'attente).
-//! Les parts dynamiques (branchement pris, nombre de décalages, registres MOVEM) sont ajoutées
-//! à l'exécution.
+//! Instruction duration in cycles (68000 user manual tables, without wait states).
+//! The dynamic parts (branch taken, shift count, MOVEM registers) are added
+//! at execution time.
 
 use crate::decode::{Ea, Instr, Op, Size};
 
-/// Temps de calcul d'adresse effective (octet/mot, long).
+/// Effective address calculation time (byte/word, long).
 fn ea_time(ea: Ea, size: Size) -> u32 {
     let long = size == Size::Long;
     let (bw, l) = match ea {
@@ -20,7 +20,7 @@ fn ea_time(ea: Ea, size: Size) -> u32 {
     if long { l } else { bw }
 }
 
-/// Destination d'un MOVE : -(An) coûte comme (An).
+/// MOVE destination: -(An) costs the same as (An).
 fn move_dst_time(ea: Ea, size: Size) -> u32 {
     match ea {
         Ea::PreDec(_) => if size == Size::Long { 8 } else { 4 },
@@ -28,7 +28,7 @@ fn move_dst_time(ea: Ea, size: Size) -> u32 {
     }
 }
 
-/// Adresse de contrôle pour LEA/PEA/JMP/JSR : (An), d16, d8+Xn, abs.w, abs.l.
+/// Control address for LEA/PEA/JMP/JSR: (An), d16, d8+Xn, abs.w, abs.l.
 fn ctrl_index(ea: Ea) -> usize {
     match ea {
         Ea::Ind(_) => 0,
@@ -39,7 +39,7 @@ fn ctrl_index(ea: Ea) -> usize {
     }
 }
 
-/// Durée de base ; les parts dépendant des données sont ajoutées par l'exécuteur.
+/// Base duration; the data-dependent parts are added by the executor.
 pub fn base_cycles(ins: &Instr) -> u32 {
     use Op::*;
     let reg = |ea: Ea| matches!(ea, Ea::Dn(_) | Ea::An(_));
@@ -88,7 +88,7 @@ pub fn base_cycles(ins: &Instr) -> u32 {
         Heap(d) => if reg(d) { 4 } else { 10 + ea_time(d, Size::Byte) },
         Ext(..) | Swap(_) | Nop => 4,
         Exg(..) => 6,
-        // + 2 par bit (MULU) / transition (MULS), + durée de division : ajoutés à l'exécution
+        // + 2 per bit (MULU) / transition (MULS), + division duration: added at execution
         Mulu(s, _) | Muls(s, _) => 38 + ea_time(s, Size::Word),
         Divu(s, _) | Divs(s, _) => ea_time(s, Size::Word),
         Chk(s, _) => 10 + ea_time(s, Size::Word),
@@ -111,7 +111,7 @@ pub fn base_cycles(ins: &Instr) -> u32 {
             use crate::decode::{BitOp, ShiftCount};
             let imm = matches!(count, ShiftCount::Imm(_));
             if matches!(d, Ea::Dn(_)) {
-                // BCHG/BSET/BCLR : +2 si le numéro de bit >= 16 (ajouté à l'exécution)
+                // BCHG/BSET/BCLR: +2 if the bit number >= 16 (added at execution)
                 let base = match kind {
                     BitOp::Btst => 6,
                     BitOp::Bclr => 8,
@@ -120,7 +120,7 @@ pub fn base_cycles(ins: &Instr) -> u32 {
                 base + if imm { 4 } else { 0 }
             } else {
                 let base = if kind == BitOp::Btst { 4 } else { 8 };
-                // BTST Dn,#imm : l'immédiat compte comme une lecture d'extension
+                // BTST Dn,#imm: the immediate counts as an extension read
                 base + if imm { 4 } else { 0 } + if matches!(d, Ea::Imm(_)) { 6 } else { ea_time(d, Size::Byte) }
             }
         }

@@ -1,12 +1,12 @@
-//! Création et initialisation des joueurs (P1).
+//! Creation and initialization of the players (P1).
 //!
-//! - `clear_players` (0x2d9e) remet à zéro les quatre enregistrements de 0x200 octets ;
-//! - `clear_overlays` (0x2df8) remet à zéro les huit sous-objets (armes et boucliers) de 0x60 octets
-//!   qui suivent les enregistrements joueur (`A5+0xdde`..) ;
-//! - `init_slot` (0x2e58, 0x2e6e, 0x2e86, 0x2e9e, une entrée par joueur) construit un joueur à partir
-//!   de son personnage (`+3`, déjà posé par l'appelant) : niveau, points de vie, caractéristiques tirées
-//!   au hasard, équipement, sorts et armes de départ. Les valeurs viennent de tables de la ROM
-//!   (une ligne par personnage, puis par niveau) lues à l'exécution.
+//! - `clear_players` (0x2d9e) resets the four 0x200-byte records to zero;
+//! - `clear_overlays` (0x2df8) resets the eight 0x60-byte sub-objects (weapons and shields)
+//!   that follow the player records (`A5+0xdde`..) to zero;
+//! - `init_slot` (0x2e58, 0x2e6e, 0x2e86, 0x2e9e, one entry per player) builds a player from
+//!   their character (`+3`, already set by the caller): level, hit points, randomly drawn
+//!   attributes, equipment, starting spells and weapons. The values come from ROM tables
+//!   (one row per character, then per level) read at run time.
 
 use crate::machine::Machine;
 use cps2::Cps2Bus;
@@ -16,30 +16,30 @@ use super::{ram, Ctx, Player, PLAYER_COUNT, PLAYER_STRIDE};
 use crate::mem::{rts, wr32, A5};
 use crate::{regs, Native};
 
-/// Tables de la ROM programme : un pointeur par personnage (12), chacun vers une table propre.
+/// Program ROM tables: one pointer per character (12), each to its own table.
 mod tables {
-    /// Niveau initial (`LEVEL`) par scène.
+    /// Initial level (`LEVEL`) per scene.
     pub const LEVEL_BY_SCENE: u32 = 0x3208;
-    /// Points de vie (mots) par niveau.
+    /// Hit points (words) per level.
     pub const HP_BY_LEVEL: u32 = 0x325e;
-    /// Huit jeux de caractéristiques (8 octets) dont l'un est tiré au hasard.
+    /// Eight sets of attributes (8 bytes), one of which is drawn at random.
     pub const RANDOM_STATS: u32 = 0x32d8;
-    /// Équipement par niveau (12 longs de 0x30 octets par niveau).
+    /// Equipment per level (12 longs of 0x30 bytes per level).
     pub const GEAR_BY_LEVEL: u32 = 0x3402;
-    /// Liste (terminée par 0) des drapeaux d'objets débloqués, 8 octets par niveau.
+    /// List (terminated by 0) of unlocked item flags, 8 bytes per level.
     pub const UNLOCKED_BY_LEVEL: u32 = 0x345e;
-    /// Dix octets par niveau (deux longs et un mot) en `+0x150`.
+    /// Ten bytes per level (two longs and a word) at `+0x150`.
     pub const SPELLS_BY_LEVEL: u32 = 0x34b4;
-    /// Armes de départ par niveau (4 octets par niveau).
+    /// Starting weapons per level (4 bytes per level).
     pub const WEAPONS_BY_LEVEL: u32 = 0x3522;
-    /// Puissance d'attaque par arme (2 octets par numéro d'arme).
+    /// Attack power per weapon (2 bytes per weapon number).
     pub const WEAPON_STATS: u32 = 0x3590;
 }
 
-/// Drapeaux d'objets et sorts débloqués (tableau d'octets en `A5-0x5b88`), copiés à la mort.
+/// Unlocked item and spell flags (byte array at `A5-0x5b88`), copied on death.
 pub const UNLOCKED_FLAGS: u32 = 0xff_2478;
 
-/// Remet à zéro `n` blocs de 32 octets à partir de `at` (la boucle `dbf` de l'original).
+/// Resets `n` blocks of 32 bytes starting at `at` (the `dbf` loop of the original).
 fn clear(g: &mut Ctx, at: u32, blocks: u32) {
     cov!();
     for i in 0..blocks * 8 {
@@ -47,25 +47,25 @@ fn clear(g: &mut Ctx, at: u32, blocks: u32) {
     }
 }
 
-/// Efface l'enregistrement du joueur `k`.
+/// Clears the record of player `k`.
 pub fn clear_player(g: &mut Ctx, k: u32) {
     cov!();
     clear(g, Player::nth(k).0, PLAYER_STRIDE / 32);
 }
 
-/// Adresses des huit sous-objets (deux par joueur : arme, bouclier).
+/// Addresses of the eight sub-objects (two per player: weapon, shield).
 pub fn overlay(k: u32, shield: bool) -> u32 {
     A5 + 0xdde + 0x60 * (2 * k + shield as u32)
 }
 
-/// Efface les deux sous-objets du joueur `k`.
+/// Clears the two sub-objects of player `k`.
 pub fn clear_overlays_of(g: &mut Ctx, k: u32) {
     cov!();
     clear(g, overlay(k, false), 3);
     clear(g, overlay(k, true), 3);
 }
 
-/// 0x2d9e : les quatre enregistrements de joueur à zéro.
+/// 0x2d9e: the four player records to zero.
 pub fn clear_all_players(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut g = Ctx::new(c, b);
     for k in 0..PLAYER_COUNT {
@@ -73,7 +73,7 @@ pub fn clear_all_players(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-/// 0x2df8 : les huit sous-objets des joueurs à zéro.
+/// 0x2df8: the eight player sub-objects to zero.
 pub fn clear_sub_objects(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut g = Ctx::new(c, b);
     for k in 0..PLAYER_COUNT {
@@ -107,14 +107,14 @@ pub const CLEAR_OVERLAYS: Native = Native {
     outputs: 0,
 };
 
-/// Pointeur de la table du personnage de `p` dans la table de pointeurs `table`.
+/// Pointer to the table of `p`'s character in the pointer table `table`.
 fn table_of(g: &mut Ctx, p: Player, table: u32) -> u32 {
     cov!();
     let character = p.u8(g, Player::CHARACTER) as u32;
     g.prog32(table + 4 * character)
 }
 
-/// 0x31f0 : niveau selon la scène.
+/// 0x31f0: level according to the scene.
 fn init_level(g: &mut Ctx, p: Player) {
     cov!();
     let t = table_of(g, p, tables::LEVEL_BY_SCENE);
@@ -123,7 +123,7 @@ fn init_level(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::LEVEL, level);
 }
 
-/// 0x3238 : points de vie (maximum, courants, précédents) selon le niveau.
+/// 0x3238: hit points (maximum, current, previous) according to the level.
 fn init_hp(g: &mut Ctx, p: Player) {
     cov!();
     let t = table_of(g, p, tables::HP_BY_LEVEL);
@@ -134,7 +134,7 @@ fn init_hp(g: &mut Ctx, p: Player) {
     p.set_u16(g, Player::HP_PREV, hp);
 }
 
-/// 0x328e : un des huit jeux de caractéristiques du personnage, tiré au hasard.
+/// 0x328e: one of the character's eight attribute sets, drawn at random.
 fn init_random_stats(g: &mut Ctx, p: Player) {
     cov!();
     let t = table_of(g, p, tables::RANDOM_STATS);
@@ -145,12 +145,12 @@ fn init_random_stats(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x3308 : équipement de départ (douze longs en `+0x120`) ; les magiciens (personnages 8 et 9)
-/// reçoivent un bonus de 0x14 pour chacun de leurs trois sorts (codes 0x52, 0x53, 0x54).
-/// (0x33b0 : seulement les huit premiers longs, à la reprise après « continue ».)
+/// 0x3308: starting equipment (twelve longs at `+0x120`); the magic-users (characters 8 and 9)
+/// receive a bonus of 0x14 for each of their three spells (codes 0x52, 0x53, 0x54).
+/// (0x33b0: only the first eight longs, on resuming after a "continue".)
 fn init_gear(g: &mut Ctx, p: Player, longs: u32) {
     cov!();
-    // seule table de pointeurs lue en espace données (`lea` puis indexation par registre)
+    // only pointer table read in data space (`lea` then register indexing)
     let character = p.u8(g, Player::CHARACTER) as u32;
     let t = g.data32(tables::GEAR_BY_LEVEL + 4 * character);
     let level = p.u8(g, Player::LEVEL) as u32;
@@ -171,9 +171,9 @@ fn init_gear(g: &mut Ctx, p: Player, longs: u32) {
     }
 }
 
-/// 0xcf182 : relève les compteurs de sorts (`+0x151..+0x159`, neuf octets signés) au minimum prévu pour
-/// le niveau du joueur. La table par classe (0xcf1b0) a une ligne de dix octets par niveau (à partir du
-/// niveau de base de la classe, octets 0xcf17c) : un premier octet négatif la désactive, puis les neuf minima.
+/// 0xcf182: raises the spell counters (`+0x151..+0x159`, nine signed bytes) to the minimum planned for
+/// the player's level. The per-class table (0xcf1b0) has a ten-byte row per level (starting from the
+/// class base level, bytes 0xcf17c): a first negative byte disables it, then the nine minima.
 pub fn raise_spells(g: &mut Ctx, p: Player) {
     const BASE_LEVEL: u32 = 0xcf17c;
     const MINIMA: u32 = 0xcf1b0;
@@ -190,7 +190,7 @@ pub fn raise_spells(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x3432 : débloque les drapeaux listés (octets non nuls) pour ce personnage et ce niveau.
+/// 0x3432: unlocks the listed flags (non-zero bytes) for this character and level.
 fn init_unlocked(g: &mut Ctx, p: Player) {
     cov!();
     let t = table_of(g, p, tables::UNLOCKED_BY_LEVEL);
@@ -206,7 +206,7 @@ fn init_unlocked(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x348e : réserve de sorts (deux longs et un mot en `+0x150`).
+/// 0x348e: spell reserve (two longs and a word at `+0x150`).
 fn init_spells(g: &mut Ctx, p: Player) {
     cov!();
     let t = table_of(g, p, tables::SPELLS_BY_LEVEL);
@@ -219,7 +219,7 @@ fn init_spells(g: &mut Ctx, p: Player) {
     p.set_u16(g, 0x158, c);
 }
 
-/// 0x34e4 : armes de départ (`WEAPON_A`, `WEAPON_B`) et deux drapeaux d'objets débloqués.
+/// 0x34e4: starting weapons (`WEAPON_A`, `WEAPON_B`) and two unlocked item flags.
 fn init_weapons(g: &mut Ctx, p: Player) {
     cov!();
     let t = table_of(g, p, tables::WEAPONS_BY_LEVEL);
@@ -232,8 +232,8 @@ fn init_weapons(g: &mut Ctx, p: Player) {
     crate::mem::wr8(g.b, UNLOCKED_FLAGS + f2, 1);
 }
 
-/// 0x3552 : puissance de base de l'arme (`+0x109` pour `WEAPON_A`, `+0x10a` pour `WEAPON_B`, numéros
-/// jusqu'à 0x27) et plafond de dégâts (`+0x16e`, deux octets par arme dans la table).
+/// 0x3552: base power of the weapon (`+0x109` for `WEAPON_A`, `+0x10a` for `WEAPON_B`, numbers
+/// up to 0x27) and damage cap (`+0x16e`, two bytes per weapon in the table).
 pub fn init_weapon_stats(g: &mut Ctx, p: Player) {
     cov!();
     let t = table_of(g, p, tables::WEAPON_STATS);
@@ -247,7 +247,7 @@ pub fn init_weapon_stats(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x2eb2 : construction d'un joueur de numéro `k`.
+/// 0x2eb2: construction of player number `k`.
 pub fn init_slot(g: &mut Ctx, p: Player, k: u8) {
     cov!();
     p.set_u8(g, Player::INDEX, k);
@@ -285,7 +285,7 @@ pub fn init_slot(g: &mut Ctx, p: Player, k: u8) {
     ram::PLAYERS_ALIVE.set(g.b, alive);
 }
 
-/// Les entrées 0x2e58, 0x2e6e, 0x2e86, 0x2e9e : construisent le joueur `k` ; D0 et A0-A3 sont gardés (movem).
+/// The entries 0x2e58, 0x2e6e, 0x2e86, 0x2e9e: build player `k`; D0 and A0-A3 are kept (movem).
 pub fn initialize(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
     let (d0, a) = (c.d[0], [c.a[0], c.a[1], c.a[2], c.a[3]]);
     init_slot(&mut Ctx::new(c, b), Player::nth(k), k as u8);
@@ -326,23 +326,23 @@ pub const INIT_P2: Native = init_native(0x2e6e, "player_init_2", init_p2);
 pub const INIT_P3: Native = init_native(0x2e86, "player_init_3", init_p3);
 pub const INIT_P4: Native = init_native(0x2e9e, "player_init_4", init_p4);
 
-// ---- arrivée d'un joueur en cours de partie ---------------------------------------------------------
+// ---- arrival of a player during the game ---------------------------------------------------------
 
-/// Trois façons d'entrer en cours de partie (une entrée par joueur pour chacune).
+/// Three ways to join during the game (one entry per player for each).
 #[derive(Clone, Copy, PartialEq)]
 pub enum Join {
-    /// 0x2f46.. : nouveau joueur (score remis à zéro).
+    /// 0x2f46..: new player (score reset to zero).
     New,
-    /// 0x3048.. : reprise après « continue » (le score est gardé).
+    /// 0x3048..: resume after "continue" (the score is kept).
     Continue,
-    /// 0x3142.. : reprise sans nouveau tirage : PV, équipement (huit longs) et drapeaux seulement.
+    /// 0x3142..: resume without a new draw: HP, equipment (eight longs) and flags only.
     Refill,
 }
 
-/// Le joueur `k` arrive en cours de partie : il tombe du ciel (état scénarisé de résurrection, `0x00040000` ;
-/// `0x00040800` entrées figées, `0x00040c00` marche lente globale), puis tous les ennemis et boss reçoivent
-/// un choc (`join_shockwave`).
-/// Les entrées 0x2f46.., 0x3048.., 0x3142.. (une par joueur `k`) : le joueur arrive en cours de partie.
+/// Player `k` arrives during the game: they fall from the sky (scripted revival state, `0x00040000`;
+/// `0x00040800` frozen inputs, `0x00040c00` global slow walk), then all enemies and bosses receive
+/// a shock (`join_shockwave`).
+/// The entries 0x2f46.., 0x3048.., 0x3142.. (one per player `k`): the player arrives during the game.
 pub fn join_player(c: &mut Cpu, b: &mut Cps2Bus, k: u8, how: Join) {
     join(&mut Ctx::new(c, b), k, how);
 }
@@ -405,13 +405,13 @@ fn join(g: &mut Ctx, k: u8, how: Join) {
     join_shockwave(g, p, strength);
 }
 
-/// Dégâts du choc par nombre de joueurs (mots, lus en espace de données par `lea` puis registre ; masqués à
-/// 63) ; mot de RAM qui les garde.
+/// Shock damage by number of players (words, read in data space by `lea` then register; masked to
+/// 63); RAM word that holds them.
 const SHOCK_DAMAGE: u32 = 0x10108;
 const SHOCK_DAMAGE_RAM: u32 = A5 - 0x7194;
-/// 0x10022 : choc de l'arrivée du joueur `p` : chaque boss puis chaque ennemi vivant, visible, non protégé
-/// (`+0x40`, bit 31 de `+0x94`) est projeté (état `0x04000000`, réaction 12, sens opposé au sien) et perd
-/// des PV (les boss à 32 PV ou moins sont épargnés, et gardent au moins 1 PV).
+/// 0x10022: shock of the arrival of player `p`: each boss then each living, visible, unprotected enemy
+/// (`+0x40`, bit 31 of `+0x94`) is thrown (state `0x04000000`, reaction 12, direction opposite to its own) and loses
+/// HP (bosses with 32 HP or less are spared, and keep at least 1 HP).
 fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
     let damage = g.data16(SHOCK_DAMAGE + 2 * strength as u32) & 63;
     crate::mem::wr16(g.b, SHOCK_DAMAGE_RAM, damage);
@@ -487,8 +487,8 @@ pub const JOIN: &[Native] = &[
     join_entry!(0x317c, "player_join_refill_4", 3, Join::Refill),
 ];
 
-/// 0x3552 appelée par le code d'origine (fin de partie, boutique) : registres laissés comme l'original
-/// (A4 = table du personnage, D0 = dernier numéro d'arme lu, doublé s'il est dans la table).
+/// 0x3552 called by the original code (end of game, shop): registers left like the original
+/// (A4 = character table, D0 = last weapon number read, doubled if it is in the table).
 fn weapon_stats_native(c: &mut Cpu, b: &mut Cps2Bus) {
     let p = Player(c.a[0]);
     let mut g = Ctx::new(c, b);

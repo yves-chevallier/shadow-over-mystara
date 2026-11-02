@@ -1,12 +1,12 @@
-//! Type 5, déplacements de repli (`+5 = 6`, `+6` : 0 et 2 pas de côté, 4 et 6 bond, 8 coups en deux temps,
-//! 10 sortie d'écran) et demi-tours enchaînés sur une attaque (`+5 = 8`, `+6` : 0 à 6).
+//! Type 5, fallback movements (`+5 = 6`, `+6`: 0 and 2 side step, 4 and 6 leap, 8 two-stage attacks, 10 screen exit)
+//! and turn-arounds chained onto an attack (`+5 = 8`, `+6`: 0 to 6).
 
 use super::*;
 use crate::families::cx::Bench;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-// --- sous-état 6 --------------------------------------------------------------------------------
+// --- substate 6 --------------------------------------------------------------------------------
 
 pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
@@ -22,7 +22,7 @@ pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0 : pas en avant (animation 0 ou coup 3) ; 2 : pas en profondeur vers un côté tiré au hasard.
+/// 0: step forward (animation 0 or attack 3); 2: step in depth toward a randomly drawn side.
 fn side_step<R: Bench>(x: &mut Cx<'_, R>, depth: bool) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -55,7 +55,7 @@ fn side_step<R: Bench>(x: &mut Cx<'_, R>, depth: bool) {
     step(x);
 }
 
-/// 4 et 6 : petit bond en arrière puis retombée (animation 3, 4, 5).
+/// 4 and 6: small leap backward then landing (animation 3, 4, 5).
 fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -98,7 +98,7 @@ fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 8 : approche, puis deux coups de griffe de suite.
+/// 8: approach, then two claw attacks in a row.
 fn two_strikes<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -141,7 +141,7 @@ fn two_strikes<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 10 : le ghoul quitte l'écran en courant vers le bord le plus proche.
+/// 10: the ghoul leaves the screen running toward the nearest edge.
 fn exit_screen<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set16(Obj::VX, -0x230i16 as u16);
@@ -165,7 +165,7 @@ fn exit_screen<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 --------------------------------------------------------------------------------
+// --- substate 8 --------------------------------------------------------------------------------
 
 pub(super) fn run_c<R: Bench>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
@@ -187,7 +187,7 @@ enum Axis {
     Depth,
 }
 
-/// Se retourne vers la cible si besoin, puis marche selon `axis` (rien, vers elle en X, en profondeur).
+/// Turns toward the target if needed, then walks according to `axis` (nothing, toward it in X, in depth).
 fn turn_then<R: Bench>(x: &mut Cx<'_, R>, axis: Axis) {
     match (x.u8(f::SUB3), axis) {
         (0, Axis::None) => {
@@ -247,7 +247,7 @@ fn turn_then<R: Bench>(x: &mut Cx<'_, R>, axis: Axis) {
     }
 }
 
-/// 0x60472 / 0x60512 : marche vers la cible, en X ou en profondeur.
+/// 0x60472 / 0x60512: walks toward the target, in X or in depth.
 fn walk_toward<R: Bench>(x: &mut Cx<'_, R>, axis: Axis) {
     x.add8(f::SUB3, 2);
     let target = load_target(x);
@@ -268,7 +268,7 @@ fn walk_toward<R: Bench>(x: &mut Cx<'_, R>, axis: Axis) {
     body(x, 2);
 }
 
-/// 6 : se retourne si besoin puis regarde si un joueur est à portée de coup.
+/// 6: turns around if needed then checks whether a player is within striking range.
 fn wake<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);

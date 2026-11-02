@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""regs_bisect.py <scenario> <frames> <base poison> [label=sortie]
+"""regs_bisect.py <scenario> <frames> <base poison> [label=exit]
 Finds, step by step, the (handler, register) pairs whose output is read back, and excludes them.
 Prints the final list of exclusions."""
 import os, re, subprocess, sys
@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 BIN=os.environ.get('BIN', os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'port/target/release/examples/validate'))
 ROM=os.environ.get('DDSOM_ROMS', 'rom'); EEP=os.environ.get('DDSOM_EEPROM', 'testdata/eeprom_ddsom.bin')
 sc, n, base = sys.argv[1], int(sys.argv[2]), sys.argv[3]
-lab = sys.argv[4] if len(sys.argv) > 4 else 'sortie'
+lab = sys.argv[4] if len(sys.argv) > 4 else 'exit'
 JOBS = int(os.environ.get('JOBS', '8'))
 def run(poison, frames, trace=False):
     env = dict(os.environ, DDSOM_POISON=poison)

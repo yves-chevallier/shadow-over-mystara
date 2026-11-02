@@ -1,5 +1,5 @@
-//! Tirs des joueurs (PSHL), quatrième série : types 19 à 24 (foudre en chaîne, projectiles de l'elfe et du
-//! magicien : flèche, couteau, boule de feu). Voir `docs/families/player.md`.
+//! Player shots (PSHL), fourth series: types 19 to 24 (chain lightning, projectiles of the elf and the wizard: arrow,
+//! knife, fireball). See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -15,18 +15,17 @@ fn signed(v: u16, negate: bool) -> u16 {
 }
 
 fn stopped_by_terrain<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    // Glitch d'origine : les restes de 0x24a8 (D3 = index de la case) sont relus par un gestionnaire suivant (lot C :
-    // `boss11_scene42_mort`, image 4447)
+    // Original glitch: the leftovers of 0x24a8 (D3 = cell index) are re-read by a following handler (batch C:
+    // `boss11_scene42_mort`, frame 4447)
     let t = crate::video::terrain_of(x.b, x.o);
     leftovers_terrain(x, &t);
     let terrain = t.number as u32;
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
 }
 
-/// Type 19 (0x53e94) : foudre en chaîne. Un maillon (variante 0) crée quatre étincelles d'écran
-/// (EFFCT 12), les relie en liste par `+0x5c`, puis poursuit la cible vivante la plus proche
-/// (ENEMY ou BOSS, `+0x5c`) en tournant de 1/32 de tour par image. Le compteur `A5-0x5fb4` limite le
-/// nombre de maillons.
+/// Type 19 (0x53e94): chain lightning. A link (variant 0) creates four screen sparks (EFFCT 12), links them into a list
+/// through `+0x5c`, then pursues the nearest living target (ENEMY or BOSS, `+0x5c`) turning by 1/32 of a turn per
+/// frame. Counter `A5-0x5fb4` limits the number of links.
 mod chain {
     use super::*;
 
@@ -78,10 +77,10 @@ mod chain {
         x.set8(0x47, 2);
         x.set32(0x4c, SPEEDS);
         x.set32(0x58, 0xffff_ffff);
-        // quatre étincelles, triées par adresse puis chaînées
+        // four sparks, sorted by address then chained
         let mut sparks = [0u16; 4];
         for s in sparks.iter_mut() {
-            // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+            // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
             let spark = x.alloc_unchecked(&pools::EFFCT);
             *s = spark.0 as u16;
             spark.set_u8(x.b, 0, 1);
@@ -124,7 +123,7 @@ mod chain {
                         if target.u8(x.b, 0x86) == 0 {
                             steer(x, target);
                         } else {
-                            // cible en transit : on en cherche une autre
+                            // target in transit: another one is sought
                             x.set16(0x52, target.0 as u16);
                             find_target(x, target.0 as u16);
                             let now = x.linked(0x5c);
@@ -137,7 +136,7 @@ mod chain {
                     x.set16(0x5c, 0);
                 }
             }
-            // plus de cible (ou plus de vie) : retrait si l'objet sort de l'écran
+            // no more target (or no more life): removal if the object leaves the screen
             if !off_screen(x) {
                 if x.u16(0x42) != 0 {
                     find_target(x, 0);
@@ -153,7 +152,7 @@ mod chain {
                 return;
             }
         }
-        // histoire des angles, élévation vers la cible, déplacement
+        // history of the angles, elevation toward the target, movement
         let (a, b, c) = (x.u8(0x58), x.u8(0x59), x.u8(0x5a));
         x.set8(0x59, a);
         x.set8(0x5a, b);
@@ -170,7 +169,7 @@ mod chain {
         x.reinsert();
     }
 
-    /// Tourne d'un cran vers la cible (`0x53fe0`).
+    /// Turns one notch toward the target (`0x53fe0`).
     fn steer<R: Bench>(x: &mut Cx<'_, R>, target: Obj) {
         let delta = crate::aids::direction_to(x.b, x.o, target);
         let mut step: u8 = 1;
@@ -182,7 +181,7 @@ mod chain {
         x.set8(0x2d, a);
     }
 
-    /// Monte ou descend d'un cran de 3 pixels vers la hauteur de la cible (`0x54090`).
+    /// Climbs or descends one notch of 3 pixels toward the height of the target (`0x54090`).
     fn rise<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(0x5c) == 0 {
             return;
@@ -203,7 +202,7 @@ mod chain {
         }
     }
 
-    /// `0x54152` : vrai quand le maillon est hors de la zone visible (caméra +/- marges).
+    /// `0x54152`: true when the link is outside the visible zone (camera +/- margins).
     fn off_screen<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let cam = if x.a5_u8(a5::USE_CAM2) != 0 { 0x54e } else { 0x4fe };
         let (cx, cy) = (x.a5_u16(cam + 8), x.a5_u16(cam + 0xc));
@@ -215,7 +214,7 @@ mod chain {
         d0 > 0x120
     }
 
-    /// `0x54190` / `0x54192` : choisit la cible. `held` est la cible prioritaire déjà tenue.
+    /// `0x54190` / `0x54192`: chooses the target. `held` is the priority target already held.
     fn find_target<R: Bench>(x: &mut Cx<'_, R>, held: u16) {
         let mut best_priority = held;
         let mut nearest = 0u16;
@@ -274,7 +273,7 @@ mod chain {
         }
     }
 
-    /// État 4 : le maillon s'éteint (avec un éclat de fin à l'endroit où il est mort).
+    /// State 4: the link goes out (with an end shard at the place where it died).
     fn dying<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             x.add8(0x5, 2);
@@ -303,8 +302,8 @@ mod chain {
     }
 }
 
-/// Type 20 (0x542ee) : mur de feu ou de glace (une colonne par exemplaire, selon le rang `+3`) qui avance
-/// vers le fond de l'écran par pas de 16 pixels puis s'éteint.
+/// Type 20 (0x542ee): wall of fire or ice (one column per copy, according to rank `+3`) that advances toward the back
+/// of the screen in steps of 16 pixels then goes out.
 mod wall {
     use super::*;
 
@@ -378,7 +377,7 @@ mod wall {
     }
 }
 
-/// Type 21 (0x54450) : couteau lancé (voleur) à vitesse longue 0x8000000.
+/// Type 21 (0x54450): thrown knife (thief) with long speed 0x8000000.
 mod knife {
     use super::*;
 
@@ -429,8 +428,8 @@ mod knife {
     }
 }
 
-/// Type 22 (0x54560) : boule de feu (magie 14). La variante 0 vole en arc, la variante 1 est l'explosion
-/// qu'elle crée au sol (avec secousse et éclair d'écran).
+/// Type 22 (0x54560): fireball (magic 14). Variant 0 flies in an arc, variant 1 is the explosion it creates on the
+/// ground (with screen shake and flash).
 mod fireball {
     use super::*;
 
@@ -528,7 +527,7 @@ mod fireball {
     }
 }
 
-/// Type 23 (0x5471a) : éclair de l'elfe, posé devant le lanceur (le geste 0x17 le place plus haut).
+/// Type 23 (0x5471a): the elf's lightning, placed in front of the caster (move 0x17 places it higher).
 mod bolt {
     use super::*;
 
@@ -574,7 +573,7 @@ mod bolt {
     }
 }
 
-/// Type 24 (0x548a0) : étincelle de foudre collée à son créateur (`+0x5c`).
+/// Type 24 (0x548a0): lightning spark stuck to its creator (`+0x5c`).
 mod spark {
     use super::*;
 

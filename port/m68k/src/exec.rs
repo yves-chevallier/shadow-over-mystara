@@ -1,9 +1,9 @@
-//! Exécution des instructions décodées.
+//! Execution of decoded instructions.
 
 use crate::decode::{BitOp, Ea, Instr, Op, ShiftCount, ShiftKind, Size};
 use crate::{Bus, Cpu, ADDR_MASK, SR_C, SR_N, SR_S, SR_V, SR_X, SR_Z};
 
-/// Emplacement d'un opérande une fois son adresse effective calculée (effets de bord appliqués).
+/// Location of an operand once its effective address is computed (side effects applied).
 #[derive(Clone, Copy)]
 enum Loc {
     D(u8),
@@ -29,7 +29,7 @@ impl Cpu {
         v.wrapping_add(ext as i8 as i32 as u32)
     }
 
-    /// Adresse effective d'un mode mémoire (sans effet de bord) : pour LEA/PEA/JMP/JSR.
+    /// Effective address of a memory mode (no side effect): for LEA/PEA/JMP/JSR.
     fn ea_address(&self, ea: Ea) -> u32 {
         match ea {
             Ea::Ind(n) => self.a[n as usize],
@@ -38,7 +38,7 @@ impl Cpu {
             Ea::AbsW(a) | Ea::AbsL(a) => a,
             Ea::PcDisp(a) => a,
             Ea::PcIdx(base, ext) => base.wrapping_add(self.index(ext) - (ext as i8 as i32 as u32)),
-            _ => unreachable!("mode sans adresse : {ea:?}"),
+            _ => unreachable!("mode without an address: {ea:?}"),
         }
     }
 
@@ -94,7 +94,7 @@ impl Cpu {
             }
             Loc::A(n) => self.a[n as usize] = v,
             Loc::Mem(a) => write_mem(bus, a, size, v),
-            Loc::Prog(_) | Loc::Imm(_) => unreachable!("écriture vers un mode non altérable"),
+            Loc::Prog(_) | Loc::Imm(_) => unreachable!("write to a non-alterable mode"),
         }
     }
 
@@ -130,7 +130,7 @@ impl Cpu {
         self.sr = (self.sr & !mask) | (values & mask);
     }
 
-    /// N et Z selon le résultat, V et C à zéro (opérations logiques, MOVE...).
+    /// N and Z according to the result, V and C cleared (logical operations, MOVE...).
     pub fn flags_logic(&mut self, r: u32, size: Size) {
         let mut f = 0;
         if r & size.mask() == 0 {
@@ -151,9 +151,9 @@ impl Cpu {
         true
     }
 
-    /// Exécute `ins` (PC déjà avancé). Renvoie vrai si une exception a été prise.
-    /// Chaque variante est une fonction `op_*` publique, utilisée aussi par le code recompilé :
-    /// appelée avec une instruction constante, elle se spécialise à l'inlining.
+    /// Executes `ins` (PC already advanced). Returns true if an exception was taken.
+    /// Each variant is a public `op_*` function, also used by the recompiled code:
+    /// called with a constant instruction, it specializes through inlining.
     pub(crate) fn exec<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         match ins.op {
             Op::Add(..) | Op::Sub(..) => self.op_00_add(bus, ins),
@@ -371,7 +371,7 @@ impl Cpu {
         {
             let dl = self.resolve(d, sz);
             if let Loc::Mem(_) = dl {
-                // le 68000 lit l'opérande avant de l'effacer
+                // the 68000 reads the operand before clearing it
                 self.read(bus, dl, sz);
             }
             self.set_flags(SR_N | SR_Z | SR_V | SR_C, SR_Z);
@@ -537,7 +537,7 @@ impl Cpu {
             let v = self.d[n as usize] as u16 as i16;
             self.chk_flags(v, bound);
             if v < 0 || v > bound {
-                // MAME : 38 cycles si Dn > borne ; si Dn < 0, 38 ou 40 selon le signe de (borne - Dn) sur 16 bits
+                // MAME: 38 cycles if Dn > bound; if Dn < 0, 38 or 40 depending on the sign of (bound - Dn) on 16 bits
                 self.cycles += if v > bound || (bound as u16).wrapping_sub(v as u16) & 0x8000 != 0 { 28 } else { 30 };
                 self.exception(bus, 6, self.pc);
                 return true;
@@ -685,7 +685,7 @@ impl Cpu {
     pub fn op_34_link<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let Op::Link(n, disp) = ins.op else { unreachable!() };
         {
-            // LINK A7 empile l'ancienne valeur de A7
+            // LINK A7 pushes the old value of A7
             let v = self.a[n as usize];
             self.push32(bus, v);
             self.a[n as usize] = self.a[7];
@@ -966,8 +966,8 @@ impl Cpu {
         false
     }
 
-    /// Addition/soustraction avec tous les flags. `dv - sv` pour une soustraction.
-    /// `ext` : variante X (ADDX/SUBX/NEGX) où Z n'est effacé que si le résultat est non nul.
+    /// Addition/subtraction with all flags. `dv - sv` for a subtraction.
+    /// `ext`: X variant (ADDX/SUBX/NEGX) where Z is cleared only if the result is non-zero.
     pub fn addsub(&mut self, sub: bool, sv: u32, dv: u32, x: bool, sz: Size, ext: bool) -> u32 {
         let m = sz.mask();
         let msb = sz.msb();
@@ -1006,7 +1006,7 @@ impl Cpu {
         r
     }
 
-    /// ABCD : algorithme vérifié sur 68000 réel (Flamewing), y compris V et N « non définis ».
+    /// ABCD: algorithm verified on a real 68000 (Flamewing), including the "undefined" V and N.
     fn abcd(&mut self, sv: u32, dv: u32) -> u32 {
         let x = (self.sr & SR_X != 0) as u32;
         let unadj = sv + dv + x;
@@ -1023,7 +1023,7 @@ impl Cpu {
         self.bcd_flags(res, c, v)
     }
 
-    /// dv - sv - X en BCD (sert aussi à NBCD avec dv = 0).
+    /// dv - sv - X in BCD (also used for NBCD with dv = 0).
     fn sbcd(&mut self, sv: u32, dv: u32) -> u32 {
         let x = (self.sr & SR_X != 0) as i32;
         let (sv, dv) = (sv as i32, dv as i32);
@@ -1066,7 +1066,7 @@ impl Cpu {
         if v < 0 {
             f |= SR_N;
         } else if v > bound {
-            // N effacé
+            // N cleared
         }
         self.set_flags(SR_N | SR_Z | SR_V | SR_C, f);
     }
@@ -1126,7 +1126,7 @@ impl Cpu {
         }
         let _ = bits;
         if count == 0 {
-            // C effacé (ou copie de X pour ROXL/ROXR), X inchangé
+            // C cleared (or copy of X for ROXL/ROXR), X unchanged
             c = kind == ShiftKind::Rox && x;
         }
         let mut f = 0;
@@ -1152,7 +1152,7 @@ impl Cpu {
         self.cycles += (mask.count_ones() * if size == Size::Long { 8 } else { 4 }) as u64;
         if to_mem {
             if let Ea::PreDec(an) = ea {
-                // masque inversé : bit 0 = A7 ... bit 15 = D0 ; on écrit de A7 vers D0
+                // reversed mask: bit 0 = A7 ... bit 15 = D0; written from A7 to D0
                 let mut addr = self.a[an as usize];
                 for i in 0..16 {
                     if mask >> i & 1 == 0 {
@@ -1222,7 +1222,7 @@ pub(crate) fn write_mem<B: Bus>(bus: &mut B, a: u32, size: Size, v: u32) {
     }
 }
 
-/// Durée de DIVU (sans calcul d'adresse), algorithme de Jorge Cwik.
+/// Duration of DIVU (without address calculation), algorithm by Jorge Cwik.
 fn divu_cycles(dividend: u32, divisor: u16) -> u32 {
     if divisor == 0 {
         return 0;
@@ -1249,7 +1249,7 @@ fn divu_cycles(dividend: u32, divisor: u16) -> u32 {
     mcycles * 2
 }
 
-/// Durée de DIVS (sans calcul d'adresse), algorithme de Jorge Cwik.
+/// Duration of DIVS (without address calculation), algorithm by Jorge Cwik.
 fn divs_cycles(dividend: i32, divisor: i16) -> u32 {
     if divisor == 0 {
         return 0;
@@ -1281,7 +1281,7 @@ fn divs_cycles(dividend: i32, divisor: i16) -> u32 {
     mcycles * 2
 }
 
-/// Nom de la fonction `Cpu::op_*` qui exécute `op` (utilisé par le recompilateur).
+/// Name of the `Cpu::op_*` function that executes `op` (used by the recompiler).
 pub fn op_fn_name(op: &Op) -> &'static str {
     match op {
         Op::Add(..) | Op::Sub(..) => "op_00_add",

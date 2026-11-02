@@ -1,4 +1,4 @@
-//! Boss 9, état 4 : coup reçu (`+5` = 0) et engin détruit (`+5` = 2).
+//! Boss 9, state 4: hit received (`+5` = 0) and vehicle destroyed (`+5` = 2).
 
 use crate::families::cx::Bench;
 use super::moves::{restart, roll};
@@ -13,9 +13,9 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupe 0 : coup reçu --------------------------------------------------------------------------
+// --- group 0: hit received --------------------------------------------------------------------------
 
-/// 0x8b49c : gel, puis secousse (`+6` = 0 à 4) ; remise en liste.
+/// 0x8b49c: freeze, then shake (`+6` = 0 to 4); put back in the list.
 fn shaken<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE);
     if freeze != 0 && (freeze as i8) > 0 {
@@ -36,7 +36,7 @@ fn shaken<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// 0x8b4c2 : le coup : avaries, gel ; plus de PV : détruit ; sinon secousse et recul à l'opposé de l'attaquant.
+/// 0x8b4c2: the hit: damage, freeze; out of HP: destroyed; otherwise shake and knockback away from the attacker.
 fn struck<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xea984);
     damage_bits(x);
@@ -67,7 +67,7 @@ fn struck<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x16, vz);
 }
 
-/// 0x8b9ca : secousse de ±`amplitude` (D0 de l'original ; alternée, dans le sens de l'engin).
+/// 0x8b9ca: shake of ±`amplitude` (D0 of the original; alternating, in the vehicle's direction).
 fn shake<R: Bench>(x: &mut Cx<'_, R>, amplitude: u16) {
     let n = x.u8(SHAKE).wrapping_sub(1);
     x.set8(SHAKE, n);
@@ -81,7 +81,7 @@ fn shake<R: Bench>(x: &mut Cx<'_, R>, amplitude: u16) {
     x.add16(0x8, d);
 }
 
-/// 0x8b55e : recul jusqu'à l'arrêt (octet fort de la vitesse nul), puis reprise de l'état mémorisé.
+/// 0x8b55e: knockback until it stops (high byte of the speed zero), then resumption of the saved state.
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if every(x, 3) {
         smoke_pair(x, 0, 2);
@@ -110,7 +110,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     count_crew(x);
 }
 
-/// Le coup est consommé (gel, dérive, coup, état mémorisé).
+/// The hit is consumed (freeze, drift, hit, saved state).
 fn clear_hit<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::FREEZE, 0);
     x.set16(0x16, 0);
@@ -119,7 +119,7 @@ fn clear_hit<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(RESUME, 0);
 }
 
-/// 0x8b628 : détruit : la scène est prévenue (0x900 : boss 9 vaincu), l'équipage saute.
+/// 0x8b628: destroyed: the stage is notified (0x900: boss 9 defeated), the crew jumps.
 fn destroyed<R: Bench>(x: &mut Cx<'_, R>) {
     damage_bits(x);
     count_crew(x);
@@ -142,12 +142,12 @@ fn destroyed<R: Bench>(x: &mut Cx<'_, R>) {
     *x.c.d5() = 0xffff;
 }
 
-/// Boss vaincu : type et variante (mot), score (`A5-0x557c..`), lus par la fin de scène.
+/// Defeated boss: type and variant (word), score (`A5-0x557c..`), read by the end of the stage.
 const A5_DEATH: u32 = 0xff8000 - 0x557c;
 
-// --- groupe 2 : détruit ------------------------------------------------------------------------------
+// --- group 2: destroyed ------------------------------------------------------------------------------
 
-/// 0x8b67c : l'épave sort de l'écran, revient, l'équipage est éjecté, dialogue, puis chute hors de l'écran.
+/// 0x8b67c: the wreck leaves the screen, comes back, the crew is ejected, dialogue, then falls off the screen.
 fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u16(0x51e, 0);
     if var::PAUSE.get(x.b) != 0 {
@@ -212,7 +212,7 @@ fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
             jolt(x);
             smoke_every(x, 3);
             if x.u16(0x8) as i16 >= 0x660 {
-                // le conducteur saute
+                // the driver jumps
                 if x.u16(DRIVER) != 0 {
                     next6(x);
                     let d = x.linked(DRIVER);
@@ -274,7 +274,7 @@ fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// 0x8b6c8 : l'épave part vers le bord (en remplaçant l'équipage tant qu'il en manque).
+/// 0x8b6c8: the wreck heads for the edge (replacing the crew as long as some are missing).
 fn leaving<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(CREW_LOST) != 0 {
         x.set8(GAIT, 2);

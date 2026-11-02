@@ -1,5 +1,5 @@
-//! Type 13, sous-état 0 : arrivée selon la variante `+3` (valeurs paires). 0 marche d'entrée, 2 et 6 chute depuis le
-//! haut, 4 saut de côté, 8 arrivée armée (pose la hache), 10 course d'entrée armée suivie de la saisie.
+//! Type 13, substate 0: arrival according to variant `+3` (even values). 0 walk-in, 2 and 6 fall from above, 4 side
+//! jump, 8 armed arrival (puts down the axe), 10 armed run-in followed by the grab.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -18,7 +18,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variante 0 : marche vers l'écran pendant `+0xa2` images.
+/// Variant 0: walks toward the screen for `+0xa2` frames.
 fn walk_in<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         x.move_by_table_xy();
@@ -38,8 +38,8 @@ fn walk_in<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 1);
 }
 
-/// Variantes 2 et 6 : saut depuis le haut. `gravity` : la variante 2 attend l'atterrissage (`+0xc`) avant de se
-/// relever, la variante 6 se relève tout de suite.
+/// Variants 2 and 6: jump from above. `gravity`: variant 2 waits for the landing (`+0xc`) before getting up, variant 6
+/// gets up right away.
 fn drop_in<R: Bench>(x: &mut Cx<'_, R>, gravity: bool) {
     match x.u8(f::SUB2) {
         0 => {
@@ -73,7 +73,7 @@ fn drop_in<R: Bench>(x: &mut Cx<'_, R>, gravity: bool) {
     }
 }
 
-/// Variante 4 : bond par le côté (vitesse horizontale −0x280), coup en l'air, retombée.
+/// Variant 4: leap in from the side (horizontal speed −0x280), mid-air attack, landing.
 fn side_jump<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -117,7 +117,7 @@ fn side_jump<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// L'arme se pose (clé 9) ou se reprend (clé 0xb) pendant les animations d'arrivée armée.
+/// The weapon is put down (key 9) or taken back (key 0xb) during the armed arrival animations.
 fn weapon_key_drop<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) == 9 {
         x.set8(f::KEY_FRAME, 0);
@@ -126,7 +126,7 @@ fn weapon_key_drop<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variante 8 : le Gnoll arrive en courant avec sa hache, la lâche (animation 9) puis la reprend.
+/// Variant 8: the Gnoll arrives running with its axe, drops it (animation 9) then takes it back.
 fn armed_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -162,7 +162,7 @@ fn armed_in<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6ae42 : course armée pendant `+0xa2` images, puis animation 5.
+/// 0x6ae42: armed run for `+0xa2` frames, then animation 5.
 fn armed_run<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     x.anim_step();
@@ -175,7 +175,7 @@ fn armed_run<R: Bench>(x: &mut Cx<'_, R>) {
     strike(x, 5);
 }
 
-/// Variante 10 : le Gnoll entre par le bord de l'écran avec sa hache ; saisi aussitôt la course finie.
+/// Variant 10: the Gnoll enters from the edge of the screen with its axe; grabbed as soon as the run is over.
 fn armed_run_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {

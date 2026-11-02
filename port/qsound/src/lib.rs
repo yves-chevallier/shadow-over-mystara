@@ -1,6 +1,6 @@
-//! Capcom QSound DL-1425 en émulation haut niveau.
-//! Port de MAME src/devices/sound/qsoundhle.cpp (BSD-3-Clause, superctr, Valley Bell),
-//! fondé sur le désassemblage du programme du DSP. L'arithmétique entière est reproduite à l'identique.
+//! Capcom QSound DL-1425 in high-level emulation.
+//! Port of MAME src/devices/sound/qsoundhle.cpp (BSD-3-Clause, superctr, Valley Bell),
+//! based on the disassembly of the DSP program. The integer arithmetic is reproduced exactly.
 
 const DATA_PAN_TAB: u16 = 0x110;
 const DATA_ADPCM_TAB: u16 = 0x9dc;
@@ -17,7 +17,7 @@ const FILTER_ENTRY_SIZE: u16 = 95;
 const DELAY_BASE_OFFSET: u16 = 0x554;
 const DELAY_BASE_OFFSET2: u16 = 0x53c;
 
-/// Horloge par défaut 60 MHz : fréquence d'échantillonnage = 60e6 / 2 / 1248.
+/// Default 60 MHz clock: sample rate = 60e6 / 2 / 1248.
 pub const SAMPLE_RATE: f64 = 60_000_000.0 / 2.0 / 1248.0;
 
 #[derive(Clone, Copy, Default)]
@@ -59,19 +59,19 @@ impl Default for Fir {
     }
 }
 
-/// Somme des produits (arithmétique modulo 2^32, comme le DSP).
+/// Sum of products (modulo 2^32 arithmetic, like the DSP).
 fn dot_product(a: &[i16], b: &[i16]) -> i32 {
     a.iter().zip(b).fold(0i32, |s, (&x, &y)| s.wrapping_add(x as i32 * y as i32))
 }
 
 impl Fir {
     fn apply(&mut self, input: i16) -> i32 {
-        let m = self.tap_count - 1; // longueur du tampon circulaire
+        let m = self.tap_count - 1; // length of the circular buffer
         if m < 1 || self.delay_pos < 0 || self.delay_pos >= m {
             return self.apply_general(input);
         }
-        // Les m premiers coefficients lisent le tampon à partir de delay_pos en le parcourant circulairement,
-        // le dernier lit l'entrée. delay_pos revient à sa valeur, reçoit l'entrée puis avance.
+        // The first m coefficients read the buffer starting from delay_pos, walking it circularly,
+        // the last one reads the input. delay_pos returns to its value, receives the input, then advances.
         let (m, p) = (m as usize, self.delay_pos as usize);
         let line = &self.delay_line[..m];
         let taps = &self.taps[..m];
@@ -82,7 +82,7 @@ impl Fir {
         0i32.wrapping_sub(sum << 2)
     }
 
-    /// Version d'origine, pour les états anormaux (filtre non initialisé).
+    /// Original version, for abnormal states (uninitialized filter).
     fn apply_general(&mut self, input: i16) -> i32 {
         let mut output: i32 = 0;
         let mut tap = 0;
@@ -136,7 +136,7 @@ impl Delay {
         out
     }
     fn update(&mut self) {
-        // % du C : reste du signe du dividende
+        // C's %: remainder takes the sign of the dividend
         let n = ((self.write_pos as i32 - self.delay as i32) % 51) as i16;
         self.read_pos = if n < 0 { n + 51 } else { n };
     }
@@ -174,7 +174,7 @@ impl Echo {
     }
 }
 
-/// Registre adressable par le Z80 (index dans la table de 256 registres).
+/// Register addressable by the Z80 (index in the 256-register table).
 #[derive(Clone, Copy)]
 enum Reg {
     VoiceBank(usize),
@@ -206,7 +206,7 @@ enum Reg {
 fn register_map() -> [Option<Reg>; 256] {
     let mut m = [None; 256];
     for i in 0..16 {
-        m[i << 3] = Some(Reg::VoiceBank((i + 1) % 16)); // la banque s'applique à la voie suivante
+        m[i << 3] = Some(Reg::VoiceBank((i + 1) % 16)); // the bank applies to the next voice
         m[(i << 3) + 1] = Some(Reg::VoiceAddr(i));
         m[(i << 3) + 2] = Some(Reg::VoiceRate(i));
         m[(i << 3) + 3] = Some(Reg::VoicePhase(i));
@@ -245,7 +245,7 @@ pub struct QSound {
     sample_mask: usize,
     regs: [Option<Reg>; 256],
     data_latch: u16,
-    /// Dernier échantillon stéréo produit.
+    /// Last stereo sample produced.
     pub out: [i16; 2],
     voice: [Voice; 16],
     adpcm: [Adpcm; 3],
@@ -261,13 +261,13 @@ pub struct QSound {
     delay_update: u16,
     state_counter: i32,
     ready_flag: u8,
-    /// Journal des écritures de registres (adresse, valeur), si activé (outils d'analyse).
+    /// Register write log (address, value), if enabled (analysis tools).
     pub log: Option<Vec<(u8, u16)>>,
 }
 
 impl QSound {
-    /// `dsp_rom` : dl-1425.bin (seuls les 0x2000 premiers octets, mots petit-boutistes).
-    /// `samples` : ROM d'échantillons (taille puissance de 2).
+    /// `dsp_rom`: dl-1425.bin (only the first 0x2000 bytes, little-endian words).
+    /// `samples`: sample ROM (size a power of 2).
     pub fn new(dsp_rom: &[u8], samples: Vec<u8>) -> Self {
         let rom = dsp_rom[..0x2000].chunks_exact(2).map(|w| u16::from_le_bytes([w[0], w[1]])).collect();
         let sample_mask = samples.len().next_power_of_two() - 1;
@@ -315,7 +315,7 @@ impl QSound {
         ((b as u16) << 8) as i16
     }
 
-    /// Écriture Z80 en D000-D002.
+    /// Z80 write at D000-D002.
     pub fn write(&mut self, offset: u8, data: u8) {
         match offset {
             0 => self.data_latch = (self.data_latch & 0x00ff) | (data as u16) << 8,
@@ -325,7 +325,7 @@ impl QSound {
         }
     }
 
-    /// Lecture Z80 en D007 : 0x80 = prêt.
+    /// Z80 read at D007: 0x80 = ready.
     pub fn read(&self) -> u8 {
         self.ready_flag
     }
@@ -366,7 +366,7 @@ impl QSound {
         self.ready_flag = 0;
     }
 
-    /// Calcule un échantillon (à SAMPLE_RATE).
+    /// Computes one sample (at SAMPLE_RATE).
     pub fn update_sample(&mut self) {
         match self.state {
             STATE_REFRESH1 => self.refresh_filter_1(),
@@ -461,7 +461,7 @@ impl QSound {
 
     fn voice_update(&mut self, i: usize, echo_out: &mut i32) -> i16 {
         let v = self.voice[i];
-        // voix muette : sortie nulle sans lire l'échantillon (la phase avance quand même)
+        // muted voice: null output without reading the sample (the phase advances anyway)
         let output = if v.volume == 0 { 0 } else { ((v.volume as i32 * self.read_sample(v.bank, v.addr as u16) as i32) >> 14) as i16 };
         *echo_out = echo_out.wrapping_add(((output as i32) * v.echo as i32) << 2);
         let mut new_phase = (v.rate as i32).wrapping_add(((v.addr as i32) << 12) | (v.phase >> 4) as i32);
@@ -478,11 +478,11 @@ impl QSound {
     fn adpcm_update(&mut self, i: usize, mut curr_sample: i16, nibble: i32) -> i16 {
         let step: i8 = if nibble == 0 {
             let a = &mut self.adpcm[i];
-            // voie muette en fin d'échantillon
+            // voice muted at the end of the sample
             if a.cur_addr == a.end_addr {
                 a.cur_vol = 0;
             }
-            // démarrage de la lecture
+            // start of playback
             if a.flag != 0 {
                 curr_sample = 0;
                 a.flag = 0;

@@ -1,11 +1,11 @@
-//! Fenêtres de dialogue et textes des trois langues : `data/dialogs.json` (SET 24 `0xd7056`,
-//! `families/set_b.rs` module `dialog` ; liste de messages du menu de test `0xf2dc4`).
+//! Dialog windows and texts in the three languages: `data/dialogs.json` (SET 24 `0xd7056`,
+//! `families/set_b.rs` module `dialog`; message list of the test menu `0xf2dc4`).
 //!
-//! Pour chaque langue : une table de 256 définitions (une par variante de SET 24), les définitions de
-//! 18 octets qu'elle désigne directement ou indirectement, les listes d'adresses de définitions ou de
-//! textes, et les textes. Le tout forme un bloc continu par langue : la région est parcourue depuis les
-//! tables (même logique que le chargement 0xd7124 et la construction des textes), puis chaque trou est
-//! classé (définitions, textes, listes, sinon mots bruts).
+//! For each language: a table of 256 definitions (one per SET 24 variant), the 18-byte definitions
+//! it designates directly or indirectly, the lists of definition or text addresses,
+//! and the texts. The whole forms one continuous block per language: the region is walked from the
+//! tables (same logic as the loading at 0xd7124 and the text construction), then each gap is
+//! classified (definitions, texts, lists, otherwise raw words).
 
 use std::collections::BTreeMap;
 
@@ -14,23 +14,23 @@ use ddsom_assets::data::{encode_units, Region, TextBlock};
 use crate::data::{data, prog, region, span, Spec};
 use crate::rom::Program;
 
-/// Définition de fenêtre (0xd7124) : colonne, ligne, petit cadre (`+0x18`), lignes (`+0x19`), texte
-/// (`+0x24`), X (`+8`), Z (`+0xc`), sorte (`+0x2f`), suite (`+0x1a` : >= 0, la définition suivante suit),
-/// attente (`+0x32`, 0xffff : jusqu'à une touche), paramètre (`+0x34`).
+/// Window definition (0xd7124): column, row, small frame (`+0x18`), rows (`+0x19`), text
+/// (`+0x24`), X (`+8`), Z (`+0xc`), kind (`+0x2f`), continuation (`+0x1a`: >= 0, the next definition follows),
+/// wait (`+0x32`, 0xffff: until a key), parameter (`+0x34`).
 const DEF_FORMAT: &str = "u8*4 addr i16*2 u8 i8 u16 u16";
 const DEF_FIELDS: &[&str] = &["col", "row", "small", "lines", "text", "x", "z", "kind", "next", "wait", "param"];
 const DEF_SIZE: u32 = 18;
 
 struct Lang {
     code: &'static str,
-    /// Table des 256 définitions.
+    /// Table of the 256 definitions.
     definitions: u32,
-    /// Liste des messages (menu de test caché).
+    /// Message list (hidden test menu).
     messages: u32,
     count: u32,
-    /// Textes en tuiles (mots) plutôt qu'en octets.
+    /// Texts in tiles (words) rather than bytes.
     tiles: bool,
-    /// Fin du bloc de la langue.
+    /// End of the language's block.
     end: u32,
 }
 
@@ -48,8 +48,8 @@ enum Item {
     Raw,
 }
 
-/// Fin d'un texte : mots jusqu'à 0 (une commande négative prend deux mots de plus, 0xfffe un seul), ou
-/// octets jusqu'à 0xfd, suivis d'un octet nul si la longueur est impaire.
+/// End of a text: words up to 0 (a negative command takes two more words, 0xfffe only one), or
+/// bytes up to 0xfd, followed by a null byte if the length is odd.
 fn text_end(rom: &Program, at: u32, tiles: bool, limit: u32) -> Option<u32> {
     let mut p = at;
     if tiles {
@@ -113,7 +113,7 @@ impl Walk<'_> {
         }
     }
 
-    /// Parcourt les définitions depuis `queue`.
+    /// Walks the definitions from `queue`.
     fn defs(&mut self, mut queue: Vec<u32>) {
         let rom = self.rom;
         while let Some(p) = queue.pop() {
@@ -123,7 +123,7 @@ impl Walk<'_> {
             self.items.insert(p, (p + DEF_SIZE, Item::Defs));
             let (t, kind, next) = (rom.rd32(p + 4), rom.rd8(p + 12), rom.rd8(p + 13));
             match kind {
-                // la définition est remplacée par une autre (0xd7196)
+                // the definition is replaced by another (0xd7196)
                 1 => {
                     self.list(t, 2);
                     queue.extend([rom.rd32(t), rom.rd32(t + 4)]);
@@ -136,13 +136,13 @@ impl Walk<'_> {
                 5 => queue.extend((0..8).map(|i| t + rom.prog8(KIND5_STEPS + i) as u32)),
                 19 => queue.extend((0..4).map(|n| t + DEF_SIZE * n)),
                 20 => queue.extend([t, t + 2 * DEF_SIZE]),
-                // texte choisi (10 : texte relié, puis texte ; 15 : un ou plusieurs joueurs)
+                // chosen text (10: linked text, then text; 15: one or several players)
                 10 | 15 => {
                     self.list(t, 2);
                     self.text(rom.rd32(t));
                     self.text(rom.rd32(t + 4));
                 }
-                // pas de texte
+                // no text
                 2 | 4 | 12 => {}
                 _ => self.text(t),
             }
@@ -152,7 +152,7 @@ impl Walk<'_> {
         }
     }
 
-    /// Le trou `[a, b)` est-il une suite de définitions plausibles ?
+    /// Is the gap `[a, b)` a sequence of plausible definitions?
     fn defs_fit(&self, a: u32, b: u32) -> bool {
         (b - a) % DEF_SIZE == 0
             && (a..b).step_by(DEF_SIZE as usize).all(|p| {
@@ -161,14 +161,14 @@ impl Walk<'_> {
             })
     }
 
-    /// Classe chaque trou de la région. Un texte désigné en son milieu (suite après un saut de page)
-    /// coupe le texte qui le contient : chaque morceau va jusqu'au début du suivant.
+    /// Classifies each gap of the region. A text designated in its middle (continuation after a page break)
+    /// cuts the text containing it: each piece goes up to the start of the next one.
     fn fill(&mut self) -> (u32, u32) {
         let starts: Vec<(u32, u32, Item)> = self.items.iter().map(|(&a, &(e, i))| (a, e, i)).collect();
         for w in starts.windows(2) {
             let ((a, e, i), (b, f, j)) = (w[0], w[1]);
             if i == Item::Text && j == Item::Text && b < e {
-                assert_eq!(f, e, "dialogues : textes {a:#x} et {b:#x} de fins différentes");
+                assert_eq!(f, e, "dialogs: texts {a:#x} and {b:#x} have different ends");
                 self.items.insert(a, (b, Item::Text));
             }
         }
@@ -178,7 +178,7 @@ impl Walk<'_> {
         let mut gaps = Vec::new();
         let mut prev = (0, 0, Item::Raw);
         for (a, e, i) in spans {
-            assert!(a >= at, "dialogues : chevauchement en {a:#x} ({i:?}) avec {:#x}-{:#x} ({:?})", prev.0, prev.1, prev.2);
+            assert!(a >= at, "dialogs: overlap at {a:#x} ({i:?}) with {:#x}-{:#x} ({:?})", prev.0, prev.1, prev.2);
             prev = (a, e, i);
             if a > at {
                 gaps.push((at, a));
@@ -225,11 +225,11 @@ impl Walk<'_> {
     }
 }
 
-/// Décalages des définitions de la sorte 5 (0xd7196 : `2 x +0x42 + (A5+0x6f & 1)`), octets, espace programme.
+/// Offsets of the kind 5 definitions (0xd7196: `2 x +0x42 + (A5+0x6f & 1)`), bytes, program space.
 const KIND5_STEPS: u32 = 0xd7218;
 
-/// Bulles de SET 10 (`families/set.rs` module `dialogue`) : par langue (`A5+0x72`), 51 adresses de textes
-/// (une par variante) ; texte : largeur, taille (mots), puis le texte (tuiles ou octets).
+/// SET 10 balloons (`families/set.rs` module `dialogue`): per language (`A5+0x72`), 51 text addresses
+/// (one per variant); text: width, size (words), then the text (tiles or bytes).
 const BUBBLES: u32 = 0xcc444;
 const BUBBLE_LANGS: [(&str, bool); 3] = [("en", true), ("fr", false), ("de", false)];
 const BUBBLE_COUNT: u32 = 51;
@@ -246,14 +246,14 @@ fn bubbles(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>) -> 
             items.insert(t, (end, Some(tiles)));
         }
     }
-    // les listes sont suivies de code (0xcc6a8), puis des textes
+    // the lists are followed by code (0xcc6a8), then the texts
     let first = *items.keys().next().unwrap();
     let end = items.values().map(|&(e, _)| e).max().unwrap();
-    // trous entre les textes : octets bruts
+    // gaps between texts: raw bytes
     let mut at = first;
     let spans: Vec<(u32, u32)> = items.iter().map(|(&a, &(e, _))| (a, e)).collect();
     for (a, e) in spans {
-        assert!(a >= at, "bulles : chevauchement en {a:#x}");
+        assert!(a >= at, "balloons: overlap at {a:#x}");
         if a > at {
             items.insert(at, (a, None));
         }
@@ -281,16 +281,16 @@ fn bubbles(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>) -> 
     [region("bubble_lists", BUBBLES, BUBBLES + 4 * BUBBLE_COUNT * 3), region("bubbles", first, end)]
 }
 
-/// Texte en tuiles (mots jusqu'au 0 compris) de `a` à `e`.
+/// Text in tiles (words up to and including the 0) from `a` to `e`.
 fn tile_text(rom: &Program, name: String, a: u32, e: u32) -> TextBlock {
     let units: Vec<u16> = (a..e).step_by(2).map(|p| rom.rd16(p)).collect();
     TextBlock { name, rom: a, encoding: Some("tiles".into()), lines: vec![encode_units(&units, true)] }
 }
 
-/// Tables de la construction des textes (module `dialog`) : noms prédéfinis, textes selon le nombre de
-/// joueurs, titres des classes, tuiles des caractères des noms, objets et leurs textes.
+/// Tables of the text construction (module `dialog`): predefined names, texts depending on the number of
+/// players, class titles, tiles of the name characters, objects and their texts.
 fn construction(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>) -> Vec<Region> {
-    // noms prédéfinis (0xd7604) : mot n, puis n + 1 caractères au plus (0xff termine), 10 octets chacun
+    // predefined names (0xd7604): word n, then at most n + 1 characters (0xff ends), 10 bytes each
     specs.push(data("names", 0xd7604, "addr", &[], 5));
     for i in 0..5u32 {
         let at = rom.rd32(0xd7604 + 4 * i);
@@ -299,9 +299,9 @@ fn construction(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>
     specs.push(data("players_one_two", 0xd7d96, "addr", &[], 4));
     specs.push(data("players_one_two_b", 0xd7da6, "addr", &[], 4));
     specs.push(data("class_titles", 0xd7db6, "addr", &[], 6));
-    // textes jusqu'à la table des caractères
+    // texts up to the character table
     const CHARS: u32 = 0xd7e8a;
-    // (un texte désigné en son milieu coupe celui qui le contient)
+    // (a text designated in its middle cuts the one containing it)
     let targets: Vec<u32> = (0..14).map(|i| rom.rd32(0xd7d96 + 4 * i)).collect();
     let mut p = 0xd7dce;
     while p < CHARS {
@@ -313,14 +313,14 @@ fn construction(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>
         texts.push(tile_text(rom, format!("build_text@{start:#x}"), start, p));
     }
     assert_eq!(p, CHARS);
-    // tuile de chaque code de caractère des noms (0xd75a6...), jusqu'aux textes des objets
+    // tile of each name character code (0xd75a6...), up to the object texts
     let items: Vec<u32> = (0..5).map(|i| rom.prog32(0xd7a48 + 4 * i)).collect();
     specs.push(span("name_chars", CHARS, items[0], false, "u16", &[]));
     specs.push(prog("item_texts", 0xd7a48, "addr", &[], 5));
     specs.push(data("item_lists", 0xd7a20, "u8*6", &[], 4));
     let mut end = items[0];
     for &at in &items {
-        assert_eq!(at, end, "textes des objets non jointifs");
+        assert_eq!(at, end, "object texts not contiguous");
         let mut e = at;
         while rom.rd16(e) != 0 {
             e += 2;
@@ -331,12 +331,12 @@ fn construction(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>
     vec![region("names", 0xd7604, 0xd764a), region("build", 0xd7d96, end)]
 }
 
-/// Fin d'un message de passage de niveau (0xce9ea) : mots comme les dialogues, ou octets jusqu'à 0xfd
-/// (0xfe : un octet de paramètre, 0xff : deux, octet <= 0xf : lettre accentuée sur deux octets), puis
-/// un octet nul si la longueur est impaire.
+/// End of a level transition message (0xce9ea): words like the dialogs, or bytes up to 0xfd
+/// (0xfe: one parameter byte, 0xff: two, byte <= 0xf: accented letter on two bytes), then
+/// a null byte if the length is odd.
 fn level_text_end(rom: &Program, at: u32, tiles: bool) -> u32 {
     if tiles {
-        return text_end(rom, at, true, 0x100000).expect("message de niveau");
+        return text_end(rom, at, true, 0x100000).expect("level message");
     }
     let mut p = at;
     loop {
@@ -355,9 +355,9 @@ fn level_text_end(rom: &Program, at: u32, tiles: bool) -> u32 {
     p
 }
 
-/// Passage de niveau (SET C 7, `families/set_c_finale_c.rs`) : par classe, trois listes de messages (une
-/// par langue : anglais en tuiles, français, allemand), puis un enregistrement de 20 octets par niveau
-/// atteint ; les listes de messages suivent.
+/// Level transition (SET C 7, `families/set_c_finale_c.rs`): per class, three message lists (one
+/// per language: English in tiles, French, German), then a 20-byte record per level
+/// reached; the message lists follow.
 fn levelup(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>) -> Vec<Region> {
     const TABLES: u32 = 0xceaa2;
     const RANGE: u32 = 0xce728;
@@ -397,15 +397,15 @@ fn levelup(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>) -> 
             end = end.max(list + 4 * count);
         }
     }
-    // messages : jointifs, chacun jusqu'au début du suivant (un message désigné en son milieu coupe le
-    // précédent)
+    // messages: contiguous, each up to the start of the next (a message designated in its middle cuts the
+    // previous one)
     let starts: Vec<(u32, bool)> = messages.into_iter().collect();
     let mut text_end_max = 0;
     for (i, &(a, tiles)) in starts.iter().enumerate() {
         let full = level_text_end(rom, a, tiles);
         let e = starts.get(i + 1).map(|&(b, _)| b.min(full)).unwrap_or(full);
         if let Some(&(b, _)) = starts.get(i + 1) {
-            assert!(b >= e, "messages de niveau : trou avant {b:#x}");
+            assert!(b >= e, "level messages: gap before {b:#x}");
         }
         text_end_max = e;
         let (units, enc): (Vec<u16>, &str) = if tiles {
@@ -445,13 +445,13 @@ pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>, Vec<TextBlock>) {
             w.text(rom.rd32(lang.messages + 4 * i));
         }
         if lang.end == 0 {
-            // dernière langue : le bloc s'arrête après le dernier élément atteint
+            // last language: the block stops after the last element reached
             w.end = w.items.values().map(|&(e, _)| e).max().unwrap();
         }
         let end = w.end;
         let (gaps, raw) = w.fill();
-        eprintln!("dialogues {} : {} éléments, {gaps} trous, dont {raw} bruts", lang.code, w.items.len());
-        // tables : définitions jointives regroupées
+        eprintln!("dialogs {}: {} elements, {gaps} gaps, of which {raw} raw", lang.code, w.items.len());
+        // tables: contiguous definitions grouped
         let mut run: Option<(u32, u32)> = None;
         let flush = |run: &mut Option<(u32, u32)>, specs: &mut Vec<Spec>| {
             if let Some((a, e)) = run.take() {

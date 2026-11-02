@@ -1,20 +1,20 @@
-//! Ennemi « Owlbear » (ENEMY type 4, 0x5d87a). Voir `docs/families/enemy.md`.
+//! "Owlbear" enemy (ENEMY type 4, 0x5d87a). See `docs/families/enemy.md`.
 //!
-//! Même charpente que le Riyakaa (`enemy_riyakaa`) : `+4` état principal (0 création, 2 actif,
-//! 4 touché, 6 libération), `+5` groupe de comportements, `+6` et `+7` étapes. En état actif :
+//! Same framework as the Riyakaa (`enemy_riyakaa`): `+4` main state (0 creation, 2 active, 4 hit, 6 release), `+5`
+//! group of behaviours, `+6` and `+7` steps. In the active state:
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `stance` | arrivée selon la variante `+3` |
-//! | 2 | `stance` | debout : poursuite, demi-tour, attente, approche |
-//! | 4 | `attacks` | coups (`+6` = le coup) |
-//! | 6 | `attacks` | coups de l'après-arrivée : bond, charge |
-//! | 8 | `moves` | charges et sauts vers un joueur |
-//! | 10 | `stance` | repos, attend qu'un joueur soit en vie |
-//! | état 4 | `hit` | réactions aux coups |
+//! | 0 | `stance` | arrival according to variant `+3` |
+//! | 2 | `stance` | standing: pursuit, turn-around, wait, approach |
+//! | 4 | `attacks` | attacks (`+6` = the attack) |
+//! | 6 | `attacks` | post-arrival attacks: leap, charge |
+//! | 8 | `moves` | charges and jumps toward a player |
+//! | 10 | `stance` | rest, waits for a player to be alive |
+//! | state 4 | `hit` | reactions to hits |
 //!
-//! Animations : 0x160e26 (mouvements) et 0x160e44 (coups). `+0xa1` est l'animation voulue,
-//! `+0xa2` celle en cours (on ne relance pas la même).
+//! Animations: 0x160e26 (movements) and 0x160e44 (attacks). `+0xa1` is the wanted animation, `+0xa2` the current one
+//! (the same one is not restarted).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -26,32 +26,32 @@ mod hit;
 mod moves;
 mod stance;
 
-/// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
+/// Fields specific to this type (the common fields are in `enemy_common::f`).
 pub(self) mod g {
-    /// Dégâts du coup en cours : `+0x44` type, `+0x45` force.
+    /// Damage of the current attack: `+0x44` type, `+0x45` strength.
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
-    /// Vulnérable (1) ou non (0) pendant le geste.
+    /// Vulnerable (1) or not (0) during the move.
     pub const VULNERABLE: u32 = 0x67;
-    /// Paramètres d'IA posés à la création.
+    /// AI parameters set at creation.
     pub const AI_STEP: u32 = 0x6b;
     pub const AI_REPEAT: u32 = 0x6e;
     pub const AI_TURN: u32 = 0x71;
     pub const AI_KICK: u32 = 0x77;
     pub const AI_SHOT: u32 = 0x79;
-    /// Délai avant la première attaque (octet fort du mot `+0xaa`).
+    /// Delay before the first attack (high byte of word `+0xaa`).
     pub const DELAY: u32 = 0xaa;
-    /// Minuterie de l'étape en cours.
+    /// Timer of the current step.
     pub const TIMER: u32 = 0xa0;
-    /// Animation voulue et animation en cours.
+    /// Wanted animation and current animation.
     pub const WANT_ANIM: u32 = 0xa1;
     pub const CUR_ANIM: u32 = 0xa2;
-    /// État long (`+0xa6`) et étape (`+0xa4`) à reprendre après un demi-tour.
+    /// Long state (`+0xa6`) and step (`+0xa4`) to resume after a turn-around.
     pub const RESUME_STATE: u32 = 0xa6;
     pub const RESUME_STEP: u32 = 0xa4;
-    /// Octet non nul : l'état touché ne teste pas la zone de jeu.
+    /// Non-zero byte: the hit state does not test the play zone.
     pub const NO_ZONE: u32 = 0xa5;
-    /// Répétitions d'un coup : `+0xac` (série), `+0xad` (même animation).
+    /// Repetitions of an attack: `+0xac` (series), `+0xad` (same animation).
     pub const SERIES: u32 = 0xac;
     pub const REPEAT_LEFT: u32 = 0xad;
 }
@@ -59,10 +59,10 @@ pub(self) mod g {
 use g::*;
 use crate::objects::Current;
 
-/// Jeux d'animations : mouvements et coups.
+/// Animation sets: movements and attacks.
 const SET_BODY: u32 = 0x160e26;
 const SET_STRIKE: u32 = 0x160e44;
-/// États longs (`+4..+7`).
+/// Long states (`+4..+7`).
 const ACTIVE_STANCE: u32 = 0x0202_0000;
 const ACTIVE_IDLE: u32 = 0x020a_0000;
 const ACTIVE_TURN: u32 = 0x0202_0200;
@@ -85,8 +85,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- aides ------------------------------------------------------------------------------------
 
-/// Pose l'animation voulue `want` ; lance le script `n` du jeu `set` si ce n'est pas déjà la
-/// courante.
+/// Sets the wanted animation `want`; starts script `n` of set `set` if it is not already the current one.
 fn pose<R: Bench>(x: &mut Cx<'_, R>, want: u8, set: u32, n: u32) {
     x.set8(WANT_ANIM, want);
     if want != x.u8(CUR_ANIM) {
@@ -95,15 +94,15 @@ fn pose<R: Bench>(x: &mut Cx<'_, R>, want: u8, set: u32, n: u32) {
     }
 }
 
-/// Ce que doit faire un coup quand il voudrait rejouer son animation (`+0xa1`).
+/// What an attack must do when it wants to replay its animation (`+0xa1`).
 enum Replay {
     New,
     Again,
     End,
 }
 
-/// Comme `pose`, pour un coup répété : si l'animation tourne déjà, une répétition de moins
-/// (`+0xad`), et à zéro la bête se remet debout.
+/// Like `pose`, for a repeated attack: if the animation is already running, one repetition fewer (`+0xad`), and at zero
+/// the beast gets back on its feet.
 fn replay<R: Bench>(x: &mut Cx<'_, R>, want: u8) -> Replay {
     x.set8(WANT_ANIM, want);
     if want != x.u8(CUR_ANIM) {
@@ -143,33 +142,33 @@ fn set_state_long<R: Bench>(x: &mut Cx<'_, R>, v: u32) {
     x.set32(f::STATE, v);
 }
 
-/// Direction de marche selon l'orientation : `flipped` si la bête regarde à gauche (octet `+0x2c` non
-/// nul), `otherwise` sinon.
+/// Walking direction according to the orientation: `flipped` if the beast looks left (byte `+0x2c` non-zero),
+/// `otherwise` if not.
 fn set_angle<R: Bench>(x: &mut Cx<'_, R>, flipped: u8, otherwise: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { otherwise };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
-/// Écart d'abscisse de la cible à la bête (positif : la cible est à droite), `None` sans cible.
+/// X offset from the target to the beast (positive: the target is on the right), `None` without a target.
 fn target_dx<R: Bench>(x: &mut Cx<'_, R>) -> Option<i16> {
     let t = target(x)?;
     Some(t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)) as i16)
 }
 
-/// Même chose en profondeur (positif : la cible est plus bas à l'écran).
+/// Same thing in depth (positive: the target is lower on the screen).
 fn target_dy<R: Bench>(x: &mut Cx<'_, R>) -> Option<i16> {
     let t = target(x)?;
     Some(t.u16(x.b, 0x10).wrapping_sub(x.u16(0x10)) as i16)
 }
 
-/// 0x5f710 : la cible est derrière la bête, elle se retourne.
+/// 0x5f710: the target is behind the beast, it turns around.
 fn turn_if_behind<R: Bench>(x: &mut Cx<'_, R>) {
     if needs_turn(x) {
         set_state_long(x, ACTIVE_TURN);
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 const AI_PARAMS: [(u32, u8); 14] =
     [(0x68, 2), (0x69, 2), (0x70, 0), (0x6a, 2), (0x6c, 2), (0x6d, 2), (0x72, 4), (0x73, 3), (0x74, 2), (0x75, 4), (0x76, 3), (0x78, 0xff), (0x81, 9), (0x80, 0xa)];
@@ -210,7 +209,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(TIMER, 0x29);
             x.set8(VULNERABLE, 1);
             x.set8(WANT_ANIM, 2);
-            // l'original ne mémorise pas ici l'animation lancée
+            // the original does not save the launched animation here
             if x.u8(WANT_ANIM) != x.u8(CUR_ANIM) {
                 body(x, 2);
             }
@@ -227,7 +226,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     active_loop(x, |x| {

@@ -1,9 +1,9 @@
-//! Textes : descripteurs lus par les routines de texte V2 (`ddsom-game/src/text.rs`) et noms des bulles.
+//! Texts: descriptors read by the V2 text routines (`ddsom-game/src/text.rs`) and balloon names.
 //!
-//! Les descripteurs sont trouvés en suivant le code : adresses chargées dans A4 avant un appel aux routines
-//! de texte (`SEEDS`), tables de descripteurs (`TABLES`) ; chaque descripteur trouvé est suivi de ceux qui
-//! lui succèdent en mémoire tant qu'ils sont plausibles (les appelants enchaînent les textes). Une recherche
-//! de motifs dans toute la ROM ajoute les descripteurs de texte que le code désigne autrement (`scanned`).
+//! The descriptors are found by following the code: addresses loaded into A4 before a call to the text
+//! routines (`SEEDS`), descriptor tables (`TABLES`); each descriptor found is followed by those that
+//! succeed it in memory as long as they are plausible (callers chain texts together). A pattern
+//! search over the whole ROM adds the text descriptors that the code designates otherwise (`scanned`).
 
 use std::collections::BTreeMap;
 use std::io;
@@ -16,7 +16,7 @@ use crate::rom::Program;
 
 use TextKind::*;
 
-/// Descripteurs chargés dans A4 (`lea`, `movea.l #`) avant un appel à une routine de texte.
+/// Descriptors loaded into A4 (`lea`, `movea.l #`) before a call to a text routine.
 const SEEDS: &[(u32, TextKind)] = &[
     (0x13b52, Text), (0x14e54, Box), (0x14ea2, Text), (0x19f02, Box), (0x19f06, Box), (0x19f0a, Box),
     (0x19f0e, Box), (0x19f12, Box), (0x19f16, Box), (0x19f1a, Box), (0x19f1e, Box), (0x1c546, Box),
@@ -32,7 +32,7 @@ const SEEDS: &[(u32, TextKind)] = &[
     (0xd86e8, Box), (0xf7336, Tall), (0xf734e, Tall), (0xf985e, Tall), (0xfacc4, Text),
 ];
 
-/// Tables de descripteurs : (adresse, espace programme, déplacements (mots) plutôt que longs, entrées, sorte).
+/// Descriptor tables: (address, program space, displacements (words) rather than longs, entries, kind).
 const TABLES: &[(u32, bool, bool, u32, TextKind)] = &[
     (0x11cba, false, false, 6, Text),
     (0x11cd2, false, false, 6, Text),
@@ -56,15 +56,15 @@ const TABLES: &[(u32, bool, bool, u32, TextKind)] = &[
     (0xfad92, false, false, 6, Text),
 ];
 
-/// Noms terminés par `@` : (table de longs, espace programme, entrées).
+/// Names terminated by `@`: (table of longs, program space, entries).
 const NAMES: &[(u32, bool, u32)] = &[(0xd6232, false, 21), (0xb20e8, true, 6)];
 
-/// Noms des bulles : table de déplacements (espace programme) ; le premier déplacement donne sa taille.
+/// Balloon names: displacement table (program space); the first displacement gives its size.
 const POPUP_TABLE: u32 = 0x1a01a;
 const POPUP_END: u8 = b'/';
 
-/// Lit le descripteur de sorte `kind` en `at` ; `strict` : refuse ce qui ne ressemble pas à un texte
-/// (position hors de l'écran, attributs > 0x1f, octets hors de la police, tuiles >= 0x2000).
+/// Reads the descriptor of kind `kind` at `at`; `strict`: refuses what does not look like text
+/// (position off screen, attributes > 0x1f, bytes outside the font, tiles >= 0x2000).
 fn parse(rom: &Program, at: u32, kind: TextKind, strict: bool) -> Option<TextDesc> {
     let mut d = TextDesc { rom: at, kind, col: None, row: None, attr: None, text: None, words: None, size: None, scanned: false };
     let mut p = at;
@@ -133,7 +133,7 @@ fn end(d: &TextDesc) -> u32 {
     d.rom + d.bytes().len() as u32
 }
 
-/// Le descripteur en `at` (accepté sans contrôle : le code le désigne) puis ceux qui le suivent.
+/// The descriptor at `at` (accepted unchecked: the code designates it) then those that follow it.
 fn run(rom: &Program, at: u32, kind: TextKind, found: &mut BTreeMap<u32, TextDesc>) -> bool {
     let Some(first) = parse(rom, at, kind, false) else {
         return false;
@@ -151,8 +151,8 @@ fn run(rom: &Program, at: u32, kind: TextKind, found: &mut BTreeMap<u32, TextDes
     true
 }
 
-/// Descripteurs de texte non désignés par le code suivi : adresse paire, colonne < 0x40, ligne < 0x20,
-/// attributs < 0x20, au moins 6 octets de texte (ASCII ou ©) puis `@` ; puis ceux qui les suivent.
+/// Text descriptors not designated by the followed code: even address, column < 0x40, row < 0x20,
+/// attributes < 0x20, at least 6 bytes of text (ASCII or ©) then `@`; then those that follow them.
 fn scan(rom: &Program, found: &mut BTreeMap<u32, TextDesc>) {
     let covered = |f: &BTreeMap<u32, TextDesc>, a: u32| f.range(..=a).next_back().is_some_and(|(_, d)| a < end(d));
     let mut a = 0;
@@ -193,7 +193,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     let mut found = BTreeMap::new();
     for &(at, kind) in SEEDS {
         if !run(&rom, at, kind, &mut found) {
-            return Err(bad(format!("texte illisible en {at:#x}")));
+            return Err(bad(format!("unreadable text at {at:#x}")));
         }
     }
     let mut tables = Vec::new();
@@ -208,21 +208,21 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
             .collect();
         for &e in &entries {
             if !run(&rom, e, kind, &mut found) {
-                return Err(bad(format!("table {at:#x} : texte illisible en {e:#x}")));
+                return Err(bad(format!("table {at:#x}: unreadable text at {e:#x}")));
             }
         }
         tables.push(TextTable { rom: at, program, offsets, entries });
     }
     let followed = found.len();
     scan(&rom, &mut found);
-    // pas de chevauchement
+    // no overlap
     let texts: Vec<TextDesc> = found.into_values().collect();
     for w in texts.windows(2) {
         if end(&w[0]) > w[1].rom {
-            return Err(bad(format!("textes {:#x} et {:#x} : chevauchement", w[0].rom, w[1].rom)));
+            return Err(bad(format!("texts {:#x} and {:#x}: overlap", w[0].rom, w[1].rom)));
         }
     }
-    // noms des bulles
+    // balloon names
     let count = rom.prog16(POPUP_TABLE) / 2;
     let offsets: Vec<i16> = (0..count as u32).map(|i| rom.prog16(POPUP_TABLE + 2 * i) as i16).collect();
     let mut starts: Vec<i16> = offsets.clone();
@@ -233,7 +233,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     let mut p = strings_rom;
     for &s in &starts {
         if POPUP_TABLE.wrapping_add(s as u32) != p {
-            return Err(bad(format!("noms des bulles : trou avant {p:#x}")));
+            return Err(bad(format!("balloon names: gap before {p:#x}")));
         }
         let mut bytes = Vec::new();
         while rom.rd8(p) != POPUP_END {
@@ -244,7 +244,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         strings.push(encode(&bytes));
     }
     eprintln!(
-        "textes : {} descripteurs ({} par le code, {} par recherche), {} tables, {} noms de bulles",
+        "texts: {} descriptors ({} by the code, {} by search), {} tables, {} balloon names",
         texts.len(),
         followed,
         texts.len() - followed,
@@ -256,7 +256,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     json::save(path, &Texts { texts, tables, popups, names }, 2)
 }
 
-/// Noms désignés par une table : tous ceux de la région, du premier désigné à la fin du dernier.
+/// Names designated by a table: all those of the region, from the first designated to the end of the last.
 fn names(rom: &Program, table: u32, program: bool, n: u32) -> NameGroup {
     let entries: Vec<u32> = (0..n).map(|i| rom.long(table + 4 * i, program)).collect();
     let (first, last) = (*entries.iter().min().unwrap(), *entries.iter().max().unwrap());

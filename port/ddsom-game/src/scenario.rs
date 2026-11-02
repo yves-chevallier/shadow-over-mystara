@@ -1,23 +1,23 @@
-//! Scénarios d'entrées (format de mame/scenario.lua : « image champ valeur »).
-//! Comme dans MAME, une entrée posée après l'image n prend effet à l'image n + 2.
+//! Input scenarios (format of mame/scenario.lua: "frame field value").
+//! As in MAME, an input set after frame n takes effect at frame n + 2.
 //!
-//! Format : une action par ligne, `image field value`.
-//!   * `900 Coin 1 1` / `906 Coin 1 0` : entrée MAME (appuyée = 1, relâchée = 0).
-//!   * `quit` : ligne finale ignorée ici (utilisée par MAME).
-//!   * **`2000 poke8 ff8034 5`**, `poke16`, `poke32` : écrit `value` (décimal ou `0x…`) à
-//!     l'adresse hexadécimale `ff0000-ffffff` de la RAM de travail, en big-endian, juste avant
-//!     l'exécution de l'image `n + 1` (même instant qu'une entrée). Les deux machines de
-//!     `validate` appliquent la même écriture. Adresse ou valeur invalide : ligne ignorée.
-//!     MAME ignore ces lignes.
-//!   * Les lignes vides et celles commençant par `#` sont ignorées.
-//! Les scénarios ne contiennent que des entrées et des adresses/valeurs de RAM, jamais de données de ROM.
+//! Format: one action per line, `frame field value`.
+//!   * `900 Coin 1 1` / `906 Coin 1 0`: MAME input (pressed = 1, released = 0).
+//!   * `quit`: final line ignored here (used by MAME).
+//!   * **`2000 poke8 ff8034 5`**, `poke16`, `poke32`: writes `value` (decimal or `0x…`) at
+//!     the hexadecimal address `ff0000-ffffff` of the work RAM, big-endian, just before
+//!     frame `n + 1` is executed (same instant as an input). Both `validate` machines
+//!     apply the same write. Invalid address or value: line ignored.
+//!     MAME ignores these lines.
+//!   * Empty lines and those starting with `#` are ignored.
+//! Scenarios only contain inputs and RAM addresses/values, never ROM data.
 
 use std::io;
 use std::path::Path;
 
 pub struct Scenario {
-    actions: Vec<(usize, u8, u16, bool)>, // (image, port, bit, appuyé)
-    pokes: Vec<(usize, u32, u32, u8)>,    // (image, adresse, valeur, taille en octets)
+    actions: Vec<(usize, u8, u16, bool)>, // (frame, port, bit, pressed)
+    pokes: Vec<(usize, u32, u32, u8)>,    // (frame, address, value, size in bytes)
 }
 
 impl Scenario {
@@ -52,7 +52,7 @@ impl Scenario {
         Ok(Scenario { actions, pokes })
     }
 
-    /// Applique les entrées dues avant d'exécuter l'image d'indice `f` (0 = première image).
+    /// Applies the inputs due before executing the frame of index `f` (0 = first frame).
     pub fn apply(&self, f: usize, m: &mut cps2::Machine) {
         for &(af, addr, val, size) in &self.pokes {
             if af + 1 == f {
@@ -67,7 +67,7 @@ impl Scenario {
     }
 }
 
-/// Écrit `value` (big-endian, `size` octets) en RAM de travail (FF0000-FFFFFF).
+/// Writes `value` (big-endian, `size` bytes) to the work RAM (FF0000-FFFFFF).
 pub fn poke(m: &mut cps2::Machine, addr: u32, val: u32, size: u8) {
     for k in 0..size as u32 {
         let a = (addr + k - 0xff0000) as usize;
@@ -86,7 +86,7 @@ fn set_bit(m: &mut cps2::Machine, port: u8, bit: u16, down: bool) {
     if down { *reg &= !bit } else { *reg |= bit }
 }
 
-/// Appuie (`down`) ou relâche l'entrée MAME `name` (ex. « P1 Button 2 ») ; faux si le nom est inconnu.
+/// Presses (`down`) or releases the MAME input `name` (e.g. "P1 Button 2"); false if the name is unknown.
 pub fn set_input(m: &mut cps2::Machine, name: &str, down: bool) -> bool {
     match input_bit(name) {
         Some((port, bit)) => {
@@ -97,7 +97,7 @@ pub fn set_input(m: &mut cps2::Machine, name: &str, down: bool) -> bool {
     }
 }
 
-/// Enregistre les entrées d'une partie en scénario : une ligne par entrée qui change, rejouable par `validate`.
+/// Records the inputs of a game as a scenario: one line per input that changes, replayable by `validate`.
 pub struct Recorder<W: io::Write = std::fs::File> {
     out: W,
     inputs: Vec<(String, u8, u16)>,
@@ -124,8 +124,8 @@ impl<W: io::Write> Recorder<W> {
         Recorder { out, inputs, before: [0xffff; 3], image: 0 }
     }
 
-    /// Reprend l'enregistrement d'une partie rejouée jusqu'à l'image `image` (déjà écrite dans `out`) : les entrées
-    /// de `m` sont celles de la dernière image rejouée.
+    /// Resumes the recording of a replayed game up to frame `image` (already written to `out`): the inputs
+    /// of `m` are those of the last replayed frame.
     pub fn resumes(out: W, image: usize, m: &cps2::Machine) -> Self {
         let mut e = Recorder::new(out);
         e.before = [m.bus.inputs.in0, m.bus.inputs.in1, m.bus.inputs.in2];
@@ -133,7 +133,7 @@ impl<W: io::Write> Recorder<W> {
         e
     }
 
-    /// Images enregistrées.
+    /// Recorded frames.
     pub fn images(&self) -> usize {
         self.image
     }
@@ -142,7 +142,7 @@ impl<W: io::Write> Recorder<W> {
         &self.out
     }
 
-    /// À appeler juste avant chaque image exécutée, entrées posées : `apply` les rejoue au même instant.
+    /// To be called just before each executed frame, inputs set: `apply` replays them at the same instant.
     pub fn image(&mut self, m: &cps2::Machine) -> io::Result<()> {
         let ports = [m.bus.inputs.in0, m.bus.inputs.in1, m.bus.inputs.in2];
         let f = self.image.saturating_sub(1);
@@ -171,7 +171,7 @@ const SYSTEM: [&str; 10] = [
     "Service Mode",
 ];
 
-/// Nom d'entrée MAME -> (port, bit) pour cps2_4p4b (actif à 0).
+/// MAME input name -> (port, bit) for cps2_4p4b (active at 0).
 fn input_bit(name: &str) -> Option<(u8, u16)> {
     if let Some(rest) = name.strip_prefix('P') {
         let (p, what) = rest.split_once(' ')?;

@@ -1,8 +1,8 @@
 # BOSS (C04) : les boss (`families/boss_*.rs`)
 
 Pool de 3 objets de 0xC0 octets (FFBA1E, compteur de places libres inutilisé), table de gestionnaires 0x39b12 (23
-entrées, dispatch 0x39aec). Même cadre que les ennemis (`docs/familles/enemy.md` §2, `Cx`, `handlers!`, contrat A0/D7 :
-`docs/familles-eshl-set-sobj.md`) : `+4` état (0 création, 2 actif, 4 touché, 6 libération), `+5`, `+6`, `+7` sous-états,
+entrées, dispatch 0x39aec). Même cadre que les ennemis (`docs/families/enemy.md` §2, `Cx`, `handlers!`, contrat A0/D7 :
+`docs/families-eshl-set-sobj.md`) : `+4` état (0 création, 2 actif, 4 touché, 6 libération), `+5`, `+6`, `+7` sous-états,
 octets pairs qui indexent des tables de sauts. `boss_common.rs` réexporte `enemy_common` (champs, états, `alloc`,
 `suspended`, `random`...) et ajoute les variables de scène des boss (`var::*`, `leader`, `scroll_x`).
 Les noms de rôle (h) sont des hypothèses tirées du comportement et des noms de debug du jeu (atlas, annexe A).
@@ -83,7 +83,7 @@ la main (les parcours de `boss_scan` ne durent pas assez pour déclencher leur a
 ### Type 13 (0x8f59c) : dragon noir en vol — `boss_dragon.rs`
 
 Ce n'est pas un adversaire : il accompagne la caméra (`A5+0x506`) à `scroll - 0x80`, flotte (`bob` : tous les 16 images,
-quatre vitesses tirées à `4 × (tirage & 7)` octets dans la table 0x8faa2, qui se chevauchent comme dans l'original,
+quatre vitesses tirées à `4 × (draw & 7)` octets dans la table 0x8faa2, qui se chevauchent comme dans l'original,
 puis leurs opposées), et déclenche des étapes quand la caméra dépasse les seuils 0xf00, 0x1e00, 0x2d00, 0x3c00 de la
 table 0x8f97a (`next_stop`, compteur `+0xa7` ; la lecture au-delà du 4e seuil lit des opcodes). Création : au moins
 deux places ESHL libres et un meneur de la caméra (`A5+0x46`), deux tirs ESHL 0x14 (variantes 1 puis 0, `+0x50` = le
@@ -165,7 +165,7 @@ boss, plus un tirage), deux octets par entrée (angle et groupe, durée et demi-
 
 Particularités : la reprise après un coup sans effet (`+0x49` = 0x38) rappelle la boucle de l'état actif depuis l'état
 touché (et revient à la fin de l'état touché : zone et ombre) ; les `+6` hors tables (6 impair ou trop grand) sautent dans le
-code de l'original à des adresses sans sens, la porte `etats_boss` du fuzz s'en tient aux valeurs des tables.
+code de l'original à des adresses sans sens, la porte `boss_states` du fuzz s'en tient aux valeurs des tables.
 `addq8` (boss_common) reproduit les drapeaux de `addq.b` avant les appels sonores qui rendent les drapeaux reçus.
 Couverture : fuzz 585 instructions sur 594 (reste : l'appel 0x9b6 de l'ouverture, qui ne revient pas en fuzz).
 
@@ -452,13 +452,13 @@ caméra (+0xc0), 0x180 étant écrasé ; `subq.b #1,(0xa0)` agit sur l'octet hau
   la machine d'origine B finit en retard certaines images de cette scène chargée (tirs, sprites) alors que A, plus rapide,
   les finit à temps. Contrôle appel par appel (`DDSOM_CHECK=1 DDSOM_CHECK_ALL=1`) : VALIDE.
 * Types 0, 16, 2 et 22 (jamais créés par les parcours) : `scenarios/boss/boss0_poke{,_mort}.txt`, `boss16_poke{,_mort}.txt`,
-  `boss2_poke.txt`, `boss2_poke3p{,_mort}.txt`. `tools/gen_boss.py` ajoute le 7e élément `type:variante:image[:joueurs]` des spécifications :
-  `autobot --spawn boss:type:variante:image` écrit en RAM (`poke`) un objet BOSS neuf à 0x60 pixels à droite du joueur 1 comme le fait
+  `boss2_poke.txt`, `boss2_poke3p{,_mort}.txt`. `tools/gen_boss.py` ajoute le 7e élément `type:variant:image[:joueurs]` des spécifications :
+  `autobot --spawn boss:type:variant:image` écrit en RAM (`poke`) un objet BOSS neuf à 0x60 pixels à droite du joueur 1 comme le fait
   `creatures spawn`, et le bot le combat (variante `_mort` : PV ramenés à 1, séquences de mort et de fin de scène). Les scénarios à
   trois joueurs exercent aussi le type 22 (créé par le type 2).
 * `examples/boss_trace.rs <roms> <eeprom> <scénario> <images>` : trace les changements d'état et de PV de chaque boss (quelles phases,
   dont la mort, un scénario exerce).
-* `examples/fuzz_boss.rs <roms> <eeprom> <scénario> <chauffe> <tours>` (modèle `fuzz_enemy.rs`) : objet neuf dans le pool BOSS,
+* `examples/fuzz_boss.rs <roms> <eeprom> <scénario> <warmup> <tours>` (modèle `fuzz_enemy.rs`) : objet neuf dans le pool BOSS,
   états tirés dans les tables de sauts (`DDSOM_ETATS=1`), meneur de la caméra, joueurs, caméra et drapeaux perturbés à chaque pas,
   chaque appel comparé à l'original ; `DDSOM_COUVERTURE=fichier` écrit les instructions vues (`DDSOM_GRAINE`, `DDSOM_ENTREE`, `DDSOM_PAS`).
   Exemple : `DDSOM_ETATS=1 fuzz_boss $DDSOM_ROMS $DDSOM_EEPROM scenarios/bot_char0.txt 4500 300`.

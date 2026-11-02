@@ -1,21 +1,22 @@
-//! Table des tâches en Rust : remplace les enregistrements FF0064 du noyau d'origine (voir `docs/noyau.md`).
+//! Task table in Rust: replaces the FF0064 records of the original kernel (see `docs/noyau.md`).
 //!
-//! 16 emplacements, numérotés par leur décalage dans la table d'origine divisé par 16 (`kill(0x30)` : emplacement 3).
-//! L'ordonnanceur les examine de 0 à 15 (dans l'original, D0 décompte alors de 15 à 0). Chaque emplacement porte
-//! l'état et le compte d'attente de l'original, la pile 68000 donnée à la tâche et ce qu'il faut pour la reprendre :
-//! son entrée tant qu'elle n'a pas tourné (son étape d'entrée : `tasks::entry`), puis l'étape Rust où elle reprendra
-//! (ce qu'elle relit à sa reprise est dans les champs de l'étape, et non plus dans des registres sauvés), et ses
-//! appels en cours ([`Frame`]). La table garde aussi où en est le processeur (`kernel::Point`).
+//! 16 slots, numbered by their offset in the original table divided by 16 (`kill(0x30)`: slot 3).
+//! The scheduler examines them from 0 to 15 (in the original, D0 then counts down from 15 to 0). Each slot carries
+//! the original's state and wait count, the 68000 stack given to the task and what is needed to resume it:
+//! its entry as long as it has not run (its entry stage: `tasks::entry`), then the Rust stage where it will resume
+//! (what it re-reads on resuming is in the fields of the stage, no longer in saved registers), and its
+//! calls in progress ([`Frame`]). The table also keeps where the processor is (`kernel::Point`).
 //!
-//! La table vit dans le bus (`Cps2Bus::ext`) : la machine du jeu n'écrit plus FF0052-FF01A5 (pile de
-//! l'ordonnanceur, tâche courante, tas des piles, enregistrements), et les enveloppes de cession ne sauvent plus les
-//! registres sur la pile de la tâche. [`gaps`] compare la table à celle de la RAM d'une machine d'origine.
+//! The table lives in the bus (`Cps2Bus::ext`): the game machine no longer writes FF0052-FF01A5 (scheduler
+//! stack, current task, stack heap, records), and the cession wrappers no longer save the
+//! registers on the task's stack. [`gaps`] compares the table with that of the RAM of a reference machine.
 //!
-//! Une tâche reprend toujours à une étape ([`Step`], `Resume::Step`) et ses appels en cours continuent à des étapes
-//! ([`Next::Step`]) : l'ordonnanceur appelle son pas sans poser de PC. L'adresse d'origine de l'étape
-//! (`Step::address`) ne sert plus qu'au diagnostic, et aux registres que l'original y laisse (épilogue étranger des
-//! bulles). Une suite désignée par une adresse ([`Next::Address`]) n'est plus qu'un retour de la pile 68000 : celui
-//! d'un appel par adresse (`crate::call`, sentinelle) ou d'un outil de diagnostic qui appelle une native.
+//! A task always resumes at a stage ([`Step`], `Resume::Step`) and its calls in progress continue at stages
+//! ([`Next::Step`]): the scheduler calls its step without setting a PC. The original address of the stage
+//! (`Step::address`) is now only used for diagnostics, and for the registers the original leaves there (foreign
+//! epilogue of the
+//! bubbles). A continuation designated by an address ([`Next::Address`]) is now just a return of the 68000 stack: that
+//! of a call by address (`crate::call`, sentinel) or of a diagnostic tool that calls a native.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -23,40 +24,40 @@ use m68k::Cpu;
 use super::Step;
 use crate::mem::rd32;
 
-/// Nombre d'emplacements.
+/// Number of slots.
 pub const SLOTS: usize = 16;
-/// Adresse de l'enregistrement d'origine de l'emplacement 0 ; l'emplacement k est à `+ 0x10 k`.
+/// Address of the original record of slot 0; slot k is at `+ 0x10 k`.
 pub const RECORDS: u32 = 0xff_0064;
 
-/// Adresse (fictive dans la machine du jeu) de l'enregistrement de l'emplacement `k`, que l'original laisse dans A0.
+/// Address (fictitious in the game machine) of the record of slot `k`, which the original leaves in A0.
 pub fn record(k: usize) -> u32 {
     RECORDS + 0x10 * k as u32
 }
 
-/// Emplacement désigné par un décalage dans la table (octet bas de D0 des traps).
+/// Slot designated by an offset in the table (low byte of D0 of the traps).
 pub fn slot(offset: u32) -> usize {
     (offset as usize & 0xff) / 0x10
 }
 
-/// État d'un emplacement (octet +0 de l'enregistrement d'origine).
+/// State of a slot (byte +0 of the original record).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum State {
     #[default]
     Free,
-    /// Attend que le VBLANK ait décompté son compte jusqu'à zéro.
+    /// Waits until VBLANK has counted its count down to zero.
     Waiting,
-    /// Attend qu'une autre tâche la réveille (trap 6).
+    /// Waits for another task to wake it (trap 6).
     Suspended,
-    /// Sera lancée au prochain passage de l'ordonnanceur.
+    /// Will be launched at the scheduler's next pass.
     Ready,
-    /// Lancée, n'a pas encore cédé la main.
+    /// Launched, has not ceded control yet.
     InProgress,
-    /// Créée (trap 0) ou relancée (trap 7) : démarrera à son entrée.
+    /// Created (trap 0) or relaunched (trap 7): will start at its entry.
     Fresh,
 }
 
 impl State {
-    /// Octet d'état de l'original.
+    /// State byte of the original.
     pub fn byte(self) -> u8 {
         match self {
             State::Free => 0,
@@ -74,40 +75,40 @@ impl State {
             .find(|e| e.byte() == byte)
     }
 
-    /// L'ordonnanceur lance la tâche (état ≥ 4 dans l'original).
+    /// The scheduler launches the task (state ≥ 4 in the original).
     pub fn castable(self) -> bool {
         matches!(self, State::Ready | State::InProgress | State::Fresh)
     }
 }
 
-/// Les tâches du jeu, reconnues à leur entrée. Toutes sont en Rust (natives à leur entrée et à leurs adresses de
-/// reprise) sauf l'écran `0x19068`, jamais atteint par les scénarios.
+/// The game's tasks, recognized by their entry. All are in Rust (natives at their entry and at their resume
+/// addresses) except the screen `0x19068`, never reached by the scenarios.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Task {
-    /// `0x11b16` (emplacement 0) : initialisation, avertissements, création des crédits et du gel (`modes/boot.rs`),
-    /// puis la machine à modes (`modes/`), dans laquelle elle continue sans changer d'entrée.
+    /// `0x11b16` (slot 0): initialization, warnings, creation of the credits and the freeze (`modes/boot.rs`),
+    /// then the mode machine (`modes/`), in which it continues without changing entry.
     Startup,
-    /// `0x133fe` (emplacement 0) : la machine à modes relancée après une partie (`modes/gameover.rs`).
+    /// `0x133fe` (slot 0): the mode machine relaunched after a game (`modes/gameover.rs`).
     Modes,
-    /// `0x1c45a` (emplacement 0) : la partie (`tasks/game.rs`).
+    /// `0x1c45a` (slot 0): the game (`tasks/game.rs`).
     Game,
-    /// `0x29162` (emplacement 0) : menu TEST (`tasks/service.rs`).
+    /// `0x29162` (slot 0): TEST menu (`tasks/service.rs`).
     Service,
-    /// `0x14ba`... `0x1ced4` (emplacement 1) : fondus de palette (`tasks/fading.rs`).
+    /// `0x14ba`... `0x1ced4` (slot 1): palette fades (`tasks/fading.rs`).
     Fading,
-    /// `0x13c0a` (emplacement 2) : crédits et départs (`credits_task.rs`).
+    /// `0x13c0a` (slot 2): credits and starts (`credits_task.rs`).
     Credits,
-    /// `0x150ac` (emplacement 3) : interface des joueurs (`hud/`).
+    /// `0x150ac` (slot 3): player interface (`hud/`).
     Interface,
-    /// `0xf7dfe` (emplacement 12) : portraits de la boutique (`scene/shop.rs`).
+    /// `0xf7dfe` (slot 12): shop portraits (`scene/shop.rs`).
     Portraits,
-    /// `0xe03fe` (emplacement 13) : « INSERT COIN » clignotant (`tasks/prompt.rs`).
+    /// `0xe03fe` (slot 13): blinking "INSERT COIN" (`tasks/prompt.rs`).
     Prompt,
-    /// `0xee080` (emplacement 14) : attente active et avance rapide (`tasks/freeze.rs`).
+    /// `0xee080` (slot 14): busy wait and fast forward (`tasks/freeze.rs`).
     Freeze,
-    /// `0x1835e` (emplacement 15) : tableau des scores de l'attract (`tasks/fixed_screen.rs`).
+    /// `0x1835e` (slot 15): attract score table (`tasks/fixed_screen.rs`).
     Scores,
-    /// Autre entrée : code d'origine (l'écran `0x19068`, emplacement 15).
+    /// Other entry: original code (the screen `0x19068`, slot 15).
     #[default]
     Original,
 }
@@ -131,20 +132,21 @@ impl Task {
     }
 }
 
-/// Où reprendre une tâche.
+/// Where to resume a task.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Resume {
-    /// Pas encore lancée : son entrée (son étape Rust : `tasks::entry`).
+    /// Not launched yet: its entry (its Rust stage: `tasks::entry`).
     Entry(u32),
-    /// A cédé la main ; reprendra à cette étape Rust. L'original sauve ses 15 registres et son SR à la cession et les
-    /// restaure ; la sonde `DDSOM_POISON=resume` (`diag::probe_launch`, tous les registres et drapeaux inversés à la
-    /// reprise, 296 scénarios) montre que seuls quelques-uns sont relus, et ils sont des champs nommés des étapes qui
-    /// les relisent (voir `tasks::resume_step`). Le SR rendu est toujours celui du mode utilisateur, interruptions
-    /// permises : aucune tâche ne cède en les masquant (`kernel::cede`).
+    /// Has ceded control; will resume at this Rust stage. The original saves its 15 registers and its SR at the
+    /// cession and
+    /// restores them; the probe `DDSOM_POISON=resume` (`diag::probe_launch`, all registers and flags inverted on
+    /// resuming, 296 scenarios) shows that only a few are re-read, and they are named fields of the stages that
+    /// re-read them (see `tasks::resume_step`). The restored SR is always that of user mode, interrupts
+    /// allowed: no task cedes while masking them (`kernel::cede`).
     Step(Step),
 }
 
-/// Ce qui suit un appel en cours, ou une cession : une native à son adresse, ou une étape Rust.
+/// What follows a call in progress, or a cession: a native at its address, or a Rust stage.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Next {
     Address(u32),
@@ -152,7 +154,7 @@ pub enum Next {
 }
 
 impl Next {
-    /// Adresse d'origine (celle que l'original empile).
+    /// Original address (the one the original pushes).
     pub fn address(self) -> u32 {
         match self {
             Next::Address(a) => a,
@@ -170,15 +172,15 @@ impl From<Step> for Next {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Slot {
-    /// La tâche qui occupe l'emplacement (d'après sa dernière entrée).
+    /// The task occupying the slot (from its last entry).
     pub task: Task,
     pub state: State,
-    /// Images d'attente restantes (gardé tel quel par les états qui ne s'en servent pas, comme l'original).
+    /// Remaining wait frames (kept as is by the states that do not use it, like the original).
     pub count: u8,
-    /// Pile 68000 donnée à la tâche à sa création, rendue à sa mort.
+    /// 68000 stack given to the task at its creation, returned at its death.
     pub stack: u32,
     pub resume: Resume,
-    /// Appels en cours de la tâche, tenus en Rust au lieu de sa pile 68000 (voir [`Frame`]).
+    /// Calls in progress of the task, held in Rust instead of its 68000 stack (see [`Frame`]).
     pub frames: Frames,
 }
 
@@ -195,33 +197,33 @@ impl Default for Slot {
     }
 }
 
-/// Un appel en cours d'une tâche, à la place de sa pile 68000. Quand un pas Rust appelle un sous-programme qui peut
-/// céder la main (fondu, écran noir, gestionnaire d'objet, mise à jour du monde...), la suite de l'appelant est rangée
-/// ici au lieu d'une adresse de retour empilée (ce que le sous-programme garde pendant qu'il cède est dans son étape) :
-/// à chaque cession, la pile 68000 de la tâche reste ainsi vide, et sa reprise ne dépend plus que de la table (étape,
-/// contexte, cadres).
+/// A call in progress of a task, in place of its 68000 stack. When a Rust step calls a subroutine that may
+/// cede control (fade, black screen, object handler, world update...), the caller's continuation is stored
+/// here instead of a pushed return address (what the subroutine keeps while it cedes is in its stage):
+/// at each cession, the task's 68000 stack thus stays empty, and its resume depends only on the table (stage,
+/// context, frames).
 ///
-/// Le retour d'un sous-programme (`rts`) revient au plus récent des appels en cours : le dernier cadre de la tâche, ou
-/// un appel par adresse ouvert après lui ([`Table::calls`]). La profondeur de chacun dit lequel ; le pointeur de pile
-/// 68000 (A7) n'y sert plus.
+/// The return of a subroutine (`rts`) goes back to the most recent of the calls in progress: the task's last frame, or
+/// a call by address opened after it ([`Table::calls`]). The depth of each says which; the 68000
+/// stack pointer (A7) is no longer used for this.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Frame {
-    /// Nombre d'appels hors cadre en cours ([`Table::calls`]) quand le cadre a été ouvert : un appel par adresse
-    /// ouvert après lui (`crate::call`, imbriqué) revient avant lui.
+    /// Number of calls outside frames in progress ([`Table::calls`]) when the frame was opened: a call by address
+    /// opened after it (`crate::call`, nested) returns before it.
     pub calls: usize,
-    /// Quand l'appelé revient (`rts` d'une native, fin d'une étape, ou cession terminale `jmp 0xa40`), la tâche
-    /// continue à cette suite.
+    /// When the callee returns (`rts` of a native, end of a stage, or terminal cession `jmp 0xa40`), the task
+    /// continues at this continuation.
     pub next: Next,
-    /// Appel attendu par une fonction Rust en cours (voir [`call_expected`]) : son retour rend la main à cette
-    /// fonction au lieu d'exécuter la suite. La suite ne sert que si la tâche cède avant.
+    /// Call expected by a Rust function in progress (see [`call_expected`]): its return hands control back to that
+    /// function instead of executing the continuation. The continuation is only used if the task cedes before.
     pub expected: Option<u32>,
 }
 
-/// Profondeur maximale des appels en cours d'une tâche (6 dans le jeu : tour, fin d'image, phase, monde, aiguillage,
-/// sous-programme d'un gestionnaire).
+/// Maximum depth of the calls in progress of a task (6 in the game: turn, frame end, phase, world, dispatch,
+/// subroutine of a handler).
 pub const DEPTH: usize = 8;
 
-/// Pile des appels en cours d'une tâche (le dernier est le plus récent).
+/// Stack of the calls in progress of a task (the last is the most recent).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Frames {
     list: [Frame; DEPTH],
@@ -236,7 +238,7 @@ impl Default for Frames {
 
 impl Frames {
     pub fn push(&mut self, frame: Frame) {
-        assert!(self.n < DEPTH, "trop d'appels en cours pour une tâche : {:x?}", self.iter().collect::<Vec<_>>());
+        assert!(self.n < DEPTH, "too many calls in progress for a task: {:x?}", self.iter().collect::<Vec<_>>());
         self.list[self.n] = frame;
         self.n += 1;
     }
@@ -254,13 +256,14 @@ impl Frames {
         self.n == 0
     }
 
-    /// Du plus ancien au plus récent.
+    /// From oldest to most recent.
     pub fn iter(&self) -> impl Iterator<Item = Frame> + '_ {
         self.list[..self.n].iter().copied()
     }
 
-    /// L'appel attendu `id` n'est plus attendu (la fonction Rust qui l'attendait l'abandonne) : s'il est encore là, son
-    /// retour exécutera sa suite.
+    /// The expected call `id` is no longer expected (the Rust function that was waiting for it abandons it): if it is
+    /// still there, its
+    /// return will execute its continuation.
     fn leave(&mut self, id: u32) {
         for frame in &mut self.list[..self.n] {
             if frame.expected == Some(id) {
@@ -273,69 +276,70 @@ impl Frames {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Table {
     pub slots: [Slot; SLOTS],
-    /// Dernière tâche lancée (celle qui cède quand une enveloppe de cession est appelée).
+    /// Last task launched (the one that cedes when a cession wrapper is called).
     pub current: usize,
-    /// Piles libres : la dernière est la prochaine donnée (le tas FF005A de l'original, rempli par `boot_init`).
+    /// Free stacks: the last is the next one given (the FF005A heap of the original, filled by `boot_init`).
     pub stacks: Vec<u32>,
-    /// Où en est le processeur (point du démarrage ou de l'ordonnanceur, ou tâche en cours).
+    /// Where the processor is (boot or scheduler point, or task in progress).
     pub point: crate::kernel::Point,
-    /// Pendant l'interruption de VBLANK (`Point::Interruption`) : le point où le processeur reviendra.
+    /// During the VBLANK interrupt (`Point::Interruption`): the point where the processor will return.
     pub interrupted: Option<crate::kernel::Point>,
-    /// Numéro du prochain appel attendu, et dernier appel attendu revenu (voir [`call_expected`]).
+    /// Number of the next expected call, and last expected call returned (see [`call_expected`]).
     next_call: u32,
     returned: Option<u32>,
-    /// Appels en cours hors des cadres des tâches, du plus ancien au plus récent : appels par adresse
-    /// (`crate::call`), et, dans les outils, natives appelées par le code d'origine. Ils ne cèdent jamais la main :
-    /// aucun n'est en cours à une cession (ils ne sont donc à aucune tâche).
+    /// Calls in progress outside the task frames, from oldest to most recent: calls by address
+    /// (`crate::call`), and, in the tools, natives called by the original code. They never cede control:
+    /// none is in progress at a cession (they are therefore in no task).
     pub calls: Vec<OutsideFrame>,
-    /// Restes de registres que les gestionnaires d'objets se transmettent (`dispatch::Leftovers`) : un état de la partie.
-    /// Le code encore sur le processeur (gestionnaires non convertis, liste des sprites, caméras...) les tient dans le
-    /// banc (D2-D5) : ils passent du banc à la table à l'entrée d'un gestionnaire converti, et reviennent au banc à sa
-    /// sortie (`Native::execute`).
+    /// Leftover registers that the object handlers pass to each other (`dispatch::Leftovers`): a game state.
+    /// The code still on the processor (unconverted handlers, sprite list, cameras...) holds them in the
+    /// bench (D2-D5): they pass from the bench to the table on entering a converted handler, and return to the bench
+    /// on its
+    /// exit (`Native::execute`).
     pub leftovers: crate::dispatch::Leftovers,
 }
 
-/// Un appel en cours hors des cadres d'une tâche.
+/// A call in progress outside the frames of a task.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutsideFrame {
-    /// Appel par adresse d'une fonction Rust (`crate::call`) : le retour de la native lui rend la main.
+    /// Call by address of a Rust function (`crate::call`): the return of the native hands control back to it.
     ByAddress,
-    /// Outils (machine qui exécute aussi le code d'origine) : native appelée par un `jsr` du 68000, dont l'adresse de
-    /// retour est sur la pile 68000.
+    /// Tools (machine that also runs the original code): native called by a 68000 `jsr`, whose return
+    /// address is on the 68000 stack.
     By68000,
 }
 
-/// Ce que devient la tâche au retour d'un sous-programme (voir [`ret`]).
+/// What the task becomes on the return of a subroutine (see [`ret`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Return {
-    /// La suite de l'appel en cours, rangée par un pas Rust.
+    /// The continuation of the call in progress, stored by a Rust step.
     Next(Next),
-    /// La fonction Rust qui attendait ce retour reprend la main (appel attendu, appel par adresse).
+    /// The Rust function that was waiting for this return resumes (expected call, call by address).
     Render,
-    /// Aucun appel en cours tenu en Rust : l'adresse de retour est sur la pile 68000 (outils seulement ; dans le jeu,
-    /// c'est une erreur).
+    /// No call in progress held in Rust: the return address is on the 68000 stack (tools only; in the game,
+    /// it is an error).
     Stack68000,
 }
 
 impl Table {
-    /// Trap 0 : la tâche `k` (re)part de `entry` avec une pile neuve ; celle d'une tâche déjà là est rendue.
+    /// Trap 0: task `k` (re)starts from `entry` with a new stack; that of a task already there is returned.
     pub fn create(&mut self, k: usize, entry: u32) {
         if self.slots[k].state != State::Free {
             self.give_back_stack(k);
         }
-        let stack = self.stacks.pop().expect("plus de pile libre pour une tâche");
+        let stack = self.stacks.pop().expect("no free stack left for a task");
         let task = Task::from_entry(entry);
         self.slots[k] = Slot { task, state: State::Fresh, stack, resume: Resume::Entry(entry), ..Slot::default() };
     }
 
-    /// Trap 1 (la tâche se termine) et trap 2 sur une tâche vivante.
+    /// Trap 1 (the task ends) and trap 2 on a live task.
     pub fn free(&mut self, k: usize) {
         self.slots[k].state = State::Free;
         self.slots[k].frames = Frames::default();
         self.give_back_stack(k);
     }
 
-    /// Trap 2 : tue la tâche `k`, si elle existe.
+    /// Trap 2: kills task `k`, if it exists.
     pub fn kill(&mut self, k: usize) {
         if self.slots[k].state != State::Free {
             self.free(k);
@@ -346,21 +350,21 @@ impl Table {
         self.stacks.push(self.slots[k].stack);
     }
 
-    /// Trap 5 : suspend la tâche `k`.
+    /// Trap 5: suspends task `k`.
     pub fn suspend(&mut self, k: usize) {
         let e = &mut self.slots[k];
         e.state = State::Suspended;
         e.count = 0;
     }
 
-    /// Trap 6 : la tâche `k` redevient prête (avec ce compte, que rien ne lit).
+    /// Trap 6: task `k` becomes ready again (with this count, which nothing reads).
     pub fn wake(&mut self, k: usize, count: u8) {
         let e = &mut self.slots[k];
         e.state = State::Ready;
         e.count = count;
     }
 
-    /// Trap 7 : la tâche courante repart de `entry` (même pile).
+    /// Trap 7: the current task restarts from `entry` (same stack).
     pub fn restart(&mut self, entry: u32) {
         let e = &mut self.slots[self.current];
         e.task = Task::from_entry(entry);
@@ -370,7 +374,7 @@ impl Table {
         e.frames = Frames::default();
     }
 
-    /// Cession de la tâche courante : nouvel état, et où la reprendre.
+    /// Cession of the current task: new state, and where to resume it.
     pub fn cede(&mut self, state: State, count: Option<u8>, resume: Resume) {
         let e = &mut self.slots[self.current];
         e.state = state;
@@ -380,7 +384,7 @@ impl Table {
         e.resume = resume;
     }
 
-    /// Une image de moins pour la tâche `k` si elle attend ; à zéro, elle est prête.
+    /// One frame less for task `k` if it is waiting; at zero, it is ready.
     pub fn count_down(&mut self, k: usize) {
         let e = &mut self.slots[k];
         if e.state == State::Waiting {
@@ -391,8 +395,8 @@ impl Table {
         }
     }
 
-    /// Réveils du VBLANK : chaque tâche qui attend perd une image ; l'emplacement 0 (le premier examiné) ne
-    /// décompte qu'une image sur quatre tant que le ralenti (`A5+0x4f`, décompté ici) n'est pas épuisé.
+    /// VBLANK wake-ups: each waiting task loses a frame; slot 0 (the first examined) only
+    /// counts down one frame out of four as long as the slow-motion (`A5+0x4f`, counted down here) is not exhausted.
     pub fn count_down_frame(&mut self, slowdown: &mut u8) {
         for k in 0..SLOTS {
             if self.slots[k].state != State::Waiting {
@@ -408,45 +412,46 @@ impl Table {
         }
     }
 
-    /// Appels en cours de la tâche courante.
+    /// Calls in progress of the current task.
     pub fn frames(&mut self) -> &mut Frames {
         &mut self.slots[self.current].frames
     }
 }
 
-/// La table des tâches de la machine (créée au premier accès).
+/// The machine's task table (created at first access).
 pub fn table(b: &mut Cps2Bus) -> &mut Table {
     let ext = b.ext.get_or_insert_with(|| Box::new(Table::default()));
-    ext.as_mut().as_any_mut().downcast_mut().expect("extension du bus : table des tâches")
+    ext.as_mut().as_any_mut().downcast_mut().expect("bus extension: task table")
 }
 
-/// La table des tâches, si la machine en a une (machine du jeu ; la machine d'origine garde la sienne en RAM).
+/// The task table, if the machine has one (game machine; the original machine keeps its own in RAM).
 pub fn read(b: &Cps2Bus) -> Option<&Table> {
     b.ext.as_deref()?.as_any().downcast_ref()
 }
 
-/// La table des tâches, si la machine en a une, sans la créer.
+/// The task table, if the machine has one, without creating it.
 fn table_if(b: &mut Cps2Bus) -> Option<&mut Table> {
     b.ext.as_deref_mut()?.as_any_mut().downcast_mut()
 }
 
 // ---------------------------------------------------------------------------------------------
-// Appels en cours (voir `Frame`)
+// Calls in progress (see `Frame`)
 
-/// Un pas Rust de la tâche courante appelle un sous-programme qui peut céder la main : quand celui-ci reviendra, la
-/// tâche continuera à `next`. Rien n'est empilé sur la pile 68000.
+/// A Rust step of the current task calls a subroutine that may cede control: when it returns, the
+/// task will continue at `next`. Nothing is pushed on the 68000 stack.
 pub fn call(b: &mut Cps2Bus, next: impl Into<Next>) {
     table(b).open_frame(next.into(), None);
 }
 
-/// Appel attendu (voir [`call_expected`]).
+/// Expected call (see [`call_expected`]).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[must_use]
 pub struct Call(u32);
 
-/// Une fonction Rust appelle une native qui revient par `rts` (le gestionnaire d'un objet) et continue après elle : le
-/// retour de la native lui rend la main ([`returned`]). Si la native cède la main avant, la tâche reprendra plus tard à
-/// `next`, la fonction Rust ayant abandonné.
+/// A Rust function calls a native that returns via `rts` (an object's handler) and continues after it: the
+/// return of the native hands control back to it ([`returned`]). If the native cedes control before, the task will
+/// resume later at
+/// `next`, the Rust function having abandoned.
 pub fn call_expected(b: &mut Cps2Bus, next: impl Into<Next>) -> Call {
     let t = table(b);
     t.next_call = t.next_call.wrapping_add(1);
@@ -455,13 +460,14 @@ pub fn call_expected(b: &mut Cps2Bus, next: impl Into<Next>) -> Call {
     Call(id)
 }
 
-/// L'appel attendu est encore en cours (son cadre est dans la pile des appels de la tâche courante).
+/// The expected call is still in progress (its frame is in the call stack of the current task).
 pub fn pending(b: &Cps2Bus, call: Call) -> bool {
     read(b).is_some_and(|t| t.slots[t.current].frames.iter().any(|k| k.expected == Some(call.0)))
 }
 
-/// L'appel attendu est-il revenu ? Sinon (la tâche a cédé, ou un appelé a dépilé l'appel pour revenir plus haut), la
-/// fonction Rust qui l'attendait abandonne : son cadre, s'il est encore là, exécutera sa suite quand l'appelé reviendra.
+/// Has the expected call returned? If not (the task ceded, or a callee popped the call to return higher), the
+/// Rust function that was waiting for it abandons: its frame, if still there, will execute its continuation when the
+/// callee returns.
 pub fn returned(b: &mut Cps2Bus, call: Call) -> bool {
     let t = table(b);
     if t.returned == Some(call.0) {
@@ -472,24 +478,25 @@ pub fn returned(b: &mut Cps2Bus, call: Call) -> bool {
     false
 }
 
-/// Outils : l'appel attendu `call`, fait à du code d'origine, est revenu par la pile 68000 (adresse de retour
-/// sentinelle) : son cadre, le plus récent de la tâche courante, est fermé comme par le `rts` d'une native.
+/// Tools: the expected call `call`, made to original code, returned through the 68000 stack (sentinel return
+/// address): its frame, the most recent of the current task, is closed as by the `rts` of a native.
 pub fn give_back_expected(b: &mut Cps2Bus, call: Call) {
     let t = table(b);
     let frame = t.frames().pop();
-    assert!(frame.is_some_and(|k| k.expected == Some(call.0)), "appel attendu {call:?} : ce n'est pas le dernier cadre ({frame:x?})");
+    assert!(frame.is_some_and(|k| k.expected == Some(call.0)), "expected call {call:?}: it is not the last frame ({frame:x?})");
     t.returned = Some(call.0);
 }
 
 impl Table {
-    /// Le plus récent des appels en cours de la tâche courante : un appel hors cadre ouvert après le dernier cadre (il
-    /// est dépilé et rendu), sinon le dernier cadre (dépilé et rendu).
+    /// The most recent of the calls in progress of the current task: a call outside frames opened after the last
+    /// frame (it
+    /// is popped and returned), otherwise the last frame (popped and returned).
     fn pop_most_recent(&mut self) -> Option<Result<OutsideFrame, Frame>> {
         let top = self.frames().top();
         let height = top.map_or(0, |k| k.calls);
         assert!(
             self.calls.len() >= height,
-            "appels hors cadre {:?} revenus avant le cadre {top:x?} ouvert pendant eux",
+            "calls outside frames {:?} returned before the frame {top:x?} opened during them",
             self.calls
         );
         if self.calls.len() > height {
@@ -498,7 +505,7 @@ impl Table {
         self.frames().pop().map(Err)
     }
 
-    /// Retour d'un sous-programme (`rts`) : il revient au plus récent des appels en cours ([`Frame`]).
+    /// Return of a subroutine (`rts`): it goes back to the most recent of the calls in progress ([`Frame`]).
     pub fn ret(&mut self) -> Return {
         match self.pop_most_recent() {
             Some(Ok(OutsideFrame::ByAddress)) => Return::Render,
@@ -511,92 +518,94 @@ impl Table {
         }
     }
 
-    /// Un pas Rust de la tâche courante appelle un sous-programme qui peut céder ; `expected` : appel attendu.
+    /// A Rust step of the current task calls a subroutine that may cede; `expected`: expected call.
     fn open_frame(&mut self, next: Next, expected: Option<u32>) {
         let calls = self.calls.len();
         self.frames().push(Frame { calls, next, expected });
     }
 }
 
-/// Retour d'un sous-programme (`rts`) : il revient au plus récent des appels en cours ([`Frame`]).
+/// Return of a subroutine (`rts`): it goes back to the most recent of the calls in progress ([`Frame`]).
 pub fn ret(b: &mut Cps2Bus) -> Return {
     table_if(b).map_or(Return::Stack68000, Table::ret)
 }
 
-/// Outils : dépile l'adresse de retour de la pile 68000 (`rts` d'une native appelée par le code d'origine).
+/// Tools: pops the return address from the 68000 stack (`rts` of a native called by the original code).
 pub fn pop_68000(c: &mut Cpu, b: &mut Cps2Bus) -> u32 {
     let address = rd32(b, c.a[7]);
     c.a[7] = c.a[7].wrapping_add(4);
     address
 }
 
-/// Un appel par adresse (`crate::call`) commence ; son `rts` le fermera ([`ret`]). Rend la profondeur à laquelle
-/// revenir.
+/// A call by address (`crate::call`) begins; its `rts` will close it ([`ret`]). Returns the depth to
+/// return to.
 pub fn open_call(b: &mut Cps2Bus) -> usize {
     let t = table(b);
     t.calls.push(OutsideFrame::ByAddress);
     t.calls.len() - 1
 }
 
-/// L'appel par adresse ouvert à la profondeur `depth` est-il revenu ?
+/// Has the call by address opened at depth `depth` returned?
 pub fn call_returned(b: &Cps2Bus, depth: usize) -> bool {
     read(b).is_some_and(|t| t.calls.len() == depth)
 }
 
-/// Outils : le code d'origine appelle une native (son adresse de retour est sur la pile 68000). Rend la profondeur à
-/// rétablir après elle ([`close_calls`]) si la machine a une table des tâches (sans table, tous les retours sont sur
-/// la pile 68000).
+/// Tools: the original code calls a native (its return address is on the 68000 stack). Returns the depth to
+/// restore after it ([`close_calls`]) if the machine has a task table (without a table, all returns are on
+/// the 68000 stack).
 pub fn open_call_68000(b: &mut Cps2Bus) -> Option<usize> {
     let t = table_if(b)?;
     t.calls.push(OutsideFrame::By68000);
     Some(t.calls.len() - 1)
 }
 
-/// Outils : la native appelée par le code d'origine est finie ; si elle n'est pas revenue par `rts` (saut, cession),
-/// son appel est fermé.
+/// Tools: the native called by the original code is finished; if it did not return via `rts` (jump, cession),
+/// its call is closed.
 pub fn close_calls(b: &mut Cps2Bus, depth: Option<usize>) {
     if let (Some(p), Some(t)) = (depth, table_if(b)) {
         t.calls.truncate(p);
     }
 }
 
-/// Comme [`ret`], pour une cession terminale (`jmp 0xa40`) ou un appel abandonné : la suite du dernier cadre, qu'elle
-/// soit attendue ou non (la fonction Rust qui l'attendait voit qu'elle n'est pas revenue). Une cession ne peut avoir
-/// lieu dans un appel par adresse.
+/// Like [`ret`], for a terminal cession (`jmp 0xa40`) or an abandoned call: the continuation of the last frame,
+/// whether it
+/// is expected or not (the Rust function that was waiting for it sees that it did not return). A cession cannot
+/// take place in a call by address.
 pub fn pop_return(c: &mut Cpu, b: &mut Cps2Bus) -> Next {
     match table_if(b).and_then(Table::pop_most_recent) {
         Some(Err(frame)) => frame.next,
-        Some(Ok(OutsideFrame::ByAddress)) => panic!("cession ou abandon de l'appel en cours dans un appel par adresse"),
+        Some(Ok(OutsideFrame::ByAddress)) => panic!("cession or abandon of the call in progress inside a call by address"),
         Some(Ok(OutsideFrame::By68000)) | None => {
-            assert!(!crate::no68k::active(), "cession ou abandon sans appel en cours");
+            assert!(!crate::no68k::active(), "cession or abandon without a call in progress");
             Next::Address(pop_68000(c, b))
         }
     }
 }
 
-/// Les `n` appels en cours les plus récents de la tâche courante sont dépilés sans revenir (une routine qui dépile les
-/// retours de ses appelants pour revenir plus haut : épilogue étranger des bulles) ; rend leurs suites, de la plus
-/// récente à la plus ancienne.
+/// The `n` most recent calls in progress of the current task are popped without returning (a routine that pops the
+/// returns of its callers to return higher: foreign epilogue of the bubbles); returns their continuations, from the
+/// most
+/// recent to the oldest.
 pub fn pop_calls(b: &mut Cps2Bus, n: usize) -> Vec<Next> {
     let frames = table(b).frames();
     (0..n)
-        .map(|_| frames.pop().unwrap_or_else(|| panic!("{n} appels en cours à dépiler : il n'y en a pas assez")).next)
+        .map(|_| frames.pop().unwrap_or_else(|| panic!("{n} calls in progress to pop: there are not enough")).next)
         .collect()
 }
 
-/// Octets de la RAM du noyau d'origine (décalage depuis FF0000) que le jeu ne tient plus en RAM : pile de
-/// l'ordonnanceur, tâche courante et sommet du tas (FF0052-FF005D), enregistrements (FF0064-FF0163), tas des piles
-/// (FF0166-FF01A5), piles des tâches (FF01A6-FF0DA5) et du superviseur (jusqu'à FF0E65). Les outils qui comparent la
-/// RAM du jeu à celle de l'original les ignorent et comparent la table avec [`gaps`]. FF0E66 et la suite sont des
-/// variables du jeu (relatives à A5 : `placement::LAST_X`...), comparées comme le reste de la RAM.
+/// Bytes of the original kernel RAM (offset from FF0000) that the game no longer holds in RAM: scheduler
+/// stack, current task and top of the heap (FF0052-FF005D), records (FF0064-FF0163), stack heap
+/// (FF0166-FF01A5), task stacks (FF01A6-FF0DA5) and supervisor stack (up to FF0E65). The tools that compare the
+/// game RAM with that of the original ignore them and compare the table with [`gaps`]. FF0E66 and beyond are
+/// game variables (relative to A5: `placement::LAST_X`...), compared like the rest of the RAM.
 pub fn kernel_ram(offset: u32) -> bool {
     (0x52..0x5e).contains(&offset) || (0x64..0x164).contains(&offset) || (0x166..0xe66).contains(&offset)
 }
 
 // ---------------------------------------------------------------------------------------------
-// Test différentiel : table Rust contre la table FF0064 d'une machine d'origine
+// Differential test: Rust table against the FF0064 table of an original machine
 
-/// Champs d'un enregistrement de l'original.
+/// Fields of a record of the original.
 mod field {
     pub const STATE: u32 = 0;
     pub const COUNT: u32 = 1;
@@ -605,20 +614,21 @@ mod field {
     pub const STACK: u32 = 0xc;
 }
 
-/// Reprises des enveloppes de cession de l'original (`0xa40`/`0xb64`, `0xa86`) : elles restaurent les 15 registres
-/// sauvés sur la pile de la tâche puis reviennent (`rts`) à l'adresse de reprise.
+/// Resumes of the original's cession wrappers (`0xa40`/`0xb64`, `0xa86`): they restore the 15 registers
+/// saved on the task's stack then return (`rts`) to the resume address.
 const ORIGINAL_RESUMES: [u32; 2] = [0xa4c, 0xa8c];
-/// Tas des piles de l'original : sommet (FF005A) et fond.
+/// Stack heap of the original: top (FF005A) and bottom.
 const HEAP: u32 = 0xff_005a;
 const HEAP_BOTTOM: u32 = 0xff_01a6;
 
-/// Emplacement de la tâche principale (partie, machine à modes), que la tâche du gel décompte elle-même.
+/// Slot of the main task (game, mode machine), which the freeze task counts down itself.
 const PRINCIPALE: usize = 0;
 
-/// Les deux états de la tâche principale ne diffèrent que d'une image décomptée par la tâche du gel (avance rapide).
-/// Quand le jeu travaille jusqu'au bout de l'image (avance rapide d'une scène chargée), la fin d'image tombe à un
-/// instant qui dépend de la durée des routines, natives ou d'origine : peu avant ou peu après un passage du gel, voire
-/// au milieu (compte décrémenté, état pas encore « prête »).
+/// The two states of the main task differ only by one frame counted down by the freeze task (fast forward).
+/// When the game works to the end of the frame (fast forward of a loaded scene), the frame end falls at a
+/// moment that depends on the duration of the routines, native or original: shortly before or after a pass of the
+/// freeze, or even
+/// in the middle (count decremented, state not yet "ready").
 fn one_gap_countdown(rust: (State, u8), original: (u8, u8)) -> bool {
     let waits = State::Waiting.byte();
     let next = |(state, count): (u8, u8)| match (state == waits, count.wrapping_sub(1)) {
@@ -627,7 +637,7 @@ fn one_gap_countdown(rust: (State, u8), original: (u8, u8)) -> bool {
         _ => None,
     };
     let rust = (rust.0.byte(), rust.1);
-    // « en cours » vaut « prête » ; « attend » à zéro est un décompte du gel interrompu entre le compte et l'état
+    // "running" equals "ready"; "waiting" at zero is a freeze countdown interrupted between the count and the state
     let normal = |(state, count): (u8, u8)| {
         let ready = state == State::InProgress.byte() || state == waits && count == 0;
         (if ready { State::Ready.byte() } else { state }, count)
@@ -636,12 +646,13 @@ fn one_gap_countdown(rust: (State, u8), original: (u8, u8)) -> bool {
     rust == original || next(rust) == Some(original) || next(original) == Some(rust)
 }
 
-/// Différences entre la table Rust et la table FF0064 de la RAM `ram` (FF0000-FFFFFF) d'une machine d'origine, à la
-/// même image : état (« prête » et « en cours » confondus : la fin d'image peut tomber pendant qu'une tâche tourne
-/// dans l'original ; pour la tâche principale, une image d'écart décomptée par le gel est admise, voir
-/// [`one_gap_countdown`]), compte, pile, entrée d'une tâche neuve, et tas des piles. Avec `all`, l'adresse de reprise
-/// des tâches qui ont cédé aussi (diagnostic) : elle peut différer sans effet (une native reprend parfois à une copie
-/// identique du code de reprise d'origine, `0xf32cc` pour `0xf5902`).
+/// Differences between the Rust table and the FF0064 table of the RAM `ram` (FF0000-FFFFFF) of an original machine,
+/// at the
+/// same frame: state ("ready" and "running" merged: the frame end may fall while a task runs
+/// in the original; for the main task, a one-frame gap counted down by the freeze is allowed, see
+/// [`one_gap_countdown`]), count, stack, entry of a new task, and stack heap. With `all`, the resume address
+/// of the tasks that ceded too (diagnostics): it may differ with no effect (a native sometimes resumes at an identical
+/// copy of the original resume code, `0xf32cc` for `0xf5902`).
 pub fn gaps(t: &Table, ram: &[u16], all: bool) -> Vec<String> {
     let word = |a: u32| ram[(a as usize & 0xffff) / 2];
     let byte = |a: u32| (word(a & !1) >> if a & 1 == 0 { 8 } else { 0 }) as u8;
@@ -653,29 +664,29 @@ pub fn gaps(t: &Table, ram: &[u16], all: bool) -> Vec<String> {
         let normal = |o: u8| if o == State::InProgress.byte() { State::Ready.byte() } else { o };
         let mut gap = |what: &str, rust: u32, original: u32| {
             if rust != original {
-                gaps.push(format!("tâche {k} : {what} {rust:x} au lieu de {original:x}"));
+                gaps.push(format!("task {k}: {what} {rust:x} instead of {original:x}"));
             }
         };
         let count = byte(r + field::COUNT);
         if !(k == PRINCIPALE && one_gap_countdown((e.state, e.count), (state, count))) {
-            gap("état", normal(e.state.byte()) as u32, normal(state) as u32);
-            gap("compte", e.count as u32, count as u32);
+            gap("state", normal(e.state.byte()) as u32, normal(state) as u32);
+            gap("count", e.count as u32, count as u32);
         }
         if e.state == State::Free || state == State::Free.byte() {
             continue;
         }
-        gap("pile", e.stack, long(r + field::STACK));
+        gap("stack", e.stack, long(r + field::STACK));
         let in_progress = e.state == State::InProgress || state == State::InProgress.byte();
         match e.resume {
-            Resume::Entry(entry) => gap("entrée", entry, long(r + field::PC)),
-            // la pile d'une tâche en cours a changé depuis sa cession
+            Resume::Entry(entry) => gap("entry", entry, long(r + field::PC)),
+            // the stack of a running task has changed since its cession
             Resume::Step(step) if all && !in_progress => {
                 let usp = long(r + field::USP);
                 if !ORIGINAL_RESUMES.contains(&long(r + field::PC)) {
-                    gap("reprise (PC de l'enregistrement)", step.address(), long(r + field::PC));
+                    gap("resume (PC of the record)", step.address(), long(r + field::PC));
                     continue;
                 }
-                gap("reprise", step.address(), long(usp + 60));
+                gap("resume", step.address(), long(usp + 60));
             }
             Resume::Step(_) => {}
         }
@@ -683,7 +694,7 @@ pub fn gaps(t: &Table, ram: &[u16], all: bool) -> Vec<String> {
     let top = if long(HEAP) == 0 { HEAP_BOTTOM } else { long(HEAP) };
     let heap: Vec<u32> = (top..HEAP_BOTTOM).step_by(4).rev().map(long).collect();
     if heap != t.stacks {
-        gaps.push(format!("tas des piles {:x?} au lieu de {:x?}", t.stacks, heap));
+        gaps.push(format!("stack heap {:x?} instead of {:x?}", t.stacks, heap));
     }
     gaps
 }
@@ -699,7 +710,7 @@ mod tests {
         t.create(3, 0x200);
         assert_eq!((t.slots[0].stack, t.slots[3].stack), (1, 2));
         t.create(0, 0x300);
-        assert_eq!(t.slots[0].stack, 1, "la pile rendue est reprise aussitôt");
+        assert_eq!(t.slots[0].stack, 1, "the returned stack is reused immediately");
         t.kill(3);
         t.kill(3);
         assert_eq!(t.stacks, vec![3, 2]);
@@ -710,13 +721,13 @@ mod tests {
         let mut t = Table::default();
         t.open_frame(Next::Address(0x1341a), None);
         t.open_frame(Next::Address(0x1376e), Some(1));
-        // un appel par adresse imbriqué revient le premier
+        // a nested call by address returns first
         t.calls.push(OutsideFrame::ByAddress);
         assert_eq!(t.ret(), Return::Render);
         assert!(t.calls.is_empty());
         assert_eq!(t.ret(), Return::Render);
         assert_eq!(t.returned, Some(1));
-        // un appel par adresse ouvert avant un cadre revient après lui
+        // a call by address opened before a frame returns after it
         t.calls.push(OutsideFrame::ByAddress);
         t.open_frame(Next::Address(0x1376e), None);
         assert_eq!(t.ret(), Return::Next(Next::Address(0x1376e)));

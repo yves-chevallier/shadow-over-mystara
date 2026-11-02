@@ -33,7 +33,7 @@ brut : `rd*/wr*` ; a5 : décalages `A5 + 0x…` écrits en clair.)
 1. **La convention d'appel du 68000.** Une native est `fn(&mut Cpu, &mut Cps2Bus)` : arguments dans D0-D7/A0-A6, résultat
    dans un registre et la retenue (`SR_C` : « pool plein », « script fini »), `rts` final. Un appel Rust → Rust passe par
    l'adresse d'origine : `x.call(0x2348)` empile une adresse de retour, remet les cadres de la tâche sur la pile 68000,
-   cherche la native dans l'index, l'exécute, dépile (`call_at`, `taches::table::mettre_sur_la_pile`). 4 776 appels ainsi.
+   cherche la native dans l'index, l'exécute, dépile (`call_at`, `tasks::table::mettre_sur_la_pile`). 4 776 appels ainsi.
    L'appelant relit ensuite `x.c.a[1]` et `x.c.sr & SR_C` : le type de retour est implicite et le compilateur ne voit
    rien.
 2. **Dix contextes qui se ressemblent.** `families::cx::Cx`, `families::Ctx`, `player::Ctx`, `scene::Ctx`,
@@ -49,7 +49,7 @@ brut : `rd*/wr*` ; a5 : décalages `A5 + 0x…` écrits en clair.)
 5. **Les durées du mode hybride** (supprimées au lot 0a, § 6). En mode normal, une native qui déborderait sur l'interruption suivante est remplacée par
    son original : chaque native annonce sa durée (`cost`, `exact_cost`), parfois exacte, calculée en suivant le chemin de
    l'original (`Chemin`, `walk_cycles`, `path_cycles`, exécution « à blanc » sur une copie de la machine :
-   `families::Ctx::a_blanc`, `vue::Vue::simulee`, `objects::cost`, `scroll::Exec::simulated`, `evenements::plafonnements`).
+   `families::Ctx::a_blanc`, `view::View::simulee`, `objects::cost`, `scroll::Exec::simulated`, `events::plafonnements`).
    1 036 marques, sans aucun effet sur le jeu sans 68000, qui ne les lit pas. Pire, elles couplent le code : une logique
    qui cesse d'appeler une routine par son adresse fait paniquer le calcul du chemin (« branchement sans décision »), vu
    pendant le pilote.
@@ -57,7 +57,7 @@ brut : `rd*/wr*` ; a5 : décalages `A5 + 0x…` écrits en clair.)
    `x.call(0x…)` vers du code qui est de toute façon une native. Sans 68000, une adresse sans native arrête le jeu : chacun
    est soit un appel de native déguisé, soit du code jamais atteint (à lister, pas à garder en repli).
 7. **La pile et les cessions.** Une tâche cède en posant le PC sur une native de reprise (`resume!`, 349), les appels en
-   cours sont des cadres (`taches::table::Cadre`) remis sur la pile 68000 quand du « code d'origine » reprend la main,
+   cours sont des cadres (`tasks::table::Frame`) remis sur la pile 68000 quand du « code d'origine » reprend la main,
    `Unwound` abandonne les fonctions Rust quand un appelé cède ou revient plus haut (`epilogue_etranger` des bulles).
    Tout cela imite une pile qui n'a plus de raison d'être quand appelant et appelé sont en Rust.
 
@@ -67,9 +67,9 @@ brut : `rd*/wr*` ; a5 : décalages `A5 + 0x…` écrits en clair.)
 * **`validate`** et ses diagnostics (`DDSOM_CHECK`, `DDSOM_ADOPT_REGS`, `examples/cessions`, `reste68k`, `watch`...).
 * **L'état dans la RAM émulée**, aux mêmes adresses, avec le même ordre d'écriture, tant que la validation compare la RAM.
   Les vues typées (`Obj`, `Player`, `ram::*`) nomment cet état sans le déplacer.
-* **La table des tâches Rust** et son contrôle contre FF0064, le calendrier de l'image du jeu sans 68000 (`sans68k.rs`).
+* **La table des tâches Rust** et son contrôle contre FF0064, le calendrier de l'image du jeu sans 68000 (`no68k.rs`).
 * **Les glitches** : allocation non testée qui écrit dans le premier emplacement ou après le pool, boucles qui insistent,
-  registres résiduels relus. Ils sont marqués (`// Glitch d'origine : …`), jamais corrigés.
+  registres résiduels relus. Ils sont marqués (`// Glitch d'original : …`), jamais corrigés.
 
 ## 2. Architecture cible
 
@@ -96,7 +96,7 @@ Un appelant converti écrit `let Some(o) = x.alloc(&pools::SET) else { return };
 
 * Champs d'objet : constantes associées de la vue (`Obj::X`, `Player::HP`) ou module `f` du type ; accesseurs typés quand
   un champ est lu partout (`o.depth(b)`).
-* Variables de la RAM de travail : `ram::Octet/Mot/Long/Table` (`src/ram.rs`). Les variables partagées sont dans `ram.rs`
+* Variables de la RAM de travail : `ram::Byte/Word/Long/Table` (`src/ram.rs`). Les variables partagées sont dans `ram.rs`
   (scène, phase, caméra, joueurs, germe du hasard...), celles d'un sous-système dans son module (`hud::var`,
   `objects::ram`) avec les mêmes types.
 * Adresses d'origine : une seule déclaration, dans le module qui possède la routine (`Pool::alloc_routine`), jamais
@@ -112,22 +112,22 @@ enum Etape { Entree, Attente, Tour, … }               // une variante par poin
 fn pas(t: &mut EtatTache, j: &mut Jeu) -> Attente    // Images(n) | Prete | Suspendue | Terminee
 ```
 
-et le noyau appelle `pas` au lieu de poser `c.pc`. Chemin : (1) un module de tâche range ses reprises en `match` sur une
-`enum` (l'adresse d'origine devient `Etape::adresse()`, gardée pour la comparaison de la table des tâches avec FF0064) ;
-(2) `table::Reprise` gagne une variante Rust (`Etape`) à côté de `Cession(Contexte)` ; (3) les sous-programmes qui cèdent
-(fondus, écran noir) deviennent des sous-machines appelées par `pas`, leurs cadres des champs de l'état ; (4) quand plus
-aucune reprise n'est une adresse, `Cadre`, `mettre_sur_la_pile`, `Unwound` et `resume!` disparaissent. Le contexte de
+et le noyau appelle `step` au lieu de poser `c.pc`. Chemin : (1) un module de tâche range ses reprises en `match` sur une
+`enum` (l'adresse d'origine devient `Step::address()`, gardée pour la comparaison de la table des tâches avec FF0064) ;
+(2) `table::Resume` gagne une variante Rust (`Step`) à côté de `Cession(Contexte)` ; (3) les sous-programmes qui cèdent
+(fondus, écran noir) deviennent des sous-machines appelées par `step`, leurs cadres des champs de l'état ; (4) quand plus
+aucune reprise n'est une adresse, `Frame`, `mettre_sur_la_pile`, `Unwound` et `resume!` disparaissent. Le contexte de
 registres d'une tâche (sens d'un fondu dans D1...) devient un champ nommé de son état.
 
 ### Quand le `Cpu` quitte le chemin du jeu
 
 1. **D1 — un seul mode de jeu** (décision préalable, lot 0 ; fait au lot 0a, § 6) : le jeu sans 68000 devient le jeu ; le mode normal (natives
    et 68000 de repli, durées) ne sert plus qu'au diagnostic `DDSOM_CHECK`, avec une durée constante par native. Les
-   durées exactes, `Chemin`, l'exécution à blanc et `Vue` disparaissent (1 036 marques).
+   durées exactes, `Chemin`, l'exécution à blanc et `View` disparaissent (1 036 marques).
 2. **J1 — plus d'appel par adresse entre natives** (`adr` → 0 hors tables de la ROM et noyau) : les lots.
 3. **J2 — plus de registre hors frontière** (`regs`, `drap` → 0 hors adaptateurs `_68k` restants) : `DDSOM_POISON` par
    routine, puis suppression des adaptateurs.
-4. **J3 — tâches en machines à états** : le noyau n'écrit plus `c.pc` ; `sans68k::pas` devient un appel direct.
+4. **J3 — tâches en machines à états** : le noyau n'écrit plus `c.pc` ; `no68k::step` devient un appel direct.
 5. Alors `Native::run` perd son `Cpu` (`fn(&mut Jeu)`), les contextes perdent `c`, et `m68k::Cpu` ne sert plus qu'à la
    machine de référence. Les natives restantes ne sont que la table « adresse → fonction » des tables de la ROM
    (gestionnaires par type) et le contrôle `DDSOM_CHECK`.
@@ -138,19 +138,19 @@ L'état lui-même ne quitte la RAM émulée qu'après J3, structure par structur
 ## 3. Découpage en lots
 
 Les conflits de fusion viennent des fichiers communs : `lib.rs` (listes de natives), `families/mod.rs`, `families/cx.rs`,
-`objects/`, `mem.rs`, `ram.rs`, `taches/table.rs`, `kernel.rs`. Règle : **un seul agent touche les API communes** (lot 0),
+`objects/`, `mem.rs`, `ram.rs`, `tasks/table.rs`, `kernel.rs`. Règle : **un seul agent touche les API communes** (lot 0),
 les autres convertissent leurs appelants dans leurs propres répertoires ; un besoin d'API nouvelle se met d'abord dans le
 module du lot (privé), puis remonte dans le socle à la fusion suivante.
 
 | Lot | Périmètre | Dépend de | Taille |
 |---|---|---|---|
-| **0a** (seul, d'abord) | Supprimer les durées du mode hybride : champ `cost` réduit à une constante, `exact_cost`, `Chemin`, à-blanc de `families::Ctx`, `vue.rs`, `objects/cost.rs`, `timing.rs`, chemins de `evenements`/`credits`/`config`/`palette`/`scroll`. Valider le mode normal avec une durée constante | — | ~1 000 marques, tous les fichiers (mécanique) |
+| **0a** (seul, d'abord) | Supprimer les durées du mode hybride : champ `cost` réduit à une constante, `exact_cost`, `Chemin`, à-blanc de `families::Ctx`, `view.rs`, `objects/cost.rs`, `timing.rs`, chemins de `events`/`credits`/`config`/`palette`/`scroll`. Valider le mode normal avec une durée constante | — | ~1 000 marques, tous les fichiers (mécanique) |
 | **0b** (seul, d'abord) | API du moteur d'objets comme le pilote `pools` : `anim` (start, step), `motion` (move_*, speed_table, move_by_table), `lists` (reinsert, unlink), `cull`, `rank` : cœur + `_68k` + méthodes de `Cx`/`Ctx` qui appellent l'adaptateur directement ; `random` unique ; `combat::Obj` fusionné dans `objects::Obj` ; contexte commun (trait d'accès mémoire ou base `Jeu`) | 0a | `objects/`, `families/cx.rs`, `families/mod.rs`, `rng.rs`, `ram.rs` |
 | A | Familles d'ennemis et de boss : `families/boss_*`, `boss_common`, `enemy*`, `reactions` | 0b | ~30 000 lignes |
-| B | Effets, objets, coffres : `families/effects*`, `items*`, `boxes`, `petites`, `creators`, `effects_creators`, `effects_aids.rs` | 0b | ~30 000 lignes |
-| C | Tirs et décors : `families/eshl*`, `set*`, `sobj`, `shell`, `joueur/`, `eshl_creators` | 0b | ~35 000 lignes |
+| B | Effets, objets, coffres : `families/effects*`, `items*`, `boxes`, `small`, `creators`, `effects_creators`, `effects_aids.rs` | 0b | ~30 000 lignes |
+| C | Tirs et décors : `families/eshl*`, `set*`, `sobj`, `shell`, `player/`, `eshl_creators` | 0b | ~35 000 lignes |
 | D | Joueurs et monde : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain.rs`, `scroll.rs`, `camera_modes.rs`, `placement.rs` | 0b | ~22 000 lignes |
-| E | Tâches et écrans : `taches/` (machines à états, J3), `kernel.rs`, `vblank.rs`, `scene/`, `modes/`, `hud/`, `tache_credits.rs`, `ecran_credits.rs`, `service/`, `eeprom*`, `game.rs`, `dispatch.rs` | 0a | ~20 000 lignes |
+| E | Tâches et écrans : `tasks/` (machines à états, J3), `kernel.rs`, `vblank.rs`, `scene/`, `modes/`, `hud/`, `credits_task.rs`, `credits_screen.rs`, `service/`, `eeprom*`, `game.rs`, `dispatch.rs` | 0a | ~20 000 lignes |
 | F | Performance (après A-E, ou en parallèle hors `ddsom-game`) : rendu, QSound, bus | — | voir § 4 |
 
 Ordre conseillé : 0a puis 0b (un agent, l'un après l'autre) ; puis trois agents en parallèle sur A, C, E ; puis B et D.
@@ -172,12 +172,12 @@ temps de chargement des ROMs compris (~0,5 ms rapporté à une image) :
 Profil (`perf record` sur `bench`, symboles par `addr2line` : le décalage du segment de code du binaire est de 0x1000) :
 
 * **Avec rendu : `cps2_gfx::render` fait 92 % du temps** (`Layer::sample`, `pixel` : échantillonnage des couches pixel
-  par pixel). `validate` rendait les deux machines à chaque image sans regarder l'image : `Machine::rendu = false` dans
+  par pixel). `validate` rendait les deux machines à chaque image sans regarder l'image : `Machine::rendering = false` dans
   `validate` et `bench` (socle, sans effet sur l'état) divise le temps de validation (mesure dans § 5).
 * **Sans rendu, pilote son Rust** : `qsound` (filtres `Fir::apply`, `update_sample`, voix) 72 % ; le jeu lui-même ~15 %
   (~25 µs par image) : accès au bus `Cps2Bus::read_word`/`write_word` (décodage d'adresse à chaque accès, 7 %),
   `latch_palette` 2 %, `Scenario::apply` 1,4 % (outil), `lookup` des natives (table de hachage SipHash) 1 %, gestion de
-  la pile 68000 des tâches (`mettre_sur_la_pile`, `reprendre_de_la_pile`, `depiler_retour`, `type_id` de la table des
+  la pile 68000 des tâches (`mettre_sur_la_pile`, `reprendre_de_la_pile`, `pop_return`, `type_id` de la table des
   tâches rangée en `Any`) ~1,2 %, `dispatch::Class::sweep`, `idle`.
 * **Z80 émulé** : le programme du Z80 coûte autant que tout le reste (356 contre 183 µs).
 
@@ -188,7 +188,7 @@ goulot : l'optimiser avant les lots n'aurait pas de sens.
 
 ### Lot F : résultats (branche wt-perf)
 
-Contrôle bit à bit : `examples/render_check <roms> <eeprom> <scénario> <images> [sortie]` imprime, par image, le
+Contrôle bit à bit : `examples/render_check <roms> <eeprom> <scénario> <images> [exit]` imprime, par image, le
 hachage des pixels et celui des échantillons audio (jeu sans 68000, rendu allumé, Z80 émulé ou `DDSOM_SON_RUST=1`).
 Référence enregistrée avec le code d'avant le lot, puis comparée avec `cmp` après chaque optimisation : attract,
 bot30k, boss10_scene65, cov_4p_a, 4 000 images, deux modes de son, soit 8 séries, toutes identiques à chaque étape.
@@ -218,7 +218,7 @@ Chaîne choisie : l'allocation et la libération des objets (`0x225e`-`0x2408`, 
 (606 références dans 120 fichiers, 16 copies de `ALLOC_SET`, une vingtaine d'aides `alloc`/`try_alloc`/`spawn`).
 
 1. **Cœur et adaptateurs** (`objects/pools.rs`) : `Pool::alloc`, `alloc_unchecked`, `alloc_or_leftover`, `release`
-   (purs) ; `alloc_68k`, `alloc_unchecked_68k`, `release_68k` (registres de l'original, `diag::registres_morts`) ;
+   (purs) ; `alloc_68k`, `alloc_unchecked_68k`, `release_68k` (registres de l'original, `diag::dead_regs`) ;
    natives inchangées pour les appels par adresse ; `Pool::alloc_routine`/`free_routine` (adresses déclarées une fois) et
    `pool_of_alloc_routine` pour les tables de la ROM qui désignent un pool par sa routine.
 2. **Appelants** (scripts puis relecture) : tous passent par `x.alloc(&pools::SET)`, `x.alloc_unchecked(...)`,
@@ -244,54 +244,54 @@ D1 est appliquée. Le mode sans 68000 est le mode par défaut de l'application `
 `tools/validate_all.sh`, de `bench` et de `lectures_rom` ; `DDSOM_HYBRIDE=1` choisit le mode hybride (natives et 68000
 de repli), qui ne sert plus qu'au diagnostic et n'a plus à finir VALIDE (`DDSOM_SANS_68K` n'existe plus).
 
-* `Native` perd `cost` et `exact_cost` ; en mode hybride chaque native dure `DUREE_NATIVE` (100 cycles), et sans 68000
-  rien (`lib.rs`, `executer`). `Stats` perd `original_cycles`/`native_cycles` (contrôle `DDSOM_CHECK` : mémoire et
+* `Native` perd `cost` et `exact_cost` ; en mode hybride chaque native dure `NATIVE_DURATION` (100 cycles), et sans 68000
+  rien (`lib.rs`, `execute`). `Stats` perd `original_cycles`/`native_cycles` (contrôle `DDSOM_CHECK` : mémoire et
   registres seulement).
-* Supprimés : `chemin.rs`, `timing.rs`, `vue.rs`, `objects/cost.rs` ; l'exécution à blanc et le relevé de chemin de
-  `families::Ctx` (`a_blanc`, `at`, `pris`, `externe`, `sans_chemin`, `jsr_indirect`, `cout`, couverture des
+* Supprimés : `chemin.rs`, `timing.rs`, `view.rs`, `objects/cost.rs` ; l'exécution à blanc et le relevé de chemin de
+  `families::Ctx` (`a_blanc`, `at`, `pris`, `externe`, `sans_chemin`, `jsr_indirect`, `cost`, couverture des
   décisions), de `ai::Mach` (`dry`, `seg`, `span`, tirage prédit, `refund`), de `scroll::Exec` (`Sim`, `mark`,
   `repeat`, `helper`) ; les fonctions de coût de chaque module (palette, vidéo, crédits, configuration, EEPROM,
   événements, son, entrées, objets, combat, texte, démarrage, service) et les arguments de coût des macros
-  (`handlers!`, `entry!`, `natif!`, `handler`, `fixed`...). Les fonctions écrites sur `Vue` (réelle ou simulée)
+  (`handlers!`, `entry!`, `native!`, `handler`, `fixed`...). Les fonctions écrites sur `View` (réelle ou simulée)
   prennent le bus.
 * Le comportement ne change pas : seules des lectures sans effet et des décisions recopiées disparaissent (`ctx.pris(c)`
-  devient `c`). Les exemples `familles`, `fuzz_familles`, `fuzz*`, `recensement` perdent la comparaison des cycles.
-* Mesure (`tools/measure_refactor.py`, total) : `duree` 1 036 → 11 (restent des faux positifs : le prix d'un crédit,
-  `cost`, dans `hud/slot.rs`, `sprites.rs`, `tache_credits.rs`) ; lignes de code 149 834 → 147 861 ; au passage `regs`
-  5 907 → 5 865, `drap` 643 → 642, `adr` 4 581 → 4 584 (`call` explicites qui remplacent `Vue::appeler`).
+  devient `c`). Les exemples `families`, `fuzz_familles`, `fuzz*`, `recensement` perdent la comparaison des cycles.
+* Mesure (`tools/measure_refactor.py`, total) : `duration` 1 036 → 11 (restent des faux positifs : le prix d'un crédit,
+  `cost`, dans `hud/slot.rs`, `sprites.rs`, `credits_task.rs`) ; lignes de code 149 834 → 147 861 ; au passage `regs`
+  5 907 → 5 865, `drap` 643 → 642, `adr` 4 581 → 4 584 (`call` explicites qui remplacent `View::call`).
 
 ## 7. Lot E : les tâches en machines à états (J3)
 
 Modèle et marche à suivre : [guide-refactorisation.md](guide-refactorisation.md), « Exemple : une tâche qui cède » ;
 détail du noyau : [noyau.md](noyau.md), « Tâches Rust ».
 
-* **Pas 1-2 (étapes, `Reprise::Etape`).** Chaque point de reprise est une variante d'une `enum Etape` de son module
-  (`etapes!`), réunies dans `taches::Etape` ; `table::Suite` (étape ou adresse d'une native) désigne la suite d'une
-  cession et d'un appel en cours. L'ordonnanceur remet le contexte puis appelle le pas (`taches::executer`) au lieu de
+* **Pas 1-2 (étapes, `Resume::Step`).** Chaque point de reprise est une variante d'une `enum Step` de son module
+  (`steps!`), réunies dans `tasks::Step` ; `table::Next` (étape ou adresse d'une native) désigne la suite d'une
+  cession et d'un appel en cours. L'ordonnanceur remet le contexte puis appelle le pas (`tasks::execute`) au lieu de
   poser `c.pc` ; une tâche neuve dont l'entrée est une étape démarre de même. Converties : gel, invites, écran des
   scores, menu TEST, interface des joueurs, crédits, fondus, partie (entrée, début de tour), portraits de la boutique,
   machine à modes (démarrage, attract, titre, choix, classement, démonstration, fin, fin de partie) et séquences de
   scène (sortie de scène, fondu au noir, transitions, bonus, boutique, personnages, comptes) : 349 `resume!` → 4.
 * **Pas 3 (sous-machines).** Fondus et écran noir sont des fonctions Rust appelées directement
-  (`Sequence::sous_programme`, appel terminal) ; ce qu'ils gardaient sur la pile (sens d'un fondu dans D1, registres
-  d'un `movem`, D0 d'une impulsion de verrouillage) est un champ de leur étape. Un `Cadre` n'est plus qu'une suite :
-  `Contenu::Registres`, `Valeur`, `garder`, `reprendre` ont disparu.
+  (`Sequence::subroutine`, appel terminal) ; ce qu'ils gardaient sur la pile (sens d'un fondu dans D1, registres
+  d'un `movem`, D0 d'une impulsion de verrouillage) est un champ de leur étape. Un `Frame` n'est plus qu'une suite :
+  `Contenu::Regs`, `Value`, `garder`, `resume_step` ont disparu.
 * **J1 dans le périmètre.** Plus d'appel par adresse aux enveloppes du noyau (`0x9b6`, `0xa14`, `0xb64`, `0xa40`,
-  `0x9f8`, `0xae4` : `kernel::creer_tache`, `tuer_tache`, `taches::une_image`, `attendre`, `terminer`,
-  `recommencer`), ni aux fondus et à l'écran noir.
+  `0x9f8`, `0xae4` : `kernel::create_task`, `kill_task`, `tasks::one_frame`, `wait`, `finish`,
+  `restart`), ni aux fondus et à l'écran noir.
 * **Pas 4, ce qui reste (et pourquoi).** `resume!` : le pas de jeu `0x1c4b0` (la boucle d'image teste le plafond de
   pas, `cps2::StepCap`, sur le PC), les retours des phases de la démonstration `0x1f98c`/`0x20a98` (adresse de retour
   d'un `call_at` vers une phase qui peut céder), le fondu au noir `0x1460` (appelé par `call_at` par les objets SET,
-  `families/set.rs`, `set_b.rs`) ; plus depuis le lot C, § 8). `Cadre`, `mettre_sur_la_pile`, `Unwound` et `Reprise::Cession` restent pour les
+  `families/set.rs`, `set_b.rs`) ; plus depuis le lot C, § 8). `Frame`, `mettre_sur_la_pile`, `Unwound` et `Resume::Cession` restent pour les
   appelants hors du lot : gestionnaires d'objets qui cèdent par `call_at` (fondu des SET, reprises `game.rs`
   `WORLD_RESUMES`/`PHASE_12_RESUME` et `dispatch.rs` `RESUME_*`, adresses de retour de leurs `call_at`), épilogue
   étranger des bulles (`families/mod.rs`, qui dépile des cadres remis sur la pile ; l'étape `Tour` qu'il atteint est
-  retrouvée par `table::etape_depilee`), `families/effects_g.rs` (`table::appeler`). Ils disparaîtront quand les
+  retrouvée par `table::etape_depilee`), `families/effects_g.rs` (`table::call`). Ils disparaîtront quand les
   familles (lots A-C) ne céderont plus par `call_at`.
 
-Mesure (`tools/measure_refactor.py`, zones du lot : `scene`, `modes`, `hud`, `taches`, `service`, `eeprom`,
-`tache_credits`, `game`, `kernel`, `vblank`, `ecran_credits`, `dispatch`) : lignes 18 724 → 18 693, `adr` 625 → 560,
-`pile` 407 → 67, natives 389 → 49 ; `regs` (886), `drap` (23), `brut` (1 837 → 1 836) inchangés : le lot a porté sur
+Mesure (`tools/measure_refactor.py`, zones du lot : `scene`, `modes`, `hud`, `tasks`, `service`, `eeprom`,
+`credits_task`, `game`, `kernel`, `vblank`, `credits_screen`, `dispatch`) : lignes 18 724 → 18 693, `adr` 625 → 560,
+`stack` 407 → 67, natives 389 → 49 ; `regs` (886), `drap` (23), `raw` (1 837 → 1 836) inchangés : le lot a porté sur
 J3, pas sur J2.
 
 ## 8. Lot 0b : l'API du moteur d'objets
@@ -304,25 +304,25 @@ Fait sur le modèle du pilote (§ 5), décrit pour les lots suivants dans le gui
   (random, seed). Les natives n'appellent plus que la forme « registres » de l'adaptateur, plus `rts`.
 * **Contexte commun** : trait `machine::Machine` (choisi plutôt qu'une base `Jeu` : les accès disjoints `x.c`/`x.b`
   ne survivraient pas à un `Deref`), implémenté par `Cx`, `families::Ctx`, `player::Ctx`, `scene::Ctx`,
-  `combat::World` ; `random`, `prog*`, `data*`. Trait `objects::Courant` pour les gestionnaires (`x.move_xz()`,
-  `x.anim_step()`, `x.reinsert()`...), qui remplace les méthodes inhérentes de `Cx` et `Ctx` (et `Ctx::natif`).
+  `combat::World` ; `random`, `prog*`, `data*`. Trait `objects::Current` pour les gestionnaires (`x.move_xz()`,
+  `x.anim_step()`, `x.reinsert()`...), qui remplace les méthodes inhérentes de `Cx` et `Ctx` (et `Ctx::native`).
 * **Un seul `random`** (`rng::random`) : copies de `camera_modes`, `player::Ctx`, `ai_aids`, `effects_b` supprimées ;
   ~90 sites `x.call(RNG)` convertis. **`combat::Obj`** fusionné dans `objects::Obj` (`from_word`, `word`, `long_ref`).
 * **Appelants** : ~1 400 appels par adresse convertis par scripts (familles, joueurs, scènes, modes ; appels de lot E
   limités à une ligne). Lectures immédiates de drapeaux et de D0 repliées dans les valeurs rendues (`if x.anim_step()`,
-  `x.move_xz().gt()` via `motion::LastAdd`, `let alea = x.random()`). Constantes d'adresse recopiées supprimées
+  `x.move_xz().gt()` via `motion::LastAdd`, `let rng = x.random()`). Constantes d'adresse recopiées supprimées
   (dont des noms faux : `MOVE_Z = 0x1da6` déplaçait en X et Z, `MOVE_Y = 0x1dbc` en Z, `PLAYER_ARRIVES = 0x1f300`
   baissait le rang).
 * **Glitches mis au jour** : durée d'animation nulle qui repart de 0xFFFF en levant la retenue (`anim::Step::Wrapped`,
-  vu par `ending`) ; registres de la réinsertion relus par le gestionnaire suivant (`Courant::reinsert` garde
+  vu par `ending`) ; registres de la réinsertion relus par le gestionnaire suivant (`Current::reinsert` garde
   l'adaptateur).
-* **Preuve** : `DDSOM_POISON` gagne les sites (`étiquette@motif`, `!étiquette@motif`, `#[track_caller]` sur
+* **Preuve** : `DDSOM_POISON` gagne les sites (`étiquette@pattern`, `!étiquette@pattern`, `#[track_caller]` sur
   adaptateurs et méthodes). Validation complète empoisonnée (`anim,motion,lists,cull,rank,random`), lecteurs isolés
   site par site, puis méthodes passées au cœur. Restent 88 appels `_68k` hors modules du socle (liste dans le guide) :
   natives appelées par adresse, aides à contrat de registres, lecteurs documentés.
 
 Mesure (`tools/measure_refactor.py`, avant : b53a8b1 ; après : lot 0b fusionné avec le lot E de main, dont les chiffres
-`pile` et `natives` de `scene`/`modes` viennent) :
+`stack` et `natives` de `scene`/`modes` viennent) :
 
 | | regs | drap | adr | brut | a5 |
 |---|---:|---:|---:|---:|---:|
@@ -338,7 +338,7 @@ Périmètre : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain
 `placement.rs`. Code mort et trous : [code-mort.md](code-mort.md), section du lot D.
 
 * **Accesseurs propres supprimés.** `player::Ctx` perd `a5u8/a5u16/set_a5u8/set_a5u16` et ses `data*`/`prog*` (trait
-  `Machine`) ; les variables de la RAM sont typées dans `player::ram` (`ram::Octet/Mot`, celles de `crate::ram`
+  `Machine`) ; les variables de la RAM sont typées dans `player::ram` (`ram::Byte/Word`, celles de `crate::ram`
   réexportées ; nommées : `SPELL_ROW`, `CURSE_COUNT`, `SCROLL1_Y`, `FADE_*`, `CAMERA_FOCUS`, `BOSS_SIGNAL`, `DSW`...).
   `combat::World` perd `u8/u16/u32/set8/16/32`, `a5_8/a5_16`, `pc8/pc16` et son `random` à registres : vues `Obj`,
   variables partagées avec `player::ram`, `Machine`, files de collision prises dans `objects::pools`
@@ -347,15 +347,15 @@ Périmètre : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain
   0x35918-0x35a48 relues dans la ROM ; `OVERRIDES` vide supprimée) ; décor (`terrain::push_68k`), placement et
   palettes d'effet (`placement`), secousse de caméra (`camera_modes::start_shake`, cœur + natives), créateurs
   d'effets joueur (`spawn::swap`, `weapon_trail`, `thrown`, `lightning_target`, `wall_target`), animations par
-  variante : appels de fonctions Rust au lieu de `g.rom(adresse)`. Restent par adresse (`Ctx::rom`) : les sons, les
+  variante : appels de fonctions Rust au lieu de `g.rom(address)`. Restent par adresse (`Ctx::rom`) : les sons, les
   palettes de `palette.rs`, les effets de `families`, `video::terrain` (0x24b0), déclarés une seule fois
-  (`player::externes`) en attendant leur API.
+  (`player::external`) en attendant leur API.
 * **J2.** `DDSOM_POISON` (scénarios du lot, 90) a prouvé morts et fait passer au cœur : rang, animations,
   allocation (combat, ai_aids), vitesses, zone de jeu, tirage du combat ; registres du décor (`terrain`), du
   placement et des palettes (`placement`) ; D0/D1/A1 après les créateurs, secousses et animations convertis
   (étiquette temporaire). Le pas d'animation des joueurs suit maintenant la retenue de l'original (durée nulle :
   `Step::finished`, glitch d'origine).
-* **Replis et trous.** 13 replis `_ => g.rom(adresse propre)` des automates (jamais atteints, parfois récursifs)
+* **Replis et trous.** 13 replis `_ => g.rom(address clean)` des automates (jamais atteints, parfois récursifs)
   deviennent `unreachable!`. Dix routines atteignables **sans native** (le jeu sans 68000 s'y serait arrêté) sont
   écrites en Rust et validées par `fuzz_player` contre l'original : actions 0x26, 0x2c, 0x30 (`moves::curse_drop`,
   `dust_puffs`, `box_recoil`) et sept créateurs (`spawn::cursed_weapon`, `dying_shards`, `storm_cloud`,
@@ -367,29 +367,29 @@ Périmètre : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain
   (registres prouvés morts, mais ils appellent `video::terrain` par ses registres) ; `ai::Mach::random` (machine à
   registres des IA : D0 relu, `DDSOM_POISON=random@ai.rs` échoue à l'image 2742 d'`attract`).
 * **Mesure** (`tools/measure_refactor.py`, zones du lot, avant c8107db / après) : lignes 20 722 / 20 878 (dix routines
-  ajoutées), `regs` 756 / 755, `drap` 104 / 110, `adr` 354 / 285, `brut` 917 / 895, `a5` 138 / 78 ; adresses
+  ajoutées), `regs` 756 / 755, `drap` 104 / 110, `adr` 354 / 285, `raw` 917 / 895, `a5` 138 / 78 ; adresses
   déclarées dans plusieurs fichiers du lot 43 / 0 (112 / 0 déclarations) ; lignes dupliquées (`--doublons 6`) de
   `player` 1 464 / 1 497, `combat` 38 / 30, `ai` 8 / 0 ; appels `_68k` 17 / 13 (les 13 restants sont décrits
   ci-dessus).
 * **Pas faits** : `ai.rs`/`ai_aids.rs` (natives à contrat de registres appelées par les familles), `scroll.rs`,
   `combat` (`call_ao` vers effets et sons hors lot), `--doublons` des personnages.
 
-## 10. Lot C : tirs et décors (`eshl*`, `set*`, `sobj`, `shell`, `joueur/`)
+## 10. Lot C : tirs et décors (`eshl*`, `set*`, `sobj`, `shell`, `player/`)
 
 * **Fondu au noir des portes sans `call_at`.** Les portes SET 7 (`set.rs`, `exit_gate`) et SET 29 (`set_b.rs`,
-  `door_b`) appellent `taches::fondu::descente` comme un sous-programme de tâche (`set::fondu_de_sortie`) : la suite
-  est une étape `fondu_de_sortie::Etape` (`taches::Etape::PorteSet`) qui porte la porte ; à la fin du fondu la tâche
+  `door_b`) appellent `tasks::fading::descent` comme un sous-programme de tâche (`set::exit_fading`) : la suite
+  est une étape `exit_fading::Step` (`tasks::Step::DoorSet`) qui porte la porte ; à la fin du fondu la tâche
   y reprend, puis revient dans la boucle de dispatch par l'adresse de retour du gestionnaire. Les fonctions Rust de la
   boucle sont abandonnées par `Unwound`, comme le faisait `call_at`. Disparaissent : `resume!(FONDU_DESCENTE, 0x1460)`
-  (`taches/fondu.rs`) et les natives de reprise 0xcb896, 0xcb9c0, 0xd8f06. `fuzz_porte` suit maintenant le fondu
+  (`tasks/fading.rs`) et les natives de reprise 0xcb896, 0xcb9c0, 0xd8f06. `fuzz_porte` suit maintenant le fondu
   jusqu'au bout (étapes de la tâche) et couvre aussi la porte 29, que les scénarios n'atteignent pas
   (`DDSOM_PORTE=29`).
-* **J1.** Plus d'appel par adresse vers les natives du lot : créateurs ESHL (`eshl_creators::appeler`, chaque
-  créateur est une fonction publique `(c, b)`, la native n'ajoute que `rts`), routines de vague (`set_residu`),
-  interprète du dialogue de la boutique (`peff_boutique::talk_a/b`, natives 0x514ac/0x514cc retirées), création de
-  la tâche de fondu (`kernel::creer_tache` au lieu de 0x9b6). Les adresses des natives d'autres modules appelées par
+* **J1.** Plus d'appel par adresse vers les natives du lot : créateurs ESHL (`eshl_creators::call`, chaque
+  créateur est une fonction publique `(c, b)`, la native n'ajoute que `rts`), routines de vague (`set_residue`),
+  interprète du dialogue de la boutique (`peff_shop::talk_a/b`, natives 0x514ac/0x514cc retirées), création de
+  la tâche de fondu (`kernel::create_task` au lieu de 0x9b6). Les adresses des natives d'autres modules appelées par
   le lot ne sont plus recopiées : `crate::camera_modes::SHAKE_A.entry`, `terrain::SHADOW`, `palette::*`,
-  `text::CLEAR_BOX`, `aides::*`, `video::*`, `ai::KEEP_ON_SCREEN`, `scene::*` (60 constantes locales, dont des noms
+  `text::CLEAR_BOX`, `aids::*`, `video::*`, `ai::KEEP_ON_SCREEN`, `scene::*` (60 constantes locales, dont des noms
   faux : `SAY_A`/`SAY_B`/`SAY_C`, `SOUND_THUD`, `AREA_DAMAGE`, `CAMERA_LOCK` désignaient les secousses de caméra
   0x2824/0x2860/0x289c ; `RUN_PALETTE_SCRIPT`/`PLAY_SCRIPT` l'effacement d'un rectangle de texte 0x1324).
 * **J2, preuve à la sortie des gestionnaires.** Diagnostic (non gardé) : à la sortie de chaque gestionnaire du lot,
@@ -403,70 +403,70 @@ Périmètre : `player/`, `combat/`, `combat.rs`, `ai.rs`, `ai_aids.rs`, `terrain
   sur la pile privée du son (`sound::sauvegarde_fantome`, copie morte restée en RAM, que `validate` compare) ; tout
   registre vivant au moment d'un son doit donc rester celui de l'original, et un gestionnaire qui joue un son garde
   ses écritures de registres. Il faudrait que `validate` ignore cette zone, ou une API de son qui prenne ces valeurs
-  en argument. (2) Les **créateurs** (`eshl_creators`, `set_residu`, tremplins) : leurs registres de sortie (A1,
+  en argument. (2) Les **créateurs** (`eshl_creators`, `set_residue`, tremplins) : leurs registres de sortie (A1,
   retenue, compteurs) sont relus par les gestionnaires d'ennemis et de boss (lot A) et par les sons qui suivent ;
   empoisonnés, une trentaine de scénarios divergent. Ils gardent leur contrat.
 ## 11. Lot B : effets, objets, coffres
 
-Périmètre : `families/effects*.rs`, `effects_creators.rs`, `items*.rs`, `boxes.rs`, `petites.rs`, `creators.rs`,
+Périmètre : `families/effects*.rs`, `effects_creators.rs`, `items*.rs`, `boxes.rs`, `small.rs`, `creators.rs`,
 `effects_aids.rs`. Code mort et replis : [code-mort.md](code-mort.md), section du lot B.
 
-* **Créateurs écrits une fois** (`effects_creators::restes::Registres`). Chaque créateur (allouer, poser type,
-  variante, réglage, lien) est une fonction générique sur un `Registres` : `Pur` (le cœur, aucun registre) ou le
+* **Créateurs écrits une fois** (`effects_creators::leftovers::Regs`). Chaque créateur (allouer, poser type,
+  variante, réglage, lien) est une fonction générique sur un `Regs` : `Pure` (le cœur, aucun registre) ou le
   processeur (natives appelées par adresse et adaptateurs `_68k` : l'allocation passe par `Pool::alloc_68k`, les
   drapeaux du dernier `move`, les compteurs de boucle et les tirages vont dans les registres de l'original). Plus
   de seconde implémentation « à registres » à tenir à jour. Convertis : tous les créateurs d'EFFCT
-  (`effects_creators.rs`), les étincelles et chocs (`effects_aids.rs`), les créateurs de `creators.rs`/`petites.rs`
+  (`effects_creators.rs`), les étincelles et chocs (`effects_aids.rs`), les créateurs de `creators.rs`/`small.rs`
   appelés par le lot ou demandés par le lot D.
-* **Cœurs pour le lot D** (appelants par adresse de `player/externes.rs`, à brancher) : `effects_aids::shock`
+* **Cœurs pour le lot D** (appelants par adresse de `player/external.rs`, à brancher) : `effects_aids::shock`
   (0xb10c8, `DUST`), `effects_creators::halo` (0xab708), `blow` (0xb378a, `STARS`), `creators::set_a` (0xcc352,
-  `WAND`), `creators::sparks` (0x4dc9a), `bolt` (0x4b7a0), `quake` (0x4b340), `petites::quake_b` (0x4f132), chacun
-  avec son adaptateur `_68k` (registres de l'original, étiquette `effets`). `HEALTH_BAR` (0x19dce) est dans
-  `evenements.rs`, hors lot.
+  `WAND`), `creators::sparks` (0x4dc9a), `bolt` (0x4b7a0), `quake` (0x4b340), `small::quake_b` (0x4f132), chacun
+  avec son adaptateur `_68k` (registres de l'original, étiquette `effects`). `HEALTH_BAR` (0x19dce) est dans
+  `events.rs`, hors lot.
 * **J1.** Plus d'appel par adresse vers les créateurs du lot, le décor (`terrain::push_68k`), la secousse
-  (`camera_modes::start_shake`), la création de tâche (`kernel::creer_tache`), les éclairs et pages de palette
-  du lot (`petites`), la remise à zéro de scène (`creators::restart_scene`). Restent par adresse (pas d'API Rust) :
-  les sons (enveloppes de `sound.rs`), `evenements` (0x19ae6, 0x19b08), `ai` (0xfbae, 0xfbb0, 0x103d6, 0x137e,
+  (`camera_modes::start_shake`), la création de tâche (`kernel::create_task`), les éclairs et pages de palette
+  du lot (`small`), la remise à zéro de scène (`creators::restart_scene`). Restent par adresse (pas d'API Rust) :
+  les sons (enveloppes de `sound.rs`), `events` (0x19ae6, 0x19b08), `ai` (0xfbae, 0xfbb0, 0x103d6, 0x137e,
   0x1172e), palettes de `palette.rs`, vidéo, scène (0x33aa6, 0xf2e56, 0x20de6), 0x3403c (second décor). Les
   créateurs ESHL du lot C (fusionné) sont appelés comme fonctions Rust, y compris par la table des effets spéciaux
   des coffres (`match` sur l'adresse lue).
-* **J2.** `DDSOM_POISON=effets` (registres des créateurs après les appels convertis) puis `DDSOM_POISON=restes`
+* **J2.** `DDSOM_POISON=effects` (registres des créateurs après les appels convertis) puis `DDSOM_POISON=leftovers`
   (registres laissés par les gestionnaires : restes des aiguillages `saut_table`, pointeurs de lecture, compteurs
   de boucle) : 270/270, écritures supprimées. Un lecteur trouvé : le nuage (type 26) relisait le mot haut de D0 de
   l'aiguillage (nul) après la remise en liste ; écrit en clair. Restent des lectures de registres réels : D2 hérité
-  par `items_b::drop_old` (compteur de coups de la pièce rejetée, glitch d'origine), A2 de `guide_cible` (aucun
+  par `items_b::drop_old` (compteur de coups de la pièce rejetée, glitch d'origine), A2 de `guide_target` (aucun
   joueur vivant), A1 laissé par la boucle de dispatch (`effects_c`, adresse du gestionnaire), D0 des tirages
   (`effects_c`, `effects_d::random`), D4 hérité du radeau (`effects_e`), D6 de l'allocation dans la boucle des
   éclats (`effects_f`, glitch d'origine documenté).
-* **Replis.** 68 aiguillages `_ => deleguer(cible)` relevés table par table : état 6 (libération) explicite là où
-  la table l'a, `hors_table` ailleurs ; deux branchements « pool plein » vers une erreur d'adresse de l'original
-  (`erreur_d_adresse`).
+* **Replis.** 68 aiguillages `_ => deleguer(target)` relevés table par table : état 6 (libération) explicite là où
+  la table l'a, `outside_table` ailleurs ; deux branchements « pool plein » vers une erreur d'adresse de l'original
+  (`address_error`).
 * **Cession (lot E).** Le feu d'artifice (type 80) fait attendre la tâche de partie au milieu de la boucle de
-  dispatch : ses reprises sont des étapes (`effects_g::Etape`, ligne ajoutée à `taches::etapes_des_taches!`) au lieu
+  dispatch : ses reprises sont des étapes (`effects_g::Step`, ligne ajoutée à `tasks::task_steps!`) au lieu
   de natives à adresse et de `call_at` ; l'abandon de la boucle reste un `Unwound` (la boucle de dispatch n'est pas
   une machine à états). Nouveau scénario `cov/cov_effct_feu` (le chemin n'était exercé par aucun) ; ses lectures de
   la ROM manquaient aux assets sans ROM : cinq zones ajoutées à `port/extract/native_zones.txt` (fichier local
   généré) et `natives.json` des assets régénéré.
 * **Nommer.** Variables de la caméra, de la scène et de la phase par `ram.rs` (85 accès) ; constantes d'adresses
   recopiées supprimées avec leurs appels.
-* **Contrats des natives restantes.** `fuzz createurs` (`examples/fuzz.rs`, mode hybride, contrôle) compare chaque
+* **Contrats des natives restantes.** `fuzz creators` (`examples/fuzz.rs`, mode hybride, contrôle) compare chaque
   créateur du lot à l'original sur des états tirés : 0 écart après correction de drapeaux que l'ancienne écriture
   oubliait (X du `lsr` du choc, `moveq #0,D0` de la colonne ESHL au pool plein, X de la moitié droite, `moveq` des
   douze blocs de palette, `move.b D1` du décor 11, table des décalages du joueur scripté lue en ROM).
 * **Mesure** (`tools/measure_refactor.py`, fichiers du lot, avant 1f5ae77 / après) : lignes 16 022 / 16 104 ; `regs`
-  729 / 425 ; `drap` 40 / 38 ; `adr` 266 / 124 (les sons, `evenements`, `ai`, palettes et vidéo hors lot) ; `pile`
-  1 / 2 (`Unwound` explicite du feu d'artifice) ; `brut` 490 / 451 ; `a5` 263 / 174 ; adresses déclarées dans
+  729 / 425 ; `drap` 40 / 38 ; `adr` 266 / 124 (les sons, `events`, `ai`, palettes et vidéo hors lot) ; `stack`
+  1 / 2 (`Unwound` explicite du feu d'artifice) ; `raw` 490 / 451 ; `a5` 263 / 174 ; adresses déclarées dans
   plusieurs fichiers touchant le lot 51 / 39 (72 / 47 déclarations du lot) ; lignes dupliquées (`--doublons 6`)
   221 / 223.
-* **Restent en `_68k` (et pourquoi).** Les natives appelées par adresse (créateurs de `creators.rs`, `petites.rs`,
+* **Restent en `_68k` (et pourquoi).** Les natives appelées par adresse (créateurs de `creators.rs`, `small.rs`,
   `effects_creators.rs`, `effects_aids.rs` : leur contrat de registres sert aux appelants hors lot), `regs_68k` de
   la boucle des éclats (`effects_f`, D6 de l'allocation relu, glitch d'origine), `terrain::push_68k` (pas de cœur,
   il appelle `video::terrain` par ses registres), `random_68k` des tirages dont D0 est relu (`effects_c`),
-  `petites::flash_68k` (drapeaux non prouvés morts), `start_by_character_68k` (`effects_f`, D6 sauvé autour).
+  `small::flash_68k` (drapeaux non prouvés morts), `start_by_character_68k` (`effects_f`, D6 sauvé autour).
 
 ## 12. Lot S : services communs (son, palettes, texte, terrain, aides, événements)
 
-Périmètre : `sound.rs`, `palette.rs`, `text.rs`, `video.rs`, `aides.rs`, `evenements.rs`, `terrain.rs`,
+Périmètre : `sound.rs`, `palette.rs`, `text.rs`, `video.rs`, `aids.rs`, `events.rs`, `terrain.rs`,
 `placement.rs`, `ai_aids.rs` (et `ai.rs`, `scroll.rs`, `camera_modes.rs`, laissés par le lot D), plus les
 appelants hors des familles des lots A et B. API et mode d'emploi : [guide-refactorisation.md](guide-refactorisation.md),
 « Les services communs (lot S) ».
@@ -476,18 +476,18 @@ appelants hors des familles des lots A et B. API et mode d'emploi : [guide-refac
   privée (FF297E-FF2A19, trois niveaux d'aiguillage au plus) n'est relue que par les restaurations des wrappers et
   par le test de la RAM du menu TEST (0x2d096, qui remet la valeur lue). Elle était déjà dans la zone ignorée par
   `validate` (FF2900-FF2A19) : le blocage signalé par le lot C venait des registres que les sons **lisent** (A0,
-  D4, A1), pas de la copie. `validate` n'ignore plus que la sauvegarde (`SAUVEGARDE_FANTOME`) : la fin de la file
+  D4, A1), pas de la copie. `validate` n'ignore plus que la sauvegarde (`GHOST_SAVE`) : la fin de la file
   des sons, ses têtes et l'alternance des voix (FF2900-FF2961) sont maintenant comparées.
-* **Cœurs.** Son : `jouer(b, son, objet)`, `jouer_global`, `jouer_avec(b, son, Source)` (valeurs `Option` : un son
-  qui lit une valeur absente s'arrête), `service(b, Service::…)`, `emettre` ; aiguillages et entrées « selon la
+* **Cœurs.** Son : `play(b, sound, object)`, `play_global`, `play_with(b, sound, Source)` (valeurs `Option` : un son
+  qui lit une valeur absente s'arrête), `service(b, Service::…)`, `emit` ; aiguillages et entrées « selon la
   version » dans le cœur ; la liste `sound::NATIVES` (inutilisée, en double) supprimée. Palettes : luminosité,
   éclairs (`Flash`), couleur d'éclair, palette du personnage. Texte : `print`, `erase`, `print_over` (un seul
-  moteur `texte`), `print_tall(_at)`, blocs, `clear_box`, qui rendent la fin du descripteur. Vidéo :
-  `terrain(b, x, y) -> Terrain`, `terrain_of`, `terrain_68k`. Aides : `direction*`, `grabbed -> Saisie`, `game_over`
+  moteur `text`), `print_tall(_at)`, blocs, `clear_box`, qui rendent la fin du descripteur. Vidéo :
+  `terrain(b, x, y) -> Terrain`, `terrain_of`, `terrain_68k`. Aides : `direction*`, `grabbed -> NameEntry`, `game_over`
   (sans appel par adresse : `palette::character_palette`, `player::actions::to_stand`). Événements : files de
   points, crédit, pop-ups (`Popup`). Terrain et placement : `terrain::push(b, o)`, `placement::place_on_free_ground(b,
-  o)` (plus d'adaptateur `_68k` : registres de 0x24b0 pris dans `Terrain`). IA : `ai_aids::stance`, `in_front`,
-  `box_around -> DansBoite` (boîte : `Boite`). `ram` : `JOUEURS_EN_VIE` (0x35, ex-`DIFFICULTE`), `DEFILEMENT_Y_PLAN1`
+  o)` (plus d'adaptateur `_68k` : regs de 0x24b0 pris below `Terrain`). IA : `ai_aids::stance`, `in_front`,
+  `box_around -> InHitbox` (boîte : `Hitbox`). `ram` : `PLAYERS_ALIVE` (0x35, ex-`DIFFICULTE`), `SCROLL_Y_PLANE1`
   (0x4ba), `DSW` (0x7fd0), réexportés par `player::ram`. Les natives restent pour les appels par adresse et
   reproduisent les registres de l'original.
 * **Appelants convertis** (hors familles des lots A et B) : ~330 appels de son (script `tools/convert_sounds.py`,
@@ -498,22 +498,22 @@ appelants hors des familles des lots A et B. API et mode d'emploi : [guide-refac
 * **Registres gardés, et pourquoi.** `pshl::stopped_by_terrain` (et, par prudence, `eshl.rs`, `shell.rs`) gardent les
   registres de 0x24a8 (`terrain_68k`) : D3 est relu par un gestionnaire suivant (`boss11_scene42_mort`, image 4447,
   la divergence est apparue en passant au cœur) ; `peff_e.rs` : D2 du terrain relu par le rebond du suivant
-  (lot C). `combat.rs` (`jouer_avec` des aiguillages 0xe662a/0xe823a : D4 posé par l'appelant pour la cible, peut-être
-  un `ParD4`). Les tours de `peff_m`, `peff_n`, `pshl_d` lisent encore leur cible dans A1 (posé par l'appelant).
+  (lot C). `combat.rs` (`play_with` des aiguillages 0xe662a/0xe823a : D4 posé par l'appelant pour la cible, peut-être
+  un `ByD4`). Les tours de `peff_m`, `peff_n`, `pshl_d` lisent encore leur cible dans A1 (posé par l'appelant).
 * **Glitch mis au jour.** La barre de vie (0x19dce) laisse A2 sur la file des pop-ups, et `player_hits_enemies`
   garde A2 comme boîte d'attaque du joueur pour les ennemis suivants : après un coup qui affiche une barre, les
   ennemis suivants de la liste sont testés contre la file des pop-ups (`combat::show_enemy_hp`, marqué ; vu en
-  passant au cœur `evenements::creer_popup` : une dizaine de scénarios divergeaient).
-* **Fuzz.** `fuzz son` (wrappers, aiguillages hors sélecteurs aléatoires, services) et `fuzz video` sans écart ;
+  passant au cœur `events::create_popup` : une dizaine de scénarios divergeaient).
+* **Fuzz.** `fuzz sound` (wrappers, aiguillages hors sélecteurs aléatoires, services) et `fuzz video` sans écart ;
   `fuzz u1` sans écart sur les natives du lot (un écart antérieur, hors lot : D6 de `popups_effacer_tout`,
   `popups.rs`, 0x0000ffff attendu) ; `fuzz_monde ia_` (nouveau : 0xa470, 0x7f0c, 0x7ef4, 0x7f19c) : mêmes écarts
   avant et après (drapeau X seulement, que ces natives n'ont jamais reproduit).
 * **Mesure** (`tools/measure_refactor.py`, avant 44d7794 / après) : total `adr` 2 896 / 2 347, `regs` 5 596 / 5 365,
   `drap` 536 / 522, lignes 148 020 / 148 078 ; `player` `adr` 263 / 71, `scene` 257 / 173, `modes` 185 / 158,
-  `families` (lot C seulement) 2 053 / 1 839 ; modules du lot : `sound` `regs` 54 / 24, `aides` 46 / 28,
-  `evenements` 43 / 35 (`drap` 30 / 18), `placement` 16 / 8, `ai_aids` 273 / 249 ; adresses déclarées dans plusieurs
+  `families` (lot C seulement) 2 053 / 1 839 ; modules du lot : `sound` `regs` 54 / 24, `aids` 46 / 28,
+  `events` 43 / 35 (`drap` 30 / 18), `placement` 16 / 8, `ai_aids` 273 / 249 ; adresses déclarées dans plusieurs
   fichiers 214 / 196 (940 / 872 déclarations). Les `_68k(` passent de 116 à 133 : les adaptateurs du lot portent
-  maintenant ce nom (`terrain_68k`, `enfiler_68k`...), alors que les natives les contenaient sans le dire.
+  maintenant ce nom (`terrain_68k`, `enqueue_68k`...), alors que les natives les contenaient sans le dire.
 * **Pas faits.** `ai.rs` (machine à registres des IA), le reste de `ai_aids.rs` (une quarantaine d'aides à contrat
   D0/Z appelées par les familles des lots A et B : tirages, butin, débris, saisie...), `scroll.rs`,
   `camera_modes.rs` ; les appels de services dans les familles des lots A et B (à faire par ces lots avec l'API).
@@ -527,8 +527,8 @@ Périmètre : `families/boss_*`, `boss_common.rs`, `boss_dragon.rs`, `enemy*`, `
   arguments, résultat en valeur Rust (`lib::target_in_front -> InBox`, `lib::attack_hits_a_player -> Option<Obj>`,
   `lib::turn_decision -> Turn`, `lib::maybe_draw_6e -> bool`, `lib::decision(x, même_côté)`...). Les appelants ne
   lisent plus ni Z, ni la retenue, ni D0. Après la fusion des lots S, B et D, la façade appelle leurs cœurs (son,
-  événements, `ai_aids::stance/in_front/box_around`, `effects_creators::attack/debris`, `aides::direction*`,
-  `aides::grabbed`, `video::terrain_of`) ; restent par adresse dans `enemy_lib` les routines sans cœur (le reste de
+  événements, `ai_aids::stance/in_front/box_around`, `effects_creators::attack/debris`, `aids::direction*`,
+  `aids::grabbed`, `video::terrain_of`) ; restent par adresse dans `enemy_lib` les routines sans cœur (le reste de
   `ai.rs`/`ai_aids.rs` : tirages 0x788c/0x79ce/0x79f6/0xac3a/0xf118, PV, immunités, cibles, saisie 0xfc44/0xfd64/
   0xfd8c/0xfda2, butin, débris 0x1172e/0x11a36, poussée ; secousses de `camera_modes.rs` ; quelques créateurs).
 * **Noms faux corrigés** (vérifiés par valeur) : `FACE_TARGET = 0xa470` tirait l'attitude (`lib::draw_stance`),
@@ -538,7 +538,7 @@ Périmètre : `families/boss_*`, `boss_common.rs`, `boss_dragon.rs`, `enemy*`, `
   (`guard_in_front_strict`), `SPEED_Y = +0x16` est l'accélération en X (`Obj::AX`), `ANGLE = +0x2d` l'index de
   la table de vitesses, `DIFFICULTY = A5+0x7f92` le rang dynamique (`var::RANK`).
 * **État nommé** : champs génériques par `Obj::X`, `Obj::VX`... et `f::SUB3`, `f::KEY_FRAME` (15 copies des mêmes
-  modules de champs supprimées) ; variables de la RAM de travail typées (`enemy_common::var`, `ram::Octet/Mot`).
+  modules de champs supprimées) ; variables de la RAM de travail typées (`enemy_common::var`, `ram::Byte/Word`).
 * **Natives du périmètre en fonctions Rust** : 0x27ee (détachement de l'hôte), 0x81aa4, 0x833b6, 0x87048
   (`boss_common`), 0x81ae0 (riposte du boss 3), réactions communes (`reactions::run_common`, appelées directement
   par `enemy_common::react`, `react_with` pour la routine propre d'un boss) ; leurs natives ne servent plus qu'aux
@@ -546,15 +546,15 @@ Périmètre : `families/boss_*`, `boss_common.rs`, `boss_dragon.rs`, `enemy*`, `
 * **Routines d'origine sans native** appelées par les familles, jamais atteintes (le jeu sans 68000 s'y serait
   arrêté) : transcrites dans `enemy_lib` ([code-mort.md](code-mort.md), lot A).
 * **J2 : registres résiduels.** Les écritures de registres que plus rien ne relit en Rust (copies des registres de
-  l'original, ~800) ont été instrumentées une à une (`registres_morts`, une étiquette par site). La validation
-  empoisonnée, puis des bissections automatiques sur les sites (outil de travail : `DDSOM_POISON=lota@fichier:ligne:`),
+  l'original, ~800) ont été instrumentées une à une (`dead_regs`, une étiquette par site). La validation
+  empoisonnée, puis des bissections automatiques sur les sites (outil de travail : `DDSOM_POISON=lota@file:line:`),
   ont désigné les écritures relues par la suite : un gestionnaire suivant (A1 de `load_target`, D1-D4 du boss 15,
   D5 de l'archer, D2 du boss 6...) ou un compteur de boucle relu au tour suivant. Elles restent, marquées
   `// relu : …` ; 725 autres sont supprimées. `boss_1` et `boss_9` (lecteurs nombreux) gardent leurs registres.
   Piège : une écriture dans une boucle peut être relue au tour suivant (lecture placée avant dans le texte).
 * **Besoins d'API** (signalés) : cœurs pour le reste de `ai_aids.rs` et `ai.rs` (tirages, cibles, PV, immunités,
   saisie, butin, débris), les secousses de `camera_modes.rs`, les créateurs 0xd5f30/0xd6952/0xd5ef8 (SET de la barre
-  de vie), `popups::effacer_tout` (0x19eb0), 0x57c66/0x5cdc6 (`creators.rs`, privés) ; `ram::DIFFICULTE` était le
+  de vie), `popups::clear_all` (0x19eb0), 0x57c66/0x5cdc6 (`creators.rs`, privés) ; `ram::DIFFICULTE` était le
   nombre de joueurs en vie (corrigé au lot S).
 
 Mesure (périmètre du lot, `tools/measure_refactor.py` restreint aux fichiers du lot ; avant c8107db / après) :
@@ -571,67 +571,67 @@ tables de la ROM (réactions propres à un type, créateurs par table), quelques
 
 ## 14. Lot « noyau final » : J3 achevé, l'ordonnanceur en Rust
 
-Périmètre : `dispatch.rs`, `game.rs`, `taches/`, `kernel.rs`, `vblank.rs`, `sans68k.rs`, `demarrage.rs`, `lib.rs`,
+Périmètre : `dispatch.rs`, `game.rs`, `tasks/`, `kernel.rs`, `vblank.rs`, `no68k.rs`, `startup.rs`, `lib.rs`,
 `families/mod.rs`, `families/cx.rs`, et les reprises restantes de `modes/` (boucle, démarrage, démonstration),
 `families/set.rs` et `effects_g.rs` (cessions des gestionnaires). Détail : [noyau.md](noyau.md), « Ordonnanceur et
 traps », « Appels en cours en Rust », « Le jeu sans 68000 ».
 
 * **Plus de cession par la pile 68000.** Les appels en cours de la boucle de partie sont des étapes : fin d'image
-  (`partie::Etape::FinImage`, ex-native `0x1c4c4`), fin de la phase 12 (`game::Etape::ApresMonde`, ex-`PHASE_12_RESUME`),
-  mise à jour du monde (`game::Etape::Monde { ordre, etape }`, ex-`WORLD_RESUMES`, 46 natives), boucles d'aiguillage
-  (`dispatch::Etape::Aiguillage`, ex-`RESUME_*`, 10 natives), retours des phases de la démonstration
-  (`demo::Etape::AfterPhaseA/B`, ex-`resume!` `0x1f98c`/`0x20a98`, et `ApresMonde` `0x1fa4a` pour sa phase 12), boucle
-  de la machine à modes (`modes::Etape`, ex-natives `0x133fe`, `0x1341a`, `0x13422`), entrée de la tâche de démarrage
-  (`boot::Etape::Entree`, ex-native `0x11b16`), pas de jeu (`partie::Etape::Pas`, ex-`resume!` `0x1c4b0`).
+  (`game::Step::FrameEnd`, ex-native `0x1c4c4`), fin de la phase 12 (`game::Step::AfterWorld`, ex-`PHASE_12_RESUME`),
+  mise à jour du monde (`game::Step::World { order, step }`, ex-`WORLD_RESUMES`, 46 natives), boucles d'aiguillage
+  (`dispatch::Step::Dispatch`, ex-`RESUME_*`, 10 natives), retours des phases de la démonstration
+  (`demo::Step::AfterPhaseA/B`, ex-`resume!` `0x1f98c`/`0x20a98`, et `AfterWorld` `0x1fa4a` pour sa phase 12), boucle
+  de la machine à modes (`modes::Step`, ex-natives `0x133fe`, `0x1341a`, `0x13422`), entrée de la tâche de démarrage
+  (`boot::Step::Entry`, ex-native `0x11b16`), pas de jeu (`game::Step::Step`, ex-`resume!` `0x1c4b0`).
 * **Céder au milieu d'une boucle Rust** sans abandon par panique : une boucle qui appelle un gestionnaire puis
-  continue ouvre un *appel attendu* (`table::appeler_attendu`, `crate::appeler_attendu`) dont le `rts` lui rend la
-  main ; si le gestionnaire cède (porte : `fondu_de_sortie::fondu_au_noir` ne diverge plus ; feu d'artifice), la
-  cession est notée (`taches::a_cede`, remise à faux à chaque point de premier niveau), les `rts` suivants ne font
+  continue ouvre un *appel attendu* (`table::call_expected`, `crate::call_expected`) dont le `rts` lui rend la
+  main ; si le gestionnaire cède (porte : `exit_fading::fade_to_black` ne diverge plus ; feu d'artifice), la
+  cession est notée (`tasks::has_ceded`, remise à faux à chaque point de premier niveau), les `rts` suivants ne font
   rien, et chaque niveau rend `Flow::Yield` ; la tâche reprendra par les cadres. L'épilogue étranger des bulles
-  dépile quatre cadres (`table::depiler_appels`, A1-A4 = leurs adresses d'origine) et revient au cinquième ; observé
-  aussi dans la démonstration de l'attract (`modes/attract`, images 16 857 et suivantes), d'où l'étape `ApresMonde`
+  dépile quatre cadres (`table::pop_calls`, A1-A4 = leurs adresses d'origine) et revient au cinquième ; observé
+  aussi dans la démonstration de l'attract (`modes/attract`, images 16 857 et suivantes), d'où l'étape `AfterWorld`
   de sa phase 12.
 * **Disparaissent** : `Unwound` (et le `catch_unwind` de chaque native), `call_at` (`Cx::call_at` ; `Cx::tail` est un
-  `call`), `resume!`, `Reprise::Cession`, `table::mettre_sur_la_pile`, `relever`, `etape_depilee`,
-  `reprendre_de_la_pile`, `vers_le_68000` et la liste `remis`. `Cadre` reste, comme pile des suites d'une tâche (sa
+  `call`), `resume!`, `Resume::Cession`, `table::mettre_sur_la_pile`, `relever`, `etape_depilee`,
+  `reprendre_de_la_pile`, `vers_le_68000` et la liste `remis`. `Frame` reste, comme pile des suites d'une tâche (sa
   hauteur de pile 68000 ne sert plus qu'à distinguer un appel par adresse, qui empile une sentinelle) ; il gagne
-  l'attente (`attendu`). `crate::call` n'admet plus de cession ni de retour plus haut : une panique nomme le site
+  l'attente (`expected`). `crate::call` n'admet plus de cession ni de retour plus haut : une panique nomme le site
   (aucun cas dans les 272 scénarios).
 * **Le noyau ne pose plus de PC.** L'ordonnanceur (`0x928`-`0x984`) et le démarrage (`0x350`-`0x50a`) sont une machine
-  à états (`kernel::Point`, rangé dans la table des tâches) que `sans68k::ligne` fait avancer d'un point à la fois ;
+  à états (`kernel::Point`, rangé dans la table des tâches) que `no68k::line` fait avancer d'un point à la fois ;
   l'interruption de VBLANK est une fonction Rust prise entre deux points (`vblank::interruption`). Une tâche est
   lancée en appelant le pas de son étape ; toutes les reprises et entrées sont des étapes (l'écran mort `0x19068`
-  n'en a pas). Le plafond des pas est compté par le jeu (`sans68k::pas_de_jeu`, `Point::PasRetenu`) au lieu du test
+  n'en a pas). Le plafond des pas est compté par le jeu (`no68k::game_step`, `Point::StepKept`) au lieu du test
   du PC (`cps2::StepCap` reste pour la machine de référence). Natives retirées : les cinq de l'ordonnanceur, les dix
   des handlers de traps et de leur retour (`trap #12` change directement le masque), le VBLANK, les cinq du démarrage.
 * **Mode hybride retiré** (D1 jusqu'au bout) : avec des tâches lancées par un ordonnanceur Rust et des appels en cours
   hors de la pile 68000, le code d'origine ne peut plus prendre la suite d'une native. `install` = jeu sans 68000,
-  `DDSOM_HYBRIDE=1` arrête les outils avec un message (`refuser_hybride`). La machine de référence (`install_reference`)
+  `DDSOM_HYBRIDE=1` arrête les outils avec un message (`refuse_hybrid`). La machine de référence (`install_reference`)
   garde son 68000 et n'a pas changé ; `DDSOM_CHECK` et `DDSOM_ADOPT_REGS` (original sur une copie) marchent toujours.
   `examples/cessions` et `reste68k` (68000 restant du mode hybride) n'ont plus d'objet.
 * **J1 dans le périmètre** : la mise à jour du monde et la fin de phase appellent directement `player::update::update_all`,
-  `player::overlays::update`, `combat::combat_update`, `rank::tick_68k`, `aides::game_over` ; la fin de la phase 12 est
-  commune au jeu et à la démonstration (`game::apres_le_monde`). Restent par adresse (corps privés d'autres modules) :
+  `player::overlays::update`, `combat::combat_update`, `rank::tick_68k`, `aids::game_over` ; la fin de la phase 12 est
+  commune au jeu et à la démonstration (`game::after_world`). Restent par adresse (corps privés d'autres modules) :
   jauge `0xb3e`, sprites `0x1de96`, caméras `0x33e20`, pop-ups `0x19e20`, script `0xf2e5c`, entrées `0x2aec`, et les
   quatre services du VBLANK (`0x80c`, `0x68c`, `0x143da`, `0x2dcf6`).
 
 **Sortie du `Cpu` (étape 3) : pas atteinte, ce qui bloque.** `Native::run` garde `(c, b)` et les contextes leur `c` :
 (1) le **PC** sert encore aux sauts d'une native à une autre au sein d'une tâche (`Sequence::jump`/`jump_to`/`tail`,
-~25 sites de `modes/`, `scene/`, `taches/` ; `taches::revenir` vers une `Suite::Adresse`, retour d'un `crate::call` ;
+~25 sites de `modes/`, `scene/`, `tasks/` ; `tasks::return_to_caller` vers une `Next::Address`, retour d'un `crate::call` ;
 `ai_aids::landing_by_kind`, `jmp (A1)`) et aux appels par adresse (`crate::call`, 929 `adr`, dont ~430 dans
 `families`) ; (2) les **registres** : 4 269 accès (`regs`) dont 2 195 dans `families`, 349 `modes`, 282 `scene`, 249
 `ai_aids`, 186 `player`, 172 `ai` ; les registres résiduels relus d'une routine à l'autre (bilans des lots C, B, S, A :
 boucle de dispatch A0/D7/D0/A1, `reinsert`, `random_68k`, `terrain_68k`, créateurs, boss 1 et 9...) et ceux que le
 noyau transmet aux tâches neuves et que les cessions rangent dans le contexte ; (3) la **pile 68000** des appels par
 adresse (sentinelle) et de l'interruption (FF0E66 et piles des tâches, ignorées par `validate`). Une structure
-`Registres` portée par les contextes n'a de sens qu'une fois (1) fait : elle remplacerait le banc `Cpu` à l'identique.
+`Regs` portée par les contextes n'a de sens qu'une fois (1) fait : elle remplacerait le banc `Cpu` à l'identique.
 
-Mesure (`tools/measure_refactor.py`, avant b30905d / après) : `pile` total 117 / 81 (`taches` 22 / 14, `kernel` 17 / 3,
-`sans68k` 10 / 3, `families` 18 / 6) ; natives déclarées 330 / 317 (sans compter les 46 + 10 natives de reprise
-générées) ; `regs` `kernel` 47 / 33, `sans68k` 9 / 3 ; `adr` total 943 / 929 (`game` 15 / 14 : les appels directs
+Mesure (`tools/measure_refactor.py`, avant b30905d / après) : `stack` total 117 / 81 (`tasks` 22 / 14, `kernel` 17 / 3,
+`no68k` 10 / 3, `families` 18 / 6) ; natives déclarées 330 / 317 (sans compter les 46 + 10 natives de reprise
+générées) ; `regs` `kernel` 47 / 33, `no68k` 9 / 3 ; `adr` total 943 / 929 (`game` 15 / 14 : les appels directs
 remplacent `call` mais le compte inclut les commentaires d'adresse) ; lignes 146 821 / 146 702. Écritures de `c.pc` :
-`kernel` 11 / 0, `sans68k` 2 / 0, `demarrage` 5 / 0, `vblank` 1 / 0, `families/mod.rs` 3 / 2 (repli hors jeu de
-`jsr_origine`), `taches` 2 / 2 (`revenir` vers une adresse ; `executer` pose l'adresse d'origine de l'étape :
+`kernel` 11 / 0, `no68k` 2 / 0, `startup` 5 / 0, `vblank` 1 / 0, `families/mod.rs` 3 / 2 (repli hors jeu de
+`jsr_origine`), `tasks` 2 / 2 (`return_to_caller` vers une adresse ; `execute` pose l'adresse d'origine de l'étape :
 un pas qui rendrait la main sans céder ni sauter s'arrêterait sur « pas de native »).
 
 ## 15. Lot IA : aides d'IA et derniers services
@@ -643,23 +643,23 @@ des événements (0x19ae6, 0x19b08, 0x19dce) et des palettes (0x1686, 0x3af8), p
 
 * **Cœurs.** Chaque aide d'IA est une fonction Rust sur l'objet (`ai::pick_target(b, o, Rule) -> Option<Obj>`,
   `target_by`, `random_player`, `initial_hp`, `set_immunities -> u16`, `hp_rank`, `decision_a/b -> bool`,
-  `pick_byte`, `target_in_front(b, o, Boite) -> DansBoite`, `facing_target`, `target_faces_me`, `back_to_target`,
+  `pick_byte`, `target_in_front(b, o, Hitbox) -> InHitbox`, `facing_target`, `target_faces_me`, `back_to_target`,
   `turn_decision -> Turn`, `moving_forward`, `keep_on_screen/keep_in_zone -> bool`, `turn_toward`, `drift_heading` ;
   `ai_aids::` points de marche, prises, tirages par tables, parades (`Parry`), débris, butins, éclair et secousse,
   `landing_routine`). La machine à registres `ai::Mach` (opérations à drapeaux exacts) et les ~60 natives des deux
   modules sont supprimées : plus aucun appel par adresse ne les vise (code-mort.md, lot IA). Autres cœurs :
-  `creators::set_14`, `set_15_b`, `in_right_half`, `chance_10_16`, `set_residu::attach_life_bar`,
-  `popups::effacer_tout`, `popups::animer`, `effects_creators::impact_spark`, `terrain::push_collides`,
+  `creators::set_14`, `set_15_b`, `in_right_half`, `chance_10_16`, `set_residue::attach_life_bar`,
+  `popups::clear_all`, `popups::animer`, `effects_creators::impact_spark`, `terrain::push_collides`,
   `camera_modes::shake::of_routine`, `camera_modes::update_camera_1/2` et `scroll::update_cameras` (appelables
   directement, encore sur le processeur : les caméras appellent des natives vidéo par adresse).
 * **Appelants.** La façade `enemy_lib` n'appelle plus que des cœurs ; ses doublons Rust du lot A (`outside`,
-  `facing_target`...) sont fondus avec eux. Familles (`eshl*`, `items*`, `effects*`, `petites`, `joueur/`), joueurs,
+  `facing_target`...) sont fondus avec eux. Familles (`eshl*`, `items*`, `effects*`, `small`, `player/`), joueurs,
   scènes, modes, combat : secousses par `start_shake`, zone et écran par `ai::keep_*`, animations de l'IA par
-  `enemy_lib::start/step`, événements par `evenements::enfiler_*`/`creer_popup`, palettes par `palette::full_brightness`
+  `enemy_lib::start/step`, événements par `events::enfiler_*`/`create_popup`, palettes par `palette::full_brightness`
   et `placement::load_effect_palette`, pools par `Pool::reset`.
 * **Preuve (J2).** Les appels par adresse ont d'abord été sondés (`ai::sonde`, diagnostic retiré depuis) : après
   chaque native, les registres qu'elle avait changés et ceux que l'appelant avait posés pour elle étaient
-  empoisonnés (`DDSOM_POISON=ia_<adresse>`, un registre à la fois : `ia_<adresse>.d2`), validations complètes puis
+  empoisonnés (`DDSOM_POISON=ia_<address>`, un registre à la fois : `ia_<address>.d2`), validations complètes puis
   bissections par étiquette et par site. Lecteurs trouvés, écrits en clair (glitches d'origine) : index de réaction
   des boss 7, 8, 19 et 3 (octet haut de D0 laissé par 0x10112, 0xb648, 0xfe5a), `+0x8e` de la harpie (D0 de 0xfe5a),
   D5 de la zone et du décor relu par le squelette (`zone_and_terrain -> bool`), côté de la boîte relu dans D0
@@ -686,122 +686,122 @@ des événements (0x19ae6, 0x19b08, 0x19dce) et des palettes (0x1686, 0x3af8), p
 But : lever, hors de `families/`, ce qui empêche le `Cpu` de quitter le chemin du jeu (§ 14, « Sortie du `Cpu` »).
 
 * **Le PC.** Plus aucune fonction du jeu n'écrit `c.pc`. `Sequence::jump`, `jump_to`, `tail` et `Cx::tail` sont
-  supprimés : les phases de la partie et de la démonstration sont appelées directement (`partie::gestionnaire`,
+  supprimés : les phases de la partie et de la démonstration sont appelées directement (`game::handler`,
   `select::phase_4`, `ending::phase_28`, `gameover::phase_20`...), un saut terminal vers une native connue passe
-  par `Sequence::sauter` (`crate::sauter` : la native s'exécute aussitôt, son `rts` revient à l'appel en cours), la
-  cession de la sortie de scène appelle `kernel::attendre`, les deux blocages définitifs (`bra.b *` du MEMORY CHECK
-  et de l'EEPROM) sont un point du noyau (`Point::Bloque`), et la fin d'étape du tableau des scores une étape
-  (`ecran_fixe::Etape::ApresEtape`). Les replis vers une adresse sans native (entrées de tables jamais produites)
-  sont des `unreachable!` (code-mort.md). `Suite` n'est plus convertible depuis une adresse ; `taches::executer`
-  ne pose plus de PC ; une tâche qui rendrait la main sans céder arrête le jeu (`Point::Tache` n'est plus qu'un état
+  par `Sequence::jump` (`crate::jump` : la native s'exécute aussitôt, son `rts` revient à l'appel en cours), la
+  cession de la sortie de scène appelle `kernel::wait`, les deux blocages définitifs (`bra.b *` du MEMORY CHECK
+  et de l'EEPROM) sont un point du noyau (`Point::Blocked`), et la fin d'étape du tableau des scores une étape
+  (`fixed_screen::Step::AfterStep`). Les replis vers une adresse sans native (entrées de tables jamais produites)
+  sont des `unreachable!` (code-mort.md). `Next` n'est plus convertible depuis une adresse ; `tasks::execute`
+  ne pose plus de PC ; une tâche qui rendrait la main sans céder arrête le jeu (`Point::Task` n'est plus qu'un état
   transitoire). Dans le jeu, **un appel par adresse n'écrit plus ni le PC ni la pile 68000** : `crate::call` et
-  `crate::appeler_attendu` exécutent la native aussitôt ; le retour d'un appel par adresse est une entrée de
-  `taches::table::Table::appels` (A7 descend de 4 comme si l'adresse de retour était empilée, sans écriture), et
+  `crate::call_expected` exécutent la native aussitôt ; le retour d'un appel par adresse est une entrée de
+  `tasks::table::Table::calls` (A7 descend de 4 comme si l'adresse de retour était empilée, sans écriture), et
   un retour sans appel en cours arrête le jeu. Restent : le chemin des outils (machine sans table des tâches) et
   les correctifs (`cps2::Patch`) de la machine de référence. Les natives partagées par plusieurs entrées (536
-  enveloppes son, services son) reçoivent leur adresse (`Corps::ProcesseurEn`) au lieu de lire le PC.
-* **Vidéo et entrées.** Cœurs Rust : `video::jauge`, `activer_couches` (0xbc6), `effacer_debut_couche1`
-  (0x3525c), `charger_grille(b, Grille::{Blocs4x4, Couche2, Couche3}, n, destination) -> FinDeGrille` (0x260c,
-  0x26d4, 0x2766), `sprites::construire(b, d4) -> Option<Restes>` (0x1de96), `sprites::vider_listes` (0x1de7c),
-  `inputs::lire_panneau` (0x80c), `inputs::recopier` (0x2aec), `sound::envoyer` (0x68c),
-  `credits::lire_monnayeurs` (0x143da, et la comptabilité `eeprom::compter_piece`, 0x2e448, sans `Cpu`),
+  enveloppes son, services son) reçoivent leur adresse (`Body::CpuIn`) au lieu de lire le PC.
+* **Vidéo et entrées.** Cœurs Rust : `video::gauge`, `turn_layers_on` (0xbc6), `clear_layer1_start`
+  (0x3525c), `load_grid(b, Grid::{Blocks4x4, Layer2, Layer3}, n, destination) -> GridEnd` (0x260c,
+  0x26d4, 0x2766), `sprites::build(b, d4) -> Option<Leftovers>` (0x1de96), `sprites::clear_lists` (0x1de7c),
+  `inputs::read_panel` (0x80c), `inputs::copy` (0x2aec), `sound::send` (0x68c),
+  `credits::read_coin_slots` (0x143da, et la comptabilité `eeprom::count_coin`, 0x2e448, sans `Cpu`),
   `eeprom::vblank` (0x2dcf6) ; `eeprom.rs` n'utilise plus le processeur que pour les registres de ses natives.
   Le VBLANK n'appelle plus que des cœurs (`vblank::vblank(b)`). `scroll::update_cameras(b)`,
-  `camera_modes::update_camera_1/2(b)`, `scroll::cameras_depart`, `cameras_retour` ne prennent plus de `Cpu` :
+  `camera_modes::update_camera_1/2(b)`, `scroll::cameras_start`, `cameras_return` ne prennent plus de `Cpu` :
   les scripts de caméra ont leur contexte (`camera_modes::Cam`, bus et caméra), les parallaxes et le défilement
   pas à pas sont des cœurs, 0xa8ae8 est `effects_creators::set_list`. La mise à jour du monde et la fin de la phase
   12 appellent directement jauge, caméras, sprites, entrées, pop-ups et script (`game.rs` : `adr` 11 → 2).
 * **Glitches d'origine trouvés (registres relus, écrits en clair).** D4 laissé par la recopie du décor des caméras
   (0x3f/0x40, 0x1f/0xe0) : relu par un gestionnaire d'objet (`boss13_dragon`, image 7241) — `update_cameras` le
-  rend (`[RestesD4; 2]`), `update_cameras_68k` le pose. D4 de la liste de sprites (attributs du dernier morceau,
-  relu par 0xad7b0) — `sprites::Restes::d4`. D2.w = 0x400 laissé par la jauge masquée (test de DSW), écrit par un
-  gestionnaire dans un champ d'objet (`long_nain_57_86`, image 13398, `ram ffd692`) — `video::jauge_68k`.
-* **Preuve.** Sonde générique `DDSOM_POISON=appel_<adresse>` dans `crate::call` (registres changés par l'appelé,
+  rend (`[D4Leftovers; 2]`), `update_cameras_68k` le pose. D4 de la liste de sprites (attributs du dernier morceau,
+  relu par 0xad7b0) — `sprites::Leftovers::d4`. D2.w = 0x400 laissé par la jauge masquée (test de DSW), écrit par un
+  gestionnaire dans un champ d'objet (`long_nain_57_86`, image 13398, `ram ffd692`) — `video::gauge_68k`.
+* **Preuve.** Sonde générique `DDSOM_POISON=call_<address>` dans `crate::call` (registres changés par l'appelé,
   inversés au retour, au site d'appel) et étiquettes des adaptateurs restreintes hors des familles
   (`alloc,!alloc@families/`...). Faux positifs écartés : enchaînement des blocs de tuiles (A1 = fin du bloc
   précédent, `modes/title.rs` : un argument, pas un reste), A1 des créateurs appelés par adresse
   (`effects_aids.rs`, `player/spawn.rs` : contrat de leur native).
 * **Adaptateurs `_68k` hors des familles (55 sites au départ).** Registres morts (sonde et étiquettes sur les 286
   scénarios), passés au cœur : allocations des modes, scènes, boutique, tableau des scores, crédits et phase 0 (16),
-  `rank::reset/lower/tick` et `charger_preset` (12), `lists::unlink_all` (3), `rng::seed` (3), pop-ups et
+  `rank::reset/lower/tick` et `load_current_preset` (12), `lists::unlink_all` (3), `rng::seed` (3), pop-ups et
   effacement de la couche 1 de la phase 12, A0 des caméras. Registres relus, gardés et documentés (glitches
-  d'origine) : copie des entrées 0x2aec (`inputs::recopier_68k`, D0-D4 relus : `long_elfe_objets`, image 13133),
+  d'origine) : copie des entrées 0x2aec (`inputs::copy_68k`, D0-D4 relus : `long_elfe_objets`, image 13133),
   pas d'animation des personnages (`step_keeping_regs`, D0.b relu : `long_3p_mortels`, image 22018), jauge (D2),
   sprites (D4), caméras (D4). Contrats de natives appelées par adresse (restent tant que leurs appelants le
   sont) : créateurs (`effects_aids.rs`, `player/spawn.rs` : A1 relu par `modes/title.rs`), terrain
-  (`terrain.rs`, `placement.rs`, `video.rs`), files d'événements (`evenements.rs`), adaptateurs des natives de ce
+  (`terrain.rs`, `placement.rs`, `video.rs`), files d'événements (`events.rs`), adaptateurs des natives de ce
   lot (`scroll`, `video`, `eeprom`, `sprites`, `inputs`, `popups`). Familles : 65 sites (liste dans le rapport du
   lot : `random_68k` 18, `push_68k` 14, `terrain_68k` 9, `alloc_68k` 5, `alloc_unchecked_68k` 4, `start_68k` 2,
   `reinsert_68k` 2, `in_front_68k` 2, `flash_68k` 2, et un site de `target_in_front_68k`, `start_by_character_68k`,
   `shock_68k`, `release_68k`, `regs_68k`, `in_arena_68k`, `box_around_68k`).
-* **Forme cible des natives.** `Native::run` est un `Corps` : `Processeur(fn(&mut Cpu, &mut Cps2Bus))`,
-  `ProcesseurEn(fn(&mut Cpu, &mut Cps2Bus, u32))` (corps partagé, reçoit son entrée) ou `Memoire(fn(&mut
-  Cps2Bus))` (sans registre ; le `rts` est fait pour lui, `Native::executer`). Converties en `Memoire` : 0x1de7c,
-  0xc58, 0x143da, 0xf2e56, 0xf7ee0, 0xe03e4. Bilan : 956 `Processeur`, 532 `ProcesseurEn`, 6 `Memoire`.
+* **Forme cible des natives.** `Native::run` est un `Body` : `Processeur(fn(&mut Cpu, &mut Cps2Bus))`,
+  `CpuIn(fn(&mut Cpu, &mut Cps2Bus, u32))` (corps partagé, reçoit son entrée) ou `Memoire(fn(&mut
+  Cps2Bus))` (without register ; le `rts` est done pour lui, `Native::executer`). Converties en `Memoire` : 0x1de7c,
+  0xc58, 0x143da, 0xf2e56, 0xf7ee0, 0xe03e4. Bilan : 956 `Processeur`, 532 `CpuIn`, 6 `Memory`.
 * **Ce qui bloque encore le retrait du `Cpu`** (mesure `tools/measure_refactor.py` après le lot : `regs` 3 676, `adr`
-  749, `pile` 80). (1) Les **appels par adresse** : 749 `adr`, dont 301 dans `families`, 154 `modes`, 169 `scene`,
-  28 `tache_credits` ; environ 490 `call`/`x.call` hors des familles (`modes/ending` 56, `select` 46, `scene/entry`
-  44, `title` 41, `tache_credits` 28, `scene/exit` 28, `demo` 28, `transition` 38...) : leurs cibles sont des natives
-  `(c, b)` dont le contrat de registres est à prouver une par une (la sonde `appel_<adresse>` le fait). (2) Les
-  **registres** : 3 676 `regs`, dont 2 077 `families`, 348 `modes`, 275 `scene`, 56 `taches`, 53 `video`, 38
+  749, `stack` 80). (1) Les **appels par adresse** : 749 `adr`, dont 301 dans `families`, 154 `modes`, 169 `scene`,
+  28 `credits_task` ; environ 490 `call`/`x.call` hors des familles (`modes/ending` 56, `select` 46, `scene/entry`
+  44, `title` 41, `credits_task` 28, `scene/exit` 28, `demo` 28, `transition` 38...) : leurs cibles sont des natives
+  `(c, b)` dont le contrat de registres est à prouver une par une (la sonde `appel_<address>` le fait). (2) Les
+  **registres** : 3 676 `regs`, dont 2 077 `families`, 348 `modes`, 275 `scene`, 56 `tasks`, 53 `video`, 38
   `scroll` (natives des caméras et parallaxes appelées par adresse), et les glitches relus listés plus haut, qui
-  devront devenir des champs nommés d'un état (`Registres`) quand le banc `Cpu` disparaîtra. (3) La **pile** :
-  80 `pile` (cadres des tâches et appels attendus, `Table::appels`, contexte des cessions, prise du VBLANK qui
+  devront devenir des champs nommés d'un état (`Regs`) quand le banc `Cpu` disparaîtra. (3) La **pile** :
+  80 `stack` (cadres des tâches et appels attendus, `Table::calls`, contexte des cessions, prise du VBLANK qui
   empile PC et SR) : plus aucune écriture de la pile 68000 par un appel du jeu, mais A7 sert encore de clé aux
-  retours. (4) Les **natives** : 956 corps `Processeur` et 532 `ProcesseurEn` (enveloppes et services son, qui lisent
-  A0, A1, D4 ou D0/D1) ; un corps `Memoire` n'est possible que pour une routine qui ne lit ni ne laisse aucun registre.
+  retours. (4) Les **natives** : 956 corps `Processeur` et 532 `CpuIn` (enveloppes et services son, qui lisent
+  A0, A1, D4 ou D0/D1) ; un corps `Memory` n'est possible que pour une routine qui ne lit ni ne laisse aucun registre.
 
 ## 17. Lot « sortie du Cpu », partie 2 : les écrans
 
-But : plus d'appel par adresse ni de registre miroir dans les écrans (`modes/`, `scene/`, `tache_credits.rs`,
-`ecran_credits.rs`, `hud/`, `service/`), contrats prouvés par poison, état nommé.
+But : plus d'appel par adresse ni de registre miroir dans les écrans (`modes/`, `scene/`, `credits_task.rs`,
+`credits_screen.rs`, `hud/`, `service/`), contrats prouvés par poison, état nommé.
 
 * **Appels par adresse.** Les quelque 490 `call`/`x.call` des écrans sont des appels Rust : cœurs nouveaux ou rendus
   publics dans les services (`video::{verrouiller_compteurs, vider_objets, ecran_noir, effacer_couche(Couche),
   desactiver_couches, copier_ecrans_fixes}`, `palette::{charger_palettes_de_scene, charger_ensemble, charger_page,
   charger_tout}`, `eeprom::{compter_partie, compter_depart, stat_personnage_choisi, stat_duree_de_partie}`,
-  `credits::{lire_departs, ecrire_chiffre, initialiser}`, `inputs::entrees_du_joueur`, `player::init::{initialiser,
+  `credits::{read_starts, write_digit, initialize}`, `inputs::player_inputs`, `player::init::{initialiser,
   rejoindre, effacer_joueurs}`, `config::initialiser`, `sound::emettre`), créateurs des familles en fonctions pures
-  (`creators::set_13_pur`... `-> Result<Obj, Obj>`, l'`Err` est l'A1 laissé par un échec : conversion mécanique
+  (`creators::set_13_pure`... `-> Result<Obj, Obj>`, l'`Err` est l'A1 laissé par un échec : conversion mécanique
   seulement). `adr` : `scene` 169 → 1 (`script.rs` : appels `CALL` des scripts, lus dans la ROM), `modes` 154 → 0,
-  `tache_credits` 28 → 0, `hud` 8 → 0, `service` 9 → 0, `ecran_credits` 3 → 0, `taches` 8 → 0. `Ctx::call`,
+  `credits_task` 28 → 0, `hud` 8 → 0, `service` 9 → 0, `credits_screen` 3 → 0, `tasks` 8 → 0. `Ctx::call`,
   `Block::call_d0/ok` et les natives qui ne servaient qu'aux appels par adresse (textes de l'écran des crédits,
   boutons de départ, verrous, chiffre des crédits) sont retirés.
 * **Registres.** Les miroirs (`c.d[0] = ...` pour un appelé qui n'en lit rien, A0 rechargé après chaque appel) sont
-  retirés ; le contexte d'une tâche relu après une cession devient un champ nommé de son `Etape`
-  (`tache_credits::Depart {monnayeur, joueur, enregistrement, cout}`, D2/D3/A3 de l'original ;
-  `characters::Joueur {enregistrement, octet}`, A6/D1). `regs` : `scene` 275 → 67, `modes` 348 → 33,
-  `tache_credits` 42 → 8, `ecran_credits` 30 → 0, `hud` 6 → 3, `service` 10 → 3, `taches` 56 → 43.
-* **État nommé.** `scene::fondu` (pages, pas, délai et les six tâches de fondu : `MONTEE`, `DESCENTE`,
-  `DESCENTE_PAS`, `MONTEE_PAS`, `VERS_LE_BLANC`, `DEPUIS_LE_BLANC`) remplace les copies par écran (`FADE_*`) ;
-  `ecran_credits` en fonctions pures ; `taches::invite::Impression`.
-* **Natives.** `Memoire` : `video::copier_ecrans_fixes`, `hud::FORGET_DISPLAYED` (0x1507a), `RECORDER_STOP`
+  retirés ; le contexte d'une tâche relu après une cession devient un champ nommé de son `Step`
+  (`credits_task::GameStart {coin_slot, player, record, cost}`, D2/D3/A3 de l'original ;
+  `characters::Player {record, byte}`, A6/D1). `regs` : `scene` 275 → 67, `modes` 348 → 33,
+  `credits_task` 42 → 8, `credits_screen` 30 → 0, `hud` 6 → 3, `service` 10 → 3, `tasks` 56 → 43.
+* **État nommé.** `scene::fading` (pages, pas, délai et les six tâches de fondu : `RISE`, `DESCENT`,
+  `DESCENT_STEP`, `RISE_STEP`, `TO_WHITE`, `FROM_WHITE`) remplace les copies par écran (`FADE_*`) ;
+  `credits_screen` en fonctions pures ; `tasks::prompt::Print`.
+* **Natives.** `Memory` : `video::copy_fixed_screens`, `hud::FORGET_DISPLAYED` (0x1507a), `RECORDER_STOP`
   (0xe05d6), remises à zéro des blocs (0xf3130, 0xf7916, 0xfc562) et effacement du texte (0xf683c), qui n'ont plus
-  d'appelant par adresse. Bilan du lot (après fusion de main 044c685) : 944 `Processeur`, 532 `ProcesseurEn`, 14 `Memoire` (6 avant le
+  d'appelant par adresse. Bilan du lot (après fusion de main 044c685) : 944 `Processeur`, 532 `CpuIn`, 14 `Memory` (6 avant le
   lot) ; total `regs` 3 676 → 3 045, `adr` 749 → 368 (299 dans `families`). Après fusion de la partie 3 (a911566) :
-  862 `Processeur`, 532 `ProcesseurEn`, 14 `Memoire`, 82 `Gestionnaire` ; `regs` 2 811, `adr` 163.
+  862 `Processeur`, 532 `CpuIn`, 14 `Memory`, 82 `Handler` ; `regs` 2 811, `adr` 163.
 * **Glitches d'origine (registres relus, écrits en clair).** A1 laissé par une allocation qui échoue (créateurs,
   messages, objets système : l'échec n'est pas testé) ; D0 du chargement des palettes (premier long de la dernière
   page) relu par les compteurs de répétition du menu des réglages ; D1.w = -1 de l'effacement du texte (0xf683c) relu
   comme réglage de l'effet du compte à rebours du bonus ; A0 du gestionnaire de phase (`jsr (A0)`) relu par l'entrée
-  de scène ; A0 laissé par la boucle de partie lié aux effets d'ouverture (`effets_13`) et à l'objet de la finale ;
+  de scène ; A0 laissé par la boucle de partie lié aux effets d'ouverture (`effects_13`) et à l'objet de la finale ;
   A0 du déliement des listes à travers la cession de l'écran noir ; D0 du rendu qui fixe la durée d'une cession du
   générique ; reprise de la transition 32 qui rouvre le message 1 (D0 de l'attente) ; octet haut de D0.w de la
   statistique du personnage choisi ; contexte des cessions (D2/D3/A3 du départ d'un joueur, A6/D1 de l'intermède
   des personnages) ; A0 sur le bloc de la sortie de scène gardé par les cessions de la boutique et de l'intermède
-  des personnages (constante `BLOC`), et relu par l'aiguillage en fin d'état partagé (octet `+2` du bloc désigné par
-  A0 : `x.c.a[0] = BLOC` posé en clair au retour de la boutique).
-* **Preuve.** Sondes `cession`, `retour` et `rendu` (guide, « Sondes des appels, des cessions et des retours »),
-  validation empoisonnée du code d'origine avec `tout@` les fichiers du lot et les cessions/retours de ses tâches,
-  bissection de chaque échec (`tools/bisect_poison.py`), puis la même liste sur le code converti (`rendu` compris) : 46 échecs au premier passage (A0 du bloc relu après
+  des personnages (constante `BLOCK`), et relu par l'aiguillage en fin d'état partagé (octet `+2` du bloc désigné par
+  A0 : `x.c.a[0] = BLOCK` posé en clair au retour de la boutique).
+* **Preuve.** Sondes `cession`, `ret` et `rendering` (guide, « Sondes des appels, des cessions et des retours »),
+  validation empoisonnée du code d'origine avec `all@` les fichiers du lot et les cessions/retours de ses tâches,
+  bissection de chaque échec (`tools/bisect_poison.py`), puis la même liste sur le code converti (`rendering` compris) : 46 échecs au premier passage (A0 du bloc relu après
   les cessions de la boutique et de l'intermède, contexte D1/A6 déjà en champs), 0 après correction, une seule
-  lecture gardée (`retour@Shop(LeaveWaited)#a0`, A0 vers l'aiguillage). Les restes de l'effacement de la couche 1
+  lecture gardée (`ret@Shop(LeaveWaited)#a0`, A0 vers l'aiguillage). Les restes de l'effacement de la couche 1
   (0x3525c) avant une mise à jour du monde, notés « glitch possible », sont morts (rendu empoisonné VALIDE) : appel du
   cœur.
 * **Ce qui reste.** Les appels `CALL` des scripts d'apparition (adresse lue dans la ROM) ; les natives des phases et
   des écrans gardent un corps `Processeur` tant que le noyau leur passe la main par adresse ; des adaptateurs `_68k`
-  dont les restes sont relus (glitches d'origine) : listes de sprites (`construire_68k`, D4, 17 sites), caméras
-  (`update_cameras_68k`, D4, 3), copie des entrées (`recopier_68k`, D0-D4, 2), déliement des listes de l'écran
+  dont les restes sont relus (glitches d'origine) : listes de sprites (`build_68k`, D4, 17 sites), caméras
+  (`update_cameras_68k`, D4, 3), copie des entrées (`copy_68k`, D0-D4, 2), déliement des listes de l'écran
   noir (A0) ; le passage d'A0 d'un état partagé à l'aiguillage de la sortie de scène (`a0_clobbered`).
 
 ## 18. Lot « sortie du Cpu », partie 3 : familles d'objets
@@ -809,10 +809,10 @@ But : plus d'appel par adresse ni de registre miroir dans les écrans (`modes/`,
 Périmètre : `families/` (et les créateurs appelés par `player/spawn.rs`, `effects_aids.rs`). But : que les gestionnaires
 et les créateurs ne passent plus par le banc de registres du `Cpu`.
 
-* **Sonde de sortie des gestionnaires.** `DDSOM_POISON=sortie` (`diag::sonder_sortie`, appelée par la boucle
+* **Sonde de sortie des gestionnaires.** `DDSOM_POISON=exit` (`diag::probe_exit`, appelée par la boucle
   d'aiguillage `dispatch.rs`) inverse au retour de chaque gestionnaire les registres qu'il a changés (sauf A0 et D7) ;
-  `sortie.d4@ba310` vise un registre d'un gestionnaire, `!…` en exclut (la même syntaxe vaut pour `appel_<adresse>`,
-  et `appel@families/` vise tous les appels par adresse d'un dossier). Bissection automatique (`tools/regs_bisect.py` : classe, gestionnaire,
+  `exit.d4@ba310` vise un registre d'un gestionnaire, `!…` en exclut (la même syntaxe vaut pour `appel_<address>`,
+  et `call@families/` vise tous les appels par adresse d'un dossier). Bissection automatique (`tools/regs_bisect.py` : classe, gestionnaire,
   registre) sur chaque scénario qui diverge. Résultat sur les 286 scénarios, complété sur les 296 : **les registres que laisse un
   gestionnaire ne sont relus par personne, sauf pour une douzaine de gestionnaires** (tableau ci-dessous). Tout ce que
   les autres écrivent dans les registres (copies des registres de l'original, restes de `reinsert`, de la collision
@@ -832,46 +832,46 @@ et les créateurs ne passent plus par le banc de registres du `Cpu`.
   Les dix scénarios longs du lot « sorts » ont montré, après coup, deux de ces lecteurs (PEFF 41, éclat de gel : D2 et
   d'autres registres ensemble) : la preuve ne vaut que pour les chemins joués. Les gestionnaires de ce tableau restent sur
   le processeur.
-* **Restes nommés de la boucle.** Ces registres deviennent les champs de `dispatch::Restes` (`d4`, `d5`), passés au
-  gestionnaire converti dans `dispatch::Aiguillage` (objet A0, compteur D7.w, restes) et rendus au processeur après lui
+* **Restes nommés de la boucle.** Ces registres deviennent les champs de `dispatch::Leftovers` (`d4`, `d5`), passés au
+  gestionnaire converti dans `dispatch::Dispatch` (objet A0, compteur D7.w, restes) et rendus au processeur après lui
   (les routines encore sur le processeur, liste des sprites, caméras, gestionnaires non convertis, les lisent et les
-  écrivent toujours dans le banc). SET 0 et le radeau écrivent `restes.d4` ; la zone de jeu et la collision avec le
-  décor écrivent `restes.d5` (`Cx::keep_in_zone`, `keep_on_screen`, `push_terrain`).
+  écrivent toujours dans le banc). SET 0 et le radeau écrivent `leftovers.d4` ; la zone de jeu et la collision avec le
+  décor écrivent `leftovers.d5` (`Cx::keep_in_zone`, `keep_on_screen`, `push_terrain`).
 * **Forme des gestionnaires.** `Cx<'a, R>` est générique sur le banc de registres : `&mut Cpu` (par défaut, inchangé)
-  ou `&mut Aiguillage` (`Gx`, sans registres : `x.c.d[0]` n'existe pas, le compilateur le garantit). Le trait
-  `cx::Banc` porte ce qui dépend du banc : la remise en liste (adaptateur `reinsert_68k` sur le processeur, cœur sans
+  ou `&mut Dispatch` (`Gx`, sans registres : `x.c.d[0]` n'existe pas, le compilateur le garantit). Le trait
+  `cx::Bench` porte ce qui dépend du banc : la remise en liste (adaptateur `reinsert_68k` sur le processeur, cœur sans
   registres) et l'accès au reste D5. `Machine` n'exige plus que le bus (`Processeur` donne `machine()` aux contextes
-  qui ont un `Cpu`). Un gestionnaire `Gx` est déclaré `0x… "nom" #[sans] chemin` dans `handlers!` : sa native est
-  `Corps::Gestionnaire(fn(&mut Cps2Bus, &mut Aiguillage))`.
+  qui ont un `Cpu`). Un gestionnaire `Gx` est déclaré `0x… "name" #[without] chemin` dans `handlers!` : sa native est
+  `Body::Handler(fn(&mut Cps2Bus, &mut Dispatch))`.
 * **Généralisation par point fixe** (`tools/regs_generic.py`) : toutes les fonctions
-  `fn f(x: &mut Cx, …)` sont rendues génériques (`<R: Banc>`), puis celles où le compilateur trouve une erreur reprennent
-  leur signature, jusqu'à ce que tout compile ; un contrôle par entrée (`tools/regs_without.py`) marque `#[sans]` les gestionnaires
+  `fn f(x: &mut Cx, …)` sont rendues génériques (`<R: Bench>`), puis celles où le compilateur trouve une erreur reprennent
+  leur signature, jusqu'à ce que tout compile ; un contrôle par entrée (`tools/regs_without.py`) marque `#[without]` les gestionnaires
   dont la fonction est générique. Résultat : **1 870 fonctions des familles prouvées sans registres** (2 796 restent
   sur le processeur, dont 728 l'utilisent directement : 1 212 accès à Dn, 304 à An, 76 appels par adresse), **82
-  gestionnaires `Corps::Gestionnaire`** (SET, SOBJ, EFFCT, ESHL…).
+  gestionnaires `Body::Handler`** (SET, SOBJ, EFFCT, ESHL…).
 * **Adaptateurs `_68k` (65 au départ).** Retirés : les 18 `random_68k` (valeur rendue ; `rand_and_b` garde l'octet
   haut du tirage dans D0, relu par l'éclat de gel), 10 des 14 `push_68k` et 6 des 9 `terrain_68k`, dans les gestionnaires dont
-  la sortie n'est pas relue (`push_terrain`, `terrain_of`), `alloc*_68k` des créateurs (portés par `Registres`),
+  la sortie n'est pas relue (`push_terrain`, `terrain_of`), `alloc*_68k` des créateurs (portés par `Regs`),
   `start_68k`, `start_by_character_68k`, `release_68k`, `regs_68k` (boucle d'éclats de caméra), `flash_68k`
   (`palette::set_flash_color`), `in_arena_68k` (le `bhi` de `reactions.rs` est `cull::beyond_arena`). Restent (22 sites)
-  : les implémentations `Registres` et `Banc` du processeur (natives et gestionnaires non convertis), `terrain_68k` de
+  : les implémentations `Regs` et `Bench` du processeur (natives et gestionnaires non convertis), `terrain_68k` de
   PSHL 2 et de l'éclat de gel (D2, D3 relus), la façade `enemy_lib` (tests de boîte, collision, choc : D1-D3, A1 relus
   par `flash_and_shake` et les ennemis), `items.rs` (contexte `families::Ctx`), les créateurs de paires d'ennemis.
 * **Appels par adresse (301 → 97 `adr`).** Sons (`convert_sounds.py` puis à la main : 70 sites), éclairs de palette
-  (`palette::set_flash_color`, `flash`, `restore_flash`), directions (`aides::direction_from`), créateurs d'effets
-  (cœurs `effects_creators::scenery_*`, `spark_at`, `spell*`, `shouts`… sur `Pur`), créateurs ESHL (`eshl_creators`
-  réécrit sur `Registres` : 33 créateurs, cœur sans registres et native ; tirs lancés passés en `fn(&mut Cps2Bus, Obj)`),
+  (`palette::set_flash_color`, `flash`, `restore_flash`), directions (`aids::direction_from`), créateurs d'effets
+  (cœurs `effects_creators::scenery_*`, `spark_at`, `spell*`, `shouts`… sur `Pure`), créateurs ESHL (`eshl_creators`
+  réécrit sur `Regs` : 33 créateurs, cœur sans registres et native ; tirs lancés passés en `fn(&mut Cps2Bus, Obj)`),
   SET de scène (bulles de dialogue), écrans de fin, vote, SET 0xa, tirs 0x17/0x18, effets 5, tir d'arme, chocs.
   Restent : tables par type de la ROM (réactions, routines de chute, de mort, de vague : 42 sites), routines de scène
-  (`scene/`, autre lot), palettes par page, et une vingtaine de créateurs de `creators.rs`/`petites.rs` (paires
+  (`scene/`, autre lot), palettes par page, et une vingtaine de créateurs de `creators.rs`/`small.rs` (paires
   d'ennemis, SOBJ, pierres, éclair du joueur).
-* **Glitches d'origine écrits en clair** : D4 du radeau, D5 de la rangée d'éclats (`row_1a(…, sorte, d5)`), réglage de
+* **Glitches d'origine écrits en clair** : D4 du radeau, D5 de la rangée d'éclats (`row_1a(…, kind, d5)`), réglage de
   0xb1a7a pris dans D1 laissé (`set_c_finale`), variante des débris prise dans le D1 laissé par le choc 0xb10c8
   (`eshl_b`), D0 = 0 de 0x54872 qui empêche de retenir le tir créé (`eshl_c`), A1 « reste » de l'allocation où
   0x9dda8 / 0x9ed78 écrivent l'orientation quand le pool est plein (`eshl_creators::copy_flip`).
 * **Factorisation** : le décor repris (0xcc0ca) avait quatre copies (`creators`, porte de zone annexe SET 7 à l'aller
-  et au retour, passage EFFCT 14) : `creators::reprendre_decor` ; tirs 0x18 (trois natives, une fonction) ; éclairs de
-  couleur (`petites` sur `palette`).
+  et au retour, passage EFFCT 14) : `creators::resume_scenery` ; tirs 0x18 (trois natives, une fonction) ; éclairs de
+  couleur (`small` sur `palette`).
 * **Écart trouvé par `fuzz_couv`** (ESHL, zone C08, avant/après sur les mêmes états) : la remise en liste en clair
   (`SortedList::reinsert` : plan puis application) ne refaisait pas les écritures de 0x1ee1a dans le même ordre ; sur une
   liste dont des liens se recouvrent, la mémoire différait (ESHL 44). Le cœur est maintenant la transcription exacte de
@@ -879,28 +879,28 @@ et les créateurs ne passent plus par le banc de registres du `Cpu`.
 
 **Ce qu'il faut encore pour que `m68k::Cpu` disparaisse du jeu.**
 1. *Registres portés.* Familles : 2 796 fonctions sur le processeur, dont 728 l'utilisent directement (`boss_1`,
-   `boss_9`, `boss_11/chain`, `reactions`, `set_b`, `effects_c`, `joueur/peff_*`, `enemy_lib`, `enemy_common`…) ; ce
-   sont presque toujours des copies de registres que rien ne relit hors du gestionnaire (sonde `sortie`) : à remplacer
+   `boss_9`, `boss_11/chain`, `reactions`, `set_b`, `effects_c`, `player/peff_*`, `enemy_lib`, `enemy_common`…) ; ce
+   sont presque toujours des copies de registres que rien ne relit hors du gestionnaire (sonde `exit`) : à remplacer
    par des variables locales, fonction par fonction, en relançant `tools/regs_generic.py` et `tools/regs_without.py` (chaque fonction convertie
    en libère d'autres). Les flux réels sont connus : restes de la boucle (tableau ci-dessus : D2, D3 à ajouter à
-   `Restes`, avec les valeurs que laissent la collision et les tests de boîte), et à l'intérieur d'un gestionnaire les
+   `Leftovers`, avec les valeurs que laissent la collision et les tests de boîte), et à l'intérieur d'un gestionnaire les
    registres d'entrée des tables par type (D0 = index, A1 = routine). Hors familles : `modes/`, `scene/` (autre lot),
-   `player/` (189), `palette` (86), `video` (53), `scroll` (38), `evenements` (35), `aides` (30), `tache_credits`,
+   `player/` (189), `palette` (86), `video` (53), `scroll` (38), `events` (35), `aids` (30), `credits_task`,
    `credits`, `config`, `kernel` (33).
 2. *Appels par adresse.* Familles : 97 `adr` (tables par type, scène, palettes par page, créateurs restants) ; il faut
-   une table Rust (adresse → fonction) pour les tables par type de la ROM, comme `boxes::effet_special`.
-3. *La pile A7 comme clé des retours.* `taches::table::Table::appels` et les cadres (`Cadre::pile`) identifient un retour
+   une table Rust (adresse → fonction) pour les tables par type de la ROM, comme `boxes::effect_special`.
+3. *La pile A7 comme clé des retours.* `tasks::table::Table::calls` et les cadres (`Frame::stack`) identifient un retour
    par la valeur d'A7 ; `crate::call` décrémente A7. Sans `Cpu`, il faut une profondeur d'appel portée par la table des
    tâches (compteur par tâche) à la place d'A7, et le contexte d'une tâche (ses registres sauvés à la cession) réduit à
    ses restes nommés.
 4. *Prise du VBLANK.* `vblank::interruption` empile PC et SR sur la pile de la tâche interrompue (et le noyau les
    reprend) : à remplacer par un état du noyau (« interrompu au point P ») sans pile 68000, ce qui suppose 3.
 5. *Restes des routines hors familles.* La liste des sprites (D4), les caméras (D4), la jauge (D2), la copie des
-   entrées (D0-D4) écrivent encore leurs restes dans le banc : quand le banc disparaît, `dispatch::Restes` devient un
+   entrées (D0-D4) écrivent encore leurs restes dans le banc : quand le banc disparaît, `dispatch::Leftovers` devient un
    état de la partie (dans la table des tâches) que ces routines et les gestionnaires lisent et écrivent par leur nom.
 
 Mesure (`tools/measure_refactor.py`, avant 1ead669 / après) : `families` regs 2 079 / 1 841, adr 301 / 97, drap 83 / 64 ;
-total regs 3 686 / 3 455, adr 749 / 545. Natives : 82 `Corps::Gestionnaire`.
+total regs 3 686 / 3 455, adr 749 / 545. Natives : 82 `Body::Handler`.
 
 ## Avancement
 
@@ -914,16 +914,16 @@ total regs 3 686 / 3 455, adr 749 / 545. Natives : 82 `Corps::Gestionnaire`.
 | Lot 0b : API du moteur d'objets, appelants convertis (adaptateurs) | f60da0a | complète, 269/269 sans 68000 |
 | Lot 0b : fusion du lot E, méthodes au cœur après `DDSOM_POISON`, documentation | voir `git log` | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`) ; empoisonnée : lecteurs isolés (guide) |
 | Lot D : joueurs et monde (accesseurs, appels Rust directs, poison, trous réécrits) | voir `git log` (wt-joueur) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`), JOBS=8 ; poison du lot sur 90 scénarios ; fuzz_player des dix routines ajoutées |
-| Lot C : fondu des portes en sous-programme de tâche, J1 dans le lot, registres morts des gestionnaires sans son | e3a49b7 (wt-decors) | complète, 269/269 sans 68000 (30 min 49 s, 8 tâches) et 269/269 depuis les assets (`DDSOM_ASSETS`) ; `fuzz_porte` (portes 7 et 29), `fuzz boutique`, `fuzz petites` sans écart |
-| Lot S : services communs sans registres (sauvegarde fantôme du son, cœurs son/palette/texte/terrain/aides/événements, appelants hors lots A-B) | voir `git log` (wt-services) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`), JOBS=8 ; `fuzz son`, `fuzz video`, `fuzz u1`, `fuzz_monde ia_` |
-| Lot B : créateurs en fonctions Rust, appels directs, replis, registres prouvés morts, étape du feu d'artifice | voir `git log` (wt-effets) | complète, 270/270 sans 68000 et 270/270 depuis les assets ; `DDSOM_POISON=effets` et `restes` 270/270 |
+| Lot C : fondu des portes en sous-programme de tâche, J1 dans le lot, registres morts des gestionnaires sans son | e3a49b7 (wt-decors) | complète, 269/269 sans 68000 (30 min 49 s, 8 tâches) et 269/269 depuis les assets (`DDSOM_ASSETS`) ; `fuzz_porte` (portes 7 et 29), `fuzz boutique`, `fuzz small` sans écart |
+| Lot S : services communs sans registres (sauvegarde fantôme du son, cœurs son/palette/texte/terrain/aides/événements, appelants hors lots A-B) | voir `git log` (wt-services) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`), JOBS=8 ; `fuzz sound`, `fuzz video`, `fuzz u1`, `fuzz_monde ia_` |
+| Lot B : créateurs en fonctions Rust, appels directs, replis, registres prouvés morts, étape du feu d'artifice | voir `git log` (wt-effets) | complète, 270/270 sans 68000 et 270/270 depuis les assets ; `DDSOM_POISON=effects` et `leftovers` 270/270 |
 | Lot A : ennemis et boss (façade `enemy_lib`, noms, variables typées, natives du lot en Rust, routines sans native, registres résiduels prouvés par poison) | voir `git log` (wt-boss) | complète après fusion de main (lots S, B, 9b27479), 272/272 sans 68000 et 272/272 depuis les assets (`DDSOM_ASSETS`, assets réextraits : `native_zones.txt` de main), JOBS=8 ; poison par site et bissections (boss/, enemy/, cov) |
 | Lot « noyau final » : J3 achevé (appels en cours en étapes, appel attendu, cession notée au lieu de `Unwound`), ordonnanceur, démarrage et VBLANK en machine à états Rust, mode hybride retiré, appels directs de la fin de phase | voir `git log` (wt-noyau) | complète après fusion de main (f8f67af), 272/272 sans 68000 (14 min 55 s, 8 tâches) et 272/272 (10 min 53 s) depuis les assets (`DDSOM_ASSETS`, `data` réextrait par l'`extract` de main : `reste.json`) |
 | Lot IA : cœurs des aides d'IA et services restants, natives retirées, glitches de registres en clair, fuzz_ia | voir `git log` (wt-ia) | complète, 272/272 puis, fusionné avec le lot « trous », 286/286 (DDSOM_LONG=1) sans 68000 et depuis les assets (`trous_assets`), JOBS=8 ; poison par adresse et par registre (sondes), `fuzz_ia` 0 écart |
-| Lot « sortie du Cpu », partie 2 : écrans sans appel par adresse ni registre miroir, contexte des tâches en champs d'étape, `scene::fondu`, sondes `cession`/`retour`/`rendu` | voir `git log` (wt-ecrans2) | complète après fusion de main a911566 : 296/296 (DDSOM_LONG=1) sans 68000 et 296/296 depuis les assets (`sorts_assets`), JOBS=8 ; empoisonnée 296/296 après cette fusion aussi. Avant, après fusion de main (044c685), 296/296 (DDSOM_LONG=1) sans 68000 et 296/296 depuis les assets (`sorts_assets`), JOBS=8 ; empoisonnée (`tout@` les fichiers du lot, cessions et retours de ses tâches, une lecture gardée) 296/296. Étape suivante : prouver le reste des `_68k` des écrans (`construire_68k`, `update_cameras_68k`) avec la sonde `sortie` et `tools/regs_*.py` |
-| Sortie du Cpu, partie 3 : familles (sonde de sortie des gestionnaires, `Cx<R>`/`Banc`/`Restes`, 1 870 fonctions génériques, 82 gestionnaires `Corps::Gestionnaire`, créateurs ESHL et d'effets en Rust, `random_68k` retiré, remise en liste exacte) | voir `git log` (wt-familles) | complète après fusion de main (044c685) : 296/296 sans 68000 et 296/296 depuis les assets (`sorts_assets`), JOBS=7/6 ; sonde `sortie` 285/286 puis exclusions bissectées ; `fuzz_couv` C08, C10, C0e, C14 avant/après : aucun écart nouveau |
-| Sortie du Cpu, partie 5 : registres des familles en variables locales (wt-locales) — EN COURS (dernier état validé, fusion de main b6ef83e comprise) | 0e2ccf8 (étape 1), 1a3aff7 (étape 2), e4a30ac, 169e328, 4eaba13, fusion b6ef83e (validés 296/296 dans les deux modes) | **Suite (wt-familles2, depuis 82f6d91)** : toutes les familles d'ennemis sont en gestionnaires `#[sans]` (`lecteurs.py --famille enemy` : 0) : squelette (1), trog (2), gargouille (8), golem (11 ; glitch d'origine : boutons relus dans le D0 que 0x1a56 écrase par `+0x32`, drapeau « a bougé » en D2), bête de l'ombre (19 ; Z laissé par 0x1a32 après l'orphelinat), scarabée (9 ; effet d'attaque testé par la valeur rendue et non par une retenue jamais posée), scorpion (10), harpie (21 ; créateurs 0xa036e/0xa0566 en cœurs sur `Registres`), Riyakaa (16), tentacule (7 ; tir 0x9ef20 en cœur), doubles (22-24, 26 ; réaction du maître par `enemy_common::run_reaction`), bras du guerrier (25 ; étincelles sur `lib::shock`, A1 en scène 41 = l'hôte). Boss `#[sans]` : 0, 1, 2/22, 4, 6, 7, 10, 13, 16, 17, 18, 21 (réactions communes par `run_reaction`, créateurs 0x57c8c/0x5f764 en cœurs, D2/D5 des boucles `dbf` laissés en restes ; `boss_common::addq8/sub8/sub16` n'écrivent plus SR). EFFCT `effct_double_b` (0xb7248). Validé 296/296 dans les deux modes (DDSOM_LONG=1) : a11f35e, 8505fff, ef8fe90 (fusion de main 0e04e48), cf7baf5, c5734b0. `fuzz_couv` C02/C04 (fuzz.sh) contre main 82f6d91 : aucune différence. **Reste** : boss 3 (forme du corps, A1/D6 de 0x81aa4), 5 (A1 hérité de l'image précédente en saisie, sous-état 0xc : il faudrait un reste A1), 8, 9 (registres de boucle A2/D6 partout), 11 (chaîne), 15 (D1 relu, 0x168e), 19 (octet haut de D0 de l'aiguillage dans l'index des réactions, 0x63ae0) ; puis `joueur/`, `set_b`, `effects_c` (`lecteurs.py`). Outil cassé signalé : `fuzz_enemy familles` (sans 68000 par défaut) : l'original contrôlé ne revient jamais (`check`), aucun appel comparé. **4eaba13 (validé 296/296 dans les deux modes, puis de nouveau après fusion de main b6ef83e)** : six familles de plus en `#[sans]` : elfe (12), gnoll (13), ogre (18), hibours (4), goule (5), molosse (6) ; 0x81aa4 (corps du boss 3) générique (`boss_3::body::pousser` au lieu du `call` par adresse ; registres rendus par l'adaptateur de la native) ; `active_loop`/`hit_loop` génériques ; tables de programme lues par `enemy_common::rom32` (et non `data32` : `Cx::rom32` du processeur lit l'espace programme). **Reste (familles d'ennemis)** : squelette (D1 relu, attacks.rs:336), trog (A1 de table, mod.rs:136), gargouille (D0 de visée relu, attacks.rs:409/436), golem (D0 « boutons », control.rs:50), bête de l'ombre (D0 d'angle, parts.rs:234), scarabée, scorpion, harpie, Riyakaa, guerrier, double, part ; puis boss, joueur/, set_b, effects_c (`lecteurs.py`). Outils `generique.py`/`nettoie.py`/`famille.sh` : `<scratchpad>/locales_outils/` (à recopier, le scratchpad ne survit pas). **Étapes 1 et 2 validées (e4a30ac, après fusion de main 29f0087) : 296/296 VALIDE en mode par défaut et avec `DDSOM_ASSETS` (DDSOM_LONG=1).** Cause de l'écart de `sorts_noms_b` (image 21225, `+0xa0` du Bow Gnoll) : `enemy_bow::decide` lisait la cible dans l'A1 laissé par le test de boîte, que les façades génériques n'écrivent plus ; elle prend désormais la cible `+0x50` (c'est la même). L'étape 2 cassait 13 scénarios (boss15_scene46, scènes 46 et 105, ending, cov_2p_c...) : `enemy_warrior::sparks` appelait le `shock` sans registres puis relisait A1 ; il garde `shock_68k`. **`fuzz_couv` C02/C04 contre main (29f0087)** : 10 scénarios d'ennemis et 10 de boss, mêmes graines : aucun écart plausible ni panique de plus que main ; seule différence, 58 écarts REG (D0) de moins pour `ennemi_tremble_b` (0x71680). **Étape 3, familles sans registres (169e328, validé 296/296 dans les deux modes)** : `reactions.rs` entièrement générique (`Cx<'_, R: Banc>`), avec les relevés par type qu'elle appelle ; `load_target` ne pose plus A1 (scarabée et scorpion prennent la cible rendue) ; riposte du boss 3 : le tirage et le masque sortent par l'adaptateur de la native 0x81ae0 ; cinq familles en gestionnaires `#[sans]` : kobold (0), Bow Gnoll (3), troll (14), gobelin (15), machine de guerre (27). Méthode (outils du scratchpad `locales_outils/` : `generique.py` rend générique une fonction et, d'après `cargo check`, tout ce qu'elle appelle ; `nettoie.py` retire les écritures seules de D0/D1/D6/An et fait passer D2-D5 par le banc ; `lecteurs.py` liste les lecteurs de registres) : la fonction générique est la preuve que la famille ne lit plus de registre ; entre gestionnaires, seuls D2-D5 sont relus (`DDSOM_POISON=sortie`, `dispatch::Restes`). **Étape 1 (0e2ccf8)** : `dispatch::Restes` reçoit D2/D3 (pris et rendus par `Aiguillage`), le trait `cx::Banc` donne `d2()`..`d5()` et `compteur()` ; `terrain::push_restes`, `ai_aids::{target_in_front_restes, box_around_restes, in_front_avec_restes, RestesBoite}` ; façades `enemy_lib`/`enemy_common` génériques (collision, tests de boîte, butin, `flash_and_shake` lisent/écrivent les restes D2-D5 ; visée, tirages, créateurs sans registres ; appelants de `aim*` reposent D0 en attendant leur conversion). Validation complète de 0e2ccf8 en mode par défaut : 295/296, **ÉCHEC de `sorts_noms_b` (première différence à l'image 21225)**, à bissecter (candidats : restes D2-D5 désormais écrits par les façades génériques, D0/A1/D1 retirés de `collide_terrain`, des tests de boîte, de `palette_script`, de `roll_*`) ; la validation `DDSOM_ASSETS` n'a pas démarré (construction tombée sur l'arbre en cours d'édition) : à relancer. **Étape 2 (non validée, compile)** : `reactions.rs` sans registres (pas en macro `pas!` à appel direct au lieu de tableaux de pointeurs, sons par type via `sound::jouer`, relevés par type 0x3e000 en table Rust `get_up_by_kind`, `kept_down` au lieu d'un pointeur de suite, D2/D3 gardés en restes dans `face_attacker`/`seized_hits`, glitch scène 41 de `zapped_burn` écrit en clair, `burnt` : animation 0 = D0 laissé par l'aiguillage) ; `lib::shock` rend `Choc` (Cree/Refuse(A1 laissé)/Aucun), l'ancien `shock_68k` reste pour `enemy_warrior::sparks` ; `react` : table Rust des réactions propres (`petites::own_reaction` : 0x78ad2, 0x71680, et 0x65236 de la gargouille, jamais atteinte, réécrite) ; `react_with` remplacé par `reaction_routine`. **Suite** : valider l'étape 2 (DDSOM_LONG=1, deux modes) et fuzz_couv C02/C04 contre `base/` (scratchpad locales_/fuzz.sh) ; puis convertir les 228 « lecteurs de registres d'entrée » (outil scratchpad locales_/lecteurs.py) famille par famille (ennemis, boss, joueur/, set_b, effects_c…), garder D2-D5 en restes dans le code ennemis/boss (lecteurs : `flash_and_shake`, roll du boss 11, rangée d'éclats), supprimer les écritures mortes, puis `tools/regs_generic.py` et `regs_without.py`. Méthode : la fonction générique est la preuve (compilateur) ; une écriture de registre ne se retire que si aucun lecteur non générique ne suit. |
-| Sortie du Cpu, partie 5, suite joueur2 (wt-joueur2) : `joueur/`, `set_b`, `effects_c` en gestionnaires sans registres — FAIT (non fusionné) | 1645d98 (joueur/, set_b), 23917cd (effects_c), 93a30bf (fusion de main 3bec3f5) : **296/296 VALIDE en mode par défaut et avec `DDSOM_ASSETS` (DDSOM_LONG=1), après fusion de main** | **joueur/ et set_b** : les 70 gestionnaires PSHL/PEFF de `families/joueur/` et ceux de `set_b` (sauf la porte 29, `door_b`, dont le fondu cède la main : `run`/`watch`/`after_fade`/`exit_zone` restent sur le processeur) sont `#[sans]` ; `lecteurs.py` : joueur 38 → 0, set_b 9 → 1 (`run_on_68k`, adaptateur des portes sur le processeur). Méthode : toutes les fonctions rendues génériques d'un coup (`perl` puis `nettoie.py`), lectures restantes converties à la main en arguments et retours. `pshell` sans registres (`link_a1` → `linked`, `state`, `rand_and`, `rand_and_b` ; `rand_and_b_mot` rend le D0.w relu par l'éclat de gel ; `offset` garde D2 en reste ; `restes_terrain` pour les restes de 0x24a8/0x24b0) ; boutique (PEFF 42/43) : client et position du script en arguments (`talk::Script`), octet haut de D0 de l'appelant écrit en clair (nul : étendues des zones < 0x100) ; familiers (PEFF 34, 41) et chaîne (PSHL 19) : la cible de `turn`/`steer` en argument (glitch d'origine gardé : après une recherche, le dernier objet examiné et non la cible) ; foudre (PEFF 26) : `(0x168,A1)` avec A1 = l'adresse du gestionnaire (0x4e038), écrit en clair ; créateurs appelés par adresse remplacés par des cœurs (`creators::bolt_shot`, `shot_5`, `petites::pshl_stones` sur `Registres`, natives 0x53e48/0x52578/0x53746 retirées), palette 0x3afe par `placement::load_effect_palette` (D2-D5 en restes). set_b : vagues (créateurs = allocations ENEMY/BOSS/SET), `effects_aids::decompte_joueurs_vivants` (0xcc18e), `set_residu::debut_de_vague`/`fin_de_vague` (sons 0xe0c5c/0xe0d8c), SET de scène (`scene_set_par` sur `SurBanc`), décors 6 et 11, liste de décors 7, dialogue : `load` rend le D6 que laisse la copie de palette (relu par `shrink`) ; caméras, palettes par page, placement des joueurs, 0x1ad2a, 0xa66c0 sur un banc de travail (`effects_creators::restes::sur_banc_de_travail` : seuls D2-D5 entrent et sortent). **Écart trouvé et corrigé (API commune)** : la remise en liste sans registres n'écrivait pas le reste D2 de 0x1ee1a (lien quitté lors d'un déplacement), relu par le rebond de l'éclat de gel (`sorts_magicien` image 4874) : `SortedList::reinsert_restes`, utilisé par `Banc for &mut Aiguillage`. Nouveau : `effects_creators::restes::SurBanc` (cœur `Registres` qui ne garde que les restes D2-D5). **effects_c** : 40 gestionnaires `#[sans]`, `lecteurs.py` 5 → 0 (total du jeu après fusion : 180 fonctions) ; `fuzz_couv` C06/C12/C10/C0e contre main bba79f5 (sorts_*, long_boutiques, bot_2p, bot_char3) : aucune panique de plus, écarts du même ordre que main ; boutique EFFCT (case de l'acheteur en argument), état 4 du minuteur du vote en `unreachable!` (code-mort.md). **Reste** : `effects_creators` (natives d'appel par adresse, arguments en registres : 4 lecteurs, appelants hors périmètre), appels par adresse sur banc de travail (caméras, palettes, 0x930a4, 0x3403c), `regs_generic.py`/`regs_without.py`. |
-| Sortie du Cpu, partie 5, suite familles3 (wt-familles3) : ESHL, SOBJ, SET, ITEM, BOX, EFFCT restants en gestionnaires sans registres — FAIT (non fusionné) | 9b2e7b1 (étape 1), 4afecd3 (étape 2) : 296/296 VALIDE dans les deux modes ; étape 3 et fusion de main 440e988 : **308/308 VALIDE en mode par défaut et avec `DDSOM_ASSETS` (DDSOM_LONG=1)** | **Toutes les entrées des tables d'aiguillage sont des gestionnaires `#[sans]`** (`Corps::Gestionnaire`) : ESHL (`eshl*.rs`, 52 de plus), SOBJ (5), SET (`set.rs`, `set_c*` : contrôleur de scène, fenêtre, écrans de fin ; portes SET 7 et 29 comprises), ITEM (`items.rs`, `items_b`), BOX (`boxes.rs`), EFFCT (`effects.rs`, `effects_b/d/e/f/g`, feu d'artifice compris), ENEMY 20 et 28. Natives (`examples/names`) : `Corps::Processeur` 715 → 594, `Gestionnaire` 227 → 344 ; `lecteurs.py` : 180 → 143 fonctions (familles 69 → 32). **`families::Ctx` supprimé** : `effects.rs`, `items.rs`, `boxes.rs` écrits sur `cx::Cx` générique (`ctx.rom*` de l'ancien contexte = espace données → `data*`, `prog*` par `Machine`) ; `gestionnaire!` accepte `#[sans]`. Bulle (EFFCT 4) : l'épilogue étranger 0xaa9fe ne fait que dépiler les quatre appels (`effects::foreign_epilogue`, A1-A4 jamais relus). Cessions sans processeur dans le gestionnaire : fondu des portes (`set::fondu_de_sortie::fondu_au_noir` générique, pas du fondu sur un banc de travail qui porte A0 et les restes) et attente de quatre images du feu d'artifice (`kernel::attendre` sur un banc de travail) ; plus de `run_on_68k`. **Appels par adresse remplacés** : nouveau module `families/scenery.rs` (décor repris 0xcc0ca/0x33aa6/0x33b24 + palettes 0x1a360/0x1a678/0x1a8ac, placement des joueurs 0x20de6, page de palettes 1 0x1a608, sauvegarde 0x1ad2a, restitution 0x1ad6a, salve 0xa66c0 ; chacun écrit les restes D2-D5 de l'original), `boss_15::attacks::approach_toward` (cœur de 0x930a4, native retirée), `terrain::push_second_restes` (0x3403c), `petites::four_palette_blocks` (0x10158/0x101da), `petites::clear_scroll1_start` (0x3525c), `creators::play_scene_music`/`run_scene_exit` (0xd9778/0xd981a), libération par classe (0xcc2b8 → `pools::POOLS`), cadre de dialogue `creators::sobj_12_pur`, `video::charger_grille` (0x26d4/0x2766), `effects_aids::decor_6`, `effects_creators::tile_block` (0xb230e), `player::init::init_weapon_stats` (0x3552) ; `sur_banc_de_travail` supprimé (plus d'utilisateur). Doublons retirés : natives des aides de la barrière (0xb9ee6, 0xb9eba, 0xba094, code-mort.md). Glitches écrits en clair : rangée de placement de l'ESHL 10 lue dans le D5 hérité ; A1 = adresse du gestionnaire (0x9f67c) de l'ESHL 13 sans propriétaire ; marge du SOBJ 2 dans le D2 laissé par 0xddbfc ; couleurs du `movem` du guide 3 en D2-D5 ; secousse des écrans de fin (D1 → réglage de 0xb1a7a, D2 en reste). Code mort : guide 1 sans joueur vivant (`unreachable!`, code-mort.md). **Écart trouvé par `fuzz_couv`** (branche contre main a00e694, 14 scénarios, cibles `eshl_`, `sobj_`, `set_`, `effct_`, `item_`, `box_`, ENEMY 20/28) : la version « banc de travail » du passage (EFFCT 14, 0xad866) écrivait FFFFFE sur un chemin non joué (registres du banc nuls) ; disparu avec `scenery::resume_scenery_lit`. Aucune autre différence. **Étape 2** : créateurs d'effets appelés par les joueurs (`player/`) par des fonctions à arguments (`effects_creators::for_players` : étoiles 0xb378a, halo 0xab708, gerbe 0xab7d8, type 57 0xb6ba8, flammèche 0xb9c6a, éclat posé 0xb97ba ; A0, A1 et drapeaux écrits comme la native) ; 0xdabba et 0xdb6c0 en fonctions de `items.rs` appelées par `game::leave` et `player::hurt` (natives retirées). **Écart `effct_attaque` (fuzz_couv 122 contre 63) : bruit.** Même graine, cible `nom:effct_attaque` seule, 13 scénarios (sorts_*, long_boutiques, bot_2p, bot_char3) : bba79f5 et a00e694 donnent exactement les mêmes essais (9 093), écarts (63) et plausibles (19) ; les écarts viennent d'états `+4` hors table (0x0a, jamais produits) ; les chiffres de wt-joueur2 venaient de zones différentes (l'échantillonnage dépend de l'ensemble des natives ciblées). **Étape 3** (appels par adresse hors familles qui visaient des natives des familles) : étincelles de la résolution des coups (`combat::World::spark`, 0xaa96c/0xaaa04/0xaaa84), réaction de l'ennemi frappé (`player::hit_reactions::enemy_reacts_68k`, native 0xf232e retirée), chocs des joueurs (`player::Ctx::shock`, 0xb10c8), créateurs des joueurs (`creators::for_players` : éclair 0x4b7a0, étincelles 0x4dc9a, tourbillon 0x4b8d0, effets 8 et 0x2f ; `set_a_68k`, `quake_68k`, `petites::quake_b_68k`, `petites::revive_68k` 0x4c930, `effects_creators::for_players::thrown_shard_68k` 0xb96c0), renvoi des morts-vivants du clerc (cinq appels écrits en clair), octet de table 0x3baea, luminosité 0x173c. **Scripts de scène** (`scene::script::script_routine`) : les entrées « appel » de tous les scripts de la ROM (table 0xf2f62, relevé exhaustif) n'appellent que 0x2a24, 0x2a2a, 0x2a30 (caméra), 0xa8ae8 (liste de décors), 0xd40e8 (tremplins), 0xdd12c (verrou des objets) : appels typés avec l'argument D0 ; natives retirées. Natives `Corps::Processeur` : 594 → 584 ; `lecteurs.py` : 141 fonctions (familles 30). **Reste avant de retirer `m68k::Cpu`** : natives sur le processeur encore exécutées dans les 308 scénarios : `CREER_TACHE` (0x9b6, lancements de tâches par `crate::call`), `config_init`, `palette_pages_blanches` (0x1cf3c, `game::leave`), baguettes du magicien `spawn_rod_*` (table de tirs, `g.rom(shot, …)`), effacements de couches 0xca8/0xcc8/0xce8 (démarrage, modes) ; appels par adresse restants (23 sites) : tables du module `player/` (actions, pas, sous-états : `run_at`, `handler`, `routine`), son 0x4c58e/HEX_BYTE, `combat` (gestionnaires de tirs inconnus), `dispatch` (boucle d'aiguillage sur processeur), `demarrage`, `set_residu` (grilles), `creators` (0xcc0ca et ses appels, plus appelé que par sa native) ; puis le processeur comme banc des modules `player/`, `scene/`, `modes/`, `palette`, `video`, `kernel` (`lecteurs.py` : 141 fonctions, dont 30 dans `families/`, surtout des natives d'appel par adresse aux arguments en registres). Les 2 fonctions des familles encore sur `Cx<'_, Cpu>` sont des adaptateurs (`boss_common::push_out_of_boss_68k`, `enemy_common::set_dw`) ; `tools/regs_generic.py`/`regs_without.py` n'ont plus rien à convertir dans les tables d'aiguillage (toutes `#[sans]`). |
-| Sortie du Cpu, partie 5 (suite, boss restants : wt-boss2) | 4478a09 (boss 3, 5, 8, 9 ; 296/296 sans 68000), 07d1f81 (15, 19), 0eaa248 (11/12 ; 296/296 VALIDE dans les deux modes, DDSOM_LONG=1) | **Tous les boss sont en gestionnaires `#[sans]`** (`lecteurs.py --famille boss` : plus que les adaptateurs des natives 0x818e6/0x819e2 et 0x930a4, appelée par `effects_c`). Boss 3 : formes du corps sur (bus, boss, objet), adaptateurs réduits à D0/CCR ; réaction : l'octet haut de D0 est nul (aiguillage, index de 0xfe5a). Boss 5 : saisie `+6` = 0xc (glitch d'origine : table de trois entrées, le saut tombe sur `moveq #0,D0 ; jsr 0xfd64` et « saisit » A1 = l'adresse du gestionnaire laissée par la boucle d'aiguillage, d'où une écriture en ROM et `+0x50` = 0x341c) : constante `HANDLER`, pas de reste A1 ; 0x2a42 (`petites::fond_1_allume_a`), 0x9b6 (`scene::fondu::lancer`). Boss 8 : comme le 7. Boss 9 : secousse à amplitude en argument. Boss 11/12 : recherches d'anneaux par valeur, D2 de 0x8f4c2 et de `life_rank` en restes ; glitch d'origine écrit en clair (le test du type relit le D0 mis à zéro par 0x19e10 : les deux types prennent les réglages du type 11). Boss 15 : `set_anim` sans registres (le réglage de 0xb3fb0 est le D1.b posé par 0x93182 : 0), 0x168e par `palette::or_brightness`, 0x76ec4/0xa7234/0xa727c par des cœurs de `petites` sur `Registres` (`paire_d_ennemis_par`, `roar_par`), poussée des joueurs : 0x1386 par `aides::calcul` (rendu `pub(crate)`), ses registres de travail D2-D4 en restes. Boss 19 : index des réactions = le code (`moveq` de l'aiguillage 0x90948), 0x63ae0 par `creators::enemy_7_pair_cree`, 0x9b6 par `kernel::creer_tache`. Aucune modification de `Restes`. **`fuzz_enemy familles` réparé** : sans 68000, `lib::check` faisait partir l'original du PC du banc (jamais posé par `call`) ; il part maintenant de l'entrée de la native (`pile_pour_l_original`) ; l'outil résume les paniques et échoue si rien n'est comparé. Types ENEMY 0 à 28 (`DDSOM_ETATS=1`, 40 tours, kobold_scene7) : tous VALIDE (golem 11, troll 14...), sauf 28 (0x79300 cède la main dès le pas 0 : limite de l'outil, l'appel est abandonné) ; une panique « l'original ne revient pas » pour 26 (état tiré hors des rails). `fuzz_couv` C04 (9 scénarios de boss) contre main bba79f5 : aucune différence. **Reste** : `joueur/`, `set_b`, `effects_c` (autre agent), puis `regs_generic.py` et `regs_without.py`. |
-| Sortie du Cpu, partie 4 : pile et interruption (wt-pile fusionnée ; suite wt-restes, validée, non fusionnée) | voir `git log` (wt-pile) | **Fait** (après fusion de main 29f0087) : (point 3) les retours ne sont plus identifiés par A7 : `Cadre::appels` (profondeur des appels hors cadre à l'ouverture) et `Table::appels: Vec<HorsCadre>` ; `crate::call` ne touche plus A7 ; `appeler`/`appeler_attendu` sans `Cpu`. (Point 4) VBLANK = point du noyau `Point::Interruption`, point interrompu dans `Table::interrompu`, plus de PC/SR empilés. **Contexte réduit** (`taches::table::Contexte`) : SR (masque du `trap #12`), A0, D4, D7, nommés et documentés ; le noyau ne gère plus ni A7 ni USP (plus de pile du superviseur, plus d'A1 = pile laissé par la cession) ; une tâche neuve ne reçoit plus A1/A4/D1 (personne ne les lit). Lecteurs trouvés par bissection (`tools/bisect_poison.py`, sondes `reprise`/`neuve` de `diag::sonder_lancement`, site sans espaces ni virgules) : D4 relu par la phase du pas de jeu suivant (`Partie(Pas)`) ; A0 relu au retour d'un sous-programme qui cède (fondu de luminosité `Fondu(Luminosite)`, `Bonus(SetUp)`, `Exit(Both)`, `Exit(DispatchTail(18))`, `Transition(SpritesAfterFrame)`, `TransitionEarly(S4FadingOutNext)`, `TransitionLate(S32End)`) ; D7 (et A0) de la boucle d'aiguillage interrompue par une cession (`FeuArtifice(ApresAttente)`, fondu appelé par un gestionnaire). Aucun registre hérité par une tâche neuve n'est lu. Sonde `pile` (`sans68k::empoisonner_pile`) : FF0166-FF0E65 rempli d'une valeur changeante avant chaque point hors démarrage (FF0E66 et au-delà sont des variables du jeu relatives à A5 : `placement::LAST_X`...). **Validation empoisonnée** `DDSOM_POISON=reprise,neuve,pile,=reprise#a0+d4+d7` : 296/296 VALIDE (DDSOM_LONG=1). **Validation complète** (640d635, DDSOM_LONG=1, JOBS=8) : 296/296 VALIDE sans 68000 et 296/296 depuis les assets (`DDSOM_ASSETS`, assets frais de main). **Resserrement de `ram_du_noyau` (wt-restes)** : n'ignore plus que FF0052-FF005D, FF0064-FF0163 et FF0166-FF0E65 (piles) ; FF0E66-FF0FFF (variables du jeu relatives à A5) est comparé : 296/296 VALIDE dans les deux modes (DDSOM_LONG=1), aucun écart. **Suite (wt-restes)** : (point 5) `dispatch::Restes` est un état de la partie, `taches::table::Table::restes` ; le code encore sur le processeur les tient dans le banc (D2-D5) : `Native::executer` les passe du banc à la table à l'entrée d'un gestionnaire converti (`Corps::Gestionnaire`) et les y rend à sa sortie (`Restes::depuis_le_banc`/`vers_le_banc`) ; API de `Restes`, `Aiguillage` et `cx::Banc` inchangée. **`Contexte` supprimé** : `Reprise::Etape(Etape)` sans registres. Ce qui était relu est nommé : `dispatch::Etape::Aiguillage { classe, objet, compteur }` (A0/D7 notés à l'appel du gestionnaire, remis dans le banc à la reprise de la boucle) ; `taches::partie::Etape::Pas { d4 }` (D4 du pas précédent, aussi dans `kernel::Point::PasRetenu { d4 }`) ; `taches::fondu::Etape::Luminosite { fondu, a0 }` (A0 de l'appelant du sous-programme : bloc de la sortie de scène, objet d'une porte SET) ; `taches::reprendre`/`a0_de_reprise` : les étapes des séquences de sortie de scène (Exit, Bonus, Tally, Characters, Transition, TransitionEarly, TransitionLate) retrouvent le bloc `scene::screen::blocks::EXIT`, le feu d'artifice (`FeuArtifice`) l'objet de la boucle d'aiguillage en cours (`dispatch::objet_en_cours`). SR : une tâche reprend en mode utilisateur, interruptions permises (aucune ne cède en les masquant : `assert!` dans `kernel::ceder` ; le seul `trap #12` du jeu, test de la mémoire du menu TEST, ne cède pas) ; les drapeaux ne sont pas relus. Sonde `cession` retirée (plus rien n'est sauvé à la cession). **Preuve** : avant le retrait, une validation complète où chaque valeur nommée était comparée (panique sinon) au registre rendu par le contexte : 296/296 VALIDE, aucun écart ; après le retrait (4764679, DDSOM_LONG=1, JOBS=8) : 296/296 VALIDE sans 68000, 296/296 depuis les assets (`DDSOM_ASSETS`, assets frais), et **`DDSOM_POISON=reprise,neuve,pile` sans aucune exemption : 296/296 VALIDE** (plus aucun registre relu à la reprise d'une tâche). **Reste** : les restes D2-D5 ne quittent le banc qu'autour des gestionnaires convertis ; ils deviendront l'état unique quand la liste des sprites, les caméras, la jauge et les gestionnaires encore sur le processeur les écriront par leur nom (partie 5). |
+| Lot « sortie du Cpu », partie 2 : écrans sans appel par adresse ni registre miroir, contexte des tâches en champs d'étape, `scene::fading`, sondes `cession`/`ret`/`rendering` | voir `git log` (wt-ecrans2) | complète après fusion de main a911566 : 296/296 (DDSOM_LONG=1) sans 68000 et 296/296 depuis les assets (`sorts_assets`), JOBS=8 ; empoisonnée 296/296 après cette fusion aussi. Avant, après fusion de main (044c685), 296/296 (DDSOM_LONG=1) sans 68000 et 296/296 depuis les assets (`sorts_assets`), JOBS=8 ; empoisonnée (`all@` les fichiers du lot, cessions et retours de ses tâches, une lecture gardée) 296/296. Étape suivante : prouver le reste des `_68k` des écrans (`build_68k`, `update_cameras_68k`) avec la sonde `exit` et `tools/regs_*.py` |
+| Sortie du Cpu, partie 3 : familles (sonde de sortie des gestionnaires, `Cx<R>`/`Bench`/`Leftovers`, 1 870 fonctions génériques, 82 gestionnaires `Body::Handler`, créateurs ESHL et d'effets en Rust, `random_68k` retiré, remise en liste exacte) | voir `git log` (wt-familles) | complète après fusion de main (044c685) : 296/296 sans 68000 et 296/296 depuis les assets (`sorts_assets`), JOBS=7/6 ; sonde `exit` 285/286 puis exclusions bissectées ; `fuzz_couv` C08, C10, C0e, C14 avant/après : aucun écart nouveau |
+| Sortie du Cpu, partie 5 : registres des familles en variables locales (wt-locales) — EN COURS (dernier état validé, fusion de main b6ef83e comprise) | 0e2ccf8 (étape 1), 1a3aff7 (étape 2), e4a30ac, 169e328, 4eaba13, fusion b6ef83e (validés 296/296 dans les deux modes) | **Suite (wt-familles2, depuis 82f6d91)** : toutes les familles d'ennemis sont en gestionnaires `#[without]` (`lecteurs.py --famille enemy` : 0) : squelette (1), trog (2), gargouille (8), golem (11 ; glitch d'origine : boutons relus dans le D0 que 0x1a56 écrase par `+0x32`, drapeau « a bougé » en D2), bête de l'ombre (19 ; Z laissé par 0x1a32 après l'orphelinat), scarabée (9 ; effet d'attaque testé par la valeur rendue et non par une retenue jamais posée), scorpion (10), harpie (21 ; créateurs 0xa036e/0xa0566 en cœurs sur `Regs`), Riyakaa (16), tentacule (7 ; tir 0x9ef20 en cœur), doubles (22-24, 26 ; réaction du maître par `enemy_common::run_reaction`), bras du guerrier (25 ; étincelles sur `lib::shock`, A1 en scène 41 = l'hôte). Boss `#[without]` : 0, 1, 2/22, 4, 6, 7, 10, 13, 16, 17, 18, 21 (réactions communes par `run_reaction`, créateurs 0x57c8c/0x5f764 en cœurs, D2/D5 des boucles `dbf` laissés en restes ; `boss_common::addq8/sub8/sub16` n'écrivent plus SR). EFFCT `effct_double_b` (0xb7248). Validé 296/296 dans les deux modes (DDSOM_LONG=1) : a11f35e, 8505fff, ef8fe90 (fusion de main 0e04e48), cf7baf5, c5734b0. `fuzz_couv` C02/C04 (fuzz.sh) contre main 82f6d91 : aucune différence. **Reste** : boss 3 (forme du corps, A1/D6 de 0x81aa4), 5 (A1 hérité de l'image précédente en saisie, sous-état 0xc : il faudrait un reste A1), 8, 9 (registres de boucle A2/D6 partout), 11 (chaîne), 15 (D1 relu, 0x168e), 19 (octet haut de D0 de l'aiguillage dans l'index des réactions, 0x63ae0) ; puis `player/`, `set_b`, `effects_c` (`lecteurs.py`). Outil cassé signalé : `fuzz_enemy families` (sans 68000 par défaut) : l'original contrôlé ne revient jamais (`check`), aucun appel comparé. **4eaba13 (validé 296/296 dans les deux modes, puis de nouveau après fusion de main b6ef83e)** : six familles de plus en `#[without]` : elfe (12), gnoll (13), ogre (18), hibours (4), goule (5), molosse (6) ; 0x81aa4 (corps du boss 3) générique (`boss_3::body::pousser` au lieu du `call` par adresse ; registres rendus par l'adaptateur de la native) ; `active_loop`/`hit_loop` génériques ; tables de programme lues par `enemy_common::rom32` (et non `data32` : `Cx::rom32` du processeur lit l'espace programme). **Reste (familles d'ennemis)** : squelette (D1 relu, attacks.rs:336), trog (A1 de table, mod.rs:136), gargouille (D0 de visée relu, attacks.rs:409/436), golem (D0 « boutons », control.rs:50), bête de l'ombre (D0 d'angle, parts.rs:234), scarabée, scorpion, harpie, Riyakaa, guerrier, double, part ; puis boss, player/, set_b, effects_c (`lecteurs.py`). Outils `generique.py`/`nettoie.py`/`famille.sh` : `<scratchpad>/locales_outils/` (à recopier, le scratchpad ne survit pas). **Étapes 1 et 2 validées (e4a30ac, après fusion de main 29f0087) : 296/296 VALIDE en mode par défaut et avec `DDSOM_ASSETS` (DDSOM_LONG=1).** Cause de l'écart de `sorts_noms_b` (image 21225, `+0xa0` du Bow Gnoll) : `enemy_bow::decide` lisait la cible dans l'A1 laissé par le test de boîte, que les façades génériques n'écrivent plus ; elle prend désormais la cible `+0x50` (c'est la même). L'étape 2 cassait 13 scénarios (boss15_scene46, scènes 46 et 105, ending, cov_2p_c...) : `enemy_warrior::sparks` appelait le `shock` sans registres puis relisait A1 ; il garde `shock_68k`. **`fuzz_couv` C02/C04 contre main (29f0087)** : 10 scénarios d'ennemis et 10 de boss, mêmes graines : aucun écart plausible ni panique de plus que main ; seule différence, 58 écarts REG (D0) de moins pour `ennemi_tremble_b` (0x71680). **Étape 3, familles sans registres (169e328, validé 296/296 dans les deux modes)** : `reactions.rs` entièrement générique (`Cx<'_, R: Bench>`), avec les relevés par type qu'elle appelle ; `load_target` ne pose plus A1 (scarabée et scorpion prennent la cible rendue) ; riposte du boss 3 : le tirage et le masque sortent par l'adaptateur de la native 0x81ae0 ; cinq familles en gestionnaires `#[without]` : kobold (0), Bow Gnoll (3), troll (14), gobelin (15), machine de guerre (27). Méthode (outils du scratchpad `locales_outils/` : `generique.py` rend générique une fonction et, d'après `cargo check`, tout ce qu'elle appelle ; `nettoie.py` retire les écritures seules de D0/D1/D6/An et fait passer D2-D5 par le banc ; `lecteurs.py` liste les lecteurs de registres) : la fonction générique est la preuve que la famille ne lit plus de registre ; entre gestionnaires, seuls D2-D5 sont relus (`DDSOM_POISON=exit`, `dispatch::Leftovers`). **Étape 1 (0e2ccf8)** : `dispatch::Leftovers` reçoit D2/D3 (pris et rendus par `Dispatch`), le trait `cx::Bench` donne `d2()`..`d5()` et `counter()` ; `terrain::push_leftovers`, `ai_aids::{target_in_front_leftovers, box_around_leftovers, in_front_with_leftovers, HitboxLeftovers}` ; façades `enemy_lib`/`enemy_common` génériques (collision, tests de boîte, butin, `flash_and_shake` lisent/écrivent les restes D2-D5 ; visée, tirages, créateurs sans registres ; appelants de `aim*` reposent D0 en attendant leur conversion). Validation complète de 0e2ccf8 en mode par défaut : 295/296, **ÉCHEC de `sorts_noms_b` (première différence à l'image 21225)**, à bissecter (candidats : restes D2-D5 désormais écrits par les façades génériques, D0/A1/D1 retirés de `collide_terrain`, des tests de boîte, de `palette_script`, de `roll_*`) ; la validation `DDSOM_ASSETS` n'a pas démarré (construction tombée sur l'arbre en cours d'édition) : à relancer. **Étape 2 (non validée, compile)** : `reactions.rs` sans registres (pas en macro `step!` à appel direct au lieu de tableaux de pointeurs, sons par type via `sound::play`, relevés par type 0x3e000 en table Rust `get_up_by_kind`, `kept_down` au lieu d'un pointeur de suite, D2/D3 gardés en restes dans `face_attacker`/`seized_hits`, glitch scène 41 de `zapped_burn` écrit en clair, `burnt` : animation 0 = D0 laissé par l'aiguillage) ; `lib::shock` rend `Choc` (Cree/Refuse(A1 laissé)/Aucun), l'ancien `shock_68k` reste pour `enemy_warrior::sparks` ; `react` : table Rust des réactions propres (`small::own_reaction` : 0x78ad2, 0x71680, et 0x65236 de la gargouille, jamais atteinte, réécrite) ; `react_with` remplacé par `reaction_routine`. **Suite** : valider l'étape 2 (DDSOM_LONG=1, deux modes) et fuzz_couv C02/C04 contre `base/` (scratchpad locales_/fuzz.sh) ; puis convertir les 228 « lecteurs de registres d'entrée » (outil scratchpad locales_/lecteurs.py) famille par famille (ennemis, boss, player/, set_b, effects_c…), garder D2-D5 en restes dans le code ennemis/boss (lecteurs : `flash_and_shake`, roll du boss 11, rangée d'éclats), supprimer les écritures mortes, puis `tools/regs_generic.py` et `regs_without.py`. Méthode : la fonction générique est la preuve (compilateur) ; une écriture de registre ne se retire que si aucun lecteur non générique ne suit. |
+| Sortie du Cpu, partie 5, suite joueur2 (wt-joueur2) : `player/`, `set_b`, `effects_c` en gestionnaires sans registres — FAIT (non fusionné) | 1645d98 (player/, set_b), 23917cd (effects_c), 93a30bf (fusion de main 3bec3f5) : **296/296 VALIDE en mode par défaut et avec `DDSOM_ASSETS` (DDSOM_LONG=1), après fusion de main** | **player/ et set_b** : les 70 gestionnaires PSHL/PEFF de `families/player/` et ceux de `set_b` (sauf la porte 29, `door_b`, dont le fondu cède la main : `run`/`watch`/`after_fade`/`exit_zone` restent sur le processeur) sont `#[without]` ; `lecteurs.py` : joueur 38 → 0, set_b 9 → 1 (`run_on_68k`, adaptateur des portes sur le processeur). Méthode : toutes les fonctions rendues génériques d'un coup (`perl` puis `nettoie.py`), lectures restantes converties à la main en arguments et retours. `pshell` sans registres (`link_a1` → `linked`, `state`, `rand_and`, `rand_and_b` ; `rand_and_b_word` rend le D0.w relu par l'éclat de gel ; `offset` garde D2 en reste ; `leftovers_terrain` pour les restes de 0x24a8/0x24b0) ; boutique (PEFF 42/43) : client et position du script en arguments (`talk::Script`), octet haut de D0 de l'appelant écrit en clair (nul : étendues des zones < 0x100) ; familiers (PEFF 34, 41) et chaîne (PSHL 19) : la cible de `turn`/`steer` en argument (glitch d'origine gardé : après une recherche, le dernier objet examiné et non la cible) ; foudre (PEFF 26) : `(0x168,A1)` avec A1 = l'adresse du gestionnaire (0x4e038), écrit en clair ; créateurs appelés par adresse remplacés par des cœurs (`creators::bolt_shot`, `shot_5`, `small::pshl_stones` sur `Regs`, natives 0x53e48/0x52578/0x53746 retirées), palette 0x3afe par `placement::load_effect_palette` (D2-D5 en restes). set_b : vagues (créateurs = allocations ENEMY/BOSS/SET), `effects_aids::living_players` (0xcc18e), `set_residue::begin_wave`/`finish_wave` (sons 0xe0c5c/0xe0d8c), SET de scène (`scene_set_via` sur `OnBench`), décors 6 et 11, liste de décors 7, dialogue : `load` rend le D6 que laisse la copie de palette (relu par `shrink`) ; caméras, palettes par page, placement des joueurs, 0x1ad2a, 0xa66c0 sur un banc de travail (`effects_creators::leftovers::sur_banc_de_travail` : seuls D2-D5 entrent et sortent). **Écart trouvé et corrigé (API commune)** : la remise en liste sans registres n'écrivait pas le reste D2 de 0x1ee1a (lien quitté lors d'un déplacement), relu par le rebond de l'éclat de gel (`sorts_magicien` image 4874) : `SortedList::reinsert_leftovers`, utilisé par `Bench for &mut Dispatch`. Nouveau : `effects_creators::leftovers::OnBench` (cœur `Regs` qui ne garde que les restes D2-D5). **effects_c** : 40 gestionnaires `#[without]`, `lecteurs.py` 5 → 0 (total du jeu après fusion : 180 fonctions) ; `fuzz_couv` C06/C12/C10/C0e contre main bba79f5 (sorts_*, long_boutiques, bot_2p, bot_char3) : aucune panique de plus, écarts du même ordre que main ; boutique EFFCT (case de l'acheteur en argument), état 4 du minuteur du vote en `unreachable!` (code-mort.md). **Reste** : `effects_creators` (natives d'appel par adresse, arguments en registres : 4 lecteurs, appelants hors périmètre), appels par adresse sur banc de travail (caméras, palettes, 0x930a4, 0x3403c), `regs_generic.py`/`regs_without.py`. |
+| Sortie du Cpu, partie 5, suite familles3 (wt-familles3) : ESHL, SOBJ, SET, ITEM, BOX, EFFCT restants en gestionnaires sans registres — FAIT (non fusionné) | 9b2e7b1 (étape 1), 4afecd3 (étape 2) : 296/296 VALIDE dans les deux modes ; étape 3 et fusion de main 440e988 : **308/308 VALIDE en mode par défaut et avec `DDSOM_ASSETS` (DDSOM_LONG=1)** | **Toutes les entrées des tables d'aiguillage sont des gestionnaires `#[without]`** (`Body::Handler`) : ESHL (`eshl*.rs`, 52 de plus), SOBJ (5), SET (`set.rs`, `set_c*` : contrôleur de scène, fenêtre, écrans de fin ; portes SET 7 et 29 comprises), ITEM (`items.rs`, `items_b`), BOX (`boxes.rs`), EFFCT (`effects.rs`, `effects_b/d/e/f/g`, feu d'artifice compris), ENEMY 20 et 28. Natives (`examples/names`) : `Body::Processeur` 715 → 594, `Handler` 227 → 344 ; `lecteurs.py` : 180 → 143 fonctions (familles 69 → 32). **`families::Ctx` supprimé** : `effects.rs`, `items.rs`, `boxes.rs` écrits sur `cx::Cx` générique (`ctx.rom*` de l'ancien contexte = espace données → `data*`, `prog*` par `Machine`) ; `handler!` accepte `#[without]`. Bulle (EFFCT 4) : l'épilogue étranger 0xaa9fe ne fait que dépiler les quatre appels (`effects::foreign_epilogue`, A1-A4 jamais relus). Cessions sans processeur dans le gestionnaire : fondu des portes (`set::exit_fading::fade_to_black` générique, pas du fondu sur un banc de travail qui porte A0 et les restes) et attente de quatre images du feu d'artifice (`kernel::wait` sur un banc de travail) ; plus de `run_on_68k`. **Appels par adresse remplacés** : nouveau module `families/scenery.rs` (décor repris 0xcc0ca/0x33aa6/0x33b24 + palettes 0x1a360/0x1a678/0x1a8ac, placement des joueurs 0x20de6, page de palettes 1 0x1a608, sauvegarde 0x1ad2a, restitution 0x1ad6a, salve 0xa66c0 ; chacun écrit les restes D2-D5 de l'original), `boss_15::attacks::approach_toward` (cœur de 0x930a4, native retirée), `terrain::push_second_leftovers` (0x3403c), `small::four_palette_blocks` (0x10158/0x101da), `small::clear_scroll1_start` (0x3525c), `creators::play_scene_music`/`run_scene_exit` (0xd9778/0xd981a), libération par classe (0xcc2b8 → `pools::POOLS`), cadre de dialogue `creators::sobj_12_pure`, `video::load_grid` (0x26d4/0x2766), `effects_aids::scenery_6`, `effects_creators::tile_block` (0xb230e), `player::init::init_weapon_stats` (0x3552) ; `sur_banc_de_travail` supprimé (plus d'utilisateur). Doublons retirés : natives des aides de la barrière (0xb9ee6, 0xb9eba, 0xba094, code-mort.md). Glitches écrits en clair : rangée de placement de l'ESHL 10 lue dans le D5 hérité ; A1 = adresse du gestionnaire (0x9f67c) de l'ESHL 13 sans propriétaire ; marge du SOBJ 2 dans le D2 laissé par 0xddbfc ; couleurs du `movem` du guide 3 en D2-D5 ; secousse des écrans de fin (D1 → réglage de 0xb1a7a, D2 en reste). Code mort : guide 1 sans joueur vivant (`unreachable!`, code-mort.md). **Écart trouvé par `fuzz_couv`** (branche contre main a00e694, 14 scénarios, cibles `eshl_`, `sobj_`, `set_`, `effct_`, `item_`, `box_`, ENEMY 20/28) : la version « banc de travail » du passage (EFFCT 14, 0xad866) écrivait FFFFFE sur un chemin non joué (registres du banc nuls) ; disparu avec `scenery::resume_scenery_lit`. Aucune autre différence. **Étape 2** : créateurs d'effets appelés par les joueurs (`player/`) par des fonctions à arguments (`effects_creators::for_players` : étoiles 0xb378a, halo 0xab708, gerbe 0xab7d8, type 57 0xb6ba8, flammèche 0xb9c6a, éclat posé 0xb97ba ; A0, A1 et drapeaux écrits comme la native) ; 0xdabba et 0xdb6c0 en fonctions de `items.rs` appelées par `game::leave` et `player::hurt` (natives retirées). **Écart `effct_attaque` (fuzz_couv 122 contre 63) : bruit.** Même graine, cible `name:effct_attaque` seule, 13 scénarios (sorts_*, long_boutiques, bot_2p, bot_char3) : bba79f5 et a00e694 donnent exactement les mêmes essais (9 093), écarts (63) et plausibles (19) ; les écarts viennent d'états `+4` hors table (0x0a, jamais produits) ; les chiffres de wt-joueur2 venaient de zones différentes (l'échantillonnage dépend de l'ensemble des natives ciblées). **Étape 3** (appels par adresse hors familles qui visaient des natives des familles) : étincelles de la résolution des coups (`combat::World::spark`, 0xaa96c/0xaaa04/0xaaa84), réaction de l'ennemi frappé (`player::hit_reactions::enemy_reacts_68k`, native 0xf232e retirée), chocs des joueurs (`player::Ctx::shock`, 0xb10c8), créateurs des joueurs (`creators::for_players` : éclair 0x4b7a0, étincelles 0x4dc9a, tourbillon 0x4b8d0, effets 8 et 0x2f ; `set_a_68k`, `quake_68k`, `small::quake_b_68k`, `small::revive_68k` 0x4c930, `effects_creators::for_players::thrown_shard_68k` 0xb96c0), renvoi des morts-vivants du clerc (cinq appels écrits en clair), octet de table 0x3baea, luminosité 0x173c. **Scripts de scène** (`scene::script::script_routine`) : les entrées « appel » de tous les scripts de la ROM (table 0xf2f62, relevé exhaustif) n'appellent que 0x2a24, 0x2a2a, 0x2a30 (caméra), 0xa8ae8 (liste de décors), 0xd40e8 (tremplins), 0xdd12c (verrou des objets) : appels typés avec l'argument D0 ; natives retirées. Natives `Body::Processeur` : 594 → 584 ; `lecteurs.py` : 141 fonctions (familles 30). **Reste avant de retirer `m68k::Cpu`** : natives sur le processeur encore exécutées dans les 308 scénarios : `CREATE_TASK` (0x9b6, lancements de tâches par `crate::call`), `config_init`, `palette_pages_blanches` (0x1cf3c, `game::leave`), baguettes du magicien `spawn_rod_*` (table de tirs, `g.rom(shot, …)`), effacements de couches 0xca8/0xcc8/0xce8 (démarrage, modes) ; appels par adresse restants (23 sites) : tables du module `player/` (actions, pas, sous-états : `run_at`, `handler`, `routine`), son 0x4c58e/HEX_BYTE, `combat` (gestionnaires de tirs inconnus), `dispatch` (boucle d'aiguillage sur processeur), `startup`, `set_residue` (grilles), `creators` (0xcc0ca et ses appels, plus appelé que par sa native) ; puis le processeur comme banc des modules `player/`, `scene/`, `modes/`, `palette`, `video`, `kernel` (`lecteurs.py` : 141 fonctions, dont 30 dans `families/`, surtout des natives d'appel par adresse aux arguments en registres). Les 2 fonctions des familles encore sur `Cx<'_, Cpu>` sont des adaptateurs (`boss_common::push_out_of_boss_68k`, `enemy_common::set_dw`) ; `tools/regs_generic.py`/`regs_without.py` n'ont plus rien à convertir dans les tables d'aiguillage (toutes `#[without]`). |
+| Sortie du Cpu, partie 5 (suite, boss restants : wt-boss2) | 4478a09 (boss 3, 5, 8, 9 ; 296/296 sans 68000), 07d1f81 (15, 19), 0eaa248 (11/12 ; 296/296 VALIDE dans les deux modes, DDSOM_LONG=1) | **Tous les boss sont en gestionnaires `#[without]`** (`lecteurs.py --famille boss` : plus que les adaptateurs des natives 0x818e6/0x819e2 et 0x930a4, appelée par `effects_c`). Boss 3 : formes du corps sur (bus, boss, objet), adaptateurs réduits à D0/CCR ; réaction : l'octet haut de D0 est nul (aiguillage, index de 0xfe5a). Boss 5 : saisie `+6` = 0xc (glitch d'origine : table de trois entrées, le saut tombe sur `moveq #0,D0 ; jsr 0xfd64` et « saisit » A1 = l'adresse du gestionnaire laissée par la boucle d'aiguillage, d'où une écriture en ROM et `+0x50` = 0x341c) : constante `HANDLER`, pas de reste A1 ; 0x2a42 (`small::background_1_lit_a`), 0x9b6 (`scene::fading::launch`). Boss 8 : comme le 7. Boss 9 : secousse à amplitude en argument. Boss 11/12 : recherches d'anneaux par valeur, D2 de 0x8f4c2 et de `life_rank` en restes ; glitch d'origine écrit en clair (le test du type relit le D0 mis à zéro par 0x19e10 : les deux types prennent les réglages du type 11). Boss 15 : `set_anim` sans registres (le réglage de 0xb3fb0 est le D1.b posé par 0x93182 : 0), 0x168e par `palette::or_brightness`, 0x76ec4/0xa7234/0xa727c par des cœurs de `small` sur `Regs` (`enemy_pair_kind_via`, `roar_via`), poussée des joueurs : 0x1386 par `aids::compute` (rendu `pub(crate)`), ses registres de travail D2-D4 en restes. Boss 19 : index des réactions = le code (`moveq` de l'aiguillage 0x90948), 0x63ae0 par `creators::enemy_7_pair_created`, 0x9b6 par `kernel::create_task`. Aucune modification de `Leftovers`. **`fuzz_enemy families` réparé** : sans 68000, `lib::check` faisait partir l'original du PC du banc (jamais posé par `call`) ; il part maintenant de l'entrée de la native (`stack_for_original`) ; l'outil résume les paniques et échoue si rien n'est comparé. Types ENEMY 0 à 28 (`DDSOM_ETATS=1`, 40 tours, kobold_scene7) : tous VALIDE (golem 11, troll 14...), sauf 28 (0x79300 cède la main dès le pas 0 : limite de l'outil, l'appel est abandonné) ; une panique « l'original ne revient pas » pour 26 (état tiré hors des rails). `fuzz_couv` C04 (9 scénarios de boss) contre main bba79f5 : aucune différence. **Reste** : `player/`, `set_b`, `effects_c` (autre agent), puis `regs_generic.py` et `regs_without.py`. |
+| Sortie du Cpu, partie 4 : pile et interruption (wt-pile fusionnée ; suite wt-restes, validée, non fusionnée) | voir `git log` (wt-pile) | **Fait** (après fusion de main 29f0087) : (point 3) les retours ne sont plus identifiés par A7 : `Frame::calls` (profondeur des appels hors cadre à l'ouverture) et `Table::calls: Vec<OutsideFrame>` ; `crate::call` ne touche plus A7 ; `call`/`call_expected` sans `Cpu`. (Point 4) VBLANK = point du noyau `Point::Interruption`, point interrompu dans `Table::interrupted`, plus de PC/SR empilés. **Contexte réduit** (`tasks::table::Contexte`) : SR (masque du `trap #12`), A0, D4, D7, nommés et documentés ; le noyau ne gère plus ni A7 ni USP (plus de pile du superviseur, plus d'A1 = pile laissé par la cession) ; une tâche neuve ne reçoit plus A1/A4/D1 (personne ne les lit). Lecteurs trouvés par bissection (`tools/bisect_poison.py`, sondes `resume`/`neuve` de `diag::probe_launch`, site sans espaces ni virgules) : D4 relu par la phase du pas de jeu suivant (`Game(Step)`) ; A0 relu au retour d'un sous-programme qui cède (fondu de luminosité `Fading(Brightness)`, `Bonus(SetUp)`, `Exit(Both)`, `Exit(DispatchTail(18))`, `Transition(SpritesAfterFrame)`, `TransitionEarly(S4FadingOutNext)`, `TransitionLate(S32End)`) ; D7 (et A0) de la boucle d'aiguillage interrompue par une cession (`Firework(AfterWait)`, fondu appelé par un gestionnaire). Aucun registre hérité par une tâche neuve n'est lu. Sonde `stack` (`no68k::poison_stacks`) : FF0166-FF0E65 rempli d'une valeur changeante avant chaque point hors démarrage (FF0E66 et au-delà sont des variables du jeu relatives à A5 : `placement::LAST_X`...). **Validation empoisonnée** `DDSOM_POISON=resume,new,stack,=reprise#a0+d4+d7` : 296/296 VALIDE (DDSOM_LONG=1). **Validation complète** (640d635, DDSOM_LONG=1, JOBS=8) : 296/296 VALIDE sans 68000 et 296/296 depuis les assets (`DDSOM_ASSETS`, assets frais de main). **Resserrement de `kernel_ram` (wt-restes)** : n'ignore plus que FF0052-FF005D, FF0064-FF0163 et FF0166-FF0E65 (piles) ; FF0E66-FF0FFF (variables du jeu relatives à A5) est comparé : 296/296 VALIDE dans les deux modes (DDSOM_LONG=1), aucun écart. **Suite (wt-restes)** : (point 5) `dispatch::Leftovers` est un état de la partie, `tasks::table::Table::leftovers` ; le code encore sur le processeur les tient dans le banc (D2-D5) : `Native::execute` les passe du banc à la table à l'entrée d'un gestionnaire converti (`Body::Handler`) et les y rend à sa sortie (`Leftovers::from_bench`/`to_bench`) ; API de `Leftovers`, `Dispatch` et `cx::Bench` inchangée. **`Contexte` supprimé** : `Resume::Step(Step)` sans registres. Ce qui était relu est nommé : `dispatch::Step::Dispatch { class, object, counter }` (A0/D7 notés à l'appel du gestionnaire, remis dans le banc à la reprise de la boucle) ; `tasks::game::Step::Step { d4 }` (D4 du pas précédent, aussi dans `kernel::Point::StepKept { d4 }`) ; `tasks::fading::Step::Brightness { fading, a0 }` (A0 de l'appelant du sous-programme : bloc de la sortie de scène, objet d'une porte SET) ; `tasks::resume_step`/`resume_a0` : les étapes des séquences de sortie de scène (Exit, Bonus, Tally, Characters, Transition, TransitionEarly, TransitionLate) retrouvent le bloc `scene::screen::blocks::EXIT`, le feu d'artifice (`Firework`) l'objet de la boucle d'aiguillage en cours (`dispatch::current_object`). SR : une tâche reprend en mode utilisateur, interruptions permises (aucune ne cède en les masquant : `assert!` dans `kernel::cede` ; le seul `trap #12` du jeu, test de la mémoire du menu TEST, ne cède pas) ; les drapeaux ne sont pas relus. Sonde `cession` retirée (plus rien n'est sauvé à la cession). **Preuve** : avant le retrait, une validation complète où chaque valeur nommée était comparée (panique sinon) au registre rendu par le contexte : 296/296 VALIDE, aucun écart ; après le retrait (4764679, DDSOM_LONG=1, JOBS=8) : 296/296 VALIDE sans 68000, 296/296 depuis les assets (`DDSOM_ASSETS`, assets frais), et **`DDSOM_POISON=resume,new,stack` sans aucune exemption : 296/296 VALIDE** (plus aucun registre relu à la reprise d'une tâche). **Reste** : les restes D2-D5 ne quittent le banc qu'autour des gestionnaires convertis ; ils deviendront l'état unique quand la liste des sprites, les caméras, la jauge et les gestionnaires encore sur le processeur les écriront par leur nom (partie 5). |

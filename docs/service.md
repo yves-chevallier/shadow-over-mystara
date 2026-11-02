@@ -1,15 +1,15 @@
 # Menu TEST (M1) et réglages (M2)
 
-Code : `port/ddsom-game/src/taches/service.rs` (la tâche), `src/service/` (`mod.rs` : menu et aides communes ;
-`essais.rs` : INPUT, OUTPUT, SOUND & VOICE ; `mire.rs` : COLOR, DOT CROSS HATCH, GAME DATA ; `reglages.rs` :
-CONFIGURATION ; `memoire.rs` : MEMORY CHECK), `src/config.rs` et `src/eeprom.rs` (M2). `A5` = 0xFF8000. Les
+Code : `port/ddsom-game/src/tasks/service.rs` (la tâche), `src/service/` (`mod.rs` : menu et aides communes ;
+`tests.rs` : INPUT, OUTPUT, SOUND & VOICE ; `test_pattern.rs` : COLOR, DOT CROSS HATCH, GAME DATA ; `settings.rs` :
+CONFIGURATION ; `memory.rs` : MEMORY CHECK), `src/config.rs` et `src/eeprom.rs` (M2). `A5` = 0xFF8000. Les
 textes et les tables restent dans la ROM et sont lus à l'exécution.
 
 Tout est validé image par image par six scénarios (`scenarios/cov/cov_service*.txt` et `covs_carte_dev.txt`, voir §6).
 
 ## 1. Entrée et tâche (`0x29162`)
 
-La tâche des crédits (`tache_credits.rs`) se démonte quand l'interrupteur TEST est actionné (bit 1 de `IN2+1`, actif
+La tâche des crédits (`credits_task.rs`) se démonte quand l'interrupteur TEST est actionné (bit 1 de `IN2+1`, actif
 bas) : écran remis à zéro, tâche du menu `0x29162` créée à l'emplacement 0, tâche des crédits terminée.
 
 La tâche du menu est une tâche Rust (`docs/noyau.md`, « Tâches Rust ») :
@@ -54,14 +54,14 @@ P1 et P2 sont pressés ensemble. Jamais atteint ; le menu à 13 lignes (OBJECT, 
 
 | Ligne | Original | Rust | Écran |
 |---|---|---|---|
-| 1. INPUT | `0x2a4f4` | `essais::input` | état de chaque entrée (« 0 »/« 1 ») : service, test, pièces, départs, leviers, boutons ; 2 à 4 joueurs selon le type de monnayeurs (`A5+0x1d`) |
-| 2. OUTPUT | `0x2aadc` | `essais::output` | tir 1 de chaque joueur : verrou de son monnayeur (`0xb96`/`0xbac`) ; tir 2 de P1 : compteur électrique ; tir 2 de P2 : distributeur de cartes (variantes 4 et 10) |
-| 3. SOUND & VOICE | `0x2b450` | `essais::sound` | code (0-0x4a0) : haut/bas ±1, droite/gauche ±0x10, boutons 3/4 ±0x100 ; tir 1 le joue (`0xe0836`), tir 2 coupe (`0xe0882`) ; volume lu sur le port 0x804030 |
-| 4. COLOR | `0x29366` | `mire::color` | quatre dégradés de 15 couleurs (palettes 0x1c-0x1f) |
-| 5. DOT CROSS HATCH | `0x2949c` | `mire::cross_hatch` | grille sur le plan 2 |
-| 6. GAME DATA | `0x2b808` | `mire::game_data` | compteurs de l'EEPROM : pièces, services, parties gratuites ou cartes |
-| 7. CONFIGURATION | `0x2bb0a` | `reglages::configuration` | §3 |
-| 8. MEMORY CHECK | `0x2ceb4` | `memoire::memory` | §4 |
+| 1. INPUT | `0x2a4f4` | `tests::input` | état de chaque entrée (« 0 »/« 1 ») : service, test, pièces, départs, leviers, boutons ; 2 à 4 joueurs selon le type de monnayeurs (`A5+0x1d`) |
+| 2. OUTPUT | `0x2aadc` | `tests::output` | tir 1 de chaque joueur : verrou de son monnayeur (`0xb96`/`0xbac`) ; tir 2 de P1 : compteur électrique ; tir 2 de P2 : distributeur de cartes (variantes 4 et 10) |
+| 3. SOUND & VOICE | `0x2b450` | `tests::sound` | code (0-0x4a0) : haut/bas ±1, droite/gauche ±0x10, boutons 3/4 ±0x100 ; tir 1 le joue (`0xe0836`), tir 2 coupe (`0xe0882`) ; volume lu sur le port 0x804030 |
+| 4. COLOR | `0x29366` | `test_pattern::color` | quatre dégradés de 15 couleurs (palettes 0x1c-0x1f) |
+| 5. DOT CROSS HATCH | `0x2949c` | `test_pattern::cross_hatch` | grille sur le plan 2 |
+| 6. GAME DATA | `0x2b808` | `test_pattern::game_data` | compteurs de l'EEPROM : pièces, services, parties gratuites ou cartes |
+| 7. CONFIGURATION | `0x2bb0a` | `settings::configuration` | §3 |
+| 8. MEMORY CHECK | `0x2ceb4` | `memory::memory` | §4 |
 | 9. EXIT | `0x29314` | `exit` | redémarrage |
 
 ## 3. 7. CONFIGURATION (`0x2bb0a`)
@@ -103,7 +103,7 @@ dans les 64 mots, puis la copie en RAM validée et réécrite) ; somme d'un octe
 
 **Écart assumé.** Le test dure une vingtaine d'images à ×16 (plusieurs secondes sur la borne), interruptions
 masquées ; sa durée dépend de la fréquence du 68000, comme les ralentissements. Il est instantané dans les deux
-machines de la validation : en Rust, et dans le code d'origine par un correctif (`memoire::patch_instant_check`,
+machines de la validation : en Rust, et dans le code d'origine par un correctif (`memory::patch_instant_check`,
 liste `patches` de `lib.rs`) qui exécute `0x2cf26` jusqu'à son retour sans faire avancer le temps de la machine.
 La validation compare donc le test Rust à l'exécution du code d'origine.
 
@@ -116,22 +116,22 @@ La validation compare donc le test Rust à l'exécution du code d'origine.
 | `0x2d546` | `config::reset_factory` | réglages d'usine de la variante dans les variables |
 | `0x2d5c6` | `config::is_factory` | les variables sont-elles les réglages d'usine ? |
 | `0x2da4a` | `eeprom::tester` | test de l'EEPROM du MEMORY CHECK |
-| `0x2e4ec` | `eeprom::COMPTA_PARTIES` (native) | au départ d'un joueur, en jeu gratuit (`A5+0x25`) : compteur des parties gratuites (`0x2db1e`) ; sur la carte de développement, le compteur des parties payantes ou gratuites de sa RAM |
-| `0x2dc9a` | `eeprom::COMPTA_INIT` (native) | démarrage : rien, sauf sur la carte de développement |
+| `0x2e4ec` | `eeprom::COUNT_GAMES_ACC` (native) | au départ d'un joueur, en jeu gratuit (`A5+0x25`) : compteur des parties gratuites (`0x2db1e`) ; sur la carte de développement, le compteur des parties payantes ou gratuites de sa RAM |
+| `0x2dc9a` | `eeprom::ACCOUNTING_INIT` (native) | démarrage : rien, sauf sur la carte de développement |
 
-### Carte de développement (`eeprom/carte_dev.rs`)
+### Carte de développement (`eeprom/dev_card.rs`)
 
 Quand `A5+0x82` est non nul (le reset le pose si le bit 14 du port 0x804030 est nul : jamais sur la machine émulée, où
 il vaut 0xe021 ; un `poke8 ff8082 1` le simule), le jeu tient une comptabilité plus fine dans une RAM de 16 Ko en 0x660000,
 **en trois exemplaires** par zone (0x661xxx, 0x662xxx, 0x663xxx). Tout est en Rust, validé par `fuzz_carte_dev` (voir §6) :
 
-| Original | Rust (`carte_dev`) | Rôle |
+| Original | Rust (`dev_card`) | Rôle |
 |---|---|---|
-| `0x2dc9a` → `0x2dca6`, `0x2dcd2` | `demarrer` | au reset : signature de région (`0x2dd14`, 32 mots comparés à `0x2ebfc + 16 × région`), puis vote et réparation de chaque zone (`0x2dd94`... `0x2e204`), puis recopie vers les variables `A5-0x6164`... (`0x2e48a`...`0x2e77c`). Signature fausse : réinitialisation complète (`0x2e91a`) |
-| `0x2e8e4` (boutons `0x3304` tenus au reset) | `reinitialiser` (`eeprom::reinitialiser_carte`, appelée par `demarrage.rs`) | remise à zéro de toutes les zones (sauf les cartes distribuées, `0x2ea24` : l'original ne la remet à zéro que sur désaccord) |
-| `0x2e456`, `0x2e4a8`, `0x2e4fc`, `0x2e59a`, `0x2e540` | `pieces`, `departs`, `parties_payantes`, `parties_gratuites`, `temps_de_jeu` | +1 sur les trois exemplaires d'un compteur, vote, bornes, variable de travail (`0x2e540` : une fois par seconde de partie, appelé par `taches/partie.rs`) |
-| `0x2e638` | `partie_du_personnage` | +1 au compteur (8 octets) du personnage choisi (`0x1200 + 8 × D0`) |
-| `0x2e69e` | `duree_de_partie` | durée de la partie en secondes (D0 / 60), plus longue (`0x1260`) et plus courte (`0x1268`) |
+| `0x2dc9a` → `0x2dca6`, `0x2dcd2` | `start_up` | au reset : signature de région (`0x2dd14`, 32 mots comparés à `0x2ebfc + 16 × région`), puis vote et réparation de chaque zone (`0x2dd94`... `0x2e204`), puis recopie vers les variables `A5-0x6164`... (`0x2e48a`...`0x2e77c`). Signature fausse : réinitialisation complète (`0x2e91a`) |
+| `0x2e8e4` (boutons `0x3304` tenus au reset) | `reset` (`eeprom::reset_card`, appelée par `startup.rs`) | remise à zéro de toutes les zones (sauf les cartes distribuées, `0x2ea24` : l'original ne la remet à zéro que sur désaccord) |
+| `0x2e456`, `0x2e4a8`, `0x2e4fc`, `0x2e59a`, `0x2e540` | `pieces`, `starts`, `paid_games`, `free_games`, `play_time` | +1 sur les trois exemplaires d'un compteur, vote, bornes, variable de travail (`0x2e540` : une fois par seconde de partie, appelé par `tasks/game.rs`) |
+| `0x2e638` | `character_part` | +1 au compteur (8 octets) du personnage choisi (`0x1200 + 8 × D0`) |
+| `0x2e69e` | `game_duration` | durée de la partie en secondes (D0 / 60), plus longue (`0x1260`) et plus courte (`0x1268`) |
 | `0x2e41c` | `vote` | octets bas des mots des trois exemplaires, drapeaux 2 (B≠A), 4 (C≠A), 8 (C≠B) cumulés ; arrêt si les trois diffèrent. 0 : bon ; 6 : A fautif (copié de C) ; 10 : B fautif (de A) ; 12 : C fautif (de B) ; autre : zone perdue, remise à zéro |
 
 Les zones, leurs bornes (pièces et départs > 999 999 : 0 ; temps total > 0x127a3980 et parties > 0x4f5880 : plafonnés)
@@ -152,7 +152,7 @@ mot, adresses impaires). La zone `0x1240` (un vote complet, `0x2e2b0`) n'a aucun
 | `covs_carte_dev_partie.txt` | `cov_mortal_c1` avec la carte de développement dès l'image 790 : pièces, départs, parties payantes, personnage choisi, durée de partie, temps de jeu à la seconde |
 | `covs_carte_dev_gratuit.txt` | `cov_credits_gratuit` avec la carte de développement : parties gratuites (`0x2e59a`), pièces, départs |
 
-**Fuzz différentiel** (`examples/fuzz_dev_card.rs`, `fuzz_carte_dev <roms> <eeprom> [essais [graine]]`). Les scénarios ne
+**Fuzz différentiel** (`examples/fuzz_dev_card.rs`, `fuzz_carte_dev <roms> <eeprom> [tests [seed]]`). Les scénarios ne
 peuvent pas poser la RAM supplémentaire (`poke` n'écrit que 0xff0000-0xffffff) ni déclencher le reset avec la carte : le
 fuzz tire des états de la RAM 0x660000 (zones valides, exemplaires corrompus, compteurs près de leurs bornes, RAM vierge ou
 aléatoire, signature d'une des régions 0 à 6) et compare, pour `0x2dc9a`, `0x2e8e4`, `0x2e540`, `0x2e448`, `0x2e49a`,

@@ -1,12 +1,12 @@
-//! Scripts de mode de la caméra 1 (B1) : à chaque image, avant la recopie du décor (`scroll`), le
-//! script du mode courant (`MODE`, multiple de 4) déplace la position cible de la caméra, suit les
-//! joueurs ou anime la scène (tables de défilement par ligne, secousses...). Chaque script
-//! s'achève, selon le cas, par la routine d'aiguillage par scène (`stage_script`, 0x309e0) qui peut
-//! changer le mode.
+//! Mode scripts of camera 1 (B1): each frame, before the scenery copy (`scroll`), the
+//! script of the current mode (`MODE`, multiple of 4) moves the camera's target position, follows the
+//! players or animates the scene (per-line scroll tables, shakes...). Each script
+//! ends, as the case may be, with the per-scene dispatch routine (`stage_script`, 0x309e0) which can
+//! change the mode.
 //!
-//! Les caméras sont des enregistrements de la RAM de travail (`scroll::CAMERA_1` / `CAMERA_2`) ;
-//! `Cam::o` désigne celle que le script modifie (quelques scripts agissent sur la caméra 2). Les scripts ne
-//! touchent que la mémoire : ni registre ni processeur ([`Cam`]).
+//! The cameras are work RAM records (`scroll::CAMERA_1` / `CAMERA_2`);
+//! `Cam::o` designates the one the script modifies (a few scripts act on camera 2). The scripts only
+//! touch memory: no register or processor ([`Cam`]).
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
@@ -21,7 +21,7 @@ use crate::scroll::{cam, CAMERA_1, CAMERA_2};
 use crate::video::Grid;
 use crate::{regs, Native};
 
-/// Contexte d'un script de caméra : le bus et la caméra que le script modifie.
+/// Context of a camera script: the bus and the camera that the script modifies.
 struct Cam<'a> {
     b: &'a mut Cps2Bus,
     o: Obj,
@@ -58,7 +58,7 @@ impl Cam<'_> {
         let x = self.u32(off).wrapping_add(v);
         self.set32(off, x)
     }
-    /// Espace données (tables par scène, RAM).
+    /// Data space (per-scene tables, RAM).
     fn data8(&mut self, a: u32) -> u8 {
         rd8(self.b, a)
     }
@@ -68,50 +68,50 @@ impl Cam<'_> {
     fn data32(&mut self, a: u32) -> u32 {
         rd32(self.b, a)
     }
-    /// Espace programme (tables lues relativement au PC).
+    /// Program space (tables read PC-relative).
     fn rom16(&mut self, a: u32) -> u16 {
         self.b.fetch16(a)
     }
-    /// Le tirage du hasard du jeu (`rng::random`).
+    /// The game's random draw (`rng::random`).
     fn random(&mut self) -> u16 {
         crate::rng::random(self.b)
     }
     fn alloc(&mut self, pool: &Pool) -> Option<Obj> {
         pool.alloc(self.b)
     }
-    /// 0x1dbc : Z.
+    /// 0x1dbc: Z.
     fn move_z(&mut self) -> LastAdd {
         motion::ballistic(self.b, self.o, motion::Z)
     }
 }
 
-/// Champs de la caméra utilisés par les scripts, en plus de `scroll::cam`.
+/// Camera fields used by the scripts, in addition to `scroll::cam`.
 mod f {
-    /// Octet : étape du script du mode (augmente de 4), puis sous-étape.
+    /// Byte: step of the mode script (increases by 4), then substep.
     pub const STEP: u32 = 0x01;
     pub const SUB_STEP: u32 = 0x02;
-    /// Mot : vitesse verticale.
+    /// Word: vertical speed.
     pub const SPEED: u32 = 0x1a;
-    /// Mot : variable de script (ordonnée de départ, courbe...).
+    /// Word: script variable (starting ordinate, curve...).
     pub const SCRATCH: u32 = 0x18;
-    /// Mot : tampon des lignes de défilement : position de départ.
+    /// Word: buffer of the scroll lines: starting position.
     pub const GRADIENT_ACC: u32 = 0x30;
     pub const GRADIENT_POS: u32 = 0x36;
-    /// Mots : compteurs des scripts.
+    /// Words: script counters.
     pub const TIMER: u32 = 0x4a;
     pub const TIMER_2: u32 = 0x4c;
-    /// Octet : variante transmise aux objets créés.
+    /// Byte: variant passed to the objects created.
     pub const KIND: u32 = 0x4b;
-    /// Secousse : position de repos, compteur, mode à restaurer.
+    /// Shake: rest position, counter, mode to restore.
     pub const SHAKE_X: u32 = 0x42;
     pub const SHAKE_Y: u32 = 0x44;
     pub const SHAKE_COUNT: u32 = 0x46;
     pub const SHAKE_MODE: u32 = 0x48;
-    /// Octet : secousse en cours (effacé au début de chaque pas).
+    /// Byte: shake in progress (cleared at the start of each step).
     pub const SHAKING: u32 = 0x3c;
 }
 
-/// Modes (champ `cam::MODE`).
+/// Modes (field `cam::MODE`).
 mod mode {
     pub const STAGE: u16 = 0x00;
     pub const FREE: u16 = 0x04;
@@ -135,23 +135,23 @@ mod mode {
     pub const FOLLOW_MID: u16 = 0x88;
 }
 
-/// Registres de matériel et variables de la RAM de travail.
+/// Hardware registers and work RAM variables.
 mod hw {
-    /// Adresse de la table de défilement par ligne (poids fort de l'adresse GFX RAM), décalage de
-    /// départ et registre de contrôle vidéo (copie en `A5+0x12`).
+    /// Address of the per-line scroll table (high part of the GFX RAM address), starting offset and
+    /// video control register (copy at `A5+0x12`).
     pub const ROWSCROLL_BASE: u32 = 0x804108;
     pub const ROWSCROLL_OFFSET: u32 = 0x804120;
     pub const VIDEO_CONTROL: u32 = 0x804122;
-    /// Table de défilement par ligne en GFX RAM.
+    /// Per-line scroll table in GFX RAM.
     pub const ROWSCROLL: u32 = 0x920000;
     pub const ROWSCROLL_B: u32 = 0x920200;
 }
 const VIDEO_CONTROL_COPY: u32 = 0x12;
 const STAGE: u32 = 0x34;
-/// Mot de A5 : distance de défilement de la couche 1 (mouvement de fond), long à partir de 0x7fb2.
+/// A5 word: scroll distance of layer 1 (background movement), long from 0x7fb2.
 const BACKDROP: u32 = 0x7fb2;
 
-/// Position de la caméra 2 (x, y), sa position précédente, ses butées (offsets depuis A5).
+/// Position of camera 2 (x, y), its previous position, its stops (offsets from A5).
 const CAM2_X: u32 = CAMERA_2 + cam::X;
 const CAM2_Y: u32 = CAMERA_2 + cam::Y;
 const CAM2_PREVIOUS_X: u32 = CAMERA_2 + cam::PREVIOUS_X;
@@ -160,7 +160,7 @@ const CAM2_MIN_X: u32 = CAMERA_2 + cam::MIN_X;
 
 
 // ---------------------------------------------------------------------------------------------
-// Suivi des joueurs
+// Following the players
 // ---------------------------------------------------------------------------------------------
 
 
@@ -168,12 +168,12 @@ fn record(k: u32) -> u32 {
     A5 + PLAYER_BASE + k * PLAYER_STRIDE
 }
 
-/// Le joueur `k` existe.
+/// Player `k` exists.
 fn present(x: &mut Cam, k: u32) -> bool {
     rd8(x.b, record(k)) != 0
 }
 
-/// Le joueur `k` existe et a des points de vie.
+/// Player `k` exists and has hit points.
 fn alive(x: &mut Cam, k: u32) -> bool {
     present(x, k) && rd16(x.b, record(k) + Player::HP) != 0
 }
@@ -182,18 +182,18 @@ fn any(x: &mut Cam, test: fn(&mut Cam, u32) -> bool) -> bool {
     (0..PLAYER_COUNT).any(|k| test(x, k))
 }
 
-/// Joueur actif pour le suivi horizontal : en jeu, pas encore en sortie (état principal < 4).
+/// Player active for horizontal following: in game, not yet exiting (main state < 4).
 fn playing(x: &mut Cam, k: u32) -> bool {
     present(x, k) && (rd8(x.b, record(k) + Player::MAIN) as i8) < 4
 }
 
-/// Joueur au sol ou en action : état principal <= 2.
+/// Player on the ground or acting: main state <= 2.
 fn grounded(x: &mut Cam, k: u32) -> bool {
     present(x, k) && (rd8(x.b, record(k) + Player::MAIN) as i8) <= 2
 }
 
-/// Plus grande et plus petite valeur (non signées) d'une grandeur des joueurs retenus. Le joueur 0,
-/// s'il est retenu, pose les deux sans comparaison ; sans joueur, (0, 0xffff).
+/// Largest and smallest (unsigned) value of a quantity of the retained players. Player 0,
+/// if retained, sets both without comparison; without players, (0, 0xffff).
 fn extent(x: &mut Cam, value: impl Fn(&mut Cam, u32) -> Option<u16>) -> (u16, u16) {
     let (mut high, mut low) = (0u16, 0xffffu16);
     for k in 0..PLAYER_COUNT {
@@ -209,16 +209,16 @@ fn extent(x: &mut Cam, value: impl Fn(&mut Cam, u32) -> Option<u16>) -> (u16, u1
     (high, low)
 }
 
-/// Fenêtre de suivi d'une caméra : la cible est gardée entre `far` (côté avant) et `near`/`back`.
+/// Following window of a camera: the target is kept between `far` (front side) and `near`/`back`.
 #[derive(Clone, Copy)]
 struct Window {
-    /// Distance de la caméra au joueur le plus avancé au-delà de laquelle elle avance.
+    /// Distance from the camera to the most advanced player beyond which it advances.
     far: i16,
-    /// Marge avant de suivre le joueur le moins avancé / de reculer.
+    /// Margin before following the least advanced player / moving back.
     near: i16,
     back: i16,
-    /// Pas maximal (6) ; au-delà de cette limite le pas vaut 6 : la variante « à saccades » de 0x30f6a
-    /// tolère 16 en avant (et recule alors d'au plus 16).
+    /// Maximum step (6); beyond this limit the step is 6: the "jerky" variant of 0x30f6a
+    /// tolerates 16 forwards (and then moves back by at most 16).
     limit: i16,
 }
 
@@ -239,10 +239,10 @@ const Y_PLAYERS: Window = Window::new(0x70, 0x30, 0x30);
 const Y_PLAYERS_LOW: Window = Window::new(0x90, 0x38, 0x38);
 const Y_OBJECT: Window = Window::new(0x88, 0x78, 0x78);
 
-/// Nouvelle position de la caméra (`pos`) pour garder dans la fenêtre les cibles dont la plus
-/// avancée vaut `high` et la moins avancée `low` : avance de 6 pixels par image au plus quand la plus
-/// avancée sort de la fenêtre (sans perdre la moins avancée), recule quand la moins avancée est trop
-/// en arrière.
+/// New camera position (`pos`) to keep within the window the targets whose most
+/// advanced is `high` and least advanced `low`: advances by at most 6 pixels per frame when the most
+/// advanced leaves the window (without losing the least advanced), moves back when the least advanced is too
+/// far behind.
 fn follow(pos: i16, high: u16, low: u16, w: Window) -> i16 {
     let ahead = (high as i16).wrapping_sub(pos).wrapping_sub(w.far);
     let advance = |pos: i16, d: i16| pos.wrapping_add(if d > w.limit { 6 } else { d });
@@ -263,43 +263,43 @@ fn follow(pos: i16, high: u16, low: u16, w: Window) -> i16 {
     }
 }
 
-/// Applique `follow` au champ `field` de la caméra.
+/// Applies `follow` to the camera's field `field`.
 fn track(x: &mut Cam, field: u32, (high, low): (u16, u16), w: Window) {
     let pos = follow(x.u16(field) as i16, high, low, w);
     x.set16(field, pos as u16);
 }
 
-/// Abscisse des joueurs retenus par `keep`.
+/// Abscissa of the players retained by `keep`.
 fn players_x(x: &mut Cam, keep: fn(&mut Cam, u32) -> bool) -> (u16, u16) {
     extent(x, |x, k| keep(x, k).then(|| rd16(x.b, record(k) + Obj::X)))
 }
 
-/// Profondeur des joueurs retenus par `keep`.
+/// Depth of the players retained by `keep`.
 fn players_depth(x: &mut Cam, keep: fn(&mut Cam, u32) -> bool) -> (u16, u16) {
     extent(x, |x, k| keep(x, k).then(|| rd16(x.b, record(k) + Obj::Y)))
 }
 
-/// 0x30fc8 : suit horizontalement les joueurs au sol (rien s'il n'y en a pas).
+/// 0x30fc8: follows the players on the ground horizontally (nothing if there are none).
 fn follow_x(x: &mut Cam) {
     if any(x, grounded) {
         follow_x_playing(x);
     }
 }
 
-/// 0x31018 : suit horizontalement les joueurs en jeu.
+/// 0x31018: follows the players in game horizontally.
 fn follow_x_playing(x: &mut Cam) {
     let e = players_x(x, playing);
     track(x, cam::X, e, X_PLAYERS);
 }
 
-/// Abscisse x négative ramenée à 0.
+/// Negative abscissa x brought back to 0.
 fn keep_x_positive(x: &mut Cam) {
     if (x.u16(cam::X) as i16) < 0 {
         x.set16(cam::X, 0);
     }
 }
 
-/// 0x315be : suit les joueurs vivants, horizontalement (fenêtre étroite) puis en profondeur.
+/// 0x315be: follows the living players, horizontally (narrow window) then in depth.
 fn follow_xy(x: &mut Cam) {
     if any(x, alive) {
         let e = players_x(x, playing);
@@ -309,13 +309,13 @@ fn follow_xy(x: &mut Cam) {
     }
 }
 
-/// 0x31616 : suit la profondeur des joueurs vivants.
+/// 0x31616: follows the depth of the living players.
 fn follow_depth(x: &mut Cam) {
     let e = players_depth(x, alive);
     track(x, cam::Y, e, Y_PLAYERS);
 }
 
-/// 0x3147c : suit les joueurs vivants, la profondeur avec la fenêtre « basse ».
+/// 0x3147c: follows the living players, depth with the "low" window.
 fn follow_snap(x: &mut Cam) {
     if any(x, alive) {
         follow_x_playing(x);
@@ -325,7 +325,7 @@ fn follow_snap(x: &mut Cam) {
     }
 }
 
-/// 0x31700 : suit le milieu des joueurs vivants, puis la profondeur de tous les joueurs présents.
+/// 0x31700: follows the middle of the living players, then the depth of all the players present.
 fn follow_mid(x: &mut Cam) {
     if any(x, alive) {
         let (high, low) = players_x(x, alive);
@@ -337,10 +337,10 @@ fn follow_mid(x: &mut Cam) {
     }
 }
 
-/// Quatre pointeurs (mots) vers les objets que suit la caméra du mode 0x0c (A5 - 0x555c).
+/// Four pointers (words) to the objects followed by the mode 0x0c camera (A5 - 0x555c).
 const TRACKED_OBJECTS: u32 = 0xff2aa4;
 
-/// 0x31334 : suit horizontalement les objets désignés par les quatre pointeurs.
+/// 0x31334: follows horizontally the objects designated by the four pointers.
 fn follow_objects(x: &mut Cam) {
     let pointers: Vec<u16> = (0..4).map(|k| rd16(x.b, TRACKED_OBJECTS + 2 * k)).collect();
     if pointers.iter().fold(0u16, |s, &p| s.wrapping_add(p)) == 0 {
@@ -357,10 +357,10 @@ fn follow_objects(x: &mut Cam) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Aiguillage par scène (0x309e0)
+// Per-scene dispatch (0x309e0)
 // ---------------------------------------------------------------------------------------------
 
-/// Écrit le registre de contrôle vidéo avec le bit 0 mis (défilement par ligne) ou effacé.
+/// Writes the video control register with bit 0 set (per-line scroll) or cleared.
 fn rowscroll_control(x: &mut Cam, on: bool) {
     let v = rd16(x.b, A5 + VIDEO_CONTROL_COPY);
     let v = if on { v | 1 } else { v & !1 };
@@ -368,13 +368,13 @@ fn rowscroll_control(x: &mut Cam, on: bool) {
     wr16(x.b, hw::VIDEO_CONTROL, v);
 }
 
-/// Active la table de défilement par ligne en GFX RAM.
+/// Enables the per-line scroll table in GFX RAM.
 fn rowscroll_on(x: &mut Cam) {
     rowscroll_control(x, true);
     wr16(x.b, hw::ROWSCROLL_BASE, 0x9200);
 }
 
-/// 0x309e0 : selon la scène, fixe le mode de la caméra ou joue une séquence de scène.
+/// 0x309e0: depending on the scene, sets the camera mode or plays a scene sequence.
 fn stage_script(x: &mut Cam) {
     let stage = rd8(x.b, A5 + STAGE);
     match stage {
@@ -413,7 +413,7 @@ fn stage_script(x: &mut Cam) {
     }
 }
 
-/// Blocs de tuiles chargés dans les couches de défilement (indice de bloc, adresse GFX RAM).
+/// Tile blocks loaded into the scroll layers (block index, GFX RAM address).
 const BACKDROP_BLOCKS_A: [(u16, u32); 8] = [
     (206, 0x917000),
     (173, 0x917400),
@@ -431,7 +431,7 @@ fn load_backdrops(x: &mut Cam, blocks: &[(u16, u32)]) {
     }
 }
 
-/// Scènes 2, 83-90, 102 : la caméra 2 défile selon un scénario (étape de la caméra 1).
+/// Scenes 2, 83-90, 102: camera 2 scrolls according to a script (step of camera 1).
 fn scripted_scroll(x: &mut Cam) {
     let sync_previous = |x: &mut Cam| {
         let v = rd16(x.b, A5 + CAM2_X);
@@ -468,7 +468,7 @@ fn scripted_scroll(x: &mut Cam) {
                 wr16(x.b, A5 + CAM2_X, 800);
                 wr16(x.b, A5 + CAM2_PREVIOUS_X, 800);
                 x.set16(f::TIMER, 120);
-                // 0xa8ae8 : la liste de décors 2
+                // 0xa8ae8: scenery list 2
                 crate::families::effects_creators::set_list(x.b, 2);
             }
         }
@@ -500,7 +500,7 @@ fn scripted_scroll(x: &mut Cam) {
     }
 }
 
-/// Scène 1 : la caméra se cale selon l'abscisse d'arrivée.
+/// Scene 1: the camera locks according to the arrival abscissa.
 fn arrival(x: &mut Cam) {
     let step = x.u8(f::STEP);
     let px = x.u16(cam::X) as i16;
@@ -517,7 +517,7 @@ fn arrival(x: &mut Cam) {
     }
 }
 
-/// Scènes 4 et 91 : attente, puis la caméra monte jusqu'à `48` et passe au suivi.
+/// Scenes 4 and 91: wait, then the camera rises to `48` and switches to following.
 fn rise_then_follow(x: &mut Cam) {
     match x.u8(f::SUB_STEP) {
         0x00 => x.add8(f::SUB_STEP, 4),
@@ -536,7 +536,7 @@ fn rise_then_follow(x: &mut Cam) {
     }
 }
 
-/// Scènes 33 et 104 : pause de 64 images puis suivi normal.
+/// Scenes 33 and 104: pause of 64 frames then normal following.
 fn pause_then_follow(x: &mut Cam) {
     match x.u8(f::STEP) {
         0x00 => {
@@ -555,7 +555,7 @@ fn pause_then_follow(x: &mut Cam) {
     }
 }
 
-/// Scènes 66 et 44/111 : la caméra monte de `speed` pixels par image jusqu'à `top`, puis suivi.
+/// Scenes 66 and 44/111: the camera rises by `speed` pixels per frame to `top`, then following.
 fn climb(x: &mut Cam, speed: u16, top: i16) {
     match x.u8(f::SUB_STEP) {
         0x00 => {
@@ -572,17 +572,17 @@ fn climb(x: &mut Cam, speed: u16, top: i16) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scripts de mode
+// Mode scripts
 // ---------------------------------------------------------------------------------------------
 
-/// Position dessinée = position cible.
+/// Drawn position = target position.
 fn sync_drawn(x: &mut Cam) {
     let (px, py) = (x.u16(cam::X), x.u16(cam::Y));
     x.set16(cam::DRAWN_X, px);
     x.set16(cam::DRAWN_Y, py);
 }
 
-/// 0x31888 : sens de la poussée verticale selon la position dessinée, puis déplacement.
+/// 0x31888: direction of the vertical push according to the drawn position, then movement.
 fn push_vertical(x: &mut Cam) {
     x.set16(f::SPEED, 0xffff);
     if x.u16(cam::DRAWN_Y) as i16 > x.u16(cam::Y) as i16 {
@@ -592,7 +592,7 @@ fn push_vertical(x: &mut Cam) {
     x.move_z();
 }
 
-/// 0x3016e : dégradé de ciel dans la table de défilement par ligne.
+/// 0x3016e: sky gradient in the per-line scroll table.
 fn sky_gradient(x: &mut Cam) {
     follow_objects(x);
     if x.u8(f::STEP) == 0 {
@@ -629,7 +629,7 @@ fn sky_gradient(x: &mut Cam) {
     }
 }
 
-/// 0x3022a : ondulation (table de défilement par ligne de départ en ROM, puis décalage du fond).
+/// 0x3022a: undulation (starting per-line scroll table in ROM, then background offset).
 fn ripple(x: &mut Cam) {
     if x.u8(f::STEP) == 0 {
         x.add8(f::STEP, 1);
@@ -657,8 +657,8 @@ fn ripple(x: &mut Cam) {
     wr16(x.b, A5 + BACKDROP, v);
 }
 
-/// Table de défilement par ligne qui oscille : deux compteurs (0x4a, 0x4c) qui avancent de 1 et 2,
-/// écrits 129 fois ; l'ordre des deux mots dépend de la table active.
+/// Oscillating per-line scroll table: two counters (0x4a, 0x4c) that advance by 1 and 2,
+/// written 129 times; the order of the two words depends on the active table.
 fn waves(x: &mut Cam) {
     let a = x.u16(f::TIMER).wrapping_add(1);
     let a = if (a as i16) < 0x100 { a } else { 0 };
@@ -674,14 +674,14 @@ fn waves(x: &mut Cam) {
     }
 }
 
-/// Caméra 2 : copie de la position précédente avant de la déplacer.
+/// Camera 2: copy of the previous position before moving it.
 fn remember_camera_2(x: &mut Cam) {
     let (px, py) = (rd16(x.b, A5 + CAM2_X), rd16(x.b, A5 + CAM2_Y));
     wr16(x.b, A5 + CAM2_PREVIOUS_X, px);
     wr16(x.b, A5 + CAM2_PREVIOUS_Y, py);
 }
 
-/// 0x303f2 : la caméra 2 reste entre la butée de la caméra 1 et sa propre butée gauche.
+/// 0x303f2: camera 2 stays between camera 1's stop and its own left stop.
 fn clamp_camera_2(x: &mut Cam) {
     let max = x.u16(cam::MAX_X) as i16;
     if max < rd16(x.b, A5 + CAM2_X) as i16 {
@@ -694,7 +694,7 @@ fn clamp_camera_2(x: &mut Cam) {
     stage_script(x);
 }
 
-/// Exécute `f` avec la caméra 2 comme caméra courante.
+/// Runs `f` with camera 2 as the current camera.
 fn on_camera_2(x: &mut Cam, f: fn(&mut Cam)) {
     let cam1 = x.o;
     x.o = Obj(A5 + CAMERA_2);
@@ -702,7 +702,7 @@ fn on_camera_2(x: &mut Cam, f: fn(&mut Cam)) {
     x.o = cam1;
 }
 
-/// 0x30308 : ondulation, puis la caméra 2 suit les joueurs.
+/// 0x30308: undulation, then camera 2 follows the players.
 fn waves_and_follow(x: &mut Cam) {
     waves(x);
     let px = rd16(x.b, A5 + CAM2_X);
@@ -711,7 +711,7 @@ fn waves_and_follow(x: &mut Cam) {
     clamp_camera_2(x);
 }
 
-/// 0x3041c : la caméra 2 suit la profondeur des joueurs vivants.
+/// 0x3041c: camera 2 follows the depth of the living players.
 fn camera_2_depth(x: &mut Cam) {
     remember_camera_2(x);
     if any(x, alive) {
@@ -719,7 +719,7 @@ fn camera_2_depth(x: &mut Cam) {
     }
 }
 
-/// 0x303c8 : la caméra 2 suit les joueurs (étroit), puis reste dans les butées.
+/// 0x303c8: camera 2 follows the players (narrow), then stays within the stops.
 fn camera_2_follow(x: &mut Cam) {
     remember_camera_2(x);
     if any(x, present) {
@@ -728,7 +728,7 @@ fn camera_2_follow(x: &mut Cam) {
     }
 }
 
-/// Création d'un objet décor (SET) à la fin d'un défilement : `kind` écrit dans son type.
+/// Creation of a scenery object (SET) at the end of a scroll: `kind` written to its type.
 fn spawn_gate(x: &mut Cam, pool: &pools::Pool, kind: u8, bump: u8) -> bool {
     let Some(Obj(obj)) = x.alloc(pool) else { return false };
     let variant = x.u8(f::KIND);
@@ -738,8 +738,8 @@ fn spawn_gate(x: &mut Cam, pool: &pools::Pool, kind: u8, bump: u8) -> bool {
     true
 }
 
-/// 0x3047e / 0x3053c : la caméra va à `target` (2 pixels par image) ; arrivée : un objet est créé et
-/// le mode passe à `next`.
+/// 0x3047e / 0x3053c: the camera goes to `target` (2 pixels per frame); on arrival: an object is created and
+/// the mode switches to `next`.
 fn advance_to(x: &mut Cam, target: i16, next: u16) {
     let mut px = x.u16(cam::X) as i16;
     if target >= px {
@@ -763,7 +763,7 @@ fn advance_to(x: &mut Cam, target: i16, next: u16) {
     }
 }
 
-/// 0x304dc : le portail créé, la caméra se cale et décale les joueurs présents.
+/// 0x304dc: with the portal created, the camera locks and shifts the players present.
 fn gate(x: &mut Cam) {
     if x.u8(f::STEP) == 0 {
         return;
@@ -787,7 +787,7 @@ fn shift_players(x: &mut Cam, shift: u16) {
     }
 }
 
-/// 0x3058e : sortie du second portail.
+/// 0x3058e: exit from the second portal.
 fn gate_far(x: &mut Cam) {
     match x.u8(f::STEP) {
         0x04 => x.add16(cam::X, 0xfffe),
@@ -805,7 +805,7 @@ fn gate_far(x: &mut Cam) {
     }
 }
 
-/// 0x305fc : la caméra suit les joueurs vers l'avant ; la profondeur suit le quart du déplacement.
+/// 0x305fc: the camera follows the players forwards; the depth follows a quarter of the movement.
 fn push(x: &mut Cam) {
     let before = x.u32(cam::X);
     follow_x(x);
@@ -818,7 +818,7 @@ fn push(x: &mut Cam) {
     stage_script(x);
 }
 
-/// 0x3063a : secousse de 4 positions (déplacements `dx`, `dy` par position), puis fin.
+/// 0x3063a: shake of 4 positions (movements `dx`, `dy` per position), then end.
 fn shake(x: &mut Cam, amplitude: i16) {
     let t = x.u16(f::SHAKE_COUNT).wrapping_sub(1);
     x.set16(f::SHAKE_COUNT, t);
@@ -838,7 +838,7 @@ fn shake(x: &mut Cam, amplitude: i16) {
     x.set16(cam::Y, sy.wrapping_add((dy * amplitude) as u16));
 }
 
-/// Remplit la table de défilement par ligne de valeurs aléatoires (masque `mask`) : 513 mots.
+/// Fills the per-line scroll table with random values (mask `mask`): 513 words.
 fn rowscroll_noise(x: &mut Cam, mask: u16) {
     for k in 0..0x201 {
         let v = x.random() & mask;
@@ -846,7 +846,7 @@ fn rowscroll_noise(x: &mut Cam, mask: u16) {
     }
 }
 
-/// Décale la table de défilement par ligne d'un mot vers le début et ajoute un tirage au bout.
+/// Shifts the per-line scroll table by one word towards the start and adds a draw at the end.
 fn rowscroll_shift(x: &mut Cam, mask: u16, tail_offset: u32) {
     for k in 0..0x200 {
         let v = rd16(x.b, hw::ROWSCROLL + 2 * k + 2);
@@ -856,7 +856,7 @@ fn rowscroll_shift(x: &mut Cam, mask: u16, tail_offset: u32) {
     wr16(x.b, hw::ROWSCROLL + 0x400 + tail_offset, v);
 }
 
-/// 0x308da : tempête (bruit dans la table de défilement par ligne), retour au mode libre.
+/// 0x308da: storm (noise in the per-line scroll table), return to free mode.
 fn storm(x: &mut Cam) {
     match x.u8(f::STEP) {
         0 => {
@@ -880,10 +880,10 @@ fn storm(x: &mut Cam) {
     }
 }
 
-/// Palettes animées (en ROM : pointeur source et destination par entrée de 8 octets).
+/// Animated palettes (in ROM: source and destination pointer per 8-byte entry).
 const PALETTE_STEPS: u32 = 0x30816;
 
-/// 0x3071a : orage (comme `storm`, puis fondu des palettes éclair).
+/// 0x3071a: thunderstorm (like `storm`, then fade of the lightning palettes).
 fn thunder(x: &mut Cam) {
     match x.u8(f::STEP) {
         0 => {
@@ -911,7 +911,7 @@ fn thunder(x: &mut Cam) {
                 return;
             }
             x.set16(f::TIMER, 1);
-            // l'original appelle deux fois le même sous-programme (`bsr` vers l'instruction suivante)
+            // the original calls the same subroutine twice (`bsr` to the next instruction)
             for _ in 0..2 {
                 palette_step(x);
             }
@@ -920,7 +920,7 @@ fn thunder(x: &mut Cam) {
     }
 }
 
-/// 0x307d8 : un pas du fondu de palettes ; fin de la table : le défilement par ligne s'arrête.
+/// 0x307d8: one step of the palette fade; end of the table: the per-line scroll stops.
 fn palette_step(x: &mut Cam) {
     let at = x.u16(f::TIMER_2) as i16 as i32 as u32;
     let rom32 = |x: &mut Cam, a: u32| (x.rom16(a) as u32) << 16 | x.rom16(a + 2) as u32;
@@ -942,7 +942,7 @@ fn palette_step(x: &mut Cam) {
     x.add16(f::TIMER_2, 8);
 }
 
-/// 0x30988 : attend, puis la caméra descend jusqu'à 256 (scène 67).
+/// 0x30988: waits, then the camera descends to 256 (scene 67).
 fn waves_left(x: &mut Cam) {
     match x.u8(f::STEP) {
         0x00 => {
@@ -969,7 +969,7 @@ fn waves_left(x: &mut Cam) {
     }
 }
 
-/// 0x31822 : la caméra suit un objet (pointeur au mot `A5+0x46`).
+/// 0x31822: the camera follows an object (pointer at word `A5+0x46`).
 fn screen_object(x: &mut Cam) {
     let obj = rd16(x.b, A5 + 0x46) as i16 as i32 as u32;
     let v = rd16(x.b, obj + Obj::X);
@@ -978,7 +978,7 @@ fn screen_object(x: &mut Cam) {
     track(x, cam::Y, (v, v), Y_OBJECT);
 }
 
-/// 0x3047e..0x3071a, 0x3141a... : exécute le script du mode `mode` de la caméra 1.
+/// 0x3047e..0x3071a, 0x3141a...: runs the script of mode `mode` of camera 1.
 fn run_mode(x: &mut Cam, mode: u16) {
     match mode {
         mode::STAGE => stage_script(x),
@@ -1059,10 +1059,10 @@ fn run_mode(x: &mut Cam, mode: u16) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Caméra 2 : décor de la couche de défilement 3, qui suit le défilement de la caméra 1
+// Camera 2: scenery of scroll layer 3, which follows the scroll of camera 1
 // ---------------------------------------------------------------------------------------------
 
-/// Modes de la caméra 2 (`cam::MODE`).
+/// Modes of camera 2 (`cam::MODE`).
 mod mode2 {
     pub const STAGE: u16 = 0x00;
     pub const FREE: u16 = 0x04;
@@ -1084,18 +1084,18 @@ mod mode2 {
     pub const DRIVES_CAMERA_1: u16 = 0x78;
 }
 
-/// Défilement de la caméra 1 depuis l'image précédente sur l'axe 0 (x) ou 1 (y).
+/// Scroll of camera 1 since the previous frame on axis 0 (x) or 1 (y).
 fn delta(x: &mut Cam, axis: usize) -> i32 {
     crate::scroll::scroll_delta(x.b, A5, axis)
 }
 
-/// Caméra 2 : avance de `dx`/`dy` (positions en 16.16).
+/// Camera 2: advances by `dx`/`dy` (positions in 16.16).
 fn drift(x: &mut Cam, dx: i32, dy: i32) {
     x.add32(cam::X, dx as u32);
     x.add32(cam::Y, dy as u32);
 }
 
-/// Aiguillage par scène de la caméra 2 (0x332c0).
+/// Per-scene dispatch of camera 2 (0x332c0).
 fn stage_script_2(x: &mut Cam) {
     let stage = rd8(x.b, A5 + STAGE);
     match stage {
@@ -1120,7 +1120,7 @@ fn stage_script_2(x: &mut Cam) {
     }
 }
 
-/// Scène 13 : le décor monte, puis des feuilles tombent (objets de décor créés au hasard).
+/// Scene 13: the scenery rises, then leaves fall (scenery objects created at random).
 fn falling_leaves(x: &mut Cam) {
     const VARIANTS: [u8; 8] = [0x4b, 0x4c, 0x4d, 0x58, 0x4c, 0x4d, 0x58, 0x4b];
     match x.u8(f::STEP) {
@@ -1175,7 +1175,7 @@ fn falling_leaves(x: &mut Cam) {
     }
 }
 
-/// Scènes 46 et 113 : le décor descend de 0 à 704 en créant un objet au passage.
+/// Scenes 46 and 113: the scenery descends from 0 to 704, creating an object on the way.
 fn rising(x: &mut Cam) {
     let finish = |x: &mut Cam| {
         let y = x.u16(cam::Y).wrapping_add(4);
@@ -1206,8 +1206,8 @@ fn rising(x: &mut Cam) {
     }
 }
 
-/// 0x32f7c / 0x32fd2 : le décor avance de 6 pixels par image sur un tampon de 0x600 pixels, qu'il
-/// ramène de 0x200 en arrière ; la première fois, il se cale sur la page suivante.
+/// 0x32f7c / 0x32fd2: the scenery advances 6 pixels per frame over a 0x600-pixel buffer, which it
+/// brings back by 0x200; the first time, it locks onto the next page.
 fn strolling(x: &mut Cam) {
     x.add16(cam::X, 6);
     let px = x.u16(cam::X);
@@ -1225,7 +1225,7 @@ fn strolling(x: &mut Cam) {
     }
 }
 
-/// 0x33152 : un objet de décor est créé quand le décor est arrivé en bas.
+/// 0x33152: a scenery object is created when the scenery has arrived at the bottom.
 fn rubble(x: &mut Cam) {
     let Some(Obj(obj)) = x.alloc(&pools::ENEMY) else { return };
     let v = rd8(x.b, obj).wrapping_add(1);
@@ -1234,7 +1234,7 @@ fn rubble(x: &mut Cam) {
     x.set16(cam::MODE, mode2::RUBBLE);
 }
 
-/// Exécute le script du mode de la caméra 2 (A0).
+/// Runs the script of camera 2's mode (A0).
 fn run_mode_2(x: &mut Cam, mode: u16) {
     match mode {
         mode2::STAGE => stage_script_2(x),
@@ -1374,7 +1374,7 @@ fn run_mode_2(x: &mut Cam, mode: u16) {
     }
 }
 
-/// 0x32898 : un pas de la caméra 2 initialisée : script du mode, puis recopie du décor.
+/// 0x32898: one step of the initialised camera 2: mode script, then scenery copy.
 fn step_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     let mut x = Cam { b, o: Obj(A5 + CAMERA_2) };
     x.set8(f::SHAKING, 0);
@@ -1383,21 +1383,21 @@ fn step_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     crate::scroll::draw2(x.b)
 }
 
-/// Efface le bit de défilement par ligne de la copie du registre vidéo (sans écrire le registre).
+/// Clears the per-line scroll bit of the video register copy (without writing the register).
 fn clear_rowscroll_flag(x: &mut Cam) {
     let v = rd16(x.b, A5 + VIDEO_CONTROL_COPY) & !1;
     wr16(x.b, A5 + VIDEO_CONTROL_COPY, v);
 }
 
 // ---------------------------------------------------------------------------------------------
-// Initialisation et mise à jour des caméras
+// Initialisation and update of the cameras
 // ---------------------------------------------------------------------------------------------
 
-/// Tables par scène en ROM (espace de données), lues aussi par `scroll::return_cameras`.
+/// Per-scene tables in ROM (data space), also read by `scroll::return_cameras`.
 pub(crate) mod tables {
-    /// Caméra 1 : butée droite (mots), valeur du port de sortie 0x400004 (mots), registre des couches
-    /// (mots), octet « ne recule pas » (octets), butée gauche (mots), pointeur de pas de bande (longs),
-    /// octet « figée » (octets).
+    /// Camera 1: right stop (words), value of output port 0x400004 (words), layer register
+    /// (words), "does not go back" byte (bytes), left stop (words), strip step pointer (longs),
+    /// "frozen" byte (bytes).
     pub const MAX_X_1: u32 = 0x2f0ee;
     pub const OUTPUT: u32 = 0x2f008;
     pub const LAYERS: u32 = 0x2ef22;
@@ -1405,15 +1405,15 @@ pub(crate) mod tables {
     pub const MIN_X: u32 = 0x2f1d4;
     pub const ROW_STEP_1: u32 = 0x2f3aa;
     pub const FROZEN: u32 = 0x2f2ba;
-    /// Caméra 2 : pointeur de pas de bande (longs), position de départ (x, y : mots).
+    /// Camera 2: strip step pointer (longs), starting position (x, y: words).
     pub const ROW_STEP_2: u32 = 0x32650;
     pub const START_2: u32 = 0x32484;
 }
 
-/// Port de sortie dont la valeur dépend de la scène.
+/// Output port whose value depends on the scene.
 pub(crate) const OUTPUT_PORT: u32 = 0x400004;
 
-/// Blocs de tuiles (indice, adresse dans la couche 2) chargés à l'entrée de certaines scènes, caméra 1.
+/// Tile blocks (index, address in layer 2) loaded at the entry of certain scenes, camera 1.
 fn background_blocks_1(stage: u8) -> Option<Vec<(u16, u32)>> {
     const SLOTS: [u32; 4] = [0x917000, 0x917400, 0x917800, 0x917c00];
     let indices: &[u16] = match stage {
@@ -1432,8 +1432,8 @@ fn background_blocks_1(stage: u8) -> Option<Vec<(u16, u32)>> {
     Some(indices.iter().zip(SLOTS).map(|(&index, slot)| (index, slot)).collect())
 }
 
-/// 0x2ede0 : la caméra 1 (A5+0x4fe) est initialisée au premier appel d'une scène, puis mise à jour à chaque image.
-/// Rend le D4 que laisse la recopie du décor.
+/// 0x2ede0: camera 1 (A5+0x4fe) is initialised at the first call of a scene, then updated each frame.
+/// Returns the D4 left by the scenery copy.
 pub fn update_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     if rd8(b, A5 + CAMERA_1) != 0 {
         step(b)
@@ -1442,7 +1442,7 @@ pub fn update_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     }
 }
 
-/// Native : D4 de la recopie, A0 = la caméra en sortie.
+/// Native: D4 of the copy, A0 = the output camera.
 fn camera1_update(c: &mut Cpu, b: &mut Cps2Bus) {
     if let Some((v, m)) = update_camera_1(b) {
         c.d[4] = c.d[4] & !m | v;
@@ -1474,7 +1474,7 @@ fn init_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     x.set16(f::SCRATCH, 0x28);
     x.set8(f::STEP, 0);
     wr32(x.b, A5 + BACKDROP, 0);
-    // la butée gauche prend la valeur de la table si elle est positive, sinon elle est inversée
+    // the left stop takes the table's value if it is positive, otherwise it is inverted
     let min = x.u16(cam::MIN_X) as i16;
     let min = if min >= 0 { x.data16(tables::MIN_X + by_stage) } else { min.wrapping_neg() as u16 };
     x.set16(cam::MIN_X, min);
@@ -1497,11 +1497,11 @@ fn init_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     crate::scroll::draw1(x.b)
 }
 
-/// Destinations (couche 3) des huit blocs chargés par les scènes 54 et 59.
+/// Destinations (layer 3) of the eight blocks loaded by scenes 54 and 59.
 const BACKDROP_SLOTS_2: [u32; 8] = [0x91b800, 0x91b900, 0x91b000, 0x91b100, 0x91a800, 0x91a900, 0x91a000, 0x91a100];
 
-/// Charge dans la couche 3 des blocs de tuiles désignés par une table de la ROM (indice, décalage depuis
-/// 0x918000) ; la caméra 2 est déjà positionnée.
+/// Loads into layer 3 tile blocks designated by a ROM table (index, offset from
+/// 0x918000); camera 2 is already positioned.
 fn load_scroll3_table(x: &mut Cam, table: u32, count: u32) {
     x.set8(f::SUB_STEP, 0);
     let px = x.u16(cam::X);
@@ -1513,15 +1513,15 @@ fn load_scroll3_table(x: &mut Cam, table: u32, count: u32) {
     }
 }
 
-/// Charge des blocs consécutifs d'indices `first..` aux adresses `slots`.
+/// Loads consecutive blocks of indices `first..` at the addresses `slots`.
 fn load_scroll3_blocks(x: &mut Cam, first: u32, slots: [u32; 8]) {
     for (i, slot) in slots.into_iter().enumerate() {
         crate::video::load_grid(x.b, Grid::Layer3, (first + i as u32) as u16, slot);
     }
 }
 
-/// 0x32108 : la caméra 2 (A5+0x54e) est initialisée au premier appel d'une scène, puis mise à jour à chaque image.
-/// Rend le D4 que laisse la recopie du décor.
+/// 0x32108: camera 2 (A5+0x54e) is initialised at the first call of a scene, then updated each frame.
+/// Returns the D4 left by the scenery copy.
 pub fn update_camera_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     if rd8(b, A5 + CAMERA_2) != 0 {
         step_2(b)
@@ -1530,7 +1530,7 @@ pub fn update_camera_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     }
 }
 
-/// Native : D4 de la recopie, A0 = la caméra en sortie.
+/// Native: D4 of the copy, A0 = the output camera.
 fn camera2_update(c: &mut Cpu, b: &mut Cps2Bus) {
     if let Some((v, m)) = update_camera_2(b) {
         c.d[4] = c.d[4] & !m | v;
@@ -1575,8 +1575,8 @@ fn init_camera_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     None
 }
 
-/// 0x2f80c : un pas de la caméra 1 initialisée : script du mode, puis butées de la cible et recopie du
-/// décor (`scroll`).
+/// 0x2f80c: one step of the initialised camera 1: mode script, then target stops and scenery
+/// copy (`scroll`).
 fn step(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     let mut x = Cam { b, o: Obj(A5 + CAMERA_1) };
     x.set8(f::SHAKING, 0);
@@ -1592,7 +1592,7 @@ const fn camera(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus))
     Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs: regs::a(0) }
 }
 
-/// Modes de secousse de la caméra (`cam::MODE`) et leurs entrées d'origine.
+/// Camera shake modes (`cam::MODE`) and their original entries.
 pub mod shake {
     /// 0x2824.
     pub const A: u16 = 0x54;
@@ -1601,20 +1601,20 @@ pub mod shake {
     /// 0x289c.
     pub const C: u16 = 0x5c;
 
-    /// Le mode de la secousse dont une table de la ROM donne la routine.
+    /// The shake mode whose routine is given by a ROM table.
     pub fn of_routine(routine: u32) -> u16 {
         match routine {
             0x2824 => A,
             0x2860 => B,
             0x289c => C,
-            _ => unreachable!("secousse : routine {routine:06x} (0x2824, 0x2860 ou 0x289c seulement)"),
+            _ => unreachable!("shake: routine {routine:06x} (0x2824, 0x2860 or 0x289c only)"),
         }
     }
 }
 
-/// 0x2824, 0x2860, 0x289c : lance une secousse de la caméra en service (1, ou 2 si `A5+0x36`) dans le
-/// mode `mode` pour `frames` images. Si aucune secousse n'est en cours, la position de repos et le mode
-/// courant sont retenus pour la fin de la secousse. Rend la caméra.
+/// 0x2824, 0x2860, 0x289c: starts a shake of the camera in service (1, or 2 if `A5+0x36`) in mode
+/// `mode` for `frames` frames. If no shake is in progress, the rest position and the current
+/// mode are kept for the end of the shake. Returns the camera.
 pub fn start_shake(b: &mut Cps2Bus, mode: u16, frames: u16) -> Obj {
     let cam = Obj(A5 + if rd8(b, A5 + 0x36) != 0 { CAMERA_2 } else { CAMERA_1 });
     if cam.u8(b, f::SHAKING) == 0 {

@@ -1,16 +1,16 @@
-//! Zones de la ROM programme lues par le code Rust (sortie de `lectures_rom` de ddsom-game) que les
-//! ressources ne reconstruisent pas.
+//! Zones of the program ROM read by the Rust code (output of `lectures_rom` of ddsom-game) that the
+//! resources do not rebuild.
 //!
-//!   rom_coverage <assets> <lectures.txt> [écart]
-//!   rom_coverage <assets> --octets <fichier> [--sans <fichier d'assets>]
+//!   rom_coverage <assets> <reads.txt> [gap]
+//!   rom_coverage <assets> --octets <file> [--sans <asset file>]
 //!
-//! La seconde forme écrit la couverture mot par mot (un octet par mot, données puis programme, 1 = couvert)
-//! pour `DDSOM_COUVERT` de `lectures_rom` ; `--without data/natives.json` l'écrit sans ce fichier (pour
-//! `tools/native_zones.py`, qui le régénère).
+//! The second form writes the coverage word by word (one byte per word, data then program, 1 = covered)
+//! for `DDSOM_COUVERT` of `lectures_rom`; `--sans data/natives.json` writes it without that file (for
+//! `tools/native_zones.py`, which regenerates it).
 //!
-//! Affiche, par espace (données `d`, programme `p`), le total lu, la part couverte, puis les zones lues non
-//! couvertes (regroupées si moins de `écart` octets les séparent, 0x10 par défaut) : début, fin exclue,
-//! octets lus non couverts, lectures, masque des scénarios.
+//! Prints, per space (data `d`, program `p`), the total read, the covered share, then the read zones that are not
+//! covered (merged if fewer than `gap` bytes separate them, 0x10 by default): start, end exclusive,
+//! uncovered bytes read, reads, scenario mask.
 
 use std::path::Path;
 
@@ -20,7 +20,7 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     if (a.len() == 4 || a.len() == 6 && a[4] == "--sans") && a[2] == "--octets" {
         let without = a.get(5).cloned().unwrap_or_default();
-        let p = Program::load_files(Path::new(&a[1]), &|f| f != without).expect("ressources");
+        let p = Program::load_files(Path::new(&a[1]), &|f| f != without).expect("resources");
         let mut out = Vec::new();
         for img in [&p.data, &p.prog] {
             out.extend((0..0x200000u32).map(|w| (img.is_covered(2 * w) && img.is_covered(2 * w + 1)) as u8));
@@ -29,12 +29,12 @@ fn main() {
         return;
     }
     let [_, assets, reads_path, ..] = &a[..] else {
-        eprintln!("usage : rom_coverage <assets> <lectures.txt> [écart]");
+        eprintln!("usage: rom_coverage <assets> <reads.txt> [gap]");
         std::process::exit(2);
     };
     let gap: u32 = a.get(3).map_or(0x10, |g| u32::from_str_radix(g, 16).unwrap());
-    let p = Program::load(Path::new(assets)).expect("ressources");
-    // octets lus couverts par chaque fichier : (fichier, données, programme)
+    let p = Program::load(Path::new(assets)).expect("resources");
+    // read bytes covered by each file: (file, data, program)
     let reads: Vec<(char, u32, u32)> = std::fs::read_to_string(reads_path)
         .unwrap()
         .lines()
@@ -44,17 +44,17 @@ fn main() {
             (f[0].chars().next().unwrap(), u32::from_str_radix(f[1], 16).unwrap(), u32::from_str_radix(f[2], 16).unwrap())
         })
         .collect();
-    println!("# octets lus et couverts, par fichier de ressources (données, programme)");
+    println!("# bytes read and covered, per resource file (data, program)");
     for rel in Program::FILES {
-        let q = Program::load_files(Path::new(assets), &|f| f == rel).expect("ressources");
+        let q = Program::load_files(Path::new(assets), &|f| f == rel).expect("resources");
         let count = |view: char, img: &ddsom_assets::rebuild::Image| -> u64 {
             reads.iter().filter(|r| r.0 == view).map(|&(_, s, e)| (s..e).filter(|&a| img.is_covered(a)).count() as u64).sum()
         };
         println!("{rel} {} {}", count('d', &q.data), count('p', &q.prog));
     }
-    for (view, name, img) in [('d', "données", &p.data), ('p', "programme", &p.prog)] {
+    for (view, name, img) in [('d', "data", &p.data), ('p', "program", &p.prog)] {
         let (mut total, mut covered) = (0u64, 0u64);
-        // zones non couvertes : (début, fin, lectures, masque)
+        // uncovered zones: (start, end, reads, mask)
         let mut miss: Vec<(u32, u32, u64, u32)> = Vec::new();
         for l in std::fs::read_to_string(reads_path).unwrap().lines() {
             let f: Vec<&str> = l.split(' ').collect();
@@ -79,7 +79,7 @@ fn main() {
                 }
             }
         }
-        println!("# espace {name} : {total} octets lus, {covered} couverts, {} zones non couvertes", miss.len());
+        println!("# {name} space: {total} bytes read, {covered} covered, {} uncovered zones", miss.len());
         for (s, e, reads, mask) in &miss {
             println!("{view} {s:06x} {e:06x} {} {reads} {mask:x}", e - s);
         }

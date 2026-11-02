@@ -1,23 +1,23 @@
 //! Recompilateur statique 68000 -> Rust.
 //!
-//! 1. Découverte du code par descente récursive depuis les vecteurs et des points d'entrée connus,
-//!    avec les heuristiques propres aux jeux Capcom (tables de saut relatives au PC, appels sans
-//!    pile via A6, créations de tâches par TRAP #0).
-//! 2. Découpage en blocs de base.
-//! 3. Génération : chaque instruction devient un appel à `Cpu::op_*` avec une instruction
-//!    constante (spécialisée à l'inlining), suivi du décompte de cycles et d'une sortie dès que
-//!    l'échéance de la ligne est atteinte. La sémantique est donc celle de l'interpréteur validé.
+//! 1. Code discovery by recursive descent from the vectors and known entry points,
+//!    with heuristics specific to Capcom games (PC-relative jump tables, stackless calls
+//!    via A6, task creation through TRAP #0).
+//! 2. Splitting into basic blocks.
+//! 3. Generation: each instruction becomes a call to `Cpu::op_*` with a constant
+//!    instruction (specialized by inlining), followed by the cycle count and an exit as soon as
+//!    the line deadline is reached. The semantics are thus those of the validated interpreter.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::fmt::Write;
 
 use m68k::decode::{BitOp, Ea, Fetch, Instr, Op, ShiftCount, ShiftKind, Size};
 
-/// Image du programme vue par le CPU.
+/// Program image as seen by the CPU.
 pub struct Image<'a> {
-    /// Espace programme (opcodes et lectures relatives au PC), mots big-endian.
+    /// Program space (opcodes and PC-relative reads), big-endian words.
     pub prog: &'a [u16],
-    /// Espace données (vecteurs d'exception).
+    /// Data space (exception vectors).
     pub data: &'a [u16],
 }
 
@@ -39,19 +39,19 @@ impl Image<'_> {
     }
 }
 
-/// L'instruction termine-t-elle un bloc ?
+/// Does the instruction end a block?
 fn ends_block(op: &Op) -> bool {
     use Op::*;
     matches!(
         op,
         Bra(_) | Bsr(_) | Bcc(..) | Dbcc(..) | Jmp(_) | Jsr(_) | Rts | Rte | Rtr | Trap(_) | Trapv
             | Chk(..) | Illegal | LineA | LineF | Stop(_) | Reset
-            // changement possible du masque d'interruption : on rend la main au répartiteur
+            // possible change of the interrupt mask: control goes back to the dispatcher
             | MoveToSr(_) | AndiSr(_) | OriSr(_) | EoriSr(_)
     )
 }
 
-/// Le flot continue-t-il après l'instruction ?
+/// Does the flow continue after the instruction?
 fn falls_through(op: &Op) -> bool {
     use Op::*;
     !matches!(op, Bra(_) | Jmp(_) | Rts | Rte | Rtr | Illegal | LineA | LineF)
@@ -66,19 +66,19 @@ fn static_target(op: &Op) -> Option<u32> {
     }
 }
 
-/// Résultat de la découverte.
+/// Result of the discovery.
 pub struct Program {
     pub instrs: BTreeMap<u32, Instr>,
     pub leaders: BTreeSet<u32>,
 }
 
-/// Découverte du code depuis `entries` (plus les vecteurs d'exception lus en espace données).
+/// Code discovery from `entries` (plus the exception vectors read in data space).
 pub fn discover(img: &mut Image, entries: &[u32]) -> Program {
     let mut instrs: BTreeMap<u32, Instr> = BTreeMap::new();
     let mut leaders: BTreeSet<u32> = BTreeSet::new();
     let mut work: VecDeque<u32> = VecDeque::new();
 
-    // vecteurs : reset en espace programme, les autres en espace données
+    // vectors: reset in program space, the others in data space
     let reset = img.l(4);
     let mut roots = vec![reset];
     for v in 2..64u32 {
@@ -113,7 +113,7 @@ pub fn discover(img: &mut Image, entries: &[u32]) -> Program {
                 break;
             }
             if ends_block(&ins.op) {
-                // l'instruction suivante commence un nouveau bloc
+                // the next instruction starts a new block
                 if img.in_rom(next) && leaders.insert(next) {
                     work.push_back(next);
                 }
@@ -128,16 +128,16 @@ pub fn discover(img: &mut Image, entries: &[u32]) -> Program {
     Program { instrs, leaders }
 }
 
-/// Cibles implicites : idiomes de tables relatives au PC et d'appels indirects (cf. Cps2Setup.java).
+/// Implicit targets: PC-relative table idioms and indirect calls (cf. Cps2Setup.java).
 fn table_targets(img: &mut Image, instrs: &BTreeMap<u32, Instr>, ins: &Instr) -> Vec<u32> {
     let a = ins.pc;
     let op = ins.opcode;
     let mut out = Vec::new();
-    // lea (d16,pc),a6 : adresse de retour d'un appel sans pile
+    // lea (d16,pc),a6: return address of a stackless call
     if op == 0x4dfa {
         out.push(a.wrapping_add(2).wrapping_add(img.w(a + 2) as i16 as i32 as u32));
     }
-    // lea abs.l,a6 | lea abs.l,An ; jmp (An) | lea abs.l,a0 ; ... trap #0 (création de tâche)
+    // lea abs.l,a6 | lea abs.l,An ; jmp (An) | lea abs.l,a0 ; ... trap #0 (task creation)
     if op & 0xf1ff == 0x41f9 {
         let an = (op >> 9) & 7;
         let t = img.l(a + 2);
@@ -147,7 +147,7 @@ fn table_targets(img: &mut Image, instrs: &BTreeMap<u32, Instr>, ins: &Instr) ->
             out.push(t);
         }
     }
-    // movea.l (d8,pc,Dn),An ; jmp/jsr (An) : table de pointeurs longs
+    // movea.l (d8,pc,Dn),An ; jmp/jsr (An): table of long pointers
     if op & 0xf1ff == 0x207b {
         let an = (op >> 9) & 7;
         let nxt = img.w(a + 4);
@@ -203,7 +203,7 @@ fn table_targets(img: &mut Image, instrs: &BTreeMap<u32, Instr>, ins: &Instr) ->
     out
 }
 
-/// trap #0 dans les 4 instructions suivantes, ou appel d'une fonction qui commence par un trap #0.
+/// trap #0 within the next 4 instructions, or call of a function that starts with a trap #0.
 fn spawns_task_soon(img: &mut Image, mut pc: u32) -> bool {
     for _ in 0..4 {
         if !img.in_rom(pc) {
@@ -223,7 +223,7 @@ fn spawns_task_soon(img: &mut Image, mut pc: u32) -> bool {
     false
 }
 
-// ---------- génération ----------
+// ---------- generation ----------
 
 fn size(s: Size) -> &'static str {
     match s {
@@ -359,8 +359,8 @@ pub fn op_expr(op: &Op) -> String {
     }
 }
 
-/// Découverte statique, puis ajout des points d'entrée appris à l'exécution qui ne sont pas déjà
-/// des instructions connues (les autres viennent des sorties de bloc à l'échéance d'une ligne).
+/// Static discovery, then addition of the entry points learned at run time that are not already
+/// known instructions (the others come from block exits at a line's deadline).
 pub fn discover_with_extra(img: &mut Image, extra: &[u32]) -> Program {
     let base = discover(img, &[]);
     let new: Vec<u32> = extra.iter().copied().filter(|a| !base.instrs.contains_key(a)).collect();
@@ -370,17 +370,17 @@ pub fn discover_with_extra(img: &mut Image, extra: &[u32]) -> Program {
     discover(img, &new)
 }
 
-/// Paramètres de génération.
+/// Generation parameters.
 pub struct Options<'a> {
-    /// Type Rust du bus (implémente m68k::Bus), ex. "cps2::Cps2Bus".
+    /// Rust type of the bus (implements m68k::Bus), e.g. "cps2::Cps2Bus".
     pub bus_type: &'a str,
-    /// Nombre de modules générés (compilation parallèle).
+    /// Number of generated modules (parallel compilation).
     pub modules: usize,
-    /// Longueur maximale d'un bloc.
+    /// Maximum length of a block.
     pub max_block: usize,
 }
 
-/// Blocs de base : (adresse de tête, instructions).
+/// Basic blocks: (head address, instructions).
 pub fn blocks(p: &Program, max_block: usize) -> Vec<(u32, Vec<Instr>)> {
     let mut out = Vec::new();
     for &lead in &p.leaders {
@@ -401,7 +401,7 @@ pub fn blocks(p: &Program, max_block: usize) -> Vec<(u32, Vec<Instr>)> {
     out
 }
 
-/// Génère les fichiers Rust : `mod.rs` (répartiteur) et `b{k}.rs` (blocs). Renvoie (nom, contenu).
+/// Generates the Rust files: `mod.rs` (dispatcher) and `b{k}.rs` (blocks). Returns (name, content).
 pub fn generate(p: &Program, opt: &Options) -> Vec<(String, String)> {
     let blocks = blocks(p, opt.max_block);
     let n = opt.modules.max(1);
@@ -410,7 +410,7 @@ pub fn generate(p: &Program, opt: &Options) -> Vec<(String, String)> {
     let mut dispatch = String::new();
     for (k, chunk) in blocks.chunks(per).enumerate() {
         let mut s = String::new();
-        writeln!(s, "// Code généré par recomp : ne pas modifier.").unwrap();
+        writeln!(s, "// Code generated by recomp: do not modify.").unwrap();
         writeln!(s, "use m68k::decode::{{BitOp, Ea, Instr, Op, ShiftCount, ShiftKind, Size}};").unwrap();
         writeln!(s, "use m68k::Cpu;").unwrap();
         writeln!(s, "type B = {};", opt.bus_type).unwrap();
@@ -439,15 +439,15 @@ pub fn generate(p: &Program, opt: &Options) -> Vec<(String, String)> {
         files.push((format!("b{k}.rs"), s));
     }
     let mut m = String::new();
-    writeln!(m, "// Code généré par recomp : ne pas modifier.").unwrap();
+    writeln!(m, "// Code generated by recomp: do not modify.").unwrap();
     for k in 0..files.len() {
         writeln!(m, "mod b{k} {{ include!(concat!(env!(\"OUT_DIR\"), \"/b{k}.rs\")); }}").unwrap();
     }
-    writeln!(m, "\n/// Nombre de blocs recompilés.\npub const BLOCKS: usize = {};", blocks.len()).unwrap();
+    writeln!(m, "\n/// Number of recompiled blocks.\npub const BLOCKS: usize = {};", blocks.len()).unwrap();
     writeln!(
         m,
-        "\n/// Exécute le bloc commençant à `pc` (jusqu'à sa fin, une exception ou l'échéance `dl`).\n\
-         /// Renvoie None si aucun bloc ne commence à cette adresse.\n\
+        "\n/// Runs the block starting at `pc` (until its end, an exception or the deadline `dl`).\n\
+         /// Returns None if no block starts at this address.\n\
          #[inline(never)]\n\
          pub fn run_block(pc: u32, c: &mut m68k::Cpu, b: &mut {}, dl: u64) -> Option<u32> {{\n    match pc {{",
         opt.bus_type

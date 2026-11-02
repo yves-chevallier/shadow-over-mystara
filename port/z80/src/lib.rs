@@ -1,7 +1,7 @@
-//! Interpréteur Zilog Z80 (CPU son du CPS2).
+//! Zilog Z80 interpreter (CPS2 sound CPU).
 //!
-//! Comportements non documentés inclus (bits X/Y, registre interne WZ/MEMPTR, Q pour SCF/CCF),
-//! validés contre les tests SingleStepTests/z80. Durées en T-états.
+//! Includes undocumented behaviors (X/Y bits, internal WZ/MEMPTR register, Q for SCF/CCF),
+//! validated against the SingleStepTests/z80 tests. Durations in T-states.
 
 pub const FC: u8 = 0x01;
 pub const FN: u8 = 0x02;
@@ -17,7 +17,7 @@ pub trait Bus {
     fn write(&mut self, addr: u16, v: u8);
     fn input(&mut self, port: u16) -> u8;
     fn output(&mut self, port: u16, v: u8);
-    /// Acquittement d'interruption : valeur placée sur le bus de données (0xff par défaut).
+    /// Interrupt acknowledge: value placed on the data bus (0xff by default).
     fn irq_ack(&mut self) -> u8 {
         0xff
     }
@@ -48,11 +48,11 @@ pub struct Z80 {
     pub iff2: bool,
     pub im: u8,
     pub halted: bool,
-    /// EI vient d'être exécuté : les interruptions ne sont pas acceptées avant l'instruction suivante.
+    /// EI was just executed: interrupts are not accepted before the next instruction.
     pub ei_delay: bool,
-    /// Drapeaux écrits par la dernière instruction (0 sinon) : utilisé par SCF/CCF.
+    /// Flags written by the last instruction (0 otherwise): used by SCF/CCF.
     pub q: u8,
-    /// Ligne INT maintenue par le matériel.
+    /// INT line held by the hardware.
     pub irq_line: bool,
     pub cycles: u64,
 }
@@ -173,7 +173,7 @@ impl Z80 {
         }
     }
 
-    /// Registre 8 bits n°r (B C D E H L - A), H/L remplacés par IXH/IXL sous préfixe.
+    /// 8-bit register number r (B C D E H L - A), H/L replaced by IXH/IXL under a prefix.
     fn reg8(&self, r: u8, x: Idx) -> u8 {
         match r {
             0 => self.b,
@@ -205,7 +205,7 @@ impl Z80 {
         }
     }
 
-    /// Paires BC DE HL SP (SP pour p=3), HL remplacé par IX/IY.
+    /// Pairs BC DE HL SP (SP for p=3), HL replaced by IX/IY.
     fn rp(&self, p: u8, x: Idx) -> u16 {
         match p {
             0 => self.bc(),
@@ -284,7 +284,7 @@ impl Z80 {
                     f |= FC;
                 }
                 if op == 7 {
-                    // CP : X/Y viennent de l'opérande
+                    // CP: X/Y come from the operand
                     f |= v & (FX | FY);
                 } else {
                     f |= rb & (FX | FY);
@@ -393,7 +393,7 @@ impl Z80 {
         rw
     }
 
-    /// Rotations/décalages CB (RLC RRC RL RR SLA SRA SLL SRL).
+    /// CB rotations/shifts (RLC RRC RL RR SLA SRA SLL SRL).
     fn rot(&mut self, op: u8, v: u8) -> u8 {
         let c = self.f & FC != 0;
         let (r, co) = match op {
@@ -442,9 +442,9 @@ impl Z80 {
         self.set_f(f);
     }
 
-    // ---------- exécution ----------
+    // ---------- execution ----------
 
-    /// Exécute une instruction (ou prend une interruption). Renvoie les T-états consommés.
+    /// Executes one instruction (or takes an interrupt). Returns the T-states consumed.
     pub fn step<B: Bus>(&mut self, bus: &mut B) -> u32 {
         let start = self.cycles;
         if self.irq_line && self.iff1 && !self.ei_delay {
@@ -485,7 +485,7 @@ impl Z80 {
                 self.cycles += 19;
             }
             _ => {
-                // IM 1, et IM 0 avec RST 38h sur le bus (0xff)
+                // IM 1, and IM 0 with RST 38h on the bus (0xff)
                 self.push(bus, self.pc);
                 self.pc = if self.im == 1 { 0x38 } else { (data & 0x38) as u16 };
                 self.cycles += 13;
@@ -494,7 +494,7 @@ impl Z80 {
         self.wz = self.pc;
     }
 
-    /// Adresse (HL) ou (IX+d)/(IY+d) ; lit le déplacement si préfixé.
+    /// Address (HL) or (IX+d)/(IY+d); reads the displacement if prefixed.
     fn mem_addr<B: Bus>(&mut self, bus: &mut B, x: Idx) -> u16 {
         match x {
             Idx::Hl => self.hl(),
@@ -805,7 +805,7 @@ impl Z80 {
                                 self.pc = a;
                                 self.cycles += 13;
                             }
-                            // le préfixe compte comme une instruction : Q repart de 0
+                            // the prefix counts as an instruction: Q restarts from 0
                             1 => self.prefix(bus, Idx::Ix, 0),
                             2 => self.exec_ed(bus),
                             _ => self.prefix(bus, Idx::Iy, 0),
@@ -828,11 +828,11 @@ impl Z80 {
         }
     }
 
-    /// Préfixe DD/FD : l'opcode suivant utilise IX/IY.
+    /// DD/FD prefix: the next opcode uses IX/IY.
     fn prefix<B: Bus>(&mut self, bus: &mut B, x: Idx, q_before: u8) {
         let op = self.fetch_m1(bus);
         match op {
-            // préfixe suivant : il remplace celui-ci
+            // next prefix: it replaces this one
             0xdd | 0xfd | 0xed => {
                 self.pc = self.pc.wrapping_sub(1);
                 self.r = (self.r & 0x80) | (self.r.wrapping_sub(1) & 0x7f);
@@ -904,7 +904,7 @@ impl Z80 {
             _ => v | (1 << y),
         };
         bus.write(a, r);
-        // copie non documentée dans un registre
+        // undocumented copy into a register
         if z != 6 {
             self.set_reg8(z, Idx::Hl, r);
         }
@@ -1015,7 +1015,7 @@ impl Z80 {
         if xx == 2 && z <= 3 && y >= 4 {
             self.block(bus, y, z);
         }
-        // autres opcodes ED : NOP de 8 T-états
+        // other ED opcodes: 8 T-state NOP
     }
 
     fn block<B: Bus>(&mut self, bus: &mut B, y: u8, z: u8) {
@@ -1108,7 +1108,7 @@ impl Z80 {
                     self.pc = self.pc.wrapping_sub(2);
                     self.wz = self.pc.wrapping_add(1);
                     f = (f & !(FX | FY)) | ((self.pc >> 8) as u8 & (FX | FY));
-                    // effets supplémentaires de la répétition (P. Rak)
+                    // additional effects of the repetition (P. Rak)
                     if f & FC != 0 {
                         if v & 0x80 != 0 {
                             pv ^= !parity(b.wrapping_sub(1) & 7);

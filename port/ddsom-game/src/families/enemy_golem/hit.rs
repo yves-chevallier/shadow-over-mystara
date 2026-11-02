@@ -1,13 +1,12 @@
-//! Type 11, état touché (`+4 = 4`, 0x684fa). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
-//! 6 seconde table de réactions, 8 saisie par un joueur (le Golem sort de l'écran), 10 rien. Zone et ombre sont
-//! toujours testées.
+//! Type 11, hit state (`+4 = 4`, 0x684fa). `+5`: 0 reaction by table (`+0x49`), 2 recoil, 4 fall and get up, 6 second
+//! reaction table, 8 grabbed by a player (the Golem leaves the screen), 10 nothing. Zone and shadow are always tested.
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Tables de réactions communes aux coups, indexées par le code `+0x49`.
+/// Reaction tables shared by the hits, indexed by code `+0x49`.
 const REACT_FIRST: u32 = 0x68542;
 const REACT_SECOND: u32 = 0x68724;
 
@@ -69,7 +68,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 0);
 }
 
-/// Chute puis relevé (0x6869a).
+/// Fall then get up (0x6869a).
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -106,7 +105,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Saisi par un joueur : le Golem marche vers le bord de l'écran le plus proche (0x687cc).
+/// Grabbed by a player: the Golem walks toward the nearest edge of the screen (0x687cc).
 fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;

@@ -1,10 +1,10 @@
-//! Tâche des invites (`0xe03fe`, emplacement 0xd0) : le texte « INSERT COIN(S) », « CONTINUE », etc. clignote,
-//! affiché 40 images puis effacé 20 images, tant que la machine à modes ne l'arrête pas.
+//! Prompts task (`0xe03fe`, slot 0xd0): the text "INSERT COIN(S)", "CONTINUE", etc. blinks,
+//! displayed 40 frames then erased 20 frames, as long as the mode machine does not stop it.
 //!
-//! Le texte dépend de la situation : partie gratuite (`A5+0x25`) ou réglage `A5+0x457` (texte imprimé par `0xd5e`,
-//! effacé par `0xd32`), sinon un texte par réglage de pièces (`A5+0x1e`, table de longs `0xe048c` ; imprimé par
-//! `0xf38`, effacé par `0xf4a`). Le texte affiché est gardé en `A5-0x5ac2` : `0xe03c6` l'efface en arrêtant la tâche,
-//! `0xe03e4` la lance.
+//! The text depends on the situation: free game (`A5+0x25`) or setting `A5+0x457` (text printed by `0xd5e`,
+//! erased by `0xd32`), otherwise one text per coin setting (`A5+0x1e`, table of longs `0xe048c`; printed by
+//! `0xf38`, erased by `0xf4a`). The displayed text is kept at `A5-0x5ac2`: `0xe03c6` erases it when stopping the task,
+//! `0xe03e4` launches it.
 
 use super::{cede, Wait};
 use crate::mem::{rd32, wr32, A5};
@@ -12,9 +12,9 @@ use crate::modes::Flow;
 use crate::scene::Ctx;
 use crate::Native;
 
-/// Texte affiché (long).
+/// Displayed text (long).
 const SHOWN: u32 = A5 - 0x5ac2;
-/// Emplacement de la tâche, et son entrée.
+/// Slot of the task, and its entry.
 const SLOT: u32 = 0xd0;
 const ENTRY: u32 = Step::Entry.address();
 
@@ -24,15 +24,15 @@ mod var {
     pub const COINAGE: u32 = 0x1e;
 }
 
-/// Textes : par réglage de pièces (longs, le premier pour le réglage 1), partie gratuite, réglage `A5+0x457`.
+/// Texts: per coin setting (longs, the first for setting 1), free game, setting `A5+0x457`.
 mod text {
     pub const BY_COINAGE: u32 = 0xe048c;
     pub const FREE_PLAY: u32 = 0xe04b0;
     pub const SETTING: u32 = 0xe04e4;
 }
 
-/// Impressions et effacements du texte gardé : blocs (0xf38, 0xf4a) ou texte simple (0xd5e, 0xd32). Les blocs ne
-/// lisent l'objet A0 que pour des attributs négatifs : jamais pour ces textes (attribut 3).
+/// Prints and erasures of the kept text: blocks (0xf38, 0xf4a) or simple text (0xd5e, 0xd32). The blocks only
+/// read the object A0 for negative attributes: never for these texts (attribute 3).
 #[derive(Clone, Copy)]
 enum Print {
     Pieces,
@@ -46,7 +46,7 @@ const SHOW_FRAMES: u32 = 40;
 const HIDE_FRAMES: u32 = 20;
 
 crate::steps! {
-    /// Étapes : l'entrée, puis après l'affichage et après l'effacement, pour chacune des deux familles de textes.
+    /// Stages: the entry, then after the display and after the erasure, for each of the two families of texts.
     pub enum Step {
         Entry = 0xe03fe => entry,
         CoinsShown = 0xe0440 => |x| {
@@ -77,7 +77,7 @@ fn entry(x: &mut Ctx) -> Flow {
     show(x, Print::Pieces, Step::CoinsShown)
 }
 
-/// Imprime le texte gardé, puis l'attente d'affichage.
+/// Prints the kept text, then the display wait.
 fn show(x: &mut Ctx, print: Print, resume: Step) -> Flow {
     print_shown(x, print);
     cede(x, Wait::Images(SHOW_FRAMES), resume)
@@ -92,16 +92,16 @@ fn print_shown(x: &mut Ctx, print: Print) {
     };
 }
 
-/// `0xe03c6` : efface le texte (comme le texte des pièces, 0xf4a) et arrête la tâche (0xa14) ; aucun registre ne
-/// change. L'effacement ne lit l'objet A0 de l'appelant que si les attributs du texte sont négatifs : jamais pour
-/// les textes que la tâche garde (attribut 3, tables 0xe048c, 0xe04b0, 0xe04e4).
+/// `0xe03c6`: erases the text (like the coin text, 0xf4a) and stops the task (0xa14); no register
+/// changes. The erasure only reads the caller's object A0 if the text attributes are negative: never for
+/// the texts the task keeps (attribute 3, tables 0xe048c, 0xe04b0, 0xe04e4).
 pub fn stop(b: &mut cps2::Cps2Bus) {
     let text = rd32(b, SHOWN);
     crate::text::clear_blocks(b, text, 0);
     crate::kernel::kill_task(b, SLOT);
 }
 
-/// `0xe03e4` : lance la tâche ; registres gardés.
+/// `0xe03e4`: launches the task; registers kept.
 pub fn launch(b: &mut cps2::Cps2Bus) {
     crate::kernel::create_task(b, SLOT, ENTRY);
 }

@@ -1,10 +1,10 @@
-//! Reconstruction des contenus des ROMs à partir des ressources extraites : région graphique, ROM
-//! d'échantillons QSound et tables de la ROM programme 68000, aux adresses d'origine.
+//! Rebuilding of the ROM contents from the extracted resources: graphics region, QSound sample
+//! ROM and tables of the 68000 program ROM, at the original addresses.
 //!
-//! Chaque fonction `put_*` est l'inverse du chargement d'un fichier : elle réécrit ses tables telles
-//! que la ROM les range (les tests de `tests/roundtrip.rs` comparent le résultat octet pour octet).
-//! Seuls les octets décrits par les fichiers sont écrits : `Image::covered` donne les zones couvertes,
-//! le reste de l'image vaut zéro.
+//! Each `put_*` function is the inverse of loading a file: it rewrites its tables as the ROM
+//! stores them (the tests of `tests/roundtrip.rs` compare the result byte for byte).
+//! Only the bytes described by the files are written: `Image::covered` gives the covered zones,
+//! the rest of the image is zero.
 
 use std::io;
 use std::path::Path;
@@ -16,14 +16,14 @@ use crate::{
     Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, SpriteTables, Terrain, Texts,
 };
 
-/// Taille de la ROM programme (espace 0x000000-0x3fffff).
+/// Size of the program ROM (space 0x000000-0x3fffff).
 pub const PROGRAM_SIZE: usize = 0x40_0000;
 
-/// Octets d'une zone de ROM, avec la liste des octets que les ressources décrivent.
+/// Bytes of a ROM zone, with the list of bytes that the resources describe.
 pub struct Image {
     pub bytes: Vec<u8>,
     known: Vec<u64>,
-    /// Adresses où deux écritures se contredisent (devrait rester vide).
+    /// Addresses where two writes contradict each other (should stay empty).
     pub conflicts: Vec<u32>,
 }
 
@@ -32,12 +32,12 @@ impl Image {
         Image { bytes: vec![0; size], known: vec![0; size.div_ceil(64)], conflicts: Vec::new() }
     }
 
-    /// Écrit `data` à l'adresse `at`.
+    /// Writes `data` at address `at`.
     pub fn put(&mut self, at: u32, data: &[u8]) {
         for (i, &b) in data.iter().enumerate() {
             let a = at as usize + i;
             if a >= self.bytes.len() {
-                panic!("écriture hors de l'image en {a:#x}");
+                panic!("write outside the image at {a:#x}");
             }
             let known = self.known[a / 64] >> (a % 64) & 1 != 0;
             if known && self.bytes[a] != b {
@@ -66,7 +66,7 @@ impl Image {
         a < self.bytes.len() && self.known[a / 64] >> (a % 64) & 1 != 0
     }
 
-    /// Zones couvertes `(début, end exclue)`, triées, sans chevauchement.
+    /// Covered zones `(start, end exclusive)`, sorted, non-overlapping.
     pub fn covered(&self) -> Vec<(u32, u32)> {
         let mut out: Vec<(u32, u32)> = Vec::new();
         for a in 0..self.bytes.len() as u32 {
@@ -80,18 +80,18 @@ impl Image {
         out
     }
 
-    /// Octets couverts.
+    /// Covered bytes.
     pub fn covered_len(&self) -> usize {
         self.known.iter().map(|w| w.count_ones() as usize).sum()
     }
 }
 
-/// ROM programme : vue données (lectures du 68000) et vue espace programme déchiffrée (opcodes et
-/// lectures relatives au PC), comme `cps2::load_program`.
+/// Program ROM: data view (68000 reads) and decrypted program-space view (opcodes and
+/// PC-relative reads), like `cps2::load_program`.
 pub struct Program {
     pub data: Image,
     pub prog: Image,
-    /// Fichiers absents du dossier d'assets (leurs tables ne sont pas reconstruites).
+    /// Files missing from the assets folder (their tables are not rebuilt).
     pub missing: Vec<String>,
 }
 
@@ -102,12 +102,12 @@ impl Default for Program {
 }
 
 impl Program {
-    /// Reconstruit toutes les tables dont le fichier existe dans `dir`.
+    /// Rebuilds all the tables whose file exists in `dir`.
     pub fn load(dir: &Path) -> io::Result<Self> {
         Self::load_files(dir, &|_| true)
     }
 
-    /// Fichiers (chemins relatifs à `dir`) qui servent à reconstruire le programme.
+    /// Files (paths relative to `dir`) used to rebuild the program.
     pub const FILES: [&'static str; 19] = [
         "palettes.png",
         "sprites/frames.json",
@@ -130,8 +130,8 @@ impl Program {
         "data/reste.json",
     ];
 
-    /// Comme `load`, mais seuls les fichiers que `want` accepte sont écrits (les images de sprites sont lues
-    /// quand même : les animations et les listes y renvoient).
+    /// Like `load`, but only the files that `want` accepts are written (the sprite frames are read
+    /// anyway: the animations and the lists refer to them).
     pub fn load_files(dir: &Path, want: &dyn Fn(&str) -> bool) -> io::Result<Self> {
         let mut p = Program::default();
         let need = |p: &mut Program, rel: &str| {
@@ -185,7 +185,7 @@ impl Program {
                 p.put_data(&DataFile::load(&dir.join(rel))?).map_err(io::Error::other)?;
             }
         }
-        // en dernier : le reste complète ce que les autres fichiers décrivent
+        // last: the remainder completes what the other files describe
         if need(&mut p, "data/reste.json") {
             p.put_rest(&Remainder::load(&dir.join("data/reste.json"))?).map_err(io::Error::other)?;
         }
@@ -196,13 +196,13 @@ impl Program {
         if program { &mut self.prog } else { &mut self.data }
     }
 
-    /// Bibliothèque de palettes (`palettes.png`) : 0x253000-0x293000.
+    /// Palette library (`palettes.png`): 0x253000-0x293000.
     pub fn put_palettes(&mut self, p: &Palettes) {
         let words: Vec<u16> = p.0.iter().flatten().copied().collect();
         self.data.put_words(0x253000, &words);
     }
 
-    /// Table des adresses d'images et images (en-tête, morceaux), plus leurs tables de décalages.
+    /// Table of frame addresses and frames (header, pieces), plus their offset tables.
     pub fn put_frames(&mut self, f: &Frames) {
         for (i, fr) in f.frames.iter().enumerate() {
             self.data.put32(f.table + 4 * i as u32, fr.rom);
@@ -225,10 +225,10 @@ impl Program {
         }
     }
 
-    /// Familles du visualiseur, jeux d'animations et entrées d'animation.
+    /// Viewer families, animation sets and animation entries.
     pub fn put_anims(&mut self, a: &Anims, frames: &Frames) {
-        // Noms, listes de jeux par famille (rangées à la suite de la table des variantes) et nombre de
-        // variantes (octet bas de l'entrée ; les trois octets hauts ne sont pas des données).
+        // Names, per-family lists of sets (stored right after the variants table) and number of
+        // variants (low byte of the entry; the three high bytes are not data).
         let mut list = a.variants_rom + 4 * a.families.len() as u32 - a.families_rom;
         for (i, fam) in a.families.iter().enumerate() {
             let i = i as u32;
@@ -258,7 +258,7 @@ impl Program {
         }
     }
 
-    /// Scroll 2 et 3 : banques de blocs, bandes, tables de bandes, pointeurs de scènes (espace programme).
+    /// Scroll 2 and 3: block banks, strips, strip tables, scene pointers (program space).
     pub fn put_levels(&mut self, levels: &Levels) {
         for l in &levels.layers {
             for (b, bank) in l.banks.iter().enumerate() {
@@ -279,7 +279,7 @@ impl Program {
         }
     }
 
-    /// Scroll 1 : grilles (complétées de zéros jusqu'aux blocs) et blocs.
+    /// Scroll 1: grids (padded with zeros up to the blocks) and blocks.
     pub fn put_scroll1(&mut self, s: &crate::levels::Scroll1) {
         let mut words: Vec<u16> = s.grids.iter().flatten().copied().collect();
         words.resize((s.blocks_rom - s.grids_rom) as usize / 2, 0);
@@ -288,7 +288,7 @@ impl Program {
         self.data.put_words(s.blocks_rom, &words);
     }
 
-    /// Cartes de terrain fixes et types de terrain.
+    /// Fixed terrain maps and terrain types.
     pub fn put_terrain(&mut self, t: &Terrain) {
         for m in &t.maps {
             let words: Vec<u16> = m.columns.iter().flatten().copied().collect();
@@ -300,7 +300,7 @@ impl Program {
         }
     }
 
-    /// Palettes de chaque scène : page 0, palettes ajoutées, ensembles et pages 1 à 3.
+    /// Palettes of each scene: page 0, added palettes, sets and pages 1 to 3.
     pub fn put_scene_palettes(&mut self, p: &ScenePalettes) {
         let words: Vec<u16> = p.stages.iter().flatten().map(|&v| ScenePalettes::stage_word(v)).collect();
         self.data.put_words(p.stages_rom, &words);
@@ -311,7 +311,7 @@ impl Program {
         }
     }
 
-    /// Boîtes (jeux, blocs, visibilité), marques au sol, listes d'images et tir ESHL 5.
+    /// Boxes (sets, blocks, visibility), ground marks, frame lists and ESHL 5 shot.
     pub fn put_sprite_tables(&mut self, t: &SpriteTables, frames: &Frames) {
         for bt in &t.box_tables {
             for (i, &a) in bt.sets.iter().enumerate() {
@@ -344,7 +344,7 @@ impl Program {
         self.data.put(s5.mirrored_rom, &bytes);
     }
 
-    /// Textes de la couche 8x8, tables de textes, noms des bulles et noms terminés par `@`.
+    /// Texts of the 8x8 layer, text tables, popup names and `@`-terminated names.
     pub fn put_texts(&mut self, t: &Texts) {
         for d in &t.texts {
             self.data.put(d.rom, &d.bytes());
@@ -385,7 +385,7 @@ impl Program {
         }
     }
 
-    /// Scripts d'apparition des scènes.
+    /// Spawn scripts of the scenes.
     pub fn put_spawns(&mut self, s: &Spawns) {
         for (i, &a) in s.scenes.iter().enumerate() {
             self.data.put32(s.table + 4 * i as u32, a);
@@ -395,8 +395,8 @@ impl Program {
         }
     }
 
-    /// Le reste de la région programme (`data/remainder.json`) : ses blocs, puis l'espace programme hors de la zone
-    /// chiffrée, recopié de l'espace données (il lui est égal).
+    /// The remainder of the program region (`data/remainder.json`): its blocks, then the program space outside the
+    /// encrypted zone, copied from the data space (it is equal to it).
     pub fn put_rest(&mut self, r: &Remainder) -> Result<(), String> {
         for b in &r.data {
             self.data.put(b.start, &b.bytes()?);
@@ -413,7 +413,7 @@ impl Program {
         Ok(())
     }
 
-    /// Tables de données (`data/*.json`) et leurs textes.
+    /// Data tables (`data/*.json`) and their texts.
     pub fn put_data(&mut self, f: &DataFile) -> Result<(), String> {
         for t in &f.tables {
             let bytes = t.bytes()?;
@@ -426,14 +426,14 @@ impl Program {
     }
 }
 
-/// Région graphique (cellules 16x16 au format matériel : 4 plans par groupe de 8 pixels, 128 octets par
-/// cellule), telle que `cps2_gfx::rom::load_gfx` la construit depuis les ROMs.
+/// Graphics region (16x16 cells in hardware format: 4 planes per group of 8 pixels, 128 bytes per
+/// cell), as `cps2_gfx::rom::load_gfx` builds it from the ROMs.
 pub fn gfx_region(dir: &Path) -> io::Result<Vec<u8>> {
     Ok(Cells::load(dir)?.to_region())
 }
 
 impl Cells {
-    /// Octets de la cellule `c` au format matériel.
+    /// Bytes of cell `c` in hardware format.
     pub fn encode(&self, c: usize) -> [u8; 128] {
         let mut bytes = [0u8; 128];
         for y in 0..16 {
@@ -447,17 +447,17 @@ impl Cells {
         bytes
     }
 
-    /// Toute la région graphique.
+    /// The whole graphics region.
     pub fn to_region(&self) -> Vec<u8> {
         (0..self.len()).flat_map(|c| self.encode(c)).collect()
     }
 }
 
-/// Taille de la ROM d'échantillons QSound (`dd2.11m` et `dd2.12m`).
+/// Size of the QSound sample ROM (`dd2.11m` and `dd2.12m`).
 pub const SAMPLES_SIZE: usize = 0x40_0000;
 
-/// ROM d'échantillons : les zones décrites par la table des échantillons du pilote (`music.json`) et les
-/// fichiers `sounds/NNN.wav` et ce qui suit chaque échantillon (`Music::sample_tails`), le reste à zéro. `Image::covered` donne les zones remplies.
+/// Sample ROM: the zones described by the driver's sample table (`music.json`) and the
+/// `sounds/NNN.wav` files and what follows each sample (`Music::sample_tails`), the rest zero. `Image::covered` gives the filled zones.
 pub fn qsound_samples(dir: &Path) -> io::Result<Image> {
     let music = Music::load(&dir.join("sound/music.json"))?;
     let mut img = Image::new(SAMPLES_SIZE);
@@ -469,7 +469,7 @@ pub fn qsound_samples(dir: &Path) -> io::Result<Image> {
         let pcm: Vec<u8> = Sample::load(&path)?.pcm.iter().map(|&v| v as u8).collect();
         let (start, end) = music.sample_span(i);
         img.put(start as u32, &pcm);
-        // la suite jusqu'au prochain échantillon (zéros omis dans le fichier)
+        // what follows up to the next sample (zeros omitted in the file)
         let mut tail = vec![0; music.sample_tail_end(i) - end - 1];
         if let Some(hex) = music.sample_tails.get(i) {
             for (k, b) in tail.iter_mut().zip(hex.as_bytes().chunks(2)) {
@@ -481,14 +481,14 @@ pub fn qsound_samples(dir: &Path) -> io::Result<Image> {
     Ok(img)
 }
 
-/// Taille de la région du Z80 (`cps2::sound::Sound::rom`).
+/// Size of the Z80 region (`cps2::sound::Sound::rom`).
 pub const AUDIO_SIZE: usize = 0x5_0000;
 
-/// Région du Z80 (0-7FFF fixe, banques à partir de 0x10000) avec tout ce que lit le pilote son réécrit
-/// (`ddsom_sound`, `sound/music.json`) : pointeurs de la ROM fixe, en-tête et table des sons, définitions,
-/// pistes, bancs d'instruments, fiches d'échantillons et tables du pilote. Le programme du Z80 n'y est pas :
-/// seul le pilote Rust (`cps2::sound::Sound::use_rust_driver`) peut la jouer. Adresses linéaires de
-/// `ddsom_sound::Rom` (décalage de 0x8000 à partir de 0x8000).
+/// Z80 region (0-7FFF fixed, banks from 0x10000) with everything the rewritten sound driver reads
+/// (`ddsom_sound`, `sound/music.json`): fixed-ROM pointers, header and sound table, definitions,
+/// tracks, instrument banks, sample records and driver tables. The Z80 program is not in it:
+/// only the Rust driver (`cps2::sound::Sound::use_rust_driver`) can play it. Linear addresses of
+/// `ddsom_sound::Rom` (shift of 0x8000 from 0x8000).
 pub fn audio_region(dir: &Path) -> io::Result<Image> {
     let m = Music::load(&dir.join("sound/music.json"))?;
     let mut img = Image::new(AUDIO_SIZE);
@@ -513,7 +513,7 @@ pub fn audio_region(dir: &Path) -> io::Result<Image> {
         put(s.rom, &s.bytes());
     }
     for b in &m.code {
-        let bytes = b.bytes().ok_or_else(|| io::Error::other(format!("music.json : piste {:#x} illisible", b.rom)))?;
+        let bytes = b.bytes().ok_or_else(|| io::Error::other(format!("music.json: unreadable track {:#x}", b.rom)))?;
         put(b.rom, &bytes);
     }
     for (k, b) in m.banks.iter().enumerate() {
@@ -527,8 +527,8 @@ pub fn audio_region(dir: &Path) -> io::Result<Image> {
     Ok(img)
 }
 
-/// Programme du DSP QSound tel que `qsound::QSound::new` le lit (0x2000 octets, mots petit-boutistes) : seules les
-/// tables de `sound/qsound_dsp.json` sont remplies, le code (que l'émulation haut niveau remplace) vaut zéro.
+/// QSound DSP program as `qsound::QSound::new` reads it (0x2000 bytes, little-endian words): only the
+/// tables of `sound/qsound_dsp.json` are filled, the code (which the high-level emulation replaces) is zero.
 pub fn qsound_dsp(dir: &Path) -> io::Result<Vec<u8>> {
     let t = crate::music::DspTables::load(&dir.join("sound/qsound_dsp.json"))?;
     let mut bytes = vec![0u8; 0x2000];
@@ -541,18 +541,18 @@ pub fn qsound_dsp(dir: &Path) -> io::Result<Vec<u8>> {
     Ok(bytes)
 }
 
-/// Mots grand-boutistes d'une image de la ROM programme (vue de `cps2::Cps2Bus`).
+/// Big-endian words of a program ROM image (view of `cps2::Cps2Bus`).
 fn words(img: &Image) -> Vec<u16> {
     img.bytes.chunks_exact(2).map(|w| u16::from_be_bytes([w[0], w[1]])).collect()
 }
 
-/// Tout ce que la machine range dans ses puces, reconstruit depuis le dossier d'assets, sans aucune ROM : programme
-/// 68000 (seulement ses tables : le jeu doit tourner sans 68000, `ddsom_game::install_no_68k`), graphismes,
-/// région du Z80 (sans son programme : pilote son Rust obligatoire), tables du DSP QSound, échantillons.
+/// Everything the machine stores in its chips, rebuilt from the assets folder, without any ROM: 68000
+/// program (only its tables: the game must run without the 68000, `ddsom_game::install_no_68k`), graphics,
+/// Z80 region (without its program: Rust sound driver mandatory), QSound DSP tables, samples.
 pub fn contents(dir: &Path) -> io::Result<cps2::Contents> {
     let p = Program::load(dir)?;
     if !p.missing.is_empty() {
-        return Err(io::Error::new(io::ErrorKind::NotFound, format!("assets incomplets : {}", p.missing.join(", "))));
+        return Err(io::Error::new(io::ErrorKind::NotFound, format!("incomplete assets: {}", p.missing.join(", "))));
     }
     Ok(cps2::Contents {
         program: words(&p.data),
@@ -564,12 +564,12 @@ pub fn contents(dir: &Path) -> io::Result<cps2::Contents> {
     })
 }
 
-/// Zones de `a` et `b` qui diffèrent sur les octets couverts de `img` (pour les tests et les mesures).
+/// First address where `img` and `rom` differ on the bytes covered by `img` (for tests and measurements).
 pub fn first_difference(img: &Image, rom: &[u8]) -> Option<u32> {
     (0..img.bytes.len() as u32).find(|&a| img.is_covered(a) && img.bytes[a as usize] != rom[a as usize])
 }
 
-/// Regroupe des adresses lues en zones : `(début, end exclue)` par mot de 2 octets.
+/// Merges read addresses into zones: `(start, end exclusive)` per 2-byte word.
 pub fn merge_ranges(mut v: Vec<(u32, u32)>) -> Vec<(u32, u32)> {
     v.sort();
     let mut out: Vec<(u32, u32)> = Vec::new();
@@ -582,7 +582,7 @@ pub fn merge_ranges(mut v: Vec<(u32, u32)>) -> Vec<(u32, u32)> {
     out
 }
 
-/// Octets de `ranges` non couverts par `img`, regroupés en zones.
+/// Bytes of `ranges` not covered by `img`, merged into zones.
 pub fn uncovered(img: &Image, ranges: &[(u32, u32)]) -> Vec<(u32, u32)> {
     let mut out: Vec<(u32, u32)> = Vec::new();
     for &(s, e) in ranges {

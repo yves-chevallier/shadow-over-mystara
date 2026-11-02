@@ -2,7 +2,7 @@
 name = "ddsom-assets"
 version = "0.1.0"
 edition = "2021"
-description = "Chargement des ressources extraites (graphismes, palettes, sons, sprites, décors)"
+description = "Loading of the extracted resources (graphics, palettes, sounds, sprites, scenery)"
 
 [dependencies]
 cps2 = { path = "../cps2" }

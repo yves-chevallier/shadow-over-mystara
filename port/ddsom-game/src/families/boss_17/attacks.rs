@@ -1,15 +1,15 @@
-//! Boss 17, groupe `+5` = 4 : les attaques (`+6` = 0 à 16), et leurs effets de poussière.
+//! Boss 17, group `+5` = 4: the attacks (`+6` = 0 to 16), and their dust effects.
 //!
-//! | `+6` | Attaque (h) |
+//! | `+6` | Attack (h) |
 //! |---|---|
-//! | 0 | coup simple |
-//! | 2 | coup avec onde |
-//! | 4 | coup double avec élan |
-//! | 6 | bond vers la cible |
-//! | 8, 10 | tir ESHL 0x20 (lancer) |
-//! | 12 | tir ESHL 0x21 (souffle) |
-//! | 14 | cri qui lâche des objets autour de la caméra |
-//! | 16 | cri final, mode ralenti |
+//! | 0 | simple hit |
+//! | 2 | hit with a wave |
+//! | 4 | double hit with a run-up |
+//! | 6 | leap toward the target |
+//! | 8, 10 | ESHL 0x20 shot (throw) |
+//! | 12 | ESHL 0x21 shot (breath) |
+//! | 14 | cry that drops objects around the camera |
+//! | 16 | final cry, slow-motion mode |
 
 use crate::families::cx::Bench;
 use super::decide;
@@ -40,7 +40,7 @@ fn state7<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     x.u8(0x7)
 }
 
-/// Fin d'une attaque : retour au combat si l'animation est finie.
+/// End of an attack: return to combat if the animation is finished.
 fn finish<R: Bench>(x: &mut Cx<'_, R>, to: fn(&mut Cx<'_, R>)) {
     if lib::step(x) {
         if !players_alive(x) {
@@ -56,7 +56,7 @@ fn strike_anim<R: Bench>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     lib::start(x, SET_STRIKE, n);
 }
 
-/// Poussière : un EFFCT 0x32 de variante `v` lié au boss, sans insister (0x2318).
+/// Dust: an EFFCT 0x32 of variant `v` linked to the boss, without insisting (0x2318).
 fn puff<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     if let Some(e) = x.alloc(&pools::EFFCT) {
         e.set_u8(x.b, 0, 1);
@@ -68,7 +68,7 @@ fn puff<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     }
 }
 
-/// 0x97580 : poussière à intervalle régulier pendant le ralenti.
+/// 0x97580: dust at regular intervals during the slow motion.
 pub(super) fn slow_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SLOW) == 0 {
         return;
@@ -82,7 +82,7 @@ pub(super) fn slow_tick<R: Bench>(x: &mut Cx<'_, R>) {
     puff(x, 4);
 }
 
-/// 0x975a2 : poussière sauf pendant le ralenti.
+/// 0x975a2: dust except during the slow motion.
 pub(super) fn dust_unless_slow<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SLOW) == 0 {
         puff(x, 4);
@@ -143,7 +143,7 @@ fn strike_2<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 4 : coup double avec élan ---------------------------------------------------------------
+// --- +6 = 4: double hit with a run-up ---------------------------------------------------------------
 
 fn strike_4<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
@@ -203,7 +203,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             let angle = if x.u8(f::FLIP) == 0 { 0x18 } else { 8 };
             x.set8(Obj::SPEED_INDEX, angle);
             speed(x, 0x17);
-            // vitesse en profondeur assez grande pour atteindre la cible en un bond
+            // depth speed large enough to reach the target in one leap
             let target = x.linked(f::TARGET);
             let mut gap = (x.u32(0x8) as i32).wrapping_sub(target.u32(x.b, 0x8) as i32);
             if gap < 0 {
@@ -211,7 +211,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             }
             let per_frame = ((x.u16(0x14) as i16 as i32) << 8).wrapping_abs();
             let mut vz: u16 = 0x100;
-            // la boucle de l'original ne finit pas si la vitesse est nulle
+            // the original's loop does not end if the speed is zero
             for _ in 0..0x10000 {
                 gap = gap.wrapping_sub(per_frame);
                 if gap <= 0 {
@@ -341,7 +341,7 @@ fn throw<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x96614 : le tir a disparu (ou n'a pas pu naître) : fin du geste.
+/// 0x96614: the shot has disappeared (or could not be born): end of the gesture.
 fn throw_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     lib::start(x, SET_STRIKE, 8);

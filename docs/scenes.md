@@ -22,7 +22,7 @@ l'attract). La boucle de partie (`docs/boucle.md`) appelle chaque image le gesti
 | 28 | `0xfb292` | fin du jeu (générique) | `modes/ending.rs`, voir `docs/modes.md` |
 
 La phase 4 (sélection du personnage, F3/F5) et les phases 0, 12, 20 (W1) sont décrites ailleurs
-(`docs/boucle.md`, `docs/familles/set_c.md`).
+(`docs/boucle.md`, `docs/families/set_c.md`).
 
 Toutes les séquences sont des machines à états en RAM : l'étape (`A5+0x2d`) et la sous-étape
 (`A5+0x2e`, pas de 2 en phase 8 et 24, de 4 en phase 16) disent où l'on en est ; des minuteries et des

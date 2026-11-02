@@ -1,6 +1,6 @@
-//! Type 1, coups au corps à corps (`+5 = 4`). `+6` : 0 estoc, 2 coup d'estoc haut, 4 enchaînement,
-//! 6 double coup, 8 bond-coup, 10 glissade, 12 grand bond, 14 et 16 bond avec demi-tour, 18 et 20 garde (série 1).
-//! `+7` est l'étape : les étapes 0 à 4 (selon le coup) sont communes (`ready`, `settle`, `face`).
+//! Type 1, melee attacks (`+5 = 4`). `+6`: 0 thrust, 2 high thrust, 4 combo, 6 double attack, 8 leap attack, 10 slide,
+//! 12 big leap, 14 and 16 leap with turn-around, 18 and 20 guard (series 1).
+//! `+7` is the step: steps 0 to 4 (depending on the attack) are shared (`ready`, `settle`, `face`).
 
 use crate::families::cx::Bench;
 use super::*;
@@ -27,15 +27,15 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     zone_and_terrain(x);
 }
 
-// --- étapes communes ----------------------------------------------------------------------------
+// --- common steps ----------------------------------------------------------------------------
 
-/// 0x59b98 : le squelette se prépare (animation de repos).
+/// 0x59b98: the skeleton gets ready (rest animation).
 pub(super) fn ready<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     body(x, 0);
 }
 
-/// 0x59b82 : attend que le délai `+0x77` soit écoulé.
+/// 0x59b82: waits for delay `+0x77` to elapse.
 pub(super) fn settle<R: Bench>(x: &mut Cx<'_, R>) {
     let wait = x.u8(COOLDOWN);
     if wait != 0 {
@@ -48,7 +48,7 @@ pub(super) fn settle<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
 }
 
-/// 0x591d6 : se tourne vers la cible si elle est derrière (`+0xa6` = 2).
+/// 0x591d6: turns toward the target if it is behind (`+0xa6` = 2).
 pub(super) fn face<R: Bench>(x: &mut Cx<'_, R>) {
     let side = x.u8(SIDE) as i8;
     if side < 2 {
@@ -68,7 +68,7 @@ pub(super) fn face<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x59222 : mémorise si la cible est derrière (`+0xa6` = 2, sinon 0) ; vrai si un demi-tour est nécessaire.
+/// 0x59222: saves whether the target is behind (`+0xa6` = 2, otherwise 0); true if a turn-around is needed.
 fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let mut side = 0;
     if x.u16(f::TARGET) != 0 {
@@ -86,7 +86,7 @@ fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     side != 0
 }
 
-/// 0x58370 : fin d'un coup — on attend la fin de l'animation, puis on choisit la suite.
+/// 0x58370: end of an attack — waits for the end of the animation, then chooses what follows.
 fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(ANIM_STATE) as i16) >= 0 {
         step(x);
@@ -98,8 +98,8 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- coups simples ------------------------------------------------------------------------------
 
-/// Estoc (`+6` = 0 ou 2) : tire au sort de reprendre l'idée, sinon prépare puis frappe (type `kind`,
-/// force `power`, animation `anim`).
+/// Thrust (`+6` = 0 or 2): draws whether to take the idea up again, otherwise prepares then strikes (type `kind`,
+/// strength `power`, animation `anim`).
 fn thrust<R: Bench>(x: &mut Cx<'_, R>, kind: u8, power: u8, anim: u32) {
     match x.u8(f::SUB3) {
         0 => {
@@ -124,7 +124,7 @@ fn thrust<R: Bench>(x: &mut Cx<'_, R>, kind: u8, power: u8, anim: u32) {
     }
 }
 
-/// Enchaînement (`+6` = 4) : coup de bouclier, puis, au hasard, un second coup ; la série 1 passe à la garde.
+/// Combo (`+6` = 4): shield strike, then, at random, a second strike; series 1 goes to guard.
 fn combo<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => face(x),
@@ -159,7 +159,7 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Double coup (`+6` = 6) : un coup au hasard parmi deux animations, puis le suivant.
+/// Double attack (`+6` = 6): a random strike among two animations, then the next one.
 fn double_cut<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => face(x),
@@ -196,7 +196,7 @@ pub(super) enum Leap {
     Short,
     /// Grand bond : type 8, plus rapide.
     Long,
-    /// Bond avec demi-tour à l'atterrissage.
+    /// Leap with turn-around on landing.
     Turning,
     /// Idem, suivi d'un second coup.
     TurningCombo,
@@ -251,7 +251,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>, kind: Leap) {
     }
 }
 
-/// 0x584fe : attend l'image-clé du saut.
+/// 0x584fe: waits for the key frame of the jump.
 pub(super) fn land_wait<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     if x.u8(f::KEY_FRAME) != 0 {
@@ -259,7 +259,7 @@ pub(super) fn land_wait<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x58512 : montée du bond (déplacement en X et en hauteur).
+/// 0x58512: climb of the leap (movement in X and in height).
 pub(super) fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     step(x);
@@ -281,7 +281,7 @@ pub(super) fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Début du bond : vitesse horizontale selon le type de bond et l'orientation, puis envol.
+/// Start of the leap: horizontal speed according to the leap type and the orientation, then take-off.
 fn jump_up<R: Bench>(x: &mut Cx<'_, R>, kind: Leap) {
     match kind {
         Leap::Short => {
@@ -305,7 +305,7 @@ fn jump_up<R: Bench>(x: &mut Cx<'_, R>, kind: Leap) {
     strike(x, 2);
 }
 
-/// Glissade (`+6` = 10) : le squelette fonce vers la cible en déplaçant son animation.
+/// Slide (`+6` = 10): the skeleton rushes at the target while shifting its animation.
 fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => ready(x),
@@ -316,17 +316,17 @@ fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x58582 : lance l'animation 2 en la ramenant à l'image qu'elle avait, mémorise la position.
+/// 0x58582: starts animation 2 bringing it back to the frame it had, saves the position.
 fn begin_slide<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x2a);
     restart_slide(x);
 }
 
-/// 0x5858c : animation 2 rejouée jusqu'à retrouver la même image (au plus huit pas).
+/// 0x5858c: animation 2 replayed until the same frame is found again (at most eight steps).
 pub(super) fn restart_slide<R: Bench>(x: &mut Cx<'_, R>) {
     let (count, state) = (x.u16(ANIM_COUNT), x.u16(ANIM_STATE));
-    // D2 (mot bas) = l'image cherchée, D3 = compteur de pas : restes relus par la suite (DDSOM_POISON :
+    // D2 (low word) = the sought frame, D3 = step counter: leftovers re-read afterwards (DDSOM_POISON:
     // skeleton_scene13, boss17_scene13).
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | state as u32;
     x.anim_start(SET_BODY, 2);

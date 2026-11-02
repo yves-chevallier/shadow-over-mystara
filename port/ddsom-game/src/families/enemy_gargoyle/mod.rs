@@ -1,19 +1,19 @@
-//! Ennemi « Gargoyle » (ENEMY type 8, 0x63fb0). Voir `docs/families/enemy.md`.
+//! "Gargoyle" enemy (ENEMY type 8, 0x63fb0). See `docs/families/enemy.md`.
 //!
-//! Créature volante qui se pose pour attaquer (variantes `+3` = 0 à 2 : arrivée au ras du sol, en vol ou au sol).
-//! Elle s'appuie sur la bibliothèque commune `enemy_lib` (jeux d'animation avec type de coup `+0x44`).
+//! Flying creature that lands to attack (variants `+3` = 0 to 2: arrival at ground level, in flight or on the ground).
+//! It relies on the common library `enemy_lib` (animation sets with attack type `+0x44`).
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `arrival` | arrivée en vol (`+6` = 0 variante 0, 2 variante 1) |
-//! | 2 | `stance` | déplacements (`+6` = 0 à 10) : poursuite, demi-tour, plongeons, vols en cercle |
-//! | 4 | `attacks` | coups (`+6` = 0 à 12) |
-//! | 6, 8, 10 | `attacks` | repos, tir de fin de combat |
-//! | 12, 14 | `attacks` | saisie d'un joueur par la créature |
-//! | état 4 | `hit` | réactions aux coups (table `0x6518a` par code `+0x49`), chute, mort |
+//! | 0 | `arrival` | arrival in flight (`+6` = 0 variant 0, 2 variant 1) |
+//! | 2 | `stance` | movements (`+6` = 0 to 10): pursuit, turn-around, dives, circular flights |
+//! | 4 | `attacks` | attacks (`+6` = 0 to 12) |
+//! | 6, 8, 10 | `attacks` | rest, end-of-fight shot |
+//! | 12, 14 | `attacks` | grab of a player by the creature |
+//! | state 4 | `hit` | reactions to hits (table `0x6518a` by code `+0x49`), fall, death |
 //!
-//! `+0x50` est la cible (joueur), `+0x54` l'éventuelle victime saisie. Animations 0x162ebc (vol), 0x162eee (coups),
-//! 0x163014 et 0x163098 (vol contre ou avec l'orientation).
+//! `+0x50` is the target (player), `+0x54` the possible grabbed victim. Animations 0x162ebc (flight), 0x162eee
+//! (attacks), 0x163014 and 0x163098 (flight against or with the orientation).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -57,7 +57,7 @@ use crate::objects::Current;
 
 pub(self) const SET_FLY: u32 = 0x162ebc;
 pub(self) const SET_STRIKE: u32 = 0x162eee;
-/// Jeux de vol selon que la vitesse suit ou non l'orientation (`lib::moving_forward`).
+/// Flight sets depending on whether or not the speed follows the orientation (`lib::moving_forward`).
 pub(self) const SET_FLY_AGAINST: u32 = 0x163014;
 pub(self) const SET_FLY_ALONG: u32 = 0x163098;
 
@@ -100,12 +100,12 @@ pub(self) fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK_PREV, v);
 }
 
-/// Table de vitesses `n` (0x1b64) pour l'angle `+0x2d`.
+/// Speed table `n` (0x1b64) for angle `+0x2d`.
 pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
-/// Éclat de décor (0x1172e) au point d'impact `d5`.
+/// Scenery chip (0x1172e) at impact point `d5`.
 pub(self) fn spark<R: Bench>(x: &mut Cx<'_, R>, d5: u32) {
     lib::debris(x, d5);
 }
@@ -114,14 +114,14 @@ pub(self) fn camera_x<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_X.get(x.b) } else { var::CAMERA1_X.get(x.b) }
 }
 
-/// Décompte d'une minuterie mot `+off` : vrai tant qu'elle reste positive.
+/// Countdown of a word timer `+off`: true as long as it stays positive.
 pub(self) fn count_down<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     let n = x.u16(off).wrapping_sub(1);
     x.set16(off, n);
     (n as i16) > 0
 }
 
-/// 0x65a9e : se tourne vers la cible.
+/// 0x65a9e: turns toward the target.
 pub(self) fn face_target<R: Bench>(x: &mut Cx<'_, R>) {
     let target = x.linked(f::TARGET);
     let d1 = target.u16(x.b, Obj::X);
@@ -129,7 +129,7 @@ pub(self) fn face_target<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::FLIP, flip as u8);
 }
 
-/// 0x65a30 : ondulation verticale en vol selon la clé d'animation (table de longs `0x65a5a`).
+/// 0x65a30: vertical undulation in flight according to the animation key (table of longs `0x65a5a`).
 pub(self) fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
     let mut d = rom32(x, 0x65a5a + idx) as i32;
@@ -142,19 +142,19 @@ pub(self) fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x65a72 : montée progressive (table de longs `0x65a86`).
+/// 0x65a72: progressive climb (table of longs `0x65a86`).
 pub(self) fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
     let d = rom32(x, 0x65a86 + idx);
     x.add32(Obj::Z, d);
 }
 
-// --- transitions d'état : le geste suivant ----------------------------------------------------------
+// --- state transitions: the next move ----------------------------------------------------------
 
 pub(self) mod go {
     use super::*;
 
-    /// Sous-état 2 (déplacements) : `+6` = 2, saisie de l'état courant pour y revenir.
+    /// Substate 2 (movements): `+6` = 2, saves the current state in order to come back to it.
     pub fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         let s = x.u32(f::STATE);
@@ -181,7 +181,7 @@ pub(self) mod go {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0202_0a00);
     }
-    /// Sous-état 4 (coups), `+6` = 0 ; `grab` : la créature a déjà saisi sa victime.
+    /// Substate 4 (attacks), `+6` = 0; `grab`: the creature has already grabbed its victim.
     pub fn strike_0<R: Bench>(x: &mut Cx<'_, R>, grab: bool) {
         if grab {
             x.set8(HIT_FLAGS, 0);
@@ -220,17 +220,17 @@ pub(self) mod go {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0c00);
     }
-    /// Plus de joueur en vie : la créature se retire (sous-état 10).
+    /// No player alive any more: the creature withdraws (substate 10).
     pub fn retire<R: Bench>(x: &mut Cx<'_, R>) {
         set_state_long(x, 0x020a_0000);
     }
-    /// Saisie par un joueur : état touché 8.
+    /// Grabbed by a player: hit state 8.
     pub fn held<R: Bench>(x: &mut Cx<'_, R>) {
         set_state_long(x, 0x0408_0000);
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
@@ -281,7 +281,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::FREEZE) as i8 > 0 {
@@ -305,7 +305,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     cooldown(x);
 }
 
-/// 0x65ab6 : décompte de la période de repos (`+0xb4`) ; à zéro, le drapeau `+0x58` retombe.
+/// 0x65ab6: countdown of the rest period (`+0xb4`); at zero, flag `+0x58` drops.
 pub(self) fn cooldown<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(COOLDOWN) as i16) <= 0 {
         return;
@@ -317,6 +317,6 @@ pub(self) fn cooldown<R: Bench>(x: &mut Cx<'_, R>) {
 
 handlers! {
     0x63fb0 "enemy_8" #[without] run,
-    // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
+    // get up after a common reaction (table 0x3e000 of `reactions.rs`)
     0x653b2 "enemy_8_releve" attacks::regroup,
 }

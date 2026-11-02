@@ -1,17 +1,17 @@
-//! État scénarisé des joueurs (`+4` = 0) : entrées en scène, résurrection, cinématiques (P3).
+//! Scripted state of the players (`+4` = 0): scene entries, revival, cinematics (P3).
 //!
-//! Dans cet état le joueur obéit à un petit script plutôt qu'aux manettes. L'octet `+5` choisit le
-//! genre de script ; `+6` est alors le *pas* du script (et `+7` un sous-pas) :
+//! In this state the player obeys a small script rather than the controllers. Byte `+5` selects the
+//! kind of script; `+6` is then the script *step* (and `+7` a sub-step):
 //!
-//! | `+5` | genre | aiguillage |
+//! | `+5` | kind | dispatch |
 //! |---|---|---|
-//! | 0 | cinématique de la scène | numéro de scène (`A5+0x34`) -> routine (table 0x23826) |
-//! | 4 | résurrection | pas `+6` -> routine (décalages, table 0x23b98) |
-//! | 8 | attente d'ouverture des commandes | pas `+6` -> routine (table 0x23d66) |
-//! | 0xc | cinématique de fin | numéro de scène -> routine (table 0x23f4e), sans réinsertion |
+//! | 0 | scene cinematic | scene number (`A5+0x34`) -> routine (table 0x23826) |
+//! | 4 | revival | step `+6` -> routine (offsets, table 0x23b98) |
+//! | 8 | wait for controls to open | step `+6` -> routine (table 0x23d66) |
+//! | 0xc | end cinematic | scene number -> routine (table 0x23f4e), without reinsertion |
 //!
-//! Comme `hurt`, les routines d'origine sont atteintes par les tables du code ; `HANDLERS`
-//! donne la version Rust des routines réécrites, les autres s'exécutent telles quelles.
+//! Like `hurt`, the original routines are reached through the code tables; `HANDLERS`
+//! gives the Rust version of the rewritten routines, the others run as they are.
 
 use super::actions::start_stand;
 use super::checks::{special_attack, throw_button};
@@ -26,7 +26,7 @@ use crate::player::external as ext;
 
 type Handler = fn(&mut Ctx, Player);
 
-/// Routines d'origine encore appelées telles quelles.
+/// Original routines still called as they are.
 mod rom {
     pub const INTRO_ACTION: u32 = 0xe1330;
 }
@@ -59,14 +59,14 @@ mod tables {
     pub const FROZEN_OFFSETS: u32 = 0x23d04;
 }
 
-// Signal de la cinématique partagé avec le boss 21 (`ram::BOSS_SIGNAL`) : 0x5c quand il projette les
-// joueurs, 4 une fois le premier retombé.
+// Cinematic signal shared with boss 21 (`ram::BOSS_SIGNAL`): 0x5c when it throws the
+// players, 4 once the first has landed.
 const SIGNAL_THROW: u16 = 0x5c;
 const SIGNAL_LANDED: u16 = 4;
-/// Profondeur visée par le joueur (mot).
+/// Depth aimed at by the player (word).
 const TARGET_ROW: u32 = 0x1e2;
 
-/// Réécrit : adresse d'origine -> routine Rust.
+/// Rewritten: original address -> Rust routine.
 const HANDLERS: &[(u32, Handler)] = &[
     (0x24ea0, |g, p| step_table(g, p, tables::SCENE1_STEPS)),
     (0x24ebc, scene1_start),
@@ -109,7 +109,7 @@ const HANDLERS: &[(u32, Handler)] = &[
     (0x23f2a, thrown_end),
 ];
 
-/// Version Rust de la routine d'origine `addr`, si elle est réécrite.
+/// Rust version of the original routine `addr`, if it is rewritten.
 fn handler(addr: u32) -> Option<Handler> {
     HANDLERS.iter().chain(cinematics::HANDLERS).chain(cinematics::INTRO_HANDLERS).find(|h| h.0 == addr).map(|h| h.1)
 }
@@ -119,13 +119,13 @@ fn run_at(g: &mut Ctx, p: Player, addr: u32) {
     match handler(addr) {
         Some(f) => f(g, p),
         None => {
-            g.c.d[0] = 0; // les routines d'origine complètent l'octet bas de D0 : le reste doit être nul
+            g.c.d[0] = 0; // the original routines complete the low byte of D0: the remainder must be zero
             g.rom(addr, p);
         }
     }
 }
 
-/// Saut par table de décalages indexée par le pas `+6`.
+/// Jump by offset table indexed by step `+6`.
 fn step_table(g: &mut Ctx, p: Player, base: u32) {
     cov!();
     let step = p.u8(g, Player::ACTION) as u32;
@@ -133,7 +133,7 @@ fn step_table(g: &mut Ctx, p: Player, base: u32) {
     run_at(g, p, base.wrapping_add(offset));
 }
 
-/// Idem avec le sous-pas `+7`.
+/// Same with sub-step `+7`.
 fn substep_table(g: &mut Ctx, p: Player, base: u32) {
     cov!();
     let step = p.u8(g, Player::STEP) as u32;
@@ -141,7 +141,7 @@ fn substep_table(g: &mut Ctx, p: Player, base: u32) {
     run_at(g, p, base.wrapping_add(offset));
 }
 
-/// 0x352da : aiguille selon `+5`.
+/// 0x352da: dispatches according to `+5`.
 pub fn update(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::SUB) {
@@ -167,7 +167,7 @@ pub fn update(g: &mut Ctx, p: Player) {
         0xc => {
             let scene = ram::SCENE.get(g.b) as u32;
             let routine = end_routine(g, scene);
-            // l'aiguillage d'origine (0x23f40) saute avec D0 = 4 × scène et A1 = routine
+            // the original dispatch (0x23f40) jumps with D0 = 4 × scene and A1 = routine
             g.c.d[0] = scene << 2;
             g.c.a[1] = routine;
             match handler(routine) {
@@ -181,14 +181,14 @@ pub fn update(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- cinématique de fin ------------------------------------------------------------------------
+// ---- end cinematic ------------------------------------------------------------------------
 
-/// Début de l'aiguillage d'origine de la cinématique de fin (indexé par la scène).
+/// Start of the original dispatch of the end cinematic (indexed by scene).
 pub const END_BY_SCENE_ENTRY: u32 = 0x23f40;
-/// Dernière scène de la table 0x23f4e ; au-delà (scènes de démonstration 109 à 114), l'original lit du code comme
-/// des adresses et saute au hasard (la scène 110 aboutit à l'animation 0x1a32 avec les registres laissés par la
-/// routine précédente, d'où des morceaux de sprite écrits par dizaines de milliers). Ces scènes n'ont pas de
-/// cinématique : la routine inactive 0x24102.
+/// Last scene of the table 0x23f4e; beyond it (demo scenes 109 to 114), the original reads code as
+/// addresses and jumps at random (scene 110 ends up at animation 0x1a32 with the registers left by the
+/// previous routine, hence sprite pieces written by tens of thousands). These scenes have no
+/// cinematic: the inactive routine 0x24102.
 const LAST_END_SCENE: u32 = 108;
 const NO_END: u32 = 0x24102;
 
@@ -200,7 +200,7 @@ fn end_routine(g: &mut Ctx, scene: u32) -> u32 {
     }
 }
 
-/// Même correctif dans le code d'origine (machine de référence de la validation) : à l'entrée de l'aiguillage.
+/// Same fix in the original code (reference machine of the validation): at the entry of the dispatch.
 pub fn patch_end_by_scene(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) -> bool {
     let scene = ram::SCENE.get(b) as u32;
     if scene <= LAST_END_SCENE {
@@ -212,7 +212,7 @@ pub fn patch_end_by_scene(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) -> bool {
     true
 }
 
-// ---- outils -----------------------------------------------------------------------------------
+// ---- tools -----------------------------------------------------------------------------------
 
 fn next_action(g: &mut Ctx, p: Player) {
     cov!();
@@ -226,7 +226,7 @@ fn next_step(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::STEP, step);
 }
 
-/// Compte à rebours en `+0x1e0` (mot) ; vrai quand il atteint zéro.
+/// Countdown at `+0x1e0` (word); true when it reaches zero.
 fn countdown(g: &mut Ctx, p: Player) -> bool {
     cov!();
     let left = p.u16(g, 0x1e0).wrapping_sub(1);
@@ -234,22 +234,22 @@ fn countdown(g: &mut Ctx, p: Player) -> bool {
     left == 0
 }
 
-/// Le joueur reprend la main : état de jeu normal.
+/// The player gets control back: normal game state.
 fn give_control(g: &mut Ctx, p: Player) {
     cov!();
     p.set_state(g, State::pack(2, 0, 0, 0).0);
 }
 
-/// Mot de la table indexée par le numéro du joueur.
+/// Word of the table indexed by the player number.
 fn per_player(g: &mut Ctx, p: Player, table: u32) -> u16 {
     cov!();
     let k = p.u8(g, Player::INDEX) as u32;
     g.prog16(table + 2 * k)
 }
 
-// ---- cinématique de la scène 1 : entrée en marchant, pose, course finale ------------------------
+// ---- scene 1 cinematic: walking in, pose, final run ------------------------
 
-/// 0x24ebc : départ de la marche d'entrée (vitesse 2 pixels par image).
+/// 0x24ebc: start of the walk-in (speed 2 pixels per frame).
 fn scene1_start(g: &mut Ctx, p: Player) {
     cov!();
     next_action(g, p);
@@ -263,7 +263,7 @@ fn scene1_start(g: &mut Ctx, p: Player) {
     animation::start(g, p, 2);
 }
 
-/// 0x24eea : marche d'entrée ; à la fin du compte à rebours, immobile.
+/// 0x24eea: walk-in; at the end of the countdown, standing.
 fn scene1_walk(g: &mut Ctx, p: Player) {
     cov!();
     if countdown(g, p) {
@@ -278,7 +278,7 @@ fn scene1_walk(g: &mut Ctx, p: Player) {
     move_x(g, p);
 }
 
-/// 0x24f12 : attend que la scène (`A5+0x2e`) arrive à l'étape 6.
+/// 0x24f12: waits for the scene (`A5+0x2e`) to reach step 6.
 fn scene1_wait_progress(g: &mut Ctx, p: Player) {
     cov!();
     if ram::SUB_STEP.get(g.b) == 6 {
@@ -291,7 +291,7 @@ fn scene1_wait_progress(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// 0x24f40 : attend, puis prend la pose (animation 0x33, arme en main).
+/// 0x24f40: waits, then strikes the pose (animation 0x33, weapon in hand).
 fn scene1_wait(g: &mut Ctx, p: Player) {
     cov!();
     if countdown(g, p) {
@@ -303,7 +303,7 @@ fn scene1_wait(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// 0x24f60 : pose, puis cri du héros au moment du geste (selon la classe), retour à l'immobile.
+/// 0x24f60: pose, then the hero's cry at the moment of the gesture (according to the class), return to standing.
 fn scene1_pose(g: &mut Ctx, p: Player) {
     cov!();
     if animation::step(g, p) {
@@ -321,7 +321,7 @@ fn scene1_pose(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x24f98 : attend l'étape 8, puis la course finale (animation 7, vitesses par table 0x21).
+/// 0x24f98: waits for step 8, then the final run (animation 7, speeds by table 0x21).
 fn scene1_dash_start(g: &mut Ctx, p: Player) {
     cov!();
     if ram::SUB_STEP.get(g.b) != 8 {
@@ -336,7 +336,7 @@ fn scene1_dash_start(g: &mut Ctx, p: Player) {
     animation::start(g, p, 7);
 }
 
-/// 0x24fc8 : course finale ; à la fin, le joueur reprend la main.
+/// 0x24fc8: final run; at the end, the player gets control back.
 fn scene1_dash(g: &mut Ctx, p: Player) {
     cov!();
     crate::objects::motion::advance_by_table(g.b, p.obj(), crate::objects::motion::AXIS_X, 0);
@@ -347,7 +347,7 @@ fn scene1_dash(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-// ---- marche d'entrée des scènes 2, 15, 16... ----------------------------------------------------
+// ---- walk-in of scenes 2, 15, 16... ----------------------------------------------------
 
 /// 0x23a0a.
 fn walk_in_start(g: &mut Ctx, p: Player) {
@@ -360,7 +360,7 @@ fn walk_in_start(g: &mut Ctx, p: Player) {
     animation::start(g, p, 2);
 }
 
-/// 0x23a2e : le joueur avance de 2 pixels par image.
+/// 0x23a2e: the player advances 2 pixels per frame.
 fn walk_in_walk(g: &mut Ctx, p: Player) {
     cov!();
     let x = p.u16(g, 8).wrapping_add(2);
@@ -375,7 +375,7 @@ fn walk_in_walk(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// 0x23a5e : attend, puis prend la pose.
+/// 0x23a5e: waits, then strikes the pose.
 fn walk_in_wait(g: &mut Ctx, p: Player) {
     cov!();
     if countdown(g, p) {
@@ -387,7 +387,7 @@ fn walk_in_wait(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// 0x23a7c : pose ; cri du héros ; retour à l'immobile.
+/// 0x23a7c: pose; the hero's cry; return to standing.
 fn walk_in_pose(g: &mut Ctx, p: Player) {
     cov!();
     if animation::step(g, p) {
@@ -405,7 +405,7 @@ fn walk_in_pose(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x23ab2 : en phase de jeu, le joueur reprend la main.
+/// 0x23ab2: in the game phase, the player gets control back.
 fn walk_in_end(g: &mut Ctx, p: Player) {
     cov!();
     if ram::PHASE.get(g.b) == 0xc {
@@ -414,7 +414,7 @@ fn walk_in_end(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// 0x24102 : cinématique vide : une pose immobile.
+/// 0x24102: empty cinematic: a still pose.
 pub fn idle(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::ACTION) == 0 {
@@ -531,7 +531,7 @@ fn revive_in_place(g: &mut Ctx, p: Player) {
     crate::objects::rank::raise(g.b);
 }
 
-// ---- attente d'ouverture des commandes (début de scène) ------------------------------------------
+// ---- wait for the controls to open (start of scene) ------------------------------------------
 
 /// 0x23d82.
 fn wait_start(g: &mut Ctx, p: Player) {
@@ -547,7 +547,7 @@ fn wait_start(g: &mut Ctx, p: Player) {
     g.sound(rom::INTRO_ACTION, p);
 }
 
-/// 0x23db4 : attend, puis se tourne vers la droite si nécessaire.
+/// 0x23db4: waits, then turns to the right if necessary.
 fn wait_delay(g: &mut Ctx, p: Player) {
     cov!();
     if !countdown(g, p) {
@@ -564,7 +564,7 @@ fn wait_delay(g: &mut Ctx, p: Player) {
     animation::start(g, p, 5);
 }
 
-/// 0x23dde : pose de demi-tour.
+/// 0x23dde: turn pose.
 fn wait_pose(g: &mut Ctx, p: Player) {
     cov!();
     if animation::step(g, p) {
@@ -573,7 +573,7 @@ fn wait_pose(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x23df2 : dès que les commandes sont ouvertes, le joueur reprend la main.
+/// 0x23df2: as soon as the controls are open, the player gets control back.
 fn wait_inputs(g: &mut Ctx, p: Player) {
     cov!();
     if ram::INPUT_MASK.get(g.b) != 0 {
@@ -581,9 +581,9 @@ fn wait_inputs(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- attente des commandes, pas 4 : entrée projetée par le boss (0x23e02) -----------------------
+// ---- wait for the controls, step 4: entry thrown by the boss (0x23e02) -----------------------
 
-/// 0x23e20 : vise sa profondeur et se tourne vers la droite (demi-tour si besoin), puis marche.
+/// 0x23e20: aims for their depth and turns to the right (turn if needed), then walks.
 fn thrown_turn(g: &mut Ctx, p: Player) {
     cov!();
     next_step(g, p);
@@ -600,7 +600,7 @@ fn thrown_turn(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x23e60 : fin du demi-tour, puis la marche.
+/// 0x23e60: end of the turn, then the walk.
 fn thrown_turned(g: &mut Ctx, p: Player) {
     cov!();
     if animation::step(g, p) {
@@ -609,7 +609,7 @@ fn thrown_turned(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x23e76 : rejoint sa profondeur, un pixel par image.
+/// 0x23e76: reaches their depth, one pixel per frame.
 fn thrown_align(g: &mut Ctx, p: Player) {
     cov!();
     let (y, row) = (p.u16(g, Obj::Y), p.u16(g, TARGET_ROW));
@@ -622,7 +622,7 @@ fn thrown_align(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// 0x23e98 : avance de 2 pixels par image jusqu'à buter sur le décor, puis immobile.
+/// 0x23e98: advances 2 pixels per frame until bumping into the terrain, then standing.
 fn thrown_walk(g: &mut Ctx, p: Player) {
     cov!();
     let x = p.u16(g, Obj::X).wrapping_add(2);
@@ -635,7 +635,7 @@ fn thrown_walk(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x23eb4 : attend le signal du boss, puis est projeté en l'air (vitesses x et z, gravité).
+/// 0x23eb4: waits for the boss's signal, then is thrown into the air (x and z speeds, gravity).
 fn thrown_wait_signal(g: &mut Ctx, p: Player) {
     cov!();
     if ram::BOSS_SIGNAL.get(g.b) != SIGNAL_THROW {
@@ -650,7 +650,7 @@ fn thrown_wait_signal(g: &mut Ctx, p: Player) {
     crate::objects::anim::start_by_character(g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, 2);
 }
 
-/// Vol plané : vrai à l'atterrissage (altitude repassée sous zéro, remise à zéro).
+/// Glide: true on landing (altitude back below zero, reset).
 fn thrown_flight(g: &mut Ctx, p: Player) -> bool {
     move_xz(g, p);
     if (p.u16(g, Obj::Z) as i16) >= 0 {
@@ -662,7 +662,7 @@ fn thrown_flight(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// 0x23ee4 : vol ; à l'atterrissage, prévient le boss (`SIGNAL_LANDED`) et reprend la pose immobile.
+/// 0x23ee4: flight; on landing, notifies the boss (`SIGNAL_LANDED`) and resumes the still pose.
 fn thrown_first_fall(g: &mut Ctx, p: Player) {
     cov!();
     if thrown_flight(g, p) {
@@ -671,7 +671,7 @@ fn thrown_first_fall(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x23f0a : idem, sans signal.
+/// 0x23f0a: same, without signal.
 fn thrown_fall(g: &mut Ctx, p: Player) {
     cov!();
     if thrown_flight(g, p) {
@@ -679,7 +679,7 @@ fn thrown_fall(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x23f2a : en phase de jeu, le joueur reprend la main.
+/// 0x23f2a: in the game phase, the player gets control back.
 fn thrown_end(g: &mut Ctx, p: Player) {
     cov!();
     if ram::PHASE.get(g.b) == 0xc {

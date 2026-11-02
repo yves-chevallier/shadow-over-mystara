@@ -1,6 +1,6 @@
-//! Couverture du code d'origine par zone d'adresses : nombre d'entrées de bloc recompilé par adresse.
-//!   zones <roms> <eeprom> <scénario> <images> <début-hex> <fin-hex> [...autres paires]
-//! Sert à repérer les états et actions des joueurs réellement exercés par un scénario.
+//! Coverage of the original code by address zone: number of recompiled-block entries per address.
+//!   zones <roms> <eeprom> <scenario> <frames> <start-hex> <end-hex> [...other pairs]
+//! Used to spot the player states and actions actually exercised by a scenario.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;

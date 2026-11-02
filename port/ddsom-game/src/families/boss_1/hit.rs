@@ -1,21 +1,21 @@
-//! Boss 1, état 4 « touché » (0x7bb66) et retour au combat. Groupes `+5` :
+//! Boss 1, state 4 "hit" (0x7bb66) and return to combat. `+5` groups:
 //!
-//! | `+5` | Rôle |
+//! | `+5` | Role |
 //! |---|---|
-//! | 0 | réaction au coup : mort si plus de PV, sinon routine de la table 0x7bbbe (code `+0x49`) |
-//! | 2 | recul en glissant, puis riposte |
-//! | 4 | à terre, relevé, bond de riposte |
-//! | 6, 8 | mort : projection, chute dans la poussière |
-//! | 10 | retour au combat |
+//! | 0 | reaction to the hit: death if out of HP, otherwise routine from table 0x7bbbe (code `+0x49`) |
+//! | 2 | knocked back sliding, then counterattack |
+//! | 4 | on the ground, getting up, counterattack leap |
+//! | 6, 8 | death: thrown, falls into the dust |
+//! | 10 | return to combat |
 
 use super::*;
 use crate::families::cx::Bench;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
+/// Table of reaction routines, indexed by the hit code `+0x49` (longs).
 const REACTIONS: u32 = 0x7bbbe;
-/// La seule routine propre au boss (code 0x4c) : tremblement sur place.
+/// The only routine specific to the boss (code 0x4c): shaking in place.
 const SHAKE_REACTION: u32 = 0x7bc6a;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -34,7 +34,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-/// 0x7bb96 : premier passage : dégâts (0xb648, 0x10112) et, sans PV, la mort ; puis la routine du code de coup.
+/// 0x7bb96: first pass: damage (0xb648, 0x10112) and, with no HP left, death; then the hit code's routine.
 fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::drop_once(x);
@@ -56,7 +56,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x7bc6a : tremblement sur place (16 images), puis à terre.
+/// 0x7bc6a: shaking in place (16 frames), then on the ground.
 fn shake<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         next6(x);
@@ -89,7 +89,7 @@ fn shake<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x58, 0);
 }
 
-/// 0x7bce2 : recul en glissant, puis riposte selon la position de la cible.
+/// 0x7bce2: knocked back sliding, then counterattack depending on the target's position.
 fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -130,7 +130,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x7bda4 : à terre (`+0x84` images hors pause), relevé, et bond si la cible est devant.
+/// 0x7bda4: on the ground (`+0x84` frames outside pause), getting up, and a leap if the target is ahead.
 fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -192,8 +192,8 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x7bece : retour au combat (aussi appelé par les réactions communes, table 0x3e000) : franchit le palier de
-/// PV suivant (0x105b6), puis bond si hors de l'écran, bond en ciseaux, saisie ou attente.
+/// 0x7bece: return to combat (also called by the common reactions, table 0x3e000): crosses the next HP threshold
+/// (0x105b6), then a leap if off screen, a scissor leap, a grab or a wait.
 pub(crate) fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
@@ -213,7 +213,7 @@ pub(crate) fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     stand(x)
 }
 
-/// 0x7bf22 : mort : la scène est prévenue, le boss est projeté puis s'effondre.
+/// 0x7bf22: death: the stage is notified, the boss is thrown then collapses.
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -263,5 +263,5 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Boss vaincu : type, variante et score (`A5-0x557c..`), lus par la fin de scène.
+/// Defeated boss: type, variant and score (`A5-0x557c..`), read by the end of the stage.
 const A5_DEATH: u32 = 0xff8000 - 0x557c;

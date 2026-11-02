@@ -1,16 +1,16 @@
-//! Recensement du code d'origine encore atteignable depuis les gestionnaires EFFCT (table `0x39ce0`).
+//! Census of the original code still reachable from the EFFCT handlers (table `0x39ce0`).
 //!
-//! Pour chaque type dont le gestionnaire est natif, on crée dans le pool EFFCT un objet du type (variante
-//! et états tirés dans une grille, propriétaire = un joueur ou un ennemi actif), puis on appelle le
-//! gestionnaire image après image sur la machine hybride, en relevant chaque instruction 68000 exécutée
-//! pendant ces appels. Sortie : par type et variante, les sites Rust qui exécutent encore du 68000
-//! (`file:line routine`), avec un exemple d'état ; puis les adresses de la zone EFFCT exécutées.
+//! For each type whose handler is native, an object of that type is created in the EFFCT pool (variant
+//! and states drawn on a grid, owner = a player or an active enemy), then the handler is called
+//! frame after frame on the hybrid machine, recording every 68000 instruction executed
+//! during these calls. Output: per type and variant, the Rust sites that still execute 68000
+//! (`file:line routine`), with an example state; then the addresses of the EFFCT zone executed.
 //!
-//!   census_effct <roms> <eeprom> <scénario> <images de chauffe> [types séparés par des virgules]
+//!   census_effct <roms> <eeprom> <scenario> <warm-up frames> [comma-separated types]
 //!
-//! `RECENS_VARIANTES=n` (16 par défaut), `RECENS_PAS=n` (pas par trajectoire, 40), `RECENS_TOURS=n` (8).
-//! Les combinaisons hors des tables de l'original (variante ou état que la table ne prévoit pas) font
-//! sauter le code d'origine dans des données : elles apparaissent aussi, à trier à la main.
+//! `RECENS_VARIANTES=n` (16 by default), `RECENS_PAS=n` (steps per trajectory, 40), `RECENS_TOURS=n` (8).
+//! Combinations outside the original's tables (a variant or state the table does not provide for) make
+//! the original code jump into data: they show up too, to be sorted by hand.
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -19,9 +19,9 @@ use std::path::Path;
 use ddsom_game::mem::{rd16, rd8, wr16, wr8, A5};
 use ddsom_game::objects::pools::{ENEMY, EFFCT};
 
-/// Zone du code des gestionnaires EFFCT.
+/// Code zone of the EFFCT handlers.
 const ZONE: std::ops::Range<u32> = 0xa8594..0xba310;
-/// Instructions 68000 au plus par appel (au-delà, l'original est sorti des rails).
+/// At most this many 68000 instructions per call (beyond that, the original has gone off the rails).
 const BUDGET: u64 = 100_000;
 
 thread_local! {
@@ -59,14 +59,14 @@ impl Rng {
 }
 
 fn main() {
-    // les appels imbriqués (natives, code d'origine) consomment beaucoup de pile
+    // nested calls (natives, original code) consume a lot of stack
     std::thread::Builder::new().stack_size(1 << 30).spawn(principal).unwrap().join().unwrap();
 }
 
 fn principal() {
     let a: Vec<String> = std::env::args().collect();
     let (Some(roms), Some(eeprom), Some(scenario), Some(warmup)) = (a.get(1), a.get(2), a.get(3), a.get(4)) else {
-        eprintln!("usage : census_effct <roms> <eeprom> <scénario> <images de chauffe> [types]");
+        eprintln!("usage: census_effct <roms> <eeprom> <scenario> <warm-up frames> [types]");
         std::process::exit(2);
     };
     let env = |k: &str, d: u32| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
@@ -78,7 +78,7 @@ fn principal() {
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
     ddsom_game::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
@@ -97,7 +97,7 @@ fn principal() {
             (m68k::Bus::read_prog16(&mut b, 0x39ce0 + 4 * t) as u32) << 16 | m68k::Bus::read_prog16(&mut b, 0x39ce2 + 4 * t) as u32
         };
         if !natives.contains(&entry) {
-            println!("TYPE {t} {entry:06x} : pas de native");
+            println!("TYPE {t} {entry:06x}: no native");
             continue;
         }
         // (variante, site, routine) -> (nombre de trajectoires, exemple)
@@ -119,8 +119,8 @@ fn principal() {
                     wr8(&mut b, obj, 1);
                     wr8(&mut b, obj + 2, t as u8);
                     wr8(&mut b, obj + 3, v as u8);
-                    // premier tour : naissance (état 0) ; suivants : état actif, sous-état de la grille
-                    // une trajectoire sur deux part de la naissance (état 0), les autres de l'état actif
+                    // first round: birth (state 0); following ones: active state, sub-state of the grid
+                    // every other trajectory starts from birth (state 0), the others from the active state
                     let birth = tour % 2 == 0;
                     let s4 = if birth { 0 } else { 2 };
                     wr8(&mut b, obj + 4, s4);
@@ -135,13 +135,13 @@ fn principal() {
                         wr16(&mut b, obj + off, w);
                     }
                     if birth && s5 != 0 {
-                        // naissance avec des champs de création variés
+                        // birth with varied creation fields
                         for off in [0x2fu32, 0x30, 0x31, 0x42, 0x43, 0x58, 0x59] {
                             wr8(&mut b, obj + off, rng.pick(&[0, 1, 2, 3, 4, 8]));
                         }
                     }
                     if rng.next() % 2 == 0 {
-                        // action et compteurs du propriétaire, lus par les bulles et les effets liés
+                        // owner's action and counters, read by the bubbles and the linked effects
                         wr8(&mut b, owner + 0x3d, 2 * (rng.next() % 0x1a) as u8);
                         for off in [0x10du32, 0x10e, 0x77, 0x86, 0x43] {
                             wr8(&mut b, owner + off, rng.pick(&[0, 1, 2, 3, 4, 5]));
@@ -154,7 +154,7 @@ fn principal() {
                             break;
                         }
                         if k > 0 && rng.next() % 4 == 0 {
-                            // le propriétaire et le monde bougent
+                            // the owner and the world move
                             wr8(&mut b, owner + 4, rng.pick(&[0, 2, 4, 6]));
                             wr8(&mut b, owner + 0x3d, (rng.next() % 0x30) as u8);
                             wr8(&mut b, obj + 0x33, rng.pick(&[0, 1]));
@@ -172,11 +172,11 @@ fn principal() {
                         let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entry)));
                         let sites = SITES.with(|s| std::mem::take(&mut *s.borrow_mut()));
                         let pcs = PCS.with(|p| std::mem::take(&mut *p.borrow_mut()));
-                        // appel suspect : l'original est sorti des rails (exception, adresse impaire, budget épuisé)
+                        // suspicious call: the original went off the rails (exception, odd address, budget exhausted)
                         let suspect = r.is_err() || sites.iter().any(|(f, a)| f.starts_with("demarrage") || a & 1 != 0);
                         for (site, routine) in sites {
                             let site = if suspect { format!("? {site}") } else { site };
-                            let e = reading.entry((v, site, routine)).or_insert((0, format!("départ {start} pas {k} état {state}")));
+                            let e = reading.entry((v, site, routine)).or_insert((0, format!("start {start} step {k} state {state}")));
                             e.0 += 1;
                         }
                         zone.entry(v).or_default().extend(pcs);
@@ -196,7 +196,7 @@ fn principal() {
             if pcs.is_empty() {
                 continue;
             }
-            // plages contiguës
+            // contiguous ranges
             let mut ranges: Vec<(u32, u32)> = Vec::new();
             for &p in pcs {
                 match ranges.last_mut() {

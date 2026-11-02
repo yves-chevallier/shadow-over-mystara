@@ -1,34 +1,33 @@
-//! Variante 7 du type SET 15 (0xce714) : la fenêtre de dialogue de fin de niveau (h).
+//! Variant 7 of the SET 15 type (0xce714): the end-of-level dialogue window (h).
 //!
-//! Elle s'ouvre pour le joueur désigné par `+0x34` (adresse RAM sur 16 bits) : choisit dans les
-//! tables de la ROM le message qui correspond à son personnage (`+3 >> 1`), à son niveau d'avancement
-//! (`+0x10c` du joueur, plafonné) et à la langue (`A5+0x72`), applique le bonus que le message décrit
-//! (statistiques `+0x151..` du joueur, équipement `+0x10d`, `+0x10e`, `+0x140..` puis recalcul par
-//! 0x3552), dessine le cadre de la fenêtre dans la tilemap et compose le texte dans le tampon
-//! 0xff2072 (nom du joueur, puis message) que le moteur de texte affiche ensuite. L'état 2 recompose
-//! la suite du message page par page (`+0x10` : délai entre deux pages).
+//! It opens for the player designated by `+0x34` (16-bit RAM address): picks from the ROM tables the message that
+//! matches its character (`+3 >> 1`), its progress level (`+0x10c` of the player, capped) and the language (`A5+0x72`),
+//! applies the bonus that the message describes (player statistics `+0x151..`, equipment `+0x10d`, `+0x10e`, `+0x140..`
+//! then recomputation by 0x3552), draws the window frame in the tilemap and composes the text in the buffer 0xff2072
+//! (player name, then message) that the text engine then displays. State 2 recomposes the rest of the message page by
+//! page (`+0x10`: delay between two pages).
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::mem::{rd8, wr16, wr32, wr8};
 
-/// Tables en ROM (espace programme : accès relatifs au PC).
+/// ROM tables (program space: PC-relative accesses).
 const LEVEL_RANGE: u32 = 0xce728;
 const FRAME_BY_LEVEL: u32 = 0xce7ac;
 const FRAMES: u32 = 0xce7e4;
 const MESSAGE_TABLES: u32 = 0xceaa2;
-/// Tables en ROM (espace de données).
+/// ROM tables (data space).
 const HEADER_PAGES: u32 = 0xce9a4;
 const GLYPHS_JP: u32 = 0xd7e8a;
 const GLYPHS_LATIN: u32 = 0xc9216;
 const PALETTE_SOURCES: [(u32, u32, u32); 2] = [(0x292260, 0x91c1e0, 1), (0x292200, 0x91c300, 2)];
 
-/// Tampon de texte composé et ses variables (A5+).
+/// Composed text buffer and its variables (A5+).
 const TEXT_BUFFER: u32 = 0xff2072;
 const TEXT_POINTER: u32 = 0x5c6;
 const TEXT_WIDTH: u32 = 0x5ca;
 const BOX_TOP: u32 = 0x5cc;
-/// Langue (2 : japonais) et numéro de page de message.
+/// Language (2: Japanese) and message page number.
 const LANGUAGE: u32 = 0x73;
 const MESSAGE_PAGE: u32 = 0x72;
 
@@ -57,8 +56,7 @@ fn next_state<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
 }
 
-/// État 0 : calcule le palier du joueur, crée l'objet de fenêtre, dessine le cadre et affiche le
-/// premier message.
+/// State 0: computes the player's tier, creates the window object, draws the frame and displays the first message.
 fn open<R: Bench>(x: &mut Cx<'_, R>) {
     let player = adr(x.u16(0x34));
     let half = rd8(x.b, player + 3) >> 1;
@@ -84,13 +82,13 @@ fn open<R: Bench>(x: &mut Cx<'_, R>) {
     pick_message(x, player);
 }
 
-/// Adresse RAM stockée sur 16 bits (`movea.w` : extension de signe).
+/// RAM address stored on 16 bits (`movea.w`: sign extension).
 fn adr(v: u16) -> u32 {
     v as i16 as i32 as u32
 }
 
-/// Cadre de la fenêtre n° `frame` (0xce7fc) : enregistrement de 8 octets (adresse de GFX RAM, largeur)
-/// dans la table 0xce7e4 ; un bord haut, deux colonnes latérales (42 lignes de 0x80 octets) et un fond.
+/// Window frame no. `frame` (0xce7fc): 8-byte record (GFX RAM address, width) in table 0xce7e4; a top edge, two side
+/// columns (42 lines of 0x80 bytes) and a background.
 fn draw_frame<R: Bench>(x: &mut Cx<'_, R>, frame: u8) {
     let entry = FRAMES + 8 * frame as u32;
     let origin = (x.rom16(entry) as u32) << 16 | x.rom16(entry + 2) as u32;
@@ -120,7 +118,7 @@ fn draw_frame<R: Bench>(x: &mut Cx<'_, R>, frame: u8) {
     }
 }
 
-/// Choisit le message (0xceaba) : table d'enregistrements par personnage, rang de la page, palier.
+/// Chooses the message (0xceaba): table of records per character, page rank, tier.
 fn pick_message<R: Bench>(x: &mut Cx<'_, R>, player: u32) {
     let half = x.u8(0x37) as u32;
     let tables = {
@@ -143,8 +141,8 @@ fn pick_message<R: Bench>(x: &mut Cx<'_, R>, player: u32) {
     compose_message(x, count);
 }
 
-/// 0xceb20 : prend le maximum, octet par octet, de neuf valeurs de la ROM et des statistiques
-/// `+0x151..` du joueur (sauf si l'enregistrement commence par un octet négatif). Rend la suite.
+/// 0xceb20: takes the maximum, byte by byte, of nine ROM values and of the player's statistics `+0x151..` (unless the
+/// record starts with a negative byte). Returns the continuation.
 fn merge_statistics<R: Bench>(x: &mut Cx<'_, R>, player: u32, at: u32) -> u32 {
     let skip = x.data8(at) as i8 <= -1;
     if !skip {
@@ -159,9 +157,8 @@ fn merge_statistics<R: Bench>(x: &mut Cx<'_, R>, player: u32, at: u32) -> u32 {
     at + 10
 }
 
-/// 0xceb6c : change une pièce d'équipement du joueur. L'enregistrement donne (nouvelle valeur,
-/// ancienne valeur) pour `+0x10d` ou, sinon, pour la case de `+0x140..` qui porte l'ancienne valeur ;
-/// puis 0x3552 recalcule les caractéristiques du joueur.
+/// 0xceb6c: changes a piece of the player's equipment. The record gives (new value, old value) for `+0x10d` or,
+/// otherwise, for the slot of `+0x140..` that holds the old value; then 0x3552 recomputes the player's characteristics.
 fn equip<R: Bench>(x: &mut Cx<'_, R>, player: u32, at: u32) {
     if x.data8(at) as i8 <= -1 {
         return;
@@ -188,8 +185,8 @@ fn equip<R: Bench>(x: &mut Cx<'_, R>, player: u32, at: u32) {
     crate::player::init::init_weapon_stats(&mut crate::player::Ctx::new(&mut bench, x.b), crate::player::Player(player));
 }
 
-/// Palette de la fenêtre et en-tête du texte (0xce88a) : recopie trois blocs de palette, fixe le
-/// tampon de texte et y compose le nom du joueur. Rend le nombre de caractères écrits.
+/// Window palette and text header (0xce88a): copies three palette blocks, sets the text buffer and composes the
+/// player's name in it. Returns the number of characters written.
 fn compose_header<R: Bench>(x: &mut Cx<'_, R>, player: u32) -> u16 {
     for (from, to, blocks) in PALETTE_SOURCES {
         for i in 0..8 * blocks {
@@ -204,8 +201,8 @@ fn compose_header<R: Bench>(x: &mut Cx<'_, R>, player: u32) -> u16 {
     count
 }
 
-/// Nom du joueur (0xce8de) : codes de glyphes de l'enregistrement `+0x118` du joueur, six au plus ;
-/// un code >= 0xf9 renvoie à une liste de la table 0xce9a4. Rend (fin du tampon, nombre de glyphes).
+/// Player name (0xce8de): glyph codes of the player's record `+0x118`, six at most; a code >= 0xf9 refers to a list of
+/// table 0xce9a4. Returns (end of buffer, number of glyphs).
 fn write_name<R: Bench>(x: &mut Cx<'_, R>, player: u32, buffer: u32) -> (u32, u16) {
     let japanese = x.a5_u8(LANGUAGE) == 2;
     let mut src = player + 0x118;
@@ -220,7 +217,7 @@ fn write_name<R: Bench>(x: &mut Cx<'_, R>, player: u32, buffer: u32) -> (u32, u1
         wr8(x.b, out + 1, 0x18);
         out += 2;
     }
-    // un code >= 0xf9 remplace la source par une liste de la table (ses codes puis 0xff)
+    // a code >= 0xf9 replaces the source with a list of the table (its codes then 0xff)
     let first = rd8(x.b, src).wrapping_add(1);
     if first >= 0xfa {
         let index = if japanese {
@@ -271,8 +268,8 @@ fn write_name<R: Bench>(x: &mut Cx<'_, R>, player: u32, buffer: u32) -> (u32, u1
     (out, count)
 }
 
-/// Composition de la suite du message (0xce9ea) : recopie dans le tampon (`+0xc`) les caractères de la
-/// source (`+8`) jusqu'à une marque de fin de page ; `count` = glyphes déjà écrits sur la ligne.
+/// Composition of the rest of the message (0xce9ea): copies into the buffer (`+0xc`) the characters of the source
+/// (`+8`) up to a page end mark; `count` = glyphs already written on the line.
 fn compose_message<R: Bench>(x: &mut Cx<'_, R>, mut count: u16) {
     let mut src = x.u32(0x8);
     let mut out = x.u32(0xc);

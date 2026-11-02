@@ -1,4 +1,4 @@
-//! Suit la machine à modes (FF0E70-72) et la phase de partie (A5+0x2c) : une ligne à chaque changement.
+//! Follows the mode machine (FF0E70-72) and the game phase (A5+0x2c): one line at each change.
 //! modes_trace <roms> <eeprom> <scenario> <images>
 fn main() {
     let a: Vec<String> = std::env::args().collect();
@@ -15,7 +15,7 @@ fn main() {
         let r = |addr: u32| m.bus.ram[((addr - 0xff0000) / 2) as usize];
         let now = (r(0xff0e70), r(0xff0e72), r(0xff802c), r(0xff8034));
         if now != last {
-            println!("image {:6} : mode {:04x} {:04x}  phase/etape {:04x}  scène {:04x}", f + 1, now.0, now.1, now.2, now.3 >> 8);
+            println!("frame {:6}: mode {:04x} {:04x}  phase/step {:04x}  scene {:04x}", f + 1, now.0, now.1, now.2, now.3 >> 8);
             last = now;
         }
     }

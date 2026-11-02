@@ -1,12 +1,12 @@
-//! Type 14, état touché (`+4 = 4`, 0x6d050). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
-//! 6 seconde table de réactions, 8 saisie par un joueur (le Troll s'enfuit). Zone et ombre sont toujours testées.
+//! Type 14, hit state (`+4 = 4`, 0x6d050). `+5`: 0 reaction by table (`+0x49`), 2 recoil, 4 fall and get up, 6 second
+//! reaction table, 8 grabbed by a player (the Troll runs away). Zone and shadow are always tested.
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Tables de réactions communes aux coups, indexées par le code `+0x49`.
+/// Reaction tables shared by the hits, indexed by code `+0x49`.
 const REACT_FIRST: u32 = 0x6d0f0;
 const REACT_SECOND: u32 = 0x6d284;
 
@@ -55,7 +55,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Chute puis relevé (0x6d202).
+/// Fall then get up (0x6d202).
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {

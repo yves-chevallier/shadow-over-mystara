@@ -1,15 +1,15 @@
-//! Réactions communes des ennemis et des boss aux coups (O3, `0x3bb00-0x3e480`).
+//! Common reactions of enemies and bosses to hits (O3, `0x3bb00-0x3e480`).
 //!
-//! Quand un coup touche, la collision range un code de réaction en `+0x49` ; l'état « touché » de chaque type
-//! appelle la routine désignée par ce code dans sa table de réactions (longs, par exemple `0x56816` pour le
-//! Kobold, voir `enemy_common::react`). Ces routines sont communes à tous les types : recul, projection en l'air,
-//! chute, rebond au sol, relevé, mort clignotante, saisie, glissade... Chacune est une machine à états sur `+6`
-//! (pas de 2, table de sauts relative au PC) dont les pas sont souvent partagés (`chute`, `rebond`, `relevé`,
-//! `dead`). Les animations et les sons dépendent du type (`+2`) et de la classe (`+0x28` : 2 ENEMY, 4 BOSS),
-//! par des tables de la ROM.
+//! When a hit lands, the collision stores a reaction code in `+0x49`; each type's "hit" state
+//! calls the routine designated by this code in its reaction table (longs, for example `0x56816` for the
+//! Kobold, see `enemy_common::react`). These routines are common to all types: recoil, throw into the air,
+//! fall, bounce on the ground, get-up, flashing death, grab, slide... Each is a state machine on `+6`
+//! (step of 2, PC-relative jump table) whose steps are often shared (`fall`, `bounce`, `get-up`,
+//! `dead`). The animations and sounds depend on the type (`+2`) and the class (`+0x28`: 2 ENEMY, 4 BOSS),
+//! through ROM tables.
 //!
 //! Champs (en plus de ceux de `enemy_common::f`) : vitesses `+0x14` (X), `+0x16` (profondeur), `+0x18`
-//! (hauteur), `+0x1a` (gravité), `+0x1c`/`+0x1e` (secondaires) ; hauteur `+0xc` (long) ; compteur `+0x90` ;
+//! (height), `+0x1a` (gravity), `+0x1c`/`+0x1e` (secondary); height `+0xc` (long); counter `+0x90`;
 //! liaison en attente `+0x91` (bit 7) vers `+0x2a`/`+0x2b` ; orientation de l'agresseur `+0x4a`.
 
 use crate::families::cx::Bench;
@@ -25,7 +25,7 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-/// Champs des objets touchés.
+/// Fields of the hit objects.
 mod f {
     pub const ACTIVE: u32 = 0;
     pub const DISPLAY: u32 = 1;
@@ -45,13 +45,13 @@ mod f {
     pub const VX2: u32 = 0x1c;
     pub const VY2: u32 = 0x1e;
     pub const CLASS: u32 = 0x28;
-    /// Contact avec un obstacle pendant le déplacement.
+    /// Contact with an obstacle during movement.
     pub const BLOCKED: u32 = 0x29;
     pub const LINKED: u32 = 0x2a;
     pub const LINK: u32 = 0x2b;
     pub const FLIP: u32 = 0x2c;
     pub const ANGLE: u32 = 0x2d;
-    /// Fin de l'animation (mot ; octet `+0x33` : événement de l'animation).
+    /// End of the animation (word; byte `+0x33`: animation event).
     pub const ANIM_END: u32 = 0x32;
     pub const ANIM_EVENT: u32 = 0x33;
     pub const REACTION: u32 = 0x49;
@@ -72,24 +72,24 @@ mod f {
 const ENEMY: u8 = 2;
 const BOSS: u8 = 4;
 
-/// Tables de la ROM.
+/// ROM tables.
 mod rom {
-    /// Jeux d'animations par type (longs lus comme données ; mot haut nul : routine propre, décalage).
+    /// Animation sets per type (longs read as data; high word zero: own routine, offset).
     pub const ANIM_SETS: u32 = 0x3de58;
     /// Variante d'animation selon `+0xbf` (octets, relatifs au PC).
     pub const ANIM_VARIANTS: u32 = 0x3e28a;
-    /// Sons de coup et de mort par type (longs relatifs au PC), routine du relevé par type.
+    /// Hit and death sounds per type (PC-relative longs), get-up routine per type.
     pub const HIT_SOUNDS: u32 = 0x3e2ac;
     pub const DEATH_SOUNDS: u32 = 0x3e3a4;
     pub const GET_UP: u32 = 0x3e000;
-    /// Types qui ne restent pas au sol quand ils sont saisis (octets relatifs au PC).
+    /// Types that do not stay on the ground when grabbed (PC-relative bytes).
     pub const NO_GRAB_DOWN: u32 = 0x3e1ee;
-    /// Projections prédéfinies : compteur (octets), vitesses (4 mots par entrée).
+    /// Predefined throws: counter (bytes), speeds (4 words per entry).
     pub const LAUNCH_COUNTERS: u32 = 0x3bdec;
     pub const LAUNCH_SPEEDS: u32 = 0x3bdcc;
-    /// Routine vide (`rts`) des tables par type.
+    /// Empty routine (`rts`) of the per-type tables.
     pub const NOTHING: [u32; 2] = [0x3e2aa, 0x3bb9a];
-    /// Animations de réaction du joueur (longs par personnage, données).
+    /// Player reaction animations (longs per character, data).
     pub const PLAYER_HURT: u32 = 0x3bb52;
 }
 
@@ -102,7 +102,7 @@ fn next<R: Bench>(x: &mut Cx<'_, R>) {
 fn next_sub<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB_STEP, 2);
 }
-/// Pas suivant, sous-pas à zéro.
+/// Next step, sub-step at zero.
 fn next_clear<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
     x.set8(f::SUB_STEP, 0);
@@ -124,7 +124,7 @@ fn dead<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn paused<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PAUSE.get(x.b) != 0
 }
-/// Mort : sous-état 6 (+ `+0` = 2).
+/// Death: substate 6 (+ `+0` = 2).
 fn mark_dead<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB, 6);
     x.set8(f::ACTIVE, 2);
@@ -153,30 +153,30 @@ fn landed<R: Bench>(x: &mut Cx<'_, R>) {
 fn random<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     x.random() as u32
 }
-/// Effet `0xabec8` de variante et réglage donnés ; faux si le pool l'a refusé.
+/// Effect `0xabec8` with given variant and setting; false if the pool refused it.
 fn effect<R: Bench>(x: &mut Cx<'_, R>, variant: u32, setting: u32) -> bool {
     lib::attack_effect(x, variant, setting)
 }
-/// Indice des tables par type : type, plus 32 hors de la classe ENEMY.
+/// Index into the per-type tables: type, plus 32 outside the ENEMY class.
 fn type_index<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     let base = if x.u8(f::CLASS) == ENEMY { 0 } else { 32 };
     (base + x.u8(f::KIND) as u32) & 0xff
 }
 
-/// 0x3de26 : le gel après le coup prend la durée d'étourdissement.
+/// 0x3de26: the freeze after the hit takes the stun duration.
 fn stun<R: Bench>(x: &mut Cx<'_, R>) {
     let s = x.u8(f::STUN);
     x.set8(f::FREEZE, s);
 }
 
-/// 0x3de2e : animation `n` du jeu du type (les types 13, 19, 34 et 54 ajoutent une variante `+0xbf`).
+/// 0x3de2e: animation `n` of the type's set (types 13, 19, 34 and 54 add a variant `+0xbf`).
 fn anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     let i = 4 * type_index(x);
     let entry = rd32(x.b, rom::ANIM_SETS + i);
     let (set, n) = if entry >> 16 != 0 {
         (entry, n as u16)
     } else {
-        // routine propre : `bsr 0x3e27e ; movea.l #game,A4 ; jmp 0x1a32` (0x3e27e ajoute la variante à l'octet bas)
+        // own routine: `bsr 0x3e27e ; movea.l #game,A4 ; jmp 0x1a32` (0x3e27e adds the variant to the low byte)
         let routine = rom::ANIM_SETS + (entry & 0xffff);
         let v = x.u8(0xbf) as u32;
         let add = x.rom8(rom::ANIM_VARIANTS + v);
@@ -186,14 +186,14 @@ fn anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(set, n);
 }
 
-/// Routine d'une table par type (longs relatifs au PC, `jsr (A1)` avec D0 = l'index) ; `None` pour les entrées vides
+/// Routine from a per-type table (PC-relative longs, `jsr (A1)` with D0 = the index); `None` for empty entries
 /// (`rts`).
 fn per_type<R: Bench>(x: &mut Cx<'_, R>, table: u32, index: u32) -> Option<u32> {
     let i = 4 * index;
     let routine = (x.rom16(table + i) as u32) << 16 | x.rom16(table + i + 2) as u32;
     (!rom::NOTHING.contains(&routine)).then_some(routine)
 }
-/// 0x3e28e et 0x3e388 : son du coup, son de la mort (tables par type de sons : la routine lue est le son).
+/// 0x3e28e and 0x3e388: hit sound, death sound (per-type sound tables: the routine read is the sound).
 fn hit_sound<R: Bench>(x: &mut Cx<'_, R>) {
     let i = type_index(x);
     if let Some(sound) = per_type(x, rom::HIT_SOUNDS, i) {
@@ -206,7 +206,7 @@ fn death_sound<R: Bench>(x: &mut Cx<'_, R>) {
         lib::sound(x, sound);
     }
 }
-/// 0x3e000 : relevé propre au type (table par type ; l'adresse lue désigne le gestionnaire de sa famille).
+/// 0x3e000: type-specific get-up (per-type table; the address read designates its family's handler).
 fn get_up_by_kind<R: Bench>(x: &mut Cx<'_, R>, index: u32) {
     let Some(routine) = per_type(x, rom::GET_UP, index) else { return };
     match routine {
@@ -219,10 +219,10 @@ fn get_up_by_kind<R: Bench>(x: &mut Cx<'_, R>, index: u32) {
         0x85490 => super::boss_6::hit::recovered_tail(x),
         0x96ce0 => super::boss_17::hit::recovered_tail(x),
         0x9a6d4 => super::boss_21::hit::recovered(x),
-        _ => unreachable!("relevé du type {index} : routine {routine:#x} hors de la table 0x3e000"),
+        _ => unreachable!("get-up of type {index}: routine {routine:#x} outside table 0x3e000"),
     }
 }
-/// 0x3e180 : son du coup, ou mort (sous-état 6) et son de la mort.
+/// 0x3e180: hit sound, or death (substate 6) and death sound.
 fn hurt<R: Bench>(x: &mut Cx<'_, R>) {
     if dead(x) {
         mark_dead(x);
@@ -232,10 +232,10 @@ fn hurt<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x3e130 : l'objet se tourne vers l'agresseur ; les vitesses X et profondeur suivent l'orientation.
+/// 0x3e130: the object turns toward the aggressor; the X and depth speeds follow the orientation.
 fn face_attacker<R: Bench>(x: &mut Cx<'_, R>) {
     let flip = x.u8(f::ATTACKER_FLIP) ^ 0x20;
-    // reste : l'orientation dans l'octet bas de D2 (`dispatch::Leftovers::d2`, vitesse de l'étincelle de
+    // leftover: the orientation in the low byte of D2 (`dispatch::Leftovers::d2`, speed of the spark of
     // `flash_and_shake`)
     *x.c.d2() = *x.c.d2() & !0xff | flip as u32;
     x.set8(f::FLIP, flip);
@@ -244,7 +244,7 @@ fn face_attacker<R: Bench>(x: &mut Cx<'_, R>) {
         neg16(x, f::VY);
     }
 }
-/// 0x3e148 : les vitesses suivent l'orientation actuelle.
+/// 0x3e148: the speeds follow the current orientation.
 fn orient_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     if flipped(x) {
         neg16(x, f::VX);
@@ -252,7 +252,7 @@ fn orient_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x3e25e : une liaison en attente (`+0x91`, bit 7) devient effective (`+0x2b`, `+0x2a` levé).
+/// 0x3e25e: a pending link (`+0x91`, bit 7) becomes effective (`+0x2b`, `+0x2a` raised).
 fn apply_pending<R: Bench>(x: &mut Cx<'_, R>) {
     let p = x.u8(f::PENDING);
     if (p as i8) >= 0 {
@@ -262,7 +262,7 @@ fn apply_pending<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::LINKED, 1);
     x.set8(f::PENDING, 0);
 }
-/// Variante qui efface toujours `+0x91`.
+/// Variant that always clears `+0x91`.
 fn take_pending<R: Bench>(x: &mut Cx<'_, R>) {
     let p = x.u8(f::PENDING);
     if (p as i8) < 0 {
@@ -271,7 +271,7 @@ fn take_pending<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set8(f::PENDING, 0);
 }
-/// Inverse : la liaison effective repasse en attente (`+0x2b` | 0x80 dans `+0x91`).
+/// Inverse: the effective link goes back to pending (`+0x2b` | 0x80 in `+0x91`).
 fn defer_link<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(f::PENDING) as i8) < 0 || x.u8(f::LINKED) == 0 {
         return;
@@ -281,7 +281,7 @@ fn defer_link<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::LINKED, 0);
 }
 
-/// 0x3bda2 : projection prédéfinie `n` (compteur et quatre vitesses de la ROM).
+/// 0x3bda2: predefined throw `n` (counter and four speeds from the ROM).
 fn launch<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(f::DOWNED, 0);
     next(x);
@@ -294,7 +294,7 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     }
 }
 
-/// Tremblement sur place : X oscille de ±2 selon la parité du compteur et l'orientation.
+/// Shaking in place: X oscillates by ±2 according to the counter parity and the orientation.
 fn shake<R: Bench>(x: &mut Cx<'_, R>, amount: u16) {
     let mut d = amount;
     if x.u8(f::COUNTER) & 1 != 0 {
@@ -309,7 +309,7 @@ fn shake<R: Bench>(x: &mut Cx<'_, R>, amount: u16) {
 // ---------------------------------------------------------------------------------------------
 // Pas communs
 
-/// 0x3bdf0 : attend la fin de l'animation.
+/// 0x3bdf0: waits for the end of the animation.
 fn wait_anim<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::ANIM_END) != 0 {
         next(x);
@@ -318,7 +318,7 @@ fn wait_anim<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x3be02 : chute (déplacement X et hauteur) ; au sol, pas suivant et atterrissage.
+/// 0x3be02: fall (X movement and height); on the ground, next step and landing.
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     move_xz(x);
     if x.u16(f::HEIGHT) as i16 > 0 {
@@ -334,13 +334,13 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     landed(x);
 }
 
-/// 0x3be38 : chute, l'octet `+0x38` à zéro.
+/// 0x3be38: fall, byte `+0x38` at zero.
 fn fall_38<R: Bench>(x: &mut Cx<'_, R>) {
     fall(x);
     x.set8(0x38, 0);
 }
 
-/// 0x3e22e : pas suivant ; le boss de type 3 non saisi enchaîne sa réaction propre (0x81ae0).
+/// 0x3e22e: next step; the non-grabbed type 3 boss chains its own reaction (0x81ae0).
 fn boss_3_hook<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
     if x.u8(f::KIND) == 3 && x.u8(f::CLASS) == BOSS && x.u8(f::SUB) != 6 && x.u8(f::GRABBED) == 0 {
@@ -365,7 +365,7 @@ fn bounce_back<R: Bench>(x: &mut Cx<'_, R>) {
     }
     bounce_start(x);
 }
-/// 0x3be70 : rebond (animation 2) après une liaison.
+/// 0x3be70: bounce (animation 2) after a link.
 fn bounce_linked<R: Bench>(x: &mut Cx<'_, R>) {
     take_pending(x);
     x.set16(f::VZ, 0x300);
@@ -383,7 +383,7 @@ fn bounce_2<R: Bench>(x: &mut Cx<'_, R>) {
     anim(x, 2);
 }
 
-/// 0x3bea8 : le rebond, quatre sous-pas (`+7`).
+/// 0x3bea8: the bounce, four sub-steps (`+7`).
 fn bounce<R: Bench>(x: &mut Cx<'_, R>) {
     let s = x.u8(f::SUB_STEP);
     match s {
@@ -429,7 +429,7 @@ fn bounce<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x3e0dc : relevé ; mort (sous-état 6) : pas suivant.
+/// 0x3e0dc: get-up; death (substate 6): next step.
 fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x16, 0);
     x.set8(0x67, 0);
@@ -441,7 +441,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
         get_up_done(x);
     }
 }
-/// 0x3df7c : fin de la glissade : l'objet se relève.
+/// 0x3df7c: end of the slide: the object gets up.
 fn slide_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x16, 0);
     if var::GAME_ON.get(x.b) != 0 {
@@ -454,11 +454,12 @@ fn slide_end<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x3e19a : un objet saisi (`+0x87`) au sol peut rester à terre (code de réaction 104, ou 108 s'il était à
-/// terre) : vrai dans ce cas ; sinon l'appelant continue (A6 désigne sa suite dans l'original : `jmp (A6)`).
+/// 0x3e19a: a grabbed object (`+0x87`) on the ground may stay down (reaction code 104, or 108 if it was
+/// down): true in that case; otherwise the caller continues (A6 designates its continuation in the original: `jmp
+/// (A6)`).
 fn kept_down<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(f::GRABBED) != 0 {
-        // `bhi` sur la dernière comparaison de 0x1e92 (marge nulle) : un objet pile sur le bord en largeur compte comme
+        // `bhi` on the last comparison of 0x1e92 (zero margin): an object exactly on the edge in width counts as
         // dedans
         if !crate::objects::cull::beyond_arena(x.b, x.o, 0) {
             x.set16(f::RECOVER, 1);
@@ -476,7 +477,7 @@ fn kept_down<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     false
 }
 
-/// 0x3e0fc : debout, l'état principal reprend (0x04040000) ; le relevé du boss (0xf118) sauf code 108.
+/// 0x3e0fc: standing, the main state resumes (0x04040000); the boss's get-up (0xf118) except code 108.
 fn get_up_done<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::ACTIVE, 1);
     x.set32(f::STATE, 0x0404_0000);
@@ -488,8 +489,8 @@ fn get_up_done<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x3df9e : après la glissade, l'état mémorisé (`+0x8a`) reprend s'il le peut, sinon l'état actif et la
-/// routine de relevé du type.
+/// 0x3df9e: after the slide, the saved state (`+0x8a`) resumes if it can, otherwise the active state and the
+/// type's get-up routine.
 fn resume_after_slide<R: Bench>(x: &mut Cx<'_, R>) {
     let saved = x.u32(f::RESUME_STATE);
     if saved != 0 {
@@ -512,7 +513,7 @@ fn resume_after_slide<R: Bench>(x: &mut Cx<'_, R>) {
     get_up_by_kind(x, i);
 }
 
-/// 0x3dd9c : mort ; 40 images de clignotement, puis l'objet disparaît (0x19ad6).
+/// 0x3dd9c: death; 40 frames of blinking, then the object disappears (0x19ad6).
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB_STEP) == 0 {
         x.set8(f::COUNTER, 40);
@@ -528,7 +529,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
     }
     blink(x, c);
 }
-/// Clignotement : bit 1 de `+1` (caché) une image sur quatre... selon les deux bits bas du compteur.
+/// Blinking: bit 1 of `+1` (hidden) one frame out of four... according to the two low bits of the counter.
 fn blink<R: Bench>(x: &mut Cx<'_, R>, c: u8) {
     x.set_bit(f::DISPLAY, 1, false);
     if c & 3 != 0 {
@@ -536,12 +537,12 @@ fn blink<R: Bench>(x: &mut Cx<'_, R>, c: u8) {
     }
 }
 
-/// 0x3e158 : pas suivant, puis 0x51c06.
+/// 0x3e158: next step, then 0x51c06.
 fn step_51c06<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
     crate::families::creators::weapon_shot(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
 }
-/// 0x3e162 : pas suivant.
+/// 0x3e162: next step.
 fn skip<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
 }
@@ -549,9 +550,9 @@ fn skip<R: Bench>(x: &mut Cx<'_, R>) {
 fn idle<R: Bench>(_: &mut Cx<'_, R>) {}
 
 // ---------------------------------------------------------------------------------------------
-// Projections (premier pas des réactions)
+// Throws (first step of the reactions)
 
-/// 0x3bb9c (code 0) : recul sur place ; mort si les PV sont épuisés.
+/// 0x3bb9c (code 0): recoil in place; death if the HP are exhausted.
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::STEP) != 0 {
         return recoil_shake(x);
@@ -565,7 +566,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     }
     recoil_start(x, 0);
 }
-/// Début du recul (16 images de tremblement, petite poussée), animation `n`.
+/// Start of the recoil (16 frames of shaking, small push), animation `n`.
 fn recoil_start<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     next(x);
     stun(x);
@@ -576,7 +577,7 @@ fn recoil_start<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     anim(x, n);
     hit_sound(x);
 }
-/// 0x3bbec : tremblement, puis glissade (0x3bc10).
+/// 0x3bbec: shaking, then slide (0x3bc10).
 fn recoil_shake<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::COUNTER) != 0 {
         let c = x.u8(f::COUNTER).wrapping_sub(1);
@@ -585,7 +586,7 @@ fn recoil_shake<R: Bench>(x: &mut Cx<'_, R>) {
     }
     slide(x);
 }
-/// 0x3bc10 / 0x3d7f8 : glissade jusqu'à l'arrêt, puis relevé.
+/// 0x3bc10 / 0x3d7f8: slide until it stops, then get-up.
 fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::VX) == 0 {
         return slide_end(x);
@@ -594,7 +595,7 @@ fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     anim_step(x);
 }
 
-/// 0x3bf76 (code 0x38 et voisins) : comme le recul, animation 1, mort par 0x3ddf6.
+/// 0x3bf76 (code 0x38 and neighbors): like the recoil, animation 1, death through 0x3ddf6.
 fn recoil_1<R: Bench>(x: &mut Cx<'_, R>) {
     if dead(x) {
         mark_dead(x);
@@ -614,8 +615,8 @@ fn recoil_1<R: Bench>(x: &mut Cx<'_, R>) {
     hit_sound(x);
 }
 
-/// Projection en l'air : vitesse X `vx` (long), hauteur 0x400, gravité -64, compteur `counter`, animation
-/// `anim_n` ; `steps` pas d'avance (deux pour certaines variantes) ; `clear_67` : l'octet `+0x67` est effacé.
+/// Throw into the air: X speed `vx` (long), height 0x400, gravity -64, counter `counter`, animation
+/// `anim_n`; `steps` steps of advance (two for some variants); `clear_67`: byte `+0x67` is cleared.
 fn throw<R: Bench>(x: &mut Cx<'_, R>, vx: u32, counter: u8, anim_n: u32, steps: u8, clear_67: bool) {
     if clear_67 {
         x.set8(0x67, 0);
@@ -647,7 +648,7 @@ fn throw_3<R: Bench>(x: &mut Cx<'_, R>) {
 fn throw_4<R: Bench>(x: &mut Cx<'_, R>) {
     throw(x, 0x0300_0000, 1, 2, 1, true);
 }
-/// 0x3bfde, 0x3c03a, 0x3c098, 0x3c0f2 : mêmes projections, animation 3 (les deux premières sautent un pas).
+/// 0x3bfde, 0x3c03a, 0x3c098, 0x3c0f2: same throws, animation 3 (the first two skip a step).
 fn throw_1b<R: Bench>(x: &mut Cx<'_, R>) {
     throw(x, 0x0180_0000, 0, 3, 2, false);
 }
@@ -662,9 +663,9 @@ fn throw_4b<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Projections hautes (0x3c14e et voisines) et glissades au sol
+// High throws (0x3c14e and neighbors) and slides on the ground
 
-/// 0x3c15e : coup qui fait décoller (vitesses X 0x600, hauteur 0x280) après l'animation `n`.
+/// 0x3c15e: hit that makes it take off (X speeds 0x600, height 0x280) after animation `n`.
 fn uppercut<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     anim(x, n);
     x.set8(0x67, 0);
@@ -694,7 +695,7 @@ fn bounce_high<R: Bench>(x: &mut Cx<'_, R>) {
     anim(x, 5);
 }
 
-/// Début d'une glissade au sol (animation 6) à la vitesse `vx`.
+/// Start of a slide on the ground (animation 6) at speed `vx`.
 fn slide_start<R: Bench>(x: &mut Cx<'_, R>, vx: u16) {
     next(x);
     x.set8(f::SUB_STEP, 0);
@@ -710,7 +711,7 @@ fn slide_start_slow<R: Bench>(x: &mut Cx<'_, R>) {
     slide_start(x, 0x400);
 }
 
-/// Poussière de la glissade, une image sur deux (0xb10c8).
+/// Slide dust, every other frame (0xb10c8).
 fn dust<R: Bench>(x: &mut Cx<'_, R>) {
     let was = x.bit(f::COUNTER, 0);
     x.set_bit(f::COUNTER, 0, !was);
@@ -720,7 +721,7 @@ fn dust<R: Bench>(x: &mut Cx<'_, R>) {
     lib::shock(x, 0, 1, 0, 0xffff);
 }
 
-/// 0x3c270 : glissade ; arrêtée, l'ENEMY de type 0 attend l'événement de son animation pour l'animation 7.
+/// 0x3c270: slide; stopped, the type 0 ENEMY waits for its animation's event for animation 7.
 fn slide_fast<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB_STEP) != 0 {
         anim_step(x);
@@ -748,7 +749,7 @@ fn slide_fast<R: Bench>(x: &mut Cx<'_, R>) {
     dust(x)
 }
 
-/// 0x3c500 : glissade lente ; arrêtée, l'animation 7 quand l'animation en cours le signale.
+/// 0x3c500: slow slide; stopped, animation 7 when the current animation signals it.
 fn slide_slow<R: Bench>(x: &mut Cx<'_, R>) {
     anim_step(x);
     if x.u8(f::SUB_STEP) != 0 {
@@ -799,7 +800,7 @@ fn skim<R: Bench>(x: &mut Cx<'_, R>) {
     anim(x, 1);
 }
 
-/// 0x3c3ce : vol rasant (`+7`) : 0 plané, 4 chute, 2 chute qui repart en arrière.
+/// 0x3c3ce: skimming flight (`+7`): 0 glide, 4 fall, 2 fall that restarts backward.
 fn skim_flight<R: Bench>(x: &mut Cx<'_, R>) {
     let s = x.u8(f::SUB_STEP);
     match s {
@@ -859,7 +860,7 @@ fn skim_flight<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Projection en hauteur (animation `n`, vitesse X `vx`, hauteur `vz`, gravité `g`), compteur 1.
+/// High throw (animation `n`, X speed `vx`, height `vz`, gravity `g`), counter 1.
 fn pop<R: Bench>(x: &mut Cx<'_, R>, n: u32, vx: u16, vz: u16, g: u16, clear_67: bool) {
     if clear_67 {
         x.set8(0x67, 0);
@@ -875,7 +876,7 @@ fn pop<R: Bench>(x: &mut Cx<'_, R>, n: u32, vx: u16, vz: u16, g: u16, clear_67: 
     face_attacker(x);
 }
 
-/// 0x3c58c : projection dont la hauteur dépend du code de réaction (table 0x3c5f2), animation 9.
+/// 0x3c58c: throw whose height depends on the reaction code (table 0x3c5f2), animation 9.
 fn pop_by_code<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     apply_pending(x);
@@ -898,7 +899,7 @@ fn pop_11<R: Bench>(x: &mut Cx<'_, R>) {
     pop(x, 11, 0x600, 0xf800, -64i16 as u16, false);
 }
 
-/// 0x3c5fa : chute qui anime en descendant.
+/// 0x3c5fa: fall that animates while descending.
 fn fall_animated<R: Bench>(x: &mut Cx<'_, R>) {
     move_xz(x);
     if x.u16(f::HEIGHT) as i16 > 0 {
@@ -960,14 +961,14 @@ fn held_end<R: Bench>(x: &mut Cx<'_, R>) {
     anim_step(x);
 }
 
-/// 0x3c7fa : deux éclats (EFFCT type 8, variantes 1 et 0) si le décor le permet.
+/// 0x3c7fa: two sparks (EFFCT type 8, variants 1 and 0) if the terrain allows.
 fn sparks<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
     if x.a5_u16(0x7e68) < 2 {
         return;
     }
     for v in [1u8, 0] {
-        // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+        // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
         let o = x.alloc_unchecked(&pools::EFFCT);
         o.set_u8(x.b, 0, 1);
         o.set_u8(x.b, 2, 8);
@@ -976,7 +977,7 @@ fn sparks<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x3c828 : désintégration (ENEMY de type 1 : 0xeb448, sinon 0xe35a6), puis clignotement et disparition.
+/// 0x3c828: disintegration (type 1 ENEMY: 0xeb448, otherwise 0xe35a6), then blinking and disappearance.
 fn disintegrate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(f::STEP) == 0 {
         next(x);
@@ -1008,7 +1009,7 @@ fn disintegrate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x3c8d8 : étourdi : délai tiré au hasard (table 0x3c904), des étoiles (0xabec8) à la fin de chaque délai.
+/// 0x3c8d8: stunned: randomly drawn delay (table 0x3c904), stars (0xabec8) at the end of each delay.
 fn dazed<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     apply_pending(x);
@@ -1037,7 +1038,7 @@ fn dazed_wait<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set8(f::COUNTER, 1);
 }
-/// 0x3c936 : projection prédéfinie 1, gel d'une image.
+/// 0x3c936: predefined throw 1, freeze of one frame.
 fn knock<R: Bench>(x: &mut Cx<'_, R>) {
     hurt(x);
     launch(x, 1);
@@ -1047,7 +1048,7 @@ fn knock<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x3c970 : grande projection rasante (étoiles 0xabec8(2)).
+/// 0x3c970: big skimming throw (stars 0xabec8(2)).
 fn blast<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     next(x);
@@ -1068,7 +1069,7 @@ fn blast<R: Bench>(x: &mut Cx<'_, R>) {
     effect(x, 2, 0);
 }
 
-/// 0x3c9ec : animation 19 (avant une projection).
+/// 0x3c9ec: animation 19 (before a throw).
 fn wind_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     apply_pending(x);
@@ -1076,14 +1077,14 @@ fn wind_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB_STEP, 0);
     anim(x, 19);
 }
-/// 0x3ca04 : l'animation joue tant que le jeu est en pause, puis pas suivant.
+/// 0x3ca04: the animation plays while the game is paused, then next step.
 fn wind_up_wait<R: Bench>(x: &mut Cx<'_, R>) {
     anim_step(x);
     if !paused(x) {
         next(x);
     }
 }
-/// 0x3ca18 / 0x3ca3a : projection prédéfinie 3 (animation 2), les PV à zéro pour la première.
+/// 0x3ca18 / 0x3ca3a: predefined throw 3 (animation 2), HP at zero for the first.
 fn launch_3<R: Bench>(x: &mut Cx<'_, R>, kill: bool) {
     anim(x, 2);
     if kill {
@@ -1115,7 +1116,7 @@ fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::VX, 0);
     anim(x, 0);
 }
-/// 0x3cacc : monte jusqu'au haut de l'écran (0x110 au-dessus de la caméra), puis 0x3cafc.
+/// 0x3cacc: rises to the top of the screen (0x110 above the camera), then 0x3cafc.
 fn hop_rise<R: Bench>(x: &mut Cx<'_, R>) {
     move_xz(x);
     let camera = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_Y.get(x.b) } else { var::SCROLL_Y.get(x.b) };
@@ -1125,7 +1126,7 @@ fn hop_rise<R: Bench>(x: &mut Cx<'_, R>) {
     }
     hop_top(x);
 }
-/// 0x3cafc : quand l'objet lié (`+0x54`) est au sous-pas 4, retombe d'une hauteur aléatoire (animation 11).
+/// 0x3cafc: when the linked object (`+0x54`) is at sub-step 4, falls back from a random height (animation 11).
 fn hop_top<R: Bench>(x: &mut Cx<'_, R>) {
     let a1 = x.u16(0x54) as i16 as i32 as u32;
     if rd8(x.b, a1 + 7) != 4 {
@@ -1138,7 +1139,7 @@ fn hop_top<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::GRAVITY, -128i16 as u16);
     anim(x, 11);
 }
-/// 0x3cb32 : chute ; au sol, son et 0x2824 (D0 = 8).
+/// 0x3cb32: fall; on the ground, sound and 0x2824 (D0 = 8).
 fn hop_land<R: Bench>(x: &mut Cx<'_, R>) {
     fall(x);
     if x.u16(f::HEIGHT) != 0 {
@@ -1148,7 +1149,7 @@ fn hop_land<R: Bench>(x: &mut Cx<'_, R>) {
     lib::shake_54(x, 8);
 }
 
-/// 0x3cbaa : projection vers l'arrière (compteur 1, X 0x200, hauteur 0x600).
+/// 0x3cbaa: backward throw (counter 1, X 0x200, height 0x600).
 fn knockback_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
     x.set8(f::COUNTER, 1);
@@ -1156,7 +1157,7 @@ fn knockback_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::VZ, 0x600);
     x.set16(f::GRAVITY, -64i16 as u16);
 }
-/// Son du coup, ou mort et son de la mort, l'objet restant actif (`+0` = 2).
+/// Hit sound, or death and death sound, the object remaining active (`+0` = 2).
 fn hurt_active<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::ACTIVE, 2);
     if dead(x) {
@@ -1166,14 +1167,14 @@ fn hurt_active<R: Bench>(x: &mut Cx<'_, R>) {
         hit_sound(x);
     }
 }
-/// 0x3cc3e : à terre, la liaison repasse en attente, animation 13.
+/// 0x3cc3e: on the ground, the link goes back to pending, animation 13.
 fn tumble_anim<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     x.set8(f::DOWNED, 0);
     defer_link(x);
     anim(x, 13);
 }
-/// 0x3cb6c : projection vers l'arrière, culbute.
+/// 0x3cb6c: backward throw, somersault.
 fn tumble<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     x.set16(f::VY2, 0);
@@ -1184,7 +1185,7 @@ fn tumble<R: Bench>(x: &mut Cx<'_, R>) {
     hurt_active(x);
     tumble_anim(x);
 }
-/// 0x3cbca : comme la culbute, animation 18.
+/// 0x3cbca: like the somersault, animation 18.
 fn tumble_18<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     x.set8(f::DOWNED, 0);
@@ -1195,7 +1196,7 @@ fn tumble_18<R: Bench>(x: &mut Cx<'_, R>) {
     defer_link(x);
     anim(x, 18);
 }
-/// 0x3cc00 : culbute, animation 18 et étoiles 0xabec8(5).
+/// 0x3cc00: somersault, animation 18 and stars 0xabec8(5).
 fn tumble_18_stars<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     x.set8(f::DOWNED, 0);
@@ -1206,7 +1207,7 @@ fn tumble_18_stars<R: Bench>(x: &mut Cx<'_, R>) {
     effect(x, 5, 0);
     hurt_active(x);
 }
-/// 0x3cd0c : culbute, animation 13 et étoiles 0xabec8(7).
+/// 0x3cd0c: somersault, animation 13 and stars 0xabec8(7).
 fn tumble_13_stars<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     x.set16(f::VY2, 0);
@@ -1219,7 +1220,7 @@ fn tumble_13_stars<R: Bench>(x: &mut Cx<'_, R>) {
     effect(x, 7, 0);
     hurt_active(x);
 }
-/// 0x3cc6e : montée en trois dimensions ; au sommet, pas suivant (actif s'il n'est pas mort).
+/// 0x3cc6e: rise in three dimensions; at the top, next step (active if not dead).
 fn tumble_rise<R: Bench>(x: &mut Cx<'_, R>) {
     move_xyz(x);
     if x.u16(f::VZ) as i16 > 0 {
@@ -1230,7 +1231,7 @@ fn tumble_rise<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(f::ACTIVE, 1);
     }
 }
-/// 0x3cc90 : descente en trois dimensions jusqu'au sol.
+/// 0x3cc90: descent in three dimensions down to the ground.
 fn tumble_fall<R: Bench>(x: &mut Cx<'_, R>) {
     move_xyz(x);
     if x.u16(f::HEIGHT) as i16 > 0 {
@@ -1249,13 +1250,13 @@ fn tumble_blocked<R: Bench>(x: &mut Cx<'_, R>) {
     }
     anim_step(x);
 }
-/// 0x3ccca : pas suivant, la liaison en attente devient effective.
+/// 0x3ccca: next step, the pending link becomes effective.
 fn tumble_link<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
     take_pending(x);
 }
 
-/// 0x3cdb0 / 0x3cf1e : renversé (animation 17, son 0xebbda) ; la seconde ajoute les étoiles 0xabec8(8).
+/// 0x3cdb0 / 0x3cf1e: knocked over (animation 17, sound 0xebbda); the second adds the stars 0xabec8(8).
 fn floored<R: Bench>(x: &mut Cx<'_, R>, stars: bool) {
     x.set8(0x67, 0);
     x.set8(f::DOWNED, 0);
@@ -1281,7 +1282,7 @@ fn floored_plain<R: Bench>(x: &mut Cx<'_, R>) {
 fn floored_stars<R: Bench>(x: &mut Cx<'_, R>) {
     floored(x, true);
 }
-/// 0x3ce4c / 0x3ce84 : 30 images au sol ; la première variante lance 0xab7d8(1).
+/// 0x3ce4c / 0x3ce84: 30 frames on the ground; the first variant launches 0xab7d8(1).
 fn floored_wait<R: Bench>(x: &mut Cx<'_, R>, cry: bool) {
     if x.u8(f::SUB_STEP) == 0 {
         next_sub(x);
@@ -1304,7 +1305,7 @@ fn floored_wait_cry<R: Bench>(x: &mut Cx<'_, R>) {
 fn floored_wait_quiet<R: Bench>(x: &mut Cx<'_, R>) {
     floored_wait(x, false);
 }
-/// 0x3ceb4 / 0x3cecc : hors pause, pas suivant (la première lance 0xab7d8(1)).
+/// 0x3ceb4 / 0x3cecc: outside pause, next step (the first launches 0xab7d8(1)).
 fn unpaused_cry<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -1319,7 +1320,7 @@ fn unpaused_next<R: Bench>(x: &mut Cx<'_, R>) {
     next_clear(x);
 }
 
-/// 0x3d6f8 : renversé sans liaison (animation 17, étoiles 0xabec8(9)), vitesses orientées.
+/// 0x3d6f8: knocked over without a link (animation 17, stars 0xabec8(9)), oriented speeds.
 fn floored_9<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     x.set8(f::DOWNED, 0);
@@ -1337,9 +1338,9 @@ fn floored_9<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Saisies et réactions particulières
+// Grabs and special reactions
 
-/// 0x3d00a : saisi par un joueur (animation 14), immunités totales.
+/// 0x3d00a: grabbed by a player (animation 14), total immunities.
 fn seized<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x94, u32::MAX);
     apply_pending(x);
@@ -1348,12 +1349,12 @@ fn seized<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB_STEP, 0);
     anim(x, 14);
 }
-/// 0x3d02a : retour à l'attente de la saisie.
+/// 0x3d02a: back to waiting for the grab.
 fn seized_again<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB_STEP, 2);
     anim(x, 14);
 }
-/// 0x3d036 : la saisie (`+7`) : se colle au joueur, puis subit ses coups.
+/// 0x3d036: the grab (`+7`): sticks to the player, then takes their hits.
 fn seized_by<R: Bench>(x: &mut Cx<'_, R>) {
     let s = x.u8(f::SUB_STEP);
     match s {
@@ -1370,7 +1371,7 @@ fn seized_by<R: Bench>(x: &mut Cx<'_, R>) {
         _ => {}
     }
 }
-/// 0x3d048 : quand le joueur (`+0x50`) signale la prise, l'objet se place devant lui.
+/// 0x3d048: when the player (`+0x50`) signals the hold, the object places itself in front of them.
 fn seized_stick<R: Bench>(x: &mut Cx<'_, R>) {
     let p = x.u16(f::OWNER) as i16 as i32 as u32;
     if rd8(x.b, p + 0x33) != 1 {
@@ -1386,8 +1387,8 @@ fn seized_stick<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.add16(f::X, d);
 }
-/// 0x3d0e8 : le joueur (personnage 5, état 0x02000cxx, action 26) frappe : dégâts selon son coup (`+0x10c`,
-/// table 0x3d0da), points (0x19dce), effet (0xb141a) ; sinon fin de la saisie.
+/// 0x3d0e8: the player (character 5, state 0x02000cxx, action 26) strikes: damage according to their hit (`+0x10c`,
+/// table 0x3d0da), points (0x19dce), effect (0xb141a); otherwise end of the grab.
 fn seized_hits<R: Bench>(x: &mut Cx<'_, R>) {
     let p = x.u16(f::OWNER) as i16 as i32 as u32;
     let character = rd8(x.b, p + 3) >> 1;
@@ -1405,7 +1406,7 @@ fn seized_hits<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::HP, if (hp as i16) > 0 { hp } else { 0 });
     x.set8(f::COUNTER, 7);
     anim_step(x);
-    // 0x19dce : barre de vie de l'objet saisi, au nom du joueur
+    // 0x19dce: health bar of the grabbed object, in the player's name
     let owner = x.u16(f::OWNER) as i16 as i32 as u32;
     let header = ((rd8(x.b, owner + 2) as u16) << 8) | x.u8(f::KIND) as u16;
     let popup = crate::events::Popup { header, max: x.u16(0x60), value: x.u16(f::HP), raw: x.u8(f::CLASS) == 2 };
@@ -1416,12 +1417,12 @@ fn seized_hits<R: Bench>(x: &mut Cx<'_, R>) {
     if flipped(x) {
         vx = vx.wrapping_neg();
     }
-    // restes : les vitesses de l'étincelle dans D2.w et D3.w (`dispatch::Leftovers`)
+    // leftovers: the spark's speeds in D2.w and D3.w (`dispatch::Leftovers`)
     *x.c.d2() = *x.c.d2() & !0xffff | vx as u32;
     *x.c.d3() = *x.c.d3() & !0xffff | ax as u32;
     crate::families::effects_creators::impact_spark(x.b, x.o, vx, ax);
 }
-/// 0x3d224 : lâché : projection prédéfinie 1, immunités du type (0xfe5a).
+/// 0x3d224: released: predefined throw 1, the type's immunities (0xfe5a).
 fn released<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::ACTIVE, 1);
     anim(x, 3);
@@ -1434,7 +1435,8 @@ fn released<R: Bench>(x: &mut Cx<'_, R>) {
     lib::set_immunities(x);
 }
 
-/// 0x3d26a : coup reçu par un objet saisi (`+0x87`) ou non ; selon la hauteur, recul (code 0) ou coup bas (56).
+/// 0x3d26a: hit received by a grabbed object (`+0x87`) or not; depending on the height, recoil (code 0) or low blow
+/// (56).
 fn grab_hit<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::GRABBED) == 0 {
         if x.u16(f::HEIGHT) as i16 > 0 {
@@ -1476,7 +1478,7 @@ fn grab_hit<R: Bench>(x: &mut Cx<'_, R>) {
     launch(x, 0);
     face_attacker(x);
 }
-/// 0x3d318 : à terre saisi : `+0x87` s'use, puis relevé par la glissade.
+/// 0x3d318: on the ground, grabbed: `+0x87` wears off, then get-up through the slide.
 fn grab_down<R: Bench>(x: &mut Cx<'_, R>) {
     let c = x.u8(f::COUNTER);
     if c != 0 {
@@ -1493,7 +1495,7 @@ fn grab_down<R: Bench>(x: &mut Cx<'_, R>) {
     }
     anim_step(x);
 }
-/// 0x3d350 (code 108) : à terre et saisi ; mort par 0x3c63a.
+/// 0x3d350 (code 108): on the ground and grabbed; death through 0x3c63a.
 fn grounded_grab<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if dead(x) {
         x.set8(f::SUB, 6);
@@ -1524,7 +1526,7 @@ fn grounded_grab<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x3d3c8 : tremble sur place (étoiles 0xabec8(1)), délai tiré au hasard (table 0x3d42a).
+/// 0x3d3c8: shakes in place (stars 0xabec8(1)), randomly drawn delay (table 0x3d42a).
 fn quiver<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     x.set8(f::DOWNED, 0);
@@ -1549,7 +1551,7 @@ fn quiver_delay<R: Bench>(x: &mut Cx<'_, R>) {
     let d = x.rom8(0x3d42a + r);
     x.set8(f::COUNTER, d);
 }
-/// 0x3d42e : le tremblement ; à chaque délai, des étoiles une fois sur quatre... trois sur quatre.
+/// 0x3d42e: the shaking; at each delay, stars one time out of four... three out of four.
 fn quiver_shake<R: Bench>(x: &mut Cx<'_, R>) {
     let c = x.u8(f::COUNTER).wrapping_sub(1);
     x.set8(f::COUNTER, c);
@@ -1566,7 +1568,7 @@ fn quiver_shake<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x3d4a6 / 0x3d522 : culbute basse (X 0x100, hauteur 0x800) ; la seconde a l'animation 13 et ses étoiles.
+/// 0x3d4a6 / 0x3d522: low somersault (X 0x100, height 0x800); the second has animation 13 and its stars.
 fn roll<R: Bench>(x: &mut Cx<'_, R>, stars: bool) {
     x.set8(0x67, 0);
     next(x);
@@ -1585,7 +1587,7 @@ fn roll<R: Bench>(x: &mut Cx<'_, R>, stars: bool) {
         effect(x, 7, 0);
         return hurt_active(x);
     }
-    // 0x3d4e6 : mort, les deux sons ; puis l'animation de la culbute
+    // 0x3d4e6: death, both sounds; then the somersault animation
     x.set8(f::ACTIVE, 2);
     if dead(x) {
         x.set8(f::SUB, 6);
@@ -1601,7 +1603,7 @@ fn roll_stars<R: Bench>(x: &mut Cx<'_, R>) {
     roll(x, true);
 }
 
-/// 0x3d5a2 : électrocuté (80 images, animation 0), il meurt.
+/// 0x3d5a2: electrocuted (80 frames, animation 0), it dies.
 fn zapped<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     apply_pending(x);
@@ -1611,7 +1613,7 @@ fn zapped<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::COUNTER, 80);
     anim(x, 0);
 }
-/// 0x3d5c6 : étincelles toutes les 8 images (0xb10c8), puis disparition.
+/// 0x3d5c6: sparks every 8 frames (0xb10c8), then disappearance.
 fn zapped_burn<R: Bench>(x: &mut Cx<'_, R>) {
     let c = x.u8(f::COUNTER).wrapping_sub(1);
     x.set8(f::COUNTER, c);
@@ -1624,15 +1626,15 @@ fn zapped_burn<R: Bench>(x: &mut Cx<'_, R>) {
     if c & 7 != 0 {
         return;
     }
-    // Glitch d'origine : dans la scène 41, 0xb10c8 rend la main sans effet ni retenue, et la suite écrit dans l'A1
-    // laissé, la routine de réaction elle-même (ROM) : les écritures sont perdues.
+    // Original glitch: in scene 41, 0xb10c8 cedes control with no effect or carry, and the rest writes into the A1
+    // left over, the reaction routine itself (ROM): the writes are lost.
     let lib::Choc::Created(o) = lib::shock(x, 7, 0x200, 0, 0xffff) else { return };
     o.set_u8(x.b, 0x43, 1);
     let h = o.u16(x.b, 0xc).wrapping_add(16);
     o.set_u16(x.b, 0xc, h);
 }
 
-/// 0x3d62c : pétrifié (animation 20) ; en l'air, il tombe d'abord.
+/// 0x3d62c: petrified (animation 20); in the air, it falls first.
 fn petrified<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     apply_pending(x);
@@ -1670,7 +1672,7 @@ fn petrified_end<R: Bench>(x: &mut Cx<'_, R>) {
     lib::object_event(x);
 }
 
-/// 0x3d762 (code 0x5c...) : en l'air, projection (code 4) ; mort au sol ; sinon tremblement de 60 images puis
+/// 0x3d762 (code 0x5c...): in the air, throw (code 4); death on the ground; otherwise 60 frames of shaking then
 /// glissade.
 fn stagger<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
@@ -1702,7 +1704,7 @@ fn stagger_shake<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x3d828 : petite projection (animation 3), vitesses orientées.
+/// 0x3d828: small throw (animation 3), oriented speeds.
 fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
     apply_pending(x);
     next(x);
@@ -1719,7 +1721,7 @@ fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
     stun(x);
 }
 
-/// 0x3d882 : brûlé (0xe909a), animation D0 laissé tel quel, six étoiles (0xabec8(4)).
+/// 0x3d882: burned (0xe909a), animation D0 left as is, six stars (0xabec8(4)).
 fn burnt<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     lib::sound(x, 0xe909a);
@@ -1736,7 +1738,7 @@ fn burnt<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::DOWNED, 0);
     x.set8(f::GRABBED, 0);
     x.set8(f::COUNTER, 0xf0);
-    // Glitch d'origine : l'animation est le D0 laissé par l'aiguillage sur `+6`, le pas courant (0)
+    // Original glitch: the animation is the D0 left by the dispatch on `+6`, the current step (0)
     anim(x, 0);
     if !lib::attack_effects(x, 4, 5) {
         x.set8(f::STEP, 6);
@@ -1766,7 +1768,7 @@ fn burnt_wait<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Angle de départ d'un tourbillon : au hasard, centré à gauche (8) ou à droite (24) selon l'orientation.
+/// Start angle of a whirlwind: random, centered on the left (8) or on the right (24) depending on the orientation.
 fn spin_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let d2 = if flipped(x) { 24 } else { 8 };
     let r = random(x);
@@ -1774,7 +1776,7 @@ fn spin_angle<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::ANGLE, a as u8);
     anim(x, 3);
 }
-/// 0x3d950 : emporté par un tourbillon.
+/// 0x3d950: carried off by a whirlwind.
 fn whirl<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     x.set8(f::DOWNED, 0);
@@ -1789,7 +1791,7 @@ fn whirl<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::COUNTER, c);
     spin_angle(x);
 }
-/// Tour suivant de l'angle (pas de 2 sur 32) ; l'orientation suit le demi-cercle.
+/// Next turn of the angle (step of 2 out of 32); the orientation follows the half-circle.
 fn turn_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let a = x.u8(f::ANGLE).wrapping_add(2) & 31;
     x.set8(f::ANGLE, a);
@@ -1799,7 +1801,7 @@ fn turn_angle<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(f::FLIP, 32);
     }
 }
-/// 0x3da0e : position sur le cercle (table 0x1c94b6 : X, profondeur), vitesses ajoutées.
+/// 0x3da0e: position on the circle (table 0x1c94b6: X, depth), speeds added.
 fn orbit<R: Bench>(x: &mut Cx<'_, R>) {
     const CIRCLE: u32 = 0x1c94b6;
     let i = 4 * x.u8(f::ANGLE) as u32;
@@ -1811,7 +1813,7 @@ fn orbit<R: Bench>(x: &mut Cx<'_, R>) {
     let d = ((vy as i16 as i32) << 8) as u32;
     x.add32(f::Y, d);
 }
-/// 0x3d9b2 : monte en tournant jusqu'à 96, puis retombe.
+/// 0x3d9b2: rises while spinning up to 96, then falls back.
 fn whirl_rise<R: Bench>(x: &mut Cx<'_, R>) {
     x.add32(f::HEIGHT, 0x2_0000);
     if x.u16(f::HEIGHT) as i16 >= 96 {
@@ -1828,7 +1830,7 @@ fn whirl_rise<R: Bench>(x: &mut Cx<'_, R>) {
     }
     orbit(x);
 }
-/// 0x3da44 : retombe ; au sol, atterrissage et son.
+/// 0x3da44: falls back; on the ground, landing and sound.
 fn whirl_fall<R: Bench>(x: &mut Cx<'_, R>) {
     anim_step(x);
     move_xyz(x);
@@ -1847,7 +1849,7 @@ fn whirl_fall<R: Bench>(x: &mut Cx<'_, R>) {
     hurt(x);
 }
 
-/// 0x3dc30 : tourbillon des boss (60 images).
+/// 0x3dc30: boss whirlwind (60 frames).
 fn spin<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
     x.set8(f::COUNTER, 60);
@@ -1859,7 +1861,7 @@ fn spin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::GRABBED, g);
     spin_angle(x);
 }
-/// 0x3dc86 : tourne en montant jusqu'à 64.
+/// 0x3dc86: spins while rising up to 64.
 fn spin_rise<R: Bench>(x: &mut Cx<'_, R>) {
     let c = x.u8(f::COUNTER).wrapping_sub(1);
     x.set8(f::COUNTER, c);
@@ -1878,7 +1880,7 @@ fn spin_rise<R: Bench>(x: &mut Cx<'_, R>) {
     }
     orbit(x);
 }
-/// 0x3db4e : le boss redevient actif (état 4) et retombe renversé (animation 17).
+/// 0x3db4e: the boss becomes active again (state 4) and falls back knocked over (animation 17).
 fn spin_drop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::STATE, 4);
     x.set8(f::ACTIVE, 2);
@@ -1896,7 +1898,7 @@ fn spin_drop<R: Bench>(x: &mut Cx<'_, R>) {
     anim(x, 17);
     lib::sound(x, 0xebbda);
 }
-/// 0x3dada : variante : animation 17 et étoiles 0xabec8(8).
+/// 0x3dada: variant: animation 17 and stars 0xabec8(8).
 fn spin_drop_stars<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
     next(x);
@@ -1910,7 +1912,7 @@ fn spin_drop_stars<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xebbda);
     effect(x, 8, 0);
 }
-/// 0x3dbb4 : animation ; chute jusqu'au sol, puis attente de la fin du compteur.
+/// 0x3dbb4: animation; fall to the ground, then wait for the counter to end.
 fn spin_fall<R: Bench>(x: &mut Cx<'_, R>) {
     anim_step(x);
     if x.u8(f::SUB_STEP) == 0 {
@@ -1938,7 +1940,7 @@ fn spin_bounce<R: Bench>(x: &mut Cx<'_, R>) {
     defer_link(x);
     anim(x, 13);
 }
-/// 0x3db18 : variante : étoiles 0xabec8(7), puis le son.
+/// 0x3db18: variant: stars 0xabec8(7), then the sound.
 fn spin_bounce_stars<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
     x.set8(f::COUNTER, 60);
@@ -1951,7 +1953,7 @@ fn spin_bounce_stars<R: Bench>(x: &mut Cx<'_, R>) {
     effect(x, 7, 0);
     hit_sound(x);
 }
-/// 0x3dcea : projection rasante finale (étoiles 0xabec8(2)).
+/// 0x3dcea: final skimming throw (stars 0xabec8(2)).
 fn spin_blast<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
     apply_pending(x);
@@ -1966,7 +1968,7 @@ fn spin_blast<R: Bench>(x: &mut Cx<'_, R>) {
     }
     effect(x, 2, 0);
 }
-/// 0x3dd2e : mort du boss ; hors ENEMY, `A5+0x4f` signale la fin ; certains types gardent leur pas.
+/// 0x3dd2e: boss death; outside ENEMY, `A5+0x4f` signals the end; some types keep their step.
 fn spin_death<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
     x.set8(f::ACTIVE, 2);
@@ -1981,7 +1983,7 @@ fn spin_death<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x3dd8c / 0x3dd94 : mort en l'air : son, puis projection basse (animation 2 ou 3).
+/// 0x3dd8c / 0x3dd94: death in the air: sound, then low throw (animation 2 or 3).
 fn death_throw<R: Bench>(x: &mut Cx<'_, R>) {
     death_sound(x);
     throw_1(x);
@@ -1992,10 +1994,10 @@ fn death_throw_b<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Les routines de réaction (entrées des tables par type)
+// The reaction routines (entries of the per-type tables)
 
-/// Aiguillage d'origine sur `+6` (`moveq #0,D0 ; move.b 6(A0),D0 ; move.w table(PC,D0),D1 ; jmp`) : le pas
-/// `+6` = 2 × i exécute la i-ième fonction de la liste ; faux pour un pas hors de la table (ou impair).
+/// Original dispatch on `+6` (`moveq #0,D0 ; move.b 6(A0),D0 ; move.w table(PC,D0),D1 ; jmp`): step
+/// `+6` = 2 × i runs the i-th function of the list; false for a step outside the table (or odd).
 macro_rules! step {
     ($x:ident; $($f:path),+ $(,)?) => {{
         let s = $x.u8(f::STEP);
@@ -2014,7 +2016,7 @@ macro_rules! step {
     };
 }
 
-/// Pas communs de fin : relevé, mort.
+/// Common end steps: get-up, death.
 macro_rules! standard {
     ($x:ident, $first:path) => {
         step!($x; $first, wait_anim, fall, boss_3_hook, bounce_start, bounce, get_up, death)
@@ -2031,7 +2033,7 @@ macro_rules! slides {
     };
 }
 
-/// Les routines de réaction à table de sauts en tête : (entrée, table sur `+6`).
+/// The reaction routines with a jump table at the head: (entry, table on `+6`).
 #[cfg(test)]
 const REACTIONS: &[(u32, u32)] = &[
     (0x3bc24, 0x3bc32),
@@ -2082,7 +2084,7 @@ const REACTIONS: &[(u32, u32)] = &[
     (0x3ddf6, 0x3de04),
 ];
 
-/// Les pas de la routine de réaction `entry` (une de `REACTIONS`), sur `+6` ; `None` si `entry` n'en est pas une.
+/// The steps of reaction routine `entry` (one of `REACTIONS`), on `+6`; `None` if `entry` is not one.
 fn run_table<R: Bench>(x: &mut Cx<'_, R>, entry: u32) -> Option<bool> {
     Some(match entry {
         0x3bc24 /* table 0x3bc32 */ => standard!(x, throw_1),
@@ -2135,7 +2137,7 @@ fn run_table<R: Bench>(x: &mut Cx<'_, R>, entry: u32) -> Option<bool> {
     })
 }
 
-/// Routines sans table de sauts en tête.
+/// Routines without a jump table at the head.
 const RECOIL: u32 = 0x3bb9c;
 const RECOIL_1: u32 = 0x3bf76;
 const HELD: u32 = 0x3c63a;
@@ -2143,7 +2145,7 @@ const DISINTEGRATE: u32 = 0x3c828;
 const GROUNDED_GRAB: u32 = 0x3d350;
 const BURNT: u32 = 0x3d86e;
 
-/// Exécute la routine de réaction d'origine `entry` ; faux si le pas est hors de sa table (voir `native_run`).
+/// Runs the original reaction routine `entry`; false if the step is outside its table (see `native_run`).
 fn run_entry_flag<R: Bench>(x: &mut Cx<'_, R>, entry: u32) -> bool {
     match entry {
         RECOIL => {
@@ -2161,20 +2163,21 @@ fn run_entry_flag<R: Bench>(x: &mut Cx<'_, R>, entry: u32) -> bool {
         }
         DISINTEGRATE => disintegrate(x),
         GROUNDED_GRAB => grounded_grab(x),
-        // `move.b 6(A0),D0` sans `moveq` : l'indice est le mot bas de D0, dont l'octet haut est nul (D0 = le code de
-        // réaction, un octet, posé par l'appelant : `enemy_common::react`, les tables propres des boss)
+        // `move.b 6(A0),D0` without `moveq`: the index is the low word of D0, whose high byte is zero (D0 = the
+        // reaction
+        // code, one byte, set by the caller: `enemy_common::react`, the bosses' own tables)
         BURNT => step!(x; burnt, burnt_fall, anim_step, burnt_wait), // table 0x3d87a
         _ => run_table(x, entry).unwrap_or(false),
     }
 }
 
-/// Saut vers une autre routine de réaction (`bra`) depuis un pas.
+/// Jump to another reaction routine (`bra`) from a step.
 fn run_entry<R: Bench>(x: &mut Cx<'_, R>, entry: u32) {
     let step = x.u8(f::STEP);
-    assert!(run_entry_flag(x, entry), "réaction {entry:#x} : pas {step:#x} hors de la table d'origine");
+    assert!(run_entry_flag(x, entry), "reaction {entry:#x}: step {step:#x} outside the original table");
 }
 
-/// 0x3bb16 : animation de réaction `D6` du joueur (jeu par personnage `+3`, table 0x3bb52).
+/// 0x3bb16: player reaction animation `D6` (set per character `+3`, table 0x3bb52).
 fn player_hurt_animation(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     let o = Obj(c.a[0]);
     let character = rd8(b, o.0 + 3) as u32;
@@ -2188,25 +2191,26 @@ fn player_hurt_animation(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     rts(c, b);
 }
 
-/// Exécute la routine de réaction commune `entry` si c'en est une (faux sinon) : appel direct depuis
-/// `enemy_common::react`, sans passer par la native.
+/// Runs the common reaction routine `entry` if it is one (false otherwise): direct call from
+/// `enemy_common::react`, without going through the native.
 pub fn run_common<R: Bench>(x: &mut Cx<'_, R>, entry: u32) -> bool {
     if !NATIVES.iter().any(|n| n.entry == entry) {
         return false;
     }
     let step = x.u8(f::STEP);
-    assert!(run_entry_flag(x, entry), "réaction {entry:#x} : pas {step:#x} hors de la table d'origine");
+    assert!(run_entry_flag(x, entry), "reaction {entry:#x}: step {step:#x} outside the original table");
     true
 }
 
-/// Exécute la routine de réaction `entry` (RTS compris). Tous les pas des tables d'origine sont réécrits : le pas
-/// (`+6`) part de 0 et n'avance que de 2 en 2 jusqu'au dernier pas de la table, qui ne l'avance plus (mort, fin de
-/// saisie...), et l'indice de `BURNT` (D0.w) est le code de réaction posé par l'appelant (octet haut nul). Un pas
-/// hors table ferait sauter l'original dans des données : il ne peut pas se produire.
+/// Runs the reaction routine `entry` (RTS included). All the steps of the original tables are rewritten: the step
+/// (`+6`) starts at 0 and only advances by 2 up to the last step of the table, which no longer advances it (death,
+/// end of
+/// grab...), and the `BURNT` index (D0.w) is the reaction code set by the caller (high byte zero). A step
+/// outside the table would make the original jump into data: it cannot happen.
 fn native_run(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, entry: u32) {
     let mut x = Cx::new(c, b);
     let step = x.u8(f::STEP);
-    assert!(run_entry_flag(&mut x, entry), "réaction {entry:#x} : pas {step:#x} hors de la table d'origine");
+    assert!(run_entry_flag(&mut x, entry), "reaction {entry:#x}: step {step:#x} outside the original table");
     x.ret();
 }
 
@@ -2222,7 +2226,7 @@ macro_rules! reaction_natives {
     };
 }
 
-/// Les routines de réaction, à leur adresse d'origine (appelées par `jsr (A1)` depuis les tables par type).
+/// The reaction routines, at their original address (called by `jsr (A1)` from the per-type tables).
 pub const NATIVES: &[Native] = reaction_natives![
     0x3bb9c, 0x3bc24, 0x3bc82, 0x3bce2, 0x3bd42, 0x3bf56, 0x3bf76, 0x3bfc0, 0x3c01c, 0x3c07a, 0x3c0d4, 0x3c12e,
     0x3c1c2, 0x3c1e2, 0x3c2ee, 0x3c35a, 0x3c4b4, 0x3c570, 0x3c63a, 0x3c70c, 0x3c784, 0x3c828, 0x3c8b8, 0x3c954,
@@ -2231,7 +2235,7 @@ pub const NATIVES: &[Native] = reaction_natives![
     0x3da86, 0x3dab0, 0x3dd72, 0x3ddf6,
 ];
 
-/// Animation de réaction du joueur (appelée par les états du joueur restés en 68000).
+/// Player reaction animation (called by the player states that remained in 68000).
 pub const PLAYER_HURT_ANIMATION: Native = Native {
     entry: 0x3bb16,
     name: "player_hurt_animation",
@@ -2244,7 +2248,7 @@ pub const PLAYER_HURT_ANIMATION: Native = Native {
 mod tests {
     use super::*;
 
-    /// Chaque routine de réaction a une native, et inversement.
+    /// Each reaction routine has a native, and vice versa.
     #[test]
     fn routines_and_natives() {
         for &(entry, _) in REACTIONS {

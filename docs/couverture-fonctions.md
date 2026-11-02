@@ -488,11 +488,11 @@ ci-dessus) est exécuté par un fuzz différentiel, l'original et la native Rust
 
 ### Méthode : `examples/fuzz_couv`
 
-`fuzz_couv <roms> <eeprom> <scénario> <images> <cibles> <sortie.bin>` déroule un scénario sur la machine de
+`fuzz_couv <roms> <eeprom> <scénario> <images> <targets> <sortie.bin>` déroule un scénario sur la machine de
 référence (code d'origine seul, 68000 ×16). Aux appels d'une native ciblée (zone de l'atlas, adresse ou préfixe de
 nom), l'état réel devient une *base* ; des copies perturbées en sont exécutées par l'original (interprété, couverture
 relevée) et par la native, puis comparées : RAM (hors piles mortes et RAM du noyau, la table des tâches Rust étant
-reconstruite depuis FF0064 puis comparée par `taches::table::ecarts`), mémoire vidéo, registres du contrat, PC.
+reconstruite depuis FF0064 puis comparée par `tasks::table::gaps`), mémoire vidéo, registres du contrat, PC.
 
 * **Perturbations ciblées.** La base est d'abord exécutée par l'original avec un bus qui journalise ses lectures de
   RAM : seuls les octets, mots et longs *lus* sont réécrits. Les lectures faites juste avant un saut conditionnel pris
@@ -508,20 +508,20 @@ reconstruite depuis FF0064 puis comparée par `taches::table::ecarts`), mémoire
   d'une voisine (un gestionnaire d'objet sur l'objet A0 d'un gestionnaire du même pool, dont le type est changé et
   l'état souvent remis à zéro ; un wrapper de son avec A0 sur un joueur). Ces bases sont marquées `SUBST` : leurs
   registres d'entrée sont ceux d'un autre appel.
-* **Code des tâches** : des « natives de test » (`hud::NATIVES_DE_TEST` 0x15216, `credits` 0x1422e, `tache_credits`
+* **Code des tâches** : des « natives de test » (`hud::TEST_NATIVES` 0x15216, `credits` 0x1422e, `credits_task`
   0x13c2c, `modes::demo` 0xe05ec) présentent au fuzz des sous-programmes réécrits dans le corps d'une tâche ; le jeu
-  ne les appelle pas par adresse. `FUZZ_FOCUS=zone` avec la cible `tout` fuzze toutes les natives dont la base passe
+  ne les appelle pas par adresse. `FUZZ_FOCUS=zone` avec la cible `all` fuzze toutes les natives dont la base passe
   par la zone (code atteint par des natives d'autres zones : collisions X1, interface F3...).
 * **Tri des écarts** : chaque écart est réduit (perturbations retirées une à une tant que l'écart persiste) et
   étiqueté : `HORS` (une valeur hors du domaine du champ : état que le jeu ne produit pas), `REG` (registres seuls,
   sans effet tant qu'aucun appelant ne les relit), `SUBST`, `NEUF` (l'original passe par du code jamais exécuté par
   les scénarios). Les écarts *plausibles* (ni HORS, ni REG, ni SUBST) ont tous été analysés.
-* **Diagnostic** : la fonctionnalité `surveille` de `ddsom-game` (`FUZZ_SURVEILLE=adresse[-fin]`) donne la pile
+* **Diagnostic** : la fonctionnalité `watched` de `ddsom-game` (`FUZZ_SURVEILLE=adresse[-fin]`) donne la pile
   d'appels Rust de chaque écriture de la native dans la plage, et les écritures de l'original avec leur PC ;
   `FUZZ_PC=adresse,...` montre les registres de l'original à ces PC.
 
 Bilan : `tools/coverage_fuzz.py <listing> <index.tsv> <atlas.md> <union des scénarios> <bitmaps de fuzz_couv>...
-[--detail ZONE]` ; la sortie `<sortie>.identiques` de `fuzz_couv` ne garde que les essais sans écart.
+[--detail ZONE]` ; la exit `<sortie>.identiques` de `fuzz_couv` ne garde que les essais sans écart.
 
 Par zone : 6 à 16 scénarios choisis pour couvrir les sauts de la frontière de la zone, un appel retenu sur 8 (les
 4 premiers toujours, 400 au plus par native), 32 essais par appel retenu. Une zone dure de 2 à 15 minutes sur 6
@@ -544,7 +544,7 @@ Tous sur des chemins que les scénarios n'exercent pas ; chacun corrigé dans un
 | C12 | PEFF 12 (gel), éclat qui rebondit | table d'angles du bord bas en 0x4be8c au lieu de 0x4be88 (`lea` de 0x4be5e) | adresse corrigée |
 | C10 | 0xd40e8 création des tremplins | mot haut de D5 (compteur `moveq #12`) laissé au reste | D5 long |
 | C08 | ESHL 8 (0x9ee00) et 13 (0x9f712) | sans propriétaire (`+0x50` nul), l'original passe l'effet à l'état 6 ; la native le laissait tel quel | `move.l #0x6000000,(4,A0)` |
-| C0c | ITEM 3, échange d'équipement (0xdbc2e → 0xdc28a) | l'objet expulsé est tiré de la table par D0.w, dont l'octet haut (classe × 8) n'est nul qu'avec un vrai propriétaire ; index non étendu en signe | index D0.w complet passé à `objet_expulse` |
+| C0c | ITEM 3, échange d'équipement (0xdbc2e → 0xdc28a) | l'objet expulsé est tiré de la table par D0.w, dont l'octet haut (classe × 8) n'est nul qu'avec un vrai propriétaire ; index non étendu en signe | index D0.w complet passé à `object_ejected` |
 | P4 | 0x3b3aa joueur gelé, chute hors de l'état 4 | variante de l'effet 0xb6ba8 prise dans un reste Rust de D0 au lieu du D0 laissé par le mouvement 0x1da6 (octet bas nul) | D0 recalculé |
 
 Les écarts d'outillage (états impossibles, registres non relus) ne sont pas corrigés : voir ci-dessous.
@@ -559,7 +559,7 @@ Les écarts d'outillage (états impossibles, registres non relus) ne sont pas co
 * **REG** : registres de sortie seuls (contrats `regs::ALL` des natives des scripts SET, CCR des poussées du boss 3,
   CCR de `ia_boite`) : aucun appelant Rust ne les relit.
 * **SUBST** : wrappers de son appelés depuis l'état d'un autre wrapper imbriqué (la sauvegarde de l'original sur la
-  pile privée, plus profonde que dans le jeu, recouvre les têtes de la file : écart assumé de `sound::jouer_wrapper`) ;
+  pile privée, plus profonde que dans le jeu, recouvre les têtes de la file : écart assumé de `sound::play_wrapper`) ;
   gestionnaires de boss dont les champs viennent d'un autre type.
 * **Natives de haut niveau** (`world_update`, `game_phase12`, `scene_phase_*`, `players_update`) : une perturbation
   profonde y fait diverger un gestionnaire ; les cas plausibles retombent sur les écarts du tableau ci-dessus ou sur

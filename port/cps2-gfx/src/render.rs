@@ -1,13 +1,13 @@
-//! Rendu d'une image CPS2 à partir de l'état vidéo (GFX RAM, registres CPS-A/CPS-B, Object RAM).
-//! Traduction de cps_state::screen_update_cps1 / cps2_state::render_layers / cps2_render_sprites.
+//! Rendering of a CPS2 frame from the video state (GFX RAM, CPS-A/CPS-B registers, Object RAM).
+//! Translation of cps_state::screen_update_cps1 / cps2_state::render_layers / cps2_render_sprites.
 
 pub const SCREEN_W: usize = 384;
 pub const SCREEN_H: usize = 224;
-/// Zone visible dans la bitmap 512x262 de MAME (CPS_HBEND, CPS_VBEND).
+/// Visible area in MAME's 512x262 bitmap (CPS_HBEND, CPS_VBEND).
 const VIS_X0: i32 = 64;
 const VIS_Y0: i32 = 16;
 
-// CPS-A (index de mots)
+// CPS-A (word index)
 const A_SCROLL_BASE: [usize; 3] = [0x02 / 2, 0x04 / 2, 0x06 / 2];
 const A_OTHER_BASE: usize = 0x08 / 2;
 const A_PALETTE_BASE: usize = 0x0a / 2;
@@ -15,7 +15,7 @@ const A_SCROLLX: [usize; 3] = [0x0c / 2, 0x10 / 2, 0x14 / 2];
 const A_SCROLLY: [usize; 3] = [0x0e / 2, 0x12 / 2, 0x16 / 2];
 const A_ROWSCROLL_OFFS: usize = 0x20 / 2;
 const A_VIDEOCONTROL: usize = 0x22 / 2;
-// CPS-B, configuration CPS_B_21_DEF (commune aux jeux CPS2)
+// CPS-B, CPS_B_21_DEF configuration (common to CPS2 games)
 const B_LAYER_CONTROL: usize = 0x26 / 2;
 const B_PALETTE_CONTROL: usize = 0x30 / 2;
 const LAYER_ENABLE_MASK: [u16; 3] = [0x02, 0x04, 0x08];
@@ -24,23 +24,23 @@ const OUT_PRI: usize = 0x04 / 2;
 const OUT_XOFFS: usize = 0x08 / 2;
 const OUT_YOFFS: usize = 0x0a / 2;
 
-/// Base des tuiles de décor dans la région gfx (mapper_cps2 : banque 1, 0x20000 unités de 64 octets).
+/// Base of the scenery tiles in the gfx region (mapper_cps2: bank 1, 0x20000 units of 64 bytes).
 const SCROLL_TILE_BASE: usize = 0x20000 * 64;
 
 pub struct VideoState<'a> {
-    /// GFX RAM 0x900000-0x92FFFF, en mots.
+    /// GFX RAM 0x900000-0x92FFFF, in words.
     pub gfxram: &'a [u16],
     pub cps_a: &'a [u16; 32],
     pub cps_b: &'a [u16; 32],
-    /// Table d'objets verrouillée au vblank (0x1000 mots).
+    /// Object table latched at vblank (0x1000 words).
     pub objram: &'a [u16],
     pub output: &'a [u16; 6],
-    /// Copie de la GFX RAM faite à l'écriture du registre de base de palette (6 x 0x200 mots).
-    /// C'est ce que le matériel affiche ; None = lire la GFX RAM courante.
+    /// Copy of the GFX RAM made when the palette base register is written (6 x 0x200 words).
+    /// This is what the hardware displays; None = read the current GFX RAM.
     pub palette_ram: Option<&'a [u16]>,
 }
 
-/// Palette 0xC00 couleurs en RGB, construite comme cps1_build_palette.
+/// 0xC00-color RGB palette, built like cps1_build_palette.
 pub fn build_palette(v: &VideoState) -> Vec<[u8; 3]> {
     let mut pal = vec![[0u8; 3]; 0xc00];
     let (ram, base) = match v.palette_ram {
@@ -65,13 +65,13 @@ pub fn build_palette(v: &VideoState) -> Vec<[u8; 3]> {
     pal
 }
 
-/// cps1_base : adresse (index de mot dans la GFX RAM) désignée par un registre CPS-A.
+/// cps1_base: address (word index in the GFX RAM) designated by a CPS-A register.
 fn gfx_base(reg: u16, boundary: usize) -> usize {
     let base = (reg as usize * 256) & !(boundary - 1);
     (base & 0x3ffff) / 2
 }
 
-/// `BURST[b]` : les 8 bits de `b` rangés un par octet, le bit de poids fort dans l'octet 0 (pixel 0).
+/// `BURST[b]`: the 8 bits of `b` laid out one per byte, the most significant bit in byte 0 (pixel 0).
 const BURST: [u64; 256] = {
     let mut t = [0u64; 256];
     let mut b = 0;
@@ -86,7 +86,7 @@ const BURST: [u64; 256] = {
     t
 };
 
-/// Les 8 pixels (0..15) d'une ligne graphique : `row` pointe sur 4 octets (un plan par octet, MSB = pixel 0).
+/// The 8 pixels (0..15) of a graphics row: `row` points to 4 bytes (one plane per byte, MSB = pixel 0).
 #[inline]
 fn pixels8(gfx: &[u8], row: usize) -> [u8; 8] {
     let r = &gfx[row..row + 4];
@@ -96,12 +96,12 @@ fn pixels8(gfx: &[u8], row: usize) -> [u8; 8] {
 
 struct Layer {
     tile: usize,     // 8, 16, 32
-    base: usize,     // index de mot dans la GFX RAM
+    base: usize,     // word index in the GFX RAM
     color_base: u16, // 0x20, 0x40, 0x60
 }
 
 impl Layer {
-    /// Mappers tilemap0_scan / tilemap1_scan / tilemap2_scan : (col, row) -> index de tuile.
+    /// Mappers tilemap0_scan / tilemap1_scan / tilemap2_scan: (col, row) -> tile index.
     fn tile_index(&self, col: usize, row: usize) -> usize {
         match self.tile {
             8 => (row & 0x1f) + ((col & 0x3f) << 5) + ((row & 0x20) << 6),
@@ -110,8 +110,8 @@ impl Layer {
         }
     }
 
-    /// Dessine sur la ligne `out` (pens, prio) les pixels des tuiles qui couvrent l'abscisse de tilemap `tx0`
-    /// (pour x = 0..W) à l'ordonnée de tilemap `ty` : une tuile est lue une fois pour toute sa portion de ligne.
+    /// Draws onto the line `out` (pens, prio) the pixels of the tiles covering tilemap abscissa `tx0`
+    /// (for x = 0..W) at tilemap ordinate `ty`: a tile is read once for its whole portion of the line.
     fn draw_row(&self, v: &VideoState, gfx: &[u8], tx0: usize, ty: usize, pbit: u8, pens: &mut [u16], prio: &mut [u8]) {
         let t = self.tile;
         let size = 64 * t;
@@ -127,7 +127,7 @@ impl Layer {
             if attr & 0x40 != 0 {
                 py = t - 1 - py;
             }
-            // début de la ligne de pixels de la tuile ; la moitié (4 octets) dépend du pixel pour 16 et 32
+            // start of the tile's pixel row; half (4 bytes) depends on the pixel for 16 and 32
             let row = match t {
                 8 => SCROLL_TILE_BASE + code * 64 + py * 8 + ((idx >> 5) & 1) * 4,
                 16 => SCROLL_TILE_BASE + code * 128 + py * 8,
@@ -135,7 +135,7 @@ impl Layer {
             };
             let pen_base = ((attr & 0x1f) + self.color_base) * 16;
             let flip = attr & 0x20 != 0;
-            // ligne de pixels de la tuile, dans l'ordre de l'écran ; un groupe hors de la région graphique reste transparent
+            // tile pixel row, in screen order; a group outside the graphics region stays transparent
             let mut line = [15u8; 32];
             for g in 0..t / 8 {
                 let r = row + g * 4 * (t > 8) as usize;
@@ -160,7 +160,7 @@ impl Layer {
     }
 }
 
-/// Rend une image 384x224 en RGB.
+/// Renders a 384x224 RGB frame.
 pub fn render(v: &VideoState, gfx: &[u8]) -> Vec<[u8; 3]> {
     let pal = build_palette(v);
     const W: usize = SCREEN_W;
@@ -183,7 +183,7 @@ pub fn render(v: &VideoState, gfx: &[u8]) -> Vec<[u8; 3]> {
     let other = gfx_base(v.cps_a[A_OTHER_BASE], 0x800);
     let rowscroll = video_control & 1 != 0;
 
-    // Ordre des couches : 4 groupes de 2 bits, 0 = sprites, 1..3 = scroll1..3.
+    // Layer order: 4 groups of 2 bits, 0 = sprites, 1..3 = scroll1..3.
     let mut order = [
         (layer_control >> 6) & 3,
         (layer_control >> 8) & 3,
@@ -192,7 +192,7 @@ pub fn render(v: &VideoState, gfx: &[u8]) -> Vec<[u8; 3]> {
     ];
     let pri_ctrl = v.output[OUT_PRI];
     let mut lpri = order.map(|l| ((pri_ctrl >> (4 * l)) & 0x0f) as u32);
-    // retire la couche sprites CPS1 de l'ordre
+    // removes the CPS1 sprite layer from the order
     if order[0] == 0 { order[0] = order[1]; order[1] = 0; lpri[0] = lpri[1]; }
     if order[1] == 0 { order[1] = order[2]; order[2] = 0; lpri[1] = lpri[2]; }
     if order[2] == 0 { order[2] = order[3]; order[3] = 0; lpri[2] = lpri[3]; }
@@ -304,10 +304,10 @@ fn draw_sprites(v: &VideoState, gfx: &[u8], primasks: &[u32; 8], pens: &mut [u16
     }
 }
 
-/// drawgfx prio_transpen : pixel dessiné si ((1 << prio) & pmask) == 0 ; prio passe à 31.
-/// MAME force le bit 31 du masque : un pixel déjà couvert par un sprite (prio 31) bloque les
-/// sprites dessinés ensuite. La table étant parcourue de la fin vers le début, c'est l'entrée
-/// d'indice le plus élevé qui reste visible.
+/// drawgfx prio_transpen: pixel drawn if ((1 << prio) & pmask) == 0; prio becomes 31.
+/// MAME forces bit 31 of the mask: a pixel already covered by a sprite (prio 31) blocks the
+/// sprites drawn afterwards. Since the table is walked from end to start, the entry
+/// with the highest index is the one that stays visible.
 #[allow(clippy::too_many_arguments)]
 fn draw_tile16(gfx: &[u8], code: usize, col: u16, flipx: bool, flipy: bool, sx: i32, sy: i32,
                pmask: u32, pens: &mut [u16], prio: &mut [u8]) {

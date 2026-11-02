@@ -1,21 +1,21 @@
-//! Boss de type 0 (0x794ae) : boss de la scène 20 (h), qui se dédouble (une seconde moitié, variante 1, lui est
-//! liée par `+0xba`). Voir `docs/families/boss.md`.
+//! Boss of type 0 (0x794ae): the boss of stage 20 (h), which splits in two (a second half, variant 1, is linked to
+//! it by `+0xba`). See `docs/families/boss.md`.
 //!
-//! Même charpente que le fauve bondissant (`boss_1`) : `+4` état, `+5` groupe, `+6` et `+7` étapes, états posés d'un
-//! coup en longs, bibliothèque d'IA 0x103d6.. Il court et saute vers sa cible, la frappe à portée, et quand il
-//! n'a plus que la moitié de ses PV il se transforme : la seconde moitié (variante 1) entre en scène et les deux
-//! combattent ensemble ; ils ne meurent qu'ensemble.
+//! Same skeleton as the leaping beast (`boss_1`): `+4` state, `+5` group, `+6` and `+7` steps, states set in one go
+//! as longs, AI library 0x103d6.. It runs and jumps toward its target, hits it when in range, and when it has only
+//! half of its HP left it transforms: the second half (variant 1) enters the stage and the two fight together;
+//! they only die together.
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `moves` | entrées en scène : arrivée par un bord (`+6` = 0), transformation avec création de la seconde moitié (2), arrivée de la seconde moitié (4) |
-//! | 2 | `moves` | combat : attente (`+6` = 0), demi-tour (2), course (4, 6), charge (8) |
-//! | 4 | `moves` | attaques : sept coups (`+6` = 0 à 12) |
-//! | 6 à 10 | `moves` | attente tant qu'aucun joueur n'est en vie |
-//! | état 4 | `hit` | réactions aux coups (table de la ROM), recul, chute, mort |
+//! | 0 | `moves` | stage entrances: arrival from an edge (`+6` = 0), transformation creating the second half (2), arrival of the second half (4) |
+//! | 2 | `moves` | combat: wait (`+6` = 0), about-face (2), run (4, 6), charge (8) |
+//! | 4 | `moves` | attacks: seven hits (`+6` = 0 to 12) |
+//! | 6 to 10 | `moves` | wait while no player is alive |
+//! | state 4 | `hit` | reactions to hits (ROM table), knockback, fall, death |
 //!
-//! Les choix d'attaque (tirages dans les tables de la ROM selon la phase `+0xaa`) et les états qu'ils posent sont ici
-//! (`go`). Animations : 0x171a52 (corps), 0x171a7e (entrées en scène, attaques), 0x171a94 (coups reçus).
+//! The attack choices (draws in the ROM tables according to phase `+0xaa`) and the states they set are here
+//! (`go`). Animations: 0x171a52 (body), 0x171a7e (stage entrances, attacks), 0x171a94 (hits received).
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -24,70 +24,70 @@ use super::cx::handlers;
 pub(crate) mod hit;
 mod moves;
 
-/// Champs propres à ce type.
+/// Fields specific to this type.
 pub(self) mod g {
     pub const VULNERABLE: u32 = 0x67;
-    /// Nombre de pas de la course, délai entre deux pas, attente debout.
+    /// Number of run steps, delay between two steps, standing wait.
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
     pub const WALK_DELAY: u32 = 0x71;
-    /// Temps au sol (mot) et compteur du tremblement (réaction 0x4c).
+    /// Time on the ground (word) and shaking counter (reaction 0x4c).
     pub const DOWN_TIME: u32 = 0x84;
     pub const SHAKE: u32 = 0x90;
-    /// Abscisse mémorisée pendant le tremblement (mot).
+    /// X position saved during the shaking (word).
     pub const SAVED_X: u32 = 0xa;
-    /// Sorte d'animation courante et dernière lancée.
+    /// Kind of current animation and last one started.
     pub const ANIM_KIND: u32 = 0xa0;
     pub const ANIM_LAST: u32 = 0xa1;
-    /// État mémorisé (long) à reprendre après un demi-tour.
+    /// Saved state (long) to resume after an about-face.
     pub const SAVED_STATE: u32 = 0xa2;
-    /// Minuteries de l'étape (mots).
+    /// Step timers (words).
     pub const TIMER: u32 = 0xa6;
     pub const TIMER2: u32 = 0xa8;
     pub const PHASE: u32 = 0xaa;
-    /// Octet non nul : le boss est invulnérable (`+0x38` remis à zéro à chaque image).
+    /// Non-zero byte: the boss is invulnerable (`+0x38` reset to zero every frame).
     pub const INVULNERABLE: u32 = 0xad;
-    /// Coups restants de l'enchaînement.
+    /// Hits remaining in the chain.
     pub const COMBO: u32 = 0xae;
-    /// Rôle dans l'histoire : 1 = moitié principale transformée, 2 = seconde moitié.
+    /// Role in the story: 1 = transformed main half, 2 = second half.
     pub const ROLE: u32 = 0xaf;
-    /// Charge vers la position mémorisée de la cible (`+0xbc`) plutôt que vers la caméra.
+    /// Charges toward the saved target position (`+0xbc`) rather than toward the camera.
     pub const CHARGE_AIMED: u32 = 0xb2;
-    /// La transformation a eu lieu.
+    /// The transformation has taken place.
     pub const TRANSFORMED: u32 = 0xb3;
-    /// Cette moitié est morte la première (l'autre meurt aussitôt).
+    /// This half died first (the other dies right away).
     pub const DONE: u32 = 0xb4;
-    /// L'autre moitié (mot, adresse RAM ; 0 = aucune).
+    /// The other half (word, RAM address; 0 = none).
     pub const PARTNER: u32 = 0xba;
-    /// Abscisse de la cible mémorisée (mot).
+    /// Saved target X position (word).
     pub const MARK_X: u32 = 0xbc;
 }
 use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Jeux d'animations : corps, entrées en scène et attaques, coups reçus.
+/// Animation sets: body, stage entrances and attacks, hits received.
 pub(self) const SET_BODY: u32 = 0x171a52;
 pub(self) const SET_ENTRY: u32 = 0x171a7e;
 pub(self) const SET_HURT: u32 = 0x171a94;
-/// Jeux de marche selon le sens (0x103e0).
+/// Walk sets by direction (0x103e0).
 pub(self) const SET_RUN_FORWARD: u32 = 0x171b76;
 pub(self) const SET_RUN_BACK: u32 = 0x171c1a;
 
-/// Seuils de PV des phases (0x105b6).
+/// HP thresholds of the phases (0x105b6).
 pub(self) const THRESHOLDS: u32 = 0x10ae2;
 
-/// Lance l'animation `n` du jeu des corps par l'IA (0x103d6).
+/// Starts animation `n` of the body set via the AI (0x103d6).
 pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-/// Lance l'animation `n` du jeu des entrées en scène.
+/// Starts animation `n` of the stage entrances set.
 pub(self) fn entry<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_ENTRY, n);
 }
 
-/// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
+/// Next step (`addq.b #2,(+6)` or `(+7)`).
 pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
@@ -114,10 +114,10 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
-/// 0x794e8 : réglages du boss ; la moitié principale (variante 0) attend invulnérable en pose, la seconde moitié
-/// (variante 1) attend son tour. Rien n'est réglé si la scène est déjà lancée (`A5+0x52`).
+/// 0x794e8: boss setup; the main half (variant 0) waits invulnerable in its pose, the second half
+/// (variant 1) waits for its turn. Nothing is set if the stage is already started (`A5+0x52`).
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, true);
     if x.a5_u16(0x52) == 0 {
@@ -170,7 +170,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 4);
 }
 
-/// 0x7aad0 : la moitié principale attend, invulnérable, que la scène la lance (entrée en scène `+6` = 0).
+/// 0x7aad0: the main half waits, invulnerable, for the stage to start it (stage entrance `+6` = 0).
 fn wait_for_transformation<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, false);
     x.set8(INVULNERABLE, 1);
@@ -179,7 +179,7 @@ fn wait_for_transformation<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0200_0000);
 }
 
-/// 0x7ab4c : la seconde moitié attend sa création complète (entrée en scène `+6` = 4).
+/// 0x7ab4c: the second half waits for its creation to complete (stage entrance `+6` = 4).
 fn partner_waits<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, false);
     x.set8(ANIM_KIND, 0x32);
@@ -189,9 +189,9 @@ fn partner_waits<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0200_0400);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
-/// 0x79600 : un groupe par image (hors gel et pause), puis zone de jeu et ombre.
+/// 0x79600: one group per frame (outside freeze and pause), then play area and shadow.
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
@@ -208,9 +208,9 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-// --- décisions : états posés d'un coup (0x7ab74..0x7ac70) -----------------------------------------
+// --- decisions: states set in one go (0x7ab74..0x7ac70) -----------------------------------------
 
-/// Pose le long d'état `+4..+7` et rend le boss vulnérable ou non (`+0x67`).
+/// Sets the state long `+4..+7` and makes the boss vulnerable or not (`+0x67`).
 fn state<R: Bench>(x: &mut Cx<'_, R>, vulnerable: bool, s: u32) {
     x.set8(VULNERABLE, vulnerable as u8);
     x.set32(f::STATE, s);
@@ -221,7 +221,7 @@ pub(self) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, true, 0x0202_0000);
 }
 
-/// 0x7ab84 : demi-tour, l'état courant sera repris.
+/// 0x7ab84: about-face, the current state will be resumed.
 pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let s = x.u32(f::STATE);
@@ -229,27 +229,27 @@ pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0202_0200);
 }
 
-/// 0x7ab98 : début de la course (animation de course selon le rôle : 0x34 ou, seconde moitié, 0x36).
+/// 0x7ab98: start of the run (run animation depending on the role: 0x34 or, second half, 0x36).
 pub(self) fn run_start<R: Bench>(x: &mut Cx<'_, R>) {
     let kind = if x.u8(3) == 0 { 0x34 } else { 0x36 };
     x.set8(0x79, kind);
     state(x, true, 0x0202_0400);
 }
 
-/// 0x7abba : fin de la course (0x35 ou 0x37).
+/// 0x7abba: end of the run (0x35 or 0x37).
 pub(self) fn run_end<R: Bench>(x: &mut Cx<'_, R>) {
     let kind = if x.u8(3) == 0 { 0x35 } else { 0x37 };
     x.set8(0x79, kind);
     state(x, true, 0x0202_0600);
 }
 
-/// 0x7abdc et 0x7abee : charge, vers la caméra (`aimed` faux) ou vers la cible mémorisée.
+/// 0x7abdc and 0x7abee: charge, toward the camera (`aimed` false) or toward the saved target.
 pub(self) fn charge<R: Bench>(x: &mut Cx<'_, R>, aimed: bool) {
     x.set8(CHARGE_AIMED, aimed as u8);
     state(x, false, 0x0202_0800);
 }
 
-/// 0x7ac02, 0x7ac10, 0x7ac1e, 0x7ac32, 0x7ac40, 0x7ac4e, 0x7ac62 : attaque `n` (`+6` = 0 à 12).
+/// 0x7ac02, 0x7ac10, 0x7ac1e, 0x7ac32, 0x7ac40, 0x7ac4e, 0x7ac62: attack `n` (`+6` = 0 to 12).
 pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32, shielded: bool) {
     if shielded {
         x.set8(INVULNERABLE, 1);
@@ -257,12 +257,12 @@ pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32, shielded: bool) {
     state(x, false, 0x0204_0000 | n << 8);
 }
 
-/// 0x7ac70 : plus aucun joueur, attente.
+/// 0x7ac70: no player left, wait.
 pub(self) fn idle_alone<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 
-/// 0x7aaf4 : la transformation (PV à la moitié) : la moitié principale lance la cinématique.
+/// 0x7aaf4: the transformation (HP at half): the main half starts the cutscene.
 pub(self) fn transform<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(ANIM_KIND, 0x31);
     x.set32(f::IMMUNITY, 0xffff_ffff);
@@ -282,7 +282,7 @@ pub(self) fn transform<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0200_0200);
 }
 
-/// Exécute la décision dont l'adresse d'origine est `at` (sauts par tables de la ROM).
+/// Runs the decision whose original address is `at` (jumps through ROM tables).
 pub(self) fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
     match at {
         0x7ac02 => strike(x, 0, false),
@@ -295,11 +295,11 @@ pub(self) fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
         0x7ac62 => strike(x, 12, false),
         0x7abee => charge(x, true),
         0x7abdc => charge(x, false),
-        _ => panic!("boss 0 : décision inconnue {at:#x}"),
+        _ => panic!("boss 0: unknown decision {at:#x}"),
     }
 }
 
-/// 0x7a8d2 : cible à courte portée : tirage dans la table 0x7a8e8.
+/// 0x7a8d2: target at short range: draw in table 0x7a8e8.
 pub(self) fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7a8e8 + r) as u32;
@@ -307,7 +307,7 @@ pub(self) fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
     go(x, at)
 }
 
-/// 0x7a8fa : cible devant (boîte de la course) ; les trois routines de la phase `+0xaa` lisent la même table 0x7a932.
+/// 0x7a8fa: target ahead (run box); the three routines of phase `+0xaa` read the same table 0x7a932.
 pub(self) fn from_front<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7a932 + r) as u32;
@@ -315,8 +315,8 @@ pub(self) fn from_front<R: Bench>(x: &mut Cx<'_, R>) {
     go(x, at)
 }
 
-/// 0x7a944 : l'IA a choisi le geste `g` (1 ou 2) pour la boîte proche ; tirage dans les tables 0x7a9ae (principale),
-/// 0x7a9be (seconde moitié, geste 1) ou 0x7a9ce.
+/// 0x7a944: the AI chose gesture `g` (1 or 2) for the near box; draw in tables 0x7a9ae (main), 0x7a9be (second
+/// half, gesture 1) or 0x7a9ce.
 pub(self) fn from_near_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     let r = rand_and(x, 0xf);
     let table = if x.u8(3) == 0 {
@@ -331,27 +331,27 @@ pub(self) fn from_near_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     go(x, at)
 }
 
-/// 0x7a9e4 : l'IA a choisi le geste `g` (1 ou 2) pour la boîte lointaine : sélection de la table d'après la phase.
+/// 0x7a9e4: the AI chose gesture `g` (1 or 2) for the far box: table selection according to the phase.
 pub(self) fn from_far_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32 as u32;
     let index = g.wrapping_sub(1).wrapping_mul(2).wrapping_add(phase.wrapping_mul(4));
     let first = if x.u8(3) == 0 { 0x7aa16 } else { 0x7aa22 };
     let entry = jump_target(x, first, index);
-    // chaque entrée lit un octet de sa table de 16 octets, qui sert d'index dans la table 0x7aac8
+    // each entry reads a byte from its 16-byte table, which is used as an index into table 0x7aac8
     let table = match entry {
         0x7aa2e | 0x7aa36 | 0x7aa3e | 0x7aa46 => 0x7aa88,
         0x7aa4e | 0x7aa56 => 0x7aa98,
         0x7aa5e | 0x7aa64 | 0x7aa6a | 0x7aa70 => 0x7aaa8,
         0x7aa76 | 0x7aa7c => 0x7aab8,
-        _ => panic!("boss 0 : entrée {entry:#x} inconnue"),
+        _ => panic!("boss 0: unknown entry {entry:#x}"),
     };
     let i = x.rom8(table + r) as u32;
     let at = jump_target(x, 0x7aac8, i);
     go(x, at)
 }
 
-/// 0x7a7a4 et 0x7a7b0 : délai entre deux pas de la course, selon la difficulté.
+/// 0x7a7a4 and 0x7a7b0: delay between two run steps, depending on difficulty.
 pub(self) fn walk_delay<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     let level = var::RANK.get(x.b) as u32;
     let table = if kind == 3 { 0x7a7dc } else { 0x7a7bc };
@@ -359,7 +359,7 @@ pub(self) fn walk_delay<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(WALK_DELAY, d);
 }
 
-/// 0x7a7fc et 0x7a80e : nombre de pas de la course, tiré dans la table du sens.
+/// 0x7a7fc and 0x7a80e: number of run steps, drawn from the direction table.
 pub(self) fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     let r = rand_and(x, 0x1f);
     let table = if kind == 3 { 0x7a840 } else { 0x7a820 };
@@ -367,13 +367,13 @@ pub(self) fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(WALK_STEPS, n);
 }
 
-/// 0x7a860 : cible devant (boîte étroite) et geste choisi par l'IA.
+/// 0x7a860: target ahead (narrow box) and gesture chosen by the AI.
 pub(self) fn close_gesture<R: Bench>(x: &mut Cx<'_, R>) -> Option<u32> {
     ai_box(x, -0x50, 0x30, 5)
 }
 
-/// 0x7a87e : si le boss est dans l'écran, cible dans une boîte profonde (plus étroite pour la seconde moitié) et
-/// geste choisi par l'IA.
+/// 0x7a87e: if the boss is on screen, target in a deep box (narrower for the second half) and gesture chosen by
+/// the AI.
 pub(self) fn far_gesture<R: Bench>(x: &mut Cx<'_, R>) -> Option<u32> {
     let cam = camera_x(x);
     let px = x.u16(0x8);
@@ -386,6 +386,6 @@ pub(self) fn far_gesture<R: Bench>(x: &mut Cx<'_, R>) -> Option<u32> {
 
 handlers! {
     0x794ae "boss_0" #[without] run,
-    // retour au combat après une réaction commune (table 0x3e000 de `reactions.rs`)
+    // return to combat after a common reaction (table 0x3e000 of `reactions.rs`)
     0x7a5ac "boss_0_releve" hit::get_up,
 }

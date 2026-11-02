@@ -1,27 +1,27 @@
-//! Configuration du jeu (M2) : réglages gardés dans l'EEPROM, copie en RAM, valeurs par défaut.
+//! Game configuration (M2): settings kept in the EEPROM, RAM copy, default values.
 //!
-//! L'EEPROM contient deux exemplaires de la configuration (octets 0x00-0x2f et 0x30-0x5f), suivis de
-//! quatre compteurs de comptabilité (octets 0x60-0x6f). L'exemplaire 1 porte en 0x20-0x2f une
-//! signature propre à la variante du jeu (région, `A5+0x70`) ; à l'initialisation (0x2d30a), si la
-//! signature ne correspond pas, les valeurs par défaut de la variante sont réécrites.
+//! The EEPROM contains two copies of the configuration (bytes 0x00-0x2f and 0x30-0x5f), followed by
+//! four bookkeeping counters (bytes 0x60-0x6f). Copy 1 carries at 0x20-0x2f a
+//! signature specific to the game variant (region, `A5+0x70`); at initialisation (0x2d30a), if the
+//! signature does not match, the variant's default values are rewritten.
 //!
-//! Octets de la copie en RAM (`CONFIG`) et variables qu'ils alimentent (0x2d358) :
+//! Bytes of the RAM copy (`CONFIG`) and the variables they feed (0x2d358):
 //!
-//! | Octet | Variable | Rôle (h) |
+//! | Byte | Variable | Role (h) |
 //! |---|---|---|
-//! | 0 | `A5+0x1c` | mode de monnayage (0-16 : table des pièces par crédit ; 17 : départ gratuit ; 18 : jeu gratuit) |
-//! | 1 | `A5+0x1d` | mode de crédit : indexe les trois tables qui donnent `A5+0x20..0x22` |
+//! | 0 | `A5+0x1c` | coin mode (0-16: table of coins per credit; 17: free start; 18: free play) |
+//! | 1 | `A5+0x1d` | credit mode: indexes the three tables that give `A5+0x20..0x22` |
 //! | 2 | `A5+0x23` | |
 //! | 3-5 | `A5+0x26..0x28` | |
 //! | 6 | `A5+0x29` | |
 //! | 7 | `A5+0x73` | |
 //! | 8, 9 | `A5+0x84`, `A5+0x85` | |
 //! | 16, 17 | `A5+0x2a`, `A5+0x2b` | |
-//! | 0x60.. | `A5+0x76/0x7a/0x7e/0x7fd4` | compteurs de comptabilité (longs) |
+//! | 0x60.. | `A5+0x76/0x7a/0x7e/0x7fd4` | bookkeeping counters (longs) |
 //!
-//! L'initialisation (0x2d30a, au démarrage et par la tâche de démarrage) lit l'EEPROM ; si la lecture
-//! échoue ou que la signature ne correspond pas à la variante, les valeurs par défaut sont réécrites,
-//! sinon les réglages lus sont validés ; puis les variables du jeu en sont tirées.
+//! The initialisation (0x2d30a, at startup and by the startup task) reads the EEPROM; if the read
+//! fails or the signature does not match the variant, the default values are rewritten,
+//! otherwise the settings read are validated; then the game variables are derived from them.
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -31,26 +31,26 @@ use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
 use crate::{regs, Native};
 
 mod ram {
-    /// Variante du jeu (région), en octets (index ×2 dans la table des blocs).
+    /// Game variant (region), in bytes (index ×2 in the block table).
     pub const VARIANT: u32 = 0x70;
-    /// Copie en RAM de l'EEPROM (64 mots).
+    /// RAM copy of the EEPROM (64 words).
     pub const CONFIG: u32 = 0xffff_9d8e;
-    /// Mode de monnayage, mode de crédit... (destinations de `load_variables`).
+    /// Coin mode, credit mode... (destinations of `load_variables`).
     pub const COIN_MODE: u32 = 0x1c;
     pub const MODE_CREDIT: u32 = 0x1d;
     pub const PIECES: u32 = 0x1e;
     pub const COUNTERS: [(u32, u32); 4] = [(0x60, 0x76), (0x64, 0x7a), (0x68, 0x7e), (0x6c, 0x7fd4)];
-    /// Transfert EEPROM demandé : nombre de mots moins un, début (voir `eeprom.rs`).
+    /// EEPROM transfer requested: number of words minus one, start (see `eeprom.rs`).
     pub const WORDS: u32 = 0xffff_9e92;
     pub const START: u32 = 0xffff_9e96;
 }
 
-/// Distance entre l'exemplaire de la configuration et son exemplaire de secours.
+/// Distance between the configuration copy and its backup copy.
 const FALLBACK: u32 = 0x30;
-/// Table des blocs de valeurs par défaut par variante (mots relatifs à la table), en code.
+/// Table of default value blocks per variant (words relative to the table), in code.
 const TABLE_VARIANTS: u32 = 0x2d656;
-/// Tables du chargement : pièces par crédit (mots) selon le mode de monnayage, deux octets puis un
-/// octet selon le mode de crédit.
+/// Loading tables: coins per credit (words) by coin mode, two bytes then one
+/// byte by credit mode.
 const TABLE_PIECES: u32 = 0x2d38c;
 const TABLE_CREDIT_A: u32 = 0x2d40e;
 const TABLE_CREDIT_B: u32 = 0x2d426;
@@ -64,10 +64,10 @@ fn set_word(r: &mut u32, v: u16) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 0x2d648 : bloc des valeurs par défaut de la variante
+// 0x2d648: default value block of the variant
 
-/// Rend D0 = déplacement lu dans la table, A6 = bloc des valeurs par défaut (blocs de 0x30 octets :
-/// valeurs 0x00-0x11, signature 0x20-0x2f).
+/// Returns D0 = displacement read from the table, A6 = default value block (blocks of 0x30 bytes:
+/// values 0x00-0x11, signature 0x20-0x2f).
 fn variant(c: &mut Cpu, b: &mut Cps2Bus) {
     let index = rd16(b, a5(c, ram::VARIANT));
     let displacement = crate::mem::prog16(b, TABLE_VARIANTS.wrapping_add(index as i16 as u32));
@@ -77,29 +77,29 @@ fn variant(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// Bloc des valeurs par défaut de la variante courante.
+/// Default value block of the current variant.
 fn block_defaults(b: &mut Cps2Bus) -> u32 {
     let index = crate::mem::rd16(b, crate::mem::A5 + ram::VARIANT);
     let displacement = crate::mem::prog16(b, TABLE_VARIANTS.wrapping_add(index as i16 as u32));
     TABLE_VARIANTS.wrapping_add(displacement as i16 as u32)
 }
 
-/// Octets du bloc par défaut et variables du jeu qu'ils alimentent, dans l'ordre des comparaisons de
-/// l'original (0x2d5c6).
+/// Bytes of the default block and the game variables they feed, in the order of the original's
+/// comparisons (0x2d5c6).
 const SETTINGS: [(u32, u32); 12] =
     [(0, 0x1c), (2, 0x23), (3, 0x26), (4, 0x27), (5, 0x28), (1, 0x1d), (6, 0x29), (7, 0x73), (8, 0x84), (9, 0x85), (0x10, 0x2a), (0x11, 0x2b)];
 
-/// 0x2d5c6 : les réglages en cours sont-ils ceux d'usine (bloc par défaut de la variante) ?
+/// 0x2d5c6: are the current settings the factory ones (default block of the variant)?
 pub fn is_factory(x: &mut crate::scene::Ctx) -> bool {
     let block = block_defaults(x.b);
     SETTINGS.iter().all(|&(byte, variable)| rd8(x.b, block + byte) == x.v8(variable))
 }
 
 // ---------------------------------------------------------------------------------------------
-// 0x2d7aa : valeurs par défaut
+// 0x2d7aa: default values
 
-/// Recopie le bloc par défaut de la variante en deux exemplaires (exemplaire et secours), puis
-/// efface la suite de la copie (les compteurs de comptabilité).
+/// Copies the variant's default block into two copies (copy and backup), then
+/// clears the rest of the copy (the bookkeeping counters).
 fn load_defaults(c: &mut Cpu, b: &mut Cps2Bus) {
     defaults(c, b);
     rts(c, b);
@@ -120,7 +120,7 @@ fn defaults(c: &mut Cpu, b: &mut Cps2Bus) {
     for i in 0..16 {
         wr16(b, destination + 2 * i, 0);
     }
-    // restes de l'original : A1 et A6 en fin de zone, D0 = 0, D7 = 0xFFFF, drapeaux du dernier move
+    // leftovers of the original: A1 and A6 at the end of the zone, D0 = 0, D7 = 0xFFFF, flags of the last move
     c.a[1] = destination + 32;
     c.a[6] = block + 48;
     c.d[0] = 0;
@@ -129,28 +129,28 @@ fn defaults(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 0x2d662 : validation et réparation
+// 0x2d662: validation and repair
 
-/// Remplace la valeur `i` de la copie (et de son secours) par la valeur par défaut.
+/// Replaces value `i` of the copy (and of its backup) with the default value.
 fn repair(b: &mut Cps2Bus, copy: u32, defaults: u32, i: u32) {
     let d = rd8(b, defaults + i);
     wr8(b, copy + i, d);
     wr8(b, copy + FALLBACK + i, d);
 }
 
-/// Vérifie chaque réglage de la copie en RAM selon ses bornes ; remplace les valeurs invalides par
-/// celles du bloc par défaut de la variante. L'ordre des tests et ses particularités sont ceux de l'original : par exemple,
-/// l'octet 4 n'est examiné que si l'octet 3 était invalide.
+/// Checks each setting of the RAM copy against its limits; replaces the invalid values with
+/// those of the variant's default block. The order of the tests and its quirks are those of the original: for example,
+/// byte 4 is only examined if byte 3 was invalid.
 fn validate(b: &mut Cps2Bus, c: &mut Cpu) {
     let copy = a5(c, ram::CONFIG);
-    // l'original commence par 0x2d648 : A6 = bloc par défaut de la variante
+    // the original starts with 0x2d648: A6 = default block of the variant
     let variant = rd16(b, a5(c, ram::VARIANT));
     let displacement = crate::mem::prog16(b, TABLE_VARIANTS.wrapping_add(variant as i16 as u32));
     set_word(&mut c.d[0], displacement);
     let defaults = TABLE_VARIANTS.wrapping_add(displacement as i16 as u32);
     c.a[6] = defaults;
 
-    // octet 0 : au plus 9 (variantes 4 et 10) ou 18 ; la valeur 17 est tolérée pour 4 et 10
+    // byte 0: at most 9 (variants 4 and 10) or 18; the value 17 is tolerated for 4 and 10
     let mut cabinet = 9;
     if !(variant == 4) && !(variant == 10) {
         cabinet = 18;
@@ -169,19 +169,19 @@ fn validate(b: &mut Cps2Bus, c: &mut Cpu) {
             repair(b, copy, defaults, 0);
         }
     }
-    // octet 1 : au plus 11
+    // byte 1: at most 11
     let o1 = rd8(b, copy + 1);
     if !(o1 <= 11) {
         repair(b, copy, defaults, 1);
     }
-    // octet 2 : exactement 1 si le mode (éventuellement réparé) est 17, sinon 0 ou 1
+    // byte 2: exactly 1 if the mode (possibly repaired) is 17, otherwise 0 or 1
     let mode = rd8(b, copy);
     let o2 = rd8(b, copy + 2);
     let valid_2 = if mode == 17 { o2 == 1 } else { o2 <= 1 };
     if !valid_2 {
         repair(b, copy, defaults, 2);
     }
-    // octets 3 et 4 : 0 ou 1 ; l'octet 4 n'est examiné que si l'octet 3 a dû être réparé
+    // bytes 3 and 4: 0 or 1; byte 4 is only examined if byte 3 had to be repaired
     let o3 = rd8(b, copy + 3);
     if !(o3 <= 1) {
         repair(b, copy, defaults, 3);
@@ -190,34 +190,34 @@ fn validate(b: &mut Cps2Bus, c: &mut Cpu) {
             repair(b, copy, defaults, 4);
         }
     }
-    // octet 5 : 0 ou 1
+    // byte 5: 0 or 1
     let o5 = rd8(b, copy + 5);
     if !(o5 <= 1) {
         repair(b, copy, defaults, 5);
     }
-    // octet 6 : au plus 0, ou 1 pour la variante 6
+    // byte 6: at most 0, or 1 for variant 6
     let cabinet6 = if variant != 6 { 0 } else { 1 };
     let o6 = rd8(b, copy + 6);
     if !(cabinet6 >= o6) {
         repair(b, copy, defaults, 6);
     }
-    // octet 7 : égal au défaut, ou supérieur de 2 à 10 au plus
+    // byte 7: equal to the default, or greater by at most 2 to 10
     let o7 = rd8(b, copy + 7);
     let d7 = rd8(b, defaults + 7);
     if !(o7 == d7) && !(o7.wrapping_sub(2) <= 8) {
         repair(b, copy, defaults, 7);
     }
-    // octet 8 : 0 ou 1
+    // byte 8: 0 or 1
     let o8 = rd8(b, copy + 8);
     if !(o8 <= 1) {
         repair(b, copy, defaults, 8);
     }
-    // octet 9 : entre 2 et 14
+    // byte 9: between 2 and 14
     let o9 = rd8(b, copy + 9) as i8;
     if (o9 < 2) || !(o9 <= 14) {
         repair(b, copy, defaults, 9);
     }
-    // octets 16 et 17 : au plus 7
+    // bytes 16 and 17: at most 7
     for i in [16, 17] {
         let o = rd8(b, copy + i);
         if !(o <= 7) {
@@ -226,7 +226,7 @@ fn validate(b: &mut Cps2Bus, c: &mut Cpu) {
     }
 }
 
-/// 0x2d662 appelé depuis Rust.
+/// 0x2d662 called from Rust.
 pub fn validate_copy(c: &mut Cpu, b: &mut Cps2Bus) {
     validate(b, c);
 }
@@ -237,10 +237,10 @@ fn native_validate(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 0x2d358 : de la copie en RAM aux variables du jeu
+// 0x2d358: from the RAM copy to the game variables
 
-/// Recopie les réglages de la copie en RAM vers les variables du jeu et en déduit les réglages de
-/// monnayage (`A5+0x1e..0x22`). Laisse D0, D1, A4 et les drapeaux comme l'original.
+/// Copies the settings from the RAM copy to the game variables and derives the coin
+/// settings from them (`A5+0x1e..0x22`). Leaves D0, D1, A4 and the flags like the original.
 fn load_variables(c: &mut Cpu, b: &mut Cps2Bus) {
     variables(c, b);
     rts(c, b);
@@ -254,7 +254,7 @@ fn variables(c: &mut Cpu, b: &mut Cps2Bus) {
     }
     let mode = rd8(b, a4);
     wr8(b, a5(c, ram::COIN_MODE), mode);
-    // pièces par crédit : table, ou 0x0101 pour les modes 17 (départ gratuit) et 18 (jeu gratuit)
+    // coins per credit: table, or 0x0101 for modes 17 (free start) and 18 (free play)
     let (pieces, common) = match mode {
         18 => {
             wr8(b, a5(c, 0x25), 1);
@@ -336,19 +336,19 @@ pub const VARIABLES: Native = Native {
 };
 
 // ---------------------------------------------------------------------------------------------
-// 0x2d30a : initialisation
+// 0x2d30a: initialisation
 
-/// Signature de la variante : octets 0x20-0x2f du bloc par défaut et de l'exemplaire 1.
+/// Variant signature: bytes 0x20-0x2f of the default block and of copy 1.
 const SIGNATURE: u32 = 0x20;
 const SIGNATURE_LEN: u32 = 16;
-/// Message « EEPROM ERROR » (12 caractères, attribut 8) affiché si l'écriture des valeurs par défaut
-/// échoue, et boucle sans fin de l'original.
+/// "EEPROM ERROR" message (12 characters, attribute 8) displayed if writing the default values
+/// fails, and the original's endless loop.
 const MESSAGE_ERROR: u32 = 0x2d7fc;
 const CASE_ERROR: u32 = 0x912938;
 pub const BLOCKED: u32 = 0x2d7fa;
 
-/// Compare la signature de la copie en RAM à celle de la variante, comme la boucle de l'original (registres
-/// compris : D0 dernier octet attendu, D7 compteur, A1 et A6 après le dernier octet examiné).
+/// Compares the signature of the RAM copy with that of the variant, like the original's loop (registers
+/// included: D0 last byte expected, D7 counter, A1 and A6 after the last byte examined).
 fn signature_ok(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     let block = block_defaults(b);
     c.a[6] = block + SIGNATURE;
@@ -369,14 +369,14 @@ fn signature_ok(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     true
 }
 
-/// 0x2d30a : lecture de l'EEPROM, réglages par défaut si besoin, variables du jeu. Rend faux si l'écriture des
-/// réglages par défaut a échoué : le jeu est alors bloqué sur « EEPROM ERROR » (la tâche a cédé la main pour
-/// toujours).
+/// 0x2d30a: EEPROM read, default settings if needed, game variables. Returns false if writing the
+/// default settings failed: the game is then blocked on "EEPROM ERROR" (the task ceded control
+/// for good).
 pub fn initialize(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     crate::eeprom::all_eeprom(b);
     let lu = crate::eeprom::read_verify(b);
     let valid = lu && {
-        // D0 de 0x2d648 (déplacement du bloc), comme l'original avant sa boucle
+        // D0 of 0x2d648 (block displacement), like the original before its loop
         let index = crate::mem::rd16(b, a5(c, ram::VARIANT));
         set_word(&mut c.d[0], crate::mem::prog16(b, TABLE_VARIANTS.wrapping_add(index as i16 as u32)));
         signature_ok(c, b)
@@ -402,7 +402,7 @@ fn init(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-/// 0x2d7d2 : « EEPROM ERROR » et blocage (jamais vu : l'EEPROM émulée ne refuse pas l'écriture).
+/// 0x2d7d2: "EEPROM ERROR" and blocking (never seen: the emulated EEPROM does not refuse the write).
 fn error(b: &mut Cps2Bus) {
     for k in 0..12 {
         let ch = rd8(b, MESSAGE_ERROR + k) as u16;
@@ -421,9 +421,9 @@ pub const INIT: Native = Native {
 };
 
 // ---------------------------------------------------------------------------------------------
-// Menu TEST, 7. CONFIGURATION : réglages d'usine et enregistrement
+// TEST menu, 7. CONFIGURATION: factory settings and saving
 
-/// 0x2d546 : les réglages d'usine de la variante dans les variables du jeu.
+/// 0x2d546: the variant's factory settings into the game variables.
 pub fn reset_factory(x: &mut crate::scene::Ctx) {
     let block = block_defaults(x.b);
     for (byte, variable) in SETTINGS {
@@ -432,9 +432,9 @@ pub fn reset_factory(x: &mut crate::scene::Ctx) {
     }
 }
 
-/// 0x2d47c : les variables du jeu dans les deux exemplaires de la copie en RAM (avec la signature de la
-/// variante), écrites dans l'EEPROM, puis relues dans les variables (0x2d358). Faux si l'écriture a échoué :
-/// « EEPROM ERROR » est affiché et le PC posé sur la boucle sans fin de l'original.
+/// 0x2d47c: the game variables into the two copies of the RAM copy (with the variant's
+/// signature), written to the EEPROM, then reread into the variables (0x2d358). False if the write failed:
+/// "EEPROM ERROR" is displayed and the PC is set on the original's endless loop.
 pub fn save(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     let block = block_defaults(b);
     for copy in [a5(c, ram::CONFIG), a5(c, ram::CONFIG) + FALLBACK] {
@@ -447,7 +447,7 @@ pub fn save(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
             crate::mem::wr8(b, copy + SIGNATURE + k, v);
         }
     }
-    // les deux exemplaires : 0x30 mots
+    // the two copies: 0x30 words
     crate::mem::wr16(b, a5(c, ram::WORDS), 0x2f);
     crate::mem::wr16(b, a5(c, ram::START), 0);
     if !crate::eeprom::write_verify(b) {

@@ -1,6 +1,6 @@
-//! Quels boss (objets BOSS, FFBA1E) un scénario rencontre-t-il, et dans quelle scène ?
-//!   boss_seen <roms> <eeprom> <scénario> <images>
-//! Rejoue le scénario sur la machine d'origine et note la première image de chaque (scène, type, variante).
+//! Which bosses (BOSS objects, FFBA1E) does a scenario meet, and in which scene?
+//!   boss_seen <roms> <eeprom> <scenario> <frames>
+//! Replays the scenario on the original machine and records the first frame of each (scene, type, variant).
 use std::path::Path;
 
 fn main() {
@@ -26,7 +26,7 @@ fn main() {
             if rd8(&m, o) != 0 {
                 let key = (rd8(&m, 0xff8034), rd8(&m, o + 2), rd8(&m, o + 3));
                 if seen.insert(key) {
-                    println!("image {f} : scène {} boss type {} variante {}", key.0, key.1, key.2);
+                    println!("frame {f}: scene {} boss type {} variant {}", key.0, key.1, key.2);
                 }
             }
         }

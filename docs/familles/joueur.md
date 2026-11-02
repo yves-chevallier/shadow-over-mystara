@@ -1,8 +1,8 @@
 # Classes PSHL et PEFF : tirs et effets des joueurs
 
-Code : `port/ddsom-game/src/families/joueur/` : `pshl*.rs` (tirs) et `peff*.rs` (effets), éléments communs dans `pshell.rs`
+Code : `port/ddsom-game/src/families/player/` : `pshl*.rs` (tirs) et `peff*.rs` (effets), éléments communs dans `pshell.rs`
 (champs, libération, création de frères, `Cx::state`, `Cx::rand_and`). Même cadre que les autres familles
-(`cx::Cx`, `handlers!`, voir `docs/familles-eshl-set-sobj.md`) : un gestionnaire par type, enregistré dans
+(`cx::Cx`, `handlers!`, voir `docs/families-eshl-set-sobj.md`) : un gestionnaire par type, enregistré dans
 `families::natives()` sous le nom `pshl_N` ou `peff_N` (`DDSOM_SANS=pshl,peff` les désactive).
 
 ## Modèle
@@ -20,7 +20,7 @@ regard (0 ou 0x20 ; copié du joueur), `+0x2e` jeu de boîtes de collision, `+0x
 * Le gestionnaire est appelé par `dispatch.rs` avec A0 = l'objet, D0 = genre × 4 et A1 = adresse du gestionnaire ;
   `Cx::state(table)` laisse D0 = état et D1.w = mot de la table comme `jmp (table,PC,D0.w)` (restes lus par les
   gestionnaires suivants).
-* Les tables lues par `(adresse,PC,Dn)` le sont dans le programme déchiffré (`rom8/rom16/rom32`) ; celles lues par un
+* Les tables lues par `(address,PC,Dn)` le sont dans le programme déchiffré (`rom8/rom16/rom32`) ; celles lues par un
   registre d'adresse (`lea table,A4` puis `(0,A4,D0)`) le sont en clair (`data8/data16/data32`) : les deux sont
   différentes dans la ROM, y compris pour une table adressée par `lea (d,PC),An`.
 * Un tir ou un effet qui meurt appelle `Cx::free_pshl` (0x21d8) ou `free_peff` (0x21e6) ; la création d'un frère passe par
@@ -93,8 +93,8 @@ regard (0 ou 0x20 ; copié du joueur), `+0x2e` jeu de boîtes de collision, `+0x
 
 PEFF 42 (0x50b9c, article en vitrine de la boutique : zone de vente, message, vente contre la bourse BCD) et
 l'interprète des dialogues de PEFF 43 (0x514ac / 0x514cc, table de 0x514ec : messages, menu, vente, apprentissage,
-dons d'objets) sont dans `peff_boutique.rs`, validés par `fuzz boutique` à travers le comptoir 0x51076 (aucun
-scénario n'atteint un client `+0x58` positif). PEFF 43 les appelle directement (`peff_boutique::talk_a`/`talk_b`,
+dons d'objets) sont dans `peff_shop.rs`, validés par `fuzz boutique` à travers le comptoir 0x51076 (aucun
+scénario n'atteint un client `+0x58` positif). PEFF 43 les appelle directement (`peff_shop::talk_a`/`talk_b`,
 plus de native) avec A1 = case de la liste des joueurs, A2 = le client, D6 = compteur de boucle, que l'interprète
 laisse intacts (ses appels de son les recopiaient dans la pile privée du son ; plus depuis le lot S,
 [son-68000.md](../son-68000.md), « La sauvegarde fantôme »).
@@ -108,7 +108,7 @@ A1 = l'objet créé, retenue levée si le pool est plein (ou, pour 0x51c06, si l
 * `tools/validate_all.sh 30000`, `DDSOM_COV=1` pour les scénarios `cov/` : voir `docs/couverture.md`.
 * `examples/fuzz_player_shots.rs` : chaque gestionnaire est appelé en mode contrôle depuis des états fabriqués (joueur
   propriétaire aux champs variés, parent et frères factices, compteurs de scène) pendant `DDSOM_PAS` images ;
-  `fuzz_joueur <roms> <eeprom> <scénario> <chauffe> <tours> [PSHL|PEFF]`, `DDSOM_ENTREE=<adresse>` pour un seul
+  `fuzz_joueur <roms> <eeprom> <scénario> <warmup> <tours> [PSHL|PEFF]`, `DDSOM_ENTREE=<address>` pour un seul
   gestionnaire, `DDSOM_ETATS=1` pour tirer aussi des états quelconques (beaucoup sortent des tables de l'original).
 * Les écarts du fuzz sur PEFF 30 (variante 1) viennent de parents fabriqués à pointeur absurde (0x1, 0x3) : bruit du
   fuzz, non retenu.

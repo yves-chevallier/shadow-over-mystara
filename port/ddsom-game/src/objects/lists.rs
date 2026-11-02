@@ -1,21 +1,21 @@
-//! Listes d'objets triées par profondeur (ordre de dessin).
+//! Object lists sorted by depth (drawing order).
 //!
-//! Deux listes doublement chaînées intrusives contiennent les objets à dessiner : les *acteurs*
-//! (personnages, ennemis, décors) et le *premier plan*. Les liens sont les mots `Obj::PREV` (vers
-//! la tête) et `Obj::NEXT` (vers la queue) ; la liste est triée par `Obj::Y` décroissant de la tête
-//! à la queue. Une liste vide a tête et queue nulles ; les bouts de liste portent la marque de fin
-//! de leur liste (1 : acteurs, 2 : premier plan).
+//! Two intrusive doubly-linked lists contain the objects to draw: the *actors*
+//! (characters, enemies, scenery) and the *foreground*. The links are the words `Obj::PREV` (toward
+//! the head) and `Obj::NEXT` (toward the tail); the list is sorted by decreasing `Obj::Y` from the head
+//! to the tail. An empty list has null head and tail; the list ends carry the end marker
+//! of their list (1: actors, 2: foreground).
 //!
-//! Chaque handler d'objet termine par `reinsert` : l'objet est inséré s'il n'est dans aucune liste,
-//! sinon déplacé seulement si sa profondeur ne respecte plus l'ordre.
+//! Each object handler ends with `reinsert`: the object is inserted if it is in no list,
+//! otherwise moved only if its depth no longer respects the order.
 //!
-//! Piège du jeu d'origine : les handlers finissent souvent par `jmp 0x1ee1a`, et le dispatch
-//! passe à l'objet suivant sans remettre les registres à zéro. Certains handlers lisent alors un
-//! registre laissé par le précédent : 0x4bd32 fait `andi.b #$f,D0` puis indexe une table avec tout
-//! D0.w, dont l'octet haut est le lien de liste laissé par `reinsert`. Les natives 0x1ee1a et
-//! 0x1ef6c (`Reinsert`) transcrivent donc l'original instruction par instruction et rendent
-//! D0-D2, A1-A4 et les drapeaux tels que lui, selon le chemin suivi (`SortedList::reinsert_68k`). Les
-//! appelants qui n'ont pas ce contrat utilisent `SortedList::reinsert`, la même transcription sans registres.
+//! Trap of the original game: handlers often end with `jmp 0x1ee1a`, and the dispatch
+//! moves on to the next object without resetting the registers. Some handlers then read a
+//! register left by the previous one: 0x4bd32 does `andi.b #$f,D0` then indexes a table with all of
+//! D0.w, whose high byte is the list link left by `reinsert`. The natives 0x1ee1a and
+//! 0x1ef6c (`Reinsert`) therefore transcribe the original instruction by instruction and return
+//! D0-D2, A1-A4 and the flags as it does, depending on the path followed (`SortedList::reinsert_68k`). The
+//! callers without this contract use `SortedList::reinsert`, the same transcription without registers.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -32,9 +32,9 @@ pub struct SortedList {
     end: Link,
 }
 
-/// Personnages, ennemis, décors.
+/// Characters, enemies, scenery.
 pub const ACTORS: SortedList = SortedList { head: super::ram::ACTORS_HEAD, tail: super::ram::ACTORS_TAIL, end: Link(1) };
-/// Premier plan.
+/// Foreground.
 pub const FOREGROUND: SortedList =
     SortedList { head: super::ram::FOREGROUND_HEAD, tail: super::ram::FOREGROUND_TAIL, end: Link(2) };
 
@@ -53,11 +53,11 @@ impl SortedList {
         wr16(b, A5 + self.tail, l.0)
     }
 
-    /// Insère `obj` s'il n'est dans aucune liste, sinon le replace si l'ordre est rompu.
+    /// Inserts `obj` if it is in no list, otherwise puts it back if the order is broken.
     ///
-    /// Les écritures sont celles de 0x1ee1a, dans le même ordre (comme `Reinsert`, sans registres) : sur une liste
-    /// incohérente (liens qui se recouvrent), l'original et cette fonction laissent la même mémoire, ce que la
-    /// version par plan (`plan_reinsert`, `apply`) ne garantissait pas (écart trouvé par `fuzz_couv` sur ESHL 44).
+    /// The writes are those of 0x1ee1a, in the same order (like `Reinsert`, without registers): on an
+    /// inconsistent list (overlapping links), the original and this function leave the same memory, which the
+    /// plan-based version (`plan_reinsert`, `apply`) did not guarantee (discrepancy found by `fuzz_couv` on ESHL 44).
     pub fn reinsert(self, b: &mut Cps2Bus, obj: Obj) {
         let a0 = obj.0;
         let (prev, next) = (rd16(b, a0 + Obj::PREV), rd16(b, a0 + Obj::NEXT));
@@ -70,7 +70,7 @@ impl SortedList {
         self.relocate_exact(b, obj, Way::toward_tail(self));
     }
 
-    /// `Reinsert::relocate` sans registres.
+    /// `Reinsert::relocate` without registers.
     fn relocate_exact(self, b: &mut Cps2Bus, obj: Obj, w: Way) -> bool {
         let a0 = obj.0;
         let link = rd16(b, a0 + w.ahead);
@@ -113,7 +113,7 @@ impl SortedList {
         true
     }
 
-    /// `Reinsert::insert` sans registres (0x1eef2).
+    /// `Reinsert::insert` without registers (0x1eef2).
     fn insert_exact(self, b: &mut Cps2Bus, obj: Obj) {
         let a0 = obj.0;
         let y = rd32(b, a0 + Obj::Y);
@@ -155,29 +155,29 @@ impl SortedList {
     }
 }
 
-/// Cas de retrait d'un objet de sa liste.
+/// Cases of removing an object from its list.
 #[derive(Clone, Copy, Debug)]
 pub(super) enum Removal {
-    /// Pas dans une liste.
+    /// Not in a list.
     NotListed,
-    /// Entre deux objets.
+    /// Between two objects.
     Middle { prev: Obj, next: Obj },
-    /// Dernier de sa liste (la queue devient `prev`).
+    /// Last of its list (the tail becomes `prev`).
     Last { prev: Obj, list: SortedList },
-    /// Premier de sa liste (la tête devient `next`).
+    /// First of its list (the head becomes `next`).
     First { next: Obj, list: SortedList },
-    /// Seul dans sa liste.
+    /// Alone in its list.
     Only { list: SortedList },
 }
 
-/// Analyse le retrait de `obj` (sans rien modifier), comme `0x1f0be`.
+/// Analyzes the removal of `obj` (without modifying anything), like `0x1f0be`.
 fn plan_removal(b: &mut Cps2Bus, obj: Obj) -> Removal {
     let (prev, next) = (obj.prev(b), obj.next(b));
     if prev.is_none() {
         return Removal::NotListed;
     }
     if !is_sentinel_or_none(prev) {
-        // un objet précède
+        // an object precedes
         let p = prev.target();
         if !is_sentinel_or_none(next) {
             Removal::Middle { prev: p, next: next.target() }
@@ -194,12 +194,12 @@ fn plan_removal(b: &mut Cps2Bus, obj: Obj) -> Removal {
     }
 }
 
-/// La liste dont `end` est la marque de fin (`bgt` de l'original : > 1, premier plan).
+/// The list whose end marker is `end` (`bgt` of the original: > 1, foreground).
 fn list_ending_with_mark(end: Link) -> SortedList {
     if end.0 as i16 > 1 { FOREGROUND } else { ACTORS }
 }
 
-/// Retire `obj` de sa liste (s'il y est) et remet ses liens à zéro : `0x1f0be`.
+/// Removes `obj` from its list (if it is in one) and resets its links to zero: `0x1f0be`.
 pub fn unlink(b: &mut Cps2Bus, obj: Obj) {
     let removal = plan_removal(b, obj);
     apply_removal(b, obj, removal);
@@ -230,8 +230,8 @@ fn apply_removal(b: &mut Cps2Bus, obj: Obj, removal: Removal) {
     obj.set_next(b, Link::NONE);
 }
 
-/// Retire de leurs listes tous les objets des acteurs puis, si les acteurs n'étaient pas vides,
-/// ceux du premier plan : `0x1f184`. Renvoie le dernier objet retiré.
+/// Removes from their lists all the actor objects then, if the actors were not empty,
+/// those of the foreground: `0x1f184`. Returns the last object removed.
 pub fn unlink_all(b: &mut Cps2Bus) -> Option<Obj> {
     let mut last = None;
     for list in [ACTORS, FOREGROUND] {
@@ -253,18 +253,18 @@ pub fn unlink_all(b: &mut Cps2Bus) -> Option<Obj> {
     last
 }
 
-// ---- adaptation aux registres du 68000 ----
+// ---- adaptation to the 68000 registers ----
 
-/// Sens dans lequel un objet mal placé cherche sa nouvelle place.
+/// Direction in which a misplaced object looks for its new place.
 #[derive(Clone, Copy)]
 struct Way {
-    /// Lien suivi pour chercher (`Obj::PREV` vers la tête, `Obj::NEXT` vers la queue) et lien opposé.
+    /// Link followed to search (`Obj::PREV` toward the head, `Obj::NEXT` toward the tail) and opposite link.
     ahead: u32,
     behind: u32,
-    /// Extrémité de liste atteinte en suivant `ahead`, et extrémité opposée (adresses relatives à A5).
+    /// List end reached by following `ahead`, and opposite end (addresses relative to A5).
     reach: u32,
     far: u32,
-    /// Vers la tête (profondeurs décroissantes en tête) : on s'arrête dès que `y <= voisin`, sinon `y >= voisin`.
+    /// Toward the head (decreasing depths at the head): stop as soon as `y <= neighbor`, otherwise `y >= neighbor`.
     toward_head: bool,
 }
 
@@ -275,20 +275,20 @@ impl Way {
     fn toward_tail(list: SortedList) -> Way {
         Way { ahead: Obj::NEXT, behind: Obj::PREV, reach: list.tail, far: list.head, toward_head: false }
     }
-    /// L'objet de profondeur `y` est-il déjà du bon côté de `neighbour` ?
+    /// Is the object of depth `y` already on the right side of `neighbour`?
     fn settled(self, y: u32, neighbour: u32) -> bool {
         if self.toward_head { y as i32 <= neighbour as i32 } else { y as i32 >= neighbour as i32 }
     }
 }
 
-/// Réinsertion de A0 dans `list` (0x1ee1a, 0x1ef6c), instruction par instruction : les handlers
-/// d'objets qui suivent relisent D0, D1, D2, A1-A4 et les drapeaux tels que l'original les laisse
-/// (voir l'en-tête du module), selon le chemin suivi. Les `move.w` vers la mémoire fixent N et Z
-/// (`store`), les `movea.w` étendent en signe et ne touchent aucun drapeau.
+/// Reinsertion of A0 in `list` (0x1ee1a, 0x1ef6c), instruction by instruction: the following object
+/// handlers re-read D0, D1, D2, A1-A4 and the flags as the original leaves them
+/// (see the module header), depending on the path followed. The `move.w` to memory set N and Z
+/// (`store`), the `movea.w` sign-extend and touch no flag.
 struct Reinsert<'a> {
     c: &'a mut Cpu,
     b: &'a mut Cps2Bus,
-    /// L'objet réinséré (A0 de l'original).
+    /// The reinserted object (A0 of the original).
     obj: Obj,
     list: SortedList,
 }
@@ -310,19 +310,19 @@ impl Reinsert<'_> {
         let w = rd16(self.b, base.wrapping_add(off));
         self.movea(n, w)
     }
-    /// `move.w (off,An),Dn` : mot bas de Dn et drapeaux.
+    /// `move.w (off,An),Dn`: low word of Dn and flags.
     fn load(&mut self, d: usize, base: u32, off: u32) -> u16 {
         let v = rd16(self.b, base.wrapping_add(off));
         set_low_word(&mut self.c.d[d], v);
         ops::logic(self.c, v as u32, Size::Word);
         v
     }
-    /// `move.w src,(off,An)` : écrit et fixe les drapeaux.
+    /// `move.w src,(off,An)`: writes and sets the flags.
     fn store(&mut self, base: u32, off: u32, v: u16) {
         wr16(self.b, base.wrapping_add(off), v);
         ops::logic(self.c, v as u32, Size::Word);
     }
-    /// `cmp.l (Y,An),Dn` : drapeaux ; renvoie la profondeur du voisin.
+    /// `cmp.l (Y,An),Dn`: flags; returns the depth of the neighbor.
     fn compare_depth(&mut self, d: usize, an: u32) -> u32 {
         let y = rd32(self.b, an.wrapping_add(Obj::Y));
         let dn = self.c.d[d];
@@ -344,8 +344,8 @@ impl Reinsert<'_> {
         self.relocate(Way::toward_tail(self.list));
     }
 
-    /// L'objet est déjà dans la liste : le déplace s'il est du mauvais côté d'un voisin dans le sens
-    /// `w`. Renvoie vrai quand la routine est terminée (déplacé, ou rien à faire en bout de liste).
+    /// The object is already in the list: moves it if it is on the wrong side of a neighbor in the direction
+    /// `w`. Returns true when the routine is done (moved, or nothing to do at the end of the list).
     fn relocate(&mut self, w: Way) -> bool {
         let a0 = self.a0();
         let link = self.load(0, a0, w.ahead);
@@ -358,7 +358,7 @@ impl Reinsert<'_> {
         if w.settled(self.c.d[1], y1) {
             return false;
         }
-        // cherche le dernier voisin que l'objet doit encore dépasser
+        // searches for the last neighbor that the object still has to pass
         loop {
             let link = self.load(0, a1, w.ahead);
             if (link as i16) >= 0 {
@@ -372,7 +372,7 @@ impl Reinsert<'_> {
             }
             a1 = self.movea(1, link);
         }
-        // retrait : le voisin `behind` et celui de `ahead` se raccordent
+        // removal: the neighbor `behind` and the one `ahead` are linked together
         let a3 = self.movea_mem(3, a0, w.ahead);
         let d2 = self.load(2, a0, w.behind);
         if (d2 as i16) < 0 {
@@ -383,7 +383,7 @@ impl Reinsert<'_> {
         if (d2 as i16) >= 0 {
             self.store(A5, w.far, a3 as u16);
         }
-        // insertion devant A1 (dans le sens `ahead`)
+        // insertion in front of A1 (in the `ahead` direction)
         let d0 = self.c.d[0] as u16;
         self.store(a0, w.ahead, d0);
         if (d0 as i16) < 0 {
@@ -395,7 +395,7 @@ impl Reinsert<'_> {
         true
     }
 
-    /// L'objet n'est dans aucune liste : insertion en partant de la queue (0x1eef2).
+    /// The object is in no list: insertion starting from the tail (0x1eef2).
     fn insert(&mut self) {
         let (a0, list) = (self.a0(), self.list);
         let y = rd32(self.b, a0 + Obj::Y);
@@ -411,7 +411,7 @@ impl Reinsert<'_> {
         let mut a1 = self.movea(1, tail);
         let y1 = self.compare_depth(0, a1);
         if y as i32 <= y1 as i32 {
-            // plus profond que toute la liste : nouvelle queue
+            // deeper than the whole list: new tail
             self.store(a1, Obj::NEXT, self.a0w());
             self.store(a0, Obj::PREV, a1 as u16);
             self.store(a0, Obj::NEXT, list.end.0);
@@ -421,7 +421,7 @@ impl Reinsert<'_> {
         loop {
             let before = self.load(1, a1, Obj::PREV);
             if (before as i16) >= 0 {
-                // devient la nouvelle tête
+                // becomes the new head
                 self.store(a1, Obj::PREV, self.a0w());
                 self.store(a0, Obj::NEXT, a1 as u16);
                 self.store(a0, Obj::PREV, list.end.0);
@@ -434,7 +434,7 @@ impl Reinsert<'_> {
                 break;
             }
         }
-        // entre A1 et son suivant
+        // between A1 and its successor
         let a2 = self.movea_mem(2, a1, Obj::NEXT);
         self.store(a1, Obj::NEXT, self.a0w());
         self.store(a2, Obj::PREV, self.a0w());
@@ -443,14 +443,15 @@ impl Reinsert<'_> {
     }
 }
 
-/// Registres que laisse la réinsertion d'origine (voir `diag::dead_regs`, étiquette `lists`).
+/// Registers left by the original reinsertion (see `diag::dead_regs`, label `lists`).
 pub const REGS_REINSERT: u32 =
     regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::a(2) | regs::a(3) | regs::a(4) | regs::CCR;
 
 impl SortedList {
-    /// `reinsert`, avec le reste D2 de l'original (`dispatch::Leftovers`) : quand l'objet est déplacé, le mot bas de D2
-    /// reçoit le lien qu'il quitte (`move.w (behind,A0),D2`). Glitch d'origine : un gestionnaire suivant le relit (le
-    /// rebond de l'éclat de gel, 0x4bda8). D2 entre et ressort tel quel sinon.
+    /// `reinsert`, with the leftover D2 of the original (`dispatch::Leftovers`): when the object is moved, the low
+    /// word of D2
+    /// receives the link it leaves (`move.w (behind,A0),D2`). Original glitch: a following handler re-reads it (the
+    /// bounce of the freeze shard, 0x4bda8). D2 goes in and out unchanged otherwise.
     pub fn reinsert_leftovers(self, b: &mut Cps2Bus, obj: Obj, d2: &mut u32) {
         let mut c = Cpu::default();
         c.d[2] = *d2;
@@ -458,7 +459,7 @@ impl SortedList {
         *d2 = c.d[2];
     }
 
-    /// `reinsert` avec les registres de l'original, selon le chemin suivi (voir `Reinsert`).
+    /// `reinsert` with the original's registers, depending on the path followed (see `Reinsert`).
     #[track_caller]
     pub fn reinsert_68k(self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
         Reinsert { c, b, obj, list: self }.run();
@@ -466,7 +467,7 @@ impl SortedList {
     }
 }
 
-/// `unlink_all` avec le registre de l'original : A0 = dernier objet retiré (inchangé si les listes sont vides).
+/// `unlink_all` with the original's register: A0 = last object removed (unchanged if the lists are empty).
 #[track_caller]
 pub fn unlink_all_68k(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
     let last = unlink_all_regs(c, b);
@@ -477,7 +478,7 @@ pub fn unlink_all_68k(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
 fn unlink_all_regs(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
     let last = unlink_all(b);
     if let Some(o) = last {
-        c.a[0] = o.0 | 0xff00_0000; // movea.w : étendu en signe
+        c.a[0] = o.0 | 0xff00_0000; // movea.w: sign-extended
     }
     last
 }
@@ -488,14 +489,14 @@ fn reinsert_native(list: SortedList, c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x1f0be : retire l'objet A0 de sa liste. L'original ne laisse aucun registre utile : les appelants Rust
-/// appellent `unlink` directement.
+/// 0x1f0be: removes object A0 from its list. The original leaves no useful register: the Rust callers
+/// call `unlink` directly.
 fn unlink_native(c: &mut Cpu, b: &mut Cps2Bus) {
     unlink(b, Obj(c.a[0]));
     rts(c, b);
 }
 
-/// 0x1f184 : vide les deux listes.
+/// 0x1f184: empties both lists.
 fn unlink_all_native(c: &mut Cpu, b: &mut Cps2Bus) {
     unlink_all_regs(c, b);
     rts(c, b);

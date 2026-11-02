@@ -1,18 +1,18 @@
-//! Images des créatures du jeu (ennemis, boss, personnages), tirées de l'état d'une partie en cours.
+//! Images of the game's creatures (enemies, bosses, characters), taken from the state of a game in progress.
 //!
-//!   creatures scan <roms> <eeprom> <scénario> <images> <cache> [étiquette]
-//!   creatures spawn <roms> <eeprom> <cache> <scène> <enemy|boss> <type> <variante>
-//!   creatures build <cache> <dossier_images> <index.md>
+//!   creatures scan <roms> <eeprom> <scenario> <frames> <cache> [label]
+//!   creatures spawn <roms> <eeprom> <cache> <scene> <enemy|boss> <type> <variant>
+//!   creatures build <cache> <images_folder> <index.md>
 //!
-//! `scan` rejoue un scénario d'entrées sur la machine (code natif), et à chaque image examine les objets
-//! des pools ENEMY et BOSS et le joueur 1. Pour chaque objet dont le cadre de sprite (`+0x34`) change, il
-//! reconstruit les entrées d'Object RAM de cet objet seul (même décodage que `sprites.rs` : morceaux,
-//! miroir, palette imposée, objets rattachés), les rend avec la palette courante de la machine sur un fond
-//! transparent et range l'échantillon recadré dans `<cache>/<family>_<type>_<variant>/`.
-//! `build` choisit la pose de base de chaque type (premier cadre en état actif, sous-état « marche »),
-//! écrit les PNG (1:1 et x2), la planche récapitulative et l'index Markdown.
+//! `scan` replays an input scenario on the machine (native code), and at each frame examines the objects
+//! of the ENEMY and BOSS pools and player 1. For each object whose sprite frame (`+0x34`) changes, it
+//! rebuilds the Object RAM entries of that object alone (same decoding as `sprites.rs`: pieces,
+//! mirror, forced palette, attached objects), renders them with the machine's current palette on a
+//! transparent background and stores the cropped sample in `<cache>/<family>_<type>_<variant>/`.
+//! `build` picks the base pose of each type (first frame in active state, « walk » sub-state),
+//! writes the PNGs (1:1 and x2), the summary sheet and the Markdown index.
 //!
-//! Les images dérivent des ROMs : elles restent locales (dossier `assets/`, ignoré par git).
+//! The images derive from the ROMs: they stay local (`assets/` folder, ignored by git).
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -27,24 +27,24 @@ const BOSS: (u32, u32, u32) = (A5 + 0x3a1e, 0xc0, 3);
 const PLAYER: u32 = A5 + 0x5de;
 const STAGE: u32 = A5 + 0x34;
 
-/// Fenêtre d'échantillonnage (images) et nombre maximal d'échantillons d'une clé par fenêtre.
+/// Sampling window (frames) and maximum number of samples of a key per window.
 const WINDOW: usize = 3000;
 const PER_WINDOW: u32 = 30;
 
 const W: usize = 384;
 const H: usize = 224;
-/// Point d'ancrage (position de l'objet) sur l'écran de rendu.
+/// Anchor point (object position) on the rendering screen.
 const ANCHOR_X: u16 = 192;
 const ANCHOR_H: u16 = 0x38;
 
 // ---------------------------------------------------------------------------------------------
-// Image RGBA recadrée
+// Cropped RGBA image
 
 #[derive(Clone)]
 struct Sprite {
     w: usize,
     h: usize,
-    /// Position du coin haut-gauche par rapport au point d'ancrage.
+    /// Position of the top-left corner relative to the anchor point.
     ox: i32,
     oy: i32,
     rgba: Vec<u8>,
@@ -67,7 +67,7 @@ impl Sprite {
         self.rgba.chunks_exact(4).filter(|p| p[3] != 0).count()
     }
 
-    /// Palette absente (pas encore chargée) : le bleu pur domine les pixels opaques.
+    /// Palette missing (not loaded yet): pure blue dominates the opaque pixels.
     fn garbage(&self) -> bool {
         let blue = self.rgba.chunks_exact(4).filter(|p| p[3] != 0 && p[0] < 40 && p[1] < 40 && p[2] > 200).count();
         blue * 10 > self.opaque() * 3
@@ -90,7 +90,7 @@ fn save_png(path: &Path, w: usize, h: usize, rgba: &[u8]) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Décodage des cadres (comme sprites.rs)
+// Decoding of the frames (like sprites.rs)
 
 struct Frame {
     count: u16,
@@ -112,7 +112,7 @@ fn with_palette(attr: u16, pal: Option<u8>) -> u16 {
     }
 }
 
-/// Entrées d'Object RAM d'un cadre posé en (x, y) ; sans miroir (orientation de la ROM).
+/// Object RAM entries of a frame placed at (x, y); without mirror (ROM orientation).
 fn emit(b: &mut Cps2Bus, f: u32, x: u16, y: u16, palette: Option<u8>, out: &mut Vec<[u16; 4]>) {
     let fr = frame_at(b, f);
     let n = if fr.per_piece { fr.second } else { fr.count };
@@ -141,7 +141,7 @@ fn palette_of(b: &mut Cps2Bus, o: u32) -> Option<u8> {
     (rd8(b, o + 0x2a) & 1 != 0).then(|| rd8(b, o + 0x2b))
 }
 
-/// Entrées de l'objet `o` et de ses objets rattachés (derrière, lui, devant).
+/// Entries of object `o` and of its attached objects (behind, itself, in front).
 fn object_entries(b: &mut Cps2Bus, o: u32) -> Option<Vec<[u16; 4]>> {
     let f = rd32(b, o + 0x34);
     if !plausible(b, f) {
@@ -173,10 +173,10 @@ fn object_entries(b: &mut Cps2Bus, o: u32) -> Option<Vec<[u16; 4]>> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Rendu sur fond transparent
+// Rendering on a transparent background
 
-/// Rend les entrées avec la palette de la machine, deux fois sur deux fonds différents : un pixel est
-/// opaque s'il est identique dans les deux rendus.
+/// Renders the entries with the machine's palette, twice on two different backgrounds: a pixel is
+/// opaque if it is identical in both renderings.
 fn render(m: &cps2::Machine, entries: &[[u16; 4]]) -> Option<Sprite> {
     let mut obj = vec![0u16; 0x1000];
     for (i, e) in entries.iter().take(0x3fc).enumerate() {
@@ -185,9 +185,9 @@ fn render(m: &cps2::Machine, entries: &[[u16; 4]]) -> Option<Sprite> {
     let end = 4 * entries.len().min(0x3fc);
     obj[end..end + 4].copy_from_slice(&[0x8000, 0x8000, 0, 0]);
     let mut output = m.bus.output;
-    output[2] = 0; // pas de priorité de couches
+    output[2] = 0; // no layer priority
     let (cps_a, mut cps_b) = ([0u16; 32], [0u16; 32]);
-    cps_b[0x30 / 2] = 0x3f; // les six pages de palette
+    cps_b[0x30 / 2] = 0x3f; // the six palette pages
     let mut shot = |bg: u16| {
         let mut pal = m.bus.palette.clone();
         pal[0xbff] = bg;
@@ -217,7 +217,7 @@ fn render(m: &cps2::Machine, entries: &[[u16; 4]]) -> Option<Sprite> {
             }
         }
     }
-    // le point d'ancrage est à (ANCHOR_X, ligne de l'objet de hauteur ANCHOR_H)
+    // the anchor point is at (ANCHOR_X, line of the object of height ANCHOR_H)
     let row0 = 0x100 - ANCHOR_H as i32 - m.bus.output[3] as i32;
     Some(Sprite { w, h, ox: x0 as i32 - ANCHOR_X as i32, oy: y0 as i32 - row0, rgba })
 }
@@ -236,17 +236,17 @@ fn pools() -> Vec<(&'static str, u32)> {
     v
 }
 
-/// Échantillonneur : examine à chaque image les objets observés et range les nouveaux cadres dans le cache.
+/// Sampler: at each frame examines the observed objects and stores the new frames in the cache.
 struct Observer {
     cache: PathBuf,
     label: String,
     objects: Vec<(&'static str, u32)>,
-    /// Dernier cadre vu par emplacement.
+    /// Last frame seen per slot.
     last: Vec<u32>,
-    /// Nombre d'échantillons par clé et par fenêtre de `WINDOW` images (les palettes de certains boss ne
-    /// sont chargées qu'après leur apparition : il faut aussi des échantillons tardifs).
+    /// Number of samples per key and per window of `WINDOW` frames (the palettes of some bosses are
+    /// loaded only after they appear: late samples are needed too).
     count: BTreeMap<(String, usize), u32>,
-    /// Scènes où chaque clé a été vue (nombre d'images).
+    /// Scenes where each key was seen (number of frames).
     scenes: BTreeMap<(String, u8), u32>,
     seq: u32,
 }
@@ -267,7 +267,7 @@ impl Observer {
                 self.last[i] = 0;
                 continue;
             }
-            // joueur 1 : l'octet +3 est le numéro du personnage (une clé par personnage)
+            // player 1: byte +3 is the character number (one key per character)
             let key = if family == "player" { format!("player_{variant:02}_00") } else { format!("{family}_{kind:02}_{variant:02}") };
             if family != "player" {
                 *self.scenes.entry((key.clone(), scene)).or_default() += 1;
@@ -289,14 +289,14 @@ impl Observer {
             fs::create_dir_all(&dir).unwrap();
             let name = format!("{}_{:06}", self.label, self.seq);
             sp.write(&dir.join(format!("{name}.png")), 1);
-            // l'emplacement relie les échantillons successifs d'un même objet (animation)
+            // the slot links the successive samples of the same object (animation)
             let meta = format!("{} {} {} {} {:02x} {:02x} {:02x} {} {:06x}\n", sp.ox, sp.oy, scene, i, st[0], st[1], st[2], f, frame);
             fs::write(dir.join(format!("{name}.txt")), meta).unwrap();
             self.seq += 1;
         }
     }
 
-    /// Écrit les scènes vues : `scenes_<étiquette>.txt` (parties jouées) ou `forced_<étiquette>.txt` (objets créés à la main).
+    /// Writes the scenes seen: `scenes_<label>.txt` (games played) or `forced_<label>.txt` (objects created by hand).
     fn finish(self, prefix: &str) {
         let mut s = String::new();
         for ((key, scene), n) in &self.scenes {
@@ -313,14 +313,14 @@ fn load_machine(roms: &str, eeprom: &str) -> cps2::Machine {
     m
 }
 
-/// Rejoue un scénario et échantillonne les créatures après l'image 600.
+/// Replays a scenario and samples the creatures after frame 600.
 fn scan(a: &[String]) {
     let [roms, eeprom, scenario, frames, cache] = &a[..5] else { usage() };
     let label = a.get(5).cloned().unwrap_or_else(|| Path::new(scenario).file_stem().unwrap().to_string_lossy().into());
     let mut m = load_machine(roms, eeprom);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let mut obs = Observer::new(Path::new(cache), &label);
-    for f in 0..frames.parse::<usize>().expect("images") {
+    for f in 0..frames.parse::<usize>().expect("frames") {
         script.apply(f, &mut m);
         m.run_frame();
         if f >= 600 {
@@ -330,10 +330,10 @@ fn scan(a: &[String]) {
     obs.finish("scenes");
 }
 
-/// Entre dans la scène `scene` (un personnage, joueur invincible), y fait apparaître à la main un objet de la
-/// famille `enemy` ou `boss` (type, variante) à côté du joueur et l'échantillonne : pour les types que
-/// les parcours ne rencontrent jamais. La palette est celle de la scène choisie.
-///   creatures spawn <roms> <eeprom> <cache> <scène> <enemy|boss> <type> <variante>
+/// Enters scene `scene` (one character, invincible player), spawns by hand an object of family
+/// `enemy` or `boss` (type, variant) next to the player and samples it: for the types that
+/// the runs never meet. The palette is that of the chosen scene.
+///   creatures spawn <roms> <eeprom> <cache> <scene> <enemy|boss> <type> <variant>
 fn spawn(a: &[String]) {
     let [roms, eeprom, cache, scene, family, kind, variant] = &a[..7] else { usage() };
     let (scene, kind, variant): (u32, u8, u8) = (scene.parse().unwrap(), kind.parse().unwrap(), variant.parse().unwrap());
@@ -342,7 +342,7 @@ fn spawn(a: &[String]) {
     let mut obs = Observer::new(Path::new(cache), &format!("forced{scene}-{family}{kind}-{variant}"));
     let mut spawned = false;
     for f in 0..3600usize {
-        // pièce, Start, premier personnage, saut dans la scène (comme `boss_scan`)
+        // coin, Start, first character, jump into the scene (like `boss_scan`)
         for (at, input, down) in [(910, "Coin 1", true), (916, "Coin 1", false), (1000, "1 Player Start", true), (1006, "1 Player Start", false), (1440, "P1 Button 1", true), (1446, "P1 Button 1", false)] {
             if f == at + 1 {
                 ddsom_game::scenario::set_input(&mut m, input, down);
@@ -405,7 +405,7 @@ fn name_of(family: &str, t: u8) -> String {
     }
 }
 
-/// Remarques sur ce que l'image montre quand cela diffère du nom du type (relevées sur les planches).
+/// Remarks on what the image shows when it differs from the type's name (noted from the sheets).
 fn remark(family: &str, t: u8, variant: u8) -> &'static str {
     match (family, t, variant) {
         ("enemy", 19, _) => "guerrier à bouclier et bombe (gobelin ou gnoll), pas un Displacer Beast : nom du type hypothétique",
@@ -451,8 +451,8 @@ fn load_samples(dir: &Path) -> Vec<Sample> {
         .collect()
 }
 
-/// Pose de base : parmi les échantillons en état actif (+4 = 2) et sous-état de marche (+5 = 0) à palette
-/// chargée, celui de taille médiane (écarte les apparitions progressives et les gestes d'attaque).
+/// Base pose: among the samples in active state (+4 = 2) and walking sub-state (+5 = 0) with a loaded
+/// palette, the one of median size (discards progressive appearances and attack gestures).
 fn base_index(s: &[Sample]) -> usize {
     let usable = |x: &&(usize, &Sample)| !x.1.sprite.garbage();
     let all: Vec<(usize, &Sample)> = s.iter().enumerate().collect();
@@ -467,7 +467,7 @@ fn base_index(s: &[Sample]) -> usize {
     pool[pool.len() / 2].0
 }
 
-/// Suite d'au plus `n` cadres distincts de même emplacement et même exécution, à partir de `from`.
+/// Sequence of at most `n` distinct frames of the same slot and the same run, starting from `from`.
 fn animation(s: &[Sample], from: usize, n: usize) -> Vec<&Sample> {
     let run = s[from].file.rsplit_once('_').unwrap().0;
     let mut v: Vec<&Sample> = vec![];
@@ -485,7 +485,7 @@ fn animation(s: &[Sample], from: usize, n: usize) -> Vec<&Sample> {
     v
 }
 
-/// Planche : sprites alignés sur leur ancre, disposés en grille, avec légende en dessous (dessinée à la main).
+/// Sheet: sprites aligned on their anchor, laid out in a grid, with a caption below (drawn by hand).
 struct Sheet {
     w: usize,
     h: usize,
@@ -533,7 +533,7 @@ impl Sheet {
     }
 }
 
-/// Police 5x7 minimale (majuscules, chiffres, quelques signes) pour les légendes des planches.
+/// Minimal 5x7 font (capitals, digits, a few signs) for the sheet captions.
 fn glyph(c: char) -> Option<[u8; 7]> {
     const FONT: &[(char, [u8; 7])] = &[
         ('A', [0x0e, 0x11, 0x11, 0x1f, 0x11, 0x11, 0x11]), ('B', [0x1e, 0x11, 0x11, 0x1e, 0x11, 0x11, 0x1e]),
@@ -561,7 +561,7 @@ fn glyph(c: char) -> Option<[u8; 7]> {
     FONT.iter().find(|f| f.0 == c).map(|f| f.1)
 }
 
-/// Une créature : un type d'objet et une variante, avec sa pose de base et quelques cadres d'animation.
+/// A creature: an object type and a variant, with its base pose and a few animation frames.
 struct Entry {
     family: String,
     t: u8,
@@ -569,14 +569,14 @@ struct Entry {
     name: String,
     file: String,
     scenes: Vec<u8>,
-    /// Jamais rencontrée dans les parcours : vue seulement lors d'un essai `creatures spawn` dans la scène indiquée.
+    /// Never met in the runs: seen only during a `creatures spawn` trial in the given scene.
     forced: bool,
     sprite: Sprite,
     frames: Vec<Sprite>,
 }
 
-/// Scènes où chaque clé (`famille_type_variante`) a été vue, d'après les `<prefix>_*.txt` de `scan` (`scenes`)
-/// ou de `spawn` (`forced`).
+/// Scenes where each key (`family_type_variant`) was seen, from the `<prefix>_*.txt` of `scan` (`scenes`)
+/// or `spawn` (`forced`).
 fn load_scenes(cache: &Path, prefix: &str) -> BTreeMap<String, BTreeSet<u8>> {
     let mut scenes: BTreeMap<String, BTreeSet<u8>> = BTreeMap::new();
     for e in fs::read_dir(cache).unwrap().flatten() {
@@ -596,7 +596,7 @@ fn load_entries(cache: &Path, images: &Path) -> Vec<Entry> {
     for e in fs::read_dir(cache).unwrap().flatten() {
         let key = e.file_name().to_string_lossy().to_string();
         let p: Vec<&str> = key.split('_').collect();
-        // les numéros de personnage impairs sont des états transitoires du joueur
+        // odd character numbers are transient states of the player
         if !e.path().is_dir() || p.len() != 3 || (p[0] == "player" && p[1].parse::<u8>().unwrap() % 2 == 1) {
             continue;
         }
@@ -636,7 +636,7 @@ fn load_entries(cache: &Path, images: &Path) -> Vec<Entry> {
     entries
 }
 
-/// Planche récapitulative : les créatures de la liste en lignes, légende (type.variante nom) dessous.
+/// Summary sheet: the creatures of the list in rows, caption (type.variant name) below.
 fn contact_sheet(es: &[&Entry]) -> Sheet {
     const WIDTH: usize = 1500;
     let mut placed = vec![];
@@ -696,7 +696,7 @@ fn build(a: &[String]) {
         md += &format!("Types d'ennemis sans image : {} (jamais rencontrés dans les parcours ; l'objet créé à la main par `spawn` ne montre rien).\n", missing.join(", "));
     }
     fs::write(index, md).unwrap();
-    println!("{} créatures", entries.len());
+    println!("{} creatures", entries.len());
 }
 
 const INTRO: &str = "# Les créatures du jeu
@@ -745,7 +745,7 @@ la suite de cadres distincts du même objet pour la bande d'animation.
 
 ";
 
-/// Bande de cadres alignés sur leur ancre.
+/// Strip of frames aligned on their anchor.
 fn strip(frames: &[Sprite], gap: usize) -> Sheet {
     let x0 = frames.iter().map(|f| f.ox).min().unwrap();
     let x1 = frames.iter().map(|f| f.ox + f.w as i32).max().unwrap();
@@ -760,7 +760,7 @@ fn strip(frames: &[Sprite], gap: usize) -> Sheet {
 }
 
 fn usage() -> ! {
-    eprintln!("usage : creatures scan <roms> <eeprom> <scénario> <images> <cache> [étiquette]\n        creatures spawn <roms> <eeprom> <cache> <scène> <enemy|boss> <type> <variante>\n        creatures build <cache> <dossier_images> <index.md>");
+    eprintln!("usage: creatures scan <roms> <eeprom> <scenario> <frames> <cache> [label]\n        creatures spawn <roms> <eeprom> <cache> <scene> <enemy|boss> <type> <variant>\n        creatures build <cache> <images_folder> <index.md>");
     std::process::exit(2);
 }
 

@@ -1,8 +1,8 @@
-//! Primitives vidéo (V1) et tilemaps (V2) : couches, registres CPS-A/B, Object RAM, blocs de tuiles.
+//! Video primitives (V1) and tilemaps (V2): layers, CPS-A/B registers, Object RAM, tile blocks.
 //!
-//! Voir `docs/video.md` pour les formats. Les registres `0x804100-0x80411f` (CPS-A) contiennent les
-//! adresses des tables en GFX RAM (en unités de 256 octets) : objets en `0x804100`, couches 1 à 3 en
-//! `0x804102/04/06` ; `0x804166` (CPS-B) active les couches.
+//! See `docs/video.md` for the formats. The registers `0x804100-0x80411f` (CPS-A) contain the
+//! addresses of the tables in GFX RAM (in units of 256 bytes): objects at `0x804100`, layers 1 to 3 at
+//! `0x804102/04/06`; `0x804166` (CPS-B) enables the layers.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -10,33 +10,33 @@ use m68k::Cpu;
 use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, wr16, wr32, wr8, A5};
 use crate::{regs, Native};
 
-/// Variables de la RAM de travail (offsets depuis A5 = FF8000) propres au sous-système vidéo.
+/// Work RAM variables (offsets from A5 = FF8000) specific to the video subsystem.
 pub mod ram {
-    /// Réglages (bit 10 : pas de jauge de chargement).
+    /// Settings (bit 10: no loading gauge).
     pub const DIP: u32 = 0x7fd0;
-    /// Image du registre d'activation des couches (écrit en `0x804166`).
+    /// Image of the layer enable register (written at `0x804166`).
     pub const LAYER_ENABLE: u32 = 0x14;
-    /// Adresse de la table d'objets (valeur de `0x804100`).
+    /// Address of the object table (value of `0x804100`).
     pub const OBJ_TABLE: u32 = 0x5ba;
-    /// Bascule de banque de l'Object RAM (octet, inversée à chaque effacement).
+    /// Object RAM bank toggle (byte, inverted at each clearing).
     pub const OBJ_BANK: u32 = 0x5bc;
-    /// Verrous de pièces : deux images de la sortie (`+0x10`, `+0x17`) et les bits forcés (`+0x18`).
+    /// Coin locks: two images of the output (`+0x10`, `+0x17`) and the forced bits (`+0x18`).
     pub const LOCKOUT: [u32; 2] = [0x10, 0x17];
     pub const LOCKOUT_FORCED: u32 = 0x18;
-    /// Octet non nul : les registres d'affichage ne sont plus écrits (écran figé), `A5 - 0x7155`.
+    /// Non-zero byte: the display registers are no longer written (frozen screen), `A5 - 0x7155`.
     pub const FROZEN: u32 = 0xff0eab;
-    /// Scène en cours.
+    /// Current scene.
     pub const STAGE: u32 = 0x34;
-    /// Caméra 1 (`+0x4fe`) et 2 (`+0x54e`) : scroll en `+0x08` (x) et `+0x0c` (y).
+    /// Camera 1 (`+0x4fe`) and 2 (`+0x54e`): scroll at `+0x08` (x) and `+0x0c` (y).
     pub const CAMERAS: [u32; 2] = [0x4fe, 0x54e];
-    /// Octet non nul : la caméra 2 est la caméra courante.
+    /// Non-zero byte: camera 2 is the current camera.
     pub const USE_CAMERA_2: u32 = 0x36;
-    /// Positions de scroll courantes (x, y) de la caméra 1 et de la caméra 2.
+    /// Current scroll positions (x, y) of camera 1 and camera 2.
     pub const SCROLL: [u32; 2] = [0x506, 0x50a];
     pub const SCROLL_2: [u32; 2] = [0x556, 0x55a];
 }
 
-/// Mémoire graphique et registres.
+/// Graphics memory and registers.
 pub mod hw {
     pub const TEXT_LAYER: u32 = 0x912000;
     pub const SCROLL1: u32 = 0x910000;
@@ -55,22 +55,22 @@ fn set_low_word(r: &mut u32, v: u16) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// V1 : jauge de chargement, verrous, couches, effacements
+// V1: loading gauge, locks, layers, clearings
 // ---------------------------------------------------------------------------------------------
 
-/// Valeur de remplissage de la jauge de chargement : tuile 0x20 (espace), attribut 3.
+/// Fill value of the loading gauge: tile 0x20 (space), attribute 3.
 const GAUGE: u32 = 0x0020_0003;
-/// La jauge occupe les 32 premiers longs de la couche de caractères (la première colonne).
+/// The gauge occupies the first 32 longs of the character layer (the first column).
 const GAUGE_LONGS: u32 = 32;
 
-/// 0xb40 : appelée à chaque attente (0xa40) ; fixe D1 puis dessine la jauge (0xb46).
+/// 0xb40: called at each wait (0xa40); sets D1 then draws the gauge (0xb46).
 fn gauge_with_value(c: &mut Cpu, b: &mut Cps2Bus) {
     c.d[1] = GAUGE;
     gauge(c, b);
 }
 
-/// 0xb46 : remplit la première colonne de la couche de caractères avec `marker` (la jauge de chargement), sauf si
-/// les réglages la masquent (bit 0x400 de DSW : toujours, dans ce jeu). Rend vrai si la jauge est dessinée.
+/// 0xb46: fills the first column of the character layer with `marker` (the loading gauge), unless
+/// the settings hide it (bit 0x400 of DSW: always, in this game). Returns true if the gauge is drawn.
 pub fn update_gauge(b: &mut Cps2Bus, marker: u32) -> bool {
     let hidden = rd16(b, A5 + ram::DIP) & 0x400 != 0;
     if !hidden {
@@ -81,8 +81,8 @@ pub fn update_gauge(b: &mut Cps2Bus, marker: u32) -> bool {
     !hidden
 }
 
-/// `update_gauge` (D1 = marqueur) avec les registres de l'original : D2 et les drapeaux du dernier calcul, A0 après la
-/// dernière écriture (la mise à jour du monde les laisse au gestionnaire suivant).
+/// `update_gauge` (D1 = marker) with the registers of the original: D2 and the flags of the last computation, A0
+/// after the last write (the world update leaves them to the next handler).
 pub fn gauge_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     let flags_clear = !(m68k::SR_N | m68k::SR_Z | m68k::SR_V | m68k::SR_C);
     if !update_gauge(b, c.d[1]) {
@@ -102,7 +102,7 @@ fn gauge(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xb96 : verrouille les compteurs de pièces des bits `bits` (en plus des bits forcés). Rend les bits forcés (D1.b).
+/// 0xb96: locks the coin counters of bits `bits` (in addition to the forced bits). Returns the forced bits (D1.b).
 pub fn lock_counters(b: &mut Cps2Bus, bits: u8) -> u8 {
     let forced = rd8(b, A5 + ram::LOCKOUT_FORCED);
     for off in ram::LOCKOUT {
@@ -112,7 +112,7 @@ pub fn lock_counters(b: &mut Cps2Bus, bits: u8) -> u8 {
     forced
 }
 
-/// 0xbac : déverrouille les bits `bits` (sauf les bits forcés). Rend les bits forcés (D1.b).
+/// 0xbac: unlocks bits `bits` (except the forced bits). Returns the forced bits (D1.b).
 pub fn unlock_counters(b: &mut Cps2Bus, bits: u8) -> u8 {
     let forced = rd8(b, A5 + ram::LOCKOUT_FORCED);
     for off in ram::LOCKOUT {
@@ -128,15 +128,15 @@ fn lock(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// D0 est rendu inchangé.
+/// D0 is returned unchanged.
 fn unlock(c: &mut Cpu, b: &mut Cps2Bus) {
     let forced = unlock_counters(b, c.d[0] as u8);
     set_low_byte(&mut c.d[1], forced);
     rts(c, b);
 }
 
-/// 0xbc6 : active les couches `bits` (ajoutés à l'image du registre) et programme les registres d'affichage, sauf si
-/// l'écran est figé. Ni registre ni drapeau ne change.
+/// 0xbc6: enables the layers `bits` (added to the register image) and programs the display registers, unless
+/// the screen is frozen. No register or flag changes.
 pub fn turn_layers_on(b: &mut Cps2Bus, bits: u16) {
     let enable = rd16(b, A5 + ram::LAYER_ENABLE) | bits;
     wr16(b, A5 + ram::LAYER_ENABLE, enable);
@@ -155,7 +155,7 @@ fn enable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xbfc : désactive les couches `bits`. Le processeur reçoit D0.w complémenté.
+/// 0xbfc: disables the layers `bits`. The processor receives D0.w complemented.
 pub fn turn_layers_off(b: &mut Cps2Bus, bits: u16) {
     let enable = rd16(b, A5 + ram::LAYER_ENABLE) & !bits;
     wr16(b, A5 + ram::LAYER_ENABLE, enable);
@@ -169,8 +169,8 @@ fn disable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xc58 : écrit l'entrée de fin de liste (0x8000, 0x18000000) en tête de l'Object RAM, deux fois,
-/// avec bascule de la banque entre les deux : la liste est vide dans les deux banques.
+/// 0xc58: writes the end-of-list entry (0x8000, 0x18000000) at the head of the Object RAM, twice,
+/// toggling the bank between the two: the list is empty in both banks.
 pub fn clear_objects(b: &mut Cps2Bus) {
     for _ in 0..2 {
         wr32(b, hw::OBJECTS, 0x8000);
@@ -182,14 +182,14 @@ pub fn clear_objects(b: &mut Cps2Bus) {
 }
 
 
-/// Écran noir, première moitié (0xc0c, 0xc32) : toutes les couches éteintes (`0xbfc` avec D0 = 0x12ce, après la
-/// remise à zéro de `A5+0x14`).
+/// Black screen, first half (0xc0c, 0xc32): all layers off (`0xbfc` with D0 = 0x12ce, after
+/// resetting `A5+0x14` to zero).
 fn switch_layers_off(b: &mut Cps2Bus) {
     wr16(b, A5 + ram::LAYER_ENABLE, 0);
     wr16(b, hw::LAYER_ENABLE, 0);
 }
 
-/// Écran noir, seconde moitié : liste d'objets vide et les trois couches effacées.
+/// Black screen, second half: empty object list and the three layers cleared.
 fn clear_screen(b: &mut Cps2Bus) {
     clear_objects(b);
     for layer in [Layer::One, Layer::Two, Layer::Three] {
@@ -197,20 +197,20 @@ fn clear_screen(b: &mut Cps2Bus) {
     }
 }
 
-/// `switch_layers_off`, D0.w = !0x12ce (le masque de 0xbfc).
+/// `switch_layers_off`, D0.w = !0x12ce (the mask of 0xbfc).
 fn blank_layers(c: &mut Cpu, b: &mut Cps2Bus) {
     switch_layers_off(b);
     set_low_word(&mut c.d[0], !0x12ce);
 }
 
-/// `clear_screen`, D0.w = 0x1f00 et D1 = 0 comme après `0xce8`.
+/// `clear_screen`, D0.w = 0x1f00 and D1 = 0 as after `0xce8`.
 fn blank_planes(c: &mut Cpu, b: &mut Cps2Bus) {
     clear_screen(b);
     set_low_word(&mut c.d[0], 0x1f00);
     c.d[1] = 0;
 }
 
-/// 0xc0c : écran noir d'un coup (couches éteintes, objets et couches effacés). Le processeur reçoit D0.w = 0x1f00 et
+/// 0xc0c: black screen in one go (layers off, objects and layers cleared). The processor receives D0.w = 0x1f00 and
 /// D1 = 0.
 pub fn black_screen(b: &mut Cps2Bus) {
     switch_layers_off(b);
@@ -223,35 +223,35 @@ fn blank_screen(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xc32 : écran noir en trois images (sous-programme qui cède, `0xb64`, avant et après l'effacement) : une
-/// sous-machine ([`black_screen::Step`]) que les pas Rust appellent directement (`Sequence::subroutine`) ; plus
-/// rien ne l'appelle par adresse.
+/// 0xc32: black screen in three frames (subroutine that cedes, `0xb64`, before and after the clearing): a
+/// sub-machine ([`black_screen::Step`]) that the Rust steps call directly (`Sequence::subroutine`); nothing
+/// calls it by address any more.
 pub mod black_screen {
     use crate::modes::Flow;
     use crate::scene::Ctx;
     use crate::tasks::one_frame;
 
-    /// Couches éteintes, puis une image.
+    /// Layers off, then one frame.
     pub fn start(x: &mut Ctx) -> Flow {
         super::blank_layers(x.c, x.b);
         one_frame(x, Step::Clear)
     }
 
     crate::steps! {
-        /// Étapes de l'écran noir.
+        /// Steps of the black screen.
         pub enum Step {
-            /// Objets et couches effacés, puis une image.
+            /// Objects and layers cleared, then one frame.
             Clear = 0xc42 => |x| {
                 super::blank_planes(x.c, x.b);
                 one_frame(x, Step::End)
             },
-            /// Retour à l'appelant.
+            /// Return to the caller.
             End = 0xc56 => |_| Flow::Done,
         }
     }
 }
 
-/// Remplit [debut, fin) de cases (tuile, 0) : 0xca8 (scroll 1), 0xcc8 (scroll 2), 0xce8 (scroll 3).
+/// Fills [start, end) with cells (tile, 0): 0xca8 (scroll 1), 0xcc8 (scroll 2), 0xce8 (scroll 3).
 fn fill_layer(b: &mut Cps2Bus, from: u32, to: u32, tile: u16) {
     for a in (from..to).step_by(4) {
         wr16(b, a, tile);
@@ -259,7 +259,7 @@ fn fill_layer(b: &mut Cps2Bus, from: u32, to: u32, tile: u16) {
     }
 }
 
-/// Les trois couches de défilement.
+/// The three scroll layers.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Layer {
     One,
@@ -268,7 +268,7 @@ pub enum Layer {
 }
 
 impl Layer {
-    /// Début et fin de la couche en GFX RAM, et sa tuile vide.
+    /// Start and end of the layer in GFX RAM, and its empty tile.
     fn zone(self) -> (u32, u32, u16) {
         match self {
             Layer::One => (hw::SCROLL1, hw::SCROLL2, 0x20),
@@ -278,14 +278,14 @@ impl Layer {
     }
 }
 
-/// 0xca8, 0xcc8, 0xce8 : remplit la couche de sa tuile vide. Le processeur reçoit D0.w = la tuile et D1 = 0 (A0 et A1
-/// sont rétablis).
+/// 0xca8, 0xcc8, 0xce8: fills the layer with its empty tile. The processor receives D0.w = the tile and D1 = 0 (A0
+/// and A1 are restored).
 pub fn clear_layer(b: &mut Cps2Bus, layer: Layer) {
     let (from, to, tile) = layer.zone();
     fill_layer(b, from, to, tile);
 }
 
-/// Corps commun des trois remplissages : D0 = tuile, D1 = 0.
+/// Common body of the three fills: D0 = tile, D1 = 0.
 fn fill_run(c: &mut Cpu, b: &mut Cps2Bus, layer: Layer) {
     clear_layer(b, layer);
     set_low_word(&mut c.d[0], layer.zone().2);
@@ -296,22 +296,22 @@ fn fill_run(c: &mut Cpu, b: &mut Cps2Bus, layer: Layer) {
 fn clear_scroll1(c: &mut Cpu, b: &mut Cps2Bus) {
     fill_run(c, b, Layer::One);
 }
-/// Octets effacés par 0x3525c.
+/// Bytes cleared by 0x3525c.
 const SCROLL1_START: u32 = 0x2000;
 
-/// 0x3525c : efface les 8 Ko du début de la couche 1 avec la tuile vide 0x1f.
+/// 0x3525c: clears the first 8 KB of layer 1 with the empty tile 0x1f.
 pub fn clear_layer1_start(b: &mut Cps2Bus) {
     fill_layer(b, hw::SCROLL1, hw::SCROLL1 + SCROLL1_START, 0x1f);
 }
 
-/// `clear_layer1_start` avec les registres de l'original : la case dans D0-D5, A2 et A3, D6 = -1 et A1 à la fin
-/// de la zone.
+/// `clear_layer1_start` with the registers of the original: the cell in D0-D5, A2 and A3, D6 = -1 and A1 at the end
+/// of the zone.
 pub fn clear_layer1_start_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     clear_layer1_start(b);
     leftovers_clear_layer1_start(c);
 }
 
-/// Les registres que laisse 0x3525c.
+/// The registers that 0x3525c leaves.
 pub fn leftovers_clear_layer1_start(c: &mut Cpu) {
     const SIZE: u32 = SCROLL1_START;
     for n in 0..6 {
@@ -340,7 +340,7 @@ const fn fixed(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), 
 }
 
 pub const GAUGE_NATIVE: Native = fixed(0xb46, "video_jauge", gauge, regs::d(2) | regs::a(0) | regs::CCR);
-/// 0xb3e : `bra.b 0xb46`, appelé par la mise à jour du monde (D1 = marqueur de la classe).
+/// 0xb3e: `bra.b 0xb46`, called by the world update (D1 = class marker).
 pub const GAUGE_THUNK_NATIVE: Native = fixed(0xb3e, "video_jauge_b3e", gauge, regs::d(2) | regs::a(0) | regs::CCR);
 pub const GAUGE_VALUE_NATIVE: Native = fixed(0xb40, "video_jauge_d1", gauge_with_value, regs::d(1) | regs::d(2) | regs::a(0) | regs::CCR);
 pub const LOCK: Native = fixed(0xb96, "video_verrou", lock, regs::d(1));
@@ -363,33 +363,33 @@ pub const CLEAR_SCROLL3: Native = fixed(0xce8, "video_effacer_scroll3", clear_sc
 
 
 // ---------------------------------------------------------------------------------------------
-// V2 : attribut du terrain sous un point
+// V2: terrain attribute under a point
 // ---------------------------------------------------------------------------------------------
 
-/// Cartes de terrain fixes des scènes 2 et 0x14 (mots en ROM, colonnes de 0x20 octets).
+/// Fixed terrain maps of scenes 2 and 0x14 (words in ROM, columns of 0x20 bytes).
 const TERRAIN_MAP_STAGE_2: u32 = 0x3f8e9c;
 const TERRAIN_MAP_STAGE_14: u32 = 0x3f9c9c;
 
-/// Attribut du terrain sous un point, et les restes de calcul que l'original laisse dans ses registres.
+/// Terrain attribute under a point, and the computation leftovers that the original leaves in its registers.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Terrain {
-    /// Numéro de terrain : bits 7 à 15 du mot d'attribut de la case (D2.w ; 0 : sol libre).
+    /// Terrain number: bits 7 to 15 of the cell's attribute word (D2.w; 0: free ground).
     pub number: u16,
-    /// Coordonnées corrigées (D0.w, D1.w) : y décalé de -/+ 0x10 sur les cartes fixes, caméra 2 sinon.
+    /// Corrected coordinates (D0.w, D1.w): y shifted by -/+ 0x10 on the fixed maps, camera 2 otherwise.
     pub x: u16,
     pub y: u16,
-    /// Adresse de la case (A1) : carte fixe en ROM, ou couche de défilement 2 en GFX RAM.
+    /// Address of the cell (A1): fixed map in ROM, or scroll layer 2 in GFX RAM.
     pub case: u32,
-    /// Index de la case dans la carte (D3.w, D3 entier sur les cartes fixes) et colonne (D4.w).
+    /// Index of the cell in the map (D3.w, whole D3 on the fixed maps) and column (D4.w).
     pub index: u16,
     pub column: u16,
-    /// Carte fixe des scènes 2 et 0x14 (D2 n'est alors écrit qu'en mot bas ; ailleurs D2 = 0 d'abord).
+    /// Fixed map of scenes 2 and 0x14 (D2 is then only written as a low word; elsewhere D2 = 0 first).
     pub fixed_map: bool,
 }
 
-/// Numéro de terrain sous le point (x, y) (0x24b0). Scènes 2 et 0x14 : carte fixe en ROM (y décalé de -/+ 0x10) ;
-/// ailleurs : case de la couche de défilement 2 en GFX RAM, avec la correction de caméra quand la caméra 2 est
-/// courante.
+/// Terrain number under point (x, y) (0x24b0). Scenes 2 and 0x14: fixed map in ROM (y shifted by -/+ 0x10);
+/// elsewhere: cell of scroll layer 2 in GFX RAM, with the camera correction when camera 2 is
+/// current.
 pub fn terrain(b: &mut Cps2Bus, x: u16, y: u16) -> Terrain {
     let stage = rd8(b, crate::mem::A5 + ram::STAGE);
     let (mut x, mut y) = (x, y);
@@ -423,14 +423,14 @@ pub fn terrain(b: &mut Cps2Bus, x: u16, y: u16) -> Terrain {
     Terrain { number: (word & 0xff80) >> 7, x, y, case, index, column, fixed_map: fixed_map.is_some() }
 }
 
-/// Numéro de terrain sous l'objet `o` (0x24a8 : position x en +8, y en +0x10).
+/// Terrain number under object `o` (0x24a8: x position at +8, y at +0x10).
 pub fn terrain_of(b: &mut Cps2Bus, o: crate::objects::Obj) -> Terrain {
     let (x, y) = (rd16(b, o.0 + 8), rd16(b, o.0 + 0x10));
     terrain(b, x, y)
 }
 
-/// Registres que laisse 0x24b0 : D0/D1 (coordonnées corrigées), D2 (numéro), D3/D4 (restes de calcul, lus par des
-/// appelants qui les prennent pour arguments), A1 (case) et Z (numéro nul).
+/// Registers left by 0x24b0: D0/D1 (corrected coordinates), D2 (number), D3/D4 (computation leftovers, read by
+/// callers that take them as arguments), A1 (cell) and Z (zero number).
 pub fn terrain_68k(c: &mut Cpu, t: &Terrain) {
     if t.fixed_map {
         c.d[3] = t.index as u32;
@@ -446,14 +446,14 @@ pub fn terrain_68k(c: &mut Cpu, t: &Terrain) {
     c.sr = c.sr & !crate::ops::ALL | if t.number == 0 { m68k::SR_Z } else { 0 };
 }
 
-/// 0x24b0 : numéro de terrain en (D0, D1).
+/// 0x24b0: terrain number at (D0, D1).
 fn terrain_native(c: &mut Cpu, b: &mut Cps2Bus) {
     let t = terrain(b, c.d[0] as u16, c.d[1] as u16);
     terrain_68k(c, &t);
     rts(c, b);
 }
 
-/// 0x24a8 : numéro de terrain sous l'objet A0 (position x en +8, y en +0x10).
+/// 0x24a8: terrain number under object A0 (x position at +8, y at +0x10).
 fn terrain_of_object(c: &mut Cpu, b: &mut Cps2Bus) {
     set_low_word(&mut c.d[0], rd16(b, c.a[0] + 8));
     set_low_word(&mut c.d[1], rd16(b, c.a[0] + 0x10));
@@ -466,33 +466,33 @@ pub const TERRAIN: Native = fixed(0x24b0, "video_terrain", terrain_native, TERRA
 pub const TERRAIN_OF_OBJECT: Native = fixed(0x24a8, "video_terrain_objet", terrain_of_object, TERRAIN_OUT);
 
 // ---------------------------------------------------------------------------------------------
-// V2 : chargeurs de blocs de tuiles
+// V2: tile block loaders
 // ---------------------------------------------------------------------------------------------
 
-/// Géométrie d'un chargeur : D0 choisit une grille de `grid` x `grid` indices de blocs (mots en ROM) ;
-/// chaque bloc est `cells` x `cells` cases, chaque case un long (tuile, attribut) copié depuis la ROM
-/// avec `code_offset` ajouté à la tuile. A1 est la destination en GFX RAM.
+/// Geometry of a loader: D0 chooses a grid of `grid` x `grid` block indices (words in ROM);
+/// each block is `cells` x `cells` cells, each cell a long (tile, attribute) copied from the ROM
+/// with `code_offset` added to the tile. A1 is the destination in GFX RAM.
 struct Blocks {
     index_base: u32,
-    /// Octets d'indices par valeur de D0.
+    /// Index bytes per value of D0.
     index_size: u32,
     grid: u32,
     cells: u32,
-    /// Octets par ligne de cases dans la destination.
+    /// Bytes per row of cells in the destination.
     row_stride: u32,
     code_offset: u16,
-    /// Si présent, la destination revient au début de sa page (de cette taille) en fin de ligne de blocs.
+    /// If present, the destination goes back to the start of its page (of this size) at the end of a row of blocks.
     page: Option<u32>,
     source: Source,
 }
 
 enum Source {
-    /// Une seule table de blocs de 16 cases.
+    /// A single block table of 16 cells.
     Fixed(u32),
-    /// Plusieurs tables de blocs de `cells`² cases, choisies d'après la position de l'indice dans la
-    /// ROM d'indices : sélecteur = `((position & mask) << shift)` échangé par moitiés (SWAP), mot
-    /// signé ; adresse de la table à `list + séreader` (lue en espace programme si `program`, accès
-    /// relatif au PC, sinon en espace données, accès par registre d'adresse).
+    /// Several block tables of `cells`² cells, chosen from the position of the index in the
+    /// index ROM: selector = `((position & mask) << shift)` swapped by halves (SWAP), signed
+    /// word; address of the table at `list + selector` (read in program space if `program`, PC-relative
+    /// access, otherwise in data space, access through an address register).
     Banks { origin: u32, list: u32, mask: u32, shift: u32, program: bool },
 }
 
@@ -532,7 +532,7 @@ fn prog_long(b: &mut Cps2Bus, a: u32) -> u32 {
 }
 
 impl Blocks {
-    /// Adresse en ROM des cases du bloc dont l'indice est lu en `at`.
+    /// ROM address of the cells of the block whose index is read at `at`.
     fn block_source(&self, b: &mut Cps2Bus, at: u32) -> u32 {
         let index = rd16(b, at) as u32;
         match self.source {
@@ -546,7 +546,7 @@ impl Blocks {
         }
     }
 
-    /// Charge la grille d'indices D0 en `dst`. Rend l'adresse finale de la destination et la fin des indices.
+    /// Loads index grid D0 at `dst`. Returns the final address of the destination and the end of the indices.
     fn load(&self, b: &mut Cps2Bus, d0: u16, mut dst: u32) -> (u32, u32) {
         let page_base = self.page.map_or(0, |p| dst & !(p - 1));
         let mut at = self.index_base.wrapping_add(d0 as u32 * self.index_size);
@@ -573,14 +573,14 @@ impl Blocks {
     }
 }
 
-/// Les chargeurs de grilles de blocs de tuiles.
+/// The tile block grid loaders.
 #[derive(Clone, Copy)]
 pub enum Grid {
-    /// 0x260c : blocs de 4 x 4 cases.
+    /// 0x260c: blocks of 4 x 4 cells.
     Blocks4x4,
-    /// 0x26d4 : couche de défilement 2 (blocs de 2 x 2 cases, pages de 0x1000 octets).
+    /// 0x26d4: scroll layer 2 (blocks of 2 x 2 cells, pages of 0x1000 bytes).
     Layer2,
-    /// 0x2766 : couche de défilement 3 (petits blocs, pages de 0x800 octets).
+    /// 0x2766: scroll layer 3 (small blocks, pages of 0x800 bytes).
     Layer3,
 }
 
@@ -594,21 +594,21 @@ impl Grid {
     }
 }
 
-/// Fin d'un chargement de grille : la destination après le dernier bloc (A1) et l'indice qui suit le dernier (A2).
+/// End of a grid load: the destination after the last block (A1) and the index following the last (A2).
 #[derive(Clone, Copy, Debug)]
 pub struct GridEnd {
     pub destination: u32,
     pub indices: u32,
 }
 
-/// Charge la grille de blocs `n` de `grid` à `destination` (GFX RAM).
+/// Loads block grid `n` of `grid` to `destination` (GFX RAM).
 pub fn load_grid(b: &mut Cps2Bus, grid: Grid, n: u16, destination: u32) -> GridEnd {
     let (destination, indices) = grid.blocks().load(b, n, destination);
     GridEnd { destination, indices }
 }
 
-/// `load_grid` (D0 = numéro, A1 = destination) avec les registres de l'original : D0 = 0xffff, A1 et A2 en fin
-/// de grille.
+/// `load_grid` (D0 = number, A1 = destination) with the registers of the original: D0 = 0xffff, A1 and A2 at the end
+/// of the grid.
 pub fn load_grid_68k(c: &mut Cpu, b: &mut Cps2Bus, grid: Grid) {
     let end = load_grid(b, grid, c.d[0] as u16, c.a[1]);
     c.d[0] = 0xffff;
@@ -628,21 +628,21 @@ pub const LOAD_BLOCKS_SCROLL2: Native = fixed(0x26d4, "video_blocs_scroll2", |c,
 pub const LOAD_BLOCKS_SMALL: Native = fixed(0x2766, "video_blocs_petits", |c, b| load_blocks(c, b, Grid::Layer3), LOAD_OUT);
 
 // ---------------------------------------------------------------------------------------------
-// V2 : chiffres dans la couche de caractères
+// V2: digits in the character layer
 // ---------------------------------------------------------------------------------------------
 
-/// Écrit un chiffre (numéro de tuile = valeur, attribut 0) en `at` ; la case suivante de la ligne est
-/// `COLUMN` plus loin dans la couche de caractères.
+/// Writes a digit (tile number = value, attribute 0) at `at`; the next cell of the row is
+/// `COLUMN` further in the character layer.
 fn put_digit(b: &mut Cps2Bus, at: u32, digit: u16) {
     wr16(b, at, digit);
     wr16(b, at + 2, 0);
 }
 
-/// Colonne suivante de la couche de caractères (voir `text.rs`).
+/// Next column of the character layer (see `text.rs`).
 const COLUMN: u32 = 0x80;
 
-/// 0x255a : D0 (0 à 99, saturé) en deux chiffres décimaux : dizaines en A1, unités une colonne plus loin.
-/// Rend D0 = unités, D1 = dizaines, A1 = case des unités + 2.
+/// 0x255a: D0 (0 to 99, saturated) as two decimal digits: tens in A1, units one column further.
+/// Returns D0 = units, D1 = tens, A1 = units cell + 2.
 fn decimal_digits(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut value = c.d[0] as u16;
     if value >= 100 {
@@ -658,8 +658,8 @@ fn decimal_digits(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x25e8 : D0 en quatre chiffres hexadécimaux (quartet fort en premier), un par colonne à partir de A1.
-/// Rend A1 = A1 + 4 colonnes.
+/// 0x25e8: D0 as four hexadecimal digits (high nibble first), one per column starting at A1.
+/// Returns A1 = A1 + 4 columns.
 fn hex_digits(c: &mut Cpu, b: &mut Cps2Bus) {
     for i in 0..4 {
         put_digit(b, c.a[1] + COLUMN * i, (c.d[0] as u16) >> (12 - 4 * i) & 0xf);
@@ -677,8 +677,8 @@ pub const HEX_DIGITS: Native = fixed(
     regs::a(1) | regs::CCR,
 );
 
-/// Table des écrans fixes (logos et classements) : 10 entrées de 12 octets de la ROM, recopiées en RAM de
-/// travail au démarrage (0x19038).
+/// Table of fixed screens (logos and rankings): 10 entries of 12 bytes from the ROM, copied into work
+/// RAM at startup (0x19038).
 const FIXED_SCREENS_ROM: u32 = 0x19a1a;
 const FIXED_SCREENS_RAM: u32 = 0xff111c;
 const FIXED_SCREENS_LEN: u32 = 120;
@@ -698,7 +698,7 @@ pub const COPY_FIXED_SCREENS: Native = Native {
     outputs: 0,
 };
 
-/// Routines natives de ce module.
+/// Native routines of this module.
 pub const NATIVES: &[Native] = &[
     COPY_FIXED_SCREENS,
     GAUGE_NATIVE,

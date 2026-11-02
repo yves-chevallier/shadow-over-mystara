@@ -1,21 +1,21 @@
-//! Boss de types 15 et 20 (0x91530, une seule routine pour les deux), scène 46. Voir `docs/families/boss.md`.
+//! Boss of types 15 and 20 (0x91530, a single routine for both), stage 46. See `docs/families/boss.md`.
 //!
-//! Dragon rouge (type 15 « Red Dragon » dans les noms de debug ; le type 20 est une variante plus petite jamais vue dans
-//! les scénarios) : de la même famille que le dragon de `boss_19` (mêmes tirages de cible, mêmes sondes de portée) avec ses
-//! propres tables, un décor de vol en trois temps et une « armure » (les premiers coups de chaque période de 64 images ne
-//! l'interrompent pas). Charpente des ennemis (`+4` état, `+5` groupe, `+6` et `+7` étapes), états posés en longs.
+//! Red dragon (type 15 "Red Dragon" in the debug names; type 20 is a smaller variant never seen in the scenarios):
+//! from the same family as the dragon of `boss_19` (same target draws, same range probes) with its own tables, a
+//! three-phase flight scenery and an "armor" (the first hits of each 64-frame period do not interrupt it). Enemy
+//! skeleton (`+4` state, `+5` group, `+6` and `+7` steps), states set as longs.
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `intro` | arrivée : tombe du ciel par la droite en trois temps |
-//! | 2 | `fight` | combat : marche (`+6` = 0), saut vers un joueur (2), approche (4) |
-//! | 4 | `attacks` | onze attaques (`+6` = 0 à 18), la plupart en vol |
-//! | 6, 8, 10 | ici | debout, puis attente tant qu'aucun joueur n'est en vie |
-//! | 12 | ici | prise d'un joueur (drainé jusqu'à 1 PV) |
-//! | 14 | ici | attente |
-//! | état 4 | `hit` | réaction (une seule routine), recul, relevé, mort |
+//! | 0 | `intro` | arrival: falls from the sky on the right in three phases |
+//! | 2 | `fight` | combat: walk (`+6` = 0), jump toward a player (2), approach (4) |
+//! | 4 | `attacks` | eleven attacks (`+6` = 0 to 18), most of them in flight |
+//! | 6, 8, 10 | here | standing, then waiting while no player is alive |
+//! | 12 | here | grab of a player (drained down to 1 HP) |
+//! | 14 | here | wait |
+//! | state 4 | `hit` | reaction (a single routine), knockback, getting up, death |
 //!
-//! Animations : trois jeux par type (`+0xa0` = 0, 2 ou 4, `set_anim`), `+0xa1` est l'animation en cours.
+//! Animations: three sets per type (`+0xa0` = 0, 2 or 4, `set_anim`), `+0xa1` is the current animation.
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -33,7 +33,7 @@ pub(self) mod g {
     pub const WALK_STEPS: u32 = 0x6b;
     pub const WALK_DELAY: u32 = 0x71;
     pub const SHOT: u32 = 0x79;
-    /// Foreground : la liste d'affichage du premier plan (`+0x43`).
+    /// Foreground: the foreground display list (`+0x43`).
     pub const FOREGROUND: u32 = 0x43;
     pub const SHAKE: u32 = 0x90;
     pub const ANIM_SET: u32 = 0xa0;
@@ -42,16 +42,16 @@ pub(self) mod g {
     pub const HOVER: u32 = 0xa4;
     pub const HOVER_STATE: u32 = 0xa5;
     pub const TIMER: u32 = 0xa6;
-    /// Position mémorisée à la fin de l'image précédente (X, altitude, profondeur) : un coup ne déplace pas le dragon.
+    /// Position saved at the end of the previous frame (X, altitude, depth): a hit does not move the dragon.
     pub const KEPT_X: u32 = 0xa8;
     pub const KEPT_Z: u32 = 0xaa;
     pub const KEPT_Y: u32 = 0xac;
     pub const SHIELD: u32 = 0xae;
     pub const SPECIALS: u32 = 0xaf;
-    /// État actif de l'image précédente (long) et sa boîte de coups (`+0xb9`).
+    /// Active state of the previous frame (long) and its hit box (`+0xb9`).
     pub const LAST_STATE: u32 = 0xb0;
     pub const LAST_BOX: u32 = 0xb9;
-    /// Armure : période (`+0xb4`, 64 images), coups encore ignorés (`+0xb5`), temporisation de la poussée (`+0xb8`).
+    /// Armor: period (`+0xb4`, 64 frames), hits still ignored (`+0xb5`), push timer (`+0xb8`).
     pub const ARMOR_TICK: u32 = 0xb4;
     pub const ARMOR: u32 = 0xb5;
     pub const COOLDOWN: u32 = 0xb7;
@@ -84,7 +84,8 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- animations ----------------------------------------------------------------------------------
 
-/// Lance l'animation `n` du jeu `set` (0, 2 ou 4) du type, sauf si elle joue déjà (0x93182, 0x9319c, 0x931b6).
+/// Starts animation `n` of set `set` (0, 2 or 4) of the type, unless it is already playing (0x93182, 0x9319c,
+/// 0x931b6).
 pub(self) fn set_anim<R: Bench>(x: &mut Cx<'_, R>, set: u8, n: u32) {
     let small = x.u8(TYPE) == TYPE_SMALL;
     let base = match (set, small) {
@@ -111,9 +112,9 @@ pub(self) fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
-// --- changements d'état ---------------------------------------------------------------------------
+// --- state changes ---------------------------------------------------------------------------
 
-/// 0x92ff4 : debout, au repos.
+/// 0x92ff4: standing, at rest.
 pub(self) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     set_abs8(x, 0xff8043, 0xff);
     x.set8(HURT_BOX, 0);
@@ -128,7 +129,7 @@ pub(self) fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     rest(x);
 }
 
-/// 0x9301e : repos ou marche, au hasard (le petit dragon : seulement le demi-tour).
+/// 0x9301e: rest or walk, at random (the small dragon: only the about-face).
 pub(self) fn wander<R: Bench>(x: &mut Cx<'_, R>) {
     let mut r = random(x) as u16 & 3;
     if x.u8(TYPE) != TYPE_BIG {
@@ -144,12 +145,12 @@ pub(self) fn wander<R: Bench>(x: &mut Cx<'_, R>) {
     rest(x);
 }
 
-/// 0x91748 : attend un joueur.
+/// 0x91748: waits for a player.
 pub(self) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
@@ -200,9 +201,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::clear_all_popups(x);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
-/// Boucle de l'état actif (0x91684) ; l'état touché la rappelle pour reprendre le combat.
+/// Active state loop (0x91684); the hit state calls it again to resume the combat.
 pub(self) fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(FOREGROUND) != 0 {
         x.set8(FOREGROUND, 0);
@@ -248,7 +249,7 @@ pub(self) fn active<R: Bench>(x: &mut Cx<'_, R>) {
     finish(x);
 }
 
-/// 0x9171e : fin de l'image : le premier plan reçoit le dragon quand `+0x43` est levé.
+/// 0x9171e: end of the frame: the foreground receives the dragon when `+0x43` is raised.
 pub(self) fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xb6, 0);
     if x.u8(FOREGROUND) != 0 {
@@ -259,7 +260,7 @@ pub(self) fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Les positions mémorisées reprennent la place du dragon au début de l'image (un coup ne le déplace pas).
+/// The saved positions take over the dragon's place at the start of the frame (a hit does not move it).
 pub(self) fn restore_position<R: Bench>(x: &mut Cx<'_, R>) {
     let (px, pz, py) = (x.u16(KEPT_X), x.u16(KEPT_Z), x.u16(KEPT_Y));
     x.set16(0x8, px);
@@ -274,7 +275,7 @@ pub(self) fn keep_position<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(KEPT_Y, py);
 }
 
-/// 0x93066 : balancement vertical, quand `+0xa4` est levé : l'altitude suit une table de sinus (0x1c67b6).
+/// 0x93066: vertical sway, when `+0xa4` is raised: the altitude follows a sine table (0x1c67b6).
 pub(self) fn hover<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 {
         return;
@@ -291,7 +292,7 @@ pub(self) fn hover<R: Bench>(x: &mut Cx<'_, R>) {
     x.add32(0xc, (((w as u32) << 16) as i32 >> 8) as u32);
 }
 
-/// `+5` = 6, 8, 10 (0x927fa) : attend qu'un joueur revienne.
+/// `+5` = 6, 8, 10 (0x927fa): waits for a player to come back.
 fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, STAND);
@@ -306,7 +307,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     fight::steer(x);
 }
 
-/// `+5` = 12 (0x9282c) : prise d'un joueur : il perd des PV puis est relâché.
+/// `+5` = 12 (0x9282c): grab of a player: they lose HP then are released.
 fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(f::TARGET) as i16) >= 0 {
         return stand(x);
@@ -374,7 +375,7 @@ fn release<R: Bench>(x: &mut Cx<'_, R>) {
     stand(x);
 }
 
-/// `jsr 0x1a56` : un pas de script, rend vrai à la fin (retenue levée).
+/// `jsr 0x1a56`: one script step, returns true at the end (carry raised).
 fn step_anim<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }

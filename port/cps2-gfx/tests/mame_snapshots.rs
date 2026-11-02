@@ -1,5 +1,5 @@
-//! Non-régression du rendu : chaque instantané de testdata/vsnap (capturé par mame/vsnap.lua)
-//! doit donner exactement la capture PNG de MAME. Ignoré si les ROMs ou les instantanés manquent.
+//! Render non-regression: each snapshot in testdata/vsnap (captured by mame/vsnap.lua)
+//! must give exactly MAME's PNG capture. Ignored if the ROMs or the snapshots are missing.
 
 use std::path::{Path, PathBuf};
 
@@ -26,7 +26,7 @@ fn render_identical_to_mame() {
     let romdir = root().join("rom");
     let snaps = root().join("testdata/vsnap");
     if !romdir.join("dd2.13m").exists() || !snaps.exists() {
-        eprintln!("ROMs ou instantanés absents, test ignoré");
+        eprintln!("ROMs or snapshots missing, test skipped");
         return;
     }
     let gfx = rom::load_gfx(&romdir, rom::DDSOM_GFX, rom::DDSOM_GFX_SIZE).unwrap();
@@ -36,13 +36,13 @@ fn render_identical_to_mame() {
         .collect();
     frames.sort();
     assert!(!frames.is_empty());
-    // MAME numérote ses captures dans l'ordre des images
+    // MAME numbers its captures in frame order
     for (n, f) in frames.iter().enumerate() {
         let d = snaps.join(f.to_string());
         let gfxram = words(&d.join("gfxram.bin"));
         let cps_a: [u16; 32] = words(&d.join("cps_a.bin")).try_into().unwrap();
         let cps_b: [u16; 32] = words(&d.join("cps_b.bin")).try_into().unwrap();
-        // MAME affiche la table d'objets verrouillée au vblank précédent
+        // MAME displays the object table latched at the previous vblank
         let output: [u16; 6] = words(&d.join("prev_output.bin")).try_into().unwrap();
         let bank = std::fs::read_to_string(d.join("prev_objbank.txt")).unwrap();
         let objram = words(&d.join(if bank.trim() == "0" { "prev_objram1.bin" } else { "prev_objram2.bin" }));
@@ -55,6 +55,6 @@ fn render_identical_to_mame() {
         let img = render(&v, &gfx);
         let reference = read_png(&snaps.join(format!("png/ddsom/{n:04}.png")));
         let diff = img.iter().zip(&reference).filter(|(a, b)| a != b).count();
-        assert_eq!(diff, 0, "image {f} : {diff} pixels différents de MAME");
+        assert_eq!(diff, 0, "frame {f}: {diff} pixels differ from MAME");
     }
 }

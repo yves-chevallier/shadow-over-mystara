@@ -1,22 +1,22 @@
-//! Boss de type 9 (0x8a75c) : l'engin de guerre roulant de la scène 2 (h), avec son équipage. Voir
+//! Boss of type 9 (0x8a75c): the rolling war machine of stage 2 (h), with its crew. See
 //! `docs/families/boss.md`.
 //!
-//! L'engin roule d'un bord à l'autre de l'écran (plan de la caméra `A5+0x556`) ; ses parties (ESHL 0xd et 0xe) et
-//! son équipage (ENEMY 0x13 : un conducteur `+0xac` et quatre servants `+0xae..+0xb4`) sont des objets à part. Il
-//! n'a pas d'IA de combat : il passe, s'arrête, tire (ses parties font le travail, `+0xa8` / `+0xa9` : demandes et
-//! dégâts), et l'équipage perdu est remplacé. Ses coups reçus ne font que le secouer ; détruit, il quitte l'écran
-//! et la scène continue.
+//! The vehicle rolls from one edge of the screen to the other (camera plane `A5+0x556`); its parts (ESHL 0xd and 0xe)
+//! and its crew (ENEMY 0x13: a driver `+0xac` and four gunners `+0xae..+0xb4`) are separate objects. It has no
+//! combat AI: it passes by, stops, fires (its parts do the work, `+0xa8` / `+0xa9`: requests and
+//! damage), and the lost crew is replaced. Hits received only shake it; once destroyed, it leaves the screen
+//! and the stage goes on.
 //!
-//! | État | `+5` | Fichier | Rôle |
+//! | State | `+5` | File | Role |
 //! |---|---|---|---|
-//! | 0 | | `mod` | attend la place dans les pools ESHL et ENEMY, puis crée parties et conducteur |
-//! | 2 | 0 | `moves` | entrée en scène (dialogue, traversée de l'écran) |
-//! | 2 | 2, 4 | `moves` | passages d'un bord à l'autre, arrêts, tirs |
-//! | 2 | 6 | `moves` | attente tant qu'aucun joueur n'est en vie |
-//! | 4 | 0 | `hit` | coup reçu : secousse, puis reprise |
-//! | 4 | 2 | `hit` | détruit : sortie de l'écran, dialogue, chute |
+//! | 0 | | `mod` | waits for room in the ESHL and ENEMY pools, then creates parts and driver |
+//! | 2 | 0 | `moves` | stage entrance (dialogue, crossing the screen) |
+//! | 2 | 2, 4 | `moves` | passes from one edge to the other, stops, shots |
+//! | 2 | 6 | `moves` | wait while no player is alive |
+//! | 4 | 0 | `hit` | hit received: shake, then resumption |
+//! | 4 | 2 | `hit` | destroyed: exit from the screen, dialogue, fall |
 //!
-//! Animations : 0x17a276.
+//! Animations: 0x17a276.
 
 use crate::families::cx::Bench;
 use crate::objects::Current;
@@ -26,46 +26,46 @@ use crate::objects::Obj;
 mod hit;
 mod moves;
 
-/// Champs propres à ce type.
+/// Fields specific to this type.
 pub(self) mod g {
-    /// Compteur des bouffées de fumée (`+0x42` : et logique par un masque).
+    /// Counter of the smoke puffs (`+0x42`: logical AND with a mask).
     pub const PUFFS: u32 = 0x42;
-    /// Clignotement après la perte de l'équipage : durée, en cours.
+    /// Blinking after the loss of the crew: duration, in progress.
     pub const BLINK_TIME: u32 = 0x43;
     pub const BLINKING: u32 = 0x5c;
-    /// Fumée de l'avarie : posée une fois (`+0x5d`), au bout de `+0x78` images (mot).
+    /// Damage smoke: set once (`+0x5d`), after `+0x78` frames (word).
     pub const SMOKE_DONE: u32 = 0x5d;
     pub const SMOKE_DELAY: u32 = 0x78;
-    /// Bulle de dialogue en cours (mot, objet SET).
+    /// Dialogue bubble in progress (word, SET object).
     pub const MESSAGE: u32 = 0x68;
-    /// Passages restants, attente avant de repartir.
+    /// Passes remaining, wait before setting off again.
     pub const PASSES: u32 = 0x6b;
     pub const WAIT: u32 = 0x6e;
-    /// État à reprendre après un coup (long).
+    /// State to resume after a hit (long).
     pub const RESUME: u32 = 0x8a;
-    /// Secousse après un coup (images).
+    /// Shake after a hit (frames).
     pub const SHAKE: u32 = 0xa0;
-    /// Allure des roues (0 arrêt, 1 rapide, 2 au pas).
+    /// Wheel pace (0 stopped, 1 fast, 2 at walking pace).
     pub const GAIT: u32 = 0xa1;
     /// Minuterie (mot).
     pub const TIMER: u32 = 0xa2;
-    /// Avaries (bits posés par paliers de PV : 0x8b9ea), demandes aux parties (bit 0 tir, 3 et 4 bombardement).
+    /// Damage (bits set by HP thresholds: 0x8b9ea), requests to the parts (bit 0 shot, 3 and 4 bombardment).
     pub const DAMAGE: u32 = 0xa8;
     pub const ORDERS: u32 = 0xa9;
-    /// Équipage à créer (3 à l'entrée), puis 4 quand il n'y a plus de servants.
+    /// Crew to create (3 at the entrance), then 4 when there are no gunners left.
     pub const CREW_LOST: u32 = 0xaa;
-    /// Ruées restantes.
+    /// Rushes remaining.
     pub const DASHES: u32 = 0xab;
-    /// Conducteur et servants (mots).
+    /// Driver and gunners (words).
     pub const DRIVER: u32 = 0xac;
     pub const CREW: u32 = 0xae;
-    /// Servants actifs : bits, et nombre × 4.
+    /// Active gunners: bits, and number × 4.
     pub const CREW_BITS: u32 = 0xb6;
     pub const CREW_COUNT: u32 = 0xb7;
-    /// Abscisse visée par l'arrêt (mot).
+    /// X position aimed at by the stop (word).
     pub const STOP_X: u32 = 0xb8;
-    /// Compteurs : bombardements (`+0xb9`), arrêts (`+0xba`), descente/montée (`+0xbe`), attente du tir (`+0xbd`),
-    /// équipage avant clignotement (`+0xbf`).
+    /// Counters: bombardments (`+0xb9`), stops (`+0xba`), descent/climb (`+0xbe`), wait for the shot (`+0xbd`),
+    /// crew before blinking (`+0xbf`).
     pub const BOMBS: u32 = 0xb9;
     pub const STOPS: u32 = 0xba;
     pub const READY: u32 = 0xbd;
@@ -78,22 +78,22 @@ use crate::objects::pools;
 /// Jeu d'animations.
 pub(self) const SET: u32 = 0x17a276;
 
-/// Caméra du plan de l'engin (X, Y : `A5+0x556`, `A5+0x55a`).
+/// Camera of the vehicle's plane (X, Y: `A5+0x556`, `A5+0x55a`).
 pub(self) const CAM_X: u32 = 0x556;
 pub(self) const CAM_Y: u32 = 0x55a;
-/// Places libres des pools ENEMY et ESHL (mots).
+/// Free slots of the ENEMY and ESHL pools (words).
 pub(self) const ENEMY_FREE: u32 = 0x7e62;
 pub(self) const ESHL_FREE: u32 = 0x7e64;
-/// Mode « dur » (mot non nul) : vitesses de la table rapide.
+/// "Hard" mode (non-zero word): speeds from the fast table.
 pub(self) const HARD: u32 = 0x70;
 
 
-/// Un pas d'animation (0x1a56).
+/// One animation step (0x1a56).
 pub(self) fn anim<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
+/// Next step (`addq.b #2,(+6)` or `(+7)`).
 pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
@@ -111,39 +111,39 @@ pub(self) fn jolt<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xd, v);
 }
 
-/// Une image sur `mask` + 1 (`+0x42`), vrai.
+/// One frame in `mask` + 1 (`+0x42`), true.
 pub(self) fn every<R: Bench>(x: &mut Cx<'_, R>, mask: u8) -> bool {
     let n = x.u8(PUFFS).wrapping_add(1) & mask;
     x.set8(PUFFS, n);
     n == 0
 }
 
-/// Deux fumées (0xb10c8) : sorte `kind`, décalage `dx`.
+/// Two smoke puffs (0xb10c8): kind `kind`, offset `dx`.
 pub(self) fn smoke_pair<R: Bench>(x: &mut Cx<'_, R>, kind: u32, dx: u16) {
     for (dy, dz) in [(0x30, 0x28), (0x28, 8)] {
         lib::shock(x, kind, dx, dy, dz);
     }
 }
 
-/// 0x8ca22 : fumée de l'engin qui roule.
+/// 0x8ca22: smoke of the rolling vehicle.
 pub(self) fn smoke<R: Bench>(x: &mut Cx<'_, R>) {
     smoke_pair(x, 1, 0x100)
 }
 
-/// Une fumée toutes les `mask` + 1 images.
+/// A smoke puff every `mask` + 1 frames.
 pub(self) fn smoke_every<R: Bench>(x: &mut Cx<'_, R>, mask: u8) {
     if every(x, mask) {
         smoke(x);
     }
 }
 
-/// Fumée plus serrée quand l'équipage est réduit (plus de deux servants : une image sur 4, sinon sur 8).
+/// Tighter smoke when the crew is reduced (more than two gunners: one frame in 4, otherwise in 8).
 pub(self) fn crew_smoke<R: Bench>(x: &mut Cx<'_, R>) {
     let mask = if (x.u8(CREW_COUNT) as i8) > 8 { 3 } else { 7 };
     smoke_every(x, mask);
 }
 
-/// L'engin est-il sorti par le bord vers lequel il roule (`+0x2c` : 0 vers la gauche) ?
+/// Has the vehicle left through the edge it is rolling toward (`+0x2c`: 0 toward the left)?
 pub(self) fn past_edge<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = x.a5_u16(CAM_X);
     if x.u8(f::FLIP) == 0 {
@@ -153,19 +153,19 @@ pub(self) fn past_edge<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     }
 }
 
-/// `x + d - edge` négatif (`sub.w ; bge`) : l'engin est à gauche du bord.
+/// `x + d - edge` negative (`sub.w ; bge`): the vehicle is to the left of the edge.
 pub(self) fn left_of<R: Bench>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
     let a = x.u16(0x8).wrapping_add(d);
     Fl::sub16(a, edge).lt()
 }
 
-/// `x - d - edge` positif (`sub.w ; ble`) : l'engin est à droite du bord.
+/// `x - d - edge` positive (`sub.w ; ble`): the vehicle is to the right of the edge.
 pub(self) fn right_of<R: Bench>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
     let a = x.u16(0x8).wrapping_sub(d);
     Fl::sub16(a, edge).gt()
 }
 
-/// Plus de servants assez longtemps (`+0xbf` négatif) : l'engin clignote, et repart d'un passage.
+/// No gunners for long enough (`+0xbf` negative): the vehicle blinks, and sets off on a pass.
 pub(self) fn crew_gone<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u8(LIVES) as i8) >= 0 {
         return false;
@@ -178,26 +178,26 @@ pub(self) fn crew_gone<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// Fin d'un arrêt : clignotement si l'équipage est perdu, sinon nouveau passage (`+6` = 2, `+7` = 4).
+/// End of a stop: blinking if the crew is lost, otherwise a new pass (`+6` = 2, `+7` = 4).
 pub(self) fn stop_over<R: Bench>(x: &mut Cx<'_, R>) {
     if !crew_gone(x) {
         steps(x, 2, 4);
     }
 }
 
-// --- tables par difficulté (données de la ROM) ----------------------------------------------------
+// --- tables by difficulty (ROM data) ----------------------------------------------------
 
 fn difficulty<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     var::RANK.get(x.b) as u32
 }
 
-/// Octet de la table à une entrée par difficulté.
+/// Byte of the table with one entry per difficulty.
 fn per_level<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let d = difficulty(x);
     x.data8(table + d)
 }
 
-/// Octet tiré (`mask`) dans la table de la difficulté, dont l'adresse est dans la table de longs `lists`.
+/// Byte drawn (`mask`) from the difficulty's table, whose address is in the table of longs `lists`.
 fn draw<R: Bench>(x: &mut Cx<'_, R>, lists: u32, mask: u32) -> u8 {
     let d = difficulty(x);
     let at = x.data32(lists + 4 * d);
@@ -205,25 +205,25 @@ fn draw<R: Bench>(x: &mut Cx<'_, R>, lists: u32, mask: u32) -> u8 {
     x.data8(at + r)
 }
 
-/// 0x8c9ee : équipage perdu avant clignotement.
+/// 0x8c9ee: crew lost before blinking.
 pub(self) fn reset_lives<R: Bench>(x: &mut Cx<'_, R>) {
     let n = per_level(x, 0x8ca02).wrapping_sub(1);
     x.set8(LIVES, n);
 }
 
-/// 0x8c9ba : attente avant le tir.
+/// 0x8c9ba: wait before the shot.
 pub(self) fn reset_count<R: Bench>(x: &mut Cx<'_, R>) {
     let n = per_level(x, 0x8c9ce).wrapping_add(5);
     x.set8(COUNT, n);
 }
 
-/// 0x8c420 : ruées autorisées.
+/// 0x8c420: rushes allowed.
 pub(self) fn reset_dashes<R: Bench>(x: &mut Cx<'_, R>) {
     let n = per_level(x, 0x8c430);
     x.set8(DASHES, n);
 }
 
-/// 0x8beca : passages avant un arrêt.
+/// 0x8beca: passes before a stop.
 pub(self) fn draw_passes<R: Bench>(x: &mut Cx<'_, R>) {
     let n = draw(x, 0x8bef0, 0x1f).wrapping_sub(1);
     x.set8(PASSES, n);
@@ -235,13 +235,13 @@ pub(self) fn draw_bombs<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(BOMBS, n);
 }
 
-/// 0x8c576 : arrêts.
+/// 0x8c576: stops.
 pub(self) fn draw_stops<R: Bench>(x: &mut Cx<'_, R>) {
     let n = draw(x, 0x8c598, 0xf);
     x.set8(STOPS, n);
 }
 
-/// 0x8bc0c : attente avant de repartir, selon le nombre de joueurs, la difficulté et l'équipage.
+/// 0x8bc0c: wait before setting off again, according to the number of players, the difficulty and the crew.
 pub(self) fn reset_wait<R: Bench>(x: &mut Cx<'_, R>) {
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let list = x.data32(0x8bc3e + 4 * players);
@@ -253,7 +253,7 @@ pub(self) fn reset_wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(WAIT, n);
 }
 
-/// 0x8bcd2 : abscisse de l'arrêt, tirée devant l'engin.
+/// 0x8bcd2: X position of the stop, drawn in front of the vehicle.
 pub(self) fn draw_stop_x<R: Bench>(x: &mut Cx<'_, R>) {
     let d = difficulty(x);
     let list = (x.rom16(0x8bd08 + 4 * d) as u32) << 16 | x.rom16(0x8bd08 + 4 * d + 2) as u32;
@@ -264,7 +264,7 @@ pub(self) fn draw_stop_x<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(STOP_X, goal);
 }
 
-/// 0x8be88 : profondeur du passage selon celle de la cible (trois voies).
+/// 0x8be88: depth of the pass according to that of the target (three lanes).
 pub(self) fn pick_lane<R: Bench>(x: &mut Cx<'_, R>) {
     let lane: u32 = if x.u16(f::TARGET) == 0 {
         1
@@ -283,7 +283,7 @@ pub(self) fn pick_lane<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x10, z);
 }
 
-/// 0x8c988 : nouvelle cible (0x424e ou 0x44ee, au hasard).
+/// 0x8c988: new target (0x424e or 0x44ee, at random).
 pub(self) fn retarget<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let k = x.data8(0x8c9aa + r);
@@ -294,7 +294,7 @@ pub(self) fn retarget<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8bff0 : compte les servants actifs (état 0x0200) : bits en `+0xb6`, nombre × 4 en `+0xb7` ; aucun : `+0xaa` = 4.
+/// 0x8bff0: counts the active gunners (state 0x0200): bits in `+0xb6`, number × 4 in `+0xb7`; none: `+0xaa` = 4.
 pub(self) fn count_crew<R: Bench>(x: &mut Cx<'_, R>) {
     let (mut bits, mut count) = (0u8, 0u8);
     for k in 0..4u32 {
@@ -305,7 +305,7 @@ pub(self) fn count_crew<R: Bench>(x: &mut Cx<'_, R>) {
             bits |= 1 << k;
         }
     }
-    *x.c.d3() = bits as u32; // relu : D3 relu par la suite (DDSOM_POISON : covb_long3p_02)
+    *x.c.d3() = bits as u32; // re-read: D3 re-read afterwards (DDSOM_POISON : covb_long3p_02)
     *x.c.d4() = 4;
     *x.c.d5() = 0xffff;
     x.set8(CREW_BITS, bits);
@@ -315,7 +315,7 @@ pub(self) fn count_crew<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8c026 : vitesse de roulement selon l'équipage (table rapide en mode dur), allure des roues.
+/// 0x8c026: rolling speed according to the crew (fast table in hard mode), wheel pace.
 pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>) {
     let hard = x.a5_u16(HARD) != 0;
     let mut top = if hard { 0x800u16 } else { 0x680 };
@@ -340,7 +340,7 @@ pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x16, vz);
 }
 
-/// 0x8c1a0 : ruée (équipage au complet, tirage par joueurs et difficulté) : pleine vitesse ; vrai si lancée.
+/// 0x8c1a0: rush (full crew, draw by players and difficulty): full speed; true if launched.
 pub(self) fn try_dash<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(CREW_COUNT) != 0x10 || x.u8(DASHES) == 0 {
         return false;
@@ -364,7 +364,7 @@ pub(self) fn try_dash<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x8c124 / 0x8c132 : remplace les servants perdus (ENEMY 0x13, variante 2 sans aucun servant, 1 sinon).
+/// 0x8c124 / 0x8c132: replaces the lost gunners (ENEMY 0x13, variant 2 with no gunner at all, 1 otherwise).
 pub(self) fn refill_crew<R: Bench>(x: &mut Cx<'_, R>, all: bool) {
     if all {
         if x.u8(CREW_COUNT) == 0x10 {
@@ -395,7 +395,7 @@ pub(self) fn refill_crew<R: Bench>(x: &mut Cx<'_, R>, all: bool) {
     *x.c.d5() = slot as u32;
 }
 
-/// 0x8c8d2 : une cible au sol devant l'engin ? 1 tout près, 0 à portée de tir, 2 sinon.
+/// 0x8c8d2: a target on the ground in front of the vehicle? 1 very close, 0 within firing range, 2 otherwise.
 pub(self) fn target_range<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     let r = if x.u16(f::TARGET) == 0 {
         2
@@ -414,7 +414,7 @@ pub(self) fn target_range<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     r
 }
 
-/// 0x8c698 / 0x8c6a0 : arrêt de tir tiré par difficulté (`base` : 2 cible proche, 0xe cible à portée).
+/// 0x8c698 / 0x8c6a0: firing stop drawn by difficulty (`base`: 2 close target, 0xe target in range).
 pub(self) fn draw_halt<R: Bench>(x: &mut Cx<'_, R>, base: u8) {
     *x.c.d2() = base as u32;
     let level = (var::RANK.get(x.b) >> 1) << 5;
@@ -426,7 +426,7 @@ pub(self) fn draw_halt<R: Bench>(x: &mut Cx<'_, R>, base: u8) {
     x.set8(0x7, 0);
 }
 
-/// 0x8b9ea : avaries par paliers de huitièmes de PV (bits de `+0xa8`, cumulés).
+/// 0x8b9ea: damage by eighths of HP (bits of `+0xa8`, cumulative).
 pub(self) fn damage_bits<R: Bench>(x: &mut Cx<'_, R>) {
     let q = x.u16(0x60) >> 3;
     let hp = x.u16(f::HP) as i16;
@@ -455,9 +455,9 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
-/// 0x8a772 : hors cinématique, et dès qu'il y a la place (10 ESHL, 5 ENEMY) : parties, conducteur, position.
+/// 0x8a772: outside cutscene, and as soon as there is room (10 ESHL, 5 ENEMY): parts, driver, position.
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
@@ -480,7 +480,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::BOX_SET, 0x29);
     lib::initial_hp_boss(x);
     lib::set_immunities(x);
-    // deux parties 0xd (liées par `+0xa4`, `+0xa6`), huit parties 0xe
+    // two 0xd parts (linked by `+0xa4`, `+0xa6`), eight 0xe parts
     for (kind, last, linked) in [(0xdu8, 1u8, true), (0xe, 7, false)] {
         for k in (0..=last).rev() {
             *x.c.d5() = k as u32;
@@ -514,7 +514,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::FLIP, 0x20);
     x.set8(0x2d, 8);
     x.set16(0x10, 0x48);
-    // `move.w #-0x8000,D3 ; swap ; asr.l #16` : moins une demi-unité
+    // `move.w #-0x8000,D3 ; swap ; asr.l #16`: minus half a unit
     *x.c.d3() = 0xffff_8000;
     let z = x.u32(0x10).wrapping_add(0xffff_8000);
     x.set32(0x10, z);
@@ -524,9 +524,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_start(SET, 6);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
-/// 0x8a8c0 : gel, clignotement, un groupe par image, ombre ; sans cible ni joueur : attente.
+/// 0x8a8c0: freeze, blinking, one group per frame, shadow; with no target or player: wait.
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE);
     if freeze != 0 && (freeze as i8) > 0 {

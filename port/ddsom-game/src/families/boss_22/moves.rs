@@ -1,25 +1,25 @@
-//! Boss 22, états actifs de déplacement : arrivée (`+5` = 0), combat (2), courses et sauts (6 et 8), pause (10), joueur
-//! saisi (12), transformation (14).
+//! Boss 22, active movement states: arrival (`+5` = 0), combat (2), runs and jumps (6 and 8), pause (10), grabbed
+//! player (12), transformation (14).
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 
-/// Animation du corps `n` pour l'animation `id`, avec les réglages sonores `(0x27, 5)` et une vitesse `speed`.
+/// Body animation `n` for animation `id`, with the sound settings `(0x27, 5)` and a speed `speed`.
 fn body_pose<R: Bench>(x: &mut Cx<'_, R>, id: u8, n: u32, speed_n: u32) {
     sounds(x, 0x27, 5);
     pose(x, Set::A, id, n);
     speed(x, speed_n);
 }
 
-/// 0x1a56 : un pas d'animation (la retenue, fin du script, n'est pas utilisée).
+/// 0x1a56: one animation step (the carry, end of the script, is not used).
 pub(super) fn step_anim<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-// --- groupe 0 : arrivée ------------------------------------------------------------------------
+// --- group 0: arrival ------------------------------------------------------------------------
 
-/// 0x9b066 : attend (`+0xbc` images), puis tombe du haut de l'écran.
+/// 0x9b066: waits (`+0xbc` frames), then falls from the top of the screen.
 pub(super) fn arrive<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -88,7 +88,7 @@ pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Une cible au hasard (424e ou 44ee) d'après un tirage ; le résultat n'est pas utilisé.
+/// A random target (424e or 44ee) from a draw; the result is not used.
 fn pick_some_target<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     if 0xffc0u32 >> r & 1 != 0 {
@@ -98,7 +98,8 @@ fn pick_some_target<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9b180 : debout ; la marche tire sa durée dans `+0x6b`, `+0x71`, puis une attaque est choisie selon la portée.
+/// 0x9b180: standing; the walk draws its duration into `+0x6b`, `+0x71`, then an attack is chosen according to the
+/// range.
 fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     if target_far(x) {
         return x.set32(f::STATE, state::LEAP);
@@ -190,7 +191,8 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9b45c : le demi-tour continue tant que le boss est dans l'écran et que la cible est assez proche devant lui.
+/// 0x9b45c: the about-face continues as long as the boss is within the screen and the target is close enough in
+/// front of it.
 fn turn_not_needed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = var::SCROLL_X.get(x.b);
     if x.u8(f::FLIP) != 0 && (cam.wrapping_add(0x160).wrapping_sub(x.u16(0x8)) as i16) < 0 {
@@ -204,7 +206,7 @@ fn turn_not_needed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     d <= 0xe0 && x.u8(0x29) == 0
 }
 
-/// 0x9b51a : élan ; avec une chance sur huit, le boss se laisse tomber (état touché).
+/// 0x9b51a: run-up; with a one-in-eight chance, the boss lets itself drop (hit state).
 fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) != 0 {
         if sub8(x, IDLE_COUNT, 1).mi() {
@@ -240,7 +242,7 @@ fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9b5e6 : bond vers la cible, qui se retourne si besoin.
+/// 0x9b5e6: leap toward the target, which turns around if needed.
 fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -282,9 +284,9 @@ fn leap_pose<R: Bench>(x: &mut Cx<'_, R>) {
     body_pose(x, 3, 4, 0x1f);
 }
 
-// --- groupes 6 et 8 : course vers un point de l'écran -------------------------------------------
+// --- groups 6 and 8: run to a point on the screen -------------------------------------------
 
-/// 0x9c506 : course vers le point choisi (`+6` = 0), pause (2), bond (4 et 6).
+/// 0x9c506: run toward the chosen point (`+6` = 0), pause (2), leap (4 and 6).
 pub(super) fn run_to_spot<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => spot_run(x),
@@ -295,7 +297,7 @@ pub(super) fn run_to_spot<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9c90c : même chose après une attaque ; `+6` = 0 est une courte attente.
+/// 0x9c90c: same after an attack; `+6` = 0 is a short wait.
 pub(super) fn run_to_spot_after_attack<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => spot_wait(x),
@@ -344,7 +346,7 @@ fn spot_run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9c69c : marche courte vers l'avant puis retour au combat.
+/// 0x9c69c: short forward walk then return to combat.
 fn spot_pause<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -367,7 +369,7 @@ fn spot_pause<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9c924 : courte attente avant la course (`+0xa0` images), puis retour au combat ou demi-tour.
+/// 0x9c924: short wait before the run (`+0xa0` frames), then return to combat or about-face.
 fn spot_wait<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 | 4 => {
@@ -401,7 +403,7 @@ fn spot_wait<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Étape commune des bonds : attend l'image-clé, monte, redescend, retombe.
+/// Common step of the leaps: waits for the key frame, rises, descends, lands.
 fn leap_rise_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
@@ -443,7 +445,7 @@ fn leap_end<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9c74a : grand bond vers l'avant (vitesse horizontale).
+/// 0x9c74a: big forward leap (horizontal speed).
 fn spot_leap_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -469,7 +471,7 @@ fn spot_leap_a<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9c7d2 : grand bond de côté (vitesse en profondeur tirée au hasard).
+/// 0x9c7d2: big sideways leap (depth speed drawn at random).
 fn spot_leap_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -500,7 +502,7 @@ fn spot_leap_b<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- groupe 10 : pause ----------------------------------------------------------------------------
 
-/// 0x9ca0a : sans joueur en vie, le boss attend (animation de repos de sa forme) ; sinon il reprend.
+/// 0x9ca0a: with no player alive, the boss waits (rest animation of its form); otherwise it resumes.
 pub(super) fn paused<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         if second_form(x) {
@@ -598,10 +600,10 @@ fn release_prey<R: Bench>(x: &mut Cx<'_, R>) {
     lib::release_player(x, prey);
 }
 
-// --- groupe 14 : transformation en seconde forme ----------------------------------------------------
+// --- group 14: transformation into the second form ----------------------------------------------------
 
-/// 0xffda : tirage dont les chances (un bit par résultat, mot de la table 0xfff4 choisi par la difficulté) décident si la
-/// transformation s'enchaîne sur une riposte.
+/// 0xffda: draw whose chances (one bit per result, word of table 0xfff4 chosen by difficulty) decide whether the
+/// transformation chains into a counterattack.
 fn flee_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let row = (((var::RANK.get(x.b) >> 3) << 1)) as u32;
     let chances = x.rom16(0xfff4 + row);

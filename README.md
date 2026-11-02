@@ -95,28 +95,28 @@ Capturer de nouveaux instantanés : `VSNAP="f1 f2 ..." VSNAP_DIR=... SCENARIO=..
 
 ## Jouer au port Rust
 
-    ./jouer.sh
+    ./play.sh
 
 Touches (comme MAME) : `5` pièce, `1` Start, flèches, `Ctrl`/`Alt`/`Espace`/`Maj` (ou `W` `X` `C` `V`)
 = boutons 1 à 4 ; joueur 2 : `R F D G`, `A S Q`, `6` pièce, `2` Start ; `F2` test, `P` pause,
 `Tab` avance rapide, `F11` plein écran, `Échap` quitter (sauvegarde l'EEPROM dans `nvram/`).
 
-Les touches se changent dans `touches.cfg`, créé au premier lancement (`action = touches`, noms
+Les touches se changent dans `touches.cfg`, créé au premier lancement (`action = keys`, noms
 minifb : `Left`, `LeftCtrl`, `A`, `Key1`, `NumPad0`…). Lettres et chiffres suivent la disposition
-du clavier (en AZERTY, `Key1` demande `Maj`) : `DDSOM_TOUCHES=1 ./jouer.sh` affiche le nom des
+du clavier (en AZERTY, `Key1` demande `Maj`) : `DDSOM_TOUCHES=1 ./play.sh` affiche le nom des
 touches pressées.
 
 `F5` sauvegarde la partie (`sauvegardes/rapide.txt`), `F9` la reprend : le jeu rejoue sans affichage les
 entrées depuis le démarrage (quelques secondes pour une longue partie). Le fichier est un scénario
 rejouable par `validate` (avec `rapide.txt.eeprom`).
 
-Sous Windows, `jouer.bat` (lançable depuis `\\wsl.localhost\...`) compile et lance `ddsom.exe` avec le
+Sous Windows, `play.bat` (lançable depuis `\\wsl.localhost\...`) compile et lance `ddsom.exe` avec le
 Rust Windows (MSVC) : son par waveOut et manettes Xbox par XInput (`Pad1A`, `Pad1Haut`… dans
 `touches.cfg`, A B X Y = boutons 1 à 4, Start = Start, Back = pièce). Avec un dossier `assets\` à
 la racine (produit par `extract`, voir plus bas), il joue sans aucune ROM ; sinon il prépare `rom\`
 depuis `ddsom.zip` et `qsound.zip`.
 
-Son : `DDSOM_SON_RUST=1 ./jouer.sh` remplace le programme du Z80 par le pilote Rust (`ddsom-sound`).
+Son : `DDSOM_SON_RUST=1 ./play.sh` remplace le programme du Z80 par le pilote Rust (`ddsom-sound`).
 
 Sans ROM : une fois les ressources extraites (ci-dessous), `port/target/release/ddsom --assets
 assets` joue sans aucun fichier ROM ni 68000 (routines Rust seules, pilote son Rust) ; voir

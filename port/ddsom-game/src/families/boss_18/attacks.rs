@@ -1,17 +1,17 @@
-//! Boss 18, groupe `+5` = 4 : les attaques (`+6` = 0 à 20), chacune en étapes `+7`.
+//! Boss 18, group `+5` = 4: the attacks (`+6` = 0 to 20), each in steps `+7`.
 //!
-//! | `+6` | Attaque |
+//! | `+6` | Attack |
 //! |---|---|
-//! | 0 | coup simple (animation 0 des coups) |
-//! | 2 | pas de côté (quatre temps, vitesse du pas `+0x16`) |
-//! | 4 | geste puis suite tirée selon le nombre de joueurs (attaque 4 au plus `+0xae` fois) |
-//! | 6 | poursuite magique (`+0xb8` images, visée toutes les 2) |
-//! | 8 | bond en arrière avec retombée |
-//! | 10, 12 | tir ESHL 0x20 (boule) ou 0x21 (rayon) |
-//! | 14 | onde de choc : les joueurs au sol sont renversés |
-//! | 16 | téléportation (disparaît, réapparaît ailleurs) |
-//! | 18 | pluie de 16 tirs ESHL 0x23 |
-//! | 20 | tirs successifs ESHL 0x24 (nombre tiré d'une table) |
+//! | 0 | simple hit (animation 0 of the hits) |
+//! | 2 | sidestep (four beats, step speed `+0x16`) |
+//! | 4 | gesture then follow-up drawn according to the number of players (attack 4 at most `+0xae` times) |
+//! | 6 | magic pursuit (`+0xb8` frames, aiming every 2) |
+//! | 8 | backward leap with landing |
+//! | 10, 12 | ESHL 0x20 (ball) or 0x21 (beam) shot |
+//! | 14 | shockwave: players on the ground are knocked down |
+//! | 16 | teleportation (disappears, reappears elsewhere) |
+//! | 18 | rain of 16 ESHL 0x23 shots |
+//! | 20 | successive ESHL 0x24 shots (number drawn from a table) |
 
 use crate::families::cx::Bench;
 use super::decide;
@@ -41,7 +41,7 @@ fn strike_anim<R: Bench>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     strike(x, n);
 }
 
-/// Fin d'attaque : l'absence de joueurs l'emporte ; sinon `to`.
+/// End of attack: the absence of players takes precedence; otherwise `to`.
 fn finish<'a, R: Bench>(x: &mut Cx<'a, R>, to: fn(&mut Cx<'a, R>)) {
     if !lib::players_alive(x) {
         return decide::wait(x);
@@ -53,7 +53,7 @@ fn step_only<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// Consomme le bit 0 de l'image-clé `+0x33`.
+/// Consumes bit 0 of the key frame `+0x33`.
 fn key_bit0<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(f::KEY_FRAME) & 1 == 0 {
         return false;
@@ -63,13 +63,13 @@ fn key_bit0<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// Fin d'un tir : l'état de la scène est rendu (`A5+0x43`), puis `to`.
+/// End of a shot: the stage state is restored (`A5+0x43`), then `to`.
 fn end_shot<'a, R: Bench>(x: &mut Cx<'a, R>, to: fn(&mut Cx<'a, R>)) {
     set_abs8(x, 0xff8043, 0xff);
     finish(x, to);
 }
 
-/// Un pas de l'animation, plus un dernier effet par image-clé (0xe5e2a).
+/// One animation step, plus one last effect per key frame (0xe5e2a).
 fn step_with_spark<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::step(x) {
         if key_bit0(x) {
@@ -98,7 +98,7 @@ fn strike_0<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 2 : pas de côté -----------------------------------------------------------------------
+// --- +6 = 2: sidestep -----------------------------------------------------------------------
 
 fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
@@ -179,7 +179,7 @@ fn gesture<R: Bench>(x: &mut Cx<'_, R>) {
                 return decide::stand(x);
             }
             if pick == 1 {
-                // 0x9900a : la charge
+                // 0x9900a: the charge
                 x.set8(VULNERABLE, 0);
                 x.set8(SHOT, 0x2a);
                 return x.set32(f::STATE, 0x0202_0800);
@@ -248,7 +248,7 @@ fn end_chase<R: Bench>(x: &mut Cx<'_, R>) {
     finish(x, decide::chase);
 }
 
-// --- +6 = 8 : bond en arrière --------------------------------------------------------------------
+// --- +6 = 8: backward leap --------------------------------------------------------------------
 
 fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
@@ -433,7 +433,7 @@ fn beam<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 14 : onde de choc ----------------------------------------------------------------------
 
-/// 0x9931a : un nuage (effet 0x32, variante 15) derrière le Lich.
+/// 0x9931a: a cloud (effect 0x32, variant 15) behind the Lich.
 fn dust<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(e) = x.alloc(&pools::EFFCT) else { return };
     e.set_u8(x.b, 0, 1);
@@ -456,7 +456,7 @@ fn dust<R: Bench>(x: &mut Cx<'_, R>) {
     e.set_u32(x.b, 0x10, ny);
 }
 
-/// 0x9921c : à la troisième pulsation, les joueurs au sol qui ne sont pas déjà à terre sont renversés.
+/// 0x9921c: on the third pulse, players on the ground who are not already down are knocked over.
 fn topple_all<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(COUNT) != 3 {
         return;
@@ -474,7 +474,7 @@ fn topple_all<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x99274 : lâche des projectiles autour de la caméra (0x5f764) tant qu'aucun n'est en jeu.
+/// 0x99274: drops projectiles around the camera (0x5f764) as long as none is in play.
 fn spawn_blast<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(SPAWNED) as i8) > 0 {
         return;
@@ -500,7 +500,7 @@ fn spawn_blast<R: Bench>(x: &mut Cx<'_, R>) {
         }
         d5 = d5.wrapping_sub(1);
     }
-    // `dbf D5` : D5.w = -1 en sortie (reste ; le mot haut est celui de l'appelant)
+    // `dbf D5`: D5.w = -1 on exit (leftover; the high word is the caller's)
     *x.c.d5() = *x.c.d5() & 0xffff_0000 | 0xffff;
 }
 
@@ -575,9 +575,9 @@ fn shockwave<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 16 : téléportation ----------------------------------------------------------------------
+// --- +6 = 16: teleportation ----------------------------------------------------------------------
 
-/// 0x99184 : réapparition dans l'un des neuf points autour de la caméra, selon la position du Lich.
+/// 0x99184: reappearance at one of the nine points around the camera, depending on the Lich's position.
 fn place_after_teleport<R: Bench>(x: &mut Cx<'_, R>) {
     let cam = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
     let here = x.u16(0x8);

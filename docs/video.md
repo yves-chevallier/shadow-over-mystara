@@ -52,7 +52,7 @@ miroirs en 5 et 6...). Les cases sont rangées par colonnes pour la couche de te
   | 0x26d4 | 8x8 | 2x2 | `0x1f9ba0 + 0x80 D0` | table de code `0x275a`, par tranche de 32 Ko d'indices, `+16 i` | `0x1800` | `0x40` | `0x1000` |
   | 0x2766 | 4x4 | 2x2 | `0x2459c0 + 0x20 D0` | table de code `0x27e6`, par tranche de 8 Ko d'indices, `+16 i` | `0x1f00` | `0x20` | `0x800` |
 
-  Fin de ligne de blocs : la destination avance de `cases x pas de ligne` et revient dans sa page (A1 mod
+  Fin de ligne de blocs : la destination avance de `cases x step de line` et revient dans sa page (A1 mod
   taille de page). Rend D0 = `0xffff`, A1 = destination finale, A2 = fin des indices. 0x2a52 (non native) appelle
   0x26d4 huit fois pour remplir `0x916000-0x917c00` (scroll 3).
 
@@ -82,12 +82,12 @@ bibliothèque ; un déplacement négatif laisse la palette en place.
 
 ### Fondus
 
-Code : `taches/fondu.rs` (tâches et sous-programmes), `palette.rs` (un pas). Deux familles, toutes pas à pas : un
+Code : `tasks/fading.rs` (tâches et sous-programmes), `palette.rs` (un pas). Deux familles, toutes pas à pas : un
 pas, puis une cession de `A5+0x490` images (D0.w, `jsr 0xa40`) tant que le compte `A5+0x48f` n'est pas épuisé.
 Chacune existe sous deux formes : une **tâche** (créée par `0x9b6`, emplacement 0x10 le plus souvent, elle se
 termine par `jsr 0x9f8`) et un **sous-programme** appelé par `jsr`, qui ne revient qu'à la fin du fondu (l'appelant
 attend). Chaque adresse qui suit une cession porte la native du pas suivant ; un appelant Rust d'un sous-programme
-passe par `Sequence::tail(entrée, reprise)`.
+passe par `Sequence::tail(entrée, resume)`.
 
 1. **Luminosité** : chaque pas ajoute ±0x1000 à toutes les couleurs des pages cochées (`A5+0x48e`), dont les
    adresses sont écrites à `A5+0x492 + 4 k`. Une page est sautée si sa première couleur est déjà à la butée (0 ou
@@ -160,11 +160,11 @@ saccades » `0x30f6a`, pas de 16 au plus).
 ### Carte du décor
 
 * Caméra 1 : table d'indices de blocs en ROM `0x1f9ba0` ; chaque indice choisit un bloc de 2x2 cases (16
-  octets, quatre cases `(tuile, attribut)`) dans l'une de 4 banques (`0x320f6`, quatre longs lus en espace
-  données). La position `p = adresse - 0x1f9ba0` donne : banque `(p >> 16) & 0xc` (octet), indice à
+  octets, quatre cases `(tile, attr)`) dans l'une de 4 banques (`0x320f6`, quatre longs lus en espace
+  données). La position `p = address - 0x1f9ba0` donne : banque `(p >> 16) & 0xc` (octet), indice à
   `0x1f9ba0 + (c & 0xe) + ((c >> 1) & 0x3fff0)` avec `c = p >> 2`, case du bloc `((p >> 3) & 8) + (p & 4)`.
   Les bandes de la carte (1 Ko d'indices) sont désignées par une table propre à la scène : `0x2ff94 + 4 s`
-  (espace programme) donne l'adresse d'un tableau de mots ; `bande = mot[curseur]`, adresse `0x1f9ba0 + (bande << 10)`.
+  (espace programme) donne l'adresse d'un tableau de mots ; `band = word[curseur]`, adresse `0x1f9ba0 + (band << 10)`.
 * Caméra 2 : mêmes principes avec la carte `0x2459c0`, 16 banques (`0x33a9c`), `c & 6`, `(c >> 1) & ~7`,
   `((p >> 2) & 8) + (p & 4)`, bandes de 256 octets (`0x32d7c + 4 s`).
 * Cases écrites : `case + 0x18000000` (caméra 1) / `case + 0x1f000000` (caméra 2) : décalage de tuile. Si
@@ -202,7 +202,7 @@ Initialisation propre à chaque scène (`0x2ede0` première image, `0x32108` ide
 * `palette.rs` : l'éclair (`0x1ab56` grise les palettes `0x91c800` et `0x91c3a0` après les avoir mises en
   réserve en `0xff1190`, `0x1ac24` la réserve, `0x1abe0` la remet).
 * `popups.rs` : dessin des bulles (`0x19ee0` effacement, `0x19f24` cadre, `0x19fd2` texte, `0x1a20e` bord) en Rust.
-* `aides.rs` : `0x1386` (direction 0 à 31 entre deux points), `0x2810` (objet saisi), `0x28d8` (tous les joueurs à
+* `aids.rs` : `0x1386` (direction 0 à 31 entre deux points), `0x2810` (objet saisi), `0x28d8` (tous les joueurs à
   terre : fin de partie).
 * `sprites.rs` : `0x1de7c` vide les têtes de listes. **`0x1de96` n'est pas exécuté en 68000** : l'inventaire le lui attribuait à
   cause de l'`rts` en `0x1df12`, partagé par `0x1ee1a` (listes triées) comme sortie.

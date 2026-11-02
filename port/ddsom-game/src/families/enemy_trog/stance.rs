@@ -1,5 +1,5 @@
-//! Type 2, troglodyte debout (`+5 = 2`) et au repos (`+5 = 10`). `+6` : 0 marche vers la cible et
-//! décide d'attaquer, 2 demi-tour, 4 attente, 6 bond d'approche.
+//! Type 2, standing troglodyte (`+5 = 2`) and at rest (`+5 = 10`). `+6`: 0 walks toward the target and decides to
+//! attack, 2 turn-around, 4 wait, 6 approach leap.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -33,7 +33,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5a08a : le troglodyte se met en marche vers sa cible.
+/// 0x5a08a: the troglodyte starts walking toward its target.
 fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(AI_SHOT, 0x14);
@@ -46,7 +46,7 @@ fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
     lib::draw_6b(x);
 }
 
-/// 0x5a0ce : marche ; se retourne, attend ou attaque ; saisi par un joueur, il part en chute.
+/// 0x5a0ce: walk; turns around, waits or attacks; grabbed by a player, it goes into a fall.
 fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     lib::approach_target(x);
     if grabbed(x) {
@@ -74,7 +74,7 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     decide(x);
 }
 
-/// 0x5a13c : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
+/// 0x5a13c: a player in range? If so, attacks; otherwise advances by one animation step.
 fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x20, 0x20, 8) {
         set_state_long(x, 0x0204_1600);
@@ -108,7 +108,7 @@ fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5b002 : un coup est tiré dans la ligne de la difficulté ; il sera joué après l'annonce.
+/// 0x5b002: an attack is drawn from the difficulty row; it will be played after the announcement.
 pub(super) fn pick_attack_close<R: Bench>(x: &mut Cx<'_, R>) {
     let table = if x.u8(SERIES) != 0 { CLOSE_ATTACKS_ARMED } else { CLOSE_ATTACKS };
     let mv = pick_byte(x, table);
@@ -125,7 +125,7 @@ pub(super) fn pick_attack_close<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB2, 0x16);
 }
 
-/// 0x5b474 : coup d'approche, 0x12 ou 0x14 au hasard.
+/// 0x5b474: approach attack, 0x12 or 0x14 at random.
 pub(super) fn pick_attack_far<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     x.set8(RESUME, 0x12);
@@ -137,7 +137,7 @@ pub(super) fn pick_attack_far<R: Bench>(x: &mut Cx<'_, R>) {
     blink_if_running(x);
 }
 
-/// 0x5a208 : bond de la série 1 vers la cible.
+/// 0x5a208: leap of series 1 toward the target.
 fn begin_jump<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB2, 6);
     x.set8(f::SUB3, 2);
@@ -151,7 +151,7 @@ fn begin_jump<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 0xa);
 }
 
-/// `+6` = 6 : bond d'approche (étape 0 : envol, 2 : montée et chute, 4 : réception).
+/// `+6` = 6: approach leap (step 0: take-off, 2: climb and fall, 4: landing).
 fn jump<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_jump(x),
@@ -176,7 +176,7 @@ fn jump<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// `+6` = 2 : demi-tour (animation 1, puis inversion de l'orientation).
+/// `+6` = 2: turn-around (animation 1, then orientation inversion).
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -208,7 +208,7 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-/// Sous-état 10 : repos jusqu'à ce qu'un joueur soit en vie.
+/// Substate 10: rest until a player is alive.
 pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         return rest_begin(x);

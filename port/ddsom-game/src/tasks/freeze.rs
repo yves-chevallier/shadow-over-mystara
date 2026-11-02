@@ -1,13 +1,13 @@
-//! Tâche du gel (`0xee080`, emplacement 14 de la table) : attente active et « avance rapide ».
+//! Freeze task (`0xee080`, slot 14 of the table): busy wait and "fast forward".
 //!
-//! À chaque passage de l'ordonnanceur elle fait ce que fait le VBLANK pour les tâches qui dorment, mais
-//! seulement pour la tâche principale (emplacement 0), et seulement quand un joueur présent presse un bouton
-//! pendant une partie : le jeu enchaîne alors ses pas sans attendre l'image (voir `docs/looped.md` §1). Dans tous
-//! les autres cas elle cède la main sans rien faire (`Wait::Ready`) : c'est l'attente active qui occupe le
-//! processeur surcadencé ([`idle_wait`] la reconnaît).
+//! On each pass of the scheduler it does what VBLANK does for sleeping tasks, but
+//! only for the main task (slot 0), and only when a present player presses a button
+//! during a game: the game then chains its steps without waiting for the frame (see `docs/looped.md` §1). In all
+//! other cases it cedes control doing nothing (`Wait::Ready`): this is the busy wait that occupies the
+//! overclocked processor ([`idle_wait`] recognizes it).
 //!
-//! Le pas est le même à l'entrée (`0xee080`, tâche neuve) et après chacune des deux cessions (`0xee0fa`,
-//! `0xee16a` : l'original reboucle par un `bra 0xee080`) : trois étapes ([`Step`]), un seul pas.
+//! The step is the same at entry (`0xee080`, new task) and after each of the two cessions (`0xee0fa`,
+//! `0xee16a`: the original loops back with a `bra 0xee080`): three stages ([`Step`]), a single step.
 
 use super::table::{record, table, State, Resume, Table, SLOTS};
 use super::{cede, Wait};
@@ -15,38 +15,38 @@ use crate::mem::{set_low_byte, set_low_word, A5};
 use crate::modes::Flow;
 use crate::scene::Ctx;
 
-/// Variables de la RAM de travail (décalages depuis A5).
+/// Work RAM variables (offsets from A5).
 mod var {
-    /// Mot de réglages (DSW) : le bit 7 vaut 1 en marche normale.
+    /// Settings word (DSW): bit 7 is 1 in normal operation.
     pub const DSW: u32 = 0x7fd0;
-    /// Partie en cours, et écran de jeu actif.
+    /// Game in progress, and active game screen.
     pub const GAME: u32 = 0x30;
     pub const SCREEN: u32 = 0x33;
-    /// Boutons des quatre joueurs (`A5+0..3`) et leurs drapeaux de présence.
+    /// Buttons of the four players (`A5+0..3`) and their presence flags.
     pub const BUTTONS: u32 = 0;
     pub const PRESENT: [u32; 4] = [0x5de, 0x7de, 0x9de, 0xbde];
 }
 
-/// Emplacement de la tâche du gel, et celui de la tâche principale.
+/// Slot of the freeze task, and that of the main task.
 pub const SLOT: usize = 14;
 const MAIN: usize = 0;
-/// Bits de bouton qui comptent.
+/// Button bits that count.
 const BUTTON_MASK: u8 = 0x16;
-/// Bit du mot de réglages qui désigne la marche normale.
+/// Bit of the settings word designating normal operation.
 const NORMAL: u16 = 0x80;
 
 crate::steps! {
-    /// Étapes de la tâche : son entrée, et les retours de ses deux cessions.
+    /// Stages of the task: its entry, and the returns from its two cessions.
     pub enum Step {
         Entry = 0xee080 => step,
-        /// Après une cession sans effet.
+        /// After a cession with no effect.
         AfterCession = 0xee0fa => step,
-        /// Après une cession qui a décompté la tâche principale.
+        /// After a cession that counted down the main task.
         AfterCountdown = 0xee16a => step,
     }
 }
 
-/// Un pas : l'effet du passage, puis la cession.
+/// One step: the effect of the pass, then the cession.
 fn step(x: &mut Ctx) -> Flow {
     let normal = x.v16(var::DSW) & NORMAL;
     set_low_word(&mut x.c.d[0], normal);
@@ -61,7 +61,7 @@ fn step(x: &mut Ctx) -> Flow {
     cede(x, Wait::Ready, resume)
 }
 
-/// `0xee0ce` (réglages sans le bit 7, jamais vus dans ce jeu) : décompte comme le VBLANK, pour toutes les tâches.
+/// `0xee0ce` (settings without bit 7, never seen in this game): countdown like VBLANK, for all tasks.
 fn wake_all(x: &mut Ctx) {
     let tasks = table(x.b);
     for slot in 0..SLOTS {
@@ -71,8 +71,8 @@ fn wake_all(x: &mut Ctx) {
     set_low_word(&mut x.c.d[0], 0xffff);
 }
 
-/// `0xee0fc` : si un joueur présent presse un bouton, la tâche principale perd une image d'attente. Rend
-/// l'étape qui suit la cession.
+/// `0xee0fc`: if a present player presses a button, the main task loses one wait frame. Returns
+/// the stage that follows the cession.
 fn fast_forward(x: &mut Ctx) -> Step {
     x.c.d[0] = 0;
     for (player, present) in var::PRESENT.into_iter().enumerate() {
@@ -90,23 +90,23 @@ fn fast_forward(x: &mut Ctx) -> Step {
     Step::AfterCountdown
 }
 
-/// L'ordonnanceur tourne à vide : la tâche du gel est la seule prête, elle vient de céder la main, et son prochain
-/// pas ne ferait rien. L'état du jeu ne peut plus changer avant la prochaine interruption : `idle` (`lib.rs`) peut
-/// avancer jusqu'à elle. `ram` est la RAM de travail (FF0000-FFFFFF).
+/// The scheduler is idling: the freeze task is the only one ready, it has just ceded control, and its next
+/// step would do nothing. The game state cannot change before the next interrupt: `idle` (`lib.rs`) can
+/// advance up to it. `ram` is the work RAM (FF0000-FFFFFF).
 pub fn idle_wait(tasks: &Table, ram: &[u16]) -> bool {
     let ready = |slot: usize| tasks.slots[slot].state.castable();
     if !ready(SLOT) || (0..SLOTS).any(|slot| slot != SLOT && ready(slot)) {
         return false;
     }
-    // elle a cédé par `jsr 0xa86` depuis l'une de ses deux cessions, et c'est la dernière tâche lancée
-    // (l'état de l'ordonnanceur est alors celui de chaque passage suivant)
+    // it ceded through `jsr 0xa86` from one of its two cessions, and it is the last task launched
+    // (the scheduler state is then that of each following pass)
     let ceded = matches!(tasks.slots[SLOT].resume, Resume::Step(super::Step::Freeze(Step::AfterCession | Step::AfterCountdown)));
     let main_waiting = tasks.slots[MAIN].state == State::Waiting;
     ceded && tasks.current == SLOT && !step_would_act(ram, main_waiting)
 }
 
-/// Même test sur la table de la RAM d'une machine d'origine (enregistrements FF0064 : état, PC de reprise `0xa8c`
-/// de l'enveloppe, pile où l'adresse de retour suit les 15 registres sauvés ; tâche courante en FF0056).
+/// Same test on the RAM table of a reference machine (records FF0064: state, resume PC `0xa8c`
+/// of the wrapper, stack where the return address follows the 15 saved registers; current task at FF0056).
 pub fn idle_wait_original(ram: &[u16]) -> bool {
     let byte = |a: u32| (ram[(a as usize & 0xffff) / 2] >> if a & 1 == 0 { 8 } else { 0 }) as u8;
     let long = |a: u32| (ram[(a as usize & 0xffff) / 2] as u32) << 16 | ram[(a as usize & 0xffff) / 2 + 1] as u32;
@@ -123,8 +123,8 @@ pub fn idle_wait_original(ram: &[u16]) -> bool {
     !step_would_act(ram, main_waiting)
 }
 
-/// Le prochain pas ferait quelque chose : réglages sans le bit 7 (tout décompter), ou un joueur présent presse un
-/// bouton en partie alors que la tâche principale attend.
+/// The next step would do something: settings without bit 7 (count everything down), or a present player presses a
+/// button in game while the main task is waiting.
 fn step_would_act(ram: &[u16], main_waiting: bool) -> bool {
     let byte = |a: u32| (ram[(a as usize & 0xffff) / 2] >> if a & 1 == 0 { 8 } else { 0 }) as u8;
     let var = |offset: u32| A5.wrapping_add(offset);

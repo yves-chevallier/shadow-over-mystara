@@ -1,21 +1,21 @@
-//! Phase 4 (`0x1ca20`) : sélection des personnages.
+//! Phase 4 (`0x1ca20`): character selection.
 //!
-//! Après la mise de départ, la partie commence par cette phase : chaque joueur présent déplace un
-//! curseur sur les douze cases (six personnages, deux variantes chacun), un compte à rebours de
-//! trente secondes force le choix, deux joueurs ne peuvent pas prendre la même case. Quand tous ont
-//! validé, la phase passe à 8 (entrée de la première scène).
+//! After the opening bet, the game starts with this phase: each present player moves a
+//! cursor over the twelve cells (six characters, two variants each), a thirty-second countdown
+//! forces the choice, two players cannot take the same cell. When everyone has
+//! confirmed, the phase moves to 8 (entry of the first scene).
 //!
-//! La phase est une machine à états (`A5+0x2d`, pas de 2) qui fait un pas par image ; seules les
-//! étapes d'ouverture et de fermeture cèdent la main (fondus), à des adresses d'origine reprises par
-//! des étapes Rust (`steps!`).
+//! The phase is a state machine (`A5+0x2d`, step of 2) that takes one step per frame; only the
+//! opening and closing steps cede control (fades), at original addresses taken up by
+//! Rust steps (`steps!`).
 //!
-//! | Étape | Rôle |
+//! | Step | Role |
 //! |---|---|
-//! | 0 | écran de sélection : objets curseurs (`ae776`), fond, fondu d'ouverture |
-//! | 2 | curseurs des joueurs, file d'attente, décompte (30 s) |
-//! | 4 | attente de 20 images avant la suite |
-//! | 6 | joueurs figés dans leur personnage, fondu, écran d'attente |
-//! | 8 | fond du second écran (choix de route), objets |
+//! | 0 | selection screen: cursor objects (`ae776`), background, opening fade |
+//! | 2 | player cursors, waiting queue, countdown (30 s) |
+//! | 4 | wait of 20 frames before continuing |
+//! | 6 | players frozen on their character, fade, waiting screen |
+//! | 8 | background of the second screen (route choice), objects |
 //! | 10 / 12 | attente d'un bouton, annonce clignotante |
 //! | 14 | fondu final, phase 8 |
 
@@ -29,14 +29,14 @@ use crate::scene::{Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::video::{load_grid, clear_layer, Layer, Grid};
 use crate::Native;
 
-/// Variables de la RAM de travail (adresses absolues).
+/// Work RAM variables (absolute addresses).
 mod var {
     use crate::mem::A5;
-    /// Phase de partie, étape (octets), sous-étape (mot).
+    /// Game phase, step (bytes), sub-step (word).
     pub const PHASE: u32 = A5 + 0x2c;
     pub const STEP: u32 = A5 + 0x2d;
     pub const SUB: u32 = A5 + 0x2e;
-    /// Joueurs figés (≠ 0) ; partie active ; boutons ; masque des joueurs en jeu.
+    /// Frozen players (!= 0); game active; buttons; mask of players in play.
     pub const PLAYERS_FROZEN: u32 = A5 + 0x4a;
     pub const GAME_ACTIVE: u32 = A5 + 0x30;
     pub const BUTTONS_A: u32 = A5 + 4;
@@ -53,14 +53,14 @@ mod var {
     pub const CAMERA_Y: u32 = A5 + 0x50a;
     pub const CAMERA_2: u32 = A5 + 0x556;
     pub const CAMERA_2_Y: u32 = A5 + 0x55a;
-    /// Annonce clignotante : adresse de texte (long), abscisse et ordonnée.
+    /// Blinking announcement: text address (long), x and y.
     pub const BANNER: u32 = A5 + 0x5c6;
     pub const BANNER_X: u32 = A5 + 0x5ca;
     pub const BANNER_Y: u32 = A5 + 0x5cc;
-    /// Indicateur d'écran en attente (octet à FF0EAB).
+    /// Waiting-screen flag (byte at FF0EAB).
     pub const SCREEN_WAIT: u32 = A5 - 0x7155;
 
-    /// Mot de décompte (octet haut : secondes, octet bas : images), cases prises (bits), liste des choix.
+    /// Countdown word (high byte: seconds, low byte: frames), cells taken (bits), list of choices.
     pub const COUNTDOWN: u32 = A5 - 0x6602;
     pub const COUNTDOWN_TICK: u32 = A5 - 0x6601;
     pub const TAKEN: u32 = A5 - 0x6600;
@@ -73,14 +73,14 @@ mod var {
     pub const MAIN_LINK: u32 = A5 - 0x6604;
 }
 
-/// Sons et tâches de fondu de l'écran.
+/// Sounds and fade tasks of the screen.
 mod ext {
     pub const SOUND_E10D8: u32 = 0xe10d8;
     pub const SOUND_E109C: u32 = 0xe109c;
 }
 
-/// Tables en ROM : octets de variante par personnage (code), annonces, déplacements du curseur (données). Les
-/// routines d'initialisation des quatre joueurs (0x1d0f6) sont celles de `player::init::initialize`.
+/// ROM tables: variant bytes per character (code), announcements, cursor moves (data). The
+/// initialisation routines of the four players (0x1d0f6) are those of `player::init::initialize`.
 mod table {
     pub const VARIANT: u32 = 0x1d118;
     pub const BANNERS: u32 = 0x1d3aa;
@@ -95,7 +95,7 @@ fn prog32(x: &mut Ctx, addr: u32) -> u32 {
     (x.prog16(addr) as u32) << 16 | x.prog16(addr + 2) as u32
 }
 
-/// Mot de l'espace programme étendu du signe (adresse `movea.w`).
+/// Program-space word sign-extended (`movea.w` address).
 fn sign_ext(v: u16) -> u32 {
     v as i16 as i32 as u32 & 0xff_ffff
 }
@@ -104,7 +104,7 @@ fn player(k: u32) -> u32 {
     PLAYERS + k * PLAYER_STRIDE
 }
 
-/// Aiguillage des objets des classes données, puis la liste de sprites (`jsr 0x39cba`... `jsr 0x1de96`).
+/// Dispatch of the objects of the given classes, then the sprite list (`jsr 0x39cba`... `jsr 0x1de96`).
 fn render(x: &mut Ctx, classes: &[&dispatch::Class]) {
     for class in classes {
         class.update_no_next(x.c, x.b);
@@ -112,7 +112,7 @@ fn render(x: &mut Ctx, classes: &[&dispatch::Class]) {
     crate::sprites::build_68k(x.c, x.b);
 }
 
-/// Deux blocs de tuiles (`n`, `n + 1`) à la suite l'un de l'autre à partir de `destination`.
+/// Two tile blocks (`n`, `n + 1`) one after the other from `destination`.
 fn two_blocks(x: &mut Ctx, grid: Grid, n: u16, destination: u32) {
     let end = load_grid(x.b, grid, n, destination);
     load_grid(x.b, grid, n + 1, end.destination);
@@ -131,7 +131,7 @@ pub const PHASE_4: Native = Native {
     outputs: 0,
 };
 
-/// Phase 4 de la partie (`0x1ca20`) : l'écran de sélection, un pas par image.
+/// Phase 4 of the game (`0x1ca20`): the selection screen, one step per frame.
 pub fn phase_4(x: &mut Ctx) -> Flow {
     let step = rd8(x.b, var::STEP);
     match step {
@@ -148,7 +148,7 @@ pub fn phase_4(x: &mut Ctx) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Étape 0 : écran de sélection
+// Step 0: selection screen
 
 fn step_0(x: &mut Ctx) -> Flow {
     wr8(x.b, var::SCREEN_WAIT, 0);
@@ -162,7 +162,7 @@ fn step_0(x: &mut Ctx) -> Flow {
     crate::sprites::clear_lists(x.b);
     wr32(x.b, var::SCROLL_1, 0);
     wr32(x.b, var::SCROLL_2, 0);
-    // curseur de départ de chaque joueur : un bit de case par joueur
+    // starting cursor of each player: one cell bit per player
     for (k, cell) in [0u8, 2, 4, 8].into_iter().enumerate() {
         wr8(x.b, player(k as u32) + 3, cell);
     }
@@ -190,8 +190,8 @@ fn step_0(x: &mut Ctx) -> Flow {
     objects_0(x)
 }
 
-/// Crée les objets de l'écran : quatre curseurs, un panneau, six marqueurs, un compteur, huit
-/// cases ; si un pool est plein l'étape s'arrête (l'original sort sans rien défaire).
+/// Creates the screen objects: four cursors, a panel, six markers, a counter, eight
+/// cells; if a pool is full the step stops (the original exits without undoing anything).
 fn objects_0(x: &mut Ctx) -> Flow {
     let mut links = var::SLOT_LINKS;
     for slot in (0..4u32).rev() {
@@ -243,7 +243,7 @@ fn objects_0(x: &mut Ctx) -> Flow {
 }
 const FADE_START: u32 = 0x1cc0c;
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
         FadeStart = FADE_START => |x| {
             fading::DELAY.set(x.b, 1);
@@ -276,7 +276,7 @@ crate::steps! {
             x.wait(4, Step::Step6Palette)
         },
         Step6Palette = STEP_6_PALETTE => |x| {
-            // 0x1a608 (la page 1 prend l'entrée 0), 0x1a67e, 0x1a8b2, 0x1a3d4
+            // 0x1a608 (page 1 takes entry 0), 0x1a67e, 0x1a8b2, 0x1a3d4
             crate::palette::load_scene_page(x.b, 1);
             crate::palette::load_palette_page(x.b, 2, 0x56);
             crate::palette::load_palette_page(x.b, 3, 0x56);
@@ -323,7 +323,7 @@ crate::steps! {
         },
     }
 }
-/// Attend la fin du fondu d'ouverture (une image par tour), puis allume les curseurs.
+/// Waits for the opening fade to finish (one frame per turn), then turns the cursors on.
 fn fade_wait(x: &mut Ctx) -> Flow {
     if fading::STEP.get(x.b) != 0 {
         render(x, &[&dispatch::EFFCT]);
@@ -332,12 +332,12 @@ fn fade_wait(x: &mut Ctx) -> Flow {
     wr8(x.b, var::SCREEN_ID, 3);
     let main = sign_ext(rd16(x.b, var::MAIN_LINK));
     wr8(x.b, main + 0x1c, 1);
-    // `jmp 0x1de96` à la fin
+    // `jmp 0x1de96` at the end
     render(x, &[&dispatch::EFFCT]);
     Flow::Done
 }
 
-/// Les trois couches effacées.
+/// The three cleared layers.
 fn clear_layers(x: &mut Ctx) {
     for layer in [Layer::One, Layer::Two, Layer::Three] {
         clear_layer(x.b, layer);
@@ -345,18 +345,18 @@ fn clear_layers(x: &mut Ctx) {
 }
 const FADE_LOOP: u32 = 0x1cca4;
 
-/// Crée la tâche d'entrée `entry` dans l'emplacement `slot` (`move.w #slot,D0w ; jsr 0x9b6`).
+/// Creates the entry task `entry` in slot `slot` (`move.w #slot,D0w ; jsr 0x9b6`).
 fn create_task(x: &mut Ctx, entry: u32, slot: u16) {
     crate::kernel::create_task(x.b, slot as u32, entry);
 }
 
 // ---------------------------------------------------------------------------------------------
-// Étape 2 : curseurs, décompte
+// Step 2: cursors, countdown
 
 fn step_2(x: &mut Ctx) -> Flow {
     count_players(x);
     if countdown(x) {
-        // décompte fini : la suite
+        // countdown over: continue
         wr8(x.b, var::STEP, 4);
         wr8(x.b, var::PLAYERS_FROZEN, 1);
     }
@@ -372,12 +372,12 @@ fn step_2(x: &mut Ctx) -> Flow {
     let main = sign_ext(rd16(x.b, var::MAIN_LINK));
     publish_choices(x, main);
     wr8(x.b, var::LOCKED_FLAG, 0);
-    // `jmp 0x1de96` à la fin
+    // `jmp 0x1de96` at the end
     render(x, &[&dispatch::EFFCT]);
     Flow::Done
 }
 
-/// Recopie les choix des joueurs dans l'objet principal (lu par les objets curseurs).
+/// Copies the players' choices into the main object (read by the cursor objects).
 fn publish_choices(x: &mut Ctx, main: u32) {
     for k in 0..3u32 {
         let v = rd32(x.b, var::CHOICES + 4 * k);
@@ -389,7 +389,7 @@ fn publish_choices(x: &mut Ctx, main: u32) {
     wr8(x.b, main + 0x18, v);
 }
 
-/// `0x1d6d8` : compte les joueurs présents et réarme le décompte quand leur nombre change.
+/// `0x1d6d8`: counts the present players and re-arms the countdown when their number changes.
 fn count_players(x: &mut Ctx) {
     let mut n = 0u8;
     for k in 0..4 {
@@ -407,7 +407,7 @@ fn count_players(x: &mut Ctx) {
     wr8(x.b, var::PLAYERS_PRESENT, n);
 }
 
-/// `0x1d802` : une image du décompte ; vrai quand les secondes sont écoulées (drapeau Z de l'original).
+/// `0x1d802`: one frame of the countdown; true when the seconds have elapsed (Z flag of the original).
 fn countdown(x: &mut Ctx) -> bool {
     let tick = rd8(x.b, var::COUNTDOWN_TICK).wrapping_sub(1);
     wr8(x.b, var::COUNTDOWN_TICK, tick);
@@ -426,7 +426,7 @@ fn countdown(x: &mut Ctx) -> bool {
     false
 }
 
-/// `0x1d584` : curseur du joueur `a0` (cases 0 à 11, deux par personnage).
+/// `0x1d584`: cursor of player `a0` (cells 0 to 11, two per character).
 fn cursor(x: &mut Ctx, a0: u32) {
     if rd8(x.b, a0 + 3) & 0x80 != 0 {
         return;
@@ -447,7 +447,7 @@ fn cursor(x: &mut Ctx, a0: u32) {
         if d0 == 0 {
             break;
         }
-        // libère la case quittée
+        // frees the cell being left
         let mut cell = var::CHOICES + (d3 & 0xffff);
         if rd8(x.b, cell) == slot || {
             cell += 1;
@@ -455,7 +455,7 @@ fn cursor(x: &mut Ctx, a0: u32) {
         } {
             wr8(x.b, cell, 0xff);
         }
-        // nouvelle case, avec retour à l'autre bout
+        // new cell, wrapping around to the other end
         let mut n = (d3 as u8).wrapping_add(d0);
         if n & 0x80 != 0 {
             n = 10;
@@ -496,8 +496,8 @@ fn cursor(x: &mut Ctx, a0: u32) {
         }
         other |= 1 << (d3 & 31);
         wr16(x.b, var::WORD_9A0E, other as u16);
-        // 0x2e630 : statistique du personnage (carte de développement seulement). Glitch d'origine : elle reçoit
-        // D0.w, dont seul l'octet bas est le choix ; l'octet haut est un reste des appels précédents
+        // 0x2e630: character stat (development card only). Original glitch: it receives
+        // D0.w, of which only the low byte is the choice; the high byte is left over from previous calls
         let d0 = (x.c.d[0] as u16 & 0xff00) | (d3 & 0xff) as u16;
         crate::eeprom::stat_chosen_character(x.b, d0);
         d3 |= 0x80;
@@ -506,7 +506,7 @@ fn cursor(x: &mut Ctx, a0: u32) {
     wr8(x.b, a0 + 3, d3 as u8);
 }
 
-/// `0x1d714` : le joueur ne doit pas occuper la case d'un autre joueur ; sinon il avance de deux cases.
+/// `0x1d714`: the player must not occupy another player's cell; otherwise he advances two cells.
 fn dedupe(x: &mut Ctx, a0: u32) {
     loop {
         let cell = rd8(x.b, a0 + 3) as u32;
@@ -514,7 +514,7 @@ fn dedupe(x: &mut Ctx, a0: u32) {
         let slot = rd8(x.b, a0 + 2);
         let first = rd8(x.b, a1);
         if first & 0x80 != 0 || first == slot {
-            // la première place est libre ou à moi : la seconde ne doit pas être à moi
+            // the first place is free or mine: the second must not be mine
             if rd8(x.b, a1 + 1) != slot {
                 wr8(x.b, a1, slot);
             }
@@ -536,7 +536,7 @@ fn dedupe(x: &mut Ctx, a0: u32) {
     }
 }
 
-/// `0x1d760` : un joueur qui n'a pas validé et dont la case voisine a été libérée prend la première place.
+/// `0x1d760`: a player who has not confirmed and whose neighbouring cell was freed takes the first place.
 fn queue(x: &mut Ctx) {
     let taken = rd16(x.b, var::TAKEN) as u32;
     for k in 0..6u32 {
@@ -553,7 +553,7 @@ fn queue(x: &mut Ctx) {
     }
 }
 
-/// `0x1d794` : pour chaque curseur de case, `+0x16` = parité de la case occupée par son joueur.
+/// `0x1d794`: for each cell cursor, `+0x16` = parity of the cell occupied by its player.
 fn mark_choices(x: &mut Ctx) {
     for k in 0..4u32 {
         let o = sign_ext(rd16(x.b, var::SLOT_LINKS + 2 * k));
@@ -569,7 +569,7 @@ fn mark_choices(x: &mut Ctx) {
     }
 }
 
-/// `0x1d7c0` : si tous les joueurs présents ont validé, passe à l'étape 4.
+/// `0x1d7c0`: if all present players have confirmed, moves to step 4.
 fn check_all_chosen(x: &mut Ctx) {
     if rd8(x.b, var::STEP) != 4 {
         let mut left = rd8(x.b, var::PLAYERS_PRESENT);
@@ -607,7 +607,7 @@ fn step_4(x: &mut Ctx) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Étape 6 : personnages figés, fondu
+// Step 6: characters frozen, fade
 
 fn step_6(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, var::STEP).wrapping_add(2);
@@ -621,10 +621,10 @@ fn step_6(x: &mut Ctx) -> Flow {
         wr8(x.b, p + 3, cell);
         let variant = x.prog8(table::VARIANT + (cell as u32 >> 1));
         wr8(x.b, p + 0x15d, variant);
-        // la routine de la table 0x1d0f6 (`movea.w`, appelée avec A0 = le joueur) est l'initialisation du joueur de
-        // ce numéro (0x2e58, 0x2e6e, 0x2e86, 0x2e9e)
+        // the routine of table 0x1d0f6 (`movea.w`, called with A0 = the player) is the initialisation of the
+        // player of that number (0x2e58, 0x2e6e, 0x2e86, 0x2e9e)
         let kind = rd8(x.b, p + 2) as u32;
-        assert!(kind < 4, "sélection : joueur {kind} hors de la table 0x1d0f6");
+        assert!(kind < 4, "selection: player {kind} outside table 0x1d0f6");
         crate::player::init::initialize(x.c, x.b, kind);
         if (rd8(x.b, p + 3) & 0x7f) >> 1 == 5 {
             wr8(x.b, p + 0x162, 1);
@@ -642,7 +642,7 @@ const STEP_6_CLEAR: u32 = 0x1d1c2;
 const STEP_6_PALETTE: u32 = 0x1d1e8;
 
 // ---------------------------------------------------------------------------------------------
-// Étape 8 : second écran
+// Step 8: second screen
 
 fn step_8(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, var::STEP).wrapping_add(2);
@@ -653,7 +653,7 @@ fn step_8(x: &mut Ctx) -> Flow {
     two_blocks(x, Grid::Layer3, 0x14a, 0x91b800);
     let mut count = 0u8;
     for counter in (0..2u8).rev() {
-        // la variante du panneau est le compteur de la boucle `dbf` (D0)
+        // the variant of the panel is the loop counter of the `dbf` (D0)
         let Some(Obj(o)) = banner(x.b, counter) else { break };
         wr32(x.b, o + 0x58, var::PLAYERS_PRESENT);
         count = count.wrapping_add(1);
@@ -675,7 +675,7 @@ fn step_8(x: &mut Ctx) -> Flow {
 }
 const STEP_8_SHOW: u32 = 0x1d31c;
 
-/// `0x1d686` : un joueur en jeu (état < 4) a-t-il pressé un bouton ? (drapeau Z de l'original : faux)
+/// `0x1d686`: has a player in play (state < 4) pressed a button? (Z flag of the original: false)
 fn any_button(x: &mut Ctx) -> bool {
     if rd8(x.b, var::GAME_ACTIVE) == 0 {
         return false;
@@ -734,7 +734,7 @@ fn step_c(x: &mut Ctx) -> Flow {
         if phase != rd8(x.b, var::PLAYERS_PRESENT) && rd8(x.b, var::LOCKED_FLAG) != 7 {
             let v = rd8(x.b, var::PLAYERS_PRESENT) ^ 0x10;
             wr8(x.b, var::PLAYERS_PRESENT, v);
-            // 0xcdedc : objet SET de type 13 (le clignotement), de variante le compteur
+            // 0xcdedc: SET object of type 13 (the blinking), variant is the counter
             let n = rd8(x.b, var::LOCKED_FLAG);
             if crate::families::creators::set_13_pure(x.b, n).is_ok() {
                 wr8(x.b, var::LOCKED_FLAG, n + 1);

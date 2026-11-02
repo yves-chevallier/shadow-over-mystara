@@ -1,11 +1,11 @@
-//! Famille EFFCT (suite) : effets de la fin de niveau et du ramassage, types 72 à 75 et 79 (table des
-//! types `0x39ce0`, qui compte 92 entrées de 4 octets).
+//! EFFCT family (continued): end-of-level and pickup effects, types 72 to 75 and 79 (type table
+//! `0x39ce0`, which has 92 entries of 4 bytes).
 //!
-//! - 72 : détecteur de ramassage, qui crée l'éclat de type 55 et, selon sa variante, le clignotement 79 ;
-//! - 73 : écran de victoire (sprite qui tombe, clignote et change d'animation selon l'objet qui l'a créé) ;
-//! - 74 : bulle à côté d'un joueur qui disparaît quand son créateur s'en va ;
-//! - 75 : bouton de menu, une machine à sept sous-états ;
-//! - 79 : clignotement d'un objet ramassé, détecté par les joueurs voisins.
+//! - 72: pickup detector, which creates the sparkle of type 55 and, depending on its variant, the blink 79;
+//! - 73: victory screen (sprite that falls, blinks and changes animation depending on the object that created it);
+//! - 74: bubble next to a player that disappears when its creator leaves;
+//! - 75: menu button, a seven-substate machine;
+//! - 79: blink of a picked-up object, detected by nearby players.
 
 use crate::families::cx::Bench;
 use crate::machine::Machine;
@@ -15,16 +15,16 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Valeurs de l'octet d'état `+4` (le suivant se calcule par `+2`).
+/// Values of the state byte `+4` (the next one is computed with `+2`).
 mod state {
     pub const INIT: u8 = 0;
     pub const ACTIVE: u8 = 2;
     pub const FREE: u8 = 4;
-    /// Premier état de l'objet lié à un créateur disparu : libération au tour suivant.
+    /// First state of the object tied to a vanished creator: release on the next turn.
     pub const EXIT: u8 = 6;
 }
 
-/// Champs partagés.
+/// Shared fields.
 mod f {
     pub const STATE: u32 = 0x04;
     pub const SUB_STATE: u32 = 0x05;
@@ -32,13 +32,13 @@ mod f {
     pub const VARIANT: u32 = 0x03;
     pub const FLAGS: u32 = 0x01;
     pub const FACING: u32 = 0x2c;
-    /// Créateur (pointeur de 16 bits).
+    /// Creator (16-bit pointer).
     pub const OWNER: u32 = 0x5c;
     pub const TIMER: u32 = 0x58;
     pub const TIMER_B: u32 = 0x42;
 }
 
-/// Routines d'origine utilisées.
+/// Original routines used.
 mod rom {
     pub const SOUND_0ED11C: u32 = 0xed11c;
     pub const SOUND_0ED056: u32 = 0xed056;
@@ -64,7 +64,7 @@ fn players() -> impl Iterator<Item = u32> {
     (0..4).map(|k| PLAYERS + k * PLAYER_STRIDE)
 }
 
-/// Créateur de l'objet.
+/// Creator of the object.
 fn owner<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
     x.linked(f::OWNER)
 }
@@ -74,10 +74,10 @@ fn free<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 72 : détecteur de ramassage
+// Type 72: pickup detector
 // ---------------------------------------------------------------------------------------------
 
-/// 0xb8dc2 : crée le clignotement (type 79) sur la position de l'objet, un cran plus haut.
+/// 0xb8dc2: creates the blink (type 79) at the object's position, one notch higher.
 fn spawn_blink<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(blink) = x.alloc(&pools::EFFCT) else { return };
     wr8(x.b, blink.0, 1);
@@ -91,7 +91,7 @@ fn spawn_blink<R: Bench>(x: &mut Cx<'_, R>) {
     wr16(x.b, blink.0 + f::OWNER, x.o.0 as u16);
 }
 
-/// 0xa532e : crée le tir d'éclat de ramassage (ESHL de type 55) à l'endroit où le détecteur est touché.
+/// 0xa532e: creates the pickup sparkle shot (ESHL of type 55) where the detector is touched.
 fn spawn_pickup_flash<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(Obj(flash)) = x.alloc(&pools::ESHL) else { return };
     wr8(x.b, flash, 1);
@@ -104,7 +104,7 @@ fn spawn_pickup_flash<R: Bench>(x: &mut Cx<'_, R>) {
     wr16(x.b, flash + f::OWNER, x.o.0 as u16);
 }
 
-/// Un joueur marche sur le détecteur : à 6 pixels en profondeur et 8 en x près.
+/// A player steps on the detector: within 6 pixels in depth and 8 in x.
 fn player_on_detector<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let (depth, across) = (x.u16(Obj::Y), x.u16(Obj::X));
     players().any(|player| {
@@ -148,10 +148,10 @@ fn pickup_waiting<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 73 : écran de victoire
+// Type 73: victory screen
 // ---------------------------------------------------------------------------------------------
 
-/// Clignotement : caché une image sur deux selon la parité du compteur d'images de partie.
+/// Blinking: hidden every other frame according to the parity of the game frame counter.
 fn blink_by_frame<R: Bench>(x: &mut Cx<'_, R>) {
     let hidden = x.a5_u16(0x6e) & 1 == 0;
     let flags = x.u8(f::FLAGS);
@@ -220,7 +220,7 @@ fn victory_active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 74 : bulle à côté du créateur
+// Type 74: bubble next to the creator
 // ---------------------------------------------------------------------------------------------
 
 fn bubble<R: Bench>(x: &mut Cx<'_, R>) {
@@ -291,9 +291,9 @@ fn bubble<R: Bench>(x: &mut Cx<'_, R>) {
 // Type 75 : bouton de menu
 // ---------------------------------------------------------------------------------------------
 
-/// Variable `A5-0x55c8` (0xff2a38) : étape de la séquence de menu qui commande les sous-états du bouton.
+/// Variable `A5-0x55c8` (0xff2a38): step of the menu sequence that drives the button's substates.
 const MENU_STEP: u32 = 0xff2a38;
-/// Variable `A5+0x2e` : étape de la sélection.
+/// Variable `A5+0x2e`: selection step.
 const SELECT_STEP: u32 = 0x2e;
 
 fn menu_button<R: Bench>(x: &mut Cx<'_, R>) {
@@ -345,7 +345,7 @@ fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
                 crate::sound::play(x.b, rom::SOUND_0ECF10, x.o);
             } else if x.u8(0x33) != 0 {
                 x.set8(0x33, 0);
-                // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+                // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
                 let Obj(spawned) = x.alloc_unchecked(&pools::BOSS);
                 wr8(x.b, spawned, 1);
                 wr8(x.b, spawned + 2, 8);
@@ -390,10 +390,10 @@ fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 79 : clignotement d'un objet ramassé
+// Type 79: blink of a picked-up object
 // ---------------------------------------------------------------------------------------------
 
-/// Un joueur vivant, de classe 5, est à portée (32 en profondeur, 96 en x).
+/// A living player of class 5 is in range (32 in depth, 96 in x).
 fn class_5_player_near<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let (depth, across) = (x.u16(Obj::Y), x.u16(Obj::X));
     players().any(|player| {

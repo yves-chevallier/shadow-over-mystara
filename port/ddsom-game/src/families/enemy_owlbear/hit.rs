@@ -1,12 +1,12 @@
-//! Type 4, état touché (`+4 = 4`, 0x5ea0c). `+5` : 0 et 6 réaction commune par table (`+0x49`),
-//! 2 recul, 4 chute, 8 mort ou fuite.
+//! Type 4, hit state (`+4 = 4`, 0x5ea0c). `+5`: 0 and 6 common reaction by table (`+0x49`), 2 recoil, 4 fall, 8 death
+//! or flight.
 
 use crate::families::cx::Bench;
 use super::stance::next_move;
 use super::*;
 use crate::objects::Current;
 
-/// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
+/// Tables of the common reaction, indexed by reaction code `+0x49`.
 const REACT_FIRST: u32 = 0x5ea5c;
 const REACT_SECOND: u32 = 0x5ecb8;
 
@@ -32,7 +32,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-// --- sous-état 2 : recul -------------------------------------------------------------------------
+// --- substate 2: recoil -------------------------------------------------------------------------
 
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -71,7 +71,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 4 : chute -------------------------------------------------------------------------
+// --- substate 4: fall -------------------------------------------------------------------------
 
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -108,7 +108,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 : mort ou fuite -----------------------------------------------------------------
+// --- substate 8: death or flight -----------------------------------------------------------------
 
 fn flee<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -148,7 +148,7 @@ fn flee<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5ede8 : s'enfuit en courant vers le bord de l'écran.
+/// 0x5ede8: runs away toward the edge of the screen.
 fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_angle(x, 8, 0x18);

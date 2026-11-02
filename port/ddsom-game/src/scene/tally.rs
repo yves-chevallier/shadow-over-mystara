@@ -1,11 +1,11 @@
-//! État partagé `0xf590e` des sorties de scène : le décompte de fin de niveau.
+//! Shared state `0xf590e` of the scene exits: the end-of-level tally.
 //!
-//! Un bandeau (« STAGE CLEAR » et le nom de la scène, dessinés hors champ puis glissés depuis la droite),
-//! le temps restant, la prime de temps (comptée de 5:00 jusqu'au temps restant, dix secondes par pas), la prime
-//! des secondes, puis par joueur la prime totale, deux primes optionnelles (trésor et meilleur score de coups :
-//! octet `+0x18a`, mot `+0x190`), enfin le versement des primes au score des joueurs, chiffre par chiffre.
-//! Quatorze sous-états (octet `+3` du bloc de la sortie de scène, pas de 2), un par image ; le premier attend la
-//! fin d'un fondu en cédant la main à l'ordonnanceur.
+//! A banner ("STAGE CLEAR" and the scene name, drawn off-screen then slid in from the right),
+//! the remaining time, the time bonus (counted from 5:00 down to the remaining time, ten seconds per step), the
+//! seconds bonus, then per player the total bonus, two optional bonuses (treasure and best hit count:
+//! byte `+0x18a`, word `+0x190`), finally the payout of the bonuses to the players' score, digit by digit.
+//! Fourteen sub-states (byte `+3` of the scene exit block, step of 2), one per frame; the first waits for the
+//! end of a fade by ceding control to the scheduler.
 
 use super::tiles::{self, Number, COLUMN, LAYER};
 use super::fading;
@@ -16,96 +16,96 @@ use crate::ops::abcd;
 use crate::objects::Obj;
 use crate::Native;
 
-/// Variables du décompte (RAM de travail, sous A5).
+/// Tally variables (work RAM, under A5).
 mod v {
     use crate::mem::A5;
-    /// Colonne d'arrivée du bandeau (décroît de 48 à 0) et nombre de colonnes déjà visibles - 1.
+    /// Arrival column of the banner (decreases from 48 to 0) and number of columns already visible - 1.
     pub const BANNER_AT: u32 = A5 - 0x55aa;
     pub const BANNER_WIDTH: u32 = A5 - 0x55a9;
-    /// Minuterie (octet) entre deux sous-états, et compteur de pas de la prime de temps.
+    /// Timer (byte) between two sub-states, and step counter of the time bonus.
     pub const TIMER: u32 = A5 - 0x55a8;
     pub const STEPS: u32 = A5 - 0x55a9;
-    /// Temps décompté (mot BCD m:ss).
+    /// Counted-down time (BCD word m:ss).
     pub const TIME: u32 = A5 - 0x55a6;
-    /// Prime totale (long BCD) et prime en cours (long BCD ; son octet `+2` : prime des secondes).
+    /// Total bonus (BCD long) and current bonus (BCD long; its byte `+2`: seconds bonus).
     pub const BONUS: u32 = A5 - 0x55a4;
     pub const PRIME: u32 = A5 - 0x55a0;
-    /// Indice de la scène dans les tables de noms et de primes, et sa variante de bandeau.
+    /// Index of the scene in the name and bonus tables, and its banner variant.
     pub const NAME: u32 = A5 - 0x557c;
     pub const NAME_FIRST: u32 = A5 - 0x557b;
     pub const PRIME_INDEX: u32 = A5 - 0x557a;
-    /// Primes restant à verser, un long BCD par joueur.
+    /// Bonuses left to pay out, one BCD long per player.
     pub const PAYOUT: u32 = A5 - 0x5574;
-    /// Joueur de la prime optionnelle en cours (mot, adresse RAM).
+    /// Player of the optional bonus in progress (word, RAM address).
     pub const WINNER: u32 = A5 - 0x5562;
-    /// Compteur d'écrans de fin ouverts (incrémenté au début, décrémenté à la fin).
+    /// Counter of open end screens (incremented at the start, decremented at the end).
     pub const SCREENS: u32 = A5 - 0x5b8e;
 }
 
-/// Variables de la RAM de travail (décalages depuis A5).
+/// Work RAM variables (offsets from A5).
 mod a5 {
-    /// Temps restant (mot BCD m:ss du long de l'horloge).
+    /// Remaining time (BCD word m:ss of the clock long).
     pub const CLOCK: u32 = 0x38;
-    /// Bit 0 : disposition de l'écran à deux colonnes (positions des panneaux des joueurs).
+    /// Bit 0: two-column screen layout (positions of the player panels).
     pub const LAYOUT: u32 = 0x20;
     pub const HOLD: u32 = 0x33;
     pub const FLAG_5F: u32 = 0x5f;
 }
 
-/// Champs d'un joueur lus par le décompte.
+/// Player fields read by the tally.
 mod p {
     pub const CHARACTER: u32 = 2;
     pub const STATE: u32 = 4;
-    /// Prime du trésor gagnée (octet) ; meilleur nombre de coups (mot).
+    /// Treasure bonus earned (byte); best hit count (word).
     pub const TREASURE: u32 = 0x18a;
     pub const HITS: u32 = 0x190;
 }
 
-/// Tables de la ROM.
+/// ROM tables.
 mod rom {
-    /// Bandeau : colonnes vides avant le texte (octets, relatifs au PC), selon la variante.
+    /// Banner: empty columns before the text (bytes, PC-relative), by variant.
     pub const LEAD_NAME_FIRST: u32 = 0xf6f48;
     pub const LEAD_CLEAR_FIRST: u32 = 0xf6f6a;
-    /// Noms des scènes (pointeurs, relatifs au PC) et texte « STAGE CLEAR » des deux variantes.
+    /// Scene names (pointers, PC-relative) and "STAGE CLEAR" text of the two variants.
     pub const NAMES: u32 = 0xf6ed2;
     pub const CLEAR_AFTER: u32 = 0xf7000;
     pub const CLEAR_BEFORE: u32 = 0xf6fec;
-    /// Textes « TIME » et « TIME OVER » (descripteurs de 0x1136).
+    /// "TIME" and "TIME OVER" texts (descriptors of 0x1136).
     pub const TIME_TEXT: u32 = 0xf7336;
     pub const NO_TIME_TEXT: u32 = 0xf734e;
-    /// Décrément BCD de la prime de temps : dix secondes, ou cinquante pour passer la minute.
+    /// BCD decrement of the time bonus: ten seconds, or fifty to cross the minute.
     pub const TEN_SECONDS: u32 = 0xf5a62;
     pub const MINUTE: u32 = 0xf5a64;
-    /// Prime d'un pas de la prime de temps (longs BCD, 31 valeurs).
+    /// Bonus of one step of the time bonus (BCD longs, 31 values).
     pub const TIME_BONUS: u32 = 0xf6ba0;
-    /// Prime d'une seconde (octet BCD, quartet haut).
+    /// Bonus of one second (BCD byte, high nibble).
     pub const SECOND_BONUS: u32 = 0xf5b06;
-    /// Primes du trésor et des coups, selon la scène (longs BCD).
+    /// Treasure and hit bonuses, by scene (BCD longs).
     pub const TREASURE_BONUS: u32 = 0x19c0e;
     pub const HITS_BONUS: u32 = 0xf6c1c;
-    /// Positions (mots, relatifs à la couche) par personnage et disposition : prime, étiquette, total, versement.
+    /// Positions (words, relative to the layer) per character and layout: bonus, label, total, payout.
     pub const TOTAL_AT: u32 = 0xf5c08;
     pub const LABEL_AT: u32 = 0xf5c18;
     pub const PANEL_AT: u32 = 0xf5d82;
     pub const PANEL_VALUE_AT: u32 = 0xf5d92;
     pub const PAYOUT_AT: u32 = 0xf5f0a;
-    /// Étiquette d'un joueur (paires de tuiles).
+    /// Label of a player (pairs of tiles).
     pub const LABEL: u32 = 0xf7320;
 }
 
-/// Sous-routines du jeu.
+/// Game subroutines.
 mod sub {
     pub const MUSIC: u32 = 0xe1150;
 }
 
-/// Le bandeau est dessiné hors champ (lignes 8 et 9 de la première page de la couche, 0x910000), puis copié.
+/// The banner is drawn off-screen (rows 8 and 9 of the first page of the layer, 0x910000), then copied.
 const BANNER: u32 = 0x910020;
 
-/// Reprises après une cession (adresses qui suivent les `jsr`/`bsr` d'origine).
+/// Resumes after a yield (addresses following the original `jsr`/`bsr`).
 const FADE_WAIT: u32 = 0xf6906;
 const AFTER_FADE: u32 = 0xf596e;
 
-/// Sous-état courant (octet `+3` du bloc désigné par A0).
+/// Current sub-state (byte `+3` of the block designated by A0).
 fn sub_step(x: &mut Ctx) -> u8 {
     rd8(x.b, x.c.a[0] + 3)
 }
@@ -117,7 +117,7 @@ fn next_sub_step(x: &mut Ctx) {
     set_sub_step(x, s);
 }
 
-/// Minuterie : retire une image, vrai quand elle arrive à zéro.
+/// Timer: subtracts one frame, true when it reaches zero.
 fn tick(x: &mut Ctx) -> bool {
     let t = rd8(x.b, v::TIMER).wrapping_sub(1);
     wr8(x.b, v::TIMER, t);
@@ -127,7 +127,7 @@ fn set_timer(x: &mut Ctx, t: u8) {
     wr8(x.b, v::TIMER, t)
 }
 
-/// Joueurs en jeu (présents, état principal < 4) : adresses des enregistrements.
+/// Players in the game (present, main state < 4): addresses of the records.
 fn players_in_game(x: &mut Ctx) -> impl Iterator<Item = u32> {
     let alive: Vec<u32> = (0..4)
         .map(|k| super::PLAYERS + k * super::PLAYER_STRIDE)
@@ -136,8 +136,8 @@ fn players_in_game(x: &mut Ctx) -> impl Iterator<Item = u32> {
     alive.into_iter()
 }
 
-/// Position dans la couche lue dans une table (mots signés relatifs au PC) indexée par le personnage du joueur et
-/// la disposition de l'écran.
+/// Position in the layer read from a table (signed PC-relative words) indexed by the player's character and
+/// the screen layout.
 fn panel_at(x: &mut Ctx, table: u32, player: u32, pc_relative: bool) -> u32 {
     let mut i = 2 * rd8(x.b, player + p::CHARACTER) as u32;
     if x.v8(a5::LAYOUT) & 1 != 0 {
@@ -147,7 +147,7 @@ fn panel_at(x: &mut Ctx, table: u32, player: u32, pc_relative: bool) -> u32 {
     LAYER.wrapping_add(off as i16 as i32 as u32)
 }
 
-/// Un état de 0xf590e.
+/// A state of 0xf590e.
 pub fn run(x: &mut Ctx) -> Flow {
     match sub_step(x) {
         0 => start(x),
@@ -189,13 +189,13 @@ pub fn run(x: &mut Ctx) -> Flow {
     }
 }
 
-/// Sous-état 0 : musique, fondu (tâche 0x14de, un niveau par image, pages 13) dont on attend la fin.
+/// Sub-state 0: music, fade (task 0x14de, one level per frame, pages 13) whose end is awaited.
 fn start(x: &mut Ctx) -> Flow {
     next_sub_step(x);
     x.set_v8(a5::HOLD, 1);
     crate::sound::play_global(x.b, sub::MUSIC);
     fading::STEP.set(x.b, 8);
-    // 0xf68c8 : la tâche de fondu (A0 gardé)
+    // 0xf68c8: the fade task (A0 kept)
     fading::DELAY.set(x.b, 1);
     fading::PAGES.set(x.b, 13);
     crate::kernel::create_task(x.b, 16, fading::DESCENT_STEP);
@@ -204,7 +204,7 @@ fn start(x: &mut Ctx) -> Flow {
 }
 
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
         FadeWait = FADE_WAIT => |x| {
             if fading::PAGES.get(x.b) != 0 {
@@ -212,7 +212,7 @@ crate::steps! {
             }
             Flow::Done
         },
-        /// Fin du sous-état 0 : le bandeau est dessiné hors champ, puis son premier pas.
+        /// End of sub-state 0: the banner is drawn off-screen, then its first step.
         AfterFade = AFTER_FADE => |x| {
             banner(x);
             wr8(x.b, v::BANNER_AT, 48);
@@ -226,8 +226,8 @@ crate::steps! {
     }
 }
 
-/// Le bandeau, deux rangées à partir de la ligne 8 de la colonne 0 (0x0f6e88) : texte « STAGE CLEAR » et nom
-/// de la scène, dans l'ordre de la variante, une colonne vide entre les deux ; un mot 0xffff marque la fin.
+/// The banner, two rows from row 8 of column 0 (0x0f6e88): "STAGE CLEAR" text and scene name,
+/// in the order of the variant, an empty column between the two; a word 0xffff marks the end.
 fn banner(x: &mut Ctx) {
     let at = BANNER;
     let name = rd8(x.b, v::NAME) as u32;
@@ -248,13 +248,13 @@ fn banner(x: &mut Ctx) {
     wr16(x.b, at, 0xffff);
 }
 
-/// Sous-état 2 : le bandeau avance d'une colonne vers la gauche (lignes 10 et 11), jusqu'à la colonne 0.
+/// Sub-state 2: the banner advances one column to the left (rows 10 and 11), up to column 0.
 fn banner_step(x: &mut Ctx) {
     let col = rd8(x.b, v::BANNER_AT).wrapping_sub(1);
     wr8(x.b, v::BANNER_AT, col);
     let width = rd8(x.b, v::BANNER_WIDTH).wrapping_add(1);
     wr8(x.b, v::BANNER_WIDTH, width);
-    // 0x0f71fa : copie des colonnes visibles, une case vide après la dernière
+    // 0x0f71fa: copy of the visible columns, one empty cell after the last
     let mut dst = LAYER + ((col as u32) << 7) + 0x28;
     let mut src = BANNER;
     for _ in 0..=width as u32 {
@@ -274,7 +274,7 @@ fn banner_step(x: &mut Ctx) {
     }
 }
 
-/// Sous-état 4 : le temps restant, ou « TIME OVER » et la prime du trésor s'il est écoulé.
+/// Sub-state 4: the remaining time, or "TIME OVER" and the treasure bonus if it has run out.
 fn clock(x: &mut Ctx) -> Flow {
     if !tick(x) {
         return Flow::Done;
@@ -290,7 +290,7 @@ fn clock(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Temps écoulé (0x0f6dca) : la prime du trésor en grands chiffres, puis directement les primes des joueurs.
+/// Time elapsed (0x0f6dca): the treasure bonus in large digits, then directly the players' bonuses.
 fn time_over(x: &mut Ctx) -> Flow {
     let src = rom::TREASURE_BONUS + 4 * rd8(x.b, v::PRIME_INDEX) as u32 + 1;
     let mut n = Number::new(0x9128b4, 3);
@@ -309,8 +309,8 @@ fn time_over(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Sous-état 8 : le temps décompté descend de dix secondes par pas jusqu'au temps restant (dizaines) ; la prime
-/// du pas (table indexée par le nombre de pas, au plus 30) s'affiche à côté.
+/// Sub-state 8: the counted-down time descends by ten seconds per step down to the remaining time (tens); the bonus
+/// of the step (table indexed by the number of steps, at most 30) is displayed next to it.
 fn time_bonus(x: &mut Ctx) -> Flow {
     if !tick(x) {
         return Flow::Done;
@@ -318,7 +318,7 @@ fn time_bonus(x: &mut Ctx) -> Flow {
     set_timer(x, 10);
     let t = rd16(x.b, v::TIME);
     tiles::duration(x.b, 0x91283c, t);
-    // `cmpi.b #30 ; ble` : comparaison signée d'un octet utilisé ensuite non signé
+    // `cmpi.b #30 ; ble`: signed comparison of a byte then used unsigned
     let steps = rd8(x.b, v::STEPS);
     let steps = if (steps as i8) <= 30 { steps } else { 30 } as u32;
     let bonus = rom::TIME_BONUS + 4 * steps;
@@ -330,7 +330,7 @@ fn time_bonus(x: &mut Ctx) -> Flow {
         next_sub_step(x);
         return Flow::Done;
     }
-    // soustraction BCD sur deux octets (sbcd), retenue de départ nulle
+    // BCD subtraction on two bytes (sbcd), initial carry zero
     let dec = if t & 0xf0 != 0 { rom::TEN_SECONDS } else { rom::MINUTE };
     let (lo, borrow) = crate::game::sbcd(t as u8, rd8(x.b, dec + 1), false);
     let (hi, _) = crate::game::sbcd((t >> 8) as u8, rd8(x.b, dec), borrow);
@@ -340,7 +340,7 @@ fn time_bonus(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Sous-état 10 : les secondes restantes (unités) font la prime des secondes, ajoutée à la prime totale.
+/// Sub-state 10: the remaining seconds (units) make the seconds bonus, added to the total bonus.
 fn second_bonus(x: &mut Ctx) -> Flow {
     if !tick(x) {
         return Flow::Done;
@@ -361,7 +361,7 @@ fn second_bonus(x: &mut Ctx) -> Flow {
         wr8(x.b, v::PRIME + 2, prime);
         add_bcd(x, v::BONUS, v::PRIME);
     }
-    // le taux (deux chiffres), et la prime des secondes suivie de « 00 »
+    // the rate (two digits), and the seconds bonus followed by "00"
     let mut n = Number::new(0x912a44 + 2 * COLUMN, 0);
     n.byte(x.b, rate);
     n.digit(x.b, 0);
@@ -373,7 +373,7 @@ fn second_bonus(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// `dst += src` (longs BCD), quatre `abcd` de l'octet bas vers l'octet haut.
+/// `dst += src` (BCD longs), four `abcd` from the low byte to the high byte.
 fn add_bcd(x: &mut Ctx, dst: u32, src: u32) {
     let mut carry = false;
     for i in (0..4).rev() {
@@ -383,7 +383,7 @@ fn add_bcd(x: &mut Ctx, dst: u32, src: u32) {
     }
 }
 
-/// Sous-état 12 : le cadre du total, le temps restant et la prime totale ; chaque joueur la recevra.
+/// Sub-state 12: the total frame, the remaining time and the total bonus; each player will receive it.
 fn total(x: &mut Ctx) -> Flow {
     if !tick(x) {
         return Flow::Done;
@@ -410,7 +410,7 @@ fn total(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Sous-état 14 : la prime totale sous l'étiquette de chaque joueur en jeu.
+/// Sub-state 14: the total bonus under the label of each player in the game.
 fn player_totals(x: &mut Ctx) -> Flow {
     if !tick(x) {
         return Flow::Done;
@@ -426,8 +426,8 @@ fn player_totals(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Sous-état 16 : le premier joueur qui a trouvé le trésor reçoit sa prime (affichée 60 images), sinon on passe
-/// à la prime des coups.
+/// Sub-state 16: the first player who found the treasure receives their bonus (displayed 60 frames), otherwise we move
+/// on to the hit bonus.
 fn treasure(x: &mut Ctx) -> Flow {
     if !tick(x) {
         return Flow::Done;
@@ -447,7 +447,7 @@ fn treasure(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Sous-état 20 : le joueur au meilleur nombre de coups reçoit la prime des coups ; les compteurs sont remis à 0.
+/// Sub-state 20: the player with the best hit count receives the hit bonus; the counters are reset to 0.
 fn best_hits(x: &mut Ctx) -> Flow {
     if !tick(x) {
         return Flow::Done;
@@ -477,7 +477,7 @@ fn best_hits(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// La prime optionnelle `src` (long BCD) mémorisée et affichée dans le panneau du gagnant.
+/// The optional bonus `src` (BCD long) stored and displayed in the winner's panel.
 fn prime_value(x: &mut Ctx, src: u32) {
     let w = winner(x);
     let at = panel_at(x, rom::PANEL_VALUE_AT, w, false);
@@ -490,7 +490,7 @@ fn winner(x: &mut Ctx) -> u32 {
     rd16(x.b, v::WINNER) as i16 as i32 as u32 & 0xff_ffff
 }
 
-/// Pancarte de quatre colonnes (tuiles `first`.., attributs 30) dans le panneau du gagnant (0x0f5cee, 0x0f5ce6).
+/// Sign of four columns (tiles `first`.., attributes 30) in the winner's panel (0x0f5cee, 0x0f5ce6).
 fn sign(x: &mut Ctx, first: u16) {
     let w = winner(x);
     let at = panel_at(x, rom::PANEL_AT, w, false);
@@ -499,14 +499,14 @@ fn sign(x: &mut Ctx, first: u16) {
     }
 }
 
-/// Sous-états 18 et 22 : la pancarte clignote 30 images, reste 30 images, puis un objet SET (type 19) emporte
-/// la prime vers le gagnant.
+/// Sub-states 18 and 22: the sign blinks 30 frames, stays 30 frames, then a SET object (type 19) carries
+/// the bonus to the winner.
 fn announce(x: &mut Ctx, first: u16) -> Flow {
     if tick(x) {
         next_sub_step(x);
         set_timer(x, 20);
         sign(x, first);
-        // 0xce00a : objet SET de type 15, variante 19
+        // 0xce00a: SET object of type 15, variant 19
         let Ok(Obj(o)) = crate::families::creators::set_15_pure(x.b, 19) else {
             return Flow::Done;
         };
@@ -532,8 +532,8 @@ fn announce(x: &mut Ctx, first: u16) -> Flow {
     Flow::Done
 }
 
-/// Sous-état 24 : les primes passent au score des joueurs, un chiffre par pas de deux images (centaines, puis
-/// milliers, puis dizaines de milliers) ; le reste s'affiche à chaque pas.
+/// Sub-state 24: the bonuses are added to the players' score, one digit per step of two frames (hundreds, then
+/// thousands, then ten-thousands); the remainder is displayed at each step.
 fn payout(x: &mut Ctx) -> Flow {
     if x.v16(a5::CLOCK) == 0 {
         next_sub_step(x);
@@ -569,8 +569,8 @@ fn payout(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Retire un du chiffre le plus faible non nul parmi les centaines, milliers et dizaines de milliers (0x0f5f1a) ;
-/// rend le reste et le montant versé (code de score : 4, 14 ou 33).
+/// Subtracts one from the lowest non-zero digit among hundreds, thousands and ten-thousands (0x0f5f1a);
+/// returns the remainder and the amount paid out (score code: 4, 14 or 33).
 fn pay_digit(v: u32) -> (u32, u32) {
     if v & 0x0f00 != 0 {
         (v - 0x100, 4)
@@ -581,7 +581,7 @@ fn pay_digit(v: u32) -> (u32, u32) {
     }
 }
 
-/// Entrée d'origine (séquences de sortie restées en 68000).
+/// Original entry (exit sequences left in 68000).
 pub const TALLY: Native = Native {
     entry: 0xf590e,
     name: "scene_tally",

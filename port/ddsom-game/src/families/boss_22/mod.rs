@@ -1,21 +1,21 @@
-//! Boss de type 22 (0x9aeaa) : la créature que le boss de type 2 libère à sa mort (h), à qui il passe le relais
-//! (`+0x42` = son hôte). Voir `docs/families/boss.md`.
+//! Boss of type 22 (0x9aeaa): the creature that the type 2 boss releases on its death (h), to which it hands over
+//! (`+0x42` = its host). See `docs/families/boss.md`.
 //!
-//! Même gabarit que le type 16 (`boss_16`) : groupes `+5` pairs, étapes `+6` et `+7`, états posés d'un coup en
-//! longs, deux jeux d'animations (corps 0x18492a, attaques 0x184964). Sa seconde forme (`+0xb5` levé) a d'autres
-//! animations et d'autres attaques. Les réactions aux coups sont les routines communes (`reactions.rs`).
+//! Same template as type 16 (`boss_16`): even `+5` groups, steps `+6` and `+7`, states set in one go as longs, two
+//! animation sets (body 0x18492a, attacks 0x184964). Its second form (`+0xb5` raised) has other animations and
+//! other attacks. The reactions to hits are the common routines (`reactions.rs`).
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `moves` | arrivée : tombe du haut de l'écran |
-//! | 2 | `moves` | combat : attente (`+6` = 0 et 8), demi-tour (2), bond vers la cible (6), charge (4) |
-//! | 4 | `attacks` | attaques : six coups (`+6` = 0 à 22) |
-//! | 6 | `moves` | course vers un point de l'écran (`+6` = 0 et 2), saut (4 et 6) |
-//! | 8 | `moves` | idem après une attaque |
+//! | 0 | `moves` | arrival: falls from the top of the screen |
+//! | 2 | `moves` | combat: wait (`+6` = 0 and 8), about-face (2), leap toward the target (6), charge (4) |
+//! | 4 | `attacks` | attacks: six hits (`+6` = 0 to 22) |
+//! | 6 | `moves` | run to a point on the screen (`+6` = 0 and 2), jump (4 and 6) |
+//! | 8 | `moves` | same after an attack |
 //! | 10 | `moves` | pause |
-//! | 12 | `moves` | un joueur saisi (`+0x50`) : morsures |
-//! | 14 | `moves` | transformation en seconde forme |
-//! | état 4 | `hit` | réactions aux coups, recul, à terre, mort |
+//! | 12 | `moves` | a grabbed player (`+0x50`): bites |
+//! | 14 | `moves` | transformation into the second form |
+//! | state 4 | `hit` | reactions to hits, knockback, on the ground, death |
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -26,23 +26,23 @@ mod hit;
 mod moves;
 mod two;
 
-/// Champs propres à ce type.
+/// Fields specific to this type.
 pub(self) mod g {
     pub const VULNERABLE: u32 = 0x67;
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
     pub const WALK_DELAY: u32 = 0x71;
-    /// Animation (numéro) en cours et dernière lancée.
+    /// Current animation (number) and last one started.
     pub const ANIM_ID: u32 = 0xa2;
     pub const ANIM_LAST: u32 = 0xa3;
-    /// Minuteries (mots, ou octets sur la même adresse).
+    /// Timers (words, or bytes at the same address).
     pub const TIMER: u32 = 0xa0;
     pub const TIMER2: u32 = 0xaa;
     pub const SPOT_TIMER: u32 = 0xbc;
-    /// État à reprendre après un demi-tour : long en `+0xa6` (états) et octet en `+0xa5` (étape `+6`).
+    /// State to resume after an about-face: long at `+0xa6` (states) and byte at `+0xa5` (step `+6`).
     pub const SAVED_STEP: u32 = 0xa5;
     pub const SAVED_STATE: u32 = 0xa6;
-    /// Point visé (mots), sens de rotation de la trajectoire.
+    /// Aimed point (words), rotation direction of the trajectory.
     pub const SPOT_X: u32 = 0xb0;
     pub const SPOT_Z: u32 = 0xb2;
     pub const SPIN: u32 = 0xb4;
@@ -54,38 +54,38 @@ pub(self) mod g {
     pub const HIT_TICK: u32 = 0xba;
     pub const BITES: u32 = 0xbe;
     pub const RAGE: u32 = 0xae;
-    /// Délai (mot) avant qu'un joueur trop proche déclenche la riposte, et son compte à rebours.
+    /// Delay (word) before a player too close triggers the counterattack, and its countdown.
     pub const GUARD: u32 = 0x46;
     pub const GUARD_TIMER: u32 = 0x5c;
-    /// Hôte (boss de type 2).
+    /// Host (boss of type 2).
     pub const HOST: u32 = 0x42;
 }
 use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Jeux d'animations d'un boss.
+/// Animation sets of a boss.
 #[derive(Clone, Copy)]
 pub(self) enum Set {
     A,
     B,
 }
 
-/// Ce qui distingue le boss de type 2 de celui de type 22 : le code est celui d'une même famille, copié avec d'autres
-/// jeux d'animations et d'autres tables de la ROM.
+/// What distinguishes the type 2 boss from the type 22 one: the code is that of a single family, copied with other
+/// animation sets and other ROM tables.
 pub(self) struct Kit {
     set_a: u32,
     set_b: u32,
-    /// Tables d'attaque (32 octets par couple de niveaux) : portée courte, portée longue, fin d'attaque.
+    /// Attack tables (32 bytes per pair of levels): short range, long range, end of attack.
     close: u32,
     far: u32,
     next: u32,
-    /// Points d'arrivée de la course (lignes de 6 octets : X, Z, angle, sens) et chances de riposte (lignes de
-    /// `1 << chances_shift` octets).
+    /// Arrival points of the run (6-byte rows: X, Z, angle, direction) and counterattack chances (rows of
+    /// `1 << chances_shift` bytes).
     spot: u32,
     chances: u32,
     chances_shift: u32,
-    /// Table de tirage de l'élan, table des réactions aux coups.
+    /// Run-up draw table, hit reaction table.
     dash: u32,
     reactions: u32,
 }
@@ -116,7 +116,7 @@ const PART_KIT: Kit = Kit {
     reactions: 0x9ce66,
 };
 
-/// Le boss est-il le type 2 (et non le type 22) ?
+/// Is the boss type 2 (and not type 22)?
 pub(self) fn two<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.u8(2) == 2
 }
@@ -125,13 +125,13 @@ pub(self) fn kit<R: Bench>(x: &mut Cx<'_, R>) -> &'static Kit {
     if two(x) { &TWO_KIT } else { &PART_KIT }
 }
 
-/// Lance l'animation `n` du jeu `set` (0x1a32).
+/// Starts animation `n` of set `set` (0x1a32).
 pub(self) fn start<R: Bench>(x: &mut Cx<'_, R>, set: Set, n: u32) {
     let k = kit(x);
     x.anim_start(if matches!(set, Set::A) { k.set_a } else { k.set_b }, n as u16);
 }
 
-/// États posés d'un coup (`+4..+7`).
+/// States set in one go (`+4..+7`).
 pub(self) mod state {
     pub const STAND: u32 = 0x0202_0000;
     pub const TURN: u32 = 0x0202_0200;
@@ -144,7 +144,7 @@ pub(self) mod call {
 
 // --- animations --------------------------------------------------------------------------------
 
-/// Numéro d'animation `id` (+0xa2) ; lance l'animation `n` du jeu `set` si ce n'est pas la dernière lancée (+0xa3).
+/// Animation number `id` (+0xa2); starts animation `n` of set `set` if it is not the last one started (+0xa3).
 pub(self) fn pose<R: Bench>(x: &mut Cx<'_, R>, set: Set, id: u8, n: u32) {
     x.set8(ANIM_ID, id);
     if x.u8(ANIM_ID) != x.u8(ANIM_LAST) {
@@ -154,13 +154,13 @@ pub(self) fn pose<R: Bench>(x: &mut Cx<'_, R>, set: Set, id: u8, n: u32) {
     }
 }
 
-/// Réglages sonores `+0x44` et `+0x45` posés avec l'animation.
+/// Sound settings `+0x44` and `+0x45` set along with the animation.
 pub(self) fn sounds<R: Bench>(x: &mut Cx<'_, R>, a: u8, b: u8) {
     x.set8(0x44, a);
     x.set8(0x45, b);
 }
 
-/// Animation du corps ou des attaques selon qu'il est en seconde forme.
+/// Animation of the body or of the attacks depending on whether it is in its second form.
 pub(self) fn second_form<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.u8(SECOND) != 0
 }
@@ -172,7 +172,7 @@ pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
 
-/// Une poussière / explosion `D0 .. D3` (0xb10c8) tous les huit appels (`+0xb7`).
+/// A dust puff / explosion `D0 .. D3` (0xb10c8) every eight calls (`+0xb7`).
 pub(self) fn rubble<R: Bench>(x: &mut Cx<'_, R>, d0: u32, d1: u32, d2: u32, d3: u32) {
     x.add8(EFFECT_COUNT, 1);
     let n = x.u8(EFFECT_COUNT) & 7;
@@ -183,7 +183,7 @@ pub(self) fn rubble<R: Bench>(x: &mut Cx<'_, R>, d0: u32, d1: u32, d2: u32, d3: 
     lib::shock(x, d0, d1 as u16, d2 as u16, d3 as u16);
 }
 
-/// 0x9d8e0 : la cible est-elle du mauvais côté (le boss ne la regarde pas) ?
+/// 0x9d8e0: is the target on the wrong side (the boss is not facing it)?
 pub(self) fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
@@ -194,7 +194,7 @@ pub(self) fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     wanted != x.u8(f::FLIP)
 }
 
-/// 0x9d928 : la cible est-elle loin à la fois en profondeur et en X ?
+/// 0x9d928: is the target far in both depth and X?
 pub(self) fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
@@ -208,7 +208,7 @@ pub(self) fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     dx > 0x180
 }
 
-/// 0x9b30a et 0x9b384 : une cible dans la boîte, avec des coups possibles (0xa4b4 / 0xa4c2) ; le boss fonce ou attaque.
+/// 0x9b30a and 0x9b384: a target in the box, with possible hits (0xa4b4 / 0xa4c2); the boss charges or attacks.
 fn hunt_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, table: u32) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) || x.u16(f::TARGET) == 0 {
         return false;
@@ -238,7 +238,7 @@ pub(self) fn hunt_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     hunt_box(x, -0xd0, 0x50, 0x50, table)
 }
 
-/// 0x9d24e et 0x9d254 : attaque tirée dans la ligne de la difficulté de `table` (32 octets par couple de niveaux).
+/// 0x9d24e and 0x9d254: attack drawn from the difficulty row of `table` (32 bytes per pair of levels).
 pub(self) fn attack_from_table<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let row = ((var::RANK.get(x.b) >> 1) as u32) << 5;
     let r = rand_and(x, 0x1f);
@@ -248,12 +248,12 @@ pub(self) fn attack_from_table<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     x.set8(0x7, 0);
 }
 
-/// 0x9d680 (0x7ee1e pour le type 2) : fin d'une attaque : debout, ou une nouvelle attaque si un joueur est tout près.
+/// 0x9d680 (0x7ee1e for type 2): end of an attack: standing, or a new attack if a player is very close.
 pub(self) fn next_attack<R: Bench>(x: &mut Cx<'_, R>) {
     for k in 0..4u32 {
         let p = crate::objects::Obj(0xff85de + 0x200 * k);
         if p.u8(x.b, 0) == 0 {
-            // le type 22 s'arrête au premier joueur absent, le type 2 passe au suivant
+            // type 22 stops at the first absent player, type 2 moves on to the next
             if two(x) {
                 continue;
             }
@@ -273,7 +273,7 @@ pub(self) fn next_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, state::STAND);
 }
 
-/// 0x9d9d0 : un joueur tout près (boîte ±0x28 en X, ±8 en profondeur) à la hauteur du sol ?
+/// 0x9d9d0: a player very close (box ±0x28 in X, ±8 in depth) at ground height?
 pub(self) fn player_within_reach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     for k in 0..4u32 {
         let p = crate::objects::Obj(0xff85de + 0x200 * k);
@@ -287,7 +287,7 @@ pub(self) fn player_within_reach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     false
 }
 
-/// 0x9da00 : `p` est-il dans la boîte (décalage `d0`, demi-largeur `d1`, demi-profondeur `d2`) du boss, au sol ?
+/// 0x9da00: is `p` in the boss's box (offset `d0`, half-width `d1`, half-depth `d2`), on the ground?
 pub(self) fn reach<R: Bench>(x: &mut Cx<'_, R>, p: crate::objects::Obj, d0: i16, d1: u16, d2: u16) -> bool {
     if p.u16(x.b, 0xc) != 0 {
         return false;
@@ -304,8 +304,8 @@ pub(self) fn reach<R: Bench>(x: &mut Cx<'_, R>, p: crate::objects::Obj, d0: i16,
     dz <= d2.wrapping_mul(2)
 }
 
-/// 0x9da5c : choisit le point d'arrivée de la course (`+0xb0`, `+0xb2`), l'angle et le sens de rotation, d'après la
-/// position du boss dans l'écran (table 0x9dabe : X, Z, angle, sens).
+/// 0x9da5c: chooses the arrival point of the run (`+0xb0`, `+0xb2`), the angle and the rotation direction, from the
+/// boss's position on the screen (table 0x9dabe: X, Z, angle, direction).
 pub(self) fn choose_spot<R: Bench>(x: &mut Cx<'_, R>) {
     let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
     let dz = x.u16(0x10).wrapping_sub(var::SCROLL_Y.get(x.b));
@@ -327,14 +327,14 @@ pub(self) fn choose_spot<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(SPIN, spin);
 }
 
-/// 0x9db72 : cinq poussières en ligne sous le boss qui retombe.
+/// 0x9db72: five dust puffs in a line under the boss as it lands.
 pub(self) fn dust_line<R: Bench>(x: &mut Cx<'_, R>) {
     for dz in [-0x30i16, -0x18, 0, 0x18, 0x30] {
         lib::shock(x, 1, 0, dz as u16, 4);
     }
 }
 
-/// 0x7f328 et 0x7f3a0 : poussières en ligne, vers la droite (le boss regarde à gauche) ou vers la gauche.
+/// 0x7f328 and 0x7f3a0: dust puffs in a line, toward the right (the boss faces left) or toward the left.
 pub(self) fn dust_trail<R: Bench>(x: &mut Cx<'_, R>, right: bool) {
     const RIGHT: [i16; 6] = [-0x10, 8, 0x20, 0x38, 0x50, 0x68];
     const LEFT: [i16; 6] = [-0x68, -0x58, -0x38, -0x20, -0x8, 0x10];
@@ -343,7 +343,7 @@ pub(self) fn dust_trail<R: Bench>(x: &mut Cx<'_, R>, right: bool) {
     }
 }
 
-/// Cinq appels de 0x9eca4 (éclats), D5 = 4 à 0 comme la boucle `dbf` de l'original.
+/// Five calls of 0x9eca4 (bursts), D5 = 4 to 0 like the original's `dbf` loop.
 pub(self) fn scatter<R: Bench>(x: &mut Cx<'_, R>) {
     for i in (0..5u32).rev() {
         *x.c.d5() = i;
@@ -352,7 +352,7 @@ pub(self) fn scatter<R: Bench>(x: &mut Cx<'_, R>) {
     *x.c.d5() |= 0xffff;
 }
 
-/// 0x9db28 : quinze couleurs de palette écrites en 0x91c340 ; le boss prend le décalage de palette 0x1a.
+/// 0x9db28: fifteen palette colors written at 0x91c340; the boss takes palette offset 0x1a.
 fn set_palette<R: Bench>(x: &mut Cx<'_, R>) {
     const COLORS: [u16; 15] = [
         0xf333, 0xfdef, 0xfaed, 0xf9b9, 0xf575, 0xf244, 0xffff, 0xfddd, 0xfa9a, 0xf656, 0xf5cb, 0xf397, 0xf075, 0xf053, 0xf031,
@@ -385,7 +385,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
@@ -415,15 +415,15 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(SECOND_FX, 0);
     x.set16(SPOT_TIMER, 0x10);
     x.set8(0x93, 0);
-    // `jmp 0x1a32` : les registres qu'il laisse au gestionnaire suivant ne sont relus par personne (sonde `exit`)
+    // `jmp 0x1a32`: the registers it leaves to the following handler are re-read by no one (`exit` probe)
     let set = kit(x).set_a;
     x.anim_start(set, 0);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
-/// 0x9afbc : un groupe par image (hors gel et pause) ; un compte à rebours (`+0x5c`, reprise à 0xf0) déclenche, quand
-/// le boss est au sol et que `+0x46` désigne un objet, l'état 0x0204_1600 (colère).
+/// 0x9afbc: one group per frame (outside freeze and pause); a countdown (`+0x5c`, restart at 0xf0) triggers, when
+/// the boss is on the ground and `+0x46` designates an object, state 0x0204_1600 (anger).
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         pick_target(x);

@@ -1,10 +1,10 @@
-//! Fuzz différentiel de la RAM supplémentaire de la carte de développement (`eeprom/dev_card.rs`).
+//! Differential fuzz of the extra RAM of the development card (`eeprom/dev_card.rs`).
 //!
-//! Sur des états aléatoires de la RAM 0x660000 (zones valides, exemplaires corrompus, compteurs près de
-//! leurs bornes, RAM vierge ou aléatoire), compare le code d'origine (68000 recompilé, sans aucune native) à
-//! la version Rust : mémoire complète et registres rendus.
+//! On random states of the RAM 0x660000 (valid zones, corrupted copies, counters near
+//! their bounds, blank or random RAM), compares the original code (recompiled 68000, without any native) to
+//! the Rust version: complete memory and returned registers.
 //!
-//!   fuzz_dev_card <roms> <eeprom> [essais [graine]]
+//!   fuzz_dev_card <roms> <eeprom> [trials [seed]]
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
@@ -34,7 +34,7 @@ impl Rng {
 }
 
 const RAM: u32 = 0x66_0000;
-/// (décalage, mots) des zones de la RAM supplémentaire.
+/// (offset, words) of the zones of the extra RAM.
 const ZONES: &[(u32, u32)] =
     &[(0x1140, 32), (0x1020, 4), (0x1028, 4), (0x1030, 4), (0x1038, 4), (0x1040, 4), (0x1048, 4), (0x1200, 48), (0x1260, 8), (0x1270, 2)];
 
@@ -44,7 +44,7 @@ fn write_long(b: &mut Cps2Bus, a: u32, v: u32) {
     }
 }
 
-/// Un état plausible de la RAM supplémentaire pour la région `r`.
+/// A plausible state of the extra RAM for region `r`.
 fn state(b: &mut Cps2Bus, a: &mut Rng, r: u32) {
     let values: [u32; 12] = [0, 1, 5, 999_998, 999_999, 1_000_000, 0x127a_3980, 0x127a_3981, 0x4f_5880, 0x4f_5881, 0xffff_ffff, 0x1234_5678];
     for k in 0..3 {
@@ -57,7 +57,7 @@ fn state(b: &mut Cps2Bus, a: &mut Rng, r: u32) {
     }
     let mode = a.below(10);
     for &(start, words) in ZONES {
-        // une valeur commune aux trois exemplaires
+        // a value common to the three copies
         let mut bytes = vec![0u8; words as usize];
         for (i, o) in bytes.iter_mut().enumerate() {
             *o = match start {
@@ -87,7 +87,7 @@ fn state(b: &mut Cps2Bus, a: &mut Rng, r: u32) {
                 }
             }
         }
-        // corruption : un exemplaire, parfois deux, quelques octets
+        // corruption: one copy, sometimes two, a few bytes
         if mode >= 2 && a.below(2) == 0 {
             for _ in 0..1 + a.below(3) {
                 let k = a.below(3) as u32;
@@ -128,7 +128,7 @@ type Rust = Box<dyn Fn(&mut Cpu, &mut Cps2Bus)>;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let (Some(roms), Some(eeprom)) = (a.get(1), a.get(2)) else {
-        eprintln!("usage : fuzz_dev_card <roms> <eeprom> [essais [graine]]");
+        eprintln!("usage: fuzz_dev_card <roms> <eeprom> [trials [seed]]");
         std::process::exit(2);
     };
     let tests: u32 = a.get(3).map_or(2000, |s| s.parse().unwrap());
@@ -137,30 +137,30 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_game::install(&mut m);
-    // quelques images : la RAM de travail est celle d'un jeu qui a démarré
+    // a few frames: the work RAM is that of a game that has started
     for _ in 0..700 {
         m.run_frame();
     }
-    // (nom, entrée d'origine, routine Rust, registre D0 aléatoire ?)
+    // (name, original entry, Rust routine, random D0 register?)
     let natives = |entry: u32| -> Rust {
         let n = ddsom_game::all_natives().find(|n| n.entry == entry).expect("native");
         Box::new(move |c, b| n.execute(c, b))
     };
     let case: Vec<(&str, u32, Rust)> = vec![
-        ("démarrage 0x2dc9a", 0x2dc9a, natives(0x2dc9a)),
-        ("réinitialisation 0x2e8e4", 0x2e8e4, Box::new(|c, b| {
+        ("startup 0x2dc9a", 0x2dc9a, natives(0x2dc9a)),
+        ("reset 0x2e8e4", 0x2e8e4, Box::new(|c, b| {
             ddsom_game::eeprom::reset_card(c, b);
             ddsom_game::mem::rts(c, b);
         })),
-        ("temps de jeu 0x2e540", 0x2e540, Box::new(|c, b| {
+        ("game time 0x2e540", 0x2e540, Box::new(|c, b| {
             ddsom_game::eeprom::dev_card::play_time(b);
             ddsom_game::mem::rts(c, b);
         })),
-        ("pièce 0x2e448", 0x2e448, natives(0x2e448)),
-        ("départ 0x2e49a", 0x2e49a, natives(0x2e49a)),
+        ("coin 0x2e448", 0x2e448, natives(0x2e448)),
+        ("start 0x2e49a", 0x2e49a, natives(0x2e49a)),
         ("parties 0x2e4ec", 0x2e4ec, natives(0x2e4ec)),
         ("personnage 0x2e630", 0x2e630, natives(0x2e630)),
-        ("durée 0x2e696", 0x2e696, natives(0x2e696)),
+        ("duration 0x2e696", 0x2e696, natives(0x2e696)),
     ];
     let mut total = 0;
     for (name, entry, rust) in &case {
@@ -182,7 +182,7 @@ fn main() {
                 }
                 _ => c.d[0],
             };
-            // la durée doit se comparer à la plus longue / plus courte du moment
+            // the duration must be compared with the longest / shortest of the moment
             c.a[7] = 0xff_f000;
             c.a[7] -= 4;
             wr32(&mut b, c.a[7], 0xfffe);
@@ -226,11 +226,11 @@ fn main() {
                     }
                 }
                 if examples.len() < 3 {
-                    examples.push(format!("région {region} d0={:08x} : {}", c2.d[0], diffs.join(", ")));
+                    examples.push(format!("region {region} d0={:08x}: {}", c2.d[0], diffs.join(", ")));
                 }
             }
         }
-        println!("{name:28} {tests} essais, {gaps} écarts, {panics} paniques, {abandons} abandons");
+        println!("{name:28} {tests} trials, {gaps} mismatches, {panics} panics, {abandons} abandons");
         for e in examples {
             println!("    {e}");
         }
@@ -238,5 +238,5 @@ fn main() {
     }
     let _ = rd32;
     let _ = rd8;
-    println!("{}", if total == 0 { "FUZZ OK" } else { "FUZZ ÉCARTS" });
+    println!("{}", if total == 0 { "FUZZ OK" } else { "FUZZ MISMATCHES" });
 }

@@ -1,9 +1,9 @@
-//! État partagé `0xf5938` des sorties de scène : l'écran de bonus.
+//! Shared state `0xf5938` of the scene exits: the bonus screen.
 //!
-//! Il n'a lieu que si un joueur en jeu a ses deux longs `+0x118` et `+0x11c` à -1. Fondu au noir, caméras mises de
-//! côté, puis (sept sous-états, octet `+3` du bloc, pas de 2) : décor et objets du bonus (quatre effets numérotés,
-//! cinq objets SET triés par adresse, dont le dernier mène le jeu), compte à rebours de 90 secondes affiché par un
-//! effet (`+0x42` : secondes restantes), fondu, retour des caméras. Le jeu lui-même est dans les objets.
+//! It only takes place if a player in the game has both longs `+0x118` and `+0x11c` at -1. Fade to black, cameras set
+//! aside, then (seven sub-states, byte `+3` of the block, step of 2): bonus terrain and objects (four numbered effects,
+//! five SET objects sorted by address, the last of which drives the game), 90-second countdown displayed by an
+//! effect (`+0x42`: seconds left), fade, cameras returned. The game itself is in the objects.
 
 use super::screen::{self, copy_page};
 use super::fading;
@@ -15,37 +15,37 @@ use crate::families::effects_creators::{end_screen, or_rest};
 use crate::objects::{pools, Obj};
 use crate::video::{load_grid, clear_layer, Layer, Grid};
 
-/// Variables de l'écran de bonus (sous A5).
+/// Bonus screen variables (below A5).
 mod v {
     use crate::mem::A5;
-    /// Caméras mises de côté : X et Y de la principale, X et Y de l'alternative.
+    /// Cameras set aside: X and Y of the main one, X and Y of the alternate one.
     pub const SAVED_CAMERAS: u32 = A5 - 0x5594;
-    /// Secondes restantes (octet ; mot pendant le fondu final), images de la seconde, durée totale (mot).
+    /// Seconds left (byte; word during the final fade), frames of the second, total duration (word).
     pub const SECONDS: u32 = A5 - 0x558c;
     pub const FRAMES: u32 = A5 - 0x558b;
     pub const DURATION: u32 = A5 - 0x558a;
-    /// L'objet qui mène le jeu (mot), ses cinq objets triés (mots), l'effet qui affiche le compte à rebours.
+    /// The object that drives the game (word), its five sorted objects (words), the effect that displays the countdown.
     pub const LEADER: u32 = A5 - 0x5588;
     pub const OBJECTS: u32 = A5 - 0x5586;
     pub const COUNTER: u32 = A5 - 0x5564;
-    /// Dernière valeur vue de l'octet `+0x17` du meneur.
+    /// Last value seen of the leader's `+0x17` byte.
     pub const LAST_SCORE: u32 = A5 - 0x55a7;
 }
 
-/// Variables de la RAM de travail (décalages depuis A5) touchées par le bonus.
+/// Work RAM variables (offsets from A5) touched by the bonus.
 mod a5 {
     pub const SCENE: u32 = 0x34;
-    /// Caméra principale : X, Y, copies de X et Y, et autres champs remis à zéro ; idem pour l'alternative.
+    /// Main camera: X, Y, copies of X and Y, and other fields reset to zero; same for the alternate one.
     pub const CAM_X: u32 = 0x506;
     pub const CAM_Y: u32 = 0x50a;
     pub const ALT_X: u32 = 0x556;
     pub const ALT_Y: u32 = 0x55a;
 }
 
-/// Tables de la ROM et sous-routines.
+/// ROM tables and subroutines.
 mod rom {
     pub const DISPATCH: u32 = 0xf5946;
-    /// Décors du bonus (rectangles de cases), selon `A5+0x70`.
+    /// Bonus terrain (rectangles of cells), according to `A5+0x70`.
     pub const BACKDROP: u32 = 0x3f7e0e;
     pub const BACKDROP_ALT: u32 = 0x3f6c08;
 }
@@ -53,7 +53,7 @@ mod sub {
     pub const MUSIC: u32 = 0xe1114;
 }
 
-/// Reprises (adresses d'origine qui suivent une cession).
+/// Resumes (original addresses following a yield).
 mod at {
     pub const FADED_OUT: u32 = 0xf5fcc;
     pub const SET_UP: u32 = 0xf60ca;
@@ -71,7 +71,7 @@ fn next_sub_step(x: &mut Ctx) {
     let s = sub_step(x).wrapping_add(2);
     wr8(x.b, x.c.a[0] + 3, s);
 }
-/// Fin de l'état : état suivant de la séquence (`+2` += 4), sous-état 0.
+/// End of the state: next state of the sequence (`+2` += 4), sub-state 0.
 fn leave(x: &mut Ctx) {
     let a0 = x.c.a[0];
     let s = rd8(x.b, a0 + 2).wrapping_add(4);
@@ -79,12 +79,12 @@ fn leave(x: &mut Ctx) {
     wr8(x.b, a0 + 3, 0);
 }
 
-/// Aiguillage d'origine (`moveq #0,D0 ; move.b 3(A0),D0 ; move.w table(PC,D0),D1`) : la sous-étape.
+/// Original dispatch (`moveq #0,D0 ; move.b 3(A0),D0 ; move.w table(PC,D0),D1`): the sub-step.
 pub fn dispatch(x: &mut Ctx, _table: u32) -> u8 {
     sub_step(x)
 }
 
-/// Fondu au noir ou depuis le noir (délai 4, toutes les pages, 15 pas) ; la routine cède la main et revient en
+/// Fade to black or from black (delay 4, all pages, 15 steps); the routine cedes control and returns to
 /// `resume`.
 pub fn fade(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, resume: impl Into<crate::tasks::table::Next>) -> Flow {
     fading::STEP.set(x.b, 15);
@@ -93,14 +93,14 @@ pub fn fade(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, resume: impl Into<crate:
     x.subroutine(routine, resume)
 }
 
-/// `movem.l A0,-(SP) ; jsr 0x1de96 ; movem.l (SP)+,A0` : la liste de sprites, A0 gardé.
+/// `movem.l A0,-(SP) ; jsr 0x1de96 ; movem.l (SP)+,A0`: the sprite list, A0 preserved.
 pub fn sprites_keep_a0(x: &mut Ctx) {
     let a0 = x.c.a[0];
     crate::sprites::build_68k(x.c, x.b);
     x.c.a[0] = a0;
 }
 
-/// Un état de 0xf5938.
+/// A state of 0xf5938.
 pub fn run(x: &mut Ctx) -> Flow {
     match dispatch(x, rom::DISPATCH) {
         0 => start(x),
@@ -131,14 +131,14 @@ pub fn run(x: &mut Ctx) -> Flow {
     }
 }
 
-/// Mot décrémenté ; vrai quand il arrive à zéro.
+/// Word decremented; true when it reaches zero.
 fn tick16(x: &mut Ctx, at: u32) -> bool {
     let t = rd16(x.b, at).wrapping_sub(1);
     wr16(x.b, at, t);
     t == 0
 }
 
-/// Les joueurs en jeu (présents, état < 4) qui ont gagné le bonus (`+0x118` et `+0x11c` à -1).
+/// The players in the game (present, state < 4) who won the bonus (`+0x118` and `+0x11c` at -1).
 fn qualified(x: &mut Ctx) -> u8 {
     let mut n = 0u8;
     for k in 0..4 {
@@ -150,7 +150,7 @@ fn qualified(x: &mut Ctx) -> u8 {
     n
 }
 
-/// Sous-état 0 : sans joueur qualifié, l'état est sauté ; sinon fondu au noir.
+/// Sub-state 0: with no qualified player, the state is skipped; otherwise fade to black.
 fn start(x: &mut Ctx) -> Flow {
     if qualified(x) == 0 {
         let s = rd8(x.b, A5 - 0x55c8).wrapping_add(4);
@@ -161,9 +161,9 @@ fn start(x: &mut Ctx) -> Flow {
 }
 
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
-        /// Les caméras sont mises de côté et placées sur le décor du bonus.
+        /// The cameras are set aside and placed on the bonus terrain.
         FadedOut = at::FADED_OUT => |x| {
             next_sub_step(x);
             let main = (x.v16(a5::CAM_X), x.v16(a5::CAM_Y));
@@ -193,7 +193,7 @@ crate::steps! {
             crate::palette::load_palette_set(x.b, 2);
             Flow::Done
         },
-        /// Le titre du bonus (objet SET type 0, variante 69).
+        /// The bonus title (SET object type 0, variant 69).
         Started = at::STARTED => |x| {
             if let Some(Obj(o)) = pools::SET.alloc(x.b) {
                 for (off, v) in [(0, 1), (2, 0), (3, 69), (0x2f, 3)] {
@@ -202,8 +202,8 @@ crate::steps! {
             }
             Flow::Done
         },
-        /// L'écran du bonus est effacé ; hors scène 1 l'état est fini, dans la scène 1 les pages de palettes reviennent
-        /// après quatre images.
+        /// The bonus screen is cleared; outside scene 1 the state is finished, in scene 1 the palette pages come back
+        /// after four frames.
         Ended = at::ENDED => |x| {
             next_sub_step(x);
             screen::clear_bonus_frame(x.b);
@@ -232,7 +232,7 @@ crate::steps! {
             }
             Flow::Done
         },
-        /// Dernière image : fondu depuis le noir, puis l'état suivant de la séquence.
+        /// Last frame: fade from black, then the next state of the sequence.
         LastFrame = at::LAST_FRAME => |x| fade(x, crate::tasks::fading::rise, Step::FadedIn),
         FadedIn = at::FADED_IN => |x| {
             leave(x);
@@ -241,7 +241,7 @@ crate::steps! {
     }
 }
 
-/// Copies des positions des caméras et champs de défilement remis à leurs valeurs de départ.
+/// Copies of the camera positions and scroll fields reset to their starting values.
 pub fn reset_camera_copies(x: &mut Ctx) {
     let (cx, cy, ax, ay) = (x.v16(a5::CAM_X), x.v16(a5::CAM_Y), x.v16(a5::ALT_X), x.v16(a5::ALT_Y));
     x.set_v16(0x50e, cx);
@@ -257,15 +257,15 @@ pub fn reset_camera_copies(x: &mut Ctx) {
     x.set_v8(0x36, 0);
 }
 
-/// Sous-état 2 : quand le décor est chargé (`A5+0x7e68` ≥ 5), l'écran est vidé (sauf scène 1) et les effets du
-/// bonus créés ; quatre images d'attente.
+/// Sub-state 2: when the terrain is loaded (`A5+0x7e68` >= 5), the screen is cleared (except scene 1) and the bonus
+/// effects created; four frames of waiting.
 fn set_up(x: &mut Ctx) -> Flow {
     if (x.v16(0x7e68) as i16) < 5 {
         return Flow::Done;
     }
-    // Glitch d'origine : l'effet du compte à rebours reçoit en `+0x2f` l'octet bas de D1 tel que le laisse
-    // l'effacement de la zone de texte (D1.w = 0xffff), ou, dans la scène 1, l'aiguillage (le déplacement de la
-    // sous-étape 2 dans sa table)
+    // Original glitch: the countdown effect receives in `+0x2f` the low byte of D1 as left by
+    // the clearing of the text area (D1.w = 0xffff), or, in scene 1, the dispatch (the offset of the
+    // sub-step 2 in its table)
     let setting = if x.v8(a5::SCENE) != 1 {
         x.set_v8(0x42, 2);
         crate::objects::lists::unlink_all(x.b);
@@ -280,7 +280,7 @@ fn set_up(x: &mut Ctx) -> Flow {
     } else {
         prog16(x.b, rom::DISPATCH + 2) as u8
     };
-    // Glitch d'origine : les échecs d'allocation ne sont pas testés (l'A1 laissé reçoit les écritures)
+    // Original glitch: allocation failures are not tested (the A1 left over receives the writes)
     let created = end_screen(x.b, 3, setting);
     let counter = or_rest(x.b, created).0;
     wr16(x.b, v::COUNTER, counter as u16);
@@ -294,22 +294,22 @@ fn set_up(x: &mut Ctx) -> Flow {
     x.wait(4, Step::SetUp)
 }
 
-/// Pages de palettes du bonus : la page 0x91c400 passe en 0x910000, et ainsi de suite.
+/// Bonus palette pages: page 0x91c400 goes to 0x910000, and so on.
 const PAGES: [(u32, u32); 4] = [(0x91c400, 0x910000), (0x91c800, 0x910400), (0x91cc00, 0x910800), (0x91c000, 0x910c00)];
 
-/// Sous-état 4 : quand les décors sont prêts (`A5+0x7e66` ≥ 5), cinq objets SET, triés par adresse : les quatre
-/// premiers sont liés aux joueurs, le dernier (le meneur) aux quatre autres. Compte à rebours de 90 secondes,
-/// décor, blocs de tuiles, fondu depuis le noir.
+/// Sub-state 4: when the terrain is ready (`A5+0x7e66` >= 5), five SET objects, sorted by address: the first four
+/// are linked to the players, the last (the leader) to the other four. 90-second countdown,
+/// terrain, tile blocks, fade from black.
 fn objects(x: &mut Ctx) -> Flow {
     if x.v16(0x7e66) < 5 {
         return Flow::Done;
     }
-    // Glitch d'origine : les échecs d'allocation ne sont pas testés (l'A1 laissé est rangé)
+    // Original glitch: allocation failures are not tested (the A1 left over is stored)
     let mut objs = [0u16; 5];
     for o in objs.iter_mut() {
         *o = crate::families::creators::set_5_pure(x.b).unwrap_or_else(|a1| a1).0 as u16;
     }
-    // tri à bulles de l'original sur les adresses étendues en signe (cmpa.w)
+    // original bubble sort on sign-extended addresses (cmpa.w)
     objs.sort_by_key(|&w| w as i16 as i32 as u32);
     for (k, &o) in objs.iter().enumerate() {
         wr16(x.b, v::OBJECTS + 2 * k as u32, o);
@@ -348,7 +348,7 @@ fn objects(x: &mut Ctx) -> Flow {
     fade(x, crate::tasks::fading::rise, Step::Started)
 }
 
-/// 0xf67fa : le décor du bonus, rectangle de cases lu dans la ROM (largeur, hauteur, puis les cases par colonnes).
+/// 0xf67fa: the bonus terrain, rectangle of cells read from ROM (width, height, then the cells by columns).
 fn backdrop(x: &mut Ctx) {
     let mut src = if x.v16(0x70) != 0 { rom::BACKDROP_ALT } else { rom::BACKDROP };
     let (rows, columns) = (rd16(x.b, src) as u32, rd16(x.b, src + 2) as u32);
@@ -362,16 +362,16 @@ fn backdrop(x: &mut Ctx) {
     }
 }
 
-/// 0xf6772 : l'effet du compte à rebours affiche les secondes restantes.
+/// 0xf6772: the countdown effect displays the seconds left.
 fn show_seconds(x: &mut Ctx) {
     let counter = rd16(x.b, v::COUNTER) as i16 as i32 as u32 & 0xff_ffff;
     let s = rd8(x.b, v::SECONDS);
     wr8(x.b, counter + 0x42, s);
 }
 
-/// Sous-état 6 : le compte à rebours. Il repart de 20 secondes quand le score du meneur (`+0x17`) change, tombe à
-/// 10 quand le meneur le demande (`+0x14`), et le jeu finit au bout des 90 secondes, à zéro, ou quand le score
-/// atteint l'objectif (`+0x16`).
+/// Sub-state 6: the countdown. It restarts from 20 seconds when the leader's score (`+0x17`) changes, drops to
+/// 10 when the leader asks for it (`+0x14`), and the game ends after the 90 seconds, at zero, or when the score
+/// reaches the goal (`+0x16`).
 fn countdown(x: &mut Ctx) {
     let leader = rd16(x.b, v::LEADER) as i16 as i32 as u32 & 0xff_ffff;
     if (rd8(x.b, v::SECONDS) as i8) < 10 && rd8(x.b, leader + 0x14) != 0 {
@@ -411,7 +411,7 @@ fn countdown(x: &mut Ctx) {
     wr16(x.b, v::SECONDS, 30);
 }
 
-/// Sous-état 8 : 30 images, puis fondu au noir.
+/// Sub-state 8: 30 frames, then fade to black.
 fn end(x: &mut Ctx) -> Flow {
     if !tick16(x, v::SECONDS) {
         return Flow::Done;
@@ -419,7 +419,7 @@ fn end(x: &mut Ctx) -> Flow {
     fade(x, crate::tasks::fading::descent, Step::Ended)
 }
 
-/// Entrée d'origine (séquences restées en 68000).
+/// Original entry (sequences still in 68000).
 pub const BONUS: Native = Native {
     entry: 0xf5938,
     name: "scene_bonus",

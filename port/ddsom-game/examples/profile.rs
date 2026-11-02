@@ -1,5 +1,5 @@
-//! Profil : cycles 68000 par fonction d'origine sur un scénario.
-//! profile <roms> <eeprom> <scenario> <images> <decomp/index.tsv>
+//! Profile: 68000 cycles per original function over a scenario.
+//! profile <roms> <eeprom> <scenario> <frames> <decomp/index.tsv>
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -27,7 +27,7 @@ fn main() {
         script.apply(f, &mut m);
         m.run_frame();
     }
-    // fonctions : (adresse, nom, taille)
+    // functions: (address, name, size)
     let mut funcs: Vec<(u32, String, u32)> = std::fs::read_to_string(&a[5]).unwrap().lines().skip(1)
         .filter_map(|l| {
             let v: Vec<&str> = l.split('\t').collect();
@@ -47,7 +47,7 @@ fn main() {
     });
     let mut v: Vec<(u32, u64)> = per.into_iter().collect();
     v.sort_by_key(|x| std::cmp::Reverse(x.1));
-    println!("{} fonctions exécutées, {} cycles recompilés", v.len(), total);
+    println!("{} functions executed, {} recompiled cycles", v.len(), total);
     for (f, cy) in v.iter().take(40) {
         let name = funcs.iter().find(|x| x.0 == *f).map(|x| x.1.as_str()).unwrap_or("?");
         println!("{:06x} {:30} {:5.2} %", f, name, 100.0 * *cy as f64 / total as f64);

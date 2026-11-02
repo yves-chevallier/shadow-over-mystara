@@ -1,8 +1,8 @@
-//! Qui entre dans une plage de code 68000 : pour chaque entrée (instruction de la plage précédée d'une
-//! instruction 68000 hors de la plage, ou d'une routine native), l'image, l'adresse et la dernière
-//! instruction 68000 exécutée avant (« natif » si une native s'est exécutée entre les deux).
+//! Who enters a 68000 code range: for each entry (instruction of the range preceded by a
+//! 68000 instruction outside the range, or by a native routine), the frame, the address and the last
+//! 68000 instruction executed before (« native » if a native ran in between).
 //!
-//!   who_enters <roms> <eeprom> <scénario> <images> <début> <fin> [max]
+//!   who_enters <roms> <eeprom> <scenario> <frames> <start> <end> [max]
 
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -15,9 +15,9 @@ static FRAME: AtomicU64 = AtomicU64::new(0);
 static LEFT: AtomicU32 = AtomicU32::new(20);
 static STEPS: AtomicU64 = AtomicU64::new(0);
 static LAST_STEP: AtomicU64 = AtomicU64::new(0);
-/// Natives en cours d'exécution (la dernière est l'appelante du code 68000 courant).
+/// Natives being executed (the last one is the caller of the current 68000 code).
 static NATIVES: Mutex<Vec<u32>> = Mutex::new(Vec::new());
-/// Une native a commencé ou fini depuis la dernière instruction 68000.
+/// A native has started or finished since the last 68000 instruction.
 static NATIVE_SEEN: AtomicU32 = AtomicU32::new(0);
 
 fn hook(pc: u32, enter: bool) {
@@ -43,16 +43,16 @@ fn trace(pc: u32) {
             format!("{last:06x}")
         } else {
             let stack: Vec<String> = NATIVES.lock().unwrap().iter().map(|a| format!("{a:06x}")).collect();
-            format!("natives [{}] (dernier 68000 {last:06x})", stack.join(" > "))
+            format!("natives [{}] (last 68000 {last:06x})", stack.join(" > "))
         };
-        println!("image {} : {pc:06x} depuis {via}", FRAME.load(Ordering::Relaxed));
+        println!("frame {}: {pc:06x} from {via}", FRAME.load(Ordering::Relaxed));
     }
 }
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames, from, to, rest @ ..] = &a[..] else {
-        eprintln!("usage : who_enters <roms> <eeprom> <scénario> <images> <début> <fin> [max]");
+        eprintln!("usage: who_enters <roms> <eeprom> <scenario> <frames> <start> <end> [max]");
         std::process::exit(2);
     };
     FROM.store(u32::from_str_radix(from, 16).unwrap(), Ordering::Relaxed);
@@ -67,7 +67,7 @@ fn main() {
     m.executor = Some(ddsom_game::run_traced);
     ddsom_game::set_native_hook(hook);
     ddsom_game::set_trace(trace);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..frames.parse::<usize>().unwrap() {
         FRAME.store(f as u64, Ordering::Relaxed);
         script.apply(f, &mut m);

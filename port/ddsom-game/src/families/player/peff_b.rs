@@ -1,4 +1,4 @@
-//! Effets des joueurs (PEFF), deuxième série : types 11, 20, 33. Voir `docs/families/player.md`.
+//! Player effects (PEFF), second series: types 11, 20, 33. See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -6,16 +6,16 @@ use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Type 11 (0x4b93c) : averse de grêlons. Le parent (variante 0) compte 0x70 images en créant, toutes les
-/// 8 images, deux grêlons (variante 1, sens 0 et 1) ; chaque grêlon tourne autour de sa position
-/// de départ en suivant une table de vitesses (`+0x4c`, choisie par `+0x58`) avant de retomber.
+/// Type 11 (0x4b93c): hailstorm. The parent (variant 0) counts 0x70 frames while creating, every 8 frames, two
+/// hailstones (variant 1, directions 0 and 1); each hailstone circles around its starting position following a speed
+/// table (`+0x4c`, chosen by `+0x58`) before falling back down.
 mod hail {
     use super::*;
 
     const SPEED_TABLES: u32 = 0x4baf6;
     const ANIMS: u32 = 0x1b609a;
     const KIND: u8 = 0xb;
-    /// Durée d'attente avant la chute : `+0x58` (octet), tour de la table : `+0x59`.
+    /// Wait duration before the fall: `+0x58` (byte), table turn: `+0x59`.
     const TIMER: u32 = 0x58;
     const PHASE: u32 = 0x59;
     const PARENT: u32 = 0x5c;
@@ -39,7 +39,7 @@ mod hail {
         }
     }
 
-    /// Une image du parent : au bout de 0x70 images il cesse de créer des grêlons (`+0x5a`).
+    /// One frame of the parent: after 0x70 frames it stops creating hailstones (`+0x5a`).
     fn parent_tick<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(TIMER, 0xff);
         if x.u8(TIMER) == 0 {
@@ -54,7 +54,7 @@ mod hail {
         }
     }
 
-    /// Deux grêlons liés au parent (`+0x5c`) et au joueur.
+    /// Two hailstones linked to the parent (`+0x5c`) and to the player.
     fn spawn_pair<R: Bench>(x: &mut Cx<'_, R>) {
         for side in 0..2 {
             let Some(o) = x.alloc(&pools::PEFF) else { return };
@@ -92,14 +92,14 @@ mod hail {
         x.anim_start(ANIMS, r);
     }
 
-    /// `0x4bae6` : table de vitesses d'après `+0x58`.
+    /// `0x4bae6`: speed table from `+0x58`.
     fn select_table<R: Bench>(x: &mut Cx<'_, R>) {
         let index = x.u8(TIMER) as u32;
         let table = x.rom32(SPEED_TABLES + index);
         x.set32(0x4c, table);
     }
 
-    /// `0x4bb1a` : vitesses de la rangée courante, puis position autour du joueur et déplacement.
+    /// `0x4bb1a`: speeds of the current row, then position around the player and movement.
     fn place<R: Bench>(x: &mut Cx<'_, R>) {
         let row = (x.u8(ANGLE) as u32) << 2 & 0xffff;
         let table = x.u32(0x4c);
@@ -144,7 +144,7 @@ mod hail {
                 return x.reinsert();
             }
         }
-        // fin de la chute : le grêlon éclate
+        // end of the fall: the hailstone bursts
         x.add8(0x4, 2);
         x.set8(TIMER, 0x20);
         select_table(x);
@@ -170,8 +170,8 @@ mod hail {
     }
 }
 
-/// Type 33 (0x4f14c) : brindille projetée depuis un bord de l'écran (variante `+3` : bit 0 = côté), qui
-/// vole `+0x58` images puis, si le jeu n'est pas en pause, crée une trace (type 33 de variante + 1).
+/// Type 33 (0x4f14c): twig thrown from an edge of the screen (variant `+3`: bit 0 = side), which flies `+0x58` frames
+/// then, if the game is not paused, creates a trail (type 33 of variant + 1).
 mod spark {
     use super::*;
 
@@ -240,8 +240,8 @@ mod spark {
     }
 }
 
-/// Type 20 (0x4d08c) : la sorcière. Le parent (variante 0) naît dans un SET, suit le tourbillon (état 2) et
-/// crée à chaque image un éclat (variante 1) ; l'éclat vole en arc depuis le bord de l'écran.
+/// Type 20 (0x4d08c): the witch. The parent (variant 0) is born in a SET, follows the whirlwind (state 2) and creates a
+/// shard (variant 1) every frame; the shard flies in an arc from the edge of the screen.
 mod witch {
     use super::*;
 
@@ -318,7 +318,7 @@ mod witch {
         x.add8(0x4, 2);
     }
 
-    /// Crée un éclat (variante 1) qui garde le rang `+0x5e` de ce parent ; renvoie vrai si le pool est plein.
+    /// Creates a shard (variant 1) that keeps the rank `+0x5e` of this parent; returns true if the pool is full.
     fn spawn_spark<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         match x.alloc(&pools::PEFF) {
             None => {

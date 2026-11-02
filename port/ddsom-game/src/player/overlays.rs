@@ -1,16 +1,16 @@
-//! Sous-objets des joueurs : arme et bouclier dessinés à côté du personnage (P4).
+//! Player sub-objects: weapon and shield drawn next to the character (P4).
 //!
-//! Chaque joueur a deux sous-objets de 0x60 octets (`init::overlay`) : le premier porte l'arme tenue
-//! (`WEAPON_A`), le second le bouclier ou la seconde arme (`WEAPON_B`). Chaque image, `update`
-//! (0x392e4, appelée juste après la boucle des joueurs) les recale sur le joueur : même orientation,
-//! décalage et animation tirés de tables de la ROM selon le personnage, le cadre d'animation du
-//! joueur (`+0x40`, `+0x42`, `+0x44`) et l'arme. Elle fait aussi scintiller la palette des armes
-//! quand un joueur est sous bonus de puissance.
+//! Each player has two 0x60-byte sub-objects (`init::overlay`): the first carries the held weapon
+//! (`WEAPON_A`), the second the shield or the second weapon (`WEAPON_B`). Each frame, `update`
+//! (0x392e4, called right after the player loop) re-snaps them to the player: same orientation,
+//! offset and animation taken from ROM tables according to the character, the player's animation
+//! frame (`+0x40`, `+0x42`, `+0x44`) and the weapon. It also makes the weapon palette sparkle
+//! when a player is under a power bonus.
 //!
-//! Registres : la boucle de partie enchaîne cette routine et les boucles de dispatch des objets sans
-//! rien réinitialiser, et certains gestionnaires lisent des registres qu'elle laisse (D3 par exemple :
-//! un effet recopie le dernier décalage horizontal). Le code ci-dessous reproduit donc les registres
-//! que l'original modifie, au même format (octet, mot ou long) que lui.
+//! Registers: the game loop chains this routine and the object dispatch loops without
+//! resetting anything, and some handlers read registers it leaves (D3 for example:
+//! an effect copies the last horizontal offset). The code below therefore reproduces the registers
+//! that the original modifies, in the same format (byte, word or long) as it.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -25,27 +25,27 @@ use crate::Native;
 use crate::player::ram;
 use crate::machine::Machine;
 
-/// Tables de la ROM (données) : un pointeur par personnage vers des lignes de 8 octets
-/// (animation, décalage x, décalage z, retournement, profondeur).
+/// ROM tables (data): one pointer per character to rows of 8 bytes
+/// (animation, x offset, z offset, flip, depth).
 mod tables {
-    /// Arme tenue (`+0x40`) et bouclier de bas numéro (`+0x42`).
+    /// Held weapon (`+0x40`) and low-numbered shield (`+0x42`).
     pub const BODY: u32 = 0x395d4;
-    /// Bouclier de numéro ≥ 0x28 (`+0x44`).
+    /// Shield numbered ≥ 0x28 (`+0x44`).
     pub const SHIELD_HIGH: u32 = 0x39604;
-    /// Scripts d'animation par numéro d'arme (pointeurs).
+    /// Animation scripts by weapon number (pointers).
     pub const ANIMATIONS: u32 = 0x396e8;
-    /// Palettes qui scintillent sous bonus (8 blocs de 32 octets).
+    /// Palettes that sparkle under bonus (8 blocks of 32 bytes).
     pub const POWER_PALETTES: u32 = 0x397e0;
 }
 
-/// Drapeau « l'équipe est prête pour le sort ultime » (mot en `A5-0x5fc2`).
+/// Flag "the team is ready for the ultimate spell" (word at `A5-0x5fc2`).
 const TEAM_READY: u32 = A5 - 0x5fc2;
-/// Drapeau d'arrêt des scintillements (octet en `A5-0x65ec`).
+/// Flag stopping the sparkles (byte at `A5-0x65ec`).
 const NO_SPARKLE: u32 = A5 - 0x65ec;
-/// Palette qui scintille (RAM de palette CPS).
+/// Sparkling palette (CPS palette RAM).
 const SPARKLE_RAM: u32 = 0x91_c1c0;
 
-/// Champs d'un joueur lus ici.
+/// Fields of a player read here.
 mod f {
     pub const WEAPON_FRAME: u32 = 0x40;
     pub const SHIELD_LOW_FRAME: u32 = 0x42;
@@ -56,17 +56,17 @@ mod f {
     pub const SPARKLE_STEP: u32 = 0x52;
 }
 
-/// Ligne de table d'un sous-objet : 8 octets.
+/// Table row of a sub-object: 8 bytes.
 struct Row {
     anim: u16,
     dx: i16,
     dz: i16,
-    /// Octets 6 et 7 de la ligne : retournement et profondeur (non nuls : vrai).
+    /// Bytes 6 and 7 of the row: flip and depth (non-zero: true).
     flip: u8,
     behind: u8,
 }
 
-/// Début commun des sous-objets : D1 = personnage × 4, A4 = table du personnage, D2.w = cadre.
+/// Common start of the sub-objects: D1 = character × 4, A4 = character table, D2.w = frame.
 fn select_table(g: &mut Ctx, table: u32, character: u32, frame: u32) {
     cov!();
     g.c.d[1] = character << 2;
@@ -74,7 +74,7 @@ fn select_table(g: &mut Ctx, table: u32, character: u32, frame: u32) {
     set_low_word(&mut g.c.d[2], frame as u16);
 }
 
-/// Ligne `index` de la table choisie par `select_table` (D2.w = index × 8, D0.w = animation).
+/// Row `index` of the table chosen by `select_table` (D2.w = index × 8, D0.w = animation).
 fn row(g: &mut Ctx, table: u32, character: u32, index: u32) -> Row {
     cov!();
     let base = g.data32(table + 4 * character) + 8 * index;
@@ -90,7 +90,7 @@ fn row(g: &mut Ctx, table: u32, character: u32, index: u32) -> Row {
     row
 }
 
-/// Le sous-objet suit l'état d'activité et l'orientation du joueur.
+/// The sub-object follows the player's activity state and orientation.
 fn follow(g: &mut Ctx, p: Player, o: Obj) {
     cov!();
     let (active, facing) = (p.u8(g, Player::ACTIVE), p.u8(g, Player::FACING));
@@ -98,7 +98,7 @@ fn follow(g: &mut Ctx, p: Player, o: Obj) {
     wr8(g.b, o.at(0x2c), facing);
 }
 
-/// Place le sous-objet `o` d'après la ligne `r` du joueur `p`.
+/// Places sub-object `o` from row `r` of player `p`.
 fn place(g: &mut Ctx, p: Player, o: Obj, r: &Row) {
     cov!();
     if r.flip != 0 {
@@ -115,7 +115,7 @@ fn place(g: &mut Ctx, p: Player, o: Obj, r: &Row) {
     set_low_byte(&mut g.c.d[6], r.behind);
 }
 
-/// Charge l'animation `n` du script d'armes `weapon` dans le sous-objet.
+/// Loads animation `n` of the weapon script `weapon` into the sub-object.
 fn load_animation(g: &mut Ctx, o: Obj, weapon: u32, n: u16) {
     cov!();
     let set = g.data32(tables::ANIMATIONS + 4 * weapon);
@@ -129,7 +129,7 @@ fn load_animation(g: &mut Ctx, o: Obj, weapon: u32, n: u16) {
     }
 }
 
-/// 0x393c8 : sous-objet de l'arme tenue.
+/// 0x393c8: held-weapon sub-object.
 fn body(g: &mut Ctx, p: Player, o: Obj) {
     cov!();
     let hidden = (p.u8(g, Player::WEAPON_A) as i8) < 0 || p.u8(g, f::HAS_WEAPON) == 0;
@@ -173,7 +173,7 @@ fn body(g: &mut Ctx, p: Player, o: Obj) {
     load_animation(g, o, weapon as u32, r.anim);
 }
 
-/// 0x394a2 : sous-objet du bouclier ou de la seconde arme.
+/// 0x394a2: shield or second-weapon sub-object.
 fn shield(g: &mut Ctx, p: Player, o: Obj) {
     cov!();
     let shield_kind = p.u8(g, Player::WEAPON_B);
@@ -196,7 +196,7 @@ fn shield(g: &mut Ctx, p: Player, o: Obj) {
         wr8(g.b, o.at(0x2b), 0x10);
         select_table(g, tables::SHIELD_HIGH, character, frame);
         let mut r = row(g, tables::SHIELD_HIGH, character, frame);
-        // une palette par paire de personnages : l'index d'animation est décalé de 0x20 par classe
+        // one palette per pair of characters: the animation index is shifted by 0x20 per class
         r.anim = r.anim.wrapping_add(((character >> 1) << 5) as u16);
         place(g, p, o, &r);
         p.set_u16(g, Player::OVERLAY_ATTACK, o.0 as u16);
@@ -229,15 +229,15 @@ fn shield(g: &mut Ctx, p: Player, o: Obj) {
     blink_unless_idle(g, p);
 }
 
-/// 0x39634 : certains sorts (magiciens 8 et 9, ou charge de baguette 0..5) font clignoter l'arme :
-/// l'objet est masqué une image sur deux.
+/// 0x39634: certain spells (magic-users 8 and 9, or wand charge 0..5) make the weapon blink:
+/// the object is hidden every other frame.
 fn blink_unless_idle(g: &mut Ctx, p: Player) {
     cov!();
     let character = p.u8(g, Player::CHARACTER);
     if !matches!(character, 8 | 9) && p.u8(g, Player::AURA) != 0 {
         return;
     }
-    // D.b reçoit chaque compteur examiné : le dernier reste, qu'il corresponde ou non
+    // D.b receives each counter examined: the last one remains, whether or not it matches
     let kind = p.u8(g, Player::WEAPON_B);
     let charge = match kind {
         0x24 => p.u8(g, 0x18c),
@@ -256,9 +256,9 @@ fn blink_unless_idle(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x397a8 : fait défiler la palette scintillante des armes (huit blocs, un toutes les 8 images).
-/// `target` est le sous-objet dont l'octet `SPARKLE_STEP` compte les étapes (l'original utilise le
-/// dernier sous-objet manipulé).
+/// 0x397a8: scrolls the sparkling weapon palette (eight blocks, one every 8 frames).
+/// `target` is the sub-object whose `SPARKLE_STEP` byte counts the steps (the original uses the
+/// last sub-object handled).
 fn sparkle(g: &mut Ctx, target: u32) {
     cov!();
     let phase = ram::FRAME_COUNTER.get(g.b) & 7;
@@ -269,7 +269,7 @@ fn sparkle(g: &mut Ctx, target: u32) {
     let step = rd8(g.b, target + f::SPARKLE_STEP).wrapping_add(1) & 7;
     wr8(g.b, target + f::SPARKLE_STEP, step);
     let src = tables::POWER_PALETTES + ((step as u32) << 5);
-    // l'original charge les huit longs dans D0-D6 et A3, puis les range d'un coup
+    // the original loads the eight longs into D0-D6 and A3, then stores them all at once
     let mut words = [0u32; 8];
     for (i, w) in words.iter_mut().enumerate() {
         *w = rd32(g.b, src + 4 * i as u32);
@@ -281,8 +281,8 @@ fn sparkle(g: &mut Ctx, target: u32) {
     g.c.a[2] = SPARKLE_RAM;
 }
 
-/// Registres laissés par `team_score_reached` (0x37658) : D0 = résultat, D5 et D6 = compteurs de boucle
-/// épuisés, A1 = après le dernier joueur, A2 = somme, A3 = score du dernier joueur additionné.
+/// Registers left by `team_score_reached` (0x37658): D0 = result, D5 and D6 = exhausted loop counters,
+/// A1 = after the last player, A2 = sum, A3 = score of the last player added.
 fn team_score_regs(g: &mut Ctx, reached: bool) {
     cov!();
     g.c.d[0] = reached as u32;
@@ -295,7 +295,7 @@ fn team_score_regs(g: &mut Ctx, reached: bool) {
     }
 }
 
-/// 0x392e4 : met à jour tous les sous-objets. A0 à l'entrée reste en place si aucun joueur n'est actif.
+/// 0x392e4: updates all the sub-objects. A0 on entry stays in place if no player is active.
 pub fn update(g: &mut Ctx) {
     cov!();
     wr16(g.b, TEAM_READY, 0);
@@ -328,7 +328,7 @@ pub fn update(g: &mut Ctx) {
     }
 }
 
-/// 0x392e4 : mise à jour des armes et boucliers des joueurs.
+/// 0x392e4: update of the players' weapons and shields.
 pub fn update_cpu(c: &mut Cpu, b: &mut Cps2Bus) {
     update(&mut Ctx::new(c, b));
 }

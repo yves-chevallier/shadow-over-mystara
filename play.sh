@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Lance le port Rust jouable de Shadow over Mystara.
-# Prérequis : rom/ contient les fichiers de ddsom.zip et dl-1425.bin (qsound.zip).
+# Launches the playable Rust port of Shadow over Mystara.
+# Requirement: rom/ holds the files of ddsom.zip and dl-1425.bin (qsound.zip).
 set -euo pipefail
 cd "$(dirname "$0")"
 [ -f rom/ddsom.key ] || unzip -oq ddsom.zip -d rom

@@ -1,23 +1,24 @@
-//! Boss 15 / 20, groupe `+5` = 2 : le combat. Le dragon se tient autour du centre de l'écran (`steer`), se retourne ou
-//! s'éloigne quand il est trop loin, et choisit une attaque (`+5` = 4) selon la distance du joueur visé et sa santé.
+//! Boss 15 / 20, group `+5` = 2: the combat. The dragon stays around the center of the screen (`steer`), turns
+//! around or moves away when it is too far, and chooses an attack (`+5` = 4) according to the distance of the
+//! targeted player and its health.
 //!
-//! | `+6` | Rôle |
+//! | `+6` | Role |
 //! |---|---|
-//! | 0 | surveille (tirages, sondes de portée) |
-//! | 2 | bond vers un point calculé (vitesses de saut tirées d'une distance) |
-//! | 4 | rejoint le joueur visé |
+//! | 0 | watches (draws, range probes) |
+//! | 2 | leap toward a computed point (jump speeds drawn from a distance) |
+//! | 4 | reaches the targeted player |
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Obj;
 use crate::objects::Current;
 
-/// Octets de choix d'attaque (4 lignes de 16 : 0x91a28, 0x91a38, 0x91a48, 0x91a58) et seuil de patience.
+/// Attack choice bytes (4 rows of 16: 0x91a28, 0x91a38, 0x91a48, 0x91a58) and patience threshold.
 const PICKS: [u32; 4] = [0x91a28, 0x91a38, 0x91a48, 0x91a58];
 const COOLDOWNS: u32 = 0x91a18;
-/// Table de bits (un long par quart de PV) qui décide d'un tir de 0x43ae.
+/// Bit table (one long per quarter of HP) that decides on a shot of 0x43ae.
 const FAR_MASKS: u32 = 0x91998;
-/// Gestes déclenchés par la riposte spéciale (`+6` de l'attaque 4).
+/// Gestures triggered by the special counterattack (`+6` of attack 4).
 const SPECIAL_MOVES: u32 = 0x91ab0;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -74,23 +75,23 @@ fn watch<R: Bench>(x: &mut Cx<'_, R>) {
     steer(x);
 }
 
-/// 0x91ab8 : le dragon est à plus de 0x80 pixels du centre de la zone (caméra + 0xc0).
+/// 0x91ab8: the dragon is more than 0x80 pixels from the center of the area (camera + 0xc0).
 fn far_from_center<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let d = var::SCROLL_X.get(x.b).wrapping_add(0xc0).wrapping_sub(x.u16(0x8)) as i16;
     d.wrapping_abs() >= 0x80
 }
 
-/// Un joueur est-il dans la boîte `(d0, d1, d2)` devant le dragon ?
+/// Is a player in the box `(d0, d1, d2)` in front of the dragon?
 fn probe<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     lib::target_in_box(x, d0, d1, d2)
 }
 
-/// 0x919b0 : numéro (0 à 3) du quart de PV restant, d'après `+0x62` rapporté à `+0x60`.
+/// 0x919b0: number (0 to 3) of the quarter of HP remaining, from `+0x62` relative to `+0x60`.
 fn quarter<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     let d1 = x.u16(0x60) as u32;
     let d3 = (x.u16(0x62) as u32) << 2;
     let (mut d0, mut d2) = (-1i32, 0u32);
-    // l'original boucle sans fin si `+0x60` est nul
+    // the original loops forever if `+0x60` is zero
     for _ in 0..0x20000 {
         d2 = d2.wrapping_add(d1);
         d0 += 1;
@@ -101,8 +102,8 @@ fn quarter<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     d0 as u16 as u32
 }
 
-/// 0x91950 : le dragon est à son altitude de garde (0x40), sa patience est épuisée et un tirage favorable (un bit du
-/// long de PV 0x91998) l'autorise à viser un joueur éloigné (0x43ae).
+/// 0x91950: the dragon is at its guard altitude (0x40), its patience is exhausted and a favorable draw (one bit
+/// of the HP long 0x91998) lets it aim at a distant player (0x43ae).
 fn far_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(0xc) != 0x40 {
         return false;
@@ -120,8 +121,8 @@ fn far_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::pick_target_any(x)
 }
 
-/// 0x91a68 : une riposte spéciale est-elle due ? Les PV passent sous `SPECIALS` quarts de `+0x60` : le dragon lance
-/// l'attaque 4 (geste tiré dans 0x91ab0).
+/// 0x91a68: is a special counterattack due? The HP drop below `SPECIALS` quarters of `+0x60`: the dragon launches
+/// attack 4 (gesture drawn from 0x91ab0).
 fn special_due<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let left = x.u8(SPECIALS);
     if left == 0 {
@@ -150,8 +151,8 @@ fn special_due<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x919cc..0x91a16 : choisit une attaque dans la ligne `row` des tables ; un octet négatif renvoie à la ligne de
-/// patience (0x91a18), qui peut aussi renvoyer au hasard (`wander`).
+/// 0x919cc..0x91a16: chooses an attack from row `row` of the tables; a negative byte refers to the patience row
+/// (0x91a18), which can also refer to a random choice (`wander`).
 fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, row: usize) {
     let r = random(x) & 0xf;
     let b = x.data8(PICKS[row] + r) as i8;
@@ -168,7 +169,8 @@ fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, row: usize) {
     x.set8(COOLDOWN, c as u8);
 }
 
-/// 0x91ad8 : se tient au centre de la zone (caméra + 0xc0), à la profondeur d'un joueur (ou de la caméra) et à l'altitude 0x40.
+/// 0x91ad8: stays at the center of the area (camera + 0xc0), at the depth of a player (or of the camera) and at
+/// altitude 0x40.
 pub(super) fn steer<R: Bench>(x: &mut Cx<'_, R>) {
     let target_x = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
     let d = target_x.wrapping_sub(x.u16(0x8)) as i16;
@@ -214,8 +216,8 @@ fn jump<R: Bench>(x: &mut Cx<'_, R>) {
     stand(x);
 }
 
-/// 0x91b54 : vitesses du bond pour atteindre le centre de la zone : vitesse horizontale 0x100 dans le bon sens,
-/// vitesse verticale 0x100 × (distance × 16 / 0x100).
+/// 0x91b54: leap speeds to reach the center of the area: horizontal speed 0x100 in the right direction,
+/// vertical speed 0x100 × (distance × 16 / 0x100).
 fn jump_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     let d1 = x.rom16(0x91b94);
     let mut d2 = d1 as i16;
@@ -241,7 +243,7 @@ fn jump_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x18, (d6 as u16) << 8);
 }
 
-// --- +6 = 4 : rejoint le joueur visé -------------------------------------------------------------------
+// --- +6 = 4: reaches the targeted player -------------------------------------------------------------------
 
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     let t = x.u16(TIMER).wrapping_sub(1);
@@ -263,8 +265,8 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     stand(x);
 }
 
-/// 0x91c22 : rejoint par tiers l'altitude `z` (1/4 de l'écart par image) et la profondeur `y` (1/4) ; rend vrai
-/// quand les deux sont atteintes.
+/// 0x91c22: reaches in thirds altitude `z` (1/4 of the gap per frame) and depth `y` (1/4); returns true
+/// when both are reached.
 pub(super) fn close_in_zy<R: Bench>(x: &mut Cx<'_, R>, z: i16, y: i16) -> bool {
     let mut reached = 0;
     let dz = z.wrapping_sub(x.u16(0xc) as i16);
@@ -291,7 +293,7 @@ pub(super) fn close_in_zy<R: Bench>(x: &mut Cx<'_, R>, z: i16, y: i16) -> bool {
     false
 }
 
-/// 0x91c6a : idem pour l'altitude `z` (1/4) et l'abscisse `px` (1/16).
+/// 0x91c6a: same for altitude `z` (1/4) and X position `px` (1/16).
 fn close_x<R: Bench>(x: &mut Cx<'_, R>, z: i16, px: u16) -> bool {
     let mut reached = 0;
     let dz = z.wrapping_sub(x.u16(0xc) as i16);

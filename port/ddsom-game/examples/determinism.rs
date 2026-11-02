@@ -1,14 +1,14 @@
-//! Le jeu surcadencé est-il déterminé image par image ? Deux machines d'origine, à deux fréquences
-//! différentes, rejouent le même scénario ; on compare la RAM de travail à chaque image.
+//! Is the overclocked game deterministic frame by frame? Two original machines, at two different
+//! frequencies, replay the same scenario; the work RAM is compared at every frame.
 //!
-//! determinism <roms> <eeprom> <scenario> <images> <k1> <k2>
+//! determinism <roms> <eeprom> <scenario> <frames> <k1> <k2>
 
 use std::path::Path;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames, k1, k2] = &a[..] else {
-        eprintln!("usage : determinism <roms> <eeprom> <scenario> <images> <k1> <k2>");
+        eprintln!("usage: determinism <roms> <eeprom> <scenario> <frames> <k1> <k2>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
@@ -21,10 +21,10 @@ fn main() {
         }
         m
     };
-    // même démarrage (sa durée dépend de la fréquence), puis fréquences différentes
+    // same startup (its duration depends on the frequency), then different frequencies
     let (mut ma, mut mb) = (load(k1), load(k1));
     let k2: f64 = k2.parse().unwrap();
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
     let mut shown = 0;
     let mut freq = std::collections::BTreeMap::<usize, usize>::new();
@@ -42,16 +42,16 @@ fn main() {
         }
         if (f + 1) % 2000 == 0 {
             let w = |m: &cps2::Machine, a: u32| m.bus.ram[((a - 0xff0000) / 2) as usize];
-            println!("image {} : {} mots différents ; 806c {:04x}/{:04x} 806e {:04x}/{:04x} 85bc {:04x}/{:04x}", f + 1, diff.len(),
+            println!("frame {}: {} different words; 806c {:04x}/{:04x} 806e {:04x}/{:04x} 85bc {:04x}/{:04x}", f + 1, diff.len(),
                 w(&ma, 0xff806c), w(&mb, 0xff806c), w(&ma, 0xff806e), w(&mb, 0xff806e), w(&ma, 0xff85bc), w(&mb, 0xff85bc));
         }
         if diff.contains(&(0x144 / 2)) && shown < 8 {
             let t = |m: &cps2::Machine| (0..8).map(|k| format!("{:04x}", m.bus.ram[0x144 / 2 + k])).collect::<Vec<_>>().join(" ");
-            println!("image {} tâche 14 : {} | {}", f + 1, t(&ma), t(&mb));
+            println!("frame {} task 14: {} | {}", f + 1, t(&ma), t(&mb));
         }
         if !diff.is_empty() && shown < 5 {
             shown += 1;
-            print!("image {} : {} mots :", f + 1, diff.len());
+            print!("frame {}: {} words:", f + 1, diff.len());
             for &i in diff.iter().take(12) {
                 print!(" {:06x}", 0xff0000 + 2 * i);
             }
@@ -61,7 +61,7 @@ fn main() {
     let mut v: Vec<_> = freq.into_iter().collect();
     v.sort_by_key(|&(_, n)| std::cmp::Reverse(n));
     for (i, n) in v.iter().take(25) {
-        println!("  {:06x} : {n} images", 0xff0000 + 2 * i);
+        println!("  {:06x}: {n} frames", 0xff0000 + 2 * i);
     }
-    println!("fin ({shown} images en écart affichées)");
+    println!("end ({shown} differing frames shown)");
 }

@@ -1,5 +1,5 @@
-//! Type 15, sous-état 2 (debout : approche, demi-tour, attente, sortie d'écran) et sous-état 10 (promenade tant
-//! qu'aucun joueur n'est en vie).
+//! Type 15, substate 2 (standing: approach, turn-around, wait, screen exit) and substate 10 (stroll as long as no
+//! player is alive).
 
 use crate::families::cx::Bench;
 use super::*;
@@ -23,7 +23,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6de46 : (re)commence la marche vers la cible.
+/// 0x6de46: (re)starts the walk toward the target.
 pub(super) fn approach_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
@@ -34,7 +34,7 @@ pub(super) fn approach_start<R: Bench>(x: &mut Cx<'_, R>) {
     lib::draw_6b(x);
 }
 
-/// +6 = 0 : marche vers le joueur ; choisit un geste dès qu'il est à portée.
+/// +6 = 0: walks toward the player; chooses a move as soon as it is in range.
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set8(SHOT_KIND, 0x1a);
@@ -98,7 +98,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 : attente sur place.
+/// +6 = 4: waits in place.
 fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -113,8 +113,8 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// +6 = 6 (et sous-état 4, +6 = 20) : le Goblin quitte l'écran en marchant. L'original rend la main à la boucle
-/// avec une remise en liste (`jmp 0x1ee1a`) à plusieurs endroits : on la rejoue.
+/// +6 = 6 (and substate 4, +6 = 20): the Goblin leaves the screen walking. The original returns control to the loop
+/// with a re-queuing (`jmp 0x1ee1a`) in several places: it is replayed.
 pub(super) fn walk_off<R: Bench>(x: &mut Cx<'_, R>) {
     let step = x.u8(f::SUB3);
     if step == 2 {
@@ -155,7 +155,7 @@ pub(super) fn walk_off<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Sous-état 10 : promenade sur place tant qu'aucun joueur n'est en vie, puis retour debout.
+/// Substate 10: strolls in place as long as no player is alive, then back to standing.
 pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);

@@ -1,5 +1,5 @@
-//! Musiques et effets : table des sons, pistes, instruments, échantillons et tables du pilote Z80, lus
-//! comme les lit `ddsom-sound` (adresses linéaires de `ddsom_sound::Rom`).
+//! Music and effects: sound table, tracks, instruments, samples and Z80 driver tables, read
+//! the way `ddsom-sound` reads them (linear addresses of `ddsom_sound::Rom`).
 
 use std::collections::BTreeMap;
 use std::io;
@@ -12,12 +12,12 @@ use ddsom_sound::Rom;
 const HEADER_PTR: u32 = 0x39e1;
 const SAMPLES_PTR: u32 = 0x39e3;
 const BANKS_TABLE: u32 = 0x39e5;
-/// Bancs : deux (le premier commence juste après la table, à 0x39e9), 256 fiches chacun.
+/// Banks: two (the first starts right after the table, at 0x39e9), 256 entries each.
 const BANKS: u32 = 2;
 const INSTRUMENTS: u32 = 256;
-/// Échantillons : 345 fiches (comme `sounds/`, qui n'écrit que les fiches valides).
+/// Samples: 345 entries (like `sounds/`, which only writes the valid entries).
 const SAMPLES: u32 = 345;
-/// Tables du pilote dans la ROM fixe : (nom, adresse, mots petit-boutistes, nombre de valeurs).
+/// Driver tables in the fixed ROM: (name, address, little-endian words, number of values).
 const TABLES: [(&str, u32, bool, u32); 14] = [
     ("qsound_init_regs", 0xd5, false, 12),
     ("qsound_init_values", 0xe1, true, 12),
@@ -49,7 +49,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     for i in 0..u32::from(count) {
         let e = header + 6 + 4 * i;
         if rom.byte(e + 3) != 0 {
-            return Err(bad(format!("son {i} : quatrième octet non nul")));
+            return Err(bad(format!("sound {i}: fourth byte non-null")));
         }
         let at = u32::from(rom.byte(e)) << 16 | u32::from(be(e + 1));
         if at == 0 {
@@ -62,17 +62,17 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
             0..=0x7f => s.tracks = (0..16).map(|c| be(at + 1 + 2 * c)).collect(),
             0x80..=0x8f => s.body = (1..=10).map(|k| rom.byte(at + k)).collect(),
             0x90..=0x92 => s.body = (1..=7).map(|k| rom.byte(at + k)).collect(),
-            _ => return Err(bad(format!("son {i} : type {kind:#x}"))),
+            _ => return Err(bad(format!("sound {i}: type {kind:#x}"))),
         }
         songs.push(Some(s));
     }
-    // instructions atteintes depuis les pistes, en suivant les sauts
+    // instructions reached from the tracks, following the jumps
     let mut ops: BTreeMap<u32, (String, u32)> = BTreeMap::new();
     let mut todo: Vec<u32> = songs.iter().flatten().flat_map(|s| s.track_starts().map(|(_, a)| a).collect::<Vec<_>>()).collect();
     while let Some(mut p) = todo.pop() {
         while !ops.contains_key(&p) {
             let bytes: Vec<u8> = (0..4).map(|k| rom.byte(p + k)).collect();
-            let (tok, n) = decode_op(&bytes).ok_or_else(|| bad(format!("piste illisible en {p:#x}")))?;
+            let (tok, n) = decode_op(&bytes).ok_or_else(|| bad(format!("unreadable track at {p:#x}")))?;
             let n = n as u32;
             let op = bytes[0];
             ops.insert(p, (tok, n));
@@ -88,16 +88,16 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
             }
             p += n;
             if p >= 0x40000 {
-                return Err(bad("piste hors de la ROM".into()));
+                return Err(bad("track outside the ROM".into()));
             }
         }
     }
-    // blocs d'instructions jointives ; une instruction ne doit pas en chevaucher une autre
+    // blocks of contiguous instructions; an instruction must not overlap another
     let mut code: Vec<CodeBlock> = Vec::new();
     let mut next = 0;
     for (&a, (tok, n)) in &ops {
         if a < next {
-            return Err(bad(format!("instructions qui se chevauchent en {a:#x}")));
+            return Err(bad(format!("overlapping instructions at {a:#x}")));
         }
         match code.last_mut() {
             Some(b) if a == next => {
@@ -127,7 +127,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         })
         .collect();
     eprintln!(
-        "musique : {} sons ({} définis), {} instructions de pistes en {} blocs",
+        "music: {} sounds ({} defined), {} track instructions in {} blocks",
         count,
         songs.iter().flatten().count(),
         ops.len(),
@@ -150,7 +150,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         sample_tails: Vec::new(),
         tables,
     };
-    // ROM d'échantillons (ROM_LOAD16_WORD_SWAP) : ce qui suit la fin de chaque échantillon
+    // sample ROM (ROM_LOAD16_WORD_SWAP): what follows the end of each sample
     let mut pcm = Vec::new();
     for name in ["dd2.11m", "dd2.12m"] {
         pcm.extend(std::fs::read(roms.join(name))?.chunks_exact(2).flat_map(|w| [w[1], w[0]]));
@@ -166,17 +166,17 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     json::save(path, &music, 2)
 }
 
-/// Tables du programme du DSP QSound (`dl-1425.bin`, mots petit-boutistes) que lit l'émulation haut niveau
-/// (`qsound`) : (nom, adresse en mots, nombre de mots). Le reste du programme du DSP n'est que du code, que
-/// l'émulation remplace.
+/// Tables of the QSound DSP program (`dl-1425.bin`, little-endian words) read by the high-level emulation
+/// (`qsound`): (name, address in words, number of words). The rest of the DSP program is just code, which
+/// the emulation replaces.
 const DSP_TABLES: [(&str, u32, u32); 4] = [
-    // pan : PAN_BASE (0x110) + position (0-0x20), puis +98 (réverbération), +196 (canal droit)
+    // pan: PAN_BASE (0x110) + position (0-0x20), then +98 (reverb), +196 (right channel)
     ("pan", 0x110, 0x150),
-    // pas de l'ADPCM : 0x9dc + 8 + pas signé (-8..7)
+    // ADPCM step: 0x9dc + 8 + signed step (-8..7)
     ("adpcm", 0x9dc, 0x10),
-    // filtres FIR : 95 coefficients par entrée depuis 0xd53, et les deux filtres d'origine 0xf73 et 0xfa4
+    // FIR filters: 95 coefficients per entry from 0xd53, and the two original filters 0xf73 and 0xfa4
     ("filters", 0xd53, 0x1000 - 0xd53),
-    // le second filtre déborde de 3 mots et reprend au début (adresses sur 12 bits)
+    // the second filter overflows by 3 words and wraps to the start (12-bit addresses)
     ("filters_wrap", 0, 3),
 ];
 

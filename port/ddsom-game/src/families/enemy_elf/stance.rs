@@ -1,5 +1,5 @@
-//! Type 12, elfe debout (`+5 = 2`) et au repos (`+5 = 10`). `+6` : 0 marche vers la cible et
-//! décide d'attaquer, 2 demi-tour, 4 attente.
+//! Type 12, standing elf (`+5 = 2`) and at rest (`+5 = 10`). `+6`: 0 walks toward the target and decides to attack, 2
+//! turn-around, 4 wait.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -29,7 +29,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x696b0 : l'elfe se met en marche vers sa cible.
+/// 0x696b0: the elf starts walking toward its target.
 pub(super) fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.select_speed(&crate::objects::motion::SPEEDS_B, 0x12);
@@ -39,7 +39,7 @@ pub(super) fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
     lib::draw_6b(x);
 }
 
-/// 0x696a0 : début de la marche en comptant une étape de plus.
+/// 0x696a0: start of the walk counting one more step.
 pub(super) fn begin_walk_step<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(WALK_ANIM, 0xf0);
@@ -47,7 +47,7 @@ pub(super) fn begin_walk_step<R: Bench>(x: &mut Cx<'_, R>) {
     begin_walk(x);
 }
 
-/// 0x696de : marche ; se retourne, attend ou attaque.
+/// 0x696de: walk; turns around, waits or attacks.
 fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     lib::approach_target(x);
     let n = x.u8(AI_WALK).wrapping_sub(1);
@@ -69,7 +69,7 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     decide(x);
 }
 
-/// 0x69718 : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
+/// 0x69718: a player in range? If so, attacks; otherwise advances by one animation step.
 fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x20, 0x20, 0xc) {
         x.set16(f::STATE, 0x204);
@@ -101,18 +101,18 @@ fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6a6a6 : cible devant, à portée courte.
+/// 0x6a6a6: target in front, at short range.
 pub(super) fn front_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_attack(x, 0, 0x70, 0x10)
 }
 
-/// 0x6a698 : cible derrière ou loin devant (boîte large).
+/// 0x6a698: target behind or far in front (wide box).
 pub(super) fn side_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_attack(x, -0x80, 0x30, 0x10)
 }
 
-/// Boîte de détection puis décisions par masque : de même orientation, les deux (0xa4c2 puis 0xa4b4)
-/// doivent accepter ; sinon seule 0xa4b4.
+/// Detection box then decisions by mask: with the same orientation, both (0xa4c2 then 0xa4b4) must accept; otherwise
+/// only 0xa4b4.
 fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     let found = lib::target_in_box(x, d0, d1, d2);
     let ok = found && {
@@ -130,8 +130,8 @@ fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     ok
 }
 
-/// 0x6a706 / 0x6a70c : le coup à jouer après l'approche est tiré dans la ligne de la difficulté ; il est rendu (D0.b
-/// de l'original).
+/// 0x6a706 / 0x6a70c: the attack to play after the approach is drawn from the difficulty row; it is returned (D0.b of
+/// the original).
 pub(super) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = (var::RANK.get(x.b) >> 1) << 5;
     let n = rand_and(x, 0x1f);
@@ -142,7 +142,7 @@ pub(super) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     mv
 }
 
-/// 0x6a6de : la cible est de l'autre côté de l'orientation de l'elfe.
+/// 0x6a6de: the target is on the other side of the elf's orientation.
 pub(super) fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
@@ -154,7 +154,7 @@ pub(super) fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     turn
 }
 
-/// `+6 = 2` : demi-tour (animation 2, puis inversion de l'orientation).
+/// `+6 = 2`: turn-around (animation 2, then orientation inversion).
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -184,7 +184,7 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-/// Sous-état 10 : repos jusqu'à ce qu'un joueur soit en vie.
+/// Substate 10: rest until a player is alive.
 pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);

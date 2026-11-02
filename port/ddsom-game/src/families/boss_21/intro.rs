@@ -1,9 +1,9 @@
-//! Boss 21, groupe `+5` = 0 : arrivée en scène.
+//! Boss 21, group `+5` = 0: arrival on stage.
 //!
-//! | `+6` | Rôle |
+//! | `+6` | Role |
 //! |---|---|
-//! | 0 | arrivée par la droite de l'écran : approche, bond, atterrissage (`+7` = 0 à 14) |
-//! | 2 | entrée en combat : tombe du haut de l'écran (`+7` = 0 à 4) |
+//! | 0 | arrival from the right of the screen: approach, leap, landing (`+7` = 0 to 14) |
+//! | 2 | entry into combat: falls from the top of the screen (`+7` = 0 to 4) |
 
 use super::decide;
 use crate::families::cx::Bench;

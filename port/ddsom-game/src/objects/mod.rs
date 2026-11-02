@@ -1,18 +1,18 @@
-//! Modèle d'objets du jeu : pools, listes triées par profondeur, animation, vitesses, culling.
+//! Game object model: pools, depth-sorted lists, animation, speeds, culling.
 //!
-//! Tout ce qui bouge à l'écran (tirs, effets, ennemis, boss, décors animés, objets ramassables...)
-//! est un *objet* : un enregistrement de 0x50 à 0xC0 octets dans l'un des 10 pools de la RAM
-//! (`pools`). Les joueurs ont leur propre enregistrement (0x200 octets) mais partagent les champs
-//! communs ci-dessous. Voir `docs/objects.md` pour le détail des formats.
+//! Everything that moves on screen (shots, effects, enemies, bosses, animated scenery, pickable items...)
+//! is an *object*: a record of 0x50 to 0xC0 bytes in one of the 10 RAM pools
+//! (`pools`). Players have their own record (0x200 bytes) but share the
+//! common fields below. See `docs/objects.md` for the details of the formats.
 //!
-//! - `Obj` : vue typée sur un objet en RAM (adresse + constantes de champs).
-//! - `pools` : allocation, libération et initialisation des pools.
-//! - `lists` : deux listes doublement chaînées triées par profondeur (ordre de dessin).
-//! - `anim` : scripts d'animation (durée, drapeaux, cadre de sprite).
-//! - `motion` : vitesses, accélérations, tables de vitesse par index.
-//! - `rank` : compteur de rang (difficulté dynamique).
-//! - `cull` : test de présence à l'écran et inscription dans les files de collision.
-//! - `current` : le trait `Current`, ces routines appliquées à l'objet d'un gestionnaire (`x.move_xz()`...).
+//! - `Obj`: typed view of an object in RAM (address + field constants).
+//! - `pools`: allocation, release and initialization of the pools.
+//! - `lists`: two doubly-linked lists sorted by depth (drawing order).
+//! - `anim`: animation scripts (duration, flags, sprite frame).
+//! - `motion`: speeds, accelerations, speed tables by index.
+//! - `rank`: rank counter (dynamic difficulty).
+//! - `cull`: on-screen presence test and registration in the collision queues.
+//! - `current`: the `Current` trait, these routines applied to a handler's object (`x.move_xz()`...).
 
 pub mod anim;
 pub mod current;
@@ -29,7 +29,7 @@ use cps2::Cps2Bus;
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::Native;
 
-/// Toutes les routines natives du modèle d'objets.
+/// All the native routines of the object model.
 pub const NATIVES: &[Native] = &[
     pools::INIT_ALL,
     pools::INIT_PEFF,
@@ -91,23 +91,23 @@ pub const NATIVES: &[Native] = &[
     rank::RANK_TICK,
 ];
 
-/// Variables de la RAM de travail (offsets depuis A5 = 0xFF8000) utilisées par le modèle d'objets.
+/// Work RAM variables (offsets from A5 = 0xFF8000) used by the object model.
 pub mod ram {
-    /// Liste des personnages et décors : tête, queue (liens `Obj::PREV`/`Obj::NEXT`).
+    /// List of characters and scenery: head, tail (links `Obj::PREV`/`Obj::NEXT`).
     pub const ACTORS_HEAD: u32 = 0x5be;
     pub const ACTORS_TAIL: u32 = 0x5c0;
-    /// Liste du premier plan : tête, queue.
+    /// Foreground list: head, tail.
     pub const FOREGROUND_HEAD: u32 = 0x5c2;
     pub const FOREGROUND_TAIL: u32 = 0x5c4;
-    /// Caméra principale (x en +8, y en +0xc) et caméra alternative, choisie si `USE_ALT_CAMERA != 0`.
+    /// Main camera (x at +8, y at +0xc) and alternate camera, chosen if `USE_ALT_CAMERA != 0`.
     pub const CAMERA: u32 = 0x4fe;
     pub const ALT_CAMERA: u32 = 0x54e;
     pub const USE_ALT_CAMERA: u32 = 0x36;
 }
 
-/// Lien d'une liste d'objets : adresse RAM sur 16 bits (bit 15 à 1 : 0xFF8000-0xFFFFFF), ou une
-/// valeur positive qui marque la fin de liste (1 : liste des acteurs, 2 : liste du premier plan).
-/// 0 : l'objet n'est dans aucune liste.
+/// Link of an object list: 16-bit RAM address (bit 15 set: 0xFF8000-0xFFFFFF), or a
+/// positive value marking the end of the list (1: actor list, 2: foreground list).
+/// 0: the object is in no list.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Link(pub u16);
 
@@ -118,12 +118,12 @@ impl Link {
         Link(o.0 as u16)
     }
 
-    /// L'objet désigné, sauf pour 0 et les marques de fin.
+    /// The designated object, except for 0 and the end markers.
     pub fn obj(self) -> Option<Obj> {
         (self.0 & 0x8000 != 0).then(|| Obj(0xff_0000 | self.0 as u32))
     }
 
-    /// Objet désigné, l'adresse étant étendue en signe comme le fait le 68000 (`movea.w`).
+    /// Designated object, the address being sign-extended as the 68000 does (`movea.w`).
     pub fn target(self) -> Obj {
         Obj(self.0 as i16 as i32 as u32 & 0xff_ffff)
     }
@@ -133,80 +133,80 @@ impl Link {
     }
 }
 
-/// Un objet du jeu, désigné par son adresse en RAM (le registre A0 de l'original).
+/// A game object, designated by its RAM address (register A0 of the original).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Obj(pub u32);
 
 impl Obj {
-    /// Octet non nul : l'emplacement du pool est occupé.
+    /// Non-zero byte: the pool slot is occupied.
     pub const ACTIVE: u32 = 0x00;
-    /// Bit 0 : visible à cette image ; bit 1 : caché (non dessiné, hors collisions).
+    /// Bit 0: visible this frame; bit 1: hidden (not drawn, out of collisions).
     pub const FLAGS: u32 = 0x01;
-    /// Type : index du gestionnaire dans la table de sa classe.
+    /// Type: index of the handler in the table of its class.
     pub const KIND: u32 = 0x02;
-    /// Variante (sens propre à chaque type ; personnage pour les tables d'animation).
+    /// Variant (meaning specific to each type; character for the animation tables).
     pub const VARIANT: u32 = 0x03;
-    /// Octets d'état de l'automate du gestionnaire : état principal, sous-états.
+    /// State bytes of the handler's automaton: main state, sub-states.
     pub const STATE: u32 = 0x04;
-    /// Abscisse (16.16, pixels).
+    /// Abscissa (16.16, pixels).
     pub const X: u32 = 0x08;
-    /// Altitude (16.16) : s'ajoute à `Y` pour la hauteur à l'écran.
+    /// Altitude (16.16): added to `Y` for the screen height.
     pub const Z: u32 = 0x0c;
-    /// Profondeur sur le sol (16.16) : clé de tri des listes d'affichage.
+    /// Depth on the ground (16.16): sort key of the display lists.
     pub const Y: u32 = 0x10;
-    /// Octet non nul : objet caché ou suspendu (testé par `motion::pause_hook`).
+    /// Non-zero byte: hidden or suspended object (tested by `motion::pause_hook`).
     pub const HIDDEN: u32 = 0x40;
-    /// Vitesse et accélération en X, Z, Y (8.8 pixels/image).
+    /// Speed and acceleration in X, Z, Y (8.8 pixels/frame).
     pub const VX: u32 = 0x14;
     pub const AX: u32 = 0x16;
     pub const VZ: u32 = 0x18;
     pub const AZ: u32 = 0x1a;
     pub const VY: u32 = 0x1c;
     pub const AY: u32 = 0x1e;
-    /// Script d'animation : adresse de l'entrée suivante (long).
+    /// Animation script: address of the next entry (long).
     pub const ANIM_NEXT: u32 = 0x20;
-    /// Liens de la liste triée : précédent (vers la tête), suivant (vers la queue). Mots.
+    /// Links of the sorted list: previous (toward the head), next (toward the tail). Words.
     pub const PREV: u32 = 0x24;
     pub const NEXT: u32 = 0x26;
-    /// Code de classe (= pool d'origine : voir `pools::Pool::class`).
+    /// Class code (= original pool: see `pools::Pool::class`).
     pub const CLASS: u32 = 0x28;
-    /// Index dans la table de vitesses (`SPEED_TABLE`).
+    /// Index into the speed table (`SPEED_TABLE`).
     pub const SPEED_INDEX: u32 = 0x2d;
-    /// Entrée d'animation courante : durée restante (images), drapeaux (octet haut : 0 suite,
-    /// 0xFE fin, autre saut), cadre de sprite, puis deux longs de données par cadre.
+    /// Current animation entry: remaining duration (frames), flags (high byte: 0 continue,
+    /// 0xFE end, other jump), sprite frame, then two longs of data per frame.
     pub const ANIM_TIMER: u32 = 0x30;
     pub const ANIM_FLAGS: u32 = 0x32;
     pub const FRAME: u32 = 0x34;
     pub const FRAME_DATA_A: u32 = 0x38;
     pub const FRAME_DATA_B: u32 = 0x3c;
-    /// Deux longs de données supplémentaires pour les entrées d'animation longues.
+    /// Two additional longs of data for the long animation entries.
     pub const FRAME_DATA_C: u32 = 0x40;
     pub const FRAME_DATA_D: u32 = 0x44;
-    /// Octet remis à zéro par `motion::tick_counters` quand il est négatif.
+    /// Byte reset to zero by `motion::tick_counters` when it is negative.
     pub const COUNTER_53: u32 = 0x53;
-    /// Compte à rebours (images) : à zéro, `COUNTDOWN_FLAG` est effacé.
+    /// Countdown (frames): at zero, `COUNTDOWN_FLAG` is cleared.
     pub const COUNTDOWN: u32 = 0x89;
     pub const COUNTDOWN_FLAG: u32 = 0x88;
-    /// Table de vitesses courante (adresse ROM d'un tableau de (vx, vy) 8.8 indexé par `SPEED_INDEX`).
+    /// Current speed table (ROM address of an array of (vx, vy) 8.8 indexed by `SPEED_INDEX`).
     pub const SPEED_TABLE: u32 = 0x4c;
 
     pub fn at(self, off: u32) -> u32 {
         self.0.wrapping_add(off)
     }
 
-    /// Objet désigné par un mot (lien, pointeur 16 bits d'un champ) : adresse étendue en signe comme le fait
-    /// `movea.w`, soit la RAM FF8000-FFFFFF pour un mot négatif.
+    /// Object designated by a word (link, 16-bit pointer of a field): address sign-extended as
+    /// `movea.w` does, i.e. RAM FF8000-FFFFFF for a negative word.
     pub fn from_word(w: u16) -> Obj {
         Obj(w as i16 as i32 as u32 & 0xff_ffff)
     }
 
-    /// Le mot bas de l'adresse, tel que les objets se référencent entre eux.
+    /// The low word of the address, as objects reference each other.
     pub fn word(self) -> u16 {
         self.0 as u16
     }
 
-    /// L'adresse telle que le registre An la contient après `movea.w` (étendue du signe sur 32 bits) : c'est cette
-    /// valeur que le jeu range quand il mémorise un objet sur 32 bits (`move.l A1,(0x86,A0)`).
+    /// The address as register An holds it after `movea.w` (sign-extended to 32 bits): this
+    /// is the value the game stores when it remembers an object on 32 bits (`move.l A1,(0x86,A0)`).
     pub fn long_ref(self) -> u32 {
         self.0 as u16 as i16 as i32 as u32
     }
@@ -234,7 +234,7 @@ impl Obj {
         self.u8(b, Self::ACTIVE) != 0
     }
 
-    /// Profondeur (clé de tri), signée.
+    /// Depth (sort key), signed.
     pub fn depth(self, b: &mut Cps2Bus) -> i32 {
         self.u32(b, Self::Y) as i32
     }

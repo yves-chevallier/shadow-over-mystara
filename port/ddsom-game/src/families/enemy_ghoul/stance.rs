@@ -1,5 +1,5 @@
-//! Type 5, ghoul debout (`+5 = 2`) et en patrouille (`+5 = 10`). `+6` : 0 et 6 marche vers la cible et
-//! décide d'attaquer, 2 demi-tour, 4 attente.
+//! Type 5, standing ghoul (`+5 = 2`) and patrolling (`+5 = 10`). `+6`: 0 and 6 walk toward the target and decide to
+//! attack, 2 turn-around, 4 wait.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -29,7 +29,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// L'aspect voulu `v` ; l'animation `anim` n'est lancée (et rendu vrai) que si l'aspect change.
+/// The wanted look `v`; animation `anim` is started (and true returned) only if the look changes.
 fn set_look<R: Bench>(x: &mut Cx<'_, R>, v: u8, anim: u32) -> bool {
     x.set8(LOOK, v);
     if v == x.u8(LOOK_PREV) {
@@ -40,7 +40,7 @@ fn set_look<R: Bench>(x: &mut Cx<'_, R>, v: u8, anim: u32) -> bool {
     true
 }
 
-/// 0x5fcec : le ghoul se met en marche vers sa cible.
+/// 0x5fcec: the ghoul starts walking toward its target.
 pub(super) fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
@@ -51,7 +51,7 @@ pub(super) fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
     lib::draw_6b(x);
 }
 
-/// 0x5fd3e : marche ; se retourne, attend ou attaque.
+/// 0x5fd3e: walk; turns around, waits or attacks.
 fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set8(AI_SHOT, 0);
@@ -79,7 +79,7 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     decide(x);
 }
 
-/// 0x5fd96 : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
+/// 0x5fd96: a player in range? If so, attacks; otherwise advances by one animation step.
 fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x20, 0x20, 8) {
         x.set16(f::STATE, 0x204);
@@ -98,7 +98,7 @@ fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// `+6` = 2 : demi-tour (animation 1, puis inversion de l'orientation).
+/// `+6` = 2: turn-around (animation 1, then orientation inversion).
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -131,7 +131,7 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-/// Sous-état 10 : patrouille tant qu'aucun joueur n'est en vie.
+/// Substate 10: patrols as long as no player is alive.
 pub(super) fn patrol<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {

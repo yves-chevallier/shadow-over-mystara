@@ -1,5 +1,5 @@
-//! Type 15, sous-états 4, 6 et 8 : les gestes. Le sous-état 4 contient les séries de coups, la charge et le repos,
-//! le 6 les pas de côté, sauts et téléportations, le 8 le choix qui suit une série.
+//! Type 15, substates 4, 6 and 8: the moves. Substate 4 contains the series of strikes, the charge and rest, 6 the side
+//! steps, jumps and teleportations, 8 the choice that follows a series.
 
 use crate::families::cx::Bench;
 use super::stance::{approach_start, walk_off};
@@ -32,20 +32,20 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6e228 : l'étape suivante lance l'animation 4.
+/// 0x6e228: the next step starts animation 4.
 fn next_and_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     mv(x, 4);
 }
 
-/// 0x6e230 : étape suivante à la fin de l'animation.
+/// 0x6e230: next step at the end of the animation.
 fn next_when_done<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.add8(f::SUB3, 2);
     }
 }
 
-/// Étape commune « s'accroupit » (0x6e27e, 0x6e32a, 0x6e502) : fin d'animation, esquive invulnérable `ticks` images.
+/// Common step "crouches" (0x6e27e, 0x6e32a, 0x6e502): end of animation, invulnerable dodge for `ticks` frames.
 fn crouch<R: Bench>(x: &mut Cx<'_, R>, ticks: u8) {
     if !x.anim_step() {
         return;
@@ -56,7 +56,7 @@ fn crouch<R: Bench>(x: &mut Cx<'_, R>, ticks: u8) {
     x.set8(TIMER, ticks);
 }
 
-/// Étape commune « se déplace de `dist` » (0x6e100, 0x6e34a, 0x6e522) : après l'accroupi, saute de côté.
+/// Common step "moves by `dist`" (0x6e100, 0x6e34a, 0x6e522): after the crouch, jumps sideways.
 fn shift<R: Bench>(x: &mut Cx<'_, R>, dist: i16) {
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
@@ -71,7 +71,7 @@ fn shift<R: Bench>(x: &mut Cx<'_, R>, dist: i16) {
     mv(x, 3);
 }
 
-/// Étape commune « tire un coup » (0x6e086, 0x6e3a4) : en cours, la clé d'animation déclenche l'effet.
+/// Common step "fires a strike" (0x6e086, 0x6e3a4): in progress, the animation key triggers the effect.
 fn swing_key<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.anim_step() {
         return true;
@@ -83,7 +83,7 @@ fn swing_key<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     false
 }
 
-// --- geste 0 : provocation, puis geste choisi --------------------------------------------------------
+// --- move 0: taunt, then chosen move --------------------------------------------------------
 
 fn windup<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
@@ -112,7 +112,7 @@ fn windup<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 2 : demi-tour puis geste 0xc (marche).
+/// +6 = 2: turn-around then move 0xc (walk).
 fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -127,15 +127,15 @@ fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- séries de coups ----------------------------------------------------------------------------------
+// --- series of strikes ----------------------------------------------------------------------------------
 
-/// 0x6e048 : lance la série (+6 = 4).
+/// 0x6e048: starts the series (+6 = 4).
 fn series_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::SUB2, 0x400);
     series(x);
 }
 
-/// +6 = 4 : série de coups de la durée tirée dans la rangée de difficulté, puis geste de repli.
+/// +6 = 4: series of strikes of the duration drawn from the difficulty row, then fallback move.
 fn series<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -154,7 +154,7 @@ fn series<R: Bench>(x: &mut Cx<'_, R>) {
     follow_up(x);
 }
 
-/// +6 = 10 : au hasard, retour à la marche (0x1c) ou série.
+/// +6 = 10: at random, back to walking (0x1c) or series.
 fn maybe_series<R: Bench>(x: &mut Cx<'_, R>) {
     if rand_and(x, 1) == 0 {
         return again(x, 0x1c);
@@ -162,14 +162,14 @@ fn maybe_series<R: Bench>(x: &mut Cx<'_, R>) {
     series_begin(x);
 }
 
-/// +6 = 14, 16 (et 10 au tirage) : retour debout et reprise de la marche, `kind` = type de tir mémorisé.
+/// +6 = 14, 16 (and 10 on a draw): back to standing and resume walking, `kind` = saved shot type.
 fn again<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(SHOT_KIND, kind);
     set_state_long(x, STANCE);
     approach_start(x);
 }
 
-/// +6 = 6 et 8 : pas de côté invulnérable, puis série (6) ou retour à la marche (8).
+/// +6 = 6 and 8: invulnerable side step, then series (6) or back to walking (8).
 fn side_hop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
@@ -192,7 +192,7 @@ fn side_hop<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 12 : charge vers la cible pendant `+0xa2` images.
+/// +6 = 12: charge toward the target for `+0xa2` frames.
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -211,7 +211,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 18 : repos. L'original sort du repos dès la deuxième image (le test de fin de minuterie est inversé).
+/// +6 = 18: rest. The original leaves the rest from the second frame on (the timer-end test is inverted).
 fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -226,9 +226,9 @@ fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 6 --------------------------------------------------------------------------------------
+// --- substate 6 --------------------------------------------------------------------------------------
 
-/// +6 = 6 : pas en profondeur.
+/// +6 = 6: step in depth.
 fn depth_step<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
@@ -250,7 +250,7 @@ fn depth_step<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 8 : esquive sur place.
+/// +6 = 8: dodge in place.
 fn dodge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
@@ -274,7 +274,7 @@ fn dodge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 10 : esquive avec saut de côté, puis série de coups terminée par le retour debout.
+/// +6 = 10: dodge with a side jump, then series of strikes ending with a return to standing.
 fn dodge_then_series<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
@@ -303,11 +303,11 @@ fn dodge_then_series<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Positions d'arrivée (X puis profondeur) de la téléportation, relatives à la cible.
+/// Arrival positions (X then depth) of the teleportation, relative to the target.
 const TELEPORT_X: u32 = 0x6e44c;
 const TELEPORT_Y: u32 = 0x6e43e;
 
-/// +6 = 12 : le Goblin réapparaît près de sa cible.
+/// +6 = 12: the Goblin reappears near its target.
 fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
@@ -340,7 +340,7 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 --------------------------------------------------------------------------------------
+// --- substate 8 --------------------------------------------------------------------------------------
 
 /// +6 = 0 : courte pause debout.
 fn pause<R: Bench>(x: &mut Cx<'_, R>) {
@@ -358,7 +358,7 @@ fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// +6 = 2 : pas en arrière.
+/// +6 = 2: step backward.
 fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
@@ -373,7 +373,7 @@ fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 : bond (ou course) vers la cible.
+/// +6 = 4: leap (or run) toward the target.
 fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -428,7 +428,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 6 : rechoisit un geste ; ne change de geste que si le nouveau diffère du précédent ou après un délai.
+/// +6 = 6: chooses a move again; changes move only if the new one differs from the previous one or after a delay.
 fn pick_again<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_state_long(x, IDLE);

@@ -1,5 +1,5 @@
-//! Compare la RAM de travail (FF0000-FFFFFF) image par image avec un dump MAME
-//! (mame/scenario.lua, RAMDUMP="1 N fichier" : 64 Ko par image à partir de l'image 1).
+//! Compares the work RAM (FF0000-FFFFFF) frame by frame with a MAME dump
+//! (mame/scenario.lua, RAMDUMP="1 N file": 64 KB per frame starting at frame 1).
 //! cargo run --release -p cps2 --example compare -- <roms> <eeprom> <ram_mame.bin> [images]
 
 use std::path::Path;
@@ -9,7 +9,7 @@ fn main() {
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
     let dump = std::fs::read(&a[3]).expect("dump MAME");
-    // IGNORE="debut-fin,..." (adresses hex) : zones exclues (ex. piles des tâches)
+    // IGNORE="start-end,..." (hex addresses): excluded areas (e.g. task stacks)
     let ignore: Vec<(usize, usize)> = std::env::var("IGNORE").unwrap_or_default().split(',')
         .filter(|s| !s.is_empty())
         .map(|r| {
@@ -18,7 +18,7 @@ fn main() {
         })
         .collect();
     let n = (dump.len() / 0x10000).min(a.get(4).map(|s| s.parse().unwrap()).unwrap_or(usize::MAX));
-    // SCENARIO=fichier (format mame/scenario.lua) : mêmes entrées, appliquées après l'image indiquée
+    // SCENARIO=file (mame/scenario.lua format): same inputs, applied after the given frame
     let mut actions: Vec<(usize, String, u32)> = Vec::new();
     if let Ok(path) = std::env::var("SCENARIO") {
         for line in std::fs::read_to_string(path).unwrap().lines() {
@@ -32,17 +32,17 @@ fn main() {
             }
         }
     }
-    // SNAP="f1,f2" SNAPDIR=dossier : écrit le rendu de ces images en PNG
+    // SNAP="f1,f2" SNAPDIR=folder: writes the render of these frames as PNG
     let snaps: Vec<usize> = std::env::var("SNAP").unwrap_or_default().split(',').filter_map(|v| v.parse().ok()).collect();
     let snapdir = std::env::var("SNAPDIR").unwrap_or_else(|_| ".".into());
     let mut first_bad = None;
-    // divergences durables : octet différent pendant >= 30 images consécutives
+    // lasting divergences: byte differing for >= 30 consecutive frames
     let mut run = vec![0u32; 0x10000];
     let mut reported = vec![false; 0x10000];
     let mut persistent = 0;
     for f in 0..n {
         for (af, name, v) in &actions {
-            // MAME ne voit une valeur posée par set_value qu'à la mise à jour des ports de l'image suivante
+            // MAME only sees a value set by set_value at the next frame's port update
             if *af + 1 == f {
                 let (port, bit) = input_bit(name);
                 let reg = match port { 0 => &mut m.bus.inputs.in0, 1 => &mut m.bus.inputs.in1, _ => &mut m.bus.inputs.in2 };
@@ -67,14 +67,14 @@ fn main() {
                 if run[i] == 30 && !reported[i] && persistent < 12 {
                     reported[i] = true;
                     persistent += 1;
-                    println!("durable : {:06x} diffère depuis l'image {} (MAME {:02x} Rust {:02x})", 0xff0000 + i, f + 2 - 30, mame[i], ours[i]);
+                    println!("lasting: {:06x} differs since frame {} (MAME {:02x} Rust {:02x})", 0xff0000 + i, f + 2 - 30, mame[i], ours[i]);
                 }
             } else {
                 run[i] = 0;
             }
         }
         if std::env::var("DETAIL").ok().and_then(|v| v.parse::<usize>().ok()) == Some(f + 1) {
-            println!("détail image {} :", f + 1);
+            println!("detail frame {}:", f + 1);
             for &i in &diffs {
                 println!("  {:06x}: MAME {:02x}  Rust {:02x}", 0xff0000 + i, mame[i], ours[i]);
             }
@@ -82,22 +82,22 @@ fn main() {
         if !diffs.is_empty() {
             if first_bad.is_none() {
                 first_bad = Some(f + 1);
-                println!("image {} : {} octets différents (pc={:06x})", f + 1, diffs.len(), m.cpu.pc);
+                println!("frame {}: {} bytes differ (pc={:06x})", f + 1, diffs.len(), m.cpu.pc);
                 for &i in diffs.iter().take(24) {
                     println!("  {:06x}: MAME {:02x}  Rust {:02x}", 0xff0000 + i, mame[i], ours[i]);
                 }
             } else if (f + 1) % 60 == 0 {
-                println!("image {} : {} octets différents", f + 1, diffs.len());
+                println!("frame {}: {} bytes differ", f + 1, diffs.len());
             }
         }
     }
     match first_bad {
-        None => println!("{n} images identiques à MAME"),
-        Some(f) => println!("première divergence à l'image {f}"),
+        None => println!("{n} frames identical to MAME"),
+        Some(f) => println!("first divergence at frame {f}"),
     }
 }
 
-/// Nom d'entrée MAME -> (port, bit) (cps2_4p4b, actif à 0).
+/// MAME input name -> (port, bit) (cps2_4p4b, active low).
 fn input_bit(name: &str) -> (u8, u16) {
     let player = |p: &str| -> u16 { if p == "1" { 0 } else { 8 } };
     if let Some(rest) = name.strip_prefix('P') {
@@ -106,7 +106,7 @@ fn input_bit(name: &str) -> (u8, u16) {
         let b = match what {
             "Right" => 0x01, "Left" => 0x02, "Down" => 0x04, "Up" => 0x08,
             "Button 1" => 0x10, "Button 2" => 0x20, "Button 3" => 0x40, "Button 4" => 0x80,
-            _ => panic!("entrée inconnue {name}"),
+            _ => panic!("unknown input {name}"),
         };
         return (0, b << shift);
     }
@@ -116,6 +116,6 @@ fn input_bit(name: &str) -> (u8, u16) {
         "1 Player Start" => (2, 0x0100),
         "2 Players Start" => (2, 0x0200),
         "Service 1" => (2, 0x0004),
-        _ => panic!("entrée inconnue {name}"),
+        _ => panic!("unknown input {name}"),
     }
 }

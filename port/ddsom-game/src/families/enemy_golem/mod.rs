@@ -1,19 +1,18 @@
-//! Ennemi « Mud Golem » (ENEMY type 11, 0x67854). Voir `docs/families/enemy.md`.
+//! "Mud Golem" enemy (ENEMY type 11, 0x67854). See `docs/families/enemy.md`.
 //!
-//! Un colosse lent dont le code est un amas de gestes : coups de poing (animations 0x15eef4), sauts, bonds
-//! latéraux, marche. Quand il se tient debout (`+5` = 0 ou 2), il est piloté par les touches du quatrième joueur
-//! (`A5+3`, mode de mise au point) ; l'IA proprement dite part des sous-états 4 (coups), 6 et 8 (repli), choisis par
-//! la routine 0x690ce dans des rangées de 32 octets (0x69146).
+//! A slow colossus whose code is a heap of moves: punches (animations 0x15eef4), jumps, lateral leaps, walk. When it
+//! stands (`+5` = 0 or 2), it is driven by the keys of the fourth player (`A5+3`, debug mode); the AI proper starts
+//! from substates 4 (attacks), 6 and 8 (fallback), chosen by routine 0x690ce from rows of 32 bytes (0x69146).
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0, 2 | `control` | marche pilotée par les touches, saut |
-//! | 4 | `attacks` | coups (`+6` = 0 à 20) et leurs étapes `+7` |
-//! | 6, 8 | `moves` | bonds, esquives, sortie d'écran |
-//! | état 4 | `hit` | réactions aux coups, chute, fuite |
+//! | 0, 2 | `control` | key-driven walk, jump |
+//! | 4 | `attacks` | attacks (`+6` = 0 to 20) and their steps `+7` |
+//! | 6, 8 | `moves` | leaps, dodges, screen exit |
+//! | state 4 | `hit` | reactions to hits, fall, flight |
 //!
-//! Animations 0x15eed8 (mouvements) et 0x15eef4 (coups). Beaucoup de gestes partagent trois étapes communes :
-//! `next_anim` (0x6935c), `wait` (0x69346, attente de `+0x77` images) et `turn` (0x6899a, demi-tour).
+//! Animations 0x15eed8 (movements) and 0x15eef4 (attacks). Many moves share three common steps: `next_anim` (0x6935c),
+//! `wait` (0x69346, wait of `+0x77` frames) and `turn` (0x6899a, turn-around).
 
 use crate::families::cx::Bench;
 use crate::objects::Current;
@@ -39,7 +38,7 @@ pub(self) mod g {
     pub const HIT_FLAG: u32 = 0x8f;
     pub const TIMER: u32 = 0xa2;
     pub const TIMER2: u32 = 0xa4;
-    /// Orientation de la cible vue par les boîtes (0, 2) ou numéro de la boîte.
+    /// Orientation of the target as seen by the boxes (0, 2) or box number.
     pub const SIDE: u32 = 0xa6;
 }
 use g::*;
@@ -64,29 +63,29 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-/// Démarre l'animation `n` du jeu des mouvements.
+/// Starts animation `n` of the movement set.
 pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
-/// Démarre l'animation `n` du jeu des coups.
+/// Starts animation `n` of the attack set.
 pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-/// Fixe le type de coup et sa force.
+/// Sets the attack type and its strength.
 pub(self) fn set_strike<R: Bench>(x: &mut Cx<'_, R>, kind: u8, power: u8) {
     x.set8(STRIKE_KIND, kind);
     x.set8(STRIKE_POWER, power);
 }
 
-/// 0x6935c : étape suivante, animation 0.
+/// 0x6935c: next step, animation 0.
 pub(self) fn next_anim<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     mv(x, 0);
 }
 
-/// 0x69346 : attend `+0x77` images (compte à rebours), puis étape suivante.
+/// 0x69346: waits `+0x77` frames (countdown), then next step.
 pub(self) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(AI_WAIT);
     if n != 0 {
@@ -99,7 +98,8 @@ pub(self) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
 }
 
-/// 0x6899a : demi-tour selon `+0xa6` (0 ou 1 : rien, 2 : animation 1 puis 3 : attend la fin et se retourne).
+/// 0x6899a: turn-around according to `+0xa6` (0 or 1: nothing, 2: animation 1 then 3: waits for the end and turns
+/// around).
 pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     let side = x.u8(SIDE) as i8;
     if side < 2 {
@@ -118,7 +118,7 @@ pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// 0x689e6 : mémorise dans `+0xa6` si la cible est derrière (2) ou devant (0) ; vrai si derrière.
+/// 0x689e6: saves in `+0xa6` whether the target is behind (2) or in front (0); true if behind.
 pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let mut d1 = 0u32;
     if x.u16(f::TARGET) != 0 {
@@ -136,7 +136,7 @@ pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     d1 != 0
 }
 
-/// 0x68910 : drapeau de coup reçu `+0x8f` : rend vrai quand l'état doit continuer normalement.
+/// 0x68910: received hit flag `+0x8f`: returns true when the state must continue normally.
 pub(self) fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let v = x.u8(HIT_FLAG);
     if v == 0 {
@@ -176,7 +176,7 @@ pub(self) fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     }
 }
 
-/// Octet tiré au hasard dans la rangée de difficulté de `table`.
+/// Byte drawn at random from the difficulty row of `table`.
 pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
@@ -184,7 +184,7 @@ pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     x.data8(at + r)
 }
 
-/// 0x690ce : choisit le geste suivant (`+5` = 8) d'après la distance de la cible, ou se remet debout.
+/// 0x690ce: chooses the next move (`+5` = 8) according to the distance of the target, or gets back on its feet.
 pub(self) fn choose<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     if x.u16(f::TARGET) == 0 {
@@ -205,8 +205,8 @@ pub(self) fn choose<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 0);
 }
 
-/// 0x67ea4 : relance l'animation 2 en reprenant le temps et le drapeau de fin de l'animation précédente
-/// (au plus huit images d'avance), marque le coup et mémorise la position.
+/// 0x67ea4: restarts animation 2 taking over the time and the end flag of the previous animation (at most eight frames
+/// ahead), marks the strike and saves the position.
 pub(self) fn restart_walk<R: Bench>(x: &mut Cx<'_, R>) {
     let time = x.u16(ANIM_TIME);
     let end = x.u16(ANIM_END);
@@ -234,7 +234,7 @@ pub(self) fn restart_walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(TIMER2, at);
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
@@ -251,7 +251,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;

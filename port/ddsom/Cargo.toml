@@ -2,7 +2,7 @@
 name = "ddsom"
 version = "0.1.0"
 edition = "2021"
-description = "Dungeons & Dragons: Shadow over Mystara — port Rust jouable"
+description = "Dungeons & Dragons: Shadow over Mystara — playable Rust port"
 
 [dependencies]
 cps2 = { path = "../cps2" }

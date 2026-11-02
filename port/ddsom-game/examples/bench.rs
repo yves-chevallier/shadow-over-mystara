@@ -1,18 +1,20 @@
-//! Vitesse du jeu seul (sans machine de référence) : images par seconde sur un scénario.
+//! Speed of the game alone (without the reference machine): frames per second on a scenario.
 //!
-//! bench <roms> <eeprom> <scenario> <images>
+//! bench <roms> <eeprom> <scenario> <frames>
 //!
-//! Le jeu sans 68000 (`install_no_68k`), comme la machine A de `validate`. `DDSOM_SON_RUST=1` : pilote son Rust au lieu du Z80 émulé (comme l'application).
-//! `DDSOM_ASSETS=<dir>` : machine faite des seuls assets.
-//! Seul `Machine::run_frame` est mesuré (jeu, Z80 ou pilote son, QSound), sans le rendu de l'image
-//! (`DDSOM_RENDU=1` : avec), ni la sortie audio et vidéo de l'application. Base de la phase d'optimisation : docs/refactorisation.md, « Performance ».
+//! The game without the 68000 (`install_no_68k`), like machine A of `validate`. `DDSOM_SON_RUST=1`: Rust sound driver
+//! instead of the emulated Z80 (like the application).
+//! `DDSOM_ASSETS=<dir>`: machine built from the assets only.
+//! Only `Machine::run_frame` is measured (game, Z80 or sound driver, QSound), without rendering the frame
+//! (`DDSOM_RENDU=1`: with it), nor the application's audio and video output.
+//! Basis of the optimisation phase: docs/refactorisation.md, « Performance ».
 
 use std::path::Path;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames] = &a[..] else {
-        eprintln!("usage : bench <roms> <eeprom> <scenario> <images>");
+        eprintln!("usage: bench <roms> <eeprom> <scenario> <frames>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
@@ -34,9 +36,9 @@ fn main() {
         }
     };
     ddsom_game::install_no_68k(&mut m);
-    // DDSOM_RENDU=1 : l'image est calculée à chaque image, comme dans l'application
+    // DDSOM_RENDU=1: the frame is computed at every frame, as in the application
     m.rendering = std::env::var_os("DDSOM_RENDU").is_some();
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
     let t0 = std::time::Instant::now();
     for f in 0..frames {
@@ -45,7 +47,7 @@ fn main() {
     }
     let dt = t0.elapsed();
     println!(
-        "{} : {frames} images en {:.2?}, {:.0} images/s ({:.1} µs par image)",
+        "{}: {frames} frames in {:.2?}, {:.0} frames/s ({:.1} µs per frame)",
         Path::new(scenario).file_name().unwrap().to_string_lossy(),
         dt,
         frames as f64 / dt.as_secs_f64(),

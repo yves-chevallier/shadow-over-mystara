@@ -1,22 +1,22 @@
-//! Tables des joueurs : `data/players.json` (`player/init.rs`, `player/walk.rs`, `player/characters/`).
+//! Player tables: `data/players.json` (`player/init.rs`, `player/walk.rs`, `player/characters/`).
 //!
-//! La région 0x101166-0x1051ae ne contient que des tables par personnage : chaque table d'adresses (12
-//! longs, un par personnage, souvent deux fois la même adresse) désigne une table propre au personnage.
-//! Les tailles viennent de l'écart entre les tables désignées.
+//! The region 0x101166-0x1051ae holds only per-character tables: each address table (12
+//! longs, one per character, often the same address twice) designates a table specific to the character.
+//! Sizes come from the gap between the designated tables.
 
 use ddsom_assets::data::Region;
 
 use crate::data::{data, prog, region, row_size, span, Spec};
 use crate::rom::Program;
 
-/// Région des tables par personnage (la fiche des caisses `0x1051ae` suit).
+/// Region of the per-character tables (the crate sheet `0x1051ae` follows).
 const START: u32 = 0x101166;
 const END: u32 = 0x1051ae;
 
 const CLASSES: [&str; 6] = ["fighter", "cleric", "elf", "dwarf", "magic_user", "thief"];
 
-/// Nom des personnages qui partagent une table : la classe si ce sont ses deux variantes, sinon chaque
-/// variante (`class.0`, `class.1`) ; plusieurs classes sont jointes par `+`.
+/// Name of the characters sharing a table: the class if they are its two variants, otherwise each
+/// variant (`class.0`, `class.1`); several classes are joined by `+`.
 fn owners(chars: &[usize]) -> String {
     let mut names = Vec::new();
     for (c, class) in CLASSES.iter().enumerate() {
@@ -30,7 +30,7 @@ fn owners(chars: &[usize]) -> String {
     names.join("+")
 }
 
-/// Table d'adresses `pointers` (12 longs) et les tables qu'elle désigne, jusqu'à `end`.
+/// Address table `pointers` (12 longs) and the tables it designates, up to `end`.
 #[allow(clippy::too_many_arguments)]
 fn per_character(
     rom: &Program,
@@ -57,7 +57,7 @@ fn per_character(
 
 pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>) {
     let mut s = Vec::new();
-    // ---- init.rs : création du joueur ----
+    // ---- init.rs: player creation ----
     per_character(rom, &mut s, "level_by_scene", 0x3208, true, 0x101436, "u8", &[]);
     per_character(rom, &mut s, "hp_by_level", 0x325e, true, 0x101556, "u16", &[]);
     per_character(rom, &mut s, "weapons_by_level", 0x3522, true, 0x101722, "u8*4", &["weapon_a", "weapon_b", "flag_a", "flag_b"]);
@@ -66,12 +66,12 @@ pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>) {
     per_character(rom, &mut s, "unlocked_by_level", 0x345e, true, 0x101e1a, "u8*8", &[]);
     per_character(rom, &mut s, "gear_by_level", 0x3402, false, 0x103c7a, "u8*48", &[]);
     per_character(rom, &mut s, "spells_by_level", 0x34b4, true, 0x10417a, "u8*16", &[]);
-    // ---- dégâts des sorts et objets par niveau du lanceur : (ennemis, chefs) ----
+    // ---- spell and item damage by caster level: (enemies, bosses) ----
     for i in 0..15u32 {
         let at = 0x10417a + 60 * i;
         s.push(data(&format!("magic_damage/{i}"), at, "u8*30", &[], 2));
     }
-    // ---- vitesses de saut (une ligne par type de saut `+0x67`) ----
+    // ---- jump speeds (one row per jump type `+0x67`) ----
     let jumps = [
         ("fighter", 0x1044fe),
         ("cleric", 0x10451e),
@@ -84,7 +84,7 @@ pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>) {
         let next = jumps.get(i + 1).map(|j| j.1).unwrap_or(0x1045de);
         s.push(span(&format!("jump_speeds/{class}"), at, next, false, "i16*4", &["vx", "ax", "vz", "az"]));
     }
-    // ---- vitesses de marche : 16 couples (vx, vy) par combinaison de directions ----
+    // ---- walk speeds: 16 (vx, vy) pairs per combination of directions ----
     let walks = [
         ("walk_normal", 0x1045de),
         ("walk_unused", 0x10478e),
@@ -98,7 +98,7 @@ pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>) {
         let next = walks.get(i + 1).map(|w| w.1).unwrap_or(END);
         per_character(rom, &mut s, name, at, false, next, "i16*2", &["vx", "vy"]);
     }
-    // ---- tables rangées dans le code ----
+    // ---- tables stored in the code ----
     s.push(data("shock_damage", 0x10108, "u16", &[], 5));
     s.push(prog("throw_kind", 0x371b2, "u8", &[], 12));
     s.push(prog("special_anim", 0x372e4, "u8", &[], 88));

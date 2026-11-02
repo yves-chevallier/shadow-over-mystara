@@ -54,7 +54,7 @@ caméras du jeu (`port/ddsom-game/src/scroll.rs`, `docs/video.md` §B1).
 * Parallaxe : quand une couche est plus étroite que l'autre (fond lointain), l'image est assemblée par
   tranches d'un écran (384 pixels), chacune telle que le joueur la voit à cette position, avec le
   rapport de défilement déduit des largeurs ; des raccords sont visibles entre tranches. Les deux couches
-  sont alignées par le bas ; les couches seules sont dans `couches/NN_scroll2.png` et `NN_scroll3.png`.
+  sont alignées par le bas ; les couches seules sont dans `layers/NN_scroll2.png` et `NN_scroll3.png`.
 * Une soixantaine de scènes n'ont pas de carte propre pour le scroll 3 (leur table est celle, par défaut, de
   la scène 1) : cette couche est alors un reste de mémoire masqué par le scroll 2, et elle est omise.
 * Les écarts verticaux entre couches sont ceux des caméras au début de la scène ; si une caméra se déplace

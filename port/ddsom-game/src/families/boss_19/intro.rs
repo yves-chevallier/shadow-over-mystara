@@ -1,11 +1,11 @@
-//! Boss 14 / 19, groupe `+5` = 0 : cinématique d'arrivée (si la scène en a une, `A5+0x30`), propre à chaque
-//! type et variante ; elle se termine par `end` qui passe au combat.
+//! Boss 14 / 19, group `+5` = 0: arrival cutscene (if the stage has one, `A5+0x30`), specific to each
+//! type and variant; it ends with `end`, which moves on to the combat.
 //!
-//! | Cas | `+6` |
+//! | Case | `+6` |
 //! |---|---|
-//! | type 14 (variante 0) | 0 attente, 2 et 4 entrée en vol, 6 descente, 8 atterrissage |
-//! | type 19, variante 0 (scène 32) | 0 annonce (bulles), 2 bulles puis attente, 4 entrée par la droite, 6 vol vers l'écran, 8 attend la caméra |
-//! | type 19, variante 1 (dragon de Nagpa) | 0 entrée par la droite, 2 vol, 4 attend la caméra |
+//! | type 14 (variant 0) | 0 wait, 2 and 4 flying entrance, 6 descent, 8 landing |
+//! | type 19, variant 0 (stage 32) | 0 announcement (bubbles), 2 bubbles then wait, 4 entrance from the right, 6 flight toward the screen, 8 waits for the camera |
+//! | type 19, variant 1 (Nagpa's dragon) | 0 entrance from the right, 2 flight, 4 waits for the camera |
 
 use crate::families::cx::Bench;
 use super::fight;
@@ -52,7 +52,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// 0x900e2 : fin de l'arrivée : le combat commence sur-le-champ.
+/// 0x900e2: end of the arrival: the combat begins right away.
 fn end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     x.set16(f::SUB2, 0);
@@ -135,7 +135,7 @@ fn green_land<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- type 19, variante 0 -----------------------------------------------------------------------------
 
-/// Lance la tâche de fondu `list` (0x9b6 avec A0 = l'entrée, emplacement 0x10 ; `tasks/fading.rs`).
+/// Starts the fade task `list` (0x9b6 with A0 = the entry, slot 0x10; `tasks/fading.rs`).
 fn open_list<R: Bench>(x: &mut Cx<'_, R>, list: u32) {
     crate::kernel::create_task(x.b, 0x10, list);
 }
@@ -153,7 +153,7 @@ fn announce<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xe50fe);
 }
 
-/// 0x8fe68 : une bulle de plus toutes les 15 à 78 images.
+/// 0x8fe68: one more bubble every 15 to 78 frames.
 fn bubble_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(BUBBLES) as i8) <= 0 {
         return;
@@ -190,7 +190,7 @@ fn bubbles<R: Bench>(x: &mut Cx<'_, R>) {
     open_list(x, 0x14c8);
 }
 
-/// Position d'entrée à droite de la caméra, à la profondeur `dy` sous son bord haut.
+/// Entry position to the right of the camera, at depth `dy` below its top edge.
 fn enter_from_right<R: Bench>(x: &mut Cx<'_, R>, dy: u16) {
     x.add8(f::SUB2, 2);
     x.set_bit(0x1, 1, false);
@@ -211,7 +211,7 @@ fn enter<R: Bench>(x: &mut Cx<'_, R>) {
     fly(x);
 }
 
-/// Vol d'approche : la retombée est coupée sous l'altitude 0x20.
+/// Approach flight: the fall back is cut below altitude 0x20.
 fn glide<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xyz();
     if x.u16(0x18) != 0 && (x.u16(0xc) as i16) < 0x20 {

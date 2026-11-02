@@ -1,12 +1,12 @@
-//! Déchiffrement des opcodes CPS2.
-//! Port de MAME src/mame/capcom/cps2crypt.cpp et cps2_state::init_cps2crypt
+//! CPS2 opcode decryption.
+//! Port of MAME src/mame/capcom/cps2crypt.cpp and cps2_state::init_cps2crypt
 //! (BSD-3-Clause, Paul Leaman, Andreas Naive, Nicola Salmoria, Charles MacDonald).
 
 use crate::sboxes::*;
 
 pub struct Sbox {
     pub table: [u8; 64],
-    pub inputs: [i32; 6], // -1 : pas d'entrée, seulement la clé
+    pub inputs: [i32; 6], // -1: no input, only the key
     pub outputs: [i32; 2],
 }
 
@@ -109,7 +109,7 @@ fn opt(boxes: &[[Sbox; 4]; 4]) -> [[OptSbox; 4]; 4] {
     boxes.each_ref().map(|r| r.each_ref().map(OptSbox::new))
 }
 
-/// Décodage du fichier .key (cps2_state::init_cps2crypt) : clé maître 64 bits et plage chiffrée en mots.
+/// Decoding of the .key file (cps2_state::init_cps2crypt): 64-bit master key and encrypted range in words.
 pub fn parse_key(raw: &[u8]) -> ([u32; 2], u32, u32) {
     let mut d = [0u16; 10];
     for b in 0..160 {
@@ -132,7 +132,7 @@ pub fn decrypt(rom: &[u16], key: [u32; 2], lower: u32, upper: u32) -> Vec<u16> {
     let sb2 = opt(&[FN2_R1_BOXES, FN2_R2_BOXES, FN2_R3_BOXES, FN2_R4_BOXES]);
 
     let mut k1 = expand(&KEY1_BITS, &key);
-    // bits supplémentaires pour les s-boxes à moins de 6 entrées
+    // extra bits for the s-boxes with fewer than 6 inputs
     k1[0] ^= bit(k1[0], 1) << 4;
     k1[0] ^= bit(k1[0], 2) << 5;
     k1[0] ^= bit(k1[0], 8) << 11;

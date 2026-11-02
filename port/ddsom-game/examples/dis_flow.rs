@@ -1,8 +1,8 @@
-//! Désassemblage par descente récursive : complète `listing.txt` (qui perd du code après les tables
-//! de données) en suivant les branchements, les `bsr`/`jsr` locaux et les tables de sauts
-//! `jmp/jsr (table,PC,Dn)` à partir de points d'entrée.
-//!   dis_flow <roms> <début> <fin> <entrée>...      (adresses en hexadécimal)
-//! Seul le code de la plage [début, fin) est suivi ; la sortie est triée par adresse.
+//! Recursive-descent disassembly: completes `listing.txt` (which loses code after the data
+//! tables) by following branches, local `bsr`/`jsr` and the jump tables
+//! `jmp/jsr (table,PC,Dn)` from entry points.
+//!   dis_flow <roms> <start> <end> <entry>...      (addresses in hexadecimal)
+//! Only the code of the range [start, end) is followed; the output is sorted by address.
 
 use m68k::decode::{Ea, Op};
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,7 +11,7 @@ use std::path::Path;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 5 {
-        eprintln!("usage : dis_flow <roms> <début> <fin> <entrée>...");
+        eprintln!("usage: dis_flow <roms> <start> <end> <entry>...");
         std::process::exit(2);
     }
     let hex = |s: &String| u32::from_str_radix(s, 16).unwrap();
@@ -41,7 +41,7 @@ fn main() {
                     match ea {
                         Ea::AbsL(t) | Ea::AbsW(t) | Ea::PcDisp(t) => todo.push(t),
                         Ea::PcIdx(base, _) => {
-                            // table de mots relatifs à `base` : elle finit où commence le premier code
+                            // table of words relative to `base`: it ends where the first code begins
                             let mut end = hi;
                             let mut at = base;
                             while at < end && at < base + 0x200 {
@@ -79,7 +79,7 @@ fn main() {
         }
         for (b, e) in &tables {
             if *b == *pc {
-                println!("; table de sauts {b:06x}..{e:06x}");
+                println!("; jump table {b:06x}..{e:06x}");
             }
         }
         println!("{pc:06x}  {opcode:04x}  {op}");

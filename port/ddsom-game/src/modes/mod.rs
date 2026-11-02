@@ -1,12 +1,12 @@
-//! Machine à modes (tâche 0 hors partie) : démarrage, écrans d'attract, titre. Voir `docs/modes.md`.
+//! Mode machine (task 0 outside a game): startup, attract screens, title. See `docs/modes.md`.
 //!
-//! Hors partie, la tâche 0 exécute la boucle de `0x133fe` : à chaque tour elle appelle le gestionnaire
-//! du *mode* (`FF0E70` : 0 initialisation, 2 exécution), qui aiguille sur le *sous-mode* (`FF0E71`,
-//! pas de 2) ; le tour finit par une cession d'une image à l'ordonnanceur. Un gestionnaire de
-//! sous-mode est lui-même une machine à états (`FF0E72`) qui peut céder la main en son milieu
-//! (attente de fondu, d'une image, d'un chargement) : chaque gestionnaire est découpé aux points de
-//! cession, et la reprise est une étape Rust (`steps!`, l'adresse que l'original reprend n'étant plus
-//! que le nom de l'étape ; voir [`Flow`]).
+//! Outside a game, task 0 runs the loop at `0x133fe`: on each turn it calls the *mode* handler
+//! (`FF0E70`: 0 initialisation, 2 execution), which dispatches on the *sub-mode* (`FF0E71`,
+//! step of 2); the turn ends with a one-frame yield to the scheduler. A sub-mode handler
+//! is itself a state machine (`FF0E72`) that may cede control in the middle of its work
+//! (waiting for a fade, a frame, a load): each handler is split at the yield points,
+//! and the resume is a Rust step (`steps!`, the address the original resumes at being no more
+//! than the name of the step; see [`Flow`]).
 
 pub mod attract;
 pub mod boot;
@@ -24,77 +24,77 @@ use crate::scene::Ctx;
 use crate::tasks::table::Next;
 use crate::Native;
 
-/// Bloc d'état de la machine à modes (`A0` dans l'original) et ses champs.
+/// Mode machine state block (`A0` in the original) and its fields.
 pub mod mode {
     pub const BASE: u32 = 0xff_0e70;
-    /// Mode : 0 initialisation, 2 exécution.
+    /// Mode: 0 initialisation, 2 execution.
     pub const MODE: u32 = BASE;
-    /// Sous-mode (pas de 2) : l'écran en cours.
+    /// Sub-mode (step of 2): the current screen.
     pub const SUB: u32 = BASE + 1;
-    /// Étape du sous-mode.
+    /// Sub-mode step.
     pub const STEP: u32 = BASE + 2;
     pub const STEP_2: u32 = BASE + 3;
-    /// Minuterie de l'écran (mot, en images).
+    /// Screen timer (word, in frames).
     pub const TIMER: u32 = BASE + 8;
-    /// Octet ≠ 0 : l'écran de démarrage a déjà été montré.
+    /// Byte != 0: the startup screen has already been shown.
     pub const BOOTED: u32 = BASE + 0x32;
 }
 
-/// Adresses de la boucle de `0x133fe`.
+/// Addresses of the loop at `0x133fe`.
 mod at {
     pub const LOOP: u32 = 0x133fe;
-    /// Retour du gestionnaire de mode : cession d'une image.
+    /// Return of the mode handler: yield one frame.
     pub const AFTER_HANDLER: u32 = 0x1341a;
-    /// Reprise après la cession : tour suivant.
+    /// Resume after the yield: next turn.
     pub const AFTER_WAIT: u32 = 0x13422;
 }
 
-/// Sous-routines du moteur appelées par les écrans.
+/// Engine subroutines called by the screens.
 pub mod sub {
-    /// Effacements de la VRAM : sprites, plan 1, plan 2, plan 3.
+    /// VRAM clears: sprites, plane 1, plane 2, plane 3.
     pub const CLEAR_SPRITES: u32 = 0xc58;
     pub const CLEAR_SCROLL_1: u32 = 0xca8;
     pub const CLEAR_SCROLL_2: u32 = 0xcc8;
     pub const CLEAR_SCROLL_3: u32 = 0xce8;
-    /// Charge la palette n (D0) des pages de fond.
+    /// Loads palette n (D0) of the background pages.
     pub const LOAD_PALETTE: u32 = 0x1a67e;
-    /// Copie un bloc de tuiles (D0 = numéro, A1 = destination) dans un plan.
+    /// Copies a tile block (D0 = number, A1 = destination) into a plane.
     pub const TILE_BLOCK: u32 = 0x26d4;
 }
 
-/// Suite d'un gestionnaire : terminé (il revient à la suite de l'appel en cours) ou non (il a cédé la main à
-/// l'ordonnanceur, sauté vers une autre native, ou abandonné : la tâche continuera ailleurs).
+/// Continuation of a handler: finished (it returns to what follows the current call) or not (it yielded to
+/// the scheduler, jumped to another native, or gave up: the task will continue elsewhere).
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Flow {
     Done,
     Yield,
 }
 
-/// Cessions et appels qui peuvent céder, vus depuis une séquence d'écran.
+/// Yields and calls that may yield, seen from a screen sequence.
 pub trait Sequence {
-    /// Cède `frames` images à l'ordonnanceur ; la tâche reprendra en `resume` (étape Rust, ou adresse qui suit le
-    /// `jsr 0xa40` de l'original). La séquence doit rendre `Flow::Yield` aussitôt.
+    /// Yields `frames` frames to the scheduler; the task will resume at `resume` (Rust step, or the address
+    /// following the original's `jsr 0xa40`). The sequence must return `Flow::Yield` immediately.
     fn wait(&mut self, frames: u32, resume: impl Into<Next>) -> Flow;
-    /// Appel terminal (`jmp`) de la native `n` : elle s'exécute aussitôt, et son `rts` revient à la suite de l'appel en
-    /// cours (la séquence rend `Flow::Yield`, la suite ayant déjà été exécutée).
+    /// Terminal call (`jmp`) of native `n`: it runs at once, and its `rts` returns to what follows the current
+    /// call (the sequence returns `Flow::Yield`, the continuation having already been executed).
     fn jump(&mut self, n: &'static Native) -> Flow;
-    /// Appelle un sous-programme Rust qui peut céder la main (fondu, écran noir : `tasks::fading::descent`,
-    /// `video::black_screen::start`...) : `resume` est rangée dans les appels en cours ; s'il revient sans céder,
-    /// elle s'exécute aussitôt.
+    /// Calls a Rust subroutine that may cede control (fade, black screen: `tasks::fading::descent`,
+    /// `video::black_screen::start`...): `resume` is stored in the current calls; if it returns without yielding,
+    /// it runs at once.
     fn subroutine(&mut self, sp: fn(&mut Ctx) -> Flow, resume: impl Into<Next>) -> Flow;
-    /// Appel `bsr`/`jsr` dont la suite est une native de reprise : rangée dans les appels en cours de la tâche
-    /// (`tasks::table::Frame`), elle reprendra quand l'appelé reviendra.
+    /// `bsr`/`jsr` call whose continuation is a resume native: stored in the task's current calls
+    /// (`tasks::table::Frame`), it will resume when the callee returns.
     fn push_return(&mut self, next: impl Into<Next>);
-    /// L'appelé est revenu sans passer par son `rts` (fonction Rust qui a rendu `Flow::Done`) : l'appel en cours
-    /// ouvert par `push_return` est abandonné.
+    /// The callee returned without going through its `rts` (Rust function that returned `Flow::Done`): the
+    /// current call opened by `push_return` is abandoned.
     fn drop_return(&mut self);
-    /// Mots et octets de la RAM de travail, par décalage depuis A5.
+    /// Work RAM words and bytes, by offset from A5.
     fn or16(&mut self, off: u32, v: u16);
     fn and16(&mut self, off: u32, v: u16);
 }
 
-/// Appel d'un sous-programme natif depuis un pas Rust : sa suite est un appel en cours de la tâche, pas une
-/// adresse empilée.
+/// Call of a native subroutine from a Rust step: its continuation is a current call of the task, not a pushed
+/// address.
 fn push(b: &mut Cps2Bus, next: impl Into<Next>) {
     crate::tasks::table::call(b, next);
 }
@@ -130,15 +130,15 @@ impl Sequence for Ctx<'_> {
     }
 }
 
-/// Accès au bloc d'état des écrans (`mode::BASE`) et appels usuels.
+/// Access to the screens' state block (`mode::BASE`) and usual calls.
 pub trait Block {
     fn m8(&mut self, off: u32) -> u8;
     fn m16(&mut self, off: u32) -> u16;
     fn set_m8(&mut self, off: u32, v: u8);
     fn set_m16(&mut self, off: u32, v: u16);
-    /// Passe à l'étape suivante de l'écran (`FF0E72` += 2).
+    /// Moves to the next screen step (`FF0E72` += 2).
     fn next_step(&mut self);
-    /// Un tour d'objets et de sprites (`0xfaca2`) : SET, EFFCT, SOBJ puis liste de sprites.
+    /// One round of objects and sprites (`0xfaca2`): SET, EFFCT, SOBJ then sprite list.
     fn render(&mut self);
 }
 
@@ -169,27 +169,27 @@ impl Block for Ctx<'_> {
     }
 }
 
-/// A5 est toujours en place dans le code d'origine.
+/// A5 is always in place in the original code.
 pub fn c_a5(x: &mut Ctx) {
     x.c.a[5] = A5;
 }
 
 // ---------------------------------------------------------------------------------------------
-// La boucle
+// The loop
 
 crate::steps! {
-    /// Étapes de la boucle de la machine à modes (`0x133fe`).
+    /// Steps of the mode machine loop (`0x133fe`).
     pub enum Step {
-        /// Entrée de la boucle (tâche 0 relancée après une partie, ou fin du démarrage).
+        /// Loop entry (task 0 restarted after a game, or end of startup).
         Entry = at::LOOP => start,
-        /// Le gestionnaire a rendu la main : une image de cession, puis un nouveau tour.
+        /// The handler yielded: one yield frame, then a new turn.
         AfterHandler = at::AFTER_HANDLER => |x| x.wait(1, Step::AfterWait),
-        /// Après la cession : un nouveau tour.
+        /// After the yield: a new turn.
         AfterWait = at::AFTER_WAIT => turn,
     }
 }
 
-/// Un tour : appelle le gestionnaire du mode, qui revient à [`Step::AfterHandler`].
+/// One turn: calls the mode handler, which returns to [`Step::AfterHandler`].
 fn turn(x: &mut Ctx) -> Flow {
     x.c.a[0] = mode::BASE;
     let m = rd8(x.b, mode::MODE);
@@ -197,12 +197,12 @@ fn turn(x: &mut Ctx) -> Flow {
     match m {
         0 => init(x),
         2 => dispatch(x),
-        // la table n'a que deux entrées, et seul `init` écrit le mode (code-mort.md, lot « sortie du Cpu »)
-        _ => unreachable!("mode {m:#x} : hors de la table 0x13424 (modes 0 et 2)"),
+        // two table entries only; `init` alone writes the mode (code-mort.md, batch « sortie du Cpu »)
+        _ => unreachable!("mode {m:#x}: outside table 0x13424 (modes 0 and 2)"),
     }
 }
 
-/// Mode 0 (`0x13428`) : passe au mode 2 et choisit le premier sous-mode.
+/// Mode 0 (`0x13428`): moves to mode 2 and chooses the first sub-mode.
 fn init(x: &mut Ctx) -> Flow {
     let m = rd8(x.b, mode::MODE).wrapping_add(2);
     wr8(x.b, mode::MODE, m);
@@ -216,24 +216,24 @@ fn init(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Mode 2 (`0x13450`) : aiguille sur le sous-mode.
+/// Mode 2 (`0x13450`): dispatches on the sub-mode.
 fn dispatch(x: &mut Ctx) -> Flow {
     let sub = rd8(x.b, mode::SUB);
     match attract::screen(x, sub).or_else(|| title::screen(x, sub)).or_else(|| ranking::screen(x, sub)).or_else(|| demo::screen(x, sub)) {
         Some(flow) => flow,
-        // les onze entrées de la table (0 à 0x14) sont réécrites (code-mort.md, lot « sortie du Cpu »)
-        None => unreachable!("sous-mode {sub:#x} : hors de la table 0x1345c"),
+        // the eleven entries of the table (0 to 0x14) are rewritten (code-mort.md, batch « sortie du Cpu »)
+        None => unreachable!("sub-mode {sub:#x}: outside table 0x1345c"),
     }
 }
 
-/// `0x133fe` : entrée de la boucle.
+/// `0x133fe`: loop entry.
 pub fn start(x: &mut Ctx) -> Flow {
     wr8(x.b, A5.wrapping_sub(0x7151), 0xff);
     wr8(x.b, A5.wrapping_sub(0x7152), 0);
     turn(x)
 }
 
-/// Routines natives de la machine à modes.
+/// Native routines of the mode machine.
 pub fn natives() -> impl Iterator<Item = &'static Native> {
     attract::NATIVES.iter().chain(title::NATIVES).chain(select::NATIVES).chain(ranking::NATIVES).chain(gameover::NATIVES).chain(boot::NATIVES).chain(demo::NATIVES).chain(ending::NATIVES)
 }

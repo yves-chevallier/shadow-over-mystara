@@ -1,22 +1,22 @@
-//! Boss de type 3 (0x7f41a) : la créature volante de la scène 11 (nom de debug « Harpy », h). Voir
+//! Boss of type 3 (0x7f41a): the flying creature of stage 11 (debug name "Harpy", h). See
 //! `docs/families/boss.md`.
 //!
-//! Charpente des boss à IA (`+4` état, `+5` groupe, `+6` et `+7` étapes, états posés en longs). Le boss vole :
-//! la hauteur `+0xc` est sa altitude, il plane, pique sur les joueurs, les saisit et les emporte. Son corps
-//! repousse les joueurs (`+0xa4` : forme du corps, routines `body`) et les autres objets (`boss_common`, 0x81aa4).
+//! Skeleton of the AI bosses (`+4` state, `+5` group, `+6` and `+7` steps, states set as longs). The boss flies:
+//! the height `+0xc` is its altitude, it hovers, dives on the players, grabs them and carries them off. Its body
+//! pushes back the players (`+0xa4`: body shape, `body` routines) and the other objects (`boss_common`, 0x81aa4).
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `fight` | arrivée : descente du haut de l'écran (variante 0 seulement) |
-//! | 2 | `fight` | combat : vol stationnaire, demi-tour, approche (`+6` = 4, 8), montée, descente, ronde (16) |
-//! | 4 | `attacks` | seize attaques (`+6` = 0 à 30) : coups de griffes, piqués, ruées, cris, enlèvement |
-//! | 6, 8 | `fight` | tour de l'écran, envol |
-//! | 10 | `fight` | attente tant qu'aucun joueur n'est en vie |
-//! | 12 | `fight` | un joueur saisi est emporté puis lâché |
-//! | 14 | `fight` | riposte tirée au sort |
-//! | état 4 | `hit` | réactions aux coups (table de la ROM), recul, chute, mort |
+//! | 0 | `fight` | arrival: descent from the top of the screen (variant 0 only) |
+//! | 2 | `fight` | combat: hovering, about-face, approach (`+6` = 4, 8), rise, descent, patrol (16) |
+//! | 4 | `attacks` | sixteen attacks (`+6` = 0 to 30): claw swipes, dives, rushes, cries, abduction |
+//! | 6, 8 | `fight` | tour of the screen, takeoff |
+//! | 10 | `fight` | wait while no player is alive |
+//! | 12 | `fight` | a grabbed player is carried off then dropped |
+//! | 14 | `fight` | randomly drawn counterattack |
+//! | state 4 | `hit` | reactions to hits (ROM table), knockback, fall, death |
 //!
-//! Animations : 0x174776 (corps), 0x1747c4 (attaques), 0x1747f0 (mort).
+//! Animations: 0x174776 (body), 0x1747c4 (attacks), 0x1747f0 (death).
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -27,33 +27,33 @@ pub mod body;
 mod fight;
 mod hit;
 
-/// Champs propres à ce type.
+/// Fields specific to this type.
 pub(self) mod g {
     pub const VULNERABLE: u32 = 0x67;
-    /// Bonds restants de la marche, attente debout, décompte avant le prochain choix de cible.
+    /// Leaps remaining in the walk, standing wait, countdown before the next target choice.
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
     pub const WALK_DELAY: u32 = 0x71;
-    /// Sorte de visée demandée à 0xe76c.
+    /// Kind of aiming requested from 0xe76c.
     pub const AIM: u32 = 0x79;
-    /// Temps au sol (mot).
+    /// Time on the ground (word).
     pub const DOWN_TIME: u32 = 0x84;
-    /// Octet remis à 0xff à chaque image hors pause, à 0 quand le boss plane (h).
+    /// Byte reset to 0xff every frame outside pause, to 0 when the boss hovers (h).
     pub const HOVER: u32 = 0xa0;
-    /// Mode vol (1) ou sol (0) : posé par les étapes, et par les paliers de PV de la table 0x81712 (`wound_changed`) ;
-    /// en vol, les attaques sont tirées dans une autre table.
+    /// Flight (1) or ground (0) mode: set by the steps, and by the HP thresholds of table 0x81712 (`wound_changed`);
+    /// in flight, the attacks are drawn from another table.
     pub const FLYING: u32 = 0xa2;
-    /// Étape du piqué (attaque 20).
+    /// Step of the dive (attack 20).
     pub const DIVE: u32 = 0xa3;
-    /// Forme du corps qui repousse (0 aucune, 1 devant, 2 de côté), remise à zéro à chaque image.
+    /// Body shape that pushes back (0 none, 1 front, 2 sideways), reset to zero every frame.
     pub const BODY_SHAPE: u32 = 0xa4;
-    /// Images d'invulnérabilité restantes (`+0x38` remis à zéro).
+    /// Invulnerability frames remaining (`+0x38` reset to zero).
     pub const INVULNERABLE: u32 = 0xa5;
-    /// Minuterie de l'étape (octet ou mot selon l'étape).
+    /// Step timer (byte or word depending on the step).
     pub const TIMER: u32 = 0xa6;
-    /// État à reprendre après un demi-tour (long).
+    /// State to resume after an about-face (long).
     pub const SAVED_STATE: u32 = 0xaa;
-    /// Point de passage de la ronde (mots) et sens dans lequel l'angle tourne.
+    /// Patrol waypoint (words) and direction in which the angle turns.
     pub const GOAL_X: u32 = 0xb0;
     pub const GOAL_Z: u32 = 0xb2;
     pub const GOAL_TURN: u32 = 0xb5;
@@ -67,10 +67,10 @@ pub(self) const SET_BODY: u32 = 0x174776;
 pub(self) const SET_ATTACK: u32 = 0x1747c4;
 pub(self) const SET_DEATH: u32 = 0x1747f0;
 
-/// Boss enregistré comme obstacle pour les autres objets (mot, adresse ; voir `boss_common`).
+/// Boss registered as an obstacle for the other objects (word, address; see `boss_common`).
 pub(self) const BODY_OWNER: u32 = 0xff8000 - 0x5fb2;
 
-/// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
+/// Starts animation `n` of a set via the AI (0x103d6).
 pub(self) fn body_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
@@ -79,7 +79,7 @@ pub(self) fn attack_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_ATTACK, n);
 }
 
-/// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
+/// Next step (`addq.b #2,(+6)` or `(+7)`).
 pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
@@ -87,30 +87,30 @@ pub(self) fn next7<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
-/// `move.w #v,(6,A0)` : étapes `+6` et `+7` d'un coup.
+/// `move.w #v,(6,A0)`: steps `+6` and `+7` in one go.
 pub(self) fn set_steps<R: Bench>(x: &mut Cx<'_, R>, v: u16) {
     x.set16(f::SUB2, v);
 }
 
-/// 0x8188e : vitesses et accélérations (`+0x14..+0x1f`) à zéro.
+/// 0x8188e: speeds and accelerations (`+0x14..+0x1f`) to zero.
 pub(self) fn stop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
 }
 
-/// 0x8189e : enregistrement de la caméra en service (A2 : 0xff84fe, ou 0xff854e si `A5+0x36`).
+/// 0x8189e: record of the camera in use (A2: 0xff84fe, or 0xff854e if `A5+0x36`).
 pub(self) fn camera<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
     let a = if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe };
     Obj(a)
 }
 
-/// 0x7f5ae : plus de cible, attente (`+4` = 0x020a0000).
+/// 0x7f5ae: no target left, wait (`+4` = 0x020a0000).
 pub(self) fn idle_alone<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 
-/// 0x8173c : la cible est-elle derrière le boss ? Sans cible : attente, et vrai.
+/// 0x8173c: is the target behind the boss? With no target: wait, and true.
 pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::TARGET) as i16) >= 0 {
         idle_alone(x);
@@ -125,7 +125,7 @@ pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     behind
 }
 
-/// 0x81764 : la cible est-elle loin (plus de 0x20 en profondeur ou 0xc0 en largeur) ? Sans cible : attente, et vrai.
+/// 0x81764: is the target far (more than 0x20 in depth or 0xc0 in width)? With no target: wait, and true.
 pub(self) fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         idle_alone(x);
@@ -142,7 +142,7 @@ pub(self) fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     far
 }
 
-/// 0x81722 : seizièmes de PV restants (0 à 15).
+/// 0x81722: sixteenths of HP remaining (0 to 15).
 fn hp_sixteenths<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     let mut d1 = x.u16(f::HP) << 4;
     let max = x.u16(0x60);
@@ -161,7 +161,7 @@ fn hp_sixteenths<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     d0
 }
 
-/// 0x816f8 : le boss vient-il de changer de palier de PV (`+0xa2`, table 0x81712) ?
+/// 0x816f8: has the boss just changed HP threshold (`+0xa2`, table 0x81712)?
 pub(self) fn wound_changed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let n = hp_sixteenths(x);
     let w = x.rom8(0x81712 + n);
@@ -172,8 +172,8 @@ pub(self) fn wound_changed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     changed
 }
 
-/// Tirage d'une attaque dans une table de 32 octets par niveau de difficulté (lue en données, à partir de `table`) :
-/// `+6` = l'attaque, `+4..+5` = actif / attaques, `+7` = 0.
+/// Draw of an attack from a table of 32 bytes per difficulty level (read as data, from `table`):
+/// `+6` = the attack, `+4..+5` = active / attacks, `+7` = 0.
 fn draw_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let level = (var::RANK.get(x.b) >> 1) << 5;
     let at = table.wrapping_add(level as i16 as u32);
@@ -184,7 +184,7 @@ fn draw_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     x.set8(0x7, 0);
 }
 
-/// 0x80e1c / 0x80e22 : attaque tirée pour une cible proche (`far` : à distance) ; blessé, la table des blessés.
+/// 0x80e1c / 0x80e22: attack drawn for a nearby target (`far`: at a distance); when wounded, the wounded table.
 pub(self) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, far: bool) {
     let table = if x.u8(FLYING) != 0 {
         0x81262
@@ -196,7 +196,7 @@ pub(self) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, far: bool) {
     draw_attack(x, table)
 }
 
-/// 0x81462 : fin d'une attaque : nouvelle attaque si la cible est tout près, sinon reprise du vol (ou attente).
+/// 0x81462: end of an attack: new attack if the target is very close, otherwise resumption of the flight (or wait).
 pub(self) fn after_attack<R: Bench>(x: &mut Cx<'_, R>) {
     if !pick_target(x) {
         let s = if x.u8(FLYING) != 0 { 0x0202_0a00 } else { 0x0202_0400 };
@@ -233,9 +233,9 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
-/// 0x7f44e : réglages du boss (hors cinématique) ; il s'enregistre comme obstacle.
+/// 0x7f44e: boss setup (outside cutscene); it registers itself as an obstacle.
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
@@ -277,9 +277,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::clear_all_popups(x);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
-/// 0x7f550 : un groupe par image (hors gel et pause), invulnérabilité décomptée, puis zone, ombre et liste.
+/// 0x7f550: one group per frame (outside freeze and pause), invulnerability counted down, then zone, shadow and list.
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
@@ -305,20 +305,20 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     end_frame(x, 0x40);
 }
 
-/// Fin d'image ordinaire : retenue dans l'écran (marge `margin`), ombre, remise en liste.
+/// Ordinary end of frame: held within the screen (margin `margin`), shadow, put back in the list.
 pub(self) fn end_frame<R: Bench>(x: &mut Cx<'_, R>, margin: u16) {
     lib::keep_on_screen(x, margin);
     lib::collide_terrain(x);
     x.reinsert();
 }
 
-/// 0x81ae0 : riposte d'un coup commun (appelée par les réactions, 0x3e22e) : tirage selon la difficulté, puis
-/// l'attaque 24 (ruée au sol).
-/// Rend le tirage (D0 de l'original, `andi.l #0xf`) et le masque (D1.w) pour le contrat de la native.
+/// 0x81ae0: counterattack of a common hit (called by the reactions, 0x3e22e): draw according to difficulty, then
+/// attack 24 (rush along the ground).
+/// Returns the draw (D0 of the original, `andi.l #0xf`) and the mask (D1.w) for the native's contract.
 pub(crate) fn counter_reaction<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u16) {
     let r = random(x) & 0xf;
     let level = (var::RANK.get(x.b) >> 1).wrapping_mul(4);
-    // index `(d8,PC,D1.w)` : mot étendu en signe
+    // index `(d8,PC,D1.w)`: sign-extended word
     let mask = x.rom16(0x81b1a_u32.wrapping_add(level as i16 as i32 as u32));
     if mask >> r & 1 != 0 {
         x.set8(INVULNERABLE, 8);
@@ -329,7 +329,7 @@ pub(crate) fn counter_reaction<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u16) {
     (r, mask)
 }
 
-/// Natives : gestionnaire, riposte et formes du corps (appelées par 0x81aa4 de `boss_common`).
+/// Natives: handler, counterattack and body shapes (called by 0x81aa4 of `boss_common`).
 pub const NATIVES: &[crate::Native] = &[
     super::cx::handler_sans(0x7f41a, "boss_3", |b, a| run(&mut super::cx::Gx::aiguille(b, a))),
     crate::Native {
@@ -338,7 +338,7 @@ pub const NATIVES: &[crate::Native] = &[
         run: crate::Body::Processeur(|c, b| {
             let mut x = Cx::new(c, b);
             let (r, mask) = counter_reaction(&mut x);
-            // contrat de sortie de l'original : D0 = le tirage, D1.w = le masque
+            // original's output contract: D0 = the draw, D1.w = the mask
             x.c.d[0] = r;
             x.c.d[1] = x.c.d[1] & 0xffff_0000 | mask as u32;
             x.ret();

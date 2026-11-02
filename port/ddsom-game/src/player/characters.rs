@@ -1,20 +1,20 @@
-//! Points d'accroche des personnages (P5).
+//! Character hook points (P5).
 //!
-//! Le noyau commun (`actions`) ne contient pas le code des attaques : six personnages × deux variantes
-//! ont chacun leur saut, leur attaque, leur attaque spéciale et deux autres actions. Dans le programme
-//! d'origine, chaque `Slot` est une table de 12 adresses (une par valeur de `Player::CHARACTER`) ;
-//! `actions::act` appelle l'adresse de la table.
+//! The common core (`actions`) does not contain the attack code: six characters × two variants
+//! each have their own jump, attack, special attack and two other actions. In the original program,
+//! each `Slot` is a table of 12 addresses (one per value of `Player::CHARACTER`);
+//! `actions::act` calls the address in the table.
 //!
-//! `run` aiguille vers la fonction Rust du personnage (`routine`) ; les natives (`action_native!`) ne servent plus
-//! qu'aux appels par adresse restants (fuzz, `DDSOM_CHECK`).
+//! `run` dispatches to the character's Rust function (`routine`); the natives (`action_native!`) now only serve
+//! the remaining calls by address (fuzz, `DDSOM_CHECK`).
 //!
-//! Les fonctions communes que les personnages réutilisent sont publiques : `checks::turn_check`,
+//! The common functions that the characters reuse are public: `checks::turn_check`,
 //! `attack_button`, `jump_button`, `actions::to_stand`, `walk::walk_speed`, `walk::move_xy`,
 //! `animation::start`, `animation::step`, `hurt::hurt_animation`...
 
-/// Déclare une `Native` à l'adresse d'origine d'une action de personnage : la fonction Rust reçoit le
-/// joueur (A0) ; aucun registre n'est lu par les appelants. Le jeu appelle la fonction directement (`routine`) ; la
-/// native sert à la validation différentielle de chaque action (`DDSOM_CHECK=1`, `fuzz_player`).
+/// Declares a `Native` at the original address of a character action: the Rust function receives the
+/// player (A0); no register is read by the callers. The game calls the function directly (`routine`); the
+/// native serves the differential validation of each action (`DDSOM_CHECK=1`, `fuzz_player`).
 macro_rules! action_native {
     ($name:ident, $entry:expr, $label:expr, $f:path) => {
         pub const $name: crate::Native = crate::Native {
@@ -43,27 +43,27 @@ pub mod thief;
 
 use super::{Ctx, Player};
 
-/// Une routine Rust d'un personnage : s'exécute pour une image du joueur.
+/// A character's Rust routine: runs for one frame of the player.
 pub type CharacterFn = fn(&mut Ctx, Player);
 
-/// Les cinq actions propres aux personnages (octet `+6`).
+/// The five character-specific actions (byte `+6`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Slot {
-    /// Saut (`action::JUMP`, 0x0a).
+    /// Jump (`action::JUMP`, 0x0a).
     Jump,
-    /// Attaque du bouton 1 (`action::ATTACK`, 0x0c).
+    /// Button 1 attack (`action::ATTACK`, 0x0c).
     Attack,
-    /// Attaque spéciale (`action::SPECIAL`, 0x0e).
+    /// Special attack (`action::SPECIAL`, 0x0e).
     Special,
-    /// Action 0x10 (h : attaque en l'air ou lancer d'arme).
+    /// Action 0x10 (h: aerial attack or weapon throw).
     Action10,
     /// Action 0x12 (h).
     Action12,
 }
 
-/// Routine du personnage `character` (`Player::CHARACTER`) pour l'action `slot` : tables d'origine 0x35918 (saut),
-/// 0x35972 (attaque), 0x359cc (spéciale), 0x35a0a (action 0x10) et 0x35a48 (action 0x12), une adresse par valeur
-/// de `CHARACTER` ; les deux variantes d'un personnage ont le même code.
+/// Routine of character `character` (`Player::CHARACTER`) for action `slot`: original tables 0x35918 (jump),
+/// 0x35972 (attack), 0x359cc (special), 0x35a0a (action 0x10) and 0x35a48 (action 0x12), one address per value
+/// of `CHARACTER`; the two variants of a character have the same code.
 pub fn routine(slot: Slot, character: u8) -> CharacterFn {
     use super::moves;
     use Slot::*;
@@ -93,15 +93,15 @@ pub fn routine(slot: Slot, character: u8) -> CharacterFn {
         (5, Action12) => thief::roll,
         (0..=3, Action10) => common::dash,
         (0..=2, Action12) => moves::leap_attack,
-        (class, _) => unreachable!("personnage {character} (classe {class}) hors des tables 0x35918-0x35a48"),
+        (class, _) => unreachable!("character {character} (class {class}) outside the tables 0x35918-0x35a48"),
     }
 }
 
-/// Exécute l'action `slot` du personnage du joueur `p`.
+/// Runs action `slot` of player `p`'s character.
 pub fn run(g: &mut Ctx, p: Player, slot: Slot) {
     let character = p.u8(g, Player::CHARACTER);
-    // D0 = numéro d'action, octet haut nul, comme l'aiguillage d'origine : le pas d'animation fidèle aux registres
-    // (`common::step_keeping_regs`) et les créateurs qui suivent peuvent encore le lire
+    // D0 = action number, high byte zero, like the original dispatch: the register-faithful animation step
+    // (`common::step_keeping_regs`) and the creators that follow can still read it
     g.c.d[0] = p.u8(g, Player::ACTION) as u32;
     routine(slot, character)(g, p)
 }

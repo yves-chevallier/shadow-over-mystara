@@ -4,7 +4,7 @@ Image de chaque créature (types d'ennemis du pool ENEMY, boss du pool BOSS, six
 de base (premier cadre de l'animation de marche ou d'attente), avec sa palette, sur fond transparent, à l'échelle
 1:1 (`x2` : agrandie deux fois) avec une bande de cadres d'animation (`anim`). Un même type d'objet a souvent
 plusieurs **variantes** (octet `+3`) : autre couleur, autre créature, autre rôle ; chacune a son image.
-Les noms des types sont ceux de `docs/familles/enemy.md` et `boss.md` (hypothèses : une variante peut montrer
+Les noms des types sont ceux de `docs/families/enemy.md` et `boss.md` (hypothèses : une variante peut montrer
 autre chose que le nom du type).
 
 Les images sont tirées des ROMs : **elles ne sont pas versionnées**. Le dossier `assets/creatures/` est ignoré
@@ -19,7 +19,7 @@ tools/creatures.sh build               # seulement l'assemblage (images, planche
 
 Le script compile `port/ddsom-game/examples/creatures.rs`, lance `creatures scan` sur les scénarios
 `scenarios/cov/cov_tour*.txt` et `cov_natural_c0.txt` (4 en parallèle, 30 000 images chacun), puis `creatures build`
-qui réécrit les PNG, les planches `planche_*.png` et ce fichier. `CREATURES_EXTRA="nom ..."` ajoute des scénarios
+qui réécrit les PNG, les planches `planche_*.png` et ce fichier. `CREATURES_EXTRA="name ..."` ajoute des scénarios
 de `scenarios/cov/`.
 
 ## Méthode

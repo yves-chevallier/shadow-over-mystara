@@ -1,6 +1,6 @@
-//! Aperçu d'une image de sprite : `frame <assets> <numéro> <palette> <exit.png>`.
-//! Assemble les morceaux de l'image (cellules 16x16, miroirs) et les peint avec une palette de la
-//! bibliothèque (la même pour tous les morceaux : en jeu, la palette dépend de l'objet).
+//! Preview of a sprite frame: `frame <assets> <number> <palette> <output.png>`.
+//! Assembles the pieces of the frame (16x16 cells, mirrors) and paints them with a palette of the
+//! library (the same for all pieces: in game, the palette depends on the object).
 
 use std::path::Path;
 
@@ -14,7 +14,7 @@ fn main() {
     let cells = Cells::load(&assets.join("gfx")).unwrap();
     let pal = Palettes::load(&assets.join("palettes.png")).unwrap().0[num(&a[3])];
     let f = &frames.frames[num(&a[2])];
-    // cellules posées : (x, y, cellule, miroir x, miroir y)
+    // placed cells: (x, y, cell, mirror x, mirror y)
     let mut tiles = Vec::new();
     for p in &f.pieces {
         let (nx, ny) = (((p.attr() >> 8) & 0xf) as i32 + 1, (p.attr() >> 12) as i32 + 1);
@@ -36,7 +36,7 @@ fn main() {
     let (x0, y0) = (tiles.iter().map(|t| t.0).min().unwrap(), tiles.iter().map(|t| t.1).min().unwrap());
     let (w, h) = ((tiles.iter().map(|t| t.0).max().unwrap() - x0 + 16) as usize, (tiles.iter().map(|t| t.1).max().unwrap() - y0 + 16) as usize);
     let mut rgba = vec![0u8; w * h * 4];
-    // la table d'objets est dessinée de la fin vers le début : le premier morceau passe devant
+    // the object table is drawn from the end towards the start: the first piece ends up in front
     for &(x, y, cell, fx, fy) in tiles.iter().rev() {
         for py in 0..16 {
             for px in 0..16 {
@@ -55,5 +55,5 @@ fn main() {
     let mut enc = png::Encoder::new(std::fs::File::create(&a[4]).unwrap(), w as u32, h as u32);
     enc.set_color(png::ColorType::Rgba);
     enc.write_header().unwrap().write_image_data(&rgba).unwrap();
-    println!("image {} ({:#x}) : {} morceaux, {w}x{h}, ancrage en ({}, {})", a[2], f.rom, f.pieces.len(), -x0, -y0);
+    println!("frame {} ({:#x}): {} pieces, {w}x{h}, anchor at ({}, {})", a[2], f.rom, f.pieces.len(), -x0, -y0);
 }

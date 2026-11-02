@@ -1,18 +1,18 @@
-//! Ennemi « Goblin » (ENEMY type 15, 0x6da20). Voir `docs/families/enemy.md`.
+//! "Goblin" enemy (ENEMY type 15, 0x6da20). See `docs/families/enemy.md`.
 //!
-//! Un petit combattant à épée : il marche vers le joueur, choisit un geste dans des rangées de 32 octets (une par
-//! niveau de difficulté `A5+0x7f92 / 2`), enchaîne des séries de coups et se place à côté de sa cible.
+//! A small sword fighter: it walks toward the player, chooses a move from rows of 32 bytes (one per difficulty level
+//! `A5+0x7f92 / 2`), chains series of strikes and positions itself next to its target.
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `arrival` | arrivée selon la variante `+3` (0 marche, 2 et 4 chute, 6 course d'entrée) |
-//! | 2 | `stance` | debout : approche, demi-tour, attente, sortie d'écran |
-//! | 4, 6, 8 | `attacks` | gestes (`+6` = 0 à 20), séries de coups, pas de côté, saut |
-//! | 10 | `stance` | attend tant qu'aucun joueur n'est en vie |
-//! | état 4 | `hit` | réactions aux coups, recul, chute, saisie par un joueur |
+//! | 0 | `arrival` | arrival according to variant `+3` (0 walk, 2 and 4 fall, 6 run-in) |
+//! | 2 | `stance` | standing: approach, turn-around, wait, screen exit |
+//! | 4, 6, 8 | `attacks` | moves (`+6` = 0 to 20), series of strikes, side steps, jump |
+//! | 10 | `stance` | waits as long as no player is alive |
+//! | state 4 | `hit` | reactions to hits, recoil, fall, grab by a player |
 //!
-//! Animations 0x165ee6 (mouvements) et 0x165ef4 (coups). L'état d'initialisation enchaîne directement sur le corps
-//! de l'état actif (la même image).
+//! Animations 0x165ee6 (movements) and 0x165ef4 (attacks). The initialization state chains directly into the body of
+//! the active state (the same frame).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -36,9 +36,9 @@ pub(self) mod g {
     /// Minuterie (octet) d'un geste.
     pub const TIMER: u32 = 0xa2;
     pub const COOLDOWN: u32 = 0xa4;
-    /// Geste choisi (valeur de `+6` à reprendre).
+    /// Chosen move (value of `+6` to resume).
     pub const CHOSEN: u32 = 0xaa;
-    /// Non nul : pas de test de zone (arrivée par la course d'entrée).
+    /// Non-zero: no zone test (arrival by the run-in).
     pub const NO_ZONE: u32 = 0xae;
 }
 use g::*;
@@ -73,12 +73,12 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-/// Démarre l'animation `n` du jeu des mouvements.
+/// Starts animation `n` of the movement set.
 pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
-/// Démarre l'animation `n` du jeu des coups.
+/// Starts animation `n` of the attack set.
 pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
@@ -87,7 +87,7 @@ pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
-/// Octet tiré au hasard dans la rangée de difficulté de `table` (rangées de 32 octets).
+/// Byte drawn at random from the difficulty row of `table` (rows of 32 bytes).
 pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
@@ -95,7 +95,7 @@ pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     x.data8(at + r)
 }
 
-/// 0x6eb04 : fin d'un geste ; debout, et si le tirage le veut, attente (`+5 = 10`).
+/// 0x6eb04: end of a move; standing, and if the draw says so, wait (`+5 = 10`).
 pub(self) fn done_attack<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
@@ -103,8 +103,8 @@ pub(self) fn done_attack<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6eb34 : un joueur est-il dans la boîte `(d0, d1, d2)` et accepté par les portes d'IA (0xa4b4, et 0xa4c2 s'il
-/// regarde dans le même sens) ?
+/// 0x6eb34: is a player in box `(d0, d1, d2)` and accepted by the AI gates (0xa4b4, and 0xa4c2 if it looks in the same
+/// direction)?
 fn box_check<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
@@ -122,17 +122,17 @@ fn box_check<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     true
 }
 
-/// 0x6eb2a : joueur tout près.
+/// 0x6eb2a: player very close.
 pub(self) fn near_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_check(x, 0, 0x70, 0x10)
 }
 
-/// 0x6eb1c : joueur à une courte distance, devant.
+/// 0x6eb1c: player at a short distance, in front.
 pub(self) fn far_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_check(x, -0xd0, 0x60, 0x18)
 }
 
-/// 0x6eb62 : le Goblin tourne le dos à sa cible.
+/// 0x6eb62: the Goblin has its back to its target.
 pub(self) fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
@@ -146,12 +146,12 @@ pub(self) fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 pub(self) const NEAR_TABLE: u32 = 0x6ebc0;
 pub(self) const FAR_TABLE: u32 = 0x6edc0;
-/// Rangées de durées de séries de coups.
+/// Rows of strike-series durations.
 pub(self) const SERIES_TABLE: u32 = 0x6efc0;
-/// Rangées de gestes qui suivent une série (sous-état 8).
+/// Rows of moves that follow a series (substate 8).
 pub(self) const FOLLOW_TABLE: u32 = 0x6e904;
 
-/// 0x6eb8a (série lointaine) / 0x6eb90 (série proche) : choisit le geste (`+5 = 4`, `+6 = 0`).
+/// 0x6eb8a (far series) / 0x6eb90 (near series): chooses the move (`+5 = 4`, `+6 = 0`).
 pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let b = row_byte(x, table);
     x.set8(f::SUB, 4);
@@ -160,7 +160,7 @@ pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     b
 }
 
-/// 0x6e8d6 : après une série, choisit le geste de repli (sous-état 8).
+/// 0x6e8d6: after a series, chooses the fallback move (substate 8).
 pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     let b = row_byte(x, FOLLOW_TABLE);
@@ -169,7 +169,7 @@ pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 0);
 }
 
-/// 0x6e656 : le Goblin est saisi par un joueur : animation de lâcher, puis il disparaît.
+/// 0x6e656: the Goblin is grabbed by a player: drop animation, then it disappears.
 pub(self) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -184,9 +184,9 @@ pub(self) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
-/// Faux si le jeu est en pause (rien n'est fait) ; sinon le corps de l'état actif suit dans la même image.
+/// False if the game is paused (nothing is done); otherwise the body of the active state follows within the same frame.
 fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if paused(x) {
         return false;
@@ -226,7 +226,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;

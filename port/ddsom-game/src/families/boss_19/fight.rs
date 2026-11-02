@@ -1,23 +1,23 @@
-//! Boss 14 / 19, groupe `+5` = 2 : le combat. Le dragon marche vers un joueur ; selon la distance, la direction
-//! et l'état de ses PV il se retourne, souffle ou attaque (`attacks`).
+//! Boss 14 / 19, group `+5` = 2: the combat. The dragon walks toward a player; depending on the distance, the
+//! direction and the state of its HP it turns around, breathes or attacks (`attacks`).
 //!
-//! | `+6` | Rôle |
+//! | `+6` | Role |
 //! |---|---|
-//! | 0, 8 | marche (tir 0x20, 0x21) : tire au sort, sonde les boîtes de portée |
-//! | 2 | demi-tour (animation 1) |
-//! | 4 | immobile un instant, puis demi-tour si besoin |
-//! | 6 | approche lente |
+//! | 0, 8 | walk (shot 0x20, 0x21): draws randomly, probes the range boxes |
+//! | 2 | about-face (animation 1) |
+//! | 4 | motionless for a moment, then about-face if needed |
+//! | 6 | slow approach |
 //!
-//! Les sondes de portée rendent vrai quand le dragon doit réagir ; plusieurs ont des particularités de l'original
-//! (résultat toujours faux, retour avec l'état « attente » écrit) reproduites telles quelles.
+//! The range probes return true when the dragon must react; several have quirks of the original (result always
+//! false, return with the "wait" state written) reproduced as is.
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 
-/// Table des octets de seuils des ripostes spéciales (0x901e0), indexée par le quart de PV restant.
+/// Table of threshold bytes for the special counterattacks (0x901e0), indexed by the quarter of HP remaining.
 const SPECIAL_LEVELS: u32 = 0x901e0;
-/// Choix d'attaque (0x91096, 32 octets) et d'attaque à courte portée (0x9110c, 32 octets par niveau de difficulté).
+/// Attack choice (0x91096, 32 bytes) and short-range attack choice (0x9110c, 32 bytes per difficulty level).
 const PICK_A: u32 = 0x91096;
 const PICK_B: u32 = 0x9110c;
 
@@ -61,7 +61,7 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, shot: u8) {
     if special_due(x) {
         return attack_4(x);
     }
-    // probe_near (0x9132e) ne rend jamais vrai : la sonde est lancée pour rien
+    // probe_near (0x9132e) never returns true: the probe is launched for nothing
     lib::target_in_front(x, -0x20, 0x40, 0x10);
     if probe_front(x) || probe_back(x) {
         return pick_attack_a(x);
@@ -76,12 +76,12 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, shot: u8) {
     x.anim_step();
 }
 
-/// 0x901c2 : une riposte spéciale est-elle due ? Les PV restants (en quarts de `+0x60`) la déclenchent.
+/// 0x901c2: is a special counterattack due? The remaining HP (in quarters of `+0x60`) trigger it.
 fn special_due<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let d1 = x.u16(0x60) as u32;
     let d3 = (x.u16(0x62) as u32) << 2;
     let (mut d0, mut d2) = (-1i32, 0u32);
-    // l'original boucle sans fin si `+0x60` est nul
+    // the original loops forever if `+0x60` is zero
     for _ in 0..0x20000 {
         d2 = d2.wrapping_add(d1);
         d0 += 1;
@@ -98,7 +98,7 @@ fn special_due<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x91024 : le dragon tourne-t-il le dos à sa cible ? (sans cible : attend, et rend vrai comme l'original).
+/// 0x91024: is the dragon turning its back on its target? (with no target: waits, and returns true like the original).
 fn facing_away<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::TARGET) as i16) >= 0 {
         wait(x);
@@ -112,7 +112,7 @@ fn facing_away<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     d < 0
 }
 
-/// 0x9130c : un joueur est tout près derrière (boîte 0x7f0c) : le dragon réagit (0xac3a).
+/// 0x9130c: a player is very close behind (box 0x7f0c): the dragon reacts (0xac3a).
 fn probe_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::guard_in_front_strict(x, -0x60, 0x60, 0x10) {
         return false;
@@ -121,8 +121,8 @@ fn probe_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x91348, 0x91390 : joueur dans la boîte `(d0, d1, d2)` et tirage favorable (0xa4c2 si la cible regarde du même
-/// côté que le dragon, 0xa4b4 sinon). Sans cible, le dragon attend et la sonde rend vrai comme l'original.
+/// 0x91348, 0x91390: player in the box `(d0, d1, d2)` and favorable draw (0xa4c2 if the target faces the same
+/// way as the dragon, 0xa4b4 otherwise). With no target, the dragon waits and the probe returns true like the original.
 fn probe_target<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, no_target: impl Fn(u16) -> bool) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
@@ -144,7 +144,7 @@ fn probe_back<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     probe_target(x, -0xc0, 0x30, 0x10, |t| t == 0)
 }
 
-/// 0x91050 : choisit une attaque (`+6` = 0 à 10) dans la table.
+/// 0x91050: chooses an attack (`+6` = 0 to 10) from the table.
 fn pick_attack_a<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     let which = x.data8(PICK_A + r);
@@ -206,10 +206,10 @@ fn close_in<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
-// --- choix d'une attaque après un tir d'essai (0x910b6) ---------------------------------------------------------
+// --- choice of an attack after a trial shot (0x910b6) ---------------------------------------------------------
 
-/// 0x910b6 : un joueur est à portée de souffle ? Le tirage (table par niveau) est fait, puis l'original écrase
-/// le résultat par l'état « debout » : seule la consommation du tirage reste.
+/// 0x910b6: is a player within breath range? The draw (table per level) is made, then the original overwrites
+/// the result with the "standing" state: only the consumption of the draw remains.
 pub(super) fn pick_attack_b<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(f::TARGET) as i16) >= 0 {
         return wait(x);

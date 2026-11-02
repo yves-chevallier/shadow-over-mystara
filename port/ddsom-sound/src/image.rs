@@ -1,15 +1,15 @@
-//! Image de la RAM du Z80 (F000-FFFF) telle que le programme d'origine la tient.
+//! Image of the Z80 RAM (F000-FFFF) as the original program keeps it.
 //!
-//! Le pilote Rust n'en a pas besoin pour fonctionner : c'est un outil de validation, qui permet de
-//! comparer champ par champ l'état du pilote à la RAM du Z80 d'origine.
+//! The Rust driver does not need it to work: it is a validation tool that allows comparing,
+//! field by field, the driver state with the original Z80 RAM.
 
 use crate::adpcm::AdpcmChannel;
 use crate::voice::Voice;
 use crate::Driver;
 
-/// Début de la RAM du Z80.
+/// Start of the Z80 RAM.
 pub const RAM_BASE: usize = 0xf000;
-/// Adresses des tableaux de voies.
+/// Addresses of the voice arrays.
 pub const SFX_VOICES: usize = 0xf200;
 pub const MUSIC_VOICES: usize = 0xf700;
 pub const ADPCM_CHANNELS: usize = 0xfc00;
@@ -26,14 +26,14 @@ fn put(ram: &mut [u8], addr: usize, v: u8) {
 }
 
 impl Voice {
-    /// Octets de l'enregistrement de voie (0x50 octets).
+    /// Bytes of the voice record (0x50 bytes).
     pub fn image(&self) -> [u8; VOICE_SIZE] {
         let mut b = [0u8; VOICE_SIZE];
         let w = |b: &mut [u8], at: usize, v: u16| {
             b[at] = v as u8;
             b[at + 1] = (v >> 8) as u8;
         };
-        // Pointeur : banque (0 en zone fixe) puis adresse dans la fenêtre 8000-BFFF.
+        // Pointer: bank (0 in the fixed area) then address in the 8000-BFFF window.
         let (bank, addr) = if self.seq < 0x8000 {
             (0, self.seq as u16)
         } else {
@@ -95,7 +95,7 @@ impl Voice {
 }
 
 impl AdpcmChannel {
-    /// Octets de l'enregistrement de voie ADPCM (0x18 octets).
+    /// Bytes of the ADPCM voice record (0x18 bytes).
     pub fn image(&self) -> [u8; ADPCM_SIZE] {
         let mut b = [0u8; ADPCM_SIZE];
         let w = |b: &mut [u8], at: usize, v: u16| {
@@ -124,7 +124,7 @@ impl AdpcmChannel {
 }
 
 impl Driver {
-    /// RAM F000-FFFF du Z80 d'origine, reconstituée (octets que le pilote ne modélise pas : 0).
+    /// Reconstructed F000-FFFF RAM of the original Z80 (bytes the driver does not model: 0).
     pub fn ram_image(&self) -> Vec<u8> {
         let mut r = vec![0u8; 0x1000];
         let g = &self.g;

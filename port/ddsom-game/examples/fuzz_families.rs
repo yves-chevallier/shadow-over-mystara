@@ -1,18 +1,18 @@
-//! Fuzzing des gestionnaires de familles ITEM / BOX / EFFCT sur des états réels perturbés.
+//! Fuzzing of the ITEM / BOX / EFFCT family handlers on perturbed real states.
 //!
-//! Le scénario déroule la partie avec le code d'origine seul (la ligne du temps est celle du jeu). Aux
-//! appels d'un gestionnaire réécrit (un sur `période`), on prend l'état réel, on en tire `tests`
-//! copies dont quelques octets sont perturbés (champs de l'objet, de son joueur, drapeaux de scène),
-//! puis on exécute sur chacune le code d'origine et la routine native, et on compare (RAM, registres).
-//! Cela exerce des branches que les scénarios n'atteignent pas. Les états absurdes sont
-//! sans danger : les parties non réécrites s'exécutent en code d'origine dans les deux versions.
+//! The scenario runs the game with the original code alone (the timeline is the game's). At the
+//! calls of a rewritten handler (one in `period`), the real state is taken and `tests`
+//! copies are drawn from it with a few bytes perturbed (fields of the object, of its player, scene flags),
+//! then the original code and the native routine are run on each, and compared (RAM, registers).
+//! This exercises branches that the scenarios do not reach. Absurd states are
+//! harmless: the parts not rewritten run as original code in both versions.
 //!
-//! Les types que les scénarios n'exercent jamais se testent en les *forçant* : le dernier argument
-//! (`ITEM:2,ITEM:3,EFFCT:7`) liste des types dont la routine native est essayée sur des copies d'objets
-//! réels de la même famille dont l'octet de type (`+2`) est remplacé, avec variante et états tirés au
-//! hasard.
+//! The types that the scenarios never exercise are tested by *forcing* them: the last argument
+//! (`ITEM:2,ITEM:3,EFFCT:7`) lists types whose native routine is tried on copies of real objects
+//! of the same family whose type byte (`+2`) is replaced, with variant and states drawn at
+//! random.
 //!
-//!   fuzz_families <roms> <eeprom> <scénario> <images> [période [essais [graine [FAMILLE:type,...]]]]
+//!   fuzz_families <roms> <eeprom> <scenario> <frames> [period [trials [seed [FAMILY:type,...]]]]
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -34,13 +34,13 @@ struct Summary {
     examples: Vec<String>,
 }
 
-/// (nom de la famille, table de sauts, nombre de types)
+/// (family name, jump table, number of types)
 const FAMILIES: &[(&str, u32, u32)] = &[("ITEM", 0x39f5a, 10), ("BOX", 0x39e76, 4), ("EFFCT", 0x39ce0, 92)];
 
 thread_local! {
-    /// adresse d'entrée d'un gestionnaire -> famille
+    /// entry address of a handler -> family
     static INPUTS: RefCell<BTreeMap<u32, usize>> = RefCell::new(BTreeMap::new());
-    /// types forcés : (famille, type, adresse d'entrée)
+    /// forced types: (family, type, entry address)
     static FORCES: RefCell<Vec<(usize, u32, u32)>> = const { RefCell::new(Vec::new()) };
     static FAMILY_CALLS: RefCell<BTreeMap<usize, u64>> = RefCell::new(BTreeMap::new());
     static SUMMARY: RefCell<BTreeMap<&'static str, Summary>> = RefCell::new(BTreeMap::new());
@@ -64,7 +64,7 @@ fn chooses<T: Copy>(v: &[T]) -> T {
     v[(rng() % v.len() as u64) as usize]
 }
 
-/// Octets de l'objet que les gestionnaires testent (décalage, valeurs plausibles).
+/// Bytes of the object that the handlers test (offset, plausible values).
 const OBJECT_BYTES: &[(u32, &[u8])] = &[
     (0x01, &[0, 1, 2, 3]),
     (0x03, &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0x0a, 0x10, 0x11]),
@@ -106,7 +106,7 @@ const OBJECT_BYTES: &[(u32, &[u8])] = &[
     (0x31, &[0, 1]),
 ];
 
-/// Mots de l'objet (décalage, valeurs plausibles).
+/// Words of the object (offset, plausible values).
 const OBJECT_WORDS: &[(u32, &[u16])] = &[
     (0x0c, &[0, 0x10, 0xfff0]),
     (0x0e, &[0, 0x8000]),
@@ -128,7 +128,7 @@ const OBJECT_WORDS: &[(u32, &[u16])] = &[
     (0x10, &[0, 0x40, 0x80, 0xc0]),
 ];
 
-/// Octets du joueur propriétaire.
+/// Bytes of the owner player.
 const PLAYER_BYTES: &[(u32, &[u8])] = &[
     (0x00, &[0, 1, 1, 1, 2]),
     (0x02, &[0, 1, 2, 3, 4, 5]),
@@ -153,7 +153,7 @@ const PLAYER_BYTES: &[(u32, &[u8])] = &[
     (0x180, &[0, 1]),
 ];
 
-/// Variables de scène (décalage depuis A5, valeurs plausibles).
+/// Scene variables (offset from A5, plausible values).
 const SCENE_BYTES: &[(i32, &[u8])] = &[
     (0x2c, &[0, 1, 2, 3, 4, 7, 8, 9]),
     (0x36, &[0, 1]),
@@ -168,7 +168,7 @@ const SCENE_BYTES: &[(i32, &[u8])] = &[
     (-0x55c8, &[0, 4, 0x0c, 0x10]),
 ];
 
-/// Perturbe l'état copié ; renvoie la description des changements.
+/// Perturbs the copied state; returns the description of the changes.
 fn perturbs(b: &mut Cps2Bus, obj: u32) -> String {
     let mut notes = Vec::new();
     let n = 1 + rng() % 4;
@@ -199,7 +199,7 @@ fn perturbs(b: &mut Cps2Bus, obj: u32) -> String {
                 }
             }
             9 if rng() % 2 == 0 => {
-                // l'objet se place sur un joueur (recouvrement de boîtes, proximité...)
+                // the object is placed on a player (box overlap, proximity...)
                 let player = 0xff_85de + 0x200 * (rng() % 4) as u32;
                 let delta = chooses(&[0u16, 0, 4, 0xfffc, 0x10, 0xfff0, 0x40, 0xffc0]);
                 for off in [0x08u32, 0x0c, 0x10] {
@@ -219,7 +219,7 @@ fn perturbs(b: &mut Cps2Bus, obj: u32) -> String {
     notes.join(" ")
 }
 
-/// Exécute le code d'origine jusqu'au retour ; faux si la routine ne revient pas assez vite.
+/// Runs the original code until it returns; false if the routine does not return fast enough.
 fn run_original_code(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     let ret = rd32(b, c.a[7]);
     let sp_after = c.a[7].wrapping_add(4);
@@ -241,7 +241,7 @@ fn test(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: bool
     let mut b1 = b.clone();
     let mut notes = String::new();
     if let Some(t) = force {
-        // objet synthétique : le même objet réel, d'un autre type
+        // synthetic object: the same real object, of another type
         let obj = c.a[0];
         wr8(&mut b1, obj + 2, t as u8);
         wr8(&mut b1, obj + 3, chooses(&[0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 0x0a, 0x0c, 0x10, 0x11, 0x14]));
@@ -253,7 +253,7 @@ fn test(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: bool
         wr16(&mut b1, obj + 0x54, chooses(&[0x85de, 0x87de, 0x89de, 0x8bde, obj as u16]));
         wr16(&mut b1, obj + 0x5c, chooses(&[0x85de, 0x87de, obj as u16]));
         notes = format!(
-            "type {t} variante {:02x} états {:02x} {:02x} {:02x} ; ",
+            "type {t} variant {:02x} states {:02x} {:02x} {:02x}; ",
             rd8(&mut b1, obj + 3),
             rd8(&mut b1, obj + 4),
             rd8(&mut b1, obj + 5),
@@ -272,7 +272,7 @@ fn test(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: bool
         SUMMARY.with(|m| m.borrow_mut().entry(n.name).or_default().abandons += 1);
         return;
     }
-    // routine native sur la copie perturbée (même état de départ que l'original)
+    // native routine on the perturbed copy (same starting state as the original)
     let result = catch_unwind(AssertUnwindSafe(|| n.execute(&mut c1, &mut b1)));
     let mut diffs = Vec::new();
     match result {
@@ -311,7 +311,7 @@ fn test(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: bool
             summary.gaps += 1;
             if summary.examples.len() < 3 {
                 if let (Some(mut ct), Some(mut bt)) = (c_start, b_start) {
-                    // trace de l'original (pc et durée de chaque instruction) pour le diagnostic
+                    // trace of the original (pc and duration of each instruction) for diagnosis
                     let ret = rd32(&mut bt, ct.a[7]);
                     let sp_after = ct.a[7].wrapping_add(4);
                     let mut trace = String::new();
@@ -334,14 +334,14 @@ fn dump(bytes: &[u8]) -> String {
     bytes.iter().map(|x| format!("{x:02x}")).collect::<Vec<_>>().join("")
 }
 
-/// Routine native d'un gestionnaire de famille (écrite sur `Ctx` ou sur `Cx`).
+/// Native routine of a family handler (written on `Ctx` or on `Cx`).
 fn handler(entry: u32) -> Option<&'static ddsom_game::Native> {
     ddsom_game::families::NATIVES.iter().chain(ddsom_game::families::natives()).find(|n| n.entry == entry)
 }
 
 fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
-    // types forcés : essais sur des objets synthétiques à chaque appel (périodique) d'un gestionnaire
-    // de la même famille
+    // forced types: trials on synthetic objects at each (periodic) call of a handler
+    // of the same family
     if let Some(family) = INPUTS.with(|e| e.borrow().get(&pc).copied()) {
         let (period, tests) = PARAMS.with(|p| *p.borrow());
         let k = FAMILY_CALLS.with(|m| {
@@ -371,7 +371,7 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
             *e
         });
         if k % period == 1 {
-            // l'état réel d'abord (sans perturbation), puis des variantes perturbées
+            // the real state first (without perturbation), then perturbed variants
             test(n, c, b, false, None);
             for _ in 0..tests {
                 test(n, c, b, true, None);
@@ -384,7 +384,7 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let (Some(roms), Some(eeprom), Some(scenario), Some(frames)) = (a.get(1), a.get(2), a.get(3), a.get(4)) else {
-        eprintln!("usage : fuzz_families <roms> <eeprom> <scénario> <images> [période [essais [graine]]]");
+        eprintln!("usage: fuzz_families <roms> <eeprom> <scenario> <frames> [period [trials [seed]]]");
         std::process::exit(2);
     };
     let period: u64 = a.get(5).map_or(16, |s| s.parse().unwrap());
@@ -393,7 +393,7 @@ fn main() {
         RNG.with(|x| *x.borrow_mut() = 0x9e37_79b9_7f4a_7c15 ^ g.parse::<u64>().unwrap().wrapping_mul(0x1000_0000_01b3));
     }
     PARAMS.with(|p| *p.borrow_mut() = (period, tests));
-    std::panic::set_hook(Box::new(|_| {})); // les paniques sont comptées, pas affichées
+    std::panic::set_hook(Box::new(|_| {})); // panics are counted, not printed
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     let wanted = a.get(8).cloned().unwrap_or_default();
@@ -408,7 +408,7 @@ fn main() {
         }
     }
     m.executor = Some(run);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..frames.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
@@ -416,7 +416,7 @@ fn main() {
     let mut total_gaps = 0;
     for (name, summary) in SUMMARY.with(|m| std::mem::take(&mut *m.borrow_mut())) {
         println!(
-            "  {name:24} {:>7} essais {:>5} écarts {:>4} paniques {:>5} abandons",
+            "  {name:24} {:>7} trials {:>5} mismatches {:>4} panics {:>5} abandons",
             summary.tests, summary.gaps, summary.panics, summary.abandons
         );
         total_gaps += summary.gaps + summary.panics;
@@ -424,6 +424,6 @@ fn main() {
             println!("    {e}");
         }
     }
-    println!("{}", if total_gaps == 0 { "FUZZ OK" } else { "FUZZ ÉCARTS" });
+    println!("{}", if total_gaps == 0 { "FUZZ OK" } else { "FUZZ MISMATCHES" });
     let _ = rd16;
 }

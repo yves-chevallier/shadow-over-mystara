@@ -1,28 +1,28 @@
-//! Écran 7. CONFIGURATION du menu TEST (`0x2bb0a`) : menu de configuration (SYSTEM, GAME, DEFAULT,
-//! SAVE & EXIT) et ses deux sous-menus, 7-1 SYSTEM CONFIGURATION et 7-2 GAME CONFIGURATION.
+//! Screen 7. CONFIGURATION of the TEST menu (`0x2bb0a`): configuration menu (SYSTEM, GAME, DEFAULT,
+//! SAVE & EXIT) and its two submenus, 7-1 SYSTEM CONFIGURATION and 7-2 GAME CONFIGURATION.
 //!
-//! Les réglages sont modifiés directement dans les variables du jeu (`A5+0x1c...`, voir `config.rs`) ;
-//! « SAVE & EXIT » les enregistre dans l'EEPROM. À l'entrée, leurs valeurs sont recopiées (A5 - 0x6292...) :
-//! un réglage différent de sa valeur d'entrée est affiché en couleur, et la ligne « 4. SAVE & EXIT » (du
-//! menu) l'est aussi tant que les réglages diffèrent des réglages d'usine.
+//! The settings are modified directly in the game variables (`A5+0x1c...`, see `config.rs`);
+//! "SAVE & EXIT" saves them to the EEPROM. On entry, their values are copied (A5 - 0x6292...):
+//! a setting different from its entry value is displayed in colour, and the line "4. SAVE & EXIT" (of the
+//! menu) is too as long as the settings differ from the factory settings.
 //!
-//! Champs de l'enregistrement : étape (`+2` : 0 entrée, 2 menu, 4 sous-menu), ligne du menu (`+3`), étape
-//! du sous-menu (`+4`), ligne du sous-menu (`+5`), compteurs de répétition (`+0x10` haut/bas, `+0x11`
-//! gauche/droite, `+0x12` tirs).
+//! Fields of the record: step (`+2`: 0 entry, 2 menu, 4 submenu), menu line (`+3`), submenu
+//! step (`+4`), submenu line (`+5`), repeat counters (`+0x10` up/down, `+0x11`
+//! left/right, `+0x12` fire buttons).
 
 use super::{arrow, back_to_menu, clear_screen, f, get, horizontal, key, layers_off, layers_on, move_arrow, paint, pressed, print, set, shots, var, vertical, HIGHLIGHT};
 use crate::config;
 use crate::modes::Flow;
 use crate::scene::Ctx;
 
-/// Champs de l'enregistrement propres à l'écran.
+/// Fields of the record specific to the screen.
 mod field {
     pub const LINE: u32 = 3;
     pub const SUB_STEP: u32 = 4;
     pub const SUB_LINE: u32 = 5;
 }
 
-/// Lignes du menu de configuration.
+/// Lines of the configuration menu.
 mod line {
     pub const SYSTEM: u8 = 0;
     pub const GAME: u8 = 2;
@@ -30,7 +30,7 @@ mod line {
     pub const SAVE: u8 = 6;
 }
 
-/// Textes.
+/// Texts.
 mod text {
     pub const TITLE: u32 = 0x2caa6;
     pub const MENU: u32 = 0x2cad2;
@@ -40,7 +40,7 @@ mod text {
     pub const HELP_EXIT: u32 = 0x2cb76;
     pub const SAVING: u32 = 0x2cdce;
     pub const SYSTEM_TITLE: u32 = 0x2cb96;
-    /// Lignes de 7-1 : sans langue ni cartes, avec la langue (variante 8), avec les cartes (4, 10).
+    /// Lines of 7-1: without language or cards, with the language (variant 8), with the cards (4, 10).
     pub const SYSTEM_LINES: u32 = 0x2cbc8;
     pub const SYSTEM_LINES_LANGUAGE: u32 = 0x2cc3c;
     pub const SYSTEM_LINES_CARDS: u32 = 0x2ce1a;
@@ -51,25 +51,25 @@ mod text {
     pub const SUB_HELP_EXIT: u32 = 0x2cd82;
 }
 
-/// Flèches du menu et des sous-menus ; ligne « 4. SAVE & EXIT » colorée hors réglages d'usine.
+/// Arrows of the menu and submenus; line "4. SAVE & EXIT" coloured when not at factory settings.
 const MENU_ARROW: u32 = 0x91289c;
 const SUB_ARROW: u32 = 0x91211c;
 const SAVE_LINE: u32 = 0x912b2c;
 
-/// Variables du jeu (décalages depuis A5).
+/// Game variables (offsets from A5).
 mod v {
     pub const COIN_MODE: u32 = 0x1c;
     pub const CONTINUE: u32 = 0x23;
-    /// Mode de monnayage « départ gratuit » : la ligne CONTINUE est sautée.
+    /// Coin mode "free start": the CONTINUE line is skipped.
     pub const FREE_START: u8 = 0x11;
 }
 
-/// Valeurs d'entrée des réglages (A5 - 0x6292...), pour la mise en évidence des changements.
+/// Entry values of the settings (A5 - 0x6292...), for highlighting the changes.
 mod saved {
     pub const COIN_MODE: u32 = 0xff_1d6e;
     pub const FALLS: u32 = 0xff_1d6f;
     pub const CONTINUE: u32 = 0xff_1d70;
-    /// CONTINUE choisi (rétabli quand le mode de monnayage quitte le départ gratuit).
+    /// CONTINUE chosen (restored when the coin mode leaves the free start).
     pub const CONTINUE_CHOSEN: u32 = 0xff_1d71;
     pub const MONITOR: u32 = 0xff_1d72;
     pub const DEMO_SOUND: u32 = 0xff_1d73;
@@ -82,12 +82,12 @@ mod saved {
     pub const BYTE_2B: u32 = 0xff_1d7c;
 }
 
-/// Variante du jeu : la liste des réglages en dépend.
+/// Game variant: the list of settings depends on it.
 #[derive(Clone, Copy, PartialEq)]
 enum Variant {
-    /// Variantes 4 et 10 : distributeur de cartes.
+    /// Variants 4 and 10: card dispenser.
     Cards(u16),
-    /// Variante 8 : choix de la langue.
+    /// Variant 8: language choice.
     Language,
     Plain,
 }
@@ -101,18 +101,18 @@ fn variant(x: &mut Ctx) -> Variant {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Les réglages
+// The settings
 
-/// Affichage d'un réglage.
+/// Display of a setting.
 #[derive(Clone, Copy)]
 enum Show {
-    /// Texte de `width` caractères, le `n`-ième de la table à `stride` octets d'écart.
+    /// Text of `width` characters, the `n`-th of the table at `stride` bytes apart.
     Text { table: u32, stride: u32, width: u32 },
-    /// « ON » / « OFF ».
+    /// "ON" / "OFF".
     OnOff,
 }
 
-/// Un réglage : variable (mot pour la langue), pas et maximum, valeur d'entrée, case et affichage.
+/// A setting: variable (word for the language), step and maximum, entry value, cell and display.
 #[derive(Clone, Copy)]
 struct Setting {
     var: u32,
@@ -136,16 +136,16 @@ const MONITOR: Setting = Setting { var: 0x26, word: false, step: 1, max: 1, save
 const DEMO_SOUND: Setting = Setting { var: 0x27, word: false, step: 1, max: 1, saved: saved::DEMO_SOUND, cell: 0x9129bc, show: Show::OnOff };
 const SOUND_MODE: Setting =
     Setting { var: 0x28, word: false, step: 1, max: 1, saved: saved::SOUND_MODE, cell: 0x9129c4, show: text(0x2c590, 16, 16) };
-/// Langue : mot `A5+0x72`, valeurs paires 2 à 6 (0, le japonais, est sauté).
+/// Language: word `A5+0x72`, even values 2 to 6 (0, Japanese, is skipped).
 const LANGUAGE: Setting = Setting { var: 0x72, word: true, step: 2, max: 6, saved: saved::LANGUAGE, cell: 0x9129cc, show: text(0x2c610, 8, 16) };
 const CARD: Setting = Setting { var: 0x84, word: false, step: 1, max: 1, saved: saved::CARD, cell: 0x912b4c, show: Show::OnOff };
-/// Points de carte : 2 à 14.
+/// Card points: 2 to 14.
 const CARD_POINT: Setting =
     Setting { var: 0x85, word: false, step: 1, max: 0xe, saved: saved::CARD_POINT, cell: 0x912b54, show: text(0x2c71a, 16, 16) };
 const DIFFICULTY: Setting =
     Setting { var: 0x2a, word: false, step: 1, max: 7, saved: saved::DIFFICULTY, cell: 0x912a1c, show: text(0x2c862, 20, 20) };
 
-/// Ce que fait une ligne de sous-menu.
+/// What a submenu line does.
 #[derive(Clone, Copy)]
 enum Line {
     Coin,
@@ -154,7 +154,7 @@ enum Line {
     Exit,
 }
 
-/// Lignes de 7-1 selon la variante (tables 0x2be98, 0x2bea6, 0x2beb6).
+/// Lines of 7-1 according to the variant (tables 0x2be98, 0x2bea6, 0x2beb6).
 fn system_lines(variant: Variant) -> &'static [Line] {
     use Line::*;
     const PLAIN: &[Line] =
@@ -191,7 +191,7 @@ fn write(x: &mut Ctx, s: &Setting, value: u8) {
     }
 }
 
-/// Affiche la valeur du réglage (`0x2ca46` / `0x2ca12`), en couleur si elle diffère de la valeur d'entrée.
+/// Displays the value of the setting (`0x2ca46` / `0x2ca12`), in colour if it differs from the entry value.
 fn draw(x: &mut Ctx, s: &Setting) {
     let value = read(x, s);
     let width = match s.show {
@@ -218,7 +218,7 @@ fn draw(x: &mut Ctx, s: &Setting) {
     }
 }
 
-/// Gauche/droite, sinon tir 1/tir 2 : la nouvelle valeur si elle a changé.
+/// Left/right, otherwise fire 1/fire 2: the new value if it changed.
 fn edit(x: &mut Ctx, value: u8, step: u8, max: u8) -> Option<u8> {
     match horizontal(x, value, step, max) {
         Some(v) => Some(v),
@@ -226,7 +226,7 @@ fn edit(x: &mut Ctx, value: u8, step: u8, max: u8) -> Option<u8> {
     }
 }
 
-/// Un réglage ordinaire (`0x2c44e`, `0x2c498`...).
+/// An ordinary setting (`0x2c44e`, `0x2c498`...).
 fn setting(x: &mut Ctx, s: &Setting) {
     let current = read(x, s);
     let Some(mut value) = edit(x, current, s.step, s.max) else { return };
@@ -240,7 +240,7 @@ fn setting(x: &mut Ctx, s: &Setting) {
     draw(x, s);
 }
 
-/// `0x2c2a4` : type de monnayeurs (0-2 avec les cartes, 0-11 sinon).
+/// `0x2c2a4`: coin slot type (0-2 with the cards, 0-11 otherwise).
 fn falls(x: &mut Ctx, variant: Variant) {
     let max = if let Variant::Cards(_) = variant { 2 } else { FALLS.max };
     let current = read(x, &FALLS);
@@ -249,8 +249,8 @@ fn falls(x: &mut Ctx, variant: Variant) {
     draw(x, &FALLS);
 }
 
-/// `0x2bf86` : mode de monnayage. Avec les cartes, la valeur choisie indexe une liste réduite de modes
-/// (0x2c008 / 0x2c00c). Le départ gratuit force CONTINUE à ON ; sinon CONTINUE reprend la valeur choisie.
+/// `0x2bf86`: coin mode. With the cards, the chosen value indexes a reduced list of modes
+/// (0x2c008 / 0x2c00c). The free start forces CONTINUE to ON; otherwise CONTINUE takes the chosen value.
 fn coin_mode(x: &mut Ctx, variant: Variant) {
     let max = match variant {
         Variant::Cards(4) => 2,
@@ -271,7 +271,7 @@ fn coin_mode(x: &mut Ctx, variant: Variant) {
     draw(x, &COIN_MODE);
 }
 
-/// `0x2c9fe` : tir 1 revient au menu de configuration.
+/// `0x2c9fe`: fire 1 returns to the configuration menu.
 fn exit_line(x: &mut Ctx) -> Flow {
     if pressed(x) & key::SHOT1 != 0 {
         show_menu(x);
@@ -280,7 +280,7 @@ fn exit_line(x: &mut Ctx) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Le menu de configuration
+// The configuration menu
 
 pub fn configuration(x: &mut Ctx) -> Flow {
     match get(x, f::STEP) {
@@ -298,7 +298,7 @@ pub fn configuration(x: &mut Ctx) -> Flow {
     }
 }
 
-/// `0x2bb22` : valeurs d'entrée des réglages.
+/// `0x2bb22`: entry values of the settings.
 fn remember(x: &mut Ctx) {
     let bytes = [
         (saved::COIN_MODE, v::COIN_MODE),
@@ -322,14 +322,14 @@ fn remember(x: &mut Ctx) {
     }
 }
 
-/// `0x2bb70` : écran du menu de configuration.
+/// `0x2bb70`: screen of the configuration menu.
 fn show_menu(x: &mut Ctx) {
     set(x, f::STEP, 2);
     x.wr16(super::MENU + field::SUB_STEP, 0);
     let d0 = clear_screen(x);
     super::full_brightness(x);
-    // Glitch d'origine : les compteurs de répétition reçoivent le D0 que laisse le chargement des palettes (premier
-    // long de la dernière palette de la page 3)
+    // Original glitch: the repeat counters receive the D0 left by the palette loading (first
+    // long of the last palette of page 3)
     super::set16(x, f::REPEAT_V, d0 as u16);
     set(x, f::REPEAT_SHOTS, 0x7f);
     for t in [text::TITLE, text::MENU, text::SELECT, text::HELP_START] {
@@ -342,7 +342,7 @@ fn show_menu(x: &mut Ctx) {
     arrow(x, MENU_ARROW, line);
 }
 
-/// `0x2bc22` : choix d'une ligne, puis SYSTEM / GAME (tir 1), DEFAULT (départ 1P + tir 1), SAVE & EXIT (tir 1).
+/// `0x2bc22`: choice of a line, then SYSTEM / GAME (fire 1), DEFAULT (1P start + fire 1), SAVE & EXIT (fire 1).
 fn menu(x: &mut Ctx) -> Flow {
     let line = get(x, field::LINE);
     if let Some(to) = vertical(x, line, 2, line::SAVE) {
@@ -391,8 +391,8 @@ fn menu(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Choix d'une ligne de sous-menu (haut, bas) ; la dernière (`exit`) a son propre texte d'aide. Rend vrai
-/// si la ligne a changé.
+/// Choice of a submenu line (up, down); the last one (`exit`) has its own help text. Returns true
+/// if the line changed.
 fn sub_select(x: &mut Ctx, exit: u8, skip_continue: bool) -> bool {
     let line = get(x, field::SUB_LINE);
     let Some(mut to) = vertical(x, line, 2, exit) else { return false };
@@ -405,7 +405,7 @@ fn sub_select(x: &mut Ctx, exit: u8, skip_continue: bool) -> bool {
     true
 }
 
-/// Entrée d'un sous-menu : titre, lignes, aide, flèche sur la première ligne.
+/// Entry into a submenu: title, lines, help, arrow on the first line.
 fn sub_screen(x: &mut Ctx, texts: &[u32]) {
     let s = get(x, field::SUB_STEP).wrapping_add(2);
     set(x, field::SUB_STEP, s);
@@ -437,7 +437,7 @@ fn system(x: &mut Ctx) -> Flow {
                 draw(x, &LANGUAGE);
                 return Flow::Done;
             }
-            // l'original enchaîne sur le choix d'une ligne dans la même image
+            // the original goes straight on to the choice of a line in the same frame
             Variant::Cards(_) => {
                 draw(x, &CARD);
                 draw(x, &CARD_POINT);
@@ -460,7 +460,7 @@ fn system(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// `0x2bec8` : 7-2 GAME CONFIGURATION (difficulté).
+/// `0x2bec8`: 7-2 GAME CONFIGURATION (difficulty).
 fn game(x: &mut Ctx) -> Flow {
     if get(x, field::SUB_STEP) == 0 {
         sub_screen(x, &[text::GAME_TITLE, text::GAME_LINES]);

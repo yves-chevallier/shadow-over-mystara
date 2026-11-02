@@ -1,59 +1,59 @@
-//! Sous-système son CPS2 : Z80 à 8 MHz + QSound (qsound_sub_map de MAME).
+//! CPS2 sound subsystem: Z80 at 8 MHz + QSound (MAME's qsound_sub_map).
 //!
-//! Z80 : 0000-7FFF ROM, 8000-BFFF banque de ROM, C000-CFFF RAM partagée avec le 68000,
-//! D000-D002 écritures QSound, D003 banque, D007 état QSound, F000-FFFF RAM.
+//! Z80: 0000-7FFF ROM, 8000-BFFF ROM bank, C000-CFFF RAM shared with the 68000,
+//! D000-D002 QSound writes, D003 bank, D007 QSound status, F000-FFFF RAM.
 //!
-//! Option : le programme du Z80 peut être remplacé par le pilote Rust de la crate `ddsom-sound`
-//! (`Sound::use_rust_driver`). Il reçoit une interruption par période de 250 Hz, lit et écrit la
-//! RAM partagée et écrit dans la QSound exactement comme le Z80, sans que le 68000 y voie de
-//! différence.
+//! Option: the Z80 program can be replaced by the Rust driver of the `ddsom-sound` crate
+//! (`Sound::use_rust_driver`). It receives one interrupt per 250 Hz period, reads and writes the
+//! shared RAM and writes to the QSound exactly like the Z80, without the 68000 seeing any
+//! difference.
 
 use qsound::QSound;
 
 /// Z80 : 8 MHz.
 pub const Z80_HZ: f64 = 8_000_000.0;
-/// Interruption périodique : 8 MHz / 32000 = 250 Hz (irq0_line_hold).
+/// Periodic interrupt: 8 MHz / 32000 = 250 Hz (irq0_line_hold).
 pub const Z80_IRQ_PERIOD: u64 = 32_000;
 
-/// Événement observable du Z80 (outils d'analyse et de validation du pilote son).
+/// Observable Z80 event (analysis and validation tools for the sound driver).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Event {
-    /// Interruption acceptée.
+    /// Interrupt accepted.
     Irq,
-    /// Lecture du Z80 dans la RAM partagée (adresse 0-0xFFF, valeur lue).
+    /// Z80 read from the shared RAM (address 0-0xFFF, value read).
     Read(u16, u8),
-    /// Écriture du Z80 dans la RAM partagée.
+    /// Z80 write to the shared RAM.
     Write(u16, u8),
-    /// Écriture du Z80 en D000-D003 : (décalage, octet). D000/D001 chargent le verrou de données,
-    /// D002 écrit le registre QSound, D003 choisit la banque de ROM.
+    /// Z80 write to D000-D003: (offset, byte). D000/D001 load the data latch,
+    /// D002 writes the QSound register, D003 selects the ROM bank.
     Port(u8, u8),
 }
 
 pub struct Sound {
-    /// Journal des événements, si activé.
+    /// Event log, if enabled.
     pub trace: Option<Vec<Event>>,
-    /// Rappel avant chaque instruction du Z80 (couverture), si activé.
+    /// Callback before each Z80 instruction (coverage), if enabled.
     pub pc_hook: Option<Box<dyn FnMut(&z80::Z80)>>,
     pub z80: z80::Z80,
-    /// Région audiocpu (0x50000) : 0-7FFF fixe, banques de 0x4000 à partir de 0x10000.
+    /// audiocpu region (0x50000): 0-7FFF fixed, 0x4000 banks from 0x10000.
     pub rom: Vec<u8>,
     pub bank: usize,
     pub ram: Vec<u8>, // F000-FFFF
     pub qsound: QSound,
-    /// Le 68000 maintient le Z80 en reset (bit 3 de 804041 à 0).
+    /// The 68000 holds the Z80 in reset (bit 3 of 804041 at 0).
     pub in_reset: bool,
     pub next_irq: u64,
-    /// Pilote Rust qui remplace le programme du Z80, si activé.
+    /// Rust driver replacing the Z80 program, if enabled.
     pub driver: Option<ddsom_sound::Driver>,
-    /// Le pilote doit (re)démarrer : activation, ou reset du Z80 relâché par le 68000.
+    /// The driver must (re)start: activation, or Z80 reset released by the 68000.
     driver_restart: bool,
-    /// Échantillons stéréo produits (à vider par l'application).
+    /// Stereo samples produced (to be drained by the application).
     pub audio: Vec<[i16; 2]>,
     sample_acc: f64,
     irq_acked: bool,
 }
 
-/// Vue du bus Z80 : la RAM partagée appartient au bus 68000.
+/// Z80 bus view: the shared RAM belongs to the 68000 bus.
 pub struct Z80Bus<'a> {
     pub s: &'a mut Sound,
     pub qram: &'a mut [u8],
@@ -91,13 +91,13 @@ impl Sound {
         self.in_reset = asserted;
     }
 
-    /// Remplace le programme du Z80 par le pilote Rust. À appeler avant la première image.
+    /// Replaces the Z80 program with the Rust driver. To be called before the first frame.
     pub fn use_rust_driver(&mut self) {
         self.driver = Some(ddsom_sound::Driver::new(ddsom_sound::Rom::from_region(self.rom.clone())));
         self.driver_restart = true;
     }
 
-    /// Une période de 250 Hz du pilote Rust : le temps passe, le pilote répond aux interruptions.
+    /// One 250 Hz period of the Rust driver: time passes, the driver answers the interrupts.
     fn run_driver(&mut self, qram: &mut [u8], target: u64) {
         let Some(driver) = self.driver.as_mut() else { return };
         let mut writes = Vec::new();
@@ -106,8 +106,8 @@ impl Sound {
             driver.reset(qram, &mut writes);
         }
         self.z80.cycles = self.z80.cycles.max(target);
-        // Une interruption qui tombe exactement sur la fin de la tranche est prise par le Z80 au
-        // début de la suivante, c'est-à-dire après les écritures du 68000 sur la ligne suivante.
+        // An interrupt that falls exactly at the end of the slice is taken by the Z80 at the
+        // start of the next one, that is after the 68000 writes on the next line.
         while self.next_irq < target {
             self.next_irq += Z80_IRQ_PERIOD;
             if !self.in_reset {
@@ -127,11 +127,11 @@ impl Sound {
         }
     }
 
-    /// Exécute le Z80 jusqu'au cycle absolu `target`, puis produit les échantillons QSound
-    /// correspondant à `seconds` de temps machine.
+    /// Runs the Z80 up to absolute cycle `target`, then produces the QSound samples
+    /// corresponding to `seconds` of machine time.
     pub fn run(&mut self, qram: &mut [u8], target: u64, seconds: f64) {
         if self.in_reset {
-            // horloge arrêtée côté programme, mais le temps passe
+            // clock stopped on the program side, but time passes
             if self.z80.cycles < target {
                 self.z80.cycles = target;
             }
@@ -142,7 +142,7 @@ impl Sound {
         if self.driver.is_some() {
             self.run_driver(qram, target);
         }
-        // le Z80 est sorti de Sound le temps de l'exécution (le bus emprunte Sound)
+        // the Z80 is taken out of Sound for the duration of the run (the bus borrows Sound)
         let mut cpu = std::mem::take(&mut self.z80);
         while self.driver.is_none() && cpu.cycles < target {
             if cpu.cycles >= self.next_irq {
@@ -214,7 +214,7 @@ impl z80::Bus for Z80Bus<'_> {
     }
     fn output(&mut self, _port: u16, _v: u8) {}
     fn irq_ack(&mut self) -> u8 {
-        // irq0_line_hold : la ligne retombe à l'acquittement
+        // irq0_line_hold: the line drops at acknowledge
         self.s.irq_acked = true;
         if let Some(t) = self.s.trace.as_mut() {
             t.push(Event::Irq);

@@ -1,13 +1,13 @@
-//! Désassemble une plage du programme (espace opcodes) avec le décodeur de l'interpréteur.
-//! Complète `listing.txt` là où il est incomplet (désalignements).
-//!   dis <roms> <début hexa> <fin hexa>
+//! Disassembles a range of the program (opcode space) with the interpreter's decoder.
+//! Completes `listing.txt` where it is incomplete (misalignments).
+//!   dis <roms> <start hex> <end hex>
 
 use std::path::Path;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, from, to] = &a[..] else {
-        eprintln!("usage : dis <roms> <début> <fin>");
+        eprintln!("usage: dis <roms> <start> <end>");
         std::process::exit(2);
     };
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), None).expect("roms");

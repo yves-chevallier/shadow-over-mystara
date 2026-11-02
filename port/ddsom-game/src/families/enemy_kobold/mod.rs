@@ -1,18 +1,18 @@
-//! Ennemi « Kobold » (ENEMY type 0, 0x54914). Voir `docs/families/enemy.md`.
+//! "Kobold" enemy (ENEMY type 0, 0x54914). See `docs/families/enemy.md`.
 //!
-//! Le plus gros des ennemis : quatorze variantes d'arrivée (`+3`), quatre profils d'IA (`+0x2f`) et une vingtaine de
-//! gestes. Charpente des types 1 et 6 (squelette, chien) avec ses propres tables.
+//! The biggest of the enemies: fourteen arrival variants (`+3`), four AI profiles (`+0x2f`) and about twenty moves.
+//! Framework of types 1 and 6 (skeleton, dog) with its own tables.
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `arrival` | arrivée selon `+6` (course, saut, chute d'en haut, apparition, mort-vivant qui se relève) |
-//! | 2 | `stance` | debout : approche et choix d'un geste, demi-tour, attente |
-//! | 4 | `attacks` | coups (`+6` = 0 à 36) |
-//! | 6, 8 | `moves` | bonds et déplacements |
-//! | 10 | `moves` | promenade tant qu'aucun joueur n'est en vie |
-//! | état 4 | `hit` | réactions aux coups, recul, chute, saisie par un joueur |
+//! | 0 | `arrival` | arrival according to `+6` (run, jump, fall from above, appearance, undead rising) |
+//! | 2 | `stance` | standing: approach and choice of a move, turn-around, wait |
+//! | 4 | `attacks` | attacks (`+6` = 0 to 36) |
+//! | 6, 8 | `moves` | leaps and movements |
+//! | 10 | `moves` | stroll as long as no player is alive |
+//! | state 4 | `hit` | reactions to hits, recoil, fall, grab by a player |
 //!
-//! Animations 0x15d4ae (mouvements) et 0x15d4ec (coups) ; `+0xa2/+0xa3` aspect courant et précédent.
+//! Animations 0x15d4ae (movements) and 0x15d4ec (attacks); `+0xa2/+0xa3` current and previous look.
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -80,7 +80,7 @@ pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-/// L'aspect voulu : `+0xa2` et son double `+0xa3`.
+/// The wanted look: `+0xa2` and its twin `+0xa3`.
 pub(self) fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
@@ -90,13 +90,13 @@ pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
-/// Direction de marche : 8 (regarde à gauche) ou 0x18.
+/// Walking direction: 8 (looks left) or 0x18.
 pub(self) fn set_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
-/// Étape commune : attend la clé d'animation `+0x33` (0x54fae).
+/// Common step: waits for animation key `+0x33` (0x54fae).
 pub(self) fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
@@ -105,7 +105,7 @@ pub(self) fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// L'animation finie, le Kobold se met debout, tourné vers sa cible (0x54e9a).
+/// Once the animation is over, the Kobold stands up, facing its target (0x54e9a).
 pub(self) fn stand_when_done<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.anim_step() {
         return;
@@ -114,7 +114,7 @@ pub(self) fn stand_when_done<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 0);
 }
 
-/// Un coup de poussière (0xb10c8) toutes les `mask + 1` images (le compteur `A5+0x6e` est masqué en place).
+/// A puff of dust (0xb10c8) every `mask + 1` frames (counter `A5+0x6e` is masked in place).
 pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d1: u16, d2: i16, d3: i16) {
     let v = x.a5_u16(0x6e) & mask;
     x.set_a5_u16(0x6e, v);
@@ -123,7 +123,7 @@ pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d1: u16, d2: i16, d3: 
     }
 }
 
-/// 0x57b9c : l'ennemi doit se retourner pour faire face à sa cible (faux sans cible ni aspect mémorisé).
+/// 0x57b9c: the enemy must turn around to face its target (false without a target or a saved look).
 pub(self) fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
         return false;
@@ -135,7 +135,7 @@ pub(self) fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     turn
 }
 
-/// 0x57bee : la cible est à plus de 0x30 de profondeur et à plus de 0xa0 en X.
+/// 0x57bee: the target is more than 0x30 away in depth and more than 0xa0 in X.
 pub(self) fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
@@ -150,7 +150,7 @@ pub(self) fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     far
 }
 
-/// 0x57c34 : force du coup (`+0x45`) d'après le type de coup `+0x44` et le profil `+0x2f` (table 0x57c52).
+/// 0x57c34: strength of the attack (`+0x45`) from the attack type `+0x44` and profile `+0x2f` (table 0x57c52).
 pub(self) fn set_power<R: Bench>(x: &mut Cx<'_, R>) {
     let kind = x.u8(STRIKE_KIND).wrapping_mul(4) as u32;
     let group = x.u8(GROUP) as u32;
@@ -158,7 +158,7 @@ pub(self) fn set_power<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(STRIKE_POWER, p);
 }
 
-/// 0x57c66 : l'ennemi est dans la moitié droite de l'écran (à 0xc0 de la caméra).
+/// 0x57c66: the enemy is in the right half of the screen (0xc0 from the camera).
 pub(self) fn on_right_half<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
     let d1 = cam.wrapping_add(0xc0).wrapping_sub(x.u16(Obj::X));
@@ -166,8 +166,8 @@ pub(self) fn on_right_half<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     right
 }
 
-/// 0x56c70 / 0x56c78 : choisit le coup suivant (`+6`) dans la ligne de la difficulté du profil `+0x2f` ;
-/// `bias` = 0x14 pour la série lointaine.
+/// 0x56c70 / 0x56c78: chooses the next attack (`+6`) from the difficulty row of profile `+0x2f`; `bias` = 0x14 for the
+/// far series.
 pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
     let profile = x.u8(GROUP).wrapping_mul(4) as u32;
     let table = if bias == 0 { 0x56d04 } else { 0x56d14 };
@@ -183,8 +183,8 @@ pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
     }
 }
 
-/// 0x57924 : fin d'un geste : le variant 0 se remet debout ; les autres, si la cible est dans une boîte de portée,
-/// enchaînent un coup de la série `0x5799c`.
+/// 0x57924: end of a move: variant 0 gets back on its feet; the others, if the target is in a range box, chain an
+/// attack of series `0x5799c`.
 pub(self) fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::VARIANT) == 0 || x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
@@ -201,7 +201,7 @@ pub(self) fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 0);
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
@@ -233,7 +233,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
     lib::draw_stance(x);
     lib::draw_6b(x);
-    // état de départ, aspect et animation selon la variante
+    // starting state, look and animation according to the variant
     let (state, look_v, anim, active) = match x.u8(Obj::VARIANT) {
         0 => (STANCE, 0xc, 0xc, false),
         1 => (0x0200_0e00, 0x16, 0x16, false),
@@ -260,7 +260,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, anim);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;

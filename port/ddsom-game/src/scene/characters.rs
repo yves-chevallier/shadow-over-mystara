@@ -1,9 +1,9 @@
-//! État partagé `0xf6492` des sorties de scène : un intermède propre à certains personnages.
+//! Shared state `0xf6492` of the scene exits: an interlude specific to certain characters.
 //!
-//! Certaines scènes (table d'octets `0xf672e` : un bit par personnage, d'après l'octet `+3` du joueur divisé par
-//! deux) font jouer à chaque joueur concerné une courte scène : écran vidé, palettes chargées, puis pour chaque
-//! joueur trois objets SET (types 5, 6, 7) créés dès qu'il y a de la place, 240 images, et le joueur suivant.
-//! Six sous-états (octet `+3` du bloc, pas de 2) ; plusieurs cèdent la main à l'ordonnanceur.
+//! Certain scenes (byte table `0xf672e`: one bit per character, from the player's `+3` byte divided by
+//! two) make each concerned player play a short scene: screen cleared, palettes loaded, then for each
+//! player three SET objects (types 5, 6, 7) created as soon as there is room, 240 frames, and the next player.
+//! Six sub-states (byte `+3` of the block, step of 2); several cede control to the scheduler.
 
 use super::bonus::{dispatch, fade};
 use crate::video::{clear_layer, Layer};
@@ -14,28 +14,28 @@ use crate::Native;
 
 mod v {
     use crate::mem::A5;
-    /// Personnages concernés (masque), joueur courant (mot), joueurs restant à examiner.
+    /// Characters concerned (mask), current player (word), players left to examine.
     pub const MASK: u32 = A5 - 0x5576;
     pub const PLAYER: u32 = A5 - 0x5578;
     pub const LEFT: u32 = A5 - 0x5575;
-    /// Minuterie (octet) de l'intermède d'un joueur.
+    /// Timer (byte) of a player's interlude.
     pub const TIMER: u32 = A5 - 0x55a8;
 }
 
 const DISPATCH: u32 = 0xf64a0;
-/// Masque des personnages concernés, par scène (octets relatifs au PC).
+/// Mask of the characters concerned, per scene (bytes relative to the PC).
 const MASKS: u32 = 0xf672e;
 
 mod at {
     pub const FADED_OUT: u32 = 0xf64d4;
-    /// Après une attente, nouvelle tentative de création des objets 5, 6 et 7.
+    /// After a wait, new attempt to create objects 5, 6 and 7.
     pub const RETRY_5: u32 = 0xf6600;
     pub const RETRY_6: u32 = 0xf6626;
     pub const RETRY_7: u32 = 0xf6644;
     pub const NEXT_WAITED: u32 = 0xf66aa;
 }
 
-/// Bloc de la sortie de scène : l'A0 de l'original, posé par l'aiguillage et gardé à travers les cessions.
+/// Scene exit block: the original's A0, set by the dispatch and kept across the yields.
 const BLOCK: u32 = super::screen::blocks::EXIT;
 
 fn sub_step(x: &mut Ctx) -> u8 {
@@ -49,14 +49,14 @@ fn next_sub_step(x: &mut Ctx) {
     set_sub_step(x, s);
 }
 
-/// Fin de l'état sans intermède : état suivant de la séquence.
+/// End of the state without an interlude: next state of the sequence.
 fn skip(x: &mut Ctx) {
     let s = rd8(x.b, A5 - 0x55c8).wrapping_add(4);
     wr8(x.b, A5 - 0x55c8, s);
     wr8(x.b, A5 - 0x55c7, 0);
 }
 
-/// Le joueur `p` est-il en jeu et concerné par le masque (`btst` sur un registre : bit modulo 32) ?
+/// Is player `p` in the game and concerned by the mask (`btst` on a register: bit modulo 32)?
 fn concerned(x: &mut Ctx, p: u32, mask: u8) -> bool {
     let bit = (rd8(x.b, p + 3) >> 1) as u32 % 32;
     rd8(x.b, p) != 0 && (rd8(x.b, p + 4) as i8) < 4 && (mask as u32) >> bit & 1 != 0
@@ -78,7 +78,7 @@ pub fn run(x: &mut Ctx) -> Flow {
     }
 }
 
-/// Sous-état 0 (0xf66d6) : le masque de la scène ; sans joueur concerné, l'état est sauté, sinon fondu au noir.
+/// Sub-state 0 (0xf66d6): the scene mask; with no player concerned, the state is skipped, otherwise fade to black.
 fn start(x: &mut Ctx) -> Flow {
     wr8(x.b, v::MASK, 0);
     let scene = x.v8(0x34) as u32;
@@ -93,20 +93,20 @@ fn start(x: &mut Ctx) -> Flow {
     fade(x, crate::tasks::fading::descent, Step::FadedOut)
 }
 
-/// Le joueur de l'intermède en cours : son enregistrement (A6 de l'original) et son octet `+3` (D1), que l'original
-/// garde dans les registres pendant les cessions.
+/// The player of the current interlude: its record (A6 of the original) and its `+3` byte (D1), which the original
+/// keeps in registers during the yields.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Player {
     record: u32,
     byte: u8,
 }
 
-/// Étapes (points de reprise) de la machine à états.
+/// Steps (resume points) of the state machine.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Step {
-    /// Écran vidé, caméras à l'origine, palettes de l'intermède (84) ; puis le premier joueur.
+    /// Screen cleared, cameras at the origin, interlude palettes (84); then the first player.
     FadedOut,
-    /// Après une attente, nouvelle tentative de création des objets 5, 6 et 7.
+    /// After a wait, new attempt to create objects 5, 6 and 7.
     Retry5(Player),
     Retry6(Player),
     Retry7(Player),
@@ -114,7 +114,7 @@ pub enum Step {
 }
 
 impl Step {
-    /// Adresse que l'original reprend à cette étape.
+    /// Address the original resumes at in this step.
     pub const fn address(self) -> u32 {
         match self {
             Step::FadedOut => at::FADED_OUT,
@@ -125,7 +125,7 @@ impl Step {
         }
     }
 
-    /// Le pas de l'étape.
+    /// The step's body.
     pub fn step(self, x: &mut Ctx) -> Flow {
         match self {
             Step::FadedOut => faded_out(x),
@@ -142,7 +142,7 @@ impl Step {
     }
 }
 
-/// Écran vidé, caméras à l'origine, palettes de l'intermède (84) ; puis le premier joueur.
+/// Screen cleared, cameras at the origin, interlude palettes (84); then the first player.
 fn faded_out(x: &mut Ctx) -> Flow {
     for off in [0x50a, 0x55a, 0x506, 0x556] {
         x.set_v16(off, 0);
@@ -164,7 +164,7 @@ fn faded_out(x: &mut Ctx) -> Flow {
     next_player(x)
 }
 
-/// Sous-état 2 : le prochain joueur concerné, ou la fin de l'état.
+/// Sub-state 2: the next concerned player, or the end of the state.
 fn next_player(x: &mut Ctx) -> Flow {
     if rd8(x.b, v::LEFT) == 0 {
         return end(x);
@@ -187,7 +187,7 @@ fn next_player(x: &mut Ctx) -> Flow {
     }
 }
 
-/// Sous-état 4 : l'intermède du joueur, après quatre images (le joueur suit dans l'étape de reprise).
+/// Sub-state 4: the player's interlude, after four frames (the player follows in the resume step).
 fn player_scene(x: &mut Ctx) -> Flow {
     next_sub_step(x);
     wr8(x.b, v::TIMER, 0xf0);
@@ -197,7 +197,7 @@ fn player_scene(x: &mut Ctx) -> Flow {
     x.wait(4, Step::Retry5(player))
 }
 
-/// Listes défaites et vidées (0x1f184, 0x1de7c), pools remis à zéro.
+/// Lists undone and emptied (0x1f184, 0x1de7c), pools reset.
 fn reset_objects(x: &mut Ctx) {
     crate::objects::lists::unlink_all(x.b);
     crate::sprites::clear_lists(x.b);
@@ -206,8 +206,8 @@ fn reset_objects(x: &mut Ctx) {
     }
 }
 
-/// Crée l'objet SET de type 15 et de variante `kind` (0xce00a) ; s'il n'y a pas de place, attend `frames` images et
-/// reprend en `retry`.
+/// Creates the SET object of type 15 and variant `kind` (0xce00a); if there is no room, waits `frames` frames and
+/// resumes at `retry`.
 fn object(x: &mut Ctx, kind: u8, frames: u32, retry: Step) -> Option<u32> {
     match crate::families::creators::set_15_pure(x.b, kind) {
         Ok(o) => Some(o.0),
@@ -218,13 +218,13 @@ fn object(x: &mut Ctx, kind: u8, frames: u32, retry: Step) -> Option<u32> {
     }
 }
 
-/// L'objet est lié au joueur (octet `+0x2f`) et au bloc de la sortie de scène (long `+0x4c`, A0 de l'original).
+/// The object is linked to the player (byte `+0x2f`) and to the scene exit block (long `+0x4c`, A0 of the original).
 fn bind(x: &mut Ctx, o: u32, j: Player) {
     wr8(x.b, o + 0x2f, j.byte);
     wr32(x.b, o + 0x4c, BLOCK);
 }
 
-/// Les objets 5, 6 et 7 du joueur.
+/// Objects 5, 6 and 7 of the player.
 fn objects(x: &mut Ctx, j: Player) -> Flow {
     let Some(o) = object(x, 5, 4, Step::Retry5(j)) else { return Flow::Yield };
     bind(x, o, j);
@@ -243,7 +243,7 @@ fn object_7(x: &mut Ctx, j: Player) -> Flow {
     Flow::Done
 }
 
-/// Sous-état 8 : après 240 images, l'écran est vidé et le joueur suivant passe (sous-état 2).
+/// Sub-state 8: after 240 frames, the screen is cleared and the next player goes (sub-state 2).
 fn player_done(x: &mut Ctx) -> Flow {
     let t = rd8(x.b, v::TIMER).wrapping_sub(1);
     wr8(x.b, v::TIMER, t);
@@ -263,7 +263,7 @@ fn player_done(x: &mut Ctx) -> Flow {
     x.wait(1, Step::NextWaited)
 }
 
-/// Fin de l'état (0xf66bc) : état suivant de la séquence, une image cédée (retour direct à l'aiguillage).
+/// End of the state (0xf66bc): next state of the sequence, one frame yielded (direct return to the dispatch).
 fn end(x: &mut Ctx) -> Flow {
     skip(x);
     x.set_v8(0x33, 0);

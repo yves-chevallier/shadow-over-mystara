@@ -1,5 +1,5 @@
-//! Type 11, sous-états 6 (gestes de repli : bonds, accroupi, sortie d'écran) et 8 (attente, bond latéral).
-//! Chacun commence par le drapeau de coup `+0x8f` (`hit_gate`).
+//! Type 11, substates 6 (fallback moves: leaps, crouch, screen exit) and 8 (wait, lateral leap).
+//! Each begins with hit flag `+0x8f` (`hit_gate`).
 
 use crate::families::cx::Bench;
 use super::attacks::squat_begin;
@@ -30,7 +30,7 @@ pub(super) fn run_c<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x68080 : minuterie `+0xa2` puis debout.
+/// 0x68080: timer `+0xa2` then standing.
 fn countdown_stance<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u16(TIMER).wrapping_sub(1);
     x.set16(TIMER, n);
@@ -39,7 +39,7 @@ fn countdown_stance<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x680ee : attend la clé d'animation.
+/// 0x680ee: waits for the animation key.
 fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if x.u8(f::KEY_FRAME) == 0 {
@@ -48,7 +48,7 @@ fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
 }
 
-/// 0x68146 : attend la fin de l'animation, puis debout.
+/// 0x68146: waits for the end of the animation, then standing.
 fn end_stance<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if (x.u16(ANIM_END) as i16) < 0 {
@@ -56,7 +56,7 @@ fn end_stance<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 2 : bond en arrière (vitesses latérales ±0x200).
+/// +6 = 2: backward leap (lateral speeds ±0x200).
 fn back_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
@@ -148,7 +148,7 @@ fn forward_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     }
 }
 
-/// +6 = 6 : bond avec coup de poing en l'air.
+/// +6 = 6: leap with a punch in mid-air.
 fn punch_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
@@ -200,7 +200,7 @@ fn punch_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     }
 }
 
-/// +6 = 8 : accroupi (tirage ou profil), puis retour debout.
+/// +6 = 8: crouch (draw or profile), then back to standing.
 fn squat_again<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
@@ -231,14 +231,14 @@ fn squat_again<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     }
 }
 
-/// +6 = 10 : sortie d'écran à pied (vitesse −0x230 vers le bord le plus proche), puis disparition.
+/// +6 = 10: screen exit on foot (speed −0x230 toward the nearest edge), then disappearance.
 fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set16(Obj::VX, -0x230i16 as u16);
         x.set8(f::FLIP, 0);
         let d = var::SCROLL_X.get(x.b).wrapping_sub(x.u16(Obj::X));
         if (d as i16) >= 0xc0 {
-            // `blt` non pris : à droite du bord, il part dans l'autre sens
+            // `blt` not taken: to the right of the edge, it goes the other way
             negate(x, Obj::VX);
             x.set8(f::FLIP, 0x20);
         }
@@ -256,7 +256,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 --------------------------------------------------------------------------------------
+// --- substate 8 --------------------------------------------------------------------------------------
 
 pub(super) fn run_d<R: Bench>(x: &mut Cx<'_, R>) {
     if !hit_gate(x) {
@@ -301,7 +301,7 @@ pub(super) fn run_d<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 : pas latéral en profondeur ou bond latéral (au hasard).
+/// +6 = 4: lateral step in depth or lateral leap (at random).
 fn sidestep<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => {
@@ -315,7 +315,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
             }
             x.set8(Obj::SPEED_INDEX, angle);
             if rand_and(x, 1) != 0 {
-                // bond latéral
+                // lateral leap
                 x.set8(f::SUB3, 4);
                 x.set16(Obj::VY, 0x300);
                 if x.u8(Obj::SPEED_INDEX) != 0 {

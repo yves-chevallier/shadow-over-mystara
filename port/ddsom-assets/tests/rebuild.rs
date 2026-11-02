@@ -1,7 +1,7 @@
-//! Les ressources extraites reconstruisent les ROMs octet pour octet sur les zones qu'elles décrivent
-//! (région graphique, échantillons QSound, tables de la ROM programme, aux adresses d'origine).
-//! Ignoré si les ressources (`DDSOM_ASSETS`, sinon ../../assets) ou les ROMs (`DDSOM_ROMS`, sinon ../../rom)
-//! manquent.
+//! The extracted resources rebuild the ROMs byte for byte on the zones they describe
+//! (graphics region, QSound samples, program ROM tables, at the original addresses).
+//! Skipped if the resources (`DDSOM_ASSETS`, otherwise ../../assets) or the ROMs (`DDSOM_ROMS`, otherwise ../../rom)
+//! are missing.
 
 use std::path::{Path, PathBuf};
 
@@ -22,15 +22,15 @@ fn assets() -> PathBuf {
 fn available() -> bool {
     let ok = assets().join("palettes.png").exists() && roms().join("dd2.13m").exists();
     if !ok {
-        eprintln!("ressources ou ROMs absentes : test ignoré");
+        eprintln!("resources or ROMs missing: test skipped");
     }
     ok
 }
 
 fn same(name: &str, img: &Image, rom: &[u8]) {
-    assert!(img.conflicts.is_empty(), "{name} : écritures contradictoires en {:#x}", img.conflicts[0]);
+    assert!(img.conflicts.is_empty(), "{name}: contradictory writes at {:#x}", img.conflicts[0]);
     if let Some(a) = rebuild::first_difference(img, rom) {
-        panic!("{name} : octet {a:#x} différent ({:#04x} au lieu de {:#04x})", img.bytes[a as usize], rom[a as usize]);
+        panic!("{name}: byte {a:#x} differs ({:#04x} instead of {:#04x})", img.bytes[a as usize], rom[a as usize]);
     }
 }
 
@@ -40,17 +40,17 @@ fn rebuilt_program() {
         return;
     }
     let p = Program::load(&assets()).unwrap();
-    assert!(p.missing.is_empty(), "fichiers absents : {:?}", p.missing);
+    assert!(p.missing.is_empty(), "missing files: {:?}", p.missing);
     let (data, prog) = cps2::load_program(&roms()).unwrap();
     let bytes = |w: Vec<u16>| -> Vec<u8> { w.iter().flat_map(|v| v.to_be_bytes()).collect() };
-    same("espace données", &p.data, &bytes(data));
-    same("espace programme", &p.prog, &bytes(prog));
-    // l'essentiel des tables est là : palettes (256 Ko), images (plus de 2 Mo avec les animations)
+    same("data space", &p.data, &bytes(data));
+    same("program space", &p.prog, &bytes(prog));
+    // most of the tables are there: palettes (256 KB), frames (over 2 MB with the animations)
     assert!(p.data.covered_len() > 0x200000, "{}", p.data.covered_len());
 }
 
-/// Avec `data/remainder.json`, la région programme est complète : les seuls octets absents (dans les deux espaces)
-/// sont du code 68000 déclaré par ce fichier (docs/sans-rom.md « Couverture complète des données »).
+/// With `data/remainder.json`, the program region is complete: the only missing bytes (in both spaces)
+/// are 68000 code declared by that file (docs/sans-rom.md « Couverture complète des données »).
 #[test]
 fn full_program_outside_code() {
     if !available() {
@@ -62,9 +62,9 @@ fn full_program_outside_code() {
     for (d, f) in remainder.code_ranges().unwrap() {
         code[d as usize..f as usize].fill(true);
     }
-    for (name, img) in [("espace données", &p.data), ("espace programme", &p.prog)] {
+    for (name, img) in [("data space", &p.data), ("program space", &p.prog)] {
         let absent = (0..rebuild::PROGRAM_SIZE as u32).find(|&a| !img.is_covered(a) && !code[a as usize]);
-        assert!(absent.is_none(), "{name} : octet {:#x} absent des assets et hors du code", absent.unwrap());
+        assert!(absent.is_none(), "{name}: byte {:#x} missing from the assets and outside the code", absent.unwrap());
     }
 }
 
@@ -75,7 +75,7 @@ fn rebuilt_graphics() {
     }
     let region = rebuild::gfx_region(&assets().join("gfx")).unwrap();
     let rom = cps2_gfx::rom::load_gfx(&roms(), cps2_gfx::rom::DDSOM_GFX, cps2_gfx::rom::DDSOM_GFX_SIZE).unwrap();
-    assert!(region == rom, "région graphique différente");
+    assert!(region == rom, "graphics region differs");
 }
 
 #[test]
@@ -89,6 +89,6 @@ fn rebuilt_samples() {
         pcm.extend(std::fs::read(roms().join(name)).unwrap().chunks_exact(2).flat_map(|w| [w[1], w[0]]));
     }
     assert_eq!(img.bytes.len(), pcm.len());
-    same("échantillons", &img, &pcm);
+    same("samples", &img, &pcm);
     assert!(img.covered_len() > 0x100000, "{}", img.covered_len());
 }

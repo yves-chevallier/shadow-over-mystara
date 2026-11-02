@@ -1,13 +1,13 @@
-//! Type 2, coups. `+5 = 4` : `+6` = 0, 2, 4 combinaisons de coups, 6 double coup, 8, 10 et 18 bond-coup,
-//! 12 estoc répété, 14 jet, 16 course ou bond, 20 attaque spéciale, 22 annonce, 24 demi-tour, 26 geste long.
-//! `+5 = 6` : gardes et bonds. `+5 = 8` : coups de repli. `+7` est l'étape.
+//! Type 2, attacks. `+5 = 4`: `+6` = 0, 2, 4 combinations of attacks, 6 double attack, 8, 10 and 18 leap attack, 12
+//! repeated thrust, 14 throw, 16 run or leap, 20 special attack, 22 announcement, 24 turn-around, 26 long move.
+//! `+5 = 6`: guards and leaps. `+5 = 8`: fallback attacks. `+7` is the step.
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Poussée d'esprit inconnue de la ROM : lecture de la table de coups d'un bond, par difficulté.
+/// Unknown mental push from the ROM: read of the attack table of a leap, by difficulty.
 fn pick_jump_move<R: Bench>(x: &mut Cx<'_, R>) {
     let row = difficulty_row(x);
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | row;
@@ -16,7 +16,7 @@ fn pick_jump_move<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 0);
 }
 
-// --- sous-état 4 --------------------------------------------------------------------------------
+// --- substate 4 --------------------------------------------------------------------------------
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(BLINK_PHASE) != 0 && (x.u8(BLINK_PHASE) as i8) > 0 {
@@ -44,7 +44,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0, 2 ou 4 : une série de coups d'animation 15fabe (nombre de répétitions `+0xa2`).
+/// 0, 2 or 4: a series of attacks with animation 15fabe (number of repetitions `+0xa2`).
 fn combo<R: Bench>(x: &mut Cx<'_, R>, id: u8) {
     if x.u8(f::SUB3) != 0 {
         if step(x) {
@@ -108,7 +108,7 @@ fn double<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 8, 10 et 18 : bond sur la cible avec un coup (8 et 18 enchaînent le coup suivant, 10 rejoue un bond).
+/// 8, 10 and 18: leap onto the target with an attack (8 and 18 chain the next attack, 10 replays a leap).
 fn leap_strike<R: Bench>(x: &mut Cx<'_, R>, id: u8) {
     match x.u8(f::SUB3) {
         0 => {
@@ -156,7 +156,7 @@ fn leap_strike<R: Bench>(x: &mut Cx<'_, R>, id: u8) {
     }
 }
 
-/// Montée et chute d'un bond, puis animation de réception (0xc).
+/// Climb and fall of a leap, then landing animation (0xc).
 fn land_with<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if step(x) && (x.u16(Obj::Z) as i16) < 0 {
@@ -166,7 +166,7 @@ fn land_with<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 12 : estoc répété `+0xa2` fois (animation 5).
+/// 12: thrust repeated `+0xa2` times (animation 5).
 fn stab<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -193,7 +193,7 @@ fn stab_begin<R: Bench>(x: &mut Cx<'_, R>) {
     strike(x, 5);
 }
 
-/// 14 : jet (animation 8 répétée), avec la routine 0x9e194 qui peut interrompre le geste.
+/// 14: throw (animation 8 repeated), with routine 0x9e194 which can interrupt the move.
 fn throw<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -215,7 +215,7 @@ fn throw<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 16 : course vers la cible (animation 2) ou bond.
+/// 16: run toward the target (animation 2) or leap.
 fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -249,7 +249,7 @@ fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5a5a4 : grand bond de côté.
+/// 0x5a5a4: big sideways leap.
 fn long_jump<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 6);
     x.set8(LOOK_PREV, 0xcc);
@@ -266,7 +266,7 @@ fn long_jump<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 0xa);
 }
 
-/// 20 : geste spécial (animation 3), interrompu par 0x9e2a0.
+/// 20: special move (animation 3), interrupted by 0x9e2a0.
 fn special<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -283,7 +283,7 @@ fn special<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 22 : annonce du coup, puis passage au coup prévu `+0xa3` (ou demi-tour si la cible est derrière).
+/// 22: announcement of the attack, then switch to the planned attack `+0xa3` (or turn-around if the target is behind).
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -312,7 +312,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 24 : demi-tour, puis reprise du coup prévu.
+/// 24: turn-around, then resumes the planned attack.
 fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -328,7 +328,7 @@ fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 26 : geste long (animation 8 répétée `+0xa2` fois).
+/// 26: long move (animation 8 repeated `+0xa2` times).
 fn long_gesture<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -347,7 +347,7 @@ fn long_gesture<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 6 : gardes et bonds --------------------------------------------------------------
+// --- substate 6: guards and leaps --------------------------------------------------------------
 
 pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -363,7 +363,7 @@ pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Garde sur place (animation 8) jusqu'à la fin de l'animation, puis retour debout.
+/// Guard in place (animation 8) until the end of the animation, then back to standing.
 fn hold<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -393,7 +393,7 @@ fn guard<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 4 : bond de côté vers la profondeur de la cible.
+/// 4: side leap toward the depth of the target.
 fn side_hop<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -420,7 +420,7 @@ fn side_hop<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 6, 8 et 10 : course vers l'avant (animation 3) ; à la fin, 6 retourne debout, 8 et 10 enchaînent un coup.
+/// 6, 8 and 10: run forward (animation 3); at the end, 6 goes back to standing, 8 and 10 chain an attack.
 fn forward_hop<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         return forward_hop_begin(x);
@@ -448,7 +448,7 @@ pub(super) fn forward_hop_begin<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 3);
 }
 
-/// 12 : bond avec coup (animation 6 de la série des coups).
+/// 12: leap with an attack (animation 6 of the attack series).
 fn hop_strike<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => hop_strike_begin(x),
@@ -486,7 +486,7 @@ pub(super) fn hop_strike_begin<R: Bench>(x: &mut Cx<'_, R>) {
     strike(x, 6);
 }
 
-// --- sous-état 8 : coups de repli -----------------------------------------------------------------
+// --- substate 8: fallback attacks -----------------------------------------------------------------
 
 pub(super) fn run_fallback<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -522,7 +522,7 @@ pub(super) fn run_fallback<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// `+6` = 4 : pas de côté, soit course (étape 0), soit bond en profondeur.
+/// `+6` = 4: side step, either a run (step 0) or a leap in depth.
 fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -580,7 +580,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// `+6` = 6 : choisit le prochain coup selon la cible.
+/// `+6` = 6: chooses the next attack according to the target.
 fn choose<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(LOOK_PREV, 1);
     body(x, 0);

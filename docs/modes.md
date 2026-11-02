@@ -41,7 +41,7 @@ de fin de partie (`0x133f0`).
 
 | Sous-mode | Écran | Rust |
 |---|---|---|
-| 0, 6 | tableau des meilleurs scores (tâche `0x1835e`, objets EFFCT et SET), puis fondu | `attract::fixed_screen`, `taches/ecran_fixe.rs` |
+| 0, 6 | tableau des meilleurs scores (tâche `0x1835e`, objets EFFCT et SET), puis fondu | `attract::fixed_screen`, `tasks/fixed_screen.rs` |
 | 2, 12 | titres (Capcom, « Dungeons & Dragons », droits) | `title.rs` |
 | 4, 14 | démonstrations scénarisées (interpréteur `0x1f32e`) | `demo.rs` |
 | 8, 16 | image de deux blocs de tuiles, 300 images (16 : seulement si `A5+0x70` = 2) | `attract::legal_screen`, `second_legal_screen` |
@@ -57,13 +57,13 @@ désactive et reboucle.
 
 Un écran cède la main à l'ordonnanceur en plein milieu (attente d'une image, d'un fondu). Une native ne pouvant
 céder, chaque écran est découpé aux points de cession : chaque point de reprise (l'adresse qui suit le `jsr 0xa40`
-de l'original, `Sequence::wait`) est une étape de l'`enum Etape` du module (`etapes!`, voir `noyau.md`, « Tâches
+de l'original, `Sequence::wait`) est une étape de l'`enum Step` du module (`steps!`, voir `noyau.md`, « Tâches
 Rust »), que l'ordonnanceur appelle à la reprise. Quand l'original appelle une routine qui peut céder (`0x1460` et
 `0x144c` : fondus avec attente ; `0xc32` : effacement vidéo), le pas appelle sa fonction Rust avec la suite
-(`Sequence::sous_programme(taches::fondu::descente, Etape::…)`). Un appel `bsr` qui peut céder est un vrai appel
-(`push_return`) et le retour a lui aussi son étape (`title::Etape::T18After`). Ces appels
+(`Sequence::subroutine(tasks::fading::descent, Step::…)`). Un appel `bsr` qui peut céder est un vrai appel
+(`push_return`) et le retour a lui aussi son étape (`title::Step::T18After`). Ces appels
 ne sont plus empilés sur la pile 68000 : leur suite est rangée dans les *appels en cours* de la tâche
-(`taches::table::Cadre`, voir `noyau.md`, « Appels en cours ») et le `rts` d'une native (`mem::rts`) y revient ; la
+(`tasks::table::Frame`, voir `noyau.md`, « Appels en cours ») et le `rts` d'une native (`mem::rts`) y revient ; la
 boucle de la machine à modes y range de même le retour de son gestionnaire (`0x1341a`). Les états dont l'original
 quitte par un saut dans une autre routine (`jmp`, `bra` vers la fin d'un autre état) utilisent `Sequence::jump_to`.
 
@@ -81,7 +81,7 @@ caméra (22), palette du logo (24), texte de droits selon la région `A5+0x70` (
 titre, 5 étapes, qui réutilise le texte de droits et la sortie. Les objets lisent et écrivent le bloc d'état par le
 pointeur `+0x4c` de leur enregistrement.
 
-**Tableau des scores** (`taches/ecran_fixe.rs`, sous-modes 0 et 6) : la machine à modes crée la tâche `0x1835e`
+**Tableau des scores** (`tasks/fixed_screen.rs`, sous-modes 0 et 6) : la machine à modes crée la tâche `0x1835e`
 (emplacement 0xf0) et attend son indicateur `FF0F53`. La tâche (bloc d'état `FF0F50`) pose le décor et les rangs 5 à 10,
 attend 0x40 images, dessine les rangs 1 à 4 et le titre, fait monter la couche 2 pendant 0xe0 images, attend 0x90 images,
 lève l'indicateur et se termine. Lignes du tableau : 14 octets (niveau, personnage, nom de six lettres, score BCD,

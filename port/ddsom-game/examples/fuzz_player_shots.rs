@@ -1,16 +1,16 @@
-//! Fuzz des gestionnaires des tirs (PSHL) et des effets (PEFF) des joueurs, réécrits dans
-//! `families/pshl*.rs` et `families/peff*.rs`.
+//! Fuzz of the shot (PSHL) and effect (PEFF) handlers of the players, rewritten in
+//! `families/pshl*.rs` and `families/peff*.rs`.
 //!
-//! Chaque gestionnaire natif est appelé en mode contrôle (l'original s'exécute à côté sur une copie, les
-//! deux sont comparés : mémoire, registres du contrat, avec `DDSOM_CHECK_ALL=1` tous les registres) sur
-//! un objet fabriqué dans un état tiré au sort : joueur propriétaire et lanceur aux champs variés, parent
-//! et frères factices, états de l'automate, compteurs et drapeaux de la scène. L'objet vit ensuite
-//! quelques dizaines d'images (le propriétaire change de geste, le moteur de collisions pose ses drapeaux...).
+//! Each native handler is called in check mode (the original runs alongside on a copy, the
+//! two are compared: memory, contract registers, with `DDSOM_CHECK_ALL=1` all registers) on
+//! an object fabricated in a randomly drawn state: owner player and launcher with varied fields, dummy parent
+//! and siblings, state-machine states, scene counters and flags. The object then lives
+//! a few dozen frames (the owner changes gesture, the collision engine sets its flags...).
 //!
-//!   fuzz_player_shots <roms> <eeprom> <scénario> <images de chauffe> <tours> [PSHL|PEFF]
+//!   fuzz_player_shots <roms> <eeprom> <scenario> <warm-up frames> <rounds> [PSHL|PEFF]
 //!
-//! Variables : `DDSOM_ENTREE=<address>` (un seul gestionnaire), `DDSOM_GRAINE`, `DDSOM_PAS` (images par
-//! objet, 40 par défaut), `DDSOM_VARIANTES` (variantes tirées, 3 par défaut), `DDSOM_VERBOSE`.
+//! Variables: `DDSOM_ENTREE=<address>` (a single handler), `DDSOM_GRAINE`, `DDSOM_PAS` (frames per
+//! object, 40 by default), `DDSOM_VARIANTES` (variants drawn, 3 by default), `DDSOM_VERBOSE`.
 
 use std::path::Path;
 
@@ -35,7 +35,7 @@ impl Rng {
     }
 }
 
-/// Octets du joueur propriétaire que les gestionnaires testent : (décalage, valeurs plausibles).
+/// Bytes of the owner player that the handlers test: (offset, plausible values).
 const PLAYER_BYTES: &[(u32, &[u8])] = &[
     (0x03, &[0, 2, 4, 6, 8, 0x0a, 0x0b, 0x0e]),
     (0x05, &[0, 2, 4]),
@@ -72,7 +72,7 @@ const PLAYER_WORDS: &[(u32, &[u16])] = &[
     (0x0c, &[0, 0x10]),
 ];
 
-/// Octets de l'objet testés par les gestionnaires.
+/// Bytes of the object tested by the handlers.
 const OBJECT_BYTES: &[(u32, &[u8])] = &[
     (0x2f, &[0, 1, 2, 3, 4]),
     (0x33, &[0, 1, 0x80]),
@@ -102,7 +102,7 @@ fn random(b: &mut cps2::Cps2Bus, rng: &mut Rng, base: u32, bytes: &[(u32, &[u8])
     }
 }
 
-/// Fabrique un objet frère actif dans un autre emplacement du même pool.
+/// Fabricates an active sibling object in another slot of the same pool.
 fn sibling(b: &mut cps2::Cps2Bus, rng: &mut Rng, pool: &Pool, object: u32, kind: u8) -> u32 {
     let mut o = pool.slot(rng.below(pool.slots)).0;
     if o == object {
@@ -119,7 +119,7 @@ fn sibling(b: &mut cps2::Cps2Bus, rng: &mut Rng, pool: &Pool, object: u32, kind:
     o
 }
 
-/// Nombre de variantes (`+3`) que l'original sait traiter pour un type (les autres sautent dans des données).
+/// Number of variants (`+3`) that the original can handle for a type (the others jump into data).
 fn valid_variants(class: u8, kind: u8, default: u32) -> u32 {
     match (class, kind) {
         (0x12, 4) | (0x12, 13) | (0x12, 22) | (0x12, 30) => 3,
@@ -137,7 +137,7 @@ fn valid_variants(class: u8, kind: u8, default: u32) -> u32 {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 6 {
-        eprintln!("usage : fuzz_player_shots <roms> <eeprom> <scénario> <images de chauffe> <tours> [PSHL|PEFF]");
+        eprintln!("usage: fuzz_player_shots <roms> <eeprom> <scenario> <warm-up frames> <rounds> [PSHL|PEFF]");
         std::process::exit(2);
     }
     let (roms, eeprom, scenario) = (&a[1], &a[2], &a[3]);
@@ -148,7 +148,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_game::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
         m.run_frame();
@@ -191,13 +191,13 @@ fn main() {
             let nv = valid_variants(pool.class, kind, variants);
             wr8(&mut b, obj.0 + 3, rng.below(nv) as u8);
             if pool.class == PEFF.class && kind <= 1 && rng.below(2) == 0 {
-                // anneau parent (variante négative)
+                // parent ring (negative variant)
                 wr8(&mut b, obj.0 + 3, 0x80);
             }
             wr8(&mut b, obj.0 + 0x28, pool.class);
             wr8(&mut b, obj.0 + 0x2c, rng.among(&[0, 0x20]));
             wr16(&mut b, obj.0 + 0x50, player as u16);
-            // lanceur et frères factices : liens +0x52, +0x5c, +0x42, +0x46
+            // launcher and dummy siblings: links +0x52, +0x5c, +0x42, +0x46
             let parent = sibling(&mut b, &mut rng, pool, obj.0, kind);
             for off in [0x52u32, 0x5c, 0x42, 0x46] {
                 wr16(&mut b, obj.0 + off, parent as u16);
@@ -209,9 +209,9 @@ fn main() {
             if rng.below(2) == 0 {
                 wr16(&mut b, obj.0 + 0x30, parent as u16);
             }
-            // états de l'automate
-            // trajectoire naturelle (état 0, sous-états nuls) ; DDSOM_ETATS=1 tire aussi des états quelconques
-            // (beaucoup tombent hors des tables de l'original : écarts sans signification)
+            // state-machine states
+            // natural trajectory (state 0, null sub-states); DDSOM_ETATS=1 also draws arbitrary states
+            // (many fall outside the original's tables: meaningless mismatches)
             if std::env::var("DDSOM_ETATS").is_ok() {
                 wr8(&mut b, obj.0 + 4, rng.among(&[0, 0, 2, 2, 2, 4, 6]));
                 wr8(&mut b, obj.0 + 5, rng.among(&[0, 0, 2, 4, 6, 8, 0xa, 0xc]));
@@ -220,7 +220,7 @@ fn main() {
             } else {
                 wr8(&mut b, obj.0 + 4, 0);
             }
-            // position proche de l'écran
+            // position close to the screen
             let (cx, cy) = (rd16(&mut b, A5 + 0x506), rd16(&mut b, A5 + 0x50a));
             for (o, j) in [(obj.0, 0u32), (player, 0), (parent, 0)] {
                 let _ = j;
@@ -234,7 +234,7 @@ fn main() {
                 wr8(&mut b, obj.0 + 0x2f, rng.among(&[0, 2, 4]));
             }
             if pool.class == PEFF.class && kind == 24 {
-                // le tas d'or : lien vers un joueur qui lui-même se désigne
+                // the gold pile: link to a player that designates itself
                 wr16(&mut b, obj.0 + 0x5c, player as u16);
                 wr16(&mut b, player + 0x5c, rng.among(&[0, player as u16]));
                 wr16(&mut b, player + 0x50, player as u16);
@@ -254,15 +254,15 @@ fn main() {
                 wr16(&mut b, obj.0 + 0x5c, target as u16);
             }
             if pool.class == PEFF.class && kind == 39 {
-                // le monstre touché (+0x42) est un ennemi
+                // the monster hit (+0x42) is an enemy
                 let enemy = ddsom_game::objects::pools::ENEMY.slot(rng.below(22)).0;
                 wr8(&mut b, enemy, 1);
                 wr16(&mut b, obj.0 + 0x42, enemy as u16);
             }
-            // génération de la partie : fixe pendant la vie de l'objet (un changement le fait mourir)
+            // game generation: fixed during the object's life (a change makes it die)
             wr8(&mut b, A5 + 0x34, rng.below(4) as u8);
             if pool.class == PEFF.class {
-                // octet de génération : +0x5a (type 0), +0x5b (types 1, 34, 41)
+                // generation byte: +0x5a (type 0), +0x5b (types 1, 34, 41)
                 let g = rd8(&mut b, A5 + 0x34);
                 match kind {
                     0 => wr8(&mut b, obj.0 + 0x5a, g),
@@ -285,7 +285,7 @@ fn main() {
                         wr8(&mut b, obj.0 + 0x33, rng.among(&[0, 1, 0x80]));
                     }
                     if rng.below(8) == 0 {
-                        // +0x2f (rang) et +0x5c/+0x5d (pointeur de lien) gardent leur valeur
+                        // +0x2f (rank) and +0x5c/+0x5d (link pointer) keep their value
                         let guards: Vec<u8> = [0x2fu32, 0x5c, 0x5d].iter().map(|&o| rd8(&mut b, obj.0 + o)).collect();
                         random(&mut b, &mut rng, obj.0, OBJECT_BYTES, &[]);
                         for (&o, v) in [0x2fu32, 0x5c, 0x5d].iter().zip(guards) {
@@ -322,7 +322,7 @@ fn main() {
                 if after > before && shown < 40 {
                     shown += 1;
                     let last = ddsom_game::report().get(native_name).and_then(|s| s.last.clone());
-                    println!("écart en {entry:06x} {} {kind} pas {step} : {}", pool.name, last.unwrap_or_default());
+                    println!("mismatch at {entry:06x} {} {kind} step {step}: {}", pool.name, last.unwrap_or_default());
                     println!("  objet avant : {:02x?}", prev_obj);
                 }
             }
@@ -332,9 +332,9 @@ fn main() {
     for (name, st) in ddsom_game::report() {
         if name.starts_with("peff_") || name.starts_with("pshl_") {
             total += st.mismatches;
-            println!("  {name:12} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
+            println!("  {name:12} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
         }
     }
-    println!("{tests} appels de gestionnaires");
-    println!("{}", if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
+    println!("{tests} handler calls");
+    println!("{}", if total == 0 { "VALID: no mismatch" } else { "FAILED" });
 }

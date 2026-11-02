@@ -1,20 +1,20 @@
-//! Tâche d'écran fixe (`0x1835e`, F4) : le tableau des meilleurs scores de l'attract (sous-modes 0 et 6 de la
-//! machine à modes, `modes::attract::fixed_screen`).
+//! Fixed-screen task (`0x1835e`, F4): the attract high-score table (sub-modes 0 and 6 of the
+//! mode machine, `modes::attract::fixed_screen`).
 //!
-//! À chaque image : l'étape de l'écran (bloc d'état `FF0F50`), puis les objets EFFCT et SET et la liste de
-//! sprites, puis une image de cession (`jsr 0xb64`, reprise à l'étape `Resume`, `0x18384`). Étapes (`+0`, pas de 2) :
+//! On each frame: the screen stage (state block `FF0F50`), then the EFFCT and SET objects and the sprite
+//! list, then a cession frame (`jsr 0xb64`, resume at stage `Resume`, `0x18384`). Stages (`+0`, step of 2):
 //!
-//! * 0 (`0x1838a`) : décor (palettes, deux blocs de tuiles par couche, palettes du titre), six lignes du
-//!   tableau (rangs 5 à 10, `0x18b8e`), objet SET du cadre, luminosités ;
-//! * 2 (`0x18530`) : sous-étapes (`+1`) — 0 attend 0x40 images puis dessine les trois premiers rangs
-//!   (`0x18a3e`), leurs quatre objets EFFCT, le titre et le meilleur score ; 2 fait monter la couche 2 de
-//!   0xe0 lignes ; 4 attend 0x90 images, lève l'indicateur « écran fini » (`+3`) et termine la tâche.
+//! * 0 (`0x1838a`): scenery (palettes, two tile blocks per layer, title palettes), six rows of the
+//!   table (ranks 5 to 10, `0x18b8e`), frame SET object, brightness levels;
+//! * 2 (`0x18530`): sub-stages (`+1`) — 0 waits 0x40 frames then draws the first three ranks
+//!   (`0x18a3e`), their four EFFCT objects, the title and the best score; 2 scrolls layer 2 up by
+//!   0xe0 lines; 4 waits 0x90 frames, raises the "screen finished" flag (`+3`) and ends the task.
 //!
-//! Une ligne du tableau (14 octets) : `+0` niveau, `+1` personnage, `+2..+7` nom (0xff : blanc), `+8` score
-//! (7 chiffres BCD), `+0xc` variante de l'emblème, `+0xd` emblème présent (objet EFFCT de type 0x5b).
+//! A table row (14 bytes): `+0` level, `+1` character, `+2..+7` name (0xff: blank), `+8` score
+//! (7 BCD digits), `+0xc` emblem variant, `+0xd` emblem present (EFFCT object of type 0x5b).
 //!
-//! Les cases de la couche de texte (scroll 1) sont des paires de mots (tuile, attribut), rangées par colonnes :
-//! `+4` ligne suivante, `+0x80` colonne suivante. Les tables de tuiles sont lues dans la ROM (données).
+//! The cells of the text layer (scroll 1) are pairs of words (tile, attribute), stored by columns:
+//! `+4` next row, `+0x80` next column. The tile tables are read from the ROM (data).
 
 use crate::aids::divide;
 use crate::scene::fading;
@@ -24,26 +24,26 @@ use crate::scene::Ctx;
 use crate::video::Grid;
 use crate::objects::pools;
 
-/// Bloc d'état de l'écran (`A0`, A5 - 0x70b0).
+/// State block of the screen (`A0`, A5 - 0x70b0).
 mod state {
     pub const BASE: u32 = 0xff_0f50;
     pub const STEP: u32 = BASE;
     pub const SUB_STEP: u32 = BASE + 1;
-    /// Écran fini : la machine à modes passe à la suite.
+    /// Screen finished: the mode machine moves on to the next one.
     pub const FINISHED: u32 = BASE + 3;
-    /// Minuterie (mot signé).
+    /// Timer (signed word).
     pub const MINUTERIE: u32 = BASE + 0x10;
 }
 
-/// Lignes du tableau : rangs 5 à 10 (de `LOW_RANKS` vers le bas de la mémoire), rangs 2 à 4, meilleur score.
+/// Table rows: ranks 5 to 10 (from `LOW_RANKS` downward in memory), ranks 2 to 4, best score.
 const LOW_RANKS: u32 = 0xff_104e;
 const HIGH_RANKS: u32 = 0xff_0fde;
 const BEST: u32 = 0xff_0fd0;
 const LINE: u32 = 0xe;
-/// Octet `+1` des quatre objets EFFCT des premiers rangs, lu de `EMBLEMS` vers le bas (pas `LINE`).
+/// Byte `+1` of the four EFFCT objects of the first ranks, read from `EMBLEMS` downward (step `LINE`).
 const EMBLEMS: u32 = 0xff_0ffa;
 
-/// Variables de la RAM de travail (décalages depuis A5).
+/// Work RAM variables (offsets from A5).
 mod var {
     pub const LAYERS: u32 = 0x14;
     pub const TERRAIN_VIEW: u32 = 0x36;
@@ -55,51 +55,51 @@ mod var {
 }
 
 crate::steps! {
-    /// Étapes de la tâche : l'entrée et le retour de la cession, qui font chacune un tour.
+    /// Stages of the task: the entry and the cession return, each of which does one turn.
     pub enum Step {
         Entry = 0x1835e => tour,
         Resume = 0x18384 => tour,
-        /// Retour de l'appel de l'étape (`jsr (table,PC)`) : les objets, les sprites, une image de cession.
+        /// Return from the stage call (`jsr (table,PC)`): the objects, the sprites, a cession frame.
         AfterStep = at::AFTER_STEP => after_step,
     }
 }
 
-/// Adresses de l'original.
+/// Addresses of the original.
 mod at {
-    /// Retour de l'appel de l'étape (`jsr (table,PC)`).
+    /// Return from the stage call (`jsr (table,PC)`).
     pub const AFTER_STEP: u32 = 0x1836e;
 }
 
-/// Tables de tuiles (ROM, données).
+/// Tile tables (ROM, data).
 mod tiles {
-    /// Grands chiffres (4 x 4 cases) du meilleur score.
+    /// Large digits (4 x 4 cells) of the best score.
     pub const BIG_DIGITS: u32 = 0x18d58;
-    /// Chiffres (2 x 2 cases).
+    /// Digits (2 x 2 cells).
     pub const DIGITS: u32 = 0x18d6c;
-    /// Numéros de rang 5 à 10 (2 x 2).
+    /// Rank numbers 5 to 10 (2 x 2).
     pub const RANKS: u32 = 0x18d82;
-    /// Portrait de chaque personnage : tuile et attribut (4 x 2 cases).
+    /// Portrait of each character: tile and attribute (4 x 2 cells).
     pub const PORTRAITS: u32 = 0x18d8e;
-    /// Lettres des noms (2 x 2).
+    /// Name letters (2 x 2).
     pub const LETTERS: u32 = 0x18dbe;
-    /// Numéros des rangs 2 à 4 (6 x 4 cases).
+    /// Numbers of ranks 2 to 4 (6 x 4 cells).
     pub const BIG_RANKS: u32 = 0x18b88;
-    /// Premier rang (6 x 4).
+    /// First rank (6 x 4).
     pub const FIRST_RANK: u16 = 0x230;
-    /// Case vide des grands caractères.
+    /// Empty cell of the large characters.
     pub const WHITE: u16 = 0x2fc;
 }
 
-/// Palettes de la première étape : source en ROM et destination, toutes à pleine luminosité.
+/// Palettes of the first stage: ROM source and destination, all at full brightness.
 const PALETTES: [(u32, u32); 2] = [(0x2537c0, 0x91c3c0), (0x28f4c0, 0x91c180)];
-/// Titre : grands caractères (2 x 2 cases, attribut 1) écrits à partir de `TITLE_CELL` ; 0 = blanc.
+/// Title: large characters (2 x 2 cells, attribute 1) written starting from `TITLE_CELL`; 0 = blank.
 const TITLE_CELL: u32 = 0x91021c;
 const TITLE: [u16; 20] = [
     0x192, 0x194, 0x190, 0x192, 0, 0x190, 0x1b6, 0x174, 0x17a, 0x17c, 0, 0x1ba, 0x1b6, 0x174, 0x1be, 0x17c, 0x19a, 0x17c,
     0x1b6, 0x1b8,
 ];
 
-/// Une ligne du tableau.
+/// A table row.
 #[derive(Clone, Copy)]
 struct Line(u32);
 
@@ -118,7 +118,7 @@ impl Line {
     }
 }
 
-/// Pinceau sur la couche de texte : `p` est l'adresse de la case courante.
+/// Brush on the text layer: `p` is the address of the current cell.
 struct Brush(u32);
 
 impl Brush {
@@ -129,14 +129,14 @@ impl Brush {
         wr16(x.b, self.0 + d, tile);
         wr16(x.b, self.0 + d + 2, attr);
     }
-    /// Caractère de 2 x 2 cases : `t`, `t + 1` à droite, `t + 0x10` et `t + 0x11` dessous.
+    /// Character of 2 x 2 cells: `t`, `t + 1` to the right, `t + 0x10` and `t + 0x11` below.
     fn car(&self, x: &mut Ctx, d: u32, t: u16, attr: u16) {
         self.case(x, d, t, attr);
         self.case(x, d + 0x80, t + 1, attr);
         self.case(x, d + 4, t + 0x10, attr);
         self.case(x, d + 0x84, t + 0x11, attr);
     }
-    /// Bloc de `width` x `height` cases, tuiles consécutives par ligne, lignes de 16 tuiles.
+    /// Block of `width` x `height` cells, consecutive tiles per row, rows of 16 tiles.
     fn block(&mut self, x: &mut Ctx, t: u16, width: u16, height: u16, attr: u16) {
         for line in 0..height {
             for col in 0..width {
@@ -144,7 +144,7 @@ impl Brush {
             }
         }
     }
-    /// Nom de six lettres (2 x 2, attribut 2), une lettre toutes les deux colonnes.
+    /// Six-letter name (2 x 2, attribute 2), one letter every two columns.
     fn name(&mut self, x: &mut Ctx, line: Line) {
         for i in 0..6 {
             let c = match line.letter(x, i) {
@@ -156,7 +156,7 @@ impl Brush {
             self.advance(0x100);
         }
     }
-    /// Les sept chiffres bas du score (2 x 2, attribut 3).
+    /// The seven low digits of the score (2 x 2, attribute 3).
     fn score(&mut self, x: &mut Ctx, line: Line) {
         let score = line.score(x);
         for i in (0..7).rev() {
@@ -165,7 +165,7 @@ impl Brush {
             self.advance(0x100);
         }
     }
-    /// Niveau en deux chiffres : tuile = chiffre, attribut 1, sur deux colonnes.
+    /// Level in two digits: tile = digit, attribute 1, over two columns.
     fn level(&self, x: &mut Ctx, line: Line) {
         let (tens, units) = divide(line.level(x) as u32, 10);
         self.case(x, 0, tens as u16, 1);
@@ -173,7 +173,7 @@ impl Brush {
     }
 }
 
-/// `0x18a0e` : l'emblème de la ligne (objet EFFCT de type 0x5b), s'il en a un.
+/// `0x18a0e`: the row's emblem (EFFCT object of type 0x5b), if it has one.
 fn emblem(x: &mut Ctx, line: Line) {
     if rd8(x.b, line.0 + 0xd) == 0 {
         return;
@@ -187,12 +187,12 @@ fn emblem(x: &mut Ctx, line: Line) {
     }
 }
 
-/// Allocation d'un objet : son adresse, ou rien (retenue levée).
+/// Allocation of an object: its address, or nothing (carry set).
 fn allocated(x: &mut Ctx, pool: &pools::Pool) -> Option<u32> {
     pool.alloc(x.b).map(|o| o.0)
 }
 
-/// `0x18b8e` : ligne des rangs 5 à 10 (`rank` = 10 à 5) à partir de la case `p`.
+/// `0x18b8e`: row of ranks 5 to 10 (`rank` = 10 to 5) starting from cell `p`.
 fn low_line(x: &mut Ctx, line: Line, p: u32, rank: u16) {
     emblem(x, line);
     let mut p = Brush(p);
@@ -212,7 +212,7 @@ fn low_line(x: &mut Ctx, line: Line, p: u32, rank: u16) {
     p.name(x, line);
     p.advance(0x100);
     p.score(x, line);
-    // « exp » après le score, « LEVEL » sur la ligne du dessus, puis le niveau
+    // "exp" after the score, "LEVEL" on the row above, then the level
     p.advance(4);
     for (k, t) in [0x65, 0x78, 0x70].into_iter().enumerate() {
         p.case(x, 0x80 * k as u32, t, 3);
@@ -225,7 +225,7 @@ fn low_line(x: &mut Ctx, line: Line, p: u32, rank: u16) {
     p.level(x, line);
 }
 
-/// `0x18a3e` : ligne des rangs 2 à 4 (`rank` = 2 à 4) à partir de la case `p`.
+/// `0x18a3e`: row of ranks 2 to 4 (`rank` = 2 to 4) starting from cell `p`.
 fn high_line(x: &mut Ctx, line: Line, p: u32, rank: u16) {
     emblem(x, line);
     let mut p = Brush(p);
@@ -236,14 +236,14 @@ fn high_line(x: &mut Ctx, line: Line, p: u32, rank: u16) {
     p.advance(-0x6f8);
     p.name(x, line);
     p.advance(-0x6fc + 0x384);
-    // « LV » puis le niveau
+    // "LV" then the level
     p.case(x, 0, 0x4c, 1);
     p.case(x, 0x80, 0x56, 1);
     p.advance(0x100);
     p.level(x, line);
 }
 
-/// Étape 0 (`0x1838a`) : le décor et les rangs 5 à 10.
+/// Stage 0 (`0x1838a`): the scenery and ranks 5 to 10.
 fn scenery(x: &mut Ctx) -> Flow {
     crate::video::clear_objects(x.b);
     crate::video::clear_layer(x.b, crate::video::Layer::One);
@@ -255,13 +255,13 @@ fn scenery(x: &mut Ctx) -> Flow {
     x.set_v16(var::CAMERA_Y, 0x10);
     x.set_v16(var::CAMERA_2_X, 0);
     x.set_v16(var::CAMERA_2_Y, 0x20);
-    // 0x1a366 (palettes de la scène 1), pages 1 à 3 (0x1a60a, 0x1a67e, 0x1a8b2), 0x1a5e8
+    // 0x1a366 (scene 1 palettes), pages 1 to 3 (0x1a60a, 0x1a67e, 0x1a8b2), 0x1a5e8
     crate::palette::load_scene_palettes_of(x.b, 1);
     for (page, n) in [(1, 2), (2, 0x3a), (3, 0x3a)] {
         crate::palette::load_palette_page(x.b, page, n);
     }
     crate::families::small::palette_twelve_blocks(x.b);
-    // `ori.l #0xf000f000` sur les six premiers longs, `adda.l` (addition) sur les deux derniers
+    // `ori.l #0xf000f000` on the first six longs, `adda.l` (addition) on the last two
     for (source, dest) in PALETTES {
         for i in 0..8 {
             let v = rd32(x.b, source + 4 * i);
@@ -296,7 +296,7 @@ fn scenery(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Minuterie de l'écran : décomptée ; vrai quand elle passe sous zéro.
+/// Screen timer: counted down; true when it goes below zero.
 fn minuterie(x: &mut Ctx) -> bool {
     let remainder = rd16(x.b, state::MINUTERIE).wrapping_sub(1);
     wr16(x.b, state::MINUTERIE, remainder);
@@ -309,7 +309,7 @@ fn next_sub_step(x: &mut Ctx, minuterie: u16) {
     wr16(x.b, state::MINUTERIE, minuterie);
 }
 
-/// Sous-étape 0 (`0x18544`) : après 0x40 images, les rangs 1 à 4 et le titre ; puis la montée commence.
+/// Sub-stage 0 (`0x18544`): after 0x40 frames, ranks 1 to 4 and the title; then the scroll begins.
 fn first_ranks(x: &mut Ctx) -> Flow {
     if !minuterie(x) {
         return Flow::Done;
@@ -342,7 +342,7 @@ fn first_ranks(x: &mut Ctx) -> Flow {
     rise(x)
 }
 
-/// Fin de `0x18544` : le premier rang (`BEST`), en grands chiffres.
+/// End of `0x18544`: the first rank (`BEST`), in large digits.
 fn best_score(x: &mut Ctx) {
     let line = Line(BEST);
     let mut p = Brush(0x9100ac);
@@ -363,7 +363,7 @@ fn best_score(x: &mut Ctx) {
     p.advance(-0xcf0);
     p.name(x, line);
     p.advance(0x300);
-    // « LV » puis le niveau en chiffres 2 x 2
+    // "LV" then the level in 2 x 2 digits
     p.car(x, 0, 0x19a, 1);
     p.car(x, 0x100, 0x1be, 1);
     p.advance(0x200);
@@ -374,7 +374,7 @@ fn best_score(x: &mut Ctx) {
     }
 }
 
-/// Sous-étape 2 (`0x189e0`) : la couche 2 monte d'une ligne par image pendant 0xe0 images.
+/// Sub-stage 2 (`0x189e0`): layer 2 scrolls up one line per frame for 0xe0 frames.
 fn rise(x: &mut Ctx) -> Flow {
     let y = x.v16(var::SCROLL_2).wrapping_add(1);
     x.set_v16(var::SCROLL_2, y);
@@ -384,8 +384,8 @@ fn rise(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Sous-étape 4 (`0x189f8`) : après 0x90 images, l'écran est fini et la tâche se termine (`jmp 0x9f8` depuis
-/// l'étape : le retour vers la boucle reste sur la pile).
+/// Sub-stage 4 (`0x189f8`): after 0x90 frames, the screen is finished and the task ends (`jmp 0x9f8` from
+/// the stage: the return to the loop stays on the stack).
 fn end(x: &mut Ctx) -> Flow {
     if !minuterie(x) {
         return Flow::Done;
@@ -395,7 +395,7 @@ fn end(x: &mut Ctx) -> Flow {
     super::finish(x)
 }
 
-/// Un tour de la boucle : l'étape, les objets, les sprites, une image de cession.
+/// One turn of the loop: the stage, the objects, the sprites, a cession frame.
 fn tour(x: &mut Ctx) -> Flow {
     x.c.a[0] = state::BASE;
     let step = rd8(x.b, state::STEP);
@@ -405,13 +405,13 @@ fn tour(x: &mut Ctx) -> Flow {
         (2, 0) => first_ranks(x),
         (2, 2) => rise(x),
         (2, 4) => end(x),
-        // les tables 0x18386 (deux étapes) et 0x1853c (trois sous-étapes) sont réécrites ; `end` termine la tâche
+        // the tables 0x18386 (two stages) and 0x1853c (three sub-stages) are rewritten; `end` ends the task
         // (code-mort.md, lot « sortie du Cpu »)
-        (e, s) => unreachable!("tableau des scores : étape {e:#x}, sous-étape {s:#x} hors des tables"),
+        (e, s) => unreachable!("score table: stage {e:#x}, sub-stage {s:#x} outside the tables"),
     }
 }
 
-/// `0x1836e` : retour de l'étape.
+/// `0x1836e`: return from the stage.
 fn after_step(x: &mut Ctx) -> Flow {
     x.c.a[0] = state::BASE;
     crate::dispatch::EFFCT.update_no_next(x.c, x.b);

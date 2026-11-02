@@ -1,26 +1,26 @@
-//! Chronologie du démarrage (reset 0x350, test de RAM 0x182a, poignée de main du Z80, `boot_init` 0x492) :
-//! image, ligne et cycle du premier passage en chaque jalon, puis registres à l'entrée de l'ordonnanceur.
-//!   startup <roms> <eeprom> [images] [natives=0]
-//!   startup <roms> <eeprom> <images> compare : jeu réécrit et code d'origine côte à côte ; à chaque image, nombre
-//!   de mots différents (RAM hors zones ignorées par `validate`, GFX RAM, objets, palette) et état du son (RAM partagée,
-//!   RAM et registres du Z80), que `validate` ne compare pas.
+//! Startup timeline (reset 0x350, RAM test 0x182a, Z80 handshake, `boot_init` 0x492):
+//! frame, line and cycle of the first pass at each milestone, then registers at the scheduler's entry.
+//!   startup <roms> <eeprom> [frames] [natives=0]
+//!   startup <roms> <eeprom> <frames> compare: rewritten game and original code side by side; at each frame, number
+//!   of different words (RAM outside the zones ignored by `validate`, GFX RAM, objects, palette) and sound state (shared RAM,
+//!   Z80 RAM and registers), which `validate` does not compare.
 
 use std::cell::RefCell;
 
-/// Jalons du démarrage (adresses de début de bloc).
+/// Startup milestones (block start addresses).
 const MILESTONES: &[(u32, &str)] = &[
     (0x350, "reset"),
     (0x182a, "test de RAM"),
     (0x1884, "test GFX 0x914000"),
     (0x189c, "test GFX 0x918000"),
-    (0x18b4, "test de la RAM de travail"),
-    (0x18cc, "Z80 relâché"),
-    (0x18f2, "0x77 reçu, test de la RAM partagée"),
-    (0x190a, "fin du test"),
+    (0x18b4, "work RAM test"),
+    (0x18cc, "Z80 released"),
+    (0x18f2, "0x77 received, shared RAM test"),
+    (0x190a, "end of the test"),
     (0x492, "boot_init"),
     (0x928, "ordonnanceur"),
     (0x574, "premier VBLANK"),
-    (0x11b16, "tâche de démarrage"),
+    (0x11b16, "startup task"),
 ];
 
 thread_local! {
@@ -40,7 +40,7 @@ fn note(pc: u32, c: &m68k::Cpu, b: &cps2::Cps2Bus) {
         });
         if new {
             let f = IMAGE.with(|i| *i.borrow());
-            println!("{pc:06x} {name:36} image {f} ligne {} cycle {}", b.scanline, c.cycles);
+            println!("{pc:06x} {name:36} frame {f} line {} cycle {}", b.scanline, c.cycles);
             if pc == 0x928 || pc == 0x492 {
                 let r: Vec<String> = c.d.iter().chain(&c.a).map(|r| format!("{r:08x}")).collect();
                 println!("    D0-D7 A0-A7 {} sr={:04x} usp={:08x}", r.join(" "), c.sr, c.other_sp);
@@ -82,7 +82,7 @@ fn compare(roms: &str, ee: Option<&[u8]>, images: u64) {
         let qram = ma.bus.qram.iter().zip(&mb.bus.qram).filter(|(p, q)| p != q).count();
         let zram = ma.sound.ram.iter().zip(&mb.sound.ram).filter(|(p, q)| p != q).count();
         let z80 = format!("{:?}", ma.sound.z80) == format!("{:?}", mb.sound.z80);
-        println!("image {} : ram {ram} gfx {gfx} objets {obj} palette {pal} | partagée {qram} ram Z80 {zram} registres Z80 {}", f + 1, if z80 { "identiques" } else { "différents" });
+        println!("frame {}: ram {ram} gfx {gfx} objects {obj} palette {pal} | shared {qram} Z80 ram {zram} Z80 registers {}", f + 1, if z80 { "identical" } else { "different" });
     }
 }
 
@@ -108,7 +108,7 @@ fn main() {
         IMAGE.with(|i| *i.borrow_mut() = f);
         m.run_frame();
         println!(
-            "fin de l'image {f} : pc {:06x} sr {:04x} CFFD {:02x} CFFF {:02x} Z80 {} IRQ {}",
+            "end of frame {f}: pc {:06x} sr {:04x} CFFD {:02x} CFFF {:02x} Z80 {} IRQ {}",
             m.cpu.pc,
             m.cpu.sr,
             m.bus.qram[0xffd],

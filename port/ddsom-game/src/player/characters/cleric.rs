@@ -1,15 +1,15 @@
-//! Le clerc (personnages 2 et 3 : les deux variantes ont le même code).
+//! The cleric (characters 2 and 3: both variants have the same code).
 //!
-//! Quatre actions, atteintes par `characters::run` :
-//! - `jump` (0x3fd08) : le saut commun (`common::jump`) avec le coup en l'air du clerc ;
-//! - `attack` (0x3ff2a) : le bouton 1 ; `Player::SUBACTION` choisit le coup (voir `kind`) ;
-//! - `special` (0x406d4) : l'objet ou la prière choisie (`field::SPECIAL_KIND`) : les objets et magies
-//!   communes avec le combattant (`items`) et les dix prières du clerc (numéros 0x24..0x2d) ;
-//! - l'action 0x10 (0x41f22) est la même glissade que celle du combattant (`common::dash`).
+//! Four actions, reached through `characters::run`:
+//! - `jump` (0x3fd08): the common jump (`common::jump`) with the cleric's aerial strike;
+//! - `attack` (0x3ff2a): button 1; `Player::SUBACTION` selects the strike (see `kind`);
+//! - `special` (0x406d4): the chosen item or prayer (`field::SPECIAL_KIND`): the items and spells
+//!   shared with the fighter (`items`) and the cleric's ten prayers (numbers 0x24..0x2d);
+//! - action 0x10 (0x41f22) is the same slide as the fighter's (`common::dash`).
 //!
-//! Les prières assombrissent l'écran, figent les autres joueurs et mettent le jeu en pause jusqu'à
-//! leur fin (`common::begin_spell` / `end_spell`). Les routines d'origine qui créent tirs, effets et
-//! sons restent appelées telles quelles.
+//! The prayers darken the screen, freeze the other players and pause the game until
+//! their end (`common::begin_spell` / `end_spell`). The original routines that create shots, effects and
+//! sounds are still called as they are.
 
 use crate::machine::Machine;
 use super::common::{self, field, next_step};
@@ -25,14 +25,14 @@ use crate::objects::pools::{BOSS, ENEMY};
 use crate::objects::Obj;
 use crate::player::external as ext;
 
-/// Routines d'origine appelées telles quelles : effets joueur, sons et palettes du clerc.
+/// Original routines called as they are: player effects, sounds and palettes of the cleric.
 mod rom {
-    /// Sons des coups.
+    /// Sounds of the strikes.
     pub const SOUND_STRIKE_B: u32 = 0xe8156;
-    /// Sons du saut tournoyant.
+    /// Sounds of the spinning jump.
     pub const SOUND_LEAP_LAND: u32 = 0xe2760;
     pub const SOUND_SPIN: u32 = 0xe81c8;
-    /// Prières : effets joueur (pool PEFF) créés au geste, avec leurs sons.
+    /// Prayers: player effects (PEFF pool) created at the gesture, with their sounds.
     pub const PRAYER_EVENT_SOUND: u32 = 0xe2aba;
     pub const PRAYER_AURA_SOUND: u32 = 0xe96e0;
     pub const PRAYER_AURA_B_SOUND: u32 = 0xe9030;
@@ -50,10 +50,10 @@ mod rom {
     pub const PRAYER_HEAL_SOUND_SELF_B: u32 = 0xe2bfa;
 }
 
-/// Table du clerc (données de la ROM) : vitesses des sauts (quatre mots par type de saut).
+/// Cleric table (ROM data): jump speeds (four words per jump type).
 const JUMP_SPEEDS: u32 = 0x10_451e;
 
-/// Sous-actions du bouton 1 (`Player::SUBACTION`), toutes paires.
+/// Sub-actions of button 1 (`Player::SUBACTION`), all even.
 mod kind {
     pub const COMBO: u8 = 0x00;
     pub const THRUST_HIGH: u8 = 0x02;
@@ -66,30 +66,30 @@ mod kind {
     pub const LOW_BLOW: u8 = 0x10;
     pub const BACK_HOP: u8 = 0x12;
     pub const GUARD_BREAK: u8 = 0x14;
-    /// Saut tournoyant (attaque spéciale 0x2d).
+    /// Spinning jump (special attack 0x2d).
     pub const LEAP: u8 = 0x16;
-    /// Prière de renvoi des morts-vivants.
+    /// Prayer for turning away the undead.
     pub const TURN_UNDEAD: u8 = 0x18;
     pub const POSE_A: u8 = 0x1a;
     pub const POSE_B: u8 = 0x1c;
 }
 
-// ---- saut (0x3fd08) --------------------------------------------------------------------------
+// ---- jump (0x3fd08) --------------------------------------------------------------------------
 
-/// Le saut du clerc : vitesses de décollage dans la table 0x10451e, coup en l'air sans arme maudite.
+/// The cleric's jump: takeoff speeds in the table 0x10451e, aerial strike without a cursed weapon.
 const JUMP_KIT: common::JumpKit = common::JumpKit {
     speeds: JUMP_SPEEDS,
     air_attack,
     ..common::JumpKit::PLAIN
 };
 
-/// 0x3fd08 : saut.
+/// 0x3fd08: jump.
 pub fn jump(g: &mut Ctx, p: Player) {
     cov!();
     common::jump(g, p, &JUMP_KIT);
 }
 
-/// 0x3feca : le bouton 1 en l'air donne un coup (une fois par saut) ; bas : coup plongeant.
+/// 0x3feca: button 1 in the air gives a strike (once per jump); down: diving strike.
 fn air_attack(g: &mut Ctx, p: Player) {
     cov!();
     if !common::air_attack_pressed(g, p) {
@@ -105,9 +105,9 @@ fn air_attack(g: &mut Ctx, p: Player) {
     common::aura_hit_countdown(g, p);
 }
 
-// ---- attaque (0x3ff2a) -----------------------------------------------------------------------
+// ---- attack (0x3ff2a) -----------------------------------------------------------------------
 
-/// 0x3ff2a : attaque du bouton 1. Les coups au sol sont suivis d'un contrôle de prolongement.
+/// 0x3ff2a: button 1 attack. Ground strikes are followed by a continuation check.
 pub fn attack(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::SUBACTION) {
@@ -150,7 +150,7 @@ pub fn attack(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup de base (0x3ff8c) : jusqu'à cinq coups enchaînés, l'animation suit le rang.
+/// Basic strike (0x3ff8c): up to five chained strikes, the animation follows the rank.
 fn combo(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -170,7 +170,7 @@ fn combo(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coups d'estoc haut (0x4003c) et bas (0x4008e) : un geste, de rang 0 ou 1.
+/// High (0x4003c) and low (0x4008e) thrusts: one gesture, of rank 0 or 1.
 fn thrust(g: &mut Ctx, p: Player, hit_bit: u8, base_anim: u16) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -185,7 +185,7 @@ fn thrust(g: &mut Ctx, p: Player, hit_bit: u8, base_anim: u16) {
     }
 }
 
-/// Coup donné en se retournant (0x400e0) : le pas 2 est le pas 0 d'une entrée par état (combos).
+/// Strike given while turning (0x400e0): step 2 is step 0 of a per-state entry (combos).
 fn turn_strike(g: &mut Ctx, p: Player) {
     cov!();
     let step = p.u8(g, Player::STEP);
@@ -202,13 +202,13 @@ fn turn_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup donné en marche lente (0x4012c) : sans prolongement.
+/// Strike given in slow walk (0x4012c): without continuation.
 fn slow_strike(g: &mut Ctx, p: Player) {
     cov!();
     common::single_strike(g, p, 0x13);
 }
 
-/// Coup de retombée (0x40166) : la masse d'armes (arme 0x1e) a son propre geste.
+/// Landing strike (0x40166): the mace (weapon 0x1e) has its own gesture.
 fn after_jump(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -231,7 +231,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Charge (0x401c4) : élan de 12 pixels par image, geste, deux effets, glissade.
+/// Charge (0x401c4): run-up of 12 pixels per frame, gesture, two effects, slide.
 fn charge(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -265,7 +265,7 @@ fn charge(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup donné en courant (0x4028a).
+/// Strike given while running (0x4028a).
 fn run_strike(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -286,7 +286,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup de garde (0x4039e).
+/// Guard strike (0x4039e).
 fn guard_break(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -300,8 +300,8 @@ fn guard_break(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Saut tournoyant (0x403be) : bond, tournoyer au sommet, retombée. Avec la masse d'armes (arme 0x1e)
-/// c'est une série de cinq coups sur place (pas 8 à 0xa).
+/// Spinning jump (0x403be): leap, spin at the top, landing. With the mace (weapon 0x1e)
+/// it is a series of five strikes in place (steps 8 to 0xa).
 fn leap(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -376,7 +376,7 @@ fn leap(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Début des cinq coups de masse sur place (0x40492).
+/// Start of the five mace strikes in place (0x40492).
 fn leap_mace_begin(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u8(g, Player::STEP, 8);
@@ -387,13 +387,13 @@ fn leap_mace_begin(g: &mut Ctx, p: Player) {
     animation::start_plain(g, p, 0x19);
 }
 
-/// Table (octets du code, 0x4054e) : deux octets par niveau, nombre de morts-vivants renvoyés par la
-/// prière (monstres de type 1 et de type 5).
+/// Table (code bytes, 0x4054e): two bytes per level, number of undead turned away by the
+/// prayer (monsters of type 1 and type 5).
 const UNDEAD_COUNTS: u32 = 0x4054e;
 
-/// Renvoi des morts-vivants (0x40506) : le clerc prie, l'écran clignote, puis les morts-vivants à
-/// l'écran (types 1 et 5) fuient, en nombre limité par le niveau, sauf si le clerc a un talisman
-/// (`+0x165` = 3, aucun plafond).
+/// Turning away the undead (0x40506): the cleric prays, the screen flashes, then the undead on
+/// screen (types 1 and 5) flee, in a number limited by the level, unless the cleric has a talisman
+/// (`+0x165` = 3, no cap).
 fn turn_undead(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -459,13 +459,13 @@ fn turn_undead(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- attaque spéciale (0x406d4) --------------------------------------------------------------
+// ---- special attack (0x406d4) --------------------------------------------------------------
 
-/// Animations du clerc pour les magies lancées (voir `items::Style`).
+/// The cleric's animations for cast spells (see `items::Style`).
 const STYLE: items::Style = items::Style { cast_anim: 0x20, bolt_anim: 0x1f, spark: 1, ..items::Style::CLASSIC };
 
-/// 0x406d4 : l'objet ou la prière choisie (`field::SPECIAL_KIND`). Les numéros 0..5, 11 et 21..35
-/// n'existent pas pour le clerc : retour à l'état immobile.
+/// 0x406d4: the chosen item or prayer (`field::SPECIAL_KIND`). Numbers 0..5, 11 and 21..35
+/// do not exist for the cleric: return to the standing state.
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
@@ -493,8 +493,8 @@ pub fn special(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Échange d'équipement (0x40944) : l'objet ramassé remplace l'arme ; l'ancienne arme prend sa place
-/// dans la liste d'objets.
+/// Equipment swap (0x40944): the picked-up item replaces the weapon; the old weapon takes its place
+/// in the item list.
 fn swap_equipment(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
@@ -516,12 +516,12 @@ fn swap_equipment(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- renvoi des morts-vivants : effet sur les monstres (0x40648) -----------------------------------
+// ---- turning away the undead: effect on the monsters (0x40648) -----------------------------------
 
-/// Les 23 premiers emplacements de la zone des ennemis (les 22 ennemis puis le premier chef) : un monstre
-/// de type 1 en jeu, ou un emplacement de type 5, reçoit la marque `+0x8f` : 1 tant que le compteur de
-/// renvois (`field` 0x1f0 pour le type 1, 0x1f1 pour le type 5) n'est pas épuisé (ou avec le talisman),
-/// sinon 2 (3 à partir du niveau 10).
+/// The first 23 slots of the enemy area (the 22 enemies then the first boss): a monster
+/// of type 1 in play, or a slot of type 5, receives the mark `+0x8f`: 1 as long as the turn-away
+/// counter (`field` 0x1f0 for type 1, 0x1f1 for type 5) is not exhausted (or with the talisman),
+/// otherwise 2 (3 from level 10).
 fn scare_undead(g: &mut Ctx, p: Player) {
     cov!();
     let level = p.u8(g, Player::LEVEL);
@@ -552,10 +552,10 @@ fn scare_undead(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- prières -----------------------------------------------------------------------------------
+// ---- prayers -----------------------------------------------------------------------------------
 
-/// Début commun des prières : pas suivant, pause, indicateur de sort, durée, une charge de la réserve
-/// (`reserve` : octet de `+0x152..+0x157`), orientation, gel des autres joueurs.
+/// Common start of the prayers: next step, pause, spell indicator, duration, one charge of the reserve
+/// (`reserve`: byte of `+0x152..+0x157`), orientation, freezing of the other players.
 fn begin_prayer(g: &mut Ctx, p: Player, timer: Option<u16>, reserve: u32) {
     cov!();
     common::begin_spell(g, p, timer);
@@ -565,37 +565,37 @@ fn begin_prayer(g: &mut Ctx, p: Player, timer: Option<u16>, reserve: u32) {
     common::freeze_others(g, p);
 }
 
-/// Une image de décompte : `field::TIMER` diminue ; vrai quand il atteint zéro.
+/// One frame of countdown: `field::TIMER` decreases; true when it reaches zero.
 fn countdown(g: &mut Ctx, p: Player) -> bool {
     let left = p.u16(g, field::TIMER).wrapping_sub(1);
     p.set_u16(g, field::TIMER, left);
     left == 0
 }
 
-/// Prière annulée (une protection, `SPELL_CANCELLED`) : le décompte passe à 16 images et l'étincelle
-/// d'échec de genre `spark` est jouée.
+/// Prayer cancelled (a protection, `SPELL_CANCELLED`): the countdown goes to 16 frames and the failure
+/// spark of kind `spark` is played.
 fn cancel_prayer(g: &mut Ctx, p: Player, spark: u16) {
     cov!();
     p.set_u16(g, field::TIMER, 0x10);
     common::item_spark(g, p, spark);
 }
 
-/// Table (octets du code) : nombre maximum de monstres touchés par niveau, par prière.
+/// Table (code bytes): maximum number of monsters hit per level, per prayer.
 mod counts {
     pub const HOLD: u32 = 0x4131e;
     pub const CURE: u32 = 0x40ece;
     pub const BANISH: u32 = 0x41afe;
 }
 
-/// Table (mots du code, 0x410a6) : durée du bonus de la bénédiction par niveau, et (0x41e4c) durée de
-/// l'aura de protection.
+/// Table (code words, 0x410a6): duration of the blessing bonus per level, and (0x41e4c) duration of
+/// the protection aura.
 mod durations {
     pub const BLESSING: u32 = 0x410a6;
     pub const PROTECTION: u32 = 0x41e4c;
 }
 
-/// 0x4119c, n° 0x24 : aura sacrée qui immobilise des monstres. L'animation 0x2a prépare, 0x2b prie ; au
-/// geste l'aura est créée, puis les premiers monstres désignés par `hold_foes` sont figés.
+/// 0x4119c, no. 0x24: holy aura that immobilizes monsters. Animation 0x2a prepares, 0x2b prays; at the
+/// gesture the aura is created, then the first monsters designated by `hold_foes` are frozen.
 fn prayer_hold(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -648,9 +648,9 @@ fn prayer_hold(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x412a8 : désigne les premiers monstres (chefs puis ennemis) qui peuvent être touchés : en jeu,
-/// vivants, non protégés (bit 15 de `+0x94`), pas déjà figés (`+0x49` = 0x9c). Leur nombre maximum est lu
-/// par niveau dans une table du code. Ils passent à la réaction 0x9c, attribuée au clerc.
+/// 0x412a8: designates the first monsters (bosses then enemies) that can be hit: in play,
+/// alive, unprotected (bit 15 of `+0x94`), not already frozen (`+0x49` = 0x9c). Their maximum number is read
+/// per level from a code table. They go to reaction 0x9c, assigned to the cleric.
 fn hold_foes(g: &mut Ctx, p: Player) {
     cov!();
     let level = p.u8(g, Player::LEVEL) as u32;
@@ -680,7 +680,7 @@ fn hold_foes(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x417c2, n° 0x25 : tempête. Un seul geste ; l'effet (0x4ec66) naît au premier événement.
+/// 0x417c2, no. 0x25: storm. A single gesture; the effect (0x4ec66) is born at the first event.
 fn prayer_storm(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
@@ -710,8 +710,8 @@ fn prayer_storm(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x40e2e, n° 0x26 : essaim. Le geste 0x2c prépare, 0x2d lance autant d'effets que le niveau le permet
-/// (0x4f272) ; au premier événement un effet de soin est créé.
+/// 0x40e2e, no. 0x26: swarm. Gesture 0x2c prepares, 0x2d launches as many effects as the level allows
+/// (0x4f272); at the first event a healing effect is created.
 fn prayer_swarm(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -757,7 +757,7 @@ fn prayer_swarm(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pas final commun : à la fin du décompte, la prière se termine.
+/// Common final step: at the end of the countdown, the prayer ends.
 fn prayer_finish_timer(g: &mut Ctx, p: Player) {
     cov!();
     if countdown(g, p) {
@@ -765,8 +765,8 @@ fn prayer_finish_timer(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x4187e, n° 0x27 : rayon sacré. Le geste 0x30 prie ; au geste un effet de soin naît, puis le rayon
-/// (0x4b5ac, D0 = 1) vise un monstre, mémorisé dans `SPELL_TARGET`, qui reçoit le drapeau `+0x5e` à la fin.
+/// 0x4187e, no. 0x27: holy ray. Gesture 0x30 prays; at the gesture a healing effect is born, then the ray
+/// (0x4b5ac, D0 = 1) aims at a monster, stored in `SPELL_TARGET`, which receives the flag `+0x5e` at the end.
 fn prayer_beam(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -821,8 +821,8 @@ fn prayer_beam(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x419b8, n° 0x28 : bannissement. Au geste (0x2e) un effet est créé ; à la fin du décompte les
-/// premiers monstres désignés par `banish_foes` sont chassés (0x4c26c) ; sans cible le sort est écourté.
+/// 0x419b8, no. 0x28: banishment. At the gesture (0x2e) an effect is created; at the end of the countdown the
+/// first monsters designated by `banish_foes` are driven away (0x4c26c); without a target the spell is cut short.
 fn prayer_banish(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -861,9 +861,9 @@ fn prayer_banish(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x41aa4 : désigne les premiers monstres vivants non protégés (bit 19 de `+0x94`) et leur applique
-/// l'effet 0x4c26c ; leur nombre maximum dépend du niveau. Renvoie le nombre de monstres touchés. Comme
-/// l'original, le plafond n'arrête que la zone en cours (les ennemis sont toujours parcourus).
+/// 0x41aa4: designates the first living unprotected monsters (bit 19 of `+0x94`) and applies
+/// effect 0x4c26c to them; their maximum number depends on the level. Returns the number of monsters hit. Like
+/// the original, the cap only stops the current area (the enemies are always scanned).
 fn banish_foes(g: &mut Ctx, p: Player) -> u8 {
     cov!();
     let mut found = 0u8;
@@ -890,8 +890,8 @@ fn banish_foes(g: &mut Ctx, p: Player) -> u8 {
     found
 }
 
-/// 0x41b26, n° 0x29 : lumière sacrée. Le geste 0x32 prie ; l'effet (0x4aeb2) naît au geste ; quand le
-/// décompte (posé par l'effet) est non nul, `holy_damage` frappe les monstres.
+/// 0x41b26, no. 0x29: holy light. Gesture 0x32 prays; the effect (0x4aeb2) is born at the gesture; when the
+/// countdown (set by the effect) is non-zero, `holy_damage` strikes the monsters.
 fn prayer_holy_light(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -932,17 +932,17 @@ fn prayer_holy_light(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Tables (octets de la ROM, données) : dégâts de la lumière sacrée par niveau, pour les chefs et pour
-/// les ennemis.
+/// Tables (ROM bytes, data): holy light damage per level, for bosses and for
+/// enemies.
 mod damage {
     pub const BOSS: u32 = 0x10_433c;
     pub const ENEMY: u32 = 0x10_431e;
 }
 
-/// 0x41c30 : la lumière sacrée blesse tous les monstres en jeu au sol non protégés (bit 20 de `+0x94`) :
-/// ils passent à la réaction 0x10 (attribuée au clerc), perdent les points de vie de la table (+25 % avec
-/// l'équipement `+0x166` = 4), les monstres de type 0 ou 0x13 non chefs meurent sur le coup. La barre
-/// de vie est mise à jour.
+/// 0x41c30: the holy light hurts all unprotected monsters in play on the ground (bit 20 of `+0x94`):
+/// they go to reaction 0x10 (assigned to the cleric), lose the hit points from the table (+25% with
+/// equipment `+0x166` = 4), non-boss monsters of type 0 or 0x13 die on the spot. The life bar
+/// is updated.
 fn holy_damage(g: &mut Ctx, p: Player) {
     cov!();
     let level = p.u8(g, Player::LEVEL) as u32;
@@ -995,8 +995,8 @@ fn holy_damage(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x41d48, n° 0x2a : protection. Une aura de protection (durée par niveau) est posée sur tous les
-/// joueurs en vie à la fin du sort.
+/// 0x41d48, no. 0x2a: protection. A protection aura (duration per level) is placed on all
+/// living players at the end of the spell.
 fn prayer_protection(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -1039,8 +1039,8 @@ fn prayer_protection(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x41de4 : fin de la protection : l'aura (`AURA_TIMER` = durée par niveau, `AURA_C` = 1) est posée sur
-/// chaque joueur en vie qui n'est pas bloqué par un objet.
+/// 0x41de4: end of the protection: the aura (`AURA_TIMER` = duration per level, `AURA_C` = 1) is placed on
+/// each living player who is not blocked by an object.
 fn protect_players(g: &mut Ctx, p: Player) {
     cov!();
     common::clear_spell_state(g);
@@ -1059,8 +1059,8 @@ fn protect_players(g: &mut Ctx, p: Player) {
     to_stand(g, p);
 }
 
-/// 0x40f6c, n° 0x2b : bénédiction. Le clerc (ou le premier allié à portée) reçoit un bonus de puissance
-/// temporaire (`POWERUP_TIMER`, durée par niveau) ; sans allié le clerc se bénit lui-même.
+/// 0x40f6c, no. 0x2b: blessing. The cleric (or the first ally in range) receives a temporary power
+/// bonus (`POWERUP_TIMER`, duration per level); without an ally the cleric blesses themselves.
 fn prayer_blessing(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -1105,8 +1105,8 @@ fn prayer_blessing(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x410d8 : choisit l'allié béni (voir `common::find_ally`, portée 0x4c) : il passe à la pose de
-/// bénédiction (état 0x02001e00) et reçoit la durée de bonus ; sans allié le clerc reçoit le bonus.
+/// 0x410d8: chooses the blessed ally (see `common::find_ally`, range 0x4c): they go to the blessing
+/// pose (state 0x02001e00) and receive the bonus duration; without an ally the cleric receives the bonus.
 fn bless_ally(g: &mut Ctx, p: Player) {
     cov!();
     let level = p.u8(g, Player::LEVEL) as u32;
@@ -1129,8 +1129,8 @@ fn bless_ally(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x4101a : fin de la bénédiction : levée de la pause et du gel ; les joueurs qui ont une durée de bonus
-/// reçoivent le drapeau de bonus (`POWERUP`).
+/// 0x4101a: end of the blessing: pause and freeze lifted; players who have a bonus duration
+/// receive the bonus flag (`POWERUP`).
 fn end_blessing(g: &mut Ctx, p: Player) {
     cov!();
     ram::SPELL_FLAG.set(g.b, 0);
@@ -1145,8 +1145,8 @@ fn end_blessing(g: &mut Ctx, p: Player) {
     to_stand(g, p);
 }
 
-/// 0x41346 (n° 0x2c) et 0x4149c (n° 0x2d) : soin. `variant` 0 ou 1. Le clerc (ou l'allié à portée, voir
-/// `common::heal_scan`) est soigné de `common::apply_heal` à la fin.
+/// 0x41346 (no. 0x2c) and 0x4149c (no. 0x2d): healing. `variant` 0 or 1. The cleric (or the ally in range, see
+/// `common::heal_scan`) is healed by `common::apply_heal` at the end.
 fn prayer_heal(g: &mut Ctx, p: Player, variant: u32) {
     cov!();
     match p.u8(g, Player::STEP) {

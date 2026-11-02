@@ -1,5 +1,5 @@
-//! Tirs des joueurs (PSHL), cinquième série : types 6 (tourbillon du rayon) et 18 (gerbe du clerc).
-//! Voir `docs/families/player.md`.
+//! Player shots (PSHL), fifth series: types 6 (ray whirlwind) and 18 (cleric's burst).
+//! See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -11,8 +11,8 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Type 6 (0x527ec) : tir du rayon (PEFF 9) qui décrit un cercle autour du porteur (`+0x5c`), le
-/// rang de l'arc étant la variante `+3`.
+/// Type 6 (0x527ec): ray shot (PEFF 9) that describes a circle around the bearer (`+0x5c`), the rank of the arc being
+/// variant `+3`.
 mod orbit {
     use super::*;
 
@@ -79,7 +79,7 @@ mod orbit {
         crate::sound::play(x.b, SFX, x.o);
     }
 
-    /// Sous-état 0 : attend le retard `+0x53`, puis passe à l'animation d'ouverture.
+    /// Substate 0: waits for delay `+0x53`, then moves on to the opening animation.
     fn wait<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x6) == 0 {
             let delay = x.u8(0x53);
@@ -100,7 +100,7 @@ mod orbit {
         }
     }
 
-    /// Sous-état 4 : vol en cercle.
+    /// Substate 4: circular flight.
     fn fly<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x6) {
             0 => {
@@ -159,7 +159,7 @@ mod orbit {
         }
     }
 
-    /// `0x52a9e` : avance d'un pas de rotation tous les `+0x58` images.
+    /// `0x52a9e`: advances one rotation step every `+0x58` frames.
     fn turn<R: Bench>(x: &mut Cx<'_, R>) {
         x.move_by_table_xy();
         x.add8(0x59, 0xff);
@@ -196,8 +196,8 @@ mod orbit {
     }
 }
 
-/// Type 18 (0x53a08) : gerbe de flammes du clerc (cinq variantes). 0 : cercle de départ ; 1 : boule en vol
-/// avec créations aléatoires ; 2 : étincelle ; 3 : braise ; 4 : anneau qui tourne autour du lanceur.
+/// Type 18 (0x53a08): cleric's burst of flames (five variants). 0: starting circle; 1: ball in flight with random
+/// creations; 2: spark; 3: ember; 4: ring that turns around the caster.
 mod fountain {
     use super::*;
 
@@ -315,7 +315,7 @@ mod fountain {
         x.reinsert();
     }
 
-    // --- états actifs ----------------------------------------------------------------------------
+    // --- active states ----------------------------------------------------------------------------
 
     fn ring<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
@@ -395,7 +395,7 @@ mod fountain {
         x.anim_step();
     }
 
-    /// Crée une braise ou une étincelle liée à la boule (`0x53992`, `0x539b2`).
+    /// Creates an ember or a spark linked to the ball (`0x53992`, `0x539b2`).
     fn spawn<R: Bench>(x: &mut Cx<'_, R>, variant: u8, _power: Option<(u8, u8)>) {
         if let Some(o) = x.alloc(&pools::PSHL) {
             o.set_u8(x.b, 0, 1);

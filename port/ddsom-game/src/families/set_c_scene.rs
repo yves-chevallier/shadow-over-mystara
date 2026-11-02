@@ -1,26 +1,23 @@
-//! Type SET 2 (0xbc814) : le contrôleur de scène (h).
+//! SET type 2 (0xbc814): the scene controller (h).
 //!
-//! Il y en a un par niveau (créé par le type 8, `scene_spawner`). Sa variante `+3` choisit un
-//! *script d'événements* en ROM (table de pointeurs 0xbd276) qui fait apparaître, au fil du temps,
-//! les ennemis, objets et décors de la scène. Beaucoup de variantes n'ont pas de script utile : ce
-//! sont des marqueurs qui ouvrent ou ferment une scène (intertitre, rideau, fondu, sortie des
-//! joueurs...).
+//! There is one per level (created by type 8, `scene_spawner`). Its variant `+3` chooses an *event script* in ROM
+//! (pointer table 0xbd276) that makes the enemies, objects and scenery of the scene appear over time. Many variants
+//! have no useful script: they are markers that open or close a scene (intertitle, curtain, fade, players' exit...).
 //!
-//! Machine à états (`+4`) :
-//! * 0 : initialisation. Charge le script de la variante, appelle 0xd9778, puis une table d'octets
-//!   (0xbc880) indexée par la variante donne l'action de départ (12 actions, voir `start`).
-//! * 2 : interpréteur du script d'événements (voir `script`), actif en niveau 4 ou en phase 0xc.
-//! * 4 : fin de scène : attend que tous les objets créés aient disparu, puis une table d'octets
-//!   (0xbcba8) donne l'action de fin (16 actions, voir `end_action`).
-//! * 6 : libération de l'objet.
+//! State machine (`+4`):
+//! * 0: initialization. Loads the variant's script, calls 0xd9778, then a byte table
+//!   (0xbc880) indexed by the variant gives the start action (12 actions, see `start`).
+//! * 2: event script interpreter (see `script`), active at level 4 or in phase 0xc.
+//! * 4: end of scene: waits until all the created objects have disappeared, then a byte table
+//!   (0xbcba8) gives the end action (16 actions, see `end_action`).
+//! * 6: release of the object.
 //!
-//! Format d'une entrée de script (0x14 octets, fin = mot 0x8000) :
-//! `+0` mot : attente avant l'entrée suivante (bit 15 nul : autant d'images + 1 ; bit 15 levé : que le
-//! nombre d'objets vivants créés par le script retombe à l'octet bas, dont le bit 7 demande en plus un
-//! déblocage extérieur de `+0x2e`), `+2` mot : rang maximal, `+4/+6/+8` : X, Z, Y, `+0xa` : difficulté
-//! minimale, `+0xb` : déplacement dans la table 0xbcb4e des allocateurs (classe de l'objet), `+0xc` :
-//! type, `+0xd` : variante, `+0xe` : `+0x2f`, `+0xf` : `+0x2c`, `+0x10` : mot `+0x42`, `+0x12` : non
-//! nul = coordonnées absolues (sinon relatives à la caméra).
+//! Format of a script entry (0x14 bytes, end = word 0x8000): `+0` word: wait before the next entry (bit 15 clear: that
+//! many frames + 1; bit 15 set: until the number of living objects created by the script drops to the low byte, whose
+//! bit 7 additionally requests an external unlock of `+0x2e`), `+2` word: maximum rank, `+4/+6/+8`: X, Z, Y, `+0xa`:
+//! minimum difficulty, `+0xb`: offset in the allocator table 0xbcb4e (object class), `+0xc`: type, `+0xd`: variant,
+//! `+0xe`: `+0x2f`, `+0xf`: `+0x2c`, `+0x10`: word `+0x42`, `+0x12`: non-zero = absolute coordinates (otherwise
+//! camera-relative).
 
 use crate::families::cx::Bench;
 use crate::objects::Current;
@@ -30,74 +27,74 @@ use crate::objects::pools::{BOSS, EFFCT, ENEMY, ESHL, ITEM, PEFF, SET, SOBJ};
 use crate::objects::Obj;
 use crate::objects::pools;
 
-/// Champs du contrôleur.
+/// Controller fields.
 mod f {
-    /// Adresse de la prochaine entrée du script (long).
+    /// Address of the next script entry (long).
     pub const CURSOR: u32 = 0x20;
-    /// Images restantes avant la fin de la scène (le script s'arrête en dessous de zéro).
+    /// Frames remaining before the end of the scene (the script stops below zero).
     pub const TIMER: u32 = 0x24;
-    /// Images à attendre avant l'entrée suivante (-1 : attente par comptage d'objets).
+    /// Frames to wait before the next entry (-1: wait by object count).
     pub const WAIT: u32 = 0x26;
-    /// Nombre d'objets vivants toléré avant l'entrée suivante (-1 : attente en images).
+    /// Number of living objects tolerated before the next entry (-1: wait in frames).
     pub const LIVE_LIMIT: u32 = 0x18;
-    /// Nombre d'objets créés par le script et encore vivants (mot).
+    /// Number of objects created by the script and still alive (word).
     pub const LIVE: u32 = 0x2a;
-    /// Octet : attend le déblocage extérieur de l'entrée.
+    /// Byte: waits for the external unlock of the entry.
     pub const WAIT_FLAG: u32 = 0x2e;
-    /// Octet : le script est terminé ou interrompu.
+    /// Byte: the script is finished or interrupted.
     pub const DONE: u32 = 0x2c;
-    /// Octet : suspension du script par une entrée extérieure.
+    /// Byte: suspension of the script by an external entry.
     pub const HOLD: u32 = 0x2d;
 }
 
-/// Variables de la RAM de travail (offsets depuis A5).
+/// Work RAM variables (offsets from A5).
 mod a5 {
     
     pub const PHASE: u32 = 0x2c;
-    /// Niveau en cours.
+    /// Current level.
     pub const STAGE: u32 = 0x34;
-    /// Difficulté (0 : le contrôleur ne travaille pas).
+    /// Difficulty (0: the controller does not work).
     pub const DIFFICULTY: u32 = 0x35;
     pub const USE_ALT_CAMERA: u32 = 0x36;
     pub const CAMERA: u32 = 0x4fe;
     pub const ALT_CAMERA: u32 = 0x54e;
-    /// Non nul : la scène est figée (les scripts attendent).
+    /// Non-zero: the scene is frozen (the scripts wait).
     pub const FROZEN: u32 = 0x42;
     pub const SCENE_LATCH: u32 = 0x43;
     pub const PLAYERS_LOCK: u32 = 0x4a;
-    /// Interdit de lancer le boss.
+    /// Forbidden to launch the boss.
     pub const NO_BOSS: u32 = 0x50;
-    /// Nombre de contrôleurs actifs.
+    /// Number of active controllers.
     pub const SCENES: u32 = 0x51;
     pub const TRANSITION_FLAG: u32 = 0x58;
     pub const SCENE_SYNC: u32 = 0x5f;
     pub const TRANSITION: u32 = 0x51e;
-    /// Rang (difficulté dynamique), mot.
+    /// Rank (dynamic difficulty), word.
     pub const RANK: u32 = 0x7f92;
 }
 
-/// Octet de l'écran de fond à A5 - 0x5b8e.
+/// Byte of the background screen at A5 - 0x5b8e.
 const PARALLAX_FLAG: u32 = 0xff2472;
-/// Joueurs : quatre enregistrements de 0x200 octets.
+/// Players: four records of 0x200 bytes.
 const PLAYERS: u32 = A5 + 0x5de;
 const PLAYER_STRIDE: u32 = 0x200;
 
-// Tables en ROM.
-/// Pointeurs des scripts d'événements, un long par variante.
+// ROM tables.
+/// Pointers to the event scripts, one long per variant.
 const SCRIPT_TABLE: u32 = 0xbd276;
-/// Action de départ par variante (octets).
+/// Start action per variant (bytes).
 const START_ACTION: u32 = 0xbc880;
-/// Action de fin par variante (octets).
+/// End action per variant (bytes).
 const END_ACTION: u32 = 0xbcba8;
-/// Allocateurs de la classe de l'objet créé (longs ; index = octet `+0xb` de l'entrée).
+/// Allocators of the class of the created object (longs; index = byte `+0xb` of the entry).
 const ALLOC_TABLE: u32 = 0xbcb4e;
-/// Classe « objets ramassables » dans cette table : l'objet n'est pas compté dans `LIVE`.
+/// "Pickup objects" class in this table: the object is not counted in `LIVE`.
 const ITEM_CLASS: u8 = 0x10;
-/// Rideau : enregistrements de 6 octets (décalage dans la palette, adresse de GFX RAM).
+/// Curtain: 6-byte records (palette offset, GFX RAM address).
 const CURTAIN_TABLE: u32 = 0xbcea4;
 const CURTAIN_PALETTE: u32 = 0xbcfc6;
 
-// Routines du moteur appelées.
+// Engine routines called.
 const PREPARE_EFFECTS: u32 = 0xebe86;
 const FADE_OUT: u32 = 0xe0c5c;
 
@@ -114,7 +111,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Alloue et active un objet de type `kind` (et de variante `variant`).
+/// Allocates and activates an object of type `kind` (and variant `variant`).
 fn spawn<R: Bench>(x: &mut Cx<'_, R>, pool: &pools::Pool, kind: u8, variant: Option<u8>) -> Option<Obj> {
     let o = x.alloc(pool)?;
     o.set_u8(x.b, 0, 1);
@@ -129,7 +126,7 @@ fn next_state<R: Bench>(x: &mut Cx<'_, R>, by: u8) {
     x.add8(0x4, by);
 }
 
-// --- état 0 : initialisation ----------------------------------------------------------------
+// --- state 0: initialization ----------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.a5_u8(a5::SCENES).wrapping_add(1);
@@ -148,10 +145,10 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     start(x, action);
 }
 
-/// Action de départ (0 à 11), choisie par la variante.
+/// Start action (0 to 11), chosen by the variant.
 fn start<R: Bench>(x: &mut Cx<'_, R>, action: u8) {
     match action {
-        // 10 et 11 : sans partie en cours (A5+0x66 nul), le contrôleur se libère
+        // 10 and 11: with no game in progress (A5+0x66 zero), the controller frees itself
         10 | 11 if x.a5_u8(0x66) == 0 => x.free(&pools::SET),
         10 | 0 => {
             x.set_a5_u16(a5::TRANSITION, 4);
@@ -164,7 +161,7 @@ fn start<R: Bench>(x: &mut Cx<'_, R>, action: u8) {
             x.set_a5_u8(a5::TRANSITION_FLAG, 1);
             next_state(x, 2)
         }
-        // saute directement à la libération
+        // jumps directly to the release
         7 => next_state(x, 6),
         8 => {
             x.set_a5_u16(0x46, 0);
@@ -182,12 +179,12 @@ fn start<R: Bench>(x: &mut Cx<'_, R>, action: u8) {
             next_state(x, 2);
             x.set_a5_u8(a5::TRANSITION_FLAG, 1);
         }
-        _ => unreachable!("table de départ : 0 à 11"),
+        _ => unreachable!("start table: 0 to 11"),
     }
 }
 
-/// Action 4 : efface la tilemap de l'écran par colonnes (une de chaque côté du centre par image,
-/// 11 images), puis passe à l'état 2.
+/// Action 4: clears the screen tilemap by columns (one on each side of the center per frame, 11 frames), then goes to
+/// state 2.
 fn opening_wipe<R: Bench>(x: &mut Cx<'_, R>) {
     const LEFT: u32 = 0x91203c;
     const RIGHT: u32 = 0x912040;
@@ -204,14 +201,14 @@ fn opening_wipe<R: Bench>(x: &mut Cx<'_, R>) {
     clear_column(x, RIGHT.wrapping_add(step));
 }
 
-/// Remplit de blanc une colonne de la tilemap (48 lignes de 0x80 octets).
+/// Fills a tilemap column with white (48 lines of 0x80 bytes).
 fn clear_column<R: Bench>(x: &mut Cx<'_, R>, top: u32) {
     for row in 0..0x30 {
         wr32(x.b, top.wrapping_add(row * 0x80), 0x100000);
     }
 }
 
-// --- état 2 : interpréteur du script d'événements -----------------------------------------------
+// --- state 2: event script interpreter ----------------------------------------------------------
 
 fn script<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(a5::STAGE) != 4 && x.a5_u8(a5::PHASE) != 0xc {
@@ -241,7 +238,7 @@ fn script<R: Bench>(x: &mut Cx<'_, R>) {
     next_entry(x);
 }
 
-/// Fin du script (`done` : interrompu plutôt qu'épuisé) : passe à l'état 4.
+/// End of the script (`done`: interrupted rather than exhausted): goes to state 4.
 fn end_of_script<R: Bench>(x: &mut Cx<'_, R>, done: bool) {
     if done {
         x.set8(f::DONE, 1);
@@ -250,7 +247,7 @@ fn end_of_script<R: Bench>(x: &mut Cx<'_, R>, done: bool) {
     x.set16(f::WAIT, 0);
 }
 
-/// Saute les entrées hors de la difficulté ou du rang courants, exécute la première convenable.
+/// Skips the entries outside the current difficulty or rank, executes the first suitable one.
 fn next_entry<R: Bench>(x: &mut Cx<'_, R>) {
     loop {
         let entry = x.u32(f::CURSOR);
@@ -268,7 +265,7 @@ fn next_entry<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Exécute une entrée : règle l'attente puis crée l'objet.
+/// Executes an entry: sets the wait then creates the object.
 fn run_entry<R: Bench>(x: &mut Cx<'_, R>, entry: u32, word: u16) {
     x.set8(f::WAIT_FLAG, 0);
     x.set16(f::LIVE_LIMIT, 0xffff);
@@ -310,7 +307,7 @@ fn run_entry<R: Bench>(x: &mut Cx<'_, R>, entry: u32, word: u16) {
     x.set32(f::CURSOR, entry + 0x14);
 }
 
-// --- état 4 : fin de scène ----------------------------------------------------------------------
+// --- state 4: end of scene ----------------------------------------------------------------------
 
 fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     x.add16(f::TIMER, 0xffff);
@@ -330,7 +327,7 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     end_action(x, action);
 }
 
-/// Action de fin de scène (0 à 15), choisie par la variante.
+/// End-of-scene action (0 to 15), chosen by the variant.
 fn end_action<R: Bench>(x: &mut Cx<'_, R>, action: u8) {
     match action {
         12 => {
@@ -377,12 +374,12 @@ fn end_action<R: Bench>(x: &mut Cx<'_, R>, action: u8) {
         }
         13 => spawn_boss(x, 3),
         14 => spawn_boss(x, 1),
-        _ => unreachable!("table de fin : 0 à 15"),
+        _ => unreachable!("end table: 0 to 15"),
     }
 }
 
-/// Actions 2 et 3 : intertitre. Deux décors SET (variantes `cards`, la seconde avec `+0x2f = 2`) et
-/// un objet SOBJ (variante 0x56 puis 0x57), puis demande de transition de 0x3c images.
+/// Actions 2 and 3: intertitle. Two SET scenery objects (variants `cards`, the second with `+0x2f = 2`) and a SOBJ
+/// object (variant 0x56 then 0x57), then transition request of 0x3c frames.
 fn title_cards<R: Bench>(x: &mut Cx<'_, R>, param: u16, cards: [(u8, u8); 2]) {
     x.set_a5_u16(0x56e, param);
     x.set_a5_u8(0x54f, 0);
@@ -395,9 +392,8 @@ fn title_cards<R: Bench>(x: &mut Cx<'_, R>, param: u16, cards: [(u8, u8); 2]) {
     end_action(x, 1)
 }
 
-/// Action 4 : les joueurs vivants doivent être revenus à l'état d'attente (`+4 = 0x200`, `+6 = 0`) ;
-/// alors ils reçoivent l'ordre de sortie (état 0x80400) et leur rang d'arrivée (`+0x7d`), et la phase
-/// de partie passe à 0x18 (sortie du niveau).
+/// Action 4: the living players must have returned to the waiting state (`+4 = 0x200`, `+6 = 0`); then they receive the
+/// exit order (state 0x80400) and their arrival rank (`+0x7d`), and the game phase goes to 0x18 (level exit).
 fn players_leave<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u8(a5::SCENE_LATCH, 0);
     x.set_a5_u8(a5::PLAYERS_LOCK, 1);
@@ -423,10 +419,9 @@ fn players_leave<R: Bench>(x: &mut Cx<'_, R>) {
     next_state(x, 2);
 }
 
-/// Action 6 : le rideau. Au premier passage, fige la scène ; 0x80 images plus tard, et dès qu'un
-/// joueur est dans l'état 2, copie deux blocs de 22 couleurs (0xbcfc6) vers les adresses de la table
-/// 0xbcea4 à chaque image ; quand la table est épuisée, repousse tous les objets vers leur
-/// disparition (voir `clear_all`).
+/// Action 6: the curtain. On the first pass, freezes the scene; 0x80 frames later, and as soon as a player is in state
+/// 2, copies two blocks of 22 colors (0xbcfc6) to the addresses of table 0xbcea4 on each frame; when the table is
+/// exhausted, pushes all the objects toward their disappearance (see `clear_all`).
 fn curtain<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x5) == 0 {
         x.add8(0x5, 2);
@@ -465,8 +460,8 @@ fn curtain<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin du rideau : tout objet actif dont le compteur `+0x40` tombe sous zéro passe à l'état 6
-/// (disparition), dans les huit pools.
+/// End of the curtain: every active object whose counter `+0x40` falls below zero goes to state 6 (disappearance), in
+/// the eight pools.
 fn clear_all<R: Bench>(x: &mut Cx<'_, R>) {
     next_state(x, 2);
     x.set_a5_u8(a5::SCENE_LATCH, 0xff);
@@ -489,7 +484,7 @@ fn clear_all<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Action 7 : quatre effets de type 0x21 (variantes 0 à 3, les 1 et 3 avec `+0x2c = 0x20`).
+/// Action 7: four effects of type 0x21 (variants 0 to 3, 1 and 3 with `+0x2c = 0x20`).
 fn effects_wave<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(a5::FROZEN) != 0 {
         return next_state(x, 2);
@@ -507,7 +502,7 @@ fn effects_wave<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Actions 13 et 14 : crée un boss (type 3 ou 1) sauf s'il est interdit ou si la scène est figée.
+/// Actions 13 and 14: creates a boss (type 3 or 1) unless it is forbidden or the scene is frozen.
 fn spawn_boss<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     if x.a5_u8(a5::NO_BOSS) == 0 && x.a5_u8(a5::FROZEN) == 0 && spawn(x, &pools::BOSS, kind, None).is_none() {
         return;

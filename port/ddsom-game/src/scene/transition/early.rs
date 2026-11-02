@@ -1,11 +1,11 @@
-//! Scripts de transition des premiers niveaux : scènes 1, 2, 4 et 10, 5, 14 et 20, 11, 13.
+//! Transition scripts of the first levels: scenes 1, 2, 4 and 10, 5, 14 and 20, 11, 13.
 
 use super::*;
 use crate::scene::fading;
 
-/// Routines du moteur propres à ces scripts.
+/// Engine routines specific to these scripts.
 mod ext {
-    /// Musiques et sons d'ambiance des intermèdes.
+    /// Music and ambient sounds of the interludes.
     pub const MUSIC_A: u32 = 0xe14b0;
     pub const MUSIC_B: u32 = 0xe1564;
     pub const MUSIC_C: u32 = 0xe14ec;
@@ -14,7 +14,7 @@ mod ext {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scène 1 : dialogue 96, puis la scène 2
+// Scene 1: dialogue 96, then scene 2
 
 pub fn scene_1(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf8292) {
@@ -28,7 +28,7 @@ pub fn scene_1(x: &mut Ctx) -> Flow {
     }
 }
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
         S1Shown = 0xf829a => |x| {
             sound(x, 8);
@@ -91,7 +91,7 @@ crate::steps! {
             finish(x, scene)
         },
         S4Shown = 0xf87c2 => |x| {
-            // palette de la page 7 (huit longs, `movem.l` : les registres gardent les données)
+            // palette of page 7 (eight longs, `movem.l`: the registers keep the data)
             const FROM: u32 = 0x292260;
             const TO: u32 = 0x91c1e0;
             for k in 0..8 {
@@ -156,7 +156,7 @@ crate::steps! {
         },
         S4RetryObject = 0xf8b56 => s4_second_object,
         S4Scenery = 0xf8b64 => |x| {
-            // décor en huit blocs de tuiles du plan 2 (le troisième avec D4 = 0)
+            // terrain in eight plane 2 tile blocks (the third with D4 = 0)
             for (n, at) in [(206, 0x917000), (173, 0x917400), (175, 0x917800), (175, 0x917c00), (172, 0x916000), (205, 0x916400),
                 (174, 0x916800), (174, 0x916c00)]
             {
@@ -243,7 +243,7 @@ crate::steps! {
             crate::palette::load_palette_page(x.b, 2, 29);
             crate::palette::load_palette_page(x.b, 3, 11);
             x.set_v8(0x36, 1);
-            // quatre blocs à la suite : 8, 9, 10, 8
+            // four blocks in a row: 8, 9, 10, 8
             let mut end = tiles(x, TB, 8, SCROLL_2);
             for n in [9, 10] {
                 end = tiles(x, TB, n, end);
@@ -281,7 +281,7 @@ crate::steps! {
             fading::PAGES.set(x.b, SCENE_PAGES);
             goto(x, crate::tasks::fading::to_palettes, Caller)
         },
-        /// état 6 : nouveau décor, dialogue 30
+        /// state 6: new terrain, dialogue 30
         S13Closing = 0xf919e => |x| yield_frames(x, 1, At(Step::S13ClosingWaited.into())),
         S13ClosingWaited = 0xf91a6 => |x| hide_layers(x, At(Step::S13ClosingHidden.into())),
         S13ClosingHidden = 0xf91aa => |x| {
@@ -314,7 +314,7 @@ fn s1_message(x: &mut Ctx) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scène 2 : dialogues 9 à 13 ; la réponse au dernier choisit la scène suivante (table 0xf847c)
+// Scene 2: dialogues 9 to 13; the answer to the last one chooses the next scene (table 0xf847c)
 
 pub fn scene_2(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf82e4) {
@@ -377,7 +377,7 @@ pub fn scene_2(x: &mut Ctx) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scènes 5, 14 et 20 : dialogues 93 et 94, texte défilant ; scène 108 après la 5, sinon 24
+// Scenes 5, 14 and 20: dialogues 93 and 94, scrolling text; scene 108 after 5, otherwise 24
 
 pub fn scene_5(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf848a) {
@@ -429,7 +429,7 @@ fn s5_second_message(x: &mut Ctx) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scènes 4 et 10 : textes défilants, dialogues 15, 92 et 16, deux objets système ; puis la scène 11
+// Scenes 4 and 10: scrolling texts, dialogues 15, 92 and 16, two system objects; then scene 11
 
 pub fn scene_4(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf876a) {
@@ -500,7 +500,7 @@ pub fn scene_4(x: &mut Ctx) -> Flow {
     }
 }
 
-/// La minuterie descend ; toutes les quatre images, la caméra 1 avance d'un pixel.
+/// The timer counts down; every four frames, camera 1 advances by one pixel.
 fn drift(x: &mut Ctx) {
     let t = get16(x, var::TIMER).wrapping_sub(1);
     set16(x, var::TIMER, t);
@@ -515,7 +515,7 @@ fn s4_message_92(x: &mut Ctx) -> Flow {
     set8(x, var::SIGNAL, 0);
     s4_wizard(x)
 }
-/// Objet système 0, placé (sous-type 2, X 144, Y 188).
+/// System object 0, placed (subtype 2, X 144, Y 188).
 fn s4_wizard(x: &mut Ctx) -> Flow {
     let Some(o) = system_object(x, 0, Step::S4RetryWizard) else { return Flow::Yield };
     wr8(x.b, o.0 + 0x2f, 2);
@@ -533,7 +533,7 @@ fn s4_second_object(x: &mut Ctx) -> Flow {
     world(x);
     sprites_next_frame(x, Step::S4Scenery)
 }
-/// Le monde tourne jusqu'à la fin du fondu (0xf8c3c), puis le dialogue 16.
+/// The world runs until the end of the fade (0xf8c3c), then dialogue 16.
 fn s4_fading_in(x: &mut Ctx) -> Flow {
     world(x);
     sprites_next_frame(x, Step::S4FadingIn)
@@ -543,14 +543,14 @@ fn s4_message_16(x: &mut Ctx) -> Flow {
     next(x);
     Flow::Done
 }
-/// 0xf8c94 : le monde tourne jusqu'à la fin du fondu de sortie.
+/// 0xf8c94: the world runs until the end of the exit fade.
 fn s4_fading_out(x: &mut Ctx) -> Flow {
     world(x);
     sprites_next_frame(x, Step::S4FadingOut)
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scène 11 (s'il reste du temps) : objet système 2, dialogues 17 et 18 ; puis la scène 13
+// Scene 11 (if time remains): system object 2, dialogues 17 and 18; then scene 13
 
 pub fn scene_11(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf8ce4) {
@@ -633,8 +633,8 @@ fn s11_message_18(x: &mut Ctx) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scène 13 : selon le temps restant, objets SET 10 et 11 ou 9 ; dialogue 30 puis un choix (dialogues 136 à 138)
-// qui fixe la scène suivante (tables 0xf92e4, 0xf932e, 0xf937a ; 14 si aucun joueur n'est dans l'état attendu)
+// Scene 13: by remaining time, SET objects 10 and 11 or 9; dialogue 30 then a choice (dialogues 136 to 138)
+// that sets the next scene (tables 0xf92e4, 0xf932e, 0xf937a; 14 if no player is in the expected state)
 
 pub fn scene_13(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf8e9e) {
@@ -691,7 +691,7 @@ fn s13_object(x: &mut Ctx) -> Flow {
     sprites_next_frame(x, Step::S13Drawn)
 }
 
-/// Temps restant : objet SET 10, fondu, nouveau décor et objet SET 11 ; l'objet signale sa fin (`+8`).
+/// Time remaining: SET object 10, fade, new terrain and SET object 11; the object signals its end (`+8`).
 fn s13_time_left(x: &mut Ctx) -> Flow {
     match dispatch(x, var::SUB, 0xf8f4e) {
         0 => {
@@ -727,7 +727,7 @@ fn s13_time_left(x: &mut Ctx) -> Flow {
         _ => Flow::Done,
     }
 }
-/// Fin de l'intermède quand l'objet a signalé (`+8` négatif) : fondu vers le noir.
+/// End of the interlude when the object has signalled (`+8` negative): fade to black.
 fn s13_leave(x: &mut Ctx) -> Flow {
     if (get8(x, var::SIGNAL) as i8) >= 0 {
         return Flow::Done;
@@ -743,7 +743,7 @@ fn s13_set_11(x: &mut Ctx) -> Flow {
     sprites_next_frame(x, Step::S13Set11Drawn)
 }
 
-/// Temps écoulé : fondu par composante, autre décor, objet SET 9, puis fondu vers des palettes fixées.
+/// Time elapsed: per-component fade, other terrain, SET object 9, then fade to fixed palettes.
 fn s13_time_out(x: &mut Ctx) -> Flow {
     match dispatch(x, var::SUB, 0xf90a6) {
         0 => {
@@ -787,8 +787,8 @@ fn s13_message_30(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// État 8 : la question à poser (`+6`) dépend des joueurs : 0 si un joueur en jeu (état `+4` < 4) est dans la
-/// posture 4 ou 5 (`+3`), 4 sinon ; plus 2 s'il reste du temps.
+/// State 8: the question to ask (`+6`) depends on the players: 0 if a player in the game (state `+4` < 4) is in
+/// posture 4 or 5 (`+3`), 4 otherwise; plus 2 if time remains.
 fn s13_route(x: &mut Ctx) {
     let mut route = 0u8;
     let mut found = false;
@@ -811,7 +811,7 @@ fn s13_route(x: &mut Ctx) {
     set8(x, var::FLAG, route);
 }
 
-/// Question `n`, puis la scène suivante d'après la réponse (table `answers`).
+/// Question `n`, then the next scene according to the answer (table `answers`).
 fn choice(x: &mut Ctx, n: u16, table: u32, answers: u32) -> Flow {
     match dispatch(x, var::SUB, table) {
         0 => {

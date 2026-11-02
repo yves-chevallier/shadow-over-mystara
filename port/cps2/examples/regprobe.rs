@@ -1,4 +1,4 @@
-//! Registres à la fin de chaque image (même format que le script Lua regprobe).
+//! Registers at the end of each frame (same format as the Lua regprobe script).
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ee = std::fs::read(&a[2]).ok();

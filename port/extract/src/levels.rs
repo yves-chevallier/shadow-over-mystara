@@ -1,5 +1,5 @@
-//! Cartes des décors (scroll 2 et scroll 3) : banques de blocs, bandes, tables de bandes des scènes.
-//! Mêmes tables que les caméras du jeu (`ddsom-game/src/scroll.rs`) et `examples/cards.rs`.
+//! Scenery maps (scroll 2 and scroll 3): block banks, strips, scene strip tables.
+//! Same tables as the game cameras (`ddsom-game/src/scroll.rs`) and `examples/cards.rs`.
 
 use std::io;
 use std::path::Path;
@@ -9,7 +9,7 @@ use ddsom_assets::levels::{Bank, Layer, Levels, Scroll1, StripTable};
 
 use crate::rom::Program;
 
-/// Nombre de scènes de la table des pointeurs (0 à 114).
+/// Number of scenes in the pointer table (0 to 114).
 const SCENES: u32 = 115;
 
 struct Geometry {
@@ -21,7 +21,7 @@ struct Geometry {
     banks: u32,
     strips: u32,
     scenes: u32,
-    /// En-tête de la première table de bandes.
+    /// Header of the first strip table.
     first_table: u32,
 }
 
@@ -61,10 +61,10 @@ fn bad(msg: String) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, msg)
 }
 
-/// Tables de bandes : elles se suivent en ROM ; chacune est un mot de largeur `W` puis des lignes de `W` mots,
-/// et le pointeur de scène désigne sa ligne d'ordonnée 0. Le nombre de lignes sous 0 est celui qui amène à un
-/// en-tête suivant cohérent avec le pointeur suivant (même lecture que `examples/cards.rs`) ; la dernière
-/// table s'arrête à la table des banques, qui suit.
+/// Strip tables: they follow one another in ROM; each is a width word `W` then rows of `W` words,
+/// and the scene pointer designates its row of ordinate 0. The number of rows below 0 is the one that leads to a
+/// following header consistent with the next pointer (same reading as `examples/cards.rs`); the last
+/// table stops at the bank table, which follows.
 fn tables(rom: &Program, g: &Geometry) -> io::Result<(Vec<StripTable>, Vec<usize>)> {
     let scene_ptrs: Vec<u32> = (0..SCENES).map(|s| rom.prog32(g.scenes + 4 * s)).collect();
     let mut ptrs = scene_ptrs.clone();
@@ -78,12 +78,12 @@ fn tables(rom: &Program, g: &Geometry) -> io::Result<(Vec<StripTable>, Vec<usize
     let mut head = g.first_table;
     for (i, &p) in ptrs.iter().enumerate() {
         if !valid(head, p) {
-            return Err(bad(format!("{} : table de bandes illisible en {head:#x}", g.name)));
+            return Err(bad(format!("{}: unreadable strip table at {head:#x}", g.name)));
         }
         let w = rom.rd16(head) as u32;
         let below = (0..=8u32)
             .find(|t| ptrs.get(i + 1).map_or(p + 2 * w * (1 + t) == g.banks, |&q| valid(p + 2 * w * (1 + t), q)))
-            .ok_or_else(|| bad(format!("{} : fin de la table {head:#x} introuvable", g.name)))?;
+            .ok_or_else(|| bad(format!("{}: end of table {head:#x} not found", g.name)))?;
         let zero = (p - head - 2) / (2 * w);
         let rows = (0..zero + 1 + below).map(|r| (0..w).map(|x| rom.rd16(head + 2 + 2 * (w * r + x))).collect()).collect();
         tables.push(StripTable { rom: head, rows, zero: zero as usize });
@@ -95,7 +95,7 @@ fn tables(rom: &Program, g: &Geometry) -> io::Result<(Vec<StripTable>, Vec<usize
 
 fn layer(rom: &Program, g: &Geometry) -> io::Result<Layer> {
     let (tables, scenes) = tables(rom, g)?;
-    // bandes employées (sans le remplissage ni la sentinelle 0xfe de fin de ligne du scroll 2)
+    // strips in use (without the filler nor the 0xfe end-of-row sentinel of scroll 2)
     let sentinel = |r: &Vec<u16>| (g.case == 16 && r.last() == Some(&0xfe)) as usize;
     let used = tables
         .iter()
@@ -120,7 +120,7 @@ fn layer(rom: &Program, g: &Geometry) -> io::Result<Layer> {
     let side = layer.strip_cases() / 2;
     let words = (side * side) as u32;
     layer.strips = (0..=used as u32).map(|s| (0..words).map(|k| rom.rd16(g.strips + 2 * (s * words + k))).collect()).collect();
-    // blocs : autant que le plus grand numéro employé par les bandes de chaque banque
+    // blocks: as many as the largest number used by the strips of each bank
     let mut counts = vec![0usize; layer.bank_of(used) + 1];
     for (s, strip) in layer.strips.iter().enumerate() {
         let b = layer.bank_of(s);
@@ -137,18 +137,18 @@ fn layer(rom: &Program, g: &Geometry) -> io::Result<Layer> {
             Bank { rom: at, blocks }
         })
         .collect();
-    eprintln!("{} : {} tables de bandes, {} bandes, blocs par banque {:?}", g.name, layer.tables.len(), layer.strips.len(), counts);
+    eprintln!("{}: {} strip tables, {} strips, blocks per bank {:?}", g.name, layer.tables.len(), layer.strips.len(), counts);
     Ok(layer)
 }
 
-/// Scroll 1 : grilles d'images (0x260c, `0x1f1b60 + 0x80 D0`) et blocs de 4x4 cases (`0x1f3b60 + 64 i`),
-/// qui finissent là où commencent les bandes du scroll 2.
+/// Scroll 1: frame grids (0x260c, `0x1f1b60 + 0x80 D0`) and 4x4-cell blocks (`0x1f3b60 + 64 i`),
+/// which end where the scroll 2 strips begin.
 const SCROLL1_GRIDS: u32 = 0x1f1b60;
 const SCROLL1_BLOCKS: u32 = 0x1f3b60;
 
 fn scroll1(rom: &Program) -> Scroll1 {
     let grid = |g: u32| (0..64).map(|k| rom.rd16(SCROLL1_GRIDS + 0x80 * g + 2 * k)).collect::<Vec<u16>>();
-    // grilles jusqu'à la dernière non nulle
+    // grids up to the last non-null one
     let count = (0..(SCROLL1_BLOCKS - SCROLL1_GRIDS) / 0x80).filter(|&g| grid(g).iter().any(|&v| v != 0)).max().map_or(0, |g| g + 1);
     let grids: Vec<Vec<u16>> = (0..count).map(grid).collect();
     let used = grids.iter().flatten().copied().max().unwrap_or(0) as u32;

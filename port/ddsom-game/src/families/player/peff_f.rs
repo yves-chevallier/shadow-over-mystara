@@ -1,5 +1,5 @@
-//! Effets des joueurs (PEFF), sixième série : types 15 (traînée de l'arme), 16 (bulle d'objet), 18
-//! (pluie de pierres) et 19 (éclair). Voir `docs/families/player.md`.
+//! Player effects (PEFF), sixth series: types 15 (weapon trail), 16 (item bubble), 18 (rain of stones) and 19
+//! (lightning). See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -13,8 +13,8 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Type 15 (0x4c5be) : traînée de l'arme (armes 0x10 à 0x13, rang `+2f`). Elle suit le porteur à des
-/// décalages lus dans une fiche de la ROM (`+3` : numéro de la pose) et se colore en cycle pour le rang 2.
+/// Type 15 (0x4c5be): weapon trail (weapons 0x10 to 0x13, rank `+2f`). It follows the bearer at offsets read from a ROM
+/// record (`+3`: pose number) and cycles colours for rank 2.
 mod trail {
     use super::*;
 
@@ -52,7 +52,7 @@ mod trail {
         }
     }
 
-    /// `0x4c674` : se place sur le porteur ; renvoie le mot D3 de la fiche (numéro d'animation).
+    /// `0x4c674`: places itself on the bearer; returns word D3 of the record (animation number).
     fn place<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
@@ -82,7 +82,7 @@ mod trail {
         d3
     }
 
-    /// `0x4c63c` : les traînées de rang 2 changent de couleur toutes les 4 images.
+    /// `0x4c63c`: the rank 2 trails change colour every 4 frames.
     fn cycle<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x2f) != 2 {
             return;
@@ -102,7 +102,7 @@ mod trail {
     }
 }
 
-/// Type 16 (0x4c948) : bulle d'objet au-dessus d'un joueur (jeu 0x1b758c), qui y reste `+0x58` images.
+/// Type 16 (0x4c948): item bubble above a player (set 0x1b758c), which stays there `+0x58` frames.
 mod bubble {
     use super::*;
 
@@ -145,8 +145,8 @@ mod bubble {
     }
 }
 
-/// Type 18 (0x4ccca) : nuage de la pluie de pierres (magie 18 du clerc) : posé en haut à droite de l'écran
-/// avec un tapis de pierres (PSHL 17), il monte puis redescend à la fin de la prière.
+/// Type 18 (0x4ccca): cloud of the rain of stones (cleric's magic 18): placed at the top right of the screen with a
+/// carpet of stones (PSHL 17), it rises then comes back down at the end of the prayer.
 mod storm {
     use super::*;
 
@@ -203,8 +203,8 @@ mod storm {
     }
 }
 
-/// Type 19 (0x4ce0c) : éclair (magie 19 de l'elfe) : le corps (variante 0) et quatre étincelles de coin
-/// (variante 1, rang `+2f`) qui clignotent, éclairent l'écran et se répètent `+0x5a` fois.
+/// Type 19 (0x4ce0c): lightning (elf's magic 19): the body (variant 0) and four corner sparks (variant 1, rank `+2f`)
+/// that blink, light up the screen and repeat `+0x5a` times.
 mod flash {
     use super::*;
 
@@ -286,7 +286,7 @@ mod flash {
         x.anim_step();
     }
 
-    /// `0x4cfbc` : quatre étincelles de coin, puis l'éclair d'écran.
+    /// `0x4cfbc`: four corner sparks, then the screen flash.
     fn spawn_corners<R: Bench>(x: &mut Cx<'_, R>) {
         for rank in (0..4u8).rev() {
             let Some(o) = x.alloc(&pools::PEFF) else { break };

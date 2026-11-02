@@ -1,10 +1,10 @@
-//! Accès typés à la mémoire du jeu.
+//! Typed accesses to the game memory.
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
 use m68k::Bus;
 
-/// Base de la RAM de travail adressée par A5 dans tout le jeu.
+/// Base of the work RAM addressed by A5 throughout the game.
 pub const A5: u32 = 0xff8000;
 
 pub fn rd8(b: &mut Cps2Bus, a: u32) -> u8 {
@@ -17,23 +17,23 @@ pub fn rd32(b: &mut Cps2Bus, a: u32) -> u32 {
     (rd16(b, a) as u32) << 16 | rd16(b, a.wrapping_add(2)) as u32
 }
 pub fn wr8(b: &mut Cps2Bus, a: u32, v: u8) {
-    #[cfg(feature = "surveille")]
+    #[cfg(feature = "watch_writes")]
     watched::write(a & 0xff_ffff, 1, v as u32);
     b.write8(a & 0xff_ffff, v)
 }
 pub fn wr16(b: &mut Cps2Bus, a: u32, v: u16) {
-    #[cfg(feature = "surveille")]
+    #[cfg(feature = "watch_writes")]
     watched::write(a & 0xff_ffff, 2, v as u32);
     b.write16(a & 0xff_ffff, v)
 }
 
-/// Diagnostic (fonctionnalité `watched`, `examples/fuzz_couv`) : pile d'appels Rust de chaque écriture à l'adresse
-/// surveillée.
-#[cfg(feature = "surveille")]
+/// Diagnostics (`watched` feature, `examples/fuzz_couv`): Rust call stack of each write to the watched
+/// address.
+#[cfg(feature = "watch_writes")]
 pub mod watched {
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    /// Adresse surveillée (0 : aucune), et fin de la plage surveillée (0 : l'adresse seule).
+    /// Watched address (0: none), and end of the watched range (0: the address alone).
     pub static ADDRESS: AtomicU32 = AtomicU32::new(0);
     pub static END: AtomicU32 = AtomicU32::new(0);
 
@@ -41,7 +41,7 @@ pub mod watched {
         let s = ADDRESS.load(Ordering::Relaxed);
         let f = END.load(Ordering::Relaxed).max(s + 1);
         if s != 0 && a < f && a + size > s {
-            eprintln!("ÉCRITURE {a:06x} = {v:x}\n{}", std::backtrace::Backtrace::force_capture());
+            eprintln!("WRITE {a:06x} = {v:x}\n{}", std::backtrace::Backtrace::force_capture());
         }
     }
 }
@@ -50,32 +50,32 @@ pub fn wr32(b: &mut Cps2Bus, a: u32, v: u32) {
     wr16(b, a.wrapping_add(2), v as u16);
 }
 
-/// Revient à l'appelant (RTS) : à la suite de l'appel en cours de la tâche s'il a été fait par un pas Rust (une étape
-/// Rust s'exécute aussitôt), sinon à l'adresse de retour dépilée (voir `tasks::table::Frame`).
+/// Returns to the caller (RTS): to the continuation of the task's current call if it was made by a Rust step (a Rust
+/// step runs immediately), otherwise to the popped return address (see `tasks::table::Frame`).
 pub fn rts(c: &mut m68k::Cpu, b: &mut Cps2Bus) {
     crate::tasks::return_to_caller(c, b);
 }
 
-/// Remplace l'octet bas d'un registre de données (move.b vers Dn).
+/// Replaces the low byte of a data register (move.b to Dn).
 pub fn set_low_byte(r: &mut u32, v: u8) {
     *r = (*r & !0xff) | v as u32;
 }
 
-/// Remplace le mot bas d'un registre de données (move.w vers Dn).
+/// Replaces the low word of a data register (move.w to Dn).
 pub fn set_low_word(r: &mut u32, v: u16) {
     *r = (*r & !0xffff) | v as u32;
 }
 
-/// Écarts entre deux bus (mode contrôle). `dead_stack` : zone de pile sous le pointeur de pile au
-/// retour, dont le contenu (restes des appels internes) n'a plus de sens.
+/// Differences between two buses (check mode). `dead_stack`: stack area below the stack pointer on
+/// return, whose content (leftovers of internal calls) no longer means anything.
 pub fn diff_bus(a: &Cps2Bus, b: &Cps2Bus, dead_stack: std::ops::Range<u32>, out: &mut Vec<String>) {
     fn first_diff(name: &str, base: u32, x: &[u16], y: &[u16], out: &mut Vec<String>) {
         if let Some(i) = x.iter().zip(y).position(|(p, q)| p != q) {
-            out.push(format!("{name}[{:06x}]={:04x} au lieu de {:04x}", base + 2 * i as u32, x[i], y[i]));
+            out.push(format!("{name}[{:06x}]={:04x} instead of {:04x}", base + 2 * i as u32, x[i], y[i]));
         }
     }
-    // pile privée des wrappers son (pointeur en FF2A1A) : les registres qu'ils y sauvegardent restent
-    // en RAM sous le pointeur, sans signification (voir docs/son-68000.md)
+    // private stack of the sound wrappers (pointer at FF2A1A): the registers they save there stay
+    // in RAM below the pointer, meaningless (see docs/son-68000.md)
     let private = (a.ram[0x2a1a / 2] as u32) << 16 | a.ram[0x2a1c / 2] as u32;
     let dead_private = (private & 0xff_ffff).saturating_sub(0x400)..private & 0xff_ffff;
     let live = |i: usize| {
@@ -84,7 +84,7 @@ pub fn diff_bus(a: &Cps2Bus, b: &Cps2Bus, dead_stack: std::ops::Range<u32>, out:
     };
     let verbose = std::env::var("DDSOM_VERBOSE").is_ok();
     for i in (0..a.ram.len()).filter(|&i| a.ram[i] != b.ram[i] && live(i)).take(if verbose { 12 } else { 1 }) {
-        out.push(format!("ram[{:06x}]={:04x} au lieu de {:04x}", 0xff0000 + 2 * i as u32, a.ram[i], b.ram[i]));
+        out.push(format!("ram[{:06x}]={:04x} instead of {:04x}", 0xff0000 + 2 * i as u32, a.ram[i], b.ram[i]));
     }
     first_diff("gfxram", 0x900000, &a.gfxram, &b.gfxram, out);
     first_diff("objram0", 0, &a.objram[0], &b.objram[0], out);
@@ -105,17 +105,17 @@ pub fn diff_bus(a: &Cps2Bus, b: &Cps2Bus, dead_stack: std::ops::Range<u32>, out:
     }
 }
 
-/// Mot de l'espace programme (lecture relative au PC : le programme déchiffré, pas les données).
+/// Word of the program space (PC-relative read: the decrypted program, not the data).
 pub fn prog16(b: &mut Cps2Bus, a: u32) -> u16 {
     b.fetch16(a)
 }
 
-/// Long de l'espace programme (voir `prog16`).
+/// Long of the program space (see `prog16`).
 pub fn prog32(b: &mut Cps2Bus, a: u32) -> u32 {
     (prog16(b, a) as u32) << 16 | prog16(b, a + 2) as u32
 }
 
-/// Octet de l'espace programme (voir `prog16`).
+/// Byte of the program space (see `prog16`).
 pub fn prog8(b: &mut Cps2Bus, a: u32) -> u8 {
     let word = b.fetch16(a & !1);
     if a & 1 == 0 { (word >> 8) as u8 } else { word as u8 }

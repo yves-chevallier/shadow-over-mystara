@@ -1,7 +1,7 @@
-//! Manettes XInput (Xbox) sous Windows : `xinput1_4.dll` chargée à l'exécution. Chaque bouton tenu donne un
-//! nom utilisable dans `keys.cfg` : `Pad1A`, `Pad1B`, `Pad1X`, `Pad1Y`, `Pad1LB`, `Pad1RB`, `Pad1Start`,
-//! `Pad1Back`, `Pad1Haut`/`Bas`/`Gauche`/`Droite` (croix ou stick gauche) ; `Pad2...` pour la deuxième.
-//! Ailleurs (Linux, WSL), aucune manette.
+//! XInput (Xbox) gamepads under Windows: `xinput1_4.dll` loaded at run time. Each held button gives a
+//! name usable in `keys.cfg`: `Pad1A`, `Pad1B`, `Pad1X`, `Pad1Y`, `Pad1LB`, `Pad1RB`, `Pad1Start`,
+//! `Pad1Back`, `Pad1Haut`/`Bas`/`Gauche`/`Droite` (d-pad or left stick); `Pad2...` for the second.
+//! Elsewhere (Linux, WSL), no gamepad.
 
 pub struct Gamepads {
     #[cfg(windows)]
@@ -16,7 +16,7 @@ impl Gamepads {
         }
     }
 
-    /// Noms des boutons tenus sur toutes les manettes.
+    /// Names of the buttons held on all gamepads.
     pub fn held(&mut self) -> Vec<String> {
         #[cfg(windows)]
         if let Some(x) = &mut self.xinput {
@@ -59,19 +59,19 @@ mod xinput {
         (0x4000, "X"),
         (0x8000, "Y"),
     ];
-    /// Zone morte du stick gauche (sur ±32767).
+    /// Dead zone of the left stick (out of ±32767).
     const DEAD_ZONE: i16 = 12_000;
 
     pub struct XInput {
         _lib: libloading::Library,
         get_state: GetStateFn,
-        /// Manette absente : prochaine interrogation (XInputGetState est lent sur une manette débranchée).
+        /// Gamepad absent: next poll (XInputGetState is slow on an unplugged gamepad).
         absent: [Option<Instant>; 2],
     }
 
     impl XInput {
         pub fn opens() -> Option<Self> {
-            // SAFETY : signature conforme à <xinput.h> ; la bibliothèque est gardée avec le pointeur.
+            // SAFETY: signature matches <xinput.h>; the library is kept with the pointer.
             unsafe {
                 let lib = libloading::Library::new("xinput1_4.dll")
                     .or_else(|_| libloading::Library::new("xinput9_1_0.dll"))
@@ -88,7 +88,7 @@ mod xinput {
                     continue;
                 }
                 let mut s = State::default();
-                // SAFETY : `s` a la taille de XINPUT_STATE.
+            // SAFETY: `s` has the size of XINPUT_STATE.
                 if unsafe { (self.get_state)(i as u32, &mut s) } != 0 {
                     self.absent[i] = Some(Instant::now() + Duration::from_secs(1));
                     continue;

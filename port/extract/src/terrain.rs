@@ -1,4 +1,4 @@
-//! Terrain : cartes fixes des scènes 2 et 0x14 et tables des types de terrain (`ddsom-game/src/video.rs`,
+//! Terrain: fixed maps of scenes 2 and 0x14 and terrain type tables (`ddsom-game/src/video.rs`,
 //! `terrain.rs`).
 
 use std::io;
@@ -9,10 +9,10 @@ use ddsom_assets::terrain::{FixedMap, Kind, KindTable, Terrain};
 
 use crate::rom::Program;
 
-/// (adresse, scène, correction de y, colonnes) : la première carte va jusqu'à la seconde (ses 16 dernières
-/// colonnes sont nulles), la seconde jusqu'au remplissage 0xffff de la fin de la ROM.
+/// (address, scene, y correction, columns): the first map goes up to the second (its last 16
+/// columns are null), the second up to the 0xffff fill at the end of the ROM.
 const MAPS: [(u32, u8, i16, u32); 2] = [(0x3f8e9c, 2, -0x10, 112), (0x3f9c9c, 0x14, 0x10, 96)];
-/// (table, routine) : 128 types chacune, la seconde suit la première, du code suit la seconde.
+/// (table, routine): 128 types each, the second follows the first, code follows the second.
 const KINDS: [(u32, u32); 2] = [(0x3425c, 0x33fe4), (0x34a5c, 0x3403c)];
 const KIND_COUNT: u32 = 128;
 

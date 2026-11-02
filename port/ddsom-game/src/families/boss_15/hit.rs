@@ -1,8 +1,8 @@
-//! Boss 15 / 20, état 4 « touché » (0x928ee). Groupes `+5` : 0 réaction (une seule routine pour tous les codes de
-//! coup `+0x49`), 2 recul, 4 relevé, 6 mort.
+//! Boss 15 / 20, state 4 "hit" (0x928ee). `+5` groups: 0 reaction (a single routine for all hit codes `+0x49`),
+//! 2 knockback, 4 getting up, 6 death.
 //!
-//! Armure : pendant les `+0xb5` premiers coups de chaque période de 64 images (`+0xb4`), un coup reçu en état actif
-//! ne l'interrompt pas : le dragon reprend l'état qu'il avait à l'image précédente (`+0xb0`).
+//! Armor: during the first `+0xb5` hits of each 64-frame period (`+0xb4`), a hit received in the active state
+//! does not interrupt it: the dragon resumes the state it had on the previous frame (`+0xb0`).
 
 use super::*;
 use crate::families::cx::Bench;
@@ -19,7 +19,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
         }
         if (x.u8(ARMOR) as i8) > 0 {
             if sub8(x, ARMOR, 1).gt() && x.u8(LAST_STATE) == 2 {
-                // le coup glisse sur l'armure : reprise de l'état précédent
+                // the hit glances off the armor: resume the previous state
                 let s = x.u32(LAST_STATE);
                 x.set32(f::STATE, s);
                 let b = x.u8(LAST_BOX);
@@ -61,7 +61,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// 0x929c4 : réaction au coup (la table 0x929da n'a qu'une routine, 0x92a82).
+/// 0x929c4: reaction to the hit (table 0x929da has only one routine, 0x92a82).
 fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::set_68(x);
@@ -101,7 +101,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     stand(x);
 }
 
-/// 0x92b2c : recul : le dragon glisse en arrière pendant 15 images.
+/// 0x92b2c: knockback: the dragon slides backward for 15 frames.
 fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
@@ -128,7 +128,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     stand(x);
 }
 
-/// 0x92b8c : relevé (`+6` = 0 à 8) : attente, puis redressement avec clignotement.
+/// 0x92b8c: getting up (`+6` = 0 to 8): wait, then straightening up with blinking.
 fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 2 => {
@@ -184,7 +184,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x92c2a : mort : chute hors de l'écran, puis libération quand le décor a fini (`A5+0x42` ≥ 2).
+/// 0x92c2a: death: fall off the screen, then release when the scenery is done (`A5+0x42` ≥ 2).
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {

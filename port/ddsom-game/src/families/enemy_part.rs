@@ -1,9 +1,8 @@
-//! Parties d'ennemis composites (ENEMY type 7). Voir `docs/families/enemy.md`.
+//! Composite enemy parts (ENEMY type 7). See `docs/families/enemy.md`.
 //!
-//! Une partie est un ennemi qui n'a pas de logique de combat propre : il se colle à son hôte (mot
-//! `+0x46`), recopie sa position avec un décalage propre à sa variante, et joue les animations que
-//! l'état de l'hôte (`+0xa2`) lui commande. Il prévient l'hôte de la fin de ses gestes (`+0xa3` de
-//! l'hôte).
+//! A part is an enemy with no combat logic of its own: it sticks to its host (word `+0x46`), copies its position with
+//! an offset specific to its variant, and plays the animations that the host's state (`+0xa2`) commands. It notifies
+//! the host of the end of its gestures (`+0xa3` of the host).
 
 use super::cx::{handlers, Cx};
 use crate::families::cx::Bench;
@@ -12,28 +11,27 @@ use crate::objects::Obj;
 use crate::objects::Current;
 
 // ---------------------------------------------------------------------------------------------
-// Type 7 (0x63b2a) : « Wyvern » (h), tentacule d'un Displacer Beast
+// Type 7 (0x63b2a): "Wyvern" (h), tentacle of a Displacer Beast
 // ---------------------------------------------------------------------------------------------
 
-/// Tentacule de l'hôte (un ennemi de type 19, ou 14 pour un autre jeu d'animations) ; variante 0 =
-/// tentacule qui attaque, variante 1 = tentacule d'accompagnement. Sous-états (`+5`) choisis d'après
-/// l'octet `+0xa2` de l'hôte par une table de la ROM (0x63fa8) : 0 attente, 2 début d'attaque,
-/// 4 coup, 6 retour, 8 coup spécial, 10 recul. Tant que l'hôte n'est plus une adresse de RAM valide ou
-/// est libéré, la partie passe à l'état 6 (libération).
+/// Tentacle of the host (an enemy of type 19, or 14 for another animation set); variant 0 = attacking tentacle, variant
+/// 1 = accompanying tentacle. Substates (`+5`) chosen from byte `+0xa2` of the host by a ROM table (0x63fa8): 0 wait, 2
+/// attack start, 4 hit, 6 return, 8 special hit, 10 recoil. As long as the host is no longer a valid RAM address or is
+/// freed, the part goes to state 6 (release).
 mod tentacle {
     use super::*;
 
-    /// Hôte (mot `+0x46`) : variables lues.
+    /// Host (word `+0x46`): variables read.
     const HOST_STATE: u32 = 0xa2;
     const HOST_DONE: u32 = 0xa3;
     const HOST_LAST_HIT: u32 = 0x3e;
-    /// Décalage (X, Y, fraction de Y, Z) par variante, 8 octets par ligne.
+    /// Offset (X, Y, fraction of Y, Z) per variant, 8 bytes per row.
     const OFFSETS: u32 = 0x63f34;
-    /// Sous-état d'après l'état de l'hôte (octets en espace de données).
+    /// Substate from the host's state (bytes in data space).
     const SUB_FOR_HOST: u32 = 0x63fa8;
-    /// Durées d'attente de l'animation de repos (mots, indexées par un tirage pair).
+    /// Wait durations of the rest animation (words, indexed by an even draw).
     const IDLE_DELAYS: u32 = 0x63c7e;
-    /// Jeux d'animations par type d'hôte : (autre hôte, Displacer Beast).
+    /// Animation sets by host type: (other host, Displacer Beast).
     const BODY: (u32, u32) = (0x17dbb0, 0x1824d4);
     const ALT: (u32, u32) = (0x17dbd2, 0x1824f6);
     const MID: (u32, u32) = (0x17dbba, 0x1824de);
@@ -53,7 +51,7 @@ mod tentacle {
         }
     }
 
-    /// Hôte vivant, ou `None` : alors la partie passe à l'état 6 (`0x63e96`).
+    /// Live host, or `None`: then the part goes to state 6 (`0x63e96`).
     fn host<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let h = host_ptr(x)?;
         if h.u8(x.b, 0) == 0 {
@@ -63,7 +61,7 @@ mod tentacle {
         Some(h)
     }
 
-    /// Hôte désigné par `+0x46`, sans vérifier qu'il est actif.
+    /// Host designated by `+0x46`, without checking that it is active.
     fn host_ptr<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let w = x.u16(f::HOST);
         if (w as i16) >= 0 {
@@ -73,13 +71,13 @@ mod tentacle {
         Some(x.linked(f::HOST))
     }
 
-    /// L'hôte que l'original garde dans A1 (relu après les animations) : celui de `+0x46`, que `follow` et `host`
-    /// ont lu avant (le lien ne change pas entre-temps).
+    /// The host that the original keeps in A1 (reread after the animations): that of `+0x46`, which `follow` and `host`
+    /// read before (the link does not change in the meantime).
     fn a1<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
         x.linked(f::HOST)
     }
 
-    // --- état 0 : création ---------------------------------------------------------------------
+    // --- state 0: creation ---------------------------------------------------------------------
 
     fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::STATE, 2);
@@ -97,8 +95,8 @@ mod tentacle {
         start(x, BODY, n);
     }
 
-    /// Se colle à l'hôte : position, orientation et drapeaux copiés, plus le décalage de la variante
-    /// (X inversé quand l'hôte regarde à gauche).
+    /// Sticks to the host: position, orientation and flags copied, plus the variant's offset (X inverted when the host
+    /// faces left).
     fn follow<R: Bench>(x: &mut Cx<'_, R>) {
         let Some(h) = host_ptr(x) else { return };
         for off in [0x8, 0x10, 0xc] {
@@ -123,7 +121,7 @@ mod tentacle {
         x.add16(0xc, dz);
     }
 
-    /// Démarre l'animation `n` du jeu `sets` (celui du Displacer Beast si l'hôte en est un).
+    /// Starts animation `n` of the set `sets` (that of the Displacer Beast if the host is one).
     fn start<R: Bench>(x: &mut Cx<'_, R>, sets: (u32, u32), n: u32) {
         let mut set = sets.0;
         let w = x.u16(f::HOST);
@@ -133,7 +131,7 @@ mod tentacle {
         x.anim_start(set, n as u16);
     }
 
-    // --- état 2 : actif ------------------------------------------------------------------------
+    // --- state 2: active -----------------------------------------------------------------------
 
     fn active<R: Bench>(x: &mut Cx<'_, R>) {
         follow(x);
@@ -169,7 +167,7 @@ mod tentacle {
         finish(x);
     }
 
-    /// Fin commune : cachée quand le dernier coup de l'hôte est négatif, puis remise en liste.
+    /// Common end: hidden when the host's last hit is negative, then put back in the list.
     fn finish<R: Bench>(x: &mut Cx<'_, R>) {
         let Some(h) = host(x) else { return };
         if (h.u8(x.b, HOST_LAST_HIT) as i8) < 0 {
@@ -178,7 +176,7 @@ mod tentacle {
         x.reinsert();
     }
 
-    /// Démarre l'animation de repos et tire la durée de l'attente (`+0x30`).
+    /// Starts the rest animation and draws the wait duration (`+0x30`).
     fn idle_anim<R: Bench>(x: &mut Cx<'_, R>) {
         start(x, BODY, 2);
         let r = random(x) & 0xe;
@@ -186,7 +184,7 @@ mod tentacle {
         x.set16(0x30, delay);
     }
 
-    /// Sous-état simple de la variante 1 : démarre l'animation 3 une fois.
+    /// Simple substate of variant 1: starts animation 3 once.
     fn variant1_once<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::SUB2) == 0 {
             x.add8(f::SUB2, 2);
@@ -343,9 +341,9 @@ mod tentacle {
         }
     }
 
-    // --- état 4 : touché -----------------------------------------------------------------------
+    // --- state 4: hit --------------------------------------------------------------------------
 
-    /// L'hôte a été touché : la partie se synchronise sur ses PV (`+0x60/+0x62/+0x64` à 0x7fff).
+    /// The host was hit: the part syncs to its HP (`+0x60/+0x62/+0x64` at 0x7fff).
     fn hit<R: Bench>(x: &mut Cx<'_, R>) {
         follow(x);
         if x.u16(0x60) != x.u16(f::HP) {

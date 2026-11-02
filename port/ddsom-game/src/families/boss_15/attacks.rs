@@ -1,15 +1,4 @@
-//! Boss 15 / 20, groupe `+5` = 4 : les attaques (`+6` = 0 à 18), chacune en étapes `+7`. Les montées (`rise`), descentes
-//! (`fall`) et attentes (`pause`) sont partagées par plusieurs attaques.
-//!
-//! | `+6` | Attaque |
-//! |---|---|
-//! | 0 | rejoint le joueur, bat des ailes (le pousse), se pose |
-//! | 2 | monte, entre par un bord de l'écran, vole en travers et sort (souffle de feu) |
-//! | 4 | monte, plonge en tournant et se pose |
-//! | 6, 16 | coup de griffe à droite (6) ou à gauche (16) |
-//! | 8, 10, 18 | pose de 0x100 images (boîtes de coups 6, 8, 7) |
-//! | 12 | monte, rugit (0xa7234 / 0xa727c), descend |
-//! | 14 | plonge sur un joueur et le saisit |
+//! --- common steps ----------------------------------------------------------------------------------------
 
 use crate::families::cx::Bench;
 use super::*;
@@ -34,9 +23,9 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- étapes communes ----------------------------------------------------------------------------------------
+// 0x91cce: start of the rise.
 
-/// 0x91cce : début de montée.
+/// 0x91cec: rises up to altitude 0x300.
 fn rise_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set32(0x14, 0);
@@ -46,7 +35,7 @@ fn rise_start<R: Bench>(x: &mut Cx<'_, R>) {
     set_anim(x, 2, 0);
 }
 
-/// 0x91cec : monte jusqu'à l'altitude 0x300.
+/// 0x91d08, 0x91d6e: waits for the timer to end.
 fn rise_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_z();
     if (x.u16(0xc) as i16) < 0x300 {
@@ -56,7 +45,7 @@ fn rise_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
-/// 0x91d08, 0x91d6e : attend la fin du minuteur.
+/// 0x91d30: start of the descent.
 fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     if sub16(x, TIMER, 1).gt() {
         return;
@@ -65,7 +54,7 @@ fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
-/// 0x91d30 : début de descente.
+/// 0x91d4e: descends to altitude 0x20, then waits 0x20 frames.
 fn fall_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set32(0x14, 0);
@@ -75,7 +64,7 @@ fn fall_start<R: Bench>(x: &mut Cx<'_, R>) {
     set_anim(x, 2, 0);
 }
 
-/// 0x91d4e : descend jusqu'à l'altitude 0x20, puis attend 0x20 images.
+/// The targeted player (`+0x50`) if there is one, otherwise the dragon waits (0x91748).
 fn fall_down<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_z();
     if (x.u16(0xc) as i16) > 0x20 {
@@ -87,7 +76,7 @@ fn fall_down<R: Bench>(x: &mut Cx<'_, R>) {
     pause(x);
 }
 
-/// Le joueur visé (`+0x50`) s'il existe, sinon le dragon attend (0x91748).
+/// Reaches in quarters altitude 0x40 and the depth of the targeted player; moves on to the next step on arrival.
 fn target<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     if x.u16(f::TARGET) == 0 {
         wait(x);
@@ -101,7 +90,7 @@ fn target<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     Some(p)
 }
 
-/// Rejoint par quarts l'altitude 0x40 et la profondeur du joueur visé ; passe à l'étape suivante à l'arrivée.
+/// 0x91e16: descends by 8 per frame down to altitude 0x20.
 fn reach_player<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(p) = target(x) else { return };
     let y = p.u16(x.b, 0x10) as i16;
@@ -165,7 +154,7 @@ fn attack_0<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x91e16 : descend de 8 par image jusqu'à l'altitude 0x20.
+/// 0x91e62: flaps its wings: altitude and depth oscillate.
 fn settle<R: Bench>(x: &mut Cx<'_, R>) {
     let z = x.u16(0xc).wrapping_sub(8);
     x.set16(0xc, z);
@@ -177,7 +166,7 @@ fn settle<R: Bench>(x: &mut Cx<'_, R>) {
     set_anim(x, 2, 1);
 }
 
-/// 0x91e62 : bat des ailes : l'altitude et la profondeur oscillent.
+/// --- +6 = 2: breath across the screen ----------------------------------------------------------------------
 fn flap<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     if !sub16(x, TIMER, 1).gt() {
@@ -196,7 +185,7 @@ fn flap<R: Bench>(x: &mut Cx<'_, R>) {
     x.add16(0x10, d as u16);
 }
 
-// --- +6 = 2 : souffle en travers de l'écran ----------------------------------------------------------------------
+// 0x91f36: pushes the players by 2 pixels on the side where the dragon enters while the timer counts down.
 
 fn attack_2<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(SHIELD, 2);
@@ -234,7 +223,7 @@ fn attack_2<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x91f36 : pousse les joueurs de 2 pixels du côté où le dragon entre pendant que le minuteur décompte.
+/// 0x91f6c: reaches the attack position (0x138 or 0x48 in front of the camera).
 fn push_side<R: Bench>(x: &mut Cx<'_, R>) {
     let d: i16 = if x.u8(f::FLIP) != 0 { -2 } else { 2 };
     for k in 0..4u32 {
@@ -254,7 +243,7 @@ fn push_side<R: Bench>(x: &mut Cx<'_, R>) {
     align(x);
 }
 
-/// 0x91f6c : rejoint la position d'attaque (0x138 ou 0x48 devant la caméra).
+/// 0x91fa6: breath: the depth follows the vector table pointed to by `+0x4c` (set by the animation script).
 fn align<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     let edge: u16 = if x.u8(f::FLIP) != 0 { 0x48 } else { 0x138 };
@@ -273,7 +262,7 @@ fn align<R: Bench>(x: &mut Cx<'_, R>) {
     sweep(x);
 }
 
-/// 0x91fa6 : souffle : la profondeur suit la table de vecteurs pointée par `+0x4c` (posée par le script d'animation).
+/// 0x92036: end of the breath, then starts the exit flight.
 fn sweep<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     let table = x.u32(0x4c);
@@ -312,7 +301,7 @@ fn sweep<R: Bench>(x: &mut Cx<'_, R>) {
     x.select_speed(&crate::objects::motion::SPEEDS_A, 0x18);
 }
 
-/// 0x92036 : fin du souffle, puis lance le vol de sortie.
+/// 0x92066: moves away until it leaves the screen, then repositions itself at the top right.
 fn sweep_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     if !step(x) {
@@ -330,7 +319,7 @@ fn sweep_end<R: Bench>(x: &mut Cx<'_, R>) {
     leave(x);
 }
 
-/// 0x92066 : s'éloigne jusqu'à sortir de l'écran, puis se replace en haut à droite.
+/// 0x92180: places the dragon above the screen, according to its type.
 fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     x.move_x();
@@ -375,7 +364,7 @@ fn attack_4<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x92180 : place le dragon au-dessus de l'écran, selon son type.
+/// --- +6 = 6 and 16: claw swipe --------------------------------------------------------------------------
 fn dive_position<R: Bench>(x: &mut Cx<'_, R>) {
     let big = x.u8(TYPE) == TYPE_BIG;
     let px = var::SCROLL_X.get(x.b).wrapping_add(if big { 0x96 } else { 0xc0 });
@@ -417,9 +406,9 @@ fn dive_b<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0xc, 0x380);
 }
 
-// --- +6 = 6 et 16 : coup de griffe --------------------------------------------------------------------------
+// `boxes`: hit boxes (`+0xa2`); `dx`: movement per frame of the hit (6 to the right, -6 to the left).
 
-/// `boxes` : boîtes de coups (`+0xa2`) ; `dx` : déplacement par image du coup (6 à droite, -6 à gauche).
+/// 0xa7234 (large) or 0xa727c (small)
 fn claw<R: Bench>(x: &mut Cx<'_, R>, boxes: u8, dx: i16) {
     match x.u8(0x7) {
         0 => reach_player(x),
@@ -482,7 +471,7 @@ fn attack_12<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0x50);
             lib::shake_5c(x, 0x10);
-            // 0xa7234 (grand) ou 0xa727c (petit)
+            // --- +6 = 14: dive onto a player -------------------------------------------------------------------------
             let big = x.u8(TYPE) == TYPE_BIG;
             super::super::small::roar_created(x.b, x.o, big);
         }
@@ -500,7 +489,7 @@ fn attack_12<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 14 : plongeon sur un joueur ---------------------------------------------------------------------------
+// 0x9249e: a player within range (0xfc44) is grabbed; returns true.
 
 fn attack_14<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
@@ -561,14 +550,14 @@ fn attack_14<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9249e : un joueur à portée (0xfc44) est saisi ; rend vrai.
+/// 0x931ea: gets closer to the targeted player by 2 pixels per frame in X and Y (without overshooting).
 fn try_seize<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let Some(player) = lib::attack_hits_a_player(x, 7) else { return false };
     lib::seize_player(x, player, 0);
     true
 }
 
-/// 0x931ea : se rapproche du joueur visé de 2 pixels par image en X et en Y (sans le dépasser).
+/// 0x930e2: pushes away players that are too close (less than 0x10 pixels in X + Y) along the dragon-player axis.
 fn follow<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return;
@@ -588,7 +577,8 @@ fn follow<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x930e2 : repousse les joueurs trop proches (moins de 0x10 pixels en X + Y) le long de l'axe dragon-joueur.
+/// 0x1386: direction from the player (D3, D4) to the dragon (D1, D2). Original glitch: the working registers
+/// of 0x1386 (D2, D3, D4: Z gap, step, unit) stay for the following handlers (`dispatch::Leftovers`).
 fn push_players<R: Bench>(x: &mut Cx<'_, R>) {
     for k in 0..4u32 {
         let p = Obj(0xff85de + 0x200 * k);
@@ -603,24 +593,34 @@ fn push_players<R: Bench>(x: &mut Cx<'_, R>) {
         if dx.wrapping_add(dy) <= 0x10 {
             continue;
         }
-        // 0x1386 : direction du joueur (D3, D4) vers le dragon (D1, D2). Glitch d'origine : les registres de travail
-        // de 0x1386 (D2, D3, D4 : écart en Z, pas, unité) restent aux gestionnaires suivants (`dispatch::Leftovers`).
+        // `add.l #0x8000,D4` (carry into the high word), then the unit in D4.w
         let (bx, bz) = (x.u16(0x8) as u32, x.u16(0x10) as u32);
         let (px, pz) = (p.u16(x.b, 0x8) as u32, p.u16(x.b, 0x10) as u32);
         let r = crate::aids::compute(x.b, bx, bz, px, pz);
         *x.c.d2() = r.d2;
         *x.c.d3() = r.d3;
-        // `add.l #0x8000,D4` (retenue dans le mot haut), puis l'unité dans D4.w
+        // Slope (in 1/256 pixel) of the `shove` steps: 32 directions, (dx, dy) in words.
         *x.c.d4() = pz.wrapping_add(0x8000) & 0xffff_0000 | r.unit as u32;
         step_toward(x.b, p, r.direction);
     }
 }
 
-/// Pente (en 1/256 de pixel) des pas de `shove` : 32 directions, (dx, dy) en mots.
+/// 0x93158 then the addition to the position: moves `o` one step in direction `direction` (0x1386); returns the
+/// step (dx, dy: longs, 8 fractional bits).
 const SHOVE_STEPS: u32 = 0x1c6636;
 
-/// 0x93158 puis l'ajout à la position : déplace `o` d'un pas dans la direction `direction` (0x1386) ; rend le pas (dx,
-/// dy : longs, 8 bits de fraction).
+/// Boss 15 / 20, group `+5` = 4: the attacks (`+6` = 0 to 18), each in steps `+7`. The rises (`rise`), descents
+/// (`fall`) and waits (`pause`) are shared by several attacks.
+///
+/// | `+6` | Attack |
+/// |---|---|
+/// | 0 | reaches the player, flaps its wings (pushes them), lands |
+/// | 2 | rises, enters from an edge of the screen, flies across and leaves (fire breath) |
+/// | 4 | rises, dives while spinning and lands |
+/// | 6, 16 | claw swipe to the right (6) or to the left (16) |
+/// | 8, 10, 18 | pose of 0x100 frames (hit boxes 6, 8, 7) |
+/// | 12 | rises, roars (0xa7234 / 0xa727c), descends |
+/// | 14 | dives onto a player and grabs them |
 fn step_toward(b: &mut Cps2Bus, o: Obj, direction: u8) -> (u32, u32) {
     let a = (direction as u16 & 0x1f) * 4;
     let dy = ((rd16(b, SHOVE_STEPS + 2 + a as u32) as i16 as i32) << 8) as u32;
@@ -632,9 +632,11 @@ fn step_toward(b: &mut Cps2Bus, o: Obj, direction: u8) -> (u32, u32) {
     (dx, dy)
 }
 
-/// 0x930a4 (called by an EFFCT, 0xb482e, `effects_c::spark_active`): the current object steps toward `other` while it is
+/// 0x930a4 (called by an EFFCT, 0xb482e, `effects_c::spark_active`): the current object steps toward `other` while it
+/// is
 /// more than 0x10 pixels away (X + Y), by 0x1386 and 0x93158. Original glitch: 0x1386 leaves its work registers (D2,
-/// D3, D4) to the next handlers (`dispatch::Leftovers`); the X written to D1.w keeps a null high word (the caller's D1).
+/// D3, D4) to the next handlers (`dispatch::Leftovers`); the X written to D1.w keeps a null high word (the caller's
+/// D1).
 pub(crate) fn approach_toward<R: Bench>(x: &mut Cx<'_, R>, other: Obj) {
     let me = x.o;
     let dx = (me.u16(x.b, 0x8).wrapping_sub(other.u16(x.b, 0x8)) as i16).wrapping_abs() as u16;

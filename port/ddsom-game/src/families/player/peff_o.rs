@@ -1,5 +1,5 @@
-//! Effets des joueurs (PEFF), quinzième série : type 24 (le tas d'or de l'interface qui reprend les objets
-//! du joueur contre des points). Voir `docs/families/player.md`.
+//! Player effects (PEFF), fifteenth series: type 24 (the interface's pile of gold that takes back the player's items in
+//! exchange for points). See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -10,16 +10,16 @@ use crate::objects::pools;
 use crate::objects::Current;
 
 const ANIMS: u32 = 0x1c40c6;
-/// Position de l'icône par joueur (X, Y) : deux versions selon `A5+0x20` (1 : écran à un joueur).
+/// Position of the icon per player (X, Y): two versions according to `A5+0x20` (1: one-player screen).
 const PLAYER_SPOTS_A: u32 = 0x4d792;
 const PLAYER_SPOTS_B: u32 = 0x4d782;
-/// Tables par personnage (pointeurs) donnant, pour chaque équipement, 0 (rien), 1 (vendu `+0x148` fois),
-/// ≥ 2 (vendu une fois) ou négatif (échangé contre rien).
+/// Per-character tables (pointers) giving, for each piece of equipment, 0 (nothing), 1 (sold `+0x148` times), ≥ 2 (sold
+/// once) or negative (exchanged for nothing).
 const SELL_TABLES: u32 = 0x4d884;
-/// Prix en points (BCD sur 3 octets, 4 octets par équipement).
+/// Prices in points (BCD on 3 bytes, 4 bytes per piece of equipment).
 const PRICES: u32 = 0x4db30;
 
-/// Addition décimale d'un octet (ABCD) avec retenue entrante : résultat et retenue sortante.
+/// Decimal addition of a byte (ABCD) with incoming carry: result and outgoing carry.
 fn bcd_add(a: u8, b: u8, carry: bool) -> (u8, bool) {
     let mut r = a as u16 + b as u16 + carry as u16;
     if (a & 0xf) + (b & 0xf) + carry as u8 > 9 {
@@ -32,9 +32,9 @@ fn bcd_add(a: u8, b: u8, carry: bool) -> (u8, bool) {
     (r as u8, out)
 }
 
-/// Le tas : posé dans l'angle de l'écran du joueur, il s'anime quand un joueur qui porte un équipement
-/// (rang `+3` de la rangée) s'en approche et qu'il appuie sur le bouton (`+0x17`) ; l'équipement est repris
-/// et son prix ajouté au score (plafonné à 999999).
+/// The pile: placed in the corner of the player's screen, it animates when a player carrying a piece of equipment (rank
+/// `+3` of the row) comes near and presses the button (`+0x17`); the equipment is taken back and its price added to the
+/// score (capped at 999999).
 mod coins {
     use super::*;
 
@@ -104,7 +104,7 @@ mod coins {
         x.anim(ANIMS, 0x2b);
     }
 
-    /// `0x4d81c` : le joueur du lien (`+0x1a`) rend l'équipement de son emplacement `+3`.
+    /// `0x4d81c`: the linked player (`+0x1a`) hands back the equipment of its slot `+3`.
     fn sell<R: Bench>(x: &mut Cx<'_, R>) {
         let who = Obj(x.u16(0x1a) as i16 as i32 as u32 & 0xff_ffff);
         let player_word = who.u16(x.b, f::OWNER);
@@ -131,7 +131,7 @@ mod coins {
         let price = PRICES + (id << 2);
         let mut left = repeats;
         loop {
-            // 3 octets décimaux de `price+1..price+3` ajoutés à `(0x115..0x117, player)`
+            // 3 decimal bytes of `price+1..price+3` added to `(0x115..0x117, player)`
             let mut carry = false;
             for k in (1..=3u32).rev() {
                 let add = x.data8(price + k);

@@ -1,4 +1,4 @@
-//! Affiche PC/D0/A0 à la fin des premières images (comparaison avec MAME).
+//! Prints PC/D0/A0 at the end of the first frames (comparison with MAME).
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ee = std::fs::read(&a[2]).ok();

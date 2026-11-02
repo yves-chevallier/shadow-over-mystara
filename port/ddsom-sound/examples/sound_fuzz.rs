@@ -1,18 +1,18 @@
-//! Validation différentielle sans le jeu : le Z80 d'origine seul et le pilote Rust reçoivent les
-//! mêmes commandes synthétiques dans la RAM partagée, et on compare leurs écritures. Cela exerce
-//! toute la ROM (toutes les musiques et tous les effets, toutes les commandes système) et pas
-//! seulement ce que le scénario du jeu envoie.
+//! Differential validation without the game: the original Z80 alone and the Rust driver receive
+//! the same synthetic commands in the shared RAM, and their writes are compared. This exercises
+//! the whole ROM (all songs and effects, all system commands) and not only what the game
+//! scenario sends.
 //!
-//! sound_fuzz <roms> songs <premier> <dernier> <interruptions>  un essai par numéro de musique/effet
-//! sound_fuzz <roms> random <graine> <essais> <interruptions>   suites aléatoires de commandes
-//! sound_fuzz <roms> synth <graine> <essais> <interruptions>    sons synthétiques ajoutés à la ROM
-//! sound_fuzz <roms> short <graine> <essais> <interruptions>    idem avec des pistes courtes
-//! sound_fuzz <roms> one songs <numéro> <interruptions> [de a]            un essai, avec le détail
-//! sound_fuzz <roms> one random|synth|short <graine> <essai> <interruptions> [de a]
+//! sound_fuzz <roms> songs <first> <last> <interrupts>  one run per song/effect number
+//! sound_fuzz <roms> random <seed> <runs> <interrupts>   random command sequences
+//! sound_fuzz <roms> synth <seed> <runs> <interrupts>    synthetic sounds added to the ROM
+//! sound_fuzz <roms> short <seed> <runs> <interrupts>    same with short tracks
+//! sound_fuzz <roms> one songs <number> <interrupts> [from to]           one run, with details
+//! sound_fuzz <roms> one random|synth|short <seed> <run> <interrupts> [from to]
 //!
-//! Variables d'environnement : FUZZ_STATE=1 compare aussi la RAM du Z80 à l'état du pilote (quand
-//! le Z80 est au repos) ; FUZZ_COVERAGE=fichier écrit la couverture du programme du Z80 ;
-//! FUZZ_SHOW, FUZZ_PROFILE, FUZZ_BREAK=adresse, FUZZ_WATCH=adresse : aides au débogage de `one`.
+//! Environment variables: FUZZ_STATE=1 also compares the Z80 RAM with the driver state (when
+//! the Z80 is at rest); FUZZ_COVERAGE=file writes the coverage of the Z80 program;
+//! FUZZ_SHOW, FUZZ_PROFILE, FUZZ_BREAK=address, FUZZ_WATCH=address: debugging aids for `one`.
 
 #[path = "support/mod.rs"]
 mod support;
@@ -26,11 +26,11 @@ use support::Report;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 4 {
-        eprintln!("usage : sound_fuzz <roms> songs|random|synth|short|one ... (voir l'en-tête du fichier)");
+        eprintln!("usage: sound_fuzz <roms> songs|random|synth|short|one ... (see the file header)");
         std::process::exit(2);
     }
-    let rom = Rom::load(Path::new(&a[1])).expect("rom son");
-    let num = |i: usize| a[i].parse::<usize>().expect("nombre");
+    let rom = Rom::load(Path::new(&a[1])).expect("sound rom");
+    let num = |i: usize| a[i].parse::<usize>().expect("number");
     match a[2].as_str() {
         "songs" => {
             let (first, last, irqs) = (num(3), num(4), num(5));
@@ -49,7 +49,7 @@ fn main() {
             run_many(&rom, 0..=count.saturating_sub(1), |i| synth_short_session(&rom, seed, i, irqs));
         }
         "one" => {
-            // one songs <numéro> <interruptions> [de a] | one random <graine> <essai> <interruptions> [de a]
+            // one songs <number> <interrupts> [from to] | one random <seed> <run> <interrupts> [from to]
             let dump_at = |i| (a.len() > i + 1).then(|| (num(i), num(i + 1)));
             let (s, dump) = match a[3].as_str() {
                 "songs" => (song_session(&rom, num(4), num(5)), dump_at(6)),
@@ -58,32 +58,32 @@ fn main() {
                 _ => (random_session(&rom, num(4), num(5), num(6)), dump_at(7)),
             };
             for (at, c) in &s.commands {
-                println!("interruption {at} : commande {c:02x?}");
+                println!("interrupt {at}: command {c:02x?}");
             }
             if std::env::var("FUZZ_SHOW").is_ok() {
                 for (at, bytes) in s.patches.iter().filter(|p| p.0 >= 0x48000) {
-                    println!("données à la région {at:#x} (adresse linéaire {:#x}) : {}", at - 0x8000, bytes.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "));
+                    println!("data at region {at:#x} (linear address {:#x}): {}", at - 0x8000, bytes.iter().map(|b| format!("{b:02x}")).collect::<Vec<_>>().join(" "));
                 }
             }
             summary(&run_session(&rom, &s, dump, None));
         }
-        _ => eprintln!("mode inconnu"),
+        _ => eprintln!("unknown mode"),
     }
 }
 
 fn summary(r: &Report) {
     println!(
-        "Z80 {} écritures, Rust {}, identiques {} (+{} acquittements), débordements {}",
+        "Z80 {} writes, Rust {}, identical {} (+{} acknowledgements), spills {}",
         r.real.total, r.drv.total, r.matched_main, r.matched_acks, r.spill_intervals
     );
     match &r.first_divergence {
         None if r.identical() => println!("IDENTIQUE"),
-        None => println!("préfixe identique, longueurs différentes"),
+        None => println!("identical prefix, different lengths"),
         Some(d) => println!("DIVERGENCE : {d}"),
     }
 }
 
-/// Exécute les essais `range` en parallèle et résume.
+/// Runs the `range` runs in parallel and summarises.
 fn run_many(rom: &Rom, range: std::ops::RangeInclusive<usize>, make: impl Fn(usize) -> Session + Sync) {
     let next = AtomicUsize::new(*range.start());
     let last = *range.end();
@@ -118,11 +118,11 @@ fn run_many(rom: &Rom, range: std::ops::RangeInclusive<usize>, make: impl Fn(usi
     let writes: usize = results.iter().map(|r| r.2).sum();
     for (i, identical, _, div, slow) in &results {
         if !identical && !(*slow && div.is_none()) {
-            println!("essai {i} : {}", div.as_deref().unwrap_or("longueurs différentes"));
+            println!("run {i}: {}", div.as_deref().unwrap_or("different lengths"));
         }
     }
     println!(
-        "{ok} essais identiques sur {} ({writes} écritures comparées) ; {slow} abandonnés : le Z80 est resté occupé plus de {MAX_BUSY} interruptions (durée d'exécution non modélisée)",
+        "{ok} identical runs out of {} ({writes} writes compared); {slow} abandoned: the Z80 stayed busy for more than {MAX_BUSY} interrupts (execution time not modelled)",
         results.len()
     );
 }

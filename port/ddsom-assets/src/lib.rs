@@ -1,4 +1,4 @@
-//! Chargement des ressources produites par `extract` (voir docs/assets.md).
+//! Loading of the resources produced by `extract` (see docs/assets.md).
 
 pub mod data;
 pub mod json;
@@ -26,7 +26,7 @@ pub use texts::Texts;
 use std::io;
 use std::path::Path;
 
-/// Toutes les cellules graphiques 16x16 : un indice de couleur (0..15) par pixel.
+/// All 16x16 graphic cells: one color index (0..15) per pixel.
 pub struct Cells {
     pixels: Vec<u8>,
 }
@@ -61,13 +61,13 @@ impl Cells {
         self.pixels.is_empty()
     }
 
-    /// Pixel (x, y) de la cellule `c`.
+    /// Pixel (x, y) of cell `c`.
     pub fn pixel(&self, c: usize, x: usize, y: usize) -> u8 {
         self.pixels[(c * Self::SIZE + y) * Self::SIZE + x]
     }
 }
 
-/// Bibliothèque de palettes : 16 couleurs au format matériel 0xLRGB par palette.
+/// Palette library: 16 colors per palette in the hardware 0xLRGB format.
 pub struct Palettes(pub Vec<[u16; 16]>);
 
 impl Palettes {
@@ -83,7 +83,7 @@ impl Palettes {
     }
 }
 
-/// Échantillon : PCM 8 bits signé, boucle éventuelle (indice de début), note de référence.
+/// Sample: signed 8-bit PCM, optional loop (start index), reference note.
 pub struct Sample {
     pub pcm: Vec<i8>,
     pub loop_start: Option<usize>,

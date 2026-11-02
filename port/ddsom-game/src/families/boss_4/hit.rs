@@ -1,23 +1,23 @@
-//! Boss 4, état 4 « touché » (0x82c36). Groupes `+5` :
+//! Boss 4, state 4 "hit" (0x82c36). `+5` groups:
 //!
-//! | `+5` | Rôle |
+//! | `+5` | Role |
 //! |---|---|
-//! | 0 | réaction au coup : mort si plus de PV, sinon routine de la table 0x82c8a (code `+0x49`) |
-//! | 2 | recul, puis traversée en vol (riposte) |
-//! | 4 | à terre, puis relevé |
-//! | 6, 8 | mort : projection, chute dans la poussière |
-//! | 10 | retour au combat |
+//! | 0 | reaction to the hit: death if out of HP, otherwise routine from table 0x82c8a (code `+0x49`) |
+//! | 2 | knockback, then crossing in flight (counterattack) |
+//! | 4 | on the ground, then getting up |
+//! | 6, 8 | death: thrown, falls into the dust |
+//! | 10 | return to combat |
 
 use super::decide;
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 
-/// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
+/// Table of reaction routines, indexed by the hit code `+0x49` (longs).
 const REACTIONS: u32 = 0x82c8a;
-/// La seule routine propre au boss (code 0x4c) : tremblement sur place.
+/// The only routine specific to the boss (code 0x4c): shaking in place.
 const SHAKE_REACTION: u32 = 0x82d36;
-/// Seuils de PV par phase (mots, 128 octets par ligne).
+/// HP thresholds per phase (words, 128 bytes per row).
 const THRESHOLDS: u32 = 0x10ce2;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -36,7 +36,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-/// 0x82c68 : premier passage : dégâts (0x10112) et, sans PV, la mort ; puis la routine du code de coup.
+/// 0x82c68: first pass: damage (0x10112) and, with no HP left, death; then the hit code's routine.
 fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::set_68(x);
@@ -57,7 +57,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x82d36 : tremblement sur place (16 images, ±2 pixels), puis retour au recul (état 4, groupe 4, étape 2).
+/// 0x82d36: shaking in place (16 frames, ±2 pixels), then back to the knockback (state 4, group 4, step 2).
 fn shake<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
@@ -90,7 +90,7 @@ fn shake<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x58, 0);
 }
 
-/// 0x82dae : recul (0x14 images en arrière, puis 0x14 sur place), puis la traversée en vol.
+/// 0x82dae: knockback (0x14 frames backward, then 0x14 in place), then the crossing in flight.
 fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -124,7 +124,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x82e40 : à terre (`+0x84` images hors pause), puis relevé.
+/// 0x82e40: on the ground (`+0x84` frames outside pause), then getting up.
 fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -151,8 +151,8 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x82ea0 : retour au combat (aussi appelé par les réactions communes, table 0x3e000) : franchit le palier de
-/// PV, puis traversée en vol si un joueur est tout près, sinon la marche.
+/// 0x82ea0: return to combat (also called by the common reactions, table 0x3e000): crosses the HP threshold,
+/// then crossing in flight if a player is very close, otherwise the walk.
 pub(crate) fn resume<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
@@ -167,8 +167,8 @@ pub(crate) fn resume<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x82ee2 : mort. Projeté en l'air vers le milieu de l'écran, le boss retombe dans la poussière ; la fin de scène
-/// est lancée au premier passage.
+/// 0x82ee2: death. Thrown into the air toward the middle of the screen, the boss falls back into the dust; the end of
+/// the stage is started on the first pass.
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {

@@ -1,11 +1,11 @@
-//! Une partie démarre-t-elle avec les graphismes et les échantillons reconstruits depuis les ressources ?
+//! Does a game start with the graphics and samples rebuilt from the resources?
 //!
-//!   assets_game <roms> <eeprom> <assets> <scénario> <images> <sortie.png>
+//!   assets_game <roms> <eeprom> <assets> <scenario> <frames> <output.png>
 //!
-//! Deux machines identiques (jeu réécrit en Rust, 68000 surcadencé), l'une avec les ROMs graphiques et
-//! sonores, l'autre avec `ddsom_assets::rebuild` ; le scénario est rejoué sur les deux. Les images
-//! (RGB) et les échantillons audio doivent être identiques à chaque image ; la dernière image est écrite
-//! en PNG.
+//! Two identical machines (game rewritten in Rust, overclocked 68000), one with the graphics and
+//! sound ROMs, the other with `ddsom_assets::rebuild`; the scenario is replayed on both. The frames
+//! (RGB) and the audio samples must be identical at every frame; the last frame is written
+//! as a PNG.
 
 use std::path::Path;
 
@@ -15,13 +15,13 @@ use ddsom_assets::rebuild;
 fn machine(roms: &Path, eeprom: Option<&[u8]>, assets: Option<&Path>) -> Machine {
     let mut m = match assets {
         Some(dir) => {
-            let gfx = rebuild::gfx_region(&dir.join("gfx")).expect("graphismes");
-            let pcm = rebuild::qsound_samples(dir).expect("échantillons").bytes;
+            let gfx = rebuild::gfx_region(&dir.join("gfx")).expect("graphics");
+            let pcm = rebuild::qsound_samples(dir).expect("samples").bytes;
             Machine::load_ddsom_with(roms, eeprom, Some(gfx), Some(pcm))
         }
         None => Machine::load_ddsom(roms, eeprom),
     }
-    .expect("chargement");
+    .expect("loading");
     ddsom_game::install(&mut m);
     m.set_overclock(16.0);
     m
@@ -30,13 +30,13 @@ fn machine(roms: &Path, eeprom: Option<&[u8]>, assets: Option<&Path>) -> Machine
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, assets, scenario, frames, out] = &a[..] else {
-        eprintln!("usage : assets_game <roms> <eeprom> <assets> <scénario> <images> <sortie.png>");
+        eprintln!("usage: assets_game <roms> <eeprom> <assets> <scenario> <frames> <output.png>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
     let mut rom = machine(Path::new(roms), ee.as_deref(), None);
     let mut asset = machine(Path::new(roms), ee.as_deref(), Some(Path::new(assets)));
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
     let (mut image, mut non_blank, mut audio) = (Vec::new(), 0, 0usize);
     for f in 0..frames {
@@ -44,12 +44,12 @@ fn main() {
         script.apply(f, &mut asset);
         let (a, b) = (rom.run_frame(), asset.run_frame());
         if a != b {
-            println!("DIFFÉRENT : image {f} (graphismes)");
+            println!("DIFFÉRENT: frame {f} (graphics)");
             std::process::exit(1);
         }
         let (sa, sb): (Vec<_>, Vec<_>) = (rom.sound.audio.drain(..).collect(), asset.sound.audio.drain(..).collect());
         if sa != sb {
-            println!("DIFFÉRENT : image {f} (échantillons)");
+            println!("DIFFÉRENT: frame {f} (samples)");
             std::process::exit(1);
         }
         audio += sa.len();
@@ -61,5 +61,5 @@ fn main() {
     enc.set_depth(png::BitDepth::Eight);
     let rgb: Vec<u8> = image.iter().flatten().copied().collect();
     enc.write_header().unwrap().write_image_data(&rgb).unwrap();
-    println!("IDENTIQUE : {frames} images ({non_blank} non unies), {audio} échantillons audio comparés, dernière image dans {out}");
+    println!("IDENTIQUE: {frames} frames ({non_blank} not uniform), {audio} audio samples compared, last frame in {out}");
 }

@@ -1,20 +1,20 @@
-//! Boss de type 17 (0x952b4), scènes 13 et 44 (h : « Tel'Arin » dans les noms de debug de l'atlas). Voir
+//! Boss of type 17 (0x952b4), stages 13 and 44 (h: "Tel'Arin" in the atlas's debug names). See
 //! `docs/families/boss.md`.
 //!
-//! Combattant à trois variantes (`+3`) : 0 est le boss de la scène 13 (arrivée en scène, combat, mort et
-//! cinématique de fin), 1 et 2 des apparitions annexes (scène 44). Charpente des ennemis (`+4` état, `+5`
-//! groupe, `+6` et `+7` étapes) ; états actifs (`+5`) :
+//! Fighter with three variants (`+3`): 0 is the boss of stage 13 (stage arrival, combat, death and ending
+//! cutscene), 1 and 2 are side appearances (stage 44). Enemy skeleton (`+4` state, `+5` group, `+6` and `+7` steps);
+//! active states (`+5`):
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `intro` | cinématiques : arrivée (`+6` = 0 et 2), mort et fin de scène (4), variantes 1 et 2 (6, 8) |
-//! | 2 | `fight` | combat : marche vers un joueur (`+6` = 4, 6), charge (8, 10), tout est décidé par `decide` |
-//! | 4 | `attacks` | neuf attaques (`+6` = 0 à 16) |
-//! | 6, 8, 10 | ici | attente tant qu'aucun joueur n'est en vie |
-//! | état 4 | `hit` | réactions aux coups, mort |
+//! | 0 | `intro` | cutscenes: arrival (`+6` = 0 and 2), death and end of stage (4), variants 1 and 2 (6, 8) |
+//! | 2 | `fight` | combat: walk toward a player (`+6` = 4, 6), charge (8, 10), everything is decided by `decide` |
+//! | 4 | `attacks` | nine attacks (`+6` = 0 to 16) |
+//! | 6, 8, 10 | here | wait while no player is alive |
+//! | state 4 | `hit` | reactions to hits, death |
 //!
-//! Animations : 0x18076e (mouvements), 0x1807a2 (coups), 0x1807c0 (recul). `+0xa0` est le jeu courant
-//! (0x30 à 0x34 : séquences spéciales, sans ombre ni test de zone) et `+0xa1` l'animation en cours.
+//! Animations: 0x18076e (movements), 0x1807a2 (hits), 0x1807c0 (knockback). `+0xa0` is the current set
+//! (0x30 to 0x34: special sequences, with no shadow or zone test) and `+0xa1` the current animation.
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -27,46 +27,46 @@ mod fight;
 pub(crate) mod hit;
 mod intro;
 
-/// Champs propres à ce type.
+/// Fields specific to this type.
 pub(self) mod g {
-    /// Valeur d'étourdissement (et recopie en `+0x53` : gel après un coup).
+    /// Stun value (and copy into `+0x53`: freeze after a hit).
     pub const STUN: u32 = 0x56;
-    /// Vulnérable (1) ou non (0).
+    /// Vulnerable (1) or not (0).
     pub const VULNERABLE: u32 = 0x67;
-    /// Pas d'une marche restants (`+0x6b`), images avant le prochain pas (`+0x71`), minuterie d'approche (`+0x6e`).
+    /// Walk steps remaining (`+0x6b`), frames before the next step (`+0x71`), approach timer (`+0x6e`).
     pub const WALK_STEPS: u32 = 0x6b;
     pub const APPROACH: u32 = 0x6e;
     pub const WALK_DELAY: u32 = 0x71;
-    /// Type du tir lancé par `0xe76c` (indice de table).
+    /// Type of the shot launched by `0xe76c` (table index).
     pub const SHOT: u32 = 0x79;
-    /// Minuterie de l'étape (mot) et compteur (mot).
+    /// Step timer (word) and counter (word).
     pub const TIMER: u32 = 0xa6;
     pub const COUNT: u32 = 0xa8;
-    /// Jeu d'animations courant et animation en cours.
+    /// Current animation set and current animation.
     pub const ANIM_KIND: u32 = 0xa0;
     pub const ANIM_LAST: u32 = 0xa1;
-    /// État mémorisé (long) à reprendre après une interruption.
+    /// Saved state (long) to resume after an interruption.
     pub const SAVED_STATE: u32 = 0xa2;
     pub const PHASE: u32 = 0xaa;
     pub const PHASES: u32 = 0xab;
-    /// Octet non nul : le boss est invulnérable (`+0x38` remis à zéro à chaque image).
+    /// Non-zero byte: the boss is invulnerable (`+0x38` reset to zero every frame).
     pub const INVULNERABLE: u32 = 0xad;
-    /// Nombre d'objets lâchés encore en jeu.
+    /// Number of dropped objects still in play.
     pub const SPAWNED: u32 = 0xaf;
-    /// Objet lié (mot) : tir ou message.
+    /// Linked object (word): shot or message.
     pub const CHILD: u32 = 0xb0;
-    /// Attaques restantes de chaque sorte (`0xb2`, `0xb3`, `0xb4`).
+    /// Attacks remaining of each kind (`0xb2`, `0xb3`, `0xb4`).
     pub const BUDGET_A: u32 = 0xb2;
     pub const BUDGET_B: u32 = 0xb3;
     pub const BUDGET_C: u32 = 0xb4;
-    /// Ralenti (`0xbb` : 0 normal, 1 ou 2 mode) et ses compteurs.
+    /// Slow motion (`0xbb`: 0 normal, 1 or 2 mode) and its counters.
     pub const SLOW_TICK: u32 = 0xb5;
     pub const STRIKES: u32 = 0xb6;
     pub const STRIKE_LIMIT: u32 = 0xb7;
     pub const SLOW_TIME: u32 = 0xb8;
     pub const SLOW_COUNT: u32 = 0xba;
     pub const SLOW: u32 = 0xbb;
-    /// Position mémorisée de la cible.
+    /// Saved position of the target.
     pub const MARK_X: u32 = 0xbc;
     pub const MARK_Y: u32 = 0xbe;
 }
@@ -79,7 +79,7 @@ pub(self) const SET_BODY: u32 = 0x18076e;
 pub(self) const SET_STRIKE: u32 = 0x1807a2;
 pub(self) const SET_HURT: u32 = 0x1807c0;
 
-/// Lance l'animation `n` du jeu des mouvements / des coups par l'IA (`0x103d6`).
+/// Starts animation `n` of the movements / hits set via the AI (`0x103d6`).
 pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
@@ -106,7 +106,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0) == 0 {
             return;
         }
-        // ralenti : tant que `+0xba` reste positif, le boss rejoue sa logique dans la même image
+        // slow motion: as long as `+0xba` stays positive, the boss replays its logic within the same frame
         if x.u32(f::STATE) & 0xffff_ff00 != decide::WAIT && x.u8(SLOW) != 0 {
             let t = sub8(x, SLOW_COUNT, 1);
             if t.pl() {
@@ -130,7 +130,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
@@ -172,7 +172,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = tst8(x, f::FREEZE);
@@ -186,14 +186,14 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
             _ => wait_for_players(x),
         }
     }
-    // les séquences spéciales (jeu 0x30 et au-delà) n'ont ni zone de jeu ni ombre
+    // the special sequences (set 0x30 and beyond) have neither play area nor shadow
     if !cmp8(x, ANIM_KIND, 0x30).ge() {
         lib::keep_in_zone(x);
         lib::collide_terrain(x);
     }
 }
 
-/// `+5` = 6, 8, 10 (0x96958) : attend que des joueurs reviennent.
+/// `+5` = 6, 8, 10 (0x96958): waits for players to come back.
 fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) as i8 > 0 {
         return decide::chase(x);
@@ -213,6 +213,6 @@ fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
 
 handlers! {
     0x952b4 "boss_17" #[without] run,
-    // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
+    // getting up after a common reaction (table 0x3e000 of `reactions.rs`)
     0x96ce0 "boss_17_releve" hit::recovered_tail,
 }

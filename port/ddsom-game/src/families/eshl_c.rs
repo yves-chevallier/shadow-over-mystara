@@ -1,7 +1,7 @@
-//! Tirs et attaques des ennemis (classe ESHL), types 40 à 63. Voir `docs/families/eshl_c.md`.
+//! Enemy shots and attacks (ESHL class), types 40 to 63. See `docs/families/eshl_c.md`.
 //!
-//! Même cadre que `eshl.rs` : un `mod` par type, `run` est appelé par le dispatch avec l'objet
-//! courant ; `+4` est l'état principal, `+5` / `+6` / `+7` les sous-états (octets pairs).
+//! Same framework as `eshl.rs`: one `mod` per type, `run` is called by the dispatch with the current object; `+4` is
+//! the main state, `+5` / `+6` / `+7` the substates (even bytes).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -13,39 +13,38 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-/// Sous-routines communes de l'IA des ennemis.
+/// Common subroutines of the enemy AI.
 mod rt {
 }
 
-/// Sons (zone 0xe0836-0xee080).
+/// Sounds (area 0xe0836-0xee080).
 mod sfx {
     pub const ED186: u32 = 0xed186;
     pub const ED90A: u32 = 0xed90a;
     pub const ED32E: u32 = 0xed32e;
 }
 
-/// Mot (adresse RAM sur 16 bits) vu comme un objet : extension de signe, comme `movea.w`.
+/// Word (16-bit RAM address) seen as an object: sign extension, like `movea.w`.
 fn obj_of(word: u16) -> Obj {
     Obj(word as i16 as i32 as u32 & 0xff_ffff)
 }
 
-/// Démarre une animation par la routine de l'IA (`0x103d6`).
+/// Starts an animation through the AI routine (`0x103d6`).
 fn ai_anim<R: Bench>(x: &mut Cx<'_, R>, set: u32, n: u32) {
     crate::families::enemy_lib::start(x, set, n);
 }
 
-/// Un pas d'animation par la routine de l'IA ; vrai à la fin du script.
+/// One animation step through the AI routine; true at the end of the script.
 fn ai_step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     crate::families::enemy_lib::step(x)
 }
 
-/// Alloue un objet ESHL ; `None` si le pool est plein.
-/// Tirage pseudo-aléatoire.
+/// Allocates an ESHL object; `None` if the pool is full. Pseudo-random draw.
 fn random<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     x.random() as u32
 }
 
-/// Les trois coordonnées 16.16 (X, Y, Z) de `from`, copiées en long.
+/// The three 16.16 coordinates (X, Y, Z) of `from`, copied as longs.
 fn copy_xyz32<R: Bench>(x: &mut Cx<'_, R>, from: Obj) {
     for off in [0x8, 0x10, 0xc] {
         let v = from.u32(x.b, off);
@@ -53,7 +52,7 @@ fn copy_xyz32<R: Bench>(x: &mut Cx<'_, R>, from: Obj) {
     }
 }
 
-/// Même chose en mots (parties entières seulement).
+/// Same thing in words (integer parts only).
 fn copy_xyz16<R: Bench>(x: &mut Cx<'_, R>, from: Obj) {
     for off in [0x8, 0x10, 0xc] {
         let v = from.u16(x.b, off);
@@ -61,49 +60,48 @@ fn copy_xyz16<R: Bench>(x: &mut Cx<'_, R>, from: Obj) {
     }
 }
 
-/// Orientation recopiée d'un autre objet.
+/// Orientation copied from another object.
 fn copy_flip<R: Bench>(x: &mut Cx<'_, R>, from: Obj) -> u8 {
     let flip = from.u8(x.b, f::FLIP);
     x.set8(f::FLIP, flip);
     flip
 }
 
-/// Opposé d'un mot.
+/// Opposite of a word.
 fn neg(v: u16) -> u16 {
     v.wrapping_neg()
 }
 
-/// Octet vu comme signé.
+/// Byte seen as signed.
 fn s8(v: u8) -> i8 {
     v as i8
 }
 
-/// Mot vu comme signé.
+/// Word seen as signed.
 fn s16(v: u16) -> i16 {
     v as i16
 }
 
 // ---------------------------------------------------------------------------------------------
-// Types 40 et 41 : volée de projectiles lancés par un créateur (le créateur est en `+0x5c`)
+// Types 40 and 41: volley of projectiles launched by a creator (the creator is in `+0x5c`)
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 40 (0xa31e4) : projectile qui apparaît à la position de son créateur (`+0x5c` ; variantes 0
-/// à 2 : décalage en X de 0 / -10 / +10 pixels), choisit une animation au hasard dans une table de
-/// 16 octets et dure 90 images (`+0x42`), caché une image sur deux selon la parité de sa variante.
-/// Il disparaît quand le propriétaire (`+0x50`) est dans l'état 0x406.
+/// Shot 40 (0xa31e4): projectile that appears at the position of its creator (`+0x5c`; variants 0 to 2: X offset of 0 /
+/// -10 / +10 pixels), chooses an animation at random from a 16-byte table and lasts 90 frames (`+0x42`), hidden every
+/// other frame according to the parity of its variant. It disappears when the owner (`+0x50`) is in state 0x406.
 mod shot40 {
     use super::*;
 
     const ANIMS: u32 = 0x16ff94;
-    /// Animation tirée au hasard (16 octets).
+    /// Animation drawn at random (16 bytes).
     const RANDOM_ANIMS: u32 = 0xa329e;
-    /// Valeur de `+0x2b` (palette (h)) par `+0x47`.
+    /// Value of `+0x2b` (palette (h)) by `+0x47`.
     const PALETTES: u32 = 0xa31ba;
     const CREATOR: u32 = 0x5c;
     const LIFETIME: u32 = 0x42;
     const PALETTE_COUNTDOWN: u32 = 0x46;
     const PALETTE_INDEX: u32 = 0x47;
-    /// Variable `A5+0x6e` : bit 0 = phase de clignotement globale.
+    /// Variable `A5+0x6e`: bit 0 = global blinking phase.
     const BLINK_PHASE: u32 = 0x6e;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -164,7 +162,7 @@ mod shot40 {
         x.reinsert();
     }
 
-    /// Tous les 5 pas, passe à la palette suivante de la table (8 entrées).
+    /// Every 5 steps, goes to the next palette of the table (8 entries).
     fn cycle_palette<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u8(PALETTE_COUNTDOWN).wrapping_sub(1);
         x.set8(PALETTE_COUNTDOWN, n);
@@ -179,28 +177,27 @@ mod shot40 {
         x.set8(0x2b, p);
     }
 
-    /// Caché quand la parité de la variante diffère de la phase globale.
+    /// Hidden when the variant's parity differs from the global phase.
     fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
         let hidden = (x.u8(0x3) & 1) as u16 != x.a5_u16(BLINK_PHASE) & 1;
         x.set_bit(0x1, 1, hidden);
     }
 }
 
-/// Tir 41 (0xa336c) : rayon lancé vers la cible du propriétaire de son créateur (type 40, en
-/// `+0x5c`). Direction et vitesse de Z lues selon la distance en X à la cible, recharge une palette
-/// de 32 octets, puis, à l'arrivée au sol, crée trois tirs de type 40 (fonction de création
-/// 0xa31c2) et finit son animation.
+/// Shot 41 (0xa336c): ray launched toward the target of the owner of its creator (type 40, in `+0x5c`). Direction and Z
+/// speed read according to the X distance to the target, reloads a 32-byte palette, then, on reaching the ground,
+/// creates three shots of type 40 (creation function 0xa31c2) and finishes its animation.
 mod shot41 {
     use super::*;
 
     const ANIMS: u32 = 0x1700f8;
     const CREATOR: u32 = 0x5c;
-    /// Vitesse de Z (mot) par tranche de 32 pixels de distance.
+    /// Z speed (word) per 32-pixel slice of distance.
     const FALL_SPEEDS: u32 = 0xa3492;
-    /// Palette copiée (ROM vers RAM palette) : 8 longs.
+    /// Palette copied (ROM to palette RAM): 8 longs.
     const PALETTE_SRC: u32 = 0x25a6e0;
     const PALETTE_DST: u32 = 0x91c2e0;
-    /// Champs de la cible (objet joueur) : position de visée.
+    /// Fields of the target (player object): aiming position.
     const TARGET_X: u32 = 0xb0;
     const TARGET_Y: u32 = 0xb2;
 
@@ -251,7 +248,7 @@ mod shot41 {
         x.anim_start(ANIMS, 0);
     }
 
-    /// Recopie 8 longs de la ROM dans la RAM palette.
+    /// Copies 8 longs from the ROM to the palette RAM.
     fn copy_palette<R: Bench>(x: &mut Cx<'_, R>) {
         for i in 0..8 {
             let v = x.data32(PALETTE_SRC + 4 * i);
@@ -291,19 +288,18 @@ mod shot41 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Types 42 et 43 : attaque à éclats lancés depuis un hôte (`+0x42`)
+// Types 42 and 43: burst attack launched from a host (`+0x42`)
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 42 (0xa3568) : attaque collée à son hôte (ennemi en `+0x42`), à 32 pixels devant lui et 64 en
-/// hauteur. Elle suit l'animation de l'hôte (`+0x33`), puis, quand l'ennemi la déclenche (`+0x59`),
-/// lance une rafale de 5 éclats (type 43) de 8 en 8 images dont l'angle (`+0x5e`) tourne de `+0x5f`
-/// (modulo 32), attend 20 images puis finit son animation. Disparaît quand l'hôte passe à l'état 4
-/// ou quand il est retombé (Z <= 0, dernier sous-état).
+/// Shot 42 (0xa3568): attack stuck to its host (enemy in `+0x42`), 32 pixels in front of it and 64 in height. It
+/// follows the host's animation (`+0x33`), then, when the enemy triggers it (`+0x59`), launches a salvo of 5 bursts
+/// (type 43) every 8 frames whose angle (`+0x5e`) rotates by `+0x5f` (modulo 32), waits 20 frames then finishes its
+/// animation. Disappears when the host goes to state 4 or when it has fallen back (Z <= 0, last substate).
 mod shot42 {
     use super::*;
 
     const ANIMS: u32 = 0x170222;
-    /// Animation de l'attaque selon `+0x33` de l'hôte (table d'octets indexée par 7 bits).
+    /// Animation of the attack according to `+0x33` of the host (byte table indexed by 7 bits).
     const ANIM_OF_HOST_FRAME: u32 = 0xa3600;
     const HOST: u32 = 0x42;
     const ARMED: u32 = 0x58;
@@ -313,11 +309,11 @@ mod shot42 {
     const SHARD_DELAY: u32 = 0x48;
     const ANGLE: u32 = 0x5e;
     const ANGLE_STEP: u32 = 0x5f;
-    /// Sous-états (`+5`).
+    /// Substates (`+5`).
     const IDLE: u8 = 0;
     const FIGHT: u8 = 2;
     const END: u8 = 4;
-    /// Phases de la rafale (`+6`).
+    /// Phases of the salvo (`+6`).
     const WIND_UP: u8 = 0;
     const WAIT_TRIGGER: u8 = 2;
     const BURST: u8 = 4;
@@ -343,7 +339,7 @@ mod shot42 {
         }
     }
 
-    /// Se cale devant l'hôte (32 pixels côté regard, 64 en hauteur, un cran plus près).
+    /// Aligns in front of the host (32 pixels on the facing side, 64 in height, one notch closer).
     fn follow_host<R: Bench>(x: &mut Cx<'_, R>) {
         let host = x.linked(HOST);
         copy_xyz16(x, host);
@@ -399,7 +395,7 @@ mod shot42 {
                 x.add8(0x6, 2);
                 x.set16(SHARDS_LEFT, 5);
                 x.set16(SHARD_DELAY, 1);
-                // angle de départ et sens de rotation : selon le côté et la hauteur du propriétaire
+                // starting angle and rotation direction: according to the owner's side and height
                 let (mut a, mut step, mut a2, mut step2) = (0x16u8, 1u8, 0x1au8, 0xffu8);
                 if x.u8(f::FLIP) != 0 {
                     (a, step, a2, step2) = (0xa, 0xff, 6, 1);
@@ -446,7 +442,7 @@ mod shot42 {
         }
     }
 
-    /// Crée un éclat (type 43) devant l'attaque, avec l'angle courant, puis tourne l'angle.
+    /// Creates a burst (type 43) in front of the attack, with the current angle, then rotates the angle.
     fn spawn_shard<R: Bench>(x: &mut Cx<'_, R>) {
         let Some(c) = x.alloc(&pools::ESHL) else { return };
         c.set_u8(x.b, 0, 1);
@@ -470,9 +466,9 @@ mod shot42 {
     }
 }
 
-/// Tir 43 (0xa3762) : éclat de l'attaque 42, qui part dans la direction `+0x2d` (table de vitesses
-/// 0x40) en animation 0x10 + une valeur de la table 0xa37ba indexée par la direction / 2. Détruit au
-/// contact (touché ou paré) ou en sortant de la fenêtre de l'écran.
+/// Shot 43 (0xa3762): burst of attack 42, which leaves in the direction `+0x2d` (speed table 0x40) in animation 0x10 +
+/// a value of table 0xa37ba indexed by the direction / 2. Destroyed on contact (hit or parried) or on leaving the
+/// screen window.
 mod shot43 {
     use super::*;
 
@@ -515,25 +511,24 @@ mod shot43 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Types 44 et 45 : faisceau entre deux objets et débris
+// Types 44 and 45: beam between two objects and debris
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 44 (0xa380a) : faisceau tendu entre deux objets liés (variantes 0 et 1). `+0x46` est le
-/// créateur (qui compte ses faisceaux dans son octet `+0x42`) et le créateur du créateur est
-/// l'autre extrémité. Le faisceau se déplace de l'extrémité A2 vers l'extrémité A1 en 16 images
-/// (position = A2 + t * (A1 - A2) / 16, `+0x14` = t) ; touché (bit 3 de `+0x57`) il joue son
-/// animation de fin. La variante 1 démarre posée sur A2 (50 pixels plus haut), l'animation de départ
-/// dépend de `+0x2f` de A1, et l'animation de fin garde le faisceau en vie jusqu'à son terme.
+/// Shot 44 (0xa380a): beam stretched between two linked objects (variants 0 and 1). `+0x46` is the creator (which
+/// counts its beams in its byte `+0x42`) and the creator of the creator is the other end. The beam moves from end A2
+/// toward end A1 in 16 frames (position = A2 + t * (A1 - A2) / 16, `+0x14` = t); when hit (bit 3 of `+0x57`) it plays
+/// its end animation. Variant 1 starts placed on A2 (50 pixels higher), the start animation depends on `+0x2f` of A1,
+/// and the end animation keeps the beam alive until its end.
 mod beam44 {
     use super::*;
 
     const ANIMS: u32 = 0x17f002;
     const CREATOR: u32 = 0x46;
-    /// Compte de pas du faisceau.
+    /// Step count of the beam.
     const STEP: u32 = 0x14;
-    /// Compteur de faisceaux du créateur.
+    /// Beam counter of the creator.
     const BEAM_COUNT: u32 = 0x42;
-    /// Hauteur au-dessus de A2 de la position de visée en Z.
+    /// Height above A2 of the aiming position in Z.
     const RAISE_Z: u16 = 0x50;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -547,7 +542,7 @@ mod beam44 {
         }
     }
 
-    /// Objet vivant désigné par un mot (adresse négative et octet d'activité non nul).
+    /// Living object designated by a word (negative address and non-zero activity byte).
     fn live_link<R: Bench>(x: &mut Cx<'_, R>, word: u16) -> Option<Obj> {
         if s16(word) >= 0 {
             return None;
@@ -556,13 +551,13 @@ mod beam44 {
         (o.u8(x.b, 0) != 0).then_some(o)
     }
 
-    /// Le faisceau est terminé : état suivant.
+    /// The beam is finished: next state.
     fn end<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
     }
 
-    /// Les deux extrémités (créateur et créateur du créateur).
+    /// The two ends (creator and creator of the creator).
     fn ends<R: Bench>(x: &mut Cx<'_, R>) -> Option<(Obj, Obj)> {
         let w = x.u16(CREATOR);
         let a1 = live_link(x, w)?;
@@ -571,7 +566,7 @@ mod beam44 {
         Some((a1, a2))
     }
 
-    /// Le créateur compte un faisceau de plus.
+    /// The creator counts one more beam.
     fn count_beam<R: Bench>(x: &mut Cx<'_, R>, a1: Obj) {
         let n = a1.u8(x.b, BEAM_COUNT).wrapping_add(1);
         a1.set_u8(x.b, BEAM_COUNT, n);
@@ -624,8 +619,8 @@ mod beam44 {
         }
     }
 
-    /// État 2. `hit_anim` : animation de fin lancée au contact ; `lingers` : variante 1, où la fin
-    /// de l'animation de fin garde le faisceau (et où l'animation en cours le termine).
+    /// State 2. `hit_anim`: end animation launched on contact; `lingers`: variant 1, where the end of the end animation
+    /// keeps the beam (and where the running animation ends it).
     fn beam<R: Bench>(x: &mut Cx<'_, R>, hit_anim: u32, lingers: bool) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return x.reinsert();
@@ -650,8 +645,8 @@ mod beam44 {
         x.reinsert();
     }
 
-    /// Position = A2 + t * (A1 - A2) / 16 (arithmétique en mots), t = `+0x14` ; rien si t = 0.
-    /// En Z, la différence est mesurée 0x50 plus haut.
+    /// Position = A2 + t * (A1 - A2) / 16 (word arithmetic), t = `+0x14`; nothing if t = 0. In Z, the difference is
+    /// measured 0x50 higher.
     fn interpolate<R: Bench>(x: &mut Cx<'_, R>, a1: Obj, a2: Obj) {
         let t = x.u8(STEP) as u16;
         if t == 0 {
@@ -665,7 +660,7 @@ mod beam44 {
         }
     }
 
-    /// État 4 : rend un faisceau à son créateur.
+    /// State 4: gives a beam back to its creator.
     fn release<R: Bench>(x: &mut Cx<'_, R>) {
         let w = x.u16(CREATOR);
         if let Some(a1) = live_link(x, w) {
@@ -676,25 +671,24 @@ mod beam44 {
     }
 }
 
-/// Tir 45 (0xa3b88) : débris projetés par un objet (`+0x46`), deux variantes. Variante 0 : jaillit de
-/// l'objet avec une vitesse tirée au hasard dans une table de 8 lignes, rebondit une fois puis
-/// disparaît à la fin de l'animation. Variante 1 : éclat posé sur l'objet (décalage selon `+0x2f`),
-/// animé tant que l'objet est dans l'état `+0xa4 = 4`, puis tombe et disparaît au sol. Les débris
-/// sont retenus dans l'écran (0xfbb0).
+/// Shot 45 (0xa3b88): debris thrown by an object (`+0x46`), two variants. Variant 0: springs out of the object with a
+/// speed drawn at random from an 8-row table, bounces once then disappears at the end of the animation. Variant 1:
+/// burst placed on the object (offset according to `+0x2f`), animated as long as the object is in state `+0xa4 = 4`,
+/// then falls and disappears on the ground. The debris are kept on the screen (0xfbb0).
 mod debris45 {
     use super::*;
 
     const ANIMS: u32 = 0x17f002;
     const SOURCE: u32 = 0x46;
-    /// Lignes de 4 mots (VX, AX, VZ, VY) pour la variante 0 (espace de données).
+    /// Rows of 4 words (VX, AX, VZ, VY) for variant 0 (data space).
     const BURST_SPEEDS: u32 = 0xa3e30;
     const BURST_ANIMS: u32 = 0xa3c3a;
     const HOP_VZ: u32 = 0xa3c94;
-    /// Miroir de `+0x2f` pour l'objet retourné.
+    /// Mirror of `+0x2f` for the flipped object.
     const MIRROR: u32 = 0xa3d10;
-    /// Décalages de la variante 1 par `+0x2f` : X, puis Z par lecture décalée de deux octets.
+    /// Offsets of variant 1 by `+0x2f`: X, then Z by a read shifted by two bytes.
     const PLACE_OFFSETS: u32 = 0xa3dc2;
-    /// Marge de la retenue à l'écran.
+    /// Margin of the on-screen restraint.
     const MARGIN: u32 = 0x10;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -708,13 +702,13 @@ mod debris45 {
         }
     }
 
-    /// L'objet disparaît : état 6.
+    /// The object disappears: state 6.
     fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(0x4, 6);
         x.set8(0x5, 0);
     }
 
-    /// Source (adresse négative), éventuellement vivante.
+    /// Source (negative address), possibly alive.
     fn source<R: Bench>(x: &mut Cx<'_, R>, check_active: bool) -> Option<Obj> {
         let word = x.u16(SOURCE);
         if s16(word) >= 0 {
@@ -778,7 +772,7 @@ mod debris45 {
         }
     }
 
-    /// Fin commune : retenu à l'écran, puis remis dans la liste triée.
+    /// Common end: kept on the screen, then put back in the sorted list.
     fn settle<R: Bench>(x: &mut Cx<'_, R>) {
         x.keep_on_screen(MARGIN as u16);
         x.reinsert();
@@ -836,7 +830,7 @@ mod debris45 {
         }
     }
 
-    /// Pose l'éclat sur la source : X et Y de la source, Z + 0x30, puis décalage selon `+0x2f`.
+    /// Places the burst on the source: X and Y of the source, Z + 0x30, then offset according to `+0x2f`.
     fn place<R: Bench>(x: &mut Cx<'_, R>, src: Obj) {
         let (sx, sy, sz) = (src.u16(x.b, 0x8), src.u16(x.b, 0x10), src.u16(x.b, 0xc));
         x.set16(0x8, sx);
@@ -844,7 +838,7 @@ mod debris45 {
         x.set16(0xc, sz.wrapping_add(0x30));
         let k = 2 * (x.u8(0x2f) & 7) as u32;
         let dx = x.rom16(PLACE_OFFSETS + k);
-        // la ligne des Z est la même table lue avec un décalage de deux octets, indexée par dx
+        // the Z row is the same table read with a two-byte offset, indexed by dx
         let dz = x.rom16((PLACE_OFFSETS + 2).wrapping_add(dx as i16 as i32 as u32));
         x.add16(0x8, dx);
         x.add16(0xc, dz);
@@ -852,17 +846,16 @@ mod debris45 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Types 46 à 50
+// Types 46 to 50
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 46 (0xa3e72) : objet de décor mobile (animation choisie par la variante) qui défile de 4
-/// pixels par image vers la gauche et disparaît quand il dépasse le bord gauche de l'écran
-/// (`A5+0x506` - 0x50).
+/// Shot 46 (0xa3e72): mobile scenery object (animation chosen by the variant) that scrolls by 4 pixels per frame to the
+/// left and disappears when it passes the left edge of the screen (`A5+0x506` - 0x50).
 mod scroller46 {
     use super::*;
 
     const ANIMS: u32 = 0x1703e6;
-    /// Bord gauche de l'écran (variable `A5+0x506`).
+    /// Left edge of the screen (variable `A5+0x506`).
     const SCREEN_LEFT: u32 = 0x506;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -885,14 +878,13 @@ mod scroller46 {
     }
 }
 
-/// Tir 47 (0xa3ebe) : apparition invisible, décalée au hasard autour du bord de la caméra
-/// (`A5+0x5a6` en X, `A5+0x5aa` en Y), qui attend un délai tiré d'une table (`+0x58`), devient
-/// visible puis joue son animation jusqu'au bout.
+/// Shot 47 (0xa3ebe): invisible appearance, randomly offset around the edge of the camera (`A5+0x5a6` in X, `A5+0x5aa`
+/// in Y), which waits for a delay drawn from a table (`+0x58`), becomes visible then plays its animation to the end.
 mod spawn47 {
     use super::*;
 
     const ANIMS: u32 = 0x16fbf4;
-    /// Tables de 16 mots de décalages : en X (dans la bande / hors bande), en Y (idem), délais.
+    /// Tables of 16 words of offsets: in X (inside the band / outside the band), in Y (same), delays.
     const X_INSIDE: u32 = 0xa3fd4;
     const X_OUTSIDE: u32 = 0xa3ff4;
     const Y_INSIDE: u32 = 0xa4014;
@@ -943,7 +935,7 @@ mod spawn47 {
         }
     }
 
-    /// Décale la position au hasard : ramène vers l'écran si elle en est trop loin.
+    /// Offsets the position at random: brings it back toward the screen if it is too far from it.
     fn place<R: Bench>(x: &mut Cx<'_, R>) {
         let idx = 2 * (random(x) & 0xf);
         let cam = x.a5_u16(CAMERA_X);
@@ -972,10 +964,10 @@ mod spawn47 {
     }
 }
 
-/// Tir 48 (0xa4088) : projectile lancé en cloche par un lanceur (`+0x5c`, dont il compte les tirs
-/// retombés dans son octet `+0x1d`). Attend 16 images, monte (VZ = -0x100) jusqu'à Z <= 0x20, attend
-/// 16 images, puis redescend à la hauteur de départ (`+0x4e`) ; il peut alors détruire l'objet
-/// repéré en `+0x58`. Il libère ensuite son emplacement dans le lanceur (mot `+8+variant`).
+/// Shot 48 (0xa4088): projectile launched in a lob by a launcher (`+0x5c`, whose fallen shots it counts in its byte
+/// `+0x1d`). Waits 16 frames, rises (VZ = -0x100) until Z <= 0x20, waits 16 frames, then descends back to the starting
+/// height (`+0x4e`); it can then destroy the object spotted in `+0x58`. It then frees its slot in the launcher (word
+/// `+8+variant`).
 mod lob48 {
     use super::*;
 
@@ -1025,8 +1017,8 @@ mod lob48 {
                         x.add8(0x5, 2);
                         x.set16(0x18, neg(0x100));
                         x.set16(0x1a, neg(0x20));
-                        // Glitch d'origine : 0x54872 rend D0 = 0 même quand le tir est créé, si bien que le `bne`
-                        // qui devait le retenir en `TARGET` n'est jamais pris
+                        // Original glitch: 0x54872 returns D0 = 0 even when the shot is created, so the `bne` that was
+                        // supposed to hold it in `TARGET` is never taken
                         crate::families::small::shot_18(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o, 2);
                     }
                     2 => {
@@ -1059,7 +1051,7 @@ mod lob48 {
                 }
     }
 
-    /// Décompte du délai `+0x4c` : vrai tant qu'il n'est pas écoulé.
+    /// Countdown of the delay `+0x4c`: true as long as it has not elapsed.
     fn dec_wait<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let t = x.u16(WAIT).wrapping_sub(1);
         x.set16(WAIT, t);
@@ -1067,10 +1059,9 @@ mod lob48 {
     }
 }
 
-/// Tir 49 (0xa418e) : coup porté à 0x6e pixels devant l'ennemi qui l'a créé (`+0x42`), à hauteur
-/// 0x35. Il joue l'animation de départ tant que l'hôte n'est pas passé au sous-état 6 (`+7`) ; il
-/// finit son animation ensuite, ou disparaît si l'hôte est étourdi (état 4) sans que l'animation
-/// ait atteint son repère (`+0x33`).
+/// Shot 49 (0xa418e): blow dealt 0x6e pixels in front of the enemy that created it (`+0x42`), at height 0x35. It plays
+/// the start animation as long as the host has not gone to substate 6 (`+7`); it finishes its animation afterwards, or
+/// disappears if the host is stunned (state 4) without the animation having reached its mark (`+0x33`).
 mod strike49 {
     use super::*;
 
@@ -1129,7 +1120,7 @@ mod strike49 {
         }
     }
 
-    /// Passe à l'animation finale.
+    /// Goes to the final animation.
     fn finish<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x5, 2);
         x.set8(0x6, 0);
@@ -1137,24 +1128,23 @@ mod strike49 {
     }
 }
 
-/// Tir 50 (0xa4266) : frappes d'un ennemi (`+0x42`) en deux variantes (0 : balle qui part en cloche
-/// de 0x70 pixels devant l'hôte ; 1 : balle lente à 0x76 pixels). L'animation avance par phases
-/// (`+0x5a`, durée de phase `+0x5b` lue dans la table 0xa44aa) avec la valeur d'animation
-/// `phase + 3`. Quand l'hôte est étourdi (état 4) ou que sa trajectoire s'achève, passe à
-/// l'animation `phase + 6` (sous-état 4) puis disparaît. Retenu dans l'écran et testé par 0x33fe4
-/// à chaque image.
+/// Shot 50 (0xa4266): strikes of an enemy (`+0x42`) in two variants (0: ball that leaves in a lob 0x70 pixels in front
+/// of the host; 1: slow ball at 0x76 pixels). The animation advances by phases (`+0x5a`, phase duration `+0x5b` read
+/// from table 0xa44aa) with the animation value `phase + 3`. When the host is stunned (state 4) or its trajectory ends,
+/// goes to the animation `phase + 6` (substate 4) then disappears. Kept on the screen and tested by 0x33fe4 at each
+/// frame.
 mod bullet50 {
     use super::*;
 
     const ANIMS: u32 = 0x170468;
     const HOST: u32 = 0x42;
     const SOUND: u32 = 0xed398;
-    /// Durée des phases d'animation (octets).
+    /// Duration of the animation phases (bytes).
     const PHASE_LENGTHS: u32 = 0xa44aa;
     const PHASE: u32 = 0x5a;
     const PHASE_TIMER: u32 = 0x5b;
     const FALL_TIMER: u32 = 0x58;
-    /// Sauvegarde de `+0x3b` (priorité du cadre) à travers l'animation.
+    /// Saving of `+0x3b` (frame priority) across the animation.
     const SAVED_PRIORITY: u32 = 0x5e;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1179,7 +1169,7 @@ mod bullet50 {
         }
     }
 
-    /// Création : variante 0 (`lob = true`) ou 1.
+    /// Creation: variant 0 (`lob = true`) or 1.
     fn launch<R: Bench>(x: &mut Cx<'_, R>, speed: u32, dx: u16, dz: u16, vz: u16, lob: bool) {
         x.add8(0x4, 2);
         if !lob {
@@ -1199,7 +1189,7 @@ mod bullet50 {
         start_phase(x);
     }
 
-    /// Avance d'une phase quand sa durée est écoulée (et qu'on n'est pas déjà en phase 2).
+    /// Advances one phase when its duration has elapsed (and we are not already in phase 2).
     fn phase_tick<R: Bench>(x: &mut Cx<'_, R>) {
         if s8(x.u8(PHASE)) < 2 {
             let n = x.u8(PHASE_TIMER).wrapping_sub(1);
@@ -1213,7 +1203,7 @@ mod bullet50 {
         step_phase(x);
     }
 
-    /// Démarre l'animation de la phase courante, puis un pas.
+    /// Starts the animation of the current phase, then one step.
     fn start_phase<R: Bench>(x: &mut Cx<'_, R>) {
         let phase = x.u8(PHASE);
         let len = x.rom8(PHASE_LENGTHS + phase as u32);
@@ -1235,8 +1225,8 @@ mod bullet50 {
         x.set8(0x3b, p);
     }
 
-    /// L'hôte est étourdi : passe à l'animation de fin (`phase + 6`), sous-état 4 pour la variante 0
-    /// (état 2, sous-état 4), prochain sous-état pour la variante 1.
+    /// The host is stunned: goes to the end animation (`phase + 6`), substate 4 for variant 0 (state 2, substate 4),
+    /// next substate for variant 1.
     fn host_stunned<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let host = x.linked(HOST);
         host.u8(x.b, 4) == 4
@@ -1321,20 +1311,20 @@ mod bullet50 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Types 51 et 52
+// Types 51 and 52
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 51 (0xa4522) : projectile tombant du haut de l'écran, lancé par un lanceur (`+0x5c`, dont il
-/// compte les tirs retombés dans son octet `+0x1d`). Attend `+0x42` images, apparaît 0x100 plus haut
-/// que sa profondeur, attend 30 images puis tombe (VZ = -0x100, AZ = -0x40) jusqu'au sol, où il
-/// déclenche deux sous-routines d'impact (0xab7d8 avec 3, 0x2860 avec 8) et disparaît.
+/// Shot 51 (0xa4522): projectile falling from the top of the screen, launched by a launcher (`+0x5c`, whose fallen
+/// shots it counts in its byte `+0x1d`). Waits `+0x42` frames, appears 0x100 higher than its depth, waits 30 frames
+/// then falls (VZ = -0x100, AZ = -0x40) to the ground, where it triggers two impact subroutines (0xab7d8 with 3, 0x2860
+/// with 8) and disappears.
 mod drop51 {
     use super::*;
 
     const ANIMS: u32 = 0x16ea18;
     const LAUNCHER: u32 = 0x5c;
     const WAIT: u32 = 0x42;
-    /// Haut de l'écran : `A5+0x50a` (joueur 1) ou `A5+0x55a` (joueur 2, si `A5+0x36`).
+    /// Top of the screen: `A5+0x50a` (player 1) or `A5+0x55a` (player 2, if `A5+0x36`).
     const SCREEN_TOP: u32 = 0x50a;
     const SCREEN_TOP_P2: u32 = 0x55a;
 
@@ -1392,7 +1382,7 @@ mod drop51 {
         }
     }
 
-    /// Décompte du délai `+0x42` : vrai tant qu'il n'est pas écoulé.
+    /// Countdown of the delay `+0x42`: true as long as it has not elapsed.
     fn wait<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let t = x.u16(WAIT).wrapping_sub(1);
         x.set16(WAIT, t);
@@ -1400,15 +1390,15 @@ mod drop51 {
     }
 }
 
-/// Tir 52 (0xa46c6) : éléments de l'attaque finale d'un boss, attachés à lui (`+0x46`), quatre
-/// variantes qui n'existent que tant que le boss est dans l'état `+0xa0` attendu :
-///  0 (état 0x201) : boule posée sur le boss, qui lance trois sous-éléments (variantes 1 à 3 de
-///    `+0x2f`) ; blesse les joueurs touchés ;
-///  1 (état 0x214) : rayon collé à côté du boss ;
-///  2 (état 0x215) : voile plein écran qui suit l'écran et blesse les joueurs hors des zones sûres
-///    de l'étage 0x2e ou 0x69 ;
-///  3 : variante de la précédente qui dure 256 images (`+0x42`).
-/// Les états de verrouillage de l'écran sont `A5+0x43` (0x3f pris, 0xff libéré) et `A5+0x4ba`.
+/// Shot 52 (0xa46c6): elements of a boss's final attack, attached to it (`+0x46`), four variants that exist only as
+/// long as the boss is in the expected state `+0xa0`:
+///  0 (state 0x201): ball placed on the boss, which launches three sub-elements (variants 1 to 3 of
+///    `+0x2f`); hurts the players it touches;
+///  1 (state 0x214): ray stuck beside the boss;
+///  2 (state 0x215): full-screen veil that follows the screen and hurts the players outside the safe zones
+///    of stage 0x2e or 0x69;
+///  3: variant of the previous one that lasts 256 frames (`+0x42`).
+/// The screen locking states are `A5+0x43` (0x3f taken, 0xff released) and `A5+0x4ba`.
 mod finale52 {
     use super::*;
 
@@ -1417,11 +1407,11 @@ mod finale52 {
     const PARENT_STATE: u32 = 0xa0;
     const SUBTYPE: u32 = 0x2f;
     const TIMER: u32 = 0x42;
-    /// Animation par sous-type de la variante 0 (octets).
+    /// Animation per sub-type of variant 0 (bytes).
     const ANIM_OF_SUBTYPE: u32 = 0xa473e;
-    /// Sous-types des trois éléments lancés par la variante 0.
+    /// Sub-types of the three elements launched by variant 0.
     const ORB_SUBTYPES: u32 = 0xa46c2;
-    /// Écran : X (`A5+0x506`), Y (long `A5+0x50a`).
+    /// Screen: X (`A5+0x506`), Y (long `A5+0x50a`).
     const SCREEN_X: u32 = 0x506;
     const SCREEN_Y: u32 = 0x50a;
     const STAGE: u32 = 0x34;
@@ -1429,15 +1419,15 @@ mod finale52 {
     const LOCK_TAKEN: u8 = 0x3f;
     const LOCK_FREE: u8 = 0xff;
     const FLAG_4BA: u32 = 0x4ba;
-    /// Étage 0x2e : paires (début, longueur) des zones sûres en X, terminées par 0.
+    /// Stage 0x2e: pairs (start, length) of the safe zones in X, terminated by 0.
     const SAFE_RANGES: u32 = 0xa4bca;
-    /// Étage 0x69 : rectangles sûrs (X, largeur, Y, hauteur), un par bit de `0xff2064`.
+    /// Stage 0x69: safe rectangles (X, width, Y, height), one per bit of `0xff2064`.
     const SAFE_RECTS: u32 = 0xa4bd4;
     const RECT_FLAGS: u32 = 0xff2064;
-    /// Boîtes de l'attaque (lignes de 16 octets par `+0x3e`) et pointeurs vers les boîtes des joueurs.
+    /// Attack boxes (rows of 16 bytes per `+0x3e`) and pointers to the players' boxes.
     const ATTACK_BOXES: u32 = 0xa4cd2;
     const PLAYER_BOXES: u32 = 0xa4cba;
-    /// Premier joueur (`A5+0x5de`) et pas.
+    /// First player (`A5+0x5de`) and step.
     const PLAYERS: u32 = 0x5de;
     const PLAYER_SIZE: u32 = 0x200;
     const SCREEN_END_FX: u32 = 0xe55fe;
@@ -1460,7 +1450,7 @@ mod finale52 {
         x.set8(0x5, 0);
     }
 
-    /// Boss vivant (adresse négative, octet d'activité non nul).
+    /// Living boss (negative address, non-zero activity byte).
     fn parent<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let w = x.u16(PARENT);
         if s16(w) >= 0 {
@@ -1475,7 +1465,7 @@ mod finale52 {
         x.set8(f::ATTACK_POWER, 0);
     }
 
-    /// Se cale sur le boss ; le sous-type décale en hauteur (0x1c moins le sous-type).
+    /// Aligns on the boss; the sub-type offsets in height (0x1c minus the sub-type).
     fn attach<R: Bench>(x: &mut Cx<'_, R>, boss: Obj) {
         copy_xyz16(x, boss);
         let sub = x.u8(SUBTYPE) as u16;
@@ -1486,7 +1476,7 @@ mod finale52 {
         x.add16(0x10, sub);
     }
 
-    /// Fin de l'image : retenu dans l'écran puis remis dans la liste triée.
+    /// End of the frame: kept on the screen then put back in the sorted list.
     fn settle<R: Bench>(x: &mut Cx<'_, R>) {
         x.keep_on_screen(0x10);
         x.reinsert();
@@ -1497,7 +1487,7 @@ mod finale52 {
         x.set_a5_u16(FLAG_4BA, 0);
     }
 
-    // ----- variante 0 -----
+    // ----- variant 0 -----
 
     fn variant0<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
@@ -1532,7 +1522,7 @@ mod finale52 {
         }
     }
 
-    /// Sous-type 0 : suit l'animation de lancement, puis lance trois éléments et colle à côté du boss.
+    /// Sub-type 0: follows the launch animation, then launches three elements and sticks beside the boss.
     fn orb<R: Bench>(x: &mut Cx<'_, R>, boss: Obj) {
         let mut source = boss;
         if x.u8(0x5) == 0 {
@@ -1542,8 +1532,8 @@ mod finale52 {
             x.add8(0x5, 2);
             let last = spawn_followers(x);
             x.anim_start(ANIMS, 0x1b);
-            // Glitch d'origine : la position est ensuite recopiée depuis A1, qui désigne alors le dernier élément créé
-            // (et non le boss), ou, si le pool était plein, l'emplacement que l'allocation laisse dans A1.
+            // Original glitch: the position is then copied from A1, which then designates the last element created (and
+            // not the boss), or, if the pool was full, the slot that the allocation leaves in A1.
             source = last;
         }
         x.anim_step();
@@ -1555,8 +1545,8 @@ mod finale52 {
         x.add16(0x10, 0xffff);
     }
 
-    /// Crée trois éléments de sous-types 3, 2, 1 (table), liés au même boss. Rend l'A1 de l'original : le dernier
-    /// élément créé, ou ce que l'allocation qui échoue laisse (`Pool::alloc_or_leftover`).
+    /// Creates three elements of sub-types 3, 2, 1 (table), linked to the same boss. Returns the original's A1: the
+    /// last element created, or what the failing allocation leaves (`Pool::alloc_or_leftover`).
     fn spawn_followers<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
         let mut a1 = None;
         for i in (0..3u32).rev() {
@@ -1576,7 +1566,7 @@ mod finale52 {
         a1.expect("three followers created")
     }
 
-    /// Sous-types 1 à 3 : invisibles tant que le boss n'a pas armé `+0x3e` (sauf le sous-type 2).
+    /// Sub-types 1 to 3: invisible as long as the boss has not armed `+0x3e` (except sub-type 2).
     fn follower<R: Bench>(x: &mut Cx<'_, R>, boss: Obj) {
         attach(x, boss);
         x.set_bit(0x1, 1, true);
@@ -1588,7 +1578,7 @@ mod finale52 {
         x.anim_step();
     }
 
-    // ----- variante 1 -----
+    // ----- variant 1 -----
 
     fn variant1<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
@@ -1627,7 +1617,7 @@ mod finale52 {
         }
     }
 
-    /// Collé au boss, 8 pixels devant lui et 0x28 plus haut ; le boss avance d'un cran en Y.
+    /// Stuck to the boss, 8 pixels in front of it and 0x28 higher; the boss advances one notch in Y.
     fn beside<R: Bench>(x: &mut Cx<'_, R>, boss: Obj) {
         let (px, pz) = (boss.u16(x.b, 0x8), boss.u16(x.b, 0xc));
         x.set16(0x8, px);
@@ -1642,9 +1632,9 @@ mod finale52 {
         boss.set_u16(x.b, 0x12, n);
     }
 
-    // ----- variantes 2 et 3 : voile plein écran -----
+    // ----- variants 2 and 3: full-screen veil -----
 
-    /// Cale le voile sur l'écran (X, Y) à la hauteur 0x108 ; le boss avance d'un cran en Y s'il y en a un.
+    /// Aligns the veil on the screen (X, Y) at height 0x108; the boss advances one notch in Y if there is one.
     fn cover_screen<R: Bench>(x: &mut Cx<'_, R>, boss: Option<Obj>) {
         let sx = x.a5_u16(SCREEN_X);
         x.set16(0x8, sx);
@@ -1698,8 +1688,8 @@ mod finale52 {
                     x.set_a5_u16(FLAG_4BA, 0);
                     x.anim_step();
                     fall_check(x);
-                    // piège de l'original : la boucle des joueurs a laissé A1 après le quatrième joueur
-                    // (0xff8dde) et 0xa49fc incrémente le mot +0x12 de cet « objet », pas celui du boss
+                    // original trap: the player loop left A1 after the fourth player (0xff8dde) and 0xa49fc increments
+                    // the word +0x12 of this "object", not that of the boss
                     cover_screen(x, Some(Obj(0xff_8000 + PLAYERS + 4 * PLAYER_SIZE)));
                 }
                 settle(x);
@@ -1764,18 +1754,18 @@ mod finale52 {
         unlock_screen(x);
     }
 
-    // ----- collisions avec les joueurs -----
+    // ----- collisions with the players -----
 
     fn players() -> impl Iterator<Item = Obj> {
         (0..4).map(|i| Obj(0xff_8000 + PLAYERS + PLAYER_SIZE * i))
     }
 
-    /// Joueur en jeu normal : actif, vivant (PV non nuls), état 2, non invulnérable.
+    /// Player in normal play: active, alive (non-zero HP), state 2, not invulnerable.
     fn alive<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
         p.u8(x.b, 0) != 0 && p.u8(x.b, 0x7e) == 0 && p.u8(x.b, 4) == 2 && p.u8(x.b, 0x10f) == 0 && p.u16(x.b, 0x62) != 0
     }
 
-    /// Le voile blesse les joueurs touchés par l'attaque (boîtes `+0x3e`).
+    /// The veil hurts the players touched by the attack (boxes `+0x3e`).
     fn hit_players<R: Bench>(x: &mut Cx<'_, R>) {
         for p in players() {
             if alive(x, p) && overlap(x, p) {
@@ -1784,7 +1774,7 @@ mod finale52 {
         }
     }
 
-    /// Blesse les joueurs qui ne sont pas dans une zone sûre (étages 0x2e et 0x69).
+    /// Hurts the players who are not in a safe zone (stages 0x2e and 0x69).
     fn fall_check<R: Bench>(x: &mut Cx<'_, R>) {
         for p in players() {
             if !alive(x, p) {
@@ -1805,7 +1795,7 @@ mod finale52 {
         }
     }
 
-    /// Étage 0x2e : le joueur est au sol (Z < 0x100) et dans une des zones sûres.
+    /// Stage 0x2e: the player is on the ground (Z < 0x100) and in one of the safe zones.
     fn on_safe_range<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
         if p.u8(x.b, 0xc) != 0 {
             return false;
@@ -1829,7 +1819,7 @@ mod finale52 {
         }
     }
 
-    /// Étage 0x69 : le joueur est au sol et dans le rectangle (X, largeur, Y, hauteur).
+    /// Stage 0x69: the player is on the ground and in the rectangle (X, width, Y, height).
     fn in_rect<R: Bench>(x: &mut Cx<'_, R>, p: Obj, rect: u32) -> bool {
         if p.u8(x.b, 0xc) != 0 {
             return false;
@@ -1846,9 +1836,9 @@ mod finale52 {
         s16(y1) > s16(p.u16(x.b, 0x10))
     }
 
-    /// Recouvrement des boîtes de l'attaque (ligne `+0x3e` - 1) et du joueur (pointeur selon son
-    /// numéro de personnage, ligne selon `+0x38`), axe par axe : X (miroir selon l'orientation),
-    /// Z puis Y. Distance absolue des centres contre la somme des demi-tailles.
+    /// Overlap of the attack boxes (row `+0x3e` - 1) and the player's (pointer according to its character number, row
+    /// according to `+0x38`), axis by axis: X (mirrored according to the orientation), Z then Y. Absolute distance of
+    /// the centers against the sum of the half-sizes.
     fn overlap<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
         if p.u8(x.b, 0x38) == 0 {
             return false;
@@ -1887,8 +1877,8 @@ mod finale52 {
         true
     }
 
-    /// Blessure : le joueur passe à l'état 0x02042000 ; PV -= PV max / 2 (sauf attaques 0x2c), un
-    /// joueur à 0 PV est retiré du compte `A5+0x35`.
+    /// Wound: the player goes to state 0x02042000; HP -= max HP / 2 (except attacks 0x2c), a player at 0 HP is removed
+    /// from the count `A5+0x35`.
     fn hurt<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
         p.set_u32(x.b, 0x4, 0x0204_2000);
         let mut hp = 0u16;
@@ -1910,31 +1900,31 @@ mod finale52 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Types 53 à 55
+// Types 53 to 55
 // ---------------------------------------------------------------------------------------------
 
-/// Caché une image sur deux selon la parité de la variante comparée à la phase globale `A5+0x6e`.
+/// Hidden every other frame according to the parity of the variant compared with the global phase `A5+0x6e`.
 fn blink_by_variant<R: Bench>(x: &mut Cx<'_, R>) {
     let hidden = (x.u8(0x3) & 1) as u16 != x.a5_u16(0x6e) & 1;
     x.set_bit(0x1, 1, hidden);
 }
 
-/// Haut de l'écran (`A5+0x50a`, ou `A5+0x55a` en mode deux joueurs `A5+0x36`).
+/// Top of the screen (`A5+0x50a`, or `A5+0x55a` in two-player mode `A5+0x36`).
 fn screen_top<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     let off = if x.a5_u8(0x36) != 0 { 0x55a } else { 0x50a };
     x.a5_u16(off)
 }
 
-/// Tir 53 (0xa4d82) : projectile visant le joueur ciblé par le créateur de son créateur. Il part de
-/// la position de son créateur (`+0x5c`, lui-même lié à un ennemi dont `+0x50` désigne la cible),
-/// dans la direction (0 à 8 environ) donnée par la routine 0x1376 ; animation et orientation lues dans
-/// une table de 2 octets par direction. Détruit au contact (touché ou paré) ; retiré hors écran.
+/// Shot 53 (0xa4d82): projectile aiming at the player targeted by the creator of its creator. It leaves from the
+/// position of its creator (`+0x5c`, itself linked to an enemy whose `+0x50` designates the target), in the direction
+/// (0 to 8 approximately) given by routine 0x1376; animation and orientation read from a 2-byte table per direction.
+/// Destroyed on contact (hit or parried); removed off the screen.
 mod aimed53 {
     use super::*;
 
     const ANIMS: u32 = 0x175dc4;
     const LINK: u32 = 0x5c;
-    /// Pour chaque direction : (animation, orientation).
+    /// For each direction: (animation, orientation).
     const DIRECTIONS: u32 = 0xa4e16;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1982,12 +1972,11 @@ mod aimed53 {
     }
 }
 
-/// Tir 54 (0xa4eaa) : gerbe de projectiles lancés par un objet (`+0x5c`, qui a un créateur), 17
-/// exemplaires numérotés par la variante `+3` (créés par 0xa4e84). Sous-type `+0x2f` 0 : part de
-/// l'objet avec les décalages et vitesses de la ligne `+3` de la table 0xa4fe6 (18 octets) ; autre
-/// sous-type : ligne de 20 octets de la table 0xa51b4 (dont l'animation). Se déplace 60 (ou 30)
-/// images, puis 10 images de plus, puis son animation s'achève ; clignote selon sa variante. Le
-/// tir disparaît dès que son lanceur n'existe plus.
+/// Shot 54 (0xa4eaa): salvo of projectiles launched by an object (`+0x5c`, which has a creator), 17 copies numbered by
+/// the variant `+3` (created by 0xa4e84). Sub-type `+0x2f` 0: leaves the object with the offsets and speeds of row `+3`
+/// of table 0xa4fe6 (18 bytes); other sub-type: 20-byte row of table 0xa51b4 (including the animation). Moves for 60
+/// (or 30) frames, then 10 more frames, then its animation ends; blinks according to its variant. The shot disappears
+/// as soon as its launcher no longer exists.
 mod burst54 {
     use super::*;
 
@@ -1995,9 +1984,9 @@ mod burst54 {
     const LINK: u32 = 0x5c;
     const TIMER: u32 = 0x42;
     const SOUND: u32 = 0xe4560;
-    /// Lignes de 9 mots : DX, DZ, DY, VX, AX, VZ, AZ, VY, AY.
+    /// Rows of 9 words: DX, DZ, DY, VX, AX, VZ, AZ, VY, AY.
     const ROWS: u32 = 0xa4fe6;
-    /// Lignes de 10 mots : les mêmes, puis l'animation.
+    /// Rows of 10 words: the same, then the animation.
     const ROWS_ANIM: u32 = 0xa51b4;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -2042,7 +2031,7 @@ mod burst54 {
         }
     }
 
-    /// Se place sur le lanceur et prend les vitesses de la ligne de la variante.
+    /// Places itself on the launcher and takes the speeds of the variant's row.
     fn launch<R: Bench>(x: &mut Cx<'_, R>, with_anim: bool) {
         let src = x.linked(LINK);
         for off in [0x8, 0x10, 0xc] {
@@ -2077,10 +2066,10 @@ mod burst54 {
     }
 }
 
-/// Tir 55 (0xa5358) : projectile qui tombe du haut de l'écran, jeté d'un côté (variante 0 : à
-/// gauche ; X et profondeur proviennent de `+0x58` / `+0x5a`, posés par le créateur). Il va en
-/// diagonale (VX = ±0x800, VZ = -0xc00) jusqu'au sol (Z <= 0), puis reste 48 images en jouant sa
-/// seconde animation, en clignotant pendant les 32 dernières. Immobile en pause (`A5+0x3d`).
+/// Shot 55 (0xa5358): projectile that falls from the top of the screen, thrown to one side (variant 0: to the left; X
+/// and depth come from `+0x58` / `+0x5a`, set by the creator). It goes diagonally (VX = ±0x800, VZ = -0xc00) to the
+/// ground (Z <= 0), then stays 48 frames playing its second animation, blinking during the last 32. Motionless when
+/// paused (`A5+0x3d`).
 mod fall55 {
     use super::*;
 
@@ -2162,33 +2151,32 @@ mod fall55 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Types 56 à 58
+// Types 56 to 58
 // ---------------------------------------------------------------------------------------------
 
-/// Les quatre joueurs (enregistrements de 0x200 octets à partir de `A5+0x5de`).
+/// The four players (records of 0x200 bytes starting at `A5+0x5de`).
 fn players() -> impl Iterator<Item = Obj> {
     (0..4).map(|i| Obj(0xff_8000 + 0x5de + 0x200 * i))
 }
 
-/// Tir 56 (0xa5466) : objets à ramasser (12 variantes, deux par type d'objet : la variante paire
-/// utilise la palette 0x14 et l'identifiant d'attaque 0x21, l'impaire 0x13 et 0x22). Posés à l'écran,
-/// ils s'animent (clignotent selon `A5+0x6f` et `D7`, sauf pendant `A5+0x33`) ; un joueur au sol à
-/// moins de 8 pixels en X et 6 en profondeur les ramasse : l'objet clignote 30 images (`+0x56`) puis
-/// joue son animation de ramassage (types 0 à 5 : animation 3 et son 0xeb132 pour les variantes 0
-/// et 1), ou, pour les variantes 6 et 7, attend un délai tiré d'une table avant de rejouer
-/// l'animation 5 ; les variantes 8 et 9 dépendent des points de vie (`+0x62`) de leur créateur
-/// (`+0x5c`). Disparaît quand il est à plus de 0x200 pixels à gauche de l'écran (sauf étage 0x19).
+/// Shot 56 (0xa5466): objects to pick up (12 variants, two per object type: the even variant uses palette 0x14 and
+/// attack identifier 0x21, the odd one 0x13 and 0x22). Placed on the screen, they animate (blink according to `A5+0x6f`
+/// and `D7`, except during `A5+0x33`); a player on the ground within 8 pixels in X and 6 in depth picks them up: the
+/// object blinks for 30 frames (`+0x56`) then plays its pickup animation (types 0 to 5: animation 3 and sound 0xeb132
+/// for variants 0 and 1), or, for variants 6 and 7, waits a delay drawn from a table before replaying animation 5;
+/// variants 8 and 9 depend on the hit points (`+0x62`) of their creator (`+0x5c`). Disappears when it is more than
+/// 0x200 pixels to the left of the screen (except stage 0x19).
 mod pickup56 {
     use super::*;
 
     const ANIMS: u32 = 0x170c3e;
-    /// Animation de création par type d'objet (variante / 2).
+    /// Creation animation per object type (variant / 2).
     const INIT_ANIMS: [u32; 6] = [2, 4, 5, 5, 4, 7];
-    /// Délais (16 mots) tirés au hasard pour les variantes 6 et 7.
+    /// Delays (16 words) drawn at random for variants 6 and 7.
     const DELAYS: u32 = 0xa55b2;
     const PICKUP_SOUND: u32 = 0xeb132;
     const COUNTDOWN: u32 = 0x56;
-    /// Variable `A5+0x6f` : phase de clignotement ; `A5+0x33` : clignotement suspendu.
+    /// Variable `A5+0x6f`: blinking phase; `A5+0x33`: blinking suspended.
     const BLINK_PHASE: u32 = 0x6f;
     const BLINK_OFF: u32 = 0x33;
     const STAGE: u32 = 0x34;
@@ -2227,7 +2215,7 @@ mod pickup56 {
         }
     }
 
-    /// Délai tiré dans la table 0xa55b2.
+    /// Delay drawn from table 0xa55b2.
     fn random_delay<R: Bench>(x: &mut Cx<'_, R>) {
         let r = random(x) & 0xf;
         let d = x.rom16(DELAYS + 2 * r);
@@ -2258,7 +2246,7 @@ mod pickup56 {
         x.reinsert();
     }
 
-    /// Rend l'objet visible puis le cache une image sur deux (sauf si `A5+0x33`).
+    /// Makes the object visible then hides it every other frame (except if `A5+0x33`).
     fn flash<R: Bench>(x: &mut Cx<'_, R>) {
         x.set_bit(0x1, 1, false);
         if x.a5_u8(BLINK_OFF) == 0 && x.a5_u8(BLINK_PHASE).wrapping_add(x.counter() as u8) & 1 != 0 {
@@ -2271,7 +2259,7 @@ mod pickup56 {
         x.anim_step();
     }
 
-    /// Un joueur au sol, assez proche, ramasse l'objet : `+5` suivant, décompte de 30 images.
+    /// A player on the ground, close enough, picks up the object: next `+5`, 30-frame countdown.
     fn pickup_touch<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(HIDDEN) != 0 || x.a5_u8(GAME_PAUSED) != 0 {
             return;
@@ -2294,7 +2282,7 @@ mod pickup56 {
         }
     }
 
-    /// Décompte du ramassage : clignote tous les 8 pas ; `true` quand il est écoulé.
+    /// Pickup countdown: blinks every 8 steps; `true` when it has elapsed.
     fn pick_countdown<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let t = x.u16(COUNTDOWN).wrapping_sub(1);
         x.set16(COUNTDOWN, t);
@@ -2310,7 +2298,7 @@ mod pickup56 {
         false
     }
 
-    /// Variantes 0, 1 (`with_effects`) et 4, 5 : attend le ramassage, clignote, joue l'animation de fin.
+    /// Variants 0, 1 (`with_effects`) and 4, 5: wait for the pickup, blink, play the end animation.
     fn touch_then_pick<R: Bench>(x: &mut Cx<'_, R>, with_effects: bool) {
         match x.u8(0x5) {
             0 => pickup_touch(x),
@@ -2329,7 +2317,7 @@ mod pickup56 {
         }
     }
 
-    /// Variantes 6, 7 : attend un délai (hors pause), puis rejoue l'animation 5 avec un nouveau délai.
+    /// Variants 6, 7: wait for a delay (outside pause), then replay animation 5 with a new delay.
     fn wait_and_replay<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             if x.u8(HIDDEN) != 0 || x.a5_u8(GAME_PAUSED) != 0 {
@@ -2347,8 +2335,8 @@ mod pickup56 {
         }
     }
 
-    /// Variantes 8, 9 : vivant tant que les PV du créateur sont non nuls ; à sa mort, animation 6,
-    /// puis clignote 32 images avant de disparaître.
+    /// Variants 8, 9: alive as long as the creator's HP are non-zero; at its death, animation 6, then blinks for 32
+    /// frames before disappearing.
     fn hp_dependent<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
@@ -2383,11 +2371,10 @@ mod pickup56 {
     }
 }
 
-/// Tir 57 (0xa593c) : projectile à tête chercheuse d'un créateur (`+0x5c`) : posé à 0x4a pixels
-/// devant lui et 0x32 plus haut, il vise la cible du créateur (`+0x50` du créateur), se dirige vers
-/// elle par la table de vitesses (direction recalculée toutes les 20 images) et explose en 16 éclats
-/// (type 58) quand il est à moins de 24 pixels de la cible ou quand ses 360 images (`+0x46`) sont
-/// écoulées. Si son créateur meurt ou perd sa cible, il clignote et disparaît.
+/// Shot 57 (0xa593c): homing projectile of a creator (`+0x5c`): placed 0x4a pixels in front of it and 0x32 higher, it
+/// aims at the creator's target (`+0x50` of the creator), heads toward it through the speed table (direction recomputed
+/// every 20 frames) and explodes into 16 bursts (type 58) when it is within 24 pixels of the target or when its 360
+/// frames (`+0x46`) have elapsed. If its creator dies or loses its target, it blinks and disappears.
 mod seeker57 {
     use super::*;
 
@@ -2473,7 +2460,7 @@ mod seeker57 {
         x.anim_step();
     }
 
-    /// Crée 16 éclats (type 58, variantes 15 à 0) puis passe à l'état 6.
+    /// Creates 16 bursts (type 58, variants 15 down to 0) then goes to state 6.
     fn explode<R: Bench>(x: &mut Cx<'_, R>) {
         for n in (0..16u8).rev() {
             let Some(c) = x.alloc(&pools::ESHL) else { break };
@@ -2496,10 +2483,9 @@ mod seeker57 {
     }
 }
 
-/// Tir 58 (0xa5ad6) : éclat de l'explosion 57 (16 variantes issues de la table de 8 octets par
-/// variante : durée `+0x42`, sous-type `+0x2f`, indice de vitesse `+0x2d`, animation, orientation,
-/// table de vitesses). Part de la position de son créateur et se déplace par la table de vitesses
-/// (XY ou XZ selon `+0x2f`) pendant sa durée, en clignotant selon sa variante.
+/// Shot 58 (0xa5ad6): burst of explosion 57 (16 variants from the 8-byte-per-variant table: duration `+0x42`, sub-type
+/// `+0x2f`, speed index `+0x2d`, animation, orientation, speed table). Leaves from the position of its creator and
+/// moves through the speed table (XY or XZ according to `+0x2f`) for its duration, blinking according to its variant.
 mod shard58 {
     use super::*;
 
@@ -2562,23 +2548,22 @@ mod shard58 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Types 59 à 62
+// Types 59 to 62
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 59 (0xa5cc2) : anneau d'effet d'un créateur (`+0x5c`), deux sous-types `+0x2f`. Sous-type 0 :
-/// posé sur le créateur, avec le propriétaire du créateur (`+0x50`), joue l'animation 1, puis 2 (300
-/// images), 3, et quand elle s'achève déclenche l'effet 0xe448c ; disparaît quand le propriétaire
-/// est dans l'état 0x406. Sous-type 1 : posé près du créateur (décalage par variante), il joue son
-/// animation et met l'octet `+0xae` du créateur à 1 à la fin. La palette change toutes les 3 images.
+/// Shot 59 (0xa5cc2): effect ring of a creator (`+0x5c`), two sub-types `+0x2f`. Sub-type 0: placed on the creator,
+/// with the creator's owner (`+0x50`), plays animation 1, then 2 (300 frames), 3, and when it ends triggers effect
+/// 0xe448c; disappears when the owner is in state 0x406. Sub-type 1: placed near the creator (offset per variant), it
+/// plays its animation and sets the creator's byte `+0xae` to 1 at the end. The palette changes every 3 frames.
 mod ring59 {
     use super::*;
 
     const ANIMS: u32 = 0x171026;
     const LINK: u32 = 0x5c;
     const TIMER: u32 = 0x42;
-    /// Décalages (X, Y) par variante pour le sous-type 1 (4 octets par ligne).
+    /// Offsets (X, Y) per variant for sub-type 1 (4 bytes per row).
     const OFFSETS: u32 = 0xa5db2;
-    /// Valeur de `+0x2b` (palette (h)) par `+0x47`.
+    /// Value of `+0x2b` (palette (h)) by `+0x47`.
     const PALETTES: u32 = 0xa5f30;
     const FX_START_0: u32 = 0xe4422;
     const FX_START_1: u32 = 0xe44f6;
@@ -2643,7 +2628,7 @@ mod ring59 {
         }
     }
 
-    /// Sous-type 0 : suit le propriétaire.
+    /// Sub-type 0: follows the owner.
     fn ring<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
         if owner.u16(x.b, 0x4) == 0x406 {
@@ -2678,7 +2663,7 @@ mod ring59 {
         cycle_palette(x);
     }
 
-    /// Sous-type 1 : animation puis signal au créateur.
+    /// Sub-type 1: animation then signal to the creator.
     fn satellite<R: Bench>(x: &mut Cx<'_, R>) {
         let maker = x.linked(LINK);
         if maker.u16(x.b, 0x4) == 0x406 {
@@ -2708,13 +2693,12 @@ mod ring59 {
     }
 }
 
-/// Tir 60 (0xa5f5c) : plateforme mobile qui monte et descend avec l'écran (hauteur corrigée du
-/// défilement vertical `A5+0x50a`/`0x55a`), 4 variantes. Cycle de `+5` : attendre (variante 0 :
-/// `+0x42` images, variante 1 : un joueur monte dessus (0x7f19c), variante 3 : idem avec
-/// `A5+0x51e` = 4, variante 2 : le créateur est dans l'état 0x204), monter (VZ = -0x100, AZ = -0x20,
-/// en réalité descendre : Z diminue) jusqu'à Z <= 0x20 (0x38 si sous-type `+0x2f`), attendre 16
-/// images puis remonter (VZ = 0x180) jusqu'à la hauteur de départ (`+0x4e`), et recommencer. La
-/// couche de dessin `+0x3b` dépend de la hauteur. Crée un tir joueur de type 0x18 (0x54872).
+/// Shot 60 (0xa5f5c): mobile platform that rises and descends with the screen (height corrected by the vertical scroll
+/// `A5+0x50a`/`0x55a`), 4 variants. Cycle of `+5`: wait (variant 0: `+0x42` frames, variant 1: a player climbs on it
+/// (0x7f19c), variant 3: same with `A5+0x51e` = 4, variant 2: the creator is in state 0x204), rise (VZ = -0x100, AZ =
+/// -0x20, actually descend: Z decreases) until Z <= 0x20 (0x38 if sub-type `+0x2f`), wait 16 frames then go back up (VZ
+/// = 0x180) to the starting height (`+0x4e`), and start over. The drawing layer `+0x3b` depends on the height. Creates
+/// a player shot of type 0x18 (0x54872).
 mod platform60 {
     use super::*;
 
@@ -2723,15 +2707,15 @@ mod platform60 {
     const TIMER: u32 = 0x42;
     const RELOAD: u32 = 0x4c;
     const HOME_Z: u32 = 0x4e;
-    /// Dernier défilement vertical (mot), et son nouveau relevé.
+    /// Last vertical scroll (word), and its new reading.
     const LAST_SCROLL: u32 = 0x16;
     const SCROLL: u32 = 0x14;
     const THUD: u32 = 0xeb04e;
-    /// Positions de départ de la variante 2 par sous-type (4 octets par ligne).
+    /// Starting positions of variant 2 per sub-type (4 bytes per row).
     const START_POSITIONS: u32 = 0xa6046;
-    /// Variable `A5+0x51e` (variante 3).
+    /// Variable `A5+0x51e` (variant 3).
     const SIGNAL: u32 = 0x51e;
-    /// Sous-états (`+5`).
+    /// Substates (`+5`).
     const WAIT: u8 = 0;
     const SINK: u8 = 2;
     const REST: u8 = 4;
@@ -2783,7 +2767,7 @@ mod platform60 {
     }
 
     fn live<R: Bench>(x: &mut Cx<'_, R>) {
-        // suit le défilement vertical de l'écran
+        // follows the vertical scroll of the screen
         let top = screen_top(x);
         x.set16(SCROLL, top);
         let delta = top.wrapping_sub(x.u16(LAST_SCROLL));
@@ -2820,7 +2804,7 @@ mod platform60 {
         x.set8(0x3b, layer);
     }
 
-    /// Ce qui déclenche la descente.
+    /// What triggers the descent.
     #[derive(Clone, Copy, PartialEq)]
     enum Trigger {
         Timer,
@@ -2894,7 +2878,7 @@ mod platform60 {
         }
     }
 
-    /// Un joueur (hors personnage 5) est-il sur la plateforme ? (collision 0x7f19c.)
+    /// Is a player (other than character 5) on the platform? (collision 0x7f19c.)
     fn player_on<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         for p in players() {
             let character = p.u8(x.b, 3) >> 1;
@@ -2910,15 +2894,15 @@ mod platform60 {
     }
 }
 
-/// Tir 61 (0xa63d8) : marqueur collé à son créateur (`+0x5c`, de variante 0 à 2 qui choisit une des
-/// trois tables de décalages ; 20 octets par variante du marqueur, 4 par sous-type `+0x2f`), qui
-/// joue son animation et, à la fin, met l'octet `+0x1c` du créateur à 1.
+/// Shot 61 (0xa63d8): marker stuck to its creator (`+0x5c`, of variant 0 to 2 which chooses one of the three offset
+/// tables; 20 bytes per marker variant, 4 per sub-type `+0x2f`), which plays its animation and, at the end, sets the
+/// creator's byte `+0x1c` to 1.
 mod marker61 {
     use super::*;
 
     const ANIMS: u32 = 0x171374;
     const LINK: u32 = 0x5c;
-    /// Tables de décalages (X, Y) selon la variante du créateur.
+    /// Offset tables (X, Y) according to the creator's variant.
     const OFFSET_TABLES: [u32; 3] = [0xa6538, 0xa65de, 0xa6670];
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -2958,7 +2942,7 @@ mod marker61 {
         }
     }
 
-    /// Se pose sur le créateur avec le décalage de la table (miroir selon l'orientation du créateur).
+    /// Settles on the creator with the offset from the table (mirrored according to the creator's orientation).
     fn place<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
         if x.u16(LINK) == 0 {
             return;
@@ -2976,15 +2960,15 @@ mod marker61 {
     }
 }
 
-/// Tir 62 (0xa66ea) : météore qui tombe sur le terrain près de la caméra. Position tirée au hasard
-/// autour de l'écran (X dans 0x1ff + 0x40, Y dans 0x7f) à la hauteur 0x100, retardé de `+0x42` images
-/// (table selon la variante), tombe (VZ = -0x200, AZ = -0x20) et, en touchant le sol (Z < 0),
-/// déclenche les effets d'impact (0xb9c88, 0xab7d8 avec 3, 0x2860 avec 8, 0xeafdc).
+/// Shot 62 (0xa66ea): meteor that falls on the terrain near the camera. Position drawn at random around the screen (X
+/// within 0x1ff + 0x40, Y within 0x7f) at height 0x100, delayed by `+0x42` frames (table according to the variant),
+/// falls (VZ = -0x200, AZ = -0x20) and, on touching the ground (Z < 0), triggers the impact effects (0xb9c88, 0xab7d8
+/// with 3, 0x2860 with 8, 0xeafdc).
 mod meteor62 {
     use super::*;
 
     const ANIMS: u32 = 0x16ea18;
-    /// Retard avant la chute (octets) par variante (32 entrées).
+    /// Delay before the fall (bytes) per variant (32 entries).
     const DELAYS: u32 = 0xa679e;
     const IMPACT_SOUND: u32 = 0xeafdc;
     const TIMER: u32 = 0x42;
@@ -3003,7 +2987,7 @@ mod meteor62 {
         x.set8(0x5, 0);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_ID, 0x25);
-        // caméra : bloc de A5+0x4fe (joueur 1) ou A5+0x54e (joueur 2)
+        // camera: block of A5+0x4fe (player 1) or A5+0x54e (player 2)
         let camera = if x.a5_u8(0x36) != 0 { 0x54e } else { 0x4fe };
         x.set16(0xc, 0x100);
         let mut dx = random(x) as u16 & 0x1ff;
@@ -3052,28 +3036,27 @@ mod meteor62 {
 // Type 63
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 63 (0xa6864) : main d'un boss (`+0x5c`, dont l'octet `+0xac` donne la phase : < 1 repos,
-/// 1 attaque, > 1 fin) qui suit le boss (2 pixels par image vers la position cible : 0x30 devant lui,
-/// même profondeur) et joue les animations 3 (repos) et 5 (attaque). Au repos, `+0x42` compte les
-/// images avant de tirer au sort (table 0xa6c54 selon le nombre de joueurs `A5+0x35` et l'état
-/// `A5+0xff92`) si elle attaque quand la cible est de son côté ; une attaque lancée par le boss
-/// (phase 1) crée un tir de type 53 à la fin de son animation. Sous-états : `+5` (0 repos,
-/// 4 attaque) et `+6` (étapes de 4).
+/// Shot 63 (0xa6864): hand of a boss (`+0x5c`, whose byte `+0xac` gives the phase: < 1 rest, 1 attack, > 1 end) that
+/// follows the boss (2 pixels per frame toward the target position: 0x30 in front of it, same depth) and plays
+/// animations 3 (rest) and 5 (attack). At rest, `+0x42` counts the frames before drawing lots (table 0xa6c54 according
+/// to the number of players `A5+0x35` and the state `A5+0xff92`) whether it attacks when the target is on its side; an
+/// attack launched by the boss (phase 1) creates a shot of type 53 at the end of its animation. Substates: `+5` (0
+/// rest, 4 attack) and `+6` (steps of 4).
 mod hand63 {
     use super::*;
 
     const ANIMS: u32 = 0x175da6;
     const LINK: u32 = 0x5c;
     const DELAY: u32 = 0x42;
-    /// Table de pointeurs (par nombre de joueurs) vers 32 délais (mots).
+    /// Pointer table (per number of players) to 32 delays (words).
     const DELAY_TABLES: u32 = 0xa6b0e;
-    /// Table de pointeurs (par nombre de joueurs) vers des masques de 32 bits indexés par `FFFF92`.
+    /// Pointer table (per number of players) to 32-bit masks indexed by `FFFF92`.
     const GATE_TABLES: u32 = 0xa6c54;
     const PLAYER_COUNT: u32 = 0x35;
     const GATE_INDEX: u32 = 0x7f92;
-    /// Phase du boss.
+    /// Phase of the boss.
     const BOSS_PHASE: u32 = 0xac;
-    /// Distance devant le boss et vitesse de rapprochement.
+    /// Distance in front of the boss and approach speed.
     const REACH: u16 = 0x30;
     const SPEED: u16 = 2;
 
@@ -3094,7 +3077,7 @@ mod hand63 {
         }
     }
 
-    /// Phase 1 / 2 (`+4 = 2`), puis remise dans la liste triée.
+    /// Phase 1 / 2 (`+4 = 2`), then put back in the sorted list.
     fn resting_or_attacking<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             match x.u8(0x6) {
@@ -3123,7 +3106,7 @@ mod hand63 {
         x.reinsert();
     }
 
-    /// Délai avant le prochain tir au sort, selon le nombre de joueurs.
+    /// Delay before the next draw of lots, according to the number of players.
     fn pick_delay<R: Bench>(x: &mut Cx<'_, R>) {
         let players = x.a5_u8(PLAYER_COUNT) as u32;
         let table = x.data32(DELAY_TABLES + 4 * players);
@@ -3132,7 +3115,7 @@ mod hand63 {
         x.set16(DELAY, d);
     }
 
-    /// Tirage : le bit tiré dans le masque de la configuration courante est-il levé ?
+    /// Draw: is the bit drawn in the mask of the current configuration set?
     fn gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let players = x.a5_u8(PLAYER_COUNT) as u32;
         let table = x.data32(GATE_TABLES + 4 * players);
@@ -3146,7 +3129,7 @@ mod hand63 {
         x.set16(0x4, 0x400);
     }
 
-    /// Repos : décompte, tirage, puis attaque si la cible est du bon côté.
+    /// Rest: countdown, draw, then attack if the target is on the right side.
     fn rest<R: Bench>(x: &mut Cx<'_, R>) {
         let boss = x.linked(LINK);
         if x.a5_u8(GAME_PAUSED) == 0 {
@@ -3171,7 +3154,7 @@ mod hand63 {
         }
         match s8(boss.u8(x.b, BOSS_PHASE)) {
             1 => {
-                // le boss attaque : passe à la phase d'attaque
+                // the boss attacks: goes to the attack phase
                 x.add8(0x5, 4);
                 x.set16(0x6, 0);
             }
@@ -3183,7 +3166,7 @@ mod hand63 {
         }
     }
 
-    /// Fin de la phase de repos par `+6 = 8` : attend la fin de l'animation puis crée un tir 53.
+    /// End of the rest phase by `+6 = 8`: waits for the end of the animation then creates a shot 53.
     fn finish_attack<R: Bench>(x: &mut Cx<'_, R>) {
         let boss = x.linked(LINK);
         if boss.u16(x.b, f::OWNER) == 0 {
@@ -3211,7 +3194,7 @@ mod hand63 {
         }
     }
 
-    /// Attaque en cours (le boss est en phase 1) : suit le boss, joue l'animation, puis termine.
+    /// Attack in progress (the boss is in phase 1): follows the boss, plays the animation, then ends.
     fn attack<R: Bench>(x: &mut Cx<'_, R>) {
         follow(x);
         if !x.anim_step() {
@@ -3222,7 +3205,7 @@ mod hand63 {
         back_to_rest(x);
     }
 
-    /// Le boss a-t-il fini son attaque ? Repos si la phase est retombée sous 1.
+    /// Has the boss finished its attack? Rest if the phase has dropped below 1.
     fn back_to_rest<R: Bench>(x: &mut Cx<'_, R>) {
         let boss = x.linked(LINK);
         if boss.u8(x.b, 0) == 0 {
@@ -3238,7 +3221,7 @@ mod hand63 {
         }
     }
 
-    /// État 4 : animation 5 jusqu'à la fin, puis disparition.
+    /// State 4: animation 5 until the end, then disappearance.
     fn striking<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
@@ -3259,8 +3242,8 @@ mod hand63 {
         }
     }
 
-    /// Rapproche la main de sa position cible (devant le boss, côté où il regarde), de 2 pixels par
-    /// image en X et en Y. Boss disparu : état 4 (et retour à l'appelant qui continue).
+    /// Moves the hand closer to its target position (in front of the boss, on the side it faces), by 2 pixels per frame
+    /// in X and Y. Boss gone: state 4 (and return to the caller which continues).
     fn follow<R: Bench>(x: &mut Cx<'_, R>) {
         let boss = x.linked(LINK);
         if boss.u8(x.b, 0) == 0 {
@@ -3275,7 +3258,7 @@ mod hand63 {
         x.set16(0x10, py);
     }
 
-    /// Un pas de 2 vers `goal` sans le dépasser.
+    /// A step of 2 toward `goal` without overshooting it.
     fn approach(goal: u16, pos: u16) -> u16 {
         if s16(goal) == s16(pos) {
             pos

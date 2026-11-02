@@ -1,16 +1,16 @@
-//! Boss de type 10 (0x8ca4a), scènes 65 et 66 : Nagpa (h). Voir `docs/families/boss.md`.
+//! Boss of type 10 (0x8ca4a), scenes 65 and 66: Nagpa (h). See `docs/families/boss.md`.
 //!
-//! Même gabarit que les boss 17 et 6 (états `+4`, groupes `+5`, étapes `+6` / `+7`, états posés en longs), en
-//! plus court : il apparaît (cinématique d'ouverture : il crée un ennemi de type 18 et un boss de type 19, variante 1),
-//! marche vers un joueur, saute sur lui ou lui lance un tir (ESHL 0x21), puis meurt par une chute en trois temps.
+//! Same template as bosses 17 and 6 (states `+4`, groups `+5`, steps `+6` / `+7`, states stored as longs), but
+//! shorter: it appears (opening cutscene: it creates an enemy of type 18 and a boss of type 19, variant 1),
+//! walks toward a player, jumps on them or fires a shot at them (ESHL 0x21), then dies through a three-stage fall.
 //!
-//! | `+5` | Rôle |
+//! | `+5` | Role |
 //! |---|---|
-//! | 0 | ouverture : attend la scène (`A5+0x2e` = 6), crée ses deux compagnons, se présente |
+//! | 0 | opening: waits for the scene (`A5+0x2e` = 6), creates its two companions, introduces itself |
 //! | 2 | combat : attente (`+6` = 0), demi-tour (2), marche (4), saut (6) |
-//! | 4 | tir à distance : récupération (`+6` = 0), tir avec cinématique (2) |
-//! | 6 | attente sans joueur |
-//! | état 4 | touché : réactions (table 0x8d176 dont 0x8d294 est propre), relevé, mort |
+//! | 4 | ranged shot: recovery (`+6` = 0), shot with cutscene (2) |
+//! | 6 | waiting with no player |
+//! | state 4 | hit: reactions (table 0x8d176 of which 0x8d294 is specific), get-up, death |
 //!
 //! Animations : 0x17b14e (mouvements), 0x17b162 (tirs), 0x17b166 (recul, mort).
 
@@ -42,7 +42,7 @@ use crate::objects::Current;
 const SET_BODY: u32 = 0x17b14e;
 const SET_SHOT: u32 = 0x17b162;
 const SET_DIE: u32 = 0x17b166;
-/// Jeux de marche (0x103e0) selon le sens (Z de 0x10560).
+/// Walk sets (0x103e0) depending on the direction (Z of 0x10560).
 const WALK_A: u32 = 0x17b21c;
 const WALK_B: u32 = 0x17b2a0;
 
@@ -89,7 +89,7 @@ fn zone_and_shadow<R: Bench>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-/// 0x8d526 : choisit l'étape suivante du combat (`+6` = 0, 4 ou 6) d'après une table de 32 octets.
+/// 0x8d526: picks the next combat step (`+6` = 0, 4 or 6) from a 32-byte table.
 fn next_action<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     x.set32(f::STATE, FIGHT);
@@ -97,7 +97,7 @@ fn next_action<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB2, step);
 }
 
-/// 0x8d560 : interrompt l'action (état mémorisé).
+/// 0x8d560: interrupts the action (saved state).
 fn interrupt<R: Bench>(x: &mut Cx<'_, R>) {
     let s = x.u32(f::STATE);
     x.set32(SAVED_STATE, s);
@@ -112,7 +112,7 @@ fn facing_forward<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::moving_forward(x)
 }
 
-/// Un joueur est-il dans la boîte ? 0 sinon (0x8d4ee, 0x8d50a).
+/// Is a player inside the box? 0 otherwise (0x8d4ee, 0x8d50a).
 fn probe<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
@@ -120,7 +120,7 @@ fn probe<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     lib::turn_decision(x) != lib::Turn::None
 }
 
-// --- état 0 : création ------------------------------------------------------------------------
+// --- state 0: creation ------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::clear_popup(x);
@@ -156,7 +156,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     intro(x);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
@@ -199,7 +199,7 @@ fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB2, 2);
             x.set16(TIMER, 0x60);
-            // un ennemi (type 18, variante 0xff) et un boss (type 19, variante 1) liés à Nagpa
+            // an enemy (type 18, variant 0xff) and a boss (type 19, variant 1) linked to Nagpa
             let enemy = alloc(x, &pools::ENEMY);
             enemy.set_u8(x.b, 0, 1);
             enemy.set_u8(x.b, 2, 0x12);
@@ -315,7 +315,7 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, n);
 }
 
-/// Choisit l'animation de marche par l'image-clé (0x103e0) ; `mirror` : le test de sens est inversé.
+/// Picks the walk animation from the key frame (0x103e0); `mirror`: the direction test is inverted.
 fn select_walk<R: Bench>(x: &mut Cx<'_, R>, mirror: bool) {
     let z = lib::moving_forward(x);
     let set = if z != mirror { WALK_A } else { WALK_B };
@@ -360,7 +360,7 @@ fn walk_steps<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(WALK_STEPS, v);
 }
 
-/// +6 = 6 : saut sur la cible.
+/// +6 = 6: jump onto the target.
 fn jump<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -378,7 +378,7 @@ fn jump<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(JUMP_X, xx);
             *x.c.d2() = *x.c.d2() & 0xffff_0000 | 0xc0;
             let found = lib::pick_target_any(x);
-            // Glitch d'origine : si personne n'est trouvé, l'écart est le D2.w que 0x43ae laisse : la profondeur de
+            // Original glitch: if nobody is found, the gap is the D2.w that 0x43ae leaves behind: the depth of
             // l'objet
             let mut d2 = x.u16(crate::objects::Obj::Y);
             *x.c.d2() = *x.c.d2() & 0xffff_0000 | d2 as u32;
@@ -448,7 +448,7 @@ fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8d0a0 : fin du tir.
+/// 0x8d0a0: end of the shot.
 fn shot_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set_a5_u16(0x51e, 0);
@@ -552,7 +552,7 @@ fn wait_state<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-// --- état 4 : touché --------------------------------------------------------------------------------
+// --- state 4: hit --------------------------------------------------------------------------------
 
 fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
@@ -594,7 +594,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     react(x, REACTIONS);
 }
 
-/// 0x8d294 : étourdissement.
+/// 0x8d294: stun.
 fn stun<R: Bench>(x: &mut Cx<'_, R>) {
     sub16(x, HITS, 1);
     match x.u8(f::SUB2) {

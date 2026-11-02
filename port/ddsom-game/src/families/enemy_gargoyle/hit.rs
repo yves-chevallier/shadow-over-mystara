@@ -1,6 +1,5 @@
-//! Type 8, état touché (`+4 = 4`, 0x650d4). `+5` : 0 réaction à un coup (table par code `+0x49`), 2 recul,
-//! 4 chute et relevé, 6 mort en plusieurs temps, 8 chute d'une créature qui en saisissait une autre,
-//! 10 reprise du combat.
+//! Type 8, hit state (`+4 = 4`, 0x650d4). `+5`: 0 reaction to a hit (table by code `+0x49`), 2 recoil, 4 fall and get
+//! up, 6 death in several stages, 8 fall of a creature that was grabbing another, 10 fight resumes.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -8,7 +7,7 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Réactions communes aux coups, indexées par le code `+0x49`.
+/// Common reactions to hits, indexed by code `+0x49`.
 const REACTIONS: u32 = 0x6518a;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -32,14 +31,14 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin des sous-états 2 et 4 : l'état est mémorisé et la période de repos décomptée.
+/// End of substates 2 and 4: the state is saved and the rest period counted down.
 fn tail<R: Bench>(x: &mut Cx<'_, R>) {
     let s = x.u32(f::STATE);
     x.set32(STATE_SAVED, s);
     cooldown(x);
 }
 
-/// 0x65ac8 : plus de PV → mort (sous-état 6, état 2 le temps de la chute) ; vrai si l'ennemi meurt.
+/// 0x65ac8: no more HP → death (substate 6, state 2 during the fall); true if the enemy dies.
 fn death_check<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
@@ -49,7 +48,7 @@ fn death_check<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-// --- sous-état 0 : réaction -----------------------------------------------------------------------
+// --- substate 0: reaction -----------------------------------------------------------------------
 
 fn first<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
@@ -77,7 +76,7 @@ fn first<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(STATE_SAVED, s);
 }
 
-/// 0x65168 : la créature n'est plus tenue : elle reprend l'état mémorisé avec une courte période de repos.
+/// 0x65168: the creature is no longer held: it resumes the saved state with a short rest period.
 fn resume<R: Bench>(x: &mut Cx<'_, R>) {
     let code = x.u8(HIT_CODE_SAVED);
     x.set8(0x49, code);
@@ -90,7 +89,7 @@ fn resume<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
 }
 
-// --- sous-état 2 : recul ----------------------------------------------------------------------------
+// --- substate 2: recoil ----------------------------------------------------------------------------
 
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -127,7 +126,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     tail(x);
 }
 
-// --- sous-état 4 : chute et relevé --------------------------------------------------------------------
+// --- substate 4: fall and get up --------------------------------------------------------------------
 
 fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -159,7 +158,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     tail(x);
 }
 
-// --- sous-état 6 : mort ------------------------------------------------------------------------------
+// --- substate 6: death ------------------------------------------------------------------------------
 
 fn dying<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -245,7 +244,7 @@ fn dying<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 : chute d'une créature en vol -------------------------------------------------------
+// --- substate 8: fall of a flying creature -------------------------------------------------------
 
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {

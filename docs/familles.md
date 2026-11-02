@@ -9,7 +9,7 @@ décrit dans `docs/objets.md` ; la méthode générale dans `docs/rewrite-guide.
 La boucle de dispatch d'une classe appelle, pour chaque objet actif, `jsr (table + 4 × type)` avec
 `A0` = objet et `D7` = compteur de boucle (`0x39f34` ITEM, `0x39e50` BOX, `0x39cba` EFFCT). Un gestionnaire
 rend la main par `rts` en laissant `A0` et `D7` intacts : c'est le seul contrat (`outputs` = A0, D7).
-Chaque type est donc une routine native (`families::gestionnaire!`) qui remplace son point d'entrée.
+Chaque type est donc une routine native (`families::handler!`) qui remplace son point d'entrée.
 
 Les gestionnaires sont des automates : octet d'état `+4` (0 initialisation, 2 actif, 4 libération, 6 posé par
 le culling), sous-états `+5`, `+6`. Les sauts du 68000 se font par tables de mots relatifs dans le code
@@ -21,12 +21,12 @@ calcul de durée (`Ctx::saut_table`, qui pose aussi D0 et D1 comme l'original).
 La durée d'un gestionnaire dépend de ses branchements et de ses sous-routines. La logique est écrite une
 seule fois sur un contexte `Ctx` :
 
-- **à blanc** (`families::cout`) : la logique s'exécute sur une copie de la machine ; chaque branchement
+- **à blanc** (`families::cost`) : la logique s'exécute sur une copie de la machine ; chaque branchement
   conditionnel du code d'origine est noté par `Ctx::pris(condition)` (`vrai` = branchement pris) dans un
   `Chemin` ; `Chemin::duree_hors` additionne ensuite les durées des instructions du code d'origine le long de
-  ce chemin (tronçons ouverts par `Ctx::at` / `saut_table`) ; les sous-routines appelées (`Ctx::jsr`, `natif`,
+  ce chemin (tronçons ouverts par `Ctx::at` / `saut_table`) ; les sous-routines appelées (`Ctx::jsr`, `native`,
   `jsr_indirect`) ont été exécutées pour de vrai sur la copie et leurs cycles s'ajoutent ;
-- **réel** (`families::executer`) : la même logique s'exécute sur la machine.
+- **réel** (`families::execute`) : la même logique s'exécute sur la machine.
 
 La durée est donc exacte (`exact_cost`) et le mode contrôle la vérifie à chaque appel : toute décision
 oubliée ou inversée fait échouer le parcours (`Chemin` refuse les décisions en trop ou en moins) ou la
@@ -42,16 +42,16 @@ deux `bcs` successifs quand l'appelant teste la retenue après le `bcs` interne.
 
 ### Sous-routines, états délégués
 
-- les routines du modèle d'objets sont appelées directement (`Ctx::natif`, `anim_start`, `anim_step`,
+- les routines du modèle d'objets sont appelées directement (`Ctx::native`, `anim_start`, `anim_step`,
   `reinsert`, `alloc`, `free`) sans passer par l'index des adresses ; les autres par `Ctx::jsr` (sons,
   événements de score, création d'objets non réécrits...) ;
 - `Ctx::reinsert` passe par la native des listes triées (`objects::lists::REINSERT_ACTORS`, registres exacts) ;
-- `Ctx::sans_chemin(cible, corps)` exécute en Rust, sans relevé de chemin, un état ouvert par `saut_table` : sa durée
+- `Ctx::sans_chemin(target, body)` exécute en Rust, sans relevé de chemin, un état ouvert par `saut_table` : sa durée
   est celle de ses sous-routines (les durées exactes sont obsolètes) ;
 - `Ctx::jsr_origine` exécute le code d'origine seul : à utiliser quand le gestionnaire lit des registres
   laissés en reste par la sous-routine (le modèle d'objets ne les reproduit pas : voir EFFCT 26) ;
 - **états non exercés ou non réécrits** : un état que le gestionnaire ne gère pas est délégué au code
-  d'origine (`Ctx::deleguer(adresse)`, exécuté comme un `jmp` de la table, avec D0/D1 comme l'original) ;
+  d'origine (`Ctx::deleguer(address)`, exécuté comme un `jmp` de la table, avec D0/D1 comme l'original) ;
   le comportement reste celui de l'original ; ces états sont listés ci-dessous ;
 - **retour par-dessus l'appelant** : EFFCT 4 saute, pour le personnage 1, dans l'épilogue d'une autre routine
   (`movem.l (SP)+,{A1-A4} ; rts`, `beq.w 0xaa9fe`) : l'original ne revient donc pas à son appelant mais plus
@@ -60,7 +60,7 @@ deux `bcs` successifs quand l'appelant teste la retenue après le `bcs` interne.
   (`Ctx::epilogue_etranger`) : elle dépile les quatre appels en cours les plus récents de la tâche (aiguillage des
   EFFCT, mise à jour du monde, fin de la phase, fin d'image ; A1-A4 reçoivent leurs adresses d'origine,
   `docs/noyau.md`, « Appels en cours en Rust »), revient au cinquième, et les fonctions Rust dépassées (boucle de
-  dispatch...) voient que leur appel n'est pas revenu et abandonnent (`taches::table::revenu`). Il n'y a plus de chemin « hors contrat » où le code
+  dispatch...) voient que leur appel n'est pas revenu et abandonnent (`tasks::table::returned`). Il n'y a plus de chemin « hors contrat » où le code
   d'origine s'exécute à la place d'une native (l'ancien coût démesuré `COUT_HORS_CONTRAT` a disparu).
 
 ### Outils de validation
@@ -71,7 +71,7 @@ deux `bcs` successifs quand l'appelant teste la retenue après le `bcs` interne.
 - `examples/families.rs` : contrôle détaillé des gestionnaires (RAM, registres, cycles) avec affichage de
   l'objet fautif et, avec `FAMILLES_TRACE=1`, trace de l'original ; les autres routines natives restent en
   mode contrôle pour suivre exactement la ligne du temps de l'original ; il affiche aussi la **couverture des
-  décisions** (`COUV fichier ligne résultat`) : les branchements du Rust jamais pris ou jamais refusés par
+  décisions** (`COUV file line résultat`) : les branchements du Rust jamais pris ou jamais refusés par
   un scénario ne sont pas validés ;
 - `examples/fuzz_families.rs` : mêmes comparaisons sur des états réels **perturbés** (champs de l'objet, de
   son joueur et de la scène) et sur des objets **synthétiques** : le dernier argument
@@ -81,7 +81,7 @@ deux `bcs` successifs quand l'appelant teste la retenue après le `bcs` interne.
 
 Validation obtenue : voir le tableau de chaque famille (colonne « validation »). « scénarios » : appelé par
 `validate_all` (8 scénarios, 30 000 images, durées exactes comprises) et contrôlé appel par appel par
-`familles` ; « fuzz » : seulement sur objets synthétiques ou perturbés (des dizaines de milliers d'essais par
+`families` ; « fuzz » : seulement sur objets synthétiques ou perturbés (des dizaines de milliers d'essais par
 type, écart nul).
 
 ## 2. ITEM (classe 0xC) : objets ramassables
@@ -106,7 +106,7 @@ scintillement (EFFCT 15) créé par `0xae3ec`, `+0x58` ramassé (1 : ramassage, 
 | 4 | 0xdbdf6 | objet d'inventaire | quantité + `+0x5a` (plafonnée à 9), emplacement vide, échange avec le premier emplacement (l'objet remplacé est recréé), refus selon la classe (rejet en arc) ; mode 1 : objet jeté | 21 775 | scénarios (refus exercé ; échange et quantités : fuzz) |
 | 5 | 0xdc382 | bonus animé | mode de création → vitesses initiales ; ramassé : événement `0x19b08` | 50 180 | scénarios |
 | 6 | 0xdc624 | objet de scène | 0 et 2 : icône qui suit un joueur et joue un son toutes les 0x3c images (envol et attente aussi) ; 1 : guide qui marche vers le joueur le plus proche et crée des SET ; 3 : voir le code | 10 387 | scénarios (variantes 0, 1, 2) |
-| 7 | 0xdce6e | réserve du joueur | compteurs `+0x150 + variante` plafonnés à 9 pour les classes autorisées | 0 | fuzz |
+| 7 | 0xdce6e | réserve du joueur | compteurs `+0x150 + variant` plafonnés à 9 pour les classes autorisées | 0 | fuzz |
 | 8 | 0xdd132 | objet à contact | test de boîtes avec les quatre joueurs (`0xdd470`), crée un SET ; 3 variantes | 0 | fuzz |
 | 9 | 0xdd5a2 | accompagnement | étincelle qui suit un objet pendant `+0x14` images | 0 | fuzz |
 
@@ -129,7 +129,7 @@ Pool de 21 emplacements de 0x80 octets (`0xFFEEDE`), 4 types.
 Le type 0 n'a plus d'état délégué (anciennement : sous-états 2, 4, 6 et 8 de l'état actif et tremblement des
 coffres). Encore délégués dans le type 1 (jamais exercés) : variantes 2 et 3.
 
-Sous-routines de la famille appelées hors des gestionnaires (fonctions de `items.rs`, plus de natives : `effacer_ramasses_68k`,
+Sous-routines de la famille appelées hors des gestionnaires (fonctions de `items.rs`, plus de natives : `clear_picked_68k`,
 `chute_equipement_68k`) : `0xdabba` efface le tableau des
 objets de collection (48 longs en `A5-0x5b88`, appelé par la sortie de la phase 0) ; `0xdb6c0` fait tomber au
 plus un équipement du joueur touché (bouclier `+0x165`, arme spéciale `+0x163`, anneau `+0x162`), chacun avec un compteur
@@ -368,13 +368,13 @@ type 1, PSHL 10 et 11 celui du 2, SET 33 celui du 3, SOBJ 4 et EFFCT 18 celui du
 | SOBJ (0x14) | 0x39fa8 | 16 | 16 (dont 0xcc25a) | 16 | aucun |
 
 Chaque entrée a donc sa native. Mesuré sur `bot30k` (variante 0) et `cov_4p_a` (variantes 0 à 2), 20
-trajectoires par type ; `fuzz familles`, `fuzz_joueur`, `fuzz_familles`, `fuzz_set_a`, `fuzz_eshl_c` valident
-les natives elles-mêmes (sections précédentes, `docs/familles-eshl-set-sobj.md`, `docs/familles/joueur.md`).
+trajectoires par type ; `fuzz families`, `fuzz_joueur`, `fuzz_familles`, `fuzz_set_a`, `fuzz_eshl_c` valident
+les natives elles-mêmes (sections précédentes, `docs/families-eshl-set-sobj.md`, `docs/families/joueur.md`).
 
 ### Sous-tables (états `+4`, `+5`, `+6`/`+7`, variantes `+3`)
 
 Les natives écrites sur `Cx` implémentent tous les états de leurs tables. Celles écrites sur `Ctx` (ITEM, BOX,
-une partie d'EFFCT) ont un bras `_ => ctx.deleguer(cible)` : il n'est pris que pour un état absent de la table
+une partie d'EFFCT) ont un bras `_ => ctx.deleguer(target)` : il n'est pris que pour un état absent de la table
 de l'original (aucun objet du jeu ne l'atteint ; aucun passage en 68000 sur les trajectoires régulières ni dans
 les 256 scénarios). Avec `DDSOM_ETATS=1`, ces délégations s'exécutent, mais sur des adresses impaires ou en
 plein milieu de tables (`0x28604`, `0xdfa55`, `0xe0699`...) : c'est l'original qui saute dans des données, pas
@@ -384,12 +384,12 @@ un état légitime oublié.
 
 | Entrée | Rôle | Validation |
 |---|---|---|
-| SET 7 0xcb29c (états 2 et 4) + reprises 0xcb896, 0xcb9c0 | porte de sortie : changement de zone (prime, joueurs morts cachés), quatre genres de sortie (zone annexe, retour, scène suivante, fin de partie), fondu 0x1460 qui cède (appelé en Rust comme un sous-programme de tâche, la tâche reprend aux étapes `set::fondu_de_sortie::Etape`), sauvegarde/suspension du monde, retour de zone (état 4) | `cov_mortal_late` (scène suivante), `cov/cov_porte_annexe` (nouveau : entrée puis retour), `fuzz_porte` (jusqu'à la première cession du fondu, puis fondu fini sans attendre et étape de reprise ; 3000 essais dont 728 avec fondu ; `DDSOM_PORTE=29` : porte de passage SET 29, 649 avec fondu), `fuzz familles` |
-| 0x33b24 | caméras au retour d'une zone annexe (portes 7, 27, 29) | `fuzz petites`, `fuzz_porte`, `cov_porte_annexe` |
+| SET 7 0xcb29c (états 2 et 4) + reprises 0xcb896, 0xcb9c0 | porte de sortie : changement de zone (prime, joueurs morts cachés), quatre genres de sortie (zone annexe, retour, scène suivante, fin de partie), fondu 0x1460 qui cède (appelé en Rust comme un sous-programme de tâche, la tâche reprend aux étapes `set::exit_fading::Step`), sauvegarde/suspension du monde, retour de zone (état 4) | `cov_mortal_late` (scène suivante), `cov/cov_porte_annexe` (nouveau : entrée puis retour), `fuzz_porte` (jusqu'à la première cession du fondu, puis fondu fini sans attendre et étape de reprise ; 3000 essais dont 728 avec fondu ; `DDSOM_PORTE=29` : porte de passage SET 29, 649 avec fondu), `fuzz families` |
+| 0x33b24 | caméras au retour d'une zone annexe (portes 7, 27, 29) | `fuzz small`, `fuzz_porte`, `cov_porte_annexe` |
 | PEFF 42 0x50b9c | article en vitrine de la boutique : zone de vente, message, vente (stock, bourse BCD, inventaire, refus) | `fuzz boutique` |
 | 0x514ac / 0x514cc | interprète des dialogues du marchand appelé par le comptoir PEFF 43 (12 commandes ; fonctions Rust appelées directement, plus de native) | `fuzz boutique` (scripts tirés, par le comptoir 0x51076) |
-| 0x4aed0, 0x53746, 0xa2b4a, 0xa462c | créateurs (PEFF 5, pierres PSHL 0x11, ESHL 0x25, ESHL 0x34 variante 3) | `fuzz petites`, `fuzz_joueur` |
-| 0x101da, 0x1ac90, 0xb230e | palette de la scène 0x69, fin d'éclair, deux paires de cases de tuiles | `fuzz petites` |
+| 0x4aed0, 0x53746, 0xa2b4a, 0xa462c | créateurs (PEFF 5, pierres PSHL 0x11, ESHL 0x25, ESHL 0x34 variante 3) | `fuzz small`, `fuzz_joueur` |
+| 0x101da, 0x1ac90, 0xb230e | palette de la scène 0x69, fin d'éclair, deux paires de cases de tuiles | `fuzz small` |
 | reprises de 0x1c86e (51 adresses de retour d'étape) et 0x1c702 | fin de la mise à jour du monde et de la phase 12 quand un gestionnaire a cédé | `scene_67`, `cov_mortal_late`, `cov_porte_annexe` |
 
 ### Reste en code d'origine, appelé depuis ces familles

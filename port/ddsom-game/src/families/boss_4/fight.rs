@@ -1,25 +1,25 @@
-//! Boss 4, groupes 0 (arrivée), 2 (combat) et 6 à 12 (attente sans joueur).
+//! Boss 4, groups 0 (arrival), 2 (combat) and 6 to 12 (wait with no player).
 //!
-//! | `+6` du groupe 2 | Rôle |
+//! | `+6` of group 2 | Role |
 //! |---|---|
-//! | 0 | debout, attend (`+0x6e` images) |
-//! | 2 | demi-tour, puis reprise de l'état mémorisé |
-//! | 4, 6 | marche vers la cible (pas rapides, pas lents) ; les boîtes devant le boss décident de l'attaque |
-//! | 8 | charge (vers le milieu de l'écran ou la cible) |
-//! | 10 | bond en arrière |
+//! | 0 | standing, waits (`+0x6e` frames) |
+//! | 2 | about-face, then resumption of the saved state |
+//! | 4, 6 | walk toward the target (fast steps, slow steps); the boxes in front of the boss decide the attack |
+//! | 8 | charge (toward the middle of the screen or the target) |
+//! | 10 | backward leap |
 
 use crate::families::cx::Bench;
 use super::decide;
 use super::*;
 use crate::objects::Current;
 
-/// Jeux de marche choisis par la marque `+0x33` (0x103e0) : de côté, de face.
+/// Walk sets chosen by the mark `+0x33` (0x103e0): sideways, facing front.
 const WALK_SIDEWAYS: u32 = 0x17569c;
 const WALK_FORWARD: u32 = 0x175740;
 
-// --- groupe 0 : arrivée ------------------------------------------------------------------------
+// --- group 0: arrival ------------------------------------------------------------------------
 
-/// 0x81daa : le boss paraît en haut de l'écran, descend, rugit, puis se met en marche.
+/// 0x81daa: the boss appears at the top of the screen, descends, roars, then starts walking.
 pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -77,22 +77,22 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// La cible est-elle hors de la zone `[caméra - 0x50, caméra + 0x1d0]` (0x104a2) ?
+/// Is the target outside the zone `[camera - 0x50, camera + 0x1d0]` (0x104a2)?
 fn off_screen<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::outside_band(x, -0x50, 0x1d0)
 }
 
-/// Le boss doit-il se retourner vers sa cible (0x1050c) ?
+/// Must the boss turn around toward its target (0x1050c)?
 fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
-/// Avance-t-il dans le sens où il regarde (0x10560) ?
+/// Is it moving in the direction it faces (0x10560)?
 fn facing_forward<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::moving_forward(x)
 }
 
-/// 0x81e7a : debout ; sorti de l'écran il charge, au bout de l'attente il marche, sinon il se tourne vers sa cible.
+/// 0x81e7a: standing; off screen it charges, at the end of the wait it walks, otherwise it turns toward its target.
 fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if !alive(x) {
         return decide::wait(x);
@@ -119,19 +119,19 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// Animation de marche 2 (de face) ou 3 (de côté).
+/// Walk animation 2 (facing front) or 3 (sideways).
 fn walk_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let n = if facing_forward(x) { 2 } else { 3 };
     body(x, n);
 }
 
-/// Animation de marche reprise à la même marque dans le jeu du sens de marche.
+/// Walk animation resumed at the same mark in the walk direction's set.
 fn walk_select<R: Bench>(x: &mut Cx<'_, R>) {
     let set = if facing_forward(x) { WALK_FORWARD } else { WALK_SIDEWAYS };
     lib::switch_keeping_time(x, set);
 }
 
-/// 0x81ede : demi-tour (animation 1), puis reprise de l'état mémorisé.
+/// 0x81ede: about-face (animation 1), then resumption of the saved state.
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
@@ -157,7 +157,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x81f44 (`slow` = faux) et 0x81f66 : marche vers la cible, `+0x6b` pas espacés de `+0x71` images.
+/// 0x81f44 (`slow` = false) and 0x81f66: walk toward the target, `+0x6b` steps spaced `+0x71` frames apart.
 fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
     if !alive(x) {
         return decide::wait(x);
@@ -187,20 +187,20 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
     }
 }
 
-/// Délai entre deux pas, selon la difficulté (table de la ROM `table`).
+/// Delay between two steps, depending on difficulty (ROM table `table`).
 fn set_delay<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let level = var::RANK.get(x.b);
     let d = x.rom8(table + level as u32);
     x.set8(WALK_DELAY, d);
 }
 
-/// Vise la cible (0xe76c) et prend la table de vitesses 0xd.
+/// Aims at the target (0xe76c) and takes speed table 0xd.
 fn aim<R: Bench>(x: &mut Cx<'_, R>) {
     lib::approach_target(x);
     speed(x, 0xd);
 }
 
-/// La marche : un pas toutes les `+0x71` images ; entre deux pas, les boîtes devant le boss décident de la suite.
+/// The walk: one step every `+0x71` frames; between two steps, the boxes in front of the boss decide what follows.
 fn walking<R: Bench>(x: &mut Cx<'_, R>) {
     if sub8(x, WALK_DELAY, 1).mi() {
         if !sub8(x, WALK_STEPS, 1).gt() {
@@ -214,7 +214,7 @@ fn walking<R: Bench>(x: &mut Cx<'_, R>) {
     if off_screen(x) {
         return decide::charge(x, false);
     }
-    // marche lente : boîte proche de l'IA (0x83094)
+    // slow walk: AI's near box (0x83094)
     if x.u8(ANIM_KIND) == 3 {
         if let Some(g) = ai_box(x, -0x68, 0x38, 6) {
             return decide::from_ai(x, g, true);
@@ -238,7 +238,7 @@ fn walking<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// 0x83094 / 0x830b2 : la cible est dans la boîte et l'IA (0x1047a) choisit un geste (1 ou 2).
+/// 0x83094 / 0x830b2: the target is in the box and the AI (0x1047a) chooses a gesture (1 or 2).
 fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u16> {
     if !lib::target_in_box(x, d0, d1, d2) {
         return None;
@@ -247,12 +247,12 @@ fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u16>
     (turn != lib::Turn::None).then_some(turn as u16)
 }
 
-/// Boîte large devant le boss (0x7ef4).
+/// Wide box in front of the boss (0x7ef4).
 fn target_in_box_7ef4<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     lib::guard_in_front(x, d0, d1, d2)
 }
 
-/// 0x820b6 : charge en ligne droite jusqu'au point visé, poussière et grondement, puis marche.
+/// 0x820b6: charge in a straight line to the aimed point, dust and rumble, then walk.
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -260,7 +260,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x16, 0);
             let mut angle = 0x18;
             if x.u8(CHARGE_AT_TARGET) == 0 {
-                // vers le milieu de l'écran
+                // toward the middle of the screen
                 x.set8(f::FLIP, 0);
                 let px = x.u16(0x8);
                 setw(x, 1, px);
@@ -296,7 +296,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x82128 : la charge avance jusqu'au point visé ; à l'arrivée (marque négative) le boss freine.
+/// 0x82128: the charge advances to the aimed point; on arrival (negative mark) the boss brakes.
 fn charging<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     let key = x.u8(f::KEY_FRAME);
@@ -309,7 +309,7 @@ fn charging<R: Bench>(x: &mut Cx<'_, R>) {
         } else {
             (x.u16(MARK_X), x.u16(0x8))
         };
-        // vers la gauche, les rôles s'échangent (`exg D0,D1`)
+        // toward the left, the roles are swapped (`exg D0,D1`)
         let (a, b) = if (x.u16(0x14) as i16) < 0 { (px, goal) } else { (goal, px) };
         if !Fl::sub16(b, a).lt() && (x.u8(f::KEY_FRAME) as i8) < 0 {
             return brake(x);
@@ -338,7 +338,7 @@ fn brake<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 5);
 }
 
-/// 0x82202 : bond en arrière (élan, saut, chute, glissade).
+/// 0x82202: backward leap (run-up, jump, fall, slide).
 fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -403,9 +403,9 @@ fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupes 6 à 12 : attente ---------------------------------------------------------------
+// --- groups 6 to 12: wait ---------------------------------------------------------------
 
-/// 0x82be2 : sans joueur en vie, le boss se tient debout ; dès qu'un joueur revient (en partie), il marche.
+/// 0x82be2: with no player alive, the boss stands; as soon as a player comes back (in game), it walks.
 pub(super) fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return decide::walk(x);

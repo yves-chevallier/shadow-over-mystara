@@ -168,7 +168,7 @@ Les 22 scénarios de `scenarios/cov/` sont VALIDES sur 30 000 images (`DDSOM_COV
 trois enseignements généraux :
 
 * **Appeler du 68000 qui cède la main** : une native qui appelait par `call` une routine d'origine pouvant atteindre
-  `0xa40` (fondu `0x1460`, chargeurs de scène) devait utiliser `call_at(adresse, retour d'origine)`, sinon la tâche
+  `0xa40` (fondu `0x1460`, chargeurs de scène) devait utiliser `call_at(address, ret d'original)`, sinon la tâche
   réveillée revenait à l'adresse sentinelle (`docs/boucle.md`). Depuis, les cessions passent par des étapes Rust
   (`docs/noyau.md`, « Appels en cours en Rust ») et `call_at` a disparu : `call` refuse une cession.
 * **Registres relus par du code qui n'initialise rien** : en plus de D4 et A4 déjà rendus par le constructeur de sprites,
@@ -187,7 +187,7 @@ images dans une boucle (compteur FF806E qui avance par à-coups) est un comporte
 Parties longues jouées par `examples/autobot.rs` (40 000 à 90 000 images chacune) : plusieurs joueurs, magies et
 objets fréquents, scènes 20 et 56 (0x14 et 0x38, prises à tort pour les choix de route), boutiques, difficultés 0, 3 et 7, langue 4, joueurs mortels. Elles
 sortent des chemins des scénarios de 30 000 images et ont trouvé des trous du mode sans 68000. Génération :
-`tools/gen_long.py [nom...]` (écrit `<nom>.txt` et `<nom>.images`, le nombre d'images du scénario). Validation :
+`tools/gen_long.py [name...]` (écrit `<name>.txt` et `<name>.images`, le nombre d'images du scénario). Validation :
 `DDSOM_LONG=1 tools/validate_all.sh` les ajoute (en tête de liste : chacune dure 1 à 3 minutes) ; sans la variable,
 la validation habituelle ne change pas. Ciblée : `validate <roms> <eeprom> scenarios/long/<nom>.txt $(cat
 scenarios/long/<nom>.images)`.
@@ -218,7 +218,7 @@ Trous trouvés et corrigés (2026-10-27) ; chacun passait inaperçu des 272 scé
 | `long_2p_magies`, avec `DDSOM_ASSETS` (59 932) | délai d'un éclat du gel nul | glitch d'origine : le délai `move.b (0x4bd98,PC,D0.w)` prend l'octet haut de D0.w laissé par le tirage : 256 lectures de 16 octets sur ±32 Ko, souvent dans le code, absent des assets. Zones déclarées dans `tools/native_zones.py` et ajoutées à `native_zones.txt` (154 lignes dans le code) |
 | `long_28_scenes` (86 671) | arrêt : pas de native en 0x20ae (`scene/shop.rs`) | initialisation du pool PEFF à la réouverture d'une boutique enchaînée : native `pools::INIT_PEFF` |
 | `long_3p_mortels` (13 279) | 32 objets ESHL de type 0x1a manquants | glitch d'origine : 0xa17d0 (rangée d'éclats d'une caisse) charge le compte par `move.b (table),D5b` sans effacer D5 (0xa1670 le fait) : l'octet haut de D5.w laissé par la caisse s'ajoute à la boucle `dbf`, qui remplit le pool ; `eshl_creators::row_1a` gardait D5 entier |
-| `long_4p` (24 848) | arrêt : pas de native en 0xe296c (`elf.rs`) | son de la lune de l'elfe qui teste la version (`A5+0x70`) : ajouté à `sound::SELON_VERSION` (seul de ce genre manquant parmi les 7 entrées `tst.w (0x70,A5)` des sons) |
+| `long_4p` (24 848) | arrêt : pas de native en 0xe296c (`elf.rs`) | son de la lune de l'elfe qui teste la version (`A5+0x70`) : ajouté à `sound::BY_VERSION` (seul de ce genre manquant parmi les 7 entrées `tst.w (0x70,A5)` des sons) |
 | `long_2p_d3_mortels` (19 500) | compteur d'animation d'un joueur | `moves::pause` : pendant l'arrêt du jeu (`A5+0x3d`), l'action 0x1e (0x362d0) rend la main sans animer (`rts`), seule 0x1c (0x3626c) anime |
 
 Résultat : les 14 bots finissent VALIDE en mode par défaut et avec `DDSOM_ASSETS` (assets régénérés avec les zones
@@ -277,8 +277,8 @@ au hasard, l'original dépasse la garde du contrôle) ; ils sont validés par le
 helpers de suspension) ; les boutiques et les votes de chemin ont leurs bots dans la section suivante.
 
 Résultat (après les quatre corrections et les trois zones) : `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1 DDSOM_JOBS=8
-tools/validate_all.sh 30000` donne 296 scénarios VALIDE sur 296, en mode par défaut et avec `DDSOM_ASSETS` (assets
-réextraits avec les zones ci-dessus : `extract <roms> <assets> data`). Régénération : `tools/gen_long.py sorts_<nom>` (environ
+tools/validate_all.sh 30000` donne 296 scénarios VALIDE over 296, en mode par défaut et avec `DDSOM_ASSETS` (assets
+réextraits avec les zones ci-dessus : `extract <roms> <assets> data`). Régénération : `tools/gen_long.py sorts_<name>` (environ
 5 à 10 minutes chacun) ; sélection `late` de `bot_lib.build` et option `--door` documentées dans leurs en-têtes.
 
 
@@ -324,7 +324,7 @@ Le choix de la langue 0 (japonais, sautée par le menu de réglages) fait redém
 131 669 instructions distinctes, 2 321 fonctions exécutées sur 2 559, et dans les fonctions exécutées des zones de jeu
 2 909 instructions jamais exécutées et 991 sauts pris d'un seul côté ; après, 308 scénarios, 132 152 instructions, 2 323
 fonctions (0xcffd0, SET ; 0xea5f0, son de la boutique), 2 835 instructions jamais exécutées et 974 sauts d'un seul côté
-(détail : [couverture-fonctions.md](couverture-fonctions.md), `couverture-branches.tsv`). Le code des boutiques et
+(détail : [couverture-fonctions.md](couverture-fonctions.md), `coverage-branches.tsv`). Le code des boutiques et
 des votes était déjà exécuté presque en entier ; les bots y ajoutent les textes de choix en octets (0xb0174), le
 changement d'équipement des icônes de la boutique (PEFF, 0x4cb78), des styles de fenêtres de 0xc8430 (37 instructions),
 le son 0xea5f0 et, surtout, des parties naturelles comparées par `validate`. F3 hors curseur et noms est entièrement joué, sauf du code mort

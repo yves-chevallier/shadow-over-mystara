@@ -1,13 +1,13 @@
-//! Phase 24 (`0x21c2a`) : séquences scriptées entre deux phases de jeu (h).
+//! Phase 24 (`0x21c2a`): scripted sequences between two game phases (h).
 //!
-//! La phase est déclenchée par le contrôleur de scène (SET 2, action de fin 4 : les joueurs sortent) ou
-//! par un objet de scène. Elle contient deux séquences, choisies par l'étape (`A5+0x2d`, pas de 2) :
+//! The phase is triggered by the scene controller (SET 2, end action 4: the players exit) or
+//! by a scene object. It contains two sequences, chosen by the step (`A5+0x2d`, step of 2):
 //!
-//! * étape 0 : un boss (type 9) entre, un dialogue (message 4) s'ouvre, la caméra arrive en 800, le
-//!   boss s'avance, un deuxième dialogue (message 6) conclut et le jeu reprend (phase 12) ;
-//! * étape 2 : transition imposée (`A5+0x51e` = 76 → 92), la caméra avance jusqu'à 2408, puis le jeu reprend.
+//! * step 0: a boss (type 9) enters, a dialogue (message 4) opens, the camera arrives at 800, the
+//!   boss advances, a second dialogue (message 6) concludes and the game resumes (phase 12);
+//! * step 2: forced transition (`A5+0x51e` = 76 -> 92), the camera advances to 2408, then the game resumes.
 //!
-//! Chaque image appelle ensuite la copie des entrées, la mise à jour du monde et les sprites.
+//! Each frame then calls the input copy, the world update and the sprites.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -17,23 +17,23 @@ use crate::mem::{rts, wr32};
 use crate::Native;
 use crate::objects::pools;
 
-/// Variables temporaires des deux séquences.
+/// Temporary variables of the two sequences.
 const TIMER: u32 = scratch(0x9a2a);
 const MESSAGE: u32 = scratch(0x9a2c);
 const BOSS: u32 = scratch(0x9a30);
 
-/// Durée d'attente selon le nombre de joueurs (mots de l'espace programme, dans le code).
+/// Wait duration depending on the number of players (program-space words, in the code).
 const WAITS: u32 = 0x21c94;
-/// Compteur d'état du boss d'entrée (octet) : 12 = a fini d'entrer.
+/// State counter of the entering boss (byte): 12 = has finished entering.
 const BOSS_STATE: u32 = 0x4ff;
-/// Abscisse de caméra (mot) à atteindre / vitesse du défilement forcé.
+/// Camera x position (word) to reach / forced scroll speed.
 const CAMERA_X: u32 = 0x506;
 const ALT_CAMERA_X: u32 = 0x556;
 const TRANSITION: u32 = 0x51e;
-/// Horloge de partie BCD au retour au jeu : 4:59:59... (minutes, secondes, images).
+/// BCD game clock on return to the game: 4:59:59... (minutes, seconds, frames).
 const GAME_CLOCK: u32 = 0x38;
 const CLOCK_START: u32 = 0x0459_5900;
-/// Phase 12, étape et sous-étape à zéro.
+/// Phase 12, step and sub-step at zero.
 const GAME_PHASE: u32 = 0x0c00_0000;
 
 const STEP_BOSS_INTRO: u8 = 0;
@@ -50,7 +50,7 @@ pub fn phase_24(c: &mut Cpu, b: &mut Cps2Bus) {
     x.world();
 }
 
-/// Rend la main au jeu : phase 12, scène libre, horloge réarmée.
+/// Hands control back to the game: phase 12, free scene, clock re-armed.
 fn resume_game(x: &mut Ctx) {
     x.set_v32(var::PHASE, GAME_PHASE);
     x.set_v8(var::HOLD, 0);
@@ -163,7 +163,7 @@ fn scroll_out(x: &mut Ctx) {
                 crate::families::effects_creators::type_53_pure(x.b);
             }
         }
-        6 => {} // 0xb66e4 passe lui-même à la sous-étape 8
+        6 => {} // 0xb66e4 itself moves to sub-step 8
         8 => {
             x.set_v32(var::PHASE, GAME_PHASE);
             x.set_v8(var::HOLD, 0);

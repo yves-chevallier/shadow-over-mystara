@@ -1,4 +1,4 @@
-//! Boss 22, groupe 4 : les attaques (`+6` = 0 à 22). Chacune se termine par `next_attack` (0x9d680).
+//! Boss 22, group 4: the attacks (`+6` = 0 to 22). Each ends with `next_attack` (0x9d680).
 
 use crate::families::cx::Bench;
 use super::moves::step_anim;
@@ -22,7 +22,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9b752 : image-clé de l'animation d'attaque (son 0xebfdc), puis fin quand l'animation est finie.
+/// 0x9b752: key frame of the attack animation (sound 0xebfdc), then end when the animation is finished.
 fn finish_attack<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         lib::sound(x, 0xebfdc);
@@ -67,7 +67,7 @@ fn breath<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9bfb4 : image-clé de la morsure : saisit un joueur à portée (0xfc44, 0xfd64), sinon fin de l'animation.
+/// 0x9bfb4: key frame of the bite: grabs a player within range (0xfc44, 0xfd64), otherwise end of the animation.
 fn grab_on_key<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         if let Some(player) = lib::attack_hits_a_player(x, 5) {
@@ -94,7 +94,7 @@ fn bite<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin de la course d'une attaque de la seconde forme : le boss se tourne vers sa cible s'il lui tourne le dos.
+/// End of the run of a second-form attack: the boss turns toward its target if it has its back to it.
 fn facing_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
@@ -104,7 +104,7 @@ fn facing_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     wanted != x.u8(f::FLIP)
 }
 
-/// 0x9c0ac : attaque de la seconde forme (rugissement qui la déclenche, course, coup).
+/// 0x9c0ac: second-form attack (roar that triggers it, run, hit).
 fn second_form_strike<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -217,7 +217,8 @@ fn second_form_strike<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9c29a : le boss reste dans l'écran et la cible est assez proche devant lui (comme au demi-tour du combat).
+/// 0x9c29a: the boss stays within the screen and the target is close enough in front of it (as at the about-face of
+/// the combat).
 fn still_close<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = var::SCROLL_X.get(x.b);
     if x.u8(f::FLIP) != 0 && (cam.wrapping_add(0x160).wrapping_sub(x.u16(0x8)) as i16) < 0 {
@@ -231,7 +232,7 @@ fn still_close<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     d <= 0xe0 && x.u8(0x29) == 0
 }
 
-/// 0x9b7ae : charge (course vers la cible, coup à portée).
+/// 0x9b7ae: charge (run toward the target, hit in range).
 fn charge_strike<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -278,7 +279,7 @@ fn charge_start<R: Bench>(x: &mut Cx<'_, R>) {
     speed(x, 0x15);
 }
 
-/// 0x9bfe0 : piétinement (course vers un joueur proche, puis morsure).
+/// 0x9bfe0: stomping (run toward a nearby player, then bite).
 fn stomp<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -323,7 +324,7 @@ fn stomp_start<R: Bench>(x: &mut Cx<'_, R>) {
     speed(x, 0x15);
 }
 
-/// 0x9c354 : plongeon sur la cible.
+/// 0x9c354: dive onto the target.
 fn dive<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -332,7 +333,7 @@ fn dive<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(VULNERABLE, 1);
                 let t = x.linked(f::TARGET);
                 let (tx, tz) = (t.u16(x.b, 0x8), t.u16(x.b, 0x10));
-                // D2 = la profondeur de la cible (reste)
+                // D2 = the target's depth (leftover)
                 *x.c.d2() = tz as u32;
                 let angle = lib::aim_from(x, (tx, tz));
                 x.set8(0x2d, angle);
@@ -379,7 +380,8 @@ fn climb<R: Bench>(x: &mut Cx<'_, R>, up: bool) {
     step_anim(x);
 }
 
-/// Retombée du plongeon : son, poussière en ligne ; `down` (0x9c4a2) ajoute cinq éclats et ne rend pas vulnérable.
+/// Landing of the dive: sound, dust in a line; `down` (0x9c4a2) adds five bursts and does not make the boss
+/// vulnerable.
 fn land<R: Bench>(x: &mut Cx<'_, R>, down: bool) {
     x.move_xz();
     if (x.u32(0xc) as i32) > 0 {
@@ -399,7 +401,7 @@ fn land<R: Bench>(x: &mut Cx<'_, R>, down: bool) {
     start(x, Set::A, 6);
 }
 
-/// 0x9c3ee : saut sur place avec retombée en poussière.
+/// 0x9c3ee: jump in place with a landing in a puff of dust.
 fn dive_down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {

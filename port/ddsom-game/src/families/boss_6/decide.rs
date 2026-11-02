@@ -1,5 +1,5 @@
-//! Boss 6 : choix de l'action suivante (changements d'état) et tirages dans les tables de la ROM.
-//! Même principe que `boss_17::decide` ; les tables de décision sont lues dans la ROM (adressage relatif au PC).
+//! Boss 6: choice of the next action (state changes) and draws in the ROM tables.
+//! Same principle as `boss_17::decide`; the decision tables are read from the ROM (PC-relative addressing).
 
 use crate::families::cx::Bench;
 use super::*;
@@ -22,17 +22,17 @@ fn set_state<R: Bench>(x: &mut Cx<'_, R>, vulnerable: u8, state: u32) {
     x.set32(f::STATE, state);
 }
 
-/// 0x85962 : attend (aucun joueur en vie).
+/// 0x85962: waits (no player alive).
 pub(super) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
-/// 0x8588a : debout et vulnérable.
+/// 0x8588a: standing and vulnerable.
 pub(super) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     set_state(x, 1, STAND);
 }
 
-/// 0x8589a : interrompt l'action (état mémorisé en `+0xa2`).
+/// 0x8589a: interrupts the action (state saved in `+0xa2`).
 pub(super) fn interrupt<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let state = x.u32(f::STATE);
@@ -40,7 +40,7 @@ pub(super) fn interrupt<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, INTERRUPTED);
 }
 
-/// 0x858ae : marche rapide vers un joueur.
+/// 0x858ae: fast walk toward a player.
 pub(super) fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(SHOT, 0x2c);
     set_state(x, 1, CHASE);
@@ -52,14 +52,14 @@ pub(super) fn chase_b<R: Bench>(x: &mut Cx<'_, R>) {
     set_state(x, 1, CHASE_B);
 }
 
-/// 0x858da (`at_target` faux) et 0x858ec : charge vers la caméra ou vers la cible.
+/// 0x858da (`at_target` false) and 0x858ec: charge toward the camera or toward the target.
 pub(super) fn charge<R: Bench>(x: &mut Cx<'_, R>, at_target: bool) {
     x.set8(VULNERABLE, 0);
     x.set8(CHARGE_AT_TARGET, at_target as u8);
     x.set32(f::STATE, CHARGE);
 }
 
-/// 0x85900 : tir en bond.
+/// 0x85900: shot in a leap.
 pub(super) fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
     set_state(x, 0, SHOOT);
 }
@@ -76,24 +76,24 @@ pub(super) fn attack_4<R: Bench>(x: &mut Cx<'_, R>) {
     set_state(x, 0, ATTACK_4);
 }
 
-/// 0x8593a : attaque 6 en invulnérable.
+/// 0x8593a: attack 6 while invulnerable.
 pub(super) fn attack_6_shielded<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     set_state(x, 0, ATTACK_6);
 }
 
-/// 0x8594e : attaque 8 en invulnérable.
+/// 0x8594e: attack 8 while invulnerable.
 pub(super) fn attack_8_shielded<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     set_state(x, 0, ATTACK_8);
 }
 
-/// Cible d'une table de sauts de mots relatifs à son début.
+/// Target of a jump table of words relative to its start.
 fn target<R: Bench>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u32 {
     (table as i32 + x.rom16(table + index) as i16 as i32) as u32
 }
 
-/// Applique le changement d'état dont l'adresse d'origine est `routine`.
+/// Applies the state change whose original address is `routine`.
 fn apply<R: Bench>(x: &mut Cx<'_, R>, routine: u32) {
     match routine {
         0x858ec => charge(x, true),
@@ -110,7 +110,7 @@ fn apply<R: Bench>(x: &mut Cx<'_, R>, routine: u32) {
             x.set8(VULNERABLE, 0);
             x.set32(f::STATE, ATTACK_8);
         }
-        t => unreachable!("boss 6 : cible {t:x}"),
+        t => unreachable!("boss 6: target {t:x}"),
     }
 }
 
@@ -140,7 +140,7 @@ pub(super) fn walk_steps_slow<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(WALK_STEPS, v);
 }
 
-/// Un joueur est-il dans la boîte `(d0, d1, d2)` ? 0 sinon, ou 1 / 2 : le côté (0x1047a).
+/// Is a player in the box `(d0, d1, d2)`? 0 if not, or 1 / 2: the side (0x1047a).
 pub(super) fn probe<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u8 {
     if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
@@ -148,7 +148,7 @@ pub(super) fn probe<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u
     lib::turn_decision(x) as u8
 }
 
-/// 0x856f2 : un joueur est tout près devant.
+/// 0x856f2: a player is very close ahead.
 pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
     let pick = x.rom8(0x85708 + r);
@@ -156,7 +156,7 @@ pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
     apply(x, t);
 }
 
-/// 0x8571a : un joueur est devant ; la table dépend de la phase.
+/// 0x8571a: a player is ahead; the table depends on the phase.
 pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
     let phase = x.u8(PHASE) as i8 as i32;
@@ -165,30 +165,30 @@ pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
         0x8573a => 0x85752,
         0x85740 => 0x85762,
         0x85746 => 0x85772,
-        t => unreachable!("boss 6 : cible {t:x}"),
+        t => unreachable!("boss 6: target {t:x}"),
     };
     let pick = x.rom8(table + r);
     let t = target(x, 0x85782, pick as u32);
     apply(x, t);
 }
 
-/// 0x85788 : un joueur est à mi-distance (côté `side`).
+/// 0x85788: a player is at mid-distance (side `side`).
 pub(super) fn choose_mid<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
     let r = random(x) & 0xf;
     let index = (side as u32 - 1) * 2 + 4 * (x.u8(PHASE) as i8 as i32 as u32);
-    // les six routines lisent la même table d'octets
+    // the six routines read the same byte table
     let _ = target(x, 0x857ac, index);
     let pick = x.rom8(0x857e2 + r);
     let t = target(x, 0x857f2, pick as u32);
     apply(x, t);
 }
 
-/// 0x857f6 : un joueur est loin (côté `side`).
+/// 0x857f6: a player is far (side `side`).
 pub(super) fn choose_far<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
     let r = random(x) & 0xf;
     let index = (side as u32 - 1) * 2 + 4 * (x.u8(PHASE) as i8 as i32 as u32);
     let routine = target(x, 0x8581a, index);
-    // six routines : les deux premières lisent 0x85850, les deux suivantes 0x85860, les deux dernières 0x85870
+    // six routines: the first two read 0x85850, the next two 0x85860, the last two 0x85870
     let table = match routine {
         0x85826 | 0x8582c => 0x85850,
         0x85832 | 0x85838 => 0x85860,

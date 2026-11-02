@@ -1,7 +1,7 @@
-//! Sauvegarde rapide (F5) et reprise (F9) par rejeu : la partie garde ses entrées depuis le démarrage et l'EEPROM
-//! de départ ; reprendre, c'est refaire une machine neuve et rejouer ces entrées sans affichage jusqu'à l'image
-//! sauvegardée (le jeu est déterministe : c'est ce que vérifie `validate`). Le fichier est un scénario (fin
-//! `N quit`) et son EEPROM de départ (`.eeprom`) : `validate <roms> file.eeprom file N` le rejoue aussi.
+//! Quick save (F5) and resume (F9) by replay: the game keeps its inputs since startup and the starting EEPROM;
+//! resuming means building a fresh machine and replaying those inputs without display up to the saved
+//! frame (the game is deterministic: this is what `validate` checks). The file is a scenario (ending
+//! `N quit`) and its starting EEPROM (`.eeprom`): `validate <roms> file.eeprom file N` replays it too.
 
 use std::io;
 use std::path::Path;
@@ -15,21 +15,21 @@ pub struct Game {
 }
 
 impl Game {
-    /// Partie qui commence sur `m` neuve.
+    /// Game that starts on the fresh `m`.
     pub fn new(m: &Machine) -> Self {
         Game { eeprom: m.bus.eeprom.to_bytes(), inputs: Recorder::new(Vec::new()) }
     }
 
-    /// À appeler juste avant chaque image exécutée, entrées posées.
+    /// To be called just before each executed frame, inputs set.
     pub fn image(&mut self, m: &Machine) {
-        self.inputs.image(m).expect("écriture en mémoire");
+        self.inputs.image(m).expect("in-memory write");
     }
 
     pub fn images(&self) -> usize {
         self.inputs.images()
     }
 
-    /// Écrit `file` (scénario) et `file.eeprom`.
+    /// Writes `file` (scenario) and `file.eeprom`.
     pub fn saved(&self, file: &Path) -> io::Result<()> {
         if let Some(dir) = file.parent() {
             std::fs::create_dir_all(dir)?;
@@ -40,14 +40,14 @@ impl Game {
         std::fs::write(file, text)
     }
 
-    /// Rejoue `file` sur une machine neuve (`machine` la fait à partir de l'EEPROM de départ) jusqu'à l'image
-    /// sauvegardée.
+    /// Replays `file` on a fresh machine (`machine` builds it from the starting EEPROM) up to the saved
+    /// frame.
     pub fn charge(file: &Path, machine: impl FnOnce(&[u8]) -> Machine) -> io::Result<(Machine, Game)> {
         let eeprom = std::fs::read(eeprom_of(file))?;
         let text = std::fs::read_to_string(file)?;
         let end = text.lines().rev().find_map(|l| l.strip_suffix(" quit")?.trim().parse::<usize>().ok());
         let Some(end) = end else {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "ligne finale « N quit » absente"));
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "final line « N quit » missing"));
         };
         let scenario = Scenario::load(file)?;
         let mut m = machine(&eeprom);

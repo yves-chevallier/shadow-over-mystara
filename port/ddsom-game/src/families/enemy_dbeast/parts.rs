@@ -1,15 +1,14 @@
-//! Type 19, pièces de la bête (sous-état `+5 = 0`) et création des variantes.
+//! Type 19, parts of the beast (substate `+5 = 0`) and creation of the variants.
 //!
-//! Les variantes 0 à 3 sont la bête et ses membres attachés ; les variantes 4 à 13 sont des pièces
-//! lâchées (projectiles, bonds, ombre) : à la création elles reçoivent chacune un `+6` qui choisit
-//! leur comportement dans `run`.
+//! Variants 0 to 3 are the beast and its attached limbs; variants 4 to 13 are released parts (projectiles, leaps,
+//! shadow): at creation each receives a `+6` that chooses its behaviour in `run`.
 
 use crate::families::cx::Bench;
 use crate::families::eshl_creators;
 use super::*;
 use crate::objects::Current;
 
-/// Création selon la variante `+3` (0x71f86).
+/// Creation according to variant `+3` (0x71f86).
 pub(super) fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => {
@@ -67,7 +66,7 @@ pub(super) fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x10, cam_y.wrapping_add(py));
             play(x, 8);
         }
-        // pièces lâchées : état « actif », étape choisie par `+6`
+        // released parts: "active" state, step chosen by `+6`
         4 => lone(x, 0x0202_0000, 8),
         5 => lone(x, 0x0200_0800, 1),
         6 => lone(x, 0x0200_0600, 0xe),
@@ -82,14 +81,14 @@ pub(super) fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Points de vie des pièces (1) : elles meurent au premier coup.
+/// Hit points of the parts (1): they die on the first hit.
 fn set_hp<R: Bench>(x: &mut Cx<'_, R>) {
     for off in [0x60, f::HP, 0x64] {
         x.set16(off, 1);
     }
 }
 
-/// Pièce lâchée qui joue aussitôt une animation (variantes 4 à 7).
+/// Released part that immediately plays an animation (variants 4 to 7).
 fn lone<R: Bench>(x: &mut Cx<'_, R>, state: u32, anim: u8) {
     set_state_long(x, state);
     x.set8(PART, 0xff);
@@ -97,7 +96,7 @@ fn lone<R: Bench>(x: &mut Cx<'_, R>, state: u32, anim: u8) {
     play(x, anim);
 }
 
-/// Pièce lâchée sans animation de départ (variantes 8 à 13) ; `active` : elle est active.
+/// Released part without a starting animation (variants 8 to 13); `active`: it is active.
 fn detached<R: Bench>(x: &mut Cx<'_, R>, state: u32, active: bool) {
     set_state_long(x, state);
     x.set8(PART, 0xff);
@@ -106,7 +105,7 @@ fn detached<R: Bench>(x: &mut Cx<'_, R>, state: u32, active: bool) {
     }
 }
 
-// --- sous-état 0 --------------------------------------------------------------------------------
+// --- substate 0 --------------------------------------------------------------------------------
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -126,7 +125,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 0 (0x7245e) : membre attaché ; il se détache quand la bête est loin de la caméra.
+/// +6 = 0 (0x7245e): attached limb; it detaches when the beast is far from the camera.
 fn attached<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         let mut cam = var::SCROLL_X.get(x.b);
@@ -155,8 +154,8 @@ fn attached<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-/// +6 = 2 (0x724cc) : bras de la bête : suit le parent, joue l'animation de son état et frappe un
-/// joueur proche.
+/// +6 = 2 (0x724cc): arm of the beast: follows the parent, plays the animation of its state and strikes a nearby
+/// player.
 fn arm<R: Bench>(x: &mut Cx<'_, R>) {
     const BY_PARENT_STATE: u32 = 0x724c8;
     follow_body(x);
@@ -203,15 +202,15 @@ fn arm<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x725a0 : le bras se repose.
+/// 0x725a0: the arm rests.
 fn arm_rest<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(DONE, 0);
     x.set8(SHOTS, 7);
 }
 
-/// Se dirige vers le point de ralliement de la pièce (0x721a2) ; vrai quand elle y est.
-/// Glitch d'origine : sans parent, la pièce devient orpheline (saut à 0x725c8) et l'appelant teste le drapeau Z
-/// laissé par le démarrage d'animation (0x1a32 : `move.l A4,(0x20,A0)`, pointeur non nul) : « arrivée ».
+/// Heads for the part's rally point (0x721a2); true when it is there.
+/// Original glitch: without a parent, the part becomes an orphan (jump to 0x725c8) and the caller tests the Z flag left
+/// by the animation start (0x1a32: `move.l A4,(0x20,A0)`, non-null pointer): "arrived".
 fn rally<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     const OFFSETS: u32 = 0x72224;
     let Some(p) = parent(x) else {
@@ -230,7 +229,8 @@ fn rally<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let ay = dy.wrapping_add(p.u16(x.b, 0x10));
     x.set16(AIM_X, ax);
     x.set16(AIM_Y, ay);
-    // D2 (mot bas) = Y visé, laissé en reste (l'original y laisse le calcul de 0x137e, que `aim_from` ne rend pas).
+    // D2 (low word) = aimed Y, left as a leftover (the original leaves the computation of 0x137e there, which
+    // `aim_from` does not return).
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | ay as u32;
     let angle = lib::aim_from(x, (ax, ay));
     x.set8(Obj::SPEED_INDEX, angle);
@@ -239,7 +239,7 @@ fn rally<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     near(x.u16(AIM_X), x.u16(0x8)) && near(x.u16(AIM_Y), x.u16(0x10))
 }
 
-/// +6 = 4 (0x725e2) : la pièce se lève, attend, puis rejoint son parent.
+/// +6 = 4 (0x725e2): the part gets up, waits, then rejoins its parent.
 fn reach<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -278,7 +278,7 @@ fn reach<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 6 (0x7267c) : crache dès qu'un joueur est devant.
+/// +6 = 6 (0x7267c): spits as soon as a player is in front.
 fn spit<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, KNOCKED);
@@ -301,7 +301,7 @@ fn spit<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin d'un geste : quand l'animation est finie, retour à la bête debout (0x726e6).
+/// End of a move: when the animation is over, back to the standing beast (0x726e6).
 pub(super) fn finish_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         set_state_long(x, ACTIVE_STANCE);
@@ -309,7 +309,7 @@ pub(super) fn finish_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 8 (0x7270c) : comme `spit` mais sans attendre la fin du geste.
+/// +6 = 8 (0x7270c): like `spit` but without waiting for the end of the move.
 fn spit_once<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, KNOCKED);
@@ -329,7 +329,7 @@ fn spit_once<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Attend la fin de la phase de bond en l'air (image-clé), 0x727da.
+/// Waits for the end of the airborne leap phase (key frame), 0x727da.
 pub(super) fn bound_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
@@ -338,7 +338,7 @@ pub(super) fn bound_wait<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-/// Atterrissage d'un bond en X et Z (0x727f0).
+/// Landing of a leap in X and Z (0x727f0).
 pub(super) fn bound_land<R: Bench>(x: &mut Cx<'_, R>) {
     if x.move_xz().gt() {
         return step(x);
@@ -370,7 +370,7 @@ fn bound<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Début d'un bond en profondeur (variantes 12 et 14) : vitesse en Y, bond haut.
+/// Start of a leap in depth (variants 12 and 14): speed in Y, high leap.
 fn bound_y_start<R: Bench>(x: &mut Cx<'_, R>, vy: i16, anim_marker: u8, anim: u8) {
     x.set16(0x1c, vy as u16);
     x.add8(0x7, 2);
@@ -383,7 +383,7 @@ fn bound_y_start<R: Bench>(x: &mut Cx<'_, R>, vy: i16, anim_marker: u8, anim: u8
     play(x, anim);
 }
 
-/// Retombée d'un bond en profondeur (0x728d4 / 0x728f0).
+/// Landing of a leap in depth (0x728d4 / 0x728f0).
 pub(super) fn bound_y_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         lib::sound(x, 0xeb9a0);
@@ -428,7 +428,7 @@ fn bound_x<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 14 (0x72840) : bond en profondeur vers l'arrière.
+/// +6 = 14 (0x72840): leap in depth backward.
 fn bound_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => bound_y_start(x, -0x140, 0xe, 0xa),
@@ -439,7 +439,7 @@ fn bound_back<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 16 (0x72930) : tombe du haut de l'écran.
+/// +6 = 16 (0x72930): falls from the top of the screen.
 fn drop_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -465,7 +465,7 @@ fn drop_in<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Glissement vers l'avant avec la vitesse de la table (0x729bc / 0x72a2a).
+/// Forward slide with the speed from the table (0x729bc / 0x72a2a).
 fn slide_start<R: Bench>(x: &mut Cx<'_, R>, anim: u8, delay: u16) {
     x.add8(0x7, 2);
     x.set16(TIMER, delay);
@@ -497,7 +497,7 @@ fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Rampe : durée aléatoire, puis la bête surgit et frappe (+6 = 20 et 22, 0x72a16 / 0x72b16).
+/// Crawl: random duration, then the beast springs up and strikes (+6 = 20 and 22, 0x72a16 / 0x72b16).
 fn sneak_gen<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     const DELAYS: u32 = 0x72a6e;
     match x.u8(0x7) {

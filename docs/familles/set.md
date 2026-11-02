@@ -7,7 +7,7 @@ triées : leurs gestionnaires ne finissent pas par `reinsert`. Le type 8 (0xcc25
 2, 3, 15 et suivants ne sont pas dans ce fichier (le 33 est un alias du 3 ; le 3 n'est pas réécrit, voir §
 « Non fait »). Les noms de rôle marqués (h) sont des hypothèses tirées du comportement.
 
-Les gestionnaires sont validés par `fuzz familles` (mode `DDSOM_SCENE`, voir §« Validation ») et par les huit
+Les gestionnaires sont validés par `fuzz families` (mode `DDSOM_SCENE`, voir §« Validation ») et par les huit
 scénarios (`tools/validate_all.sh 30000`). Dans les tables ci-dessous, « lecture ROM » distingue l'espace
 *programme* (`rom16` : adressage `(table,PC,Dn)`) de l'espace de *données* (`data16` : adressage par registre
 ou absolu).
@@ -38,7 +38,7 @@ vus : la branche `+5 = 4` quand le compteur du chef vaut 1 (0xbc65a) et la boucl
 
 La variante choisit une entrée de 16 octets (tables 0xc93a2 et 0xcb024, programme) : script, carte de tuiles en
 mémoire vidéo, drapeau de boucle. Script : durée, colonnes, lignes, un long par case ; chaque case devient
-`(attribut & 0xff80) + long`. Le type 4 s'arrête en pause et quand `+0x40` ; le type 6 laisse intactes les cases
+`(attr & 0xff80) + long`. Le type 4 s'arrête en pause et quand `+0x40` ; le type 6 laisse intactes les cases
 dont le premier mot vaut 0x1800. Couverture : fuzz sans écart ; scénarios : 4 (48 appels). Non vu : le type 6
 avec une case 0x1800 (0xcb142).
 

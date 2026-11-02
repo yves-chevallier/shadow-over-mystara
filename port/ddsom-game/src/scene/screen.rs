@@ -1,5 +1,5 @@
-//! Petites routines des écrans de fin de niveau : effacements de la couche de caractères, copies de pages de
-//! palettes, remises à zéro de blocs d'état (W3).
+//! Small routines of the end-of-level screens: clears of the character layer, copies of palette
+//! pages, resets of state blocks (W3).
 
 use cps2::Cps2Bus;
 
@@ -7,7 +7,7 @@ use super::tiles::{BLANK, COLUMN};
 use crate::mem::{rd32, wr32};
 use crate::Native;
 
-/// Rectangle de cases vides : `columns` colonnes de `rows` cases à partir de `at`.
+/// Rectangle of empty cells: `columns` columns of `rows` cells starting at `at`.
 pub fn blank_rect(b: &mut Cps2Bus, at: u32, columns: u32, rows: u32) {
     for col in 0..columns {
         for row in 0..rows {
@@ -16,19 +16,19 @@ pub fn blank_rect(b: &mut Cps2Bus, at: u32, columns: u32, rows: u32) {
     }
 }
 
-/// 0xf683c : efface la zone de texte des écrans de fin (48 colonnes de 22 cases à partir de la ligne 5).
-/// L'original laisse D1.w = -1, relu par l'écran de bonus comme réglage (écrit en clair dans `bonus.rs`).
+/// 0xf683c: clears the text area of the end screens (48 columns of 22 cells from row 5).
+/// The original leaves D1.w = -1, re-read by the bonus screen as a setting (written out in `bonus.rs`).
 pub fn clear_text(b: &mut Cps2Bus) {
     const AT: u32 = 0x912014;
     blank_rect(b, AT, 48, 22);
 }
 
-/// 0xf688c : efface le cadre de l'écran de bonus (40 colonnes de 21 cases à partir de la ligne 6, colonne 5).
+/// 0xf688c: clears the frame of the bonus screen (40 columns of 21 cells from row 6, column 5).
 pub fn clear_bonus_frame(b: &mut Cps2Bus) {
     blank_rect(b, 0x912298, 40, 21);
 }
 
-/// 0xf617e : copie d'une page de palettes (0x400 octets).
+/// 0xf617e: copy of a palette page (0x400 bytes).
 pub fn copy_page(b: &mut Cps2Bus, from: u32, to: u32) {
     for i in (0..0x400).step_by(4) {
         let v = rd32(b, from + i);
@@ -36,30 +36,30 @@ pub fn copy_page(b: &mut Cps2Bus, from: u32, to: u32) {
     }
 }
 
-/// 0xfa240 : met à zéro 0x800 octets de la couche 0x920000.
+/// 0xfa240: zeroes 0x800 bytes of layer 0x920000.
 pub fn clear_920000(b: &mut Cps2Bus) {
     for i in (0..0x800).step_by(4) {
         wr32(b, 0x920000 + i, 0);
     }
 }
 
-/// Met à zéro `n` longs à partir de `at`.
+/// Zeroes `n` longs starting at `at`.
 pub fn clear_longs(b: &mut Cps2Bus, at: u32, n: u32) {
     for k in 0..n {
         wr32(b, at + 4 * k, 0);
     }
 }
 
-/// Blocs d'état remis à zéro par les routines d'initialisation.
+/// State blocks reset by the initialisation routines.
 pub mod blocks {
     use crate::mem::A5;
-    /// Bloc de la sortie de scène (phase 16), 8 longs (0xf3130).
+    /// Scene exit block (phase 16), 8 longs (0xf3130).
     pub const EXIT: u32 = A5 - 0x55ca;
-    /// Bloc de la boutique, 5 longs (0xf7916).
+    /// Shop block, 5 longs (0xf7916).
     pub const SHOP: u32 = A5 - 0x5560;
-    /// Variables des scripts de transition (état partagé 0xf7ecc), 4 longs (0xf7ee0).
+    /// Transition script variables (shared state 0xf7ecc), 4 longs (0xf7ee0).
     pub const TRANSITION: u32 = A5 - 0x5520;
-    /// Bloc de l'écran de classement, 4 longs (0xfc562).
+    /// Ranking screen block, 4 longs (0xfc562).
     pub const RANKING: u32 = A5 - 0x54f0;
 }
 
@@ -75,8 +75,8 @@ macro_rules! clear_native {
     };
 }
 
-/// 0xf3130 : plus aucun appel par adresse (l'entrée de scène appelle `clear_longs`) ; A4 et D6 laissés par la boucle
-/// d'origine ne sont relus par personne (code-mort.md).
+/// 0xf3130: no more calls by address (scene entry calls `clear_longs`); A4 and D6 left by the original
+/// loop are read by nobody (code-mort.md).
 pub const RESET_EXIT: Native = Native {
     entry: 0xf3130,
     name: "scene_exit_reset",
@@ -102,7 +102,7 @@ pub const CLEAR_TEXT: Native = Native {
     outputs: 0,
 };
 
-/// Plus aucun appel par adresse vers ces cinq natives : registres laissés par l'original non reproduits.
+/// No more calls by address to these five natives: registers left by the original not reproduced.
 pub const NATIVES: &[Native] = &[RESET_EXIT, RESET_SHOP, RESET_TRANSITION, RESET_RANKING, CLEAR_TEXT];
 
 #[cfg(test)]

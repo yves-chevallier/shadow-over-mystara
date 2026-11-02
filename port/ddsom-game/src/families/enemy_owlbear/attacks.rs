@@ -1,7 +1,7 @@
-//! Type 4, coups de l'Owlbear : sous-état 4 (0x5e086, dix coups) et sous-état 6 (0x5e5d6, bonds).
+//! Type 4, Owlbear attacks: substate 4 (0x5e086, ten attacks) and substate 6 (0x5e5d6, leaps).
 //!
-//! Chaque coup commence par la préparation (`+7 = 0`) et le suivi du regard (`+7 = 2`), puis ses
-//! étapes propres. La fin du coup appelle `next_move`, qui enchaîne une charge ou remet la bête debout.
+//! Each attack begins with the preparation (`+7 = 0`) and the gaze tracking (`+7 = 2`), then its own steps. The end of
+//! the attack calls `next_move`, which chains a charge or puts the beast back on its feet.
 
 use crate::families::cx::Bench;
 use super::stance::{next_move, pursue_tail, ready, walk_begin};
@@ -9,9 +9,9 @@ use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Série de répétitions d'un coup, tirée dans une table par niveau de difficulté (0x5f5fa).
+/// Series of repetitions of an attack, drawn from a table per difficulty level (0x5f5fa).
 const SERIES_TABLE: u32 = 0x5f5fa;
-/// États longs à reprendre après un demi-tour : coups (sous-état 4) ou seconde série (6).
+/// Long states to resume after a turn-around: attacks (substate 4) or second series (6).
 const RESUME_STRIKES: u32 = 0x0204_0000;
 const RESUME_LEAPS: u32 = 0x0206_0000;
 
@@ -56,9 +56,9 @@ pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- étapes communes ----------------------------------------------------------------------------
+// --- common steps ----------------------------------------------------------------------------
 
-/// Préparation (`+7 = 0`), suivi du regard (`+7 = 2`), puis `later(étape)`.
+/// Preparation (`+7 = 0`), gaze tracking (`+7 = 2`), then `later(step)`.
 fn chain<'a, R: Bench>(x: &mut Cx<'a, R>, resume: u32, later: impl FnOnce(&mut Cx<'a, R>, u8)) {
     match x.u8(0x7) {
         0 => ready(x),
@@ -67,7 +67,7 @@ fn chain<'a, R: Bench>(x: &mut Cx<'a, R>, resume: u32, later: impl FnOnce(&mut C
     }
 }
 
-/// 0x5e0ba / 0x5e624 : suit la cible du regard pendant `+0x77` images.
+/// 0x5e0ba / 0x5e624: follows the target with its gaze for `+0x77` frames.
 fn track<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
     let n = x.u8(AI_KICK).wrapping_sub(1);
     x.set8(AI_KICK, n);
@@ -81,20 +81,20 @@ fn track<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
     step(x);
 }
 
-/// Joue l'animation `n` des coups sauf si la série de répétitions est finie.
+/// Plays animation `n` of the attacks unless the series of repetitions is over.
 fn strike_play<R: Bench>(x: &mut Cx<'_, R>, want: u8, n: u32) {
     if !matches!(replay(x, want), Replay::End) {
         strike(x, n);
     }
 }
 
-/// Un temps d'attente avant de continuer (`+0xa0` images), puis étape suivante.
+/// A wait before continuing (`+0xa0` frames), then next step.
 fn pause<R: Bench>(x: &mut Cx<'_, R>, frames: u8) {
     x.add8(0x7, 2);
     x.set8(TIMER, frames);
 }
 
-/// Attend la fin du délai en avançant (0x5e17e, 0x5e2ea).
+/// Waits for the end of the delay while advancing (0x5e17e, 0x5e2ea).
 fn walk_on<R: Bench>(x: &mut Cx<'_, R>) {
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);
@@ -106,7 +106,7 @@ fn walk_on<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin d'un coup : l'animation finie, le coup suivant.
+/// End of an attack: once the animation is over, the next attack.
 fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         next_move(x);
@@ -115,7 +115,7 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- coup de patte (+6 = 0) ----------------------------------------------------------------------
 
-/// Début d'un coup de patte (0x5e0e0).
+/// Start of a paw strike (0x5e0e0).
 fn swipe_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 0);
@@ -125,7 +125,7 @@ fn swipe_begin<R: Bench>(x: &mut Cx<'_, R>) {
     strike_play(x, 0xa, 0);
 }
 
-/// 0x5f5d8 : tire le nombre de coups de la série dans la table du niveau de difficulté.
+/// 0x5f5d8: draws the number of attacks of the series from the difficulty-level table.
 fn roll_series<R: Bench>(x: &mut Cx<'_, R>) {
     let level = (var::RANK.get(x.b) >> 1 << 4) as u32;
     let r = random(x) & 0xf;
@@ -133,7 +133,7 @@ fn roll_series<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(SERIES, n);
 }
 
-/// Fin d'un coup de patte (0x5e132) : coup suivant, ou un coup de plus tant que la série dure.
+/// End of a paw strike (0x5e132): next attack, or one more attack as long as the series lasts.
 fn swipe_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         let n = x.u8(SERIES).wrapping_sub(1);
@@ -153,7 +153,7 @@ fn swipe<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// +6 = 2 (0x5e158) : avance, puis coup de patte.
+/// +6 = 2 (0x5e158): advances, then paw strike.
 fn swipe_walk<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => walk_begin(x),
@@ -167,13 +167,13 @@ fn swipe_walk<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- bonds (+6 = 4, 6, 12, 14) -------------------------------------------------------------------
 
-/// Début d'un bond (0x5e1b2 / 0x5e1b8 / 0x5e1bc) : vitesse en X `vx` déjà posée par l'appelant.
+/// Start of a leap (0x5e1b2 / 0x5e1b8 / 0x5e1bc): X speed `vx` already set by the caller.
 pub(super) fn leap_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     leap_body(x);
 }
 
-/// Suite du début d'un bond, l'étape étant déjà avancée.
+/// Continuation of the start of a leap, the step having already advanced.
 fn leap_body<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(STRIKE_KIND, 0xf);
     x.set8(STRIKE_POWER, 8);
@@ -193,7 +193,7 @@ fn leap_at<R: Bench>(x: &mut Cx<'_, R>, vx: i16) {
     leap_begin(x);
 }
 
-/// 0x5e222 : attend l'image-clé du saut.
+/// 0x5e222: waits for the key frame of the jump.
 fn leap_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
@@ -202,7 +202,7 @@ fn leap_wait<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-/// Fin d'un saut avec choc au sol (0x5e238) : poussière et recul.
+/// End of a jump with ground impact (0x5e238): dust and recoil.
 fn leap_land<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.move_xz().gt() {
         lib::sound(x, 0xecb26);
@@ -217,12 +217,12 @@ fn leap_land<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-/// Poussière de réception : 0xb10c8 avec ses quatre paramètres.
+/// Landing dust: 0xb10c8 with its four parameters.
 fn dust<R: Bench>(x: &mut Cx<'_, R>, d2: i16) {
     lib::shock(x, 1, 1, d2 as u16, 0xffff);
 }
 
-/// Glissade du recul (0x5e27a) : poussière tous les quatre pas, puis arrêt.
+/// Recoil slide (0x5e27a): dust every four steps, then stop.
 fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     let low = x.a5_u16(0x6e) & 3;
     x.set_a5_u16(0x6e, low);
@@ -237,7 +237,7 @@ fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
 }
 
-/// Fin d'un coup à terre (0x5e2ae).
+/// End of an attack on the ground (0x5e2ae).
 fn leap_end<R: Bench>(x: &mut Cx<'_, R>) {
     finish(x);
 }
@@ -253,7 +253,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// +6 = 6 (0x5e2be) : élan à pied puis bond.
+/// +6 = 6 (0x5e2be): run-up on foot then leap.
 fn run_leap<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => walk_begin(x),
@@ -284,7 +284,7 @@ fn leap_far<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// +6 = 14 (0x5e410) : saut en hauteur, deux retombées.
+/// +6 = 14 (0x5e410): high jump, two landings.
 fn leap_high<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => {
@@ -325,7 +325,7 @@ fn leap_high<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- courses (+6 = 8, 10, 16, 18) ------------------------------------------------------------------
 
-/// 0x5e318 : prend son élan en courant vers le côté voulu.
+/// 0x5e318: takes a run-up running toward the wanted side.
 fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(TIMER, 0x42);
@@ -335,7 +335,7 @@ fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
     speed(x, 8);
 }
 
-/// Revient en garde et teste la portée de la cible (0x5e36a et semblables).
+/// Back on guard and tests the range of the target (0x5e36a and similar).
 fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, ACTIVE_ENGAGE);
     body(x, 2);
@@ -362,7 +362,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// +6 = 10 (0x5e3a0) : course puis cri.
+/// +6 = 10 (0x5e3a0): run then cry.
 fn charge_b<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => run_begin(x),
@@ -383,7 +383,7 @@ fn charge_b<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// +6 = 16 et 18 : arrêt sur place puis cri.
+/// +6 = 16 and 18: stop in place then cry.
 fn rush_gen<'a, R: Bench>(x: &mut Cx<'a, R>, last: impl FnOnce(&mut Cx<'a, R>)) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => walk_begin(x),
@@ -423,7 +423,7 @@ fn rush_b<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-// --- seconde série (sous-état 6) ----------------------------------------------------------------
+// --- second series (substate 6) ----------------------------------------------------------------
 
 /// 0x5e64a : petit bond en avant.
 fn hop_begin<R: Bench>(x: &mut Cx<'_, R>) {
@@ -439,7 +439,7 @@ fn hop_begin<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 0xd);
 }
 
-/// 0x5e690 : attend l'image-clé du petit bond.
+/// 0x5e690: waits for the key frame of the small leap.
 fn hop_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
@@ -447,7 +447,7 @@ fn hop_wait<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-/// 0x5e6da : glissade après le petit bond ; elle dure tant que la vitesse en X reste positive.
+/// 0x5e6da: slide after the small leap; it lasts as long as the X speed stays positive.
 fn hop_slide<R: Bench>(x: &mut Cx<'_, R>) {
     let low = x.a5_u16(0x6e) & 3;
     x.set_a5_u16(0x6e, low);
@@ -462,7 +462,7 @@ fn hop_slide<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
 }
 
-/// 0x5e6a2 : retombée du petit bond, toujours suivie de la glissade.
+/// 0x5e6a2: landing of the small leap, always followed by the slide.
 fn hop_land<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     lib::sound(x, 0xecb26);
@@ -475,7 +475,7 @@ fn hop_land<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-/// 0x5e70e : fin du petit bond, retour en garde.
+/// 0x5e70e: end of the small leap, back on guard.
 fn hop_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         set_state_long(x, ACTIVE_ENGAGE);
@@ -485,7 +485,7 @@ fn hop_end<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5e750 : course vers le côté de la cible.
+/// 0x5e750: run toward the side of the target.
 fn run_toward_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     let right = match target_dx(x) {
@@ -499,7 +499,7 @@ fn run_toward_begin<R: Bench>(x: &mut Cx<'_, R>) {
     speed(x, 8);
 }
 
-/// 0x5e7b4 : la course dure `+0xa0` images, puis retour en garde et reprise de la poursuite.
+/// 0x5e7b4: the run lasts `+0xa0` frames, then back on guard and the pursuit resumes.
 fn run_toward<R: Bench>(x: &mut Cx<'_, R>) {
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);

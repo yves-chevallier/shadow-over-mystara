@@ -1,5 +1,5 @@
-//! Type 6, sous-état 2 : debout. `+6` : 0 et 8 approche et choix d'un coup, 2 demi-tour, 4 attente, 6 crachat
-//! de feu (le chien recule en soufflant), 10 saut de côté.
+//! Type 6, substate 2: standing. `+6`: 0 and 8 approach and choice of an attack, 2 turn-around, 4 wait, 6 fire spit
+//! (the dog backs off while breathing), 10 side jump.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -23,12 +23,12 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 0 et 8 : approche -----------------------------------------------------------------------------
+// --- +6 = 0 and 8: approach -----------------------------------------------------------------------------
 
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     let dx = x.u16(Obj::X).wrapping_sub(var::SCROLL_X.get(x.b));
     if dx >= 0x180 {
-        // loin de la caméra : se tourne vers la cible puis tire son geste au hasard
+        // far from the camera: turns toward the target then draws its move at random
         let mut flip = 0;
         if x.u16(f::TARGET) != 0 {
             let target = x.linked(f::TARGET);
@@ -73,13 +73,13 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     reach(x);
 }
 
-/// 0x61a9e : le chien est en garde ; un joueur à portée ? Coup immédiat, sinon pas de marche.
+/// 0x61a9e: the dog is on guard; a player in range? Immediate attack, otherwise walking step.
 pub(super) fn reach<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(GUARD, 2);
     reach_boxes(x);
 }
 
-/// 0x61aa4 : boîtes de portée successives (coup immédiat, attaque de face, attaque lointaine, annonce, marche).
+/// 0x61aa4: successive range boxes (immediate attack, frontal attack, far attack, announcement, walk).
 pub(super) fn reach_boxes<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x28, 0x28, 0xc) {
         x.set16(f::STATE, 0x0204);
@@ -106,7 +106,7 @@ pub(super) fn reach_boxes<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Décision d'attaque selon l'orientation relative de la cible (0xa4c2 de même sens, 0xa4b4 sinon).
+/// Attack decision according to the relative orientation of the target (0xa4c2 same direction, 0xa4b4 otherwise).
 fn gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let target = x.linked(f::TARGET);
     let theirs = target.u8(x.b, f::FLIP);
@@ -114,7 +114,7 @@ fn gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::decision(x, same)
 }
 
-/// 0x61b3a : un joueur devant, assez près : coup de queue ou geste.
+/// 0x61b3a: a player in front, close enough: tail strike or move.
 fn front_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0x40, 0x40, 0x10) || x.u16(f::TARGET) == 0 || !gate(x) {
         return false;
@@ -130,7 +130,7 @@ fn front_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x61bb4 : un joueur loin devant : geste de la série lointaine.
+/// 0x61bb4: a player far in front: move from the far series.
 fn far_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0xc0, 0x40, 0x10) || x.u16(f::TARGET) == 0 || !gate(x) {
         return false;
@@ -217,7 +217,7 @@ fn spit<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x61d08 : début du crachat : le chien recule en soufflant.
+/// 0x61d08: start of the spit: the dog backs off while breathing.
 fn spit_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 3);

@@ -1,4 +1,4 @@
-//! Lecture de la ROM programme : données (lectures du 68000) et espace programme (déchiffré).
+//! Reading the program ROM: data (68000 reads) and program space (decrypted).
 
 use std::io;
 use std::path::Path;
@@ -35,12 +35,12 @@ impl Program {
         (self.rd16(a) as u32) << 16 | self.rd16(a.wrapping_add(2)) as u32
     }
 
-    /// Mot lu en espace programme (tables lues par le code en adressage relatif au PC).
+    /// Word read in program space (tables read by the code with PC-relative addressing).
     pub fn prog16(&self, a: u32) -> u16 {
         self.prog.get((a >> 1) as usize).copied().unwrap_or(0)
     }
 
-    /// Octet lu en espace programme.
+    /// Byte read in program space.
     pub fn prog8(&self, a: u32) -> u8 {
         let w = self.prog16(a & !1);
         if a & 1 == 0 {
@@ -50,12 +50,12 @@ impl Program {
         }
     }
 
-    /// Long lu en espace programme.
+    /// Long read in program space.
     pub fn prog32(&self, a: u32) -> u32 {
         (self.prog16(a) as u32) << 16 | self.prog16(a + 2) as u32
     }
 
-    /// Lecture d'un long dans l'espace choisi.
+    /// Read of a long in the chosen space.
     pub fn long(&self, a: u32, program: bool) -> u32 {
         if program {
             self.prog32(a)

@@ -1,5 +1,5 @@
-//! Type 8, sous-état 0 : arrivée. `+6` = 0 : vol d'entrée par un bord, atterrissage, premier combat ;
-//! `+6` = 2 : arrivée posée (crée une ombre, attend un joueur à portée).
+//! Type 8, substate 0: arrival. `+6` = 0: entrance flight from an edge, landing, first fight; `+6` = 2: grounded
+//! arrival (creates a shadow, waits for a player in range).
 
 use crate::families::cx::Bench;
 use super::*;
@@ -15,7 +15,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Signe de l'orientation appliqué à `v` : négatif quand l'ennemi regarde à gauche.
+/// Sign of the orientation applied to `v`: negative when the enemy looks left.
 fn signed_by_facing<R: Bench>(x: &mut Cx<'_, R>, v: i16) -> u16 {
     if x.u8(f::FLIP) != 0 { v.wrapping_neg() as u16 } else { v as u16 }
 }
@@ -90,7 +90,7 @@ fn flight<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// `+6` = 2 : l'ombre est créée (EFFCT 0x32), puis la créature attend un joueur dans sa boîte.
+/// `+6` = 2: the shadow is created (EFFCT 0x32), then the creature waits for a player in its box.
 fn landed<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {

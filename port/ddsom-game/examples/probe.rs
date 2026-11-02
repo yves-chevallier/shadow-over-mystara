@@ -1,6 +1,6 @@
-//! Suivi de l'état de jeu : probe <roms> <eeprom> <scenario> <images> [adresse_hex:taille ...]
-//! Affiche à chaque changement : mode (FF0E70-72), phase de partie (FF802C-E), partie active/masque
-//! joueurs (FF8030-31), scène (FF8034), + les adresses demandées (taille 1, 2 ou 4).
+//! Game state tracking: probe <roms> <eeprom> <scenario> <frames> [hex_address:size ...]
+//! Prints at each change: mode (FF0E70-72), game phase (FF802C-E), active game/player
+//! mask (FF8030-31), scene (FF8034), + the requested addresses (size 1, 2 or 4).
 use std::path::Path;
 
 fn main() {
@@ -8,7 +8,7 @@ fn main() {
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).unwrap();
     ddsom_game::install_reference(&mut m);
-    // comme validate : 68000 surcadencé (DDSOM_OC, défaut 16 ; 1 = vitesse arcade)
+    // like validate: overclocked 68000 (DDSOM_OC, default 16; 1 = arcade speed)
     m.set_overclock(std::env::var("DDSOM_OC").ok().and_then(|v| v.parse().ok()).unwrap_or(16.0));
     let s = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).unwrap();
     let frames: usize = a[4].parse().unwrap();
@@ -31,14 +31,14 @@ fn main() {
         s.apply(f, &mut m);
         m.run_frame();
         let mut st = format!(
-            "mode {:02x}{:02x}{:02x} phase {:02x}/{:02x}/{:02x} actif {:02x} joueurs {:02x} scene {:02x} f35 {:02x}",
+            "mode {:02x}{:02x}{:02x} phase {:02x}/{:02x}/{:02x} active {:02x} players {:02x} scene {:02x} f35 {:02x}",
             rd(&m, 0xff0e70, 1), rd(&m, 0xff0e71, 1), rd(&m, 0xff0e72, 1),
             rd(&m, 0xff802c, 1), rd(&m, 0xff802d, 1), rd(&m, 0xff802e, 1),
             rd(&m, 0xff8030, 1), rd(&m, 0xff8031, 1), rd(&m, 0xff8034, 1), rd(&m, 0xff8035, 1));
         for &(ad, n) in &extra {
             st += &format!(" [{ad:x}]={:0w$x}", rd(&m, ad, n), w = 2 * n as usize);
         }
-        // DUMP=adresse_hex:longueur:image,image,... : hexdump de la RAM à ces images
+        // DUMP=hex_address:length:frame,frame,...: hexdump of the RAM at these frames
         if let Ok(d) = std::env::var("DUMP") {
             let p: Vec<&str> = d.split(':').collect();
             let ad = u32::from_str_radix(p[0], 16).unwrap();

@@ -1,7 +1,7 @@
 # ESHL 15 à 39 (`families/eshl_b.rs`)
 
 Tirs et attaques des ennemis de la classe ESHL (pool de 38 objets de 0x60 octets, table des gestionnaires
-0x39b96). Cadre commun, contrat des gestionnaires et conventions : `docs/familles-eshl-set-sobj.md`. Les noms
+0x39b96). Cadre commun, contrat des gestionnaires et conventions : `docs/families-eshl-set-sobj.md`. Les noms
 de rôle marqués (h) sont des hypothèses tirées du comportement. Machines à états : `+4` état principal
 (0 création, 2 actif, 4 fin, 6 libération), `+5` et `+6` sous-états ; les valeurs hors des tables de sauts
 de l'original n'ont pas de sens (l'original sort alors du code) et ne sont pas reproduites.
@@ -107,7 +107,7 @@ types 27 et 29), `blink_by_parity`, `guarded` (suspension, état, réinsertion),
 
 * Scénarios (`tools/validate_all.sh 30000`, 8 scénarios) : VALIDE, mais **aucun des types 15 à 39 n'y est appelé**
   (seuls ESHL 1, 2 et 11 le sont dans la liste des appels) : leur validation repose sur le fuzz.
-* `fuzz familles` (`DDSOM_ETATS=1 DDSOM_PAS=150 DDSOM_VARIANTES=2`, 400 tours après 3000 images de chauffe,
+* `fuzz families` (`DDSOM_ETATS=1 DDSOM_PAS=150 DDSOM_VARIANTES=2`, 400 tours après 3000 images de chauffe,
   environ un million d'appels, de 1 100 à 60 000 par type) : 0 écart. Sans `DDSOM_VARIANTES=2`, le type 15
   écarte pour la variante 2 (hors table : l'original saute dans le code du type 29) ; ce n'est pas une erreur.
   Enrichissements additifs de `examples/fuzz.rs` : champs `+0x5c`, `+0x42`, `+0x58`, pointeurs longs des types

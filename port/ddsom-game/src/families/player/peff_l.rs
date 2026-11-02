@@ -1,5 +1,5 @@
-//! Effets des joueurs (PEFF), douzième série : type 17 (icône de la rangée d'équipement de l'interface).
-//! Voir `docs/families/player.md`.
+//! Player effects (PEFF), twelfth series: type 17 (icon of the equipment row of the interface).
+//! See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -7,21 +7,21 @@ use super::pshell::*;
 use crate::objects::Obj;
 use crate::objects::Current;
 
-/// Type 17 (0x4c9fe) : icône d'un emplacement d'équipement (rang `+3`) du joueur propriétaire, posée sur
-/// l'écran à une place qui dépend de la partie (`A5+0x20` : mode un joueur ou plus) et du joueur. Elle change
-/// d'image quand l'équipement change, rejoint sa place de huit pixels par image, et suit le défilement de la
-/// caméra. Pas de traitement pendant la pause.
+/// Type 17 (0x4c9fe): icon of an equipment slot (rank `+3`) of the owning player, placed on the screen at a spot that
+/// depends on the game (`A5+0x20`: one-player mode or more) and on the player. It changes frame when the equipment
+/// changes, reaches its place at eight pixels per frame, and follows the scroll of the camera. No processing during the
+/// pause.
 mod slot_icon {
     use super::*;
 
-    /// Tables de décalage (X, Y) par joueur, puis par rang : deux versions selon `A5+0x20`.
+    /// Offset tables (X, Y) per player, then per rank: two versions according to `A5+0x20`.
     const PLAYER_A: u32 = 0x4cabe;
     const SLOT_A: u32 = 0x4cae2;
     const PLAYER_B: u32 = 0x4caae;
     const SLOT_B: u32 = 0x4caca;
     const ICONS: u32 = 0x1b7726;
     const ICONS_ALT: u32 = 0x1b8204;
-    /// Place de repos de l'icône (X, Y) et état : `+0x52`, `+0x54`, `+0x56` (0 en marche, 1 prise, négatif en attente).
+    /// Resting place of the icon (X, Y) and state: `+0x52`, `+0x54`, `+0x56` (0 moving, 1 taken, negative waiting).
     const HOME: u32 = 0x52;
     const TAKEN: u32 = 0x56;
 
@@ -39,7 +39,7 @@ mod slot_icon {
         }
     }
 
-    /// Joueur propriétaire + rang de l'emplacement (`lea (0,A1,D0.w),A1`).
+    /// Owning player + rank of the slot (`lea (0,A1,D0.w),A1`).
     fn slot<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
         let owner = x.linked(f::OWNER);
         let rank = x.u8(0x3) as u32;
@@ -72,7 +72,7 @@ mod slot_icon {
         choose_icon(x);
     }
 
-    /// `0x4cb16` : image de l'icône d'après l'équipement courant.
+    /// `0x4cb16`: icon frame from the current equipment.
     fn choose_icon<R: Bench>(x: &mut Cx<'_, R>) {
         let at = slot(x);
         let item = at.u8(x.b, 0x140) as u32;
@@ -89,7 +89,7 @@ mod slot_icon {
         x.reinsert();
     }
 
-    /// `0x4cb50` : l'équipement a changé : nouvelle image (l'icône d'un objet retiré retourne à sa place).
+    /// `0x4cb50`: the equipment has changed: new frame (the icon of a removed item goes back to its place).
     fn refresh<R: Bench>(x: &mut Cx<'_, R>) {
         let at = slot(x);
         let item = at.u8(x.b, 0x140);
@@ -108,7 +108,7 @@ mod slot_icon {
         x.anim_start(set, ((((item as u32) << 4) + count as u32) & 0xffff) as u16);
     }
 
-    /// `0x4cc56` : un objet ramassé (lié par `+0x5c`) passe sur l'icône : elle le prend.
+    /// `0x4cc56`: a picked-up item (linked by `+0x5c`) passes over the icon: it takes it.
     fn pickup<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(TAKEN) != 0 {
             return;
@@ -130,7 +130,7 @@ mod slot_icon {
         item.set_u16(x.b, 0x5c, x.o.0 as u16);
     }
 
-    /// `0x4cbb2` : rejoint sa place huit pixels par image ; prise, elle suit l'objet.
+    /// `0x4cbb2`: reaches its place at eight pixels per frame; once taken, it follows the item.
     fn approach<R: Bench>(x: &mut Cx<'_, R>) {
         let taken = x.u8(TAKEN) as i8;
         if taken > 0 {
@@ -173,7 +173,7 @@ mod slot_icon {
         x.set16(0xc, 0);
     }
 
-    /// Avance de 8 vers `target` sans le dépasser.
+    /// Advances by 8 toward `target` without going past it.
     fn step_axis<R: Bench>(x: &mut Cx<'_, R>, at: u32, target: u16) {
         let here = x.u16(at) as i16;
         let t = target as i16;
@@ -193,7 +193,7 @@ mod slot_icon {
         }
     }
 
-    /// `0x4cc9a` : suit le défilement de la caméra.
+    /// `0x4cc9a`: follows the scroll of the camera.
     fn scroll<R: Bench>(x: &mut Cx<'_, R>) {
         let delta = x.a5_u32(a5::CAM_X).wrapping_sub(x.a5_u32(0x524));
         x.add32(0x8, delta);

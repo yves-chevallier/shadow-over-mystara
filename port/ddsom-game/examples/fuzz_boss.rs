@@ -1,12 +1,12 @@
-//! Fuzz différentiel des boss réécrits (classe BOSS, table 0x39b12), sur le modèle de `fuzz_enemy.rs` :
-//! un objet neuf du type est posé dans le pool BOSS, son état est tiré dans les tables de sauts de l'original
-//! (`boss_states`), les variables que le moteur modifie (caméra, joueurs, drapeaux de scène) sont perturbées
-//! à chaque pas, et chaque appel du gestionnaire est comparé à l'original (mode contrôle de `ddsom_game`).
+//! Differential fuzz of the rewritten bosses (BOSS class, table 0x39b12), modeled on `fuzz_enemy.rs`:
+//! a new object of the type is placed in the BOSS pool, its state is drawn from the original's jump tables
+//! (`boss_states`), the variables the engine modifies (camera, players, scene flags) are perturbed
+//! at each step, and each handler call is compared with the original (control mode of `ddsom_game`).
 //!
-//!   fuzz_boss <roms> <eeprom> <scénario> <images de chauffe> <tours>
+//!   fuzz_boss <roms> <eeprom> <scenario> <warm-up frames> <rounds>
 //!
-//! Variables : `DDSOM_GRAINE=n` (graine), `DDSOM_ENTREE=address` (un seul gestionnaire), `DDSOM_PAS=n` (pas par
-//! trajectoire, 60), `DDSOM_ETATS=1` (états tirés), `DDSOM_COUVERTURE=file` (instructions de l'original vues).
+//! Variables: `DDSOM_GRAINE=n` (seed), `DDSOM_ENTREE=address` (a single handler), `DDSOM_PAS=n` (steps per
+//! trajectory, 60), `DDSOM_ETATS=1` (drawn states), `DDSOM_COUVERTURE=file` (original instructions seen).
 
 use std::path::Path;
 
@@ -28,10 +28,10 @@ type Bus = cps2::Cps2Bus;
 
 const Z: &[u8] = &[0];
 
-/// États (`+4`, `+5`, `+6`) que les tables de sauts de l'original acceptent pour un type de boss.
+/// States (`+4`, `+5`, `+6`) that the original's jump tables accept for a boss type.
 fn boss_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8])] {
     match kind {
-        // boss 0 : entrées en scène, combat, attaques, attente, état touché
+        // boss 0: scene entrances, combat, attacks, waiting, hit state
         0 => &[
             (&[0], Z, Z),
             (&[2], &[0], &[0, 2, 4]),
@@ -45,7 +45,7 @@ fn boss_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
             (&[4], &[10], &[0, 2]),
             (&[6], Z, Z),
         ],
-        // boss 16 : réveil, combat, attaques, bond, attente, pause, prise, état touché
+        // boss 16: awakening, combat, attacks, leap, waiting, pause, grab, hit state
         16 => &[
             (&[0], Z, Z),
             (&[2], &[0], &[0, 2]),
@@ -62,7 +62,7 @@ fn boss_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
             (&[4], &[8, 10], Z),
             (&[6], Z, Z),
         ],
-        // boss 2 et 22 : arrivée, combat, attaques, courses, pause, prise, transformation, état touché
+        // bosses 2 and 22: arrival, combat, attacks, runs, pause, grab, transformation, hit state
         2 | 22 => &[
             (&[0], Z, Z),
             (&[2], &[0], Z),
@@ -80,9 +80,9 @@ fn boss_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
             (&[4], &[8, 10], Z),
             (&[6], Z, Z),
         ],
-        // dragon en vol : +5 = 0 (étapes +6 de 0 à 14) ou 2 (libération)
+        // flying dragon: +5 = 0 (steps +6 from 0 to 14) or 2 (release)
         13 => &[(&[0], Z, Z), (&[2], &[0], &[0, 2, 4, 6, 8, 10, 12, 14]), (&[2], &[2], Z), (&[4, 6], Z, Z)],
-        // boss 17 : groupes (+5) et étapes (+6) des tables de sauts de l'original
+        // boss 17: groups (+5) and steps (+6) of the original's jump tables
         17 => &[
             (&[0], Z, Z),
             (&[2], &[0], &[0, 2, 4, 6, 8]),
@@ -154,7 +154,7 @@ fn boss_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
             (&[4], &[10], Z),
             (&[6], Z, Z),
         ],
-        // dragons 14 et 19
+        // dragons 14 and 19
         14 | 19 => &[
             (&[0], Z, Z),
             (&[2], &[0], &[0, 2, 4, 6, 8, 10]),
@@ -166,7 +166,7 @@ fn boss_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
             (&[4], &[6], &[0, 2, 4]),
             (&[6], Z, Z),
         ],
-        // dragons rouges 15 et 20
+        // red dragons 15 and 20
         15 | 20 => &[
             (&[0], Z, Z),
             (&[2], &[0], &[0, 2, 4]),
@@ -195,7 +195,7 @@ fn boss_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
             (&[4], &[10], &[0, 2]),
             (&[6], Z, Z),
         ],
-        // boss 11 et 12 (serpents)
+        // bosses 11 and 12 (snakes)
         11 | 12 => &[
             (&[0], Z, Z),
             (&[2], &[0], &[0, 2, 4, 6]),
@@ -207,7 +207,7 @@ fn boss_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
             (&[4], &[2, 6, 8, 10], &[0, 2, 4]),
             (&[6], Z, Z),
         ],
-        // boss 4 (Chimère)
+        // boss 4 (Chimera)
         4 => &[
             (&[0], Z, Z),
             (&[2], &[0], &[0, 2, 4]),
@@ -271,7 +271,7 @@ fn boss_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
             (&[4], &[10], Z),
             (&[6], Z, Z),
         ],
-        // boss 3 (créature volante)
+        // boss 3 (flying creature)
         3 => &[
             (&[0], Z, Z),
             (&[2], &[0], &[0, 2, 4, 6, 8]),
@@ -298,7 +298,7 @@ fn boss_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
     }
 }
 
-/// Étape `+7` valide du boss 0.
+/// Valid `+7` step of boss 0.
 fn step_0(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 0, 0) => 4,
@@ -318,7 +318,7 @@ fn step_0(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Boss 0 : les deux moitiés (variante +3), l'autre moitié liée par `+0xba`, phase, drapeaux et minuteries.
+/// Boss 0: the two halves (variant +3), the other half linked by `+0xba`, phase, flags and timers.
 fn prep_0(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     wr8(b, obj + 3, (rng.next() % 2) as u8);
@@ -329,7 +329,7 @@ fn prep_0(b: &mut Bus, rng: &mut Rng, obj: u32) {
     for off in [0xadu32, 0xae, 0xaf, 0xb2, 0xb3, 0xb4] {
         wr8(b, obj + off, pick(rng, &[0, 0, 1, 2, 5]));
     }
-    // l'autre moitié : un autre emplacement de BOSS, dans l'un des états que l'original attend
+    // the other half: another BOSS slot, in one of the states the original expects
     wr16(b, obj + 0xba, 0);
     if rng.next() % 4 != 0 {
         let k = BOSS.slot((rng.next() % BOSS.slots + 1) % BOSS.slots).0;
@@ -368,14 +368,14 @@ fn prep_0(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr16(b, obj + 0x50, t as u16);
     wr8(b, t, 1);
     wr8(b, t + 0x188, 1);
-    // le joueur près du boss, devant ou derrière, pour que les boîtes d'attaque se déclenchent
+    // the player near the boss, in front or behind, so that the attack boxes trigger
     let (bx, by) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
     let dx = [0u16, 0x20, 0x30, 0x50, 0xffe0, 0xffd0, 0xffb0, 0xff20, 0x100, 0xff00][rng.next() as usize % 10];
     wr16(b, t + 8, bx.wrapping_add(dx));
     wr16(b, t + 0x10, by.wrapping_add([0u16, 2, 4, 0xfffc, 8, 0x10][rng.next() as usize % 6]));
 }
 
-/// Étape `+7` valide du boss 16.
+/// Valid `+7` step of boss 16.
 fn step_16(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 0, _) | (2, 2, _) | (2, 6, 0 | 2) | (2, 10, _) => 2,
@@ -389,7 +389,7 @@ fn step_16(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Boss 16 : variante, proie, point visé, minuteries, code de coup et vitesses.
+/// Boss 16: variant, prey, aimed point, timers, hit code and speeds.
 fn prep_16(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     wr8(b, obj + 3, pick(rng, &[0, 0, 1, 1, 2]));
@@ -441,7 +441,7 @@ fn prep_16(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr16(b, A5 + 0x50a, [0u16, 0x100, 0x200][rng.next() as usize % 3]);
 }
 
-/// Étape `+7` valide du boss 22.
+/// Valid `+7` step of boss 22.
 fn step_22(rng: &mut Rng, two: bool, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 0, _) if two => 6,
@@ -469,7 +469,7 @@ fn step_22(rng: &mut Rng, two: bool, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Boss 22 : forme, hôte (autre boss), cible, points visés, minuteries et code de coup.
+/// Boss 22: form, host (another boss), target, aimed points, timers and hit code.
 fn prep_22(b: &mut Bus, rng: &mut Rng, obj: u32, two: bool) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     wr8(b, obj + 3, 0);
@@ -490,7 +490,7 @@ fn prep_22(b: &mut Bus, rng: &mut Rng, obj: u32, two: bool) {
     wr8(b, obj + 0xba, pick(rng, &[0, 1]));
     wr8(b, obj + 0xbe, pick(rng, &[1, 2, 8]));
     wr16(b, obj + 0xbc, (rng.next() % 3) as u16);
-    // l'hôte : un autre emplacement de BOSS, dans l'un des états que l'original attend
+    // the host: another BOSS slot, in one of the states the original expects
     let k = BOSS.slot((rng.next() % BOSS.slots + 1) % BOSS.slots).0;
     if k != obj {
         wr8(b, k, 1);
@@ -540,7 +540,7 @@ fn prep_22(b: &mut Bus, rng: &mut Rng, obj: u32, two: bool) {
     wr16(b, A5 + 0x50a, [0u16, 0x100, 0x200][rng.next() as usize % 3]);
 }
 
-/// Étape `+7` valide des boss 11 et 12.
+/// Valid `+7` step of bosses 11 and 12.
 fn step_11(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 2 | 8 | 10 | 12 | 6, _) => 2,
@@ -554,7 +554,7 @@ fn step_11(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Étape `+7` valide du boss 8.
+/// Valid `+7` step of boss 8.
 fn step_8(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 2, 6) => 3,
@@ -572,7 +572,7 @@ fn step_8(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Étape `+7` valide du boss 7.
+/// Valid `+7` step of boss 7.
 fn step_7(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 0, 0) => 4,
@@ -592,7 +592,7 @@ fn step_7(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Étape `+7` valide du boss 4.
+/// Valid `+7` step of boss 4.
 fn step_4(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 2, 8) => 3,
@@ -607,7 +607,7 @@ fn step_4(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Boss 4 : paramètres communs du 17, puis ses doubles (ENEMY) et ses champs propres.
+/// Boss 4: parameters shared with 17, then its doubles (ENEMY) and its own fields.
 fn prep_4(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     prep_17(b, rng, obj);
@@ -640,7 +640,7 @@ fn prep_4(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr16(b, obj + 0x1a, [0u16, 0xffc0, 0xfff0, 0xffd0][rng.next() as usize % 4]);
 }
 
-/// Étape `+7` valide du boss 18.
+/// Valid `+7` step of boss 18.
 fn step_18(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 2, 0 | 2 | 10) => 2,
@@ -656,7 +656,7 @@ fn step_18(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Étape `+7` valide des dragons 15 et 20.
+/// Valid `+7` step of dragons 15 and 20.
 fn step_15(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 2, 0 | 2) => 2,
@@ -673,7 +673,7 @@ fn step_15(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Étape `+7` valide des dragons 14 et 19.
+/// Valid `+7` step of dragons 14 and 19.
 fn step_19(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 2, 0 | 8) => 2,
@@ -685,7 +685,7 @@ fn step_19(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Étape `+7` valide du boss 21 pour un état `(+4, +5, +6)`.
+/// Valid `+7` step of boss 21 for a state `(+4, +5, +6)`.
 fn step_21(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 0, 0) => 8,
@@ -700,7 +700,7 @@ fn step_21(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Étape `+7` valide du boss 10 pour un état actif `(+4, +5, +6)`.
+/// Valid `+7` step of boss 10 for an active state `(+4, +5, +6)`.
 fn step_10(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 2, 6) => 3,
@@ -711,7 +711,7 @@ fn step_10(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Étape `+7` valide du boss 6 pour un état actif `(+4, +5, +6)`.
+/// Valid `+7` step of boss 6 for an active state `(+4, +5, +6)`.
 fn step_6(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 2, 8) => 3,
@@ -726,7 +726,7 @@ fn step_6(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Étape `+7` valide du boss 17 pour un état `(+4, +5, +6)` (états actifs ; les états touchés n'en ont pas besoin).
+/// Valid `+7` step of boss 17 for a state `(+4, +5, +6)` (active states; hit states do not need one).
 fn step_17(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (s4, s5, s6) {
         (2, 0, 0) => 7,
@@ -743,9 +743,9 @@ fn step_17(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Préparation propre à chaque type (champs que le créateur ou une autre routine pose).
+/// Type-specific preparation (fields that the creator or another routine sets).
 
-/// Étapes `+7` valides des boss 1, 3 et 9 (nombre d'entrées des tables de sauts).
+/// Valid `+7` steps of bosses 1, 3 and 9 (number of jump table entries).
 fn step_139(kind: u8, rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (kind, s4, s5, s6) {
         (1, 2, 2, 0 | 2) => 2,
@@ -775,7 +775,7 @@ fn step_139(kind: u8, rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Champs des boss 1, 3 et 9 tirés dans des plages plausibles (étapes `+7` comprises).
+/// Fields of bosses 1, 3 and 9 drawn in plausible ranges (including `+7` steps).
 fn prep_1(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     wr8(b, obj + 3, 0);
@@ -899,7 +899,7 @@ fn prep_9(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr16(b, obj + 0x62, (rng.next() % 0x110) as u16);
     wr8(b, obj + 0xab, pick(rng, &[0, 1, 2]));
     if rng.next() % 2 == 0 {
-        // équipage au complet
+        // full crew
         for k in 0..4u32 {
             let d = ENEMY.slot(k).0;
             wr16(b, obj + 0xae + 2 * k, d as u16);
@@ -959,7 +959,7 @@ fn prep(kind: u8, b: &mut Bus, rng: &mut Rng, obj: u32) {
         prep_11(b, rng, obj);
     }
     if kind == 13 {
-        // minuterie de flottement courte, rang d'étape de la table STOPS (4 valeurs), message de cinématique
+        // short hovering timer, step rank of the STOPS table (4 values), cutscene message
         wr8(b, obj + 0xa1, (rng.next() % 4) as u8);
         wr8(b, obj + 0xa0, (rng.next() % 2) as u8);
         wr8(b, obj + 0xa7, (rng.next() % 4) as u8);
@@ -971,7 +971,7 @@ fn prep(kind: u8, b: &mut Bus, rng: &mut Rng, obj: u32) {
     }
 }
 
-/// Boss 17 : paramètres d'IA, phase, budgets, cible, liens et variables de scène plausibles.
+/// Boss 17: AI parameters, phase, budgets, target, links and plausible scene variables.
 fn prep_17(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     wr8(b, obj + 3, (rng.next() % 3) as u8);
@@ -1010,7 +1010,7 @@ fn prep_17(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr16(b, obj + 0x1c, [0u16, 1, 0xff00, 0xff80][rng.next() as usize % 4]);
     wr16(b, obj + 0xc, [0u16, 1, 0x30, 0x50, 0x60][rng.next() as usize % 5]);
     wr16(b, obj + 0x62, [0u16, 1, 10, 40, 100][rng.next() as usize % 5]);
-    // liens : message (+0x42, +0xb0) vers un emplacement d'effet ; joueur qui a frappé (+0x54)
+    // links: message (+0x42, +0xb0) to an effect slot; player who hit (+0x54)
     for l in [obj + 0x42, obj + 0xb0] {
         let m = ddsom_game::objects::pools::EFFCT.slot(rng.next() % 3).0;
         wr16(b, l, m as u16);
@@ -1018,7 +1018,7 @@ fn prep_17(b: &mut Bus, rng: &mut Rng, obj: u32) {
         wr16(b, m + 4, [0x020a, 0x021e, 0x0202, 0][rng.next() as usize % 4]);
     }
     wr16(b, obj + 0x54, if rng.next() % 3 == 0 { 0x85de + 0x200 * (rng.next() % 4) as u16 } else { 0 });
-    // variables de scène
+    // scene variables
     wr8(b, A5 + 0x34, pick(rng, &[13, 0x2c, 0x6f, 5]));
     wr8(b, A5 + 0x35, (rng.next() % 5) as u8);
     wr8(b, A5 + 0x36, (rng.next() % 4 == 0) as u8);
@@ -1043,7 +1043,7 @@ fn prep_17(b: &mut Bus, rng: &mut Rng, obj: u32) {
     }
 }
 
-/// Boss 6 : mêmes variables de scène que le 17 ; paramètres propres.
+/// Boss 6: same scene variables as 17; own parameters.
 fn prep_6(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     prep_17(b, rng, obj);
@@ -1060,25 +1060,25 @@ fn prep_6(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 0x33, pick(rng, &[0, 0, 1, 2, 3, 4, 0x81, 0x82, 0x84, 0xff]));
     wr16(b, obj + 0x46, ENEMY.slot(rng.next() % ENEMY.slots).0 as u16);
     wr8(b, obj + 0x32, (rng.next() % 2) as u8);
-    // un tir lié pour les attaques qui le pilotent
+    // a linked shot for the attacks that drive it
     let shot = ddsom_game::objects::pools::ESHL.slot(rng.next() % 4).0;
     wr16(b, obj + 0xb0, shot as u16);
     wr8(b, shot, (rng.next() % 4 != 0) as u8);
     wr8(b, shot + 0x5a, (rng.next() % 2) as u8);
 }
 
-/// Boss 5 : mêmes variables de scène que le 17 ; paramètres propres.
+/// Boss 5: same scene variables as 17; own parameters.
 fn prep_5(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     prep_17(b, rng, obj);
     wr8(b, obj + 3, 0);
     wr8(b, obj + 7, 2 * (rng.next() % 2) as u8);
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
-    // hors du recul (+6 = 0 ou 4), seul le code 0xa8 (chute en tourbillon) a des étapes
+    // outside knockback (+6 = 0 or 4), only code 0xa8 (whirlwind fall) has steps
     let code = if s.0 == 4 && s.1 <= 4 && s.2 != 0 && s.2 != 4 { 0xa8 } else { pick(rng, &[0xa8, 0xa8, 0x38, 0x4c, 0]) };
     wr8(b, obj + 0x49, code);
     wr8(b, obj + 0x87, (rng.next() % 3) as u8);
-    // état mémorisé (+0xa8) : un état actif valide
+    // remembered state (+0xa8): a valid active state
     wr32(b, obj + 0xa8, 0x0200_0000 | (pick(rng, &[0, 4, 8, 12, 16, 20, 24]) as u32) << 16);
     wr8(b, obj + 0x90, (rng.next() % 20) as u8);
     wr8(b, obj + 0x91, pick(rng, &[0, 0x80, 0x85, 3]));
@@ -1095,17 +1095,17 @@ fn prep_5(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, A5 + 0x2c, pick(rng, &[0, 0xc, 4]));
 }
 
-/// Dragons 14 et 19 : variante, hôte (variante 1 de 19), réactions, état mémorisé.
+/// Dragons 14 and 19: variant, host (variant 1 of 19), reactions, remembered state.
 fn prep_19(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     prep_17(b, rng, obj);
     let variant = if kind == 19 { (rng.next() % 3 == 0) as u8 } else { 0 };
     wr8(b, obj + 3, variant);
-    // la mort du dragon de Nagpa n'a que deux étapes
+    // the death of Nagpa's dragon has only two steps
     if variant != 0 && rd8(b, obj + 4) == 4 && rd8(b, obj + 5) == 6 && rd8(b, obj + 6) == 4 {
         wr8(b, obj + 6, 2);
     }
-    // l'arrivée du dragon de Nagpa n'a que trois étapes
+    // the arrival of Nagpa's dragon has only three steps
     if variant != 0 && rd8(b, obj + 4) == 2 && rd8(b, obj + 5) == 0 && rd8(b, obj + 6) >= 6 {
         wr8(b, obj + 6, 4);
     }
@@ -1132,21 +1132,21 @@ fn prep_19(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8) {
     wr8(b, obj + 0xb2, pick(rng, &[0, 0, 1, 2, 0x30]));
     wr8(b, obj + 0xb0, (rng.next() % 5) as u8);
     wr8(b, obj + 0xb1, (rng.next() % 3) as u8);
-    // état mémorisé : le souffle (attaque 4) une fois sur trois
+    // remembered state: the breath (attack 4) one time in three
     let saved = if rng.next() % 3 == 0 { 0x0204_0400 } else { 0x0202_0000 };
     wr32(b, obj + 0xa8, saved);
-    // hôte : un ennemi vivant ou non, avec ou sans PV
+    // host: a living enemy or not, with or without HP
     let host = ENEMY.slot(rng.next() % ENEMY.slots).0;
     wr16(b, obj + 0x46, if rng.next() % 4 == 0 { 0 } else { host as u16 });
     wr8(b, host, (rng.next() % 4 != 0) as u8);
     wr16(b, host + 0x62, [0u16, 1, 50][rng.next() as usize % 3]);
     if s.0 == 4 && s.1 == 0 && (s.2 == 2) {
-        // l'étape 2 de la réaction ne sert qu'à la glissade (code 0x68, 0x80, 0xa8 ou ordinaire)
+        // step 2 of the reaction is only used for the slide (code 0x68, 0x80, 0xa8 or ordinary)
     }
     close_players(b, rng, obj);
 }
 
-/// Dragons rouges 15 et 20 : positions mémorisées, armure, état précédent, tables du script.
+/// Red dragons 15 and 20: remembered positions, armor, previous state, script tables.
 fn prep_15(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     prep_17(b, rng, obj);
@@ -1177,15 +1177,15 @@ fn prep_15(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 0x33, pick(rng, &[0, 0, 1, 0xff]));
     wr8(b, obj + 0x43, (rng.next() % 4 == 0) as u8);
     wr8(b, obj + 0x2d, (rng.next() % 32) as u8);
-    // table de vecteurs du souffle (+0x4c) : nulle ou la table des angles de la ROM
+    // breath vector table (+0x4c): null or the ROM's angle table
     wr32(b, obj + 0x4c, if rng.next() % 2 == 0 { 0 } else { 0x1c6636 });
     wr8(b, A5 + 0x42, (rng.next() % 4) as u8);
-    // état de l'image précédente : actif (02) ou autre
+    // previous frame state: active (02) or other
     let saved = [0x0202_0000u32, 0x0202_0400, 0x0204_0200, 0x0000_0000][rng.next() as usize % 4];
     wr32(b, obj + 0xb0, saved);
     wr8(b, obj + 0xb9, (rng.next() % 9) as u8);
     close_players(b, rng, obj);
-    // joueurs saisissables (+0x188) et 0x91f6c : à la position exacte d'attaque
+    // grabbable players (+0x188) and 0x91f6c: at the exact attack position
     for j in 0..4u32 {
         wr8(b, 0xff85de + 0x200 * j + 0x188, (rng.next() % 2) as u8);
     }
@@ -1196,14 +1196,14 @@ fn prep_15(b: &mut Bus, rng: &mut Rng, obj: u32) {
     }
 }
 
-/// Boss 11 et 12 : douze anneaux autour de la tête, pose et rang suivis, codes de coup cohérents avec l'étape.
+/// Bosses 11 and 12: twelve rings around the head, tracked pose and rank, hit codes consistent with the step.
 fn prep_11(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     prep_17(b, rng, obj);
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     wr8(b, obj + 3, 0);
     wr8(b, obj + 7, step_11(rng, s.0, s.1, s.2));
-    // anneaux : rangs 0 à 11 dans les douze premiers emplacements ESHL, les autres vides
+    // rings: ranks 0 to 11 in the first twelve ESHL slots, the others empty
     let esh = &ddsom_game::objects::pools::ESHL;
     for i in 0..esh.slots {
         let o = esh.slot(i).0;
@@ -1227,10 +1227,10 @@ fn prep_11(b: &mut Bus, rng: &mut Rng, obj: u32) {
     match rng.next() % 24 {
         0 => wr8(b, esh.slot(rng.next() % 12).0, 0),
         1 => wr8(b, esh.slot(rng.next() % 12).0 + 0x2f, 0x40),
-        2 => wr8(b, esh.slot(12).0, 0), // pas de douzième anneau
+        2 => wr8(b, esh.slot(12).0, 0), // no twelfth ring
         _ => {}
     }
-    // pose (ligne de 32 octets de 0x1069f8) et rang suivi, autour du seuil de la ligne
+    // pose (32-byte row of 0x1069f8) and tracked rank, around the row threshold
     let aa = (rng.next() % 22) as u8;
     wr8(b, obj + 0xaa, aa);
     let thr = rd8(b, 0x1069f8 + 32 * aa as u32 + 2);
@@ -1288,7 +1288,7 @@ fn prep_11(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, A5 + 0x2c, pick(rng, &[0, 5, 0xb, 0xc, 0xd]));
     wr16(b, A5 + 0x6e, (rng.next() % 8) as u16);
     wr16(b, A5 + 0x7f92, (rng.next() % 32) as u16);
-    // code de coup cohérent avec l'étape de réaction
+    // hit code consistent with the reaction step
     if s.0 == 4 && s.1 == 0 {
         let codes: &[u8] = match s.2 {
             0 => &[0, 4, 0x1c, 0x4c, 0x68, 0xa4, 0xa8, 0x78, 0x38],
@@ -1301,7 +1301,7 @@ fn prep_11(b: &mut Bus, rng: &mut Rng, obj: u32) {
     close_players(b, rng, obj);
 }
 
-/// Boss 8 : variables de scène du 17, paramètres propres.
+/// Boss 8: scene variables of 17, own parameters.
 fn prep_8(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     prep_17(b, rng, obj);
@@ -1343,7 +1343,7 @@ fn prep_8(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 0x71, (rng.next() % 4) as u8);
     wr16(b, A5 + 0x7f92, (rng.next() % 32) as u16);
     wr16(b, A5 + 0x6e, (rng.next() % 8) as u16);
-    // les tirs de la rafale visent des joueurs distincts : tous en vie
+    // the burst shots target distinct players: all alive
     if s.0 == 2 && s.1 == 4 && (s.2 == 4 || s.2 == 6 || s.2 == 14) {
         for j in 0..4u32 {
             wr8(b, 0xff85de + 0x200 * j, 1);
@@ -1353,7 +1353,7 @@ fn prep_8(b: &mut Bus, rng: &mut Rng, obj: u32) {
     close_players(b, rng, obj);
 }
 
-/// Boss 18 : phases, budgets, tir lié, codes de coup valides pour l'étape de réaction.
+/// Boss 18: phases, budgets, linked shot, hit codes valid for the reaction step.
 fn prep_18(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     prep_17(b, rng, obj);
@@ -1377,7 +1377,7 @@ fn prep_18(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr32(b, obj + 0xa2, [0x0202_0000u32, 0x0202_0400, 0x0202_0600, 0x0204_0400][rng.next() as usize % 4]);
     wr8(b, obj + 0xa0, pick(rng, &[0, 1, 2, 3, 4, 5, 0x10, 0x20]));
     wr8(b, obj + 0xa1, pick(rng, &[0, 1, 2, 3, 5, 0xff]));
-    // code de coup : toutes les routines de réaction propres (les étapes avancées n'en acceptent que certaines)
+    // hit code: all the specific reaction routines (the advanced steps accept only some of them)
     let codes: &[u8] = if s.0 == 4 && s.1 == 0 && s.2 >= 4 {
         &[0x20, 0x38, 0x44, 0x50, 0x5c, 0x9c, 0x8, 0x60]
     } else if s.0 == 4 && s.1 == 0 && s.2 == 2 {
@@ -1400,7 +1400,7 @@ fn prep_18(b: &mut Bus, rng: &mut Rng, obj: u32) {
     }
 }
 
-/// Boss 21 : mêmes variables de scène que le 17 ; hôte (`+0x46`) parfois mort, tir lié.
+/// Boss 21: same scene variables as 17; host (`+0x46`) sometimes dead, linked shot.
 fn prep_21(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     prep_17(b, rng, obj);
@@ -1428,7 +1428,7 @@ fn prep_21(b: &mut Bus, rng: &mut Rng, obj: u32) {
     close_players(b, rng, obj);
 }
 
-/// Joueurs tout près du boss (une fois sur deux) pour atteindre les choix d'attaque selon la portée.
+/// Players very close to the boss (one time in two) to reach the attack choices depending on range.
 fn close_players(b: &mut Bus, rng: &mut Rng, obj: u32) {
     if rng.next() % 2 == 0 {
         return;
@@ -1442,7 +1442,7 @@ fn close_players(b: &mut Bus, rng: &mut Rng, obj: u32) {
     }
 }
 
-/// Boss 10 : mêmes variables de scène que le 17 ; paramètres propres.
+/// Boss 10: same scene variables as 17; own parameters.
 fn prep_10(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     prep_17(b, rng, obj);
@@ -1450,7 +1450,7 @@ fn prep_10(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     wr8(b, obj + 7, step_10(rng, s.0, s.1, s.2));
     if s.0 == 4 && s.1 == 0 && s.2 != 0 {
-        // les étapes 2 et 4 de la réaction sont celles de l'étourdissement (code 0x4c)
+        // steps 2 and 4 of the reaction are those of the stun (code 0x4c)
         wr8(b, obj + 0x49, 0x4c);
     }
     wr8(b, A5 + 0x2e, pick(rng, &[0, 6, 6]));
@@ -1467,7 +1467,7 @@ fn prep_10(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, shot + 0x5a, (rng.next() % 2) as u8);
 }
 
-/// Variables globales que la boucle de jeu modifie entre deux appels.
+/// Global variables that the game loop modifies between two calls.
 fn perturb(b: &mut Bus, rng: &mut Rng, obj: u32, leader: u32) {
     for (off, values) in [(0x4eu32, &[0u8, 0, 0, 0, 1][..]), (0x3d, &[0, 0, 0, 1]), (0x35, &[0, 1, 2, 3]), (0x36, &[0, 1])] {
         if rng.next() % 3 == 0 {
@@ -1481,7 +1481,7 @@ fn perturb(b: &mut Bus, rng: &mut Rng, obj: u32, leader: u32) {
     if rng.next() % 4 == 0 {
         wr16(b, A5 + 0x51e, [0u16, 4, 8][rng.next() as usize % 3]);
     }
-    // le meneur de la caméra : position autour du boss, vitesse
+    // the camera leader: position around the boss, speed
     if rng.next() % 3 == 0 {
         let x = rd16(b, obj + 8).wrapping_add((rng.next() % 0x300) as u16).wrapping_sub(0x100);
         wr16(b, leader + 8, x);
@@ -1493,7 +1493,7 @@ fn perturb(b: &mut Bus, rng: &mut Rng, obj: u32, leader: u32) {
             wr8(b, 0xff85de + 0x200 * j, [0u8, 1, 1][rng.next() as usize % 3]);
         }
     }
-    // octet 0x22 du message de cinématique : terminé ou non
+    // byte 0x22 of the cutscene message: finished or not
     let msg = rd16(b, obj + 0xb0) as u32 | 0xff0000;
     if rd16(b, obj + 0xb0) != 0 && rng.next() % 3 == 0 {
         wr8(b, msg + 0x22, (rng.next() % 2) as u8);
@@ -1503,13 +1503,13 @@ fn perturb(b: &mut Bus, rng: &mut Rng, obj: u32, leader: u32) {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, warmup, tours] = &a[..] else {
-        eprintln!("usage : fuzz_boss <roms> <eeprom> <scénario> <images de chauffe> <tours>");
+        eprintln!("usage: fuzz_boss <roms> <eeprom> <scenario> <warm-up frames> <rounds>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_game::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
@@ -1543,7 +1543,7 @@ fn main() {
             for off in (0..BOSS.stride).step_by(2) {
                 wr16(&mut b, obj.0 + off, 0);
             }
-            // le meneur de la caméra : un joueur, ou un ennemi quelconque
+            // the camera leader: a player, or any enemy
             let leader = 0xff85de + 0x200 * (rng.next() % 4);
             wr16(&mut b, A5 + 0x46, if rng.next() % 8 == 0 { 0 } else { leader as u16 });
             wr8(&mut b, obj.0, 1);
@@ -1578,14 +1578,14 @@ fn main() {
                         prep(kind, &mut b, &mut rng, obj.0);
                     }
                 }
-                // compteurs de places libres cohérents avec le contenu des pools
+                // free-slot counters consistent with the pool contents
                 for q in POOLS {
                     let free = (0..q.slots).filter(|&i| rd8(&mut b, q.slot(i).0) == 0).count();
                     wr16(&mut b, A5 + q.free, free as u16);
                 }
                 wr8(&mut b, obj.0 + 0x40, (rng.next() % 40 == 0) as u8);
-                // le drapeau X n'a pas de sens pour un gestionnaire ; les routines sonores natives le conservent alors que
-                // l'original le recalcule : on l'abaisse pour que cet écart connu ne masque pas les autres
+                // the X flag is meaningless for a handler; the native sound routines keep it whereas
+                // the original recomputes it: it is cleared so that this known mismatch does not mask the others
                 c.sr &= !0x10;
                 c.a[0] = obj.0;
                 c.a[5] = A5;
@@ -1612,15 +1612,15 @@ fn main() {
                 }
                 let prev_obj: Vec<u8> = (0..BOSS.stride).map(|i| rd8(&mut b, obj.0 + i)).collect();
                 if std::env::var("DDSOM_PAS_ETAT").is_ok() {
-                    println!("pas {step} états {:02x?}", &prev_obj[4..8]);
+                    println!("step {step} states {:02x?}", &prev_obj[4..8]);
                 }
                 let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entry)));
                 if r.is_err() {
-                    // l'original est sorti des rails (entrée incohérente) : trajectoire abandonnée
+                    // the original went off the rails (inconsistent entry): trajectory abandoned
                     break;
                 }
                 let after = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
-                // `DDSOM_SEULS=préfixe` : n'afficher que les écarts des routines dont le nom commence ainsi
+                // `DDSOM_SEULS=prefix`: only show the mismatches of routines whose name starts that way
                 let only = std::env::var("DDSOM_SEULS").ok();
                 let concerns = only.as_deref().map_or(true, |p| {
                     ddsom_game::report().iter().any(|(n, s)| {
@@ -1629,14 +1629,14 @@ fn main() {
                 });
                 if after > before && concerns && shown < 12 {
                     shown += 1;
-                    // routines dont le compte d'écarts a augmenté pendant cet appel
+                    // routines whose mismatch count increased during this call
                     let faulty: Vec<String> = ddsom_game::report()
                         .iter()
                         .filter(|(n, s)| s.mismatches > before_names.get(&n.to_string()).copied().unwrap_or(0))
                         .map(|(n, s)| format!("{n} : {}", s.last.clone().unwrap_or_default()))
                         .collect();
-                    println!("écart en {entry:06x} type {kind} pas {step} objet {:06x} : {}", obj.0, faulty.join(" ; "));
-                    println!("  objet avant : {:02x?}", prev_obj);
+                    println!("mismatch at {entry:06x} type {kind} step {step} object {:06x}: {}", obj.0, faulty.join(" ; "));
+                    println!("  object before: {:02x?}", prev_obj);
                     if std::env::var("DDSOM_TRACE_ORIG").is_ok() {
                         let (mut c2, mut b2) = (cs.clone(), bs.clone());
                         c2.pc = entry;
@@ -1652,7 +1652,7 @@ fn main() {
                             }
                             c2.step(&mut b2);
                         }
-                        // octets de la RAM qui diffèrent entre la native (b) et l'original (b2)
+                        // RAM bytes that differ between the native (b) and the original (b2)
                         let mut n = 0;
                         for a in 0xff8000u32..0x1000000 {
                             let (u, v) = (rd8(&mut b, a), rd8(&mut b2, a));
@@ -1669,12 +1669,12 @@ fn main() {
     let mut total = 0;
     for (name, st) in ddsom_game::report() {
         total += st.mismatches;
-        println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
+        println!("  {name:28} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
     println!("{tests} appels de gestionnaires");
     if let Ok(file) = std::env::var("DDSOM_COUVERTURE") {
         let text: Vec<String> = seen.iter().map(|a| format!("{a:06x}")).collect();
-        std::fs::write(file, text.join("\n")).expect("écriture couverture");
+        std::fs::write(file, text.join("\n")).expect("coverage write");
     }
-    println!("{}", if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
+    println!("{}", if total == 0 { "VALID: no mismatch" } else { "FAILED" });
 }

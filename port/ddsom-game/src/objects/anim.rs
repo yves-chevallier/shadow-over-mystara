@@ -1,23 +1,23 @@
-//! Scripts d'animation des objets.
+//! Object animation scripts.
 //!
-//! Un script est une suite d'*entrées* en ROM. L'objet n'en garde que l'entrée courante, recopiée
-//! dans ses champs, et l'adresse de la suivante (`Obj::ANIM_NEXT`). Format d'une entrée :
+//! A script is a sequence of *entries* in ROM. The object only keeps the current entry, copied
+//! into its fields, and the address of the next one (`Obj::ANIM_NEXT`). Format of an entry:
 //!
-//! | décalage | taille | contenu | champ de l'objet |
+//! | offset | size | content | object field |
 //! |---|---|---|---|
-//! | +0x00 | mot | durée (images) | `ANIM_TIMER` |
-//! | +0x02 | mot | drapeaux (octet haut utilisé) | `ANIM_FLAGS` |
-//! | +0x04 | long | cadre de sprite | `FRAME` |
-//! | +0x08 | long | données du cadre A (ombre) | `FRAME_DATA_A` |
-//! | +0x0c | long | données du cadre B (boîte de visibilité, priorité) | `FRAME_DATA_B` |
-//! | +0x10 | 2 longs | seulement dans les entrées *longues* (personnages) | `FRAME_DATA_C/D` |
+//! | +0x00 | word | duration (frames) | `ANIM_TIMER` |
+//! | +0x02 | word | flags (high byte used) | `ANIM_FLAGS` |
+//! | +0x04 | long | sprite frame | `FRAME` |
+//! | +0x08 | long | frame data A (shadow) | `FRAME_DATA_A` |
+//! | +0x0c | long | frame data B (visibility box, priority) | `FRAME_DATA_B` |
+//! | +0x10 | 2 longs | only in *long* entries (characters) | `FRAME_DATA_C/D` |
 //!
-//! Si l'octet de drapeaux de l'entrée vaut 0, la suivante suit immédiatement ; 0xFE signale la fin
-//! du script (l'objet reste sur son dernier cadre, `anim_step` renvoie C) ; toute autre valeur est
-//! suivie d'un long qui désigne l'entrée suivante (boucle ou saut).
+//! If the flags byte of the entry is 0, the next one follows immediately; 0xFE marks the end
+//! of the script (the object stays on its last frame, `anim_step` returns C); any other value is
+//! followed by a long designating the next entry (loop or jump).
 //!
-//! Un *jeu* d'animations est un tableau de mots (décalages signés relatifs au début du tableau) ;
-//! chaque décalage désigne le premier élément d'un script.
+//! An animation *set* is an array of words (signed offsets relative to the start of the array);
+//! each offset designates the first element of a script.
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -28,29 +28,29 @@ use super::Obj;
 use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, set_low_word};
 use crate::{regs, Native};
 
-/// Résultat d'un pas d'animation.
+/// Result of an animation step.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Step {
-    /// La durée de l'entrée courante n'est pas écoulée.
+    /// The duration of the current entry has not elapsed.
     Running,
-    /// La durée était nulle : elle repart de 0xFFFF. Glitch d'origine : la soustraction emprunte, et la retenue
-    /// que les appelants testent (`bcs`) est levée comme en fin de script.
+    /// The duration was zero: it restarts from 0xFFFF. Original glitch: the subtraction borrows, and the carry
+    /// that the callers test (`bcs`) is raised as at the end of the script.
     Wrapped,
-    /// Une nouvelle entrée a été chargée.
+    /// A new entry has been loaded.
     Loaded,
-    /// Fin du script : l'objet reste sur son dernier cadre.
+    /// End of the script: the object stays on its last frame.
     Ended,
 }
 
 impl Step {
-    /// La retenue de l'original est levée : fin du script, ou durée nulle qui repart de 0xFFFF (glitch d'origine).
+    /// The original's carry is raised: end of the script, or zero duration restarting from 0xFFFF (original glitch).
     pub fn finished(self) -> bool {
         matches!(self, Step::Ended | Step::Wrapped)
     }
 }
 
-/// Recopie l'entrée située en `at` dans l'objet et renvoie l'adresse qui la suit.
-/// `long` : l'entrée contient aussi `FRAME_DATA_C/D`.
+/// Copies the entry located at `at` into the object and returns the address following it.
+/// `long`: the entry also contains `FRAME_DATA_C/D`.
 pub fn load_entry(b: &mut Cps2Bus, obj: Obj, at: u32, long: bool) -> u32 {
     let timer = rd16(b, at);
     obj.set_u16(b, Obj::ANIM_TIMER, timer);
@@ -71,14 +71,14 @@ pub fn load_entry(b: &mut Cps2Bus, obj: Obj, at: u32, long: bool) -> u32 {
     p
 }
 
-/// Adresse du script `index` dans un jeu d'animations (décalage lu à `set + 2 × index`, sans repli sur 16 bits :
-/// voir `start` pour l'indexation exacte de l'original).
+/// Address of script `index` in an animation set (offset read at `set + 2 × index`, without 16-bit wrap-around:
+/// see `start` for the exact indexing of the original).
 pub fn script_of(b: &mut Cps2Bus, set: u32, index: u16) -> u32 {
     let off = rd16(b, set.wrapping_add(2 * index as u32)) as i16;
     set.wrapping_add(off as i32 as u32)
 }
 
-/// Un pas d'animation : décompte la durée et, à zéro, charge l'entrée suivante.
+/// One animation step: counts down the duration and, at zero, loads the next entry.
 pub fn step(b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
     let before = obj.u16(b, Obj::ANIM_TIMER);
     let timer = before.wrapping_sub(1);
@@ -103,9 +103,9 @@ pub fn step(b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
     Step::Loaded
 }
 
-/// 0x1a32 : démarre le script `n` du jeu d'animations `set` (`lea set,A4 ; moveq #n,D0 ; jsr 0x1a32`). L'index
-/// est un mot (`add.w D0,D0 ; move.w (A4,D0.w),D0`) : le double est étendu en signe. Rend l'adresse qui suit
-/// l'entrée chargée.
+/// 0x1a32: starts script `n` of the animation set `set` (`lea set,A4 ; moveq #n,D0 ; jsr 0x1a32`). The index
+/// is a word (`add.w D0,D0 ; move.w (A4,D0.w),D0`): the double is sign-extended. Returns the address following
+/// the loaded entry.
 pub fn start(b: &mut Cps2Bus, obj: Obj, set: u32, n: u16) -> u32 {
     let script = script_at(b, set, n);
     load_entry(b, obj, script, false)
@@ -116,38 +116,38 @@ fn script_at(b: &mut Cps2Bus, set: u32, n: u16) -> u32 {
     set.wrapping_add(off as i16 as i32 as u32)
 }
 
-/// 0x1a3c : démarre l'animation à l'entrée `at` (A4 de l'original).
+/// 0x1a3c: starts the animation at entry `at` (A4 of the original).
 pub fn start_entry(b: &mut Cps2Bus, obj: Obj, at: u32) -> u32 {
     load_entry(b, obj, at, false)
 }
 
-/// Jeux d'animations propres à chaque personnage (entrées longues) : une table de pointeurs lue dans le code,
-/// un jeu par variante `Obj::VARIANT`.
+/// Animation sets specific to each character (long entries): a pointer table read in the code,
+/// one set per `Obj::VARIANT` variant.
 pub struct CharacterSets {
-    /// Routine d'origine qui démarre une animation de ces jeux.
+    /// Original routine that starts an animation from these sets.
     pub routine: u32,
-    /// Table des pointeurs de jeux (espace programme).
+    /// Table of set pointers (program space).
     pub pointers: u32,
-    /// Sans arme (octet `0x68` nul), les numéros d'animation sont décalés de 0x40.
+    /// Without a weapon (byte `0x68` zero), the animation numbers are shifted by 0x40.
     pub weapon_offset: bool,
-    /// La variante est étendue en signe avant l'indexation.
+    /// The variant is sign-extended before indexing.
     pub sign_extend: bool,
 }
 
-/// 0x2c16 : jeux des joueurs, numéros décalés de 0x40 sans arme en main.
+/// 0x2c16: player sets, numbers shifted by 0x40 with no weapon in hand.
 pub const SETS_ARMED: CharacterSets =
     CharacterSets { routine: 0x2c16, pointers: 0x2c58, weapon_offset: true, sign_extend: true };
-/// 0x2c88 : seconde table, numéro direct.
+/// 0x2c88: second table, direct number.
 pub const SETS_PLAIN: CharacterSets =
     CharacterSets { routine: 0x2c88, pointers: 0x2cc0, weapon_offset: false, sign_extend: true };
-/// 0x2cf0 : troisième table, variante prise sans extension de signe.
+/// 0x2cf0: third table, variant taken without sign extension.
 pub const SETS_BY_VARIANT: CharacterSets =
     CharacterSets { routine: 0x2cf0, pointers: 0x2d28, weapon_offset: false, sign_extend: false };
 
-/// Octet de l'objet : le personnage tient son arme.
+/// Object byte: the character holds their weapon.
 const ARMED: u32 = 0x68;
 
-/// Démarre l'animation `n` (D6 de l'original) du jeu propre au personnage de l'objet (entrées longues).
+/// Starts animation `n` (D6 of the original) of the set specific to the object's character (long entries).
 pub fn start_by_character(b: &mut Cps2Bus, obj: Obj, sets: &CharacterSets, n: u16) -> u32 {
     let n = if sets.weapon_offset && obj.u8(b, ARMED) == 0 { n.wrapping_add(0x40) } else { n };
     let variant = obj.u8(b, Obj::VARIANT);
@@ -157,15 +157,15 @@ pub fn start_by_character(b: &mut Cps2Bus, obj: Obj, sets: &CharacterSets, n: u1
     load_entry(b, obj, script, true)
 }
 
-// ---- adaptation aux registres du 68000 ----
+// ---- adaptation to the 68000 registers ----
 
-/// Registres que laissent les routines d'origine (voir `diag::dead_regs`, étiquette `anim`).
+/// Registers left behind by the original routines (see `diag::dead_regs`, label `anim`).
 pub const REGS_START: u32 = regs::d(0) | regs::a(4) | regs::CCR;
 pub const REGS_STEP: u32 = regs::d(0) | regs::a(4) | regs::CCR;
 pub const REGS_BY_CHARACTER: u32 = regs::d(5) | regs::d(6) | regs::a(4) | regs::CCR;
 
-/// `start` avec les registres de l'original : D0 = `n` puis le décalage du script (mot bas), A4 = fin de
-/// l'entrée, drapeaux du dernier `move.l` (X : retenue du doublement de l'index).
+/// `start` with the original's registers: D0 = `n` then the script offset (low word), A4 = end of
+/// the entry, flags of the last `move.l` (X: carry of the index doubling).
 #[track_caller]
 pub fn start_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, set: u32, n: u16) -> u32 {
     c.d[0] = n as u32;
@@ -175,7 +175,7 @@ pub fn start_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, set: u32, n: u16) -> u3
     end
 }
 
-/// `start_entry` avec les registres de l'original : A4 = fin de l'entrée, drapeaux du `move.l`.
+/// `start_entry` with the original's registers: A4 = end of the entry, flags of the `move.l`.
 #[track_caller]
 pub fn start_entry_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, at: u32) -> u32 {
     let end = start_entry(b, obj, at);
@@ -185,7 +185,7 @@ pub fn start_entry_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, at: u32) -> u32 {
     end
 }
 
-/// `step` avec les registres de l'original : A4 = entrée suivante, D0.b = drapeaux, retenue = fin de script.
+/// `step` with the original's registers: A4 = next entry, D0.b = flags, carry = end of script.
 #[track_caller]
 pub fn step_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
     let r = step_regs(c, b, obj, long);
@@ -193,8 +193,8 @@ pub fn step_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
     r
 }
 
-/// `start_by_character` avec les registres de l'original (D5 = variante × 4, D6 = décalage du script, A4 = fin
-/// de l'entrée).
+/// `start_by_character` with the original's registers (D5 = variant × 4, D6 = script offset, A4 = end
+/// of the entry).
 #[track_caller]
 pub fn start_by_character_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, sets: &CharacterSets, n: u16) -> u32 {
     c.d[6] = c.d[6] & 0xffff_0000 | n as u32;
@@ -203,7 +203,7 @@ pub fn start_by_character_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, sets: &Cha
     end
 }
 
-/// 0x1a32 : démarre le script `D0` du jeu d'animations A4 pour l'objet. Laisse A4 après l'entrée.
+/// 0x1a32: starts script `D0` of the animation set A4 for the object. Leaves A4 after the entry.
 fn start_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> u32 {
     // add.w D0w,D0w ; move.w (A4,D0w),D0w
     let d0 = c.d[0] as u16;
@@ -218,8 +218,8 @@ fn start_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> u32 {
     end
 }
 
-/// Pas d'animation avec la sémantique complète des registres : A4 = entrée suivante, D0.b = drapeaux,
-/// C = fin de script.
+/// Animation step with full register semantics: A4 = next entry, D0.b = flags,
+/// C = end of script.
 fn step_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
     let timer = obj.u16(b, Obj::ANIM_TIMER);
     let left = c.addsub(true, 1, timer as u32, false, Size::Word, false) as u16;
@@ -246,7 +246,7 @@ fn step_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
     Step::Loaded
 }
 
-/// Démarre l'animation `D6` du jeu propre au personnage de l'objet (entrées longues), registres compris.
+/// Starts animation `D6` of the set specific to the object's character (long entries), registers included.
 fn by_character_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, sets: &CharacterSets) -> u32 {
     if sets.weapon_offset && obj.u8(b, ARMED) == 0 {
         let v = c.addsub(false, 0x40, c.d[6], false, Size::Word, false);
@@ -275,7 +275,7 @@ fn by_character_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, sets: &CharacterSet
     end
 }
 
-// ---- natives (appels par adresse restants) ----
+// ---- natives (remaining calls by address) ----
 
 macro_rules! anim_native {
     ($const:ident, $entry:expr, $name:expr, $run:expr) => {

@@ -1,8 +1,8 @@
-//! Tâche du menu TEST (`0x29162`), créée par la tâche des crédits quand l'interrupteur TEST est actionné.
+//! TEST menu task (`0x29162`), created by the credits task when the TEST switch is activated.
 //!
-//! À la création : enregistrement du menu remis à zéro, tâche de l'emplacement 15 (`0xf0`) tuée. Puis, à
-//! chaque image, le gestionnaire de l'état du menu (`service::handler`), suivi d'une image d'attente. La
-//! sortie (9. EXIT) remplace la tâche par la tâche de démarrage.
+//! At creation: menu record reset to zero, task in slot 15 (`0xf0`) killed. Then, on
+//! each frame, the menu state handler (`service::handler`), followed by a wait frame. The
+//! exit (9. EXIT) replaces the task with the boot task.
 
 use crate::mem::set_low_word;
 use crate::modes::{Flow, Sequence};
@@ -10,19 +10,19 @@ use crate::scene::Ctx;
 use crate::service::{self, MENU, MENU_LONGS};
 
 crate::steps! {
-    /// Étapes de la tâche.
+    /// Stages of the task.
     pub enum Step {
         Entry = 0x29162 => entry,
-        /// Après l'image d'attente : un tour.
+        /// After the wait frame: one turn.
         Turn = 0x29190 => turn,
-        /// Retour du gestionnaire quand il a cédé la main en route : l'image d'attente.
+        /// Return of the handler when it ceded control on the way: the wait frame.
         HandlerReturn = 0x2918a => wait,
-        /// Reprise du menu après l'image d'attente qui suit l'effacement de l'écran (`service::show_menu`).
+        /// Resume of the menu after the wait frame that follows the clearing of the screen (`service::show_menu`).
         MenuAfterClear = 0x291ec => service::menu_after_clear,
     }
 }
 
-/// Emplacement tué à l'entrée.
+/// Slot killed at entry.
 const KILLED_SLOT: u16 = 0xf0;
 
 fn entry(x: &mut Ctx) -> Flow {
@@ -34,8 +34,8 @@ fn entry(x: &mut Ctx) -> Flow {
     turn(x)
 }
 
-/// `0x2917a` : le gestionnaire, appelé comme par `jsr` (sa suite est un appel en cours) ; s'il rend la main sans
-/// céder, l'image d'attente.
+/// `0x2917a`: the handler, called as by `jsr` (its continuation is a call in progress); if it returns without
+/// ceding, the wait frame.
 fn turn(x: &mut Ctx) -> Flow {
     x.push_return(Step::HandlerReturn);
     match service::handler(x) {
@@ -47,7 +47,7 @@ fn turn(x: &mut Ctx) -> Flow {
     }
 }
 
-/// `0x2918a` : `jsr 0xb64`, puis un nouveau tour.
+/// `0x2918a`: `jsr 0xb64`, then a new turn.
 fn wait(x: &mut Ctx) -> Flow {
     crate::tasks::one_frame(x, Step::Turn)
 }

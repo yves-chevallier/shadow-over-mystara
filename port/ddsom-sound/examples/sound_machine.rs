@@ -1,16 +1,16 @@
-//! Machine complète avec le pilote Rust à la place du Z80 : le 68000 ne doit voir aucune
-//! différence. Deux machines tournent en parallèle sur le même scénario (Z80 d'origine, et pilote
-//! Rust) ; on compare la RAM du 68000 et la RAM partagée à chaque image, et les suites d'écritures
-//! dans la QSound.
+//! Complete machine with the Rust driver in place of the Z80: the 68000 must see no
+//! difference. Two machines run in parallel on the same scenario (original Z80, and Rust
+//! driver); the 68000 RAM and the shared RAM are compared at each frame, along with the
+//! QSound write sequences.
 //!
-//! sound_machine <roms> <eeprom> <scenario> <images>
+//! sound_machine <roms> <eeprom> <scenario> <frames>
 
 use std::path::Path;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames] = &a[..] else {
-        eprintln!("usage : sound_machine <roms> <eeprom> <scenario> <images>");
+        eprintln!("usage: sound_machine <roms> <eeprom> <scenario> <frames>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
@@ -27,7 +27,7 @@ fn main() {
         rust.sound.trace = Some(Vec::new());
     }
     let mut irq_flags: (Vec<(usize, u8)>, Vec<(usize, u8)>) = Default::default();
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
 
     let mut first_ram = None;
@@ -68,35 +68,35 @@ fn main() {
                     .filter(|&i| z80.bus.qram[i] != rust.bus.qram[i])
                     .map(|i| format!("{i:03x}: {:02x}/{:02x}", z80.bus.qram[i], rust.bus.qram[i]))
                     .collect();
-                println!("première différence de RAM partagée à l'image {} : {}", f + 1, diffs.join(" "));
+                println!("first shared RAM difference at frame {}: {}", f + 1, diffs.join(" "));
             }
             first_shared.get_or_insert(f + 1);
         }
     }
     let (lz, lr) = (z80.sound.qsound.log.take().unwrap(), rust.sound.qsound.log.take().unwrap());
     let common = lz.iter().zip(&lr).take_while(|(a, b)| a == b).count();
-    println!("{frames} images");
+    println!("{frames} frames");
     if !irq_flags.0.is_empty() {
         let n = irq_flags.0.iter().zip(&irq_flags.1).take_while(|(a, b)| a.1 == b.1).count();
-        println!("interruptions : Z80 {} / pilote Rust {} ; drapeau de boîte aux lettres identique sur les {n} premières", irq_flags.0.len(), irq_flags.1.len());
+        println!("interrupts: Z80 {} / Rust driver {}; mailbox flag identical on the first {n}", irq_flags.0.len(), irq_flags.1.len());
         for i in n.saturating_sub(3)..(n + 4).min(irq_flags.0.len().min(irq_flags.1.len())) {
-            println!("  interruption {i} : Z80 (image {}, drapeau {:02x}) / Rust (image {}, drapeau {:02x})", irq_flags.0[i].0, irq_flags.0[i].1, irq_flags.1[i].0, irq_flags.1[i].1);
+            println!("  interrupt {i}: Z80 (frame {}, flag {:02x}) / Rust (frame {}, flag {:02x})", irq_flags.0[i].0, irq_flags.0[i].1, irq_flags.1[i].0, irq_flags.1[i].1);
         }
     }
     if common < lz.len().min(lr.len()) {
         let frame = log_ends.iter().position(|&(a, b)| a > common || b > common).unwrap_or(0);
-        println!("première écriture QSound différente : n°{common}, image {frame}");
+        println!("first differing QSound write: #{common}, frame {frame}");
         for i in common.saturating_sub(3)..(common + 6).min(lz.len().min(lr.len())) {
-            println!("  {i} : Z80 {:02x?} / Rust {:02x?}", lz[i], lr[i]);
+            println!("  {i}: Z80 {:02x?} / Rust {:02x?}", lz[i], lr[i]);
         }
     }
-    println!("écritures QSound : Z80 {} / pilote Rust {} ; identiques dans l'ordre : {common}", lz.len(), lr.len());
+    println!("QSound writes: Z80 {} / Rust driver {}; identical in order: {common}", lz.len(), lr.len());
     match first_ram {
-        None => println!("RAM du 68000 identique à chaque image"),
-        Some(f) => println!("RAM du 68000 différente dès l'image {f}"),
+        None => println!("68000 RAM identical at every frame"),
+        Some(f) => println!("68000 RAM differs from frame {f}"),
     }
     match first_shared {
-        None => println!("RAM partagée identique à chaque image"),
-        Some(f) => println!("RAM partagée différente à {shared_diffs} images, la première à l'image {f}"),
+        None => println!("shared RAM identical at every frame"),
+        Some(f) => println!("shared RAM differs in {shared_diffs} frames, the first at frame {f}"),
     }
 }

@@ -1,8 +1,8 @@
-//! Une image qui ne finit pas : fait tourner une seule machine (jeu réécrit, ou code d'origine avec
-//! `original`) jusqu'à l'image donnée ; si une image exécute plus de 20 millions de blocs, affiche
-//! les PC les plus fréquents et s'arrête.
+//! A frame that never ends: runs a single machine (rewritten game, or original code with
+//! `original`) up to the given frame; if a frame executes more than 20 million blocks, prints
+//! the most frequent PCs and stops.
 //!
-//! stuck <roms> <eeprom> <scénario> <image> [origine|reecrit] [deux]
+//! stuck <roms> <eeprom> <scenario> <frame> [origine|reecrit] [deux]
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -23,7 +23,7 @@ fn count(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u
         if n > 20_200_000 {
             let mut v: Vec<_> = PCS.with(|p| p.borrow().iter().map(|(&a, &k)| (a, k)).collect());
             v.sort_by_key(|&(_, k)| std::cmp::Reverse(k));
-            println!("bloqué : {:?}", c);
+            println!("stuck: {:?}", c);
             for (a, k) in v.iter().take(25) {
                 println!("  {a:06x} : {k}");
             }
@@ -51,7 +51,7 @@ fn main() {
     m.executor = Some(count);
     let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let n: usize = a[4].parse().unwrap();
-    // `deux` : une seconde machine (code d'origine) tourne dans le même processus, comme dans validate
+    // `deux`: a second machine (original code) runs in the same process, as in validate
     let mut other = a.get(6).is_some_and(|s| s == "deux").then(|| {
         let mut m2 = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
         m2.set_overclock(16.0);
@@ -69,5 +69,5 @@ fn main() {
             m2.run_frame();
         }
     }
-    println!("{n} images sans blocage");
+    println!("{n} frames without blocking");
 }

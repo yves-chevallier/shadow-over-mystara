@@ -1,12 +1,12 @@
-//! Type 2, état touché (`+4 = 4`, 0x5ab72). `+5` : 0 et 6 réaction commune par table (`+0x49`), 2 recul,
-//! 4 chute, 8 saisie par un joueur (le troglodyte s'enfuit).
+//! Type 2, hit state (`+4 = 4`, 0x5ab72). `+5`: 0 and 6 common reaction by table (`+0x49`), 2 recoil, 4 fall, 8 grabbed
+//! by a player (the troglodyte runs away).
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
+/// Tables of the common reaction, indexed by reaction code `+0x49`.
 const REACT_FIRST: u32 = 0x5acfc;
 const REACT_SECOND: u32 = 0x5ae8e;
 
@@ -38,7 +38,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Le clignotement de la série 0 continue pendant l'état touché (0x5ab72).
+/// The blinking of series 0 continues during the hit state (0x5ab72).
 fn blink_hit<R: Bench>(x: &mut Cx<'_, R>) {
     let phase = x.u8(BLINK_PHASE) as i8;
     if phase <= 0 {
@@ -64,7 +64,7 @@ fn blink_hit<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(1, v);
 }
 
-/// Sous-état 2 : le troglodyte recule, puis se remet debout.
+/// Substate 2: the troglodyte recoils, then gets back on its feet.
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -95,7 +95,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(POSTURE, 4);
 }
 
-/// Sous-état 4 : chute, attente couché, relevé.
+/// Substate 4: fall, wait lying down, get up.
 fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -129,7 +129,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Sous-état 8 (0x5ac08) : saisi par un joueur, le troglodyte se retourne et s'enfuit.
+/// Substate 8 (0x5ac08): grabbed by a player, the troglodyte turns around and runs away.
 pub(super) fn caught<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -171,7 +171,7 @@ pub(super) fn caught<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5ac8c : s'enfuit en courant vers le bord de l'écran.
+/// 0x5ac8c: runs away toward the edge of the screen.
 fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(Obj::SPEED_INDEX, 8);

@@ -1,7 +1,7 @@
-//! Cycles à l'entrée de chaque routine native pendant une image (pour régler les coûts des natives).
-//!   cyc <roms> <eeprom> <scénario> <image> <natives 0|1>
-//! Mode 1 : machine hybride ; mode 0 : code d'origine seul (mêmes points d'entrée). Chaque ligne :
-//! nom, cycles de la machine à l'entrée, horizon de l'IRQ (et coût annoncé en mode 1).
+//! Cycles at the entry of each native routine during a frame (to tune the costs of the natives).
+//!   cyc <roms> <eeprom> <scenario> <frame> <natives 0|1>
+//! Mode 1: hybrid machine; mode 0: original code only (same entry points). Each line:
+//! name, machine cycles at entry, IRQ horizon (and declared cost in mode 1).
 
 use std::cell::RefCell;
 use std::collections::HashMap;

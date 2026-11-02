@@ -1,4 +1,4 @@
-//! Tirs (PSHL) et effets (PEFF) des joueurs : un gestionnaire par type, voir `docs/families/player.md`.
+//! Player shots (PSHL) and effects (PEFF): one handler per type, see `docs/families/player.md`.
 
 use crate::Native;
 
@@ -26,7 +26,7 @@ pub mod pshl_d;
 pub mod pshl_e;
 pub mod pshell;
 
-/// Toutes les routines natives des tirs et des effets des joueurs.
+/// All the native routines of the players' shots and effects.
 pub fn natives() -> impl Iterator<Item = &'static Native> {
     std::iter::empty()
         .chain(peff::NATIVES)

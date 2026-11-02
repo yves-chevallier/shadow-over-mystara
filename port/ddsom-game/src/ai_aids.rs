@@ -1,8 +1,8 @@
-//! Aides d'IA des ennemis et des boss (suite de `ai`) : tirages d'attitude par tables, test de la
-//! boîte devant un adversaire.
+//! AI helpers for enemies and bosses (continuation of `ai`): stance draws from tables, test of the
+//! box in front of an opponent.
 //!
-//! Ces routines gardent le contrat des originaux : un résultat dans D0 (1 : oui, 0 : non) et les
-//! drapeaux d'un `moveq`, que les handlers testent juste après l'appel (`beq`).
+//! These routines keep the contract of the originals: a result in D0 (1: yes, 0: no) and the
+//! flags of a `moveq`, which the handlers test right after the call (`beq`).
 
 use cps2::Cps2Bus;
 use m68k::decode::{Fetch, Size};
@@ -14,52 +14,52 @@ use crate::objects::Obj;
 use crate::rng;
 use crate::objects::pools;
 
-/// Compteur de l'image courante, qui sert d'index dans les tables d'attitude.
+/// Counter of the current frame, used as an index in the stance tables.
 const TICK: u32 = A5 + 0x7f92;
-/// État du générateur pseudo-aléatoire.
+/// State of the pseudo-random generator.
 
-/// Champs de l'ennemi (A0).
+/// Fields of the enemy (A0).
 mod f {
     pub const X: u32 = 0x08;
     pub const DEPTH: u32 = 0x10;
     pub const FACING: u32 = 0x2c;
-    /// Objet visé (pointeur de 16 bits).
+    /// Targeted object (16-bit pointer).
     pub const TARGET: u32 = 0x50;
     pub const STATE: u32 = 0x05;
     pub const SUB_STATE: u32 = 0x06;
     pub const SUB_STEP: u32 = 0x07;
-    /// Numéros de tables : attitude (0x70), temporisation (0x72, 0x73), boîte d'attaque (0x74, 0x75).
+    /// Table numbers: stance (0x70), timing (0x72, 0x73), attack box (0x74, 0x75).
     pub const STANCE_TABLE: u32 = 0x70;
     pub const STANCE_VALUE: u32 = 0x71;
     pub const BOX_CHANCE: u32 = 0x74;
     pub const BOX_ANIMATION: u32 = 0x75;
 }
 
-/// Tables de pointeurs en ROM (un long par numéro de table).
+/// Pointer tables in ROM (one long per table number).
 const STANCE_POINTERS: u32 = 0xa48c;
 const BOX_CHANCE_POINTERS: u32 = 0x7fec;
 const BOX_ANIMATION_POINTERS: u32 = 0x800c;
 
-/// `moveq #v,D0` : D0 et les drapeaux N, Z (V et C à zéro).
+/// `moveq #v,D0`: D0 and the flags N, Z (V and C zero).
 fn moveq(c: &mut Cpu, v: i32) {
     c.d[0] = v as u32;
     logic(c, v as u32, Size::Long);
 }
 
-/// Mot de la table de pointeurs `table` désigné par `index`, étendu en signe comme le fait un index
-/// `Dn.w` du 68000.
+/// Word of the pointer table `table` designated by `index`, sign-extended as a `Dn.w` index
+/// does on the 68000.
 fn offset(index: u16) -> u32 {
     index as i16 as i32 as u32
 }
 
 
-/// 0xa470 : tire l'attitude de l'ennemi `o` (octet de la table `+0x70`, indexée par le compteur d'images), la
-/// range en `+0x71` et la rend (le `beq` des appelants teste sa nullité).
+/// 0xa470: draws the stance of enemy `o` (byte of the table `+0x70`, indexed by the frame counter), stores it
+/// at `+0x71` and returns it (the callers' `beq` tests whether it is zero).
 pub fn stance(b: &mut Cps2Bus, o: Obj) -> u8 {
     stance_at(b, o).1
 }
 
-/// (table lue, attitude).
+/// (table read, stance).
 fn stance_at(b: &mut Cps2Bus, o: Obj) -> (u32, u8) {
     let number = rd8(b, o.0 + f::STANCE_TABLE);
     let table = crate::mem::rd32(b, STANCE_POINTERS + 4 * number as u32);
@@ -70,7 +70,7 @@ fn stance_at(b: &mut Cps2Bus, o: Obj) -> (u32, u8) {
 }
 
 
-/// Remplace l'octet bas / le mot bas d'un registre (les autres bits restent).
+/// Replaces the low byte / low word of a register (the other bits remain).
 fn set_b(r: &mut u32, v: u8) {
     *r = *r & !0xff | v as u32;
 }
@@ -79,7 +79,7 @@ fn set_w(r: &mut u32, v: u16) {
 }
 
 
-/// Boîte devant un objet : décalage en x (vers l'avant), demi-largeur, demi-profondeur (D0, D1, D2 de l'original).
+/// Box in front of an object: x offset (forwards), half-width, half-depth (D0, D1, D2 of the original).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Hitbox {
     pub offset: u16,
@@ -87,7 +87,7 @@ pub struct Hitbox {
     pub half_depth: u16,
 }
 
-/// Registres de travail que laissent les tests de boîte de l'original (mots bas, s'ils ont été posés).
+/// Work registers left by the original's box tests (low words, if they were set).
 #[derive(Clone, Copy, Debug, Default)]
 struct Leftovers {
     d0: Option<u16>,
@@ -101,7 +101,7 @@ struct Leftovers {
 
 impl Leftovers {
     fn set(&self, c: &mut Cpu) {
-        // dans l'ordre de l'original : octets puis mots, chacun à sa place
+        // in the original's order: bytes then words, each in its place
         if let Some(v) = self.d3_byte {
             set_b(&mut c.d[3], v);
         }
@@ -119,7 +119,7 @@ impl Leftovers {
     }
 }
 
-/// L'objet `other` est-il dans la boîte devant `me` ? Écarts biaisés comparés en non signé, comme l'original.
+/// Is object `other` in the box in front of `me`? Biased gaps compared unsigned, like the original.
 fn in_hitbox(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Hitbox, r: &mut Leftovers) -> bool {
     let facing = rd8(b, me + f::FACING);
     let offset_x = if facing != 0 { hitbox.offset.wrapping_neg() } else { hitbox.offset };
@@ -141,14 +141,14 @@ fn in_hitbox(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Hitbox, r: &mut Lefto
     reach_depth <= half_depth.wrapping_mul(2)
 }
 
-/// 0x7f0c (`strict`) et 0x7ef4 : un adversaire (l'objet visé `+0x50`) est-il dans la boîte devant l'ennemi `o`, de
-/// face, au sol et dans l'état 12 (ou 14 si `strict`) ? Si oui, après un tirage de probabilité (table `+0x74`),
-/// l'ennemi passe à l'état 6 avec une animation tirée au hasard (table `+0x75`) et le résultat est vrai.
+/// 0x7f0c (`strict`) and 0x7ef4: is an opponent (the targeted object `+0x50`) in the box in front of enemy `o`,
+/// facing it, on the ground and in state 12 (or 14 if `strict`)? If so, after a probability draw (table `+0x74`),
+/// the enemy goes to state 6 with a randomly drawn animation (table `+0x75`) and the result is true.
 pub fn in_front(b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Hitbox) -> bool {
     in_front_leftovers(b, o.0, strict, hitbox).0
 }
 
-/// (résultat, restes, adversaire lu (A1), table lue (A4), D2 et D0 longs du tirage).
+/// (result, leftovers, opponent read (A1), table read (A4), D2 and D0 longs of the draw).
 fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox: Hitbox) -> (bool, Leftovers, Option<u32>, Option<u32>, Option<(u32, u32)>) {
     let mut r = Leftovers::default();
     let target = rd16(b, me + f::TARGET);
@@ -182,7 +182,7 @@ fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox: Hitbox) ->
         return (false, r, Some(other), Some(chances), Some((mask, roll)));
     }
     let number = rd8(b, me + f::BOX_ANIMATION);
-    // l'octet `+0x75` est déjà un multiple de 4 : pas de décalage
+    // byte `+0x75` is already a multiple of 4: no shift
     let animations = rd32(b, BOX_ANIMATION_POINTERS.wrapping_add(number as u32)).wrapping_add(offset((tick >> 1) << 5));
     let pick = rng::random(b) as u32 & 31;
     wr8(b, me + f::STATE, 6);
@@ -192,18 +192,18 @@ fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox: Hitbox) ->
     (true, r, Some(other), Some(animations), Some((mask, roll)))
 }
 
-/// Position de l'objet par rapport à la boîte devant un autre (0x7f19c).
+/// Position of the object relative to the box in front of another (0x7f19c).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InHitbox {
-    /// Hors de la boîte, ou en l'air (D0 = 0).
+    /// Outside the box, or in the air (D0 = 0).
     Non,
-    /// Dans la boîte, de face (D0 = 1).
+    /// In the box, facing (D0 = 1).
     Face,
-    /// Dans la boîte, de dos (D0 = 2).
+    /// In the box, from behind (D0 = 2).
     Back,
 }
 
-/// 0x7f19c : l'objet `other` est-il dans la boîte devant l'objet `me` ?
+/// 0x7f19c: is object `other` in the box in front of object `me`?
 pub fn box_around(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox) -> InHitbox {
     box_reach(b, me.0, other.0, hitbox, &mut Leftovers::default())
 }
@@ -224,17 +224,18 @@ fn box_reach(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Hitbox, r: &mut Lefto
     }
 }
 
-/// Restes des tests de boîte relus par la suite (glitch d'origine, `dispatch::Leftovers`) : D2 et D3 (vitesses de
-/// l'étincelle de `flash_and_shake`, relues par le boss 11) et l'octet bas de D4, dans l'ordre où l'original les pose.
+/// Leftovers of the box tests reread afterwards (original glitch, `dispatch::Leftovers`): D2 and D3 (speeds of
+/// the spark of `flash_and_shake`, reread by boss 11) and the low byte of D4, in the order in which the original sets
+/// them.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct HitboxLeftovers {
     leftovers: Leftovers,
-    /// D2 long : le masque du tirage de `in_front`.
+    /// D2 long: the mask of the `in_front` draw.
     mask: Option<u32>,
 }
 
 impl HitboxLeftovers {
-    /// Pose les restes dans D2, D3 et D4 (les registres que l'original laisse et que d'autres relisent).
+    /// Sets the leftovers in D2, D3 and D4 (the registers that the original leaves and that others reread).
     pub fn set(&self, d2: &mut u32, d3: &mut u32, d4: &mut u32) {
         let r = &self.leftovers;
         if let Some(v) = r.d3_byte {
@@ -258,7 +259,7 @@ impl HitboxLeftovers {
     }
 }
 
-/// 0xb5e0 (`ai::target_in_front`) : la cible `+0x50` est-elle dans la boîte devant l'objet ? Avec les restes relus.
+/// 0xb5e0 (`ai::target_in_front`): is the target `+0x50` in the box in front of the object? With the leftovers reread.
 pub fn target_in_front_leftovers(b: &mut Cps2Bus, o: Obj, hitbox: Hitbox) -> (InHitbox, HitboxLeftovers) {
     let pointer = rd16(b, o.0 + f::TARGET);
     let mut leftovers = Leftovers::default();
@@ -266,22 +267,22 @@ pub fn target_in_front_leftovers(b: &mut Cps2Bus, o: Obj, hitbox: Hitbox) -> (In
     (found, HitboxLeftovers { leftovers, mask: None })
 }
 
-/// 0x7f19c (`box_around`), avec les restes relus.
+/// 0x7f19c (`box_around`), with the leftovers reread.
 pub fn box_around_leftovers(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox) -> (InHitbox, HitboxLeftovers) {
     let mut leftovers = Leftovers::default();
     let found = box_reach(b, me.0, other.0, hitbox, &mut leftovers);
     (found, HitboxLeftovers { leftovers, mask: None })
 }
 
-/// 0x7f0c / 0x7ef4 (`in_front`), avec les restes relus.
+/// 0x7f0c / 0x7ef4 (`in_front`), with the leftovers reread.
 pub fn in_front_with_leftovers(b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Hitbox) -> (bool, HitboxLeftovers) {
     let (yes, leftovers, _, _, draw) = in_front_leftovers(b, o.0, strict, hitbox);
     (yes, HitboxLeftovers { leftovers, mask: draw.map(|(m, _)| m) })
 }
 
-/// 0xb5e0 (`ai::target_in_front`) avec les registres de l'original : A1 = la cible, D0 = 0/1/2 et drapeaux de
-/// `moveq`, D1-D3 laissés par les tests de la boîte. Pour les appelants dont la suite relit ces restes (boss 11 :
-/// D2, glitch d'origine).
+/// 0xb5e0 (`ai::target_in_front`) with the registers of the original: A1 = the target, D0 = 0/1/2 and flags of
+/// `moveq`, D1-D3 left by the box tests. For the callers whose continuation rereads these leftovers (boss 11:
+/// D2, original glitch).
 pub fn target_in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, hitbox: Hitbox) -> InHitbox {
     let pointer = rd16(b, o.0 + f::TARGET);
     let mut leftovers = Leftovers::default();
@@ -296,8 +297,8 @@ pub fn target_in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, hitbox: Hitbox)
     found
 }
 
-/// 0x7f19c (`box_around`) avec les registres de l'original : D0 = 0/1/2 et drapeaux de `moveq`, D1-D3 laissés par
-/// les tests de la boîte.
+/// 0x7f19c (`box_around`) with the registers of the original: D0 = 0/1/2 and flags of `moveq`, D1-D3 left by
+/// the box tests.
 pub fn box_around_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox) -> InHitbox {
     let mut leftovers = Leftovers::default();
     let found = box_reach(b, me.0, other.0, hitbox, &mut leftovers);
@@ -306,8 +307,8 @@ pub fn box_around_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, other: Obj, hitbox:
     found
 }
 
-/// 0x7f0c / 0x7ef4 (`in_front`) avec les registres de l'original : D0 (1 / 0) et drapeaux de `moveq`, D1-D4, A1
-/// et A4 laissés comme l'original.
+/// 0x7f0c / 0x7ef4 (`in_front`) with the registers of the original: D0 (1 / 0) and flags of `moveq`, D1-D4, A1
+/// and A4 left as in the original.
 pub fn in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Hitbox) -> bool {
     let (yes, leftovers, other, table, draw) = in_front_leftovers(b, o.0, strict, hitbox);
     if let Some(other) = other {
@@ -325,12 +326,12 @@ pub fn in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: 
     yes
 }
 
-/// Profils de poussée : table d'octets (indexée par l'écart en x / 16) en espace programme, puis
-/// entrées de 8 octets (hauteur maximale, écart en profondeur maximal, poussée) en espace de données.
+/// Push profiles: byte table (indexed by the x gap / 16) in program space, then
+/// 8-byte entries (maximum height, maximum depth gap, push) in data space.
 const PUSH_PROFILE_INDEX: u32 = 0x1168e;
 const PUSH_PROFILES: u32 = 0x116ae;
 
-/// Octet de l'espace programme (table adressée relativement au PC).
+/// Byte of the program space (table addressed PC-relative).
 fn prog8(b: &mut Cps2Bus, a: u32) -> u8 {
     let word = b.fetch16(a & !1);
     if a & 1 == 0 {
@@ -340,8 +341,8 @@ fn prog8(b: &mut Cps2Bus, a: u32) -> u8 {
     }
 }
 
-/// Poussée (16.16) que le boss `me` applique au joueur `player` pour un écart en x `gap` : 0 si le
-/// joueur est trop haut ou trop loin en profondeur.
+/// Push (16.16) that boss `me` applies to player `player` for an x gap `gap`: 0 if the
+/// player is too high or too far in depth.
 fn push_amount_for(b: &mut Cps2Bus, me: u32, player: u32, gap: u16) -> u32 {
     if gap as i16 >= 512 {
         return 0;
@@ -358,7 +359,7 @@ fn push_amount_for(b: &mut Cps2Bus, me: u32, player: u32, gap: u16) -> u32 {
     }
 }
 
-/// Le boss `me` pousse le joueur `player` en x, du côté vers lequel il regarde ; vrai si poussé.
+/// Boss `me` pushes player `player` in x, towards the side it faces; true if pushed.
 fn push_player_once(b: &mut Cps2Bus, me: u32, player: u32) -> bool {
     let gap = (rd16(b, player + f::X).wrapping_sub(rd16(b, me + f::X)) as i16).wrapping_abs() as u16;
     let push = push_amount_for(b, me, player, gap);
@@ -374,33 +375,33 @@ fn push_player_once(b: &mut Cps2Bus, me: u32, player: u32) -> bool {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Animations par table et tests d'orientation (0x103e0-0x105d0). Les fonctions « corps » ne font pas
-// le RTS : `leaf!` l'ajoute pour la native.
+// Table-driven animations and orientation tests (0x103e0-0x105d0). The "body" functions do not do
+// the RTS: `leaf!` adds it for the native.
 // ---------------------------------------------------------------------------------------------
 
 const ANIM_MARK: u32 = 0x3e;
 
-/// Adresse de l'objet désigné par un pointeur de 16 bits (étendu en signe).
+/// Address of the object designated by a 16-bit pointer (sign-extended).
 fn object(pointer: u16) -> u32 {
     pointer as i16 as i32 as u32
 }
 
 // ---------------------------------------------------------------------------------------------
-// Attaques sur les joueurs (0xfc44-0xfda0)
+// Attacks on the players (0xfc44-0xfda0)
 // ---------------------------------------------------------------------------------------------
 
-/// Boîtes d'attaque des ennemis (entrées de 8 octets : décalage et demi-étendue en x, z, y) et boîtes de
-/// corps des joueurs (une table par personnage, entrées de 8 octets), en espace de données.
+/// Enemy attack boxes (8-byte entries: offset and half-extent in x, z, y) and player
+/// body boxes (one table per character, 8-byte entries), in data space.
 const ATTACK_BOXES: u32 = 0x123602;
 const BODY_BOX_TABLES: u32 = 0xfd4c;
 
-/// Octet signé de l'espace de données.
+/// Signed byte of the data space.
 fn rd8s(b: &mut Cps2Bus, a: u32) -> i16 {
     rd8(b, a) as i8 as i16
 }
 
-/// Le joueur à `player` est-il touché par la boîte d'attaque `attack` (adresse de l'entrée) de l'objet `me` ?
-/// Le joueur doit être présent, visible, non protégé, ni à terre ni mort, et avoir une boîte de corps.
+/// Is the player at `player` hit by the attack box `attack` (entry address) of object `me`?
+/// The player must be present, visible, unprotected, neither on the ground nor dead, and have a body box.
 fn player_hit(b: &mut Cps2Bus, me: u32, attack: u32, player: u32) -> bool {
     let flags = rd8(b, player);
     if flags & 1 == 0 || flags & 2 != 0 || rd8(b, player + 0x188) != 0 {
@@ -417,7 +418,7 @@ fn player_hit(b: &mut Cps2Bus, me: u32, attack: u32, player: u32) -> bool {
     let table = rd32(b, BODY_BOX_TABLES + 2 * character as u32);
     let mut mine = attack;
     let mut theirs = table.wrapping_add(8 * body as u32);
-    // x, puis z, puis y : (décalage, étendue) de chaque boîte ; seul x tient compte du sens regardé
+    // x, then z, then y: (offset, extent) of each box; only x takes the facing direction into account
     for (axis, mirror) in [(0x08, true), (0x0c, false), (0x10, false)] {
         let (mut d0, mut d1) = (rd8s(b, mine), rd8s(b, theirs));
         if mirror {
@@ -440,15 +441,15 @@ fn player_hit(b: &mut Cps2Bus, me: u32, attack: u32, player: u32) -> bool {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Choix d'un point où marcher autour de la cible (0xe886, 0xeff2, 0xf084)
+// Choosing a point to walk to around the target (0xe886, 0xeff2, 0xf084)
 // ---------------------------------------------------------------------------------------------
 
-/// Tables de points candidats par numéro (`+0x79`) : pointeur, puis nombre de points - 1 et paires
-/// (décalage x, décalage profondeur) autour de la cible.
+/// Tables of candidate points by number (`+0x79`): pointer, then number of points - 1 and pairs
+/// (x offset, depth offset) around the target.
 pub(crate) const WALK_POINTS: u32 = 0xe93e;
 const MIRRORED_WALK_POINTS: u32 = 0xf06a;
 
-/// Écart « en ville » entre deux points : |dx| + |dy| (mots).
+/// "City block" gap between two points: |dx| + |dy| (words).
 fn manhattan(b: &mut Cps2Bus, me: u32, x: u16, depth: u16) -> u16 {
     let dx = (x.wrapping_sub(rd16(b, me + f::X)) as i16).wrapping_abs() as u16;
     let dy = (depth.wrapping_sub(rd16(b, me + f::DEPTH)) as i16).wrapping_abs() as u16;
@@ -456,19 +457,19 @@ fn manhattan(b: &mut Cps2Bus, me: u32, x: u16, depth: u16) -> u16 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Divers : tests d'écran, cap aléatoire, prise (0x104a2-0x105d0, 0xfda2, 0xff54)
+// Miscellaneous: screen tests, random heading, grab (0x104a2-0x105d0, 0xfda2, 0xff54)
 // ---------------------------------------------------------------------------------------------
 
-/// Origine de l'écran en x (mot de A5), selon la caméra utilisée (`A5+0x36`).
+/// Screen origin in x (A5 word), depending on the camera in use (`A5+0x36`).
 fn screen_origin(b: &mut Cps2Bus) -> u16 {
     let offset = if rd8(b, A5 + 0x36) == 0 { 0x5a6 } else { 0x5ae };
     rd16(b, A5 + offset)
 }
 
-/// Table de déplacement des prises (octets signés : décalage x, décalage de hauteur, orientation, sens).
+/// Grab movement table (signed bytes: x offset, height offset, orientation, direction).
 const SEIZE_OFFSETS: u32 = 0x123652;
 
-/// 0xfe34 : l'objet A0 est ramené dans l'écran de la caméra. Rend vrai s'il l'a été.
+/// 0xfe34: object A0 is brought back into the camera's screen. Returns true if it was.
 fn keep_inside_camera(b: &mut Cps2Bus, me: u32) -> bool {
     let left = if rd8(b, A5 + 0x36) == 0 { rd16(b, A5 + 0x506) } else { rd16(b, A5 + 0x556) };
     let x = rd16(b, me + f::X) as i16;
@@ -485,26 +486,26 @@ fn keep_inside_camera(b: &mut Cps2Bus, me: u32) -> bool {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Choix d'une cible selon un critère imposé (0x43bc)
+// Choosing a target according to an imposed criterion (0x43bc)
 // ---------------------------------------------------------------------------------------------
 
 
 // ---------------------------------------------------------------------------------------------
-// Tirages par tables : attitude, riposte, esquive (0x788c, 0x79ce, 0x79f6, 0xb048, 0xb068, 0xf118,
-// 0x10112). Une table de pointeurs (longs) est indexée par un octet de l'objet ; la ligne choisie est
-// lue au hasard (octets) ou par le compteur d'images (masques de 32 bits, un bit tiré au hasard).
+// Table-driven draws: stance, counterattack, dodge (0x788c, 0x79ce, 0x79f6, 0xb048, 0xb068, 0xf118,
+// 0x10112). A pointer table (longs) is indexed by a byte of the object; the chosen row is
+// read at random (bytes) or by the frame counter (32-bit masks, a randomly drawn bit).
 // ---------------------------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------------------------
-// Débris et butin (0x11a36, 0x1172e, 0xb648, 0xb780, 0xbad6, 0xe2f6)
+// Debris and loot (0x11a36, 0x1172e, 0xb648, 0xb780, 0xbad6, 0xe2f6)
 // ---------------------------------------------------------------------------------------------
 
-/// Alloue par `alloc` (0x2318, 0x23d8) : l'objet, ou `None` si le pool est plein.
+/// Allocates through `alloc` (0x2318, 0x23d8): the object, or `None` if the pool is full.
 fn alloc(b: &mut Cps2Bus, pool: &pools::Pool) -> Option<u32> {
     pool.alloc(b).map(|o| o.0)
 }
 
-/// Copie la position de `from` dans `to`, posée 16 pixels plus haut et juste devant.
+/// Copies the position of `from` to `to`, set 16 pixels higher and just in front.
 fn place_above(b: &mut Cps2Bus, from: u32, to: u32) {
     for field in [0x08, 0x0c, 0x10] {
         let v = rd16(b, from + field);
@@ -516,9 +517,9 @@ fn place_above(b: &mut Cps2Bus, from: u32, to: u32) {
     wr16(b, to + 0x10, depth);
 }
 
-/// Débris (EFFCT de type 0x32, variante 0xc) : `+0x58`/`+0x18` puis vitesses lus dans la table A2,
-/// décalage et vitesse en x retournés si l'objet regarde à gauche. Une ligne n'est consommée que si
-/// l'effet a pu être créé.
+/// Debris (EFFCT of type 0x32, variant 0xc): `+0x58`/`+0x18` then speeds read from the table A2,
+/// offset and x speed flipped if the object faces left. A row is only consumed if
+/// the effect could be created.
 fn debris(b: &mut Cps2Bus, fx: u32, me: u32) {
     wr8(b, fx, 1);
     wr8(b, fx + 2, 0x32);
@@ -527,8 +528,8 @@ fn debris(b: &mut Cps2Bus, fx: u32, me: u32) {
     wr16(b, fx + 0x08, x);
 }
 
-/// Butin lancé en l'air (ITEM de genre `kind`, variante `variant`) : vitesses (±0x140, -0x28 en z...),
-/// retournées si `mirrored`.
+/// Loot thrown into the air (ITEM of kind `kind`, variant `variant`): speeds (±0x140, -0x28 in z...),
+/// flipped if `mirrored`.
 fn tossed_item(b: &mut Cps2Bus, me: u32, item: u32, kind: u8, variant: u8, vy: u16, mirrored: bool) {
     wr8(b, item, 1);
     wr8(b, item + 2, kind);
@@ -546,7 +547,7 @@ fn tossed_item(b: &mut Cps2Bus, me: u32, item: u32, kind: u8, variant: u8, vy: u
     }
 }
 
-/// Nombre de tirages de butin : deux à plus de trois joueurs en vie, sinon un.
+/// Number of loot draws: two with more than three players alive, otherwise one.
 fn loot_rolls(b: &mut Cps2Bus) -> u16 {
     if rd8(b, A5 + 0x35) > 3 {
         2
@@ -555,11 +556,12 @@ fn loot_rolls(b: &mut Cps2Bus) -> u16 {
     }
 }
 
-/// Objet spécial tiré par 0xbad6 : genre et variante.
+/// Special object drawn by 0xbad6: kind and variant.
 const DRAWN_KIND: u32 = A5 - 0x7196;
 const DRAWN_VARIANT: u32 = A5 - 0x7195;
 
-/// Tables de 0xbad6 (lues comme données, A1 = `lea` de la table) : ligne `+0x80` (paires genre, variante), puis par difficulté (`A5+0x49`).
+/// Tables of 0xbad6 (read as data, A1 = `lea` of the table): row `+0x80` (kind, variant pairs), then by difficulty
+/// (`A5+0x49`).
 mod special {
     pub const ROWS: u32 = 0xbf26;
     pub const COMMON: u32 = 0xc4c6;
@@ -572,28 +574,28 @@ mod special {
     pub const MAGE_OR_CLERIC: u32 = 0xdd36;
 }
 
-/// Classes de personnage (`+3` / 2 d'un joueur) qui comptent pour le butin spécial.
+/// Character classes (`+3` / 2 of a player) that count for the special loot.
 const CLERIC: u8 = 1;
 const ELF: u8 = 2;
 const MAGE: u8 = 4;
 
-/// Étapes du tirage de 0xbad6 (les étiquettes de l'original).
+/// Steps of the 0xbad6 draw (the labels of the original).
 #[derive(Clone, Copy)]
 enum Draw {
-    /// 0xbaf2 : ligne de l'objet.
+    /// 0xbaf2: row of the object.
     Row,
-    /// 0xbb20 : objet commun, ou de genre 7 si un clerc, un elfe ou un magicien est en jeu.
+    /// 0xbb20: common object, or of kind 7 if a cleric, an elf or a magician is in play.
     Common,
-    /// 0xbba8 : paire (genre, variante) tirée.
+    /// 0xbba8: (kind, variant) pair drawn.
     Pair,
-    /// 0xbbda : genre 2.
+    /// 0xbbda: kind 2.
     Kind2,
-    /// 0xbc02 : selon les classes en jeu.
+    /// 0xbc02: according to the classes in play.
     ByClass,
-    /// 0xbcb4 : certains objets sont réservés à des classes ; sinon l'objet est lâché.
+    /// 0xbcb4: certain objects are reserved for classes; otherwise the object is dropped.
     Restrict,
     Spawn,
-    /// 0xbf20 : tirage suivant.
+    /// 0xbf20: next draw.
     Next,
 }
 
@@ -604,7 +606,7 @@ fn set_drawn(b: &mut Cps2Bus, kind: u8, variant: u8) {
     wr8(b, DRAWN_KIND, kind);
     wr8(b, DRAWN_VARIANT, variant);
 }
-/// Nouvelle variante de genre 4 tirée dans `at` : 0 annule le tirage, 1 et 2 renvoient aux tirages `on_1`, `on_2`.
+/// New kind 4 variant drawn in `at`: 0 cancels the draw, 1 and 2 refer back to the draws `on_1`, `on_2`.
 fn redraw(b: &mut Cps2Bus, at: u32, on_1: Draw, on_2: Draw) -> Draw {
     let variant = rd8(b, at);
     set_drawn(b, 4, variant);
@@ -622,36 +624,36 @@ fn reroll_or_none(b: &mut Cps2Bus, at: u32) -> Draw {
     if variant == 0 { Draw::Next } else { Draw::Spawn }
 }
 
-/// Routines d'atterrissage par type (longs du code) : ennemis (classe 2) aux indices 0..31, boss ensuite.
+/// Landing routines by type (longs of the code): enemies (class 2) at indices 0..31, bosses afterwards.
 const LANDING_BY_KIND: u32 = 0x3e49c;
 
 
 // ---------------------------------------------------------------------------------------------
-// Cœurs du lot IA : chaque routine d'origine est une fonction Rust sur l'objet traité, sans registre.
+// Cores of the AI batch: each original routine is a Rust function on the processed object, without registers.
 // ---------------------------------------------------------------------------------------------
 
-/// Champs de l'ennemi propres à ces aides.
+/// Enemy fields specific to these helpers.
 mod g {
-    /// Clé d'animation de la variante (7 bits) et durée de l'entrée courante.
+    /// Animation key of the variant (7 bits) and duration of the current entry.
     pub const VARIANT_KEY: u32 = 0x33;
     pub const ANIM_TIMER: u32 = 0x30;
-    /// Marque de l'entrée d'animation (type de coup), recopiée en `+0x44` après chaque pas.
+    /// Mark of the animation entry (hit type), copied to `+0x44` after each step.
     pub const ANIM_MARK: u32 = 0x3e;
     pub const ANIM_MARK_COPY: u32 = 0x44;
-    /// Maître (pointeur de 16 bits) dont la variante ou la marque choisit l'animation.
+    /// Master (16-bit pointer) whose variant or mark chooses the animation.
     pub const MASTER: u32 = 0xb2;
-    /// Point visé (x, profondeur), jeu de points et numéro du dernier point retenu.
+    /// Targeted point (x, depth), point set and number of the last point retained.
     pub const GOAL_X: u32 = 0x7a;
     pub const GOAL_DEPTH: u32 = 0x7c;
     pub const POINT_SET: u32 = 0x79;
     pub const LAST_POINT: u32 = 0x99;
-    /// Paliers de PV : palier courant, nombre de paliers, colonne (rang de PV).
+    /// HP tiers: current tier, number of tiers, column (HP rank).
     pub const LEVEL: u32 = 0xaa;
     pub const LEVELS: u32 = 0xab;
-    /// Paramètre de comportement (et compte à rebours de 0xff54).
+    /// Behaviour parameter (and countdown of 0xff54).
     pub const BEHAVIOUR: u32 = 0x98;
-    /// Lignes des tables de tirage : `+0x6a` → `+0x6b`, `+0x6c` (masques) et `+0x6d` → `+0x6e`, `+0x8e` →
-    /// `+0x85` (`+0x84` : hors de l'écran).
+    /// Rows of the draw tables: `+0x6a` → `+0x6b`, `+0x6c` (masks) and `+0x6d` → `+0x6e`, `+0x8e` →
+    /// `+0x85` (`+0x84`: off screen).
     pub const ROW_6A: u32 = 0x6a;
     pub const DRAW_6B: u32 = 0x6b;
     pub const ROW_6C: u32 = 0x6c;
@@ -660,22 +662,22 @@ mod g {
     pub const OFFSCREEN_84: u32 = 0x84;
     pub const DRAW_85: u32 = 0x85;
     pub const ROW_8E: u32 = 0x8e;
-    /// Niveau de parade (0x10112).
+    /// Parry level (0x10112).
     pub const PARRY_LEVEL: u32 = 0x68;
-    /// Butin : ligne des tables (`+0x80`), masque et drapeau de l'objet lâché une seule fois.
+    /// Loot: table row (`+0x80`), mask and flag of the object dropped only once.
     pub const LOOT_ROW: u32 = 0x80;
     pub const ONCE_MASK: u32 = 0x9c;
     pub const ONCE_DONE: u32 = 0x9d;
 }
 
-/// L'objet désigné par le mot `pointer` (étendu en signe, comme `movea.w`).
+/// The object designated by the word `pointer` (sign-extended, like `movea.w`).
 fn linked(pointer: u16) -> Obj {
     Obj(object(pointer))
 }
 
-// --- animations par table (0x103e0, 0x10428, 0x10450) ----------------------------------------------
+// --- table-driven animations (0x103e0, 0x10428, 0x10450) -----------------------------------------
 
-/// Première entrée (16 octets) du jeu `set` dont l'octet `+3` vaut `key` sous `mask`.
+/// First entry (16 bytes) of set `set` whose byte `+3` equals `key` under `mask`.
 fn find_animation(b: &mut Cps2Bus, set: u32, key: u8, mask: u8) -> u32 {
     let mut at = set;
     while rd8(b, at + 3) & mask != key & mask {
@@ -684,14 +686,14 @@ fn find_animation(b: &mut Cps2Bus, set: u32, key: u8, mask: u8) -> u32 {
     at
 }
 
-/// Recopie de la marque d'animation (0x1046c).
+/// Copy of the animation mark (0x1046c).
 fn copy_mark(b: &mut Cps2Bus, o: Obj) {
     let v = o.u8(b, g::ANIM_MARK);
     o.set_u8(b, g::ANIM_MARK_COPY, v);
 }
 
-/// 0x103e0 : démarre l'animation du jeu `set` de même clé que la variante courante (`+0x33`), en gardant la durée
-/// de l'entrée courante.
+/// 0x103e0: starts the animation of set `set` with the same key as the current variant (`+0x33`), keeping the duration
+/// of the current entry.
 pub fn animation_by_variant(b: &mut Cps2Bus, o: Obj, set: u32) {
     let timer = o.u16(b, g::ANIM_TIMER);
     let key = o.u8(b, g::VARIANT_KEY);
@@ -701,7 +703,7 @@ pub fn animation_by_variant(b: &mut Cps2Bus, o: Obj, set: u32) {
     copy_mark(b, o);
 }
 
-/// 0x10428 : démarre l'animation du jeu `set` de même clé que la variante du maître (`+0xb2`).
+/// 0x10428: starts the animation of set `set` with the same key as the master's variant (`+0xb2`).
 pub fn animation_of_master(b: &mut Cps2Bus, o: Obj, set: u32) {
     let master = linked(o.u16(b, g::MASTER));
     let key = master.u8(b, g::VARIANT_KEY);
@@ -710,7 +712,7 @@ pub fn animation_of_master(b: &mut Cps2Bus, o: Obj, set: u32) {
     copy_mark(b, o);
 }
 
-/// 0x10450 : démarre l'animation du jeu `set` dont la marque (`+3`) est celle de l'entrée courante du maître.
+/// 0x10450: starts the animation of set `set` whose mark (`+3`) is that of the master's current entry.
 pub fn animation_of_mark(b: &mut Cps2Bus, o: Obj, set: u32) {
     let master = linked(o.u16(b, g::MASTER));
     let key = master.u8(b, g::ANIM_MARK);
@@ -718,15 +720,15 @@ pub fn animation_of_mark(b: &mut Cps2Bus, o: Obj, set: u32) {
     crate::objects::anim::start_entry(b, o, at);
 }
 
-// --- joueurs et paliers (0x10474, 0x104a2, 0x105b6) -----------------------------------------------
+// --- players and tiers (0x10474, 0x104a2, 0x105b6) -------------------------------------------------
 
-/// 0x10474 : au moins un joueur est en vie.
+/// 0x10474: at least one player is alive.
 pub fn players_alive(b: &mut Cps2Bus) -> bool {
     crate::ram::PLAYERS_ALIVE.get(b) != 0
 }
 
-/// 0x104a2 : `o` est-il hors de la bande `[écran + left, écran + right]` (bornes exclues de l'intérieur) ? L'écran
-/// est l'origine de la caméra d'affichage (`A5+0x5a6`, ou `A5+0x5ae` en mode deux caméras).
+/// 0x104a2: is `o` outside the strip `[screen + left, screen + right]` (limits excluded from the inside)? The screen
+/// is the origin of the display camera (`A5+0x5a6`, or `A5+0x5ae` in two-camera mode).
 pub fn outside_band(b: &mut Cps2Bus, o: Obj, left: u16, right: u16) -> bool {
     let origin = screen_origin(b);
     let x = o.u16(b, Obj::X) as i16;
@@ -734,8 +736,8 @@ pub fn outside_band(b: &mut Cps2Bus, o: Obj, left: u16, right: u16) -> bool {
     low >= x || high <= x
 }
 
-/// 0x105b6 : franchit le palier de PV suivant (`+0xaa` < `+0xab`) si son seuil dans `table` (ligne du palier,
-/// colonne `+0xac`, mots) atteint les PV (`+0x62`). Vrai si un palier est passé.
+/// 0x105b6: passes the next HP tier (`+0xaa` < `+0xab`) if its threshold in `table` (tier row,
+/// column `+0xac`, words) reaches the HP (`+0x62`). True if a tier is passed.
 pub fn next_threshold(b: &mut Cps2Bus, o: Obj, table: u32) -> bool {
     let level = o.u8(b, g::LEVEL) as i8;
     if level >= o.u8(b, g::LEVELS) as i8 {
@@ -751,20 +753,20 @@ pub fn next_threshold(b: &mut Cps2Bus, o: Obj, table: u32) -> bool {
     true
 }
 
-// --- points de marche autour de la cible (0xe76c, 0xe7fa, 0xe886, 0xe914, 0xeff2, 0xf084) ------------
+// --- walking points around the target (0xe76c, 0xe7fa, 0xe886, 0xe914, 0xeff2, 0xf084) --------------
 
-/// Le point de marche retenu : le plus proche ou le plus éloigné de `o`.
+/// The walking point retained: the nearest or the farthest from `o`.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Pick {
     Nearest,
     Farthest,
 }
 
-/// Retient, parmi les points de la table de `o` (`+0x79`) autour de sa cible, celui qui est le plus proche (à
-/// égalité, le dernier) ou le plus éloigné (à égalité, le premier) de `o`, et le range en `+0x7a`/`+0x7c` (la
-/// position de la cible si aucun). `skip` : numéro de point sauté sans lire sa paire (glitch d'origine : les
-/// points suivants prennent la paire décalée) ; le point retenu est alors noté en `+0x99`. `mirror` : décalages en
-/// x retournés si la cible regarde à gauche. Rend le point retenu.
+/// Retains, among the points of the table of `o` (`+0x79`) around its target, the one that is nearest (on a
+/// tie, the last) or farthest (on a tie, the first) from `o`, and stores it at `+0x7a`/`+0x7c` (the
+/// target's position if none). `skip`: point number skipped without reading its pair (original glitch: the following
+/// points take the shifted pair); the point retained is then noted at `+0x99`. `mirror`: x offsets
+/// flipped if the target faces left. Returns the point retained.
 fn pick_point(b: &mut Cps2Bus, o: Obj, table: u32, pick: Pick, skip: Option<u8>, mirror: bool) -> (u16, u16) {
     let target = linked(o.u16(b, crate::ai::f::TARGET));
     let set = o.u8(b, g::POINT_SET) as u32;
@@ -803,20 +805,20 @@ fn pick_point(b: &mut Cps2Bus, o: Obj, table: u32, pick: Pick, skip: Option<u8>,
     (o.u16(b, g::GOAL_X), o.u16(b, g::GOAL_DEPTH))
 }
 
-/// `o` est-il à plus de 384 pixels à droite du bord gauche de la caméra en service ?
+/// Is `o` more than 384 pixels to the right of the left edge of the camera in service?
 fn far_from_camera(b: &mut Cps2Bus, o: Obj) -> bool {
     let (camera, _) = crate::ram::camera(b);
     o.u16(b, Obj::X).wrapping_sub(camera) > 0x180
 }
 
-/// 0xf084 : vise le point le plus éloigné autour de la cible et tourne d'un cran vers lui.
+/// 0xf084: aims at the farthest point around the target and turns one notch towards it.
 pub fn walk_far_point(b: &mut Cps2Bus, o: Obj) {
     let goal = pick_point(b, o, WALK_POINTS, Pick::Farthest, None, false);
     crate::ai::turn_toward(b, o, goal);
 }
 
-/// 0xe76c : vise le point le plus proche autour de la cible (loin de la caméra : le plus éloigné, 0xf084) et
-/// tourne d'un cran vers lui. Rien sans cible.
+/// 0xe76c: aims at the nearest point around the target (far from the camera: the farthest, 0xf084) and
+/// turns one notch towards it. Nothing without a target.
 pub fn approach_target(b: &mut Cps2Bus, o: Obj) {
     if o.u16(b, crate::ai::f::TARGET) == 0 {
         return;
@@ -828,7 +830,7 @@ pub fn approach_target(b: &mut Cps2Bus, o: Obj) {
     crate::ai::turn_toward(b, o, goal);
 }
 
-/// 0xeff2 : comme `approach_target` (sans le cas lointain), les décalages retournés selon le sens de la cible.
+/// 0xeff2: like `approach_target` (without the far case), the offsets flipped according to the target's direction.
 pub fn walk_near_point(b: &mut Cps2Bus, o: Obj) {
     if o.u16(b, crate::ai::f::TARGET) == 0 {
         return;
@@ -837,8 +839,8 @@ pub fn walk_near_point(b: &mut Cps2Bus, o: Obj) {
     crate::ai::turn_toward(b, o, goal);
 }
 
-/// 0xe886 : retient le point le plus éloigné autour de la cible, sauf le dernier retenu (`+0x99`) ; loin de la
-/// caméra, vise tout de suite un point lointain (0xf084). Rien sans cible.
+/// 0xe886: retains the farthest point around the target, except the last one retained (`+0x99`); far from the
+/// camera, aims straight away at a far point (0xf084). Nothing without a target.
 pub fn choose_walk_point(b: &mut Cps2Bus, o: Obj) {
     if o.u16(b, crate::ai::f::TARGET) == 0 {
         return;
@@ -850,7 +852,7 @@ pub fn choose_walk_point(b: &mut Cps2Bus, o: Obj) {
     pick_point(b, o, WALK_POINTS, Pick::Farthest, Some(last), false);
 }
 
-/// 0xe914 : le point visé est-il atteint (à 8 pixels près sur chaque axe) ? Alors un autre est choisi (0xe886).
+/// 0xe914: is the targeted point reached (to within 8 pixels on each axis)? Then another is chosen (0xe886).
 pub fn walk_point_reached(b: &mut Cps2Bus, o: Obj) {
     let near = |goal: u16, here: u16| goal.wrapping_sub(here).wrapping_add(8) <= 16;
     let (gx, x) = (o.u16(b, g::GOAL_X), o.u16(b, Obj::X));
@@ -860,8 +862,8 @@ pub fn walk_point_reached(b: &mut Cps2Bus, o: Obj) {
     }
 }
 
-/// 0xe7fa : retient le point le plus proche autour de la cible et note son numéro (`+0x99`, 0xff si aucun) ; loin
-/// de la caméra, vise un point lointain (0xf084). Rien sans cible.
+/// 0xe7fa: retains the nearest point around the target and notes its number (`+0x99`, 0xff if none); far
+/// from the camera, aims at a far point (0xf084). Nothing without a target.
 pub fn choose_near_walk_point(b: &mut Cps2Bus, o: Obj) {
     if o.u16(b, crate::ai::f::TARGET) == 0 {
         return;
@@ -892,15 +894,15 @@ pub fn choose_near_walk_point(b: &mut Cps2Bus, o: Obj) {
     }
 }
 
-// --- prises (0xfc44, 0xfd64, 0xfd8c, 0xfda2) --------------------------------------------------------
+// --- grabs (0xfc44, 0xfd64, 0xfd8c, 0xfda2) --------------------------------------------------------
 
-/// 0xfc44 : un joueur est-il touché par la boîte d'attaque `attack` de `o` ? Rend le premier touché.
+/// 0xfc44: is a player hit by the attack box `attack` of `o`? Returns the first one hit.
 pub fn attack_hits_a_player(b: &mut Cps2Bus, o: Obj, attack: u8) -> Option<Obj> {
     let boxes = ATTACK_BOXES.wrapping_add(offset((attack as u16) << 3));
     crate::ram::PLAYERS.iter().find(|p| player_hit(b, o.0, boxes, p.0))
 }
 
-/// 0xfd64 : le joueur `player` est saisi par `o` (animation de prise `anim` de `o`).
+/// 0xfd64: player `player` is grabbed by `o` (grab animation `anim` of `o`).
 pub fn seize_player(b: &mut Cps2Bus, o: Obj, player: Obj, anim: u8) {
     player.set_u32(b, Obj::STATE, 0x0204_3200);
     player.set_u8(b, Obj::ACTIVE, 2);
@@ -911,15 +913,15 @@ pub fn seize_player(b: &mut Cps2Bus, o: Obj, player: Obj, anim: u8) {
     o.set_u8(b, f::SUB_STATE, anim);
 }
 
-/// 0xfd8c : le joueur `player` est relâché (action 0x34).
+/// 0xfd8c: player `player` is released (action 0x34).
 pub fn release_player(b: &mut Cps2Bus, player: Obj) {
     player.set_u32(b, Obj::STATE, 0x0204_0000);
     player.set_u8(b, f::SUB_STATE, 0x34);
     player.set_u8(b, 0x188, 0);
 }
 
-/// 0xfda2 : `o` est ramené dans l'écran, puis l'objet qu'il tient (`+0x50`) le suit selon l'étape (`+0x3e`) de
-/// l'animation de prise (table des déplacements : x, hauteur, orientation, sens de `+0x12`).
+/// 0xfda2: `o` is brought back into the screen, then the object it holds (`+0x50`) follows it according to the step
+/// (`+0x3e`) of the grab animation (movement table: x, height, orientation, direction of `+0x12`).
 pub fn hold_seized(b: &mut Cps2Bus, o: Obj) {
     let me = o.0;
     keep_inside_camera(b, me);
@@ -965,13 +967,13 @@ pub fn hold_seized(b: &mut Cps2Bus, o: Obj) {
     wr16(b, me + 0x12, v);
 }
 
-// --- états et paramètres (0xff54, 0xfffc) --------------------------------------------------------------
+// --- states and parameters (0xff54, 0xfffc) ---------------------------------------------------------
 
-/// Masques (mots, par joueurs en vie et rang) de 0xff54.
+/// Masks (words, by players alive and rank) of 0xff54.
 const COUNTDOWN_MASKS: u32 = 0xff9a;
 
-/// 0xff54 : compte à rebours `+0x98` ; à son terme, et si le bit tiré dans le masque des joueurs en vie et du rang
-/// est levé, état 0x020e0000 ; sinon `o` reste (ou redevient) actif à l'état 0x04040200.
+/// 0xff54: countdown `+0x98`; at its end, and if the bit drawn in the mask of the players alive and the rank
+/// is set, state 0x020e0000; otherwise `o` stays (or becomes again) active in state 0x04040200.
 pub fn countdown_then_state(b: &mut Cps2Bus, o: Obj) {
     let left = o.u8(b, g::BEHAVIOUR).wrapping_sub(1);
     o.set_u8(b, g::BEHAVIOUR, left);
@@ -991,20 +993,20 @@ pub fn countdown_then_state(b: &mut Cps2Bus, o: Obj) {
     o.set_u32(b, Obj::STATE, 0x020e_0000);
 }
 
-/// Paramètre de comportement par type de 0xfffc.
+/// Behaviour parameter by type of 0xfffc.
 const BEHAVIOUR_BY_KIND: u32 = 0x1000a;
 
-/// 0xfffc : paramètre de comportement `+0x98` de `o`, selon son type.
+/// 0xfffc: behaviour parameter `+0x98` of `o`, according to its type.
 pub fn behaviour_by_kind(b: &mut Cps2Bus, o: Obj) {
     let kind = o.u8(b, Obj::KIND) as u32;
     let v = crate::mem::prog8(b, BEHAVIOUR_BY_KIND + kind);
     o.set_u8(b, g::BEHAVIOUR, v);
 }
 
-// --- tirages par tables (0x788c, 0x79ce, 0x79f6, 0xb048, 0xb068, 0xf118, 0x10112) ---------------------
+// --- table-driven draws (0x788c, 0x79ce, 0x79f6, 0xb048, 0xb068, 0xf118, 0x10112) ------------------
 
-/// Masque de 32 bits de la ligne `number` de la table `pointers`, choisi par le rang ; un de ses bits est tiré :
-/// vrai s'il est levé.
+/// 32-bit mask of row `number` of the table `pointers`, chosen by the rank; one of its bits is drawn:
+/// true if it is set.
 fn rank_mask_roll(b: &mut Cps2Bus, pointers: u32, number: u8) -> bool {
     let row = rd32(b, pointers + 4 * number as u32);
     let tick = rd16(b, TICK);
@@ -1013,21 +1015,21 @@ fn rank_mask_roll(b: &mut Cps2Bus, pointers: u32, number: u8) -> bool {
     mask >> roll & 1 != 0
 }
 
-/// Octet tiré au hasard (32 choix) dans la ligne `number` de la table `pointers`.
+/// Byte drawn at random (32 choices) in row `number` of the table `pointers`.
 fn random_byte(b: &mut Cps2Bus, pointers: u32, number: u8) -> u8 {
     let row = rd32(b, pointers + 4 * number as u32);
     let roll = rng::random(b) as u32 & 31;
     rd8(b, row + roll)
 }
 
-/// 0x788c : `+0x6b` tiré dans la ligne `+0x6a`.
+/// 0x788c: `+0x6b` drawn in row `+0x6a`.
 pub fn draw_6b(b: &mut Cps2Bus, o: Obj) {
     let number = o.u8(b, g::ROW_6A);
     let v = random_byte(b, 0x78ae, number);
     o.set_u8(b, g::DRAW_6B, v);
 }
 
-/// 0x79f6 : dans la zone de jeu, `+0x6e` est tiré dans la ligne `+0x6d` ; sinon il vaut 1.
+/// 0x79f6: inside the play area, `+0x6e` is drawn in row `+0x6d`; otherwise it is 1.
 pub fn draw_6e(b: &mut Cps2Bus, o: Obj) {
     let v = if crate::objects::cull::in_arena(b, o, 0) {
         let number = o.u8(b, g::ROW_6D);
@@ -1038,7 +1040,7 @@ pub fn draw_6e(b: &mut Cps2Bus, o: Obj) {
     o.set_u8(b, g::DRAW_6E, v);
 }
 
-/// 0x79ce : si le bit tiré dans le masque de la ligne `+0x6c` est levé, `draw_6e` et vrai ; sinon faux.
+/// 0x79ce: if the bit drawn in the mask of row `+0x6c` is set, `draw_6e` and true; otherwise false.
 pub fn maybe_draw_6e(b: &mut Cps2Bus, o: Obj) -> bool {
     let number = o.u8(b, g::ROW_6C);
     if !rank_mask_roll(b, 0x7a34, number) {
@@ -1048,15 +1050,15 @@ pub fn maybe_draw_6e(b: &mut Cps2Bus, o: Obj) -> bool {
     true
 }
 
-/// Les deux tables de parade : ligne `+0x68` (0xb048) ou `+0x69` (0xb068) de la victime.
+/// The two parry tables: row `+0x68` (0xb048) or `+0x69` (0xb068) of the victim.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Parry {
     A,
     B,
 }
 
-/// 0xb048 / 0xb068 : la victime `victim` pare-t-elle le coup de `attacker` ? Il faut qu'elle sache parer (`+0x67`),
-/// soit au sol et face à l'agresseur ; un bit est alors tiré dans le masque de sa ligne de parade.
+/// 0xb048 / 0xb068: does the victim `victim` parry the hit of `attacker`? It must know how to parry (`+0x67`),
+/// be on the ground and face the aggressor; a bit is then drawn in the mask of its parry row.
 pub fn parries(b: &mut Cps2Bus, attacker: Obj, victim: Obj, table: Parry) -> bool {
     let facing = attacker.u8(b, f::FACING);
     if victim.u8(b, 0x67) == 0 || victim.u16(b, Obj::Z) != 0 || facing == victim.u8(b, f::FACING) {
@@ -1070,8 +1072,8 @@ pub fn parries(b: &mut Cps2Bus, attacker: Obj, victim: Obj, table: Parry) -> boo
     rank_mask_roll(b, 0xb0b0, number)
 }
 
-/// 0xf118 : hors de la zone de jeu, `+0x84` = 1 ; sinon `+0x84` = 0 et `+0x85` est tiré dans la ligne `+0x8e`, bloc
-/// choisi par le rang (32 octets par paire de rangs).
+/// 0xf118: outside the play area, `+0x84` = 1; otherwise `+0x84` = 0 and `+0x85` is drawn in row `+0x8e`, block
+/// chosen by the rank (32 bytes per pair of ranks).
 pub fn draw_84(b: &mut Cps2Bus, o: Obj) {
     if !crate::objects::cull::in_arena(b, o, 0) {
         o.set_u16(b, g::OFFSCREEN_84, 1);
@@ -1086,11 +1088,11 @@ pub fn draw_84(b: &mut Cps2Bus, o: Obj) {
     o.set_u8(b, g::OFFSCREEN_84, 0);
 }
 
-/// Niveaux de parade par niveau de scène et joueurs en vie de 0x10112.
+/// Parry levels by scene level and players alive of 0x10112.
 const PARRY_LEVELS: u32 = 0x10144;
 
-/// 0x10112 : niveau de parade `+0x68` = 8 sans niveau de scène (`A5+0x5a`), sinon lu selon lui (plafonné à 4) et le
-/// nombre de joueurs en vie.
+/// 0x10112: parry level `+0x68` = 8 without a scene level (`A5+0x5a`), otherwise read according to it (capped at 4)
+/// and the number of players alive.
 pub fn set_68(b: &mut Cps2Bus, o: Obj) {
     let level = rd8(b, A5 + 0x5a);
     let v = if level == 0 {
@@ -1103,10 +1105,10 @@ pub fn set_68(b: &mut Cps2Bus, o: Obj) {
     o.set_u8(b, g::PARRY_LEVEL, v);
 }
 
-// --- poussée des joueurs (0x115e2) -----------------------------------------------------------------------
+// --- push of the players (0x115e2) ----------------------------------------------------------------
 
-/// 0x115e2 : le boss `o` pousse chaque joueur présent devant lui, sauf le voleur ou le nain dans leur état 26
-/// (`+0x6a`), un joueur en sortie (`+0x66`) ou protégé (`+0x188`).
+/// 0x115e2: boss `o` pushes each player present in front of it, except the thief or the dwarf in their state 26
+/// (`+0x6a`), a player exiting (`+0x66`) or protected (`+0x188`).
 pub fn push_players(b: &mut Cps2Bus, o: Obj) {
     for p in crate::ram::PLAYERS.iter() {
         let player = p.0;
@@ -1122,13 +1124,13 @@ pub fn push_players(b: &mut Cps2Bus, o: Obj) {
     }
 }
 
-// --- débris et butin (0x1172e, 0x11a36, 0xb648, 0xb780, 0xbad6, 0xe2f6) --------------------------------
+// --- debris and loot (0x1172e, 0x11a36, 0xb648, 0xb780, 0xbad6, 0xe2f6) --------------------------
 
-/// Jeux de débris de 0x1172e.
+/// Debris sets of 0x1172e.
 const DEBRIS_SETS: u32 = 0x1178a;
 
-/// 0x1172e : jeu de débris n° `set` (table : nombre - 1, puis lignes de 4 mots : décalage x, vitesse x, `+0x18`,
-/// `+0x58`) autour de `o`, retournés si `o` regarde à gauche. Une ligne n'est lue que si l'effet a pu être créé.
+/// 0x1172e: debris set no. `set` (table: number - 1, then rows of 4 words: x offset, x speed, `+0x18`,
+/// `+0x58`) around `o`, flipped if `o` faces left. A row is only read if the effect could be created.
 pub fn debris_set(b: &mut Cps2Bus, o: Obj, set: u16) {
     let mut at = crate::mem::prog32(b, DEBRIS_SETS.wrapping_add(offset(set.wrapping_mul(4))));
     let mut next = |b: &mut Cps2Bus| {
@@ -1160,11 +1162,11 @@ pub fn debris_set(b: &mut Cps2Bus, o: Obj, set: u16) {
     }
 }
 
-/// Lignes des débris au sol de 0x11a36 (la seconde si `second`).
+/// Rows of the ground debris of 0x11a36 (the second if `second`).
 const GROUND_DEBRIS: [u32; 2] = [0x11a9e, 0x11ada];
 
-/// 0x11a36 : cinq débris au sol (profondeur `A5+0x5aa`), lignes de 6 mots (décalage x, vitesse x, vitesse z,
-/// `+0x18`, décalage en profondeur, `+0x1c`), retournés si `o` regarde à gauche ; puis le son 0xede08.
+/// 0x11a36: five pieces of ground debris (depth `A5+0x5aa`), rows of 6 words (x offset, x speed, z speed,
+/// `+0x18`, depth offset, `+0x1c`), flipped if `o` faces left; then the sound 0xede08.
 pub fn ground_debris(b: &mut Cps2Bus, o: Obj, second: bool) {
     let mut at = GROUND_DEBRIS[second as usize];
     let mut next = |b: &mut Cps2Bus| {
@@ -1200,18 +1202,18 @@ pub fn ground_debris(b: &mut Cps2Bus, o: Obj, second: bool) {
     crate::sound::play(b, 0xede08, o);
 }
 
-/// Objet lâché une seule fois par type de 0xb648 (genre 2 ; 0 : rien), et masques de chance.
+/// Object dropped only once per type by 0xb648 (kind 2; 0: nothing), and luck masks.
 const ONCE_VARIANTS: u32 = 0xb6e4;
 const ONCE_MASKS: u32 = 0xb6fc;
 
-/// Lance un objet en l'air au-dessus de `o` (genre `kind`, variante `variant`) : vitesses ±0x140 en x, 0x300 vers
-/// le haut, `vy` en profondeur, retournées si `mirrored`.
+/// Throws an object into the air above `o` (kind `kind`, variant `variant`): speeds ±0x140 in x, 0x300 upwards,
+/// `vy` in depth, flipped if `mirrored`.
 fn toss_item(b: &mut Cps2Bus, o: Obj, item: u32, kind: u8, variant: u8, vy: u16, mirrored: bool) {
     tossed_item(b, o.0, item, kind, variant, vy, mirrored);
 }
 
-/// 0xb648 : une seule fois par objet (`+0x9d`), si le bit tiré dans le masque `+0x9c` est levé, lâche l'objet de
-/// genre 2 propre à son type (rien pour une variante nulle), lancé d'un côté tiré au hasard.
+/// 0xb648: only once per object (`+0x9d`), if the bit drawn in the mask `+0x9c` is set, drops the kind 2 object
+/// specific to its type (nothing for a zero variant), thrown to a randomly drawn side.
 pub fn drop_once(b: &mut Cps2Bus, o: Obj) {
     if o.u8(b, g::ONCE_DONE) != 0 {
         return;
@@ -1238,10 +1240,10 @@ pub fn drop_once(b: &mut Cps2Bus, o: Obj) {
     }
 }
 
-/// Butin par ligne (`+0x80`, 16 tirages) de 0xb780 ; variante négative : rien.
+/// Loot by row (`+0x80`, 16 draws) of 0xb780; negative variant: nothing.
 const LOOT: u32 = 0xb806;
 
-/// 0xb780 : butin de `o`, un ou deux tirages selon le nombre de joueurs ; le second lancé de l'autre côté.
+/// 0xb780: loot of `o`, one or two draws depending on the number of players; the second thrown to the other side.
 pub fn drop_loot(b: &mut Cps2Bus, o: Obj) {
     let row = o.u8(b, g::LOOT_ROW) as u16;
     if row == 0 {
@@ -1258,14 +1260,14 @@ pub fn drop_loot(b: &mut Cps2Bus, o: Obj) {
     }
 }
 
-/// Trésors de 0xe2f6 : ligne (`+0x80`, 16 tirages) → liste (longs) d'objets de genre 5, terminée par un octet
-/// négatif.
+/// Treasures of 0xe2f6: row (`+0x80`, 16 draws) → list (longs) of kind 5 objects, ended by a negative
+/// byte.
 const TREASURE_ROWS: u32 = 0xe372;
 const TREASURE_LISTS: u32 = 0xe642;
 
-/// 0xe2f6 : trésor de `o` (un ou deux tirages) ; les objets d'une liste sont numérotés à partir de 1 (`+0x2f`) et
-/// posés au-dessus de `o`. Rend le mot bas de D2 que l'original laisse (la ligne, × 16 si elle est non nulle) et son
-/// D5 (le compteur de tirages de la boucle `dbf`, 0x0000ffff à la fin), s'il l'a écrit.
+/// 0xe2f6: treasure of `o` (one or two draws); the objects of a list are numbered from 1 (`+0x2f`) and
+/// placed above `o`. Returns the low word of D2 that the original leaves (the row, × 16 if non-zero) and its
+/// D5 (the draw counter of the `dbf` loop, 0x0000ffff at the end), if it wrote it.
 pub fn drop_treasure(b: &mut Cps2Bus, o: Obj) -> (u16, Option<u32>) {
     let row = o.u8(b, g::LOOT_ROW) as u16;
     if row == 0 {
@@ -1297,7 +1299,7 @@ pub fn drop_treasure(b: &mut Cps2Bus, o: Obj) -> (u16, Option<u32>) {
     (row << 4, Some(0xffff))
 }
 
-/// Les joueurs en jeu et en vie (présents, PV non nuls), dans l'ordre, avec leur classe (`+3` / 2).
+/// The players in play and alive (present, non-zero HP), in order, with their class (`+3` / 2).
 fn party_classes(b: &mut Cps2Bus) -> Vec<u8> {
     let mut classes = Vec::with_capacity(4);
     for p in crate::ram::PLAYERS.iter() {
@@ -1308,23 +1310,23 @@ fn party_classes(b: &mut Cps2Bus) -> Vec<u8> {
     classes
 }
 
-/// Tire une entrée de `table` à `base` + (tirage & `mask`) × `scale`.
+/// Draws an entry of `table` at `base` + (draw & `mask`) × `scale`.
 fn special_entry(b: &mut Cps2Bus, table: u32, base: u16, mask: u16, scale: u16) -> u32 {
     let roll = (rng::random(b) & mask).wrapping_mul(scale).wrapping_add(base);
     table.wrapping_add(offset(roll))
 }
 
-/// Début de la ligne de difficulté (`A5+0x49`) de `size` octets.
+/// Start of the difficulty row (`A5+0x49`) of `size` bytes.
 fn difficulty_line(b: &mut Cps2Bus, size: u16) -> u16 {
     rd8(b, A5 + 0x49) as u16 * size
 }
 
-/// 0xbad6 : objet spécial lâché par `o` (ligne `+0x80` de la table 0xbf26 : paires genre et variante, 16 tirages ;
-/// genre négatif : rien), un ou deux tirages selon le nombre de joueurs. Une variante 0 à 3 de genre 0 renvoie à
-/// des tables par difficulté (`A5+0x49`), certaines selon les classes en jeu (clerc, elfe, magicien) ; certains
-/// objets sont réservés à un groupe d'un seul genre de lanceurs de sorts (`restrict_draw`). L'objet est lancé en
-/// l'air comme le butin. Rend le mot bas de D3 que l'original laisse s'il l'a écrit (ligne de difficulté, ou
-/// classes en jeu).
+/// 0xbad6: special object dropped by `o` (row `+0x80` of the table 0xbf26: kind and variant pairs, 16 draws;
+/// negative kind: nothing), one or two draws depending on the number of players. A variant 0 to 3 of kind 0 refers to
+/// tables by difficulty (`A5+0x49`), some according to the classes in play (cleric, elf, magician); certain
+/// objects are reserved for a group of a single kind of spellcasters (`restrict_draw`). The object is thrown into
+/// the air like loot. Returns the low word of D3 that the original leaves if it wrote it (difficulty row, or
+/// classes in play).
 pub fn drop_special(b: &mut Cps2Bus, o: Obj) -> Option<u16> {
     let row = o.u8(b, g::LOOT_ROW) as u16;
     if row == 0 {
@@ -1420,15 +1422,15 @@ pub fn drop_special(b: &mut Cps2Bus, o: Obj) -> Option<u16> {
     }
 }
 
-/// 0xbcb4 : objets réservés. Genre 3 variante 5 : clercs et magiciens seulement (table 0xd776) ; genre 4 variante
-/// 15 : magiciens seulement (0xda56) ; genre 4 variantes 8 et 9 : clercs seulement (0xdbc6) ; genre 4 variantes 10
-/// et 11 : selon les magiciens et les clercs en jeu (0xdd36). Un groupe qui ne convient pas garde l'objet tiré.
+/// 0xbcb4: reserved objects. Kind 3 variant 5: clerics and magicians only (table 0xd776); kind 4 variant
+/// 15: magicians only (0xda56); kind 4 variants 8 and 9: clerics only (0xdbc6); kind 4 variants 10
+/// and 11: according to the magicians and clerics in play (0xdd36). A group that does not fit keeps the object drawn.
 fn restrict_draw(b: &mut Cps2Bus, d3: &mut Option<u16>) -> Draw {
     let (kind, variant) = drawn(b);
     match (kind, variant) {
         (3, 5) => {
             let classes = party_classes(b);
-            // la boucle de l'original s'arrête au premier joueur ni clerc ni magicien
+            // the original's loop stops at the first player that is neither cleric nor magician
             let other = classes.iter().any(|&k| k != CLERIC && k != MAGE);
             let mut bits = 0u8;
             for &k in classes.iter().take_while(|&&k| k == CLERIC || k == MAGE) {
@@ -1472,7 +1474,7 @@ fn restrict_draw(b: &mut Cps2Bus, d3: &mut Option<u16>) -> Draw {
     }
 }
 
-/// Tous les joueurs en jeu sont de la classe `class` : nouvelle variante de genre 4 tirée dans `table`.
+/// All the players in play are of class `class`: new kind 4 variant drawn in `table`.
 fn only_class_draw(b: &mut Cps2Bus, d3: &mut Option<u16>, class: u8, table: u32) -> Draw {
     if party_classes(b).iter().any(|&k| k != class) {
         return Draw::Spawn;
@@ -1483,12 +1485,12 @@ fn only_class_draw(b: &mut Cps2Bus, d3: &mut Option<u16>, class: u8, table: u32)
     reroll_or_none(b, at)
 }
 
-// --- éclair et secousse (0x103ba), atterrissage par type (0x3e480) -----------------------------------
+// --- lightning and shake (0x103ba), landing by type (0x3e480) --------------------------------------
 
-/// 0x103ba : éclair rouge, secousse de 8 images (`A5+0x4be`) et étincelle d'impact (0xb141a, vitesses `vx`, `ax`)
-/// dont la variante est remise à zéro.
-/// Glitch d'origine : l'original ne pose pas les vitesses de l'étincelle ; elle prend les D2 et D3 que laissent les
-/// routines appelées avant (les appelants les passent en clair).
+/// 0x103ba: red flash, 8-frame shake (`A5+0x4be`) and impact spark (0xb141a, speeds `vx`, `ax`)
+/// whose variant is reset to zero.
+/// Original glitch: the original does not set the spark's speeds; it takes the D2 and D3 left by the
+/// routines called before (the callers pass them in the clear).
 pub fn flash_and_shake(b: &mut Cps2Bus, o: Obj, vx: u16, ax: u16) {
     crate::palette::set_flash_color(b, crate::palette::FLASH_COLOR_RED);
     wr16(b, A5 + 0x4be, 8);
@@ -1497,9 +1499,9 @@ pub fn flash_and_shake(b: &mut Cps2Bus, o: Obj, vx: u16, ax: u16) {
     }
 }
 
-/// 0x3e480 : la routine d'atterrissage propre au type de `o` (ennemis : classe 2, types 0..31 ; boss ensuite) et
-/// l'index lu dans la table, que l'original laisse dans D0 en sautant à la routine (A1). `None` pour les types sans
-/// routine (un simple `rts` : 0x3e2aa, 0x3bb9a).
+/// 0x3e480: the landing routine specific to the type of `o` (enemies: class 2, types 0..31; bosses afterwards) and
+/// the index read in the table, which the original leaves in D0 when jumping to the routine (A1). `None` for the
+/// types without a routine (a plain `rts`: 0x3e2aa, 0x3bb9a).
 pub fn landing_routine(b: &mut Cps2Bus, o: Obj) -> Option<(u32, u16)> {
     let base: u8 = if o.u8(b, Obj::CLASS) == 2 { 0 } else { 32 };
     let index = base.wrapping_add(o.u8(b, Obj::KIND)) as u16 * 4;

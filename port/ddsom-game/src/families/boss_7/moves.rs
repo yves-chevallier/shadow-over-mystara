@@ -1,6 +1,6 @@
-//! Boss 7, groupes 6 et 8 : esquives (disparition et réapparition, bond en arrière, marche courte), lancées par
-//! `aids::after_attack` et les coups encaissés. Le groupe 6 tire deux variantes de la réapparition selon `+6`, le
-//! groupe 8 en a quatre.
+//! Boss 7, groups 6 and 8: dodges (disappearance and reappearance, backward leap, short walk), started by
+//! `aids::after_attack` and by hits taken. Group 6 draws two variants of the reappearance according to `+6`, group 8
+//! has four.
 
 use crate::families::cx::Bench;
 use super::aids;
@@ -12,7 +12,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch(x, table, f::SUB3)
 }
 
-/// 0x8699e : le boss s'efface (début commun des esquives).
+/// 0x8699e: the boss fades out (common start of the dodges).
 fn fade_out<R: Bench>(x: &mut Cx<'_, R>) {
     addq8(x, f::SUB3, 2);
     x.set8(0, 2);
@@ -21,7 +21,7 @@ fn fade_out<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 4);
 }
 
-/// 0x86a06 : le boss reparaît quand le décompte est écoulé.
+/// 0x86a06: the boss reappears when the countdown has elapsed.
 fn fade_in<R: Bench>(x: &mut Cx<'_, R>) {
     if timer_done(x) {
         addq8(x, f::SUB3, 2);
@@ -31,21 +31,21 @@ fn fade_in<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin des esquives : joue l'animation, puis passe à `state`.
+/// End of the dodges: plays the animation, then moves to `state`.
 fn finish<R: Bench>(x: &mut Cx<'_, R>, state: u32) {
     if x.anim_step() {
         x.set32(f::STATE, state);
     }
 }
 
-/// Réapparition : le boss est invisible (`bset 1`) 8 images, animation 5.
+/// Reappearance: the boss is invisible (`bset 1`) for 8 frames, animation 5.
 fn reappear<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, true);
     x.set16(TIMER, 8);
     body(x, 5);
 }
 
-/// 0x869c6 : réapparition un peu en arrière (0x60 pixels), dans l'aire de jeu.
+/// 0x869c6: reappearance slightly behind (0x60 pixels), within the play area.
 fn back_off<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         addq8(x, f::SUB3, 2);
@@ -59,7 +59,7 @@ fn back_off<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x86a4e : réapparition à un point tiré selon le quart d'écran.
+/// 0x86a4e: reappearance at a point drawn according to the screen quarter.
 fn jump_away<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         addq8(x, f::SUB3, 2);
@@ -96,7 +96,7 @@ pub(super) fn group8<R: Bench>(x: &mut Cx<'_, R>) {
             0x86a06 => fade_in(x),
             _ => finish(x, FIGHT),
         },
-        // bond en arrière : les étapes du bond d'attaque, mais il finit sur le combat (0x86a7c)
+        // backward leap: the steps of the attack leap, but it ends on combat (0x86a7c)
         _ => match step(x, 0x86a9e) {
             0x86aaa => leap_start(x, 0x400),
             0x86a7c => finish(x, FIGHT),
@@ -105,7 +105,7 @@ pub(super) fn group8<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x868fe (`+6` = 0) : quelques pas sur place (0x14 images) en surveillant l'adversaire.
+/// 0x868fe (`+6` = 0): a few steps in place (0x14 frames) while watching the opponent.
 fn short_walk<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x8690c) {
         0x86950 => {

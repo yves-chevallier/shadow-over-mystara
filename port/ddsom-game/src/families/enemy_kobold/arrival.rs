@@ -1,5 +1,5 @@
-//! Type 0, sous-état 0 : arrivée. `+6` : 0 et 2 hurlement, 4 bond d'entrée, 6 et 8 saut périlleux (variantes 12 et 13),
-//! 10 chute d'en haut, 12 apparition, 14 course d'arrivée, 16 et 20 réveil, 18 course vers le joueur.
+//! Type 0, substate 0: arrival. `+6`: 0 and 2 howl, 4 entrance leap, 6 and 8 somersault (variants 12 and 13), 10 fall
+//! from above, 12 appearance, 14 arrival run, 16 and 20 wake-up, 18 run toward the player.
 
 use crate::families::cx::Bench;
 use crate::families::eshl_creators;
@@ -24,7 +24,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Le joueur à portée : le geste est tiré au hasard entre deux animations (`a` si le tirage est pair, `b` sinon).
+/// The player in range: the move is drawn at random between two animations (`a` if the draw is even, `b` otherwise).
 fn pick_anim<R: Bench>(x: &mut Cx<'_, R>, a: u8, b: u8) {
     let r = rand_and(x, 1);
     x.add8(f::SUB3, 2);
@@ -34,7 +34,7 @@ fn pick_anim<R: Bench>(x: &mut Cx<'_, R>, a: u8, b: u8) {
     mv(x, n as u32);
 }
 
-/// Attend un joueur dans la boîte devant l'ennemi, anime l'attente ; vrai quand il est là.
+/// Waits for a player in the box in front of the enemy, animates the wait; true when one is there.
 fn player_ahead<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !pick_target(x) {
         return false;
@@ -43,7 +43,7 @@ fn player_ahead<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::target_in_box(x, 0, 0x80, 0x20)
 }
 
-/// +6 = 0 : hurlement, puis démarche vers la cible (animations 4 ou 3).
+/// +6 = 0: howl, then advance toward the target (animations 4 or 3).
 fn howl<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
@@ -64,7 +64,7 @@ fn howl<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 2 : comme 0 sans le hurlement ; animations 2 ou 1.
+/// +6 = 2: like 0 without the howl; animations 2 or 1.
 fn growl<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
@@ -80,7 +80,7 @@ fn growl<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 : bond d'entrée.
+/// +6 = 4: entrance leap.
 fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -113,8 +113,8 @@ fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 6 et 8 : saut périlleux, la clé d'animation déclenche l'effet (0xeb92e ou 0xeb9a0) ; `d3` : variante
-/// qui l'accompagne, `vx2` la vitesse de côté.
+/// +6 = 6 and 8: somersault, the animation key triggers the effect (0xeb92e or 0xeb9a0); `d3`: variant that goes with
+/// it, `vx2` the side speed.
 fn somersault<R: Bench>(x: &mut Cx<'_, R>, variant: u8, vx2: i16, anim: u32) {
     match x.u8(f::SUB3) {
         0 => {
@@ -210,7 +210,7 @@ fn appear<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 14 : course d'arrivée (0x1e images).
+/// +6 = 14: arrival run (0x1e frames).
 fn run_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -234,7 +234,7 @@ fn run_in<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 16 : attente d'un nombre d'images (`+0x42`) puis démarche.
+/// +6 = 16: wait of a number of frames (`+0x42`) then advance.
 fn wake<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -258,7 +258,7 @@ fn wake<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 18 : course vers le joueur sur une durée tirée au hasard, puis grande attaque.
+/// +6 = 18: run toward the player for a randomly drawn duration, then big attack.
 fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -294,7 +294,7 @@ fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 20 : comme 18, avec un autre effet et une reprise différente.
+/// +6 = 20: like 18, with another effect and a different resume.
 fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -330,8 +330,8 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Clé d'animation : effet `effect` ; en fin de script, le Kobold reprend sa marche un pas en avant (`−0x20`
-/// à droite, `+0x20` à gauche).
+/// Animation key: effect `effect`; at the end of the script, the Kobold resumes its walk one step forward (`−0x20` to
+/// the right, `+0x20` to the left).
 fn landing_hit<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);

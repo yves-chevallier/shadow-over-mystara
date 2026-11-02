@@ -1,12 +1,12 @@
-//! Boss 6, état 4 « touché » (0x85222). Groupes `+5` :
+//! Boss 6, state 4 "hit" (0x85222). `+5` groups:
 //!
-//! | `+5` | Rôle |
+//! | `+5` | Role |
 //! |---|---|
-//! | 0 | réaction au coup : mort si plus de PV, sinon routine de la table 0x8527a (code `+0x49`) |
-//! | 2 | recul |
-//! | 4 | relevé |
-//! | 6, 8 | mort : chute, atterrissage, clignotement, libération |
-//! | 10 | reprise |
+//! | 0 | reaction to the hit: death if out of HP, otherwise routine from table 0x8527a (code `+0x49`) |
+//! | 2 | knockback |
+//! | 4 | getting up |
+//! | 6, 8 | death: fall, landing, blinking, release |
+//! | 10 | resumption |
 
 use crate::families::cx::Bench;
 use super::decide;
@@ -16,9 +16,9 @@ use crate::objects::Current;
 use crate::objects::Obj;
 
 const REACTIONS: u32 = 0x8527a;
-/// La seule routine de la table propre au boss (code 0x4c) : étourdissement avec tremblement.
+/// The only routine of the table specific to the boss (code 0x4c): stun with trembling.
 const STUN_REACTION: u32 = 0x85326;
-/// Seuils de PV par phase (mots).
+/// HP thresholds per phase (words).
 const THRESHOLDS: u32 = 0x10de2;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -38,7 +38,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-/// 0x859d8 : plus de PV ? Passe alors au groupe 6 (mort).
+/// 0x859d8: out of HP? Then moves to group 6 (death).
 fn out_of_hp<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if tst16(x, f::HP).gt() {
         return false;
@@ -63,7 +63,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     react(x, REACTIONS);
 }
 
-/// 0x85326 : étourdissement : le boss tremble sur place puis repart.
+/// 0x85326: stun: the boss trembles in place then sets off again.
 fn stun<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -167,7 +167,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x85490 : le boss est debout ; il continue au corps à corps ou marche.
+/// 0x85490: the boss is standing; it continues in melee or walks.
 pub(crate) fn recovered_tail<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
@@ -206,7 +206,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             let mut vx: i16 = 0x200;
             let mut side = 0;
             let edge = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
-            *x.c.d2() = *x.c.d2() & 0xffff_0000 | edge as u32; // D2 relu par la suite (DDSOM_POISON : cov_tour1_c0, cov_tour5_c4)
+            *x.c.d2() = *x.c.d2() & 0xffff_0000 | edge as u32; // D2 re-read afterwards (DDSOM_POISON : cov_tour1_c0, cov_tour5_c4)
             if !Fl::sub16(edge, x.u16(0x8)).ge() {
                 vx = -vx;
                 side = 0x20;

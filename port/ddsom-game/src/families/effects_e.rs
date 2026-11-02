@@ -1,12 +1,12 @@
-//! Famille EFFCT : objets de scène qui commandent les joueurs (table des types `0x39ce0`).
+//! EFFCT family: scene objects that command the players (type table `0x39ce0`).
 //!
-//! - 11 : effets des attaques d'un ennemi (éclats, marques, reflets, colonnes, traînées, pièces, étincelles,
-//!   gerbes) ; les variantes 0, 2, 5, 8 et 9, qu'aucun scénario n'exerce, sont validées par
+//! - 11: effects of an enemy's attacks (sparks, marks, reflections, columns, trails, pieces, sparkles,
+//!   sprays); variants 0, 2, 5, 8 and 9, which no scenario exercises, are validated by
 //!   `examples/fuzz_effct.rs` ;
-//! - 13 : radeau qui défile et emporte les joueurs (les directions des joueurs le pilotent) ;
-//! - 14 : passage vers une sous-scène, qui oscille, attend un joueur, puis lance la transition
-//!   (rideau de tuiles dans le fond 2) : entrée dans la sous-scène (`0xada96` : contexte de la scène
-//!   sauvé dans l'objet, objets gelés), puis retour (`0xae11a` : contexte rendu, joueurs replacés).
+//! - 13: raft that scrolls and carries the players away (the players' directions steer it);
+//! - 14: passage to a sub-scene, which oscillates, waits for a player, then launches the transition
+//!   (tile curtain in background 2): entry into the sub-scene (`0xada96`: scene context
+//!   saved in the object, objects frozen), then return (`0xae11a`: context restored, players repositioned).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx, Gx};
@@ -34,8 +34,8 @@ fn free(x: &mut impl Current) {
     x.free(&pools::EFFCT);
 }
 
-/// Préambule commun : le crochet de pause (0x29ea, Z faux : objet suspendu), la pause du jeu, et au
-/// moins un joueur présent dans un état ≤ 2. Vrai si le gestionnaire continue.
+/// Common preamble: the pause hook (0x29ea, Z false: object suspended), the game pause, and at
+/// least one player present in a state ≤ 2. True if the handler continues.
 fn scene_running<X: Current>(x: &mut X, suspended: impl FnOnce(&mut X)) -> bool {
     if x.suspended() {
         suspended(x);
@@ -53,9 +53,9 @@ fn scene_running<X: Current>(x: &mut X, suspended: impl FnOnce(&mut X)) -> bool 
 // ---------------------------------------------------------------------------------------------
 
 mod raft {
-    /// Vitesse de défilement (long, 16.16).
+    /// Scroll speed (long, 16.16).
     pub const SPEED: u32 = 0x58;
-    /// Mode de la caméra (`A5+0x51e`) : 4 = caméra fixée, le radeau ne se pilote plus.
+    /// Camera mode (`A5+0x51e`): 4 = camera fixed, the raft can no longer be steered.
     pub const CAMERA_MODE: u32 = 0x51e;
 }
 
@@ -90,11 +90,11 @@ fn raft(x: &mut Gx) {
     }
 }
 
-/// Les directions des joueurs présents accélèrent le radeau (haut/bas : profondeur ±1 ou ±0.19 au-delà
-/// de ±1 ; droite/gauche : x ±1.19 ou ±0.25), puis les joueurs sont posés dessus, à 0x48 près en x.
+/// The directions of the players present accelerate the raft (up/down: depth ±1 or ±0.19 beyond
+/// ±1; right/left: x ±1.19 or ±0.25), then the players are placed on it, within 0x48 in x.
 fn raft_drift(x: &mut Gx) {
-    // Glitch d'origine : sans pilotage (caméra fixée), le déplacement est le D4 laissé par ce qui précède (dernier
-    // long de l'animation de palette SET 0, déplacement du radeau à une image précédente, liste des sprites...).
+    // Original glitch: without steering (camera fixed), the movement is the D4 left by what precedes (last
+    // long of the SET 0 palette animation, raft movement of a previous frame, sprite list...).
     let mut dx = x.leftovers().d4 as i32;
     if x.a5_u16(raft::CAMERA_MODE) != 4 {
         let (mut dy, mut sx) = (0i32, 0i32);
@@ -142,24 +142,24 @@ fn raft_drift(x: &mut Gx) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 14 : passage vers une sous-scène
+// Type 14: passage to a sub-scene
 // ---------------------------------------------------------------------------------------------
 
 mod gate {
-    /// Jeux d'animations par mode `+0x2f` (longs, espace programme).
+    /// Animation sets per mode `+0x2f` (longs, program space).
     pub const ANIM_SETS: u32 = 0xad954;
-    /// Oscillation : demi-période (`+0x42`), compteur (`+0x5e`), active (`+0x5f`).
+    /// Oscillation: half-period (`+0x42`), counter (`+0x5e`), active (`+0x5f`).
     pub const PERIOD: u32 = 0x42;
     pub const SWING: u32 = 0x43;
     pub const COUNTER: u32 = 0x5e;
     pub const MOVING: u32 = 0x5f;
-    /// Étape du rideau (mot).
+    /// Curtain step (word).
     pub const CURTAIN: u32 = 0x5c;
-    /// Rideau : (décalage dans les tuiles, adresse) par étape, 6 octets (données) ; tuiles (données).
+    /// Curtain: (offset in the tiles, address) per step, 6 bytes (data); tiles (data).
     pub const CURTAIN_STEPS: u32 = 0xadad0;
     pub const CURTAIN_TILES: u32 = 0xadbf2;
-    /// Contexte de la scène sauvé dans l'objet : caméras (longs `+0x44`, `+0x48`, mots `+0x4c`,
-    /// `+0x4e`), état du défilement (`+0x54`, `+0x5a`) et musique (`+0x16`).
+    /// Scene context saved in the object: cameras (longs `+0x44`, `+0x48`, words `+0x4c`,
+    /// `+0x4e`), scroll state (`+0x54`, `+0x5a`) and music (`+0x16`).
     pub const CAMERA_X: u32 = 0x44;
     pub const CAMERA_Y: u32 = 0x48;
     pub const ALT_X: u32 = 0x4c;
@@ -167,15 +167,15 @@ mod gate {
     pub const SCROLL: u32 = 0x54;
     pub const SCROLL_STEP: u32 = 0x5a;
     pub const MUSIC: u32 = 0x16;
-    /// État du défilement de la scène (`A5-0x55d0` long, `A5-0x55cc` octet) et musique (`A5+0x7fc4`).
+    /// Scene scroll state (`A5-0x55d0` long, `A5-0x55cc` byte) and music (`A5+0x7fc4`).
     pub const SCENE_SCROLL: u32 = 0xff2a30;
     pub const SCENE_SCROLL_STEP: u32 = 0xff2a34;
     pub const SCENE_MUSIC: u32 = 0xffffc4;
-    /// Pools dont les objets sont gelés pendant la sous-scène (`+0x40` incrémenté, `+0x41` effacé) :
-    /// (décalage de `A5`, emplacements, taille).
+    /// Pools whose objects are frozen during the sub-scene (`+0x40` incremented, `+0x41` cleared):
+    /// (offset from `A5`, slots, size).
     pub const FROZEN: [(u32, u32, u32); 6] =
         [(0x4a9e, 32, 0x50), (0x549e, 38, 0x60), (0x795e, 16, 0x50), (0x3a1e, 3, 0xc0), (0x3c5e, 38, 0x60), (0x179e, 48, 0x60)];
-    /// Décalage en x des joueurs, par personnage, au retour (mots, espace programme).
+    /// X offset of the players, per character, on return (words, program space).
     pub const RETURN_OFFSETS: u32 = 0xae3b4;
     pub const MUSIC_OF_SCENE: u32 = 0xe0d8c;
     pub const PLAY_MUSIC: u32 = 0xe17a4;
@@ -233,7 +233,7 @@ fn gate_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// 0xae3bc : oscillation (vitesses `+0x14` en x, `+0x18` en profondeur, inversées chaque demi-période).
+/// 0xae3bc: oscillation (speeds `+0x14` in x, `+0x18` in depth, inverted every half-period).
 fn gate_swing<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(gate::MOVING) == 0 {
         return;
@@ -256,7 +256,7 @@ fn gate_watch<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     gate_swing(x);
     if (crate::ram::CAMERA_X.get(x.b).wrapping_sub(0x40) as i16) > (x.u16(Obj::X) as i16) {
-        // sorti de l'écran par la gauche
+        // left the screen on the left
         return x.set8(f::STATE, 6);
     }
     let leader = Obj(x.a5_u16(0x46) as i16 as i32 as u32 & 0xff_ffff);
@@ -268,7 +268,7 @@ fn gate_watch<R: Bench>(x: &mut Cx<'_, R>) {
     if !players().any(|p| p.is_active(x.b) && p.u16(x.b, 0x62) != 0) {
         return;
     }
-    // un joueur vivant entre : début de la transition
+    // a living player enters: start of the transition
     x.set_a5_u8(0x5f, 0);
     wr8(x.b, 0xff2472, 1);
     x.add8(f::SUB_STATE, 2);
@@ -276,7 +276,7 @@ fn gate_watch<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u8(0x4e, 1);
 }
 
-/// Sous-état 2 : palette du rideau, puis deux bandes de 22 tuiles par image.
+/// Substate 2: curtain palette, then two bands of 22 tiles per frame.
 fn gate_curtain<R: Bench>(x: &mut Cx<'_, R>) {
     for k in 0..8 {
         let v = x.data32(0x25c4a0 + 4 * k);
@@ -288,7 +288,7 @@ fn gate_curtain<R: Bench>(x: &mut Cx<'_, R>) {
         let entry = gate::CURTAIN_STEPS.wrapping_add(step as i16 as i32 as u32);
         let offset = x.data16(entry);
         if (offset as i16) < 0 {
-            // fin du rideau : entrée dans la sous-scène
+            // end of the curtain: entry into the sub-scene
             return gate_enter(x);
         }
         let mut at = x.data32(entry + 2);
@@ -304,8 +304,8 @@ fn gate_curtain<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0xada96 : entrée dans la sous-scène (scène 7 → 6, sinon 12). Le contexte de la scène est sauvé dans
-/// l'objet, les objets des pools sont gelés, le décor de la variante est créé, puis la scène repart.
+/// 0xada96: entry into the sub-scene (scene 7 → 6, otherwise 12). The scene context is saved in
+/// the object, the objects of the pools are frozen, the variant's scenery is created, then the scene restarts.
 fn gate_enter<R: Bench>(x: &mut Cx<'_, R>) {
     let scene = if crate::ram::SCENE.get(x.b) == 7 { 6 } else { 0xc };
     x.set_a5_u8(0x34, scene);
@@ -313,7 +313,7 @@ fn gate_enter<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(gate::CURTAIN, 0);
     x.set_a5_u8(0x44, 0);
     x.unlink();
-    // 0xae298 : sauvegarde du contexte
+    // 0xae298: context save
     let (cam_x, cam_y) = (x.a5_u32(0x506), x.a5_u32(0x50a));
     x.set32(gate::CAMERA_X, cam_x);
     x.set32(gate::CAMERA_Y, cam_y);
@@ -336,7 +336,7 @@ fn gate_enter<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
     }
-    // 0xae37c : décor de la variante (D0 = 0, D1 = variante)
+    // 0xae37c: variant's scenery (D0 = 0, D1 = variant)
     let v = x.u8(f::VARIANT);
     scene_prop(x, 0, v);
     crate::sound::play(x.b, gate::MUSIC_OF_SCENE, x.o);
@@ -344,7 +344,8 @@ fn gate_enter<R: Bench>(x: &mut Cx<'_, R>) {
     super::scenery::restart_scene(x);
 }
 
-/// 0xcc200: scenery (SET 8) of variant `variant` (D0) and setting `setting` (D1); failing that a SOBJ 4, failing that an
+/// 0xcc200: scenery (SET 8) of variant `variant` (D0) and setting `setting` (D1); failing that a SOBJ 4, failing that
+/// an
 /// EFFCT 18.
 fn scene_prop<R: Bench>(x: &mut Cx<'_, R>, variant: u8, setting: u8) {
     for (alloc, kind) in [(&pools::SET, 8), (&pools::SOBJ, 4), (&pools::EFFCT, 0x12)] {
@@ -358,8 +359,8 @@ fn scene_prop<R: Bench>(x: &mut Cx<'_, R>, variant: u8, setting: u8) {
     }
 }
 
-/// 0xae11a, sous-état 0 : retour de la sous-scène (scène 6 → 7, sinon 9). La scène repart avec le
-/// contexte sauvé par `gate_enter`, les joueurs vivants sont replacés devant l'objet suivi.
+/// 0xae11a, substate 0: return from the sub-scene (scene 6 → 7, otherwise 9). The scene restarts with the
+/// context saved by `gate_enter`, the living players are repositioned in front of the followed object.
 fn gate_leave<R: Bench>(x: &mut Cx<'_, R>) {
     let scene = if crate::ram::SCENE.get(x.b) == 6 { 7 } else { 9 };
     x.set_a5_u8(0x34, scene);
@@ -374,7 +375,7 @@ fn gate_leave<R: Bench>(x: &mut Cx<'_, R>) {
         p.set_u8(x.b, 0x66, 0);
         p.set_u8(x.b, 0x15c, 0);
         p.set_u8(x.b, 0x7e, 0x50);
-        // 0xae388 : devant l'objet suivi, décalé selon le personnage
+        // 0xae388: in front of the followed object, offset according to the character
         let leader = Obj(x.a5_u16(0x46) as i16 as i32 as u32 & 0xff_ffff);
         let (lx, ly) = (leader.u16(x.b, Obj::X), leader.u16(x.b, Obj::Y));
         p.set_u16(x.b, Obj::X, lx);
@@ -392,7 +393,7 @@ fn gate_leave<R: Bench>(x: &mut Cx<'_, R>) {
     let (alt_x, alt_y) = (x.u16(gate::ALT_X), x.u16(gate::ALT_Y));
     x.set_a5_u16(0x556, alt_x);
     x.set_a5_u16(0x55a, alt_y);
-    // cibles des caméras : alignées sur 32 pixels en x, 0x160 plus haut
+    // camera targets: aligned to 32 pixels in x, 0x160 higher
     x.set_a5_u32(0x50e, cam_x & !0x1f_0000);
     x.set_a5_u32(0x512, cam_y.wrapping_sub(0x160_0000));
     x.set_a5_u16(0x55e, alt_x & 0xffe0);
@@ -408,7 +409,7 @@ fn gate_leave<R: Bench>(x: &mut Cx<'_, R>) {
     crate::sound::play_with(x.b, gate::PLAY_MUSIC, crate::sound::Source { object: Some(x.o), d4: Some(music as u32), ..Default::default() });
 }
 
-/// État 4, sous-état 2 : le rideau s'ouvre (deux colonnes effacées par image depuis le centre).
+/// State 4, substate 2: the curtain opens (two columns cleared per frame from the center).
 fn gate_open<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u16(0x51e, 4);
     let step = x.u16(gate::CURTAIN);
@@ -429,22 +430,22 @@ fn gate_open<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 11 : effets attachés aux attaques d'un ennemi (dix variantes)
+// Type 11: effects attached to an enemy's attacks (ten variants)
 // ---------------------------------------------------------------------------------------------
 
 mod attack_fx {
-    /// Variante 0 : places autour de l'attaquant (mot de décalage par type d'attaquant, puis huit (dx, dz)).
+    /// Variant 0: spots around the attacker (offset word per attacker type, then eight (dx, dz)).
     pub const FLASH_PLACES: u32 = 0xabfbe;
     pub const SOUND_FLASH: u32 = 0xe9ef4;
-    /// Variante 2 : décalages (dx, dz) et animation par type d'attaquant (espace programme).
+    /// Variant 2: offsets (dx, dz) and animation per attacker type (program space).
     pub const MARK_PLACES: u32 = 0xac6ea;
     pub const MARK_ANIMS: u32 = 0xac6ca;
-    /// Action de l'attaquant (`+0x49`), notée par la variante 5 en `+0x42`.
+    /// Attacker's action (`+0x49`), noted by variant 5 in `+0x42`.
     pub const ACTION: u32 = 0x49;
     pub const NOTED_ACTION: u32 = 0x42;
-    /// Variantes 8 et 9 : fiche de la gerbe par type d'attaquant (octet, espace programme : 0 = aucune),
-    /// fiches (données : décalages, puis nombre moins un et (vx, vz, réglage, bourrage) par éclat),
-    /// animation des éclats par réglage.
+    /// Variants 8 and 9: spray sheet per attacker type (byte, program space: 0 = none),
+    /// sheets (data: offsets, then count minus one and (vx, vz, setting, padding) per spark),
+    /// spark animation per setting.
     pub const SHOWER_SHEETS: u32 = 0xad1b4;
     pub const SHOWER_DATA: u32 = 0xad232;
     pub const SHOWER_ANIMS: u32 = 0xad354;
@@ -454,7 +455,7 @@ mod attack_fx {
     pub const SOURCE: u32 = 0x54;
 }
 
-/// 0xabec8 : crée un EFFCT 11 de variante `variant` et de mode `mode`, rattaché à l'objet courant.
+/// 0xabec8: creates an EFFCT 11 of variant `variant` and mode `mode`, attached to the current object.
 fn attack_fx_spawn<R: Bench>(x: &mut Cx<'_, R>, variant: u8, mode: u8) -> Option<Obj> {
     let o = x.alloc(&pools::EFFCT)?;
     wr8(x.b, o.0, 1);
@@ -465,8 +466,8 @@ fn attack_fx_spawn<R: Bench>(x: &mut Cx<'_, R>, variant: u8, mode: u8) -> Option
     Some(o)
 }
 
-/// Indice de l'attaquant dans les tables : son type, + 0x20 si sa classe (`+0x28`) vaut `class`
-/// (`when_equal`) ou ne la vaut pas.
+/// Index of the attacker in the tables: its type, + 0x20 if its class (`+0x28`) equals `class`
+/// (`when_equal`) or does not.
 fn attacker_index<R: Bench>(x: &mut Cx<'_, R>, a: Obj, class: u8, when_equal: bool) -> u32 {
     let shifted = (a.u8(x.b, 0x28) == class) == when_equal;
     let base: u8 = if shifted { 0x20 } else { 0 };
@@ -488,7 +489,7 @@ fn attack_fx<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin d'animation : retrait (état 6), sinon remise en liste.
+/// End of animation: removal (state 6), otherwise re-listing.
 fn attack_fx_anim_or_leave<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         return x.set32(f::STATE, 0x0600_0000);
@@ -496,8 +497,8 @@ fn attack_fx_anim_or_leave<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Variante 0 : éclat posé au hasard autour de l'attaquant (huit places par type d'attaquant, retourné une
-/// image sur deux), animation tirée au hasard, son ; disparaît à la fin de l'animation.
+/// Variant 0: spark placed at random around the attacker (eight spots per attacker type, flipped every other
+/// frame), random animation, sound; disappears at the end of the animation.
 fn attack_fx_flash<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
@@ -534,8 +535,8 @@ fn attack_fx_flash<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variante 2 : marque posée sur l'attaquant (décalage et animation par type) ; à la fin de son animation,
-/// elle fait avancer l'attaquant (`+6` += 2) et disparaît.
+/// Variant 2: mark placed on the attacker (offset and animation per type); at the end of its animation,
+/// it advances the attacker (`+6` += 2) and disappears.
 fn attack_fx_mark<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
@@ -573,8 +574,8 @@ fn attack_fx_mark<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variante 5 : comme l'éclat (1), mais il ne suit l'attaquant que tant que celui-ci garde l'action notée à la
-/// naissance (`+0x49` → `+0x42`) et n'a pas passé l'étape 4.
+/// Variant 5: like the spark (1), but it follows the attacker only as long as the attacker keeps the action noted at
+/// birth (`+0x49` → `+0x42`) and has not passed step 4.
 fn attack_fx_trail<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
@@ -602,9 +603,9 @@ fn attack_fx_trail<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variantes 8 et 9 : gerbe d'éclats de l'attaquant. Le premier (réglage 0) crée les éclats d'une fiche
-/// propre au type de l'attaquant (vitesses, réglage) puis disparaît ; chaque éclat suit l'attaquant tant
-/// qu'il est dans l'action prévue, puis se détache, retombe en clignotant et disparaît au sol.
+/// Variants 8 and 9: spray of sparks from the attacker. The first (setting 0) creates the sparks of a sheet
+/// specific to the attacker's type (speeds, setting) then disappears; each spark follows the attacker as long as
+/// it is in the expected action, then detaches, falls back blinking and disappears on the ground.
 fn attack_fx_shower<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x2f) == 0 {
         return attack_fx_shower_spawn(x);
@@ -656,7 +657,7 @@ fn attack_fx_shower_spawn<R: Bench>(x: &mut Cx<'_, R>) {
     free(x);
 }
 
-/// Un éclat de la gerbe (`0xad384`).
+/// A spark of the spray (`0xad384`).
 fn attack_fx_shard<R: Bench>(x: &mut Cx<'_, R>) {
     let owner = x.linked(attack_fx::OWNER);
     if x.u8(f::SUB_STATE) == 0 {
@@ -666,7 +667,7 @@ fn attack_fx_shard<R: Bench>(x: &mut Cx<'_, R>) {
         let follows = if action == a || action == b || action != 0xa8 {
             owner.u8(x.b, f::STATE) == 4 && (owner.u8(x.b, 6) as i8) < 6
         } else {
-            // action 0xa8 : l'éclat suit l'attaquant pendant ses étapes 4 à 6, sinon disparaît
+            // action 0xa8: the spark follows the attacker during its steps 4 to 6, otherwise disappears
             if owner.u8(x.b, 6).wrapping_sub(4) > 2 {
                 return free(x);
             }
@@ -688,7 +689,7 @@ fn attack_fx_shard<R: Bench>(x: &mut Cx<'_, R>) {
             x.add16(Obj::X, vx);
             return x.reinsert();
         }
-        // détaché : il retombe, poussé vers l'extérieur
+        // detached: it falls back, pushed outward
         x.add8(f::SUB_STATE, 2);
         x.set16(Obj::VZ, 0x200);
         x.set16(Obj::AZ, 0xffc0);
@@ -714,7 +715,7 @@ fn attack_fx_shard<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variante 1 : éclat lancé depuis l'attaquant, qui le suit puis disparaît.
+/// Variant 1: spark thrown from the attacker, which follows it then disappears.
 fn attack_fx_burst<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => burst_init(x),
@@ -727,7 +728,7 @@ fn attack_fx_burst<R: Bench>(x: &mut Cx<'_, R>) {
             let (vx, vz) = (x.u16(Obj::VX), x.u16(Obj::VZ));
             x.add16(Obj::X, vx);
             x.add16(Obj::Z, vz);
-            // la pause (`A5+0x3d`) le fait vivre jusqu'à la fin de l'animation, sinon il disparaît
+            // the pause (`A5+0x3d`) keeps it alive until the end of the animation, otherwise it disappears
             if x.a5_u8(0x3d) == 0 || x.anim_step() {
                 x.set32(f::STATE, 0x0600_0000);
             }
@@ -736,7 +737,7 @@ fn attack_fx_burst<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Naissance de l'éclat (variantes 1 et 5) : posé sur l'attaquant, vitesse et animation selon son type.
+/// Birth of the spark (variants 1 and 5): placed on the attacker, speed and animation according to its type.
 fn burst_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let owner = x.linked(attack_fx::OWNER);
@@ -771,7 +772,7 @@ fn burst_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Variante 3 : reflet posé sur l'attaquant tant qu'il est dans l'action 0x68 ou 0x6c.
+/// Variant 3: reflection placed on the attacker as long as it is in action 0x68 or 0x6c.
 fn attack_fx_glint<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
@@ -808,7 +809,7 @@ fn attack_fx_glint<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variante 4 : colonne qui monte depuis le bas de l'écran jusqu'à une hauteur selon l'attaquant.
+/// Variant 4: column that rises from the bottom of the screen to a height depending on the attacker.
 fn attack_fx_rise<R: Bench>(x: &mut Cx<'_, R>) {
     let owner = x.linked(attack_fx::OWNER);
     match x.u8(f::STATE) {
@@ -851,7 +852,7 @@ fn attack_fx_rise<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variante 6 : pièces d'un objet brisé ; le mode 0 crée les modes 2 et 3 (et devient le mode 1).
+/// Variant 6: pieces of a broken object; mode 0 creates modes 2 and 3 (and becomes mode 1).
 fn attack_fx_parts<R: Bench>(x: &mut Cx<'_, R>) {
     let mode = x.u8(0x2f);
     if mode == 0 {
@@ -930,8 +931,8 @@ fn attack_fx_parts<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variante 7 : le mode 0 crée une gerbe d'étincelles (modes 1 et 2, liste selon l'attaquant) puis
-/// disparaît ; une étincelle suit l'attaquant tant qu'il frappe.
+/// Variant 7: mode 0 creates a spray of sparkles (modes 1 and 2, list depending on the attacker) then
+/// disappears; a sparkle follows the attacker as long as it strikes.
 fn attack_fx_sparks<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x2f) {
         0 => {
@@ -947,7 +948,7 @@ fn attack_fx_sparks<R: Bench>(x: &mut Cx<'_, R>) {
                 let count = x.data16(p);
                 p += 2;
                 for _ in 0..=count {
-                    // mode provisoire : D1.b de l'original (mot de la table des modes), remplacé aussitôt
+                    // temporary mode: D1.b of the original (word of the mode table), replaced immediately
                     let Some(o) = attack_fx_spawn(x, 7, 6) else { break };
                     let (vx, vz, m) = (x.data16(p), x.data16(p + 2), x.data8(p + 4));
                     wr16(x.b, o.0 + Obj::VX, vx);

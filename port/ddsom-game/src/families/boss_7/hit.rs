@@ -1,5 +1,5 @@
-//! Boss 7, état 4 « touché » (0x86baa). Groupes `+5` : 0 réaction (routine commune des ennemis choisie par le code de coup
-//! `+0x49` dans la table de longs 0x86c3a), 2 projeté, 4 chute, 6 mort, 8 et 10 retour au combat.
+//! Boss 7, state 4 "hit" (0x86baa). `+5` groups: 0 reaction (common enemy routine chosen by the hit code
+//! `+0x49` in the table of longs 0x86c3a), 2 thrown, 4 fall, 6 death, 8 and 10 return to combat.
 
 use crate::families::cx::Bench;
 use super::aids;
@@ -32,7 +32,7 @@ fn paused<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PAUSE.get(x.b) != 0
 }
 
-/// 0x86be6 : le coup est traité par la routine commune ; sans PV le boss meurt.
+/// 0x86be6: the hit is handled by the common routine; with no HP the boss dies.
 fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set_bit(0x1, 1, false);
@@ -55,7 +55,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x86ce6 : le boss est projeté en arrière, rebondit, puis se relève ou riposte.
+/// 0x86ce6: the boss is thrown backward, bounces, then gets up or counterattacks.
 fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -95,7 +95,7 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(0x14, 0);
             let n = var::PLAYERS_ALIVE.get(x.b) as u32;
             let mask = rom32(x, 0x86dd6 + ((n as u16) << 2) as u32);
-            // D5 = le masque (reste)
+            // D5 = the mask (leftover)
             *x.c.d5() = mask;
             let rng = x.random();
             let i = rng & 0x1f;
@@ -123,7 +123,7 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x86e10 : chute, attente au sol, relevé (en s'écartant si un joueur est trop près).
+/// 0x86e10: fall, wait on the ground, getting up (stepping aside if a player is too close).
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x86e1c) {
         0x86e26 => {
@@ -176,9 +176,9 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x86ed8 : mort (projection, atterrissage dans la poussière, fin de scène).
+/// 0x86ed8: death (throw, landing in the dust, end of stage).
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
-    // `move.w (tbl,PC,D0w),D0w ; jmp (tbl,PC,D0w)` : ici le décalage remplace D0 (D1 n'est pas touché)
+    // `move.w (tbl,PC,D0w),D0w ; jmp (tbl,PC,D0w)`: here the offset replaces D0 (D1 is not touched)
     let i = x.u8(f::SUB2) as u32;
     let off = x.rom16(0x86ee6 + i);
     match i {
@@ -234,7 +234,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         6 => {}
-        // la table 0x86ee6 n'a que quatre entrées (voir docs/code-mort.md)
-        _ => unreachable!("boss 7 : étape de mort {i:#x} hors table ({off:#x})"),
+        // table 0x86ee6 has only four entries (see docs/code-mort.md)
+        _ => unreachable!("boss 7: death step {i:#x} outside table ({off:#x})"),
     }
 }

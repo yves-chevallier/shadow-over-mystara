@@ -1,4 +1,4 @@
-//! Type 0, sous-états 6 (gestes d'affût), 8 (gestes de repli) et 10 (promenade sans joueur).
+//! Type 0, substates 6 (lying-in-wait moves), 8 (fallback moves) and 10 (stroll without a player).
 
 use crate::families::cx::Bench;
 use super::attacks::{begin_wait, hold, paw_begin};
@@ -6,7 +6,7 @@ use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Fin d'un geste du sous-état 6 : retour à l'affût (0x5634a).
+/// End of a substate 6 move: back to lying in wait (0x5634a).
 fn ready_after_anim<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         set_state_long(x, STANCE);
@@ -16,7 +16,7 @@ fn ready_after_anim<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x555c2 : le Kobold se met à l'affût (test aléatoire, puis boîtes de portée ou charge).
+/// 0x555c2: the Kobold lies in wait (random test, then range boxes or charge).
 fn ready<R: Bench>(x: &mut Cx<'_, R>) {
     if !lib::maybe_draw_6e(x) {
         stance::reach(x);
@@ -25,7 +25,7 @@ fn ready<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 6 --------------------------------------------------------------------------------------------
+// --- substate 6 --------------------------------------------------------------------------------------------
 
 pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
@@ -44,7 +44,7 @@ pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 0 : rugissement ou souffle (tirage au hasard).
+/// +6 = 0: roar or breath (random draw).
 fn b_roar<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
@@ -82,7 +82,7 @@ fn b_stretch<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 : saut périlleux de côté.
+/// +6 = 4: sideways somersault.
 fn b_somersault<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
@@ -106,7 +106,7 @@ fn b_somersault<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x55148 : attend la clé d'animation.
+/// 0x55148: waits for the animation key.
 fn attacks_wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
@@ -115,7 +115,7 @@ fn attacks_wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// 0x5515e : retombée du saut périlleux.
+/// 0x5515e: landing of the somersault.
 fn land_yz<R: Bench>(x: &mut Cx<'_, R>) {
     if x.move_yz().gt() {
         x.anim_step();
@@ -129,7 +129,7 @@ fn land_yz<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 0x18);
 }
 
-/// +6 = 6 et 10 : bond de côté ; `strike` : l'animation 7 de coups au lieu de la 0x1c de marche.
+/// +6 = 6 and 10: sideways leap; `strike`: attack animation 7 instead of walking animation 0x1c.
 fn b_hop<R: Bench>(x: &mut Cx<'_, R>, vx: i16, vz: u16, strike_anim: bool) {
     match x.u8(f::SUB3) {
         4 => {
@@ -156,12 +156,12 @@ fn b_hop<R: Bench>(x: &mut Cx<'_, R>, vx: i16, vz: u16, strike_anim: bool) {
     }
 }
 
-/// 0x54fae : attend la clé d'animation (la clé n'est pas remise à zéro).
+/// 0x54fae: waits for the animation key (the key is not reset to zero).
 fn attacks_wait_key_clear<R: Bench>(x: &mut Cx<'_, R>) {
     wait_key(x);
 }
 
-/// 0x54fc4 : retombée d'un saut.
+/// 0x54fc4: landing of a jump.
 fn land<R: Bench>(x: &mut Cx<'_, R>) {
     if x.move_xz().gt() {
         x.anim_step();
@@ -174,7 +174,7 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 0x18);
 }
 
-/// +6 = 8 : bond de côté puis coup.
+/// +6 = 8: sideways leap then strike.
 fn b_hop_strike<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => b_hop(x, 0x80, 0x2c0, false),
@@ -193,7 +193,7 @@ fn b_hop_strike<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 ----------------------------------------------------------------------------------------------
+// --- substate 8 ----------------------------------------------------------------------------------------------
 
 pub(super) fn run_c<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -260,7 +260,7 @@ fn c_paw<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 : pas de côté ou saut de côté.
+/// +6 = 4: side step or side jump.
 fn c_side<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -307,7 +307,7 @@ fn c_side<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 10 : promenade -----------------------------------------------------------------------------------
+// --- substate 10: stroll -----------------------------------------------------------------------------------
 
 pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {

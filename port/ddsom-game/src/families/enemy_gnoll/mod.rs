@@ -1,19 +1,19 @@
-//! Ennemi « Axe Gnoll » (ENEMY type 13, 0x6ab52). Voir `docs/families/enemy.md`.
+//! "Axe Gnoll" enemy (ENEMY type 13, 0x6ab52). See `docs/families/enemy.md`.
 //!
-//! Même famille que le Goblin et le Troll (paramètres d'IA, variantes d'arrivée paires, gestes choisis dans des
-//! rangées de 32 octets par niveau de difficulté) mais armé d'une hache : chaque coup fixe le type de coup `+0x44`
-//! et sa force `+0x45`, l'arme `+0xa6` / `+0xbf` est posée ou ramassée par des routines du programme (0xa09ca,
-//! 0xa114a), et plusieurs coups sont des sauts sur la cible.
+//! Same family as the Goblin and the Troll (AI parameters, even arrival variants, moves chosen from rows of 32 bytes
+//! per difficulty level) but armed with an axe: each attack sets the attack type `+0x44` and its strength `+0x45`, the
+//! weapon `+0xa6` / `+0xbf` is put down or picked up by program routines (0xa09ca, 0xa114a), and several attacks are
+//! jumps onto the target.
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `arrival` | arrivée selon la variante `+3` (0 marche, 2 et 6 chute, 4 saut de côté, 8 et 10 arrivée armée) |
-//! | 2 | `stance` | debout : approche, demi-tour, attente |
-//! | 4, 6, 8 | `attacks` | gestes (`+6` = 0 à 24), séries de coups de hache, sauts, téléportation |
-//! | 10 | `stance` | attend tant qu'aucun joueur n'est en vie |
-//! | état 4 | `hit` | réactions aux coups, recul, chute, saisie par un joueur |
+//! | 0 | `arrival` | arrival according to variant `+3` (0 walk, 2 and 6 fall, 4 side jump, 8 and 10 armed arrival) |
+//! | 2 | `stance` | standing: approach, turn-around, wait |
+//! | 4, 6, 8 | `attacks` | moves (`+6` = 0 to 24), series of axe strikes, jumps, teleportation |
+//! | 10 | `stance` | waits as long as no player is alive |
+//! | state 4 | `hit` | reactions to hits, recoil, fall, grab by a player |
 //!
-//! Animations 0x1649d0 (mouvements, `+0xa6` ajouté à l'animation de provocation) et 0x1649e8 (coups).
+//! Animations 0x1649d0 (movements, `+0xa6` added to the taunt animation) and 0x1649e8 (attacks).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -39,11 +39,11 @@ pub(self) mod g {
     /// Minuterie (octet) d'un geste.
     pub const TIMER: u32 = 0xa2;
     pub const COOLDOWN: u32 = 0xa4;
-    /// Geste choisi (valeur de `+6` à reprendre).
+    /// Chosen move (value of `+6` to resume).
     pub const CHOSEN: u32 = 0xa5;
-    /// L'arme est en main (la provocation et le relevé utilisent l'animation +1).
+    /// The weapon is in hand (the taunt and the get-up use animation +1).
     pub const WEAPON: u32 = 0xa6;
-    /// Même drapeau, utilisé par l'état touché (animations de chute).
+    /// Same flag, used by the hit state (fall animations).
     pub const ARMED: u32 = 0xbf;
 }
 use g::*;
@@ -77,17 +77,17 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-/// Démarre l'animation `n` du jeu des mouvements.
+/// Starts animation `n` of the movement set.
 pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
-/// Démarre l'animation `n` du jeu des coups.
+/// Starts animation `n` of the attack set.
 pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-/// Démarre le coup `n` : type de coup `kind` et force `power`.
+/// Starts attack `n`: attack type `kind` and strength `power`.
 pub(self) fn strike_with<R: Bench>(x: &mut Cx<'_, R>, n: u32, kind: u8, power: u8) {
     x.set8(STRIKE_KIND, kind);
     x.set8(STRIKE_POWER, power);
@@ -98,13 +98,13 @@ pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
-/// 0x6ad12 : son puis animation 4.
+/// 0x6ad12: sound then animation 4.
 pub(self) fn wind_up<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xecfe4);
     mv(x, 4);
 }
 
-/// Octet tiré au hasard dans la rangée de difficulté de `table` (rangées de 32 octets).
+/// Byte drawn at random from the difficulty row of `table` (rows of 32 bytes).
 pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
@@ -112,7 +112,7 @@ pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     x.data8(at + r)
 }
 
-/// 0x6c01a : fin d'un geste ; debout, et si le tirage le veut, attente (`+5 = 10`).
+/// 0x6c01a: end of a move; standing, and if the draw says so, wait (`+5 = 10`).
 pub(self) fn done_attack<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
@@ -120,8 +120,8 @@ pub(self) fn done_attack<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6c04a : un joueur est-il dans la boîte `(d0, d1, d2)` et accepté par les portes d'IA (0xa4b4, et 0xa4c2 s'il
-/// regarde dans le même sens) ?
+/// 0x6c04a: is a player in box `(d0, d1, d2)` and accepted by the AI gates (0xa4b4, and 0xa4c2 if it looks in the same
+/// direction)?
 fn box_check<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
@@ -139,17 +139,17 @@ fn box_check<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     true
 }
 
-/// 0x6c040 : joueur tout près.
+/// 0x6c040: player very close.
 pub(self) fn near_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_check(x, 0, 0x70, 0x10)
 }
 
-/// 0x6c032 : joueur à une courte distance, devant.
+/// 0x6c032: player at a short distance, in front.
 pub(self) fn far_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_check(x, -0x80, 0x30, 0x10)
 }
 
-/// 0x6c078 : le Gnoll tourne le dos à sa cible.
+/// 0x6c078: the Gnoll has its back to its target.
 pub(self) fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
@@ -163,10 +163,10 @@ pub(self) fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 pub(self) const NEAR_TABLE: u32 = 0x6c0d6;
 pub(self) const FAR_TABLE: u32 = 0x6c2d6;
-/// Rangées de gestes qui suivent une série (sous-état 8).
+/// Rows of moves that follow a series (substate 8).
 pub(self) const FOLLOW_TABLE: u32 = 0x6be1a;
 
-/// 0x6c0a6 (série proche) / 0x6c0a0 (série lointaine) : choisit le geste (`+5 = 4`, `+6 = 0`).
+/// 0x6c0a6 (near series) / 0x6c0a0 (far series): chooses the move (`+5 = 4`, `+6 = 0`).
 pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let b = row_byte(x, table);
     x.set8(f::SUB, 4);
@@ -175,7 +175,7 @@ pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     b
 }
 
-/// 0x6bdec : après une série, choisit le geste de repli (sous-état 8).
+/// 0x6bdec: after a series, chooses the fallback move (substate 8).
 pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     let b = row_byte(x, FOLLOW_TABLE);
@@ -184,7 +184,7 @@ pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 0);
 }
 
-/// 0x6baf2 : le Gnoll est saisi par un joueur : animation de lâcher, puis il disparaît.
+/// 0x6baf2: the Gnoll is grabbed by a player: drop animation, then it disappears.
 pub(self) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -199,9 +199,9 @@ pub(self) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
-/// Faux si le jeu est en pause (rien n'est fait) ; sinon le corps de l'état actif suit dans la même image.
+/// False if the game is paused (nothing is done); otherwise the body of the active state follows within the same frame.
 fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if paused(x) {
         return false;
@@ -241,7 +241,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;

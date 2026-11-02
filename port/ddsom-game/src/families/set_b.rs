@@ -1,8 +1,8 @@
-//! Objets de décor et d'animation (classe SET, pool de 32 objets de 0x50 octets, table 0x39eac),
-//! types 16 à 32. Voir `docs/families/set_b.md`.
+//! Scenery and animation objects (SET class, pool of 32 objects of 0x50 bytes, table 0x39eac), types 16 to 32. See
+//! `docs/families/set_b.md`.
 //!
-//! Les objets SET ne figurent pas dans les listes triées de profondeur par construction (les
-//! appels à `reinsert` des créations les y inscrivent tout de même quand ils les rendent visibles).
+//! SET objects are not in the depth-sorted lists by construction (the `reinsert` calls of the creations nevertheless
+//! enter them there when they make them visible).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -14,18 +14,18 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-/// Les quatre enregistrements de joueurs : A5+0x5de, 0x200 octets chacun.
+/// The four player records: A5+0x5de, 0x200 bytes each.
 const PLAYERS: u32 = A5 + 0x5de;
 const PLAYER_SIZE: u32 = 0x200;
 
-/// Champs d'un enregistrement de joueur utilisés par les décors.
+/// Fields of a player record used by the scenery.
 
-/// 0xc8312 : objet SET de la scène, de variante `variant`. Glitch d'origine : l'appelant ne teste pas l'échec et
-/// écrit dans l'objet que laisse A1 (`Pool::alloc_or_leftover`).
+/// 0xc8312: SET object of the scene, of variant `variant`. Original glitch: the caller does not test the failure and
+/// writes into the object that A1 leaves (`Pool::alloc_or_leftover`).
 fn scene_set<R: Bench>(x: &mut Cx<'_, R>, variant: u8) -> Obj {
     match super::creators::scene_set_via(&mut OnBench(&mut x.c), x.b, variant) {
         Some(o) => o,
-        None => pools::SET.alloc_or_leftover(x.b).expect_err("le pool SET vient d'être trouvé plein"),
+        None => pools::SET.alloc_or_leftover(x.b).expect_err("the SET pool was just found full"),
     }
 }
 
@@ -43,15 +43,15 @@ fn players() -> impl Iterator<Item = Obj> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 16 (0xd4110) : tremplin (h)
+// Type 16 (0xd4110): trampoline (h)
 // ---------------------------------------------------------------------------------------------
 
-/// 0xd40e8, routine des scripts d'apparition (scènes 14 et 109) : libère le verrou des tremplins
-/// (`A5+0x46`) et crée les treize tremplins de la scène, SET 16 de variantes 13 à 1 ; s'arrête si le
-/// pool est plein. Laisse comme l'original D5 (compteur de boucle), A1 et D6 (de l'allocation).
+/// 0xd40e8, routine of the appearance scripts (scenes 14 and 109): releases the trampoline lock (`A5+0x46`) and creates
+/// the thirteen trampolines of the scene, SET 16 of variants 13 to 1; stops if the pool is full. Leaves like the
+/// original D5 (loop counter), A1 and D6 (from the allocation).
 pub(crate) fn spawn_bumpers(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     crate::mem::wr16(b, A5 + 0x46, 0);
-    // `moveq #12,D5` : compteur long, mot haut nul
+    // `moveq #12,D5`: long counter, high word zero
     for counter in (0..13u32).rev() {
         c.d[5] = counter;
         let Some(o) = pools::SET.alloc_68k(c, b) else { return };
@@ -62,40 +62,39 @@ pub(crate) fn spawn_bumpers(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     c.d[5] |= 0xffff;
 }
 
-/// Tremplin / pare-chocs (h) : une zone de contact (boîtes lues dans la ROM d'après `+0x2e` et les
-/// octets `+0x38..+0x3a`) qui, quand un joueur la touche en appuyant la bonne touche, le lance
-/// dans les airs (vitesses en dur par type de tremplin `+0x42`, état du joueur 0x2002400 ou
-/// 0x2002402). Un seul joueur à la fois : `A5+0x46` mémorise l'objet qui tient le verrou et
-/// `+0x14` le délai avant de le relâcher. Tant qu'un joueur vivant est hors de portée des deux
-/// boîtes de présence, l'objet ne fait rien.
+/// Trampoline / bumper (h): a contact zone (boxes read from the ROM according to `+0x2e` and bytes `+0x38..+0x3a`)
+/// that, when a player touches it while pressing the right key, launches the player into the air (hardcoded speeds per
+/// trampoline type `+0x42`, player state 0x2002400 or 0x2002402). Only one player at a time: `A5+0x46` remembers the
+/// object holding the lock and `+0x14` the delay before releasing it. As long as a living player is out of range of the
+/// two presence boxes, the object does nothing.
 mod bumper {
     use super::*;
 
     const ANIMS: u32 = 0x1c4738;
-    /// Mot de la RAM (A5+0x46) : tremplin occupé (adresse de l'objet).
+    /// RAM word (A5+0x46): occupied trampoline (address of the object).
     const LOCK: u32 = 0x46;
-    /// Octet de la RAM (A5+0x50) : jeu figé.
+    /// RAM byte (A5+0x50): game frozen.
     const FROZEN: u32 = 0x50;
     const LOCK_FRAMES: u16 = 0x20;
-    /// Variante -> sorte de tremplin (`+0x42`) ; variante -> position X, Y (deux mots).
+    /// Variant -> trampoline kind (`+0x42`); variant -> position X, Y (two words).
     const KIND: u32 = 0xd4198;
     const POSITION: u32 = 0xd41a6;
-    /// Tables de pointeurs de boîtes (par `+0x2e`), de 8 octets par boîte (dx, demi-largeur,
-    /// dz, demi-hauteur ...) : boîte de contact, de présence 1 et de présence 2.
+    /// Tables of box pointers (by `+0x2e`), 8 bytes per box (dx, half-width, dz, half-height ...): contact box,
+    /// presence box 1 and 2.
     const BOXES_HIT: u32 = 0x11bffa;
     const BOXES_NEAR: u32 = 0x11c11a;
     const BOXES_NEAR2: u32 = 0x11c23a;
     const BOX_SET: u8 = 0x42;
-    /// Sous-champs de la boîte de contact (`+0x38`) et des boîtes de présence (`+0x39`, `+0x3a`).
+    /// Subfields of the contact box (`+0x38`) and of the presence boxes (`+0x39`, `+0x3a`).
     const HIT_SEL: u32 = 0x38;
     const NEAR_SEL: u32 = 0x39;
     const NEAR2_SEL: u32 = 0x3a;
-    /// États du joueur lancé.
+    /// States of the launched player.
     const AIRBORNE: u32 = 0x0200_2400;
     const AIRBORNE_BACK: u32 = 0x0200_2402;
 
-    /// Un lancer : touche du joueur (bit de `+0x6c`), vitesses, hauteur initiale, amortissement
-    /// (`+0x1e`), état d'arrivée, et si l'orientation est remise à zéro.
+    /// A launch: player key (bit of `+0x6c`), speeds, initial height, damping (`+0x1e`), arrival state, and whether the
+    /// orientation is reset to zero.
     struct Launch {
         button: u8,
         vx: i16,
@@ -110,7 +109,7 @@ mod bumper {
         Launch { button: 0, vx: 0x300, vy: 0x400, z: 0x2_0000, drag: -0x20, state: AIRBORNE, reset_flip: false },
         Launch { button: 1, vx: -0x380, vy: 0x380, z: 0x2_0000, drag: -0x20, state: AIRBORNE, reset_flip: false },
         Launch { button: 2, vx: 0, vy: 0, z: 0x2_0000, drag: -0x30, state: AIRBORNE, reset_flip: false },
-        // l'entrée 3 est spéciale (voir `kick_up`)
+        // entry 3 is special (see `kick_up`)
         Launch { button: 3, vx: 0, vy: 0, z: 0, drag: 0, state: 0, reset_flip: false },
         Launch { button: 0, vx: 0x480, vy: 0, z: 0x2_0000, drag: -0x30, state: AIRBORNE_BACK, reset_flip: false },
         Launch { button: 2, vx: -0x200, vy: 0, z: 0x3_0000, drag: -0x30, state: AIRBORNE_BACK, reset_flip: true },
@@ -172,14 +171,14 @@ mod bumper {
         }
     }
 
-    /// Adresse de la boîte de la ligne `sel` du jeu `+0x2e` de la table `table`.
+    /// Address of the box of row `sel` of the set `+0x2e` of the table `table`.
     fn box_of<R: Bench>(x: &mut Cx<'_, R>, table: u32, sel: u32) -> u32 {
         let set = x.u8(0x2e) as u32;
         let boxes = x.data32(table + 4 * set);
         boxes.wrapping_add(8 * x.u8(sel) as u32)
     }
 
-    /// Test d'un axe : la distance corrigée est dans l'intervalle (comparaison non signée).
+    /// Test of an axis: the corrected distance is in the interval (unsigned comparison).
     fn in_range(delta: u16, half: u8, shift: Option<i8>) -> bool {
         let mut d = delta.wrapping_add(half as u16);
         if let Some(s) = shift {
@@ -188,7 +187,7 @@ mod bumper {
         d <= (half as u16).wrapping_mul(2)
     }
 
-    /// Le joueur est dans une boîte de présence (boîte décalée de deux octets de décalage).
+    /// The player is in a presence box (box offset by two offset bytes).
     fn within<R: Bench>(x: &mut Cx<'_, R>, p: Obj, table: u32, sel: u32) -> bool {
         let b = box_of(x, table, sel);
         let dx = p.u16(x.b, pl::X).wrapping_sub(x.u16(0x8));
@@ -203,7 +202,7 @@ mod bumper {
         in_range(dy, half_y, Some(shift_y))
     }
 
-    /// Le joueur est dans la boîte de contact et dans un état qui le permet.
+    /// The player is in the contact box and in a state that allows it.
     fn keys<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
         let b = box_of(x, BOXES_HIT, HIT_SEL);
         if p.u8(x.b, 5) != 0 || p.u8(x.b, 0x8a) != 0 {
@@ -226,7 +225,7 @@ mod bumper {
         in_range(dy, x.data8(b + 3), None)
     }
 
-    /// Lance le joueur selon la sorte du tremplin (`+0x42`).
+    /// Launches the player according to the trampoline kind (`+0x42`).
     fn launch<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
         let kind = x.u8(0x42) as usize;
         if kind >= LAUNCHES.len() {
@@ -254,14 +253,14 @@ mod bumper {
         p.set_u32(x.b, pl::STATE, l.state);
     }
 
-    /// Prend le verrou et arme le délai de relâchement.
+    /// Takes the lock and arms the release delay.
     fn grab<R: Bench>(x: &mut Cx<'_, R>) {
         x.set_a5_u16(LOCK, x.o.0 as u16);
         x.set16(0x14, LOCK_FRAMES);
     }
 
-    /// Sorte 3 : pousse un joueur qui appuie la touche 3 et dont la hauteur est au moins 0x28 :
-    /// il est déplacé de 0x28 en profondeur et abaissé d'autant.
+    /// Kind 3: pushes a player who presses key 3 and whose height is at least 0x28: the player is moved by 0x28 in
+    /// depth and lowered by as much.
     fn kick_up<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
         if p.u8(x.b, 0x6c) & 8 == 0 || (p.u16(x.b, pl::Z) as i16) < 0x28 {
             return;
@@ -274,15 +273,15 @@ mod bumper {
     }
 }
 
-/// Variables de la RAM de travail (A5+) : abscisse et ordonnée de la caméra, caméra secondaire.
+/// Work RAM variables (A5+): camera abscissa and ordinate, secondary camera.
 mod ram {
     pub const CAMERA_X: u32 = 0x506;
     pub const CAMERA_Y: u32 = 0x50a;
     pub const CAMERA2_Y: u32 = 0x55a;
 }
 
-/// Fige la partie et assombrit l'écran : `A5+0x490` = 1, `A5+0x48e` = 0xc, `A5+0x48f` = `flag` pas, palettes
-/// blanchies (0x1686) puis tâche de fondu 0x14de (`tasks/fading.rs`).
+/// Freezes the game and darkens the screen: `A5+0x490` = 1, `A5+0x48e` = 0xc, `A5+0x48f` = `flag` steps, palettes
+/// whitened (0x1686) then fade task 0x14de (`tasks/fading.rs`).
 fn show_message<R: Bench>(x: &mut Cx<'_, R>, flag: u8) {
     x.set_a5_u16(0x490, 1);
     x.set_a5_u8(0x48e, 0xc);
@@ -291,36 +290,35 @@ fn show_message<R: Bench>(x: &mut Cx<'_, R>, flag: u8) {
     start_fade_task(x, FADE_TO_BLACK_TASK);
 }
 
-/// Tâche de fondu au noir (pas de l'état `A5+0x48f`).
+/// Fade-to-black task (steps of state `A5+0x48f`).
 const FADE_TO_BLACK_TASK: u32 = 0x14de;
-/// Emplacement de la tâche de fondu (décalage dans la table des tâches).
+/// Slot of the fade task (offset in the task table).
 const FADE_TASK_SLOT: u32 = 0x10;
 
-/// Crée la tâche de fondu `entry` (0x9b6, D0 = 0x10, A0 = l'entrée).
+/// Creates the fade task `entry` (0x9b6, D0 = 0x10, A0 = the entry).
 fn start_fade_task<R: Bench>(x: &mut Cx<'_, R>, entry: u32) {
     crate::kernel::create_task(x.b, FADE_TASK_SLOT, entry);
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 17 (0xd466a) : séquence d'arrivée du boss (h)
+// Type 17 (0xd466a): boss arrival sequence (h)
 // ---------------------------------------------------------------------------------------------
 
-/// Séquenceur de la cinématique d'arrivée du boss (h) : une suite de 13 étapes (`+5`) qui
-/// attendent que la caméra atteigne une abscisse (0x100, 0x180, 0x200, 0x2b0) ou qu'un
-/// compte à rebours (`+0x42`) s'écoule, et lancent à chaque fois des sons, des messages
-/// (0x2824, 0x2860, 0x289c, 0xeda26, 0xeda66...) et des explosions aléatoires ; la dernière
-/// étape crée le boss (objet BOSS de type 2).
+/// Sequencer of the boss arrival cutscene (h): a series of 13 steps (`+5`) that wait for the camera to reach an
+/// abscissa (0x100, 0x180, 0x200, 0x2b0) or for a countdown (`+0x42`) to run out, and each time launch sounds, messages
+/// (0x2824, 0x2860, 0x289c, 0xeda26, 0xeda66...) and random explosions; the last step creates the boss (BOSS object of
+/// type 2).
 mod boss_intro {
     use super::*;
 
     const STEP: u32 = 0x42;
     const BLAST: u32 = 0x46;
-    /// Routines de son (D0 = numéro).
+    /// Sound routines (D0 = number).
     const EDA26: u32 = 0xeda26;
     const EDA66: u32 = 0xeda66;
     const ED94A: u32 = 0xed94a;
     const ED9BC: u32 = 0xed9bc;
-    /// Tables de décalages (16 mots chacune) de l'explosion en X et en Y.
+    /// Offset tables (16 words each) of the explosion in X and in Y.
     const BLAST_DX: u32 = 0xd4910;
     const BLAST_DY: u32 = 0xd4930;
 
@@ -340,7 +338,7 @@ mod boss_intro {
         x.a5_u16(ram::CAMERA_X) as i16
     }
 
-    /// Passe à l'étape suivante et arme le compte à rebours de l'étape.
+    /// Goes to the next step and arms the step's countdown.
     fn next<R: Bench>(x: &mut Cx<'_, R>, frames: u8) {
         x.set8(STEP, frames);
         x.add8(0x5, 2);
@@ -434,14 +432,13 @@ mod boss_intro {
         }
     }
 
-    /// Étape 0 : fige la partie (`A5+0x48e` = 0xc, `A5+0x48f` = 7), lance le fondu 0x1686 et la
-    /// tâche de fondu 0x14de (0x9b6).
+    /// Step 0: freezes the game (`A5+0x48e` = 0xc, `A5+0x48f` = 7), starts the fade 0x1686 and the fade task 0x14de
+    /// (0x9b6).
     fn freeze_and_show<R: Bench>(x: &mut Cx<'_, R>) {
         show_message(x, 7);
     }
 
-    /// Étape 16 : toutes les 20 images un coup de ED94A ; quand `+0x42` est un multiple de 4
-    /// une explosion au hasard ; à 0, fin.
+    /// Step 16: every 20 frames a hit of ED94A; when `+0x42` is a multiple of 4 a random explosion; at 0, end.
     fn explosions<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u8(BLAST).wrapping_sub(1);
         x.set8(BLAST, n);
@@ -471,12 +468,12 @@ mod boss_intro {
         crate::families::enemy_common::enemy_blast_at(x, px, py);
     }
 
-    /// Étape 22 : 30 fumées, puis le boss (BOSS type 2) apparaît.
+    /// Step 22: 30 smokes, then the boss (BOSS type 2) appears.
     fn spawn_boss<R: Bench>(x: &mut Cx<'_, R>) {
         if !countdown(x) {
             return;
         }
-        // 0xb4bcc trente fois : la variante est le compteur de la boucle (D1, 0x1d à 0), le réglage nul
+        // 0xb4bcc thirty times: the variant is the loop counter (D1, 0x1d down to 0), the setting zero
         for n in (0..=0x1d).rev() {
             crate::families::effects_creators::debris_rain(x.b, x.o, n, 0);
         }
@@ -493,11 +490,11 @@ mod boss_intro {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 18 (0xd4950) : défilement vertical vers une cible
+// Type 18 (0xd4950): vertical scroll toward a target
 // ---------------------------------------------------------------------------------------------
 
-/// Fait descendre la caméra secondaire d'un pixel par image jusqu'à la hauteur `+0x42`, puis
-/// libère l'objet lié (`+0x46`) et prévient la routine 0x2824.
+/// Makes the secondary camera descend one pixel per frame down to the height `+0x42`, then frees the linked object
+/// (`+0x46`) and notifies routine 0x2824.
 mod scroll_to {
     use super::*;
 
@@ -527,40 +524,38 @@ mod scroll_to {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 19 (0xd49a2) : générateur de vagues d'ennemis (h)
+// Type 19 (0xd49a2): enemy wave generator (h)
 // ---------------------------------------------------------------------------------------------
 
-/// Générateur de vagues (h) : il se déclenche quand un joueur vivant arrive à portée (0xc0 en X,
-/// 0x30 en profondeur), lit alors un script de la ROM (entrées de 0x14 octets, une liste par
-/// variante) et crée les objets décrits (ennemis, boss ou décors) quand la partie est en jeu
-/// (`A5+0x2c` = 0xc), en tenant le compte des objets encore en vie (`+0x2a`, que ces objets
-/// décrémentent à leur mort en retrouvant leur générateur dans `+0x46`).
+/// Wave generator (h): it triggers when a living player comes within range (0xc0 in X, 0x30 in depth), then reads a ROM
+/// script (entries of 0x14 bytes, one list per variant) and creates the described objects (enemies, bosses or scenery)
+/// when the game is in play (`A5+0x2c` = 0xc), keeping the count of the objects still alive (`+0x2a`, which these
+/// objects decrement at their death by finding their generator in `+0x46`).
 ///
-/// Entrée de script : +0 mot (> 0 : délai avant la suivante ; < 0 : attendre que le nombre
-/// d'objets vivants soit au plus l'octet bas, bit 7 de cet octet : attendre qu'aucun ne vive),
-/// +2 rang minimal, +4/+6/+8 position (X, Z, Y), +0xa nombre de joueurs minimal, +0xb routine de
-/// création (index en octets dans la table 0xd4b92), +0xc type, +0xd variante, +0xe/+0xf
-/// paramètres, +0x10 mot `+0x42`, +0x12 position absolue si non nul (sinon relative à la caméra).
-/// Un mot 0x8000 termine le script.
+/// Script entry: +0 word (> 0: delay before the next; < 0: wait until the number of living objects is at most the low
+/// byte, bit 7 of this byte: wait until none lives), +2 minimum rank, +4/+6/+8 position (X, Z, Y), +0xa minimum number
+/// of players, +0xb creation routine (byte index in table 0xd4b92), +0xc type, +0xd variant, +0xe/+0xf parameters,
+/// +0x10 word `+0x42`, +0x12 absolute position if non-zero (otherwise relative to the camera). A word 0x8000 ends the
+/// script.
 mod wave_spawner {
     use super::*;
 
-    /// Pointeurs de scripts, par variante (espace de données).
+    /// Script pointers, per variant (data space).
     const SCRIPTS: u32 = 0xd4c5e;
-    /// Variante -> forme du démarrage / de la fin (octets, espace programme).
+    /// Variant -> shape of the start / end (bytes, program space).
     const START_KIND: u32 = 0xd4a0e;
     const END_KIND: u32 = 0xd4bdc;
-    /// Routines de création par index (longs, espace de données).
+    /// Creation routines by index (longs, data space).
     const CREATORS: u32 = 0xd4b92;
     const ENTRY_SIZE: u32 = 0x14;
     const SCRIPT_END: u16 = 0x8000;
-    /// Octet de la RAM (A5+0x51) : générateurs actifs. Octet (A5+0x2c) : mode de jeu (0xc : en jeu).
+    /// RAM byte (A5+0x51): active generators. Byte (A5+0x2c): game mode (0xc: in play).
     const ACTIVE_COUNT: u32 = 0x51;
     const GAME_MODE: u32 = 0x2c;
     const PLAYING: u8 = 0xc;
-    /// Mot de la RAM (A5+0x51e) : limite de défilement imposée par la vague.
+    /// RAM word (A5+0x51e): scroll limit imposed by the wave.
     const SCROLL_LIMIT: u32 = 0x51e;
-    /// Champs de l'objet : délai global, pointeur de script, attente, seuil, vivants.
+    /// Fields of the object: global delay, script pointer, wait, threshold, alive.
     const TIMER: u32 = 0x24;
     const CURSOR: u32 = 0x20;
     const DELAY: u32 = 0x26;
@@ -582,7 +577,7 @@ mod wave_spawner {
         }
     }
 
-    /// Un joueur vivant est à portée du générateur.
+    /// A living player is within range of the generator.
     fn player_near<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         for p in players() {
             if p.u8(x.b, pl::ACTIVE) == 0 || p.u16(x.b, pl::HEALTH) == 0 {
@@ -625,7 +620,7 @@ mod wave_spawner {
         x.add8(0x4, 2);
     }
 
-    /// Fin du déroulement (arrêt demandé, temps écoulé ou script terminé).
+    /// End of the run (stop requested, time elapsed or script finished).
     fn stop<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(DONE, 1);
         end_script(x);
@@ -664,8 +659,7 @@ mod wave_spawner {
         next_entry(x);
     }
 
-    /// Exécute l'entrée courante du script (en sautant celles que le nombre de joueurs ou le rang
-    /// excluent).
+    /// Executes the current script entry (skipping those that the number of players or the rank exclude).
     fn next_entry<R: Bench>(x: &mut Cx<'_, R>) {
         let mut e = x.u32(CURSOR);
         loop {
@@ -700,7 +694,7 @@ mod wave_spawner {
             0x22bc => &pools::ENEMY,
             0x23a8 => &pools::BOSS,
             0x2348 => &pools::SET,
-            r => unreachable!("créateur de vague {r:#x} : la table 0xd4b92 n'a que les allocations ENEMY, BOSS, SET"),
+            r => unreachable!("wave creator {r:#x}: table 0xd4b92 only has the ENEMY, BOSS, SET allocations"),
         };
         let Some(o) = pool.alloc(x.b) else {
             x.set16(THRESHOLD, 0xffff);
@@ -728,7 +722,7 @@ mod wave_spawner {
         let me = x.o.0 as u16;
         o.set_u16(x.b, 0x46, me);
         if x.data8(e + 0x12) == 0 {
-            // position relative à la caméra
+            // position relative to the camera
             let camera = if x.a5_u8(0x36) != 0 { 0x54e } else { 0x4fe };
             let cam = Obj(A5 + camera);
             let v = o.u16(x.b, 0x8).wrapping_add(cam.u16(x.b, 0x8));
@@ -739,8 +733,7 @@ mod wave_spawner {
         x.set32(CURSOR, e + ENTRY_SIZE);
     }
 
-    /// Plus aucun objet vivant : libère le compte, laisse la variante conclure et libère la
-    /// limite de défilement.
+    /// No more living objects: releases the count, lets the variant conclude and releases the scroll limit.
     fn finish<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u16(TIMER).wrapping_sub(1);
         x.set16(TIMER, n);
@@ -758,7 +751,7 @@ mod wave_spawner {
         let variant = x.u8(0x3) as u32;
         match x.rom8(END_KIND + variant) {
             0 => {
-                // fixe la limite de défilement à la caméra courante
+                // sets the scroll limit at the current camera
                 let v = x.a5_u16(ram::CAMERA_X);
                 x.set_a5_u16(0x52c, v);
                 x.set_a5_u16(SCROLL_LIMIT, 0);
@@ -771,16 +764,15 @@ mod wave_spawner {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 20 (0xd5f5a) : barre de vie
+// Type 20 (0xd5f5a): health bar
 // ---------------------------------------------------------------------------------------------
 
-/// Barre de vie d'un joueur (ou de deux joueurs réunis si `+3`), dessinée dans trois colonnes de
-/// 44 cases de la couche de fond 1 (GFX RAM 0x91215c, 0x912160, 0x912164 ; 0x80 octets par ligne).
-/// La barre se remplit par pièces de 8 points de vie : la vie affichée (`+0x2a`) rejoint la vie
-/// réelle (`+0x32`, somme de `+0x62` du joueur) d'un point par image, en avançant le curseur
-/// d'écriture (`+0x22`) et son sous-pas (`+0x26`). Au-delà de 0x160 points la barre passe à la
-/// colonne suivante. `+0x30` = vie maximale (barre vide à droite), `+0x2c` / `+0x27` = longueur
-/// du fond en pièces entières et en reste.
+/// Health bar of a player (or of two players together if `+3`), drawn in three columns of 44 cells of background layer
+/// 1 (GFX RAM 0x91215c, 0x912160, 0x912164; 0x80 bytes per line). The bar fills in pieces of 8 hit points: the
+/// displayed life (`+0x2a`) catches up with the real life (`+0x32`, sum of `+0x62` of the player) by one point per
+/// frame, advancing the write cursor (`+0x22`) and its sub-step (`+0x26`). Beyond 0x160 points the bar moves to the
+/// next column. `+0x30` = maximum life (empty bar on the right), `+0x2c` / `+0x27` = length of the background in whole
+/// pieces and remainder.
 mod life_bar {
     use super::*;
     use crate::mem::{wr16, wr32};
@@ -789,19 +781,19 @@ mod life_bar {
     const COLUMN_B: u32 = 0x912160;
     const COLUMN_C: u32 = 0x912164;
     const ROW: u32 = 0x80;
-    /// Colonne remise au vide quand la barre repasse sous 0x160.
+    /// Column reset to empty when the bar falls back below 0x160.
     const CURSOR_AFTER_RESET: u32 = 0x913760;
     const ROWS: u32 = 44;
     const MAX_LEN: i16 = 0x2c0;
     const SECOND_COLUMN_FROM: i16 = 0x160;
-    /// Case pleine, case vide.
+    /// Full cell, empty cell.
     const FULL: u32 = 0x1318_000d;
     const BLANK: u32 = 0x0020_0000;
-    /// Attribut des pièces.
+    /// Attribute of the pieces.
     const PIECE_ATTR: u16 = 0xd;
-    /// Pièces partielles : table de mots indexée par le nombre de points (1 à 8) * 2.
+    /// Partial pieces: word table indexed by the number of points (1 to 8) * 2.
     const PIECES: u32 = 0xd61b2;
-    /// Pointeurs (espace de données) vers l'habillage (octets, fin 0x40) selon le type du joueur.
+    /// Pointers (data space) to the trim (bytes, end 0x40) according to the player's type.
     const FRAMES: u32 = 0xd6232;
     const FRAME_SHARED: u32 = 0xd628c;
     const FRAME_END: u8 = 0x40;
@@ -846,7 +838,7 @@ mod life_bar {
         }
     }
 
-    /// Fin : colonnes vidées, objet libéré.
+    /// End: columns emptied, object freed.
     fn dismiss<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(0x4, 6);
         for c in [COLUMN_A, COLUMN_B, COLUMN_C] {
@@ -855,8 +847,8 @@ mod life_bar {
         x.free(&pools::SET);
     }
 
-    /// Habillage de la colonne de gauche (cases de la liste d'octets du type de joueur), et
-    /// capuchon de la colonne suivante quand la vie dépasse la longueur maximale.
+    /// Trim of the left column (cells of the byte list of the player type), and cap of the next column when the life
+    /// exceeds the maximum length.
     fn draw_frame<R: Bench>(x: &mut Cx<'_, R>) {
         let player = x.linked(0x20);
         let kind = player.u8(x.b, 2);
@@ -885,7 +877,7 @@ mod life_bar {
         }
     }
 
-    /// Case de la pièce de `d1` points (au plus 8), décalée de `d0`.
+    /// Cell of the piece of `d1` points (at most 8), offset by `d0`.
     fn piece<R: Bench>(x: &mut Cx<'_, R>, at: u32, d0: i16, d1: i16) {
         let points = d1.min(8);
         let base = x.rom16(PIECES.wrapping_add((points.wrapping_mul(2)) as i32 as u32));
@@ -893,7 +885,7 @@ mod life_bar {
         wr16(x.b, at + 2, PIECE_ATTR);
     }
 
-    /// Sous-état 0 : trace toute la barre (la vie affichée prend la vie réelle).
+    /// Substate 0: draws the whole bar (the displayed life takes the real life).
     fn draw_full<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(0x32) as i16 > MAX_LEN {
             return;
@@ -941,7 +933,7 @@ mod life_bar {
         }
     }
 
-    /// Dernière pièce de la partie pleine, puis la partie vide.
+    /// Last piece of the full part, then the empty part.
     fn partial<R: Bench>(x: &mut Cx<'_, R>, at: u32, d0: i16, d1: i16, d2: i16) {
         piece(x, at, d0, d1);
         if d1 <= 8 {
@@ -951,8 +943,8 @@ mod life_bar {
         tail(x, at + ROW, d0, d1, d2 - 1, false)
     }
 
-    /// Mémorise le curseur (`+0x22`) et le sous-pas (`+0x26`), puis trace la partie restante
-    /// (pièces vides) jusqu'à épuisement de `d1`.
+    /// Remembers the cursor (`+0x22`) and the sub-step (`+0x26`), then draws the remaining part (empty pieces) until
+    /// `d1` is exhausted.
     fn tail<R: Bench>(x: &mut Cx<'_, R>, mut at: u32, d0: i16, mut d1: i16, mut d2: i16, set_cursor: bool) {
         if set_cursor {
             x.set32(0x22, at);
@@ -976,7 +968,7 @@ mod life_bar {
         }
     }
 
-    /// Sous-état 2 : la vie affichée rejoint la vie réelle d'un point par image.
+    /// Substate 2: the displayed life catches up with the real life by one point per frame.
     fn animate<R: Bench>(x: &mut Cx<'_, R>) {
         let shown = x.u16(0x2a) as i16;
         if shown == 0 {
@@ -1032,16 +1024,15 @@ mod life_bar {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 21 (0xd6372) : compte à rebours de continuation
+// Type 21 (0xd6372): continue countdown
 // ---------------------------------------------------------------------------------------------
 
-/// Affichage du compte à rebours d'un joueur qui peut continuer (h) : trois chiffres (`+0x14`,
-/// `+0x15`, `+0x16`, de 0:00 à 9:59 (h)) dessinés dans la couche de fond 1 (0x912b38) et décomptés
-/// à la seconde (`+0x17` compte 60 images) ; l'inscription « prêt » clignote à côté (rangées de
-/// cases constantes en 0x912830). À zéro, les joueurs encore vivants sont mis à mort. Variante 1 :
-/// version sans compte (invitation seule), variante 2 : ne dépend pas de `A5+0x50`.
-/// États : 0 initialisation (palette 0x91c420), 2 comptage, 4 fin de partie (inscription finale
-/// en 0x9127b0), 6 libération. Le script de son 0xd6922 annonce l'affichage, 0xd694e son retrait.
+/// Display of the countdown of a player who can continue (h): three digits (`+0x14`, `+0x15`, `+0x16`, from 0:00 to
+/// 9:59 (h)) drawn in background layer 1 (0x912b38) and counted down by the second (`+0x17` counts 60 frames); the
+/// "ready" inscription blinks beside it (rows of constant cells at 0x912830). At zero, the players still alive are put
+/// to death. Variant 1: version without count (invitation only), variant 2: does not depend on `A5+0x50`. States: 0
+/// initialization (palette 0x91c420), 2 counting, 4 end of game (final inscription at 0x9127b0), 6 release. The sound
+/// script 0xd6922 announces the display, 0xd694e its removal.
 mod continue_countdown {
     use super::*;
     use crate::mem::{rd8, wr16, wr32};
@@ -1049,11 +1040,11 @@ mod continue_countdown {
     const PALETTE_SRC: u32 = 0x25c0e0;
     const PALETTE_DST: u32 = 0x91c420;
     const BRIGHT: u32 = 0xf000_f000;
-    /// Octet (A5-0x5b8e = 0xff2472) : son coupé.
+    /// Byte (A5-0x5b8e = 0xff2472): sound muted.
     const MUTED: u32 = 0xff_2472;
     const SCRIPT_ON: u32 = 0xd6922;
     const SCRIPT_OFF: u32 = 0xd694e;
-    /// Variante -> paramètre de l'invitation (`+0x2c`), selon le niveau `A5+0x34` (octets).
+    /// Variant -> invitation parameter (`+0x2c`), according to the level `A5+0x34` (bytes).
     const PROMPT_BY_STAGE: u32 = 0xd6464;
     const DIGITS: u32 = 0x912b38;
     const GET_READY: u32 = 0x912830;
@@ -1061,14 +1052,14 @@ mod continue_countdown {
     const ROW: u32 = 0x80;
     const ATTR: u32 = 3;
     const COLON: u16 = 0x3a;
-    /// Rangées (tuile gauche, tuile droite) de l'inscription clignotante (attribut 3).
+    /// Rows (left tile, right tile) of the blinking inscription (attribute 3).
     const GET_READY_ROWS: [(u16, u16); 16] = [
         (0x192, 0x1a2), (0x193, 0x1a3), (0x1bc, 0x1cc), (0x1bd, 0x1cd),
         (0x1b6, 0x1c6), (0x1b7, 0x1c7), (0x1b6, 0x1c6), (0x1b7, 0x1c7),
         (0x1d4, 0x1e4), (0x1d5, 0x1e5), (0x2fc, 0x2fc), (0x2fc, 0x2fc),
         (0x1bc, 0x1cc), (0x1bd, 0x1cd), (0x1b2, 0x1c2), (0x1b3, 0x1c3),
     ];
-    /// Inscription de la fin de partie.
+    /// End-of-game inscription.
     const GAME_OVER_ROWS: [(u16, u16); 18] = [
         (0x1ba, 0x1ca), (0x1bb, 0x1cb), (0x194, 0x1a4), (0x195, 0x1a5),
         (0x19c, 0x1ac), (0x19d, 0x1ad), (0x17c, 0x18c), (0x17d, 0x18d),
@@ -1076,7 +1067,7 @@ mod continue_countdown {
         (0x1be, 0x1ce), (0x1bf, 0x1cf), (0x17c, 0x18c), (0x17d, 0x18d),
         (0x1b6, 0x1c6), (0x1b7, 0x1c7),
     ];
-    /// États du joueur condamné.
+    /// States of the condemned player.
     const DOOMED: u32 = 0x0204_0600;
     const SAFE_STATE: u32 = 0x0200_2000;
 
@@ -1105,7 +1096,7 @@ mod continue_countdown {
 
     const GAME_PAUSED: u32 = 0x3d;
 
-    /// Retire l'annonce (une fois) et coupe l'affichage.
+    /// Removes the announcement (once) and cuts the display.
     fn hide<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x18) == 0 {
             return;
@@ -1139,7 +1130,7 @@ mod continue_countdown {
             x.set8(0x2c, v);
         }
         x.set8(0x5, 0);
-        // palette : six longs forcés au maximum de luminosité, les deux derniers additionnés
+        // palette: six longs forced to maximum brightness, the last two added
         for i in 0..8 {
             let v = x.data32(PALETTE_SRC + 4 * i);
             let v = if i < 6 { v | BRIGHT } else { v.wrapping_add(BRIGHT) };
@@ -1184,7 +1175,7 @@ mod continue_countdown {
         prompt(x, camera)
     }
 
-    /// Décompte d'une image ; faux si le temps est écoulé (les joueurs sont alors condamnés).
+    /// One-frame countdown; false if the time has elapsed (the players are then condemned).
     fn tick<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let n = x.u8(0x17).wrapping_sub(1);
         x.set8(0x17, n);
@@ -1216,7 +1207,7 @@ mod continue_countdown {
         true
     }
 
-    /// Le temps est écoulé : les joueurs vivants sont condamnés.
+    /// The time has elapsed: the living players are condemned.
     fn time_out<R: Bench>(x: &mut Cx<'_, R>) {
         for p in players() {
             if p.u8(x.b, pl::ACTIVE) == 0 || p.u8(x.b, pl::STATE) as i8 >= 4 {
@@ -1241,7 +1232,7 @@ mod continue_countdown {
         x.set_a5_u16(0x4ba, 0);
     }
 
-    /// Affiche les chiffres et fait clignoter l'inscription.
+    /// Displays the digits and makes the inscription blink.
     fn draw<R: Bench>(x: &mut Cx<'_, R>) {
         let (d0, d1, d2) = (x.u8(0x14) as u16, x.u8(0x15) as u16, x.u8(0x16) as u16);
         for (i, tile) in [0, d0, COLON, d1, d2].into_iter().enumerate() {
@@ -1266,8 +1257,8 @@ mod continue_countdown {
         }
     }
 
-    /// Invitation périodique (h) : tant que la caméra ne bouge pas, crée toutes les 256 images
-    /// un objet SOBJ d'invitation.
+    /// Periodic invitation (h): as long as the camera does not move, creates an invitation SOBJ object every 256
+    /// frames.
     fn prompt<R: Bench>(x: &mut Cx<'_, R>, camera: Obj) {
         if x.u8(0x40) != 0 {
             return;
@@ -1290,7 +1281,7 @@ mod continue_countdown {
         let _ = crate::effects_aids::scenery_11(x.b, 0, orientation);
     }
 
-    /// État 4 : inscription finale puis retour à l'état 0 (sous-état 1) après 0x80 images.
+    /// State 4: final inscription then return to state 0 (substate 1) after 0x80 frames.
     fn finish<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             x.add8(0x5, 1);
@@ -1318,30 +1309,29 @@ mod continue_countdown {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 22 (0xd69c2) : ajustement du rang en fin de zone
+// Type 22 (0xd69c2): rank adjustment at the end of a zone
 // ---------------------------------------------------------------------------------------------
 
-/// Ajuste le rang de difficulté (A5+0x7f92) à l'arrivée dans une zone (h) : d'après le plus faible
-/// niveau de vie (`+0x62`) parmi les joueurs présents, classé en quatre catégories (<= 0x10,
-/// <= 0x30, <= 0x50, au-delà), il lit une variation dans une table de la ROM (une ligne de 4 mots
-/// par nombre de joueurs, une table par variante) et la ramène dans l'intervalle [minimum,
-/// maximum]. Il agit une seule fois, puis se libère.
+/// Adjusts the difficulty rank (A5+0x7f92) on arrival in a zone (h): from the lowest life level (`+0x62`) among the
+/// present players, classed into four categories (<= 0x10, <= 0x30, <= 0x50, beyond), it reads a variation from a ROM
+/// table (one row of 4 words per number of players, one table per variant) and brings it back into the interval
+/// [minimum, maximum]. It acts only once, then frees itself.
 mod rank_adjust {
     use super::*;
 
-    /// Pointeurs de tables (espace de données), par variante.
+    /// Table pointers (data space), per variant.
     const TABLES: u32 = 0xd6aa0;
     const RANK: u32 = 0x7f92;
     const RANK_MAX: u32 = 0x7f94;
     const RANK_MIN: u32 = 0x7f96;
     const RANK_SAVED_FROM: u32 = 0x7f9c;
     const RANK_SAVED: u32 = 0x7fa4;
-    /// Seuils de vie et catégories correspondantes (0 = presque mort ... 6 = en forme).
+    /// Life thresholds and corresponding categories (0 = almost dead ... 6 = fit).
     const THRESHOLDS: [(u16, u16); 3] = [(0x30, 2), (0x50, 4), (0xffff, 6)];
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
-            // l'état 0 se prolonge dans l'état 2 : deux fois +2
+            // state 0 continues into state 2: twice +2
             0 => {
                 x.add8(0x4, 4);
                 adjust(x);
@@ -1400,21 +1390,20 @@ mod rank_adjust {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 23 (0xd6c5c) : porte de sortie de zone (h)
+// Type 23 (0xd6c5c): zone exit door (h)
 // ---------------------------------------------------------------------------------------------
 
-/// Porte de sortie de la zone (h) : chaque joueur vivant qui reste immobile au sol devant la porte
-/// (X >= 0x1e0, à moins de 0x20 en profondeur), la touche 0 enfoncée (octet A5+numéro), pendant
-/// plus de 8 images est « entré » : il est mis dans l'état 0x2002006 et un effet (EFFCT 0x2f) est créé
-/// pour le premier. Quand tous les joueurs vivants (ou morts qui restent) sont entrés, la porte
-/// passe à l'état 4 : changement de niveau (`A5+0x34`) ou, à la dernière zone, fin de partie.
-/// Bits de `+0x17` : joueurs entrés ; de `+0x1a` : joueurs déjà comptés ; `+0x16` : leur nombre ;
-/// `+0x42..+0x45` : compteurs d'attente de chaque joueur ; `A5+0x52` : porte active.
+/// Zone exit door (h): each living player who stays motionless on the ground in front of the door (X >= 0x1e0, within
+/// 0x20 in depth), with key 0 held down (byte A5+number), for more than 8 frames has "entered": it is put in state
+/// 0x2002006 and an effect (EFFCT 0x2f) is created for the first one. When all the living players (or dead ones who
+/// remain) have entered, the door goes to state 4: level change (`A5+0x34`) or, at the last zone, end of game. Bits of
+/// `+0x17`: players entered; of `+0x1a`: players already counted; `+0x16`: their number; `+0x42..+0x45`: waiting
+/// counters of each player; `A5+0x52`: active door.
 mod exit_gate {
     use super::*;
 
     const GATE_LOCK: u32 = 0x52;
-    /// Script de son joué en quittant la zone.
+    /// Sound script played when leaving the zone.
     const LEAVE_SCRIPT: u32 = 0xd6f0e;
     const EFFECT_TYPE: u8 = 0x2f;
     const ENTERED: u32 = 0x0200_2006;
@@ -1448,7 +1437,7 @@ mod exit_gate {
         }
     }
 
-    /// Un joueur est-il en position d'entrer ? Compte les images consécutives (octet `counter`).
+    /// Is a player in a position to enter? Counts the consecutive frames (byte `counter`).
     fn at_door<R: Bench>(x: &mut Cx<'_, R>, p: Obj, input: u8, counter: u32) {
         let busy = p.u8(x.b, 0x66).wrapping_add(p.u8(x.b, 0x15c)).wrapping_add(p.u8(x.b, 0x8a));
         let state = p.u32(x.b, pl::STATE) & 0xffff_ff00;
@@ -1494,7 +1483,7 @@ mod exit_gate {
                 x.set_bit(0x1a, i as u8, true);
             }
         }
-        // tous les joueurs concernés sont-ils entrés ?
+        // have all the players concerned entered?
         let mut needed = x.a5_u8(0x35);
         if needed == 0 {
             return;
@@ -1512,8 +1501,8 @@ mod exit_gate {
         x.set16(0x4, 0x400);
     }
 
-    /// Fin de la zone (0xcc1c2) : le décompte des joueurs entrés s'ajoute à l'octet `A5-0x5b20`, le script de
-    /// son 0xcbc02 est joué et les joueurs morts qui restent à l'écran passent à l'état 0x04020000.
+    /// End of the zone (0xcc1c2): the count of players entered is added to the byte `A5-0x5b20`, the sound script
+    /// 0xcbc02 is played and the dead players who remain on the screen go to state 0x04020000.
     fn scene_end<R: Bench>(x: &mut Cx<'_, R>) {
         const COUNT: u32 = 0xff_24e0;
         const SCRIPT: u32 = 0xcbc02;
@@ -1531,7 +1520,7 @@ mod exit_gate {
         }
     }
 
-    /// Le joueur `p` (numéro `bit`) entre : il est mis à l'état « entré ».
+    /// Player `p` (number `bit`) enters: it is put in the "entered" state.
     fn enter<R: Bench>(x: &mut Cx<'_, R>, p: Obj, bit: u8) {
         if p.u8(x.b, pl::ACTIVE) == 0 || p.u16(x.b, pl::HEALTH) == 0 {
             return;
@@ -1554,7 +1543,7 @@ mod exit_gate {
         p.set_u8(x.b, 0x10f, 1);
     }
 
-    /// État 4 : rend la main aux joueurs, annonce la sortie et passe au niveau suivant.
+    /// State 4: cedes control to the players, announces the exit and moves on to the next level.
     fn leave<R: Bench>(x: &mut Cx<'_, R>) {
         x.set_a5_u8(0x50, 0);
         for p in players() {
@@ -1579,7 +1568,7 @@ mod exit_gate {
         x.free(&pools::SET);
     }
 
-    /// Zone bonus : retour au niveau 0x1c, quatre fois au plus, puis fin de partie.
+    /// Bonus zone: return to level 0x1c, four times at most, then end of game.
     fn bonus_stage<R: Bench>(x: &mut Cx<'_, R>) {
         x.set_a5_u8(0x34, BONUS_STAGE);
         let n = x.a5_u8(0x4e).wrapping_add(1);
@@ -1592,13 +1581,13 @@ mod exit_gate {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 25 (0xd801e) : volée de projectiles quand la caméra recule (h)
+// Type 25 (0xd801e): volley of projectiles when the camera moves back (h)
 // ---------------------------------------------------------------------------------------------
 
-/// Quand la partie est en jeu, que la caméra se trouve dans la moitié gauche du niveau (X <= 0x180)
-/// et qu'elle a reculé depuis l'image précédente (le joueur fait demi-tour), l'objet lance trois
-/// tirs ennemis (ESHL de type 0x12) à droite de l'écran, à la profondeur d'un joueur tiré au hasard
-/// (décalages -0x18, +0x18, 0). Il attend 0x60 images (`+8`) entre deux volées.
+/// When the game is in play, the camera is in the left half of the level (X <= 0x180) and it has moved back since the
+/// previous frame (the player turns around), the object launches three enemy shots (ESHL of type 0x12) at the right of
+/// the screen, at the depth of a randomly drawn player (offsets -0x18, +0x18, 0). It waits 0x60 frames (`+8`) between
+/// two volleys.
 mod rearguard {
     use super::*;
 
@@ -1607,9 +1596,9 @@ mod rearguard {
     const FIRST_X: u16 = 0x1a0;
     const SPACING_X: u16 = 0xc;
     const HEIGHT: u16 = 0x20;
-    /// Décalages de profondeur des trois tirs (mots).
+    /// Depth offsets of the three shots (words).
     const OFFSETS: u32 = 0xd80fe;
-    /// A5+0x53a : cinématique en cours (h).
+    /// A5+0x53a: cutscene in progress (h).
     const CUTSCENE: u32 = 0x53a;
     const PLAYING: u8 = 0xc;
 
@@ -1649,7 +1638,7 @@ mod rearguard {
         if camera > 0x180 || camera >= x.u16(0xa) as i16 {
             return remember_camera(x);
         }
-        // un joueur présent, tiré au hasard
+        // a present player, drawn at random
         let target = loop {
             let rng = x.random();
             let p = Obj(PLAYERS + (rng as u32 & 3) * PLAYER_SIZE);
@@ -1676,25 +1665,24 @@ mod rearguard {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 26 (0xd810a) : chasseur de joueurs immobiles (h)
+// Type 26 (0xd810a): hunter of motionless players (h)
 // ---------------------------------------------------------------------------------------------
 
-/// Pénalise les joueurs qui restent immobiles (h) : pour chaque joueur vivant dont la position
-/// (X + sa partie fractionnaire haute) ne change pas pendant `+0x1c` images, il crée des poursuivants
-/// (routine 0xa44bc, trois ESHL de type 0x33), dans la limite d'un nombre d'actifs qui dépend du
-/// nombre de joueurs. Le délai `+0x1c` est tiré dans une table de la ROM selon le rang. L'ordre
-/// d'examen des quatre joueurs est tiré au hasard parmi quatre permutations.
+/// Penalizes players who stay motionless (h): for each living player whose position (X + its high fractional part) does
+/// not change for `+0x1c` frames, it creates pursuers (routine 0xa44bc, three ESHL of type 0x33), within a limit of
+/// active ones that depends on the number of players. The delay `+0x1c` is drawn from a ROM table according to the
+/// rank. The order in which the four players are examined is drawn at random among four permutations.
 mod idle_hunter {
     use super::*;
 
-    /// Délais d'immobilité : 16 octets par tranche de 4 rangs (espace programme).
+    /// Motionless delays: 16 bytes per slice of 4 ranks (program space).
     const IDLE_FRAMES: u32 = 0xd8186;
-    /// Nombre maximal de poursuivants selon le nombre de joueurs (mots).
+    /// Maximum number of pursuers according to the number of players (words).
     const MAX_ACTIVE: u32 = 0xd8448;
     const CUTSCENE: u32 = 0x53a;
     const PLAYING: u8 = 0xc;
     const WARMUP: u16 = 0x168;
-    /// Les quatre ordres d'examen.
+    /// The four examination orders.
     const ORDERS: [[u32; 4]; 4] = [[0, 1, 2, 3], [2, 3, 1, 0], [1, 0, 3, 2], [3, 2, 0, 1]];
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1705,7 +1693,7 @@ mod idle_hunter {
         }
     }
 
-    /// Position de référence d'un joueur : X + octets suivants (`+8` et `+0x10` du joueur).
+    /// Reference position of a player: X + following bytes (`+8` and `+0x10` of the player).
     fn mark<R: Bench>(x: &mut Cx<'_, R>, i: u32) -> u16 {
         let base = 0x5de + PLAYER_SIZE * i;
         x.a5_u16(base + 8).wrapping_add(x.a5_u16(base + 0x10))
@@ -1754,7 +1742,7 @@ mod idle_hunter {
         }
     }
 
-    /// Examen d'un joueur : immobile assez longtemps, il attire des poursuivants.
+    /// Examination of a player: motionless long enough, it attracts pursuers.
     fn check<R: Bench>(x: &mut Cx<'_, R>, i: u32) {
         let p = Obj(PLAYERS + PLAYER_SIZE * i);
         if p.u8(x.b, pl::ACTIVE) & 1 == 0 || p.u16(x.b, pl::HEALTH) == 0 || x.u16(0x8 + 2 * i) != 0 {
@@ -1775,8 +1763,7 @@ mod idle_hunter {
         x.set8(0x18 + i, 0);
     }
 
-    /// Crée des poursuivants pour le joueur `p` si la limite n'est pas atteinte ; rend l'adresse
-    /// du dernier créé.
+    /// Creates pursuers for player `p` if the limit is not reached; returns the address of the last one created.
     fn chase<R: Bench>(x: &mut Cx<'_, R>, p: Obj, slot: u32) -> Option<u16> {
         let active = [0x8, 0xa, 0xc, 0xe].into_iter().filter(|&o| x.u16(o) != 0).count() as i16;
         let players = x.a5_u8(0x35) as u32;
@@ -1789,11 +1776,10 @@ mod idle_hunter {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Types 27 et 29 : portes de passage (h)
+// Types 27 and 29: passage doors (h)
 // ---------------------------------------------------------------------------------------------
 
-/// Pools d'objets suspendus ou libérés lors d'un passage de porte : début, taille d'un objet,
-/// nombre d'emplacements.
+/// Pools of objects suspended or freed during a door passage: start, size of an object, number of slots.
 pub(super) struct Pool {
     pub(super) base: u32,
     pub(super) size: u32,
@@ -1809,15 +1795,15 @@ pub(super) const ENEMY_POOL: Pool = Pool { base: A5 + 0x299e, size: 0xc0, count:
 pub(super) const BOSS_POOL: Pool = Pool { base: A5 + 0x3a1e, size: 0xc0, count: 3 };
 pub(super) const ESHL_POOL: Pool = Pool { base: A5 + 0x3c5e, size: 0x60, count: 38 };
 
-/// Champs d'un objet de la boucle de dispatch communs à tous les pools.
+/// Fields of a dispatch loop object common to all the pools.
 mod obj {
     pub const SUSPEND: u32 = 0x40;
     pub const SUSPEND_PHASE: u32 = 0x41;
     pub const STATE: u32 = 0x4;
 }
 
-/// Exécute `run` du gestionnaire avec un autre objet comme objet courant (appel récursif
-/// `bsr` de l'original, qui met A0 sur l'autre objet).
+/// Runs `run` of the handler with another object as the current object (recursive `bsr` call of the original, which
+/// puts A0 on the other object).
 pub(super) fn run_on<R: Bench>(x: &mut Cx<'_, R>, other: Obj, run: fn(&mut Cx<'_, R>)) {
     let me = x.o;
     x.o = other;
@@ -1825,7 +1811,7 @@ pub(super) fn run_on<R: Bench>(x: &mut Cx<'_, R>, other: Obj, run: fn(&mut Cx<'_
     x.o = me;
 }
 
-/// Suspend les objets d'un pool (compteur `+0x40` + 1, phase remise à zéro).
+/// Suspends the objects of a pool (counter `+0x40` + 1, phase reset to zero).
 pub(super) fn suspend<R: Bench>(x: &mut Cx<'_, R>, pool: &Pool) {
     for i in 0..pool.count {
         let o = Obj(pool.base + i * pool.size);
@@ -1837,8 +1823,7 @@ pub(super) fn suspend<R: Bench>(x: &mut Cx<'_, R>, pool: &Pool) {
     }
 }
 
-/// Réveille les objets d'un pool ; ceux dont le compteur de suspension devient négatif sont
-/// supprimés (état 6).
+/// Wakes up the objects of a pool; those whose suspension counter becomes negative are deleted (state 6).
 pub(super) fn resume<R: Bench>(x: &mut Cx<'_, R>, pool: &Pool) {
     resume_with(x, pool, |_, _| ());
 }
@@ -1861,11 +1846,11 @@ pub(super) fn resume_with<'a, R: Bench>(x: &mut Cx<'a, R>, pool: &Pool, mut when
     }
 }
 
-/// Variables (A5-0x55d0 et A5-0x55cc) mémorisées avec la caméra.
+/// Variables (A5-0x55d0 and A5-0x55cc) stored with the camera.
 const SCROLL_STATE: u32 = 0xff_2a30;
 const STAGE_FLAG: u32 = 0xff_2a34;
 
-/// Mémorise dans la porte l'état de la caméra et du défilement (champs `+0x30..+0x4a`).
+/// Stores in the door the state of the camera and of the scroll (fields `+0x30..+0x4a`).
 pub(super) fn save_camera<R: Bench>(x: &mut Cx<'_, R>) {
     for (src, dst) in [(0x506, 0x30), (0x50a, 0x34), (0x556, 0x38), (0x55a, 0x3c)] {
         let v = x.a5_u32(src);
@@ -1883,7 +1868,7 @@ pub(super) fn save_camera<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x1c, v);
 }
 
-/// Rétablit la caméra et le défilement mémorisés par `save_camera`.
+/// Restores the camera and the scroll stored by `save_camera`.
 pub(super) fn restore_camera<R: Bench>(x: &mut Cx<'_, R>) {
     for (dst, src) in [(0x506, 0x30), (0x50a, 0x34), (0x556, 0x38), (0x55a, 0x3c)] {
         let v = x.u32(src);
@@ -1915,8 +1900,8 @@ pub(super) fn restore_camera<R: Bench>(x: &mut Cx<'_, R>) {
     wr8(x.b, STAGE_FLAG, v);
 }
 
-/// Remet les joueurs en jeu après un passage (état, drapeaux, délais) ; ceux qui étaient
-/// au-delà de l'état 2 sont marqués morts (0x402).
+/// Puts the players back in play after a passage (state, flags, delays); those that were beyond state 2 are marked dead
+/// (0x402).
 pub(super) fn reset_players_after_exit<R: Bench>(x: &mut Cx<'_, R>) {
     for p in players() {
         if p.u8(x.b, pl::ACTIVE) == 0 || p.u16(x.b, pl::HEALTH) == 0 {
@@ -1938,7 +1923,7 @@ pub(super) fn reset_players_after_exit<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Remet les joueurs en marche à l'arrivée d'une porte de sortie (état 1, délai 0x20).
+/// Sets the players walking again on arrival at an exit door (state 1, delay 0x20).
 fn release_players<R: Bench>(x: &mut Cx<'_, R>) {
     for p in players() {
         if p.u8(x.b, pl::ACTIVE) == 0 {
@@ -1954,9 +1939,9 @@ fn release_players<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Le joueur `p` est-il immobile devant la porte ? Compte les images (octet `counter`).
-/// Conditions : rien en cours (`+0x66`, `+0x15c`, `+0x8a`), la touche `bit` de `input`, l'état 2
-/// (marche ou arrêt), au sol, à moins de 0x10 en X et de 8 en profondeur (sauf `+0x1b`).
+/// Is player `p` motionless in front of the door? Counts the frames (byte `counter`). Conditions: nothing in progress
+/// (`+0x66`, `+0x15c`, `+0x8a`), key `bit` of `input`, state 2 (walking or stopped), on the ground, within 0x10 in X
+/// and 8 in depth (except `+0x1b`).
 fn at_gate<R: Bench>(x: &mut Cx<'_, R>, p: Obj, input: u32, counter: u32) {
     let busy = p.u8(x.b, 0x66).wrapping_add(p.u8(x.b, 0x15c)).wrapping_add(p.u8(x.b, 0x8a));
     let bit = x.u8(0x46) as u32 & 31;
@@ -1977,11 +1962,10 @@ fn at_gate<R: Bench>(x: &mut Cx<'_, R>, p: Obj, input: u32, counter: u32) {
     }
 }
 
-/// Porte de passage entre zones (type 27, h) : comme `exit_gate`, mais le passage mène à une autre
-/// zone ou en revient (suspension des objets de la zone courante dans `+0x40`, caméra sauvegardée
-/// dans `+0x30..+0x4a`), avec une porte, de variante `+3` : 0 entrée dans la zone cachée, 1
-/// retour. Les paramètres de chaque variante (position, touche `+0x46`, mode `+0x48`, niveau
-/// d'arrivée `+0x4f`, `+0x1b`) viennent de lignes de 16 octets de la table 0xd84e8.
+/// Passage door between zones (type 27, h): like `exit_gate`, but the passage leads to another zone or back from it
+/// (suspension of the objects of the current zone in `+0x40`, camera saved in `+0x30..+0x4a`), with a door, of variant
+/// `+3`: 0 entry into the hidden zone, 1 return. The parameters of each variant (position, key `+0x46`, mode `+0x48`,
+/// arrival level `+0x4f`, `+0x1b`) come from 16-byte rows of table 0xd84e8.
 mod door_a {
     use super::*;
 
@@ -2083,8 +2067,8 @@ mod door_a {
         leave(x);
     }
 
-    /// Un joueur franchit la porte : soit une apparition (variante 0 sans `A5+0x4e`), soit il est
-    /// mis à l'état d'entrée.
+    /// A player goes through the door: either an appearance (variant 0 without `A5+0x4e`), or it is put in the entry
+    /// state.
     fn enter<R: Bench>(x: &mut Cx<'_, R>, p: Obj, bit: u8) {
         if x.u8(0x3) == 0 && x.a5_u8(0x4e) == 0 {
             let spawned = scene_set(x, 0x8b);
@@ -2106,7 +2090,7 @@ mod door_a {
         p.set_u8(x.b, 0x10f, 1);
     }
 
-    /// Tous les joueurs concernés sont à la porte : le passage commence.
+    /// All the players concerned are at the door: the passage begins.
     fn leave<R: Bench>(x: &mut Cx<'_, R>) {
         crate::sound::service(x.b, crate::sound::Service::Ff06 { lock: 0xff, line: 4 });
         x.set_a5_u8(0x51, 1);
@@ -2118,7 +2102,7 @@ mod door_a {
         }
         crate::text::clear_box(x.b, SCRIPT);
         x.set_a5_u32(0x5c6, 0);
-        // 0xdd12c : le verrou d'apparition des objets de ramassage levé
+        // 0xdd12c: the pickup objects' appearance lock lifted
         crate::mem::wr8(x.b, A5 - 0x5ac4, 0);
         x.set_a5_u16(GATE_LOCK, 0);
         match x.u8(0x48) as i8 {
@@ -2135,7 +2119,7 @@ mod door_a {
         }
     }
 
-    /// Chargement de la zone cachée (état 0x400 de la porte).
+    /// Loading of the hidden zone (state 0x400 of the door).
     fn enter_zone<R: Bench>(x: &mut Cx<'_, R>) {
         crate::families::scenery::resume_scenery(x, crate::families::scenery::Cameras::Start);
         x.set_a5_u8(0x48e, 0xf);
@@ -2145,8 +2129,8 @@ mod door_a {
         crate::families::scenery::place_players(x);
     }
 
-    /// Retour à la zone d'origine : les joueurs sont libérés et tous les objets de la zone cachée
-    /// supprimés ; chaque porte de type 0x1b de la zone retrouvée est rejouée.
+    /// Return to the original zone: the players are released and all the objects of the hidden zone deleted; each door
+    /// of type 0x1b of the zone found again is replayed.
     fn exit_zone<R: Bench>(x: &mut Cx<'_, R>) {
         x.set_a5_u8(0x4e, 1);
         release_players(x);
@@ -2162,7 +2146,7 @@ mod door_a {
         resume(x, &SOBJ_POOL);
     }
 
-    /// État 4 : arrivée dans la zone cachée (chargement de la nouvelle zone).
+    /// State 4: arrival in the hidden zone (loading of the new zone).
     fn arrive<R: Bench>(x: &mut Cx<'_, R>) {
         crate::families::scenery::resume_scenery(x, crate::families::scenery::Cameras::Return);
         x.set_a5_u8(0x48e, 0xf);
@@ -2170,8 +2154,8 @@ mod door_a {
         x.set_a5_u16(GATE_LOCK, 0);
         x.set_a5_u8(0x51, 0);
         restore_camera(x);
-        // Glitch d'origine : D4.w = `+0x1c` (la musique de la zone, lue par le son de 0xe17a4 dans la porte 29) reste
-        // aux gestionnaires suivants (`dispatch::Leftovers`)
+        // Original glitch: D4.w = `+0x1c` (the zone's music, read by the sound of 0xe17a4 in door 29) stays for the
+        // following handlers (`dispatch::Leftovers`)
         let d4 = x.u16(0x1c);
         *x.c.d4() = (*x.c.d4() & 0xffff_0000) | d4 as u32;
         crate::sound::service(x.b, crate::sound::Service::Ff06 { lock: 0x90, line: 0 });
@@ -2183,7 +2167,7 @@ mod door_a {
         x.set8(0x4, 6);
     }
 
-    /// Place un joueur à l'arrivée (position relative à la porte, table 0xd89be selon le côté).
+    /// Places a player on arrival (position relative to the door, table 0xd89be according to the side).
     fn place<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
         if p.u8(x.b, 4) != 2 {
             let v = p.u8(x.b, 1) | 2;
@@ -2212,10 +2196,9 @@ mod door_a {
     }
 }
 
-/// Porte de zone en trois temps (type 28, h) : quand la caméra atteint X = 0x1c0 elle bloque le
-/// défilement (`A5+0x51e` = 4), crée un événement SET (type 0x3f) et attend qu'il se termine
-/// (`+0x22` de cet événement) ; elle lance alors l'invitation (SOBJ 11) et un délai de 0x78
-/// images, puis libère le défilement et lance les routines de fin de zone (0xa462c, 0xe55a2,
+/// Three-stage zone door (type 28, h): when the camera reaches X = 0x1c0 it blocks the scroll (`A5+0x51e` = 4), creates
+/// a SET event (type 0x3f) and waits for it to finish (`+0x22` of that event); it then launches the invitation (SOBJ
+/// 11) and a delay of 0x78 frames, then frees the scroll and launches the end-of-zone routines (0xa462c, 0xe55a2,
 /// 0xe13b0).
 mod zone_end {
     use super::*;
@@ -2225,7 +2208,7 @@ mod zone_end {
     const SCROLL_LOCK: u32 = 0x51e;
     const EVENT_FLAG: u32 = 0x43;
     const DELAY: u16 = 0x78;
-    /// Les objets SET de ce type voient leur orientation (`+0x2c` bit 5) inversée à la fin.
+    /// The SET objects of this type have their orientation (`+0x2c` bit 5) inverted at the end.
     const FLIPPED_TYPE: u8 = 0x15;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -2269,7 +2252,7 @@ mod zone_end {
                 x.set_a5_u8(EVENT_FLAG, 0xff);
                 let v = x.a5_u16(ram::CAMERA_X);
                 x.set_a5_u16(0x532, v);
-                // 33 emplacements : le dernier est le premier objet EFFCT (pool contigu)
+                // 33 slots: the last is the first EFFCT object (contiguous pool)
                 for i in 0..33u32 {
                     let o = Obj(SET_POOL.base + i * SET_POOL.size);
                     if o.u8(x.b, 0) != 0 && o.u8(x.b, 2) == FLIPPED_TYPE {
@@ -2295,10 +2278,9 @@ mod zone_end {
     }
 }
 
-/// Porte de passage (type 29, h) : variante de la porte 27 qui décale tout le décor (`SET`, `SOBJ`,
-/// `EFFCT`, `BOX`, `ITEM`, `BOSS`, `ESHL`) au lieu de trois pools, et replace les joueurs sur un
-/// repère fixe (table 0xd9052). Mêmes champs (`+0x42..+0x45` compteurs, `+0x16` nombre entré, `+0x17`
-/// bits entrés, `+0x30..` caméra sauvegardée).
+/// Passage door (type 29, h): variant of door 27 that shifts all the scenery (`SET`, `SOBJ`, `EFFCT`, `BOX`, `ITEM`,
+/// `BOSS`, `ESHL`) instead of three pools, and puts the players back on a fixed marker (table 0xd9052). Same fields
+/// (`+0x42..+0x45` counters, `+0x16` number entered, `+0x17` bits entered, `+0x30..` saved camera).
 pub(super) mod door_b {
     use super::*;
 
@@ -2309,7 +2291,7 @@ pub(super) mod door_b {
     const NEAR_X: u16 = 0x30;
     const NEAR_Y: u16 = 0x20;
 
-    /// Reste sur le processeur : le fondu de sortie (`watch`) cède la main (`set::exit_fading`).
+    /// Stays on the processor: the exit fade (`watch`) cedes control (`set::exit_fading`).
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let me = x.o;
         crate::effects_aids::living_players(x.b, me);
@@ -2347,7 +2329,7 @@ pub(super) mod door_b {
         }
     }
 
-    /// Le joueur est à portée de la porte.
+    /// The player is within range of the door.
     fn near<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
         let dx = p.u16(x.b, pl::X).wrapping_sub(x.u16(0x8)).wrapping_add(NEAR_X);
         if dx > 2 * NEAR_X {
@@ -2368,12 +2350,12 @@ pub(super) mod door_b {
         wr8(x.b, SOUND_FLAG, v);
         x.set_a5_u16(GATE_LOCK, 0);
         x.set_a5_u8(0x43, 0xff);
-        // fondu de sortie : cède la main, la tâche reprend à `after_fade`
+        // exit fade: cedes control, the task resumes at `after_fade`
         use crate::families::set::exit_fading::{fade_to_black, Step};
         fade_to_black(x, Step::Passage)
     }
 
-    /// Après le fondu de sortie (0xd8f06).
+    /// After the exit fade (0xd8f06).
     pub fn after_fade<R: Bench>(x: &mut Cx<'_, R>) {
         let level = x.u8(0x4f);
         x.set_a5_u8(0x34, level);
@@ -2454,16 +2436,16 @@ pub(super) mod door_b {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 30 (0xd9424) : fin de partie (écran de continuation)
+// Type 30 (0xd9424): end of game (continue screen)
 // ---------------------------------------------------------------------------------------------
 
-/// Quand `A5+0x42` (fin de partie) est levé, joue la musique de fin (routine 0xa8ae8, D0 = 7),
-/// attend 0x80 images puis lance la tâche de fondu par composante 0x1ccf8 et se libère.
+/// When `A5+0x42` (end of game) is raised, plays the end music (routine 0xa8ae8, D0 = 7), waits 0x80 frames then
+/// launches the per-component fade task 0x1ccf8 and frees itself.
 mod game_over {
     use super::*;
 
     const WAIT_FRAMES: u16 = 0x80;
-    /// Tâche de fondu par composante vers le blanc.
+    /// Per-component fade-to-white task.
     const FADE_TO_WHITE_TASK: u32 = 0x1ccf8;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -2472,12 +2454,12 @@ mod game_over {
                 if x.a5_u8(0x42) == 0 {
                     return;
                 }
-                // 0xa8ae8 (D0 = 7) : la liste de décors 7
+                // 0xa8ae8 (D0 = 7): scenery list 7
                 crate::families::effects_creators::set_list_via(&mut OnBench(&mut x.c), x.b, 7);
                 x.add8(0x4, 2);
                 x.set16(0x4c, WAIT_FRAMES);
                 crate::families::scenery::save_palette_page_1(x);
-                // l'original enchaîne sur le décompte (0xd9458) dès cette image : 0x80 devient 0x7f
+                // the original chains onto the countdown (0xd9458) from this very frame: 0x80 becomes 0x7f
                 countdown(x);
             }
             4 => countdown(x),
@@ -2500,13 +2482,12 @@ mod game_over {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 31 (0xd9492) : message d'attente dans un niveau long (h)
+// Type 31 (0xd9492): waiting message in a long level (h)
 // ---------------------------------------------------------------------------------------------
 
-/// Chronomètre de niveau (h) : compte les images tant qu'un joueur est en jeu (`+0x42`) et déclenche
-/// à 0x258, 0x4b0 et 0x708 images trois messages (paroles + effets : routines 0xa66c0, 0x2824,
-/// 0x2860, 0x289c, 0xeda26, 0xeda66) ; si la caméra avance de plus de 0xa00 depuis le départ
-/// (`+0x1e`) il abrège et passe directement à la dernière étape.
+/// Level timer (h): counts frames as long as a player is in play (`+0x42`) and triggers at 0x258, 0x4b0 and 0x708
+/// frames three messages (speech + effects: routines 0xa66c0, 0x2824, 0x2860, 0x289c, 0xeda26, 0xeda66); if the camera
+/// advances by more than 0xa00 since the start (`+0x1e`) it cuts short and goes directly to the last step.
 mod level_clock {
     use super::*;
 
@@ -2530,7 +2511,7 @@ mod level_clock {
         }
     }
 
-    /// 0xa66c0, qui lit sa ligne de table dans D2 (laissé aux gestionnaires suivants, `dispatch::Leftovers`).
+    /// 0xa66c0, which reads its table row in D2 (left to the following handlers, `dispatch::Leftovers`).
     fn speech<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
         // the row stays in D2 (`dispatch::Leftovers`)
         *x.c.d2() = kind;
@@ -2615,13 +2596,12 @@ mod level_clock {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 32 (0xd96d0) : sélecteur de test (h)
+// Type 32 (0xd96d0): test selector (h)
 // ---------------------------------------------------------------------------------------------
 
-/// Sélecteur de test (h) : avec les touches du joueur 1 (octets A5+2 pressées, A5+8 précédent),
-/// le bouton 5 augmente un numéro (0 à 0x32, `+0x2f`), le bouton 6 le diminue, le bouton 4 le
-/// valide (routine 0xcc352 sur le premier joueur). Le numéro est affiché en deux chiffres
-/// hexadécimaux dans le fond (0x912bc0).
+/// Test selector (h): with player 1's keys (bytes A5+2 pressed, A5+8 previous), button 5 increases a number (0 to 0x32,
+/// `+0x2f`), button 6 decreases it, button 4 confirms it (routine 0xcc352 on the first player). The number is displayed
+/// as two hexadecimal digits in the background (0x912bc0).
 mod test_selector {
     use super::*;
     use crate::mem::wr16;
@@ -2644,7 +2624,7 @@ mod test_selector {
     fn step<R: Bench>(x: &mut Cx<'_, R>) {
         let pressed = !x.a5_u8(8) & x.a5_u8(2);
         if pressed >> 4 & 1 != 0 {
-            // 0xcc352 avec A0 = le premier joueur : sa classe est celle de l'objet SET créé
+            // 0xcc352 with A0 = the first player: its class is that of the SET object created
             let index = x.u8(0x2f);
             crate::families::creators::set_a(x.b, Obj(PLAYERS), index);
         } else if pressed >> 5 & 1 != 0 {
@@ -2668,31 +2648,29 @@ mod test_selector {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 24 (0xd7056) : fenêtre de dialogue
+// Type 24 (0xd7056): dialogue window
 // ---------------------------------------------------------------------------------------------
 
-/// Fenêtre de dialogue (h) : cadre dessiné dans la couche de fond 1 (GFX RAM 0x912000, 0x80 octets
-/// par ligne) qui s'ouvre, reçoit un texte, attend une touche puis se referme. La variante `+3`
-/// désigne, par la table 0x1d78d0, une définition de fenêtre dans la ROM (position, taille,
-/// texte `+0x24`, sorte `+0x2f`...). La sorte (24 valeurs) règle l'initialisation (palettes, choix
-/// d'un autre texte selon le nombre de joueurs...) et la construction de la liste de jetons du
-/// texte (mots dans le tampon 0xff2072, relue par le moteur de texte via la case `A5+0x5c6+
-/// (+0x38)`). Jetons spéciaux : 0 fin, négatifs = commandes, 0x7000 à 0x7009 = substitutions
-/// (nombre de joueurs, noms des joueurs...).
+/// Dialogue window (h): frame drawn in background layer 1 (GFX RAM 0x912000, 0x80 bytes per line) that opens, receives
+/// a text, waits for a key then closes. The variant `+3` designates, through table 0x1d78d0, a window definition in the
+/// ROM (position, size, text `+0x24`, kind `+0x2f`...). The kind (24 values) sets the initialization (palettes, choice
+/// of another text according to the number of players...) and the construction of the text's token list (words in the
+/// buffer 0xff2072, reread by the text engine through the cell `A5+0x5c6+ (+0x38)`). Special tokens: 0 end, negatives =
+/// commands, 0x7000 to 0x7009 = substitutions (number of players, player names...).
 ///
-/// États : 0 ouverture, 2 vie (sous-états `+5` : 0 ouverture du cadre, 2 déploiement, 4 attente d'une
-/// touche, 6 fermeture), 4 et 6 libération.
+/// States: 0 opening, 2 life (substates `+5`: 0 frame opening, 2 unfolding, 4 waiting for a key, 6 closing), 4 and 6
+/// release.
 mod dialog {
     use super::*;
     use crate::mem::{rd16, rd32, wr16, wr32};
 
-    /// Définitions de fenêtres par variante (pointeurs, espace de données).
+    /// Window definitions per variant (pointers, data space).
     const DEFINITIONS: u32 = 0x1d78d0;
     const SCREEN: u32 = 0x912000;
-    /// Tampon des jetons (A5-0x5f8e) et cases du moteur de texte (A5+0x5c6, 8 octets chacune).
+    /// Token buffer (A5-0x5f8e) and text engine cells (A5+0x5c6, 8 bytes each).
     const BUFFER: u32 = 0xff_2072;
     const SLOTS: u32 = A5 + 0x5c6;
-    /// Compteur de fenêtres ouvertes (A5-0x5b8e) et drapeau (A5-0x5fbe).
+    /// Counter of open windows (A5-0x5b8e) and flag (A5-0x5fbe).
     const OPEN_COUNT: u32 = 0xff_2472;
     const FLAG_SKIP: u32 = 0xff_2042;
     const PALETTE_SRC: u32 = 0x292260;
@@ -2704,10 +2682,10 @@ mod dialog {
     const PLAYERS_ONE_TWO: u32 = 0xd7d96;
     const PLAYERS_ONE_TWO_B: u32 = 0xd7da6;
     const TOK_LINK_A: u16 = 0xfffe;
-    /// Mots d'ouverture et de fermeture d'un nom de joueur.
+    /// Opening and closing words of a player name.
     const NAME_OPEN: u32 = 0xfffe_0018;
     const NAME_CLOSE: u32 = 0xfffe_000f;
-    /// Création / recherche d'objets liés.
+    /// Creation / search of linked objects.
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
@@ -2717,9 +2695,9 @@ mod dialog {
         }
     }
 
-    // --- sortie des jetons -----------------------------------------------------------------
+    // --- token output ----------------------------------------------------------------------
 
-    /// Pointeur d'écriture (A4) et nombre de caractères (D6) de la liste de jetons.
+    /// Write pointer (A4) and number of characters (D6) of the token list.
     struct Out {
         at: u32,
         n: u16,
@@ -2734,14 +2712,14 @@ mod dialog {
             self.put(x, (v >> 16) as u16);
             self.put(x, v as u16);
         }
-        /// Terminateur, non avancé.
+        /// Terminator, not advanced.
         fn end<R: Bench>(&mut self, x: &mut Cx<'_, R>) {
             wr16(x.b, self.at, 0);
         }
     }
 
-    /// Commande (jeton négatif) : recopie le jeton, `-8 * n`, puis le mot qui suit le mot suivant
-    /// (0xfffe : le mot suivant seul).
+    /// Command (negative token): copies the token, `-8 * n`, then the word that follows the next word (0xfffe: the next
+    /// word alone).
     fn command<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, a6: &mut u32, tok: u16) {
         o.put(x, tok);
         if tok == TOK_LINK_A {
@@ -2757,14 +2735,14 @@ mod dialog {
         o.put(x, w);
     }
 
-    /// Lit le mot suivant du texte.
+    /// Reads the next word of the text.
     fn next<R: Bench>(x: &mut Cx<'_, R>, a6: &mut u32) -> u16 {
         let w = x.data16(*a6);
         *a6 += 2;
         w
     }
 
-    /// Texte brut : jetons recopiés, 0x7000 (nombre de joueurs) remplacé selon le nombre de joueurs.
+    /// Raw text: tokens copied, 0x7000 (number of players) replaced according to the number of players.
     fn plain<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, a6: &mut u32) {
         loop {
             let tok = next(x, a6);
@@ -2785,8 +2763,8 @@ mod dialog {
         }
     }
 
-    /// Chaîne de caractères d'un nom (jusqu'à 6 octets, index dans la table de tuiles 0xd7e8a ;
-    /// 0xff termine). `special` : les octets >= 0xf9 désignent un nom prédéfini de la table 0xd7604.
+    /// Character string of a name (up to 6 bytes, index into the tile table 0xd7e8a; 0xff terminates). `special`: bytes
+    /// >= 0xf9 designate a predefined name of the table 0xd7604.
     fn name<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a1: u32) {
         let mut remaining: u16 = 5;
         let first = x.data8(a1);
@@ -2812,8 +2790,8 @@ mod dialog {
         }
     }
 
-    /// Variante pour les noms ayant une catégorie (octet de départ >= 0x82 : 0x88, 0x90, 0x82,
-    /// 0xa0 ou autre, chacun avec son propre texte dans la table 0xd7604).
+    /// Variant for names with a category (starting byte >= 0x82: 0x88, 0x90, 0x82, 0xa0 or other, each with its own
+    /// text in the table 0xd7604).
     fn name_category<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a1: u32) {
         let mut remaining: u16 = 5;
         let first = x.data8(a1);
@@ -2845,20 +2823,20 @@ mod dialog {
         }
     }
 
-    /// Fin d'un bloc de nom : mot -1, `-8 * n`, 0x10 (routine 0xd75a6).
+    /// End of a name block: word -1, `-8 * n`, 0x10 (routine 0xd75a6).
     fn name_tail<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out) {
         o.put(x, 0xffff);
         o.put(x, (o.n << 3).wrapping_neg());
         o.put(x, 0x10);
     }
 
-    /// Nom du joueur `p` entre les ouvertures 0xfffe0018 et 0xfffe000f (routine 0xd75b6 sans la fin).
+    /// Name of player `p` between the openings 0xfffe0018 and 0xfffe000f (routine 0xd75b6 without the end).
     fn player_name<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, p: Obj) {
         o.put32(x, NAME_OPEN);
         name(x, o, p.0 + 0x118);
     }
 
-    /// Bloc complet d'un joueur de la sorte 1 (routine 0xd7536) : titre, nom, fin.
+    /// Complete block of a kind 1 player (routine 0xd7536): title, name, end.
     fn player_block<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, p: Obj) {
         let index = ((p.u8(x.b, 3) >> 1).wrapping_mul(4)) as u32;
         let mut a1 = x.data32(PLAYER_TITLES + index);
@@ -2876,9 +2854,9 @@ mod dialog {
         name_tail(x, o);
     }
 
-    /// `movem.l (A2)+,D0-D6/A3 ; movem.l D0-D6/A3,(A1)` : les huit longs restent dans D0-D6 et A3. Rend le
-    /// septième (D6), que relit la fermeture d'une fenêtre (`shrink` : le nombre de lignes). Glitch d'origine : D2-D5
-    /// restent aux gestionnaires suivants (`dispatch::Leftovers`).
+    /// `movem.l (A2)+,D0-D6/A3 ; movem.l D0-D6/A3,(A1)`: the eight longs remain in D0-D6 and A3. Returns the seventh
+    /// (D6), which the closing of a window rereads (`shrink`: the number of lines). Original glitch: D2-D5 remain for
+    /// the following handlers (`dispatch::Leftovers`).
     fn copy_palette<R: Bench>(x: &mut Cx<'_, R>, src: u32, dst: u32) -> u32 {
         copy_longs(x, src, dst, 8);
         let [d2, d3, d4, d5, d6] = [2, 3, 4, 5, 6].map(|i| x.data32(src + 4 * i));
@@ -2893,10 +2871,10 @@ mod dialog {
         }
     }
 
-    // --- construction du texte, selon la sorte -------------------------------------------------
+    // --- text construction, according to the kind ----------------------------------------------
 
-    /// Construit la liste de jetons de la sorte `kind` (table 0xd7464 : l'index est décalé d'un cran,
-    /// la sorte `k` saute à la `k`-ième entrée de la table 0xd7466 ; la sorte 0 est traitée avant).
+    /// Builds the token list of the kind `kind` (table 0xd7464: the index is shifted by one notch, kind `k` jumps to
+    /// the `k`-th entry of the table 0xd7466; kind 0 is handled before).
     fn build<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
         let mut o = Out { at: BUFFER, n: 0 };
         let mut a6 = x.u32(0x24);
@@ -3033,7 +3011,7 @@ mod dialog {
         }
     }
 
-    /// Texte dont le jeton `special` appelle le nom d'un joueur situé en 0xff0fd2 (sortes 12, 20).
+    /// Text whose token `special` calls the name of a player located at 0xff0fd2 (kinds 12, 20).
     fn text_with_name<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a6: u32, special: u16, _alt: bool) {
         loop {
             let tok = next(x, &mut a6);
@@ -3053,8 +3031,8 @@ mod dialog {
         }
     }
 
-    /// Sorte 9 : le joueur de classe 5 (octet `+3` >> 1) donne son nom à la place du jeton 0x7004 ;
-    /// sans ce joueur, le texte n'est qu'un lien vers l'autre texte.
+    /// Kind 9: the class 5 player (byte `+3` >> 1) gives its name in place of the token 0x7004; without this player,
+    /// the text is only a link to the other text.
     fn build_9<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, a6: u32) {
         let mut found = None;
         for p in players() {
@@ -3089,12 +3067,12 @@ mod dialog {
         }
     }
 
-    /// Sorte 16 : jetons 0x7006 à 0x7009 = noms du propriétaire `+0x46`, objets équipés...
+    /// Kind 16: tokens 0x7006 to 0x7009 = names of the owner `+0x46`, equipped objects...
     fn build_16<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a6: u32) {
         loop {
             let tok = next(x, &mut a6);
             if tok == 0 {
-                // fin : cherche une pièce de test (0xce00a, type 17) à lier à ce texte
+                // end: looks for a test piece (0xce00a, type 17) to link to this text
                 wr16(x.b, o.at, tok);
                 if let Ok(created) = crate::families::creators::set_15_pure(x.b, 0x11) {
                     created.set_u16(x.b, 0x46, x.o.0 as u16);
@@ -3128,15 +3106,15 @@ mod dialog {
         }
     }
 
-    /// Nom du propriétaire de la fenêtre (`+0x46`) avec ses ouvertures (routine 0xd75ba).
+    /// Name of the window's owner (`+0x46`) with its openings (routine 0xd75ba).
     fn owner_name<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out) {
         let owner = x.linked(0x46);
         o.put32(x, NAME_OPEN);
         name(x, o, owner.0 + 0x118);
     }
 
-    /// Premier objet équipé du propriétaire qui figure dans l'une des listes de la sorte 16
-    /// (routines 0xd799c, 0xd7a38 et 0xd7a5c) : recopie le texte de l'objet.
+    /// First equipped object of the owner that appears in one of the lists of kind 16 (routines 0xd799c, 0xd7a38 and
+    /// 0xd7a5c): copies the object's text.
     fn equipped_item<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out) {
         let owner = x.linked(0x46);
         let (a, b, c) = if owner.u8(x.b, 3) >> 1 == 0 {
@@ -3180,8 +3158,8 @@ mod dialog {
         }
     }
 
-    /// Sorte 20 : comme la sorte 12 (jeton 0x7005), mais précédée d'un changement de palette en
-    /// partie à un joueur ; jeton 0x7000 sauté en solo ou remplacé par 0x2003.
+    /// Kind 20: like kind 12 (token 0x7005), but preceded by a palette change in a one-player game; token 0x7000
+    /// skipped in solo or replaced by 0x2003.
     fn build_20<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a6: u32) {
         o.put32(x, 0xfffe_000c);
         if x.a5_u8(0x50) != 0 && x.a5_u8(0x42) != 0 {
@@ -3202,7 +3180,7 @@ mod dialog {
                 }
             } else if tok == 0x7005 {
                 name_category(x, o, 0xff_0fd2);
-                // le reste du texte est lu comme pour la sorte 12
+                // the rest of the text is read as for kind 12
                 return text_with_name(x, o, a6, 0x7005, true);
             } else {
                 o.put(x, tok);
@@ -3211,11 +3189,11 @@ mod dialog {
         }
     }
 
-    // --- chargement d'une définition de fenêtre --------------------------------------------------
+    // --- loading a window definition -------------------------------------------------------------
 
-    /// Routine 0xd7124 : lit la définition à `def`, calcule l'adresse d'écran et applique
-    /// l'initialisation de la sorte. Rend l'adresse d'écran (A1 à la sortie de la routine) et, si une palette a été
-    /// copiée, le D6 qu'elle laisse (`copy_palette`).
+    /// Routine 0xd7124: reads the definition at `def`, computes the screen address and applies the kind's
+    /// initialization. Returns the screen address (A1 at the routine's exit) and, if a palette was copied, the D6 that
+    /// it leaves (`copy_palette`).
     fn load<R: Bench>(x: &mut Cx<'_, R>, mut def: u32) -> (u32, Option<u32>) {
         x.set16(0x30, 0);
         wr16(x.b, BUFFER, 0);
@@ -3251,7 +3229,7 @@ mod dialog {
         kind_init(x, a1)
     }
 
-    /// Initialisation propre à la sorte (table de sauts 0xd7196).
+    /// Initialization specific to the kind (jump table 0xd7196).
     fn kind_init<R: Bench>(x: &mut Cx<'_, R>, a1: u32) -> (u32, Option<u32>) {
         match x.u8(0x2f) {
             1 => {
@@ -3359,9 +3337,9 @@ mod dialog {
         }
     }
 
-    /// Lumière de la fenêtre : si une partie est en cours et que son bit 0 est levé
-    /// (`A5+0x48e`), la luminosité de la palette 0x91c2a0 est reportée sur les huit longs à
-    /// partir de `a1` (0x91c1e0 ou 0x91c380). Rend l'adresse après les huit longs.
+    /// Window light: if a game is in progress and its bit 0 is set (`A5+0x48e`), the brightness of the palette 0x91c2a0
+    /// is carried over to the eight longs starting at `a1` (0x91c1e0 or 0x91c380). Returns the address after the eight
+    /// longs.
     fn palette_tail<R: Bench>(x: &mut Cx<'_, R>, a1: u32) -> u32 {
         if x.a5_u8(0x48f) == 0 || x.a5_u8(0x48e) & 1 == 0 {
             return a1;
@@ -3374,7 +3352,7 @@ mod dialog {
         a1 + 0x20
     }
 
-    // --- états ------------------------------------------------------------------------------
+    // --- states -----------------------------------------------------------------------------
 
     fn open<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
@@ -3421,7 +3399,7 @@ mod dialog {
         crate::mem::rd8(b, a)
     }
 
-    /// Sous-état 2 : le cadre grandit d'une ligne toutes les `+0x36` images.
+    /// Substate 2: the frame grows by one line every `+0x36` frames.
     fn grow<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u8(0x1b).wrapping_sub(1);
         x.set8(0x1b, n);
@@ -3460,7 +3438,7 @@ mod dialog {
         build(x, kind);
     }
 
-    /// Sous-état 4 : attend qu'un joueur appuie (compte à rebours `+0x32` ; -1 = sans fin).
+    /// Substate 4: waits for a player to press (countdown `+0x32`; -1 = endless).
     fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(0x32) == 0xffff {
             return;
@@ -3480,7 +3458,7 @@ mod dialog {
         x.add16(0x32, 0xffff);
     }
 
-    /// Touches pressées par les joueurs concernés (octet `A5+0xc+n`, bits 4 à 7).
+    /// Keys pressed by the players concerned (byte `A5+0xc+n`, bits 4 to 7).
     fn poll_keys<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
         let mut who: i8 = -1;
         if x.u8(0x3) == 0x8b {
@@ -3505,7 +3483,7 @@ mod dialog {
         keys & 0xf0
     }
 
-    /// Sous-état 6 : le cadre se referme d'une ligne par pas ; puis l'objet est supprimé.
+    /// Substate 6: the frame closes by one line per step; then the object is deleted.
     fn shrink<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u8(0x1b).wrapping_sub(1);
         x.set8(0x1b, n);
@@ -3515,7 +3493,7 @@ mod dialog {
         let v = x.u8(0x36);
         x.set8(0x1b, v);
         let mut a6;
-        // D6 : nombre de lignes de la fenêtre (octet), que le chargement d'une définition peut écraser
+        // D6: number of lines of the window (byte), which the loading of a definition may overwrite
         let d6;
         if x.u8(0x21) != 0 {
             x.add8(0x21, 0xff);
@@ -3563,7 +3541,7 @@ mod dialog {
         x.free(&pools::SET);
     }
 
-    // --- dessin du cadre ----------------------------------------------------------------------
+    // --- drawing the frame --------------------------------------------------------------------
 
     fn frame_top<R: Bench>(x: &mut Cx<'_, R>, mut a1: u32) {
         let tiles: [u32; 2] = if x.u8(0x18) != 0 { [0x0434_000f, 0x0444_000f] } else { [0x0400_000f, 0x0410_000f] };

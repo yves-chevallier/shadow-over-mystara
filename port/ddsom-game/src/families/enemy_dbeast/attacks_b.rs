@@ -1,5 +1,5 @@
-//! Type 19, seconde série de coups de la bête (sous-état `+5 = 6`, 0x739b2) : bonds et sauts. Mêmes
-//! étapes communes que `attacks` (préparation, regard), reprise après demi-tour en sous-état 6.
+//! Type 19, second series of the beast's attacks (substate `+5 = 6`, 0x739b2): leaps and jumps. Same common steps as
+//! `attacks` (preparation, gaze), resume after a turn-around in substate 6.
 
 use crate::families::cx::Bench;
 use super::attacks::{phased, pounce_repeat, roll_pounces};
@@ -22,7 +22,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Retour à la bête debout, puis suite de la poursuite (0x73a4a).
+/// Back to the standing beast, then continue the pursuit (0x73a4a).
 fn end_and_pursue<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         set_state_long(x, ACTIVE_STANCE);
@@ -32,7 +32,7 @@ fn end_and_pursue<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x739cc : au hasard un petit saut vers l'avant, sinon une série de sauts sur place.
+/// 0x739cc: at random a small jump forward, otherwise a series of jumps in place.
 fn hop_or_pounce<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => {
@@ -68,7 +68,7 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x73aae : bond de côté (en profondeur), vers le haut ou le bas au hasard.
+/// 0x73aae: sideways leap (in depth), up or down at random.
 fn side_leap<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => {
@@ -90,7 +90,7 @@ fn side_leap<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// Début d'un bond en X de la seconde série (0x73b30) : vitesse `vx`, hauteur `vz`.
+/// Start of an X leap of the second series (0x73b30): speed `vx`, height `vz`.
 fn leap_start<R: Bench>(x: &mut Cx<'_, R>, vx: i16, vz: u16, anim: Option<u8>) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 1);
@@ -119,7 +119,7 @@ fn short_leap<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x73b7a : petit bond puis coup de griffe.
+/// 0x73b7a: small leap then claw strike.
 fn leap_and_claw<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => leap_start(x, 0x80, 0x2c0, None),
@@ -150,7 +150,7 @@ fn long_leap<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x73c5a : recule en rugissant puis se retourne, à terre.
+/// 0x73c5a: backs off roaring then turns around, on the ground.
 fn retreat<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);

@@ -1,30 +1,30 @@
-//! Reconnaissance des coups spéciaux par séquences d'entrées (P6).
+//! Recognition of special moves by input sequences (P6).
 //!
-//! Chaque image, `detect` (0xf157c) fait avancer une dizaine de *reconnaisseurs* de séquences
-//! (dérouler, double appui...) rangés dans l'enregistrement du joueur à `+0x1a0` (6 octets chacun).
-//! Un reconnaisseur lit sa séquence dans une table de la ROM : des paires (masque, valeur attendue)
-//! suivies d'un mot, -1 marquant la fin de la séquence. Quand une séquence est complète, l'action
-//! associée est lancée (`moves::combo`), sauf si l'état courant l'interdit : les *portes* (neuf octets en
-//! `A5-0x55e0`, un par action) sont posées au début de chaque image selon l'état du joueur.
+//! Each frame, `detect` (0xf157c) advances about ten sequence *recognizers*
+//! (roll, double press...) stored in the player record at `+0x1a0` (6 bytes each).
+//! A recognizer reads its sequence from a ROM table: pairs (mask, expected value)
+//! followed by a word, -1 marking the end of the sequence. When a sequence is complete, the associated
+//! action is launched (`moves::combo`), unless the current state forbids it: the *gates* (nine bytes at
+//! `A5-0x55e0`, one per action) are set at the start of each frame according to the player's state.
 //!
-//! Reconnaisseur (6 octets) : deux automates (octet d'avancement, octet de délai) pour l'orientation
-//! normale (`+0`) et miroir (`+2`) ; `+4` : séquence terminée ; `+5` : orientation à l'achèvement.
+//! Recognizer (6 bytes): two automata (progress byte, delay byte) for the normal orientation
+//! (`+0`) and mirrored (`+2`); `+4`: sequence finished; `+5`: orientation at completion.
 
 use super::moves::{combo, Combo};
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, wr8, A5};
 use crate::machine::Machine;
 
-/// Portes des actions : neuf octets (un par action déclenchable) suivis de trois autres, lus dans
-/// le code à chaque image.
+/// Action gates: nine bytes (one per triggerable action) followed by three others, read from
+/// the code on each frame.
 const GATES: u32 = A5 - 0x55e0;
 
-/// Début des reconnaisseurs dans l'enregistrement joueur.
+/// Start of the recognizers in the player record.
 const RECOGNIZERS: u32 = 0x1a0;
 
 
-/// Variantes de portes : adresse du premier des trois `move.l PC@(..),(A5-...)` du code d'origine ;
-/// les trois longs de données sont 0x16, 0x1a et 0x1e octets plus loin.
+/// Gate variants: address of the first of the three `move.l PC@(..),(A5-...)` of the original code;
+/// the three data longs are 0x16, 0x1a and 0x1e bytes further.
 mod gates {
     pub const BLOCKED: u32 = 0xf19c2;
     pub const HOLDING: u32 = 0xf19e2;
@@ -38,7 +38,7 @@ mod gates {
     pub const FROZEN: u32 = 0xf1b02;
 }
 
-/// Tables de séquences (octets du code, lus comme des données).
+/// Sequence tables (code bytes, read as data).
 mod tables {
     pub const R1A0: u32 = 0xf193a;
     pub const R1C4: u32 = 0xf1970;
@@ -53,7 +53,7 @@ mod tables {
     pub const R1D0: u32 = 0xf19b0;
 }
 
-/// Copie les douze octets de portes de la variante `variant`.
+/// Copies the twelve gate bytes of variant `variant`.
 fn set_gates(g: &mut Ctx, variant: u32) {
     cov!();
     for k in 0..3 {
@@ -62,7 +62,7 @@ fn set_gates(g: &mut Ctx, variant: u32) {
     }
 }
 
-/// Aucune action interdite.
+/// No forbidden action.
 fn clear_gates(g: &mut Ctx) {
     cov!();
     for k in 0..3 {
@@ -75,7 +75,7 @@ fn gate(g: &mut Ctx, n: u32) -> bool {
     crate::mem::rd8(g.b, GATES + n) != 0
 }
 
-/// 0xf18fa : efface tous les reconnaisseurs.
+/// 0xf18fa: clears all the recognizers.
 pub fn clear_recognizers(g: &mut Ctx, p: Player) {
     cov!();
     for k in 0..15 {
@@ -83,18 +83,19 @@ pub fn clear_recognizers(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Remplace l'octet bas d'un registre.
+/// Replaces the low byte of a register.
 fn low8(reg: &mut u32, v: u8) {
     *reg = *reg & !0xff | v as u32;
 }
 
-/// 0xf1884 : fait avancer un automate (octet d'avancement `state`, délai `state+1`) d'un pas.
-/// `mirror` : masque de miroir des directions (0 ou 3), `side` : valeur écrite à l'achèvement.
-/// Renvoie vrai quand la séquence est terminée.
+/// 0xf1884: advances an automaton (progress byte `state`, delay `state+1`) by one step.
+/// `mirror`: direction mirror mask (0 or 3), `side`: value written at completion.
+/// Returns true when the sequence is finished.
 ///
-/// Laisse les registres de l'original (relus par le code qui suit, p. ex. D3 puis D2 par la mort d'un boss :
-/// le sang créé en 0xb141a y prend sa position) : D0 = indice, D1 = touches précédentes (puis haut de l'attendu),
-/// D2 = touches tenues, D3 = masque (puis attendu), D7.b = attendu & miroir.
+/// Leaves the original's registers (re-read by the code that follows, e.g. D3 then D2 by a boss's death:
+/// the blood created at 0xb141a takes its position from them): D0 = index, D1 = previous keys (then high part of the
+/// expected),
+/// D2 = held keys, D3 = mask (then expected), D7.b = expected & mirror.
 fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, mirror: u8, side: u8) -> bool {
     cov!();
     let mut held = p.u8(g, Player::KEYS_HELD);
@@ -144,8 +145,8 @@ fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, m
     false
 }
 
-/// 0xf186e : essaie l'orientation normale puis l'orientation miroir.
-/// Laisse D4 (masque de miroir) et D5 (valeur écrite à l'achèvement) du dernier automate essayé, relus plus loin.
+/// 0xf186e: tries the normal orientation then the mirrored orientation.
+/// Leaves D4 (mirror mask) and D5 (value written at completion) of the last automaton tried, re-read later.
 fn recognize_both(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8) -> bool {
     cov!();
     g.c.d[4] = 0;
@@ -156,7 +157,7 @@ fn recognize_both(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8) -> 
     recognize_mirror(g, p, rec, table, timeout)
 }
 
-/// 0xf187c : essaie seulement l'orientation miroir.
+/// 0xf187c: tries only the mirrored orientation.
 fn recognize_mirror(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8) -> bool {
     cov!();
     g.c.d[4] = 3;
@@ -164,8 +165,8 @@ fn recognize_mirror(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8) -
     step(g, p, rec, rec + 2, table, timeout, 3, 0)
 }
 
-/// 0xf157c : met à jour les portes puis tous les reconnaisseurs. Dès qu'un coup spécial change l'état
-/// du joueur (Z = 0 au retour de l'action), les suivants ne sont pas examinés.
+/// 0xf157c: updates the gates then all the recognizers. As soon as a special move changes the state
+/// of the player (Z = 0 on return from the action), the following ones are not examined.
 pub fn detect(g: &mut Ctx, p: Player) {
     cov!();
     if ram::INPUT_RAW.get(g.b) != 0 || ram::SLOW_MODE.get(g.b) != 0 {
@@ -175,7 +176,7 @@ pub fn detect(g: &mut Ctx, p: Player) {
     run_recognizers(g, p);
 }
 
-/// Choisit les actions interdites selon l'état du joueur.
+/// Chooses the forbidden actions according to the player's state.
 fn select_gates(g: &mut Ctx, p: Player) {
     cov!();
     use gates::*;
@@ -214,16 +215,16 @@ fn select_gates(g: &mut Ctx, p: Player) {
     clear_gates(g);
 }
 
-/// Les reconnaisseurs, dans l'ordre de l'original.
+/// The recognizers, in the order of the original.
 fn run_recognizers(g: &mut Ctx, p: Player) {
     cov!();
-    // (reconnaisseur, table, délai, deux orientations, porte, action)
+    // (recognizer, table, delay, two orientations, gate, action)
     if recognized(g, p, 0x1a0, tables::R1A0, 0xc, true, 0, Combo::Dash) {
         return;
     }
-    // le magicien (classe 4) n'a pas les trois reconnaisseurs suivants
+    // the magic-user (class 4) does not have the following three recognizers
     if p.u8(g, Player::CHARACTER) >> 1 != 4 {
-        // boutons 1 et 2 enfoncés ensemble (un des deux vient d'être appuyé) : lancer immédiat
+        // buttons 1 and 2 pressed together (one of the two was just pressed): immediate throw
         let pressed = !p.u8(g, Player::KEYS_PREV) & p.u8(g, Player::KEYS_HELD) & 0x30;
         if !gate(g, 1) {
             let fire = pressed == 0x30 || recognize_mirror(g, p, 0x1c4, tables::R1C4, 6);
@@ -260,8 +261,8 @@ fn run_recognizers(g: &mut Ctx, p: Player) {
     recognize_both(g, p, 0x1d0, tables::R1D0, 0xc);
 }
 
-/// 0xf1b22 : vrai quand au moins trois joueurs tiennent les trois premiers boutons (image
-/// précédente) et qu'un magicien armé de l'arme 0x21 est libre de lancer son sort ultime.
+/// 0xf1b22: true when at least three players hold the first three buttons (previous
+/// frame) and a magic-user armed with weapon 0x21 is free to cast their ultimate spell.
 pub fn all_ready(g: &mut Ctx) -> bool {
     cov!();
     if ram::FROZEN.get(g.b) != 0 || ram::PAUSE.get(g.b) != 0 {
@@ -289,8 +290,8 @@ pub fn all_ready(g: &mut Ctx) -> bool {
     holding >= 3 && caster
 }
 
-/// Un reconnaisseur : vrai si sa séquence est terminée, que sa porte est ouverte et que l'action
-/// lancée a changé l'état du joueur (arrêt des examens).
+/// A recognizer: true if its sequence is finished, its gate is open and the action
+/// launched changed the player's state (stop of the examinations).
 fn recognized(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8, both: bool, gate_n: u32, action: Combo) -> bool {
     cov!();
     let done = if both { recognize_both(g, p, rec, table, timeout) } else { recognize_mirror(g, p, rec, table, timeout) };

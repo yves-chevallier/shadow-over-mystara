@@ -1,6 +1,6 @@
-//! Type 3 créé par un autre objet (`+0x42` non nul) : il ne suit pas l'IA. Il surgit (`+5` = 0), puis tire en place
-//! jusqu'à ce que sa durée de vie `+0xa8` s'écoule (`+0xa7` : saisi), après quoi il sort de l'écran à pied. Sans zone
-//! ni ombre : seules les remises en liste des routines (`jmp 0x1ee1a`) sont rejouées.
+//! Type 3 created by another object (`+0x42` non-zero): it does not follow the AI. It springs up (`+5` = 0), then
+//! shoots in place until its lifetime `+0xa8` elapses (`+0xa7`: grabbed), after which it leaves the screen on foot. No
+//! zone or shadow: only the routines' re-queuing (`jmp 0x1ee1a`) is replayed.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -18,7 +18,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5befc : surgit : points de vie à 1 (mots `+0x60`, `+0x62`, `+0x64`), marche en place.
+/// 0x5befc: springs up: hit points set to 1 (words `+0x60`, `+0x62`, `+0x64`), walks in place.
 fn begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     x.set16(0x60, 1);
@@ -45,7 +45,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 0 : marche sur place pendant `+0xa4` images, puis les tirs.
+/// +6 = 0: walks in place for `+0xa4` frames, then the shots.
 fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     x.anim_step();
@@ -57,7 +57,7 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// +6 = 2 : la durée de vie est écoulée : le Bow Gnoll s'éloigne de l'écran, puis disparaît.
+/// +6 = 2: the lifetime has elapsed: the Bow Gnoll moves away from the screen, then disappears.
 fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -107,7 +107,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 : tire (nombre de tirs tiré dans la rangée), reste dans la boucle de tirs.
+/// +6 = 4: shoots (number of shots drawn from the row), stays in the shooting loop.
 fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -133,7 +133,7 @@ fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// 0x5c04a : animation de tir (0 ou 5 selon le profil `+0x2f`).
+/// 0x5c04a: shot animation (0 or 5 according to profile `+0x2f`).
 fn shoot_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let anim = if x.u8(GROUP) != 0 { 5 } else { 0 };
     shot(x, anim);

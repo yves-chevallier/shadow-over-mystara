@@ -1,4 +1,4 @@
-//! Fichiers de données en JSON : adresses ROM en hexadécimal, une entrée par ligne.
+//! JSON data files: ROM addresses in hexadecimal, one entry per line.
 
 use std::io;
 use std::path::Path;
@@ -6,7 +6,7 @@ use std::path::Path;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 
-/// Adresse ROM écrite `"0x2b45d8"`.
+/// ROM address written `"0x2b45d8"`.
 pub mod hex {
     use serde::{Deserialize, Deserializer, Serializer};
 
@@ -16,7 +16,7 @@ pub mod hex {
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<u32, D::Error> {
         let s = String::deserialize(d)?;
-        parse(&s).ok_or_else(|| serde::de::Error::custom(format!("adresse invalide : {s}")))
+        parse(&s).ok_or_else(|| serde::de::Error::custom(format!("invalid address: {s}")))
     }
 
     pub fn parse(s: &str) -> Option<u32> {
@@ -24,7 +24,7 @@ pub mod hex {
     }
 }
 
-/// Liste d'adresses ROM.
+/// List of ROM addresses.
 pub mod hex_vec {
     use serde::{Deserialize, Deserializer, Serializer};
 
@@ -35,12 +35,12 @@ pub mod hex_vec {
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<u32>, D::Error> {
         Vec::<String>::deserialize(d)?
             .iter()
-            .map(|s| super::hex::parse(s).ok_or_else(|| serde::de::Error::custom(format!("adresse invalide : {s}"))))
+            .map(|s| super::hex::parse(s).ok_or_else(|| serde::de::Error::custom(format!("invalid address: {s}"))))
             .collect()
     }
 }
 
-/// Adresse ROM facultative.
+/// Optional ROM address.
 pub mod hex_opt {
     use serde::{Deserialize, Deserializer, Serializer};
 
@@ -53,7 +53,7 @@ pub mod hex_opt {
 
     pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Option<u32>, D::Error> {
         Option::<String>::deserialize(d)?
-            .map(|s| super::hex::parse(&s).ok_or_else(|| serde::de::Error::custom(format!("adresse invalide : {s}"))))
+            .map(|s| super::hex::parse(&s).ok_or_else(|| serde::de::Error::custom(format!("invalid address: {s}"))))
             .transpose()
     }
 }
@@ -63,9 +63,9 @@ pub fn load<T: DeserializeOwned>(path: &Path) -> io::Result<T> {
     serde_json::from_reader(f).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, format!("{}: {e}", path.display())))
 }
 
-/// Écrit `v` en JSON indenté jusqu'à la profondeur `depth`, compact au-delà (et pour les listes de
-/// nombres) : une image, une entrée d'animation ou une bande par ligne. Les champs gardent l'ordre des
-/// structures.
+/// Writes `v` as JSON indented down to depth `depth`, compact beyond (and for lists of
+/// numbers): one frame, one animation entry or one strip per line. Fields keep the order of the
+/// structs.
 pub fn save<T: Serialize>(path: &Path, v: &T, depth: usize) -> io::Result<()> {
     let compact = serde_json::to_string(v).map_err(io::Error::other)?;
     let mut out = layout(&compact, depth);
@@ -73,8 +73,8 @@ pub fn save<T: Serialize>(path: &Path, v: &T, depth: usize) -> io::Result<()> {
     std::fs::write(path, out)
 }
 
-/// Réindente un JSON compact : retour à la ligne entre les éléments des objets et des listes d'objets
-/// ou de listes de profondeur inférieure à `depth`.
+/// Re-indents a compact JSON: newline between the elements of objects and of lists of objects
+/// or of lists of depth below `depth`.
 fn layout(json: &str, depth: usize) -> String {
     let b = json.as_bytes();
     let mut out = String::with_capacity(json.len() + json.len() / 8);
@@ -103,7 +103,7 @@ fn layout(json: &str, depth: usize) -> String {
             '{' | '[' => {
                 let next = b.get(i + 1).copied();
                 let empty = matches!(next, Some(b'}' | b']'));
-                // liste dont les premiers éléments sont `null` : imbriquée si le premier élément non nul l'est
+                // list whose first elements are `null`: nested if the first non-null element is
                 let mut k = i + 1;
                 while b[k..].starts_with(b"null,") {
                     k += 5;

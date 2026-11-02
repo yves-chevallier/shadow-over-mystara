@@ -1,6 +1,6 @@
-//! Type 27, sous-état 4 : les gestes de l'arme. `+6` = 0, 2 et 4 canon (animations 0 à 2 du jeu de l'arme), 6 charge
-//! de projectiles, 8 bond d'écrasement, 10 salve, 12 lancer d'un objet ; sous-états 6, 8 et 10 : tourne sur place
-//! quand plus aucun joueur n'est en vie.
+//! Type 27, substate 4: the weapon moves. `+6` = 0, 2 and 4 cannon (animations 0 to 2 of the weapon set), 6 projectile
+//! charge, 8 crushing leap, 10 volley, 12 throw of an object; substates 6, 8 and 10: spins in place when no player is
+//! alive any more.
 
 use super::arrival::hop_loop;
 use crate::families::cx::Bench;
@@ -22,7 +22,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin de geste : à la fin de l'animation, retour à `fire_a`, ou attente s'il n'y a plus de joueur en vie.
+/// End of a move: at the end of the animation, back to `fire_a`, or wait if there is no player alive any more.
 fn end_of_animation<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::step(x) {
         end_gesture(x);
@@ -36,7 +36,7 @@ fn end_gesture<R: Bench>(x: &mut Cx<'_, R>) {
     go::fire_a(x);
 }
 
-/// +6 = 0, 2, 4 : une animation de l'arme (`look` = aspect, `anim` = numéro) jouée jusqu'au bout.
+/// +6 = 0, 2, 4: a weapon animation (`look` = look, `anim` = number) played to the end.
 fn cannon<R: Bench>(x: &mut Cx<'_, R>, look_v: u8, anim: u32) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -46,7 +46,7 @@ fn cannon<R: Bench>(x: &mut Cx<'_, R>, look_v: u8, anim: u32) {
     end_of_animation(x);
 }
 
-/// +6 = 6 : charge vers la cible, étincelles pendant le roulement, puis bond.
+/// +6 = 6: charge toward the target, sparks while rolling, then leap.
 fn rush<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -98,7 +98,7 @@ fn rush<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 8 : bond d'écrasement vers la cible, puis choc au sol.
+/// +6 = 8: crushing leap toward the target, then ground impact.
 fn smash<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -107,7 +107,7 @@ fn smash<R: Bench>(x: &mut Cx<'_, R>) {
             let angle = heading(x);
             x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x17);
-            // distance horizontale à la cible, divisée par la vitesse : détermine la poussée verticale
+            // horizontal distance to the target, divided by the speed: determines the vertical thrust
             let target = load_target(x);
             let mut d2 = x.u32(Obj::X) as i32 - target.u32(x.b, Obj::X) as i32;
             if d2 < 0 {
@@ -176,7 +176,7 @@ fn smash<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 10 : salve : l'arme tire un nombre de fois lu dans la table 0x78856.
+/// +6 = 10: volley: the weapon fires a number of times read from table 0x78856.
 fn volley<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -222,7 +222,7 @@ fn volley<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 12 : lance un objet (type 0x43) devant la machine, puis reste en place un moment.
+/// +6 = 12: throws an object (type 0x43) in front of the machine, then stays in place for a moment.
 fn grenade<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -271,7 +271,7 @@ fn grenade<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Sous-états 6, 8 et 10 : plus aucun joueur en vie : tourne sur place tant que `A5+0x35` est nul.
+/// Substates 6, 8 and 10: no player alive any more: spins in place as long as `A5+0x35` is zero.
 pub(super) fn spin<R: Bench>(x: &mut Cx<'_, R>) {
     if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return go::fire_a(x);

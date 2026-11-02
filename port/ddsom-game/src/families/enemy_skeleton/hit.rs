@@ -1,12 +1,12 @@
-//! Type 1, état touché (`+4 = 4`, 0x58ca6). `+5` : 0 et 6 réaction commune par table (`+0x49`),
-//! 2 recul (riposte possible), 4 chute, 8 fuite hors de l'écran, 10 rien.
+//! Type 1, hit state (`+4 = 4`, 0x58ca6). `+5`: 0 and 6 common reaction by table (`+0x49`), 2 recoil (counter-attack
+//! possible), 4 fall, 8 flight off the screen, 10 nothing.
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
+/// Tables of the common reaction, indexed by reaction code `+0x49`.
 const REACT_FIRST: u32 = 0x58d0a;
 const REACT_SECOND: u32 = 0x58f2e;
 
@@ -17,7 +17,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     } else {
         match x.u8(f::SUB) {
             0 => {
-                // le code 0x64 n'est jamais une réaction spéciale
+                // code 0x64 is never a special reaction
                 if x.u8(0x49) == 0x64 || !special_hit(x) {
                     react(x, REACT_FIRST);
                 }
@@ -35,7 +35,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-// --- sous-état 2 : recul ------------------------------------------------------------------------
+// --- substate 2: recoil ------------------------------------------------------------------------
 
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) || special_hit(x) {
@@ -57,7 +57,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
         }
         return body(x, 4);
     }
-    // recule pendant `TIMER` images, puis se relève
+    // recoils for `TIMER` frames, then gets up
     let t = x.u16(TIMER);
     if t != 0 {
         x.set16(TIMER, t - 1);
@@ -76,7 +76,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(POSTURE, posture);
         let counter = x.u8(COUNTER) as i8;
         if counter != 0 && (counter > 0 || random(x) & 1 != 0) {
-            // riposte : le coup `+0xa9` de la série des coups
+            // counter-attack: attack `+0xa9` of the attack series
             x.set16(f::STATE, 0x204);
             let mv = x.u8(COUNTER_MOVE);
             x.set8(f::SUB2, mv);
@@ -90,7 +90,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 0);
 }
 
-// --- sous-état 4 : chute --------------------------------------------------------------------------
+// --- substate 4: fall --------------------------------------------------------------------------
 
 fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -128,7 +128,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 : fuite ------------------------------------------------------------------------
+// --- substate 8: flight ------------------------------------------------------------------------
 
 fn flee<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
@@ -176,7 +176,7 @@ fn flee<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x59082 : court vers le bord de l'écran ; hors de l'écran, il disparaît.
+/// 0x59082: runs toward the edge of the screen; off screen, it disappears.
 fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
@@ -200,7 +200,7 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
             return;
         }
     }
-    // immobile : il se remet à jouer l'animation normale
+    // motionless: it goes back to playing the normal animation
     x.add8(f::SUB2, 2);
     let series = x.u8(SERIES);
     if series != 0 {

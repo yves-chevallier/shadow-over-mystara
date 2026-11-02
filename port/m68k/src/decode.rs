@@ -1,5 +1,5 @@
-//! Décodage 68000 : opcode + mots d'extension -> instruction entièrement résolue.
-//! Partagé par l'interpréteur et le recompilateur.
+//! 68000 decoding: opcode + extension words -> fully resolved instruction.
+//! Shared by the interpreter and the recompiler.
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Size {
@@ -32,7 +32,7 @@ impl Size {
     }
 }
 
-/// Mode d'adressage effectif, avec ses mots d'extension déjà lus.
+/// Effective addressing mode, with its extension words already read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Ea {
     Dn(u8),
@@ -43,13 +43,13 @@ pub enum Ea {
     Disp(u8, i16),
     /// (d8,An,Xn) : mot d'extension brut
     Idx(u8, u16),
-    /// (xxx).w : adresse étendue en signe.
+    /// (xxx).w: sign-extended address.
     AbsW(u32),
     /// (xxx).l
     AbsL(u32),
-    /// (d16,PC) : adresse cible calculée au décodage. Lu en espace programme.
+    /// (d16,PC): target address computed at decode time. Read in program space.
     PcDisp(u32),
-    /// (d8,PC,Xn) : base (adresse du mot d'extension + d8) et mot d'extension. Espace programme.
+    /// (d8,PC,Xn): base (address of the extension word + d8) and extension word. Program space.
     PcIdx(u32, u16),
     Imm(u32),
 }
@@ -84,7 +84,7 @@ pub enum ShiftCount {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Op {
-    // arithmétique / logique : src, dst
+    // arithmetic / logic: src, dst
     Add(Size, Ea, Ea),
     Adda(Size, Ea, u8),
     Addx(Size, Ea, Ea),
@@ -133,11 +133,11 @@ pub enum Op {
     Pea(Ea),
     Link(u8, i16),
     Unlk(u8),
-    // bits / décalages
+    // bits / shifts
     Bit(BitOp, ShiftCount, Ea),
     Shift { kind: ShiftKind, left: bool, size: Size, count: ShiftCount, dn: u8 },
     ShiftMem { kind: ShiftKind, left: bool, ea: Ea },
-    // flot de contrôle
+    // control flow
     Bra(u32),
     Bsr(u32),
     Bcc(u8, u32),
@@ -161,15 +161,15 @@ pub enum Op {
 #[derive(Clone, Copy, Debug)]
 pub struct Instr {
     pub op: Op,
-    /// Adresse de l'opcode.
+    /// Address of the opcode.
     pub pc: u32,
-    /// Longueur en octets (opcode + extensions).
+    /// Length in bytes (opcode + extensions).
     pub len: u32,
-    /// Mot d'opcode brut (distingue par ex. ADDQ d'ADDI pour le timing).
+    /// Raw opcode word (distinguishes e.g. ADDQ from ADDI for timing).
     pub opcode: u16,
 }
 
-/// Source des mots d'instruction (espace programme).
+/// Source of instruction words (program space).
 pub trait Fetch {
     fn fetch16(&mut self, addr: u32) -> u16;
 }
@@ -190,7 +190,7 @@ impl<F: Fetch> Reader<'_, F> {
         (hi << 16) | self.w() as u32
     }
 
-    /// Lit un mode d'adressage (mode, reg) ; None si invalide pour la taille.
+    /// Reads an addressing mode (mode, reg); None if invalid for the size.
     fn ea(&mut self, mode: u16, reg: u16, size: Size) -> Option<Ea> {
         let r = reg as u8;
         Some(match mode {
@@ -225,7 +225,7 @@ impl<F: Fetch> Reader<'_, F> {
     }
 }
 
-// Classes de modes autorisés
+// Classes of allowed modes
 fn is_data(ea: Ea) -> bool {
     !matches!(ea, Ea::An(_))
 }
@@ -251,13 +251,13 @@ fn size2(bits: u16) -> Option<Size> {
     }
 }
 
-/// Décode l'instruction à `pc`. Les encodages invalides donnent `Op::Illegal` (ou LineA/LineF).
+/// Decodes the instruction at `pc`. Invalid encodings give `Op::Illegal` (or LineA/LineF).
 pub fn decode<F: Fetch>(f: &mut F, pc: u32) -> Instr {
     let mut r = Reader { f, pc };
     let op = r.w();
     let o = decode_op(&mut r, op).unwrap_or(Op::Illegal);
     let len = r.pc.wrapping_sub(pc);
-    // Une instruction invalide n'a que son opcode
+    // An invalid instruction has only its opcode
     let len = if matches!(o, Op::Illegal | Op::LineA | Op::LineF) { 2 } else { len };
     Instr { op: o, pc, len, opcode: op }
 }
@@ -297,7 +297,7 @@ fn decode_op<F: Fetch>(r: &mut Reader<F>, op: u16) -> Option<Op> {
                 }
                 return Some(Op::Bit(kind, ShiftCount::Imm(n), ea));
             }
-            // immédiats
+            // immediates
             match op {
                 0x003c => return Some(Op::OriCcr(r.w() as u8)),
                 0x007c => return Some(Op::OriSr(r.w())),
@@ -365,7 +365,7 @@ fn decode_op<F: Fetch>(r: &mut Reader<F>, op: u16) -> Option<Op> {
                 return None;
             }
             if let Ea::An(n) = dst {
-                // ADDQ/SUBQ sur An : toujours long, sans flags
+                // ADDQ/SUBQ on An: always long, no flags
                 return Some(if op & 0x100 == 0 {
                     Op::Adda(Size::Long, Ea::Imm(q), n)
                 } else {
@@ -635,7 +635,7 @@ fn decode_4<F: Fetch>(r: &mut Reader<F>, op: u16, mode: u16, reg: u16, rx: u8) -
             }
             let size = size2(size_bits)?;
             let ea = r.ea(mode, reg, size)?;
-            // 68000 : TST n'accepte que les modes données altérables (An, PC et # viennent du 68020)
+            // 68000: TST only accepts alterable data modes (An, PC and # come from the 68020)
             if !is_data_alt(ea) {
                 return None;
             }

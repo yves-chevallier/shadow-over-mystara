@@ -1,8 +1,7 @@
-//! Tirs et attaques des ennemis (classe ESHL), types 64 à 72 (fin de la table 0x39b96). Voir
-//! `docs/families/eshl_c.md`.
+//! Enemy shots and attacks (ESHL class), types 64 to 72 (end of table 0x39b96). See `docs/families/eshl_c.md`.
 //!
-//! Même cadre que `eshl.rs` : un `mod` par type, `run` est appelé par le dispatch avec l'objet
-//! courant ; `+4` est l'état principal, `+5` / `+6` les sous-états (octets pairs).
+//! Same framework as `eshl.rs`: one `mod` per type, `run` is called by the dispatch with the current object; `+4` is
+//! the main state, `+5` / `+6` the substates (even bytes).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -12,22 +11,20 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-/// Alloue un objet ESHL ; `None` si le pool est plein.
-/// `subq.w #1,(off,A0)` : vrai quand le compteur atteint zéro.
+/// Allocates an ESHL object; `None` if the pool is full. `subq.w #1,(off,A0)`: true when the counter reaches zero.
 fn count_down<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     x.add16(off, 0xffff);
     x.u16(off) == 0
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 64 : colonnes de flammes du guerrier (0xa6efa)
+// Type 64: flame columns of the warrior (0xa6efa)
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 64 (0xa6efa) : flammes posées par un créateur (`+0x5c`, un ennemi ou une autre flamme). La
-/// variante 0 compte ses générations dans `+0x2f` : la quatrième retombe en arc et s'éteint au sol
-/// (dégâts de zone 0x2860), les autres s'allument sur place ; à la fin de leur temps (`+0x42`), elles
-/// créent trois flammes : une de variante 0 (génération suivante) et deux colonnes (variantes 1 et 2)
-/// qui montent ou descendent de 8 pixels par génération (`+0x46` : son toutes les trois).
+/// Shot 64 (0xa6efa): flames placed by a creator (`+0x5c`, an enemy or another flame). Variant 0 counts its generations
+/// in `+0x2f`: the fourth falls back in an arc and goes out on the ground (area damage 0x2860), the others light up in
+/// place; at the end of their time (`+0x42`), they create three flames: one of variant 0 (next generation) and two
+/// columns (variants 1 and 2) that rise or descend by 8 pixels per generation (`+0x46`: sound every third one).
 mod flame64 {
     use super::*;
 
@@ -109,7 +106,7 @@ mod flame64 {
         x.anim_start(ANIMS, 2);
     }
 
-    /// Position (longs) et orientation du créateur, un pixel devant lui.
+    /// Position (longs) and orientation of the creator, one pixel in front of it.
     fn follow<R: Bench>(x: &mut Cx<'_, R>) {
         let creator = x.linked(CREATOR);
         for off in [0x8, 0x10, 0xc] {
@@ -160,7 +157,7 @@ mod flame64 {
         }
     }
 
-    /// Colonne : à la fin de son temps, crée la flamme suivante de sa variante.
+    /// Column: at the end of its time, creates the next flame of its variant.
     fn column<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
         if count_down(x, TIMER) {
             spawn(x, variant);
@@ -180,8 +177,8 @@ mod flame64 {
         spawn(x, 2);
     }
 
-    /// Flamme fille de variante `variant` (0xa6e8e, 0xa6eb2, 0xa6ed6) : la variante 0 hérite de la
-    /// génération, les colonnes du compteur de sons.
+    /// Child flame of variant `variant` (0xa6e8e, 0xa6eb2, 0xa6ed6): variant 0 inherits the generation, the columns the
+    /// sound counter.
     fn spawn<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
         let Some(child) = x.alloc(&pools::ESHL) else { return };
         child.set_u8(x.b, 0x0, 1);
@@ -200,23 +197,22 @@ mod flame64 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 65 : pluie de pierres (0xa72c4)
+// Type 65: rain of stones (0xa72c4)
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 65 (0xa72c4) : pierre qui tombe du haut de l'écran à une position tirée au hasard (deux
-/// tirages : X dans l'écran, profondeur dans une bande de 0x50), après une attente lue dans une table
-/// par rang `+0x2f` ; au sol elle déclenche des dégâts de zone (0x2860). Variante 0 : éclat d'impact
-/// (0xab7d8) et disparition ; variante 1 : animation d'impact jusqu'à son terme.
+/// Shot 65 (0xa72c4): stone that falls from the top of the screen at a randomly drawn position (two draws: X within the
+/// screen, depth within a band of 0x50), after a wait read from a table by rank `+0x2f`; on the ground it triggers area
+/// damage (0x2860). Variant 0: impact burst (0xab7d8) and disappearance; variant 1: impact animation until its end.
 mod rocks65 {
     use super::*;
 
-    /// Par variante : jeu d'animations, identifiant d'attaque, attentes par rang (octets, ROM programme).
+    /// Per variant: animation set, attack identifier, waits per rank (bytes, program ROM).
     const ANIMS: [u32; 2] = [0x16ea18, 0x171574];
     const ATTACK: [u8; 2] = [0x25, 0x38];
     const DELAYS: [u32; 2] = [0xa739a, 0xa74b6];
     const TIMER: u32 = 0x42;
     const RANK: u32 = 0x2f;
-    /// Coin de l'écran (joueur 1, ou joueur 2 si `A5+0x36`).
+    /// Corner of the screen (player 1, or player 2 if `A5+0x36`).
     const SCREEN: u32 = 0x4fe;
     const SCREEN_P2: u32 = 0x54e;
     const SFX: [u32; 2] = [0xeafdc, 0xed548];
@@ -226,7 +222,7 @@ mod rocks65 {
             return;
         }
         let v = (x.u8(0x3) != 0) as usize;
-        // la variante 1 a un état de plus (fin d'animation) avant la libération
+        // variant 1 has one more state (end of animation) before the release
         let state = x.u8(0x4);
         match (state, v) {
             (0, _) => init(x, v),
@@ -266,7 +262,7 @@ mod rocks65 {
         x.anim_start(ANIMS[v], 0);
     }
 
-    /// Tirage pseudo-aléatoire (mot bas de D0).
+    /// Pseudo-random draw (low word of D0).
     fn random<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
         x.random()
     }
@@ -296,27 +292,26 @@ mod rocks65 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 66 : éclats tenus puis lâchés (0xa75c6)
+// Type 66: bursts held then dropped (0xa75c6)
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 66 (0xa75c6) : éclat collé à son porteur (`+0x46`, mot) à un décalage lu dans une table par
-/// variante et rang `+0x2f`, qui s'en rapproche en clignotant pendant 8 images, puis est projeté vers
-/// le haut, retombe (son, dégâts de zone 0x2824), attend 16 images et clignote 16 images avant de
-/// disparaître. Sans porteur, il repart de l'initialisation.
+/// Shot 66 (0xa75c6): burst stuck to its carrier (`+0x46`, word) at an offset read from a table by variant and rank
+/// `+0x2f`, which approaches it blinking for 8 frames, then is thrown upward, falls back (sound, area damage 0x2824),
+/// waits 16 frames and blinks 16 frames before disappearing. Without a carrier, it restarts from initialization.
 mod shard66 {
     use super::*;
 
     const ANIMS: u32 = 0x17b9d6;
-    /// Animation par variante, à la création puis à l'impact (octets, ROM programme).
+    /// Animation per variant, at creation then at impact (bytes, program ROM).
     const START_ANIMS: u32 = 0xa760e;
     const LAND_ANIMS: u32 = 0xa777a;
-    /// Décalages (X, profondeur) par variante, quatre octets par rang (mots, en clair).
+    /// Offsets (X, depth) per variant, four bytes per rank (words, in the clear).
     const OFFSETS: [u32; 6] = [0xa7834, 0xa7834, 0xa7854, 0xa7870, 0xa7890, 0xa78a8];
     const CARRIER: u32 = 0x46;
     const TIMER: u32 = 0x42;
     const RANK: u32 = 0x2f;
     const SFX_LAND: u32 = 0xe4de6;
-    /// États `+4.w` de l'éclat dans lequel il reste tenu.
+    /// States `+4.w` of the carrier in which the burst stays held.
     const HELD_STATE: u16 = 0x204;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -350,7 +345,7 @@ mod shard66 {
     fn active<R: Bench>(x: &mut Cx<'_, R>) {
         let carrier = x.u16(CARRIER);
         if carrier as i16 >= 0 {
-            // pas de porteur : l'original repart de l'initialisation (sous-état 4)
+            // no carrier: the original restarts from initialization (substate 4)
             x.set16(0x4, 4);
             return;
         }
@@ -374,7 +369,7 @@ mod shard66 {
                     x.add16(0x10, t);
                     return blink(x, t & 1 != 0);
                 }
-                // (test de l'original sur l'éclat lui-même : toujours faux dans le sous-état 0)
+                // (test of the original on the burst itself: always false in substate 0)
                 if x.u16(0x4) == HELD_STATE && (x.u8(0x6) as i8) < 6 {
                     return blink(x, false);
                 }
@@ -421,13 +416,13 @@ mod shard66 {
         }
     }
 
-    /// `subq.w #1,+0x42 ; bgt` : vrai quand le compteur n'est plus positif.
+    /// `subq.w #1,+0x42 ; bgt`: true when the counter is no longer positive.
     fn count_down_signed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         x.add16(TIMER, 0xffff);
         x.u16(TIMER) as i16 <= 0
     }
 
-    /// Fin commune : visibilité (bit 1 de `+1` : caché), terrain, retenue dans l'écran, tri.
+    /// Common end: visibility (bit 1 of `+1`: hidden), terrain, on-screen restraint, sort.
     fn blink<R: Bench>(x: &mut Cx<'_, R>, hidden: bool) {
         x.set_bit(0x1, 1, hidden);
         x.push_terrain();
@@ -437,14 +432,13 @@ mod shard66 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 67 : tonneau lancé (0xa78c2)
+// Type 67: thrown barrel (0xa78c2)
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 67 (0xa78c2) : objet lancé en arc vers le propriétaire (`+0x50`) : la vitesse verticale est
-/// choisie pour l'atteindre (12 de moins par pas de la distance horizontale, bornée à 16..256). Il
-/// tourne sur lui-même (orientation basculée toutes les 4 images) ; au sol il glisse 30 images en
-/// ralentissant (effet 0x1172e toutes les 6 images) ; touché ou paré, il rebondit trois fois (effets
-/// 12, 13, 8). Il clignote pendant ses 30 dernières images et disparaît hors de l'écran.
+/// Shot 67 (0xa78c2): object thrown in an arc toward the owner (`+0x50`): the vertical speed is chosen to reach it (12
+/// less per step of the horizontal distance, bounded to 16..256). It spins on itself (orientation flipped every 4
+/// frames); on the ground it slides for 30 frames, slowing down (effect 0x1172e every 6 frames); hit or parried, it
+/// bounces three times (effects 12, 13, 8). It blinks during its last 30 frames and disappears off the screen.
 mod barrel67 {
     use super::*;
 
@@ -490,7 +484,7 @@ mod barrel67 {
         crate::families::enemy_lib::start(x, ANIMS, 21);
     }
 
-    /// 0xa7af4 : bascule l'orientation toutes les 4 images.
+    /// 0xa7af4: flips the orientation every 4 frames.
     fn spin<R: Bench>(x: &mut Cx<'_, R>) {
         x.add16(SPIN_TIMER, 0xffff);
         if x.u16(SPIN_TIMER) as i16 > 0 {
@@ -507,7 +501,7 @@ mod barrel67 {
         *x.c.d5() = 0xffff;
     }
 
-    /// Mouvement en X et en hauteur ; vrai quand l'objet touche le sol (hauteur remise à 0).
+    /// Movement in X and in height; true when the object touches the ground (height reset to 0).
     fn lands<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         x.move_xz();
         if x.u16(0xc) as i16 > 0 {
@@ -598,7 +592,7 @@ mod barrel67 {
         }
     }
 
-    /// `subq.w #1 ; ble` : vrai quand le compteur n'est plus positif.
+    /// `subq.w #1 ; ble`: true when the counter is no longer positive.
     fn count_down_one<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
         x.add16(off, 0xffff);
         x.u16(off) as i16 <= 0
@@ -606,21 +600,21 @@ mod barrel67 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 68 : pierres soulevées (0xa7b76)
+// Type 68: lifted stones (0xa7b76)
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 68 (0xa7b76) : pierre qui monte du sol (premier plan) au-dessus d'une abscisse lue par rang
-/// `+0x2f`, puis reste en l'air tant que son porteur (`+0x46`) n'est pas dans l'état 0x204 au-delà du
-/// sous-état 6 ; lâchée, elle file (table de vitesses 31, direction par rang) avec une animation qui
-/// dépend de sa hauteur dans l'écran, et disparaît en passant sous le haut de l'écran.
+/// Shot 68 (0xa7b76): stone that rises from the ground (foreground) above an abscissa read by rank `+0x2f`, then stays
+/// in the air as long as its carrier (`+0x46`) is not in state 0x204 beyond substate 6; once dropped, it flies off
+/// (speed table 31, direction by rank) with an animation that depends on its height on the screen, and disappears when
+/// passing below the top of the screen.
 mod stone68 {
     use super::*;
 
     const ANIMS: u32 = 0x17b9d6;
-    /// Abscisse par rang (mots, ROM programme), direction par rang (octets, ROM programme).
+    /// Abscissa per rank (words, program ROM), direction per rank (bytes, program ROM).
     const COLUMNS: u32 = 0xa7be4;
     const DIRECTIONS: u32 = 0xa7c7c;
-    /// Animations selon la hauteur dans l'écran : compte puis paires (animation, seuil) (mots, en clair).
+    /// Animations according to the height on the screen: count then pairs (animation, threshold) (words, in the clear).
     const HEIGHT_ANIMS: u32 = 0xa7d50;
     const CARRIER: u32 = 0x46;
     const RANK: u32 = 0x2f;
@@ -706,7 +700,7 @@ mod stone68 {
         x.reinsert();
     }
 
-    /// 0xa7d20 : animation selon la hauteur dans l'écran (seuils croissants, la dernière par défaut).
+    /// 0xa7d20: animation according to the height on the screen (increasing thresholds, the last one by default).
     fn height_anim<R: Bench>(x: &mut Cx<'_, R>) {
         let top = if x.a5_u8(0x36) != 0 { SCREEN_TOP_P2 } else { SCREEN_TOP };
         let h = x.u16(0x10).wrapping_sub(x.a5_u16(top)) as i16;
@@ -723,18 +717,17 @@ mod stone68 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 69 : pierre qui rebondit (0xa7e30)
+// Type 69: bouncing stone (0xa7e30)
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 69 (0xa7e30) : pierre lancée devant le créateur (48 pixels, hauteur 32) après une attente lue
-/// par rang `+0x2f` ; elle rebondit à chaque contact avec le sol (son) et disparaît quand elle sort de
-/// l'écran (16 pixels à gauche, 400 à droite). `+0x42` (octet, posé par le créateur) = 11 : coup plus
-/// fort (0x36).
+/// Shot 69 (0xa7e30): stone thrown in front of the creator (48 pixels, height 32) after a wait read by rank `+0x2f`; it
+/// bounces at each contact with the ground (sound) and disappears when it leaves the screen (16 pixels to the left, 400
+/// to the right). `+0x42` (byte, set by the creator) = 11: stronger hit (0x36).
 mod bouncer69 {
     use super::*;
 
     const ANIMS: u32 = 0x17b9d6;
-    /// Par rang : attente puis animation (mots, ROM programme).
+    /// Per rank: wait then animation (words, program ROM).
     const RANKS: u32 = 0xa7eb4;
     const RANK: u32 = 0x2f;
     const TIMER: u32 = 0x42;
@@ -769,7 +762,7 @@ mod bouncer69 {
         x.anim_start(ANIMS, (anim as u32) as u16);
     }
 
-    /// 0xa7ed4 : vitesses d'un bond (vers l'avant), son.
+    /// 0xa7ed4: speeds of a leap (forward), sound.
     fn bounce<R: Bench>(x: &mut Cx<'_, R>) {
         let vx: u16 = if x.u8(f::FLIP) != 0 { 0x400 } else { 0x400u16.wrapping_neg() };
         x.set16(0x14, vx);
@@ -806,13 +799,12 @@ mod bouncer69 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 70 : grilles qui se lèvent selon le défilement (0xa801a)
+// Type 70: gratings that rise according to the scroll (0xa801a)
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 70 (0xa801a) : élément de décor dangereux lié à un SET (type 7, `+0x5c`) qui le signale tant que
-/// l'écran n'a pas atteint une abscisse donnée (0x500 pour la variante 0, 0x650 pour la variante 1) ;
-/// passé ce point, le SET est prévenu (`+0x2f` = 0) et l'objet disparaît. La variante 1 alterne
-/// attente (`+0x42`, 4 images) et animation.
+/// Shot 70 (0xa801a): dangerous scenery element linked to a SET (type 7, `+0x5c`) that signals it as long as the screen
+/// has not reached a given abscissa (0x500 for variant 0, 0x650 for variant 1); past this point, the SET is notified
+/// (`+0x2f` = 0) and the object disappears. Variant 1 alternates wait (`+0x42`, 4 frames) and animation.
 mod gate70 {
     use super::*;
 
@@ -884,13 +876,13 @@ mod gate70 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 71 : boules qui roulent (0xa81ca)
+// Type 71: rolling balls (0xa81ca)
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 71 (0xa81ca) : boule lancée par un ennemi (`+0x46`). Variante 0 : tenue jusqu'à ce que `+0x58`
-/// la libère (disparaît si le lanceur passe dans l'état 4 hors 0x204), part en arc (table de vitesses
-/// 33, direction selon l'orientation), roule au sol ; touchée (`+0x33`), elle crée devant elle une boule
-/// de variante 1 si elle est dans l'écran. Variante 1 : roule jusqu'à la fin de son animation.
+/// Shot 71 (0xa81ca): ball launched by an enemy (`+0x46`). Variant 0: held until `+0x58` releases it (disappears if the
+/// launcher goes to state 4 other than 0x204), leaves in an arc (speed table 33, direction according to the
+/// orientation), rolls on the ground; when hit (`+0x33`), it creates in front of it a ball of variant 1 if it is on the
+/// screen. Variant 1: rolls until the end of its animation.
 mod ball71 {
     use super::*;
 
@@ -948,7 +940,7 @@ mod ball71 {
         ai_anim(x, 0);
     }
 
-    /// Tenue par le lanceur : libérée par `+0x58`, détruite si le lanceur meurt (état 4 hors 0x204).
+    /// Held by the launcher: released by `+0x58`, destroyed if the launcher dies (state 4 other than 0x204).
     fn held<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(OWNER);
         let dying = owner.u8(x.b, 0x4) == 4 && owner.u16(x.b, 0x4) != 0x204;
@@ -990,18 +982,18 @@ mod ball71 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 72 : éclats projetés par un créateur (0xa838e)
+// Type 72: bursts thrown by a creator (0xa838e)
 // ---------------------------------------------------------------------------------------------
 
-/// Tir 72 (0xa838e) : éclat posé sur son créateur (`+0x5c`) avec un décalage et des vitesses lus dans
-/// une fiche par rang `+0x2f` et variante ; il finit son animation, part en arc, retombe (dégâts de
-/// zone 0x2860 de force 40) et disparaît à la fin de l'animation d'impact. Sans créateur, il se libère.
+/// Shot 72 (0xa838e): burst placed on its creator (`+0x5c`) with an offset and speeds read from a sheet by rank `+0x2f`
+/// and variant; it finishes its animation, leaves in an arc, falls back (area damage 0x2860 of strength 40) and
+/// disappears at the end of the impact animation. Without a creator, it frees itself.
 mod splinter72 {
     use super::*;
 
     const ANIMS: u32 = 0x1718d8;
     const IMPACT_ANIMS: u32 = 0x16d1d6;
-    /// Par rang : adresse d'une fiche de 18 octets par variante (longs puis mots, en clair).
+    /// Per rank: address of an 18-byte sheet per variant (longs then words, in the clear).
     const ROWS: u32 = 0xa84f4;
     const CREATOR: u32 = 0x5c;
     const RANK: u32 = 0x2f;
@@ -1055,8 +1047,8 @@ mod splinter72 {
         }
     }
 
-    /// 0xa8478 : position (longs) et orientation du créateur, un pixel devant lui, plus le décalage et
-    /// les vitesses de la fiche.
+    /// 0xa8478: position (longs) and orientation of the creator, one pixel in front of it, plus the offset and the
+    /// speeds of the sheet.
     fn place<R: Bench>(x: &mut Cx<'_, R>) {
         let creator = x.linked(CREATOR);
         for off in [0x8, 0x10, 0xc] {

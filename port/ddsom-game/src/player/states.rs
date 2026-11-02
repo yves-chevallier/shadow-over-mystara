@@ -1,81 +1,81 @@
-//! Valeurs de la machine à états des joueurs.
+//! Values of the players' state machine.
 //!
-//! Les octets `+4..+7` de l'enregistrement forment un long : état principal, sous-état, action et pas
-//! de l'action. Le code d'origine écrit souvent le long d'un coup (`move.l #0x02000c00,(4,A0)`) ;
-//! `State::pack` reproduit ces constantes.
+//! The bytes `+4..+7` of the record form a long: main state, sub-state, action and step
+//! of the action. The original code often writes the long at once (`move.l #0x02000c00,(4,A0)`);
+//! `State::pack` reproduces these constants.
 
-/// État principal (`+4`).
+/// Main state (`+4`).
 pub mod main {
-    /// Scénarisé : cinématiques par scène ; `+5` choisit le sous-état (P3).
+    /// Scripted: cinematics per scene; `+5` selects the sub-state (P3).
     pub const SCRIPTED: u8 = 0;
-    /// Jeu normal.
+    /// Normal game.
     pub const PLAYING: u8 = 2;
-    /// À terre / expulsé.
+    /// On the ground / ejected.
     pub const DOWN: u8 = 4;
-    /// Retiré de la partie.
+    /// Removed from the game.
     pub const REMOVED: u8 = 6;
 }
 
-/// Sous-état (`+5`) du jeu normal.
+/// Sub-state (`+5`) of the normal game.
 pub mod sub {
-    /// Le joueur agit : l'action (`+6`) est exécutée.
+    /// The player acts: the action (`+6`) is executed.
     pub const ACTING: u8 = 0;
-    /// Touché : l'action (`+6`) est une réaction (`hurt`).
+    /// Hit: the action (`+6`) is a reaction (`hurt`).
     pub const HURT: u8 = 4;
-    /// Parade.
+    /// Parry.
     pub const PARRY: u8 = 8;
 }
 
-/// Actions du jeu normal (`+6`, toujours paires : indices de la table de gestionnaires 0x35586).
-/// Les noms sont déduits des endroits où l'action est choisie ; (h) = hypothèse.
+/// Actions of the normal game (`+6`, always even: indices of the handler table 0x35586).
+/// The names are deduced from the places where the action is chosen; (h) = hypothesis.
 pub mod action {
-    /// Immobile.
+    /// Standing.
     pub const STAND: u8 = 0x00;
-    /// Entrée dans la marche lente (`Player::SLOW`) ou retour à la marche normale (bas + saut) (h).
+    /// Entering slow walk (`Player::SLOW`) or returning to normal walk (down + jump) (h).
     pub const SLOW_SWITCH: u8 = 0x02;
-    /// Marche.
+    /// Walk.
     pub const WALK: u8 = 0x04;
-    /// Course.
+    /// Run.
     pub const RUN: u8 = 0x06;
-    /// Demi-tour.
+    /// Turn.
     pub const TURN: u8 = 0x08;
-    /// Saut (code propre au personnage, `characters`).
+    /// Jump (character-specific code, `characters`).
     pub const JUMP: u8 = 0x0a;
-    /// Attaque du bouton 1 (propre au personnage).
+    /// Button 1 attack (character-specific).
     pub const ATTACK: u8 = 0x0c;
-    /// Attaque spéciale du bouton 4 (propre au personnage).
+    /// Button 4 special attack (character-specific).
     pub const SPECIAL: u8 = 0x0e;
-    /// Prend (`+0x8b` = 0) ou lâche (2) l'objet porté (`moves::carry`).
+    /// Picks up (`+0x8b` = 0) or drops (2) the carried object (`moves::carry`).
     pub const RELEASE: u8 = 0x14;
-    /// Garde au bouclier (armes 0x28..0x30) tant que le bouton 4 est maintenu (`moves::guard`).
+    /// Shield guard (weapons 0x28..0x30) while button 4 is held (`moves::guard`).
     pub const SPECIAL_ALT: u8 = 0x16;
-    /// Garde au bouclier tant que le bouton 1 est maintenu, prise pendant un demi-tour (`moves::guard`).
+    /// Shield guard while button 1 is held, grab during a turn (`moves::guard`).
     pub const TURN_ATTACK: u8 = 0x18;
-    /// Grimper (h) (`moves::climb`).
+    /// Climb (h) (`moves::climb`).
     pub const CLIMB: u8 = 0x1a;
-    /// Pousse l'objet lié dans une direction (`moves::push`).
+    /// Pushes the linked object in a direction (`moves::push`).
     pub const PUSH: u8 = 0x2e;
-    /// Saisi par un adversaire (le joueur est tenu).
+    /// Grabbed by an opponent (the player is held).
     pub const GRAB: u8 = 0x22;
-    /// Sort sans charge restante : animation d'échec (h).
+    /// Spell with no charge left: failure animation (h).
     pub const SPELL_FIZZLE: u8 = 0x32;
-    /// Ces actions ne subissent ni la collision avec le décor ni le recadrage de l'écran.
+    /// These actions undergo neither collision with the terrain nor screen re-framing.
     pub const NO_TERRAIN_A: u8 = 0x20;
     pub const NO_TERRAIN_B: u8 = 0x2a;
     pub const NO_TERRAIN_C: u8 = 0x24;
 }
 
-/// Un état complet (`+4..+7`).
+/// A complete state (`+4..+7`).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct State(pub u32);
 
 impl State {
-    /// Assemble les quatre octets.
+    /// Assembles the four bytes.
     pub const fn pack(main: u8, sub: u8, action: u8, step: u8) -> State {
         State((main as u32) << 24 | (sub as u32) << 16 | (action as u32) << 8 | step as u32)
     }
 
-    /// Le long sans l'octet de pas (comparaisons `andi.l #-0x100`).
+    /// The long without the step byte (comparisons `andi.l #-0x100`).
     pub const fn without_step(self) -> u32 {
         self.0 & !0xff
     }
@@ -94,22 +94,22 @@ impl State {
     }
 }
 
-/// États écrits par le code commun.
+/// States written by the common code.
 pub mod state {
     use super::{action, main, sub, State};
 
-    /// Immobile, animation en cours (pas 2).
+    /// Standing, animation in progress (step 2).
     pub const STAND: State = State::pack(main::PLAYING, sub::ACTING, action::STAND, 2);
-    /// Marche, départ.
+    /// Walk, start.
     pub const WALK: State = State::pack(main::PLAYING, sub::ACTING, action::WALK, 0);
-    /// Demi-tour (pas 2 : marche lente).
+    /// Turn (step 2: slow walk).
     pub const TURN: State = State::pack(main::PLAYING, sub::ACTING, action::TURN, 0);
     pub const TURN_SLOW: State = State::pack(main::PLAYING, sub::ACTING, action::TURN, 2);
-    /// Attaque du bouton 1.
+    /// Button 1 attack.
     pub const ATTACK: State = State::pack(main::PLAYING, sub::ACTING, action::ATTACK, 0);
-    /// Saut.
+    /// Jump.
     pub const JUMP: State = State::pack(main::PLAYING, sub::ACTING, action::JUMP, 0);
-    /// Attaque spéciale.
+    /// Special attack.
     pub const SPECIAL: State = State::pack(main::PLAYING, sub::ACTING, action::SPECIAL, 0);
 }
 

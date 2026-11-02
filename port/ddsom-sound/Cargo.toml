@@ -2,7 +2,7 @@
 name = "ddsom-sound"
 version = "0.1.0"
 edition = "2021"
-description = "Pilote son de ddsom (séquenceur QSound du Z80) réécrit en Rust"
+description = "ddsom sound driver (Z80 QSound sequencer) rewritten in Rust"
 
 [dependencies]
 

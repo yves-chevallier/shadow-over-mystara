@@ -1,17 +1,18 @@
-//! Boss 1, état actif : arrivée (`+5` = 0), combat (2), attaques (4), attente (6 à 10), saisie (12).
+//! Boss 1, active state: arrival (`+5` = 0), combat (2), attacks (4), wait (6 to 10), grab (12).
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-// --- groupe 0 : arrivée ------------------------------------------------------------------------
+// --- group 0: arrival ------------------------------------------------------------------------
 
-/// Vitesses (X, Y) des huit sauts de la traversée, et animation de chacun.
+/// Speeds (X, Y) of the eight jumps of the crossing, and the animation of each.
 const CROSSING_SPEEDS: u32 = 0x7af94;
 const CROSSING_ANIMS: u32 = 0x7afb4;
 
-/// 0x7ae5a : le boss traverse l'écran en huit sauts (en cinématique), disparaît, puis tombe du haut de l'écran.
+/// 0x7ae5a: the boss crosses the screen in eight jumps (in cutscene), disappears, then falls from the top of the
+/// screen.
 pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -119,7 +120,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x7aeda : la traversée, maintenue dans l'écran ; un saut par la table des vitesses à chaque bord touché.
+/// 0x7aeda: the crossing, kept within the screen; a jump from the speed table at each edge touched.
 fn crossing<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     let mut bumped = false;
@@ -155,7 +156,7 @@ fn crossing<R: Bench>(x: &mut Cx<'_, R>) {
         x.set_bit(0x1, 1, true);
         return puff(x, 0);
     }
-    // index `(d8,PC,D0.w)` : quadruple calculé sur un mot, étendu en signe
+    // index `(d8,PC,D0.w)`: quadruple computed on a word, sign-extended
     let i = x.u16(TIMER).wrapping_mul(4) as i16 as i32 as u32;
     let vx = x.rom16(CROSSING_SPEEDS.wrapping_add(i));
     x.set16(0x14, vx);
@@ -181,14 +182,14 @@ pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Animation de repos : 4, ou 5 si la cible est à terre (`+0x66`).
+/// Rest animation: 4, or 5 if the target is on the ground (`+0x66`).
 fn rest_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     let n = if t.u8(x.b, 0x66) != 0 { 5 } else { 4 };
     body(x, n);
 }
 
-/// 0x7b150 : debout ; sorti de l'écran il bondit, au bout de l'attente il marche, cible proche : attaque.
+/// 0x7b150: standing; off screen it leaps, at the end of the wait it walks, target close: attack.
 fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if !alive(x) {
         return idle_alone(x);
@@ -215,7 +216,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// 0x7b1d0 : demi-tour (animation 6), puis reprise de l'état mémorisé.
+/// 0x7b1d0: about-face (animation 6), then resumption of the saved state.
 fn turning<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         next7(x);
@@ -240,7 +241,7 @@ fn turning<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 4);
 }
 
-/// 0x7b236 et 0x7b422 : marche par bonds vers des points tirés près de la cible.
+/// 0x7b236 and 0x7b422: walk by leaps toward points drawn near the target.
 fn hop_walk<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     match x.u8(0x7) {
         0 => {
@@ -305,13 +306,13 @@ fn hop_walk<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     }
 }
 
-/// Animation `k` du bond, à partir de la première animation du sens (`+0xb4`).
+/// Leap animation `k`, starting from the first animation of the direction (`+0xb4`).
 fn hop_anim<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     let n = k.wrapping_add(x.u8(HOP_ANIM));
     body(x, n as u32);
 }
 
-/// 0x7b268 : un bond vers un point près de la cible, sauf s'il faut d'abord se retourner.
+/// 0x7b268: a leap toward a point near the target, unless it must turn around first.
 fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xbb, 0);
     if turn_needed(x) {
@@ -330,7 +331,7 @@ fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, first);
 }
 
-/// 0x7b38e : entre deux bonds ; les boîtes devant le boss décident d'une attaque.
+/// 0x7b38e: between two leaps; the boxes in front of the boss decide on an attack.
 fn between_hops<R: Bench>(x: &mut Cx<'_, R>) {
     if !alive(x) {
         return idle_alone(x);
@@ -365,7 +366,7 @@ fn between_hops<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// 0x7b45c : grand bond vers la cible ou le milieu de l'écran, puis attaque si on lui a riposté.
+/// 0x7b45c: big leap toward the target or the middle of the screen, then attack if it was countered.
 fn leap_attack<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -463,7 +464,7 @@ fn leap_attack<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x7b5fe : bond en arrière, glissade, puis riposte si la cible est devant.
+/// 0x7b5fe: backward leap, slide, then counterattack if the target is ahead.
 fn backing<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -548,7 +549,7 @@ pub(super) fn attacks<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x7b764 à 0x7b86a : coup `k` (0 à 3) : cri (0xe3da6), animation `k`, bouffées aux images-clés.
+/// 0x7b764 to 0x7b86a: hit `k` (0 to 3): cry (0xe3da6), animation `k`, puffs at the key frames.
 fn strike<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     if x.u8(0x7) == 0 {
         next7(x);
@@ -564,7 +565,7 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
         lib::sound(x, 0xe3f02);
         return dust(x, 7);
     }
-    // 0x7b7ba : fin du coup ; l'enchaînement continue si le coup a porté
+    // 0x7b7ba: end of the hit; the chain continues if the hit connected
     x.set8(INVULNERABLE, 0);
     if sub8(x, COMBO, 1).gt() && x.bit(0x57, 2) {
         if x.u16(0x54) != 0 {
@@ -586,7 +587,7 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     stand(x)
 }
 
-/// 0x7b89e : saisie : une cible à portée de l'image-clé est attrapée (0xfd64).
+/// 0x7b89e: grab: a target within range of the key frame is caught (0xfd64).
 fn grab_attempt<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -619,7 +620,7 @@ fn grab_attempt<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x7b91c : bond en ciseaux : un double (ENEMY 0x1a) saute de l'autre côté.
+/// 0x7b91c: scissor leap: a double (ENEMY 0x1a) jumps to the other side.
 fn split<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -679,9 +680,9 @@ fn split<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupes 6 à 10 : attente --------------------------------------------------------------------
+// --- groups 6 to 10: wait --------------------------------------------------------------------
 
-/// 0x7ba18 : tant qu'aucun joueur n'est en vie, le boss reste en pose.
+/// 0x7ba18: while no player is alive, the boss stays in its pose.
 pub(super) fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return walk(x);
@@ -694,12 +695,12 @@ pub(super) fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-// --- groupe 12 : un joueur saisi ---------------------------------------------------------------
+// --- group 12: a grabbed player ---------------------------------------------------------------
 
-/// Durée entre deux morsures, selon la phase.
+/// Time between two bites, depending on the phase.
 const BITE_DELAYS: u32 = 0x7bb3e;
 
-/// 0x7ba50 : le joueur saisi (`+0x50`) est tenu (0xfda2) et mordu (4 PV) jusqu'au relâchement.
+/// 0x7ba50: the grabbed player (`+0x50`) is held (0xfda2) and bitten (4 HP) until released.
 pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     if t.u8(x.b, 0) == 0 || t.u8(x.b, 0x188) == 0 {
@@ -718,7 +719,7 @@ pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
         2 => {
             if !sub16(x, TIMER2, 1).gt() {
                 lib::sound(x, 0xedd96);
-                // bouffée de sang à la gueule (0xaaa40)
+                // puff of blood at the mouth (0xaaa40)
                 let mut dx = (-0x69i16) as u16;
                 if x.u8(f::FLIP) != 0 {
                     dx = dx.wrapping_neg();
@@ -728,7 +729,7 @@ pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
                 *x.c.d2() = *x.c.d2() & 0xffff_0000 | pos.0 as u32;
                 *x.c.d3() = *x.c.d3() & 0xffff_0000 | pos.1 as u32;
                 *x.c.d4() = *x.c.d4() & 0xffff_0000 | pos.2 as u32;
-                // l'autre objet de l'étincelle est A1, la cible chargée en tête de l'état
+                // the other object of the spark is A1, the target loaded at the head of the state
                 crate::families::effects_creators::spark_at(x.b, x.o, t.0, 2, pos);
                 let t = target_obj(x);
                 let hp = t.u16(x.b, f::HP);
@@ -755,7 +756,7 @@ pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x7bb1c : relâche le joueur (0xfd8c) et rejoue l'animation 7.
+/// 0x7bb1c: releases the player (0xfd8c) and replays animation 7.
 fn release<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     t.set_u8(x.b, 0x6f, 1);

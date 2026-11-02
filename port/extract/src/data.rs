@@ -1,8 +1,8 @@
-//! Tables de données du jeu (joueurs, combat, ennemis, caisses, scènes) : `assets/data/*.json`
+//! Game data tables (players, combat, enemies, crates, scenes): `assets/data/*.json`
 //! (`ddsom_assets::data`, docs/assets.md « Tables de données »).
 //!
-//! Chaque table est décrite par une `Spec` (nom, adresse, espace, format, nombre de lignes). Les tailles
-//! viennent de l'écart entre tables quand elles se suivent (régions), sinon du code qui les lit.
+//! Each table is described by a `Spec` (name, address, space, format, row count). Sizes
+//! come from the gap between tables when they follow one another (regions), otherwise from the code that reads them.
 
 use std::io;
 use std::path::Path;
@@ -12,7 +12,7 @@ use ddsom_assets::json;
 
 use crate::rom::Program;
 
-/// Description d'une table à extraire.
+/// Description of a table to extract.
 pub struct Spec {
     pub name: String,
     pub rom: u32,
@@ -22,12 +22,12 @@ pub struct Spec {
     pub rows: usize,
 }
 
-/// Table de l'espace données.
+/// Table of the data space.
 pub fn data(name: &str, rom: u32, format: &'static str, fields: &'static [&'static str], rows: usize) -> Spec {
     Spec { name: name.into(), rom, program: false, format, fields, rows }
 }
 
-/// Table de l'espace programme (lue en relatif au PC).
+/// Table of the program space (read PC-relative).
 pub fn prog(name: &str, rom: u32, format: &'static str, fields: &'static [&'static str], rows: usize) -> Spec {
     Spec { name: name.into(), rom, program: true, format, fields, rows }
 }
@@ -36,11 +36,11 @@ pub fn row_size(format: &str) -> usize {
     parse_format(format).unwrap().iter().map(|k| k.size()).sum()
 }
 
-/// Table de `rows` lignes qui va de `rom` à `end`.
+/// Table of `rows` rows going from `rom` to `end`.
 pub fn span(name: &str, rom: u32, end: u32, program: bool, format: &'static str, fields: &'static [&'static str]) -> Spec {
     let size = row_size(format);
     let len = (end - rom) as usize;
-    assert!(len % size == 0, "{name} : {len:#x} octets pour des lignes de {size}");
+    assert!(len % size == 0, "{name}: {len:#x} bytes for rows of {size}");
     Spec { name: name.into(), rom, program, format, fields, rows: len / size }
 }
 
@@ -55,7 +55,7 @@ pub fn region(name: &str, start: u32, end: u32) -> Region {
     Region { name: name.into(), start, end, program: false }
 }
 
-/// Texte d'octets de `start` à `end`, coupé en lignes après chaque octet `cut`.
+/// Text of bytes from `start` to `end`, cut into lines after each `cut` byte.
 pub fn text(rom: &Program, name: &str, start: u32, end: u32, cut: u8) -> TextBlock {
     let bytes: Vec<u8> = (start..end).map(|a| rom.rd8(a)).collect();
     let lines = bytes.split_inclusive(|&b| b == cut).map(ddsom_assets::texts::encode).collect();
@@ -75,10 +75,10 @@ pub fn save(rom: &Program, path: &Path, regions: Vec<Region>, specs: &[Spec], te
         inside.sort();
         let mut at = r.start;
         for (start, end, name) in inside {
-            assert_eq!(start, at, "région {} : trou ou chevauchement avant {name}", r.name);
+            assert_eq!(start, at, "region {}: gap or overlap before {name}", r.name);
             at = end;
         }
-        assert_eq!(at, r.end, "région {} : fin", r.name);
+        assert_eq!(at, r.end, "region {}: end", r.name);
     }
     eprintln!("{} : {} tables, {} textes", path.display(), tables.len(), texts.len());
     std::fs::create_dir_all(path.parent().unwrap())?;

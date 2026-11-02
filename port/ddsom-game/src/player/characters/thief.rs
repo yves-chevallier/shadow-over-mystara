@@ -1,15 +1,15 @@
-//! Le voleur (personnages 10 et 11 : les deux variantes ont le même code).
+//! The thief (characters 10 and 11: both variants have the same code).
 //!
-//! Quatre actions, atteintes par `characters::run` :
-//! - `jump` (0x488bc) : saut agile (saut double, saut contre le bord de l'écran, coup en l'air, lancer
-//!   de couteau) ;
-//! - `attack` (0x48d48) : le bouton 1 ; `Player::SUBACTION` choisit le coup (voir `kind`) ; le voleur
-//!   n'a ni prolongement de coup ni repli sur le coup de base ;
-//! - `special` (0x49498) : l'objet ou la magie choisie (`field::SPECIAL_KIND`, 0..20), ceux du
-//!   combattant (`items`) avec en plus un couteau lancé (n° 11) ;
-//! - `dash` (0x49d46) : l'action 0x10, une glissade proche de `common::dash`.
+//! Four actions, reached through `characters::run`:
+//! - `jump` (0x488bc): agile jump (double jump, jump against the screen edge, aerial strike, knife
+//!   throw);
+//! - `attack` (0x48d48): button 1; `Player::SUBACTION` selects the strike (see `kind`); the thief
+//!   has neither strike continuation nor fallback to the basic strike;
+//! - `special` (0x49498): the chosen item or spell (`field::SPECIAL_KIND`, 0..20), those of the
+//!   fighter (`items`) plus a thrown knife (no. 11);
+//! - `dash` (0x49d46): action 0x10, a slide close to `common::dash`.
 //!
-//! Les routines d'origine qui créent tirs, effets et sons restent appelées telles quelles.
+//! The original routines that create shots, effects and sounds are still called as they are.
 
 use super::common::{self, field, next_step, set_forward_motion};
 use super::items;
@@ -25,40 +25,40 @@ use crate::player::ram;
 use crate::machine::Machine;
 use crate::player::external as ext;
 
-/// Routines d'origine appelées telles quelles : effets joueur, objets créés et sons du voleur.
+/// Original routines called as they are: player effects, created objects and sounds of the thief.
 mod rom {
     pub const KNIFE_SOUND: u32 = 0xeb8bc;
-    /// Sons.
+    /// Sounds.
     pub const SOUND_SHADOW: u32 = 0xe2578;
     pub const SOUND_STAB_A: u32 = 0xe25f2;
     pub const SOUND_STAB_B: u32 = 0xe7304;
 }
 
-/// Table des vitesses de saut du voleur (données de la ROM) : une ligne de quatre mots (vx, ax, vz, az)
-/// par type de saut (`0x67`).
+/// Thief jump speed table (ROM data): a row of four words (vx, ax, vz, az)
+/// per jump type (`0x67`).
 const JUMP_SPEEDS: u32 = 0x10_45be;
 
-/// Table de la ROM (relative au PC) : décalage (x, z) du voleur derrière la cible du coup dans le dos,
-/// par type d'objet lié.
+/// ROM table (PC-relative): offset (x, z) of the thief behind the target of the backstab,
+/// per type of linked object.
 const BACKSTAB_OFFSETS: u32 = 0x4935a;
 
-/// Octets de l'enregistrement propres au voleur.
+/// Record bytes specific to the thief.
 mod own {
-    /// Dernier bord de l'écran touché (1 gauche, 2 droite), posé par `walk::clamp_to_screen`.
+    /// Last screen edge touched (1 left, 2 right), set by `walk::clamp_to_screen`.
     pub const EDGE_HIT: u32 = 0x5a;
-    /// Le saut double a déjà servi pendant ce saut.
+    /// The double jump has already been used during this jump.
     pub const DOUBLE_JUMP_USED: u32 = 0x1ef;
-    /// Octet de l'action sans usage connu (le saut y met 4).
+    /// Action byte with no known use (the jump sets it to 4).
     pub const JUMP_ROW: u32 = 0x1e8;
-    /// Compteur de la glissade.
+    /// Slide counter.
     pub const COUNTER: u32 = 0x1e8;
-    /// Objet lié à l'action (mot : adresse) : l'ombre du coup dans le dos.
+    /// Object linked to the action (word: address): the backstab shadow.
     pub const LINKED: u32 = 0x50;
-    /// Compteur de la famille d'animations (mot).
+    /// Counter of the animation family (word).
     pub const ANIM_COUNT: u32 = 0x190;
 }
 
-/// Sous-actions du bouton 1 (`Player::SUBACTION`), toutes paires.
+/// Sub-actions of button 1 (`Player::SUBACTION`), all even.
 mod kind {
     pub const COMBO: u8 = 0x00;
     pub const STAB_A: u8 = 0x02;
@@ -71,21 +71,21 @@ mod kind {
     pub const LOW_BLOW: u8 = 0x10;
     pub const BACK_HOP: u8 = 0x12;
     pub const GUARD_BREAK: u8 = 0x14;
-    /// Coup de pied sauté.
+    /// Jumping kick.
     pub const LEAP_KICK: u8 = 0x16;
-    /// Bond arrière avec coup de pied.
+    /// Backward leap with kick.
     pub const BACK_KICK: u8 = 0x18;
-    /// Coup dans le dos : l'ombre s'élance, le voleur la rejoint derrière la cible.
+    /// Backstab: the shadow darts forward, the thief joins it behind the target.
     pub const BACKSTAB: u8 = 0x1a;
     pub const POSE: u8 = 0x1c;
-    /// Couteau lancé (objet 0x2c).
+    /// Thrown knife (item 0x2c).
     pub const KNIFE: u8 = 0x1e;
 }
 
-// ---- saut (0x488bc) --------------------------------------------------------------------------
+// ---- jump (0x488bc) --------------------------------------------------------------------------
 
-/// 0x488bc : saut. Pas 0 accroupissement, 2 montée, 4 sommet, 6 descente, 8 récupération, 0xa coup en
-/// l'air, 0xc couteau en l'air, 0xe saut contre le bord de l'écran.
+/// 0x488bc: jump. Step 0 crouch, 2 rise, 4 peak, 6 descent, 8 recovery, 0xa aerial strike, 0xc aerial
+/// knife, 0xe jump against the screen edge.
 pub fn jump(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -102,7 +102,7 @@ pub fn jump(g: &mut Ctx, p: Player) {
     common::flush_pending_effect(g, p);
 }
 
-/// Pas 0 : à la fin de l'accroupissement le saut part.
+/// Step 0: at the end of the crouch the jump starts.
 fn takeoff(g: &mut Ctx, p: Player) {
     cov!();
     if !animation::step(g, p) {
@@ -123,7 +123,7 @@ fn takeoff(g: &mut Ctx, p: Player) {
     common::launch_jump(g, p, JUMP_SPEEDS, kind);
 }
 
-/// La vitesse horizontale est plafonnée à 0x300 (le reste de l'élan est perdu).
+/// The horizontal speed is capped at 0x300 (the rest of the momentum is lost).
 fn limit_speed(g: &mut Ctx, p: Player) {
     cov!();
     let speed = p.u16(g, Obj::VX) as i16;
@@ -134,7 +134,7 @@ fn limit_speed(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pas 2 : montée.
+/// Step 2: rise.
 fn rise(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -156,7 +156,7 @@ fn rise(g: &mut Ctx, p: Player) {
     animation::start(g, p, anim);
 }
 
-/// Pas 4 : sommet.
+/// Step 4: peak.
 fn apex(g: &mut Ctx, p: Player) {
     cov!();
     move_z(g, p);
@@ -179,7 +179,7 @@ fn apex(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pas 6 : descente ; au sol la récupération commence.
+/// Step 6: descent; on the ground the recovery begins.
 fn fall(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -199,7 +199,7 @@ fn fall(g: &mut Ctx, p: Player) {
     land(g, p);
 }
 
-/// Atterrissage : au sol (`Z` = 0), animation de récupération et son.
+/// Landing: on the ground (`Z` = 0), recovery animation and sound.
 fn land(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u32(g, Obj::Z, 0);
@@ -208,7 +208,7 @@ fn land(g: &mut Ctx, p: Player) {
     g.sound(ext::sound::LANDING, p);
 }
 
-/// Pas 8 : récupération, puis retour à l'état immobile (et chute de l'arme maudite).
+/// Step 8: recovery, then return to the standing state (and fall of the cursed weapon).
 fn recover(g: &mut Ctx, p: Player) {
     cov!();
     if animation::step(g, p) {
@@ -217,7 +217,7 @@ fn recover(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pas 0xa : coup donné en l'air ; au sol la récupération commence.
+/// Step 0xa: strike given in the air; on the ground the recovery begins.
 fn air_strike(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -229,7 +229,7 @@ fn air_strike(g: &mut Ctx, p: Player) {
     land(g, p);
 }
 
-/// Pas 0xc : couteau lancé en l'air (objet 0x2c) ; au sol la récupération commence.
+/// Step 0xc: knife thrown in the air (item 0x2c); on the ground the recovery begins.
 fn air_knife(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -246,7 +246,7 @@ fn air_knife(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pas 0xe : le voleur s'agrippe au bord de l'écran, puis repart en sens inverse.
+/// Step 0xe: the thief clings to the screen edge, then sets off in the opposite direction.
 fn wall_kick(g: &mut Ctx, p: Player) {
     cov!();
     if !animation::step(g, p) {
@@ -266,9 +266,9 @@ fn wall_kick(g: &mut Ctx, p: Player) {
     g.sound(ext::sound::JUMP_VOICE, p);
 }
 
-/// 0x48ca0 : en l'air, un bord de l'écran touché avec le bouton de saut maintenu fait agripper le bord
-/// (pas 0xe) ; sinon le bouton de saut appuyé de nouveau donne un saut double (une fois par saut).
-/// Pas d'effet quand le voleur monte encore près du sol. Renvoie vrai si l'une des deux a démarré.
+/// 0x48ca0: in the air, a screen edge touched with the jump button held makes the thief cling to the edge
+/// (step 0xe); otherwise the jump button pressed again gives a double jump (once per jump).
+/// No effect while the thief is still rising near the ground. Returns true if either one started.
 fn air_options(g: &mut Ctx, p: Player) -> bool {
     cov!();
     if (p.u16(g, Obj::VZ) as i16) < 0 && p.u16(g, Obj::Z) <= 0x10 {
@@ -301,7 +301,7 @@ fn air_options(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// 0x48d22 : un bord de l'écran vient d'être touché et le bouton de saut est maintenu.
+/// 0x48d22: a screen edge has just been touched and the jump button is held.
 fn grab_edge(g: &mut Ctx, p: Player) -> bool {
     cov!();
     if p.u8(g, own::EDGE_HIT) == 0 || p.u8(g, Player::KEYS_HELD) & 0x20 == 0 {
@@ -312,8 +312,8 @@ fn grab_edge(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// 0x48bf0 : en l'air, le bouton 1 donne un coup (pas 0xa), la touche 4 avec le couteau (objet 0x2c)
-/// le lance (pas 0xc) ; une fois par saut.
+/// 0x48bf0: in the air, button 1 gives a strike (step 0xa), key 4 with the knife (item 0x2c)
+/// throws it (step 0xc); once per jump.
 fn air_attack(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, field::AIR_ATTACK_DONE) != 0 {
@@ -339,9 +339,9 @@ fn air_attack(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- attaque (0x48d48) -----------------------------------------------------------------------
+// ---- attack (0x48d48) -----------------------------------------------------------------------
 
-/// 0x48d48 : attaque du bouton 1 ; `kind` choisit le coup.
+/// 0x48d48: button 1 attack; `kind` selects the strike.
 pub fn attack(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::SUBACTION) {
@@ -366,7 +366,7 @@ pub fn attack(g: &mut Ctx, p: Player) {
     common::flush_pending_effect(g, p);
 }
 
-/// Coup de base (0x48dba) : trois coups enchaînés si les précédents ont porté.
+/// Basic strike (0x48dba): three chained strikes if the previous ones landed.
 fn combo(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -386,7 +386,7 @@ fn combo(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup donné en se retournant (0x48eb8) : le pas 2 est le pas 0 d'une entrée par état (combos).
+/// Strike given while turning (0x48eb8): step 2 is step 0 of a per-state entry (combos).
 fn turn_strike(g: &mut Ctx, p: Player) {
     cov!();
     let step = p.u8(g, Player::STEP);
@@ -403,7 +403,7 @@ fn turn_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup de retombée (0x48f38).
+/// Landing strike (0x48f38).
 fn after_jump(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -420,7 +420,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Charge (0x48f6e) : élan, geste, glissade avec deux effets.
+/// Charge (0x48f6e): run-up, gesture, slide with two effects.
 fn charge(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -453,7 +453,7 @@ fn charge(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup donné en courant (0x49036) : élan de 5 pixels par image, puis arrêt net.
+/// Strike given while running (0x49036): run-up of 5 pixels per frame, then a dead stop.
 fn run_strike(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -482,7 +482,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup de pied sauté (0x49166) : bond de 1 pixel par image, un geste (effet), un second (ombre).
+/// Jumping kick (0x49166): leap of 1 pixel per frame, one gesture (effect), a second (shadow).
 fn leap_kick(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -499,7 +499,7 @@ fn leap_kick(g: &mut Ctx, p: Player) {
         }
         2 => {
             animation::step(g, p);
-            // l'original teste « événement absent » : le pas suivant vient donc tout de suite
+            // the original tests "event absent": the next step therefore comes right away
             if p.u8(g, field::EVENT) == 0 {
                 next_step(g, p);
                 g.sound(ext::sound::LEAP_END, p);
@@ -530,7 +530,7 @@ fn leap_kick(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Bond arrière avec coup de pied (0x49244).
+/// Backward leap with kick (0x49244).
 fn back_kick(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -568,13 +568,13 @@ fn back_kick(g: &mut Ctx, p: Player) {
     }
 }
 
-/// L'objet rattaché au voleur (mot `+0x50`, adresse étendue avec le signe).
+/// The object attached to the thief (word `+0x50`, sign-extended address).
 fn linked(g: &mut Ctx, p: Player) -> u32 {
     p.u16(g, own::LINKED) as i16 as i32 as u32 & 0xff_ffff
 }
 
-/// Coup dans le dos (0x492d0) : l'ombre (créée par le coup de pied sauté) est rejointe derrière sa
-/// cible, le voleur frappe puis retombe.
+/// Backstab (0x492d0): the shadow (created by the jumping kick) is joined behind its
+/// target, the thief strikes then lands.
 fn backstab(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -637,8 +637,8 @@ fn backstab(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Le voleur prend la place de son ombre, de l'autre côté : même position et même orientation
-/// inversée, décalées de la valeur de la table `BACKSTAB_OFFSETS` selon le genre de l'ombre.
+/// The thief takes the place of its shadow, on the other side: same position and same inverted
+/// orientation, offset by the value of the table `BACKSTAB_OFFSETS` according to the kind of the shadow.
 fn appear_behind_shadow(g: &mut Ctx, p: Player) {
     cov!();
     let shadow = linked(g, p);
@@ -665,14 +665,14 @@ fn appear_behind_shadow(g: &mut Ctx, p: Player) {
     p.set_u16(g, Obj::Y, y);
 }
 
-// ---- attaque spéciale (0x49498) --------------------------------------------------------------
+// ---- special attack (0x49498) --------------------------------------------------------------
 
-/// Animations du voleur pour les magies lancées (voir `items::Style`).
+/// The thief's animations for cast spells (see `items::Style`).
 const STYLE: items::Style = items::Style { cast_anim: 0x1d, bolt_anim: 0x1c, spark: 5, ..items::Style::CLASSIC };
 
-/// 0x49498 : l'objet ou la magie choisie (`field::SPECIAL_KIND`, 0..20), comme le combattant, avec le
-/// couteau lancé (n° 11) ; le numéro 3 ne fait rien. 0..8 : objets lancés ; 12 : échange d'arme ;
-/// 9, 10 et 13..20 : `items`.
+/// 0x49498: the chosen item or spell (`field::SPECIAL_KIND`, 0..20), like the fighter, with the
+/// thrown knife (no. 11); number 3 does nothing. 0..8: thrown items; 12: weapon swap;
+/// 9, 10 and 13..20: `items`.
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
@@ -694,8 +694,8 @@ pub fn special(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Couteau lancé (attaque spéciale n° 11, 0x49636, et coup 0x1e, 0x4945e : geste `anim`) : au geste, le tir est
-/// créé (et son son) ; aucune charge consommée.
+/// Thrown knife (special attack no. 11, 0x49636, and strike 0x1e, 0x4945e: gesture `anim`): at the gesture, the shot is
+/// created (and its sound); no charge consumed.
 fn throw_knife(g: &mut Ctx, p: Player, anim: u16) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
@@ -714,9 +714,9 @@ fn throw_knife(g: &mut Ctx, p: Player, anim: u16) {
     }
 }
 
-// ---- glissade (0x49d46) ----------------------------------------------------------------------
+// ---- slide (0x49d46) ----------------------------------------------------------------------
 
-/// Action 0x10 : élan, bond bref, glissade freinée sans poussière (voir `common::dash`).
+/// Action 0x10: run-up, brief leap, slide braked without dust (see `common::dash`).
 pub fn dash(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -753,7 +753,7 @@ pub fn dash(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Glissade freinée jusqu'à l'arrêt.
+/// Slide braked to a stop.
 fn slide(g: &mut Ctx, p: Player) {
     cov!();
     move_x(g, p);
@@ -765,8 +765,8 @@ fn slide(g: &mut Ctx, p: Player) {
 
 // ---- action 0x12 (0x35b50) -------------------------------------------------------------------
 
-/// Roulade du voleur : élan de 6 pixels par image ; le déplacement n'a lieu qu'aux images où le script
-/// d'animation signale un événement (qui n'est pas effacé), puis retour à l'état immobile.
+/// Thief roll: run-up of 6 pixels per frame; the movement only happens on the frames where the animation
+/// script signals an event (which is not cleared), then return to the standing state.
 pub fn roll(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {

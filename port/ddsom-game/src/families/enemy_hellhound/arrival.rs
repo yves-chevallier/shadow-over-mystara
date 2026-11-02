@@ -1,5 +1,5 @@
-//! Type 6, sous-état 0 : arrivée. `+6` = 0 hurlement puis course, 2 demi-tour de l'arrivée, 4 et 6 bond d'entrée,
-//! 8 chute d'en haut, 10 apparition.
+//! Type 6, substate 0: arrival. `+6` = 0 howl then run, 2 turn-around of the arrival, 4 and 6 entrance leap, 8 fall
+//! from above, 10 appearance.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -17,7 +17,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin du geste d'arrivée : l'animation finie, le chien se met debout (0x616d8).
+/// End of the arrival move: once the animation is over, the dog stands up (0x616d8).
 pub(super) fn stand_when_done<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.anim_step() {
         return;
@@ -112,7 +112,7 @@ fn turn_in<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Angle de la course d'arrivée : 0x18 vers la droite, 8 vers la gauche (0x6174c).
+/// Angle of the arrival run: 0x18 to the right, 8 to the left (0x6174c).
 fn set_angle_run<R: Bench>(x: &mut Cx<'_, R>) {
     set_angle_facing(x, 0x18, 8);
 }
@@ -122,7 +122,7 @@ pub(super) fn set_angle_facing<R: Bench>(x: &mut Cx<'_, R>, forward: u8, flipped
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
-// --- +6 = 4 et 6 : bond d'entrée -----------------------------------------------------------------------
+// --- +6 = 4 and 6: entrance leap -----------------------------------------------------------------------
 
 fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {

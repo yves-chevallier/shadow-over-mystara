@@ -1,4 +1,4 @@
-//! Type 3, sous-états 2 (debout : approche, marche), 8 (repos), 10 (attente) et 12 (demi-tour).
+//! Type 3, substates 2 (standing: approach, walk), 8 (rest), 10 (wait) and 12 (turn-around).
 
 use crate::families::cx::Bench;
 use super::shoot::start_shot;
@@ -19,7 +19,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5c17e : premier pas debout : choisit une cible et s'oriente vers elle.
+/// 0x5c17e: first standing step: chooses a target and faces it.
 pub(super) fn stance_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     if !pick_target(x) {
@@ -33,13 +33,13 @@ pub(super) fn stance_begin<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 2);
 }
 
-/// 0x5c2de : début de l'attente.
+/// 0x5c2de: start of the wait.
 fn idle_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     mv(x, 0);
 }
 
-/// +6 = 2 : marche vers la cible ; tire ou esquive quand elle est à portée.
+/// +6 = 2: walks toward the target; shoots or dodges when it is in range.
 fn advance<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.in_arena_default() {
         x.set8(SHOT_KIND, 5);
@@ -76,11 +76,11 @@ fn advance<R: Bench>(x: &mut Cx<'_, R>) {
     decide(x)
 }
 
-/// 0x5c22c : un joueur à portée de tir ? Alors tir ou esquive selon la boîte qui l'a vu.
+/// 0x5c22c: a player within shooting range? Then shoot or dodge depending on the box that saw it.
 pub(super) fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     if in_front(x) || on_line(x) {
-        // la cible vue par la boîte (A1 de l'original : la cible `+0x50`, non nulle puisque la boîte l'a trouvée) ;
-        // D5 dit quelle boîte (0 devant, 2 sur la ligne)
+        // the target seen by the box (A1 in the original: target `+0x50`, non-zero since the box found it); D5 says
+        // which box (0 in front, 2 on the line)
         let found = x.linked(f::TARGET);
         let facing = x.u8(f::FLIP);
         let same_side = facing == found.u8(x.b, f::FLIP);
@@ -98,7 +98,7 @@ pub(super) fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     check_facing(x)
 }
 
-/// 0x5c27a : si le Bow Gnoll tourne le dos à sa cible, demi-tour (état à reprendre mémorisé en `+0xa0`).
+/// 0x5c27a: if the Bow Gnoll has its back to its target, turn around (state to resume saved in `+0xa0`).
 pub(super) fn check_facing<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return;
@@ -116,7 +116,7 @@ pub(super) fn check_facing<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::SUB2, 0);
 }
 
-/// +6 = 4 : marche latérale pendant `+0xa4` images, puis retour à l'approche.
+/// +6 = 4: lateral walk for `+0xa4` frames, then back to the approach.
 fn strafe<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
@@ -130,7 +130,7 @@ fn strafe<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-// --- sous-état 8 : repos ------------------------------------------------------------------------------
+// --- substate 8: rest ------------------------------------------------------------------------------
 
 pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -149,7 +149,7 @@ pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 2 (en X, regarde vers la cible) et 4 (en profondeur) : pas de côté pendant `+0x6b` images.
+/// +6 = 2 (in X, looks toward the target) and 4 (in depth): side step for `+0x6b` frames.
 fn side_step<R: Bench>(x: &mut Cx<'_, R>, along_x: bool) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -179,7 +179,7 @@ fn side_step<R: Bench>(x: &mut Cx<'_, R>, along_x: bool) {
     x.anim_step();
 }
 
-// --- sous-état 10 : attente ---------------------------------------------------------------------------
+// --- substate 10: wait ---------------------------------------------------------------------------
 
 pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
@@ -194,7 +194,7 @@ pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-// --- sous-état 12 : demi-tour -------------------------------------------------------------------------
+// --- substate 12: turn-around -------------------------------------------------------------------------
 
 pub(super) fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {

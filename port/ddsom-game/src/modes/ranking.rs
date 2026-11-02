@@ -1,17 +1,17 @@
-//! Écran de fin de partie (sous-mode 20, `0xfc576`) : le classement défile, puis les scores des
-//! joueurs s'affichent. La machine à modes y arrive après la phase 20 (`0x1c80c`), avec le drapeau de
-//! démarrage levé (`0x133f6`) ; elle le baisse en partant (`0x133f0`).
+//! Game-over screen (sub-mode 20, `0xfc576`): the ranking scrolls, then the players'
+//! scores are displayed. The mode machine arrives here after phase 20 (`0x1c80c`), with the
+//! startup flag raised (`0x133f6`); it lowers it on leaving (`0x133f0`).
 //!
-//! L'écran a son propre bloc d'état, à `FF2B10` :
+//! The screen has its own state block, at `FF2B10`:
 //!
-//! | Champ | Rôle |
+//! | Field | Role |
 //! |---|---|
-//! | `+0` | étape (pas de 2) : 0 préparation, 2 défilement du classement, 4 scores, 6 et 8 décor, 10 sortie |
-//! | `+4` | minuterie (mot) |
-//! | `+6` | pointeur sur le texte du classement (long, dans la ROM) |
-//! | `+10` | ordonnée de la caméra à la dernière ligne ajoutée (mot) |
+//! | `+0` | step (of 2): 0 preparation, 2 ranking scroll, 4 scores, 6 and 8 terrain, 10 exit |
+//! | `+4` | timer (word) |
+//! | `+6` | pointer to the ranking text (long, in ROM) |
+//! | `+10` | camera y at the last added line (word) |
 //!
-//! Le défilement vertical est le long `FF2B1C` (16.16) ; un bouton pressé le ralentit.
+//! The vertical scroll is the long `FF2B1C` (16.16); a pressed button slows it down.
 
 use super::{Flow, Sequence};
 use crate::families::effects_creators::{end_screen, or_rest};
@@ -28,22 +28,22 @@ mod f {
     pub const TEXT: u32 = 6;
     pub const MARK: u32 = 0xa;
 }
-/// Défilement du fond (long, 16.16) et du second plan.
+/// Background scroll (long, 16.16) and second plane.
 const SCROLL: u32 = 0xff_2b1c;
 const SCROLL_2: u32 = 0xff_2b20;
-/// Table des quatre joueurs (16 octets chacun : score et état).
+/// Table of the four players (16 bytes each: score and state).
 const SCORES: u32 = A5 - 0x5b18;
 const FRAME_COUNT: u32 = A5 + 0x7e68;
 const VIDEO: u32 = A5 + 0x14;
 const CPS_REG_4: u32 = 0x400004;
 
-/// Musique de l'écran.
+/// Music of the screen.
 const SOUND_E172C: u32 = 0xe172c;
 
-/// Retour de l'étape à `0xfc584` : A0 revient sur le bloc de la machine à modes.
+/// Return from the step at `0xfc584`: A0 goes back to the mode machine block.
 const RETURN: u32 = 0xfc584;
 
-/// Écran du sous-mode `sub`, s'il est réécrit ici.
+/// Screen of sub-mode `sub`, if it is rewritten here.
 pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
     (sub == 0x14).then(|| post_game(x))
 }
@@ -64,7 +64,7 @@ fn post_game(x: &mut Ctx) -> Flow {
 }
 
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
         Return = RETURN => |x| {
             x.c.a[0] = super::mode::BASE;
@@ -82,7 +82,7 @@ crate::steps! {
             crate::palette::load_palette_page(x.b, 2, 83);
             wr8(x.b, A5 + 0x34, 0);
             crate::palette::load_scene_palettes_of(x.b, 89);
-            // quatre blocs de palette, de la ROM vers la table des palettes
+            // four palette blocks, from ROM to the palette table
             for (dst, src) in [(0x91c3e0u32, 0x291f00u32), (0x91c2e0, 0xfc6d8), (0x91c000, 0x292260), (0x91c3c0, 0x2537c0)] {
                 for i in 0..8 {
                     let w = rd32(x.b, src + 4 * i);
@@ -137,14 +137,14 @@ fn next_step(x: &mut Ctx) {
     wr8(x.b, STATE, s);
 }
 
-/// Les trois couches effacées.
+/// The three cleared layers.
 fn clear_layers(x: &mut Ctx) {
     for layer in [Layer::One, Layer::Two, Layer::Three] {
         clear_layer(x.b, layer);
     }
 }
 
-/// Listes défaites et vidées, objets effacés, pools remis à zéro (0x1f184, 0x1de7c, 0xc58, 0x2062).
+/// Lists undone and emptied, objects cleared, pools reset (0x1f184, 0x1de7c, 0xc58, 0x2062).
 fn reset_objects(x: &mut Ctx) {
     crate::objects::lists::unlink_all(x.b);
     crate::sprites::clear_lists(x.b);
@@ -154,7 +154,7 @@ fn reset_objects(x: &mut Ctx) {
     }
 }
 
-/// Un rendu : PEFF, EFFCT, sprites (`0xfc91c`).
+/// One render: PEFF, EFFCT, sprites (`0xfc91c`).
 fn render(x: &mut Ctx) {
     for class in [&crate::dispatch::PEFF, &crate::dispatch::EFFCT] {
         class.update_no_next(x.c, x.b);
@@ -163,13 +163,13 @@ fn render(x: &mut Ctx) {
     x.c.a[0] = STATE;
 }
 
-/// Vitesse du défilement et boutons pressés (D0 et D1.b de l'original).
+/// Scroll speed and pressed buttons (D0 and D1.b of the original).
 struct Speed {
     speed: u32,
     top_buttons: u8,
 }
 
-/// `0xfc6f8` : vitesse du défilement (1 pixel par image, 1/4 si un bouton est pressé).
+/// `0xfc6f8`: scroll speed (1 pixel per frame, 1/4 if a button is pressed).
 fn speed(x: &mut Ctx) -> Speed {
     let mut buttons = 0;
     for k in 0..4 {
@@ -179,7 +179,7 @@ fn speed(x: &mut Ctx) -> Speed {
     Speed { speed: if top_buttons == 0 { 0x10000 } else { 0x4000 }, top_buttons }
 }
 
-/// Fait avancer le défilement du fond d'une image ; la caméra 2 le suit.
+/// Advances the background scroll by one frame; camera 2 follows it.
 fn scroll(x: &mut Ctx) -> Speed {
     let v = speed(x);
     let s = rd32(x.b, SCROLL).wrapping_sub(v.speed);
@@ -200,8 +200,8 @@ const S0_VIDEO: u32 = 0xfc5cc;
 const S0_PALETTES: u32 = 0xfc5e2;
 const S0_TILES: u32 = 0xfc6a8;
 
-/// Étape 2 : le classement défile ; toutes les 40 lignes de pixels, les lignes suivantes du texte
-/// sont ajoutées. Quand le texte est fini (octet négatif), étape suivante.
+/// Step 2: the ranking scrolls; every 40 pixel lines, the next text lines
+/// are added. When the text ends (negative byte), next step.
 fn s2_scroll(x: &mut Ctx) -> Flow {
     render(x);
     scroll(x);
@@ -217,8 +217,8 @@ fn s2_scroll(x: &mut Ctx) -> Flow {
             next_step(x);
             return Flow::Done;
         }
-        // 0x517ba : une ligne du classement (variante = compteur), son réglage est l'octet suivant du texte, qui
-        // n'avance que si l'effet est créé
+        // 0x517ba: a ranking line (variant = counter), its setting is the next byte of the text, which
+        // only advances if the effect is created
         let setting = rd8(x.b, a4);
         if crate::effects_aids::effect_44(x.b, counter, setting).is_some() {
             a4 += 1;
@@ -232,7 +232,7 @@ fn s2_scroll(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Étape 4 : les cartouches des scores (un objet par joueur ayant joué), après dix images de jeu.
+/// Step 4: the score cartridges (one object per player who played), after ten game frames.
 fn s4_scores(x: &mut Ctx) -> Flow {
     if (rd16(x.b, FRAME_COUNT) as i16) < 10 {
         return Flow::Done;
@@ -240,11 +240,11 @@ fn s4_scores(x: &mut Ctx) -> Flow {
     render(x);
     let v = scroll(x);
     next_step(x);
-    // les deux premiers cartouches reçoivent pour réglage le D1.b de la vitesse (les boutons pressés)
+    // the first two cartridges receive the speed's D1.b as setting (the pressed buttons)
     for kind in [4u8, 6] {
         end_screen(x.b, kind, v.top_buttons);
     }
-    // Glitch d'origine : la retenue n'est pas testée, un échec écrit dans l'A1 laissé par l'allocation
+    // Original glitch: the carry is not tested, a failure writes into the A1 left by the allocation
     let mut rank = 3u8;
     let mut a4 = SCORES;
     for counter in (0..4u8).rev() {
@@ -274,7 +274,7 @@ fn s4_scores(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Étape 6 : le fond descend jusqu'à l'ordonnée 1064, puis un second plan se met à défiler.
+/// Step 6: the background descends to y 1064, then a second plane starts scrolling.
 fn s6_scenery(x: &mut Ctx) -> Flow {
     render(x);
     scroll(x);
@@ -287,7 +287,7 @@ fn s6_scenery(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Étape 8 : les deux plans défilent ensemble jusqu'à l'ordonnée 832.
+/// Step 8: the two planes scroll together until y 832.
 fn s8_scenery(x: &mut Ctx) -> Flow {
     render(x);
     let speed = scroll(x).speed;
@@ -302,7 +302,7 @@ fn s8_scenery(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Étape 10 : après 300 images (ou un bouton), fondu au noir et retour à l'attract.
+/// Step 10: after 300 frames (or a button), fade to black and back to attract.
 fn sa_leave(x: &mut Ctx) -> Flow {
     let mut buttons = 0;
     for k in 0..4 {

@@ -1,13 +1,12 @@
-//! Type 8, sous-états 4 (coups), 6, 8, 10 (repos), 12 (saisie) et 14 (fin de geste).
-//! Sous-état 4, `+6` : 0 et 2 griffe, 4 coup bref, 6 charge latérale, 8 saut en arrière, 10 plongeon,
-//! 12 saisie d'un joueur.
+//! Type 8, substates 4 (attacks), 6, 8, 10 (rest), 12 (grab) and 14 (end of move).
+//! Substate 4, `+6`: 0 and 2 claw, 4 short strike, 6 lateral charge, 8 backward jump, 10 dive, 12 grab of a player.
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Fin d'un geste : si plus personne n'est en vie la créature se retire, sinon elle repart au hasard.
+/// End of a move: if nobody is alive any more the creature withdraws, otherwise it sets off again at random.
 fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::players_alive(x) {
         go::wander(x);
@@ -16,7 +15,7 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Le coup frappe quand la clé d'animation `+0x33` passe : elle est aussitôt remise à zéro.
+/// The attack hits when animation key `+0x33` goes by: it is reset to zero immediately.
 fn strike_hit<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
@@ -24,7 +23,7 @@ fn strike_hit<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Libère la victime saisie (`+0x54`) : ses drapeaux de saisie retombent.
+/// Releases the grabbed victim (`+0x54`): its grab flags drop back.
 fn release_victim<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(VICTIM) != 0 {
         let v = x.linked(VICTIM);
@@ -126,7 +125,7 @@ fn short_blow<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 6 : charge latérale --------------------------------------------------------------------
+// --- +6 = 6: lateral charge --------------------------------------------------------------------
 
 fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
@@ -181,7 +180,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 8 : saut en arrière --------------------------------------------------------------------
+// --- +6 = 8: backward jump --------------------------------------------------------------------
 
 fn jump_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
@@ -241,7 +240,7 @@ fn jump_back<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 10 : plongeon sur la cible ---------------------------------------------------------------
+// --- +6 = 10: dive onto the target ---------------------------------------------------------------
 
 fn plunge_attack<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
@@ -251,7 +250,7 @@ fn plunge_attack<R: Bench>(x: &mut Cx<'_, R>) {
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x17);
-            // nombre d'images pour couvrir la distance à la cible : la vitesse verticale en découle
+            // number of frames to cover the distance to the target: the vertical speed follows from it
             let target = load_target(x);
             let mut dist = x.u32(Obj::X).wrapping_sub(target.u32(x.b, Obj::X)) as i32;
             if dist < 0 {
@@ -327,7 +326,7 @@ fn plunge_attack<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 12 : le gargouille fond sur la cible --------------------------------------------------------
+// --- +6 = 12: the gargoyle swoops onto the target --------------------------------------------------------
 
 fn stoop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
@@ -390,7 +389,7 @@ fn stoop<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x64e00 : vise la cible : angle, vitesse verticale pour y arriver en autant d'images que la course horizontale.
+/// 0x64e00: aims at the target: angle, vertical speed to get there in as many frames as the horizontal run.
 fn aim_dive<R: Bench>(x: &mut Cx<'_, R>) {
     let target = load_target(x);
     let (tx, tz) = (target.u16(x.b, Obj::X), target.u16(x.b, Obj::Y));
@@ -420,8 +419,8 @@ fn aim_dive<R: Bench>(x: &mut Cx<'_, R>) {
         frames = frames.wrapping_add(1);
         guard += 1;
     }
-    // 0x17ea : hauteur / nombre d'images. Glitch d'origine : la division laisse son reste dans D2 et son compteur
-    // dans D3 (restes).
+    // 0x17ea: height / number of frames. Original glitch: the division leaves its remainder in D2 and its counter in D3
+    // (leftovers).
     let (q, r) = crate::aids::divide(x.u16(Obj::Z) as u32, frames as u32);
     *x.c.d2() = r;
     *x.c.d3() = 0xffff;
@@ -438,7 +437,7 @@ fn aim_dive<R: Bench>(x: &mut Cx<'_, R>) {
     strike(x, 0xe);
 }
 
-/// 0x64eee : retombée du plongeon : la créature se pose en glissant dans l'autre sens.
+/// 0x64eee: landing of the dive: the creature settles, sliding in the other direction.
 fn land_from_dive<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x18);
@@ -451,7 +450,7 @@ fn land_from_dive<R: Bench>(x: &mut Cx<'_, R>) {
     fly(x, 6);
 }
 
-// --- sous-états 6, 8, 10 : repos -----------------------------------------------------------------------
+// --- substates 6, 8, 10: rest -----------------------------------------------------------------------
 
 pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
@@ -470,7 +469,7 @@ pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 12 : saisie ------------------------------------------------------------------------------
+// --- substate 12: grab ------------------------------------------------------------------------------
 
 pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
@@ -536,7 +535,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x650a6 : la victime est relâchée (`+0x6f` levé) et la créature passe en vol circulaire.
+/// 0x650a6: the victim is released (`+0x6f` raised) and the creature goes into circular flight.
 fn dismount<R: Bench>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
     victim.set_u8(x.b, 0x6f, 1);
@@ -544,14 +543,14 @@ fn dismount<R: Bench>(x: &mut Cx<'_, R>) {
     go::circle(x);
 }
 
-/// Sous-état 14 : fin de geste, cible de remplacement.
+/// Substate 14: end of move, replacement target.
 pub(super) fn done<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         regroup(x);
     }
 }
 
-/// 0x653b2 : le combat reprend : cible choisie, palier de PV franchi, nouveau geste.
+/// 0x653b2: the fight resumes: target chosen, HP threshold crossed, new move.
 pub(crate) fn regroup<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HIT_FLAGS, 0);
     x.set8(0, 1);

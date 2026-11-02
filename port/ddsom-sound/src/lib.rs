@@ -1,15 +1,15 @@
-//! Pilote son de ddsom réécrit en Rust.
+//! ddsom sound driver rewritten in Rust.
 //!
-//! Il remplace le programme du Z80 (`dd2.01`) : mêmes écritures dans les registres de la QSound,
-//! dans le même ordre, et mêmes écritures dans la RAM partagée avec le 68000, pour les mêmes
-//! commandes. Le fonctionnement est décrit dans `docs/sound.md`.
+//! It replaces the Z80 program (`dd2.01`): same writes to the QSound registers, in the same
+//! order, and same writes to the RAM shared with the 68000, for the same commands. How it works
+//! is described in `docs/sound.md`.
 //!
-//! Organisation :
-//! - [`Driver`] : interruption à 250 Hz, file de commandes, boucle principale (lib.rs) ;
-//! - `command` : exécution des commandes envoyées par le 68000 ;
-//! - `voice` : voies de séquenceur (musiques et effets), enveloppes, sortie vers la QSound ;
-//! - `adpcm` : les trois voies ADPCM ;
-//! - [`Rom`] : accès aux données du Z80 (séquences, instruments, échantillons).
+//! Layout:
+//! - [`Driver`] : 250 Hz interrupt, command queue, main loop (lib.rs);
+//! - `command` : execution of the commands sent by the 68000;
+//! - `voice` : sequencer voices (music and effects), envelopes, output to the QSound;
+//! - `adpcm` : the three ADPCM voices;
+//! - [`Rom`] : access to the Z80 data (sequences, instruments, samples).
 
 mod adpcm;
 mod command;
@@ -25,131 +25,131 @@ pub use rom::Rom;
 use adpcm::AdpcmChannel;
 use voice::Voice;
 
-/// Durée de l'interruption à 250 Hz, en cycles du Z80 (8 MHz).
+/// Duration of the 250 Hz interrupt, in Z80 cycles (8 MHz).
 pub const IRQ_PERIOD_CYCLES: u64 = 32_000;
 
-/// Interruptions de 250 Hz que le Z80 d'origine perd au démarrage : il masque les interruptions
-/// pendant l'initialisation de la QSound et la remise à zéro de sa RAM (environ 128 000 cycles,
-/// mesurés dans la machine complète), et n'en prend qu'une seule en les réactivant.
+/// 250 Hz interrupts that the original Z80 loses at startup: it masks interrupts during QSound
+/// initialisation and the clearing of its RAM (about 128,000 cycles, measured on the full
+/// machine), and takes only one of them when re-enabling them.
 const INIT_MASKED_PERIODS: u32 = 3;
 
-/// Taille de la RAM partagée avec le 68000 (côté Z80 : C000-CFFF).
+/// Size of the RAM shared with the 68000 (Z80 side: C000-CFFF).
 pub const SHARED_SIZE: usize = 0x1000;
 
-/// Décalages dans la RAM partagée.
+/// Offsets in the shared RAM.
 mod shared {
-    /// Boîte aux lettres : 16 octets de commande en 000-00F ; l'octet 00F vaut 0xFF quand le
-    /// Z80 a pris la commande (le 68000 n'écrit une nouvelle commande que s'il voit 0xFF).
+    /// Mailbox: 16 command bytes at 000-00F; byte 00F is 0xFF once the Z80 has taken the
+    /// command (the 68000 only writes a new command if it sees 0xFF).
     pub const MAILBOX: usize = 0x000;
     pub const MAILBOX_FLAG: usize = 0x00f;
-    /// Octet de pan de la dernière voie réglée (rapport du Z80 au 68000).
+    /// Pan byte of the last voice set (Z80 report to the 68000).
     pub const PAN_REPORT: usize = 0x005;
-    /// 0x88 : le 68000 a initialisé la boîte aux lettres.
+    /// 0x88: the 68000 has initialised the mailbox.
     pub const MAILBOX_READY: usize = 0xffd;
-    /// Réglage stéréo (0 = mono).
+    /// Stereo setting (0 = mono).
     pub const STEREO: usize = 0xffe;
-    /// Poignée de main : le Z80 écrit 0x77 au démarrage, le 68000 répond 0xFF.
+    /// Handshake: the Z80 writes 0x77 at startup, the 68000 answers 0xFF.
     pub const HANDSHAKE: usize = 0xfff;
 }
 
-/// Écriture produite par le pilote, dans l'ordre où le Z80 les fait.
+/// Write produced by the driver, in the order the Z80 makes them.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Write {
-    /// Registre de la QSound (écriture de `data` dans le registre `reg`).
+    /// QSound register (write of `data` to register `reg`).
     Qsound { reg: u8, data: u16 },
-    /// Écriture du Z80 dans la RAM partagée (décalage 0-0xFFF).
+    /// Z80 write to the shared RAM (offset 0-0xFFF).
     Shared { offset: u16, value: u8 },
 }
 
-/// Où en est le démarrage du pilote.
+/// Where the driver startup stands.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum Boot {
-    /// Attente du premier « tic » (4 interruptions).
+    /// Waiting for the first "tick" (4 interrupts).
     WaitFirstTick,
-    /// Attente du deuxième tic, puis initialisation de la QSound.
+    /// Waiting for the second tick, then QSound initialisation.
     WaitSecondTick,
-    /// Initialisation faite : attente de la réponse 0xFF du 68000 en 0xFFF.
+    /// Initialisation done: waiting for the 68000's 0xFF answer at 0xFFF.
     WaitHandshake,
-    /// Boucle principale.
+    /// Main loop.
     Running,
 }
 
-/// Rythme des tâches déclenchées par l'interruption (une sur quatre à chaque fois).
+/// Pacing of the tasks triggered by the interrupt (one in four each time).
 #[derive(Default)]
 struct Pending {
-    /// Commandes en attente de traitement (interruptions impaires).
+    /// Commands waiting to be processed (odd interrupts).
     commands: u8,
-    /// Tics du séquenceur, 62,5 Hz.
+    /// Sequencer ticks, 62.5 Hz.
     ticks: u8,
-    /// Tics des voies ADPCM, 62,5 Hz (décalés de deux interruptions).
+    /// ADPCM voice ticks, 62.5 Hz (offset by two interrupts).
     adpcm: u8,
 }
 
-/// Réglages globaux (musique et effets).
+/// Global settings (music and effects).
 #[derive(Default)]
 pub(crate) struct Globals {
-    /// Volume de base des effets (table indexée par l'en-tête des musiques).
+    /// Base volume of the effects (table indexed by the music header).
     pub sfx_volume: u16,
-    /// Facteur de volume de la musique (en-tête).
+    /// Music volume factor (header).
     pub music_factor: u16,
-    /// Volume courant de la musique.
+    /// Current music volume.
     pub music_volume: u16,
-    /// Pas de temps des voies de musique (instruction 5) et ajustement de tempo (commande 8).
+    /// Time step of the music voices (instruction 5) and tempo adjustment (command 8).
     pub music_step: u16,
     pub tempo_adjust: u16,
-    /// Transposition globale de la musique (instruction 10).
+    /// Global music transposition (instruction 10).
     pub music_transpose: u8,
-    /// Hauteur ajoutée aux voies qui l'ont demandé (commande 9).
+    /// Pitch added to the voices that asked for it (command 9).
     pub pitch_bend: u16,
-    /// Pas de temps de la voie en cours de traitement.
+    /// Time step of the voice being processed.
     pub step: u16,
-    /// Fondu général (commandes 12 et 13) : sens (0 = inactif, 1 = montée, 0xFF = descente),
-    /// pas et niveau courant.
+    /// Global fade (commands 12 and 13): direction (0 = inactive, 1 = up, 0xFF = down),
+    /// step and current level.
     pub fade_dir: u8,
     pub fade_step: u16,
     pub fade_level: u16,
-    /// Rampe de volume de la musique (commandes 6 et 7) : sens, pas, niveau et cible.
+    /// Music volume ramp (commands 6 and 7): direction, step, level and target.
     pub ramp_dir: u8,
     pub ramp_step: u16,
     pub ramp_level: u16,
     pub ramp_target: u16,
 }
 
-/// Le pilote son.
+/// The sound driver.
 pub struct Driver {
     rom: Rom,
     boot: Boot,
-    /// Copie de la RAM partagée pendant le traitement d'une interruption.
+    /// Copy of the shared RAM while an interrupt is being processed.
     shared: Vec<u8>,
     out: Vec<Write>,
-    /// Compteur d'interruptions (modulo 256).
+    /// Interrupt counter (modulo 256).
     irq_count: u8,
     pending: Pending,
-    /// Copie de l'octet stéréo du 68000 (0 = mono).
+    /// Copy of the 68000's stereo byte (0 = mono).
     stereo: u8,
-    /// File de commandes : 16 entrées de 16 octets, indices d'octets qui bouclent à 256.
+    /// Command queue: 16 entries of 16 bytes, byte indices wrapping at 256.
     queue: [u8; 256],
     queue_head: u8,
     queue_tail: u8,
-    /// En-tête de la table des musiques : nombre d'entrées et adresse de la table.
+    /// Header of the music table: number of entries and table address.
     song_count: u16,
     song_table: u32,
-    /// Adresse de la musique ou de l'effet en cours de démarrage.
+    /// Address of the music or effect being started.
     song: u32,
-    /// Priorité de la commande en cours.
+    /// Priority of the current command.
     priority: u8,
     pub(crate) g: Globals,
-    /// Voie en cours de traitement : indice, et `true` si c'est une voie de musique.
+    /// Voice being processed: index, and `true` if it is a music voice.
     cur: u8,
     is_music: bool,
-    /// Le pilote d'origine boucle indéfiniment sur une piste sans note qui se rappelle elle-même :
-    /// le séquenceur est alors gelé (les interruptions continuent de s'accumuler).
+    /// The original driver loops forever on a noteless track that calls itself:
+    /// the sequencer is then frozen (interrupts keep accumulating).
     hung: bool,
-    /// Périodes de 250 Hz à ignorer encore (initialisation en cours dans le Z80 d'origine).
+    /// 250 Hz periods still to ignore (initialisation in progress in the original Z80).
     masked_periods: u32,
-    /// Une voie d'effet occupe le canal en cours : la voie de musique ne touche pas à la QSound.
+    /// An effect voice occupies the current channel: the music voice does not touch the QSound.
     sfx_override: bool,
-    /// Voies d'effets sonores puis voies de musique, une par canal QSound.
+    /// Sound-effect voices then music voices, one per QSound channel.
     pub(crate) sfx: [Voice; 16],
     pub(crate) music: [Voice; 16],
     pub(crate) adpcm: [AdpcmChannel; 3],
@@ -184,8 +184,8 @@ impl Driver {
         }
     }
 
-    /// Mise en route (ou reset relâché par le 68000) : le Z80 annonce sa présence. Sa RAM n'est
-    /// pas effacée par le reset : le compteur d'interruptions, qui cadence le démarrage, subsiste.
+    /// Power-up (or reset released by the 68000): the Z80 announces its presence. Its RAM is
+    /// not cleared by the reset: the interrupt counter, which paces startup, is kept.
     pub fn reset(&mut self, shared: &mut [u8], out: &mut Vec<Write>) {
         let rom = std::mem::replace(&mut self.rom, Rom::from_region(Vec::new()));
         let irq_count = self.irq_count;
@@ -196,9 +196,9 @@ impl Driver {
         self.finish(shared, out);
     }
 
-    /// Une interruption à 250 Hz prise par le Z80 : ce que fait la routine d'interruption, puis ce
-    /// que fait la boucle principale avant l'interruption suivante. Les écritures dans la QSound
-    /// sont rendues dans `out`, celles dans la RAM partagée sont aussi faites dans `shared`.
+    /// One 250 Hz interrupt taken by the Z80: what the interrupt routine does, then what the
+    /// main loop does before the next interrupt. QSound writes are returned in `out`; those to
+    /// the shared RAM are also made in `shared`.
     pub fn interrupt(&mut self, shared: &mut [u8], out: &mut Vec<Write>) {
         self.shared.copy_from_slice(shared);
         self.irq_handler();
@@ -206,8 +206,8 @@ impl Driver {
         self.finish(shared, out);
     }
 
-    /// Une période de 250 Hz s'est écoulée (toutes les [`IRQ_PERIOD_CYCLES`] du Z80). Équivaut à
-    /// [`Driver::interrupt`], sauf pendant l'initialisation où le Z80 d'origine ne répond pas.
+    /// A 250 Hz period has elapsed (every [`IRQ_PERIOD_CYCLES`] of the Z80). Equivalent to
+    /// [`Driver::interrupt`], except during initialisation when the original Z80 does not respond.
     pub fn irq_request(&mut self, shared: &mut [u8], out: &mut Vec<Write>) {
         if self.masked_periods > 0 {
             self.masked_periods -= 1;
@@ -216,13 +216,13 @@ impl Driver {
         }
     }
 
-    /// Rend la RAM partagée à l'appelant et lui remet les écritures produites.
+    /// Hands the shared RAM back to the caller along with the writes produced.
     fn finish(&mut self, shared: &mut [u8], out: &mut Vec<Write>) {
         shared.copy_from_slice(&self.shared);
         out.append(&mut self.out);
     }
 
-    /// Routine d'interruption : compte, cadence les tâches, recopie la commande du 68000.
+    /// Interrupt routine: counts, paces the tasks, copies the 68000's command.
     fn irq_handler(&mut self) {
         self.irq_count = self.irq_count.wrapping_add(1);
         match self.irq_count & 3 {
@@ -242,7 +242,7 @@ impl Driver {
         self.stereo = self.shared[shared::STEREO];
     }
 
-    /// Boucle principale : démarrage, puis traitement des tâches en attente.
+    /// Main loop: startup, then processing of the pending tasks.
     fn main_loop(&mut self) {
         if self.boot == Boot::WaitFirstTick && self.pending.ticks != 0 {
             self.pending.ticks = 0;
@@ -258,7 +258,7 @@ impl Driver {
         if self.boot != Boot::Running || self.hung {
             return;
         }
-        // Une passe : une commande, un tic ADPCM, un tic du séquenceur, dans cet ordre.
+        // One pass: a command, an ADPCM tick, a sequencer tick, in that order.
         while self.pending.commands != 0 || self.pending.adpcm != 0 || self.pending.ticks != 0 {
             if self.pending.commands != 0 {
                 self.pending.commands -= 1;
@@ -278,9 +278,9 @@ impl Driver {
         }
     }
 
-    /// Initialisation de la QSound, mise à zéro de la RAM et lecture de l'en-tête des musiques.
+    /// QSound initialisation, RAM clearing and reading of the music header.
     fn init_hardware(&mut self) {
-        // Table de registres (0xD5) et de leurs valeurs (0xE1) : réglage des filtres et de l'écho.
+        // Register table (0xD5) and their values (0xE1): filter and echo settings.
         for i in 0.. {
             let reg = self.rom.byte(0xd5 + i);
             let data = self.rom.word(0xe1 + 2 * i);
@@ -296,7 +296,7 @@ impl Driver {
             self.silence_adpcm(ch);
         }
         self.masked_periods = INIT_MASKED_PERIODS;
-        // La RAM du Z80 est remise à zéro (compteurs d'interruption compris).
+        // The Z80 RAM is cleared (interrupt counters included).
         self.irq_count = 0;
         self.pending = Pending::default();
         self.stereo = 0;
@@ -312,8 +312,8 @@ impl Driver {
         self.cur = 0;
         self.is_music = false;
         self.sfx_override = false;
-        // En-tête des musiques : adresse de l'en-tête, puis [nombre de musiques (2 octets,
-        // grand-boutiste), index du facteur de musique, index du volume des effets].
+        // Music header: header address, then [number of songs (2 bytes,
+        // big-endian), music factor index, effects volume index].
         let header = u32::from(self.rom.word(math::HEADER_PTR));
         self.song_count = u16::from(self.rom.byte(header)) << 8 | u16::from(self.rom.byte(header + 1));
         self.g.music_factor = self.rom.table(math::TABLE_LEVELS, self.rom.byte(header + 2));

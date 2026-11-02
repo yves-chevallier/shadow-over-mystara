@@ -1,15 +1,15 @@
-//! Collision d'un objet avec le décor : 0x33fe4 (joueurs, ennemis, ombres...) et sa variante 0x3403c.
+//! Collision of an object with the terrain: 0x33fe4 (players, enemies, shadows...) and its variant 0x3403c.
 //!
-//! L'attribut de terrain sous l'objet (`video::terrain`, 0x24b0) indexe une table de types en ROM
-//! (entrées de 16 octets). Un type de genre 0 est franchissable ; sinon il décrit un obstacle dont
-//! le profil dépend des 4 bits bas de la position dans la case (D0 = x, D1 = y) : l'objet est
-//! repoussé hors de l'obstacle (`Obj::X` ou `Obj::Y` corrigé) et D5 vaut 1. Pour un obstacle plein
-//! (genre 1) on recommence tant qu'il en reste (sauf si le champ `STOP` du type est non nul) ; pour
-//! une pente (genre 2) un seul passage.
+//! The terrain attribute under the object (`video::terrain`, 0x24b0) indexes a table of types in ROM
+//! (16-byte entries). A type of kind 0 can be crossed; otherwise it describes an obstacle whose
+//! profile depends on the 4 low bits of the position within the cell (D0 = x, D1 = y): the object is
+//! pushed out of the obstacle (`Obj::X` or `Obj::Y` corrected) and D5 is 1. For a solid obstacle
+//! (kind 1) the routine restarts as long as some remains (unless the `STOP` field of the type is non-zero); for
+//! a slope (kind 2) a single pass.
 //!
-//! Registres : comme les handlers qui suivent relisent D0-D2, D5, A1, A2 et les drapeaux, la routine
-//! est transcrite instruction par instruction (A1 = adresse du sous-programme de l'original, que le
-//! 68000 atteignait par une table de sauts, D1 corrigé...).
+//! Registers: since the handlers that follow reread D0-D2, D5, A1, A2 and the flags, the routine
+//! is transcribed instruction by instruction (A1 = address of the original subroutine, which the
+//! 68000 reached through a jump table, corrected D1...).
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -19,37 +19,37 @@ use crate::mem::{rd16, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::{ops, regs, Native};
 
-/// Bit des commutateurs (`ram::DSW`) : collision avec le décor active.
+/// Switch bit (`ram::DSW`): terrain collision active.
 const ENABLED: u16 = 0x800;
-/// Dernier objet testé (A0), sa position x et sa position y : consultés par d'autres routines.
+/// Last object tested (A0), its x position and its y position: consulted by other routines.
 const LAST_OBJECT: u32 = 0x64;
 const LAST_X: u32 = 0x60;
 const LAST_Y: u32 = 0x62;
-/// Octet de l'objet : numéro de terrain sous lui.
+/// Object byte: terrain number under it.
 const OBJ_TERRAIN: u32 = 0x29;
 
-/// Champs d'un type de terrain (entrée de 16 octets, mots).
+/// Fields of a terrain type (16-byte entry, words).
 mod kind {
-    /// 0 : franchissable ; 1 : obstacle plein ; plus : pente.
+    /// 0: can be crossed; 1: solid obstacle; more: slope.
     pub const CATEGORY: u32 = 0;
-    /// Sous-programme de l'obstacle (0, 4, 8 ou 12).
+    /// Obstacle subroutine (0, 4, 8 or 12).
     pub const ROUTINE: u32 = 2;
-    /// Pente : sens (0 ou autre).
+    /// Slope: direction (0 or other).
     pub const FLIP: u32 = 4;
-    /// Pente : décalage de la hauteur.
+    /// Slope: height offset.
     pub const SHIFT: u32 = 6;
-    /// Profondeur (pente : hauteur de base) du bord de l'obstacle.
+    /// Depth (slope: base height) of the obstacle's edge.
     pub const EDGE: u32 = 8;
-    /// Obstacle plein : non nul, un seul passage.
+    /// Solid obstacle: non-zero, a single pass.
     pub const STOP: u32 = 10;
 }
 
-/// Les deux copies de la routine (`Variant`) : seule la table des types et les adresses des sous-programmes
-/// (visibles dans A1) changent.
+/// The two copies of the routine (`Variant`): only the type table and the subroutine addresses
+/// (visible in A1) change.
 #[derive(Clone, Copy)]
 struct Variant {
     entry: u32,
-    /// La seconde copie pose D5 avant de savoir si l'objet touche l'obstacle plein.
+    /// The second copy sets D5 before knowing whether the object touches the solid obstacle.
     early_flag: bool,
     types: u32,
     solid: [u32; 4],
@@ -57,7 +57,7 @@ struct Variant {
 
 const FIRST: Variant = Variant { entry: 0x33fe4, early_flag: false, types: 0x3425c, solid: [0x340b6, 0x340d4, 0x340f2, 0x34108] };
 const SECOND: Variant = Variant { entry: 0x3403c, early_flag: true, types: 0x34a5c, solid: [0x34120, 0x3413e, 0x3415c, 0x34172] };
-/// Sous-programmes des pentes, communs aux deux copies.
+/// Slope subroutines, common to both copies.
 const SLOPES: [u32; 4] = [0x341a4, 0x341d0, 0x341fe, 0x3422e];
 
 struct Push<'a> {
@@ -76,7 +76,7 @@ impl Push<'_> {
     fn field(&mut self, a2: u32, off: u32) -> u16 {
         rd16(self.b, a2 + off)
     }
-    /// `sub.w src,Dn` : drapeaux de l'original ; renvoie la retenue.
+    /// `sub.w src,Dn`: flags of the original; returns the carry.
     fn sub_d(&mut self, n: usize, src: u16) -> bool {
         let r = self.c.addsub(true, src as u32, self.d(n) as u32, false, Size::Word, false);
         self.set_d(n, r as u16);
@@ -88,7 +88,7 @@ impl Push<'_> {
         let r = self.c.addsub(sub, src as u32, rd16(self.b, a) as u32, false, Size::Word, false);
         wr16(self.b, a, r as u16);
     }
-    /// `tst.w (off,A2)` : vrai si nul.
+    /// `tst.w (off,A2)`: true if zero.
     fn zero(&mut self, a2: u32, off: u32) -> bool {
         let v = self.field(a2, off);
         ops::logic(self.c, v as u32, Size::Word);
@@ -99,12 +99,12 @@ impl Push<'_> {
         self.c.d[5] = 1;
     }
 
-    /// Répète les passages tant qu'un obstacle plein relance la routine (`beq entry`).
+    /// Repeats the passes as long as a solid obstacle restarts the routine (`beq entry`).
     fn run(&mut self) {
         while self.pass() {}
     }
 
-    /// Un passage ; vrai pour recommencer.
+    /// One pass; true to start over.
     fn pass(&mut self) -> bool {
         let a0 = self.c.a[0];
         if self.variant.entry == FIRST.entry {
@@ -130,7 +130,7 @@ impl Push<'_> {
         if number == 0 {
             return self.free();
         }
-        // lsl.w #4,D2w : entrée de la table des types
+        // lsl.w #4,D2w: entry of the type table
         let d2 = self.d(2);
         self.set_d(2, d2 << 4);
         let carry = d2 >> 12 & 1 != 0;
@@ -150,7 +150,7 @@ impl Push<'_> {
         }
     }
 
-    /// Rien à corriger : l'objet est libre (0x3402c).
+    /// Nothing to correct: the object is free (0x3402c).
     fn free(&mut self) -> bool {
         let a0 = self.c.a[0];
         wr16(self.b, A5 + LAST_OBJECT, 0);
@@ -161,14 +161,14 @@ impl Push<'_> {
         false
     }
 
-    /// Obstacle plein : repousse l'objet hors de la case ; vrai pour recommencer.
+    /// Solid obstacle: pushes the object out of the cell; true to start over.
     fn solid(&mut self, a2: u32) -> bool {
         let routine = self.field(a2, kind::ROUTINE);
         self.set_d(2, routine);
         self.c.a[1] = self.variant.solid[routine as usize / 4];
         let edge = self.field(a2, kind::EDGE);
         match routine {
-            // en dessous / au dessus du bord : corrige y
+            // below / above the edge: corrects y
             0 | 4 => {
                 if self.variant.early_flag {
                     self.collided();
@@ -184,7 +184,7 @@ impl Push<'_> {
                 }
                 self.add_obj(false, self.d(1), Obj::Y);
             }
-            // à droite / à gauche du bord : corrige x
+            // right / left of the edge: corrects x
             _ => {
                 let x = if routine == 8 { self.d(0) } else { !self.d(0) };
                 self.set_d(0, (x & 0xf) + 1);
@@ -195,7 +195,7 @@ impl Push<'_> {
         self.zero(a2, kind::STOP)
     }
 
-    /// Pente (genre > 1) : un seul passage.
+    /// Slope (kind > 1): a single pass.
     fn slope(&mut self, a2: u32) {
         let routine = self.field(a2, kind::ROUTINE);
         self.set_d(2, routine);
@@ -203,7 +203,7 @@ impl Push<'_> {
         let flipped = self.field(a2, kind::FLIP) != 0;
         let (edge, shift) = (self.field(a2, kind::EDGE), self.field(a2, kind::SHIFT));
         match routine {
-            // le bord est une rampe en x : hauteur au-dessus (0) ou au-dessous (4) de y
+            // the edge is a ramp in x: height above (0) or below (4) y
             0 | 4 => {
                 let x = if flipped == (routine == 0) { !self.d(0) } else { self.d(0) };
                 let height = ((x & 0xf) as u32 >> (shift & 63).min(31)) as u16;
@@ -220,7 +220,7 @@ impl Push<'_> {
                 self.collided();
                 self.add_obj(routine == 4, self.d(0), Obj::Y);
             }
-            // le bord est une rampe en y : largeur à gauche (8) ou à droite (12) de x
+            // the edge is a ramp in y: width to the left (8) or right (12) of x
             _ => {
                 let y = if flipped == (routine == 12) { !self.d(1) } else { self.d(1) };
                 self.set_d(1, y & 0xf);
@@ -252,12 +252,12 @@ fn run(variant: Variant, c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x33fe4 sur l'objet `o`, sans registre : rend le drapeau Z de l'original (vrai : la dernière case examinée est
-/// libre, ou la collision est désactivée). La routine est transcrite sur des registres de travail (`Push`) ; ici
-/// ce sont des registres privés, jetés au retour (les appelants des joueurs ne relisaient pas ceux de l'original :
-/// `DDSOM_POISON=terrain`, lot D).
-/// Adaptateur : comme `push`, mais sur les registres de l'appelant, laissés comme l'original (familles du lot B,
-/// registres non encore prouvés morts : `DDSOM_POISON=terrain`).
+/// 0x33fe4 on object `o`, without registers: returns the original's Z flag (true: the last cell examined is
+/// free, or the collision is disabled). The routine is transcribed on work registers (`Push`); here
+/// these are private registers, discarded on return (the players' callers did not reread those of the original:
+/// `DDSOM_POISON=terrain`, batch D).
+/// Adapter: like `push`, but on the caller's registers, left as in the original (families of batch B,
+/// registers not yet proven dead: `DDSOM_POISON=terrain`).
 pub fn push_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) -> bool {
     c.a[0] = o.0;
     Push { c, b, variant: FIRST }.run();
@@ -270,7 +270,7 @@ pub fn push(b: &mut Cps2Bus, o: Obj) -> bool {
     push_collides(b, o).0
 }
 
-/// `push`, et vrai en second si l'objet a heurté un obstacle (le D5 = 1 de l'original, que des appelants relisent).
+/// `push`, and true second if the object hit an obstacle (the original's D5 = 1, which callers reread).
 pub fn push_collides(b: &mut Cps2Bus, o: Obj) -> (bool, bool) {
     let mut c = Cpu::default();
     c.a[0] = o.0;
@@ -278,10 +278,10 @@ pub fn push_collides(b: &mut Cps2Bus, o: Obj) -> (bool, bool) {
     (c.sr & m68k::SR_Z != 0, c.d[5] == 1)
 }
 
-/// `push`, avec les restes de l'original que relisent les gestionnaires suivants (`dispatch::Leftovers`) : D2 et D3
-/// (case et écart du terrain, glitch d'origine : vitesses de l'étincelle de `flash_and_shake`, réglage du rebond de
-/// l'éclat de gel) et D5 (1 après un choc). Les restes entrent et sortent tels quels quand la routine ne les écrit
-/// pas. Rend le drapeau Z de l'original.
+/// `push`, with the leftovers of the original that the following handlers reread (`dispatch::Leftovers`): D2 and D3
+/// (cell and terrain gap, original glitch: speeds of the spark of `flash_and_shake`, bounce setting of the
+/// frost shard) and D5 (1 after a collision). The leftovers go in and out unchanged when the routine does not write
+/// them. Returns the original's Z flag.
 pub fn push_leftovers(b: &mut Cps2Bus, o: Obj, d2: &mut u32, d3: &mut u32, d5: &mut u32) -> bool {
     let mut c = Cpu::default();
     c.a[0] = o.0;

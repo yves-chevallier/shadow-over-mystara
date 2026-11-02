@@ -14,7 +14,7 @@ externe autrement que par l'état de la RAM (variables de partie, joueurs, objet
 
 Créé par le type 8 (0xcc25a) avec la variante `+0x2f`. Ne travaille que si `+0x40 == 0` et
 `A5+0x35` (difficulté) est non nul. Sa variante `+3` choisit : un script d'événements
-(`0xbd276 + 4 × variante`, mot de tête = durée de la scène), une action de départ (octet de la table
+(`0xbd276 + 4 × variant`, mot de tête = durée de la scène), une action de départ (octet de la table
 0xbc880, 12 actions) et une action de fin (octet de la table 0xbcba8, 16 actions). Beaucoup de
 variantes (120 au plus) sont de simples marqueurs : intertitre, rideau, fondu, sortie des joueurs.
 
@@ -41,7 +41,7 @@ copiées d'après la table 0xbcea4 puis tous les objets des huit pools sont pous
 7 quatre effets de type 0x21, 8, 9 un SET de type 0x11, 10 et 15 scène figée, 11 fin simple, 12 figée puis
 0, 13 et 14 un boss (types 3 et 1) sauf si `A5+0x50` ou `A5+0x42`.
 
-Couverture : 43 083 appels dans les 8 scénarios (VALIDE) ; fuzz `familles` sur 0xbc814 (variantes 0 à
+Couverture : 43 083 appels dans les 8 scénarios (VALIDE) ; fuzz `families` sur 0xbc814 (variantes 0 à
 119, états 0/2/4/6, variables de partie et joueurs tirés ; 128 000 appels) : 0 écart. Non vus par le
 fuzz : actions de départ 5 (jamais choisie par la table), échecs d'allocation, parcours de pools remplis
 d'objets de chaque classe (le balayage du rideau est identique d'un pool à l'autre).
@@ -73,7 +73,7 @@ enregistré (0xff0fd2) avec une commande de couleur ; 23 efface l'entrée du mot
 sont 6 caractères codés à partir de 0x51 (glyphes 0xc9216), ou un nom par défaut (0xc8948).
 
 Les scénarios n'exercent que les fenêtres des scénarios de langue (`covb_langue4`, `covb_langue6`) ;
-`fuzz familles` (`DDSOM_ENTREE=c8352`) compare les autres variantes à l'original.
+`fuzz families` (`DDSOM_ENTREE=c8352`) compare les autres variantes à l'original.
 
 ## SET 15 : écrans de fin de niveau (0xce024)
 
@@ -117,7 +117,7 @@ garantis (seuls leurs `outputs` le sont) : le gestionnaire reconstitue lui-même
 `D1` doit contenir le décalage de la secousse quand 0xb1a7a crée un effet (variante 1) ; les index
 `(tbl,Dn.w)` sont des mots étendus en signe ; la variante 18 itère `btst` sur un masque de 32 bits.
 
-Validation : `fuzz familles` sur 0xce024 (états 0/2/4/6, sous-états valides par variante, variables de
+Validation : `fuzz families` sur 0xce024 (états 0/2/4/6, sous-états valides par variante, variables de
 fin de niveau, joueurs, chef d'orchestre tirés) : environ 500 000 appels, 0 écart sauf un cas
 connu et hors contrat (variante 18, `choose_reward` : quand plus de 24 candidats sont refusés l'original
 saute dans des données, 0xd5ef8, via la table 0xcff10 ; la réécriture refuse alors sans écart de

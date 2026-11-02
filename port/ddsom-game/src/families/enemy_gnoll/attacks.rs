@@ -1,5 +1,5 @@
-//! Type 13, sous-états 4, 6 et 8 : les gestes. Le sous-état 4 contient les coups de hache, les sauts sur la cible et
-//! le repos, le 6 les pas, sauts et téléportations, le 8 le choix qui suit un geste.
+//! Type 13, substates 4, 6 and 8: the moves. Substate 4 contains the axe strikes, the jumps onto the target and rest, 6
+//! the steps, jumps and teleportations, 8 the choice that follows a move.
 
 use crate::families::cx::Bench;
 use super::stance::{approach_restart, approach_start};
@@ -7,8 +7,8 @@ use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Les quatre sauts sur la cible du sous-état 4 (`+6` = 12, 16, 18 et 20) : les trois derniers retombent plus haut
-/// et plus loin, les deux derniers enchaînent encore un coup (étapes `+7` = 12 et plus).
+/// The four jumps onto the target of substate 4 (`+6` = 12, 16, 18 and 20): the last three land higher and further, the
+/// last two still chain another strike (steps `+7` = 12 and up).
 #[derive(Clone, Copy, PartialEq)]
 enum Leap {
     Low,
@@ -51,20 +51,20 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6b742 : l'étape suivante lance l'animation 4 (avec son).
+/// 0x6b742: the next step starts animation 4 (with sound).
 fn next_and_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     wind_up(x);
 }
 
-/// 0x6b74a : étape suivante à la fin de l'animation.
+/// 0x6b74a: next step at the end of the animation.
 fn next_when_done<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.add8(f::SUB3, 2);
     }
 }
 
-/// 0x6b776 : fin de l'animation, geste terminé.
+/// 0x6b776: end of the animation, move finished.
 fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         done_attack(x);
@@ -78,7 +78,7 @@ fn finish_follow<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- geste 0 : provocation, puis geste choisi --------------------------------------------------------
+// --- move 0: taunt, then chosen move --------------------------------------------------------
 
 fn windup<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
@@ -108,7 +108,7 @@ fn windup<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 2 : demi-tour puis geste 0xc.
+/// +6 = 2: turn-around then move 0xc.
 fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -126,7 +126,7 @@ fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- coups de hache -----------------------------------------------------------------------------------
 
-/// +6 = 4 et 6 : un coup de hache (animation `anim`, type `kind`), ou, une fois sur dix à seize, retour à la marche.
+/// +6 = 4 and 6: an axe strike (animation `anim`, type `kind`), or, one time in ten to sixteen, back to walking.
 fn swing<R: Bench>(x: &mut Cx<'_, R>, anim: u32, kind: u8) {
     if x.u8(f::SUB3) != 0 {
         if x.anim_step() {
@@ -135,7 +135,7 @@ fn swing<R: Bench>(x: &mut Cx<'_, R>, anim: u32, kind: u8) {
         return;
     }
     let r = rand_and(x, 0xf);
-    // `btst D0,D1` avec D1 = 0xffc0 : les tirages de 6 à 15 renoncent au coup
+    // `btst D0,D1` with D1 = 0xffc0: draws from 6 to 15 give up the strike
     if (0xffc0u32 >> r) & 1 != 0 {
         x.set8(SHOT_KIND, 0x1b);
         set_state_long(x, STANCE);
@@ -145,7 +145,7 @@ fn swing<R: Bench>(x: &mut Cx<'_, R>, anim: u32, kind: u8) {
     strike_with(x, anim, kind, 5);
 }
 
-/// +6 = 8 : un coup, puis un coup bas répété `+0xa2` fois.
+/// +6 = 8: a strike, then a low strike repeated `+0xa2` times.
 fn combo_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -176,7 +176,7 @@ fn combo_a<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 10 : un coup tiré au hasard entre deux, puis un deuxième.
+/// +6 = 10: a strike drawn at random between two, then a second one.
 fn combo_b<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -200,10 +200,10 @@ fn combo_b<R: Bench>(x: &mut Cx<'_, R>) {
     strike_with(x, 2, 0x1c, 4);
 }
 
-// --- sauts sur la cible -------------------------------------------------------------------------------
+// --- jumps onto the target -------------------------------------------------------------------------------
 
-/// 0x6b3bc / 0x6b4fa : le Gnoll se place sur la cible (position copiée), à la hauteur `height`, et bondit de
-/// `shift` en avant.
+/// 0x6b3bc / 0x6b4fa: the Gnoll places itself on the target (position copied), at height `height`, and leaps `shift`
+/// forward.
 fn leap_start<R: Bench>(x: &mut Cx<'_, R>, height: u32, shift: i16) {
     x.add8(f::SUB3, 2);
     let target = load_target(x);
@@ -227,7 +227,7 @@ fn leap_start<R: Bench>(x: &mut Cx<'_, R>, height: u32, shift: i16) {
     mv(x, 3);
 }
 
-/// 0x6b8a8 : retombée du saut.
+/// 0x6b8a8: landing of the jump.
 fn land<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if (x.u16(Obj::Z) as i16) > 0 {
@@ -297,7 +297,7 @@ fn leap_on_target<R: Bench>(x: &mut Cx<'_, R>, kind: Leap) {
     }
 }
 
-/// +6 = 14 (sous-état 4) et 8 (sous-état 6) : saut sur place.
+/// +6 = 14 (substate 4) and 8 (substate 6): jump in place.
 fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
@@ -311,9 +311,9 @@ fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 6 --------------------------------------------------------------------------------------
+// --- substate 6 --------------------------------------------------------------------------------------
 
-/// +6 = 6 : pas en profondeur.
+/// +6 = 6: step in depth.
 fn depth_step<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
@@ -362,11 +362,11 @@ fn jump_up<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Positions d'arrivée (X puis profondeur) de la téléportation, relatives à la cible.
+/// Arrival positions (X then depth) of the teleportation, relative to the target.
 const TELEPORT_X: u32 = 0x6b8a4;
 const TELEPORT_Y: u32 = 0x6b89c;
 
-/// +6 = 12 : le Gnoll réapparaît près de sa cible.
+/// +6 = 12: the Gnoll reappears near its target.
 fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
@@ -395,7 +395,7 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 --------------------------------------------------------------------------------------
+// --- substate 8 --------------------------------------------------------------------------------------
 
 /// +6 = 0 : courte pause debout.
 fn pause<R: Bench>(x: &mut Cx<'_, R>) {
@@ -413,7 +413,7 @@ fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// +6 = 2 : pas en arrière (les étapes 8 et plus sont un saut sur place, jamais atteint depuis l'étape 6).
+/// +6 = 2: step backward (steps 8 and up are a jump in place, never reached from step 6).
 fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 | 8 => next_and_start(x),
@@ -456,7 +456,7 @@ fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 : bond (ou course) vers la cible.
+/// +6 = 4: leap (or run) toward the target.
 fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -499,7 +499,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 6 : rechoisit un geste ; ne change de geste que si le nouveau diffère du précédent ou après un délai.
+/// +6 = 6: chooses a move again; changes move only if the new one differs from the previous one or after a delay.
 fn pick_again<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_state_long(x, IDLE);

@@ -1,5 +1,5 @@
-//! Tirs des joueurs (PSHL), deuxième série : types 7 (sol gelé) et 8 (ombres du voleur).
-//! Voir `docs/families/player.md`.
+//! Player shots (PSHL), second series: types 7 (frozen ground) and 8 (the thief's shadows).
+//! See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -11,8 +11,8 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Type 7 (0x52b94) : sol gelé (magie 15), deux exemplaires (variante 0 : l'image de glace au sol qui
-/// change selon le numéro de sort `+0x1e9` du lanceur ; variante 1 : sa zone de dégâts).
+/// Type 7 (0x52b94): frozen ground (magic 15), two copies (variant 0: the ice image on the ground that changes
+/// according to the caster's spell number `+0x1e9`; variant 1: its damage zone).
 mod ground {
     use super::*;
 
@@ -107,7 +107,7 @@ mod ground {
         x.set32(0x34, 0);
     }
 
-    /// `0x52d06` : place l'objet sur le lanceur, devant ou derrière selon la magie en cours.
+    /// `0x52d06`: places the object on the caster, in front or behind depending on the current magic.
     fn pose<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
         x.copy_pos(owner);
@@ -134,7 +134,7 @@ mod ground {
         }
     }
 
-    /// `0x52df0` : change de couleur toutes les 4 images (`+0x2b`).
+    /// `0x52df0`: changes colour every 4 frames (`+0x2b`).
     fn colors<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x5e, 0xff);
         if x.u8(0x5e) != 0 {
@@ -151,8 +151,8 @@ mod ground {
     }
 }
 
-/// Type 8 (0x52e42) : ombres du coup de pied du voleur. `+0x2f` : 0 = ombre qui tombe d'en haut ;
-/// 2 = ombre qui se détache du voleur ; 4 = ombre qui attend et frappe.
+/// Type 8 (0x52e42): shadows of the thief's kick. `+0x2f`: 0 = shadow that falls from above; 2 = shadow that detaches
+/// from the thief; 4 = shadow that waits and strikes.
 mod shadow {
     use super::*;
 

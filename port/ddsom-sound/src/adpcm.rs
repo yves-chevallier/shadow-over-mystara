@@ -1,7 +1,7 @@
-//! Voies ADPCM : trois canaux qui jouent un échantillon une fois (ou en boucle) sans séquenceur.
+//! ADPCM voices: three channels that play a sample once (or looped) without a sequencer.
 //!
-//! Le programme d'origine n'a pas de notion de hauteur ici : une voie ADPCM est démarrée par une
-//! commande « effet à une voie » dont le numéro de voie est au moins 0x10.
+//! The original program has no notion of pitch here: an ADPCM voice is started by a
+//! "single-voice effect" command whose voice number is at least 0x10.
 
 use crate::math::*;
 use crate::pan::PanFade;
@@ -9,17 +9,17 @@ use crate::Driver;
 
 #[derive(Clone, Default)]
 pub struct AdpcmChannel {
-    /// Vient de démarrer : le prochain tic programme les registres.
+    /// Has just started: the next tick programs the registers.
     pub fresh: bool,
-    /// Rejoue l'échantillon en boucle jusqu'à l'arrêt explicite.
+    /// Replays the sample in a loop until explicitly stopped.
     pub continuous: bool,
-    /// Durée restante, décomptée par pas de 0x40 à chaque tic ; 0 = canal libre.
+    /// Remaining duration, counted down in steps of 0x40 per tick; 0 = free channel.
     pub remaining: u16,
     pub volume: u16,
     pub pan: PanFade,
     pub delay: u8,
     pub priority: u8,
-    /// Durée totale, pour la reprise en boucle.
+    /// Total duration, for looping.
     pub length: u16,
     pub bank: u8,
     pub start: u16,
@@ -27,7 +27,7 @@ pub struct AdpcmChannel {
 }
 
 impl Driver {
-    /// Coupe un canal ADPCM.
+    /// Silences an ADPCM channel.
     pub(crate) fn silence_adpcm(&mut self, ch: u8) {
         self.qsound(0xcd_u8.wrapping_add(ch.wrapping_mul(4)), 0);
         self.qsound(0xd6_u8.wrapping_add(ch), 1);
@@ -55,8 +55,8 @@ impl Driver {
         self.silence_adpcm(ch);
     }
 
-    /// Démarre une voie ADPCM. `p` pointe sur la définition de l'effet : drapeaux et priorité,
-    /// 4 octets ignorés, amplitude, numéro d'échantillon.
+    /// Starts an ADPCM voice. `p` points to the effect definition: flags and priority,
+    /// 4 ignored bytes, amplitude, sample number.
     pub(crate) fn start_adpcm(&mut self, ch: u8, mut p: u32, cmd: &[u8; 16]) {
         let slot = usize::from(ch);
         if slot >= self.adpcm.len() {
@@ -71,7 +71,7 @@ impl Driver {
         }
         let amplitude = self.rom.table(TABLE_AMPLITUDE, self.rom.byte(p + 4));
         let sample = u16::from(self.rom.byte(p + 5)) << 8 | u16::from(self.rom.byte(p + 6));
-        // Fiche de l'échantillon : banque, un octet ignoré, début, fin.
+        // Sample record: bank, one ignored byte, start, end.
         let entry = u32::from(self.rom.word(SAMPLE_PTR)) + ((u32::from(sample) * 8) & 0xffff);
         let start = self.rom.word(entry + 2);
         let end = self.rom.word(entry + 4);
@@ -90,7 +90,7 @@ impl Driver {
             ..AdpcmChannel::default()
         };
         if cmd[6] == 7 {
-            // Le canal voisin reçoit une copie qui part dans l'autre sens, si sa priorité le permet.
+            // The neighbouring channel receives a copy moving in the other direction, if its priority allows it.
             let next = usize::from((ch + 1) % 3);
             if self.priority >= self.adpcm[next].priority {
                 let mut copy = a.clone();
@@ -104,7 +104,7 @@ impl Driver {
         self.silence_adpcm(ch);
     }
 
-    /// Tic des trois canaux ADPCM.
+    /// Tick of the three ADPCM channels.
     pub(crate) fn adpcm_tick(&mut self) {
         for ch in 0..3u8 {
             self.cur = ch;
@@ -140,14 +140,14 @@ impl Driver {
         if program {
             self.program_adpcm(a, ch);
         }
-        // Le premier tic écrit le pan de départ ; ensuite il évolue.
+        // The first tick writes the start pan; after that it evolves.
         let first = std::mem::take(&mut a.fresh);
         if first || a.pan.step() {
             self.write_pan(0x90 + ch, a.pan.pan, true);
         }
     }
 
-    /// Écrit adresses, banque, volume et lance la lecture.
+    /// Writes addresses, bank, volume and starts playback.
     fn program_adpcm(&mut self, a: &AdpcmChannel, ch: u8) {
         let base = ch.wrapping_mul(4);
         self.qsound(0xca_u8.wrapping_add(base), a.start);

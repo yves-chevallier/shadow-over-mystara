@@ -1,15 +1,15 @@
-//! Données diverses : `data/misc.json` — octets et noms des scripts du visualiseur de sprites (menu de test
-//! caché), entrées enregistrées des démonstrations de l'attract, générique de fin.
+//! Miscellaneous data: `data/misc.json` — bytes and names of the sprite viewer scripts (hidden test menu),
+//! recorded inputs of the attract demos, ending credits.
 
 use ddsom_assets::data::{Region, TextBlock};
 
 use crate::data::{data, prog, region, text, Spec};
 use crate::rom::Program;
 
-/// Entrées des démonstrations : 30 suites d'enregistrements de 14 octets (durée en images, puis 3 octets
-/// d'entrées par joueur, comparés et recopiés en `+0x64a..+0x64c` des quatre joueurs ; enregistreur 0xe0698).
-/// Chaque suite commence par un en-tête (durée 0, entrées 0xff) et finit par une durée 0xffff ; entre les
-/// suites, des mots de bourrage (`0x4e71`, une fois 0) et un enregistrement de remplissage (0xff).
+/// Demo inputs: 30 sequences of 14-byte records (duration in frames, then 3 input bytes
+/// per player, compared and copied to `+0x64a..+0x64c` of the four players; recorder 0xe0698).
+/// Each sequence starts with a header (duration 0, inputs 0xff) and ends with a duration 0xffff; between
+/// sequences, padding words (`0x4e71`, once 0) and a filler record (0xff).
 const DEMO: (u32, u32) = (0x2b04de, 0x2b45d8);
 const DEMO_FORMAT: &str = "u16 x8*12";
 const DEMO_FIELDS: &[&str] =
@@ -33,7 +33,7 @@ fn demo(rom: &Program, s: &mut Vec<Spec>) {
             s.push(data(&format!("filler/{p:#x}"), p, DEMO_FORMAT, DEMO_FIELDS, 1));
             p += 14;
         } else {
-            assert!(matches!(rom.rd16(p), 0x4e71 | 0), "démonstrations : {p:#x} inattendu");
+            assert!(matches!(rom.rd16(p), 0x4e71 | 0), "demos: unexpected {p:#x}");
             s.push(data(&format!("pad/{p:#x}"), p, "x16", &[], 1));
             p += 2;
         }
@@ -41,10 +41,10 @@ fn demo(rom: &Program, s: &mut Vec<Spec>) {
     assert_eq!(p, DEMO.1);
 }
 
-/// Scripts des démonstrations (`modes/demo.rs`) : interpréteur A (deux scripts alternés, table 0x1f348)
-/// et B (0x1f756). Opération : octet négatif = fin ; 0 = scène (scène, durée, quatre joueurs de 6 octets,
-/// adresse des entrées enregistrées) ; 2 = commande son (index, octet sauté) puis scène ; autre =
-/// présentation d'un personnage (3 octets). B ne connaît que les scènes. Un octet 0xff sépare les scripts.
+/// Demo scripts (`modes/demo.rs`): interpreter A (two alternating scripts, table 0x1f348)
+/// and B (0x1f756). Operation: negative byte = end; 0 = scene (scene, duration, four players of 6 bytes,
+/// address of the recorded inputs); 2 = sound command (index, skipped byte) then scene; other =
+/// character presentation (3 bytes). B only knows scenes. A 0xff byte separates the scripts.
 const SCENE_FIELDS: &[&str] = &[
     "op", "scene", "frames", "c1", "s1", "w1", "h1", "i1", "u1", "c2", "s2", "w2", "h2", "i2", "u2", "c3", "s3", "w3",
     "h3", "i3", "u3", "c4", "s4", "w4", "h4", "i4", "u4", "inputs",
@@ -79,7 +79,7 @@ fn demo_scripts(rom: &Program, s: &mut Vec<Spec>) -> Region {
                 p += 4;
             }
         }
-        // octet de bourrage avant le script suivant
+        // padding byte before the next script
         s.push(data(&format!("pad/{p:#x}"), p, "x8", &[], 1));
         p += 1;
     }

@@ -1,6 +1,6 @@
-//! Les ressources extraites redonnent exactement les données des ROMs.
-//! Ignoré si ../../assets ou les ROMs manquent (lancer `extract <roms> assets` à la racine). Les ROMs
-//! sont lues dans `DDSOM_ROMS`, sinon dans ../../rom.
+//! The extracted resources give back exactly the data of the ROMs.
+//! Skipped if ../../assets or the ROMs are missing (run `extract <roms> assets` at the root). The ROMs
+//! are read from `DDSOM_ROMS`, otherwise from ../../rom.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -13,7 +13,7 @@ fn root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// Dossier des ressources : `DDSOM_ASSETS`, sinon `assets/` à la racine.
+/// Resources folder: `DDSOM_ASSETS`, otherwise `assets/` at the root.
 fn assets() -> PathBuf {
     std::env::var_os("DDSOM_ASSETS").map(PathBuf::from).unwrap_or_else(|| root().join("assets"))
 }
@@ -26,31 +26,31 @@ fn available() -> bool {
     assets().join("palettes.png").exists() && roms().join("dd2.13m").exists()
 }
 
-/// Les ROMs et le fichier extrait `rel` sont présents.
+/// The ROMs and the extracted file `rel` are present.
 fn has(rel: &str) -> bool {
     let ok = assets().join(rel).exists() && roms().join("dd2.13m").exists();
     if !ok {
-        eprintln!("{rel} ou les ROMs absents : test ignoré");
+        eprintln!("{rel} or the ROMs missing: test skipped");
     }
     ok
 }
 
-/// ROM programme : données (lectures du 68000) et espace programme déchiffré, en octets.
+/// Program ROM: data (68000 reads) and decrypted program space, as bytes.
 fn program() -> (Vec<u8>, Vec<u8>) {
     let (data, prog) = cps2::load_program(&roms()).unwrap();
     let bytes = |w: Vec<u16>| w.iter().flat_map(|v| v.to_be_bytes()).collect();
     (bytes(data), bytes(prog))
 }
 
-/// Les tables que `put` réécrit redonnent la ROM, octet pour octet, sur les zones qu'elles décrivent.
+/// The tables that `put` rewrites give back the ROM, byte for byte, on the zones they describe.
 fn check(what: &str, put: impl FnOnce(&mut Program)) {
     let mut p = Program::default();
     put(&mut p);
     let (data, prog) = program();
-    for (name, img, rom) in [("données", &p.data, &data), ("programme", &p.prog, &prog)] {
-        assert!(img.conflicts.is_empty(), "{what} : écritures contradictoires en {:#x}", img.conflicts[0]);
+    for (name, img, rom) in [("data", &p.data, &data), ("program", &p.prog, &prog)] {
+        assert!(img.conflicts.is_empty(), "{what}: contradictory writes at {:#x}", img.conflicts[0]);
         if let Some(a) = rebuild::first_difference(img, rom) {
-            panic!("{what} : espace {name}, octet {a:#x} : {:#04x} au lieu de {:#04x}", img.bytes[a as usize], rom[a as usize]);
+            panic!("{what}: {name} space, byte {a:#x}: {:#04x} instead of {:#04x}", img.bytes[a as usize], rom[a as usize]);
         }
     }
 }
@@ -63,9 +63,9 @@ fn graphics_lossless() {
     let cells = Cells::load(&assets().join("gfx")).unwrap();
     let rom = cps2_gfx::rom::load_gfx(&roms(), cps2_gfx::rom::DDSOM_GFX, cps2_gfx::rom::DDSOM_GFX_SIZE).unwrap();
     assert_eq!(cells.len() * 128, rom.len());
-    // chaque cellule réencodée au format matériel (4 plans par groupe de 8 pixels)
+    // each cell re-encoded in hardware format (4 planes per group of 8 pixels)
     for c in 0..cells.len() {
-        assert_eq!(&cells.encode(c)[..], &rom[c * 128..][..128], "cellule {c}");
+        assert_eq!(&cells.encode(c)[..], &rom[c * 128..][..128], "cell {c}");
     }
 }
 
@@ -96,17 +96,17 @@ fn sounds_lossless() {
         let word = |o: usize| u16::from_le_bytes([e[o], e[o + 1]]) as usize;
         let (base, start, loop_start, end) = ((e[1] as usize) << 16, word(2), word(4), word(6));
         if !(e[1] < 0x40 && start <= end && (start..=end).contains(&loop_start)) {
-            assert!(!assets().join(format!("sounds/{i:03}.wav")).exists(), "fiche invalide {i} : fichier");
+            assert!(!assets().join(format!("sounds/{i:03}.wav")).exists(), "invalid record {i}: file");
             continue;
         }
         count += 1;
         let s = Sample::load(&assets().join(format!("sounds/{i:03}.wav"))).unwrap();
         let expect: Vec<i8> = pcm[base + start..=base + end].iter().map(|&b| b as i8).collect();
-        assert_eq!(s.pcm, expect, "échantillon {i}");
-        assert_eq!(s.root, e[0], "note de l'échantillon {i}");
-        assert_eq!(s.loop_start, (loop_start < end).then_some(loop_start - start), "boucle de l'échantillon {i}");
+        assert_eq!(s.pcm, expect, "sample {i}");
+        assert_eq!(s.root, e[0], "note of sample {i}");
+        assert_eq!(s.loop_start, (loop_start < end).then_some(loop_start - start), "loop of sample {i}");
     }
-    assert_eq!(count, 342, "fiches valides");
+    assert_eq!(count, 342, "valid records");
 }
 
 #[test]
@@ -115,18 +115,18 @@ fn sprite_frames_lossless() {
         return;
     }
     let frames = Frames::load(&assets().join("sprites/frames.json")).unwrap();
-    // table des adresses, images et tables de décalages
-    check("images de sprites", |p| p.put_frames(&frames));
-    // les images se suivent sans trou, puis les tables de décalages (partagées) sans trou non plus
+    // address table, frames and offset tables
+    check("sprite frames", |p| p.put_frames(&frames));
+    // the frames follow each other without gaps, then the (shared) offset tables, also without gaps
     let start = frames.frames[0].rom;
     let mut next = start;
     let mut offsets: BTreeMap<u32, usize> = BTreeMap::new();
     for f in &frames.frames {
-        assert_eq!(next, f.rom, "image {:#x} : position", f.rom);
+        assert_eq!(next, f.rom, "frame {:#x}: position", f.rom);
         let n = if f.per_piece() { f.attr } else { f.cost } as usize;
-        assert_eq!(f.pieces.len(), n, "image {:#x} : nombre de morceaux", f.rom);
+        assert_eq!(f.pieces.len(), n, "frame {:#x}: number of pieces", f.rom);
         if !f.per_piece() {
-            assert!(f.pieces.iter().all(|p| p.attr() == f.attr), "image {:#x} : attributs communs", f.rom);
+            assert!(f.pieces.iter().all(|p| p.attr() == f.attr), "frame {:#x}: common attributes", f.rom);
         }
         let piece = if f.per_piece() { 4 } else { 2 };
         next += 10 + piece * n as u32;
@@ -134,10 +134,10 @@ fn sprite_frames_lossless() {
         *len = (*len).max(4 * n);
     }
     let first = *offsets.keys().next().unwrap();
-    assert_eq!(next, first, "les décalages suivent les images");
+    assert_eq!(next, first, "the offsets follow the frames");
     let mut at = first;
     for (&a, &len) in &offsets {
-        assert_eq!(at, a, "table de décalages {a:#x} : position");
+        assert_eq!(at, a, "offset table {a:#x}: position");
         at += len as u32;
     }
 }
@@ -162,21 +162,21 @@ fn scenery_lossless() {
         return;
     }
     let levels = Levels::load(&assets().join("levels.json")).unwrap();
-    // banques, bandes, tables de bandes et pointeurs des scènes (espace programme)
-    check("décors", |p| p.put_levels(&levels));
+    // banks, strips, strip tables and scene pointers (program space)
+    check("scenery", |p| p.put_levels(&levels));
     let (rom, _) = program();
     let at = |a: u32, n: usize| &rom[a as usize..a as usize + n];
     let be32 = |m: &[u8], a: u32| u32::from_be_bytes(m[a as usize..a as usize + 4].try_into().unwrap());
     for l in &levels.layers {
-        // tables de bandes : jointives, terminées par la table des banques
+        // strip tables: contiguous, ending at the bank table
         let mut next = l.tables[0].rom;
         for t in &l.tables {
-            assert_eq!(t.rom, next, "{} table {:#x} : position", l.name, t.rom);
+            assert_eq!(t.rom, next, "{} table {:#x}: position", l.name, t.rom);
             assert!(t.rows.iter().all(|r| r.len() == t.width()));
             next = t.rom + 2 + 2 * (t.rows.len() * t.width()) as u32;
         }
-        assert_eq!(next, l.banks_rom, "{} : fin des tables", l.name);
-        // cases : même lecture que les caméras du jeu (`map_cell` de scroll.rs, `case_a` de cards.rs)
+        assert_eq!(next, l.banks_rom, "{}: end of the tables", l.name);
+        // cells: same read as the game's cameras (`map_cell` of scroll.rs, `case_a` of cards.rs)
         let rd16 = |a: u32| u16::from_be_bytes(at(a, 2).try_into().unwrap());
         let n = l.strip_cases();
         let column = if l.case == 16 { 0x40 } else { 0x20 };
@@ -194,7 +194,7 @@ fn scenery_lossless() {
                     };
                     let v = be32(&rom, bank + (index << 4) + sub);
                     let expect = ((v >> 16) as u16 + l.tile_offset, v as u16);
-                    assert_eq!(l.case_at(strip, cx, cy), expect, "{} bande {strip} case ({cx}, {cy})", l.name);
+                    assert_eq!(l.case_at(strip, cx, cy), expect, "{} strip {strip} cell ({cx}, {cy})", l.name);
                 }
             }
         }
@@ -211,10 +211,10 @@ fn scroll1_lossless() {
     let (rom, _) = program();
     assert!(s1.grids.iter().all(|g| g.len() == 64));
     assert!(s1.blocks.iter().all(|b| b.len() == 32));
-    // les blocs finissent où commencent les bandes du scroll 2
+    // the blocks end where the scroll 2 strips begin
     let end = s1.blocks_rom as usize + 64 * s1.blocks.len();
-    assert_eq!(end, 0x1f9ba0, "les blocs du scroll 1 précèdent les bandes du scroll 2");
-    // cases : même calcul que 0x260c (destination A1 en colonnes de 0x80 octets, cases de 4 octets)
+    assert_eq!(end, 0x1f9ba0, "the scroll 1 blocks precede the scroll 2 strips");
+    // cells: same computation as 0x260c (destination A1 in columns of 0x80 bytes, 4-byte cells)
     let be32 = |a: usize| u32::from_be_bytes(rom[a..a + 4].try_into().unwrap());
     for g in 0..s1.grids.len() {
         let mut layer = vec![0u32; 32 * 32];
@@ -237,7 +237,7 @@ fn scroll1_lossless() {
         for cx in 0..32 {
             for cy in 0..32 {
                 let v = layer[cx * 32 + cy];
-                assert_eq!(s1.case_at(g, cx, cy), ((v >> 16) as u16, v as u16), "image {g} case ({cx}, {cy})");
+                assert_eq!(s1.case_at(g, cx, cy), ((v >> 16) as u16, v as u16), "image {g} cell ({cx}, {cy})");
             }
         }
     }
@@ -253,18 +253,18 @@ fn terrain_lossless() {
     let at = |a: u32, n: usize| &rom[a as usize..a as usize + n];
     check("terrain", |p| p.put_terrain(&t));
     for m in &t.maps {
-        // lecture de 0x24b0 : rang 0x1e - ((y >> 3) & 0x1e), colonne (2 x) & 0xffe0
+        // read of 0x24b0: row 0x1e - ((y >> 3) & 0x1e), column (2 x) & 0xffe0
         for x in (0..32 * m.columns.len() as u16 / 2).step_by(5) {
             for y in (0..0x200u16).step_by(7) {
                 let y2 = y.wrapping_add(m.dy as u16);
                 let off = (0x1e - ((y2 as u8 >> 3) & 0x1e) as u16).wrapping_add(x.wrapping_add(x) & 0xffe0);
                 let a = m.rom.wrapping_add(off as i16 as u32);
                 let w = u16::from_be_bytes(at(a, 2).try_into().unwrap());
-                assert_eq!(m.word(x, y), Some(w), "carte {:#x} ({x}, {y})", m.rom);
+                assert_eq!(m.word(x, y), Some(w), "map {:#x} ({x}, {y})", m.rom);
             }
         }
     }
-    // les deux cartes se suivent ; la seconde est suivie du remplissage de fin de ROM
+    // the two maps follow each other; the second is followed by the end-of-ROM padding
     let end = t.maps[1].rom as usize + 32 * t.maps[1].columns.len();
     assert_eq!(t.maps[0].rom as usize + 32 * t.maps[0].columns.len(), t.maps[1].rom as usize);
     assert!(rom[end..end + 64].iter().all(|&b| b == 0xff));
@@ -277,12 +277,12 @@ fn scene_palettes_lossless() {
         return;
     }
     let p = ScenePalettes::load(&assets().join("scene_palettes.json")).unwrap();
-    check("palettes des scènes", |q| q.put_scene_palettes(&p));
+    check("scene palettes", |q| q.put_scene_palettes(&p));
     for t in [&p.extra, &p.sets].into_iter().chain(p.pages.iter()) {
-        // toutes les palettes désignées sont dans la bibliothèque (sauf les entrées nulles)
+        // all the designated palettes are in the library (except null entries)
         for &a in t.entries.iter().filter(|&&a| a != 0) {
-            let i = p.library_index(a).unwrap_or_else(|| panic!("table {:#x} : {a:#x} hors bibliothèque", t.rom));
-            assert!(i + t.count as usize <= 8192, "table {:#x} : {a:#x}", t.rom);
+            let i = p.library_index(a).unwrap_or_else(|| panic!("table {:#x}: {a:#x} outside the library", t.rom));
+            assert!(i + t.count as usize <= 8192, "table {:#x}: {a:#x}", t.rom);
         }
     }
 }
@@ -294,41 +294,41 @@ fn object_tables_lossless() {
     }
     let t = SpriteTables::load(&assets().join("sprites/tables.json")).unwrap();
     let frames = Frames::load(&assets().join("sprites/frames.json")).unwrap();
-    check("tables des objets", |p| p.put_sprite_tables(&t, &frames));
+    check("object tables", |p| p.put_sprite_tables(&t, &frames));
     let (rom, _) = program();
     let at = |a: u32, n: usize| &rom[a as usize..a as usize + n];
-    // tables de jeux de boîtes, à la suite, puis les blocs de boîtes jointifs jusqu'à `box_end`
+    // box set tables, one after the other, then the contiguous box blocks up to `box_end`
     let mut next = t.box_tables[0].rom;
     for bt in &t.box_tables {
-        assert_eq!(bt.rom, next, "table de boîtes {}", bt.name);
+        assert_eq!(bt.rom, next, "box table {}", bt.name);
         next = bt.rom + 4 * bt.sets.len() as u32;
         for &s in &bt.sets {
-            assert!(t.box_blocks.iter().any(|b| b.rom == s), "jeu {s:#x} sans bloc");
+            assert!(t.box_blocks.iter().any(|b| b.rom == s), "set {s:#x} without block");
         }
     }
     for b in &t.box_blocks {
-        assert_eq!(b.rom, next, "bloc de boîtes {:#x} : position", b.rom);
+        assert_eq!(b.rom, next, "box block {:#x}: position", b.rom);
         assert!(b.tail.len() < 8);
         next = b.rom + b.len() as u32;
     }
-    assert_eq!(next, t.box_end, "fin des boîtes");
-    // lecture du jeu : adresse du jeu + 8 n
+    assert_eq!(next, t.box_end, "end of the boxes");
+    // read of the set: set address + 8 n
     for (k, bt) in t.box_tables.iter().enumerate() {
         for (s, &a) in bt.sets.iter().enumerate() {
             for n in 1..4 {
                 let r = a + 8 * n as u32;
                 if r + 8 <= t.box_end {
-                    assert_eq!(t.hit_box(k, s, n).unwrap().bytes(), at(r, 8), "{} jeu {s} boîte {n}", bt.name);
+                    assert_eq!(t.hit_box(k, s, n).unwrap().bytes(), at(r, 8), "{} set {s} box {n}", bt.name);
                 }
             }
         }
     }
-    // tir ESHL 5 : les déplacements désignent des listes d'images ; les retournements sont suivis de la première
+    // ESHL 5 shot: the offsets designate frame lists; the flips are followed by the first one
     let s5 = &t.shot5;
     for (base, offs) in [(s5.even_rom, &s5.even), (s5.odd_rom, &s5.odd)] {
         for &d in offs.iter() {
             let target = base.wrapping_add(d as i32 as u32);
-            assert!(t.frame_lists.iter().any(|l| l.rom == target), "tir 5 : liste {target:#x}");
+            assert!(t.frame_lists.iter().any(|l| l.rom == target), "shot 5: list {target:#x}");
         }
     }
     assert_eq!(s5.mirrored_rom + 2 * s5.mirrored.len() as u32, t.frame_lists[0].rom);
@@ -340,18 +340,18 @@ fn texts_lossless() {
         return;
     }
     let t = Texts::load(&assets().join("texts.json")).unwrap();
-    check("textes", |p| p.put_texts(&t));
+    check("texts", |p| p.put_texts(&t));
     let mut end = 0;
     for d in &t.texts {
-        assert!(d.rom >= end, "texte {:#x} : chevauche le précédent", d.rom);
+        assert!(d.rom >= end, "text {:#x}: overlaps the previous one", d.rom);
         end = d.rom + d.bytes().len() as u32;
     }
     for tb in &t.tables {
         for &e in &tb.entries {
-            assert!(t.by_rom(e).is_some(), "table {:#x} : {e:#x} sans texte", tb.rom);
+            assert!(t.by_rom(e).is_some(), "table {:#x}: {e:#x} without text", tb.rom);
         }
     }
-    // noms des bulles : chaînes à la suite terminées par '/'
+    // popup names: contiguous strings terminated by '/'
     let p = &t.popups;
     let mut len = 0;
     let mut starts = Vec::new();
@@ -360,12 +360,12 @@ fn texts_lossless() {
         len += ddsom_assets::texts::decode(s).len() as u32 + 1;
     }
     for &o in &p.offsets {
-        assert!(starts.contains(&p.table.wrapping_add(o as u32)), "bulle : déplacement {o}");
+        assert!(starts.contains(&p.table.wrapping_add(o as u32)), "popup: offset {o}");
     }
-    // noms terminés par '@'
+    // names terminated by '@'
     for g in &t.names {
         let starts = g.starts();
-        assert!(g.entries.iter().all(|e| starts.contains(e)), "noms {:#x} : entrée hors des noms", g.table);
+        assert!(g.entries.iter().all(|e| starts.contains(e)), "names {:#x}: entry outside the names", g.table);
     }
 }
 
@@ -375,31 +375,31 @@ fn music_lossless() {
         return;
     }
     let m = Music::load(&assets().join("sound/music.json")).unwrap();
-    // même lecture que le pilote : adresses linéaires de ddsom_sound::Rom
+    // same read as the driver: linear addresses of ddsom_sound::Rom
     let rom = ddsom_sound::Rom::load(&roms()).unwrap();
     let at = |a: u32, n: usize| (0..n as u32).map(|k| rom.byte(a + k)).collect::<Vec<u8>>();
     assert_eq!(u32::from(rom.word(m.header_ptr)), m.header);
     let mut head = m.count.to_be_bytes().to_vec();
     head.extend([m.music_factor, m.sfx_volume]);
     head.extend(m.header_rest);
-    assert_eq!(at(m.header, 6), head, "en-tête des sons");
+    assert_eq!(at(m.header, 6), head, "sound header");
     assert_eq!(m.songs.len(), m.count as usize);
-    // table des sons, définitions
+    // sound table, definitions
     for (i, s) in m.songs.iter().enumerate() {
         let a = s.as_ref().map_or(0, |s| s.rom);
-        assert_eq!(at(m.header + 6 + 4 * i as u32, 4), [(a >> 16) as u8, (a >> 8) as u8, a as u8, 0], "son {i} : entrée");
+        assert_eq!(at(m.header + 6 + 4 * i as u32, 4), [(a >> 16) as u8, (a >> 8) as u8, a as u8, 0], "sound {i}: entry");
         if let Some(s) = s {
             let b = s.bytes();
-            assert_eq!(at(s.rom, b.len()), b, "son {i} : définition");
+            assert_eq!(at(s.rom, b.len()), b, "sound {i}: definition");
         }
     }
-    // pistes : blocs jointifs réencodés ; chaque piste et chaque cible de saut tombe sur une instruction
+    // tracks: contiguous blocks re-encoded; each track and each jump target lands on an instruction
     let mut starts = std::collections::BTreeSet::new();
     let mut targets = Vec::new();
     let mut end = 0;
     for b in &m.code {
-        assert!(b.rom >= end, "bloc {:#x} : chevauchement", b.rom);
-        let bytes = b.bytes().unwrap_or_else(|| panic!("bloc {:#x} : jeton illisible", b.rom));
+        assert!(b.rom >= end, "block {:#x}: overlap", b.rom);
+        let bytes = b.bytes().unwrap_or_else(|| panic!("block {:#x}: unreadable token", b.rom));
         assert_eq!(at(b.rom, bytes.len()), bytes, "bloc {:#x}", b.rom);
         let mut a = b.rom;
         for t in b.ops.split(' ') {
@@ -416,23 +416,23 @@ fn music_lossless() {
         end = a;
     }
     for (a, t) in targets {
-        assert!(starts.contains(&t), "saut en {a:#x} vers {t:#x} : pas une instruction");
+        assert!(starts.contains(&t), "jump at {a:#x} to {t:#x}: not an instruction");
     }
     for s in m.songs.iter().flatten() {
         for (c, a) in s.track_starts() {
-            assert!(starts.contains(&a), "son {:#x} canal {c} : piste {a:#x}", s.rom);
+            assert!(starts.contains(&a), "sound {:#x} channel {c}: track {a:#x}", s.rom);
             assert!(m.track(a).is_some());
         }
     }
-    // bancs d'instruments, échantillons, tables du pilote
+    // instrument banks, samples, driver tables
     for (k, b) in m.banks.iter().enumerate() {
-        assert_eq!(u32::from(rom.word(m.banks_table + 2 * k as u32)), b.rom, "banc {k}");
+        assert_eq!(u32::from(rom.word(m.banks_table + 2 * k as u32)), b.rom, "bank {k}");
         let bytes: Vec<u8> = b.instruments.iter().flatten().copied().collect();
-        assert_eq!(at(b.rom, bytes.len()), bytes, "banc {k}");
+        assert_eq!(at(b.rom, bytes.len()), bytes, "bank {k}");
     }
     assert_eq!(u32::from(rom.word(m.samples_ptr)), m.samples_rom);
     let bytes: Vec<u8> = m.samples.iter().flatten().copied().collect();
-    assert_eq!(at(m.samples_rom, bytes.len()), bytes, "fiches d'échantillons");
+    assert_eq!(at(m.samples_rom, bytes.len()), bytes, "sample records");
     for t in &m.tables {
         let b = t.bytes();
         assert_eq!(at(t.rom, b.len()), b, "table {}", t.name);
@@ -445,30 +445,30 @@ fn spawns_lossless() {
         return;
     }
     let sp = Spawns::load(&assets().join("data/spawns.json")).unwrap();
-    check("apparitions", |p| p.put_spawns(&sp));
+    check("spawns", |p| p.put_spawns(&sp));
     for (s, &a) in sp.scenes.iter().enumerate() {
-        assert!(sp.of_scene(s).is_some(), "scène {s} : script {a:#x} absent");
+        assert!(sp.of_scene(s).is_some(), "scene {s}: script {a:#x} missing");
     }
-    // scripts : à la suite les uns des autres
+    // scripts: one after the other
     let mut next = sp.scripts[0].rom;
     for sc in &sp.scripts {
-        assert_eq!(sc.rom, next, "script {:#x} : position", sc.rom);
+        assert_eq!(sc.rom, next, "script {:#x}: position", sc.rom);
         next = sc.rom + sc.bytes().len() as u32;
     }
 }
 
-/// Tables de données (`data/*.json`) : chaque table réencodée est identique à la ROM (dans son espace) ;
-/// chaque région est couverte exactement par ses tables ; toute adresse d'une colonne `addr` qui tombe
-/// dans une région désigne le début d'une ligne d'une table.
+/// Data tables (`data/*.json`): each re-encoded table is identical to the ROM (in its space);
+/// each region is covered exactly by its tables; any address of an `addr` column that falls
+/// in a region designates the start of a row of a table.
 fn check_data(rel: &str) {
     if !has(rel) {
         return;
     }
     let file = DataFile::load(&assets().join(rel)).unwrap();
-    check(rel, |p| p.put_data(&file).unwrap_or_else(|e| panic!("{rel} : {e}")));
+    check(rel, |p| p.put_data(&file).unwrap_or_else(|e| panic!("{rel}: {e}")));
     let mut names = std::collections::HashSet::new();
     for t in &file.tables {
-        assert!(names.insert(&t.name), "{rel} : nom {} en double", t.name);
+        assert!(names.insert(&t.name), "{rel}: duplicate name {}", t.name);
     }
     for r in &file.regions {
         let mut inside: Vec<(u32, u32, &str)> = file
@@ -482,10 +482,10 @@ fn check_data(rel: &str) {
         inside.sort();
         let mut at = r.start;
         for (start, end, name) in inside {
-            assert_eq!(start, at, "{rel} : région {}, {name}", r.name);
+            assert_eq!(start, at, "{rel}: region {}, {name}", r.name);
             at = end;
         }
-        assert_eq!(at, r.end, "{rel} : fin de la région {}", r.name);
+        assert_eq!(at, r.end, "{rel}: end of region {}", r.name);
     }
     for t in &file.tables {
         let kinds = t.kinds();
@@ -496,7 +496,7 @@ fn check_data(rel: &str) {
                         let text = file.texts.iter().any(|x| x.rom == a);
                         assert!(
                             text || file.row_at(a).is_some(),
-                            "{rel} : {} ligne {i} : {a:#x} n'est ni un début de ligne ni un texte",
+                            "{rel}: {} row {i}: {a:#x} is neither the start of a row nor a text",
                             t.name
                         );
                     }
@@ -512,7 +512,7 @@ fn players_lossless() {
     if !has("data/players.json") {
         return;
     }
-    // accès par personnage, comme init.rs : points de vie du clerc (personnage 3) au niveau 13
+    // per-character access, like init.rs: cleric's hit points (character 3) at level 13
     let f = DataFile::load(&assets().join("data/players.json")).unwrap();
     let hp = f.via("hp_by_level", 3).unwrap();
     let (rom, prog) = program();
@@ -531,7 +531,7 @@ fn enemies_lossless() {
     if !has("data/enemies.json") {
         return;
     }
-    // PV initiaux comme 0x4548 : type 3, difficulté normale, 2 joueurs, rang 5
+    // initial HP like 0x4548: type 3, normal difficulty, 2 players, rank 5
     let f = DataFile::load(&assets().join("data/enemies.json")).unwrap();
     let hp = f.table("hp_enemy").unwrap();
     let (rom, _) = program();
@@ -569,7 +569,7 @@ fn natives_lossless() {
     check_data("data/natives.json");
 }
 
-/// Tables du DSP QSound : les mots de `qsound_dsp.json` sont ceux de `dl-1425.bin`.
+/// QSound DSP tables: the words of `qsound_dsp.json` are those of `dl-1425.bin`.
 #[test]
 fn dsp_lossless() {
     if !has("sound/qsound_dsp.json") {
@@ -584,16 +584,16 @@ fn dsp_lossless() {
     }
 }
 
-/// Région du Z80 reconstruite : chaque octet écrit vaut celui des ROMs `dd2.01`/`dd2.02`, sans conflit.
+/// Rebuilt Z80 region: each written byte equals that of the `dd2.01`/`dd2.02` ROMs, without conflict.
 #[test]
 fn audio_region_lossless() {
     if !has("sound/music.json") {
         return;
     }
     let img = ddsom_assets::rebuild::audio_region(&assets()).unwrap();
-    assert!(img.conflicts.is_empty(), "écritures contradictoires : {:x?}", &img.conflicts[..img.conflicts.len().min(8)]);
+    assert!(img.conflicts.is_empty(), "contradictory writes: {:x?}", &img.conflicts[..img.conflicts.len().min(8)]);
     let rom = ddsom_sound::Rom::load(&roms()).unwrap();
     let region = rom.region();
     let first = ddsom_assets::rebuild::first_difference(&img, region);
-    assert!(first.is_none(), "région du Z80 : différence en {:#x}", first.unwrap());
+    assert!(first.is_none(), "Z80 region: difference at {:#x}", first.unwrap());
 }

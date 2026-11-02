@@ -1,5 +1,5 @@
-//! Sortie audio : PulseAudio sous Linux, waveOut sous Windows (bibliothèques chargées dynamiquement : aucune
-//! dépendance de compilation). Un fil dédié écrit les échantillons ; sans sortie, le jeu tourne sans son.
+//! Audio output: PulseAudio under Linux, waveOut under Windows (libraries loaded dynamically: no
+//! build dependency). A dedicated thread writes the samples; without output, the game runs without sound.
 
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 
@@ -8,7 +8,7 @@ pub struct Audio {
 }
 
 impl Audio {
-    /// Ouvre un flux stéréo 16 bits à `rate` Hz. None sans sortie audio.
+    /// Opens a 16-bit stereo stream at `rate` Hz. None without audio output.
     pub fn open(rate: u32) -> Option<Self> {
         let (tx, rx) = sync_channel::<Vec<i16>>(8);
         let (ok_tx, ok_rx) = sync_channel::<bool>(1);
@@ -16,7 +16,7 @@ impl Audio {
         if ok_rx.recv().unwrap_or(false) { Some(Audio { tx }) } else { None }
     }
 
-    /// Envoie un bloc d'échantillons entrelacés ; abandonné si le tampon est plein (retard).
+    /// Sends a block of interleaved samples; dropped if the buffer is full (lag).
     pub fn push(&self, samples: Vec<i16>) {
         match self.tx.try_send(samples) {
             Ok(()) | Err(TrySendError::Full(_)) => {}
@@ -51,7 +51,7 @@ mod exit {
     type WriteFn = unsafe extern "C" fn(s: *mut c_void, data: *const c_void, bytes: usize, error: *mut c_int) -> c_int;
 
     pub fn audio_thread(rate: u32, rx: Receiver<Vec<i16>>, ok: SyncSender<bool>) {
-        // SAFETY : signatures conformes à <pulse/simple.h> ; la bibliothèque reste chargée tout le fil.
+        // SAFETY: signatures match <pulse/simple.h>; the library stays loaded for the whole thread.
         unsafe {
             let Ok(lib) = libloading::Library::new("libpulse-simple.so.0") else {
                 let _ = ok.send(false);
@@ -112,12 +112,12 @@ mod exit {
     type OpenFn = unsafe extern "system" fn(*mut *mut c_void, u32, *const WaveFormat, usize, usize, u32) -> u32;
     type HdrFn = unsafe extern "system" fn(*mut c_void, *mut WaveHdr, u32) -> u32;
 
-    /// Blocs en file dans le périphérique (un par image, environ 17 ms chacun).
+    /// Blocks queued in the device (one per frame, about 17 ms each).
     const BLOCKS: usize = 4;
 
     pub fn audio_thread(rate: u32, rx: Receiver<Vec<i16>>, ok: SyncSender<bool>) {
-        // SAFETY : signatures conformes à <mmeapi.h> ; la bibliothèque reste chargée tout le fil, et chaque en-tête
-        // et ses échantillons restent en place tant que le périphérique ne l'a pas rendu (WHDR_DONE).
+        // SAFETY: signatures match <mmeapi.h>; the library stays loaded for the whole thread, and each header
+        // and its samples stay in place until the device has given it back (WHDR_DONE).
         unsafe {
             let Ok(lib) = libloading::Library::new("winmm.dll") else {
                 let _ = ok.send(false);

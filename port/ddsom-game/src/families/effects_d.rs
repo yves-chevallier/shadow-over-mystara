@@ -1,12 +1,12 @@
-//! Famille EFFCT, type 31 (`0xb1a98`) : écrans de fin de scène et de décompte, dix variantes.
+//! EFFCT family, type 31 (`0xb1a98`): end-of-scene and countdown screens, ten variants.
 //!
-//! - 0 : pièce projetée par un coffre (vole, retombe, attend la fin de la séquence) ;
-//! - 2 : icône de récompense qui, à la fin de la séquence, devient l'objet ramassé (`0xe24d8`) ;
-//! - 3 : rang affiché ; 4 : plaque ; 5 : ligne de résultat d'un joueur, qui se dessine dans le fond 2
-//!   quand elle arrive à l'écran ; 6 : compteurs sur trois chiffres ; 8 : ligne par joueur ;
-//! - 7 : personnage de l'écran de fin qui marche vers sa place, saute, se retourne ;
-//! - 1 : trophée du tableau de fin, qui attend le signal de son contrôleur, s'anime après un délai tiré
-//!   au hasard puis se décompte auprès du contrôleur ; 9 : enseigne posée sur la caméra alternative.
+//! - 0: coin thrown by a chest (flies, falls back, waits for the end of the sequence);
+//! - 2: reward icon that, at the end of the sequence, becomes the picked-up object (`0xe24d8`);
+//! - 3: displayed rank; 4: plate; 5: result row of a player, drawn in background 2
+//!   when it reaches the screen; 6: three-digit counters; 8: row per player;
+//! - 7: character of the end screen that walks to its place, jumps, turns around;
+//! - 1: trophy of the end board, which waits for the signal of its controller, animates after a randomly drawn delay
+//!   then counts itself down with the controller; 9: sign placed on the alternate camera.
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -25,10 +25,10 @@ mod f {
     pub const HIDDEN: u32 = 0x40;
     pub const FACING: u32 = 0x2c;
     pub const MODE: u32 = 0x2f;
-    /// Valeur affichée (variantes 3, 5, 9) ou rang du personnage (variante 7).
+    /// Displayed value (variants 3, 5, 9) or rank of the character (variant 7).
     pub const VALUE: u32 = 0x42;
     pub const SHOWN: u32 = 0x43;
-    /// Contrôleur de la séquence (long) : son octet `+8` donne l'étape (2 : fin ; négatif : suspendu).
+    /// Sequence controller (long): its byte `+8` gives the step (2: end; negative: suspended).
     pub const SEQUENCE: u32 = 0x4c;
 }
 
@@ -42,7 +42,7 @@ fn random<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     x.random() as u32
 }
 
-/// État 4 (`0xb2916`) : passe à 6 et libère ; état 6 : libère.
+/// State 4 (`0xb2916`): goes to 6 and releases; state 6: releases.
 fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::STATE) == 4 {
         x.add8(f::STATE, 2);
@@ -88,17 +88,17 @@ fn countdown_screen<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin depuis l'état actif (`0xb2916` : `addq.b #2` puis libération).
+/// End from the active state (`0xb2916`: `addq.b #2` then release).
 fn finish_from_active<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     free(x)
 }
 
 // ---------------------------------------------------------------------------------------------
-// variante 0 : pièce projetée
+// variant 0: thrown coin
 // ---------------------------------------------------------------------------------------------
 
-/// Vitesses (vx, vz, az) par tirage (8 entrées de 8 octets, espace programme) et animations.
+/// Speeds (vx, vz, az) per draw (8 entries of 8 bytes, program space) and animations.
 const COIN_SPEEDS: u32 = 0xb1b76;
 const COIN_ANIMS: u32 = 0xb1b66;
 
@@ -146,30 +146,30 @@ fn coin_active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(Obj::Z) >= crate::ram::CAMERA_Y.get(x.b) {
         return x.reinsert();
     }
-    // sortie par le bas de l'écran
+    // exit through the bottom of the screen
     x.add8(f::STATE, 2);
     x.set8(f::HIDDEN, 1);
 }
 
 // ---------------------------------------------------------------------------------------------
-// variante 1 : trophée du tableau de fin
+// variant 1: trophy of the end board
 // ---------------------------------------------------------------------------------------------
 
 mod trophy {
-    /// Contrôleur du tableau (pointeur de 16 bits) : `+0x30` = phase (1 : s'animer, 2 : fin),
-    /// `+0x31` = trophées qui ne se sont pas encore animés.
+    /// Board controller (16-bit pointer): `+0x30` = phase (1: animate, 2: end), `+0x31` = trophies that have not
+    /// animated yet.
     pub const CONTROLLER: u32 = 0x5c;
     pub const PHASE: u32 = 0x30;
     pub const PENDING: u32 = 0x31;
-    /// Objet dont la variante choisit l'animation (pointeur négatif), sinon `+0x50` est le rang lui-même.
+    /// Object whose variant chooses the animation (negative pointer), otherwise `+0x50` is the rank itself.
     pub const SOURCE: u32 = 0x50;
-    /// Places (x, profondeur, orientation : 8 octets) par mode `+0x2f`, décalées de 6 places pour
-    /// un contrôleur de variante 11 (données).
+    /// Places (x, depth, orientation: 8 bytes) per mode `+0x2f`, shifted by 6 places for a controller of variant 11
+    /// (data).
     pub const PLACES: u32 = 0xb1cb4;
-    /// Délais avant l'animation, tirés au hasard (octets, espace programme).
+    /// Delays before the animation, drawn at random (bytes, program space).
     pub const DELAYS: u32 = 0xb1d4e;
     pub const DELAY: u32 = 0x42;
-    /// Décor créé quand il ne reste que cinq trophées, et qui doit avoir fini (`+0x22`).
+    /// Scenery created when only five trophies remain, and which must have finished (`+0x22`).
     pub const SCENERY: u32 = 0x58;
     pub const SCENERY_KIND: u32 = 0x1d;
 }
@@ -247,10 +247,10 @@ fn trophy_active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// variante 9 : enseigne posée sur la caméra alternative
+// variant 9: sign placed on the alternate camera
 // ---------------------------------------------------------------------------------------------
 
-/// Hauteurs par valeur `+0x42` (mots, espace programme).
+/// Heights per value `+0x42` (words, program space).
 const SIGN_HEIGHTS: u32 = 0xb2908;
 
 fn sign_init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -268,14 +268,14 @@ fn sign_init<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// variante 2 : icône de récompense
+// variant 2: reward icon
 // ---------------------------------------------------------------------------------------------
 
-/// Animations de base par mode `+0x2f` (mots, données) dans le jeu 0x190ba8.
+/// Base animations per mode `+0x2f` (words, data) in set 0x190ba8.
 const REWARD_ANIMS: u32 = 0xb1c9a;
 const REWARD_SET: u32 = 0x190ba8;
 
-/// 0xb24b6 : animation de base du mode + `n`.
+/// 0xb24b6: base animation of the mode + `n`.
 fn reward_anim<R: Bench>(x: &mut Cx<'_, R>, n: u16) {
     let mode = x.u8(f::MODE) as u32;
     let base = x.data16(REWARD_ANIMS + 2 * mode);
@@ -294,7 +294,7 @@ fn reward_active<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     reward_anim(x, 0xe);
-    // devient pour un instant l'objet (type `+0x42`, variante `+0x2f`) le temps de l'effet de ramassage
+    // becomes for an instant the object (type `+0x42`, variant `+0x2f`) for the duration of the pickup effect
     let variant = x.u8(f::VARIANT);
     let (mode, kind) = (x.u8(f::MODE), x.u8(f::VALUE));
     x.set8(f::VARIANT, mode);
@@ -307,7 +307,7 @@ fn reward_active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// variantes 3, 4, 6, 8 : rang, plaque, compteurs, lignes des joueurs
+// variants 3, 4, 6, 8: rank, plate, counters, player rows
 // ---------------------------------------------------------------------------------------------
 
 fn at_camera<R: Bench>(x: &mut Cx<'_, R>, cx: u32, cy: u32) {
@@ -352,13 +352,13 @@ fn plate_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Compteurs de la scène (deux octets à `A5-0x5b21`) et leurs places dans le fond 2.
+/// Scene counters (two bytes at `A5-0x5b21`) and their places in background 2.
 const COUNTERS: u32 = 0xff24df;
 const COUNTER_TILES: [u32; 2] = [0x910f6c, 0x910f74];
-/// Tuiles des chiffres (mots, espace programme).
+/// Digit tiles (words, program space).
 const DIGIT_TILES: u32 = 0xb2334;
 
-/// 0xb2348 : valeur binaire (< 1000) en BCD sur trois chiffres.
+/// 0xb2348: binary value (< 1000) in BCD on three digits.
 fn to_bcd(value: u16) -> u16 {
     let (mut rest, mut bcd) = (value, 0u16);
     loop {
@@ -379,8 +379,8 @@ fn to_bcd(value: u16) -> u16 {
     rest.wrapping_add(10).wrapping_add(bcd)
 }
 
-/// 0xb230e : bloc de 2 × 2 tuiles (`tile`, `tile + 0x10` ; rangée suivante `tile + 1`...), puis la rangée
-/// d'après. Renvoie la tuile suivante (`tile + 2`) et la nouvelle adresse.
+/// 0xb230e: block of 2 × 2 tiles (`tile`, `tile + 0x10`; next row `tile + 1`...), then the following row. Returns the
+/// next tile (`tile + 2`) and the new address.
 fn draw_block<R: Bench>(x: &mut Cx<'_, R>, at: &mut u32, tile: u16, attr: u16) -> u16 {
     let mut t = tile;
     for _ in 0..2 {
@@ -394,7 +394,7 @@ fn draw_block<R: Bench>(x: &mut Cx<'_, R>, at: &mut u32, tile: u16, attr: u16) -
     t
 }
 
-/// 0xb22d0 : nombre BCD de trois chiffres en gros chiffres (zéros de tête effacés).
+/// 0xb22d0: three-digit BCD number in big digits (leading zeros erased).
 fn draw_big_number<R: Bench>(x: &mut Cx<'_, R>, mut at: u32, bcd: u16) {
     let mut shown = false;
     for i in 0..4 {
@@ -462,31 +462,30 @@ fn player_line_init<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// variante 5 : ligne de résultat d'un joueur
+// variant 5: result row of a player
 // ---------------------------------------------------------------------------------------------
 
 mod line {
-    /// Décalage vertical par rang (mots, espace programme).
+    /// Vertical offset per rank (words, program space).
     pub const OFFSETS: u32 = 0xb1f6a;
-    /// Place dans le fond 2 (décalage depuis 0x912000) par rang, espace programme.
+    /// Place in background 2 (offset from 0x912000) per rank, program space.
     pub const PLACES: u32 = 0xb1fa8;
     pub const LAYER: u32 = 0x912000;
-    /// Portrait : palettes de 8 longs par personnage (0x25c4c0), vers la palette 0x91c600 + 32 × joueur.
+    /// Portrait: palettes of 8 longs per character (0x25c4c0), to palette 0x91c600 + 32 × player.
     pub const PORTRAITS: u32 = 0x25c4c0;
     pub const PALETTES: u32 = 0x91c600;
-    /// Première tuile du portrait par personnage (mots, espace programme).
+    /// First tile of the portrait per character (words, program space).
     pub const PORTRAIT_TILES: u32 = 0xb1fe0;
-    /// Attribut du numéro et du nom par joueur (octets, espace programme).
+    /// Attribute of the number and of the name per player (bytes, program space).
     pub const NUMBER_ATTRS: u32 = 0xb21d4;
     pub const NAME_ATTRS: u32 = 0xb20b4;
-    /// Noms des personnages (pointeurs longs par paire de classes, espace programme ; chaînes terminées
-    /// par 0x40, données).
+    /// Character names (long pointers per pair of classes, program space; strings terminated by 0x40, data).
     pub const NAMES: u32 = 0xb20e8;
-    /// Petits chiffres (mots, espace programme) ; texte qui suit le score (données).
+    /// Small digits (words, program space); text that follows the score (data).
     pub const SMALL_DIGITS: u32 = 0xb2240;
     pub const SCORE_SUFFIX: u32 = 0xb21d0;
-    /// Gros caractères du titre (mots, données), titres par défaut (8 octets par personnage, + 0x60
-    /// avec `A5+0x70`), titres spéciaux (codes 0xf9 à 0xfe).
+    /// Big title characters (words, data), default titles (8 bytes per character, + 0x60 with `A5+0x70`), special
+    /// titles (codes 0xf9 to 0xfe).
     pub const GLYPHS: u32 = 0xb2920;
     pub const DEFAULT_TITLES: u32 = 0xb2a30;
     pub const SPECIAL_TITLES: u32 = 0xb2a24;
@@ -508,7 +507,7 @@ fn line_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// La ligne (montante) atteint le haut de la caméra : elle se dessine une fois dans le fond 2.
+/// The (rising) row reaches the top of the camera: it is drawn once in background 2.
 fn line_active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB_STATE) != 0 || (x.u16(Obj::Z) as i16) < (crate::ram::CAMERA_ALT_Y.get(x.b) as i16) {
         return;
@@ -527,8 +526,8 @@ fn line_active<R: Bench>(x: &mut Cx<'_, R>) {
     d.title(x, base + 0x408);
 }
 
-/// Dessin d'une ligne : la fiche du joueur (`+0x4c`) et l'attribut courant (D1 de l'original), qui
-/// passe d'un élément au suivant.
+/// Drawing of a row: the player's sheet (`+0x4c`) and the current attribute (D1 of the original), which passes from one
+/// element to the next.
 struct LineDraw {
     record: u32,
     attr: u16,
@@ -540,7 +539,7 @@ impl LineDraw {
         rd8(x.b, self.record + 0xc)
     }
 
-    /// 0xb222e : paire de tuiles `tile`, `tile + 0x10`, puis rangée suivante.
+    /// 0xb222e: tile pair `tile`, `tile + 0x10`, then next row.
     fn pair<R: Bench>(&self, x: &mut Cx<'_, R>, at: &mut u32, tile: u16) {
         wr16(x.b, *at, tile);
         wr16(x.b, *at + 2, self.attr);
@@ -549,7 +548,7 @@ impl LineDraw {
         *at += 0x80;
     }
 
-    /// 0xb2212 : petit chiffre (zéros de tête effacés tant que `shown` est faux).
+    /// 0xb2212: small digit (leading zeros erased as long as `shown` is false).
     fn digit<R: Bench>(&mut self, x: &mut Cx<'_, R>, at: &mut u32, digit: u16) {
         let digit = digit & 0xf;
         if digit == 0 && !self.shown {
@@ -561,7 +560,7 @@ impl LineDraw {
         self.pair(x, at, tile);
     }
 
-    /// 0xb20d2 : chaîne de tuiles (une par octet) terminée par 0x40, une colonne par caractère.
+    /// 0xb20d2: tile string (one per byte) terminated by 0x40, one column per character.
     fn text<R: Bench>(&self, x: &mut Cx<'_, R>, at: &mut u32, mut s: u32) {
         loop {
             let c = x.data8(s);
@@ -575,7 +574,7 @@ impl LineDraw {
         }
     }
 
-    /// 0xb1ff8 : portrait (palette recopiée, puis 4 colonnes de 2 tuiles).
+    /// 0xb1ff8: portrait (palette copied, then 4 columns of 2 tiles).
     fn portrait<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let class = self.class(x) as u32;
         let mode = x.u8(f::MODE) as u32;
@@ -593,7 +592,7 @@ impl LineDraw {
         }
     }
 
-    /// 0xb21d8 : numéro du joueur (petit chiffre) et une tuile fixe.
+    /// 0xb21d8: player number (small digit) and a fixed tile.
     fn number<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let mode = x.u8(f::MODE);
         self.attr = x.rom8(line::NUMBER_ATTRS + mode as u32) as u16;
@@ -602,7 +601,7 @@ impl LineDraw {
         self.pair(x, &mut at, 0x211);
     }
 
-    /// 0xb2078 : niveau du joueur (deux chiffres) après deux tuiles fixes.
+    /// 0xb2078: player level (two digits) after two fixed tiles.
     fn level<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         for tile in [0x4c, 0x5f] {
             wr16(x.b, at, tile);
@@ -617,7 +616,7 @@ impl LineDraw {
         }
     }
 
-    /// 0xb20b8 : nom du personnage.
+    /// 0xb20b8: character name.
     fn name<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let mode = x.u8(f::MODE) as u32;
         self.attr = x.rom8(line::NAME_ATTRS + mode) as u16;
@@ -627,7 +626,7 @@ impl LineDraw {
         self.text(x, &mut at, s);
     }
 
-    /// 0xb219e : trois tuiles fixes, le score (huit chiffres BCD), puis le texte qui suit.
+    /// 0xb219e: three fixed tiles, the score (eight BCD digits), then the text that follows.
     fn score<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         for tile in [0x1f6, 0x219, 0x211] {
             self.pair(x, &mut at, tile);
@@ -642,8 +641,8 @@ impl LineDraw {
         self.text(x, &mut at, line::SCORE_SUFFIX);
     }
 
-    /// 0xb212c : titre en gros caractères ; 0xff : titre par défaut du personnage recopié dans la fiche ;
-    /// 0xf9 à 0xfe : titre spécial de six caractères consécutifs.
+    /// 0xb212c: title in big characters; 0xff: default title of the character copied into the sheet; 0xf9 to 0xfe:
+    /// special title of six consecutive characters.
     fn title<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let mut p = self.record;
         if rd8(x.b, p) == 0xff {
@@ -677,17 +676,16 @@ impl LineDraw {
 }
 
 // ---------------------------------------------------------------------------------------------
-// variante 7 : personnage de l'écran de fin
+// variant 7: character of the end screen
 // ---------------------------------------------------------------------------------------------
 
 mod walker {
-    /// Fiches de 12 octets par rang : x, z, y, cible x, cible y (mots) et premier sous-état (octet),
-    /// espace programme.
+    /// Sheets of 12 bytes per rank: x, z, y, target x, target y (words) and first substate (byte), program space.
     pub const PLACES: u32 = 0xb2432;
     pub const TARGET_X: u32 = 0x50;
     pub const TARGET_Y: u32 = 0x52;
-    /// Objet que le personnage prévient en partant (pointeur de 16 bits), dont `+0x23` compte les
-    /// personnages encore en route.
+    /// Object that the character notifies when leaving (16-bit pointer), whose `+0x23` counts the characters still on
+    /// their way.
     pub const WAITER: u32 = 0x46;
     pub const WALK_SPEEDS: u32 = 0x1c75b6;
     pub const RUN_SPEEDS: u32 = 0x1c7eb6;
@@ -731,7 +729,7 @@ fn walker_facing_target<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     }
 }
 
-/// 0xb27aa : demi-tour, puis retour au sous-état courant.
+/// 0xb27aa: about-turn, then return to the current substate.
 fn walker_start_turn<R: Bench>(x: &mut Cx<'_, R>) {
     let sub = x.u8(f::SUB_STATE);
     x.set8(f::SUB_STEP, sub);
@@ -754,7 +752,7 @@ fn walker_wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// Un pas vers la cible (direction 0x137e, table de vitesses courante).
+/// One step toward the target (direction 0x137e, current speed table).
 fn walker_move<R: Bench>(x: &mut Cx<'_, R>) {
     let (tx, ty) = (x.u16(walker::TARGET_X), x.u16(walker::TARGET_Y));
     let direction = crate::aids::direction_from(x.b, x.o, (tx, ty));
@@ -762,7 +760,7 @@ fn walker_move<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
-/// La cible est atteinte à 8 près sur l'axe `off`.
+/// The target is reached within 8 on the axis `off`.
 fn walker_near<R: Bench>(x: &mut Cx<'_, R>, off: u32, target: u32) -> bool {
     x.u16(off).wrapping_sub(x.u16(target)).wrapping_add(8) <= 0x10
 }

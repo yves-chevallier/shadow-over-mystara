@@ -1,8 +1,8 @@
-//! Exploration du pilote Z80 : couverture des instructions exécutées et journal d'événements.
+//! Exploration of the Z80 driver: coverage of executed instructions and event log.
 //!
-//! sound_explore <roms> <eeprom> <scenario> <images> <sortie>
-//! Produit <sortie>.cov (octets 0/1 par adresse Z80 0-0x7FFF, un octet = instruction exécutée)
-//! et <sortie>.log (texte : événements du Z80 regroupés par interruption).
+//! sound_explore <roms> <eeprom> <scenario> <frames> <output>
+//! Produces <output>.cov (0/1 bytes per Z80 address 0-0x7FFF, one byte = instruction executed)
+//! and <output>.log (text: Z80 events grouped by interrupt).
 
 use cps2::sound::Event;
 use std::cell::RefCell;
@@ -13,13 +13,13 @@ use std::rc::Rc;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames, out] = &a[..] else {
-        eprintln!("usage : sound_explore <roms> <eeprom> <scenario> <images> <sortie>");
+        eprintln!("usage: sound_explore <roms> <eeprom> <scenario> <frames> <output>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_rc::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
 
     let cov = Rc::new(RefCell::new(vec![0u8; 0x10000]));
@@ -45,7 +45,7 @@ fn main() {
             match e {
                 Event::Irq => {
                     irq += 1;
-                    let _ = writeln!(log, "IRQ {irq} image {f}");
+                    let _ = writeln!(log, "IRQ {irq} frame {f}");
                 }
                 Event::Read(a, v) => {
                     if last_read == Some((a, v)) {

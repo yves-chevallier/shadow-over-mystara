@@ -1,4 +1,4 @@
-//! Carte mémoire du 68000 CPS2 (cps2_state::cps2_map de MAME).
+//! CPS2 68000 memory map (MAME's cps2_state::cps2_map).
 
 use std::sync::Arc;
 
@@ -6,12 +6,12 @@ use m68k::decode::Fetch;
 
 use crate::eeprom::Eeprom93c46;
 
-/// Entrées du panneau (actives à 0, comme sur le matériel).
+/// Panel inputs (active low, as on the hardware).
 #[derive(Clone, Copy, Debug)]
 pub struct Inputs {
     pub in0: u16,
     pub in1: u16,
-    /// Bits 1..15 de IN2 (le bit 0 vient de l'EEPROM).
+    /// Bits 1..15 of IN2 (bit 0 comes from the EEPROM).
     pub in2: u16,
 }
 
@@ -21,8 +21,8 @@ impl Default for Inputs {
     }
 }
 
-/// État d'un jeu porté gardé hors de la RAM émulée (par exemple la table des tâches en Rust de ddsom) : opaque pour
-/// la machine, copié avec le bus.
+/// State of a ported game kept outside the emulated RAM (for example ddsom's Rust task table): opaque to
+/// the machine, copied with the bus.
 pub trait Extension: std::any::Any + Send {
     fn clone_box(&self) -> Box<dyn Extension>;
     fn as_any(&self) -> &dyn std::any::Any;
@@ -49,9 +49,9 @@ impl Clone for Box<dyn Extension> {
 
 #[derive(Clone)]
 pub struct Cps2Bus {
-    /// ROM programme, vue données (en clair), mots big-endian. Partagée entre copies du bus.
+    /// Program ROM, data view (plain), big-endian words. Shared between bus copies.
     pub rom: Arc<Vec<u16>>,
-    /// ROM programme, vue espace programme (opcodes et lectures relatives au PC déchiffrés).
+    /// Program ROM, program-space view (decrypted opcodes and PC-relative reads).
     pub rom_dec: Arc<Vec<u16>>,
     pub ram: Vec<u16>,       // FF0000-FFFFFF
     pub extra_ram: Vec<u16>, // 660000-664001
@@ -61,29 +61,29 @@ pub struct Cps2Bus {
     pub output: [u16; 6], // 400000-40000B
     pub cps_a: [u16; 32],
     pub cps_b: [u16; 32],
-    /// RAM partagée avec le Z80 (C000-CFFF côté Z80), un octet par mot côté 68000.
+    /// RAM shared with the Z80 (C000-CFFF on the Z80 side), one byte per word on the 68000 side.
     pub qram: Vec<u8>,
     pub eeprom: Eeprom93c46,
     pub eeprom_out: u16,
     pub inputs: Inputs,
-    /// Palette copiée à l'écriture du registre CPS-A 0x0a (6 pages de 0x200 mots).
+    /// Palette copied on write to CPS-A register 0x0a (6 pages of 0x200 words).
     pub palette: Vec<u16>,
-    /// Ligne vblank/raster IRQ demandée (niveau 68000), effacée à l'acquittement.
+    /// Requested vblank/raster IRQ line (68000 level), cleared on acknowledge.
     pub irq_vblank: bool,
     pub irq_raster: bool,
     /// Compteurs raster CPS-B (registres 0x0e/0x10/0x12).
     pub raster_counter: [u16; 3],
     pub raster_reload: [u16; 3],
-    /// Ligne courante (pour la lecture des compteurs raster).
+    /// Current line (for reading the raster counters).
     pub scanline: u32,
-    /// Image en cours depuis la mise sous tension (`Machine::frame`) : avec `scanline`, position du faisceau.
+    /// Frame in progress since power-on (`Machine::frame`): with `scanline`, the beam position.
     pub frame: u64,
-    /// Le Z80 est maintenu en reset tant que le bit 3 de 804041 vaut 0.
+    /// The Z80 is held in reset while bit 3 of 804041 is 0.
     pub z80_running: bool,
-    /// Premier cycle CPU où une interruption peut être levée (fin d'image, ou fin de ligne si les
-    /// compteurs raster sont armés). Un traitement atomique qui s'achève avant reste exact.
+    /// First CPU cycle at which an interrupt can be raised (end of frame, or end of line if the
+    /// raster counters are armed). An atomic operation that completes before it remains exact.
     pub irq_horizon: u64,
-    /// État du jeu porté hors de la RAM émulée (voir [`Extension`]).
+    /// State of the game ported outside the emulated RAM (see [`Extension`]).
     pub ext: Option<Box<dyn Extension>>,
 }
 
@@ -111,14 +111,14 @@ impl Cps2Bus {
             raster_reload: [0x1ff, 0x1ff, 0],
             scanline: 0,
             frame: 0,
-            // le Z80 démarre à la mise sous tension ; le 68000 le met en reset au boot
+            // the Z80 starts at power-on; the 68000 puts it in reset at boot
             z80_running: true,
             irq_horizon: 0,
             ext: None,
         }
     }
 
-    /// Niveau d'interruption présenté au 68000 (IPL1 = vblank -> 2, IPL2 = raster -> 4, les deux -> 6).
+    /// Interrupt level presented to the 68000 (IPL1 = vblank -> 2, IPL2 = raster -> 4, both -> 6).
     pub fn irq_level(&self) -> u8 {
         (self.irq_vblank as u8) * 2 + (self.irq_raster as u8) * 4
     }
@@ -127,7 +127,7 @@ impl Cps2Bus {
         let base = ((self.cps_a[0x0a / 2] as usize * 256) & !0x3ff) & 0x3ffff;
         let n = self.gfxram.len();
         let start = base / 2 % n;
-        // copie en deux tranches si la palette déborde de la fin de la GFX RAM (adressage circulaire)
+        // copy in two slices if the palette overflows the end of the GFX RAM (circular addressing)
         let len = self.palette.len();
         let first = len.min(n - start);
         self.palette[..first].copy_from_slice(&self.gfxram[start..start + first]);
@@ -155,17 +155,17 @@ impl Cps2Bus {
             0x804000..=0x804001 => self.inputs.in0,
             0x804010..=0x804011 => self.inputs.in1,
             0x804020..=0x804021 => (self.inputs.in2 & !1) | self.eeprom.do_read() as u16,
-            0x804030..=0x804031 => 0xe021, // volume numérique au maximum, pas de RAM additionnelle
-            0x8040b0..=0x8040b3 => 0xffff, // DIP (cartes de développement seulement)
+            0x804030..=0x804031 => 0xe021, // digital volume at maximum, no additional RAM
+            0x8040b0..=0x8040b3 => 0xffff, // DIP (development boards only)
             0x900000..=0x92ffff => self.gfxram[((a - 0x900000) >> 1) as usize],
             0xff0000..=0xffffff => self.ram[((a - 0xff0000) >> 1) as usize],
-            _ => 0, // non mappé
+            _ => 0, // unmapped
         }
     }
 
     fn cps_b_read(&self, off: usize) -> u16 {
         match off {
-            // multiplicateur matériel (CPS_B_21_DEF : facteurs 0x00/0x02, résultat 0x04/0x06)
+            // hardware multiplier (CPS_B_21_DEF: factors 0x00/0x02, result 0x04/0x06)
             2 => (self.cps_b[0] as u32 * self.cps_b[1] as u32) as u16,
             3 => ((self.cps_b[0] as u32 * self.cps_b[1] as u32) >> 16) as u16,
             7 => ((self.raster_counter[2] << 1) & 0x1fe) | (self.cps_b[7] & 1),
@@ -189,7 +189,7 @@ impl Cps2Bus {
         }
     }
 
-    /// Écriture d'un mot avec masque d'octets (COMBINE_DATA).
+    /// Writes a word with a byte mask (COMBINE_DATA).
     fn write_word(&mut self, a: u32, v: u16, mask: u16) {
         let comb = |old: u16| (old & !mask) | (v & mask);
         match a {
@@ -284,19 +284,19 @@ impl m68k::Bus for Cps2Bus {
         self.write_word(a & !1, v, 0xffff);
     }
     fn irq_ack(&mut self, _level: u8) {
-        // l'acquittement efface IPL1 et IPL2 (cps_state::irqack_r)
+        // the acknowledge clears IPL1 and IPL2 (cps_state::irqack_r)
         self.irq_vblank = false;
         self.irq_raster = false;
     }
 }
 
-/// Lectures de la ROM programme par le code Rust : mots lus, par vue (données, programme). Les lectures des
-/// instructions 68000 (`m68k::IN_STEP`) ne sont pas comptées. Activé par la fonctionnalité `rom-trace`.
+/// Program ROM reads by the Rust code: words read, per view (data, program). Reads of the
+/// 68000 instructions (`m68k::IN_STEP`) are not counted. Enabled by the `rom-trace` feature.
 #[cfg(feature = "rom-trace")]
 pub mod rom_trace {
     use std::cell::RefCell;
 
-    /// Nombre de lectures de chaque mot de 0x000000 à 0x3fffff : `[données, program]`.
+    /// Number of reads of each word from 0x000000 to 0x3fffff: `[data, program]`.
     pub struct Reads(pub [Vec<u32>; 2]);
 
     thread_local! {
@@ -307,7 +307,7 @@ pub mod rom_trace {
         static HOOK: std::cell::Cell<Option<fn(bool, u32)>> = const { std::cell::Cell::new(None) };
     }
 
-    /// `hook(program, address)` est appelé à la première lecture de chaque mot (pour en chercher l'origine).
+    /// `hook(program, address)` is called on the first read of each word (to find its origin).
     pub fn set_hook(hook: fn(bool, u32)) {
         HOOK.set(Some(hook));
     }
@@ -327,7 +327,7 @@ pub mod rom_trace {
         }
     }
 
-    /// Compteurs actuels (remis à zéro).
+    /// Current counters (reset to zero).
     pub fn take() -> Reads {
         READS.with(|r| std::mem::replace(&mut *r.borrow_mut(), Reads([vec![0; 0x200000], vec![0; 0x200000]])))
     }

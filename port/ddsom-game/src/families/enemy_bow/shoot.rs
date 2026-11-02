@@ -1,5 +1,5 @@
-//! Type 3, sous-états 4 (tirs, `+6` = 0 premier geste choisi dans la rangée de difficulté, 2 second geste, 4 fuite
-//! d'arrivée) et 6 (pas de côté et sauts).
+//! Type 3, substates 4 (shots, `+6` = 0 first move chosen from the difficulty row, 2 second move, 4 arrival escape) and
+//! 6 (side steps and jumps).
 
 use crate::families::cx::Bench;
 use super::stance::stance_begin;
@@ -9,7 +9,7 @@ use crate::objects::Obj;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.in_arena(8) {
-        // hors de l'écran : il revient par l'arrivée de la variante 2
+        // off screen: it comes back through the arrival of variant 2
         set_state_long(x, 0x0200_0000);
         return arrival::walk_in(x, 0x20, 0x17);
     }
@@ -26,7 +26,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5c8aa : le demi-tour du sous-état 12.
+/// 0x5c8aa: the turn-around of substate 12.
 fn turn_to_resume<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     mv(x, 3);
@@ -93,7 +93,7 @@ fn first<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5c37a : au tirage, un tir sur place, sinon rapprochement (type de tir 4).
+/// 0x5c37a: on a draw, a shot in place, otherwise closing in (shot type 4).
 fn shoot_or_approach<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 2);
     if shoot_roll(x) {
@@ -103,7 +103,7 @@ fn shoot_or_approach<R: Bench>(x: &mut Cx<'_, R>) {
     approach_target(x);
 }
 
-/// 0x5c44e : un tir sur place : nombre de tirs tiré dans la rangée, puis animation de tir.
+/// 0x5c44e: a shot in place: number of shots drawn from the row, then shot animation.
 fn aim_again<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     let n = row_byte(x, SHOT_REPEATS);
@@ -111,13 +111,13 @@ fn aim_again<R: Bench>(x: &mut Cx<'_, R>) {
     reload_shot(x);
 }
 
-/// 0x5c472 : l'animation de tir (0 ou 5 selon le profil `+0x2f`).
+/// 0x5c472: the shot animation (0 or 5 according to profile `+0x2f`).
 fn reload_shot<R: Bench>(x: &mut Cx<'_, R>) {
     let anim = if x.u8(GROUP) != 0 { 5 } else { 0 };
     shot(x, anim);
 }
 
-/// 0x5c418 : s'oriente vers la cible vivante, ou se met en attente si elle est tombée.
+/// 0x5c418: faces the living target, or goes to wait if it has fallen.
 fn approach_target<R: Bench>(x: &mut Cx<'_, R>) {
     let target = load_target(x);
     if target.u8(x.b, 0) == 0 {
@@ -130,7 +130,7 @@ fn approach_target<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 2);
 }
 
-/// +7 = 4 : la flèche part à la clé d'animation ; à la fin de l'animation, un tir de moins.
+/// +7 = 4: the arrow leaves at the animation key; at the end of the animation, one shot fewer.
 fn fire_loop<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.anim_step() {
         if x.u8(f::KEY_FRAME) != 0 {
@@ -147,7 +147,7 @@ fn fire_loop<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, 0x0208_0000);
 }
 
-/// +7 = 6 : pas de côté vers la profondeur de la cible, puis nouvelle visée.
+/// +7 = 6: side step toward the target's depth, then aims again.
 fn side_walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Obj::SPEED_INDEX, 0);
     let target = load_target(x);
@@ -248,7 +248,7 @@ fn second<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Vitesses d'un saut : vers le haut 0x200, en avant 0x280 (inversé si l'orientation est non nulle).
+/// Speeds of a jump: upward 0x200, forward 0x280 (inverted if the orientation is non-zero).
 fn jump_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(Obj::VZ, 0x200);
     x.set16(Obj::VX, 0x280);
@@ -258,7 +258,7 @@ fn jump_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5c5f6 : élan latéral (vitesse 0xb, animation 2) pendant `0x23` images.
+/// 0x5c5f6: sideways run-up (speed 0xb, animation 2) for `0x23` frames.
 fn dash_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(TIMER, 0x23);
     x.set8(Obj::SPEED_INDEX, 8);
@@ -270,7 +270,7 @@ fn dash_start<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 2);
 }
 
-/// 0x5c59e : un tir à bout portant (flèche de type 0xa, force 4).
+/// 0x5c59e: a point-blank shot (arrow of type 0xa, strength 4).
 pub(super) fn start_shot<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(AI_SHOT, 3);
@@ -280,7 +280,7 @@ pub(super) fn start_shot<R: Bench>(x: &mut Cx<'_, R>) {
     shot(x, 1);
 }
 
-// --- sous-état 6 --------------------------------------------------------------------------------------
+// --- substate 6 --------------------------------------------------------------------------------------
 
 pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -291,7 +291,7 @@ pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5c6e6… : fin d'un geste du sous-état 6 : debout, et au tirage, attente.
+/// 0x5c6e6…: end of a substate 6 move: standing, and on a draw, waiting.
 fn done_gesture<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
@@ -301,7 +301,7 @@ fn done_gesture<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 0 : se baisse (animation 1 ou 0xb au hasard).
+/// +6 = 0: crouches (animation 1 or 0xb at random).
 fn crouch<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -313,7 +313,7 @@ fn crouch<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 2 et 8 : pas de côté pendant `+0x6b` images.
+/// +6 = 2 and 8: side step for `+0x6b` frames.
 fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -353,7 +353,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 et 6 : saut avec élan (vitesse 0x280), retombée, puis tir (6).
+/// +6 = 4 and 6: jump with run-up (speed 0x280), landing, then shot (6).
 fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {

@@ -1,15 +1,15 @@
-//! Variante de fuzz.rs du lot ESHL 40-63 (options DDSOM_LIEN, DDSOM_PAS).
-//! Validation différentielle sur des états aléatoires : chaque routine native d'un groupe est appelée
-//! en mode contrôle depuis des états tirés au sort ; l'original s'exécute à côté et les deux sont
-//! comparés (mémoire, registres du contrat, durée si elle est déclarée exacte). Exerce les chemins
-//! que les scénarios n'atteignent pas.
+//! Variant of fuzz.rs for batch ESHL 40-63 (options DDSOM_LIEN, DDSOM_PAS).
+//! Differential validation on random states: each native routine of a group is called
+//! in control mode from randomly drawn states; the original runs alongside and the two are
+//! compared (memory, contract registers, duration if declared exact). Exercises the paths
+//! that the scenarios do not reach.
 //!
-//!   fuzz <groupe> <roms> <eeprom> <scénario> <images de chauffe> <tours>
+//!   fuzz <group> <roms> <eeprom> <scenario> <warm-up frames> <rounds>
 //!
-//! Groupes : son (0x68c, 0xe0836-0xee000), u1 (RNG et files d'événements 0x19a80-0x1a000),
-//! c1 (monnayeurs 0x13c00-0x14e50), m2 (EEPROM et configuration 0x2d300-0x2ede0),
-//! video (primitives vidéo, palettes et fondus : natives `video_*` et `palette_*`),
-//! camera (recopie du décor par les caméras 1 et 2, 0x2f81c 0x2f86e 0x328a8, et décors à parallaxe 0x33178...).
+//! Groups: son (0x68c, 0xe0836-0xee000), u1 (RNG and event queues 0x19a80-0x1a000),
+//! c1 (coin slots 0x13c00-0x14e50), m2 (EEPROM and configuration 0x2d300-0x2ede0),
+//! video (video primitives, palettes and fades: natives `video_*` and `palette_*`),
+//! camera (scenery copy by cameras 1 and 2, 0x2f81c 0x2f86e 0x328a8, and parallax scenery 0x33178...).
 
 use std::path::Path;
 
@@ -24,7 +24,7 @@ impl Rng {
         self.0 ^= self.0 << 17;
         (self.0 >> 16) as u32
     }
-    /// Vrai avec la probabilité 1/n.
+    /// True with probability 1/n.
     fn one_chance_in(&mut self, n: u32) -> bool {
         self.next() % n == 0
     }
@@ -33,7 +33,7 @@ impl Rng {
 type Cpu = m68k::Cpu;
 type Bus = cps2::Cps2Bus;
 
-/// Registres quelconques ; A0 sur un enregistrement joueur.
+/// Arbitrary registers; A0 on a player record.
 fn regs(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     for r in 0..8 {
         c.d[r] = if rng.next() & 3 == 0 { rng.next() & 0xff } else { rng.next() };
@@ -62,7 +62,7 @@ fn rng_sound(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr16(b, 0xff2960, if rng.next() & 1 == 0 { 0 } else { 0xffff });
     wr16(b, A5 + 0x5a6, rng.next() as u16 & 0x3ff);
     wr16(b, A5 + 0x5ae, rng.next() as u16 & 0x3ff);
-    // file : têtes quelconques, parfois pleine ou vide
+    // queue: arbitrary heads, sometimes full or empty
     let read = (rng.next() as u16 & 0x3f) * 0x10;
     let write = match rng.next() % 4 {
         0 => read,
@@ -75,7 +75,7 @@ fn rng_sound(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     regs(c, b, rng);
 }
 
-/// Un compteur BCD : parfois proche du plafond, parfois n'importe quoi.
+/// A BCD counter: sometimes close to the ceiling, sometimes anything.
 fn bcd(rng: &mut Rng) -> u32 {
     match rng.next() % 4 {
         0 => 0x0999_9990 + rng.next() % 10,
@@ -99,12 +99,12 @@ fn rng_u1(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr16(b, A5 + 0x1a, rng.next() as u16);
     ring(b, rng, 0x108, 0x10a, true);
     ring(b, rng, 0x18a, 0x18c, true);
-    // pop-ups : entrées de 8 octets, index multiples de 8
+    // pop-ups: 8-byte entries, indices multiple of 8
     wr8(b, A5 + 0x50, rng.one_chance_in(4) as u8);
     wr8(b, A5 + 0x20c, (rng.next() as u8 & 0x1f) * 8);
     wr8(b, A5 + 0x20d, (rng.next() as u8 & 0x1f) * 8);
     for i in 0..32 {
-        // entrées plausibles : type (octet haut 0-3), code < 0x18, petits paramètres
+        // plausible entries: type (high byte 0-3), code < 0x18, small parameters
         let plausible = (rng.next() % 4) as u16 * 0x100 | (rng.next() % 0x18) as u16;
         let base = A5 + 0x20e + 8 * i;
         wr16(b, base, if rng.next() % 3 == 0 { plausible } else { 0xffff });
@@ -112,7 +112,7 @@ fn rng_u1(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
         wr16(b, base + 4, if rng.next() & 1 == 0 { 0 } else { rng.next() as u16 % 0x100 });
         wr16(b, base + 6, 0x80);
     }
-    // pop-up courant : durée restante 0, 1, 2, 3, 4, 5 ou longue
+    // current pop-up: remaining duration 0, 1, 2, 3, 4, 5 or long
     let duration = [0u16, 1, 2, 3, 4, 5, 0x60][rng.next() as usize % 7];
     wr16(b, 0xff9180, (rng.next() % 4) as u16 * 0x100 | (rng.next() % 0x18) as u16);
     wr16(b, 0xff9182, rng.next() as u16 % 0x100);
@@ -125,7 +125,7 @@ fn rng_u1(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     regs(c, b, rng);
 }
 
-/// Monnayeurs : réglages, enregistrements et lignes d'entrée quelconques.
+/// Coin slots: arbitrary settings, records and input lines.
 fn rng_c1(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr16(b, A5 + 0x7fcc, rng.one_chance_in(8) as u16);
     wr8(b, A5 + 0x1e, 1 + rng.next() as u8 % 4);
@@ -150,14 +150,14 @@ fn rng_c1(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     regs(c, b, rng);
 }
 
-/// EEPROM et comptabilité : contenu de l'EEPROM, copies en RAM, paramètres de transfert, compteurs.
+/// EEPROM and accounting: EEPROM contents, RAM copies, transfer parameters, counters.
 fn rng_m2(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     let mut data = [0u16; 64];
     for d in data.iter_mut() {
         *d = rng.next() as u16;
     }
     if rng.next() & 1 == 0 {
-        // les deux exemplaires de la configuration concordent
+        // the two copies of the configuration agree
         for i in 0..24 {
             data[24 + i] = data[i];
         }
@@ -186,7 +186,7 @@ fn rng_m2(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr16(b, A5 + 0x16, rng.next() as u16 & 0x8f88);
     wr8(b, A5 + 0x18, rng.next() as u8 & 6);
     wr16(b, 0x664000, rng.next() as u16);
-    // configuration : variante, copie en RAM (valeurs valides ou non), bloc par défaut dans A6
+    // configuration: variant, RAM copy (valid or not), default block in A6
     let variant = 2 * (rng.next() as u16 % 6);
     wr16(b, A5 + 0x70, variant);
     for i in 0..0x80u32 {
@@ -198,10 +198,10 @@ fn rng_m2(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     regs(c, b, rng);
 }
 
-/// Routine tirée au sort (pour les états qui dépendent de l'entrée appelée).
+/// Randomly drawn routine (for states that depend on the entry being called).
 static ENTRY: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
-/// Couleur de palette : luminosité souvent aux butées, composantes quelconques ou proches de 0 / 0xf.
+/// Palette color: brightness often at the limits, components arbitrary or close to 0 / 0xf.
 fn colour(rng: &mut Rng) -> u16 {
     let lum = match rng.next() % 4 {
         0 => 0,
@@ -216,7 +216,7 @@ fn colour(rng: &mut Rng) -> u16 {
     lum | compo(rng) << 8 | compo(rng) << 4 | compo(rng)
 }
 
-/// Primitives vidéo, palettes et fondus : palettes, état de fondu, scène et caméras quelconques.
+/// Video primitives, palettes and fades: arbitrary palettes, fade state, scene and cameras.
 fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     let entry = ENTRY.load(std::sync::atomic::Ordering::Relaxed);
     for i in 0..0x800u32 {
@@ -234,7 +234,7 @@ fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
             1 => 0x253000 + 0x20 * (rng.next() % 0x1000),
             _ => 0x91c000 + 0x400 * k,
         };
-        // 0x1cdd6 lit un mot (couleur) : mêmes octets, interprétés autrement
+        // 0x1cdd6 reads a word (color): same bytes, interpreted differently
         wr32(b, A5 + 0x492 + 4 * k, if entry == 0x1cdd6 { colour(rng) as u32 } else if entry == 0x158e || entry == 0x15c8 { 0x91c000 + 0x400 * k } else { target });
     }
     if entry == 0x15c8 {
@@ -256,11 +256,11 @@ fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr8(b, A5 + 0x18, rng.next() as u8);
     regs(c, b, rng);
     c.a[4] = A5 + 0x48e;
-    // numéros de scène / d'ensemble valides (les tables de la ROM s'arrêtent à la scène 0x5a)
+    // valid scene / set numbers (the ROM tables stop at scene 0x5a)
     c.d[0] = if rng.next() % 3 == 0 { rng.next() % 0x5b } else { rng.next() % 12 };
     c.d[1] = if rng.next() & 1 == 0 { 0x1000 } else { 0xffff_f000 };
     if entry == 0x1a60a {
-        c.d[0] %= 3; // la table de la page 1 n'a que trois entrées
+        c.d[0] %= 3; // the page 1 table has only three entries
     }
     let page = 0x91c000 + 0x400 * (rng.next() % 4);
     c.a[0] = page;
@@ -287,12 +287,12 @@ fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     }
 }
 
-/// Caméras de défilement : positions cible et dessinée, butées et indicateurs quelconques mais plausibles
-/// (les écarts vont du simple décalage à plusieurs pas, dans les quatre sens).
+/// Scroll cameras: target and drawn positions, limits and flags arbitrary but plausible
+/// (offsets range from a simple shift to several steps, in all four directions).
 fn rng_camera(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     let entry = ENTRY.load(std::sync::atomic::Ordering::Relaxed);
     if matches!(entry, 0x33178 | 0x33196 | 0x331e8 | 0x3326c) {
-        // décors à parallaxe : défilement courant et précédent, position de l'objet
+        // parallax scenery: current and previous scroll, object position
         for off in [0x506u32, 0x50a, 0x524, 0x528] {
             wr32(b, A5 + off, rng.next() << 8 ^ rng.next());
         }
@@ -311,7 +311,7 @@ fn rng_camera(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
             _ => (a.next() as i32 % (2 * portee)) - portee,
         }
     };
-    // positions qui restent dans la carte du décor (au-delà, la ROM n'a plus de table : lectures sans sens)
+    // positions that stay inside the scenery map (beyond it the ROM has no more table: meaningless reads)
     let drawn_x = 0x100 + (rng.next() % 0xb00) as i32;
     let drawn_y = 0x40 + (rng.next() % 0x260) as i32;
     let x = drawn_x + gap(rng, 4 * step);
@@ -334,22 +334,22 @@ fn b_prog16(b: &mut Bus, a: u32) -> u16 {
     m68k::Bus::read_prog16(b, a)
 }
 
-/// Familles d'objets (ESHL, SET, SOBJ) : pour chaque gestionnaire, des trajectoires complètes. Un
-/// objet neuf du type est créé à l'état 0 (propriétaire et variante tirés au sort) puis le
-/// gestionnaire est appelé image après image, avec des perturbations aléatoires des entrées que le
-/// moteur de collisions ou le créateur modifient (drapeaux de touche, propriétaire, positions).
-/// Les états sont ainsi atteints par le code lui-même. Chaque appel est comparé à l'original.
-/// `DDSOM_ENTREE=<address hexa>` restreint à un gestionnaire.
-/// Nombre de variantes (octet `+3`) que la table de sauts de l'original couvre (0xcc25a, ESHL 5, 9, 15). Au-delà, l'original
-/// lit du code ou des données comme un décalage et saute n'importe où : ces cas sont hors contrat
-/// (aucun objet du jeu n'a ces variantes) et ne sont pas tirés. 0xcc25a : une entrée de table (la
-/// variante 1 retombe sur la même cible), la variante 2 saute au milieu d'un `jsr`.
+/// Object families (ESHL, SET, SOBJ): for each handler, complete trajectories. A
+/// new object of the type is created in state 0 (owner and variant drawn at random), then the
+/// handler is called frame after frame, with random perturbations of the inputs that the
+/// collision engine or the creator modify (hit flags, owner, positions).
+/// States are thus reached by the code itself. Each call is compared with the original.
+/// `DDSOM_ENTREE=<hex address>` restricts to one handler.
+/// Number of variants (byte `+3`) covered by the original jump table (0xcc25a, ESHL 5, 9, 15). Beyond that, the original
+/// reads code or data as an offset and jumps anywhere: these cases are out of contract
+/// (no game object has these variants) and are not drawn. 0xcc25a: one table entry (the
+/// variant 1 falls back on the same target), variant 2 jumps into the middle of a `jsr`.
 fn table_variants(entry: u32) -> u32 {
     match entry {
         0xcc25a => 2,
         0x9e458 | 0x9ef46 => 3,
         0x9fe0a => 2,
-        // ESHL 65, 68, 70, 71 (tables de variantes de 2, 1, 2, 2 entrées)
+        // ESHL 65, 68, 70, 71 (variant tables of 2, 1, 2, 2 entries)
         0xa72c4 | 0xa801a | 0xa81ca => 2,
         0xa7b76 => 1,
         _ => u32::MAX,
@@ -363,7 +363,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_game::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
         m.run_frame();
@@ -386,22 +386,22 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
         let mut b = b0.clone();
         println!("places libres : ESHL {} SET {} SOBJ {}", rd16(&mut b, A5 + ESHL.free), rd16(&mut b, A5 + SET.free), rd16(&mut b, A5 + SOBJ.free));
     }
-    // nombre de variantes tirées (3 par défaut : au-delà, beaucoup de types sortent de leurs tables)
+    // number of variants drawn (3 by default: beyond that, many types leave their tables)
     let variants: u32 = std::env::var("DDSOM_VARIANTES").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
-    // DDSOM_LIEN=1 : renseigne aussi +0x5c (créateur) et perturbe les liens du propriétaire
+    // DDSOM_LIEN=1: also fills in +0x5c (creator) and perturbs the owner's links
     let link = std::env::var("DDSOM_LIEN").is_ok();
-    // DDSOM_PAS=n : appels par trajectoire (60 par défaut)
+    // DDSOM_PAS=n: calls per trajectory (60 by default)
     let max_step: u32 = std::env::var("DDSOM_PAS").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
     let mut shown = 0;
     let mut tests = 0;
-    // couverture du code d'origine des gestionnaires (DDSOM_COUVERTURE=fichier : écrit les adresses vues)
+    // coverage of the handlers' original code (DDSOM_COUVERTURE=file: writes the addresses seen)
     let coverage = std::env::var("DDSOM_COUVERTURE").is_ok();
     let mut seen: std::collections::BTreeSet<u32> = Default::default();
     for _ in 0..tours {
         for &(entry, pool, kind) in &inputs {
             let (mut c, mut b) = (c0.clone(), b0.clone());
             b.irq_horizon = u64::MAX;
-            // propriétaires possibles : ennemis actifs, sinon joueurs
+            // possible owners: active enemies, otherwise players
             let mut owners: Vec<u32> = ENEMY.iter().filter(|o| rd8(&mut b, o.0) != 0).map(|o| o.0).collect();
             owners.extend((0..4).map(|j| 0xff85de + 0x200 * j));
             let obj = pool.slot(rng.next() % pool.slots);
@@ -419,7 +419,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
             wr16(&mut b, obj.0 + 0x46, owner as u16);
             wr16(&mut b, obj.0 + 0x5a, owner as u16);
             if link {
-                // types dont le créateur est en +0x5c (et qui ont des compteurs en +0x42 / +0x4c)
+                // types whose creator is at +0x5c (and which have counters at +0x42 / +0x4c)
                 wr16(&mut b, obj.0 + 0x5c, owner as u16);
                 wr16(&mut b, obj.0 + 0x42, (rng.next() % 4) as u16);
                 wr16(&mut b, obj.0 + 0x4c, (rng.next() % 4) as u16);
@@ -427,7 +427,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                 if rng.next() % 2 == 0 {
                     wr16(&mut b, owner + 0xa0, [0x201u16, 0x214, 0x215, 0x204][rng.next() as usize % 4]);
                 }
-                // étage de jeu et drapeaux de zone lus par les types de boss
+                // game stage and zone flags read by the boss types
                 wr8(&mut b, A5 + 0x34, [0x2e, 0x69, 0x2d, 0x19, 0x10][rng.next() as usize % 5]);
                 wr8(&mut b, 0xff2064, (rng.next() & 3) as u8);
             }
@@ -436,11 +436,11 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                 wr32(&mut b, obj.0 + off, v);
             }
             wr16(&mut b, obj.0 + 0xc, (rng.next() % 0x60) as u16);
-            // décompte des places libres cohérent
-            // (au moment du chauffage le pool peut être plein : les gestionnaires testent ce compteur)
+            // consistent free-slot count
+            // (at warm-up time the pool may be full: the handlers test this counter)
             wr16(&mut b, A5 + pool.free, (pool.slots / 2) as u16);
             if link {
-                // chaînes de liens non nulles pour les types qui remontent « créateur du créateur »
+                // non-null link chains for the types that go up to the "creator's creator"
                 for &p in &owners {
                     if rng.next() % 5 != 0 {
                         wr16(&mut b, p + 0x5c, owners[rng.next() as usize % owners.len()] as u16);
@@ -467,7 +467,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                     if rng.next() % 10 == 0 {
                         wr8(&mut b, owner + 4, (rng.next() % 8) as u8);
                     }
-                    // le propriétaire change d'état : états de l'automate, drapeaux d'attaque, compteurs
+                    // the owner changes state: state-machine states, attack flags, counters
                     if rng.next() % 3 == 0 {
                         for off in [4u32, 5, 6, 7] {
                             if rng.next() % 2 == 0 {
@@ -487,7 +487,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                         }
                     }
                     if link && rng.next() % 4 == 0 {
-                        // drapeaux d'attaque que le créateur pose dans le tir, états d'attaque d'un boss
+                        // attack flags the creator sets in the shot, attack states of a boss
                         for off in [0x58u32, 0x59, 0x5a] {
                             if rng.next() % 3 == 0 {
                                 wr8(&mut b, obj.0 + off, (rng.next() % 3) as u8);
@@ -498,7 +498,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                         }
                     }
                     if link && rng.next() % 3 == 0 {
-                        // liens et champs de boss lus par les types attachés à un créateur
+                        // boss links and fields read by the types attached to a creator
                         for off in [0x50u32, 0x5c, 0x46] {
                             if rng.next() % 2 == 0 {
                                 let p = if rng.next() % 5 == 0 { 0 } else { owners[rng.next() as usize % owners.len()] };
@@ -517,7 +517,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                             wr16(&mut b, owner + 0x62, (rng.next() % 3) as u16);
                         }
                     }
-                    // sa propre variante / drapeaux de contrôle
+                    // its own variant / control flags
                     if rng.next() % 12 == 0 {
                         wr8(&mut b, obj.0 + 0x3e, rng.next() as u8 % 6);
                     }
@@ -525,20 +525,20 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                         wr8(&mut b, obj.0 + 0x53, (rng.next() % 5) as u8);
                     }
                 }
-                // jeu en pause (rare) ou non ; objet suspendu (octet +0x40) très rarement
+                // game paused (rare) or not; suspended object (byte +0x40) very rarely
                 wr8(&mut b, A5 + 0x3d, (rng.next() % 10 == 0) as u8);
                 wr8(&mut b, obj.0 + 0x40, (rng.next() % 40 == 0) as u8);
                 c.a[0] = obj.0;
                 c.a[5] = A5;
                 c.d[7] = step;
-                // registres de la boucle de dispatch : D0 = type * 4 (octet 0 haut vide), A1 = gestionnaire
+                // dispatch loop registers: D0 = type * 4 (high byte 0 empty), A1 = handler
                 c.d[0] = 4 * kind as u32;
                 c.a[1] = entry;
                 tests += 1;
                 let before = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
                 let (cs, bs) = (c.clone(), b.clone());
                 if coverage {
-                    // adresses des instructions que l'original exécute à cet appel (interpréteur)
+                    // addresses of the instructions the original executes in this call (interpreter)
                     let (mut c2, mut b2) = (cs.clone(), bs.clone());
                     c2.pc = entry;
                     c2.a[7] = cs.a[7].wrapping_sub(4);
@@ -554,7 +554,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                 let prev_obj: Vec<u8> = (0..pool.stride).map(|i| rd8(&mut b, obj.0 + i)).collect();
                 let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entry)));
                 if r.is_err() {
-                    // l'original est sorti des rails (entrée incohérente) : on abandonne la trajectoire
+                    // the original went off the rails (inconsistent entry): the trajectory is abandoned
                     let _ = (cs, bs);
                     break;
                 }
@@ -562,10 +562,10 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                 if after > before && shown < 12 {
                     shown += 1;
                     let last = ddsom_game::report().values().filter_map(|s| s.last.clone()).next();
-                    println!("écart en {entry:06x} type {kind} pas {step} : {}", last.unwrap_or_default());
-                    println!("  objet avant : {:02x?}", prev_obj);
+                    println!("mismatch at {entry:06x} type {kind} step {step}: {}", last.unwrap_or_default());
+                    println!("  object before: {:02x?}", prev_obj);
                     if std::env::var("DDSOM_TRACE_ORIG").is_ok() {
-                        // exécution pas à pas du code d'origine seul depuis l'état d'avant
+                        // step-by-step execution of the original code alone from the previous state
                         let (mut c2, mut b2) = (cs.clone(), bs.clone());
                         let sp = c2.a[7];
                         c2.pc = entry;
@@ -587,21 +587,21 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
     let mut total = 0;
     for (name, st) in ddsom_game::report() {
         total += st.mismatches;
-        println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches,
+        println!("  {name:28} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches,
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
     println!("{tests} appels de gestionnaires");
     if let Ok(file) = std::env::var("DDSOM_COUVERTURE") {
         let text: Vec<String> = seen.iter().map(|a| format!("{a:06x}")).collect();
-        std::fs::write(file, text.join("\n")).expect("écriture couverture");
+        std::fs::write(file, text.join("\n")).expect("coverage write");
     }
-    println!("{}", if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
+    println!("{}", if total == 0 { "VALID: no mismatch" } else { "FAILED" });
 }
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, group, roms, eeprom, scenario, warmup, tours] = &a[..] else {
-        eprintln!("usage : fuzz <groupe> <roms> <eeprom> <scénario> <images de chauffe> <tours>");
+        eprintln!("usage: fuzz <group> <roms> <eeprom> <scenario> <warm-up frames> <rounds>");
         std::process::exit(2);
     };
     if group == "familles" {
@@ -623,7 +623,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_game::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
@@ -655,7 +655,7 @@ fn main() {
                     .iter()
                     .map(|o| format!("{o:02x}={:04x}", ddsom_game::mem::rd16(b, cam + o)))
                     .collect();
-                format!(" scène={:02x} terrain={} {}", ddsom_game::mem::rd8(b, A5 + 0x34), ddsom_game::mem::rd8(b, A5 + 0x37), fields.join(" "))
+                format!(" scene={:02x} terrain={} {}", ddsom_game::mem::rd8(b, A5 + 0x34), ddsom_game::mem::rd8(b, A5 + 0x37), fields.join(" "))
             } else {
                 String::new()
             };
@@ -665,15 +665,15 @@ fn main() {
             if after > before && shown < 12 {
                 shown += 1;
                 let last = ddsom_game::report().values().filter_map(|s| s.last.clone()).next();
-                println!("écart en {entry:06x} (d0={d0:08x} a0={a0:06x}){context} : {}", last.unwrap_or_default());
+                println!("mismatch at {entry:06x} (d0={d0:08x} a0={a0:06x}){context}: {}", last.unwrap_or_default());
             }
         }
     }
     let mut total = 0;
     for (name, st) in ddsom_game::report() {
         total += st.mismatches;
-        println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches,
+        println!("  {name:28} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches,
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
-    println!("{}", if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
+    println!("{}", if total == 0 { "VALID: no mismatch" } else { "FAILED" });
 }

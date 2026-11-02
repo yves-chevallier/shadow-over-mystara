@@ -1,14 +1,14 @@
-//! Boss 11/12, états actifs hors attaques : arrivée (groupe 0), attente (6), poursuite (2, 8, 10, 12) et les tests qui
-//! déclenchent une attaque ou une manœuvre.
+//! Boss 11/12, active states other than attacks: arrival (group 0), wait (6), pursuit (2, 8, 10, 12) and the tests
+//! that trigger an attack or a maneuver.
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-// --- groupe 0 : arrivée --------------------------------------------------------------------------------------
+// --- group 0: arrival --------------------------------------------------------------------------------------
 
-/// 0x8d7b8 : le serpent surgit à droite de l'écran, retombe, rebondit, se met en marche.
+/// 0x8d7b8: the snake bursts in on the right of the screen, drops, bounces, starts walking.
 pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch0(x, 0x8d7c6, f::SUB2) {
         0x8d7ce => {
@@ -53,7 +53,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8d818 : chute jusqu'au sol.
+/// 0x8d818: fall to the ground.
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(NO_ZONE, 0xff);
     x.move_xz();
@@ -71,9 +71,9 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xecc0a);
 }
 
-// --- groupe 6 : sans joueur ----------------------------------------------------------------------------------
+// --- group 6: no player ----------------------------------------------------------------------------------
 
-/// 0x8d8bc : attend ; un joueur revient (vie > 0) et le compteur `+0xb6` repart.
+/// 0x8d8bc: waits; a player comes back (life > 0) and the `+0xb6` counter restarts.
 pub(super) fn lone<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         if lib::target_by_criterion(x, lib::LOWEST_HP).is_some() {
@@ -95,14 +95,14 @@ pub(super) fn lone<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- groupes 2, 8, 10, 12 : poursuite --------------------------------------------------------------------------
 
-/// 0x8eb52 : délai de marche selon la difficulté.
+/// 0x8eb52: walk delay depending on difficulty.
 fn walk_delay<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b);
     let v = x.rom8(0x8eb5e + level as u32);
     x.set8(0x71, v);
 }
 
-/// 0x8eb7e : nombre de pas tiré.
+/// 0x8eb7e: number of steps drawn.
 fn walk_steps<R: Bench>(x: &mut Cx<'_, R>) {
     let rng = x.random();
     let i = rng & 0x1f;
@@ -184,7 +184,7 @@ fn pose<R: Bench>(x: &mut Cx<'_, R>) {
     sync(x)
 }
 
-/// 0x8da02 : le serpent est hors de l'écran.
+/// 0x8da02: the snake is off screen.
 fn off_screen<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let mut d0 = var::SCROLL_X.get(x.b);
     if var::CAMERA_SELECT.get(x.b) != 0 {
@@ -201,7 +201,7 @@ fn off_screen<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x8da28 : la cible est derrière le serpent.
+/// 0x8da28: the target is behind the snake.
 fn turn_needed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let w = x.u16(f::TARGET);
     if (w as i16) >= 0 {
@@ -221,14 +221,15 @@ fn turn_needed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x8dafe : un joueur tout près devant.
+/// 0x8dafe: a player very close ahead.
 fn hit_near<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    // relu : D2 de la boîte (0xb5e0), dont `roll` (0x8db98) lit l'octet haut (glitch d'origine)
+    // re-read: D2 of the box (0xb5e0), whose high byte `roll` (0x8db98) reads (original glitch)
     lib::target_in_box(x, -0x10, 0x20, 0x10)
 }
 
-/// 0x8dae2 : rang de vie (0 à 3 environ) : nombre de fois que les PV maximaux tiennent dans quatre fois les PV.
-/// Rend le rang (D0.w). Glitch d'origine : la somme et le quadruple des PV restent dans D2 et D3 (`dispatch::Leftovers`).
+/// 0x8dae2: life rank (about 0 to 3): number of times the maximum HP fits in four times the HP.
+/// Returns the rank (D0.w). Original glitch: the sum and the quadruple of the HP stay in D2 and D3
+/// (`dispatch::Leftovers`).
 pub(super) fn life_rank<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     let max = x.u16(0x60) as u32;
     let goal = (x.u16(f::HP) as u32) << 2;
@@ -245,7 +246,7 @@ pub(super) fn life_rank<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     rank
 }
 
-/// 0x8da56 : tirage selon le rang de vie (table 0x8da88).
+/// 0x8da56: draw according to the life rank (table 0x8da88).
 fn near_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let i = (life_rank(x) & 3) * 4;
     let mask = rom32(x, 0x8da88 + i as u32);
@@ -264,7 +265,7 @@ fn near_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     false
 }
 
-/// 0x8da98 : tirage selon le rang de vie (table 0x8dad2), puis un joueur dans la boîte.
+/// 0x8da98: draw according to the life rank (table 0x8dad2), then a player in the box.
 fn far_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let i = (life_rank(x) & 3) * 4;
     let mask = rom32(x, 0x8dad2 + i as u32);
@@ -272,7 +273,7 @@ fn far_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let b = rng & 0x1f;
     setw(x, 0, b);
     if mask >> b & 1 != 0 {
-        // relu : D2 de la boîte (0xb5e0), dont `roll` (0x8db98) lit l'octet haut (glitch d'origine)
+        // re-read: D2 of the box (0xb5e0), whose high byte `roll` (0x8db98) reads (original glitch)
         if lib::target_in_box(x, -0x20, 0xa0, 0x80) {
             return true;
         }
@@ -280,7 +281,7 @@ fn far_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     false
 }
 
-/// 0x8db2a : tire une attaque dans la table `table` (16 octets), ou renonce.
+/// 0x8db2a: draws an attack from table `table` (16 bytes), or gives up.
 fn pick<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     if !roll(x) {
         let rng = x.random();
@@ -304,7 +305,7 @@ fn pick<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     to_wait(x)
 }
 
-/// 0x8db98 : tirage « renoncer » selon la difficulté et le nombre de joueurs ; vrai si le bit tombe.
+/// 0x8db98: "give up" draw according to difficulty and number of players; true if the bit falls.
 fn roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let rng = x.random();
     let r = rng & 7;
@@ -313,8 +314,8 @@ fn roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let d1 = (n as u16 & 2).wrapping_mul(4);
     let level = (var::RANK.get(x.b) >> 8) as u8;
     setb(x, 2, level);
-    // Glitch d'origine : seul l'octet bas de D2 est posé ; l'octet haut est celui que laisse le test de boîte
-    // (0xb5e0) qui précède, ou le gestionnaire (`dispatch::Leftovers`).
+    // Original glitch: only the low byte of D2 is set; the high byte is the one left by the preceding box test
+    // (0xb5e0), or by the handler (`dispatch::Leftovers`).
     let d2 = (*x.c.d2() as u16) >> 2;
     let d1 = d1.wrapping_add(d2);
     let v = x.rom8(0x8dbc0 + d1 as u32);

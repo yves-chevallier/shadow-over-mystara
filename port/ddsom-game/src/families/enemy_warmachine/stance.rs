@@ -1,5 +1,5 @@
-//! Type 27, sous-état 2 : la machine roule vers le joueur. `+6` = 0 attente, 2 demi-tour, 4 et 6 marche (avec ou
-//! sans délai de charge), 8 charge.
+//! Type 27, substate 2: the machine rolls toward the player. `+6` = 0 wait, 2 turn-around, 4 and 6 walk (with or
+//! without charge delay), 8 charge.
 
 use crate::families::cx::Bench;
 use super::arrival::hop_loop;
@@ -8,7 +8,7 @@ use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Tables de délais (octets) lues par `charge_delay` et `wander_delay`.
+/// Delay tables (bytes) read by `charge_delay` and `wander_delay`.
 const CHARGE_A: u32 = 0x78e8c;
 const CHARGE_B: u32 = 0x78eac;
 const WANDER_A: u32 = 0x78ef0;
@@ -25,7 +25,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Début commun des gestes 0 à 6 : saisi ou plus aucun joueur → états de repli (vrai si l'on en est sorti).
+/// Common start of moves 0 to 6: grabbed or no player left → fallback states (true if we have left).
 fn gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if grabbed(x) {
         go::held(x);
@@ -67,7 +67,7 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// 0x79f6 : fixe le délai d'attente `+0x6e` d'après la difficulté et rend la main (D0 = 1).
+/// 0x79f6: sets the wait delay `+0x6e` from the difficulty and returns control (D0 = 1).
 fn pick_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.in_arena(0) {
         x.set8(AI_WAIT, 1);
@@ -105,19 +105,19 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 4);
 }
 
-/// 0x78244 : animation de marche (6 si la vitesse suit l'orientation, 7 sinon).
+/// 0x78244: walking animation (6 if the speed follows the orientation, 7 otherwise).
 fn walk_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let n = if lib::moving_forward(x) { 6 } else { 7 };
     mv(x, n);
 }
 
-/// 0x7831e : bascule dans l'animation de vol de même clé, selon le sens de la marche.
+/// 0x7831e: switches to the flight animation with the same key, according to the direction of the walk.
 fn fly_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let set = if lib::moving_forward(x) { SET_FLY_B } else { SET_FLY_A };
     lib::switch_keeping_time(x, set);
 }
 
-/// +6 = 4 (`first`) et 6 : marche vers le joueur ; chaque variante tire son délai et son aspect (2 ou 3).
+/// +6 = 4 (`first`) and 6: walks toward the player; each variant draws its delay and its look (2 or 3).
 fn march<R: Bench>(x: &mut Cx<'_, R>, first: bool) {
     if gate(x) {
         return;
@@ -152,7 +152,7 @@ fn march<R: Bench>(x: &mut Cx<'_, R>, first: bool) {
     walk_anim(x);
 }
 
-/// 0x7827c : marche : délai de charge, puis décisions de tir.
+/// 0x7827c: walk: charge delay, then shot decisions.
 fn march_step<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(AI_CHARGE).wrapping_sub(1);
     x.set8(AI_CHARGE, n);
@@ -196,7 +196,7 @@ fn march_step<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// +6 = 8 : charge vers le joueur (ou vers `+0xbc` si `+0xb2`), puis bond.
+/// +6 = 8: charge toward the player (or toward `+0xbc` if `+0xb2`), then leap.
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {

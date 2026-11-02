@@ -1,17 +1,17 @@
-//! Cartes des niveaux : image complète du décor (scroll 2 et scroll 3) de chaque scène, sans sprites ni
-//! interface, reconstruite depuis les cartes de décor de la ROM. Voir `docs/niveaux.md`.
+//! Level maps: complete image of the scenery (scroll 2 and scroll 3) of each scene, without sprites or
+//! interface, rebuilt from the ROM's scenery maps. See `docs/niveaux.md`.
 //!
-//!   level_maps cartes  <roms> <eeprom> <dossier> [scène...]   une image par scène (1 à 82 par défaut)
-//!   level_maps planche <dossier> <niveaux.md>                 planche d'aperçu `sheet.png` + index Markdown
-//!   level_maps tables  <roms>                                 dimensions des tables de bandes des 115 scènes
+//!   level_maps cartes  <roms> <eeprom> <folder> [scene...]   one image per scene (1 to 82 by default)
+//!   level_maps planche <folder> <niveaux.md>                 overview sheet `sheet.png` + Markdown index
+//!   level_maps tables  <roms>                                dimensions of the strip tables of the 115 scenes
 //!
-//! Méthode. Les caméras du jeu (`scroll.rs`) recopient dans leurs couches des colonnes de cases lues dans une
-//! carte de ROM : des *bandes* de 256x256 pixels (indices de blocs 2x2, banques de blocs) que désigne, pour
-//! chaque scène, une table de mots (`0x2ff94 + 4 s` pour le scroll 2, cases de 16 pixels ; `0x32d7c + 4 s` pour
-//! le scroll 3, cases de 32 pixels). L'outil lit ces mêmes tables (voir `Layer::grid`), recompose toutes les
-//! cases de la carte, les dessine avec la palette de la scène relevée dans la machine (jeu réel lancé jusqu'à
-//! la phase de jeu de la scène, `FF8034` forcé comme dans `docs/coverage.md`) et superpose les deux couches
-//! dans l'ordre que fixe CPS-B. Aucun sprite, aucune interface, pas de scroll 1.
+//! Method. The game's cameras (`scroll.rs`) copy into their layers columns of cells read from a
+//! ROM map: 256x256-pixel *strips* (2x2 block indices, block banks) designated, for
+//! each scene, by a table of words (`0x2ff94 + 4 s` for scroll 2, 16-pixel cells; `0x32d7c + 4 s` for
+//! scroll 3, 32-pixel cells). The tool reads these same tables (see `Layer::grid`), recomposes all the
+//! cells of the map, draws them with the scene's palette taken from the machine (real game run up to
+//! the scene's game phase, `FF8034` forced as in `docs/coverage.md`) and superimposes the two layers
+//! in the order set by CPS-B. No sprite, no interface, no scroll 1.
 
 use std::path::Path;
 
@@ -21,10 +21,10 @@ const TABLES1: u32 = 0x2ff94;
 const MAP2: u32 = 0x2459c0;
 const BANKS2: u32 = 0x33a9c;
 const TABLES2: u32 = 0x32d7c;
-/// Base des tuiles de décor dans la région graphique (banque 1 du mapper CPS2).
+/// Base of the scenery tiles in the graphics region (bank 1 of the CPS2 mapper).
 const TILES: usize = 0x20000 * 64;
 const SCENES: std::ops::RangeInclusive<u32> = 1..=82;
-/// Largeur de l'écran : pas de la superposition des couches à parallaxe.
+/// Screen width: step of the superposition of the parallax layers.
 const SCREEN: usize = 384;
 const BACKGROUND: [u8; 3] = [24, 16, 40];
 
@@ -45,27 +45,27 @@ impl Rom<'_> {
     fn rd32(&self, a: u32) -> u32 {
         (self.rd16(a) as u32) << 16 | self.rd16(a.wrapping_add(2)) as u32
     }
-    /// Lecture en espace programme (tables du code).
+    /// Read in program space (code tables).
     fn prog32(&self, a: u32) -> u32 {
         (self.prog[(a >> 1) as usize] as u32) << 16 | self.prog[(a >> 1) as usize + 1] as u32
     }
 }
 
-/// Une couche de décor : géométrie de sa carte en ROM.
+/// A scenery layer: geometry of its ROM map.
 #[derive(Clone, Copy)]
 struct Layer {
     map: u32,
     banks: u32,
     tables: u32,
-    /// Adresse du mot de pas de ligne de la première table de bandes.
+    /// Address of the line-step word of the first strip table.
     start: u32,
-    /// Taille d'une case en pixels (16 ou 32) et nombre de cases par côté de bande.
+    /// Size of a cell in pixels (16 or 32) and number of cells per strip side.
     case: usize,
     cases: usize,
-    /// Décalage de tuile ajouté au code de la carte, base de couleur du matériel.
+    /// Tile offset added to the map code, colour base of the hardware.
     offset: u16,
     colour: u16,
-    /// Numéro de bande de remplissage (jamais affichée : la caméra ne va pas jusque-là), laissée vide.
+    /// Fill strip number (never displayed: the camera does not go that far), left empty.
     empty: u16,
 }
 
@@ -73,7 +73,7 @@ const SCROLL2: Layer = Layer { map: MAP1, banks: BANKS1, tables: TABLES1, start:
 const SCROLL3: Layer = Layer { map: MAP2, banks: BANKS2, tables: TABLES2, start: 0x33564, case: 32, cases: 8, offset: 0x1f00, colour: 0x60, empty: 0xfd };
 
 impl Layer {
-    /// Case (code de tuile, attribut) à l'adresse `at` de la carte virtuelle (`map_cell` de `scroll.rs`).
+    /// Cell (tile code, attribute) at address `at` of the virtual map (`map_cell` of `scroll.rs`).
     fn case_a(&self, rom: &Rom, at: u32) -> (u16, u16) {
         let off = at.wrapping_sub(self.map);
         let c = off >> 2;
@@ -90,15 +90,15 @@ impl Layer {
         ((v >> 16) as u16 + self.offset, v as u16)
     }
 
-    /// Grille des numéros de bandes de la scène, de haut en bas (vide si les tables sont incohérentes).
+    /// Grid of the scene's strip numbers, from top to bottom (empty if the tables are inconsistent).
     ///
-    /// Les tables de toutes les scènes se suivent en ROM : un mot de pas de ligne `W` (celui de la caméra,
-    /// `+0x40`), `K` lignes de `W` mots au-dessus de la ligne d'ordonnée 0 (celle que désigne le pointeur de la
-    /// scène : les ordonnées croissantes sont aux adresses décroissantes), puis quelques lignes d'ordonnée
-    /// négative (la caméra descend un peu sous 0). Le pointeur d'une table fixe donc où commence la suivante :
-    /// la lecture part de la première table et cherche, après chaque pointeur, le nombre de lignes négatives
-    /// qui amène à un en-tête et à un pointeur suivants cohérents. Dans le scroll 2 le dernier mot de chaque
-    /// ligne est une sentinelle (0xfe).
+    /// The tables of all the scenes follow one another in ROM: a line-step word `W` (the camera's,
+    /// `+0x40`), `K` lines of `W` words above the line of ordinate 0 (the one designated by the scene's
+    /// pointer: increasing ordinates are at decreasing addresses), then a few lines of negative
+    /// ordinate (the camera goes down a little below 0). A table's pointer therefore fixes where the next one begins:
+    /// the reading starts from the first table and searches, after each pointer, for the number of negative lines
+    /// that leads to a consistent header and following pointer. In scroll 2 the last word of each
+    /// line is a sentinel (0xfe).
     fn grid(&self, rom: &Rom, scene: u32) -> Vec<Vec<u16>> {
         let mut pointers: Vec<u32> = (0..115).map(|s| rom.prog32(self.tables + 4 * s)).collect();
         pointers.sort();
@@ -127,7 +127,7 @@ impl Layer {
         Vec::new()
     }
 
-    /// Image du décor : les bandes de la grille côte à côte, chaque case dessinée avec la palette `pal`.
+    /// Scenery image: the grid's strips side by side, each cell drawn with palette `pal`.
     fn image(&self, rom: &Rom, pal: &[[u8; 3]], grid: &[Vec<u16>]) -> Image {
         let band = self.case * self.cases;
         let mut img = Image::new(grid[0].len() * band, grid.len() * band);
@@ -149,13 +149,13 @@ impl Layer {
         img
     }
 
-    /// La scène utilise la table par défaut (celle de la scène 1) : sa couche n'est pas tirée d'une carte.
+    /// The scene uses the default table (that of scene 1): its layer is not taken from a map.
     fn shared(&self, rom: &Rom, scene: u32) -> bool {
         rom.prog32(self.tables + 4 * scene) == rom.prog32(self.tables + 4)
     }
 
 
-    /// Dessine une tuile (décodage de `cps2-gfx` : un plan par octet, miroirs aux bits 5 et 6 de l'attribut).
+    /// Draws a tile (`cps2-gfx` decoding: one plane per byte, mirrors at bits 5 and 6 of the attribute).
     fn tile(&self, rom: &Rom, pal: &[[u8; 3]], img: &mut Image, x0: usize, y0: usize, code: u16, attr: u16) {
         let t = self.case;
         for py in 0..t {
@@ -184,7 +184,7 @@ impl Layer {
 // Images
 // ---------------------------------------------------------------------------------------------
 
-/// Image RGBA (alpha 0 : rien dessiné).
+/// RGBA image (alpha 0: nothing drawn).
 struct Image {
     w: usize,
     h: usize,
@@ -200,7 +200,7 @@ impl Image {
         self.px[y * self.w + x] = [c[0], c[1], c[2], 255];
     }
 
-    /// Retire les bords entièrement vides.
+    /// Removes the entirely empty borders.
     fn reframe(self) -> Image {
         let (mut x0, mut y0, mut x1, mut y1) = (self.w, self.h, 0, 0);
         for y in 0..self.h {
@@ -230,11 +230,11 @@ impl Image {
 }
 
 
-/// Superpose les couches (de l'arrière vers l'avant), chacune avec l'ordonnée `u` de sa ligne du bas (les
-/// ordonnées du décor croissent vers le haut ; l'écart entre couches vient des caméras au début de la scène).
-/// Une couche plus étroite que le cadre est à parallaxe : l'écran qui voit la colonne `x` du cadre voit
-/// ses colonnes à partir de `x * (w - 384) / (frame - 384)` ; l'image est donc assemblée par tranches d'un
-/// écran, chacune telle que le joueur la voit.
+/// Superimposes the layers (from back to front), each with the ordinate `u` of its bottom line (the
+/// scenery ordinates increase upwards; the gap between layers comes from the cameras at the start of the scene).
+/// A layer narrower than the frame is a parallax one: the screen that sees column `x` of the frame sees
+/// its columns from `x * (w - 384) / (frame - 384)`; the image is therefore assembled in slices of one
+/// screen, each as the player sees it.
 fn compose(layers: &[(&Image, i64)]) -> Image {
     let w = layers.iter().map(|c| c.0.w).max().unwrap();
     let low = layers.iter().map(|c| c.1).min().unwrap();
@@ -280,7 +280,7 @@ fn read_png(path: &Path) -> (usize, usize, Vec<u8>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Machine : atteindre une scène
+// Machine: reaching a scene
 // ---------------------------------------------------------------------------------------------
 
 fn rw(m: &cps2::Machine, a: u32) -> u16 {
@@ -299,7 +299,7 @@ fn poke(m: &mut cps2::Machine, a: u32, v: u32, size: u8) {
     ddsom_game::scenario::poke(m, a, v, size);
 }
 
-/// Lance le jeu : pièce, Start, personnage choisi, `FF8034` forcé pendant la sélection (scène 1).
+/// Starts the game: coin, Start, chosen character, `FF8034` forced during the selection (scene 1).
 fn start_up(roms: &Path, eeprom: &Path) -> cps2::Machine {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(roms, ee.as_deref()).unwrap();
@@ -321,17 +321,17 @@ fn start_up(roms: &Path, eeprom: &Path) -> cps2::Machine {
     m
 }
 
-/// Ce que la machine donne d'une scène en jeu : palette et ordre des couches.
+/// What the machine gives of a scene in play: palette and layer order.
 struct Reading {
     pal: Vec<[u8; 3]>,
-    /// Couches de décor (2, 3) de l'arrière vers l'avant.
+    /// Scenery layers (2, 3) from back to front.
     order: Vec<u8>,
-    /// Écart d'ordonnée entre les caméras 1 (scroll 2) et 2 (scroll 3) au début de la scène.
+    /// Ordinate gap between cameras 1 (scroll 2) and 2 (scroll 3) at the start of the scene.
     gap_y: i64,
     in_game: bool,
 }
 
-/// Saute dans la scène `n` (partie en cours, joueur invincible), attend la phase de jeu et relève la palette.
+/// Jumps to scene `n` (game in progress, invincible player), waits for the game phase and reads the palette.
 fn enter(m: &mut cps2::Machine, n: u32) -> Reading {
     for (a, v) in [(0xff8034, n), (0xff802c, 8), (0xff802d, 0), (0xff802e, 0)] {
         poke(m, a, v, 1);
@@ -351,15 +351,15 @@ fn enter(m: &mut cps2::Machine, n: u32) -> Reading {
     let b = &m.bus;
     let v = cps2_gfx::VideoState { gfxram: &b.gfxram, cps_a: &b.cps_a, cps_b: &b.cps_b, objram: &m.obj_buffer, output: &m.pri_ctrl_buffer, palette_ram: Some(&b.palette) };
     let command = b.cps_b[0x26 / 2];
-    // couche active : bit de CPS-B (0x04 / 0x08) et bit de commande vidéo CPS-A (4 / 8), comme `cps2-gfx`
+    // active layer: CPS-B bit (0x04 / 0x08) and CPS-A video command bit (4 / 8), as in `cps2-gfx`
     let active = |l: u8| command & (1 << l) != 0 && b.cps_a[0x22 / 2] & (1 << l) != 0;
     let order = (0..4).map(|i| (command >> (6 + 2 * i) & 3) as u8).filter(|&l| (l == 2 || l == 3) && active(l)).collect();
-    // positions cibles des caméras (enregistrements `A5 + 0x4fe` et `A5 + 0x54e`, champ `+0x0c`)
+    // target positions of the cameras (records `A5 + 0x4fe` and `A5 + 0x54e`, field `+0x0c`)
     let (y1, y2) = (rw(m, 0xff84fe + 0xc) as i16 as i64, rw(m, 0xff854e + 0xc) as i16 as i64);
     Reading { pal: cps2_gfx::render::build_palette(&v), order, gap_y: y1 - y2, in_game }
 }
 
-/// Scène qui suit naturellement : on force la phase 16 (sortie de scène) et on lit la scène suivante.
+/// Scene that naturally follows: phase 16 (scene exit) is forced and the next scene is read.
 fn next_scene(m: &mut cps2::Machine) -> Option<u32> {
     let n = scene(m);
     for (a, v) in [(0xff802c, 16), (0xff802d, 0), (0xff802e, 0)] {
@@ -390,16 +390,16 @@ fn cards(roms: &Path, eeprom: &Path, exit: &Path, scenes: &[u32]) {
         }
         let (g2, g3) = (SCROLL2.grid(&rom, n), SCROLL3.grid(&rom, n));
         if g2.is_empty() || g3.is_empty() {
-            eprintln!("scène {n} : tables de bandes illisibles");
+            eprintln!("scene {n}: unreadable strip tables");
             continue;
         }
         let (s2, s3) = (SCROLL2.image(&rom, &r.pal, &g2), SCROLL3.image(&rom, &r.pal, &g3));
-        // Les scènes dont la table du scroll 3 est celle par défaut (scène 1) n'ont pas de carte pour cette
-        // couche : sa mémoire est un reste d'une scène précédente, masqué par le scroll 2 (vérifié par capture).
+        // The scenes whose scroll 3 table is the default one (scene 1) have no map for this
+        // layer: its memory is a leftover of a previous scene, masked by scroll 2 (checked by capture).
         let without_s3 = n != 1 && SCROLL3.shared(&rom, n);
         let order: Vec<u8> = r.order.iter().copied().filter(|&l| l == 2 || !without_s3).collect();
         if order.is_empty() {
-            eprintln!("scène {n} : aucune couche de décor active");
+            eprintln!("scene {n}: no active scenery layer");
             continue;
         }
         let layers: Vec<(&Image, i64)> = order.iter().map(|&l| if l == 2 { (&s2, -r.gap_y) } else { (&s3, 0) }).collect();
@@ -409,27 +409,27 @@ fn cards(roms: &Path, eeprom: &Path, exit: &Path, scenes: &[u32]) {
         if !without_s3 {
             s3.png(&exit.join("couches").join(format!("{n:02}_scroll3.png")));
         }
-        // sans DDSOM_ROUTES, la scène suivante déjà relevée est conservée
+        // without DDSOM_ROUTES, the already-read next scene is kept
         let old = std::fs::read_to_string(exit.join("infos").join(format!("{n:02}.tsv"))).ok().and_then(|t| t.trim().split('\t').nth(6).and_then(|s| s.parse().ok()));
         let next = if routes { next_scene(&mut m) } else { old };
         let order: Vec<String> = order.iter().map(|l| l.to_string()).collect();
         let info = format!("{n}\t{}\t{}\t{}x{}\t{}x{}\t{}\t{}\t{}\n", img.w, img.h, s2.w, s2.h, s3.w, s3.h, order.join(">"), next.map_or(String::from("-"), |s| s.to_string()), r.in_game as u8);
         std::fs::write(exit.join("infos").join(format!("{n:02}.tsv")), info).unwrap();
-        println!("scène {n} : {}x{} (scroll 2 {}x{}, scroll 3 {}x{}, ordre {}) suite {next:?}{}", img.w, img.h, s2.w, s2.h, s3.w, s3.h, order.join(">"), if r.in_game { "" } else { " ATTENTION : phase de jeu non atteinte, palette douteuse" });
+        println!("scene {n}: {}x{} (scroll 2 {}x{}, scroll 3 {}x{}, order {}) next {next:?}{}", img.w, img.h, s2.w, s2.h, s3.w, s3.h, order.join(">"), if r.in_game { "" } else { " WARNING: game phase not reached, doubtful palette" });
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// Planche d'aperçu et index
+// Overview sheet and index
 // ---------------------------------------------------------------------------------------------
 
-/// Chiffres 3x5 pour les numéros de la planche.
+/// 3x5 digits for the sheet's numbers.
 const DIGITS: [[u8; 5]; 10] = [[7, 5, 5, 5, 7], [2, 6, 2, 2, 7], [7, 1, 7, 4, 7], [7, 1, 7, 1, 7], [5, 5, 7, 1, 1], [7, 4, 7, 1, 7], [7, 4, 7, 5, 7], [7, 1, 1, 1, 1], [7, 5, 7, 5, 7], [7, 5, 7, 1, 7]];
 
 fn label(rgb: &mut [u8], width: usize, x0: usize, y0: usize, n: u32) {
     let text = n.to_string();
     let k = 4;
-    // fond sombre sous le numéro
+    // dark background under the number
     for y in y0 - 2..y0 + 5 * k + 2 {
         for x in x0 - 2..x0 + text.len() * 4 * k + 2 {
             rgb[(y * width + x) * 3..][..3].copy_from_slice(&[0, 0, 0]);
@@ -461,7 +461,7 @@ fn sheet(dir: &Path, doc: &Path) {
     }
     for (i, &n) in views.iter().enumerate() {
         let (w, h, src) = read_png(&dir.join(format!("{n:02}.png")));
-        // réduction par moyenne, à l'échelle qui fait entrer l'image dans la cellule
+        // averaging reduction, at the scale that makes the image fit in the cell
         let scale = (w as f64 / CELL.0 as f64).max(h as f64 / CELL.1 as f64).max(1.0);
         let (tw, th) = (((w as f64 / scale) as usize).max(1), ((h as f64 / scale) as usize).max(1));
         let (ox, oy) = (8 + (i % COLUMNS) * (CELL.0 + 8), 8 + (i / COLUMNS) * (CELL.1 + 8));
@@ -593,9 +593,9 @@ fn main() {
                     let g = c.grid(&rom, n);
                     format!("{}x{} bandes", g.first().map_or(0, |l| l.len()), g.len())
                 };
-                println!("scène {n} : scroll 2 {}, scroll 3 {}", dim(&SCROLL2), dim(&SCROLL3));
+                println!("scene {n}: scroll 2 {}, scroll 3 {}", dim(&SCROLL2), dim(&SCROLL3));
             }
         }
-        _ => eprintln!("usage : level_maps cartes <roms> <eeprom> <dossier> [scène...] | cartes planche <dossier> <niveaux.md> | cartes tables <roms>"),
+        _ => eprintln!("usage: level_maps cartes <roms> <eeprom> <folder> [scene...] | cartes planche <folder> <niveaux.md> | cartes tables <roms>"),
     }
 }

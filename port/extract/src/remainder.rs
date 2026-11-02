@@ -1,12 +1,12 @@
-//! Le reste de la région programme : `data/remainder.json` (`ddsom_assets::remainder`, docs/sans-rom.md « Couverture
+//! The rest of the program region: `data/remainder.json` (`ddsom_assets::remainder`, docs/sans-rom.md « Couverture
 //! complète des données »).
 //!
-//! Tout octet de la région programme que les autres fichiers ne décrivent pas y est rangé, sauf le code 68000 :
-//! les octets des instructions que la machine de référence exécute sur tous les scénarios (`code_68k.txt`, mesuré
-//! par l'exemple `code_execute` de ddsom-game et réuni par `tools/code_68k.sh`). En cas de doute un octet va du côté
-//! des données : le code jamais exécuté, les tables rangées dans le code et les octets qu'un appel saute sont donc
-//! dans ce fichier. Les zones lues par les natives dans le code même (`natives.json`, mesurées) restent couvertes.
-//! Doit être extrait après tous les autres fichiers (il les lit pour savoir ce qu'ils décrivent).
+//! Every byte of the program region that the other files do not describe is stored there, except 68000 code:
+//! the bytes of the instructions that the reference machine executes over all the scenarios (`code_68k.txt`, measured
+//! by the `code_execute` example of ddsom-game and gathered by `tools/code_68k.sh`). When in doubt a byte goes to the
+//! data side: never-executed code, tables stored in the code and bytes that a call skips are therefore
+//! in this file. The zones read by the natives in the code itself (`natives.json`, measured) remain covered.
+//! Must be extracted after all the other files (it reads them to know what they describe).
 
 use std::io;
 use std::path::Path;
@@ -16,7 +16,7 @@ use m68k::decode::{Ea, Fetch, Op};
 
 const CODE: &str = include_str!("../code_68k.txt");
 
-/// Plages d'octets exécutés `(début, end exclue)`.
+/// Ranges of executed bytes `(start, exclusive end)`.
 pub fn code() -> Vec<(u32, u32)> {
     CODE.lines()
         .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
@@ -27,7 +27,7 @@ pub fn code() -> Vec<(u32, u32)> {
         .collect()
 }
 
-/// Espace programme vu par le décodeur.
+/// Program space as seen by the decoder.
 struct View<'a>(&'a [u16]);
 
 impl Fetch for View<'_> {
@@ -36,8 +36,8 @@ impl Fetch for View<'_> {
     }
 }
 
-/// Opérandes mémoire d'une instruction : (lus ou écrits comme données, seulement calculés par `lea`/`pea`).
-/// Les sauts et appels ne comptent pas : leur cible est du code.
+/// Memory operands of an instruction: (read or written as data, only computed by `lea`/`pea`).
+/// Jumps and calls do not count: their target is code.
 fn operands(op: &Op) -> (Vec<Ea>, Vec<Ea>) {
     use Op::*;
     let read = match *op {
@@ -56,7 +56,7 @@ fn operands(op: &Op) -> (Vec<Ea>, Vec<Ea>) {
     (read, addresses)
 }
 
-/// Adresse ROM fixe d'un opérande (relatif au PC ou absolu).
+/// Fixed ROM address of an operand (PC-relative or absolute).
 fn address(ea: Ea) -> Option<u32> {
     match ea {
         Ea::PcDisp(a) | Ea::PcIdx(a, _) | Ea::AbsL(a) => Some(a & 0xff_ffff),
@@ -65,10 +65,10 @@ fn address(ea: Ea) -> Option<u32> {
     }
 }
 
-/// Données rangées dans le code exécuté : une instruction exécutée lit (ou calcule par `lea`/`pea` hors d'un début
-/// d'instruction) une adresse fixe qui tombe dans le code. Ces octets sont des données (par exemple une table indexée
-/// qui commence dans le déplacement d'un `bra`) : la plage de code est rendue aux données de la cible à sa fin.
-/// Renvoie les plages rendues.
+/// Data stored in executed code: an executed instruction reads (or computes by `lea`/`pea` outside an instruction
+/// start) a fixed address that falls in the code. These bytes are data (for example a table indexed
+/// that starts in the displacement of a `bra`): the code range is given back to the data of the target at its end.
+/// Returns the ranges given back.
 fn data_in_code(prog: &[u16], code: &[(u32, u32)], is_code: &[bool]) -> Vec<(u32, u32)> {
     let mut view = View(prog);
     let mut starts = vec![false; is_code.len()];
@@ -104,12 +104,12 @@ pub fn extract(roms: &Path, assets: &Path) -> io::Result<()> {
     let size = 2 * data.len() as u32;
     let key = std::fs::read(roms.join("ddsom.key"))?;
     let (_, start, end) = cps2::crypt::parse_key(&key);
-    assert_eq!(start, 0, "zone chiffrée inattendue");
-    // le déchiffrement (comme MAME) inclut le mot de la borne haute
+    assert_eq!(start, 0, "unexpected encrypted zone");
+    // the decryption (as in MAME) includes the word of the upper bound
     let encrypted_end = 2 * end + 2;
-    // hors de la zone chiffrée, l'espace programme égale l'espace données (la reconstruction le recopie)
+    // outside the encrypted zone, the program space equals the data space (the rebuild copies it)
     if let Some(w) = (end as usize + 1..data.len()).find(|&w| data[w] != prog[w]) {
-        panic!("espace programme différent de l'espace données hors de la zone chiffrée, en {:#x}", 2 * w);
+        panic!("program space differs from data space outside the encrypted zone, at {:#x}", 2 * w);
     }
     let mut is_code = vec![false; size as usize];
     for &(a, b) in &code() {
@@ -130,7 +130,7 @@ pub fn extract(roms: &Path, assets: &Path) -> io::Result<()> {
     let program = blocks(&prog, &|a| others.prog.is_covered(a), encrypted_end);
     let code = ranges(size, |a| is_code[a as usize]);
     let remainder = Remainder {
-        description: "Région programme hors code 68000 et hors des autres fichiers (docs/sans-rom.md)".into(),
+        description: "Program region outside 68000 code and outside the other files (docs/sans-rom.md)".into(),
         encrypted_end,
         code_bytes: code.iter().map(|(a, b)| b - a).sum(),
         code: code.iter().map(|(a, b)| format!("{a:#x}-{b:#x}")).collect(),
@@ -141,8 +141,8 @@ pub fn extract(roms: &Path, assets: &Path) -> io::Result<()> {
     remainder.save(&path)?;
     let n = |v: &[Block]| v.iter().map(|b| b.bytes().unwrap().len()).sum::<usize>();
     println!(
-        "{} : {} blocs, {} octets (données), {} blocs, {} octets (programme), code exclu {} octets en {} plages \
-         ({} plages rendues aux données : cibles d'opérandes dans le code)",
+        "{}: {} blocks, {} bytes (data), {} blocks, {} bytes (program), code excluded {} bytes in {} ranges \
+         ({} ranges given back to the data: operand targets in the code)",
         path.display(),
         remainder.data.len(),
         n(&remainder.data),

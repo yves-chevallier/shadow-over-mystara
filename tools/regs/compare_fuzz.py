@@ -2,7 +2,7 @@
 import re, glob, collections, sys
 d = sys.argv[1]
 # Matches the summary lines printed by the Rust fuzz_couv example (French output today).
-L = re.compile(r'^([0-9a-f]{6}) (\S+)\s+(\d+) appels\s+(\d+) essais \(\s*(\d+) neufs\)\s+(\d+) écarts \(\s*(\d+) neufs,\s*(\d+) plausibles\)\s+(\d+) paniques')
+L = re.compile(r'^([0-9a-f]{6}) (\S+)\s+(\d+) (?:appels|calls)\s+(\d+) (?:essais|trials) \(\s*(\d+) (?:neufs|new)\)\s+(\d+) (?:écarts|gaps) \(\s*(\d+) (?:neufs|new),\s*(\d+) (?:plausibles|plausible)\)\s+(\d+) (?:paniques|panics)')
 tot = {v: collections.defaultdict(lambda: [0]*5) for v in ('branch', 'main')}
 sig = {v: collections.defaultdict(set) for v in ('branch', 'main')}
 for f in glob.glob(d + '/*.txt'):

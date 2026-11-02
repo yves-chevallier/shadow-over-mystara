@@ -1,6 +1,6 @@
-//! Types SET 2 (contrôleur de scène, 0xbc814), 3 (fenêtre de texte, 0xc8352) et 15 (0xce024) : voir
+//! Types SET 2 (scene controller, 0xbc814), 3 (text window, 0xc8352) and 15 (0xce024): see
 //! `docs/families/set_c.md`.
-//! Les tables (scripts d'événements, adresses de jeux d'animation...) restent dans la ROM.
+//! The tables (event scripts, animation set addresses...) stay in the ROM.
 
 use super::cx::handlers;
 

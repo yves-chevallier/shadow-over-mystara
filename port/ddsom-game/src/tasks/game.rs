@@ -1,41 +1,43 @@
-//! Tâche de partie (`0x1c45a`) : la boucle de jeu, un pas par image (voir `docs/looped.md` §1).
+//! Game task (`0x1c45a`): the game loop, one step per frame (see `docs/looped.md` §1).
 //!
-//! Créée au premier départ (`credits_task.rs`) à l'emplacement 0, elle boucle sans fin :
-//! compteur d'images, service tous les 60 images (`0x2e540`), cession d'une image, puis un pas de jeu
-//! (la phase `A5+0x2c`, table `0x1c502`, suivie de la fin d'image, [`Step::FrameEnd`]). Les phases ne cèdent jamais : tout le
-//! travail d'un pas tient dans une native.
+//! Created at the first start (`credits_task.rs`) in slot 0, it loops endlessly:
+//! frame counter, service every 60 frames (`0x2e540`), cession of one frame, then a game step
+//! (the phase `A5+0x2c`, table `0x1c502`, followed by the frame end, [`Step::FrameEnd`]). The phases never cede: all
+//! the
+//! work of a step fits in a native.
 //!
-//! | Adresse | Étape |
+//! | Address | Stage |
 //! |---|---|
-//! | `0x1c45a` | entrée ([`Step::Entry`]) : variables de phase remises à zéro, puis boucle |
-//! | `0x1c468` | début de tour ([`Step::Tour`], retour de la fin d'image `0x1c4c4`, [`Step::FrameEnd`]) : compteurs, service, puis la cession `0x1c48c` : une image d'attente, sauf tour sauté (voir `wait`) |
-//! | `0x1c4b0` | pas de jeu ([`Step::Frame`]) : appel de la phase |
+//! | `0x1c45a` | entry ([`Step::Entry`]): phase variables reset to zero, then loop |
+//! | `0x1c468` | start of turn ([`Step::Tour`], return from the frame end `0x1c4c4`, [`Step::FrameEnd`]): counters, service, then the cession `0x1c48c`: one wait frame, except for a skipped turn (see `wait`) |
+//! | `0x1c4b0` | game step ([`Step::Frame`]): call of the phase |
 //!
-//! Le pas commence à `0x1c4b0` = [`crate::GAME_STEP`], où la machine de référence plafonne le nombre de pas par image
-//! (`cps2::StepCap`, testé sur le PC) ; le jeu compte ses pas lui-même (`no68k::game_step`) : un pas au-delà du
-//! plafond est retenu jusqu'au début de l'image suivante, juste après le VBLANK (`kernel::Point::StepKept`).
+//! The step starts at `0x1c4b0` = [`crate::GAME_STEP`], where the reference machine caps the number of steps per frame
+//! (`cps2::StepCap`, tested on the PC); the game counts its steps itself (`no68k::game_step`): a step beyond the
+//! cap is held until the start of the next frame, just after VBLANK (`kernel::Point::StepKept`).
 
 use super::{cede, Wait};
 use crate::mem::{rd8, wr32, wr8, A5};
 use crate::modes::Flow;
 use crate::scene::Ctx;
 
-/// Étapes de la tâche de partie (le pas de jeu, `0x1c4b0`, reste une native : voir plus haut).
+/// Stages of the game task (the game step, `0x1c4b0`, remains a native: see above).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Step {
     Entry,
-    /// Début de tour : retour de la fin d'image, ou d'une phase qui dépile son propre retour.
+    /// Start of turn: return from the frame end, or from a phase that pops its own return.
     Tour,
-    /// Le pas de jeu : la phase courante. `d4` : le D4 que le pas précédent a laissé et que la phase relit (reste de la
-    /// boucle d'aiguillage, `dispatch::Leftovers::d4` : le radeau sans pilote, 0xad7b0, l'ajoute à la position des
-    /// joueurs) ; l'original le garde dans ses registres, que la cession sauve et rend.
+    /// The game step: the current phase. `d4`: the D4 that the previous step left and that the phase re-reads
+    /// (leftover of the
+    /// dispatch loop, `dispatch::Leftovers::d4`: the pilotless raft, 0xad7b0, adds it to the players'
+    /// position); the original keeps it in its registers, which the cession saves and restores.
     Frame { d4: u32 },
-    /// Retour de la phase : fin d'image (`game::frame_end`), puis le tour suivant.
+    /// Return from the phase: frame end (`game::frame_end`), then the next turn.
     FrameEnd,
 }
 
 impl Step {
-    /// Adresse que l'original reprend à cette étape.
+    /// Address at which the original resumes at this stage.
     pub const fn address(self) -> u32 {
         match self {
             Step::Entry => at::ENTRY,
@@ -45,7 +47,7 @@ impl Step {
         }
     }
 
-    /// Le pas de l'étape.
+    /// The step of the stage.
     pub fn step(self, x: &mut Ctx) -> Flow {
         match self {
             Step::Entry => entry(x),
@@ -62,48 +64,48 @@ impl Step {
     }
 }
 
-/// Variables de la RAM de travail (décalages depuis A5).
+/// Work RAM variables (offsets from A5).
 mod var {
-    /// Phase (pas de 4), étape, et mots suivants : remis à zéro à l'entrée.
+    /// Phase (step of 4), stage, and following words: reset to zero at entry.
     pub const PHASE: u32 = 0x2c;
-    /// Compteur d'images de la partie.
+    /// Game frame counter.
     pub const FRAMES: u32 = 0x6e;
-    /// Carte de développement : le temps de jeu est compté chaque seconde.
+    /// Development board: play time is counted every second.
     pub const SERVICE: u32 = 0x82;
 }
 
-/// Octets hors de la page A5 : compteur d'images du service (A5 - 0x6610), tours sautés sans cession
-/// (A5 - 0x660f) et « un pas a eu lieu depuis le VBLANK » (A5 - 0x660e).
+/// Bytes outside the A5 page: service frame counter (A5 - 0x6610), turns skipped without cession
+/// (A5 - 0x660f) and "a step took place since VBLANK" (A5 - 0x660e).
 const SERVICE_COUNT: u32 = 0xff_19f0;
 const FREE_STEPS: u32 = 0xff_19f1;
 const STEPPED: u32 = 0xff_19f2;
 
-/// Images entre deux services, pas enchaînés sans cession après une cession, table des phases.
+/// Frames between two services, steps chained without cession after a cession, phase table.
 const SERVICE_PERIOD: u8 = 60;
 const MAX_FREE_STEPS: i8 = 3;
 const PHASES: u32 = 0x1c502;
 
-/// Adresses de l'original.
+/// Addresses of the original.
 mod at {
     pub const ENTRY: u32 = 0x1c45a;
     pub const TURN: u32 = 0x1c468;
     pub const STEP: u32 = crate::GAME_STEP;
-    /// Retour d'une phase : la fin d'image.
+    /// Return from a phase: the frame end.
     pub const FRAME_END: u32 = 0x1c4c4;
 }
 
-/// Appel en cours de la tâche : `next` reprendra quand l'appelé reviendra (rien n'est empilé sur la pile 68000).
+/// Current call of the task: `next` will resume when the callee returns (nothing is pushed on the 68000 stack).
 fn push(x: &mut Ctx, next: impl Into<super::table::Next>) {
     super::table::call(x.b, next);
 }
 
-/// Drapeaux N et Z d'un octet chargé (`move.b`), V et C à zéro.
+/// N and Z flags of a loaded byte (`move.b`), V and C at zero.
 fn flags(x: &mut Ctx, value: u8) {
     x.c.sr = (x.c.sr & !0x0f) | (value == 0) as u16 * 4 | (value >> 7) as u16 * 8;
 }
 
-/// `0x1c44a` : les variables de partie `A5+0x2c..0x6b` (phase, étape...) à zéro ; registres de la boucle
-/// d'origine (D0 = 0, D6.w = -1, A0 = fin de la zone).
+/// `0x1c44a`: the game variables `A5+0x2c..0x6b` (phase, stage...) to zero; registers of the original
+/// loop (D0 = 0, D6.w = -1, A0 = end of the area).
 pub fn clear_variables(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     for i in 0..16 {
         wr32(b, A5 + var::PHASE + 4 * i, 0);
@@ -113,14 +115,14 @@ pub fn clear_variables(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     c.a[0] = A5 + var::PHASE + 0x40;
 }
 
-/// `0x1c45a` : phase et étape à zéro.
+/// `0x1c45a`: phase and stage to zero.
 fn entry(x: &mut Ctx) -> Flow {
     wr32(x.b, A5 + var::PHASE, 0);
     wr32(x.b, A5 + var::PHASE + 4, 0);
     turn(x)
 }
 
-/// `0x1c468` : un tour. Les quatre mots `A5+0x2c..0x33` sont ceux que `0x1c44a` remet à zéro.
+/// `0x1c468`: one turn. The four words `A5+0x2c..0x33` are those that `0x1c44a` resets to zero.
 fn turn(x: &mut Ctx) -> Flow {
     let frames = x.v16(var::FRAMES).wrapping_add(1);
     x.set_v16(var::FRAMES, frames);
@@ -134,8 +136,8 @@ fn turn(x: &mut Ctx) -> Flow {
     wait(x)
 }
 
-/// `0x1c48c` : cède une image, sauf si aucun pas n'a eu lieu depuis le VBLANK (qui efface `STEPPED`) et que moins
-/// de quatre tours ont été sautés de suite.
+/// `0x1c48c`: cedes one frame, unless no step took place since VBLANK (which clears `STEPPED`) and fewer
+/// than four turns have been skipped in a row.
 fn wait(x: &mut Ctx) -> Flow {
     let stepped = rd8(x.b, STEPPED) != 0;
     let free = rd8(x.b, FREE_STEPS) as i8;
@@ -148,8 +150,8 @@ fn wait(x: &mut Ctx) -> Flow {
     cede(x, Wait::Images(1), Step::Frame { d4 })
 }
 
-/// `0x1c4b0` : le pas de jeu, s'il tient dans l'image (sinon il est retenu jusqu'à la suivante). La phase revient à
-/// la fin d'image, qui revient au début du tour.
+/// `0x1c4b0`: the game step, if it fits in the frame (otherwise it is held until the next one). The phase returns to
+/// the frame end, which returns to the start of the turn.
 fn step(x: &mut Ctx) -> Flow {
     if !crate::no68k::game_step() {
         crate::kernel::keep_step(x.b, x.c.d[4]);
@@ -166,8 +168,8 @@ fn step(x: &mut Ctx) -> Flow {
     run_handler(x, phase)
 }
 
-/// Le gestionnaire de la phase (table `0x1c502` de l'original, une adresse par phase, laissée dans A0), appelé
-/// directement : il revient (`Flow::Done`, à la fin d'image) ou a cédé la main.
+/// The phase handler (table `0x1c502` of the original, one address per phase, left in A0), called
+/// directly: it returns (`Flow::Done`, at the frame end) or has ceded control.
 fn run_handler(x: &mut Ctx, phase: u8) -> Flow {
     match phase {
         0 => {
@@ -190,8 +192,8 @@ fn run_handler(x: &mut Ctx, phase: u8) -> Flow {
             Flow::Done
         }
         28 => crate::modes::ending::phase_28(x),
-        // la table a huit entrées (code-mort.md, lot « sortie du Cpu »)
-        _ => unreachable!("phase {phase:#x} : hors de la table 0x1c502"),
+        // the table has eight entries (code-mort.md, lot « sortie du Cpu »)
+        _ => unreachable!("phase {phase:#x}: outside the table 0x1c502"),
     }
 }
 

@@ -1,16 +1,16 @@
-//! Type 4, arrivée (`+5 = 0`), bête debout (`+5 = 2`) et repos (`+5 = 10`).
+//! Type 4, arrival (`+5 = 0`), standing beast (`+5 = 2`) and rest (`+5 = 10`).
 
 use crate::families::cx::Bench;
 use super::*;
 
-/// Tables de la ROM : attaques à choisir par niveau de difficulté (`A5+0x7f92`), 32 octets par niveau.
+/// ROM tables: attacks to choose per difficulty level (`A5+0x7f92`), 32 bytes per level.
 const CLOSE_ATTACKS: u32 = 0x5eec6;
 const FAR_ATTACKS: u32 = 0x5f0c6;
 const NEXT_MOVES: u32 = 0x5f3d8;
-/// Tirage de la chance d'attaquer, un long par niveau de difficulté.
+/// Draw of the chance to attack, one long per difficulty level.
 const ATTACK_CHANCE: u32 = 0x5f2ea;
 
-// --- sous-état 0 : arrivée ----------------------------------------------------------------------
+// --- substate 0: arrival ----------------------------------------------------------------------
 
 pub(super) fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
@@ -59,7 +59,7 @@ pub(super) fn walk_begin<R: Bench>(x: &mut Cx<'_, R>) {
     speed(x, 0xb);
 }
 
-/// 0x5db66 : fin d'un demi-tour de l'arrivée.
+/// 0x5db66: end of an arrival turn-around.
 pub(super) fn turn_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.set8(0x7, 0);
@@ -71,7 +71,7 @@ pub(super) fn turn_end<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5f2c6 : la bête a-t-elle envie d'attaquer ? (un bit tiré dans un masque par niveau de difficulté).
+/// 0x5f2c6: does the beast feel like attacking? (one bit drawn from a mask per difficulty level).
 fn attack_chance<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let level = (var::RANK.get(x.b).wrapping_mul(4)) as u32;
     let mask = rom32(x, ATTACK_CHANCE + level);
@@ -79,7 +79,7 @@ fn attack_chance<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     mask >> bit & 1 != 0
 }
 
-// --- sous-état 2 : debout -----------------------------------------------------------------------
+// --- substate 2: standing -----------------------------------------------------------------------
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
@@ -97,7 +97,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 0 et 8 (0x5dc2c) : marche vers la cible, observe, puis attaque ou change de côté.
+/// +6 = 0 and 8 (0x5dc2c): walks toward the target, watches, then attacks or changes side.
 fn pursue<R: Bench>(x: &mut Cx<'_, R>) {
     if target_far(x) {
         return set_state_long(x, 0x0202_0600);
@@ -128,7 +128,7 @@ fn pursue<R: Bench>(x: &mut Cx<'_, R>) {
     engage(x);
 }
 
-/// 0x5dcc8 : un test de la cible peut figer la bête un instant ; sinon elle engage.
+/// 0x5dcc8: a test on the target can freeze the beast for a moment; otherwise it engages.
 pub(super) fn pursue_tail<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::maybe_draw_6e(x) {
         return x.set16(f::SUB2, 0x0400);
@@ -137,7 +137,7 @@ pub(super) fn pursue_tail<R: Bench>(x: &mut Cx<'_, R>) {
     engage(x);
 }
 
-/// 0x5dce0 : la cible est-elle à portée ? Frappe, saisit, ou continue d'avancer.
+/// 0x5dce0: is the target in range? Strikes, grabs, or keeps advancing.
 pub(super) fn engage<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x28, 0x28, 0x10) {
         x.set16(f::STATE, 0x0204);
@@ -152,7 +152,7 @@ pub(super) fn engage<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     move_xy(x);
     let Some(dx) = target_dx(x) else { return };
-    // l'écart (bête - cible) est négatif quand la cible est à droite : la bête doit regarder à droite
+    // the offset (beast - target) is negative when the target is on the right: the beast must look right
     let want = if dx > 0 { 0x20 } else { 0 };
     if want != x.u8(f::FLIP) {
         x.set32(g::RESUME_STATE, ACTIVE_STANCE);
@@ -161,9 +161,9 @@ pub(super) fn engage<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Un joueur est juste devant (0x5dd7a ou 0x5ddf4) : au hasard une attaque de la table `attacks`
-/// ou un coup court (état `0x02020800`). `mask` : bits du tirage qui choisissent le coup court
-/// (`0xf` : jusqu'à 10 sur 16, `0x2` : une fois sur deux).
+/// A player is right in front (0x5dd7a or 0x5ddf4): at random an attack from the `attacks` table or a short attack
+/// (state `0x02020800`). `mask`: bits of the draw that choose the short attack (`0xf`: up to 10 out of 16, `0x2`: one
+/// time in two).
 fn reach<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, mask: u16, attacks: u32) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
@@ -185,7 +185,7 @@ fn reach<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, mask: u16, atta
     true
 }
 
-/// 0x5ee94 et 0x5ee9a : tire l'attaque (`+6`) dans la table du niveau de difficulté.
+/// 0x5ee94 and 0x5ee9a: draws the attack (`+6`) from the difficulty-level table.
 pub(super) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
     let r = random(x) & 0x1f;
@@ -195,14 +195,14 @@ pub(super) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     x.set8(0x7, 0);
 }
 
-/// 0x5ee68 : la cible est loin en abscisse.
+/// 0x5ee68: the target is far in abscissa.
 fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let Some(t) = target(x) else { return false };
     let dx = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_add(0xa0);
     dx > 0x140
 }
 
-/// +6 = 2 (0x5dbd4) : demi-tour (animation 1 puis 3) puis reprise de l'état mémorisé.
+/// +6 = 2 (0x5dbd4): turn-around (animation 1 then 3) then resumes the saved state.
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
@@ -222,7 +222,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 (0x5de68) : attente debout avant de passer à l'attaque.
+/// +6 = 4 (0x5de68): standing wait before moving on to the attack.
 fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         return ready(x);
@@ -238,14 +238,14 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-/// +7 = 0 des attaques (0x5de70) : la bête se prépare (animation de repos).
+/// +7 = 0 of the attacks (0x5de70): the beast gets ready (rest animation).
 pub(super) fn ready<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 1);
     pose(x, 6, SET_BODY, 0);
 }
 
-/// +6 = 6 (0x5decc) : s'approche de la cible en la regardant.
+/// +6 = 6 (0x5decc): approaches the target while looking at it.
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -281,7 +281,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5f36a : fin d'un coup ; la bête enchaîne une charge si un joueur est proche, sinon se remet debout.
+/// 0x5f36a: end of an attack; the beast chains a charge if a player is near, otherwise gets back on its feet.
 pub(super) fn next_move<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(_) = target(x) else { return set_state_long(x, ACTIVE_STANCE) };
     if !lib::target_in_box(x, -0x38, 0x38, 0x20) && !lib::target_in_box(x, -0xb0, 0x40, 0x20) {
@@ -295,7 +295,7 @@ pub(super) fn next_move<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x7, 0);
 }
 
-// --- sous-état 10 : repos -----------------------------------------------------------------------
+// --- substate 10: rest -----------------------------------------------------------------------
 
 /// Repos : attend qu'un joueur soit en vie (`+6` = 0 seulement).
 pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {

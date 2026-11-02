@@ -1,5 +1,5 @@
-//! Effets des joueurs (PEFF), cinquième série : types 12 (le gel), 13 (bénédiction) et 14 (renvoi).
-//! Voir `docs/families/player.md`.
+//! Player effects (PEFF), fifth series: types 12 (freeze), 13 (blessing) and 14 (reflect).
+//! See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -13,7 +13,7 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Caméra de référence : position (X, Y) de la caméra principale, ou de la secondaire si `A5+0x36`.
+/// Reference camera: position (X, Y) of the main camera, or of the secondary one if `A5+0x36`.
 fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
     if x.a5_u8(a5::USE_CAM2) != 0 {
         (x.a5_u16(a5::CAM2_X), x.a5_u16(a5::CAM2_Y))
@@ -22,10 +22,10 @@ fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
     }
 }
 
-/// Type 12 (0x4bc66) : le gel (magie 15 et sorts de gel), six variantes qui ont chacune leurs états.
-/// 0 : éclat de glace qui rebondit sur les bords de l'écran ; 1 : son halo ; 2 : brume ; 3 : flocon ;
-/// 4 : éclat tombant (`+2f` pair) ; 5 : couronne autour du lanceur. Tant que le jeu est figé
-/// (`A5+0x3d` non nul) les effets durent ; il passe à l'état 4 dès que le gel cesse.
+/// Type 12 (0x4bc66): the freeze (magic 15 and freeze spells), six variants that each have their own states.
+/// 0: ice shard that bounces off the edges of the screen; 1: its halo; 2: mist; 3: snowflake;
+/// 4: falling shard (`+2f` even); 5: crown around the caster. As long as the game is frozen (`A5+0x3d` non-zero) the
+/// effects last; it goes to state 4 as soon as the freeze ends.
 mod ice {
     use super::*;
 
@@ -56,7 +56,7 @@ mod ice {
         }
     }
 
-    // --- variante 0 : éclat qui rebondit ---------------------------------------------------------
+    // --- variant 0: bouncing shard ---------------------------------------------------------
 
     fn shard<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4bc90) {
@@ -80,7 +80,7 @@ mod ice {
                 let n = 0x2b;
                 x.select_speed(&crate::objects::motion::SPEEDS_B, n);
                 x.anim(ANIMS, 0);
-                // un halo (variante 1) suit l'éclat
+                // a halo (variant 1) follows the shard
                 if let Some(o) = x.alloc(&pools::PEFF) {
                     o.set_u8(x.b, 0, 1);
                     o.set_u8(x.b, 2, 0xc);
@@ -95,8 +95,8 @@ mod ice {
                 if x.u8(0x54) == 0 {
                     let w = x.rand_and_b_word(0x1f);
                     x.set8(0x2d, w as u8);
-                    // Glitch d'origine : `andi.b #0xf,D0` puis index D0.w : l'octet haut du tirage entre dans
-                    // l'index des délais
+                    // Original glitch: `andi.b #0xf,D0` then index D0.w: the high byte of the draw enters the delay
+                    // index
                     let index = (w & 0xff00 | w & 0xf) as i16 as i32 as u32;
                     let delay = x.rom8(DELAYS.wrapping_add(index));
                     x.set8(0x54, delay);
@@ -123,10 +123,9 @@ mod ice {
         }
     }
 
-    /// Rebond sur les bords de l'écran (`0x4bda8`) : le tirage `andi.w #7,D2w` porte sur D2, laissé
-    /// par l'appelant.
+    /// Bounce off the edges of the screen (`0x4bda8`): the draw `andi.w #7,D2w` operates on D2, left by the caller.
     fn bounce<R: Bench>(x: &mut Cx<'_, R>) {
-        // Glitch d'origine : le tirage n'est pas utilisé, le rebond est choisi par le D2 hérité.
+        // Original glitch: the draw is not used, the bounce is chosen by the inherited D2.
         x.random();
         let d2 = *x.c.d2() & 7;
         *x.c.d2() = *x.c.d2() & 0xffff_0000 | d2;
@@ -169,7 +168,7 @@ mod ice {
         }
     }
 
-    // --- variante 1 : halo de l'éclat --------------------------------------------------------------
+    // --- variant 1: halo of the shard --------------------------------------------------------------
 
     fn halo<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4be9e) {
@@ -230,7 +229,7 @@ mod ice {
             }
         }
         if d0 & mask == 0 {
-            // flocon (variante 3), sans lien
+            // snowflake (variant 3), unrelated
             if let Some(o) = x.alloc(&pools::PEFF) {
                 o.set_u8(x.b, 0, 1);
                 o.set_u8(x.b, 2, 0xc);
@@ -258,7 +257,8 @@ mod ice {
                 let dy = x.rom16(SCATTER_Y + b2);
                 x.add16(0x8, dx);
                 x.add16(0x10, dy);
-                // Glitch d'origine : les restes de 0x24b0 (D2 = le terrain) sont relus par le rebond d'un gestionnaire suivant
+                // Original glitch: the leftovers of 0x24b0 (D2 = the terrain) are re-read by the bounce of a following
+                // handler
                 let (px, py) = (x.u16(0x8), x.u16(0x10));
                 let t = crate::video::terrain(x.b, px, py);
                 leftovers_terrain(x, &t);
@@ -278,7 +278,7 @@ mod ice {
         }
     }
 
-    // --- variante 4 : éclat tombant ----------------------------------------------------------------
+    // --- variant 4: falling shard ----------------------------------------------------------------
 
     fn falling<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4c076) {
@@ -304,7 +304,7 @@ mod ice {
         }
     }
 
-    // --- variante 5 : couronne autour du lanceur ----------------------------------------------------
+    // --- variant 5: crown around the caster ----------------------------------------------------
 
     fn crown<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4c0da) {
@@ -339,8 +339,8 @@ mod ice {
     }
 }
 
-/// Type 13 (0x4c1b6) : bénédiction (variantes 0 à 2) : posée devant le lanceur, elle clignote tant que
-/// son effet (`+0x168` du lanceur) dure.
+/// Type 13 (0x4c1b6): blessing (variants 0 to 2): placed in front of the caster, it blinks as long as its effect
+/// (`+0x168` of the caster) lasts.
 mod blessing {
     use super::*;
 
@@ -379,8 +379,8 @@ mod blessing {
     }
 }
 
-/// Type 14 (0x4c2b4) : renvoi. Variante 0 : rayon posé sur le lanceur ; variantes 1 : quatre faisceaux qui
-/// s'abattent sur le monstre visé (`+0x5c`) et le blessent en touchant le sol.
+/// Type 14 (0x4c2b4): reflect. Variant 0: ray placed on the caster; variant 1: four beams that come down on the
+/// targeted monster (`+0x5c`) and hurt it when touching the ground.
 mod banish {
     use super::*;
 
@@ -471,7 +471,7 @@ mod banish {
         x.reinsert();
     }
 
-    /// Le faisceau 0 touche le sol : blesse le monstre visé (`0x4c4a0`).
+    /// Beam 0 touches the ground: hurts the targeted monster (`0x4c4a0`).
     fn strike<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x2f) != 0 || (x.u16(0xc) as i16) >= 0 {
             return;

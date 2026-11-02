@@ -1,7 +1,7 @@
 # ESHL 40 à 63 (`families/eshl_c.rs`)
 
 Tirs et attaques des ennemis, types 40 à 63 de la classe ESHL. Cadre commun et contrat des
-gestionnaires : `docs/familles-eshl-set-sobj.md`. Les noms de rôle marqués (h) sont des hypothèses
+gestionnaires : `docs/families-eshl-set-sobj.md`. Les noms de rôle marqués (h) sont des hypothèses
 tirées du comportement. Champs : `+4` état principal, `+5` / `+6` / `+7` sous-états, `+3` variante,
 `+0x2c` orientation, `+0x2e` jeu de boîtes, `+0x44` identifiant d'attaque, `+0x45` puissance,
 `+0x50` propriétaire, `+0x5c` créateur (pour les types qui en ont un, l'objet est créé par une
@@ -9,7 +9,7 @@ fonction de création placée dans la ROM entre deux gestionnaires, non réécri
 dans la ROM (jamais recopiées) : `(tbl,PC,Dn)` en espace programme (`rom16/rom8`), registres et
 absolus en espace de données (`data16/data32/data8`).
 
-Aucun de ces types n'est exercé par les 8 scénarios : ils ne sont validés que par `fuzz familles`
+Aucun de ces types n'est exercé par les 8 scénarios : ils ne sont validés que par `fuzz families`
 (voir la couverture en fin de document).
 
 Fonctions de création **non** réécrites (appelées par d'autres objets) : 0xa3354 (type 41),
@@ -80,7 +80,7 @@ chevauchement), qui tombe quand `+0xa4` de la source n'est plus 4.
 ### 46 à 51
 46 : animation = variante, X -= 4 par image, libéré à `A5+0x506 - 0x50`. 47 : table de décalages
 0xa3fd4 / 0xa3ff4 (X) et 0xa4014 / 0xa4034 (Y), délais 0xa4068. 48 : monte/descend le long de VZ,
-compte ses retombées dans `+0x1d` du lanceur, libère l'emplacement `+8+variante` du lanceur ; appelle
+compte ses retombées dans `+0x1d` du lanceur, libère l'emplacement `+8+variant` du lanceur ; appelle
 0x54872 (création d'un tir joueur). 49 : posé à 0x6e pixels devant l'hôte, anime jusqu'à ce que l'hôte
 passe à `+7 = 6`. 50 : phases d'animation `+0x5a` / durée `+0x5b` (table 0xa44aa), retenue (0xfbae) et
 0x33fe4 à chaque image. 51 : retombée depuis `A5+0x50a + 0x100`, appelle 0xab7d8 et 0x2860 au sol.
@@ -117,7 +117,7 @@ sort par les tables 0xa6b0e (délais) et 0xa6c54 (masques indexés par `FFFF92`)
 
 Scénarios : aucun des types 40 à 63 n'est appelé (seuls ESHL 1, 2, 11, 13, 14, 23 le sont).
 
-Fuzz (`fuzz familles`, `DDSOM_LIEN=1 DDSOM_PAS=200 DDSOM_VARIANTES=n DDSOM_ENTREE=<adresse sans 0x>`,
+Fuzz (`fuzz families`, `DDSOM_LIEN=1 DDSOM_PAS=200 DDSOM_VARIANTES=n DDSOM_ENTREE=<address without 0x>`,
 150 trajectoires environ par type) : 0 écart sur les 24 types, de 200 à 12 000 appels chacun selon le
 type. Les variantes hors table (par exemple `+3` = 2 pour les types 44, 45 qui n'en ont que deux) font
 sortir l'original des rails : elles ne sont pas des écarts à corriger et ont été exclues du compte.
@@ -168,6 +168,6 @@ juste avant la boucle de dispatch EFFCT 0x39cba) étaient restées en code d'ori
 
 Particularités : ESHL 66 teste à l'expiration de son attente son **propre** mot `+4` (0x204) et `+6`, toujours faux
 dans ce sous-état : il est donc toujours lâché ; ESHL 68 compare le long `+4..+6` du porteur (octet `+7` effacé) à
-0x02040200. Fuzz (`fuzz_eshl_c familles`, `DDSOM_LIEN=1`, 300 trajectoires par type, `DDSOM_ENTREE=<entrée>`) : 0 écart
-sur les neuf types, les variantes hors table de 65, 68, 70, 71 exclues (`variantes_en_table`). Restent en code
+0x02040200. Fuzz (`fuzz_eshl_c families`, `DDSOM_LIEN=1`, 300 trajectoires par type, `DDSOM_ENTREE=<entrée>`) : 0 écart
+sur les neuf types, les variantes hors table de 65, 68, 70, 71 exclues (`table_variants`). Restent en code
 d'origine les fonctions de création appelées par les ennemis (0xa6e6a, 0xa7234, 0xa727c, 0xa7b0a, 0xa836c).

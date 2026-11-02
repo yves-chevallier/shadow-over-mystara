@@ -1,21 +1,20 @@
-//! Ennemi « Shadow Elf » (ENEMY type 12, 0x69384). Voir `docs/families/enemy.md`.
+//! "Shadow Elf" enemy (ENEMY type 12, 0x69384). See `docs/families/enemy.md`.
 //!
-//! Elfe sombre qui frappe à l'épée, disparaît et retombe sur sa cible. Charpente commune : `+4` état
-//! (0 création, 2 actif, 4 touché, 6 libération), `+5` groupe de comportements, `+6` et `+7` étapes.
-//! En état actif :
+//! Dark elf that strikes with a sword, disappears and falls back onto its target. Common framework: `+4` state (0
+//! creation, 2 active, 4 hit, 6 release), `+5` group of behaviours, `+6` and `+7` steps. In the active state:
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `mod` | arrivée selon la variante `+3` |
-//! | 2 | `stance` | debout : marche, demi-tour, attente, choix d'un coup |
-//! | 4 | `attacks` | coups (`+6` = le coup) |
-//! | 6 | `attacks` | coups d'après-bond |
-//! | 8 | `attacks` | coups de repli |
-//! | 10 | `stance` | repos : attend qu'un joueur soit en vie |
-//! | état 4 | `hit` | réactions aux coups |
+//! | 0 | `mod` | arrival according to variant `+3` |
+//! | 2 | `stance` | standing: walk, turn-around, wait, choice of an attack |
+//! | 4 | `attacks` | attacks (`+6` = the attack) |
+//! | 6 | `attacks` | post-leap attacks |
+//! | 8 | `attacks` | fallback attacks |
+//! | 10 | `stance` | rest: waits for a player to be alive |
+//! | state 4 | `hit` | reactions to hits |
 //!
-//! Animations : 0x164174 (mouvements) et 0x164184 (coups). L'état actif exécute toujours, hors gel, le
-//! test de proximité 0x81aa4, le test de zone, l'ombre et la remise en liste.
+//! Animations: 0x164174 (movements) and 0x164184 (attacks). Except when frozen, the active state always runs the
+//! proximity test 0x81aa4, the zone test, the shadow and the re-queuing.
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -26,40 +25,40 @@ mod attacks;
 mod hit;
 mod stance;
 
-/// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
+/// Fields specific to this type (the common fields are in `enemy_common::f`).
 pub(self) mod g {
-    /// Dégâts du coup en cours : type et force.
+    /// Damage of the current attack: type and strength.
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
-    /// Vulnérable (1) ou non.
+    /// Vulnerable (1) or not.
     pub const VULNERABLE: u32 = 0x67;
-    /// Compteurs d'IA : coups restants, délai avant un nouveau choix, attente, marche.
+    /// AI counters: remaining attacks, delay before a new choice, wait, walk.
     pub const AI_CHOICE: u32 = 0x6b;
     pub const AI_WAIT: u32 = 0x6e;
     pub const AI_WALK: u32 = 0x71;
     pub const AI_KIND: u32 = 0x78;
-    /// Compteur de répétitions d'un coup et minuterie.
+    /// Repetition counter of an attack and timer.
     pub const REPEAT: u32 = 0xa2;
-    /// Dernière direction d'IA (animation de marche) et son compte à rebours.
+    /// Last AI direction (walking animation) and its countdown.
     pub const WALK_ANIM: u32 = 0xa1;
     pub const WALK_ANIM_TIMER: u32 = 0xa4;
-    /// Coup prévu après l'approche et animation de mouvement de ce coup.
+    /// Attack planned after the approach and movement animation of that attack.
     pub const NEXT_ATTACK: u32 = 0xa5;
     pub const APPROACH_ANIM: u32 = 0xa6;
-    /// Attente restante avant l'étape suivante.
+    /// Remaining wait before the next step.
     pub const COOLDOWN: u32 = 0x77;
 }
 
 use g::*;
 use crate::objects::Current;
 
-/// Jeux d'animations : mouvements et coups.
+/// Animation sets: movements and attacks.
 const SET_BODY: u32 = 0x164174;
 const SET_STRIKE: u32 = 0x164184;
-/// États longs (`+4..+7`).
+/// Long states (`+4..+7`).
 const STANCE: u32 = 0x0202_0000;
 const IDLE: u32 = 0x020a_0000;
-/// Tables de la ROM : coups à choisir par niveau de difficulté (`A5+0x7f92`), 32 octets par niveau.
+/// ROM tables: attacks to choose per difficulty level (`A5+0x7f92`), 32 bytes per level.
 const FALLBACK_MOVES: u32 = 0x6a480;
 const CLOSE_ATTACKS: u32 = 0x6a73c;
 const FAR_ATTACKS: u32 = 0x6a93c;
@@ -98,7 +97,7 @@ fn move_xy<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
-/// 0x69528 : saut — effet 0xecfe4 et animation 3.
+/// 0x69528: jump — effect 0xecfe4 and animation 3.
 fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xecfe4);
     body(x, 3);
@@ -109,7 +108,7 @@ fn crouch<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 4);
 }
 
-/// 0x6953c : attend la fin de l'animation, puis passe au `+6` suivant.
+/// 0x6953c: waits for the end of the animation, then moves on to the next `+6`.
 fn wait_anim<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         x.add8(f::SUB2, 2);
@@ -123,7 +122,7 @@ fn end_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6a680 : retour debout ; si la décision 0x79ce le veut, au repos.
+/// 0x6a680: back to standing; if decision 0x79ce wants it, to rest.
 fn back_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
@@ -131,7 +130,7 @@ fn back_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6a452 : fin d'un coup — le suivant est tiré dans la ligne de la difficulté (32 octets).
+/// 0x6a452: end of an attack — the next one is drawn from the difficulty row (32 bytes).
 fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_KIND, 0xff);
     let row = (var::RANK.get(x.b) >> 1) << 5;
@@ -142,7 +141,7 @@ fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 0);
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
@@ -166,11 +165,11 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_KIND, 0xff);
     x.set8(0x80, 0xc);
     x.set8(0x81, 0xb);
-    // la création enchaîne directement sur l'état actif
+    // creation chains directly into the active state
     active(x);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
@@ -192,8 +191,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Sous-état 0 : arrivée selon la variante `+3` (octet pair, indice de table : 0 marche, 2 chute, 4 bond,
-/// 6 chute lente).
+/// Substate 0: arrival according to variant `+3` (even byte, table index: 0 walk, 2 fall, 4 leap, 6 slow fall).
 fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => {
@@ -276,7 +274,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x69558 : descente (déplacement en hauteur) puis réception.
+/// 0x69558: descent (movement in height) then landing.
 fn land<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_z();
     if (x.u16(Obj::Z) as i16) > 0 {

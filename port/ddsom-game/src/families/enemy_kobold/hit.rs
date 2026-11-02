@@ -1,12 +1,12 @@
-//! Type 0, état touché (`+4 = 4`, 0x567ca). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
-//! 6 seconde table de réactions, 8 saisie par un joueur (le Kobold s'enfuit).
+//! Type 0, hit state (`+4 = 4`, 0x567ca). `+5`: 0 reaction by table (`+0x49`), 2 recoil, 4 fall and get up, 6 second
+//! reaction table, 8 grabbed by a player (the Kobold runs away).
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Tables de réactions communes aux coups, indexées par le code `+0x49`.
+/// Reaction tables shared by the hits, indexed by code `+0x49`.
 const REACT_FIRST: u32 = 0x56816;
 const REACT_SECOND: u32 = 0x56a0e;
 
@@ -37,7 +37,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-// --- sous-état 2 : recul ------------------------------------------------------------------------------------
+// --- substate 2: recoil ------------------------------------------------------------------------------------
 
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
@@ -73,7 +73,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     zone_and_terrain(x);
 }
 
-// --- sous-état 4 : chute et relevé --------------------------------------------------------------------------
+// --- substate 4: fall and get up --------------------------------------------------------------------------
 
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -107,7 +107,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     zone_and_terrain(x);
 }
 
-// --- sous-état 8 : saisie par un joueur ------------------------------------------------------------------------
+// --- substate 8: grabbed by a player ------------------------------------------------------------------------
 
 fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
@@ -117,7 +117,7 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             let right = on_right_half(x);
             let flipped = x.u8(f::FLIP) != 0;
-            // se retourne vers le bord de l'écran le plus proche, ou court directement
+            // turns toward the nearest edge of the screen, or runs straight off
             let turn = if right { !flipped } else { flipped };
             if turn {
                 x.add8(f::SUB2, 2);
@@ -192,7 +192,7 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x56b42 : le Kobold court vers le bord de l'écran (animation 0x16).
+/// 0x56b42: the Kobold runs toward the edge of the screen (animation 0x16).
 fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 0x16);

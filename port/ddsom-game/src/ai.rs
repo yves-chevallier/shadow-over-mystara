@@ -1,13 +1,13 @@
-//! Aides d'IA communes aux ennemis et aux boss (sous-système E1) : choix d'un joueur comme cible, points de vie
-//! et immunités initiaux, décisions pseudo-aléatoires par tables, tests de position, maintien dans l'écran.
+//! AI helpers common to enemies and bosses (subsystem E1): choosing a player as target, initial hit points
+//! and immunities, pseudo-random table-driven decisions, position tests, keeping on screen.
 //!
-//! Chaque routine d'origine est une fonction Rust ordinaire sur l'objet traité (`Obj`, l'A0 de l'original) : ses
-//! entrées en arguments, son résultat en valeur Rust. Les gestionnaires (`families::enemy_lib`) les appellent
-//! directement ; aucune ne reproduit plus les registres de l'original (preuve : `DDSOM_POISON`, voir
-//! `docs/refactorisation.md`, lot IA).
+//! Each original routine is an ordinary Rust function on the processed object (`Obj`, the A0 of the original): its
+//! inputs as arguments, its result as a Rust value. The handlers (`families::enemy_lib`) call them
+//! directly; none reproduces the registers of the original any more (proof: `DDSOM_POISON`, see
+//! `docs/refactorisation.md`, AI batch).
 //!
-//! Joueurs : 4 enregistrements de 0x200 octets à A5+0x5de (`ram::PLAYERS`) ; un joueur est « ciblable » s'il est
-//! actif (`+0`), d'état principal < 4 (`+4`), et non masqué (bit 1 de `+1`), avec une règle sur `+0x182`
+//! Players: 4 records of 0x200 bytes at A5+0x5de (`ram::PLAYERS`); a player is "targetable" if it is
+//! active (`+0`), of main state < 4 (`+4`), and not masked (bit 1 of `+1`), with a rule on `+0x182`
 //! ([`Rule`]).
 
 use cps2::Cps2Bus;
@@ -18,71 +18,71 @@ use crate::player::Player;
 use crate::ram::{self, Word, Byte, PLAYERS, PLAYERS_ALIVE};
 use crate::rng;
 
-/// Rang (difficulté dynamique 0..31, `objects::rank`) : il indexe les tables de décision et de PV.
+/// Rank (dynamic difficulty 0..31, `objects::rank`): it indexes the decision and HP tables.
 pub const RANK: Word = Word::a5(0x7f92);
-/// Niveau de difficulté du réglage (h) : au-delà de 5, les PV initiaux viennent de la seconde moitié de la table.
+/// Difficulty level of the setting (h): beyond 5, the initial HP come from the second half of the table.
 const LEVEL: Byte = Byte::a5(0x48);
 
-/// Champs de l'ennemi lus ou écrits par ces aides.
+/// Enemy fields read or written by these helpers.
 pub mod f {
-    /// Cible : mot bas de l'adresse d'un joueur ou d'un objet (0 : aucune).
+    /// Target: low word of the address of a player or an object (0: none).
     pub const TARGET: u32 = 0x50;
-    /// Orientation : 0 regarde à droite, 0x20 à gauche.
+    /// Orientation: 0 faces right, 0x20 left.
     pub const FLIP: u32 = 0x2c;
-    /// Cap (0..31, index de la table de vitesses : `Obj::SPEED_INDEX`).
+    /// Heading (0..31, index of the speed table: `Obj::SPEED_INDEX`).
     pub const HEADING: u32 = 0x2d;
-    /// Points de vie : maximum, courants, précédents.
+    /// Hit points: maximum, current, previous.
     pub const HP_MAX: u32 = 0x60;
     pub const HP: u32 = 0x62;
     pub const HP_PREV: u32 = 0x64;
-    /// Lignes des tables de décision par masque (0xa4b4, 0xa4c2).
+    /// Rows of the mask decision tables (0xa4b4, 0xa4c2).
     pub const DECISION_A: u32 = 0x72;
     pub const DECISION_B: u32 = 0x73;
-    /// Ligne de la table d'octets par rang et octet tiré (0xac3a).
+    /// Row of the byte table by rank and drawn byte (0xac3a).
     pub const BYTE_TABLE: u32 = 0x76;
     pub const BYTE: u32 = 0x77;
-    /// Immunités (long, bits par sorte d'attaque).
+    /// Immunities (long, bits per kind of attack).
     pub const IMMUNITIES: u32 = 0x94;
-    /// Rang de PV : (joueurs en vie - 1) × 32 + rang pair (colonne des tables de paliers).
+    /// HP rank: (players alive - 1) × 32 + even rank (column of the threshold tables).
     pub const HP_RANK: u32 = 0xac;
 }
 
 // ---------------------------------------------------------------------------------------------
-// Choix d'un joueur comme cible (0x424e, 0x43ae, 0x43bc, 0x44ee)
+// Choosing a player as target (0x424e, 0x43ae, 0x43bc, 0x44ee)
 
-/// Règle d'éligibilité d'un joueur.
+/// Eligibility rule of a player.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Rule {
-    /// 0x424e, 0x44ee : `+0x182` non nul (aura) exclut le joueur.
+    /// 0x424e, 0x44ee: non-zero `+0x182` (aura) excludes the player.
     Strict,
-    /// 0x43ae, 0x43bc : `+0x182` non nul dispense du test « masqué ».
+    /// 0x43ae, 0x43bc: non-zero `+0x182` exempts from the "masked" test.
     Lenient,
 }
 
-/// Critère de choix parmi les joueurs ciblables (D0 de 0x43bc : 0, 2, 4).
+/// Criterion for choosing among the targetable players (D0 of 0x43bc: 0, 2, 4).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Criterion {
-    /// Le plus proche (|dx| + |dy|) ; à égalité, le premier.
+    /// The nearest (|dx| + |dy|); on a tie, the first.
     Nearest,
-    /// Celui qui a le moins de PV ; à égalité, le dernier.
+    /// The one with the fewest HP; on a tie, the last.
     LowestHp,
-    /// Le plus éloigné ; à égalité, le dernier.
+    /// The farthest; on a tie, the last.
     Farthest,
 }
 
 impl Criterion {
-    /// Octet de critère des tables de l'original (0, 2 ou 4).
+    /// Criterion byte of the original's tables (0, 2 or 4).
     pub fn from_byte(v: u8) -> Criterion {
         match v {
             0 => Criterion::Nearest,
             2 => Criterion::LowestHp,
             4 => Criterion::Farthest,
-            _ => unreachable!("critère de cible {v} : les tables n'ont que 0, 2 et 4"),
+            _ => unreachable!("target criterion {v}: the tables only have 0, 2 and 4"),
         }
     }
 }
 
-/// Le joueur `p` peut-il être pris pour cible ?
+/// Can player `p` be targeted?
 pub fn targetable(b: &mut Cps2Bus, p: Obj, rule: Rule) -> bool {
     let aura = p.u8(b, Player::AURA) != 0;
     let hidden = p.u8(b, Player::FLAGS) & 2 != 0;
@@ -93,15 +93,15 @@ pub fn targetable(b: &mut Cps2Bus, p: Obj, rule: Rule) -> bool {
     p.u8(b, Player::ACTIVE) != 0 && visible && (p.u8(b, Player::MAIN) as i8) < 4
 }
 
-/// Écart |dx| + |dy| (mots, comme l'original : `sub`, `neg` si négatif, `add`).
+/// Distance |dx| + |dy| (words, like the original: `sub`, `neg` if negative, `add`).
 fn manhattan(b: &mut Cps2Bus, a: Obj, other: Obj) -> u16 {
     let dx = other.u16(b, Obj::X).wrapping_sub(a.u16(b, Obj::X)) as i16;
     let dy = other.u16(b, Obj::Y).wrapping_sub(a.u16(b, Obj::Y)) as i16;
     (dx.wrapping_abs() as u16).wrapping_add(dy.wrapping_abs() as u16)
 }
 
-/// Corps de 0x427a / 0x42e0 / 0x4338 (règle stricte) et 0x43ca / 0x4430 / 0x4488 (règle large) : le joueur qui
-/// répond le mieux au critère devient la cible de `o` (`+0x50`, 0 si aucun).
+/// Body of 0x427a / 0x42e0 / 0x4338 (strict rule) and 0x43ca / 0x4430 / 0x4488 (wide rule): the player who
+/// best meets the criterion becomes the target of `o` (`+0x50`, 0 if none).
 pub fn target_by(b: &mut Cps2Bus, o: Obj, criterion: Criterion, rule: Rule) -> Option<Obj> {
     let mut best: u16 = match criterion {
         Criterion::Nearest => 0xffff,
@@ -136,11 +136,11 @@ pub fn target_by(b: &mut Cps2Bus, o: Obj, criterion: Criterion, rule: Rule) -> O
     found
 }
 
-/// Tables des critères tirés au hasard (16 octets : 10 fois le plus proche, 4 le moins de PV, 2 le plus éloigné).
+/// Tables of randomly drawn criteria (16 bytes: 10 times the nearest, 4 the fewest HP, 2 the farthest).
 const CRITERIA_STRICT: u32 = 0x426a;
 const CRITERIA_LENIENT: u32 = 0x439e;
 
-/// 0x424e (règle stricte) / 0x43ae (règle large) : critère tiré au hasard, puis `target_by`.
+/// 0x424e (strict rule) / 0x43ae (wide rule): randomly drawn criterion, then `target_by`.
 pub fn pick_target(b: &mut Cps2Bus, o: Obj, rule: Rule) -> Option<Obj> {
     let table = match rule {
         Rule::Strict => CRITERIA_STRICT,
@@ -151,8 +151,8 @@ pub fn pick_target(b: &mut Cps2Bus, o: Obj, rule: Rule) -> Option<Obj> {
     target_by(b, o, criterion, rule)
 }
 
-/// 0x44ee : un joueur ciblable (règle stricte) tiré au hasard devient la cible : trois essais, chacun sur le joueur
-/// qui suit le précédent. Sans joueur en vie, ni tirage ni écriture.
+/// 0x44ee: a targetable player (strict rule) drawn at random becomes the target: three tries, each on the player
+/// following the previous one. With no player alive, neither a draw nor a write.
 pub fn random_player(b: &mut Cps2Bus, o: Obj) -> Option<Obj> {
     if PLAYERS_ALIVE.get(b) == 0 {
         return None;
@@ -170,14 +170,14 @@ pub fn random_player(b: &mut Cps2Bus, o: Obj) -> Option<Obj> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Valeurs initiales : PV (0x453c, 0x4544), immunités (0xfe5a), rang de PV (0x1059e)
+// Initial values: HP (0x453c, 0x4544), immunities (0xfe5a), HP rank (0x1059e)
 
-/// Tables des PV initiaux : boss (0x453c) et ennemis (0x4544). Mots, par type (256 octets), niveau, joueurs, rang.
+/// Initial HP tables: bosses (0x453c) and enemies (0x4544). Words, by type (256 bytes), level, players, rank.
 pub const HP_TABLE_BOSS: u32 = 0x458c;
 pub const HP_TABLE_ENEMY: u32 = 0x5c8c;
 
-/// 0x453c / 0x4544 : PV initiaux de `o` lus dans `table` (bloc du type `+2` ; seconde moitié au-delà du niveau 5 ;
-/// ligne du nombre de joueurs en vie ; colonne du rang / 2), copiés en `+0x60`, `+0x62` et `+0x64`.
+/// 0x453c / 0x4544: initial HP of `o` read from `table` (block of type `+2`; second half beyond level 5;
+/// row of the number of players alive; column of rank / 2), copied to `+0x60`, `+0x62` and `+0x64`.
 pub fn initial_hp(b: &mut Cps2Bus, o: Obj, table: u32) {
     let mut index = (o.u8(b, Obj::KIND) as u16) << 8;
     if LEVEL.get(b) > 5 {
@@ -191,10 +191,10 @@ pub fn initial_hp(b: &mut Cps2Bus, o: Obj, table: u32) {
     }
 }
 
-/// Immunités par type (longs) : ennemis (classe 2) puis boss (classe 4, 32 types plus loin).
+/// Immunities by type (longs): enemies (class 2) then bosses (class 4, 32 types further).
 const IMMUNITY_TABLE: u32 = 0xfe78;
 
-/// 0xfe5a : immunités de `o` (`+0x94`) selon sa classe et son type. Rend l'index (octets) lu dans la table.
+/// 0xfe5a: immunities of `o` (`+0x94`) according to its class and type. Returns the index (bytes) read in the table.
 pub fn set_immunities(b: &mut Cps2Bus, o: Obj) -> u16 {
     let base: u8 = if o.u8(b, Obj::CLASS) == 4 { 32 } else { 0 };
     let index = base.wrapping_add(o.u8(b, Obj::KIND)) as u16 * 4;
@@ -203,7 +203,7 @@ pub fn set_immunities(b: &mut Cps2Bus, o: Obj) -> u16 {
     index
 }
 
-/// 0x1059e : rang de PV de `o` (`+0xac`) = (joueurs en vie - 1) × 32 + (rang & 0x1e), sur un octet.
+/// 0x1059e: HP rank of `o` (`+0xac`) = (players alive - 1) × 32 + (rank & 0x1e), on one byte.
 pub fn hp_rank(b: &mut Cps2Bus, o: Obj) {
     let players = PLAYERS_ALIVE.get(b).wrapping_sub(1) << 5;
     let v = players.wrapping_add(RANK.get(b) as u8 & 0x1e);
@@ -211,14 +211,14 @@ pub fn hp_rank(b: &mut Cps2Bus, o: Obj) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Décisions par tables (0xa4b4, 0xa4c2, 0xac3a)
+// Table-driven decisions (0xa4b4, 0xa4c2, 0xac3a)
 
-/// Tables de lignes de masques (longs) des deux décisions.
+/// Mask row tables (longs) of the two decisions.
 const DECISION_TABLE_A: u32 = 0xa4f2;
 const DECISION_TABLE_B: u32 = 0xa516;
 
-/// Décision par masque : la ligne `+0x72` (`decision_a`, 0xa4b4) ou `+0x73` (`decision_b`, 0xa4c2) donne une
-/// table de masques de 32 bits indexée par le rang ; un bit y est tiré au hasard. Vrai s'il est levé.
+/// Mask decision: row `+0x72` (`decision_a`, 0xa4b4) or `+0x73` (`decision_b`, 0xa4c2) gives a
+/// table of 32-bit masks indexed by rank; a bit in it is drawn at random. True if it is set.
 fn decision(b: &mut Cps2Bus, o: Obj, field: u32, table: u32) -> bool {
     let line = (o.u8(b, field) as u16) << 2;
     let masks = rd32(b, table.wrapping_add(line as i16 as u32));
@@ -228,20 +228,20 @@ fn decision(b: &mut Cps2Bus, o: Obj, field: u32, table: u32) -> bool {
     mask >> bit & 1 != 0
 }
 
-/// 0xa4b4 : l'IA agit-elle à cette image (ligne `+0x72`) ?
+/// 0xa4b4: does the AI act on this frame (row `+0x72`)?
 pub fn decision_a(b: &mut Cps2Bus, o: Obj) -> bool {
     decision(b, o, f::DECISION_A, DECISION_TABLE_A)
 }
 
-/// 0xa4c2 : idem avec la ligne `+0x73`.
+/// 0xa4c2: same with row `+0x73`.
 pub fn decision_b(b: &mut Cps2Bus, o: Obj) -> bool {
     decision(b, o, f::DECISION_B, DECISION_TABLE_B)
 }
 
-/// Tables d'octets par rang de 0xac3a.
+/// Byte tables by rank of 0xac3a.
 const BYTE_TABLES: u32 = 0xac58;
 
-/// 0xac3a : `+0x77` = octet de la table de ligne `+0x76`, à l'index du rang.
+/// 0xac3a: `+0x77` = byte of the table of row `+0x76`, at the rank index.
 pub fn pick_byte(b: &mut Cps2Bus, o: Obj) {
     let line = (o.u8(b, f::BYTE_TABLE) as u16) << 2;
     let table = rd32(b, BYTE_TABLES.wrapping_add(line as i16 as u32));
@@ -251,16 +251,16 @@ pub fn pick_byte(b: &mut Cps2Bus, o: Obj) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Position de la cible (0xb5e0, 0x1050c, 0x1052e, 0x104e0, 0x1047a, 0x10560)
+// Position of the target (0xb5e0, 0x1050c, 0x1052e, 0x104e0, 0x1047a, 0x10560)
 
-/// La cible de `o` (`+0x50`), si elle est désignée par un mot négatif (un objet de la RAM haute).
+/// The target of `o` (`+0x50`), if designated by a negative word (an object in high RAM).
 fn linked_target(b: &mut Cps2Bus, o: Obj) -> Option<Obj> {
     let w = o.u16(b, f::TARGET);
     ((w as i16) < 0).then(|| Obj::from_word(w))
 }
 
-/// Orientation qui regarde de `o` vers `other` : 0x20 (gauche) si `other` est à gauche (`o.x - other.x` > 0
-/// est faux pour un écart négatif : l'original teste le signe de la soustraction).
+/// Orientation looking from `o` towards `other`: 0x20 (left) if `other` is to the left (`o.x - other.x` > 0
+/// is false for a negative difference: the original tests the sign of the subtraction).
 fn side_of(b: &mut Cps2Bus, o: Obj, other: Obj) -> u8 {
     if (o.u16(b, Obj::X).wrapping_sub(other.u16(b, Obj::X)) as i16) < 0 {
         0x20
@@ -269,7 +269,8 @@ fn side_of(b: &mut Cps2Bus, o: Obj, other: Obj) -> u8 {
     }
 }
 
-/// 0xb5e0 : la cible de `o` (`+0x50`, au sol) est-elle dans la boîte `hitbox` devant `o` (0x7f19c sur la cible) ?
+/// 0xb5e0: is the target of `o` (`+0x50`, on the ground) inside the box `hitbox` in front of `o` (0x7f19c on the
+/// target)?
 pub fn target_in_front(b: &mut Cps2Bus, o: Obj, hitbox: crate::ai_aids::Hitbox) -> crate::ai_aids::InHitbox {
     match o.u16(b, f::TARGET) {
         0 => crate::ai_aids::InHitbox::Non,
@@ -277,13 +278,13 @@ pub fn target_in_front(b: &mut Cps2Bus, o: Obj, hitbox: crate::ai_aids::Hitbox) 
     }
 }
 
-/// 0x1050c : `o` regarde-t-il vers sa cible ? Vrai aussi sans cible (mot positif).
+/// 0x1050c: is `o` facing its target? True also without a target (positive word).
 pub fn facing_target(b: &mut Cps2Bus, o: Obj) -> bool {
     let Some(t) = linked_target(b, o) else { return true };
     side_of(b, o, t) == o.u8(b, f::FLIP)
 }
 
-/// 0x1052e : la cible regarde-t-elle vers `o` ?
+/// 0x1052e: is the target facing `o`?
 pub fn target_faces_me(b: &mut Cps2Bus, o: Obj) -> bool {
     let Some(t) = linked_target(b, o) else { return false };
     let gap = o.u16(b, Obj::X).wrapping_sub(t.u16(b, Obj::X)) & 0x8000;
@@ -292,7 +293,7 @@ pub fn target_faces_me(b: &mut Cps2Bus, o: Obj) -> bool {
     wanted == t.u8(b, f::FLIP)
 }
 
-/// 0x104e0 (Z clair) : la cible regarde du même côté que `o`, qui lui tourne le dos.
+/// 0x104e0 (Z clear): the target faces the same way as `o`, which has its back turned to it.
 pub fn back_to_target(b: &mut Cps2Bus, o: Obj) -> bool {
     let Some(t) = linked_target(b, o) else { return false };
     let flip = o.u8(b, f::FLIP);
@@ -303,17 +304,17 @@ pub fn back_to_target(b: &mut Cps2Bus, o: Obj) -> bool {
     wanted != flip
 }
 
-/// Geste choisi par `turn_decision` (D0 de 0x1047a).
+/// Gesture chosen by `turn_decision` (D0 of 0x1047a).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Turn {
     None,
-    /// Face à face, décision A acceptée.
+    /// Face to face, decision A accepted.
     FaceToFace,
-    /// Même côté, décision B acceptée.
+    /// Same side, decision B accepted.
     SameSide,
 }
 
-/// 0x1047a : décision de l'IA selon le côté de la cible.
+/// 0x1047a: AI decision according to the side of the target.
 pub fn turn_decision(b: &mut Cps2Bus, o: Obj) -> Turn {
     if target_faces_me(b, o) {
         if decision_a(b, o) {
@@ -328,20 +329,20 @@ pub fn turn_decision(b: &mut Cps2Bus, o: Obj) -> Turn {
     }
 }
 
-/// 0x10560 : le sens de la vitesse en X (`+0x14`) est-il celui de l'orientation ?
+/// 0x10560: is the direction of the X speed (`+0x14`) that of the orientation?
 pub fn moving_forward(b: &mut Cps2Bus, o: Obj) -> bool {
     let flip = (o.u8(b, f::FLIP) as u16).rotate_right(6);
     o.u16(b, Obj::VX) & 0x8000 == flip
 }
 
 // ---------------------------------------------------------------------------------------------
-// Rester dans l'écran (0xfbae, 0xfbb0)
+// Staying on screen (0xfbae, 0xfbb0)
 
-/// Marge de 0xfbae (le test de zone de fin d'image des gestionnaires).
+/// Margin of 0xfbae (the handlers' end-of-frame zone test).
 pub const ZONE_MARGIN: u16 = 0x30;
 
-/// Ramène un axe (`field`) de `o` dans la fenêtre `[origin - margin, origin + span + margin]` : une position
-/// négative devient 0, une position hors de la fenêtre est posée au bord le plus proche. Vrai si elle a changé.
+/// Brings an axis (`field`) of `o` back into the window `[origin - margin, origin + span + margin]`: a negative
+/// position becomes 0, a position outside the window is set to the nearest edge. True if it changed.
 fn pull_inside(b: &mut Cps2Bus, o: Obj, field: u32, origin: u16, span: u16, margin: u16) -> bool {
     let pos = o.u16(b, field);
     if (pos as i16) < 0 {
@@ -357,8 +358,8 @@ fn pull_inside(b: &mut Cps2Bus, o: Obj, field: u32, origin: u16, span: u16, marg
     true
 }
 
-/// 0xfbb0 : garde `o` dans l'écran de la caméra en service, à `margin` pixels près en X (16 pixels de moins que la
-/// hauteur de l'écran en profondeur). Vrai s'il a été déplacé.
+/// 0xfbb0: keeps `o` within the screen of the active camera, to within `margin` pixels in X (16 pixels less than the
+/// screen height in depth). True if it was moved.
 pub fn keep_on_screen(b: &mut Cps2Bus, o: Obj, margin: u16) -> bool {
     let (x, y) = ram::camera(b);
     let moved_x = pull_inside(b, o, Obj::X, x, 0x180, margin);
@@ -366,30 +367,30 @@ pub fn keep_on_screen(b: &mut Cps2Bus, o: Obj, margin: u16) -> bool {
     moved_x | moved_y
 }
 
-/// 0xfbae : `keep_on_screen` avec la marge de 0x30 pixels.
+/// 0xfbae: `keep_on_screen` with the margin of 0x30 pixels.
 pub fn keep_in_zone(b: &mut Cps2Bus, o: Obj) -> bool {
     keep_on_screen(b, o, ZONE_MARGIN)
 }
 
-/// `keep_on_screen` qui laisse aussi le D5 de l'original (`moveq #0,D5`, puis 1 si l'objet a bougé).
-/// Glitch d'origine : D5 traverse les gestionnaires de la boucle de dispatch, et la rangée d'éclats d'une caisse
-/// (0xa17d0, `eshl_creators::row_1a`) en relit l'octet haut : on l'écrit donc en clair.
+/// `keep_on_screen` that also leaves the D5 of the original (`moveq #0,D5`, then 1 if the object moved).
+/// Original glitch: D5 passes through the handlers of the dispatch loop, and the row of shards of a crate
+/// (0xa17d0, `eshl_creators::row_1a`) rereads its high byte: so it is written in the clear.
 pub fn keep_on_screen_d5(c: &mut m68k::Cpu, b: &mut Cps2Bus, o: Obj, margin: u16) -> bool {
     let moved = keep_on_screen(b, o, margin);
     c.d[5] = moved as u32;
     moved
 }
 
-/// `keep_in_zone` avec le D5 de l'original (voir `keep_on_screen_d5`).
+/// `keep_in_zone` with the D5 of the original (see `keep_on_screen_d5`).
 pub fn keep_in_zone_d5(c: &mut m68k::Cpu, b: &mut Cps2Bus, o: Obj) -> bool {
     keep_on_screen_d5(c, b, o, ZONE_MARGIN)
 }
 
 // ---------------------------------------------------------------------------------------------
-// Cap (0xf0e8, 0x10574)
+// Heading (0xf0e8, 0x10574)
 
-/// 0xf0e8 : tourne d'un cran le cap de `o` (`+0x2d`, 0..31) vers le point `to` (direction de 0x137e), par le
-/// plus court.
+/// 0xf0e8: turns the heading of `o` (`+0x2d`, 0..31) by one notch towards the point `to` (direction of 0x137e), by the
+/// shortest way.
 pub fn turn_toward(b: &mut Cps2Bus, o: Obj, to: (u16, u16)) {
     let wanted = crate::aids::direction_from(b, o, to);
     let heading = o.u8(b, f::HEADING);
@@ -401,10 +402,10 @@ pub fn turn_toward(b: &mut Cps2Bus, o: Obj, to: (u16, u16)) {
     o.set_u8(b, f::HEADING, turned & 0x1f);
 }
 
-/// Pas de cap tirés au hasard (octets signés) de 0x10574.
+/// Randomly drawn heading steps (signed bytes) of 0x10574.
 const DRIFT_STEPS: u32 = 0x1058e;
 
-/// 0x10574 : le cap de `o` change d'au plus un cran, tiré au hasard.
+/// 0x10574: the heading of `o` changes by at most one notch, drawn at random.
 pub fn drift_heading(b: &mut Cps2Bus, o: Obj) {
     let roll = rng::random(b) & 15;
     let step = prog8(b, DRIFT_STEPS + roll as u32);

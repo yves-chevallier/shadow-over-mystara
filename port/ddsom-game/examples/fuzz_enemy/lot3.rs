@@ -1,16 +1,16 @@
-//! Préparation des états du troisième lot ENEMY (types 0 à 15, 18 et 27) pour `fuzz_enemy` : états
-//! `(+4, +5, +6, +7)` que les tables de sauts de l'original acceptent (hors de ces tables il saute dans
-//! des données) et champs à des valeurs qu'elles tolèrent.
+//! Preparation of the states of the third ENEMY batch (types 0 to 15, 18 and 27) for `fuzz_enemy`: states
+//! `(+4, +5, +6, +7)` accepted by the original's jump tables (outside these tables it jumps into
+//! data) and fields set to values they tolerate.
 //!
-//! Chaque type décrit ses états par des lignes `"s4 s5 s6,s6,.. max7"` : `+4`, `+5`, les `+6` possibles et
-//! la plus grande étape `+7` (paire) valide pour ces `+6`.
+//! Each type describes its states with lines `"s4 s5 s6,s6,.. max7"`: `+4`, `+5`, the possible `+6` and
+//! the largest valid (even) `+7` step for these `+6`.
 
 use super::Rng;
 use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 
 type Bus = cps2::Cps2Bus;
 
-/// Le type fait partie du lot (les états et les champs sont préparés ici).
+/// The type belongs to the batch (states and fields are prepared here).
 pub fn handles(kind: u8) -> bool {
     states(kind).is_some()
 }
@@ -19,7 +19,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
     Some(match kind {
         1 => &[
             "0 0 0 0",
-            // arrivée, debout, coups, bonds, esquives, chute d'arrivée
+            // arrival, standing, hits, leaps, dodges, arrival fall
             "2 0 0,2,4 2",
             "2 0 6 8",
             "2 2 0,2,4,6 2",
@@ -35,7 +35,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
             "2 8 0,2,6 2",
             "2 8 4 10",
             "2 10 0,2,4,6 0",
-            // touché
+            // hit
             "4 0 0 0",
             "4 2 0,2,4 0",
             "4 4 0,2,4 0",
@@ -46,7 +46,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         12 => &[
             "0 0 0 0",
-            // arrivée (le plus grand `+6` dépend de la variante), debout, coups, coups d'après-bond, repli, repos
+            // arrival (the largest `+6` depends on the variant), standing, hits, after-leap hits, retreat, rest
             "2 0 0,2,4,6,8 0",
             "2 2 0,2,4 2",
             "2 4 0,2,4,6 2",
@@ -78,7 +78,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         2 => &[
             "0 0 0 0",
-            // arrivée (le plus grand `+6` dépend de la variante), debout, coups, gardes, repli, repos
+            // arrival (the largest `+6` depends on the variant), standing, hits, guards, retreat, rest
             "2 0 0,2,4 0",
             "2 2 0,2,4 2",
             "2 2 6 4",
@@ -101,7 +101,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         5 => &[
             "0 0 0 0",
-            // arrivée (le plus grand `+6` dépend de la variante), debout, coups, déplacements, repos
+            // arrival (the largest `+6` depends on the variant), standing, hits, movements, rest
             "2 0 0,2,4,6,8 0",
             "2 2 0,2,4,6 2",
             "2 4 0,2,8,14 2",
@@ -123,7 +123,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         9 => &[
             "0 0 0 0",
-            // marche, trajectoires par groupe (le plus grand `+7` dépend de `+0x2f`), demi-tour, bond, dormant
+            // walk, trajectories per group (the largest `+7` depends on `+0x2f`), U-turn, leap, dormant
             "2 0 0,2 2",
             "2 2 0 2",
             "2 4 0 6",
@@ -137,7 +137,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         8 => &[
             "0 0 0 0",
-            // arrivée, déplacements, coups, repos, saisie
+            // arrival, movements, hits, rest, grab
             "2 0 0 6",
             "2 0 2 6",
             "2 2 0,2,4,6 2",
@@ -164,7 +164,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         0 => &[
             "0 0 0 0",
-            // arrivée (sous-états 0 à 20), debout, coups, gestes d'affût et de repli, promenade, touché
+            // arrival (sub-states 0 to 20), standing, hits, lurking and retreat gestures, stroll, hit
             "2 0 0 4",
             "2 0 2 2",
             "2 0 4,6,8,18,20 6",
@@ -197,7 +197,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         6 => &[
             "0 0 0 0",
-            // arrivée, debout, coups, gestes d'affût et de repli, promenade, morsure, touché
+            // arrival, standing, hits, lurking and retreat gestures, stroll, bite, hit
             "2 0 0,2,8,10 4",
             "2 0 4,6 6",
             "2 2 0,8 2",
@@ -228,7 +228,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         18 => &[
             "0 0 0 0",
-            // arrivée, déplacements, coups (bras lancés), repos, touché
+            // arrival, movements, hits (thrown arms), rest, hit
             "2 0 0 14",
             "2 0 2,4,6 4",
             "2 2 0,2,4,6 2",
@@ -251,7 +251,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         10 => &[
             "0 0 0 0",
-            // arrivée (le plus grand `+7` de `+6` = 4), debout, coups, attente, coup spécial, coups, touché
+            // arrival (the largest `+7` of `+6` = 4), standing, hits, waiting, special hit, hits, hit
             "2 0 2,6,8 0",
             "2 0 4 4",
             "2 2 0,2,4 4",
@@ -270,7 +270,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         27 => &[
             "0 0 0 0",
-            // arrivée, roule vers le joueur, gestes de l'arme (4), tourne sur place (6, 8, 10), touché
+            // arrival, rolls toward the player, weapon gestures (4), turns in place (6, 8, 10), hit
             "2 0 0 6",
             "2 0 2,4 4",
             "2 2 0,2,4,6 2",
@@ -296,7 +296,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         11 => &[
             "0 0 0 0",
-            // debout piloté par les touches, coups (4), gestes de repli (6, 8), touché
+            // standing driven by the keys, hits (4), retreat gestures (6, 8), hit
             "2 0 0 0",
             "2 0 2 2",
             "2 2 0 0",
@@ -325,8 +325,8 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         3 => &[
             "0 0 0 0",
-            // arrivée (toutes variantes), debout, tirs (4 : +6 = 0 premier geste, 2 second geste), pas et sauts (6),
-            // repos (8), attente (10), demi-tour (12), touché
+            // arrival (all variants), standing, shots (4: +6 = 0 first gesture, 2 second gesture), steps and jumps (6),
+            // rest (8), waiting (10), U-turn (12), hit
             "2 0 0,2,4,6 0",
             "2 2 0,2,4 0",
             "2 4 0 10",
@@ -349,7 +349,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         13 => &[
             "0 0 0 0",
-            // arrivée (+6 = 6 : variantes 0 à 8, +6 = 8 : variantes 0 et 4, voir `gnoll`), debout, gestes, repos, touché
+            // arrival (+6 = 6: variants 0 to 8, +6 = 8: variants 0 and 4, see `gnoll`), standing, gestures, rest, hit
             "2 0 0,2,4 0",
             "2 0 6 0",
             "2 0 8 0",
@@ -383,7 +383,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         14 => &[
             "0 0 0 0",
-            // arrivée (+6 = 6 : variantes 2 et 4 seulement), debout, gestes (4 : lancer et sauts, 6 : pas, sauts, 8 : suite)
+            // arrival (+6 = 6: variants 2 and 4 only), standing, gestures (4: throw and jumps, 6: steps, jumps, 8: continuation)
             "2 0 0,2,4 0",
             "2 0 6 0",
             "2 2 0,2,4 2",
@@ -414,7 +414,7 @@ fn states(kind: u8) -> Option<&'static [&'static str]> {
         ],
         15 => &[
             "0 0 0 0",
-            // arrivée (+6 = 6 : variantes 2 et 4 seulement), debout, gestes (4 : séries, 6 : pas de côté, 8 : suite), repos, touché
+            // arrival (+6 = 6: variants 2 and 4 only), standing, gestures (4: series, 6: side steps, 8: continuation), rest, hit
             "2 0 0,2,4 0",
             "2 0 6 0",
             "2 2 0,2,4 2",
@@ -450,7 +450,7 @@ fn pair(rng: &mut Rng, max: u8) -> u8 {
     2 * (rng.next() % (max as u32 / 2 + 1)) as u8
 }
 
-/// Tire un état valide et pose `+4..+7` ; `fresh` : création de l'objet (variante, série...).
+/// Draws a valid state and sets `+4..+7`; `fresh`: creation of the object (variant, series...).
 pub fn prep(b: &mut Bus, rng: &mut Rng, kind: u8, obj: u32, fresh: bool) {
     let lines = states(kind).unwrap();
     let line: Vec<&str> = lines[rng.next() as usize % lines.len()].split(' ').collect();
@@ -459,11 +459,11 @@ pub fn prep(b: &mut Bus, rng: &mut Rng, kind: u8, obj: u32, fresh: bool) {
     wr8(b, obj + 4, line[0].parse().unwrap());
     wr8(b, obj + 5, line[1].parse().unwrap());
     wr8(b, obj + 6, s6[rng.next() as usize % s6.len()]);
-    // l'étape 0 est la plus fréquente (début du geste)
+    // step 0 is the most frequent (start of the gesture)
     let step = if rng.next() % 3 == 0 { 0 } else { pair(rng, max) };
     wr8(b, obj + 7, step);
     common(b, rng, obj);
-    // deuxième caméra (mode à deux écrans) et difficulté, lues par plusieurs types
+    // second camera (two-screen mode) and difficulty, read by several types
     if rng.next() % 4 == 0 {
         wr8(b, A5 + 0x36, 1);
         wr16(b, A5 + 0x556, (rng.next() % 0x200) as u16);
@@ -492,13 +492,13 @@ pub fn prep(b: &mut Bus, rng: &mut Rng, kind: u8, obj: u32, fresh: bool) {
     }
 }
 
-/// Champs que presque tous les ennemis lisent : cible, code de réaction, orientation, hauteur.
+/// Fields that almost all enemies read: target, reaction code, orientation, height.
 fn common(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr16(b, obj + 0x50, 0x85de + 0x200 * (rng.next() % 4) as u16);
     wr8(b, obj + 0x49, 4 * (rng.next() % 43) as u8);
     wr8(b, obj + 0x4a, 0x20 * (rng.next() % 2) as u8);
     wr8(b, obj + 0x2c, 0x20 * (rng.next() % 2) as u8);
-    // au ras du sol, parfois en l'air, parfois en train de retomber
+    // at ground level, sometimes in the air, sometimes falling back
     let h = [0u16, 0, 0, 1, 2, 0x30][rng.next() as usize % 6];
     wr16(b, obj + 0xc, h);
     if rng.next() % 2 == 0 {
@@ -513,7 +513,7 @@ fn common(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 0x33, [0u8, 1, 0xff, 0x80][rng.next() as usize % 4]);
     wr16(b, obj + 0x84, (rng.next() % 3) as u16);
     wr8(b, obj + 0x86, (rng.next() % 4 == 0) as u8);
-    // le joueur visé est en vie
+    // the targeted player is alive
     let j = 0xff0000 | rd16(b, obj + 0x50) as u32;
     if rng.next() % 4 != 0 {
         wr8(b, j, 1);
@@ -542,7 +542,7 @@ fn skeleton(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     wr16(b, obj + 0x7a, ox.wrapping_add((rng.next() % 0x80) as u16));
     wr16(b, obj + 0x7c, oy.wrapping_add((rng.next() % 0x40) as u16));
     wr32(b, obj + 0x4c, [0x1c74b6u32, 0x1c7336][rng.next() as usize % 2]);
-    // l'ennemi qui a créé celui-ci (compteur `+0xaf`) : un autre objet existant
+    // the enemy that created this one (counter `+0xaf`): another existing object
     wr8(b, obj + 0xac, (rng.next() % 3 == 0) as u8);
     wr16(b, obj + 0xaa, 0x85de + 0x200 * (rng.next() % 4) as u16);
     wr8(b, obj + 0x29, (rng.next() % 2) as u8);
@@ -551,10 +551,10 @@ fn skeleton(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
 
 fn elf(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     if fresh {
-        // la variante est un indice de table : 0, 2, 4 ou 6
+        // the variant is a table index: 0, 2, 4 or 6
         wr8(b, obj + 3, 2 * (rng.next() % 4) as u8);
     }
-    // l'arrivée n'a que quelques `+6` selon la variante
+    // the arrival has only a few `+6` depending on the variant
     if rd8(b, obj + 4) == 2 && rd8(b, obj + 5) == 0 {
         let largest = match rd8(b, obj + 3) {
             0 => 2,
@@ -564,7 +564,7 @@ fn elf(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
         let s6 = rd8(b, obj + 6).min(largest);
         wr8(b, obj + 6, s6);
     }
-    // coup prévu après l'approche : un `+6` valide du groupe courant
+    // hit planned after the approach: a valid `+6` of the current group
     let largest = match rd8(b, obj + 5) {
         6 => 12,
         8 => 6,
@@ -590,7 +590,7 @@ fn troglodyte(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
         wr8(b, obj + 3, (rng.next() % 6) as u8);
         wr8(b, obj + 0x2f, (rng.next() % 2) as u8);
     }
-    // l'arrivée n'a que quelques `+6` selon la variante
+    // the arrival has only a few `+6` depending on the variant
     if rd8(b, obj + 4) == 2 && rd8(b, obj + 5) == 0 {
         let largest = match rd8(b, obj + 3) {
             0 | 3 | 4 => 2,
@@ -599,7 +599,7 @@ fn troglodyte(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
         let s6 = rd8(b, obj + 6).min(largest);
         wr8(b, obj + 6, s6);
     }
-    // coup à reprendre : un `+6` valide du groupe courant
+    // hit to resume: a valid `+6` of the current group
     let largest = match rd8(b, obj + 5) {
         6 => 24,
         8 => 6,
@@ -630,7 +630,7 @@ fn ghoul(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     if fresh {
         wr8(b, obj + 3, (rng.next() % 6) as u8);
     }
-    // l'arrivée n'a que quelques `+6` selon la variante
+    // the arrival has only a few `+6` depending on the variant
     if rd8(b, obj + 4) == 2 && rd8(b, obj + 5) == 0 {
         let largest = match rd8(b, obj + 3) {
             0 | 4 => 2,
@@ -664,14 +664,14 @@ fn beetle(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
         wr8(b, obj + 0x2f, (rng.next() % 8) as u8);
         wr8(b, obj + 0x42, (rng.next() % 4) as u8);
     }
-    // `+7` est une étape de la table du groupe `+0x2f` : la dérive (groupes 2 et 3) n'en a que deux
+    // `+7` is a step of the table of group `+0x2f`: the drift (groups 2 and 3) has only two
     if rd8(b, obj + 4) == 2 && rd8(b, obj + 5) == 4 && rd8(b, obj + 6) == 0 {
         let largest = if matches!(rd8(b, obj + 0x2f), 2 | 3) { 2 } else { 6 };
         let e = rd8(b, obj + 7).min(largest);
         wr8(b, obj + 7, e);
     }
     wr8(b, obj + 0xa4, 0x10 * (rng.next() % 2) as u8);
-    // étape à reprendre après une marche latérale (2 ou 6 dans le jeu)
+    // step to resume after a side walk (2 or 6 in the game)
     wr8(b, obj + 0xa6, [2u8, 6][rng.next() as usize % 2]);
     wr8(b, obj + 0xa7, 2 * (rng.next() % 3) as u8);
     wr8(b, obj + 0xa2, 1 + (rng.next() % 4) as u8);
@@ -691,12 +691,12 @@ fn beetle(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     wr16(b, obj + 0x32, [0u16, 0x8000, 0x0080, 0xff00][rng.next() as usize % 4]);
     wr8(b, obj + 0x29, (rng.next() % 2) as u8);
     wr16(b, obj + 0x5c, 0x85de + 0x200 * (rng.next() % 4) as u16);
-    // saisie par un joueur (0x2810) : rare
+    // grabbed by a player (0x2810): rare
     wr8(b, A5 + 0x42, (rng.next() % 4 == 0) as u8);
     if rng.next() % 2 == 0 {
         wr16(b, obj + 0x46, 0);
     }
-    // la morsure (0x661ce) ne se déclenche que si la cible est dans l'état 0x200, étape 0xc
+    // the bite (0x661ce) triggers only if the target is in state 0x200, step 0xc
     if rng.next() % 3 == 0 {
         let p = 0xff0000 | rd16(b, obj + 0x50) as u32;
         wr16(b, p + 4, 0x200);
@@ -720,7 +720,7 @@ fn scorpion(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     wr8(b, obj + 0x29, (rng.next() % 2) as u8);
     let ox = rd16(b, obj + 8);
     wr16(b, obj + 0xa4, ox.wrapping_add((rng.next() % 0x40) as u16));
-    // parent des scorpions « enfants » (+6 = 2 de l'état debout) : un objet existant, dans un état tiré
+    // parent of the "child" scorpions (+6 = 2 of the standing state): an existing object, in a drawn state
     wr16(b, obj + 0x5c, 0x85de + 0x200 * (rng.next() % 4) as u16);
     if rng.next() % 6 == 0 {
         let parent = 0xff0000 | rd16(b, obj + 0x5c) as u32;
@@ -734,15 +734,15 @@ fn scorpion(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
 
 fn gargoyle(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     if fresh {
-        // la variante 2 saute dans des données dans l'original : elle n'apparaît jamais dans le jeu
+        // variant 2 jumps into data in the original: it never appears in the game
         wr8(b, obj + 3, (rng.next() % 2) as u8);
     }
-    // états valides à restaurer (`+0xa2` après un demi-tour, `+0xb8` après un coup qui n'a pas touché)
+    // valid states to restore (`+0xa2` after a U-turn, `+0xb8` after a hit that missed)
     let valid = [0x0202_0000u32, 0x0202_0400, 0x0202_0600, 0x0202_0800, 0x0204_0000, 0x0204_0200, 0x0204_0400, 0x0204_0c00, 0x020a_0000];
     wr32(b, obj + 0xa2, valid[rng.next() as usize % valid.len()]);
     wr32(b, obj + 0xb8, valid[rng.next() as usize % valid.len()]);
     wr8(b, obj + 0xb7, 4 * (rng.next() % 43) as u8);
-    // cible : parfois aucune (mot positif)
+    // target: sometimes none (positive word)
     if rng.next() % 8 == 0 {
         wr16(b, obj + 0x50, 0);
     }
@@ -776,7 +776,7 @@ fn gargoyle(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     wr8(b, obj + 0x86, (rng.next() % 4 == 0) as u8);
     wr8(b, obj + 0x67, (rng.next() % 2) as u8);
     wr8(b, obj + 0x79, 0x3b);
-    // paramètres d'IA lus par les décisions 0xa4b4 et 0xa4c2
+    // AI parameters read by decisions 0xa4b4 and 0xa4c2
     for off in [0x72u32, 0x73] {
         wr8(b, obj + off, (rng.next() % 4) as u8);
     }
@@ -784,7 +784,7 @@ fn gargoyle(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     let (ox, oy) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
     wr16(b, obj + 0xbc, ox.wrapping_add((rng.next() % 0x80) as u16));
     wr16(b, obj + 0xbe, oy.wrapping_add((rng.next() % 0x40) as u16));
-    // joueurs placés aux distances que testent les boîtes de décision (devant ou derrière, profondeur proche)
+    // players placed at the distances tested by the decision boxes (in front or behind, close depth)
     if rng.next() % 2 == 0 {
         let offsets = [-0x90i16, -0x3a, -0x10, 0, 0x20, 0x40, 0x80, 0x90];
         for j in 0..4u32 {
@@ -802,7 +802,7 @@ fn gargoyle(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     if rng.next() % 2 == 0 {
         wr16(b, obj + 0x46, 0);
     }
-    // les caméras sont tantôt près de l'objet (hors zone sinon)
+    // the cameras are sometimes near the object (out of zone otherwise)
     let cam = ox.wrapping_sub(0x80 + (rng.next() % 0x100) as u16);
     wr16(b, A5 + 0x5a6, cam);
     wr16(b, A5 + 0x5ae, cam);
@@ -813,7 +813,7 @@ fn dog(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
         wr8(b, obj + 3, (rng.next() % 8) as u8);
         wr8(b, obj + 0x2f, (rng.next() % 2) as u8);
     }
-    // état à reprendre après un demi-tour : (`+0xa6`, `+0xa4`) cohérents
+    // state to resume after a U-turn: (`+0xa6`, `+0xa4`) consistent
     let resumes: [(u32, u8); 8] = [
         (0x0202_0000, 0),
         (0x0202_0000, 4),
@@ -847,14 +847,14 @@ fn dog(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     wr8(b, obj + 0x53, (rng.next() % 4 == 0) as u8);
     wr8(b, obj + 0x56, (rng.next() % 4) as u8);
     wr8(b, obj + 0x29, (rng.next() % 2) as u8);
-    // paramètres d'IA lus par 0xa4b4 / 0xa4c2 et les tables de coups
+    // AI parameters read by 0xa4b4 / 0xa4c2 and the hit tables
     for off in [0x72u32, 0x73] {
         wr8(b, obj + off, (rng.next() % 4) as u8);
     }
     if rng.next() % 8 == 0 {
         wr16(b, obj + 0x50, 0);
     }
-    // victime d'une morsure (+0x50) : vivante et à terre le plus souvent
+    // bite victim (+0x50): alive and on the ground most of the time
     let v = 0xff0000 | rd16(b, obj + 0x50) as u32;
     wr8(b, v + 0x188, (rng.next() % 5 != 0) as u8);
     wr16(b, v + 0x62, [0u16, 1, 2, 5, 30][rng.next() as usize % 5]);
@@ -883,12 +883,12 @@ fn ogre(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     if fresh {
         wr8(b, obj + 3, [0u8, 1, 2, 0xff, 0xff][rng.next() as usize % 5]);
     }
-    // état à restaurer après un demi-tour
+    // state to restore after a U-turn
     let valid = [0x0202_0000u32, 0x0202_0400, 0x0202_0600, 0x0202_0800, 0x0204_0000, 0x0204_0200, 0x0204_0400, 0x020a_0000];
     wr32(b, obj + 0xa2, valid[rng.next() as usize % valid.len()]);
-    // bras lancé (+0xb0) et ogre accompagné (+0x46) : des objets existants
+    // thrown arm (+0xb0) and accompanying ogre (+0x46): existing objects
     let other = 0x85de + 0x200 * (rng.next() % 4) as u16;
-    // pendant l'arrivée le bras n'existe pas encore : la fin d'attente (0x75c36) y relit `+0xb1`
+    // during the arrival the arm does not exist yet: the end of waiting (0x75c36) rereads `+0xb1` there
     let arrival = rd8(b, obj + 5) == 0;
     wr16(b, obj + 0xb0, if arrival { 0 } else { other });
     wr16(b, obj + 0x46, other);
@@ -933,7 +933,7 @@ fn ogre(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
             wr16(b, q + 8, ox.wrapping_add(off as u16));
             wr16(b, q + 0x10, oy.wrapping_add((rng.next() % 9) as u16).wrapping_sub(4));
             wr8(b, q + 0x2c, 0x20 * (rng.next() % 2) as u8);
-            // joueur à terre ou en position de saisie : 0x7ef4 et 0x7f0c testent son état
+            // player on the ground or in grab position: 0x7ef4 and 0x7f0c test its state
             wr8(b, q + 6, [0u8, 0xc, 0xc, 0xe][rng.next() as usize % 4]);
             wr16(b, q + 0xc, 0);
         }
@@ -957,7 +957,7 @@ fn kobold(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
         wr8(b, obj + 3, (rng.next() % 14) as u8);
         wr8(b, obj + 0x2f, (rng.next() % 4) as u8);
     }
-    // état à reprendre après un demi-tour : (`+0xa6`, `+0xa5`) cohérents
+    // state to resume after a U-turn: (`+0xa6`, `+0xa5`) consistent
     let resumes: [(u32, u8); 8] = [
         (0x0202_0000, 0),
         (0x0202_0000, 4),
@@ -976,7 +976,7 @@ fn kobold(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     }
     wr16(b, obj + 0xa0, [0u16, 1, 2, 5, 0x14][rng.next() as usize % 5]);
     wr8(b, obj + 0xa2, [0u8, 1, 2, 3, 4, 0xc, 0x7f][rng.next() as usize % 7]);
-    // aspect précédent : souvent celui que le geste va reprendre (le décompte `+0xad` n'a lieu que s'ils sont égaux)
+    // previous look: often the one the gesture will resume (the `+0xad` countdown happens only if they are equal)
     let resume = [0u8, 1, 2, 3, 4, 0xc, 0x7f, 0x16, 0x1a, 0x1c, 0x1e, 0x28, 0x29, 0x2a, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f];
     wr8(b, obj + 0xa3, resume[rng.next() as usize % resume.len()]);
     wr8(b, obj + 0xaa, 1 + (rng.next() % 3) as u8);
@@ -1019,8 +1019,8 @@ fn kobold(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
 }
 
 fn goblin(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
-    // variante paire : 0 marche, 2 et 4 chute, 6 course ; en arrivée, +6 = 6 n'existe que pour les variantes 2 et 4
-    // et la variante 6 n'a que trois étapes
+    // even variant: 0 walk, 2 and 4 fall, 6 run; in arrival, +6 = 6 exists only for variants 2 and 4
+    // and variant 6 has only three steps
     let (s5, s6) = (rd8(b, obj + 5), rd8(b, obj + 6));
     let variant = if s5 == 0 && s6 == 6 { [2u8, 4][rng.next() as usize % 2] } else { 2 * (rng.next() % 4) as u8 };
     wr8(b, obj + 3, variant);
@@ -1031,8 +1031,8 @@ fn goblin(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
     wr8(b, obj + 0xa2, [0u8, 1, 2, 5, 0x14][rng.next() as usize % 5]);
     wr8(b, obj + 0xa4, (rng.next() % 3) as u8);
     wr8(b, obj + 0xa1, [0u8, 1, 0x80][rng.next() as usize % 3]);
-    // geste mémorisé : un `+6` valide du sous-état 4
-    // (le sous-état 6 n'a que sept gestes : l'original sauterait dans des données au-delà)
+    // remembered gesture: a valid `+6` of sub-state 4
+    // (sub-state 6 has only seven gestures: the original would jump into data beyond)
     let gestures = if s5 == 6 { 7 } else { 11 };
     wr8(b, obj + 0xaa, 2 * (rng.next() % gestures) as u8);
     wr8(b, obj + 0xae, (rng.next() % 6 == 0) as u8);
@@ -1045,7 +1045,7 @@ fn goblin(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
     wr8(b, obj + 0x29, (rng.next() % 2) as u8);
     wr8(b, obj + 0x67, (rng.next() % 2) as u8);
     wr8(b, obj + 0x79, 0x1a);
-    // paramètres d'IA lus par 0xa4b4 et 0xa4c2
+    // AI parameters read by 0xa4b4 and 0xa4c2
     for off in [0x72u32, 0x73] {
         wr8(b, obj + off, (rng.next() % 5) as u8);
     }
@@ -1062,7 +1062,7 @@ fn goblin(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
             wr16(b, q + 8, ox.wrapping_add(off as u16));
             wr16(b, q + 0x10, oy.wrapping_add((rng.next() % 0x30) as u16).wrapping_sub(0x18));
             wr8(b, q + 0x2c, 0x20 * (rng.next() % 2) as u8);
-            // joueur à terre ou en position de saisie : 0x7f0c teste son état
+            // player on the ground or in grab position: 0x7f0c tests its state
             wr8(b, q + 6, [0u8, 0xc, 0xc, 0xe][rng.next() as usize % 4]);
             wr16(b, q + 0xc, 0);
         }
@@ -1082,7 +1082,7 @@ fn goblin(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
 }
 
 fn troll(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
-    // variante paire : 0 marche, 2 et 4 chute ; en arrivée, +6 = 6 n'existe que pour les variantes 2 et 4
+    // even variant: 0 walk, 2 and 4 fall; in arrival, +6 = 6 exists only for variants 2 and 4
     let (s5, s6) = (rd8(b, obj + 5), rd8(b, obj + 6));
     let variant = if s5 == 0 && s6 == 6 { [2u8, 4][rng.next() as usize % 2] } else { 2 * (rng.next() % 3) as u8 };
     wr8(b, obj + 3, variant);
@@ -1093,13 +1093,13 @@ fn troll(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
     wr8(b, obj + 0xa2, [0u8, 1, 2, 5, 0x14][rng.next() as usize % 5]);
     wr8(b, obj + 0xa4, (rng.next() % 3) as u8);
     wr8(b, obj + 0xa1, [0u8, 1, 0x80, 4, 8, 0x12][rng.next() as usize % 6]);
-    // geste mémorisé : un `+6` valide du sous-état 4
+    // remembered gesture: a valid `+6` of sub-state 4
     let gestures = if s5 == 6 { 7 } else { 11 };
     wr8(b, obj + 0xaa, 2 * (rng.next() % gestures) as u8);
     wr8(b, obj + 0xae, (rng.next() % 6 == 0) as u8);
     wr8(b, obj + 0xab, [0u8, 0x10, 0x20, 0xf0][rng.next() as usize % 4]);
     wr8(b, obj + 0xac, [0u8, 0, 1, 0xb4][rng.next() as usize % 4]);
-    // objet lancé : un joueur existant
+    // thrown object: an existing player
     let launches = 0x85de + 0x200 * (rng.next() % 4);
     wr32(b, obj + 0xa6, 0xff0000 | launches);
     wr8(b, obj + 0x33, [0u8, 4, 1, 0x80][rng.next() as usize % 4]);
@@ -1130,7 +1130,7 @@ fn troll(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
             wr8(b, q + 0x2c, 0x20 * (rng.next() % 2) as u8);
             wr8(b, q + 6, [0u8, 0xc, 0xc, 0xe][rng.next() as usize % 4]);
             wr16(b, q + 0xc, 0);
-            // l'objet lancé : état +4 de 0 à 5
+            // the thrown object: state +4 from 0 to 5
             wr8(b, q + 4, (rng.next() % 6) as u8);
         }
     }
@@ -1148,8 +1148,8 @@ fn troll(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
 }
 
 fn gnoll(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
-    // variante paire : 0 marche, 2 et 6 chute, 4 saut de côté, 8 et 10 arrivée armée ; en arrivée, les +6 grands
-    // n'existent que pour certaines variantes (6 : toutes sauf 10, 8 : 0 et 4) ; debout, la variante 10 est saisie
+    // even variant: 0 walk, 2 and 6 fall, 4 side jump, 8 and 10 armed arrival; in arrival, the large +6
+    // exist only for some variants (6: all but 10, 8: 0 and 4); standing, variant 10 is a grab
     let (s4, s5, s6) = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     let variant = match (s5, s6) {
         (0, 8) => [0u8, 4][rng.next() as usize % 2],
@@ -1166,7 +1166,7 @@ fn gnoll(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
     wr8(b, obj + 0xa2, [0u8, 1, 2, 5, 0x14][rng.next() as usize % 5]);
     wr8(b, obj + 0xa4, (rng.next() % 3) as u8);
     wr8(b, obj + 0xa1, [0u8, 1, 0x80, 4, 6, 8, 0x12][rng.next() as usize % 7]);
-    // geste mémorisé : un `+6` valide du sous-état 4 (et 6)
+    // remembered gesture: a valid `+6` of sub-state 4 (and 6)
     let gestures = if s5 == 6 { 7 } else { 13 };
     wr8(b, obj + 0xa5, 2 * (rng.next() % gestures) as u8);
     wr8(b, obj + 0xa6, (rng.next() % 2) as u8);
@@ -1215,9 +1215,9 @@ fn gnoll(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
 
 fn archer(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
     let (s4, s5, s6) = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
-    // variante paire : 0 et 2 marche, 4 chute, 6 apparition, 8 course
+    // even variant: 0 and 2 walk, 4 fall, 6 appearance, 8 run
     wr8(b, obj + 3, 2 * (rng.next() % 5) as u8);
-    // créé par un autre objet : seuls les états d'arrivée et de tir en place existent
+    // created by another object: only the arrival and in-place shot states exist
     let created = s4 == 2 && s5 <= 2 && s6 <= 4 && rng.next() % 3 == 0;
     wr8(b, obj + 0x42, created as u8);
     if created {
@@ -1229,9 +1229,9 @@ fn archer(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
     wr8(b, obj + 0xac, (rng.next() % 8 == 0) as u8);
     wr8(b, obj + 0xa4, [0u8, 1, 2, 5, 0x20][rng.next() as usize % 5]);
     wr8(b, obj + 0xa5, 1 + (rng.next() % 3) as u8);
-    // étape à reprendre après une marche latérale (2 ou 6 dans le jeu)
+    // step to resume after a side walk (2 or 6 in the game)
     wr8(b, obj + 0xa6, [2u8, 6][rng.next() as usize % 2]);
-    // état à reprendre après un demi-tour
+    // state to resume after a U-turn
     let valid = [0x0202_0000u32, 0x0202_0200, 0x0204_0000, 0x0204_0202, 0x0208_0000, 0x020a_0000];
     wr32(b, obj + 0xa0, valid[rng.next() as usize % valid.len()]);
     for off in [0x6bu32, 0x6e, 0x71] {
@@ -1247,7 +1247,7 @@ fn archer(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
     if rng.next() % 6 == 0 {
         wr16(b, obj + 0x50, 0);
     }
-    // créateur éventuel (le bit 7 de `+0x43` fait agir sur lui à la sortie de l'écran)
+    // possible creator (bit 7 of `+0x43` makes it act on it when leaving the screen)
     let host = 0x85de + 0x200 * (rng.next() % 4) as u16;
     wr16(b, obj + 0x46, if rng.next() % 3 == 0 { 0 } else { host });
     let (ox, oy) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
@@ -1278,7 +1278,7 @@ fn archer(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
 fn golem(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
     wr8(b, obj + 0x2f, (rng.next() % 2) as u8);
     wr8(b, obj + 0x77, (rng.next() % 4) as u8);
-    // drapeau de coup reçu : presque toujours nul
+    // received-hit flag: almost always zero
     wr8(b, obj + 0x8f, [0u8, 0, 0, 0, 1, 2, 3][rng.next() as usize % 7]);
     wr8(b, obj + 0xa6, [0u8, 1, 2, 3][rng.next() as usize % 4]);
     wr16(b, obj + 0xa2, [0u16, 1, 2, 5, 0x10][rng.next() as usize % 5]);
@@ -1300,7 +1300,7 @@ fn golem(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
     if rng.next() % 8 == 0 {
         wr16(b, obj + 0x50, 0);
     }
-    // l'objet qui l'a touché (+0x54) : un joueur existant, dont l'octet +0x57 donne le gel
+    // the object that hit it (+0x54): an existing player, whose byte +0x57 gives the freeze
     let key = 0x85de + 0x200 * (rng.next() % 4) as u16;
     wr16(b, obj + 0x54, key);
     wr8(b, 0xff0000 | key as u32 + 0x57, [0u8, 4, 8, 0x20][rng.next() as usize % 4]);
@@ -1317,7 +1317,7 @@ fn golem(b: &mut Bus, rng: &mut Rng, obj: u32, _fresh: bool) {
             wr16(b, q + 0xc, 0);
         }
     }
-    // touches du quatrième joueur
+    // keys of the fourth player
     wr8(b, A5 + 3, rng.next() as u8);
     wr8(b, A5 + 0xf, rng.next() as u8);
     wr8(b, A5 + 0x35, (rng.next() % 5) as u8);
@@ -1344,11 +1344,11 @@ fn machine(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
         wr8(b, obj + off, (rng.next() % 4) as u8);
     }
     wr8(b, obj + 0x6d, (rng.next() % 9) as u8);
-    // aspect courant et précédent (valeurs prises par la machine)
+    // current and previous look (values taken by the machine)
     let aspects = [0u8, 1, 2, 3, 4, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x20, 0x30, 0x31, 0x32, 0x40, 0xff];
     wr8(b, obj + 0xa0, aspects[rng.next() as usize % aspects.len()]);
     wr8(b, obj + 0xa1, aspects[rng.next() as usize % aspects.len()]);
-    // état à reprendre après un demi-tour
+    // state to resume after a U-turn
     let valid = [0x0202_0000u32, 0x0202_0400, 0x0202_0600, 0x0202_0800, 0x0204_0000, 0x020a_0000];
     wr32(b, obj + 0xa2, valid[rng.next() as usize % valid.len()]);
     for off in [0xa6u32, 0xa8] {
@@ -1389,7 +1389,7 @@ fn machine(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
         }
     }
     wr8(b, A5 + 0x30, (rng.next() % 3 == 0) as u8);
-    // saisie : `A5+0x42` et le lien `+0x46` (2810)
+    // grab: `A5+0x42` and the link `+0x46` (2810)
     wr8(b, A5 + 0x42, (rng.next() % 8 == 0) as u8);
     wr16(b, obj + 0x46, if rng.next() % 4 == 0 { 0x85de } else { 0 });
     wr8(b, A5 + 0x35, (rng.next() % 5) as u8);

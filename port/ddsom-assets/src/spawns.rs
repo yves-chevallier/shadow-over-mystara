@@ -1,5 +1,5 @@
-//! Scripts d'apparition des scènes (vagues d'ennemis, décors, objets) : `assets/data/spawns.json`, lus par
-//! `ddsom-game/src/scene/script.rs` (0xf2e5c). Voir docs/assets.md et docs/scenes.md §2.
+//! Spawn scripts of the scenes (enemy waves, scenery, objects): `assets/data/spawns.json`, read by
+//! `ddsom-game/src/scene/script.rs` (0xf2e5c). See docs/assets.md and docs/scenes.md §2.
 
 use std::io;
 use std::path::Path;
@@ -8,22 +8,22 @@ use serde::{Deserialize, Serialize};
 
 use crate::json::{hex, hex_vec};
 
-/// Entrée d'un script (le mot `+2` les distingue : 0xffff pour un appel).
+/// Script entry (the word at `+2` tells them apart: 0xffff for a call).
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Entry {
-    /// Appel (10 octets) : à l'abscisse `x`, appelle la routine `call` avec D0 = `arg`.
+    /// Call (10 bytes): at abscissa `x`, calls routine `call` with D0 = `arg`.
     Call {
         x: i16,
         #[serde(with = "hex")]
         call: u32,
         arg: u16,
     },
-    /// Apparition (0x12 octets) : à l'abscisse de caméra `x`, crée un objet de la classe `class` (octet pair,
-    /// index des allocateurs `0xf2f38` : ENEMY, SET, EFFCT, BOX, SOBJ, BOSS, ITEM, ESHL...), de type `kind` et
-    /// variante `variant`, en X = `x + dx`, Z = `z`, Y = `y`, si le rang du jeu est au plus `rank` et s'il y a au
-    /// moins `players` joueurs ; `f2c`, `f2f` et `f42` sont recopiés en `+0x2c`, `+0x2f` et `+0x42` (mot) de
-    /// l'objet ; `unused` (octet `+0xa`) n'est pas lu.
+    /// Spawn (0x12 bytes): at camera abscissa `x`, creates an object of class `class` (even byte,
+    /// index of the allocators `0xf2f38`: ENEMY, SET, EFFCT, BOX, SOBJ, BOSS, ITEM, ESHL...), of type `kind` and
+    /// variant `variant`, at X = `x + dx`, Z = `z`, Y = `y`, if the game rank is at most `rank` and there are at
+    /// least `players` players; `f2c`, `f2f` and `f42` are copied to `+0x2c`, `+0x2f` and `+0x42` (word) of
+    /// the object; `unused` (byte `+0xa`) is not read.
     Spawn {
         x: i16,
         dx: i16,
@@ -63,8 +63,8 @@ impl Entry {
     }
 }
 
-/// Un script : entrées jusqu'au mot 0xffff final (non écrit), puis `pad` : le mot de bourrage `0x4e71` qui
-/// sépare certains scripts du suivant.
+/// A script: entries up to the final 0xffff word (not stored), then `pad`: the padding word `0x4e71` that
+/// separates some scripts from the next one.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Script {
     #[serde(with = "hex")]
@@ -85,13 +85,13 @@ impl Script {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Spawns {
-    /// Table des scripts (un long par scène, espace données).
+    /// Script table (one long per scene, data space).
     #[serde(with = "hex")]
     pub table: u32,
-    /// Script de chaque scène (adresse).
+    /// Script of each scene (address).
     #[serde(with = "hex_vec")]
     pub scenes: Vec<u32>,
-    /// Scripts distincts, par adresse croissante.
+    /// Distinct scripts, by increasing address.
     pub scripts: Vec<Script>,
 }
 
@@ -100,7 +100,7 @@ impl Spawns {
         crate::json::load(path)
     }
 
-    /// Script de la scène `s`.
+    /// Script of scene `s`.
     pub fn of_scene(&self, s: usize) -> Option<&Script> {
         let a = *self.scenes.get(s)?;
         self.scripts.iter().find(|x| x.rom == a)

@@ -1,12 +1,12 @@
-//! Type 5, état touché (`+4 = 4`, 0x6089a). `+5` : 0 et 6 réaction commune par table (`+0x49`), 2 recul,
-//! 4 chute, 8 saisie par un joueur (le ghoul s'enfuit).
+//! Type 5, hit state (`+4 = 4`, 0x6089a). `+5`: 0 and 6 common reaction by table (`+0x49`), 2 recoil, 4 fall, 8 grabbed
+//! by a player (the ghoul runs away).
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
+/// Tables of the common reaction, indexed by reaction code `+0x49`.
 const REACT_FIRST: u32 = 0x6090c;
 const REACT_SECOND: u32 = 0x60abe;
 
@@ -38,7 +38,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Sous-état 2 : le ghoul recule (animation 9), puis se remet debout.
+/// Substate 2: the ghoul recoils (animation 9), then gets back on its feet.
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -65,7 +65,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 0);
 }
 
-/// Sous-état 4 : chute (animation 6), attente couché, relevé.
+/// Substate 4: fall (animation 6), wait lying down, get up.
 fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -103,7 +103,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Sous-état 8 (0x60b6a) : saisi par un joueur, le ghoul se retourne et s'enfuit hors de l'écran.
+/// Substate 8 (0x60b6a): grabbed by a player, the ghoul turns around and runs off the screen.
 fn caught<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -165,7 +165,7 @@ fn caught<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x60bda : le ghoul court (animation 2).
+/// 0x60bda: the ghoul runs (animation 2).
 fn flee_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     body(x, 2);

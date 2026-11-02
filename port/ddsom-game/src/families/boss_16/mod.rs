@@ -1,20 +1,21 @@
-//! Boss de type 16 (0x9325e) : boss de la scène 14 (h). Voir `docs/families/boss.md`.
+//! Boss of type 16 (0x9325e): boss of stage 14 (h). See `docs/families/boss.md`.
 //!
-//! Gabarit ancien, comme Ezerhorden (`boss_5`) : `+5` (multiples de 2) et `+6`, `+7` sont posés champ par champ, les
-//! trois jeux d'animations (corps 0x17efe8, attaques 0x17f002, coups reçus 0x17f046) sont choisis par `anim_a`,
-//! `anim_b` et `anim_c` qui mémorisent le jeu et l'animation (`+0xa0`, `+0xa1`) pour ne pas relancer la même. Le boss
-//! se tient accroupi puis charge les joueurs (`+3` : 0 en bas de l'écran, 1 en haut, d'après la caméra).
+//! Old template, like Ezerhorden (`boss_5`): `+5` (multiples of 2) and `+6`, `+7` are set field by field, the three
+//! animation sets (body 0x17efe8, attacks 0x17f002, hits received 0x17f046) are chosen by `anim_a`, `anim_b` and
+//! `anim_c`, which save the set and the animation (`+0xa0`, `+0xa1`) so as not to restart the same one. The boss
+//! stays crouched then charges the players (`+3`: 0 at the bottom of the screen, 1 at the top, according to the
+//! camera).
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `moves` | réveil : les deux variantes attendent qu'un joueur s'approche |
-//! | 2 | `moves` | combat : attente (`+6` = 0), demi-tour (2), marche (4 et 8), bond vers la cible (6) |
-//! | 4 | `attacks` | attaques : huit coups (`+6` = 0 à 14) |
-//! | 6 | `moves` | course vers un point de l'écran (`+6` = 0 et 2), puis saut (4) |
-//! | 8 | `moves` | attente avant une attaque (`+6` = 0), course (2), saut (4) |
+//! | 0 | `moves` | wake-up: both variants wait for a player to come close |
+//! | 2 | `moves` | combat: wait (`+6` = 0), about-face (2), walk (4 and 8), leap toward the target (6) |
+//! | 4 | `attacks` | attacks: eight hits (`+6` = 0 to 14) |
+//! | 6 | `moves` | run to a point on the screen (`+6` = 0 and 2), then jump (4) |
+//! | 8 | `moves` | wait before an attack (`+6` = 0), run (2), jump (4) |
 //! | 10 | `moves` | pause |
-//! | 12 | `moves` | un joueur saisi (`+0x50`) : morsures, puis relâché |
-//! | état 4 | `hit` | réactions aux coups (routines propres), recul, à terre, mort |
+//! | 12 | `moves` | a grabbed player (`+0x50`): bites, then released |
+//! | state 4 | `hit` | reactions to hits (specific routines), knockback, on the ground, death |
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -24,32 +25,32 @@ mod attacks;
 mod hit;
 mod moves;
 
-/// Champs propres à ce type.
+/// Fields specific to this type.
 pub(self) mod g {
-    /// Étage de proximité des joueurs (0 à 7) pendant le réveil.
+    /// Player proximity level (0 to 7) during the wake-up.
     pub const NEAR: u32 = 0x2f;
     pub const NEAR_MAX: u32 = 0x30;
-    /// Octet non nul : la pesanteur est appliquée en fin d'image (`gravity`).
+    /// Non-zero byte: gravity is applied at the end of the frame (`gravity`).
     pub const FALLS: u32 = 0xa2;
     pub const VULNERABLE: u32 = 0x67;
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
     pub const WALK_DELAY: u32 = 0x71;
-    /// Mémoire de l'animation en cours : jeu (0, 2 ou 4) et numéro.
+    /// Memory of the current animation: set (0, 2 or 4) and number.
     pub const ANIM_SET: u32 = 0xa0;
     pub const ANIM_N: u32 = 0xa1;
     pub const HIT_BUDGET: u32 = 0xa5;
-    /// Minuterie (octet ou mot selon l'étape).
+    /// Timer (byte or word depending on the step).
     pub const TIMER: u32 = 0xa6;
-    /// État à reprendre après un demi-tour (long).
+    /// State to resume after an about-face (long).
     pub const SAVED_STATE: u32 = 0xa8;
-    /// Point visé (mots) et sens de rotation de la trajectoire.
+    /// Aimed point (words) and rotation direction of the trajectory.
     pub const SPOT_X: u32 = 0xae;
     pub const SPOT_Z: u32 = 0xb0;
     pub const SPIN: u32 = 0xb3;
     pub const DOWN_TIME: u32 = 0x84;
     pub const SHAKE: u32 = 0x90;
-    /// Octet mémorisé « la pause a été vue ».
+    /// Saved byte "the pause has been seen".
     pub const PAUSE_SEEN: u32 = 0x42;
 }
 use g::*;
@@ -60,7 +61,7 @@ const SET_A: u32 = 0x17efe8;
 const SET_B: u32 = 0x17f002;
 const SET_C: u32 = 0x17f046;
 
-/// États posés d'un coup (`+4..+7`).
+/// States set in one go (`+4..+7`).
 pub(self) mod state {
     pub const STAND: u32 = 0x0202_0000;
     pub const TURN: u32 = 0x0202_0200;
@@ -71,13 +72,13 @@ pub(self) mod state {
     pub const IDLE_PAUSED: u32 = 0x020a_0200;
 }
 
-/// Routines du moteur appelées par ce boss.
+/// Engine routines called by this boss.
 pub(self) mod call {
 }
 
 // --- animations --------------------------------------------------------------------------------
 
-/// 0x95256 : lance l'animation `n` du jeu `set` (de sorte `kind`) par l'IA, sauf si c'est déjà celle en cours.
+/// 0x95256: starts animation `n` of set `set` (of kind `kind`) via the AI, unless it is already the current one.
 fn play_set<R: Bench>(x: &mut Cx<'_, R>, set: u32, kind: u8, n: u32) {
     if x.u8(ANIM_SET) == kind && x.u8(ANIM_N) == n as u8 {
         return;
@@ -87,31 +88,31 @@ fn play_set<R: Bench>(x: &mut Cx<'_, R>, set: u32, kind: u8, n: u32) {
     lib::start(x, set, n);
 }
 
-/// 0x95234 : animation `n` du jeu des mouvements.
+/// 0x95234: animation `n` of the movement set.
 pub(self) fn anim_a<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play_set(x, SET_A, 0, n);
 }
 
-/// 0x95240 : animation `n` du jeu des attaques.
+/// 0x95240: animation `n` of the attack set.
 pub(self) fn anim_b<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play_set(x, SET_B, 2, n);
 }
 
-/// 0x9524c : animation `n` du jeu des coups reçus.
+/// 0x9524c: animation `n` of the hits-received set.
 pub(self) fn anim_c<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play_set(x, SET_C, 4, n);
 }
 
 // --- aides --------------------------------------------------------------------------------------
 
-/// 0x95210 : annule les vitesses.
+/// 0x95210: cancels the speeds.
 pub(self) fn stop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
 }
 
-/// 0x93420 : plus de cible, attente.
+/// 0x93420: no target left, wait.
 pub(self) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, state::IDLE);
 }
@@ -123,12 +124,12 @@ pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
 
-/// 0x95220 : la caméra en service (son enregistrement ; X en `+8`, Y en `+0xc`).
+/// 0x95220: the camera in use (its record; X at `+8`, Y at `+0xc`).
 pub(self) fn camera_record<R: Bench>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
     crate::objects::Obj(if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe })
 }
 
-/// 0x950b8 : la cible est-elle derrière le boss ? (sans cible, le boss attend et la réponse est oui.)
+/// 0x950b8: is the target behind the boss? (with no target, the boss waits and the answer is yes.)
 pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) as i16 >= 0 {
         idle(x);
@@ -142,7 +143,7 @@ pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     (d.wrapping_add(0x20) as i16) < 0
 }
 
-/// 0x9489a : la cible est-elle loin (hors de ±0x20 en profondeur ou ±0xc0 en X) ?
+/// 0x9489a: is the target far (outside ±0x20 in depth or ±0xc0 in X)?
 pub(self) fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) as i16 >= 0 {
         idle(x);
@@ -157,7 +158,7 @@ pub(self) fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     dx > 0x180
 }
 
-/// 0x94902, 0x9491e, 0x94968 : une cible dans la boîte de portée (et, pour les deux dernières, des coups possibles).
+/// 0x94902, 0x9491e, 0x94968: a target in the range box (and, for the last two, possible hits).
 pub(self) fn close_target<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::target_in_box(x, 0, 0x28, 0x20)
 }
@@ -174,7 +175,7 @@ pub(self) fn edge_target<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16)
     lib::decision(x, same_side)
 }
 
-/// 0x951dc : pesanteur douce quand l'étape l'a demandée (`+0xa2`) : le boss retombe sur le sol.
+/// 0x951dc: soft gravity when the step asked for it (`+0xa2`): the boss falls back to the ground.
 fn gravity<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(FALLS) == 0 {
         return;
@@ -191,7 +192,7 @@ fn gravity<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x95272 : joueurs devant le boss dans l'état 0x0200_0e00 (qu'il laisse ainsi sans défense) : ils reçoivent `+0x189`.
+/// 0x95272: players in front of the boss in state 0x0200_0e00 (which leaves it defenseless): they receive `+0x189`.
 fn count_victims<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     let mut n = 0;
     for k in 0..4u32 {
@@ -228,9 +229,9 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
-/// 0x93286 : attend la fin de la pause ; les variantes 0 et 1 sont choisies d'après la hauteur de la caméra.
+/// 0x93286: waits for the end of the pause; variants 0 and 1 are chosen according to the camera height.
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
@@ -277,10 +278,10 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xe1470);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
-/// 0x933b8 : un groupe par image ; pendant une pause de scène, le boss reste en attente (0x020a0200) tant que des
-/// joueurs sont sous son emprise.
+/// 0x933b8: one group per frame; during a stage pause, the boss stays waiting (0x020a0200) as long as players
+/// are under its grip.
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HIT_BUDGET, 5);
     if tst8(x, f::FREEZE).gt() {
@@ -298,7 +299,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// 0x933d0..0x93452 : vrai si le groupe doit tourner cette image (hors pause, ou en attente de pause).
+/// 0x933d0..0x93452: true if the group must run this frame (outside pause, or waiting for a pause).
 fn paused_dispatch<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if var::PAUSE.get(x.b) == 0 {
         x.set8(PAUSE_SEEN, 0);
@@ -332,8 +333,8 @@ fn group<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x94e24 : choix de la suite d'une attaque : debout si la cible est hors de portée, sinon une nouvelle attaque tirée
-/// dans la table de la difficulté (0x94e7c, une ligne de 32 octets par couple de niveaux).
+/// 0x94e24: choice of what follows an attack: standing if the target is out of range, otherwise a new attack drawn
+/// from the difficulty table (0x94e7c, one 32-byte row per pair of levels).
 pub(self) fn next_attack<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) as i16 >= 0 {
         return idle(x);

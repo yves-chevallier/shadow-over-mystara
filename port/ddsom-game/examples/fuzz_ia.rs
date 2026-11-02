@@ -1,13 +1,13 @@
-//! Fuzz différentiel des cœurs du lot IA (`ai.rs`, `ai_aids.rs`, routines de `families::enemy_lib`) : chaque cœur
-//! Rust est comparé à la routine d'origine, exécutée par l'interpréteur 68000 seul (aucune native), sur des états
-//! tirés au sort à partir d'une partie réelle (un ennemi ou un boss actif sert d'objet A0 ; joueurs, cible, caméra,
-//! rang et tirage pseudo-aléatoire perturbés). On compare la mémoire (RAM, vidéo, palettes...) et le résultat du
-//! cœur à ce que l'original laisse dans ses registres (Z, D0, A1...). Les registres de travail ne sont pas comparés :
-//! les cœurs n'en écrivent plus.
+//! Differential fuzz of the cores of the AI batch (`ai.rs`, `ai_aids.rs`, routines of `families::enemy_lib`): each Rust
+//! core is compared to the original routine, run by the 68000 interpreter alone (no native), on states
+//! drawn at random from a real game (an active enemy or boss serves as object A0; players, target, camera,
+//! rank and pseudo-random draw perturbed). The memory (RAM, video, palettes...) and the core's result are compared
+//! to what the original leaves in its registers (Z, D0, A1...). The work registers are not compared:
+//! the cores no longer write them.
 //!
-//!   fuzz_ia <roms> <eeprom> <scénario> <images de chauffe> <tours> [entrée hexadécimale...]
+//!   fuzz_ia <roms> <eeprom> <scenario> <warm-up frames> <rounds> [hexadecimal entry...]
 //!
-//! Variables : `DDSOM_GRAINE` (graine du tirage), `DDSOM_VERBOSE` (chaque écart).
+//! Variables: `DDSOM_GRAINE` (draw seed), `DDSOM_VERBOSE` (each mismatch).
 
 use std::path::Path;
 
@@ -37,10 +37,10 @@ impl Rng {
     }
 }
 
-/// Adresse de retour fictive de l'appel de l'original.
+/// Fictitious return address of the original's call.
 const RETURN: u32 = 0x00_fffe;
 
-/// Exécute la routine d'origine `entry` (interpréteur seul) jusqu'à son retour.
+/// Runs the original routine `entry` (interpreter alone) until it returns.
 fn original(c: &mut Cpu, b: &mut Bus, entry: u32) {
     let sp = c.a[7];
     c.a[7] = sp.wrapping_sub(4);
@@ -50,11 +50,11 @@ fn original(c: &mut Cpu, b: &mut Bus, entry: u32) {
     while !(c.pc == RETURN && c.a[7] == sp) {
         c.step(b);
         n += 1;
-        assert!(n < 5_000_000, "{entry:06x} : l'original ne revient pas");
+        assert!(n < 5_000_000, "{entry:06x}: the original does not return");
     }
 }
 
-/// Un objet actif d'un pool d'ennemis ou de boss, s'il y en a.
+/// An active object of an enemy or boss pool, if there is one.
 fn actors(b: &mut Bus) -> Vec<u32> {
     let mut v = Vec::new();
     for pool in [&pools::ENEMY, &pools::BOSS] {
@@ -68,7 +68,7 @@ fn actors(b: &mut Bus) -> Vec<u32> {
     v
 }
 
-/// Perturbe l'état autour de l'objet `o` : joueurs (présence, PV, état, aura, position), cible, caméra, rang, hasard.
+/// Perturbs the state around object `o`: players (presence, HP, state, aura, position), target, camera, rank, chance.
 fn perturbs(c: &mut Cpu, b: &mut Bus, rng: &mut Rng, o: u32) {
     for r in 0..8 {
         c.d[r] = rng.next();
@@ -114,7 +114,7 @@ fn perturbs(c: &mut Cpu, b: &mut Bus, rng: &mut Rng, o: u32) {
     for off in [0x50au32, 0x55a, 0x5aa] {
         wr16(b, A5 + off, y.wrapping_add(rng.below(0x200) as u16).wrapping_sub(0x100));
     }
-    // cible : un joueur, rien, ou un autre acteur
+    // target: a player, nothing, or another actor
     let target = match rng.below(6) {
         0 => 0,
         1 => actors(b).first().copied().unwrap_or(0) as u16,
@@ -141,7 +141,7 @@ fn perturbs(c: &mut Cpu, b: &mut Bus, rng: &mut Rng, o: u32) {
     wr16(b, o + 0x62, rng.below(0x400) as u16);
 }
 
-/// Résultat comparé : celui du cœur, et ce que l'original laisse (lu dans ses registres).
+/// Compared result: the core's, and what the original leaves (read from its registers).
 type Core = fn(&mut Cpu, &mut Bus, Obj) -> u32;
 type Read = fn(&Cpu) -> u32;
 
@@ -160,7 +160,7 @@ fn d5(c: &Cpu) -> u32 {
 fn nothing(_: &Cpu) -> u32 {
     0
 }
-/// La cible trouvée (A1, 0 si aucune) quand Z est clair.
+/// The target found (A1, 0 if none) when Z is clear.
 fn a1_when(c: &Cpu) -> u32 {
     if c.sr & m68k::SR_Z == 0 {
         c.a[1] & 0xffffff
@@ -175,7 +175,7 @@ fn obj(o: Option<Obj>) -> u32 {
 struct Case {
     entry: u32,
     name: &'static str,
-    /// Registres d'entrée posés avant l'appel (selon l'état tiré).
+    /// Input registers set before the call (depending on the drawn state).
     inputs: fn(&mut Cpu, &mut Bus, &mut Rng),
     core: Core,
     read: Read,
@@ -208,7 +208,7 @@ fn band(c: &mut Cpu, _: &mut Bus, a: &mut Rng) {
     c.d[1] = c.d[1] & !0xffff | 0x100 + a.below(0x100);
 }
 
-/// Table de paliers (A1) : une table de boss connue (0x83... ), ou une zone de la RAM.
+/// Tier table (A1): a known boss table (0x83... ), or a RAM zone.
 fn steps(c: &mut Cpu, b: &mut Bus, a: &mut Rng) {
     let t = 0xffe000;
     for k in 0..0x400u32 {
@@ -249,8 +249,8 @@ fn ground_debris(c: &mut Cpu, _: &mut Bus, a: &mut Rng) {
 }
 
 fn game_animation(c: &mut Cpu, b: &mut Bus, a: &mut Rng) {
-    // jeu d'animation : celui que l'objet joue (adresse de l'entrée courante, alignée sur le début du jeu inconnu)
-    // ; on prend la table d'animations du squelette (0x1c74b6 joue la marche) et un maître = l'objet lui-même
+    // animation set: the one the object plays (address of the current entry, aligned on the start of the unknown set)
+    // ; the skeleton's animation table is taken (0x1c74b6 plays the walk) and a master = the object itself
     let o = c.a[0];
     c.a[4] = 0x1c74b6;
     wr16(b, o + 0xb2, o as u16);
@@ -408,7 +408,7 @@ fn case() -> Vec<Case> {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 6 {
-        eprintln!("usage : fuzz_ia <roms> <eeprom> <scénario> <images de chauffe> <tours> [entrées...]");
+        eprintln!("usage: fuzz_ia <roms> <eeprom> <scenario> <warm-up frames> <rounds> [entries...]");
         std::process::exit(2);
     }
     let (roms, eeprom, scenario) = (&a[1], &a[2], &a[3]);
@@ -418,7 +418,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_game::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
         m.run_frame();
@@ -429,7 +429,7 @@ fn main() {
     b0.irq_horizon = u64::MAX;
     let objects = actors(&mut b0);
     if objects.is_empty() {
-        eprintln!("aucun ennemi ni boss actif à l'image {warmup}");
+        eprintln!("no active enemy or boss at frame {warmup}");
         std::process::exit(2);
     }
     let verbose = std::env::var("DDSOM_VERBOSE").is_ok();
@@ -457,7 +457,7 @@ fn main() {
             let got = (case.core)(&mut c, &mut b, a0);
             let mut diffs = Vec::new();
             if got != expected {
-                diffs.push(format!("résultat {got:x} au lieu de {expected:x}"));
+                diffs.push(format!("result {got:x} instead of {expected:x}"));
             }
             let sp = c2.a[7] & 0xff_ffff;
             ddsom_game::mem::diff_bus(&b, &b2, sp.saturating_sub(0x400)..sp + 4, &mut diffs);
@@ -470,8 +470,8 @@ fn main() {
                 first.get_or_insert(msg);
             }
         }
-        println!("{:06x} {:24} {:6} tours {:6} écarts {:4} sautés {}", case.entry, case.name, tours, gaps, skipped, first.as_deref().unwrap_or(""));
+        println!("{:06x} {:24} {:6} rounds {:6} mismatches {:4} skipped {}", case.entry, case.name, tours, gaps, skipped, first.as_deref().unwrap_or(""));
         bad += gaps;
     }
-    println!("{}", if bad == 0 { "FUZZ OK" } else { "FUZZ ÉCARTS" });
+    println!("{}", if bad == 0 { "FUZZ OK" } else { "FUZZ MISMATCHES" });
 }

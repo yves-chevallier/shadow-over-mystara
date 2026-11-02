@@ -1,7 +1,7 @@
-//! Quel boss (type de l'objet BOSS, FFBA1E) apparaît dans quelle scène ?
-//!   boss_scan <roms> <eeprom> <base.txt> <scène_début> <scène_fin> [images_par_scène]
-//! Joue la base (pièce, Start, personnage), puis saute de scène en scène (FF8034, phase 8) sur la machine
-//! d'origine, joueur invincible, et note les types de boss vus.
+//! Which boss (type of the BOSS object, FFBA1E) appears in which scene?
+//!   boss_scan <roms> <eeprom> <base.txt> <scene_start> <scene_end> [frames_per_scene]
+//! Plays the base (coin, Start, character), then jumps from scene to scene (FF8034, phase 8) on the original
+//! machine, player invincible, and records the boss types seen.
 use std::path::Path;
 
 fn main() {
@@ -47,7 +47,7 @@ fn main() {
             }
         }
         if since >= per {
-            println!("scène {scene} : boss (type, variante) {:?}", seen);
+            println!("scene {scene}: boss (type, variant) {:?}", seen);
             seen.clear();
             since = 0;
             scene += 1;

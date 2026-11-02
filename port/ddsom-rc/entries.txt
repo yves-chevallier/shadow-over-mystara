@@ -1,4 +1,4 @@
-# Points d'entrée appris à l'exécution (adresses hex), ajoutés aux racines de la découverte statique.
+# Entry points learnt at run time (hex addresses), added to the roots of the static discovery.
 0003b6
 0003b8
 0004ec

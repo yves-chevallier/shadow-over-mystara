@@ -1,13 +1,13 @@
-//! Phase 28 (`0xfb292`) : la fin du jeu (générique).
+//! Phase 28 (`0xfb292`): the end of the game (credits).
 //!
-//! Après la dernière scène (séquence de sortie 35, `scene::exit`), la partie passe en phase 28 : le boss est
-//! vaincu, les joueurs reçoivent leurs récompenses, des dialogues et des écrans fixes se succèdent, puis la
-//! phase 20 (fin de partie) rend la main à la machine à modes. Les états (`A5+0x2d`, pas de 2) sont rangés
-//! par ordre de passage ; l'état 0 *tombe* dans l'état 2 (le compteur avance de 4).
+//! After the last scene (exit sequence 35, `scene::exit`), the game enters phase 28: the boss is
+//! defeated, the players receive their rewards, dialogues and fixed screens follow one another, then
+//! phase 20 (game over) hands control back to the mode machine. The states (`A5+0x2d`, step of 2) are stored
+//! in order of passage; state 0 *falls through* into state 2 (the counter advances by 4).
 //!
-//! Le bloc d'état est à `FF2B00` : `+0` minuterie (mot), `+2` lien vers l'objet de dialogue en cours
-//! (mot), `+8` octet de signal lu et écrit par les objets (par le pointeur `+0x4c` de leur enregistrement).
-//! Chaque état revient en `0xfb2a4` (la native de reprise rétablit A0).
+//! The state block is at `FF2B00`: `+0` timer (word), `+2` link to the current dialogue object
+//! (word), `+8` signal byte read and written by the objects (through the `+0x4c` pointer of their record).
+//! Each state returns to `0xfb2a4` (the resume native restores A0).
 
 use super::{Flow, Sequence};
 use crate::scene::fading;
@@ -72,7 +72,7 @@ pub const PHASE_28: Native = Native {
     touches_sound: false,
     outputs: 0,
 };
-/// Phase 28 de la partie (`0xfb292`) : le générique de fin. L'état revient à [`Step::Return`].
+/// Phase 28 of the game (`0xfb292`): the ending credits. The state returns to [`Step::Return`].
 pub fn phase_28(x: &mut Ctx) -> Flow {
     x.c.a[0] = BLOCK;
     let step = rd8(x.b, var::STEP);
@@ -81,7 +81,7 @@ pub fn phase_28(x: &mut Ctx) -> Flow {
 }
 
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
         Return = at::RETURN => |x| {
             x.c.a[0] = BLOCK;
@@ -156,7 +156,7 @@ crate::steps! {
         },
         S0eObjects = S0E_OBJECTS => |x| {
             wr8(x.b, var::SCREEN_ID, 1);
-            // Glitch d'origine : la retenue n'est pas testée ; un échec écrit dans l'A1 laissé par l'allocation
+            // Original glitch: the carry is not tested; a failure writes into the A1 left by the allocation
             let _ = scenery_6(x.b, 11);
             let o = scenery_6(x.b, 12).unwrap_or_else(|a1| a1);
             wr8(x.b, o.0 + 0x2f, 0);
@@ -168,7 +168,7 @@ crate::steps! {
             wr8(x.b, BLOCK + f::SIGNAL, 1);
             wr16(x.b, BLOCK + f::TIMER, 180);
             fade_settings(x, 3, FADE_ALL);
-            // `jmp 0x9b6` : la tâche de fondu, puis le retour
+            // `jmp 0x9b6`: the fade task, then the return
             crate::kernel::create_task(x.b, 0x10, crate::scene::fading::RISE);
             Flow::Done
         },
@@ -194,7 +194,7 @@ crate::steps! {
         },
         S1cPalette = S1C_PALETTE => |x| {
             crate::palette::load_scene_palettes(x.b);
-            // sauvegarde les 1024 octets de palette en 0x910000, puis les remplit de blanc
+            // saves the 1024 palette bytes at 0x910000, then fills them with white
             for i in 0..256u32 {
                 let v = rd32(x.b, 0x91c000 + 4 * i);
                 wr32(x.b, 0x910000 + 4 * i, v);
@@ -331,7 +331,7 @@ crate::steps! {
             fading::PAGES.set(x.b, 12);
             crate::palette::no_brightness(x.b);
             crate::sound::service(x.b, crate::sound::Service::Ff07 { lock: 0, line: 4 });
-            // joueurs présents et joueurs « prêts à partir » (octet +0x192)
+            // present players and players "ready to leave" (byte +0x192)
             let mut present = 0u8;
             let mut ready = 0u8;
             let count = rd8(x.b, A5 + 0x20) as u32 + 1;
@@ -374,7 +374,7 @@ crate::steps! {
             let mut d4 = 13u8;
             for counter in (0..3u32).rev() {
                 wr8(x.b, BLOCK + f::SIGNAL, 0);
-                // Glitch d'origine : la retenue n'est pas testée ; un échec écrit dans l'A1 laissé par l'allocation
+                // Original glitch: the carry is not tested; a failure writes into the A1 left by the allocation
                 let Obj(o) = scenery_6(x.b, 0).unwrap_or_else(|a1| a1);
                 wr32(x.b, o + 0x4c, BLOCK);
                 let v = rd16(x.b, var::CAMERA);
@@ -407,7 +407,7 @@ crate::steps! {
         },
         S32Cleared = S32_CLEARED => |x| {
             clear_layers(x, &[Layer::One, Layer::Two, Layer::Three]);
-            // le score (long BCD à +0x110) reçoit la récompense (+0x114, sans son quartet faible), plafonné à 9 999 999
+            // the score (BCD long at +0x110) gets the reward (+0x114, low nibble dropped), capped at 9 999 999
             for k in 0..4u32 {
                 let p = var::PLAYERS + 0x200 * k;
                 if rd8(x.b, p) == 0 {
@@ -422,7 +422,7 @@ crate::steps! {
             crate::player::update::update_cpu(x.c, x.b);
             wr8(x.b, var::PHASE, 20);
             crate::sound::service(x.b, crate::sound::Service::GeneralStop);
-            // `jmp 0x133f6` : le démarrage noté fait, puis le retour à l'appelant
+            // `jmp 0x133f6`: the scored startup done, then the return to the caller
             crate::families::small::startup_done(x.b, true);
             Flow::Done
         },
@@ -468,7 +468,7 @@ fn next_step(x: &mut Ctx) {
     wr8(x.b, var::STEP, s);
 }
 
-/// `0xfc4ea` : décor (SET, SOBJ) et sprites ; A0 est conservé.
+/// `0xfc4ea`: terrain (SET, SOBJ) and sprites; A0 is preserved.
 fn render(x: &mut Ctx) {
     let a0 = x.c.a[0];
     crate::dispatch::SET.update_no_next(x.c, x.b);
@@ -477,7 +477,7 @@ fn render(x: &mut Ctx) {
     x.c.a[0] = a0;
 }
 
-/// `0xfc506` : comme `render`, avec les effets et les caméras (dont le D4 est relu par des gestionnaires : voir
+/// `0xfc506`: like `render`, with the effects and the cameras (whose D4 is re-read by handlers: see
 /// `scroll::update_cameras_68k`).
 fn render_scroll(x: &mut Ctx) -> Flow {
     let a0 = x.c.a[0];
@@ -490,20 +490,20 @@ fn render_scroll(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Couches effacées (0xca8, 0xcc8, 0xce8).
+/// Cleared layers (0xca8, 0xcc8, 0xce8).
 fn clear_layers(x: &mut Ctx, layers: &[Layer]) {
     for &layer in layers {
         clear_layer(x.b, layer);
     }
 }
 
-/// Listes triées défaites (0x1f184) et listes de sprites vidées (0x1de7c).
+/// Sorted lists undone (0x1f184) and sprite lists emptied (0x1de7c).
 fn unlink_and_clear_lists(x: &mut Ctx) {
     crate::objects::lists::unlink_all(x.b);
     crate::sprites::clear_lists(x.b);
 }
 
-/// Les dix pools remis à zéro (0x2062).
+/// The ten pools reset (0x2062).
 fn reset_pools(x: &mut Ctx) {
     for pool in pools::POOLS {
         pool.reset(x.b);
@@ -525,12 +525,12 @@ fn fade_settings(x: &mut Ctx, delay: u16, pages: u8) {
     fading::PAGES.set(x.b, pages);
 }
 
-/// Crée la tâche de fondu d'entrée `entry` (emplacement 0x10).
+/// Creates the entry fade task `entry` (slot 0x10).
 fn fade_task(x: &mut Ctx, entry: u32) {
     crate::kernel::create_task(x.b, 0x10, entry);
 }
 
-/// Deux blocs de tuiles de la grille `grid` à la suite l'un de l'autre à partir de `destination`.
+/// Two tile blocks of the grid `grid` one after the other from `destination`.
 fn tile_blocks(x: &mut Ctx, destination: u32, first: u16, second: u16, grid: Grid) {
     let end = load_grid(x.b, grid, first, destination);
     load_grid(x.b, grid, second, end.destination);
@@ -539,7 +539,7 @@ fn tile_blocks(x: &mut Ctx, destination: u32, first: u16, second: u16, grid: Gri
 // ---------------------------------------------------------------------------------------------
 // États
 
-/// État 0 : vide tout, copie les récompenses des joueurs, puis tombe dans l'état 2.
+/// State 0: clears everything, copies the players' rewards, then falls into state 2.
 fn s00_reset(x: &mut Ctx) -> Flow {
     next_step(x);
     crate::kernel::kill_task(x.b, 0x30);
@@ -560,7 +560,7 @@ fn s00_reset(x: &mut Ctx) -> Flow {
     x.wait(1, Step::S00Video)
 }
 
-/// `0xfb798` : deux longs de la table des fins (par personnage et région) dans le joueur.
+/// `0xfb798`: two longs of the endings table (per character and region) into the player.
 fn reward_table(x: &mut Ctx, p: u32) {
     let mut offset = (rd8(x.b, p + 3) as u32) << 3;
     if rd16(x.b, A5 + 0x70) != 0 {
@@ -574,7 +574,7 @@ fn reward_table(x: &mut Ctx, p: u32) {
 const S00_VIDEO: u32 = 0xfb712;
 const S00_PALETTE: u32 = 0xfb758;
 
-/// État 2 (où tombe l'état 0) : l'écran est vidé.
+/// State 2 (where state 0 falls): the screen is cleared.
 fn s02_clear(x: &mut Ctx) -> Flow {
     next_step(x);
     wr16(x.b, var::VIDEO, 0x12c0);
@@ -592,7 +592,7 @@ fn s04_picture(x: &mut Ctx) -> Flow {
 const S04_FADE: u32 = 0xfb8a8;
 const S04_TIMER: u32 = 0xfb8c0;
 
-/// État 6 : après la minuterie, crée l'objet de dialogue (SET 70).
+/// State 6: after the timer, creates the dialogue object (SET 70).
 fn s06_wait(x: &mut Ctx) -> Flow {
     if !timer_tick(x) {
         return Flow::Done;
@@ -611,7 +611,7 @@ fn s06_object(x: &mut Ctx) -> Flow {
 }
 const S06_RETRY: u32 = 0xfb8e0;
 
-/// État 8 : l'objet de dialogue arrive à l'état 6 : fondu au noir puis nouveau décor.
+/// State 8: the dialogue object reaches state 6: fade to black then new terrain.
 fn s08_wait_dialogue(x: &mut Ctx) -> Flow {
     render(x);
     let o = link(x);
@@ -634,10 +634,10 @@ fn s08_object(x: &mut Ctx) -> Flow {
     fade_settings(x, 3, FADE_ALL);
     crate::tasks::fading::rise(x)
 }
-/// Réessai de la création de l'objet : `bra 0xfb982` (la remise à zéro du signal n'est pas refaite).
+/// Retry of the object creation: `bra 0xfb982` (the signal reset is not redone).
 const S08_RETRY: u32 = 0xfb996;
 
-/// État 10 : attend le signal de l'objet, puis ouvre le message 89.
+/// State 10: waits for the object's signal, then opens message 89.
 fn s0a_wait_signal(x: &mut Ctx) -> Flow {
     render(x);
     if rd8(x.b, BLOCK + f::SIGNAL) == 0 {
@@ -646,7 +646,7 @@ fn s0a_wait_signal(x: &mut Ctx) -> Flow {
     next_step(x);
     open_message(x, 89, Step::S0aRetry)
 }
-/// Message `n` (0xc8312) : l'objet de dialogue est rangé dans le bloc ; `retry` : cession en cas d'échec.
+/// Message `n` (0xc8312): the dialogue object is stored in the block; `retry`: yield on failure.
 fn open_message(x: &mut Ctx, n: u8, retry: Step) -> Flow {
     let Some(message) = crate::families::creators::scene_set(x.b, n) else {
         return x.wait(1, retry);
@@ -656,7 +656,7 @@ fn open_message(x: &mut Ctx, n: u8, retry: Step) -> Flow {
 }
 const S0A_RETRY: u32 = 0xfb9dc;
 
-/// État 12 : le message est fini : 30 images, puis l'objet SET 13.
+/// State 12: the message is finished: 30 frames, then the SET 13 object.
 fn s0c_wait_dialogue(x: &mut Ctx) -> Flow {
     render(x);
     let o = link(x);
@@ -677,7 +677,7 @@ fn s0c_object(x: &mut Ctx) -> Flow {
 }
 const S0C_RETRY: u32 = 0xfba14;
 
-/// État 14 : après la minuterie, fondu au noir (tâche), image suivante, palette, objets des joueurs.
+/// State 14: after the timer, fade to black (task), next frame, palette, players' objects.
 fn s0e_wait_timer(x: &mut Ctx) -> Flow {
     render(x);
     if !timer_tick(x) {
@@ -699,7 +699,7 @@ fn s0e_wait_fade(x: &mut Ctx) -> Flow {
     wr16(x.b, var::CAMERA_2, 0);
     wr16(x.b, var::CAMERA_Y, 256);
     wr16(x.b, var::CAMERA, 128);
-    // palette : huit longs copiés puis assombris (ET 0x0fff0fff sur les huit suivants)
+    // palette: eight longs copied then darkened (AND 0x0fff0fff on the next eight)
     let words: Vec<u32> = (0..8).map(|i| rd32(x.b, 0x291980 + 4 * i)).collect();
     for (i, w) in words.iter().enumerate() {
         wr32(x.b, 0x91c280 + 4 * i as u32, w & 0x0fff_0fff);
@@ -707,7 +707,7 @@ fn s0e_wait_fade(x: &mut Ctx) -> Flow {
     s0e_wait_music(x)
 }
 const S0E_LOOP: u32 = 0xfba68;
-/// Attend que la musique ait avancé (`7e70` ≥ 3 ou `7e66` ≥ 1), une image à la fois.
+/// Waits for the music to advance (`7e70` >= 3 or `7e66` >= 1), one frame at a time.
 fn s0e_wait_music(x: &mut Ctx) -> Flow {
     let ready = (rd16(x.b, A5 + 0x7e70) as i16) >= 3 && (rd16(x.b, A5 + 0x7e66) as i16) >= 1;
     x.wait(1, if ready { Step::S0eObjects } else { Step::S0eMusic })
@@ -715,7 +715,7 @@ fn s0e_wait_music(x: &mut Ctx) -> Flow {
 const S0E_MUSIC: u32 = 0xfbb18;
 const S0E_OBJECTS: u32 = 0xfbb26;
 
-/// État 16 : attend que la caméra se soit arrêtée et la minuterie, puis ouvre le message 90.
+/// State 16: waits for the camera to stop and the timer, then opens message 90.
 fn s10_wait_camera(x: &mut Ctx) -> Flow {
     render(x);
     if rd16(x.b, var::CAMERA) != 0 || !timer_tick(x) {
@@ -726,7 +726,7 @@ fn s10_wait_camera(x: &mut Ctx) -> Flow {
 }
 const S10_RETRY: u32 = 0xfbbae;
 
-/// États 18 et 22 : le message est fini : 30 images.
+/// States 18 and 22: the message is finished: 30 frames.
 fn s12_wait_dialogue(x: &mut Ctx) -> Flow {
     render(x);
     let o = link(x);
@@ -738,7 +738,7 @@ fn s12_wait_dialogue(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// État 20 : après la minuterie, ouvre le message 91.
+/// State 20: after the timer, opens message 91.
 fn s14_wait_timer(x: &mut Ctx) -> Flow {
     render(x);
     if !timer_tick(x) {
@@ -749,7 +749,7 @@ fn s14_wait_timer(x: &mut Ctx) -> Flow {
 }
 const S14_RETRY: u32 = 0xfbbf6;
 
-/// État 24 : objet SET 13, caméras remises à zéro.
+/// State 24: SET 13 object, cameras reset.
 fn s18_object(x: &mut Ctx) -> Flow {
     let Ok(Obj(set)) = set_15_pure(x.b, 13) else {
         return x.wait(1, Step::S18Retry);
@@ -765,7 +765,7 @@ fn s18_object(x: &mut Ctx) -> Flow {
 }
 const S18_RETRY: u32 = 0xfbc16;
 
-/// État 26 : le signal passe à 1 : fondu (tâche), vide tout, prépare les joueurs.
+/// State 26: the signal becomes 1: fade (task), clears everything, prepares the players.
 fn s1a_wait_signal(x: &mut Ctx) -> Flow {
     render(x);
     if rd8(x.b, BLOCK + f::SIGNAL) != 1 {
@@ -796,7 +796,7 @@ fn s1a_wait_fade(x: &mut Ctx) -> Flow {
 }
 const S1A_LOOP: u32 = 0xfbc92;
 
-/// État 28 : le générique : décor, objets, caméra, attente de l'ouverture.
+/// State 28: the credits: terrain, objects, camera, waiting for the opening.
 fn s1c_wait(x: &mut Ctx) -> Flow {
     if !timer_tick(x) {
         return Flow::Done;
@@ -821,7 +821,7 @@ fn s1c_wait(x: &mut Ctx) -> Flow {
     wr16(x.b, BLOCK + f::TIMER, 3);
     s1c_scroll(x)
 }
-/// `0xfbdd2` : objets du décor d'après une table de la ROM (dix octets par objet, 0xffff termine).
+/// `0xfbdd2`: terrain objects from a ROM table (ten bytes per object, 0xffff ends).
 fn credits_objects_a(x: &mut Ctx) {
     let mut a2 = 0xfbe92;
     while rd16(x.b, a2) != 0xffff {
@@ -839,7 +839,7 @@ fn credits_objects_a(x: &mut Ctx) {
         }
     }
 }
-/// `0xfbe0a` : un objet de score par joueur présent.
+/// `0xfbe0a`: one score object per present player.
 fn credits_objects_b(x: &mut Ctx) {
     let mut fp = var::PLAYERS;
     let mut a2 = 0xfbebc;
@@ -869,7 +869,7 @@ fn credits_objects_c(x: &mut Ctx) {
         wr8(x.b, o + 0x2f, k);
     }
 }
-/// `0xfbd38` : rendu avec défilement pendant trois images.
+/// `0xfbd38`: render with scrolling for three frames.
 fn s1c_scroll(x: &mut Ctx) -> Flow {
     render_scroll(x);
     x.wait(1, Step::S1cScroll)
@@ -881,7 +881,7 @@ fn s1c_wait_fade(x: &mut Ctx) -> Flow {
 }
 const S1C_FADE_LOOP: u32 = 0xfbdc0;
 
-/// État 30 : le générique défile ; à la fin de la minuterie, fondu (tâche), puis objet SET 18.
+/// State 30: the credits scroll; at the end of the timer, fade (task), then SET 18 object.
 fn s1e_fade(x: &mut Ctx) -> Flow {
     render_scroll(x);
     if !timer_tick(x) {
@@ -900,15 +900,15 @@ fn s1e_object(x: &mut Ctx) -> Flow {
     if set_15_pure(x.b, 18).is_ok() {
         return Flow::Done;
     }
-    // `moveq 1,D0 ; bsr 0xfc506 ; jsr 0xa40`. Glitch d'origine : la cession dure D0 images, tel que le rendu le laisse
-    // (le dernier gestionnaire d'objet appelé)
+    // `moveq 1,D0 ; bsr 0xfc506 ; jsr 0xa40`. Original glitch: the yield lasts D0 frames, as the render leaves it
+    // (the last object handler called)
     x.c.d[0] = 1;
     render_scroll(x);
     crate::tasks::wait(x, Step::S1eRetry)
 }
 const S1E_RETRY: u32 = 0xfbf26;
 
-/// État 34 : objet SET 16, fondu (tâche), puis objet SET 20.
+/// State 34: SET 16 object, fade (task), then SET 20 object.
 fn s22_object(x: &mut Ctx) -> Flow {
     if set_15_pure(x.b, 16).is_err() {
         return Flow::Done;
@@ -924,7 +924,7 @@ fn s22_wait(x: &mut Ctx) -> Flow {
 }
 const S22_LOOP: u32 = 0xfbf64;
 
-/// État 38 : après la minuterie, signal 2 et nouvelle minuterie.
+/// State 38: after the timer, signal 2 and new timer.
 fn s26_wait(x: &mut Ctx) -> Flow {
     render_scroll(x);
     if !timer_tick(x) {
@@ -936,7 +936,7 @@ fn s26_wait(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// État 40 : après la minuterie, fondu au noir (tâche, attente de la fin).
+/// State 40: after the timer, fade to black (task, waits for the end).
 fn s28_fade(x: &mut Ctx) -> Flow {
     render_scroll(x);
     if !timer_tick(x) {
@@ -953,7 +953,7 @@ fn s28_loop(x: &mut Ctx) -> Flow {
 }
 const S28_LOOP: u32 = 0xfbfe8;
 
-/// État 42 : vide tout, retire les plans, nouvelle image, objet SOBJ 0.
+/// State 42: clears everything, removes the planes, next frame, SOBJ 0 object.
 fn s2a_clear(x: &mut Ctx) -> Flow {
     render_scroll(x);
     unlink_and_clear_lists(x);
@@ -985,7 +985,7 @@ fn s2a_object(x: &mut Ctx) -> Flow {
 const S2A_RETRY: u32 = 0xfc0c2;
 const S2A_SHOW: u32 = 0xfc0ee;
 
-/// État 44 : après la minuterie, fondu au noir, vide tout et prépare l'écran des récompenses.
+/// State 44: after the timer, fade to black, clears everything and prepares the rewards screen.
 fn s2c_wait(x: &mut Ctx) -> Flow {
     if !timer_tick(x) {
         render(x);
@@ -1009,13 +1009,13 @@ fn s2c_wait_timer(x: &mut Ctx) -> Flow {
     x.wait(1, Step::S2cTimer)
 }
 const S2C_TIMER: u32 = 0xfc1d8;
-/// `bra 0xfc4ea` : un rendu puis retour.
+/// `bra 0xfc4ea`: a render then return.
 fn render_flow(x: &mut Ctx) -> Flow {
     render(x);
     Flow::Done
 }
 
-/// État 46 : le dialogue de fin ouvre puis ferme l'écran (fondus au noir et depuis le noir).
+/// State 46: the ending dialogue opens then closes the screen (fades to black and from black).
 fn s2e_dialogue(x: &mut Ctx) -> Flow {
     let o = link(x);
     if rd8(x.b, o + 5) == 6 {
@@ -1031,7 +1031,7 @@ fn s2e_dialogue(x: &mut Ctx) -> Flow {
 const S2E_OPENED: u32 = 0xfc286;
 const S2E_CLOSED: u32 = 0xfc2ae;
 
-/// État 48 : récompenses : palettes, puis un objet par joueur ayant gagné une récompense.
+/// State 48: rewards: palettes, then one object per player who won a reward.
 fn s30_rewards(x: &mut Ctx) -> Flow {
     for (src, dst) in [(0x28fa80u32, 0x91c120u32), (0x28faa0, 0x91c1a0), (0x28f4c0, 0x91c180), (0x292260, 0x91c1e0), (0x291f00, 0x91c200)] {
         for i in 0..8 {
@@ -1055,7 +1055,7 @@ fn s30_rewards(x: &mut Ctx) -> Flow {
 }
 const S30_WAIT: u32 = 0xfc366;
 
-/// État 50 : dernier écran (quatre cadres de tuiles), puis fin du jeu : phase 20.
+/// State 50: last screen (four tile frames), then end of the game: phase 20.
 fn s32_end(x: &mut Ctx) -> Flow {
     render(x);
     if rd16(x.b, BLOCK + f::TIMER) == 120 {
@@ -1064,7 +1064,7 @@ fn s32_end(x: &mut Ctx) -> Flow {
         for _ in 0..4 {
             let first = rd16(x.b, a2);
             a2 += 2;
-            // deux lignes de quatre tuiles : n, n + 16 puis n + 1, n + 17 (attribut 2)
+            // two rows of four tiles: n, n + 16 then n + 1, n + 17 (attribute 2)
             for tile in [first, first.wrapping_add(1)] {
                 for t in [tile, tile.wrapping_add(16)] {
                     wr16(x.b, a1, t);
@@ -1084,7 +1084,7 @@ fn s32_end(x: &mut Ctx) -> Flow {
 const S32_FADED: u32 = 0xfc450;
 const S32_CLEARED: u32 = 0xfc470;
 
-/// Addition décimale codée (huit chiffres, retenue finale perdue) : quatre `abcd`.
+/// Decimal-coded addition (eight digits, final carry lost): four `abcd`.
 fn bcd_add(dest: u32, src: u32) -> u32 {
     let mut carry = 0u32;
     let mut out = 0u32;
@@ -1118,7 +1118,7 @@ mod tests {
     fn addition_decimal() {
         assert_eq!(bcd_add(0x0000_0199, 0x0000_0001), 0x0000_0200);
         assert_eq!(bcd_add(0x0123_4567, 0x0876_5430), 0x0999_9997);
-        // la retenue finale est perdue
+        // the final carry is lost
         assert_eq!(bcd_add(0x9999_9999, 0x0000_0001), 0x0000_0000);
     }
 }

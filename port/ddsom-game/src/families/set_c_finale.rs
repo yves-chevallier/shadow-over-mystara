@@ -1,11 +1,11 @@
-//! Type SET 15 (0xce024) : les mises en scène de fin de niveau et d'écrans de transition (h).
+//! Type SET 15 (0xce024): end-of-level staging and transition screens (h).
 //!
-//! Le type est un *aiguilleur* : la variante `+3` (0 à 24) choisit une petite machine à états
-//! indépendante (`+4` état principal, `+5` sous-état) dont l'adresse est dans la table 0xce034 de
-//! la ROM. Ces machines animent l'écran entre deux niveaux (secousses de caméra, défilements de
-//! décor chargés par 0x26d4 / 0x2766, fondus de palette, apparitions d'objets liés par `+0x4c` à un
-//! objet « chef d'orchestre »). Elles ne sont jamais appelées dans les scénarios (voir
-//! `docs/families/set_c.md`). Les variantes pas encore réécrites sont exécutées par le code d'origine.
+//! The type is a *dispatcher*: variant `+3` (0 to 24) picks a small state machine
+//! independent of the others (`+4` main state, `+5` substate) whose address is in table 0xce034 of
+//! the ROM. These machines animate the screen between two levels (camera shakes, scrolling of
+//! scenery loaded by 0x26d4 / 0x2766, palette fades, appearance of objects tied by `+0x4c` to a
+//! "conductor" object). They are never called in the scenarios (see
+//! `docs/families/set_c.md`). The variants not yet rewritten are run by the original code.
 
 use crate::families::cx::Bench;
 use crate::families::cx::Cx;
@@ -16,7 +16,7 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-/// Table (espace programme) des déplacements des machines, un mot relatif par variante.
+/// Table (program space) of the machines' movements, one relative word per variant.
 const VARIANTS: u32 = 25;
 
 /// Block grid loaders: 0x26d4 (scroll 2) and 0x2766 (small blocks, scroll 3).
@@ -26,14 +26,14 @@ mod rom {
     pub const LOAD_SMALL: Grid = Grid::Layer3;
 }
 
-/// Variables de la RAM de travail (offsets depuis A5).
+/// Work RAM variables (offsets from A5).
 mod a5 {
-    /// Caméra du fond : position (X, Y) et sa copie « précédente ».
+    /// Background camera: position (X, Y) and its "previous" copy.
     pub const CAM_X: u32 = 0x506;
     pub const CAM_Y: u32 = 0x50a;
     pub const CAM_X_PREV: u32 = 0x50e;
     pub const CAM_Y_PREV: u32 = 0x512;
-    /// Second plan (scroll 2) : position et copie.
+    /// Second plane (scroll 2): position and copy.
     pub const BG_X: u32 = 0x556;
     pub const BG_Y: u32 = 0x55a;
     pub const BG_X_PREV: u32 = 0x55e;
@@ -45,9 +45,9 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if variant >= VARIANTS {
         return;
     }
-    // Les tables d'états de toutes les variantes (sauf 19 et 20, sans table) finissent pareil :
-    // état 4 = passer à 6 (0xce0e8) ou, pour 0 et 1, libérer ; état 6 = libérer (0xce0e2) ; pour 24
-    // l'état 4 est propre à la variante.
+    // The state tables of all variants (except 19 and 20, which have no table) end the same way:
+    // state 4 = go to 6 (0xce0e8) or, for 0 and 1, release; state 6 = release (0xce0e2); for 24
+    // state 4 is specific to the variant.
     if !matches!(variant, 19 | 20) {
         match (variant, x.u8(0x4)) {
             (0 | 1, 4 | 6) | (_, 6) => return free(x),
@@ -95,12 +95,12 @@ fn next_substate<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x5, 2);
 }
 
-/// Passe l'objet à l'état 6 (libération au passage suivant).
+/// Sets the object to state 6 (release on the next pass).
 fn free<R: Bench>(x: &mut Cx<'_, R>) {
     x.free(&pools::SET);
 }
 
-/// Le chef d'orchestre : l'objet pointé par `+0x4c` (adresse longue).
+/// The conductor: the object pointed to by `+0x4c` (long address).
 fn conductor<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
     Obj(x.u32(0x4c))
 }
@@ -129,15 +129,15 @@ fn shake<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u16 {
     dx
 }
 
-/// Avance un champ de 32 bits d'un mot de vitesse 8.8 (`speed << 8` signée).
+/// Advances a 32-bit field by an 8.8 speed word (signed `speed << 8`).
 fn velocity(speed: u16) -> u32 {
     (((speed as u32) << 16) as i32 >> 8) as u32
 }
 
 // --- variante 0 : clignotement de titre ------------------------------------------------------------
 
-/// Variante 0 (0xce066) : initialise deux routines (0x3525c, 0x1ac86), puis, de temps à autre (rng
-/// et parité de l'image), bascule `+0x43` et lance l'une de deux routines sonores/vidéo.
+/// Variant 0 (0xce066): initializes two routines (0x3525c, 0x1ac86), then, from time to time (rng
+/// and frame parity), toggles `+0x43` and launches one of two sound/video routines.
 fn title_blink<R: Bench>(x: &mut Cx<'_, R>) {
     const ON: u32 = 0xea22c;
     const OFF: u32 = 0xea1d0;
@@ -173,9 +173,9 @@ fn title_blink<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- variante 1 : secousse de fin de niveau --------------------------------------------------------
 
-/// Variante 1 (0xce0f0) : place l'objet au bas de l'écran, attend, puis fait trembler la caméra avec
-/// des tables de secousses (0xd0b10, 0xd0b20) en lançant des effets ; le chef d'orchestre (`+0x4c`)
-/// est prévenu par son octet `+8` et par `+0xc`.
+/// Variant 1 (0xce0f0): places the object at the bottom of the screen, waits, then shakes the camera with
+/// shake tables (0xd0b10, 0xd0b20) while launching effects; the conductor (`+0x4c`)
+/// is notified through its byte `+8` and through `+0xc`.
 fn quake<R: Bench>(x: &mut Cx<'_, R>) {
     const SHAKE_A: u32 = 0xd0b10;
     const SHAKE_B: u32 = 0xd0b20;
@@ -247,14 +247,14 @@ fn quake<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Délai aléatoire avant le prochain effet : octet de la table 0xce138 tiré par le rng.
+/// Random delay before the next effect: byte of table 0xce138 drawn by the rng.
 fn quake_delay<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let r = rng(x) & 7;
     let d = x.rom8(table + r as u32);
     x.set8(0x42, d);
 }
 
-/// Crée un effet (type 0 de 0xb1a7a) lié à l'objet quand le délai `+0x42` est écoulé.
+/// Creates an effect (type 0 of 0xb1a7a) tied to the object when the delay `+0x42` has elapsed.
 fn quake_effects<R: Bench>(x: &mut Cx<'_, R>, table: u32, setting: u8) {
     x.add8(0x42, 0xff);
     if x.u8(0x42) != 0 {
@@ -269,10 +269,10 @@ fn quake_effects<R: Bench>(x: &mut Cx<'_, R>, table: u32, setting: u8) {
     quake_delay(x, table);
 }
 
-// --- variante 2 : fond qui glisse ---------------------------------------------------------------
+// --- variant 2: sliding background ---------------------------------------------------------------
 
-/// Variante 2 (0xce294) : un fond (scroll 3, GFX 0x920000) dont la position `+0x34` accélère ;
-/// `+5` = 0 : il entre ; 2 : il sort. Écrit sa position dans les 176 mots du bloc quand elle change.
+/// Variant 2 (0xce294): a background (scroll 3, GFX 0x920000) whose position `+0x34` accelerates;
+/// `+5` = 0: it enters; 2: it leaves. Writes its position into the block's 176 words when it changes.
 fn backdrop_slide<R: Bench>(x: &mut Cx<'_, R>) {
     const TILEMAP: u32 = 0x920000;
     match x.u8(0x4) {
@@ -306,11 +306,11 @@ fn backdrop_slide<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variante 3 : le décor se place d'après le chef d'orchestre -----------------------------------
+// --- variant 3: the scenery positions itself from the conductor -----------------------------------
 
-/// Variante 3 (0xce324) : lit dans une table (0xce37a, 16 octets) la position de caméra, la vitesse
-/// et le but selon `+0x3f` du chef d'orchestre, charge deux grilles de blocs dans le scroll 3
-/// (0x917000), puis fait glisser la caméra vers le but ; le chef d'orchestre est alors décrémenté.
+/// Variant 3 (0xce324): reads from a table (0xce37a, 16 bytes) the camera position, speed
+/// and goal according to the conductor's `+0x3f`, loads two block grids into scroll 3
+/// (0x917000), then slides the camera toward the goal; the conductor is then decremented.
 fn camera_script<R: Bench>(x: &mut Cx<'_, R>) {
     const TABLE: u32 = 0xce37a;
     match x.u8(0x4) {
@@ -348,10 +348,10 @@ fn camera_script<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variantes 4 et 6 : défilement d'une scène --------------------------------------------------------
+// --- variants 4 and 6: scrolling of a scene --------------------------------------------------------
 
-/// Paramètres de scène (sous-routine 0xce4a2, table de pointeurs 0xce4ea indexée par `index`
-/// octets) : position et vitesses du fond, puis une liste de blocs 4x4 chargés dans 0x918000.
+/// Scene parameters (subroutine 0xce4a2, pointer table 0xce4ea indexed by `index`
+/// bytes): background position and speeds, then a list of 4x4 blocks loaded into 0x918000.
 fn load_scene<R: Bench>(x: &mut Cx<'_, R>, index: u32) {
     const SCENES: u32 = 0xce4ea;
     let at = SCENES.wrapping_add(index);
@@ -378,8 +378,8 @@ fn load_scene<R: Bench>(x: &mut Cx<'_, R>, index: u32) {
     }
 }
 
-/// Un pas de défilement du fond : position += vitesse (8.8), masquée par `+0x1c` / `+0x1e`, puis
-/// publiée dans le second plan avec le décalage `+0x16`.
+/// One step of background scrolling: position += speed (8.8), masked by `+0x1c` / `+0x1e`, then
+/// published to the second plane with the offset `+0x16`.
 fn scroll_step<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.u32(0x8).wrapping_add(velocity(x.u16(0x14)));
     x.set32(0x8, v);
@@ -397,7 +397,7 @@ fn scroll_step<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u16(a5::BG_Y, bg_y);
 }
 
-/// Variante 4 (0xce47c) : charge la scène `+0x2f` (bit 0 ignoré), puis la fait défiler sans fin.
+/// Variant 4 (0xce47c): loads scene `+0x2f` (bit 0 ignored), then scrolls it endlessly.
 fn scene_scroll<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
@@ -416,8 +416,8 @@ fn publish_background<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u16(a5::BG_Y_PREV, py);
 }
 
-/// Variante 6 (0xce6bc) : comme 4 (scène `+0x2f`, bit 0 compris), en recopiant le fond dans sa copie
-/// « précédente », jusqu'à ce que le chef d'orchestre passe à la variante 2.
+/// Variant 6 (0xce6bc): like 4 (scene `+0x2f`, bit 0 included), copying the background into its "previous"
+/// copy, until the conductor switches to variant 2.
 fn scene_scroll_follow<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
@@ -439,7 +439,7 @@ fn scene_scroll_follow<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- variante 5 : chargeur de blocs ---------------------------------------------------------------------
 
-/// Variante 5 (0xce64a) : charge deux grilles de blocs (0xce686 + 4 × `+0x2f`) dans le scroll 3.
+/// Variant 5 (0xce64a): loads two block grids (0xce686 + 4 × `+0x2f`) into scroll 3.
 fn block_loader<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
@@ -452,7 +452,7 @@ fn block_loader<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Charge les deux grilles de blocs n° `index` (couples de mots à 0xce686) dans le scroll 3.
+/// Loads the two block grids no. `index` (word pairs at 0xce686) into scroll 3.
 fn block_loader_for<R: Bench>(x: &mut Cx<'_, R>, index: u32) {
     const GRIDS: u32 = 0xce686;
     let at = GRIDS + 4 * index;

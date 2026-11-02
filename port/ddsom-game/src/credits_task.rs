@@ -1,24 +1,24 @@
-//! Tâche des crédits (C1, `0x13c0a`) : monnayeurs, écran « crédits », départs de partie et reprise
-//! (continue). C'est une des tâches permanentes de l'ordonnanceur (`kernel.rs`).
+//! Credits task (C1, `0x13c0a`): coin slots, "credits" screen, game starts and resumption
+//! (continue). It is one of the scheduler's permanent tasks (`kernel.rs`).
 //!
-//! Elle tourne en boucle : chaque tour lit les boutons de départ (`0x141e0`), gère l'état des
-//! crédits (`0x13c2c`), verrouille les compteurs de pièces (`0x14290`) et lit les boutons de
-//! continue (`0x1436e`), puis cède une image (`0xb64`). Tant que l'interrupteur TEST n'est pas
-//! actionné (bit 1 de `IN2+1`, actif bas, test de `0x14d74`), elle continue ; sinon elle se démonte (`0x14d8c`) :
-//! écran remis à zéro, tâche d'interface (`0x29162`) créée, tâche terminée.
+//! It loops: each turn reads the start buttons (`0x141e0`), handles the credits
+//! state (`0x13c2c`), locks the coin counters (`0x14290`) and reads the continue
+//! buttons (`0x1436e`), then cedes one frame (`0xb64`). As long as the TEST switch is not
+//! operated (bit 1 of `IN2+1`, active low, test at `0x14d74`), it continues; otherwise it tears itself down
+//! (`0x14d8c`): screen reset, interface task (`0x29162`) created, task ended.
 //!
-//! ## État des crédits (`0x13c2c`)
+//! ## Credits state (`0x13c2c`)
 //!
-//! Selon les crédits et les départs demandés (enregistrements de monnayeurs en `A5+0x44e`, voir
-//! `credits.rs`), elle prépare l'écran des crédits au premier crédit (`init`, qui efface l'écran et
-//! cède une image), l'affiche, puis appelle `start` (`0x140b4`) pour chaque joueur : si le bouton de
-//! départ du joueur est pressé et qu'il y a assez de crédits, le joueur entre dans la partie (tâche de
-//! partie `0x1c45a` créée au premier départ). Quand un joueur a démarré (`A5+0x31` ≠ 0), la tâche
-//! de partie est lancée à la place de l'écran des crédits (`end`).
+//! According to the credits and the starts requested (coin slot records at `A5+0x44e`, see
+//! `credits.rs`), it prepares the credits screen at the first credit (`init`, which clears the screen and
+//! cedes a frame), displays it, then calls `start` (`0x140b4`) for each player: if the player's
+//! start button is pressed and there are enough credits, the player enters the game (game task
+//! `0x1c45a` created at the first start). When a player has started (`A5+0x31` ≠ 0), the game task
+//! is launched in place of the credits screen (`end`).
 //!
-//! Les cessions d'origine (`0xc32` efface l'écran en cédant, `0x1460` fond au noir, `0x1436e`, `0xb64`)
-//! coupent le code en morceaux : chacun est une étape de la machine à états de la tâche ([`Step`]), à l'adresse
-//! de retour de l'original.
+//! The original cessions (`0xc32` clears the screen while ceding, `0x1460` fades to black, `0x1436e`, `0xb64`)
+//! cut the code into pieces: each is a step of the task's state machine ([`Step`]), at the return
+//! address of the original.
 
 use crate::credits_screen::{self, FIRST_COIN_SLOT};
 use crate::scene::fading;
@@ -29,21 +29,21 @@ use crate::scene::Ctx;
 use crate::tasks;
 use crate::video::{load_grid, Grid};
 
-/// Sons de l'écran des crédits.
+/// Sounds of the credits screen.
 mod sound {
     pub const SCREEN_A: u32 = 0xe1060;
     pub const SCREEN_B: u32 = 0xe18b8;
     pub const START: u32 = 0xe181c;
 }
 
-/// Entrée de la tâche de partie, et de la tâche d'interface des joueurs.
+/// Entry of the game task, and of the players' interface task.
 const GAME_TASK: u32 = 0x1c45a;
 const UI_TASK: u32 = 0x29162;
-/// Textes affichés par l'écran des crédits (adresses de pointeurs ou de chaînes en ROM).
+/// Texts displayed by the credits screen (addresses of pointers or strings in ROM).
 const TEXT_CREDITS: u32 = 0x14ea2;
 const TEXT_TABLE: u32 = 0x15060;
 
-/// Registres matériel.
+/// Hardware registers.
 const IN2: u32 = 0x804020;
 const IN2_SERVICE: u32 = 0x804021;
 const CPS_VIDEO_A: u32 = 0x804122;
@@ -54,30 +54,30 @@ const OUTPUT_4: u32 = 0x400004;
 const VIDEO_ON: u16 = 0x12ce;
 const OUTPUT_ON: u16 = 0x1355;
 
-/// Variables de la RAM de travail (décalages depuis A5).
+/// Work RAM variables (offsets from A5).
 mod var {
-    /// Partie en cours.
+    /// Game in progress.
     pub const GAME: u32 = 0x30;
-    /// Joueurs qui ont démarré (un bit par joueur).
+    /// Players who have started (one bit per player).
     pub const STARTED: u32 = 0x31;
-    /// Mode « continue » : les crédits servent à reprendre une partie.
+    /// "Continue" mode: the credits serve to resume a game.
     pub const CONTINUE: u32 = 0x25;
     pub const SEPARATE: u32 = 0x22;
     pub const COIN_COUNT: u32 = 0x21;
     pub const SHARED: u32 = 0x20;
-    /// Premier monnayeur, et pas.
+    /// First coin slot, and stride.
     pub const COIN_1: u32 = 0x44e;
-    /// Écran des crédits déjà préparé (octet +6 du premier monnayeur).
+    /// Credits screen already prepared (byte +6 of the first coin slot).
     pub const SCREEN_READY: u32 = COIN_1 + 6;
-    /// Drapeau de bruit de pièce (A5 - 0x713c).
+    /// Coin sound flag (A5 - 0x713c).
     pub const COIN_SOUND: u32 = 0xffff_8ec4;
-    /// Défilements demandés (voir `vblank.rs`).
+    /// Requested scrolls (see `vblank.rs`).
     pub const SCROLLS: [u32; 6] = [0x4b6, 0x4ba, 0x506, 0x50a, 0x556, 0x55a];
     pub const FLAGS: u32 = 0x12;
     pub const VIDEO_B: u32 = 0x14;
     pub const SCROLL_MODE: u32 = 0x53c;
     pub const GAME_LANGUAGE: u32 = 0x70;
-    /// Drapeau (A5 - 0x7155) et octet (A5 - 0x5b8e) remis à zéro / posé par l'écran.
+    /// Flag (A5 - 0x7155) and byte (A5 - 0x5b8e) reset to zero / set by the screen.
     pub const CLEAR_FLAG: u32 = 0xffff_8eab;
     pub const SCREEN_FLAG: u32 = 0xffff_a472;
     pub const FRAME_SKIP: u32 = 0x5bc;
@@ -85,27 +85,27 @@ mod var {
     pub const TILES_OFF: u32 = 0x33;
 }
 
-/// Adresses de retour de l'original après chaque appel qui peut céder la main.
+/// Return addresses of the original after each call that may cede control.
 mod at {
-    /// Retours des `bsr 0x143a6` de `0x1436e`, et reprise de l'impulsion après sa première cession.
+    /// Returns of the `bsr 0x143a6` of `0x1436e`, and resumption of the pulse after its first cession.
     pub const LOCKOUT: [u32; 3] = [0x14376, 0x14386, 0x14398];
     pub const PULSE_AFTER_WAIT: u32 = 0x143c8;
-    /// Après `bsr 0x13c2c`, `0x14290`, `0x1436e` de la boucle, et après la cession.
+    /// After `bsr 0x13c2c`, `0x14290`, `0x1436e` of the loop, and after the cession.
     pub const AFTER_STATE: u32 = 0x13c18;
     pub const AFTER_CONTINUE: u32 = 0x13c20;
     pub const AFTER_WAIT: u32 = 0x13c2a;
-    /// Après l'effacement de l'écran d'initialisation.
+    /// After clearing the initialisation screen.
     pub const AFTER_INIT_CLEAR: u32 = 0x13cc6;
-    /// Retours des quatre appels de départ de chaque séquence (le dernier de B est la fin, `0x13fa8`).
+    /// Returns of the four start calls of each sequence (the last of B is the end, `0x13fa8`).
     pub const SEQ_A: [u32; 4] = [0x13eb6, 0x13ec8, 0x13ee2, 0x13efe];
     pub const SEQ_B: [u32; 4] = [0x13f72, 0x13f84, 0x13f96, 0x13fa8];
     pub const SEQ_C: [u32; 4] = [0x13f26, 0x13f38, 0x13f4a, 0x13f5c];
-    /// Après le fondu et l'effacement de la reprise de partie.
+    /// After the fade and the clearing of the game resumption.
     pub const AFTER_FADE: u32 = 0x14066;
     pub const AFTER_FADE_CLEAR: u32 = 0x1406c;
-    /// Reprise de `0x140b4` après l'effacement de l'écran.
+    /// Resumption of `0x140b4` after the screen is cleared.
     pub const START_AFTER_CLEAR: u32 = 0x14174;
-    /// Démontage : après l'effacement.
+    /// Teardown: after the clearing.
     pub const SHUTDOWN_AFTER_CLEAR: u32 = 0x14e24;
 }
 
@@ -113,7 +113,7 @@ fn a5(off: u32) -> u32 {
     A5.wrapping_add(off)
 }
 
-/// Octet de la RAM de travail à un décalage signé (`A5 - n` est donné en 32 bits).
+/// Work RAM byte at a signed offset (`A5 - n` is given as 32 bits).
 fn v8(x: &mut Ctx, off: u32) -> u8 {
     rd8(x.b, a5(off))
 }
@@ -124,7 +124,7 @@ fn set16(x: &mut Ctx, off: u32, v: u16) {
     wr16(x.b, a5(off), v)
 }
 
-/// Tue les tâches de ces décalages dans la table (`0xa14`, D0 = décalage).
+/// Kills the tasks at these offsets in the table (`0xa14`, D0 = offset).
 fn kill(x: &mut Ctx, slots: &[u16]) {
     for &s in slots {
         crate::kernel::kill_task(x.b, s as u32);
@@ -137,44 +137,44 @@ fn clear_scrolls(x: &mut Ctx) {
     }
 }
 
-/// `A5+0x14 = 0 ; 0xbc6` : remet les plans en route.
+/// `A5+0x14 = 0 ; 0xbc6`: restarts the planes.
 fn video_on(x: &mut Ctx) {
     set16(x, var::VIDEO_B, 0);
     crate::video::turn_layers_on(x.b, VIDEO_ON);
 }
 
 // ---------------------------------------------------------------------------------------------
-// La boucle de la tâche
+// The task loop
 
-/// Étapes de la tâche : son entrée, et chaque retour d'un appel qui peut céder la main.
+/// Steps of the task: its entry, and each return from a call that may cede control.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Step {
     /// `0x13c0a`.
     Entry,
-    /// Après `bsr 0x13c2c` (état des crédits), `0x1436e` (verrous), et après la cession du tour.
+    /// After `bsr 0x13c2c` (credits state), `0x1436e` (locks), and after the turn's cession.
     AfterState,
     AfterContinue,
     AfterWait,
-    /// Démontage, après l'effacement de l'écran.
+    /// Teardown, after the screen is cleared.
     ShutdownAfterClear,
-    /// Première préparation de l'écran, après l'effacement.
+    /// First preparation of the screen, after the clearing.
     AfterInitClear,
-    /// Retour du `k`-ième appel de départ d'une séquence (le dernier de la séquence B tombe sur `0x13fa8`, la fin).
+    /// Return of the `k`-th start call of a sequence (the last of sequence B lands on `0x13fa8`, the end).
     Sequence(Seq, usize),
-    /// Reprise de partie : après le fondu au noir, puis après l'effacement.
+    /// Game resumption: after the fade to black, then after the clearing.
     AfterFade,
     AfterFadeClear,
-    /// Départ d'un joueur en mode « continue », après l'effacement de l'écran.
+    /// Start of a player in "continue" mode, after the screen is cleared.
     StartAfterClear(GameStart),
-    /// Impulsion de verrouillage après sa première cession ; `d0` est le D0 que l'original garde sur la pile
+    /// Lock pulse after its first cession; `d0` is the D0 that the original keeps on the stack
     /// (`move.l D0,-(SP)`).
     PulseAfterWait { d0: u32 },
-    /// Retour de l'impulsion du monnayeur `k - 1` : celle du monnayeur `k` (1 à 3).
+    /// Return of the pulse of coin slot `k - 1`: that of coin slot `k` (1 to 3).
     Lock(usize),
 }
 
 impl Step {
-    /// Adresse que l'original reprend à cette étape.
+    /// Address that the original resumes at in this step.
     pub fn address(self) -> u32 {
         match self {
             Step::Entry => 0x13c0a,
@@ -209,7 +209,7 @@ impl Step {
     }
 }
 
-/// `0x13c10` : un tour.
+/// `0x13c10`: one turn.
 fn tour(x: &mut Ctx) -> Flow {
     crate::credits::read_starts(x.b);
     x.push_return(Step::AfterState);
@@ -223,7 +223,7 @@ fn after_state(x: &mut Ctx) -> Flow {
 }
 
 fn after_continue(x: &mut Ctx) -> Flow {
-    // 0x14d74 : la tâche continue tant que l'interrupteur TEST n'est pas actionné (le drapeau 0xc8 de la ROM est nul)
+    // 0x14d74: the task continues as long as the TEST switch is not operated (the ROM flag 0xc8 is zero)
     if x.rd8(IN2_SERVICE) & 2 != 0 {
         tasks::one_frame(x, Step::AfterWait)
     } else {
@@ -231,7 +231,7 @@ fn after_continue(x: &mut Ctx) -> Flow {
     }
 }
 
-/// `0x14d8c` : démontage de la tâche.
+/// `0x14d8c`: teardown of the task.
 fn shutdown(x: &mut Ctx) -> Flow {
     kill(x, &[0, 0x10, 0x30, 0xb0, 0xd0]);
     wr16(x.b, CPS_VIDEO_A, 0xe);
@@ -253,7 +253,7 @@ fn shutdown(x: &mut Ctx) -> Flow {
     x.subroutine(crate::video::black_screen::start, Step::ShutdownAfterClear)
 }
 
-/// Fin du démontage : la tâche du menu TEST prend l'emplacement 0, la tâche se termine.
+/// End of the teardown: the TEST menu task takes slot 0, the task ends.
 fn shutdown_after_clear(x: &mut Ctx) -> Flow {
     crate::palette::load_all_palettes(x.b);
     crate::sound::service(x.b, crate::sound::Service::GeneralStop);
@@ -262,7 +262,7 @@ fn shutdown_after_clear(x: &mut Ctx) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// État des crédits (0x13c2c)
+// Credits state (0x13c2c)
 
 /// `0x13c2c`.
 fn credits(x: &mut Ctx) -> Flow {
@@ -270,7 +270,7 @@ fn credits(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     if v8(x, var::CONTINUE) == 0 {
-        // des crédits ou des pièces quelque part ?
+        // credits or coins anywhere?
         let sum = [0x44f, 0x45f, 0x46f, 0x47f, 0x450, 0x460, 0x470, 0x480].iter().fold(0u8, |s, &o| s.wrapping_add(v8(x, o)));
         if sum == 0 {
             return Flow::Done;
@@ -283,7 +283,7 @@ fn credits(x: &mut Ctx) -> Flow {
     starts(x)
 }
 
-/// `0x13c6c` : première fois : prépare l'écran des crédits, après l'effacement de l'écran.
+/// `0x13c6c`: first time: prepares the credits screen, after the screen is cleared.
 fn init(x: &mut Ctx) -> Flow {
     set8(x, var::SCREEN_READY, 1);
     kill(x, &[0, 0x10, 0x30, 0xd0, 0xf0]);
@@ -304,9 +304,9 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
     video_on(x);
     crate::palette::load_palette_set(x.b, 1);
     pools::SOBJ.reset(x.b);
-    // cinq objets système : (variante, X, Z)
+    // five system objects: (variant, X, Z)
     for (variant, px, pz) in [(0xe7, 0x70, 0xd0), (0xe8, 0x70, 0xd0), (0xe4, 0x20, 0xb0), (0xe5, 0x00, 0x70), (0xe6, 0x13c, 0x60)] {
-        // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+        // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
         let Obj(o) = pools::SOBJ.alloc_unchecked(x.b);
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
@@ -315,7 +315,7 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
         wr16(x.b, o + 0xc, pz);
     }
     crate::dispatch::SOBJ.update_no_next(x.c, x.b);
-    // deux grilles de chaque sorte, la seconde à la suite de la première
+    // two grids of each kind, the second following the first
     let end = load_grid(x.b, Grid::Blocks4x4, 5, 0x912000);
     load_grid(x.b, Grid::Blocks4x4, 6, end.destination);
     let end = load_grid(x.b, Grid::Layer2, 0x201, 0x917000);
@@ -335,7 +335,7 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
     display(x)
 }
 
-/// `0x13e46` : affiche l'écran des crédits (compteurs, textes, sprites), puis traite les départs.
+/// `0x13e46`: displays the credits screen (counters, texts, sprites), then processes the starts.
 fn display(x: &mut Ctx) -> Flow {
     credits_screen::credit_text(x.b, FIRST_COIN_SLOT);
     credits_screen::digits(x.b, FIRST_COIN_SLOT);
@@ -346,23 +346,23 @@ fn display(x: &mut Ctx) -> Flow {
     starts(x)
 }
 
-/// Texte de la langue du jeu (`A5+0x70`, deux octets par langue dans la table des pointeurs).
+/// Text of the game's language (`A5+0x70`, two bytes per language in the pointer table).
 fn language_text(x: &mut Ctx) -> u32 {
     let d0 = (rd16(x.b, a5(var::GAME_LANGUAGE)) as u32 * 2) & 0xffff;
     x.rd32(TEXT_TABLE + d0)
 }
 
 // ---------------------------------------------------------------------------------------------
-// Impulsions de verrouillage des compteurs (0x1436e)
+// Counter lock pulses (0x1436e)
 
-/// Décalages des quatre monnayeurs.
+/// Offsets of the four coin slots.
 const COINS: [u32; 4] = [0x44e, 0x45e, 0x46e, 0x47e];
 
-/// `0x1436e` : pour chaque monnayeur dont le compteur `+3` n'est pas nul, une impulsion de
-/// verrouillage (voir `pulse`), de plus en plus loin selon le nombre de monnayeurs (`A5+0x21`). Chaque
-/// impulsion cède la main : sa suite est l'étape `Lock(k + 1)`.
+/// `0x1436e`: for each coin slot whose counter `+3` is not zero, a lock
+/// pulse (see `pulse`), further and further apart according to the number of coin slots (`A5+0x21`). Each
+/// pulse cedes control: its continuation is the step `Lock(k + 1)`.
 fn lockouts(x: &mut Ctx, k: usize) -> Flow {
-    // le monnayeur k n'existe que si `A5+0x21` ≥ k
+    // coin slot k only exists if `A5+0x21` ≥ k
     if k > 0 && v8(x, var::COIN_COUNT) as usize == k - 1 {
         return Flow::Done;
     }
@@ -373,8 +373,8 @@ fn lockouts(x: &mut Ctx, k: usize) -> Flow {
     pulse(x)
 }
 
-/// `0x143a6` : si le monnayeur A0 a une pièce comptée (`+3`), la décompte, verrouille le compteur de
-/// pièces 16 images puis le déverrouille et attend encore 16 images.
+/// `0x143a6`: if coin slot A0 has a counted coin (`+3`), counts it down, locks the coin
+/// counter for 16 frames then unlocks it and waits another 16 frames.
 fn pulse(x: &mut Ctx) -> Flow {
     set_low_word(&mut x.c.d[0], 1);
     let counter = rd8(x.b, x.c.a[0] + 3);
@@ -382,7 +382,7 @@ fn pulse(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     wr8(x.b, x.c.a[0] + 3, counter - 1);
-    // D0 est gardé pendant la cession (`move.l D0,-(SP)` de l'original) : dans l'étape de reprise
+    // D0 is kept during the cession (`move.l D0,-(SP)` of the original): in the resumption step
     let d0 = x.c.d[0];
     crate::video::lock_counters(x.b, d0 as u8);
     set_low_word(&mut x.c.d[0], 0x10);
@@ -390,7 +390,7 @@ fn pulse(x: &mut Ctx) -> Flow {
     Flow::Yield
 }
 
-/// `0x143c8` : déverrouille, puis la seconde attente (`jmp 0xa40`) : la tâche reprendra à la suite de l'appelant.
+/// `0x143c8`: unlocks, then the second wait (`jmp 0xa40`): the task will resume at the continuation of the caller.
 fn pulse_after_wait(x: &mut Ctx, d0: u32) -> Flow {
     x.c.d[0] = d0;
     crate::video::unlock_counters(x.b, d0 as u8);
@@ -401,10 +401,10 @@ fn pulse_after_wait(x: &mut Ctx, d0: u32) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Départs de partie (0x13e7a)
+// Game starts (0x13e7a)
 
-/// Un appel de `start` : monnayeur (décalage de A1), masque du bouton (D1), joueur (D2), enregistrement
-/// du joueur (décalage de A3).
+/// A `start` call: coin slot (offset of A1), button mask (D1), player (D2), player record
+/// (offset of A3).
 type Start = (u32, u8, u32, u32);
 
 const SEQ_A: [Start; 4] = [(0x44e, 1, 0, 0x5de), (0x44e, 2, 1, 0x7de), (0x44e, 4, 2, 0x9de), (0x44e, 8, 3, 0xbde)];
@@ -435,7 +435,7 @@ impl Seq {
     }
 }
 
-/// `0x13e7a` : choisit la séquence d'appels de départ.
+/// `0x13e7a`: chooses the sequence of start calls.
 fn starts(x: &mut Ctx) -> Flow {
     if v8(x, var::SEPARATE) != 0 {
         let seq = if v8(x, var::COIN_COUNT) == 1 && v8(x, var::SHARED) != 0 { Seq::B } else { Seq::C };
@@ -450,14 +450,14 @@ fn starts(x: &mut Ctx) -> Flow {
     sequence(x, Seq::A, 0)
 }
 
-/// Exécute les appels de départ de la séquence à partir du `k`-ième. Chaque appel revient à l'étape
-/// `Sequence(seq, k)`, qui reprend à l'appel suivant.
+/// Runs the sequence's start calls from the `k`-th. Each call returns to the step
+/// `Sequence(seq, k)`, which resumes at the next call.
 fn sequence(x: &mut Ctx, seq: Seq, k: usize) -> Flow {
     if k == 4 {
         return end(x);
     }
     if let Seq::A = seq {
-        // le troisième joueur n'existe que si A5+0x20 ≠ 0, le quatrième s'il est ≥ 2
+        // the third player only exists if A5+0x20 ≠ 0, the fourth if it is ≥ 2
         let shared = v8(x, var::SHARED) as i8;
         if (k == 2 && shared == 0) || (k == 3 && shared <= 1) {
             return end(x);
@@ -468,7 +468,7 @@ fn sequence(x: &mut Ctx, seq: Seq, k: usize) -> Flow {
     start_player(x, GameStart { coin_slot: a5(coin_slot), player: player as u8, record: a5(record), cost: 0 }, mask)
 }
 
-/// `0x13fa8` : si un joueur a démarré, lance la partie.
+/// `0x13fa8`: if a player has started, launches the game.
 fn end(x: &mut Ctx) -> Flow {
     if v8(x, var::GAME) != 0 || v8(x, var::STARTED) == 0 {
         return Flow::Done;
@@ -483,7 +483,7 @@ fn end(x: &mut Ctx) -> Flow {
         crate::text::erase(x.b, text);
         return create_game_task(x);
     }
-    // reprise de partie : l'écran de continue est démonté, fondu au noir et effacé
+    // game resumption: the continue screen is torn down, faded to black and cleared
     crate::sprites::clear_lists(x.b);
     pools::SOBJ.reset(x.b);
     let flags = rd16(x.b, a5(var::FLAGS)) & !1;
@@ -507,31 +507,31 @@ fn after_fade_clear(x: &mut Ctx) -> Flow {
     create_game_task(x)
 }
 
-/// `jmp 0x9b6` avec A0 = tâche de partie, D0 = emplacement 0 : la tâche de partie est créée, et l'on revient à
-/// l'appelant de `0x13c2c`.
+/// `jmp 0x9b6` with A0 = game task, D0 = slot 0: the game task is created, and we return to the
+/// caller of `0x13c2c`.
 fn create_game_task(x: &mut Ctx) -> Flow {
     crate::kernel::create_task(x.b, 0, GAME_TASK);
     Flow::Done
 }
 
 // ---------------------------------------------------------------------------------------------
-// Départ d'un joueur (0x140b4)
+// Start of a player (0x140b4)
 
-/// Un départ de joueur (A1, D2, A3 et D3 de l'original, gardés pendant l'effacement de l'écran d'un départ en
-/// mode « continue »).
+/// A player start (A1, D2, A3 and D3 of the original, kept while the screen is cleared in a start in
+/// "continue" mode).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GameStart {
-    /// Enregistrement du monnayeur qui paie.
+    /// Record of the paying coin slot.
     coin_slot: u32,
-    /// Numéro du joueur.
+    /// Player number.
     player: u8,
-    /// Enregistrement du joueur.
+    /// Player record.
     record: u32,
-    /// Crédits débités.
+    /// Credits debited.
     cost: u8,
 }
 
-/// `0x140b4` : le joueur dont le bouton de départ est `mask` (IN2) entre dans la partie.
+/// `0x140b4`: the player whose start button is `mask` (IN2) enters the game.
 fn start_player(x: &mut Ctx, mut d: GameStart, mask: u8) -> Flow {
     let button = x.rd8(IN2) & mask;
     if v8(x, var::CONTINUE) == 0 {
@@ -565,8 +565,8 @@ fn start_after_clear(x: &mut Ctx, d: GameStart) -> Flow {
     join(x, d)
 }
 
-/// `0x141a6` : le joueur démarre : bruit, crédit débité, enregistrement du joueur créé, comptabilité (`jmp`, qui
-/// revient à l'appelant).
+/// `0x141a6`: the player starts: sound, credit debited, player record created, bookkeeping (`jmp`, which
+/// returns to the caller).
 fn join(x: &mut Ctx, d: GameStart) -> Flow {
     crate::sound::play_global(x.b, sound::START);
     crate::sound::service(x.b, crate::sound::Service::Ff07 { lock: 0, line: 4 });
@@ -581,15 +581,16 @@ fn join(x: &mut Ctx, d: GameStart) -> Flow {
     Flow::Done
 }
 
-/// Sous-programme d'origine réécrit dans le corps de la tâche, présenté comme une native pour le fuzz différentiel
-/// (`examples/fuzz_couv`) ; le jeu ne l'appelle pas par son adresse. S'il cède la main, l'essai est écarté (panique).
+/// Original subroutine rewritten in the body of the task, presented as a native for the differential fuzz
+/// (`examples/fuzz_couv`); the game does not call it by its address. If it cedes control, the trial is discarded
+/// (panic).
 pub const TEST_NATIVES: &[crate::Native] = &[crate::Native {
-    // 0x13c2c : état des crédits (démarrage, reprise, ralliement des quatre emplacements)
+    // 0x13c2c: credits state (startup, resumption, rallying of the four slots)
     entry: 0x13c2c,
     name: "credits_etat",
     run: crate::Body::Processeur(|c, b| {
         if let Flow::Yield = credits(&mut Ctx::new(c, b)) {
-            panic!("credits_etat : cède la main (hors du cadre du fuzz)");
+            panic!("credits_etat: cedes control (outside the fuzz frame)");
         }
         crate::mem::rts(c, b);
     }),

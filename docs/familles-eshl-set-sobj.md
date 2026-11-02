@@ -26,11 +26,11 @@ le code d'origine ; leur durée s'ajoute d'elle-même.
 ## 2. Structure du code
 
 * `cx.rs` : `Cx` (processeur, bus, objet courant `o`), lecture/écriture des champs de l'objet,
-  appels `anim_start(jeu, n)`, `anim_step()` (vrai en fin de script), `reinsert()` (liste triée),
-  `free_eshl()`, `call(adresse)`, tables de la ROM : `rom16/rom8` (espace *programme*, pour les
+  appels `anim_start(game, n)`, `anim_step()` (vrai en fin de script), `reinsert()` (liste triée),
+  `free_eshl()`, `call(address)`, tables de la ROM : `rom16/rom8` (espace *programme*, pour les
   adressages `(table,PC,Dn)`) et `data16/data32/data8` (espace de *données*, pour les adressages
   absolus ou par registre : les deux espaces diffèrent sur CPS2, le programme étant chiffré).
-  Macro `handlers!` : table `NATIVES` d'un fichier, `adresse "nom" coût chemin`.
+  Macro `handlers!` : table `NATIVES` d'un fichier, `address "name" coût chemin`.
 * `shell.rs` : champs et aides propres à ESHL (`f::OWNER`, `place_in_front`, `blink`...).
 * `eshl.rs`, `eshl_b.rs`, `eshl_c.rs`, `eshl_d.rs` : types ESHL (`creators.rs` : petites routines de création appelées par le code d'origine) ; `set.rs`, `set_b.rs`, `set_c.rs` : types SET ;
   `sobj.rs` : types SOBJ. Un type = un `mod` avec une fonction `run`, des constantes nommées pour ses
@@ -55,7 +55,7 @@ si bien que la validation globale n'est pas affectée.
 1. `tools/validate_all.sh 30000` (8 scénarios, deux machines, mode contrôle) et
    `cargo test --release -p ddsom-game --lib` (unicité des entrées).
 2. Les scénarios n'exercent qu'une petite part des types (voir §5). Pour les autres,
-   `examples/fuzz familles` :
+   `examples/fuzz families` :
 
    ```
    export DDSOM_ROMS=... DDSOM_EEPROM=...
@@ -67,10 +67,10 @@ si bien que la validation globale n'est pas affectée.
    est créé à l'état 0, puis le gestionnaire est appelé image après image tandis que l'on perturbe
    les entrées que d'autres sous-systèmes modifient (drapeaux de touche `+0x57`, états et drapeaux
    du propriétaire, pause `A5+0x3d`, compteurs de gel). Chaque appel est comparé à l'original.
-   Variables : `DDSOM_ENTREE=<adresse>` (un seul type), `DDSOM_VARIANTES=n` (variantes tirées, 3 par
+   Variables : `DDSOM_ENTREE=<address>` (un seul type), `DDSOM_VARIANTES=n` (variantes tirées, 3 par
    défaut), `DDSOM_VERBOSE=1`, `DDSOM_TRACE_ORIG=1` (trace de l'original à l'écart) et
    `DDSOM_COUVERTURE=fichier` (écrit les instructions de l'original exécutées).
-3. `python3 tools/families_unseen.py fichier...` liste, par type, les instructions du listing que le
+3. `python3 tools/families_unseen.py file...` liste, par type, les instructions du listing que le
    fuzz n'a pas atteintes (à interpréter : tables de données mal désassemblées et fonctions de
    création appelées par d'autres objets y figurent aussi).
 4. `tools/families_coverage.sh` compte les appels de chaque gestionnaire dans les scénarios.
@@ -84,16 +84,16 @@ vers du code qui rappelle le même sous-programme.
 ## 6. Procédure pour réécrire un lot de types
 
 1. **Repérer le type** : `python3 tools/families_tables.py` donne l'adresse de chaque type ;
-   `python3 tools/dis_range.py <début> <fin>` affiche le listing de la plage avec les tables de sauts
+   `python3 tools/dis_range.py <début> <end>` affiche le listing de la plage avec les tables de sauts
    `(tbl,PC,Dn)` résolues. Le listing est incomplet par endroits (instructions manquantes, tables de
    données décodées en instructions absurdes comme `ori.b #0x0,D0b`) : pour un doute, `examples/dis
-   <roms> <début> <fin>` ou les mots bruts de `prog_dec.bin`. Les fonctions placées entre deux
+   <roms> <début> <fin>` ou les words bruts de `prog_dec.bin`. Les fonctions placées entre deux
    gestionnaires qui commencent par `jsr 0x22ea` (allocation) ou ne sont atteintes que par des `jsr`
    d'autres objets sont des *fonctions de création* : elles ne font pas partie du gestionnaire.
 2. **Comprendre avant d'écrire** : suivre les trois étages d'états (`+4`, `+5`, `+6`/`+7`), noter
    les champs lus et écrits (nom de champ en constante), les sous-routines appelées et les registres
    qu'elles attendent ou rendent (cherche leur contrat dans `docs/objets.md`, `docs/video.md`,
-   `src/ai.rs`...). Les sons (adresses 0xe0836-0xee080) se rappellent par `x.call(adresse)` : les
+   `src/ai.rs`...). Les sons (adresses 0xe0836-0xee080) se rappellent par `x.call(address)` : les
    noter dans un `mod sfx`.
 3. **Écrire** un `mod` par type (fonction `run(x: &mut Cx)`, sous-fonctions nommées par état, constantes
    pour les adresses de tables/jeux d'animation, commentaire de rôle en français) et l'inscrire dans la
@@ -105,21 +105,21 @@ vers du code qui rappelle le même sous-programme.
    revient à l'appelant qui en refait un) ; drapeaux de retenue/Z après les sous-routines
    (`x.anim_step()` rend la retenue, `x.c.cond(n)` lit les autres conditions : 6 `bne`, 7 `beq`, 14 `bgt`...).
 4. **Valider** (dans cet ordre), toujours avec `export DDSOM_ROMS=/home/ycr/som/rom
-   DDSOM_EEPROM=/home/ycr/som/testdata/eeprom_ddsom.bin` dans la même commande que `cargo`
+   DDSOM_EEPROM=/home/ycr/som/testdata/eeprom_ddsom.bin` below la même command que `cargo`
    (sinon `ddsom-rc` se recompile, ~10 minutes et beaucoup de mémoire) :
    * `cargo build --release -p ddsom-game --examples` depuis `port/`,
-   * `fuzz familles ... scenarios/bot30k.txt 3000 200` (tous tes types) puis, pour chaque type qui
-     écarte, `DDSOM_ENTREE=<adresse> DDSOM_TRACE_ORIG=1 DDSOM_VERBOSE=1` ; essayer aussi
+   * `fuzz families ... scenarios/bot30k.txt 3000 200` (tous tes types) puis, pour chaque type qui
+     écarte, `DDSOM_ENTREE=<address> DDSOM_TRACE_ORIG=1 DDSOM_VERBOSE=1` ; essayer aussi
      `DDSOM_VARIANTES=8` (les variantes hors table font sortir l'original des rails : ces écarts-là
      ne sont pas des erreurs, vérifier dans la trace que l'original saute en pleine donnée),
-   * `DDSOM_COUVERTURE=fichier` + `tools/families_unseen.py fichier` : les instructions non vues sont
+   * `DDSOM_COUVERTURE=fichier` + `tools/families_unseen.py file` : les instructions non vues sont
      du code non validé ; si possible, enrichir le fuzz (il est dans `examples/fuzz.rs`, fonction
-     `familles`) pour les atteindre, sinon les signaler,
+     `families`) pour les atteindre, sinon les signaler,
    * `tools/validate_all.sh 30000` : les 8 scénarios doivent être VALIDE, et `cargo test --release
      -p ddsom-game --lib` doit passer (unicité des entrées natives).
 5. **Calibrer la durée** : le fuzz affiche « écart à corriger de la durée estimée » par type ; la
    durée propre vaut l'estimation + cet écart (arrondir). Reporter dans `handlers!`.
-6. **Décrire** les types dans `docs/familles/<fichier>.md` (adresse, rôle, états, champs, tables ROM
+6. **Décrire** les types dans `docs/families/<file>.md` (adresse, rôle, états, champs, tables ROM
    utilisées, couverture scénarios/fuzz, instructions non vues).
 
 Un gestionnaire qui cède la main à l'ordonnanceur de tâches (`trap`) ne peut pas être natif tel
@@ -162,11 +162,11 @@ garantissent que A0 et D7.
 
 Outils :
 
-* `DDSOM_CHECK=1 DDSOM_CHECK_ALL=1 validate ...` (et `DDSOM_CHECK_ALL=1 fuzz familles ...`) : une ligne
-  `REGS routine appels : d2:n ...` par routine native, avec le nombre d'appels où chaque registre de sortie
+* `DDSOM_CHECK=1 DDSOM_CHECK_ALL=1 validate ...` (et `DDSOM_CHECK_ALL=1 fuzz families ...`) : une ligne
+  `REGS routine calls : d2:n ...` par routine native, avec le nombre d'appels où chaque registre de sortie
   diffère de l'original (tous les gestionnaires natifs diffèrent sur beaucoup de registres : seul compte
   ce qu'un successeur lit) ;
-* `DDSOM_RESTES=1 fuzz familles ...` : lecteurs de restes **dynamiques**. Le code d'origine de chaque
+* `DDSOM_RESTES=1 fuzz families ...` : lecteurs de restes **dynamiques**. Le code d'origine de chaque
   gestionnaire des six tables est exécuté depuis la même mémoire en changeant un seul registre de reste
   (D1-D6, A2-A4, mot haut de D0) ; si la mémoire finale change (piles ignorées), le gestionnaire lit ce
   registre. `DDSOM_RESTES_SITE=1` donne l'instruction qui le lit et le chemin parcouru ;
@@ -195,7 +195,7 @@ table à dix entrées 0xaab5e) ou le résultat d'une sous-routine (D2 après 0xf
 ## 8. Cas hors contrat du fuzz
 
 Variante `+3` au-delà de la table de sauts de l'original (l'original saute dans du code ou des données ;
-`examples/fuzz*.rs` ne les tire plus, voir `variantes_en_table`) : 0xcc25a (2 variantes ; 71 « écarts » sur 600 appels
+`examples/fuzz*.rs` ne les tire plus, voir `table_variants`) : 0xcc25a (2 variantes ; 71 « écarts » sur 600 appels
 quand on tirait la variante 2 : saut au milieu d'un `jsr`), ESHL 5 et 9 (3 variantes), ESHL 15 (2). ESHL 14
 (8 variantes) est conforme avec toutes ses variantes ; ESHL 5, 9, 14, 15 et 0xcc25a sont à 0 écart avec les trois
 outils de fuzz (`fuzz`, `fuzz_eshl_c`, `fuzz_set_a`, `DDSOM_VARIANTES=8 DDSOM_ETATS=1`).

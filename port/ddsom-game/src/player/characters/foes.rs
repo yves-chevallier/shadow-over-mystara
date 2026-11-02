@@ -1,9 +1,9 @@
-//! Sorts qui blessent les monstres (elfe, magicien) : le programme d'origine recopie une boucle par
-//! sort ; elles ne diffèrent que par quelques paramètres, décrits ici par `Strike`.
+//! Spells that hurt monsters (elf, magic-user): the original program copies one loop per
+//! spell; they differ only by a few parameters, described here by `Strike`.
 //!
-//! La boucle parcourt les chefs puis les ennemis. Un monstre en jeu, vivant et sans protection contre ce
-//! sort (un bit de `+0x94`) passe à la réaction `reaction` attribuée au lanceur, perd des points de
-//! vie (table par niveau ou valeur fixe, majorée selon l'équipement) et sa barre de vie est mise à jour.
+//! The loop goes through the bosses then the enemies. A monster in play, alive and without protection against this
+//! spell (a bit of `+0x94`) goes to the reaction `reaction` assigned to the caster, loses hit
+//! points (per-level table or fixed value, increased according to equipment) and its life bar is updated.
 
 use crate::machine::Machine;
 use super::super::{Ctx, Player};
@@ -11,59 +11,59 @@ use crate::objects::pools::{BOSS, ENEMY};
 use crate::objects::Obj;
 use crate::player::ram;
 
-/// Dégâts de base.
+/// Base damage.
 pub enum Damage {
-    /// Octets de la ROM indexés par le niveau du lanceur (chefs, ennemis).
+    /// ROM bytes indexed by the caster's level (bosses, enemies).
     Table(u32, u32),
-    /// Valeur unique.
+    /// Single value.
     Fixed(u16),
 }
 
-/// Test de l'octet `+1` du monstre (état de jeu).
+/// Test of the monster's byte `+1` (game state).
 pub enum Live {
-    /// Non nul.
+    /// Non-zero.
     Any,
     /// Bit 0.
     Bit0,
-    /// Pas de test.
+    /// No test.
     Unchecked,
 }
 
-/// Majoration des dégâts (`d += d >> n`, ou +5), dans l'ordre d'application.
+/// Damage increases (`d += d >> n`, or +5), in order of application.
 pub enum Boost {
-    /// Le monstre est un chef (classe 4) de type `kind` : +50 %.
+    /// The monster is a boss (class 4) of type `kind`: +50%.
     Boss(u8),
-    /// L'équipement `WEAPON_B` du lanceur vaut `weapon` : `d >> shift` en plus.
+    /// The caster's `WEAPON_B` equipment is `weapon`: `d >> shift` extra.
     Held(u8, u32),
-    /// L'accessoire `+0x166` du lanceur vaut 4 : +25 %.
+    /// The caster's accessory `+0x166` is 4: +25%.
     Armor,
-    /// L'accessoire `+0x165` du lanceur vaut `v` : +5.
+    /// The caster's accessory `+0x165` is `v`: +5.
     Charm(u8),
 }
 
-/// Un sort qui blesse les monstres.
+/// A spell that hurts monsters.
 pub struct Strike {
     pub damage: Damage,
     pub live: Live,
-    /// Le monstre doit avoir des points de vie.
+    /// The monster must have hit points.
     pub needs_hp: bool,
-    /// Le monstre doit être au sol (`Z` = 0).
+    /// The monster must be on the ground (`Z` = 0).
     pub grounded: bool,
-    /// Bit de `+0x94` qui protège le monstre.
+    /// Bit of `+0x94` that protects the monster.
     pub immune_bit: u32,
-    /// Réaction (`+0x49`) imposée au monstre.
+    /// Reaction (`+0x49`) imposed on the monster.
     pub reaction: u8,
-    /// Le monstre est retourné au hasard (`+0x4a`).
+    /// The monster is turned around at random (`+0x4a`).
     pub random_facing: bool,
     pub boosts: &'static [Boost],
-    /// Les monstres de type 0 et 0x13 (non chefs) meurent sur le coup.
+    /// Monsters of type 0 and 0x13 (non-boss) die on the spot.
     pub undead_die: bool,
-    /// Son joué après chaque barre de vie.
+    /// Sound played after each life bar.
     pub sound: Option<u32>,
 }
 
-/// Applique `strike` à tous les monstres éligibles. `boss_table`/`enemy_table` remplacent les tables de
-/// `Damage::Table` quand le sort choisit sa table à l'exécution.
+/// Applies `strike` to all eligible monsters. `boss_table`/`enemy_table` replace the tables of
+/// `Damage::Table` when the spell chooses its table at run time.
 pub fn strike_foes(g: &mut Ctx, p: Player, s: &Strike) {
     cov!();
     let level = p.u8(g, Player::LEVEL) as u32;

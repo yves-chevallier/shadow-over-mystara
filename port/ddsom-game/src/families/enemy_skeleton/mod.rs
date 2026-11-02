@@ -1,20 +1,19 @@
-//! Ennemi « Skeleton » (ENEMY type 1, 0x57cc4). Voir `docs/families/enemy.md`.
+//! "Skeleton" enemy (ENEMY type 1, 0x57cc4). See `docs/families/enemy.md`.
 //!
-//! Squelette à épée (série `+0x2f` = 0) ou squelette armé (série 1). Charpente commune : `+4` état
-//! (0 création, 2 actif, 4 touché, 6 libération), `+5` groupe de comportements, `+6` et `+7`
-//! étapes. En état actif :
+//! Sword skeleton (series `+0x2f` = 0) or armed skeleton (series 1). Common framework: `+4` state (0 creation, 2
+//! active, 4 hit, 6 release), `+5` group of behaviours, `+6` and `+7` steps. In the active state:
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `mod` | arrivée selon la variante `+3` |
-//! | 2 | `stance` | debout : idée, marche, attente, demi-tour, choix d'une attaque |
-//! | 4 | `attacks` | coups au corps à corps (`+6` = le coup) |
-//! | 6 | `leaps` | bonds, garde, sortie d'écran |
-//! | 8 | `leaps` | esquive latérale et pas de côté |
-//! | 10 | `leaps` | chute d'arrivée |
-//! | état 4 | `hit` | réactions aux coups |
+//! | 0 | `mod` | arrival according to variant `+3` |
+//! | 2 | `stance` | standing: idea, walk, wait, turn-around, choice of an attack |
+//! | 4 | `attacks` | melee attacks (`+6` = the attack) |
+//! | 6 | `leaps` | leaps, guard, screen exit |
+//! | 8 | `leaps` | lateral dodge and side step |
+//! | 10 | `leaps` | arrival fall |
+//! | state 4 | `hit` | reactions to hits |
 //!
-//! Animations : 0x15eed8 (mouvements) et 0x15eef4 (coups).
+//! Animations: 0x15eed8 (movements) and 0x15eef4 (attacks).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -26,61 +25,61 @@ mod hit;
 mod leaps;
 mod stance;
 
-/// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
+/// Fields specific to this type (the common fields are in `enemy_common::f`).
 pub(self) mod g {
-    /// Série : 0 squelette, 1 squelette armé.
+    /// Series: 0 skeleton, 1 armed skeleton.
     pub const SERIES: u32 = 0x2f;
-    /// Compteur d'images de l'animation (mot) et sa valeur courante.
+    /// Frame counter of the animation (word) and its current value.
     pub const ANIM_COUNT: u32 = 0x30;
     pub const ANIM_STATE: u32 = 0x32;
-    /// Dégâts du coup en cours : type et force.
+    /// Damage of the current attack: type and strength.
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
-    /// Table de vitesses de déplacement (long).
+    /// Movement speed table (long).
     pub const MOVE_TABLE: u32 = 0x4c;
-    /// Vulnérable (1) ou non.
+    /// Vulnerable (1) or not.
     pub const VULNERABLE: u32 = 0x67;
-    /// Posture d'IA : 9 = en garde (riposte à un coup).
+    /// AI posture: 9 = on guard (counter-attack to a hit).
     pub const POSTURE: u32 = 0x68;
-    /// Compteurs d'IA : délai avant un nouveau choix, avant une attente, demi-tours.
+    /// AI counters: delay before a new choice, before a wait, turn-arounds.
     pub const AI_CHOICE: u32 = 0x6b;
     pub const AI_WAIT: u32 = 0x6e;
     pub const AI_WALK: u32 = 0x71;
-    /// Attente restante avant l'étape suivante d'un coup.
+    /// Remaining wait before the next step of an attack.
     pub const COOLDOWN: u32 = 0x77;
     pub const AI_KIND: u32 = 0x78;
     pub const AI_SHOT: u32 = 0x79;
-    /// Jeux de boîtes de marche.
+    /// Walking box sets.
     pub const WALK_ARGS_Y: u32 = 0x7a;
     pub const WALK_ARGS_Z: u32 = 0x7c;
-    /// Minuterie (mot) et position mémorisée.
+    /// Timer (word) and saved position.
     pub const TIMER: u32 = 0xa2;
     pub const SAVED_POS: u32 = 0xa4;
-    /// Côté où se trouve la cible (0 devant, 2 derrière), posé par la détection.
+    /// Side where the target is (0 in front, 2 behind), set by the detection.
     pub const SIDE: u32 = 0xa6;
-    /// Drapeau « saisi » : l'ennemi part en chute.
+    /// "Grabbed" flag: the enemy goes into a fall.
     pub const CAUGHT: u32 = 0xa7;
-    /// Riposte : drapeau (`+0xa8`, 0xff = au hasard) et coup à jouer (`+0xa9`).
+    /// Counter-attack: flag (`+0xa8`, 0xff = at random) and attack to play (`+0xa9`).
     pub const COUNTER: u32 = 0xa8;
     pub const COUNTER_MOVE: u32 = 0xa9;
-    /// Drapeaux de réaction spéciale (1 chute, 2 recul, 3 projection).
+    /// Special reaction flags (1 fall, 2 recoil, 3 throw).
     pub const SPECIAL_HIT: u32 = 0x8f;
 }
 
 use g::*;
 use crate::objects::Current;
 
-/// Jeux d'animations : mouvements et coups.
+/// Animation sets: movements and attacks.
 const SET_BODY: u32 = 0x15eed8;
 const SET_STRIKE: u32 = 0x15eef4;
-/// États longs (`+4..+7`).
+/// Long states (`+4..+7`).
 const STANCE: u32 = 0x0202_0000;
 const STANCE_ALT: u32 = 0x0202_0600;
 const AFTER_TURN: u32 = 0x0202_0002;
 const IDLE: u32 = 0x020a_0000;
 const DASH: u32 = 0x0206_0800;
 const KNOCKED: u32 = 0x0408_0000;
-/// Tables de la ROM : attaques à choisir par niveau de difficulté (`A5+0x7f92`), 32 octets par niveau.
+/// ROM tables: attacks to choose per difficulty level (`A5+0x7f92`), 32 bytes per level.
 const CLOSE_ATTACKS: u32 = 0x5932a;
 const FAR_ATTACKS: u32 = 0x5952a;
 const NEXT_MOVES: u32 = 0x59982;
@@ -117,7 +116,7 @@ fn move_xy<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
-/// Fin des coups : étape suivante tirée dans la table par difficulté, ou retour debout.
+/// End of the attacks: next step drawn from the table by difficulty, or back to standing.
 fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_KIND, 0xff);
     if x.u16(f::TARGET) != 0 {
@@ -135,7 +134,7 @@ fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
 }
 
-/// Choisit le coup `+6` dans la ligne de la difficulté (32 octets) de `table`, et pose `+4/+5` à `state`.
+/// Chooses attack `+6` from the difficulty row (32 bytes) of `table`, and sets `+4/+5` to `state`.
 fn pick_move<R: Bench>(x: &mut Cx<'_, R>, table: u32, state: u16) {
     let row = (var::RANK.get(x.b) >> 1) << 5;
     let n = rand_and(x, 0x1f);
@@ -145,8 +144,8 @@ fn pick_move<R: Bench>(x: &mut Cx<'_, R>, table: u32, state: u16) {
     x.set8(f::SUB3, 0);
 }
 
-/// Réaction aux drapeaux de coup `+0x8f` (0x59146) : vrai si elle a pris la main (l'adresse de reprise que
-/// l'original passait en A6 n'est relue par personne).
+/// Reaction to hit flags `+0x8f` (0x59146): true if it took over (the resume address that the original passed in A6 is
+/// read by nobody).
 fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let flag = x.u8(SPECIAL_HIT);
     match flag {
@@ -183,7 +182,7 @@ fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
@@ -217,7 +216,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x1a);
     }
-    // quatre octets par série : 0x6d, 0x72, 0x73, 0x68
+    // four bytes per series: 0x6d, 0x72, 0x73, 0x68
     let row = 0x57de6 + 4 * series;
     for (i, off) in [0x6d, 0x72, 0x73, POSTURE].into_iter().enumerate() {
         let v = x.data8(row + i as u32);
@@ -266,7 +265,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     zone_and_terrain(x);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
@@ -286,7 +285,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Sous-état 0 : arrivée (`+6` : 0 et 2 attente de l'animation, 4 chute, 6 clignotement).
+/// Substate 0: arrival (`+6`: 0 and 2 wait for the animation, 4 fall, 6 blinking).
 fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 2 => {
@@ -325,7 +324,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Arrivée clignotante (`+6 = 6`) : trois séries de clignotements puis l'état debout.
+/// Blinking arrival (`+6 = 6`): three series of blinks then the standing state.
 fn blink<R: Bench>(x: &mut Cx<'_, R>) {
     let d1 = match x.u8(f::SUB3) {
         0 => {
@@ -363,7 +362,7 @@ fn blink<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x42, d1);
 }
 
-// --- état 6 : libération ------------------------------------------------------------------------
+// --- state 6: release ------------------------------------------------------------------------
 
 fn dead<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0xac) != 0 {

@@ -1,4 +1,4 @@
-//! Type 0, sous-état 2 : debout. `+6` : 0 et 8 approche et choix d'un geste, 2 demi-tour, 4 attente, 6 course.
+//! Type 0, substate 2: standing. `+6`: 0 and 8 approach and choice of a move, 2 turn-around, 4 wait, 6 run.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -24,7 +24,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 0 et 8 : approche -----------------------------------------------------------------------------
+// --- +6 = 0 and 8: approach -----------------------------------------------------------------------------
 
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     if target_far_in_line(x) {
@@ -58,13 +58,13 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     reach(x);
 }
 
-/// 0x555d4 : en garde ; un joueur tout près ? Coup immédiat, sinon boîtes de portée, sinon pas de marche.
+/// 0x555d4: on guard; a player very close? Immediate attack, otherwise range boxes, otherwise walking step.
 pub(super) fn reach<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(GUARD, 2);
     reach_boxes(x);
 }
 
-/// 0x555da : boîtes de portée successives.
+/// 0x555da: successive range boxes.
 pub(super) fn reach_boxes<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x28, 0x18, 4) {
         set_state_long(x, 0x0204_0200);
@@ -90,7 +90,7 @@ pub(super) fn reach_boxes<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Décision d'attaque selon l'orientation relative de la cible (0xa4c2 de même sens, 0xa4b4 sinon).
+/// Attack decision according to the relative orientation of the target (0xa4c2 same direction, 0xa4b4 otherwise).
 fn gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let target = x.linked(f::TARGET);
     let theirs = target.u8(x.b, f::FLIP);
@@ -98,7 +98,7 @@ fn gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::decision(x, same)
 }
 
-/// 0x5566e : un joueur devant, tout près : coup de la série courte ou nouveau pas.
+/// 0x5566e: a player in front, very close: attack of the short series or new step.
 fn front_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0x40, 0x20, 2) || x.u16(f::TARGET) == 0 || !gate(x) {
         return false;
@@ -114,7 +114,7 @@ fn front_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x556e8 : un joueur plus loin devant : geste de la série lointaine.
+/// 0x556e8: a player further in front: move from the far series.
 fn far_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0xb0, 0x20, 2) || x.u16(f::TARGET) == 0 || !gate(x) {
         return false;
@@ -214,7 +214,7 @@ fn run_up<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5583c : début de la course.
+/// 0x5583c: start of the run.
 fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 0x16);

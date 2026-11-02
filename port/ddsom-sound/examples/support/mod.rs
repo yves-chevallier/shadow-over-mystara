@@ -1,23 +1,23 @@
 #![allow(dead_code)]
-//! Outils communs aux exemples : comparaison de suites d'écritures et Z80 de référence.
+//! Tools shared by the examples: comparison of write sequences and reference Z80.
 
 use ddsom_sound::Write;
 
 pub mod session;
 use std::collections::VecDeque;
 
-/// Écritures d'un côté, avec le numéro d'interruption où elles ont eu lieu.
+/// Writes on one side, with the number of the interrupt in which they occurred.
 #[derive(Default)]
 pub struct Side {
-    /// Écritures de la boucle principale (QSound et rapport de pan en C005).
+    /// Main loop writes (QSound and pan report at C005).
     pub main: VecDeque<(usize, Write)>,
-    /// Acquittements de commande (C00F <- FF) de la routine d'interruption.
+    /// Command acknowledgements (C00F <- FF) from the interrupt routine.
     pub acks: VecDeque<(usize, Write)>,
     pub total: usize,
     pub qsound: usize,
 }
 
-/// Résultats de la comparaison de deux exécutions.
+/// Results of comparing two runs.
 #[derive(Default)]
 pub struct Report {
     pub real: Side,
@@ -25,25 +25,25 @@ pub struct Report {
     pub matched_main: usize,
     pub matched_acks: usize,
     pub first_divergence: Option<String>,
-    /// Interruptions où les écritures de la boucle principale coïncident exactement.
+    /// Interrupts where the main loop writes match exactly.
     pub exact_intervals: usize,
-    /// Interruptions où le travail déborde sur la suivante dans l'un des deux côtés.
+    /// Interrupts where the work spills over into the next one on either side.
     pub spill_intervals: usize,
-    /// Interruptions sans aucune écriture des deux côtés.
+    /// Interrupts with no writes on either side.
     pub idle_intervals: usize,
-    /// Le Z80 a été occupé trop longtemps pour que le pilote Rust, qui ne modélise pas la durée
-    /// d'exécution, puisse l'être comparé (essai abandonné).
+    /// The Z80 was busy for too long for the Rust driver, which does not model execution
+    /// time, to be compared with it (run abandoned).
     pub slow: bool,
-    /// Registres QSound de chaque côté, et nombre d'interruptions où ils coïncident en fin
-    /// d'interruption.
+    /// QSound registers on each side, and number of interrupts where they match at the end
+    /// of the interrupt.
     regs_real: Vec<Option<u16>>,
     regs_drv: Vec<Option<u16>>,
     pub same_state_intervals: usize,
 }
 
-/// L'acquittement de commande est écrit par la routine d'interruption, à l'instant de
-/// l'interruption : son rang par rapport aux écritures de la boucle principale (dont le travail
-/// peut déborder sur l'interruption suivante) dépend de la durée des instructions du Z80.
+/// The command acknowledgement is written by the interrupt routine, at the instant of the
+/// interrupt: its rank relative to the main loop writes (whose work may spill over into the
+/// next interrupt) depends on the duration of the Z80 instructions.
 pub fn is_ack(w: &Write) -> bool {
     matches!(w, Write::Shared { offset: 0xf, value: 0xff })
 }
@@ -62,7 +62,7 @@ impl Side {
 }
 
 impl Report {
-    /// Range les écritures d'une interruption (Z80 d'origine, pilote Rust) et compare.
+    /// Files the writes of an interrupt (original Z80, Rust driver) and compares them.
     pub fn add_interval(&mut self, irq: usize, real: Vec<Write>, drv: Vec<Write>) {
         let main = |v: &[Write]| v.iter().filter(|w| !is_ack(w)).copied().collect::<Vec<_>>();
         if real.is_empty() && drv.is_empty() {
@@ -89,7 +89,7 @@ impl Report {
         self.drain();
     }
 
-    /// Compare les écritures en attente des deux côtés, dans l'ordre.
+    /// Compares the pending writes of both sides, in order.
     fn drain(&mut self) {
         for acks in [false, true] {
             loop {
@@ -102,8 +102,8 @@ impl Report {
                 if r != d && self.first_divergence.is_none() {
                     let n = if acks { self.matched_acks } else { self.matched_main };
                     self.first_divergence = Some(format!(
-                        "{} n°{n} : Z80 {r:?} (interruption {ri}) / pilote {d:?} (interruption {di})",
-                        if acks { "acquittement" } else { "écriture" }
+                        "{} #{n}: Z80 {r:?} (interrupt {ri}) / driver {d:?} (interrupt {di})",
+                        if acks { "acknowledgement" } else { "write" }
                     ));
                 }
                 if self.first_divergence.is_some() {
@@ -122,24 +122,24 @@ impl Report {
         }
     }
 
-    /// Écritures de la boucle principale que l'un des deux côtés n'a pas encore produites quand
-    /// l'essai s'arrête (le Z80 est au milieu d'un tic, ou le pilote a une interruption d'avance).
+    /// Main loop writes that one of the two sides has not yet produced when
+    /// the run stops (the Z80 is in the middle of a tick, or the driver is one interrupt ahead).
     pub fn tail(&self) -> usize {
         self.real.main.len().abs_diff(self.drv.main.len())
     }
 
-    /// Les deux suites sont-elles identiques de bout en bout, à l'inachevé final près ?
+    /// Are the two sequences identical from end to end, apart from the unfinished tail?
     pub fn identical(&self) -> bool {
         self.first_divergence.is_none() && self.tail() <= MAX_TAIL
     }
 }
 
-/// Un tic complet de 16 voies écrit au plus quelques dizaines de registres : au-delà, ce n'est
-/// plus une simple fin d'essai en cours de tic.
+/// A full tick of 16 voices writes at most a few dozen registers: beyond that, it is no
+/// longer just a run ending in the middle of a tick.
 const MAX_TAIL: usize = 120;
 
-/// Z80 d'origine seul (sans 68000 ni QSound) : exécute la ROM du pilote et relève ses écritures.
-/// La QSound répond toujours « prête ».
+/// Original Z80 alone (no 68000 or QSound): runs the driver ROM and records its writes.
+/// The QSound always answers "ready".
 pub mod reference {
     use ddsom_sound::{Rom, Write};
 
@@ -199,14 +199,14 @@ pub mod reference {
         cpu: z80::Z80,
         bus: Bus,
         next_irq: u64,
-        /// Adresses d'instructions exécutées (couverture du programme du Z80).
+        /// Addresses of executed instructions (coverage of the Z80 program).
         pub coverage: Vec<bool>,
-        /// Nombre d'exécutions de chaque adresse depuis la dernière remise à zéro (profil).
+        /// Number of executions of each address since the last reset (profile).
         pub hits: Vec<u32>,
-        /// Point d'arrêt de débogage : affiche IX et l'enregistrement de voie.
+        /// Debug breakpoint: prints IX and the voice record.
         pub break_at: Option<u16>,
         break_count: usize,
-        /// Surveille une adresse de la RAM du Z80 (débogage).
+        /// Watches an address of the Z80 RAM (debugging).
         watch: Option<u16>,
     }
 
@@ -226,13 +226,13 @@ pub mod reference {
             RefZ80 { cpu, bus, next_irq: IRQ_PERIOD, coverage: vec![false; 0x10000], hits: vec![0; 0x10000], break_at: std::env::var("FUZZ_BREAK").ok().and_then(|v| u16::from_str_radix(&v, 16).ok()), break_count: 0, watch: std::env::var("FUZZ_WATCH").ok().and_then(|v| u16::from_str_radix(&v, 16).ok()) }
         }
 
-        /// RAM partagée vue par le Z80 (le 68000 y écrit).
+        /// Shared RAM as seen by the Z80 (the 68000 writes to it).
         pub fn shared(&mut self) -> &mut [u8] {
             &mut self.bus.shared
         }
 
-        /// La boucle principale est-elle au repos (le Z80 vient d'être interrompu dans sa boucle
-        /// d'attente) ? On le lit dans l'adresse de retour empilée par l'interruption.
+        /// Is the main loop at rest (the Z80 has just been interrupted in its wait loop)?
+        /// This is read from the return address pushed by the interrupt.
         pub fn is_idle(&self) -> bool {
             let sp = usize::from(self.cpu.sp);
             if sp < 0xf000 {
@@ -243,14 +243,14 @@ pub mod reference {
             (0x017d..=0x019a).contains(&ret) && !matches!(ret, 0x0185 | 0x0190 | 0x019b) && pending == 0
         }
 
-        /// RAM du Z80 (F000-FFFF) : pour le débogage.
+        /// Z80 RAM (F000-FFFF): for debugging.
         pub fn ram(&self) -> &[u8] {
             &self.bus.ram
         }
 
-        /// Exécute jusqu'à l'acquittement de l'interruption suivante (non compris) et rend les
-        /// écritures faites depuis le précédent. Les interruptions demandées pendant que le Z80
-        /// les masque (initialisation) ne produisent qu'un seul acquittement.
+        /// Runs until the acknowledgement of the next interrupt (not included) and returns the
+        /// writes made since the previous one. Interrupts requested while the Z80 masks them
+        /// (initialisation) produce only a single acknowledgement.
         pub fn run_interval(&mut self) -> Vec<Write> {
             loop {
                 if self.cpu.cycles >= self.next_irq {
@@ -261,12 +261,12 @@ pub mod reference {
                 self.hits[usize::from(self.cpu.pc)] += 1;
                 if let Some(b) = self.break_at {
                     if self.cpu.pc == b && std::env::var("FUZZ_BREAK_SHORT").is_ok() {
-                        println!("  [{b:04x}] cycle {} f000 {:02x} f001-3 {:02x?} file {:02x}/{:02x}", self.cpu.cycles, self.bus.ram[0], &self.bus.ram[1..4], self.bus.ram[0x15], self.bus.ram[0x16]);
+                        println!("  [{b:04x}] cycle {} f000 {:02x} f001-3 {:02x?} queue {:02x}/{:02x}", self.cpu.cycles, self.bus.ram[0], &self.bus.ram[1..4], self.bus.ram[0x15], self.bus.ram[0x16]);
                     } else if self.cpu.pc == b && self.break_count < 6 {
                         self.break_count += 1;
                         let ix = usize::from(self.cpu.ix);
                         let rec: Vec<String> = (0..0x50).map(|i| format!("{:02x}", self.bus.ram.get(ix + i - 0xf000).copied().unwrap_or(0))).collect();
-                        println!("point d'arrêt {b:04x} : IX={ix:04x} DE={:04x} enregistrement {}", self.cpu.de(), rec.join(" "));
+                        println!("breakpoint {b:04x}: IX={ix:04x} DE={:04x} record {}", self.cpu.de(), rec.join(" "));
                     }
                 }
                 let watch_before = self.watch.map(|w| self.bus.ram[usize::from(w) - 0xf000]);
@@ -275,7 +275,7 @@ pub mod reference {
                 if let (Some(w), Some(before)) = (self.watch, watch_before) {
                     let after = self.bus.ram[usize::from(w) - 0xf000];
                     if after != before {
-                        println!("  [écriture {w:04x}] pc {pc_before:04x} cycle {} : {before:02x} -> {after:02x}", self.cpu.cycles);
+                        println!("  [write {w:04x}] pc {pc_before:04x} cycle {}: {before:02x} -> {after:02x}", self.cpu.cycles);
                     }
                 }
                 if self.bus.irq_acked {

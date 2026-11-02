@@ -2,7 +2,7 @@
 name = "ddsom-rc"
 version = "0.1.0"
 edition = "2021"
-description = "Code 68000 de ddsom recompilé en Rust (généré à la compilation à partir des ROMs locales)"
+description = "ddsom 68000 code recompiled to Rust (generated at build time from the local ROMs)"
 build = "build.rs"
 
 [dependencies]

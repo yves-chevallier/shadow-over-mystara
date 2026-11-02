@@ -1,5 +1,5 @@
-//! Ce que le boss de type 2 (0x7c5a8) a en propre : création (il fait naître le type 22 et, plus tard, la scène de
-//! fin), arrivée par un grand bond, et deux attaques (bond-écrasement `+6` = 10, rotation et rugissement `+6` = 12).
+//! What the type 2 boss (0x7c5a8) has of its own: creation (it spawns type 22 and, later, the ending stage), arrival
+//! by a big leap, and two attacks (crushing leap `+6` = 10, spin and roar `+6` = 12).
 
 use crate::families::cx::Bench;
 use super::moves::step_anim;
@@ -7,7 +7,7 @@ use super::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// 0x7c5b8 : quand le compte à rebours `+0xbc` est écoulé, crée le contrôleur de scène SET 2 (variante 0x3e), une fois.
+/// 0x7c5b8: when the `+0xbc` countdown has elapsed, creates the SET 2 stage controller (variant 0x3e), once.
 pub(super) fn spawn_scene_controller<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0xa4) != 0 || !sub16(x, SPOT_TIMER, 1).mi() {
         return;
@@ -19,7 +19,7 @@ pub(super) fn spawn_scene_controller<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xa4, 1);
 }
 
-/// 0x7c600 : création. Selon le nombre de joueurs et la difficulté, un boss de type 22 lui est lié (`+0xac`).
+/// 0x7c600: creation. Depending on the number of players and the difficulty, a type 22 boss is linked to it (`+0xac`).
 pub(super) fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -69,13 +69,13 @@ pub(super) fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(0x9a, 0xff);
     }
     x.add8(f::STATE, 2);
-    // `jmp 0x1a32` : les registres qu'il laisse au gestionnaire suivant ne sont relus par personne (sonde `exit`)
+    // `jmp 0x1a32`: the registers it leaves to the following handler are re-read by no one (`exit` probe)
     x.anim_start(TWO_KIT.set_a, 0);
 }
 
-// --- groupe 0 : arrivée -----------------------------------------------------------------------------
+// --- group 0: arrival -----------------------------------------------------------------------------
 
-/// 0x7c814 : le boss arrive par un grand bond depuis la droite, retombe en poussière et passe en combat.
+/// 0x7c814: the boss arrives by a big leap from the right, lands in a puff of dust and goes into combat.
 pub(super) fn arrive<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -123,7 +123,7 @@ pub(super) fn arrive<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x7d0bc : attend l'image-clé de l'animation de saut.
+/// 0x7d0bc: waits for the key frame of the jump animation.
 pub(super) fn rise_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
@@ -132,7 +132,7 @@ pub(super) fn rise_wait<R: Bench>(x: &mut Cx<'_, R>) {
     step_anim(x);
 }
 
-/// 0x7d0d2 (montée) et 0x7d0f2 (descente) : la vitesse verticale franchit ±0x100.
+/// 0x7d0d2 (rise) and 0x7d0f2 (descent): the vertical speed crosses ±0x100.
 pub(super) fn climb<R: Bench>(x: &mut Cx<'_, R>, up: bool) {
     x.move_xz();
     let vz = x.u16(0x18);
@@ -144,7 +144,7 @@ pub(super) fn climb<R: Bench>(x: &mut Cx<'_, R>, up: bool) {
     step_anim(x);
 }
 
-/// 0x7d112 : retombée du saut (son, poussière en ligne, vulnérable).
+/// 0x7d112: landing from the jump (sound, dust in a line, vulnerable).
 pub(super) fn land<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if (x.u32(0xc) as i32) > 0 {
@@ -160,10 +160,10 @@ pub(super) fn land<R: Bench>(x: &mut Cx<'_, R>) {
     start(x, Set::A, 6);
 }
 
-// --- attaque 10 : bond-écrasement ---------------------------------------------------------------------
+// --- attack 10: crushing leap ---------------------------------------------------------------------
 
-/// 0x7f10a : vitesses du bond selon la distance à la caméra (quatre lignes de 8 octets en 0x7f14c : X, hauteur,
-/// gravité, profondeur).
+/// 0x7f10a: leap speeds according to the distance to the camera (four 8-byte rows at 0x7f14c: X, height,
+/// gravity, depth).
 fn jump_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     let d = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
     let row = if Fl::sub16(d, 0x60).le() {
@@ -181,8 +181,8 @@ fn jump_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x7d05c : bond-écrasement. Étapes `+7` : 0 saut, 2 à 8 bond (comme à l'arrivée), 10 réception et coup, 12 demi-tour,
-/// 14 coup double, 16 course, 18 course vers un point, 20 virage, 22 à 30 fin.
+/// 0x7d05c: crushing leap. Steps `+7`: 0 jump, 2 to 8 leap (as on arrival), 10 landing and hit, 12 about-face,
+/// 14 double hit, 16 run, 18 run to a point, 20 turn, 22 to 30 end.
 pub(super) fn slam<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -344,9 +344,9 @@ pub(super) fn slam<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- attaque 12 : rotation et rugissement ------------------------------------------------------------------
+// --- attack 12: spin and roar ------------------------------------------------------------------
 
-/// Point visé sur le bord de l'écran, du côté où le boss regarde (`+0xb0`, `+0xb2`).
+/// Aimed point on the screen edge, on the side the boss faces (`+0xb0`, `+0xb2`).
 fn edge_spot<R: Bench>(x: &mut Cx<'_, R>) {
     let off = if x.u8(f::FLIP) != 0 { 0x160 } else { 0x20 };
     let sx = var::SCROLL_X.get(x.b).wrapping_add(off);
@@ -355,7 +355,7 @@ fn edge_spot<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(SPOT_Z, sz);
 }
 
-/// 0x7d4a0 : le boss tourne autour d'un point du bord de l'écran, se retourne, rugit (effets, cinématique) puis reprend.
+/// 0x7d4a0: the boss spins around a point on the screen edge, turns around, roars (effects, cutscene) then resumes.
 pub(super) fn spin_roar<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {

@@ -18,8 +18,8 @@ target/release/ddsom --assets <assets>
 ```
 
 `ddsom --assets <assets>` sans dossier de ROMs donné joue ainsi sans ROM.
-Aucun fichier ROM n'est ouvert : la machine est faite par `ddsom_assets::rebuild::contenus` puis
-`cps2::Machine::ddsom` (la machine ordinaire passe par `cps2::Contenus::depuis_roms`). Le son passe toujours par le
+Aucun fichier ROM n'est ouvert : la machine est faite par `ddsom_assets::rebuild::contents` puis
+`cps2::Machine::ddsom` (la machine ordinaire passe par `cps2::Contents::from_roms`). Le son passe toujours par le
 pilote Rust (`Sound::use_rust_driver`). Avec un dossier de ROMs donné, `--assets` ne prend que les
 graphismes et les échantillons dans les assets (le programme vient des ROMs).
 
@@ -29,13 +29,13 @@ Le dossier d'assets est local (dérivé des ROMs de l'utilisateur), jamais versi
 données : relancer `extract` sur le même dossier (il réécrit tous les fichiers ; `extract <roms> <assets> data`
 suffit quand seules les tables de données ont changé, en quelques secondes). Un dossier sans `data/reste.json`
 (antérieur à la couverture complète) est refusé au démarrage (« assets incomplets : data/reste.json »). Sous
-Windows, `jouer.bat` réextrait de lui-même un `assets\` sans `data\reste.json` (il lui faut alors `ddsom.zip` et
+Windows, `play.bat` réextrait de lui-même un `assets\` sans `data\reste.json` (il lui faut alors `ddsom.zip` et
 `qsound.zip` à la racine, ou `rom\` déjà décompressé) ; pour forcer une réextraction après une autre mise à jour
-d'`extract`, supprimer `assets\` puis relancer `jouer.bat`.
+d'`extract`, supprimer `assets\` puis relancer `play.bat`.
 
 ## D'où vient chaque puce
 
-| Puce (`cps2::Contenus`) | Depuis les assets | Ce qui manque, et pourquoi c'est sans effet |
+| Puce (`cps2::Contents`) | Depuis les assets | Ce qui manque, et pourquoi c'est sans effet |
 |---|---|---|
 | Programme 68000, vue données et vue programme déchiffrée (`Program::load`) | toutes les tables décrites (`palettes.png`, `sprites/*.json`, `levels.json`, `terrain.json`, `scene_palettes.json`, `texts.json`, `data/*.json`) ; `data/natives.json` : les zones lues par les natives qu'aucun autre fichier ne décrit (ci-dessous) ; `data/reste.json` : tout le reste, sauf le code 68000 (« Couverture complète des données ») | le code 68000 exécuté (486 399 octets, zéro) : sans 68000 il n'est plus exécuté ni lu |
 | Région du Z80 (`rebuild::audio_region`) | `sound/music.json` : pointeurs de la ROM fixe, table des sons, définitions, pistes, instruments, fiches d'échantillons, tables du pilote | le programme du Z80 : remplacé par le pilote Rust (`ddsom-sound`), qui ne lit que ces données |
@@ -69,7 +69,7 @@ DDSOM_COUVERT=couvert.bin target/trace/release/examples/rom_reads <roms> <eeprom
 espace programme : les durées des natives (`Native::cost`, appelé par l'exécuteur sans 68000) et les durées de
 chemins que les natives ajoutent aux cycles (`chemin.rs`, `timing.rs`, `objects/cost.rs`, `ai.rs` : ils décodent
 le code d'origine avec `m68k::decode`). Sans 68000 les cycles ne servent plus (le temps de l'image est celui de la
-boucle du noyau) : ces fonctions rendent 0 sans rien lire quand `sans68k::actif()`, et l'exécuteur ne calcule plus
+boucle du noyau) : ces fonctions rendent 0 sans rien lire quand `no68k::active()`, et l'exécuteur ne calcule plus
 le coût. Validation sans 68000 inchangée.
 
 **Résultat** (269 scénarios, 4,4 millions d'images, aucun arrêt faute de native) :
@@ -89,7 +89,7 @@ routines des pools d'objets) ; le reste en petites zones (moins de 1,7 Ko par le
 `palette.rs` lit 0x000-0x400 (la page 3 des palettes des scènes 0x58 et 0x59 a une entrée nulle : le jeu copie
 32 palettes depuis l'adresse 0, vecteurs compris, comme l'original), et `vecteurs` (0-7 en espace programme : pile
 et PC du reset, lus par `Cpu::reset` à la construction de la machine). Quatre petites zones lues par des accès
-génériques (`Vue`, `mem.rs`) à plus de trois niveaux d'appel sont nommées `inconnu`.
+génériques (`View`, `mem.rs`) à plus de trois niveaux d'appel sont nommées `inconnu`.
 
 ## Couverture complète des données
 
@@ -115,15 +115,15 @@ instructions exécutées qui lisent une adresse fixe (relative au PC ou absolue 
 n'est pas un début d'instruction) tombant dans le code : la plage est rendue aux données de la cible à sa fin
 (9 plages, par exemple une table d'octets indexée qui commence dans le déplacement d'un `bra`, 0x406d).
 
-**Format.** `data/reste.json` : `fin_chiffree` (0x100002 : au-delà, l'espace programme égale l'espace données et la
-reconstruction le recopie), `octets_de_code` et `code` (les plages de code, `"0x400-0x456"`), puis `donnees` et
-`programme` (zone chiffrée seulement) : des blocs `debut` + lignes de 32 octets en hexadécimal. Environ 540 000
+**Format.** `data/reste.json` : `encrypted_end` (0x100002 : au-delà, l'espace programme égale l'espace données et la
+reconstruction le recopie), `code_bytes` et `code` (les plages de code, `"0x400-0x456"`), puis `data` et
+`program` (zone chiffrée seulement) : des blocs `start` + lignes de 32 octets en hexadécimal. Environ 540 000
 octets en 7 400 blocs (données) et 528 000 en 5 450 blocs (programme) : 3 Mo de JSON. `extract ... data` l'écrit en
 dernier (il lit les autres fichiers pour savoir ce qu'ils décrivent).
 
 **Contrôle.** `programme_complet <assets> <roms> [--liste]` (exemple de ddsom-assets) reconstruit la région
 programme, vérifie que chaque octet reconstruit égale la ROM dans les deux espaces et que les octets absents sont
-tous du code déclaré, et les liste avec leur total ; le test `programme_complet_hors_code` (`tests/rebuild.rs`)
+tous du code déclaré, et les liste avec leur total ; le test `full_program_outside_code` (`tests/rebuild.rs`)
 fait la même vérification :
 
 ```

@@ -1,17 +1,17 @@
-//! Boss 3, groupe 4 : les attaques (`+6` = 0 à 30, table 0x7fd0c). Chacune finit par `after_attack` (0x81462).
+//! Boss 3, group 4: the attacks (`+6` = 0 to 30, table 0x7fd0c). Each ends with `after_attack` (0x81462).
 //!
-//! | `+6` | Attaque |
+//! | `+6` | Attack |
 //! |---|---|
-//! | 0, 6 à 14 | coup de griffes (animation 3) |
-//! | 2 | coup de griffes court (animation 4) |
-//! | 4 | double coup de griffes, le boss avance aux images-clés |
-//! | 16 | bond : montée à 0x70, puis plongée en avant |
-//! | 18, 22 | cris (0xb3e4e) dont le dernier repousse les joueurs devant lui |
-//! | 20 | rase-mottes : ruée en avant jusqu'à frôler un joueur, coup, remontée |
-//! | 24 | ruée au sol à hauteur 0x50, puis plongée |
-//! | 26 | cri sur place (0xa2d22) |
-//! | 28 | vol de côté vers le milieu de l'écran en repoussant les joueurs, avec cris |
-//! | 30 | enlèvement : monte hors de l'écran, fond sur un joueur et l'emporte (groupe 12) |
+//! | 0, 6 to 14 | claw swipe (animation 3) |
+//! | 2 | short claw swipe (animation 4) |
+//! | 4 | double claw swipe, the boss advances at the key frames |
+//! | 16 | leap: rise to 0x70, then dive forward |
+//! | 18, 22 | cries (0xb3e4e), the last of which pushes back the players in front of it |
+//! | 20 | low sweep: rush forward until it skims a player, hit, climb back up |
+//! | 24 | rush along the ground at height 0x50, then dive |
+//! | 26 | cry in place (0xa2d22) |
+//! | 28 | sideways flight toward the middle of the screen pushing the players away, with cries |
+//! | 30 | abduction: rises off screen, swoops on a player and carries them off (group 12) |
 
 use crate::families::cx::Bench;
 use super::body::push_players;
@@ -36,7 +36,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Début d'un coup : vitesses à zéro, animation `n` du jeu des attaques, cri (0xebfdc).
+/// Start of a hit: speeds to zero, animation `n` of the attacks set, cry (0xebfdc).
 fn swing<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     next7(x);
     x.set8(0x44, 0);
@@ -46,7 +46,7 @@ fn swing<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::sound(x, 0xebfdc);
 }
 
-/// Pas en avant aux images-clés (`+0x33`) : décalage lu dans la table `table` (relative au PC), vers l'avant.
+/// Step forward at the key frames (`+0x33`): offset read from table `table` (PC-relative), toward the front.
 fn key_step<R: Bench>(x: &mut Cx<'_, R>, table: u32, clear: bool) {
     let key = x.u8(f::KEY_FRAME) as u32;
     if clear {
@@ -107,7 +107,7 @@ fn double_claw<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x7fe7a : bond : montée à 0x70, retombée en avant, glissade.
+/// 0x7fe7a: leap: rise to 0x70, landing forward, slide.
 fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -180,7 +180,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Image-clé marquée (bit 7 de `+0x33`) : vrai et marque effacée.
+/// Marked key frame (bit 7 of `+0x33`): true and mark cleared.
 fn marked_key<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         return false;
@@ -189,7 +189,7 @@ fn marked_key<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x7ffbc : un cri (animation 8), puis quatre autres qui repoussent les joueurs devant lui.
+/// 0x7ffbc: a cry (animation 8), then four others that push back the players in front of it.
 fn cries<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 | 2 => {
@@ -222,7 +222,7 @@ fn cries<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x80130 : distance en X au joueur présent le plus proche (0x7fff sans joueur).
+/// 0x80130: X distance to the nearest present player (0x7fff with no player).
 fn nearest_player_dx<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     let mut best = 0x7fffu16;
     for k in 0..4u32 {
@@ -241,7 +241,7 @@ fn nearest_player_dx<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     best
 }
 
-/// 0x801ca : lancé à pleine vitesse (0x900 ou plus), il ne dérive plus en profondeur.
+/// 0x801ca: launched at full speed (0x900 or more), it no longer drifts in depth.
 fn no_drift_when_fast<R: Bench>(x: &mut Cx<'_, R>) {
     let mut v = x.u16(0x14);
     if (v as i16) < 0 {
@@ -252,7 +252,7 @@ fn no_drift_when_fast<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8003e : rase-mottes : ruée en avant, coup (animation 6) au premier joueur frôlé, remontée si le coup porte.
+/// 0x8003e: low sweep: rush forward, hit (animation 6) at the first player skimmed, climb back if the hit connects.
 fn skim<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -333,7 +333,7 @@ fn skim<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x800e0 : fin du rase-mottes (animation 7).
+/// 0x800e0: end of the low sweep (animation 7).
 fn skim_end<R: Bench>(x: &mut Cx<'_, R>) {
     stop(x);
     let v = ((x.u16(0x14) as i16) >> 2) as u16;
@@ -343,7 +343,7 @@ fn skim_end<R: Bench>(x: &mut Cx<'_, R>) {
     attack_anim(x, 7);
 }
 
-/// 0x8030e : vitesse en X ramenée à ±0x800 si elle la dépasse (et plus de dérive en profondeur).
+/// 0x8030e: X speed brought back to ±0x800 if it exceeds it (and no more drift in depth).
 fn cap_speed<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.u16(0x14);
     let (cap, abs) = if (v as i16) < 0 { (0xf800u16, v.wrapping_neg()) } else { (0x800, v) };
@@ -354,7 +354,7 @@ fn cap_speed<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x16, 0);
 }
 
-/// 0x801de : ruée : monte ou descend à hauteur 0x50, plane, puis plonge vers l'avant.
+/// 0x801de: rush: rises or descends to height 0x50, glides, then dives forward.
 fn rush<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 | 2 => {
@@ -428,7 +428,7 @@ fn rush<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x80330 : cri sur place : montée, cri (0xa2d22, 0xedbf4) aux images-clés.
+/// 0x80330: cry in place: rise, cry (0xa2d22, 0xedbf4) at the key frames.
 fn cry<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 | 2 => {
@@ -466,7 +466,8 @@ fn shriek<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xedb82);
 }
 
-/// 0x803aa : vol de côté à hauteur 0x60 vers le milieu de l'écran (corps de côté : il écarte les joueurs).
+/// 0x803aa: sideways flight at height 0x60 toward the middle of the screen (body sideways: it pushes the players
+/// aside).
 fn side_flight<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -532,7 +533,7 @@ fn side_flight<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x80496 : redescend à hauteur 0x40, puis fin de l'attaque.
+/// 0x80496: descends back to height 0x40, then end of the attack.
 fn descend_to_0x40<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_z();
     if (x.u16(0xc) as i16) > 0x40 {
@@ -542,14 +543,14 @@ fn descend_to_0x40<R: Bench>(x: &mut Cx<'_, R>) {
     after_attack(x)
 }
 
-/// Hauteur au-dessus du sol de la caméra : `z - caméra + height`.
+/// Height above the camera's ground: `z - camera + height`.
 fn height_over_camera<R: Bench>(x: &mut Cx<'_, R>) -> i16 {
     let cam = camera(x);
     let h = x.u16(0x10).wrapping_sub(cam.u16(x.b, 0xc)).wrapping_add(x.u16(0xc));
     h as i16
 }
 
-/// 0x8069a : un joueur à portée est saisi (0xfc44, 0xfd64 : groupe 12) ; vrai si saisi.
+/// 0x8069a: a player within range is grabbed (0xfc44, 0xfd64: group 12); true if grabbed.
 fn try_grab<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let Some(player) = lib::attack_hits_a_player(x, 1) else {
         return false;
@@ -558,7 +559,7 @@ fn try_grab<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x804ba : enlèvement : monte hors de l'écran, attend, fond sur la cible en saisissant au passage, remonte.
+/// 0x804ba: abduction: rises off screen, waits, swoops on the target grabbing on the way, climbs back up.
 fn abduction<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 | 2 => {
@@ -586,7 +587,7 @@ fn abduction<R: Bench>(x: &mut Cx<'_, R>) {
             let cam = camera(x);
             stop(x);
             let mut pz = cam.u16(x.b, 0x10).wrapping_add(0x50);
-            // l'original écrase X par le mot de la cible avant de la tester : sans cible, X = 0
+            // the original overwrites X with the target's word before testing it: with no target, X = 0
             let mut px = x.u16(f::TARGET);
             if (px as i16) < 0 {
                 let t = load_target(x);

@@ -2,7 +2,7 @@
 
 Pool d'objets de 22 emplacements de 0xC0 octets (A5+0x299e, compteur de places libres A5+0x7e62), table de
 gestionnaires 0x39a78 (29 types, le 17 est nul), boucle de dispatch 0x39a52. Cadre commun (`Cx`, `handlers!`,
-contrat A0/D7) : `docs/familles-eshl-set-sobj.md` ; vue d'ensemble du code : `docs/atlas.md` §7 étape 4.3.
+contrat A0/D7) : `docs/families-eshl-set-sobj.md` ; vue d'ensemble du code : `docs/atlas.md` §7 étape 4.3.
 Les noms de rôle (h) sont des hypothèses tirées du comportement et des noms de debug du jeu (atlas, annexe A).
 
 ## 1. Fichiers
@@ -219,7 +219,7 @@ la table de sauts de la création n'a que deux entrées), `+0xbf` un décalage d
 L'état touché (`hit`) : 0 et 6 réaction commune par table (`0x740c0`, `0x742fa`), 2 recul d'une pièce, 4 chute, 8 fuite
 ou mort. Piège : plusieurs tables de sauts ont du code **dans** la table (une entrée désigne le code qui la suit :
 `0x72efe`, `0x73cb8`) et `0x72bbc` (code après le `jsr` de la table de `stance`, absent du listing) ; les tables
-d'octets lues par `lea ...(PC)` se lisent en espace de données, celles lues par `(adresse,PC,Dn)` en espace
+d'octets lues par `lea ...(PC)` se lisent en espace de données, celles lues par `(address,PC,Dn)` en espace
 des opcodes. Couverture : scénarios (jusqu'à 129 000 appels), fuzz (2 126 instructions, 43 non atteintes dont une
 dizaine de restes de tables).
 
@@ -396,7 +396,7 @@ niveaux 1 à 66 (`scenarios/cov/`, `enemy_scan`) : ils sont validés par le fuzz
 
 * `tools/validate_all.sh 30000` : les 8 scénarios + 4 « mash » doivent être VALIDE ; type 20 : 7 914 appels,
   type 16 : appels dans plusieurs scénarios.
-* `fuzz familles` (groupe `familles` d'`examples/fuzz.rs`, ENEMY ajouté) : crée un ennemi neuf du type (variante,
+* `fuzz families` (groupe `families` d'`examples/fuzz.rs`, ENEMY ajouté) : crée un ennemi neuf du type (variante,
   états `+4/+5/+6` pris dans les tables que l'original accepte, maître/hôte/cible fabriqués), puis 60 appels
   comparés à l'original ; les compteurs de places libres sont recalculés. `DDSOM_ETATS=1` active les états tirés,
   `DDSOM_VARIANTES=n` les variantes, `DDSOM_COUVERTURE=fichier` écrit les instructions de l'original exécutées.
@@ -407,7 +407,7 @@ niveaux 1 à 66 (`scenarios/cov/`, `enemy_scan`) : ils sont validés par le fuzz
 
 ### Méthode pour réécrire un type restant
 
-1. `SOM_ROOT=<dépôt principal> python3 tools/handler_listing.py <début> <fin>` (bornes : adresses des gestionnaires
+1. `SOM_ROOT=<dépôt principal> python3 tools/handler_listing.py <début> <end>` (bornes : adresses des gestionnaires
    voisins dans la table 0x39a78) donne le code atteignable et les tables de sauts ; lire le code de haut en bas
    en notant pour chaque routine : étapes `+7`, minuteries (`+0xa2`...), animations, tables de données, appels.
 2. Écrire `families/enemy_<type>/{mod,stance,attacks,hit}.rs` sur le modèle d'`enemy_ghoul/` (le plus proche d'une
@@ -417,7 +417,7 @@ niveaux 1 à 66 (`scenarios/cov/`, `enemy_scan`) : ils sont validés par le fuzz
    scène 66), puis une ligne dans `tools/gen_enemy.py`.
 4. `DDSOM_CHECK=1 DDSOM_CHECK_ALL=1 DDSOM_SANS=game_phase12,world_update,dispatch validate ...` : les lignes `REGS`
    de l'ennemi doivent disparaître (A6/D6/D1 du préambule, A1 après `movea.w`, D0 après `andi.w`...). Hors mode
-   contrôle, un écart qui subsiste avec `DDSOM_SANS=<nom de la native>` n'est pas le sien : bisecter avec les autres
+   contrôle, un écart qui subsiste avec `DDSOM_SANS=<name de la native>` n'est pas le sien : bisecter avec les autres
    préfixes (`players_update`, `combat`...) et ranger le scénario dans `scenarios/ko/`.
 5. Fuzz : une entrée par type dans `fuzz_enemy/lot3.rs`, puis `DDSOM_ENTREE=<adresse> DDSOM_VARIANTES=1 fuzz_enemy
    familles ... 3500 100` et `DDSOM_COUVERTURE=<fichier>` pour vérifier les instructions de l'original vues.
@@ -433,7 +433,7 @@ de scène (`--plan a:n,b:m`) provoque la « tempête de pas » (voir `couverture
 12 000 images. Le fuzz du lot est `examples/fuzz_enemy/lot3.rs` (états `(+4,+5,+6,+7)` valides par type, décrits par
 des lignes `"s4 s5 s6,.. max7"`, champs tolérés) branché dans `fuzz_enemy.rs` : `DDSOM_ENTREE=<adresse du gestionnaire>
 DDSOM_VARIANTES=1 fuzz_enemy familles <roms> <eeprom> <scénario> 3500 <tours>`. Outils ajoutés : `pctrace`
-(`PCTRACE_SEUL`, `PCTRACE_IMAGES`), `DDSOM_TRACE_ORIG=<nom de la native>` dans `lib.rs` (trace du code d'origine pour
+(`PCTRACE_SEUL`, `PCTRACE_IMAGES`), `DDSOM_TRACE_ORIG=<name de la native>` dans `lib.rs` (trace du code d'origine pour
 les écarts d'une native en mode contrôle).
 Pièges rencontrés : **0xfbae n'est pas un `rts`** (test de zone, natif `ai::IN_ZONE`, remet D5 à 0 ; l'index du pseudo-C le donne pour
 2 octets) ; les routines appelées par un sous-état reviennent à la boucle de l'état, qui exécute la suite (zone,
@@ -445,7 +445,7 @@ D1 `moveq`...) se corrigent avec `DDSOM_CHECK=1 DDSOM_CHECK_ALL=1` (lignes `REGS
 
 ### Fuzz des types du deuxième lot (4, 19, 21, 25)
 
-`fuzz_enemy.rs` a pour ces types : `etats_enemy` (états `+4/+5/+6` valides), `etape_dbeast` / `etape_owlbear`
+`fuzz_enemy.rs` a pour ces types : `enemy_states` (états `+4/+5/+6` valides), `step_dbeast` / `step_owlbear`
 (étape `+7` valide selon l'état), `prep_dbeast` / `prep_owlbear` / `prep_harpy` / `prep_warrior` (compteurs courts, animation en cours
 souvent égale à l'animation voulue, état à reprendre après un demi-tour, code de réaction `+0x49` < 43 entrées,
 parent dans un état connu, objet au ras du sol pour les réceptions de bonds), joueurs placés dans les boîtes de portée,

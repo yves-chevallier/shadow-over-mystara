@@ -1,5 +1,5 @@
-//! Type 18, sous-état 0 : arrivée. `+6` = 0 chute d'entrée par le bord droit, 2 apparition au sol (variante 0),
-//! 4 attente d'un joueur dans la boîte (variante 1), 6 apparition cachée jusqu'à l'arrivée d'un joueur (variante 2).
+//! Type 18, substate 0: arrival. `+6` = 0 entrance fall from the right edge, 2 appearance on the ground (variant 0), 4
+//! wait for a player in the box (variant 1), 6 appearance hidden until a player arrives (variant 2).
 
 use crate::families::cx::Bench;
 use super::*;
@@ -16,7 +16,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Début commun d'une arrivée : plus invulnérable, immunités remises.
+/// Common start of an arrival: no longer invulnerable, immunities reset.
 fn begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set_bit(1, 1, false);
@@ -24,7 +24,7 @@ fn begin<R: Bench>(x: &mut Cx<'_, R>) {
     lib::set_immunities(x);
 }
 
-// --- +6 = 0 : chute d'entrée ----------------------------------------------------------------------------
+// --- +6 = 0: entrance fall ----------------------------------------------------------------------------
 
 fn fall_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
@@ -150,7 +150,7 @@ fn walk_in<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x70770 : la clé 3 de l'animation fait trembler le sol.
+/// 0x70770: key 3 of the animation shakes the ground.
 fn thump<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 3 {
         return;
@@ -161,7 +161,7 @@ fn thump<R: Bench>(x: &mut Cx<'_, R>) {
     lib::shake_54(x, 0xa);
 }
 
-/// 0x70794 : début de la course (animation 5).
+/// 0x70794: start of the run (animation 5).
 fn begin_dash<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x14);
@@ -174,7 +174,7 @@ fn begin_dash<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 5);
 }
 
-/// 0x707d2 : la course, puis le premier geste.
+/// 0x707d2: the run, then the first move.
 fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     if !count_down(x, TIMER2) {
         x.set16(TIMER2, 4);
@@ -214,7 +214,7 @@ fn wait_for_player<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x75c36 : fin d'attente, décompte de `+0xa0` puis retour au sous-état d'avant (`+0xb1`).
+/// 0x75c36: end of wait, countdown of `+0xa0` then back to the previous substate (`+0xb1`).
 fn waiting_out<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(LOOK).wrapping_sub(1);
     x.set8(LOOK, n);
@@ -235,7 +235,7 @@ fn waiting_out<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB2, back);
 }
 
-// --- +6 = 6 : apparition cachée -----------------------------------------------------------------------------
+// --- +6 = 6: hidden appearance -----------------------------------------------------------------------------
 
 fn hidden<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {

@@ -1,16 +1,16 @@
-//! Écran 8. MEMORY CHECK du menu TEST (`0x2ceb4`) : test de chaque mémoire, puis retour au menu après
-//! une seconde.
+//! Screen 8. MEMORY CHECK of the TEST menu (`0x2ceb4`): test of each memory, then return to the menu after
+//! one second.
 //!
-//! Le test (`0x2cf26`) écrit quatre motifs dans chaque mot de la RAM de travail, de la GFX RAM, des deux
-//! bancs de l'Object RAM et de la RAM partagée du Z80 (en relisant aussitôt, puis en rétablissant le mot),
-//! teste l'EEPROM (`eeprom::tester`) et compare la somme d'un octet sur 0xfff de chaque bloc de 512 Ko du
-//! programme à la table de l'en-tête (0xca). Chaque ligne affiche « TESTING... » puis « OK » ; une erreur
-//! affiche « NG » et bloque la tâche.
+//! The test (`0x2cf26`) writes four patterns into every word of the work RAM, the GFX RAM, the two
+//! Object RAM banks and the Z80 shared RAM (rereading immediately, then restoring the word),
+//! tests the EEPROM (`eeprom::tester`) and compares the one-byte-in-0xfff sum of each 512 KB block of the
+//! program with the header table (0xca). Each line displays "TESTING..." then "OK"; an error
+//! displays "NG" and blocks the task.
 //!
-//! **Écart assumé** : l'original fait ce test interruptions masquées, d'un seul tenant ; il dure une
-//! vingtaine d'images à ×16 (plusieurs secondes sur la borne), et sa durée dépend de la fréquence du 68000.
-//! Il est instantané dans les deux machines de la validation : ici en Rust, et dans le code d'origine par
-//! le correctif [`patch_instant_check`], qui l'exécute sans faire avancer le temps.
+//! **Accepted difference**: the original runs this test with interrupts masked, in one go; it lasts about
+//! twenty frames at ×16 (several seconds on the cabinet), and its duration depends on the 68000 frequency.
+//! It is instantaneous in both validation machines: here in Rust, and in the original code through
+//! the patch [`patch_instant_check`], which runs it without advancing time.
 
 use super::{back_to_menu, f, get, layers_off, layers_on, next_step, print, set};
 use crate::mem::{rd32, wr8};
@@ -19,33 +19,33 @@ use crate::scene::Ctx;
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-/// Entrée du test dans l'original (appelé par `bsr` depuis l'étape 2 de l'écran).
+/// Entry of the test in the original (called by `bsr` from step 2 of the screen).
 pub const CHECK: u32 = 0x2cf26;
-/// Boucle sans fin de l'original après un « NG ».
+/// Endless loop of the original after an "NG".
 pub const BLOCKED: u32 = 0x2d112;
 
 const TITLE: u32 = 0x2d184;
 const LABELS: u32 = 0x2d1a8;
-/// Textes de 10 caractères (octets en ROM).
+/// 10-character texts (bytes in ROM).
 const TESTING: u32 = 0x2d27c;
 const OK: u32 = 0x2d286;
 const NG: u32 = 0x2d290;
-/// Décompte avant le retour au menu (champ de l'enregistrement).
+/// Countdown before returning to the menu (record field).
 const COUNTDOWN: u32 = 0x14;
 const COUNTDOWN_FRAMES: u8 = 0x3c;
 
-/// Motifs écrits dans chaque mot (table adressée relativement au PC).
+/// Patterns written into each word (table addressed PC-relative).
 const PATTERNS: u32 = 0x2d0ce;
-/// Sortie qui choisit le banc de l'Object RAM vu en 0x708000.
+/// Output that selects the Object RAM bank seen at 0x708000.
 const OBJ_BANK: u32 = 0x8040e1;
-/// Octet de la RAM partagée du Z80 posé avant et après son test.
+/// Byte of the Z80 shared RAM set before and after its test.
 const Z80_FLAG: u32 = 0x619ffb;
-/// Sommes attendues des blocs du programme (mots de l'en-tête).
+/// Expected sums of the program blocks (header words).
 const ROM_SUMS: u32 = 0xca;
 const ROM_BLOCK: u32 = 0x80000;
 const ROM_STRIDE: u32 = 0xfff;
 
-/// Cases de chaque ligne de résultat.
+/// Cells of each result line.
 mod cell {
     pub const WORK_RAM: u32 = 0x912ea0;
     pub const CPS_RAM: u32 = 0x912ea8;
@@ -66,7 +66,7 @@ pub fn memory(x: &mut Ctx) -> Flow {
             Flow::Done
         }
         2 => {
-            // l'original masque les interruptions autour du test (trap 12) : sans effet sur un test instantané
+            // the original masks interrupts around the test (trap 12): no effect on an instantaneous test
             if !check(x) {
                 crate::kernel::block(x.b, BLOCKED);
                 return Flow::Yield;
@@ -83,7 +83,7 @@ pub fn memory(x: &mut Ctx) -> Flow {
     }
 }
 
-/// `0x2d12a` : un texte de 10 caractères dans la ligne `at`.
+/// `0x2d12a`: a 10-character text on line `at`.
 fn label(x: &mut Ctx, at: u32, text: u32, attr: u16) {
     for k in 0..10 {
         let ch = x.rd8(text + k) as u16;
@@ -92,7 +92,7 @@ fn label(x: &mut Ctx, at: u32, text: u32, attr: u16) {
     }
 }
 
-/// Résultat d'une ligne : « OK », ou « NG » (en couleur).
+/// Result of a line: "OK", or "NG" (coloured).
 fn verdict(x: &mut Ctx, at: u32, ok: bool) -> bool {
     if ok {
         label(x, at, OK, 0);
@@ -102,8 +102,8 @@ fn verdict(x: &mut Ctx, at: u32, ok: bool) -> bool {
     ok
 }
 
-/// `0x2d096` : chaque mot de `start..end` reçoit les quatre motifs, relus aussitôt (octet de poids faible
-/// seulement pour la RAM du Z80, `byte`), puis sa valeur d'origine.
+/// `0x2d096`: each word of `start..end` receives the four patterns, reread immediately (low-order byte
+/// only for the Z80 RAM, `byte`), then its original value.
 fn test_words(x: &mut Ctx, start: u32, end: u32, byte: bool) -> bool {
     let patterns: [u16; 4] = std::array::from_fn(|k| x.prog16(PATTERNS + 2 * k as u32));
     for a in (start..end).step_by(2) {
@@ -120,13 +120,13 @@ fn test_words(x: &mut Ctx, start: u32, end: u32, byte: bool) -> bool {
     true
 }
 
-/// `bchg #0` de la sortie du banc de l'Object RAM (relue comme le fait l'original).
+/// `bchg #0` of the Object RAM bank output (reread as the original does).
 fn toggle_bank(x: &mut Ctx) {
     let v = x.rd8(OBJ_BANK) ^ 1;
     wr8(x.b, OBJ_BANK, v);
 }
 
-/// `0x2d0d6` : somme d'un octet sur 0xfff du bloc `k` du programme.
+/// `0x2d0d6`: one-byte-in-0xfff sum of block `k` of the program.
 fn rom_sum(x: &mut Ctx, k: u32) -> u16 {
     let start = ROM_BLOCK * k;
     let mut sum = 0u32;
@@ -138,7 +138,7 @@ fn rom_sum(x: &mut Ctx, k: u32) -> u16 {
     sum as u16
 }
 
-/// Une ligne de test de RAM : « TESTING... », le test, puis « OK » (sauf `quiet`) ou « NG ».
+/// A RAM test line: "TESTING...", the test, then "OK" (unless `quiet`) or "NG".
 fn test_line(x: &mut Ctx, at: u32, (start, end): (u32, u32), byte: bool, quiet: bool) -> bool {
     let ok = test_words(x, start, end, byte);
     if !ok || !quiet {
@@ -147,7 +147,7 @@ fn test_line(x: &mut Ctx, at: u32, (start, end): (u32, u32), byte: bool, quiet: 
     ok
 }
 
-/// `0x2cf26` : le test complet. Faux après un « NG » (l'original reste bloqué).
+/// `0x2cf26`: the complete test. False after an "NG" (the original stays blocked).
 fn check(x: &mut Ctx) -> bool {
     label(x, cell::WORK_RAM, TESTING, 0);
     if !test_line(x, cell::WORK_RAM, (0xff_0000, 0x100_0000), false, false) {
@@ -157,7 +157,7 @@ fn check(x: &mut Ctx) -> bool {
     if !test_line(x, cell::CPS_RAM, (0x90_0000, 0x93_0000), false, false) {
         return false;
     }
-    // Object RAM : le banc vu en 0x708000 (sans « OK »), puis l'autre
+    // Object RAM: the bank seen at 0x708000 (without "OK"), then the other
     label(x, cell::OBJECT_RAM, TESTING, 0);
     if !test_line(x, cell::OBJECT_RAM, (0x70_8000, 0x70_a000), false, true) {
         return false;
@@ -189,10 +189,10 @@ fn check(x: &mut Ctx) -> bool {
     true
 }
 
-/// Correctif commun aux deux machines (`lib.rs`, `patches`) : le test d'origine (`0x2cf26`, entré par
-/// `bsr`) est exécuté jusqu'à son retour par l'interpréteur, sans faire avancer le temps de la machine.
-/// Après un « NG », le test boucle sans fin : l'exécution s'arrête au bout d'un budget d'instructions et
-/// la machine reprend la boucle.
+/// Patch common to both machines (`lib.rs`, `patches`): the original test (`0x2cf26`, entered by
+/// `bsr`) is run until its return by the interpreter, without advancing the machine's time.
+/// After an "NG", the test loops forever: execution stops after an instruction budget and
+/// the machine resumes the loop.
 pub fn patch_instant_check(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     let cycles = c.cycles;
     let sp = c.a[7];

@@ -1,13 +1,13 @@
-//! Tables de données du jeu : `assets/data/players.json`, `combat.json`, `enemies.json`, `boxes.json`,
-//! `scenes.json`. Voir docs/assets.md (« Tables de données ») pour le sens de chaque table.
+//! Game data tables: `assets/data/players.json`, `combat.json`, `enemies.json`, `boxes.json`,
+//! `scenes.json`. See docs/assets.md (« Tables de données ») for the meaning of each table.
 //!
-//! Une table est une suite de lignes de même format, rangées telles quelles en ROM (grand-boutiste) :
-//! `format` donne le type de chaque colonne, `fields` (facultatif) leur nom. Une table d'une seule
-//! colonne écrit ses lignes comme des nombres, les autres comme des listes. Les colonnes `addr` (longs qui
-//! désignent une adresse de la ROM) s'écrivent en hexadécimal, les autres en décimal.
+//! A table is a sequence of rows of the same format, stored as-is in ROM (big-endian):
+//! `format` gives the type of each column, `fields` (optional) their name. A single-column table
+//! writes its rows as numbers, the others as lists. `addr` columns (longs that designate a ROM
+//! address) are written in hexadecimal, the others in decimal.
 //!
-//! Types : `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `addr`, et `x8`, `x16`, `x32` (masques de bits, écrits
-//! en hexadécimal comme les adresses) ; `T*n` répète `n` fois le type `T`.
+//! Types: `u8`, `i8`, `u16`, `i16`, `u32`, `i32`, `addr`, and `x8`, `x16`, `x32` (bit masks, written
+//! in hexadecimal like addresses); `T*n` repeats the type `T` `n` times.
 
 use std::io;
 use std::path::Path;
@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::json::hex;
 
-/// Type d'une colonne.
+/// Type of a column.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Kind {
     U8,
@@ -25,9 +25,9 @@ pub enum Kind {
     I16,
     U32,
     I32,
-    /// Long : adresse de la ROM.
+    /// Long: ROM address.
     Addr,
-    /// Masques de bits (écrits en hexadécimal).
+    /// Bit masks (written in hexadecimal).
     X8,
     X16,
     X32,
@@ -50,7 +50,7 @@ impl Kind {
         })
     }
 
-    /// Écrit en hexadécimal dans le JSON.
+    /// Written in hexadecimal in the JSON.
     pub fn is_hex(self) -> bool {
         matches!(self, Kind::Addr | Kind::X8 | Kind::X16 | Kind::X32)
     }
@@ -63,7 +63,7 @@ impl Kind {
         }
     }
 
-    /// Valeur lue dans `b` (`size()` octets, grand-boutiste).
+    /// Value read from `b` (`size()` bytes, big-endian).
     pub fn read(self, b: &[u8]) -> i64 {
         let u = b[..self.size()].iter().fold(0u64, |v, &x| v << 8 | x as u64);
         match self {
@@ -74,7 +74,7 @@ impl Kind {
         }
     }
 
-    /// Octets de `v` (la valeur doit tenir dans le type).
+    /// Bytes of `v` (the value must fit in the type).
     pub fn write(self, v: i64, out: &mut Vec<u8>) -> Result<(), String> {
         let (lo, hi) = match self {
             Kind::U8 | Kind::X8 => (0, 0xff),
@@ -85,7 +85,7 @@ impl Kind {
             Kind::I32 => (-0x8000_0000, 0x7fff_ffff),
         };
         if v < lo || v > hi {
-            return Err(format!("{v} hors de {self:?}"));
+            return Err(format!("{v} out of range for {self:?}"));
         }
         let n = self.size();
         out.extend(&(v as u64).to_be_bytes()[8 - n..]);
@@ -93,24 +93,24 @@ impl Kind {
     }
 }
 
-/// Liste des types des colonnes d'un format (`"u8 i16*4 addr"`).
+/// List of the column types of a format (`"u8 i16*4 addr"`).
 pub fn parse_format(format: &str) -> Result<Vec<Kind>, String> {
     let mut kinds = Vec::new();
     for tok in format.split_whitespace() {
         let (t, n) = match tok.split_once('*') {
-            Some((t, n)) => (t, n.parse::<usize>().map_err(|_| format!("répétition invalide : {tok}"))?),
+            Some((t, n)) => (t, n.parse::<usize>().map_err(|_| format!("invalid repetition: {tok}"))?),
             None => (tok, 1),
         };
-        let k = Kind::parse(t).ok_or_else(|| format!("type inconnu : {t}"))?;
+        let k = Kind::parse(t).ok_or_else(|| format!("unknown type: {t}"))?;
         kinds.extend(std::iter::repeat_n(k, n));
     }
     if kinds.is_empty() {
-        return Err("format vide".into());
+        return Err("empty format".into());
     }
     Ok(kinds)
 }
 
-/// Valeur d'une case : nombre, ou adresse (ou masque) écrite en hexadécimal.
+/// Value of a cell: a number, or an address (or mask) written in hexadecimal.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Cell {
@@ -127,7 +127,7 @@ impl Cell {
     }
 }
 
-/// Ligne : une valeur (table d'une colonne) ou la liste des colonnes.
+/// Row: a single value (single-column table) or the list of columns.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Row {
@@ -146,26 +146,26 @@ impl Row {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Table {
-    /// Nom (unique dans le fichier) ; `rôle/character` pour les tables par personnage.
+    /// Name (unique in the file); `role/character` for per-character tables.
     pub name: String,
     #[serde(with = "hex")]
     pub rom: u32,
-    /// Lue par le code en adressage relatif au PC : espace programme déchiffré.
+    /// Read by the code with PC-relative addressing: decrypted program space.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub program: bool,
     pub format: String,
-    /// Noms des colonnes (facultatif).
+    /// Column names (optional).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fields: Vec<String>,
     pub rows: Vec<Row>,
 }
 
 impl Table {
-    /// Table lue dans `bytes` (`rows` lignes au format `format`) ; les colonnes `addr` deviennent des adresses.
+    /// Table read from `bytes` (`rows` rows in format `format`); `addr` columns become addresses.
     pub fn read(name: &str, rom: u32, program: bool, format: &str, fields: &[&str], bytes: &[u8], rows: usize) -> Table {
         let kinds = parse_format(format).unwrap();
         let size: usize = kinds.iter().map(|k| k.size()).sum();
-        assert!(fields.is_empty() || fields.len() == kinds.len(), "{name} : {} noms pour {} colonnes", fields.len(), kinds.len());
+        assert!(fields.is_empty() || fields.len() == kinds.len(), "{name}: {} names for {} columns", fields.len(), kinds.len());
         let rows = (0..rows)
             .map(|r| {
                 let mut at = r * size;
@@ -202,7 +202,7 @@ impl Table {
         parse_format(&self.format).unwrap()
     }
 
-    /// Taille d'une ligne en octets.
+    /// Size of a row in bytes.
     pub fn row_size(&self) -> usize {
         self.kinds().iter().map(|k| k.size()).sum()
     }
@@ -215,53 +215,53 @@ impl Table {
         self.rows.is_empty()
     }
 
-    /// Taille de la table en octets.
+    /// Size of the table in bytes.
     pub fn size(&self) -> usize {
         self.row_size() * self.rows.len()
     }
 
-    /// Adresse qui suit la table.
+    /// Address following the table.
     pub fn end(&self) -> u32 {
         self.rom + self.size() as u32
     }
 
-    /// Colonne `col` de la ligne `row`.
+    /// Column `col` of row `row`.
     pub fn get(&self, row: usize, col: usize) -> i64 {
         self.rows[row].cells()[col].value()
     }
 
-    /// Valeur d'une table d'une colonne.
+    /// Value of a single-column table.
     pub fn value(&self, row: usize) -> i64 {
         self.get(row, 0)
     }
 
-    /// Colonne nommée `field` de la ligne `row`.
+    /// Column named `field` of row `row`.
     pub fn field(&self, row: usize, field: &str) -> Option<i64> {
         let col = self.fields.iter().position(|f| f == field)?;
         Some(self.get(row, col))
     }
 
-    /// Octets de la table, tels que la ROM les range.
+    /// Bytes of the table, as the ROM stores them.
     pub fn bytes(&self) -> Result<Vec<u8>, String> {
         let kinds = parse_format(&self.format)?;
         if !self.fields.is_empty() && self.fields.len() != kinds.len() {
-            return Err(format!("{} : {} noms pour {} colonnes", self.name, self.fields.len(), kinds.len()));
+            return Err(format!("{}: {} names for {} columns", self.name, self.fields.len(), kinds.len()));
         }
         let mut out = Vec::with_capacity(self.size());
         for (r, row) in self.rows.iter().enumerate() {
             let cells = row.cells();
             if cells.len() != kinds.len() {
-                return Err(format!("{} ligne {r} : {} valeurs pour {} colonnes", self.name, cells.len(), kinds.len()));
+                return Err(format!("{} row {r}: {} values for {} columns", self.name, cells.len(), kinds.len()));
             }
             for (&k, c) in kinds.iter().zip(cells) {
-                k.write(c.value(), &mut out).map_err(|e| format!("{} ligne {r} : {e}", self.name))?;
+                k.write(c.value(), &mut out).map_err(|e| format!("{} row {r}: {e}", self.name))?;
             }
         }
         Ok(out)
     }
 }
 
-/// Plage de la ROM entièrement couverte par les tables du fichier (vérifié par les tests).
+/// ROM range entirely covered by the tables of the file (checked by the tests).
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Region {
     pub name: String,
@@ -273,15 +273,15 @@ pub struct Region {
     pub program: bool,
 }
 
-/// Texte (chaîne de caractères ou de tuiles) découpé en lignes pour la lecture. `encoding` :
-/// * absent : octets ASCII, écrits comme les textes de `texts.json` (`texts::encode` : ASCII tel quel,
-///   autres octets `{xx}`) ;
-/// * `"high"` : octets ASCII + 0x80 (textes des dialogues français et allemands) : `0x80` est l'espace,
-///   `0xa1..0xfe` le caractère ASCII correspondant, tout autre octet `{xx}` ;
-/// * `"tiles"` : mots, tuiles de la grande police (textes des dialogues anglais) : `0x1800` est l'espace,
-///   `0x18a1..0x18fe` le caractère ASCII, tout autre mot `{xxxx}` (commandes négatives, 0 final compris).
+/// Text (string of characters or tiles) split into lines for reading. `encoding`:
+/// * absent: ASCII bytes, written like the texts of `texts.json` (`texts::encode`: ASCII as is,
+///   other bytes `{xx}`);
+/// * `"high"`: ASCII bytes + 0x80 (French and German dialog texts): `0x80` is the space,
+///   `0xa1..0xfe` the matching ASCII character, any other byte `{xx}`;
+/// * `"tiles"`: words, tiles of the large font (English dialog texts): `0x1800` is the space,
+///   `0x18a1..0x18fe` the ASCII character, any other word `{xxxx}` (negative commands, final 0 included).
 ///
-/// `{` et `}` sont toujours écrits en hexadécimal.
+/// `{` and `}` are always written in hexadecimal.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct TextBlock {
     pub name: String,
@@ -292,13 +292,13 @@ pub struct TextBlock {
     pub lines: Vec<String>,
 }
 
-/// Caractère ASCII imprimable écrit tel quel dans les textes.
+/// Printable ASCII character written as is in the texts.
 fn plain_char(c: u32) -> Option<char> {
     let c = char::from_u32(c)?;
     (c.is_ascii_graphic() && c != '{' && c != '}').then_some(c)
 }
 
-/// Texte « high » ou « tiles » -> chaîne (voir `TextBlock`).
+/// « high » or « tiles » text -> string (see `TextBlock`).
 pub fn encode_units(units: &[u16], tiles: bool) -> String {
     let (space, base) = if tiles { (0x1800, 0x1880) } else { (0x80, 0x80) };
     let mut s = String::new();
@@ -314,7 +314,7 @@ pub fn encode_units(units: &[u16], tiles: bool) -> String {
     s
 }
 
-/// Chaîne -> mots ou octets (inverse de `encode_units`).
+/// String -> words or bytes (inverse of `encode_units`).
 pub fn decode_units(s: &str, tiles: bool) -> Vec<u16> {
     let (space, base) = if tiles { (0x1800u16, 0x1880u16) } else { (0x80, 0x80) };
     let mut out = Vec::new();
@@ -353,7 +353,7 @@ pub struct DataFile {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub regions: Vec<Region>,
     pub tables: Vec<Table>,
-    /// Textes d'octets (espace données).
+    /// Byte texts (data space).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub texts: Vec<TextBlock>,
 }
@@ -367,12 +367,12 @@ impl DataFile {
         self.tables.iter().find(|t| t.name == name)
     }
 
-    /// Table qui commence à l'adresse `rom` (espace données).
+    /// Table starting at address `rom` (data space).
     pub fn at(&self, rom: u32) -> Option<&Table> {
         self.tables.iter().find(|t| t.rom == rom && !t.program)
     }
 
-    /// Table et ligne qui commencent à l'adresse `rom` (espace données).
+    /// Table and row starting at address `rom` (data space).
     pub fn row_at(&self, rom: u32) -> Option<(&Table, usize)> {
         self.tables.iter().filter(|t| !t.program && rom >= t.rom && rom < t.end()).find_map(|t| {
             let d = (rom - t.rom) as usize;
@@ -380,7 +380,7 @@ impl DataFile {
         })
     }
 
-    /// Table désignée par l'entrée `index` de la table d'adresses `pointers` (tables par personnage...).
+    /// Table designated by entry `index` of the address table `pointers` (per-character tables...).
     pub fn via(&self, pointers: &str, index: usize) -> Option<&Table> {
         self.at(self.table(pointers)?.value(index) as u32)
     }

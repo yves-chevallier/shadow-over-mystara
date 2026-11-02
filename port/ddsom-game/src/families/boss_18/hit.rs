@@ -1,9 +1,9 @@
-//! Boss 18, état 4 « touché » (0x98680). Groupes `+5` : 0 réaction (une routine par code de coup `+0x49`, neuf routines
-//! propres), 2 recul (poursuite magique avortée), 4, 6, 8 mort, 10 relevé.
+//! Boss 18, state 4 "hit" (0x98680). `+5` groups: 0 reaction (one routine per hit code `+0x49`, nine specific
+//! routines), 2 knockback (aborted magic pursuit), 4, 6, 8 death, 10 getting up.
 //!
-//! Réactions (`+0x49` / 4) : `hit_a` (recul sur place, animation 0), `hit_b` (idem animation 1), `hit_c` (projection selon
-//! le code, animation 0), `hit_d`, `hit_e`, `hit_f`, `hit_g` (projections, animation 1), `hit_h` (soulevé, bouffées d'effets),
-//! `hit_i` (rebonds jusqu'à la mort).
+//! Reactions (`+0x49` / 4): `hit_a` (knockback in place, animation 0), `hit_b` (same, animation 1), `hit_c` (throw
+//! depending on the code, animation 0), `hit_d`, `hit_e`, `hit_f`, `hit_g` (throws, animation 1), `hit_h` (lifted,
+//! puffs of effects), `hit_i` (bounces until death).
 
 use crate::families::cx::Bench;
 use super::decide;
@@ -11,9 +11,9 @@ use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Table des routines de réaction (mots relatifs à 0x986d6, indexés par `+0x49 / 2`).
+/// Table of reaction routines (words relative to 0x986d6, indexed by `+0x49 / 2`).
 const REACTIONS: u32 = 0x986d6;
-/// Vitesses de projection (4 mots par ligne) et dérive verticale (0x993ec).
+/// Throw speeds (4 words per row) and vertical drift (0x993ec).
 const THROW: u32 = 0x993ac;
 const DRIFT: u32 = 0x993ec;
 
@@ -33,7 +33,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-/// 0x99362 : plus de PV ? Passe alors au groupe 6 (mort) et rend vrai.
+/// 0x99362: out of HP? Then moves to group 6 (death) and returns true.
 fn dead<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
@@ -62,13 +62,13 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
         0x988c4 => hit_d(x, 1, 0x38, false, true),
         0x98982 => hit_h(x),
         0x98a1e => hit_i(x),
-        t => unreachable!("boss 18 : réaction {t:x}"),
+        t => unreachable!("boss 18: reaction {t:x}"),
     }
 }
 
 // --- aides ------------------------------------------------------------------------------------------------
 
-/// 0x99414 : orientation du boss opposée au coup (`+0x4a`) ; vitesses inversées si elle est non nulle.
+/// 0x99414: boss orientation opposite to the hit (`+0x4a`); speeds reversed if it is non-zero.
 fn face_away<R: Bench>(x: &mut Cx<'_, R>) {
     let side = x.u8(0x4a) ^ 0x20;
     x.set8(f::FLIP, side);
@@ -79,13 +79,13 @@ fn face_away<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9940c : le gel après le coup (`+0x53`) reprend la valeur d'étourdissement.
+/// 0x9940c: the freeze after the hit (`+0x53`) takes the stun value again.
 fn freeze_by_stun<R: Bench>(x: &mut Cx<'_, R>) {
     let stun = x.u8(STUN);
     x.set8(f::FREEZE, stun);
 }
 
-/// 0x9937a : vitesses de projection de la ligne `row` des tables.
+/// 0x9937a: throw speeds of row `row` of the tables.
 fn throw_speeds<R: Bench>(x: &mut Cx<'_, R>, row: u32) {
     let i = row.wrapping_mul(2) & 0xffff;
     for (off, table) in [(0x14u32, THROW), (0x16, THROW + 2), (0x18, THROW + 4), (0x1a, THROW + 6)] {
@@ -105,7 +105,7 @@ fn begin_throw<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xyz();
 }
 
-// --- hit_a, hit_b : recul sur place --------------------------------------------------------------------------
+// --- hit_a, hit_b: knockback in place --------------------------------------------------------------------------
 
 fn hit_a<R: Bench>(x: &mut Cx<'_, R>, anim: u32) {
     if x.u8(f::SUB2) != 0 {
@@ -123,7 +123,7 @@ fn hit_a<R: Bench>(x: &mut Cx<'_, R>, anim: u32) {
     freeze_by_stun(x);
 }
 
-/// 0x98786 : tremble puis glisse jusqu'à l'arrêt.
+/// 0x98786: trembles then slides until it stops.
 fn slide_back<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SHAKE) != 0 {
         let mut d: i16 = 2;
@@ -143,7 +143,7 @@ fn slide_back<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_x();
 }
 
-// --- hit_c : projection selon le code ---------------------------------------------------------------------------
+// --- hit_c: throw depending on the code ---------------------------------------------------------------------------
 
 fn hit_c<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -161,7 +161,7 @@ fn hit_c<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Étapes communes des projections (`+6` = 2, 4, 6) : montée, retombée, glissade.
+/// Common steps of the throws (`+6` = 2, 4, 6): rise, landing, slide.
 fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         2 => {
@@ -202,8 +202,8 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- hit_d, hit_e, hit_f, hit_g : projections ---------------------------------------------------------------------
 
-/// `anim` : animation du jeu de réactions ; `base` : retrait du code pour la ligne de vitesses ; `slow_rise` : divise la vitesse
-/// verticale par 4 ; `grounded` : le boss passe à l'état 2 pendant la projection.
+/// `anim`: animation of the reactions set; `base`: code offset for the speeds row; `slow_rise`: divides the
+/// vertical speed by 4; `grounded`: the boss moves to state 2 during the throw.
 fn hit_d<R: Bench>(x: &mut Cx<'_, R>, anim: u32, base: u32, slow_rise: bool, grounded: bool) {
     if x.u8(f::SUB2) != 0 {
         return thrown(x);
@@ -224,7 +224,7 @@ fn hit_d<R: Bench>(x: &mut Cx<'_, R>, anim: u32, base: u32, slow_rise: bool, gro
     begin_throw(x);
 }
 
-// --- hit_h : soulevé --------------------------------------------------------------------------------------------------
+// --- hit_h: lifted --------------------------------------------------------------------------------------------------
 
 fn hit_h<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -266,9 +266,9 @@ fn hit_h<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- hit_i : rebonds jusqu'à la mort --------------------------------------------------------------------------------
+// --- hit_i: bounces until death --------------------------------------------------------------------------------
 
-/// Durées (mots) des rebonds successifs (0x98ab8, un par valeur de `+0xa6`).
+/// Durations (words) of the successive bounces (0x98ab8, one per value of `+0xa6`).
 const BOUNCE_TIMES: u32 = 0x98ab8;
 
 fn hit_i<R: Bench>(x: &mut Cx<'_, R>) {
@@ -306,7 +306,8 @@ fn hit_i<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x98a68 : prépare un rebond : élan horizontal de 0x800 vers le côté regardé, hauteur selon l'altitude de la caméra.
+/// 0x98a68: prepares a bounce: horizontal momentum of 0x800 toward the side faced, height depending on the camera
+/// altitude.
 fn bounce_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB2, 2);
     let (mut vx, mut vz) = (0x800i16, -0x40i16);
@@ -330,7 +331,7 @@ fn bounce_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(COUNT, n);
 }
 
-// --- +5 = 2 : recul (poursuite magique avortée) ------------------------------------------------------------------
+// --- +5 = 2: knockback (aborted magic pursuit) ------------------------------------------------------------------
 
 fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -374,7 +375,7 @@ fn step_only<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-// --- mort -------------------------------------------------------------------------------------------------------------
+// --- mort ------------------------------------------------------------------------------------------------------------
 
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -426,7 +427,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +5 = 10 : relevé -------------------------------------------------------------------------------------------------
+// --- +5 = 10: getting up ---------------------------------------------------------------------------------------------
 
 fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {

@@ -1,12 +1,12 @@
-//! Boss 22, état 4 « touché » (0x9cdc6). Groupes `+5` :
+//! Boss 22, state 4 "hit" (0x9cdc6). `+5` groups:
 //!
-//! | `+5` | Rôle |
+//! | `+5` | Role |
 //! |---|---|
-//! | 0 | réaction au coup : routine commune choisie par le code `+0x49` (table 0x9ce66) |
-//! | 2 | recul en glissant |
-//! | 4 | à terre, relevé |
-//! | 6 | mort : bond, retombée, passage de relais à l'hôte |
-//! | 8, 10 | retour au combat |
+//! | 0 | reaction to the hit: common routine chosen by the code `+0x49` (table 0x9ce66) |
+//! | 2 | knockback, sliding |
+//! | 4 | on the ground, getting up |
+//! | 6 | death: leap, landing, handing over to the host |
+//! | 8, 10 | return to combat |
 
 use super::*;
 use crate::families::cx::Bench;
@@ -42,7 +42,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// 0x9ce28 : dégâts (0x10112) ; sans PV la mort, sinon la routine commune du code de coup.
+/// 0x9ce28: damage (0x10112); with no HP, death, otherwise the common routine of the hit code.
 fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if !second_form(x) {
         x.set8(SECOND_FX, 0);
@@ -60,12 +60,12 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     react(x, table);
 }
 
-/// Une poussière (0xb10c8) sans le compteur de huit : le type 2 en lâche une quand il est repoussé vers la droite.
+/// A dust puff (0xb10c8) without the counter of eight: type 2 drops one when it is pushed back to the right.
 fn rubble_once<R: Bench>(x: &mut Cx<'_, R>) {
     lib::shock(x, 0, 0x201, 0x20, 0x20);
 }
 
-/// 0x9cf12 : recul en glissant, puis retour au combat ou riposte.
+/// 0x9cf12: knockback sliding, then return to combat or counterattack.
 fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -91,7 +91,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
             start(x, Set::A, n);
         }
         2 => {
-            // `andi.w #3,(0x6e,A5)` réduit aussi le compteur de la RAM de travail
+            // `andi.w #3,(0x6e,A5)` also reduces the counter in the working RAM
             let tick = x.a5_u16(0x6e) & 3;
             x.set_a5_u16(0x6e, tick);
             if tick == 0 {
@@ -128,7 +128,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9d026 : à terre (`+0x84` images hors pause), puis relevé.
+/// 0x9d026: on the ground (`+0x84` frames outside pause), then getting up.
 fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -169,8 +169,8 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9d0d6 : mort. Si l'hôte a rendu l'âme avant ou en même temps, seule une chute (0x19ad6) ; sinon la scène est
-/// prévenue : boss vaincu (type 2).
+/// 0x9d0d6: death. If the host died before or at the same time, only a fall (0x19ad6); otherwise the stage is
+/// notified: boss defeated (type 2).
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -208,7 +208,8 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x16, 0);
             x.set16(0x18, 0x600);
             x.set16(0x1a, (-0x38i16) as u16);
-            // l'original charge 0x180 dans D0 puis l'écrase par la position de la caméra : la vitesse est cette position + 0xc0
+            // the original loads 0x180 into D0 then overwrites it with the camera position: the speed is that position
+            // + 0xc0
             let center = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
             let (vx, side) = if Fl::sub16(center, x.u16(0x8)).ge() { (center, 0u8) } else { (center.wrapping_neg(), 0x20) };
             x.set16(0x14, vx);

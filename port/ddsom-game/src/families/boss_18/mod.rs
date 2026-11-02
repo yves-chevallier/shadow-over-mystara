@@ -1,18 +1,18 @@
-//! Boss de type 18 (0x975ec), scène 26 : le Lich (h). Voir `docs/families/boss.md`.
+//! Boss of type 18 (0x975ec), stage 26: the Lich (h). See `docs/families/boss.md`.
 //!
-//! De la famille des boss 17 et 21 (charpente des ennemis `+4` état, `+5` groupe, `+6` et `+7` étapes, états posés d'un coup
-//! en longs, tirages à deux niveaux dans les tables de la ROM) ; sa particularité est l'état touché : la plupart des
-//! codes de coup `+0x49` ont une réaction propre (neuf routines : recul, chute, saut, tourbillon...).
+//! From the family of bosses 17 and 21 (enemy skeleton `+4` state, `+5` group, `+6` and `+7` steps, states set in one
+//! go as longs, two-level draws in the ROM tables); its particularity is the hit state: most of the hit codes
+//! `+0x49` have a reaction of their own (nine routines: knockback, fall, jump, whirlwind...).
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `intro` | cinématique d'arrivée (délais et sons, puis combat) |
-//! | 2 | `fight` | combat : attente, demi-tour, marche (`+6` = 4, 6), charge (8), reprise (10) |
-//! | 4 | `attacks` | onze attaques (`+6` = 0 à 20) |
-//! | 6, 8, 10 | ici | attente tant qu'aucun joueur n'est en vie |
-//! | état 4 | `hit` | réactions aux coups (table de neuf routines), mort |
+//! | 0 | `intro` | arrival cutscene (delays and sounds, then combat) |
+//! | 2 | `fight` | combat: wait, about-face, walk (`+6` = 4, 6), charge (8), recovery (10) |
+//! | 4 | `attacks` | eleven attacks (`+6` = 0 to 20) |
+//! | 6, 8, 10 | here | wait while no player is alive |
+//! | state 4 | `hit` | reactions to hits (table of nine routines), death |
 //!
-//! Animations : 0x181ae0 (mouvements), 0x181af2 (coups), 0x181b10 (réactions).
+//! Animations: 0x181ae0 (movements), 0x181af2 (hits), 0x181b10 (reactions).
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -41,18 +41,18 @@ pub(self) mod g {
     pub const PHASE: u32 = 0xaa;
     pub const PHASES: u32 = 0xab;
     pub const INVULNERABLE: u32 = 0xad;
-    /// Nombre d'attaques 4 permises (`+0xae`), objets lâchés encore en jeu (`+0xaf`), objet lié (`+0xb0`).
+    /// Number of attacks 4 allowed (`+0xae`), dropped objects still in play (`+0xaf`), linked object (`+0xb0`).
     pub const BUDGET_4: u32 = 0xae;
     pub const SPAWNED: u32 = 0xaf;
     pub const CHILD: u32 = 0xb0;
-    /// Attaques restantes de chaque sorte.
+    /// Attacks remaining of each kind.
     pub const BUDGET_A: u32 = 0xb2;
     pub const BUDGET_B: u32 = 0xb3;
     pub const BUDGET_C: u32 = 0xb4;
     pub const BUDGET_D: u32 = 0xb5;
     pub const BUDGET_E: u32 = 0xb6;
     pub const BUDGET_F: u32 = 0xb7;
-    /// Minuterie de la poursuite (mot `+0xb8`) et pas entre deux visées (`+0xba`, `+0xbb`).
+    /// Pursuit timer (word `+0xb8`) and step between two aimings (`+0xba`, `+0xbb`).
     pub const CHASE_TIME: u32 = 0xb8;
     pub const AIM_TICK: u32 = 0xba;
     pub const AIM_ON: u32 = 0xbb;
@@ -95,7 +95,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
@@ -147,7 +147,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 2);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
@@ -164,7 +164,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-/// `+5` = 6, 8, 10 (0x98640) : attend que des joueurs reviennent.
+/// `+5` = 6, 8, 10 (0x98640): waits for players to come back.
 fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return decide::chase(x);

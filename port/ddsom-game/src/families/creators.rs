@@ -1,8 +1,8 @@
-//! Petites routines de création d'objets appelées par le code des joueurs, des ennemis et des scènes :
-//! elles allouent un emplacement dans un pool, posent la classe, le type et le lien vers le créateur.
+//! Small object creation routines called by the player, enemy and scene code: they allocate a slot in a pool, then set
+//! the class, the type and the link to the creator.
 //!
-//! Contrat commun : A0 = le créateur ; au retour A1 = l'objet créé et la retenue levée si le pool est
-//! plein (les appelants testent `bcs`) ; les autres drapeaux sont ceux de la dernière écriture.
+//! Common contract: A0 = the creator; on return A1 = the created object and the carry set if the pool is full (callers
+//! test `bcs`); the other flags are those of the last write.
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -15,23 +15,23 @@ use crate::objects::pools;
 use super::effects_creators::leftovers::{Pure, Regs};
 
 
-/// Alloue dans un pool ; `None` (retenue levée) si le pool est plein.
+/// Allocates in a pool; `None` (carry set) if the pool is full.
 fn alloc(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool) -> Option<Obj> {
     pool.alloc_68k(c, b)
 }
 
-/// Drapeaux d'un `move` de `v` (taille `size`) : N et Z selon la valeur, V et C à zéro.
+/// Flags of a `move` of `v` (size `size`): N and Z according to the value, V and C cleared.
 fn moved(c: &mut Cpu, v: u32, size: Size) {
     c.flags_logic(v, size);
 }
 
-/// Mot d'adresse d'un objet (`move.w An,...`).
+/// Address word of an object (`move.w An,...`).
 fn word(o: Obj) -> u16 {
     o.0 as u16
 }
 
-/// 0x51c06 : tir de joueur (PSHL) qui accompagne l'arme du joueur A0, si son genre `+2` (décalé de 4
-/// quand `+0x28` != 2) est dans le masque de la table 0x51c5c ; le tir et le joueur se lient par `+0x5c`.
+/// 0x51c06: player shot (PSHL) that accompanies the weapon of player A0, if its kind `+2` (shifted by 4 when `+0x28` !=
+/// 2) is in the mask of table 0x51c5c; the shot and the player link to each other through `+0x5c`.
 pub(crate) fn weapon_shot(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
     me.set_u16(b, 0x5c, 0);
     let shift = if me.u8(b, 0x28) == 2 { 0 } else { 4 };
@@ -62,7 +62,7 @@ pub(crate) fn weapon_shot(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option
     Some(shot)
 }
 
-/// Effet PEFF de genre `kind` (à lier ensuite au joueur par `link_effect`).
+/// PEFF effect of kind `kind` (to be linked to the player afterwards by `link_effect`).
 fn player_effect(r: &mut impl Regs, b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
     let fx = r.allocated(b, &pools::PEFF)?;
     fx.set_u8(b, Obj::ACTIVE, 1);
@@ -70,7 +70,7 @@ fn player_effect(r: &mut impl Regs, b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
     Some(fx)
 }
 
-/// Fin commune d'un effet : `+0x5d` = pas `+7` du joueur, `+0x50` = le joueur (drapeaux de ce `move.w`).
+/// Common end of an effect: `+0x5d` = step `+7` of the player, `+0x50` = the player (flags of this `move.w`).
 fn link_effect(r: &mut impl Regs, b: &mut Cps2Bus, fx: Obj, player: Obj) {
     let step = player.u8(b, 0x7);
     fx.set_u8(b, 0x5d, step);
@@ -78,17 +78,17 @@ fn link_effect(r: &mut impl Regs, b: &mut Cps2Bus, fx: Obj, player: Obj) {
     r.drapeaux(player.word() as u32, Size::Word);
 }
 
-/// 0x4b7a0 : éclair du sort (PEFF 10, variante `variant`, rang `+3` du joueur en `+0x2f`).
+/// 0x4b7a0: lightning of the spell (PEFF 10, variant `variant`, rank `+3` of the player in `+0x2f`).
 pub fn bolt(b: &mut Cps2Bus, player: Obj, variant: u8) -> Option<Obj> {
     bolt_via(&mut Pure, b, player, variant)
 }
 
-/// `bolt` avec les registres de l'original (appelants par adresse : `player/`) : A1, retenue et drapeaux.
+/// `bolt` with the original's registers (callers by address: `player/`): A1, carry and flags.
 #[track_caller]
 pub fn bolt_68k(c: &mut Cpu, b: &mut Cps2Bus, player: Obj, variant: u8) -> Option<Obj> {
     c.a[0] = player.0;
     let r = bolt_via(c, b, player, variant);
-    crate::diag::dead_regs(c, "effets", CREATED);
+    crate::diag::dead_regs(c, "effects", CREATED);
     r
 }
 
@@ -101,17 +101,17 @@ pub(crate) fn bolt_via(r: &mut impl Regs, b: &mut Cps2Bus, player: Obj, variant:
     Some(fx)
 }
 
-/// 0x4dc9a : deux étincelles du sort (PEFF 25, la seconde avec `+0x2f` = 1). Rend la seconde.
+/// 0x4dc9a: two sparks of the spell (PEFF 25, the second with `+0x2f` = 1). Returns the second.
 pub fn sparks(b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
     sparks_via(&mut Pure, b, player)
 }
 
-/// `sparks` avec les registres de l'original (appelants par adresse : `player/`).
+/// `sparks` with the original's registers (callers by address: `player/`).
 #[track_caller]
 pub fn sparks_68k(c: &mut Cpu, b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
     c.a[0] = player.0;
     let r = sparks_via(c, b, player);
-    crate::diag::dead_regs(c, "effets", CREATED);
+    crate::diag::dead_regs(c, "effects", CREATED);
     r
 }
 
@@ -124,7 +124,7 @@ pub(crate) fn sparks_via(r: &mut impl Regs, b: &mut Cps2Bus, player: Obj) -> Opt
     Some(fx)
 }
 
-/// 0x9ef20 : tir ESHL 9 lié à l'ennemi A0, une image sur quatre (compteur `A5+0x6e`).
+/// 0x9ef20: ESHL shot 9 linked to enemy A0, one frame out of four (counter `A5+0x6e`).
 fn enemy_shot_9(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = Obj(c.a[0]);
     enemy_shot_9_via(c, b, me);
@@ -147,9 +147,8 @@ pub(crate) fn enemy_shot_9_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> O
     Some(shot)
 }
 
-/// 0xcdedc : objet SET 13 de variante D0.
-/// Objet actif de type `kind` dans `pool`, de variante `variant`. L'échec rend l'A1 que l'original laisse
-/// (`Pool::alloc_or_leftover`), pour les appelants qui ne testent pas la retenue.
+/// 0xcdedc: SET object 13 of variant D0. Active object of type `kind` in `pool`, of variant `variant`. On failure it
+/// returns the A1 that the original leaves (`Pool::alloc_or_leftover`), for callers that do not test the carry.
 fn object(b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, variant: Option<u8>) -> Result<Obj, Obj> {
     let o = pool.alloc_or_leftover(b)?;
     o.set_u8(b, Obj::ACTIVE, 1);
@@ -160,29 +159,29 @@ fn object(b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, variant: Option<u8>) ->
     Ok(o)
 }
 
-/// 0xcdedc : objet SET de type 13, de variante `variant`.
+/// 0xcdedc: SET object of type 13, of variant `variant`.
 pub fn set_13_pure(b: &mut Cps2Bus, variant: u8) -> Result<Obj, Obj> {
     object(b, &pools::SET, 13, Some(variant))
 }
 
-/// 0xce00a : objet SET de type 15, de variante `variant`.
+/// 0xce00a: SET object of type 15, of variant `variant`.
 pub fn set_15_pure(b: &mut Cps2Bus, variant: u8) -> Result<Obj, Obj> {
     object(b, &pools::SET, 0xf, Some(variant))
 }
 
-/// 0xc9760 : objet SET de type 5, variante 1, `+0x24` nul.
+/// 0xc9760: SET object of type 5, variant 1, `+0x24` zero.
 pub fn set_5_pure(b: &mut Cps2Bus) -> Result<Obj, Obj> {
     let set = object(b, &pools::SET, 5, Some(1))?;
     set.set_u8(b, 0x24, 0);
     Ok(set)
 }
 
-/// 0xdfe26 : objet SOBJ de type 14 (sa variante n'est pas posée).
+/// 0xdfe26: SOBJ object of type 14 (its variant is not set).
 pub fn sobj_14_pure(b: &mut Cps2Bus) -> Result<Obj, Obj> {
     object(b, &pools::SOBJ, 0xe, None)
 }
 
-/// 0xdfc78 : objet SOBJ de type 12, de variante `variant`, vitesse nulle.
+/// 0xdfc78: SOBJ object of type 12, of variant `variant`, zero speed.
 pub fn sobj_12_pure(b: &mut Cps2Bus, variant: u8) -> Result<Obj, Obj> {
     let o = object(b, &pools::SOBJ, 0xc, Some(variant))?;
     o.set_u16(b, 0x14, 0);
@@ -200,19 +199,19 @@ fn set_13(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xc8312 : objet SET de variante `variant`, dont le type dépend de la scène (`A5+0x73 / 2`, table 0xc834c) ;
-/// compte les SET créés (`A5+0x51`, `A5-0x5b8e`). Le processeur reçoit D0 = indice de la scène, Z = (D0.b == 0).
+/// 0xc8312: SET object of variant `variant`, whose type depends on the scene (`A5+0x73 / 2`, table 0xc834c); counts the
+/// SETs created (`A5+0x51`, `A5-0x5b8e`). The processor receives D0 = scene index, Z = (D0.b == 0).
 pub fn scene_set(b: &mut Cps2Bus, variant: u8) -> Option<Obj> {
     scene_set_via(&mut Pure, b, variant)
 }
 
-/// `scene_set` dont l'échec n'est pas testé : rend l'A1 que l'original laisse (`Pool::alloc_or_leftover`).
+/// `scene_set` whose failure is not tested: returns the A1 that the original leaves (`Pool::alloc_or_leftover`).
 pub fn scene_set_or_rest(b: &mut Cps2Bus, variant: u8) -> Obj {
-    scene_set(b, variant).unwrap_or_else(|| pools::SET.alloc_or_leftover(b).expect_err("le pool SET vient d'être trouvé plein"))
+    scene_set(b, variant).unwrap_or_else(|| pools::SET.alloc_or_leftover(b).expect_err("the SET pool was just found full"))
 }
 
-/// 0x4cfbc : quatre effets 0x13 (variante 1, `+0x2f` = 3 à 0, `+0x5a` = 2) liés au créateur, puis l'éclair d'écran
-/// rouge (0x1ac68).
+/// 0x4cfbc: four 0x13 effects (variant 1, `+0x2f` = 3 down to 0, `+0x5a` = 2) linked to the creator, then the red
+/// screen flash (0x1ac68).
 pub fn effects_13(b: &mut Cps2Bus, creator: Obj) {
     for rank in (0..4u8).rev() {
         let Some(fx) = pools::PEFF.alloc(b) else { break };
@@ -251,8 +250,8 @@ fn scene_set_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xd981a : fin de scène propre à la variante (`+3`, table d'indices 0xd9836, routines 0xd982e : en
-/// pratique toujours 0xd99f8, un simple retour).
+/// 0xd981a: end of scene specific to the variant (`+3`, index table 0xd9836, routines 0xd982e: in practice always
+/// 0xd99f8, a plain return).
 fn scene_exit(c: &mut Cpu, b: &mut Cps2Bus) {
     let variant = rd8(b, c.a[0] + 3) as u32;
     let i = 4 * prog8(b, 0xd9836 + variant) as u32;
@@ -263,13 +262,13 @@ fn scene_exit(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// Un seul objet SET 0xa à la fois (`A5-0x5b8c`), et aucun pendant `A5-0x5fbe`.
+/// Only one SET object 0xa at a time (`A5-0x5b8c`), and none during `A5-0x5fbe`.
 const SET_A_ACTIVE: u32 = A5 - 0x5b8c;
 const SET_A_BLOCKED: u32 = A5 - 0x5fbe;
 
-/// 0xcc352 / 0xcc38e : objet SET 0xa de variante `variant` (effet d'un objet utilisé, baguette), qui retient la
-/// classe `class` (`+0x2f`) ; refusé (le processeur reçoit la retenue seule, `move #1,CCR`) s'il en existe déjà
-/// un, pendant `SET_A_BLOCKED` ou si le pool est plein. La classe est lue après l'allocation.
+/// 0xcc352 / 0xcc38e: SET object 0xa of variant `variant` (effect of a used item, wand), which holds the class `class`
+/// (`+0x2f`); refused (the processor receives the carry alone, `move #1,CCR`) if one already exists, during
+/// `SET_A_BLOCKED` or if the pool is full. The class is read after the allocation.
 pub(crate) fn set_a_via(r: &mut impl Regs, b: &mut Cps2Bus, variant: u8, class: impl FnOnce(&mut Cps2Bus) -> u8) -> Option<Obj> {
     let created = (rd8(b, SET_A_ACTIVE) == 0 && rd8(b, SET_A_BLOCKED) == 0).then(|| r.allocated(b, &pools::SET)).flatten();
     let Some(set) = created else {
@@ -286,18 +285,18 @@ pub(crate) fn set_a_via(r: &mut impl Regs, b: &mut Cps2Bus, variant: u8, class: 
     Some(set)
 }
 
-/// 0xcc352 : la classe est celle du créateur.
+/// 0xcc352: the class is that of the creator.
 pub fn set_a(b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
     set_a_via(&mut Pure, b, variant, |b| creator.u8(b, Obj::VARIANT))
 }
 
-/// `set_a` avec les registres de l'original (appelants par adresse : `player/`) : A0 = le créateur, D0.b = la
-/// variante ; A1, retenue et drapeaux.
+/// `set_a` with the original's registers (callers by address: `player/`): A0 = the creator, D0.b = the variant; A1,
+/// carry and flags.
 #[track_caller]
 pub fn set_a_68k(c: &mut Cpu, b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
     c.a[0] = creator.0;
     let r = set_a_via(c, b, variant, |b| creator.u8(b, Obj::VARIANT));
-    crate::diag::dead_regs(c, "effets", CREATED);
+    crate::diag::dead_regs(c, "effects", CREATED);
     r
 }
 
@@ -307,7 +306,7 @@ fn set_a_creator(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xcc38e : la classe est celle du joueur lié au créateur (`+0x50`, laissé dans A4).
+/// 0xcc38e: the class is that of the player linked to the creator (`+0x50`, left in A4).
 pub(crate) fn set_a_player_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
     let mut player = None;
     let created = set_a_via(r, b, variant, |b| {
@@ -321,7 +320,7 @@ pub(crate) fn set_a_player_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj,
     created
 }
 
-/// 0xcc38e : `set_a`, la classe étant celle du joueur lié au créateur (`+0x50`, laissé dans A4).
+/// 0xcc38e: `set_a`, the class being that of the player linked to the creator (`+0x50`, left in A4).
 pub fn set_a_player(b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
     set_a_player_via(&mut Pure, b, creator, variant)
 }
@@ -332,10 +331,9 @@ fn set_a_player_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xdc5fe : objet ITEM 6 (objet de scène) de variante D0, sauf quand `A5-0x5ac6` est négatif (le
-/// drapeau N du test reste alors levé) ; retenue si le pool est plein.
-/// 0xdc5fe : objet de ramassage de la scène (ITEM 6) de variante `variant`, sauf quand le niveau d'objets
-/// (`A5-0x5ac6`) est négatif.
+/// 0xdc5fe: ITEM 6 object (scene object) of variant D0, except when `A5-0x5ac6` is negative (the N flag of the test
+/// then stays set); carry if the pool is full. 0xdc5fe: pickup object of the scene (ITEM 6) of variant `variant`,
+/// except when the object level (`A5-0x5ac6`) is negative.
 pub fn scene_object(b: &mut Cps2Bus, variant: u8) {
     if (rd8(b, A5 - 0x5ac6) as i8) < 0 {
         return;
@@ -364,8 +362,8 @@ fn scene_item(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xd9778 : musique propre à la variante de la scène (`+3`, table d'indices 0xd9798, routines 0xd978c :
-/// rien (0xd99f8) ou la musique de la scène 0xe0c5c). D0 = décalage dans la table, A1 = la routine.
+/// 0xd9778: music specific to the scene variant (`+3`, index table 0xd9798, routines 0xd978c: nothing (0xd99f8) or the
+/// music of scene 0xe0c5c). D0 = offset in the table, A1 = the routine.
 fn scene_music(c: &mut Cpu, b: &mut Cps2Bus) {
     let variant = rd8(b, c.a[0] + 3) as u32;
     let i = 4 * prog8(b, 0xd9798 + variant) as u32;
@@ -401,12 +399,12 @@ fn scene_routine(b: &mut Cps2Bus, scene: Obj, routine: u32) {
     }
 }
 
-/// 0xd99f8 : routine vide des tables de scène.
+/// 0xd99f8: empty routine of the scene tables.
 fn nothing(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xce00a : objet SET 15 de variante D0.
+/// 0xce00a: SET object 15 of variant D0.
 fn set_15(c: &mut Cpu, b: &mut Cps2Bus) {
     if let Some(set) = alloc(c, b, &pools::SET) {
         set.set_u8(b, 0x0, 1);
@@ -418,7 +416,7 @@ fn set_15(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xdfe26 : objet SOBJ 14.
+/// 0xdfe26: SOBJ object 14.
 fn sobj_14(c: &mut Cpu, b: &mut Cps2Bus) {
     if let Some(o) = alloc(c, b, &pools::SOBJ) {
         o.set_u8(b, 0x0, 1);
@@ -428,7 +426,7 @@ fn sobj_14(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xdfc78 : objet SOBJ 12 de variante D0, vitesse nulle ; drapeaux de D0.b.
+/// 0xdfc78: SOBJ object 12 of variant D0, zero speed; flags of D0.b.
 fn sobj_12(c: &mut Cpu, b: &mut Cps2Bus) {
     if let Some(o) = alloc(c, b, &pools::SOBJ) {
         o.set_u8(b, 0x0, 1);
@@ -441,7 +439,7 @@ fn sobj_12(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xdf688 : objet SOBJ 8 lié au créateur (`+0x14`), variante 1 si le créateur a lui-même un lien.
+/// 0xdf688: SOBJ object 8 linked to the creator (`+0x14`), variant 1 if the creator itself has a link.
 pub fn sobj_8(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     sobj_8_via(&mut Pure, b, creator)
 }
@@ -460,11 +458,10 @@ pub(crate) fn sobj_8_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Op
     Some(o)
 }
 
-/// Barre de vie du boss (objet SET 0x14) retenue par 0xd5f30 (mot bas de son adresse).
+/// Boss health bar (SET object 0x14) held by 0xd5f30 (low word of its address).
 const LIFE_BAR_SET: u32 = A5 - 0x5b8a;
 
-/// 0xd5f30 : en partie, objet SET 0x14 (variante 0) lié au créateur `creator` (`+0x20`), retenu en
-/// `A5-0x5b8a`. Cœur.
+/// 0xd5f30: in game, SET object 0x14 (variant 0) linked to the creator `creator` (`+0x20`), held in `A5-0x5b8a`. Core.
 pub fn set_14(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     set_14_via(&mut Pure, b, creator)
 }
@@ -485,10 +482,10 @@ fn set_14_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     Some(set)
 }
 
-/// Valeur de `+0x42` de l'objet SET 0x15 de 0xd6952, par type du créateur.
+/// Value of `+0x42` of the SET object 0x15 of 0xd6952, by creator type.
 const SET_15_PARAMS: u32 = 0xd697c;
 
-/// 0xd6952 : objet SET 0x15 (variante 2) dont `+0x42` vient de la table 0xd697c selon le type du créateur. Cœur.
+/// 0xd6952: SET object 0x15 (variant 2) whose `+0x42` comes from table 0xd697c according to the creator's type. Core.
 pub fn set_15_b(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     set_15_b_via(&mut Pure, b, creator)
 }
@@ -506,7 +503,7 @@ fn set_15_b_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj>
     Some(set)
 }
 
-/// 0xc9760 : objet SET 5 (variante 1), `+0x24` nul.
+/// 0xc9760: SET object 5 (variant 1), `+0x24` zero.
 fn set_5(c: &mut Cpu, b: &mut Cps2Bus) {
     if let Some(set) = alloc(c, b, &pools::SET) {
         set.set_u8(b, 0x0, 1);
@@ -518,7 +515,7 @@ fn set_5(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xd6182 : 44 cases d'une colonne de tuiles (A1, pas de 0x80) remplies de 0x00200000 (tuile vide).
+/// 0xd6182: 44 cells of a tile column (A1, step 0x80) filled with 0x00200000 (empty tile).
 fn blank_column(c: &mut Cpu, b: &mut Cps2Bus) {
     for _ in 0..0x2c {
         crate::mem::wr32(b, c.a[1], 0x20_0000);
@@ -529,8 +526,8 @@ fn blank_column(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0xceb46 : fiche de bonus en A4 (octet de garde, puis 9 octets) : si la garde est positive, chaque
-/// caractéristique `+0x151..` du joueur A0 prend le maximum ; A4 passe la fiche.
+/// 0xceb46: bonus sheet in A4 (guard byte, then 9 bytes): if the guard is positive, each characteristic `+0x151..` of
+/// player A0 takes the maximum; A4 passes the sheet.
 fn bonus_sheet(c: &mut Cpu, b: &mut Cps2Bus) {
     let guard = rd8(b, c.a[4]);
     c.a[4] = c.a[4].wrapping_add(1);
@@ -553,10 +550,10 @@ fn bonus_sheet(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// Le décor de la scène est repris : caméras (`cameras` : 0x33aa6 au départ de la scène, 0x33b24 au retour d'une zone
-/// annexe), script de la scène (0xf2e56), pages de palettes (0x1a360, 0x1a678, 0x1a8ac), toutes les pages à recopier,
-/// luminosité pleine (0x1686). Début commun de 0xcc0ca, des portes de zones annexes (SET 7) et du passage (EFFCT 14).
-/// A0 et D7 conservés.
+/// The scenery of the scene is restored: cameras (`cameras`: 0x33aa6 at the start of the scene, 0x33b24 on return from
+/// a side zone), scene script (0xf2e56), palette pages (0x1a360, 0x1a678, 0x1a8ac), all the pages to copy back, full
+/// brightness (0x1686). Common start of 0xcc0ca, of the side zone doors (SET 7) and of the passage (EFFCT 14). A0 and
+/// D7 preserved.
 pub(crate) fn resume_scenery(c: &mut Cpu, b: &mut Cps2Bus, cameras: u32) {
     let (a0, d7) = (c.a[0], c.d[7]);
     call(c, b, cameras);
@@ -570,9 +567,9 @@ pub(crate) fn resume_scenery(c: &mut Cpu, b: &mut Cps2Bus, cameras: u32) {
     crate::palette::full_brightness(b);
 }
 
-/// 0xcc0ca : la scène repart de son début (h) : décor repris (`resume_scenery`) ; chaque joueur vivant revient en jeu
-/// normal (masqué et en entrée scénarisée s'il était à terre ou mort), est replacé (0x20de6) puis trié. A0 et D7
-/// conservés.
+/// 0xcc0ca: the scene restarts from its beginning (h): scenery restored (`resume_scenery`); each living player returns
+/// to normal play (hidden and in scripted entry if down or dead), is repositioned (0x20de6) then sorted. A0 and D7
+/// preserved.
 pub(crate) fn restart_scene(c: &mut Cpu, b: &mut Cps2Bus) {
     resume_scenery(c, b, 0x33aa6);
     wr16(b, A5 + 0x52, 0);
@@ -610,16 +607,16 @@ pub(crate) fn restart_scene(c: &mut Cpu, b: &mut Cps2Bus) {
     c.d[6] = 0xffff;
 }
 
-/// Tir de joueur créé : résistances `+0x45`/`+0x46` lues dans deux tables (en clair) selon le niveau `+0x10c`
-/// du joueur.
+/// Player shot created: resistances `+0x45`/`+0x46` read from two tables (in the clear) according to the player's level
+/// `+0x10c`.
 fn shot_strength_core(b: &mut Cps2Bus, shot: Obj, level: u8, tables: (u32, u32)) {
     let (a, d) = (rd8(b, tables.0 + level as u32), rd8(b, tables.1 + level as u32));
     shot.set_u8(b, 0x45, a);
     shot.set_u8(b, 0x46, d);
 }
 
-/// 0x53e48 : éclair du joueur `me` (PSHL 0x13) de vitesses `vx`, `vz` (D0.w, D1.w de l'original), tant qu'il en
-/// reste (`A5-0x5fb4`). Appelé par l'orage du magicien (PEFF 25).
+/// 0x53e48: lightning of player `me` (PSHL 0x13) with speeds `vx`, `vz` (D0.w, D1.w of the original), while some remain
+/// (`A5-0x5fb4`). Called by the wizard's storm (PEFF 25).
 pub(crate) fn bolt_shot(b: &mut Cps2Bus, me: Obj, vx: u16, vz: u16) {
     let left = rd16(b, A5 - 0x5fb4);
     if left == 0 {
@@ -637,8 +634,8 @@ pub(crate) fn bolt_shot(b: &mut Cps2Bus, me: Obj, vx: u16, vz: u16) {
     }
 }
 
-/// 0x52578 : tir de type 5 à la position et dans l'orientation de `me`, même joueur (pool plein : rien). Appelé
-/// par l'impact du rayon (PEFF 10).
+/// 0x52578: type 5 shot at the position and orientation of `me`, same player (pool full: nothing). Called by the ray
+/// impact (PEFF 10).
 pub(crate) fn shot_5(b: &mut Cps2Bus, me: Obj) {
     if let Some(shot) = pools::PSHL.alloc(b) {
         shot.set_u8(b, 0x0, 1);
@@ -656,7 +653,7 @@ pub(crate) fn shot_5(b: &mut Cps2Bus, me: Obj) {
     }
 }
 
-/// Effet de joueur (PEFF) de type `kind`, variante `variant`, lié au joueur (`+0x50`).
+/// Player effect (PEFF) of type `kind`, variant `variant`, linked to the player (`+0x50`).
 fn peff(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, variant: Option<u8>) -> Option<Obj> {
     let me = c.a[0];
     let fx = alloc(c, b, &pools::PEFF)?;
@@ -706,19 +703,19 @@ pub(crate) mod for_players {
     }
 }
 
-/// 0x4b8d0 : effet 0xb (variante 0).
+/// 0x4b8d0: effect 0xb (variant 0).
 fn peff_b(c: &mut Cpu, b: &mut Cps2Bus) {
     peff(c, b, 0xb, Some(0));
     rts(c, b);
 }
 
-/// 0x4b518 : effet 8.
+/// 0x4b518: effect 8.
 fn peff_8(c: &mut Cpu, b: &mut Cps2Bus) {
     peff(c, b, 8, None);
     rts(c, b);
 }
 
-/// 0x51bb6 : effet 0x2f (sans lien).
+/// 0x51bb6: effect 0x2f (no link).
 fn peff_2f(c: &mut Cpu, b: &mut Cps2Bus) {
     if let Some(fx) = alloc(c, b, &pools::PEFF) {
         fx.set_u8(b, 0x0, 1);
@@ -728,7 +725,7 @@ fn peff_2f(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x4cfbc : quatre effets 0x13 (variante 1, `+0x2f` = 3 à 0, `+0x5a` = 2), puis l'éclair d'écran (0x1ac68).
+/// 0x4cfbc: four 0x13 effects (variant 1, `+0x2f` = 3 down to 0, `+0x5a` = 2), then the screen flash (0x1ac68).
 fn peff_13_x4(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = c.a[0];
     c.d[5] = 3;
@@ -750,19 +747,19 @@ fn peff_13_x4(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x4b340 (séisme des sorts) : `pair`, deux effets 7 (variante 0, `+0x2f` = 0 et 1) ; sinon un effet 7 de
-/// variante 1. Le pas `+7` du joueur est recopié en `+0x5d`. Rend le dernier effet créé.
+/// 0x4b340 (spell quake): `pair`, two 7 effects (variant 0, `+0x2f` = 0 and 1); otherwise one 7 effect of variant 1.
+/// The player's step `+7` is copied to `+0x5d`. Returns the last effect created.
 pub fn quake(b: &mut Cps2Bus, player: Obj, pair: bool) -> Option<Obj> {
     quake_via(&mut Pure, b, player, pair)
 }
 
-/// `quake` avec les registres de l'original (appelants par adresse : `player/`) : A0 = le joueur, D0.b nul pour la
-/// paire ; A1, retenue et drapeaux.
+/// `quake` with the original's registers (callers by address: `player/`): A0 = the player, D0.b zero for the pair; A1,
+/// carry and flags.
 #[track_caller]
 pub fn quake_68k(c: &mut Cpu, b: &mut Cps2Bus, player: Obj, pair: bool) -> Option<Obj> {
     c.a[0] = player.0;
     let r = quake_via(c, b, player, pair);
-    crate::diag::dead_regs(c, "effets", CREATED);
+    crate::diag::dead_regs(c, "effects", CREATED);
     r
 }
 
@@ -793,21 +790,21 @@ fn quake_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x63ae0 : s'il reste plus de deux places d'ennemis (`A5+0x7e62`), deux ennemis de type 7 (variantes 0
-/// et 1) liés au créateur par `+0x46` ; D0 = 1, sinon 0 (l'allocation n'est pas vérifiée).
+/// 0x63ae0: if more than two enemy slots remain (`A5+0x7e62`), two enemies of type 7 (variants 0 and 1) linked to the
+/// creator through `+0x46`; D0 = 1, otherwise 0 (the allocation is not checked).
 fn enemy_7_pair(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = Obj(c.a[0]);
     super::small::enemy_pair_kind_via(c, b, me, 7);
     rts(c, b);
 }
 
-/// 0x63ae0 sans registres : vrai si les deux ennemis de type 7 sont créés.
+/// 0x63ae0 without registers: true if both type 7 enemies are created.
 pub fn enemy_7_pair_created(b: &mut Cps2Bus, creator: Obj) -> bool {
     super::small::enemy_pair_kind_via(&mut Pure, b, creator, 7)
 }
 
-/// Ennemi de type `kind` (variante 5) placé en (D0, D1, D2) = (x, z, y), lié au créateur par `link` ;
-/// drapeaux de D0.b (`or.b D0b,D0b`).
+/// Enemy of type `kind` (variant 5) placed at (D0, D1, D2) = (x, z, y), linked to the creator by `link`; flags of D0.b
+/// (`or.b D0b,D0b`).
 fn enemy_at(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, link: u32, extra: &[(u32, u8)]) {
     let (me, pos) = (Obj(c.a[0]), (c.d[0] as u16, c.d[1] as u16, c.d[2] as u16));
     let d0 = c.d[0];
@@ -817,7 +814,7 @@ fn enemy_at(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, link: u32, extra: &[(u32, u8
     rts(c, b);
 }
 
-/// Cœur de `enemy_at` : l'ennemi créé en `pos` = (x, z, y).
+/// Core of `enemy_at`: the enemy created at `pos` = (x, z, y).
 fn enemy_at_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, link: u32, extra: &[(u32, u8)], pos: (u16, u16, u16)) -> Option<Obj> {
     let o = r.allocated(b, &pools::ENEMY)?;
     o.set_u8(b, 0x0, 1);
@@ -833,39 +830,39 @@ fn enemy_at_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, link: u32
     Some(o)
 }
 
-/// 0x5f764 : ennemi de type 5 en (D0, D1, D2), lié par `+0xa4`.
+/// 0x5f764: enemy of type 5 at (D0, D1, D2), linked by `+0xa4`.
 fn enemy_5_at(c: &mut Cpu, b: &mut Cps2Bus) {
     enemy_at(c, b, 5, 0xa4, &[]);
 }
 
-/// 0x5f764 sans registres : ennemi de type 5 en `pos` = (x, z, y), lié par `+0xa4`.
+/// 0x5f764 without registers: enemy of type 5 at `pos` = (x, z, y), linked by `+0xa4`.
 pub(crate) fn enemy_5_at_pure(b: &mut Cps2Bus, me: Obj, pos: (u16, u16, u16)) -> Option<Obj> {
     enemy_at_via(&mut Pure, b, me, 5, 0xa4, &[], pos)
 }
 
-/// 0x57c8c : ennemi de type 1 en (D0, D1, D2), lié par `+0xaa` (`+0xac` = 1, `+0x2f` = 0).
+/// 0x57c8c: enemy of type 1 at (D0, D1, D2), linked by `+0xaa` (`+0xac` = 1, `+0x2f` = 0).
 fn enemy_1_at(c: &mut Cpu, b: &mut Cps2Bus) {
     enemy_at(c, b, 1, 0xaa, &[(0xac, 1), (0x2f, 0)]);
 }
 
-/// 0x57c8c sans registres : ennemi de type 1 en `pos` = (x, z, y), lié par `+0xaa`.
+/// 0x57c8c without registers: enemy of type 1 at `pos` = (x, z, y), linked by `+0xaa`.
 pub(crate) fn enemy_1_at_pure(b: &mut Cps2Bus, me: Obj, pos: (u16, u16, u16)) -> Option<Obj> {
     enemy_at_via(&mut Pure, b, me, 1, 0xaa, &[(0xac, 1), (0x2f, 0)], pos)
 }
 
-/// 0x57c66 : l'objet `o` est-il dans la moitié droite de l'écran (x >= caméra + 0xc0) ? Cœur.
+/// 0x57c66: is object `o` in the right half of the screen (x >= camera + 0xc0)? Core.
 pub fn in_right_half(b: &mut Cps2Bus, o: Obj) -> bool {
     let (camera, _) = crate::ram::camera(b);
     (camera.wrapping_add(0xc0).wrapping_sub(o.u16(b, Obj::X)) as i16) <= 0
 }
 
-/// 0x5cdc6 : tirage au sort, vrai 10 fois sur 16 (bit (hasard & 0xf) du masque 0x03ff). Cœur.
+/// 0x5cdc6: random draw, true 10 times out of 16 (bit (random & 0xf) of mask 0x03ff). Core.
 pub fn chance_10_16(b: &mut Cps2Bus) -> bool {
     let bit = crate::rng::random(b) & 0xf;
     0x03ff >> bit & 1 != 0
 }
 
-/// 0x97218 : boss : `+0x67` = 1, `+0x79` = 0x31, état 0x02020400.
+/// 0x97218: boss: `+0x67` = 1, `+0x79` = 0x31, state 0x02020400.
 fn boss_state_0202(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = Obj(c.a[0]);
     me.set_u8(b, 0x67, 1);

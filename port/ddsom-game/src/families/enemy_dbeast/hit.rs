@@ -1,12 +1,12 @@
-//! Type 19, état touché (`+4 = 4`, 0x7407a) : réactions aux coups. `+5` : 0 réaction commune par
-//! table (`+0x49`), 2 recul des pièces, 4 chute, 6 deuxième table de réactions, 8 mort ou fuite.
+//! Type 19, hit state (`+4 = 4`, 0x7407a): reactions to hits. `+5`: 0 common reaction by table (`+0x49`), 2 recoil of
+//! the parts, 4 fall, 6 second reaction table, 8 death or flight.
 
 use crate::families::cx::Bench;
 use super::stance::next_move;
 use super::*;
 use crate::objects::Current;
 
-/// Tables de la réaction commune (indexées par le code de réaction `+0x49`).
+/// Tables of the common reaction (indexed by reaction code `+0x49`).
 const REACT_PART: u32 = 0x740c0;
 const REACT_BEAST: u32 = 0x742fa;
 
@@ -51,7 +51,7 @@ fn zone_and_shadow<R: Bench>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-// --- sous-état 2 : recul d'une pièce --------------------------------------------------------------
+// --- substate 2: recoil of a part --------------------------------------------------------------
 
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -91,7 +91,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 4 : chute --------------------------------------------------------------------------
+// --- substate 4: fall --------------------------------------------------------------------------
 
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -138,7 +138,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 : mort ou fuite ------------------------------------------------------------------
+// --- substate 8: death or flight ------------------------------------------------------------------
 
 fn flee<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -221,7 +221,7 @@ fn flee<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x7444e : s'enfuit en courant vers le bord de l'écran.
+/// 0x7444e: runs away toward the edge of the screen.
 fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 0x16);
@@ -233,7 +233,7 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     speed(x, 0x21);
 }
 
-/// 0x7449e : continue jusqu'à sortir de l'écran, puis disparaît.
+/// 0x7449e: keeps going until it leaves the screen, then disappears.
 fn leave_screen<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     if x.in_arena_default() {

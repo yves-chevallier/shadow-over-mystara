@@ -1,13 +1,13 @@
-//! Type 13, état touché (`+4 = 4`, 0x6baba). `+5` : 0 réaction par table (`+0x49`) après avoir lâché la hache,
-//! 2 recul, 4 chute et relevé, 6 seconde table de réactions, 8 saisie par un joueur. Zone et ombre sont toujours
-//! testées ; il n'y a ni pause du hook ni octet `+0` à remettre à 1.
+//! Type 13, hit state (`+4 = 4`, 0x6baba). `+5`: 0 reaction by table (`+0x49`) after dropping the axe, 2 recoil, 4 fall
+//! and get up, 6 second reaction table, 8 grabbed by a player. Zone and shadow are always tested; there is neither a
+//! hook pause nor a byte `+0` to reset to 1.
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Tables de réactions communes aux coups, indexées par le code `+0x49`.
+/// Reaction tables shared by the hits, indexed by code `+0x49`.
 const REACT_FIRST: u32 = 0x6bb4c;
 const REACT_SECOND: u32 = 0x6bd3a;
 
@@ -29,7 +29,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// 0x6bb20 : la hache tombe (le Gnoll la lâche à la première image), puis réaction par la table.
+/// 0x6bb20: the axe falls (the Gnoll drops it on the first frame), then reaction by the table.
 fn first_reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set_bit(1, 1, false);
@@ -68,7 +68,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Chute puis relevé (0x6bc64). Les animations dépendent de `+0xbf` (arme).
+/// Fall then get up (0x6bc64). The animations depend on `+0xbf` (weapon).
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {

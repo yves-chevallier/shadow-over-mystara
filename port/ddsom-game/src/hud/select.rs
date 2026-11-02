@@ -1,15 +1,15 @@
-//! Choix du personnage : personnages déjà pris, recherche du suivant libre, lecture de la croix.
+//! Character choice: characters already taken, search for the next free one, d-pad reading.
 //!
-//! Un personnage est un nombre de 0 à 11 : le numéro (pas de 2) et, dans le bit 0, la variante de
-//! couleur. Un joueur ne peut pas prendre le personnage d'un autre.
+//! A character is a number from 0 to 11: the number (step of 2) and, in bit 0, the color
+//! variant. A player cannot take another player's character.
 
 use cps2::Cps2Bus;
 
 use super::{panel, player, v8, var, Slot};
 use crate::mem::{rd8, A5};
 
-/// Personnages pris (un bit par personnage et variante) : ceux des joueurs présents, ou celui qu'ils ont
-/// choisi s'ils sont en train de choisir (états 8 et 0xc). `except` : un joueur à ignorer (le sien).
+/// Characters taken (one bit per character and variant): those of the present players, or the one they
+/// have chosen if they are currently choosing (states 8 and 0xc). `except`: a player to ignore (their own).
 fn taken(b: &mut Cps2Bus, except: Option<u32>) -> u32 {
     let count = 3u8.wrapping_sub(v8(b, var::LAYOUT)) as u32 + 1;
     let mut mask = 0u32;
@@ -30,9 +30,9 @@ fn is_free(mask: u32, choice: u8) -> bool {
     mask >> (choice & 31) & 1 == 0
 }
 
-/// Cherche à partir de `choice` un personnage libre, en avant ou en arrière. Si la variante voisine est
-/// libre, on la prend ; sinon on passe au personnage suivant (ou précédent). Rend aussi si la recherche s'est
-/// arrêtée sur la variante voisine (`true`) ou sur le choix lui-même.
+/// Searches from `choice` for a free character, forwards or backwards. If the neighboring variant is
+/// free, it is taken; otherwise move on to the next (or previous) character. Also returns whether the search
+/// stopped on the neighboring variant (`true`) or on the choice itself.
 fn search(mask: u32, mut choice: u8, backward: bool) -> (u8, bool) {
     loop {
         if is_free(mask, choice) {
@@ -57,7 +57,7 @@ fn search(mask: u32, mut choice: u8, backward: bool) -> (u8, bool) {
     }
 }
 
-/// Le joueur garde sa variante si le personnage trouvé est le sien (`panel::CHOSEN`).
+/// The player keeps their variant if the character found is their own (`panel::CHOSEN`).
 fn keep_own_variant(b: &mut Cps2Bus, s: Slot, choice: u8) -> u8 {
     let own = s.p8(b, panel::CHOSEN);
     if own >> 1 == choice >> 1 {
@@ -67,21 +67,21 @@ fn keep_own_variant(b: &mut Cps2Bus, s: Slot, choice: u8) -> u8 {
     }
 }
 
-/// 0x153ba : premier personnage libre à partir de `choice` (choix à l'entrée en jeu).
+/// 0x153ba: first free character from `choice` (choice when entering the game).
 pub fn free_choice(b: &mut Cps2Bus, choice: u8, backward: bool) -> u8 {
     let mask = taken(b, None);
     search(mask, choice, backward).0
 }
 
-/// 0x15444 : comme `free_choice`, sans compter le personnage du joueur lui-même, qui garde sa variante.
+/// 0x15444: like `free_choice`, not counting the player's own character, which keeps its variant.
 pub fn other_choice(b: &mut Cps2Bus, s: Slot, choice: u8, backward: bool) -> u8 {
     let mask = taken(b, Some(s.player));
     let (found, _) = search(mask, choice, backward);
     keep_own_variant(b, s, found)
 }
 
-/// 0x154e8 : comme `other_choice`, mais le personnage trouvé est rendu tel quel, sauf en arrière quand c'est
-/// la variante voisine (l'original sort alors par la fin de 0x15444).
+/// 0x154e8: like `other_choice`, but the character found is returned as is, except backwards when it is
+/// the neighboring variant (the original then exits through the end of 0x15444).
 pub fn resume_choice(b: &mut Cps2Bus, s: Slot, choice: u8, backward: bool) -> u8 {
     let mask = taken(b, Some(s.player));
     let (found, neighbour) = search(mask, choice, backward);
@@ -92,17 +92,18 @@ pub fn resume_choice(b: &mut Cps2Bus, s: Slot, choice: u8, backward: bool) -> u8
     }
 }
 
-/// 0x173ee : entrées du joueur `index` : état courant et fronts montants.
+/// 0x173ee: inputs of player `index`: current state and rising edges.
 pub fn inputs(b: &mut Cps2Bus, index: u8) -> (u8, u8) {
     (rd8(b, A5 + var::INPUT + index as u32), rd8(b, A5 + var::PRESSED + index as u32))
 }
 
-/// Répétition de la croix : nombre d'images avant de répéter un mouvement maintenu.
+/// D-pad repeat: number of frames before repeating a held movement.
 const REPEAT_FRAMES: i8 = 0x3c;
 
-/// 0x158c6 / 0x15958 : lit la croix et déplace le choix `choice` d'un cran (à droite : 1 ou 2 selon la variante ;
-/// à gauche : 2 ou 3) à chaque front montant, puis toutes les 60 images si la direction est maintenue. Le
-/// nouveau choix passe par la recherche d'un personnage libre (`resolve`).
+/// 0x158c6 / 0x15958: reads the d-pad and moves the choice `choice` by one step (to the right: 1 or 2 depending on
+/// the variant;
+/// to the left: 2 or 3) on each rising edge, then every 60 frames if the direction is held. The
+/// new choice goes through the free-character search (`resolve`).
 pub fn navigate(
     b: &mut Cps2Bus,
     s: Slot,

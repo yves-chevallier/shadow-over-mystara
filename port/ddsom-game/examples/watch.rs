@@ -1,5 +1,5 @@
-//! Qui écrit une adresse ? watch <roms> <eeprom> <scenario> <image> <adresse_hex> [natives=1]
-//! Exécute jusqu'à l'image donnée, puis la rejoue pas à pas en signalant chaque changement.
+//! Who writes an address? watch <roms> <eeprom> <scenario> <frame> <hex_address> [natives=1]
+//! Runs up to the given frame, then replays it step by step reporting each change.
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ee = std::fs::read(&a[2]).ok();
@@ -18,7 +18,7 @@ fn main() {
         m.run_frame();
     }
     s.apply(n - 1, &mut m);
-    // dernière image : les natives restent actives, mais le reste est interprété pas à pas
+    // last frame: the natives stay active, but the rest is interpreted step by step
     let exec = m.executor;
     m.executor = Some(|pc, c, b, dl| {
         let k = WATCH.with(|w| w.get());
@@ -26,7 +26,7 @@ fn main() {
         let before = get(b);
         let r = ddsom_game::run_native_only(pc, c, b, dl);
         if get(b) != before {
-            println!("écrit par une routine native en {pc:06x} : {:04x}", get(b));
+            println!("written by a native routine at {pc:06x}: {:04x}", get(b));
         }
         r
     });

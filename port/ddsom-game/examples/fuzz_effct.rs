@@ -1,19 +1,19 @@
-//! Fuzz différentiel des gestionnaires EFFCT (table `0x39ce0`) sur des trajectoires complètes.
+//! Differential fuzz of the EFFCT handlers (table `0x39ce0`) on complete trajectories.
 //!
-//! Pour chaque type demandé, un objet du type est créé dans le pool EFFCT (variante tirée, naissance à
-//! l'état 0 ou état actif de la grille, propriétaire = joueur ou ennemi actif, champs de liaison sur le
-//! propriétaire) puis le gestionnaire est appelé image après image, avec des perturbations du propriétaire,
-//! des joueurs et de la scène. Chaque appel de routine native est comparé à l'original (mode contrôle de
-//! `ddsom_game`, sous-routines natives comprises). La couverture du code d'origine du gestionnaire (exécuté à
-//! part sur une copie) est relevée : en fin de course, les instructions du gestionnaire jamais exécutées
-//! par l'original sont listées (chemins non validés).
+//! For each requested type, an object of the type is created in the EFFCT pool (variant drawn, birth in
+//! state 0 or an active state of the grid, owner = player or active enemy, link fields on the
+//! owner) then the handler is called frame after frame, with perturbations of the owner,
+//! the players and the scene. Each native routine call is compared with the original (control mode of
+//! `ddsom_game`, native subroutines included). The coverage of the handler's original code (run
+//! separately on a copy) is collected: at the end, the handler instructions never executed
+//! by the original are listed (unvalidated paths).
 //!
-//!   fuzz_effct <roms> <eeprom> <scénario> <images de chauffe> <types séparés par des virgules>
+//!   fuzz_effct <roms> <eeprom> <scenario> <warm-up frames> <comma-separated types>
 //!
-//! Variables : `FUZZ_CREATEURS=b4bcc,b96c0` (créateurs essayés depuis des registres tirés au hasard),
-//! `FUZZ_VARIANTES=0,2,5` (variantes tirées ; par défaut 0 à 15), `FUZZ_TOURS=n` (trajectoires par
-//! variante, 24), `FUZZ_PAS=n` (pas par trajectoire, 60), `FUZZ_GRAINE=n`, `FUZZ_PLAGE=début-end` (plage du
-//! code d'origine dont on relève la couverture ; par défaut de l'entrée à l'entrée suivante de la table).
+//! Variables: `FUZZ_CREATEURS=b4bcc,b96c0` (creators tried from registers drawn at random),
+//! `FUZZ_VARIANTES=0,2,5` (variants drawn; default 0 to 15), `FUZZ_TOURS=n` (trajectories per
+//! variant, 24), `FUZZ_PAS=n` (steps per trajectory, 60), `FUZZ_GRAINE=n`, `FUZZ_PLAGE=start-end` (range of the
+//! original code whose coverage is collected; by default from the entry to the next table entry).
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -43,8 +43,8 @@ impl Rng {
 
 const PLAYERS: u32 = 0xff85de;
 
-/// Instructions atteignables depuis `entry` dans `range` (branchements, `bsr` locaux, tables de sauts dont la
-/// fin est le début du premier code qu'elles désignent).
+/// Instructions reachable from `entry` in `range` (branches, local `bsr`, jump tables whose
+/// end is the start of the first code they designate).
 fn reachable(b: &mut Cps2Bus, entry: u32, range: std::ops::Range<u32>) -> BTreeSet<u32> {
     let mut seen = BTreeSet::new();
     let mut todo = vec![entry];
@@ -95,7 +95,7 @@ fn reachable(b: &mut Cps2Bus, entry: u32, range: std::ops::Range<u32>) -> BTreeS
     seen
 }
 
-/// Exécute le code d'origine seul sur une copie et rend les adresses exécutées dans `range`.
+/// Runs the original code alone on a copy and returns the addresses executed in `range`.
 fn coverage(c: &Cpu, b: &Cps2Bus, entry: u32, range: &std::ops::Range<u32>, seen: &mut BTreeSet<u32>) -> Option<(Cpu, Cps2Bus)> {
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let (mut c, mut b) = (c.clone(), b.clone());
@@ -120,8 +120,8 @@ fn coverage(c: &Cpu, b: &Cps2Bus, entry: u32, range: &std::ops::Range<u32>, seen
     end
 }
 
-/// Comparaison faite ici (`FUZZ_PROPRE=1`, sans le mode contrôle) : A0, D7, RAM hors pile et hors table des tâches
-/// 68000 (`0xff0000-0xff0400`, que les natives du noyau tiennent en Rust) et hors pile privée des sons, GFX RAM,
+/// Comparison done here (`FUZZ_PROPRE=1`, without control mode): A0, D7, RAM outside the stack and the task table
+/// of the 68000 (`0xff0000-0xff0400`, which the kernel natives keep in Rust) and outside the private sound stack, GFX RAM,
 /// palette, OBJ RAM.
 fn compare(orig: &(Cpu, Cps2Bus), c: &Cpu, b: &Cps2Bus) -> Vec<String> {
     let (co, bo) = orig;
@@ -133,7 +133,7 @@ fn compare(orig: &(Cpu, Cps2Bus), c: &Cpu, b: &Cps2Bus) -> Vec<String> {
         d.push(format!("d7={:08x} au lieu de {:08x}", c.d[7], co.d[7]));
     }
     let sp = co.a[7] & 0xff_ffff;
-    // pile privée des wrappers son (pointeur en FF2A1A), comme `mem::diff_bus`
+    // private stack of the sound wrappers (pointer at FF2A1A), like `mem::diff_bus`
     let private = ((bo.ram[0x2a1a / 2] as u32) << 16 | bo.ram[0x2a1c / 2] as u32) & 0xff_ffff;
     for i in 0..bo.ram.len() {
         let a = 0xff0000 + 2 * i as u32;
@@ -150,7 +150,7 @@ fn compare(orig: &(Cpu, Cps2Bus), c: &Cpu, b: &Cps2Bus) -> Vec<String> {
     d
 }
 
-/// Sous-états (`+5`) de l'état actif que la table de l'original prévoit (au-delà, il saute dans des données).
+/// Sub-states (`+5`) of the active state that the original's table provides (beyond that, it jumps into data).
 fn sub_states(t: u32, v: u32) -> &'static [u8] {
     match (t, v) {
         (80, 0) => &[0, 2, 4, 6, 8, 10, 12, 14, 16],
@@ -170,11 +170,11 @@ fn type_sub_states(t: u32) -> &'static [u8] {
     }
 }
 
-/// Réglages propres à un type, après la création générique de l'objet.
+/// Type-specific settings, after the generic creation of the object.
 fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
     let player = PLAYERS + 0x200 * (rng.next() % 4);
     match t {
-        // feu d'artifice : étape de la scène, fondu, hôte (+0x56), décor (+0x42), délais
+        // fireworks: scene step, fade, host (+0x56), scenery (+0x42), delays
         80 => {
             wr8(b, A5 + 0x2e, rng.pick(&[0, 0x12, 0x12, 0xc]));
             wr8(b, A5 + 0x48f, rng.pick(&[0, 1]));
@@ -186,12 +186,12 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
             wr8(b, obj + 0x33, rng.pick(&[0, 0, 1]));
             wr16(b, obj + 0xc, (rng.next() % 0x40) as u16);
             if rng.one_in(3) {
-                // presque en haut de l'écran
+                // almost at the top of the screen
                 let high = rd16(b, A5 + 0x5aa).wrapping_add(0x100).wrapping_sub(rd16(b, obj + 0x10));
                 wr16(b, obj + 0xc, high.wrapping_sub((rng.next() % 8) as u16));
             }
         }
-        // effets liés à un joueur : le propriétaire est un joueur
+        // player-linked effects: the owner is a player
         81 => {
             wr16(b, obj + 0x50, player as u16);
             for off in [0x8u32, 0xc, 0x10] {
@@ -200,9 +200,9 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
             }
             wr16(b, player + 0x42, (rng.next() % 6) as u16);
         }
-        // créateur en +0x42
+        // creator at +0x42
         63 => wr16(b, obj + 0x42, owner as u16),
-        // porteur (ENEMY) en +0x46, pièce 0 à 2 ; vie autour des seuils ; coups reçus
+        // carrier (ENEMY) at +0x46, piece 0 to 2; life around the thresholds; hits received
         46 => {
             let porteur = if rng.one_in(8) { obj } else { owner };
             wr16(b, obj + 0x46, porteur as u16);
@@ -212,7 +212,7 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
             wr8(b, porteur + 0x33, rng.pick(&[0, 0, 1, 2, 0x81, 5]));
             wr8(b, obj + 0x5c, (rng.next() % 4) as u8);
         }
-        // porteur en +0x46 (lui-même suivant un objet), phase +0xa4 ; armement, décompte, angle
+        // carrier at +0x46 (itself following an object), phase +0xa4; arming, countdown, angle
         48 => {
             wr16(b, obj + 0x46, if rng.one_in(10) { 0 } else { owner as u16 });
             let other = PLAYERS + 0x200 * (rng.next() % 4);
@@ -225,11 +225,11 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
             wr8(b, owner + 0x2c, rng.pick(&[0, 0x20]));
             wr8(b, A5 + 0x36, rng.pick(&[0, 0, 1]));
         }
-        // bulle d'action : porteur (+0x50) joueur dont l'action (+0x3d) est dans la table (0 à 32), objet porté
+        // action bubble: carrier (+0x50) player whose action (+0x3d) is in the table (0 to 32), carried object
         4 => {
             let j = PLAYERS + 0x200 * (rng.next() % 4);
             wr16(b, obj + 0x50, j as u16);
-            // actions prévues par les tables de chaque variante (0 : 0 à 32 ; 2 : 0 à 18 ; 1, 5, 6 : 0 à 4)
+            // actions provided by each variant's tables (0: 0 to 32; 2: 0 to 18; 1, 5, 6: 0 to 4)
             let actions: &[u8] = match rd8(b, obj + 3) {
                 0 => &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32],
                 2 => &[0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
@@ -245,8 +245,8 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
             wr8(b, j + 0x77, rng.pick(&[0, 1]));
             wr8(b, j + 3, 2 * (1 + rng.next() % 6) as u8);
         }
-        // boutiques : acheteurs (liste A5-0x555c) dans la zone, prêts à acheter (+0x58), joueur (+0x50) avec de
-        // l'or, une vie, un inventaire ; comptoir de scène : vente en cours, vendeur (+0x1a)
+        // shops: buyers (list A5-0x555c) in the zone, ready to buy (+0x58), player (+0x50) with
+        // gold, a life, an inventory; scene counter: sale in progress, seller (+0x1a)
         22 | 70 => {
             for k in 0..4u32 {
                 let buyer = PLAYERS + 0x200 * k;
@@ -269,7 +269,7 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
                 }
             }
             wr8(b, obj + 0x18, rng.pick(&[0, 1, 2]));
-            // zone et prix d'un étal déjà ouvert (la naissance les remplace)
+            // zone and price of an already open stall (birth replaces them)
             for (off, v) in [(0x14u32, 0x40u16), (0x16, 0x40), (0x54, 0xfff0), (0x56, 0x1c), (0x52, 0x100)] {
                 wr16(b, obj + off, v);
             }
@@ -280,7 +280,7 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
             wr16(b, owner + 0x32, rng.pick(&[0, 1, 5]));
             wr8(b, obj + 6, rng.pick(&[0, 2, 4]));
             if rng.one_in(2) {
-                // l'objet est posé à l'écran, devant la zone des acheteurs du comptoir de scène
+                // the object is placed on screen, in front of the scene counter's buyer zone
                 let (cx, cy) = (rd16(b, A5 + 0x506), rd16(b, A5 + 0x50a));
                 for k in 0..4u32 {
                     let buyer = PLAYERS + 0x200 * k;
@@ -294,15 +294,15 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
             wr8(b, obj + 0x2f, (rng.next() % 6) as u8);
             wr16(b, obj + 0x5c, owner as u16);
         }
-        // vote : réglage (scrutin) restreint
+        // vote: restricted setting (ballot)
         23 => {
             wr8(b, obj + 0x2f, rng.pick(&[0, 1, 2]));
-            // texte du choix gagnant (pointeur `+0x30`, longueur `+0x34`) dans le tampon du scrutin
+            // text of the winning choice (pointer `+0x30`, length `+0x34`) in the ballot buffer
             wr32(b, obj + 0x30, 0xff2072 + 2 * (rng.next() % 0x20));
             wr16(b, obj + 0x34, (rng.next() % 8) as u16);
         }
-        // maillon de chaîne : précédent (+0x5c), tête (+0x46) dont l'octet +0x58 annonce la fin ou la rupture,
-        // porteur de la tête (+0x54), rang
+        // chain link: previous (+0x5c), head (+0x46) whose byte +0x58 announces the end or the break,
+        // head's carrier (+0x54), rank
         12 => {
             let head = PLAYERS + 0x200 * (rng.next() % 4);
             wr16(b, obj + 0x5c, owner as u16);
@@ -312,13 +312,13 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
             wr8(b, obj + 0x2f, (rng.next() % 4) as u8);
             wr8(b, owner + 0x28, rng.pick(&[2, 2, 4]));
         }
-        // effets de scène : objet suivi (+0x46, parfois aucun), réglage
+        // scene effects: followed object (+0x46, sometimes none), setting
         42 => {
             wr16(b, obj + 0x46, if rng.one_in(8) { 0 } else { owner as u16 });
             wr8(b, obj + 0x2f, (rng.next() % 8) as u8);
             wr8(b, owner + 0x2c, rng.pick(&[0, 0x20]));
         }
-        // effets d'un coup : attaquant en +0x5c dans l'état 0x204 et une étape de la table (+6), réglage
+        // hit effects: attacker at +0x5c in state 0x204 and a table step (+6), setting
         40 => {
             wr16(b, obj + 0x5c, owner as u16);
             wr16(b, owner + 4, rng.pick(&[0x204, 0x204, 0x202]));
@@ -330,7 +330,7 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
             wr8(b, obj + 0x2f, rng.pick(settings));
             wr8(b, A5 + 0x36, rng.pick(&[0, 0, 1]));
         }
-        // effets d'attaque : attaquant en +0x5c (action +0x49, étape +6, type, classe), réglage
+        // attack effects: attacker at +0x5c (action +0x49, step +6, type, class), setting
         11 => {
             wr16(b, obj + 0x5c, owner as u16);
             wr8(b, owner + 0x49, rng.pick(&[0x70, 0x90, 0x94, 0xa8, 0xa8, 0x10]));
@@ -349,7 +349,7 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
             wr8(b, obj + 0x42, rng.pick(&[0x70, 0x94, action]));
             wr8(b, obj + 0x5, rng.pick(&[0, 0, 2]));
         }
-        // objet suivi en +0x5c (parfois aucun), réglage 0 ou 1
+        // followed object at +0x5c (sometimes none), setting 0 or 1
         43 => {
             wr16(b, obj + 0x5c, if rng.one_in(10) { 0 } else { owner as u16 });
             wr8(b, obj + 0x2f, rng.pick(&[0, 0, 1]));
@@ -359,7 +359,7 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
     }
 }
 
-/// Perturbation à chaque pas (propriétaire, joueurs, scène).
+/// Perturbation at each step (owner, players, scene).
 fn perturbs(b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
     if rng.one_in(4) {
         wr8(b, owner + 4, rng.pick(&[0, 2, 4, 6]));
@@ -376,7 +376,7 @@ fn perturbs(b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
         wr16(b, j + 8, x.wrapping_add((rng.next() % 0x40) as u16).wrapping_sub(0x20));
         wr16(b, j + 0x10, y.wrapping_add((rng.next() % 0x20) as u16).wrapping_sub(0x10));
     }
-    // étape de la scène et fondu (feu d'artifice)
+    // scene step and fade (fireworks)
     if rng.one_in(10) {
         wr8(b, A5 + 0x2e, rng.pick(&[0, 0x12, 0xc]));
         wr8(b, A5 + 0x48f, rng.pick(&[0, 1]));
@@ -394,7 +394,7 @@ fn main() {
 fn principal() {
     let a: Vec<String> = std::env::args().collect();
     let (Some(roms), Some(eeprom), Some(scenario), Some(warmup), Some(types)) = (a.get(1), a.get(2), a.get(3), a.get(4), a.get(5)) else {
-        eprintln!("usage : fuzz_effct <roms> <eeprom> <scénario> <images de chauffe> <types>");
+        eprintln!("usage: fuzz_effct <roms> <eeprom> <scenario> <warm-up frames> <types>");
         std::process::exit(2);
     };
     let env = |k: &str, d: u32| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
@@ -408,7 +408,7 @@ fn principal() {
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
     ddsom_game::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
@@ -428,8 +428,8 @@ fn principal() {
     }
     let mut calls = 0u64;
     let mut abandons = 0u64;
-    // créateurs (FUZZ_CREATEURS=adresse,...) : appelés depuis des registres tirés au hasard, A0 sur un
-    // joueur, un ennemi ou un effet, A1 dans la RAM de travail ; le pool EFFCT plus ou moins rempli
+    // creators (FUZZ_CREATEURS=address,...): called from registers drawn at random, A0 on a
+    // player, an enemy or an effect, A1 in work RAM; the EFFCT pool more or less full
     let creators: Vec<u32> = std::env::var("FUZZ_CREATEURS")
         .map(|v| v.split(',').map(|x| u32::from_str_radix(x, 16).unwrap()).collect())
         .unwrap_or_default();
@@ -459,7 +459,7 @@ fn principal() {
                 if !d.is_empty() {
                     clean_gaps += 1;
                     if clean_gaps <= 5 {
-                        println!("  écart {entry:06x} : {}", d.join(", "));
+                        println!("  mismatch {entry:06x} : {}", d.join(", "));
                     }
                 }
             }
@@ -491,7 +491,7 @@ fn principal() {
                 wr8(&mut b, obj, 1);
                 wr8(&mut b, obj + 2, t as u8);
                 wr8(&mut b, obj + 3, v as u8);
-                // de temps en temps, l'état de libération (4) ou celui que pose le retrait hors écran (6)
+                // from time to time, the release state (4) or the one set by the off-screen removal (6)
                 let state = if birth { 0 } else if tour % 8 == 3 { 4 } else if tour % 8 == 7 { 6 } else { 2 };
                 wr8(&mut b, obj + 4, state);
                 wr8(&mut b, obj + 5, if birth { 0 } else { rng.pick(sub_states(t, v)) });
@@ -525,7 +525,7 @@ fn principal() {
                     c.a[1] = entry;
                     if std::env::var_os("FUZZ_DEBUG").is_some() {
                         let o: Vec<String> = (0..0x60).step_by(2).map(|i| format!("{:04x}", rd16(&mut b, obj + i))).collect();
-                        println!("pas {k} : {}", o.join(" "));
+                        println!("step {k}: {}", o.join(" "));
                     }
                     let state_before = format!("{:02x}/{:02x}/{:02x}", rd8(&mut b, obj + 4), rd8(&mut b, obj + 5), rd8(&mut b, obj + 6));
                     let orig = coverage(&c, &b, entry, &range, &mut seen);
@@ -541,9 +541,9 @@ fn principal() {
                             clean_gaps += 1;
                             gap_types += 1;
                             if gap_types <= 3 {
-                                println!("  écart type {t} variante {v} pas {k} état {state_before} : {}", d.join(", "));
+                                println!("  mismatch type {t} variant {v} step {k} state {state_before}: {}", d.join(", "));
                             }
-                            // on repart de l'état de l'original
+                            // restart from the original's state
                             (c, b) = orig;
                         }
                     }
@@ -561,7 +561,7 @@ fn principal() {
             }
         }
         println!(
-            "TYPE {t} {entry:06x} : {gap_types} écarts, {} instructions atteignables, {} exécutées par l'original, non vues : {}",
+            "TYPE {t} {entry:06x} : {gap_types} mismatches, {} reachable instructions, {} executed by the original, unseen: {}",
             all.len(),
             all.intersection(&seen).count(),
             ranges.iter().map(|(a, b)| format!("{a:06x}-{b:06x}")).collect::<Vec<_>>().join(" ")
@@ -569,7 +569,7 @@ fn principal() {
     }
     let mut gaps = clean_gaps;
     if clean {
-        println!("  comparaison propre : {clean_gaps} écarts");
+        println!("  clean comparison: {clean_gaps} mismatches");
     }
     for (name, st) in ddsom_game::report() {
         if st.calls == 0 {
@@ -577,9 +577,9 @@ fn principal() {
         }
         gaps += st.mismatches;
         if st.mismatches > 0 || name.starts_with("effct") || name.starts_with("cree") || name.starts_with("bloc") {
-            println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
+            println!("  {name:28} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
         }
     }
-    println!("{calls} appels, {abandons} trajectoires abandonnées");
-    println!("{}", if gaps == 0 { "FUZZ VALIDE : aucun écart" } else { "FUZZ ÉCHEC" });
+    println!("{calls} calls, {abandons} abandoned trajectories");
+    println!("{}", if gaps == 0 { "FUZZ VALID: no mismatch" } else { "FUZZ FAILED" });
 }

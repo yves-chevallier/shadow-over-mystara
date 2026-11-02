@@ -1,5 +1,5 @@
-//! Tables des objets liées aux sprites : boîtes de collision (0x11bffa...), de visibilité (0x1ca538),
-//! marques au sol (0x1e45c), listes d'images lues par le code (0x9e8bc, 0x17efca) et tables du tir ESHL 5.
+//! Object tables tied to sprites: collision boxes (0x11bffa...), visibility boxes (0x1ca538),
+//! ground marks (0x1e45c), frame lists read by the code (0x9e8bc, 0x17efca) and ESHL 5 shot tables.
 
 use std::io;
 use std::path::Path;
@@ -9,21 +9,21 @@ use ddsom_assets::tables::{BoxBlock, BoxTable, Bounds, FrameList, GroundMark, Hi
 
 use crate::rom::Program;
 
-/// Tables de jeux de boîtes : 72 jeux chacune, à la suite ; les boîtes suivent la dernière.
+/// Box set tables: 72 sets each, one after the other; the boxes follow the last one.
 const BOX_TABLES: [(&str, u32); 3] = [("body", 0x11bffa), ("push", 0x11c11a), ("attack", 0x11c23a)];
 const BOX_SETS: u32 = 72;
-/// Fin des boîtes : la dernière (0x1235f8) est suivie d'un mot de bourrage `0x4e71` et d'autres données.
+/// End of the boxes: the last one (0x1235f8) is followed by a `0x4e71` padding word and other data.
 const BOX_END: u32 = 0x123600;
-/// Boîtes de visibilité : 128 entrées (des données d'une autre nature suivent).
+/// Visibility boxes: 128 entries (data of another nature follows).
 const BOUNDS: u32 = 0x1ca538;
 const BOUNDS_COUNT: u32 = 128;
-/// Marques au sol : 97 entrées, du code suit (0x1ea6c).
+/// Ground marks: 97 entries, code follows (0x1ea6c).
 const MARKS: u32 = 0x1e45c;
 const MARKS_COUNT: u32 = 97;
-/// Table des images (une adresse par image).
+/// Frame table (one address per frame).
 const FRAMES: u32 = 0x293000;
 const FRAME_COUNT: u32 = 21887;
-/// Liste lue par 0xb48c0 (`+0x33` du porteur).
+/// List read by 0xb48c0 (`+0x33` of the carrier).
 const LIST_B48C0: u32 = 0x17efca;
 /// Tir ESHL 5.
 const SHOT5_BOXES: u32 = 0x9e55c;
@@ -40,7 +40,7 @@ fn bad(msg: String) -> io::Error {
 
 pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     let rom = Program::load(roms)?;
-    // boîtes de collision
+    // collision boxes
     let box_tables: Vec<BoxTable> = BOX_TABLES
         .iter()
         .map(|&(name, at)| BoxTable { name: name.into(), rom: at, sets: (0..BOX_SETS).map(|s| rom.rd32(at + 4 * s)).collect() })
@@ -49,7 +49,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     starts.sort();
     starts.dedup();
     if starts[0] != BOX_TABLES[2].1 + 4 * BOX_SETS {
-        return Err(bad(format!("boîtes : premier bloc en {:#x}", starts[0])));
+        return Err(bad(format!("boxes: first block at {:#x}", starts[0])));
     }
     let box_blocks = starts
         .iter()
@@ -68,7 +68,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         })
         .collect();
     let marks = (0..MARKS_COUNT).map(|i| GroundMark::from_words(std::array::from_fn(|k| rom.rd16(MARKS + 16 * i + 2 * k as u32)))).collect();
-    // listes d'images
+    // frame lists
     let mut frame_of: Vec<(u32, u32)> = (0..FRAME_COUNT).map(|i| (rom.rd32(FRAMES + 4 * i), i)).collect();
     frame_of.sort();
     let index = |a: u32| frame_of.binary_search_by_key(&a, |&(r, _)| r).ok().map(|k| frame_of[k].1);
@@ -79,7 +79,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
             match index(rom.rd32(a)) {
                 Some(f) => frames.push(f),
                 None if end.is_none() => break,
-                None => panic!("liste d'images {at:#x} : {:#x} n'est pas une image", rom.rd32(a)),
+                None => panic!("frame list {at:#x}: {:#x} is not a frame", rom.rd32(a)),
             }
             a += 4;
         }
@@ -107,7 +107,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         mirrored: (0..SHOT5_MIRRORED_COUNT).map(|i| [rom.rd8(SHOT5_MIRRORED + 2 * i), rom.rd8(SHOT5_MIRRORED + 2 * i + 1)]).collect(),
     };
     eprintln!(
-        "tables : {} blocs de boîtes, {} boîtes de visibilité, {} marques au sol, {} listes d'images ({} images)",
+        "tables: {} box blocks, {} visibility boxes, {} ground marks, {} frame lists ({} frames)",
         box_blocks.len(),
         BOUNDS_COUNT,
         MARKS_COUNT,

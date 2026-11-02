@@ -1,13 +1,13 @@
-//! Ennemi « DarkWarrior 1 » (ENEMY type 25, 0x76f0e) : bras du guerrier sombre. Voir
+//! "DarkWarrior 1" enemy (ENEMY type 25, 0x76f0e): arms of the dark warrior. See
 //! `docs/families/enemy.md`.
 //!
-//! Le créateur (0x76ec4, non réécrit) engendre deux exemplaires, variante 0 (côté gauche) et 1 (côté
-//! droit), liés à leur hôte par `+0x46`. Un bras n'a pas d'IA : il se place à côté de l'hôte
-//! (`+0xa8..+0xac` de l'hôte, décalage de 0x82 pixels) et joue ce que l'état de l'hôte (`+0xa2`) lui commande.
-//! Les types 22, 23, 24 et 26 sont des « doubles » graphiques de ce type (`enemy_double.rs`).
+//! The creator (0x76ec4, not rewritten) spawns two instances, variant 0 (left side) and 1 (right
+//! side), linked to their host by `+0x46`. An arm has no AI: it positions itself next to the host
+//! (`+0xa8..+0xac` of the host, offset of 0x82 pixels) and plays what the host's state (`+0xa2`) commands.
+//! Types 22, 23, 24 and 26 are graphical "doubles" of this type (`enemy_double.rs`).
 //!
-//! La position se calcule en deux temps : les vitesses `+0x14..+0x1e` s'intègrent dans des décalages
-//! `+0xb4` (X), `+0xb6` (altitude), `+0xb8` (profondeur) que `apply_motion` ajoute ensuite à la position.
+//! The position is computed in two steps: the speeds `+0x14..+0x1e` are integrated into offsets
+//! `+0xb4` (X), `+0xb6` (altitude), `+0xb8` (depth) that `apply_motion` then adds to the position.
 
 use crate::families::cx::Bench;
 use crate::objects::Current;
@@ -15,12 +15,12 @@ use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
 
-/// Jeux d'animations : corps (0x17e03a) et coups (0x17e048).
+/// Animation sets: body (0x17e03a) and hits (0x17e048).
 const SET_BODY: u32 = 0x17e03a;
 const SET_STRIKE: u32 = 0x17e048;
-/// Table des ondulations verticales (octets signés, lue dans l'espace des opcodes).
+/// Table of vertical undulations (signed bytes, read in the opcode space).
 const BOB_TABLE: u32 = 0x7759e;
-/// Scénarios de déplacement : table de mots (décalages) suivis d'octets (dx, dz) par image.
+/// Movement scenarios: table of words (offsets) followed by bytes (dx, dz) per frame.
 const SCRIPTS: u32 = 0x77626;
 
 mod g {
@@ -62,7 +62,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// L'hôte (`+0x46`) s'il est encore actif.
+/// The host (`+0x46`) if it is still active.
 fn live_host<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     let w = x.u16(HOST);
     if (w as i16) >= 0 {
@@ -79,8 +79,8 @@ fn host<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
     x.linked(HOST)
 }
 
-/// Lance l'animation `n` du jeu des corps (0x776fe) ou des coups (0x77708) si elle n'est pas déjà
-/// la courante.
+/// Starts animation `n` of the body set (0x776fe) or the hit set (0x77708) if it is not already
+/// the current one.
 fn play<R: Bench>(x: &mut Cx<'_, R>, set_id: u8, n: u8) {
     let set = if set_id == 0 { SET_BODY } else { SET_STRIKE };
     if set_id != x.u8(ANIM_SET) || n != x.u8(ANIM_NUM) {
@@ -102,7 +102,7 @@ fn set_state_long<R: Bench>(x: &mut Cx<'_, R>, v: u32) {
     x.set32(f::STATE, v);
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
@@ -112,14 +112,14 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(OFFSET_X, 0);
     x.set16(OFFSET_Z, 0);
     x.set16(OFFSET_Y, 0);
-    // la variante 0 regarde à gauche
+    // variant 0 looks left
     let flip = if x.u8(Obj::VARIANT) == 0 { 0x20 } else { 0 };
     x.set8(f::FLIP, flip);
     x.set16(ANIM_SET, 0xffff);
     body(x, 5);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x38, 0);
@@ -168,13 +168,13 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(PREV_STATE, state);
 }
 
-/// Force du coup : 0x4a, ou 0x5a quand l'hôte n'est pas de type 0xf.
+/// Hit strength: 0x4a, or 0x5a when the host is not of type 0xf.
 fn hit_power<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     let h = host(x);
     if h.u8(x.b, 2) == 0xf { 0x4a } else { 0x5a }
 }
 
-/// Fin commune : drapeau « hôte visible », puis remise en liste (0x77016).
+/// Common ending: "host visible" flag, then re-listing (0x77016).
 fn end_part<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(FLAGS, 1, false);
     let h = host(x);
@@ -184,7 +184,7 @@ fn end_part<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// 0x774a8 : le bras se place à côté de l'hôte, 0x82 pixels de part et d'autre selon son côté.
+/// 0x774a8: the arm positions itself next to the host, 0x82 pixels on either side depending on its side.
 fn follow_host<R: Bench>(x: &mut Cx<'_, R>) {
     let h = host(x);
     let (px, pz, py) = (h.u16(x.b, SLOT_X), h.u16(x.b, SLOT_Z), h.u16(x.b, SLOT_Y));
@@ -194,8 +194,8 @@ fn follow_host<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(SLOT_Y, py);
 }
 
-/// 0x774e0 : ajoute les décalages à la position ; l'altitude ne descend pas sous 0 et la
-/// profondeur garde le bras à 0x60 pixels sous le haut de l'écran au moins.
+/// 0x774e0: adds the offsets to the position; the altitude does not go below 0 and the
+/// depth keeps the arm at least 0x60 pixels below the top of the screen.
 fn apply_motion<R: Bench>(x: &mut Cx<'_, R>) {
     let px = x.u16(0x8).wrapping_add(x.u16(OFFSET_X));
     x.set16(0x8, px);
@@ -215,7 +215,7 @@ fn apply_motion<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x10, y);
 }
 
-/// Ajoute les décalages à la position, sans bornes (états 4 à 8 : 0x77252).
+/// Adds the offsets to the position, with no bounds (states 4 to 8: 0x77252).
 fn add_offsets<R: Bench>(x: &mut Cx<'_, R>) {
     for (off, o) in [(0x8, OFFSET_X), (0xc, OFFSET_Z), (0x10, OFFSET_Y)] {
         let v = x.u16(off).wrapping_add(x.u16(o));
@@ -223,8 +223,8 @@ fn add_offsets<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x776a2.. : intègre une vitesse (`vel`, accélération `vel + 2`) dans un décalage entier `int` et la
-/// fraction `frac` de la position.
+/// 0x776a2..: integrates a speed (`vel`, acceleration `vel + 2`) into an integer offset `int` and the
+/// fraction `frac` of the position.
 fn integrate<R: Bench>(x: &mut Cx<'_, R>, vel: u32, int: u32, frac: u32) {
     let v = x.u16(vel).wrapping_add(x.u16(vel + 2));
     x.set16(vel, v);
@@ -234,15 +234,15 @@ fn integrate<R: Bench>(x: &mut Cx<'_, R>, vel: u32, int: u32, frac: u32) {
     x.set16(int, (d1 >> 16) as u16);
 }
 
-/// 0x77684 : intègre les trois vitesses.
+/// 0x77684: integrates the three speeds.
 fn integrate_all<R: Bench>(x: &mut Cx<'_, R>) {
     integrate(x, 0x1c, OFFSET_Y, 0x12);
     integrate(x, 0x14, OFFSET_X, 0xa);
     integrate(x, 0x18, OFFSET_Z, 0xe);
 }
 
-/// 0x77032 : rapproche les décalages des cibles `(d0, d1, d2)` de moitié à chaque image ; vrai quand
-/// les trois sont arrivés.
+/// 0x77032: brings the offsets closer to the targets `(d0, d1, d2)` by half each frame; true when
+/// all three have arrived.
 fn converge<R: Bench>(x: &mut Cx<'_, R>, targets: [i16; 3]) -> bool {
     let mut arrived = 0;
     for (t, off) in targets.into_iter().zip([OFFSET_X, OFFSET_Z, OFFSET_Y]) {
@@ -264,8 +264,8 @@ fn converge<R: Bench>(x: &mut Cx<'_, R>, targets: [i16; 3]) -> bool {
     arrived >= 3
 }
 
-/// 0x775de : un pas du scénario de déplacement `n` ; vrai quand il est fini. La première image lit
-/// la première paire d'octets ; les suivantes reprennent à la fin (indice = compteur restant).
+/// 0x775de: one step of movement scenario `n`; true when it is finished. The first frame reads
+/// the first pair of bytes; the following ones resume at the end (index = remaining counter).
 fn script_step<R: Bench>(x: &mut Cx<'_, R>, n: u32) -> bool {
     let offset = x.rom16(SCRIPTS + 2 * n) as i16 as i32 as u32;
     let a2 = SCRIPTS.wrapping_add(offset);
@@ -295,9 +295,9 @@ fn script_step<R: Bench>(x: &mut Cx<'_, R>, n: u32) -> bool {
     false
 }
 
-// --- états de l'hôte sans geste (0 à 3, 9 et plus) ----------------------------------------------
+// --- host states without gesture (0 to 3, 9 and above) ----------------------------------------------
 
-/// 0x76ff4 : le bras se tient à côté de l'hôte et ondule.
+/// 0x76ff4: the arm stands next to the host and undulates.
 fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 {
         x.add8(f::SUB, 2);
@@ -310,7 +310,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     end_part(x);
 }
 
-/// 0x77562 : ondulation verticale pendant que l'hôte agit.
+/// 0x77562: vertical undulation while the host acts.
 fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let h = host(x);
     if h.u8(x.b, 5) == 0 {
@@ -327,7 +327,7 @@ fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     x.add16(0x10, d);
 }
 
-/// 0x77530 : les décalages s'amortissent d'un seizième à chaque image.
+/// 0x77530: the offsets damp by a sixteenth each frame.
 fn damp<R: Bench>(x: &mut Cx<'_, R>) {
     for off in [OFFSET_X, OFFSET_Z, OFFSET_Y] {
         let v = x.u16(off) as i16;
@@ -341,9 +341,9 @@ fn damp<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- états 4 et 5 de l'hôte : coup -----------------------------------------------------------------
+// --- host states 4 and 5: hit -----------------------------------------------------------------
 
-/// 0x770e8 : le bras qui frappe (`+5` = 0 approche, 2 élan, 4 coup, 6 retour).
+/// 0x770e8: the striking arm (`+5` = 0 approach, 2 wind-up, 4 blow, 6 return).
 fn swing<R: Bench>(x: &mut Cx<'_, R>) {
     swing_step(x);
     end_part(x);
@@ -412,10 +412,11 @@ fn swing_step<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Étincelles de la frappe (0xb10c8) et dispersion de l'effet.
-/// Glitch d'origine : l'objet dispersé est A1 après le choc, testé par son mot (`move.w A1,D0`) : l'emplacement que
-/// laisse l'allocation refusée, ou, en scène 41 (pas de choc, A1 non écrit), l'hôte que `follow_host` (0x774a8) y a
-/// chargé.
+/// Sparks of the strike (0xb10c8) and dispersal of the effect.
+/// Original glitch: the dispersed object is A1 after the shock, tested by its word (`move.w A1,D0`): the slot that
+/// the refused allocation leaves, or, in scene 41 (no shock, A1 not written), the host that
+/// `follow_host` (0x774a8) loaded
+/// there.
 fn sparks<R: Bench>(x: &mut Cx<'_, R>) {
     let e = match lib::shock(x, 3, 0, 0, 0) {
         lib::Choc::Created(o) | lib::Choc::Refuse(o) => o,
@@ -433,7 +434,7 @@ fn sparks<R: Bench>(x: &mut Cx<'_, R>) {
     e.set_u16(x.b, 0x8, nx);
 }
 
-/// 0x77244 : le bras qui ne frappe pas descend doucement (`+5` = 0 départ, 2 accélération).
+/// 0x77244: the non-striking arm slowly descends (`+5` = 0 start, 2 acceleration).
 fn drift<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB) {
         0 => {
@@ -458,14 +459,14 @@ fn drift<R: Bench>(x: &mut Cx<'_, R>) {
     end_part(x);
 }
 
-// --- états 6 à 8 de l'hôte : sortie en scène ------------------------------------------------------
+// --- host states 6 to 8: entrance on stage ------------------------------------------------------
 
-/// Variante qui reste à terre pendant que l'hôte monte : même mouvement que `drift`.
+/// Variant that stays on the ground while the host rises: same movement as `drift`.
 fn rise_b<R: Bench>(x: &mut Cx<'_, R>) {
     drift(x);
 }
 
-/// 0x772d6 : suit le scénario de l'hôte (`+5` = 0 départ, 2 premier scénario, 4 fin, 6 second).
+/// 0x772d6: follows the host's scenario (`+5` = 0 start, 2 first scenario, 4 end, 6 second).
 fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     rise_step(x);
     add_offsets(x);
@@ -519,7 +520,7 @@ fn rise_script_two<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x77470 : mort de l'hôte, les trois pièces de la variante partent.
+/// 0x77470: death of the host, the three pieces of the variant leave.
 fn finale<R: Bench>(x: &mut Cx<'_, R>) {
     let base = if x.u8(Obj::VARIANT) == 0 { 0 } else { 3 };
     for k in 0..3 {
@@ -528,7 +529,7 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 4 : touché ----------------------------------------------------------------------------
+// --- state 4: hit ----------------------------------------------------------------------------
 
 fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     let h = host(x);

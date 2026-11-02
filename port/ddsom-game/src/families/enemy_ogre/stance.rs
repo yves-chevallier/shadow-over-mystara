@@ -1,5 +1,5 @@
-//! Type 18, sous-état 2 : déplacements. `+6` : 0 poursuite lente, 2 demi-tour, 4 et 6 vol de poursuite,
-//! 8 plongeon vers la cible, 10 bond qui lance un bras (objet de type 0x2a, variante 0).
+//! Type 18, substate 2: movements. `+6`: 0 slow pursuit, 2 turn-around, 4 and 6 pursuit flight, 8 dive toward the
+//! target, 10 leap that throws an arm (object of type 0x2a, variant 0).
 
 use crate::families::cx::Bench;
 use super::*;
@@ -19,18 +19,18 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Un joueur qui saisit l'ogre ou la fin de la partie interrompt le geste ; vrai si l'état a changé.
+/// A player grabbing the ogre or the end of the game interrupts the move; true if the state has changed.
 fn interrupted<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     held_by_player(x) || nobody_left(x)
 }
 
-/// Animation de vol 2 ou 3 selon le sens de la vitesse (0x70a94).
+/// Flight animation 2 or 3 according to the direction of the speed (0x70a94).
 fn fly_forward_or_back<R: Bench>(x: &mut Cx<'_, R>) {
     let n = if lib::moving_forward(x) { 2 } else { 3 };
     play(x, SET_A, n);
 }
 
-/// Le jeu de vol correspondant au sens de la vitesse, à la même image (0x70b6e).
+/// The flight set matching the direction of the speed, on the same frame (0x70b6e).
 fn switch_flight_set<R: Bench>(x: &mut Cx<'_, R>) {
     let table = if lib::moving_forward(x) { SET_FLY_ALONG } else { SET_FLY_AGAINST };
     lib::switch_keeping_time(x, table);
@@ -116,7 +116,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 0);
 }
 
-// --- +6 = 4 et 6 : vol de poursuite -----------------------------------------------------------------
+// --- +6 = 4 and 6: pursuit flight -----------------------------------------------------------------
 
 fn glide<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     if interrupted(x) {
@@ -202,12 +202,12 @@ fn glide_step<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// 0x7ef4 : comme `target_in_box`, pour l'ogre.
+/// 0x7ef4: like `target_in_box`, for the ogre.
 fn target_in_box_close<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     lib::guard_in_front(x, d0, d1, d2)
 }
 
-/// 0x71a9a / 0x71ab8 : un joueur dans la boîte `(−0x60, 0x30, 6)` ou `(−0xc0, 0x20, 8)`, puis la décision de l'IA.
+/// 0x71a9a / 0x71ab8: a player in box `(−0x60, 0x30, 6)` or `(−0xc0, 0x20, 8)`, then the AI decision.
 fn near_box<R: Bench>(x: &mut Cx<'_, R>, which: u32) -> u32 {
     let found = if which == 0x71a9a { lib::target_in_box(x, -0x60, 0x30, 6) } else { lib::target_in_box(x, -0xc0, 0x20, 8) };
     if !found {
@@ -216,14 +216,14 @@ fn near_box<R: Bench>(x: &mut Cx<'_, R>, which: u32) -> u32 {
     lib::turn_decision(x) as u32
 }
 
-/// 0x71ad4 : cercle autour du joueur (la table de choix n'a qu'une entrée).
+/// 0x71ad4: circle around the player (the choice table has only one entry).
 fn pick_a<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let _ = x.rom8(0x71aea + r);
     go::leap(x);
 }
 
-/// 0x71afc : choisit un geste de la série 0x71b34 (plongeon de côté, coup 6 ou 8).
+/// 0x71afc: chooses a move from series 0x71b34 (side dive, attack 6 or 8).
 fn pick_a2<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let v = x.rom8(0x71b34 + r);
@@ -235,17 +235,17 @@ fn pick_a2<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x71d62 : coup 6 sans lever l'invulnérabilité.
+/// 0x71d62: attack 6 without lifting the invulnerability.
 fn strike_6_quiet<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     set_state_long(x, 0x0204_0600);
 }
 
-/// 0x71b4a : geste de la série devant, par palier `+0xaa` (tables 0x71ba4, 0x71bb4, 0x71bc4).
+/// 0x71b4a: move of the series in front, by threshold `+0xaa` (tables 0x71ba4, 0x71bb4, 0x71bc4).
 fn pick_b<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE).min(2) as usize;
-    // décision 1 (cible devant) : une table par palier ; décision 2 : toujours la première
+    // decision 1 (target in front): one table per threshold; decision 2: always the first
     let table = if gate == 1 { [0x71ba4u32, 0x71bb4, 0x71bc4][phase] } else { 0x71ba4 };
     let v = x.rom8(table + r);
     match v {
@@ -255,7 +255,7 @@ fn pick_b<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     }
 }
 
-/// 0x71bd8 : geste de la série derrière.
+/// 0x71bd8: move of the series behind.
 fn pick_c<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE).min(2) as usize;
@@ -350,7 +350,7 @@ fn act_a<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     mv(x, n);
 }
 
-/// 0x70c6c : début de la course du plongeon.
+/// 0x70c6c: start of the dive run.
 fn plunge_dash<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x14);
@@ -363,7 +363,7 @@ fn plunge_dash<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 5);
 }
 
-// --- +6 = 10 : bond et lancer de bras ----------------------------------------------------------------------
+// --- +6 = 10: leap and arm throw ----------------------------------------------------------------------
 
 fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
@@ -436,7 +436,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x70e1c : fin du bond : retraite, saisie ou nouveau geste.
+/// 0x70e1c: end of the leap: retreat, grab or new move.
 fn end_leap<R: Bench>(x: &mut Cx<'_, R>) {
     if !interrupted(x) {
         go::wander(x);

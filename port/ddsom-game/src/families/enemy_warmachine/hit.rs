@@ -1,6 +1,6 @@
-//! Type 27, état touché (`+4 = 4`, 0x789d0). `+5` : 0 réaction par table (ou début de la mort si les PV sont épuisés),
-//! 2 recul, 4 chute et relevé (avec palier de PV), 6 mort en cinq temps, 8 fuite hors de l'écran, 10 assommé. Zone et
-//! ombre sont testées sauf en fuite (`+5` = 8).
+//! Type 27, hit state (`+4 = 4`, 0x789d0). `+5`: 0 reaction by table (or start of death if the HP are exhausted), 2
+//! recoil, 4 fall and get up (with HP threshold), 6 death in five stages, 8 flight off the screen, 10 knocked out. Zone
+//! and shadow are tested except in flight (`+5` = 8).
 
 use crate::families::cx::Bench;
 use super::*;
@@ -8,7 +8,7 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Table de réactions communes aux coups, indexée par le code `+0x49`.
+/// Table of reactions shared by the hits, indexed by code `+0x49`.
 const REACT: u32 = 0x78a26;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -32,7 +32,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     zone_and_terrain(x);
 }
 
-/// 0x792e0 : PV épuisés : passe en mort (`+5` = 6) ; vrai dans ce cas.
+/// 0x792e0: HP exhausted: goes into death (`+5` = 6); true in that case.
 fn dying<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
@@ -52,7 +52,7 @@ fn first<R: Bench>(x: &mut Cx<'_, R>) {
     react(x, REACT);
 }
 
-/// 0x78b4a : recul vers l'arrière.
+/// 0x78b4a: recoil backward.
 fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -92,7 +92,7 @@ fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x78be2 : chute puis relevé.
+/// 0x78be2: fall then get up.
 fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -126,7 +126,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x78c3c : relevé : choisit une cible, franchit un palier de PV, puis tir ou bond d'attaque.
+/// 0x78c3c: get up: chooses a target, crosses an HP threshold, then shot or attack leap.
 pub(crate) fn recover<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(LOOK_PREV, 0xff);
@@ -141,7 +141,7 @@ pub(crate) fn recover<R: Bench>(x: &mut Cx<'_, R>) {
     go::fire_a(x);
 }
 
-/// 0x78c84 : mort en cinq temps : éjection, vol, retombée, tremblement, disparition.
+/// 0x78c84: death in five stages: ejection, flight, landing, shaking, disappearance.
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -205,7 +205,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x78d92 : saisie : la machine s'enfuit hors de l'écran puis disparaît.
+/// 0x78d92: grab: the machine runs away off the screen then disappears.
 fn run_off<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -237,7 +237,7 @@ fn run_off<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x78e34 : assommé : animation 0xc, puis tir.
+/// 0x78e34: knocked out: animation 0xc, then shot.
 fn stunned<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB3, 2);

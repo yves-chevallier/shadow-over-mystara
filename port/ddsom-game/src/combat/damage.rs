@@ -1,42 +1,42 @@
-//! Formules de dégâts (sous-système X2) : coups des joueurs, tirs des joueurs, attaques ennemies,
-//! et affichage du nombre de points de vie retirés.
+//! Damage formulas (subsystem X2): player hits, player shots, enemy attacks,
+//! and display of the number of hit points removed.
 //!
-//! Les barèmes sont des tables de la ROM (lues à l'exécution) ; seules les formules sont ici.
+//! The scales are ROM tables (read at run time); only the formulas are here.
 
 use super::*;
 use crate::objects::pools;
 use crate::machine::Machine;
 
-/// Tables de barème de la ROM programme. Les tables lues par adressage relatif au PC de l'original
-/// sont dans l'espace programme (`pc8`/`pc16`), les autres en lecture ordinaire.
+/// Scale tables of the program ROM. The tables read by PC-relative addressing in the original
+/// are in the program space (`pc8`/`pc16`), the others as ordinary reads.
 mod table {
-    /// 0x3be4 (PC) : variation aléatoire ajoutée aux dégâts, octets signés, 32 par ligne
-    /// (ligne = min(dégâts de base - 1, 4)).
+    /// 0x3be4 (PC): random variation added to the damage, signed bytes, 32 per row
+    /// (row = min(base damage - 1, 4)).
     pub const ROLL: u32 = 0x3be4;
-    /// 0x3c84 (PC) : pour un coup critique, selon (PV bas, aléa 4 bits) : numéro de ligne de 0x3ca2.
+    /// 0x3c84 (PC): for a critical hit, according to (low HP, 4-bit random): row number of 0x3ca2.
     pub const CRIT_ROW: u32 = 0x3c84;
-    /// 0x3ca2 (PC) : masques de 16 bits ; le critique a lieu si le bit tiré (aléa 4 bits) est à 1.
+    /// 0x3ca2 (PC): 16-bit masks; the critical hit happens if the drawn bit (4-bit random) is 1.
     pub const CRIT_MASK: u32 = 0x3ca2;
-    /// 0x3d8e (données) : par arme (4 octets) : bonus de dégâts selon le nombre de joueurs
-    /// (2, 3, 4 : octets signés) puis plafond.
+    /// 0x3d8e (data): per weapon (4 bytes): damage bonus according to the number of players
+    /// (2, 3, 4: signed bytes) then cap.
     pub const PARTY_BONUS: u32 = 0x3d8e;
-    /// 0x3e4e et 0x3ef8 (PC) : tables du coup critique du magicien (classe 4).
+    /// 0x3e4e and 0x3ef8 (PC): tables of the magician's critical hit (class 4).
     pub const MAGE_ROW: u32 = 0x3e4e;
     pub const MAGE_SHIFT: u32 = 0x3ef8;
-    /// 0x3fea (PC) : pointeurs vers les barèmes d'attaque ennemie par réglage de jeu (`A5+0x70`).
+    /// 0x3fea (PC): pointers to the enemy attack scales by game setting (`A5+0x70`).
     pub const ENEMY_SCALE: u32 = 0x3fea;
-    /// 0x406d (PC) : nombre de tranches de 1/32 retirées selon la protection (`+0x108`).
+    /// 0x406d (PC): number of 1/32 slices removed according to protection (`+0x108`).
     pub const PROTECTION: u32 = 0x406d;
-    /// 0x40aa et 0x416a (données) : à PV bas, par (classe, PV) : tranches de 1/32 retirées.
+    /// 0x40aa and 0x416a (data): at low HP, by (class, HP): 1/32 slices removed.
     pub const LOW_HP_SHIELD: [u32; 2] = [0x40aa, 0x416a];
-    /// 0x3936 / 0x3954 (PC) : butin du voleur : probabilité par niveau, masques de tirage.
+    /// 0x3936 / 0x3954 (PC): thief's loot: probability per level, draw masks.
     pub const LOOT_LEVEL: u32 = 0x3936;
     pub const LOOT_MASK: u32 = 0x3954;
-    /// 0x39d8 (données) : butins possibles (8 octets par type : 2 entrées de 4 octets).
+    /// 0x39d8 (data): possible loot (8 bytes per type: 2 entries of 4 bytes).
     pub const LOOT: u32 = 0x39d8;
 }
 
-/// 0x3bbe : ajoute à `base` une variation tirée dans la table `ROLL` (ligne selon la valeur).
+/// 0x3bbe: adds to `base` a variation drawn from the `ROLL` table (row according to the value).
 pub(super) fn roll_variation(w: &mut World, base: u16) -> u16 {
     cov::hit("roll_variation");
     let line = base.wrapping_sub(1).min(4) as u8;
@@ -46,7 +46,7 @@ pub(super) fn roll_variation(w: &mut World, base: u16) -> u16 {
     base.wrapping_add(delta)
 }
 
-/// 0x422a : dégâts d'un tir de joueur. Puissance A contre un ennemi ordinaire, B sinon.
+/// 0x422a: damage of a player shot. Power A against an ordinary enemy, B otherwise.
 pub(super) fn shot_damage(w: &mut World, shot: Obj, e: Obj) -> u16 {
     cov::hit("shot_damage");
     let mut base = shot.u8(w.b, f::POWER_A);
@@ -61,12 +61,12 @@ pub(super) fn shot_damage(w: &mut World, shot: Obj, e: Obj) -> u16 {
     }
 }
 
-/// 0x3b36 : dégâts d'un coup de joueur `p` sur l'ennemi `e`.
+/// 0x3b36: damage of a player `p` hit on enemy `e`.
 ///
-/// Base : puissance de l'arme (`+0x109` ou `+0x10a`, selon `ATTACK_KIND` 0 ou 1 ; 1 pour le
-/// type 2), +50 % sous bonus (`+0x79`), variation aléatoire, puis modificateurs : bonus de
-/// position (`+0x100`), critique, faiblesse/résistance de l'ennemi, bonus de groupe. Le résultat
-/// est aussi affiché (`show_damage`).
+/// Base: weapon power (`+0x109` or `+0x10a`, according to `ATTACK_KIND` 0 or 1; 1 for
+/// type 2), +50% under bonus (`+0x79`), random variation, then modifiers: position
+/// bonus (`+0x100`), critical hit, enemy weakness/resistance, group bonus. The result
+/// is also displayed (`show_damage`).
 pub(super) fn player_damage(w: &mut World, p: Obj, e: Obj) -> u16 {
     cov::hit("player_damage");
     let kind = p.u8(w.b, f::ATTACK_KIND);
@@ -113,7 +113,7 @@ pub(super) fn player_damage(w: &mut World, p: Obj, e: Obj) -> u16 {
     show_damage(w, p, d5, DamageDisplay::Dealt)
 }
 
-/// 0x3cb6.. : coup critique des classes autres que le magicien : +5 de dégâts, drapeau `+0x77`.
+/// 0x3cb6..: critical hit of the classes other than the magician: +5 damage, flag `+0x77`.
 fn critical_hit(w: &mut World, p: Obj, d5: u16) -> u16 {
     cov::hit("critical_hit");
     if (p.u8(w.b, 0x3d) as i8) > 2 {
@@ -134,9 +134,9 @@ fn critical_hit(w: &mut World, p: Obj, d5: u16) -> u16 {
     d5.wrapping_add(5)
 }
 
-/// 0x3e8e : le magicien (classe 4) équipé de l'arme 0x30 fait un coup critique de type "fraction
-/// des PV max de la victime" (PV max >> n), sinon 1 point de dégâts ; avec une autre arme le
-/// calcul commun continue (`None`).
+/// 0x3e8e: the magician (class 4) equipped with weapon 0x30 makes a critical hit of the "fraction
+/// of the victim's max HP" kind (max HP >> n), otherwise 1 damage point; with another weapon the
+/// common computation continues (`None`).
 fn mage_critical(w: &mut World, p: Obj, e: Obj) -> Option<u16> {
     cov::hit("mage_critical");
     if p.u8(w.b, 0x47) != 0x30 {
@@ -162,8 +162,8 @@ fn mage_critical(w: &mut World, p: Obj, e: Obj) -> Option<u16> {
     Some(show_damage(w, p, d0, DamageDisplay::Dealt))
 }
 
-/// 0x3d10 : faiblesse/résistance élémentaire de la victime (`+0x9e`, `+0x9f`) à l'arme du joueur
-/// (`+0x107`) : +4 si faible, moitié si résistante.
+/// 0x3d10: elemental weakness/resistance of the victim (`+0x9e`, `+0x9f`) to the player's weapon
+/// (`+0x107`): +4 if weak, half if resistant.
 fn elemental(w: &mut World, p: Obj, e: Obj, d5: u16) -> u16 {
     cov::hit("elemental");
     let element = p.u8(w.b, 0x107);
@@ -183,8 +183,8 @@ fn elemental(w: &mut World, p: Obj, e: Obj, d5: u16) -> u16 {
     d5
 }
 
-/// 0x3d3a : le groupe de joueurs en vie ajuste les dégâts : bonus (octet signé) de la table de
-/// l'arme, plancher du même enregistrement.
+/// 0x3d3a: the group of living players adjusts the damage: bonus (signed byte) from the weapon's
+/// table, floor from the same record.
 fn party_bonus(w: &mut World, p: Obj, d5: u16) -> u16 {
     cov::hit("party_bonus");
     let alive = ram::PLAYERS_ALIVE.get(w.b);
@@ -206,18 +206,18 @@ fn party_bonus(w: &mut World, p: Obj, d5: u16) -> u16 {
     }
 }
 
-/// Qui subit les dégâts affichés ? (les deux nombres sont dessinés à des endroits différents de la
-/// couche de caractères)
+/// Who takes the displayed damage? (the two numbers are drawn at different places of the
+/// character layer)
 #[derive(Clone, Copy)]
 pub(super) enum DamageDisplay {
-    /// Dégâts infligés par le joueur (0x3f28 : colonne 0x9121e8).
+    /// Damage dealt by the player (0x3f28: column 0x9121e8).
     Dealt,
-    /// Dégâts reçus par le joueur (0x3f32 : colonne 0x9121ec).
+    /// Damage received by the player (0x3f32: column 0x9121ec).
     Taken,
 }
 
-/// 0x3f28 / 0x3f32 : dessine le nombre de dégâts (deux chiffres, octet bas) à côté du joueur
-/// `p`, sauf si le réglage d'écran le masque (bit 0x200 de `FFFFD0`). Renvoie `dmg`.
+/// 0x3f28 / 0x3f32: draws the damage number (two digits, low byte) next to player
+/// `p`, unless the screen setting hides it (bit 0x200 of `FFFFD0`). Returns `dmg`.
 pub(super) fn show_damage(w: &mut World, p: Obj, dmg: u16, which: DamageDisplay) -> u16 {
     cov::hit("show_damage");
     let base = match which {
@@ -229,7 +229,7 @@ pub(super) fn show_damage(w: &mut World, p: Obj, dmg: u16, which: DamageDisplay)
     }
     let idx = p.u8(w.b, f::KIND) as i8 as i16 as u16;
     let mut at = base + (((idx << 8).wrapping_add(idx << 7)) as u32);
-    // conversion en deux chiffres BCD par soustractions de 10 (octet bas seulement)
+    // conversion to two BCD digits by subtractions of 10 (low byte only)
     let mut units = dmg & 0xff;
     let mut tens: u16 = 0;
     loop {
@@ -249,12 +249,12 @@ pub(super) fn show_damage(w: &mut World, p: Obj, dmg: u16, which: DamageDisplay)
     dmg
 }
 
-/// 0x4002 : dégâts d'une attaque ennemie (`atk`) sur le joueur `p`.
+/// 0x4002: damage of an enemy attack (`atk`) on player `p`.
 ///
-/// Base tirée d'un barème de 32 entrées (indexé par le compteur FFFF92) selon le réglage de jeu,
-/// plus la puissance de l'attaque (`+0x45`), variation aléatoire, moins la défense du joueur
-/// (`+0x10b`) ; puis réduction en tranches de 1/32 selon la protection (`+0x108`) ou, à 32 PV et
-/// moins, selon la table des PV bas. Affiche le résultat.
+/// Base drawn from a 32-entry scale (indexed by the counter FFFF92) according to the game setting,
+/// plus the attack power (`+0x45`), random variation, minus the player's defence
+/// (`+0x10b`); then reduction in 1/32 slices according to protection (`+0x108`) or, at 32 HP and
+/// below, according to the low-HP table. Displays the result.
 pub(super) fn damage_vs_player(w: &mut World, p: Obj, atk: Obj) -> u16 {
     cov::hit("damage_vs_player");
     let setting = ram::DAMAGE_SETTING.get(w.b);
@@ -269,7 +269,7 @@ pub(super) fn damage_vs_player(w: &mut World, p: Obj, atk: Obj) -> u16 {
     let defense = p.u8(w.b, 0x10b) as u16;
     let (diff, borrow) = d5.overflowing_sub(defense);
     d5 = if !borrow && diff != 0 { diff } else { 1 };
-    // réduction par tranches de 1/32 (n tranches => d5 -= d5 * n / 32)
+    // reduction by 1/32 slices (n slices => d5 -= d5 * n / 32)
     let slices = if (p.u16(w.b, f::HP) as i16) > 0x20 {
         let prot = p.u8(w.b, 0x108);
         if (prot as i8) >= 9 {
@@ -300,7 +300,7 @@ pub(super) fn damage_vs_player(w: &mut World, p: Obj, atk: Obj) -> u16 {
     show_damage(w, p, d5, DamageDisplay::Taken)
 }
 
-/// 0x388a : un coup de voleur (`ATTACK_KIND` 3) peut faire tomber du butin de l'ennemi `e`.
+/// 0x388a: a thief's hit (`ATTACK_KIND` 3) can make enemy `e` drop loot.
 pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
     cov::hit("steal_loot");
     if p.u8(w.b, f::VARIANT) >> 1 != 5 {
@@ -322,7 +322,7 @@ pub(super) fn steal_loot(w: &mut World, p: Obj, e: Obj) {
     if mask >> bit & 1 == 0 {
         return;
     }
-    // objet à créer (ITEM) à la place de l'ennemi ; échec si le pool est plein (retenue)
+    // object to create (ITEM) in place of the enemy; failure if the pool is full (carry)
     w.a2 = e.0;
     let Some(item) = pools::ITEM.alloc(w.b) else { return };
     item.set_u8(w.b, f::ACTIVE, 1);

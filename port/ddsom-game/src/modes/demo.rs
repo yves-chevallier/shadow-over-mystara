@@ -1,19 +1,19 @@
-//! Démonstrations de l'attract : les deux interpréteurs de scripts de scènes de la machine à modes
-//! (sous-modes 4 et 14 : `0x1f32e` ; sous-mode 10 : `0x20926`).
+//! Attract demonstrations: the two scene-script interpreters of the mode machine
+//! (sub-modes 4 and 14: `0x1f32e`; sub-mode 10: `0x20926`).
 //!
-//! Un *script* (dans la ROM, pointeur long à `FF0EA2`) est une suite d'entrées de 32 octets :
+//! A *script* (in ROM, long pointer at `FF0EA2`) is a sequence of 32-byte entries:
 //!
-//! | Octet | Contenu |
+//! | Byte | Content |
 //! |---|---|
-//! | `+0` | opération : `0x80..` fin du script, `0` scène, `2` commande son puis scène (2 octets de plus), autre : présentation d'un personnage (3 octets) |
-//! | `+1` | numéro de scène (`A5+0x34`) |
-//! | `+2` | durée en images (mot) |
-//! | `+4` | quatre joueurs de 6 octets : personnage (négatif : absent), variante, trois paramètres facultatifs |
-//! | `+28` | un long recopié en `A5-0x5aa8` |
+//! | `+0` | operation: `0x80..` end of script, `0` scene, `2` sound command then scene (2 more bytes), other: character presentation (3 bytes) |
+//! | `+1` | scene number (`A5+0x34`) |
+//! | `+2` | duration in frames (word) |
+//! | `+4` | four 6-byte players: character (negative: absent), variant, three optional parameters |
+//! | `+28` | a long copied to `A5-0x5aa8` |
 //!
-//! Une scène de démonstration fait tourner le jeu lui-même : à chaque image l'interpréteur appelle le
-//! gestionnaire de la phase courante (8 : entrée de scène ; 12 : le jeu, mené par l'IA) jusqu'à la fin de la
-//! durée. Étapes de l'écran (`FF0E72`) : 0 début de script, 2 scène en cours, 6 présentation d'un personnage.
+//! A demonstration scene runs the game itself: on each frame the interpreter calls the
+//! current phase handler (8: scene entry; 12: the game, driven by the AI) until the end of the
+//! duration. Screen steps (`FF0E72`): 0 script start, 2 scene running, 6 character presentation.
 
 use cps2::Cps2Bus;
 use crate::scene::fading;
@@ -28,27 +28,27 @@ use crate::objects::pools;
 use crate::scene::Ctx;
 use crate::Native;
 
-/// Champs du bloc d'état de la machine à modes.
+/// Fields of the mode machine state block.
 mod f {
     pub const SUB: u32 = 1;
     pub const STEP: u32 = 2;
-    /// Sous-état de la présentation d'un personnage (octet, pas de 2).
+    /// Sub-state of the character presentation (byte, step of 2).
     pub const SUBSTEP: u32 = 3;
     pub const TIMER: u32 = 8;
     pub const PRESENT_9: u32 = 9;
-    /// Lien (mot) vers l'objet du portrait.
+    /// Link (word) to the portrait object.
     pub const LINK: u32 = 0x10;
     /// Pointeur de script (long).
     pub const SCRIPT: u32 = 0x32;
-    /// Fin de script demandée (interpréteur B).
+    /// End of script requested (interpreter B).
     pub const ENDING: u32 = 0x3a;
     pub const PRESENT_KIND: u32 = 0x3c;
     pub const PRESENT_CHARACTER: u32 = 0x3d;
-    /// Alterne entre les deux scripts (0 / 4).
+    /// Alternates between the two scripts (0 / 4).
     pub const ALTERNATE: u32 = 0x3e;
 }
 
-/// Variables de la RAM de travail (adresses absolues).
+/// Work RAM variables (absolute addresses).
 mod var {
     use crate::mem::A5;
     pub const SCREEN_WAIT: u32 = A5 - 0x7155;
@@ -67,28 +67,28 @@ mod var {
     pub const FRAME_COUNTER: u32 = A5 + 0x6e;
     pub const DEMO_TIME: u32 = A5 + 0x6c;
     pub const RANK: u32 = A5 + 0x7f92;
-    /// Partie en cours ; mot de réglages.
+    /// Game in progress; settings word.
     pub const GAME: u32 = A5 + 0x30;
     pub const DSW: u32 = A5 + 0x7fd0;
 }
 
 mod ext {
-    /// Tâche de l'interface des joueurs.
+    /// Player interface task.
     pub const PLAYER_UI: u32 = 0x150ac;
 }
 
-/// Tables en ROM (données, ou adresses lues par le code d'origine relativement au PC).
+/// ROM tables (data, or addresses read by the original code relative to the PC).
 mod table {
-    /// Pointeurs des deux scripts de départ, alternés (longs, lus par le PC).
+    /// Pointers of the two starting scripts, alternating (longs, read through the PC).
     pub const SCRIPTS: u32 = 0x1f348;
-    /// Routines des commandes son (longs, index en octets).
+    /// Sound command routines (longs, byte index).
     pub const COMMANDS: u32 = 0x1f3aa;
-    /// Gestionnaires de phase de la boucle A et de la boucle B.
+    /// Phase handlers of loop A and loop B.
     pub const PHASES_A: u32 = 0x1f990;
     pub const PHASES_B: u32 = 0x20a9c;
-    /// Script de l'interpréteur B.
+    /// Script of interpreter B.
     pub const SCRIPT_B: u32 = 0x1f756;
-    /// Tuiles de la présentation (deux mots par personnage), cadre, textes.
+    /// Presentation tiles (two words per character), frame, texts.
     pub const TILES: u32 = 0x1fd04;
     pub const PRESENT_DATA: u32 = 0x1febe;
     pub const FRAME_ATTR: u32 = 0x1ffa2;
@@ -97,7 +97,7 @@ mod table {
     pub const TEXT_2: u32 = 0x200ca;
 }
 
-/// Adresses de reprise et de retour de l'original.
+/// Resume and return addresses of the original.
 mod at {
     pub const RETURN_A: u32 = 0x1f33a;
     pub const LOOP_A: u32 = 0x1f932;
@@ -112,7 +112,7 @@ mod at {
 const PLAYERS: u32 = A5 + 0x5de;
 const PLAYER_STRIDE: u32 = 0x200;
 
-/// Écran du sous-mode `sub`, s'il est réécrit ici.
+/// Screen of sub-mode `sub`, if it is rewritten here.
 pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
     match sub {
         4 | 14 => Some(interpreter_a(x)),
@@ -130,7 +130,7 @@ fn rd_state(x: &mut Ctx, off: u32) -> u8 {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Interpréteur A (`0x1f32e`)
+// Interpreter A (`0x1f32e`)
 
 fn interpreter_a(x: &mut Ctx) -> Flow {
     let step = rd_state(x, f::STEP);
@@ -142,13 +142,13 @@ fn interpreter_a(x: &mut Ctx) -> Flow {
             loop_a(x)
         }
         6 => presentation_step(x),
-        // étape 4 (0x1fb20, fin de scène) : jamais écrite, la boucle y mène directement (`scene_end_a`) ; au-delà :
-        // hors de la table 0x1f340 (code-mort.md, lot « sortie du Cpu »)
-        _ => unreachable!("démonstration A : étape {step:#x} jamais produite"),
+        // step 4 (0x1fb20, end of scene): never written, the loop leads there directly (`scene_end_a`); beyond:
+        // outside table 0x1f340 (code-mort.md, batch « sortie du Cpu »)
+        _ => unreachable!("demo A: step {step:#x} never produced"),
     }
 }
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
         ReturnA = at::RETURN_A => |x| {
             x.c.a[0] = mode::BASE;
@@ -170,7 +170,7 @@ crate::steps! {
             wr16(x.b, var::VIDEO, v);
             Flow::Done
         },
-        /// Le saut de `0x1fce4` à `0x1fc68` laisse l'adresse du `bsr` sur la pile : le décor est rendu deux fois.
+        /// The jump from `0x1fce4` to `0x1fc68` leaves the `bsr` address on the stack: the terrain is rendered twice.
         PresentAgain = 0x1fdba => p_render,
         P4Hide = P4_HIDE => |x| {
             let v = rd16(x.b, var::VIDEO) & !0xe;
@@ -206,24 +206,24 @@ crate::steps! {
             crate::sound::service(x.b, crate::sound::Service::Ff05);
             Flow::Done
         },
-        /// Retours des phases (`jsr (A0)` des deux boucles) : une phase peut céder la main, puis y revenir.
+        /// Phase returns (`jsr (A0)` of the two loops): a phase may cede control, then come back here.
         AfterPhaseA = at::AFTER_PHASE_A => after_phase,
         AfterPhaseB = at::AFTER_PHASE_B => after_phase,
-        /// Retour de la mise à jour du monde dans la phase 12 de la démonstration (`jsr 0x1c86e` en `0x1fa44`), quand
-        /// un gestionnaire d'objet a fait céder la main à la tâche.
+        /// Return from the world update in demo phase 12 (`jsr 0x1c86e` at `0x1fa44`), when
+        /// an object handler made the task cede control.
         AfterWorld = 0x1fa4a => demo_after_world,
     }
 }
 
-/// Étape 0 : choisit l'un des deux scripts (alternativement), garde l'horloge de démonstration.
-/// Couches effacées (0xca8, 0xcc8, 0xce8).
+/// Step 0: chooses one of the two scripts (alternately), keeps the demonstration clock.
+/// Cleared layers (0xca8, 0xcc8, 0xce8).
 fn clear_layers(x: &mut Ctx, layers: &[Layer]) {
     for &layer in layers {
         clear_layer(x.b, layer);
     }
 }
 
-/// Joueurs effacés (0x2d9e) et pools remis à zéro (0x2062).
+/// Players cleared (0x2d9e) and pools reset (0x2062).
 fn clear_players_and_pools(x: &mut Ctx) {
     crate::player::init::clear_all_players(x.c, x.b);
     for pool in pools::POOLS {
@@ -231,7 +231,7 @@ fn clear_players_and_pools(x: &mut Ctx) {
     }
 }
 
-/// Listes défaites et vidées, objets effacés (0x1f184, 0x1de7c, 0xc58).
+/// Lists undone and emptied, objects cleared (0x1f184, 0x1de7c, 0xc58).
 fn clear_lists_and_objects(x: &mut Ctx) {
     crate::objects::lists::unlink_all(x.b);
     crate::sprites::clear_lists(x.b);
@@ -252,7 +252,7 @@ fn start_a(x: &mut Ctx) -> Flow {
     next_operation(x)
 }
 
-/// `0x1f376` : lit l'opération suivante du script.
+/// `0x1f376`: reads the next script operation.
 fn next_operation(x: &mut Ctx) -> Flow {
     x.c.a[0] = mode::BASE;
     wr8(x.b, mode::BASE + 3, 0);
@@ -264,8 +264,8 @@ fn next_operation(x: &mut Ctx) -> Flow {
     match op {
         0 => scene_start(x, script + 1),
         2 => {
-            // commande son : l'octet suivant indexe la table des routines (0x1f3aa : 0xe0ef8, 0xe0f70, 0xe0f34,
-            // 0xe1024), appelée par `jsr (A6)`
+            // sound command: the next byte indexes the routine table (0x1f3aa: 0xe0ef8, 0xe0f70, 0xe0f34,
+            // 0xe1024), called by `jsr (A6)`
             let index = rd8(x.b, script + 1) as u32;
             let routine = prog32(x, table::COMMANDS + index);
             crate::sound::play_global(x.b, routine);
@@ -275,7 +275,7 @@ fn next_operation(x: &mut Ctx) -> Flow {
     }
 }
 
-/// `0x1f818` : début d'une scène de démonstration d'après le script (`a1` : après l'opération).
+/// `0x1f818`: start of a demonstration scene from the script (`a1`: after the operation).
 fn scene_start(x: &mut Ctx, mut a1: u32) -> Flow {
     wr8(x.b, mode::BASE + f::STEP, 2);
     let scene = rd8(x.b, a1);
@@ -299,8 +299,8 @@ fn scene_start(x: &mut Ctx, mut a1: u32) -> Flow {
             wr8(x.b, a0 + 3, character);
             let variant = rd8(x.b, a1 + 1);
             wr8(x.b, a0 + 0x15d, variant);
-            // la routine de la table 0x1f8a8 (indexée par le compteur, à rebours) est l'initialisation du joueur
-            // de ce numéro (0x2e58... : `player::init`), D6/A0/A1 gardés autour de l'appel (`movem.l`)
+            // the routine of table 0x1f8a8 (indexed by the counter, counting down) is the player's initialisation
+            // of that number (0x2e58...: `player::init`), D6/A0/A1 kept around the call (`movem.l`)
             crate::player::init::initialize(x.c, x.b, 3 - d6);
             apply_record(x, a0, a1);
         }
@@ -317,7 +317,7 @@ fn scene_start(x: &mut Ctx, mut a1: u32) -> Flow {
     Flow::Done
 }
 
-/// `0x1f8b8` : paramètres facultatifs d'un joueur de démonstration (octet négatif : non fourni).
+/// `0x1f8b8`: optional parameters of a demonstration player (negative byte: not supplied).
 fn apply_record(x: &mut Ctx, a0: u32, a1: u32) {
     let b2 = rd8(x.b, a1 + 2);
     if b2 & 0x80 == 0 {
@@ -337,10 +337,10 @@ fn apply_record(x: &mut Ctx, a0: u32, a1: u32) {
     }
 }
 
-// --- la scène tourne ---------------------------------------------------------------------------
+// --- the scene runs ---------------------------------------------------------------------------
 
-/// `0x1f932` : une image de la démonstration. Le jeu tourne deux pas par image : un pas sans céder
-/// quand l'image vient de commencer (`SKIP_YIELD` ≤ 1), un pas après la cession.
+/// `0x1f932`: one frame of the demonstration. The game runs two steps per frame: one step without yielding
+/// when the frame has just started (`SKIP_YIELD` <= 1), one step after the yield.
 fn loop_a(x: &mut Ctx) -> Flow {
     let n = rd16(x.b, var::FRAME_COUNTER).wrapping_add(1);
     wr16(x.b, var::FRAME_COUNTER, n);
@@ -365,31 +365,31 @@ fn after_yield_a(x: &mut Ctx) -> Flow {
     run_phase(x, table::PHASES_A, Step::LoopA, Step::AfterPhaseA)
 }
 
-/// Appelle le gestionnaire de la phase courante (`jsr (A0)` précédé du `pea` de la boucle) : il revient à `after`
-/// (`after_phase`), qui revient en haut de la boucle ; une phase peut aussi revenir directement en haut de la boucle,
-/// en dépilant le retour de son appel.
+/// Calls the current phase handler (`jsr (A0)` preceded by the loop's `pea`): it returns to `after`
+/// (`after_phase`), which returns to the top of the loop; a phase may also return directly to the top of the loop,
+/// popping the return of its call.
 fn run_phase(x: &mut Ctx, phases: u32, loop_top: Step, after: Step) -> Flow {
     wr8(x.b, var::YIELDED, 0xff);
     x.push_return(loop_top);
     x.push_return(after);
     let phase = rd8(x.b, var::PHASE) as u32;
-    // Glitch d'origine : A0 reste l'adresse du gestionnaire de phase (`jsr (A0)`) ; l'entrée de scène le relit comme
-    // créateur d'objets (`scene::entry` : finale, effets 0x13)
+    // Original glitch: A0 stays the phase handler address (`jsr (A0)`); scene entry re-reads it as
+    // object creator (`scene::entry`: finale, effects 0x13)
     x.c.a[0] = prog32(x, phases + phase);
-    // les deux tables n'ont que les phases 8 (entrée de scène) et 12 (le jeu) ; les autres entrées sont nulles
-    // (code-mort.md, lot « sortie du Cpu »)
+    // the two tables only have phases 8 (scene entry) and 12 (the game); the other entries are null
+    // (code-mort.md, batch « sortie du Cpu »)
     match phase {
         8 => {
             crate::scene::entry::phase_8(x.c, x.b);
             Flow::Done
         }
         12 => demo_phase_12(x),
-        _ => unreachable!("démonstration : phase {phase:#x} sans gestionnaire (table {phases:#x})"),
+        _ => unreachable!("demo: phase {phase:#x} without handler (table {phases:#x})"),
     }
 }
 
-/// `0x1f9b0` : après la phase, gère l'écran de chargement et vide les files de collision ; le `rts`
-/// repart en haut de la boucle.
+/// `0x1f9b0`: after the phase, handles the loading screen and empties the collision queues; the `rts`
+/// goes back to the top of the loop.
 fn after_phase(x: &mut Ctx) -> Flow {
     let wait = rd8(x.b, var::SCREEN_WAIT);
     if wait == 0 {
@@ -411,23 +411,23 @@ fn after_phase(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Les files de collision repartent à vide (comme `game::FRAME_END`).
+/// The collision queues restart empty (like `game::FRAME_END`).
 fn reset_queues(x: &mut Ctx) {
     for queue in [&pools::QUEUE_PSHL, &pools::QUEUE_ESHL, &pools::QUEUE_ENEMY_BOSS, &pools::QUEUE_BOX, &pools::QUEUE_ITEM] {
         queue.reset(x.b);
     }
 }
 
-// --- fin d'une scène, fin du script -------------------------------------------------------------
+// --- end of a scene, end of the script -------------------------------------------------------------
 
-/// Remise à zéro commune à la fin d'une scène ou d'un script.
+/// Reset common to the end of a scene or a script.
 fn scene_cleanup_1(x: &mut Ctx) {
     wr8(x.b, A5 + 0x3d, 0);
     let v = rd8(x.b, var::VIDEO_FLAGS_B) & !1;
     wr8(x.b, var::VIDEO_FLAGS_B, v);
     wr8(x.b, A5 + 0x53c, 0);
 }
-/// `0x1fb20` : durée écoulée : tout est vidé, puis l'opération suivante.
+/// `0x1fb20`: duration elapsed: everything is cleared, then the next operation.
 fn scene_end_a(x: &mut Ctx) -> Flow {
     let rank = rd16(x.b, var::SAVED_RANK);
     wr16(x.b, var::RANK, rank);
@@ -435,7 +435,7 @@ fn scene_end_a(x: &mut Ctx) -> Flow {
     wr8(x.b, A5 + 0x50, 0);
     scene_end_common(x, Step::SceneEndClearA)
 }
-/// Enchaîne le nettoyage commun puis la cession d'une image dont la reprise est `resume`.
+/// Chains the common cleanup then the yield of one frame whose resume is `resume`.
 fn scene_end_common(x: &mut Ctx, resume: Step) -> Flow {
     stop_recorder(x.b);
     wr8(x.b, var::PHASE, 0);
@@ -445,7 +445,7 @@ fn scene_end_common(x: &mut Ctx, resume: Step) -> Flow {
     x.wait(1, resume)
 }
 
-/// Après la cession : vide les plans et les files, cède encore, puis lit l'opération suivante.
+/// After the yield: clears the planes and the queues, yields again, then reads the next operation.
 fn scene_end_clear(x: &mut Ctx, resume: Step) -> Flow {
     let v = rd16(x.b, var::VIDEO) & !0xe;
     wr16(x.b, var::VIDEO, v);
@@ -457,7 +457,7 @@ fn scene_end_clear(x: &mut Ctx, resume: Step) -> Flow {
 const SCENE_END_CLEAR_A: u32 = 0x1fb6a;
 const SCENE_END_NEXT_A: u32 = 0x1fbd2;
 
-/// `0x1fa92` : fin du script : retour de l'horloge de démonstration, tout est vidé, écran suivant.
+/// `0x1fa92`: end of script: return of the demonstration clock, everything cleared, next screen.
 fn end_of_script(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, mode::BASE + f::SUB).wrapping_add(2);
     wr8(x.b, mode::BASE + f::SUB, s);
@@ -482,9 +482,9 @@ fn restore_clock(x: &mut Ctx) {
 const END_CLEAR: u32 = 0x1faec;
 const END_SHOW: u32 = 0x1fb18;
 
-// --- présentation d'un personnage (opération autre que 0 et 2) -----------------------------------
+// --- character presentation (operation other than 0 and 2) -----------------------------------
 
-/// `0x1fbd6` : mémorise les trois paramètres de la présentation (`a1` : après l'opération) et prépare l'affichage.
+/// `0x1fbd6`: stores the three presentation parameters (`a1`: after the operation) and prepares the display.
 fn presentation(x: &mut Ctx, mut a1: u32) -> Flow {
     crate::tasks::prompt::stop(x.b);
     wr8(x.b, mode::BASE + f::STEP, 6);
@@ -523,12 +523,12 @@ fn presentation_step(x: &mut Ctx) -> Flow {
         2 => p2_show(x),
         4 => p4_end(x),
         6 => p6_text(x),
-        // la table 0x1fc72 a quatre entrées, toutes réécrites (code-mort.md, lot « sortie du Cpu »)
-        _ => unreachable!("présentation : sous-étape {substep:#x} hors de la table 0x1fc72"),
+        // table 0x1fc72 has four entries, all rewritten (code-mort.md, batch « sortie du Cpu »)
+        _ => unreachable!("presentation: sub-step {substep:#x} outside table 0x1fc72"),
     }
 }
 
-/// `0x1fc68` : fin commune de chaque sous-état : décor (SET, SOBJ) et sprites (`jmp 0x1de96`).
+/// `0x1fc68`: common end of each sub-state: terrain (SET, SOBJ) and sprites (`jmp 0x1de96`).
 fn p_render(x: &mut Ctx) -> Flow {
     crate::dispatch::SET.update_no_next(x.c, x.b);
     crate::dispatch::SOBJ.update_no_next(x.c, x.b);
@@ -541,7 +541,7 @@ fn next_substep(x: &mut Ctx) {
     wr8(x.b, mode::BASE + f::SUBSTEP, s);
 }
 
-/// Sous-état 0 : charge les deux blocs de tuiles du personnage, crée les objets du cadre et du portrait.
+/// Sub-state 0: loads the character's two tile blocks, creates the frame and portrait objects.
 fn p0_images(x: &mut Ctx) -> Flow {
     next_substep(x);
     let character = rd_state(x, f::PRESENT_CHARACTER) as u32 * 4;
@@ -565,7 +565,7 @@ fn p0_images(x: &mut Ctx) -> Flow {
     portrait_object(x)
 }
 
-/// `0x1fce4` : objet du portrait ; en cas d'échec ou de succès l'original *saute* à `0x1fc68`.
+/// `0x1fce4`: portrait object; on failure or success the original *jumps* to `0x1fc68`.
 fn portrait_object(x: &mut Ctx) -> Flow {
     if let Ok(Obj(o)) = scenery_6(x.b, 15) {
         let character = rd_state(x, f::PRESENT_CHARACTER) >> 1;
@@ -575,7 +575,7 @@ fn portrait_object(x: &mut Ctx) -> Flow {
     p_render(x)
 }
 
-/// Sous-état 2 : allume les plans ; sous-état suivant 6 (texte) si la présentation a un texte, sinon 4.
+/// Sub-state 2: turns the planes on; next sub-state 6 (text) if the presentation has a text, else 4.
 fn p2_show(x: &mut Ctx) -> Flow {
     let v = rd16(x.b, var::VIDEO) | 0xe;
     wr16(x.b, var::VIDEO, v);
@@ -584,7 +584,7 @@ fn p2_show(x: &mut Ctx) -> Flow {
     p_render(x)
 }
 
-/// Sous-état 6 : après la minuterie (mot `+8`, décompté par les objets), affiche le texte du personnage.
+/// Sub-state 6: after the timer (word `+8`, counted down by the objects), displays the character's text.
 fn p6_text(x: &mut Ctx) -> Flow {
     let left = rd16(x.b, mode::BASE + f::TIMER).wrapping_sub(1);
     wr16(x.b, mode::BASE + f::TIMER, left);
@@ -594,7 +594,7 @@ fn p6_text(x: &mut Ctx) -> Flow {
     wr8(x.b, mode::BASE + f::SUBSTEP, 4);
     wr16(x.b, mode::BASE + f::TIMER, 240);
     let entry = table::PRESENT_DATA + ((rd_state(x, f::PRESENT_CHARACTER) as u32) << 3);
-    // choix par nombre de joueurs (A5+0x72 : 2, 4, 6...) d'une adresse de donnée (plain)
+    // choice by number of players (A5+0x72: 2, 4, 6...) of a data address (plain)
     let players = rd16(x.b, A5 + 0x72).wrapping_sub(2).wrapping_mul(2) as u32;
     let mut a1 = rd32(x.b, entry + players);
     let a4 = entry + 12;
@@ -614,7 +614,7 @@ fn p6_text(x: &mut Ctx) -> Flow {
     portrait_object(x)
 }
 
-/// Sous-état 4 : après la minuterie, ferme la présentation et lit l'opération suivante.
+/// Sub-state 4: after the timer, closes the presentation and reads the next operation.
 fn p4_end(x: &mut Ctx) -> Flow {
     let left = rd16(x.b, mode::BASE + f::TIMER).wrapping_sub(1);
     wr16(x.b, mode::BASE + f::TIMER, left);
@@ -636,7 +636,7 @@ fn p4_end(x: &mut Ctx) -> Flow {
 const P4_HIDE: u32 = 0x1ff5e;
 const P4_CLEAR: u32 = 0x1ff6c;
 
-/// `0x1ffae` : cadre et textes de la présentation, écrits dans le plan 1 (GFX RAM `0x912000`).
+/// `0x1ffae`: frame and texts of the presentation, written into plane 1 (GFX RAM `0x912000`).
 fn text_screen(x: &mut Ctx) {
     let character = rd_state(x, f::PRESENT_CHARACTER) as u32;
     let frame = x.prog16(table::FRAME_ATTR + character) as i16 as i32 as u32;
@@ -649,7 +649,7 @@ fn text_screen(x: &mut Ctx) {
     text_lines(x, a4 + 0x700, text, attr);
 }
 
-/// `0x1ffdc` : le cadre (huit tuiles de bord et de coin).
+/// `0x1ffdc`: the frame (eight edge and corner tiles).
 fn frame_box(x: &mut Ctx, a4: u32, attr: u16) {
     let put = |x: &mut Ctx, a: &mut u32, tile: u16| {
         wr16(x.b, *a, tile);
@@ -679,7 +679,7 @@ fn frame_box(x: &mut Ctx, a4: u32, attr: u16) {
     put(x, &mut a1, 0x148);
 }
 
-/// `0x20044` : écrit un texte vertical (une tuile par ligne) ; `0x2f` passe à la colonne suivante,
+/// `0x20044`: writes a vertical text (one tile per line); `0x2f` moves to the next column,
 /// `0x40` termine.
 fn text_lines(x: &mut Ctx, start: u32, text: u32, attr: u16) {
     let mut a3 = start;
@@ -705,7 +705,7 @@ fn text_lines(x: &mut Ctx, start: u32, text: u32, attr: u16) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Interpréteur B (`0x20926`)
+// Interpreter B (`0x20926`)
 
 fn interpreter_b(x: &mut Ctx) -> Flow {
     let step = rd_state(x, f::STEP);
@@ -731,7 +731,7 @@ fn interpreter_b(x: &mut Ctx) -> Flow {
     }
 }
 
-/// `0x20960` : opération suivante : fin du script (octet négatif) ou scène.
+/// `0x20960`: next operation: end of script (negative byte) or scene.
 fn next_operation_b(x: &mut Ctx) -> Flow {
     x.c.a[0] = mode::BASE;
     wr8(x.b, mode::BASE + 3, 0);
@@ -787,7 +787,7 @@ fn after_yield_b(x: &mut Ctx) -> Flow {
     run_phase(x, table::PHASES_B, Step::LoopB, Step::AfterPhaseB)
 }
 
-/// `0x20abc` : scène suivante : comme `0x1fb20` mais efface aussi `A5+0x59`.
+/// `0x20abc`: next scene: like `0x1fb20` but also clears `A5+0x59`.
 fn scene_next_b(x: &mut Ctx) -> Flow {
     let rank = rd16(x.b, var::SAVED_RANK);
     wr16(x.b, var::RANK, rank);
@@ -799,7 +799,7 @@ fn scene_next_b(x: &mut Ctx) -> Flow {
 const SCENE_NEXT_CLEAR_B: u32 = 0x20b0a;
 const SCENE_NEXT_NEXT_B: u32 = 0x20b72;
 
-/// `0x20b86` : fin de la démonstration de jeu : écran de fin.
+/// `0x20b86`: end of the game demonstration: end screen.
 fn ending_b(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, mode::BASE + f::SUB).wrapping_add(2);
     wr8(x.b, mode::BASE + f::SUB, s);
@@ -822,10 +822,10 @@ const ENDING_CLEAR: u32 = 0x20c06;
 const ENDING_SHOW: u32 = 0x20c2c;
 
 // ---------------------------------------------------------------------------------------------
-// Entrées enregistrées (`0xe05ec`)
+// Recorded inputs (`0xe05ec`)
 
-/// Enregistreur d'entrées des démonstrations (A5 - 0x5ab2...) : pointeur vers l'entrée courante (long), images
-/// restantes de l'entrée (mot), et trois drapeaux : enregistrement, relecture, actif.
+/// Demonstration input recorder (A5 - 0x5ab2...): pointer to the current entry (long), remaining
+/// frames of the entry (word), and three flags: recording, replay, active.
 mod rec {
     use crate::mem::A5;
     pub const POINTER: u32 = A5 - 0x5ab2;
@@ -833,19 +833,19 @@ mod rec {
     pub const PLAYING: u32 = A5 - 0x5aac;
     pub const RECORDING: u32 = A5 - 0x5aab;
     pub const ACTIVE: u32 = A5 - 0x5aaa;
-    /// Une entrée : durée (mot), puis les trois octets d'entrée de chaque joueur.
+    /// An entry: duration (word), then the three input bytes of each player.
     pub const ENTRY: u32 = 0xe;
-    /// Dernière entrée possible.
+    /// Last possible entry.
     pub const LAST: u32 = 0x93fff2;
 }
 
-/// Les douze octets d'entrée des joueurs (`A5 + 0x64a + 0x200 k`, trois octets chacun), dans l'ordre d'une entrée.
+/// The twelve input bytes of the players (`A5 + 0x64a + 0x200 k`, three bytes each), in the order of an entry.
 fn input_byte(i: u32) -> u32 {
     A5 + 0x64a + 0x200 * (i / 3) + i % 3
 }
 
-/// `0xe05ec` : enregistre les entrées des joueurs (une entrée par changement, avec sa durée) ou les relit (une
-/// partie en cours avec le bit 15 des réglages suspend la relecture).
+/// `0xe05ec`: records the players' inputs (one entry per change, with its duration) or replays them (a
+/// game in progress with bit 15 of the settings suspends the replay).
 fn demo_inputs(x: &mut Ctx) {
     if rd8(x.b, rec::ACTIVE) == 0 {
         return;
@@ -877,14 +877,14 @@ fn demo_inputs(x: &mut Ctx) {
     }
 }
 
-/// `0xe0538` (entrée de scène, hors partie) : prépare l'enregistreur. Réglage bit 13 : graine du hasard et
-/// compteurs d'images à zéro, puis relecture active ; bit 15 : enregistrement en 0x930000 ; sinon relecture
-/// (inactive) de la démonstration pointée par `A5-0x5aa8`.
+/// `0xe0538` (scene entry, outside a game): prepares the recorder. Setting bit 13: random seed and
+/// frame counters to zero, then replay active; bit 15: recording at 0x930000; otherwise replay
+/// (inactive) of the demonstration pointed to by `A5-0x5aa8`.
 pub fn reset_recorder(b: &mut Cps2Bus) {
     reset_recorder_by(b);
 }
 
-/// Ce que 0xe0538 laisse dans les registres : D5.w = les réglages lus, A0 = la démonstration relue.
+/// What 0xe0538 leaves in the registers: D5.w = the settings read, A0 = the demonstration replayed.
 #[derive(Default)]
 struct RecorderLeftovers {
     settings: Option<u16>,
@@ -928,7 +928,7 @@ fn reset_recorder_by(b: &mut Cps2Bus) -> RecorderLeftovers {
     leftovers
 }
 
-/// `0xe05d6` : arrête l'enregistreur.
+/// `0xe05d6`: stops the recorder.
 pub fn stop_recorder(b: &mut Cps2Bus) {
     wr16(b, rec::LEFT, 0);
     for flag in [rec::RECORDING, rec::PLAYING, rec::ACTIVE] {
@@ -962,8 +962,8 @@ pub const RECORDER_STOP: Native = Native {
     outputs: 0,
 };
 
-/// Enregistrement : l'entrée courante dure une image de plus tant que les entrées ne changent pas (et que sa durée
-/// tient sur 16 bits) ; sinon sa durée est écrite et une nouvelle entrée commence.
+/// Recording: the current entry lasts one more frame as long as the inputs do not change (and its duration
+/// fits in 16 bits); otherwise its duration is written and a new entry begins.
 fn record_inputs(x: &mut Ctx) {
     let length = rd16(x.b, rec::LEFT);
     let at = rd32(x.b, rec::POINTER);
@@ -986,9 +986,9 @@ fn record_inputs(x: &mut Ctx) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Phase 12 de la démonstration (`0x1fa38`)
+// Phase 12 of the demonstration (`0x1fa38`)
 
-/// Le jeu de la démonstration : entrées de l'IA, monde, jauges, collisions, script d'apparition.
+/// The demonstration game: AI inputs, world, gauges, collisions, spawn script.
 pub const DEMO_PHASE_12: Native = Native {
     entry: 0x1fa38,
     name: "demo_phase_12",
@@ -1002,10 +1002,10 @@ pub const DEMO_PHASE_12: Native = Native {
     outputs: 0,
 };
 
-/// `0x1fa38` : entrées de l'IA, puis la mise à jour du monde (un gestionnaire d'objet peut y faire céder la main à la
-/// tâche : elle reprendra à [`Step::AfterWorld`]).
+/// `0x1fa38`: AI inputs, then the world update (an object handler may make the task cede control there; it
+/// will resume at [`Step::AfterWorld`]).
 fn demo_phase_12(x: &mut Ctx) -> Flow {
-    // Glitch d'origine : D0-D4 de la copie des entrées (0x2aec) sont relus par des gestionnaires (voir game.rs)
+    // Original glitch: D0-D4 of the input copy (0x2aec) are re-read by handlers (see game.rs)
     crate::inputs::copy_68k(x.c, x.b);
     demo_inputs(x);
     x.push_return(Step::AfterWorld);
@@ -1016,8 +1016,8 @@ fn demo_phase_12(x: &mut Ctx) -> Flow {
     demo_after_world(x)
 }
 
-/// `0x1fa4a` : comme la phase 12 du jeu (`game::after_world`) ; l'original finit par `jmp 0x28d8` (la fin de
-/// partie, puis son `rts`).
+/// `0x1fa4a`: like game phase 12 (`game::after_world`); the original ends with `jmp 0x28d8` (the end of
+/// the game, then its `rts`).
 fn demo_after_world(x: &mut Ctx) -> Flow {
     crate::game::after_world(x.c, x.b);
     Flow::Done

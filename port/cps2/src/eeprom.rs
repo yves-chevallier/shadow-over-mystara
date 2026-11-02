@@ -1,5 +1,5 @@
-//! EEPROM série 93C46 en mode 16 bits (64 mots), d'après MAME machine/eepromser.cpp.
-//! Les écritures sont instantanées (pas de délai de programmation).
+//! 93C46 serial EEPROM in 16-bit mode (64 words), after MAME machine/eepromser.cpp.
+//! Writes are instantaneous (no programming delay).
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 enum State {
@@ -57,7 +57,7 @@ impl Eeprom93c46 {
         }
     }
 
-    /// Contenu au format du fichier nvram de MAME (mots petit-boutistes, ordre natif x86).
+    /// Contents in MAME's nvram file format (little-endian words, native x86 order).
     pub fn from_bytes(b: &[u8]) -> Self {
         let mut d = [0xffffu16; 64];
         for (i, w) in b.chunks_exact(2).take(64).enumerate() {
@@ -70,7 +70,7 @@ impl Eeprom93c46 {
         self.data.iter().flat_map(|w| w.to_le_bytes()).collect()
     }
 
-    /// Ligne DO (1 par défaut : sortie en haute impédance avec tirage).
+    /// DO line (1 by default: high-impedance output with pull-up).
     pub fn do_read(&self) -> bool {
         if self.state == State::ReadingData {
             self.shift & 0x8000_0000 != 0
@@ -79,7 +79,7 @@ impl Eeprom93c46 {
         }
     }
 
-    /// Écriture des lignes DI, CLK et CS (dans cet ordre, comme le port EEPROMOUT de MAME).
+    /// Writes the DI, CLK and CS lines (in that order, like MAME's EEPROMOUT port).
     pub fn write_lines(&mut self, di: bool, clk: bool, cs: bool) {
         self.di = di;
         if clk != self.clk {
@@ -199,7 +199,7 @@ impl Eeprom93c46 {
         let v = self.shift as u16;
         match self.command {
             Command::Write => self.data[self.address as usize] = v,
-            // WRITEALL suppose un ERASEALL préalable : ET avec le contenu
+            // WRITEALL assumes a prior ERASEALL: AND with the contents
             _ => self.data.iter_mut().for_each(|d| *d &= v),
         }
         self.state = State::WaitForCompletion;

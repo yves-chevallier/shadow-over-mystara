@@ -3,7 +3,7 @@ name = "cps2"
 version = "0.1.0"
 edition = "2021"
 license = "BSD-3-Clause"
-description = "Machine CPS2 : bus 68000, EEPROM, interruptions, chargement des ROMs (d'après MAME)"
+description = "CPS2 machine: 68000 bus, EEPROM, interrupts, ROM loading (after MAME)"
 
 [dependencies]
 m68k = { path = "../m68k" }
@@ -16,5 +16,5 @@ ddsom-sound = { path = "../ddsom-sound" }
 png = "0.17"
 
 [features]
-# Journal des lectures de la ROM programme faites par le code Rust (hors instructions 68000) : `rom_trace`.
+# Log of program ROM reads made by Rust code (outside 68000 instructions): `rom_trace`.
 rom-trace = ["m68k/rom-trace"]

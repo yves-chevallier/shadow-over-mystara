@@ -1,8 +1,8 @@
-//! Trace des PC exécutés pendant une image (routines natives actives, reste interprété), pour
-//! comparer deux exécutions (par exemple avec et sans une routine native, via DDSOM_SANS).
+//! Trace of the PCs executed during a frame (native routines active, the rest interpreted), to
+//! compare two runs (for example with and without a native routine, via DDSOM_SANS).
 //!
-//! pctrace <roms> <eeprom> <scenario> <image> [début_exclu fin_exclue (hex)]
-//! `PCTRACE_SEUL=début-end` limite la trace à une plage de PC, `PCTRACE_IMAGES=k` trace k images de suite.
+//! pctrace <roms> <eeprom> <scenario> <frame> [excluded_start excluded_end (hex)]
+//! `PCTRACE_SEUL=start-end` limits the trace to a PC range, `PCTRACE_IMAGES=k` traces k consecutive frames.
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
@@ -20,7 +20,7 @@ fn main() {
     }
     s.apply(n - 1, &mut m);
     m.executor = Some(ddsom_game::run_native_only);
-    // PCTRACE_SEUL=début-fin (hexa) : ne montre que les PC de cette plage ; PCTRACE_IMAGES=k : trace k images de suite
+    // PCTRACE_SEUL=start-end (hex): shows only the PCs of this range; PCTRACE_IMAGES=k: traces k consecutive frames
     let only = std::env::var("PCTRACE_SEUL").ok().and_then(|v| {
         let (a, b) = v.split_once('-')?;
         Some(u32::from_str_radix(a, 16).ok()?..u32::from_str_radix(b, 16).ok()?)
@@ -34,7 +34,7 @@ fn main() {
     let k: usize = std::env::var("PCTRACE_IMAGES").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
     for i in 0..k {
         if i > 0 {
-            println!("--- image {} (compteur FF806E : {})", n + i, m.bus.ram[(0xff806e - 0xff0000) / 2]);
+            println!("--- frame {} (counter FF806E: {})", n + i, m.bus.ram[(0xff806e - 0xff0000) / 2]);
             s.apply(n - 1 + i, &mut m);
         }
         m.run_frame();

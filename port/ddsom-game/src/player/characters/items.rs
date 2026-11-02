@@ -1,17 +1,17 @@
-//! Objets et magies utilisables par l'attaque spéciale (bouton 4) : le combattant, le clerc, l'elfe et
-//! le magicien partagent le même code pour les objets lancés, la foudre, le mur, les magies lancées
-//! devant l'écran assombri (13..19) et les météores ; seules les animations et quelques détails
-//! changent (`Style`).
+//! Items and spells usable by the special attack (button 4): the fighter, the cleric, the elf and
+//! the magic-user share the same code for thrown items, lightning, the wall, spells cast
+//! in front of the darkened screen (13..19) and meteors; only the animations and a few details
+//! change (`Style`).
 //!
-//! L'attaque spéciale démarre quand `checks::special_attack` pose `field::SPECIAL_KIND` (numéro de
-//! l'animation de lancement, tiré d'une table du code selon l'identifiant de la ligne choisie). Le
-//! lanceur est un automate à pas (`Player::STEP`) ; au geste porté (`field::EVENT`) il appelle la
-//! routine d'origine qui crée le tir ou l'effet (voir `rom`). Une charge est consommée à la fin
+//! The special attack starts when `checks::special_attack` sets `field::SPECIAL_KIND` (number of
+//! the launch animation, taken from a code table according to the identifier of the chosen row). The
+//! caster is a stepped automaton (`Player::STEP`); at the carried gesture (`field::EVENT`) it calls the
+//! original routine that creates the shot or effect (see `rom`). A charge is consumed at the end
 //! (`common::consume_charge`).
 //!
-//! Les magies lancées assombrissent l'écran, figent les autres joueurs et mettent le jeu en pause
-//! (`common::begin_spell`) jusqu'à `common::end_spell`. Si `field::SPELL_CANCELLED` est non nul (une
-//! protection annule le sort), seule une étincelle est jouée.
+//! The cast spells darken the screen, freeze the other players and pause the game
+//! (`common::begin_spell`) until `common::end_spell`. If `field::SPELL_CANCELLED` is non-zero (a
+//! protection cancels the spell), only a spark is played.
 
 use super::common::{self, field, next_step};
 use super::foes::{self, Boost, Damage, Live, Strike};
@@ -19,40 +19,40 @@ use super::super::spawn;
 use super::super::actions::to_stand;
 use super::super::{animation, Ctx, Player};
 
-/// Routines d'origine appelées par ces automates : sons, cibles, éclairs d'écran et palettes (les créateurs de tirs et
-/// d'effets sont dans `spawn`).
+/// Original routines called by these automata: sounds, targets, screen flashes and palettes (the shot and
+/// effect creators are in `spawn`).
 pub mod rom {
-    /// Son d'un objet utilisé.
+    /// Sound of a used item.
     pub const SOUND_ITEM: u32 = 0xe2430;
-    /// Fin des auras après la magie rouge.
+    /// End of the auras after the red magic.
     pub const SPELL_RESET_AURA: u32 = 0x37882;
 }
 
-/// Particularités du personnage.
+/// Character peculiarities.
 #[derive(Clone, Copy)]
 pub struct Style {
-    /// Geste des magies lancées (13..20).
+    /// Gesture of the cast spells (13..20).
     pub cast_anim: u16,
-    /// Geste de la foudre (9) et du mur (10).
+    /// Gesture of lightning (9) and of the wall (10).
     pub bolt_anim: u16,
-    /// Genre de l'étincelle jouée quand le sort est annulé (ligne de la table `common::item_spark`).
+    /// Kind of spark played when the spell is cancelled (row of the table `common::item_spark`).
     pub spark: u16,
-    /// Champ de l'enregistrement qui garde la cible de la foudre et du mur (mot).
+    /// Record field that keeps the target of lightning and of the wall (word).
     pub target: u32,
-    /// Valeur du décompte de la foudre où les monstres sont blessés.
+    /// Value of the lightning countdown where the monsters are hurt.
     pub thunder_at: u16,
-    /// Pose finale des magies lancées, jouée après le décompte ; sans elle (`None`) le sort s'achève avec
-    /// le décompte.
+    /// Final pose of the cast spells, played after the countdown; without it (`None`) the spell ends with
+    /// the countdown.
     pub finish_anim: Option<u16>,
-    /// L'effet de la magie 13 lit D0.b, que l'aiguillage d'origine laisse : le pas de l'action (elfe,
-    /// magicien) ou deux fois le numéro d'attaque (combattant, clerc).
+    /// The effect of spell 13 reads D0.b, which the original dispatch leaves: the action step (elf,
+    /// magic-user) or twice the attack number (fighter, cleric).
     pub d0_is_step: bool,
-    /// Mode de rétablissement de l'écran à la fin du sort (le magicien passe 1 au lieu de 2).
+    /// Screen restoration mode at the end of the spell (the magic-user passes 1 instead of 2).
     pub undim_mode: u16,
 }
 
 impl Style {
-    /// Valeurs du combattant et du clerc.
+    /// Values of the fighter and the cleric.
     pub const CLASSIC: Style = Style {
         cast_anim: 0,
         bolt_anim: 0,
@@ -65,8 +65,8 @@ impl Style {
     };
 }
 
-/// Objet lancé : l'animation `anim` ; au geste porté, la routine `launcher` crée le tir (Z levé : rien
-/// n'a été créé) ; une charge est consommée.
+/// Thrown item: animation `anim`; at the carried gesture, the routine `launcher` creates the shot (Z set: nothing
+/// was created); a charge is consumed.
 pub fn throw_item(g: &mut Ctx, p: Player, anim: u16, launcher: spawn::Thrown) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
@@ -86,12 +86,12 @@ pub fn throw_item(g: &mut Ctx, p: Player, anim: u16, launcher: spawn::Thrown) {
     }
 }
 
-/// Adresse d'objet lue dans un mot de l'enregistrement (extension de signe de `movea.w`).
+/// Object address read from a word of the record (sign extension of `movea.w`).
 fn target_of(g: &mut Ctx, p: Player, off: u32) -> u32 {
     p.u16(g, off) as i16 as i32 as u32 & 0xff_ffff
 }
 
-/// Les magies 9..10 et 13..20, communes à tous les personnages. Renvoie faux pour un autre numéro.
+/// Spells 9..10 and 13..20, common to all characters. Returns false for another number.
 pub fn run_shared(g: &mut Ctx, p: Player, which: u8, style: Style) -> bool {
     cov!();
     match which {
@@ -110,7 +110,7 @@ pub fn run_shared(g: &mut Ctx, p: Player, which: u8, style: Style) -> bool {
     true
 }
 
-/// Foudre (n° 9) : cible choisie au geste, éclair, puis fin du sort 192 images plus tard.
+/// Lightning (no. 9): target chosen at the gesture, bolt, then end of the spell 192 frames later.
 pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -121,7 +121,7 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
             animation::start_plain(g, p, style.bolt_anim);
         }
         2 => {
-            // la variante de l'effet créé est D0.b, que le pas d'animation d'origine laisse
+            // the variant of the created effect is D0.b, which the original animation step leaves
             let step = p.u8(g, Player::STEP);
             common::step_keeping_regs(g, p, step);
             if p.u8(g, field::EVENT) != 0 {
@@ -139,7 +139,7 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
             animation::step(g, p);
             let target = target_of(g, p, style.target);
             if crate::mem::rd16(g.b, target + 0x0c) == 0 {
-                // l'éclair naît à la position de la cible (A2)
+                // the bolt is born at the target's position (A2)
                 g.c.a[2] = target;
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0xc0);
@@ -164,7 +164,7 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
     }
 }
 
-/// 0x474c4 : la foudre blesse les monstres en jeu non protégés (bit 5 de `+0x94`).
+/// 0x474c4: the lightning hurts the unprotected monsters in play (bit 5 of `+0x94`).
 pub fn lightning_damage(g: &mut Ctx, p: Player) {
     cov!();
     let strike = Strike {
@@ -182,7 +182,7 @@ pub fn lightning_damage(g: &mut Ctx, p: Player) {
     foes::strike_foes(g, p, &strike);
 }
 
-/// Mur (n° 10) : sans assombrissement ; le sort se termine quand sa cible a disparu.
+/// Wall (no. 10): without darkening; the spell ends when its target has disappeared.
 pub fn wall(g: &mut Ctx, p: Player, style: Style) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -196,8 +196,9 @@ pub fn wall(g: &mut Ctx, p: Player, style: Style) {
                 next_step(g, p);
                 p.set_u8(g, field::EVENT, 0);
                 spawn::wall_target(g, p);
-                // Glitch d'origine : l'appelant teste Z, celui de l'`addq` du compteur de murs, ou celui de l'allocation
-                // qui échoue (Z nul) : pool plein, il croit la cible créée et retient l'A1 laissé par l'allocation.
+                // Original glitch: the caller tests Z, that of the wall counter's `addq`, or that of the allocation
+                // that fails (Z clear): pool full, it believes the target created and keeps the A1 left by the
+                // allocation.
                 let target_found = g.c.sr & m68k::SR_Z == 0;
                 if target_found {
                     p.set_u16(g, style.target, g.c.a[1] as u16);
@@ -218,24 +219,24 @@ pub fn wall(g: &mut Ctx, p: Player, style: Style) {
     }
 }
 
-/// Description d'une magie lancée sur l'écran assombri (n° 13..19).
+/// Description of a spell cast on the darkened screen (no. 13..19).
 pub struct Cast {
-    /// Durée du sort en images (`field::TIMER`).
+    /// Duration of the spell in frames (`field::TIMER`).
     pub frames: u16,
-    /// Initialisation propre au sort, avant l'orientation et le gel des autres joueurs.
+    /// Spell-specific initialization, before the orientation and the freezing of the other players.
     pub prepare: fn(&mut Ctx, Player),
-    /// Après le gel des autres joueurs, avant l'assombrissement.
+    /// After the freezing of the other players, before the darkening.
     pub after_freeze: fn(&mut Ctx, Player),
-    /// À chaque image après le premier pas.
+    /// On each frame after the first step.
     pub every_frame: fn(&mut Ctx, Player),
-    /// Au geste (événement) quand le sort n'est pas annulé.
+    /// At the gesture (event) when the spell is not cancelled.
     pub fire: fn(&mut Ctx, Player),
-    /// À la fin du décompte, avant la pose finale (personnages qui en ont une).
+    /// At the end of the countdown, before the final pose (characters that have one).
     pub on_end: fn(&mut Ctx, Player),
 }
 
-/// Magie lancée : assombrit l'écran, joue le geste ; l'événement déclenche `fire` (ou l'étincelle
-/// d'échec si le sort est annulé) ; le compteur `field::TIMER` règle la durée.
+/// Cast spell: darkens the screen, plays the gesture; the event triggers `fire` (or the failure
+/// spark if the spell is cancelled); the counter `field::TIMER` sets the duration.
 pub fn cast(g: &mut Ctx, p: Player, spell: &Cast, style: Style) {
     cov!();
     let step = p.u8(g, Player::STEP);
@@ -252,8 +253,8 @@ pub fn cast(g: &mut Ctx, p: Player, spell: &Cast, style: Style) {
     if step == 4 && style.finish_anim.is_some() {
         return cast_finish(g, p, style);
     }
-    // l'effet de la magie 13 lit D0.b : le pas, ou deux fois le numéro d'attaque, ou les drapeaux de
-    // l'animation
+    // the effect of spell 13 reads D0.b: the step, or twice the attack number, or the flags of
+    // the animation
     let d0 = if style.d0_is_step { step } else { p.u8(g, field::SPECIAL_KIND).wrapping_mul(2) };
     common::step_keeping_regs(g, p, d0);
     (spell.every_frame)(g, p);
@@ -270,8 +271,8 @@ pub fn cast(g: &mut Ctx, p: Player, spell: &Cast, style: Style) {
     cast_timer(g, p, spell, style);
 }
 
-/// 0x3f4b6 : le sort dure `frames` images. À la fin, soit la pose finale commence (`finish_anim`), soit
-/// le sort s'achève (`finish_cast`).
+/// 0x3f4b6: the spell lasts `frames` frames. At the end, either the final pose begins (`finish_anim`), or
+/// the spell ends (`finish_cast`).
 fn cast_timer(g: &mut Ctx, p: Player, spell: &Cast, style: Style) {
     cov!();
     let left = p.u16(g, field::TIMER).wrapping_sub(1);
@@ -289,7 +290,7 @@ fn cast_timer(g: &mut Ctx, p: Player, spell: &Cast, style: Style) {
     }
 }
 
-/// Dernier pas des magies à pose finale : à la fin du geste le sort s'achève.
+/// Last step of the spells with a final pose: at the end of the gesture the spell ends.
 pub fn cast_finish(g: &mut Ctx, p: Player, style: Style) {
     cov!();
     if animation::step(g, p) {
@@ -297,7 +298,7 @@ pub fn cast_finish(g: &mut Ctx, p: Player, style: Style) {
     }
 }
 
-/// Une charge est consommée, l'effet de soin des potions est appliqué et l'écran est rétabli.
+/// A charge is consumed, the healing effect of the potions is applied and the screen is restored.
 fn finish_cast(g: &mut Ctx, p: Player, style: Style) {
     cov!();
     common::consume_charge(g, p);
@@ -345,14 +346,14 @@ pub const CAST_15: Cast = Cast {
     ..BASE
 };
 
-/// Anneau rouge (n° 16) : le geste crée l'anneau et l'aura.
+/// Red ring (no. 16): the gesture creates the ring and the aura.
 pub fn ring_fire(g: &mut Ctx, p: Player) {
     cov!();
     spawn::ring(g, p, 1);
     crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::RED);
 }
 
-/// Aura rouge posée sur le lanceur pour `duration` images ; un accessoire (`+0x167` = 2) la renforce.
+/// Red aura placed on the caster for `duration` frames; an accessory (`+0x167` = 2) strengthens it.
 pub fn red_aura(g: &mut Ctx, p: Player, duration: u16) {
     cov!();
     p.set_u16(g, Player::AURA_TIMER, duration);
@@ -366,7 +367,7 @@ pub fn red_aura(g: &mut Ctx, p: Player, duration: u16) {
     crate::palette::character_palette(g.b, p.obj());
 }
 
-/// Combattant et clerc : l'aura est posée au geste.
+/// Fighter and cleric: the aura is placed at the gesture.
 pub const CAST_16: Cast = Cast {
     fire: |g, p| {
         ring_fire(g, p);
@@ -391,7 +392,7 @@ pub const CAST_18: Cast = Cast {
     ..BASE
 };
 
-/// Potion de soin (n° 19) : les alliés proches sont soignés comme par le sort du clerc.
+/// Healing potion (no. 19): nearby allies are healed as by the cleric's spell.
 pub const CAST_19: Cast = Cast {
     frames: 0x78,
     prepare: |g, p| p.set_u8(g, 0x1ed, 0),
@@ -404,7 +405,7 @@ pub const CAST_19: Cast = Cast {
     ..BASE
 };
 
-/// Météores (n° 20) : le sort dure 176 images ; 96 images avant la fin, les monstres sont blessés.
+/// Meteors (no. 20): the spell lasts 176 frames; 96 frames before the end, the monsters are hurt.
 pub fn meteor(g: &mut Ctx, p: Player, style: Style) {
     cov!();
     let step = p.u8(g, Player::STEP);
@@ -455,8 +456,8 @@ pub fn meteor(g: &mut Ctx, p: Player, style: Style) {
     }
 }
 
-/// 0x4414c : les météores blessent les monstres en jeu non protégés (bit 7 de `+0x94`) ; le sort 0x1c de
-/// l'elfe utilise d'autres tables.
+/// 0x4414c: the meteors hurt the unprotected monsters in play (bit 7 of `+0x94`); the elf's spell 0x1c
+/// uses other tables.
 pub fn meteor_damage(g: &mut Ctx, p: Player) {
     cov!();
     let (boss, enemy) = if p.u8(g, field::SPECIAL_KIND) == 0x1c { (0x10_4468, 0x10_444a) } else { (0x10_44e0, 0x10_44c2) };

@@ -1,5 +1,5 @@
-//! Type 14, sous-état 0 : arrivée selon la variante `+3` (valeurs paires). 0 marche d'entrée, 2 chute depuis le haut,
-//! 4 chute déjà amorcée.
+//! Type 14, substate 0: arrival according to variant `+3` (even values). 0 walk-in, 2 fall from above, 4 fall already
+//! under way.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -15,7 +15,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variante 0 : marche vers l'écran pendant `+0xa2` images.
+/// Variant 0: walks toward the screen for `+0xa2` frames.
 fn walk_in<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         x.move_by_table_xy();
@@ -35,8 +35,8 @@ fn walk_in<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 1);
 }
 
-/// Variantes 2 et 4 : saut depuis le haut. `gravity` : la variante 2 attend l'atterrissage (`+0xc` négatif) avant de
-/// se relever, la variante 4 se relève tout de suite.
+/// Variants 2 and 4: jump from above. `gravity`: variant 2 waits for the landing (`+0xc` negative) before getting up,
+/// variant 4 gets up right away.
 fn drop_in<R: Bench>(x: &mut Cx<'_, R>, gravity: bool) {
     match x.u8(f::SUB2) {
         0 => {

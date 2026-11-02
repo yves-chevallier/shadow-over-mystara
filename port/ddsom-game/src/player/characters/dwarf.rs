@@ -1,14 +1,14 @@
-//! Le nain (personnages 6 et 7 : les deux variantes ont le même code).
+//! The dwarf (characters 6 and 7: both variants have the same code).
 //!
-//! Quatre actions, atteintes par `characters::run` :
-//! - `jump` (0x445ba) : saut à profil (accroupi, montée, descente, rebond), avec coup en l'air et
-//!   attaque plongeante ;
-//! - `attack` (0x4491a) : le bouton 1 ; `Player::SUBACTION` choisit le coup (voir `kind`) ;
-//! - `special` (0x45148) : l'objet ou la magie choisie (`field::SPECIAL_KIND`, 0..20), les mêmes que
-//!   ceux du combattant (`items`) ;
-//! - `dash` (0x45988) : l'action 0x10, la glissade commune (`common::dash`).
+//! Four actions, reached through `characters::run`:
+//! - `jump` (0x445ba): profile jump (crouch, rise, descent, bounce), with aerial strike and
+//!   diving attack;
+//! - `attack` (0x4491a): button 1; `Player::SUBACTION` selects the strike (see `kind`);
+//! - `special` (0x45148): the chosen item or spell (`field::SPECIAL_KIND`, 0..20), the same as
+//!   the fighter's (`items`);
+//! - `dash` (0x45988): action 0x10, the common slide (`common::dash`).
 //!
-//! Les routines d'origine qui créent tirs, effets et sons restent appelées telles quelles.
+//! The original routines that create shots, effects and sounds are still called as they are.
 
 use super::common::{self, field, next_step, set_forward_motion};
 use super::items;
@@ -22,30 +22,30 @@ use crate::objects::Obj;
 use crate::player::ram;
 use crate::player::external as ext;
 
-/// Routines d'origine appelées telles quelles : effets joueur et sons du nain.
+/// Original routines called as they are: player effects and sounds of the dwarf.
 mod rom {
-    /// Sons.
+    /// Sounds.
     pub const SOUND_DASH: u32 = 0xe7eaa;
     pub const SOUND_BOUNCE: u32 = 0xe8370;
 }
 
-/// Table des vitesses de saut du nain (données de la ROM) : une ligne de quatre mots (vx, ax, vz, az)
-/// par profil de saut (`JUMP_ROW`).
+/// Dwarf jump speed table (ROM data): a row of four words (vx, ax, vz, az)
+/// per jump profile (`JUMP_ROW`).
 const JUMP_SPEEDS: u32 = 0x10_455e;
 
-/// Octets de l'enregistrement propres au nain.
+/// Record bytes specific to the dwarf.
 mod own {
-    /// Profil du saut en cours : ligne de la table des vitesses. 0 sur place, 2 après une course, 3
-    /// vertical, 4 puis 5 saut en avant avec une direction tenue, 6 puis 7 sans direction.
+    /// Profile of the current jump: row of the speed table. 0 in place, 2 after a run, 3
+    /// vertical, 4 then 5 forward jump with a direction held, 6 then 7 without direction.
     pub const JUMP_ROW: u32 = 0x1e8;
-    /// Compteur de l'action (images).
+    /// Action counter (frames).
     pub const COUNTER: u32 = 0x1e8;
-    /// Le tourbillon a déjà coûté des points de vie (`1ec`) ; le contact est signalé par `+0x58` bit 0.
+    /// The whirlwind has already cost hit points (`1ec`); contact is signaled by `+0x58` bit 0.
     pub const WHIRL_PAID: u32 = 0x1ec;
     pub const CONTACT: u32 = 0x58;
 }
 
-/// Sous-actions du bouton 1 (`Player::SUBACTION`), toutes paires.
+/// Sub-actions of button 1 (`Player::SUBACTION`), all even.
 mod kind {
     pub const COMBO: u8 = 0x00;
     pub const THRUST_HIGH: u8 = 0x02;
@@ -53,25 +53,25 @@ mod kind {
     pub const TURN_STRIKE: u8 = 0x06;
     pub const SLOW_STRIKE: u8 = 0x08;
     pub const AFTER_JUMP: u8 = 0x0a;
-    /// Charge : élan de 12 pixels par image suivi d'un geste.
+    /// Charge: run-up of 12 pixels per frame followed by a gesture.
     pub const CHARGE: u8 = 0x0c;
     pub const RUN_STRIKE: u8 = 0x0e;
     pub const LOW_BLOW: u8 = 0x10;
     pub const BACK_HOP: u8 = 0x12;
     pub const GUARD_BREAK: u8 = 0x14;
-    /// Saut périlleux : bond, demi-tour en l'air, retombée.
+    /// Somersault: leap, turn in the air, landing.
     pub const FLIP: u8 = 0x16;
-    /// Tourbillon plongeant (coûte des points de vie).
+    /// Diving whirlwind (costs hit points).
     pub const SPIN_DROP: u8 = 0x18;
-    /// Longue glissade.
+    /// Long slide.
     pub const LONG_DASH: u8 = 0x1a;
     pub const POSE: u8 = 0x1c;
 }
 
-// ---- saut (0x445ba) --------------------------------------------------------------------------
+// ---- jump (0x445ba) --------------------------------------------------------------------------
 
-/// 0x445ba : saut. Pas 0 accroupissement, 2 montée (puis vol entier d'un saut sur place), 4 descente
-/// d'un saut en avant, 6 récupération, 8 plongée, 0xa rebond, 0xc fin du rebond.
+/// 0x445ba: jump. Step 0 crouch, 2 rise (then the whole flight of a jump in place), 4 descent
+/// of a forward jump, 6 recovery, 8 dive, 0xa bounce, 0xc end of the bounce.
 pub fn jump(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -87,8 +87,8 @@ pub fn jump(g: &mut Ctx, p: Player) {
     common::flush_pending_effect(g, p);
 }
 
-/// Pas 0 : à la fin de l'accroupissement le saut part. Un saut en avant prend le profil 4 si une
-/// direction est tenue, 6 sinon.
+/// Step 0: at the end of the crouch the jump starts. A forward jump takes profile 4 if a
+/// direction is held, 6 otherwise.
 fn takeoff(g: &mut Ctx, p: Player) {
     cov!();
     if !animation::step(g, p) {
@@ -111,8 +111,8 @@ fn takeoff(g: &mut Ctx, p: Player) {
     g.sound(ext::sound::JUMP_VOICE, p);
 }
 
-/// Pas 2 : montée. Un saut des profils 0..3 se termine ici (retombée au sol) ; un saut en avant passe
-/// au profil suivant et au pas 4 quand la vitesse verticale devient négative.
+/// Step 2: rise. A jump of profiles 0..3 ends here (landing on the ground); a forward jump moves on
+/// to the next profile and to step 4 when the vertical speed becomes negative.
 fn rise(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -143,7 +143,7 @@ fn rise(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pas 4 : descente d'un saut en avant.
+/// Step 4: descent of a forward jump.
 fn descend(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -160,7 +160,7 @@ fn descend(g: &mut Ctx, p: Player) {
     g.sound(ext::sound::LANDING, p);
 }
 
-/// Pas 6 : récupération, puis retour à l'état immobile (et chute de l'arme maudite).
+/// Step 6: recovery, then return to the standing state (and fall of the cursed weapon).
 fn recover(g: &mut Ctx, p: Player) {
     cov!();
     if animation::step(g, p) {
@@ -169,8 +169,8 @@ fn recover(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Le bouton 1 en l'air donne un coup (une fois par saut) ; sauter avec la touche du bas pendant un
-/// saut sans élan lance la plongée.
+/// Button 1 in the air gives a strike (once per jump); jumping with the down key during a
+/// jump without momentum launches the dive.
 fn air_attack(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, field::AIR_ATTACK_DONE) != 0 {
@@ -208,7 +208,7 @@ fn air_attack(g: &mut Ctx, p: Player) {
     animation::start_plain(g, p, 0x21);
 }
 
-/// Pas 8 : plongée ; à l'impact le nain rebondit.
+/// Step 8: dive; on impact the dwarf bounces.
 fn dive(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -229,7 +229,7 @@ fn dive(g: &mut Ctx, p: Player) {
     g.sound(rom::SOUND_BOUNCE, p);
 }
 
-/// Pas 0xa : rebond après la plongée, puis retombée.
+/// Step 0xa: bounce after the dive, then landing.
 fn bounce(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -247,7 +247,7 @@ fn bounce(g: &mut Ctx, p: Player) {
     g.sound(ext::sound::LANDING, p);
 }
 
-/// Pas 0xc : fin du rebond.
+/// Step 0xc: end of the bounce.
 fn bounce_end(g: &mut Ctx, p: Player) {
     cov!();
     if animation::step(g, p) {
@@ -255,10 +255,10 @@ fn bounce_end(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- attaque (0x4491a) -----------------------------------------------------------------------
+// ---- attack (0x4491a) -----------------------------------------------------------------------
 
-/// 0x4491a : attaque du bouton 1. `kind` choisit le coup ; les coups au sol sont suivis d'un contrôle
-/// de prolongement (`common::follow_up`).
+/// 0x4491a: button 1 attack. `kind` selects the strike; ground strikes are followed by a
+/// continuation check (`common::follow_up`).
 pub fn attack(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::SUBACTION) {
@@ -303,8 +303,8 @@ pub fn attack(g: &mut Ctx, p: Player) {
     common::flush_pending_effect(g, p);
 }
 
-/// Avec l'arme particulière (8, 0x18) tous les coups deviennent le coup de base ; `clear_hits` : les
-/// coups portés sont oubliés.
+/// With the particular weapon (8, 0x18) all strikes become the basic strike; `clear_hits`: the
+/// landed hits are forgotten.
 fn fall_back_to_combo(g: &mut Ctx, p: Player, clear_hits: bool) -> bool {
     cov!();
     if !common::holds_special_weapon(g, p) {
@@ -317,8 +317,8 @@ fn fall_back_to_combo(g: &mut Ctx, p: Player, clear_hits: bool) -> bool {
     true
 }
 
-/// Début d'un coup de base (0x449e8) : le rang de l'enchaînement avance si le coup précédent a porté
-/// (cinq coups).
+/// Start of a basic strike (0x449e8): the chain rank advances if the previous strike landed
+/// (five strikes).
 fn combo_begin(g: &mut Ctx, p: Player) {
     cov!();
     next_step(g, p);
@@ -330,7 +330,7 @@ fn combo_begin(g: &mut Ctx, p: Player) {
     common::start_with_voice(g, p, anim);
 }
 
-/// Coup de base (0x449ce) : le pas 2 prolonge le coup, les pas 4 et 6 sont une fente en avant.
+/// Basic strike (0x449ce): step 2 extends the strike, steps 4 and 6 are a forward lunge.
 fn combo(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -344,7 +344,7 @@ fn combo(g: &mut Ctx, p: Player) {
     }
 }
 
-/// La fente part au geste porté (l'événement n'est pas effacé).
+/// The lunge starts at the carried gesture (the event is not cleared).
 fn lunge_start(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -354,7 +354,7 @@ fn lunge_start(g: &mut Ctx, p: Player) {
     }
 }
 
-/// La fente glisse jusqu'à l'arrêt.
+/// The lunge slides to a stop.
 fn lunge_slide(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -364,7 +364,7 @@ fn lunge_slide(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coups d'estoc (0x44ace haut, 0x44b48 bas) : un seul geste, de rang 0 ou 1 selon le coup précédent.
+/// Thrusts (0x44ace high, 0x44b48 low): a single gesture, of rank 0 or 1 depending on the previous strike.
 fn thrust(g: &mut Ctx, p: Player, hit_bit: u8, base_anim: u16) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -382,7 +382,7 @@ fn thrust(g: &mut Ctx, p: Player, hit_bit: u8, base_anim: u16) {
     }
 }
 
-/// Coup donné en se retournant (0x44bb2) : le pas 2 est le pas 0 d'une entrée par état (combos).
+/// Strike given while turning (0x44bb2): step 2 is step 0 of a per-state entry (combos).
 fn turn_strike(g: &mut Ctx, p: Player) {
     cov!();
     let step = p.u8(g, Player::STEP);
@@ -402,7 +402,7 @@ fn turn_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup donné en marche lente (0x44c36) : sans prolongement.
+/// Strike given in slow walk (0x44c36): without continuation.
 fn slow_strike(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -420,7 +420,7 @@ fn slow_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup de retombée (0x44c90).
+/// Landing strike (0x44c90).
 fn after_jump(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -438,7 +438,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Charge (0x44cde) : élan, geste (coup porté, effet), glissade.
+/// Charge (0x44cde): run-up, gesture (landed hit, effect), slide.
 fn charge(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -472,7 +472,7 @@ fn charge(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup donné en courant (0x44da4) : élan de 5 pixels par image, puis arrêt.
+/// Strike given while running (0x44da4): run-up of 5 pixels per frame, then stop.
 fn run_strike(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -493,7 +493,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup de garde (0x44eb2) : sans voix.
+/// Guard strike (0x44eb2): without voice.
 fn guard_break(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -510,11 +510,11 @@ fn guard_break(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Saut périlleux (0x44eee) : élan, demi-tour en l'air (le nain change de côté), retombée. Tant que
-/// l'animation n'est pas finie, certains pas la font avancer deux fois par image (comme l'original).
+/// Somersault (0x44eee): run-up, turn in the air (the dwarf changes sides), landing. As long as
+/// the animation is not finished, some steps make it advance twice per frame (like the original).
 fn flip(g: &mut Ctx, p: Player) {
     cov!();
-    /// Un pas d'animation ; s'il n'est pas le dernier, un second suit.
+    /// One animation step; if it is not the last, a second follows.
     fn double_step(g: &mut Ctx, p: Player) -> bool {
         let done = animation::step(g, p);
         if !done {
@@ -573,8 +573,8 @@ fn flip(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Tourbillon plongeant (0x44fd0) : bond avec demi-tour, descente en tournoyant ; coûte 12 points de
-/// vie au premier contact.
+/// Diving whirlwind (0x44fd0): leap with a turn, descent while spinning; costs 12 hit points
+/// at the first contact.
 fn spin_drop(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -624,7 +624,7 @@ fn spin_drop(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Le premier contact du tourbillon coûte 12 points de vie (au moins un reste).
+/// The first contact of the whirlwind costs 12 hit points (at least one remains).
 fn whirl_cost(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, own::WHIRL_PAID) == 0 && p.u8(g, own::CONTACT) & 1 != 0 {
@@ -634,8 +634,8 @@ fn whirl_cost(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Longue glissade (0x450a8) : élan de 0x40 par image pendant 50 images (les 20 premières avancent
-/// vraiment), pause, puis retour à l'état immobile.
+/// Long slide (0x450a8): run-up of 0x40 per frame for 50 frames (the first 20 really advance),
+/// pause, then return to the standing state.
 fn long_dash(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -681,7 +681,7 @@ fn long_dash(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Geste vers l'avant (0x4495a), suivi d'une fente comme le coup de base.
+/// Forward gesture (0x4495a), followed by a lunge like the basic strike.
 fn pose(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -696,13 +696,13 @@ fn pose(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- attaque spéciale (0x45148) --------------------------------------------------------------
+// ---- special attack (0x45148) --------------------------------------------------------------
 
-/// Animations du nain pour les magies lancées (voir `items::Style`).
+/// The dwarf's animations for cast spells (see `items::Style`).
 const STYLE: items::Style = items::Style { cast_anim: 0x1f, bolt_anim: 0x1e, spark: 3, ..items::Style::CLASSIC };
 
-/// 0x45148 : l'objet ou la magie choisie (`field::SPECIAL_KIND`, 0..20), comme le combattant ; les
-/// numéros 3 et 11 ne font rien. 0..8 : objets lancés ; 12 : échange d'arme ; 9, 10 et 13..20 : `items`.
+/// 0x45148: the chosen item or spell (`field::SPECIAL_KIND`, 0..20), like the fighter; numbers
+/// 3 and 11 do nothing. 0..8: thrown items; 12: weapon swap; 9, 10 and 13..20: `items`.
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
@@ -725,7 +725,7 @@ pub fn special(g: &mut Ctx, p: Player) {
 
 // ---- action 0x12 (0x35b18) -------------------------------------------------------------------
 
-/// Roulade du nain : élan de 3 pixels par image jusqu'à la fin du geste, puis retour à l'état immobile.
+/// Dwarf roll: run-up of 3 pixels per frame until the end of the gesture, then return to the standing state.
 pub fn roll(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {

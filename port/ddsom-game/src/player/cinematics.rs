@@ -1,12 +1,12 @@
-//! Cinématiques de fin de scène des joueurs (P3, état `+4` = 0, `+5` = 0xc ; table 0x23f4e).
+//! End-of-scene cinematics of the players (P3, state `+4` = 0, `+5` = 0xc; table 0x23f4e).
 //!
-//! À la fin d'une scène, chaque joueur joue un petit script propre à la scène : pose de victoire, marche
-//! vers une place (une par joueur, tables indexées par `+0x7d`), demi-tours, attente d'une étape du script
-//! de la scène (`SCENE_STEP`), sortie de l'écran. Chaque routine est un automate dont `+6` est le pas
-//! (table de décalages, `steps`) ; après le pas, le joueur est réinséré dans la liste des acteurs sauf au
-//! dernier pas.
+//! At the end of a scene, each player plays a small script specific to the scene: victory pose, walk
+//! to a spot (one per player, tables indexed by `+0x7d`), turns, wait for a step of the scene
+//! script (`SCENE_STEP`), exit from the screen. Each routine is an automaton whose step is `+6`
+//! (offset table, `steps`); after the step, the player is reinserted into the actor list except at the
+//! last step.
 //!
-//! Les routines sont atteintes par leur adresse d'origine (`HANDLERS`, consulté par `scripted`).
+//! The routines are reached through their original address (`HANDLERS`, consulted by `scripted`).
 
 use super::actions::start_stand;
 use super::walk::{clamp_to_screen, move_z};
@@ -20,21 +20,21 @@ use crate::player::external as ext;
 type Handler = fn(&mut Ctx, Player);
 
 
-/// Étape du script de la scène (octet), attendue par les joueurs.
+/// Step of the scene script (byte), awaited by the players.
 const SCENE_STEP: u32 = A5 - 0x55c8;
-/// Objet du script de la scène que les joueurs regardent (pointeur de 16 bits).
+/// Object of the scene script that the players look at (16-bit pointer).
 const SCENE_ACTOR: u32 = A5 - 0x55ba;
-/// Valeur de `ram::FROZEN` quand la fin de scène est terminée.
+/// Value of `ram::FROZEN` when the end of the scene is over.
 const END_DONE: u8 = 2;
 
-/// Champs du script : place visée (x, profondeur), minuterie.
+/// Script fields: target spot (x, depth), timer.
 const TARGET_X: u32 = 0x1e0;
 const TARGET_Y: u32 = 0x1e2;
 const TIMER: u32 = 0x1e4;
-/// Rang du joueur dans la scène (index des tables de places).
+/// Rank of the player in the scene (index of the spot tables).
 const RANK: u32 = 0x7d;
 
-/// Routines réécrites : adresse d'origine -> routine Rust.
+/// Rewritten routines: original address -> Rust routine.
 pub const HANDLERS: &[(u32, Handler)] = &[
     (0x2411a, |g, p| steps(g, p, 0x24138, Some(24), END_2411A)),
     (0x2434e, |g, p| steps(g, p, 0x2436c, Some(4), END_2434E)),
@@ -54,11 +54,11 @@ pub const HANDLERS: &[(u32, Handler)] = &[
     (0x24de6, |g, p| steps(g, p, 0x24e04, Some(6), END_24DE6)),
 ];
 
-/// Pas d'une routine : adresse d'origine du pas -> routine Rust.
+/// Steps of a routine: original address of the step -> Rust routine.
 type Steps = &'static [(u32, Handler)];
 
-/// Aiguille selon `+6` par la table de décalages `table` ; `steps` donne les pas réécrits, les autres
-/// s'exécutent tels quels. Réinsère le joueur dans la liste des acteurs sauf au pas `last`.
+/// Dispatches according to `+6` through the offset table `table`; `steps` gives the rewritten steps, the others
+/// run as they are. Reinserts the player into the actor list except at step `last`.
 fn steps(g: &mut Ctx, p: Player, table: u32, last: Option<u8>, steps: Steps) {
     dispatch(g, p, table, steps);
     if last != Some(p.u8(g, Player::ACTION)) {
@@ -66,13 +66,13 @@ fn steps(g: &mut Ctx, p: Player, table: u32, last: Option<u8>, steps: Steps) {
     }
 }
 
-/// Exécute le pas `+6` de la routine à table `table`.
+/// Runs step `+6` of the routine with table `table`.
 fn dispatch(g: &mut Ctx, p: Player, table: u32, steps: Steps) {
     let step = p.u8(g, Player::ACTION);
     let offset = g.prog16(table + step as u32);
     let at = table.wrapping_add(offset as i16 as i32 as u32);
-    // comme l'aiguillage d'origine : D0 = pas, D1 = décalage (certains pas les passent tels quels aux
-    // routines qu'ils appellent, ainsi 0xb378a lit son réglage dans D1)
+    // like the original dispatch: D0 = step, D1 = offset (some steps pass them as they are to the
+    // routines they call, so 0xb378a reads its setting in D1)
     g.c.d[0] = step as u32;
     g.c.d[1] = g.c.d[1] & 0xffff_0000 | offset as u32;
     match steps.iter().find(|s| s.0 == at) {
@@ -85,17 +85,17 @@ fn dispatch(g: &mut Ctx, p: Player, table: u32, steps: Steps) {
     }
 }
 
-/// Pas final commun (un simple RTS).
+/// Common final step (a simple RTS).
 const IDLE: u32 = 0x2434c;
 
-/// Pas hors table : la routine 0x24aba n'a que trois pas, mais un joueur qui arrive dans la cinématique avec l'action
-/// 0x10 (scénario `covb_region_2`) fait lire au saut le mot 0x6702 de son code, qui mène au milieu de la routine
-/// d'affichage hexadécimal du menu TEST (0x2b1d0), après le chargement de ses deux paramètres.
+/// Step outside the table: routine 0x24aba has only three steps, but a player arriving in the cinematic with action
+/// 0x10 (scenario `covb_region_2`) makes the jump read the word 0x6702 of its code, which leads into the middle of the
+/// hexadecimal display routine of the TEST menu (0x2b1d0), after loading its two parameters.
 const STRAY_HEX_DUMP: u32 = 0x2b1da;
 
-/// 0x2b1da : l'affichage hexadécimal de 0x2b1d0 (huit longs consécutifs à partir de D1, cinq chiffres chacun, une
-/// colonne de tuiles par long), tel que l'atteint le saut hors table : la destination A1 et la valeur D1 sont celles
-/// que les registres contiennent (D1.w = le décalage lu dans la table).
+/// 0x2b1da: the hexadecimal display of 0x2b1d0 (eight consecutive longs starting at D1, five digits each, one
+/// tile column per long), as reached by the out-of-table jump: the destination A1 and the value D1 are those
+/// that the registers contain (D1.w = the offset read in the table).
 fn stray_hex_dump(g: &mut Ctx) {
     let (mut a1, mut d1) = (g.c.a[1], g.c.d[1]);
     for _ in 0..8 {
@@ -111,13 +111,13 @@ fn stray_hex_dump(g: &mut Ctx) {
     }
     g.c.a[1] = a1;
     g.c.d[1] = d1;
-    // compteurs des deux `dbf` épuisés
+    // counters of the two exhausted `dbf`
     g.c.d[3] = 0xffff;
     g.c.d[4] = 0xffff;
     g.c.flags_logic(d1, m68k::decode::Size::Long);
 }
 
-// ---- outils ------------------------------------------------------------------------------------
+// ---- tools ------------------------------------------------------------------------------------
 
 fn next(g: &mut Ctx, p: Player) {
     let step = p.u8(g, Player::ACTION).wrapping_add(2);
@@ -140,26 +140,26 @@ fn rank(g: &mut Ctx, p: Player) -> u32 {
     p.u8(g, RANK) as u32
 }
 
-/// Pose de victoire (animation 35, ou 36 si `+0x18a`) et son.
+/// Victory pose (animation 35, or 36 if `+0x18a`) and sound.
 fn victory_pose(g: &mut Ctx, p: Player) {
     let anim = if p.u8(g, 0x18a) != 0 { 36 } else { 35 };
     animation::start(g, p, anim);
     g.sound(ext::sound::FANFARE, p);
 }
 
-/// Pas suivant et pose de victoire.
+/// Next step and victory pose.
 fn start_victory(g: &mut Ctx, p: Player) {
     next(g, p);
     victory_pose(g, p);
 }
 
-/// Animation du jeu C (0x2cf0).
+/// Animation of set C (0x2cf0).
 fn anim_c(g: &mut Ctx, p: Player, n: u32) {
     crate::objects::anim::start_by_character(g.b, p.obj(), &crate::objects::anim::SETS_BY_VARIANT, n as u16);
 }
 
-/// Mémorise la place du joueur (table de couples (x, profondeur) par rang) puis se tourne vers elle :
-/// demi-tour (pas suivant, animation 5) ou, déjà tourné, marche (deux pas plus loin, animation 2).
+/// Stores the player's spot (table of (x, depth) pairs per rank) then turns toward it:
+/// turn (next step, animation 5) or, already turned, walk (two steps further, animation 2).
 fn face_place(g: &mut Ctx, p: Player, places: u32) {
     let at = places + 4 * rank(g, p);
     let (x, y) = (g.prog16(at), g.prog16(at + 2));
@@ -168,7 +168,7 @@ fn face_place(g: &mut Ctx, p: Player, places: u32) {
     turn_toward(g, p, x);
 }
 
-/// Se tourne vers l'abscisse `x` (voir `face_place`).
+/// Turns toward abscissa `x` (see `face_place`).
 fn turn_toward(g: &mut Ctx, p: Player, x: u16) {
     let wanted = if p.u16(g, Obj::X) > x { 0 } else { 0x20 };
     next(g, p);
@@ -181,7 +181,7 @@ fn turn_toward(g: &mut Ctx, p: Player, x: u16) {
     }
 }
 
-/// Fin d'un demi-tour : la marche commence (animation 2).
+/// End of a turn: the walk begins (animation 2).
 fn turned(g: &mut Ctx, p: Player) {
     if anim_step(g, p) {
         next(g, p);
@@ -189,7 +189,7 @@ fn turned(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Un pas d'un pixel en profondeur vers la place ; vrai à l'arrivée (rien d'autre n'est fait).
+/// A one-pixel step in depth toward the spot; true on arrival (nothing else is done).
 fn walk_y(g: &mut Ctx, p: Player) -> bool {
     let (y, target) = (p.u16(g, Obj::Y), p.u16(g, TARGET_Y));
     if y == target {
@@ -201,14 +201,14 @@ fn walk_y(g: &mut Ctx, p: Player) -> bool {
     false
 }
 
-/// Marche en profondeur ; à l'arrivée, pas suivant.
+/// Walk in depth; on arrival, next step.
 fn walk_to_y(g: &mut Ctx, p: Player) {
     if walk_y(g, p) {
         next(g, p);
     }
 }
 
-/// Idem, l'animation avançant aussi à l'arrivée.
+/// Same, the animation also advancing on arrival.
 fn walk_to_y_animated(g: &mut Ctx, p: Player) {
     if walk_y(g, p) {
         next(g, p);
@@ -216,7 +216,7 @@ fn walk_to_y_animated(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Deux pixels en x vers `target` ; vrai à l'arrivée (à 3 pixels près), sans bouger.
+/// Two pixels in x toward `target`; true on arrival (within 3 pixels), without moving.
 fn walk_x(g: &mut Ctx, p: Player, target: u16) -> bool {
     let gap = p.u16(g, Obj::X).wrapping_sub(target);
     if gap.wrapping_add(3) <= 6 {
@@ -229,8 +229,8 @@ fn walk_x(g: &mut Ctx, p: Player, target: u16) -> bool {
     false
 }
 
-/// Arrivé à la place en x : se tourne dans le sens `wanted` (demi-tour, animation 5) ou, déjà tourné,
-/// pose immobile deux pas plus loin.
+/// Arrived at the spot in x: turns toward the direction `wanted` (turn, animation 5) or, already turned,
+/// still pose two steps further.
 fn settle(g: &mut Ctx, p: Player, wanted: u8) {
     next(g, p);
     if wanted == p.u8(g, Player::FACING) {
@@ -242,7 +242,7 @@ fn settle(g: &mut Ctx, p: Player, wanted: u8) {
     }
 }
 
-/// Fin de l'animation : pas suivant et pose immobile.
+/// End of the animation: next step and still pose.
 fn stand_after_anim(g: &mut Ctx, p: Player) {
     if anim_step(g, p) {
         next(g, p);
@@ -250,12 +250,12 @@ fn stand_after_anim(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Fin de l'animation : pas suivant et marche (animation 2).
+/// End of the animation: next step and walk (animation 2).
 fn walk_after_anim(g: &mut Ctx, p: Player) {
     turned(g, p)
 }
 
-/// Attend l'étape `value` du script de la scène, puis pose immobile.
+/// Waits for step `value` of the scene script, then still pose.
 fn stand_at_scene_step(g: &mut Ctx, p: Player, value: u8) {
     if scene_step(g) == value {
         next(g, p);
@@ -265,7 +265,7 @@ fn stand_at_scene_step(g: &mut Ctx, p: Player, value: u8) {
     }
 }
 
-/// Attend la fin de la fin de scène (`ram::FROZEN` = 2).
+/// Waits for the end of the end of scene (`ram::FROZEN` = 2).
 fn wait_done(g: &mut Ctx, p: Player) {
     if end_done(g) {
         next(g, p);
@@ -273,7 +273,7 @@ fn wait_done(g: &mut Ctx, p: Player) {
     anim_step(g, p);
 }
 
-/// Si la classe de vitesse vaut 2, elle passe à 0xff.
+/// If the speed class is 2, it becomes 0xff.
 fn reset_speed_class(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::SPEED_CLASS) == 2 {
         p.set_u8(g, Player::SPEED_CLASS, 0xff);
@@ -286,8 +286,8 @@ fn elf_effect(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Marche vers la droite (4 pixels par image) tant que le joueur est à moins de 480 pixels du bord
-/// gauche de l'écran.
+/// Walks to the right (4 pixels per frame) as long as the player is less than 480 pixels from the left
+/// edge of the screen.
 fn walk_out(g: &mut Ctx, p: Player) {
     let limit = ram::CAMERA_X.get(g.b).wrapping_add(480);
     if limit > p.u16(g, Obj::X) {
@@ -296,23 +296,23 @@ fn walk_out(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- routines sans table ---------------------------------------------------------------------------
+// ---- routines without a table ---------------------------------------------------------------------------
 
-/// 0x249da : rien que la réinsertion, jusqu'à la fin.
+/// 0x249da: nothing but the reinsertion, until the end.
 fn wait_end(g: &mut Ctx, p: Player) {
     if !end_done(g) {
         ACTORS.reinsert(g.b, p.obj());
     }
 }
 
-/// 0x24ddc : le joueur s'enfonce de 2 pixels par image.
+/// 0x24ddc: the player sinks by 2 pixels per frame.
 fn sink(g: &mut Ctx, p: Player) {
     let z = p.u16(g, Obj::Z).wrapping_sub(2);
     p.set_u16(g, Obj::Z, z);
     anim_step(g, p);
 }
 
-/// 0x24b88 : sans `A5+0x66`, pose de victoire puis attente ; sinon pose immobile (0x24102).
+/// 0x24b88: without `A5+0x66`, victory pose then wait; otherwise still pose (0x24102).
 fn end_24b88(g: &mut Ctx, p: Player) {
     if ram::NO_WALK_IN.get(g.b) != 0 {
         super::scripted::idle(g, p);
@@ -403,7 +403,7 @@ const END_2411A: Steps = &[
     (0x2433a, wait_done),
 ];
 
-// ---- 0x2434e (dix scènes) -----------------------------------------------------------------------
+// ---- 0x2434e (ten scenes) -----------------------------------------------------------------------
 
 const END_2434E: Steps = &[
     (0x24372, |g, p| {
@@ -455,7 +455,7 @@ const END_243D6: Steps = &[
 
 // ---- 0x2447e ----------------------------------------------------------------------------------
 
-/// Sens final par rang (octets du code).
+/// Final direction per rank (code bytes).
 fn final_facing(g: &mut Ctx, p: Player, table: u32) -> u8 {
     let k = rank(g, p) & 3;
     g.prog8(table + k)
@@ -494,7 +494,7 @@ const END_2447E: Steps = &[
 
 // ---- 0x245ec ----------------------------------------------------------------------------------
 
-/// Destination de la sortie (x) et profondeur de la disparition.
+/// Destination of the exit (x) and depth of the disappearance.
 const EXIT_X: u16 = 220;
 const EXIT_Y: u16 = 384;
 
@@ -551,13 +551,13 @@ const END_245EC: Steps = &[
     (0x24734, fade_out),
 ];
 
-/// Palettes de la disparition (données) : 3 jeux de 12 personnages × 32 octets ; destination en mémoire
-/// des palettes, décalage par personnage (table de mots).
+/// Disappearance palettes (data): 3 sets of 12 characters × 32 bytes; memory destination
+/// of the palettes, offset per character (word table).
 use super::moves::{EXIT_PALETTES as FADE_PALETTES, EXIT_PALETTE_SLOTS as FADE_TARGETS};
 const PALETTE_RAM: u32 = 0x91c000;
 
-/// 0x24734 : disparition : après 48 images le joueur est masqué ; toutes les 12 images, sa palette passe
-/// au jeu suivant (trois jeux).
+/// 0x24734: disappearance: after 48 frames the player is hidden; every 12 frames, their palette moves
+/// to the next set (three sets).
 fn fade_out(g: &mut Ctx, p: Player) {
     anim_step(g, p);
     let left = p.u8(g, 0x1e6).wrapping_sub(1);
@@ -796,7 +796,7 @@ const END_24BE2: Steps = &[
     }),
 ];
 
-/// 0x24d16 : pose immobile, puis la porte de sortie (x 192, profondeur 380) devient la place visée.
+/// 0x24d16: still pose, then the exit door (x 192, depth 380) becomes the target spot.
 fn go_to_gate(g: &mut Ctx, p: Player) {
     next(g, p);
     p.set_u16(g, TARGET_X, 192);
@@ -829,24 +829,24 @@ const END_24DE6: Steps = &[
 ];
 
 // =================================================================================================
-// Entrées en scène (`+5` = 0, table 0x23826 indexée par la scène)
+// Scene entries (`+5` = 0, table 0x23826 indexed by scene)
 //
-// Le joueur apparaît (souvent hors de l'écran à gauche), attend, marche vers la droite, prend la pose
-// et reçoit les commandes quand la partie entre en phase de jeu (`ram::PHASE` = 12). `ram::SUB_STEP`
-// (`A5+0x2e`) est l'étape du script d'entrée de la scène. L'appelant (`scripted::update`) réinsère le
-// joueur dans la liste des acteurs.
+// The player appears (often off screen to the left), waits, walks to the right, strikes the pose
+// and receives the controls when the game enters the play phase (`ram::PHASE` = 12). `ram::SUB_STEP`
+// (`A5+0x2e`) is the step of the scene's entry script. The caller (`scripted::update`) reinserts the
+// player into the actor list.
 // =================================================================================================
 
-/// Phase de jeu : les joueurs reçoivent les commandes.
+/// Play phase: the players receive the controls.
 const PLAYING_PHASE: u8 = 12;
-/// Seconde minuterie des entrées.
+/// Second timer of the entries.
 const TIMER_B: u32 = 0x1e2;
-/// Minuterie des entrées (mot).
+/// Timer of the entries (word).
 const WAIT: u32 = 0x1e0;
-/// Arme en main (0 : décalage de 0x40 des animations).
+/// Weapon in hand (0: 0x40 offset of the animations).
 const ARMED: u32 = 0x68;
 
-/// Entrées réécrites : adresse d'origine -> routine Rust.
+/// Rewritten entries: original address -> Rust routine.
 pub const INTRO_HANDLERS: &[(u32, Handler)] = &[
     (0x23ac8, |g, p| dispatch(g, p, 0x23ad6, INTRO_23AC8)),
     (0x23b32, intro_23b32),
@@ -875,9 +875,9 @@ pub const INTRO_HANDLERS: &[(u32, Handler)] = &[
     (0x25f7e, |g, p| dispatch(g, p, 0x25f8c, INTRO_25F7E)),
 ];
 
-// ---- outils des entrées -------------------------------------------------------------------------
+// ---- entry tools -------------------------------------------------------------------------
 
-/// Apparition : le joueur devient actif ; `visible` lève aussi `+1` ; `armed` : arme en main.
+/// Appearance: the player becomes active; `visible` also sets `+1`; `armed`: weapon in hand.
 fn appear(g: &mut Ctx, p: Player, visible: bool, armed: bool) {
     next(g, p);
     p.set_u8(g, Player::ACTIVE, 1);
@@ -887,7 +887,7 @@ fn appear(g: &mut Ctx, p: Player, visible: bool, armed: bool) {
     p.set_u8(g, ARMED, armed as u8);
 }
 
-/// Dernier pas : en phase de jeu, le joueur reçoit les commandes.
+/// Last step: in the play phase, the player receives the controls.
 fn take_control(g: &mut Ctx, p: Player) {
     if ram::PHASE.get(g.b) == PLAYING_PHASE {
         p.set_state(g, 0x0200_0000);
@@ -895,14 +895,14 @@ fn take_control(g: &mut Ctx, p: Player) {
     anim_step(g, p);
 }
 
-/// Décompte de `WAIT` ; vrai quand il atteint zéro.
+/// Countdown of `WAIT`; true when it reaches zero.
 fn countdown(g: &mut Ctx, p: Player, field: u32) -> bool {
     let left = p.u16(g, field).wrapping_sub(1);
     p.set_u16(g, field, left);
     left == 0
 }
 
-/// Attente sans animation : vrai tant que `field` n'est pas épuisé (il est décompté).
+/// Wait without animation: true as long as `field` is not exhausted (it is counted down).
 fn waiting(g: &mut Ctx, p: Player, field: u32) -> bool {
     let left = p.u16(g, field);
     if left != 0 {
@@ -911,13 +911,13 @@ fn waiting(g: &mut Ctx, p: Player, field: u32) -> bool {
     left != 0
 }
 
-/// Avance de `dx` pixels.
+/// Advances by `dx` pixels.
 fn step_x(g: &mut Ctx, p: Player, dx: u16) {
     let x = p.u16(g, Obj::X).wrapping_add(dx);
     p.set_u16(g, Obj::X, x);
 }
 
-/// Marche vers la droite (2 pixels par image) pendant `field` images, puis `done`.
+/// Walks to the right (2 pixels per frame) for `field` frames, then `done`.
 fn walk_right(g: &mut Ctx, p: Player, field: u32, done: fn(&mut Ctx, Player)) {
     step_x(g, p, 2);
     if countdown(g, p, field) {
@@ -932,13 +932,13 @@ fn anim_0(g: &mut Ctx, p: Player) {
     animation::start(g, p, 0);
 }
 
-/// Mot de la table `table` pour le rang du joueur (index `2 × rank`, octet).
+/// Word of the table `table` for the player's rank (index `2 × rank`, byte).
 fn per_rank16(g: &mut Ctx, p: Player, table: u32) -> u16 {
     let index = (p.u8(g, RANK).wrapping_mul(2)) as u32;
     g.prog16(table + index)
 }
 
-/// Fin de l'animation : pose immobile ; entre-temps, cri du héros au geste (combattant et elfe).
+/// End of the animation: still pose; in the meantime, the hero's cry at the gesture (fighter and elf).
 fn pose_with_shout(g: &mut Ctx, p: Player) {
     if anim_step(g, p) {
         next(g, p);
@@ -954,7 +954,7 @@ fn pose_with_shout(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Fin de l'animation : pas suivant et animation `n` ; rien d'autre sinon.
+/// End of the animation: next step and animation `n`; nothing else otherwise.
 fn then_anim(g: &mut Ctx, p: Player, n: u16) {
     if anim_step(g, p) {
         next(g, p);
@@ -962,7 +962,7 @@ fn then_anim(g: &mut Ctx, p: Player, n: u16) {
     }
 }
 
-/// Décompte de `WAIT`, puis l'arme en main et la pose 51.
+/// Countdown of `WAIT`, then the weapon in hand and pose 51.
 fn draw_weapon_after_wait(g: &mut Ctx, p: Player) {
     if countdown(g, p, WAIT) {
         next(g, p);
@@ -1000,7 +1000,7 @@ const INTRO_23AC8: Steps = &[
     (0x23b1c, take_control),
 ];
 
-/// 0x23b32 : apparition immobile, puis les commandes en phase de jeu.
+/// 0x23b32: still appearance, then the controls in the play phase.
 fn intro_23b32(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::ACTION) == 0 {
         appear(g, p, true, false);
@@ -1012,7 +1012,7 @@ fn intro_23b32(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- 0x24fe2 : entrée en marchant, deux demi-tours, puis un saut vers le bas de l'écran ---------
+// ---- 0x24fe2: walk-in, two turns, then a jump toward the bottom of the screen ---------
 
 const INTRO_24FE2: Steps = &[
     (0x25006, |g, p| {
@@ -1121,7 +1121,7 @@ const INTRO_24FE2: Steps = &[
     (0x25218, take_control),
 ];
 
-/// Décompte de `WAIT`, puis demi-tour (animation 5).
+/// Countdown of `WAIT`, then turn (animation 5).
 fn turn_after_wait(g: &mut Ctx, p: Player) {
     if countdown(g, p, WAIT) {
         next(g, p);
@@ -1130,7 +1130,7 @@ fn turn_after_wait(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- 0x2522e, 0x252ac : le joueur suit l'objet de la caméra (monture, radeau...) -----------------
+// ---- 0x2522e, 0x252ac: the player follows the camera object (mount, raft...) -----------------
 
 const INTRO_2522E: Steps = &[
     (0x25240, |g, p| {
@@ -1149,7 +1149,7 @@ const INTRO_2522E: Steps = &[
     }),
 ];
 
-/// 0x25260 : devant l'objet de la caméra, 18 pixels plus près.
+/// 0x25260: in front of the camera object, 18 pixels closer.
 fn follow_focus(g: &mut Ctx, p: Player) {
     place_by_focus(g, p, 0x2528c);
     let y = p.u16(g, Obj::Y).wrapping_sub(18);
@@ -1234,7 +1234,7 @@ const INTRO_253A0: Steps = &[
 
 // ---- 0x2541a, 0x25504, 0x255ea, 0x2564a, 0x256c2, 0x257a4 -------------------------------------------
 
-/// Attente de `WAIT` images (sans animation), puis `WAIT` = 80.
+/// Wait of `WAIT` frames (without animation), then `WAIT` = 80.
 fn wait_then_walk(g: &mut Ctx, p: Player) {
     if countdown(g, p, WAIT) {
         next(g, p);
@@ -1369,7 +1369,7 @@ const INTRO_257A4: Steps = &[
     (0x257fe, take_control),
 ];
 
-// ---- 0x25814, 0x258de, 0x25954, 0x25a24 : sauts, marche lente, chutes ------------------------------
+// ---- 0x25814, 0x258de, 0x25954, 0x25a24: jumps, slow walk, falls ------------------------------
 
 const INTRO_25814: Steps = &[
     (0x25828, |g, p| {
@@ -1428,8 +1428,8 @@ const INTRO_258DE: Steps = &[
     }),
 ];
 
-/// Chute depuis le haut de l'écran : vrai à l'atterrissage (animation 14) ; `+0x3b` est effacé tant que le
-/// joueur est plus haut que `high`.
+/// Fall from the top of the screen: true on landing (animation 14); `+0x3b` is cleared as long as the
+/// player is higher than `high`.
 fn drop_in(g: &mut Ctx, p: Player, high: u16, clear_z: bool) {
     move_z(g, p);
     if (p.u16(g, Obj::Z) as i16) <= 0 {
@@ -1474,8 +1474,8 @@ const INTRO_25954: Steps = &[
     }),
 ];
 
-/// 0x25a24 : apparition à une place fixe (table par rang : x, hauteur, profondeur, sens), puis action 0x2a
-/// (saut sur place) au bout de 48 images.
+/// 0x25a24: appearance at a fixed spot (table per rank: x, height, depth, direction), then action 0x2a
+/// (jump in place) after 48 frames.
 fn intro_25a24(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::ACTION) != 0 {
         if countdown(g, p, WAIT) {
@@ -1499,10 +1499,10 @@ fn intro_25a24(g: &mut Ctx, p: Player) {
     p.set_u8(g, 0x3b, 0);
 }
 
-// ---- 0x25aa2, 0x25b3e, 0x25ba0, 0x25c9e, 0x25d40, 0x25db4 : marches d'entrée ----------------------
+// ---- 0x25aa2, 0x25b3e, 0x25ba0, 0x25c9e, 0x25d40, 0x25db4: walk-ins ----------------------
 
-/// 0x25b20 : à la scène 41, une image sur seize (selon le compteur et l'octet `A5+2`, comme l'original),
-/// effet de pas dans l'eau (h).
+/// 0x25b20: at scene 41, one frame out of sixteen (according to the counter and the byte `A5+2`, like the original),
+/// footstep effect in water (h).
 fn splash(g: &mut Ctx, p: Player) {
     if ram::SCENE.get(g.b) == 41 && ram::FRAME_COUNTER.get(g.b).wrapping_add(ram::INPUTS_2.get(g.b)) & 15 == 0 {
         crate::families::effects_creators::for_players::wisp_68k(g.c, g.b, p.obj());
@@ -1574,7 +1574,7 @@ const INTRO_25BA0: Steps = &[
     (0x25c88, take_control),
 ];
 
-/// Marche après une attente : `WAIT` images d'attente (sans animation), puis marche de `TIMER_B` images.
+/// Walk after a wait: `WAIT` frames of waiting (without animation), then walk of `TIMER_B` frames.
 fn delayed_walk(g: &mut Ctx, p: Player) {
     if waiting(g, p, WAIT) {
         return;
@@ -1614,7 +1614,7 @@ const INTRO_25DB4: Steps = &[
     (0x25e12, take_control),
 ];
 
-/// Apparition : attente de 224 images, puis marche de `walk` images.
+/// Appearance: wait of 224 frames, then walk of `walk` frames.
 fn intro_wait_walk(g: &mut Ctx, p: Player, walk: u16) {
     appear(g, p, false, true);
     p.set_u16(g, WAIT, 224);
@@ -1647,7 +1647,7 @@ const INTRO_25E28: Steps = &[
     (0x25ee6, take_control),
 ];
 
-/// 0x25efc : sans `A5+0x5c`, attente du signal `A5+0x51e`, puis attente et marche.
+/// 0x25efc: without `A5+0x5c`, wait for the signal `A5+0x51e`, then wait and walk.
 fn intro_25efc(g: &mut Ctx, p: Player) {
     if ram::NO_VICTORY.get(g.b) == 0 {
         dispatch(g, p, 0x25f12, INTRO_25EFC);

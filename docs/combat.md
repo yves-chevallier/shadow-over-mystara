@@ -48,14 +48,14 @@ signe (collisions avec les caisses), Z ignoré (ramassage), pénétration `h - |
 ## 4. Résolution des coups
 
 Un coup d'un joueur sur un ennemi (`0x2630e`) : mémorise l'identifiant d'attaque (`+0x3e`) dans l'octet
-`victime+0x58+n° du joueur` (un coup ne touche qu'une fois) ; gèle les deux camps (`+0x53/+0x56/+0x57`) ;
+`victim+0x58+n° du player` (un coup ne touche qu'une fois) ; gèle les deux camps (`+0x53/+0x56/+0x57`) ;
 refuse si la victime pare (`0xb048`) ; calcule les dégâts (§5) ; retire les PV (plancher 0) ; note
 l'agresseur dans la victime (`+0x48..+0x4b`, `+0x54`) ; met la victime en état `0x04000000`
 (réaction `+0x49` = 0x4c, `+0x4a` = orientation) ; enfile l'affichage de la jauge (`0x19dce`), crée
 l'étincelle (`0xaa96c`) et joue le son (`0xe662a`, ou `0xe823a` pour les coups spéciaux).
 
 Tirs des joueurs (`0x266fe`) : la table `0x267c4` associe à chaque comportement `+2` du tir (0..24) une
-routine qui décide si le tir porte. Immunités : le long `victime+0x94` a un bit par comportement
+routine qui décide si le tir porte. Immunités : le long `victim+0x94` a un bit par comportement
 (bits 23, 25, 28, 29, 27, 2, 18, 3, 28, 24, 26, 13, 10, 1, 9, 0, 4...). Les comportements ajoutent au
 tir un bonus de puissance (octets `+0x45/+0x46`) selon l'équipement du lanceur (`+0x10e` = 0x20 : +25 %,
 0x21 : +50 %, `+0x166` = 4 : +25 %, `+0x165` : +4/+5 fixe). Après un tir qui porte : dégâts via

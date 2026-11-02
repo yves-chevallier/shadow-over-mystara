@@ -1,13 +1,13 @@
-//! Boss 16, états actifs de déplacement : réveil (`+5` = 0), combat (2), bond vers un point (6), attente avant
-//! une attaque (8), pause (10), joueur saisi (12).
+//! Boss 16, active movement states: wake-up (`+5` = 0), combat (2), leap toward a point (6), wait before an
+//! attack (8), pause (10), grabbed player (12).
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 
-// --- groupe 0 : réveil --------------------------------------------------------------------------
+// --- group 0: wake-up --------------------------------------------------------------------------
 
-/// 0x93454 : les variantes 0 et 1 attendent qu'un joueur s'approche ; les autres vont droit au combat.
+/// 0x93454: variants 0 and 1 wait for a player to come close; the others go straight to combat.
 pub(super) fn wake<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(3) {
         0 => wake_low(x),
@@ -16,7 +16,7 @@ pub(super) fn wake<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x93606 : combat d'emblée (le groupe 2 tourne dans la même image).
+/// 0x93606: straight into combat (group 2 runs in the same frame).
 fn fight_from_wake<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     lib::set_immunities(x);
@@ -24,8 +24,8 @@ fn fight_from_wake<R: Bench>(x: &mut Cx<'_, R>) {
     fight(x);
 }
 
-/// 0x9351a : étage de proximité (0 à 7) du joueur le plus proche, d'après la distance horizontale (le test vertical de
-/// l'original compare la position du joueur avec elle-même : il est toujours nul).
+/// 0x9351a: proximity level (0 to 7) of the nearest player, from the horizontal distance (the original's vertical
+/// test compares the player's position with itself: it is always zero).
 fn proximity<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     let mut best: u16 = 0x7fff;
     for k in 0..4u32 {
@@ -48,8 +48,8 @@ fn proximity<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     level
 }
 
-/// 0x93470 : variante 0, accroupie : se retourne quand un joueur approche, et attaque quand l'animation de
-/// réveil est terminée.
+/// 0x93470: variant 0, crouched: turns around when a player approaches, and attacks when the wake-up animation
+/// is finished.
 fn wake_low<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(FALLS, 1);
     match x.u8(f::SUB2) {
@@ -67,7 +67,7 @@ fn wake_low<R: Bench>(x: &mut Cx<'_, R>) {
             let mut changed = false;
             if near == 0 {
                 if sub8(x, TIMER, 1).gt() {
-                    // pas encore
+                    // not yet
                 } else {
                     near = 2;
                     x.set8(NEAR, near);
@@ -101,7 +101,7 @@ fn wake_low<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x93582 : variante 1, en hauteur : lance le script de palette 0x10298 au rythme de l'animation, puis combat.
+/// 0x93582: variant 1, up high: starts palette script 0x10298 in time with the animation, then combat.
 fn wake_high<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -145,7 +145,7 @@ fn wake_high_wait<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- groupe 2 : combat -------------------------------------------------------------------------
 
-/// 0x93618 : combat ; sans joueur en vie, le boss attend.
+/// 0x93618: combat; with no player alive, the boss waits.
 pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => stand(x),
@@ -160,7 +160,7 @@ pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x93642 : debout, attend `+0x6e` images, se retourne si la cible est derrière.
+/// 0x93642: standing, waits `+0x6e` frames, turns around if the target is behind.
 fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(FALLS, 1);
     if x.u8(0x7) == 0 {
@@ -200,7 +200,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x936ee (kind 0x2f) et 0x936e6 (kind 0x30) : marche vers la cible ; à portée, elle devient une attaque.
+/// 0x936ee (kind 0x2f) and 0x936e6 (kind 0x30): walk toward the target; in range, it becomes an attack.
 fn walk<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(0x79, kind);
     x.set8(FALLS, 1);
@@ -231,7 +231,7 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
             }
         }
         if sub8(x, WALK_STEPS, 1).ne() {
-            // la marche continue
+            // the walk continues
         } else {
             lib::draw_6b(x);
             if lib::maybe_draw_6e(x) {
@@ -257,8 +257,8 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     }
 }
 
-/// 0x949b2 et 0x949d4 : une cible à portée ; au dé près le boss fonce (0x0202_0800), sinon il choisit une attaque dans la
-/// table 0x94a24 (la seconde table de l'original, 0x94c24, est écrasée avant d'être lue).
+/// 0x949b2 and 0x949d4: a target in range; on a die roll the boss charges (0x0202_0800), otherwise it chooses an
+/// attack from table 0x94a24 (the original's second table, 0x94c24, is overwritten before being read).
 fn attack_choice<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     if 0xffc0u32 >> r & 1 != 0 {
@@ -272,7 +272,7 @@ fn attack_choice<R: Bench>(x: &mut Cx<'_, R>) {
     lib::pick_byte(x);
 }
 
-/// 0x937e2 : bond vers la cible (le boss est loin d'elle).
+/// 0x937e2: leap toward the target (the boss is far from it).
 fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(FALLS, 1);
     match x.u8(0x7) {
@@ -300,9 +300,9 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupe 6 : course vers un point de l'écran ---------------------------------------------------
+// --- group 6: run to a point on the screen ---------------------------------------------------
 
-/// 0x93cfa : course (`+6` = 0, 2) puis saut (4) vers un point près de la caméra ; sans joueur, attente.
+/// 0x93cfa: run (`+6` = 0, 2) then jump (4) toward a point near the camera; with no player, wait.
 pub(super) fn jump_to_spot<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 2 => run_to_spot(x),
@@ -314,8 +314,8 @@ pub(super) fn jump_to_spot<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x9514a : choisit le point d'arrivée (`+0xae`, `+0xb0`), le sens de rotation (`+0xb3`) et l'angle (`+0x2d`) d'après la
-/// position du boss par rapport à la caméra (quatre coins, table 0x951b0 : X, Z, angle, sens).
+/// 0x9514a: chooses the arrival point (`+0xae`, `+0xb0`), the rotation direction (`+0xb3`) and the angle (`+0x2d`)
+/// from the boss's position relative to the camera (four corners, table 0x951b0: X, Z, angle, direction).
 fn choose_spot<R: Bench>(x: &mut Cx<'_, R>) {
     let cam = camera_record(x);
     let dx = x.u16(0x8).wrapping_sub(cam.u16(x.b, 0x8));
@@ -373,7 +373,7 @@ fn run_to_spot<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x93dd4 : saut sur place.
+/// 0x93dd4: jump in place.
 fn spot_jump<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -403,7 +403,7 @@ fn spot_jump<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupe 8 : attente avant une attaque ---------------------------------------------------------
+// --- group 8: wait before an attack ---------------------------------------------------------
 
 /// 0x93e52.
 pub(super) fn before_attack<R: Bench>(x: &mut Cx<'_, R>) {
@@ -478,7 +478,7 @@ pub(super) fn paused<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- groupe 12 : joueur saisi ---------------------------------------------------------------------------
 
-/// 0x9402a : plus de proie, le boss s'éloigne d'un bond.
+/// 0x9402a: no prey left, the boss moves away with a leap.
 fn drop_prey<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, state::WALK);
     x.set16(0x18, 0x400);
@@ -487,7 +487,7 @@ fn drop_prey<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x14, v);
 }
 
-/// 0x93f30 : le boss tient un joueur (`+0x50`) : morsures qui lui retirent 0x10 PV puis 1, relâché à 1 PV.
+/// 0x93f30: the boss holds a player (`+0x50`): bites that take 0x10 HP from them, then 1, released at 1 HP.
 pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) as i16 >= 0 {
         return drop_prey(x);
@@ -511,7 +511,7 @@ pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
         2 => {
             if tst8(x, TIMER).gt() {
                 if sub8(x, TIMER, 1).gt() {
-                    // la chute continue
+                    // the fall continues
                 } else {
                     next7(x);
                     x.set8(TIMER, 0x10);
@@ -530,8 +530,8 @@ pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x93fbc : animation de la morsure ; à sa fin, le joueur perd 1 PV (jamais le dernier) puis le boss le relâche
-/// quand le décompte est écoulé.
+/// 0x93fbc: bite animation; at its end, the player loses 1 HP (never the last one) then the boss releases them
+/// when the countdown has elapsed.
 fn hold_bite<R: Bench>(x: &mut Cx<'_, R>, prey: crate::objects::Obj) {
     if !lib::step(x) {
         return lib::hold_seized(x);

@@ -24,25 +24,25 @@ octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test 
 
 | Catégorie | Fichier | Test |
 |---|---|---|
-| Graphismes (cellules 16x16) | `gfx/cells_NN.png` | `graphismes_sans_perte` |
-| Palettes | `palettes.png` | `palettes_sans_perte` |
-| Échantillons | `sounds/NNN.wav` | `sons_sans_perte` |
-| Images de sprites | `sprites/frames.json` | `images_de_sprites_sans_perte` |
-| Scripts d'animation | `sprites/anims.json` | `animations_sans_perte` |
-| Cartes des décors | `levels.json` | `decors_sans_perte` |
-| Images du scroll 1 | `levels.json` (`scroll1`) | `scroll1_sans_perte` |
-| Palettes des scènes | `scene_palettes.json` | `palettes_des_scenes_sans_perte` |
-| Terrain (cartes fixes, types) | `terrain.json` | `terrain_sans_perte` |
-| Boîtes, marques au sol, listes d'images | `sprites/tables.json` | `tables_des_objets_sans_perte` |
-| Textes (couche 8x8, bulles, noms) | `texts.json` | `textes_sans_perte` |
-| Musiques et effets (pilote Z80) | `sound/music.json` | `musique_sans_perte` |
-| Scripts d'apparition (vagues) | `data/spawns.json` | `apparitions_sans_perte` |
-| Tables des joueurs | `data/players.json` | `joueurs_sans_perte` |
-| Réactions aux coups | `data/combat.json` | `combat_sans_perte` |
-| Tables des ennemis | `data/enemies.json` | `ennemis_sans_perte` |
-| Tables lues par le Rust, hors des précédentes | `data/rest.json` | `restes_sans_perte` |
-| Tout le reste de la région programme, hors code 68000 | `data/reste.json` | `programme_complet_hors_code` (`tests/rebuild.rs`), exemple `programme_complet` |
-| Tout le programme, graphismes, échantillons | tous | `programme_reconstruit`, `graphismes_reconstruits`, `echantillons_reconstruits` (`tests/rebuild.rs`) |
+| Graphismes (cellules 16x16) | `gfx/cells_NN.png` | `graphics_lossless` |
+| Palettes | `palettes.png` | `palettes_lossless` |
+| Échantillons | `sounds/NNN.wav` | `sounds_lossless` |
+| Images de sprites | `sprites/frames.json` | `sprite_frames_lossless` |
+| Scripts d'animation | `sprites/anims.json` | `animations_lossless` |
+| Cartes des décors | `levels.json` | `scenery_lossless` |
+| Images du scroll 1 | `levels.json` (`scroll1`) | `scroll1_lossless` |
+| Palettes des scènes | `scene_palettes.json` | `scene_palettes_lossless` |
+| Terrain (cartes fixes, types) | `terrain.json` | `terrain_lossless` |
+| Boîtes, marques au sol, listes d'images | `sprites/tables.json` | `object_tables_lossless` |
+| Textes (couche 8x8, bulles, noms) | `texts.json` | `texts_lossless` |
+| Musiques et effets (pilote Z80) | `sound/music.json` | `music_lossless` |
+| Scripts d'apparition (vagues) | `data/spawns.json` | `spawns_lossless` |
+| Tables des joueurs | `data/players.json` | `players_lossless` |
+| Réactions aux coups | `data/combat.json` | `combat_lossless` |
+| Tables des ennemis | `data/enemies.json` | `enemies_lossless` |
+| Tables lues par le Rust, hors des précédentes | `data/rest.json` | `leftovers_lossless` |
+| Tout le reste de la région programme, hors code 68000 | `data/reste.json` | `full_program_outside_code` (`tests/rebuild.rs`), exemple `programme_complet` |
+| Tout le programme, graphismes, échantillons | tous | `rebuilt_program`, `rebuilt_graphics`, `rebuilt_samples` (`tests/rebuild.rs`) |
 
 Les trois premières catégories sont décrites dans le `README.md` que l'outil écrit dans `assets/`. Ce
 document décrit les autres.
@@ -55,9 +55,9 @@ d'un chargement de fichier (les encodeurs des tests sans perte y sont réunis ; 
 
 | Fonction | Reconstruit | Test |
 |---|---|---|
-| `gfx_region(assets/gfx)` | région graphique (0x1800000 octets, 4 plans par groupe de 8 pixels) | `graphismes_reconstruits` : identique à `cps2_gfx::rom::load_gfx` |
-| `qsound_samples(assets)` | ROM d'échantillons (4 Mo) : les 342 `sounds/NNN.wav` à leur adresse (fiches de `music.json`) et la suite de chacun (`sample_tails`) ; le reste à zéro | `echantillons_reconstruits` : octets couverts identiques à `dd2.11m` + `dd2.12m` |
-| `Program::load(assets)` | ROM programme, vue données et vue espace programme déchiffrée (`Image`), à leurs adresses : tous les fichiers du tableau ci-dessus | `programme_reconstruit` : octets couverts identiques à `cps2::load_program` ; aucune écriture contradictoire |
+| `gfx_region(assets/gfx)` | région graphique (0x1800000 octets, 4 plans par groupe de 8 pixels) | `rebuilt_graphics` : identique à `cps2_gfx::rom::load_gfx` |
+| `qsound_samples(assets)` | ROM d'échantillons (4 Mo) : les 342 `sounds/NNN.wav` à leur adresse (fiches de `music.json`) et la suite de chacun (`sample_tails`) ; le reste à zéro | `rebuilt_samples` : octets couverts identiques à `dd2.11m` + `dd2.12m` |
+| `Program::load(assets)` | ROM programme, vue données et vue espace programme déchiffrée (`Image`), à leurs adresses : tous les fichiers du tableau ci-dessus | `rebuilt_program` : octets couverts identiques à `cps2::load_program` ; aucune écriture contradictoire |
 
 `Image::covered()` donne les zones décrites par les fichiers ; les autres octets valent zéro. Sur la ROM
 programme (4 Mo, vue données), les fichiers décrits couvrent 3 084 046 octets (images, palettes, cartes de décors,
@@ -67,7 +67,7 @@ espaces ([sans-rom.md](sans-rom.md) « Couverture complète des données »). Ne
 seules les tables du pilote, `sound/music.json`, sont extraites), le programme du DSP QSound
 (`dl-1425.bin`) et le code 68000.
 
-Application : `ddsom [dossier_roms] --assets [dossier]` (`ddsom/src/main.rs`) charge les graphismes et
+Application : `ddsom [dossier_roms] --assets [dir]` (`ddsom/src/main.rs`) charge les graphismes et
 les échantillons depuis les ressources (`Machine::load_ddsom_with` : `dd2.11m`...`dd2.20m` ne sont pas
 lues) ; le programme, le Z80 et le DSP viennent encore des ROMs. Vérification d'une partie :
 
@@ -157,7 +157,7 @@ chacun un sprite matériel CPS2 de 1 à 16 x 1 à 16 cellules 16x16. Lecture : `
 | `pieces` | +10 | `[dx, dy, code, attributs]` : `code` (mot) puis, si `mode`, attributs (mot) ; `dx`, `dy` de la table |
 
 Unités : `dx`, `dy` en pixels depuis le point d'ancrage de l'objet (sa position à l'écran : x, et y + z
-retournés), y vers le bas de l'écran. Miroir horizontal de l'objet : morceau en `-dx - 16 x largeur`, bit 5
+retournés), y vers le bas de l'écran. Miroir horizontal de l'objet : morceau en `-dx - 16 x width`, bit 5
 des attributs inversé. Attributs : bits 0-4 palette (relative à la base des sprites, ou imposée par
 l'objet, `+0x2a/+0x2b`), 5 miroir x, 6 miroir y, 8-11 largeur - 1, 12-15 hauteur - 1. La cellule (bx, by)
 d'un morceau est `bank << 16 | (code & !0xf) + ((code + bx) & 0xf) + 16 by` (sans miroir ; `render.rs` de
@@ -267,7 +267,7 @@ champ `data` de `anims.json`) et listes d'images lues directement par le code.
 ```
 
 * **Boîtes de collision** ([combat.md](combat.md) §3). Un objet porte un jeu (`+0x2e`) et trois
-  index : corps `+0x38`, poussée `+0x39`, attaque `+0x3a` (0 : aucune boîte). `box_tables[k].sets[jeu]`
+  index : corps `+0x38`, poussée `+0x39`, attaque `+0x3a` (0 : aucune boîte). `box_tables[k].sets[game]`
   est l'adresse de la boîte 0 du jeu ; la boîte `n` est 8 octets plus loin par index
   (`SpriteTables::hit_box`). Boîte : X (signé), demi-largeur, Z (hauteur), demi-hauteur, Y (profondeur),
   demi-profondeur, deux octets nuls. Toutes les boîtes forment une région jointive, découpée en blocs
@@ -277,7 +277,7 @@ champ `data` de `anims.json`) et listes d'images lues directement par le code.
   sont des blocs de cette région. Ces mêmes tables servent à dessiner les « ombres détaillées »
   (`sprites.rs`, 0x1ec4e : quatre quarts autour du centre de la boîte `+0x38` et `+0x3a`).
 * **Boîtes de visibilité** (index `+0x3c`, 0x1ed2, [objets.md](objets.md) §7) : `(dx, largeur, dy,
-  hauteur)`, l'objet est visible si `x écran + dx <= largeur` et `hauteur écran + dy <= hauteur` en non
+  hauteur)`, l'object est visible si `x écran + dx <= largeur` et `hauteur écran + dy <= hauteur` en non
   signé. 128 entrées (la suite de la ROM est d'une autre nature) ; les index au-delà de 65 valent tous
   `(0, 384, 0, 256)`.
 * **Marques au sol** (index `+0x3b`, 0x1e3a6, `sprites.rs`) : un sprite matériel par marque ;
@@ -373,7 +373,7 @@ Tout ce que lit le pilote son réécrit (`ddsom-sound`, [son.md](son.md)) hors �
   la table.
 * **Pistes** (`code`) : toutes les instructions qu'atteignent les pistes des sons, en suivant les sauts
   (`jump`, débuts et sorties de boucles), regroupées en blocs d'instructions jointives (1 612 blocs,
-  123 659 instructions, aucun chevauchement). `Music::track(adresse)` rend les jetons d'une piste jusqu'à
+  123 659 instructions, aucun chevauchement). `Music::track(address)` rend les jetons d'une piste jusqu'à
   sa fin ou son premier saut. Jetons (`music::decode_op` / `encode_op`) :
 
   | Jeton | Octets | Sens |
@@ -458,11 +458,11 @@ de lignes de même forme, rangées telles quelles en ROM.
   (tables rangées au milieu du code) ; sinon espace données.
 * `regions` : plages que les tables couvrent exactement, sans trou ni chevauchement (la taille de chaque
   table y est l'écart jusqu'à la suivante).
-* Accès : `DataFile::table(nom)`, `Table::value(ligne)`, `Table::get(ligne, colonne)`,
-  `Table::field(ligne, "vx")` ; `DataFile::via("hp_by_level", personnage)` suit une table d'adresses par
+* Accès : `DataFile::table(name)`, `Table::value(line)`, `Table::get(line, column)`,
+  `Table::field(line, "vx")` ; `DataFile::via("hp_by_level", character)` suit une table d'adresses par
   personnage comme le code (`table_of` de `init.rs`).
 
-Le test de chaque fichier (`joueurs_sans_perte`, ...) réencode toutes les tables et les compare à la ROM
+Le test de chaque fichier (`players_lossless`, ...) réencode toutes les tables et les compare à la ROM
 octet par octet, vérifie la couverture des régions et que toute adresse `addr` qui tombe dans une région
 est le début d'une ligne d'une table du fichier.
 
@@ -471,7 +471,7 @@ est le début d'une ligne d'une table du fichier.
 Personnages (`+3` de l'enregistrement joueur, 0 à 11) : classe = personnage / 2 (0 combattant `fighter`,
 1 clerc `cleric`, 2 elfe `elf`, 3 nain `dwarf`, 4 magicien `magic_user`, 5 voleur `thief`), deux
 variantes par classe. Une table par personnage est nommée `rôle/propriétaires` : la classe si ses deux
-variantes la partagent, `classe.0` / `classe.1` sinon, `+` entre plusieurs classes.
+variantes la partagent, `class.0` / `class.1` sinon, `+` entre plusieurs classes.
 
 **Région 0x101166-0x1051ae** (entièrement couverte), lue par les tables d'adresses (12 longs) :
 
@@ -486,7 +486,7 @@ variantes la partagent, `classe.0` / `classe.1` sinon, `+` entre plusieurs class
 | `gear_by_level` | `0x3402` (données) | 22, 23, 23, 11, 13, 24, 22, 24 | `u8*48` | équipement copié en `+0x120` : trois listes de 16 octets (8 identifiants, 8 charges ; 0x56 = rien) ; huit tables distinctes (0x3308) |
 | `spells_by_level` | `0x34b4` (prog) | 24, 23, 11, 22 | `u8*16` | 10 premiers octets copiés en `+0x150` (réserve de sorts, 0x348e) ; une table nulle commune au combattant, au nain et au voleur |
 | `magic_damage/0..14` | `0x10417a` + 60 n | 2 x 30 | `u8*30` | dégâts par niveau du lanceur : ligne 0 contre les ennemis, ligne 1 contre les chefs (`Damage::Table(chefs, ennemis)` de `foes.rs` ; consommateurs : `pshl_b`, `pshl_d`, `peff_e`, `peff_h`, `cleric`, `magic_user`, `elf`, `items`) |
-| `jump_speeds/<classe>` | `0x1044fe`… | 4 (nain : 8) | `i16*4` | (vx, ax, vz, az) de décollage par type de saut `+0x67`, 8.8 pixels par image (`common::launch_jump`) ; le nain lit aussi `ligne + 1` |
+| `jump_speeds/<class>` | `0x1044fe`… | 4 (nain : 8) | `i16*4` | (vx, ax, vz, az) de décollage par type de saut `+0x67`, 8.8 pixels par image (`common::launch_jump`) ; le nain lit aussi `line + 1` |
 | `walk_*` | `0x1045de`, `0x10478e`, `0x10493e`, `0x104aee`, `0x104c9e`, `0x104e4e`, `0x104ffe` (données) | 16 | `i16*2` | vitesses (vx, vy) 8.8 par combinaison des directions (bits 0-3 des touches) : normale, inutilisée (aucune lecture trouvée), lente forcée, course, rapide, accroupie, lente (`walk.rs`) |
 
 **Tables rangées dans le code** (taille mesurée jusqu'à l'instruction suivante) :
@@ -537,7 +537,7 @@ ENEMY (chefs), soit 55 entrées (32 ennemis, 23 chefs).
 
 | Nom | Adresse | Lignes x format | Sens |
 |---|---|---|---|
-| `anim_sets` | `0x3de58` (données) | 55 x `addr` | jeu d'animations de réaction par type ; une valeur < 0x10000 est le déplacement (depuis la table) d'une petite routine qui ajoute la variante `anim_variants[+0xbf]` puis prend le jeu dans son immédiat (`movea.l #jeu,A4` à `+6`) : types 13, 19, 34 et 54 |
+| `anim_sets` | `0x3de58` (données) | 55 x `addr` | jeu d'animations de réaction par type ; une valeur < 0x10000 est le déplacement (depuis la table) d'une petite routine qui ajoute la variante `anim_variants[+0xbf]` puis prend le jeu dans son immédiat (`movea.l #game,A4` à `+6`) : types 13, 19, 34 et 54 |
 | `anim_variants` | `0x3e28a` | 4 x `u8` | ajout au numéro d'animation selon `+0xbf` |
 | `no_grab_down` | `0x3e1ee` | 64 x `u8` | non nul : le type ne reste pas au sol quand il est saisi |
 | `launch_speeds`, `launch_counters` | `0x3bdcc`, `0x3bdec` | 4 x `i16*4`, 4 x `u8` | projections prédéfinies : (vx, vy, vz, gravité) 8.8 et compteur `+0x90` (0x3bda2) |
@@ -554,10 +554,10 @@ chacune, `rts` 0x3e2aa = rien), relevé par type `0x3e000`.
 
 | Nom | Adresse | Lignes x format | Sens |
 |---|---|---|---|
-| `fiches` | `0x1051ae` | 122 x `addr` | fiche de chaque variété de caisse (`+3`) |
-| `fiches/a`, `fiches/b` | `0x105396`, `0x1059da` | 38, 84 x `u8*10 u8*16 u8*16` | fiche de 0x2a octets (0xda082) : 10 octets copiés en `+0x60` (sorte : 0-2 caisse, 3+ coffre), `+0x61`, `+0x62` (butin du centre), `+0x69`, `+0x63..+0x68` (butin par classe de joueur) ; 16 butins tirés au hasard pour `+0x6a` ; 16 effets spéciaux tirés au hasard pour `+0x6b`. 8 octets nuls inutilisés (`pad/fiches`) suivent la fiche `0x1059a8`. Région 0x1051ae-0x1067a2 |
+| `sheets` | `0x1051ae` | 122 x `addr` | fiche de chaque variété de caisse (`+3`) |
+| `sheets/a`, `sheets/b` | `0x105396`, `0x1059da` | 38, 84 x `u8*10 u8*16 u8*16` | fiche de 0x2a octets (0xda082) : 10 octets copiés en `+0x60` (sorte : 0-2 caisse, 3+ coffre), `+0x61`, `+0x62` (butin du centre), `+0x69`, `+0x63..+0x68` (butin par classe de joueur) ; 16 butins tirés au hasard pour `+0x6a` ; 16 effets spéciaux tirés au hasard pour `+0x6b`. 8 octets nuls inutilisés (`pad/sheets`) suivent la fiche `0x1059a8`. Région 0x1051ae-0x1067a2 |
 | `loot` | `0xda28a` (données) | 135 x `u8*2` | par numéro de butin : (type, variante) de l'ITEM créé ; s'arrête à la table d'adresses par personnage `0xda398` (taille déduite, aucun index plus grand relevé) |
-| `wear_chances` | `0xdb7b8` (données) | 3 x `x16*6` | arme spéciale, bouclier, anneau (`items.rs`, `Porte`) : un masque par valeur du compteur de coups restant (0 à 5) ; l'objet tombe si le bit `rng & 15` du masque est levé |
+| `wear_chances` | `0xdb7b8` (données) | 3 x `x16*6` | arme spéciale, bouclier, anneau (`items.rs`, `Door`) : un masque par valeur du compteur de coups restant (0 à 5) ; l'objet tombe si le bit `rng & 15` du masque est levé |
 
 Code, pas des données : effets spéciaux des caisses `0xda06a` (6 adresses de routines, prog).
 
@@ -685,11 +685,11 @@ Fenêtres de dialogue (SET 24, `0xd7056`, `families/set_b.rs` module `dialog`) e
 
 * Passage de niveau (SET C 7, `families/set_c_finale_c.rs`) : `levelup_tables` (0xceaa2, prog : une
   table par classe), `levelup_range` (0xce728, prog : niveaux min et max de la classe, un
-  enregistrement par niveau), `levelup/<classe>.lists` (3 listes de messages : anglais, français,
-  allemand), `levelup/<classe>` (20 octets par niveau atteint : PV max `+0x60`, déplacement du message
+  enregistrement par niveau), `levelup/<class>.lists` (3 listes de messages : anglais, français,
+  allemand), `levelup/<class>` (20 octets par niveau atteint : PV max `+0x60`, déplacement du message
   dans la liste pour la variante paire et impaire du personnage, octet `stats` (négatif : rien) puis 9
   minimums de `+0x151..`, nouvel et ancien objet `+0x10d`, nouvel et ancien objet d'une case `+0x140..`
-  (0xff : rien)), `levelup/<classe>/<langue>` (adresses des messages) ; région `levelup`
+  (0xff : rien)), `levelup/<class>/<langue>` (adresses des messages) ; région `levelup`
   0xcebba-0xcf15a. Messages `levelup_text@…` (région `levelup_texts` 0xd0b90-0xd40e6 : anglais en
   tuiles, français et allemand en octets ; dans ceux-ci `~` est l'octet 0xfe, commande suivie d'un
   octet ; `0xff n m` fin de page). Cadre : `levelup_frame_offsets` et `levelup_frame_by_step` (0xce7ac,
@@ -732,7 +732,7 @@ bibliothèque (`palettes.png`, ROM `0x253000`), par tables (`palette.rs`, [video
 * `pages` : pages 1 (D0 = 0 à 2), 2 et 3 (par scène) : adresse de 32 palettes consécutives. Ces tables
   sont lues en adressage relatif au PC, donc dans l'espace programme déchiffré (`program`). Deux entrées
   de la page 3 valent 0 (scènes 0x58 et 0x59 : le jeu copie alors l'adresse 0 de la ROM).
-* Toute adresse non nulle est dans la bibliothèque, alignée : palette `(adresse - 0x253000) / 32`
+* Toute adresse non nulle est dans la bibliothèque, alignée : palette `(address - 0x253000) / 32`
   (`ScenePalettes::library_index`).
 
 Restent dans le code : le choix des pages et des sources de fondu (scènes 0x2f et 0x42, `0x1a296`), les
@@ -750,7 +750,7 @@ fixe (0x24b0, `video.rs`). Le numéro indexe une table de types (`terrain.rs`).
 ```
 
 * `maps` : colonnes de 16 pixels de large ; dans une colonne, le mot `k` couvre `(y + dy) / 16 % 16 =
-  15 - k`. `FixedMap::word(x, y)` refait le calcul de 0x24b0 (colonne `(2 x) & 0xffe0` étendue en signe,
+  15 - k`. `FixedMap::word(x, y)` refait le compute de 0x24b0 (column `(2 x) & 0xffe0` étendue en signe,
   rang `0x1e - ((y >> 3) & 0x1e)`). Carte de la scène 2 : 112 colonnes (les 16 dernières nulles, jusqu'à la
   seconde carte) ; scène 0x14 : 96 colonnes, suivies du remplissage `0xff` de la fin de la ROM.
 * `kinds` : 128 types par table (la seconde suit la première ; du code suit la seconde). Les deux tables
@@ -800,13 +800,13 @@ Octets lus et couverts, par fichier d'assets (données ; programme) : `sprites/f
 `data/dialogs.json` 2 594 ; `scene_palettes.json` 2 266 ; 324 ; `data/players.json` 1 680 ; 410 ; `data/scenes.json`
 1 498 ; 76 ; `data/boxes.json` 446 ; `data/enemies.json` 736 ; 116 ; `terrain.json` 508 ; `data/combat.json` 168.
 
-**Ajoutées par cette mesure** (`data/rest.json`, `extract/src/rest.rs`, 1 497 tables, test `restes_sans_perte`) :
+**Ajoutées par cette mesure** (`data/rest.json`, `extract/src/rest.rs`, 1 497 tables, test `leftovers_lossless`) :
 scripts de cases de tuiles des SET 4 et 6 (`tile_anim_entries/4` et `/6`, 53 + 32 entrées de 16 octets en
 espace programme ; `tile_anim/<script>.<n>` : durée, colonnes, lignes, puis un long par case ; 0x3ec70a-0x3f5448) ;
 scripts de palettes des SET 0 (`palette_script_table` 0xba57a, 79 entrées ; `palette_script/<script>.*` : en-tête,
 blocs, fin / relance / saut ; `palette_script_transition` 0xba44c et `palette_script_end` 0xba4ca, espace
 programme) ; sous-objets des joueurs (`overlay_body` 0x395d4, `overlay_shield` 0x39604, `overlay_anims` 0x396e8,
-`overlay_palettes` 0x397e0, et les 10 tables de lignes `overlay_rows/<adresse>` de 0x1147c6 à 0x11bffa : 1 407
+`overlay_palettes` 0x397e0, et les 10 tables de lignes `overlay_rows/<address>` de 0x1147c6 à 0x11bffa : 1 407
 lignes de 8 octets, animation, dx, dz, retournement, derrière, plus un mot `nop` de bourrage) ; palettes d'aura
 (`aura_offsets` 0x378aa en espace programme, `aura_b` 0x378c2, `aura_c` 0x384c2, `aura_normal` 0x390c2) ; piles
 initiales des 16 tâches (`task_stacks` 0x534) ; panoramique du son (`sound_pan` 0xee04e, 48 octets).
@@ -817,17 +817,17 @@ initiales des 16 tâches (`task_stacks` 0x534) ; panoramique du son (`sound_pan`
 |---|---|---|---|
 | Chronométrage (`chemin.rs`, `timing.rs`, `objects/cost.rs`, `ai.rs`, `combat.rs`) | 0 | 32 316 | pas des données : les routines natives qui comptent encore les cycles du 68000 décodent le code d'origine (`m68k::decode`) ; disparaît avec le 68000 |
 | Joueurs (`player/`) | 782 | 902 | réactions aux coups (`hit_reactions.rs` 0xf1cc4-0x1010b2 : seuils, durées d'étourdissement, lignes de poussée), combos (`combos.rs` 0xf193a) ; en p : tables de décalages des états de blessure (`hurt.rs`), des scripts de cinématiques (`scripted.rs`, `cinematics.rs`) et des routines par personnage (`characters.rs`) (h) |
-| Tirs et effets des joueurs (`families/joueur/`) | 364 | 698 | trajectoires de l'anneau (`peff_ring.rs` 0x1c9db6-0x1ca034 : vitesses x, z) ; en p : déplacements des coquilles (`pshell.rs`) |
+| Tirs et effets des joueurs (`families/player/`) | 364 | 698 | trajectoires de l'anneau (`peff_ring.rs` 0x1c9db6-0x1ca034 : vitesses x, z) ; en p : déplacements des coquilles (`pshell.rs`) |
 | Ennemis (`families/enemy_*`, `reactions.rs`) | 1 136 | 1 294 | tables d'attitude par niveau (octets de déplacements : squelette 0x5942a, bête 0x7473e, trog 0x5af66, ghoul, elfe, kobold, hibou, guerrier 0x77634) ; cercle de réactions 0x1c94b6 ; en p : tables d'adresses de routines et de déplacements |
 | Boss (`families/boss_*`) | 240 | 694 | tables de décision (octets) des chefs 5, 7, 17, 21, vitesses du chef 15 (0x1c67b8), oscillation du dragon (0x8faa2) |
 | SET : décors, portes, rideaux (`families/set*`) | 1 986 | 664 | tables par variante des scènes de SET C (`set_c_scene.rs` 0xbcfc6-0xc821c : entrées de 0x14 octets rang, difficulté, positions), finales (0xce51a), positions (0xd4198) ; en p : table du rideau (0xbcea4) |
 | Effets, tirs ennemis, objets, caisses (`families/effects*`, `eshl*`, `sobj`, `items`) | 2 220 | 1 622 | rideau de la porte du SET E (`effects_e.rs` 0xadad0-0xae118 : pas du rideau puis tuiles), tables de pièces et de couleurs ; en p : types d'objets de SET (`sobj.rs`), vitesses de pièces |
-| Affichage (`hud/`, `text.rs`, `video.rs`, `taches/ecran_fixe.rs`) | 2 732 | 290 | séries de colonnes de tuiles du HUD (`hud/layer.rs` 0x3f54c2-0x3f6300, 3 mots par colonne), glyphes de la barre d'état (0x17bca), chaînes terminées par `@` lues par `text.rs` (0x14e58, 0x1c552, 0xd6926, 0xe04c8), écrans fixes (0x19a1a) ; en p : origines et lettres du HUD |
+| Affichage (`hud/`, `text.rs`, `video.rs`, `tasks/fixed_screen.rs`) | 2 732 | 290 | séries de colonnes de tuiles du HUD (`hud/layer.rs` 0x3f54c2-0x3f6300, 3 mots par colonne), glyphes de la barre d'état (0x17bca), chaînes terminées par `@` lues par `text.rs` (0x14e58, 0x1c552, 0xd6926, 0xe04c8), écrans fixes (0x19a1a) ; en p : origines et lettres du HUD |
 | Modes, scènes, caméra, démarrage | 1 390 | 268 | scripts de démonstration (`modes/demo.rs` 0x20070), écran de démarrage (0x18faa, 0x133ba), tables de scrolls (`scroll.rs` 0x33bdc, `camera_modes.rs` 0x321fc), classement (0xfc6d8) ; en p : tables des scènes |
 | Son (`sound.rs`) | 206 | 720 | listes de genres de sons (0xe6684) ; en p : code des enveloppes lu par les wrappers de son (0xe0ca8-0xede06) |
 | Moteur d'objets (`sprites.rs`, `objects/`) | 4 534 | 100 | textes en sprites et listes de morceaux (`sprites.rs` 0x1d8be-0x1db32, 0x201e0), tables de vitesses des mouvements (`motion.rs` 0x1c67ce-0x1ca180 : vx, vy par indice), index d'entrées (`anim.rs` 0xb2b6a, 0x16cb10, 0x1b232c), rangs (0x1f208) |
 | IA, combat, boucles de dispatch (`ai.rs`, `ai_aids.rs`, `combat/`, `dispatch.rs`) | 1 680 | 792 | pointeurs et masques d'aides à la visée (`ai_aids.rs` 0x78ae-0x16c78c, `ai.rs` 0xa4f2), tables de dégâts (`combat/damage.rs` 0x3d94) ; en p : les 10 tables de dispatch des pools d'objets (`dispatch.rs` 0x39908-0x39fe4, adresses de code) |
-| Accès génériques (`vue.rs`, `mem.rs`) | 1 694 | 74 | lectures simulées (`Vue::rd8`) dont l'appelant n'est pas résolu à trois niveaux : bloc 0x000-0x400 (306 000 lectures : vecteurs ou code, (h)), 0x275a, 0x2dc3e ; pointeurs lus par `mem.rs` (0x4c6de-0x100706, nombreuses petites zones) |
+| Accès génériques (`view.rs`, `mem.rs`) | 1 694 | 74 | lectures simulées (`View::rd8`) dont l'appelant n'est pas résolu à trois niveaux : bloc 0x000-0x400 (306 000 lectures : vecteurs ou code, (h)), 0x275a, 0x2dc3e ; pointeurs lus par `mem.rs` (0x4c6de-0x100706, nombreuses petites zones) |
 
 **Lecture des résultats.** Dans l'espace données, les zones non couvertes sont de petites tables disséminées
 (moins de 20 Ko au total, 97,6 % des octets lus sont couverts) : tables de vitesses, d'attitudes, de décisions, de

@@ -1,6 +1,6 @@
-//! Petites routines du décor (SET) appelées par des tâches, des scènes ou des gestionnaires d'autres
-//! familles : le reste de 68000 qui ne tenait à aucun gestionnaire. Chacune est une native à son adresse
-//! d'origine ; les registres qu'elle laisse sont ceux de l'original.
+//! Small scenery (SET) routines called by tasks, scenes or handlers of other
+//! families: the 68000 leftover that fit no handler. Each is a native at its original
+//! address; the registers it leaves are those of the original.
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -10,15 +10,15 @@ use crate::mem::{prog32, prog8, rd16, rd8, rts, set_low_word, wr16, wr32, wr8, A
 use crate::{call, regs, Native};
 use crate::objects::Obj;
 
-/// Tampon de tuiles de la couche 3 : les colonnes de 44 mots longs effacées par 0xd5f12.
+/// Tile buffer of layer 3: the columns of 44 longwords cleared by 0xd5f12.
 const COLUMNS: [u32; 3] = [0x91_215c, 0x91_2160, 0x91_2164];
 const COLUMN_ROWS: u32 = 44;
-/// Pas d'une ligne du tampon.
+/// Step of one row of the buffer.
 const ROW: u32 = 0x80;
 /// Tuile vide (code 0x20, attribut 0).
 const BLANK: u32 = 0x20_0000;
 
-/// Efface les trois colonnes du tampon de tuiles ; rend la fin de la dernière (A1 de l'original).
+/// Clears the three columns of the tile buffer; returns the end of the last one (A1 of the original).
 pub fn clear_columns(b: &mut Cps2Bus) -> u32 {
     let mut a1 = 0;
     for column in COLUMNS {
@@ -31,15 +31,15 @@ pub fn clear_columns(b: &mut Cps2Bus) -> u32 {
     a1
 }
 
-/// 0xd5f12 : efface trois colonnes du tampon de tuiles (44 lignes chacune) pour la sortie de scène.
+/// 0xd5f12: clears three columns of the tile buffer (44 rows each) for the scene exit.
 fn erase_columns(c: &mut Cpu, b: &mut Cps2Bus) {
     let end = clear_columns(b);
     columns_regs(c, end);
     rts(c, b);
 }
 
-/// Registres que laisse l'effacement des colonnes : A1 = fin de la dernière, D0 = compteur du `dbf` épuisé, D4 =
-/// la tuile vide.
+/// Registers left by the column clearing: A1 = end of the last one, D0 = exhausted `dbf` counter, D4 =
+/// the empty tile.
 fn columns_regs(c: &mut Cpu, end: u32) {
     c.a[1] = end;
     c.d[0] = 0xffff;
@@ -47,13 +47,13 @@ fn columns_regs(c: &mut Cpu, end: u32) {
     c.flags_logic(BLANK, Size::Long);
 }
 
-/// Barre de vie du boss (h) : drapeau d'affichage (FF8030) et objet SET de la barre (pointeur court en FF2476).
+/// Boss health bar (h): display flag (FF8030) and SET object of the bar (short pointer at FF2476).
 const LIFE_BAR_SHOWN: u32 = 0x30;
 const LIFE_BAR_OBJECT: u32 = 0xff_2476;
 
-/// 0xd5ef8 : quand la barre de vie est affichée, la rattache au boss `boss` (`+0x34`, variante 1, état remis à
-/// zéro) et efface les colonnes de tuiles de l'ancienne barre (0xd5f12). Rend la fin des colonnes effacées (l'A1
-/// de l'original), `None` si la barre n'est pas affichée. Cœur.
+/// 0xd5ef8: when the health bar is displayed, attaches it to boss `boss` (`+0x34`, variant 1, state reset to
+/// zero) and clears the tile columns of the old bar (0xd5f12). Returns the end of the cleared columns (the A1
+/// of the original), `None` if the bar is not displayed. Core.
 pub fn attach_life_bar(b: &mut Cps2Bus, boss: crate::objects::Obj) -> Option<u32> {
     if rd8(b, A5 + LIFE_BAR_SHOWN) == 0 {
         return None;
@@ -65,19 +65,19 @@ pub fn attach_life_bar(b: &mut Cps2Bus, boss: crate::objects::Obj) -> Option<u32
     Some(clear_columns(b))
 }
 
-/// 0xce668 : charge deux grilles de blocs (0x26d4, destination 0x917000, la seconde à la suite) dont les numéros sont
-/// lus, par paire de mots, dans la table 0xce686 à l'indice `character`.
+/// 0xce668: loads two block grids (0x26d4, destination 0x917000, the second right after) whose numbers are
+/// read, as word pairs, from table 0xce686 at index `character`.
 pub fn two_grids(b: &mut Cps2Bus, character: u16) {
     const GRIDS: u32 = 0xce686;
     let table = GRIDS.wrapping_add(character.wrapping_mul(4) as u32);
     let mut destination = 0x91_7000;
     for k in 0..2 {
-        let n = rd16(b, table + 2 * k); // lecture par (A4)+ : espace données
+        let n = rd16(b, table + 2 * k); // read through (A4)+: data space
         destination = crate::video::load_grid(b, crate::video::Grid::Layer2, n, destination).destination;
     }
 }
 
-/// `two_grids` (personnage D0) avec les registres de l'original.
+/// `two_grids` (character D0) with the original's registers.
 fn load_two_grids(c: &mut Cpu, b: &mut Cps2Bus) {
     const GRIDS: u32 = 0xce686;
     const LOAD_BLOCKS: u32 = 0x26d4;
@@ -85,7 +85,7 @@ fn load_two_grids(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut a4 = GRIDS.wrapping_add((c.d[0] as u16).wrapping_mul(4) as u32);
     c.a[1] = DESTINATION;
     for _ in 0..2 {
-        set_low_word(&mut c.d[0], rd16(b, a4)); // lecture par (A4)+ : espace données
+        set_low_word(&mut c.d[0], rd16(b, a4)); // read through (A4)+: data space
         a4 += 2;
         c.a[4] = a4;
         call(c, b, LOAD_BLOCKS);
@@ -93,8 +93,8 @@ fn load_two_grids(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// Routine propre à la variante (`+3`) du générateur : un octet de la table `kinds` donne l'indice dans la
-/// table de routines `routines` ; l'indice 0 est un simple RTS.
+/// Routine specific to the generator's variant (`+3`): a byte of the `kinds` table gives the index into the
+/// `routines` routine table; index 0 is a plain RTS.
 fn variant_routine(c: &mut Cpu, b: &mut Cps2Bus, kinds: u32, routines: u32) {
     const NOTHING: u32 = 0xd99f8;
     let variant = rd8(b, c.a[0] + 3) as u32;
@@ -108,8 +108,8 @@ fn variant_routine(c: &mut Cpu, b: &mut Cps2Bus, kinds: u32, routines: u32) {
     }
 }
 
-/// Cœur de `variant_routine` pour le générateur `me` : la routine de la variante, rien (0xd99f8) ou une musique de
-/// la scène (0xe0c5c, 0xe0d8c), sans registres.
+/// Core of `variant_routine` for generator `me`: the variant's routine, nothing (0xd99f8) or a scene
+/// music (0xe0c5c, 0xe0d8c), with no registers.
 fn variant_sound(b: &mut Cps2Bus, me: Obj, kinds: u32, routines: u32) {
     const NOTHING: u32 = 0xd99f8;
     let variant = me.u8(b, 3) as u32;
@@ -117,34 +117,34 @@ fn variant_sound(b: &mut Cps2Bus, me: Obj, kinds: u32, routines: u32) {
     match prog32(b, routines + index as u32) {
         NOTHING => {}
         sound @ (0xe0c5c | 0xe0d8c) => crate::sound::play(b, sound, me),
-        r => unreachable!("routine de vague {r:#x} : les tables 0xd98cc et 0xd996e n'ont que 0xd99f8, 0xe0c5c, 0xe0d8c"),
+        r => unreachable!("wave routine {r:#x}: tables 0xd98cc and 0xd996e only have 0xd99f8, 0xe0c5c, 0xe0d8c"),
     }
 }
 
-/// 0xd98b8 sans registres (générateur `me`).
+/// 0xd98b8 with no registers (generator `me`).
 pub fn begin_wave(b: &mut Cps2Bus, me: Obj) {
     variant_sound(b, me, 0xd98d8, 0xd98cc);
 }
 
-/// 0xd995a sans registres (générateur `me`).
+/// 0xd995a with no registers (generator `me`).
 pub fn finish_wave(b: &mut Cps2Bus, me: Obj) {
     variant_sound(b, me, 0xd9976, 0xd996e);
 }
 
-/// 0xd98b8 : routine propre à la variante, au démarrage d'une vague (appelée directement par le générateur SET 19,
-/// A0 = le générateur ; la native ajoute le `rts`).
+/// 0xd98b8: routine specific to the variant, at the start of a wave (called directly by SET generator 19,
+/// A0 = the generator; the native adds the `rts`).
 pub fn wave_start(c: &mut Cpu, b: &mut Cps2Bus) {
     variant_routine(c, b, 0xd98d8, 0xd98cc);
 }
 
-/// 0xd995a : routine propre à la variante, à la fin d'une vague.
+/// 0xd995a: routine specific to the variant, at the end of a wave.
 pub fn wave_end(c: &mut Cpu, b: &mut Cps2Bus) {
     variant_routine(c, b, 0xd9976, 0xd996e);
 }
 
-/// Réglages de la caméra posés par les entrées « appel » des scripts de scène (D0 = valeur) : limite de
-/// défilement en X (`A5+0x52c`), position verticale (`A5+0x57c`) et mode de la caméra (`A5+0x4ff`) ; les
-/// autres réglages (0x2a36, 0x2a42) sont dans `small`.
+/// Camera settings set by the "call" entries of the scene scripts (D0 = value): scroll limit
+/// in X (`A5+0x52c`), vertical position (`A5+0x57c`) and camera mode (`A5+0x4ff`); the
+/// other settings (0x2a36, 0x2a42) are in `small`.
 pub(crate) mod camera {
     use super::*;
 

@@ -1,12 +1,12 @@
-//! Type 6, état touché (`+4 = 4`, 0x62a54). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
-//! 6 seconde table de réactions, 8 saisie par un joueur (le chien s'enfuit hors de l'écran).
+//! Type 6, hit state (`+4 = 4`, 0x62a54). `+5`: 0 reaction by table (`+0x49`), 2 recoil, 4 fall and get up, 6 second
+//! reaction table, 8 grabbed by a player (the dog runs off the screen).
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Tables de réactions communes aux coups, indexées par le code `+0x49`.
+/// Reaction tables shared by the hits, indexed by code `+0x49`.
 const REACT_FIRST: u32 = 0x62aa2;
 const REACT_SECOND: u32 = 0x62d76;
 
@@ -26,7 +26,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-// --- sous-état 2 : recul ------------------------------------------------------------------------------------
+// --- substate 2: recoil ------------------------------------------------------------------------------------
 
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
@@ -62,7 +62,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 4 : chute et relevé --------------------------------------------------------------------------
+// --- substate 4: fall and get up --------------------------------------------------------------------------
 
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -146,7 +146,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 : saisie par un joueur ------------------------------------------------------------------------
+// --- substate 8: grabbed by a player ------------------------------------------------------------------------
 
 fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
@@ -191,7 +191,7 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x62ec0 : le chien court vers le bord de l'écran.
+/// 0x62ec0: the dog runs toward the edge of the screen.
 fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_angle(x);

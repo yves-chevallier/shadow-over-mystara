@@ -1,12 +1,12 @@
-//! Boss 17, état 4 « touché » (0x96990). Groupes `+5` :
+//! Boss 17, state 4 "hit" (0x96990). `+5` groups:
 //!
-//! | `+5` | Rôle |
+//! | `+5` | Role |
 //! |---|---|
-//! | 0 | réaction au coup : mort si plus de PV, sinon routine de la table 0x96a0c (code `+0x49`) |
-//! | 2 | recul (poussé en arrière, `+6` = 0 à 4) |
-//! | 4 | relevé après une chute (`+6` = 0 à 6) |
-//! | 6, 8 | mort : chute, envol, fin (`+6` = 0 à 10) |
-//! | 10 | fin de relevé (reprend le milieu de `+5` = 4) |
+//! | 0 | reaction to the hit: death if out of HP, otherwise routine from table 0x96a0c (code `+0x49`) |
+//! | 2 | knockback (pushed back, `+6` = 0 to 4) |
+//! | 4 | getting up after a fall (`+6` = 0 to 6) |
+//! | 6, 8 | death: fall, flight, end (`+6` = 0 to 10) |
+//! | 10 | end of getting up (resumes the middle of `+5` = 4) |
 
 use crate::families::cx::Bench;
 use super::decide;
@@ -15,11 +15,11 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
+/// Table of reaction routines, indexed by the hit code `+0x49` (longs).
 const REACTIONS: u32 = 0x96a0c;
-/// La seule routine propre au boss (code 0x4c) : étourdissement avec tremblement.
+/// The only routine specific to the boss (code 0x4c): stun with trembling.
 const STUN_REACTION: u32 = 0x96ab8;
-/// Seuils de PV par phase (mots, 128 octets par ligne).
+/// HP thresholds per phase (words, 128 bytes per row).
 const THRESHOLDS_A: u32 = 0x10ee2;
 const THRESHOLDS_B: u32 = 0x110e2;
 
@@ -39,7 +39,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-/// 0x975cc : plus de PV ? Passe alors au groupe 6 (mort) et rend vrai.
+/// 0x975cc: out of HP? Then moves to group 6 (death) and returns true.
 fn out_of_hp<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if tst16(x, f::HP).gt() {
         return false;
@@ -76,7 +76,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     react(x, REACTIONS);
 }
 
-/// 0x96ab8 : étourdissement : le boss tremble sur place puis repart.
+/// 0x96ab8: stun: the boss trembles in place then sets off again.
 fn stun<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -155,7 +155,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +5 = 4 : relevé ----------------------------------------------------------------------------
+// --- +5 = 4: getting up ----------------------------------------------------------------------------
 
 fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -184,7 +184,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
                 angle = 0x18;
                 edge = edge.wrapping_add(0x120);
                 if !Fl::sub16(edge, x.u16(0x8)).le() {
-                    // entre les deux bords : pas de demi-tour
+                    // between the two edges: no about-face
                     x.add8(f::SUB2, 2);
                     return;
                 }
@@ -193,7 +193,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
             lib::drift_heading(x);
             speed(x, 0x2b);
             x.set16(TIMER, 0x1e);
-            // l'animation dépend du sens du boss par rapport au bord choisi
+            // the animation depends on the boss's direction relative to the chosen edge
             let wrong = (x.u8(f::FLIP) as i8 as i16 as u16).rotate_right(6) != 0;
             body_hurt(x, if wrong { 0xf } else { 0x10 });
         }
@@ -229,12 +229,12 @@ fn body_hurt<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     body(x, n);
 }
 
-/// 0x96ee6 : fin de relevé (sans compter le coup).
+/// 0x96ee6: end of getting up (without counting the hit).
 fn back_on_feet<R: Bench>(x: &mut Cx<'_, R>) {
     recovered_tail(x);
 }
 
-/// 0x96ce0 : le boss est debout ; choisit sa suite d'après sa phase.
+/// 0x96ce0: the boss is standing; chooses what follows according to its phase.
 pub(crate) fn recovered_tail<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);

@@ -1,31 +1,31 @@
-//! Personnages joueurs : enregistrement, machine à états commune, création, réactions aux coups.
+//! Player characters: record, common state machine, creation, hit reactions.
 //!
-//! Quatre enregistrements de 0x200 octets à `A5+0x5de` (`PLAYER_BASE`, pas `PLAYER_STRIDE`) ; un joueur
-//! est aussi un objet (`objects::Obj`) : les champs communs (position, vitesses, animation, liens de
-//! liste) sont ceux de `docs/objects.md`, les champs propres aux joueurs sont nommés dans `Player`.
-//! Voir `docs/player.md` pour le détail des structures et des états.
+//! Four records of 0x200 bytes at `A5+0x5de` (`PLAYER_BASE`, stride `PLAYER_STRIDE`); a player
+//! is also an object (`objects::Obj`): the common fields (position, speeds, animation, list
+//! links) are those of `docs/objects.md`, the player-specific fields are named in `Player`.
+//! See `docs/player.md` for the details of the structures and states.
 //!
-//! Organisation (les lettres P1.. sont celles de `docs/atlas.md`) :
-//! - `states` : valeurs de la machine à états (`+4..+7`) ;
-//! - `init` (P1) : remise à zéro et création des enregistrements ;
-//! - `update` (P4) : boucle des quatre joueurs et aiguillage des états principaux ;
-//! - `actions` (P4) : actions communes (immobile, marche, demi-tour, saisie) ;
-//! - `checks` (P4) : transitions selon les boutons (demi-tour, attaque, saut, lancer, spécial) ;
-//! - `walk` (P4) : vitesses de marche, mouvement, limites de l'écran ;
-//! - `animation` : animations propres aux joueurs (entrées longues) ;
-//! - `effects`, `overlays` (P4) : auras, palettes, arme et bouclier dessinés avec le joueur ;
-//! - `hurt` (P4) : joueur touché, à terre ou mort ;
-//! - `combos` (P6) : reconnaissance des coups spéciaux par séquences d'entrées ;
-//! - `hit_reactions` (P6) : réaction d'un ennemi frappé par un joueur ;
-//! - `scripted` (P3) : état scénarisé (entrée en scène, résurrection, cinématiques) ;
-//! - `characters` : points d'accroche pour le code des six personnages (P5, réécrit ailleurs) ;
-//! - `cov` : couverture des fonctions Rust par `examples/player_coverage`.
+//! Organization (the letters P1.. are those of `docs/atlas.md`):
+//! - `states`: values of the state machine (`+4..+7`);
+//! - `init` (P1): reset and creation of the records;
+//! - `update` (P4): loop over the four players and dispatch of the main states;
+//! - `actions` (P4): common actions (standing, walking, turning, grabbing);
+//! - `checks` (P4): transitions according to buttons (turn, attack, jump, throw, special);
+//! - `walk` (P4): walking speeds, movement, screen limits;
+//! - `animation`: player-specific animations (long entries);
+//! - `effects`, `overlays` (P4): auras, palettes, weapon and shield drawn with the player;
+//! - `hurt` (P4): player hit, on the ground or dead;
+//! - `combos` (P6): recognition of special moves by input sequences;
+//! - `hit_reactions` (P6): reaction of an enemy hit by a player;
+//! - `scripted` (P3): scripted state (scene entry, resurrection, cinematics);
+//! - `characters`: hook points for the code of the six characters (P5, rewritten elsewhere);
+//! - `cov`: coverage of the Rust functions by `examples/player_coverage`.
 //!
-//! Interface pour les personnages (P5) : voir `characters`. Les routines d'origine pas encore
-//! réécrites sont appelées par `Ctx::rom`, qui passe par l'exécuteur et donc par les natives : déclarer
-//! une `Native` à l'adresse d'une routine d'origine suffit à la remplacer partout.
+//! Interface for the characters (P5): see `characters`. The original routines not yet
+//! rewritten are called by `Ctx::rom`, which goes through the executor and hence through the natives: declaring
+//! a `Native` at the address of an original routine is enough to replace it everywhere.
 
-/// Compte l'appel de la fonction englobante quand la couverture est active (`cov`).
+/// Counts the call of the enclosing function when coverage is active (`cov`).
 macro_rules! cov {
     () => {{
         fn here() {}
@@ -60,7 +60,7 @@ use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::{call, Native};
 
-/// Routines natives des joueurs.
+/// Native routines of the players.
 pub const NATIVES: &[Native] = &[
     init::CLEAR_PLAYERS,
     init::CLEAR_OVERLAYS,
@@ -166,75 +166,76 @@ pub const NATIVES: &[Native] = &[
     spawn::MOON_B,
 ];
 
-/// Premier enregistrement joueur (offset depuis A5) et pas entre deux joueurs.
+/// First player record (offset from A5) and stride between two players.
 pub const PLAYER_BASE: u32 = 0x5de;
 pub const PLAYER_STRIDE: u32 = 0x200;
 pub const PLAYER_COUNT: u32 = 4;
 
-/// Variables de la RAM de travail lues ou écrites par le code des joueurs (vues typées, `crate::ram`). Les
-/// variables partagées viennent de `crate::ram` ; les noms marqués (h) sont des hypothèses.
+/// Work RAM variables read or written by the players' code (typed views, `crate::ram`). The
+/// shared variables come from `crate::ram`; the names marked (h) are hypotheses.
 pub mod ram {
     use crate::ram::{Word, Byte};
 
     pub use crate::ram::{CAMERA_ALT_ACTIVE as USE_ALT_CAMERA, CAMERA_ALT_X, CAMERA_ALT_Y, CAMERA_X, CAMERA_Y, PHASE, SCENE};
-    /// Indicateur de sort en cours (le bit du joueur 1 de la pause, `crate::ram::PAUSE`).
+    /// Spell-in-progress indicator (player 1's pause bit, `crate::ram::PAUSE`).
     pub use crate::ram::PAUSE as SPELL_FLAG;
 
-    /// Octet 2 des entrées courantes (`FF8000-FF8005`), que l'effet des pas dans l'eau ajoute au compteur d'images.
+    /// Byte 2 of the current inputs (`FF8000-FF8005`), which the effect of footsteps in water adds to the frame
+    /// counter.
     pub const INPUTS_2: Byte = Byte::a5(0x2);
-    /// Sous-étape de la partie (`FF802E`) : déroulement de l'entrée en scène.
+    /// Game sub-step (`FF802E`): progress of the scene entry.
     pub const SUB_STEP: Byte = Byte::a5(0x2e);
-    /// Bit k : le joueur k participe à la partie.
+    /// Bit k: player k takes part in the game.
     pub const PLAYERS_MASK: Byte = Byte::a5(0x31);
-    /// Nombre de joueurs en vie.
+    /// Number of players alive.
     pub use crate::ram::PLAYERS_ALIVE as PLAYERS_ALIVE;
-    /// Pause du jeu pendant un sort : les joueurs ne vieillissent plus, les collisions sont suspendues.
+    /// Game pause during a spell: the players no longer age, collisions are suspended.
     pub const PAUSE: Byte = Byte::a5(0x3d);
-    /// Jeu gelé (cinématique).
+    /// Frozen game (cinematic).
     pub const FROZEN: Byte = Byte::a5(0x42);
-    /// Masque d'entrées des joueurs.
+    /// Player input mask.
     pub const INPUT_MASK: Byte = Byte::a5(0x43);
-    /// Entrées gelées (scénario en cours).
+    /// Frozen inputs (scenario in progress).
     pub const INPUT_RAW: Byte = Byte::a5(0x44);
-    /// Objet suivi par la caméra (mot : adresse courte).
+    /// Object followed by the camera (word: short address).
     pub const CAMERA_FOCUS: Word = Word::a5(0x46);
-    /// Scénario en cours (second drapeau, avec `INPUT_RAW`).
+    /// Scenario in progress (second flag, with `INPUT_RAW`).
     pub const SCRIPTED_B: Byte = Byte::a5(0x4e);
-    /// Valeur copiée depuis l'ennemi tué quand il le prévoit (butin).
+    /// Value copied from the killed enemy when it provides one (loot).
     pub const KILL_FLAG: Byte = Byte::a5(0x4f);
-    /// Compteur des malédictions de l'arme 0xe (h).
+    /// Counter of the curses of weapon 0xe (h).
     pub const CURSE_COUNT: Byte = Byte::a5(0x56);
-    /// Mode « ralenti » : tous les joueurs marchent lentement (h).
+    /// "Slow-motion" mode: all the players walk slowly (h).
     pub const SLOW_MODE: Byte = Byte::a5(0x59);
-    /// Ligne choisie par le sort en cours.
+    /// Row chosen by the spell in progress.
     pub const SPELL_ROW: Byte = Byte::a5(0x5b);
-    /// Fin de scène sans pose de victoire (h).
+    /// End of scene without a victory pose (h).
     pub const NO_VICTORY: Byte = Byte::a5(0x5c);
-    /// Entrée en scène sans marche (h).
+    /// Scene entry without walking (h).
     pub const NO_WALK_IN: Byte = Byte::a5(0x66);
-    /// Octet bas du compteur d'images du VBLANK (`crate::ram::IMAGES`).
+    /// Low byte of the VBLANK frame counter (`crate::ram::IMAGES`).
     pub const VBLANK_FRAMES_LOW: Byte = Byte::a5(0x6d);
-    /// Octet bas du compteur d'images de la partie (`FF806E`) : parité, clignotements.
+    /// Low byte of the game frame counter (`FF806E`): parity, blinking.
     pub const FRAME_COUNTER: Byte = Byte::a5(0x6f);
-    /// Version du jeu (h) : choisit la série des noms prédéfinis du tableau des scores.
+    /// Game version (h): selects the series of predefined names of the score table.
     pub const VERSION: Byte = Byte::a5(0x71);
-    /// Fondu de palette en attente (état de `tasks::fading`) : pages, nombre de pas, délai.
+    /// Pending palette fade (state of `tasks::fading`): pages, number of steps, delay.
     pub const FADE_PAGES: Byte = Byte::a5(0x48e);
     pub const FADE_STEPS: Byte = Byte::a5(0x48f);
     pub const FADE_DELAY: Word = Word::a5(0x490);
-    /// Défilement vertical du plan 1 (`vblank`) : les sorts font trembler l'écran en le basculant.
+    /// Vertical scroll of plane 1 (`vblank`): spells shake the screen by toggling it.
     pub use crate::ram::SCROLL_Y_PLANE1 as SCROLL1_Y;
-    /// Signal d'un boss aux joueurs scénarisés (lancer, atterrissage).
+    /// Boss signal to the scripted players (throw, landing).
     pub const BOSS_SIGNAL: Word = Word::a5(0x51e);
-    /// Cinématique en cours (h).
+    /// Cinematic in progress (h).
     pub const CUTSCENE: Byte = Byte::a5(0x53a);
-    /// Mot des commutateurs lu au VBLANK (`FF7FD0`).
+    /// Switch word read at VBLANK (`FF7FD0`).
     pub use crate::ram::DSW;
-    /// Mot : compteur du hasard des tables (voir combat).
+    /// Word: table random counter (see combat).
     pub const TICK: Word = Word::a5(0x7f92);
 }
 
-/// Contexte d'exécution des routines natives : registres et mémoire du 68000.
+/// Execution context of the native routines: registers and memory of the 68000.
 pub struct Ctx<'a> {
     pub c: &'a mut Cpu,
     pub b: &'a mut Cps2Bus,
@@ -245,8 +246,8 @@ impl<'a> Ctx<'a> {
         Ctx { c, b }
     }
 
-    /// Appelle une routine d'origine (ou native) pour le joueur `p` : A0 = joueur, A5 = base de la
-    /// RAM. Renvoie vrai si le drapeau Z est levé au retour.
+    /// Calls an original (or native) routine for player `p`: A0 = player, A5 = base of the
+    /// RAM. Returns true if the Z flag is set on return.
     #[track_caller]
     pub fn rom(&mut self, addr: u32, p: Player) -> bool {
         cov::rom_call(addr);
@@ -264,12 +265,12 @@ impl<'a> Ctx<'a> {
         crate::effects_aids::shock_68k(self.c, self.b, p.obj(), variant, setting, vx, vy)
     }
 
-    /// Joue le son `sound` pour le joueur `p` (panoramique, personnage : `sound::play`).
+    /// Plays sound `sound` for player `p` (panning, character: `sound::play`).
     pub fn sound(&mut self, sound: u32, p: Player) {
         crate::sound::play(self.b, sound, Obj(p.0));
     }
 
-    /// Idem avec le paramètre D6 (numéro d'animation, d'effet...).
+    /// Same with parameter D6 (animation number, effect number...).
     #[track_caller]
     pub fn rom_d6(&mut self, addr: u32, p: Player, d6: u32) -> bool {
         self.c.d[6] = d6;
@@ -277,73 +278,73 @@ impl<'a> Ctx<'a> {
     }
 }
 
-/// Un joueur, désigné par l'adresse de son enregistrement (le registre A0 de l'original).
+/// A player, designated by the address of its record (register A0 of the original).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Player(pub u32);
 
-/// Champs de l'enregistrement joueur (décalages). Les noms marqués (h) sont des hypothèses.
+/// Fields of the player record (offsets). The names marked (h) are hypotheses.
 impl Player {
-    /// Octet : emplacement occupé (0 = libre) ; 2 = en sortie.
+    /// Byte: slot occupied (0 = free); 2 = leaving.
     pub const ACTIVE: u32 = Obj::ACTIVE;
-    /// Bit 1 : joueur masqué (clignotement d'invulnérabilité).
+    /// Bit 1: player hidden (invulnerability blinking).
     pub const FLAGS: u32 = Obj::FLAGS;
-    /// Numéro du joueur 0..3.
+    /// Player number 0..3.
     pub const INDEX: u32 = 0x02;
-    /// Personnage 0..11 : `CHARACTER >> 1` = classe (combattant, clerc, elfe, nain, magicien, voleur).
+    /// Character 0..11: `CHARACTER >> 1` = class (fighter, cleric, elf, dwarf, magic-user, thief).
     pub const CHARACTER: u32 = Obj::VARIANT;
-    /// État principal (`states::Main`), sous-état (`states::Sub`), action (`states::Action`), pas.
+    /// Main state (`states::Main`), sub-state (`states::Sub`), action (`states::Action`), step.
     pub const MAIN: u32 = 0x04;
     pub const SUB: u32 = 0x05;
     pub const ACTION: u32 = 0x06;
     pub const STEP: u32 = 0x07;
-    /// Groupe et numéro de palette.
+    /// Palette group and number.
     pub const PALETTE_GROUP: u32 = 0x2a;
     pub const PALETTE: u32 = 0x2b;
-    /// Orientation : 0 = regarde à droite, 0x20 = à gauche.
+    /// Orientation: 0 = faces right, 0x20 = left.
     pub const FACING: u32 = 0x2c;
-    /// Jeu de boîtes de collision (classe du personnage).
+    /// Collision box set (character class).
     pub const BOX_SET: u32 = 0x2e;
-    /// Contact avec le sol / un mur (h) : testé après un déplacement.
+    /// Contact with the ground / a wall (h): tested after a movement.
     pub const BLOCKED: u32 = 0x29;
-    /// Gel de coup (images restantes ; négatif : à effacer).
+    /// Hit freeze (frames remaining; negative: to clear).
     pub const HITSTOP: u32 = Obj::COUNTER_53;
-    /// Arme / sous-objets rattachés (mots : adresses d'objets).
+    /// Attached weapon / sub-objects (words: object addresses).
     pub const OVERLAY_BODY: u32 = 0x48;
     pub const OVERLAY_ATTACK: u32 = 0x4a;
-    /// Compteur d'animation de la palette du compte à rebours de l'écran (h).
+    /// Animation counter of the screen countdown palette (h).
     pub const PAL_STEP: u32 = 0x52;
-    /// Points de vie maximum, courants, précédents.
+    /// Maximum, current, previous hit points.
     pub const HP_MAX: u32 = 0x60;
     pub const HP: u32 = 0x62;
     pub const HP_PREV: u32 = 0x64;
-    /// Paramètre de l'action en cours (numéro d'animation de repli, durée...).
+    /// Parameter of the current action (fallback animation number, duration...).
     pub const PARAM: u32 = 0x69;
     pub const SUBACTION: u32 = 0x6a;
     pub const PARAM_6B: u32 = 0x6b;
-    /// Entrées maintenues, de l'image précédente, nouvelles.
+    /// Held inputs, from the previous frame, new.
     pub const KEYS_HELD: u32 = 0x6c;
     pub const KEYS_PREV: u32 = 0x6d;
     pub const KEYS_NEW: u32 = 0x6e;
     pub const TIMER_6F: u32 = 0x6f;
-    /// Compte à rebours (images) après lequel `RECOIL` s'efface.
+    /// Countdown (frames) after which `RECOIL` clears.
     pub const RECOIL: u32 = 0x70;
     pub const RECOIL_TIMER: u32 = 0x71;
-    /// Invulnérabilité : images restantes.
+    /// Invulnerability: frames remaining.
     pub const INVULN: u32 = 0x7e;
     pub const POWERUP: u32 = 0x79;
     pub const POWERUP_TIMER: u32 = 0x7a;
-    /// Marche lente forcée.
+    /// Forced slow walk.
     pub const SLOW: u32 = 0x66;
-    /// Cavalier / objet lié (pointeur de 16 bits en +0x86 : l'objet rattaché).
+    /// Rider / linked object (16-bit pointer at +0x86: the attached object).
     pub const LINK: u32 = 0x86;
-    /// Marche lente (monture, boue...) (h).
+    /// Slow walk (mount, mud...) (h).
     pub const SLOW_8A: u32 = 0x8a;
     pub const LEVEL: u32 = 0x10c;
-    /// Arme et bouclier courants (numéros), voir tables de P1.
+    /// Current weapon and shield (numbers), see P1 tables.
     pub const WEAPON_A: u32 = 0x10d;
     pub const WEAPON_B: u32 = 0x10e;
     pub const POWER_10F: u32 = 0x10f;
-    /// Bourse (BCD, long) (h) : somme de points.
+    /// Purse (BCD, long) (h): sum of points.
     pub const SCORE_BCD: u32 = 0x110;
     pub const SLOT_TABLE: u32 = 0x120;
     pub const SPECIAL_COUNT: u32 = 0x15d;
@@ -366,7 +367,7 @@ impl Player {
         self.0.wrapping_add(off)
     }
 
-    /// Joueur numéro `k` (0..3).
+    /// Player number `k` (0..3).
     pub fn nth(k: u32) -> Player {
         Player(A5 + PLAYER_BASE + PLAYER_STRIDE * k)
     }
@@ -394,7 +395,7 @@ impl Player {
         wr32(g.b, self.at(off), v)
     }
 
-    /// `+4..+7` lus ensemble (état principal, sous-état, action, pas).
+    /// `+4..+7` read together (main state, sub-state, action, step).
     pub fn state(self, g: &mut Ctx) -> u32 {
         self.u32(g, Self::MAIN)
     }
@@ -406,25 +407,25 @@ impl Player {
         self.u8(g, Self::ACTIVE) != 0
     }
 
-    /// Orientation vers la gauche ?
+    /// Facing left?
     pub fn faces_left(self, g: &mut Ctx) -> bool {
         self.u8(g, Self::FACING) != 0
     }
 
-    /// Vrai si la direction (bits 0..1 des entrées) demande de regarder dans l'autre sens que
-    /// l'orientation courante. Bit 0 = droite (orientation 0), sinon gauche (0x20).
+    /// True if the direction (bits 0..1 of the inputs) asks to look the other way than
+    /// the current orientation. Bit 0 = right (orientation 0), otherwise left (0x20).
     pub fn wants_flip(self, g: &mut Ctx, keys: u8) -> bool {
         let want = if keys & 1 != 0 { 0x20 } else { 0 };
         want != self.u8(g, Self::FACING)
     }
 
-    /// Bascule la moitié du bit d'orientation (retourne le personnage).
+    /// Toggles the orientation bit half (turns the character around).
     pub fn flip(self, g: &mut Ctx) {
         let v = self.u8(g, Self::FACING) ^ 0x20;
         self.set_u8(g, Self::FACING, v);
     }
 
-    /// Classe du personnage (0 combattant ... 5 voleur).
+    /// Character class (0 fighter ... 5 thief).
     pub fn class(self, g: &mut Ctx) -> u8 {
         self.u8(g, Self::CHARACTER) >> 1
     }

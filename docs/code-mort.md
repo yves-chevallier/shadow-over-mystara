@@ -5,7 +5,7 @@ section.
 
 ## Lot D : joueurs et monde
 
-### Replis `_ => g.rom(adresse de la routine)` des automates des joueurs (supprimés)
+### Replis `_ => g.rom(address de la routine)` des automates des joueurs (supprimés)
 
 * **Adresses** : 0x3573e (course), 0x35c26 et 0x35c38 (porter / lâcher), 0x35e56 (escalade), 0x3632c (sortie),
   0x36be0 (fin du ralentissement), 0x36c12 (saut sur place), 0x36b26 (garde), 0x36d68 (pousser), 0x35a78 (attaque
@@ -59,10 +59,10 @@ elles sont atteignables, le jeu sans 68000 s'y arrêterait ; aucun scénario ne 
 
 ## Lot B : effets, objets, coffres
 
-### Replis `_ => deleguer(cible)` / `_ => x.call(cible)` des tables d'états (remplacés par `hors_table`)
+### Replis `_ => deleguer(target)` / `_ => x.call(target)` des tables d'états (remplacés par `outside_table`)
 
 * **Sites** : 68 aiguillages des gestionnaires EFFCT (`effects.rs`, 24), ITEM (`items.rs`, 29 ; `items_b.rs`, 3) et
-  BOX (`boxes.rs`, 12) : état `+4`, sous-état `+5`, `2 × variante`, octet d'action `+0x3d` des bulles, tables de
+  BOX (`boxes.rs`, 12) : état `+4`, sous-état `+5`, `2 × variant`, octet d'action `+0x3d` des bulles, tables de
   longs (`0xdafb8`, `0xdb392`).
 * **Ce que faisait le code** : pour un indice sans bras Rust, saut dans le code d'origine à la cible lue dans la table
   (`move.w (table,PC,D0.w),D1.w ; jmp (table,PC,D1.w)`).
@@ -70,16 +70,16 @@ elles sont atteignables, le jeu sans 68000 s'y arrêterait ; aucun scénario ne 
   de code ou la table qui suit dans `listing.txt`). 56 aiguillages ont un bras Rust pour chaque entrée de la table :
   un indice hors table ferait sauter l'original dans des données ou au milieu d'une instruction (rien ne l'écrit).
   Les 12 autres (`effects.rs` : halo, aura, scintillement, traînée, poussière, nuage, balayage, fumée, scintillement
-  de classe, trace — `trois_etats` —, bandeau, éclat, interface 1, 2 et 4, éclat unique, marque, gerbe, éclats de
+  de classe, trace — `three_states` —, bandeau, éclat, interface 1, 2 et 4, éclat unique, marque, gerbe, éclats de
   débris, accessoire, déclencheur) n'avaient pas de bras pour l'état 6 (et 4 pour l'interface 4) : la cible est un
   simple `jmp 0x2218` (libération EFFCT), que `deleguer` appelait déjà directement. État 6 posé par l'objet parent
   qui détruit ses effets (54 écritures de 6 / `0x06000000` en `(4,An)` dans la ROM, non attribuées type par type) et
   par l'accessoire lui-même (`accessoire_suit`, propriétaire nul).
-* **Décision** : l'état 6 est un bras explicite (`etat::DETRUIT => free`, comportement réel) ; le reste devient
-  `hors_table(cible)` (`effects.rs`, `unreachable!` avec l'adresse que l'original atteindrait). Les bulles
-  (`bulle_selon_action`) : une action hors de la petite table ferait sauter l'original dans le code qui la suit ;
+* **Décision** : l'état 6 est un bras explicite (`state::DETRUIT => free`, comportement réel) ; le reste devient
+  `outside_table(target)` (`effects.rs`, `unreachable!` avec l'adresse que l'original atteindrait). Les bulles
+  (`bubble_by_action`) : une action hors de la petite table ferait sauter l'original dans le code qui la suit ;
   les actions produites par les joueurs n'y mènent pas sur les scénarios (non prouvé pour toutes les actions :
-  `hors_table` le signalera).
+  `outside_table` le signalera).
 * **Nature** : repli défensif de la conversion.
 * **Preuves** : audit des 68 tables (lot B, 2026-10-27) ; validation complète.
 
@@ -87,9 +87,9 @@ elles sont atteignables, le jeu sans 68000 s'y arrêterait ; aucun scénario ne 
 
 L'initialisation accepte la variante 3 (le mot lu en 0xda5ac retombe sur le code de la variante 0), mais l'état actif
 (`0xda5f4`, deux entrées) la ferait sauter en 0xdb61c, au milieu d'une instruction : l'original planterait aussi.
-Aucune donnée de scène connue ne crée de barrière de variante 3 ; `hors_table` le signalerait.
+Aucune donnée de scène connue ne crée de barrière de variante 3 ; `outside_table` le signalerait.
 
-### Pool plein menant à une erreur d'adresse (0xaf2bc, 0xb778c ; `erreur_d_adresse`)
+### Pool plein menant à une erreur d'adresse (0xaf2bc, 0xb778c ; `address_error`)
 
 * **Adresses** : 0xaedde, 0xaeeaa, 0xaeef8, 0xaef2c (bourse de la boutique, `effects_c::purse_init` : pools ITEM,
   PEFF, SOBJ, PEFF) → 0xaf2bc ; 0xb7560, 0xb7584 (créature de l'introduction, `swimmer`, deux SET) → 0xb778c.
@@ -99,7 +99,7 @@ Aucune donnée de scène connue ne crée de barrière de variante 3 ; `hors_tabl
 * **Pourquoi jamais atteint** : il faudrait un pool plein à la création de la bourse ou de la créature ; aucun
   scénario ne le produit.
 * **Nature** : bug d'origine (branchement vers une instruction de diagnostic, sans doute un `illegal` de débogage
-  devenu `tst.w`) ; comportement réel mais fatal. **Remplacé par** `panic!` documenté (`effects::erreur_d_adresse`) :
+  devenu `tst.w`) ; comportement réel mais fatal. **Remplacé par** `panic!` documenté (`effects::address_error`) :
   le moteur s'arrête comme le jeu, sans reproduire l'écran d'exception.
 
 ## Lot A : ennemis et boss (`families/boss_*`, `enemy*`, `reactions.rs`)
@@ -132,7 +132,7 @@ atteignable.
 * 0x818e6, 0x819e2 (formes du corps d'un boss, table 0x81ad4, appelées par `boss_common::push_out_of_boss`) : sans
   native. `+0xa4` (forme) n'est non nul pour aucun boss des scénarios (h). À transcrire avec le boss qui les pose.
 
-## Lot « noyau final » (`kernel.rs`, `vblank.rs`, `demarrage.rs`, `sans68k.rs`)
+## Lot « noyau final » (`kernel.rs`, `vblank.rs`, `startup.rs`, `no68k.rs`)
 
 ### Handlers des traps 0 à 7 et 12 (0x9c2, 0x9fa, 0xa20, 0xa52, 0xa92, 0xab8, 0xad4, 0xae6, 0xafa ; natives retirées)
 
@@ -148,7 +148,7 @@ défensif supprimé ; une adresse sans native arrête le jeu avec un diagnostic.
 ### Tâche de l'écran 0x19068 (emplacement 0xf0)
 
 Déjà signalée (`docs/noyau.md`, « Code mort de la machine à modes ») : sa tâche n'a pas d'étape d'entrée Rust ; le noyau
-s'arrête sur `entrée 19068 sans étape Rust` si elle était créée (jamais dans les 272 scénarios).
+s'arrête sur `entrée 19068 without étape Rust` si elle était créée (jamais dans les 272 scénarios).
 
 ## Lot IA : aides d'IA et derniers services
 
@@ -190,7 +190,7 @@ Routines jamais atteintes par les scénarios mais réécrites et validées par `
 Les replis qui sautaient (`jump`, `jump_to`, pose du PC) vers une adresse d'origine sans native s'arrêtaient de toute
 façon (« pas de native ») dans le jeu sans 68000. Chacun vise une entrée de table que le jeu ne produit pas ; ils sont
 remplacés par `unreachable!` (message qui nomme la table) ou par l'arrêt documenté de l'original. Preuves : tables lues
-dans la ROM (`modes`, `taches`, `scene/exit`), 286 scénarios (`DDSOM_LONG=1`) sans arrêt.
+dans la ROM (`modes`, `tasks`, `scene/exit`), 286 scénarios (`DDSOM_LONG=1`) sans arrêt.
 
 | Site | Table (ROM) | Entrées | Pourquoi le repli n'est pas atteint | Nature |
 |---|---|---|---|---|
@@ -200,23 +200,23 @@ dans la ROM (`modes`, `taches`, `scene/exit`), 286 scénarios (`DDSOM_LONG=1`) s
 | `demo::interpreter_a`, étape 4 et au-delà | 0x1f340 (4) | l'étape 4 (0x1fb20, fin de scène) n'est jamais écrite | la boucle A y mène directement (`scene_end_a`, même code) | entrée de table jamais choisie |
 | `demo::presentation_step` | 0x1fc72 (4) | toutes réécrites | sous-étapes 0 à 6 | repli défensif |
 | `demo::run_phase` (phases autres que 8 et 12) | 0x1f990, 0x20a9c | phases 8 et 12, les autres sont nulles (saut en 0) | la démonstration ne pose que ces deux phases | entrées nulles |
-| `partie::gestionnaire` (phase hors table) | 0x1c502 (8) | phases 0 à 0x1c | la phase avance de 4 et revient | repli défensif |
-| `ecran_fixe::tour` | 0x18386 (2), 0x1853c (3) | toutes réécrites | la sous-étape 4 (`fin`) termine la tâche | repli défensif |
+| `game::handler` (phase hors table) | 0x1c502 (8) | phases 0 à 0x1c | la phase avance de 4 et revient | repli défensif |
+| `fixed_screen::tour` | 0x18386 (2), 0x1853c (3) | toutes réécrites | la sous-étape 4 (`end`) termine la tâche | repli défensif |
 | `scene::exit` (`delegate` : séquence ou étape non réécrite) | 0xf3170 (séquence par scène) | séquences 0 à 0x46 (indices 0 à 35), toutes réécrites | les étapes restent dans leurs états | repli défensif |
 | `service::menu` (« Secret Test », 0xee16e) | mot 0xc0 du programme | nul dans cette version | voir `docs/service.md` | fonction cachée, non réécrite |
 
 **Boutique (0xf7dfa).** L'ouverture alloue un SOBJ et un EFFCT par joueur juste après avoir vidé tous les pools ; en
 cas d'échec l'original saute en 0xf7dfa (`tst.w 1(A5)` : erreur d'adresse, comme 0xaf2bc). Jamais atteint (pools vides) :
-`effects::erreur_d_adresse(0xf7dfa)`.
+`effects::address_error(0xf7dfa)`.
 
 **Blocages (0x2d112, 0x2d7fa).** « NG » du MEMORY CHECK et « EEPROM ERROR » finissent sur `bra.b *` ; la native vide
-posée à l'adresse est remplacée par le point `kernel::Point::Bloque` (l'image finit, les interruptions continuent).
+posée à l'adresse est remplacée par le point `kernel::Point::Blocked` (l'image finit, les interruptions continuent).
 Jamais atteints (`docs/service.md` §7).
 
 **Affichage des verrous du Z80 (fin de 0x68c, appel de 0x29d78).** Écran de débogage : chaque octet des verrous
 0x618001... en hexadécimal dans la couche de texte, seulement si le mot 0xc0 du programme (nul dans cette version) et
-`A5+0x7fc6` sont non nuls ; 0x29d78 n'a pas de native. Le cœur `sound::envoyer` (VBLANK) s'arrête sur `unreachable!` ;
-la native de 0x68c garde sa transcription (`afficher_verrous`). Nature : mode de mise au point.
+`A5+0x7fc6` sont non nuls ; 0x29d78 n'a pas de native. Le cœur `sound::send` (VBLANK) s'arrête sur `unreachable!` ;
+la native de 0x68c garde sa transcription (`show_locks`). Nature : mode de mise au point.
 
 ## Lot fuzz : branches non jouées, validées ou écartées par fuzz différentiel
 
@@ -242,7 +242,7 @@ le jeu ne produit pas, gardés tels quels dans le Rust :
 | Site | Adresse(s) | Ce que fait le code | Pourquoi il n'est jamais atteint | Nature | Décision |
 |---|---|---|---|---|---|
 | `scene::script::pool_of_class` | table 0xf2f38, dixième entrée (0x226e) | allocation de l'apparition par la routine de la classe | 0x226e n'est l'allocateur d'aucun pool (aucune native) ; aucun script d'apparition n'emploie la classe 9 (286 scénarios, et le jeu sans 68000 s'arrêterait sur l'adresse) | entrée de table jamais choisie | `unreachable!` |
-| `taches::invite::arreter`, `print_shown` | 0xf38, 0xf4a (attributs négatifs) | les blocs lisent la palette `+0x2b` de l'objet A0 de l'appelant quand les attributs du texte sont négatifs | les textes gardés par la tâche ont tous l'attribut 3 (tables 0xe048c, 0xe04b0, 0xe04e4, lues dans la ROM) | repli défensif du moteur de texte | objet 0 passé, commenté |
+| `tasks::prompt::stop`, `print_shown` | 0xf38, 0xf4a (attributs négatifs) | les blocs lisent la palette `+0x2b` de l'objet A0 de l'appelant quand les attributs du texte sont négatifs | les textes gardés par la tâche ont tous l'attribut 3 (tables 0xe048c, 0xe04b0, 0xe04e4, lues dans la ROM) | repli défensif du moteur de texte | objet 0 passé, commenté |
 | `modes::select`, étape 6 | table 0x1d0f6 | appel de la routine d'initialisation par l'octet `+2` du joueur | la table ne contient que 0x2e58, 0x2e6e, 0x2e86, 0x2e9e (une par joueur) ; un octet `+2` ≥ 4 n'est jamais produit | repli défensif | `assert!` |
 
 Les natives qui ne servaient plus qu'aux appels par adresse des écrans sont retirées avec leurs appels (le code reste,
@@ -250,7 +250,7 @@ en fonctions Rust) : textes et chiffres de l'écran des crédits (0x148be, 0x146
 et verrous des monnayeurs (0x141e0, 0x14290), chiffre des crédits (0x14e46).
 Les remises à zéro des blocs de la sortie de scène, de la boutique et du classement (0xf3130, 0xf7916, 0xfc562) et
 l'effacement du texte des écrans de fin (0xf683c) n'ont plus d'appelant par adresse : leurs natives restent (outils,
-fuzz), en `Corps::Memoire`, sans les registres que laissait l'original (D0 = 0, A4/D6 de la boucle, A1/A2/D0-D2 de
+fuzz), en `Body::Memory`, sans les registres que laissait l'original (D0 = 0, A4/D6 de la boucle, A1/A2/D0-D2 de
 l'effacement), qu'aucun appelant ne relit plus (le D1.w = -1 de 0xf683c, relu par le bonus, y est écrit en clair).
 
 ## Lot « sortie du Cpu », partie 5 (familles et boss en gestionnaires sans registres, wt-familles2)
@@ -323,11 +323,11 @@ de F1, F4 et F7 sont désormais joués (`cov_demarrage_boutons`, `long_noms_embl
   ROM ; le mot 0xc0, nul aussi, garde l'affichage des verrous du son) : 0x514 (`boot_init`), 0x5b4-0x5c0 et 0x5d0
   (`irq2_vblank` : attente d'un bit de 0x804021, copie de 0x8040b0), 0x664-0x686 (combinaison de touches lue au
   démarrage), 0x11bd2-0x11be0 (tâche de démarrage : autres textes d'avertissement). Inatteignables : la ROM ne change
-  pas. `vblank.rs` les omet (commentaire d'en-tête) ; `demarrage.rs` et `modes/boot.rs` lisent l'octet 0xc4 comme
+  pas. `vblank.rs` les omet (commentaire d'en-tête) ; `startup.rs` et `modes/boot.rs` lisent l'octet 0xc4 comme
   l'original.
 * **Registre 0x804030** (`reset`, 0x456-0x48a : lecture de la configuration 0x2dc9a, puis réinitialisation 0x2e8e4
   sur une combinaison de 0x804020, quand le bit 14 est nul) : la carte émulée rend 0xe021 (bit 14 levé ;
-  `demarrage.rs`, `CARTE`).
+  `startup.rs`, `CARD`).
 * **Erreurs de RAM** (K2, `ram_test_block`, 0x1940-0x19ae : écran « RAM ERROR » et boucle sans fin) : la RAM émulée
   ne se trompe jamais.
 * **Données** prises pour du code par `decomp/index.tsv` : 0x980 (fin de l'ordonnanceur), 0x1fa2-0x1fb6 (table après
@@ -346,7 +346,7 @@ barrière, désormais réécrite dans `effects_c` (`barrier`, `in_box`, interrup
 ne les atteint (recherche de 0xb9ee6, 0xb9eba, 0xba094 dans `src/` ; seul `examples/fuzz_world.rs` les citait).
 Doublon : supprimées, avec leurs entrées de `fuzz_monde`.
 
-### Guide de scène sans joueur vivant (ITEM 6, variante 1, 0xdcddc ; `items::guide_cible`)
+### Guide de scène sans joueur vivant (ITEM 6, variante 1, 0xdcddc ; `items::guide_target`)
 
 0xdcddc choisit le joueur vivant le plus proche ; s'il n'y en a aucun, l'original garde l'A2 de son appelant comme
 « propriétaire ». Pour le guide 3 (attract), c'est la fin de sa copie de palette (0x91c320), écrite en clair. Pour le

@@ -1,6 +1,6 @@
-//! Couverture des fonctions Rust du noyau joueur : compte les appels de chaque fonction qui contient
-//! `cov!();` quand l'outil `examples/player_coverage` l'active. Sert à dire quels états et actions
-//! les scénarios exercent (donc quelles réécritures sont validées).
+//! Coverage of the Rust functions of the player core: counts the calls of each function that contains
+//! `cov!();` when the `examples/player_coverage` tool enables it. Used to tell which states and actions
+//! the scenarios exercise (hence which rewrites are validated).
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -10,36 +10,36 @@ static ON: AtomicBool = AtomicBool::new(false);
 static HITS: Mutex<BTreeMap<&'static str, u64>> = Mutex::new(BTreeMap::new());
 static ROM_CALLS: Mutex<BTreeMap<u32, u64>> = Mutex::new(BTreeMap::new());
 
-/// Compte un appel (nom complet de la fonction, sans le chemin de crate).
+/// Counts a call (full name of the function, without the crate path).
 pub fn hit(name: &'static str) {
     if ON.load(Ordering::Relaxed) {
         *HITS.lock().unwrap().entry(name).or_default() += 1;
     }
 }
 
-/// Compte un appel de routine d'origine (pas encore réécrite) par le noyau joueur.
+/// Counts a call of an original routine (not yet rewritten) by the player core.
 pub fn rom_call(addr: u32) {
     if ON.load(Ordering::Relaxed) {
         *ROM_CALLS.lock().unwrap().entry(addr).or_default() += 1;
     }
 }
 
-/// Routines d'origine appelées depuis le noyau joueur : (adresse, appels).
+/// Original routines called from the player core: (address, calls).
 pub fn rom_report() -> Vec<(u32, u64)> {
     ROM_CALLS.lock().unwrap().iter().map(|(k, v)| (*k, *v)).collect()
 }
 
-/// Active le comptage.
+/// Enables counting.
 pub fn enable() {
     ON.store(true, Ordering::Relaxed);
 }
 
-/// Nombre d'appels de chaque fonction depuis l'activation.
+/// Number of calls of each function since activation.
 pub fn report() -> Vec<(&'static str, u64)> {
     HITS.lock().unwrap().iter().map(|(k, v)| (*k, *v)).collect()
 }
 
-/// Sources du noyau joueur, pour lister aussi les fonctions jamais appelées.
+/// Sources of the player core, to also list the functions never called.
 pub const SOURCES: &[(&str, &str)] = &[
     ("actions", include_str!("actions.rs")),
     ("characters::cleric", include_str!("characters/cleric.rs")),
@@ -64,7 +64,7 @@ pub const SOURCES: &[(&str, &str)] = &[
     ("walk", include_str!("walk.rs")),
 ];
 
-/// Toutes les fonctions instrumentées (`module::fonction`), d'après les sources.
+/// All the instrumented functions (`module::function`), from the sources.
 pub fn instrumented() -> Vec<String> {
     let mut names = Vec::new();
     for (module, src) in SOURCES {

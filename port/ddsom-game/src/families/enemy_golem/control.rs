@@ -1,5 +1,5 @@
-//! Type 11, sous-états 0 et 2 : le Golem debout, piloté par les touches du quatrième joueur (`A5+3`).
-//! `+6` = 0 marche (croix : X, profondeur), bouton 4 : coup, bouton 5 : saut ; `+6` = 2 : saut en arc.
+//! Type 11, substates 0 and 2: the standing Golem, driven by the keys of the fourth player (`A5+3`). `+6` = 0 walk
+//! (d-pad: X, depth), button 4: strike, button 5: jump; `+6` = 2: arc jump.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -39,10 +39,10 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
         x.set16(Obj::Y, at);
         moved = true;
     }
-    // Glitch d'origine : les boutons sont relus dans D0, que le pas d'animation (0x1a56) écrase par l'octet `+0x32`
-    // quand l'image en cours se termine.
+    // Original glitch: the buttons are re-read in D0, which the animation step (0x1a56) overwrites with byte `+0x32`
+    // when the current frame ends.
     let mut buttons = keys;
-    // Glitch d'origine : le drapeau « a bougé » reste dans D2 (`Leftovers`).
+    // Original glitch: the "has moved" flag stays in D2 (`Leftovers`).
     *x.c.d2() = moved as u32;
     if moved {
         let (ends, state) = (x.u16(ANIM_TIME) == 1, x.u8(ANIM_END));

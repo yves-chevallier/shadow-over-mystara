@@ -1,5 +1,5 @@
-//! Type 19, déplacements de la bête : charges et bonds (`+5 = 8`, 0x73c92), entrée en scène
-//! (`+5 = 10`, 0x73efe) et sortie (`+5 = 12`, 0x73f98).
+//! Type 19, the beast's movements: charges and leaps (`+5 = 8`, 0x73c92), entrance (`+5 = 10`, 0x73efe) and exit (`+5 =
+//! 12`, 0x73f98).
 
 use crate::families::cx::Bench;
 use super::parts::{bound_land, bound_wait, bound_y_land, bound_y_wait, finish_to_stance};
@@ -7,9 +7,9 @@ use super::stance::engage;
 use super::*;
 use crate::objects::Current;
 
-// --- sous-état 8 : charges et bonds -------------------------------------------------------------
+// --- substate 8: charges and leaps -------------------------------------------------------------
 
-/// Reprise après un demi-tour : état actif, sous-état 8 (charge), `+7 = 4`.
+/// Resume after a turn-around: active state, substate 8 (charge), `+7 = 4`.
 const RESUME_CHARGE: u32 = 0x0208_0004;
 
 pub(super) fn charge<R: Bench>(x: &mut Cx<'_, R>) {
@@ -58,7 +58,7 @@ fn stand_pose<R: Bench>(x: &mut Cx<'_, R>) {
     play(x, 0);
 }
 
-/// 0x73d3c : bond vers un joueur, de face (marche) ou par-dessus.
+/// 0x73d3c: leap toward a player, head-on (walk) or over.
 pub(super) fn jump_toward<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     if random(x) & 1 == 0 {
@@ -70,7 +70,7 @@ pub(super) fn jump_toward<R: Bench>(x: &mut Cx<'_, R>) {
         return play(x, 0x11);
     }
     x.add8(0x7, 2);
-    // vers la droite (8) si la cible est à droite, sinon vers la gauche (0x18)
+    // to the right (8) if the target is on the right, otherwise to the left (0x18)
     let right = target(x).is_some_and(|t| (t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)) as i16) >= 0);
     x.set8(Obj::SPEED_INDEX, if right { 8 } else { 0x18 });
     x.set8(WANT_ANIM, 0x1d);
@@ -80,7 +80,7 @@ pub(super) fn jump_toward<R: Bench>(x: &mut Cx<'_, R>) {
     speed(x, 0xd);
 }
 
-/// 0x73402 : le bond se déroule ; à la fin du délai la bête se remet en garde.
+/// 0x73402: the leap unfolds; at the end of the delay the beast gets back on guard.
 pub(super) fn jump_wait<R: Bench>(x: &mut Cx<'_, R>) {
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);
@@ -91,14 +91,14 @@ pub(super) fn jump_wait<R: Bench>(x: &mut Cx<'_, R>) {
     back_on_guard(x);
 }
 
-/// 0x7343a : fin du bond.
+/// 0x7343a: end of the leap.
 pub(super) fn jump_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         back_on_guard(x);
     }
 }
 
-/// La bête retombe en garde et teste aussitôt la portée de sa cible (0x72c96).
+/// The beast lands on guard and immediately tests the range of its target (0x72c96).
 fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, 0x0202_0002);
     x.set8(WANT_ANIM, 0xc);
@@ -126,7 +126,7 @@ fn leap_to_player<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 (0x73e08) : bond vers un joueur par-dessus, en profondeur.
+/// +6 = 4 (0x73e08): leap over a player, in depth.
 fn leap_over_player<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -172,9 +172,9 @@ fn leap_over_player<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 10 : entrée en scène -------------------------------------------------------------
+// --- substate 10: entrance -------------------------------------------------------------
 
-/// La bête tombe du haut de l'écran, se relève, puis attend qu'un joueur soit vivant.
+/// The beast falls from the top of the screen, gets up, then waits for a player to be alive.
 pub(super) fn enter<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -213,9 +213,9 @@ pub(super) fn enter<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 12 : sortie ----------------------------------------------------------------------
+// --- substate 12: exit ----------------------------------------------------------------------
 
-/// Une pièce quitte la scène : animation de sortie, puis bond vers le haut jusqu'à disparaître.
+/// A part leaves the scene: exit animation, then an upward leap until it disappears.
 pub(super) fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {

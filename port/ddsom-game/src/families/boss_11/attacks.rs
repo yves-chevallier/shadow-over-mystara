@@ -1,4 +1,4 @@
-//! Boss 11/12, groupe 4 : les huit attaques (`+6` = 0 à 14), étapes `+7` = 0, 2, 4...
+//! Boss 11/12, group 4: the eight attacks (`+6` = 0 to 14), steps `+7` = 0, 2, 4...
 
 use crate::families::cx::Bench;
 use super::behave::life_rank;
@@ -31,7 +31,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8dc30 : coup de queue (le effet dépend du type).
+/// 0x8dc30: tail hit (the effect depends on the type).
 fn sting<R: Bench>(x: &mut Cx<'_, R>) {
     if is_12(x) {
         lib::sound(x, 0xe4de6)
@@ -40,7 +40,7 @@ fn sting<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8dbee (`+6` = 0) : un coup.
+/// 0x8dbee (`+6` = 0): a hit.
 fn strike<R: Bench>(x: &mut Cx<'_, R>) {
     set44(x, 1);
     if step(x, 0x8dc02) == 0x8dc06 {
@@ -58,7 +58,7 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8dc44 (`+6` = 2) : crachat (types 11 et 12 : projectiles différents).
+/// 0x8dc44 (`+6` = 2): spit (types 11 and 12: different projectiles).
 fn spit<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x8dc52) {
         0x8dc5c => {
@@ -115,7 +115,7 @@ fn spit<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Orientation vers la caméra : D1b = 0 ou 0x20, D2w = ±vitesse (la tête saute vers le centre de l'écran).
+/// Orientation toward the camera: D1b = 0 or 0x20, D2w = ±speed (the head jumps toward the center of the screen).
 fn jump_side<R: Bench>(x: &mut Cx<'_, R>, speed: i16, z: u16, rise: u16) {
     stop(x);
     let mut d0 = cam_x(x);
@@ -133,7 +133,7 @@ fn jump_side<R: Bench>(x: &mut Cx<'_, R>, speed: i16, z: u16, rise: u16) {
     body(x, 5);
 }
 
-/// Atterrissage d'un bond : la hauteur redevient nulle, le serpent s'immobilise (bruit et poussière).
+/// Landing from a leap: the height becomes zero again, the snake stops moving (noise and dust).
 fn landing<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step();
     sync(x);
@@ -149,7 +149,7 @@ fn landing<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x8dd1c (`+6` = 4) : bond sur l'adversaire.
+/// 0x8dd1c (`+6` = 4): leap onto the opponent.
 fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xb2, 1);
     match step(x, 0x8dd30) {
@@ -170,7 +170,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8e2ea (`+6` = 14) : bond plus long (vitesse -0x100).
+/// 0x8e2ea (`+6` = 14): longer leap (speed -0x100).
 fn leap_c<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xb2, 1);
     match step(x, 0x8e2fe) {
@@ -191,7 +191,7 @@ fn leap_c<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8ddcc (`+6` = 6) : élan puis chute.
+/// 0x8ddcc (`+6` = 6): run-up then fall.
 fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x8ddda) {
         0x8dde0 => {
@@ -232,7 +232,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8de64 (`+6` = 8) : charge sur un joueur (cap pris dans la table de 0x1376).
+/// 0x8de64 (`+6` = 8): charge at a player (heading taken from the table at 0x1376).
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xb2, 1);
     let mut t = step(x, 0x8de78);
@@ -276,7 +276,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
                 pause_tick(x);
                 lib::sound(x, 0xe4cfe);
             }
-            // D0 : `moveq #0`, puis l'octet bas = l'écart
+            // D0: `moveq #0`, then the low byte = the gap
             let diff = x.u8(0xb3).wrapping_sub(x.u8(0x2d));
             if diff != 0 {
                 let mut w = diff as u16 & 0x1f;
@@ -299,7 +299,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8df38 : fin de la charge, freinage.
+/// 0x8df38: end of the charge, braking.
 fn charge_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     let a = asr_w(x.u16(0x14), 2);
@@ -310,7 +310,7 @@ fn charge_end<R: Bench>(x: &mut Cx<'_, R>) {
     sync(x);
 }
 
-/// 0x8df70 : choisit une cible (0x1376 donne le cap) ; faux sans joueur.
+/// 0x8df70: picks a target (0x1376 gives the heading); false with no player.
 fn aim_target<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let Some(target) = lib::target_by_criterion(x, lib::LOWEST_HP) else {
         return false;
@@ -320,7 +320,7 @@ fn aim_target<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x8df8e : durée de la charge (`+0xb0`, table 0x8dfcc selon le rang de vie) puis `pause_tick`.
+/// 0x8df8e: duration of the charge (`+0xb0`, table 0x8dfcc according to life rank) then `pause_tick`.
 fn seg_choice<R: Bench>(x: &mut Cx<'_, R>) {
     let i = life_rank(x) & 0x30;
     let a4 = 0x8dfcc + i as u32;
@@ -332,7 +332,7 @@ fn seg_choice<R: Bench>(x: &mut Cx<'_, R>) {
     pause_tick(x)
 }
 
-/// 0x8dfaa : pas entre deux visées (`+0xb1`, table 0x8dfbc).
+/// 0x8dfaa: step between two aimings (`+0xb1`, table 0x8dfbc).
 fn pause_tick<R: Bench>(x: &mut Cx<'_, R>) {
     let rng = x.random();
     let r = rng & 0xf;
@@ -340,7 +340,7 @@ fn pause_tick<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xb1, v);
 }
 
-/// 0x8e00c (`+6` = 10) : approche en suivant un tracé (table 0x8e0f8).
+/// 0x8e00c (`+6` = 10): approach following a path (table 0x8e0f8).
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xb2, 1);
     match step(x, 0x8e020) {
@@ -376,7 +376,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8e0a2 : tracé tiré selon la distance à la caméra (trois tables identiques dans la ROM).
+/// 0x8e0a2: path drawn according to the distance to the camera (three identical tables in the ROM).
 fn route_start<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let d1 = cam_x(x);
     let d0 = x.u16(0x8).wrapping_sub(d1);
@@ -392,7 +392,7 @@ fn route_start<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     route_step(x)
 }
 
-/// 0x8e0e8 : point suivant du tracé ; vrai s'il reste du chemin (la durée du pas va en `+0xb0`).
+/// 0x8e0e8: next point of the path; true if there is path left (the step's duration goes to `+0xb0`).
 fn route_step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let route = x.u8(0xb4) as u32;
     let off = x.rom16(0x8e0f8 + route);
@@ -408,7 +408,7 @@ fn route_step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
     let d1 = rd16(x.b, cam + 8).wrapping_add(x.data16(a1));
     let d2 = rd16(x.b, cam + 0xc).wrapping_add(x.data16(a1 + 2));
-    // D2.w, D3.w et D4.w : restes pour les gestionnaires suivants (`dispatch::Leftovers`)
+    // D2.w, D3.w and D4.w: leftovers for the following handlers (`dispatch::Leftovers`)
     setw(x, 2, d2);
     let (px, py) = (x.u16(0x8), x.u16(0x10));
     setw(x, 3, px);
@@ -446,7 +446,7 @@ fn route_step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         }
         d1l = (w as u32) << 16;
     }
-    // la durée : combien de fois la vitesse entre dans l'écart (centaines, seizièmes, unités)
+    // the duration: how many times the speed fits in the gap (hundreds, sixteenths, units)
     let mut d2: u16 = 0;
     let mut d3;
     loop {
@@ -490,7 +490,7 @@ fn route_step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x8e20a (`+6` = 12, type 12 seulement) : crachat de projectile à tête chercheuse.
+/// 0x8e20a (`+6` = 12, type 12 only): spit of a homing projectile.
 fn spit_c<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x8e218) {
         0x8e222 => {

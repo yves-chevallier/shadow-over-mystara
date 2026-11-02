@@ -1,14 +1,14 @@
-//! Le combattant (personnages 0 et 1 : les deux variantes ont le même code).
+//! The fighter (characters 0 and 1: both variants have the same code).
 //!
-//! Quatre actions, atteintes par `characters::run` :
-//! - `jump` (0x3e578) : saut en trois temps (accroupi, montée, descente) avec attaque en l'air ;
-//! - `attack` (0x3e7e4) : le bouton 1 ; `Player::SUBACTION` choisit le coup (voir `kind`) ;
-//! - `special` (0x3f0ae) : l'objet ou la magie choisie (`field::SPECIAL_KIND`) ;
-//! - `dash` (0x3f9bc) : l'action 0x10, charge puis glissade.
+//! Four actions, reached through `characters::run`:
+//! - `jump` (0x3e578): three-phase jump (crouch, rise, descent) with aerial attack;
+//! - `attack` (0x3e7e4): button 1; `Player::SUBACTION` selects the strike (see `kind`);
+//! - `special` (0x3f0ae): the chosen item or spell (`field::SPECIAL_KIND`);
+//! - `dash` (0x3f9bc): action 0x10, charge then slide.
 //!
-//! Chaque action est un automate dont le pas est `Player::STEP` (pair). Les routines d'origine qui
-//! créent tirs, effets, sons et projectiles restent appelées telles quelles (voir `common::rom` et les
-//! constantes `rom` ci-dessous).
+//! Each action is an automaton whose step is `Player::STEP` (even). The original routines that
+//! create shots, effects, sounds and projectiles are still called as they are (see `common::rom` and the
+//! `rom` constants below).
 
 use super::common::{self, field, next_step, set_forward_motion};
 use super::items;
@@ -24,50 +24,50 @@ use crate::objects::Obj;
 use crate::player::ram;
 use crate::player::external as ext;
 
-/// Routines d'origine appelées telles quelles : effets joueur et sons du combattant.
+/// Original routines called as they are: player effects and sounds of the fighter.
 mod rom {
-    /// Sons.
+    /// Sounds.
     pub const SOUND_SPIN_B: u32 = 0xe828c;
 }
 
-/// Table du combattant (données de la ROM) : vitesses des sauts (quatre mots par type de saut).
+/// Fighter table (ROM data): jump speeds (four words per jump type).
 const JUMP_SPEEDS: u32 = 0x10_44fe;
 
-/// Sous-actions du bouton 1 (`Player::SUBACTION`), toutes paires.
+/// Sub-actions of button 1 (`Player::SUBACTION`), all even.
 mod kind {
-    /// Coup au sol : enchaînement de coups de plus en plus longs.
+    /// Ground strike: chain of increasingly long strikes.
     pub const COMBO: u8 = 0x00;
-    /// Coup d'estoc (un ennemi est à portée de la première boîte d'attaque).
+    /// Thrust (an enemy is within range of the first attack box).
     pub const THRUST_HIGH: u8 = 0x02;
-    /// Coup bas (seconde boîte d'attaque).
+    /// Low strike (second attack box).
     pub const THRUST_LOW: u8 = 0x04;
-    /// Coup donné en se retournant.
+    /// Strike given while turning.
     pub const TURN_STRIKE: u8 = 0x06;
-    /// Coup donné en marche lente.
+    /// Strike given in slow walk.
     pub const SLOW_STRIKE: u8 = 0x08;
-    /// Coup en l'air (retombée), suite d'un saut.
+    /// Aerial strike (landing), follow-up of a jump.
     pub const AFTER_JUMP: u8 = 0x0a;
-    /// Charge : élan de 12 pixels par image suivi de deux gestes.
+    /// Charge: run-up of 12 pixels per frame followed by two gestures.
     pub const CHARGE: u8 = 0x0c;
-    /// Coup donné en courant.
+    /// Strike given while running.
     pub const RUN_STRIKE: u8 = 0x0e;
     pub const LOW_BLOW: u8 = 0x10;
-    /// Saut en arrière.
+    /// Backward jump.
     pub const BACK_HOP: u8 = 0x12;
     pub const GUARD_BREAK: u8 = 0x14;
-    /// Grand saut tournoyant (attaque spéciale du combattant).
+    /// Great spinning jump (the fighter's special attack).
     pub const LEAP: u8 = 0x16;
-    /// Tourbillon (sacrifie des points de vie).
+    /// Whirlwind (sacrifices hit points).
     pub const WHIRL: u8 = 0x18;
-    /// Geste vers l'avant sans arme.
+    /// Forward gesture without a weapon.
     pub const POSE_A: u8 = 0x1a;
     pub const POSE_B: u8 = 0x1c;
 }
 
-// ---- saut (0x3e578) --------------------------------------------------------------------------
+// ---- jump (0x3e578) --------------------------------------------------------------------------
 
-/// Le saut du combattant : vitesses de décollage dans la table 0x1044fe, coup en l'air propre, retour
-/// de l'arme maudite et création de l'effet joueur en attente.
+/// The fighter's jump: takeoff speeds in the table 0x1044fe, own aerial strike, return
+/// of the cursed weapon and creation of the pending player effect.
 const JUMP_KIT: common::JumpKit = common::JumpKit {
     speeds: JUMP_SPEEDS,
     air_attack,
@@ -76,14 +76,14 @@ const JUMP_KIT: common::JumpKit = common::JumpKit {
     ..common::JumpKit::PLAIN
 };
 
-/// 0x3e578 : saut.
+/// 0x3e578: jump.
 pub fn jump(g: &mut Ctx, p: Player) {
     cov!();
     common::jump(g, p, &JUMP_KIT);
 }
 
-/// 0x3e754 : le bouton 1 en l'air donne un coup (une fois par saut) dont l'animation dépend du type de
-/// saut, de l'arme et de la direction (bas : coup plongeant).
+/// 0x3e754: button 1 in the air gives a strike (once per jump) whose animation depends on the jump
+/// type, the weapon and the direction (down: diving strike).
 fn air_attack(g: &mut Ctx, p: Player) {
     cov!();
     if !common::air_attack_pressed(g, p) {
@@ -107,10 +107,10 @@ fn air_attack(g: &mut Ctx, p: Player) {
     common::aura_hit_countdown(g, p);
 }
 
-// ---- attaque (0x3e7e4) -----------------------------------------------------------------------
+// ---- attack (0x3e7e4) -----------------------------------------------------------------------
 
-/// 0x3e7e4 : attaque du bouton 1. `kind` (voir plus haut) choisit le coup ; les coups au sol sont suivis
-/// d'un contrôle de prolongement (`common::follow_up`).
+/// 0x3e7e4: button 1 attack. `kind` (see above) selects the strike; ground strikes are followed
+/// by a continuation check (`common::follow_up`).
 pub fn attack(g: &mut Ctx, p: Player) {
     cov!();
     let sub = p.u8(g, Player::SUBACTION);
@@ -155,7 +155,7 @@ pub fn attack(g: &mut Ctx, p: Player) {
     common::flush_pending_effect(g, p);
 }
 
-/// Avec l'arme particulière (8, 0x18) tous les coups deviennent le coup de base.
+/// With the particular weapon (8, 0x18) all strikes become the basic strike.
 fn fall_back_to_combo(g: &mut Ctx, p: Player) -> bool {
     cov!();
     if !common::holds_special_weapon(g, p) {
@@ -165,8 +165,8 @@ fn fall_back_to_combo(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// Début d'un coup de base (0x3e86e) : le rang de l'enchaînement avance si le coup précédent a porté
-/// (deux coups, quatre avec l'équipement lourd).
+/// Start of a basic strike (0x3e86e): the chain rank advances if the previous strike landed
+/// (two strikes, four with heavy equipment).
 fn combo_begin(g: &mut Ctx, p: Player) {
     cov!();
     next_step(g, p);
@@ -179,7 +179,7 @@ fn combo_begin(g: &mut Ctx, p: Player) {
     common::start_with_voice(g, p, anim);
 }
 
-/// Coup de base (0x3e858) : trois pas.
+/// Basic strike (0x3e858): three steps.
 fn combo(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -193,7 +193,7 @@ fn combo(g: &mut Ctx, p: Player) {
 }
 
 
-/// Coups d'estoc (0x3e930 haut, 0x3e998 bas) : un seul geste, de rang 0 ou 1 selon le coup précédent.
+/// Thrusts (0x3e930 high, 0x3e998 low): a single gesture, of rank 0 or 1 depending on the previous strike.
 fn thrust(g: &mut Ctx, p: Player, hit_bit: u8, base_anim: u16) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -211,7 +211,7 @@ fn thrust(g: &mut Ctx, p: Player, hit_bit: u8, base_anim: u16) {
     }
 }
 
-/// Coup donné en se retournant (0x3ea00) : le pas 2 est le pas 0 d'une entrée par état (combos).
+/// Strike given while turning (0x3ea00): step 2 is step 0 of a per-state entry (combos).
 fn turn_strike(g: &mut Ctx, p: Player) {
     cov!();
     let step = p.u8(g, Player::STEP);
@@ -232,7 +232,7 @@ fn turn_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup donné en marche lente (0x3ea82) : sans prolongement.
+/// Strike given in slow walk (0x3ea82): without continuation.
 fn slow_strike(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -252,7 +252,7 @@ fn slow_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup de retombée (0x3eae6).
+/// Landing strike (0x3eae6).
 fn after_jump(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -268,7 +268,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Charge (0x3eb3c) : élan, premier geste (coup porté, effet), second geste puis glissade.
+/// Charge (0x3eb3c): run-up, first gesture (landed hit, effect), second gesture then slide.
 fn charge(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -311,7 +311,7 @@ fn charge(g: &mut Ctx, p: Player) {
 }
 
 
-/// Coup donné en courant (0x3ec2c) : élan de 5 pixels par image, puis arrêt.
+/// Strike given while running (0x3ec2c): run-up of 5 pixels per frame, then stop.
 fn run_strike(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -335,7 +335,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
 
 
 
-/// Coup de garde (0x3ed40).
+/// Guard strike (0x3ed40).
 fn guard_break(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -353,8 +353,8 @@ fn guard_break(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Grand saut tournoyant (0x3ed86), attaque spéciale 0x2d : bond, tourbillon à la verticale, retombée.
-/// Avec l'arme légère (`WEAPON_B` < 0x28), saut simplifié qui commence au pas 0xe.
+/// Great spinning jump (0x3ed86), special attack 0x2d: leap, vertical whirlwind, landing.
+/// With the light weapon (`WEAPON_B` < 0x28), simplified jump that starts at step 0xe.
 fn leap(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -400,7 +400,7 @@ fn leap(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Variante légère du bond (0x3ef04) : arrivée au pas 0xe.
+/// Light variant of the leap (0x3ef04): arrival at step 0xe.
 fn leap_light_begin(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u8(g, Player::STEP, 0xe);
@@ -418,7 +418,7 @@ fn leap_light_begin(g: &mut Ctx, p: Player) {
     animation::start_plain(g, p, 0x2e);
 }
 
-/// Le bond léger attend le geste (événement) puis continue l'animation (0x3ef44).
+/// The light leap waits for the gesture (event) then continues the animation (0x3ef44).
 fn leap_light_wait(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, field::EVENT) != 0 {
@@ -430,7 +430,7 @@ fn leap_light_wait(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// Atterrissage du bond léger (0x3ef66).
+/// Landing of the light leap (0x3ef66).
 fn leap_light_land(g: &mut Ctx, p: Player) {
     cov!();
     move_xz(g, p);
@@ -444,8 +444,8 @@ fn leap_light_land(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// Pas 2 du bond lourd (0x3ee00) : arrivé au cadre du sommet, le bouton 1 tenu déclenche le tourbillon
-/// descendant ; le geste porté crée un effet et une voix.
+/// Step 2 of the heavy leap (0x3ee00): at the peak frame, holding button 1 triggers the descending
+/// whirlwind; the carried gesture creates an effect and a voice.
 fn leap_spin(g: &mut Ctx, p: Player) {
     cov!();
     let apex_frame = if p.u8(g, Obj::VARIANT) == 0 { 0x2b_8d5e } else { 0x2b_fa50 };
@@ -477,7 +477,7 @@ fn leap_spin(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// Pas 4 et 8 du bond lourd (0x3ee8c) : descente verticale, atterrissage au sol.
+/// Steps 4 and 8 of the heavy leap (0x3ee8c): vertical descent, landing on the ground.
 fn leap_descend(g: &mut Ctx, p: Player) {
     cov!();
     move_z(g, p);
@@ -491,7 +491,7 @@ fn leap_descend(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// Pas 6 du bond lourd (0x3eeb6) : second tourbillon.
+/// Step 6 of the heavy leap (0x3eeb6): second whirlwind.
 fn leap_fall(g: &mut Ctx, p: Player) {
     cov!();
     move_z(g, p);
@@ -508,7 +508,7 @@ fn leap_fall(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// Tourbillon (0x3efa2) : coûte 12 points de vie au premier contact.
+/// Whirlwind (0x3efa2): costs 12 hit points at the first contact.
 fn whirl(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -546,13 +546,13 @@ fn whirl(g: &mut Ctx, p: Player) {
 }
 
 
-// ---- attaque spéciale (0x3f0ae) --------------------------------------------------------------
+// ---- special attack (0x3f0ae) --------------------------------------------------------------
 
-/// Animations du combattant pour les magies lancées (voir `items::Style`).
+/// The fighter's animations for cast spells (see `items::Style`).
 const STYLE: items::Style = items::Style { cast_anim: 0x25, bolt_anim: 0x24, spark: 0, ..items::Style::CLASSIC };
 
-/// 0x3f0ae : l'objet ou la magie choisie (`field::SPECIAL_KIND`, 0..20) ; les numéros 3 et 11 ne font
-/// rien. 0..8 : objets lancés ; 12 : échange d'équipement ; 9, 10 et 13..20 : voir `items`.
+/// 0x3f0ae: the chosen item or spell (`field::SPECIAL_KIND`, 0..20); numbers 3 and 11 do
+/// nothing. 0..8: thrown items; 12: equipment swap; 9, 10 and 13..20: see `items`.
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
@@ -573,8 +573,8 @@ pub fn special(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Échange d'équipement (0x3f39a) : l'objet ramassé (`field::ITEM_NEW`) remplace l'arme ou le bouclier
-/// et l'ancien équipement prend sa place dans la liste d'objets (`field::ITEM`).
+/// Equipment swap (0x3f39a): the picked-up item (`field::ITEM_NEW`) replaces the weapon or the shield
+/// and the old equipment takes its place in the item list (`field::ITEM`).
 fn swap_equipment(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
@@ -592,13 +592,13 @@ fn swap_equipment(g: &mut Ctx, p: Player) {
             let new = p.u8(g, field::ITEM_NEW).wrapping_sub(0x2e);
             let second = p.u8(g, Player::WEAPON_B);
             if second <= 7 && second & 4 != 0 {
-                // le bouclier en main est remplacé par l'équipement lourd 0x28 + niveau de protection
+                // the shield in hand is replaced by the heavy equipment 0x28 + protection level
                 let protection = p.u8(g, 0x164);
                 p.set_u8(g, Player::WEAPON_B, 0x28u8.wrapping_add(protection));
                 p.set_u8(g, field::ITEM, second.wrapping_add(0x2e));
                 p.set_u8(g, Player::WEAPON_A, new);
             } else if new <= 7 && new & 4 != 0 {
-                // un bouclier est enfilé : l'arme tenue devient l'objet de la liste
+                // a shield is put on: the held weapon becomes the list item
                 let held = p.u8(g, Player::WEAPON_A);
                 p.set_u8(g, field::ITEM, held.wrapping_add(0x2e));
                 p.set_u8(g, Player::WEAPON_B, new);

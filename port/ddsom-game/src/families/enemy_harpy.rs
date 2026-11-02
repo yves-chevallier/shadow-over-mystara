@@ -1,11 +1,11 @@
-//! Ennemi « Harpy » (ENEMY type 21, 0x756c4) : créature volante qui traverse l'écran. Voir
+//! "Harpy" enemy (ENEMY type 21, 0x756c4): flying creature that crosses the screen. See
 //! `docs/families/enemy.md`.
 //!
-//! Dix variantes (`+3`) : 0 et 1 volent d'un bord à l'autre, 2 à 5 rasent le décor, 6 et 7 font
-//! demi-tour, 8 passe au premier plan, 9 est le modèle sans mouvement propre. Chaque créature crée à sa
-//! naissance un compagnon (ombre, ESHL type 0x10) dont `+0xaa` garde le lien. Sous-états en état actif :
-//! 0 vol, 2 attaque (`+0x2f` choisit la série : 0 projectiles, 1 coups, 2 tir), 4 pause, 6 sortie
-//! d'écran, 8 sortie par le haut.
+//! Ten variants (`+3`): 0 and 1 fly from one edge to the other, 2 to 5 skim the terrain, 6 and 7 turn
+//! around, 8 goes to the foreground, 9 is the model with no movement of its own. Each creature creates at
+//! birth a companion (shadow, ESHL type 0x10) whose link `+0xaa` keeps. Substates in the active state:
+//! 0 flight, 2 attack (`+0x2f` picks the series: 0 projectiles, 1 hits, 2 shot), 4 pause, 6 exit
+//! from the screen, 8 exit through the top.
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -13,14 +13,14 @@ use super::enemy_common::*;
 use crate::objects::Obj;
 use super::effects_creators::leftovers::Pure;
 
-/// Jeux d'animations : vol et attaques.
+/// Animation sets: flight and attacks.
 const SET_FLY: u32 = 0x16a10c;
 const SET_ATTACK: u32 = 0x16a116;
 const SET_HIT: u32 = 0x16a132;
-/// Lignes de huit octets par variante (orientation, durées, décalage en X) et décalages en Y selon `+0x42`.
+/// Rows of eight bytes per variant (orientation, durations, X offset) and Y offsets according to `+0x42`.
 const VARIANT_ROWS: u32 = 0x756e6;
 const OFFSETS_Y: u32 = 0x757d2;
-/// Animation de réaction au coup, selon la série d'attaque `+0x2f`.
+/// Hit reaction animation, according to the attack series `+0x2f`.
 const HIT_ANIM: u32 = 0x75e84;
 
 mod g {
@@ -64,7 +64,7 @@ fn set_state_long<R: Bench>(x: &mut Cx<'_, R>, v: u32) {
     x.set32(f::STATE, v);
 }
 
-/// Remise en liste : la variante 8 vit dans la liste du premier plan.
+/// Re-listing: variant 8 lives in the foreground list.
 fn reinsert<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::VARIANT) == 8 {
         x.reinsert_foreground();
@@ -73,19 +73,19 @@ fn reinsert<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Le compagnon (`+0xaa`) passe à l'état 6 (libération).
+/// The companion (`+0xaa`) goes to state 6 (release).
 fn release_companion<R: Bench>(x: &mut Cx<'_, R>) {
     let c = x.linked(COMPANION);
     c.set_u8(x.b, f::STATE, 6);
 }
 
-/// Fin du vol : la créature et son compagnon passent à l'état suivant.
+/// End of the flight: the creature and its companion go to the next state.
 fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 4);
     release_companion(x);
 }
 
-/// Sortie d'écran : comme `vanish`, en retirant d'abord la créature de la scène (0x27ee).
+/// Screen exit: like `vanish`, first removing the creature from the scene (0x27ee).
 fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 4);
     detach_from_host(x);
@@ -100,8 +100,8 @@ fn move_xz_table<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xz();
 }
 
-/// Un tour de l'angle de vol : toutes les `reload` images, `+0xa2` s'ajoute à la direction. En vol libre
-/// (`clamp`, 0x758aa) un angle devenu négatif est remis à zéro.
+/// One turn of the flight angle: every `reload` frames, `+0xa2` is added to the direction. In free flight
+/// (`clamp`, 0x758aa) an angle that became negative is reset to zero.
 fn bank<R: Bench>(x: &mut Cx<'_, R>, reload: u8, clamp: bool) {
     let t = x.u8(TIMER_A).wrapping_sub(1);
     x.set8(TIMER_A, t);
@@ -115,7 +115,7 @@ fn bank<R: Bench>(x: &mut Cx<'_, R>, reload: u8, clamp: bool) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
@@ -127,13 +127,13 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x69, 4);
     x.set8(0x76, 4);
     x.set8(0x67, 0);
-    // Glitch d'origine : `+0x8e` reçoit l'octet bas de D0, l'index de la table des immunités que laisse 0xfe5a.
+    // Original glitch: `+0x8e` receives the low byte of D0, the index into the immunity table that 0xfe5a leaves.
     x.set8(0x8e, index as u8);
     x.set8(0x7f, 0);
     x.set8(0x7e, 0xc);
     x.set32(0x8a, 0);
     x.set8(PASSES, 2);
-    // ligne de la variante : orientation, durées `+0xa0..+0xa3`, décalage en X
+    // variant row: orientation, durations `+0xa0..+0xa3`, X offset
     let row = VARIANT_ROWS + x.u8(Obj::VARIANT).wrapping_shl(3) as u32;
     let flip = x.data16(row);
     x.set16(f::FLIP, flip);
@@ -165,10 +165,10 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         let vz = x.u16(0x1c);
         x.set16(0x18, vz);
     }
-    // 0xa036e : compagnon ; sur un échec, l'original range quand même l'A1 laissé par l'allocation.
+    // 0xa036e: companion; on failure, the original still stores the A1 left by the allocation.
     let companion = match super::small::harpy_companion_via(&mut Pure, x.b, x.o) {
         Ok((o, hp)) => {
-            // Glitch d'origine : PV/4 reste dans D2.
+            // Original glitch: HP/4 stays in D2.
             *x.c.d2() = *x.c.d2() & 0xffff_0000 | hp as u32;
             o
         }
@@ -181,7 +181,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     reinsert(x);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
@@ -199,7 +199,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     reinsert(x);
 }
 
-/// +5 = 0 (0x7594a) : vol de la variante.
+/// +5 = 0 (0x7594a): flight of the variant.
 fn fly<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, 0x0206_0000);
@@ -213,7 +213,7 @@ fn fly<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin d'un passage : `+0xa1` écoulé, la créature repart ou attaque (variantes 0 et 1).
+/// End of a pass: `+0xa1` elapsed, the creature leaves again or attacks (variants 0 and 1).
 fn fly_loop<R: Bench>(x: &mut Cx<'_, R>, reload: u8) {
     move_xz_table(x);
     step(x);
@@ -235,7 +235,7 @@ fn fly_loop<R: Bench>(x: &mut Cx<'_, R>, reload: u8) {
     }
 }
 
-/// Variantes 2 à 5 (0x75aec) : même vol, passage plus lent et pause de 0x30 images.
+/// Variants 2 to 5 (0x75aec): same flight, slower pass and a pause of 0x30 frames.
 fn fly_loop_b<R: Bench>(x: &mut Cx<'_, R>) {
     move_xz_table(x);
     step(x);
@@ -269,7 +269,7 @@ fn fly_front<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variantes 6 et 7 (0x75980) : traverse l'écran puis fait demi-tour.
+/// Variants 6 and 7 (0x75980): crosses the screen then turns around.
 fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -322,7 +322,7 @@ fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +5 = 4 (0x75b2e) : attente puis retour au vol.
+/// +5 = 4 (0x75b2e): wait then back to flight.
 fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     let n = x.u8(0x77).wrapping_sub(1);
@@ -332,7 +332,7 @@ fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +5 = 6 (0x75884) : sortie d'écran selon la variante.
+/// +5 = 6 (0x75884): screen exit depending on the variant.
 fn exit_flight<R: Bench>(x: &mut Cx<'_, R>) {
     move_xz_table(x);
     step(x);
@@ -364,7 +364,7 @@ fn exit_flight<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +5 = 8 (0x75b40) : fin du vol de la variante 8.
+/// +5 = 8 (0x75b40): end of the flight of variant 8.
 fn attack_end<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => attack_start(x),
@@ -374,7 +374,7 @@ fn attack_end<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 2 : attaque ----------------------------------------------------------------------
+// --- substate 2: attack ----------------------------------------------------------------------
 
 fn attack<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(SERIES) {
@@ -395,11 +395,11 @@ fn attack_shots<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x75b7c : la créature vise un joueur et lance un projectile.
+/// 0x75b7c: the creature aims at a player and throws a projectile.
 fn attack_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     if let Some(target) = lib::pick_target(x) {
-        // 0xa0566 avec D5 = 0 (laissé en reste) et A2 = la cible
+        // 0xa0566 with D5 = 0 (left as a leftover) and A2 = the target
         *x.c.d5() = 0;
         if let Some(shot) = super::small::harpy_shot_via(&mut Pure, x.b, x.o, 0, target.0) {
             x.set32(SHOT, shot.0);
@@ -414,7 +414,7 @@ fn attack_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_start(SET_FLY, n as u16);
 }
 
-/// 0x75bd0 : attend la fin du geste de tir.
+/// 0x75bd0: waits for the end of the firing gesture.
 fn attack_aim<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     if x.u8(SHOT_DONE) != 0 {
@@ -424,7 +424,7 @@ fn attack_aim<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x75bf4 : lâche le projectile à l'image-clé.
+/// 0x75bf4: releases the projectile at the key frame.
 fn attack_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         return x.add8(f::SUB2, 2);
@@ -438,7 +438,7 @@ fn attack_wait<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x75c36 : retour au vol après le tir.
+/// 0x75c36: back to flight after the shot.
 fn attack_return<R: Bench>(x: &mut Cx<'_, R>) {
     let t = x.u8(TIMER_A).wrapping_sub(1);
     x.set8(TIMER_A, t);
@@ -516,7 +516,7 @@ fn attack_fire<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 4 : touché ----------------------------------------------------------------------------
+// --- state 4: hit ----------------------------------------------------------------------------
 
 fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
@@ -533,7 +533,7 @@ fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert_foreground();
 }
 
-/// Animation de chute de la série d'attaque (`+0x2f`).
+/// Fall animation of the attack series (`+0x2f`).
 fn hit_anim<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     let series = x.u8(SERIES) as u32;
     x.rom8(HIT_ANIM + series)
@@ -634,7 +634,7 @@ fn hit_dying<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_start(SET_HIT, (base as u32) as u16);
 }
 
-// --- état 6 : libération ---------------------------------------------------------------------------
+// --- state 6: release ---------------------------------------------------------------------------
 
 fn dead<R: Bench>(x: &mut Cx<'_, R>) {
     detach_from_host(x);

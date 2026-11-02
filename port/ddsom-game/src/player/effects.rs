@@ -1,30 +1,30 @@
-//! Effets de statut des joueurs : clignotement et couleurs d'aura, compte à rebours.
+//! Player status effects: blinking and aura colors, countdown.
 //!
-//! Trois compteurs d'aura (`AURA`, `AURA_B`, `AURA_C`, octets `+0x182..+0x184`) sont posés par les
-//! objets et sorts ; tant qu'un est non nul, le joueur clignote (A) ou change de palette (B, C). Une
-//! palette est un bloc de 16 couleurs (32 octets) copié dans la RAM de palette CPS à l'emplacement du
-//! personnage.
+//! Three aura counters (`AURA`, `AURA_B`, `AURA_C`, bytes `+0x182..+0x184`) are set by
+//! items and spells; while one is non-zero, the player blinks (A) or changes palette (B, C). A
+//! palette is a block of 16 colors (32 bytes) copied into the CPS palette RAM at the character's
+//! slot.
 
 use super::{ram, Ctx, Player};
 use crate::mem::{rd32, wr32};
 use crate::machine::Machine;
 
-/// RAM de palette des personnages (deux octets par couleur, 16 couleurs par bloc).
+/// Character palette RAM (two bytes per color, 16 colors per block).
 const PALETTE_RAM: u32 = 0x91_c000;
 
-/// Décalage (mots du code, 0x378aa) du bloc de palette de chaque personnage dans la RAM de palette
-/// et dans les blocs sources.
+/// Offset (code words, 0x378aa) of each character's palette block in the palette RAM
+/// and in the source blocks.
 const PALETTE_OFFSETS: u32 = 0x378aa;
 
-/// Palettes d'aura : chaque personnage a 8 blocs de 32 octets, alternés toutes les 8 images.
+/// Aura palettes: each character has 8 blocks of 32 bytes, alternated every 8 frames.
 mod sources {
     pub const AURA_B: u32 = 0x378c2;
     pub const AURA_C: u32 = 0x384c2;
-    /// Palette normale, rétablie à la fin d'une aura.
+    /// Normal palette, restored at the end of an aura.
     pub const NORMAL: u32 = 0x390c2;
 }
 
-/// Recopie 32 octets de palette de `src` vers `dst`.
+/// Copies 32 palette bytes from `src` to `dst`.
 fn copy_palette(g: &mut Ctx, src: u32, dst: u32) {
     cov!();
     for i in 0..8 {
@@ -39,7 +39,7 @@ fn palette_slot(g: &mut Ctx, p: Player) -> u32 {
     g.prog16(PALETTE_OFFSETS + 2 * character) as i16 as i32 as u32
 }
 
-/// 0x377cc : aura A, le joueur clignote une image sur deux (le bit « caché » suit le compteur).
+/// 0x377cc: aura A, the player blinks every other frame (the "hidden" bit follows the counter).
 pub fn blink(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::AURA) == 0 {
@@ -53,7 +53,7 @@ pub fn blink(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::FLAGS, flags);
 }
 
-/// Aura B ou C : toutes les 8 images, une nouvelle couleur de palette parmi huit.
+/// Aura B or C: every 8 frames, a new palette color among eight.
 fn cycle_palette(g: &mut Ctx, p: Player, aura: u32, base: u32) {
     cov!();
     if p.u8(g, aura) == 0 {
@@ -71,26 +71,26 @@ fn cycle_palette(g: &mut Ctx, p: Player, aura: u32, base: u32) {
     copy_palette(g, src, dst);
 }
 
-/// 0x377f4 : aura B.
+/// 0x377f4: aura B.
 pub fn cycle_aura_b(g: &mut Ctx, p: Player) {
     cov!();
     cycle_palette(g, p, Player::AURA_B, sources::AURA_B)
 }
 
-/// 0x3782e : aura C.
+/// 0x3782e: aura C.
 pub fn cycle_aura_c(g: &mut Ctx, p: Player) {
     cov!();
     cycle_palette(g, p, Player::AURA_C, sources::AURA_C)
 }
 
-/// 0x37882 : fin d'une aura, palette normale du personnage.
+/// 0x37882: end of an aura, normal palette of the character.
 pub fn restore_palette(g: &mut Ctx, p: Player) {
     cov!();
     let slot = palette_slot(g, p);
     copy_palette(g, sources::NORMAL + slot, PALETTE_RAM + slot);
 }
 
-/// 0x39242 : compte à rebours de mort (`DYING_TIMER`) ; un effet toutes les 8 images.
+/// 0x39242: death countdown (`DYING_TIMER`); one effect every 8 frames.
 pub fn dying_countdown(g: &mut Ctx, p: Player) {
     cov!();
     let left = p.u16(g, Player::DYING_TIMER) as i16;

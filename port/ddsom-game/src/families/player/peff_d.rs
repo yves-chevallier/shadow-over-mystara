@@ -1,5 +1,5 @@
-//! Effets des joueurs (PEFF), quatrième série : types 6 à 10 (rayons : tir de magie, impact, souffle).
-//! Voir `docs/families/player.md`.
+//! Player effects (PEFF), fourth series: types 6 to 10 (beams: magic shot, impact, breath).
+//! See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -7,20 +7,19 @@ use super::pshell::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Signe : `neg.w` quand le regard de l'objet vaut `flip_means_neg` (0 : gauche, 1 : droite).
+/// Sign: `neg.w` when the object's facing equals `flip_means_neg` (0: left, 1: right).
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Le geste du joueur (`+7`) a changé depuis la création : la durée de vie de l'effet est finie.
+/// The player's move (`+7`) has changed since creation: the lifetime of the effect is over.
 fn gesture_changed<R: Bench>(x: &mut Cx<'_, R>, field: u32) -> bool {
     let owner = x.linked(f::OWNER);
     let gesture = owner.u8(x.b, 0x7);
     gesture != x.u8(field)
 }
 
-/// Fait clignoter l'objet : caché une image sur deux (`+0x5c` bascule). `hidden_when_zero` choisit la
-/// phase cachée.
+/// Makes the object blink: hidden every other frame (`+0x5c` toggles). `hidden_when_zero` chooses the hidden phase.
 fn flicker<R: Bench>(x: &mut Cx<'_, R>, hidden_when_zero: bool) {
     x.set_bit(0x1, 1, true);
     let v = x.u8(0x5c) ^ 1;
@@ -30,9 +29,8 @@ fn flicker<R: Bench>(x: &mut Cx<'_, R>, hidden_when_zero: bool) {
     }
 }
 
-/// Type 6 (0x4b1b6) : faisceau lancé (magie 17). Variante 0 : rayon posé devant le lanceur tant que
-/// son geste est le 4 ; variantes 1 et 2 : extrémités (selon l'octet `+0x15e` lu *au-delà* de l'objet,
-/// comme l'original).
+/// Type 6 (0x4b1b6): thrown beam (magic 17). Variant 0: ray placed in front of the caster as long as its move is 4;
+/// variants 1 and 2: ends (according to byte `+0x15e` read *beyond* the object, as in the original).
 mod beam {
     use super::*;
 
@@ -102,8 +100,8 @@ mod beam {
     }
 }
 
-/// Type 7 (0x4b3b4) : étincelle de fin de rayon, deux de variante 0 (`+0x2f` = 0, 1) et une de
-/// variante 1 qui attend la fin de son animation.
+/// Type 7 (0x4b3b4): end-of-ray spark, two of variant 0 (`+0x2f` = 0, 1) and one of variant 1 that waits for the end of
+/// its animation.
 mod spark {
     use super::*;
 
@@ -165,7 +163,7 @@ mod spark {
     }
 }
 
-/// Type 8 (0x4b530) : lueur de 8 images à la bouche du lanceur.
+/// Type 8 (0x4b530): 8-frame glow at the caster's mouth.
 mod glow {
     use super::*;
 
@@ -193,8 +191,8 @@ mod glow {
     }
 }
 
-/// Type 9 (0x4b61a) : rayon (variante 0, deux exemplaires `+0x2f` = 0, 1 : le cœur du rayon) et son
-/// générateur (variante 1) qui lance des tirs (PSHL 6) selon le joueur.
+/// Type 9 (0x4b61a): ray (variant 0, two copies `+0x2f` = 0, 1: the core of the ray) and its generator (variant 1) that
+/// fires shots (PSHL 6) according to the player.
 mod ray {
     use super::*;
 
@@ -253,7 +251,7 @@ mod ray {
         follow_owner(x);
     }
 
-    /// Lance les tirs du rayon : un par valeur de la table du joueur (`+0x10c`).
+    /// Fires the shots of the ray: one per value of the player's table (`+0x10c`).
     fn fire<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x5, 2);
         let owner = x.linked(f::OWNER);
@@ -281,7 +279,7 @@ mod ray {
     }
 }
 
-/// Type 10 (0x4b7c8) : impact du rayon (variante 0, deux exemplaires) et poussière finale (variante 1).
+/// Type 10 (0x4b7c8): impact of the ray (variant 0, two copies) and final dust (variant 1).
 mod impact {
     use super::*;
 

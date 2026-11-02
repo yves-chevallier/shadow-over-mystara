@@ -1,13 +1,13 @@
-//! Transitions du jeu normal selon les entrées (demi-tour, boutons) et événements périodiques.
+//! Normal-game transitions according to inputs (turn, buttons) and periodic events.
 //!
-//! Chaque contrôle est appelé par les actions communes (`actions`) ou par le code des personnages
-//! avant leur propre traitement, et renvoie vrai quand il a **changé l'état** du joueur (le
-//! gestionnaire appelant s'arrête alors). Ce booléen est l'inverse du drapeau Z que l'original
-//! laisse au retour (`bne` après `bsr` : Z levé = rien fait). Certains chemins de l'original laissent
-//! un Z accidentel (dernier octet écrit nul) : ils sont reproduits à l'identique (`z_of`).
+//! Each check is called by the common actions (`actions`) or by the characters' code
+//! before their own processing, and returns true when it **changed the state** of the player (the
+//! calling handler then stops). This boolean is the inverse of the Z flag that the original
+//! leaves on return (`bne` after `bsr`: Z set = nothing done). Some paths of the original leave
+//! an accidental Z (last byte written is zero): they are reproduced identically (`z_of`).
 //!
-//! Entrées (`KEYS_HELD`, `KEYS_NEW`) : bits 0..3 directions, 4 bouton 1 (attaque), 5 bouton 2 (saut),
-//! 6 bouton 3 (lancer), 7 bouton 4 (spécial).
+//! Inputs (`KEYS_HELD`, `KEYS_NEW`): bits 0..3 directions, 4 button 1 (attack), 5 button 2 (jump),
+//! 6 button 3 (throw), 7 button 4 (special).
 
 use crate::machine::Machine;
 use super::actions::to_stand;
@@ -17,7 +17,7 @@ use super::{ram, Ctx, Player};
 use crate::mem::{rd16, rd8, wr8, A5};
 use crate::objects::pools;
 
-/// Boutons (bits de `KEYS_*`).
+/// Buttons (bits of `KEYS_*`).
 pub mod key {
     pub const DIRECTIONS: u8 = 0x0f;
     pub const HORIZONTAL: u8 = 0x03;
@@ -30,7 +30,7 @@ pub mod key {
 }
 
 
-/// Orientation demandée par les directions (bit 0 : 0x20, sinon 0).
+/// Orientation requested by the directions (bit 0: 0x20, otherwise 0).
 fn facing_for(keys: u8) -> u8 {
     if keys & 1 != 0 {
         0x20
@@ -39,8 +39,8 @@ fn facing_for(keys: u8) -> u8 {
     }
 }
 
-/// 0x36f7e : le joueur demande l'autre sens. En marche lente globale il se retourne sur place ;
-/// sinon le demi-tour est une action (`TURN`) avec sa propre animation.
+/// 0x36f7e: the player asks for the other direction. In global slow walk they turn in place;
+/// otherwise the turn is an action (`TURN`) with its own animation.
 pub fn turn_check(g: &mut Ctx, p: Player) -> bool {
     cov!();
     let keys = p.u8(g, Player::KEYS_HELD) & key::HORIZONTAL;
@@ -73,8 +73,8 @@ pub fn turn_check(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// 0x37018 : bouton 1 (attaque). Selon le contexte : coup au sol, coup en marche lente, ou
-/// libération d'une prise.
+/// 0x37018: button 1 (attack). Depending on the context: ground hit, hit in slow walk, or
+/// release of a hold.
 pub fn attack_button(g: &mut Ctx, p: Player) -> bool {
     cov!();
     if ram::SLOW_MODE.get(g.b) != 0 || p.u8(g, Player::POWER_10F) != 0 {
@@ -84,7 +84,7 @@ pub fn attack_button(g: &mut Ctx, p: Player) -> bool {
         return false;
     }
     if p.u8(g, Player::SLOW_8A) != 0 {
-        // lâche ce qu'il tient : l'objet lié reçoit l'ordre de partir
+        // lets go of what they hold: the linked object is ordered to leave
         p.set_state(g, State::pack(main::PLAYING, sub::ACTING, action::RELEASE, 0).0);
         p.set_u8(g, 0x8b, 2);
         p.set_u8(g, Player::SLOW_8A, 0);
@@ -99,7 +99,7 @@ pub fn attack_button(g: &mut Ctx, p: Player) -> bool {
         return item_curse(g, p);
     }
     if !target_in_range(g, p) {
-        // personne à portée : le type de coup dépend de l'action en cours
+        // nobody in range: the type of hit depends on the current action
         let current = p.u8(g, Player::ACTION);
         let kind = if current == action::RUN {
             0xe
@@ -114,8 +114,8 @@ pub fn attack_button(g: &mut Ctx, p: Player) -> bool {
     item_curse(g, p)
 }
 
-/// 0x370b2 : bouton 2 (saut). La direction choisit l'animation et `+0x67` le type de saut :
-/// 3 vertical, 0 sur place, 1 en avant, 2 après une course.
+/// 0x370b2: button 2 (jump). The direction selects the animation and `+0x67` the jump type:
+/// 3 vertical, 0 in place, 1 forward, 2 after a run.
 pub fn jump_button(g: &mut Ctx, p: Player) -> bool {
     cov!();
     if ram::FROZEN.get(g.b) != 0 || p.u8(g, 0x15c) != 0 || p.u8(g, Player::SLOW_8A) != 0 {
@@ -154,12 +154,12 @@ pub fn jump_button(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// Type de l'objet de lancer par personnage (octets du code, 0x371b2).
+/// Type of the thrown object per character (code bytes, 0x371b2).
 const THROW_KIND: u32 = 0x371b2;
 
-/// 0x3714c : bouton 3 (lancer). Crée un effet joueur lié au joueur (`0x15a`). Renvoie vrai quand
-/// l'original laisse Z à 0 : échec d'allocation, ou type d'effet non nul. Rien n'est fait si le bouton n'est
-/// pas un nouvel appui ou si le joueur est occupé : Z levé.
+/// 0x3714c: button 3 (throw). Creates a player effect linked to the player (`0x15a`). Returns true when
+/// the original leaves Z at 0: allocation failure, or non-zero effect type. Nothing is done if the button is
+/// not a new press or if the player is busy: Z set.
 pub fn throw_button(g: &mut Ctx, p: Player) -> bool {
     cov!();
     if p.u8(g, Player::KEYS_NEW) & key::THROW == 0
@@ -171,7 +171,7 @@ pub fn throw_button(g: &mut Ctx, p: Player) -> bool {
         return false;
     }
     let Some(effect) = pools::PEFF.alloc(g.b) else {
-        // l'allocation laisse C levé (`move #1,CCR`), donc Z à 0
+        // the allocation leaves C set (`move #1,CCR`), hence Z at 0
         return true;
     };
     wr8(g.b, effect.0, 1);
@@ -185,10 +185,10 @@ pub fn throw_button(g: &mut Ctx, p: Player) -> bool {
     kind != 0
 }
 
-/// Table (octets du code, 0x372e4) : animation de l'attaque spéciale selon l'identifiant mémorisé.
+/// Table (code bytes, 0x372e4): special attack animation according to the stored identifier.
 const SPECIAL_ANIM: u32 = 0x372e4;
 
-/// 0x371be : bouton 4 (attaque spéciale), seulement en phase de jeu 0xc.
+/// 0x371be: button 4 (special attack), only in game phase 0xc.
 pub fn special_attack(g: &mut Ctx, p: Player) {
     cov!();
     if ram::PHASE.get(g.b) != 0xc || ram::PAUSE.get(g.b) != 0 {
@@ -203,7 +203,7 @@ pub fn special_attack(g: &mut Ctx, p: Player) {
     if matches!(p.u8(g, Player::ACTION), 0xc | 0xe | 0x14 | 0x22) || p.u8(g, Player::SLOW_8A) != 0 {
         return;
     }
-    // l'emplacement de sort choisi (`0x15d`) donne l'identifiant du sort en tête de sa ligne de 16 octets
+    // the chosen spell slot (`0x15d`) gives the spell identifier at the head of its 16-byte row
     let slot = p.at(Player::SLOT_TABLE) + ((p.u8(g, Player::SPECIAL_COUNT) as u32) << 4);
     let id = rd8(g.b, slot);
     p.set_u8(g, Player::SPECIAL_ID, id);
@@ -236,8 +236,8 @@ pub fn special_attack(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x3760e : le magicien (personnage 8/9) avec l'arme 0x21 lance son sort ultime quand au moins
-/// trois joueurs sont là, que leurs scores dépassent 2 000 000 et que tous sont prêts.
+/// 0x3760e: the magic-user (character 8/9) with weapon 0x21 casts their ultimate spell when at least
+/// three players are there, their scores exceed 2,000,000 and all are ready.
 pub fn near_death(g: &mut Ctx, p: Player) {
     cov!();
     if ram::INPUT_MASK.get(g.b) & 0x80 == 0 || ram::PLAYERS_ALIVE.get(g.b) < 3 {
@@ -252,10 +252,10 @@ pub fn near_death(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Total des scores (BCD) des joueurs vivants, conservé en `A5-0x5fc6`.
+/// Total of the scores (BCD) of the living players, kept in `A5-0x5fc6`.
 pub const TEAM_SCORE: u32 = 0xff_203a;
 
-/// 0x37658 : somme BCD des scores des joueurs en vie ; vrai si elle atteint 2 000 000.
+/// 0x37658: BCD sum of the scores of the living players; true if it reaches 2,000,000.
 pub fn team_score_reached(g: &mut Ctx) -> bool {
     cov!();
     crate::mem::wr32(g.b, TEAM_SCORE, 0);
@@ -275,7 +275,7 @@ pub fn team_score_reached(g: &mut Ctx) -> bool {
     (crate::mem::rd32(g.b, TEAM_SCORE) as i32) >= 0x0200_0000
 }
 
-/// Addition décimale codée d'un octet (ABCD) avec retenue entrante ; renvoie le résultat et la retenue.
+/// Packed decimal addition of one byte (ABCD) with incoming carry; returns the result and the carry.
 fn bcd_add(a: u8, b: u8, carry: bool) -> (u8, bool) {
     let mut r = a as u16 + b as u16 + carry as u16;
     if (a & 0xf) + (b & 0xf) + carry as u8 > 9 {
@@ -288,11 +288,11 @@ fn bcd_add(a: u8, b: u8, carry: bool) -> (u8, bool) {
     (r as u8, out)
 }
 
-/// Mots (code, 0x37784) : pour chaque tirage de 4 bits, le masque des tirages qui déclenchent l'effet.
+/// Words (code, 0x37784): for each 4-bit draw, the mask of the draws that trigger the effect.
 const CURSE_MASKS: u32 = 0x37784;
 
-/// 0x376ee : objets maudits (armes 0xe et 0xf) : à chaque coup, un tirage décide d'un effet (le
-/// joueur lâche son arme, ou un monstre apparaît). Renvoie l'inverse de Z comme l'original.
+/// 0x376ee: cursed items (weapons 0xe and 0xf): on each hit, a draw decides an effect (the
+/// player drops their weapon, or a monster appears). Returns the inverse of Z like the original.
 pub fn item_curse(g: &mut Ctx, p: Player) -> bool {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_A);
@@ -306,7 +306,7 @@ pub fn item_curse(g: &mut Ctx, p: Player) -> bool {
         if weapon != 0xe {
             p.set_state(g, 0x0204_2600);
             super::spawn::cursed_weapon(g, p);
-            // Z du dernier `move.w` du créateur (le lien), ou de l'allocation qui échoue (nul) : toujours vrai
+            // Z of the creator's last `move.w` (the link), or of the allocation that fails (zero): always true
             return g.c.sr & m68k::SR_Z == 0;
         }
         let count = ram::CURSE_COUNT.get(g.b).wrapping_add(1);
@@ -325,13 +325,13 @@ pub fn item_curse(g: &mut Ctx, p: Player) -> bool {
     let count = ram::CURSE_COUNT.get(g.b).wrapping_add(1);
     ram::CURSE_COUNT.set(g.b, count);
     if count <= 0x4f {
-        // `bls` : le drapeau Z reste celui de la comparaison
+        // `bls`: the Z flag remains that of the comparison
         return count != 0x4f;
     }
     curse_fall(g, p)
 }
 
-/// 0x37768 : le joueur maudit perd son arme (devient une arme 0xd) s'il est au sol.
+/// 0x37768: the cursed player loses their weapon (becomes a weapon 0xd) if on the ground.
 fn curse_fall(g: &mut Ctx, p: Player) -> bool {
     cov!();
     if p.u16(g, 0xc) == 0 {
@@ -342,18 +342,18 @@ fn curse_fall(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// Drapeau en `A5-0x5b82` : une arme maudite a été lâchée (h).
+/// Flag at `A5-0x5b82`: a cursed weapon was dropped (h).
 const CURSE_DROPPED: u32 = A5 - 0x5b82;
 
-/// Tables de boîtes de la ROM (données) : pointeur par jeu de boîtes, puis 8 octets par boîte.
+/// Box tables in ROM (data): pointer per box set, then 8 bytes per box.
 mod boxes {
     pub const BODY: u32 = 0x11bffa;
     pub const ATTACK: u32 = 0x11c23a;
 }
 
-/// 0x371a : y a-t-il un boss ou un ennemi dans la portée du coup ? Teste la boîte d'attaque 1 (sous-
-/// action 2) puis la boîte 2 (sous-action 4) du jeu de boîtes du joueur ; si l'une touche, `SUBACTION`
-/// reçoit le numéro correspondant.
+/// 0x371a: is there a boss or an enemy within range of the hit? Tests attack box 1 (sub-
+/// action 2) then box 2 (sub-action 4) of the player's box set; if either hits, `SUBACTION`
+/// receives the corresponding number.
 pub fn target_in_range(g: &mut Ctx, p: Player) -> bool {
     cov!();
     let box_set = p.u8(g, Player::BOX_SET) as u32;
@@ -368,15 +368,15 @@ pub fn target_in_range(g: &mut Ctx, p: Player) -> bool {
     false
 }
 
-/// 0x3776 : les boss puis les ennemis.
+/// 0x3776: the bosses then the enemies.
 fn probe(g: &mut Ctx, p: Player, attack_box: u32, second: bool) -> bool {
     cov!();
     pools::BOSS.iter().chain(pools::ENEMY.iter()).any(|o| keys(g, p, attack_box, o.0, second))
 }
 
-/// 0x3796 : la boîte d'attaque du joueur recouvre-t-elle la boîte de corps de l'objet `o` ?
-/// Pour la première boîte, l'objet ne doit pas être en l'air ; pour la seconde, il doit être
-/// porté (`+0x86`) ou être un ennemi de type 0xa.
+/// 0x3796: does the player's attack box overlap the body box of object `o`?
+/// For the first box, the object must not be airborne; for the second, it must be
+/// carried (`+0x86`) or be an enemy of type 0xa.
 fn keys(g: &mut Ctx, p: Player, attack_box: u32, o: u32, second: bool) -> bool {
     cov!();
     let b = &mut *g.b;
@@ -393,13 +393,13 @@ fn keys(g: &mut Ctx, p: Player, attack_box: u32, o: u32, second: bool) -> bool {
     let body_index = rd8(b, o + 0x2e) as u32;
     let body_set = crate::mem::rd32(b, boxes::BODY + 4 * body_index);
     let body_box = body_set + 8 * rd8(b, o + 0x38) as u32;
-    // profondeur (Y)
+    // depth (Y)
     let (ya, yb) = (sbyte(b, attack_box + 4), sbyte(b, body_box + 4));
     let (pya, pyb) = (rd16(b, p.0 + 0x10), rd16(b, o + 0x10));
     if !overlap(ya, yb, pya, pyb, rd8(b, attack_box + 5), rd8(b, body_box + 5)) {
         return false;
     }
-    // abscisse (X), décalages inversés selon l'orientation de chacun
+    // abscissa (X), offsets inverted according to the orientation of each
     let (mut xa, mut xb) = (sbyte(b, attack_box), sbyte(b, body_box));
     if rd8(b, p.0 + 0x2c) != 0 {
         xa = xa.wrapping_neg();
@@ -417,13 +417,13 @@ fn keys(g: &mut Ctx, p: Player, attack_box: u32, o: u32, second: bool) -> bool {
     overlap(za, zb, pza, pzb, rd8(b, attack_box + 3), rd8(b, body_box + 3))
 }
 
-/// Octet signé étendu sur 16 bits.
+/// Signed byte extended to 16 bits.
 fn sbyte(b: &mut cps2::Cps2Bus, a: u32) -> i16 {
     rd8(b, a) as i8 as i16
 }
 
-/// Recouvrement sur un axe, en arithmétique 16 bits comme l'original : `h` est la somme (sur 8 bits)
-/// des demi-tailles, et `(décalage + position)` des deux boîtes doivent différer d'au plus `h`.
+/// Overlap on one axis, in 16-bit arithmetic like the original: `h` is the sum (on 8 bits)
+/// of the half-sizes, and `(offset + position)` of the two boxes must differ by at most `h`.
 fn overlap(ofs_a: i16, ofs_b: i16, pos_a: u16, pos_b: u16, half_a: u8, half_b: u8) -> bool {
     let d = ofs_a.wrapping_add(pos_a as i16).wrapping_sub(ofs_b.wrapping_add(pos_b as i16));
     let h = half_a.wrapping_add(half_b) as u16;
@@ -443,11 +443,11 @@ mod tests {
 
     #[test]
     fn box_overlap_on_an_axis() {
-        // positions voisines, demi-tailles 2 + 2 : recouvrement
+        // neighboring positions, half-sizes 2 + 2: overlap
         assert!(overlap(0, 0, 10, 12, 2, 2));
-        // trop éloignées
+        // too far apart
         assert!(!overlap(0, 0, 10, 30, 2, 2));
-        // les décalages comptent
+        // the offsets count
         assert!(overlap(-8, 0, 20, 12, 2, 2));
     }
 }

@@ -1,15 +1,15 @@
-//! Octets d'instructions 68000 exécutées par la machine de référence (code d'origine recompilé, 68000 surcadencé,
-//! comme la machine B de `validate`) : la mesure du code qui sépare, dans la région programme, le code des données
+//! Bytes of 68000 instructions executed by the reference machine (recompiled original code, overclocked 68000,
+//! like machine B of `validate`): the measurement of the code that separates, in the program region, code from data
 //! (`port/extract/code_68k.txt`, docs/sans-rom.md « Couverture complète des données »).
 //!
-//!   executed_code <roms> <eeprom> <sortie.txt> <scénario>:<images> ...
+//!   executed_code <roms> <eeprom> <output.txt> <scenario>:<frames> ...
 //!
-//! Chaque bloc recompilé exécuté est noté par son adresse de tête, puis étendu en ligne droite jusqu'à
-//! l'instruction qui termine un bloc de base (branchement, saut, appel, retour, trap, chk, écriture de SR) : un bloc
-//! de base s'exécute en entier une fois commencé. Un appel termine le bloc : les octets rangés après un `jsr` (données
-//! que la routine appelée lit puis saute) ne sont comptés que si l'exécution y revient. Les instructions faites par
-//! l'interpréteur sont notées une à une. La sortie donne les plages d'octets exécutés `début end` (hexadécimal, fin
-//! exclue), triées et réunies.
+//! Each recompiled block executed is recorded by its head address, then extended in a straight line up to
+//! the instruction that ends a basic block (branch, jump, call, return, trap, chk, SR write): a basic
+//! block executes entirely once started. A call ends the block: the bytes stored after a `jsr` (data
+//! that the called routine reads then skips) are counted only if execution comes back to them. The instructions done by
+//! the interpreter are recorded one by one. The output gives the ranges of executed bytes `start end` (hexadecimal, end
+//! excluded), sorted and merged.
 
 use std::cell::RefCell;
 use std::collections::BTreeSet;
@@ -21,7 +21,7 @@ thread_local! {
     static HEADS: RefCell<BTreeSet<u32>> = const { RefCell::new(BTreeSet::new()) };
 }
 
-/// Exécuteur de la référence qui note la tête de chaque bloc exécuté.
+/// Reference executor that records the head of each executed block.
 fn executor(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u32> {
     let r = ddsom_rc::run_block(pc, c, b, dl);
     if r.is_some() {
@@ -30,7 +30,7 @@ fn executor(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Optio
     r
 }
 
-/// L'instruction termine-t-elle un bloc de base ? (comme `recomp`, plus les instructions invalides)
+/// Does the instruction end a basic block? (like `recomp`, plus the invalid instructions)
 fn block_end(op: &Op) -> bool {
     use Op::*;
     matches!(
@@ -43,14 +43,14 @@ fn block_end(op: &Op) -> bool {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 5 {
-        eprintln!("usage : executed_code <roms> <eeprom> <sortie.txt> <scénario>:<images> ...");
+        eprintln!("usage: executed_code <roms> <eeprom> <output.txt> <scenario>:<frames> ...");
         std::process::exit(2);
     }
     let ee = std::fs::read(&a[2]).ok();
     let mut bytes = vec![false; 0x400000];
     for spec in &a[4..] {
-        let (path, frames) = spec.rsplit_once(':').expect("scénario:images");
-        let frames: usize = frames.parse().expect("images");
+        let (path, frames) = spec.rsplit_once(':').expect("scenario:frames");
+        let frames: usize = frames.parse().expect("frames");
         let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
         m.set_overclock(16.0);
         ddsom_game::install_reference(&mut m);
@@ -61,7 +61,7 @@ fn main() {
         m.step_hook = Some(Box::new(move |_: &m68k::Cpu, _: &cps2::Cps2Bus, pc: u32| {
             notes.borrow_mut().insert(pc);
         }));
-        let script = ddsom_game::scenario::Scenario::load(Path::new(path)).expect("scénario");
+        let script = ddsom_game::scenario::Scenario::load(Path::new(path)).expect("scenario");
         for f in 0..frames {
             script.apply(f, &mut m);
             m.run_frame();
@@ -90,7 +90,7 @@ fn main() {
                 pc += ins.len;
             }
         }
-        eprintln!("{path} : {frames} images");
+        eprintln!("{path}: {frames} frames");
     }
     let mut out = String::new();
     let mut start = None;

@@ -1,13 +1,13 @@
-//! Boss 9, état actif : entrée en scène (`+5` = 0), départ (2), passages et arrêts (4), attente (6).
+//! Boss 9, active state: stage entrance (`+5` = 0), departure (2), passes and stops (4), wait (6).
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-// --- groupe 0 : entrée en scène --------------------------------------------------------------------
+// --- group 0: stage entrance --------------------------------------------------------------------
 
-/// 0x8a96a : l'équipage monte, dialogue, l'engin traverse l'écran puis revient en marche arrière.
+/// 0x8a96a: the crew climbs aboard, dialogue, the vehicle crosses the screen then comes back in reverse.
 pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         2 => board(x),
@@ -108,18 +108,18 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Abscisse de la caméra du plan de l'engin.
+/// X position of the vehicle's plane camera.
 fn x_cam<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     x.a5_u16(CAM_X)
 }
 
-/// L'engin roule (0x1d78) et ses roues tournent (0x1a56).
+/// The vehicle rolls (0x1d78) and its wheels turn (0x1a56).
 pub(super) fn roll<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_x();
     anim(x);
 }
 
-/// 0x8a992 : l'équipage monte (quatre servants ENEMY 0x13, variante 2 : `+0xbc` = 5 à 2), s'il y a la place.
+/// 0x8a992: the crew climbs aboard (four ENEMY 0x13 gunners, variant 2: `+0xbc` = 5 to 2), if there is room.
 fn board<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.a5_u16(ENEMY_FREE) as i16) < 4 {
         return;
@@ -144,9 +144,9 @@ fn board<R: Bench>(x: &mut Cx<'_, R>) {
     next6(x);
 }
 
-// --- groupe 2 : départ ---------------------------------------------------------------------------
+// --- group 2: departure ---------------------------------------------------------------------------
 
-/// 0x8abc2 : panache de fumée (SET 2, variante 0xe), puis départ du premier passage.
+/// 0x8abc2: smoke plume (SET 2, variant 0xe), then departure of the first pass.
 pub(super) fn start<R: Bench>(x: &mut Cx<'_, R>) {
     if let Some(s) = x.alloc(&pools::SET) {
         s.set_u8(x.b, 0, 1);
@@ -156,7 +156,7 @@ pub(super) fn start<R: Bench>(x: &mut Cx<'_, R>) {
     restart(x)
 }
 
-/// 0x8abdc : (re)départ : premier passage (`+5` = 4).
+/// 0x8abdc: (re)departure: first pass (`+5` = 4).
 pub(super) fn restart<R: Bench>(x: &mut Cx<'_, R>) {
     lib::set_immunities(x);
     x.set8(0, 1);
@@ -171,9 +171,9 @@ pub(super) fn restart<R: Bench>(x: &mut Cx<'_, R>) {
     draw_passes(x);
 }
 
-// --- groupe 4 : passages et arrêts ------------------------------------------------------------
+// --- group 4: passes and stops ------------------------------------------------------------
 
-/// 0x8ac14 : fumée de l'avarie (une fois) ; sans servants, l'engin attend leur remplacement ; sinon l'étape `+6`.
+/// 0x8ac14: damage smoke (once); with no gunners, the vehicle waits for their replacement; otherwise step `+6`.
 pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SMOKE_DONE) == 0 && sub16(x, SMOKE_DELAY, 1).mi() {
         x.set8(SMOKE_DONE, 1);
@@ -207,7 +207,7 @@ pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8acaa : un passage d'un bord à l'autre (après `+0x6e` images d'attente).
+/// 0x8acaa: a pass from one edge to the other (after `+0x6e` frames of waiting).
 fn pass<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         if sub8(x, WAIT, 1).pl() {
@@ -257,14 +257,14 @@ fn pass<R: Bench>(x: &mut Cx<'_, R>) {
     reset_wait(x)
 }
 
-/// Au bord : demi-tour, et l'équipage perdu est remplacé.
+/// At the edge: about-face, and the lost crew is replaced.
 fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     let side = x.u8(f::FLIP) ^ 0x20;
     x.set8(f::FLIP, side);
     refill_crew(x, false);
 }
 
-/// 0x8adfc : roule jusqu'à l'abscisse d'arrêt, attend `+0xbe` images, puis s'arrête pour tirer selon la cible.
+/// 0x8adfc: rolls to the stop X position, waits `+0xbe` frames, then stops to fire according to the target.
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -320,7 +320,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8aed8 / 0x8af4c : arrêt de tir selon la portée de la cible ; hors de portée, nouveau passage.
+/// 0x8aed8 / 0x8af4c: firing stop according to the target's range; out of range, a new pass.
 fn choose_halt<R: Bench>(x: &mut Cx<'_, R>) {
     match target_range(x) {
         0 => draw_halt(x, 0xe),
@@ -329,7 +329,7 @@ fn choose_halt<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8c952 : avarie de tir (bit 0 de `+0xa8`) : l'arrêt est sauté ; vrai.
+/// 0x8c952: firing damage (bit 0 of `+0xa8`): the stop is skipped; true.
 fn cannon_broken<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.bit(DAMAGE, 0) {
         steps(x, 2, 4);
@@ -338,7 +338,7 @@ fn cannon_broken<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     false
 }
 
-/// 0x8c960 : avarie de bombardement (bits 3 ou 4) ; vrai.
+/// 0x8c960: bombardment damage (bits 3 or 4); true.
 fn bombard_broken<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.bit(DAMAGE, 3) || x.bit(DAMAGE, 4) {
         steps(x, 2, 4);
@@ -347,7 +347,7 @@ fn bombard_broken<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     false
 }
 
-/// 0x8af74 : arrêt, ordre de tir aux parties (bit 0 de `+0xa9`).
+/// 0x8af74: stop, firing order to the parts (bit 0 of `+0xa9`).
 fn fire_order<R: Bench>(x: &mut Cx<'_, R>) {
     if cannon_broken(x) {
         return;
@@ -358,7 +358,7 @@ fn fire_order<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(ORDERS, 0, true);
 }
 
-/// 0x8af94 : attend la fin du tir, puis repart.
+/// 0x8af94: waits for the end of the fire, then sets off again.
 fn fire_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.bit(ORDERS, 0) {
         if crew_gone(x) {
@@ -378,7 +378,7 @@ fn fire<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Monte et descend en profondeur (`+0x1c`) entre 0x40 et 0x70 pendant que l'équipage tient.
+/// Rises and descends in depth (`+0x1c`) between 0x40 and 0x70 while the crew holds.
 fn sway<R: Bench>(x: &mut Cx<'_, R>) {
     count_crew(x);
     if x.u8(CREW_COUNT) != 0 {
@@ -396,7 +396,7 @@ fn sway<R: Bench>(x: &mut Cx<'_, R>) {
     anim(x)
 }
 
-/// 0x8afd6 : tir en se déplaçant en profondeur.
+/// 0x8afd6: fire while moving in depth.
 fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -436,7 +436,7 @@ fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8b100 : vers la profondeur de la cible (`+0x1c`), et nombre de bombardements.
+/// 0x8b100: toward the target's depth (`+0x1c`), and number of bombardments.
 fn aim_lane<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x14, 0);
     x.set16(0x16, 0);
@@ -452,7 +452,7 @@ fn aim_lane<R: Bench>(x: &mut Cx<'_, R>) {
     draw_bombs(x)
 }
 
-/// 0x8b13e : ordre de bombardement (bits 3 et 4 de `+0xa9`).
+/// 0x8b13e: bombardment order (bits 3 and 4 of `+0xa9`).
 fn bomb_order<R: Bench>(x: &mut Cx<'_, R>) {
     if bombard_broken(x) {
         return;
@@ -465,7 +465,7 @@ fn bomb_order<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(READY, 1);
 }
 
-/// 0x8b0ea : bombardements répétés en se déplaçant en profondeur.
+/// 0x8b0ea: repeated bombardments while moving in depth.
 fn bomb<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => aim_lane(x),
@@ -489,7 +489,7 @@ fn bomb<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8b226 / 0x8b454 : bombardement puis tir.
+/// 0x8b226 / 0x8b454: bombardment then fire.
 fn bomb_then_fire<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => bomb_order(x),
@@ -504,7 +504,7 @@ fn bomb_then_fire<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8b328 / 0x8b33a : arrêt de `ticks` images.
+/// 0x8b328 / 0x8b33a: stop of `ticks` frames.
 fn halt<R: Bench>(x: &mut Cx<'_, R>, ticks: u16) {
     if x.u8(0x7) == 0 {
         next7(x);
@@ -514,14 +514,14 @@ fn halt<R: Bench>(x: &mut Cx<'_, R>, ticks: u16) {
         x.set16(0x16, 0);
         return;
     }
-    // l'original décompte l'octet fort du mot : l'arrêt finit tout de suite
+    // the original counts down the high byte of the word: the stop ends immediately
     if sub8(x, TIMER, 1).pl() {
         return;
     }
     stop_over(x)
 }
 
-/// 0x8b3ce : tirs répétés (`+0xb9` salves).
+/// 0x8b3ce: repeated fire (`+0xb9` salvos).
 fn volley<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -543,7 +543,7 @@ fn volley<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- groupe 6 : attente --------------------------------------------------------------------------
 
-/// 0x8b46a : un joueur revient : départ.
+/// 0x8b46a: a player comes back: departure.
 pub(super) fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(GAIT, 2);
     if var::PLAYERS_ALIVE.get(x.b) == 0 {

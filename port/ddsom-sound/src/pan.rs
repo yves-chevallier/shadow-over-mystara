@@ -1,25 +1,25 @@
-//! Évolution du panoramique d'une voie (voies de séquenceur et voies ADPCM).
+//! Evolution of a voice's panning (sequencer voices and ADPCM voices).
 //!
-//! Le pan va de 0 (gauche) à 0x20 (droite), en virgule fixe 8.8 pendant son évolution.
+//! The pan goes from 0 (left) to 0x20 (right), in 8.8 fixed point while it evolves.
 
 use crate::math::clamp_pan;
 
-/// Comment le pan évolue.
+/// How the pan evolves.
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
 pub enum FadeMode {
-    /// Aller-retour : à chaque cible atteinte la cible suivante s'ajoute de `delta`.
+    /// Back and forth: each time a target is reached, the next target is offset by `delta`.
     PingPong,
-    /// Rampe vers la cible, puis pan fixe.
+    /// Ramp to the target, then fixed pan.
     Ramp,
-    /// Rampe vers la cible, puis rampe vers la butée à la deuxième vitesse.
+    /// Ramp to the target, then ramp to the limit at the second speed.
     TwoStage,
-    /// Pan fixe.
+    /// Fixed pan.
     #[default]
     Fixed,
 }
 
 impl FadeMode {
-    /// Valeur du programme d'origine (0xFF = fixe).
+    /// Value used by the original program (0xFF = fixed).
     pub fn code(self) -> u8 {
         match self {
             FadeMode::PingPong => 0,
@@ -33,7 +33,7 @@ impl FadeMode {
 #[derive(Clone, Copy, Default, Debug)]
 pub struct PanFade {
     pub mode: FadeMode,
-    /// Position et fraction.
+    /// Position and fraction.
     pub pan: u8,
     pub frac: u8,
     pub delta: u8,
@@ -47,23 +47,23 @@ impl PanFade {
         u16::from(self.pan) << 8 | u16::from(self.frac)
     }
 
-    /// Réglage demandé par une commande du 68000. Octet 6 : type, 7 : pan de départ (0-0x20),
-    /// 8 : amplitude, 9-10 : vitesse, 11-12 : seconde vitesse. `None` si le type est inconnu.
-    /// Le type 7 est une rampe vers la droite qui demande aussi une copie vers la gauche sur le
-    /// canal voisin : voir [`PanFade::mirrored`].
+    /// Setting requested by a 68000 command. Byte 6: type, 7: start pan (0-0x20),
+    /// 8: amplitude, 9-10: speed, 11-12: second speed. `None` if the type is unknown.
+    /// Type 7 is a ramp to the right that also requests a copy to the left on the
+    /// neighbouring channel: see [`PanFade::mirrored`].
     pub fn from_command(cmd: &[u8; 16]) -> Option<PanFade> {
         let start = clamp_pan(cmd[7]);
         let amount = clamp_pan(cmd[8]);
         let speed = u16::from(cmd[9]) << 8 | u16::from(cmd[10]);
         let speed2 = u16::from(cmd[11]) << 8 | u16::from(cmd[12]);
         let neg = |x: u16| 0u16.wrapping_sub(x);
-        // Cible : `start + amount` ou `start - amount`, bornée à 0-0x20.
+        // Target: `start + amount` or `start - amount`, clamped to 0-0x20.
         let up = start.saturating_add(amount).min(0x20);
         let down = start.saturating_sub(amount);
         let mut f = PanFade { pan: start, ..PanFade::default() };
         match cmd[6] {
             0 => {}
-            // Va-et-vient entre le pan de départ et l'extrémité opposée.
+            // Back and forth between the start pan and the opposite end.
             1 => {
                 f.mode = FadeMode::PingPong;
                 if start < 0x11 {
@@ -72,7 +72,7 @@ impl PanFade {
                     (f.delta, f.target, f.speed) = (0x20, 0, neg(speed));
                 }
             }
-            // Va-et-vient d'amplitude `amount`.
+            // Back and forth with amplitude `amount`.
             2 => {
                 f.mode = FadeMode::PingPong;
                 if start < 0x11 {
@@ -81,10 +81,10 @@ impl PanFade {
                     (f.delta, f.target, f.speed) = (amount, down, neg(speed));
                 }
             }
-            // Rampe vers la droite (3, 7) ou la gauche (4).
+            // Ramp to the right (3, 7) or to the left (4).
             3 | 7 => (f.mode, f.target, f.speed) = (FadeMode::Ramp, up, speed),
             4 => (f.mode, f.target, f.speed) = (FadeMode::Ramp, down, neg(speed)),
-            // Rampe en deux temps vers la droite (5) ou la gauche (6).
+            // Two-stage ramp to the right (5) or to the left (6).
             5 => (f.mode, f.target, f.speed, f.speed2) = (FadeMode::TwoStage, up, speed, speed2),
             6 => (f.mode, f.target, f.speed, f.speed2) = (FadeMode::TwoStage, down, neg(speed), neg(speed2)),
             _ => return None,
@@ -92,20 +92,20 @@ impl PanFade {
         Some(f)
     }
 
-    /// Variante du type 7 pour le canal voisin : rampe vers la gauche.
+    /// Type 7 variant for the neighbouring channel: ramp to the left.
     pub fn mirrored(&self, cmd: &[u8; 16]) -> PanFade {
         let amount = clamp_pan(cmd[8]);
         let speed = u16::from(cmd[9]) << 8 | u16::from(cmd[10]);
         PanFade { target: self.pan.saturating_sub(amount), speed: 0u16.wrapping_sub(speed), ..*self }
     }
 
-    /// Un pas d'évolution ; renvoie la nouvelle position (pan, fraction) et `false` si le pan est
-    /// fixe (rien à écrire).
+    /// One evolution step; returns `true` if the pan changed and `false` if the pan is
+    /// fixed (nothing to write).
     pub fn step(&mut self) -> bool {
         if self.mode == FadeMode::Fixed {
             return false;
         }
-        // Un pas de rampe : nouvelle position, et la cible n'est-elle pas encore atteinte ?
+        // One ramp step: new position, and is the target not yet reached?
         let (pos, carry) = self.speed.overflowing_add(self.position());
         let below = self.target < (pos >> 8) as u8;
         let moving = 0xff_u8.wrapping_add(carry as u8).wrapping_add(below as u8) != 0;
@@ -113,14 +113,14 @@ impl PanFade {
         let pos = match self.mode {
             _ if moving => pos,
             FadeMode::PingPong => {
-                // Cible atteinte : la cible repart de l'autre côté, la vitesse s'inverse.
+                // Target reached: the target moves to the other side, the speed reverses.
                 self.target = self.target.wrapping_add(self.delta);
                 self.delta = 0u8.wrapping_sub(self.delta);
                 self.speed = 0u16.wrapping_sub(self.speed);
                 reached
             }
             FadeMode::TwoStage => {
-                // Butée : 0x20 si on monte, 0 si on descend.
+                // Limit: 0x20 when rising, 0 when falling.
                 let limit = if self.speed & 0x8000 != 0 { 0 } else { 0x20 };
                 if limit == self.target {
                     self.mode = FadeMode::Fixed;

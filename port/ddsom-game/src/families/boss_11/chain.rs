@@ -1,9 +1,9 @@
-//! Boss 11/12 : les douze anneaux. Chaque image, `update` replace les anneaux derrière la tête d'après les tables de la ROM
-//! (lignes de 32 octets de 0x1069f8 choisies par la pose `+0xaa` ; trajectoires de 0x106cb8), puis recopie la position de
-//! l'anneau suivi (rang `+0xa8`) dans la sauvegarde `+0xa2..+0xa6`.
+//! Boss 11/12: the twelve rings. Each frame, `update` repositions the rings behind the head according to the ROM
+//! tables (32-byte rows at 0x1069f8 chosen by pose `+0xaa`; paths at 0x106cb8), then copies the position of the
+//! followed ring (rank `+0xa8`) into the save `+0xa2..+0xa6`.
 //!
-//! Un anneau est un objet ESHL de type 5 : `+0x2f` rang, `+0x42` et `+0x43` orientation et inclinaison (0 à 31), `+0x12` mot
-//! d'état. Les recherches de voisin (0x8f482, 0x8f4a2) parcourent le pool sans autre contrôle que le rang.
+//! A ring is an ESHL object of type 5: `+0x2f` rank, `+0x42` and `+0x43` orientation and tilt (0 to 31), `+0x12`
+//! state word. The neighbor searches (0x8f482, 0x8f4a2) walk through the pool with no check other than the rank.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -15,8 +15,8 @@ fn flip8<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     if x.u8(f::FLIP) != 0 { 0x18 } else { 8 }
 }
 
-/// 0x8f4c2 : l'anneau de rang `+0xa8` (A1), à condition qu'il y ait exactement douze anneaux et que le rang soit unique.
-/// Glitch d'origine : D2 garde l'anneau trouvé (0 si aucun), un reste que voient les gestionnaires suivants.
+/// 0x8f4c2: the ring of rank `+0xa8` (A1), provided there are exactly twelve rings and the rank is unique.
+/// Original glitch: D2 keeps the ring found (0 if none), a leftover seen by the following handlers.
 fn find_head<R: Bench>(x: &mut Cx<'_, R>) -> Option<u32> {
     let want = x.u8(SEG);
     let mut count = 0u8;
@@ -41,7 +41,7 @@ fn find_head<R: Bench>(x: &mut Cx<'_, R>) -> Option<u32> {
     Some(found)
 }
 
-/// 0x8f482 : l'anneau de rang `want` avant `from` dans le pool (A3), s'il y en a un.
+/// 0x8f482: the ring of rank `want` before `from` in the pool (A3), if there is one.
 fn find_prev<R: Bench>(x: &mut Cx<'_, R>, want: u8, from: u32) -> Option<u32> {
     let mut a3 = from;
     loop {
@@ -55,7 +55,7 @@ fn find_prev<R: Bench>(x: &mut Cx<'_, R>, want: u8, from: u32) -> Option<u32> {
     }
 }
 
-/// 0x8f4a2 : idem après `from`.
+/// 0x8f4a2: same, after `from`.
 fn find_next<R: Bench>(x: &mut Cx<'_, R>, want: u8, from: u32) -> Option<u32> {
     let mut a3 = from;
     loop {
@@ -84,7 +84,7 @@ fn put8<R: Bench>(x: &mut Cx<'_, R>, a: u32, v: u8) {
     wr8(x.b, a, v);
 }
 
-/// 0x8ec02 : place les anneaux d'après la pose `+0xaa`.
+/// 0x8ec02: places the rings according to pose `+0xaa`.
 fn follow<R: Bench>(x: &mut Cx<'_, R>, a1: u32) {
     let row = 0x1069f8u32.wrapping_add(((x.u8(FRAME) as u16) << 5) as u32);
     let px = x.u16(0x8);
@@ -100,7 +100,7 @@ fn follow<R: Bench>(x: &mut Cx<'_, R>, a1: u32) {
     let thr = x.data8(row + 2);
     let r = Fl::sub8(idx, thr);
     if r.eq() {
-        // égal
+        // equal
     } else if r.gt() {
         if !behind(x, a1, idx) {
             return;
@@ -116,7 +116,7 @@ fn follow<R: Bench>(x: &mut Cx<'_, R>, a1: u32) {
         let sub = x.data8(row + 4) as u16;
         let t = x.rom16(0x8ed7a + 2 * sub as u32);
         let target = 0x8ed7au32.wrapping_add(t as i16 as i32 as u32);
-        // si un anneau manque, la sous-routine rend la main (état de mort posé) et le placement continue
+        // if a ring is missing, the subroutine cedes control (death state set) and the placement continues
         if target == 0x8ed7e {
             rows_a(x, a1, row);
         } else {
@@ -126,7 +126,8 @@ fn follow<R: Bench>(x: &mut Cx<'_, R>, a1: u32) {
     positions(x, a1, row)
 }
 
-/// Branche « rang inférieur au seuil » (0x8ec3e) : l'anneau tourne vers 8 (ou 0x18) et le rang suivi avance quand il y est.
+/// "Rank below the threshold" branch (0x8ec3e): the ring turns toward 8 (or 0x18) and the followed rank advances
+/// once it is there.
 fn ahead<R: Bench>(x: &mut Cx<'_, R>, a1: u32) {
     let goal = flip8(x) as u16;
     let cur = rd8(x.b, a1 + 0x42) as u16;
@@ -163,7 +164,8 @@ fn ahead<R: Bench>(x: &mut Cx<'_, R>, a1: u32) {
     }
 }
 
-/// Branche « rang supérieur au seuil » (0x8ecc6) : l'anneau précédent tourne vers 8 (ou 0x18). Faux si l'anneau manque.
+/// "Rank above the threshold" branch (0x8ecc6): the previous ring turns toward 8 (or 0x18). False if the ring is
+/// missing.
 fn behind<R: Bench>(x: &mut Cx<'_, R>, a1: u32, idx: u8) -> bool {
     let Some(a3) = find_prev(x, idx.wrapping_sub(1), a1) else {
         lost(x);
@@ -205,7 +207,7 @@ fn behind<R: Bench>(x: &mut Cx<'_, R>, a1: u32, idx: u8) -> bool {
     true
 }
 
-/// 0x8ed7e : oriente les anneaux précédents d'après une liste d'incréments (A4 = ligne + 8).
+/// 0x8ed7e: orients the previous rings according to a list of increments (A4 = row + 8).
 fn rows_a<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     let (mut d1, mut d2) = base_angles(x, row);
     let mut a4 = row + 8;
@@ -240,7 +242,7 @@ fn rows_a<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     true
 }
 
-/// Angles de départ de la ligne (octets +6 et +7), retournés si le serpent regarde à gauche.
+/// Starting angles of the row (bytes +6 and +7), reversed if the snake looks left.
 fn base_angles<R: Bench>(x: &mut Cx<'_, R>, row: u32) -> (u16, u16) {
     let mut d1 = x.data8(row + 6) as u16;
     let mut d2 = x.data8(row + 7) as u16;
@@ -251,7 +253,8 @@ fn base_angles<R: Bench>(x: &mut Cx<'_, R>, row: u32) -> (u16, u16) {
     (d1 & 0x1f, d2 & 0x1f)
 }
 
-/// Écart signé ramené à -16..16 puis réduit (quart, négatif de l'écart) : le pas appliqué aux anneaux (0x8ee48...).
+/// Signed gap brought back to -16..16 then reduced (quarter, negative of the gap): the step applied to the rings
+/// (0x8ee48...).
 fn smooth(diff: u16) -> u16 {
     let mut d4 = diff;
     if (diff as i16) < 0 {
@@ -262,7 +265,7 @@ fn smooth(diff: u16) -> u16 {
     }
     d4 = d4.wrapping_neg();
     if (diff as i16) >= 0 {
-        // tst.w D3w ; bpl : D4 reste négatif
+        // tst.w D3w ; bpl: D4 stays negative
     } else {
         d4 = d4.wrapping_neg();
     }
@@ -273,7 +276,7 @@ fn smooth(diff: u16) -> u16 {
     s
 }
 
-/// 0x8edf2 : comme `rows_a`, mais chaque anneau rejoint l'orientation cible par un quart de l'écart.
+/// 0x8edf2: like `rows_a`, but each ring reaches the target orientation by a quarter of the gap.
 fn rows_b<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     let (mut d1, mut d2) = base_angles(x, row);
     let mut a4 = row + 8;
@@ -316,12 +319,12 @@ fn rows_b<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     true
 }
 
-/// Quand l'écart est nul, l'original ajoute D3b = 0 : l'orientation ne change pas.
+/// When the gap is zero, the original adds D3b = 0: the orientation does not change.
 fn cur_zero(_cur: u16) -> u16 {
     0
 }
 
-/// 0x8eeca et 0x8ef60 : positions des anneaux précédents d'après les trajectoires, puis de la tête.
+/// 0x8eeca and 0x8ef60: positions of the previous rings according to the paths, then of the head.
 fn positions<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) {
     let mut a2 = a1;
     let n = rd8(x.b, a1 + 0x2f) as i32 - 1;
@@ -359,7 +362,7 @@ fn positions<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) {
     place_head(x, a1, a2, row)
 }
 
-/// 0x8ef60 : la tête se place contre l'anneau de rang 0 (`a2`) puis la pose de la ligne règle les anneaux suivants.
+/// 0x8ef60: the head places itself against the ring of rank 0 (`a2`) then the row's pose sets the following rings.
 fn place_head<R: Bench>(x: &mut Cx<'_, R>, a1: u32, a2: u32, row: u32) {
     let mut d0 = 4u16;
     if x.u8(f::FLIP) == 0 {
@@ -376,7 +379,7 @@ fn place_head<R: Bench>(x: &mut Cx<'_, R>, a1: u32, a2: u32, row: u32) {
     let pose = x.data8(row + 5) as u16;
     let t = x.rom16(0x8efa2 + 2 * pose as u32);
     let target = 0x8efa2u32.wrapping_add(t as i16 as i32 as u32);
-    // un anneau manquant interrompt la pose (état de mort posé) mais pas la suite
+    // a missing ring interrupts the pose (death state set) but not what follows
     match target {
         0x8efb0 => pose_0(x, a1),
         0x8eff6 => pose_1(x, a1, row),
@@ -389,7 +392,7 @@ fn place_head<R: Bench>(x: &mut Cx<'_, R>, a1: u32, a2: u32, row: u32) {
     trail(x, a1);
 }
 
-/// Rang de l'anneau `a1` à la ligne `row` : sous le seuil (`+2`), la pose ne s'applique pas.
+/// Rank of ring `a1` at row `row`: below the threshold (`+2`), the pose does not apply.
 fn guarded<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> Option<u16> {
     let d0 = rd8(x.b, a1 + 0x2f);
     if Fl::sub8(d0, x.data8(row + 2)).lt() {
@@ -398,7 +401,7 @@ fn guarded<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> Option<u16> {
     Some(d0 as u16)
 }
 
-/// Fait suivre l'orientation `(+0x42, +0x43)` de proche en proche : l'anneau suivant reprend celle du précédent.
+/// Makes the orientation `(+0x42, +0x43)` follow step by step: the next ring takes that of the previous one.
 fn ripple<R: Bench>(x: &mut Cx<'_, R>, mut d0: u16, start: u32) -> bool {
     let mut d2 = rd16(x.b, start + 0x42);
     let mut a2 = start;
@@ -418,7 +421,7 @@ fn ripple<R: Bench>(x: &mut Cx<'_, R>, mut d0: u16, start: u32) -> bool {
     }
 }
 
-/// Pose 0 (0x8efb0) : tout le serpent regarde dans la direction de la tête.
+/// Pose 0 (0x8efb0): the whole snake looks in the direction of the head.
 fn pose_0<R: Bench>(x: &mut Cx<'_, R>, a1: u32) -> bool {
     let v = flip8(x) as u8;
     put8(x, a1 + 0x42, v);
@@ -440,7 +443,7 @@ fn pose_0<R: Bench>(x: &mut Cx<'_, R>, a1: u32) -> bool {
     }
 }
 
-/// Pose 1 (0x8eff6) : ondulation : l'orientation rejoint 8/0x18, l'inclinaison oscille entre 4 et 0x1c.
+/// Pose 1 (0x8eff6): undulation: the orientation reaches 8/0x18, the tilt oscillates between 4 and 0x1c.
 fn pose_1<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     let Some(d0) = guarded(x, a1, row) else { return true };
     if d0 > 0xb {
@@ -493,12 +496,12 @@ fn pose_1<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     ripple_words(x, d0, a1)
 }
 
-/// Fait suivre le mot `(+0x42)` de proche en proche à partir de l'anneau `start` (rang `d0`).
+/// Makes the word `(+0x42)` follow step by step from ring `start` (rank `d0`).
 fn ripple_words<R: Bench>(x: &mut Cx<'_, R>, d0: u16, start: u32) -> bool {
     ripple(x, d0, start)
 }
 
-/// Pose 2 (0x8f0da) : la tête regarde vers son point précédent ; les orientations se décalent d'un anneau à l'autre.
+/// Pose 2 (0x8f0da): the head looks toward its previous point; the orientations shift from one ring to the next.
 fn pose_2<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     let Some(d0) = guarded(x, a1, row) else { return true };
     if !Fl::sub16(d0, 0xb).lt() {
@@ -506,14 +509,14 @@ fn pose_2<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     }
     let (d1, d2) = (x.u16(0x8), x.u16(0xc));
     let (d3, d4) = (x.u16(SAVE_X), x.u16(SAVE_Z));
-    // D2.w, D3.w et D4.w : restes pour les gestionnaires suivants (`dispatch::Leftovers`)
+    // D2.w, D3.w and D4.w: leftovers for the following handlers (`dispatch::Leftovers`)
     setw(x, 2, d2);
     setw(x, 3, d3);
     setw(x, 4, d4);
     if d3 != d1 || d4 != d2 {
         let angle = lib::aim(x, (d3, d4), (d1, d2)).wrapping_sub(rd8(x.b, a1 + 0x42));
         if angle != 0 {
-            // D0.w = l'écart (octet haut nul : la direction tient sur un octet)
+            // D0.w = the gap (high byte zero: the direction fits in one byte)
             let w = (angle as u16).wrapping_add(8) & 0x1f;
             let mut s: u8 = 1;
             if !Fl::sub16(w, 0x10).lt() {
@@ -543,7 +546,7 @@ fn pose_2<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     }
 }
 
-/// Pose 3 (0x8f1a4) : tous les anneaux rejoignent l'orientation de la tête (inversée pendant la réaction).
+/// Pose 3 (0x8f1a4): all the rings reach the head's orientation (reversed during the reaction).
 fn pose_3<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     let Some(d0) = guarded(x, a1, row) else { return true };
     if !Fl::sub16(d0, 0xb).lt() {
@@ -582,7 +585,7 @@ fn pose_3<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     }
 }
 
-/// Pose 4 (0x8f21a) : l'inclinaison de la tête suit la direction `+0x2d`, les orientations se décalent.
+/// Pose 4 (0x8f21a): the head's tilt follows direction `+0x2d`, the orientations shift.
 fn pose_4<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     let Some(d0) = guarded(x, a1, row) else { return true };
     if !Fl::sub16(d0, 0xb).lt() {
@@ -591,7 +594,7 @@ fn pose_4<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     let w = (x.u8(0x2d) as u16).wrapping_add(8) & 0x1f;
     let diff = (w as u8).wrapping_sub(rd8(x.b, a1 + 0x43));
     if diff != 0 {
-        // D0.w : l'octet bas remplacé par l'écart (l'octet haut de `w` est nul)
+        // D0.w: the low byte replaced by the gap (the high byte of `w` is zero)
         let w = diff as u16 & 0x1f;
         let mut s: u8 = 1;
         if !Fl::sub16(w, 0x10).lt() {
@@ -605,7 +608,7 @@ fn pose_4<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     shift_words(x, d0, a1)
 }
 
-/// Décale les mots `(+0x42)` d'un anneau au suivant à partir de `start` (rang `d0`).
+/// Shifts the words `(+0x42)` from one ring to the next starting at `start` (rank `d0`).
 fn shift_words<R: Bench>(x: &mut Cx<'_, R>, mut d0: u16, start: u32) -> bool {
     let mut a2 = start;
     let mut d2 = rd16(x.b, a2 + 0x42);
@@ -625,7 +628,7 @@ fn shift_words<R: Bench>(x: &mut Cx<'_, R>, mut d0: u16, start: u32) -> bool {
     }
 }
 
-/// Pose 5 (0x8f294) : la tête se tourne d'un cran à chaque image, sans aller plus loin.
+/// Pose 5 (0x8f294): the head turns one notch each frame, without going further.
 fn pose_5<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     let Some(d0) = guarded(x, a1, row) else { return true };
     if !Fl::sub16(d0, 0xb).lt() {
@@ -655,7 +658,7 @@ fn pose_6<R: Bench>(x: &mut Cx<'_, R>, a1: u32, row: u32) -> bool {
     shift_words(x, d0, a1)
 }
 
-/// 0x8f36a : les anneaux suivants (rangs croissants) se placent derrière le précédent d'après les trajectoires.
+/// 0x8f36a: the following rings (increasing ranks) place themselves behind the previous one according to the paths.
 fn trail<R: Bench>(x: &mut Cx<'_, R>, a1: u32) -> bool {
     let mut a2 = a1;
     let v = x.u8(0xad) & !1;

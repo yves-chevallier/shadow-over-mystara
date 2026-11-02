@@ -1,5 +1,5 @@
-//! Famille BOX (classe 0xA) : caisses, tonneaux et coffres destructibles. Dispatch `0x39e50`, table
-//! des types `0x39e76` (4 types). 21 emplacements de 0x80 octets. Voir `docs/families.md`.
+//! BOX family (class 0xA): destructible crates, barrels and chests. Dispatch `0x39e50`, type table
+//! `0x39e76` (4 types). 21 slots of 0x80 bytes. See `docs/families.md`.
 
 use crate::objects::pools;
 use crate::objects::Obj;
@@ -9,7 +9,7 @@ use super::cx::{Bench, Cx};
 use crate::objects::Current;
 use crate::machine::Machine;
 
-/// Valeurs de l'octet d'état `+4`.
+/// Values of the state byte `+4`.
 mod state {
     pub const INIT: u8 = 0;
     pub const ACTIVE: u8 = 2;
@@ -17,12 +17,12 @@ mod state {
     pub const OUTSIDE_SCREEN: u8 = 6;
 }
 
-/// Champs communs des BOX.
+/// Common BOX fields.
 mod field {
     pub const SUB_STATE: u32 = 0x05;
     pub const MODE: u32 = 0x2f;
     pub const GAME_SHADOWS: u32 = 0x2e;
-    /// Coup reçu, posé par le code des joueurs.
+    /// Hit received, set by the players' code.
     pub const COUP_B: u32 = 0x6e;
 }
 
@@ -33,14 +33,14 @@ mod rom {
 const SHADOWS: u8 = 0x35;
 
 // ---------------------------------------------------------------------------------------------
-// Type 0 : caisse, tonneau ou coffre (0xd99fa)
+// Type 0: crate, barrel or chest (0xd99fa)
 
-/// Type 0 : caisse, tonneau ou coffre destructible (variantes 0 à 3). Une fiche de la ROM donne ses
-/// caractéristiques ; frappée, elle joue son animation de casse, lâche jusqu'à trois objets ITEM puis
-/// clignote et disparaît. Un coffre (sorte >= 3) tremble quand on le frappe ; il s'ouvre (sous-état 2)
-/// quand un joueur l'ouvre, en consommant une clé s'il est verrouillé. Un joueur peut aussi soulever la
-/// caisse (sous-état 4 : elle suit ses mains), la lancer (6 : vol, rebond sur le bord de l'écran,
-/// casse à l'atterrissage) ou la lâcher (8 : chute).
+/// Type 0: destructible crate, barrel or chest (variants 0 to 3). A ROM sheet gives its
+/// characteristics; when struck, it plays its breaking animation, drops up to three ITEM objects then
+/// blinks and disappears. A chest (kind >= 3) shakes when struck; it opens (substate 2)
+/// when a player opens it, consuming a key if it is locked. A player can also lift the
+/// crate (substate 4: it follows their hands), throw it (6: flight, bounce off the screen edge,
+/// breaks on landing) or drop it (8: fall).
 pub mod caisse {
 use crate::families::cx::Bench;
 use crate::objects::Current;
@@ -50,7 +50,7 @@ use crate::objects::Current;
     use crate::families::effects_creators;
     use crate::machine::Machine;
 
-    /// Sous-états `+5` de l'état actif.
+    /// Substates `+5` of the active state.
     mod sub {
         pub const INTACTE: u8 = 0;
         pub const OUVERTE: u8 = 2;
@@ -77,54 +77,54 @@ use crate::objects::Current;
         pub const VY: u32 = 0x1c;
         pub const RETOURNE: u32 = 0x2c;
         pub const GAME_SHADOWS: u32 = 0x2e;
-        /// Coup reçu, seconde marque posée par le code des joueurs.
+        /// Hit received, second mark set by the players' code.
         pub const COUP: u32 = 0x33;
-        /// Non nul : en l'air (pas d'ombre au sol).
+        /// Non-zero: in the air (no shadow on the ground).
         pub const IN_FLIGHT: u32 = 0x3a;
         pub const HIDDEN: u32 = 0x40;
-        /// Délai avant que la caisse lancée ne reprenne son vol (`+0x53`, modulo 8).
+        /// Delay before the thrown crate resumes its flight (`+0x53`, modulo 8).
         pub const WAIT_FLIGHT: u32 = 0x53;
         pub const SELF: u32 = 0x5c;
-        /// Variété (0 à 2 : se brise d'un coup ; 3 et plus : coffre qui résiste).
+        /// Kind (0 to 2: breaks in one hit; 3 and above: chest that resists).
         pub const KIND: u32 = 0x60;
-        /// Non nul : coffre verrouillé (une clé `A5+0x45` l'ouvre, le personnage de classe 5 s'en passe).
+        /// Non-zero: locked chest (a key `A5+0x45` opens it, the class 5 character does without).
         pub const LOCK: u32 = 0x61;
-        /// Butins : au centre, par classe du joueur (`+0x63..`), bonus (`+0x69`), à gauche (`+0x6a`).
+        /// Loot: in the center, by player class (`+0x63..`), bonus (`+0x69`), on the left (`+0x6a`).
         pub const LOOT_HIGH: u32 = 0x62;
         pub const BUTIN_CLASSES: u32 = 0x63;
         pub const BUTIN_BONUS: u32 = 0x69;
         pub const LOOT_LEFT: u32 = 0x6a;
-        /// Effet spécial éventuel (`+0x6b`), marque « effet joué » (`+0x7d`).
+        /// Possible special effect (`+0x6b`), "effect played" mark (`+0x7d`).
         pub const SPECIAL: u32 = 0x6b;
-        /// Joueur qui a frappé, ouvert ou porte la caisse (pointeur RAM 16 bits).
+        /// Player who struck, opened or carries the crate (16-bit RAM pointer).
         pub const PLAYER: u32 = 0x6c;
         pub const COUP_B: u32 = 0x6e;
         pub const DELAY: u32 = 0x6f;
-        /// Coffre ouvert par un joueur de classe 3 : un second coup lâche le butin bonus.
+        /// Chest opened by a class 3 player: a second hit drops the bonus loot.
         pub const SECOND_COUP: u32 = 0x70;
-        /// Non nul : la caisse lancée ignore le décor.
+        /// Non-zero: the thrown crate ignores the terrain.
         pub const WITHOUT_SCENERY: u32 = 0x71;
         pub const EFFECT_CREATED: u32 = 0x76;
-        /// Non nul : le coffre ouvert reste frappable.
+        /// Non-zero: the opened chest can still be struck.
         pub const FRAPPABLE: u32 = 0x77;
         pub const ORIGINAL_X: u32 = 0x78;
         pub const ORIGINAL_Y: u32 = 0x7a;
         pub const BUTIN_LACHE: u32 = 0x7c;
         pub const SPECIAL_PLAYED: u32 = 0x7d;
         pub const BONUS_LACHE: u32 = 0x7e;
-        /// Le coffre lancé a rebondi sur le décor.
+        /// The thrown chest bounced off the terrain.
         pub const REBOND: u32 = 0x7f;
     }
 
-    /// Champs du joueur lié.
+    /// Fields of the linked player.
     mod j {
         pub const CLASS: u32 = 0x03;
         pub const RETOURNE: u32 = 0x2c;
-        /// Pose du joueur qui porte (0 : il ne porte plus).
+        /// Pose of the carrying player (0: no longer carrying).
         pub const POSE: u32 = 0x46;
     }
 
-    /// Tables et sous-routines.
+    /// Tables and subroutines.
     mod rom {
         pub const STATES: u32 = 0xd9a10;
         pub const SUB_STATES: u32 = 0xd9a6a;
@@ -133,24 +133,24 @@ use crate::objects::Current;
         pub const LANCEE: u32 = 0xd9d64;
         pub const LACHEE: u32 = 0xd9f82;
         pub const ANIMATIONS: u32 = 0x1bebc2;
-        /// Par variété : adresse de sa fiche de 0x2a octets (caractéristiques, butins aléatoires).
+        /// Per kind: address of its 0x2a-byte sheet (characteristics, random loot).
         pub const SHEETS: u32 = 0x1051ae;
-        /// Par numéro de butin : (type, variante) de l'ITEM créé (lu relativement au PC).
+        /// Per loot number: (type, variant) of the created ITEM (read PC-relative).
         pub const BUTINS: u32 = 0xda28a;
-        /// Effets spéciaux (adresses de routines), par valeur de `SPECIAL`.
+        /// Special effects (routine addresses), by value of `SPECIAL`.
         pub const SPECIAUX: u32 = 0xda06a;
-        /// Par classe du porteur : table des décalages (X, Z) de la caisse portée, par pose.
+        /// Per carrier class: table of offsets (X, Z) of the carried crate, per pose.
         pub const PRISES: u32 = 0xda398;
-        // sous-routines non réécrites, ou natives
+        // subroutines not rewritten, or native
         pub const SOUND_HIT: u32 = 0xeb59e;
         pub const SOUND_BROKEN: u32 = 0xeb610;
         pub const SOUND_LANDS: u32 = 0xeb52c;
         pub const SOUND_SET_DOWN: u32 = 0xeb766;
     }
 
-    /// Caisses brisées dans la scène (octet, `A5-0x5b21`).
+    /// Crates broken in the scene (byte, `A5-0x5b21`).
     const CASSEES: u32 = A5 - 0x5b21;
-    /// Clés des joueurs (octet, `A5+0x45`).
+    /// Players' keys (byte, `A5+0x45`).
     const CLES: u32 = A5 + 0x45;
     const SHADOWS: u8 = 0x35;
     const DURATION_BLINK: u8 = 0x1e;
@@ -169,13 +169,13 @@ use crate::objects::Current;
         }
     }
 
-    /// Cible du saut par table `move.w (table,PC,D0.w),D1.w ; jmp` pour l'indice `i` (`outside_table`).
+    /// Target of the jump through table `move.w (table,PC,D0.w),D1.w ; jmp` for index `i` (`outside_table`).
     fn jump<R: Bench>(x: &mut Cx<'_, R>, table: u32, i: u8) -> u32 {
         let w = x.rom16(table + i as u32);
         table.wrapping_add(w as i16 as i32 as u32)
     }
 
-    /// Classe du joueur lié (`+3 >> 1`).
+    /// Class of the linked player (`+3 >> 1`).
     fn class<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
         let player = x.linked(f::PLAYER);
         player.u8(x.b, j::CLASS) >> 1
@@ -186,7 +186,7 @@ use crate::objects::Current;
         crate::mem::wr8(x.b, CASSEES, n);
     }
 
-    /// `0xda082` : recopie la fiche de la variété (10 octets) et tire deux butins au hasard.
+    /// `0xda082`: copies the kind's sheet (10 bytes) and draws two random loots.
     fn charge_sheet<R: Bench>(x: &mut Cx<'_, R>) {
         let variant = x.u8(f::VARIANT) as u32;
         let sheet = x.data32(rom::SHEETS + 4 * variant);
@@ -201,7 +201,7 @@ use crate::objects::Current;
         let draw = (x.random() & 0xf) as u32;
         let v = x.data8(sheet + 0x1a + draw);
         x.set8(f::SPECIAL, v);
-        // pointeurs de lecture de la fiche laissés par l'original
+        // sheet read pointers left by the original
     }
 
     fn init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -272,7 +272,7 @@ use crate::objects::Current;
         x.reinsert();
     }
 
-    /// Intacte : un coup (`COUP_B`) la fait passer à l'état « touchée » ; un coffre se met aussitôt à
+    /// Intact: a hit (`COUP_B`) makes it go to the "hit" state; a chest immediately starts
     /// trembler.
     fn intacte<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::COUP_B) == 0 {
@@ -287,7 +287,7 @@ use crate::objects::Current;
         }
     }
 
-    /// `0xda04e` : joue l'effet spécial de la caisse, une seule fois (`moment` dans D1).
+    /// `0xda04e`: plays the crate's special effect, only once (`moment` in D1).
     fn effect_special<R: Bench>(x: &mut Cx<'_, R>, moment: u32) {
         if x.u8(f::SPECIAL_PLAYED) != 0 {
             return;
@@ -295,7 +295,7 @@ use crate::objects::Current;
         x.set8(f::SPECIAL_PLAYED, 1);
         let i = 4 * x.u8(f::SPECIAL) as u32;
         let effect = x.rom32(rom::SPECIAUX + i);
-        // créateurs ESHL désignés par la table d'origine
+        // ESHL creators designated by the original table
         use crate::families::eshl_creators as eshl;
         let r = &mut crate::families::effects_creators::leftovers::Pure;
         match effect {
@@ -306,7 +306,7 @@ use crate::objects::Current;
             0xa1670 => {
                 eshl::row_19(r, x.b, x.o);
             }
-            // Glitch d'origine : le D5 que laisse ce qui précède (`Leftovers`) fixe l'octet haut du compte des éclats.
+            // Original glitch: the D5 left by what precedes (`Leftovers`) sets the high byte of the spark count.
             0xa17d0 => {
                 let d5 = *x.c.d5() as u16;
                 eshl::row_1a(r, x.b, x.o, moment as u16, d5);
@@ -316,8 +316,8 @@ use crate::objects::Current;
         }
     }
 
-    /// Crée l'ITEM `butin` (type et variante lus dans `BUTINS`) au-dessus de la caisse, lancé avec
-    /// les vitesses `(vx, vy)`. `None` si le pool d'ITEM est plein.
+    /// Creates the ITEM `butin` (type and variant read from `BUTINS`) above the crate, thrown with
+    /// speeds `(vx, vy)`. `None` if the ITEM pool is full.
     fn created_loot<R: Bench>(x: &mut Cx<'_, R>, butin: u8, vx: u16, vy: u16) -> Option<Obj> {
         let n = x.alloc(&pools::ITEM)?;
         let rank = 2 * butin as u32;
@@ -341,8 +341,8 @@ use crate::objects::Current;
         Some(n)
     }
 
-    /// `0xda152` : la caisse brisée lâche son butin (une seule fois) : un objet au centre, un selon la
-    /// classe du joueur qui a frappé (lancé à droite) et un tiré au hasard (lancé à gauche).
+    /// `0xda152`: the broken crate drops its loot (only once): one object in the center, one depending on the
+    /// class of the player who struck (thrown to the right) and one drawn at random (thrown to the left).
     fn lache_butin<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::BUTIN_LACHE) != 0 {
             return;
@@ -363,7 +363,7 @@ use crate::objects::Current;
         }
     }
 
-    /// `0xda0e6` : le butin bonus, une seule fois.
+    /// `0xda0e6`: the bonus loot, only once.
     fn lache_bonus<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::BONUS_LACHE) != 0 {
             return;
@@ -375,7 +375,7 @@ use crate::objects::Current;
         }
     }
 
-    /// Clignotement final : compte à rebours `DELAY`, la caisse clignote ; à zéro, état suivant.
+    /// Final blinking: `DELAY` countdown, the crate blinks; at zero, next state.
     fn clignote<R: Bench>(x: &mut Cx<'_, R>) {
         let remainder = x.u8(f::DELAY).wrapping_sub(1);
         x.set8(f::DELAY, remainder);
@@ -385,7 +385,7 @@ use crate::objects::Current;
         x.set_bit(f::FLAGS, 1, remainder & 1 != 0);
     }
 
-    /// Touchée, sous-sous-état 0 : la caisse joue son animation de casse et lâche son butin ; un coffre
+    /// Hit, sub-substate 0: the crate plays its breaking animation and drops its loot; a chest
     /// redevient intact.
     fn casse<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::KIND) >= 3 {
@@ -410,8 +410,8 @@ use crate::objects::Current;
         }
     }
 
-    /// Touchée, sous-sous-état 4 : le coffre tremble (±2 en X, ±1 en Y une image sur deux), puis
-    /// reprend sa place.
+    /// Hit, sub-substate 4: the chest shakes (±2 in X, ±1 in Y every other frame), then
+    /// goes back to its place.
     fn tremble<R: Bench>(x: &mut Cx<'_, R>) {
         let remainder = x.u8(f::DELAY).wrapping_sub(1);
         x.set8(f::DELAY, remainder);
@@ -433,8 +433,8 @@ use crate::objects::Current;
         }
     }
 
-    /// Ouverte, sous-sous-état 0 (`0xd9b9a`) : un coffre verrouillé consomme une clé (sauf pour la classe
-    /// 5) ou refuse de s'ouvrir ; l'effet spécial est créé une fois ; puis animation d'ouverture et
+    /// Opened, sub-substate 0 (`0xd9b9a`): a locked chest consumes a key (except for class
+    /// 5) or refuses to open; the special effect is created once; then opening animation and
     /// butin au premier coup.
     fn opening<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::LOCK) != 0 && class(x) != 5 {
@@ -481,8 +481,8 @@ use crate::objects::Current;
         }
     }
 
-    /// Ouverte, sous-sous-état 2 (`0xd9c5a`) : délai, puis clignotement ; ouverte par la classe 3, un
-    /// nouveau coup lâche le bonus puis brise la caisse (ou fait clignoter le coffre).
+    /// Opened, sub-substate 2 (`0xd9c5a`): delay, then blinking; opened by class 3, a
+    /// new hit drops the bonus then breaks the crate (or makes the chest blink).
     fn open_wait<R: Bench>(x: &mut Cx<'_, R>) {
         let remainder = x.u8(f::DELAY).wrapping_sub(1);
         x.set8(f::DELAY, remainder);
@@ -507,18 +507,18 @@ use crate::objects::Current;
         }
     }
 
-    /// `moveq #2,D0 ; moveq #0,D1 ; jsr 0xab7d8` : gerbe d'éclats de la caisse.
+    /// `moveq #2,D0 ; moveq #0,D1 ; jsr 0xab7d8`: spray of sparks from the crate.
     fn eclats<R: Bench>(x: &mut Cx<'_, R>) {
         effects_creators::debris(x.b, x.o, 2);
     }
 
-    /// `0xb1352` : étincelle posée sur la caisse ; `None` si le pool est plein.
+    /// `0xb1352`: spark placed on the crate; `None` if the pool is full.
     fn etincelle_posee<R: Bench>(x: &mut Cx<'_, R>, variant: u8) -> Option<Obj> {
         effects_creators::posed_spark(x.b, x.o, variant)
     }
 
-    /// `0xd9cea` : la caisse portée suit les mains du joueur (décalage par classe et par pose, retourné
-    /// avec lui) ; rien si le joueur ne porte plus.
+    /// `0xd9cea`: the carried crate follows the player's hands (offset per class and pose, flipped
+    /// with them); nothing if the player no longer carries.
     fn suit_porteur<R: Bench>(x: &mut Cx<'_, R>) {
         let player = x.linked(f::PLAYER);
         let class = player.u8(x.b, j::CLASS) as u32;
@@ -540,7 +540,7 @@ use crate::objects::Current;
         x.add16(f::Z, dz);
     }
 
-    /// Lancée (`0xd9d38`) : attend `WAIT_FLIGHT`, puis vole (sous-sous-états) et se recale sur le décor.
+    /// Thrown (`0xd9d38`): waits `WAIT_FLIGHT`, then flies (sub-substates) and realigns itself with the terrain.
     fn lancee<R: Bench>(x: &mut Cx<'_, R>) {
         let wait_kind = x.u8(f::WAIT_FLIGHT);
         if wait_kind != 0 {
@@ -559,8 +559,9 @@ use crate::objects::Current;
         x.push_terrain();
     }
 
-    /// Lancée, 0 : tant que le joueur la tient, elle suit ses mains ; lâchée, elle part en arc devant
-    /// lui (et commence aussitôt son vol).
+    /// Thrown, 0: as long as the player holds it, it follows their hands; once released, it leaves in an arc in front
+    /// of
+    /// them (and immediately starts its flight).
     fn launched_start<R: Bench>(x: &mut Cx<'_, R>) {
         let player = x.linked(f::PLAYER);
         if player.u8(x.b, j::POSE) != 0 {
@@ -579,7 +580,7 @@ use crate::objects::Current;
         launched_flight(x);
     }
 
-    /// Terrain sous la caisse (`0x24a8`, D2) : vrai si c'est un obstacle (attributs 5 à 8).
+    /// Terrain under the crate (`0x24a8`, D2): true if it is an obstacle (attributes 5 to 8).
     fn obstacle<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let t = crate::video::terrain_of(x.b, x.o);
         // Original glitch: 0x24a8 leaves its work registers as leftovers (D2-D4)
@@ -587,14 +588,14 @@ use crate::objects::Current;
         (t.number & 0x3f).wrapping_sub(5) <= 3
     }
 
-    /// Avance en X et Z (`0x1da6`) ; rend Z.
+    /// Advances in X and Z (`0x1da6`); returns Z.
     fn advance<R: Bench>(x: &mut Cx<'_, R>) -> i16 {
         x.move_xz();
         x.u16(f::Z) as i16
     }
 
-    /// Lancée, 2 : une caisse se brise contre un obstacle ou en touchant le sol ; un coffre rebondit une
-    /// fois sur l'obstacle, puis retombe.
+    /// Thrown, 2: a crate breaks against an obstacle or on touching the ground; a chest bounces once
+    /// off the obstacle, then falls back.
     fn launched_flight<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::KIND) < 3 {
             if x.u8(f::WITHOUT_SCENERY) == 0 && !obstacle(x) && advance(x) >= 0 {
@@ -640,8 +641,8 @@ use crate::objects::Current;
         stays_on_screen(x);
     }
 
-    /// Lancée, 4 : le coffre retombe après son rebond ; posé, il redevient intact (ou, ouvert par la
-    /// classe 3, attend son clignotement en lâchant le bonus).
+    /// Thrown, 4: the chest falls back after its bounce; once placed, it becomes intact again (or, opened by
+    /// class 3, waits for its blinking while dropping the bonus).
     fn lancee_retombe<R: Bench>(x: &mut Cx<'_, R>) {
         if advance(x) >= 0 {
             return stays_on_screen(x);
@@ -658,8 +659,8 @@ use crate::objects::Current;
         stays_on_screen(x);
     }
 
-    /// `0xd9f06` : la caisse reste entre les bords de l'écran (X de la caméra + 0x18 à + 0x168) ; sa
-    /// position devient sa nouvelle origine.
+    /// `0xd9f06`: the crate stays between the screen edges (camera X + 0x18 to + 0x168); its
+    /// position becomes its new origin.
     fn stays_on_screen<R: Bench>(x: &mut Cx<'_, R>) {
         let cam2 = crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0;
         let cam_x = x.a5_u16(if cam2 { 0x556 } else { 0x506 });
@@ -679,7 +680,7 @@ use crate::objects::Current;
         x.set16(f::ORIGINAL_Y, py);
     }
 
-    /// Lâchée, 2 : chute ; au sol, un coffre sans effet spécial redevient intact, sinon la caisse attend.
+    /// Dropped, 2: fall; on the ground, a chest with no special effect becomes intact again, otherwise the crate waits.
     fn lachee_chute<R: Bench>(x: &mut Cx<'_, R>) {
         x.move_z();
         if x.u16(f::Z) as i16 >= 0 {
@@ -700,7 +701,7 @@ use crate::objects::Current;
         crate::sound::play(x.b, rom::SOUND_SET_DOWN, x.o);
     }
 
-    /// Lâchée, 4 : au premier coup, butin et effet spécial ; fin d'animation : clignotement.
+    /// Dropped, 4: on the first hit, loot and special effect; end of animation: blinking.
     fn lachee_casse<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::COUP) != 0 {
             x.set8(f::COUP, 0);
@@ -724,10 +725,10 @@ use crate::objects::Current;
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 2 : décor inerte (0xda7ac)
+// Type 2: inert scenery (0xda7ac)
 
-/// Type 2 : élément de décor sans comportement (animation 5 du jeu des BOX) ; l'objet s'initialise,
-/// puis se contente de se trier chaque image jusqu'à sa libération. Non exercé par les scénarios.
+/// Type 2: scenery element with no behavior (animation 5 of the BOX set); the object initializes itself,
+/// then just sorts itself every frame until its release. Not exercised by the scenarios.
 mod scenery {
     pub const ENTRY: u32 = 0xda7ac;
     pub const TABLE_STATES: u32 = 0xda7c2;
@@ -757,13 +758,13 @@ fn box_2<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 1 : barrière à ouvrir (0xda578)
+// Type 1: barrier to open (0xda578)
 
-/// Type 1 : élément de décor interactif frappé par les joueurs (`+0x6e`, posé par leur code de coup) :
-/// variante 0, grille qui crée un objet SET (`0x8b`, d'où sort une porte) puis attend sa fin ; variante
-/// 1, mécanisme à deux temps dont l'animation fait changer d'état l'objet frappeur (`+0x6c`) ;
-/// variante 3 comme la 0 à l'initialisation. L'objet disparaît quand la caméra l'a dépassé de 0x200.
-/// Non exercé.
+/// Type 1: interactive scenery element struck by the players (`+0x6e`, set by their hit code):
+/// variant 0, grid that creates a SET object (`0x8b`, from which a door comes out) then waits for it to end; variant
+/// 1, two-phase mechanism whose animation changes the state of the striking object (`+0x6c`);
+/// variant 3 like 0 at initialization. The object disappears when the camera has passed it by 0x200.
+/// Not exercised.
 mod barriere {
     pub const ENTRY: u32 = 0xda578;
     pub const STATES: u32 = 0xda58e;
@@ -779,7 +780,7 @@ mod barriere {
     pub const SET_CREATED: u32 = 0x7c;
 }
 
-/// `0xda6f4` : crée l'objet SET de la barrière et le rattache.
+/// `0xda6f4`: creates the barrier's SET object and attaches it.
 fn barrier_created_set<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let Some(new) = super::creators::scene_set(ctx.b, 0x8b) else { return };
     let frappeur = pointeur(ctx, o, barriere::FRAPPEUR);
@@ -812,8 +813,8 @@ fn barriere_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
 }
 
-/// Variante 0, actif : sous-état 0 attend le coup, sous-état 2 attend la fin du SET ; puis disparaît
-/// quand elle sort de l'écran.
+/// Variant 0, active: substate 0 waits for the hit, substate 2 waits for the end of the SET; then disappears
+/// when it leaves the screen.
 fn barrier_active_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sub_state = o.u8(ctx.b, field::SUB_STATE);
     let target = super::effects::target(ctx, barriere::SUB_STATES_0, sub_state as u32);
@@ -905,10 +906,10 @@ handler!(BOX_2, scenery::ENTRY, "box_decor", #[without] box_2);
 // ---------------------------------------------------------------------------------------------
 // Type 3 : bloc poussable (0xda7f2)
 
-/// Type 3 : bloc qu'un joueur pousse (action 0x2e, enregistré par le joueur en `+0x6c`). Variante 0 : glisse
-/// en X entre deux bornes, accompagné d'un SET (type 7, variante 0xc) ; sorti des bornes, il s'arrête (sous-état
-/// 2) et prévient son SET. Variante 1 : glisse en hauteur (`+0x10`) et se recale sur le décor à chaque pas.
-/// Le joueur poussant est replacé contre le bloc (décalage par personnage et direction).
+/// Type 3: block that a player pushes (action 0x2e, registered by the player in `+0x6c`). Variant 0: slides
+/// in X between two bounds, accompanied by a SET (type 7, variant 0xc); out of the bounds, it stops (substate
+/// 2) and notifies its SET. Variant 1: slides in height (`+0x10`) and realigns itself with the terrain at each step.
+/// The pushing player is placed back against the block (offset per character and direction).
 pub mod pousse {
 use crate::families::cx::Bench;
 use crate::objects::Current;
@@ -916,8 +917,8 @@ use crate::objects::Current;
     use crate::objects::{pools, Obj};
 
     const ANIMATIONS: u32 = 0x1bebc2;
-    /// Recalage de l'objet après la collision avec le décor (`terrain::push_68k`).
-    /// Décalage du joueur contre le bloc, par personnage (mots, en clair) : selon la direction de poussée.
+    /// Realignment of the object after the collision with the terrain (`terrain::push_68k`).
+    /// Offset of the player against the block, per character (words, plain): according to the push direction.
     const AGAINST_HIGH: u32 = 0xdab52;
     const AGAINST_LOW: u32 = 0xdab62;
     const AGAINST_LEFT_1: u32 = 0xdab72;
@@ -929,29 +930,29 @@ use crate::objects::Current;
         /// Non nul : objet suspendu.
         pub const HIDDEN: u32 = 0x40;
         pub const SET: u32 = 0x5c;
-        /// Bornes de la variante 0 (X minimal exclu, X maximal).
+        /// Bounds of variant 0 (minimum X excluded, maximum X).
         pub const X_MIN: u32 = 0x60;
         pub const X_MAX: u32 = 0x62;
         pub const ARRETE: u32 = 0x64;
         pub const MOBILE: u32 = 0x65;
         pub const POUSSE: u32 = 0x66;
-        /// Personnage du joueur poussant × 2.
+        /// Character of the pushing player × 2.
         pub const CHARACTER: u32 = 0x68;
-        /// Joueur poussant (mot, 0 = aucun).
+        /// Pushing player (word, 0 = none).
         pub const PLAYER: u32 = 0x6c;
     }
-    /// Champs du joueur poussant.
+    /// Fields of the pushing player.
     mod j {
-        /// États `+4..+6` (le long `+4` masqué) du joueur en train de pousser.
+        /// States `+4..+6` (the `+4` long masked) of the player who is pushing.
         pub const STATES: u32 = 0x4;
         pub const PUSHING: u32 = 0x0200_2e00;
         pub const CHARACTER: u32 = 0x3;
         pub const DIRECTION: u32 = 0x7;
-        /// Bit 4 de `+0x6e` : pas de deux pixels ; `+0x33` non nul : un pixel de plus.
+        /// Bit 4 of `+0x6e`: step of two pixels; `+0x33` non-zero: one more pixel.
         pub const ELAN: u32 = 0x6e;
         pub const FORCE: u32 = 0x33;
     }
-    /// Directions de poussée (`+7` du joueur).
+    /// Push directions (`+7` of the player).
     mod dir {
         pub const HIGH: u8 = 2;
         pub const LOW: u8 = 4;
@@ -1010,7 +1011,7 @@ use crate::objects::Current;
         x.anim_start(ANIMATIONS, 6);
     }
 
-    /// Le joueur poussant (A1), s'il est toujours en train de pousser ; sinon le bloc l'oublie.
+    /// The pushing player (A1), if still pushing; otherwise the block forgets them.
     fn pousseur<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
         if x.u16(f::PLAYER) == 0 {
             return None;
@@ -1027,7 +1028,7 @@ use crate::objects::Current;
         Some(player)
     }
 
-    /// Replace le joueur contre le bloc sur l'axe `axe` (+8 ou +0x10).
+    /// Places the player back against the block on axis `axe` (+8 or +0x10).
     fn realign_player<R: Bench>(x: &mut Cx<'_, R>, axe: u32, table: u32) {
         let player = x.linked(f::PLAYER);
         let v = x.u16(axe);
@@ -1037,7 +1038,7 @@ use crate::objects::Current;
         player.set_u16(x.b, axe, v.wrapping_add(d));
     }
 
-    /// Variante 0 : glissement en X entre les bornes.
+    /// Variant 0: sliding in X between the bounds.
     fn active_0<R: Bench>(x: &mut Cx<'_, R>) {
         let px = x.u16(0x8);
         if px > x.u16(f::X_MAX) || px <= x.u16(f::X_MIN) {
@@ -1062,7 +1063,7 @@ use crate::objects::Current;
         realign_player(x, 0x8, table);
     }
 
-    /// Un pas de la variante 1 : le bloc avance puis se recale sur le décor.
+    /// One step of variant 1: the block advances then realigns itself with the terrain.
     fn step<R: Bench>(x: &mut Cx<'_, R>, axe: u32, d: i16) {
         x.add16(axe, d as u16);
         realign_scenery(x);
@@ -1074,7 +1075,7 @@ use crate::objects::Current;
         crate::player::walk::clamp_to_screen(x.b, crate::player::Player(x.o.0));
     }
 
-    /// Variante 1 : glissement en hauteur (directions 2 et 4) ou en X (6 et 8).
+    /// Variant 1: sliding in height (directions 2 and 4) or in X (6 and 8).
     fn active_1<R: Bench>(x: &mut Cx<'_, R>) {
         let Some(player) = pousseur(x) else { return };
         let direction = player.u8(x.b, j::DIRECTION);
@@ -1090,7 +1091,7 @@ use crate::objects::Current;
         if player.u8(x.b, j::ELAN) & 0x10 != 0 {
             step(x, axe, step_long);
         }
-        // le joueur est relu après chaque appel
+        // the player is read again after each call
         let player = x.linked(f::PLAYER);
         if player.u8(x.b, j::FORCE) != 0 {
             if horizontal {

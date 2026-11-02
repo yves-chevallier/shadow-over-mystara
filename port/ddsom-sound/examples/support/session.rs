@@ -1,10 +1,10 @@
-//! Essais de validation : commandes du 68000 simulées, exécution du Z80 d'origine et du pilote Rust
-//! côte à côte, comparaison des écritures et de l'état interne.
+//! Validation runs: simulated 68000 commands, original Z80 and Rust driver executed side by
+//! side, comparison of the writes and of the internal state.
 
 use super::{reference::RefZ80, Report};
 use ddsom_sound::{Driver, Rom, Write, SHARED_SIZE};
 
-/// Générateur pseudo-aléatoire (xorshift64*).
+/// Pseudo-random generator (xorshift64*).
 pub struct Rng(pub u64);
 
 impl Rng {
@@ -22,23 +22,23 @@ impl Rng {
     }
 }
 
-/// Nombre d'interruptions consécutives pendant lesquelles le Z80 peut rester occupé avant qu'on
-/// abandonne l'essai (un tic normal n'en demande que deux ou trois).
+/// Number of consecutive interrupts during which the Z80 may stay busy before the run is
+/// abandoned (a normal tick only needs two or three).
 pub const MAX_BUSY: usize = 10;
 
-/// Ce que fait le 68000 pendant un essai.
+/// What the 68000 does during a run.
 pub struct Session {
-    /// Modifications de la ROM : (offset dans la région audiocpu, octets). Elles ajoutent des
-    /// musiques et des effets synthétiques que le jeu n'utilise pas.
+    /// ROM patches: (offset in the audiocpu region, bytes). They add synthetic songs
+    /// and effects that the game does not use.
     pub patches: Vec<(usize, Vec<u8>)>,
-    /// Réglage stéréo (0 = mono).
+    /// Stereo setting (0 = mono).
     pub stereo: u8,
-    /// Commandes (interruption à partir de laquelle on tente de les poster).
+    /// Commands (interrupt from which posting is attempted).
     pub commands: Vec<(usize, [u8; 16])>,
     pub irqs: usize,
 }
 
-/// Commande « musique ou effet » avec des paramètres de pan plausibles.
+/// "Song or effect" command with plausible pan parameters.
 pub fn play_command(rng: &mut Rng, number: u16) -> [u8; 16] {
     let mut c = [0u8; 16];
     c[0] = (number >> 8) as u8;
@@ -46,7 +46,7 @@ pub fn play_command(rng: &mut Rng, number: u16) -> [u8; 16] {
     for b in &mut c[2..6] {
         *b = rng.byte();
     }
-    c[6] = rng.below(8) as u8; // type d'évolution du pan
+    c[6] = rng.below(8) as u8; // pan evolution type
     c[7] = rng.below(0x28) as u8;
     c[8] = rng.below(0x28) as u8;
     for b in &mut c[9..13] {
@@ -57,7 +57,7 @@ pub fn play_command(rng: &mut Rng, number: u16) -> [u8; 16] {
     c
 }
 
-/// Commande système avec des paramètres plausibles.
+/// System command with plausible parameters.
 pub fn system_command(rng: &mut Rng) -> [u8; 16] {
     let mut c = [0u8; 16];
     c[0] = 0xff;
@@ -100,7 +100,7 @@ pub fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverag
     let mut next = 0;
     let mut busy = 0;
     for k in 1..=s.irqs {
-        // Le 68000 répond à la poignée de main, prépare la boîte aux lettres, poste les commandes.
+        // The 68000 answers the handshake, prepares the mailbox, posts the commands.
         if k == 10 {
             for sh in [real.shared(), &mut dshared[..]] {
                 sh[0xfff] = 0xff;
@@ -109,8 +109,8 @@ pub fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverag
                 sh[0xf] = 0xff;
             }
         }
-        // Le 68000 ne poste une commande que si le Z80 a rattrapé son retard : sinon l'ordre entre
-        // la commande et le travail en attente dépend de la durée d'exécution du Z80.
+        // The 68000 only posts a command if the Z80 has caught up: otherwise the order between
+        // the command and the pending work depends on the Z80 execution time.
         if k > 10 && next < s.commands.len() && s.commands[next].0 <= k && real.shared()[0xf] == 0xff && real.is_idle() {
             let c = s.commands[next].1;
             for sh in [real.shared(), &mut dshared[..]] {
@@ -127,7 +127,7 @@ pub fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverag
                 let ram = real.ram();
                 let img = driver.ram_image();
                 println!(
-                    "--- interruption {k} (Z80 : f000-f003 {:02x?} file {:02x}/{:02x} ; Rust : {:02x?} file {:02x}/{:02x} ; inactif : {})",
+                    "--- interrupt {k} (Z80: f000-f003 {:02x?} queue {:02x}/{:02x}; Rust: {:02x?} queue {:02x}/{:02x}; idle: {})",
                     &ram[..4], ram[0x15], ram[0x16], &img[..4], img[0x15], img[0x16], real.is_idle()
                 );
                 print_writes("Z80   ", &w_real);
@@ -136,7 +136,7 @@ pub fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverag
                     let mut top: Vec<(u32, usize)> = real.hits.iter().enumerate().map(|(a, &n)| (n, a)).filter(|x| x.0 > 0).collect();
                     top.sort_by(|a, b| b.cmp(a));
                     let list: Vec<String> = top.iter().take(10).map(|(n, a)| format!("{a:04x}:{n}")).collect();
-                    println!("  adresses les plus exécutées : {}", list.join(" "));
+                    println!("  most executed addresses: {}", list.join(" "));
                     real.hits.iter_mut().for_each(|h| *h = 0);
                 }
             }
@@ -148,9 +148,9 @@ pub fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverag
                 let list: Vec<String> = diffs
                     .iter()
                     .take(6)
-                    .map(|&i| format!("{:04x} ({}) : Z80 {:02x} / Rust {:02x}", 0xf000 + i, describe(i), z[i], r[i]))
+                    .map(|&i| format!("{:04x} ({}): Z80 {:02x} / Rust {:02x}", 0xf000 + i, describe(i), z[i], r[i]))
                     .collect();
-                report.first_divergence = Some(format!("état différent après l'interruption {k} : {}", list.join(" ; ")));
+                report.first_divergence = Some(format!("different state after interrupt {k}: {}", list.join(" ; ")));
                 break;
             }
         }
@@ -169,16 +169,16 @@ pub fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverag
     report
 }
 
-/// Octets de la RAM du Z80 que le pilote ne modélise pas (banque courante, variables
-/// temporaires, pile, octets inutilisés des voies).
+/// Bytes of the Z80 RAM that the driver does not model (current bank, temporary
+/// variables, stack, unused voice bytes).
 pub fn ignored(i: usize) -> bool {
     let a = 0xf000 + i;
     matches!(a, 0xf005 | 0xf006 | 0xf007 | 0xf00d | 0xf01a) || (0xf050..0xf200).contains(&a) || (0xff00..0x10000).contains(&a)
         || (0xf200..0xfc00).contains(&a) && matches!((a - 0xf200) % 0x50, 0x21..=0x24 | 0x32 | 0x45)
 }
 
-/// Octets différents entre la RAM du Z80 et l'image du pilote. Une voie libre n'a de sens que par
-/// son état et sa priorité : le reste est périmé et n'est pas comparé.
+/// Bytes that differ between the Z80 RAM and the driver image. A free voice only matters through
+/// its state and priority: the rest is stale and is not compared.
 pub fn differences(z: &[u8], r: &[u8]) -> Vec<usize> {
     (0..0x1000)
         .filter(|&i| {
@@ -203,14 +203,14 @@ pub fn differences(z: &[u8], r: &[u8]) -> Vec<usize> {
         .collect()
 }
 
-/// Nom d'un octet de la RAM du Z80.
+/// Name of a byte of the Z80 RAM.
 pub fn describe(i: usize) -> String {
     let a = 0xf000 + i;
     match a {
-        0xf200..=0xf6ff => format!("voie d'effet {}, +{:#04x}", (a - 0xf200) / 0x50, (a - 0xf200) % 0x50),
-        0xf700..=0xfbff => format!("voie de musique {}, +{:#04x}", (a - 0xf700) / 0x50, (a - 0xf700) % 0x50),
-        0xfc00..=0xfc47 => format!("voie ADPCM {}, +{:#04x}", (a - 0xfc00) / 0x18, (a - 0xfc00) % 0x18),
-        _ => "globale".to_string(),
+        0xf200..=0xf6ff => format!("effect voice {}, +{:#04x}", (a - 0xf200) / 0x50, (a - 0xf200) % 0x50),
+        0xf700..=0xfbff => format!("music voice {}, +{:#04x}", (a - 0xf700) / 0x50, (a - 0xf700) % 0x50),
+        0xfc00..=0xfc47 => format!("ADPCM voice {}, +{:#04x}", (a - 0xfc00) / 0x18, (a - 0xfc00) % 0x18),
+        _ => "global".to_string(),
     }
 }
 
@@ -220,7 +220,7 @@ pub fn print_writes(who: &str, w: &[Write]) {
     }
 }
 
-/// Essai « une musique » : la commande, puis un deuxième son et une commande système.
+/// "One song" run: the command, then a second sound and a system command.
 pub fn song_session(rom: &Rom, n: usize, irqs: usize) -> Session {
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ (n as u64 + 1) * 0x1234_5679);
     let mut commands = vec![(12, play_command(&mut rng, n as u16))];
@@ -230,7 +230,7 @@ pub fn song_session(rom: &Rom, n: usize, irqs: usize) -> Session {
     Session { patches: Vec::new(), stereo: if n % 5 == 0 { 0 } else { 0xff }, commands, irqs }
 }
 
-/// Essai aléatoire : une suite de commandes de tous types.
+/// Random run: a sequence of commands of all kinds.
 pub fn random_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Session {
     let mut rng = Rng(0x2545_f491 ^ (seed as u64 + 1) * 0x9e37_79b9 + i as u64 * 0x85eb_ca6b);
     let mut commands = Vec::new();
@@ -244,13 +244,13 @@ pub fn random_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Session 
     Session { patches: Vec::new(), stereo: if rng.below(4) == 0 { 0 } else { 0xff }, commands, irqs }
 }
 
-/// Essai avec des musiques et effets synthétiques (octets aléatoires mais bien formés), ajoutés
-/// dans une zone libre de la ROM et référencés par les numéros 1100 et suivants.
+/// Run with synthetic songs and effects (random but well-formed bytes), added
+/// in a free area of the ROM and referenced by numbers 1100 and up.
 pub fn synth_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Session {
     synth_session_with(rom, seed, i, irqs, 160)
 }
 
-/// Pistes courtes : une divergence est alors plus facile à localiser.
+/// Short tracks: a divergence is then easier to locate.
 pub fn synth_short_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Session {
     synth_session_with(rom, seed, i, irqs, 8)
 }
@@ -259,8 +259,8 @@ pub fn synth_session_with(rom: &Rom, seed: usize, i: usize, irqs: usize, track_l
     let mut rng = Rng(0x3c6e_f372 ^ (seed as u64 + 1) * 0x9e37_79b9 + i as u64 * 0xc2b2_ae35);
     let mut patches = Vec::new();
     let mut numbers = Vec::new();
-    // Une fois sur deux les données chevauchent une limite de banque (4C000), pour exercer le
-    // passage à la banque suivante en cours de lecture.
+    // Every other time the data straddles a bank boundary (4C000), to exercise the
+    // switch to the next bank during reading.
     let mut at = if rng.below(2) == 0 { 0x48000 } else { 0x4c000 - 0x20 - rng.below(0x300) as usize };
     for n in 0..6 {
         let data = synth_song(&mut rng, track_len);
@@ -268,7 +268,7 @@ pub fn synth_session_with(rom: &Rom, seed: usize, i: usize, irqs: usize, track_l
             break;
         }
         let number = 1100 + n as u16;
-        // Entrée de la table des musiques : adresse linéaire sur 3 octets.
+        // Entry of the music table: 3-byte linear address.
         let linear = (at - 0x8000) as u32;
         patches.push((0x9006 + 0x8000 + 4 * usize::from(number), vec![(linear >> 16) as u8, (linear >> 8) as u8, linear as u8, 0]));
         at += data.len();
@@ -287,7 +287,7 @@ pub fn synth_session_with(rom: &Rom, seed: usize, i: usize, irqs: usize, track_l
     Session { patches, stereo: if rng.below(4) == 0 { 0 } else { 0xff }, commands, irqs }
 }
 
-/// Définition d'un son synthétique : musique, effet à plusieurs voies, note simple ou ADPCM.
+/// Definition of a synthetic sound: song, multi-voice effect, simple note or ADPCM.
 pub fn synth_song(rng: &mut Rng, track_len: u64) -> Vec<u8> {
     let multi = |rng: &mut Rng, kind: u8| {
         let mut d = vec![kind];
@@ -309,7 +309,7 @@ pub fn synth_song(rng: &mut Rng, track_len: u64) -> Vec<u8> {
             multi(rng, priority)
         }
         55..=84 => {
-            // Note simple : voie, priorité (bit 7 : continue), durée, tenue, amplitude, instrument, note, détune.
+            // Simple note: voice, priority (bit 7: continuous), duration, hold, amplitude, instrument, note, detune.
             let mut d = vec![0x80 | rng.below(16) as u8, rng.byte() & if rng.below(4) == 0 { 0xff } else { 0x7f }];
             let duration = 8 + rng.below(300) as u16;
             d.extend(duration.to_be_bytes());
@@ -327,7 +327,7 @@ pub fn synth_song(rng: &mut Rng, track_len: u64) -> Vec<u8> {
             d
         }
         _ => {
-            // Voie ADPCM : priorité, 4 octets ignorés, amplitude, échantillon.
+            // ADPCM voice: priority, 4 ignored bytes, amplitude, sample.
             let mut d = vec![0x90 + rng.below(3) as u8, rng.byte() & if rng.below(3) == 0 { 0xff } else { 0x7f }];
             d.extend([rng.byte(), rng.byte(), rng.byte(), rng.byte()]);
             d.push(rng.below(128) as u8);
@@ -337,15 +337,15 @@ pub fn synth_song(rng: &mut Rng, track_len: u64) -> Vec<u8> {
     }
 }
 
-/// Piste synthétique : notes et instructions avec des paramètres plausibles. Les boucles
-/// contiennent toujours une note : le Z80 d'origine met un temps réel à parcourir une boucle sans
-/// note (une boucle de 20 000 tours le bloque pendant des dizaines de tics), ce que le pilote Rust,
-/// qui n'a pas de notion de durée d'exécution, fait instantanément.
+/// Synthetic track: notes and instructions with plausible parameters. Loops always
+/// contain a note: the original Z80 takes real time to run through a noteless loop
+/// (a 20,000-pass loop blocks it for dozens of ticks), which the Rust driver, having no notion
+/// of execution time, does instantly.
 pub fn synth_track(rng: &mut Rng, track_len: u64) -> Vec<u8> {
     let mut d = Vec::new();
-    // Un instrument d'abord, pour que les notes sonnent.
+    // An instrument first, so that the notes sound.
     d.extend([8, rng.byte()]);
-    // Début des instructions et des notes déjà écrites ; position de la dernière note.
+    // Start of the instructions and notes already written; position of the last note.
     let mut starts: Vec<usize> = Vec::new();
     let mut last_note: Option<usize> = None;
     for _ in 0..4 + rng.below(track_len) {
@@ -365,7 +365,7 @@ pub fn synth_track(rng: &mut Rng, track_len: u64) -> Vec<u8> {
                         d.extend((0x80 + rng.below(0x600) as u16).to_be_bytes());
                     }
                     9 => d.extend([op, rng.below(8) as u8]),
-                    // Boucle : retour à une instruction qui précède une note.
+                    // Loop: jump back to an instruction that precedes a note.
                     14..=17 => {
                         let Some(note) = last_note else { continue };
                         let candidates: Vec<usize> = starts.iter().copied().filter(|&s| s <= note).collect();
@@ -374,7 +374,7 @@ pub fn synth_track(rng: &mut Rng, track_len: u64) -> Vec<u8> {
                         d.extend([op, 1 + rng.below(3) as u8]);
                         d.extend((target as i64 - after as i64).to_be_bytes()[6..].iter());
                     }
-                    // Sortie de boucle et saut : vers l'avant seulement.
+                    // Loop exit and jump: forward only.
                     18..=21 => {
                         d.extend([op, rng.byte() & 0x68]);
                         d.extend((1 + rng.below(30) as u16).to_be_bytes());

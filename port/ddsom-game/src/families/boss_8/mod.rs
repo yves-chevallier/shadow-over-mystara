@@ -1,19 +1,19 @@
-//! Boss de type 8 (0x87fc0), scène 64 : le deuxième guerrier noir (« DarkWarrior 2 »). Voir `docs/families/boss.md`.
+//! Boss of type 8 (0x87fc0), stage 64: the second black warrior ("DarkWarrior 2"). See `docs/families/boss.md`.
 //!
-//! Même charpente que les boss 17, 18 et 21 (`+4` état, `+5` groupe, `+6` et `+7` étapes, états posés d'un coup en
-//! longs, tirages dans des tables de la ROM) mais ses réactions aux coups sont les routines communes des ennemis
-//! (table de longs 0x89330) et il passe en « ralenti » quand il est affaibli.
+//! Same skeleton as bosses 17, 18 and 21 (`+4` state, `+5` group, `+6` and `+7` steps, states set in one go as
+//! longs, draws in ROM tables) but its reactions to hits are the common enemy routines
+//! (table of longs 0x89330) and it goes into "slow motion" when weakened.
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `fight` | cinématique d'arrivée (délais, saut, effets) |
-//! | 2 | `fight` | combat : marche (`+6` = 0, 8), demi-tour (2), arrêt (4), approche (6) |
-//! | 4 | `attacks` | dix attaques (`+6` = 0 à 18) et choix de la suivante |
-//! | 6, 8 | `moves` | esquives (pas de côté, saut, reculade) |
-//! | 10, 12, 14 | ici | attente sans joueur, debout, relevé |
-//! | état 4 | `hit` | réactions aux coups, mort |
+//! | 0 | `fight` | arrival cutscene (delays, jump, effects) |
+//! | 2 | `fight` | combat: walk (`+6` = 0, 8), about-face (2), stop (4), approach (6) |
+//! | 4 | `attacks` | ten attacks (`+6` = 0 to 18) and choice of the next one |
+//! | 6, 8 | `moves` | dodges (sidestep, jump, retreat) |
+//! | 10, 12, 14 | here | wait with no player, standing, getting up |
+//! | state 4 | `hit` | reactions to hits, death |
 //!
-//! Animations : 0x1790f6 (mouvements), 0x179116 (coups).
+//! Animations: 0x1790f6 (movements), 0x179116 (hits).
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -35,7 +35,7 @@ pub(self) mod g {
     pub const TIMER: u32 = 0xa0;
     pub const ANIM_KIND: u32 = 0xa2;
     pub const ANIM_LAST: u32 = 0xa3;
-    /// Sous-état et état à reprendre (`+0xa5`, long `+0xa6`).
+    /// Substate and state to resume (`+0xa5`, long `+0xa6`).
     pub const RESUME_SUB: u32 = 0xa5;
     pub const RESUME_STATE: u32 = 0xa6;
     pub const GRABBED: u32 = 0xaa;
@@ -47,7 +47,7 @@ pub(self) mod g {
     pub const SPAWN_TIME: u32 = 0xb4;
     pub const WEAK_HP: u32 = 0xb6;
     pub const SPAWNED: u32 = 0xb8;
-    /// Ralenti : actif (`+0xb9`), pas (`+0xba`), compteur de la troisième attaque (`+0xbb`).
+    /// Slow motion: active (`+0xb9`), step (`+0xba`), counter of the third attack (`+0xbb`).
     pub const SLOW: u32 = 0xb9;
     pub const SLOW_TICK: u32 = 0xba;
     pub const THIRD: u32 = 0xbb;
@@ -72,7 +72,7 @@ pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-/// Les restes D2 à D5 (relus par les gestionnaires suivants) ; D0, D1 et D6 ne sont relus par personne.
+/// The leftovers D2 to D5 (re-read by the following handlers); D0, D1 and D6 are re-read by no one.
 fn remainder<'a, R: Bench>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32> {
     match n {
         2 => Some(x.c.d2()),
@@ -83,22 +83,22 @@ fn remainder<'a, R: Bench>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32
     }
 }
 
-/// Mot de poids faible d'un registre de données (`move.w`, `andi.w`...), gardé s'il est un reste.
+/// Low-order word of a data register (`move.w`, `andi.w`...), kept if it is a leftover.
 pub(self) fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
     if let Some(r) = remainder(x, n) {
         *r = *r & 0xffff_0000 | v as u32;
     }
 }
 
-/// Octet de poids faible d'un registre de données, gardé s'il est un reste.
+/// Low-order byte of a data register, kept if it is a leftover.
 pub(self) fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
     if let Some(r) = remainder(x, n) {
         *r = *r & !0xff | v as u32;
     }
 }
 
-/// Saut par table relative (`move.w (tbl,PC,D0w),D1w ; jmp (tbl,PC,D1w)`) indexée par l'octet `idx` de l'objet :
-/// rend l'adresse d'arrivée.
+/// Jump through a relative table (`move.w (tbl,PC,D0w),D1w ; jmp (tbl,PC,D1w)`) indexed by the object's byte `idx`:
+/// returns the arrival address.
 pub(self) fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
     let off = x.rom16(table + i);
@@ -123,7 +123,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0) == 0 {
             return;
         }
-        // ralenti : l'image est rejouée une fois sur trois (compteur +0xba : 2, 1, 0)
+        // slow motion: the frame is replayed one time in three (counter +0xba: 2, 1, 0)
         if x.u8(SLOW) != 0 {
             let f = sub8(x, SLOW_TICK, 1);
             if f.eq() {
@@ -149,7 +149,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
@@ -184,10 +184,10 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add16(0xc, 0x50);
     x.set16(TIMER, 0x3c);
     crate::families::effects_creators::linked(x.b, x.o, crate::families::effects_creators::kind::VICTORY, None);
-    // points de vie « affaiblis » (seuil du ralenti) selon le nombre de joueurs
+    // "weakened" hit points (slow-motion threshold) according to the number of players
     let hp = x.u16(0x60);
     let (mut d1, d2) = (hp >> 1, hp >> 2);
-    // D2.w (le quart) reste dans le registre (`dispatch::Leftovers`)
+    // D2.w (the quarter) stays in the register (`dispatch::Leftovers`)
     setw(x, 2, d2);
     let players = var::PLAYERS_ALIVE.get(x.b);
     if Fl::sub8(players, 1).gt() {
@@ -208,7 +208,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 0);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
@@ -237,7 +237,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
             0x891e2 => fight::wait(x),
             0x882a4 => x.set32(f::STATE, 0x0202_0000),
             0x8921e => fight::stand_up(x),
-            t => unreachable!("boss 8 : groupe {t:x}"),
+            t => unreachable!("boss 8: group {t:x}"),
         }
         if (x.u8(PHASE_TIMER) as i8) > 0 {
             sub8(x, PHASE_TIMER, 1);
@@ -260,7 +260,7 @@ fn idle_reset<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(IDLE_TIME, 0x12c);
 }
 
-/// Trop longtemps sans combattre : le boss se redresse et attaque (état 2, groupe 4, étape tirée dans 0x88294).
+/// Too long without fighting: the boss straightens up and attacks (state 2, group 4, step drawn from 0x88294).
 fn idle_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, false);
     x.set16(HITS, 0);

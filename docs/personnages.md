@@ -215,7 +215,7 @@ Les sons et les routines de palette (0x3af8...) ne lisent aucun registre.
 
 - `tools/validate_all.sh 30000` : tous les scénarios sont VALIDE (`bot_char0`..`bot_char5`, `bot_2p`, `bot30k`, les scénarios
   `extra` dont `mash_c0`, `mash_c0b`, `mash_c2`, `mash_c2b` ajoutés pour ce travail).
-- `examples/fuzz_player <fighter|cleric> <roms> <eeprom> <scénario> <chauffe> <tours>` : après une chauffe sur un scénario, chaque action
+- `examples/fuzz_player <fighter|cleric> <roms> <eeprom> <scénario> <warmup> <tours>` : après une chauffe sur un scénario, chaque action
   est appelée en mode contrôle (`ddsom_game::set_check`) sur des états aléatoires (pas, sous-action, entrées, événement, armes, position,
   vitesses, réserve, autres joueurs, monstres de types variés) et comparée à l'original sur une copie. Variables : `DDSOM_ENTREE`
   (une seule entrée), `DDSOM_SEED`, `DDSOM_TRACE` (affiche chaque état tiré), `DDSOM_PROBE` (soin d'origine par niveau). Résultat : 6 000
@@ -371,13 +371,13 @@ Le fuzz `fuzz_player spawn ...` appelle les natives sur des états de pools vari
 Les lunes de l'elfe (0x4e4de, 0x4e782) et les effets des sorts orage, pluie, mur de feu et vague du magicien (0x4d020, 0x4d660, 0x4d2c0,
 0x4dfe2) sont réécrits dans `spawn.rs` (`moon`, `moon_b`, `storm_spell`, `rain_glow`, `wall_spark`, `wave_bolt` ; trous trouvés par les
 bots longs, voir `docs/couverture.md`), validés par `fuzz_player spawn` (300 appels chacun, 0 écart). Restent appelés par adresse (avec
-native) : étincelles 0x4dc9a, foudre 0x4b7a0, séisme 0x4b340 et 0x4f132 (`player/externes.rs`).
-Les **gestionnaires** des tirs (C06) et des effets (C12) sont réécrits : `families/joueur/`, `docs/familles/joueur.md`.
+native) : étincelles 0x4dc9a, foudre 0x4b7a0, séisme 0x4b340 et 0x4f132 (`player/external.rs`).
+Les **gestionnaires** des tirs (C06) et des effets (C12) sont réécrits : `families/player/`, `docs/families/joueur.md`.
 
 ## 9. Reste en ROM
 
 - Les créateurs listés à la fin du §8 quater. Les gestionnaires des effets et des tirs joueur (pools PEFF et PSHL) sont réécrits
-  (`families/joueur/`), sauf PEFF 24, 42 et 43 (ramassage avec comptes BCD, boutique) : voir `docs/familles/joueur.md`.
+  (`families/player/`), sauf PEFF 24, 42 et 43 (ramassage avec comptes BCD, boutique) : voir `docs/families/joueur.md`.
 - Les sons (voix des armes 0xe7e10, 0xe7622, wrappers 0xe1xxx..0xe9xxx), les effets d'écran 0x1ab3c, 0x1ab56, 0x1abe0, 0x1ac86, 0x3b0c, 0x3b14,
   0x3af8, 0x3afe, 0x37882.
 - L'action 0x12 (0x35a78), commune aux classes 0 à 2, et celle du magicien (0x35b96).
@@ -386,7 +386,7 @@ Les **gestionnaires** des tirs (C06) et des effets (C12) sont réécrits : `fami
 
 Écrire un module avec une `JumpKit` (ou un saut propre, comme le nain et le voleur), une fonction par action, des `action_native!` aux
 adresses d'origine, les ajouter à `player::NATIVES` et à `cov::SOURCES`, puis lancer `fuzz_player` en adaptant `max_step` aux tables de pas de
-la classe (l'argument `personnage` filtre les natives par préfixe de nom ; `DDSOM_WHICH`, `DDSOM_SUB` et `DDSOM_PAS` fixent le numéro
+la classe (l'argument `character` filtre les natives par préfixe de nom ; `DDSOM_WHICH`, `DDSOM_SUB` et `DDSOM_PAS` fixent le numéro
 d'attaque spéciale, la sous-action et le pas). Les `field` de `common` sont nommés d'après les classes déjà réécrites ; les noms (h) sont à
 confirmer. Les tables de sous-actions de l'original peuvent avoir plus d'entrées que le nombre apparent (le voleur en a 16) : mesurer la
 distance entre la table et le premier pas.

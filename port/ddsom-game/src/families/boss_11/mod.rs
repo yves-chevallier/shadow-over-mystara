@@ -1,20 +1,22 @@
-//! Boss de types 11 et 12 (0x8d59e), scènes 42 et 40 : les serpents (tête mobile et douze anneaux). Voir `docs/families/boss.md`.
+//! Boss of types 11 and 12 (0x8d59e), stages 42 and 40: the snakes (mobile head and twelve rings). See
+//! `docs/families/boss.md`.
 //!
-//! La tête est le boss (A0) ; les douze anneaux sont des objets ESHL de type 5 (`+0x2f` = rang 0 à 11, `+0x46` = la tête) créés
-//! à l'initialisation par 0x9e426. Chaque image, `chain::update` replace les anneaux derrière la tête d'après les tables de la ROM
-//! (0x1069f8 : lignes de 32 octets par pose `+0xaa` ; 0x106cb8 : trajectoires), et la tête est recopiée depuis le dernier anneau.
-//! Les types 11 (`+2` = 0xb) et 12 (0xc) partagent tout sauf les jeux d'animations et quelques attaques.
+//! The head is the boss (A0); the twelve rings are ESHL objects of type 5 (`+0x2f` = rank 0 to 11, `+0x46` = the
+//! head) created at initialization by 0x9e426. Each frame, `chain::update` repositions the rings behind the head
+//! according to the ROM tables (0x1069f8: 32-byte rows per pose `+0xaa`; 0x106cb8: paths), and the head is copied
+//! from the last ring. Types 11 (`+2` = 0xb) and 12 (0xc) share everything except the animation sets and a few
+//! attacks.
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `behave` | arrivée : élan, chute, rebond, première marche |
-//! | 2, 8, 10, 12 | `behave` | poursuite : choix de l'attaque ou de la manœuvre (`tests`) |
-//! | 4 | `attacks` | huit attaques (`+6` = 0 à 14) |
-//! | 6 | `behave` | attente sans joueur |
-//! | état 4 | `hit` | réactions aux coups, mort |
-//! | tous | `chain` | positionnement des anneaux |
+//! | 0 | `behave` | arrival: run-up, fall, bounce, first walk |
+//! | 2, 8, 10, 12 | `behave` | pursuit: choice of the attack or maneuver (`tests`) |
+//! | 4 | `attacks` | eight attacks (`+6` = 0 to 14) |
+//! | 6 | `behave` | wait with no player |
+//! | state 4 | `hit` | reactions to hits, death |
+//! | all | `chain` | positioning of the rings |
 //!
-//! Animations : 0x17b9c2, 0x17b9d6, 0x17ba32 (type 12) et 0x17c8ca, 0x17c8de, 0x17c93a (type 11), choisies par `play`.
+//! Animations: 0x17b9c2, 0x17b9d6, 0x17ba32 (type 12) and 0x17c8ca, 0x17c8de, 0x17c93a (type 11), chosen by `play`.
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -45,7 +47,7 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Les restes D2 à D5 (relus par les gestionnaires suivants) ; D0, D1 et D6 ne sont relus par personne.
+/// The leftovers D2 to D5 (re-read by the following handlers); D0, D1 and D6 are re-read by no one.
 fn remainder<'a, R: Bench>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32> {
     match n {
         2 => Some(x.c.d2()),
@@ -56,14 +58,14 @@ fn remainder<'a, R: Bench>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32
     }
 }
 
-/// `move.b #v,Dn` : l'octet de poids faible d'un registre de données (gardé s'il est un reste).
+/// `move.b #v,Dn`: the low-order byte of a data register (kept if it is a leftover).
 pub(self) fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
     if let Some(r) = remainder(x, n) {
         *r = *r & !0xff | v as u32;
     }
 }
 
-/// `move.w #v,Dn` : le mot de poids faible d'un registre de données (gardé s'il est un reste).
+/// `move.w #v,Dn`: the low-order word of a data register (kept if it is a leftover).
 pub(self) fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
     if let Some(r) = remainder(x, n) {
         *r = *r & 0xffff_0000 | v as u32;
@@ -75,7 +77,7 @@ pub(self) fn asr_w(v: u16, k: u32) -> u16 {
     ((v as i16) >> k) as u16
 }
 
-/// Les types 12 et 11 se distinguent par l'octet `+2`.
+/// Types 12 and 11 are distinguished by byte `+2`.
 pub(self) fn is_12<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.u8(2) == 0xc
 }
@@ -88,7 +90,7 @@ pub(self) fn sync<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- animations (0x8f508, 0x8f530, 0x8f558) ------------------------------------------------------------------
 
-/// Lance le script `n` (déjà dans D0) du jeu `kind` (0, 2 ou 4 : D1b) pour le type, sauf s'il tourne déjà.
+/// Starts script `n` (already in D0) of set `kind` (0, 2 or 4: D1b) for the type, unless it is already running.
 pub(self) fn play<R: Bench>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     let t12 = is_12(x);
     let table = match (kind, t12) {
@@ -122,7 +124,7 @@ pub(self) fn hurt<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play(x, 4, n)
 }
 
-/// 0x8eb28 : octet `+0x44` selon le type et `n`.
+/// 0x8eb28: byte `+0x44` according to the type and `n`.
 fn set44<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     let d = (n as u16).wrapping_mul(2);
     let base = if is_12(x) { 0x8eb43 } else { 0x8eb42 };
@@ -130,15 +132,15 @@ fn set44<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(0x44, v);
 }
 
-// --- changements d'état (0x8eac8...) ---------------------------------------------------------------------------
+// --- state changes (0x8eac8...) ---------------------------------------------------------------------------
 
-/// 0x8eac8 : plus de cible, attente (état 2, groupe 6).
+/// 0x8eac8: no target left, wait (state 2, group 6).
 pub(self) fn to_wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0206_0000);
     body(x, 0)
 }
 
-/// 0x8ead6 : retour à la poursuite.
+/// 0x8ead6: return to the pursuit.
 pub(self) fn to_chase<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0202_0000);
     x.set8(0x79, 0x3f);
@@ -153,7 +155,7 @@ pub(self) fn to_turn<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 1)
 }
 
-/// 0x8eafe : attaque 2 (groupe 4, étape 4).
+/// 0x8eafe: attack 2 (group 4, step 4).
 pub(self) fn to_attack_2<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0204_0400);
     body(x, 8)
@@ -171,7 +173,7 @@ pub(self) fn to_attack_7<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 0)
 }
 
-/// 0x8d592 : un anneau manque, le serpent meurt (état 4, groupe 6).
+/// 0x8d592: a ring is missing, the snake dies (state 4, group 6).
 pub(self) fn lost<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0406_0000);
 }
@@ -222,7 +224,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// 0x8d60e : le serpent ne sort pas de l'écran par la gauche ni par le haut.
+/// 0x8d60e: the snake does not leave the screen through the left or the top.
 fn keep_in_screen<R: Bench>(x: &mut Cx<'_, R>) {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
     let mut d0 = rd16(x.b, cam + 8);
@@ -239,7 +241,7 @@ fn keep_in_screen<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8d65a : la position est celle de l'image précédente (recopiée par `chain::update`).
+/// 0x8d65a: the position is that of the previous frame (copied by `chain::update`).
 fn restore<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::STATE) == 0 || x.u8(0) == 0 {
         return;
@@ -253,13 +255,13 @@ fn restore<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x10, c);
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
-    // D0.w = l'état (0, posé par `run`) : comparé au nombre maximal de tirs de type 5
+    // D0.w = the state (0, set by `run`): compared with the maximum number of shots of type 5
     if !crate::families::eshl_creators::twelve_5(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o, 0) {
         return;
     }
@@ -281,8 +283,8 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x80, 0x26);
     x.set8(0x9e, 2);
     x.set8(0x9f, 1);
-    // Glitch d'origine : `cmpi.b #0xc,D0b` voulait sans doute distinguer le type 12, mais D0 vient d'être mis à zéro par
-    // 0x19e10 (`clear_popup`) : les deux types prennent ces réglages.
+    // Original glitch: `cmpi.b #0xc,D0b` was probably meant to distinguish type 12, but D0 has just been zeroed by
+    // 0x19e10 (`clear_popup`): both types take these settings.
     {
         x.set8(0x81, 0);
         x.set8(0x80, 0x27);
@@ -307,11 +309,11 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xac, 0);
     x.set16(ANIM_KIND, 0xffff);
     body(x, 0);
-    // la création se poursuit par l'état actif (0x8d782)
+    // creation continues with the active state (0x8d782)
     active(x);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
@@ -330,7 +332,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// `moveq 0,D0 ; move.b (idx,A0),D0b ; move.w (table,PC,D0w),D1w ; jsr (table,PC,D1w)` : adresse d'arrivée.
+/// `moveq 0,D0 ; move.b (idx,A0),D0b ; move.w (table,PC,D0w),D1w ; jsr (table,PC,D1w)`: arrival address.
 pub(self) fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
     let off = x.rom16(table + i);
@@ -338,7 +340,7 @@ pub(self) fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 
     table.wrapping_add(off as i16 as i32 as u32)
 }
 
-/// Variante qui range le décalage dans D0 (`move.w (table,PC,D0w),D0w ; jmp (table,PC,D0w)`).
+/// Variant that stores the offset in D0 (`move.w (table,PC,D0w),D0w ; jmp (table,PC,D0w)`).
 pub(self) fn dispatch0<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
     let off = x.rom16(table + i);

@@ -1,15 +1,15 @@
-//! Boss 14 / 19, groupe `+5` = 4 : les attaques (`+6` = 0 à 10), chacune en étapes `+7`.
+//! Boss 14 / 19, group `+5` = 4: the attacks (`+6` = 0 to 10), each in steps `+7`.
 //!
-//! | `+6` | Attaque |
+//! | `+6` | Attack |
 //! |---|---|
-//! | 0 | bond en arrière puis retombée, demi-tour |
-//! | 2 | charge en avant (tant que la marque `+0xa3` n'est pas levée) |
-//! | 4 | souffle : suit un joueur (`aim`) tant que l'animation joue |
-//! | 6 | saut périlleux en arrière |
-//! | 8 | saut en avant puis bond |
-//! | 10 | grand saut : monte, passe de l'autre côté de l'écran, retombe |
+//! | 0 | backward leap then landing, about-face |
+//! | 2 | charge forward (as long as the mark `+0xa3` is not raised) |
+//! | 4 | breath: follows a player (`aim`) while the animation plays |
+//! | 6 | backward somersault |
+//! | 8 | forward jump then leap |
+//! | 10 | big jump: rises, passes to the other side of the screen, lands |
 //!
-//! Elles finissent par `fight::pick_attack_b`. Plusieurs fuient d'une poussière (effet 0xb10c8).
+//! They end with `fight::pick_attack_b`. Several leak a puff of dust (effect 0xb10c8).
 
 use crate::families::cx::Bench;
 use super::fight;
@@ -17,12 +17,12 @@ use super::*;
 use crate::objects::Obj;
 use crate::objects::Current;
 
-/// Table des joueurs (FF85DE, 0x200 octets chacun).
+/// Players table (FF85DE, 0x200 bytes each).
 const PLAYERS: u32 = 0xff85de;
-/// Choix de la cible du souffle (octets, par tirage) puis routine (mots relatifs à 0x90494).
+/// Choice of the breath target (bytes, per draw) then routine (words relative to 0x90494).
 const AIM_PICK: u32 = 0x9049a;
 const AIM_ROUTINES: u32 = 0x90494;
-/// Décalages (longs) des places de joueurs parcourues dans un ordre tiré au sort.
+/// Offsets (longs) of the player slots walked in a randomly drawn order.
 const PLAYER_ORDERS: u32 = 0x90556;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -42,20 +42,20 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-/// Poussière sous le dragon (0xb10c8) : `kind` 0x100 ou 0x101.
+/// Dust under the dragon (0xb10c8): `kind` 0x100 or 0x101.
 fn dust<R: Bench>(x: &mut Cx<'_, R>, kind: u16) {
     let z = x.u16(0xc).wrapping_neg();
     lib::shock(x, 0, kind, 0, z);
 }
 
-/// Mot lu en A0 − 0x7f92 : l'original voulait le compteur d'images (`A5 + 0x6e`) mais a écrit un déplacement
-/// relatif à A0 ; on lit la même adresse.
+/// Word read at A0 − 0x7f92: the original wanted the frame counter (`A5 + 0x6e`) but wrote a displacement
+/// relative to A0; we read the same address.
 fn tick_word<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     let addr = x.o.0.wrapping_sub(0x7f92) & 0xff_ffff;
     x.data16(addr)
 }
 
-/// Vitesses `(vx, vz)` selon le sens : `(a, b)` si le dragon regarde à droite (`+0x2c` nul inversé).
+/// Speeds `(vx, vz)` by direction: `(a, b)` if the dragon looks right (`+0x2c` zero inverted).
 fn signed_by_facing<R: Bench>(x: &mut Cx<'_, R>, a: i16, b: i16) -> (u16, u16) {
     if x.u8(f::FLIP) != 0 {
         (a as u16, b as u16)
@@ -64,8 +64,8 @@ fn signed_by_facing<R: Bench>(x: &mut Cx<'_, R>, a: i16, b: i16) -> (u16, u16) {
     }
 }
 
-/// Touche le sol : l'altitude est ramenée à 0, la vitesse verticale annulée et la vitesse horizontale divisée par deux
-/// (`grow` : doublée dans le grand saut).
+/// Touches the ground: the altitude is brought back to 0, the vertical speed cancelled and the horizontal speed halved
+/// (`grow`: doubled in the big jump).
 fn bounce<R: Bench>(x: &mut Cx<'_, R>, grow: bool) {
     if (x.u16(0xc) as i16) >= 0 {
         return;
@@ -83,7 +83,7 @@ fn jump_back_and_forth<R: Bench>(x: &mut Cx<'_, R>, vx: i16, vz: i16) {
     x.set16(0x16, b);
 }
 
-// --- +6 = 0 : bond en arrière -------------------------------------------------------------------
+// --- +6 = 0: backward leap -------------------------------------------------------------------
 
 fn back_hop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(FRAME_KIND, 0x47);
@@ -127,7 +127,7 @@ fn back_hop<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Octet de l'animation (`+0x44`) lu par les scripts.
+/// Animation byte (`+0x44`) read by the scripts.
 const FRAME_KIND: u32 = 0x44;
 
 // --- +6 = 2 : charge ----------------------------------------------------------------------------
@@ -187,18 +187,18 @@ fn breath_step<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// Le joueur `a2` est-il utilisable (0x9059e) : place occupée et `+0x182` nul.
+/// Is player `a2` usable (0x9059e): slot occupied and `+0x182` zero.
 fn usable<R: Bench>(x: &mut Cx<'_, R>, a2: Obj) -> bool {
     a2.u8(x.b, 0) != 0 && a2.u8(x.b, 0x182) == 0
 }
 
-/// 0x90458 : garde la cible actuelle tant que le minuteur (octet `+0xa6`) tourne, sinon en tire une autre.
+/// 0x90458: keeps the current target as long as the timer (byte `+0xa6`) runs, otherwise draws another.
 fn aim_choice<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return;
     }
     if sub8(x, TIMER, 1).gt() {
-        // 0x90596 : la cible (+0x50) si elle est utilisable
+        // 0x90596: the target (+0x50) if usable
         let t = x.u16(f::TARGET);
         if (t as i16) < 0 {
             let target = x.linked(f::TARGET);
@@ -215,16 +215,16 @@ fn aim_choice<R: Bench>(x: &mut Cx<'_, R>) {
         0x904aa => nearest(x, false),
         0x904ee => nearest(x, true),
         0x90524 => in_random_order(x),
-        t => unreachable!("boss 19 : choix de cible {t:x}"),
+        t => unreachable!("boss 19: target choice {t:x}"),
     };
     if let Some(p) = found {
         aim(x, p);
     }
 }
 
-/// 0x904aa et 0x904ee : le joueur au plus petit score. Le score est `|x| + |y|` (0x904aa) ou `+0x60` du dragon
-/// (0x904ee) ; le meilleur part de -1, donc presque jamais atteint. L'original détruit son compteur de boucle
-/// (`D0`) par l'appel d'usage : la boucle reprend le résultat de ce test.
+/// 0x904aa and 0x904ee: the player with the lowest score. The score is `|x| + |y|` (0x904aa) or the dragon's `+0x60`
+/// (0x904ee); the best starts at -1, so it is almost never reached. The original destroys its loop counter
+/// (`D0`) through the usual call: the loop picks up the result of this test.
 fn nearest<R: Bench>(x: &mut Cx<'_, R>, by_own: bool) -> Option<Obj> {
     let mut best: i16 = -1;
     let mut chosen = None;
@@ -261,14 +261,14 @@ trait AbsKeep {
 }
 
 impl AbsKeep for i16 {
-    /// `neg.w` si négatif (−0x8000 reste négatif).
+    /// `neg.w` if negative (−0x8000 stays negative).
     fn wrapping_abs_keep(self) -> i16 {
         if self < 0 { self.wrapping_neg() } else { self }
     }
 }
 
-/// 0x90524 : parcourt les joueurs dans un ordre tiré au sort (table de rotations) jusqu'à un joueur utilisable.
-/// Même compteur de boucle détruit que `nearest`.
+/// 0x90524: walks through the players in a randomly drawn order (rotation table) until a usable player is found.
+/// Same destroyed loop counter as `nearest`.
 fn in_random_order<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     let mut order = PLAYER_ORDERS + (random(x) & 0xc);
     let mut counter: u16;
@@ -288,7 +288,7 @@ fn in_random_order<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     }
 }
 
-/// 0x90576 : marche vers le joueur `p` en visant 0xc0 pixels devant lui.
+/// 0x90576: walks toward player `p`, aiming 0xc0 pixels in front of them.
 fn aim<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
     let mut d1: i16 = 0xc0;
     if x.u8(f::FLIP) != 0 {
@@ -300,7 +300,7 @@ fn aim<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
     x.move_by_table_xy();
 }
 
-// --- +6 = 6 : saut périlleux en arrière ---------------------------------------------------------------------
+// --- +6 = 6: backward somersault ---------------------------------------------------------------------
 
 fn backflip<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(FRAME_KIND, 0x49);
@@ -334,7 +334,7 @@ fn backflip<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 8 : saut en avant puis bond -----------------------------------------------------------------------
+// --- +6 = 8: forward jump then leap -----------------------------------------------------------------------
 
 fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(FRAME_KIND, 0x49);
@@ -431,7 +431,7 @@ fn big_jump<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(0x7, 2);
-            // retombe de l'autre côté de l'écran
+            // lands on the other side of the screen
             let mut d0 = var::SCROLL_X.get(x.b);
             if x.u8(0xa) == 0 {
                 d0 = var::CAMERA_ALT_X.get(x.b);

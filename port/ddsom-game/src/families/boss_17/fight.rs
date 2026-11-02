@@ -1,11 +1,11 @@
-//! Boss 17, groupe `+5` = 2 : le combat. Le boss attend, se retourne, marche vers un joueur et, selon la
-//! distance, choisit une attaque (`decide`) ; ou fonce en ligne droite.
+//! Boss 17, group `+5` = 2: the combat. The boss waits, turns around, walks toward a player and, depending on the
+//! distance, chooses an attack (`decide`); or rushes in a straight line.
 //!
-//! | `+6` | Rôle |
+//! | `+6` | Role |
 //! |---|---|
-//! | 0 | debout, attend (animation 0) |
-//! | 2 | demi-tour |
-//! | 4, 6 | marche vers un joueur (4 : pas rapides, 6 : lents) |
+//! | 0 | standing, waits (animation 0) |
+//! | 2 | about-face |
+//! | 4, 6 | walk toward a player (4: fast steps, 6: slow) |
 //! | 8, 10 | charge |
 
 use crate::families::cx::Bench;
@@ -14,8 +14,8 @@ use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Jeux d'animations de marche, choisis par la marque `+0x33` (0x103e0) : le premier quand le boss ne regarde pas
-/// dans le sens où il avance, le second sinon.
+/// Walk animation sets, chosen by the mark `+0x33` (0x103e0): the first when the boss is not facing the
+/// direction it is moving in, the second otherwise.
 const WALK_SIDEWAYS: u32 = 0x180a46;
 const WALK_FORWARD: u32 = 0x180aea;
 
@@ -34,23 +34,23 @@ fn players_alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
-/// Le boss doit-il se retourner vers sa cible (0x1050c, Z levé = non) ?
+/// Must the boss turn around toward its target (0x1050c, Z set = no)?
 fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
-/// Le boss regarde-t-il dans le sens où il avance (0x10560, Z levé = oui) ?
+/// Is the boss facing the direction it is moving in (0x10560, Z set = yes)?
 fn facing_forward<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::moving_forward(x)
 }
 
-/// Animation de marche d'après le sens (2 ou 3).
+/// Walk animation according to the direction (2 or 3).
 fn walk_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let n = if facing_forward(x) { 2 } else { 3 };
     body(x, n);
 }
 
-/// Animation de marche choisie par la marque `+0x33` dans le jeu du sens de marche.
+/// Walk animation chosen by the mark `+0x33` in the walk direction's set.
 fn walk_select<R: Bench>(x: &mut Cx<'_, R>) {
     let set = if facing_forward(x) { WALK_FORWARD } else { WALK_SIDEWAYS };
     lib::switch_keeping_time(x, set);
@@ -108,7 +108,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 4 et 6 : marche -----------------------------------------------------------------------
+// --- +6 = 4 and 6: walk -----------------------------------------------------------------------
 
 fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
     if !players_alive(x) {
@@ -143,8 +143,8 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
     }
 }
 
-/// 0x95ff8 : un pas de marche de plus ; à la fin des pas, la marche s'arrête (`chase_b`) ; tant qu'une
-/// attaque est possible, le boss la déclenche.
+/// 0x95ff8: one more walk step; at the end of the steps, the walk stops (`chase_b`); as long as an attack is
+/// possible, the boss triggers it.
 fn keep_walking<R: Bench>(x: &mut Cx<'_, R>) {
     if sub8(x, WALK_DELAY, 1).mi() {
         if sub8(x, WALK_STEPS, 1).le() {
@@ -179,7 +179,7 @@ fn keep_walking<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-// --- +6 = 8 et 10 : charge ----------------------------------------------------------------------
+// --- +6 = 8 and 10: charge ----------------------------------------------------------------------
 
 fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {

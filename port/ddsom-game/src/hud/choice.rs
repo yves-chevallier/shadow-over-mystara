@@ -1,5 +1,5 @@
-//! Dessin du choix du personnage et du nom du joueur : lettres de sélection, noms, objets du classement,
-//! portrait du personnage choisi.
+//! Drawing of the character choice and the player name: selection letters, names, ranking items,
+//! portrait of the chosen character.
 
 use cps2::Cps2Bus;
 
@@ -10,8 +10,8 @@ use super::layer::{columns, Brush, COLUMN, EMPTY};
 use super::{panel, player, v8, var, Slot};
 use crate::mem::{prog16, prog32, prog8, rd16, rd32, rd8, wr32, A5};
 
-/// L'octet `+0x15d` du joueur : famille de la sélection (2 : aucune) ; l'entrée de sa table de lettres dit
-/// si le personnage a une image propre (octet nul : attribut 0xc).
+/// Byte `+0x15d` of the player: selection family (2: none); its letter-table entry says
+/// whether the character has its own image (zero byte: attribute 0xc).
 fn selection_row(b: &mut Cps2Bus, s: Slot) -> Option<u8> {
     let kind = s.g8(b, 0x15d);
     if kind == 2 {
@@ -21,12 +21,12 @@ fn selection_row(b: &mut Cps2Bus, s: Slot) -> Option<u8> {
     Some(rd8(b, s.player + 0x150 + entry as u32))
 }
 
-/// Bande de lettres de sélection (16 cases) : tuile et attribut de départ pour la classe `selector`, deux
-/// tables (selon `A5+0x70`) de 8 octets par classe ; une tuile négative vide la bande.
+/// Selection letter strip (16 cells): start tile and attribute for the `selector` class, two
+/// tables (depending on `A5+0x70`) of 8 bytes per class; a negative tile clears the strip.
 const SELECTION_LETTERS: [u32; 2] = [0x16220, 0x164d8];
 
-/// 0x16790 : la bande de lettres de sélection (16 cases en ligne), vide si le joueur n'a pas de sélection
-/// (`+0x15c` nul) ou si l'entrée de la table est négative.
+/// 0x16790: the selection letter strip (16 cells in a row), empty if the player has no selection
+/// (`+0x15c` zero) or if the table entry is negative.
 pub fn selection_letters(b: &mut Cps2Bus, s: Slot, selector: u8) {
     if s.p8(b, panel::DISPLAYED_A) == 0xfe {
         return;
@@ -57,10 +57,10 @@ pub fn selection_letters(b: &mut Cps2Bus, s: Slot, selector: u8) {
     }
 }
 
-/// Tuile et attribut de départ du nom de sélection, par classe (relatifs au PC).
+/// Start tile and attribute of the selection name, per class (PC-relative).
 const SELECTION_NAMES: u32 = 0x160c4;
 
-/// 0x16038 : le nom de la sélection pour la classe `selector` (4 colonnes de 2 cases).
+/// 0x16038: the selection name for the `selector` class (4 columns of 2 cells).
 pub fn selection_name(b: &mut Cps2Bus, s: Slot, selector: u8) {
     let entry = SELECTION_NAMES + 4 * selector as u32;
     let mut tile = prog16(b, entry);
@@ -84,11 +84,11 @@ pub fn selection_name(b: &mut Cps2Bus, s: Slot, selector: u8) {
     }
 }
 
-/// Pointeurs des tables de lettres (une par position du nom), lus relativement au PC.
+/// Pointers to the letter tables (one per name position), read PC-relative.
 const LETTER_TABLES: u32 = 0x16e0a;
 
-/// 0x16dac : les huit lettres du nom du joueur (`player+0x160`), chacune de `width` colonnes de trois cases,
-/// à partir de `at` ; `shift` décale les tuiles (colonnes étroites). Rend la case qui suit les lettres.
+/// 0x16dac: the eight letters of the player name (`player+0x160`), each `width` columns of three cells,
+/// starting at `at`; `shift` offsets the tiles (narrow columns). Returns the cell following the letters.
 fn name_letters(b: &mut Cps2Bus, s: Slot, at: u32, width: u32, shift: u16) -> u32 {
     let (first, second) = (s.g32(b, 0x160), s.g32(b, 0x164));
     s.set_p32(b, panel::SHOWN_NAME, first);
@@ -99,7 +99,7 @@ fn name_letters(b: &mut Cps2Bus, s: Slot, at: u32, width: u32, shift: u16) -> u3
         let letter = s.g8(brush.b, 0x160 + position);
         let entry = (letter.wrapping_add(1) as u16).wrapping_mul(4) as u32;
         let table = prog32(brush.b, LETTER_TABLES + 4 * position);
-        // une lettre vide (0xff) prend la palette du joueur
+        // an empty letter (0xff) takes the player's palette
         let attr_base = if entry == 0 { number } else { 0 };
         let mut tile = rd16(brush.b, table + entry).wrapping_add(shift);
         let attr = attr_base.wrapping_add(rd16(brush.b, table + entry + 2));
@@ -114,7 +114,7 @@ fn name_letters(b: &mut Cps2Bus, s: Slot, at: u32, width: u32, shift: u16) -> u3
     brush.at
 }
 
-/// 0x16d1a : le nom du joueur dans les dispositions à plusieurs joueurs (pas pendant la phase 4).
+/// 0x16d1a: the player name in multi-player layouts (not during phase 4).
 pub fn names(b: &mut Cps2Bus, s: Slot) {
     if v8(b, var::PHASE) == 4 || v8(b, var::LAYOUT) == 0 {
         return;
@@ -127,7 +127,7 @@ pub fn names(b: &mut Cps2Bus, s: Slot) {
     }
 }
 
-/// 0x16d5a : le nom du joueur dans la zone de sélection ; les joueurs 3 et 4 effacent d'abord leurs lignes.
+/// 0x16d5a: the player name in the selection area; players 3 and 4 clear their rows first.
 pub fn names_alt(b: &mut Cps2Bus, s: Slot) {
     let mut at = zone_brush(b, s, zone::NAMES_ALT).at;
     let frozen = rd8(b, var::FROZEN) != 0;
@@ -150,12 +150,12 @@ pub fn names_alt(b: &mut Cps2Bus, s: Slot) {
     name_letters(b, s, at, 3, 0);
 }
 
-/// Tuiles des objets du classement (2x2 cases par code) et des codes spéciaux, tables du code.
+/// Tiles of the ranking items (2x2 cells per code) and of the special codes, code tables.
 const RANK_TILES: u32 = 0x169a4;
 const RANK_SPECIAL_TILES: u32 = 0x16aa8;
 const RANK_BLANK: u16 = 0x94c;
 
-/// 0x16910 : les six objets du joueur dans la zone du classement (2x2 cases chacun).
+/// 0x16910: the player's six items in the ranking area (2x2 cells each).
 pub fn rank_items(b: &mut Cps2Bus, s: Slot) {
     let attr = 0x13 + s.index(b) as u16;
     let codes: Vec<u8> = (0..6).map(|k| s.g8(b, player::ITEMS + k)).collect();
@@ -185,12 +185,12 @@ pub fn rank_items(b: &mut Cps2Bus, s: Slot) {
     }
 }
 
-/// Pointeurs des images de portraits de choix (par personnage et variante), une série par langue.
+/// Pointers to the choice portrait images (per character and variant), one series per language.
 const CHOICE_PORTRAITS: [u32; 2] = [0x16c26, 0x16c56];
-/// Classe de chaque personnage (octet, lu relativement au PC).
+/// Class of each character (byte, read PC-relative).
 const CLASS_OF_CHARACTER: u32 = 0x16c14;
 
-/// 0x16b8a : le personnage `character` choisi : son portrait, ses palettes, son nom et son visage.
+/// 0x16b8a: the chosen character `character`: its portrait, palettes, name and face.
 pub fn show_character(b: &mut Cps2Bus, s: Slot, character: u8) {
     s.set_g8(b, player::CHARACTER, character);
     let mut offset = ((character & !1) as u32) * 2;

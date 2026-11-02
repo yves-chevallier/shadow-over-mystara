@@ -1,19 +1,21 @@
-//! Fondus de palette (V3) : un pas par cession, jusqu'à la fin du compte (voir `docs/video.md`, « Fondus »).
+//! Palette fades (V3): one step per cession, until the end of the count (see `docs/video.md`, « Fondus »).
 //!
-//! Deux familles, chacune sous deux formes : une *tâche* (créée par `0x9b6`, elle se termine par `0x9f8` à la
-//! fin du fondu) et un *sous-programme* (appelé par `jsr` depuis une séquence, il revient quand le fondu est fini ;
-//! l'appelant attend donc la fin). Les pas cèdent la main par `jsr 0xa40` (D0.w = délai `A5+0x490`) ; le pas
-//! suivant est une étape de la machine à états ([`Step`]), qui porte le fondu en cours.
+//! Two families, each in two forms: a *task* (created by `0x9b6`, it ends with `0x9f8` at the
+//! end of the fade) and a *subroutine* (called by `jsr` from a sequence, it returns when the fade is finished;
+//! the caller therefore waits for the end). The steps cede control through `jsr 0xa40` (D0.w = delay `A5+0x490`); the
+//! next
+//! step is a stage of the state machine ([`Step`]), which carries the fade in progress.
 //!
-//! * **Luminosité** : chaque pas ajoute ±0x1000 aux couleurs des pages cochées (`palette::brightness_step`).
-//!   L'état est à `A5+0x48e` (pages, pas restants, délai, adresses des quatre pages) ; le sens est un champ de
-//!   l'étape (l'original le garde dans D1, que la cession sauve et rend, et que le contexte garde aussi).
-//! * **Par composante** : chaque pas rapproche d'un cran chaque composante (`palette::component_step`) ;
-//!   16 pas, `A5-0x65ec` levé pendant le fondu, registres sauvés à l'entrée (`movem`, gardés dans l'étape) et
-//!   rendus à la fin.
+//! * **Brightness**: each step adds ±0x1000 to the colors of the checked pages (`palette::brightness_step`).
+//! The state is at `A5+0x48e` (pages, remaining steps, delay, addresses of the four pages); the direction is a field
+//! of
+//!   the stage (the original keeps it in D1, which the cession saves and restores, and which the context also keeps).
+//! * **Per component**: each step brings each component one notch closer (`palette::component_step`);
+//!   16 steps, `A5-0x65ec` raised during the fade, registers saved on entry (`movem`, kept in the stage) and
+//!   restored at the end.
 //!
-//! Les sous-programmes sont des fonctions ([`rise`], [`descent`], [`descent_d0`], [`to_white`],
-//! [`to_colours`], [`to_palettes`]) que les pas appellent directement (les portes SET aussi :
+//! The subroutines are functions ([`rise`], [`descent`], [`descent_d0`], [`to_white`],
+//! [`to_colours`], [`to_palettes`]) that the steps call directly (the SET doors too:
 //! `families::set::exit_fading`).
 
 use crate::mem::{rd16, rd8, set_low_word, wr32, wr8, A5};
@@ -22,56 +24,57 @@ use crate::palette::{brightness_step, component_step, white_out, Target};
 use crate::scene::Ctx;
 use crate::Native;
 
-/// État du fondu de luminosité (`A4` dans l'original).
+/// State of the brightness fade (`A4` in the original).
 mod state {
     use crate::mem::A5;
     pub const BASE: u32 = A5 + 0x48e;
-    /// Pages concernées (bit k : page k), remis à zéro à la fin du fondu.
+    /// Pages concerned (bit k: page k), reset to zero at the end of the fade.
     pub const PAGES: u32 = BASE;
-    /// Pas restants.
+    /// Remaining steps.
     pub const STEP: u32 = BASE + 1;
-    /// Délai entre deux pas (mot, images).
+    /// Delay between two steps (word, frames).
     pub const DELAY: u32 = BASE + 2;
-    /// Adresses des quatre pages (longs).
+    /// Addresses of the four pages (longs).
     pub const ADDRESSES: u32 = BASE + 4;
 }
 
-/// « Fondu par composante en cours » (octet, A5 - 0x65ec).
+/// "Per-component fade in progress" (byte, A5 - 0x65ec).
 const CURRENT_COMPONENT: u32 = A5 - 0x65ec;
 
-/// Pas de luminosité : monter (vers la pleine luminosité) ou descendre.
+/// Brightness step: rise (toward full brightness) or descend.
 const RISES: u32 = 0x1000;
 const DESCEND: u32 = 0xffff_f000;
-/// Nombre de pas d'un fondu complet.
+/// Number of steps of a complete fade.
 const STEP_FULL: u8 = 0x10;
 
-/// Pages des fondus : les quatre pages, ou la fin de la page 0 pour le fondu partiel.
+/// Pages of the fades: the four pages, or the end of page 0 for the partial fade.
 const PAGES: [u32; 4] = [0x91c000, 0x91c400, 0x91c800, 0x91cc00];
 const PARTIAL_START: u32 = 0x91c3a0;
 
-/// Étapes d'un fondu : le début d'une tâche de fondu (d'après son entrée), puis le pas suivant après chaque cession.
+/// Stages of a fade: the start of a fade task (from its entry), then the next step after each cession.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Step {
-    /// Début d'une tâche de fondu de luminosité ; `step` : nombre de pas imposé (sinon celui de l'état).
+    /// Start of a brightness fade task; `step`: imposed number of steps (otherwise that of the state).
     BrightnessTask { fading: Brightness, step: Option<u8> },
-    /// Début d'une tâche de fondu par composante (`whiten` : la tâche `0x1ced4` blanchit d'abord les pages).
+    /// Start of a per-component fade task (`whiten`: task `0x1ced4` first whitens the pages).
     ComponentTask { fading: Component, whiten: bool },
-    /// Pas suivant d'un fondu de luminosité ; `a0` : A0 de l'appelant du sous-programme, que le fondu ne touche pas
-    /// (l'original le garde dans ses registres, que la cession sauve et rend) et que l'appelant relit au retour (bloc
-    /// de l'état partagé des séquences de sortie de scène, objet d'une porte SET...).
+    /// Next step of a brightness fade; `a0`: A0 of the subroutine's caller, which the fade does not touch
+    /// (the original keeps it in its registers, which the cession saves and restores) and which the caller re-reads
+    /// on return (block
+    /// of the shared state of the scene-exit sequences, object of a SET door...).
     Brightness { fading: Brightness, a0: u32 },
-    /// Pas suivant d'un fondu par composante ; `regs` : D0-D7/A0-A6 sauvés à l'entrée.
+    /// Next step of a per-component fade; `regs`: D0-D7/A0-A6 saved on entry.
     Component { fading: Component, regs: Regs },
 }
 
-/// Registres sauvés par `movem.l D0-D7/A0-A6,-(SP)`.
+/// Registers saved by `movem.l D0-D7/A0-A6,-(SP)`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Regs {
     d: [u32; 8],
     a: [u32; 7],
 }
 
-/// Les tâches de fondu, par entrée.
+/// The fade tasks, by entry.
 const TASKS: [(u32, Step); 10] = [
     (0x14ba, Step::BrightnessTask { fading: task(RISES, false), step: Some(STEP_FULL) }),
     (0x14c8, Step::BrightnessTask { fading: task(RISES, false), step: None }),
@@ -85,17 +88,17 @@ const TASKS: [(u32, Step); 10] = [
     (0x1cf12, Step::ComponentTask { fading: COMPONENTS[5].1, whiten: false }),
 ];
 
-/// Première étape de la tâche de fondu qui commence à `entry`.
+/// First stage of the fade task that starts at `entry`.
 pub fn task_from_entry(entry: u32) -> Option<Step> {
     TASKS.into_iter().find(|&(e, _)| e == entry).map(|(_, step)| step)
 }
 
 impl Step {
-    /// Adresse que l'original reprend à cette étape (entrée de la tâche, ou retour de la cession du pas).
+    /// Address that the original resumes at this stage (task entry, or return from the step's cession).
     pub fn address(self) -> u32 {
         match self {
             Step::BrightnessTask { .. } | Step::ComponentTask { .. } => {
-                TASKS.into_iter().find(|&(_, e)| e == self).expect("tâche de fondu").0
+                TASKS.into_iter().find(|&(_, e)| e == self).expect("fade task").0
             }
             Step::Brightness { fading, .. } => fading.resume(),
             Step::Component { fading, .. } => fading.resume,
@@ -115,7 +118,7 @@ impl Step {
     }
 }
 
-/// Cède `delay` images (D0.w, le mot haut de D0 est gardé) ; la suite est l'étape `resume`.
+/// Cedes `delay` frames (D0.w, the high word of D0 is kept); what follows is stage `resume`.
 fn wait(x: &mut Ctx, delay: u16, resume: Step) -> Flow {
     set_low_word(&mut x.c.d[0], delay);
     crate::kernel::wait(x.c, x.b, resume);
@@ -123,9 +126,9 @@ fn wait(x: &mut Ctx, delay: u16, resume: Step) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Luminosité
+// Brightness
 
-/// Un fondu de luminosité : sens (D1), forme (sous-programme ou tâche), pages (complètes ou partielle).
+/// A brightness fade: direction (D1), form (subroutine or task), pages (complete or partial).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Brightness {
     delta: u32,
@@ -134,7 +137,7 @@ pub struct Brightness {
 }
 
 impl Brightness {
-    /// Adresse qui suit la cession du pas.
+    /// Address following the step's cession.
     fn resume(self) -> u32 {
         match (self.task, self.partial) {
             (false, _) => 0x14b4,
@@ -143,8 +146,8 @@ impl Brightness {
         }
     }
 
-    /// Début d'une tâche : `step` = nombre de pas imposé (sinon celui de l'état). Elle ne démarre que si les
-    /// pages, le délai et le nombre de pas sont non nuls.
+    /// Start of a task: `step` = imposed number of steps (otherwise that of the state). It only starts if the
+    /// pages, the delay and the number of steps are non-zero.
     fn task_start(self, x: &mut Ctx, step: Option<u8>) -> Flow {
         x.c.d[1] = self.delta;
         if let Some(n) = step {
@@ -157,7 +160,7 @@ impl Brightness {
         self.first_step(x)
     }
 
-    /// Début d'un sous-programme : D0.b = nombre de pas ; il ne démarre que si des pages sont cochées.
+    /// Start of a subroutine: D0.b = number of steps; it only starts if some pages are checked.
     fn subroutine_start(self, x: &mut Ctx) -> Flow {
         x.c.d[1] = self.delta;
         x.c.a[4] = state::BASE;
@@ -176,7 +179,7 @@ impl Brightness {
         self.step(x)
     }
 
-    /// Un pas, puis la cession jusqu'au suivant, ou la fin.
+    /// One step, then the cession until the next one, or the end.
     fn step(self, x: &mut Ctx) -> Flow {
         brightness_step(x.b, self.delta, self.partial);
         let remainder = rd8(x.b, state::STEP).wrapping_sub(1);
@@ -189,7 +192,7 @@ impl Brightness {
         wait(x, delay, Step::Brightness { fading: self, a0 })
     }
 
-    /// Fin : plus de pages ; le sous-programme revient à son appelant, la tâche se termine.
+    /// End: no more pages; the subroutine returns to its caller, the task ends.
     fn end(self, x: &mut Ctx) -> Flow {
         wr8(x.b, state::PAGES, 0);
         if self.task {
@@ -207,34 +210,34 @@ const fn task(delta: u32, partial: bool) -> Brightness {
     Brightness { delta, task: true, partial }
 }
 
-/// Fondu complet d'un sous-programme : D0.b = 16 pas.
+/// Complete fade of a subroutine: D0.b = 16 steps.
 fn full(x: &mut Ctx, delta: u32) -> Flow {
     crate::mem::set_low_byte(&mut x.c.d[0], STEP_FULL);
     subroutine(delta).subroutine_start(x)
 }
 
-/// `0x144c` : fondu complet depuis le noir (sous-programme : la suite de l'appelant attend la fin).
+/// `0x144c`: complete fade from black (subroutine: the caller's continuation waits for the end).
 pub fn rise(x: &mut Ctx) -> Flow {
     full(x, RISES)
 }
 
-/// `0x1460` : fondu complet vers le noir.
+/// `0x1460`: complete fade to black.
 pub fn descent(x: &mut Ctx) -> Flow {
     full(x, DESCEND)
 }
 
-/// `0x146c` : fondu vers le noir de D0.b pas.
+/// `0x146c`: fade to black of D0.b steps.
 pub fn descent_d0(x: &mut Ctx) -> Flow {
     subroutine(DESCEND).subroutine_start(x)
 }
 
-// tâches : 0x14ba / 0x14d0 fondu complet, 0x14c8 / 0x14de nombre de pas de l'état, 0x1536 / 0x153e partiels (voir
+// tasks: 0x14ba / 0x14d0 complete fade, 0x14c8 / 0x14de number of steps of the state, 0x1536 / 0x153e partial (see
 // `TASKS`)
 
 // ---------------------------------------------------------------------------------------------
-// Par composante
+// Per component
 
-/// Un fondu par composante : cible, forme et adresse qui suit la cession du pas.
+/// A per-component fade: target, form and address following the step's cession.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Component {
     target: Target,
@@ -242,7 +245,7 @@ pub struct Component {
     resume: u32,
 }
 
-/// Les six fondus par composante, par adresse d'entrée.
+/// The six per-component fades, by entry address.
 const COMPONENTS: [(u32, Component); 6] = [
     (0x1ccc2, Component { target: Target::White, task: false, resume: 0x1cce8 }),
     (0x1ce30, Component { target: Target::Colours, task: false, resume: 0x1ce54 }),
@@ -257,8 +260,8 @@ fn component(entry: u32) -> Component {
 }
 
 impl Component {
-    /// Entrée : registres sauvés, 16 pas (la tâche `0x1ced4` blanchit d'abord les pages, son autre entrée
-    /// `0x1cf12` non : `whiten`).
+    /// Entry: registers saved, 16 steps (task `0x1ced4` first whitens the pages, its other entry
+    /// `0x1cf12` does not: `whiten`).
     fn start(self, x: &mut Ctx, whiten: bool) -> Flow {
         let mut regs = Regs { d: x.c.d, a: [0; 7] };
         regs.a.copy_from_slice(&x.c.a[..7]);
@@ -290,17 +293,17 @@ impl Component {
     }
 }
 
-/// `0x1ccc2` : fondu par composante vers le blanc (sous-programme).
+/// `0x1ccc2`: per-component fade to white (subroutine).
 pub fn to_white(x: &mut Ctx) -> Flow {
     component(0x1ccc2).start(x, false)
 }
 
-/// `0x1ce30` : fondu par composante vers les couleurs.
+/// `0x1ce30`: per-component fade to the colors.
 pub fn to_colours(x: &mut Ctx) -> Flow {
     component(0x1ce30).start(x, false)
 }
 
-/// `0x1ce9e` : fondu par composante vers les palettes.
+/// `0x1ce9e`: per-component fade to the palettes.
 pub fn to_palettes(x: &mut Ctx) -> Flow {
     component(0x1ce9e).start(x, false)
 }

@@ -1,5 +1,5 @@
-//! Effets des joueurs (PEFF), quatorzième série : type 41 (le gardien invoqué par la magie du mur, créé
-//! par `player/spawn.rs::wall_target`). Voir `docs/families/player.md`.
+//! Player effects (PEFF), fourteenth series: type 41 (the guardian summoned by the wall magic, created by
+//! `player/spawn.rs::wall_target`). See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -11,11 +11,11 @@ use crate::objects::Current;
 const ANIMS: u32 = 0x1bc9b6;
 const SPEEDS: u32 = 0x1c7836;
 const FRAMES: u32 = 0x11bffa;
-/// Palette copiée dans la RAM graphique à la création (8 longs, lus en clair).
+/// Palette copied into the graphics RAM at creation (8 longs, read in the clear).
 const PALETTE_SOURCE: u32 = 0x5036a;
 const PALETTE_WINDOW: u32 = 0x91c180;
 const OFFSETS: u32 = 0x5043a;
-/// Boîtes : pour s'engager, pour blesser.
+/// Boxes: to engage, to hurt.
 const BOX_ENGAGE: u32 = 0x50b8a;
 const BOX_STRIKE: u32 = 0x50b92;
 /// Compteur de gardiens en vie (`A5-0x5fbe`, adresse absolue).
@@ -25,8 +25,8 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Le gardien : sort de terre (sous-état 0), cherche l'ennemi le plus proche (2), erre faute de cible (4),
-/// bondit sur lui (6), puis disparaît en clignotant (état 4). Durée de vie `+0x42` (0x4b0 images).
+/// The guardian: comes out of the ground (substate 0), looks for the nearest enemy (2), wanders for lack of a target
+/// (4), leaps on it (6), then disappears blinking (state 4). Lifetime `+0x42` (0x4b0 frames).
 mod guardian {
     use super::*;
 
@@ -98,7 +98,7 @@ mod guardian {
         if owner.u8(x.b, 0x4) as i8 >= 4 || x.a5_u8(a5::PAUSED) != 0 || x.a5_u8(0x35) == 0 {
             return die(x);
         }
-        // le saut vers l'état 4 revient ici (le sous-état a été appelé par `jsr`) : la fin s'exécute dans tous les cas
+        // the jump to state 4 comes back here (the substate was called by `jsr`): the end runs in every case
         match x.u8(0x5) {
             0 => start(x),
             2 => seek(x),
@@ -106,13 +106,13 @@ mod guardian {
             _ => lunge(x),
         }
         x.keep_in_zone();
-        // Glitch d'origine : les registres de la collision (D2...) passent aux gestionnaires suivants ; l'éclat de gel
-        // (0x4bda8) tire son rebond dans le D2 hérité (`sorts_combattant`, `sorts_voleur`)
+        // Original glitch: the collision registers (D2...) pass on to the following handlers; the freeze shard
+        // (0x4bda8) draws its bounce in the inherited D2 (`sorts_combattant`, `sorts_voleur`)
         x.push_terrain();
         x.reinsert();
     }
 
-    /// Fin de vie : état 4, sous-états nuls, puis la sortie (`bra 0x50794`).
+    /// End of life: state 4, substates zero, then the exit (`bra 0x50794`).
     fn leave<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
@@ -120,7 +120,7 @@ mod guardian {
         leaving(x);
     }
 
-    // --- sous-état 0 : sortie de terre -------------------------------------------------------------------
+    // --- substate 0: comes out of the ground -------------------------------------------------------------------
 
     fn start<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x6) {
@@ -161,7 +161,7 @@ mod guardian {
         }
     }
 
-    /// Poussière de l'arrivée (`0xb10c8`) : effet EFFCT 7 à une hauteur légèrement plus haute.
+    /// Dust of the arrival (`0xb10c8`): EFFCT 7 effect at a slightly higher height.
     fn dust<R: Bench>(x: &mut Cx<'_, R>) {
         let Some(o) = crate::effects_aids::shock(x.b, x.o, 7, 0x200, 0, 0xffff) else { return };
         o.set_u8(x.b, 0x43, 1);
@@ -169,7 +169,7 @@ mod guardian {
         o.set_u16(x.b, 0xc, z);
     }
 
-    // --- sous-état 2 : se dirige vers sa cible ----------------------------------------------------------------
+    // --- substate 2: heads for its target ----------------------------------------------------------------
 
     fn seek<R: Bench>(x: &mut Cx<'_, R>) {
         x.add16(0x42, 0xffff);
@@ -194,8 +194,8 @@ mod guardian {
         x.add8(0x46, 0xff);
         if x.u8(0x46) == 0 {
             x.set8(0x46, 2);
-            // A1 : la cible, ou le dernier objet examiné par la recherche (glitch d'origine : pas forcément la
-            // nouvelle cible)
+            // A1: the target, or the last object examined by the search (original glitch: not necessarily the new
+            // target)
             let mut toward = x.linked(0x5c);
             let mut lost = false;
             if toward.u16(x.b, 0x62) == 0 {
@@ -219,7 +219,7 @@ mod guardian {
         engage_test(x);
     }
 
-    /// Demi-tour en cours : l'animation 2 puis retour à l'image 3 avec le regard inversé.
+    /// Turn-around in progress: animation 2 then back to frame 3 with the facing inverted.
     fn flip_turn<R: Bench>(x: &mut Cx<'_, R>) {
         if !x.anim_step() {
             return;
@@ -230,7 +230,7 @@ mod guardian {
         x.anim(ANIMS, 3);
     }
 
-    // --- sous-état 4 : errance sans cible ---------------------------------------------------------------------
+    // --- substate 4: wandering without a target ---------------------------------------------------------------------
 
     fn wander<R: Bench>(x: &mut Cx<'_, R>) {
         x.add16(0x42, 0xffff);
@@ -258,7 +258,7 @@ mod guardian {
         }
     }
 
-    // --- sous-état 6 : bond sur la cible -----------------------------------------------------------------------
+    // --- substate 6: leap onto the target -----------------------------------------------------------------------
 
     fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
         x.add16(0x42, 0xffff);
@@ -315,7 +315,7 @@ mod guardian {
         }
     }
 
-    // --- état 4 : sortie ------------------------------------------------------------------------------------
+    // --- state 4: exit ------------------------------------------------------------------------------------
 
     fn leaving<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
@@ -351,7 +351,7 @@ mod guardian {
         x.reinsert();
     }
 
-    /// `0x507bc` : poussière de la disparition pendant 0x1e images, puis le gardien s'enfonce.
+    /// `0x507bc`: dust of the disappearance for 0x1e frames, then the guardian sinks.
     fn fade_dust<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4b, 0xff);
         if x.u8(0x4b) == 0 {
@@ -363,9 +363,9 @@ mod guardian {
         }
     }
 
-    // --- recherches et tests ---------------------------------------------------------------------------------------
+    // --- searches and tests ---------------------------------------------------------------------------------------
 
-    /// `0x5085a` : l'ennemi (puis le boss) le plus proche ; `+0x5c` reçoit son adresse.
+    /// `0x5085a`: the nearest enemy (then boss); `+0x5c` receives its address.
     fn find_target<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let mut best = u32::MAX;
         let mut found = 0u16;
@@ -402,7 +402,8 @@ mod guardian {
         last
     }
 
-    /// `0x508fc` : tourne d'un cran vers `toward` (l'objet que l'appelant laisse dans A1) ; si le regard doit changer, lance le demi-tour.
+    /// `0x508fc`: turns one notch toward `toward` (the object the caller leaves in A1); if the facing must change,
+    /// starts the turn-around.
     fn turn<R: Bench>(x: &mut Cx<'_, R>, toward: Obj) {
         let diff = crate::aids::direction_to(x.b, x.o, toward).wrapping_sub(x.u8(0x2d)) & 0x1f;
         let step: u8 = if diff > 0x10 { 0xff } else { 1 };
@@ -445,7 +446,7 @@ mod guardian {
         table.wrapping_add((m.u8(x.b, 0x38) as u32) << 3)
     }
 
-    /// `0x5094a` : le gardien s'engage quand un monstre touche sa boîte (profondeur et largeur).
+    /// `0x5094a`: the guardian engages when a monster touches its box (depth and width).
     fn engage_test<R: Bench>(x: &mut Cx<'_, R>) {
         for (first, count) in [(0x299eu32, 22u32), (0x3a1e, 3)] {
             let mut a1 = 0xff8000 + first;
@@ -466,7 +467,7 @@ mod guardian {
         }
     }
 
-    /// `0x509ae` : pendant le bond, blesse tous les monstres que touche la boîte du gardien.
+    /// `0x509ae`: during the leap, hurts all the monsters that the guardian's box touches.
     fn strike<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
         for (first, count) in [(0x299eu32, 22u32), (0x3a1e, 3)] {

@@ -159,14 +159,14 @@ Démarrage d'un script :
 
 - `anim_start` (0x1a3c) : A4 = adresse de l'entrée ;
 - `anim_start_indexed` (0x1a32) : A4 = **jeu d'animations**, D0.w = numéro. Un jeu est un tableau de mots
-  (décalages signés relatifs au début du tableau) : le script numéro n commence à `A4 + mot[n]` ;
+  (décalages signés relatifs au début du tableau) : le script numéro n commence à `A4 + word[n]` ;
 - jeux propres aux personnages (entrées longues) : 0x2c16 (table de pointeurs en 0x2c58, numéro D6 décalé
   de 0x40 quand l'octet `+0x68` est nul), 0x2c88 (table 0x2cc0), 0x2cf0 (table 0x2d28, non exercé). La
   table de pointeurs est indexée par `VARIANT` × 4 et lue dans l'espace programme (relatif au PC).
 
 ## 6. Vitesses (O1)
 
-Unités : vitesse et accélération en 8.8, position en 16.16. Un déplacement = `(vitesse signée) << 8`.
+Unités : vitesse et accélération en 8.8, position en 16.16. Un déplacement = `(speed signée) << 8`.
 
 - **Balistique** : `v += a ; pos += v << 8`. Routines `obj_move_*` : 0x1d62 (Y puis X), 0x1d78 (X), 0x1d90
   (Y, X, Z), 0x1da6 (X, Z), 0x1dbc (Z), 0x1dd4 (Y, Z), 0x1e02 (Y). Elles s'enchaînent (le code d'un axe

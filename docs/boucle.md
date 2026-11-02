@@ -23,8 +23,8 @@ rend jamais la main par un `rts` : c'est une boucle infinie qui cède une fois p
 
 Les phases ne cèdent donc jamais elles-mêmes : chacune est un pas par image. C'est ce qui permet de
 les réécrire en routines natives (une routine native ne peut pas céder). La boucle principale est elle aussi
-du Rust (`taches/partie.rs`, découpée aux points de cession : `0x1c45a`, `0x1c468`, `0x1c48c`, `0x1c4b0`) ;
-la tâche du gel qui l'accompagne aussi (`taches/gel.rs`, voir `noyau.md`).
+du Rust (`tasks/game.rs`, découpée aux points de cession : `0x1c45a`, `0x1c468`, `0x1c48c`, `0x1c4b0`) ;
+la tâche du gel qui l'accompagne aussi (`tasks/freeze.rs`, voir `noyau.md`).
 
 Rust : `game::FRAME_END` (0x1c4c4).
 
@@ -53,7 +53,7 @@ celle de l'original), donc deux machines surcadencées, ou une native et son ori
 passages en 0x1c4b0 par image ; le suivant est retenu, le reste de l'image est sauté (comme `idle`) et le pas
 s'exécute au début de l'image suivante, après l'IRQ du VBLANK. Huit est la médiane des mesures de l'arcade (5 à 10
 selon le coût du pas). Installé par `ddsom_game::install` (le jeu, qui compte lui-même ses pas :
-`sans68k::pas_de_jeu`, le pas retenu attend au point `kernel::Point::PasRetenu`) et par
+`no68k::game_step`, le pas retenu attend au point `kernel::Point::StepKept`) et par
 `ddsom_game::install_reference` (code d'origine de la validation, `determinisme`, `tasks`, `watch`...), donc
 identique des deux côtés ; `DDSOM_ORIGINE=1` (code d'origine à la vitesse de l'arcade) n'est pas plafonné.
 C'est un écart volontaire avec le code d'origine **surcadencé** (qui ferait 130 pas), pas avec l'arcade. Un pas

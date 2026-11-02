@@ -1,35 +1,35 @@
-//! Interface des joueurs (F3) : panneaux d'état, bannières « INSERT COIN / PUSH START », choix du
-//! personnage et compte à rebours de reprise. Voir `docs/hud.md`.
+//! Player interface (F3): status panels, "INSERT COIN / PUSH START" banners, character
+//! choice and continue countdown. See `docs/hud.md`.
 //!
-//! C'est une tâche permanente (`0x150ac`, créée en fin de phase 0 de la partie), qui boucle sur
-//! `0x15178` : une fois par image (cession `0xb64`), elle met à jour la couche de caractères
-//! (`0x912000`, voir `layer.rs`) pour chacun des 1 à 4 emplacements de joueur.
+//! It is a permanent task (`0x150ac`, created at the end of phase 0 of the game), which loops on
+//! `0x15178`: once per frame (cession `0xb64`), it updates the character layer
+//! (`0x912000`, see `layer.rs`) for each of the 1 to 4 player slots.
 //!
-//! ## Un tour (`tour`)
+//! ## One turn (`tour`)
 //!
-//! * `A5+0x3c` est le *mode d'affichage* : négatif, la zone des panneaux est effacée (une fois, quand le mode
-//!   change) ; 0, rien n'est dessiné ; 1 à 4, les panneaux sont mis à jour (`slot.rs`). Quand le mode change,
-//!   chaque emplacement redessine ses zones (`mode_change`).
-//! * un emplacement (`Slot`) a trois enregistrements de la RAM de travail : le panneau (`A5+0x30e + 0x50 k`,
-//!   champs dans `panel`), le joueur (`A5+0x5de + 0x200 k`, champs dans `player`) et le compteur de pièces
-//!   (`A5+0x44e + 0x10 k`, voir `credits.rs`). Selon `A5+0x344` (disposition : 4, 3, 2 ou 1 joueurs ; le bit 0
-//!   choisit les colonnes étroites), seuls les premiers emplacements existent.
-//! * `status.rs` : la ligne d'état commune (`0x17814`) et le compte à rebours de fin de partie (`0x175a8`).
+//! * `A5+0x3c` is the *display mode*: negative, the panel area is cleared (once, when the mode
+//!   changes); 0, nothing is drawn; 1 to 4, the panels are updated (`slot.rs`). When the mode changes,
+//!   each slot redraws its zones (`mode_change`).
+//! * a slot (`Slot`) has three work RAM records: the panel (`A5+0x30e + 0x50 k`,
+//!   fields in `panel`), the player (`A5+0x5de + 0x200 k`, fields in `player`) and the coin counter
+//!   (`A5+0x44e + 0x10 k`, see `credits.rs`). Depending on `A5+0x344` (layout: 4, 3, 2 or 1 players; bit 0
+//!   selects the narrow columns), only the first slots exist.
+//! * `status.rs`: the common status line (`0x17814`) and the end-of-game countdown (`0x175a8`).
 //!
-//! ## Machine à états d'un emplacement (`panel::STATE`, pas de 2)
+//! ## State machine of a slot (`panel::STATE`, step of 2)
 //!
-//! | État | Rôle |
+//! | State | Role |
 //! |---|---|
-//! | 0 | initialisation du panneau à partir du joueur (`enter`) |
-//! | 2 | attente : bannière « INSERT COIN » ou « PUSH START » ; départ si un crédit est disponible (`idle`) |
-//! | 4 | joueur dans la partie : mise à jour des jauges et chiffres du panneau (`play`) |
-//! | 6 | choix du personnage, avec compte à rebours (`choose`) |
-//! | 8 | reprise (« continue ») : compte à rebours de 9 à 0 (`resume`) |
-//! | 0xa | fin de la reprise (`resume_end`) |
-//! | 0xc | choix du personnage de la reprise (`resume_choose`) |
+//! | 0 | panel initialization from the player (`enter`) |
+//! | 2 | waiting: "INSERT COIN" or "PUSH START" banner; start if a credit is available (`idle`) |
+//! | 4 | player in the game: update of the panel gauges and digits (`play`) |
+//! | 6 | character choice, with countdown (`choose`) |
+//! | 8 | continue: countdown from 9 to 0 (`resume`) |
+//! | 0xa | end of the continue (`resume_end`) |
+//! | 0xc | character choice of the continue (`resume_choose`) |
 //!
-//! Les routines d'origine non réécrites (comptabilité `0x2e4ec`, sons `0x2e630`/`0x2e696`, musique
-//! `0xe12b8`...) sont appelées par `call`.
+//! The original routines not rewritten (accounting `0x2e4ec`, sounds `0x2e630`/`0x2e696`, music
+//! `0xe12b8`...) are called through `call`.
 
 mod choice;
 mod draw;
@@ -47,72 +47,72 @@ use crate::modes::Flow;
 use crate::scene::Ctx;
 use crate::Native;
 
-/// Variables de la RAM de travail (adresses absolues ou décalages depuis A5).
+/// Work RAM variables (absolute addresses or offsets from A5).
 pub mod var {
-    /// Boutons de départ : état courant et état précédent (un bit par joueur).
+    /// Start buttons: current state and previous state (one bit per player).
     pub const START_NOW: u32 = 0x04;
     pub const START_BEFORE: u32 = 0x0a;
-    /// Entrées par joueur (4 octets) et fronts montants (`+0x0c`, 4 octets).
+    /// Inputs per player (4 bytes) and rising edges (`+0x0c`, 4 bytes).
     pub const INPUT: u32 = 0x00;
     pub const PRESSED: u32 = 0x0c;
-    /// Mode des monnayeurs (0 à 11) : choisit le compteur de pièces d'un emplacement.
+    /// Coin slot mode (0 to 11): selects the coin counter of a slot.
     pub const COIN_MODE: u32 = 0x1d;
-    /// Prix d'une partie en pièces.
+    /// Price of a game in coins.
     pub const PRICE: u32 = 0x1e;
-    /// Partie à deux crédits.
+    /// Two-credit game.
     pub const PRICE_TWO: u32 = 0x457;
-    /// Mode « continue » : les crédits servent à reprendre une partie.
+    /// "Continue" mode: credits are used to resume a game.
     pub const CONTINUE_MODE: u32 = 0x25;
-    /// Reprise (« continue ») autorisée.
+    /// Continue allowed.
     pub const CONTINUE_ALLOWED: u32 = 0x23;
     pub const GAME_ON: u32 = 0x30;
     pub const PHASE: u32 = 0x2c;
     pub const STEP: u32 = 0x2d;
-    /// Mode d'affichage des panneaux (voir le module).
+    /// Display mode of the panels (see the module).
     pub const DISPLAY: u32 = 0x3c;
-    /// Pause : un bit par joueur.
+    /// Pause: one bit per player.
     pub const PAUSE: u32 = 0x4a;
-    /// Octet de réglages (bit 5 : seconde série de textes).
+    /// Settings byte (bit 5: second set of texts).
     pub const SETTINGS: u32 = 0x6d;
-    /// Disposition : nombre d'emplacements = 4 - valeur ; bit 0 : colonnes étroites.
+    /// Layout: number of slots = 4 - value; bit 0: narrow columns.
     pub const LAYOUT: u32 = 0x344;
-    /// Premier enregistrement de panneau, premier joueur, premier compteur de pièces.
+    /// First panel record, first player, first coin counter.
     pub const PANELS: u32 = 0x30e;
     pub const PLAYERS: u32 = 0x5de;
     pub const COINS: u32 = 0x44e;
-    /// Dernier mode d'affichage traité, et dernière valeur de la pause (variables de la tâche).
+    /// Last display mode processed, and last pause value (task variables).
     pub const SEEN_DISPLAY: u32 = 0xff_0f06;
     pub const SEEN_PAUSE: u32 = 0xff_0f07;
-    /// Écran figé (A5-0x5b8e) : les bannières ne sont pas effacées.
+    /// Frozen screen (A5-0x5b8e): the banners are not cleared.
     pub const FROZEN: u32 = 0xff_2472;
 }
 
-/// Champs d'un panneau (enregistrement de 0x50 octets).
+/// Fields of a panel (0x50-byte record).
 pub mod panel {
     pub const SIZE: u32 = 0x50;
-    /// Numéro du joueur (0 à 3).
+    /// Player number (0 to 3).
     pub const INDEX: u32 = 0x00;
     pub const STATE: u32 = 0x04;
-    /// Dernier PV et PV maximum affichés (mots), dernier score et dernier argent affichés (longs).
+    /// Last HP and maximum HP displayed (words), last score and last money displayed (longs).
     pub const SHOWN_HP: u32 = 0x0e;
     pub const SHOWN_HP_MAX: u32 = 0x10;
     pub const SHOWN_SCORE: u32 = 0x12;
     pub const SHOWN_MONEY: u32 = 0x16;
-    /// Jauge à redessiner (mot de PV non nul : jauge affichée).
+    /// Gauge to redraw (non-zero HP word: gauge displayed).
     pub const HP_BAR: u32 = 0x08;
     pub const HP_DIRTY: u32 = 0x09;
     pub const SCORE_DIRTY: u32 = 0x0a;
     pub const MONEY_DIRTY: u32 = 0x0b;
     pub const CLASS: u32 = 0x0c;
-    /// Objets affichés (deux longs) et drapeau « à redessiner ».
+    /// Displayed items (two longs) and "to redraw" flag.
     pub const SHOWN_ITEMS: u32 = 0x1c;
     pub const PLAYER_DIRTY: u32 = 0x1b;
     pub const DISPLAYED_A: u32 = 0x24;
     pub const DISPLAYED_B: u32 = 0x25;
-    /// Personnage sélectionné (pas de 2, bit 0 : variante).
+    /// Selected character (step of 2, bit 0: variant).
     pub const CHOICE: u32 = 0x26;
     pub const FLAG_27: u32 = 0x27;
-    /// Compte à rebours en BCD (`+0x28`) et sous-compteur d'images (`+0x29`).
+    /// BCD countdown (`+0x28`) and frame sub-counter (`+0x29`).
     pub const COUNTDOWN: u32 = 0x28;
     pub const COUNTDOWN_FRAMES: u32 = 0x29;
     pub const FLAG_2A: u32 = 0x2a;
@@ -120,23 +120,23 @@ pub mod panel {
     pub const SUBSTEP: u32 = 0x2d;
     pub const DELAY_2E: u32 = 0x2e;
     pub const LAST_MODE: u32 = 0x31;
-    /// Images écoulées dans l'état (long).
+    /// Frames elapsed in the state (long).
     pub const FRAMES: u32 = 0x32;
     pub const CHOSEN: u32 = 0x37;
     pub const HINT: u32 = 0x38;
     pub const CLAIM: u32 = 0x39;
     pub const SHOWN_NAME: u32 = 0x40;
-    /// Pièces comptées à l'ouverture de la reprise.
+    /// Coins counted when the continue opened.
     pub const SHOWN_COINS: u32 = 0x2b;
 }
 
-/// Champs du joueur (enregistrement de 0x200 octets).
+/// Fields of the player (0x200-byte record).
 pub mod player {
     pub const SIZE: u32 = 0x200;
     pub const ACTIVE: u32 = 0x00;
     pub const FLAGS: u32 = 0x01;
     pub const NUMBER: u32 = 0x02;
-    /// Personnage (pas de 2, bit 7 : choix verrouillé).
+    /// Character (step of 2, bit 7: choice locked).
     pub const CHARACTER: u32 = 0x03;
     pub const STATE: u32 = 0x04;
     pub const HP_MAX: u32 = 0x60;
@@ -147,7 +147,7 @@ pub mod player {
     pub const ITEMS: u32 = 0x118;
 }
 
-/// Les trois enregistrements d'un emplacement.
+/// The three records of a slot.
 #[derive(Clone, Copy)]
 pub struct Slot {
     pub panel: u32,
@@ -164,7 +164,7 @@ impl Slot {
         }
     }
 
-    /// Octet, mot, long du panneau.
+    /// Byte, word, long of the panel.
     pub fn p8(&self, b: &mut Cps2Bus, off: u32) -> u8 {
         rd8(b, self.panel + off)
     }
@@ -184,7 +184,7 @@ impl Slot {
         wr32(b, self.panel + off, v)
     }
 
-    /// Octet, mot, long du joueur.
+    /// Byte, word, long of the player.
     pub fn g8(&self, b: &mut Cps2Bus, off: u32) -> u8 {
         rd8(b, self.player + off)
     }
@@ -198,18 +198,18 @@ impl Slot {
         wr8(b, self.player + off, v)
     }
 
-    /// Numéro du joueur.
+    /// Player number.
     pub fn index(&self, b: &mut Cps2Bus) -> u8 {
         self.p8(b, panel::INDEX)
     }
 }
 
-/// Octet de la RAM de travail à un décalage depuis A5.
+/// Work RAM byte at an offset from A5.
 pub fn v8(b: &mut Cps2Bus, off: u32) -> u8 {
     rd8(b, A5 + off)
 }
 
-/// Les emplacements mis à jour selon la disposition : 4, 3, puis toujours au moins 2.
+/// The slots updated according to the layout: 4, 3, then always at least 2.
 fn slot_count(b: &mut Cps2Bus) -> u32 {
     match v8(b, var::LAYOUT) as i8 {
         0 => 4,
@@ -218,29 +218,29 @@ fn slot_count(b: &mut Cps2Bus) -> u32 {
     }
 }
 
-/// Adresses de l'original (reprise de la tâche).
+/// Addresses of the original (task resume).
 mod at {
-    /// Entrée de la tâche, et reprise de l'attente du début de la partie.
-    /// Disposition par type de borne (`A5+0x20`), table d'octets relative au PC.
+    /// Task entry, and resume of the wait for the game start.
+    /// Layout per cabinet type (`A5+0x20`), PC-relative byte table.
     pub const LAYOUTS: u32 = 0x15164;
 }
 
-/// Type de borne (nombre de joueurs, h) : choisit la disposition.
+/// Cabinet type (number of players, h): selects the layout.
 const CABINET: u32 = 0x20;
 
 crate::steps! {
-    /// Étapes de la tâche (le haut de la boucle, `0x15178`, n'est jamais une reprise : l'entrée y enchaîne).
+    /// Task steps (the top of the loop, `0x15178`, is never a resume: the entry chains into it).
     pub enum Step {
         Entry = 0x150ac => entry,
-        /// Attente du début de la partie.
+        /// Wait for the game start.
         Starting = 0x15146 => starting,
-        /// Après la cession d'un tour.
+        /// After the cession of a turn.
         AfterWait = 0x15212 => tour,
     }
 }
 
-/// 0x150ac : entrée de la tâche. Panneaux remis à zéro (numéro de joueur en `+0`), variables de la tâche, puis
-/// attente du début de la partie.
+/// 0x150ac: task entry. Panels reset (player number in `+0`), task variables, then
+/// wait for the game start.
 fn entry(x: &mut Ctx) -> Flow {
     for k in 0..4 {
         let at = A5 + var::PANELS + k * panel::SIZE;
@@ -264,8 +264,8 @@ fn entry(x: &mut Ctx) -> Flow {
     crate::tasks::one_frame(x, Step::Starting)
 }
 
-/// 0x15146 : disposition selon la borne ; hors partie, panneaux affichés en disposition 0 ; en partie, attente de
-/// la phase 4 (choix des personnages) avant la première mise à jour.
+/// 0x15146: layout according to the cabinet; outside the game, panels displayed in layout 0; in the game, wait for
+/// phase 4 (character choice) before the first update.
 fn starting(x: &mut Ctx) -> Flow {
     let cabinet = x.v8(CABINET);
     let layout = x.prog8(at::LAYOUTS + cabinet as u32);
@@ -280,7 +280,7 @@ fn starting(x: &mut Ctx) -> Flow {
     tour(x)
 }
 
-/// 0x1507a, appelée par d'autres modules.
+/// 0x1507a, called by other modules.
 pub const FORGET_DISPLAYED: Native = Native {
     entry: 0x1507a,
     name: "hud_forget_displayed",
@@ -290,7 +290,7 @@ pub const FORGET_DISPLAYED: Native = Native {
 };
 
 
-/// Un tour de la tâche : mise à jour des panneaux selon le mode d'affichage, services, puis cession.
+/// One turn of the task: panel update according to the display mode, services, then cession.
 fn tour(x: &mut Ctx) -> Flow {
     let mode = x.v8(var::DISPLAY);
     let seen = rd8(x.b, var::SEEN_DISPLAY);
@@ -312,19 +312,19 @@ fn tour(x: &mut Ctx) -> Flow {
         wr8(x.b, var::SEEN_PAUSE, pause);
         status::countdown(x);
     }
-    // 0x19b2a, 0x19b9c : les événements en attente crédités aux compteurs des joueurs
+    // 0x19b2a, 0x19b9c: the pending events credited to the players' counters
     crate::events::credit_points(x.b);
     crate::events::credit_counter(x.b);
     crate::tasks::one_frame(x, Step::AfterWait)
 }
 
-/// Routines natives de l'interface des joueurs.
+/// Native routines of the player interface.
 pub const NATIVES: &[Native] = &[FORGET_DISPLAYED];
 
-/// Sous-programmes d'origine réécrits dans le corps de la tâche, présentés comme des natives pour le fuzz
-/// différentiel (`examples/fuzz_couv`) ; le jeu ne les appelle pas par leur adresse.
+/// Original subroutines rewritten inside the task body, presented as natives for the
+/// differential fuzz (`examples/fuzz_couv`); the game does not call them by their address.
 pub const TEST_NATIVES: &[Native] = &[Native {
-    // 0x15216 : un emplacement (A0 panneau, A6 joueur, A4 compteur de pièces)
+    // 0x15216: a slot (A0 panel, A6 player, A4 coin counter)
     entry: 0x15216,
     name: "hud_emplacement",
     run: crate::Body::Processeur(|c, b| {

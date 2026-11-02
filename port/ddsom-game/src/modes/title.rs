@@ -1,10 +1,10 @@
-//! Écrans de titre : « shuukyaku » (sous-mode 2, `0xfa296`) et second titre (sous-mode 12, `0xfaef2`).
+//! Title screens: "shuukyaku" (sub-mode 2, `0xfa296`) and second title (sub-mode 12, `0xfaef2`).
 //!
-//! Chaque écran est une suite d'étapes (`FF0E72`, pas de 2) exécutées une par tour de la machine à modes ;
-//! une étape prépare des objets système (variantes de SOBJ, SET), attend qu'ils aient fini (champs du
-//! bloc d'état que les objets modifient par le pointeur `+0x4c` de l'objet) et passe à la suivante.
-//! Les attentes dans une étape (pool d'objets plein, fondu en cours) cèdent une image à
-//! l'ordonnanceur et reprennent à une étape Rust (`steps!`).
+//! Each screen is a sequence of steps (`FF0E72`, step of 2) run once per turn of the mode machine;
+//! a step prepares system objects (SOBJ variants, SET), waits until they are done (fields of the
+//! state block that the objects modify through the object's `+0x4c` pointer) and moves on to the next.
+//! Waits within a step (object pool full, fade in progress) yield one frame to
+//! the scheduler and resume at a Rust step (`steps!`).
 
 use super::{mode, Block, Flow, Sequence};
 use crate::scene::fading;
@@ -17,23 +17,23 @@ use crate::scene::Ctx;
 use crate::Native;
 use crate::objects::{pools, Obj};
 
-/// Champs du bloc d'état (décalages depuis `mode::BASE`).
+/// Fields of the state block (offsets from `mode::BASE`).
 mod f {
     pub const STEP: u32 = 2;
-    /// Octet lu par les objets du titre (variante d'animation à jouer).
+    /// Byte read by the title objects (animation variant to play).
     pub const CUE: u32 = 8;
-    /// Objet SOBJ de la scène (adresse sur 16 bits, étendue du signe).
+    /// SOBJ object of the scene (16-bit address, sign-extended).
     pub const OBJECT: u32 = 0xa;
-    /// Drapeau d'objet terminé (octet) ou vitesse de défilement (mot, avec `ACCEL`).
+    /// Object-done flag (byte) or scroll speed (word, with `ACCEL`).
     pub const DONE: u32 = 0xc;
     pub const CUE_INDEX: u32 = 0xc;
     pub const SPEED: u32 = 0xc;
     pub const ACCEL: u32 = 0xe;
-    /// Minuterie (octet ou mot selon l'étape).
+    /// Timer (byte or word depending on the step).
     pub const TIMER: u32 = 0x10;
 }
 
-/// Variables de la RAM de travail (décalages depuis A5).
+/// Work RAM variables (offsets from A5).
 mod var {
     pub const VIDEO_FLAGS: u32 = 0x12;
     pub const LAYERS: u32 = 0x14;
@@ -49,17 +49,17 @@ mod var {
     pub const GAUGE_SKIP: u32 = 0x7fb2;
 }
 
-/// Sons et tâches de fondu des titres.
+/// Sounds and fade tasks of the titles.
 mod ext {
     pub const SOUND_E0EBC: u32 = 0xe0ebc;
     pub const SOUND_E185C: u32 = 0xe185c;
-    /// Fin du texte de titre : continue dans l'original (objet SOBJ qui passe à la suite).
+    /// End of the title text: continues in the original (SOBJ object that moves on to the next step).
     pub const OBJECT_LAUNCH: u32 = 0xea288;
 }
 
 const LAYER_BITS: u16 = 0xe;
 const FADE_PAGES_ALL: u8 = 0xf;
-/// Palette des écrans de titre.
+/// Palette of the title screens.
 const TITLE_PALETTE: u16 = 0x53;
 const GFX_PLANE_1: u32 = 0x914000;
 const GFX_PLANE_2: u32 = 0x917000;
@@ -69,7 +69,7 @@ const CPS_REG_VIDEO: u32 = 0x804122;
 const CPS_REG_SCROLL: u32 = 0x804108;
 const SPRITE_CLEAR_AREA: u32 = 0x920000;
 
-/// Écran du sous-mode `sub`, s'il est réécrit ici.
+/// Screen of sub-mode `sub`, if it is rewritten here.
 pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
     let step = x.m8(f::STEP);
     Some(match sub {
@@ -82,7 +82,7 @@ pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
 // ---------------------------------------------------------------------------------------------
 // Aides communes
 
-/// Libère les pools d'objets et remet les sprites à zéro (début et fin d'écran).
+/// Frees the object pools and resets the sprites (start and end of screen).
 fn reset_objects(x: &mut Ctx) {
     for pool in [&crate::objects::pools::SOBJ, &crate::objects::pools::SET, &crate::objects::pools::EFFCT] {
         pool.reset(x.b);
@@ -90,36 +90,36 @@ fn reset_objects(x: &mut Ctx) {
     unlink_and_clear_lists(x);
 }
 
-/// Listes triées défaites (0x1f184) et listes de sprites vidées (0x1de7c).
+/// Sorted lists undone (0x1f184) and sprite lists emptied (0x1de7c).
 fn unlink_and_clear_lists(x: &mut Ctx) {
     crate::objects::lists::unlink_all(x.b);
     crate::sprites::clear_lists(x.b);
 }
 
-/// Crée la tâche de fondu `entry` (emplacement 0x10), A0 gardé.
+/// Creates the fade task `entry` (slot 0x10), A0 preserved.
 fn start_fade_task(x: &mut Ctx, entry: u32) {
     crate::kernel::create_task(x.b, 0x10, entry);
 }
 
-/// Réglages de fondu communs (délai, pages).
+/// Common fade settings (delay, pages).
 fn fade_setup(x: &mut Ctx, delay: u16, pages: u8) {
     fading::DELAY.set(x.b, delay);
     fading::PAGES.set(x.b, pages);
 }
 
-/// Charge la palette de titre sur toutes les pages (début d'écran).
+/// Loads the title palette on all pages (start of screen).
 fn load_title_palette(x: &mut Ctx) {
     load_palette_page(x.b, 2, TITLE_PALETTE);
     load_palette_page(x.b, 3, TITLE_PALETTE);
 }
 
-/// Copie deux blocs de tuiles de plan 1 puis deux de plan 2 (images du titre).
+/// Copies two plane 1 tile blocks then two plane 2 ones (title pictures).
 fn load_title_tiles(x: &mut Ctx, a: u16, b: u16) {
     two_blocks(x, Grid::Layer2, a, GFX_PLANE_1);
     two_blocks(x, Grid::Layer3, b, GFX_TABLE_B);
 }
 
-/// Deux blocs de tuiles (`n`, `n + 1`) à la suite l'un de l'autre à partir de `destination` ; rend la fin.
+/// Two tile blocks (`n`, `n + 1`) one after the other from `destination`; returns the end.
 fn two_blocks(x: &mut Ctx, grid: Grid, n: u16, destination: u32) -> u32 {
     let end = load_grid(x.b, grid, n, destination);
     load_grid(x.b, grid, n + 1, end.destination).destination
@@ -146,12 +146,12 @@ fn title_step(x: &mut Ctx, step: u8) -> Flow {
         0x1a => t1a_wait(x),
         0x1c => t1c_wait_logo(x),
         0x1e => t1e_end(x),
-        // la table 0xfa2a4 a seize entrées, toutes réécrites (code-mort.md, lot « sortie du Cpu »)
-        _ => unreachable!("titre : étape {step:#x} hors de la table 0xfa2a4"),
+        // table 0xfa2a4 has sixteen entries, all rewritten (code-mort.md, batch « sortie du Cpu »)
+        _ => unreachable!("title: step {step:#x} outside table 0xfa2a4"),
     }
 }
 
-/// Étape 0 : remet tout à zéro, charge la palette et les images, affiche le fond.
+/// Step 0: clears everything, loads the palette and pictures, displays the background.
 fn t00_reset(x: &mut Ctx) -> Flow {
     reset_objects(x);
     crate::video::black_screen(x.b);
@@ -160,7 +160,7 @@ fn t00_reset(x: &mut Ctx) -> Flow {
 }
 const T00_LOAD: u32 = 0xfa2fe;
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
         T00Load = T00_LOAD => |x| {
             x.set_v16(var::CAMERA_Y, 0x300);
@@ -196,7 +196,7 @@ crate::steps! {
             Flow::Done
         },
         T0aRetry = T0A_RETRY => |x| {
-            // `bra 0xfa4e8` : retente sans reposer le drapeau
+            // `bra 0xfa4e8`: retries without raising the flag again
             let Ok(set) = set_15_pure(x.b, 1) else {
                 return x.wait(1, Step::T0aRetry);
             };
@@ -232,7 +232,7 @@ crate::steps! {
             x.set_m16(f::SPEED, 0xb00);
             x.set_m16(f::ACCEL, 0xffe0);
             x.set_m16(f::TIMER, 60);
-            // Glitch d'origine : la retenue n'est pas testée ; un échec garde l'A1 de l'allocation
+            // Original glitch: the carry is not tested; a failure keeps the allocation's A1
             let set = set_15_pure(x.b, 0).unwrap_or_else(|a1| a1);
             x.set_m16(f::OBJECT, set.0 as u16);
             Flow::Done
@@ -341,7 +341,7 @@ crate::steps! {
 }
 const T00_FADE: u32 = 0xfa384;
 
-/// Étape 2 : lance les objets du titre l'un après l'autre, à intervalles donnés par une table.
+/// Step 2: launches the title objects one after another, at intervals given by a table.
 fn t02_cue(x: &mut Ctx) -> Flow {
     x.render();
     let left = x.m8(f::TIMER).wrapping_sub(1);
@@ -365,10 +365,10 @@ fn t02_cue(x: &mut Ctx) -> Flow {
     x.next_step();
     Flow::Done
 }
-/// Délais (images) entre les apparitions, dans le code d'origine ; 0xff termine.
+/// Delays (frames) between appearances, in the original code; 0xff ends.
 const T02_DELAYS: u32 = 0xfa42e;
 
-/// Étape 4 : attend la fin des objets (`+0xd` nul), puis fondu vers le noir.
+/// Step 4: waits for the objects to finish (`+0xd` zero), then fades to black.
 fn t04_fade_out(x: &mut Ctx) -> Flow {
     x.render();
     if x.m8(0xd) != 0 {
@@ -379,7 +379,7 @@ fn t04_fade_out(x: &mut Ctx) -> Flow {
     crate::tasks::fading::descent(x)
 }
 
-/// Étape 6 : fond d'écran suivant ; crée l'objet de variante 7 (attend si le pool est plein).
+/// Step 6: next background; creates the variant 7 object (waits if the pool is full).
 fn t06_start(x: &mut Ctx) -> Flow {
     x.set_v16(var::CAMERA_Y, 0);
     x.set_m8(f::CUE, 1);
@@ -400,7 +400,7 @@ fn t06_object(x: &mut Ctx) -> Flow {
 }
 const T06_RETRY: u32 = 0xfa486;
 
-/// Étape 8 : attend la fin de l'objet, éclair blanc.
+/// Step 8: waits for the object to finish, white flash.
 fn t08_wait_flash(x: &mut Ctx) -> Flow {
     x.render();
     if x.m8(f::DONE) != 0 {
@@ -412,7 +412,7 @@ fn t08_wait_flash(x: &mut Ctx) -> Flow {
 }
 const T08_NEXT: u32 = 0xfa4bc;
 
-/// Étape 10 : après 60 images, crée l'objet SET de variante 1 (attend si le pool est plein).
+/// Step 10: after 60 frames, creates the variant 1 SET object (waits if the pool is full).
 fn t0a_wait(x: &mut Ctx) -> Flow {
     x.render();
     let left = x.m16(f::TIMER).wrapping_sub(1);
@@ -433,7 +433,7 @@ fn t0a_object(x: &mut Ctx) -> Flow {
 }
 const T0A_RETRY: u32 = 0xfa4fc;
 
-/// Étape 12 : attend l'objet, puis lance le fondu au noir (tâche).
+/// Step 12: waits for the object, then starts the fade to black (task).
 fn t0c_fade_task(x: &mut Ctx) -> Flow {
     x.render();
     if x.m8(f::DONE) != 0 {
@@ -445,7 +445,7 @@ fn t0c_fade_task(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Étape 14 : attend la fin du fondu (`A5+0x48f` nul).
+/// Step 14: waits for the fade to finish (`A5+0x48f` zero).
 fn t0e_wait_fade(x: &mut Ctx) -> Flow {
     x.render();
     if fading::STEP.get(x.b) != 0 {
@@ -455,7 +455,7 @@ fn t0e_wait_fade(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Étape 16 : deuxième partie du titre : caméra à 512, objet de variante 7 (attend si plein).
+/// Step 16: second part of the title: camera at 512, variant 7 object (waits if full).
 fn t10_start(x: &mut Ctx) -> Flow {
     x.set_v16(var::CAMERA_X, 0x200);
     x.set_m8(f::CUE, 0xff);
@@ -476,7 +476,7 @@ fn t10_object(x: &mut Ctx) -> Flow {
 }
 const T10_RETRY: u32 = 0xfa582;
 
-/// Étape 18 : éclair blanc, puis charge le décor du bas (quatre bandes de deux blocs de tuiles).
+/// Step 18: white flash, then loads the lower terrain (four strips of two tile blocks).
 fn t12_wait(x: &mut Ctx) -> Flow {
     x.render();
     if x.m8(f::DONE) != 0 {
@@ -489,7 +489,7 @@ fn t12_wait(x: &mut Ctx) -> Flow {
 const T12_SCENERY: u32 = 0xfa5ba;
 const T12_FADE: u32 = 0xfa620;
 
-/// Étape 20 : attend 60 images, puis lance l'animation 3.
+/// Step 20: waits 60 frames, then starts animation 3.
 fn t14_wait(x: &mut Ctx) -> Flow {
     x.render();
     let left = x.m8(f::TIMER).wrapping_sub(1);
@@ -502,7 +502,7 @@ fn t14_wait(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Étape 22 : la caméra glisse vers le bas (vitesse croissante jusqu'à 0x400) puis s'arrête à 0x300.
+/// Step 22: the camera slides down (speed increasing up to 0x400) then stops at 0x300.
 fn t16_slide(x: &mut Ctx) -> Flow {
     x.render();
     let mut speed = x.m16(f::SPEED);
@@ -524,7 +524,7 @@ fn t16_slide(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Étape 24 : copie la palette du logo (quatre blocs de 32 octets), crée l'objet du logo et
+/// Step 24: copies the logo palette (four 32-byte blocks), creates the logo object and
 /// attend qu'il ait disparu.
 fn t18_palette(x: &mut Ctx) -> Flow {
     let left = x.m16(f::TIMER).wrapping_sub(1);
@@ -532,7 +532,7 @@ fn t18_palette(x: &mut Ctx) -> Flow {
     if left != 0 {
         return Flow::Done;
     }
-    // quatre blocs de 32 octets de la ROM vers la table des palettes
+    // four 32-byte blocks from ROM to the palette table
     let mut src = LOGO_PALETTE;
     for dst in [0x91c2e0u32, 0x91c300, 0x91c360, 0x91c3e0] {
         for i in 0..8 {
@@ -554,13 +554,13 @@ fn t18_object(x: &mut Ctx) -> Flow {
     x.set_m16(f::TIMER, 80);
     x.wait(1, Step::T18Loop)
 }
-/// Palette du logo : quatre blocs consécutifs de 32 octets dans la ROM.
+/// Logo palette: four consecutive 32-byte blocks in ROM.
 const LOGO_PALETTE: u32 = 0x2538c0;
 const T18_RETRY: u32 = 0xfa722;
 const T18_LOOP: u32 = 0xfa746;
 const T18_AFTER: u32 = 0xfa74a;
-/// Sous-routine `0xfa762` (appelée par `bsr`, revient en `T18_AFTER`) : après 80 images, crée l'objet
-/// du texte et lance le script de l'original.
+/// Subroutine `0xfa762` (called by `bsr`, returns at `T18_AFTER`): after 80 frames, creates the
+/// text object and runs the original's script.
 fn t18_sub(x: &mut Ctx) -> Flow {
     let left = x.m16(f::TIMER).wrapping_sub(1);
     x.set_m16(f::TIMER, left);
@@ -588,7 +588,7 @@ fn t18_text_object(x: &mut Ctx) -> Flow {
 }
 const T18_SUB_RETRY: u32 = 0xfa77c;
 
-/// Étape 26 : après 60 images, vide les plans et crée l'objet du logo (variante 66).
+/// Step 26: after 60 frames, clears the planes and creates the logo object (variant 66).
 fn t1a_wait(x: &mut Ctx) -> Flow {
     x.render();
     let left = x.m16(f::TIMER).wrapping_sub(1);
@@ -612,8 +612,8 @@ fn t1a_object(x: &mut Ctx) -> Flow {
 }
 const T1A_RETRY: u32 = 0xfa7fc;
 
-/// Étape 28 : attend que l'objet du logo ait atteint l'état 6, puis crée les textes (3 objets) et affiche
-/// la mention de droits selon la région.
+/// Step 28: waits for the logo object to reach state 6, then creates the texts (3 objects) and displays
+/// the rights notice according to the region.
 fn t1c_wait_logo(x: &mut Ctx) -> Flow {
     x.render();
     let o = x.m16(f::OBJECT) as i16 as i32 as u32 & 0xff_ffff;
@@ -623,10 +623,10 @@ fn t1c_wait_logo(x: &mut Ctx) -> Flow {
     x.next_step();
     title_text(x)
 }
-/// `0xfa830` : trois objets de texte autour de la caméra, puis le texte de droits.
+/// `0xfa830`: three text objects around the camera, then the rights text.
 pub fn title_text(x: &mut Ctx) -> Flow {
-    // trois variantes (0xe6, 0xe5, 0xe4, octet bas en premier) placées d'après la caméra en service et la table
-    // des décalages 0xfa8bc
+    // three variants (0xe6, 0xe5, 0xe4, low byte first) placed from the active camera and the table
+    // of offsets 0xfa8bc
     const OFFSETS: u32 = 0xfa8bc;
     let camera = crate::mem::A5 + if x.v8(var::SCREEN_TYPE) != 0 { 0x54e } else { 0x4fe };
     let mut variants = 0x00e4_e5e6u32;
@@ -646,15 +646,15 @@ pub fn title_text(x: &mut Ctx) -> Flow {
 }
 const T1C_TEXT: u32 = 0xfa88e;
 
-/// Étape 30 : après 300 images, fondu au noir (tâche), vide tout et passe au sous-mode suivant.
+/// Step 30: after 300 frames, fade to black (task), clears everything and moves to the next sub-mode.
 fn t1e_end(x: &mut Ctx) -> Flow {
     x.render();
     leave_screen(x, Step::T1eWait)
 }
 const T1E_FADED: u32 = 0xfa90e;
 
-/// Fin d'écran commune aux deux titres : minuterie de 300 images, sous-mode suivant, fondu
-/// au noir par la tâche, puis nettoyage en trois temps.
+/// End of screen common to both titles: 300-frame timer, next sub-mode, fade
+/// to black by the task, then cleanup in three phases.
 fn leave_screen(x: &mut Ctx, loop_resume: Step) -> Flow {
     let left = x.m16(f::TIMER).wrapping_sub(1);
     x.set_m16(f::TIMER, left);
@@ -671,13 +671,13 @@ fn leave_screen(x: &mut Ctx, loop_resume: Step) -> Flow {
     x.wait(1, loop_resume)
 }
 
-/// Attente de la fin du fondu (`A5+0x48f`), puis effacement et cession de 16 images.
+/// Waits for the fade to finish (`A5+0x48f`), then clear and yield of 16 frames.
 fn leave_wait(x: &mut Ctx, loop_resume: Step, cleared: Step, second_title: bool) -> Flow {
     x.render();
     if fading::STEP.get(x.b) != 0 {
         return x.wait(1, loop_resume);
     }
-    // l'original libère les pools dans un ordre différent selon l'écran
+    // the original frees the pools in a different order depending on the screen
     use crate::objects::pools::{EFFCT, SET, SOBJ};
     let pools = if second_title { [&SET, &EFFCT, &SOBJ] } else { [&SOBJ, &SET, &EFFCT] };
     for pool in pools {
@@ -713,12 +713,12 @@ fn second_title_step(x: &mut Ctx, step: u8) -> Flow {
             x.render();
             leave_screen(x, Step::S08Wait)
         }
-        // la table 0xfaf00 a cinq entrées, toutes réécrites (code-mort.md, lot « sortie du Cpu »)
-        _ => unreachable!("second titre : étape {step:#x} hors de la table 0xfaf00"),
+        // table 0xfaf00 has five entries, all rewritten (code-mort.md, batch « sortie du Cpu »)
+        _ => unreachable!("second title: step {step:#x} outside table 0xfaf00"),
     }
 }
 
-/// Étape 2 : fond de titre, palette, deux objets (variante 9 de SOBJ, puis SET 2).
+/// Step 2: title background, palette, two objects (SOBJ variant 9, then SET 2).
 fn s02_setup(x: &mut Ctx) -> Flow {
     x.set_v16(var::LAYERS, 0x12c2);
     for off in [var::CAMERA_X, var::CAMERA_Y, var::CAMERA_2_X, var::CAMERA_2_Y] {
@@ -741,14 +741,14 @@ const S02_RETRY: u32 = 0xfaff8;
 const S02_SHOW: u32 = 0xfb012;
 const S02_PALETTE: u32 = 0xfb030;
 
-/// Efface la zone de sprites de 512 octets (`0xfb18a`).
+/// Clears the 512-byte sprite area (`0xfb18a`).
 fn clear_sprite_area(x: &mut Ctx) {
     for i in 0..128 {
         wr32(x.b, SPRITE_CLEAR_AREA + 4 * i, 0);
     }
 }
 
-/// Étape 4 : attend le signal de l'objet (`+8`), crée l'objet SET de variante 68.
+/// Step 4: waits for the object's signal (`+8`), creates the variant 68 SET object.
 fn s04_wait_object(x: &mut Ctx) -> Flow {
     x.render();
     if x.m8(f::CUE) == 0 {
@@ -769,7 +769,7 @@ fn s04_object(x: &mut Ctx) -> Flow {
 const S04_RETRY: u32 = 0xfb064;
 const S04_SHOW: u32 = 0xfb088;
 
-/// Étape 6 : attend que l'objet du logo soit à l'état 6, puis texte de droits (comme le titre 1).
+/// Step 6: waits for the logo object to be at state 6, then rights text (like title 1).
 fn s06_wait_logo(x: &mut Ctx) -> Flow {
     x.render();
     let o = x.m16(f::OBJECT) as i16 as i32 as u32 & 0xff_ffff;

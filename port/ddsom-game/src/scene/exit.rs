@@ -1,28 +1,28 @@
-//! Phase 16 (`0xf3142`) : sortie de scène.
+//! Phase 16 (`0xf3142`): scene exit.
 //!
-//! Quand une scène est gagnée, la phase passe de 12 à 16 : une *séquence de sortie* (propre à la scène,
-//! 36 variantes) fait sortir les joueurs, affiche les écrans de fin de niveau, choisit la scène suivante
-//! (« choix de route ») puis relance la phase 8 (entrée de la scène suivante).
+//! When a scene is won, the phase goes from 12 to 16: an *exit sequence* (specific to the scene,
+//! 36 variants) walks the players out, shows the end-of-level screens, picks the next scene
+//! ("route choice") then restarts phase 8 (entry of the next scene).
 //!
-//! Le bloc d'état `A5-0x55ca` (A0 dans l'original) contient : `+0` état (0 : initialisation, 2 :
-//! séquence), `+1` numéro de séquence (deux fois l'indice, d'après la table des scènes `0xf3170`), `+2`
-//! état de la séquence (pas de 4), `+4` minuterie, `+0x10`, `+0x12`, `+0x16` objets (messages, effets).
+//! The state block `A5-0x55ca` (A0 in the original) holds: `+0` state (0: initialisation, 2:
+//! sequence), `+1` sequence number (twice the index, from the scene table `0xf3170`), `+2`
+//! sequence state (step of 4), `+4` timer, `+0x10`, `+0x12`, `+0x16` objects (messages, effects).
 //!
-//! Chaque séquence est un tableau d'états ([`St`]) exécuté un par image, puis un « sillage » de fin
-//! d'image ([`Update`]) qui met le monde à jour sauf à l'état final. Les cinq *états partagés* (0xf590e,
-//! 0xf5938, 0xf6492, 0xf792e, 0xf7ecc : décompte, bonus, intermède des personnages, boutique, fondu au noir)
-//! sont dans leurs propres modules ([`super::tally`], [`super::bonus`], [`super::characters`],
-//! [`super::shop`], [`super::blackout`]) ; ils sont appelés comme par l'aiguillage d'origine (`jsr (A1)`, son
-//! suite rangée dans les appels en cours) et cèdent souvent la main à l'ordonnanceur : la tâche reprend alors à
-//! une étape de leur module, qui finit par revenir à la fin d'aiguillage de la séquence (`entrée + 10`,
+//! Each sequence is an array of states ([`St`]) run one per frame, followed by an end-of-frame "wake"
+//! ([`Update`]) that updates the world except at the final state. The five *shared states* (0xf590e,
+//! 0xf5938, 0xf6492, 0xf792e, 0xf7ecc: tally, bonus, character interlude, shop, fade to black)
+//! live in their own modules ([`super::tally`], [`super::bonus`], [`super::characters`],
+//! [`super::shop`], [`super::blackout`]); they are called like the original dispatch (`jsr (A1)`, its
+//! continuation stored in the pending calls) and often cede control to the scheduler: the task then resumes at
+//! a step of their module, which ends by returning to the dispatch tail of the sequence (`entry + 10`,
 //! [`Step::DispatchTail`]).
 //!
-//! L'état final d'une séquence (`Leave`) prépare la scène suivante puis cède la main une fois
-//! (`0xa40`, quelques images) avant de finir par des appels sons (`0xc0c`, `0xe0882`) : la tâche reprend à une
-//! étape qui finit le travail ([`Step`] : `Both`, `Sound`, `Command`, `Twice`).
+//! The final state of a sequence (`Leave`) prepares the next scene then yields once
+//! (`0xa40`, a few frames) before ending with sound calls (`0xc0c`, `0xe0882`): the task resumes at a
+//! step that finishes the work ([`Step`]: `Both`, `Sound`, `Command`, `Twice`).
 //!
-//! Les séquences 0, 6, 20, 29, 31 et 33 n'ont pas d'aiguillage par `jsr` : leurs états finissent eux-mêmes
-//! l'image (`Update::Nothing`). La séquence 27 devient la 29 quand `A5+0x66` est posé.
+//! Sequences 0, 6, 20, 29, 31 and 33 have no `jsr` dispatch: their states end the
+//! frame themselves (`Update::Nothing`). Sequence 27 becomes 29 when `A5+0x66` is set.
 
 use cps2::Cps2Bus;
 use super::fading;
@@ -38,7 +38,7 @@ use crate::tasks::table::Next;
 use crate::Native;
 use crate::objects::pools;
 
-/// Bloc d'état de la sortie de scène (A0 dans l'original) et ses champs.
+/// Scene exit state block (A0 in the original) and its fields.
 const BASE: u32 = A5 - 0x55ca;
 mod blk {
     pub const STATE: u32 = 0;
@@ -51,14 +51,14 @@ mod blk {
     pub const EFFECT: u32 = 0x16;
 }
 
-/// Tables en ROM : numéro de séquence par scène (octets) et branchements (mots, relatifs à la table).
+/// ROM tables: sequence number per scene (bytes) and branches (words, relative to the table).
 const SEQUENCE_OF_SCENE: u32 = 0xf3170;
 const SEQUENCE_JUMPS: u32 = 0xf31ea;
 
-/// Commande son de la sortie vers la fin du jeu.
+/// Sound command from the exit to the end of the game.
 const SOUND_E57D6: u32 = 0xe57d6;
 
-/// Boucles de dispatch des classes d'objets, dans l'ordre de la mise à jour réduite (sans les boss).
+/// Dispatch loops of the object classes, in the order of the reduced update (without the bosses).
 const CLASSES: [&dispatch::Class; 9] = [
     &dispatch::PSHL,
     &dispatch::PEFF,
@@ -71,37 +71,37 @@ const CLASSES: [&dispatch::Class; 9] = [
     &dispatch::SOBJ,
 ];
 
-/// Joueur : champs écrits quand les joueurs quittent l'écran.
+/// Player: fields written when the players leave the screen.
 const WALK_OUT_STATE: u32 = 0x000c_0000;
 const P_STATE_LONG: u32 = 4;
 const WALK_OUT_CLEAR_BYTES: [u32; 3] = [0x66, 0x8a, 0x15c];
 const P_RANK: u32 = 0x7d;
-/// Longs des joueurs remis à zéro en quittant (état `+0x24` de chacun).
+/// Player longs cleared on leaving (state `+0x24` of each).
 const PLAYER_LONGS: [u32; 4] = [0x602, 0x802, 0xa02, 0xc02];
 
-/// Interdit de sauter (`A5+0x3d`), verrou d'entrées, drapeaux d'animation.
+/// Jumping forbidden (`A5+0x3d`), input lock, animation flags.
 const PAUSE: u32 = 0x3d;
 const PHASE_ENTRY: u32 = 0x0800_0000;
 const PHASE_ENDING: u32 = 0x1c00_0000;
 const FLAGS: u32 = 0x14;
 const FLAGS_KEEP: u16 = 0xfff1;
 
-/// Contexte d'une image de sortie de scène.
+/// Context of a scene exit frame.
 pub struct Ex<'a> {
     pub x: Ctx<'a>,
-    /// La main a été rendue à l'ordonnanceur ou à l'original : pas de retour (RTS) à faire.
+    /// Control was handed to the scheduler or to the original: no return (RTS) to perform.
     handed_off: bool,
-    /// Adresse d'origine de la séquence en cours (pour lui céder la main).
+    /// Original address of the current sequence (to cede control to it).
     entry: u32,
-    /// Où l'aiguillage d'origine reprend après l'état (`jsr (A1)`), vide pour la séquence 0.
+    /// Where the original dispatch resumes after the state (`jsr (A1)`), empty for sequence 0.
     dispatch_return: Option<Next>,
-    /// La mise à jour du monde faite dans l'état a laissé A0 sur un objet : l'aiguillage d'origine compare
-    /// alors l'octet `+2` de cet objet (et non l'état de la séquence) à l'état final.
+    /// The world update done in the state left A0 on an object: the original dispatch then compares
+    /// byte `+2` of that object (not the sequence state) with the final state.
     a0_clobbered: bool,
 }
 
 impl<'a> Ex<'a> {
-    // --- bloc d'état ----------------------------------------------------------------------------
+    // --- state block ----------------------------------------------------------------------------
 
     fn b8(&mut self, off: u32) -> u8 {
         rd8(self.x.b, BASE + off)
@@ -122,14 +122,14 @@ impl<'a> Ex<'a> {
     fn set_step(&mut self, step: u8) {
         self.set_b8(blk::STEP, step);
     }
-    /// Retire une image à la minuterie ; vrai quand elle arrive à zéro.
+    /// Subtracts one frame from the timer; true when it reaches zero.
     fn countdown(&mut self) -> bool {
         let left = self.b16(blk::TIMER).wrapping_sub(1);
         self.set_b16(blk::TIMER, left);
         left == 0
     }
 
-    /// Lance la tâche de fondu `entry` (délai `delay`) ; A0 revient sur le bloc.
+    /// Starts the fade task `entry` (delay `delay`); A0 goes back to the block.
     fn fade(&mut self, delay: u16, entry: u32) {
         fading::DELAY.set(self.x.b, delay);
         fading::PAGES.set(self.x.b, 15);
@@ -137,8 +137,8 @@ impl<'a> Ex<'a> {
         self.x.c.a[0] = BASE;
     }
 
-    /// Ouvre le message `n` (0xc8312) ; son adresse (16 bits) va dans `+0x12`. Glitch d'origine : l'échec n'est pas
-    /// testé, l'A1 laissé par l'allocation est mémorisé.
+    /// Opens message `n` (0xc8312); its (16-bit) address goes to `+0x12`. Original glitch: the failure is not
+    /// tested, the A1 left by the allocation is stored.
     fn message(&mut self, n: u8) {
         let o = crate::families::creators::scene_set_or_rest(self.x.b, n);
         self.set_b16(blk::MESSAGE, o.0 as u16);
@@ -147,13 +147,13 @@ impl<'a> Ex<'a> {
         let m = self.object(blk::MESSAGE);
         m.u8(self.x.b, 0x22) != 0
     }
-    /// Objet désigné par un mot du bloc (`movea.w` : adresse étendue en signe).
+    /// Object designated by a block word (`movea.w`: sign-extended address).
     fn object(&mut self, off: u32) -> Obj {
         Obj(self.b16(off) as i16 as i32 as u32 & 0xff_ffff)
     }
 
-    /// Les joueurs en jeu et vivants sortent : état « marche » et indicateurs remis à zéro. Si `rank`,
-    /// chacun reçoit son rang d'arrivée (`+0x7d`).
+    /// Players in the game and alive walk out: "walk" state and indicators cleared. If `rank`,
+    /// each one gets its arrival rank (`+0x7d`).
     fn release_players(&mut self, rank: bool) {
         let mut n = 0u8;
         for k in 0..4 {
@@ -171,21 +171,21 @@ impl<'a> Ex<'a> {
                 wr8(self.x.b, p + off, 0);
             }
         }
-        // registres laissés par la boucle d'origine (relus par les gestionnaires de l'image suivante)
+        // registers left by the original loop (re-read by the handlers of the next frame)
         self.x.c.a[1] = PLAYERS + 4 * PLAYER_STRIDE;
         self.x.c.d[6] = 0xffff;
         if rank {
             self.x.c.d[5] = n as u32;
         }
     }
-    /// Début de sortie : la pause est levée, les boutons libérés, les joueurs sortent.
+    /// Start of the exit: the pause is lifted, the buttons released, the players walk out.
     fn start_walk_out(&mut self, rank: bool) {
         self.x.set_v8(PAUSE, 0);
         self.x.set_v8(var::INPUT_LOCK, 0);
         crate::inputs::clear_inputs(self.x.b);
         self.release_players(rank);
     }
-    /// Les joueurs en jeu et vivants sont-ils tous dans l'état `state` (octet `+6`) ?
+    /// Are all players in the game and alive in state `state` (byte `+6`)?
     fn all_in_state(&mut self, state: u8) -> bool {
         (0..4).all(|k| {
             let p = PLAYERS + k * PLAYER_STRIDE;
@@ -195,33 +195,33 @@ impl<'a> Ex<'a> {
         })
     }
 
-    /// 0xf7ee0 : variables des scripts de transition remises à zéro.
+    /// 0xf7ee0: transition script variables cleared.
     fn reset_transition(&mut self) {
         super::screen::clear_longs(self.x.b, super::screen::blocks::TRANSITION, 4);
     }
-    /// 0xf7916 : bloc de la boutique remis à zéro.
+    /// 0xf7916: shop block cleared.
     fn reset_shop(&mut self) {
         super::screen::clear_longs(self.x.b, super::screen::blocks::SHOP, 5);
     }
-    /// 0xf683c : zone de texte des écrans de fin effacée.
+    /// 0xf683c: end-screen text area cleared.
     fn clear_text(&mut self) {
         super::screen::clear_text(self.x.b);
     }
 
-    /// Séquence ou étape sans réécriture : la table des séquences par scène (0xf3170) ne désigne que des séquences
-    /// réécrites, dont les étapes restent dans leurs états (code-mort.md, lot « sortie du Cpu »).
+    /// Sequence or step without a rewrite: the per-scene sequence table (0xf3170) only designates rewritten sequences,
+    /// whose steps stay within their states (code-mort.md, batch "exit of the Cpu").
     fn outside_table(&mut self) -> ! {
         let (sequence, step) = (self.b8(blk::SEQUENCE), self.b8(blk::STEP));
-        unreachable!("sortie de scène : séquence {sequence:#x}, étape {step:#x} sans réécriture (entrée {:#x})", self.entry)
+        unreachable!("scene exit: sequence {sequence:#x}, step {step:#x} without rewrite (entry {:#x})", self.entry)
     }
-    /// Cède la main à l'ordonnanceur pour `frames` images ; la reprise a lieu à `resume` (sinon à la suite de
-    /// l'appelant).
+    /// Cedes control to the scheduler for `frames` frames; resumption happens at `resume` (otherwise after
+    /// the caller).
     fn wait_frames(&mut self, frames: u32, resume: Option<Step>) {
         self.x.c.d[0] = frames;
         if let Some(back) = self.dispatch_return {
             self.x.push_return(back);
         }
-        // `jsr 0xa40` (ou `jmp 0xa40` sans reprise propre : la tâche reprendra à la suite de l'appel en cours)
+        // `jsr 0xa40` (or `jmp 0xa40` without its own resume: the task will resume after the current call)
         let resume_point = match resume {
             Some(resume) => resume.into(),
             None => crate::tasks::table::pop_return(self.x.c, self.x.b),
@@ -232,64 +232,64 @@ impl<'a> Ex<'a> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// États d'une séquence
+// States of a sequence
 
-/// Comment finit l'état de sortie d'une séquence : appels après la cession.
+/// How the exit state of a sequence ends: calls after the yield.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Tail {
-    /// `0xc0c` puis `0xe0882` (reprise `RESUME_BOTH`).
+    /// `0xc0c` then `0xe0882` (resume `RESUME_BOTH`).
     Both,
-    /// `0xc0c` seul.
+    /// `0xc0c` alone.
     Sound,
-    /// `0xe0882` seul.
+    /// `0xe0882` alone.
     Command,
-    /// `0xc0c`, deux images de plus, puis `0xe0882`.
+    /// `0xc0c`, two more frames, then `0xe0882`.
     Twice,
-    /// Aucun : `jmp 0xa40`, la cession revient directement à l'appelant de la phase.
+    /// None: `jmp 0xa40`, the yield returns directly to the caller of the phase.
     Jump,
 }
 
-/// Changement de scène à la sortie.
+/// Scene change on exit.
 #[derive(Clone, Copy)]
 enum NextScene {
     Same,
     Plus1,
-    /// Scène suivante, sauf si le compteur d'images `A5+0x54` dépasse 0x1500 : scène 10.
+    /// Next scene, unless the frame counter `A5+0x54` exceeds 0x1500: scene 10.
     Plus1UnlessLate,
     Fixed(u8),
-    /// Scène mémorisée dans le bloc (`+0x14`).
+    /// Scene stored in the block (`+0x14`).
     FromBlock,
 }
 
-/// Attente de la fin du fondu avant de partir (`A5+0x48e` nul) : ce que fait l'état en attendant.
+/// Waiting for the end of the fade before leaving (`A5+0x48e` zero): what the state does meanwhile.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum WaitFade {
     No,
-    /// Mise à jour du monde et sprites (le dispatcher n'a rien à ajouter).
+    /// World update and sprites (the dispatcher has nothing to add).
     World,
-    /// Entrées, mise à jour du monde et sprites.
+    /// Inputs, world update and sprites.
     InputsWorld,
-    /// Rien : le dispatcher fait la fin d'image.
+    /// Nothing: the dispatcher does the end of frame.
     Nothing,
 }
 
 #[derive(Clone, Copy)]
 struct Leave {
     wait_fade: WaitFade,
-    /// Palettes au noir avant de partir (`A5+0x48e` = 15, `0x168c`).
+    /// Palettes to black before leaving (`A5+0x48e` = 15, `0x168c`).
     black: bool,
-    /// Mot de la RAM remis à zéro (séquence 1).
+    /// RAM word cleared (sequence 1).
     clear_word: Option<u32>,
     clear_flags: bool,
     next_scene: NextScene,
     phase: u32,
-    /// Son joué avant la cession.
+    /// Sound played before the yield.
     extra_sound: Option<u32>,
     frames: u32,
     tail: Tail,
 }
 
-/// Sortie ordinaire : scène suivante inchangée, 4 images, `0xc0c` puis `0xe0882`.
+/// Ordinary exit: next scene unchanged, 4 frames, `0xc0c` then `0xe0882`.
 const LEAVE: Leave = Leave {
     wait_fade: WaitFade::No,
     black: true,
@@ -305,48 +305,48 @@ const fn leave_to(scene: u8) -> St {
     St::Leave(Leave { next_scene: NextScene::Fixed(scene), ..LEAVE })
 }
 
-/// Un état d'une séquence.
+/// A state of a sequence.
 #[derive(Clone, Copy)]
 enum St {
-    /// Ne fait rien (attend un événement extérieur).
+    /// Does nothing (waits for an external event).
     Idle,
-    /// État partagé par plusieurs séquences (écrans de fin de niveau).
+    /// State shared by several sequences (end-of-level screens).
     Shared(Shared),
-    /// Remet à zéro les variables de transition (`0xf7ee0`) et le bloc de la boutique (`0xf7916`) ; minuterie
-    /// `+4` à `timer`.
+    /// Clears the transition variables (`0xf7ee0`) and the shop block (`0xf7916`); timer
+    /// `+4` to `timer`.
     Clear { timer: Option<u16> },
-    /// Attend la fin de la minuterie, puis fait sortir les joueurs ; `timer` : nouvelle minuterie.
+    /// Waits for the timer to end, then walks the players out; `timer`: new timer.
     WalkWait { timer: Option<u16> },
-    /// Attend la fin de la minuterie, puis passe à l'état suivant.
+    /// Waits for the timer to end, then moves to the next state.
     TimerWait,
-    /// Fondu `0x14ba` (délai 2) et zone de texte effacée (`0xf683c`), minuterie `timer`.
+    /// Fade `0x14ba` (delay 2) and text area cleared (`0xf683c`), timer `timer`.
     FadeScript { timer: u16 },
-    /// Attend que tous les joueurs soient dans l'état `state`, puis passe à l'état suivant avec `timer`.
+    /// Waits for all players to be in state `state`, then moves to the next state with `timer`.
     PlayersThen { state: u8, timer: Option<u16> },
-    /// État sur mesure.
+    /// Custom state.
     Custom(fn(&mut Ex)),
-    /// État final : prépare la scène suivante.
+    /// Final state: prepares the next scene.
     Leave(Leave),
 }
 
-/// Fin d'image de la séquence, après son état (sauf à l'état final).
+/// End of frame of the sequence, after its state (except at the final state).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Update {
-    /// Entrées, monde, sprites, collisions.
+    /// Inputs, world, sprites, collisions.
     Full,
-    /// Entrées, monde, sprites.
+    /// Inputs, world, sprites.
     NoCollisions,
-    /// Monde et sprites.
+    /// World and sprites.
     World,
-    /// Entrées, joueurs, puis les classes sauf BOSS et caméras, sprites.
+    /// Inputs, players, then the classes except BOSS and cameras, sprites.
     Reduced,
-    /// Rien : les états font eux-mêmes la mise à jour (séquence 0).
+    /// Nothing: the states do the update themselves (sequence 0).
     Nothing,
 }
 
 struct Sequence {
     update: Update,
-    /// État après lequel la fin d'image est omise.
+    /// State after which the end of frame is omitted.
     last: u8,
     states: &'static [St],
 }
@@ -354,18 +354,18 @@ struct Sequence {
 use Update::{Full, NoCollisions, Nothing, Reduced, World};
 use St::Idle;
 
-/// Les états partagés des séquences de sortie, à leur adresse d'origine.
+/// The shared states of the exit sequences, at their original address.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Shared {
-    /// 0xf590e : décompte de fin de niveau ([`super::tally`]).
+    /// 0xf590e: end-of-level tally ([`super::tally`]).
     Tally,
-    /// 0xf5938 : écran de bonus.
+    /// 0xf5938: bonus screen.
     Bonus,
-    /// 0xf6492 : scène propre à certains personnages.
+    /// 0xf6492: scene specific to some characters.
     Characters,
-    /// 0xf792e : boutique.
+    /// 0xf792e: shop.
     Shop,
-    /// 0xf7ecc : fondu au noir et remise à zéro de l'écran.
+    /// 0xf7ecc: fade to black and screen reset.
     Blackout,
 }
 const TALLY: St = St::Shared(Shared::Tally);
@@ -378,7 +378,7 @@ const CLEAR: St = St::Clear { timer: None };
 const WALK: St = St::WalkWait { timer: None };
 
 // ---------------------------------------------------------------------------------------------
-// Exécution d'une image
+// Running a frame
 
 pub fn phase_16(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     let mut ex = Ex { x: Ctx::new(c, b), handed_off: false, entry: 0, dispatch_return: None, a0_clobbered: false };
@@ -391,7 +391,7 @@ pub fn phase_16(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     ex.handed_off
 }
 
-/// État 0 : verrou des joueurs et choix de la séquence d'après la scène.
+/// State 0: player lock and choice of the sequence from the scene.
 fn init(ex: &mut Ex) {
     let state = ex.b8(blk::STATE).wrapping_add(2);
     ex.set_b8(blk::STATE, state);
@@ -403,19 +403,19 @@ fn init(ex: &mut Ex) {
     ex.set_b8(blk::SEQUENCE, sequence);
 }
 
-/// État 2 : la séquence choisie.
+/// State 2: the chosen sequence.
 fn run_sequence(ex: &mut Ex) {
     let number = ex.b8(blk::SEQUENCE) as u32;
     let jump = ex.x.prog16(SEQUENCE_JUMPS + number);
     ex.entry = SEQUENCE_JUMPS + jump as u32;
     let (sequence, dispatcher) = match number as u8 / 2 {
-        // la séquence 27 devient la 29 quand `A5+0x66` est posé ; sinon son aiguillage suit ce test (10 octets)
+        // sequence 27 becomes 29 when `A5+0x66` is set; otherwise its dispatch follows this test (10 bytes)
         27 if ex.x.v8(0x66) != 0 => (&SEQ_29, None),
         27 => (&SEQ_27, Some(ex.entry + 20)),
         index => {
             let Some(s) = sequence(index) else { ex.outside_table() };
-            // l'aiguillage d'origine (10 octets) appelle l'état par `jsr (A1)` : sa pile en garde le retour ;
-            // les séquences dont les états finissent eux-mêmes l'image sautent à l'état (`jmp (A1)`)
+            // the original dispatch (10 bytes) calls the state with `jsr (A1)`: its stack keeps the return;
+            // the sequences whose states end the frame themselves jump to the state (`jmp (A1)`)
             (s, (s.update != Nothing).then(|| ex.entry + 10))
         }
     };
@@ -431,9 +431,9 @@ fn run_sequence(ex: &mut Ex) {
     }
 }
 
-/// Un état partagé, appelé comme par l'aiguillage d'origine (`jsr (A1)`, A0 sur le bloc) : s'il cède la main,
-/// la reprise finira par revenir à l'aiguillage d'origine ; sinon la fin d'image compare l'octet `+2` du bloc
-/// désigné par A0, que l'état peut avoir changé.
+/// A shared state, called like the original dispatch (`jsr (A1)`, A0 on the block): if it cedes control,
+/// the resume will end up returning to the original dispatch; otherwise the end of frame compares byte `+2` of the
+/// block designated by A0, which the state may have changed.
 fn run_shared(ex: &mut Ex, shared: Shared) {
     use crate::modes::{Flow, Sequence};
     let run: fn(&mut Ctx) -> Flow = match shared {
@@ -454,8 +454,8 @@ fn run_shared(ex: &mut Ex, shared: Shared) {
     ex.a0_clobbered = true;
 }
 
-/// Un état saute au début de l'aiguillage d'origine (`bra entrée`) après avoir changé d'étape : l'état de la
-/// nouvelle étape s'exécute dans la même image, appelé comme par l'aiguillage (A0 sur le bloc).
+/// A state jumps to the start of the original dispatch (`bra entry`) after changing step: the state of the
+/// new step runs in the same frame, called like the dispatch (A0 on the block).
 fn redispatch(ex: &mut Ex, sequence: &Sequence) {
     let step = ex.b8(blk::STEP);
     ex.x.c.a[0] = BASE;
@@ -466,7 +466,7 @@ fn redispatch(ex: &mut Ex, sequence: &Sequence) {
     }
 }
 
-/// Fin d'image : sauf à l'état final, mise à jour du monde.
+/// End of frame: except at the final state, world update.
 fn finish_frame(ex: &mut Ex, sequence: &Sequence) {
     let step = if ex.a0_clobbered { rd8(ex.x.b, ex.x.c.a[0].wrapping_add(blk::STEP)) } else { ex.b8(blk::STEP) };
     if step == sequence.last {
@@ -484,8 +484,8 @@ fn run_update(ex: &mut Ex, update: Update) {
     }
     match update {
         Update::Reduced => {
-            // sonde `rendering` (voir `dispatch::Class::update_no_next`)
-            crate::diag::dead_regs(ex.x.c, "rendu", crate::diag::TASK_REGS);
+            // `rendering` probe (see `dispatch::Class::update_no_next`)
+            crate::diag::dead_regs(ex.x.c, "handback", crate::diag::TASK_REGS);
             crate::player::update::update_cpu(ex.x.c, ex.x.b);
             crate::player::overlays::update_cpu(ex.x.c, ex.x.b);
             for class in CLASSES {
@@ -502,7 +502,7 @@ fn run_update(ex: &mut Ex, update: Update) {
     }
 }
 
-/// Attend la fin de la minuterie, puis les joueurs sortent.
+/// Waits for the timer to end, then the players walk out.
 fn walk_wait(ex: &mut Ex, timer: Option<u16>) {
     if !ex.countdown() {
         return;
@@ -550,7 +550,7 @@ fn run_state(ex: &mut Ex, state: St) {
     }
 }
 
-/// État final : la scène suivante se prépare, puis cession à l'ordonnanceur.
+/// Final state: the next scene is prepared, then control is yielded to the scheduler.
 fn do_leave(ex: &mut Ex, leave: &Leave) {
     if leave.wait_fade != WaitFade::No && fading::PAGES.get(ex.x.b) != 0 {
         match leave.wait_fade {
@@ -614,27 +614,27 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Reprises
+// Resumes
 
-/// Étapes de la sortie de scène : fins d'aiguillage des séquences (retour d'un état partagé qui a cédé la main) et
-/// reprises après la cession de l'état final.
+/// Steps of the scene exit: dispatch tails of the sequences (return of a shared state that ceded control) and
+/// resumes after the yield of the final state.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Step {
-    /// Fin d'aiguillage de la séquence d'indice donné (`entrée + 10`).
+    /// Dispatch tail of the sequence of the given index (`entry + 10`).
     DispatchTail(u8),
-    /// `0xf32cc` : `0xc0c` puis `0xe0882`.
+    /// `0xf32cc`: `0xc0c` then `0xe0882`.
     Both,
-    /// `0xf481a` : `0xc0c`.
+    /// `0xf481a`: `0xc0c`.
     Sound,
-    /// `0xf4b48` : `0xe0882`.
+    /// `0xf4b48`: `0xe0882`.
     Command,
-    /// `0xf3cec` : `0xc0c`, puis deux images d'attente avant `TwiceEnd`.
+    /// `0xf3cec`: `0xc0c`, then two waiting frames before `TwiceEnd`.
     Twice,
-    /// `0xf3cfa` : `0xe0882`.
+    /// `0xf3cfa`: `0xe0882`.
     TwiceEnd,
 }
 
-/// Entrées des aiguillages à `jsr (A1)`, par indice de séquence (la 27 a son aiguillage après un test de 10 octets).
+/// Entries of the `jsr (A1)` dispatches, by sequence index (27 has its dispatch after a 10-byte test).
 const DISPATCHERS: [(u8, u32); 29] = [
     (1, 0xf32d8), (2, 0xf33fe), (3, 0xf3594), (4, 0xf3686), (5, 0xf3812), (7, 0xf39f4), (8, 0xf3b18),
     (9, 0xf3c0a), (10, 0xf3d00), (11, 0xf3e3c), (12, 0xf3f2e), (13, 0xf4020), (14, 0xf4176), (15, 0xf434a),
@@ -643,19 +643,19 @@ const DISPATCHERS: [(u8, u32); 29] = [
     (35, 0xf5782),
 ];
 
-/// Fin d'aiguillage à l'adresse `at` (`entrée + 10`).
+/// Dispatch tail at address `at` (`entry + 10`).
 fn dispatch_tail_at(at: u32) -> Next {
     match DISPATCHERS.iter().find(|&&(_, entry)| entry + 10 == at) {
         Some(&(index, _)) => Step::DispatchTail(index).into(),
-        None => unreachable!("sortie de scène : aiguillage {at:#x} absent de DISPATCHERS"),
+        None => unreachable!("scene exit: dispatch {at:#x} absent from DISPATCHERS"),
     }
 }
 
 impl Step {
-    /// Adresse que l'original reprend à cette étape.
+    /// Address the original resumes at for this step.
     pub fn address(self) -> u32 {
         match self {
-            Step::DispatchTail(index) => DISPATCHERS.iter().find(|d| d.0 == index).expect("aiguillage").1 + 10,
+            Step::DispatchTail(index) => DISPATCHERS.iter().find(|d| d.0 == index).expect("dispatch").1 + 10,
             Step::Both => 0xf32cc,
             Step::Sound => 0xf481a,
             Step::Command => 0xf4b48,
@@ -696,10 +696,10 @@ pub const PHASE_16: Native = Native {
     outputs: 0,
 };
 
-/// Fin d'image de l'aiguillage d'origine d'une séquence (`entrée + 10` : `cmpi.b #last,2(A0)`, puis la mise à
-/// jour), où reviennent les reprises après une cession. A0 est celui que l'état a laissé.
+/// End of frame of the original dispatch of a sequence (`entry + 10`: `cmpi.b #last,2(A0)`, then the
+/// update), where the resumes after a yield return. A0 is the one the state left.
 fn dispatch_tail(x: &mut Ctx, index: u8) {
-    let sequence = if index == 27 { &SEQ_27 } else { sequence(index).expect("séquence réécrite") };
+    let sequence = if index == 27 { &SEQ_27 } else { sequence(index).expect("rewritten sequence") };
     let mut ex = Ex { x: Ctx::new(x.c, x.b), handed_off: false, entry: 0, dispatch_return: None, a0_clobbered: true };
     finish_frame(&mut ex, sequence);
 }
@@ -707,9 +707,9 @@ fn dispatch_tail(x: &mut Ctx, index: u8) {
 pub const NATIVES: &[Native] = &[PHASE_16];
 
 // ---------------------------------------------------------------------------------------------
-// Les séquences (indice = numéro de séquence / 2 ; voir `docs/scenes.md` pour les scènes)
+// The sequences (index = sequence number / 2; see `docs/scenes.md` for the scenes)
 
-/// État final sans effacement des drapeaux, cession de 8 images, seule la commande finale ensuite.
+/// Final state without clearing the flags, 8-frame yield, only the final command afterwards.
 const L_SILENT: Leave = Leave { clear_flags: false, frames: 8, tail: Tail::Command, ..LEAVE };
 
 static SEQ_0: Sequence = Sequence {
@@ -750,7 +750,7 @@ static SEQ_2: Sequence = Sequence {
         St::Leave(LEAVE),
     ],
 };
-/// Modèle commun (séquences 3, 8, 11, 12) : image, sortie, états partagés, départ.
+/// Common model (sequences 3, 8, 11, 12): frame, exit, shared states, departure.
 static SEQ_3: Sequence =
     Sequence { update: Full, last: 28, states: &[CLEAR, WALK, TALLY, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(LEAVE)] };
 static SEQ_4: Sequence = Sequence {
@@ -779,7 +779,7 @@ static SEQ_5: Sequence = Sequence {
         St::Leave(Leave { wait_fade: WaitFade::World, next_scene: NextScene::Plus1UnlessLate, ..LEAVE }),
     ],
 };
-/// Séquence 6 (scène 7) : comme la séquence 0, avec la commande sonore 0xe0a82(4).
+/// Sequence 6 (scene 7): like sequence 0, with sound command 0xe0a82(4).
 static SEQ_6: Sequence = Sequence {
     update: Nothing,
     last: 0xff,
@@ -884,7 +884,7 @@ static SEQ_19: Sequence = Sequence {
     last: 24,
     states: &[St::Clear { timer: Some(32) }, WALK, BONUS, CHARACTERS, SHOP, BLACKOUT, St::Leave(Leave { tail: Tail::Sound, ..LEAVE })],
 };
-/// Séquence 20 (scènes 35 et 111) : sortie des joueurs après 48 images de plus, fondu, scène 33.
+/// Sequence 20 (scenes 35 and 111): players leave after 48 more frames, fade, scene 33.
 static SEQ_20: Sequence = Sequence {
     update: Nothing,
     last: 0xff,
@@ -921,12 +921,12 @@ static SEQ_25: Sequence = Sequence {
 };
 static SEQ_26: Sequence =
     Sequence { update: Full, last: 28, states: &[CLEAR, WALK, TALLY, BLACKOUT, BONUS, CHARACTERS, SHOP, leave_to(38)] };
-/// Séquence 27 (scène 54), quand `A5+0x66` est nul : décompte, bonus, scène 55.
+/// Sequence 27 (scene 54), when `A5+0x66` is zero: tally, bonus, scene 55.
 static SEQ_27: Sequence =
     Sequence { update: Full, last: 16, states: &[St::Custom(seq27_clear), WALK, TALLY, BONUS, leave_to(55)] };
 static SEQ_28: Sequence =
     Sequence { update: Full, last: 24, states: &[St::Custom(seq28_clear), WALK, TALLY, BONUS, CHARACTERS, SHOP, leave_to(59)] };
-/// Séquence 29 (scène 59, et 54 quand `A5+0x66` est posé) : sortie et fondu, scène suivante.
+/// Sequence 29 (scene 59, and 54 when `A5+0x66` is set): exit and fade, next scene.
 static SEQ_29: Sequence = Sequence {
     update: Nothing,
     last: 0xff,
@@ -956,7 +956,7 @@ static SEQ_30: Sequence = Sequence {
         leave_to(65),
     ],
 };
-/// Séquence 31 (scène 65) : fondu après 192 images, scène suivante sans palettes au noir ni son.
+/// Sequence 31 (scene 65): fade after 192 frames, next scene without black palettes or sound.
 static SEQ_31: Sequence = Sequence {
     update: Nothing,
     last: 0xff,
@@ -978,7 +978,7 @@ static SEQ_32: Sequence = Sequence {
     last: 24,
     states: &[St::Custom(seq32_clear), WALK, TALLY, BONUS, St::Custom(seq32_route), CHARACTERS, leave_to(105)],
 };
-/// Séquence 33 (scène 67) : sortie des joueurs et fondu, scène 38.
+/// Sequence 33 (scene 67): players leave and fade, scene 38.
 static SEQ_33: Sequence = Sequence {
     update: Nothing,
     last: 0xff,
@@ -1017,7 +1017,7 @@ static SEQ_35: Sequence = Sequence {
     ],
 };
 
-/// Séquence réécrite d'indice `index` ; `None` : cédée à l'original.
+/// Rewritten sequence of index `index`; `None`: ceded to the original.
 fn sequence(index: u8) -> Option<&'static Sequence> {
     Some(match index {
         0 => &SEQ_0,
@@ -1056,9 +1056,9 @@ fn sequence(index: u8) -> Option<&'static Sequence> {
 }
 
 // ---------------------------------------------------------------------------------------------
-// États sur mesure
+// Custom states
 
-/// Séquence 0 (la plus courante) : les joueurs sortent, fondu.
+/// Sequence 0 (the most common): players leave, fade.
 fn seq0_start(ex: &mut Ex) {
     ex.next();
     ex.fade(2, fading::DESCENT);
@@ -1067,7 +1067,7 @@ fn seq0_start(ex: &mut Ex) {
     ex.x.world();
 }
 
-/// Séquence 6 : comme `seq0_start`, avec la commande sonore 0xe0a82(4).
+/// Sequence 6: like `seq0_start`, with sound command 0xe0a82(4).
 fn seq6_start(ex: &mut Ex) {
     ex.next();
     ex.fade(2, fading::DESCENT);
@@ -1077,13 +1077,13 @@ fn seq6_start(ex: &mut Ex) {
     ex.x.world();
 }
 
-/// Séquence 20 : les joueurs sortent à la fin de la minuterie (48 images de plus) ; mise à jour complète.
+/// Sequence 20: players leave at the end of the timer (48 more frames); full update.
 fn seq20_walk(ex: &mut Ex) {
     walk_wait(ex, Some(48));
     run_update(ex, Update::Full);
 }
 
-/// Séquences 20 et 31 : fondu de sortie à la fin de la minuterie ; le monde continue.
+/// Sequences 20 and 31: exit fade at the end of the timer; the world goes on.
 fn fade_out_world(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
@@ -1092,7 +1092,7 @@ fn fade_out_world(ex: &mut Ex) {
     ex.x.world();
 }
 
-/// Séquence 27 : caméra, minuterie + 90, variables de transition et bloc de la boutique remis à zéro.
+/// Sequence 27: camera, timer + 90, transition variables and shop block cleared.
 fn seq27_clear(ex: &mut Ex) {
     ex.next();
     ex.x.set_v16(0x51e, 4);
@@ -1102,7 +1102,7 @@ fn seq27_clear(ex: &mut Ex) {
     ex.reset_shop();
 }
 
-/// Séquence 29 : minuterie + 80, variables de transition remises à zéro, puis l'attente dans la même image.
+/// Sequence 29: timer + 80, transition variables cleared, then the wait in the same frame.
 fn seq29_start(ex: &mut Ex) {
     ex.next();
     let t = ex.b16(blk::TIMER).wrapping_add(80);
@@ -1111,7 +1111,7 @@ fn seq29_start(ex: &mut Ex) {
     seq29_walk(ex);
 }
 
-/// Séquence 29 : à la fin de la minuterie, les joueurs sortent et le fondu commence ; mise à jour complète.
+/// Sequence 29: at the end of the timer, players leave and the fade starts; full update.
 fn seq29_walk(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
@@ -1121,7 +1121,7 @@ fn seq29_walk(ex: &mut Ex) {
     run_update(ex, Update::Full);
 }
 
-/// Séquence 31 : minuterie 192, entrées libérées.
+/// Sequence 31: timer 192, inputs released.
 fn seq31_start(ex: &mut Ex) {
     ex.next();
     ex.set_b16(blk::TIMER, 192);
@@ -1130,7 +1130,7 @@ fn seq31_start(ex: &mut Ex) {
     ex.x.world();
 }
 
-/// Séquence 33 : variables de transition et bloc de la boutique remis à zéro, puis l'attente dans la même image.
+/// Sequence 33: transition variables and shop block cleared, then the wait in the same frame.
 fn seq33_start(ex: &mut Ex) {
     ex.next();
     ex.reset_transition();
@@ -1138,7 +1138,7 @@ fn seq33_start(ex: &mut Ex) {
     seq33_walk(ex);
 }
 
-/// Séquence 33 : à la fin de la minuterie, fondu de sortie puis les joueurs sortent.
+/// Sequence 33: at the end of the timer, exit fade then players leave.
 fn seq33_walk(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
@@ -1151,14 +1151,14 @@ fn seq33_walk(ex: &mut Ex) {
     ex.x.world();
 }
 
-/// Séquence 10 : variables de transition remises à zéro, minuterie 128.
+/// Sequence 10: transition variables cleared, timer 128.
 fn seq10_clear(ex: &mut Ex) {
     ex.next();
     ex.set_b16(blk::TIMER, 128);
     ex.reset_transition();
 }
 
-/// Séquence 32 : selon la route (`A5+0x5c`), la sortie ou l'écran de bonus 0xf6492.
+/// Sequence 32: depending on the route (`A5+0x5c`), the exit or the bonus screen 0xf6492.
 fn seq32_route(ex: &mut Ex) {
     if ex.x.v8(0x5c) != 0 {
         ex.set_step(24);
@@ -1171,22 +1171,22 @@ fn seq32_route(ex: &mut Ex) {
     }
 }
 
-/// Séquence 1 : les joueurs sortent aussitôt.
+/// Sequence 1: players leave immediately.
 fn walk_out_now(ex: &mut Ex) {
     ex.next();
     ex.start_walk_out(false);
 }
 
-/// Séquence 1 : variables de transition remises à zéro, puis l'événement 0xdc5fe(1).
+/// Sequence 1: transition variables cleared, then event 0xdc5fe(1).
 fn seq1_clear(ex: &mut Ex) {
     ex.next();
     ex.reset_transition();
     crate::families::creators::scene_object(ex.x.b, 1);
 }
 
-/// Séquence 2 : la minuterie (mot) est décrémentée une fois, puis les joueurs sortent s'il y en a.
+/// Sequence 2: the timer (word) is decremented once, then the players leave if there are any.
 fn seq2_start(ex: &mut Ex) {
-    // la minuterie (mot) part de 0 : elle est décrémentée tant qu'elle reste positive
+    // the timer (word) starts at 0: it is decremented as long as it stays positive
     let left = ex.b16(blk::TIMER).wrapping_sub(1);
     ex.set_b16(blk::TIMER, left);
     if left as i16 >= 0 || ex.x.v8(var::PLAYERS) == 0 {
@@ -1196,7 +1196,7 @@ fn seq2_start(ex: &mut Ex) {
     ex.start_walk_out(false);
 }
 
-/// Séquence 2 : attend que tous les joueurs soient à l'état de sortie 0xc0c00, puis dialogue 7.
+/// Sequence 2: waits for all players to be in exit state 0xc0c00, then dialogue 7.
 fn seq2_wait_exit(ex: &mut Ex) {
     ex.reset_transition();
     for k in 0..4 {
@@ -1209,7 +1209,7 @@ fn seq2_wait_exit(ex: &mut Ex) {
     ex.message(7);
 }
 
-/// Séquence 2 : message fini, le boss d'objet `+0x10` passe à l'état 0x04020a00.
+/// Sequence 2: message done, the boss of object `+0x10` goes to state 0x04020a00.
 fn seq2_message_done(ex: &mut Ex) {
     if ex.message_done() {
         ex.next();
@@ -1236,7 +1236,7 @@ fn seq2_countdown(ex: &mut Ex) {
     }
 }
 
-/// Séquence 4 : après la sortie, un effet apparaît ; si un joueur est dans l'état 4 ou 5, dialogue 33.
+/// Sequence 4: after the exit, an effect appears; if a player is in state 4 or 5, dialogue 33.
 fn seq4_probe(ex: &mut Ex) {
     if !ex.countdown() {
         return;
@@ -1271,7 +1271,7 @@ fn message_then_next(ex: &mut Ex) {
     }
 }
 
-/// Séquences 5 et 7 : les joueurs sortent, l'effet `A5+0x46` reçoit 0x20000 en `+0x58`, fondu de sortie.
+/// Sequences 5 and 7: players leave, effect `A5+0x46` receives 0x20000 at `+0x58`, exit fade.
 fn walk_with_effect(ex: &mut Ex) {
     if !ex.countdown() {
         return;
@@ -1287,7 +1287,7 @@ fn walk_with_effect(ex: &mut Ex) {
     ex.fade(1, fading::DESCENT);
 }
 
-/// Séquence 10 : les joueurs reçoivent leur rang puis 0xd5f12.
+/// Sequence 10: players receive their rank then 0xd5f12.
 fn seq10_walk(ex: &mut Ex) {
     if !ex.countdown() {
         return;
@@ -1297,7 +1297,7 @@ fn seq10_walk(ex: &mut Ex) {
     crate::families::set_residue::clear_columns(ex.x.b);
 }
 
-/// Séquence 14 : attend l'état 12 des joueurs, puis dialogue 35.
+/// Sequence 14: waits for state 12 of the players, then dialogue 35.
 fn seq14_wait_players(ex: &mut Ex) {
     if ex.all_in_state(12) {
         ex.next();
@@ -1328,7 +1328,7 @@ fn seq14_message_done_wait(ex: &mut Ex) {
     }
 }
 
-/// Séquence 15 : annule la variable temporaire A5-0x65ac, remet à zéro transition et boutique.
+/// Sequence 15: clears the temporary variable A5-0x65ac, resets transition and shop.
 fn seq15_clear(ex: &mut Ex) {
     ex.next();
     ex.x.wr16(scratch(0x9a54), 0);
@@ -1336,7 +1336,7 @@ fn seq15_clear(ex: &mut Ex) {
     ex.reset_shop();
 }
 
-/// Séquence 15 : fondu, script de fondu, événement 0xdc5fe(3).
+/// Sequence 15: fade, fade script, event 0xdc5fe(3).
 fn seq15_fade(ex: &mut Ex) {
     ex.next();
     ex.fade(2, fading::RISE);
@@ -1344,7 +1344,7 @@ fn seq15_fade(ex: &mut Ex) {
     crate::families::creators::scene_object(ex.x.b, 3);
 }
 
-/// Séquence 16 : transition et boutique remises à zéro, les joueurs sortent.
+/// Sequence 16: transition and shop cleared, players leave.
 fn seq16_start(ex: &mut Ex) {
     ex.next();
     ex.reset_transition();
@@ -1352,7 +1352,7 @@ fn seq16_start(ex: &mut Ex) {
     ex.start_walk_out(false);
 }
 
-/// Séquence 21 : les joueurs sortent, dialogue 70 ; la scène suivante dépend du résultat.
+/// Sequence 21: players leave, dialogue 70; the next scene depends on the result.
 fn seq21_start(ex: &mut Ex) {
     ex.next();
     ex.x.set_v8(PAUSE, 0);
@@ -1364,7 +1364,7 @@ fn seq21_start(ex: &mut Ex) {
     ex.release_players(false);
 }
 
-/// Séquence 21 : le message fini donne un indice (`+0x23`) dans une table de scènes suivantes.
+/// Sequence 21: the finished message gives an index (`+0x23`) into a table of next scenes.
 fn seq21_route(ex: &mut Ex) {
     const NEXT_SCENES: u32 = 0xf4a0c;
     let m = ex.object(blk::MESSAGE);
@@ -1378,7 +1378,7 @@ fn seq21_route(ex: &mut Ex) {
     }
 }
 
-/// Séquence 23 : les joueurs sortent puis fondu de sortie.
+/// Sequence 23: players leave then exit fade.
 fn seq23_walk(ex: &mut Ex) {
     if !ex.countdown() {
         return;
@@ -1388,7 +1388,7 @@ fn seq23_walk(ex: &mut Ex) {
     ex.fade(2, fading::DESCENT);
 }
 
-/// Séquence 25 : selon la route (`A5+0x5c`), saute à l'état 20 (écran de bonus) ou fond.
+/// Sequence 25: depending on the route (`A5+0x5c`), jumps to state 20 (bonus screen) or fades.
 fn seq25_route(ex: &mut Ex) {
     if ex.x.v8(0x5c) == 0 {
         ex.set_step(20);
@@ -1400,7 +1400,7 @@ fn seq25_route(ex: &mut Ex) {
     ex.clear_text();
 }
 
-/// Séquence 28 : comme `Clear`, la minuterie augmente de 90.
+/// Sequence 28: like `Clear`, the timer increases by 90.
 fn seq28_clear(ex: &mut Ex) {
     ex.next();
     let t = ex.b16(blk::TIMER).wrapping_add(90);
@@ -1409,7 +1409,7 @@ fn seq28_clear(ex: &mut Ex) {
     ex.reset_shop();
 }
 
-/// Séquence 30 : suite de dialogues (79, 80) autour d'un effet 75 et de la sortie.
+/// Sequence 30: series of dialogues (79, 80) around an effect 75 and the exit.
 fn seq30_message_79(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
@@ -1445,7 +1445,7 @@ fn seq30_players_wait(ex: &mut Ex) {
     }
 }
 
-/// Séquence 32 : efface, dessine ; si la route est prise (`A5+0x5c`) saute à l'état 12.
+/// Sequence 32: clears, draws; if the route is taken (`A5+0x5c`) jumps to state 12.
 fn seq32_clear(ex: &mut Ex) {
     ex.next();
     ex.reset_transition();
@@ -1457,7 +1457,7 @@ fn seq32_clear(ex: &mut Ex) {
     walk_wait(ex, None);
 }
 
-/// Séquence 35 : variables de transition remises à zéro, puis les joueurs sortent après l'attente.
+/// Sequence 35: transition variables cleared, then players leave after the wait.
 fn seq35_clear(ex: &mut Ex) {
     ex.next();
     ex.reset_transition();
@@ -1490,7 +1490,7 @@ fn seq35_message(ex: &mut Ex) {
     }
     ex.next();
     ex.message(88);
-    // Glitch d'origine : l'échec n'est pas testé, l'A1 laissé par l'allocation est mémorisé
+    // Original glitch: the failure is not tested, the A1 left by the allocation is stored
     let set = crate::families::creators::set_15_pure(ex.x.b, 24).unwrap_or_else(|a1| a1);
     ex.set_b16(blk::OBJECT, set.0 as u16);
     crate::camera_modes::start_shake(ex.x.b, crate::camera_modes::shake::B, 0x7fff);
@@ -1516,21 +1516,21 @@ mod tests {
         assert_eq!(scratch(0x9a2a), 0xff_1a2a);
     }
 
-    /// Chaque séquence a un état final multiple de 4 (ou 0xff) et se termine par un état de sortie.
+    /// Each sequence has a final state that is a multiple of 4 (or 0xff) and ends with an exit state.
     #[test]
     fn consistent_sequences() {
         for index in 0..36 {
             let Some(s) = sequence(index) else { continue };
-            assert!(s.last % 4 == 0 || s.last == 0xff, "séquence {index}");
-            assert!(matches!(s.states.last(), Some(St::Leave(_)) | Some(St::Custom(_))), "séquence {index}");
+            assert!(s.last % 4 == 0 || s.last == 0xff, "sequence {index}");
+            assert!(matches!(s.states.last(), Some(St::Leave(_)) | Some(St::Custom(_))), "sequence {index}");
         }
     }
 }
 
-/// État partagé 0xf792e (écran de fin de niveau) : après le message, 0xf7b62 choisit la suite d'après l'octet `+0xc` de
-/// son bloc (A6) par une table de 20 octets (0xf7b88). Pour les scènes de démonstration 109 à 114, l'octet est hors
-/// de la table et l'original saute à une adresse lue dans du code : il plante et redémarre. Hors table : aucune suite
-/// (octet de la table nul, branchement en 0xf792c). Même correctif dans le code d'origine (machine de référence).
+/// Shared state 0xf792e (end-of-level screen): after the message, 0xf7b62 picks the continuation from byte `+0xc` of
+/// its block (A6) via a 20-byte table (0xf7b88). For demo scenes 109 to 114, the byte is outside
+/// the table and the original jumps to an address read from code: it crashes and restarts. Outside the table: no
+/// continuation (zero table byte, branch at 0xf792c). Same fix in the original code (reference machine).
 pub const SHARED_NEXT_ENTRY: u32 = 0xf7b62;
 const SHARED_NEXT_TABLE_LEN: u8 = 20;
 const SHARED_NEXT_NONE: u32 = 0xf792c;

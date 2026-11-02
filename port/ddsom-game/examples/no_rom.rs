@@ -1,15 +1,15 @@
-//! Le jeu sans ROM : une machine faite des seules ressources extraites joue-t-elle comme celle des ROMs ?
+//! The game without ROM: does a machine built from the extracted resources alone play like the one with the ROMs?
 //!
-//!   no_rom <roms> <eeprom> <assets> <scénario>:<images> ...
+//!   no_rom <roms> <eeprom> <assets> <scenario>:<frames> ...
 //!
-//! Deux machines sans 68000 (`ddsom_game::install_no_68k`) avec le pilote son Rust rejouent chaque scénario :
-//!   R : contenus lus dans les ROMs (`cps2::Contents::from_roms`) ;
-//!   A : contenus reconstruits depuis le dossier d'assets (`ddsom_assets::rebuild::contents`), aucun fichier ROM
-//!       ouvert : programme 68000 réduit à ses tables, région du Z80 sans programme, DSP réduit à ses tables.
-//! À chaque image : l'image affichée, la RAM de travail, la GFX RAM, la RAM d'objets, la palette, la RAM partagée
-//! et les échantillons audio doivent être identiques. Un arrêt du jeu sans 68000 (adresse sans native) sur les
-//! deux machines à la même image clôt le scénario sans le compter en échec (trou du mode sans 68000, pas des
-//! ressources). Sortie : « IDENTIQUE » ou la première différence, par scénario.
+//! Two machines without 68000 (`ddsom_game::install_no_68k`) with the Rust sound driver replay each scenario:
+//!   R: contents read from the ROMs (`cps2::Contents::from_roms`);
+//!   A: contents rebuilt from the assets folder (`ddsom_assets::rebuild::contents`), no ROM file
+//!       opened: 68000 program reduced to its tables, Z80 region without program, DSP reduced to its tables.
+//! At every frame: the displayed frame, the work RAM, the GFX RAM, the object RAM, the palette, the shared RAM
+//! and the audio samples must be identical. A stop of the game without 68000 (address without native) on both
+//! machines at the same frame ends the scenario without counting it as a failure (a hole of the no-68000 mode, not of the
+//! resources). Output: « IDENTICAL » or the first difference, per scenario.
 
 use std::path::Path;
 
@@ -22,7 +22,7 @@ fn machine(contents: Contents, eeprom: Option<&[u8]>) -> Machine {
     m
 }
 
-/// Une image, ou le message d'arrêt du jeu sans 68000.
+/// A frame, or the stop message of the game without 68000.
 fn image(m: &mut Machine) -> Result<Vec<[u8; 3]>, String> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.run_frame())).map_err(|e| {
         let msg = e.downcast_ref::<String>().cloned().unwrap_or_default();
@@ -33,7 +33,7 @@ fn image(m: &mut Machine) -> Result<Vec<[u8; 3]>, String> {
     })
 }
 
-/// Première partie de l'état qui diffère entre les deux machines.
+/// First part of the state that differs between the two machines.
 fn gap(r: &Machine, a: &Machine) -> Option<String> {
     let first = |x: &[u16], y: &[u16]| x.iter().zip(y).position(|(p, q)| p != q);
     if let Some(i) = first(&r.bus.ram, &a.bus.ram) {
@@ -51,7 +51,7 @@ fn gap(r: &Machine, a: &Machine) -> Option<String> {
         return Some("palette".into());
     }
     if let Some(i) = r.bus.qram.iter().zip(&a.bus.qram).position(|(p, q)| p != q) {
-        return Some(format!("RAM partagée {i:03x}"));
+        return Some(format!("shared RAM {i:03x}"));
     }
     None
 }
@@ -59,20 +59,20 @@ fn gap(r: &Machine, a: &Machine) -> Option<String> {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 5 {
-        eprintln!("usage : no_rom <roms> <eeprom> <assets> <scénario>:<images> ...");
+        eprintln!("usage: no_rom <roms> <eeprom> <assets> <scenario>:<frames> ...");
         std::process::exit(2);
     }
     let ee = std::fs::read(&a[2]).ok();
     let mut failures = 0;
     for spec in &a[4..] {
-        let (path, frames) = spec.rsplit_once(':').expect("scénario:images");
-        let frames: usize = frames.parse().expect("images");
-        let script = ddsom_game::scenario::Scenario::load(Path::new(path)).expect("scénario");
+        let (path, frames) = spec.rsplit_once(':').expect("scenario:frames");
+        let frames: usize = frames.parse().expect("frames");
+        let script = ddsom_game::scenario::Scenario::load(Path::new(path)).expect("scenario");
         let roms = Contents::from_roms(Path::new(&a[1]), None, None).expect("roms");
         let assets = ddsom_assets::rebuild::contents(Path::new(&a[3])).expect("assets");
         let (mut mr, mut ma) = (machine(roms, ee.as_deref()), machine(assets, ee.as_deref()));
         let t0 = std::time::Instant::now();
-        let mut verdict = format!("IDENTIQUE sur {frames} images");
+        let mut verdict = format!("IDENTICAL over {frames} frames");
         for f in 0..frames {
             script.apply(f, &mut mr);
             script.apply(f, &mut ma);
@@ -80,17 +80,17 @@ fn main() {
             let (sr, sa): (Vec<_>, Vec<_>) = (mr.sound.audio.drain(..).collect(), ma.sound.audio.drain(..).collect());
             let diff = match (&ir, &ia) {
                 (Err(_), Err(_)) => {
-                    verdict = format!("IDENTIQUE sur {f} images (puis arrêt sans 68000 des deux : {})", ir.unwrap_err());
+                    verdict = format!("IDENTICAL over {f} frames (then both stop without 68000: {})", ir.unwrap_err());
                     break;
                 }
-                (Ok(x), Ok(y)) if x != y => Some("image affichée".to_string()),
-                (Ok(_), Ok(_)) if sr != sa => Some("échantillons audio".to_string()),
+                (Ok(x), Ok(y)) if x != y => Some("displayed frame".to_string()),
+                (Ok(_), Ok(_)) if sr != sa => Some("audio samples".to_string()),
                 (Ok(_), Ok(_)) => gap(&mr, &ma),
-                (Err(m), Ok(_)) => Some(format!("arrêt de la machine des ROMs seule : {m}")),
-                (Ok(_), Err(m)) => Some(format!("arrêt de la machine des assets seule : {m}")),
+                (Err(m), Ok(_)) => Some(format!("stop of the ROM machine alone: {m}")),
+                (Ok(_), Err(m)) => Some(format!("stop of the assets machine alone: {m}")),
             };
             if let Some(d) = diff {
-                verdict = format!("DIFFÉRENT à l'image {} : {d}", f + 1);
+                verdict = format!("DIFFERENT at frame {}: {d}", f + 1);
                 failures += 1;
                 break;
             }

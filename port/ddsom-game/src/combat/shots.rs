@@ -1,12 +1,12 @@
-//! Tirs des joueurs (PSHL) contre les ennemis : comportements au contact (table ROM 0x267c4).
+//! Player shots (PSHL) against enemies: contact behaviours (ROM table 0x267c4).
 
 use super::*;
 use crate::machine::Machine;
 
 // ---------------------------------------------------------------------------------------------
-// Tirs des joueurs contre les ennemis
+// Player shots against enemies
 
-/// 0x265c4 : chaque tir joueur visible est confronté à chaque ennemi visible.
+/// 0x265c4: each visible player shot is confronted with each visible enemy.
 pub(super) fn player_shots_hit_enemies(w: &mut World) {
     cov::hit("player_shots_hit_enemies");
     if List::PlayerShots.len(w) == 0 || List::Enemies.len(w) == 0 {
@@ -18,7 +18,7 @@ pub(super) fn player_shots_hit_enemies(w: &mut World) {
         }
         let atk = HitBox(rom::SHOT_ATTACK + 8 * shot.u8(w.b, f::ATTACK_BOX) as u32);
         scan(w, List::Enemies, scratch::SHOTS_INNER, |w, e| {
-            // le tir a pu être consommé par l'ennemi précédent
+            // the shot may have been consumed by the previous enemy
             if !w.is_active(shot) {
                 return Flow::Stop;
             }
@@ -34,9 +34,9 @@ pub(super) fn player_shots_hit_enemies(w: &mut World) {
     });
 }
 
-/// 0x266fe : un tir joueur touche un ennemi. Le comportement du tir (selon son `KIND`) décide si
-/// le coup porte ; si oui, la victime enregistre l'agresseur, perd des PV et le compteur de PV
-/// affiché est mis à jour.
+/// 0x266fe: a player shot hits an enemy. The shot's behaviour (according to its `KIND`) decides whether
+/// the hit lands; if so, the victim records the aggressor, loses HP and the displayed
+/// HP counter is updated.
 pub(super) fn shot_hits_enemy(w: &mut World, shot: Obj, e: Obj) {
     cov::hit("shot_hits_enemy");
     if e.u8(w.b, f::HITSTOP) != 0 {
@@ -72,13 +72,13 @@ pub(super) fn shot_hits_enemy(w: &mut World, shot: Obj, e: Obj) {
         21 => shot_push(w, shot, e),
         23 => shot_execute(w, shot, e, owner),
         _ => {
-            // type inconnu : on laisse l'original décider (Z clair = le tir touche)
+            // unknown type: let the original decide (Z clear = the shot hits)
             let h = rd32(w.b, rom::SHOT_HANDLERS + 4 * kind as u32);
             w.c.a[3] = owner.0;
             !w.call_ao(h, shot, e)
         }
     };
-    trace!("tir {:06x} type {kind} sur {:06x} : {hit}", shot.0, e.0);
+    trace!("shot {:06x} type {kind} on {:06x}: {hit}", shot.0, e.0);
     if !hit {
         return;
     }
@@ -100,7 +100,7 @@ pub(super) fn shot_hits_enemy(w: &mut World, shot: Obj, e: Obj) {
         return;
     }
     let mut dmg = shot_damage(w, shot, e);
-    // 0x26774 : l'original teste `+0x166` du tir lui-même (A0), pas celui du lanceur
+    // 0x26774: the original tests `+0x166` of the shot itself (A0), not that of the launcher
     if shot.u8(w.b, f::GEAR_166) == 4 {
         dmg = dmg.wrapping_add(5);
     }
@@ -114,7 +114,7 @@ pub(super) fn shot_hits_enemy(w: &mut World, shot: Obj, e: Obj) {
     show_enemy_hp(w, owner, e);
 }
 
-/// 0x26828 : certains tirs achèvent d'un coup les petits ennemis (classe 2, types 0 ou 0x13).
+/// 0x26828: certain shots finish off small enemies in one hit (class 2, types 0 or 0x13).
 pub(super) fn kill_small_enemy(w: &mut World, shot: Obj, e: Obj) {
     cov::hit("kill_small_enemy");
     let t = shot.u8(w.b, f::KIND) as u32;
@@ -127,42 +127,42 @@ pub(super) fn kill_small_enemy(w: &mut World, shot: Obj, e: Obj) {
     }
 }
 
-// --- comportements des tirs (table ROM 0x267c4) ----------------------------------------------
+// --- shot behaviours (ROM table 0x267c4) -----------------------------------------------------
 
-/// Orientation donnée à la victime d'un tir qui la projette.
+/// Orientation given to the victim of a shot that knocks it back.
 #[derive(Clone, Copy)]
 pub(super) enum Launch {
-    /// 0, ou 0x20 si le tir n'est pas du type 6 (champ `FACING_AUX`).
+    /// 0, or 0x20 if the shot is not of type 6 (field `FACING_AUX`).
     Fixed,
-    /// Orientation du tir.
+    /// Orientation of the shot.
     ShotFlip,
 }
 
-/// La victime est-elle immunisée contre ce comportement (long `+0x94`, un bit par comportement) ?
+/// Is the victim immune to this behaviour (long `+0x94`, one bit per behaviour)?
 pub(super) fn immune(w: &mut World, e: Obj, bit: u32) -> bool {
     e.u32(w.b, f::IMMUNITY) >> bit & 1 != 0
 }
 
-/// Victime déjà à terre (état 4 avec réaction 0x60 ou 0x88) : certains tirs ne la relancent pas.
+/// Victim already on the ground (state 4 with reaction 0x60 or 0x88): certain shots do not relaunch it.
 pub(super) fn already_down(w: &mut World, e: Obj) -> bool {
     e.u8(w.b, f::STATE) == 4 && matches!(e.u8(w.b, f::REACTION), 0x60 | 0x88)
 }
 
-/// Majore la puissance du tir (octets A et B) d'une fraction d'elle-même.
+/// Increases the shot's power (bytes A and B) by a fraction of itself.
 pub(super) fn boost_power(w: &mut World, shot: Obj, shift: u32) {
     let (a, b) = (shot.u8(w.b, f::POWER_A), shot.u8(w.b, f::POWER_B));
     w.add8(shot, f::POWER_A, a >> shift);
     w.add8(shot, f::POWER_B, b >> shift);
 }
 
-/// Bonus de puissance du tir selon l'équipement du lanceur, à partir des puissances initiales.
+/// Shot power bonus according to the launcher's equipment, starting from the initial powers.
 #[derive(Clone, Copy)]
 pub(super) struct OwnerBonus {
-    /// Objet d'équipement (`+0x10e`) 0x20 : +25 %, 0x21 : +50 %.
+    /// Equipment item (`+0x10e`) 0x20: +25%, 0x21: +50%.
     gear: bool,
-    /// Bague (`+0x166` = 4) : +25 %.
+    /// Ring (`+0x166` = 4): +25%.
     ring: bool,
-    /// Bonus fixe quand `+0x165` vaut la valeur : (valeur, ajout).
+    /// Fixed bonus when `+0x165` equals the value: (value, addition).
     flat: Option<(u8, u8)>,
 }
 
@@ -193,13 +193,13 @@ pub(super) fn owner_flat_bonus(w: &mut World, shot: Obj, owner: Obj, flat: Optio
     }
 }
 
-/// Compteur de coups portés du lanceur (`+0x190`, mot).
+/// Launcher's counter of hits landed (`+0x190`, word).
 pub(super) fn owner_hits(w: &mut World, owner: Obj, n: u16) {
     w.add16(owner, f::HITS_LANDED, n);
 }
 
-/// Réaction commune des tirs qui projettent (0x268ec / 0x269a0) : la victime part en réaction
-/// 0x4c (ou 0x38 au sol, 0 si elle est à terre), étincelle de type 1.
+/// Common reaction of the shots that knock back (0x268ec / 0x269a0): the victim goes into reaction
+/// 0x4c (or 0x38 on the ground, 0 if it is down), spark of type 1.
 pub(super) fn launch(w: &mut World, shot: Obj, e: Obj, face: Launch) -> bool {
     cov::hit("launch");
     e.set_u32(w.b, f::STATE, state::HIT);
@@ -226,14 +226,14 @@ pub(super) fn launch(w: &mut World, shot: Obj, e: Obj, face: Launch) -> bool {
     true
 }
 
-/// Types 1 et 2.
+/// Types 1 and 2.
 pub(super) fn shot_launch(w: &mut World, shot: Obj, e: Obj, bit: u32, face: Launch) -> bool {
     cov::hit("shot_launch");
     !immune(w, e, bit) && launch(w, shot, e, face)
 }
 
-/// Types 9 et 10 : comme 1 et 2, mais contre un gros ennemi (boss de type 5, 8 ou 0x12, ennemi de
-/// type 8) la puissance du tir augmente de moitié.
+/// Types 9 and 10: like 1 and 2, but against a big enemy (boss of type 5, 8 or 0x12, enemy of
+/// type 8) the shot's power increases by half.
 pub(super) fn shot_boost_launch(w: &mut World, shot: Obj, e: Obj, bit: u32, face: Launch) -> bool {
     cov::hit("shot_boost_launch");
     if immune(w, e, bit) {
@@ -247,7 +247,7 @@ pub(super) fn shot_boost_launch(w: &mut World, shot: Obj, e: Obj, bit: u32, face
     launch(w, shot, e, face)
 }
 
-/// Types 0 et 13 : aucun test ; le tir gèle autant que la victime.
+/// Types 0 and 13: no test; the shot freezes as much as the victim.
 pub(super) fn shot_plain(w: &mut World, shot: Obj, e: Obj) -> bool {
     cov::hit("shot_plain");
     let v = shot.u8(w.b, f::HITSTOP_VICTIM);
@@ -258,7 +258,7 @@ pub(super) fn shot_plain(w: &mut World, shot: Obj, e: Obj) -> bool {
     true
 }
 
-/// Type 3 : renverse (réaction 0x60), victime face à l'opposé d'elle-même.
+/// Type 3: knocks over (reaction 0x60), victim facing away from itself.
 pub(super) fn shot_knockdown(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
     cov::hit("shot_knockdown");
     if immune(w, e, 28) || already_down(w, e) {
@@ -273,7 +273,7 @@ pub(super) fn shot_knockdown(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bo
     true
 }
 
-/// Type 4 : déséquilibre ; alterne réaction 0x68 et rien grâce à un délai (`+0x87`), ajoute le son.
+/// Type 4: unbalances; alternates reaction 0x68 and nothing thanks to a delay (`+0x87`), adds the sound.
 pub(super) fn shot_stagger(w: &mut World, shot: Obj, e: Obj) -> bool {
     cov::hit("shot_stagger");
     if immune(w, e, 29) {
@@ -302,7 +302,7 @@ pub(super) fn shot_stagger(w: &mut World, shot: Obj, e: Obj) -> bool {
     true
 }
 
-/// Type 11 : magie ; +25 % de la puissance B contre le boss de type 0xb.
+/// Type 11: magic; +25% of power B against the type 0xb boss.
 pub(super) fn shot_mage(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
     cov::hit("shot_mage");
     if immune(w, e, 27) {
@@ -321,21 +321,21 @@ pub(super) fn shot_mage(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
     true
 }
 
-/// Orientation et réaction des coups enchaînés.
+/// Orientation and reaction of the chained hits.
 #[derive(Clone, Copy)]
 pub(super) enum Combo {
-    /// Réaction donnée, orientation tirée au hasard ; le booléen marque la victime mourante.
+    /// Given reaction, randomly drawn orientation; the boolean marks the dying victim.
     Random(u8, bool),
-    /// Réaction 0x78, la victime regarde le lanceur.
+    /// Reaction 0x78, the victim faces the launcher.
     OwnerFlip,
-    /// Réaction 0x88, la victime fait demi-tour.
+    /// Reaction 0x88, the victim turns around.
     VictimFlip,
 }
 
-/// Types 5, 22, 7, 17, 18 : coup enchaîné (+2 coups portés, +1 coup encaissé, bonus du lanceur).
+/// Types 5, 22, 7, 17, 18: chained hit (+2 hits landed, +1 hit taken, launcher bonus).
 pub(super) fn shot_combo(w: &mut World, shot: Obj, e: Obj, owner: Obj, bit: u32, kind: Combo) -> bool {
     cov::hit("shot_combo");
-    // le type 7 (OwnerFlip) ne vérifie pas que la victime est déjà à terre
+    // type 7 (OwnerFlip) does not check that the victim is already on the ground
     let down = !matches!(kind, Combo::OwnerFlip) && already_down(w, e);
     if immune(w, e, bit) || down {
         return false;
@@ -373,7 +373,7 @@ pub(super) fn shot_combo(w: &mut World, shot: Obj, e: Obj, owner: Obj, bit: u32,
     true
 }
 
-/// Type 6 : coup léger avec étincelle et son (0xe7376).
+/// Type 6: light hit with spark and sound (0xe7376).
 pub(super) fn shot_spark(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
     cov::hit("shot_spark");
     if immune(w, e, 18) {
@@ -390,7 +390,7 @@ pub(super) fn shot_spark(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
     true
 }
 
-/// Types 8 et 12 : coup sur place (réaction 0x4c, ou 0x88 si la victime est au sol).
+/// Types 8 and 12: hit in place (reaction 0x4c, or 0x88 if the victim is on the ground).
 pub(super) fn shot_slam(w: &mut World, shot: Obj, e: Obj, owner: Obj, counts: bool) -> bool {
     cov::hit("shot_slam");
     if immune(w, e, 28) {
@@ -414,8 +414,8 @@ pub(super) fn shot_slam(w: &mut World, shot: Obj, e: Obj, owner: Obj, counts: bo
     true
 }
 
-/// Types 14, 15, 16 : coup simple qui fait mourir la victime (`ACTIVE` = 2). `down` : vérifie
-/// aussi que la victime n'est pas déjà à terre ; `flat` : valeur de `+0x165` donnant +5.
+/// Types 14, 15, 16: simple hit that kills the victim (`ACTIVE` = 2). `down`: also checks
+/// that the victim is not already on the ground; `flat`: value of `+0x165` giving +5.
 pub(super) fn shot_simple(w: &mut World, shot: Obj, e: Obj, owner: Obj, bit: u32, react: u8, down: Option<()>, flat: u8) -> bool {
     cov::hit("shot_simple");
     if immune(w, e, bit) || (down.is_some() && already_down(w, e)) {
@@ -432,7 +432,7 @@ pub(super) fn shot_simple(w: &mut World, shot: Obj, e: Obj, owner: Obj, bit: u32
     true
 }
 
-/// Type 19 : éclair ; le tir lui-même passe en réaction.
+/// Type 19: lightning; the shot itself goes into reaction.
 pub(super) fn shot_lightning(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
     cov::hit("shot_lightning");
     if immune(w, e, 1) {
@@ -451,7 +451,7 @@ pub(super) fn shot_lightning(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bo
     true
 }
 
-/// Type 20 : balayage ; les ennemis ordinaires tombent à 0 PV.
+/// Type 20: sweep; ordinary enemies drop to 0 HP.
 pub(super) fn shot_sweep(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
     cov::hit("shot_sweep");
     if immune(w, e, 9) {
@@ -470,7 +470,7 @@ pub(super) fn shot_sweep(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
     true
 }
 
-/// Type 21 : repousse (le tir s'éteint) ; sans effet sur le boss 0x12 / l'ennemi 8.
+/// Type 21: pushes back (the shot goes out); no effect on boss 0x12 / enemy 8.
 pub(super) fn shot_push(w: &mut World, shot: Obj, e: Obj) -> bool {
     cov::hit("shot_push");
     let protected = if e.u8(w.b, f::CLASS) == 4 { 0x12 } else { 8 };
@@ -496,7 +496,7 @@ pub(super) fn shot_push(w: &mut World, shot: Obj, e: Obj) -> bool {
     true
 }
 
-/// Type 23 : coup fatal (PV à 0) ; le tir s'éteint.
+/// Type 23: fatal hit (HP to 0); the shot goes out.
 pub(super) fn shot_execute(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
     cov::hit("shot_execute");
     if immune(w, e, 0) {
@@ -513,7 +513,7 @@ pub(super) fn shot_execute(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool
     true
 }
 
-/// Type 24 (0x27242) : tir spécial ; dégâts directs, sans mise à jour de la jauge.
+/// Type 24 (0x27242): special shot; direct damage, without updating the gauge.
 pub(super) fn shot_kind_24(w: &mut World, shot: Obj, e: Obj) {
     cov::hit("shot_kind_24");
     if shot.u8(w.b, f::VARIANT) == 1 {

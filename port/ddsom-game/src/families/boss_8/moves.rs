@@ -1,5 +1,6 @@
-//! Boss 8, groupes 6 et 8 : esquives (disparition et réapparition, pas de côté, bond, repli), lancées par `aids::after_attack`
-//! et les coups encaissés. Le groupe 6 tire deux variantes de l'étape 2 selon `+6`, le groupe 8 en a cinq.
+//! Boss 8, groups 6 and 8: dodges (disappearance and reappearance, sidestep, leap, retreat), started by
+//! `aids::after_attack` and by hits taken. Group 6 draws two variants of step 2 according to `+6`, group 8 has
+//! five.
 
 use crate::families::cx::Bench;
 use super::aids;
@@ -16,7 +17,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch(x, table, f::SUB3)
 }
 
-/// 0x89030 : le boss s'efface (début commun des esquives).
+/// 0x89030: the boss fades out (common start of the dodges).
 fn fade_out<R: Bench>(x: &mut Cx<'_, R>) {
     addq8(x, f::SUB3, 2);
     x.set8(PHASE_TIMER, 0x10);
@@ -25,7 +26,7 @@ fn fade_out<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 4);
 }
 
-/// 0x8909a : le boss reparaît quand le décompte est écoulé.
+/// 0x8909a: the boss reappears when the countdown has elapsed.
 fn fade_in<R: Bench>(x: &mut Cx<'_, R>) {
     if sub16(x, TIMER, 1).mi() {
         addq8(x, f::SUB3, 2);
@@ -34,14 +35,14 @@ fn fade_in<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin des esquives : joue l'animation, puis passe à `state`.
+/// End of the dodges: plays the animation, then moves to `state`.
 fn finish<R: Bench>(x: &mut Cx<'_, R>, state: u32) {
     if x.anim_step() {
         x.set32(f::STATE, state);
     }
 }
 
-/// Réapparition : le boss est invisible (`bset 1`) 8 images, animation 5.
+/// Reappearance: the boss is invisible (`bset 1`) for 8 frames, animation 5.
 fn reappear<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, true);
     x.set16(TIMER, 8);
@@ -135,7 +136,7 @@ pub(super) fn group8<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x88f90 (`+6` = 0 du groupe 8) : attente debout, puis retour au combat.
+/// 0x88f90 (`+6` = 0 of group 8): standing wait, then return to combat.
 fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x88f9e, f::SUB3) {
         0x88fe2 => {

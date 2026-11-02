@@ -1,4 +1,4 @@
-//! Code 68000 de ddsom recompilé en Rust. Brancher sur la machine avec `install`.
+//! ddsom 68000 code recompiled to Rust. Plug it into the machine with `install`.
 
 #[allow(clippy::all, unused_braces, unused_imports, unused_variables)]
 mod generated {
@@ -7,7 +7,7 @@ mod generated {
 
 pub use generated::{run_block, BLOCKS};
 
-/// Active l'exécution du code recompilé sur la machine (l'interpréteur reste le filet de sécurité).
+/// Enables execution of the recompiled code on the machine (the interpreter remains the safety net).
 pub fn install(m: &mut cps2::Machine) {
     m.executor = Some(run_block);
 }

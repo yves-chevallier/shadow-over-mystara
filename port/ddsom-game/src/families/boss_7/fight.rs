@@ -1,4 +1,4 @@
-//! Boss 7, groupes 0 (arrivée, pose de l'attract), 2 (combat), 10 (attente sans joueur) et 14 (relevé).
+//! Boss 7, groups 0 (arrival, attract pose), 2 (combat), 10 (wait with no player) and 14 (getting up).
 
 use super::aids;
 use crate::families::cx::Bench;
@@ -6,9 +6,9 @@ use super::*;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-// --- groupe 0 : arrivée --------------------------------------------------------------------------------------
+// --- group 0: arrival --------------------------------------------------------------------------------------
 
-/// 0x85d08 : `+6` = 0, chute et atterrissage ; `+6` = 2, pose de l'attract.
+/// 0x85d08: `+6` = 0, fall and landing; `+6` = 2, attract pose.
 pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     if dispatch(x, 0x85d16, f::SUB2) == 0x85d1a {
         arrival(x)
@@ -17,7 +17,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x85d1a : le boss apparaît, tombe, atterrit dans un nuage de poussière, puis se met en garde.
+/// 0x85d1a: the boss appears, falls, lands in a cloud of dust, then takes its guard.
 fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x85d28, f::SUB3) {
         0x85d30 => {
@@ -60,7 +60,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x85dd6 : pose de l'attract (animation 0, relancée seulement si la clé change).
+/// 0x85dd6: attract pose (animation 0, restarted only if the key changes).
 fn pose<R: Bench>(x: &mut Cx<'_, R>) {
     dispatch(x, 0x85de4, f::SUB3);
     x.set8(VULNERABLE, 0);
@@ -76,7 +76,7 @@ fn pose<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- groupe 2 : combat -----------------------------------------------------------------------------------------
 
-/// 0x85e18 : tant qu'un joueur est en vie, marche, demi-tour, arrêt, approche.
+/// 0x85e18: as long as a player is alive, walk, about-face, stop, approach.
 pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, WAIT);
@@ -93,7 +93,7 @@ pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Animation `kind` (clé `+0xa2`) ; le script `anim` ne repart que si la clé change.
+/// Animation `kind` (key `+0xa2`); the `anim` script only restarts if the key changes.
 fn keyed_body<R: Bench>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
     x.set8(ANIM_KIND, kind);
     setb(x, 2, kind);
@@ -103,7 +103,7 @@ fn keyed_body<R: Bench>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
     }
 }
 
-/// 0x85e54 : marche vers l'adversaire, et regarde s'il peut attaquer.
+/// 0x85e54: walks toward the opponent, and checks whether it can attack.
 fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         addq8(x, f::SUB3, 2);
@@ -129,7 +129,7 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     near_checks(x)
 }
 
-/// 0x85eee : décide d'attaquer, de frapper ce qui est devant, ou de continuer la marche.
+/// 0x85eee: decides to attack, to strike whatever is in front, or to keep walking.
 fn near_checks<R: Bench>(x: &mut Cx<'_, R>) {
     if aids::player_near(x, false) {
         x.set32(f::STATE, 0x0204_0000);
@@ -168,8 +168,8 @@ fn near_checks<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x85fc4 (devant, `front`) et 0x8603e (plus loin) : un adversaire à portée de coup. Rend vrai si le boss
-/// engage une attaque ou s'écarte.
+/// 0x85fc4 (ahead, `front`) and 0x8603e (farther): an opponent within striking range. Returns true if the boss
+/// starts an attack or steps aside.
 fn guard<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) || x.u16(f::TARGET) == 0 {
         return false;
@@ -192,7 +192,7 @@ fn guard<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, front: bool) ->
     true
 }
 
-/// 0x860b8 : demi-tour, puis reprise de l'état mémorisé (`+0xa6`, `+0xa5`).
+/// 0x860b8: about-face, then resumption of the saved state (`+0xa6`, `+0xa5`).
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         addq8(x, f::SUB3, 2);
@@ -211,7 +211,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x86110 : arrêt face à l'adversaire.
+/// 0x86110: stop facing the opponent.
 fn stop<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         addq8(x, f::SUB3, 2);
@@ -276,9 +276,9 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupe 10 : attente sans joueur ----------------------------------------------------------------------------
+// --- group 10: wait with no player ----------------------------------------------------------------------------
 
-/// 0x86af6 : attend qu'un joueur soit en vie.
+/// 0x86af6: waits for a player to be alive.
 pub(super) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, FIGHT);
@@ -294,9 +294,9 @@ pub(super) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupe 14 : relevé -------------------------------------------------------------------------------------------
+// --- group 14: getting up -------------------------------------------------------------------------------------------
 
-/// 0x86b32 : le boss se relève, invisible un instant, puis riposte (attaque 10).
+/// 0x86b32: the boss gets up, invisible for a moment, then counterattacks (attack 10).
 pub(super) fn stand_up<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x86b40, f::SUB2) {
         0x86b46 => {

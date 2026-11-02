@@ -1,39 +1,39 @@
-//! Le jeu sans 68000 : natives seules et boucle d'image du noyau (voir `docs/noyau.md`, « Vers une boucle sans
+//! The game without a 68000: natives only and the kernel's frame loop (see `docs/noyau.md`, « Vers une boucle sans
 //! 68000 »).
 //!
-//! Le `Cpu` de la machine n'est plus qu'un banc de registres (D0-D7, A0-A7, SR) et de pile. Le processeur est à un
-//! *point* (`kernel::Point`, rangé dans la table des tâches) : une étape du démarrage, un point de l'ordonnanceur
-//! (machine à états Rust, `kernel`), une tâche, ou le pas de jeu retenu. Une tâche est lancée en appelant le pas de son
-//! étape (`tasks::execute`) ; tant qu'elle continue par un saut d'une native à une autre (`Sequence::jump_to`, retour
-//! vers une adresse), la native posée au PC s'exécute ([`step`]). Une native s'exécute toujours en entier, même quand
-//! elle déborderait sur l'interruption suivante : aucune n'est remplacée par son original. Une adresse sans native
-//! arrête net le jeu avec un diagnostic ([`STOP`]) au lieu d'exécuter du code d'origine.
+//! The machine's `Cpu` is now only a register bench (D0-D7, A0-A7, SR) and a stack. The processor is at a
+//! *point* (`kernel::Point`, stored in the task table): a startup step, a scheduler point
+//! (Rust state machine, `kernel`), a task, or the held game step. A task is launched by calling the step of its
+//! stage (`tasks::execute`); as long as it continues by a jump from one native to another (`Sequence::jump_to`, return
+//! to an address), the native set at the PC runs ([`step`]). A native always runs in full, even when
+//! it would overflow onto the next interrupt: none is replaced by its original. An address without a native
+//! stops the game dead with a diagnostic ([`STOP`]) instead of running original code.
 //!
-//! ## L'image
+//! ## The frame
 //!
-//! La machine garde son calendrier (`cps2::Machine::line_work`) : à chaque ligne, [`line`] fait le travail du
-//! processeur, puis le Z80 joue sa ligne. Le travail du processeur n'a pas de durée :
+//! The machine keeps its schedule (`cps2::Machine::line_work`): at each line, [`line`] does the work of the
+//! processor, then the Z80 plays its line. The processor's work has no duration:
 //!
-//! 1. l'interruption de VBLANK, levée à la fin de l'image précédente, est prise dès que le SR l'autorise, entre deux
-//!    points (au début de l'image : l'ordonnanceur l'attend, le pas de jeu retenu aussi ; pendant le démarrage, quand
-//!    `boot_init` démasque) : c'est un point du noyau (`Point::Interruption`, le point interrompu rangé dans la table,
-//!    sans PC ni SR empilés), qui s'exécute en entier (`vblank::interruption`) puis revient au point interrompu ;
-//! 2. puis les points s'enchaînent (ordonnanceur, tâches, cessions) jusqu'à ce que l'ordonnanceur tourne à vide
-//!    ([`at_rest`] : plus aucune tâche prête, ou seule la tâche du gel sans rien à faire), ou que le pas de jeu
-//!    atteigne le plafond de l'image (`MAX_STEPS_PER_FRAME` pas, [`game_step`] : le pas retenu s'exécute au début de
-//!    l'image suivante, juste après le VBLANK) ;
-//! 3. au démarrage, un point qui attend une position du faisceau (relâchement du Z80, `boot_init` :
-//!    `startup.rs`) rend la main sans rien changer : la ligne s'arrête là et il réessaie à la suivante.
+//! 1. the VBLANK interrupt, raised at the end of the previous frame, is taken as soon as the SR allows it, between two
+//!    points (at the start of the frame: the scheduler waits for it, the held game step too; during startup, when
+//!    `boot_init` unmasks): it is a kernel point (`Point::Interruption`, the interrupted point stored in the table,
+//!    without pushed PC or SR), which runs in full (`vblank::interruption`) then returns to the interrupted point;
+//! 2. then the points chain (scheduler, tasks, cessions) until the scheduler idles
+//!    ([`at_rest`]: no task ready any more, or only the freeze task with nothing to do), or the game step
+//!    reaches the frame cap (`MAX_STEPS_PER_FRAME` steps, [`game_step`]: the held step runs at the start of
+//!    the next frame, right after VBLANK);
+//! 3. at startup, a point that waits for a beam position (Z80 release, `boot_init`:
+//!    `startup.rs`) hands control back without changing anything: the line stops there and it retries at the next.
 //!
-//! Tout le travail de l'image se fait donc au début de sa première ligne (240), avant le Z80, comme à ×16 où il finit
-//! en quelques lignes : seuls le VBLANK et l'envoi des commandes au Z80 (`0x68c`, qu'il appelle) touchent la RAM
-//! partagée, et ils sont les premiers. Le surcadencement, `idle`, les durées des natives et les correctifs de la
-//! machine (`patches`, qui s'appliquent au code d'origine) ne servent plus.
+//! All the work of the frame is thus done at the start of its first line (240), before the Z80, as at ×16 where it ends
+//! in a few lines: only VBLANK and the sending of commands to the Z80 (`0x68c`, which it calls) touch the shared
+//! RAM, and they come first. The overclocking, `idle`, the durations of the natives and the machine
+//! patches (`patches`, which apply to the original code) are no longer used.
 //!
-//! Une tâche prête qui attend un événement amené par le VBLANK (fin d'un fondu...) fait tourner l'ordonnanceur en rond :
-//! l'original tourne ainsi jusqu'à l'interruption. Ici, quand l'état revient identique d'un parcours de
-//! l'ordonnanceur au suivant ([`Snapshot`]), l'image est finie. Plafond de sûreté : au plus [`NATIVES_CAP`]
-//! points par image (compté dans [`summary`]).
+//! A ready task waiting for an event brought by VBLANK (end of a fade...) makes the scheduler spin:
+//! the original spins like this until the interrupt. Here, when the state comes back identical from one walk of the
+//! scheduler to the next ([`Snapshot`]), the frame is finished. Safety cap: at most [`NATIVES_CAP`]
+//! points per frame (counted in [`summary`]).
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -47,15 +47,15 @@ use crate::mem::rd32;
 use crate::tasks::table::{read, table};
 use crate::Native;
 
-/// Le jeu tourne sans 68000 (une seule machine du processus, celle du jeu : la machine de référence de `validate`
-/// n'exécute pas de natives).
+/// The game runs without a 68000 (a single machine in the process, the game's: the `validate` reference machine
+/// does not run natives).
 static ACTIVE: AtomicBool = AtomicBool::new(false);
 
 pub fn active() -> bool {
     ACTIVE.load(Ordering::Relaxed)
 }
 
-/// Branche la boucle sans 68000 sur la machine (le plafond de pas de la machine ne sert que pour sa valeur).
+/// Hooks the loop without a 68000 onto the machine (the machine's step cap is only used for its value).
 pub(crate) fn install(m: &mut cps2::Machine) {
     ACTIVE.store(true, Ordering::Relaxed);
     m.executor = None;
@@ -64,25 +64,25 @@ pub(crate) fn install(m: &mut cps2::Machine) {
     m.line_work = Some(line);
 }
 
-/// Points au plus par image : une image ordinaire en exécute quelques milliers.
+/// Points at most per frame: an ordinary frame runs a few thousand.
 pub const NATIVES_CAP: u32 = 1_000_000;
 
-/// Parcours de l'ordonnanceur dans une image à partir duquel on cherche une attente active (voir [`Snapshot`]).
+/// Scheduler walk in a frame from which an active wait is looked for (see [`Snapshot`]).
 const ORDINARY_WALKS: u32 = 3;
 
-/// Images finies sur une attente active reconnue, et images arrêtées par [`NATIVES_CAP`].
+/// Frames finished on a recognised active wait, and frames stopped by [`NATIVES_CAP`].
 static IDLE_FRAMES: AtomicU64 = AtomicU64::new(0);
 static CAPPED_FRAMES: AtomicU64 = AtomicU64::new(0);
 
-/// Bilan pour `validate` : images finies sur une attente active, images arrêtées par le plafond de natives.
+/// Summary for `validate`: frames finished on an active wait, frames stopped by the native cap.
 pub fn summary() -> (u64, u64) {
     (IDLE_FRAMES.load(Ordering::Relaxed), CAPPED_FRAMES.load(Ordering::Relaxed))
 }
 
-/// État de la machine au début d'un parcours de l'ordonnanceur (`0x932`) : mémoire que les natives écrivent, table des
-/// tâches, registres. S'il revient identique d'un parcours au suivant, les tâches tournent en rond (une tâche prête
-/// attend un événement que seul le VBLANK amènera, comme la fin d'un fondu) : rien ne changera plus avant
-/// l'interruption, l'image est finie. L'original, lui, tourne jusqu'à l'interruption.
+/// State of the machine at the start of a scheduler walk (`0x932`): memory that the natives write, task
+/// table, registers. If it comes back identical from one walk to the next, the tasks are spinning (a ready task
+/// waits for an event that only VBLANK will bring, like the end of a fade): nothing will change before
+/// the interrupt, the frame is finished. The original, for its part, spins until the interrupt.
 #[derive(PartialEq)]
 struct Snapshot {
     ram: Vec<u16>,
@@ -99,7 +99,7 @@ struct Snapshot {
 impl Snapshot {
     fn take(c: &Cpu, b: &Cps2Bus) -> Self {
         let mut ram = b.ram.clone();
-        // la RAM des piles d'origine ne compte pas (changée à chaque point par la sonde `stack`)
+        // the RAM of the original stacks does not count (changed at each point by the `stack` probe)
         ram[STACKS.0 / 2..STACKS.1 / 2].fill(0);
         Snapshot {
             ram,
@@ -115,31 +115,31 @@ impl Snapshot {
     }
 }
 
-/// Où en est l'image en cours.
+/// Where the current frame is.
 #[derive(Default)]
 struct Image {
     number: u64,
     natives: u32,
     walk: u32,
-    /// Pas de jeu exécutés dans l'image, et leur plafond (`cps2::StepCap::max` ; aucun : pas de plafond).
+    /// Game steps run in the frame, and their cap (`cps2::StepCap::max`; none: no cap).
     step: u32,
     cap: Option<u32>,
-    /// Plus rien à faire avant l'interruption (attente active reconnue, ou plafond).
+    /// Nothing left to do before the interrupt (active wait recognised, or cap).
     finished: bool,
     snapshot: Option<Snapshot>,
 }
 
 thread_local! {
     static IMAGE: RefCell<Image> = RefCell::new(Image { number: u64::MAX, ..Image::default() });
-    /// Dernières natives exécutées (diagnostic d'un arrêt).
+    /// Last natives run (diagnosing a stop).
     static LAST: RefCell<VecDeque<&'static Native>> = const { RefCell::new(VecDeque::new()) };
 }
 
-/// Travail du processeur pendant une ligne (`cps2::Machine::line_work`). Le plafond des pas de jeu n'est lu que pour
-/// sa valeur : le compte des pas de l'image est tenu ici ([`game_step`]).
+/// Processor work during a line (`cps2::Machine::line_work`). The cap on game steps is only read for
+/// its value: the count of the frame's steps is kept here ([`game_step`]).
 pub fn line(c: &mut Cpu, b: &mut Cps2Bus, end: u64, cap: Option<&mut StepCap>) {
     if b.irq_raster {
-        stop(c, b, "interruption raster (niveau 4) : jamais armée par le jeu".into());
+        stop(c, b, "raster interrupt (level 4): never armed by the game".into());
     }
     IMAGE.with(|i| {
         let mut i = i.borrow_mut();
@@ -148,9 +148,9 @@ pub fn line(c: &mut Cpu, b: &mut Cps2Bus, end: u64, cap: Option<&mut StepCap>) {
         }
         i.cap = cap.map(|p| p.max);
     });
-    let poison_stack = crate::diag::poison_active("pile");
+    let poison_stack = crate::diag::poison_active("stack");
     loop {
-        // un point de premier niveau : aucune cession en cours
+        // a top-level point: no cession in progress
         crate::tasks::forget_cession();
         let point = crate::kernel::point(b);
         if poison_stack && !point.startup() {
@@ -161,13 +161,13 @@ pub fn line(c: &mut Cpu, b: &mut Cps2Bus, end: u64, cap: Option<&mut StepCap>) {
             crate::kernel::interrupt(b, point);
             continue;
         }
-        // (une interruption masquée attend que l'ordonnanceur rouvre sa fenêtre)
+        // (a masked interrupt waits for the scheduler to reopen its window)
         if level == 0 && (at_rest(b, point) || frame_done(c, b, point)) {
             break;
         }
         let next = match point {
             Point::Reset | Point::ReleaseZ80 | Point::Handshake | Point::BootInit | Point::Launch => {
-                // `None` : il attend sa position du faisceau
+                // `None`: it is waiting for its beam position
                 let Some(next) = crate::startup::execute(c, b, point) else { break };
                 next
             }
@@ -178,9 +178,9 @@ pub fn line(c: &mut Cpu, b: &mut Cps2Bus, end: u64, cap: Option<&mut StepCap>) {
                 crate::vblank::interruption(b, level);
                 crate::kernel::interrupt_end(b)
             }
-            // une tâche ne continue plus par un saut vers une native : chaque pas cède, se termine ou bloque
-            Point::Task => stop(c, b, "la tâche a rendu la main sans céder".into()),
-            // la boucle sans fin de l'original : l'image est finie
+            // a task no longer continues by a jump to a native: each step cedes, ends or blocks
+            Point::Task => stop(c, b, "the task handed control back without ceding".into()),
+            // the original's endless loop: the frame is finished
             Point::Blocked(_) => break,
             Point::StepKept { d4 } => {
                 if cap_reached() {
@@ -192,21 +192,21 @@ pub fn line(c: &mut Cpu, b: &mut Cps2Bus, end: u64, cap: Option<&mut StepCap>) {
             }
         };
         if next == Point::Task {
-            stop(c, b, "la tâche a rendu la main sans céder".into());
+            stop(c, b, "the task handed control back without ceding".into());
         }
         table(b).point = next;
     }
     c.cycles = c.cycles.max(end);
 }
 
-/// RAM des piles d'origine (décalages depuis FF0000) : tas des piles, piles des tâches et du superviseur
-/// (FF0166-FF0E65, que `validate` ignore : `tasks::table::kernel_ram`). Au-delà, FF0E66 et la suite sont des
-/// variables du jeu (relatives à A5 : `placement::LAST_X` en A5 - 0x719a...).
+/// RAM of the original stacks (offsets from FF0000): stack heap, stacks of the tasks and of the supervisor
+/// (FF0166-FF0E65, which `validate` ignores: `tasks::table::kernel_ram`). Beyond, FF0E66 and the rest are
+/// game variables (relative to A5: `placement::LAST_X` at A5 - 0x719a...).
 const STACKS: (usize, usize) = (0x166, 0xe66);
 
-/// Sonde `DDSOM_POISON=stack` : avant chaque point de l'ordonnanceur ou d'une tâche, la RAM des piles d'origine
-/// ([`STACKS`]) est remplie d'une valeur qui change à chaque fois. Si la validation reste VALIDE, le jeu n'y lit rien :
-/// il n'a plus de pile 68000.
+/// Probe `DDSOM_POISON=stack`: before each scheduler or task point, the RAM of the original stacks
+/// ([`STACKS`]) is filled with a value that changes each time. If validation stays VALID, the game reads nothing there:
+/// it no longer has a 68000 stack.
 fn poison_stacks(b: &mut Cps2Bus) {
     static N: AtomicU64 = AtomicU64::new(0);
     let n = N.fetch_add(1, Ordering::Relaxed);
@@ -216,10 +216,10 @@ fn poison_stacks(b: &mut Cps2Bus) {
     }
 }
 
-/// L'ordonnanceur tourne à vide, entre deux tâches : aucune tâche prête et pas de nouvelle image, ou seule la tâche du
-/// gel est prête et son prochain pas ne ferait rien (`tasks::freeze::idle_wait`).
+/// The scheduler idles, between two tasks: no task ready and no new frame, or only the freeze task
+/// is ready and its next step would do nothing (`tasks::freeze::idle_wait`).
 fn at_rest(b: &Cps2Bus, point: Point) -> bool {
-    const NEW_FRAME: usize = 0x164 / 2; // FF0164 (octet haut) : posé par le VBLANK, effacé au début d'un parcours
+    const NEW_FRAME: usize = 0x164 / 2; // FF0164 (high byte): set by VBLANK, cleared at the start of a walk
     if !point.between_two_tasks() || b.ram[NEW_FRAME] >> 8 != 0 {
         return false;
     }
@@ -227,9 +227,9 @@ fn at_rest(b: &Cps2Bus, point: Point) -> bool {
     t.slots.iter().all(|e| !e.state.castable()) || crate::tasks::freeze::idle_wait(t, &b.ram)
 }
 
-/// Un pas de jeu commence (`tasks::game`) : vrai s'il s'exécute dans cette image (il est compté), faux s'il est
-/// retenu jusqu'à la suivante (plafond des pas par image, `crate::MAX_STEPS_PER_FRAME` : écart volontaire avec le jeu
-/// d'origine surcadencé, appliqué à l'identique par la machine de référence).
+/// A game step begins (`tasks::game`): true if it runs in this frame (it is counted), false if it is
+/// held until the next (cap on steps per frame, `crate::MAX_STEPS_PER_FRAME`: deliberate difference from the
+/// overclocked original game, applied identically by the reference machine).
 pub fn game_step() -> bool {
     IMAGE.with(|i| {
         let mut i = i.borrow_mut();
@@ -248,8 +248,8 @@ fn cap_reached() -> bool {
     })
 }
 
-/// L'image n'a plus rien à faire avant l'interruption : attente active reconnue au début d'un parcours de
-/// l'ordonnanceur (même [`Snapshot`] qu'au parcours précédent), ou plafond de points atteint.
+/// The frame has nothing left to do before the interrupt: active wait recognised at the start of a walk of the
+/// scheduler (same [`Snapshot`] as at the previous walk), or point cap reached.
 fn frame_done(c: &Cpu, b: &Cps2Bus, point: Point) -> bool {
     IMAGE.with(|i| {
         let mut i = i.borrow_mut();
@@ -276,11 +276,11 @@ fn frame_done(c: &Cpu, b: &Cps2Bus, point: Point) -> bool {
     })
 }
 
-/// La native de l'adresse `address` (appel par adresse, gestionnaire d'une table de la ROM), ou l'arrêt du jeu s'il
-/// n'y en a pas. Elle est notée pour le diagnostic d'un arrêt (`DDSOM_SANS_TRACE=image` : chaque native de l'image).
+/// The native at address `address` (call by address, handler of a ROM table), or a game stop if there is
+/// none. It is noted for diagnosing a stop (`DDSOM_SANS_TRACE=frame`: each native of the frame).
 pub(crate) fn native(c: &Cpu, b: &mut Cps2Bus, address: u32) -> &'static Native {
     let Some(n) = crate::lookup(address) else {
-        stop(c, b, format!("pas de native en {address:06x}"));
+        stop(c, b, format!("no native at {address:06x}"));
     };
     LAST.with(|d| {
         let mut d = d.borrow_mut();
@@ -295,32 +295,32 @@ pub(crate) fn native(c: &Cpu, b: &mut Cps2Bus, address: u32) -> &'static Native 
     n
 }
 
-/// Diagnostic : `DDSOM_SANS_TRACE=n` affiche chaque native exécutée pendant l'image n.
+/// Diagnostics: `DDSOM_SANS_TRACE=n` prints each native run during frame n.
 fn trace(b: &Cps2Bus) -> bool {
     static IMAGE: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
     *IMAGE.get_or_init(|| std::env::var("DDSOM_SANS_TRACE").ok().and_then(|v| v.parse().ok())) == Some(b.frame)
 }
 
-/// Début du message d'un arrêt (panique) du jeu sans 68000.
-pub const STOP: &str = "sans 68000 : ";
+/// Start of the message of a stop (panic) of the game without a 68000.
+pub const STOP: &str = "without 68000: ";
 
-/// Arrête net (panique, message commençant par [`STOP`]) : cause, image et ligne, tâche courante et ses appels en cours (cadres), sommet de la pile 68000,
-/// dernières natives exécutées, appel Rust de code d'origine en cours.
+/// Stops dead (panic, message starting with [`STOP`]): cause, frame and line, current task and its pending calls
+/// (frames), top of the 68000 stack, last natives run, Rust call of original code in progress.
 fn stop(c: &Cpu, b: &mut Cps2Bus, cause: String) -> ! {
-    let mut m = format!("{cause} (image {}, ligne {})", b.frame, b.scanline);
+    let mut m = format!("{cause} (frame {}, line {})", b.frame, b.scanline);
     if let Some(t) = read(b) {
         m += &format!(" ; point {:?}", t.point);
         let k = t.current;
         let e = &t.slots[k];
         let frames: Vec<String> = e.frames.iter().map(|k| format!("{:x?}@{}", k.next, k.calls)).collect();
-        m += &format!(" ; tâche {k} ({:?}, {:?}) ; cadres [{}]", e.task, e.state, frames.join(" "));
+        m += &format!(" ; task {k} ({:?}, {:?}) ; frames [{}]", e.task, e.state, frames.join(" "));
     }
     let stack: Vec<String> = (0..6).map(|i| format!("{:x}", rd32(b, c.a[7].wrapping_add(4 * i)))).collect();
-    m += &format!(" ; SR {:04x}, pile {:x} : {}", c.sr, c.a[7], stack.join(" "));
+    m += &format!(" ; SR {:04x}, stack {:x}: {}", c.sr, c.a[7], stack.join(" "));
     let last = LAST.with(|d| d.borrow().iter().map(|n| format!("{}@{:x}", n.name, n.entry)).collect::<Vec<_>>());
-    m += &format!(" ; dernières natives : {}", last.join(" "));
+    m += &format!(" ; last natives: {}", last.join(" "));
     if let Some((site, routine)) = crate::call_site() {
-        m += &format!(" ; appel Rust en cours : {site} -> {routine:x}");
+        m += &format!(" ; Rust call in progress: {site} -> {routine:x}");
     }
     panic!("{STOP}{m}");
 }

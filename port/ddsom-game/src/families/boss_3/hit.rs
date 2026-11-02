@@ -1,18 +1,18 @@
-//! Boss 3, état 4 « touché » (0x80a90). Groupes `+5` :
+//! Boss 3, state 4 "hit" (0x80a90). `+5` groups:
 //!
-//! | `+5` | Rôle |
+//! | `+5` | Role |
 //! |---|---|
-//! | 0 | réaction au coup : routine de la table 0x80b0a (code `+0x49`) |
-//! | 2 | recul en vol |
-//! | 4 | à terre, puis relevé (riposte tirée au sort) |
-//! | 6 | mort : chute, rebond, effondrement |
-//! | 10 | retour au combat |
+//! | 0 | reaction to the hit: routine from table 0x80b0a (code `+0x49`) |
+//! | 2 | knockback in flight |
+//! | 4 | on the ground, then getting up (randomly drawn counterattack) |
+//! | 6 | death: fall, bounce, collapse |
+//! | 10 | return to combat |
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 
-/// Table des routines de réaction, indexée par le code de coup `+0x49` (longs, toutes communes).
+/// Table of reaction routines, indexed by the hit code `+0x49` (longs, all common).
 const REACTIONS: u32 = 0x80b0a;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -37,21 +37,22 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     end_frame(x, 0x50);
 }
 
-/// 0x80ae8 : premier passage : immunités du type ; puis la routine commune du code de coup.
+/// 0x80ae8: first pass: the type's immunities; then the common routine of the hit code.
 fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 0xff);
     if x.u8(f::SUB2) == 0 {
         x.set_bit(0x1, 1, false);
         lib::set_immunities(x);
     }
-    // L'original indexe la table par D0.w dont seul l'octet bas est posé : l'octet haut vient du `moveq #0` de
-    // l'aiguillage des groupes, ou de l'index rendu par 0xfe5a (au plus (32 + type) × 4 < 0x100) : il est nul.
+    // The original indexes the table by D0.w of which only the low byte is set: the high byte comes from the `moveq #0`
+    // of
+    // the group dispatch, or from the index returned by 0xfe5a (at most (32 + type) × 4 < 0x100): it is zero.
     let code = x.u8(0x49) as u32;
     let routine = rom32(x, REACTIONS + code);
     run_reaction(x, routine);
 }
 
-/// 0x80bb6 : recul en vol (animation 9) jusqu'à l'arrêt ; il se retrouve à terre.
+/// 0x80bb6: knockback in flight (animation 9) until it stops; it ends up on the ground.
 fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         next6(x);
@@ -77,7 +78,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 6);
 }
 
-/// 0x80c2c : à terre (`+0x84` images hors pause), puis relevé ou riposte.
+/// 0x80c2c: on the ground (`+0x84` frames outside pause), then getting up or counterattack.
 fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -93,7 +94,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             next6(x);
             x.set8(0x86, 0);
             x.set8(0x49, 0);
-            // 0x80cb0 : riposte 6 chances sur 16
+            // 0x80cb0: counterattack 6 chances in 16
             let r = rand_and(x, 0xf);
             if 0xfc00u32 >> r & 1 == 0 {
                 return;
@@ -121,7 +122,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x80d16 : mort : la scène est prévenue (0x300 : boss 3 vaincu), chute, rebond, effondrement.
+/// 0x80d16: death: the stage is notified (0x300: boss 3 defeated), fall, bounce, collapse.
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -162,7 +163,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x80da2 : chute jusqu'au sol, puis rebond.
+/// 0x80da2: fall to the ground, then bounce.
 fn falling<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     x.move_xz();
@@ -179,5 +180,5 @@ fn falling<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xecabc);
 }
 
-/// Boss vaincu : type et variante (mot), score (`A5-0x557c..`), lus par la fin de scène.
+/// Defeated boss: type and variant (word), score (`A5-0x557c..`), read by the end of the stage.
 const A5_DEATH: u32 = 0xff8000 - 0x557c;

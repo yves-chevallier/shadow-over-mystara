@@ -1,5 +1,5 @@
-//! Type 5, coups (`+5 = 4`). `+6` : 0 et 2 coups de griffe, 4, 10 et 12 bonds-coups, 6 reprise de la marche,
-//! 8 attente en garde, 14 et 16 approche rapide. `+7` est l'étape.
+//! Type 5, attacks (`+5 = 4`). `+6`: 0 and 2 claw attacks, 4, 10 and 12 leap attacks, 6 resume walking, 8 wait on
+//! guard, 14 and 16 fast approach. `+7` is the step.
 
 use crate::families::cx::Bench;
 use super::stance::begin_walk;
@@ -29,7 +29,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Coup de griffe (type `kind`, animation `anim` des coups).
+/// Claw attack (type `kind`, `anim` animation of the attacks).
 fn claw<R: Bench>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -43,15 +43,15 @@ fn claw<R: Bench>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
     }
 }
 
-/// Ce que fait le ghoul à la fin d'un bond.
+/// What the ghoul does at the end of a leap.
 #[derive(Clone, Copy)]
 enum Then {
     EndAttack,
-    /// Retour à la marche (0x601a2).
+    /// Back to walking (0x601a2).
     Walk,
 }
 
-/// Paramètres d'un bond-coup : type de coup (s'il est posé ici), vitesse en X, impulsion, pesanteur.
+/// Parameters of a leap attack: attack type (if set here), X speed, impulse, gravity.
 #[derive(Clone, Copy)]
 struct Leap {
     kind: Option<u8>,
@@ -129,7 +129,7 @@ fn guard<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Début d'une approche : marche vers l'avant (animation 2) pendant `0x18` images.
+/// Start of an approach: walks forward (animation 2) for `0x18` frames.
 fn begin_charge<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     look(x, 6);
@@ -140,7 +140,7 @@ fn begin_charge<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 2);
 }
 
-/// 14 : approche, puis un nouveau choix (ou un coup immédiat).
+/// 14: approach, then a new choice (or an immediate attack).
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         return begin_charge(x);
@@ -157,7 +157,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-/// 16 : approche puis geste de feinte (griffe ou animation 3 des coups).
+/// 16: approach then feint move (claw or animation 3 of the attacks).
 fn feint<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_charge(x),

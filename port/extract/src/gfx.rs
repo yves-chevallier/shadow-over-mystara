@@ -1,4 +1,4 @@
-//! Graphismes : la ROM graphique en planches de cellules 16x16, PNG indexé 4 bits.
+//! Graphics: the graphics ROM as sheets of 16x16 cells, 4-bit indexed PNG.
 
 use std::io;
 use std::path::Path;
@@ -6,11 +6,11 @@ use std::path::Path;
 use cps2_gfx::rom::{load_gfx, DDSOM_GFX, DDSOM_GFX_SIZE};
 
 const CELL: usize = 16;
-const GRID: usize = 64; // cellules par côté de planche
+const GRID: usize = 64; // cells per side of a sheet
 const CELL_BYTES: usize = 128;
 
-/// Pixel (0..15) d'une cellule : chaque ligne de 16 pixels tient sur 8 octets, deux groupes de 4
-/// plans (un octet par plan, bit 7 = pixel de gauche).
+/// Pixel (0..15) of a cell: each 16-pixel row fits in 8 bytes, two groups of 4
+/// planes (one byte per plane, bit 7 = leftmost pixel).
 fn pixel(cell: &[u8], x: usize, y: usize) -> u8 {
     let plane = &cell[y * 8 + (x / 8) * 4..][..4];
     let bit = 7 - x % 8;
@@ -36,7 +36,7 @@ pub fn extract(roms: &Path, dir: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// PNG 4 bits avec une palette de gris (15 transparent), lisible par n'importe quel visualiseur.
+/// 4-bit PNG with a gray palette (15 transparent), viewable by any viewer.
 fn write_indexed(path: &Path, side: usize, pixels: &[u8]) -> io::Result<()> {
     let mut enc = png::Encoder::new(std::fs::File::create(path)?, side as u32, side as u32);
     enc.set_color(png::ColorType::Indexed);

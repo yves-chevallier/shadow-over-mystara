@@ -2,11 +2,11 @@
 //! with the scenery (0x33fe4, 0x3403c), vertical follow of the players (0x31616). The AI aids and the barrier aids no
 //! longer have natives: `fuzz_ia` compares the AI cores.
 //!
-//! Chaque routine est appelée en mode contrôle (l'original s'exécute à côté sur une copie ; mémoire,
-//! tous les registres et les drapeaux sont comparés) depuis des états tirés au sort : listes d'objets
-//! fabriquées, positions, tables du décor, registres quelconques.
+//! Each routine is called in check mode (the original runs alongside on a copy; memory,
+//! all registers and flags are compared) from randomly drawn states: fabricated object lists,
+//! positions, scenery tables, arbitrary registers.
 //!
-//!   fuzz_world <roms> <eeprom> <scénario> <images de chauffe> <tours> [préfixe de routine]
+//!   fuzz_world <roms> <eeprom> <scenario> <warm-up frames> <rounds> [routine prefix]
 //!
 //! Variables : `DDSOM_GRAINE`, `DDSOM_VERBOSE`.
 
@@ -34,7 +34,7 @@ impl Rng {
 type Cpu = m68k::Cpu;
 type Bus = cps2::Cps2Bus;
 
-/// Zone de RAM où l'on fabrique des objets (inutilisée par le jeu à ce moment : on travaille sur une copie).
+/// RAM area where objects are fabricated (unused by the game at that moment: we work on a copy).
 const ZONE: u32 = 0xffe000;
 const STEP: u32 = 0x80;
 
@@ -60,7 +60,7 @@ fn pose_y(b: &mut Bus, o: u32, y: u32) {
     wr32(b, o + 0x10, y);
 }
 
-/// Profondeur : peu de valeurs pour provoquer des égalités.
+/// Depth: few values, to provoke ties.
 fn depth(rng: &mut Rng) -> u32 {
     if rng.below(3) == 0 {
         rng.next()
@@ -83,7 +83,7 @@ fn list(c: &mut Cpu, b: &mut Bus, rng: &mut Rng, head: u32, queue: u32, end: u16
     }
     wr16(b, A5 + head, if n == 0 { 0 } else { object(0) as u16 });
     wr16(b, A5 + queue, if n == 0 { 0 } else { object(n - 1) as u16 });
-    // le sujet : un objet de la liste dont la profondeur change, ou un objet libre
+    // the subject: an object of the list whose depth changes, or a free object
     if n > 0 && rng.below(3) != 0 {
         let k = rng.below(n);
         let y = if rng.below(2) == 0 { depth(rng) } else { ys[k as usize] };
@@ -99,7 +99,7 @@ fn list(c: &mut Cpu, b: &mut Bus, rng: &mut Rng, head: u32, queue: u32, end: u16
 }
 
 fn rng_terrain(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
-    // attributs de la couche 2 : numéros de terrain valides (la table des types en compte 128)
+    // layer 2 attributes: valid terrain numbers (the type table has 128)
     for i in (0xa000..0xc000).step_by(2) {
         b.gfxram[i] = rng.next() as u16;
         let number = if rng.below(3) == 0 { rng.below(128) } else { rng.among(&[0, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) };
@@ -134,7 +134,7 @@ fn rng_camera_y(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 6 {
-        eprintln!("usage : fuzz_world <roms> <eeprom> <scénario> <images de chauffe> <tours> [préfixe]");
+        eprintln!("usage: fuzz_world <roms> <eeprom> <scenario> <warm-up frames> <rounds> [prefix]");
         std::process::exit(2);
     }
     let (roms, eeprom, scenario) = (&a[1], &a[2], &a[3]);
@@ -144,7 +144,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_game::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
         m.run_frame();
@@ -180,9 +180,9 @@ fn main() {
     let mut bad = 0;
     for (name, s) in ddsom_game::report() {
         if routines.iter().any(|r| r.1 == name) {
-            println!("{name:30} {:6} appels {:6} écarts {}", s.calls, s.mismatches, s.first.as_deref().unwrap_or(""));
+            println!("{name:30} {:6} calls {:6} mismatches {}", s.calls, s.mismatches, s.first.as_deref().unwrap_or(""));
             bad += s.mismatches;
         }
     }
-    println!("{}", if bad == 0 { "FUZZ OK" } else { "FUZZ ÉCARTS" });
+    println!("{}", if bad == 0 { "FUZZ OK" } else { "FUZZ MISMATCHES" });
 }

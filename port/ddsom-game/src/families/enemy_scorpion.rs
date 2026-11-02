@@ -1,19 +1,19 @@
-//! Ennemi « GiantScorpion » (ENEMY type 10, 0x6681c). Voir `docs/families/enemy.md`.
+//! Enemy "GiantScorpion" (ENEMY type 10, 0x6681c). See `docs/families/enemy.md`.
 //!
-//! Variantes `+3` : 0 debout, 1 et 4 tombent d'en haut, 2 et 3 entrent en volant par un bord, 5 est le nid qui
-//! engendre des scorpions (liste `+0x2f`) et attend d'être visible. Les valeurs `+6` d'arrivée (2, 4, 6, 8)
-//! choisissent l'entrée, puis l'état actif :
+//! Variants `+3`: 0 standing, 1 and 4 fall from above, 2 and 3 enter flying through an edge, 5 is the nest that spawns
+//! scorpions (list `+0x2f`) and waits to be visible. The arrival `+6` values (2, 4, 6, 8) choose the entrance, then the
+//! active state:
 //!
-//! | `+5` | Rôle (h) |
+//! | `+5` | Role (h) |
 //! |---|---|
-//! | 0 | arrivée (chute, vol, nid dormant) |
-//! | 2 | debout : marche d'avant en arrière (`+6` = 0 libre, 2 enfant d'un parent, 4 enfant libre) |
-//! | 4, 10 | coups tirés au hasard (`+6` = 2, 4, 6, 8 ; tables par difficulté) |
-//! | 6 | attente d'une durée tirée au hasard |
-//! | 8 | coup spécial : demi-tour puis charge avec attaque `0x1f` |
+//! | 0 | arrival (fall, flight, dormant nest) |
+//! | 2 | standing: walks back and forth (`+6` = 0 free, 2 child of a parent, 4 free child) |
+//! | 4, 10 | randomly drawn hits (`+6` = 2, 4, 6, 8; tables by difficulty) |
+//! | 6 | wait of a randomly drawn duration |
+//! | 8 | special hit: about-turn then charge with attack `0x1f` |
 //!
-//! L'état touché a son propre recul (pas de table de réaction commune). Animations 0x163da8 (mouvements),
-//! 0x163db8 (charge) et 0x163dba (touché).
+//! The hit state has its own recoil (no common reaction table). Animations 0x163da8 (movements), 0x163db8 (charge) and
+//! 0x163dba (hit).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -24,7 +24,7 @@ const ANIMS: u32 = 0x163da8;
 const ANIMS_STRIKE: u32 = 0x163db8;
 const ANIMS_HIT: u32 = 0x163dba;
 
-/// Champs propres à ce type.
+/// Fields specific to this type.
 mod g {
     pub const GROUP: u32 = 0x2f;
     pub const ANIM_FLAGS: u32 = 0x32;
@@ -42,7 +42,7 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Tables de la ROM (le suffixe dit l'espace de lecture : opcodes pour les `(table,PC,Dn)`, données sinon).
+/// ROM tables (the suffix tells the read space: opcodes for the `(table,PC,Dn)`, data otherwise).
 const SPAWN_LISTS: u32 = 0x669d6;
 const SPAWN_ALLOCS: u32 = 0x669ea;
 const ATTACK_PICK_A: u32 = 0x66e48;
@@ -73,13 +73,13 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- aides --------------------------------------------------------------------------------------
+// --- helpers ------------------------------------------------------------------------------------
 
 fn anim_play<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(ANIMS, n as u16);
 }
 
-/// Hauteur de départ d'une chute : l'objet apparaît au-dessus de l'écran.
+/// Starting height of a fall: the object appears above the screen.
 fn drop_from_above<R: Bench>(x: &mut Cx<'_, R>) {
     let cam = var::SCROLL_Y.get(x.b).wrapping_add(0x100);
     let depth = x.u16(Obj::Y);
@@ -88,12 +88,12 @@ fn drop_from_above<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(Obj::AZ, -0x40i16 as u16);
 }
 
-/// Abscisse de la caméra selon le mode (`A5+0x36` : second écran).
+/// Camera abscissa according to the mode (`A5+0x36`: second screen).
 fn camera_x<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) }
 }
 
-/// 0x67808 : avance en X et en profondeur selon les vitesses (virgule fixe 8.8).
+/// 0x67808: advances in X and in depth according to the speeds (8.8 fixed point).
 fn advance<R: Bench>(x: &mut Cx<'_, R>) {
     for (pos, speed) in [(Obj::X, Obj::VX), (Obj::Y, Obj::VY)] {
         let d = ((x.u16(speed) as u32) << 16) as i32 >> 8;
@@ -101,7 +101,7 @@ fn advance<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6771a : choisit le geste (`+0xa6`) dans la ligne de la difficulté.
+/// 0x6771a: chooses the gesture (`+0xa6`) in the difficulty row.
 fn pick_move<R: Bench>(x: &mut Cx<'_, R>) {
     let row = ((var::RANK.get(x.b) >> 2) << 4) as u32;
     let r = rand_and(x, 0xf);
@@ -109,27 +109,27 @@ fn pick_move<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(MOVE, v);
 }
 
-/// 0x677e8 : durée du geste (`+0xa2`) selon le rang `d0` et le geste.
+/// 0x677e8: duration of the gesture (`+0xa2`) according to the rank `d0` and the gesture.
 fn set_timer<R: Bench>(x: &mut Cx<'_, R>, d0: u32) {
     let idx = ((d0 << 2) & !0xff) | (((d0 << 2) as u8).wrapping_add(x.u8(MOVE)) as u32);
     let t = x.rom8(TIMER_ROW + idx);
     x.set8(TIMER, t);
 }
 
-/// 0x677de : durée tirée au hasard (rang 0 à 3).
+/// 0x677de: randomly drawn duration (rank 0 to 3).
 fn random_timer<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 3);
     set_timer(x, r);
 }
 
-/// 0x670d2 : table de vitesses du geste.
+/// 0x670d2: speed table of the gesture.
 fn speed_row<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = x.u8(MOVE) as u32;
     let d0 = x.rom8(SPEED_ROW + idx);
     x.select_speed(&crate::objects::motion::SPEEDS_B, (d0 as u32) as u16);
 }
 
-/// Choix du coup suivant dans la ligne de la difficulté : tire `+6` = 2 + octet de la table.
+/// Choice of the next hit in the difficulty row: draws `+6` = 2 + byte of the table.
 fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     x.add8(f::SUB2, 2);
     let row = ((var::RANK.get(x.b) >> 2) << 4) as u32;
@@ -139,7 +139,7 @@ fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     pick_move(x);
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
@@ -212,7 +212,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active ----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
@@ -236,7 +236,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Sous-état 0 : l'arrivée dépend de `+6` (posé à la création selon la variante).
+/// Substate 0: the arrival depends on `+6` (set at creation according to the variant).
 fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         2 => land(x, |x| {
@@ -259,7 +259,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Chute : tant que l'altitude est positive ; à l'atterrissage `done` change de sous-état.
+/// Fall: as long as the altitude is positive; on landing `done` changes the substate.
 fn land<'a, R: Bench>(x: &mut Cx<'a, R>, done: impl FnOnce(&mut Cx<'a, R>)) {
     x.move_xz();
     if (x.u16(Obj::Z) as i16) > 0 {
@@ -269,7 +269,7 @@ fn land<'a, R: Bench>(x: &mut Cx<'a, R>, done: impl FnOnce(&mut Cx<'a, R>)) {
     done(x);
 }
 
-/// Variante 2 : entrée en vol (animation 6), atterrissage (animation 7), reprise de la marche.
+/// Variant 2: flying entrance (animation 6), landing (animation 7), resumption of the walk.
 fn fly_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 | 4 => {
@@ -296,7 +296,7 @@ fn fly_in<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Sous-état 2 : debout. `+6` = 0 libre, 2 enfant d'un parent (`+0x5c`), 4 enfant libre.
+/// Substate 2: standing. `+6` = 0 free, 2 child of a parent (`+0x5c`), 4 free child.
 fn stance<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => free_stance(x),
@@ -325,7 +325,7 @@ fn free_stance<R: Bench>(x: &mut Cx<'_, R>) {
     walk(x);
 }
 
-/// 0x674ca : tire le prochain sous-état d'attaque dans la ligne de la difficulté.
+/// 0x674ca: draws the next attack substate in the difficulty row.
 fn choose_attack<R: Bench>(x: &mut Cx<'_, R>) {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let r = rand_and(x, 0x1f);
@@ -336,7 +336,7 @@ fn choose_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::SUB2, 0);
 }
 
-/// Marche : aller (animation 1), demi-tour (4), retour.
+/// Walk: forward (animation 1), about-turn (4), back.
 fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -380,9 +380,9 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-états 4 et 10 : coups ----------------------------------------------------------------
+// --- substates 4 and 10: hits ------------------------------------------------------------------
 
-/// Sous-état 4 : `+6` = 0 tirage, 2 et 4 déplacements d'attaque, 6 demi-tour puis charge.
+/// Substate 4: `+6` = 0 draw, 2 and 4 attack movements, 6 about-turn then charge.
 fn melee<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         pick_attack(x, ATTACK_PICK_A);
@@ -413,7 +413,7 @@ fn melee<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Sous-état 10 : même tirage avec une autre table ; `+6` = 2, 4, 6 déplacements, 8 pause.
+/// Substate 10: same draw with another table; `+6` = 2, 4, 6 movements, 8 pause.
 fn melee_b<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         pick_attack(x, ATTACK_PICK_B);
@@ -456,13 +456,13 @@ fn melee_b<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Direction de marche d'un geste : 8 ou 0x18 selon l'orientation ; `forward` pour avancer vers le côté regardé.
+/// Walking direction of a gesture: 8 or 0x18 according to the orientation; `forward` to advance toward the side faced.
 fn face<R: Bench>(x: &mut Cx<'_, R>, forward: bool) {
     let flipped = x.u8(f::FLIP) != 0;
     x.set8(Obj::SPEED_INDEX, if flipped == forward { 8 } else { 0x18 });
 }
 
-/// 0x66f00 : vitesse et animation du geste, puis suite commune.
+/// 0x66f00: speed and animation of the gesture, then common continuation.
 fn attack_move<R: Bench>(x: &mut Cx<'_, R>) {
     speed_row(x);
     let n = 1 + x.u8(MOVE) as u32;
@@ -470,7 +470,7 @@ fn attack_move<R: Bench>(x: &mut Cx<'_, R>) {
     attack_tail(x);
 }
 
-/// 0x66f1c : avance, décompte et fin du geste.
+/// 0x66f1c: advance, countdown and end of the gesture.
 fn attack_tail<R: Bench>(x: &mut Cx<'_, R>) {
     advance(x);
     let n = x.u8(TIMER).wrapping_sub(1);
@@ -481,7 +481,7 @@ fn attack_tail<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// Sous-état 4, `+6` = 6 : se tourne vers la cible, puis lance le geste.
+/// Substate 4, `+6` = 6: turns toward the target, then launches the gesture.
 fn turn_and_charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => face_target(x),
@@ -496,7 +496,7 @@ fn turn_and_charge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x67052 : angle vers la cible ; s'il est du côté regardé, animation 4 et attente, sinon étape 4.
+/// 0x67052: angle toward the target; if it is on the side faced, animation 4 and wait, otherwise step 4.
 fn face_target<R: Bench>(x: &mut Cx<'_, R>) {
     let target = load_target(x);
     let angle = lib::aim_to(x, target);
@@ -510,7 +510,7 @@ fn face_target<R: Bench>(x: &mut Cx<'_, R>) {
     anim_play(x, 4);
 }
 
-/// 0x67088 : à la fin de l'animation de virage, l'orientation s'inverse.
+/// 0x67088: at the end of the turn animation, the orientation is inverted.
 fn wait_turn<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(ANIM_FLAGS) as i16) < 0 {
         x.add8(f::SUB3, 2);
@@ -520,7 +520,7 @@ fn wait_turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-// --- sous-état 6 : attente ---------------------------------------------------------------------
+// --- substate 6: wait --------------------------------------------------------------------------
 
 fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
@@ -539,7 +539,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 : coup spécial ---------------------------------------------------------------
+// --- substate 8: special hit ------------------------------------------------------------------
 
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
@@ -570,7 +570,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 4 : touché ----------------------------------------------------------------------------
+// --- state 4: hit -------------------------------------------------------------------------------
 
 fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
@@ -639,7 +639,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     zone_and_terrain(x);
 }
 
-/// Sous-état 4 : saisi par un joueur, le scorpion court vers le bord de l'écran le plus proche.
+/// Substate 4: grabbed by a player, the scorpion runs toward the closest edge of the screen.
 fn grabbed_flight<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
@@ -684,7 +684,7 @@ fn grabbed_flight<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x673e4 : le scorpion court (animation 2) pendant 0xff images au plus.
+/// 0x673e4: the scorpion runs (animation 2) for at most 0xff frames.
 fn run_off<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set8(EXIT_TIMER, 0xff);

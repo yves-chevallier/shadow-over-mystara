@@ -1,19 +1,19 @@
-//! Ennemi « Ghoul » (ENEMY type 5, 0x5f792). Voir `docs/families/enemy.md`.
+//! "Ghoul" enemy (ENEMY type 5, 0x5f792). See `docs/families/enemy.md`.
 //!
-//! Charpente commune (`active_loop` : gel, sous-état, zone et ombre, remise en liste). En état actif :
+//! Common framework (`active_loop`: freeze, substate, zone and shadow, re-queuing). In the active state:
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `mod` | arrivée selon la variante `+3` |
-//! | 2 | `stance` | debout : marche, demi-tour, attente, choix d'un coup |
-//! | 4 | `attacks` | coups et bonds (`+6` = le coup) |
-//! | 6 | `moves` | déplacements de repli, pas de côté, sortie d'écran |
-//! | 8 | `moves` | demi-tours et reprise |
-//! | 10 | `stance` | patrouille tant qu'aucun joueur n'est en vie |
-//! | état 4 | `hit` | réactions aux coups |
+//! | 0 | `mod` | arrival according to variant `+3` |
+//! | 2 | `stance` | standing: walk, turn-around, wait, choice of an attack |
+//! | 4 | `attacks` | attacks and leaps (`+6` = the attack) |
+//! | 6 | `moves` | fallback movements, side steps, screen exit |
+//! | 8 | `moves` | turn-arounds and resume |
+//! | 10 | `stance` | patrols as long as no player is alive |
+//! | state 4 | `hit` | reactions to hits |
 //!
-//! Animations : 0x16191c (mouvements) et 0x161930 (coups). `+0xa0/+0xa1` sont des octets d'aspect.
-//! Les sous-états 2, 4, 6 et 8 commencent par la réaction aux drapeaux de coup `+0x8f` (0x60c88).
+//! Animations: 0x16191c (movements) and 0x161930 (attacks). `+0xa0/+0xa1` are look bytes.
+//! Substates 2, 4, 6 and 8 begin with the reaction to hit flags `+0x8f` (0x60c88).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -33,12 +33,12 @@ pub(self) mod g {
     pub const AI_WALK: u32 = 0x71;
     pub const AI_SHOT: u32 = 0x79;
     pub const SPECIAL_HIT: u32 = 0x8f;
-    /// Aspect courant et précédent.
+    /// Current and previous look.
     pub const LOOK: u32 = 0xa0;
     pub const LOOK_PREV: u32 = 0xa1;
-    /// Minuterie d'une étape.
+    /// Timer of a step.
     pub const TIMER: u32 = 0xa2;
-    /// Position mémorisée (fuite).
+    /// Saved position (flight).
     pub const SAVED_X: u32 = 0xa8;
 }
 
@@ -50,7 +50,7 @@ const SET_STRIKE: u32 = 0x161930;
 const STANCE: u32 = 0x0202_0000;
 const IDLE: u32 = 0x020a_0000;
 const KNOCKED: u32 = 0x0408_0000;
-/// Tables de la ROM : coups à choisir par niveau de difficulté (`A5+0x7f92`), 32 octets par niveau.
+/// ROM tables: attacks to choose per difficulty level (`A5+0x7f92`), 32 bytes per level.
 const CLOSE_ATTACKS: u32 = 0x60d38;
 const FAR_ATTACKS: u32 = 0x60f38;
 const FALLBACK_MOVES: u32 = 0x61164;
@@ -87,36 +87,36 @@ fn move_xy<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
-/// L'aspect voulu (`LOOK` et `LOOK_PREV` identiques).
+/// The wanted look (`LOOK` and `LOOK_PREV` identical).
 fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
-/// Direction de marche selon l'orientation : `flipped` si `+0x2c` est non nul, `otherwise` sinon.
+/// Walking direction according to the orientation: `flipped` if `+0x2c` is non-zero, `otherwise` if not.
 fn set_angle<R: Bench>(x: &mut Cx<'_, R>, flipped: u8, otherwise: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { otherwise };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
-/// Table de vitesses 0xd puis marche : `ANGLE` puis 0x1b64 avec D0 = `speed`.
+/// Speed table 0xd then walk: `ANGLE` then 0x1b64 with D0 = `speed`.
 fn set_speed<R: Bench>(x: &mut Cx<'_, R>, speed: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, speed as u16);
 }
 
-/// Ligne de 32 octets de la difficulté (`A5+0x7f92`).
+/// Row of 32 bytes for the difficulty (`A5+0x7f92`).
 fn difficulty_row<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     ((var::RANK.get(x.b) >> 1) << 5) as u32
 }
 
-/// Octet tiré au hasard dans la ligne de la difficulté de `table` (A4 = ligne, D0 = indice).
+/// Byte drawn at random from the difficulty row of `table` (A4 = row, D0 = index).
 fn pick_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = difficulty_row(x);
     let n = rand_and(x, 0x1f);
     x.data8(table + row + n)
 }
 
-/// 0x61138 : fin d'un coup, le suivant est tiré dans la ligne de la difficulté.
+/// 0x61138: end of an attack, the next one is drawn from the difficulty row.
 fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     let mv = pick_byte(x, FALLBACK_MOVES);
     x.set8(f::SUB, 8);
@@ -124,14 +124,14 @@ fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 0);
 }
 
-/// 0x60d04 / 0x60d0c : choisit le coup de l'attaque (`+6` = octet de la table + `bias`).
+/// 0x60d04 / 0x60d0c: chooses the attack move (`+6` = table byte + `bias`).
 fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32, bias: u8) {
     let mv = pick_byte(x, table);
     x.set8(f::SUB2, mv.wrapping_add(bias));
     x.set8(f::SUB3, 0);
 }
 
-/// 0x5fdf8 : la cible est de l'autre côté de l'orientation (D0 = 1 ou 0).
+/// 0x5fdf8: the target is on the other side of the orientation (D0 = 1 or 0).
 fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
@@ -143,7 +143,7 @@ fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     turn
 }
 
-/// Décision par masque (0xa4c2 de même orientation, 0xa4b4 sinon) pour la cible courante.
+/// Decision by mask (0xa4c2 for the same orientation, 0xa4b4 otherwise) for the current target.
 fn decision<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let target = load_target(x);
     let theirs = target.u8(x.b, f::FLIP);
@@ -151,7 +151,7 @@ fn decision<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::decision(x, same)
 }
 
-/// 0x5fe22 / 0x5fe70 : un joueur dans la boîte et la décision l'accepte ; l'attaque est alors choisie.
+/// 0x5fe22 / 0x5fe70: a player in the box and the decision accepts it; the attack is then chosen.
 fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, table: u32, bias: u8) -> bool {
     let ok = lib::target_in_box(x, d0, d1, d2) && decision(x);
     if ok {
@@ -161,7 +161,7 @@ fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, table: u32
     ok
 }
 
-/// Réaction aux drapeaux de coup `+0x8f` (0x60c88) : vrai si elle a pris la main.
+/// Reaction to hit flags `+0x8f` (0x60c88): true if it took over.
 fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let flag = x.u8(SPECIAL_HIT);
     match flag {
@@ -196,7 +196,7 @@ fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
@@ -233,11 +233,11 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     ] {
         x.set8(off, v);
     }
-    // la création enchaîne directement sur l'état actif
+    // creation chains directly into the active state
     active(x);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     active_loop(x, |x| {
@@ -254,7 +254,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// Sous-état 0 : arrivée selon la variante `+3` (0 marche, 1 saut, 2 chute, 3 réveil, 4 apparition, 5 clignotement).
+/// Substate 0: arrival according to variant `+3` (0 walk, 1 jump, 2 fall, 3 wake-up, 4 appearance, 5 blinking).
 fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => {
@@ -347,7 +347,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                     body(x, 5);
                 }
                 2 => {
-                    // un joueur assez près réveille le ghoul
+                    // a player close enough wakes the ghoul up
                     let mut near = 0;
                     for k in 0..4u32 {
                         let p = 0xff85de + 0x200 * k;
@@ -402,7 +402,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5fa56 : l'animation finie, le ghoul se met debout.
+/// 0x5fa56: once the animation is over, the ghoul stands up.
 fn end_arrival<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         set_state_long(x, STANCE);
@@ -410,7 +410,7 @@ fn end_arrival<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Clignotement d'arrivée (0x5fbbe), `next` : valeur du mot `+0x42` quand une série est finie.
+/// Arrival blinking (0x5fbbe), `next`: value of word `+0x42` when a series is over.
 fn blink<R: Bench>(x: &mut Cx<'_, R>, next: u16) {
     x.set_bit(1, 1, true);
     let t = x.u8(TIMER).wrapping_sub(1);
@@ -428,7 +428,7 @@ fn blink<R: Bench>(x: &mut Cx<'_, R>, next: u16) {
     x.set16(0x42, next);
 }
 
-// --- état 6 : libération ------------------------------------------------------------------------
+// --- state 6: release ------------------------------------------------------------------------
 
 fn dead<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0xa6) != 0 {

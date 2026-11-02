@@ -1,4 +1,4 @@
-//! Déplacements des joueurs : vitesses de marche, intégration du mouvement, limites de l'écran.
+//! Player movement: walking speeds, motion integration, screen limits.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -10,25 +10,25 @@ use crate::objects::Obj;
 use crate::{regs, Native};
 use crate::machine::Machine;
 
-/// Tables de vitesses (ROM) : un pointeur par personnage vers 16 couples (vx, vy) 8.8, un par
-/// combinaison de directions (bits 0..3 de `KEYS_HELD`).
+/// Speed tables (ROM): one pointer per character to 16 pairs (vx, vy) 8.8, one per
+/// combination of directions (bits 0..3 of `KEYS_HELD`).
 pub mod speeds {
-    /// Marche lente forcée (1 pixel par image).
+    /// Forced slow walk (1 pixel per frame).
     pub const SLOW: u32 = 0x10_493e;
-    /// Marche lente (monture, boue...) (h).
+    /// Slow walk (mount, mud...) (h).
     pub const SLOW_B: u32 = 0x10_4ffe;
-    /// Marche normale (2 pixels par image).
+    /// Normal walk (2 pixels per frame).
     pub const NORMAL: u32 = 0x10_45de;
-    /// Marche rapide (3 pixels par image).
+    /// Fast walk (3 pixels per frame).
     pub const FAST: u32 = 0x10_4c9e;
-    /// Course (4,5 pixels par image).
+    /// Run (4.5 pixels per frame).
     pub const RUN: u32 = 0x10_4aee;
-    /// Marche accroupie (0,2 pixel par image).
+    /// Crouched walk (0.2 pixel per frame).
     pub const CRAWL: u32 = 0x10_4e4e;
 }
 
-/// 0x392c4 : vitesse (vx, vy) lue dans la table du personnage selon les directions maintenues ;
-/// accélérations remises à zéro.
+/// 0x392c4: speed (vx, vy) read from the character's table according to the held directions;
+/// accelerations reset to zero.
 pub fn set_speed(g: &mut Ctx, p: Player, tables: u32) {
     cov!();
     let character = p.u8(g, Player::CHARACTER) as u32;
@@ -41,7 +41,7 @@ pub fn set_speed(g: &mut Ctx, p: Player, tables: u32) {
     p.set_u16(g, Obj::AY, 0);
 }
 
-/// 0x39260 : vitesse de marche, selon les drapeaux de ralentissement et la classe de vitesse.
+/// 0x39260: walking speed, according to the slowdown flags and the speed class.
 pub fn walk_speed(g: &mut Ctx, p: Player) {
     cov!();
     let tables = if p.u8(g, Player::SLOW) != 0 || ram::SLOW_MODE.get(g.b) != 0 {
@@ -56,32 +56,32 @@ pub fn walk_speed(g: &mut Ctx, p: Player) {
     set_speed(g, p, tables);
 }
 
-/// 0x3929e : vitesse de course.
+/// 0x3929e: running speed.
 pub fn run_speed(g: &mut Ctx, p: Player) {
     cov!();
     set_speed(g, p, speeds::RUN);
 }
 
-/// 0x392b2 : vitesse accroupie.
+/// 0x392b2: crouched speed.
 pub fn crawl_speed(g: &mut Ctx, p: Player) {
     cov!();
     set_speed(g, p, speeds::CRAWL);
 }
 
-/// Mouvement balistique de l'objet sur Y puis X (0x1d62).
+/// Ballistic motion of the object on Y then X (0x1d62).
 pub fn move_xy(g: &mut Ctx, p: Player) {
     cov!();
     advance(g.b, p.obj(), AXIS_Y);
     advance(g.b, p.obj(), AXIS_X);
 }
 
-/// Sur X seulement (0x1d78).
+/// On X only (0x1d78).
 pub fn move_x(g: &mut Ctx, p: Player) {
     cov!();
     advance(g.b, p.obj(), AXIS_X);
 }
 
-/// Sur Y, X puis Z (0x1d90).
+/// On Y, X then Z (0x1d90).
 pub fn move_xyz(g: &mut Ctx, p: Player) {
     cov!();
     advance(g.b, p.obj(), AXIS_Y);
@@ -89,26 +89,26 @@ pub fn move_xyz(g: &mut Ctx, p: Player) {
     advance(g.b, p.obj(), AXIS_Z);
 }
 
-/// Sur X puis Z (0x1da6).
+/// On X then Z (0x1da6).
 pub fn move_xz(g: &mut Ctx, p: Player) {
     cov!();
     advance(g.b, p.obj(), AXIS_X);
     advance(g.b, p.obj(), AXIS_Z);
 }
 
-/// Sur Z seulement (0x1dbc).
+/// On Z only (0x1dbc).
 pub fn move_z(g: &mut Ctx, p: Player) {
     cov!();
     advance(g.b, p.obj(), AXIS_Z);
 }
 
 
-/// Dernier bord touché : octet `+0x5a` (1 gauche, 2 droite).
+/// Last edge touched: byte `+0x5a` (1 left, 2 right).
 const EDGE_HIT: u32 = 0x5a;
 
-/// Maintient le joueur dans la zone visible : la profondeur reste entre camera.y + 0x28 et
-/// camera.y + 0xa4, l'abscisse entre camera.x + 0x20 et camera.x + 0x160 (le bord touché est
-/// mémorisé). Renvoie vrai si l'abscisse a été corrigée.
+/// Keeps the player within the visible area: depth stays between camera.y + 0x28 and
+/// camera.y + 0xa4, abscissa between camera.x + 0x20 and camera.x + 0x160 (the touched edge is
+/// remembered). Returns true if the abscissa was corrected.
 pub fn clamp_to_screen(b: &mut Cps2Bus, p: Player) -> bool {
     cov!();
     let cam = crate::objects::cull::camera(b);
@@ -123,7 +123,7 @@ pub fn clamp_to_screen(b: &mut Cps2Bus, p: Player) -> bool {
     clamp_x(b, p)
 }
 
-/// 0x35dc : seulement l'abscisse (entre camera.x + 0x20 et camera.x + 0x160). Vrai si corrigée.
+/// 0x35dc: only the abscissa (between camera.x + 0x20 and camera.x + 0x160). True if corrected.
 pub fn clamp_x(b: &mut Cps2Bus, p: Player) -> bool {
     cov!();
     let cam = crate::objects::cull::camera(b);
@@ -144,7 +144,7 @@ pub fn clamp_x(b: &mut Cps2Bus, p: Player) -> bool {
     edge.is_some()
 }
 
-/// Entrée 68000 (0x35c0) : D0 = 1 si l'abscisse a été corrigée, A1 = caméra.
+/// 68000 entry (0x35c0): D0 = 1 if the abscissa was corrected, A1 = camera.
 fn clamp_native(c: &mut Cpu, b: &mut Cps2Bus) {
     let cam = crate::objects::cull::camera(b);
     c.d[0] = clamp_to_screen(b, Player(c.a[0])) as u32;

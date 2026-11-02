@@ -128,9 +128,9 @@ la sorte `k` saute à la `k`-ième entrée de la table (0xd7466).
 * Scénarios (8 VALIDE sur 30 000 images) : types 21 (60 410 appels), 22 (20) et 24 (2 320). Le type 20 n'est pas
   appelé par ces scénarios (0 appel avec le code d'origine) ; il n'est validé que par le fuzz (6 728 appels,
   0 écart, joueur réel en `+0x20`).
-* `fuzz familles` : 0 écart pour 16 à 23, 25 à 32 (variantes jusqu'à 24) et pour le type 24 sur ses 256
+* `fuzz families` : 0 écart pour 16 à 23, 25 à 32 (variantes jusqu'à 24) et pour le type 24 sur ses 256
   variantes (17 097 appels).
-* Peu ou pas atteint (relevé avant `perturber_globales`) : type 16 lancers hors présence de joueurs au sol ;
+* Peu ou pas atteint (relevé avant `perturb_globals`) : type 16 lancers hors présence de joueurs au sol ;
   type 17 étapes 2 à 24 ; type 19 au-delà du démarrage (création des ennemis, fin) ; types 23, 27, 29 :
   passage des joueurs et changement de zone (états 4 et 0x400 ; appels à 0x33b24, 0xf2e56, 0x1a360...). Ces
   chemins ont été relus sur le listing mais ne sont pas validés.

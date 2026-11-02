@@ -1,20 +1,20 @@
-//! Couverture des fonctions Rust du noyau joueur sur un scénario : appels de chaque fonction
-//! instrumentée (`cov!()`), y compris celles jamais appelées. Mode natif sans contrôle.
-//!   player_coverage <roms> <eeprom> <scénario> <images>
+//! Coverage of the Rust functions of the player core over a scenario: calls of each
+//! instrumented function (`cov!()`), including those never called. Native mode without checking.
+//!   player_coverage <roms> <eeprom> <scenario> <frames>
 
 use std::path::Path;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames] = &a[..] else {
-        eprintln!("usage : player_coverage <roms> <eeprom> <scénario> <images>");
+        eprintln!("usage: player_coverage <roms> <eeprom> <scenario> <frames>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_game::install(&mut m);
     ddsom_game::player::cov::enable();
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..frames.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();

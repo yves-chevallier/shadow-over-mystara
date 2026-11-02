@@ -1,6 +1,5 @@
-//! Effets des joueurs (PEFF), dixième série : types 35 à 39, 46 et 47 (effets du bond, de l'échange, de
-//! la glissade, du coup de nain, éclats des monstres touchés, pluie de l'écran de choix). Voir
-//! `docs/families/player.md`.
+//! Player effects (PEFF), tenth series: types 35 to 39, 46 and 47 (effects of the leap, the swap, the slide, the
+//! dwarf's attack, shards of the monsters hit, rain of the selection screen). See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -11,8 +10,8 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Type 35 (0x4fc1a) : effet du bond (kind 0x23, `player/spawn.rs::leap`) : posé haut devant le joueur
-/// tant que celui-ci est dans l'action 0x16.
+/// Type 35 (0x4fc1a): leap effect (kind 0x23, `player/spawn.rs::leap`): placed high in front of the player as long as
+/// the latter is in action 0x16.
 mod leap {
     use super::*;
 
@@ -62,7 +61,7 @@ mod leap {
     }
 }
 
-/// Type 36 (0x4fd4a) : échange d'équipement (kind 0x24) : une étincelle posée devant le joueur.
+/// Type 36 (0x4fd4a): equipment swap (kind 0x24): a spark placed in front of the player.
 mod swap {
     use super::*;
 
@@ -100,8 +99,8 @@ mod swap {
     }
 }
 
-/// Type 37 (0x4fe38) : poussière de la glissade (kind 0x25) : suit le joueur tant qu'il glisse
-/// (action 2, arme `+0x6a` inchangée).
+/// Type 37 (0x4fe38): slide dust (kind 0x25): follows the player as long as it slides (action 2, weapon `+0x6a`
+/// unchanged).
 mod dash {
     use super::*;
 
@@ -145,7 +144,7 @@ mod dash {
     }
 }
 
-/// Type 38 (0x4ff1e) : éclat du coup (kind 0x26) : 0x18 images devant le joueur, tant que son action dure.
+/// Type 38 (0x4ff1e): hit shard (kind 0x26): 0x18 frames in front of the player, as long as its action lasts.
 mod chip {
     use super::*;
 
@@ -185,8 +184,8 @@ mod chip {
     }
 }
 
-/// Type 39 (0x4ffd0) : éclat d'un monstre touché (kind 0x27, créé par `0x5009e`) : une première copie
-/// attend, la seconde (variante 1) reprend l'animation du monstre `+0x42` ; ils clignotent 0xe images.
+/// Type 39 (0x4ffd0): shard of a monster hit (kind 0x27, created by `0x5009e`): a first copy waits, the second (variant
+/// 1) resumes the animation of monster `+0x42`; they blink for 0xe frames.
 mod chunk {
     use super::*;
 
@@ -241,8 +240,7 @@ mod chunk {
     }
 }
 
-/// Type 46 (0x51ad6) : pluie de pièces de l'écran de gain (kind 0x2e) posée sur la caméra, qui
-/// clignote en retombant.
+/// Type 46 (0x51ad6): coin rain of the reward screen (kind 0x2e) placed on the camera, which blinks as it falls.
 mod rain {
     use super::*;
 
@@ -293,14 +291,14 @@ mod rain {
     }
 }
 
-/// Type 47 (0x51bcc) : attente de 0x16 images avant de couper l'éclair de l'écran de victoire.
+/// Type 47 (0x51bcc): wait of 0x16 frames before cutting the lightning of the victory screen.
 mod timer {
     use super::*;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let state = x.state(0x51bda);
         if state == 0 {
-            // l'initialisation enchaîne sur l'état 2
+            // initialization chains into state 2
             x.add8(0x4, 2);
             x.set16(0x14, 0x15);
         }

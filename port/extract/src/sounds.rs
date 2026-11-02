@@ -1,17 +1,17 @@
-//! Sons : les échantillons QSound décrits par la table du pilote Z80, en WAV 8 bits.
+//! Sounds: the QSound samples described by the Z80 driver table, as 8-bit WAV.
 
 use std::io::{self, Write};
 use std::path::Path;
 
-/// Table des échantillons du pilote son (ROM Z80, dd2.01).
+/// Sound driver sample table (Z80 ROM, dd2.01).
 const TABLE: usize = 0x49e8;
-/// Nombre de fiches : la table finit après la dernière fiche non nulle (343 : `0xa2000` ; 344 : fiche nulle).
-/// Trois fiches (290, 293 et 305) sont invalides (début après la fin) : pas de fichier.
+/// Number of entries: the table ends after the last non-null entry (343: `0xa2000`; 344: null entry).
+/// Three entries (290, 293 and 305) are invalid (start after end): no file.
 const COUNT: usize = 345;
-/// Fréquence de sortie de la QSound : vitesse de lecture 1.0.
+/// QSound output frequency: playback rate 1.0.
 const RATE: u32 = 24_038;
 
-/// Entrée de la table : note de référence, banque, début, début de boucle, fin (adresses dans la banque).
+/// Table entry: reference note, bank, start, loop start, end (addresses within the bank).
 struct Sample {
     root: u8,
     bank: u8,
@@ -37,7 +37,7 @@ fn table(z80: &[u8]) -> Vec<Sample> {
 pub fn extract(roms: &Path, dir: &Path) -> io::Result<()> {
     std::fs::create_dir_all(dir)?;
     let z80 = std::fs::read(roms.join("dd2.01"))?;
-    // ROM d'échantillons : ROM_LOAD16_WORD_SWAP
+    // sample ROM: ROM_LOAD16_WORD_SWAP
     let mut pcm = Vec::new();
     for name in ["dd2.11m", "dd2.12m"] {
         pcm.extend(std::fs::read(roms.join(name))?.chunks_exact(2).flat_map(|w| [w[1], w[0]]));
@@ -54,16 +54,16 @@ pub fn extract(roms: &Path, dir: &Path) -> io::Result<()> {
     Ok(())
 }
 
-/// WAV PCM 8 bits mono (non signé, d'où le ^ 0x80) avec un bloc `smpl` (note, boucle).
+/// 8-bit mono PCM WAV (unsigned, hence the ^ 0x80) with a `smpl` chunk (note, loop).
 fn write_wav(path: &Path, signed: &[u8], root: u8, loop_start: Option<u32>) -> io::Result<()> {
     let data: Vec<u8> = signed.iter().map(|b| b ^ 0x80).collect();
     let mut smpl = Vec::new();
     let le = |v: u32| v.to_le_bytes();
-    smpl.extend(le(0)); // fabricant
-    smpl.extend(le(0)); // produit
-    smpl.extend(le(1_000_000_000 / RATE)); // période d'échantillonnage (ns)
-    smpl.extend(le(root as u32)); // note de référence MIDI
-    smpl.extend([le(0), le(0), le(0)].concat()); // désaccord, format SMPTE, décalage
+    smpl.extend(le(0)); // manufacturer
+    smpl.extend(le(0)); // product
+    smpl.extend(le(1_000_000_000 / RATE)); // sample period (ns)
+    smpl.extend(le(root as u32)); // MIDI reference note
+    smpl.extend([le(0), le(0), le(0)].concat()); // detune, SMPTE format, offset
     smpl.extend(le(loop_start.is_some() as u32));
     smpl.extend(le(0));
     if let Some(start) = loop_start {

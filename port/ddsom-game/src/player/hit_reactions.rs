@@ -1,13 +1,13 @@
-//! Réaction d'un ennemi (ou d'une caisse) touché par un joueur (P6).
+//! Reaction of an enemy (or a crate) hit by a player (P6).
 //!
-//! `enemy_reacts` (0xf232e) est appelée par la résolution des coups (`combat`, 0x264fe) juste après
-//! que la victime est passée en état « touchée » : elle choisit l'animation de réaction de la victime
-//! (octet `+0x49`) d'après la classe de l'attaquant, l'identifiant du coup (`+0x47`), le type de la
-//! victime et un compteur d'étourdissement (`+0x88`) qui, une fois dépassé, la jette à terre. Puis
-//! `maybe_stun` (0xf1c1a) tire au sort un temps de sonnement (`+0x87`).
+//! `enemy_reacts` (0xf232e) is called by the hit resolution (`combat`, 0x264fe) right after
+//! the victim has entered the "hit" state: it chooses the victim's reaction animation
+//! (byte `+0x49`) from the attacker's class, the hit identifier (`+0x47`), the victim's
+//! type and a stun counter (`+0x88`) which, once exceeded, knocks the victim to the ground. Then
+//! `maybe_stun` (0xf1c1a) draws at random a stagger time (`+0x87`).
 //!
-//! Les tables sont dans la ROM : par classe de l'attaquant puis par type de victime, une ligne de
-//! quatre octets par identifiant de coup (réaction normale, en l'air, étourdie, ajout au compteur).
+//! The tables are in ROM: by attacker class then by victim type, a row of
+//! four bytes per hit identifier (normal reaction, airborne, stunned, addition to the counter).
 
 use crate::machine::Machine;
 use cps2::Cps2Bus;
@@ -17,23 +17,23 @@ use super::{ram, Ctx, Player};
 use crate::mem::{rd16, rd8, wr8};
 
 mod tables {
-    /// Par classe de l'attaquant (pointeurs) puis type de victime (pointeurs) : lignes de réaction.
+    /// By attacker class (pointers) then victim type (pointers): reaction rows.
     pub const ENEMY: u32 = 0xf2656;
-    /// Idem pour les victimes qui ne sont pas des ennemis ordinaires (boss...).
+    /// Same for victims that are not ordinary enemies (bosses...).
     pub const OTHER: u32 = 0xf266e;
-    /// Seuils d'étourdissement : 8 octets par type de victime, un par huitième du compteur de hasard.
+    /// Stun thresholds: 8 bytes per victim type, one per eighth of the random counter.
     pub const THRESHOLD_ENEMY: u32 = 0xf24fe;
-    /// Seconde table, indexée par le seuil de la première, pour les victimes qui ne sont pas des ennemis.
+    /// Second table, indexed by the threshold of the first, for victims that are not enemies.
     pub const THRESHOLD_OTHER: u32 = 0xf25ae;
-    /// Par classe de l'attaquant (adresse, dans le code) : table de chances de sonner selon le coup.
+    /// By attacker class (address, in the code): table of stagger chances according to the hit.
     pub const STUN_CLASS: u32 = 0xf1cac;
-    /// Masques de 16 bits : un tirage de 0..15 réussit si son bit est levé.
+    /// 16-bit masks: a draw of 0..15 succeeds if its bit is set.
     pub const STUN_MASKS: u32 = 0xf1d2e;
-    /// Durées de sonnement.
+    /// Stagger durations.
     pub const STUN_TIMES: u32 = 0xf1f2e;
 }
 
-/// Champs de la victime (`v`) et de l'attaquant (`a`).
+/// Fields of the victim (`v`) and the attacker (`a`).
 mod f {
     pub const ACTIVE: u32 = 0x00;
     pub const KIND: u32 = 0x02;
@@ -47,7 +47,7 @@ mod f {
     pub const STUN_TIME: u32 = 0x87;
     pub const STUN_COUNT: u32 = 0x88;
     pub const STUN_DECAY: u32 = 0x89;
-    /// Attaquant : type de coup (< 2 : coup d'arme), identifiant du coup, drapeau, charge de baguette.
+    /// Attacker: hit type (< 2: weapon hit), hit identifier, flag, wand charge.
     pub const ATTACK_KIND: u32 = 0x3c;
     pub const BLOW_ID: u32 = 0x47;
     pub const FLAG_77: u32 = 0x77;
@@ -55,13 +55,13 @@ mod f {
 }
 
 const CLASS_ENEMY: u8 = 2;
-/// Coup du magicien qui étourdit.
+/// Magic-user hit that stuns.
 const WIZARD_BLOW: u32 = 0x80;
-/// Coup de poussée : la victime se retourne vers l'agresseur.
+/// Push hit: the victim turns toward the aggressor.
 const PUSH_BLOW: u32 = 0x58;
 
 
-/// 0xf232e : `a` est le joueur qui frappe, `v` la victime (adresse de l'objet).
+/// 0xf232e: `a` is the player who strikes, `v` the victim (object address).
 pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
     cov!();
     let att = a.0;
@@ -73,14 +73,14 @@ pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
     } else if blow == PUSH_BLOW {
         wr8(g.b, v + f::FACING, 0);
     }
-    // lignes de réaction de ce type de victime pour cette classe d'attaquant
+    // reaction rows of this victim type for this attacker class
     let is_enemy = rd8(g.b, v + f::CLASS) == CLASS_ENEMY;
     let by_class = if is_enemy { tables::ENEMY } else { tables::OTHER };
     let class_offset = (rd8(g.b, att + Player::CHARACTER) as u32 & 0xe) * 2;
     let kind = rd8(g.b, v + f::KIND) as u32;
     let per_kind = g.data32(by_class + class_offset);
     let rows = g.data32(per_kind + 4 * kind);
-    // seuil d'étourdissement : deux niveaux de table pour les victimes qui ne sont pas des ennemis
+    // stun threshold: two table levels for victims that are not enemies
     let slot = (kind * 8 + ((ram::TICK.get(g.b) as u32 & 0x1c) >> 2)) & 0xffff;
     let mut threshold = g.data8(tables::THRESHOLD_ENEMY + slot) as u32;
     if !is_enemy {
@@ -92,7 +92,7 @@ pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
     if rd8(g.b, att + f::ATTACK_KIND) < 2 {
         let wizard = rd8(g.b, att + Player::CHARACTER) & 0xe == 4 && blow == WIZARD_BLOW;
         if !wizard {
-            // armes qui étourdissent à coup sûr : réaction fixe et compteur qui monte de 2
+            // weapons that stun for sure: fixed reaction and counter that goes up by 2
             let fixed = match (rd8(g.b, att + Player::WEAPON_A), rd8(g.b, att + Player::WEAPON_B)) {
                 (0x10, _) => Some(0x60),
                 (0x11, _) => Some(0x70),
@@ -126,7 +126,7 @@ pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
         let count = rd8(g.b, v + f::STUN_COUNT).wrapping_add(add);
         wr8(g.b, v + f::STUN_COUNT, count);
         if threshold <= count as i8 {
-            // seuil dépassé : la victime est jetée à terre
+            // threshold exceeded: the victim is knocked to the ground
             wr8(g.b, v + f::STUN_COUNT, 0);
             wr8(g.b, v + f::ACTIVE, 2);
             let reaction = row(g, 2);
@@ -148,8 +148,8 @@ pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
     maybe_stun(g, a, v);
 }
 
-/// 0xf1c1a : l'attaque peut étourdir la victime : un tirage selon la classe de l'attaquant, le coup et
-/// un compteur décide si un temps de sonnement est posé.
+/// 0xf1c1a: the attack may stun the victim: a draw according to the attacker class, the hit and
+/// a counter decides whether a stagger time is set.
 fn maybe_stun(g: &mut Ctx, a: Player, v: u32) {
     cov!();
     let att = a.0;
@@ -175,8 +175,8 @@ fn maybe_stun(g: &mut Ctx, a: Player, v: u32) {
     }
 }
 
-/// 0xf1c6e : durée du sonnement, tirée dans la table (selon `+0x6f` de la victime, le compteur de
-/// hasard et un tirage).
+/// 0xf1c6e: stagger duration, drawn from the table (according to the victim's `+0x6f`, the random
+/// counter and a draw).
 fn set_stun_time(g: &mut Ctx, v: u32) {
     cov!();
     let timer = (rd8(g.b, v + f::STUN_TIMER) as u16) << 8;

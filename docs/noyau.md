@@ -1,6 +1,6 @@
 # Noyau : VBLANK, ordonnanceur, traps, crédits (K1, C1)
 
-Code : `port/ddsom-game/src/vblank.rs`, `kernel.rs`, `tache_credits.rs`, `ecran_credits.rs`. `A5` = 0xFF8000.
+Code : `port/ddsom-game/src/vblank.rs`, `kernel.rs`, `credits_task.rs`, `credits_screen.rs`. `A5` = 0xFF8000.
 Tout est validé image par image (`tools/validate_all.sh`) ; les scénarios `scenarios/cov/cov_credits_*`
 exercent les écrans des crédits (compteurs séparés, partagés, gros chiffres, crédit à deux pièces, jeu gratuit).
 
@@ -14,24 +14,24 @@ native finit par `RTE`.
 | 1 | sortie 0x8040e1 ← `A5+0x5bc`, `A5+0x7fce` ← 0, 0x804170 ← 0x3f, base de palette 0x80410a ← 0x91c0 | `vblank` |
 | 2 | mot de réglages FFFFD0 ← 0xffff (les trois drapeaux de mise au point de la ROM, octets 0xc4/0xc5/0xc7, sont nuls) | |
 | 3 | compteur d'images `A5+0x6c`, indicateur « nouvelle image » FF0164 ← 0xff, FF19F2 ← 0 | |
-| 4 | registres de défilement CPS-A avec une image de retard (0x722) | `registres_affichage` |
-| 5 | lecture des entrées (0x80c), contrôle vidéo (0x902) | native `inputs`, `controle_video` |
+| 4 | registres de défilement CPS-A avec une image de retard (0x722) | `display_regs` |
+| 5 | lecture des entrées (0x80c), contrôle vidéo (0x902) | native `inputs`, `video_control` |
 | 6 | commandes vers le Z80 (0x68c), monnayeurs (0x143da), comptabilité (0x2dcf6) | natives |
-| 7 | réveil des tâches : état « attend » → compte décrémenté, à zéro « prête » ; la première examinée (emplacement 0, en FF0064 ; D0 = 15 dans l'original) ne décompte qu'une image sur quatre tant que `A5+0x4f` ≠ 0 | `reveiller_taches`, `Table::decompter_image` |
+| 7 | réveil des tâches : état « attend » → compte décrémenté, à zéro « prête » ; la première examinée (emplacement 0, en FF0064 ; D0 = 15 dans l'original) ne décompte qu'une image sur quatre tant que `A5+0x4f` ≠ 0 | `wake_tasks`, `Table::count_down_frame` |
 
 ## Ordonnanceur et traps (0x928-0xb64, `kernel.rs`)
 
 Voir l'en-tête de `kernel.rs` (parcours, enveloppes, traps). L'ordonnanceur est une machine à états Rust
-(`kernel::Point` : `Debut` 0x928, `Parcours` 0x932, `Examen` 0x93e, `Suivant` 0x952, `Retour` 0x984 ; avant lui les
-étapes du démarrage, `Reset`... `Lancement` ; `Tache` quand une tâche continue dans la native posée au PC ; `PasRetenu`
-quand le pas de jeu attend l'image suivante), rangée dans la table des tâches ; la boucle d'image (`sans68k::ligne`)
+(`kernel::Point` : `Start` 0x928, `Walk` 0x932, `Exam` 0x93e, `NextTask` 0x952, `Return` 0x984 ; avant lui les
+étapes du démarrage, `Reset`... `Launch` ; `Task` quand une tâche continue dans la native posée au PC ; `StepKept`
+quand le pas de jeu attend l'image suivante), rangée dans la table des tâches ; la boucle d'image (`no68k::line`)
 exécute un point à la fois et prend l'interruption de VBLANK entre deux points quand le SR l'autorise
 (`vblank::interruption`, PC et SR empilés comme par le processeur, l'adresse d'origine du point en guise de PC). Le
 noyau ne pose plus de PC. Fidélité : chaque emplacement examiné est un point séparé (la fenêtre d'interruption entre
 deux emplacements subsiste), et une tâche reprend avec les registres, le SR et la pile qu'elle avait en cédant, à
 l'étape où elle a cédé.
 
-### Table des tâches en Rust (`taches/table.rs`)
+### Table des tâches en Rust (`tasks/table.rs`)
 
 L'original range chaque tâche dans un enregistrement de 16 octets en FF0064 (état, compte, SR, PC, USP, pile) et sauve
 ses 15 registres sur sa propre pile ; l'ordonnanceur empile son état sur la pile du superviseur (FF0E66, pointeur en
@@ -40,12 +40,12 @@ réécrit tient tout cela dans une structure Rust, rangée dans le bus (`Cps2Bus
 
 | `Table` | Original |
 |---|---|
-| `emplacements[k].etat` : `Libre`, `Attend`, `Suspendue`, `Prete`, `EnCours`, `Neuve` | octet +0 de l'enregistrement FF0064 + 0x10 k (0, 1, 2, 4, 8, 0xc) |
-| `emplacements[k].compte` | octet +1 (images avant le réveil ; gardé tel quel dans les autres états) |
-| `emplacements[k].pile` | long +0xc : pile 68000 donnée à la création |
-| `emplacements[k].reprise` : `Entree(pc)` ou `Etape(etape)` (ce que la tâche relit à sa reprise est dans les champs de l'étape) | PC (+4) d'une tâche neuve ; sinon SR (+2), USP (+8) et, sur la pile, les 15 registres et l'adresse de retour de l'enveloppe (`Etape::adresse()` pour une étape) |
-| `courante` | FF0056 (dernière tâche lancée) |
-| `piles` | tas des piles (FF005A, FF0166-FF01A5) |
+| `slots[k].state` : `Free`, `Waiting`, `Suspended`, `Ready`, `InProgress`, `Fresh` | octet +0 de l'enregistrement FF0064 + 0x10 k (0, 1, 2, 4, 8, 0xc) |
+| `slots[k].count` | octet +1 (images avant le réveil ; gardé tel quel dans les autres états) |
+| `slots[k].stack` | long +0xc : pile 68000 donnée à la création |
+| `slots[k].resume` : `Entry(pc)` ou `Step(step)` (ce que la tâche relit à sa reprise est dans les champs de l'étape) | PC (+4) d'une tâche neuve ; sinon SR (+2), USP (+8) et, sur la pile, les 15 registres et l'adresse de retour de l'enveloppe (`Step::address()` pour une étape) |
+| `current` | FF0056 (dernière tâche lancée) |
+| `stacks` | tas des piles (FF005A, FF0166-FF01A5) |
 
 Les numéros d'emplacement sont ceux de l'original divisés par 16 (`kill(0x30)` : emplacement 3). Les enveloppes qui ne
 cèdent pas (0x9b6 créer, 0xa14 tuer, 0xaac suspendre, 0xac8 réveiller) ne font plus que l'opération sur la table :
@@ -58,29 +58,29 @@ sont pris que par leurs enveloppes, natives ; les handlers n'ont pas de native (
 que par le menu de mise au point d'origine 0x2c3e0, que le jeu n'exécute pas). `trap #12` (0xaf6) change directement
 le masque du SR.
 
-Toute tâche reprend à une *étape* de sa machine à états (`Reprise::Etape`) : l'ordonnanceur remet ses registres puis
-appelle son pas (`taches::executer`) ; une tâche neuve démarre à l'étape de son entrée (`taches::entree` : y compris
-la tâche de démarrage `0x11b16`, `modes::boot::Etape::Entree`, et la machine à modes relancée `0x133fe`,
-`modes::Etape::Entree`). Voir « Tâches Rust ». `Reprise::Cession` (une native à l'adresse de reprise) a disparu au lot
+Toute tâche reprend à une *étape* de sa machine à états (`Resume::Step`) : l'ordonnanceur remet ses registres puis
+appelle son pas (`tasks::execute`) ; une tâche neuve démarre à l'étape de son entrée (`tasks::entry` : y compris
+la tâche de démarrage `0x11b16`, `modes::boot::Step::Entry`, et la machine à modes relancée `0x133fe`,
+`modes::Step::Entry`). Voir « Tâches Rust ». `Resume::Cession` (une native à l'adresse de reprise) a disparu au lot
 « noyau final » : une cession vers une adresse est une erreur (`unreachable!`). L'écran `0x19068` est du code mort (sa
 tâche n'a pas d'étape d'entrée : le jeu s'y arrêterait avec un diagnostic). Les appels en cours ne sont plus sur la
 pile 68000 des tâches : voir ci-dessous.
 
-### Appels en cours en Rust (`table::Cadre`)
+### Appels en cours en Rust (`table::Frame`)
 
 Dans l'original, une tâche qui cède au milieu d'un sous-programme garde sur sa pile les adresses de retour de ses
 appels en cours (la boucle de partie `0x1c468`, sa fin d'image `0x1c4c4`, la phase 12 `0x1c702`, la mise à jour du
 monde, la boucle d'aiguillage d'une classe d'objets, la séquence de scène qui a lancé un fondu...) et ce que ces
 sous-programmes ont sauvé (les 15 registres d'un fondu par composante, le D0 d'une impulsion de verrouillage des
-crédits). Le jeu réécrit range les retours dans l'emplacement de la tâche (`Emplacement::cadres`, au plus 8 ; un
-`Cadre` est une `Suite`, presque toujours une étape Rust, et la hauteur de pile à son ouverture) ; ce que les
-sous-programmes sauvent est un champ de leur étape (`fondu::Etape::Composante { registres }`,
-`tache_credits::Etape::PulseAfterWait { d0 }`).
+crédits). Le jeu réécrit range les retours dans l'emplacement de la tâche (`Slot::frames`, au plus 8 ; un
+`Frame` est une `Next`, presque toujours une étape Rust, et la hauteur de pile à son ouverture) ; ce que les
+sous-programmes sauvent est un champ de leur étape (`fading::Step::Component { regs }`,
+`credits_task::Step::PulseAfterWait { d0 }`).
 
 | Cadre | Original | Ouvert par | Fermé par |
 |---|---|---|---|
-| `suite` | adresse de retour d'un `jsr`/`bsr`/`pea` | `table::appeler` : `Sequence::push_return`, `sous_programme`, `tail` ; boucle de la machine à modes (`modes::Etape`), pas de jeu (`partie::Etape::Tour`, `FinImage`), phase 12 et mise à jour du monde (`game::Etape`), sortie de scène | `mem::rts`/`taches::revenir` (l'étape s'exécute aussitôt), ou l'enveloppe de cession appelée en dernier (`jmp 0xa40`, `taches::attendre_puis_revenir`) : `table::depiler_retour` |
-| `suite` attendue | adresse de retour du `jsr (A1)` d'une boucle d'aiguillage | `table::appeler_attendu` : boucle de dispatch (`dispatch::Etape::Aiguillage`), qui appelle le gestionnaire par `crate::appeler_attendu` | le `rts` du gestionnaire rend la main à la boucle (`table::revenu`) ; si le gestionnaire a cédé, le cadre redevient une suite ordinaire |
+| `next` | adresse de retour d'un `jsr`/`bsr`/`pea` | `table::call` : `Sequence::push_return`, `subroutine`, `tail` ; boucle de la machine à modes (`modes::Step`), pas de jeu (`game::Step::Tour`, `FrameEnd`), phase 12 et mise à jour du monde (`game::Step`), sortie de scène | `mem::rts`/`tasks::return_to_caller` (l'étape s'exécute aussitôt), ou l'enveloppe de cession appelée en dernier (`jmp 0xa40`, `tasks::wait_then_return`) : `table::pop_return` |
+| `next` attendue | adresse de retour du `jsr (A1)` d'une boucle d'aiguillage | `table::call_expected` : boucle de dispatch (`dispatch::Step::Dispatch`), qui appelle le gestionnaire par `crate::call_expected` | le `rts` du gestionnaire rend la main à la boucle (`table::returned`) ; si le gestionnaire a cédé, le cadre redevient une suite ordinaire |
 
 Chaque cadre retient le pointeur de pile 68000 à son ouverture : un appelé revient au cadre quand il rend la main avec
 cette pile ; un appel par adresse imbriqué (`crate::call`, qui empile une adresse sentinelle) a toujours une pile plus
@@ -89,16 +89,16 @@ reprise ne dépend que de la table : étape de reprise, registres et SR du conte
 
 **Céder au milieu d'une boucle Rust.** Un gestionnaire d'objet peut faire céder la main à la tâche au milieu de la
 boucle d'aiguillage (fondu au noir des portes SET 7 et 29, attente du feu d'artifice) : il range la suite de son état
-dans un cadre et cède (`kernel::attendre`), puis revient aussitôt. La cession est notée (`taches::a_cede`, remis à faux
+dans un cadre et cède (`kernel::wait`), puis revient aussitôt. La cession est notée (`tasks::has_ceded`, remis à faux
 à chaque point de premier niveau) : son `rts` ne fait plus rien, la boucle voit que l'appel attendu n'est pas revenu et
 rend `Flow::Yield`, comme la mise à jour du monde, la phase 12 et le pas de jeu. Les cadres restent : à la fin du
-fondu, la tâche y reprend (fin du gestionnaire, puis `Aiguillage` : la boucle continue à l'emplacement suivant avec
-A0 et D7 rendus par le contexte, puis `Monde`, `ApresMonde`, `FinImage`, `Tour`). C'est ce que faisaient, avant, l'abandon
+fondu, la tâche y reprend (fin du gestionnaire, puis `Dispatch` : la boucle continue à l'emplacement suivant avec
+A0 et D7 rendus par le contexte, puis `World`, `AfterWorld`, `FrameEnd`, `Tour`). C'est ce que faisaient, avant, l'abandon
 par panique des fonctions Rust (`Unwound`), les natives de reprise à ces adresses (`RESUME_*`, `WORLD_RESUMES`,
 `PHASE_12_RESUME`) et la remise des cadres sur la pile 68000 (`mettre_sur_la_pile`) pour le code d'origine.
 
 **Revenir plus haut que son appelant.** L'épilogue étranger des bulles (`0xaa9fe`, `movem.l (SP)+,{A1-A4} ; rts`)
-dépile les quatre appels en cours les plus récents (`table::depiler_appels` : aiguillage, monde, fin de phase, fin
+dépile les quatre appels en cours les plus récents (`table::pop_calls` : aiguillage, monde, fin de phase, fin
 d'image ; A1-A4 reçoivent leurs adresses d'origine) et revient au cinquième (`Tour` de la partie, ou haut de boucle de
 la démonstration). Les fonctions Rust dépassées voient que leur appel n'est pas revenu et abandonnent.
 
@@ -110,66 +110,66 @@ la démonstration). Les fonctions Rust dépassées voient que leur appel n'est p
 Boucle : départs (0x141e0), état des crédits (0x13c2c), verrous (0x14290), boutons de continue (0x1436e), une
 image de cession (0xb64) tant que l'interrupteur TEST n'est pas actionné (IN2+1 bit 1, actif bas), sinon démontage (0x14d8c) :
 écran effacé, tâche d'interface créée (0x29162), tâche terminée. L'état des crédits prépare l'écran au premier
-crédit (efface l'écran en cédant), affiche textes et chiffres (`ecran_credits.rs`), puis offre le départ à chaque
-joueur (0x140b4) : bouton de départ (IN2) et assez de crédits (1 ou 2 selon `monnayeur+9`) ; le premier départ
+crédit (efface l'écran en cédant), affiche textes et chiffres (`credits_screen.rs`), puis offre le départ à chaque
+joueur (0x140b4) : bouton de départ (IN2) et assez de crédits (1 ou 2 selon `coin_slot+9`) ; le premier départ
 crée la tâche de partie (0x1c45a) au lieu de l'écran des crédits. Les cessions d'origine coupent le code : chaque
-morceau est une étape de `tache_credits::Etape` (adresse de retour de l'original : `Etape::adresse`).
+morceau est une étape de `credits_task::Step` (adresse de retour de l'original : `Step::address`).
 
-## Tâches Rust (`taches/`)
+## Tâches Rust (`tasks/`)
 
-Une tâche Rust est une machine à états (lot E, J3) : chaque point de reprise est une variante d'une `enum Etape` de
-son module (`etapes!`, réunies dans `taches::Etape`), et chaque *pas* une fonction Rust. Le pas rend la main par une
-`Attente` (`Images(n)` : trap 3, `Prete` : trap 4) que `taches::ceder` remet directement au noyau
-(`kernel::attendre`, `kernel::ceder_prete`) : la table range l'état, le compte, l'étape de reprise et le contexte de la
-tâche (`Reprise::Etape`), sans enveloppe d'origine ni adresse empilée. Au lancement suivant, l'ordonnanceur remet les
-registres et appelle le pas (`taches::executer`) ; une tâche neuve dont l'entrée est une étape (`taches::entree`)
+Une tâche Rust est une machine à états (lot E, J3) : chaque point de reprise est une variante d'une `enum Step` de
+son module (`steps!`, réunies dans `tasks::Step`), et chaque *pas* une fonction Rust. Le pas rend la main par une
+`Wait` (`Images(n)` : trap 3, `Ready` : trap 4) que `tasks::cede` remet directement au noyau
+(`kernel::wait`, `kernel::cede_ready`) : la table range l'état, le compte, l'étape de reprise et le contexte de la
+tâche (`Resume::Step`), sans enveloppe d'origine ni adresse empilée. Au lancement suivant, l'ordonnanceur remet les
+registres et appelle le pas (`tasks::execute`) ; une tâche neuve dont l'entrée est une étape (`tasks::entry`)
 démarre de même. Un pas qui finit (`Flow::Done`, retour de sous-programme) continue à la suite de l'appel en cours
-(`taches::revenir`). L'adresse d'origine d'une étape (`Etape::adresse`) ne sert plus qu'au diagnostic et à la comparaison
-de la table avec FF0064. Chaque emplacement porte aussi le nom de sa tâche (`table::Tache`, d'après son entrée :
-`Partie`, `Gel`, `Credits`...).
+(`tasks::return_to_caller`). L'adresse d'origine d'une étape (`Step::address`) ne sert plus qu'au diagnostic et à la comparaison
+de la table avec FF0064. Chaque emplacement porte aussi le nom de sa tâche (`table::Task`, d'après son entrée :
+`Game`, `Freeze`, `Credits`...).
 
 | Tâche | Étapes (adresses d'origine) | Rôle |
 |---|---|---|
-| partie (`taches/partie.rs`) | `Entree` `0x1c45a`, `Tour` `0x1c468`, `Pas` `0x1c4b0`, `FinImage` `0x1c4c4` ; appels en cours de la phase : `game::Etape` (`Monde`, `ApresMonde` `0x1c702`), `dispatch::Etape::Aiguillage` | boucle de jeu, voir `boucle.md` §1 |
-| machine à modes (`modes/mod.rs`) | `Entree` `0x133fe`, `ApresGestionnaire` `0x1341a`, `ApresAttente` `0x13422` | boucle des écrans hors partie |
+| partie (`tasks/game.rs`) | `Entry` `0x1c45a`, `Tour` `0x1c468`, `Step` `0x1c4b0`, `FrameEnd` `0x1c4c4` ; appels en cours de la phase : `game::Step` (`World`, `AfterWorld` `0x1c702`), `dispatch::Step::Dispatch` | boucle de jeu, voir `boucle.md` §1 |
+| machine à modes (`modes/mod.rs`) | `Entry` `0x133fe`, `AfterHandler` `0x1341a`, `AfterWait` `0x13422` | boucle des écrans hors partie |
 | démarrage, machine à modes (`modes/`) | `boot`, `attract`, `title`, `select`, `ranking`, `demo`, `ending`, `gameover` : une enum par écran | écrans hors partie (`modes.md`) |
 | séquences de scène (`scene/`) | `exit` (fins d'aiguillage, état final), `blackout`, `transition` (`early`, `late`), `bonus`, `shop`, `characters`, `tally` | sortie de scène, transitions (`scenes.md`) |
-| gel (`taches/gel.rs`) | `Entree` `0xee080`, `ApresCession` `0xee0fa`, `ApresDecompte` `0xee16a` | avance rapide : décompte la tâche principale quand un joueur presse un bouton |
-| fondus (`taches/fondu.rs`) | tâches `TacheLuminosite` (`0x14ba`, `0x14c8`, `0x14d0`, `0x14de`, `0x1536`, `0x153e`), `TacheComposante` (`0x1ccf8`, `0x1ce64`, `0x1ced4`, `0x1cf12`) ; pas `Luminosite` (sens dans l'étape ; `0x14b4`, `0x152c`, `0x158c`), `Composante` (registres sauvés dans l'étape ; `0x1cce8`...) | un pas par cession, puis fin de la tâche (`0x9f8`) ou retour à l'appelant ; voir `video.md`, « Fondus » |
-| écran des scores (`taches/ecran_fixe.rs`) | `Entree` `0x1835e`, `Reprise` `0x18384` | tableau des meilleurs scores de l'attract (F4), voir `modes.md` §4 |
-| interface joueurs (`hud/`) | `Entree` `0x150ac`, `Starting` `0x15146`, `AfterWait` `0x15212` | emplacement 0x30 : panneaux, bannières, choix du personnage (`hud.md`) |
-| invites (`taches/invite.rs`) | `Entree` `0xe03fe`, `CoinsShown`/`CoinsHidden` `0xe0440`/`0xe0452`, `PlainShown`/`PlainHidden` `0xe0478`/`0xe048a` ; natives `0xe03c6` arrêt, `0xe03e4` création | emplacement 0xd0 : « INSERT COIN(S) » / « CONTINUE » clignote (40 images affiché, 20 effacé) |
-| menu TEST (`taches/service.rs`) | `Entree` `0x29162`, `Turn` `0x29190`, `HandlerReturn` `0x2918a`, `MenuAfterClear` `0x291ec` | menu de service et ses écrans, tout en Rust (`service/`, `docs/service.md`) |
-| crédits (`tache_credits.rs`) | `Entree` `0x13c0a`, retours de la boucle, des départs (`Sequence(seq, k)`) et des impulsions de verrouillage (`Lock(k)`, `PulseAfterWait { d0 }`) | voir « Tâche des crédits » |
+| gel (`tasks/freeze.rs`) | `Entry` `0xee080`, `AfterCession` `0xee0fa`, `AfterCountdown` `0xee16a` | avance rapide : décompte la tâche principale quand un joueur presse un bouton |
+| fondus (`tasks/fading.rs`) | tâches `BrightnessTask` (`0x14ba`, `0x14c8`, `0x14d0`, `0x14de`, `0x1536`, `0x153e`), `ComponentTask` (`0x1ccf8`, `0x1ce64`, `0x1ced4`, `0x1cf12`) ; pas `Brightness` (sens dans l'étape ; `0x14b4`, `0x152c`, `0x158c`), `Component` (registres sauvés dans l'étape ; `0x1cce8`...) | un pas par cession, puis fin de la tâche (`0x9f8`) ou retour à l'appelant ; voir `video.md`, « Fondus » |
+| écran des scores (`tasks/fixed_screen.rs`) | `Entry` `0x1835e`, `Resume` `0x18384` | tableau des meilleurs scores de l'attract (F4), voir `modes.md` §4 |
+| interface joueurs (`hud/`) | `Entry` `0x150ac`, `Starting` `0x15146`, `AfterWait` `0x15212` | emplacement 0x30 : panneaux, bannières, choix du personnage (`hud.md`) |
+| invites (`tasks/prompt.rs`) | `Entry` `0xe03fe`, `CoinsShown`/`CoinsHidden` `0xe0440`/`0xe0452`, `PlainShown`/`PlainHidden` `0xe0478`/`0xe048a` ; natives `0xe03c6` arrêt, `0xe03e4` création | emplacement 0xd0 : « INSERT COIN(S) » / « CONTINUE » clignote (40 images affiché, 20 effacé) |
+| menu TEST (`tasks/service.rs`) | `Entry` `0x29162`, `Turn` `0x29190`, `HandlerReturn` `0x2918a`, `MenuAfterClear` `0x291ec` | menu de service et ses écrans, tout en Rust (`service/`, `docs/service.md`) |
+| crédits (`credits_task.rs`) | `Entry` `0x13c0a`, retours de la boucle, des départs (`Sequence(seq, k)`) et des impulsions de verrouillage (`Lock(k)`, `PulseAfterWait { d0 }`) | voir « Tâche des crédits » |
 | portraits de la boutique (`scene/shop.rs`) | `Portraits` `0xf7dfe` | emplacement 0xc0 |
-| écran noir (`video.rs`, sous-programme) | native `0xc32` ; `Effacement` `0xc42`, `Fin` `0xc56` | couches éteintes, une image, objets et couches effacés, une image |
+| écran noir (`video.rs`, sous-programme) | native `0xc32` ; `Clear` `0xc42`, `End` `0xc56` | couches éteintes, une image, objets et couches effacés, une image |
 
 Les **sous-programmes** qui cèdent la main (fondus de luminosité `0x144c`, `0x1460`, `0x146c`, par composante
 `0x1ccc2`, `0x1ce30`, `0x1ce9e`, écran noir `0xc32`) sont des fonctions Rust que les pas appellent directement
-(`Sequence::sous_programme(fondu::descente, suite)`, ou en appel terminal) : la suite de l'appelant est un cadre, leurs
+(`Sequence::subroutine(fading::descent, next)`, ou en appel terminal) : la suite de l'appelant est un cadre, leurs
 pas sont des étapes, et leur fin (`Flow::Done`) continue à la suite. Les gestionnaires d'objets les appellent de même
-(`families::set::fondu_de_sortie`).
+(`families::set::exit_fading`).
 
-Le pas de jeu est l'étape `Pas` : il compte lui-même les pas de l'image (`sans68k::pas_de_jeu`) ; au-delà du plafond
-(`MAX_STEPS_PER_FRAME`), il est retenu (`kernel::Point::PasRetenu`) et s'exécute au début de l'image suivante, après
+Le pas de jeu est l'étape `Step` : il compte lui-même les pas de l'image (`no68k::game_step`) ; au-delà du plafond
+(`MAX_STEPS_PER_FRAME`), il est retenu (`kernel::Point::StepKept`) et s'exécute au début de l'image suivante, après
 le VBLANK, comme la machine de référence le fait par `cps2::StepCap` sur le PC `0x1c4b0`.
 
 **Attente active sautée.** La tâche du gel est toujours prête : sans autre travail, l'ordonnanceur la relançait
 ~1 000 fois par image à ×16 (16 000 instructions 68000 par image, 95 % de tout le 68000 exécuté). `idle` (`lib.rs`)
-avance maintenant jusqu'à l'interruption quand `taches::gel::attente_vide` reconnaît que son prochain pas ne ferait
+avance maintenant jusqu'à l'interruption quand `tasks::freeze::idle_wait` reconnaît que son prochain pas ne ferait
 rien (seule tâche prête, cédée par `0xa86` depuis l'une de ses deux cessions, dernière lancée, pas de bouton qui
 réveillerait la tâche principale). `idle` testait l'indicateur de nouvelle image à FF8164 au lieu de FF0164 (il valait
 presque toujours vrai : l'attente active n'était jamais sautée) ; corrigé. `examples/idle_check.rs` vérifie, sur deux
 machines d'origine, que sauter l'attente ne change pas l'état (RAM hors zones ignorées, GFX, sprites, palette) : identique
 sur 12 000 images de six scénarios (attract, crédits, entrée de scène, jeu à deux, fin).
 
-L'enregistrement SR/PC/USP/pile est remplacé par la table Rust (`taches/table.rs`, voir plus haut), et les appels en
+L'enregistrement SR/PC/USP/pile est remplacé par la table Rust (`tasks/table.rs`, voir plus haut), et les appels en
 cours des tâches par ses cadres : toutes les reprises mesurées se font avec une pile 68000 vide (voir « Vers une boucle
 sans 68000 »). Les fondus, l'écran des scores, les invites et les
 scripts de transition de la sortie de scène (`scene/transition/`, `docs/scenes.md` §5) sont faits. Les « listes de
 bulles des boss » n'existent pas : les boss et les objets SET qui appellent `0x9b6` (A0 = `0x14de`, `0x14c8`, `0x1ccf8`...)
-lancent une tâche de fondu, déjà en Rust (`taches/fondu.rs`). Le menu TEST `0x29162` est fait aussi (`taches/service.rs` : écrans en fonctions Rust, une seule cession au milieu d'un écran,
-reprise à l'étape `MenuAfterClear` `0x291ec` ; les suites de la carte de développement, `A5+0x82`, jamais sur une borne, sont en Rust aussi : `eeprom/carte_dev.rs`, `docs/service.md` §5). L'écran `0x19068` (emplacement 0xf0, créé en `0x13aa0`) est du code mort : voir « Code mort de la machine à modes » ci-dessous. Les tâches Rust gardent encore leur état dans la RAM (comparée par `validate`) et les registres de leur contexte
+lancent une tâche de fondu, déjà en Rust (`tasks/fading.rs`). Le menu TEST `0x29162` est fait aussi (`tasks/service.rs` : écrans en fonctions Rust, une seule cession au milieu d'un écran,
+reprise à l'étape `MenuAfterClear` `0x291ec` ; les suites de la carte de développement, `A5+0x82`, jamais sur une borne, sont en Rust aussi : `eeprom/dev_card.rs`, `docs/service.md` §5). L'écran `0x19068` (emplacement 0xf0, créé en `0x13aa0`) est du code mort : voir « Code mort de la machine à modes » ci-dessous. Les tâches Rust gardent encore leur état dans la RAM (comparée par `validate`) et les registres de leur contexte
 (rendus à la reprise : le code relit des restes) ; le sens d'un fondu, les registres sauvés par un fondu par composante
 et le D0 d'une impulsion de verrouillage sont des champs de leurs étapes.
 
@@ -214,11 +214,11 @@ successives, reprise d'une tâche en posant son contexte dans le processeur. Pou
    exécutent encore du 68000 » ; surtout C10 SET, C04 boss, C0e EFFCT non exercés, P3, ESHL), le code d'origine où
    reprennent encore des tâches (plus aucune), et les natives que
    la machine remplace par leur original : en mode hybride, celles qui débordent sur l'interruption suivante (`run`,
-   `lib.rs` : `c.cycles + DUREE_NATIVE > irq_horizon`) ; celles qui se déclaraient hors contrat (`families::COUT_HORS_CONTRAT` :
+   `lib.rs` : `c.cycles + NATIVE_DURATION > irq_horizon`) ; celles qui se déclaraient hors contrat (`families::COUT_HORS_CONTRAT` :
    épilogue étranger `0xaa9fe` des bulles, pas de réaction non réécrits) s'exécutent maintenant toujours. Sans processeur, une native s'exécute toujours en entier.
 2. **Un exécuteur de natives sans interpréteur.** Un pas finit en posant `c.pc` sur la native suivante (reprise, suite
    d'un cadre, enveloppe de cession) et la machine la cherche (`lookup`) ; sans 68000, une boucle `while let Some(n) =
-   lookup(c.pc) { (n.run)(c, b) }` jusqu'au retour à l'ordonnanceur (`0x984`) suffit, le `Cpu` ne servant plus que de banc
+   lookup(c.pc) { (n.run)(c, b) }` jusqu'au ret à l'ordonnanceur (`0x984`) suffit, le `Cpu` ne servant plus que de banc
    de registres (D0-D7, A0-A7, SR, PC). `call_at` devient l'appel de la native, `Unwound` (abandon des fonctions Rust
    quand le code appelé cède ou revient plus haut) disparaît avec le dernier code d'origine.
 3. **La pile 68000 au sein d'un pas.** Elle est vide à chaque cession, mais un pas s'en sert encore entre deux cessions :
@@ -226,11 +226,11 @@ successives, reprise d'une tâche en posant son contexte dans le processeur. Pou
    routines natives qui imitent l'original. C'est de la RAM ordinaire (FF01A6-FF0DA5, ignorée par `validate`) : sans
    processeur elle peut rester, et disparaît quand plus aucun appelant n'est du 68000.
 4. **Les registres comme interface.** Les natives se passent encore des valeurs par D0-D7/A0-A6, le contexte d'une
-   tâche est fait de registres (sens d'un fondu de luminosité dans D1, bloc d'état dans A0, `Contenu::Registres` d'un
+   tâche est fait de registres (sens d'un fondu de luminosité dans D1, bloc d'état dans A0, `Contenu::Regs` d'un
    fondu par composante), et une tâche neuve hérite des registres de la précédente (reproduits par le noyau). Ils
    disparaissent quand tous les appelants sont en Rust ; d'ici là le banc de registres du point 2 les porte.
 5. **Les suites désignées par des adresses.** Fait pour les tâches et les écrans (lot E) : une reprise, une cession et
-   un cadre désignent leur suite par une étape Rust (`taches::Etape`, `table::Suite`), et l'ordonnanceur appelle le pas.
+   un cadre désignent leur suite par une étape Rust (`tasks::Step`, `table::Next`), et l'ordonnanceur appelle le pas.
    Restent des adresses (natives) : le pas de jeu `0x1c4b0` (plafond de pas), les retours des `call_at` vers du code
    qui peut céder (phases de la démonstration, reprises de la mise à jour du monde et des aiguillages d'objets) et les
    entrées des sous-programmes appelés par adresse (fondus, écran noir), tant que des gestionnaires d'objets cèdent
@@ -238,7 +238,7 @@ successives, reprise d'une tâche en posant son contexte dans le processeur. Pou
 6. **Le temps de l'image.** Aujourd'hui le VBLANK est une interruption prise là où le temps de l'image s'épuise, et le
    reste de l'image est sauté quand l'ordonnanceur tourne à vide (`idle`). Sans processeur : `vblank()` en début d'image,
    puis l'ordonnanceur jusqu'à ce que plus aucune tâche ne soit prête (ou que seule la tâche du gel le soit sans rien
-   avoir à faire, `gel::attente_vide`) ; l'avance rapide reste plafonnée à `MAX_STEPS_PER_FRAME` pas par image, le pas
+   avoir à faire, `freeze::idle_wait`) ; l'avance rapide reste plafonnée à `MAX_STEPS_PER_FRAME` pas par image, le pas
    retenu s'exécutant au début de l'image suivante, juste après le VBLANK (ce que fait `cps2::StepCap` en `0x1c4b0`). Le
    masque d'interruptions (`trap #12`, fenêtre de `0x952`) et le SR des tâches n'ont plus de sens. L'IRQ raster (niveau
    4) n'est jamais armée par le jeu. Les 8 scénarios où la fin d'image de l'original tombe au milieu d'un passage du gel
@@ -247,7 +247,7 @@ successives, reprise d'une tâche en posant son contexte dans le processeur. Pou
    (`Machine::run_line`) ; les natives qui touchent la RAM partagée (`touches_sound`) doivent tenir dans leur ligne. La
    boucle sans processeur doit garder ce calendrier : tout le travail du 68000 au début de l'image (comme à ×16, où il
    finit en quelques lignes après le VBLANK), puis le Z80 ligne par ligne ; et au démarrage, les deux instants que le
-   Z80 observe (relâchement en image 5 ligne 108, `boot_init` en image 5 ligne 173, `demarrage.rs`).
+   Z80 observe (relâchement en image 5 ligne 108, `boot_init` en image 5 ligne 173, `startup.rs`).
 8. **L'oracle reste.** `validate`, `DDSOM_CHECK` et les outils de diagnostic comparent à la machine d'origine
    (68000 surcadencé) : elle reste, hors du chemin du jeu.
 
@@ -257,9 +257,9 @@ démarrage sont des machines à états Rust (`kernel::Point`) et la boucle d'ima
 point 4 (les registres comme interface, et le PC encore posé par les sauts d'une native à une autre au sein d'une
 tâche : `Sequence::jump_to`, retours vers une adresse).
 
-### Le jeu sans 68000 (`sans68k.rs`)
+### Le jeu sans 68000 (`no68k.rs`)
 
-Les points 2, 6 et 7 sont faits : `ddsom_game::install_sans_68k` fait tourner le jeu sans interpréteur ni code
+Les points 2, 6 et 7 sont faits : `ddsom_game::install_no_68k` fait tourner le jeu sans interpréteur ni code
 recompilé. C'est **le jeu** (décision D1, [refactorisation.md](refactorisation.md)) : le mode par défaut de `validate`
 (machine du jeu sans 68000 contre la machine d'origine), de `tools/validate_all.sh`, de `bench` et de l'application
 (`ddsom`).
@@ -268,31 +268,31 @@ recompilé. C'est **le jeu** (décision D1, [refactorisation.md](refactorisation
 recompilé pour le reste ; depuis que les tâches sont des machines à états lancées par un ordonnanceur Rust et que leurs
 appels en cours ne sont plus sur la pile 68000, le code d'origine ne peut plus prendre la suite d'une native au milieu
 d'une tâche. `install` installe le jeu sans 68000, et `DDSOM_HYBRIDE=1` arrête `validate`, `bench`, `lectures_rom` et
-l'application avec un message (`ddsom_game::refuser_hybride`). `DDSOM_CHECK` et `DDSOM_ADOPT_REGS` (l'original exécuté sur
+l'application avec un message (`ddsom_game::refuse_hybrid`). `DDSOM_CHECK` et `DDSOM_ADOPT_REGS` (l'original exécuté sur
 une copie, à chaque native) marchent sans lui ; `examples/cessions` et `reste68k`, qui mesuraient le 68000 restant du
 mode hybride, sont retirés (historique git).
 
-* **Exécuteur.** La boucle d'image exécute les points (`kernel::Point`) ; au point `Tache`, `sans68k::pas` cherche la
+* **Exécuteur.** La boucle d'image exécute les points (`kernel::Point`) ; au point `Task`, `no68k::step` cherche la
   native posée au PC (`lookup`) et l'exécute, comme `call` (plus de `c.step`, plus de `ddsom_rc`). Le `Cpu` ne sert
   plus que de banc de registres et de pile. Une native s'exécute toujours en entier, et `Ctx::jsr_origine` (familles)
   appelle la native au lieu du code d'origine. Une native qui cède, ou un épilogue qui revient plus haut : le code
   Rust en cours revient sans rien faire (« Appels en cours en Rust »).
-* **Arrêt net.** Une adresse sans native arrête le jeu (panique `sans 68000 : …`, que `validate` rapporte en
+* **Arrêt net.** Une adresse sans native arrête le jeu (panique `without 68000 : …`, que `validate` rapporte en
   `ARRÊT …` puis « ÉCHEC : arrêt sans 68000 à l'image n ») : c'est le cas des replis de natives vers le code d'origine
   sur des chemins non réécrits (`g.rom(...)`/`call` des joueurs, `_ =>` des boss qui appellent l'original, `x.call`
   d'effets...). Le diagnostic donne l'adresse, l'image et la ligne, la tâche courante (nom, état, cadres), le SR et le
   sommet de la pile 68000 (les adresses de retour du code remplacé), les huit dernières natives exécutées et l'appel
-  Rust en cours (`site_d_appel` : fichier et ligne du `call`), qui désigne le repli fautif.
+  Rust en cours (`call_site` : fichier et ligne du `call`), qui désigne le repli fautif.
 * **Image.** La machine garde son calendrier ligne par ligne (`cps2::Machine::line_work`) ; à chaque ligne,
-  `sans68k::ligne` fait le travail du processeur puis le Z80 joue sa ligne. Ce travail n'a pas de durée : l'interruption
+  `no68k::line` fait le travail du processeur puis le Z80 joue sa ligne. Ce travail n'a pas de durée : l'interruption
   de VBLANK, levée en fin d'image, est prise (en Rust : SR et PC empilés, autovecteur, acquittement) dès que le SR
   l'autorise (entre deux points), puis les points s'enchaînent jusqu'à ce que l'ordonnanceur tourne à vide
-  (`sans68k::au_repos`, seulement quand aucune interruption n'attend : si l'examen d'un emplacement l'a masquée,
+  (`no68k::at_rest`, seulement quand aucune interruption n'attend : si l'examen d'un emplacement l'a masquée,
   l'ordonnanceur rouvre d'abord sa fenêtre), ou que le pas de jeu soit retenu par le plafond de l'image
-  (`sans68k::pas_de_jeu`, compté par image ; le pas retenu, `Point::PasRetenu`, reprend juste après le VBLANK
+  (`no68k::game_step`, compté par image ; le pas retenu, `Point::StepKept`, reprend juste après le VBLANK
   suivant). Tout le travail tombe donc au début de la ligne
   240, avant le Z80 : seuls le VBLANK et `0x68c` touchent la RAM partagée, et ce sont les premiers. Au démarrage, un
-  point qui attend une position du faisceau (`demarrage.rs`) rend la main sans rien changer : la ligne s'arrête et il
+  point qui attend une position du faisceau (`startup.rs`) rend la main sans rien changer : la ligne s'arrête et il
   réessaie à la suivante, ce qui garde les deux instants que le Z80 observe. Durées des natives,
   `idle` de la machine, surcadencement et correctifs `patches` (qui visent le code d'origine) ne servent plus.
 * **Attente active.** Une tâche prête qui attend un événement amené par le VBLANK (l'écran des comptes de fin de
@@ -301,14 +301,14 @@ mode hybride, sont retirés (historique git).
   du gel seul. Au début de chaque parcours de l'ordonnanceur (`0x932`) à partir du troisième de l'image, un instantané
   (RAM de travail et supplémentaire, GFX RAM, RAM d'objets, palette, RAM partagée, registres CPS, table des tâches,
   registres du processeur) est comparé au précédent : identique, rien ne changera plus avant l'interruption et l'image
-  est finie. Plafond de sûreté : 1 000 000 natives par image (`PLAFOND_NATIVES`, une image en exécute quelques
+  est finie. Plafond de sûreté : 1 000 000 natives par image (`NATIVES_CAP`, une image en exécute quelques
   milliers). `validate` compte les deux sortes d'images (« finies sur une attente active », « arrêtées par le
   plafond »). Avant l'instantané, une vingtaine de scénarios atteignaient le plafond (4 à 20 images chacun, 100 ms
   par image) ; aucun depuis.
 * **Diagnostic.** `DDSOM_SANS_TRACE=n` affiche chaque native exécutée pendant l'image n (ligne, PC, SR, pile).
 * **Sans ROM.** Sans 68000, le code d'origine n'est plus lu du tout : avec `ddsom --assets`, la machine est faite des seuls assets ([sans-rom.md](sans-rom.md)).
 
-## Démarrage (0x350, 0x182a, 0x1912, 0x492 ; `demarrage.rs`)
+## Démarrage (0x350, 0x182a, 0x1912, 0x492 ; `startup.rs`)
 
 Interruptions masquées, pile du superviseur en FF0E66 (zone de piles ignorée par `validate`) :
 
@@ -323,7 +323,7 @@ Interruptions masquées, pile du superviseur en FF0E66 (zone de piles ignorée p
 
 La branche d'erreur (« RAM ERROR !! » écrit en GFX RAM par 0x19ae, puis boucle infinie en 0x1948 ou 0x19a2) n'est jamais
 prise sur la machine émulée : elle n'est pas réécrite, et ne le sera pas. Le démarrage n'exécute **aucun** 68000 du test K2
-(`0x182a`, `0x1912` et la branche d'erreur sont remplacés d'un bloc par `reset`/`relacher_z80`/`poignee_de_main`, qui ne
+(`0x182a`, `0x1912` et la branche d'erreur sont remplacés d'un bloc par `reset`/`release_z80`/`handshake`, qui ne
 reproduisent que les effets : palette de départ, cases vides, RAM partagée, registres laissés à `boot_init`) ; mesuré par
 `examples/reste68k` : 0 instruction de K2, les deux fonctions sont comptées « jamais atteintes » parce que la native les
 couvre sans jamais les appeler. Un moteur sans processeur n'a pas de RAM à tester (la mémoire de Rust est toujours bonne) :
@@ -348,11 +348,11 @@ dans sa boucle principale). Entre les deux, la RAM partagée reçoit son état f
 de passer par 0 et 0x55 : le Z80, à son initialisation, ne lit que CFFF (en attente de 0xFF) et sa routine
 d'interruption ne touche à la boîte aux lettres que si CFFD vaut 0x88. Le calendrier est celui de la référence à ×16,
 quelle que soit la fréquence du 68000. Les registres que le test laisse (longs de la palette, motif 0x5555, adresses
-de fin de bloc) sont rendus à `boot_init` (`registres_du_test`). Contrôle : `demarrage <roms> <eeprom> 40 compare`
+de fin de bloc) sont rendus à `boot_init` (`test_regs`). Contrôle : `startup <roms> <eeprom> 40 compare`
 compare les deux machines image par image, son compris (RAM partagée, RAM et registres du Z80, que `validate` ne
 regarde pas) : tout est identique dès l'image 3, le son dès la première.
 
-**Validation.** Pendant les images 1 à 5 (`DEMARRAGE` dans `examples/validate.rs`), celles qui finissent pendant le
+**Validation.** Pendant les images 1 à 5 (`STARTUP` dans `examples/validate.rs`), celles qui finissent pendant le
 test de l'original, le mot en cours de test peut porter un motif à la fin de l'image (0x1111 au lieu de 0x0020 en
 0x910B34 à l'image 1). `validate` y tolère **un mot** de différence au plus, en RAM de travail ou en GFX RAM ; tout le
 reste (autres mots, objets, palette) est comparé dès l'image 1, et tout dès l'image 6. Seules les images 1 et 2 ont
@@ -374,7 +374,7 @@ Mesure sur 40 scénarios (`scenarios/cov/`, `scenarios/modes/`, quatre bots ; 89
 | K1 noyau, VBLANK, ordonnanceur | 107,0 M | 2,0 M (reste `reset` 0x350 et `boot_init`, réécrits depuis : voir « Démarrage ») |
 | C1 crédits | 70,6 M | 0,14 M (relecture des entrées des démonstrations 0xe05ec, réécrite depuis : `modes/demo.rs`) |
 | ordonnanceur et traps | 68000 | natifs (`kernel.rs`) |
-| tâche du gel 0xee080, boucle de partie 0x1c45a | 68000 | Rust (`taches/`) |
+| tâche du gel 0xee080, boucle de partie 0x1c45a | 68000 | Rust (`tasks/`) |
 
 Gain des tâches Rust (8 scénarios de 8 000 images, avant/après) : attente active 1 031,6 M instructions (16 100 par
 image) à **0** ; hors attente 658 à 650 par image (la boucle de partie : ~9 par image). Attente comprise : 16 760 à
@@ -388,7 +388,7 @@ Sur les 159 scénarios de la validation complète avant ce travail : 1,63 G d'in
 ## Ce qui reste avant « zéro instruction 68000 », par ordre de volume
 
 1. ~~**Test de RAM au démarrage (K2, 18 %)**~~ et 2. ~~**`reset` 0x350 et `boot_init` 0x492 (K1)**~~ : faits, plus
-   aucune instruction 68000 au démarrage (`demarrage.rs`, section « Démarrage » ci-dessous).
+   aucune instruction 68000 au démarrage (`startup.rs`, section « Démarrage » ci-dessous).
 3. ~~**Pools d'objets (O2, 9 %)**~~ : fait. `0x1ee1a`/`0x1ef6c` (insertion dans les listes triées par profondeur,
    la plus chaude du jeu) sont installées avec les registres exacts de l'original (`objects::lists::Reinsert`,
    `docs/objets.md`) : D0-D2, A1-A4 et drapeaux sont relus par le handler suivant.
@@ -477,7 +477,7 @@ Gain par routine : `0x1ee1a`/`0x1ef6c` (-10 M), `0x33fe4` (-2,7 M), `0xfbae`/`0x
 
 La tâche `0x19068` (emplacement 0xf0) n'est créée que par `0x13a88`, en `0x13aa0` (`lea 0x19068,A0 ; jmp 0x9b6`, après
 `jsr 0x19052`). Ce gestionnaire, ses quatre voisins `0x139ac`, `0x139e2`, `0x13a1a`, `0x13a4e` (écrans de texte
-clignotant : `sub.w #1,8(A0)`, `lea texte,A4`, `bchg #0,10(A0)`, `jmp 0xd32`, chacun précédé de son bloc de texte) et le
+clignotant : `sub.w #1,8(A0)`, `lea text,A4`, `bchg #0,10(A0)`, `jmp 0xd32`, chacun précédé de son bloc de texte) et le
 second gestionnaire `0x13aa6` (attente de `A5-0x6f61` puis fondu, comme `0x1371e` avec `FF0F53`) **ne sont référencés par
 rien** : le mode 2 aiguille par la table `0x1345c` (11 entrées : sous-modes 0 à 0x14, pas de 2), qui ne les contient pas ;
 aucun `jsr`/`jmp`/`bsr`/`bcc`, aucune adresse absolue ni aucun décalage relatif à une table de l'ensemble du programme ne

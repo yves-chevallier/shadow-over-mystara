@@ -1,6 +1,6 @@
-//! Trace des états des boss d'un scénario : à chaque changement de (type, +4..+7, PV) d'un objet BOSS,
-//! une ligne `image slot type état PV`. Montre quelles phases (dont la mort) un scénario exerce.
-//!   boss_trace <roms> <eeprom> <scénario> <images>
+//! Trace of the boss states of a scenario: at each change of (type, +4..+7, HP) of a BOSS object,
+//! a line `frame slot type state HP`. Shows which phases (including death) a scenario exercises.
+//!   boss_trace <roms> <eeprom> <scenario> <frames>
 use std::path::Path;
 
 fn main() {
@@ -30,7 +30,7 @@ fn main() {
                 (0, [0; 4], 0)
             };
             if now != last[k] {
-                println!("image {f} : emplacement {k} type {} états {:02x?} (+3 variante) PV {}", now.0.wrapping_sub(1), now.1, now.2);
+                println!("frame {f}: slot {k} type {} states {:02x?} (+3 variant) HP {}", now.0.wrapping_sub(1), now.1, now.2);
                 last[k] = now;
             }
         }

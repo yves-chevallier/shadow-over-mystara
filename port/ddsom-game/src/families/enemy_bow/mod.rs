@@ -1,19 +1,19 @@
-//! Ennemi « Bow Gnoll » (ENEMY type 3, 0x5bda6). Voir `docs/families/enemy.md`.
+//! "Bow Gnoll" enemy (ENEMY type 3, 0x5bda6). See `docs/families/enemy.md`.
 //!
-//! Un archer : il marche vers sa cible, tire (`+0x44` = 0xa, `+0x45` = 4 pour la flèche, le tir lui-même est créé
-//! par la clé d'animation avec 0x9dbd6), recule, esquive et saute. Un Bow Gnoll créé par un autre objet (`+0x42`)
-//! ne suit pas l'IA : il tire en place (`spawned`). Un `+0x43` non nul donne une durée de vie (`+0xa8`).
+//! An archer: it walks toward its target, shoots (`+0x44` = 0xa, `+0x45` = 4 for the arrow, the shot itself is created
+//! by the animation key with 0x9dbd6), backs off, dodges and jumps. A Bow Gnoll created by another object (`+0x42`)
+//! does not follow the AI: it shoots in place (`spawned`). A non-zero `+0x43` gives a lifetime (`+0xa8`).
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `arrival` | arrivée selon la variante `+3` (0 et 2 marche, 4 chute, 6 apparition, 8 course) |
-//! | 2 | `stance` | debout : approche, marche, choix d'un geste |
-//! | 4, 6 | `shoot` | tirs, pas de côté, sauts |
-//! | 8, 10, 12 | `stance` | repos, attente, demi-tour |
-//! | état 4 | `hit` | réactions aux coups, chute, saisie par un joueur |
+//! | 0 | `arrival` | arrival according to variant `+3` (0 and 2 walk, 4 fall, 6 appear, 8 run) |
+//! | 2 | `stance` | standing: approach, walk, choice of a move |
+//! | 4, 6 | `shoot` | shots, side steps, jumps |
+//! | 8, 10, 12 | `stance` | rest, wait, turn around |
+//! | state 4 | `hit` | reactions to hits, fall, grab by a player |
 //!
-//! Animations 0x16032c (mouvements) et 0x160350 (tirs). Le Bow Gnoll n'a pas de test « joueur en vie » : l'attente
-//! (`+5` = 10) revient au sous-état 2 quand le compte `+0x6e` est écoulé.
+//! Animations 0x16032c (movements) and 0x160350 (shots). The Bow Gnoll has no "player alive" test: the wait (`+5` = 10)
+//! goes back to substate 2 when count `+0x6e` has elapsed.
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -28,9 +28,9 @@ mod stance;
 
 pub(self) mod g {
     pub const GROUP: u32 = 0x2f;
-    /// Non nul : créé par un autre objet, tire en place (`spawned`).
+    /// Non-zero: created by another object, shoots in place (`spawned`).
     pub const SPAWNED: u32 = 0x42;
-    /// Non nul : durée de vie limitée par `LIFETIME`.
+    /// Non-zero: lifetime limited by `LIFETIME`.
     pub const TIMED: u32 = 0x43;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
@@ -41,16 +41,16 @@ pub(self) mod g {
     pub const AI_SHOT: u32 = 0x78;
     pub const SHOT_KIND: u32 = 0x79;
     pub const FLAGS: u32 = 0x8a;
-    /// État à reprendre après un demi-tour (long).
+    /// State to resume after a turn-around (long).
     pub const RESUME_STATE: u32 = 0xa0;
     pub const RESUME_SUB2: u32 = 0xa2;
     pub const TIMER: u32 = 0xa4;
     pub const REPEAT: u32 = 0xa5;
     pub const SAVED_STEP: u32 = 0xa6;
-    /// Non nul : le Bow Gnoll est saisi (durée de vie écoulée ou créé pour l'être).
+    /// Non-zero: the Bow Gnoll is grabbed (lifetime elapsed or created to be grabbed).
     pub const EXPIRED: u32 = 0xa7;
     pub const LIFETIME: u32 = 0xa8;
-    /// Non nul : l'état touché ne dessine ni zone ni ombre.
+    /// Non-zero: the hit state draws neither zone nor shadow.
     pub const NO_ZONE: u32 = 0xac;
 }
 use g::*;
@@ -86,12 +86,12 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-/// Démarre l'animation `n` du jeu des mouvements.
+/// Starts animation `n` of the movement set.
 pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
-/// Démarre l'animation `n` du jeu des tirs.
+/// Starts animation `n` of the shot set.
 pub(self) fn shot<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_SHOT, n as u16);
 }
@@ -100,19 +100,19 @@ pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
-/// 0x5ce22 : direction de marche selon l'orientation (0xc à gauche, 4 à droite).
+/// 0x5ce22: walking direction according to orientation (0xc left, 4 right).
 pub(self) fn face_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 4 } else { 0xc };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
-/// Direction de marche : 8 (regarde à gauche) ou 0x18.
+/// Walking direction: 8 (looks left) or 0x18.
 pub(self) fn walk_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
-/// Octet tiré au hasard dans la rangée de difficulté de `table` (rangées de 32 octets).
+/// Byte drawn at random from the difficulty row of `table` (rows of 32 bytes).
 pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
@@ -120,13 +120,13 @@ pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     x.data8(at + r)
 }
 
-/// Tables de rangées de difficulté : premiers gestes, nombre de tirs, deuxièmes gestes, suite.
+/// Difficulty row tables: first moves, number of shots, second moves, follow-up.
 pub(self) const FIRST_ACTIONS: u32 = 0x5d47a;
 pub(self) const SHOT_REPEATS: u32 = 0x5d07a;
 pub(self) const SECOND_ACTIONS: u32 = 0x5d67a;
 pub(self) const FOLLOW_TABLE: u32 = 0x5ce72;
 
-/// 0x5cdc6 : tirage au hasard (dix chances sur seize) qui décide d'un tir ; D0 = 0 ou 1.
+/// 0x5cdc6: random draw (ten chances out of sixteen) that decides on a shot; D0 = 0 or 1.
 pub(self) fn shoot_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let r = rand_and(x, 0xf);
     let mask = x.rom16(0x5cde0);
@@ -134,29 +134,29 @@ pub(self) fn shoot_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     hit
 }
 
-/// Boîtes de portée (0xb5e0) ; D5 est posé comme dans l'original.
+/// Range boxes (0xb5e0); D5 is set as in the original.
 fn range_box<R: Bench>(x: &mut Cx<'_, R>, d5: u32, d0: i16, d1: u16, d2: u16) -> bool {
-    *x.c.d5() = d5; // relu : D5 relu par la suite (comme pour in_front)
+    *x.c.d5() = d5; // re-read: D5 re-read afterwards (as for in_front)
     lib::target_in_box(x, d0, d1, d2)
 }
 
-/// 0x5ce14 : joueur tout près (assez pour un tir à bout portant).
+/// 0x5ce14: player very close (close enough for a point-blank shot).
 pub(self) fn point_blank<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     range_box(x, 2, -0x28, 0x28, 0xc)
 }
 
-/// 0x5cdf6 : joueur devant, à courte distance.
+/// 0x5cdf6: player in front, at short distance.
 pub(self) fn in_front<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    *x.c.d5() = 0; // relu : D5 relu par la suite (DDSOM_POISON : covb_long3p_02)
+    *x.c.d5() = 0; // re-read: D5 re-read afterwards (DDSOM_POISON: covb_long3p_02)
     lib::target_in_box(x, -0xd0, 0x60, 0x18)
 }
 
-/// 0x5ce06 : joueur près, sur la même ligne.
+/// 0x5ce06: player close, on the same line.
 pub(self) fn on_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     range_box(x, 2, 0, 0x38, 0x10)
 }
 
-/// 0x5ce36 : fin d'un tir, choix du geste de repli (sous-état 8) ; saisi si `+0xa7`.
+/// 0x5ce36: end of a shot, choice of the fallback move (substate 8); grabbed if `+0xa7`.
 pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     if x.u8(EXPIRED) != 0 {
@@ -168,9 +168,9 @@ pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 0);
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
-/// Faux si le jeu est en pause (rien n'est fait) ; sinon le corps de l'état actif suit dans la même image.
+/// False if the game is paused (nothing is done); otherwise the body of the active state follows within the same frame.
 fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if paused(x) {
         return false;
@@ -208,7 +208,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;

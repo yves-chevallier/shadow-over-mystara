@@ -1,14 +1,14 @@
-//! État partagé `0xf792e` des sorties de scène : la boutique entre deux niveaux.
+//! Shared state `0xf792e` of the scene exits: the shop between two levels.
 //!
-//! Bloc `A5-0x5560` (A6 dans l'original) : `+0` état (pas de 2), `+1` sous-état de la sortie, `+2` sous-sous-état,
-//! `+4` les objets des joueurs (quatre mots), `+0xc` numéro de boutique (table par scène `0xf7ad0`), `+0xd` nombre
-//! de joueurs dans la boutique, `+0xe` minuterie, `+0x10` scène de retour, `+0x11` boutique déjà ouverte, `+0x12`
-//! message en attente, `+0x14` message à ouvrir, `+0x16` message ouvert (mot), `+0x18` message en cours,
-//! `+0x1a` liste de messages de sortie (long).
+//! Block `A5-0x5560` (A6 in the original): `+0` state (step of 2), `+1` exit sub-state, `+2` sub-sub-state,
+//! `+4` the players' objects (four words), `+0xc` shop number (per-scene table `0xf7ad0`), `+0xd` number
+//! of players in the shop, `+0xe` timer, `+0x10` return scene, `+0x11` shop already open, `+0x12`
+//! pending message, `+0x14` message to open, `+0x16` open message (word), `+0x18` current message,
+//! `+0x1a` exit message list (long).
 //!
-//! La boutique est une scène (69 + numéro) : son SOBJ (type 13) et un EFFCT par joueur (type 20) font le jeu ;
-//! cet état ouvre la scène, enchaîne les messages, puis ramène à la scène de retour (ou à la scène fixée par
-//! `0xf7d5e`, ou recommence une boutique si `0xf7d72` le demande).
+//! The shop is a scene (69 + number): its SOBJ (type 13) and one EFFCT per player (type 20) make the game;
+//! this state opens the scene, chains the messages, then returns to the return scene (or to the scene set by
+//! `0xf7d5e`, or starts a shop over if `0xf7d72` asks for it).
 
 use super::Ctx;
 use crate::video::{clear_layer, Layer};
@@ -17,10 +17,10 @@ use crate::modes::{Flow, Sequence};
 use crate::Native;
 use crate::objects::{pools, Obj};
 
-/// Bloc de la sortie de scène : l'A0 de l'original, posé par l'aiguillage et gardé à travers les cessions.
+/// Scene exit block: the original's A0, set by the dispatch and kept across the yields.
 const EXIT_BLOCK: u32 = super::screen::blocks::EXIT;
 
-/// Bloc de la boutique.
+/// Shop block.
 pub const BLOCK: u32 = A5 - 0x5560;
 mod f {
     pub const STATE: u32 = 0;
@@ -39,34 +39,34 @@ mod f {
     pub const EXIT_MESSAGES: u32 = 0x1a;
 }
 
-/// Tables (`data` : lues comme données ; `pc` : relatives au PC).
+/// Tables (`data`: read as data; `pc`: PC-relative).
 mod rom {
-    /// Numéro de boutique par scène (data).
+    /// Shop number per scene (data).
     pub const SHOP_OF_SCENE: u32 = 0xf7ad0;
-    /// Musique de la boutique : décalage (data) dans une table de routines (data).
+    /// Shop music: offset (data) into a routine table (data).
     pub const MUSIC_INDEX: u32 = 0xf7ab0;
     pub const MUSIC: u32 = 0xf7ac4;
-    /// Son d'accueil : indice (data, 20 boutiques) dans une table de routines (data).
+    /// Welcome sound: index (data, 20 shops) into a routine table (data).
     pub const WELCOME_INDEX: u32 = 0xf7b88;
     pub const WELCOME: u32 = 0xf7b9c;
     pub const WELCOME_SHOPS: u8 = 20;
-    /// Listes de messages de sortie : indice (pc) dans une table de pointeurs (pc).
+    /// Exit message lists: index (pc) into a pointer table (pc).
     pub const EXIT_LIST_INDEX: u32 = 0xf7c14;
     pub const EXIT_LISTS: u32 = 0xf7c28;
-    /// Boutique suivie d'une autre (data) ; scène imposée après la boutique (data, 0 : la scène de retour).
+    /// Shop followed by another (data); scene imposed after the shop (data, 0: the return scene).
     pub const CHAINED: u32 = 0xf7d72;
     pub const NEXT_SCENE: u32 = 0xf7d5e;
-    /// Portraits des joueurs : 8 octets par personnage (adresse, tuile, attributs), selon la disposition.
+    /// Player portraits: 8 bytes per character (address, tile, attributes), depending on the layout.
     pub const PORTRAITS_WIDE: u32 = 0xf7eb2;
     pub const PORTRAITS: u32 = 0xf7e92;
 }
 
 mod sub {
-    /// Chemin d'erreur de l'original (`tst.w 1(A5)` : erreur d'adresse) quand un pool est plein.
+    /// Error path of the original (`tst.w 1(A5)`: address error) when a pool is full.
     pub const FULL: u32 = 0xf7dfa;
 }
 
-/// Tâche des portraits (créée à l'ouverture de la boutique).
+/// Portrait task (created when the shop opens).
 const PORTRAITS_TASK: u32 = 0xf7dfe;
 
 mod at {
@@ -94,7 +94,7 @@ fn add_b8(x: &mut Ctx, off: u32, v: u8) {
     set_b8(x, off, n);
 }
 
-/// Un état de 0xf792e. A6 désigne le bloc pendant tout l'état, comme dans l'original.
+/// A state of 0xf792e. A6 designates the block throughout the state, as in the original.
 pub fn run(x: &mut Ctx) -> Flow {
     x.c.a[6] = BLOCK;
     let s = b8(x, f::STATE);
@@ -115,7 +115,7 @@ pub fn run(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             set_b16(x, f::STATE, 0x800);
-            // D0 vaut encore l'état (6), posé pour l'aiguillage : il sert de ligne de la table des délais
+            // D0 still holds the state (6), set for the dispatch: it serves as the row of the delay table
             crate::sound::service(x.b, crate::sound::Service::Ff07 { lock: 0, line: 6 });
             Flow::Done
         }
@@ -131,7 +131,7 @@ pub fn run(x: &mut Ctx) -> Flow {
     }
 }
 
-/// État 0 : fondu au noir (délai 2) avant d'ouvrir la boutique.
+/// State 0: fade to black (delay 2) before opening the shop.
 fn open(x: &mut Ctx) -> Flow {
     x.set_v8(0x42, 2);
     x.set_v16(0x490, 2);
@@ -140,12 +140,12 @@ fn open(x: &mut Ctx) -> Flow {
 }
 
 crate::steps! {
-    /// Étapes (points de reprise) de la boutique, et la tâche des portraits.
+    /// Steps (resume points) of the shop, and the portrait task.
     pub enum Step {
-        /// Entrée de la tâche des portraits.
+        /// Entry of the portrait task.
         Portraits = PORTRAITS_TASK => portraits,
-        /// Ouverture : numéro de boutique, tâche des portraits, musique, objets de la boutique et des joueurs, puis la
-        /// scène de la boutique (69 + numéro) est chargée et son script d'apparition relancé.
+        /// Opening: shop number, portrait task, music, shop and player objects, then the
+        /// shop scene (69 + number) is loaded and its spawn script restarted.
         OpenFaded = at::OPEN_FADED => |x| {
             crate::objects::lists::unlink_all(x.b);
             for pool in crate::objects::pools::POOLS {
@@ -174,7 +174,7 @@ crate::steps! {
             x.set_v8(0x3d, 0);
             clear_layer(x.b, Layer::One);
             crate::hud::forget_displayed(x.b);
-            // pools vidés juste avant : l'échec (erreur d'adresse de l'original) n'arrive pas (code-mort.md)
+            // pools emptied just before: the failure (address error of the original) does not happen (code-mort.md)
             let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { crate::families::effects::address_error(sub::FULL) };
             wr8(x.b, o, 1);
             wr8(x.b, o + 2, 13);
@@ -200,7 +200,7 @@ crate::steps! {
             crate::palette::load_all_palettes(x.b);
             x.set_v8(0x48e, 15);
             crate::palette::no_brightness(x.b);
-            // 0x33aa6 (D7 et A0 gardés) : caméras au départ et mises à jour (D4 relu : `update_cameras_68k`)
+            // 0x33aa6 (D7 and A0 kept): cameras at start and updated (D4 re-read: `update_cameras_68k`)
             crate::scroll::cameras_start(x.b);
             crate::scroll::update_cameras_68k(x.c, x.b);
             x.c.a[0] = EXIT_BLOCK;
@@ -216,7 +216,7 @@ crate::steps! {
             x.set_v8(0x3d, 1);
             crate::tasks::one_frame(x, Step::LeaveWaited)
         },
-        /// Retour de la boutique : couches effacées, état suivant de la séquence, scène de retour.
+        /// Return from the shop: layers cleared, next state of the sequence, return scene.
         LeaveWaited = at::LEAVE_WAITED => |x| {
             clear_layers(x);
             let s = rd8(x.b, EXIT_BLOCK + 2).wrapping_add(4);
@@ -233,7 +233,7 @@ crate::steps! {
                 let back = rd8(x.b, BLOCK + f::RETURN_SCENE);
                 x.set_v8(0x34, back);
             }
-            // l'aiguillage de la sortie de scène relit l'octet `+2` du bloc désigné par A0 (le bloc, gardé par la cession)
+            // the scene exit dispatch re-reads byte `+2` of the block designated by A0 (the block, kept by the yield)
             x.c.a[0] = EXIT_BLOCK;
             Flow::Done
         },
@@ -253,14 +253,14 @@ crate::steps! {
     }
 }
 
-/// Les trois couches effacées.
+/// The three cleared layers.
 fn clear_layers(x: &mut Ctx) {
     for layer in [Layer::One, Layer::Two, Layer::Three] {
         clear_layer(x.b, layer);
     }
 }
 
-/// État 4 : fondu d'ouverture (tâche 0x14ba, qui laisse A0 sur elle), premier message (101), son d'accueil.
+/// State 4: opening fade (task 0x14ba, which leaves A0 on it), first message (101), welcome sound.
 fn welcome(x: &mut Ctx) -> Flow {
     add_b8(x, f::STATE, 2);
     x.set_v16(0x14, 0);
@@ -271,7 +271,7 @@ fn welcome(x: &mut Ctx) -> Flow {
     set_b16(x, f::PENDING, 101);
     let shop = b8(x, f::SHOP);
     if shop >= rom::WELCOME_SHOPS {
-        // scènes de démonstration hors table : correctif commun aux deux machines (`exit::patch_shared_next`)
+        // demonstration scenes outside the table: fix shared by the two machines (`exit::patch_shared_next`)
         return Flow::Done;
     }
     let index = rd8(x.b, rom::WELCOME_INDEX + shop as u32);
@@ -283,8 +283,8 @@ fn welcome(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Messages (0xf7d86) : le message en attente passe en tête ; s'il n'y en a pas d'ouvert, il s'ouvre ; un message
-/// ouvert qui dure encore est abrégé quand un autre attend.
+/// Messages (0xf7d86): the pending message goes to the front; if none is open, it opens; an open message
+/// that lasts a long time is cut short when another waits.
 fn messages(x: &mut Ctx) {
     if b16(x, f::NEXT_MESSAGE) == 0 {
         let p = b16(x, f::PENDING);
@@ -317,7 +317,7 @@ fn messages(x: &mut Ctx) {
     wr16(x.b, m + 0x32, 1);
 }
 
-/// Sortie, étape 0 : messages de sortie de la liste de la boutique, l'un après l'autre.
+/// Exit, step 0: exit messages from the shop's list, one after the other.
 fn exit_messages(x: &mut Ctx) {
     messages(x);
     match b8(x, f::EXIT_SUB) {
@@ -356,7 +356,7 @@ fn exit_messages_done(x: &mut Ctx) {
     set_b8(x, f::EXIT_SUB, 0);
 }
 
-/// Sortie, étape 4 : fondu au noir, puis retour à la scène de retour ; ou une boutique enchaînée.
+/// Exit, step 4: fade to black, then return to the return scene; or a chained shop.
 fn leave(x: &mut Ctx) -> Flow {
     let shop = b8(x, f::SHOP) as u32;
     let chained = rd8(x.b, rom::CHAINED + shop);
@@ -371,7 +371,7 @@ fn leave(x: &mut Ctx) -> Flow {
         x.set_v8(0x48e, 15);
         return x.subroutine(crate::tasks::fading::descent, Step::ChainFaded);
     }
-    // boutique suivante : le bloc repart de l'état 0
+    // next shop: the block restarts from state 0
     x.and16(0x12, 0xfffe);
     set_b8(x, f::REOPENED, 1);
     crate::video::clear_objects(x.b);
@@ -380,8 +380,8 @@ fn leave(x: &mut Ctx) -> Flow {
     crate::tasks::one_frame(x, Step::ReopenWaited)
 }
 
-/// Tâche des portraits (0xf7dfe) : pour chaque joueur en jeu, son portrait (deux colonnes) et le cadre qui le suit ;
-/// puis la tâche se termine (`jmp 0x9f8`).
+/// Portrait task (0xf7dfe): for each player in the game, its portrait (two columns) and the frame that follows it;
+/// then the task ends (`jmp 0x9f8`).
 fn portraits(x: &mut Ctx) -> Flow {
     let b = &mut *x.b;
     let table = if rd8(b, A5 + 0x20) == 1 { rom::PORTRAITS_WIDE } else { rom::PORTRAITS };

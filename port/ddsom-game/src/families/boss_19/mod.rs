@@ -1,22 +1,22 @@
-//! Boss de types 14 et 19 (0x8fae4, une seule routine pour les deux), scènes 32, 65 et 66. Voir
+//! Boss of types 14 and 19 (0x8fae4, a single routine for both), stages 32, 65 and 66. See
 //! `docs/families/boss.md`.
 //!
-//! Dragon (types 14 « Green Dragon » et 19 « Black Dragon » dans les noms de debug du jeu) : le type 19 de variante 0 est le
-//! boss de la scène 32, celui de variante 1 le dragon que Nagpa (`boss_10`) fait venir dans les scènes 65 et 66 (`+0x46` =
-//! Nagpa : le dragon disparaît quand Nagpa n'a plus de PV). Le type 14 n'a été vu dans aucune scène des scénarios. Charpente
-//! des ennemis (`+4` état, `+5` groupe, `+6` et `+7` étapes), états posés en longs.
+//! Dragon (types 14 "Green Dragon" and 19 "Black Dragon" in the game's debug names): type 19 of variant 0 is the
+//! boss of stage 32, variant 1 is the dragon that Nagpa (`boss_10`) summons in stages 65 and 66 (`+0x46` =
+//! Nagpa: the dragon disappears when Nagpa has no HP left). Type 14 was not seen in any stage of the scenarios. Enemy
+//! skeleton (`+4` state, `+5` group, `+6` and `+7` steps), states set as longs.
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `intro` | arrivée : cinématique d'apparition, propre à chaque type et variante |
-//! | 2 | `fight` | combat : marche vers un joueur (`+6` = 0, 8), demi-tour (2), arrêt (4), approche (6) |
-//! | 4 | `attacks` | cinq attaques (`+6` = 0 à 10) |
-//! | 6, 8 | ici | debout |
-//! | 10 | ici | attente tant qu'aucun joueur n'est en vie |
-//! | état 4 | `hit` | réactions aux coups (table 0x909a0), mort |
+//! | 0 | `intro` | arrival: appearance cutscene, specific to each type and variant |
+//! | 2 | `fight` | combat: walk toward a player (`+6` = 0, 8), about-face (2), stop (4), approach (6) |
+//! | 4 | `attacks` | five attacks (`+6` = 0 to 10) |
+//! | 6, 8 | here | standing |
+//! | 10 | here | wait while no player is alive |
+//! | state 4 | `hit` | reactions to hits (table 0x909a0), death |
 //!
-//! Animations : trois jeux (`+0xa0` = 0, 2 ou 4) par type, à choisir par `set_anim` ; `+0xa1` est l'animation en cours.
-//! Le dragon flotte autour de l'altitude 0x20 (`hover`, 0x91424) quand `+0xa4` est levé.
+//! Animations: three sets (`+0xa0` = 0, 2 or 4) per type, to be chosen by `set_anim`; `+0xa1` is the current animation.
+//! The dragon floats around altitude 0x20 (`hover`, 0x91424) when `+0xa4` is raised.
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -38,23 +38,23 @@ pub(self) mod g {
     pub const WALK_DELAY: u32 = 0x71;
     pub const SHOT: u32 = 0x79;
     pub const SHAKE: u32 = 0x90;
-    /// Jeu d'animations courant (0, 2 ou 4) et animation en cours.
+    /// Current animation set (0, 2 or 4) and current animation.
     pub const ANIM_SET: u32 = 0xa0;
     pub const ANIM_N: u32 = 0xa1;
-    /// Boîtes de coups (valeur lue par le moteur de collision) et marque posée par les scripts d'animation.
+    /// Hit boxes (value read by the collision engine) and mark set by the animation scripts.
     pub const HURT_BOX: u32 = 0xa2;
     pub const MARK: u32 = 0xa3;
-    /// Flottement demandé (`+0xa4`) et son état (`+0xa5`).
+    /// Requested floating (`+0xa4`) and its state (`+0xa5`).
     pub const HOVER: u32 = 0xa4;
     pub const HOVER_STATE: u32 = 0xa5;
     pub const TIMER: u32 = 0xa6;
     pub const SAVED_STATE: u32 = 0xa8;
-    /// Compte à rebours de la riposte (`+0xac`, 4 toutes les 32 images) et son rythme (`+0xad`).
+    /// Counterattack countdown (`+0xac`, 4 every 32 frames) and its rhythm (`+0xad`).
     pub const RETALIATE: u32 = 0xac;
     pub const RETALIATE_TICK: u32 = 0xad;
-    /// Images d'invulnérabilité restantes.
+    /// Invulnerability frames remaining.
     pub const SHIELD: u32 = 0xae;
-    /// Nombre de ripostes spéciales restantes.
+    /// Number of special counterattacks remaining.
     pub const SPECIALS: u32 = 0xaf;
     pub const BUBBLES: u32 = 0xb0;
     pub const BUBBLE_TICK: u32 = 0xb1;
@@ -67,7 +67,7 @@ use crate::objects::Current;
 pub(self) const TYPE_GREEN: u8 = 0xe;
 pub(self) const TYPE_BLACK: u8 = 0x13;
 
-/// États posés d'un coup (`+4..+7`).
+/// States set in one go (`+4..+7`).
 pub(self) const STAND: u32 = 0x0202_0000;
 const CHASE: u32 = 0x0202_0400;
 const TURN: u32 = 0x0202_0200;
@@ -92,7 +92,8 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- animations ----------------------------------------------------------------------------------
 
-/// Lance l'animation `n` du jeu `set` (0, 2 ou 4) du type, sauf si elle joue déjà (0x914c6, 0x914e0, 0x914fa).
+/// Starts animation `n` of set `set` (0, 2 or 4) of the type, unless it is already playing (0x914c6, 0x914e0,
+/// 0x914fa).
 pub(self) fn set_anim<R: Bench>(x: &mut Cx<'_, R>, set: u8, n: u32) {
     let black = x.u8(TYPE) == TYPE_BLACK;
     let base = match (set, black) {
@@ -120,15 +121,15 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
-// --- changements d'état ---------------------------------------------------------------------------
+// --- state changes ---------------------------------------------------------------------------
 
-/// 0x913da : debout, au repos.
+/// 0x913da: standing, at rest.
 pub(self) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, STAND);
     rest(x);
 }
 
-/// 0x913e8 : marche vers un joueur.
+/// 0x913e8: walk toward a player.
 pub(self) fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, CHASE);
     rest(x);
@@ -142,23 +143,23 @@ pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     set_anim(x, 0, 1);
 }
 
-/// 0x9140a : l'attaque 4 (souffle), invulnérable un instant.
+/// 0x9140a: attack 4 (breath), invulnerable for a moment.
 pub(self) fn attack_4<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, ATTACK_4);
     x.set8(SHIELD, 8);
 }
 
-/// 0x8fcf0 : attend un joueur.
+/// 0x8fcf0: waits for a player.
 pub(self) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
-/// 0x9141a : plus d'hôte : le boss disparaît.
+/// 0x9141a: no host left: the boss disappears.
 pub(self) fn host_gone<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, DEAD_HOST);
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
@@ -216,15 +217,15 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     rest(x);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
-/// Boucle de l'état actif (0x8fc42) ; l'état touché la rappelle pour reprendre le combat.
+/// Active state loop (0x8fc42); the hit state calls it again to resume the combat.
 pub(self) fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) == 0 {
         if tst8(x, f::FREEZE).gt() {
             sub8(x, f::FREEZE, 1);
         } else {
-            // le dragon de Nagpa disparaît avec son hôte
+            // Nagpa's dragon disappears with its host
             if x.u8(TYPE) == TYPE_BLACK && x.u8(Obj::VARIANT) == 1 {
                 if (x.u16(f::HOST) as i16) >= 0 {
                     return host_gone(x);
@@ -267,7 +268,7 @@ pub(self) fn active<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// `+5` = 10 (0x908bc) : attend qu'un joueur revienne.
+/// `+5` = 10 (0x908bc): waits for a player to come back.
 fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, STAND);
@@ -281,7 +282,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-/// 0x91424 : flottement autour de l'altitude 0x20 quand `+0xa4` est levé ; l'altitude ne descend pas sous 0.
+/// 0x91424: floating around altitude 0x20 when `+0xa4` is raised; the altitude does not go below 0.
 fn hover<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(TYPE) == TYPE_GREEN && x.u8(f::SUB) == 0 {
         return;
@@ -292,7 +293,7 @@ fn hover<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(HOVER, 0);
         let mut physics = true;
         if x.u8(HOVER_STATE) == 0 {
-            // rejoint l'altitude 0x20 d'un pixel par image
+            // reaches altitude 0x20 at one pixel per frame
             let mut d: i16 = 1;
             if (x.u16(0xc).wrapping_sub(0x20) as i16) >= 0 {
                 d = -d;
@@ -312,7 +313,7 @@ fn hover<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         if physics {
-            // oscillation : l'accélération s'inverse de part et d'autre de 0x20
+            // oscillation: the acceleration reverses on either side of 0x20
             x.move_z();
             let (mut a, mut b) = (0x20i16, -0x200i16);
             let accel = x.u16(0x1a) as i16;

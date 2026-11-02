@@ -1,17 +1,17 @@
-//! Ennemi « Hellhound » (ENEMY type 6, 0x61364). Voir `docs/families/enemy.md`.
+//! "Hellhound" enemy (ENEMY type 6, 0x61364). See `docs/families/enemy.md`.
 //!
-//! Chien de l'enfer à huit variantes d'arrivée (`+3`) et deux jeux de paramètres d'IA (`+0x2f`). Charpente de
-//! `active_loop` ; animations 0x162126 (mouvements) et 0x162148 (coups).
+//! Hell hound with eight arrival variants (`+3`) and two sets of AI parameters (`+0x2f`). `active_loop` framework;
+//! animations 0x162126 (movements) and 0x162148 (attacks).
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `arrival` | arrivée selon `+6` (course, saut, chute du haut, apparition) |
-//! | 2 | `stance` | debout : approche, demi-tour, attente, crachat, saut (`+6` = 0 à 10) |
-//! | 4 | `attacks` | coups et sauts d'attaque (`+6` = 0 à 16) |
-//! | 6, 8 | `attacks` | bonds, gestes spéciaux (`+6` = 0 à 12) |
-//! | 10 | `attacks` | repos tant qu'aucun joueur n'est en vie |
-//! | 12 | `attacks` | saisie d'un joueur |
-//! | état 4 | `hit` | réactions aux coups, recul, chute, saisie par un joueur |
+//! | 0 | `arrival` | arrival according to `+6` (run, jump, fall from above, appearance) |
+//! | 2 | `stance` | standing: approach, turn-around, wait, spit, jump (`+6` = 0 to 10) |
+//! | 4 | `attacks` | attacks and attack jumps (`+6` = 0 to 16) |
+//! | 6, 8 | `attacks` | leaps, special moves (`+6` = 0 to 12) |
+//! | 10 | `attacks` | rest as long as no player is alive |
+//! | 12 | `attacks` | grab of a player |
+//! | state 4 | `hit` | reactions to hits, recoil, fall, grab by a player |
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -36,7 +36,7 @@ pub(self) mod g {
     pub const TIMER: u32 = 0xa0;
     pub const LOOK: u32 = 0xa1;
     pub const LOOK_PREV: u32 = 0xa2;
-    /// Sous-état à reprendre après un demi-tour ou un geste.
+    /// Substate to resume after a turn-around or a move.
     pub const RESUME_SUB2: u32 = 0xa4;
     pub const RESUME_STATE: u32 = 0xa6;
     pub const TIMER_W: u32 = 0xaa;
@@ -76,7 +76,7 @@ pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-/// L'aspect voulu : `+0xa1` et son double `+0xa2`.
+/// The wanted look: `+0xa1` and its twin `+0xa2`.
 pub(self) fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
@@ -86,13 +86,13 @@ pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
-/// Direction de marche : 8 (regarde à gauche) ou 0x18.
+/// Walking direction: 8 (looks left) or 0x18.
 pub(self) fn set_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
-/// Étape commune des gestes : attend la clé d'animation `+0x33` puis passe à l'étape suivante (0x6244a).
+/// Common step of the moves: waits for animation key `+0x33` then moves on to the next step (0x6244a).
 pub(self) fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
@@ -101,7 +101,7 @@ pub(self) fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// Retombée d'un saut (0x62460) : le geste se termine par une poussière et l'animation 0xc.
+/// Landing of a jump (0x62460): the move ends with dust and animation 0xc.
 pub(self) fn land<R: Bench>(x: &mut Cx<'_, R>) {
     if x.move_xz().gt() {
         x.anim_step();
@@ -110,7 +110,7 @@ pub(self) fn land<R: Bench>(x: &mut Cx<'_, R>) {
     land_dust(x);
 }
 
-/// 0x62478 : poussière, retour au sol, étape suivante.
+/// 0x62478: dust, back to the ground, next step.
 pub(self) fn land_dust<R: Bench>(x: &mut Cx<'_, R>) {
     dust(x);
     lib::sound(x, 0xec820);
@@ -121,14 +121,14 @@ pub(self) fn land_dust<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 0xc);
 }
 
-/// 0x63a50 : quatre nuages de poussière autour de l'ennemi.
+/// 0x63a50: four dust clouds around the enemy.
 pub(self) fn dust<R: Bench>(x: &mut Cx<'_, R>) {
     for d2 in [-0x1c, -8, 8, 0x1c] {
         lib::shock(x, 0, 0, d2 as u16, 4);
     }
 }
 
-/// Un pas de fumée toutes les `mask + 1` images (`A5+0x6e` est le compteur d'images, que l'original masque en place).
+/// One smoke step every `mask + 1` frames (`A5+0x6e` is the frame counter, which the original masks in place).
 pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
     let v = x.a5_u16(0x6e) & mask;
     x.set_a5_u16(0x6e, v);
@@ -137,7 +137,7 @@ pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d0: u32, d1: u32, d2: 
     }
 }
 
-/// 0x639fe : l'ennemi doit se retourner pour faire face à sa cible (faux sans cible ni aspect mémorisé).
+/// 0x639fe: the enemy must turn around to face its target (false without a target or a saved look).
 pub(self) fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
         return false;
@@ -149,7 +149,7 @@ pub(self) fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     turn
 }
 
-/// 0x63a98 : la cible est dans la même rangée (profondeur à 0x30 près) mais loin en X (plus de 0xf0).
+/// 0x63a98: the target is in the same row (depth within 0x30) but far in X (more than 0xf0).
 pub(self) fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
@@ -164,8 +164,8 @@ pub(self) fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     far
 }
 
-/// 0x62f1e / 0x62f26 : choisit le coup suivant (`+6`) dans la ligne de la difficulté du profil `+0x2f` ;
-/// `bias` = 8 pour la série lointaine.
+/// 0x62f1e / 0x62f26: chooses the next attack (`+6`) from the difficulty row of profile `+0x2f`; `bias` = 8 for the far
+/// series.
 pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
     let profile = x.u8(GROUP) as u32;
     let list = x.data32(0x62f80 + bias as u32 + 4 * profile);
@@ -180,7 +180,7 @@ pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
     }
 }
 
-/// 0x63790 : fin d'un geste : si la cible est dans une boîte de portée, un coup de la série `0x637fe` suit ; sinon debout.
+/// 0x63790: end of a move: if the target is in a range box, an attack of series `0x637fe` follows; otherwise standing.
 pub(self) fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
@@ -201,7 +201,7 @@ pub(self) const STANCE: u32 = 0x0202_0000;
 pub(self) const HELD: u32 = 0x0408_0000;
 pub(self) const IDLE: u32 = 0x020a_0000;
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
@@ -229,7 +229,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
     lib::draw_stance(x);
     lib::draw_6b(x);
-    // état de départ, aspect et animation selon la variante
+    // starting state, look and animation according to the variant
     let (state, look_v, anim) = match x.u8(Obj::VARIANT) {
         0 => (STANCE, 0xc, 2),
         1 => (0x0202_0600, 3, 3),
@@ -250,7 +250,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, anim);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     active_loop(x, |x| {

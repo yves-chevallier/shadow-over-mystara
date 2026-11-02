@@ -1,13 +1,13 @@
-//! Type 3, état touché (`+4 = 4`, 0x5caa0). `+5` : 0 et 2 réaction par table (`+0x49`), 4 chute et relevé, 6 seconde
-//! table de réactions, 8 saisie par un joueur (le Bow Gnoll s'enfuit à pied). Zone et ombre sont testées sauf si
-//! `+0xac` est non nul.
+//! Type 3, hit state (`+4 = 4`, 0x5caa0). `+5`: 0 and 2 table reaction (`+0x49`), 4 fall and get up, 6 second reaction
+//! table, 8 grabbed by a player (the Bow Gnoll runs away on foot). Zone and shadow are tested unless `+0xac` is
+//! non-zero.
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Tables de réactions communes aux coups, indexées par le code `+0x49`.
+/// Reaction tables shared by the hits, indexed by code `+0x49`.
 const REACT_FIRST: u32 = 0x5cbe8;
 const REACT_SECOND: u32 = 0x5cd14;
 
@@ -30,7 +30,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Chute puis relevé (0x5cc94).
+/// Fall then get up (0x5cc94).
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -67,8 +67,8 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5cae0 : saisi par un joueur : le Bow Gnoll fait demi-tour vers le bord de l'écran le plus proche (selon la
-/// caméra `A5+0x34` et la moitié de l'écran), s'enfuit puis disparaît.
+/// 0x5cae0: grabbed by a player: the Bow Gnoll turns around toward the nearest screen edge (according to camera
+/// `A5+0x34` and the half of the screen), runs away then disappears.
 pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -77,7 +77,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.set8(NO_ZONE, 1);
             let flipped = x.u8(f::FLIP) != 0;
-            // `turn` : tourne d'abord (animation 3) ; sinon part tout de suite
+            // `turn`: turns first (animation 3); otherwise leaves right away
             let turn = if var::SCENE.get(x.b) == 4 {
                 flipped
             } else {
@@ -121,7 +121,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5cb70 : part en courant vers le bord (animation 2, vitesse 0x21).
+/// 0x5cb70: runs off toward the edge (animation 2, speed 0x21).
 fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     walk_angle(x);

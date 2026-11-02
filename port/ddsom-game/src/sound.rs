@@ -1,16 +1,16 @@
-//! Son côté 68000 : file de commandes envoyées au Z80 (format : `docs/sound-68000.md`).
+//! Sound, 68000 side: queue of commands sent to the Z80 (format: `docs/sound-68000.md`).
 //!
-//! Le jeu enfile ses commandes dans une file circulaire en RAM de travail (64 entrées de 16 octets) ;
-//! chaque image, le VBLANK en transmet **une** au Z80 par la RAM partagée 0x618000. Les quelque 520
-//! « wrappers » `sfx_*` (0xe0be2-0xede08) ne diffèrent que par leurs paramètres : ils sont décrits
-//! par la table `sound_table::WRAPPERS` et joués par une seule fonction, [`play`] (ou [`play_with`]).
+//! The game enqueues its commands in a circular queue in work RAM (64 entries of 16 bytes);
+//! each frame, VBLANK transmits **one** of them to the Z80 through the shared RAM 0x618000. The roughly 520
+//! `sfx_*` "wrappers" (0xe0be2-0xede08) only differ by their parameters: they are described
+//! by the table `sound_table::WRAPPERS` and played by a single function, [`play`] (or [`play_with`]).
 //!
-//! Un wrapper d'origine sauvegarde tous les registres sur une pile privée (pointeur en `PRIVATE_STACK`),
-//! puis compose trois longs (D1 = commande, D2 et D3 = paramètres) et appelle l'enfileur. Tous les
-//! registres sont rendus intacts ; seule la mémoire change : la file, et la copie des registres reste écrite
-//! sous le pointeur de pile privée. Cette « sauvegarde fantôme » n'est relue par personne et n'est plus
-//! reproduite (écart assumé, `play_wrapper`) : un son ne lit chez son appelant que l'objet (A0) et, pour
-//! quelques-uns, D4 ou A1 ([`Source`]).
+//! An original wrapper saves all registers on a private stack (pointer in `PRIVATE_STACK`),
+//! then composes three longs (D1 = command, D2 and D3 = parameters) and calls the enqueuer. All
+//! registers are returned intact; only the memory changes: the queue, and the copy of the registers stays written
+//! below the private stack pointer. This "ghost save" is reread by nobody and is no longer
+//! reproduced (accepted difference, `play_wrapper`): a sound only reads from its caller the object (A0) and, for
+//! a few, D4 or A1 ([`Source`]).
 
 use std::sync::OnceLock;
 
@@ -25,48 +25,48 @@ use crate::{regs, Native};
 #[path = "sound_table.rs"]
 mod table;
 
-/// Décalages par rapport à A5 (mots/octets signés étendus : `A5 + n` modulo 2^32).
+/// Offsets relative to A5 (signed words/bytes extended: `A5 + n` modulo 2^32).
 mod ram {
-    /// Début de la file (64 entrées de 16 octets).
+    /// Start of the queue (64 entries of 16 bytes).
     pub const FILE: u32 = 0xffff_a55c;
-    /// Tête de lecture (prochaine entrée à transmettre au Z80), mot.
+    /// Read head (next entry to transmit to the Z80), word.
     pub const READ_HEAD: u32 = 0xffff_a95c;
-    /// Tête d'écriture (prochaine case libre), mot.
+    /// Write head (next free cell), word.
     pub const WRITE_HEAD: u32 = 0xffff_a95e;
-    /// Alternance 0 / -1 des wrappers à deux variantes (voix A / voix B), mot.
+    /// 0 / -1 alternation of the two-variant wrappers (voice A / voice B), word.
     pub const ALTERNATION: u32 = 0xffff_a960;
-    /// Pointeur de la pile privée des wrappers (long).
+    /// Pointer of the wrappers' private stack (long).
     pub const PRIVATE_STACK: u32 = 0xffff_aa1a;
-    /// Octet non nul : les wrappers « gardés » n'émettent rien.
+    /// Non-zero byte: the "guarded" wrappers emit nothing.
     pub const MUTE_GUARD: u32 = 0xffff_aa1e;
-    /// Sons autorisés si ce mot est non nul...
+    /// Sounds allowed if this word is non-zero...
     pub const SOUND_WORD: u32 = 0x7fcc;
-    /// ... ou si l'un de ces octets l'est (partie en cours / mode attract avec son).
+    /// ... or if one of these bytes is (game in progress / attract mode with sound).
     pub const GAME_SOUND: u32 = 0x30;
     pub const ATTRACT_SOUND: u32 = 0x27;
-    /// Dernière commande « gardée » émise (mémo).
+    /// Last "guarded" command emitted (memo).
     pub const MEMO_COMMAND: u32 = 0x7fc4;
-    /// Compte à rebours décrémenté à chaque VBLANK (délai posé par certaines commandes).
+    /// Countdown decremented at each VBLANK (delay set by certain commands).
     pub const DELAY: u32 = 0x7fc2;
-    /// Octet non nul : verrou de la sortie son (copié en 0x619ffd).
+    /// Non-zero byte: sound output lock (copied to 0x619ffd).
     pub const SILENCE: u32 = 0x28;
-    /// Position X de la caméra 1 / 2 et choix de la caméra (octet).
+    /// X position of camera 1 / 2 and camera choice (byte).
     pub const CAMERA_1_X: u32 = 0x5a6;
     pub const CAMERA_2_X: u32 = 0x5ae;
     pub const CAMERA_CHOICE: u32 = 0x36;
 }
 
-/// Taille de la file : 64 entrées de 16 octets.
+/// Size of the queue: 64 entries of 16 bytes.
 const MASK_HEAD: u16 = 0x3f0;
 const ENTRY: u16 = 0x10;
-/// Table de panoramique (un octet par tranche de 8 pixels d'écran), en ROM.
+/// Pan table (one byte per 8-pixel slice of screen), in ROM.
 const TABLE_PAN: u32 = 0xee04e;
 
-/// RAM partagée avec le Z80 : octets aux adresses impaires.
+/// RAM shared with the Z80: bytes at odd addresses.
 mod z80 {
     pub const BASE: u32 = 0x618000;
-    /// Octets de la commande, dans l'ordre d'envoi : (octet de l'entrée de file, adresse).
-    /// L'octet 4 de l'entrée (poids fort de D2) n'est pas transmis.
+    /// Bytes of the command, in sending order: (byte of the queue entry, address).
+    /// Byte 4 of the entry (high-order part of D2) is not transmitted.
     pub const FIELDS: [(usize, u32); 11] = [
         (0, BASE + 0x07),
         (1, BASE + 0x09),
@@ -80,19 +80,19 @@ mod z80 {
         (10, BASE + 0x17),
         (11, BASE + 0x19),
     ];
-    /// Poignée de main : le Z80 met 0xff quand il a lu la commande, le 68000 remet 0.
+    /// Handshake: the Z80 sets 0xff when it has read the command, the 68000 resets it to 0.
     pub const ACQUIT: u32 = BASE + 0x1f;
-    /// Octet de verrou lu par le Z80 (0xff si la sortie son est verrouillée).
+    /// Lock byte read by the Z80 (0xff if the sound output is locked).
     pub const LOCK: u32 = BASE + 0x1ffd;
 }
 
-/// Affichage des verrous du Z80 (écran de débogage), en queue du VBLANK : actif seulement si le mot de la
-/// ROM en 0xc0 (drapeau de débogage) et le mot `A5+0x7fc6` sont non nuls ; chaque octet des verrous
-/// 0x618001... s'écrit en hexadécimal (0x29d78, deux chiffres) à une adresse de la couche de texte.
+/// Display of the Z80 locks (debug screen), at the tail of VBLANK: active only if the ROM word at 0xc0
+/// (debug flag) and the word `A5+0x7fc6` are non-zero; each byte of the locks
+/// 0x618001... is written in hexadecimal (0x29d78, two digits) at an address of the text layer.
 const DEBUG_FLAG: u32 = 0xc0;
 const DEBUG_DISPLAY: u32 = 0x7fc6;
 const HEX_BYTE: u32 = 0x29d78;
-/// (adresse de la couche de texte si elle change, verrou lu), dans l'ordre d'affichage.
+/// (address of the text layer if it changes, lock read), in display order.
 const LATCH_DISPLAY: [(Option<u32>, u32); 11] = [
     (Some(0x9135cc), 0x618001),
     (None, 0x618003),
@@ -128,15 +128,15 @@ fn show_locks(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-/// Adresse `A5 + off` (A5 vaut toujours `mem::A5` ; les décalages négatifs sont écrits modulo 2^32).
+/// Address `A5 + off` (A5 is always `mem::A5`; negative offsets are written modulo 2^32).
 const fn a5(off: u32) -> u32 {
     crate::mem::A5.wrapping_add(off)
 }
 
 // ---------------------------------------------------------------------------------------------
-// La file de commandes
+// The command queue
 
-/// Une commande : trois longs, tels que le jeu les compose (D1, D2, D3).
+/// A command: three longs, as the game composes them (D1, D2, D3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Command {
     pub d1: u32,
@@ -144,29 +144,29 @@ pub struct Command {
     pub d3: u32,
 }
 
-/// Issue d'un enfilage, avec le contenu des registres que l'original laisse derrière lui.
+/// Outcome of an enqueue, with the contents of the registers that the original leaves behind.
 struct Queueing {
-    /// Mot bas de D0 au retour (nouvelle tête d'écriture, ou tête calculée si la file est pleine).
+    /// Low word of D0 on return (new write head, or computed head if the queue is full).
     d0: u16,
-    /// Case écrite (A1 = fin de l'écriture), si la commande a été enfilée.
+    /// Cell written (A1 = end of the write), if the command was enqueued.
     written: Option<u32>,
 }
 
-/// La commande peut-elle être émise ? (son autorisé : 0xe0836)
+/// Can the command be emitted? (sound allowed: 0xe0836)
 fn sound_allowed(b: &mut Cps2Bus) -> bool {
     rd16(b, a5(ram::SOUND_WORD)) != 0
         || rd8(b, a5(ram::GAME_SOUND)) != 0
         || rd8(b, a5(ram::ATTRACT_SOUND)) != 0
 }
 
-/// La file est pleine quand l'écriture rattraperait la lecture (une case reste toujours libre).
+/// The queue is full when the write would catch up with the read (one cell always stays free).
 fn queue_full(b: &mut Cps2Bus) -> bool {
     let read = rd16(b, a5(ram::READ_HEAD));
     let write = rd16(b, a5(ram::WRITE_HEAD));
     read.wrapping_sub(ENTRY) & MASK_HEAD == write
 }
 
-/// Enfile une commande (0xe0848, sans le test d'autorisation).
+/// Enqueues a command (0xe0848, without the permission test).
 fn enqueue(b: &mut Cps2Bus, cmd: Command) -> Queueing {
     let read = rd16(b, a5(ram::READ_HEAD));
     let write = rd16(b, a5(ram::WRITE_HEAD));
@@ -182,7 +182,7 @@ fn enqueue(b: &mut Cps2Bus, cmd: Command) -> Queueing {
     Queueing { d0: next, written: Some(case + 8) }
 }
 
-/// Reproduit D0, A1 et les drapeaux laissés par 0xe0848.
+/// Reproduces D0, A1 and the flags left by 0xe0848.
 fn finish_enqueue(c: &mut Cpu, e: &Queueing) {
     c.d[0] = c.d[0] & 0xffff_0000 | e.d0 as u32;
     match e.written {
@@ -190,7 +190,7 @@ fn finish_enqueue(c: &mut Cpu, e: &Queueing) {
             c.a[1] = end;
             c.flags_logic(e.d0 as u32, Size::Word);
         }
-        None => c.sr = c.sr & 0xff00 | SR_C, // move #1,CCR : seule la retenue est levée
+        None => c.sr = c.sr & 0xff00 | SR_C, // move #1,CCR: only the carry is raised
     }
 }
 
@@ -198,20 +198,20 @@ fn register_command(c: &Cpu) -> Command {
     Command { d1: c.d[1], d2: c.d[2], d3: c.d[3] }
 }
 
-/// 0xe0836 : enfile la commande si le son est autorisé ; rend `false` si rien n'est enfilé (son interdit, file
-/// pleine).
+/// 0xe0836: enqueues the command if sound is allowed; returns `false` if nothing is enqueued (sound forbidden, queue
+/// full).
 pub fn emit(b: &mut Cps2Bus, cmd: Command) -> bool {
     sound_allowed(b) && enqueue(b, cmd).written.is_some()
 }
 
-/// 0xe0848 : enfile D1, D2, D3 (C levé si la file est pleine).
+/// 0xe0848: enqueues D1, D2, D3 (C raised if the queue is full).
 fn enqueue_direct(c: &mut Cpu, b: &mut Cps2Bus) {
     let e = enqueue(b, register_command(c));
     finish_enqueue(c, &e);
     rts(c, b);
 }
 
-/// 0xe0836 : enfile D1, D2, D3 si le son est autorisé.
+/// 0xe0836: enqueues D1, D2, D3 if sound is allowed.
 fn enqueue_if_sound(c: &mut Cpu, b: &mut Cps2Bus) {
     if sound_allowed(b) {
         enqueue_direct(c, b);
@@ -238,42 +238,42 @@ pub const ENQUEUE_DIRECT: Native = Native {
 };
 
 // ---------------------------------------------------------------------------------------------
-// Les wrappers
+// The wrappers
 
-/// Lecture « espace programme » : les tables de commandes sont rangées dans le code et lues par
-/// des accès relatifs au PC, qui voient les opcodes déchiffrés.
+/// "Program space" read: the command tables are stored in the code and read by
+/// PC-relative accesses, which see the decrypted opcodes.
 fn program_read(b: &mut Cps2Bus, address: u32) -> u16 {
     m68k::Bus::read_prog16(b, address & 0xff_ffff)
 }
 
-/// Origine de l'indice de commande dans une table de mots en ROM.
+/// Origin of the command index in a word table in ROM.
 #[derive(Clone, Copy, Debug)]
 pub enum Cmd {
-    /// Commande constante.
+    /// Constant command.
     Fixed(u16),
-    /// Deux commandes en alternance (adresse de la table) : 0xedee4 retourne 0 puis 2 à tour de rôle.
+    /// Two commands in alternation (table address): 0xedee4 returns 0 then 2 in turn.
     Alternate(u32),
-    /// Indice = 2 × octet 2 de l'objet + 4 × (octet 3 & 0xe) (0xedef2).
+    /// Index = 2 × byte 2 of the object + 4 × (byte 3 & 0xe) (0xedef2).
     ByObject(u32),
-    /// Indice = 2 × octet 2 de l'objet.
+    /// Index = 2 × byte 2 of the object.
     ByByte2(u32),
-    /// La dernière commande gardée (`MEMO_COMMAND`), rejouée.
+    /// The last guarded command (`MEMO_COMMAND`), replayed.
     Memo,
-    /// Commande passée par l'appelant dans D4.w (musique).
+    /// Command passed by the caller in D4.w (music).
     FromD4,
 }
 
-// Options d'un wrapper.
-/// Panoramique calculé depuis la position X de l'objet A0, ajouté à l'octet 1 de D2.
+// Options of a wrapper.
+/// Pan computed from the X position of object A0, added to byte 1 of D2.
 pub const PAN: u8 = 1;
-/// Ne rien émettre si `MUTE_GUARD` est non nul.
+/// Emit nothing if `MUTE_GUARD` is non-zero.
 pub const GUARD: u8 = 2;
-/// Recopie la commande en `MEMO_COMMAND`.
+/// Copies the command into `MEMO_COMMAND`.
 pub const MEMO: u8 = 4;
-/// Enfile sans tester l'autorisation du son (0xe0848 au lieu de 0xe0836).
+/// Enqueues without testing the sound permission (0xe0848 instead of 0xe0836).
 pub const DIRECT: u8 = 8;
 
-/// Description d'un point d'entrée « sfx » : la commande est D1, ses paramètres D2 et D3.
+/// Description of an "sfx" entry point: the command is D1, its parameters D2 and D3.
 #[derive(Clone, Copy, Debug)]
 pub struct Wrapper {
     pub entry: u32,
@@ -283,44 +283,44 @@ pub struct Wrapper {
     pub opts: u8,
 }
 
-/// Ce qu'un son lit chez son appelant : les registres que l'original consulte, et rien d'autre (voir l'en-tête,
-/// « sauvegarde fantôme »). Un son qui lit une valeur absente s'arrête (panique) : l'appelant doit la fournir.
+/// What a sound reads from its caller: the registers the original consults, and nothing else (see the header,
+/// "ghost save"). A sound that reads an absent value stops (panic): the caller must provide it.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Source {
-    /// A0 : l'objet à l'origine du bruit (panoramique, numéro de joueur, personnage, variante).
+    /// A0: the object at the origin of the noise (pan, player number, character, variant).
     pub object: Option<Obj>,
-    /// A1 : l'objet désigné des aiguillages `ByA1` (0xec046, 0xec200).
+    /// A1: the object designated by the `ByA1` dispatchers (0xec046, 0xec200).
     pub a1: Option<u32>,
-    /// D4 : commande de musique (`FromD4`) ou choix des aiguillages `ByD4`.
+    /// D4: music command (`FromD4`) or choice of the `ByD4` dispatchers.
     pub d4: Option<u32>,
 }
 
 impl Source {
     fn object(&self) -> u32 {
-        self.object.expect("ce son lit son objet (A0)").0
+        self.object.expect("this sound reads its object (A0)").0
     }
     fn a1(&self) -> u32 {
-        self.a1.expect("ce son lit A1")
+        self.a1.expect("this sound reads A1")
     }
     fn d4(&self) -> u32 {
-        self.d4.expect("ce son lit D4")
+        self.d4.expect("this sound reads D4")
     }
 }
 
-/// Joue le son `sound` (entrée d'un wrapper `sfx_*` ou d'un aiguillage, son identifiant) pour l'objet `object` (A0 de
-/// l'original). Les quelques sons qui lisent aussi D4 ou A1 passent par [`play_with`].
+/// Plays sound `sound` (entry of an `sfx_*` wrapper or of a dispatcher, its identifier) for object `object` (A0 of
+/// the original). The few sounds that also read D4 or A1 go through [`play_with`].
 pub fn play(b: &mut Cps2Bus, sound: u32, object: Obj) {
     play_with(b, sound, Source { object: Some(object), ..Source::default() });
 }
 
-/// Joue un son qui ne lit rien chez son appelant (pas de panoramique, de joueur ni de variante : musiques, bruits
-/// de l'interface), pour les appelants sans objet.
+/// Plays a sound that reads nothing from its caller (no pan, player or variant: music, interface
+/// noises), for callers without an object.
 pub fn play_global(b: &mut Cps2Bus, sound: u32) {
-    debug_assert!(!reads_object(sound), "son {sound:x} : lit son objet, utiliser jouer");
+    debug_assert!(!reads_object(sound), "sound {sound:x}: reads its object, use jouer");
     play_with(b, sound, Source::default());
 }
 
-/// Joue le son `sound` avec tout ce qu'il peut lire (voir [`Source`]).
+/// Plays sound `sound` with everything it may read (see [`Source`]).
 pub fn play_with(b: &mut Cps2Bus, sound: u32, source: Source) {
     if let Ok(i) = table::WRAPPERS.binary_search_by_key(&sound, |w| w.entry) {
         play_wrapper(b, &table::WRAPPERS[i], source);
@@ -330,14 +330,14 @@ pub fn play_with(b: &mut Cps2Bus, sound: u32, source: Source) {
         let target = if version_alternative(b) { alternate } else { normal };
         play_with(b, target, source);
     } else if sound == NONE.entry {
-        // objets sans son
+        // objects without sound
     } else {
-        panic!("son {sound:x} : ni wrapper ni aiguillage")
+        panic!("sound {sound:x}: neither wrapper nor dispatcher")
     }
 }
 
-/// Le son lit-il son objet (A0) ? Les cibles des aiguillages par D4 ou A1 ne sont connues qu'à l'exécution :
-/// réputées le lire.
+/// Does the sound read its object (A0)? The targets of the dispatchers by D4 or A1 are only known at run time:
+/// presumed to read it.
 fn reads_object(sound: u32) -> bool {
     if let Ok(i) = table::WRAPPERS.binary_search_by_key(&sound, |w| w.entry) {
         let w = &table::WRAPPERS[i];
@@ -352,8 +352,8 @@ fn reads_object(sound: u32) -> bool {
     sound != NONE.entry
 }
 
-/// Panoramique (0-0x2f -> octet de la table de ROM) d'un objet : position écran de l'objet par
-/// rapport à la caméra, bornée à 0..0x178, par tranches de 8 pixels.
+/// Pan (0-0x2f -> byte of the ROM table) of an object: screen position of the object relative to
+/// the camera, clamped to 0..0x178, in 8-pixel slices.
 fn pan(b: &mut Cps2Bus, object: u32) -> u8 {
     let x = rd16(b, object + 8);
     let camera_2 = rd8(b, a5(ram::CAMERA_CHOICE)) != 0;
@@ -364,16 +364,16 @@ fn pan(b: &mut Cps2Bus, object: u32) -> u8 {
     rd8(b, TABLE_PAN + ((gap & 0x1ff) >> 3) as u32)
 }
 
-/// Résultat de l'évaluation d'un wrapper (sans effet sur la mémoire).
+/// Result of evaluating a wrapper (without effect on memory).
 struct Plan {
-    /// Commande à enfiler, ou `None` si le wrapper est gardé (rien n'est émis).
+    /// Command to enqueue, or `None` if the wrapper is guarded (nothing is emitted).
     command: Option<Command>,
-    /// Le son est-il autorisé (sinon la commande est abandonnée par l'enfileur) ?
+    /// Is the sound allowed (otherwise the command is dropped by the enqueuer)?
     allowed: bool,
 }
 
 fn schedule(b: &mut Cps2Bus, w: &Wrapper, source: Source) -> Plan {
-    // indice de la table de commandes, calculé par les sous-routines 0xedee4 / 0xedef2
+    // index of the command table, computed by the subroutines 0xedee4 / 0xedef2
     let index = match w.cmd {
         Cmd::Fixed(_) => 0,
         Cmd::Alternate(_) => {
@@ -409,13 +409,14 @@ fn schedule(b: &mut Cps2Bus, w: &Wrapper, source: Source) -> Plan {
     Plan { command: Some(Command { d1: d1 as u32, d2, d3: w.d3 }), allowed }
 }
 
-/// Un wrapper : compose sa commande et l'enfile.
+/// A wrapper: composes its command and enqueues it.
 //
-// Écart assumé : l'original commence par empiler D0-D7/A0-A4 sur la pile privée (pointeur `PRIVATE_STACK`, FF2A1A)
-// et les dépile en sortie ; la copie reste en RAM sous le pointeur (« sauvegarde fantôme », FF297E-FF2A19 sur
-// tous les scénarios, trois niveaux d'aiguillage au plus). Rien ne relit ces mots hors des restaurations des
-// wrappers eux-mêmes (trace de lecture sur la machine d'origine, tous les scénarios : docs/son-68000.md), et
-// `validate` les ignore : le jeu ne les écrit plus, et un son ne dépend plus des registres de son appelant.
+// Accepted difference: the original starts by pushing D0-D7/A0-A4 on the private stack (pointer `PRIVATE_STACK`,
+// FF2A1A) and pops them on exit; the copy stays in RAM below the pointer ("ghost save", FF297E-FF2A19 in
+// all scenarios, three dispatch levels at most). Nothing rereads these words apart from the restorations of the
+// wrappers themselves (read trace on the original machine, all scenarios: docs/son-68000.md), and
+// `validate` ignores them: the game no longer writes them, and a sound no longer depends on the registers of its
+// caller.
 fn play_wrapper(b: &mut Cps2Bus, w: &Wrapper, source: Source) {
     let plan = schedule(b, w, source);
     if let Cmd::Alternate(_) = w.cmd {
@@ -432,8 +433,8 @@ fn play_wrapper(b: &mut Cps2Bus, w: &Wrapper, source: Source) {
     }
 }
 
-/// Native d'un wrapper ou d'un aiguillage (appels par adresse) : le cœur, avec ce qu'il lit dans les registres ;
-/// tous les registres sont rendus intacts, les drapeaux sont ceux du dernier `move.l` du pointeur de pile privée.
+/// Native of a wrapper or a dispatcher (calls by address): the core, with what it reads from the registers;
+/// all registers are returned intact, the flags are those of the last `move.l` of the private stack pointer.
 fn native_sound_in(c: &mut Cpu, b: &mut Cps2Bus, sound: u32) {
     play_with(b, sound, Source { object: Some(Obj(c.a[0])), a1: Some(c.a[1]), d4: Some(c.d[4]) });
     let top = rd32(b, a5(ram::PRIVATE_STACK));
@@ -441,7 +442,7 @@ fn native_sound_in(c: &mut Cpu, b: &mut Cps2Bus, sound: u32) {
     rts(c, b);
 }
 
-/// Les routines natives de chaque wrapper décrit et des aiguillages (construites une fois, puis conservées).
+/// The native routines of each described wrapper and of the dispatchers (built once, then kept).
 pub fn native_wrappers() -> &'static [Native] {
     static LIST: OnceLock<Vec<Native>> = OnceLock::new();
     LIST.get_or_init(|| {
@@ -456,32 +457,32 @@ pub fn native_wrappers() -> &'static [Native] {
                 name,
                 run: crate::Body::CpuIn(native_sound_in),
                 touches_sound: false,
-                outputs: 0, // tous les registres sont rendus intacts : rien à comparer
+                outputs: 0, // all registers are returned intact: nothing to compare
             })
             .collect()
     })
 }
 
 // ---------------------------------------------------------------------------------------------
-// Les aiguillages
+// The dispatchers
 
-/// Wrappers qui ne composent pas eux-mêmes leur commande : ils choisissent dans une table, d'après un
-/// registre ou l'objet, un autre wrapper qu'ils appellent (après leur propre sauvegarde sur la pile
-/// privée, D0-D3 mis à zéro), ou bien une commande de musique.
+/// Wrappers that do not compose their command themselves: they choose from a table, according to a
+/// register or the object, another wrapper that they call (after their own save on the private
+/// stack, D0-D3 zeroed), or else a music command.
 #[derive(Clone, Copy, Debug)]
 enum Dispatch {
-    /// `tst.b D4 ; bmi` puis D4.w = 2 × D4.b, D0.w = table[D4], cible = table + D0 (rien si D4 < 0).
+    /// `tst.b D4 ; bmi` then D4.w = 2 × D4.b, D0.w = table[D4], target = table + D0 (nothing if D4 < 0).
     ByD4(u32),
-    /// D1.w = table[A0[3] & 0xe], cible = table + D1.
+    /// D1.w = table[A0[3] & 0xe], target = table + D1.
     ByVariant(u32),
-    /// A1 = long table[2 × (A0[3] & 0xe)], cible = A1.
+    /// A1 = long table[2 × (A0[3] & 0xe)], target = A1.
     ByVariantLong(u32),
-    /// A1 = long table[2 × (A0[3] & 0xe)], puis D1.b = A0[0x47], A1 = long (en clair) en A1 + D1.w.
+    /// A1 = long table[2 × (A0[3] & 0xe)], then D1.b = A0[0x47], A1 = long (plain) at A1 + D1.w.
     ByVariantAndCategory(u32),
-    /// D1 = 4 × A1[0x44], A1 = long table[D1], cible = A1.
+    /// D1 = 4 × A1[0x44], A1 = long table[D1], target = A1.
     ByA1(u32),
-    /// Musique de la scène : D1.w = table[2 × scène] (rien si gardé, ou si D1 <= 0 / D1 < 0 selon
-    /// `strict`), recopiée en mémo puis enfilée si le son est autorisé.
+    /// Scene music: D1.w = table[2 × scene] (nothing if guarded, or if D1 <= 0 / D1 < 0 depending on
+    /// `strict`), copied to the memo then enqueued if sound is allowed.
     Music { table: u32, strict: bool },
 }
 
@@ -504,7 +505,7 @@ const DISPATCHES: &[(u32, Dispatch)] = {
     ]
 };
 
-/// Long de l'espace programme (tables lues relativement au PC).
+/// Long of the program space (tables read PC-relative).
 fn program_read32(b: &mut Cps2Bus, address: u32) -> u32 {
     (program_read(b, address) as u32) << 16 | program_read(b, address + 2) as u32
 }
@@ -513,8 +514,9 @@ fn low_word(r: u32, v: u16) -> u32 {
     r & 0xffff_0000 | v as u32
 }
 
-/// Un aiguillage : choisit le son à jouer, qui lit la source modifiée comme dans l'original (D4 doublé, A1 désigné),
-/// ou enfile la musique de la scène. L'original sauve et rend ses registres (pile privée, voir `play_wrapper`).
+/// A dispatcher: chooses the sound to play, which reads the modified source as in the original (doubled D4,
+/// designated A1), or enqueues the scene music. The original saves and restores its registers (private stack, see
+/// `play_wrapper`).
 fn dispatch(b: &mut Cps2Bus, kind: Dispatch, source: Source) {
     let (target, source) = match kind {
         Dispatch::ByD4(table) => {
@@ -573,9 +575,9 @@ fn dispatch(b: &mut Cps2Bus, kind: Dispatch, source: Source) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Transmission au Z80 (VBLANK)
+// Transmission to the Z80 (VBLANK)
 
-/// Transmet l'entrée de file `entry` aux octets de la RAM partagée.
+/// Transmits queue entry `entry` to the bytes of the shared RAM.
 fn transmit(b: &mut Cps2Bus, entry: u32) {
     for (byte, address) in z80::FIELDS {
         let v = rd8(b, entry + byte as u32);
@@ -583,8 +585,8 @@ fn transmit(b: &mut Cps2Bus, entry: u32) {
     }
 }
 
-/// 0x68c (VBLANK) : une commande de la file part vers le Z80 si celui-ci a acquitté la précédente. Rend l'entrée de file
-/// transmise.
+/// 0x68c (VBLANK): one command of the queue goes to the Z80 if it has acknowledged the previous one. Returns the
+/// queue entry transmitted.
 pub fn send(b: &mut Cps2Bus) -> Option<u32> {
     let silence = rd8(b, a5(ram::SILENCE)) != 0;
     wr8(b, z80::LOCK, if silence { 0xff } else { 0 });
@@ -602,21 +604,21 @@ pub fn send(b: &mut Cps2Bus) -> Option<u32> {
         wr16(b, a5(ram::READ_HEAD), read.wrapping_add(ENTRY) & MASK_HEAD);
         sent = Some(entry);
     }
-    // l'original se termine par un JMP vers l'affichage des verrous
+    // the original ends with a JMP to the display of the locks
     if shown_locks(b) {
-        // Code mort d'origine : écran de débogage, voir `show_locks` (docs/code-mort.md, lot « sortie du Cpu »)
-        unreachable!("affichage des verrous du Z80 : le mot 0xc0 du programme est nul dans cette version");
+        // Original dead code: debug screen, see `show_locks` (docs/code-mort.md, batch « sortie du Cpu »)
+        unreachable!("display of the Z80 locks: the program word 0xc0 is zero in this version");
     }
     sent
 }
 
-/// L'affichage de débogage des verrous est actif (mot 0xc0 du programme et `A5+0x7fc6` non nuls).
+/// The debug display of the locks is active (program word 0xc0 and `A5+0x7fc6` non-zero).
 fn shown_locks(b: &mut Cps2Bus) -> bool {
     rd16(b, DEBUG_FLAG) != 0 && rd16(b, a5(DEBUG_DISPLAY)) != 0
 }
 
-/// `send` avec les registres de l'original (D0 : tête de lecture, D0 haut = -1 si silence ; A4 après l'entrée
-/// transmise ; drapeaux du test de l'affichage des verrous).
+/// `send` with the registers of the original (D0: read head, D0 high = -1 if silence; A4 after the entry
+/// transmitted; flags of the lock display test).
 fn send_to_z80(c: &mut Cpu, b: &mut Cps2Bus) {
     let silence = rd8(b, a5(ram::SILENCE)) != 0;
     if let Some(entry) = send(b) {
@@ -633,36 +635,36 @@ pub const SEND_TO_Z80: Native = Native {
     name: "son_envoyer_z80",
     run: crate::Body::Processeur(send_to_z80),
     touches_sound: true,
-    outputs: 0, // le VBLANK a sauvegardé tous les registres
+    outputs: 0, // VBLANK saved all the registers
 };
 
 // ---------------------------------------------------------------------------------------------
-// Commandes de service (0xe0882, 0xe0a10, 0xe0a2e-0xe0aae)
+// Service commands (0xe0882, 0xe0a10, 0xe0a2e-0xe0aae)
 
-/// Octet de la RAM partagée écrit par les commandes à délai (lu par le Z80).
+/// Byte of the shared RAM written by the delayed commands (read by the Z80).
 const SERVICE_LOCK: u32 = z80::BASE + 0x05;
-/// Par indice D0.w (en octets) : (délai `A5+0x7fc2`, mot haut de D1), mots en clair.
+/// By index D0.w (in bytes): (delay `A5+0x7fc2`, high word of D1), plain words.
 const DELAYS: u32 = 0xe0ab0;
 
-/// Commande de service, enfilée sans test d'autorisation du son.
+/// Service command, enqueued without the sound permission test.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Service {
-    /// 0xe0882 : commande 0xff00 (arrêt général).
+    /// 0xe0882: command 0xff00 (general stop).
     GeneralStop,
-    /// 0xe0a10 : commande 0xff05.
+    /// 0xe0a10: command 0xff05.
     Ff05,
-    /// 0xe0a2e (verrou = D1.b) / 0xe0a40 (verrou 0xff) : commande 0xff06 à délai. `line` (D0.w) : décalage en
-    /// octets de la ligne de la table des délais.
+    /// 0xe0a2e (lock = D1.b) / 0xe0a40 (lock 0xff): delayed command 0xff06. `line` (D0.w): offset in
+    /// bytes of the row of the delay table.
     Ff06 { lock: u8, line: u16 },
-    /// 0xe0a70 (verrou = D1.b) / 0xe0a82 (verrou 0) : commande 0xff07 à délai (voir `Ff06`).
+    /// 0xe0a70 (lock = D1.b) / 0xe0a82 (lock 0): delayed command 0xff07 (see `Ff06`).
     Ff07 { lock: u8, line: u16 },
-    /// 0xe0ad8 / 0xe0af8 : commandes 0xff08 et 0xff09, de paramètre D0.w (mot haut de D1).
+    /// 0xe0ad8 / 0xe0af8: commands 0xff08 and 0xff09, with parameter D0.w (high word of D1).
     Ff08(u16),
     Ff09(u16),
 }
 
-/// Enfile une commande de service. Une commande à délai écrit d'abord le verrou du Z80, puis lit le délai
-/// (`A5+0x7fc2`) et le mot haut de la commande dans la table des délais.
+/// Enqueues a service command. A delayed command first writes the Z80 lock, then reads the delay
+/// (`A5+0x7fc2`) and the high word of the command from the delay table.
 pub fn service(b: &mut Cps2Bus, s: Service) {
     service_enqueue(b, s);
 }
@@ -689,8 +691,8 @@ fn has_delay(b: &mut Cps2Bus, command: u16, lock: u8, line: u16) -> Command {
     Command { d1: high << 16 | command as u32, d2: 0, d3: 0 }
 }
 
-/// Native d'une commande de service : tous les registres sont rendus (movem sur la pile), seuls les drapeaux de
-/// 0xe0848 restent.
+/// Native of a service command: all registers are returned (movem on the stack), only the flags of
+/// 0xe0848 remain.
 fn service_native_run(c: &mut Cpu, b: &mut Cps2Bus, s: Service) {
     let e = service_enqueue(b, s);
     let (d0, a1) = (c.d[0], c.a[1]);
@@ -700,7 +702,7 @@ fn service_native_run(c: &mut Cpu, b: &mut Cps2Bus, s: Service) {
     rts(c, b);
 }
 
-/// Commande de service de l'entrée `entry`, d'après D0 et D1 (pour les natives).
+/// Service command of entry `entry`, from D0 and D1 (for the natives).
 fn service_in(entry: u32, c: &Cpu) -> Service {
     let (d0, d1) = (c.d[0] as u16, c.d[1] as u8);
     match entry {
@@ -712,7 +714,7 @@ fn service_in(entry: u32, c: &Cpu) -> Service {
         0xe0a82 => Service::Ff07 { lock: 0, line: d0 },
         0xe0ad8 => Service::Ff08(d0),
         0xe0af8 => Service::Ff09(d0),
-        _ => unreachable!("{entry:x} n'est pas une commande de service"),
+        _ => unreachable!("{entry:x} is not a service command"),
     }
 }
 
@@ -729,10 +731,10 @@ pub const SERVICE_FF07: Native = service_native(0xe0a82, "son_service_ff07", tru
 pub const SERVICE_FF08: Native = service_native(0xe0ad8, "son_service_ff08", false);
 pub const SERVICE_FF09: Native = service_native(0xe0af8, "son_service_ff09", false);
 
-/// Entrées qui testent la version à palette alternative (`A5+0x70` non nul) avant d'appeler le wrapper
-/// `normal` ou, dans cette version, le wrapper `alternate` : 0xe2240 / 0xe22e8 (bruit du personnage),
-/// 0xe2430 (bruit par objet), 0xe27da (bruit par genre), 0xe285c (son 0xd5 ou 0xd6, prière du clerc), 0xe2a74 (son
-/// 0xf7 ou 0xf6, tempête du magicien), 0xe296c (son 0xea ou 0xe6, lune de l'elfe : trou trouvé par le bot
+/// Entries that test the alternate-palette version (`A5+0x70` non-zero) before calling the wrapper
+/// `normal` or, in this version, the wrapper `alternate`: 0xe2240 / 0xe22e8 (character noise),
+/// 0xe2430 (noise per object), 0xe27da (noise per kind), 0xe285c (sound 0xd5 or 0xd6, cleric's prayer), 0xe2a74 (sound
+/// 0xf7 or 0xf6, magician's storm), 0xe296c (sound 0xea or 0xe6, elf's moon: hole found by the bot
 /// `longue_d`).
 const BY_VERSION: [(u32, u32, u32); 7] = [
     (0xe2240, 0xe2248, 0xe2390),
@@ -744,18 +746,18 @@ const BY_VERSION: [(u32, u32, u32); 7] = [
     (0xe296c, 0xe2974, 0xe29f4),
 ];
 
-/// Version à palette alternative (`A5+0x70` non nul).
+/// Alternate-palette version (`A5+0x70` non-zero).
 fn version_alternative(b: &mut Cps2Bus) -> bool {
     rd16(b, a5(0x70)) != 0
 }
 
-/// 0xee044 : pile privée des wrappers vide (pointeur = sa propre adresse).
+/// 0xee044: wrappers' private stack empty (pointer = its own address).
 pub fn clear_private_stack(b: &mut Cps2Bus) {
     let p = a5(ram::PRIVATE_STACK);
     wr32(b, p, p);
 }
 
-/// `clear_private_stack` ; A0 = le pointeur, drapeaux de sa valeur.
+/// `clear_private_stack`; A0 = the pointer, flags of its value.
 fn init_private_stack(c: &mut Cpu, b: &mut Cps2Bus) {
     clear_private_stack(b);
     let p = a5(ram::PRIVATE_STACK);
@@ -772,7 +774,7 @@ pub const INIT_PRIVATE_STACK: Native = Native {
     outputs: regs::a(0) | regs::CCR,
 };
 
-/// 0xec238 : son vide (un simple `rts`), cible de l'aiguillage 0xec200 pour les objets sans son.
+/// 0xec238: empty sound (a plain `rts`), target of the dispatcher 0xec200 for objects without sound.
 pub const NONE: Native = Native {
     entry: 0xec238,
     name: "son_aucun",

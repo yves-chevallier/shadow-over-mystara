@@ -1,5 +1,5 @@
-//! Définitions des sprites : images (assemblages de cellules 16x16) et scripts d'animation.
-//! Formats : `assets/sprites/frames.json` et `assets/sprites/anims.json`, voir docs/assets.md.
+//! Sprite definitions: frames (assemblies of 16x16 cells) and animation scripts.
+//! Formats: `assets/sprites/frames.json` and `assets/sprites/anims.json`, see docs/assets.md.
 
 use std::io;
 use std::path::Path;
@@ -8,11 +8,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::json::{hex, hex_opt, hex_vec};
 
-/// Morceau d'une image : `[dx, dy, code, attributs]`. Le coin haut-gauche du morceau est à (dx, dy)
-/// pixels du point d'ancrage de l'objet (y vers le bas de l'écran : dy négatif = au-dessus) ; en miroir
-/// horizontal, à (-dx - 16 - 16 (largeur - 1), dy). Attributs matériels CPS2 : bits 0-4 palette, 5 miroir
-/// horizontal, 6 miroir vertical, 8-11 largeur - 1 et 12-15 hauteur - 1 (en cellules 16x16). La cellule
-/// (bx, by) d'un morceau est `bank << 16 | (code & !0xf) + ((code + bx) & 0xf) + 16 by`.
+/// Piece of a frame: `[dx, dy, code, attributes]`. The top-left corner of the piece is at (dx, dy)
+/// pixels from the object's anchor point (y towards the bottom of the screen: negative dy = above); when mirrored
+/// horizontally, at (-dx - 16 - 16 (width - 1), dy). CPS2 hardware attributes: bits 0-4 palette, 5 horizontal
+/// mirror, 6 vertical mirror, 8-11 width - 1 and 12-15 height - 1 (in 16x16 cells). The cell
+/// (bx, by) of a piece is `bank << 16 | (code & !0xf) + ((code + bx) & 0xf) + 16 by`.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Piece(pub i16, pub i16, pub u16, pub u16);
 
@@ -31,21 +31,21 @@ impl Piece {
     }
 }
 
-/// Une image de sprite (« cadre »), telle que l'objet la désigne en `+0x34`.
+/// A sprite frame, as the object designates it at `+0x34`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Frame {
-    /// Adresse ROM de l'en-tête (provenance ; c'est aussi la valeur que le jeu range dans l'objet).
+    /// ROM address of the header (provenance; it is also the value the game stores in the object).
     #[serde(with = "hex")]
     pub rom: u32,
-    /// Coût en morceaux retiré du budget de la liste de sprites (mot 0 de l'en-tête).
+    /// Cost in pieces deducted from the sprite list budget (word 0 of the header).
     pub cost: u16,
-    /// Mot 1 de l'en-tête : attributs communs (`mode` nul) ou nombre de morceaux (`mode` non nul).
+    /// Word 1 of the header: common attributes (`mode` zero) or number of pieces (`mode` non-zero).
     pub attr: u16,
-    /// Banque de cellules : la cellule d'un morceau est `bank << 16 | code`.
+    /// Cell bank: the cell of a piece is `bank << 16 | code`.
     pub bank: u8,
-    /// Octet 5 de l'en-tête : nul, tous les morceaux prennent `attr` ; sinon chacun a ses attributs.
+    /// Byte 5 of the header: zero, all pieces take `attr`; otherwise each has its own attributes.
     pub mode: u8,
-    /// Adresse ROM de la table de décalages (partagée entre images).
+    /// ROM address of the offset table (shared between frames).
     #[serde(with = "hex")]
     pub offsets: u32,
     pub pieces: Vec<Piece>,
@@ -57,10 +57,10 @@ impl Frame {
     }
 }
 
-/// Toutes les images, dans l'ordre de la table de la ROM (numéro d'image = indice).
+/// All the frames, in the order of the ROM table (frame number = index).
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Frames {
-    /// Table ROM des adresses d'images (un long par image).
+    /// ROM table of frame addresses (one long per frame).
     #[serde(with = "hex")]
     pub table: u32,
     pub frames: Vec<Frame>,
@@ -71,24 +71,24 @@ impl Frames {
         crate::json::load(path)
     }
 
-    /// Numéro de l'image dont l'en-tête est à l'adresse ROM `rom`.
+    /// Number of the frame whose header is at ROM address `rom`.
     pub fn by_rom(&self, rom: u32) -> Option<usize> {
         self.frames.binary_search_by_key(&rom, |f| f.rom).ok()
     }
 }
 
-/// Famille du visualiseur de sprites du menu de test caché (`pl00`, `em03`, `bs10`...) : un jeu
-/// d'animations par variante.
+/// Family of the sprite viewer of the hidden test menu (`pl00`, `em03`, `bs10`...): one set
+/// of animations per variant.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Family {
     pub name: String,
-    /// Entrées longues (personnages joueurs).
+    /// Long entries (player characters).
     pub long: bool,
     #[serde(with = "hex_vec")]
     pub sets: Vec<u32>,
 }
 
-/// Jeu d'animations : tableau de décalages signés (octets, relatifs à `rom`) vers le début de chaque script.
+/// Animation set: array of signed offsets (bytes, relative to `rom`) to the start of each script.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct AnimSet {
     #[serde(with = "hex")]
@@ -98,38 +98,38 @@ pub struct AnimSet {
 }
 
 impl AnimSet {
-    /// Adresse du script `i`.
+    /// Address of script `i`.
     pub fn script(&self, i: usize) -> u32 {
         self.rom.wrapping_add(self.scripts[i] as i32 as u32)
     }
 }
 
-/// Entrée d'un script d'animation (voir `objects/anim.rs`).
+/// Entry of an animation script (see `objects/anim.rs`).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
     #[serde(with = "hex")]
     pub rom: u32,
-    /// Entrée longue (24 octets, personnages) ou courte (16 octets).
+    /// Long entry (24 bytes, characters) or short (16 bytes).
     pub long: bool,
-    /// Taille déduite de l'enchaînement, l'entrée n'étant atteinte par aucun jeu connu.
+    /// Size deduced from the chaining, the entry being reached by no known set.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub guessed: bool,
-    /// Durée en images.
+    /// Duration in frames.
     pub time: u16,
-    /// Drapeaux : octet haut 0 (l'entrée suivante suit), 0xfe (fin) ou autre (saut vers `next`).
+    /// Flags: high byte 0 (the next entry follows), 0xfe (end) or other (jump to `next`).
     pub flags: u16,
-    /// Numéro de l'image (indice dans `Frames`).
+    /// Frame number (index into `Frames`).
     pub frame: u32,
-    /// Octets recopiés dans l'objet en `+0x38` (8 octets : ombre, marque au sol, boîte de visibilité,
-    /// priorité ; 16 pour une entrée longue, jusqu'à `+0x47`).
+    /// Bytes copied into the object at `+0x38` (8 bytes: shadow, ground mark, visibility box,
+    /// priority; 16 for a long entry, up to `+0x47`).
     pub data: Vec<u8>,
-    /// Cible du saut quand l'octet haut des drapeaux n'est ni 0 ni 0xfe.
+    /// Jump target when the high byte of the flags is neither 0 nor 0xfe.
     #[serde(default, with = "hex_opt", skip_serializing_if = "Option::is_none")]
     pub next: Option<u32>,
 }
 
 impl Entry {
-    /// Adresse de l'entrée suivante dans l'ordre de la ROM.
+    /// Address of the next entry in ROM order.
     pub fn end(&self) -> u32 {
         self.rom + if self.long { 24 } else { 16 } + if self.next.is_some() { 4 } else { 0 }
     }
@@ -137,7 +137,7 @@ impl Entry {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Anims {
-    /// Tables du visualiseur de sprites (provenance des familles) : noms, listes de jeux, variantes.
+    /// Tables of the sprite viewer (provenance of the families): names, set lists, variants.
     #[serde(with = "hex")]
     pub names_rom: u32,
     #[serde(with = "hex")]
@@ -146,7 +146,7 @@ pub struct Anims {
     pub variants_rom: u32,
     pub families: Vec<Family>,
     pub sets: Vec<AnimSet>,
-    /// Toutes les entrées connues, par adresse croissante.
+    /// All known entries, by increasing address.
     pub entries: Vec<Entry>,
 }
 

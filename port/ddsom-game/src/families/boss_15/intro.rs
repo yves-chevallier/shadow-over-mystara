@@ -1,11 +1,11 @@
-//! Boss 15 / 20, groupe `+5` = 0 : arrivée. Le dragon tombe du haut de l'écran, à 0xc0 pixels à droite de la caméra,
-//! s'immobilise à l'altitude 0x40, puis le combat commence.
+//! Boss 15 / 20, group `+5` = 0: arrival. The dragon falls from the top of the screen, 0xc0 pixels to the right of
+//! the camera, stops at altitude 0x40, then the combat begins.
 //!
-//! | `+6` | Rôle |
+//! | `+6` | Role |
 //! |---|---|
-//! | 0 | placement au-dessus de l'écran, délai (0xa0 images ; 0x10 pour le petit dragon) |
-//! | 2 | attend, puis commence à descendre |
-//! | 4 | descend jusqu'à l'altitude 0x40 |
+//! | 0 | placement above the screen, delay (0xa0 frames; 0x10 for the small dragon) |
+//! | 2 | waits, then starts descending |
+//! | 4 | descends to altitude 0x40 |
 
 use crate::families::cx::Bench;
 use super::*;
@@ -70,8 +70,8 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     lib::set_immunities(x);
     rest(x);
-    // 0xb3fb0 : le réglage est D1.b, que `set_anim` (0x93182) vient de poser au numéro du jeu d'animations (0)
+    // 0xb3fb0: the setting is D1.b, which `set_anim` (0x93182) has just set to the animation set number (0)
     crate::families::effects_creators::scenery_5(x.b, x.o, 0);
-    // l'arrivée finie, le combat commence dans la même image
+    // the arrival over, the combat begins on the same frame
     super::fight::run(x);
 }

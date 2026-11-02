@@ -1,10 +1,9 @@
-//! Anneaux de choix d'objets et de magies (PEFF types 0 et 1, classe C12).
+//! Rings for choosing items and magics (PEFF types 0 and 1, class C12).
 //!
-//! Le parent (variante `+3` négative) est lié au joueur (`+0x50`) ; il crée six enfants (type 0) ou un
-//! par emplacement de la rangée d'équipement (type 1), garde leurs adresses en `+0x30..` et les pilote
-//! par leurs sous-états (`+5`). Les enfants tournent sur l'anneau : l'angle est l'indice de vitesse
-//! `+0x2d` (32 positions) et les vitesses viennent de tables de vitesses (`+0x4c`) de la ROM.
-//! Les noms de rôle sont des hypothèses (h).
+//! The parent (negative variant `+3`) is linked to the player (`+0x50`); it creates six children (type 0) or one per
+//! slot of the equipment row (type 1), keeps their addresses in `+0x30..` and drives them through their substates
+//! (`+5`). The children turn on the ring: the angle is the speed index `+0x2d` (32 positions) and the speeds come from
+//! ROM speed tables (`+0x4c`). The role names are hypotheses (h).
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -13,35 +12,35 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Jeux d'animations des icônes : normal, palette alternative.
+/// Icon animation sets: normal, alternate palette.
 const ICONS: u32 = 0x1aef78;
 const ICONS_ALT: u32 = 0x1b21c2;
 
-/// Champs des parents et des enfants.
+/// Fields of the parents and the children.
 mod g {
-    /// Génération de la partie (`A5+0x34`) au moment de la création : l'anneau meurt si elle change.
+    /// Generation of the game (`A5+0x34`) at creation time: the ring dies if it changes.
     pub const GENERATION: u32 = 0x5a;
-    /// Lien de l'enfant vers son parent.
+    /// Link of the child to its parent.
     pub const PARENT: u32 = 0x52;
-    /// Angle visé, étape de la rotation.
+    /// Target angle, step of the rotation.
     pub const TARGET: u32 = 0x54;
     pub const STEP: u32 = 0x55;
-    /// Enfants du parent (mots).
+    /// Children of the parent (words).
     pub const CHILDREN: u32 = 0x30;
-    /// Délai de l'anneau (octet) et durée de vie (mot).
+    /// Ring delay (byte) and lifetime (word).
     pub const DELAY: u32 = 0x3c;
-    /// Équipement de l'icône : classe d'objet et quantité (`+0x57`, `+0x58`).
+    /// Equipment of the icon: item class and quantity (`+0x57`, `+0x58`).
     pub const ITEM: u32 = 0x57;
     pub const COUNT: u32 = 0x58;
 }
 
-/// Mot signé de la table de vitesses `table`, converti en 16.16 entier (partie entière du mot 8.8).
+/// Signed word of the speed table `table`, converted to integer 16.16 (integer part of the 8.8 word).
 fn whole_part(word: u16) -> u32 {
     ((((word as u32) << 16) as i32) >> 8) as u32 & 0xffff_0000
 }
 
-/// Règle les vitesses de l'enfant pour l'étape `step` (`0x4a1e0`, `0x4a822`) : table de vitesses
-/// choisie par `step`, ligne choisie par l'angle `+0x2d`.
+/// Sets the child's speeds for step `step` (`0x4a1e0`, `0x4a822`): speed table chosen by `step`, row chosen by angle
+/// `+0x2d`.
 fn set_speeds<R: Bench>(x: &mut Cx<'_, R>, tables: u32, step: u8) {
     let table = x.rom32(tables + 4 * (step as i8 as i16 as u16 as u32 & 0xffff) );
     x.set32(0x4c, table);
@@ -54,7 +53,7 @@ fn set_speeds<R: Bench>(x: &mut Cx<'_, R>, tables: u32, step: u8) {
     x.set16(0x1a, 0);
 }
 
-/// Position de l'enfant : celle du parent, plus deux fois la partie entière des vitesses de la rangée courante.
+/// Position of the child: that of the parent, plus twice the integer part of the speeds of the current row.
 fn follow_parent<R: Bench>(x: &mut Cx<'_, R>) {
     let parent = x.linked(g::PARENT);
     let d0 = if x.u8(0x3) != 0 { 0x8000 } else { 0 };
@@ -70,7 +69,7 @@ fn follow_parent<R: Bench>(x: &mut Cx<'_, R>) {
     x.add32(0xc, vz);
 }
 
-/// L'anneau meurt si la génération a changé, si le jeu est en pause ou si le joueur est mort.
+/// The ring dies if the generation has changed, if the game is paused or if the player is dead.
 fn ring_alive<R: Bench>(x: &mut Cx<'_, R>, generation: u32) -> bool {
     if x.a5_u8(a5::PAUSED) != 0 {
         return false;
@@ -83,7 +82,7 @@ fn ring_alive<R: Bench>(x: &mut Cx<'_, R>, generation: u32) -> bool {
     player.u16(x.b, 0x62) != 0
 }
 
-/// Le parent continue tant que le jeu n'est pas en pause, que la génération n'a pas changé et que le joueur vit.
+/// The parent carries on as long as the game is not paused, the generation has not changed and the player lives.
 fn parent_alive<R: Bench>(x: &mut Cx<'_, R>, generation: u32, player: Obj) -> bool {
     if x.a5_u8(a5::PAUSED) != 0 {
         return false;
@@ -92,9 +91,9 @@ fn parent_alive<R: Bench>(x: &mut Cx<'_, R>, generation: u32, player: Obj) -> bo
     current == x.u8(generation) && player.u16(x.b, 0x62) != 0
 }
 
-/// Parent : suit le joueur à un décalage (mots lus en ROM, selon la variante du joueur).
-/// Glitch d'origine : D2.w garde le décalage Z (`dispatch::Leftovers`) ; le gestionnaire PEFF suivant peut le relire
-/// (le rebond du gel, 0x4bda8, indexe sa table par D2 : bot `longue_a`, image 59 919).
+/// Parent: follows the player at an offset (words read from ROM, according to the player's variant).
+/// Original glitch: D2.w keeps the Z offset (`dispatch::Leftovers`); the following PEFF handler may re-read it (the
+/// freeze bounce, 0x4bda8, indexes its table by D2: bot `longue_a`, frame 59 919).
 fn parent_follow<R: Bench>(x: &mut Cx<'_, R>, offsets: u32) {
     let player = x.linked(f::OWNER);
     x.copy_pos(player);
@@ -110,7 +109,7 @@ fn parent_follow<R: Bench>(x: &mut Cx<'_, R>, offsets: u32) {
     x.add16(0xc, dz);
 }
 
-/// Pour chacun des `n` enfants du parent, appelle `f`.
+/// For each of the parent's `n` children, calls `f`.
 fn for_children<R: Bench>(x: &mut Cx<'_, R>, n: u32, mut f: impl FnMut(&mut Cx<'_, R>, Obj)) {
     let mut a2 = x.o.0 + g::CHILDREN;
     for _ in 0..n {
@@ -120,7 +119,7 @@ fn for_children<R: Bench>(x: &mut Cx<'_, R>, n: u32, mut f: impl FnMut(&mut Cx<'
     }
 }
 
-/// Anneau de magies/objets du clerc, de l'elfe... : type 0 (0x49e36).
+/// Ring of magics/items of the cleric, the elf...: type 0 (0x49e36).
 mod ring0 {
     use super::*;
 
@@ -166,7 +165,7 @@ mod ring0 {
         icon(x);
     }
 
-    /// Animation de l'icône d'après l'équipement (`0x49edc`).
+    /// Icon animation from the equipment (`0x49edc`).
     fn icon<R: Bench>(x: &mut Cx<'_, R>) {
         let item = x.u8(g::ITEM) as u32;
         let count = x.u8(g::COUNT) as u32;
@@ -188,7 +187,7 @@ mod ring0 {
         player.set_u8(x.b, 0x15d, 2);
         let mut a2 = x.o.0 + g::CHILDREN;
         for k in 0..6u32 {
-            // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+            // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
             let child = x.alloc_unchecked(&pools::PEFF);
             child.set_u8(x.b, 0, 1);
             child.set_u8(x.b, 2, 0);
@@ -234,7 +233,7 @@ mod ring0 {
         x.set8(0x4, 4);
     }
 
-    /// L'anneau est ouvert : le bouton fait tourner la rangée d'équipement, la fin referme l'anneau.
+    /// The ring is open: the button rotates the equipment row, the end closes the ring.
     fn open<R: Bench>(x: &mut Cx<'_, R>) {
         x.add16(0x3e, 0xffff);
         if x.u16(0x3e) == 0 {
@@ -255,7 +254,7 @@ mod ring0 {
         x.add8(0x5, 0xfe);
         x.set8(g::DELAY, 0x10);
         for_children(x, 6, |x, child| child.set_u8(x.b, 5, 2));
-        // rotation de la rangée d'équipement (6 emplacements, quantités à +8)
+        // rotation of the equipment row (6 slots, quantities at +8)
         let last = player.u8(x.b, 0x145);
         let last_count = player.u8(x.b, 0x14d);
         for k in (0..5u32).rev() {
@@ -326,7 +325,7 @@ mod ring0 {
     }
 }
 
-/// Anneau d'équipement du type 1 (0x4a21e) : variante de 0 qui lit les quantités du joueur.
+/// Equipment ring of type 1 (0x4a21e): variant of 0 that reads the player's quantities.
 mod ring1 {
     use super::*;
 
@@ -340,7 +339,7 @@ mod ring1 {
     const NEXT_C: u32 = 0x4a6ee;
     const NEXT2_A: u32 = 0x4a7b4;
     const NEXT2_B: u32 = 0x4a7ae;
-    /// Mode de l'anneau : `+0x59` vaut 2 pour la rangée des magies.
+    /// Ring mode: `+0x59` is 2 for the row of magics.
     const MODE: u32 = 0x59;
     const GENERATION: u32 = 0x5b;
     const CHILD_COUNT: u32 = 0x3d;
@@ -396,7 +395,7 @@ mod ring1 {
         icon(x);
     }
 
-    /// Animation de l'icône (`0x4a29c`).
+    /// Icon animation (`0x4a29c`).
     fn icon<R: Bench>(x: &mut Cx<'_, R>) {
         let item = x.u8(g::ITEM) as u32;
         let count = x.u8(g::COUNT) as u32;
@@ -456,7 +455,7 @@ mod ring1 {
                 }
             }
         }
-        // suit le joueur
+        // follows the player
         parent_follow(x, OFFSETS);
         let player = x.linked(f::OWNER);
         if parent_alive(x, GENERATION, player) {
@@ -465,7 +464,7 @@ mod ring1 {
         x.set8(0x4, 4);
     }
 
-    /// Sous-état 0 du parent : prépare l'anneau (nombre d'enfants et leurs équipements).
+    /// Substate 0 of the parent: prepares the ring (number of children and their equipment).
     fn create<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u16(a5::PEFF_FREE) <= 6 {
             return;
@@ -485,7 +484,7 @@ mod ring1 {
         x.set8(CHILD_COUNT, count);
         let mut a2 = x.o.0 + g::CHILDREN;
         for k in 0..=count as u32 {
-            // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+            // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
             let child = x.alloc_unchecked(&pools::PEFF);
             child.set_u8(x.b, 0, 1);
             child.set_u8(x.b, 2, 1);
@@ -529,7 +528,7 @@ mod ring1 {
         }
     }
 
-    /// Referme l'anneau : tous les enfants en sous-état 6, le parent en `sub`.
+    /// Closes the ring: all the children in substate 6, the parent in `sub`.
     fn shut<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
         x.set8(0x5, sub);
         x.set8(g::DELAY, 8);
@@ -537,7 +536,7 @@ mod ring1 {
         for_children(x, n, |x, child| child.set_u8(x.b, 5, 6));
     }
 
-    /// Fait tourner la rangée des équipements de la page courante.
+    /// Rotates the row of equipment of the current page.
     fn turn<R: Bench>(x: &mut Cx<'_, R>, player: Obj) {
         x.add8(0x5, 0xfe);
         x.set8(g::DELAY, 0x10);

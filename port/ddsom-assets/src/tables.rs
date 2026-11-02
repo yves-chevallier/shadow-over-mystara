@@ -1,5 +1,5 @@
-//! Tables des objets liées aux sprites : boîtes de collision, boîtes de visibilité, marques au sol et
-//! listes d'images lues directement par le code. Format : `assets/sprites/tables.json`, voir docs/assets.md.
+//! Object tables tied to sprites: collision boxes, visibility boxes, ground marks and
+//! frame lists read directly by the code. Format: `assets/sprites/tables.json`, see docs/assets.md.
 
 use std::io;
 use std::path::Path;
@@ -8,9 +8,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::json::{hex, hex_vec};
 
-/// Boîte de collision (8 octets) : X (signé), demi-largeur, Z (hauteur, signé), demi-hauteur, Y
-/// (profondeur, signé), demi-profondeur, puis deux octets que la collision ne lit pas. Décalages depuis
-/// la position de l'objet ; X est inversé quand l'objet regarde à gauche (docs/combat.md §3).
+/// Collision box (8 bytes): X (signed), half-width, Z (height, signed), half-height, Y
+/// (depth, signed), half-depth, then two bytes the collision does not read. Offsets from
+/// the object's position; X is inverted when the object faces left (docs/combat.md §3).
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HitBox(pub i8, pub u8, pub i8, pub u8, pub i8, pub u8, pub u8, pub u8);
 
@@ -24,11 +24,11 @@ impl HitBox {
     }
 }
 
-/// Table de jeux de boîtes : un long par jeu (`+0x2e` de l'objet), adresse de la boîte d'index 0 du jeu ;
-/// la boîte d'index `n` (octet de l'objet, 0 = aucune) est à `address + 8 n`.
+/// Table of box sets: one long per set (`+0x2e` of the object), address of the set's box of index 0;
+/// the box of index `n` (object byte, 0 = none) is at `address + 8 n`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BoxTable {
-    /// `body` (index `+0x38`), `push` (`+0x39`) ou `attack` (`+0x3a`).
+    /// `body` (index `+0x38`), `push` (`+0x39`) or `attack` (`+0x3a`).
     pub name: String,
     #[serde(with = "hex")]
     pub rom: u32,
@@ -36,8 +36,8 @@ pub struct BoxTable {
     pub sets: Vec<u32>,
 }
 
-/// Boîtes rangées à partir d'une adresse désignée par un jeu, jusqu'à la suivante. `tail` : octets
-/// restants quand l'écart n'est pas un multiple de 8 (fin de bloc, bourrage `0x4e71`).
+/// Boxes stored from an address designated by a set, up to the next one. `tail`: remaining
+/// bytes when the gap is not a multiple of 8 (end of block, `0x4e71` padding).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BoxBlock {
     #[serde(with = "hex")]
@@ -56,27 +56,27 @@ impl BoxBlock {
     }
 }
 
-/// Boîte de visibilité (0x1ed2, index `+0x3c`), mots : l'objet est à l'écran si `x écran + dx <= width`
-/// et `height écran + dy <= height` (comparaisons non signées).
+/// Visibility box (0x1ed2, index `+0x3c`), words: the object is on screen if `screen x + dx <= width`
+/// and `screen height + dy <= height` (unsigned comparisons).
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Bounds(pub i16, pub u16, pub i16, pub u16);
 
-/// Marque au sol (0x1e3a6, index `+0x3b`), 8 mots.
+/// Ground mark (0x1e3a6, index `+0x3b`), 8 words.
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GroundMark {
-    /// Morceaux retirés du budget de la liste de sprites.
+    /// Pieces deducted from the sprite list budget.
     pub cost: u16,
-    /// Code du sprite matériel.
+    /// Hardware sprite code.
     pub code: u16,
-    /// Décalage x fixe.
+    /// Fixed x offset.
     pub x: i16,
-    /// Attributs du sprite (bit 5 inversé en miroir).
+    /// Sprite attributes (bit 5 flipped when mirrored).
     pub attr: u16,
-    /// Décalage x supplémentaire, opposé en miroir.
+    /// Extra x offset, negated when mirrored.
     pub dx: i16,
-    /// Décalage vertical (retranché de la hauteur à l'écran).
+    /// Vertical offset (subtracted from the on-screen height).
     pub dy: i16,
-    /// Bits de priorité ajoutés au mot x du sprite.
+    /// Priority bits added to the sprite's x word.
     pub priority: u16,
     pub unused: u16,
 }
@@ -91,32 +91,32 @@ impl GroundMark {
     }
 }
 
-/// Liste d'images rangées en longs (adresses d'images) et lue directement par le code.
+/// List of frames stored as longs (frame addresses) and read directly by the code.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct FrameList {
     #[serde(with = "hex")]
     pub rom: u32,
-    /// Numéros d'images (`frames.json`).
+    /// Frame numbers (`frames.json`).
     pub frames: Vec<u32>,
 }
 
-/// Tables du tir ESHL 5 (0x9e458, anneaux du serpent et zones de contact des grands ennemis).
+/// Tables of the ESHL 5 shot (0x9e458, snake rings and contact zones of large enemies).
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Shot5 {
-    /// Par `+0x2f` : indices de boîtes corps, poussée, attaque, puis la marque au sol (`+0x3b`) ; espace
-    /// programme.
+    /// Per `+0x2f`: box indices body, push, attack, then the ground mark (`+0x3b`); program
+    /// space.
     #[serde(with = "hex")]
     pub boxes_rom: u32,
     pub boxes: Vec<[u8; 4]>,
-    /// Par `+0x2f` : déplacement (mot, depuis la table, espace programme) de la liste d'images des images
-    /// paires (`even`) ou impaires (`odd`).
+    /// Per `+0x2f`: offset (word, from the table, program space) of the frame list for even
+    /// (`even`) or odd (`odd`) frames.
     #[serde(with = "hex")]
     pub even_rom: u32,
     pub even: Vec<i16>,
     #[serde(with = "hex")]
     pub odd_rom: u32,
     pub odd: Vec<i16>,
-    /// (image, retournement) par `(+0x42 / 2) * 16 + +0x43 / 2` ; espace données.
+    /// (frame, flip) per `(+0x42 / 2) * 16 + +0x43 / 2`; data space.
     #[serde(with = "hex")]
     pub mirrored_rom: u32,
     pub mirrored: Vec<[u8; 2]>,
@@ -125,7 +125,7 @@ pub struct Shot5 {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SpriteTables {
     pub box_tables: Vec<BoxTable>,
-    /// Toutes les boîtes, en blocs jointifs (un par adresse désignée), de `box_tables[..].sets` jusqu'à
+    /// All the boxes, in contiguous blocks (one per designated address), from `box_tables[..].sets` up to
     /// `box_end`.
     pub box_blocks: Vec<BoxBlock>,
     #[serde(with = "hex")]
@@ -145,7 +145,7 @@ impl SpriteTables {
         crate::json::load(path)
     }
 
-    /// Boîte d'index `n` du jeu `set` de la table `table` (0 corps, 1 poussée, 2 attaque).
+    /// Box of index `n` of set `set` of table `table` (0 body, 1 push, 2 attack).
     pub fn hit_box(&self, table: usize, set: usize, n: usize) -> Option<HitBox> {
         let at = self.box_tables[table].sets[set] + 8 * n as u32;
         let i = self.box_blocks.partition_point(|b| b.rom <= at).checked_sub(1)?;
@@ -154,7 +154,7 @@ impl SpriteTables {
         if off % 8 == 0 && off / 8 < b.boxes.len() {
             return Some(b.boxes[off / 8]);
         }
-        // boîte à cheval sur un bloc et le suivant (blocs non alignés)
+        // box straddling a block and the next one (unaligned blocks)
         let mut bytes = Vec::new();
         for blk in &self.box_blocks[i..] {
             for bx in &blk.boxes {

@@ -1,22 +1,22 @@
-//! Rang (difficulté dynamique, hypothèse) : un niveau de 0 à 31 qui monte avec le temps de jeu et
-//! redescend quand un joueur est touché ; les ennemis le lisent (`A5+0x7f92`) pour choisir leurs
-//! attaques et leurs dégâts.
+//! Rank (dynamic difficulty, hypothesis): a level from 0 to 31 that rises with play time and
+//! drops when a player is hit; enemies read it (`A5+0x7f92`) to choose their
+//! attacks and damage.
 //!
-//! Structure à `A5 + 0x7f92` (mots) :
+//! Structure at `A5 + 0x7f92` (words):
 //!
-//! | décalage | contenu |
+//! | offset | content |
 //! |---|---|
-//! | +0x00 | rang courant (0..=31) |
-//! | +0x02 | rang maximal (réglage) |
-//! | +0x04 | rang minimal (réglage) |
-//! | +0x06 | rang initial en partie (réglage) |
-//! | +0x0a | images entre deux montées (réglage) |
-//! | +0x0c | images entre deux montées hors partie (0x384 par défaut) |
-//! | +0x0e | octets : baisse du rang quand un joueur est touché, selon `A5+0x35` |
-//! | +0x12 | compte à rebours avant la prochaine montée (0xFFFF : arrêté) |
+//! | +0x00 | current rank (0..=31) |
+//! | +0x02 | maximum rank (setting) |
+//! | +0x04 | minimum rank (setting) |
+//! | +0x06 | initial rank in game (setting) |
+//! | +0x0a | frames between two rises (setting) |
+//! | +0x0c | frames between two rises outside the game (0x384 by default) |
+//! | +0x0e | bytes: rank drop when a player is hit, according to `A5+0x35` |
+//! | +0x12 | countdown before the next rise (0xFFFF: stopped) |
 //!
-//! Les réglages (+0x02..=+0x11) sont copiés d'une ligne de 16 octets de la table 0x1f1d8, choisie
-//! par l'octet `A5+0x2a`.
+//! The settings (+0x02..=+0x11) are copied from a 16-byte row of the table 0x1f1d8, chosen
+//! by the byte `A5+0x2a`.
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -36,7 +36,7 @@ const IDLE_DELAY: u32 = 0x0c;
 const DROP_TABLE: u32 = 0x0e;
 const TIMER: u32 = 0x12;
 
-/// Variables de A5 : partie en cours, mode de jeu (nombre de joueurs), ligne de réglages.
+/// A5 variables: game in progress, game mode (number of players), settings row.
 const GAME_ACTIVE: u32 = 0x30;
 const PLAYERS_MODE: u32 = 0x35;
 const PRESET_ROW: u32 = 0x2a;
@@ -49,7 +49,7 @@ fn set(b: &mut Cps2Bus, off: u32, v: u16) {
     wr16(b, BASE + off, v)
 }
 
-/// Copie les réglages de la ligne `row` de la table.
+/// Copies the settings of row `row` of the table.
 pub fn load_preset(b: &mut Cps2Bus, row: u8) {
     let src = PRESETS + 16 * row as u32;
     for i in 0..4 {
@@ -58,14 +58,14 @@ pub fn load_preset(b: &mut Cps2Bus, row: u8) {
     }
 }
 
-/// 0x1f238 : les réglages de la ligne `A5+0x2a`, puis `reset`.
+/// 0x1f238: the settings of row `A5+0x2a`, then `reset`.
 pub fn load_current_preset(b: &mut Cps2Bus) {
     let row = rd8(b, A5 + PRESET_ROW);
     load_preset(b, row);
     reset(b);
 }
 
-/// Remet le compte à rebours et le rang à leur valeur de départ.
+/// Resets the countdown and the rank to their starting value.
 pub fn reset(b: &mut Cps2Bus) {
     if rd8(b, A5 + GAME_ACTIVE) == 0 {
         set(b, IDLE_DELAY, 0x384);
@@ -77,7 +77,7 @@ pub fn reset(b: &mut Cps2Bus) {
     set(b, CURRENT, initial);
 }
 
-/// Un pas par image : le rang monte d'un cran toutes les `RAMP_DELAY` images jusqu'au maximum.
+/// One step per frame: the rank rises by one notch every `RAMP_DELAY` frames up to the maximum.
 pub fn tick(b: &mut Cps2Bus) {
     if rd8(b, A5 + GAME_ACTIVE) == 0 || rd8(b, A5 + PLAYERS_MODE) == 0 {
         return;
@@ -102,7 +102,7 @@ pub fn tick(b: &mut Cps2Bus) {
     set(b, CURRENT, next & 0x1f);
 }
 
-/// Monte d'un cran (au plus au maximum) et relance le compte à rebours.
+/// Rises by one notch (at most to the maximum) and restarts the countdown.
 pub fn raise(b: &mut Cps2Bus) {
     let delay = get(b, RAMP_DELAY);
     set(b, TIMER, delay);
@@ -110,7 +110,7 @@ pub fn raise(b: &mut Cps2Bus) {
     set(b, CURRENT, next as u16 & 0x1f);
 }
 
-/// Baisse selon le mode de jeu (au plus jusqu'au minimum) et relance le compte à rebours.
+/// Drops according to the game mode (at most down to the minimum) and restarts the countdown.
 pub fn lower(b: &mut Cps2Bus) {
     let delay = get(b, RAMP_DELAY);
     set(b, TIMER, delay);
@@ -120,47 +120,47 @@ pub fn lower(b: &mut Cps2Bus) {
     set(b, CURRENT, next as u16 & 0x1f);
 }
 
-// ---- adaptation aux registres du 68000 ----
+// ---- adaptation to the 68000 registers ----
 
-/// Registres que laissent les routines d'origine (voir `diag::dead_regs`, étiquette `rank`).
+/// Registers left behind by the original routines (see `diag::dead_regs`, label `rank`).
 pub const REGS_RANK: u32 = regs::d(0) | regs::d(1) | regs::a(0) | regs::a(1) | regs::a(4) | regs::CCR;
 
-/// `reset` avec les registres de l'original (A0 = structure).
+/// `reset` with the original's registers (A0 = structure).
 #[track_caller]
 pub fn reset_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     reset_regs(c, b);
     crate::diag::dead_regs(c, "rank", REGS_RANK);
 }
 
-/// `load_preset` de la ligne `A5+0x2a` puis `reset`, avec les registres de l'original.
+/// `load_preset` of row `A5+0x2a` then `reset`, with the original's registers.
 #[track_caller]
 pub fn load_preset_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     load_preset_regs(c, b);
     crate::diag::dead_regs(c, "rank", REGS_RANK);
 }
 
-/// `tick` avec les registres de l'original (D0 = rang, A0 = structure).
+/// `tick` with the original's registers (D0 = rank, A0 = structure).
 #[track_caller]
 pub fn tick_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     tick_regs(c, b);
     crate::diag::dead_regs(c, "rank", REGS_RANK);
 }
 
-/// `raise` avec les registres de l'original (D0 = rang).
+/// `raise` with the original's registers (D0 = rank).
 #[track_caller]
 pub fn raise_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     raise_regs(c, b);
     crate::diag::dead_regs(c, "rank", REGS_RANK);
 }
 
-/// `lower` avec les registres de l'original (D0 = rang, D1 = baisse, A1 = table des baisses).
+/// `lower` with the original's registers (D0 = rank, D1 = drop, A1 = drop table).
 #[track_caller]
 pub fn lower_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     lower_regs(c, b);
     crate::diag::dead_regs(c, "rank", REGS_RANK);
 }
 
-/// 0x1f258 : `reset`. Laisse A0 = structure.
+/// 0x1f258: `reset`. Leaves A0 = structure.
 fn reset_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[0] = BASE;
     let active = rd8(b, A5 + GAME_ACTIVE);
@@ -170,7 +170,7 @@ fn reset_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     c.flags_logic(initial as u32, Size::Word);
 }
 
-/// 0x1f1b8 : charge la ligne de réglages `A5+0x2a`, puis `reset`.
+/// 0x1f1b8: loads the settings row `A5+0x2a`, then `reset`.
 fn load_preset_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     let row = rd8(b, A5 + PRESET_ROW);
     let off = lsl_word(c, row as u16, 4);
@@ -180,7 +180,7 @@ fn load_preset_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     reset_regs(c, b);
 }
 
-/// 0x1f27c : `tick`, opérations et drapeaux de l'original (D0 = rang, A0 = structure).
+/// 0x1f27c: `tick`, operations and flags of the original (D0 = rank, A0 = structure).
 fn tick_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     let active = rd8(b, A5 + GAME_ACTIVE);
     c.flags_logic(active as u32, Size::Byte);
@@ -228,7 +228,7 @@ fn tick_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     c.flags_logic((d0 & 0x1f) as u32, Size::Word);
 }
 
-/// 0x1f2c0 : `raise`.
+/// 0x1f2c0: `raise`.
 fn raise_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     let delay = get(b, RAMP_DELAY);
     set(b, TIMER, delay);
@@ -248,7 +248,7 @@ fn raise_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     c.flags_logic(d0 as u32, Size::Word);
 }
 
-/// 0x1f300 : `lower`.
+/// 0x1f300: `lower`.
 fn lower_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     let delay = get(b, RAMP_DELAY);
     set(b, TIMER, delay);

@@ -1,7 +1,7 @@
-//! Tests SingleStepTests/m68000 (générés avec le cœur 68000 microcodé de MAME, licence MIT).
-//! Fichiers attendus dans $M68K_TESTS (défaut ~/tools/m68000-tests/*.json.bin) ; ignoré s'ils manquent.
-//! Vérifie l'état final ET le nombre de cycles de chaque instruction.
-//! Les cas déclenchant une erreur d'adresse (accès mot impair) sont ignorés : non modélisé.
+//! SingleStepTests/m68000 tests (generated with MAME's microcoded 68000 core, MIT license).
+//! Files expected in $M68K_TESTS (default ~/tools/m68000-tests/*.json.bin); skipped if missing.
+//! Checks the final state AND the cycle count of each instruction.
+//! Cases triggering an address error (odd word access) are skipped: not modeled.
 //!
 //! cargo test --release -p m68k --test singlestep -- --nocapture
 
@@ -130,7 +130,7 @@ const NAMES: [&str; 19] = [
     "sr", "pc",
 ];
 
-/// Exécute un cas ; renvoie la liste des écarts et les cycles comptés.
+/// Runs a case; returns the list of discrepancies and the counted cycles.
 fn run(mem: &mut Mem, c: &Case) -> (Vec<String>, u64) {
     for &a in &mem.touched {
         mem.ram[a as usize] = 0;
@@ -156,7 +156,7 @@ fn run(mem: &mut Mem, c: &Case) -> (Vec<String>, u64) {
     mem.write16((start + 2) & 0xffffff, i.prefetch[1] as u16);
     cpu.pc = start;
     let ins = cpu.step(mem);
-    // après STOP le 68000 ne refait pas de prefetch : le PC du test n'a pas le +4 habituel
+    // after STOP the 68000 does not prefetch again: the test's PC does not have the usual +4
     let pc_bias: u32 = if matches!(ins.map(|i| i.op), Some(m68k::Op::Stop(_))) && cpu.stopped { 0 } else { 4 };
 
     let mut got = [0u32; 19];
@@ -187,7 +187,7 @@ fn singlestep() {
         PathBuf::from(std::env::var("HOME").unwrap()).join("tools/m68000-tests")
     });
     let Ok(rd) = std::fs::read_dir(&dir) else {
-        eprintln!("{} absent, test ignoré", dir.display());
+        eprintln!("{} missing, test skipped", dir.display());
         return;
     };
     let filter = std::env::var("M68K_FILTER").ok();
@@ -235,7 +235,7 @@ fn singlestep() {
         }
         let name = f.file_name().unwrap().to_string_lossy().replace(".json.bin", "");
         if fail > 0 {
-            println!("ÉCHEC {name:14} {ok} ok, {fail} faux, {skip} ignorés — ex. {}", first.unwrap());
+            println!("FAILED {name:14} {ok} ok, {fail} wrong, {skip} skipped — e.g. {}", first.unwrap());
         }
         if cyc_bad > 0 {
             println!("CYCLES {name:14} {cyc_ok} ok, {cyc_bad} faux — ex. {}", cyc_first.unwrap());
@@ -245,6 +245,6 @@ fn singlestep() {
     }
     let ok: usize = summary.values().map(|v| v.0).sum();
     let skip: usize = summary.values().map(|v| v.2).sum();
-    println!("TOTAL {ok} ok, {total_fail} faux, {skip} ignorés (erreurs d'adresse), {} fichiers", files.len());
+    println!("TOTAL {ok} ok, {total_fail} wrong, {skip} skipped (address errors), {} files", files.len());
     assert_eq!(total_fail, 0);
 }

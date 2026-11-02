@@ -1,6 +1,5 @@
-//! Type 1, bonds et gardes. `+5 = 6` : `+6` = 0 repos, 2 bond de côté, 4 et 6 bonds vers l'avant,
-//! 8 garde (série 1), 10 sortie d'écran. `+5 = 8` : 0 et 6 pause, 2 glissade, 4 pas de côté ou
-//! bond de profondeur. `+5 = 10` : chute d'arrivée.
+//! Type 1, leaps and guards. `+5 = 6`: `+6` = 0 rest, 2 side leap, 4 and 6 forward leaps, 8 guard (series 1), 10 screen
+//! exit. `+5 = 8`: 0 and 6 pause, 2 slide, 4 side step or depth leap. `+5 = 10`: arrival fall.
 
 use crate::families::cx::Bench;
 use super::attacks::{fall, land_wait, ready, rise, restart_slide, settle};
@@ -8,7 +7,7 @@ use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-// --- sous-état 6 --------------------------------------------------------------------------------
+// --- substate 6 --------------------------------------------------------------------------------
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
@@ -26,7 +25,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     zone_and_terrain(x);
 }
 
-/// Repos de 16 images, puis debout.
+/// Rest of 16 frames, then standing.
 fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -40,7 +39,7 @@ fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Bond de côté (`+6` = 2) : vitesse latérale au hasard.
+/// Side leap (`+6` = 2): lateral speed at random.
 fn hop_sideways<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => ready(x),
@@ -67,7 +66,7 @@ fn hop_sideways<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Bonds vers l'avant (`+6` = 4 avec animation de mouvement, 6 avec animation de coup).
+/// Forward leaps (`+6` = 4 with movement animation, 6 with attack animation).
 fn hop_forward<R: Bench>(x: &mut Cx<'_, R>, striking: bool) {
     match x.u8(f::SUB3) {
         0 => ready(x),
@@ -117,7 +116,7 @@ fn hop_forward<R: Bench>(x: &mut Cx<'_, R>, striking: bool) {
     }
 }
 
-/// Montée d'un bond de côté (déplacement en profondeur et en hauteur).
+/// Climb of a side leap (movement in depth and in height).
 fn hop_rise<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     x.move_yz();
@@ -137,7 +136,7 @@ fn hop_fall<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin d'un bond : l'animation de réception terminée, retour debout.
+/// End of a leap: once the landing animation is over, back to standing.
 fn hop_end<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     if (x.u16(ANIM_STATE) as i16) < 0 {
@@ -145,7 +144,7 @@ fn hop_end<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin d'un bond avec animation de coup : le test porte sur l'octet fort de l'état.
+/// End of a leap with attack animation: the test is on the high byte of the state.
 fn hop_end_byte<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     if (x.u8(ANIM_STATE) as i8) < 0 {
@@ -155,7 +154,7 @@ fn hop_end_byte<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- gardes -------------------------------------------------------------------------------------
 
-/// Garde du coup 18/20 (`+5 = 4`) : prépare la riposte `+0xa9 = 2` ; termine par le choix d'un nouveau coup.
+/// Guard of attack 18/20 (`+5 = 4`): prepares the counter-attack `+0xa9 = 2`; ends with the choice of a new attack.
 pub(super) fn guard<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => ready(x),
@@ -175,7 +174,7 @@ pub(super) fn guard<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Garde du saut de la série 1 (`+5 = 6`, `+6` = 8).
+/// Guard of the jump of series 1 (`+5 = 6`, `+6` = 8).
 fn guard_leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => ready(x),
@@ -192,14 +191,14 @@ fn guard_leap<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x58966 / 0x58974 : commence la garde depuis un bond (`+6` = 8, riposte aléatoire ou aucune).
+/// 0x58966 / 0x58974: starts the guard from a leap (`+6` = 8, random counter-attack or none).
 fn guard_windup<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(COUNTER, 0);
     x.set8(f::SUB2, 8);
     guard_start(x);
 }
 
-/// 0x5897a : riposte tirée au hasard (0 ou 2), puis la garde.
+/// 0x5897a: counter-attack drawn at random (0 or 2), then the guard.
 fn guard_windup_random<R: Bench>(x: &mut Cx<'_, R>) {
     let n = rand_and(x, 1) * 2;
     x.set8(COUNTER_MOVE, n as u8);
@@ -207,7 +206,7 @@ fn guard_windup_random<R: Bench>(x: &mut Cx<'_, R>) {
     guard_start(x);
 }
 
-/// 0x58990 : la garde dure `0x3c` images, la posture passe à « en garde ».
+/// 0x58990: the guard lasts `0x3c` frames, the posture changes to "on guard".
 fn guard_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x3c);
@@ -215,7 +214,7 @@ fn guard_start<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 8);
 }
 
-/// 0x589ae : tient la garde, puis la relâche.
+/// 0x589ae: holds the guard, then releases it.
 fn guard_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         let t = x.u16(TIMER).wrapping_sub(1);
@@ -232,9 +231,9 @@ fn guard_wait<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-// --- sortie d'écran -----------------------------------------------------------------------------
+// --- screen exit -----------------------------------------------------------------------------
 
-/// Le squelette s'enfuit vers le bord le plus proche (`+6` = 10).
+/// The skeleton runs away toward the nearest edge (`+6` = 10).
 fn exit_screen<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set16(Obj::VX, -0x230i16 as u16);
@@ -258,7 +257,7 @@ fn exit_screen<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 8 : esquives ---------------------------------------------------------------------
+// --- substate 8: dodges ---------------------------------------------------------------------
 
 pub(super) fn run_dash<R: Bench>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
@@ -287,7 +286,7 @@ fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Course de côté : même animation que la glissade, pendant 0x20 images.
+/// Sideways run: same animation as the slide, for 0x20 frames.
 fn run_aside<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -311,7 +310,7 @@ fn run_aside<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
 }
 
-/// Esquive en profondeur (`+6` = 4) : course vers l'avant ou bond selon un tirage.
+/// Dodge in depth (`+6` = 4): run forward or leap according to a draw.
 fn dodge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -367,7 +366,7 @@ fn dodge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 10 : chute d'arrivée -------------------------------------------------------------
+// --- substate 10: arrival fall -------------------------------------------------------------
 
 pub(super) fn run_land<R: Bench>(x: &mut Cx<'_, R>) {
     land(x);

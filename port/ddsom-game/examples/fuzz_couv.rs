@@ -1,26 +1,26 @@
-//! Fuzz différentiel guidé par la couverture : valide contre l'original les chemins des routines natives que les
-//! scénarios n'exercent pas (docs/couverture-fonctions.md, « Validation par fuzz »).
+//! Coverage-guided differential fuzz: validates against the original the paths of native routines that the
+//! scenarios do not exercise (docs/couverture-fonctions.md, « Validation par fuzz »).
 //!
-//! Le scénario déroule la partie avec le code d'origine seul (machine de référence de `validate`). Aux appels d'une
-//! routine native ciblée, l'état réel est gardé comme base ; des copies en sont perturbées puis exécutées par le code
-//! d'origine (interprété, couverture relevée) et par la native, et comparées (mémoire, registres du contrat, PC).
+//! The scenario plays the game with the original code alone (`validate`'s reference machine). At calls to a
+//! targeted native routine, the real state is kept as a base; copies of it are perturbed and then run by the
+//! original code (interpreted, coverage collected) and by the native, and compared (memory, contract registers, PC).
 //!
-//! Les perturbations visent ce que l'original lit : chaque base est d'abord exécutée par l'original avec un bus qui
-//! journalise les lectures de RAM ; les octets et mots lus sont ensuite réécrits (valeurs petites, extrêmes, voisines,
-//! bits basculés). Les lectures faites juste avant un saut conditionnel dont un côté n'a jamais été pris par les
-//! scénarios (bitmap `FUZZ_UNION`, sortie fusionnée de `cov`) sont « chaudes » : elles sont tirées plus souvent, avec
-//! la valeur immédiate comparée et ses voisines. Une copie qui atteint une instruction nouvelle entre au corpus et
-//! sera de nouveau perturbée (fuzz évolutif).
+//! The perturbations target what the original reads: each base is first run by the original with a bus that
+//! logs RAM reads; the bytes and words read are then rewritten (small, extreme, neighboring values,
+//! flipped bits). Reads made just before a conditional jump of which one side was never taken by the
+//! scenarios (bitmap `FUZZ_UNION`, merged output of `cov`) are "hot": they are drawn more often, with
+//! the immediate value compared and its neighbors. A copy that reaches a new instruction enters the corpus and
+//! will be perturbed again (evolutionary fuzz).
 //!
-//!   fuzz_couv <roms> <eeprom> <scénario> <images> <cibles> <couverture.bin>
+//!   fuzz_couv <roms> <eeprom> <scenario> <frames> <targets> <coverage.bin>
 //!
-//! Cibles (séparées par des virgules) : code de zone de docs/atlas.md (`C04`), adresse d'entrée hexa (`0x8ec02`) ou
-//! préfixe de nom de native (`name:boss_`). `-name:préfixe` exclut. La sortie est un bitmap au format de `cov`
-//! (instructions de l'original exécutées pendant les essais), et `<exit>.identiques` celles des essais sans écart.
+//! Targets (comma-separated): zone code from docs/atlas.md (`C04`), hex entry address (`0x8ec02`) or
+//! native name prefix (`name:boss_`). `-name:prefix` excludes. The output is a bitmap in the format of `cov`
+//! (original instructions executed during the trials), and `<exit>.identiques` those of the trials without mismatch.
 //!
-//! Environnement : FUZZ_UNION (bitmap des scénarios), FUZZ_ATLAS (docs/atlas.md), FUZZ_PERIODE (16 : un appel sur
-//! n), FUZZ_POINTS (400 appels retenus au plus par native), FUZZ_ESSAIS (24 par appel retenu), FUZZ_GRAINE, FUZZ_PAS (300 000 instructions au plus pour l'original),
-//! FUZZ_EXEMPLES (3 par native), FUZZ_TRACE=1 (trace de l'original pour le premier écart).
+//! Environment: FUZZ_UNION (scenario bitmap), FUZZ_ATLAS (docs/atlas.md), FUZZ_PERIODE (16: one call out of
+//! n), FUZZ_POINTS (400 calls kept at most per native), FUZZ_ESSAIS (24 per call kept), FUZZ_GRAINE, FUZZ_PAS (at most 300,000 instructions for the original),
+//! FUZZ_EXEMPLES (3 per native), FUZZ_TRACE=1 (trace of the original for the first mismatch).
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap, HashSet};
@@ -33,7 +33,7 @@ use m68k::{Cpu, Ea, Op};
 
 use ddsom_game::mem::rd32;
 
-/// Bus de l'original pendant un essai : journalise les lectures de RAM de travail (adresse, taille, PC).
+/// Original's bus during a trial: logs work RAM reads (address, size, PC).
 struct Journal<'a> {
     b: &'a mut Cps2Bus,
     pc: u32,
@@ -44,10 +44,10 @@ impl Journal<'_> {
     fn note(&mut self, a: u32, size: u8) {
         if let Some(l) = self.reads.as_deref_mut() {
             let a = a & 0xff_ffff;
-            // ni la RAM du noyau (tâches, piles), ni la pile privée des wrappers de son et son pointeur, ni les
-            // listes triées (têtes, liens des objets) : des états qu'aucun code ne produit
+            // neither kernel RAM (tasks, stacks), nor the private stack of the sound wrappers and its pointer, nor the
+            // sorted lists (heads, object links): states that no code produces
             if a >= 0xff_1000 && !(0xff_2900..0xff_2a20).contains(&a) && !list_link(a) && !existence_or_type(a) && l.len() < 200_000 {
-                // lecture longue : deux mots consécutifs lus par la même instruction
+                // long read: two consecutive words read by the same instruction
                 if let Some(d) = l.last_mut().filter(|d| size == 2 && d.1 == 2 && d.2 == self.pc && d.0 + 2 == a) {
                     d.1 = 4;
                     return;
@@ -93,10 +93,10 @@ impl m68k::Bus for Journal<'_> {
 }
 
 thread_local! {
-    /// Adresse dont les écritures de l'original sont signalées (diagnostic `FUZZ_SURVEILLE`), 0 : aucune.
+    /// Address whose writes by the original are reported (`FUZZ_SURVEILLE` diagnostic), 0: none.
     static WATCHED: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
     static WATCHED_END: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
-    /// PC de l'original dont les registres sont montrés (`FUZZ_PC=address,...`) pendant la surveillance.
+    /// PC of the original whose registers are shown (`FUZZ_PC=address,...`) during the watch.
     static WATCHED_PCS: Vec<u32> = std::env::var("FUZZ_PC")
         .map(|v| v.split(',').filter_map(|x| u32::from_str_radix(x.trim_start_matches("0x"), 16).ok()).collect())
         .unwrap_or_default();
@@ -111,17 +111,17 @@ fn original_write(pc: u32, a: u32, size: u32, v: u32) {
     }
 }
 
-/// Une perturbation : écrire `value` (1, 2 ou 4 octets) en `address`.
+/// A perturbation: write `value` (1, 2 or 4 bytes) at `address`.
 #[derive(Clone, Copy, Debug)]
 struct Mutation {
     address: u32,
     size: u8,
     value: u32,
-    /// valeur déjà vue dans ce champ (même champ d'un autre objet du pool, autre appel) ou comparée par le code
+    /// value already seen in this field (same field of another pool object, another call) or compared by the code
     plausible: bool,
 }
 
-/// Clé d'un champ : (pool, type de l'objet, décalage dans l'emplacement) pour les objets, (joueur, décalage) pour les
+/// Key of a field: (pool, object type, offset in the slot) for objects, (player, offset) for
 /// joueurs, sinon l'adresse.
 fn key(b: &Cps2Bus, a: u32) -> u32 {
     use ddsom_game::objects::pools::POOLS;
@@ -139,8 +139,8 @@ fn key(b: &Cps2Bus, a: u32) -> u32 {
     a
 }
 
-/// Octets d'existence (`+0`) et de type (`+2`) des objets des pools : un objet ne naît ni ne change de type sous
-/// un gestionnaire (ses autres champs n'auraient pas l'état de ce type, et la boucle de dispatch laisserait des
+/// Existence (`+0`) and type (`+2`) bytes of the pool objects: an object is neither born nor changes type under
+/// a handler (its other fields would not have the state of this type, and the dispatch loop would leave
 /// registres d'un autre gestionnaire).
 fn existence_or_type(a: u32) -> bool {
     use ddsom_game::objects::pools::POOLS;
@@ -150,7 +150,7 @@ fn existence_or_type(a: u32) -> bool {
     })
 }
 
-/// Têtes et queues des listes triées (A5+0x5be-0x5c5) et liens `+0x24`/`+0x26` des objets listés et des joueurs.
+/// Heads and tails of the sorted lists (A5+0x5be-0x5c5) and `+0x24`/`+0x26` links of the listed objects and players.
 fn list_link(a: u32) -> bool {
     use ddsom_game::objects::pools::POOLS;
     if (0xff_85be..0xff_85c6).contains(&a) {
@@ -160,7 +160,7 @@ fn list_link(a: u32) -> bool {
     link(0xff_85de, 0x200, 4) || POOLS.iter().any(|p| p.listed && link(ddsom_game::mem::A5 + p.first, p.stride, p.slots))
 }
 
-/// Valeurs vues de chaque champ (clé, taille) dans les états de base.
+/// Values seen for each field (key, size) in the base states.
 type Domains = HashMap<(u32, u8), Vec<u32>>;
 
 fn read(b: &Cps2Bus, a: u32, size: u8) -> u32 {
@@ -173,8 +173,8 @@ fn read(b: &Cps2Bus, a: u32, size: u8) -> u32 {
     }
 }
 
-/// Lecture chaude : faite juste avant un saut conditionnel pris d'un seul côté, avec les valeurs qui pourraient
-/// basculer le saut.
+/// Hot read: made just before a conditional jump taken on one side only, with the values that could
+/// flip the jump.
 #[derive(Clone, Debug)]
 struct HotSpot {
     address: u32,
@@ -185,7 +185,7 @@ struct HotSpot {
 struct Base {
     c: Cpu,
     b: Cps2Bus,
-    /// état synthétisé depuis l'appel d'une autre entrée (substitution)
+    // state synthesized from the call of another entry (substitution)
     subst: bool,
     reads: Vec<(u32, u8)>,
     hot_spots: Vec<HotSpot>,
@@ -198,34 +198,34 @@ struct Summary {
     gaps: u64,
     panics: u64,
     abandons: u64,
-    /// essais écartés : l'original a sauté hors du code (table de sauts lue hors de ses bornes)
+    // discarded trials: the original jumped out of the code (jump table read out of its bounds)
     outside_code: u64,
-    /// essais dont l'original passe par une instruction que les scénarios n'exécutent pas, et écarts parmi eux
+    // trials where the original goes through an instruction the scenarios do not execute, and mismatches among them
     new_count: u64,
     new_gaps: u64,
-    /// écarts dont toutes les perturbations sont plausibles
+    // mismatches whose perturbations are all plausible
     plausible_gaps: u64,
     new_total: u64,
     examples: Vec<String>,
-    /// signatures d'écart déjà vues (première adresse en écart) : nombre d'occurrences
+    // mismatch signatures already seen (first address in mismatch): number of occurrences
     signatures: BTreeMap<String, u64>,
 }
 
 struct Target {
     n: &'static ddsom_game::Native,
     bases: Vec<Base>,
-    /// (base, perturbations) qui ont atteint une instruction nouvelle
+    // (base, perturbations) that reached a new instruction
     corpus: Vec<(usize, Vec<Mutation>)>,
     summary: Summary,
-    /// appels retenus pour le fuzz
+    // calls kept for the fuzz
     points: u64,
-    /// zone de l'atlas de l'entrée
+    // atlas zone of the entry
     zone: String,
-    /// gestionnaire d'une classe d'objets : (pool, type)
+    // handler of an object class: (pool, type)
     handler: Option<(usize, u8)>,
-    /// appels synthétisés (entrée jamais appelée, essayée depuis l'état d'une voisine)
+    // synthesized calls (entry never called, tried from the state of a neighbor)
     substitutions: u64,
-    /// bases qui ne passent pas par les zones visées
+    // bases that do not go through the targeted zones
     unfocused: u64,
 }
 
@@ -233,15 +233,15 @@ struct State {
     targets: HashMap<u32, Target>,
     union: Vec<u8>,
     seen: Vec<u8>,
-    /// instructions exécutées par des essais sans écart (l'original et la native sont identiques)
+    // instructions executed by trials without mismatch (the original and the native are identical)
     identical_seen: Vec<u8>,
-    /// sauts conditionnels pris d'un seul côté par les scénarios (adresse -> (cible, suite))
+    // conditional jumps taken on one side only by the scenarios (address -> (target, fall-through))
     boundary: HashMap<u32, (u32, u32)>,
     rng: Rng,
     domains: Domains,
-    /// essayer les entrées jamais appelées depuis l'état d'une voisine (`FUZZ_SUBSTITUTS`)
+    // try the never-called entries from the state of a neighbor (`FUZZ_SUBSTITUTS`)
     substituts: bool,
-    /// zones visées (`FUZZ_FOCUS=F3,C1`) : seules les bases qui y passent sont fuzzées
+    // targeted zones (`FUZZ_FOCUS=F3,C1`): only the bases that go through them are fuzzed
     focus: Vec<(u32, u32)>,
     period: u64,
     points_max: u64,
@@ -292,16 +292,16 @@ impl State {
     }
 }
 
-/// Résultat d'une exécution de l'original.
+/// Result of a run of the original.
 struct Original {
     c: Cpu,
     b: Cps2Bus,
     pcs: Vec<u32>,
-    /// resté dans le code (débuts d'instructions, tables de sauts lues dans leurs bornes)
+    // stayed in the code (instruction starts, jump tables read within their bounds)
     valid: bool,
 }
 
-/// Exécute le code d'origine (interprété) jusqu'au retour de la routine ; rend l'état final et les PC exécutés.
+/// Runs the original code (interpreted) until the routine returns; returns the final state and the PCs executed.
 fn run_original(c0: &Cpu, b0: &Cps2Bus, max_step: u32, mut reads: Option<&mut Vec<(u32, u8, u32)>>) -> Option<Original> {
     let (mut c, mut b) = (c0.clone(), b0.clone());
     let ret = rd32(&mut b, c.a[7]);
@@ -331,21 +331,21 @@ fn run_original(c0: &Cpu, b0: &Cps2Bus, max_step: u32, mut reads: Option<&mut Ve
     }
 }
 
-/// Débuts d'instructions de listing.txt (`FUZZ_LISTING`) ; vide : pas de contrôle.
+/// Instruction starts of listing.txt (`FUZZ_LISTING`); empty: no check.
 static INSTRUCTIONS: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
 
 fn instruction(a: u32) -> bool {
     INSTRUCTIONS.get().is_none_or(|bm| bm.is_empty() || a >= 0x10_0000 || bit(bm, a)) || execute(a)
 }
 
-/// Cibles de sauts du listing (`LAB_xxxxxxxx:`, `FUN_`) : du code, jamais une table.
+/// Jump targets of the listing (`LAB_xxxxxxxx:`, `FUN_`): code, never a table.
 static LABELS: std::sync::OnceLock<HashSet<u32>> = std::sync::OnceLock::new();
 
 fn label(a: u32) -> bool {
     LABELS.get().is_some_and(|e| e.contains(&a))
 }
 
-/// Instructions exécutées par les scénarios (`FUZZ_UNION`).
+/// Instructions executed by the scenarios (`FUZZ_UNION`).
 static UNION: std::sync::OnceLock<Vec<u8>> = std::sync::OnceLock::new();
 
 fn execute(a: u32) -> bool {
@@ -353,19 +353,19 @@ fn execute(a: u32) -> bool {
 }
 
 thread_local! {
-    /// longueur des tables de sauts (adresse de la table -> nombre d'entrées)
+    // length of the jump tables (table address -> number of entries)
     static TABLES: RefCell<HashMap<(u32, bool), u32>> = RefCell::new(HashMap::new());
 }
 
-/// Nombre d'entrées d'une table de sauts : décalages 16 bits depuis la table (elle finit où commence la première
-/// cible qui la suit), ou adresses longues ; chaque cible doit être un début d'instruction.
+/// Number of entries of a jump table: 16-bit offsets from the table (it ends where the first following
+/// target begins), or long addresses; each target must be an instruction start.
 fn table_length(b: &mut Cps2Bus, base: u32, long: bool) -> u32 {
     TABLES.with(|t| {
         *t.borrow_mut().entry((base, long)).or_insert_with(|| {
             let mut end = u32::MAX;
             for i in 0..512u32 {
-                // la table finit où commence du code que les scénarios exécutent (le listing désassemble parfois les
-                // tables comme des instructions)
+                // the table ends where code executed by the scenarios begins (the listing sometimes disassembles the
+                // tables as instructions)
                 let a = base + if long { 4 } else { 2 } * i;
                 if i > 0 && (execute(a) || label(a)) {
                     return i;
@@ -390,8 +390,8 @@ fn table_length(b: &mut Cps2Bus, base: u32, long: bool) -> u32 {
     })
 }
 
-/// Faux si l'instruction au PC lit une table de sauts (`move.w (d8,PC,Xn)` ou `move.l` suivi d'un `jmp`/`jsr`)
-/// au-delà de ses entrées : l'état perturbé est impossible.
+/// False if the instruction at PC reads a jump table (`move.w (d8,PC,Xn)` or `move.l` followed by a `jmp`/`jsr`)
+/// beyond its entries: the perturbed state is impossible.
 fn in_tables(c: &Cpu, b: &mut Cps2Bus) -> bool {
     if c.pc & 1 != 0 || !instruction(c.pc) {
         return false;
@@ -404,7 +404,7 @@ fn in_tables(c: &Cpu, b: &mut Cps2Bus) -> bool {
     };
     let (size, base, ext) = match ins.op {
         Op::Move(t, Ea::PcIdx(base, ext), _) | Op::Movea(t, Ea::PcIdx(base, ext), _) => (t, base, ext),
-        // `jmp`/`jsr (d8,PC,Xn)` dans une liste de `bra` : la cible doit être l'un d'eux
+        // `jmp`/`jsr (d8,PC,Xn)` in a list of `bra`: the target must be one of them
         Op::Jmp(Ea::PcIdx(base, ext)) | Op::Jsr(Ea::PcIdx(base, ext)) => {
             let mut a = base;
             let mut starts = Vec::new();
@@ -429,8 +429,8 @@ fn in_tables(c: &Cpu, b: &mut Cps2Bus) -> bool {
     index % step == 0 && index / step < table_length(b, base, step == 4)
 }
 
-/// Valeurs qu'un saut conditionnel compare à la mémoire lue par l'instruction `ins` (valeur immédiate et voisines,
-/// bit testé), à défaut des valeurs usuelles.
+/// Values that a conditional jump compares with the memory read by instruction `ins` (immediate value and neighbors,
+/// tested bit), failing that the usual values.
 fn hot_values(op: &Op) -> Vec<u32> {
     match *op {
         Op::Cmp(_, Ea::Imm(v), _) => vec![v, v.wrapping_add(1), v.wrapping_sub(1), 0],
@@ -442,16 +442,16 @@ fn hot_values(op: &Op) -> Vec<u32> {
     }
 }
 
-/// Exécute l'original sur la base pour journaliser ses lectures et repérer les lectures chaudes.
+/// Runs the original on the base to log its reads and spot the hot reads.
 fn analyse_base(e: &State, c: &Cpu, b: &Cps2Bus) -> Option<(Vec<(u32, u8)>, Vec<HotSpot>)> {
     let mut reads = Vec::new();
     let o = run_original(c, b, e.max_step, Some(&mut reads))?;
-    // zones visées (`FUZZ_FOCUS`) : la base doit y passer
+    // targeted zones (`FUZZ_FOCUS`): the base must go through them
     if !e.focus.is_empty() && !o.pcs.iter().any(|&p| e.focus.iter().any(|(d, f)| (*d..*f).contains(&p))) {
         return Some((Vec::new(), Vec::new()));
     }
     let mut bb = b.clone();
-    // lectures par instruction
+    // reads per instruction
     let mut by_pc: HashMap<u32, Vec<(u32, u8)>> = HashMap::new();
     let mut order = Vec::new();
     let mut views = HashSet::new();
@@ -461,7 +461,7 @@ fn analyse_base(e: &State, c: &Cpu, b: &Cps2Bus) -> Option<(Vec<(u32, u8)>, Vec<
             order.push((a, t));
         }
     }
-    // chaudes : lectures des deux instructions qui précèdent un saut de la frontière
+    // hot: reads of the two instructions preceding a jump of the frontier
     let mut hot_spots = Vec::new();
     let mut views_ch = HashSet::new();
     for w in o.pcs.windows(3) {
@@ -480,8 +480,8 @@ fn analyse_base(e: &State, c: &Cpu, b: &Cps2Bus) -> Option<(Vec<(u32, u8)>, Vec<
             }
         }
     }
-    // aiguillages par table de sauts : les lectures des trois instructions précédentes reçoivent les indices valides
-    // (bruts, ou divisés par 2 ou 4 : l'index est souvent doublé avant l'accès)
+    // jump-table dispatches: the reads of the three previous instructions receive the valid indices
+    // (raw, or divided by 2 or 4: the index is often doubled before the access)
     for w in o.pcs.windows(4) {
         let Some(indices) = table_indices(&mut bb, w[3]).filter(|v| !v.is_empty()) else { continue };
         let mut values: Vec<u32> = Vec::new();
@@ -505,8 +505,8 @@ fn analyse_base(e: &State, c: &Cpu, b: &Cps2Bus) -> Option<(Vec<(u32, u8)>, Vec<
     Some((order, hot_spots))
 }
 
-/// Index valides de l'aiguillage par table de sauts à `pc` (`move.w (d8,PC,Xn)` suivi d'un `jmp`/`jsr`, ou
-/// `jmp (d8,PC,Xn)` dans une liste de `bra`).
+/// Valid indices of the jump-table dispatch at `pc` (`move.w (d8,PC,Xn)` followed by a `jmp`/`jsr`, or
+/// `jmp (d8,PC,Xn)` in a list of `bra`).
 fn table_indices(b: &mut Cps2Bus, pc: u32) -> Option<Vec<u32>> {
     let ins = m68k::decode(b, pc);
     match ins.op {
@@ -550,14 +550,14 @@ fn mutate(e: &mut Rng, domains: &Domains, base: &Base, muts: &mut Vec<Mutation>)
         } else {
             return;
         };
-        // taille : parfois l'autre octet du mot, parfois l'octet seul d'un mot
+        // size: sometimes the other byte of the word, sometimes a single byte of a word
         let (address, size) = match (size, e.over(8)) {
             (2, 0) => (address + 1, 1),
             (2, 1) => (address, 1),
             (4, 0) => (address + 2, 2),
             _ => (address, size),
         };
-        // le type de l'objet courant (octet +2) ne change pas sous son gestionnaire
+        // the type of the current object (byte +2) does not change under its handler
         let current_type = (base.c.a[0] & 0xff_ffff) + 2;
         if (address..address + size as u32).contains(&current_type) {
             continue;
@@ -585,7 +585,7 @@ fn mutate(e: &mut Rng, domains: &Domains, base: &Base, muts: &mut Vec<Mutation>)
                 8 => current.wrapping_sub(1),
                 9 => 0x8000,
                 10 if !base.reads.is_empty() => {
-                    // valeur d'une autre lecture
+                    // value of another read
                     let (a2, _) = base.reads[e.over(base.reads.len() as u64) as usize];
                     read(&base.b, a2 & !1, 2)
                 }
@@ -622,8 +622,8 @@ fn describe(muts: &[Mutation]) -> String {
         .join(" ")
 }
 
-/// Table des tâches Rust de la native, reconstruite depuis la table FF0064 et le tas des piles de l'original (la
-/// machine de référence n'a pas de table Rust) : états, comptes, piles, entrées, piles libres.
+/// Table of the native's Rust tasks, rebuilt from the FF0064 table and the original's stack heap (the
+/// reference machine has no Rust table): states, counts, stacks, entries, free stacks.
 fn table_from_original(b: &mut Cps2Bus) {
     use ddsom_game::mem::{rd32, rd8};
     use ddsom_game::tasks::table::{self, Slot, State, Resume, Task};
@@ -649,8 +649,8 @@ fn table_from_original(b: &mut Cps2Bus) {
     *table::table(b) = t;
 }
 
-/// Exécute la native sur l'état `c0`/`b0` et la compare au résultat `o` de l'original : rend le message de panique ou
-/// les écarts (vide : identique).
+/// Runs the native on state `c0`/`b0` and compares it with the original's result `o`: returns the panic message or
+/// the mismatches (empty: identical).
 fn compare(n: &ddsom_game::Native, c0: &Cpu, b0: &Cps2Bus, o: &Original) -> Result<Vec<String>, String> {
     let (mut c1, mut b1) = (c0.clone(), b0.clone());
     b1.irq_horizon = u64::MAX;
@@ -675,7 +675,7 @@ fn compare(n: &ddsom_game::Native, c0: &Cpu, b0: &Cps2Bus, o: &Original) -> Resu
     if c1.pc != c2.pc {
         diffs.push(format!("pc={:06x} au lieu de {:06x}", c1.pc, c2.pc));
     }
-    // RAM du noyau d'origine : la native tient la table des tâches en Rust ; comparée à part
+    // original kernel RAM: the native keeps the task table in Rust; compared separately
     if let Some(t) = ddsom_game::tasks::table::read(&b1) {
         diffs.extend(ddsom_game::tasks::table::gaps(t, &b2.ram, false));
     }
@@ -689,7 +689,7 @@ fn compare(n: &ddsom_game::Native, c0: &Cpu, b0: &Cps2Bus, o: &Original) -> Resu
     Ok(diffs)
 }
 
-/// Signature d'un écart : première chose qui diffère (ou la panique).
+/// Signature of a mismatch: first thing that differs (or the panic).
 fn signature(r: &Result<Vec<String>, String>) -> Option<String> {
     match r {
         Err(msg) => Some(format!("PANIQUE {}", msg.chars().take(100).collect::<String>())),
@@ -698,13 +698,13 @@ fn signature(r: &Result<Vec<String>, String>) -> Option<String> {
     }
 }
 
-/// L'original n'est resté que sur des débuts d'instructions du listing (sinon l'état perturbé l'a fait sauter dans
-/// des données, par une table de sauts lue hors de ses bornes : état impossible, essai écarté).
+/// The original stayed only on instruction starts of the listing (otherwise the perturbed state made it jump into
+/// data, through a jump table read out of its bounds: impossible state, trial discarded).
 fn valid_path(_: &State, o: &Original) -> bool {
     o.valid
 }
 
-/// Un essai : la base perturbée, exécutée par l'original puis par la native.
+/// A trial: the perturbed base, run by the original then by the native.
 fn test(e: &mut State, entry: u32, ib: usize, muts: Vec<Mutation>) {
     let max_step = e.max_step;
     let state_of = |e: &State, muts: &[Mutation]| {
@@ -761,10 +761,10 @@ fn test(e: &mut State, entry: u32, ib: usize, muts: Vec<Mutation>) {
         target.summary.new_gaps += 1;
     }
     let outside = muts.iter().any(|m| !m.plausible);
-    // écart limité aux registres de sortie (sans effet tant qu'aucun appelant ne les relit)
+    // mismatch limited to the output registers (no effect as long as no caller rereads them)
     let regs = matches!(&r, Ok(d) if d.iter().all(|x| x.starts_with('d') || x.starts_with('a') && !x.starts_with("au") || x.starts_with("ccr")));
     target.summary.plausible_gaps += (!outside && !regs && !target.bases[ib].subst) as u64;
-    // entrée jamais appelée, essayée depuis l'état d'une voisine : ses registres d'entrée sont ceux d'un autre appel
+    // entry never called, tried from the state of a neighbor: its input registers are those of another call
     let subst = target.bases[ib].subst;
     let sig = format!("{}{}{}{}{}{sig}", if subst { "SUBST " } else { "" }, if regs { "REG " } else { "" }, if muts.is_empty() { "BASE " } else { "" }, if outside { "HORS " } else { "" }, if is_new { "NEUF " } else { "" });
     let count = target.summary.signatures.entry(sig.clone()).or_insert(0);
@@ -772,7 +772,7 @@ fn test(e: &mut State, entry: u32, ib: usize, muts: Vec<Mutation>) {
     if *count != 1 || target.summary.examples.len() >= e.examples {
         return;
     }
-    // réduction : on retire les perturbations dont l'écart ne dépend pas
+    // reduction: remove the perturbations the mismatch does not depend on
     let sig0 = signature(&r);
     let mut min = muts.clone();
     let mut k = 0;
@@ -806,16 +806,16 @@ fn test(e: &mut State, entry: u32, ib: usize, muts: Vec<Mutation>) {
         c0.d[1],
         o.pcs.iter().filter(|&&p| !bit(&e.union, p)).take(16).map(|p| format!("{p:x}")).collect::<Vec<_>>().join(" ")
     );
-    #[cfg(feature = "surveille")]
+    #[cfg(feature = "watch_writes")]
     if let Ok(a) = std::env::var("FUZZ_SURVEILLE") {
-        // pile d'appels Rust des écritures de la native à cette adresse
+        // Rust call stack of the native's writes to this address
         let (a, end) = a.split_once('-').unwrap_or((&a, "0"));
         let a = u32::from_str_radix(a.trim_start_matches("0x"), 16).unwrap();
         let end = u32::from_str_radix(end.trim_start_matches("0x"), 16).unwrap();
         ddsom_game::mem::watched::ADDRESS.store(a, std::sync::atomic::Ordering::Relaxed);
         ddsom_game::mem::watched::END.store(end, std::sync::atomic::Ordering::Relaxed);
         WATCHED_END.with(|x| x.set(end));
-        eprintln!("SURVEILLE {a:06x} pour {} {:06x} ({})", n.name, n.entry, describe(&min));
+        eprintln!("SURVEILLE {a:06x} for {} {:06x} ({})", n.name, n.entry, describe(&min));
         WATCHED.with(|x| x.set(a));
         let _ = run_original(&c0, &b0, max_step, None);
         WATCHED.with(|x| x.set(0));
@@ -842,7 +842,7 @@ fn fuzzer(entry: u32, c: &Cpu, b: &Cps2Bus) {
             target.summary.calls += 1;
             target.summary.calls
         };
-        // les premiers appels, puis un sur `période`, au plus `points` fois
+        // the first calls, then one out of `period`, at most `points` times
         if k > 4 && k % period != 1 || e.targets[&entry].points >= e.points_max {
             return;
         }
@@ -851,7 +851,7 @@ fn fuzzer(entry: u32, c: &Cpu, b: &Cps2Bus) {
         if !e.substituts {
             return;
         }
-        // une entrée de la même zone (ou un gestionnaire du même pool) jamais appelée, depuis cet état
+        // an entry of the same zone (or a handler of the same pool) never called, from this state
         let here = &e.targets[&entry];
         let (zone, pool) = (here.zone.clone(), here.handler.map(|g| g.0));
         let mut candidats: Vec<u32> = e
@@ -874,11 +874,11 @@ fn fuzzer(entry: u32, c: &Cpu, b: &Cps2Bus) {
         let mut b2 = b.clone();
         c2.pc = y;
         if e.targets[&y].handler.is_none() && key(&b2, c2.a[0] & 0xff_ffff) < 0x0100_0000 {
-            // A0 n'est pas un objet : un joueur (les sons lisent la position de l'objet A0)
+            // A0 is not an object: a player (the sounds read the position of object A0)
             c2.a[0] = 0xff_85de + 0x200 * e.over(4) as u32;
         }
         if let Some((_, t)) = e.targets[&y].handler {
-            // l'objet A0 devient du type de `y`, souvent à son état initial
+            // object A0 becomes of the type of `y`, often in its initial state
             let obj = c2.a[0] & 0xff_ffff;
             ddsom_game::mem::wr8(&mut b2, obj + 2, t);
             ddsom_game::mem::wr8(&mut b2, obj + 3, 0);
@@ -891,16 +891,16 @@ fn fuzzer(entry: u32, c: &Cpu, b: &Cps2Bus) {
     });
 }
 
-/// Fuzz de `entry` depuis l'état `c`, `b` (PC sur l'entrée) : nouvelle base, puis les essais.
+/// Fuzz of `entry` from state `c`, `b` (PC on the entry): new base, then the trials.
 fn fuzz_from(e: &mut State, entry: u32, c: &Cpu, b: &Cps2Bus, subst: bool) {
-    // nouvelle base (au plus 3 par native ; ensuite, remplacement d'une base au hasard avec son corpus)
+    // new base (at most 3 per native; then, replacement of a random base along with its corpus)
     let analysis = analyse_base(e, c, b);
     let Some((reads, hot_spots)) = analysis else {
         e.targets.get_mut(&entry).unwrap().summary.abandons += 1;
         return;
     };
     if !e.focus.is_empty() && reads.is_empty() {
-        // la base ne passe pas par les zones visées : au bout de 16, la native n'est plus essayée
+        // the base does not go through the targeted zones: after 16, the native is no longer tried
         let target = e.targets.get_mut(&entry).unwrap();
         target.unfocused += 1;
         if target.unfocused >= 16 && target.bases.is_empty() {
@@ -917,7 +917,7 @@ fn fuzz_from(e: &mut State, entry: u32, c: &Cpu, b: &Cps2Bus, subst: bool) {
         }
     }
     let base = Base { c: c.clone(), b: b.clone(), subst, reads, hot_spots };
-    // la base elle-même (sans perturbation) : couverture et contrôle
+    // the base itself (without perturbation): coverage and check
     let nb = e.targets[&entry].bases.len();
     let ib = if nb < 3 {
         e.targets.get_mut(&entry).unwrap().bases.push(base);
@@ -948,7 +948,7 @@ fn fuzz_from(e: &mut State, entry: u32, c: &Cpu, b: &Cps2Bus, subst: bool) {
     }
 }
 
-/// Tables de sauts des dix classes d'objets (0x398e2-0x39ff0, W0) : gestionnaire -> (pool, type).
+/// Jump tables of the ten object classes (0x398e2-0x39ff0, W0): handler -> (pool, type).
 fn handlers(b: &mut Cps2Bus) -> HashMap<u32, (usize, u8)> {
     use ddsom_game::objects::pools::POOLS;
     const TABLES: [(u32, u32); 10] = [
@@ -989,7 +989,7 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     ddsom_rc::run_block(pc, c, b, dl)
 }
 
-/// Zones de docs/atlas.md : (début, fin, code).
+/// Zones of docs/atlas.md: (start, end, code).
 fn zones(atlas: &str) -> Vec<(u32, u32, String)> {
     let mut v = Vec::new();
     for l in std::fs::read_to_string(atlas).expect("atlas").lines() {
@@ -1003,7 +1003,7 @@ fn zones(atlas: &str) -> Vec<(u32, u32, String)> {
     v
 }
 
-/// Sauts conditionnels du programme dont un seul côté a été exécuté par les scénarios.
+/// Conditional jumps of the program of which only one side was executed by the scenarios.
 fn boundary(b: &mut Cps2Bus, union: &[u8]) -> HashMap<u32, (u32, u32)> {
     let mut f = HashMap::new();
     for w in 0..0x80000u32 {
@@ -1024,7 +1024,7 @@ fn boundary(b: &mut Cps2Bus, union: &[u8]) -> HashMap<u32, (u32, u32)> {
     f
 }
 
-/// Débuts d'instructions de listing.txt (lignes `address  mnémonique`) ; étiquettes (`LAB_`, `; ---- FUN_`).
+/// Instruction starts of listing.txt (lines `address  mnemonic`); labels (`LAB_`, `; ---- FUN_`).
 fn instructions(listing: &str) -> Vec<u8> {
     let mut bm = vec![0u8; 0x10000];
     let mut labels = HashSet::new();
@@ -1051,7 +1051,7 @@ fn instructions(listing: &str) -> Vec<u8> {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 7 {
-        eprintln!("usage : fuzz_couv <roms> <eeprom> <scénario> <images> <cibles> <couverture.bin>");
+        eprintln!("usage: fuzz_couv <roms> <eeprom> <scenario> <frames> <targets> <coverage.bin>");
         std::process::exit(2);
     }
     let env = |k: &str, d: u64| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
@@ -1075,7 +1075,7 @@ fn main() {
             } else if let Some(h) = s.strip_prefix("0x") {
                 u32::from_str_radix(h, 16).is_ok_and(|x| x == n.entry)
             } else {
-                s == "*" || s == "tout" || zone_of(n.entry) == s
+                s == "*" || s == "all" || zone_of(n.entry) == s
             }
         };
         let excluded = specs.iter().filter_map(|s| s.strip_prefix('-')).any(wanted);
@@ -1083,7 +1083,7 @@ fn main() {
             targets.insert(n.entry, Target { n, bases: Vec::new(), corpus: Vec::new(), summary: Summary::default(), points: 0, zone: zone_of(n.entry).to_string(), handler: handlers.get(&n.entry).copied(), substitutions: 0, unfocused: 0 });
         }
     }
-    eprintln!("{} natives ciblées", targets.len());
+    eprintln!("{} targeted natives", targets.len());
     let union = std::env::var("FUZZ_UNION").ok().map(|f| std::fs::read(f).expect("union")).unwrap_or_else(|| vec![0; 0x10000]);
     let front = boundary(&mut m.bus.clone(), &union);
     UNION.set(union.clone()).unwrap();
@@ -1109,11 +1109,11 @@ fn main() {
             trace: std::env::var_os("FUZZ_TRACE").is_some(),
         })
     });
-    // les paniques des essais sont comptées, pas affichées (FUZZ_PANIQUES=1 : affichées)
+    // trial panics are counted, not displayed (FUZZ_PANIQUES=1: displayed)
     if std::env::var_os("FUZZ_PANIQUES").is_none() {
         std::panic::set_hook(Box::new(|_| {}));
     }
-    let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).expect("scenario");
     for f in 0..a[4].parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
@@ -1127,7 +1127,7 @@ fn main() {
     for c in sort {
         let b = &c.summary;
         println!(
-            "{:06x} {:32} {:>6} appels {:>6} essais ({:>5} neufs) {:>5} écarts ({:>5} neufs, {:>5} plausibles) {:>4} paniques {:>4} abandons {:>4} hors code {:>5} nouvelles{}",
+            "{:06x} {:32} {:>6} calls {:>6} trials ({:>5} new) {:>5} gaps ({:>5} new, {:>5} plausible) {:>4} panics {:>4} abandoned {:>4} outside code {:>5} fresh{}",
             c.n.entry, c.n.name, b.calls, b.tests, b.new_count, b.gaps, b.new_gaps, b.plausible_gaps, b.panics, b.abandons, b.outside_code, b.new_total, if c.substitutions > 0 && c.substitutions < u64::MAX { format!(" ({} substitutions)", c.substitutions) } else { String::new() }
         );
         total += b.gaps + b.panics;
@@ -1138,5 +1138,5 @@ fn main() {
             println!("    {x}");
         }
     }
-    println!("{}", if total == 0 { "FUZZ OK" } else { "FUZZ ÉCARTS" });
+    println!("{}", if total == 0 { "FUZZ OK" } else { "FUZZ MISMATCHES" });
 }

@@ -1,9 +1,9 @@
-//! État partagé `0xf7ecc` des sorties de scène : fondu au noir et préparation de la scène suivante.
+//! Shared state `0xf7ecc` of the scene exits: fade to black and preparation of the next scene.
 //!
-//! Trois sous-états (octet `+3` du bloc, pas de 2) : (0) fondu au noir, joueurs et objets remis à zéro, couches
-//! effacées, caméras à l'origine (la scène 105, fin du jeu, garde une caméra placée) ; (1) palettes de la scène
-//! suivante (table `0xf80c4`, quatre octets par scène) ; (2) script de transition propre à la scène (table de
-//! sauts `0xf81fa`, variables `A5-0x5520`, module [`super::transition`]).
+//! Three sub-states (byte `+3` of the block, step of 2): (0) fade to black, players and objects reset, layers
+//! cleared, cameras at the origin (scene 105, end of the game, keeps a camera in place); (1) palettes of the next
+//! scene (table `0xf80c4`, four bytes per scene); (2) transition script specific to the scene (table of
+//! jumps `0xf81fa`, variables `A5-0x5520`, module [`super::transition`]).
 
 use super::bonus::dispatch;
 use super::screen;
@@ -14,9 +14,9 @@ use crate::modes::{Flow, Sequence};
 use crate::Native;
 
 const DISPATCH: u32 = 0xf7eda;
-/// Palettes de la scène suivante : ensemble de la page 0 (négatif : aucun), puis D0 de 0x1a60a, 0x1a67e, 0x1a8b2.
+/// Palettes of the next scene: set for page 0 (negative: none), then D0 of 0x1a60a, 0x1a67e, 0x1a8b2.
 const PALETTES: u32 = 0xf80c4;
-/// La scène 105 (fin du jeu) prend les palettes et le script de la scène 69.
+/// Scene 105 (end of the game) takes the palettes and script of scene 69.
 const FINALE: u8 = 105;
 const FINALE_AS: u32 = 69;
 
@@ -33,7 +33,7 @@ fn next_sub_step(x: &mut Ctx) {
     wr8(x.b, a0 + 3, s);
 }
 
-/// Scène dont on lit les tables.
+/// Scene whose tables are read.
 fn table_scene(x: &mut Ctx) -> u32 {
     let scene = x.v8(0x34);
     if scene == FINALE { FINALE_AS } else { scene as u32 }
@@ -59,13 +59,13 @@ pub fn run(x: &mut Ctx) -> Flow {
 }
 
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
         Faded = at::FADED => |x| {
             x.set_v8(0x48e, 15);
             crate::palette::no_brightness(x.b);
             if x.v8(0x34) == FINALE {
-                // fin du jeu : caméras placées sur le décor final
+                // end of the game: cameras placed on the final terrain
                 for (off, v) in [(0x506, 0), (0x50a, 0x200), (0x51e, 4), (0x556, 0), (0x55a, 0x500), (0x56e, 4)] {
                     x.set_v16(off, v);
                 }
@@ -77,14 +77,14 @@ crate::steps! {
             for off in [0x602, 0x802, 0xa02, 0xc02] {
                 x.set_v32(off, 0);
             }
-            // Glitch d'origine : l'A0 que laisse le déliement des listes (le dernier objet délié) traverse la cession
+            // Original glitch: the A0 left by the list unlinking (the last unlinked object) survives the yield
             crate::objects::lists::unlink_all_68k(x.c, x.b);
             crate::sprites::clear_lists(x.b);
             crate::video::clear_objects(x.b);
             x.set_v16(0x14, 0x12c0 & 0xfff1);
             x.wait(1, Step::Cleared)
         },
-        /// Couches effacées, défilements et caméras remis à zéro.
+        /// Layers cleared, scrolls and cameras reset.
         Cleared = at::CLEARED => |x| {
             wr16(x.b, 0x400004, 0x1355);
             clear_layer(x.b, Layer::One);
@@ -119,7 +119,7 @@ crate::steps! {
     }
 }
 
-/// Sous-état 1 : les palettes de la scène suivante, puis l'écran de joueurs et le fondu.
+/// Sub-state 1: the palettes of the next scene, then the player screen and the fade.
 fn palettes(x: &mut Ctx) {
     next_sub_step(x);
     let at = PALETTES + 4 * table_scene(x);
@@ -127,7 +127,7 @@ fn palettes(x: &mut Ctx) {
     if (set as i8) >= 0 {
         crate::palette::load_palette_set(x.b, set as u16);
     }
-    // pages 1, 2 et 3 (0x1a60a, 0x1a67e, 0x1a8b2)
+    // pages 1, 2 and 3 (0x1a60a, 0x1a67e, 0x1a8b2)
     for page in 1..=3 {
         let n = rd8(x.b, at + page as u32);
         crate::palette::load_palette_page(x.b, page, n as u16);
@@ -137,7 +137,7 @@ fn palettes(x: &mut Ctx) {
     crate::palette::no_brightness(x.b);
 }
 
-/// Sous-état 2 : le script de transition de la scène (`transition`, table 0xf81fa).
+/// Sub-state 2: the scene's transition script (`transition`, table 0xf81fa).
 fn script(x: &mut Ctx) -> Flow {
     let scene = table_scene(x);
     super::transition::run(x, scene)

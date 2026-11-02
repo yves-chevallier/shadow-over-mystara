@@ -1,5 +1,5 @@
-//! Type 8, sous-état 2 : déplacements. `+6` = 0 poursuite lente, 2 demi-tour, 4 et 6 vol de poursuite (deux
-//! cadences), 8 plongeon vers la cible, 10 saut avec retombée.
+//! Type 8, substate 2: movements. `+6` = 0 slow pursuit, 2 turn-around, 4 and 6 pursuit flight (two paces), 8 dive
+//! toward the target, 10 jump with landing.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -18,7 +18,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Arrête le geste si un joueur saisit l'ennemi ou si plus personne n'est en vie ; vrai si l'état a changé.
+/// Stops the move if a player grabs the enemy or if nobody is alive any more; true if the state has changed.
 fn interrupted<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if grabbed(x) {
         go::held(x);
@@ -31,19 +31,19 @@ fn interrupted<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     false
 }
 
-/// Animation de vol en avant (3) ou en arrière (4) selon le sens de la vitesse (0x644f4).
+/// Forward (3) or backward (4) flight animation according to the direction of the speed (0x644f4).
 fn fly_forward_or_back<R: Bench>(x: &mut Cx<'_, R>) {
     let n = if lib::moving_forward(x) { 3 } else { 4 };
     fly(x, n);
 }
 
-/// Le jeu d'animations de vol correspondant au sens de la vitesse, à la même image (0x645b8).
+/// The flight animation set matching the direction of the speed, on the same frame (0x645b8).
 fn switch_flight_set<R: Bench>(x: &mut Cx<'_, R>) {
     let table = if lib::moving_forward(x) { SET_FLY_ALONG } else { SET_FLY_AGAINST };
     lib::switch_keeping_time(x, table);
 }
 
-/// 0x6563c / 0x65648 : cadence de poursuite lue selon la difficulté.
+/// 0x6563c / 0x65648: pursuit pace read according to difficulty.
 fn charge_a<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x65654 + level);
@@ -125,9 +125,9 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     fly(x, 0);
 }
 
-// --- +6 = 4 et 6 : vol de poursuite -----------------------------------------------------------------
+// --- +6 = 4 and 6: pursuit flight -----------------------------------------------------------------
 
-/// `second` : la variante 6 (`+0xa0 = 3`, cadence B), sinon la variante 4 (`+0xa0 = 2`, cadence A).
+/// `second`: variant 6 (`+0xa0 = 3`, pace B), otherwise variant 4 (`+0xa0 = 2`, pace A).
 fn glide<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     if interrupted(x) {
         return;
@@ -147,7 +147,7 @@ fn glide<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     glide_step(x);
 }
 
-/// 0x644b8 : début du vol.
+/// 0x644b8: start of the flight.
 fn begin_glide<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(Obj::AX, 0);
@@ -167,7 +167,7 @@ fn begin_glide<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6452c : un pas de vol ; change de geste quand les compteurs sont épuisés ou qu'un joueur est à portée.
+/// 0x6452c: one flight step; changes move when the counters are exhausted or a player is in range.
 fn glide_step<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(CHARGE).wrapping_sub(1);
     x.set8(CHARGE, n);
@@ -211,7 +211,7 @@ fn glide_step<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// 0x656f8 / 0x65716 : un joueur dans la boîte, puis la décision de l'IA (0, 1 ou 2).
+/// 0x656f8 / 0x65716: a player in the box, then the AI decision (0, 1 or 2).
 fn near_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u32 {
     if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
@@ -219,7 +219,7 @@ fn near_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u32 {
     lib::turn_decision(x) as u32
 }
 
-/// 0x6575a : choisit le geste d'attaque suivant (table par palier de PV `+0xaa`).
+/// 0x6575a: chooses the next attack move (table by HP threshold `+0xaa`).
 fn pick_a<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let table = [0x65792, 0x657a2, 0x657b2][x.u8(PHASE).min(2) as usize];
@@ -232,7 +232,7 @@ fn pick_a<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x657c8 : comme `pick_a`, mais selon le résultat `gate` de la décision de l'IA (1 : devant, 2 : derrière).
+/// 0x657c8: like `pick_a`, but according to the `gate` result of the AI decision (1: in front, 2: behind).
 fn pick_a2<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     *x.c.d2() = *x.c.d2() & !0xffff | gate;
     let r = rand_and(x, 0xf);
@@ -246,7 +246,7 @@ fn pick_a2<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     }
 }
 
-/// 0x65848 : tire un geste de repli (table par palier `+0xaa`).
+/// 0x65848: draws a fallback move (table by threshold `+0xaa`).
 fn pick_b<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     *x.c.d2() = *x.c.d2() & !0xffff | gate;
     let r = rand_and(x, 0xf);

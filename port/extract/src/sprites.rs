@@ -1,5 +1,5 @@
-//! Définitions des sprites : images (assemblages de cellules) et scripts d'animation, en JSON.
-//! Voir docs/assets.md pour les tables lues et le format.
+//! Sprite definitions: frames (cell assemblies) and animation scripts, as JSON.
+//! See docs/assets.md for the tables read and the format.
 
 use std::collections::{BTreeMap, HashSet};
 use std::io;
@@ -11,20 +11,20 @@ use ddsom_assets::sprites::{AnimSet, Anims, Entry, Family, Frame, Frames, Piece}
 
 use crate::rom::Program;
 
-/// Table des adresses d'images (un long par image, dans l'ordre des images).
+/// Table of frame addresses (one long per frame, in frame order).
 const FRAME_TABLE: u32 = 0x293000;
-/// Images, les unes à la suite des autres, puis tables de décalages des morceaux.
+/// Frames, one after the other, then piece offset tables.
 const FRAMES: Range<u32> = 0x2b45d8..0x37c3d2;
 const OFFSETS: Range<u32> = 0x37c3d2..0x3ec70a;
-/// Visualiseur de sprites du menu de test caché : noms des familles (4 caractères chacun), table de
-/// décalages (mots, relatifs à la table) vers les listes de jeux par variante, et nombre de variantes
-/// (octet bas d'un long par famille : 4 x (variantes - 1)).
+/// Sprite viewer of the hidden test menu: family names (4 characters each), offset
+/// table (words, relative to the table) toward the set lists per variant, and number of variants
+/// (low byte of a long per family: 4 x (variants - 1)).
 const VIEWER_NAMES: u32 = 0xefe16;
 const VIEWER_FAMILIES: u32 = 0xf0532;
 const VIEWER_VARIANTS: u32 = 0xf06c4;
-/// Familles à entrées longues (les douze `plNN`, test `cmpi.w #0x16` en 0xefa76).
+/// Families with long entries (the twelve `plNN`, test `cmpi.w #0x16` at 0xefa76).
 const LONG_FAMILIES: usize = 12;
-/// Région des scripts d'animation, parcourue pour les entrées qu'aucun jeu connu n'atteint.
+/// Region of the animation scripts, walked for the entries that no known set reaches.
 const SCRIPTS: Range<u32> = 0x120000..0x1d0000;
 
 pub fn extract(roms: &Path, dir: &Path) -> io::Result<()> {
@@ -41,7 +41,7 @@ fn bad(msg: String) -> io::Error {
     io::Error::new(io::ErrorKind::InvalidData, msg)
 }
 
-/// Lit l'image dont l'en-tête est en `at` ; renvoie aussi l'adresse qui la suit.
+/// Reads the frame whose header is at `at`; also returns the address that follows it.
 fn frame_at(rom: &Program, at: u32) -> (Frame, u32) {
     let (cost, attr, bank, mode, offsets) = (rom.rd16(at), rom.rd16(at + 2), rom.rd8(at + 4), rom.rd8(at + 5), rom.rd32(at + 6));
     let n = if mode != 0 { attr } else { cost } as u32;
@@ -62,20 +62,20 @@ fn frames(rom: &Program) -> io::Result<Frames> {
     while at < FRAMES.end {
         let (f, next) = frame_at(rom, at);
         if !OFFSETS.contains(&f.offsets) || f.pieces.is_empty() {
-            return Err(bad(format!("image illisible en {at:#x}")));
+            return Err(bad(format!("unreadable frame at {at:#x}")));
         }
         frames.push(f);
         at = next;
     }
     if at != FRAMES.end {
-        return Err(bad(format!("la dernière image déborde ({at:#x})")));
+        return Err(bad(format!("the last frame overflows ({at:#x})")));
     }
     for (i, f) in frames.iter().enumerate() {
         if rom.rd32(FRAME_TABLE + 4 * i as u32) != f.rom {
-            return Err(bad(format!("table des images : entrée {i} différente")));
+            return Err(bad(format!("frame table: entry {i} differs")));
         }
     }
-    // les tables de décalages couvrent exactement leur région
+    // the offset tables cover exactly their region
     let mut tables: BTreeMap<u32, u32> = BTreeMap::new();
     for f in &frames {
         let len = tables.entry(f.offsets).or_default();
@@ -84,12 +84,12 @@ fn frames(rom: &Program) -> io::Result<Frames> {
     let mut end = OFFSETS.start;
     for (&a, &len) in &tables {
         if a != end {
-            return Err(bad(format!("tables de décalages : trou ou chevauchement en {a:#x}")));
+            return Err(bad(format!("offset tables: gap or overlap at {a:#x}")));
         }
         end = a + len;
     }
     if end != OFFSETS.end {
-        return Err(bad(format!("tables de décalages : fin en {end:#x}")));
+        return Err(bad(format!("offset tables: end at {end:#x}")));
     }
     Ok(Frames { table: FRAME_TABLE, frames })
 }
@@ -102,7 +102,7 @@ struct Scan<'a> {
 }
 
 impl Scan<'_> {
-    /// Une entrée d'animation peut commencer en `a` : son image est un début d'image, sa durée non nulle.
+    /// An animation entry can start at `a`: its frame is a frame start, its duration non-null.
     fn plausible(&self, a: u32) -> bool {
         a % 2 == 0 && a + 24 <= self.rom.len() && self.starts.contains(&self.rom.rd32(a + 4)) && self.rom.rd16(a) != 0
     }
@@ -124,9 +124,9 @@ impl Scan<'_> {
         }
     }
 
-    /// Entrées du script qui commence en `a` (suites et sauts), sans les entrées déjà connues. Si l'une
-    /// d'elles n'est pas plausible : `None` (`strict`) ou arrêt du chemin (quelques scripts se terminent
-    /// sur une entrée « suite » que le jeu ne dépasse jamais).
+    /// Entries of the script starting at `a` (continuations and jumps), without the already known entries. If one
+    /// of them is not plausible: `None` (`strict`) or the path stops (a few scripts end
+    /// on a "continue" entry that the game never goes past).
     fn chain(&self, a: u32, long: bool, guessed: bool, strict: bool) -> Option<Vec<Entry>> {
         let mut out: Vec<Entry> = Vec::new();
         let mut todo = vec![a];
@@ -163,7 +163,7 @@ fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
         entries: BTreeMap::new(),
     };
 
-    // familles du visualiseur
+    // viewer families
     let mut families = Vec::new();
     for i in 0.. {
         let at = VIEWER_NAMES + 4 * i;
@@ -180,8 +180,8 @@ fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
         });
     }
 
-    // jeux : décalages jusqu'au premier script, au jeu suivant ou à une entrée d'animation, sans les
-    // derniers qui ne mènent à rien
+    // sets: offsets up to the first script, the next set or an animation entry, without the
+    // last ones which lead nowhere
     let mut kinds: BTreeMap<u32, bool> = BTreeMap::new();
     for f in &families {
         for &s in &f.sets {
@@ -206,8 +206,8 @@ fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
                 }
             }
         }
-        // un jeu dont le premier script n'est pas lisible n'en est pas un (bs16, variante 2 : décalages
-        // relatifs à un autre jeu)
+    // a set whose first script is not readable is not one (bs16, variant 2: offsets
+    // relative to another set)
         if !scripts.first().is_some_and(|&o| scan.plausible(s.wrapping_add(o as i32 as u32))) {
             valid = 0;
         }
@@ -229,8 +229,8 @@ fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
     }
     let from_sets = scan.entries.len();
 
-    // entrées isolées de la région des scripts : taille choisie pour que le script soit cohérent et,
-    // à défaut de mieux, suivi d'une autre entrée
+    // isolated entries of the region of the scripts: size chosen so the script is coherent and,
+    // failing better, followed by another entry
     let mut covered: HashSet<u32> = HashSet::new();
     for e in scan.entries.values() {
         covered.extend((e.rom..e.end()).step_by(2));
@@ -266,8 +266,8 @@ fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
     let entries: Vec<Entry> = scan.entries.into_values().collect();
     let overlaps = entries.windows(2).filter(|w| w[0].end() > w[1].rom).count();
     eprintln!(
-        "sprites : {} images, {} familles, {} jeux, {} entrées ({} par les jeux, {} isolées), \
-         {} scripts illisibles depuis les jeux, {} décalages sans script, {} débuts isolés illisibles, {} chevauchements",
+        "sprites: {} frames, {} families, {} sets, {} entries ({} by the sets, {} isolated), \
+         {} scripts unreadable from the sets, {} offsets without script, {} isolated starts unreadable, {} overlaps",
         frames.frames.len(),
         families.len(),
         sets.len(),

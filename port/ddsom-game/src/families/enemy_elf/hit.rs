@@ -1,12 +1,12 @@
-//! Type 12, état touché (`+4 = 4`, 0x6a160). `+5` : 0 et 6 réaction commune par table (`+0x49`), 2 recul,
-//! 4 chute, 8 saisie par un joueur (l'elfe disparaît).
+//! Type 12, hit state (`+4 = 4`, 0x6a160). `+5`: 0 and 6 common reaction by table (`+0x49`), 2 recoil, 4 fall, 8
+//! grabbed by a player (the elf disappears).
 
 use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
+/// Tables of the common reaction, indexed by reaction code `+0x49`.
 const REACT_FIRST: u32 = 0x6a206;
 const REACT_SECOND: u32 = 0x6a3a0;
 
@@ -33,7 +33,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Sous-état 2 : l'elfe recule (animation 7), puis se remet debout.
+/// Substate 2: the elf recoils (animation 7), then gets back on its feet.
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -60,7 +60,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Sous-état 4 : chute (animation 6), attente couché, relevé.
+/// Substate 4: fall (animation 6), wait lying down, get up.
 fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -97,7 +97,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Sous-état 8 (0x6a198) : saisi par un joueur ; l'animation 4 terminée, l'elfe disparaît.
+/// Substate 8 (0x6a198): grabbed by a player; once animation 4 is over, the elf disappears.
 pub(super) fn caught<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;

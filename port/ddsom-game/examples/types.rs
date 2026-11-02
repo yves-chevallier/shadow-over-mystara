@@ -1,7 +1,7 @@
-//! Couverture des types d'objets : nombre d'appels de chaque gestionnaire des tables de dispatch
-//! des familles ITEM, BOX et EFFCT sur un scénario (code d'origine seul).
-//!   types <roms> <eeprom> <scénario> <images>
-//! `TYPES_ETATS=1` : appels par état ; `TYPES_SCENES=1` : appels par scène (`FF8034`) de chaque gestionnaire.
+//! Coverage of the object types: number of calls of each handler of the dispatch tables
+//! of the ITEM, BOX and EFFCT families over a scenario (original code only).
+//!   types <roms> <eeprom> <scenario> <frames>
+//! `TYPES_ETATS=1`: calls per state; `TYPES_SCENES=1`: calls per scene (`FF8034`) of each handler.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -9,15 +9,15 @@ use std::path::Path;
 
 use m68k::Bus;
 
-/// (nom de la famille, table de sauts, nombre de types)
+/// (family name, jump table, number of types)
 const FAMILIES: &[(&str, u32, u32)] = &[("ITEM", 0x39f5a, 10), ("BOX", 0x39e76, 4), ("EFFCT", 0x39ce0, 64), ("ENEMY", 0x39a78, 29), ("PSHL", 0x39908, 25), ("PEFF", 0x39992, 48)];
 
 thread_local! {
     static CALLS: RefCell<BTreeMap<u32, u64>> = RefCell::new(BTreeMap::new());
     static IMAGE: RefCell<u32> = const { RefCell::new(0) };
     static FIRST: RefCell<BTreeMap<u32, u32>> = RefCell::new(BTreeMap::new());
-    /// (gestionnaire, variante, états +4 +5 +6) -> appels
-    /// gestionnaire -> scène (`FF8034`) -> appels
+    /// (handler, variant, states +4 +5 +6) -> calls
+    /// handler -> scene (`FF8034`) -> calls
     static SCENES: RefCell<BTreeMap<u32, BTreeMap<u8, u64>>> = RefCell::new(BTreeMap::new());
     static STATES: RefCell<BTreeMap<(u32, u8, u8, u8, u8), u64>> = RefCell::new(BTreeMap::new());
 }
@@ -40,12 +40,12 @@ fn run(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u32
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames] = &a[..] else {
-        eprintln!("usage : types <roms> <eeprom> <scénario> <images>");
+        eprintln!("usage: types <roms> <eeprom> <scenario> <frames>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    // TYPES_OVERCLOCK=16 : même cadence que `validate` (pas de ralentissements)
+    // TYPES_OVERCLOCK=16: same rate as `validate` (no slowdowns)
     if let Some(f) = std::env::var("TYPES_OVERCLOCK").ok().and_then(|v| v.parse().ok()) {
         m.set_overclock(f);
     }
@@ -59,7 +59,7 @@ fn main() {
         }
     }
     m.executor = Some(run);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..frames.parse().unwrap() {
         IMAGE.with(|i| *i.borrow_mut() = f as u32);
         script.apply(f, &mut m);
@@ -68,7 +68,7 @@ fn main() {
     if std::env::var_os("TYPES_ETATS").is_some() {
         for ((h, variant, e4, e5, e6), n) in STATES.with(|e| e.borrow().clone()) {
             let (name, t, _) = inputs.iter().find(|x| x.2 == h).copied().unwrap();
-            println!("ETAT {name} {t} variante {variant:02x} états {e4:02x} {e5:02x} {e6:02x} : {n}");
+            println!("ETAT {name} {t} variant {variant:02x} states {e4:02x} {e5:02x} {e6:02x}: {n}");
         }
         return;
     }
@@ -76,7 +76,7 @@ fn main() {
         for (name, t, h) in inputs {
             let scenes: Vec<String> = SCENES.with(|s| s.borrow().get(&h).map(|m| m.iter().map(|(sc, n)| format!("{sc:02x}:{n}")).collect()).unwrap_or_default());
             if !scenes.is_empty() {
-                println!("{name} {t} {h:06x} scènes {}", scenes.join(" "));
+                println!("{name} {t} {h:06x} scenes {}", scenes.join(" "));
             }
         }
         return;

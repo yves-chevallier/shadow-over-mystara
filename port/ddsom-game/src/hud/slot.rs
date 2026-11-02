@@ -1,4 +1,4 @@
-//! Machine à états d'un emplacement de joueur (voir le module `hud`).
+//! State machine of a player slot (see the `hud` module).
 
 use cps2::Cps2Bus;
 
@@ -8,34 +8,34 @@ use crate::mem::{prog16, prog8, rd32, rd8, wr32, wr8, A5};
 use crate::player::init::Join;
 use crate::scene::Ctx;
 
-/// Routines d'origine appelées par l'interface (comptabilité, sons, démarrage de joueur...).
+/// Original routines called by the interface (accounting, sounds, player start...).
 mod rom {
-    /// Classe du joueur selon son personnage (octet, tables du code).
+    /// Player class according to their character (byte, code tables).
     pub const CLASS_OF_CHARACTER: u32 = 0x158c0;
     pub const CLASS_OF_CHARACTER_ALT: u32 = 0x15e18;
 }
 
-/// Pointeurs vers les textes des bannières (tables de pointeurs dans le code).
+/// Pointers to the banner texts (pointer tables in the code).
 mod banners {
-    /// « PUSH START » hors reprise (deux langues, large puis étroit).
+    /// "PUSH START" outside continue (two languages, wide then narrow).
     pub const IDLE: u32 = 0x156ca;
-    /// Reprise : « PUSH START ».
+    /// Continue: "PUSH START".
     pub const IDLE_CONTINUE: u32 = 0x156da;
-    /// Bannière de pause (aussi quand un objet est présent).
+    /// Pause banner (also when an item is present).
     pub const NOTICE: u32 = 0x156ea;
-    /// « INSERT COIN » : un seul crédit ou prix de 1 pièce, pièces manquantes, plus d'une pièce.
+    /// "INSERT COIN": a single credit or price of 1 coin, missing coins, more than one coin.
     pub const INSERT_ONE: u32 = 0x15662;
     pub const INSERT: u32 = 0x15672;
     pub const INSERT_COUNT: u32 = 0x15682;
     pub const INSERT_COUNT_NARROW: u32 = 0x156a6;
 }
 
-/// Compte à rebours initial du choix (BCD 19, sous-compteur 0x32) et de la reprise (BCD 19, 0x3c).
+/// Initial countdown of the choice (BCD 19, sub-counter 0x32) and of the continue (BCD 19, 0x3c).
 const CHOOSE_COUNTDOWN: u16 = 0x1932;
 const RESUME_COUNTDOWN: u16 = 0x193c;
 const RESUME_END_FRAMES: u16 = 0x78;
 
-/// 0x1507a : oublie ce qui est affiché dans chaque panneau (le joueur et le mode seront redessinés).
+/// 0x1507a: forgets what is displayed in each panel (the player and the mode will be redrawn).
 pub fn forget_displayed(b: &mut Cps2Bus) {
     for k in 0..4 {
         let s = Slot::new(k);
@@ -44,8 +44,8 @@ pub fn forget_displayed(b: &mut Cps2Bus) {
     }
 }
 
-/// Compteur de pièces d'un emplacement selon le mode des monnayeurs : propre, partagé, ou un pour deux
-/// joueurs.
+/// Coin counter of a slot according to the coin slot mode: own, shared, or one for two
+/// players.
 fn coin_record(b: &mut Cps2Bus, s: Slot) -> u32 {
     match v8(b, var::COIN_MODE) {
         2 | 6 | 11 => s.coins,
@@ -54,7 +54,7 @@ fn coin_record(b: &mut Cps2Bus, s: Slot) -> u32 {
     }
 }
 
-/// 0x15216 : un tour d'un emplacement.
+/// 0x15216: one turn of a slot.
 pub fn step(x: &mut Ctx, s: Slot) {
     let frames = s.p32(x.b, panel::FRAMES).wrapping_add(1);
     s.set_p32(x.b, panel::FRAMES, frames);
@@ -77,10 +77,10 @@ pub fn step(x: &mut Ctx, s: Slot) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Changement de mode d'affichage (0x178ee)
+// Display mode change (0x178ee)
 // ---------------------------------------------------------------------------------------------
 
-/// Palette du joueur dans la page de la salle d'attente (indexée par son numéro et son personnage).
+/// Player palette in the waiting room page (indexed by their number and their character).
 const LOBBY_PALETTES: u32 = 0x179a2;
 
 fn mode_change(b: &mut Cps2Bus, s: Slot) {
@@ -122,7 +122,7 @@ fn mode_change(b: &mut Cps2Bus, s: Slot) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// État 0 : initialisation
+// State 0: initialization
 // ---------------------------------------------------------------------------------------------
 
 fn enter(b: &mut Cps2Bus, s: Slot) {
@@ -132,7 +132,7 @@ fn enter(b: &mut Cps2Bus, s: Slot) {
     init_shown(b, s);
 }
 
-/// 0x152a8 : les valeurs affichées sont celles du joueur ; tout sera redessiné.
+/// 0x152a8: the displayed values are those of the player; everything will be redrawn.
 fn init_shown(b: &mut Cps2Bus, s: Slot) {
     let hp = s.g16(b, player::HP);
     s.set_p16(b, panel::SHOWN_HP, hp);
@@ -159,10 +159,10 @@ fn init_shown(b: &mut Cps2Bus, s: Slot) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// État 2 : attente d'un joueur
+// State 2: waiting for a player
 // ---------------------------------------------------------------------------------------------
 
-/// Prix en crédits d'une partie (0 en mode reprise).
+/// Price in credits of a game (0 in continue mode).
 fn price(b: &mut Cps2Bus) -> u8 {
     if v8(b, var::CONTINUE_MODE) != 0 {
         0
@@ -180,7 +180,7 @@ fn start_pressed(b: &mut Cps2Bus, s: Slot) -> bool {
 
 fn idle(x: &mut Ctx, s: Slot) {
     let b = &mut *x.b;
-    // le joueur est déjà là (démarré autrement) : état « en jeu »
+    // the player is already there (started another way): "in game" state
     if s.g8(b, player::ACTIVE) != 0 && (s.g8(b, player::STATE) as i8) < 4 {
         s.set_p32(b, panel::FRAMES, 0);
         s.set_p8(b, panel::STATE, 4);
@@ -220,7 +220,7 @@ fn idle(x: &mut Ctx, s: Slot) {
     }
 }
 
-/// 0x156fa : le joueur entre directement dans la partie, sans choisir son personnage.
+/// 0x156fa: the player enters the game directly, without choosing their character.
 fn join_now(b: &mut Cps2Bus, s: Slot) {
     s.set_p32(b, panel::FRAMES, 0);
     s.set_p8(b, panel::STATE, 4);
@@ -231,8 +231,8 @@ fn join_now(b: &mut Cps2Bus, s: Slot) {
     init_shown(b, s);
 }
 
-/// Bannière de la zone « départ » à partir d'une table de pointeurs : `a2` est la table, le pointeur choisi
-/// est celui de la langue (`+4`) et de la disposition étroite (`+8`).
+/// Banner of the "start" zone from a pointer table: `a2` is the table, the chosen pointer
+/// is the one for the language (`+4`) and the narrow layout (`+8`).
 fn banner_from(b: &mut Cps2Bus, s: Slot, mut table: u32, attr: u16) {
     if v8(b, var::SETTINGS) & 0x20 != 0 {
         table += 4;
@@ -245,12 +245,12 @@ fn banner_from(b: &mut Cps2Bus, s: Slot, mut table: u32, attr: u16) {
     draw::pointer_banner(b, s, table, columns, attr);
 }
 
-/// 0x155b2 : bannière de pause (ou d'avertissement).
+/// 0x155b2: pause (or warning) banner.
 fn notice_banner(b: &mut Cps2Bus, s: Slot) {
     banner_from(b, s, banners::NOTICE, 0xe);
 }
 
-/// 0x1557a : « PUSH START » (ou « INSERT COIN » en attente de crédit).
+/// 0x1557a: "PUSH START" (or "INSERT COIN" while waiting for a credit).
 fn idle_banner(b: &mut Cps2Bus, s: Slot) {
     if v8(b, var::CONTINUE_MODE) != 0 {
         return banner_from(b, s, banners::IDLE_CONTINUE, 0xe);
@@ -258,7 +258,7 @@ fn idle_banner(b: &mut Cps2Bus, s: Slot) {
     banner_from(b, s, banners::IDLE, 0x1d);
 }
 
-/// 0x155ba : pas assez de crédits : « INSERT COIN » avec le nombre de pièces manquantes.
+/// 0x155ba: not enough credits: "INSERT COIN" with the number of missing coins.
 fn no_credit_banner(b: &mut Cps2Bus, s: Slot) {
     let credits = rd8(b, s.coins + 2);
     let paid = rd8(b, s.coins + 1);
@@ -277,7 +277,7 @@ fn no_credit_banner(b: &mut Cps2Bus, s: Slot) {
         }
         price.wrapping_sub(paid)
     };
-    // 0x155f0 : texte du nombre de pièces manquantes
+    // 0x155f0: text of the number of missing coins
     let mut table = banners::INSERT_COUNT;
     let mut columns = 17;
     if draw::narrow(b) {
@@ -291,7 +291,7 @@ fn no_credit_banner(b: &mut Cps2Bus, s: Slot) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// État 4 : le joueur est en jeu
+// State 4: the player is in the game
 // ---------------------------------------------------------------------------------------------
 
 fn play(x: &mut Ctx, s: Slot) {
@@ -311,7 +311,7 @@ fn play(x: &mut Ctx, s: Slot) {
     }
 }
 
-/// Mode 1 : met à jour les éléments qui ont changé, puis la jauge de PV.
+/// Mode 1: updates the elements that changed, then the HP gauge.
 fn update_panel(b: &mut Cps2Bus, s: Slot) {
     update_hp(b, s);
     update_selection(b, s);
@@ -325,7 +325,7 @@ fn update_panel(b: &mut Cps2Bus, s: Slot) {
     draw::hp_bar(b, s);
 }
 
-/// 0x16838 : les PV affichés rattrapent ceux du joueur (la baisse est progressive, un point par image).
+/// 0x16838: the displayed HP catch up with those of the player (the decrease is gradual, one point per frame).
 fn update_hp(b: &mut Cps2Bus, s: Slot) {
     let hp = s.g16(b, player::HP);
     let shown = s.p16(b, panel::SHOWN_HP);
@@ -344,13 +344,13 @@ fn update_hp(b: &mut Cps2Bus, s: Slot) {
     }
 }
 
-/// Octet de la table de classe (`+0x120` du joueur, ligne de 16 octets par famille `+0x15d`).
+/// Byte of the class table (`+0x120` of the player, 16-byte row per family `+0x15d`).
 fn selection_class(b: &mut Cps2Bus, s: Slot) -> u8 {
     let kind = s.g8(b, 0x15d) as u32;
     s.g8(b, 0x120 + (kind << 4))
 }
 
-/// 0x15f9e : l'image de sélection du joueur doit-elle être redessinée ?
+/// 0x15f9e: must the player's selection image be redrawn?
 fn update_selection(b: &mut Cps2Bus, s: Slot) {
     if s.g8(b, player::ACTIVE) == 0 {
         return;
@@ -375,7 +375,7 @@ fn update_selection(b: &mut Cps2Bus, s: Slot) {
     }
 }
 
-/// 0x15ffc : redessine les lettres et le nom de sélection quand ils ont changé.
+/// 0x15ffc: redraws the selection letters and name when they have changed.
 fn letters(b: &mut Cps2Bus, s: Slot) {
     if s.g8(b, player::ACTIVE) == 0 {
         return;
@@ -390,7 +390,7 @@ fn letters(b: &mut Cps2Bus, s: Slot) {
     choice::selection_name(b, s, class);
 }
 
-/// 0x15e1e : le score a-t-il changé ? (en colonnes étroites, après un délai)
+/// 0x15e1e: has the score changed? (in narrow columns, after a delay)
 fn score_changed(b: &mut Cps2Bus, s: Slot) {
     s.set_p8(b, panel::SCORE_DIRTY, 0);
     if draw::narrow(b) {
@@ -408,7 +408,7 @@ fn score_changed(b: &mut Cps2Bus, s: Slot) {
     }
 }
 
-/// 0x15e6e : l'argent a-t-il changé ?
+/// 0x15e6e: has the money changed?
 fn money_changed(b: &mut Cps2Bus, s: Slot) {
     s.set_p8(b, panel::MONEY_DIRTY, 0);
     if s.g32(b, player::MONEY) != s.p32(b, panel::SHOWN_MONEY) {
@@ -416,7 +416,7 @@ fn money_changed(b: &mut Cps2Bus, s: Slot) {
     }
 }
 
-/// 0x15e50 / 0x15e58 : redessine le score (suivi d'une case de fermeture en colonnes étroites).
+/// 0x15e50 / 0x15e58: redraws the score (followed by a closing cell in narrow columns).
 fn score_redraw(b: &mut Cps2Bus, s: Slot) {
     if s.p8(b, panel::SCORE_DIRTY) != 0 {
         draw_score(b, s);
@@ -430,7 +430,7 @@ fn draw_score(b: &mut Cps2Bus, s: Slot) {
     }
 }
 
-/// 0x15e86 : redessine l'argent s'il a changé.
+/// 0x15e86: redraws the money if it has changed.
 fn money_redraw(b: &mut Cps2Bus, s: Slot) {
     if s.g32(b, player::MONEY) == s.p32(b, panel::SHOWN_MONEY) || s.p8(b, panel::MONEY_DIRTY) == 0 {
         return;
@@ -444,7 +444,7 @@ fn money_redraw(b: &mut Cps2Bus, s: Slot) {
     }
 }
 
-/// 0x15ec8 : le nom du joueur (dispositions à plusieurs joueurs), ou le clignotement du joueur seul.
+/// 0x15ec8: the player name (multi-player layouts), or the blinking of the lone player.
 fn update_names(b: &mut Cps2Bus, s: Slot) {
     if v8(b, var::GAME_ON) == 0 {
         return;
@@ -486,14 +486,14 @@ fn update_names(b: &mut Cps2Bus, s: Slot) {
     choice::names_alt(b, s);
 }
 
-/// 0x15f44 : tout sera redessiné au prochain tour.
+/// 0x15f44: everything will be redrawn on the next turn.
 fn refresh_all(b: &mut Cps2Bus, s: Slot) {
     s.set_p8(b, panel::DISPLAYED_A, 0xff);
     s.set_p8(b, panel::PLAYER_DIRTY, 0xff);
     s.set_p8(b, panel::HP_DIRTY, 1);
 }
 
-/// 0x16878 : le joueur a changé : portrait, nom, jauge, objets, noms et valeurs sont redessinés.
+/// 0x16878: the player has changed: portrait, name, gauge, items, names and values are redrawn.
 fn redraw_player(b: &mut Cps2Bus, s: Slot) {
     if s.p8(b, panel::PLAYER_DIRTY) == 0 || v8(b, var::DISPLAY) == 0 {
         return;
@@ -505,7 +505,7 @@ fn redraw_player(b: &mut Cps2Bus, s: Slot) {
     redraw_all(b, s);
 }
 
-/// 0x168a2 : redessine toutes les zones du joueur.
+/// 0x168a2: redraws all the zones of the player.
 fn redraw_all(b: &mut Cps2Bus, s: Slot) {
     draw::portrait(b, s, false);
     let character = s.g8(b, player::CHARACTER);
@@ -529,7 +529,7 @@ fn redraw_all(b: &mut Cps2Bus, s: Slot) {
     draw_score(b, s);
 }
 
-/// Mode 2 (classement) : les objets du joueur, ou la bannière si le joueur a des conditions particulières.
+/// Mode 2 (ranking): the player's items, or the banner if the player has special conditions.
 fn rank_mode(b: &mut Cps2Bus, s: Slot) {
     if s.p8(b, panel::HINT) != 0 {
         return notice_banner(b, s);
@@ -543,7 +543,7 @@ fn rank_mode(b: &mut Cps2Bus, s: Slot) {
     choice::rank_items(b, s);
 }
 
-/// Mode 3 (choix verrouillé des joueurs) : le personnage choisi par chaque joueur s'affiche, sans doublon.
+/// Mode 3 (locked choice of the players): the character chosen by each player is displayed, without duplicates.
 fn lock_mode(b: &mut Cps2Bus, s: Slot) {
     if s.p8(b, panel::FLAG_27) == 0xfe {
         return;
@@ -581,17 +581,17 @@ fn lock_mode(b: &mut Cps2Bus, s: Slot) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// État 6 : choix du personnage
+// State 6: character choice
 // ---------------------------------------------------------------------------------------------
 
-/// Un bouton (partie haute des fronts montants) vient-il d'être pressé ?
+/// Has a button (upper part of the rising edges) just been pressed?
 fn button_pressed(b: &mut Cps2Bus, s: Slot) -> bool {
     let index = s.index(b);
     select::inputs(b, index).1 & 0xf0 != 0
 }
 
-/// Le compte à rebours BCD du panneau perd une unité et repart pour `frames` images ; vrai (sans rien
-/// changer) s'il passe sous zéro.
+/// The panel's BCD countdown loses one unit and restarts for `frames` frames; true (without
+/// changing anything) if it goes below zero.
 fn tick_countdown(b: &mut Cps2Bus, s: Slot, frames: u8) -> bool {
     let (value, _) = sbcd(s.p8(b, panel::COUNTDOWN), 1, false);
     if value & 0x80 != 0 {
@@ -602,12 +602,12 @@ fn tick_countdown(b: &mut Cps2Bus, s: Slot, frames: u8) -> bool {
     false
 }
 
-/// Le bouton de départ du joueur est-il tout juste pressé ?
+/// Has the player's start button just been pressed?
 fn start_edge(b: &mut Cps2Bus, s: Slot) -> bool {
     start_pressed(b, s)
 }
 
-/// 0x157a8 : redessine l'écran de choix (après une pause).
+/// 0x157a8: redraws the choice screen (after a pause).
 fn redraw_choice(b: &mut Cps2Bus, s: Slot) {
     draw::portrait(b, s, false);
     let choice = s.p8(b, panel::CHOICE);
@@ -616,7 +616,7 @@ fn redraw_choice(b: &mut Cps2Bus, s: Slot) {
     s.set_p8(b, panel::PLAYER_DIRTY, 0);
 }
 
-/// 0x15788 : le joueur choisit son personnage (croix : suivant ou précédent, temps limité).
+/// 0x15788: the player chooses their character (d-pad: next or previous, limited time).
 fn choose(x: &mut Ctx, s: Slot) {
     let b = &mut *x.b;
     let pause = v8(b, var::PAUSE);
@@ -665,7 +665,7 @@ fn choose(x: &mut Ctx, s: Slot) {
         let variant = s.p8(b, panel::CHOICE) ^ 1;
         s.set_p8(b, panel::CHOICE, variant);
     }
-    // le choix est fait (bouton, ou fin du temps)
+    // the choice is made (button, or time out)
     let current = s.p8(b, panel::CHOICE);
     let chosen = select::free_choice(b, current, false);
     s.set_p8(b, panel::CHOICE, chosen);
@@ -679,9 +679,9 @@ fn choose(x: &mut Ctx, s: Slot) {
     start_player(x, s, Join::New);
 }
 
-/// 0x1588c : l'arrivée du joueur de ce panneau, puis le réglage du personnage 5. Les tables du code (0x158b8 :
-/// 0x2f46... nouveau joueur, 0x15de0 : 0x3142... recharge, 0x15e10 : 0x3048... reprise) donnent l'entrée de
-/// `player::init::join_player` propre au joueur.
+/// 0x1588c: the arrival of this panel's player, then the setting of character 5. The code tables (0x158b8:
+/// 0x2f46... new player, 0x15de0: 0x3142... reload, 0x15e10: 0x3048... continue) give the entry of
+/// `player::init::join_player` specific to the player.
 fn start_player(x: &mut Ctx, s: Slot, how: Join) {
     let index = s.index(x.b);
     crate::player::init::join_player(x.c, x.b, index, how);
@@ -694,10 +694,10 @@ fn start_player(x: &mut Ctx, s: Slot, how: Join) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// États 8, 0xa, 0xc : reprise
+// States 8, 0xa, 0xc: continue
 // ---------------------------------------------------------------------------------------------
 
-/// 0x15a26 : le joueur est tombé (état 0x402) : début de la reprise.
+/// 0x15a26: the player has fallen (state 0x402): start of the continue.
 fn join_continue(x: &mut Ctx, s: Slot) {
     let frames = s.p32(x.b, panel::FRAMES);
     crate::eeprom::stat_game_duration(x.b, frames);
@@ -715,7 +715,7 @@ fn join_continue(x: &mut Ctx, s: Slot) {
         s.set_g8(b, player::FLAGS, flags);
         s.set_p8(b, panel::CLAIM, 0);
     }
-    // un joueur arrive : le rang baisse (`objects::rank`)
+    // a player arrives: the rank drops (`objects::rank`)
     crate::objects::rank::lower(x.b);
     let b = &mut *x.b;
     s.set_p8(b, panel::STEP, 0);
@@ -730,12 +730,12 @@ fn join_continue(x: &mut Ctx, s: Slot) {
     resume(x, s);
 }
 
-/// Aucun panneau n'est en reprise (somme des sous-étapes nulle) : le joueur est le seul à attendre.
+/// No panel is in continue (sum of the sub-steps is zero): the player is the only one waiting.
 fn others_free(b: &mut Cps2Bus) -> bool {
     (0..4).fold(1u8, |free, k| free.wrapping_sub(Slot::new(k).p8(b, panel::SUBSTEP))) == 0
 }
 
-/// Pièces comptées pour la reprise de ce joueur : les pièces partielles du prix, ou les crédits.
+/// Coins counted for this player's continue: the partial coins of the price, or the credits.
 fn coins_inserted(b: &mut Cps2Bus, s: Slot) -> u8 {
     if v8(b, var::PRICE_TWO) == 0 && v8(b, var::PRICE) != 1 {
         rd8(b, s.coins + 1)
@@ -744,7 +744,7 @@ fn coins_inserted(b: &mut Cps2Bus, s: Slot) -> u8 {
     }
 }
 
-/// 0x15a9c : le compte à rebours repart de 19 secondes, avec les pièces actuelles en mémoire.
+/// 0x15a9c: the countdown restarts from 19 seconds, with the current coins in memory.
 fn restart_countdown(b: &mut Cps2Bus, s: Slot) {
     let coins = coins_inserted(b, s);
     s.set_p8(b, panel::SHOWN_COINS, coins);
@@ -752,8 +752,8 @@ fn restart_countdown(b: &mut Cps2Bus, s: Slot) {
     draw::continue_digits(b, s);
 }
 
-/// 0x15ac4 : compte à rebours de la reprise : il repart quand une pièce est insérée, se précipite quand un
-/// bouton est pressé dans les dernières secondes, et la reprise a lieu sur la touche de départ.
+/// 0x15ac4: continue countdown: it restarts when a coin is inserted, rushes when a
+/// button is pressed in the last seconds, and the continue takes place on the start key.
 fn resume(x: &mut Ctx, s: Slot) {
     let b = &mut *x.b;
     if s.p8(b, panel::FLAG_27) != 0 {
@@ -823,8 +823,8 @@ fn resume(x: &mut Ctx, s: Slot) {
     }
 }
 
-/// 0x15c0c : la reprise est refusée ou le temps est écoulé : la partie du joueur est terminée et son argent
-/// s'ajoute à son score (plafonné).
+/// 0x15c0c: the continue is refused or the time has run out: the player's game is over and their money
+/// is added to their score (capped).
 fn resume_declined(b: &mut Cps2Bus, s: Slot) {
     s.set_p8(b, panel::SUBSTEP, 0);
     s.set_p8(b, panel::FLAG_27, 1);
@@ -832,7 +832,7 @@ fn resume_declined(b: &mut Cps2Bus, s: Slot) {
     wr32(b, s.player + player::STATE, 0x0600_0000);
     let money = rd32(b, s.player + player::MONEY) & !0xf;
     wr32(b, s.player + player::MONEY, money);
-    // score += argent, en décimal codé (octet par octet, de la fin)
+    // score += money, in packed decimal (byte by byte, from the end)
     let mut carry = false;
     let mut sum = [0u8; 4];
     for k in (0..4u32).rev() {
@@ -846,7 +846,7 @@ fn resume_declined(b: &mut Cps2Bus, s: Slot) {
     wr32(b, s.player + player::SCORE, if (total as i32) <= 0x999_9999 { total } else { 0x999_9999 });
 }
 
-/// 0x15c50 : fin de la reprise : la bannière de fin s'affiche, puis l'état 0xa attend la fin du message.
+/// 0x15c50: end of the continue: the end banner is displayed, then state 0xa waits for the end of the message.
 pub fn resume_end_enter(b: &mut Cps2Bus, s: Slot) {
     s.set_p8(b, panel::FLAG_27, 0);
     draw::start_banner(b, s, draw::START_BANNER_B);
@@ -855,7 +855,7 @@ pub fn resume_end_enter(b: &mut Cps2Bus, s: Slot) {
     resume_end(b, s);
 }
 
-/// 0x15c64 : état 0xa, le message de fin reste affiché 120 images, puis le panneau est libéré.
+/// 0x15c64: state 0xa, the end message stays displayed for 120 frames, then the panel is released.
 fn resume_end(b: &mut Cps2Bus, s: Slot) {
     s.set_p8(b, panel::FLAG_27, 0);
     let left = s.p16(b, panel::COUNTDOWN).wrapping_sub(1);
@@ -871,7 +871,7 @@ fn resume_end(b: &mut Cps2Bus, s: Slot) {
     s.set_p8(b, panel::PLAYER_DIRTY, 0xff);
 }
 
-/// 0x15cae : redessine l'écran de choix de la reprise (après une pause).
+/// 0x15cae: redraws the continue choice screen (after a pause).
 fn redraw_resume_choice(b: &mut Cps2Bus, s: Slot) {
     draw::portrait(b, s, false);
     let choice = s.p8(b, panel::CHOICE);
@@ -884,8 +884,8 @@ fn redraw_resume_choice(b: &mut Cps2Bus, s: Slot) {
     s.set_p8(b, panel::PLAYER_DIRTY, 0);
 }
 
-/// 0x15c8e : état 0xc, le joueur qui reprend choisit son personnage ; il peut reprendre celui de sa partie
-/// (même personnage : il garde son équipement) ou un autre.
+/// 0x15c8e: state 0xc, the continuing player chooses their character; they may resume the one from their game
+/// (same character: they keep their equipment) or another one.
 fn resume_choose(x: &mut Ctx, s: Slot) {
     let b = &mut *x.b;
     let pause = v8(b, var::PAUSE);
@@ -940,7 +940,7 @@ fn resume_choose(x: &mut Ctx, s: Slot) {
         let variant = s.p8(b, panel::CHOICE) ^ 1;
         s.set_p8(b, panel::CHOICE, variant);
     }
-    // le choix est fait : le dernier chiffre du score avance (jusqu'à 9)
+    // the choice is made: the last digit of the score advances (up to 9)
     let last = s.g8(b, 0x113);
     if last & 0xf != 9 {
         s.set_g8(b, 0x113, last.wrapping_add(1));

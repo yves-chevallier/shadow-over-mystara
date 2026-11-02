@@ -1,14 +1,14 @@
-//! Collisions et résolution des coups (sous-systèmes X1 et X2 de l'atlas).
+//! Collisions and hit resolution (subsystems X1 and X2 of the atlas).
 //!
-//! Chaque image, `combat_update` (0x260ee) confronte les boîtes des objets visibles : les listes par
-//! catégorie remplies par `sprites::check_visible` (FFFE72.. et tableaux FFFE86..) sont parcourues
-//! par paires (attaquant, victime) ; une paire dont les boîtes se recouvrent déclenche l'application
-//! du coup (états, points de vie, étincelles, sons). Voir `docs/combat.md` pour les formats.
+//! Each frame, `combat_update` (0x260ee) confronts the boxes of the visible objects: the per-category lists
+//! filled by `sprites::check_visible` (FFFE72.. and arrays FFFE86..) are walked
+//! in (attacker, victim) pairs; a pair whose boxes overlap triggers the application
+//! of the hit (states, hit points, sparks, sounds). See `docs/combat.md` for the formats.
 //!
-//! La logique suit l'original instruction par instruction (mêmes lectures/écritures de la RAM,
-//! mêmes arithmétiques 8/16 bits) mais s'exprime sur des vues typées des objets. Les sous-routines
-//! hors du périmètre (allocation d'effets, sons, affichage des jauges, RNG...) sont appelées telles
-//! quelles par `crate::call`.
+//! The logic follows the original instruction by instruction (same RAM reads/writes,
+//! same 8/16-bit arithmetic) but is expressed on typed views of the objects. The subroutines
+//! outside the scope (effect allocation, sounds, gauge display, RNG...) are called as is
+//! through `crate::call`.
 
 use cps2::Cps2Bus;
 use m68k::{Cpu, SR_Z};
@@ -18,7 +18,7 @@ pub use crate::objects::Obj;
 use crate::objects::pools;
 use crate::{call, Native};
 
-/// Compteurs d'appel des routines réécrites (couverture de la validation).
+/// Call counters of the rewritten routines (validation coverage).
 mod cov {
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -40,12 +40,12 @@ mod cov {
     }
 }
 
-/// Active le comptage des appels des routines internes (outil `combat_coverage`).
+/// Enables counting the calls of the internal routines (tool `combat_coverage`).
 pub use cov::enable as enable_coverage;
-/// Nombre d'appels de chaque routine interne depuis l'activation.
+/// Number of calls of each internal routine since activation.
 pub use cov::report as coverage;
 
-/// Trace de mise au point (variable DDSOM_TRACE).
+/// Debug trace (variable DDSOM_TRACE).
 macro_rules! trace {
     ($($a:tt)*) => { if std::env::var("DDSOM_TRACE").is_ok() { eprintln!($($a)*); } };
 }
@@ -58,7 +58,7 @@ use contact::*;
 use damage::*;
 use shots::*;
 
-/// Variables de A5 (RAM FF8000) lues par les collisions (les variables partagées avec les joueurs sont dans
+/// A5 variables (RAM FF8000) read by the collisions (the variables shared with the players are in
 /// `player::ram`).
 mod ram {
     use crate::mem::A5;
@@ -67,16 +67,16 @@ mod ram {
     pub use crate::player::ram::{
         FROZEN, INPUT_RAW as SCRIPTED_A, KILL_FLAG, PAUSE, PLAYERS_ALIVE, SCRIPTED_B, TICK, DSW,
     };
-    /// Difficulté (> 5 : attaques ennemies renforcées).
+    /// Difficulty (> 5: strengthened enemy attacks).
     pub const DIFFICULTY: Byte = Byte::a5(0x48);
-    /// Réglage de dégâts du jeu (0, 2, 4, 6 : table de barème d'attaque ennemie).
+    /// Game damage setting (0, 2, 4, 6: enemy attack scale table).
     pub const DAMAGE_SETTING: Word = Word::a5(0x70);
-    /// Entrées courantes (un octet par joueur) et celles de l'image précédente (`FF8000`, `FF8006`).
+    /// Current inputs (one byte per player) and those of the previous frame (`FF8000`, `FF8006`).
     pub const INPUTS: u32 = A5;
     pub const INPUTS_PREV: u32 = A5 + 6;
 }
 
-/// Compteurs de boucle que l'original tient en RAM (FF1A62..) : leur valeur finale est visible.
+/// Loop counters that the original keeps in RAM (FF1A62..): their final value is visible.
 mod scratch {
     pub const PLAYER_HITS_ENEMY: u32 = 0xff1a62;
     pub const SHOTS_OUTER: u32 = 0xff1a64;
@@ -88,42 +88,42 @@ mod scratch {
     pub const ITEMS: u32 = 0xff1a70;
 }
 
-/// Champs d'un objet (joueur, ennemi, tir, caisse, objet). Les noms marqués (h) sont des
-/// hypothèses tirées de l'usage.
+/// Fields of an object (player, enemy, shot, crate, item). The names marked (h) are
+/// guesses drawn from usage.
 mod f {
-    /// Octet : 0 libre ; bit 0 actif ; 2 = en agonie / consommé (ne participe plus).
+    /// Byte: 0 free; bit 0 active; 2 = dying / consumed (no longer participates).
     pub const ACTIVE: u32 = 0x00;
     pub const FLAGS: u32 = 0x01;
-    /// Type d'objet (tir : n° de comportement au contact ; joueur : index du joueur).
+    /// Object type (shot: contact behaviour no.; player: player index).
     pub const KIND: u32 = 0x02;
-    /// Variante ; pour un joueur, `VARIANT >> 1` = classe (0 combattant .. 5 voleur).
+    /// Variant; for a player, `VARIANT >> 1` = class (0 fighter .. 5 thief).
     pub const VARIANT: u32 = 0x03;
-    /// Long : état principal, sous-état, action et octet 7 (voir `state`).
+    /// Long: main state, substate, action and byte 7 (see `state`).
     pub const STATE: u32 = 0x04;
     pub const SUBSTATE: u32 = 0x05;
     pub const ACTION: u32 = 0x06;
     pub const X: u32 = 0x08;
-    /// Hauteur au-dessus du sol.
+    /// Height above the ground.
     pub const Z: u32 = 0x0c;
-    /// Profondeur (clé de tri des sprites).
+    /// Depth (sprite sort key).
     pub const Y: u32 = 0x10;
     pub const VX: u32 = 0x14;
-    /// Classe de pool : 2 ennemi, 4 boss, 6 tir joueur, 8 tir ennemi...
+    /// Pool class: 2 enemy, 4 boss, 6 player shot, 8 enemy shot...
     pub const CLASS: u32 = 0x28;
-    /// Non nul : l'objet regarde à gauche (les décalages X des boîtes sont inversés).
+    /// Non-zero: the object faces left (the X offsets of the boxes are inverted).
     pub const FLIP: u32 = 0x2c;
     pub const FACING_AUX: u32 = 0x2d;
-    /// Jeu de boîtes (index dans les tables de pointeurs de boîtes).
+    /// Box set (index into the box pointer tables).
     pub const BOX_SET: u32 = 0x2e;
     pub const BODY_BOX: u32 = 0x38;
     pub const PUSH_BOX: u32 = 0x39;
     pub const ATTACK_BOX: u32 = 0x3a;
     pub const ATTACK_KIND: u32 = 0x3c;
     pub const ATTACK_ID: u32 = 0x3e;
-    /// Non nul : l'objet est inerte pour les collisions.
+    /// Non-zero: the object is inert for collisions.
     pub const BOXES_OFF: u32 = 0x40;
     pub const ATTACK_ID_ENEMY: u32 = 0x44;
-    /// Puissance de l'attaque : A (contre ennemis ordinaires), B (contre boss) (h).
+    /// Attack power: A (against ordinary enemies), B (against bosses) (h).
     pub const POWER_A: u32 = 0x45;
     pub const POWER_B: u32 = 0x46;
     pub const HIT_BY_KIND: u32 = 0x48;
@@ -135,7 +135,7 @@ mod f {
     pub const LINK: u32 = 0x54;
     pub const HITSTOP_VICTIM: u32 = 0x56;
     pub const HIT_FLAGS: u32 = 0x57;
-    /// Octets "dernier coup reçu" par joueur (ennemi), bits d'effets (joueur).
+    /// "Last hit received" bytes per player (enemy), effect bits (player).
     pub const HIT_MARK: u32 = 0x58;
     pub const COMBO_MARK: u32 = 0x5b;
     pub const HP_MAX: u32 = 0x60;
@@ -168,42 +168,42 @@ mod f {
     pub const DAMAGE_CAP: u32 = 0x16e;
 }
 
-/// Tables de la ROM programme.
+/// Program ROM tables.
 mod rom {
-    /// Boîtes d'attaque des tirs joueur (entrées de 8 octets).
+    /// Attack boxes of the player shots (8-byte entries).
     pub const SHOT_ATTACK: u32 = 0x121fc8;
-    /// Boîtes d'attaque des tirs ennemis.
+    /// Attack boxes of the enemy shots.
     pub const ENEMY_SHOT_ATTACK: u32 = 0x1221e2;
-    /// Boîtes de ramassage des objets.
+    /// Pickup boxes of the items.
     pub const ITEM_PICKUP: u32 = 0x1233c8;
-    /// Tables de pointeurs de boîtes par jeu (index `BOX_SET`) : corps, poussée, attaque.
+    /// Box pointer tables per set (index `BOX_SET`): body, push, attack.
     pub const BODY: u32 = 0x11bffa;
     pub const PUSH: u32 = 0x11c11a;
     pub const ATTACK: u32 = 0x11c23a;
-    /// Table des comportements au contact des tirs joueur (adresses de routine).
+    /// Table of contact behaviours of the player shots (routine addresses).
     pub const SHOT_HANDLERS: u32 = 0x267c4;
-    /// Réaction des joueurs aux coups et aux tirs ennemis : par identifiant d'attaque, 4 octets
-    /// (action au sol, action en l'air, puissance, puissance en difficulté > 5).
+    /// Reaction of the players to hits and enemy shots: by attack identifier, 4 bytes
+    /// (action on the ground, action in the air, power, power at difficulty > 5).
     pub const ENEMY_ATTACK_REACTIONS: u32 = 0x1067a4;
     pub const ENEMY_SHOT_REACTIONS: u32 = 0x106912;
-    /// Garde par type de tir ennemi (octets) : 1 parable par certains équipements, 2 magie.
+    /// Guard by enemy shot type (bytes): 1 parryable with certain equipment, 2 magic.
     pub const SHOT_GUARD: u32 = 0x27690;
 }
 
 // ---------------------------------------------------------------------------------------------
-// Accès à la mémoire
+// Memory access
 
-/// Mémoire et registres, pour les routines qui doivent appeler du code d'origine.
+/// Memory and registers, for the routines that must call original code.
 pub struct World<'a> {
     pub c: &'a mut Cpu,
     pub b: &'a mut Cps2Bus,
-    /// Valeur de A2 dans l'original : boîte du coup en cours, que certaines sous-routines
-    /// (0x19dce, 0x388a) écrasent sans que l'original le rétablisse dans `player_hits_enemies`.
+    /// Value of A2 in the original: box of the hit in progress, which certain subroutines
+    /// (0x19dce, 0x388a) overwrite without the original restoring it in `player_hits_enemies`.
     pub a2: u32,
 }
 
 impl World<'_> {
-    /// bset sur un octet.
+    /// bset on a byte.
     fn set_bit(&mut self, o: Obj, off: u32, bit: u32) {
         let v = o.u8(self.b, off) | 1 << bit;
         o.set_u8(self.b, off, v)
@@ -216,11 +216,11 @@ impl World<'_> {
         let v = o.u16(self.b, off).wrapping_add(d);
         o.set_u16(self.b, off, v)
     }
-    /// Bit 0 de l'octet d'activité : l'objet participe aux collisions.
+    /// Bit 0 of the activity byte: the object takes part in collisions.
     fn is_active(&mut self, o: Obj) -> bool {
         o.u8(self.b, f::ACTIVE) & 1 != 0
     }
-    /// Appelle une routine d'origine avec A0 et A1 (acteur, cible) ; renvoie le drapeau Z.
+    /// Calls an original routine with A0 and A1 (actor, target); returns the Z flag.
     fn call_ao(&mut self, addr: u32, a0: Obj, a1: Obj) -> bool {
         self.c.a[0] = a0.0;
         self.c.a[1] = a1.0;
@@ -265,19 +265,19 @@ fn set_low8(r: &mut u32, v: u8) {
     *r = (*r & !0xff) | v as u32;
 }
 
-/// Valeurs de l'état long (`+4` : principal, sous-état, `+6` : action, `+7`).
+/// Values of the long state (`+4`: main, substate, `+6`: action, `+7`).
 mod state {
-    /// Victime : "touchée", réaction à jouer (`REACTION` donne l'animation).
+    /// Victim: "hit", reaction to play (`REACTION` gives the animation).
     pub const HIT: u32 = 0x0400_0000;
-    /// Victime qui a paré le coup.
+    /// Victim that parried the hit.
     pub const BLOCKED: u32 = 0x0402_0000;
-    /// Joueur : en train d'agir (poussée, ramassage...), action dans l'octet 6.
+    /// Player: busy acting (push, pickup...), action in byte 6.
     pub const ATTACKING: u32 = 0x0200_0c00;
-    /// Joueur touché.
+    /// Player hit.
     pub const PLAYER_HURT: u32 = 0x0204_0000;
-    /// Joueur : parade.
+    /// Player: parry.
     pub const PARRY: u32 = 0x0208_0000;
-    /// Joueur : soulève une caisse.
+    /// Player: lifts a crate.
     pub const GRABBED: u32 = 0x0200_1400;
     pub const GRABBING: u32 = 0x0200_2e00;
     pub const PICKING_UP: u32 = 0x0200_2200;
@@ -285,15 +285,15 @@ mod state {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Boîtes de collision
+// Collision boxes
 
-/// Boîte en ROM : 6 octets utiles (décalage et demi-taille par axe), entrées de 8 octets.
+/// Box in ROM: 6 useful bytes (offset and half-size per axis), 8-byte entries.
 ///
-/// | octet | contenu |
+/// | byte | contents |
 /// |---|---|
-/// | 0 / 1 | décalage X (signé, inversé si l'objet regarde à gauche) / demi-largeur |
-/// | 2 / 3 | décalage Z (hauteur) / demi-hauteur |
-/// | 4 / 5 | décalage Y (profondeur) / demi-profondeur |
+/// | 0 / 1 | X offset (signed, inverted if the object faces left) / half-width |
+/// | 2 / 3 | Z offset (height) / half-height |
+/// | 4 / 5 | Y offset (depth) / half-depth |
 #[derive(Clone, Copy)]
 struct HitBox(u32);
 
@@ -306,21 +306,21 @@ impl HitBox {
     const HALF_Y: u32 = 5;
 }
 
-/// Boîte `index` du jeu de boîtes de l'objet, dans la table de pointeurs `table`.
+/// Box `index` of the object's box set, in the pointer table `table`.
 fn hitbox(w: &mut World, table: u32, o: Obj, index: u8) -> HitBox {
     let set = o.u8(w.b, f::BOX_SET) as u32;
     let base = rd32(w.b, table + 4 * set);
     HitBox(base + 8 * index as u32)
 }
 
-/// Boîte de l'objet pour l'index donné par son champ `field` (corps, poussée ou attaque).
+/// Object box for the index given by its field `field` (body, push or attack).
 fn object_box(w: &mut World, table: u32, o: Obj, field: u32) -> HitBox {
     let idx = o.u8(w.b, field);
     hitbox(w, table, o, idx)
 }
 
-/// Résultat de la comparaison d'un axe : `delta` = écart entre les centres (mot, en arithmétique
-/// 16 bits comme l'original), `half` = somme des demi-tailles.
+/// Result of comparing an axis: `delta` = gap between the centres (word, in 16-bit
+/// arithmetic like the original), `half` = sum of the half-sizes.
 #[derive(Clone, Copy)]
 struct Probe {
     delta: u16,
@@ -328,11 +328,11 @@ struct Probe {
 }
 
 impl Probe {
-    /// Recouvrement : |delta| <= half, calculé comme l'original (`delta + half <= 2 * half`, non signé).
+    /// Overlap: |delta| <= half, computed like the original (`delta + half <= 2 * half`, unsigned).
     fn overlaps(self) -> bool {
         self.delta.wrapping_add(self.half) <= self.half.wrapping_add(self.half)
     }
-    /// Profondeur de pénétration (`half - |delta|`) et signe de l'écart (vrai : delta < 0).
+    /// Penetration depth (`half - |delta|`) and sign of the gap (true: delta < 0).
     fn penetration(self) -> (u16, bool) {
         let neg = (self.delta as i16) < 0;
         let abs = if neg { self.delta.wrapping_neg() } else { self.delta };
@@ -340,8 +340,8 @@ impl Probe {
     }
 }
 
-/// Somme des demi-tailles : octets additionnés sur 8 bits ; `signed` étend ensuite le signe
-/// (collisions avec les caisses), sinon l'extension est nulle.
+/// Sum of the half-sizes: bytes added on 8 bits; `signed` then sign-extends
+/// (collisions with crates), otherwise the extension is zero.
 fn half_sum(a: u8, b: u8, signed: bool) -> u16 {
     let s = a.wrapping_add(b);
     if signed {
@@ -351,7 +351,7 @@ fn half_sum(a: u8, b: u8, signed: bool) -> u16 {
     }
 }
 
-/// Deux objets et leurs boîtes.
+/// Two objects and their boxes.
 struct Pair {
     a: Obj,
     abox: HitBox,
@@ -360,7 +360,7 @@ struct Pair {
     signed: bool,
 }
 
-/// Variante de 0x27410 (attaques ennemies) : seule la demi-profondeur de l'attaque compte.
+/// Variant of 0x27410 (enemy attacks): only the half-depth of the attack counts.
 fn overlap3_attack(w: &mut World, victim: Obj, vbox: HitBox, attacker: Obj, abox: HitBox) -> bool {
     cov::hit("overlap3_attack");
     let pair = Pair { a: victim, abox: vbox, b: attacker, bbox: abox, signed: false };
@@ -371,8 +371,8 @@ fn overlap3_attack(w: &mut World, victim: Obj, vbox: HitBox, attacker: Obj, abox
 }
 
 impl Pair {
-    /// Écart des centres sur un axe : (décalage de boîte + position) de `a` moins celui de `b`.
-    /// `flip` : les décalages suivent l'orientation de l'objet (axe X).
+    /// Gap of the centres on an axis: (box offset + position) of `a` minus that of `b`.
+    /// `flip`: the offsets follow the object's orientation (X axis).
     fn probe(&self, w: &mut World, off: u32, half: u32, pos: u32, flip: bool) -> Probe {
         let mut ao = rd8(w.b, self.abox.0 + off) as i8 as i16 as u16;
         let mut bo = rd8(w.b, self.bbox.0 + off) as i8 as i16 as u16;
@@ -398,7 +398,7 @@ impl Pair {
     fn probe_z(&self, w: &mut World) -> Probe {
         self.probe(w, HitBox::Z, HitBox::HALF_Z, f::Z, false)
     }
-    /// Recouvrement sur les trois axes (Y, X puis Z).
+    /// Overlap on the three axes (Y, X then Z).
     fn overlaps(&self, w: &mut World) -> bool {
         self.probe_y(w).overlaps() && self.probe_x(w).overlaps() && self.probe_z(w).overlaps()
     }
@@ -409,9 +409,9 @@ fn overlap3(w: &mut World, a: Obj, abox: HitBox, b: Obj, bbox: HitBox) -> bool {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Listes d'objets visibles
+// Lists of visible objects
 
-/// Catégories de la liste des objets visibles (voir `sprites::check_visible`).
+/// Categories of the visible object list (see `sprites::check_visible`).
 #[derive(Clone, Copy)]
 enum List {
     PlayerShots = 0,
@@ -422,7 +422,7 @@ enum List {
 }
 
 impl List {
-    /// La file de collision de la catégorie (`objects::pools`), remplie par `cull::update_visibility`.
+    /// The category's collision queue (`objects::pools`), filled by `cull::update_visibility`.
     fn queue(self) -> &'static pools::Queue {
         match self {
             List::PlayerShots => &pools::QUEUE_PSHL,
@@ -435,21 +435,21 @@ impl List {
     fn len(self, w: &mut World) -> u16 {
         rd16(w.b, A5 + self.queue().count)
     }
-    /// Premier pointeur (mot) du tableau des objets de la file.
+    /// First pointer (word) of the array of the queue's objects.
     fn first(self) -> u32 {
         A5 + self.queue().array
     }
 }
 
-/// Fin d'un tour de boucle : continuer, ou quitter la boucle (compteur laissé tel quel).
+/// End of a loop turn: continue, or leave the loop (counter left as is).
 #[derive(PartialEq)]
 enum Flow {
     Next,
     Stop,
 }
 
-/// Parcourt une liste comme l'original : compteur de boucle tenu dans la RAM (`counter`), pointeur
-/// avancé avant le corps.
+/// Walks a list like the original: loop counter kept in RAM (`counter`), pointer
+/// advanced before the body.
 fn scan(w: &mut World, list: List, counter: u32, mut body: impl FnMut(&mut World, Obj) -> Flow) {
     let n = list.len(w);
     wr16(w.b, counter, n);
@@ -468,15 +468,15 @@ fn scan(w: &mut World, list: List, counter: u32, mut body: impl FnMut(&mut World
     }
 }
 
-/// Les 4 enregistrements joueur.
+/// The 4 player records.
 fn players() -> impl Iterator<Item = Obj> {
     crate::ram::PLAYERS.iter()
 }
 
 // ---------------------------------------------------------------------------------------------
-// Racine
+// Root
 
-/// 0x260ee : toutes les collisions de l'image.
+/// 0x260ee: all the collisions of the frame.
 pub fn combat_update(w: &mut World) {
     cov::hit("combat_update");
     if ram::PLAYERS_ALIVE.get(w.b) == 0 {
@@ -502,9 +502,9 @@ pub fn combat_update(w: &mut World) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Joueur frappe ennemis / caisses
+// Player hits enemies / crates
 
-/// 0x26150 : le coup d'un joueur touche-t-il un ennemi (boîte d'attaque contre boîte de corps) ?
+/// 0x26150: does a player's hit touch an enemy (attack box against body box)?
 fn player_hits_enemies(w: &mut World) {
     cov::hit("player_hits_enemies");
     if List::Enemies.len(w) == 0 || ram::PAUSE.get(w.b) != 0 {
@@ -514,7 +514,7 @@ fn player_hits_enemies(w: &mut World) {
         if !w.is_active(p) || p.u8(w.b, f::ATTACK_BOX) == 0 {
             continue;
         }
-        // A2 reste la boîte du joueur d'un ennemi à l'autre, sauf si un coup l'a écrasée (w.a2)
+        // A2 stays the player's box from one enemy to the next, unless a hit overwrote it (w.a2)
         w.a2 = object_box(w, rom::ATTACK, p, f::ATTACK_BOX).0;
         scan(w, List::Enemies, scratch::PLAYER_HITS_ENEMY, |w, e| {
             if w.is_active(e) && e.u8(w.b, f::BODY_BOX) != 0 && e.u8(w.b, f::BOXES_OFF) == 0 && e.u16(w.b, f::HP) != 0 {
@@ -529,7 +529,7 @@ fn player_hits_enemies(w: &mut World) {
     }
 }
 
-/// 0x261f0 : le coup d'un joueur touche-t-il une caisse ?
+/// 0x261f0: does a player's hit touch a crate?
 fn player_hits_boxes(w: &mut World) {
     cov::hit("player_hits_boxes");
     if List::Boxes.len(w) == 0 {
@@ -552,7 +552,7 @@ fn player_hits_boxes(w: &mut World) {
     }
 }
 
-/// 0x2659e : un joueur frappe une caisse (la caisse retient le coup et réagit).
+/// 0x2659e: a player hits a crate (the crate holds the hit and reacts).
 fn player_blow_on_box(w: &mut World, p: Obj, bx: Obj) {
     cov::hit("player_blow_on_box");
     if p.u8(w.b, f::ACTION) == 6 || p.u8(w.b, f::ATTACK_BOX) == 4 {
@@ -563,21 +563,21 @@ fn player_blow_on_box(w: &mut World, p: Obj, bx: Obj) {
     w.spark(Spark::Linked, p, bx, 0);
 }
 
-/// 0x2630e : un joueur `p` frappe l'ennemi `e` : mémorise le coup, calcule les dégâts, lance la
-/// réaction de la victime et l'étincelle.
+/// 0x2630e: a player `p` hits enemy `e`: stores the hit, computes the damage, starts the
+/// victim's reaction and the spark.
 fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
     cov::hit("player_blow_on_enemy");
-    trace!("coup {:06x} sur {:06x}", p.0, e.0);
+    trace!("hit {:06x} on {:06x}", p.0, e.0);
     if e.u8(w.b, f::HITSTOP) != 0 || p.u8(w.b, f::ATTACK_BOX) == 4 {
         return;
     }
-    // le coup de type 3 est sans effet sur le boss de type 0x12 (h)
+    // the type 3 hit has no effect on the type 0x12 boss (h)
     if p.u8(w.b, f::ATTACK_KIND) == 3 && e.u8(w.b, f::CLASS) == 4 && e.u8(w.b, f::KIND) == 0x12 {
         return;
     }
     w.set_bit(p, f::HIT_MARK, 0);
-    // un même coup (ATTACK_ID) ne touche qu'une fois chaque victime : la victime retient le
-    // dernier coup reçu de chaque joueur (octet `HIT_MARK + n° du player`)
+    // the same hit (ATTACK_ID) only touches each victim once: the victim keeps the
+    // last hit received from each player (byte `HIT_MARK + player no.`)
     let id = p.u8(w.b, f::ATTACK_ID);
     let slot = e.0 + f::HIT_MARK + p.u8(w.b, f::KIND) as u32;
     if rd8(w.b, slot) == id {
@@ -627,8 +627,8 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
         enemy_reacts_to_hit(w, p, e);
         return;
     }
-    // coup paré / absorbé par la victime (0xb048 : Z clair)
-    // coup paré par la victime (0xb048)
+    // hit parried / absorbed by the victim (0xb048: Z clear)
+    // hit parried by the victim (0xb048)
     if crate::ai_aids::parries(w.b, p, e, crate::ai_aids::Parry::A) {
         e.set_u32(w.b, f::STATE, state::BLOCKED);
         p.set_u8(w.b, f::HITSTOP, 8);
@@ -660,7 +660,7 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
     if p.u8(w.b, f::GEAR_166) == 2 {
         dmg = dmg.wrapping_add(1);
     }
-    // plafond (octet bas seulement) fixé par le joueur
+    // cap (low byte only) set by the player
     let cap = p.u8(w.b, f::DAMAGE_CAP);
     if (dmg as u8 as i8) > cap as i8 {
         dmg = (dmg & 0xff00) | cap as u16;
@@ -679,28 +679,28 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
     enemy_reacts_to_hit(w, p, e);
 }
 
-/// HP -= dégâts, plancher à 0 (soustraction sur 16 bits, résultat négatif ramené à 0).
+/// HP -= damage, floor at 0 (16-bit subtraction, negative result brought back to 0).
 fn enemy_loses_hp(w: &mut World, e: Obj, dmg: u16) {
     let hp = e.u16(w.b, f::HP).wrapping_sub(dmg);
     e.set_u16(w.b, f::HP, if (hp as i16) < 0 { 0 } else { hp });
 }
 
-/// 0x19dce : enfile l'affichage de la jauge de vie de l'ennemi touché (clé : joueur, type d'ennemi).
+/// 0x19dce: enqueues the display of the health gauge of the enemy hit (key: player, enemy type).
 fn show_enemy_hp(w: &mut World, attacker: Obj, e: Obj) {
     cov::hit("show_enemy_hp");
     let key = ((attacker.u8(w.b, f::KIND) as u32) << 8) + e.u8(w.b, f::KIND) as u32;
     let (hp_max, hp, class) = (e.u16(w.b, f::HP_MAX), e.u16(w.b, f::HP), e.u8(w.b, f::CLASS));
     let bar = crate::events::Popup { header: key as u16, max: hp_max, value: hp, raw: class == 2 };
-    // Glitch d'origine : 0x19dce laisse A2 sur la file des pop-ups (sauf s'ils sont inhibés), et A2 est la boîte
-    // d'attaque du joueur pour les ennemis suivants de `player_hits_enemies`
+    // Original glitch: 0x19dce leaves A2 on the pop-up queue (unless they are inhibited), and A2 is the player's attack
+    // box for the following enemies of `player_hits_enemies`
     if !crate::events::popups_inhibited(w.b) {
         w.a2 = crate::events::POPUP_INPUTS_ADDR;
     }
     crate::events::create_popup(w.b, bar);
 }
 
-/// Fin de 0x2630e (0x264e4) : la victime passe en réaction "touchée", l'étincelle est créée et le
-/// son d'impact joué (0xe662a pour les coups simples, 0xe823a pour les spéciaux ; queue de saut).
+/// End of 0x2630e (0x264e4): the victim goes into the "hit" reaction, the spark is created and the
+/// impact sound played (0xe662a for simple hits, 0xe823a for special ones; tail jump).
 fn enemy_reacts_to_hit(w: &mut World, p: Obj, e: Obj) {
     cov::hit("enemy_reacts_to_hit");
     e.set_u32(w.b, f::STATE, state::HIT);
@@ -723,7 +723,7 @@ fn enemy_reacts_to_hit(w: &mut World, p: Obj, e: Obj) {
     crate::sound::play_with(w.b, target, source);
 }
 
-/// 0x26562 : compte les coups spéciaux enchaînés (octet `+0x9c` de la victime) hors classe 4.
+/// 0x26562: counts the chained special hits (byte `+0x9c` of the victim) outside class 4.
 fn count_combo(w: &mut World, p: Obj, e: Obj) {
     cov::hit("count_combo");
     let class = p.u8(w.b, f::VARIANT) >> 1;
@@ -738,9 +738,9 @@ fn count_combo(w: &mut World, p: Obj, e: Obj) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Routines natives
+// Native routines
 
-/// 0x260ee : les collisions de l'image.
+/// 0x260ee: the frame's collisions.
 pub fn update_cpu(c: &mut Cpu, b: &mut Cps2Bus) {
     combat_update(&mut World { c, b, a2: 0 });
 }

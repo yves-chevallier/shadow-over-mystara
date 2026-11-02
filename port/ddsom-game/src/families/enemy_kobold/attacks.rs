@@ -1,7 +1,7 @@
-//! Type 0, sous-état 4 : les coups. `+6` : 0 à 6 coups de massue en place, 8 double coup, 10 et 20 bond, 12 coup de patte,
-//! 14 et 34 souffle, 16 et 36 pas de côté et demi-tour, 18 course et demi-tour, 22 à 28 série de coups,
-//! 30 coup suivi d'un bond, 32 coup de patte court.
-//! Chaque geste commence par `begin_wait` (étape 0) et `hold` (étape 2, poursuite en place).
+//! Type 0, substate 4: the attacks. `+6`: 0 to 6 club strikes in place, 8 double strike, 10 and 20 leap, 12 paw strike,
+//! 14 and 34 breath, 16 and 36 side step and turn-around, 18 run and turn-around, 22 to 28 series of strikes, 30 strike
+//! followed by a leap, 32 short paw strike.
+//! Each move begins with `begin_wait` (step 0) and `hold` (step 2, pursuit in place).
 
 use crate::families::cx::Bench;
 use crate::families::eshl_creators;
@@ -10,7 +10,7 @@ use crate::objects::Current;
 use crate::objects::Obj;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    // étapes communes : 0 attente, 2 poursuite en place (retour à l'état 4)
+    // common steps: 0 wait, 2 pursuit in place (back to state 4)
     match x.u8(f::SUB3) {
         0 => return begin_wait(x),
         2 => return hold(x, 0x0204_0000),
@@ -37,7 +37,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x557bc : prépare l'attente.
+/// 0x557bc: prepares the wait.
 pub(super) fn begin_wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
@@ -45,8 +45,8 @@ pub(super) fn begin_wait<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 0);
 }
 
-/// 0x5590e / 0x55902 : poursuite en place jusqu'à la fin du compteur `+0x77`, avec demi-tour si la cible change de
-/// côté ; `resume` est l'état à reprendre après le demi-tour.
+/// 0x5590e / 0x55902: pursuit in place until counter `+0x77` ends, with a turn-around if the target changes side;
+/// `resume` is the state to resume after the turn-around.
 pub(super) fn hold<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
     x.set32(RESUME_STATE, resume);
     let n = x.u8(AI_LUNGE).wrapping_sub(1);
@@ -62,27 +62,27 @@ pub(super) fn hold<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
     x.anim_step();
 }
 
-/// 0x57924 après un pas en arrière de 0x20 : le Kobold rétablit sa place devant le coup.
+/// 0x57924 after a step back of 0x20: the Kobold restores its place in front of the attack.
 fn shift_back<R: Bench>(x: &mut Cx<'_, R>) {
     let dx: u16 = if x.u8(f::FLIP) == 0 { 0xffe0 } else { 0x20 };
     x.add16(Obj::X, dx);
 }
 
-/// Fin de coup : animation de marche, recul de 0x20, puis la suite.
+/// End of an attack: walking animation, recoil of 0x20, then the continuation.
 fn end_strike<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 0);
     shift_back(x);
     after_strike(x);
 }
 
-/// 0x55a4e : fin du geste.
+/// 0x55a4e: end of the move.
 fn step_then_after<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         after_strike(x);
     }
 }
 
-/// Clé d'animation : tir lancé `throw` (0x9dda8 ou 0x9e062 ; la clé est remise à zéro).
+/// Animation key: launched shot `throw` (0x9dda8 or 0x9e062; the key is reset to zero).
 fn key_effect<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
@@ -90,8 +90,8 @@ fn key_effect<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::
     }
 }
 
-/// Début d'un coup : l'aspect `look` est posé ; s'il l'était déjà, `+0xad` décompte et ramène debout à zéro ;
-/// sinon l'animation de coups `anim` démarre.
+/// Start of an attack: look `look` is set; if it already was, `+0xad` counts down and brings it back to standing at
+/// zero; otherwise attack animation `anim` starts.
 fn strike_look<R: Bench>(x: &mut Cx<'_, R>, look: u8, anim: u32) {
     x.set8(LOOK, look);
     if x.u8(LOOK) == x.u8(LOOK_PREV) {
@@ -115,7 +115,7 @@ fn club_begin<R: Bench>(x: &mut Cx<'_, R>, look: u8, kind: u8, anim: u32) {
     strike_look(x, look, anim);
 }
 
-// --- +6 = 0 à 6 -------------------------------------------------------------------------------------------
+// --- +6 = 0 to 6 -------------------------------------------------------------------------------------------
 
 fn club<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
@@ -181,7 +181,7 @@ fn thrust<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 6 : coups répétés (`+0xac` fois).
+/// +6 = 6: repeated strikes (`+0xac` times).
 fn combo<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
@@ -210,7 +210,7 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 8 : double coup (animations 2 puis 3).
+/// +6 = 8: double strike (animations 2 then 3).
 fn double_hit<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
@@ -282,7 +282,7 @@ fn jump_attack<R: Bench>(x: &mut Cx<'_, R>) {
     jump_series(x, vx, kind);
 }
 
-/// Étapes du bond : 4 départ, 6 attend la clé, 8 retombée, 10 fin.
+/// Steps of the leap: 4 start, 6 waits for the key, 8 landing, 10 end.
 fn jump_series<R: Bench>(x: &mut Cx<'_, R>, vx: i16, kind: u8) {
     match x.u8(f::SUB3) {
         4 => jump_begin(x, vx, kind),
@@ -293,7 +293,7 @@ fn jump_series<R: Bench>(x: &mut Cx<'_, R>, vx: i16, kind: u8) {
     }
 }
 
-/// 0x54fc4 : retombée d'un saut → animation 0x18 d'atterrissage.
+/// 0x54fc4: landing of a jump → landing animation 0x18.
 fn land<R: Bench>(x: &mut Cx<'_, R>) {
     if x.move_xz().gt() {
         x.anim_step();
@@ -327,7 +327,7 @@ fn strike_then_jump<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 12 : coup de patte --------------------------------------------------------------------------------
 
-/// 0x565d2 : coup de patte avec élan ou en courant (deux variantes tirées au hasard).
+/// 0x565d2: paw strike with a run-up or while running (two variants drawn at random).
 pub(super) fn paw_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     let r = rand_and(x, 1);
@@ -374,7 +374,7 @@ fn paw<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x55ce2 : course du coup de patte.
+/// 0x55ce2: run of the paw strike.
 fn paw_run<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u16(TIMER).wrapping_sub(1);
     x.set16(TIMER, n);
@@ -386,7 +386,8 @@ fn paw_run<R: Bench>(x: &mut Cx<'_, R>) {
     back_on_guard(x);
 }
 
-/// Le geste fini, le Kobold reprend l'approche (état 2, `+6` = 0, étape 2) et revérifie les portées (0x555da).
+/// Once the move is over, the Kobold resumes the approach (state 2, `+6` = 0, step 2) and re-checks the ranges
+/// (0x555da).
 pub(super) fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, 0x0202_0002);
     x.set8(LOOK, 0xc);
@@ -394,7 +395,7 @@ pub(super) fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
     stance::reach_boxes(x);
 }
 
-// --- +6 = 14 et 34 : souffle ---------------------------------------------------------------------------------
+// --- +6 = 14 and 34: breath ---------------------------------------------------------------------------------
 
 fn breath<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
@@ -421,7 +422,7 @@ fn breath<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x55e06 : la clé d'animation tire parfois un projectile (0xe327a) ; en fin de script, un souffle de moins.
+/// 0x55e06: the animation key sometimes fires a projectile (0xe327a); at the end of the script, one breath fewer.
 pub(super) fn breath_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
@@ -442,7 +443,7 @@ pub(super) fn breath_tick<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 7);
 }
 
-// --- +6 = 16 et 36 : pas de côté ---------------------------------------------------------------------------------
+// --- +6 = 16 and 36: side step ---------------------------------------------------------------------------------
 
 fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
@@ -491,7 +492,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 18 : course et demi-tour ------------------------------------------------------------------------------
+// --- +6 = 18: run and turn-around ------------------------------------------------------------------------------
 
 fn dash_turn<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
@@ -542,9 +543,9 @@ fn dash_turn<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 22 à 28 : séries de coups ----------------------------------------------------------------------------
+// --- +6 = 22 to 28: series of strikes ----------------------------------------------------------------------------
 
-/// 0x5603a : coup avec décompte (aspect 0x2e, animation 6).
+/// 0x5603a: strike with countdown (look 0x2e, animation 6).
 fn series_strike<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(LOOK, 0x2e);
@@ -565,7 +566,7 @@ fn series_a<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x560d2 : prologue des séries : `+0x78`, nombre de coups.
+/// 0x560d2: prologue of the series: `+0x78`, number of strikes.
 fn series_prologue<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(GROUP) != 1 {
         x.set8(AI_SHOT, 3);

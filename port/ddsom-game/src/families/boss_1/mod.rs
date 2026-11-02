@@ -1,22 +1,22 @@
-//! Boss de type 1 (0x7acea) : le fauve bondissant de la scène 27 (nom de debug « Displacer Beast », h). Voir
+//! Boss of type 1 (0x7acea): the leaping beast of stage 27 (debug name "Displacer Beast", h). See
 //! `docs/families/boss.md`.
 //!
-//! Même charpente que la Chimère (`boss_4`) : `+4` état, `+5` groupe, `+6` et `+7` étapes, états posés d'un coup en
-//! longs, bibliothèque d'IA 0x103d6..0x105b6. Le boss se déplace par bonds (une marche est une suite de sauts vers
-//! un point tiré autour de sa cible) et saisit les joueurs.
+//! Same skeleton as the Chimera (`boss_4`): `+4` state, `+5` group, `+6` and `+7` steps, states set in one go as
+//! longs, AI library 0x103d6..0x105b6. The boss moves by leaps (a walk is a series of jumps toward a point drawn
+//! around its target) and grabs the players.
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `moves` | arrivée : traversée de l'écran en sautant, puis chute du haut de l'écran |
-//! | 2 | `moves` | combat : attente, demi-tour, marche par bonds (`+6` = 4, 6), grand bond (8), bond en arrière (10) |
-//! | 4 | `moves` | attaques : quatre coups (`+6` = 0 à 6), saisie (8), bond avec un double (10) |
-//! | 6 à 10 | `moves` | attente tant qu'aucun joueur n'est en vie |
-//! | 12 | `moves` | un joueur saisi : morsures qui lui retirent des PV |
-//! | 14 | `hit` | retour au combat |
-//! | état 4 | `hit` | réactions aux coups (table de la ROM), recul, chute, mort |
+//! | 0 | `moves` | arrival: crossing the screen by jumping, then falling from the top of the screen |
+//! | 2 | `moves` | combat: wait, about-face, walk by leaps (`+6` = 4, 6), big leap (8), backward leap (10) |
+//! | 4 | `moves` | attacks: four hits (`+6` = 0 to 6), grab (8), leap with a double (10) |
+//! | 6 to 10 | `moves` | wait while no player is alive |
+//! | 12 | `moves` | a grabbed player: bites that take HP from them |
+//! | 14 | `hit` | return to combat |
+//! | state 4 | `hit` | reactions to hits (ROM table), knockback, fall, death |
 //!
-//! Les choix d'attaque (tirages dans les tables de la ROM selon la phase `+0xaa`) et les états qu'ils posent sont
-//! ici (`go`). Animations : 0x172794 (corps), 0x1727d4 (attaques), 0x1727e4 (coups reçus).
+//! The attack choices (draws in the ROM tables according to phase `+0xaa`) and the states they set are
+//! here (`go`). Animations: 0x172794 (body), 0x1727d4 (attacks), 0x1727e4 (hits received).
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -26,44 +26,44 @@ use crate::objects::Obj;
 pub(crate) mod hit;
 mod moves;
 
-/// Champs propres à ce type.
+/// Fields specific to this type.
 pub(self) mod g {
-    /// Bonds restants de la marche, attente debout.
+    /// Leaps remaining in the walk, standing wait.
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
     pub const VULNERABLE: u32 = 0x67;
-    /// Temps au sol (mot) et compteur du tremblement (réaction 0x4c).
+    /// Time on the ground (word) and shaking counter (reaction 0x4c).
     pub const DOWN_TIME: u32 = 0x84;
     pub const SHAKE: u32 = 0x90;
-    /// Abscisse mémorisée pendant le tremblement (mot).
+    /// X position saved during the shaking (word).
     pub const SAVED_X: u32 = 0xa;
-    /// Sorte d'animation courante et dernière lancée.
+    /// Kind of current animation and last one started.
     pub const ANIM_KIND: u32 = 0xa0;
     pub const ANIM_LAST: u32 = 0xa1;
-    /// État mémorisé (long) à reprendre après un demi-tour.
+    /// Saved state (long) to resume after an about-face.
     pub const SAVED_STATE: u32 = 0xa2;
-    /// Minuteries de l'étape (mots).
+    /// Step timers (words).
     pub const TIMER: u32 = 0xa6;
     pub const TIMER2: u32 = 0xa8;
     pub const PHASE: u32 = 0xaa;
     pub const PHASES: u32 = 0xab;
-    /// Octet non nul : le boss est invulnérable (`+0x38` remis à zéro à chaque image).
+    /// Non-zero byte: the boss is invulnerable (`+0x38` reset to zero every frame).
     pub const INVULNERABLE: u32 = 0xad;
-    /// Coups restants de l'enchaînement d'attaques.
+    /// Hits remaining in the attack chain.
     pub const COMBO: u32 = 0xae;
-    /// Compteur des bouffées de l'arrivée.
+    /// Counter of the arrival's puffs.
     pub const PUFFS: u32 = 0xaf;
-    /// Double (ENEMY 0x1a) créé pour le bond en ciseaux (mot, 0 = aucun).
+    /// Double (ENEMY 0x1a) created for the scissor leap (word, 0 = none).
     pub const DOUBLE: u32 = 0xb0;
-    /// Tentatives de saisie (index de la table des chances).
+    /// Grab attempts (index into the chance table).
     pub const GRAB_TRIES: u32 = 0xb2;
-    /// Grand bond : 0 vers la cible, 1 vers le milieu de l'écran.
+    /// Big leap: 0 toward the target, 1 toward the middle of the screen.
     pub const LEAP_TO_CENTER: u32 = 0xb3;
-    /// Première animation du bond de marche (7 ou 15 selon le sens).
+    /// First animation of the walking leap (7 or 15 depending on the direction).
     pub const HOP_ANIM: u32 = 0xb4;
-    /// État de l'image précédente (long).
+    /// State of the previous frame (long).
     pub const PREV_STATE: u32 = 0xb8;
-    /// Point visé par un bond (mots).
+    /// Point aimed at by a leap (words).
     pub const MARK_X: u32 = 0xbc;
     pub const MARK_Z: u32 = 0xbe;
 }
@@ -71,15 +71,15 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Jeux d'animations : corps, attaques, coups reçus.
+/// Animation sets: body, attacks, hits received.
 pub(self) const SET_BODY: u32 = 0x172794;
 pub(self) const SET_ATTACK: u32 = 0x1727d4;
 pub(self) const SET_HURT: u32 = 0x1727e4;
 
-/// Seuils de PV des phases (0x105b6).
+/// HP thresholds of the phases (0x105b6).
 pub(self) const THRESHOLDS: u32 = 0x10be2;
 
-/// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
+/// Starts animation `n` of a set via the AI (0x103d6).
 pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
@@ -94,7 +94,7 @@ pub(self) fn kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     x.set8(ANIM_LAST, k);
 }
 
-/// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
+/// Next step (`addq.b #2,(+6)` or `(+7)`).
 pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
@@ -102,42 +102,42 @@ pub(self) fn next7<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
-/// Au moins un joueur en vie (0x10474).
+/// At least one player alive (0x10474).
 pub(self) fn alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::players_alive(x)
 }
 
-/// Le boss est-il hors de la bande `[caméra + d0, caméra + d1]` (0x104a2) ?
+/// Is the boss outside the band `[camera + d0, camera + d1]` (0x104a2)?
 pub(self) fn outside<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16) -> bool {
     lib::outside_band(x, d0, d1 as i16)
 }
 
-/// Le boss doit-il se retourner vers sa cible (0x1050c) ?
+/// Must the boss turn around toward its target (0x1050c)?
 pub(self) fn turn_needed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
-/// Boîte large devant le boss (0x7ef4).
+/// Wide box in front of the boss (0x7ef4).
 pub(self) fn in_wide_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     lib::guard_in_front(x, d0, d1, d2)
 }
 
-/// Bouffée de poussière de sorte `k` (0x1172e).
+/// Puff of dust of kind `k` (0x1172e).
 pub(self) fn dust<R: Bench>(x: &mut Cx<'_, R>, k: u32) {
     lib::debris(x, k);
 }
 
-/// `subq.w #1,(off,A0)` : vrai quand le décompte est écoulé (`ble`).
+/// `subq.w #1,(off,A0)`: true when the countdown has elapsed (`ble`).
 pub(self) fn expired<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     sub16(x, off, 1).le()
 }
 
-/// Cible du boss (`movea.w (0x50,A0),A1`).
+/// The boss's target (`movea.w (0x50,A0),A1`).
 pub(self) fn target_obj<R: Bench>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
     load_target(x)
 }
 
-/// Mot de la table de sauts relative au PC `base` pour l'index `i` : adresse de la routine choisie.
+/// Word of the PC-relative jump table `base` for index `i`: address of the chosen routine.
 pub(self) fn jump_target<R: Bench>(x: &mut Cx<'_, R>, base: u32, i: u32) -> u32 {
     base.wrapping_add(x.rom16(base + i) as i16 as u32)
 }
@@ -163,9 +163,9 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
-/// 0x7ad2a : réglages du boss ; il attend, en pose, le début de la cinématique d'arrivée.
+/// 0x7ad2a: boss setup; it waits, in its pose, for the start of the arrival cutscene.
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
@@ -210,9 +210,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xe1370);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
-/// 0x7ae16 : un groupe par image (hors gel et pause), puis zone de jeu et ombre une fois arrivé.
+/// 0x7ae16: one group per frame (outside freeze and pause), then play area and shadow once arrived.
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
@@ -232,9 +232,9 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- décisions : états posés d'un coup (0x7c24a..0x7c372) -----------------------------------------
+// --- decisions: states set in one go (0x7c24a..0x7c372) -----------------------------------------
 
-/// Pose le long d'état `+4..+7` et rend le boss vulnérable ou non (`+0x67`).
+/// Sets the state long `+4..+7` and makes the boss vulnerable or not (`+0x67`).
 fn state<R: Bench>(x: &mut Cx<'_, R>, vulnerable: bool, s: u32) {
     x.set8(VULNERABLE, vulnerable as u8);
     x.set32(f::STATE, s);
@@ -245,7 +245,7 @@ pub(self) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, true, 0x0202_0000);
 }
 
-/// 0x7c25a : demi-tour, l'état courant sera repris.
+/// 0x7c25a: about-face, the current state will be resumed.
 pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let s = x.u32(f::STATE);
@@ -253,7 +253,7 @@ pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0202_0200);
 }
 
-/// 0x7c26e et 0x7c27c : marche par bonds (deux tirages du nombre de bonds).
+/// 0x7c26e and 0x7c27c: walk by leaps (two draws of the number of leaps).
 pub(self) fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, false, 0x0202_0400);
 }
@@ -261,19 +261,19 @@ pub(self) fn walk_b<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, false, 0x0202_0600);
 }
 
-/// 0x7c2a2 : grand bond, vers la cible ou (`center`) vers le milieu de l'écran.
+/// 0x7c2a2: big leap, toward the target or (`center`) toward the middle of the screen.
 pub(self) fn leap<R: Bench>(x: &mut Cx<'_, R>, center: bool) {
     x.set8(LEAP_TO_CENTER, center as u8);
     state(x, false, 0x0202_0800);
 }
 
-/// 0x7c28a : grand bond vers la cible après une riposte (invulnérable).
+/// 0x7c28a: big leap toward the target after a counterattack (invulnerable).
 pub(self) fn leap_guarded<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     leap(x, false);
 }
 
-/// 0x7c2b0 : bond en arrière, sauf hors de l'écran (grand bond).
+/// 0x7c2b0: backward leap, except off screen (big leap).
 fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
     if outside(x, 0x18, 0x168) {
         return leap_guarded(x);
@@ -282,7 +282,7 @@ fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, false, 0x0202_0a00);
 }
 
-/// 0x7c2de : premier coup (une cible saisissable reçoit le coup 4).
+/// 0x7c2de: first hit (a grabbable target receives hit 4).
 fn strike_a<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     let s = if t.u8(x.b, 0x66) != 0 { 0x0204_0400 } else { 0x0204_0000 };
@@ -290,7 +290,7 @@ fn strike_a<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, false, s);
 }
 
-/// 0x7c304 : deuxième coup (ou le coup 6 contre une cible saisissable).
+/// 0x7c304: second hit (or hit 6 against a grabbable target).
 fn strike_b<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     let s = if t.u8(x.b, 0x66) != 0 { 0x0204_0600 } else { 0x0204_0200 };
@@ -298,7 +298,7 @@ fn strike_b<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, false, s);
 }
 
-/// 0x7c300 : enchaînement (nombre de coups tiré selon la difficulté) qui commence par le deuxième coup.
+/// 0x7c300: chain (number of hits drawn according to difficulty) that starts with the second hit.
 fn combo<R: Bench>(x: &mut Cx<'_, R>) {
     combo_count(x);
     strike_b(x);
@@ -309,7 +309,7 @@ fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, false, 0x0204_0800);
 }
 
-/// 0x7c358 : bond en ciseaux avec un double.
+/// 0x7c358: scissor leap with a double.
 pub(self) fn split_leap<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 2);
     x.set32(f::IMMUNITY, 0xffff_ffff);
@@ -317,12 +317,12 @@ pub(self) fn split_leap<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0204_0a00);
 }
 
-/// 0x7c372 : plus aucun joueur, attente.
+/// 0x7c372: no player left, wait.
 pub(self) fn idle_alone<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 
-/// Exécute la décision dont l'adresse d'origine est `at` (sauts par tables de la ROM).
+/// Runs the decision whose original address is `at` (jumps through ROM tables).
 pub(self) fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
     match at {
         0x7c24a => stand(x),
@@ -351,11 +351,11 @@ pub(self) fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
         0x7c34a => grab(x),
         0x7c358 => split_leap(x),
         0x7c372 => idle_alone(x),
-        _ => panic!("boss 1 : décision inconnue {at:#x}"),
+        _ => panic!("boss 1: unknown decision {at:#x}"),
     }
 }
 
-/// 0x7c0ba : cible dans la boîte large, tirage dans la table 0x7c0d0.
+/// 0x7c0ba: target in the wide box, draw in table 0x7c0d0.
 pub(self) fn from_wide_box<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7c0d0 + r) as u32;
@@ -363,7 +363,7 @@ pub(self) fn from_wide_box<R: Bench>(x: &mut Cx<'_, R>) {
     go(x, at)
 }
 
-/// 0x7c0e2 : cible tout près ; tirage dans la table de la phase `+0xaa`.
+/// 0x7c0e2: target very close; draw in the table of phase `+0xaa`.
 pub(self) fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32 as u32;
@@ -373,7 +373,7 @@ pub(self) fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
     go(x, at)
 }
 
-/// 0x7c14e et 0x7c1cc : l'IA a choisi le geste `g` (1 ou 2) ; tirage dans la table de la phase.
+/// 0x7c14e and 0x7c1cc: the AI chose gesture `g` (1 or 2); draw in the phase's table.
 fn from_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32, tables: [u32; 6], jumps: u32) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32;
@@ -383,17 +383,17 @@ fn from_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32, tables: [u32; 6], jumps: u3
     go(x, at)
 }
 
-/// 0x7c14e : boîte proche (-0x70).
+/// 0x7c14e: near box (-0x70).
 pub(self) fn from_near_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     from_gesture(x, g, [0x7c1a8, 0x7c1a8, 0x7c1b8, 0x7c1b8, 0x7c1b8, 0x7c1b8], 0x7c1c8)
 }
 
-/// 0x7c1cc : boîte lointaine (-0xe0).
+/// 0x7c1cc: far box (-0xe0).
 pub(self) fn from_far_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     from_gesture(x, g, [0x7c226, 0x7c226, 0x7c226, 0x7c226, 0x7c236, 0x7c236], 0x7c246)
 }
 
-/// 0x7c080 / 0x7c09e : cible dans la boîte et geste choisi par l'IA (0x1047a), ou rien.
+/// 0x7c080 / 0x7c09e: target in the box and gesture chosen by the AI (0x1047a), or nothing.
 pub(self) fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u32> {
     if !lib::target_in_box(x, d0, d1, d2) {
         return None;
@@ -402,7 +402,7 @@ pub(self) fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> O
     (turn != lib::Turn::None).then_some(turn as u32)
 }
 
-/// 0x7c47c : nombre de coups de l'enchaînement, selon la difficulté et le nombre de joueurs.
+/// 0x7c47c: number of hits in the chain, according to difficulty and number of players.
 fn combo_count<R: Bench>(x: &mut Cx<'_, R>) {
     let level = (var::RANK.get(x.b) & 0x1e) * 2;
     let mut players = var::PLAYERS_ALIVE.get(x.b) as u16;
@@ -414,7 +414,7 @@ fn combo_count<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(COMBO, n);
 }
 
-/// 0x7c50c : tentative de bond en ciseaux (sans double en cours) : une chance qui croît à chaque essai.
+/// 0x7c50c: scissor leap attempt (with no double in progress): a chance that grows with each try.
 pub(self) fn try_split_leap<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(DOUBLE) != 0 {
         return false;
@@ -426,15 +426,15 @@ pub(self) fn try_split_leap<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     mask >> r & 1 != 0
 }
 
-/// 0x7c01c / 0x7c02e : nombre de bonds de la marche, tiré dans la table `table`.
+/// 0x7c01c / 0x7c02e: number of leaps in the walk, drawn from table `table`.
 pub(self) fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let r = rand_and(x, 0x1f);
     let n = x.rom8(table + r);
     x.set8(WALK_STEPS, n);
 }
 
-/// 0x7c396 / 0x7c3b0 : point visé près de la cible (décalages tirés dans `table`, `mask` + 1 entrées), du côté
-/// du boss ; l'angle vers ce point (0x137e) devient la direction.
+/// 0x7c396 / 0x7c3b0: aimed point near the target (offsets drawn from `table`, `mask` + 1 entries), on the
+/// boss's side; the angle toward that point (0x137e) becomes the direction.
 pub(self) fn aim_near_target<R: Bench>(x: &mut Cx<'_, R>, table: u32, mask: u32) {
     let i = rand_and(x, mask) * 4;
     let dx = x.rom16(table + i);
@@ -454,18 +454,18 @@ pub(self) fn aim_near_target<R: Bench>(x: &mut Cx<'_, R>, table: u32, mask: u32)
     aim_at_mark(x, (mx, mz));
 }
 
-/// 0x137e vers le point `mark` (D1, D2 de l'original) puis `+0x2d` = l'angle.
+/// 0x137e toward point `mark` (D1, D2 of the original) then `+0x2d` = the angle.
 pub(self) fn aim_at_mark<R: Bench>(x: &mut Cx<'_, R>, mark: (u16, u16)) {
     let a = lib::aim_from(x, mark);
     x.set8(Obj::SPEED_INDEX, a);
 }
 
-/// 0x7c430 : vitesse verticale du bond selon la distance au point visé : 10 de plus par tranche de la vitesse
-/// horizontale (la plus grande des deux distances, avec la vitesse correspondante).
+/// 0x7c430: vertical speed of the leap according to the distance to the aimed point: 10 more per slice of the
+/// horizontal speed (the larger of the two distances, with the corresponding speed).
 pub(self) fn hop_height<R: Bench>(x: &mut Cx<'_, R>) {
     let abs = |v: u16| if (v as i16) < 0 { v.wrapping_neg() } else { v };
-    // `move.w (0x1c,A0),D3` : le mot haut de D3 est celui que laisse la direction 0x137e appelée juste avant par
-    // les deux appelants (`moveq #0,D3` puis le pas) : nul
+    // `move.w (0x1c,A0),D3`: the high word of D3 is the one left by the direction 0x137e called just before by
+    // both callers (`moveq #0,D3` then the step): zero
     let d3 = abs(x.u16(0x1c)) as u32;
     let mut d4 = abs(x.u16(0x14)) as u32;
     let dz = abs(x.u16(MARK_Z).wrapping_sub(x.u16(0x10)));
@@ -491,7 +491,7 @@ pub(self) fn hop_height<R: Bench>(x: &mut Cx<'_, R>) {
     *x.c.d4() = d4;
 }
 
-/// 0x7c4da : une bouffée (EFFCT 0x32, variante 4) toutes les `n` + 1 images.
+/// 0x7c4da: a puff (EFFCT 0x32, variant 4) every `n` + 1 frames.
 pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
     x.add8(PUFFS, 1);
     if (n as i8) > x.u8(PUFFS) as i8 {
@@ -507,7 +507,7 @@ pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
     e.set_u8(x.b, 0x2c, side);
 }
 
-/// 0x7c542 : crée le double (ENEMY 0x1a) du bond en ciseaux, lié au boss par `+0xb0`.
+/// 0x7c542: creates the double (ENEMY 0x1a) of the scissor leap, linked to the boss by `+0xb0`.
 pub(self) fn spawn_double<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(d) = x.alloc(&pools::ENEMY) else {
         x.set16(DOUBLE, 0);
@@ -530,6 +530,6 @@ pub(self) fn spawn_double<R: Bench>(x: &mut Cx<'_, R>) {
 
 handlers! {
     0x7acea "boss_1" #[without] run,
-    // retour au combat après une réaction commune (table 0x3e000 de `reactions.rs`)
+    // return to combat after a common reaction (table 0x3e000 of `reactions.rs`)
     0x7bece "boss_1_releve" hit::get_up,
 }

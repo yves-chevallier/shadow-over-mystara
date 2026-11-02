@@ -1,19 +1,19 @@
-//! Boss de type 6 (0x8430e), scène 24 : la Manticore (h). Voir `docs/families/boss.md`.
+//! Boss of type 6 (0x8430e), stage 24: the Manticore (h). See `docs/families/boss.md`.
 //!
-//! Même gabarit que le boss 17 (`boss_17`) : `+4` état (0 création, 2 actif, 4 touché, 6 libération), `+5`
-//! groupe, `+6` et `+7` étapes ; les changements d'état se posent d'un coup (long `+4..+7`).
+//! Same template as boss 17 (`boss_17`): `+4` state (0 creation, 2 active, 4 hit, 6 release), `+5`
+//! group, `+6` and `+7` steps; state changes are set in one go (long `+4..+7`).
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `intro` | arrivée : bond depuis la droite, rugissement, attente de la caméra |
-//! | 2 | `fight` | combat : attente, demi-tour, marche, charge (`+6` = 8), tir en bond (10) |
-//! | 4 | `attacks` | cinq attaques (`+6` = 0 à 8) |
-//! | 6 à 12 | ici | attente tant qu'aucun joueur n'est en vie |
-//! | 14 | ici | reprise après un coup, sans phase |
-//! | état 4 | `hit` | réactions aux coups, mort |
+//! | 0 | `intro` | arrival: leap from the right, roar, wait for the camera |
+//! | 2 | `fight` | combat: wait, about-face, walk, charge (`+6` = 8), shot in a leap (10) |
+//! | 4 | `attacks` | five attacks (`+6` = 0 to 8) |
+//! | 6 to 12 | here | wait while no player is alive |
+//! | 14 | here | resumption after a hit, with no phase |
+//! | state 4 | `hit` | reactions to hits, death |
 //!
-//! Animations : 0x177874 (sol), 0x17788c (vol), 0x1778a4 (recul). Les variantes `+3` non nulles sont des
-//! parties liées à l'hôte `+0x46` : elles meurent avec lui (`guard`).
+//! Animations: 0x177874 (ground), 0x17788c (flight), 0x1778a4 (knockback). Non-zero `+3` variants are
+//! parts linked to the host `+0x46`: they die with it (`guard`).
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -40,9 +40,9 @@ pub(self) mod g {
     pub const SAVED_STATE: u32 = 0xa2;
     pub const PHASE: u32 = 0xaa;
     pub const INVULNERABLE: u32 = 0xad;
-    /// Charge : 0 vers la caméra, 1 vers la position mémorisée de la cible.
+    /// Charge: 0 toward the camera, 1 toward the target's saved position.
     pub const CHARGE_AT_TARGET: u32 = 0xb2;
-    /// Tir lié (mot) et bascule de l'animation de battement d'ailes.
+    /// Linked shot (word) and toggle of the wing-beat animation.
     pub const CHILD: u32 = 0xb0;
     pub const FLAP: u32 = 0xb3;
     pub const MARK_X: u32 = 0xbc;
@@ -83,7 +83,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x859b2 : une partie liée (variante non nulle) tombe avec son hôte (`+0x46`).
+/// 0x859b2: a linked part (non-zero variant) falls with its host (`+0x46`).
 fn guard<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::VARIANT) == 0 || x.u16(f::STATE) == 0x0406 {
         return;
@@ -143,7 +143,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-/// `+5` = 6 à 12 (0x851d6) : attend que des joueurs reviennent.
+/// `+5` = 6 to 12 (0x851d6): waits for players to come back.
 fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) as i8 > 0 {
         return decide::chase(x);
@@ -161,7 +161,7 @@ fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// `+5` = 14 (0x8520e) : reprise (le seul état de `+6` est la fin de relevé).
+/// `+5` = 14 (0x8520e): resumption (the only `+6` state is the end of getting up).
 fn recovered<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         hit::recovered_tail(x);
@@ -170,6 +170,6 @@ fn recovered<R: Bench>(x: &mut Cx<'_, R>) {
 
 handlers! {
     0x8430e "boss_6" #[without] run,
-    // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
+    // getting up after a common reaction (table 0x3e000 of `reactions.rs`)
     0x85490 "boss_6_releve" hit::recovered_tail,
 }

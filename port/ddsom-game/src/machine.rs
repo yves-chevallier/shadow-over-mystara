@@ -1,15 +1,15 @@
-//! Contexte commun des routines natives : la machine (processeur et bus) et les services partagés.
+//! Common context of the native routines: the machine (processor and bus) and the shared services.
 //!
-//! Chaque sous-système a son contexte (`families::cx::Cx`, `player::Ctx`, `scene::Ctx`,
-//! `combat::World`...) ; tous tiennent `c: &mut Cpu` et `b: &mut Cps2Bus`. Plutôt qu'une structure de base qu'ils
-//! embarqueraient (les accès `x.c`, `x.b` séparés, partout, ne survivraient pas à un `Deref`), ils implémentent le
-//! trait [`Machine`], qui leur donne les services communs une seule fois : le tirage du hasard, les lectures dans
-//! l'espace programme et l'espace données. Les variables de la RAM de travail se lisent par leurs vues typées
-//! (`ram::SCENE.get(x.bus())`, `Obj`, `Player`). Le moteur d'objets (animation, mouvement, listes, écran) est dans
-//! [`crate::objects::Current`], pour les contextes qui traitent un objet.
+//! Each subsystem has its own context (`families::cx::Cx`, `player::Ctx`, `scene::Ctx`,
+//! `combat::World`...); all of them hold `c: &mut Cpu` and `b: &mut Cps2Bus`. Rather than a base structure that
+//! they would embed (the separate `x.c`, `x.b` accesses, everywhere, would not survive a `Deref`), they implement
+//! the [`Machine`] trait, which gives them the common services once: the random draw, and reads in the
+//! program space and the data space. The work RAM variables are read through their typed views
+//! (`ram::SCENE.get(x.bus())`, `Obj`, `Player`). The object engine (animation, movement, lists, screen) is in
+//! [`crate::objects::Current`], for the contexts that process an object.
 //!
-//! Le processeur ne sert qu'aux adaptateurs `_68k` (registres de l'original, `docs/guide-refactorisation.md`) ; une
-//! routine convertie n'utilise que `bus()`.
+//! The processor is only used by the `_68k` adapters (registers of the original, `docs/guide-refactorisation.md`); a
+//! converted routine only uses `bus()`.
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
@@ -18,18 +18,18 @@ use m68k::Cpu;
 use crate::mem::{rd16, rd32, rd8};
 use crate::rng;
 
-/// Accès commun à la machine (voir l'en-tête du module).
+/// Common access to the machine (see the module header).
 pub trait Machine {
-    /// Le bus : la mémoire du jeu.
+    /// The bus: the game memory.
     fn bus(&mut self) -> &mut Cps2Bus;
 
-    /// Tirage du générateur pseudo-aléatoire du jeu (0x19a88, `rng::random`) ; les appelants masquent le résultat.
+    /// Draw of the game's pseudo-random generator (0x19a88, `rng::random`); callers mask the result.
     fn random(&mut self) -> u16 {
         rng::random(self.bus())
     }
 
-    /// Octet, mot et long de l'espace programme (tables lues relativement au PC dans l'original : le programme
-    /// déchiffré).
+    /// Byte, word and long of the program space (tables read PC-relative in the original: the decrypted
+    /// program).
     fn prog8(&mut self, a: u32) -> u8 {
         crate::mem::prog8(self.bus(), a)
     }
@@ -40,7 +40,7 @@ pub trait Machine {
         crate::mem::prog32(self.bus(), a)
     }
 
-    /// Octet, mot et long de l'espace données (tables de la ROM atteintes par une adresse absolue ou un pointeur,
+    /// Byte, word and long of the data space (ROM tables reached through an absolute address or a pointer,
     /// RAM).
     fn data8(&mut self, a: u32) -> u8 {
         rd8(self.bus(), a)
@@ -53,13 +53,13 @@ pub trait Machine {
     }
 }
 
-/// Contexte qui tient aussi le processeur : les adaptateurs `_68k` (registres de l'original) passent par lui.
+/// Context that also holds the processor: the `_68k` adapters (registers of the original) go through it.
 pub trait Processeur: Machine {
-    /// Le processeur et le bus, empruntés ensemble (les adaptateurs `_68k` ont besoin des deux).
+    /// The processor and the bus, borrowed together (the `_68k` adapters need both).
     fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus);
 }
 
-/// Implémente `Machine` et `Processeur` pour un contexte qui a les champs `c` et `b`.
+/// Implements `Machine` and `Processeur` for a context that has the fields `c` and `b`.
 macro_rules! machine {
     ($($t:ty),* $(,)?) => {
         $(impl Machine for $t {

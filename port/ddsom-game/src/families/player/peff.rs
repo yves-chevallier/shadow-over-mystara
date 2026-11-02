@@ -1,5 +1,5 @@
-//! Effets des joueurs (classe PEFF, pool de 48 objets de 0x60 octets, table 0x39992), première série.
-//! Voir `docs/families/player.md`.
+//! Player effects (class PEFF, pool of 48 objects of 0x60 bytes, table 0x39992), first series.
+//! See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -9,14 +9,14 @@ use crate::mem::rd16;
 use crate::objects::Obj;
 use crate::objects::Current;
 
-/// Type 44 (0x517dc) : pastille posée sur la caméra secondaire à un décalage de colonne (`+3`), animée
-/// par le jeu `0x1bcbbe` (ou `0x1bcd5a` en palette alternative) ; elle sort quand elle quitte l'écran par le bas.
+/// Type 44 (0x517dc): pellet placed on the secondary camera at a column offset (`+3`), animated by set `0x1bcbbe` (or
+/// `0x1bcd5a` in the alternate palette); it leaves when it exits the screen at the bottom.
 mod badge {
     use super::*;
 
-    /// Décalages de colonne par variante (mots, ROM programme).
+    /// Column offsets per variant (words, program ROM).
     const COLUMNS: u32 = 0x5184e;
-    /// Octets d'animation par `+0x2f` (RAM).
+    /// Animation bytes per `+0x2f` (RAM).
     const ANIM_BYTES: u32 = 0xff2478;
     const ANIMS: u32 = 0x1bcbbe;
     const ANIMS_ALT: u32 = 0x1bcd5a;
@@ -55,30 +55,29 @@ mod badge {
     }
 }
 
-/// Type 43 (0x51076) : comptoir de boutique (scènes 0x45 et suivantes). Deux zones, posées d'après la scène,
-/// guettent les quatre joueurs ; un joueur dans une zone avec `+0x58` positif lance le script de dialogue de
-/// la zone (pointeurs `+0x1c` et `+0x58`, interprète 0x514ac / 0x514cc : `peff_shop.rs`). L'objet suit
-/// le défilement de l'écran à demi-vitesse.
+/// Type 43 (0x51076): shop counter (scenes 0x45 and following). Two zones, set from the scene, watch the four players;
+/// a player in a zone with positive `+0x58` starts the zone's dialogue script (pointers `+0x1c` and `+0x58`,
+/// interpreter 0x514ac / 0x514cc: `peff_shop.rs`). The object follows the screen scroll at half speed.
 mod shop {
     use super::*;
 
-    /// Par scène (depuis 0x45) : (décalage, largeur) en X et en profondeur des deux zones (mots, en clair).
+    /// Per scene (from 0x45): (offset, width) in X and in depth of the two zones (words, in the clear).
     const ZONES_A: u32 = 0x51306;
     const ZONES_B: u32 = 0x51376;
-    /// Par scène : script de dialogue de chaque zone (longs, ROM programme).
+    /// Per scene: dialogue script of each zone (longs, program ROM).
     const SCRIPTS_A: u32 = 0x51106;
     const SCRIPTS_B: u32 = 0x5113e;
     const ANIMS: u32 = 0x1c03a6;
     const FIRST_SCENE: u16 = 0x45;
-    /// Quatre joueurs enregistrés (mots, 0 = absent).
+    /// Four registered players (words, 0 = absent).
     const PLAYERS: u32 = 0xff2aa4;
-    /// Position du défilement et sa valeur à l'image précédente (longs, A5).
+    /// Scroll position and its value on the previous frame (longs, A5).
     const SCROLL: [u32; 2] = [0x506, 0x50a];
     const PREVIOUS_SCROLL: [u32; 2] = [0x524, 0x528];
-    /// Zone A : `+0x14` décalage X, `+0x16` largeur, `+0x18` décalage en profondeur, `+0x1a` étendue.
+    /// Zone A: `+0x14` X offset, `+0x16` width, `+0x18` depth offset, `+0x1a` extent.
     const ZONE_A: u32 = 0x14;
     const ZONE_B: u32 = 0x50;
-    /// Octet du joueur : positif quand il peut parler au marchand.
+    /// Player byte: positive when it can talk to the merchant.
     const PLAYER_READY: u32 = 0x58;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -109,8 +108,8 @@ mod shop {
         x.reinsert();
     }
 
-    /// Deux tours des quatre joueurs (l'interprète du dialogue est appelé avec le joueur prêt dans la zone), puis
-    /// suivi du défilement et pas d'animation.
+    /// Two rounds over the four players (the dialogue interpreter is called with the player ready in the zone), then
+    /// scroll tracking and animation step.
     fn active<R: Bench>(x: &mut Cx<'_, R>) {
         let zones: [(u32, fn(&mut Cx<'_, R>, Obj)); 2] =
             [(ZONE_A, peff_shop::talk_a), (ZONE_B, peff_shop::talk_b)];
@@ -131,7 +130,7 @@ mod shop {
         x.anim_step();
     }
 
-    /// Le joueur de la case `k` de la liste, s'il est dans la zone.
+    /// The player in slot `k` of the list, if it is in the zone.
     fn in_zone<R: Bench>(x: &mut Cx<'_, R>, zone: u32, k: u32) -> Option<Obj> {
         let w = rd16(x.b, PLAYERS + 2 * k);
         if w == 0 {

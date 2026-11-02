@@ -1,15 +1,15 @@
-//! Variante de fuzz.rs du lot ENEMY (table ENEMY, états valides par type, maîtres et cibles fabriqués).
-//! Validation différentielle sur des états aléatoires : chaque routine native d'un groupe est appelée
-//! en mode contrôle depuis des états tirés au sort ; l'original s'exécute à côté et les deux sont
-//! comparés (mémoire, registres du contrat, durée si elle est déclarée exacte). Exerce les chemins
-//! que les scénarios n'atteignent pas.
+//! Variant of fuzz.rs for the ENEMY batch (ENEMY table, valid states per type, fabricated masters and targets).
+//! Differential validation on random states: each native routine of a group is called
+//! in control mode from randomly drawn states; the original runs alongside and the two are
+//! compared (memory, contract registers, duration if declared exact). Exercises the paths
+//! that the scenarios do not reach.
 //!
-//!   fuzz <groupe> <roms> <eeprom> <scénario> <images de chauffe> <tours>
+//!   fuzz <group> <roms> <eeprom> <scenario> <warm-up frames> <rounds>
 //!
-//! Groupes : son (0x68c, 0xe0836-0xee000), u1 (RNG et files d'événements 0x19a80-0x1a000),
-//! c1 (monnayeurs 0x13c00-0x14e50), m2 (EEPROM et configuration 0x2d300-0x2ede0),
-//! video (primitives vidéo, palettes et fondus : natives `video_*` et `palette_*`),
-//! camera (recopie du décor par les caméras 1 et 2, 0x2f81c 0x2f86e 0x328a8, et décors à parallaxe 0x33178...).
+//! Groups: son (0x68c, 0xe0836-0xee000), u1 (RNG and event queues 0x19a80-0x1a000),
+//! c1 (coin slots 0x13c00-0x14e50), m2 (EEPROM and configuration 0x2d300-0x2ede0),
+//! video (video primitives, palettes and fades: natives `video_*` and `palette_*`),
+//! camera (scenery copy by cameras 1 and 2, 0x2f81c 0x2f86e 0x328a8, and parallax scenery 0x33178...).
 
 use std::path::Path;
 
@@ -27,7 +27,7 @@ impl Rng {
         self.0 ^= self.0 << 17;
         (self.0 >> 16) as u32
     }
-    /// Vrai avec la probabilité 1/n.
+    /// True with probability 1/n.
     fn one_chance_in(&mut self, n: u32) -> bool {
         self.next() % n == 0
     }
@@ -36,7 +36,7 @@ impl Rng {
 type Cpu = m68k::Cpu;
 type Bus = cps2::Cps2Bus;
 
-/// Registres quelconques ; A0 sur un enregistrement joueur.
+/// Arbitrary registers; A0 on a player record.
 fn regs(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     for r in 0..8 {
         c.d[r] = if rng.next() & 3 == 0 { rng.next() & 0xff } else { rng.next() };
@@ -65,7 +65,7 @@ fn rng_sound(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr16(b, 0xff2960, if rng.next() & 1 == 0 { 0 } else { 0xffff });
     wr16(b, A5 + 0x5a6, rng.next() as u16 & 0x3ff);
     wr16(b, A5 + 0x5ae, rng.next() as u16 & 0x3ff);
-    // file : têtes quelconques, parfois pleine ou vide
+    // queue: arbitrary heads, sometimes full or empty
     let read = (rng.next() as u16 & 0x3f) * 0x10;
     let write = match rng.next() % 4 {
         0 => read,
@@ -78,7 +78,7 @@ fn rng_sound(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     regs(c, b, rng);
 }
 
-/// Un compteur BCD : parfois proche du plafond, parfois n'importe quoi.
+/// A BCD counter: sometimes close to the ceiling, sometimes anything.
 fn bcd(rng: &mut Rng) -> u32 {
     match rng.next() % 4 {
         0 => 0x0999_9990 + rng.next() % 10,
@@ -102,12 +102,12 @@ fn rng_u1(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr16(b, A5 + 0x1a, rng.next() as u16);
     ring(b, rng, 0x108, 0x10a, true);
     ring(b, rng, 0x18a, 0x18c, true);
-    // pop-ups : entrées de 8 octets, index multiples de 8
+    // pop-ups: 8-byte entries, indices multiple of 8
     wr8(b, A5 + 0x50, rng.one_chance_in(4) as u8);
     wr8(b, A5 + 0x20c, (rng.next() as u8 & 0x1f) * 8);
     wr8(b, A5 + 0x20d, (rng.next() as u8 & 0x1f) * 8);
     for i in 0..32 {
-        // entrées plausibles : type (octet haut 0-3), code < 0x18, petits paramètres
+        // plausible entries: type (high byte 0-3), code < 0x18, small parameters
         let plausible = (rng.next() % 4) as u16 * 0x100 | (rng.next() % 0x18) as u16;
         let base = A5 + 0x20e + 8 * i;
         wr16(b, base, if rng.next() % 3 == 0 { plausible } else { 0xffff });
@@ -115,7 +115,7 @@ fn rng_u1(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
         wr16(b, base + 4, if rng.next() & 1 == 0 { 0 } else { rng.next() as u16 % 0x100 });
         wr16(b, base + 6, 0x80);
     }
-    // pop-up courant : durée restante 0, 1, 2, 3, 4, 5 ou longue
+    // current pop-up: remaining duration 0, 1, 2, 3, 4, 5 or long
     let duration = [0u16, 1, 2, 3, 4, 5, 0x60][rng.next() as usize % 7];
     wr16(b, 0xff9180, (rng.next() % 4) as u16 * 0x100 | (rng.next() % 0x18) as u16);
     wr16(b, 0xff9182, rng.next() as u16 % 0x100);
@@ -128,7 +128,7 @@ fn rng_u1(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     regs(c, b, rng);
 }
 
-/// Monnayeurs : réglages, enregistrements et lignes d'entrée quelconques.
+/// Coin slots: arbitrary settings, records and input lines.
 fn rng_c1(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr16(b, A5 + 0x7fcc, rng.one_chance_in(8) as u16);
     wr8(b, A5 + 0x1e, 1 + rng.next() as u8 % 4);
@@ -153,14 +153,14 @@ fn rng_c1(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     regs(c, b, rng);
 }
 
-/// EEPROM et comptabilité : contenu de l'EEPROM, copies en RAM, paramètres de transfert, compteurs.
+/// EEPROM and accounting: EEPROM contents, RAM copies, transfer parameters, counters.
 fn rng_m2(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     let mut data = [0u16; 64];
     for d in data.iter_mut() {
         *d = rng.next() as u16;
     }
     if rng.next() & 1 == 0 {
-        // les deux exemplaires de la configuration concordent
+        // the two copies of the configuration agree
         for i in 0..24 {
             data[24 + i] = data[i];
         }
@@ -189,7 +189,7 @@ fn rng_m2(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr16(b, A5 + 0x16, rng.next() as u16 & 0x8f88);
     wr8(b, A5 + 0x18, rng.next() as u8 & 6);
     wr16(b, 0x664000, rng.next() as u16);
-    // configuration : variante, copie en RAM (valeurs valides ou non), bloc par défaut dans A6
+    // configuration: variant, RAM copy (valid or not), default block in A6
     let variant = 2 * (rng.next() as u16 % 6);
     wr16(b, A5 + 0x70, variant);
     for i in 0..0x80u32 {
@@ -201,10 +201,10 @@ fn rng_m2(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     regs(c, b, rng);
 }
 
-/// Routine tirée au sort (pour les états qui dépendent de l'entrée appelée).
+/// Randomly drawn routine (for states that depend on the entry being called).
 static ENTRY: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
 
-/// Couleur de palette : luminosité souvent aux butées, composantes quelconques ou proches de 0 / 0xf.
+/// Palette color: brightness often at the limits, components arbitrary or close to 0 / 0xf.
 fn colour(rng: &mut Rng) -> u16 {
     let lum = match rng.next() % 4 {
         0 => 0,
@@ -219,7 +219,7 @@ fn colour(rng: &mut Rng) -> u16 {
     lum | compo(rng) << 8 | compo(rng) << 4 | compo(rng)
 }
 
-/// Primitives vidéo, palettes et fondus : palettes, état de fondu, scène et caméras quelconques.
+/// Video primitives, palettes and fades: arbitrary palettes, fade state, scene and cameras.
 fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     let entry = ENTRY.load(std::sync::atomic::Ordering::Relaxed);
     for i in 0..0x800u32 {
@@ -237,7 +237,7 @@ fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
             1 => 0x253000 + 0x20 * (rng.next() % 0x1000),
             _ => 0x91c000 + 0x400 * k,
         };
-        // 0x1cdd6 lit un mot (couleur) : mêmes octets, interprétés autrement
+        // 0x1cdd6 reads a word (color): same bytes, interpreted differently
         wr32(b, A5 + 0x492 + 4 * k, if entry == 0x1cdd6 { colour(rng) as u32 } else if entry == 0x158e || entry == 0x15c8 { 0x91c000 + 0x400 * k } else { target });
     }
     if entry == 0x15c8 {
@@ -259,11 +259,11 @@ fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr8(b, A5 + 0x18, rng.next() as u8);
     regs(c, b, rng);
     c.a[4] = A5 + 0x48e;
-    // numéros de scène / d'ensemble valides (les tables de la ROM s'arrêtent à la scène 0x5a)
+    // valid scene / set numbers (the ROM tables stop at scene 0x5a)
     c.d[0] = if rng.next() % 3 == 0 { rng.next() % 0x5b } else { rng.next() % 12 };
     c.d[1] = if rng.next() & 1 == 0 { 0x1000 } else { 0xffff_f000 };
     if entry == 0x1a60a {
-        c.d[0] %= 3; // la table de la page 1 n'a que trois entrées
+        c.d[0] %= 3; // the page 1 table has only three entries
     }
     let page = 0x91c000 + 0x400 * (rng.next() % 4);
     c.a[0] = page;
@@ -290,12 +290,12 @@ fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     }
 }
 
-/// Caméras de défilement : positions cible et dessinée, butées et indicateurs quelconques mais plausibles
-/// (les écarts vont du simple décalage à plusieurs pas, dans les quatre sens).
+/// Scroll cameras: target and drawn positions, limits and flags arbitrary but plausible
+/// (offsets range from a simple shift to several steps, in all four directions).
 fn rng_camera(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     let entry = ENTRY.load(std::sync::atomic::Ordering::Relaxed);
     if matches!(entry, 0x33178 | 0x33196 | 0x331e8 | 0x3326c) {
-        // décors à parallaxe : défilement courant et précédent, position de l'objet
+        // parallax scenery: current and previous scroll, object position
         for off in [0x506u32, 0x50a, 0x524, 0x528] {
             wr32(b, A5 + off, rng.next() << 8 ^ rng.next());
         }
@@ -314,7 +314,7 @@ fn rng_camera(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
             _ => (a.next() as i32 % (2 * portee)) - portee,
         }
     };
-    // positions qui restent dans la carte du décor (au-delà, la ROM n'a plus de table : lectures sans sens)
+    // positions that stay inside the scenery map (beyond it the ROM has no more table: meaningless reads)
     let drawn_x = 0x100 + (rng.next() % 0xb00) as i32;
     let drawn_y = 0x40 + (rng.next() % 0x260) as i32;
     let x = drawn_x + gap(rng, 4 * step);
@@ -337,21 +337,21 @@ fn b_prog16(b: &mut Bus, a: u32) -> u16 {
     m68k::Bus::read_prog16(b, a)
 }
 
-/// Familles d'objets (ESHL, SET, SOBJ) : pour chaque gestionnaire, des trajectoires complètes. Un
-/// objet neuf du type est créé à l'état 0 (propriétaire et variante tirés au sort) puis le
-/// gestionnaire est appelé image après image, avec des perturbations aléatoires des entrées que le
-/// moteur de collisions ou le créateur modifient (drapeaux de touche, propriétaire, positions).
-/// Les états sont ainsi atteints par le code lui-même. Chaque appel est comparé à l'original.
-/// `DDSOM_ENTREE=<address hexa>` restreint à un gestionnaire.
+/// Object families (ESHL, SET, SOBJ): for each handler, complete trajectories. A
+/// new object of the type is created in state 0 (owner and variant drawn at random), then the
+/// handler is called frame after frame, with random perturbations of the inputs that the
+/// collision engine or the creator modify (hit flags, owner, positions).
+/// States are thus reached by the code itself. Each call is compared with the original.
+/// `DDSOM_ENTREE=<hex address>` restricts to one handler.
 const DDSOM_TRACE_LEN: u32 = 200000;
-/// États de départ (`+4`, `+5`, `+6`) que la table de sauts de chaque type ESHL 15..39 accepte
-/// (au-delà, l'original sort du code) : listes de valeurs possibles par octet.
-/// États (`+4`, `+5`, `+6`) valides d'un type ENEMY : ceux que les tables de sauts de l'original couvrent.
+/// Starting states (`+4`, `+5`, `+6`) accepted by the jump table of each ESHL type 15..39
+/// (beyond that, the original leaves the code): lists of possible values per byte.
+/// Valid states (`+4`, `+5`, `+6`) of an ENEMY type: those covered by the original's jump tables.
 fn enemy_states(kind: u8, variant: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u8])] {
     const Z: &[u8] = &[0];
     match kind {
-        // Riyakaa : sous-états et sous-sous-états que les tables de sauts acceptent (l'arrivée dépend
-        // de la variante)
+        // Riyakaa: sub-states and sub-sub-states accepted by the jump tables (the arrival depends
+        // on the variant)
         16 => match variant {
             8 | 10 => &[
                 (&[0], Z, Z),
@@ -395,9 +395,9 @@ fn enemy_states(kind: u8, variant: u8) -> &'static [(&'static [u8], &'static [u8
         ],
         28 => &[(&[0], Z, Z), (&[2], &[0, 2, 4, 6], Z), (&[4, 6], Z, Z)],
         20 => &[(&[0], Z, Z), (&[2], &[0, 2], Z), (&[4], &[0], &[0, 2]), (&[4], &[2], &[0, 2, 4, 6, 8, 10]), (&[6], Z, Z)],
-        // DarkWarrior 1 : bras liés à un hôte, l'étape `+5` dépend de l'état de l'hôte
+        // DarkWarrior 1: arms linked to a host, step `+5` depends on the host's state
         25 => &[(&[0], Z, Z), (&[2], &[0, 2, 4, 6], Z), (&[4], Z, Z), (&[6], Z, Z)],
-        // Harpy : états que les tables de sauts de l'original acceptent
+        // Harpy: states accepted by the original's jump tables
         21 => &[
             (&[0], Z, Z),
             (&[2], &[0], &[0, 2, 4, 6]),
@@ -410,7 +410,7 @@ fn enemy_states(kind: u8, variant: u8) -> &'static [(&'static [u8], &'static [u8
             (&[4], &[4], &[0, 2]),
             (&[6], Z, Z),
         ],
-        // Owlbear : même charpente que le Riyakaa
+        // Owlbear: same framework as the Riyakaa
         4 => &[
             (&[0], Z, Z),
             (&[2], &[0], Z),
@@ -426,7 +426,7 @@ fn enemy_states(kind: u8, variant: u8) -> &'static [(&'static [u8], &'static [u8
             (&[4], &[8], &[0, 2, 4]),
             (&[6], Z, Z),
         ],
-        // Displacer Beast : un groupe de comportements (+5) par état actif, ses étapes (+6)
+        // Displacer Beast: one behavior group (+5) per active state, its steps (+6)
         19 => &[
             (&[0], Z, Z),
             (&[2], &[0], &[0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22]),
@@ -447,7 +447,7 @@ fn enemy_states(kind: u8, variant: u8) -> &'static [(&'static [u8], &'static [u8
     }
 }
 
-/// Étape `+7` valide de l'Owlbear (type 4) pour un état `(+4, +5, +6)`.
+/// Valid `+7` step of the Owlbear (type 4) for a state `(+4, +5, +6)`.
 fn step_owlbear(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n = match (s4, s5, s6) {
         (2, 0, _) => 4,
@@ -468,8 +468,8 @@ fn step_owlbear(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % (n / 2 + 1)) as u8
 }
 
-/// Champs du bras (type 25) et de son hôte à des valeurs que les tables de l'original acceptent :
-/// état de l'hôte `+0xa2` (0 à 8), sous-état `+5` valide pour le chemin choisi, positions proches.
+/// Fields of the arm (type 25) and its host set to values the original's tables accept:
+/// host state `+0xa2` (0 to 8), valid sub-state `+5` for the chosen path, close positions.
 fn prep_warrior(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
     use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8};
     let host = rd16(b, obj + 0x46) as u32 | 0xff0000;
@@ -505,7 +505,7 @@ fn prep_warrior(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 0x34, 0);
 }
 
-/// Champs de la Harpy (type 21) à des valeurs que ses tables acceptent.
+/// Harpy (type 21) fields set to values its tables accept.
 fn prep_harpy(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
     use ddsom_game::mem::{wr16, wr32, wr8};
     wr8(b, obj + 0x43, (rng.next() % 2) as u8);
@@ -514,19 +514,19 @@ fn prep_harpy(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
         wr8(b, obj + off, (rng.next() % 5) as u8);
     }
     wr8(b, obj + 0xa2, (rng.next() % 2) as u8);
-    // l'angle de vol reste sous 0x40 (le dispatch par variante lit D0 laissé par la table de vitesses)
+    // the flight angle stays below 0x40 (the variant dispatch reads D0 left by the speed table)
     wr8(b, obj + 0x2d, (rng.next() % 0x20) as u8);
     wr16(b, obj + 0xb0, (rng.next() % 0x200) as u16);
     wr8(b, obj + 0xb1, [0u8, 2, 6][rng.next() as usize % 3]);
     wr8(b, obj + 0xa5, (rng.next() % 2) as u8);
     wr16(b, obj + 0xae, [0x100u16, 0x280, 0xff00][rng.next() as usize % 3]);
-    // le compagnon est un objet existant ; le tir (+0xa6) un autre
+    // the companion is an existing object; the shot (+0xa6) another one
     wr16(b, obj + 0xaa, 0x85de + 0x200 * (rng.next() % 4) as u16);
     wr32(b, obj + 0xa6, 0xff0000 | (0x85de + 0x200 * (rng.next() % 4)));
     wr8(b, obj + 0x49, 4 * (rng.next() % 43) as u8);
 }
 
-/// Champs de l'Owlbear à des valeurs que ses tables acceptent.
+/// Owlbear fields set to values its tables accept.
 fn prep_owlbear(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
     use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8};
     let (s4, s5, s6) = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
@@ -536,7 +536,7 @@ fn prep_owlbear(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
     }
     wr8(b, obj + 0x49, 4 * (rng.next() % 43) as u8);
     wr8(b, obj + 0x4a, 0x20 * (rng.next() % 2) as u8);
-    // souvent au ras du sol, en train de retomber : les réceptions de bonds
+    // often at ground level, falling back: the jump landings
     if rng.next() % 2 == 0 {
         wr16(b, obj + 0xc, (rng.next() % 3) as u16);
         wr16(b, obj + 0x18, 0xff00);
@@ -547,22 +547,22 @@ fn prep_owlbear(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
     }
     wr16(b, obj + 0x84, (rng.next() % 4) as u16);
     wr8(b, obj + 0xa5, (rng.next() % 2) as u8);
-    // animations voulue et en cours : souvent identiques (répétitions des coups)
+    // wanted and current animations: often identical (repeated hits)
     const ANIMS: [u8; 14] = [0, 2, 4, 6, 8, 0xa, 0xc, 0xe, 0x15, 0x16, 0x1a, 0x1c, 0x7f, 0xff];
     let anim = ANIMS[rng.next() as usize % ANIMS.len()];
     wr8(b, obj + 0xa1, anim);
     wr8(b, obj + 0xa2, if rng.next() % 2 == 0 { anim } else { ANIMS[rng.next() as usize % ANIMS.len()] });
-    // état à reprendre après un demi-tour
+    // state to resume after a U-turn
     let resumes: [u32; 3] = [0x0202_0000, 0x0204_0000, 0x0206_0000];
     wr32(b, obj + 0xa6, resumes[rng.next() as usize % 3]);
     wr8(b, obj + 0xa4, 2 * (rng.next() % 3) as u8);
     wr16(b, obj + 0x50, 0x85de + 0x200 * (rng.next() % 4) as u16);
-    // un hôte éventuel : orientation
+    // a possible host: orientation
     let host = rd16(b, obj + 0x46) as u32 | 0xff0000;
     wr8(b, host + 0x2c, 0x20 * (rng.next() % 2) as u8);
 }
 
-/// Étape `+7` valide du Displacer Beast (type 19) pour un état `(+4, +5, +6)` : celles que les tables
+/// Valid `+7` step of the Displacer Beast (type 19) for a state `(+4, +5, +6)`: those the tables
 /// de sauts de l'original acceptent.
 fn step_dbeast(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n = match (s4, s5, s6) {
@@ -586,14 +586,14 @@ fn step_dbeast(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % (n / 2 + 1)) as u8
 }
 
-/// Champs d'IA d'un ennemi à comportement complexe (type 16) à des valeurs que ses tables acceptent :
-/// compteurs courts, sous-état à reprendre, état de repli, réaction au dernier coup, cible = un joueur.
+/// AI fields of an enemy with complex behavior (type 16) set to values its tables accept:
+/// short counters, sub-state to resume, fallback state, reaction to the last hit, target = a player.
 fn prep_enemy_ai(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
     use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8};
     for off in [0x6b, 0x6e, 0x71, 0x77, 0xa2, 0x90] {
         wr8(b, obj + off, (rng.next() % 5) as u8);
     }
-    // compteur de coups de patte restants : 1 au plus, et seulement au sous-sous-état 4
+    // counter of remaining paw hits: 1 at most, and only in sub-sub-state 4
     if rd8(b, obj + 5) == 4 {
         let n = if rd8(b, obj + 6) == 4 { (rng.next() % 2) as u8 } else { 0 };
         wr8(b, obj + 0xa2, n);
@@ -609,21 +609,21 @@ fn prep_enemy_ai(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
     wr16(b, obj + 0x84, (rng.next() % 4) as u16);
     wr8(b, obj + 0x49, 4 * (rng.next() % 41) as u8);
     wr8(b, obj + 0x4a, 0x20 * (rng.next() % 2) as u8);
-    // paramètres d'IA de l'initialisation du type 16 (masques de décision, durées)
+    // AI parameters from the type 16 initialization (decision masks, durations)
     for (off, v) in [(0x68, 2), (0x69, 2), (0x70, 0), (0x6a, 1), (0x6c, 2), (0x6d, 4), (0x72, 2), (0x73, 2), (0x74, 2), (0x75, 0), (0x76, 3), (0x79, 6), (0x80, 7), (0x81, 6)] {
         wr8(b, obj + off, v);
     }
     wr8(b, obj + 0x72, (rng.next() % 4) as u8);
     wr8(b, obj + 0x73, (rng.next() % 4) as u8);
-    // un hôte qui regarde dans un sens ou l'autre (saisie par un joueur)
+    // a host looking one way or the other (grabbed by a player)
     let host = rd16(b, obj + 0x46) as u32 | 0xff0000;
     wr8(b, host + 0x2c, 0x20 * (rng.next() % 2) as u8);
-    // la cible (+0x50) est un des joueurs
+    // the target (+0x50) is one of the players
     wr16(b, obj + 0x50, 0x85de + 0x200 * (rng.next() % 4) as u16);
 }
 
-/// Champs du Displacer Beast (type 19) à des valeurs que ses tables acceptent : étape `+7`, code de
-/// réaction, compteurs courts, animation en cours, état à reprendre après un demi-tour.
+/// Displacer Beast (type 19) fields set to values its tables accept: `+7` step, reaction
+/// code, short counters, current animation, state to resume after a U-turn.
 fn prep_dbeast(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
     use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8};
     let (s4, s5, s6) = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
@@ -633,7 +633,7 @@ fn prep_dbeast(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
     }
     wr8(b, obj + 0x49, 4 * (rng.next() % 43) as u8);
     wr8(b, obj + 0x4a, 0x20 * (rng.next() % 2) as u8);
-    // souvent au ras du sol, en train de retomber : les réceptions de bonds
+    // often at ground level, falling back: the jump landings
     if rng.next() % 2 == 0 {
         wr16(b, obj + 0xc, (rng.next() % 3) as u16);
         wr16(b, obj + 0x18, 0xff00);
@@ -643,20 +643,20 @@ fn prep_dbeast(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
         wr8(b, obj + off, (rng.next() % 5) as u8);
     }
     wr8(b, obj + 0xbf, (rng.next() % 16) as u8);
-    // pièce rattachée (variante 0 à 3 : rang) ou lâchée
+    // attached piece (variant 0 to 3: rank) or dropped
     wr8(b, obj + 0xbc, if rng.next() % 3 == 0 { 0xff } else { (rng.next() % 8) as u8 });
-    // état à reprendre après un demi-tour : un état actif valide
+    // state to resume after a U-turn: a valid active state
     let resumes: [u32; 4] = [0x0202_0000, 0x0204_0000, 0x0206_0000, 0x0208_0004];
     wr32(b, obj + 0xa6, resumes[rng.next() as usize % 4]);
     wr8(b, obj + 0xa4, 2 * (rng.next() % 3) as u8);
     wr16(b, obj + 0x84, (rng.next() % 4) as u16);
-    // animation en cours : souvent celle que l'étape voudra lancer (répétitions des coups)
+    // current animation: often the one the step will want to start (repeated hits)
     const ANIMS: [u8; 22] = [0, 5, 6, 7, 0xc, 0xd, 0xe, 0xf, 0x16, 0x18, 0x19, 0x1c, 0x1d, 0x1e, 0x28, 0x2a, 0x2b, 0x2d, 0x2e, 0x2f, 0x7f, 0xff];
     wr8(b, obj + 0xa2, ANIMS[rng.next() as usize % ANIMS.len()]);
     wr8(b, obj + 0xaf, ANIMS[rng.next() as usize % ANIMS.len()]);
-    // la cible est un joueur
+    // the target is a player
     wr16(b, obj + 0x50, 0x85de + 0x200 * (rng.next() % 4) as u16);
-    // le parent (+0x42) : état, variante, indice d'animation, compteur de bras
+    // the parent (+0x42): state, variant, animation index, arm counter
     let parent = rd16(b, obj + 0x42) as u32 | 0xff0000;
     if rd16(b, obj + 0x42) != 0 {
         const STATES: [u32; 6] = [0x0402_0000, 0x0402_0c00, 0x0200_0600, 0x0202_0000, 0x0402_0200, 0x0408_0000];
@@ -668,8 +668,8 @@ fn prep_dbeast(b: &mut cps2::Cps2Bus, rng: &mut Rng, obj: u32) {
     }
 }
 
-/// États du maître d'un ennemi de type 26 (+0xb8 à +0xbb, plus +4/+5 et le code de réaction +0x49) que
-/// les tables de sauts de l'original couvrent.
+/// Master states of a type 26 enemy (+0xb8 to +0xbb, plus +4/+5 and the reaction code +0x49) that
+/// the original's jump tables cover.
 fn master_state_26(b: &mut cps2::Cps2Bus, rng: &mut Rng, master: u32) {
     use ddsom_game::mem::{wr16, wr32, wr8};
     let pair = |rng: &mut Rng, n: u32| 2 * (rng.next() % n) as u8;
@@ -678,7 +678,7 @@ fn master_state_26(b: &mut cps2::Cps2Bus, rng: &mut Rng, master: u32) {
     if group == 4 {
         mode = pair(rng, 6);
         (phase, step) = match mode {
-            // les routines de réaction ne sont sûres qu'en leur état de départ
+            // the reaction routines are only safe in their initial state
             0 => (0, 0),
             2 => (pair(rng, 3), 0),
             4 => (pair(rng, 5), 0),
@@ -704,17 +704,17 @@ fn master_state_26(b: &mut cps2::Cps2Bus, rng: &mut Rng, master: u32) {
     wr8(b, master + 0xba, phase);
     wr8(b, master + 0xbb, step);
     wr8(b, master + 0x33, (rng.next() % 2) as u8);
-    // code de réaction : multiple de 4 dans la table (45 entrées)
+    // reaction code: multiple of 4 in the table (45 entries)
     wr8(b, master + 0x49, 4 * (rng.next() % 45) as u8);
     for off in [0x14u32, 0x18, 0x1c] {
         wr32(b, master + off, (rng.next() % 0x400) as u32);
     }
     wr16(b, master + 0x16, (rng.next() % 0x40) as u16);
-    // état du maître : 0x406 (en cours de coup) déclenche la disparition du double
+    // master state: 0x406 (mid-hit) triggers the double's disappearance
     wr16(b, master + 4, if rng.next() % 12 == 0 { 0x406 } else { 0x200 });
 }
 
-/// États du maître d'un ennemi de type 24 (octets +4 à +7) que les tables de sauts de l'original couvrent.
+/// Master states of a type 24 enemy (bytes +4 to +7) that the original's jump tables cover.
 fn master_state_24(b: &mut cps2::Cps2Bus, rng: &mut Rng, master: u32) {
     use ddsom_game::mem::wr8;
     let pair = |rng: &mut Rng, n: u32| 2 * (rng.next() % n) as u8;
@@ -769,15 +769,15 @@ fn eshl_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
     }
 }
 
-/// Perturbe les variables globales que lisent les contrôleurs SET / SOBJ : mode de jeu, nombre de
-/// joueurs, caméras, rang, et pour chaque joueur son état, sa vie, ses touches et sa position
+/// Perturbs the global variables read by the SET / SOBJ controllers: game mode, number of
+/// players, cameras, rank, and for each player its state, life, keys and position
 /// autour de l'objet `obj`.
 fn perturb_globals(b: &mut cps2::Cps2Bus, rng: &mut Rng, step: u32, obj: u32) {
     use ddsom_game::mem::{rd16, wr8};
     if step != 0 && rng.next() % 4 != 0 {
         return;
     }
-    // octets de la RAM de travail (A5+) et valeurs possibles
+    // work RAM bytes (A5+) and possible values
     let bytes: [(u32, &[u8]); 16] = [
         (0x2c, &[0xc, 0xc, 0xc, 0, 8]),
         (0x30, &[0, 1, 1, 1]),
@@ -801,7 +801,7 @@ fn perturb_globals(b: &mut cps2::Cps2Bus, rng: &mut Rng, step: u32, obj: u32) {
             wr8(b, A5 + off, values[rng.next() as usize % values.len()]);
         }
     }
-    // caméras, rang
+    // cameras, rank
     for off in [0x506u32, 0x556] {
         if rng.next() % 2 == 0 {
             wr16(b, A5 + off, [0, 0x100, 0x180, 0x1c0, 0x200, 0x2b0, 0x300, 0xa00][rng.next() as usize % 8]);
@@ -815,7 +815,7 @@ fn perturb_globals(b: &mut cps2::Cps2Bus, rng: &mut Rng, step: u32, obj: u32) {
     if rng.next() % 3 == 0 {
         wr16(b, A5 + 0x7f92, (rng.next() % 32) as u16);
     }
-    // joueurs : actif, état, vie, touches, position proche de l'objet
+    // players: active, state, life, keys, position close to the object
     for j in 0..4u32 {
         let p = 0xff85de + 0x200 * j;
         if rng.next() % 3 == 0 {
@@ -853,13 +853,13 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_game::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup as usize {
         script.apply(f, &mut m);
         m.run_frame();
     }
     ddsom_game::set_check(true);
-    // les paniques sont comptées et résumées à la fin (message et lieu), pas affichées une à une
+    // panics are counted and summarized at the end (message and location), not displayed one by one
     std::panic::set_hook(Box::new(|info| {
         let msg = info.payload().downcast_ref::<String>().cloned()
             .or_else(|| info.payload().downcast_ref::<&str>().map(|s| s.to_string()))
@@ -885,19 +885,19 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
         let mut b = b0.clone();
         println!("places libres : ESHL {} SET {} SOBJ {}", rd16(&mut b, A5 + ESHL.free), rd16(&mut b, A5 + SET.free), rd16(&mut b, A5 + SOBJ.free));
     }
-    // nombre de variantes tirées (3 par défaut : au-delà, beaucoup de types sortent de leurs tables)
+    // number of variants drawn (3 by default: beyond that, many types leave their tables)
     let variants: u32 = std::env::var("DDSOM_VARIANTES").ok().and_then(|v| v.parse().ok()).unwrap_or(3);
     let duration: u32 = std::env::var("DDSOM_PAS").ok().and_then(|v| v.parse().ok()).unwrap_or(60);
     let mut shown = 0;
     let mut tests = 0;
-    // couverture du code d'origine des gestionnaires (DDSOM_COUVERTURE=fichier : écrit les adresses vues)
+    // coverage of the handlers' original code (DDSOM_COUVERTURE=file: writes the addresses seen)
     let coverage = std::env::var("DDSOM_COUVERTURE").is_ok();
     let mut seen: std::collections::BTreeSet<u32> = Default::default();
     for _ in 0..tours {
         for &(entry, pool, kind) in &inputs {
             let (mut c, mut b) = (c0.clone(), b0.clone());
             b.irq_horizon = u64::MAX;
-            // propriétaires possibles : ennemis actifs, sinon joueurs
+            // possible owners: active enemies, otherwise players
             let mut owners: Vec<u32> = ENEMY.iter().filter(|o| rd8(&mut b, o.0) != 0).map(|o| o.0).collect();
             owners.extend((0..4).map(|j| 0xff85de + 0x200 * j));
             let obj = pool.slot(rng.next() % pool.slots);
@@ -905,15 +905,15 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                 wr16(&mut b, obj.0 + off, 0);
             }
             if pool.class == 2 && (matches!(kind, 4 | 19 | 21 | 25) || lot3::handles(kind)) {
-                // un propriétaire distinct de l'objet : ses états sont réécrits au hasard par la suite
+                // an owner distinct from the object: its states are rewritten at random afterwards
                 owners.retain(|&o| o != obj.0);
             }
             let mut owner = owners[rng.next() as usize % owners.len()];
             if pool.class == 2 {
-                // le maître n'est pas l'objet lui-même : on prend un autre ennemi, sinon un joueur
+                // the master is not the object itself: take another enemy, otherwise a player
                 owners.retain(|&o| o != obj.0 && o >= ENEMY.slot(0).0 && o < ENEMY.slot(ENEMY.slots).0);
                 if owners.is_empty() {
-                    // aucun autre ennemi en scène : on en fabrique un, inactif à tous égards
+                    // no other enemy in the scene: fabricate one, inactive in every respect
                     let other = ENEMY.slot((rng.next() % ENEMY.slots).min(ENEMY.slots - 1));
                     let other = if other.0 == obj.0 { ENEMY.slot(0) } else { other };
                     let other = if other.0 == obj.0 { ENEMY.slot(1) } else { other };
@@ -937,20 +937,20 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
             wr8(&mut b, obj.0 + 0x2c, (rng.next() & 1) as u8);
             wr8(&mut b, obj.0 + 0x2f, if rng.next() % 4 == 0 { rng.next() as u8 % 3 } else { 0 });
             if pool.class == 2 && kind == 21 {
-                // la série d'attaque indexe des tables de mots : 0, 2 ou 4
+                // the attack series indexes word tables: 0, 2 or 4
                 let series = 2 * (rd8(&mut b, obj.0 + 0x2f) % 3);
                 wr8(&mut b, obj.0 + 0x2f, series);
             }
             if pool.class == 2 && kind == 19 {
-                // le profil d'IA n'a que deux valeurs (la table de sauts de l'original n'en a pas d'autre)
+                // the AI profile has only two values (the original's jump table has no other)
                 let profile = rd8(&mut b, obj.0 + 0x2f) % 2;
                 wr8(&mut b, obj.0 + 0x2f, profile);
             }
             wr16(&mut b, obj.0 + 0x50, owner as u16);
             wr16(&mut b, obj.0 + 0x46, owner as u16);
             wr16(&mut b, obj.0 + 0x5a, owner as u16);
-            // ESHL 15..39 : créateur en +0x5c, hôte en +0x42, pointeurs longs (types 17 et 19), délais,
-            // variables de niveau lues par les tirs
+            // ESHL 15..39: creator at +0x5c, host at +0x42, long pointers (types 17 and 19), delays,
+            // level variables read by the shots
             if pool.class == 8 && kind >= 15 {
                 wr16(&mut b, obj.0 + 0x5c, owner as u16);
                 if rng.next() % 2 == 0 {
@@ -970,7 +970,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                     wr8(&mut b, obj.0 + 5, s5[rng.next() as usize % s5.len()]);
                     wr8(&mut b, obj.0 + 6, s6[rng.next() as usize % s6.len()]);
                 }
-                // le plus souvent, le propriétaire est à l'écran (sinon le tir est aussitôt retiré par le culling)
+                // most often, the owner is on screen (otherwise the shot is immediately removed by culling)
                 if rng.next() % 4 != 0 {
                     let (cx, cy) = (rd16(&mut b, A5 + 0x506), rd16(&mut b, A5 + 0x50a));
                     wr16(&mut b, owner + 8, cx.wrapping_add(0x60 + (rng.next() % 0x80) as u16));
@@ -980,7 +980,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                 wr8(&mut b, A5 + 0x35, (rng.next() % 5) as u8);
                 wr8(&mut b, A5 + 0x36, (rng.next() % 2) as u8);
             }
-            // ENEMY : hôte en +0x42, PV, états tirés (DDSOM_ETATS), joueurs proches
+            // ENEMY: host at +0x42, HP, drawn states (DDSOM_ETATS), nearby players
             if pool.class == 2 {
                 wr16(&mut b, obj.0 + 0xb2, owner as u16);
                 if kind == 26 {
@@ -993,19 +993,19 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                     wr16(&mut b, obj.0 + 0x42, owner as u16);
                 }
                 wr16(&mut b, obj.0 + 0x62, (rng.next() % 40) as u16);
-                // hôte d'une partie composite (type 7) : son type, ses états et son dernier coup
+                // host of a composite part (type 7): its type, its states and its last hit
                 if kind == 7 {
                     wr8(&mut b, owner + 2, [0xe, 0x13, 5][rng.next() as usize % 3]);
                     wr8(&mut b, owner + 0xa2, (rng.next() % 7) as u8);
                     wr8(&mut b, owner + 0x3e, if rng.next() % 3 == 0 { 0xff } else { 0 });
                     wr8(&mut b, owner + 0x2c, (rng.next() % 2) as u8 * 0x20);
                 }
-                // suivi de vie des doubles (type 23) : PV minimum connu, délai, drapeau « blessé »
+                // life tracking of the doubles (type 23): minimum known HP, delay, "wounded" flag
                 wr16(&mut b, obj.0 + 0x64, (rng.next() % 50) as u16);
                 wr16(&mut b, obj.0 + 0xb4, (rng.next() % 3) as u16);
                 wr8(&mut b, obj.0 + 0xaf, (rng.next() % 3 == 0) as u8);
                 wr8(&mut b, obj.0 + 0xb6, (rng.next() % 3 == 0) as u8);
-                // parties liées (halos, flammes, bras, ombre) : objets existants tirés au hasard
+                // linked parts (halos, flames, arms, shadow): existing objects drawn at random
                 if kind == 20 && rng.next() % 4 != 0 {
                     for off in [0xa4u32, 0xa6, 0xa8, 0xaa, 0xac, 0xae, 0xb4] {
                         wr16(&mut b, obj.0 + off, owners[rng.next() as usize % owners.len()] as u16);
@@ -1053,8 +1053,8 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                 wr32(&mut b, obj.0 + off, v);
             }
             wr16(&mut b, obj.0 + 0xc, (rng.next() % 0x60) as u16);
-            // décompte des places libres cohérent
-            // (au moment du chauffage le pool peut être plein : les gestionnaires testent ce compteur)
+            // consistent free-slot count
+            // (at warm-up time the pool may be full: the handlers test this counter)
             wr16(&mut b, A5 + pool.free, (pool.slots / 2) as u16);
             if pool.class == SET.class && matches!(kind, 2 | 15) {
                 scene_state(&mut b, &mut rng, obj.0, kind, true);
@@ -1083,7 +1083,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                             master_state_24(&mut b, &mut rng, owner);
                         }
                     }
-                    // le propriétaire change d'état : états de l'automate, drapeaux d'attaque, compteurs
+                    // the owner changes state: state-machine states, attack flags, counters
                     if rng.next() % 3 == 0 && !(pool.class == 2 && matches!(kind, 22..=24 | 26)) {
                         for off in [4u32, 5, 6, 7] {
                             if rng.next() % 2 == 0 {
@@ -1102,7 +1102,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                             }
                         }
                     }
-                    // sa propre variante / drapeaux de contrôle
+                    // its own variant / control flags
                     if rng.next() % 12 == 0 {
                         wr8(&mut b, obj.0 + 0x3e, rng.next() as u8 % 6);
                     }
@@ -1111,21 +1111,21 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                     }
                 }
                 if pool.class == 2 {
-                    // compteurs de places libres de tous les pools, cohérents avec leur contenu (les ennemis
-                    // composites les lisent pour savoir s'ils peuvent créer leurs parties)
+                    // free-slot counters of all pools, consistent with their contents (the composite
+                    // enemies read them to know whether they can create their parts)
                     for q in ddsom_game::objects::pools::POOLS {
                         let free = (0..q.slots).filter(|&i| rd8(&mut b, q.slot(i).0) == 0).count();
                         wr16(&mut b, A5 + q.free, free as u16);
                     }
                 }
                 if pool.class == 2 && rng.next() % 5 == 0 {
-                    // difficulté, scène et joueurs en vie lus par les tables de décision
+                    // difficulty, scene and living players read by the decision tables
                     wr16(&mut b, A5 + 0x7f92, (rng.next() % 8) as u16);
                     wr8(&mut b, A5 + 0x34, if rng.next() % 4 == 0 { 4 } else { (rng.next() % 12) as u8 });
                     wr8(&mut b, A5 + 0x35, (rng.next() % 5) as u8);
                 }
                 if pool.class == 2 && rng.next() % 2 == 0 {
-                    // joueurs actifs, tantôt près de l'ennemi tantôt loin
+                    // active players, sometimes near the enemy sometimes far
                     for j in 0..4u32 {
                         let q = 0xff85de + 0x200 * j;
                         if rng.next() % 3 != 0 {
@@ -1139,11 +1139,11 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                     }
                 }
                 if pool.class == 2 && lot3::handles(kind) && (step == 0 || rng.next() % 3 == 0) {
-                    // état et champs valides du troisième lot, tirés à nouveau de temps en temps
+                    // valid state and fields of the third batch, redrawn from time to time
                     lot3::prep(&mut b, &mut rng, kind, obj.0, step == 0);
                 }
                 if pool.class == 2 && matches!(kind, 4 | 19 | 21 | 25) && step > 0 && rng.next() % 3 == 0 {
-                    // nouvel état valide à chaque fois : visite beaucoup plus d'étapes que la seule trajectoire
+                    // new valid state each time: visits many more steps than the trajectory alone
                     let hitboxes = enemy_states(kind, rd8(&mut b, obj.0 + 3));
                     let (s4, s5, s6) = hitboxes[rng.next() as usize % hitboxes.len()];
                     wr8(&mut b, obj.0 + 4, s4[rng.next() as usize % s4.len()]);
@@ -1160,7 +1160,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                     }
                 }
                 if pool.class == 2 && (matches!(kind, 4 | 19) || lot3::handles(kind)) && rng.next() % 2 == 0 {
-                    // des joueurs dans les boîtes de portée de la bête (largeur étroite, profondeur ±8)
+                    // players in the beast's range boxes (narrow width, depth ±8)
                     for j in 0..4u32 {
                         let q = 0xff85de + 0x200 * j;
                         if rng.next() % 4 != 0 {
@@ -1184,8 +1184,8 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                 }
                 if pool.class == 2 && step > 0 && !lot3::handles(kind) {
                     for off in [0x33u32, 0x53, 0x56, 0x57, 0xa2, 0xa3, 0xa4, 0xb0, 0xb2, 0xb6, 0x20, 0x21, 0x24, 0x26, 0x30, 0x32, 0x3e] {
-                        // +0x24 et +0x26 sont les liens des listes triées : seul le type 20 les
-                        // utilise comme compteurs (parent de type 19), on ne les corrompt que pour lui
+                        // +0x24 and +0x26 are the sorted-list links: only type 20 uses them
+                        // as counters (type 19 parent), they are corrupted only for it
                         let links = matches!(off, 0x20 | 0x24 | 0x26) || (kind == 16 && matches!(off, 0xa2 | 0xa3)) || (kind == 19 && off == 0xa4) || (kind == 4 && matches!(off, 0xa4 | 0xa3)) || (kind == 21 && off == 0xa2);
                         if rng.next() % 9 == 0 && !(matches!(kind, 22..=24 | 26) && matches!(off, 0xb0 | 0xb2)) && !(links && (kind != 20 || off == 0xa3)) {
                             let v = match rng.next() % 4 {
@@ -1195,7 +1195,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                                 _ => rng.next() as u8,
                             };
                             wr8(&mut b, obj.0 + off, v);
-                            // l'état de l'hôte d'une partie (type 7) reste dans la table de la ROM
+                            // the state of the host of a part (type 7) stays within the ROM table
                             if rng.next() % 3 == 0 && !(kind == 7 && matches!(off, 0xa2 | 0xa3)) && !(kind == 25 && off == 0xa2) {
                                 wr8(&mut b, owner + off, v);
                             }
@@ -1206,12 +1206,12 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                         wr16(&mut b, obj.0 + 0x64, (rng.next() % 50) as u16);
                     }
                 }
-                // SET et SOBJ : contrôleurs de scène et d'interface, qui lisent des variables globales
-                // (mode de jeu, nombre de joueurs, caméras, joueurs) : on les tire aussi
+                // SET and SOBJ: scene and interface controllers, which read global variables
+                // (game mode, number of players, cameras, players): these are drawn too
                 if pool.class == 0x10 || pool.class == 0x14 {
                     perturb_globals(&mut b, &mut rng, step, obj.0);
                 }
-                // jeu en pause (rare) ou non ; objet suspendu (octet +0x40) très rarement
+                // game paused (rare) or not; suspended object (byte +0x40) very rarely
                 wr8(&mut b, A5 + 0x3d, (rng.next() % 10 == 0) as u8);
                 if pool.class == 8 && kind >= 15 {
                     wr8(&mut b, A5 + 0x6f, step as u8);
@@ -1223,14 +1223,14 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                 c.a[0] = obj.0;
                 c.a[5] = A5;
                 c.d[7] = step;
-                // registres de la boucle de dispatch : D0 = type * 4 (octet 0 haut vide), A1 = gestionnaire
+                // dispatch loop registers: D0 = type * 4 (high byte 0 empty), A1 = handler
                 c.d[0] = 4 * kind as u32;
                 c.a[1] = entry;
                 tests += 1;
                 let before = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
                 let (cs, bs) = (c.clone(), b.clone());
                 if coverage {
-                    // adresses des instructions que l'original exécute à cet appel (interpréteur)
+                    // addresses of the instructions the original executes in this call (interpreter)
                     let (mut c2, mut b2) = (cs.clone(), bs.clone());
                     c2.pc = entry;
                     c2.a[7] = cs.a[7].wrapping_sub(4);
@@ -1246,28 +1246,28 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                 if std::env::var("DDSOM_MAITRE").is_ok() && pool.class == 2 {
                     let m = rd16(&mut b, obj.0 + 0xb2) as u32 | 0xff0000;
                     let o: Vec<u8> = (0..8).map(|i| rd8(&mut b, m + i)).collect();
-                    println!("pas {step} maître {m:06x} : {o:02x?} obj {:06x}", obj.0);
+                    println!("step {step} master {m:06x} : {o:02x?} obj {:06x}", obj.0);
                 }
                 let prev_obj: Vec<u8> = (0..pool.stride).map(|i| rd8(&mut b, obj.0 + i)).collect();
                 if std::env::var("DDSOM_PAS_ETAT").is_ok() {
-                    println!("pas {step} variante {:02x} états {:02x?} +2f {:02x}", prev_obj[3], &prev_obj[4..8], prev_obj[0x2f]);
+                    println!("step {step} variant {:02x} states {:02x?} +2f {:02x}", prev_obj[3], &prev_obj[4..8], prev_obj[0x2f]);
                 }
                 let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entry)));
                 if std::env::var("DDSOM_PAS_ETAT").is_ok() {
                     let after: Vec<u8> = (4..8).map(|i| rd8(&mut b, obj.0 + i)).collect();
-                    println!("   après : {after:02x?}");
+                    println!("   after: {after:02x?}");
                 }
                 if r.is_err() {
-                    // l'original est sorti des rails (entrée incohérente), ou la native a paniqué : on abandonne la
-                    // trajectoire, et la panique est comptée (résumé final)
+                    // the original went off the rails (inconsistent entry), or the native panicked: the
+                    // trajectory is abandoned, and the panic is counted (final summary)
                     let m = LAST_PANIC.lock().unwrap().take().unwrap_or_default();
-                    // regroupement par gestionnaire et par cause (le texte après le dernier « : », sans le lieu)
+                    // grouping by handler and by cause (the text after the last ": ", without the location)
                     let cause = m.rsplit(" : ").next().unwrap_or("").split(" (").next().unwrap_or("");
                     let key = format!("{entry:06x} {cause}");
                     let distinct = panics.len();
                     let n = panics.entry(key).or_insert(0);
                     if *n == 0 && distinct < 40 {
-                        println!("panique en {entry:06x} type {kind} pas {step} : {m}");
+                        println!("panic at {entry:06x} type {kind} step {step}: {m}");
                     }
                     *n += 1;
                     let _ = (cs, bs);
@@ -1276,21 +1276,21 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
                 if std::env::var("DDSOM_MAITRE").is_ok() && pool.class == 2 {
                     let m = rd16(&mut b, obj.0 + 0xb2) as u32 | 0xff0000;
                     let o: Vec<u8> = (0..8).map(|i| rd8(&mut b, m + i)).collect();
-                    println!("   après : {o:02x?}");
+                    println!("   after: {o:02x?}");
                 }
                 let after = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
                 if after > before && shown < 12 {
                     shown += 1;
                     let last = ddsom_game::report().values().filter_map(|s| s.last.clone()).next();
-                    println!("écart en {entry:06x} type {kind} pas {step} obj {:06x} : {}", obj.0, last.unwrap_or_default());
-                    println!("  objet avant : {:02x?}", prev_obj);
+                    println!("mismatch at {entry:06x} type {kind} step {step} obj {:06x}: {}", obj.0, last.unwrap_or_default());
+                    println!("  object before: {:02x?}", prev_obj);
                     if pool.class == 2 {
                         let m = ((prev_obj[0xb2] as u32) << 8 | prev_obj[0xb3] as u32) | 0xff0000;
                         let bytes: Vec<u8> = (0..8).map(|i| rd8(&mut bs.clone(), m + i)).collect();
-                        println!("  maître {m:06x} avant : {bytes:02x?}");
+                        println!("  master {m:06x} before: {bytes:02x?}");
                     }
                     if std::env::var("DDSOM_TRACE_ORIG").is_ok() {
-                        // exécution pas à pas du code d'origine seul depuis l'état d'avant
+                        // step-by-step execution of the original code alone from the previous state
                         let (mut c2, mut b2) = (cs.clone(), bs.clone());
                         let sp = c2.a[7];
                         c2.pc = entry;
@@ -1312,30 +1312,30 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
     let mut total = 0;
     for (name, st) in ddsom_game::report() {
         total += st.mismatches;
-        println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches,
+        println!("  {name:28} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches,
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
     let compares: u64 = ddsom_game::report().values().map(|s| s.calls).sum();
     let n_panics: u32 = panics.values().sum();
-    println!("{tests} appels de gestionnaires, {compares} appels de natives comparés à l'original, {n_panics} paniques");
+    println!("{tests} handler calls, {compares} native calls compared with the original, {n_panics} panics");
     for (key, n) in &panics {
         println!("  {n:6} × {key}");
     }
     if let Ok(file) = std::env::var("DDSOM_COUVERTURE") {
         let text: Vec<String> = seen.iter().map(|a| format!("{a:06x}")).collect();
-        std::fs::write(file, text.join("\n")).expect("écriture couverture");
+        std::fs::write(file, text.join("\n")).expect("coverage write");
     }
-    // rien de comparé (chaque appel a paniqué) : ce n'est pas une validation
-    println!("{}", if compares == 0 { "ÉCHEC : aucun appel comparé" } else if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
+    // nothing compared (every call panicked): this is not a validation
+    println!("{}", if compares == 0 { "FAILED: no call compared" } else if total == 0 { "VALID: no mismatch" } else { "FAILED" });
 }
 
-/// Message et lieu de la dernière panique (le crochet de panique est muet).
+/// Message and location of the last panic (the panic hook is silent).
 static LAST_PANIC: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, group, roms, eeprom, scenario, warmup, tours] = &a[..] else {
-        eprintln!("usage : fuzz <groupe> <roms> <eeprom> <scénario> <images de chauffe> <tours>");
+        eprintln!("usage: fuzz <group> <roms> <eeprom> <scenario> <warm-up frames> <rounds>");
         std::process::exit(2);
     };
     if group == "familles" {
@@ -1357,7 +1357,7 @@ fn main() {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_game::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
@@ -1389,7 +1389,7 @@ fn main() {
                     .iter()
                     .map(|o| format!("{o:02x}={:04x}", ddsom_game::mem::rd16(b, cam + o)))
                     .collect();
-                format!(" scène={:02x} terrain={} {}", ddsom_game::mem::rd8(b, A5 + 0x34), ddsom_game::mem::rd8(b, A5 + 0x37), fields.join(" "))
+                format!(" scene={:02x} terrain={} {}", ddsom_game::mem::rd8(b, A5 + 0x34), ddsom_game::mem::rd8(b, A5 + 0x37), fields.join(" "))
             } else {
                 String::new()
             };
@@ -1399,22 +1399,22 @@ fn main() {
             if after > before && shown < 12 {
                 shown += 1;
                 let last = ddsom_game::report().values().filter_map(|s| s.last.clone()).next();
-                println!("écart en {entry:06x} (d0={d0:08x} a0={a0:06x}){context} : {}", last.unwrap_or_default());
+                println!("mismatch at {entry:06x} (d0={d0:08x} a0={a0:06x}){context}: {}", last.unwrap_or_default());
             }
         }
     }
     let mut total = 0;
     for (name, st) in ddsom_game::report() {
         total += st.mismatches;
-        println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches,
+        println!("  {name:28} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches,
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
-    println!("{}", if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
+    println!("{}", if total == 0 { "VALID: no mismatch" } else { "FAILED" });
 }
 
-/// Contrôleur de scène (SET 2) et écrans de fin de niveau (SET 15) : ils dépendent de variables de
-/// partie (niveau, difficulté, scène figée...), de la variante (script) et de l'état des joueurs,
-/// que le fuzz générique ne fait pas varier. `start` : état initial de l'objet (variante, état).
+/// Scene controller (SET 2) and end-of-level screens (SET 15): they depend on
+/// game variables (level, difficulty, frozen scene...), the variant (script) and the player state,
+/// which the generic fuzz does not vary. `start`: initial object state (variant, state).
 fn scene_state(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8, start: bool) {
     use ddsom_game::mem::{rd16, rd32, rd8};
     wr8(b, A5 + 0x34, if rng.next() % 3 == 0 { 4 } else { 1 + (rng.next() % 7) as u8 });
@@ -1434,7 +1434,7 @@ fn scene_state(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8, start: bool) {
         }
     }
     if kind == 15 {
-        // variables lues par les écrans de fin : fondu terminé, caméras, score, rng, objets du joueur
+        // variables read by the end screens: fade finished, cameras, score, rng, player objects
         wr8(b, A5 + 0x48f, (rng.next() % 3 == 0) as u8);
         wr8(b, A5 + 0x6d, rng.next() as u8);
         wr16(b, A5 + 0x6e, rng.next() as u16 & [0xf, 0xff, 0][rng.next() as usize % 3]);
@@ -1467,10 +1467,10 @@ fn scene_state(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8, start: bool) {
         }
     }
     if start && kind == 15 {
-        // écrans de fin : variante, états, chef d'orchestre (+0x4c, un autre objet SET)
+        // end screens: variant, states, conductor (+0x4c, another SET object)
         wr8(b, obj + 3, (rng.next() % 25) as u8);
         wr8(b, obj + 4, [0u8, 0, 2, 2, 4, 6][rng.next() as usize % 6]);
-        // sous-états valides de chaque variante (les autres font sauter l'original dans des données)
+        // valid sub-states of each variant (the others make the original jump into data)
         let variant = rd8(b, obj + 3);
         let sub_states = match variant {
             1 => 5,
@@ -1480,12 +1480,12 @@ fn scene_state(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8, start: bool) {
             _ => 1,
         };
         wr8(b, obj + 5, 2 * (rng.next() % sub_states) as u8);
-        // joueur visé par les variantes 18 et 22, objet cible de la 17
+        // player targeted by variants 18 and 22, target object of 17
         let player = 0xff85de + 0x200 * (rng.next() % 4);
         wr16(b, obj + 0x20, player as u16);
         wr16(b, obj + 0x26, player as u16);
         wr16(b, obj + 0x46, player as u16);
-        // fenêtre de dialogue (variante 7) : joueur visé, message à composer, tampon de texte
+        // dialogue window (variant 7): targeted player, message to compose, text buffer
         wr16(b, obj + 0x34, player as u16);
         wr32(b, obj + 8, 0xcec00 + 2 * (rng.next() % 0x400));
         wr32(b, obj + 0xc, 0xff2072);
@@ -1517,7 +1517,7 @@ fn scene_state(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8, start: bool) {
         wr16(b, obj + 0x24, (rng.next() % 4) as u16);
         wr16(b, obj + 0x2a, (rng.next() % 4 == 0) as u16);
         if rng.next() % 2 == 0 {
-            // rideau (action de fin 6) : déjà armé, décompte court, curseur dans la table
+            // curtain (end action 6): already armed, short countdown, cursor in the table
             wr8(b, obj + 5, 2);
             wr16(b, obj + 0x14, (rng.next() % 3) as u16);
             wr16(b, obj + 0x26, 6 * (rng.next() % 9) as u16);

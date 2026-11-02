@@ -1,8 +1,8 @@
-//! Interpréteur Motorola 68000.
+//! Motorola 68000 interpreter.
 //!
-//! Sert d'oracle pour le recompilateur et de filet de sécurité pour le code non recompilé.
-//! Sémantique validée contre les tests SingleStepTests/m68000 (générés avec le cœur de MAME).
-//! Pas de modélisation des erreurs d'adresse ni du timing exact du bus.
+//! Serves as an oracle for the recompiler and as a safety net for non-recompiled code.
+//! Semantics validated against the SingleStepTests/m68000 tests (generated with MAME's core).
+//! No modeling of address errors or of exact bus timing.
 
 pub mod decode;
 pub mod exec;
@@ -17,13 +17,13 @@ pub const SR_N: u16 = 0x08;
 pub const SR_X: u16 = 0x10;
 pub const SR_S: u16 = 0x2000;
 pub const SR_T: u16 = 0x8000;
-/// Bits de SR existant sur 68000.
+/// SR bits that exist on the 68000.
 pub const SR_MASK: u16 = 0xa71f;
 
-/// Bus vu par le CPU. Les adresses reçues sont déjà réduites à 24 bits.
+/// Bus as seen by the CPU. Received addresses are already reduced to 24 bits.
 #[cfg(feature = "rom-trace")]
 thread_local! {
-    /// Vrai pendant l'exécution d'une instruction 68000 (`Cpu::step`), faux dans le code Rust natif.
+    /// True while a 68000 instruction is executing (`Cpu::step`), false in native Rust code.
     pub static IN_STEP: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
 }
 
@@ -32,11 +32,11 @@ pub trait Bus: decode::Fetch {
     fn read16(&mut self, addr: u32) -> u16;
     fn write8(&mut self, addr: u32, v: u8);
     fn write16(&mut self, addr: u32, v: u16);
-    /// Lecture de données en adressage relatif au PC (espace programme : déchiffré sur CPS2).
+    /// Data read with PC-relative addressing (program space: decrypted on CPS2).
     fn read_prog16(&mut self, addr: u32) -> u16 {
         self.fetch16(addr)
     }
-    /// Instruction RESET : réinitialise les périphériques.
+    /// RESET instruction: resets the peripherals.
     fn reset_devices(&mut self) {}
     /// Acquittement d'interruption (niveau 1..7).
     fn irq_ack(&mut self, _level: u8) {}
@@ -45,20 +45,20 @@ pub trait Bus: decode::Fetch {
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Cpu {
     pub d: [u32; 8],
-    /// a[7] est la pile active (SSP en superviseur, USP sinon).
+    /// a[7] is the active stack (SSP in supervisor mode, USP otherwise).
     pub a: [u32; 8],
     pub pc: u32,
     pub sr: u16,
-    /// Pile inactive (USP en superviseur, SSP en utilisateur).
+    /// Inactive stack (USP in supervisor mode, SSP in user mode).
     pub other_sp: u32,
     pub stopped: bool,
-    /// Niveau d'interruption présenté par le matériel (0 = aucune).
+    /// Interrupt level presented by the hardware (0 = none).
     pub irq_level: u8,
-    /// Cycles écoulés (estimation).
+    /// Elapsed cycles (estimate).
     pub cycles: u64,
-    /// Exception de trace due : prise au début de l'instruction suivante.
+    /// Pending trace exception: taken at the start of the next instruction.
     pub trace_pending: bool,
-    /// Compteur de cycles au début de l'instruction en cours (pour fixer la durée des exceptions).
+    /// Cycle counter at the start of the current instruction (to fix the duration of exceptions).
     pub op_start_cycles: u64,
 }
 
@@ -69,13 +69,13 @@ impl Cpu {
         Cpu { sr: 0x2700, ..Default::default() }
     }
 
-    /// Reset matériel : SSP et PC lus aux adresses 0 et 4.
+    /// Hardware reset: SSP and PC read from addresses 0 and 4.
     pub fn reset<B: Bus>(&mut self, bus: &mut B) {
         self.sr = 0x2700;
         self.stopped = false;
         self.a[7] = (bus.fetch16(0) as u32) << 16 | bus.fetch16(2) as u32;
         self.pc = (bus.fetch16(4) as u32) << 16 | bus.fetch16(6) as u32;
-        // séquence de reset : lectures des vecteurs et préchargement (~40 cycles)
+        // reset sequence: vector reads and prefetch (~40 cycles)
         self.cycles += 40;
     }
 
@@ -95,7 +95,7 @@ impl Cpu {
         if self.supervisor() { self.a[7] = v } else { self.other_sp = v }
     }
 
-    /// Écrit SR en basculant de pile si le bit S change.
+    /// Writes SR, switching stacks if the S bit changes.
     pub fn set_sr(&mut self, v: u16) {
         let v = v & SR_MASK;
         if (v ^ self.sr) & SR_S != 0 {
@@ -111,8 +111,8 @@ impl Cpu {
         self.sr = (self.sr & 0xff00) | (v & 0x1f);
     }
 
-    /// Exécute une instruction (ou prend une interruption). Renvoie l'instruction exécutée, si
-    /// une l'a été.
+    /// Executes one instruction (or takes an interrupt). Returns the executed instruction, if
+    /// one was executed.
     pub fn step<B: Bus>(&mut self, bus: &mut B) -> Option<Instr> {
         #[cfg(feature = "rom-trace")]
         {
@@ -127,7 +127,7 @@ impl Cpu {
 
     fn step_inner<B: Bus>(&mut self, bus: &mut B) -> Option<Instr> {
         let mask = ((self.sr >> 8) & 7) as u8;
-        // Le niveau 7 (non masquable, sur front) n'est pas utilisé par le CPS2.
+        // Level 7 (non-maskable, edge-triggered) is not used by the CPS2.
         if self.irq_level > mask {
             let level = self.irq_level;
             self.stopped = false;
@@ -156,7 +156,7 @@ impl Cpu {
         Some(ins)
     }
 
-    /// Prend une exception de groupe 1/2 : passe en superviseur, empile PC puis SR.
+    /// Takes a group 1/2 exception: enters supervisor mode, pushes PC then SR.
     pub(crate) fn exception<B: Bus>(&mut self, bus: &mut B, vector: u32, pc: u32) {
         let old = self.sr;
         self.set_sr((old | SR_S) & !SR_T);

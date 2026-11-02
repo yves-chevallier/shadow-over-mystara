@@ -1,18 +1,18 @@
-//! Ennemi « GiantBeetle » (ENEMY type 9, 0x65ae8). Voir `docs/families/enemy.md`.
+//! "GiantBeetle" enemy (ENEMY type 9, 0x65ae8). See `docs/families/enemy.md`.
 //!
-//! Insecte qui défile sur le côté de l'écran (variantes `+3` = 0 à 4). La variante 4 est le nid : elle
-//! engendre des pièces (ESHL 0x38) d'après une liste de la ROM puis attend d'être visible. Le groupe de
-//! trajectoire `+0x2f` (0 à 7) choisit le comportement de l'état actif, sous-état 4 ; `+7` en est l'étape.
+//! Insect that scrolls along the side of the screen (variants `+3` = 0 to 4). Variant 4 is the nest: it
+//! spawns pieces (ESHL 0x38) from a ROM list then waits to be visible. The trajectory group
+//! `+0x2f` (0 to 7) picks the behavior of the active state, substate 4; `+7` is its step.
 //!
-//! | `+5` | Rôle (h) |
+//! | `+5` | Role (h) |
 //! |---|---|
-//! | 0, 2 | marche avec demi-tours (`steer`), surveille un joueur à mordre (`bite_check`), sort de l'écran |
-//! | 4 | trajectoires par groupe `+0x2f` : 0-1 traversée, 2-3 dérive, 4-5 et 6-7 vol arrêté devant un joueur |
-//! | 6 | bond : élan, vol, retombée |
-//! | 8 | dormant tant que l'insecte est hors de l'écran |
+//! | 0, 2 | walks with U-turns (`steer`), watches for a player to bite (`bite_check`), leaves the screen |
+//! | 4 | trajectories by group `+0x2f`: 0-1 crossing, 2-3 drift, 4-5 and 6-7 flight stopped in front of a player |
+//! | 6 | leap: wind-up, flight, landing |
+//! | 8 | dormant while the insect is off screen |
 //!
-//! État 4 (touché) : recul, chute puis mort clignotante.
-//! Animations 0x163a86 (mouvements) et 0x163a9e (touché).
+//! State 4 (hit): recoil, fall then flashing death.
+//! Animations 0x163a86 (movements) and 0x163a9e (hit).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -22,14 +22,14 @@ use crate::objects::Obj;
 const ANIMS: u32 = 0x163a86;
 const ANIMS_HIT: u32 = 0x163a9e;
 
-/// Champs propres à ce type.
+/// Fields specific to this type.
 mod g {
     pub const GROUP: u32 = 0x2f;
     /// Table de vitesses courante (long).
     pub const SPEEDS: u32 = 0x4c;
     pub const HIT_CODE: u32 = 0x49;
     pub const FREEZE_AT_HIT: u32 = 0x56;
-    /// Position mémorisée (X et profondeur) et cadence de virage.
+    /// Saved position (X and depth) and turn rate.
     pub const SAVED_X: u32 = 0xa8;
     pub const SAVED_DEPTH: u32 = 0xac;
     pub const TURN_PERIOD: u32 = 0xa2;
@@ -46,7 +46,7 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Tables de la ROM : vitesses par difficulté (pointeurs), temporisations, sens de virage.
+/// ROM tables: speeds per difficulty (pointers), timings, turn directions.
 const SPEEDS_WALK: u32 = 0x66700;
 const SPEEDS_FLY: u32 = 0x66720;
 const SPEEDS_DRIFT: u32 = 0x1c9036;
@@ -58,7 +58,7 @@ const STOP_XS: u32 = 0x660d6;
 const SPEED_Y_ROW: u32 = 0x66666;
 const BITE_ODDS: u32 = 0x6623a;
 const SHAKE_TIMES: u32 = 0x664c6;
-/// Listes de pièces du nid (pointeurs par `+0x42`) et table des routines d'allocation.
+/// Nest piece lists (pointers by `+0x42`) and table of allocation routines.
 const NEST_LISTS: u32 = 0x65c78;
 const NEST_ALLOCS: u32 = 0x65c88;
 
@@ -87,13 +87,13 @@ fn anim_play<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(ANIMS, n as u16);
 }
 
-/// 0x6662e : position de la caméra, X dans le mot bas de D6, Y dans le mot haut.
+/// 0x6662e: camera position, X in the low word of D6, Y in the high word.
 fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
     let (cx, cy) = if var::CAMERA_SELECT.get(x.b) != 0 { (var::CAMERA_ALT_X.get(x.b), var::CAMERA_ALT_Y.get(x.b)) } else { (var::SCROLL_X.get(x.b), var::SCROLL_Y.get(x.b)) };
     (cx, cy)
 }
 
-/// 0x666de : adopte une table de vitesses (paires de mots par angle `+0x2d`).
+/// 0x666de: adopts a speed table (pairs of words per angle `+0x2d`).
 fn speeds<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     x.set32(SPEEDS, table);
     let off = (x.u8(Obj::SPEED_INDEX) as u32) << 2;
@@ -104,28 +104,28 @@ fn speeds<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     x.set16(Obj::AY, 0);
 }
 
-/// 0x666d2 : table de vitesses choisie par la difficulté (`A5+0x7f92` & 0x1c).
+/// 0x666d2: speed table chosen by the difficulty (`A5+0x7f92` & 0x1c).
 fn speeds_by_level<R: Bench>(x: &mut Cx<'_, R>, list: u32) {
     let level = (var::RANK.get(x.b) & 0x1c) as u32;
     let table = x.data32(list + level);
     speeds(x, table);
 }
 
-/// 0x666a2 : cadence de virage (octets `+0xa2/+0xa3`) selon la difficulté.
+/// 0x666a2: turn rate (bytes `+0xa2/+0xa3`) according to the difficulty.
 fn turn_timer<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let off = ((var::RANK.get(x.b) & 0x10) >> 3) as u32;
     let v = x.data16(table + off);
     x.set16(TURN_PERIOD, v);
 }
 
-/// 0x6664c / 0x6664e : vitesse `+0x1e` lue dans la table selon la difficulté, `base` = décalage de ligne.
+/// 0x6664c / 0x6664e: speed `+0x1e` read from the table according to the difficulty, `base` = row offset.
 fn set_speed_y<R: Bench>(x: &mut Cx<'_, R>, base: u16) {
     let off = ((var::RANK.get(x.b) & 0x18) >> 2).wrapping_add(base);
     let v = x.data16(SPEED_Y_ROW + off as u32);
     x.set16(Obj::AY, v);
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
@@ -147,7 +147,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x65b6c : l'insecte part dans le sens que dicte la parité de `+0x2f`.
+/// 0x65b6c: the insect leaves in the direction dictated by the parity of `+0x2f`.
 fn start_walk<R: Bench>(x: &mut Cx<'_, R>) {
     let (px, pz) = (x.u16(Obj::X), x.u16(Obj::Y));
     x.set16(SAVED_X, px);
@@ -164,7 +164,7 @@ fn start_walk<R: Bench>(x: &mut Cx<'_, R>) {
     anim_play(x, 0);
 }
 
-/// 0x65bb4 : reprise de la marche après un bond, selon l'orientation et la parité de `+0x2f`.
+/// 0x65bb4: resumes walking after a leap, according to the orientation and the parity of `+0x2f`.
 fn resume_walk<R: Bench>(x: &mut Cx<'_, R>) {
     let (px, pz) = (x.u16(Obj::X), x.u16(Obj::Y));
     x.set16(SAVED_X, px);
@@ -177,7 +177,7 @@ fn resume_walk<R: Bench>(x: &mut Cx<'_, R>) {
     anim_play(x, 0);
 }
 
-/// Variante 2 : entre par le bord droit (ou gauche pour les groupes impairs) de l'écran.
+/// Variant 2: enters from the right edge (or left for odd groups) of the screen.
 fn enter_from_edge<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB, 4);
     let (cx, _) = camera(x);
@@ -197,7 +197,7 @@ fn enter_from_edge<R: Bench>(x: &mut Cx<'_, R>) {
     anim_play(x, 0);
 }
 
-/// Variante 4 : le nid engendre ses pièces (liste `+0x42`) puis dort jusqu'à être visible.
+/// Variant 4: the nest spawns its pieces (list `+0x42`) then sleeps until visible.
 fn nest<R: Bench>(x: &mut Cx<'_, R>) {
     start_walk(x);
     x.set8(f::SUB, 8);
@@ -208,7 +208,7 @@ fn nest<R: Bench>(x: &mut Cx<'_, R>) {
     spawn_list(x, NEST_LISTS, NEST_ALLOCS, list);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if !paused(x) {
@@ -228,7 +228,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Sous-états 0 et 2 : marche avec demi-tours ; sort de l'écran quand il en est trop loin.
+/// Substates 0 and 2: walks with U-turns; leaves the screen when it is too far from it.
 fn march<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
@@ -250,8 +250,8 @@ fn march<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// 0x66740 : avance dans la table de vitesses ; toutes les `+0xa2` images tourne d'un cran vers l'angle voulu
-/// et enchaîne l'animation de virage.
+/// 0x66740: advances in the speed table; every `+0xa2` frames it turns one notch toward the wanted angle
+/// and chains the turn animation.
 fn steer<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     let n = x.u8(TURN_TIMER).wrapping_sub(1);
@@ -282,7 +282,7 @@ fn steer<R: Bench>(x: &mut Cx<'_, R>) {
     anim_play(x, n as u32);
 }
 
-/// 0x661ce : un joueur devant l'insecte, dans le sol 0xc de l'état 2 : tirage qui le déclenche en bond.
+/// 0x661ce: a player in front of the insect, on floor 0xc of state 2: a draw that triggers it into a leap.
 fn bite_check<R: Bench>(x: &mut Cx<'_, R>) {
     if !find_player(x, -0x20, 0x20, 8) {
         return x.set8(BITING, 0);
@@ -303,7 +303,7 @@ fn bite_check<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(BITING, 1);
 }
 
-// --- sous-état 4 : trajectoires -----------------------------------------------------------------
+// --- substate 4: trajectories -----------------------------------------------------------------
 
 fn routes<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
@@ -318,7 +318,7 @@ fn routes<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x65ea8 : début de traversée.
+/// 0x65ea8: start of a crossing.
 fn cross_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     speeds_by_level(x, SPEEDS_FLY);
@@ -326,7 +326,7 @@ fn cross_start<R: Bench>(x: &mut Cx<'_, R>) {
     anim_play(x, 0);
 }
 
-/// Groupes 0 et 1 : traversée, arrêt de la marche puis virage, sortie.
+/// Groups 0 and 1: crossing, stop walking then turn, exit.
 fn cross<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => cross_start(x),
@@ -350,7 +350,7 @@ fn cross<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x65f18 : virage jusqu'à l'angle de sortie, `side` = la parité qui oriente le virage.
+/// 0x65f18: turn until the exit angle, `side` = the parity that orients the turn.
 fn cross_turn<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
     if side & 1 != 0 {
     }
@@ -363,7 +363,7 @@ fn cross_turn<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
     }
 }
 
-/// 0x65f5c : sortie par le bord ; l'insecte est retiré quand il l'a passé.
+/// 0x65f5c: exit through the edge; the insect is removed once it has passed it.
 fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xy();
     let (cx, _) = camera(x);
@@ -376,7 +376,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// Groupes 2 et 3 : dérive latérale constante (`+0xb4`) jusqu'à la sortie de l'écran.
+/// Groups 2 and 3: constant lateral drift (`+0xb4`) until it leaves the screen.
 fn drift<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -428,14 +428,14 @@ fn drift<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x660bc : abscisse d'arrêt (`+0xb6`) lue dans la table selon le rang d'arrêt.
+/// 0x660bc: stop abscissa (`+0xb6`) read from the table according to the stop rank.
 fn set_stop<R: Bench>(x: &mut Cx<'_, R>, rank: u8) {
     let base = STOP_XS + if x.u8(GROUP) & 1 != 0 { 6 } else { 0 };
     let v = x.data16(base + rank as u32);
     x.set16(STOP_X, v);
 }
 
-/// 0x660aa : début d'un vol arrêté.
+/// 0x660aa: start of a stopped flight.
 fn halt_start<R: Bench>(x: &mut Cx<'_, R>) {
     cross_start(x);
     x.set8(STOP_STEP, 0);
@@ -444,7 +444,7 @@ fn halt_start<R: Bench>(x: &mut Cx<'_, R>) {
     set_stop(x, 0);
 }
 
-/// 0x660e2 : vol jusqu'à l'abscisse d'arrêt ; devant un joueur, s'arrête de rang en rang puis charge.
+/// 0x660e2: flight to the stop abscissa; in front of a player, stops rank by rank then charges.
 fn halt_run<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xy();
     let (cx, _) = camera(x);
@@ -489,7 +489,7 @@ fn halt_run<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// Groupes 4 et 5.
+/// Groups 4 and 5.
 fn halt_at<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => halt_start(x),
@@ -500,7 +500,7 @@ fn halt_at<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Groupes 6 et 7 : comme 4 et 5, avec la morsure surveillée à chaque étape.
+/// Groups 6 and 7: like 4 and 5, with the bite checked at each step.
 fn halt_and_bite<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -523,7 +523,7 @@ fn halt_and_bite<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x65efe : virage de côté (le sens vient de `+0xa4` et de la parité de `+0x2f`).
+/// 0x65efe: sideways turn (the direction comes from `+0xa4` and the parity of `+0x2f`).
 fn side_turn<R: Bench>(x: &mut Cx<'_, R>) {
     let mut d0 = x.u8(SIDE);
     let group = x.u8(GROUP);
@@ -533,7 +533,7 @@ fn side_turn<R: Bench>(x: &mut Cx<'_, R>) {
     cross_turn(x, d0);
 }
 
-/// Sous-état 4 avec `+6` non nul (0x6628a) : se tourne vers un joueur puis remonte vers le haut.
+/// Substate 4 with `+6` non-zero (0x6628a): turns toward a player then climbs back up.
 fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
@@ -603,7 +603,7 @@ fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- sous-état 6 : bond -------------------------------------------------------------------------
+// --- substate 6: leap -------------------------------------------------------------------------
 
 fn pounce<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -643,7 +643,7 @@ fn pounce<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Sous-état 8 : dormant ; réveillé (sous-état 0) quand il est à moins de 0x1c0 pixels de la caméra.
+/// Substate 8: dormant; woken up (substate 0) when it is less than 0x1c0 pixels from the camera.
 fn dormant<R: Bench>(x: &mut Cx<'_, R>) {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
     let d0 = x.u16(Obj::X).wrapping_sub(cam).wrapping_add(0x20);
@@ -652,7 +652,7 @@ fn dormant<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 4 : touché ----------------------------------------------------------------------------
+// --- state 4: hit ----------------------------------------------------------------------------
 
 fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
@@ -669,7 +669,7 @@ fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Sous-état 0 : un coup de code 0x5c secoue l'insecte quelques images (`+6` = 0, 2) avant le recul.
+/// Substate 0: a hit with code 0x5c shakes the insect for a few frames (`+6` = 0, 2) before the recoil.
 fn react_first<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(HIT_CODE) != 0x5c {
         return knock_back(x);
@@ -699,14 +699,14 @@ fn react_first<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x664b4 : durée de la secousse tirée au hasard.
+/// 0x664b4: randomly drawn duration of the shake.
 fn shake_timer<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 3;
     let t = x.rom8(SHAKE_TIMES + r);
     x.set8(0xa2, t);
 }
 
-/// 0x664f8 : recul, la face opposée au coup.
+/// 0x664f8: recoil, facing away from the hit.
 fn knock_back<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     x.set8(f::SUB2, 0);
@@ -726,7 +726,7 @@ fn knock_back<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_start(ANIMS_HIT, 0);
 }
 
-/// Sous-état 2 : retombée puis clignotement jusqu'à la mort.
+/// Substate 2: landing then blinking until death.
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -758,7 +758,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Sous-état 4 : saisi par un joueur, l'insecte se débat puis quitte l'écran.
+/// Substate 4: grabbed by a player, the insect struggles then leaves the screen.
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;

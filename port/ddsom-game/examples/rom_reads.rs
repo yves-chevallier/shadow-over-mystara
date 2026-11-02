@@ -1,19 +1,19 @@
-//! Lectures de la ROM programme (0x000000-0x3fffff) faites comme données par le code Rust, hors exécution
-//! d'instructions 68000 : `prog8`/`prog16`/`prog32` (espace programme déchiffré), `rd8`/`data16`/`data32`
-//! et lectures du bus (espace données).
+//! Reads of the program ROM (0x000000-0x3fffff) done as data by the Rust code, outside the execution
+//! of 68000 instructions: `prog8`/`prog16`/`prog32` (decrypted program space), `rd8`/`data16`/`data32`
+//! and bus reads (data space).
 //!
 //!   cargo build --release -p ddsom-game --example rom_reads --features rom-trace
-//!   rom_reads <roms> <eeprom> <sortie.txt> <scénario>:<images> ...
+//!   rom_reads <roms> <eeprom> <output.txt> <scenario>:<frames> ...
 //!
-//! Variables : `DDSOM_MASQUE=n` décale de n bits les numéros de scénario du masque (pour fusionner plusieurs
-//! exécutions) ; `DDSOM_COUVERT=file` (écrit par `couverture_rom`) : pour chaque mot lu hors des zones
-//! couvertes, la sortie ajoute une ligne `s d|p address file:line;...` : les trois premiers appelants dans
-//! `ddsom-game/src` de la première lecture.
+//! Variables: `DDSOM_MASQUE=n` shifts the scenario numbers of the mask by n bits (to merge several
+//! runs); `DDSOM_COUVERT=file` (written by `couverture_rom`): for each word read outside the covered
+//! zones, the output adds a line `s d|p address file:line;...`: the first three callers in
+//! `ddsom-game/src` of the first read.
 //!
-//! Chaque scénario est rejoué sur la machine sans 68000 (natives seules : toute lecture compte ; un arrêt faute de
-//! native finit le scénario à cette image, signalé sur la sortie d'erreur). La sortie donne, pour chaque zone dont tous les mots sont lus par les mêmes scénarios :
-//! `d|p début end mask reads` (hexadécimal, `d` : espace données, `p` : espace programme ; `end` exclue ;
-//! `mask` : bit n = scénario n). Les zones sont comparées aux ressources par l'exemple `couverture_rom`
+//! Each scenario is replayed on the machine without 68000 (natives only: every read counts; a stop for lack of a
+//! native ends the scenario at that frame, reported on the error output). The output gives, for each zone whose words are all read by the same scenarios:
+//! `d|p start end mask reads` (hexadecimal, `d`: data space, `p`: program space; `end` excluded;
+//! `mask`: bit n = scenario n). The zones are compared with the resources by the example `couverture_rom`
 //! de `ddsom-assets` (docs/assets.md).
 
 use std::fmt::Write as _;
@@ -24,7 +24,7 @@ thread_local! {
     static ORIGINALS: std::cell::RefCell<std::collections::BTreeMap<(bool, u32), String>> = const { std::cell::RefCell::new(std::collections::BTreeMap::new()) };
 }
 
-/// Appelé à la première lecture d'un mot : si les ressources ne le couvrent pas, note qui l'a lu.
+/// Called at the first read of a word: if the resources do not cover it, records who read it.
 fn original(program: bool, address: u32) {
     let covered = COVERED.with(|c| {
         let c = c.borrow();
@@ -53,7 +53,7 @@ fn original(program: bool, address: u32) {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 5 {
-        eprintln!("usage : rom_reads <roms> <eeprom> <sortie.txt> <scénario>:<images> ...");
+        eprintln!("usage: rom_reads <roms> <eeprom> <output.txt> <scenario>:<frames> ...");
         std::process::exit(2);
     }
     let ee = std::fs::read(&a[2]).ok();
@@ -66,16 +66,16 @@ fn main() {
     let mut mask = vec![[0u32; 2]; 0x200000];
     let mut reads = vec![[0u64; 2]; 0x200000];
     for (n, spec) in a[4..].iter().enumerate() {
-        let (path, frames) = spec.rsplit_once(':').expect("scénario:images");
+        let (path, frames) = spec.rsplit_once(':').expect("scenario:frames");
         let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
         ddsom_game::install_no_68k(&mut m);
-        let script = ddsom_game::scenario::Scenario::load(Path::new(path)).expect("scénario");
+        let script = ddsom_game::scenario::Scenario::load(Path::new(path)).expect("scenario");
         cps2::bus::rom_trace::take();
         for f in 0..frames.parse::<usize>().unwrap() {
             script.apply(f, &mut m);
             if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.run_frame())) {
                 let msg = e.downcast_ref::<String>().cloned().unwrap_or_default();
-                eprintln!("{path} : ARRÊT à l'image {f} : {}", msg.chars().take(300).collect::<String>());
+                eprintln!("{path}: STOP at frame {f}: {}", msg.chars().take(300).collect::<String>());
                 break;
             }
         }
@@ -86,7 +86,7 @@ fn main() {
                 reads[w][v] += c as u64;
             }
         }
-        eprintln!("{path} : {} images", frames);
+        eprintln!("{path}: {} frames", frames);
     }
     let mut out = String::new();
     for (v, name) in [(0, 'd'), (1, 'p')] {

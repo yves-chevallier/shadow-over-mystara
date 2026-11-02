@@ -1,6 +1,5 @@
-//! Type 11, sous-état 4 : les coups. `+6` = 0 coup de poing, 2 à 6 séries de coups (précédées d'un demi-tour et
-//! d'une pause), 8 et 12 bonds en coup plongeant, 10 marche d'approche, 14 et 16 bonds avec demi-tour, 18 et 20
-//! accroupi.
+//! Type 11, substate 4: the attacks. `+6` = 0 punch, 2 to 6 series of strikes (preceded by a turn-around and a pause),
+//! 8 and 12 leaps into a diving strike, 10 approach walk, 14 and 16 leaps with turn-around, 18 and 20 crouched.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -123,7 +122,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x67c74 : tant que le drapeau de fin `+0x32` n'est pas levé, l'animation avance ; ensuite debout.
+/// 0x67c74: as long as end flag `+0x32` is not raised, the animation advances; then standing.
 fn until_end<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(ANIM_END) as i16) >= 0 {
         x.anim_step();
@@ -134,7 +133,7 @@ fn until_end<R: Bench>(x: &mut Cx<'_, R>) {
     mv(x, 0);
 }
 
-/// 0x67c32 : au tirage (dix chances sur seize), retour à la marche (état 0x2020600), sinon étape suivante.
+/// 0x67c32: on a draw (ten chances out of sixteen), back to walking (state 0x2020600), otherwise next step.
 fn coin_flip<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     if (0xffc0u32 >> r) & 1 != 0 {
@@ -143,8 +142,8 @@ fn coin_flip<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
 }
 
-/// 0x67dce / 0x67dda / 0x67f5e : met en route un bond : vitesse horizontale (inversée si l'orientation est nulle),
-/// poussée vers le haut 0x900, coup de force 5 ; `speed` / `kind` absents quand l'appelant les a déjà posés.
+/// 0x67dce / 0x67dda / 0x67f5e: starts a leap: horizontal speed (inverted if the orientation is zero), upward thrust
+/// 0x900, strike of strength 5; `speed` / `kind` absent when the caller has already set them.
 fn leap_start<R: Bench>(x: &mut Cx<'_, R>, speed: Option<i16>, kind: Option<u8>) {
     if let Some(speed) = speed {
         x.set16(Obj::VX, speed as u16);
@@ -163,7 +162,7 @@ fn leap_start<R: Bench>(x: &mut Cx<'_, R>, speed: Option<i16>, kind: Option<u8>)
     strike(x, 2);
 }
 
-/// 0x67e0e : attend la clé d'animation.
+/// 0x67e0e: waits for the animation key.
 fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if x.u8(f::KEY_FRAME) == 0 {
@@ -172,7 +171,7 @@ fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
 }
 
-/// 0x67e22 : montée, jusqu'au sommet (`+0x18` négatif).
+/// 0x67e22: climb, up to the top (`+0x18` negative).
 fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     x.anim_step();
@@ -195,7 +194,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
 }
 
-/// 0x67e6a : fin du bond : choix du geste suivant à la fin de l'animation.
+/// 0x67e6a: end of the leap: choice of the next move at the end of the animation.
 fn end_choose<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if (x.u8(ANIM_END) as i8) < 0 {
@@ -203,8 +202,8 @@ fn end_choose<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x67f00 : marche d'approche : avance tant que la clé n'est pas négative, puis choix quand la minuterie est
-/// écoulée ou que le Golem a trop bougé.
+/// 0x67f00: approach walk: advances as long as the key is not negative, then chooses when the timer has elapsed or the
+/// Golem has moved too much.
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
@@ -221,7 +220,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 14 et 16 : bond (vitesse 0x480) puis demi-tour si la cible est derrière, et un coup (16).
+/// +6 = 14 and 16: leap (speed 0x480) then turn-around if the target is behind, and a strike (16).
 fn hop_turn<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
@@ -257,14 +256,14 @@ fn hop_turn<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     }
 }
 
-/// +6 = 18 et 20 (et 0x12 posé par le profil `+0x2f`) : se fige un moment (animation 8), puis choix.
+/// +6 = 18 and 20 (and 0x12 set by profile `+0x2f`): freezes for a while (animation 8), then choice.
 fn squat_step<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_anim(x),
         2 => wait(x),
         4 => {
             x.set16(0xa8, 0x100);
-            // (le test porte sur l'étape `+7`, pas sur `+6`)
+            // (the test is on step `+7`, not on `+6`)
             if x.u8(f::SUB3) != 0x12 {
                 x.set8(0xa9, 1);
             }
@@ -294,7 +293,7 @@ fn squat_step<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6829e : s'accroupit : étape suivante, minuterie 0x3c, animation 8.
+/// 0x6829e: crouches: next step, timer 0x3c, animation 8.
 pub(super) fn squat_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x3c);

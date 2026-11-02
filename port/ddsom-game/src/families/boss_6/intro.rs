@@ -1,5 +1,5 @@
-//! Boss 6, groupe `+5` = 0 : arrivée. La Manticore entre par la droite en bondissant, retombe, rugit puis
-//! attend que la caméra se fige avant de combattre.
+//! Boss 6, group `+5` = 0: arrival. The Manticore enters from the right by leaping, lands, roars then
+//! waits for the camera to freeze before fighting.
 
 use crate::families::cx::Bench;
 use super::decide;
@@ -20,7 +20,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 0 : placée à droite de la caméra, elle part en bond vers la gauche.
+/// +6 = 0: placed to the right of the camera, it sets off in a leap toward the left.
 fn enter<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set_bit(0x1, 1, false);
@@ -36,7 +36,7 @@ fn enter<R: Bench>(x: &mut Cx<'_, R>) {
     fly(x, 7);
 }
 
-/// +6 = 2 : montée du bond.
+/// +6 = 2: rise of the leap.
 fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
     if x.u8(f::KEY_FRAME) != 0 {
@@ -50,7 +50,7 @@ fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 : sommet du bond.
+/// +6 = 4: top of the leap.
 fn peak<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if cmp16(x, 0x18, 0xff00).le() {
@@ -59,7 +59,7 @@ fn peak<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 6 : chute ; à l'atterrissage, secousse et poussière.
+/// +6 = 6: fall; on landing, shake and dust.
 fn land<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if tst16(x, 0xc).gt() {
@@ -75,7 +75,7 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
     fly(x, 0xa);
 }
 
-/// +6 = 8 : glissade d'atterrissage, avec de la poussière toutes les 4 images.
+/// +6 = 8: landing slide, with dust every 4 frames.
 fn roar_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if !sub16(x, COUNT, 1).gt() {
         x.set16(COUNT, 4);
@@ -90,7 +90,7 @@ fn roar_wait<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// +6 = 10 : pause avant de se relever.
+/// +6 = 10: pause before getting up.
 fn settle<R: Bench>(x: &mut Cx<'_, R>) {
     if sub16(x, TIMER, 1).le() {
         x.add8(f::SUB2, 2);
@@ -99,7 +99,7 @@ fn settle<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 12 : se relève.
+/// +6 = 12: gets up.
 fn stand_up<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::step(x) {
         x.add8(f::SUB2, 2);
@@ -107,7 +107,7 @@ fn stand_up<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 14 : attend que la caméra soit prête (`A5+0x2c` = 0xc), puis combat.
+/// +6 = 14: waits for the camera to be ready (`A5+0x2c` = 0xc), then combat.
 fn wait_camera<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PHASE.get(x.b) == 0xc {
         lib::create_set_14(x);

@@ -1,9 +1,9 @@
-//! Construction de la liste de sprites (Object RAM), une fois par image.
+//! Construction of the sprite list (Object RAM), once per frame.
 //!
-//! Le matériel affiche une table d'entrées de 4 mots (x, y, tuile, attributs) terminée par un
-//! marqueur. Le jeu la remplit à partir de listes chaînées d'objets : chaque objet pointe vers une
-//! image (`Frame`), faite de morceaux de 16x16 décalés par rapport à sa position. Un budget limite
-//! le nombre de morceaux par image ; une ombre est ajoutée sous les personnages.
+//! The hardware displays a table of 4-word entries (x, y, tile, attributes) ended by a
+//! marker. The game fills it from linked lists of objects: each object points to a
+//! frame (`Frame`), made of 16x16 pieces offset from its position. A budget limits
+//! the number of pieces per frame; a shadow is added under the characters.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -11,48 +11,48 @@ use m68k::Cpu;
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
 use crate::Native;
 
-/// Variables de A5 (RAM FF8000) utilisées par le rendu.
+/// A5 variables (RAM FF8000) used by rendering.
 mod ram {
-    /// Budget de morceaux restant pour l'image en cours (initialisé à 0x36a).
+    /// Piece budget remaining for the current frame (initialised to 0x36a).
     pub const BUDGET: u32 = 0x5b8;
     pub const BUDGET_INIT: u32 = 0x5b6;
-    /// Bascule de banque d'objets, inversée à chaque liste construite.
+    /// Object bank toggle, inverted at each list built.
     pub const OBJ_BANK: u32 = 0x5bc;
-    /// Marqueurs de joueurs à afficher (un bit par joueur).
+    /// Player markers to display (one bit per player).
     pub const PLAYER_MARKERS: u32 = 0x5bd;
-    /// Têtes des listes d'objets : personnages et décors (0x5be), premier plan (0x5c2).
+    /// Heads of the object lists: characters and scenery (0x5be), foreground (0x5c2).
     pub const ACTORS: u32 = 0x5be;
     pub const FOREGROUND: u32 = 0x5c2;
-    /// Textes en sprites : (pointeur de chaîne, x, y) x 3.
+    /// Texts in sprites: (string pointer, x, y) x 3.
     pub const TEXTS: [u32; 3] = [0x5c6, 0x5ce, 0x5d6];
-    /// Caméra (0x4fe, ou 0x54e quand USE_ALT_CAMERA) : x en +8, y en +0xc.
+    /// Camera (0x4fe, or 0x54e when USE_ALT_CAMERA): x at +8, y at +0xc.
     pub const CAMERA: u32 = 0x4fe;
     pub const ALT_CAMERA: u32 = 0x54e;
     pub const USE_ALT_CAMERA: u32 = 0x36;
     pub const FOUR_PLAYERS: u32 = 0x20;
     pub const STAGE: u32 = 0x34;
     pub const TEXT_WORDS: u32 = 0x72;
-    /// Réglages (bit 9 : pas d'ombres).
+    /// Settings (bit 9: no shadows).
     pub const DIP: u32 = 0x7fd0;
-    /// Liste déjà construite pour cette image (remis à 0 par le VBLANK).
+    /// List already built for this frame (reset to 0 by VBLANK).
     pub const BUILT: u32 = 0x7fce;
-    /// Listes d'objets visibles par catégorie : compteurs et pointeurs d'écriture.
+    /// Lists of visible objects by category: counters and write pointers.
     pub const VISIBLE_COUNT: u32 = 0x7e72;
     pub const VISIBLE_PTR: u32 = 0x7e7c;
 }
 
-/// Champs d'un objet.
+/// Fields of an object.
 mod obj {
     pub const ACTIVE: u32 = 0x00;
-    /// Bit 0 : visible à cette image ; bit 1 : caché.
+    /// Bit 0: visible in this frame; bit 1: hidden.
     pub const FLAGS: u32 = 0x01;
     pub const X: u32 = 0x08;
     pub const Z: u32 = 0x0c;
     pub const Y: u32 = 0x10;
     pub const NEXT: u32 = 0x26;
-    /// Catégorie (0 : décor ; paire : personnage ou projectile, inscrit dans une liste visible).
+    /// Category (0: scenery; even: character or projectile, entered in a visible list).
     pub const KIND: u32 = 0x28;
-    /// Bit 0 : palette imposée (PALETTE).
+    /// Bit 0: imposed palette (PALETTE).
     pub const PALETTE_OVERRIDE: u32 = 0x2a;
     pub const PALETTE: u32 = 0x2b;
     pub const FLIP_X: u32 = 0x2c;
@@ -64,40 +64,40 @@ mod obj {
     pub const BOUNDS: u32 = 0x3c;
     pub const PRIORITY: u32 = 0x3f;
     pub const HIDDEN: u32 = 0x40;
-    /// Objets rattachés (index négatif = pointeur RAM) : dessinés devant ou derrière selon leur Y.
+    /// Attached objects (negative index = RAM pointer): drawn in front or behind according to their Y.
     pub const ATTACHED: [u32; 2] = [0x4a, 0x48];
 }
 
-/// Tables de la ROM programme.
+/// Program ROM tables.
 mod rom {
-    /// Boîtes de visibilité par catégorie d'objet : (dx, largeur, dy, hauteur).
+    /// Visibility boxes by object category: (dx, width, dy, height).
     pub const BOUNDS: u32 = 0x1ca538;
-    /// Marques au sol : (coût, tuile, dx, attributs, dx miroir, dy, bits de priorité, -).
+    /// Ground marks: (cost, tile, dx, attributes, mirror dx, dy, priority bits, -).
     pub const GROUND_MARKS: u32 = 0x1e45c;
-    /// Positions des marqueurs de joueurs (2 et 4 joueurs).
+    /// Positions of the player markers (2 and 4 players).
     pub const MARKERS: [u32; 2] = [0x1eb48, 0x1eb58];
-    /// Ombres détaillées : table de jeux, puis entrées de 8 octets.
+    /// Detailed shadows: table of sets, then 8-byte entries.
     pub const SHADOWS_A: u32 = 0x11bffa;
     pub const SHADOWS_B: u32 = 0x11c23a;
 }
 
 const OBJECT_RAM: u32 = 0x708000;
 
-/// Point de vue courant.
+/// Current viewpoint.
 #[derive(Clone, Copy)]
 struct Camera {
     x: u16,
     y: u16,
 }
 
-/// Écrit les entrées de la table d'objets et tient le budget de morceaux.
+/// Writes the entries of the object table and keeps the piece budget.
 struct Painter<'a> {
     b: &'a mut Cps2Bus,
     a5: u32,
     at: u32,
     cam: Camera,
-    /// D4 comme l'original le laisse (attributs du dernier morceau, couleur du dernier texte...) :
-    /// les gestionnaires qui suivent lisent ce reste (p. ex. 0xad7b0, qui additionne D4 à la position).
+    /// D4 as the original leaves it (attributes of the last piece, colour of the last text...):
+    /// the handlers that follow read this leftover (e.g. 0xad7b0, which adds D4 to the position).
     d4: u32,
 }
 
@@ -119,7 +119,7 @@ impl Painter<'_> {
         }
     }
 
-    /// Retire `n` morceaux du budget ; faux s'il n'en reste pas assez.
+    /// Removes `n` pieces from the budget; false if not enough remain.
     fn spend(&mut self, n: u16) -> bool {
         let a = self.ram(ram::BUDGET);
         let left = rd16(self.b, a);
@@ -136,7 +136,7 @@ fn camera(b: &mut Cps2Bus, a5: u32) -> Camera {
     Camera { x: rd16(b, a5 + base + 8), y: rd16(b, a5 + base + 0xc) }
 }
 
-/// Adresse d'un objet désigné par un mot (index négatif dans la RAM FF8000-FFFFFF).
+/// Address of an object designated by a word (negative index in RAM FF8000-FFFFFF).
 fn obj_at(w: u16) -> u32 {
     w as i16 as i32 as u32 & 0xff_ffff
 }
@@ -146,27 +146,28 @@ fn screen_x(p: &mut Painter, o: u32) -> u16 {
     x.wrapping_sub(p.cam.x)
 }
 
-/// Hauteur à l'écran : y + z relatifs à la caméra.
+/// Height on screen: y + z relative to the camera.
 fn screen_height(p: &mut Painter, o: u32) -> u16 {
     let h = rd16(p.b, o + obj::Y).wrapping_add(rd16(p.b, o + obj::Z));
     h.wrapping_sub(p.cam.y)
 }
 
-/// Ce que la construction de la table d'objets laisse dans les registres de l'original.
+/// What the construction of the object table leaves in the registers of the original.
 #[derive(Clone, Copy, Debug)]
 pub struct Leftovers {
-    /// D4 : attributs du dernier morceau, couleur du dernier texte... (mot bas ou long, selon le dernier écrit).
+    /// D4: attributes of the last piece, colour of the last text... (low word or long, depending on the last one
+    /// written).
     pub d4: u32,
-    /// A4 : pointeur d'écriture à la fin de la table.
+    /// A4: write pointer at the end of the table.
     pub end: u32,
-    /// A6 : bloc de la caméra courante.
+    /// A6: block of the current camera.
     pub camera: u32,
 }
 
-/// 0x1de96 : construit la table d'objets de l'image (rien si elle l'est déjà : `None`). `d4` : le D4 de l'appelant,
-/// dont l'original ne remplace parfois que le mot bas.
-/// Glitch d'origine : D4 garde les attributs du dernier morceau dessiné, et des gestionnaires le relisent plus tard
-/// (0xad7b0 l'additionne à une position) : les appelants le rendent au processeur (`Leftovers::d4`).
+/// 0x1de96: builds the frame's object table (nothing if already built: `None`). `d4`: the caller's D4,
+/// of which the original sometimes replaces only the low word.
+/// Original glitch: D4 keeps the attributes of the last piece drawn, and handlers reread it later
+/// (0xad7b0 adds it to a position): callers return it to the processor (`Leftovers::d4`).
 pub fn build(b: &mut Cps2Bus, d4: u32) -> Option<Leftovers> {
     let a5 = crate::mem::A5;
     if rd16(b, a5 + ram::BUILT) != 0 {
@@ -179,7 +180,7 @@ pub fn build(b: &mut Cps2Bus, d4: u32) -> Option<Leftovers> {
             let a = p.ram(a);
             wr16(p.b, a, 0x36a);
         }
-        // deux entrées vides en tête
+        // two empty entries at the head
         p.sprite(0, 0, 0x1800, 0);
         p.sprite(0, 0, 0x1800, 0);
         draw_foreground(&mut p);
@@ -189,7 +190,7 @@ pub fn build(b: &mut Cps2Bus, d4: u32) -> Option<Leftovers> {
         for t in ram::TEXTS {
             draw_text(&mut p, t);
         }
-        // marqueur de fin de table
+        // end-of-table marker
         p.sprite(0x8000, 0x8000, 0, 0);
         let bank = a5 + ram::OBJ_BANK;
         let v = rd8(p.b, bank) ^ 0xff;
@@ -200,7 +201,7 @@ pub fn build(b: &mut Cps2Bus, d4: u32) -> Option<Leftovers> {
     }
 }
 
-/// `build` avec les registres de l'original (D4, A4, A6 quand la table est construite).
+/// `build` with the registers of the original (D4, A4, A6 when the table is built).
 pub fn build_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     if let Some(r) = build(b, c.d[4]) {
         (c.d[4], c.a[4], c.a[6]) = (r.d4, r.end, r.camera);
@@ -212,7 +213,7 @@ fn build_sprite_list(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x1df14 : objets de premier plan.
+/// 0x1df14: foreground objects.
 fn draw_foreground(p: &mut Painter) {
     let mut w = { let a = p.ram(ram::FOREGROUND); rd16(p.b, a) };
     if w == 0 {
@@ -231,8 +232,8 @@ fn draw_foreground(p: &mut Painter) {
     }
 }
 
-/// 0x1ed2 : visibilité d'un objet (met à jour le bit 0 de FLAGS) et inscription des objets
-/// visibles dans la liste de leur catégorie.
+/// 0x1ed2: visibility of an object (updates bit 0 of FLAGS) and entry of the visible
+/// objects in the list of their category.
 fn check_visible(p: &mut Painter, o: u32) -> bool {
     let kind = rd8(p.b, o + obj::KIND);
     let inside = if kind != 0 {
@@ -251,7 +252,7 @@ fn check_visible(p: &mut Painter, o: u32) -> bool {
     }
     let f = rd8(p.b, flags) | 1;
     wr8(p.b, flags, f);
-    // listes par catégorie : (2, 4) -> 0, 6 -> 1, 8 -> 2, 10 -> 3, 12 -> 4
+    // lists by category: (2, 4) -> 0, 6 -> 1, 8 -> 2, 10 -> 3, 12 -> 4
     let list = match kind {
         2 | 4 => Some(2),
         6 => Some(0),
@@ -259,7 +260,7 @@ fn check_visible(p: &mut Painter, o: u32) -> bool {
         10 => Some(3),
         12 => Some(4),
         0 | 13.. => None,
-        _ => unreachable!("catégorie d'objet impaire {kind} : non gérée par le jeu"),
+        _ => unreachable!("odd object category {kind}: not handled by the game"),
     };
     if let Some(l) = list {
         let count = p.ram(ram::VISIBLE_COUNT + 2 * l);
@@ -273,12 +274,12 @@ fn check_visible(p: &mut Painter, o: u32) -> bool {
     true
 }
 
-/// Test d'écran des objets de décor : marge de 0x60 pixels autour de l'écran.
+/// Screen test of the scenery objects: margin of 0x60 pixels around the screen.
 fn on_screen(p: &mut Painter, o: u32) -> bool {
     screen_x(p, o).wrapping_add(0x60) <= 0x240 && screen_height(p, o).wrapping_add(0xc0) <= 0x1c0
 }
 
-/// 0x1e3a6 : marques au sol (cercles sous les personnages), passe de visibilité de la liste principale.
+/// 0x1e3a6: ground marks (circles under the characters), visibility pass of the main list.
 fn draw_ground_marks(p: &mut Painter) {
     let mut w = { let a = p.ram(ram::ACTORS); rd16(p.b, a) };
     if w == 0 {
@@ -317,7 +318,7 @@ fn draw_ground_marks(p: &mut Painter) {
     }
 }
 
-/// 0x1df3e : personnages et décors, avec leurs objets rattachés devant/derrière.
+/// 0x1df3e: characters and scenery, with their attached objects in front/behind.
 fn draw_actors(p: &mut Painter) {
     let mut w = { let a = p.ram(ram::ACTORS); rd16(p.b, a) };
     if w == 0 {
@@ -327,7 +328,7 @@ fn draw_actors(p: &mut Painter) {
         let o = obj_at(w);
         let kind = rd8(p.b, o + obj::KIND);
         if kind != 0 && rd8(p.b, o + obj::HIDDEN) != 0 {
-            // objet caché
+            // hidden object
         } else if kind != 0 {
             if rd8(p.b, o + obj::FLAGS) & 1 != 0 {
                 draw_object(p, o);
@@ -352,7 +353,7 @@ fn draw_actors(p: &mut Painter) {
     }
 }
 
-/// Objets rattachés derrière (Y négatif) ou devant (Y positif) le parent visible.
+/// Attached objects behind (negative Y) or in front of (positive Y) the visible parent.
 fn draw_attached(p: &mut Painter, parent: u32, behind: bool) {
     for field in obj::ATTACHED {
         let w = rd16(p.b, parent + field);
@@ -367,7 +368,7 @@ fn draw_attached(p: &mut Painter, parent: u32, behind: bool) {
     }
 }
 
-/// Image d'un objet : en-tête puis morceaux.
+/// Frame of an object: header then pieces.
 struct Frame {
     count: u16,
     second: u16,
@@ -388,12 +389,12 @@ fn frame_at(b: &mut Cps2Bus, f: u32) -> Frame {
     }
 }
 
-/// Mot de priorité/banque combiné aux positions (ror.l #3 de (banque << 16 | priorité)).
+/// Priority/bank word combined with the positions (ror.l #3 of (bank << 16 | priority)).
 fn position_bits(bank: u8, prio: u8) -> u32 {
     ((bank as u32) << 16 | prio as u32).rotate_right(3)
 }
 
-/// Style d'un objet : miroir et palette imposée.
+/// Style of an object: mirror and imposed palette.
 #[derive(Clone, Copy)]
 struct Style {
     flip: bool,
@@ -414,7 +415,7 @@ fn with_palette(attr: u16, pal: Option<u8>) -> u16 {
     }
 }
 
-/// Émet les morceaux d'une image à la position (x, y) (y déjà retourné pour l'écran).
+/// Emits the pieces of a frame at position (x, y) (y already flipped for the screen).
 fn emit_frame(p: &mut Painter, fr: &Frame, x: u16, y: u16, bits: u32, st: Style, palette_after_flip: bool) {
     let n = if fr.per_piece { fr.second } else { fr.count };
     let mut common = fr.second;
@@ -462,7 +463,7 @@ fn emit_frame(p: &mut Painter, fr: &Frame, x: u16, y: u16, bits: u32, st: Style,
     }
 }
 
-/// 0x1e062 : dessine l'image courante d'un objet.
+/// 0x1e062: draws the current frame of an object.
 fn draw_object(p: &mut Painter, o: u32) {
     if rd8(p.b, o + obj::ACTIVE) == 0 {
         return;
@@ -482,7 +483,7 @@ fn draw_object(p: &mut Painter, o: u32) {
     emit_frame(p, &fr, x, y, bits, st, true);
 }
 
-/// 0x1e0b4 : objet rattaché, positionné relativement à son parent (priorité 4).
+/// 0x1e0b4: attached object, positioned relative to its parent (priority 4).
 fn draw_child(p: &mut Painter, parent: u32, a: u32) {
     if rd8(p.b, a + obj::ACTIVE) == 0 {
         return;
@@ -503,7 +504,7 @@ fn draw_child(p: &mut Painter, parent: u32, a: u32) {
     emit_frame(p, &fr, x, y, bits, st, true);
 }
 
-/// 0x1ec4e : ombre au sol, plus les ombres détaillées éventuelles.
+/// 0x1ec4e: ground shadow, plus any detailed shadows.
 fn draw_shadow(p: &mut Painter, o: u32) {
     let dip = { let a = p.ram(ram::DIP); rd16(p.b, a) };
     if dip & 0x200 != 0 || !p.spend(0xb) {
@@ -522,7 +523,7 @@ fn draw_shadow(p: &mut Painter, o: u32) {
     }
 }
 
-/// 0x1ed22 : ombre détaillée en quatre quarts autour d'un point.
+/// 0x1ed22: detailed shadow in four quarters around a point.
 fn draw_shadow_quad(p: &mut Painter, o: u32, e: u32) {
     let mut dx = rd8(p.b, e) as i8 as u16;
     if rd8(p.b, o + obj::FLIP_X) != 0 {
@@ -546,12 +547,12 @@ fn draw_shadow_quad(p: &mut Painter, o: u32, e: u32) {
     }
 }
 
-/// 0x1ea6c : marqueurs des joueurs (flèches « 1P »...).
+/// 0x1ea6c: player markers ("1P" arrows...).
 fn draw_player_markers(p: &mut Painter) {
     let four = { let a = p.ram(ram::FOUR_PLAYERS); rd8(p.b, a) } & 2 != 0;
     let table = rom::MARKERS[four as usize];
     let shown = { let a = p.ram(ram::PLAYER_MARKERS); rd8(p.b, a) };
-    // (tuile haute, tuile basse) et palette de chaque joueur
+    // (high tile, low tile) and palette of each player
     let looks = [(0x1fba, 0x1fbc, 0x0c), (0x1fc0, 0x1fc2, 0x0c), (0x1fba, 0x1fbc, 0x0d), (0x1fc0, 0x1fc2, 0x0d)];
     for (k, (top, bottom, pal)) in looks.into_iter().enumerate() {
         if shown & (1 << k) != 0 {
@@ -563,7 +564,7 @@ fn draw_player_markers(p: &mut Painter) {
     }
 }
 
-/// 0x1eb90 / 0x1ec0c / 0x1ec2c : chaîne de caractères affichée en sprites de 8 pixels.
+/// 0x1eb90 / 0x1ec0c / 0x1ec2c: character string displayed in 8-pixel sprites.
 fn draw_text(p: &mut Painter, slot: u32) {
     let s = { let a = p.ram(slot); rd32(p.b, a) };
     if s == 0 {
@@ -627,22 +628,22 @@ fn draw_text(p: &mut Painter, slot: u32) {
     }
 }
 
-/// Image d'objet sans morceau (compte nul). L'original boucle alors par `dbf` sur un compteur de -1 : 65 536 entrées
-/// écrites à la suite, en faisant plusieurs fois le tour de la RAM d'objets, le temps de plusieurs images (la tâche est
-/// interrompue par les IRQ au milieu de la boucle, à des cycles que seules des routines exactes au cycle près
-/// reproduiraient). Cela n'arrive que dans des états que le jeu ne produit pas (sortie de scène forcée à un instant
-/// quelconque, scénarios de couverture) : aucun morceau n'est dessiné, comme ici (`emit_frame`). Même correctif dans le
-/// code d'origine (machine de référence), aux quatre entrées de la boucle d'émission.
+/// Object frame without a piece (zero count). The original then loops with `dbf` on a counter of -1: 65,536 entries
+/// written one after another, going around the object RAM several times, over several frames (the task is
+/// interrupted by IRQs in the middle of the loop, at cycles that only cycle-exact routines
+/// would reproduce). This only happens in states that the game does not produce (scene exit forced at any
+/// instant, coverage scenarios): no piece is drawn, as here (`emit_frame`). Same patch in the original
+/// code (reference machine), at the four entries of the emission loop.
 pub const EMPTY_FRAME_PATCHES: [cps2::Patch; 4] = [
-    // objet : compte lu dans D6 (0x1e22a), objet rattaché (0x1e1aa) ; pièces individuelles : compte dans D4 (0x1e110) ;
-    // objet à pièces individuelles : D6 déjà décrémenté (0x1e2aa)
+    // object: count read from D6 (0x1e22a), attached object (0x1e1aa); individual pieces: count in D4 (0x1e110);
+    // object with individual pieces: D6 already decremented (0x1e2aa)
     cps2::Patch { entry: 0x1e22a, apply: |c, b| return_if(c, b, c.d[6] as u16 == 0) },
     cps2::Patch { entry: 0x1e1aa, apply: |c, b| return_if(c, b, c.d[6] as u16 == 0) },
     cps2::Patch { entry: 0x1e110, apply: |c, b| return_if(c, b, c.d[4] as u16 == 0) },
     cps2::Patch { entry: 0x1e2aa, apply: |c, b| return_if(c, b, c.d[6] as u16 == 0xffff) },
 ];
 
-/// `rts` si `empty`.
+/// `rts` if `empty`.
 fn return_if(c: &mut Cpu, b: &mut Cps2Bus, empty: bool) -> bool {
     if empty {
         c.pc = crate::mem::rd32(b, c.a[7]);
@@ -650,7 +651,7 @@ fn return_if(c: &mut Cpu, b: &mut Cps2Bus, empty: bool) -> bool {
     }
     empty
 }
-/// 0x1de7c : vide les têtes de listes d'objets, les marqueurs de joueurs et les trois textes.
+/// 0x1de7c: clears the heads of the object lists, the player markers and the three texts.
 pub fn clear_lists(b: &mut Cps2Bus) {
     let a5 = crate::mem::A5;
     wr32(b, a5 + ram::ACTORS, 0);

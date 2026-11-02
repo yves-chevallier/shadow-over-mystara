@@ -1,8 +1,8 @@
-//! Le pilote Rust doit faire les mêmes écritures que le programme du Z80 d'origine.
+//! The Rust driver must make the same writes as the original Z80 program.
 //!
-//! Les tests lisent les ROMs dans le dossier désigné par `DDSOM_ROMS` (le même que pour compiler
-//! `ddsom-rc`) et s'ignorent sans lui. Version courte de `examples/sound_fuzz.rs` ; à lancer en
-//! `--release`.
+//! The tests read the ROMs from the folder given by `DDSOM_ROMS` (the same one used to build
+//! `ddsom-rc`) and skip themselves without it. Short version of `examples/sound_fuzz.rs`; to be
+//! run with `--release`.
 
 #[path = "../examples/support/mod.rs"]
 mod support;
@@ -13,17 +13,17 @@ use support::session::{random_session, run_session, song_session, synth_short_se
 
 fn rom() -> Option<Rom> {
     let dir = PathBuf::from(std::env::var_os("DDSOM_ROMS")?);
-    Some(Rom::load(&dir).expect("dd2.01 et dd2.02 dans DDSOM_ROMS"))
+    Some(Rom::load(&dir).expect("dd2.01 and dd2.02 in DDSOM_ROMS"))
 }
 
-/// Joue chaque essai et exige l'identité (les essais où le Z80 reste occupé trop longtemps pour
-/// être comparable sont ignorés, mais il en faut assez qui le soient).
+/// Plays each run and requires identity (runs where the Z80 stays busy for too long to be
+/// comparable are ignored, but enough of them must be comparable).
 fn check(rom: &Rom, sessions: impl Iterator<Item = Session>) {
     let mut compared = 0;
     for (i, s) in sessions.enumerate() {
         let r = run_session(rom, &s, None, None);
-        assert!(r.first_divergence.is_none(), "essai {i} : {:?}", r.first_divergence);
-        assert!(r.slow || r.identical(), "essai {i} : longueurs différentes");
+        assert!(r.first_divergence.is_none(), "run {i}: {:?}", r.first_divergence);
+        assert!(r.slow || r.identical(), "run {i}: different lengths");
         compared += usize::from(!r.slow);
     }
     assert!(compared > 0);

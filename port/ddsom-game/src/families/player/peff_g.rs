@@ -1,5 +1,5 @@
-//! Effets des joueurs (PEFF), septième série : types 21 à 23 (étincelle du coup, fumée de la fin de
-//! prière, lueur de la prière). Voir `docs/families/player.md`.
+//! Player effects (PEFF), seventh series: types 21 to 23 (hit spark, end-of-prayer smoke, prayer glow). See
+//! `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -11,8 +11,8 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Type 21 (0x4d2fe) : étincelle du coup (variantes 0 et 1), posée devant le joueur ; la variante 0 vit
-/// tant que son geste (`+0x5c`) dure et clignote.
+/// Type 21 (0x4d2fe): hit spark (variants 0 and 1), placed in front of the player; variant 0 lives as long as its move
+/// (`+0x5c`) lasts and blinks.
 mod hit_spark {
     use super::*;
 
@@ -65,8 +65,8 @@ mod hit_spark {
     }
 }
 
-/// Type 22 (0x4d3e2) : la prière du clerc (kind 0x16). Variante 0 : nimbe qui dure `+0x168 - 0x1e` images ;
-/// variante 1 : rayons (rang `+2f` 0 = compte à rebours, 1 = pluie d'étincelles) ; variante 2 : lueur finale.
+/// Type 22 (0x4d3e2): the cleric's prayer (kind 0x16). Variant 0: nimbus that lasts `+0x168 - 0x1e` frames; variant 1:
+/// rays (rank `+2f` 0 = countdown, 1 = rain of sparks); variant 2: final glow.
 mod prayer {
     use super::*;
 
@@ -202,7 +202,7 @@ mod prayer {
     }
 }
 
-/// Type 23 (0x4d682) : lueur de la prière (kind 0x17), collée au lanceur ; la variante 1 est plus haute.
+/// Type 23 (0x4d682): prayer glow (kind 0x17), stuck to the caster; variant 1 is higher.
 mod glow {
     use super::*;
 

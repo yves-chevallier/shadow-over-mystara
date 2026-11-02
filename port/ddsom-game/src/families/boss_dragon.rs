@@ -1,51 +1,51 @@
-//! Boss de type 13 (0x8f59c) : le dragon noir en vol des scènes 7 et 9 (h). Voir `docs/families/boss.md`.
+//! Boss of type 13 (0x8f59c): the black dragon flying in scenes 7 and 9 (h). See `docs/families/boss.md`.
 //!
-//! Il ne combat pas : il suit la caméra à gauche de l'écran (`scroll - 0x80`), flotte en haut et en bas
-//! (`bob`), puis, à des abscisses de défilement fixées (`STOPS`), s'arrête pour une cinématique (un
-//! objet « message » obtenu par `0xc8312`), vient vers le meneur de la caméra, le suit, s'en éloigne et
-//! sort. Il crée à sa naissance deux tirs ESHL de type 0x14 qui gardent un lien vers lui (`+0x50`).
+//! It does not fight: it follows the camera at the left of the screen (`scroll - 0x80`), floats up and down (`bob`),
+//! then, at fixed scroll abscissae (`STOPS`), stops for a cutscene (a "message" object obtained through `0xc8312`),
+//! moves toward the camera leader, follows it, moves away from it and leaves. At birth it creates two ESHL shots of
+//! type 0x14 that keep a link to it (`+0x50`).
 //!
-//! Sous-états `+6` de l'état actif (`+5` = 0 ; `+5` = 2 libère l'objet) :
+//! Substates `+6` of the active state (`+5` = 0; `+5` = 2 releases the object):
 //!
-//! | `+6` | Rôle |
+//! | `+6` | Role |
 //! |---|---|
-//! | 0 | prépare l'étape |
-//! | 2 | attend l'abscisse suivante de `STOPS`, puis lance la cinématique |
-//! | 4 | attend la fin de la cinématique |
-//! | 6 | vient vers le meneur |
-//! | 8, 12 | suit le meneur un temps (`+0xa2`) |
-//! | 10 | idem, puis tient la position tant que `+0xa5` bit 0 |
-//! | 14 | s'éloigne et sort de l'écran |
+//! | 0 | prepares the stage |
+//! | 2 | waits for the next abscissa of `STOPS`, then starts the cutscene |
+//! | 4 | waits for the end of the cutscene |
+//! | 6 | moves toward the leader |
+//! | 8, 12 | follows the leader for a while (`+0xa2`) |
+//! | 10 | same, then holds the position while `+0xa5` bit 0 is set |
+//! | 14 | moves away and leaves the screen |
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::mem::wr8;
 
-/// Jeu d'animations du dragon.
+/// Dragon animation set.
 const ANIMS: u32 = 0x17d7d2;
-/// Seuils d'abscisse (caméra + 0x100) qui déclenchent chaque étape (mots, espace des opcodes).
+/// Abscissa thresholds (camera + 0x100) that trigger each stage (words, opcode space).
 const STOPS: u32 = 0x8f97a;
-/// Vitesses de flottement : 4 mots (VZ, AZ, VY, AY) à partir de `4 × draw` (fenêtres qui se
-/// chevauchent, comme l'original), espace de données.
+/// Floating speeds: 4 words (VZ, AZ, VY, AY) starting at `4 × draw` (overlapping windows, like the original), data
+/// space.
 const BOB_TABLE: u32 = 0x8faa2;
 
-/// Champs propres à ce type.
+/// Fields specific to this type.
 mod g {
-    /// Bit 0 : cinématique demandée ; bit 1 : étape franchie.
+    /// Bit 0: cutscene requested; bit 1: stage passed.
     pub const CUTSCENE: u32 = 0x42;
     pub const TALKING: u32 = 0x43;
-    /// Phase du flottement (0 : vitesses à tirer, 1 : vitesses à inverser) et minuterie.
+    /// Floating phase (0: speeds to draw, 1: speeds to invert) and timer.
     pub const BOB_PHASE: u32 = 0xa0;
     pub const BOB_TIMER: u32 = 0xa1;
-    /// Minuterie du sous-état.
+    /// Substate timer.
     pub const TIMER: u32 = 0xa2;
     pub const HOLD: u32 = 0xa5;
-    /// Rang de la prochaine étape de `STOPS`.
+    /// Index of the next stage of `STOPS`.
     pub const STOP_INDEX: u32 = 0xa7;
-    /// Vitesses de flottement tirées (VZ, AZ, VY, AY).
+    /// Drawn floating speeds (VZ, AZ, VY, AY).
     pub const BOB_SPEEDS: u32 = 0xa8;
-    /// Objet « message » de la cinématique (mot).
+    /// "Message" object of the cutscene (word).
     pub const MESSAGE: u32 = 0xb0;
     pub const LEAVING: u32 = 0xb2;
     pub const SLOW: u32 = 0xbc;
@@ -54,13 +54,13 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Octet `0xff0ec6` (`A5-0x713a`) : non nul, le dragon se retire.
+/// Byte `0xff0ec6` (`A5-0x713a`): non-zero, the dragon withdraws.
 const RETREAT_FLAG: u32 = 0xff0ec6;
 const SCENE_PHASE: u32 = 0x51e;
 const SHOT_SLOTS: u32 = 0x7e64;
 const PLAYERS: u32 = 0xff85de;
 
-/// États longs (`+4..+7`) : actif, `+6` = 0 ; actif, `+6` = 0xe.
+/// Long states (`+4..+7`): active, `+6` = 0; active, `+6` = 0xe.
 const ACTIVE_FIRST: u32 = 0x0200_0000;
 const ACTIVE_LEAVE: u32 = 0x0200_0e00;
 
@@ -131,7 +131,7 @@ fn stage<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Vol libre : accroché à la gauche de l'écran, avec le flottement.
+/// Free flight: attached to the left of the screen, with the floating.
 fn drift<R: Bench>(x: &mut Cx<'_, R>) {
     let left = scroll_x(x).wrapping_sub(0x80);
     x.set16(0x8, left);
@@ -140,14 +140,14 @@ fn drift<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// Déplacement du dragon qui suit le meneur.
+/// Movement of the dragon that follows the leader.
 fn glide<R: Bench>(x: &mut Cx<'_, R>) {
     chase(x);
     x.move_yz();
     x.anim_step();
 }
 
-/// La caméra a-t-elle dépassé le seuil suivant de `STOPS` ? Si oui, passe au suivant.
+/// Has the camera passed the next threshold of `STOPS`? If so, moves on to the next one.
 fn next_stop<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let reach = scroll_x(x).wrapping_add(0x100) as i16;
     let i = x.u8(STOP_INDEX) as u32;
@@ -159,7 +159,7 @@ fn next_stop<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// Fin demandée (`RETREAT_FLAG`) ou seuil franchi : le dragon passe en mode « départ » (`+6` = 0xe).
+/// End requested (`RETREAT_FLAG`) or threshold passed: the dragon switches to "departure" mode (`+6` = 0xe).
 fn must_leave<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.data8(RETREAT_FLAG) != 0 || next_stop(x)
 }
@@ -174,12 +174,12 @@ fn begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(CUTSCENE, 0, false);
     x.set_bit(CUTSCENE, 1, false);
     x.set8(LEAVING, 0);
-    // 0xdf4bc : objet SOBJ 7 lié par `+0x46`
+    // 0xdf4bc: SOBJ object 7 linked through `+0x46`
     super::small::linked_via(&mut super::effects_creators::leftovers::Pure, x.b, x.o, &crate::objects::pools::SOBJ, 0x7, 0x46);
     drift(x);
 }
 
-/// Fige ou libère le jeu et les joueurs pendant la cinématique.
+/// Freezes or releases the game and the players during the cutscene.
 fn freeze_players<R: Bench>(x: &mut Cx<'_, R>, on: bool) {
     for k in 0..4 {
         let player = PLAYERS + 0x200 * k;
@@ -307,7 +307,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// Se place près du meneur : même profondeur, abscisse maintenue dans `[leader - 0xe0, leader - 0x60]`.
+/// Moves next to the leader: same depth, abscissa kept within `[leader - 0xe0, leader - 0x60]`.
 fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(lead) = leader(x) else { return };
     let y = lead.u16(x.b, 0x10).wrapping_sub(0x10);
@@ -331,7 +331,7 @@ fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     bob(x);
 }
 
-/// Flottement : toutes les 16 images, de nouvelles vitesses tirées dans `BOB_TABLE`, puis leurs opposées.
+/// Floating: every 16 frames, new speeds drawn from `BOB_TABLE`, then their opposites.
 fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let inverse = x.u8(BOB_PHASE) != 0;
     let t = x.u8(BOB_TIMER).wrapping_sub(1);

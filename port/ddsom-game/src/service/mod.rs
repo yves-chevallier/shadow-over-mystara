@@ -1,22 +1,22 @@
-//! Menu TEST (M1, `docs/service.md`) : le menu de service de la borne et ses écrans de test.
+//! TEST menu (M1, `docs/service.md`): the cabinet's service menu and its test screens.
 //!
-//! La tâche du menu (`tasks/service.rs`) appelle chaque image le gestionnaire de l'état courant :
-//! préparation (0), menu (2) ou écran choisi (4). L'état vit dans l'enregistrement [`MENU`] (FF1CF8,
-//! remis à zéro à la création de la tâche) :
+//! The menu task (`tasks/service.rs`) calls the handler of the current state every frame:
+//! preparation (0), menu (2) or chosen screen (4). The state lives in the [`MENU`] record (FF1CF8,
+//! reset to zero when the task is created):
 //!
-//! | Octet | Rôle |
+//! | Byte | Role |
 //! |---|---|
-//! | 0 | état du menu : 0 préparation, 2 menu, 4 écran de test |
-//! | 1 | ligne choisie (0, 2... 16 : INPUT... EXIT) |
-//! | 2 | étape de l'écran de test (0 : préparation) |
-//! | 3-5 | curseurs des menus de configuration |
-//! | 0x10, 0x11, 0x12 | répétition automatique (haut/bas, gauche/droite, tirs) |
-//! | 0x30-0x33 | SOUND & VOICE : code (mot), volume, à réafficher |
-//! | 0x5e | « Secret Test » demandé (si le mot 0xc0 du programme n'est pas nul : jamais) |
+//! | 0 | menu state: 0 preparation, 2 menu, 4 test screen |
+//! | 1 | chosen line (0, 2... 16: INPUT... EXIT) |
+//! | 2 | step of the test screen (0: preparation) |
+//! | 3-5 | cursors of the configuration menus |
+//! | 0x10, 0x11, 0x12 | auto-repeat (up/down, left/right, fire buttons) |
+//! | 0x30-0x33 | SOUND & VOICE: code (word), volume, to redisplay |
+//! | 0x5e | "Secret Test" requested (if the program word 0xc0 is not zero: never) |
 //!
-//! Les écrans sont des fonctions Rust ; ceux qui cèdent la main au milieu (le menu après l'effacement de
-//! l'écran) reprennent dans une native posée à l'adresse de retour d'origine, la pile de la tâche contenant
-//! les mêmes adresses de retour que l'original.
+//! The screens are Rust functions; those that cede control in the middle (the menu after the screen
+//! is cleared) resume in a native placed at the original return address, the task stack containing
+//! the same return addresses as the original.
 
 pub mod io_tests;
 pub mod memory;
@@ -29,11 +29,11 @@ use crate::mem::wr32;
 use crate::modes::Flow;
 use crate::scene::Ctx;
 
-/// Enregistrement du menu (A5 - 0x6308), 0x60 octets.
+/// Menu record (A5 - 0x6308), 0x60 bytes.
 pub const MENU: u32 = 0xff_1cf8;
 pub const MENU_LONGS: u32 = 24;
 
-/// Champs de l'enregistrement.
+/// Fields of the record.
 pub mod f {
     pub const STATE: u32 = 0;
     pub const CURSOR: u32 = 1;
@@ -44,16 +44,16 @@ pub mod f {
     pub const SECRET: u32 = 0x5e;
 }
 
-/// États du menu.
+/// Menu states.
 mod state {
     pub const INIT: u8 = 0;
     pub const MENU: u8 = 2;
     pub const SCREEN: u8 = 4;
 }
 
-/// Variables de la RAM de travail (décalages depuis A5).
+/// Work RAM variables (offsets from A5).
 pub mod var {
-    /// Entrées : état courant P1..P4, boutons système (départs, pièces), interrupteurs (test, service).
+    /// Inputs: current state P1..P4, system buttons (starts, coins), switches (test, service).
     pub const INPUT: u32 = 0;
     pub const SYSTEM: u32 = 4;
     pub const SWITCHES: u32 = 5;
@@ -64,15 +64,15 @@ pub mod var {
     pub const VARIANT: u32 = 0x70;
     pub const DEV_BOARD: u32 = 0x82;
     pub const CARD_DISPENSER: u32 = 0x84;
-    /// Menu TEST actif (lu par le son).
+    /// TEST menu active (read by the sound).
     pub const ACTIVE: u32 = 0x7fcc;
     pub const SCROLLS: [u32; 6] = [0x4b6, 0x4ba, 0x506, 0x50a, 0x556, 0x55a];
-    /// Octets remis à zéro par le menu (rôle inconnu ; `0x5bc` est la sortie recopiée en 0x8040e1 par le VBLANK).
+    /// Bytes reset to zero by the menu (unknown role; `0x5bc` is the output copied to 0x8040e1 by VBLANK).
     pub const FRAME_FLAG: u32 = 0x5bd;
     pub const BYTE_34: u32 = 0x34;
 }
 
-/// Bits des entrées d'un joueur (voir `inputs.rs`).
+/// Bits of a player's inputs (see `inputs.rs`).
 pub mod key {
     pub const RIGHT: u8 = 0x01;
     pub const LEFT: u8 = 0x02;
@@ -80,35 +80,35 @@ pub mod key {
     pub const UP: u8 = 0x08;
     pub const SHOT1: u8 = 0x10;
     pub const SHOT2: u8 = 0x20;
-    /// Départ du joueur 1 dans l'octet système.
+    /// Start of player 1 in the system byte.
     pub const START1: u8 = 0x01;
 }
 
-/// Entrée de la tâche de démarrage, que la tâche du menu redevient en sortant.
+/// Entry of the startup task, which the menu task becomes again on leaving.
 const BOOT_TASK: u32 = 0x11b16;
 
-/// Textes du menu (descripteurs en ROM).
+/// Menu texts (descriptors in ROM).
 mod text {
     pub const MENU: u32 = 0x29f1e;
     pub const HELP: u32 = 0x2a03a;
 }
 
-/// Sorties de la carte (0x400004), valeur posée par le menu.
+/// Board outputs (0x400004), value set by the menu.
 const OUTPUTS: u32 = 0x400004;
 const MENU_OUTPUTS: u16 = 0x2355;
-/// Mot du programme qui autorise le « Secret Test » (nul dans ce jeu).
+/// Program word that enables the "Secret Test" (zero in this game).
 const SECRET_ENABLE: u32 = 0xc0;
-/// Couche de caractères : flèche du menu, ligne « 7. CONFIGURATION » colorée si les réglages diffèrent
-/// des réglages d'usine.
+/// Character layer: menu arrow, line "7. CONFIGURATION" coloured if the settings differ
+/// from the factory settings.
 const MENU_ARROW: u32 = 0x912690;
 const MENU_CONFIG_LINE: u32 = 0x912940;
-/// Couleur de mise en évidence (attribut de case).
+/// Highlight colour (cell attribute).
 pub const HIGHLIGHT: u16 = 0x13;
-/// Lignes du menu : la dernière est EXIT.
+/// Menu lines: the last one is EXIT.
 const LAST_LINE: u8 = 0x10;
 
 // ---------------------------------------------------------------------------------------------
-// Accès
+// Access
 
 pub fn get(x: &mut Ctx, field: u32) -> u8 {
     x.rd8(MENU + field)
@@ -122,22 +122,22 @@ pub fn get16(x: &mut Ctx, field: u32) -> u16 {
 pub fn set16(x: &mut Ctx, field: u32, v: u16) {
     x.wr16(MENU + field, v)
 }
-/// Étape suivante de l'écran.
+/// Next step of the screen.
 pub fn next_step(x: &mut Ctx) {
     let s = get(x, f::STEP).wrapping_add(2);
     set(x, f::STEP, s);
 }
 
-/// Touches de P1 nouvellement pressées (actif à 1).
+/// Newly pressed P1 keys (active at 1).
 pub fn pressed(x: &mut Ctx) -> u8 {
     x.v8(var::INPUT) & !x.v8(var::PREV)
 }
 
-/// Affiche un texte (descripteur en ROM).
+/// Displays a text (descriptor in ROM).
 pub fn print(x: &mut Ctx, descriptor: u32) {
     crate::text::print(x.b, descriptor);
 }
-/// Couches de l'écran coupées / rétablies (masque 0x12ce).
+/// Screen layers cut off / restored (mask 0x12ce).
 pub const ALL_LAYERS: u16 = 0x12ce;
 pub fn layers_off(x: &mut Ctx) {
     crate::video::turn_layers_off(x.b, ALL_LAYERS);
@@ -146,14 +146,14 @@ pub fn layers_on(x: &mut Ctx) {
     crate::video::turn_layers_on(x.b, ALL_LAYERS);
 }
 
-/// Objets et couches effacés, palettes de la scène rechargées (0xc58, 0xca8, 0xcc8, 0xce8, 0x1a296). Rend le D0 que
-/// laisse le chargement des palettes (relu par le menu de configuration).
+/// Objects and layers cleared, scene palettes reloaded (0xc58, 0xca8, 0xcc8, 0xce8, 0x1a296). Returns the D0 left
+/// by the palette loading (reread by the configuration menu).
 pub fn clear_screen(x: &mut Ctx) -> u32 {
     clear_layers(x);
     crate::palette::load_all_palettes(x.b)
 }
 
-/// Objets et couches effacés (0xc58, 0xca8, 0xcc8, 0xce8).
+/// Objects and layers cleared (0xc58, 0xca8, 0xcc8, 0xce8).
 fn clear_layers(x: &mut Ctx) {
     crate::video::clear_objects(x.b);
     for layer in [Layer::One, Layer::Two, Layer::Three] {
@@ -162,12 +162,12 @@ fn clear_layers(x: &mut Ctx) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Aides communes (0x29948-0x29de0)
+// Common helpers (0x29948-0x29de0)
 
-/// Réglage à répétition automatique (`0x29948` vertical : haut recule ; `0x29994` horizontal : gauche
-/// recule ; `0x2ca5e` tirs : tir 2 recule, sauf avec le tir 1). `value` avance de `step` dans `0..=max` en
-/// bouclant ; une touche nouvellement pressée agit aussitôt puis après 30 images, une touche tenue toutes
-/// les 8 images (compteur `counter` de l'enregistrement). Rend la nouvelle valeur si la touche a agi.
+/// Auto-repeating setting (`0x29948` vertical: up goes back; `0x29994` horizontal: left
+/// goes back; `0x2ca5e` fire buttons: fire 2 goes back, except with fire 1). `value` advances by `step` in `0..=max`,
+/// wrapping around; a newly pressed key acts immediately then after 30 frames, a held key every
+/// 8 frames (`counter` of the record). Returns the new value if the key acted.
 fn repeat(x: &mut Ctx, value: u8, step: u8, max: u8, keys: u8, back: fn(u8) -> bool, counter: u32) -> Option<u8> {
     let held = x.v8(var::INPUT) & keys;
     if held == 0 {
@@ -206,31 +206,31 @@ pub fn shots(x: &mut Ctx, value: u8, step: u8, max: u8) -> Option<u8> {
     repeat(x, value, step, max, key::SHOT1 | key::SHOT2, |d| d & key::SHOT1 == 0, f::REPEAT_SHOTS)
 }
 
-/// Case d'une ligne de menu : `base` + 4 × `line` (une ligne de menu sur deux de la couche).
+/// Cell of a menu line: `base` + 4 × `line` (every other menu line of the layer).
 fn line_cell(base: u32, line: u8) -> u32 {
     base + 4 * line as u32
 }
-/// `0x299fc` : flèche (tuile 0x2a) devant la ligne ; `0x29a10` : effacée.
+/// `0x299fc`: arrow (tile 0x2a) in front of the line; `0x29a10`: erased.
 pub fn arrow(x: &mut Ctx, base: u32, line: u8) {
     wr32(x.b, line_cell(base, line), 0x002a_0000);
 }
 pub fn no_arrow(x: &mut Ctx, base: u32, line: u8) {
     wr32(x.b, line_cell(base, line), 0x0020_0000);
 }
-/// Déplace la flèche d'une ligne à l'autre.
+/// Moves the arrow from one line to another.
 pub fn move_arrow(x: &mut Ctx, base: u32, from: u8, to: u8) {
     no_arrow(x, base, from);
     arrow(x, base, to);
 }
 
-/// `0x299e0` : attribut `attr` sur `len` + 1 cases d'une ligne de la couche de caractères.
+/// `0x299e0`: attribute `attr` on `len` + 1 cells of a line of the character layer.
 pub fn paint(x: &mut Ctx, cell: u32, attr: u16, len: u32) {
     for k in 0..=len {
         x.wr16(cell + 2 + 0x80 * k, attr);
     }
 }
 
-/// `0x29a7a` : pleine luminosité pour les quatre pages de palettes (0x91c000-0x91cfff).
+/// `0x29a7a`: full brightness for the four palette pages (0x91c000-0x91cfff).
 pub fn full_brightness(x: &mut Ctx) {
     for a in (0x91c000..0x91d000).step_by(4) {
         let v = x.rd32(a) | 0xf000_f000;
@@ -238,10 +238,10 @@ pub fn full_brightness(x: &mut Ctx) {
     }
 }
 
-/// Tampon de la conversion décimale (A5 - 0x62a8, 8 octets BCD).
+/// Decimal conversion buffer (A5 - 0x62a8, 8 BCD bytes).
 const BCD: u32 = 0xff_1d58;
 
-/// `0x29da4` : `value` en décimal codé binaire, dans le tampon.
+/// `0x29da4`: `value` in binary-coded decimal, in the buffer.
 fn to_bcd(x: &mut Ctx, value: u32) -> u64 {
     let mut bcd = 0u64;
     let mut v = value;
@@ -257,8 +257,8 @@ fn to_bcd(x: &mut Ctx, value: u32) -> u64 {
     bcd
 }
 
-/// `0x29d88` : les `n` chiffres hexadécimaux de poids faible de `value` (tuile = chiffre), de gauche à
-/// droite, attribut `attr`. Rend la case qui suit.
+/// `0x29d88`: the `n` low-order hexadecimal digits of `value` (tile = digit), from left to
+/// right, attribute `attr`. Returns the cell that follows.
 pub fn hex_digits(x: &mut Ctx, mut cell: u32, value: u64, n: u32, attr: u16) -> u32 {
     for k in (0..n).rev() {
         x.wr16(cell, (value >> (4 * k)) as u16 & 0xf);
@@ -268,16 +268,16 @@ pub fn hex_digits(x: &mut Ctx, mut cell: u32, value: u64, n: u32, attr: u16) -> 
     cell
 }
 
-/// `0x29cf2` (8 chiffres), `0x29d3a` (2 chiffres) : nombre en décimal.
+/// `0x29cf2` (8 digits), `0x29d3a` (2 digits): number in decimal.
 pub fn decimal(x: &mut Ctx, cell: u32, value: u32, n: u32, attr: u16) -> u32 {
     let bcd = to_bcd(x, value);
     hex_digits(x, cell, bcd, n, attr)
 }
 
 // ---------------------------------------------------------------------------------------------
-// Le menu
+// The menu
 
-/// Un tour de la tâche : gestionnaire de l'état du menu.
+/// One turn of the task: handler of the menu state.
 pub fn handler(x: &mut Ctx) -> Flow {
     match get(x, f::STATE) {
         state::INIT => {
@@ -290,8 +290,8 @@ pub fn handler(x: &mut Ctx) -> Flow {
     }
 }
 
-/// `0x291a0` : écran remis à neuf (couches coupées, VRAM effacée, palettes d'origine à pleine luminosité),
-/// une image d'attente, puis le menu (`menu_after_clear`).
+/// `0x291a0`: screen made new again (layers cut, VRAM cleared, original palettes at full brightness),
+/// a waiting frame, then the menu (`menu_after_clear`).
 pub fn show_menu(x: &mut Ctx) -> Flow {
     layers_off(x);
     clear_screen(x);
@@ -302,7 +302,7 @@ pub fn show_menu(x: &mut Ctx) -> Flow {
     crate::tasks::one_frame(x, crate::tasks::service::Step::MenuAfterClear)
 }
 
-/// `0x291ec` : le menu, une fois l'écran effacé.
+/// `0x291ec`: the menu, once the screen is cleared.
 pub fn menu_after_clear(x: &mut Ctx) -> Flow {
     x.set_v8(var::FRAME_FLAG, 0);
     set(x, f::SECRET, 0);
@@ -320,12 +320,12 @@ pub fn menu_after_clear(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// `0x29254` : choix d'une ligne (haut, bas), entrée dans l'écran (tir 1).
+/// `0x29254`: choice of a line (up, down), entry into the screen (fire 1).
 fn menu(x: &mut Ctx) -> Flow {
     if x.rd16(SECRET_ENABLE) != 0 {
         if get(x, f::SECRET) != 0 {
-            // le mot 0xc0 du programme est nul dans cette version (docs/service.md) : le « Secret Test » n'est pas réécrit
-            unreachable!("menu TEST : « Secret Test » (0xee16e) demandé");
+            // the program word 0xc0 is zero in this version (docs/service.md): the "Secret Test" is not rewritten
+            unreachable!("TEST menu: \"Secret Test\" (0xee16e) requested");
         }
         if (x.v8(0) & x.v8(1)) & key::SHOT2 != 0 {
             set(x, f::SECRET, 1);
@@ -349,7 +349,7 @@ fn menu(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// `0x292da` : l'écran de la ligne choisie.
+/// `0x292da`: the screen of the chosen line.
 fn screen(x: &mut Ctx) -> Flow {
     match get(x, f::CURSOR) {
         0 => io_tests::input(x),
@@ -364,7 +364,7 @@ fn screen(x: &mut Ctx) -> Flow {
     }
 }
 
-/// `0x29314` (9. EXIT) : écran effacé, la tâche redevient la tâche de démarrage (`0xae4`).
+/// `0x29314` (9. EXIT): screen cleared, the task becomes the startup task again (`0xae4`).
 fn exit(x: &mut Ctx) -> Flow {
     clear_layers(x);
     for off in var::SCROLLS {
@@ -375,7 +375,7 @@ fn exit(x: &mut Ctx) -> Flow {
     crate::tasks::restart(x)
 }
 
-/// `0x29a48` : départ 1P tenu et tir 1 : retour au menu.
+/// `0x29a48`: held 1P start and fire 1: return to the menu.
 pub fn exit_check(x: &mut Ctx) -> Flow {
     if x.v8(var::SYSTEM) & key::START1 == 0 || x.v8(var::INPUT) & key::SHOT1 == 0 {
         return Flow::Done;
@@ -383,11 +383,11 @@ pub fn exit_check(x: &mut Ctx) -> Flow {
     back_to_menu(x)
 }
 
-/// `0x29a5a` : retour au menu (le son est coupé).
+/// `0x29a5a`: return to the menu (the sound is cut).
 pub fn back_to_menu(x: &mut Ctx) -> Flow {
     crate::sound::service(x.b, crate::sound::Service::GeneralStop);
     set(x, f::STATE, state::MENU);
-    // étape de l'écran et curseurs de la configuration (octets 2 à 5)
+    // step of the screen and configuration cursors (bytes 2 to 5)
     x.wr16(MENU + f::STEP, 0);
     x.wr16(MENU + f::STEP + 2, 0);
     let flags = x.v16(var::FLAGS) & 0x7fff;

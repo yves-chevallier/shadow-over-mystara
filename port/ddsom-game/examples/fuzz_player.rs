@@ -1,13 +1,13 @@
-//! Validation différentielle des actions des personnages sur des états aléatoires : après une chauffe
-//! sur un scénario (un joueur en pleine partie), chaque action native d'un personnage est appelée en
-//! mode contrôle sur des états tirés au sort (pas, sous-action, entrées, événement, armes, position,
-//! vitesses...) ; l'original s'exécute à côté sur une copie et la mémoire est comparée. Exerce les
-//! chemins que les scénarios n'atteignent pas (objets, magies, coups rares).
+//! Differential validation of the characters' actions on random states: after a warm-up
+//! on a scenario (a player in the middle of a game), each native action of a character is called in
+//! check mode on randomly drawn states (step, sub-action, inputs, event, weapons, position,
+//! speeds...); the original runs alongside on a copy and the memory is compared. Exercises the
+//! paths that the scenarios do not reach (items, magic, rare moves).
 //!
-//!   fuzz_player <personnage> <roms> <eeprom> <scénario> <images de chauffe> <tours>
+//!   fuzz_player <character> <roms> <eeprom> <scenario> <warm-up frames> <rounds>
 //!
-//! `character` : `fighter`, `cleric`, `elf`, `dwarf`... (préfixe du nom des natives). `DDSOM_ENTREE=<hexa>` limite le
-//! tir à une seule entrée.
+//! `character`: `fighter`, `cleric`, `elf`, `dwarf`... (prefix of the natives' names). `DDSOM_ENTREE=<hex>` limits the
+//! draw to a single entry.
 
 use std::path::Path;
 
@@ -31,8 +31,8 @@ impl Rng {
     }
 }
 
-/// Plus grand pas valide de l'action `entry` pour la sous-action `sub` (les autres valeurs feraient
-/// sauter l'original dans des données).
+/// Largest valid step of action `entry` for sub-action `sub` (other values would make the original
+/// jump into data).
 fn max_step(name: &str, sub: u8, which: u8) -> u8 {
     match name {
         "fighter_jump" | "cleric_jump" => 8,
@@ -129,19 +129,19 @@ fn max_step(name: &str, sub: u8, which: u8) -> u8 {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, who, roms, eeprom, scenario, warm, rounds] = &a[..] else {
-        eprintln!("usage : fuzz_player <fighter|cleric> <roms> <eeprom> <scénario> <images de chauffe> <tours>");
+        eprintln!("usage: fuzz_player <fighter|cleric> <roms> <eeprom> <scenario> <warm-up frames> <rounds>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_game::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warm.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
     }
     if std::env::var("DDSOM_PROBE").is_ok() {
-        // sonde : soin d'origine (0x41656) pour chaque niveau et chaque sort
+        // probe: original healing (0x41656) for each level and each spell
         let (c, b) = (&mut m.cpu, &mut m.bus);
         let p = Player::nth(0).0;
         for kind in [0x13u8, 0x2c, 0x2d] {
@@ -173,7 +173,7 @@ fn main() {
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ seed.wrapping_mul(0x2545_f491_4f6c_dd1d));
     let mut shown = 0;
     let p = Player::nth(0).0;
-    println!("joueur 0 : état {:08x}, personnage {}", ddsom_game::mem::rd32(b, p + 4), rd8(b, p + 3));
+    println!("player 0: state {:08x}, character {}", ddsom_game::mem::rd32(b, p + 4), rd8(b, p + 3));
     for _ in 0..rounds.parse::<u32>().unwrap() {
         for &(entry, name) in &entries {
             for r in 0..8 {
@@ -181,13 +181,13 @@ fn main() {
             }
             c.d[0] = 0;
             if who == "spawn" {
-                // créateurs d'effets : paramètre D0 petit, A2 = un monstre
+                // effect creators: small D0 parameter, A2 = a monster
                 c.d[0] = rng.pick(&[0u32, 0, 1, 2, 3, 0x13, 0xff, 0x100]);
                 c.a[2] = A5 + 0x299e + 0xc0 * rng.below(5);
             }
             c.a[0] = p;
             c.a[5] = A5;
-            // état aléatoire du joueur
+            // random player state
             let mut sub = rng.pick(&[0u8, 2, 4, 6, 8, 0xa, 0xc, 0xe, 0x10, 0x12, 0x14, 0x16, 0x18, 0x1a, 0x1c]);
             if matches!(who.as_str(), "elf" | "thief") && rng.below(15) == 0 {
                 sub = 0x1e;
@@ -204,7 +204,7 @@ fn main() {
                     0x2a, 0x2b, 0x2c, 0x2d,
                 ])
             };
-            // DDSOM_WHICH / DDSOM_SUB / DDSOM_PAS : fixent le numéro d'attaque spéciale, la sous-action et le pas
+            // DDSOM_WHICH / DDSOM_SUB / DDSOM_PAS: fix the special attack number, the sub-action and the step
             let fixed = |var: &str| std::env::var(var).ok().and_then(|v| u8::from_str_radix(&v, 16).ok());
             let which = fixed("DDSOM_WHICH").unwrap_or(which);
             let sub = fixed("DDSOM_SUB").unwrap_or(sub);
@@ -273,7 +273,7 @@ fn main() {
             wr8(b, A5 + 0x6d, rng.next() as u8);
             wr8(b, A5 + 0x3d, rng.pick(&[0u8, 0, 1]));
             wr8(b, A5 + 0x56, rng.pick(&[0u8, 0x80, 0x4f]));
-            // personnage joué : classe et variante
+            // character played: class and variant
             let base = match who.as_str() {
                 "fighter" => 0,
                 "cleric" => 2,
@@ -284,7 +284,7 @@ fn main() {
                 _ => 8,
             };
             wr8(b, p + 3, base + rng.below(2) as u8);
-            // champs des classes elfe et magicien : accessoires, cibles, états de saut et de sort
+            // fields of the elf and wizard classes: accessories, targets, jump and spell states
             wr8(b, p + 0x59, rng.below(4) as u8);
             wr8(b, p + 0x15d, rng.pick(&[0u8, 2, 2]));
             wr8(b, p + 0x166, rng.pick(&[0u8, 4]));
@@ -298,7 +298,7 @@ fn main() {
             wr8(b, p + 0x159, rng.pick(&[0u8, 1, 2, 3]));
             wr8(b, A5 + 0x48f, rng.pick(&[0u8, 1]));
             wr8(b, p + 0x18a, 0);
-            // cible mémorisée (foudre, mur, bénédiction) : un monstre ou un joueur
+            // remembered target (lightning, wall, blessing): a monster or a player
             let target = if rng.below(2) == 0 && which != 0x15 {
                 0x299e + 0xc0 * rng.below(5) as u16
             } else {
@@ -309,7 +309,7 @@ fn main() {
             } else if who == "mage" && (which == 9 || which == 10) {
                 wr16(b, p + 0x1e8, target);
             }
-            // créateurs d'effets : remplissage des pools PSHL (18) et PEFF (48), réserves de la scène
+            // effect creators: filling of the PSHL (18) and PEFF (48) pools, scene reserves
             if who == "spawn" {
                 for (first, slots, free) in [(0x10deu32, 18u32, 0x7e5eu32), (0x179e, 48, 0x7e60)] {
                     let used = rng.below(slots + 2);
@@ -323,13 +323,13 @@ fn main() {
                 wr8(b, A5.wrapping_sub(0x5fbe), rng.pick(&[0u8, 1, 0x7f, 0xff]));
                 wr8(b, A5 + 0x34, rng.below(8) as u8);
             }
-            // voleur : bord touché, saut double, objet lié (l'ombre du coup dans le dos)
+            // thief: edge touched, double jump, linked object (the shadow of the backstab)
             if who == "thief" {
                 wr8(b, p + 0x5a, rng.pick(&[0u8, 0, 1, 2]));
                 wr8(b, p + 0x1ef, rng.below(2) as u8);
                 wr16(b, p + 0x50, 0x299e + 0xc0 * rng.below(5) as u16 | 0x8000);
             }
-            // autres joueurs : parfois en jeu, devant ou derrière
+            // other players: sometimes in play, in front or behind
             for k in 1..4u32 {
                 let q = p + 0x200 * k;
                 wr8(b, q, rng.pick(&[0u8, 1, 1]));
@@ -346,7 +346,7 @@ fn main() {
                 wr8(b, q + 0x78, rng.pick(&[0u8, 0, 1]));
                 wr16(b, q + 0x7a, rng.pick(&[0u16, 0, 0x100]));
             }
-            // monstres : certains en jeu, de types variés
+            // monsters: some in play, of varied types
             for pool in [(0x3a1eu32, 3u32), (0x299e, 22)] {
                 for k in 0..pool.1 {
                     let o = A5 + pool.0 + 0xc0 * k;
@@ -366,7 +366,7 @@ fn main() {
                     wr32(b, o + 0x94, rng.next() & rng.next());
                 }
             }
-            // la cible de la foudre et du mur : un objet quelconque
+            // the target of the lightning and the wall: any object
             if matches!(who.as_str(), "fighter" | "cleric" | "dwarf" | "thief") {
                 wr16(b, p + 0x1ea, 0x299e + 0xc0 * rng.below(5) as u16 | 0x8000);
             }
@@ -377,9 +377,9 @@ fn main() {
                 .map(|o| format!("{o:x}={:02x} ", rd8(b, p + o)))
                 .collect();
             if std::env::var("DDSOM_TRACE").is_ok() {
-                eprintln!("{entry:06x} {name} pas {} sous-action {:#x} 15e={which:#x} {context}", snapshot.0, snapshot.1);
+                eprintln!("{entry:06x} {name} step {} sub-action {:#x} 15e={which:#x} {context}", snapshot.0, snapshot.1);
             }
-            // drapeaux initiaux nuls : le trap du lancement des tâches d'écran les empile sous la pile
+            // null initial flags: the trap of the screen tasks' launch pushes them under the stack
             c.sr &= !0x1f;
             ddsom_game::call(c, b, entry);
             let after = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
@@ -387,7 +387,7 @@ fn main() {
                 shown += 1;
                 let last = ddsom_game::report().get(name).and_then(|s| s.last.clone());
                 println!(
-                    "écart en {entry:06x} {name} (pas {} sous-action {:#x}, 15e={which:#x}) : {}\n    {context}",
+                    "mismatch at {entry:06x} {name} (step {} sub-action {:#x}, 15e={which:#x}): {}\n    {context}",
                     snapshot.0,
                     snapshot.1,
                     last.unwrap_or_default()
@@ -398,7 +398,7 @@ fn main() {
     let mut total = 0;
     for (name, st) in ddsom_game::report() {
         total += st.mismatches;
-        println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
+        println!("  {name:28} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
-    println!("{}", if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
+    println!("{}", if total == 0 { "VALID: no mismatch" } else { "FAILED" });
 }

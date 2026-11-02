@@ -1,8 +1,8 @@
-//! Tâche de démarrage (`0x11b16`) : initialisation du jeu, deux écrans d'avertissement selon la région,
-//! création des tâches des crédits et du gel, puis la machine à modes.
+//! Startup task (`0x11b16`): game initialisation, two warning screens depending on the region,
+//! creation of the credit and freeze tasks, then the mode machine.
 //!
-//! Chaque avertissement reste à l'écran deux ou trois secondes ; un bouton (bit 4 du port `IN1`) accélère
-//! le décompte. Le texte dépend de la région (octet 0xc4 du programme et réglage `A5+0x70`).
+//! Each warning stays on screen two or three seconds; a button (bit 4 of port `IN1`) speeds up
+//! the countdown. The text depends on the region (program byte 0xc4 and setting `A5+0x70`).
 
 use super::{Flow, Sequence};
 use crate::video::Layer;
@@ -10,22 +10,22 @@ use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
 
-/// Tâches créées à la fin du démarrage : crédits et gel.
+/// Tasks created at the end of startup: credits and freeze.
 mod task {
     pub const CREDITS: u32 = 0x13c0a;
     pub const FREEZE: u32 = 0xee080;
 }
 
-/// Palette de départ : huit longs de la ROM copiés dans la table des palettes.
+/// Starting palette: eight longs from the ROM copied into the palette table.
 const START_PALETTE_SRC: u32 = 0x133ba;
 const START_PALETTE_DST: u32 = 0x91c580;
-/// Région du jeu (octet du programme) et tables de textes (une par région, indexées par `A5+0x70`).
+/// Game region (program byte) and text tables (one per region, indexed by `A5+0x70`).
 const REGION_BYTE: u32 = 0xc4;
 const WARNING_TABLES: [u32; 3] = [0x11cba, 0x11cd2, 0x11cea];
 const NOTICE_TABLE: u32 = 0x11d02;
-/// Port des boutons (bit 4 : un bouton pressé accélère le décompte).
+/// Button port (bit 4: a pressed button speeds up the countdown).
 const PORT_IN1: u32 = 0x804001;
-/// Décompte des écrans d'avertissement : mot à FF0E6E.
+/// Countdown of the warning screens: word at FF0E6E.
 const COUNTDOWN: u32 = A5 - 0x7192;
 const WARNING_FRAMES: u16 = 0x78;
 const NOTICE_FRAMES: u16 = 0xb4;
@@ -36,9 +36,9 @@ const SLOT_FREEZE: u32 = 0xe0;
 
 const INIT: u32 = 0x11b22;
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
-        /// Entrée de la tâche (`0x11b16`) : écran noir, puis l'initialisation.
+        /// Task entry (`0x11b16`): black screen, then initialisation.
         Entry = 0x11b16 => |x| x.subroutine(crate::video::black_screen::start, Step::Init),
         Init = INIT => |x| {
             crate::palette::load_all_palettes(x.b);
@@ -103,13 +103,13 @@ crate::steps! {
             }
             crate::kernel::create_task(x.b, SLOT_CREDITS, task::CREDITS);
             crate::kernel::create_task(x.b, SLOT_FREEZE, task::FREEZE);
-            // la tâche continue dans la boucle de la machine à modes (`jmp 0x133fe`)
+            // the task continues in the mode machine loop (`jmp 0x133fe`)
             crate::modes::start(x)
         },
     }
 }
 
-/// État de la machine à modes (16 longs en `A5-0x7190`) et `A5-0x54f0..` (4 longs) à zéro (`0x133dc`, puis
+/// Mode machine state (16 longs at `A5-0x7190`) and `A5-0x54f0..` (4 longs) cleared (`0x133dc`, then
 /// `0xfc562`).
 fn clear_mode_state(x: &mut Ctx) {
     const MODES: u32 = A5 - 0x7190;
@@ -122,8 +122,8 @@ fn clear_mode_state(x: &mut Ctx) {
     }
 }
 
-/// Tableau des meilleurs scores par défaut (`0x18082`) : dix entrées de 14 octets copiées de la ROM vers
-/// FF0FD0 ; une autre table pour la version à palette alternative (`A5+0x70`).
+/// Default high-score table (`0x18082`): ten 14-byte entries copied from ROM to
+/// FF0FD0; another table for the alternate-palette version (`A5+0x70`).
 fn default_high_scores(x: &mut Ctx) {
     const TABLES: [u32; 2] = [0x18f1e, 0x18faa];
     const SCORES: u32 = 0xff0fd0;
@@ -135,14 +135,14 @@ fn default_high_scores(x: &mut Ctx) {
     }
 }
 
-/// Affiche le texte de la région courante : mot `A5+0x70` (modulo 16) indexe la table de pointeurs.
+/// Displays the text of the current region: word `A5+0x70` (modulo 16) indexes the pointer table.
 fn print_region_text(x: &mut Ctx, table: u32) {
     let region = (rd16(x.b, A5 + 0x70) & 0xf) as u32;
     let text = rd32(x.b, table + 2 * region);
     crate::text::print(x.b, text);
 }
 
-/// Un tour du décompte : un bouton pressé le raccourcit de neuf images.
+/// One countdown turn: a pressed button shortens it by nine frames.
 fn countdown_tick(x: &mut Ctx) -> bool {
     let mut left = rd16(x.b, COUNTDOWN) as i16;
     if rd8(x.b, PORT_IN1) & 0x10 == 0 {

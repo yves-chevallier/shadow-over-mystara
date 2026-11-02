@@ -1,12 +1,12 @@
-//! Boss 17, groupe `+5` = 0 : cinématiques (arrivée, mort et fin de scène, variantes 1 et 2).
+//! Boss 17, group `+5` = 0: cutscenes (arrival, death and end of stage, variants 1 and 2).
 //!
-//! | `+6` | Rôle |
+//! | `+6` | Role |
 //! |---|---|
-//! | 0 | arrivée de la variante 0 : le boss saute dans l'écran par la gauche et retombe |
-//! | 2 | entrée par la droite, puis le combat commence |
-//! | 4 | mort : longue cinématique de fin (dialogues, caméra qui monte, envol) |
-//! | 6 | variante 1 : arrivée par le bas, charge puis atterrissage |
-//! | 8 | variante 2 : comme 6, avec la caméra 2 |
+//! | 0 | arrival of variant 0: the boss jumps into the screen from the left and lands |
+//! | 2 | entrance from the right, then the combat begins |
+//! | 4 | death: long ending cutscene (dialogues, rising camera, flight) |
+//! | 6 | variant 1: arrival from below, charge then landing |
+//! | 8 | variant 2: like 6, with camera 2 |
 
 use crate::families::cx::Bench;
 use crate::objects::Obj;
@@ -30,8 +30,8 @@ fn state7<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     x.u8(0x7) as u32 / 2
 }
 
-/// Un effet (EFFCT) lié au boss (`+0x42`) : octet actif, type, variante facultative, orientation du boss.
-/// `retry` : insiste tant que le pool est plein.
+/// An effect (EFFCT) linked to the boss (`+0x42`): active byte, type, optional variant, orientation of the boss.
+/// `retry`: insists as long as the pool is full.
 fn effect<R: Bench>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8>, flip: bool) -> Option<Obj> {
     let e = if retry { alloc_retry(x, &pools::EFFCT)? } else { x.alloc(&pools::EFFCT)? };
     e.set_u8(x.b, 0, 1);
@@ -47,7 +47,7 @@ fn effect<R: Bench>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8
     Some(e)
 }
 
-/// Ouvre une bulle de dialogue de type `kind` (0xc8312) ; son adresse va en `+0x42`.
+/// Opens a dialogue bubble of type `kind` (0xc8312); its address goes to `+0x42`.
 fn open_message<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
     for _ in 0..64 {
         if let Some(bulle) = crate::families::creators::scene_set(x.b, kind as u8) {
@@ -57,18 +57,18 @@ fn open_message<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
     }
 }
 
-/// Le dialogue en cours (`+0x42`) est-il terminé (octet `+0x22` non nul) ?
+/// Is the current dialogue (`+0x42`) finished (byte `+0x22` non-zero)?
 fn message_done<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let m = x.linked(0x42);
     m.u8(x.b, 0x22) != 0
 }
 
-/// Son `addr` (`jsr`).
+/// Sound `addr` (`jsr`).
 fn fx<R: Bench>(x: &mut Cx<'_, R>, addr: u32) {
     lib::sound(x, addr);
 }
 
-// --- +6 = 0 : arrivée -----------------------------------------------------------------------------
+// --- +6 = 0: arrival -----------------------------------------------------------------------------
 
 fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
@@ -169,7 +169,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 2 : entrée par la droite ---------------------------------------------------------------
+// --- +6 = 2: entrance from the right ---------------------------------------------------------------
 
 fn entrance<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
@@ -221,7 +221,7 @@ fn entrance<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 4 : mort, cinématique de fin -------------------------------------------------------------
+// --- +6 = 4: death, ending cutscene -------------------------------------------------------------
 
 fn finale<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
@@ -418,7 +418,8 @@ fn finale<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +7 = 32 (0x959cc) : la caméra monte de 4 par image jusqu'à 0x1c8, puis le boss lâche un nuage de 4 effets autour d'un effet central.
+/// +7 = 32 (0x959cc): the camera rises by 4 per frame up to 0x1c8, then the boss drops a cloud of 4 effects around
+/// a central effect.
 fn camera_rise<R: Bench>(x: &mut Cx<'_, R>) {
     if tst16(x, TIMER).gt() && sub16(x, TIMER, 1).gt() {
         return;
@@ -449,8 +450,8 @@ fn camera_rise<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +7 = 36 et 38 (0x95a8e, 0x95abc) : le boss s'envole, la caméra remonte plus vite que lui.
-/// Ordonnée de la caméra principale lue en long (16.16).
+/// +7 = 36 and 38 (0x95a8e, 0x95abc): the boss flies off, the camera rises faster than it does.
+/// Y position of the main camera read as a long (16.16).
 const SCROLL_Y_LONG: crate::ram::Long = crate::ram::Long(var::SCROLL_Y.0);
 
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
@@ -468,7 +469,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +7 = 40 (0x95aea) : retombe vers le sol.
+/// +7 = 40 (0x95aea): falls back to the ground.
 fn land<R: Bench>(x: &mut Cx<'_, R>) {
     let y = SCROLL_Y_LONG.get(x.b).wrapping_sub(0x10000);
     SCROLL_Y_LONG.set(x.b, y);
@@ -482,9 +483,9 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_start(SET_BODY, 0x15);
 }
 
-// --- +6 = 6 et 8 : variantes 1 et 2 ----------------------------------------------------------------
+// --- +6 = 6 and 8: variants 1 and 2 ----------------------------------------------------------------
 
-/// `second` : variante 2 (caméra 2 ; sa sortie de premier plan teste la hauteur seule).
+/// `second`: variant 2 (camera 2; its exit from the foreground tests the height alone).
 fn variant<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     match state7(x) {
         0 => variant_start(x, second),
@@ -564,7 +565,7 @@ fn variant<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     }
 }
 
-/// Première étape des variantes 1 (0x95bf8) et 2 (0x95dd8) : le boss tombe du haut de l'écran.
+/// First step of variants 1 (0x95bf8) and 2 (0x95dd8): the boss falls from the top of the screen.
 fn variant_start<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     x.add8(0x7, 2);
     x.set8(0, 2);

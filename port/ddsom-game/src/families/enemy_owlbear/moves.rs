@@ -1,11 +1,11 @@
-//! Type 4, charges vers un joueur (sous-état `+5 = 8`, 0x5e7ea).
+//! Type 4, charges toward a player (substate `+5 = 8`, 0x5e7ea).
 
 use crate::families::cx::Bench;
 use super::stance::engage;
 use super::*;
 use crate::objects::Obj;
 
-/// Retour en garde, puis test de la portée de la cible (0x5e980).
+/// Back on guard, then test of the target's range (0x5e980).
 fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, ACTIVE_ENGAGE);
     body(x, 2);
@@ -23,7 +23,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Attend un instant debout (`+0xa0` images), puis la bête repart.
+/// Waits a moment standing (`+0xa0` frames), then the beast sets off again.
 fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -44,7 +44,7 @@ fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Course vers la cible : `timer` images, direction `angle`, animation `want`/`n`, vitesse `speed_n`.
+/// Run toward the target: `timer` frames, direction `angle`, animation `want`/`n`, speed `speed_n`.
 fn dash_begin<R: Bench>(x: &mut Cx<'_, R>, angle: u8, timer: u8, want: u8, n: u32, speed_n: u32) {
     x.add8(0x7, 2);
     x.set8(Obj::SPEED_INDEX, angle);
@@ -54,7 +54,7 @@ fn dash_begin<R: Bench>(x: &mut Cx<'_, R>, angle: u8, timer: u8, want: u8, n: u3
     speed(x, speed_n);
 }
 
-/// La course dure tant que `+0xa0` ne tombe pas à zéro ; ensuite la bête se remet debout.
+/// The run lasts as long as `+0xa0` does not drop to zero; then the beast gets back on its feet.
 fn dash_run<'a, R: Bench>(x: &mut Cx<'a, R>, advance: fn(&mut Cx<'a, R>)) {
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);
@@ -65,7 +65,7 @@ fn dash_run<'a, R: Bench>(x: &mut Cx<'a, R>, advance: fn(&mut Cx<'a, R>)) {
     advance(x);
 }
 
-/// +6 = 2 (0x5e85c) : course horizontale vers le côté de la cible.
+/// +6 = 2 (0x5e85c): horizontal run toward the side of the target.
 fn dash_x<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -77,7 +77,7 @@ fn dash_x<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 (0x5e8ee) : course en profondeur vers la cible, par la table de vitesses puis balistique.
+/// +6 = 4 (0x5e8ee): run in depth toward the target, through the speed table then ballistic.
 fn dash_y<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {

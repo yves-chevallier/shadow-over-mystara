@@ -1,5 +1,5 @@
-//! Effets des joueurs (PEFF), huitième série : types 25 à 29 (averse, foudre du magicien, anneau, lune,
-//! aura de prière). Voir `docs/families/player.md`.
+//! Player effects (PEFF), eighth series: types 25 to 29 (downpour, wizard's lightning, ring, moon, prayer aura). See
+//! `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -11,15 +11,15 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Le geste du joueur (`+7`) a-t-il changé depuis la création (octet `field`) ?
+/// Has the player's move (`+7`) changed since creation (byte `field`)?
 fn gesture_changed<R: Bench>(x: &mut Cx<'_, R>, field: u32) -> bool {
     let owner = x.linked(f::OWNER);
     let gesture = owner.u8(x.b, 0x7);
     gesture != x.u8(field)
 }
 
-/// Type 25 (0x4dd02) : averse (magie 13, kind 0x19). Variante 0 : nuage posé devant le lanceur ;
-/// variante 1 : gouttes (rang `+2f`) qui lancent la foudre (PSHL 19) à l'image du geste.
+/// Type 25 (0x4dd02): downpour (magic 13, kind 0x19). Variant 0: cloud placed in front of the caster; variant 1: drops
+/// (rank `+2f`) that launch the lightning (PSHL 19) on the frame of the move.
 mod shower {
     use super::*;
 
@@ -67,8 +67,8 @@ mod shower {
         }
     }
 
-    /// Place le nuage sur le lanceur : décalage lu dans une table, ligne de 8 octets (variante du
-    /// lanceur, plus 4 pour le second exemplaire) ou de 4 octets.
+    /// Places the cloud on the caster: offset read from a table, row of 8 bytes (caster's variant, plus 4 for the
+    /// second copy) or of 4 bytes.
     fn place<R: Bench>(x: &mut Cx<'_, R>, table: u32, wide: bool) {
         let owner = follow_owner(x);
         let mut row = (owner.u8(x.b, 0x3) >> 1) as u32;
@@ -89,7 +89,7 @@ mod shower {
         x.add16(0x10, 0xffff);
     }
 
-    /// Variante 1, état 2 : une goutte fait tomber un éclair à la fin de son animation.
+    /// Variant 1, state 2: a drop brings down a lightning bolt at the end of its animation.
     fn bolt<R: Bench>(x: &mut Cx<'_, R>) {
         let wide = x.u8(0x15e) == 0x18;
         if x.anim_step() {
@@ -112,7 +112,7 @@ mod shower {
         let speeds = if wide { SPEEDS_A } else { SPEEDS_B };
         let vx = x.rom16(speeds + row);
         let vz = x.rom16(speeds + row + 2);
-        // Glitch d'origine : le rang et la ligne restent dans D3 et D2 (`dispatch::Leftovers`)
+        // Original glitch: the rank and the row stay in D3 and D2 (`dispatch::Leftovers`)
         *x.c.d3() = rank as u32;
         *x.c.d2() = row;
         crate::families::creators::bolt_shot(x.b, owner, vx, vz);
@@ -121,9 +121,9 @@ mod shower {
     }
 }
 
-/// Type 26 (0x4e038) : foudre sur la scène (magie du magicien, kind 0x1a) : la colonne (variante 0) puis
-/// les éclats (variante 1, rang `+2f`) qui clignotent avec le geste ; l'éclat de rang 0 balaye à son coup tous
-/// les monstres (boss, puis ennemis) dans la zone.
+/// Type 26 (0x4e038): lightning on the scene (wizard's magic, kind 0x1a): the column (variant 0) then the shards
+/// (variant 1, rank `+2f`) that blink with the move; the rank 0 shard sweeps all the monsters (bosses, then enemies) in
+/// the zone when it hits.
 mod strike {
     use super::*;
 
@@ -191,8 +191,8 @@ mod strike {
                         x.add8(0x4, 2);
                     }
                     x.set_bit(0x1, 1, true);
-                    // Glitch d'origine : l'original relit `(0x168,A1)` avec le A1 que lui laisse la boucle
-                    // d'aiguillage, l'adresse du gestionnaire (0x4e038) : un mot de son code, et non le joueur
+                    // Original glitch: the original re-reads `(0x168,A1)` with the A1 left by the dispatch loop, the
+                    // address of the handler (0x4e038): a word of its code, and not the player
                     let timer = x.data16(0x4e038 + 0x168) & 1;
                     if timer != 0 {
                         x.set_bit(0x1, 1, false);
@@ -203,8 +203,7 @@ mod strike {
         }
     }
 
-    /// `0x4e190` : blesse les monstres dans la zone de la foudre : les boss (3 emplacements), puis les
-    /// ennemis (22).
+    /// `0x4e190`: hurts the monsters in the lightning zone: the bosses (3 slots), then the enemies (22).
     fn sweep<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
         for (first, count, power) in [(0x3a1eu32, 3u32, POWER_BOSS), (0x299e, 22, POWER_ENEMY)] {
@@ -241,7 +240,7 @@ mod strike {
         if d0 > reach.wrapping_mul(2) {
             return;
         }
-        // touché
+        // hit
         let v = player.u16(x.b, 0x190).wrapping_add(2);
         player.set_u16(x.b, 0x190, v);
         let hits = m.u8(x.b, 0x9c).wrapping_add(1);
@@ -277,8 +276,8 @@ mod strike {
     }
 }
 
-/// Type 27 (0x4e316) : anneau de feu ou de glace (magie 16, kind 0x1b) : variante 0 posée devant le lanceur ;
-/// variante 1 qui flamboie et fait trembler l'écran en fin de geste.
+/// Type 27 (0x4e316): ring of fire or ice (magic 16, kind 0x1b): variant 0 placed in front of the caster; variant 1
+/// that blazes and shakes the screen at the end of the move.
 mod ring {
     use super::*;
 
@@ -371,7 +370,7 @@ mod ring {
     }
 }
 
-/// Type 28 (0x4e4fa) : lune (magie 12, kind 0x1c), sa lueur (variante 1) posée sur le lanceur.
+/// Type 28 (0x4e4fa): moon (magic 12, kind 0x1c), its glow (variant 1) placed on the caster.
 mod moon {
     use super::*;
 
@@ -455,7 +454,7 @@ mod moon {
     }
 }
 
-/// Type 29 (0x4e6ca) : aura de prière (kind 0x1d) : deux nimbes posés sur le lanceur.
+/// Type 29 (0x4e6ca): prayer aura (kind 0x1d): two nimbi placed on the caster.
 mod aura {
     use super::*;
 

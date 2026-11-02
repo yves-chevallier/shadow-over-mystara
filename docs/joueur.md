@@ -198,7 +198,7 @@ ennemi de dos par le voleur (ennemi au sol, même sens, assez proche ; table 0x3
   (macro `action_native!`), le reste de ce paragraphe décrit le mécanisme général.
 - Le code propre à chaque personnage est atteint par `characters::run(g, p, Slot)` : table d'origine
   `Slot::table()` (12 adresses, indexées par `CHARACTER`), ou une fonction Rust ajoutée à
-  `characters::OVERRIDES` (`(personnage, slot, fn(&mut Ctx, Player))`), ou une `Native` déclarée à
+  `characters::OVERRIDES` (`(character, slot, fn(&mut Ctx, Player))`), ou une `Native` déclarée à
   l'adresse d'origine (le noyau appelle les routines d'origine par `Ctx::rom`, donc par l'exécuteur).
 - Fonctions communes réutilisables : `checks::{turn_check, attack_button, jump_button, throw_button,
   special_attack, target_in_range}`, `actions::{to_stand, start_stand}`, `walk::{walk_speed, set_speed,

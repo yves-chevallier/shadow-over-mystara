@@ -1,17 +1,17 @@
-//! Famille EFFCT (suite) : types de scène réécrits après `effects_c.rs` (table des types `0x39ce0`).
+//! EFFCT family (continued): scene types rewritten after `effects_c.rs` (type table `0x39ce0`).
 //!
-//! - 0 : décor qui glisse vers sa place à l'ouverture d'une scène, puis vide la scène (variante 3 :
-//!   attend, fait défiler la caméra et s'efface) ;
-//! - 35 : silhouette (variante 0) et reflet (variante 1) d'un porteur (`+0x46`) : la silhouette s'anime
-//!   et transmet son image au porteur (`+0xa0`), que le reflet traduit en animation ;
-//! - 53 : objet qui traverse l'écran en cloche, puis déclenche un décor, attend qu'il ait fini et crée
-//!   le type 55 ;
-//! - 54 : trois pièces d'une scène (la variante 0 ouvre le passage : fond, joueurs et caméra déplacés,
-//!   tâche de fondu, puis un boss) ;
-//! - 55 : machine qui, son délai écoulé, projette les joueurs, sauve la palette et lance la transition ;
-//! - 68 : enseigne de départ, posée sur la caméra, qui libère les joueurs à la fin de son animation ;
-//! - 77 : fondu sonore (deux volumes qui montent par paliers, puis arrêt) ;
-//! - 89 : personnage qui entre par la gauche, attend un signal de la scène et ressort par la droite.
+//! - 0: scenery that slides into place when a scene opens, then empties the scene (variant 3:
+//!   waits, scrolls the camera and disappears);
+//! - 35: silhouette (variant 0) and reflection (variant 1) of a carrier (`+0x46`): the silhouette animates
+//!   and passes its frame to the carrier (`+0xa0`), which the reflection translates into an animation;
+//! - 53: object that crosses the screen in an arc, then triggers a scenery, waits for it to finish and creates
+//!   type 55;
+//! - 54: three pieces of a scene (variant 0 opens the passage: background, players and camera moved,
+//!   fade task, then a boss);
+//! - 55: machine that, once its delay has elapsed, throws the players, saves the palette and launches the transition;
+//! - 68: departure sign, placed on the camera, which frees the players at the end of its animation;
+//! - 77: sound fade (two volumes that rise in steps, then stop);
+//! - 89: character who enters from the left, waits for a signal from the scene and leaves on the right.
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -20,7 +20,7 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Champs partagés.
+/// Shared fields.
 mod f {
     pub const STATE: u32 = 0x04;
     pub const SUB_STATE: u32 = 0x05;
@@ -33,18 +33,18 @@ mod f {
 mod rom {
 }
 
-/// Caméra (x, profondeur) et caméra secondaire.
+/// Camera (x, depth) and secondary camera.
 const CAMERA_X: u32 = 0x506;
 const CAMERA_Y: u32 = 0x50a;
-/// Étape de la scène, avancée par certains effets (`A5+0x4ff`).
+/// Scene step, advanced by some effects (`A5+0x4ff`).
 const SCENE_STEP: u32 = 0x4ff;
-/// Objet que la scène suit (`A5+0x46`, mot).
+/// Object the scene follows (`A5+0x46`, word).
 const FOCUS: u32 = 0x46;
 
 /// Joueurs : quatre enregistrements de 0x200 octets.
 const PLAYERS: u32 = A5 + 0x5de;
 
-/// Joueurs présents et vivants.
+/// Players present and alive.
 fn living_players<R: Bench>(x: &mut Cx<'_, R>) -> Vec<Obj> {
     (0..4)
         .map(|k| Obj(PLAYERS + 0x200 * k))
@@ -56,14 +56,14 @@ fn free<R: Bench>(x: &mut Cx<'_, R>) {
     x.free(&pools::EFFCT);
 }
 
-/// Pose l'objet sur la caméra, décalé de (dx, dy), au sol.
+/// Places the object on the camera, offset by (dx, dy), on the ground.
 fn at_camera<R: Bench>(x: &mut Cx<'_, R>, dx: u16, dy: u16) {
     let (cx, cy) = (x.a5_u16(CAMERA_X), x.a5_u16(CAMERA_Y));
     x.set16(Obj::X, cx.wrapping_add(dx));
     x.set16(Obj::Y, cy.wrapping_add(dy));
 }
 
-/// Copie huit longs de couleurs de la ROM dans la palette, avec l'opacité forcée (`| 0xf000f000`).
+/// Copies eight longs of colors from the ROM into the palette, with opacity forced (`| 0xf000f000`).
 fn load_palette<R: Bench>(x: &mut Cx<'_, R>, from: u32, to: u32) {
     for k in 0..8 {
         let v = rd32(x.b, from + 4 * k);
@@ -71,33 +71,33 @@ fn load_palette<R: Bench>(x: &mut Cx<'_, R>, from: u32, to: u32) {
     }
 }
 
-/// Lance la tâche `program` (0x9b6) avec le paramètre D0.w = `param`.
+/// Launches task `program` (0x9b6) with parameter D0.w = `param`.
 fn new_task<R: Bench>(x: &mut Cx<'_, R>, program: u32, param: u16) {
     crate::kernel::create_task(x.b, param as u32, program);
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 0 : décor d'ouverture de scène
+// Type 0: scene-opening scenery
 // ---------------------------------------------------------------------------------------------
 
 mod opening {
     pub const ANIM_SET: u32 = 0x18c04c;
-    /// Position de départ (x, profondeur) et abscisse d'arrivée (`+0x18`) par variante (mots,
+    /// Start position (x, depth) and arrival abscissa (`+0x18`) per variant (words,
     /// espace programme).
     pub const STARTS: u32 = 0xa8602;
     pub const TARGETS: u32 = 0xa8612;
     pub const TARGET: u32 = 0x18;
-    /// Variante 3 : délai (`+0x1a`) avant de faire défiler la scène.
+    /// Variant 3: delay (`+0x1a`) before scrolling the scene.
     pub const DELAY: u32 = 0x1a;
-    /// Couleurs de la variante 3.
+    /// Colors of variant 3.
     pub const PALETTE: u32 = 0x28dca0;
     pub const PALETTE_RAM: u32 = 0x91c3a0;
-    /// Pools vidés à l'arrivée : 32 objets à `A5+0x62de` (sauf ceux marqués `+0x58`), 18 à `A5+0x10de`.
+    /// Pools emptied on arrival: 32 objects at `A5+0x62de` (except those marked `+0x58`), 18 at `A5+0x10de`.
     pub const POOL_A: u32 = 0x62de;
     pub const POOL_B: u32 = 0x10de;
     pub const SOUND_ARRIVAL: u32 = 0xeaa98;
     pub const SOUND_SCROLL: u32 = 0xedc66;
-    /// La variante 3 attend que la caméra soit revenue à cette abscisse.
+    /// Variant 3 waits for the camera to be back at this abscissa.
     pub const CAMERA_STOP: i16 = 0x5cc;
 }
 
@@ -155,7 +155,7 @@ fn opening_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.anim_start(opening::ANIM_SET, 0x20);
         return;
     }
-    // son décor d'accompagnement (SOBJ 3), qui garde un lien long vers l'effet
+    // its accompanying scenery (SOBJ 3), which keeps a long link to the effect
     if let Some(o) = x.alloc(&pools::SOBJ) {
         o.set_u8(x.b, 0, 1);
         o.set_u8(x.b, 2, 3);
@@ -164,7 +164,7 @@ fn opening_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_start(opening::ANIM_SET, 0x1f);
 }
 
-/// Glisse vers la gauche de deux pixels par image jusqu'à l'abscisse d'arrivée.
+/// Slides left by two pixels per frame until the arrival abscissa.
 fn opening_slide<R: Bench>(x: &mut Cx<'_, R>) {
     x.add16(Obj::X, 0xfffe);
     let target = x.u16(opening::TARGET);
@@ -183,9 +183,9 @@ fn opening_slide<R: Bench>(x: &mut Cx<'_, R>) {
     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, 0x20);
 }
 
-/// Met fin (état 6) aux objets des deux pools. Comme l'original, un objet du premier pool marqué
-/// `+0x58` fait finir le parcours avec le corps de la seconde boucle, sur les emplacements restants du
-/// premier pool : le second n'est alors pas parcouru.
+/// Ends (state 6) the objects of the two pools. Like the original, an object of the first pool marked
+/// `+0x58` makes the walk end with the body of the second loop, on the remaining slots of the
+/// first pool: the second one is then not walked.
 fn clear_scene<R: Bench>(x: &mut Cx<'_, R>) {
     let (mut slot, mut left) = (A5 + opening::POOL_A, 32);
     let mut spared = false;
@@ -212,7 +212,7 @@ fn clear_scene<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variante 3 : délai, puis la scène avance (`A5+0x4ff` + 4).
+/// Variant 3: delay, then the scene advances (`A5+0x4ff` + 4).
 fn opening_wait<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u16(opening::DELAY).wrapping_sub(1);
     x.set16(opening::DELAY, n);
@@ -225,17 +225,17 @@ fn opening_wait<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 35 : silhouette et reflet d'un porteur
+// Type 35: silhouette and reflection of a carrier
 // ---------------------------------------------------------------------------------------------
 
 mod mirrored {
     pub const ANIM_SET: u32 = 0x174776;
     pub const BEARER: u32 = 0x46;
-    /// Image courante, transmise par la silhouette au porteur (`+0xa0` du porteur ; négative : rien
-    /// à montrer).
+    /// Current frame, passed by the silhouette to the carrier (`+0xa0` of the carrier; negative: nothing
+    /// to show).
     pub const FRAME: u32 = 0x33;
     pub const BEARER_FRAME: u32 = 0xa0;
-    /// Animation du reflet par image de la silhouette (octets, espace programme ; négatif : caché).
+    /// Reflection animation per silhouette frame (bytes, program space; negative: hidden).
     pub const REFLECTIONS: u32 = 0xb300c;
 }
 
@@ -280,7 +280,7 @@ fn mirrored_follow<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     if x.u8(f::VARIANT) == 0 {
-        // silhouette : un pixel devant et au-dessus du porteur
+        // silhouette: one pixel in front of and above the carrier
         x.add16(Obj::Y, 1);
         x.add16(Obj::Z, 0xffff);
         if x.a5_u8(0x3d) == 0 {
@@ -290,7 +290,7 @@ fn mirrored_follow<R: Bench>(x: &mut Cx<'_, R>) {
             bearer.set_u8(x.b, mirrored::BEARER_FRAME, frame);
         }
     } else {
-        // reflet : un pixel derrière et au-dessous
+        // reflection: one pixel behind and below
         x.add16(Obj::Y, 0xffff);
         x.add16(Obj::Z, 1);
         if frame != x.u8(mirrored::FRAME) {
@@ -312,13 +312,13 @@ fn mirrored_hide<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 53 : objet qui traverse l'écran, puis déclenche la suite de la scène
+// Type 53: object that crosses the screen, then triggers the rest of the scene
 // ---------------------------------------------------------------------------------------------
 
 mod crossing {
     pub const ANIM_SET: u32 = 0x19685a;
     pub const TIMER: u32 = 0x42;
-    /// Décor créé (pointeur) et son numéro de décor de scène.
+    /// Scenery created (pointer) and its scene scenery number.
     pub const SCENERY: u32 = 0x5c;
     pub const SCENERY_KIND: u32 = 0x83;
     pub const SOUND_LAND: u32 = 0xe3a2e;
@@ -346,7 +346,7 @@ fn crossing<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Les étapes (sous-état de 4 en 4) s'enchaînent dans la même image quand l'une se termine.
+/// The steps (substate, by 4) chain within the same frame when one of them finishes.
 fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
     let mut step = x.u8(f::SUB_STATE);
     loop {
@@ -359,7 +359,7 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 next_step(x, 1, 0x18);
             }
-            // glisse sur sa lancée
+            // glides on its momentum
             4 => {
                 x.anim_step();
                 x.move_x();
@@ -388,7 +388,7 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(crossing::TIMER, 0);
                 x.anim_start(crossing::ANIM_SET, 5);
             }
-            // attend que le décor ait fini, en jouant un son toutes les 0x30 images
+            // waits for the scenery to finish, playing a sound every 0x30 frames
             16 => {
                 x.anim_step();
                 let scenery = x.linked(crossing::SCENERY);
@@ -422,7 +422,7 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Passe à l'étape suivante : délai, animation `anim`, remise en place dans la liste des acteurs.
+/// Goes to the next step: delay, animation `anim`, put back in the actors' list.
 fn next_step<R: Bench>(x: &mut Cx<'_, R>, anim: u32, timer: u16) {
     x.add8(f::SUB_STATE, 4);
     x.set16(crossing::TIMER, timer);
@@ -430,7 +430,7 @@ fn next_step<R: Bench>(x: &mut Cx<'_, R>, anim: u32, timer: u16) {
     x.reinsert();
 }
 
-/// `subq.w #1,(+0x42)` suivi de `bpl` : vrai quand le délai est épuisé (négatif).
+/// `subq.w #1,(+0x42)` followed by `bpl`: true when the delay is exhausted (negative).
 fn timer_out<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let n = x.u16(crossing::TIMER).wrapping_sub(1);
     x.set16(crossing::TIMER, n);
@@ -438,14 +438,14 @@ fn timer_out<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 54 : pièces d'une scène qui ouvrent le passage vers un boss
+// Type 54: pieces of a scene that open the passage to a boss
 // ---------------------------------------------------------------------------------------------
 
 mod passage {
     pub const ANIM_SET: u32 = 0x196a28;
-    /// Positions (x, profondeur) par variante (mots, espace programme).
+    /// Positions (x, depth) per variant (words, program space).
     pub const PLACES: u32 = 0xb693c;
-    /// Fondu de la scène (`A5+0x48e` : en cours tant que non nul) et son réglage.
+    /// Scene fade (`A5+0x48e`: in progress as long as non-zero) and its setting.
     pub const FADE: u32 = 0x48e;
     pub const FADE_PROGRAM: u32 = 0x1ced4;
 }
@@ -463,7 +463,7 @@ fn passage<R: Bench>(x: &mut Cx<'_, R>) {
             x.reinsert();
         }
         2 => {
-            // attend que l'objet suivi par la scène passe à l'état 4
+            // waits for the object followed by the scene to go to state 4
             let focus = x.a5_u16(FOCUS);
             if focus == 0 {
                 return;
@@ -485,7 +485,7 @@ fn passage<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Ouvre le passage : la scène recule de 0x7c8 pixels (joueurs compris), puis un fondu est lancé.
+/// Opens the passage: the scene moves back by 0x7c8 pixels (players included), then a fade is launched.
 fn passage_open<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(passage::FADE) != 0 {
         return;
@@ -509,7 +509,7 @@ fn passage_open<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB_STATE, 1);
 }
 
-/// Le fondu fini, crée le boss (type 7) devant la caméra et rend la main à la scène.
+/// Once the fade is done, creates the boss (type 7) in front of the camera and cedes control to the scene.
 fn passage_boss<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(passage::FADE) != 0 {
         return;
@@ -526,17 +526,17 @@ fn passage_boss<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 55 : machine qui projette les joueurs et lance la transition
+// Type 55: machine that throws the players and launches the transition
 // ---------------------------------------------------------------------------------------------
 
 mod launcher {
     pub const ANIM_SET: u32 = 0x16ff94;
     pub const TIMER: u32 = 0x42;
-    /// Objet prévenu au départ (passé à l'état 4).
+    /// Object notified at departure (set to state 4).
     pub const PARTNER: u32 = 0x5c;
     pub const SOUND_START: u32 = 0xed474;
     pub const SOUND_LAUNCH: u32 = 0xedcd0;
-    /// Sauvegarde de la palette (0x91c000, 33 × 32 octets) pour le fondu.
+    /// Palette save (0x91c000, 33 × 32 bytes) for the fade.
     pub const PALETTE_RAM: u32 = 0x91c000;
     pub const PALETTE_COPY: u32 = 0xff1190;
     pub const FADE_PROGRAM: u32 = 0x1ccf8;
@@ -578,7 +578,7 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
         p.set_u16(x.b, Obj::X, px);
         crate::sound::service(x.b, crate::sound::Service::Ff05);
         crate::sound::play(x.b, launcher::SOUND_LAUNCH, x.o);
-        // animation 2 du joueur, puis le joueur est projeté en l'air
+        // player animation 2, then the player is thrown into the air
         crate::objects::anim::start_by_character(x.b, p, &crate::objects::anim::SETS_BY_VARIANT, 2);
         p.set_u16(x.b, Obj::VX, 0);
         p.set_u16(x.b, Obj::AX, 0);
@@ -598,9 +598,9 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u8(0x48e, 13);
     new_task(x, launcher::FADE_PROGRAM, 0x10);
     x.set_a5_u16(CAMERA_X, 0xc78);
-    // éclats (type 56) : dix-sept en principe (`dbf D6`), mais l'allocation se sert de D6 pour parcourir le pool.
-    // Glitch d'origine : la boucle compte dans D6 (`dbf`), que l'allocation réécrit (rang de l'emplacement trouvé
-    // depuis la fin du pool) : elle s'arrête au pool plein, ou quand le dernier emplacement vient d'être pris.
+    // sparks (type 56): seventeen in principle (`dbf D6`), but the allocation uses D6 to walk the pool.
+    // Original glitch: the loop counts in D6 (`dbf`), which the allocation rewrites (rank of the slot found
+    // from the end of the pool): it stops when the pool is full, or when the last slot has just been taken.
     let last = pools::EFFCT.slot(pools::EFFCT.slots - 1);
     while let Some(eclat) = super::effects_creators::camera_shard(x.b) {
         if eclat == last {
@@ -611,14 +611,14 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 68 : enseigne de départ
+// Type 68: departure sign
 // ---------------------------------------------------------------------------------------------
 
 mod start_sign {
     pub const ANIM_SET: u32 = 0x197ef0;
     pub const PALETTE: u32 = 0x28ff20;
     pub const PALETTE_RAM: u32 = 0x91c380;
-    /// Demande de rechargement des couleurs.
+    /// Request to reload the colors.
     pub const RELOAD: u32 = 0x40;
 }
 
@@ -644,7 +644,7 @@ fn start_sign<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(start_sign::RELOAD, 0);
             }
             if x.anim_step() && x.a5_u16(0x52) == 0 {
-                // fin de l'animation : les joueurs vivants et debout (étape ≤ 10) repartent
+                // end of the animation: the living, standing players (step ≤ 10) set off again
                 x.set16(f::STATE, 0x602);
                 x.set_a5_u8(0x59, 0);
                 for p in living_players(x) {
@@ -665,7 +665,7 @@ fn start_sign<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Enseigne posée à (0xb0, 0xd0) de la caméra, en hauteur (`+0xc`), profondeur nulle.
+/// Sign placed at (0xb0, 0xd0) from the camera, in height (`+0xc`), zero depth.
 fn at_camera_z<R: Bench>(x: &mut Cx<'_, R>) {
     let (cx, cy) = (x.a5_u16(CAMERA_X), x.a5_u16(CAMERA_Y));
     x.set16(Obj::X, cx);
@@ -686,7 +686,7 @@ mod sound_fade {
     pub const LEVEL_B: u32 = 0x36;
 }
 
-/// Niveaux du son : commandes de service 0xff08 et 0xff09 (0xe0ad8, 0xe0af8), de paramètre le niveau.
+/// Sound levels: service commands 0xff08 and 0xff09 (0xe0ad8, 0xe0af8), with the level as parameter.
 fn sound_fade_levels<R: Bench>(x: &mut Cx<'_, R>) {
     let a = x.u16(sound_fade::LEVEL_A);
     crate::sound::service(x.b, crate::sound::Service::Ff08(a));
@@ -728,13 +728,13 @@ fn sound_fade<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 89 : personnage qui traverse la scène
+// Type 89: character who crosses the scene
 // ---------------------------------------------------------------------------------------------
 
 mod walker {
     pub const ANIM_SET: u32 = 0x19920e;
     pub const DELAY: u32 = 0x54;
-    /// Signal de la scène (`A5-0x55c8`) qui le fait repartir.
+    /// Scene signal (`A5-0x55c8`) that makes it leave again.
     pub const SIGNAL: u32 = 0xff2a38;
 }
 
@@ -751,7 +751,7 @@ fn walker<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => {
             match x.u8(f::SUB_STATE) {
-                // entre en marchant, quatre pixels par image
+                // enters walking, four pixels per frame
                 0 => {
                     let n = x.u8(walker::DELAY).wrapping_sub(1);
                     x.set8(walker::DELAY, n);
@@ -770,7 +770,7 @@ fn walker<R: Bench>(x: &mut Cx<'_, R>) {
                         x.anim_start(walker::ANIM_SET, 0);
                     }
                 }
-                // ressort par la droite, jusqu'à 0x1e0 pixels de la caméra
+                // leaves on the right, up to 0x1e0 pixels from the camera
                 _ => {
                     let limit = x.a5_u16(CAMERA_X).wrapping_add(0x1e0);
                     if limit > x.u16(Obj::X) {

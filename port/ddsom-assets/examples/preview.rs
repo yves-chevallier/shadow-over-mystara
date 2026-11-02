@@ -1,5 +1,5 @@
-//! Aperçu en couleur : `preview <assets> <première_cellule> <palette> <exit.png>`.
-//! Rend 32x16 cellules avec la palette de la bibliothèque, comme le matériel (luminosité comprise).
+//! Color preview: `preview <assets> <first_cell> <palette> <output.png>`.
+//! Renders 32x16 cells with the library palette, like the hardware (brightness included).
 
 use std::path::Path;
 
@@ -31,9 +31,9 @@ fn main() {
     enc.write_header().unwrap().write_image_data(&rgb).unwrap();
 }
 
-/// Couleur matérielle 0xLRGB -> RGB (formule de MAME cps1_build_palette).
+/// Hardware color 0xLRGB -> RGB (formula of MAME cps1_build_palette).
 fn color(c: u16) -> [u8; 3] {
-    // aperçu : pleine luminosité (le jeu règle la luminosité au chargement et pendant les fondus)
+    // preview: full brightness (the game sets the brightness at load time and during fades)
     let bright = 0x0f + (0xf << 1);
     [c >> 8, c >> 4, c].map(|v| ((v & 0xf) as u32 * 0x11 * bright / 0x2d) as u8)
 }

@@ -1,18 +1,18 @@
-//! Boss de type 5 (0x8341c), scène 58 : Ezerhorden (h). Voir `docs/families/boss.md`.
+//! Boss of type 5 (0x8341c), scene 58: Ezerhorden (h). See `docs/families/boss.md`.
 //!
-//! Gabarit ancien, sans cinématique : l'état `+4` (0 création, 2 actif, 4 touché, 6 libération) et le groupe
-//! `+5` (multiples de 4) sont posés champ par champ, `+6` est l'étape. `0x83e3e` (`next_action`) choisit le
-//! groupe suivant d'après la position de la cible.
+//! Old template, without cutscene: the state `+4` (0 creation, 2 active, 4 hit, 6 release) and the group
+//! `+5` (multiples of 4) are set field by field, `+6` is the step. `0x83e3e` (`next_action`) picks the next
+//! group from the target's position.
 //!
-//! | `+5` | Rôle |
+//! | `+5` | Role |
 //! |---|---|
-//! | 0 | arrivée : le bond d'entrée, puis la cinématique d'ouverture (attend la caméra `A5+0x2c` = 0xc) |
-//! | 4 | marche lente sur place (`+0xa0` images) |
-//! | 8, 0x14 | déplacement à vitesse choisie par la difficulté (X et Y), sens selon `+0x2c` |
-//! | 0xc | saisie d'un joueur : le draine puis le relâche |
+//! | 0 | arrival: the entry leap, then the opening cutscene (waits for camera `A5+0x2c` = 0xc) |
+//! | 4 | slow walk in place (`+0xa0` frames) |
+//! | 8, 0x14 | movement at a speed chosen by the difficulty (X and Y), direction according to `+0x2c` |
+//! | 0xc | grabbing a player: drains them then releases them |
 //! | 0x10 | attaque simple (animation jusqu'au bout) |
-//! | 0x18 | poursuite : tourne vers la cible puis saisit |
-//! | état 4 | touché : réactions, chute en tourbillon (`+0x49` = 0xa8), mort |
+//! | 0x18 | chase: turns toward the target then grabs |
+//! | state 4 | hit: reactions, whirlwind fall (`+0x49` = 0xa8), death |
 //!
 //! Animations : 0x175da6 (corps), 0x175dc4 (attaques), 0x175e0c (chute, mort).
 
@@ -42,16 +42,16 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Le gestionnaire (0x8341c), que la boucle d'aiguillage laisse dans A1.
+/// The handler (0x8341c), which the dispatch loop leaves in A1.
 const HANDLER: u32 = 0x8341c;
 
 const SET_BODY: u32 = 0x175da6;
 const SET_ATTACK: u32 = 0x175dc4;
 const SET_FALL: u32 = 0x175e0c;
-/// Table des vecteurs (X, Y) par angle (32 × 4 octets), parcourue pendant le tourbillon.
+/// Table of (X, Y) vectors per angle (32 × 4 bytes), walked through during the whirlwind.
 const SPIN_VECTORS: u32 = 0x1c94b6;
 
-/// Entrée : le jeu ne passe pas par le hook de pause.
+/// Entry: the game does not go through the pause hook.
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         st::INIT => init(x),
@@ -63,7 +63,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-/// 0x83dfe, 0x83e12, 0x83e28 : démarre le script `n` d'un des trois jeux d'animations.
+/// 0x83dfe, 0x83e12, 0x83e28: starts script `n` of one of the three animation sets.
 fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 0);
@@ -82,7 +82,7 @@ fn fall_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_FALL, n as u16);
 }
 
-/// 0x83dde : fige-la un cran d'animation demandé par `+0x91` (bit 7 = demande).
+/// 0x83dde: freezes it one animation notch requested by `+0x91` (bit 7 = request).
 fn take_frame_request<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.u8(DEATH_FLAG);
     if v & 0x80 == 0 {
@@ -93,7 +93,7 @@ fn take_frame_request<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(DEATH_FLAG, 0);
 }
 
-/// Index dans les tables de difficulté : `(difficulté & 0xfc) / 2` (mots).
+/// Index into the difficulty tables: `(difficulty & 0xfc) / 2` (words).
 fn level_index<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     (var::RANK.get(x.b) as u32 & 0xfc) >> 1
 }
@@ -102,7 +102,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
-// --- état 0 : création, état 2 : actif ------------------------------------------------------------
+// --- state 0: creation, state 2: active ------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
@@ -127,7 +127,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     active(x);
 }
 
-/// Boucle de l'état actif (0x8349c) ; l'état touché la rappelle pour reprendre le combat.
+/// Loop of the active state (0x8349c); the hit state calls it again to resume the fight.
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
@@ -166,7 +166,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-// --- +5 = 0 : arrivée -------------------------------------------------------------------------
+// --- +5 = 0: arrival -------------------------------------------------------------------------
 
 fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -178,7 +178,7 @@ fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             x.set_a5_u16(0x490, 0x10);
             x.set_a5_u8(0x48e, 0xf);
             x.set_a5_u8(0x48f, 8);
-            // 0x9b6 avec A0 = 0x14de, D0.w = 0x10 : tâche de fondu (descente du nombre de pas de `A5+0x48f`)
+            // 0x9b6 with A0 = 0x14de, D0.w = 0x10: fade task (counting down the number of steps of `A5+0x48f`)
             crate::scene::fading::launch(x.b, crate::scene::fading::DESCENT_STEP);
             intro_wait_scene(x);
         }
@@ -245,9 +245,9 @@ fn stroll_step<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +5 = 8 et 0x14 : déplacement ---------------------------------------------------------------
+// --- +5 = 8 and 0x14: movement ---------------------------------------------------------------
 
-/// `table` : vitesses (mots) par niveau de difficulté.
+/// `table`: speeds (words) per difficulty level.
 fn dash<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     match x.u8(f::SUB2) {
         0 => {
@@ -289,10 +289,10 @@ fn seize<R: Bench>(x: &mut Cx<'_, R>) {
         4 => grab_hold(x),
         8 => grab_end(x),
         0xc => {
-            // Glitch d'origine : la table de sauts de la saisie n'a que trois entrées (0, 4, 8) ; `+6` = 0xc tombe sur
-            // le `moveq #0,D0 ; jsr 0xfd64` de la poursuite (0x8373a), qui « saisit » l'objet désigné par A1. A1 est
-            // alors l'adresse du gestionnaire, posée par la boucle d'aiguillage (`movea.l (table,D0),A1 ; jsr (A1)`),
-            // que rien ne change avant : la « prise » écrit dans la ROM (sans effet) et la cible `+0x50` devient
+            // Original glitch: the grab's jump table has only three entries (0, 4, 8); `+6` = 0xc lands on
+            // the `moveq #0,D0 ; jsr 0xfd64` of the chase (0x8373a), which "grabs" the object designated by A1. A1 is
+            // then the handler's address, set by the dispatch loop (`movea.l (table,D0),A1 ; jsr (A1)`),
+            // which nothing changes before: the "grab" writes into the ROM (no effect) and the target `+0x50` becomes
             // 0x341c.
             lib::seize_player(x, Obj(HANDLER), 0);
             grab_begin(x);
@@ -310,7 +310,7 @@ fn grab_begin<R: Bench>(x: &mut Cx<'_, R>) {
     grab_hold(x);
 }
 
-/// Le joueur saisi (`+0x50`) perd des PV tant que dure la prise.
+/// The grabbed player (`+0x50`) loses HP for as long as the grab lasts.
 fn grab_hold<R: Bench>(x: &mut Cx<'_, R>) {
     let target = x.u16(f::TARGET);
     if target == 0 {
@@ -359,7 +359,7 @@ fn grab_hold<R: Bench>(x: &mut Cx<'_, R>) {
     attack_anim(x, 2);
 }
 
-/// Le joueur n'a plus de PV : il est relâché mourant (1 PV).
+/// The player has no HP left: released dying (1 HP).
 fn grab_kill<R: Bench>(x: &mut Cx<'_, R>) {
     let p = x.linked(f::TARGET);
     p.set_u16(x.b, f::HP, 1);
@@ -442,7 +442,7 @@ fn chase_turn<R: Bench>(x: &mut Cx<'_, R>) {
     chase_follow(x);
 }
 
-/// Tourne d'un cran vers la cible, avance, saisit un joueur à portée.
+/// Turns one notch toward the target, advances, grabs a player in range.
 fn chase_follow<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     let criterion = x.u8(STEPS);
@@ -487,8 +487,8 @@ fn chase_stop<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- choix de l'action suivante (0x83e3e) ----------------------------------------------------------
 
-/// Groupe `+5` et angle d'après la position de la cible : lignes de la table 0x83f4e (2 octets par entrée :
-/// angle et groupe, durée et demi-tour).
+/// Group `+5` and angle from the target's position: rows of table 0x83f4e (2 bytes per entry:
+/// angle and group, duration and half-turn).
 fn next_action<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(BITING, 0);
     x.set8(IN_ATTACK, 0);
@@ -542,7 +542,7 @@ fn next_action<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(STEPS, b & 0x7f);
 }
 
-// --- état 4 : touché --------------------------------------------------------------------------------
+// --- state 4: hit --------------------------------------------------------------------------------
 
 fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
@@ -570,7 +570,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     if x.u8(REACTION) == 0x38 {
-        // coup sans effet : retour à l'état mémorisé
+        // hit without effect: back to the saved state
         let s = x.u32(SAVED_STATE);
         x.set32(f::STATE, s);
         let stun = x.u8(STUN);
@@ -591,7 +591,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Attend la fin du recul, puis reprend le combat (ou saute à la poursuite).
+/// Waits for the end of the recoil, then resumes the fight (or jumps to the chase).
 fn recover<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::FREEZE) != 0 {
         sub8(x, f::FREEZE, 1);
@@ -610,7 +610,7 @@ fn recover<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0218_0000);
 }
 
-/// `+0x49` = 0xa8 : le coup projette le boss, qui retombe en tourbillon (`+6` = 0 à 0x10).
+/// `+0x49` = 0xa8: the hit throws the boss, who falls back in a whirlwind (`+6` = 0 to 0x10).
 fn tumble<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
@@ -695,7 +695,7 @@ fn tumble<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Pas du tourbillon (0x83da8) : déplacement par la table de vecteurs de l'angle `+0x2d`.
+/// Whirlwind step (0x83da8): movement through the vector table of angle `+0x2d`.
 fn spin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add32(0xc, 0x20000);
     if (x.u16(0xc) as i16) >= 0x40 {
@@ -721,7 +721,7 @@ fn spin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add32(0x10, dy as u32);
 }
 
-/// État 6 de `+5` : la mort (séquence en deux temps puis libération).
+/// State 6 of `+5`: death (two-stage sequence then release).
 fn dying<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(IN_ATTACK, 2);
     match x.u8(f::SUB2) {

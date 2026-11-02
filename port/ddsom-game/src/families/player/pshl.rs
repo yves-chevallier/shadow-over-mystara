@@ -1,8 +1,8 @@
-//! Tirs des joueurs (classe PSHL, pool de 18 objets de 0x60 octets, table 0x39908), première série :
-//! types 0 à 5. Voir `docs/families/player.md`.
+//! Player shots (class PSHL, pool of 18 objects of 0x60 bytes, table 0x39908), first series: types 0 to 5. See
+//! `docs/families/player.md`.
 //!
-//! Les tirs naissent d'un créateur (`player/spawn.rs`) qui fixe leur genre, leur propriétaire (`+0x50`),
-//! leurs boîtes (`+0x2e`), la puissance (`+0x45`, `+0x46`) et la vitesse ; le gestionnaire les fait vivre.
+//! The shots are born from a creator (`player/spawn.rs`) that sets their kind, their owner (`+0x50`), their boxes
+//! (`+0x2e`), the power (`+0x45`, `+0x46`) and the speed; the handler makes them live.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -18,17 +18,17 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Le tir est arrêté par le terrain : terrains 5 à 8 sans le bit 6 de l'attribut (D2).
+/// The shot is stopped by the terrain: terrains 5 to 8 without bit 6 of the attribute (D2).
 fn stopped_by_terrain<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    // Glitch d'origine : les restes de 0x24a8 (D3 = index de la case) sont relus par un gestionnaire suivant (lot C :
-    // `boss11_scene42_mort`, image 4447)
+    // Original glitch: the leftovers of 0x24a8 (D3 = cell index) are re-read by a following handler (batch C:
+    // `boss11_scene42_mort`, frame 4447)
     let t = crate::video::terrain_of(x.b, x.o);
     leftovers_terrain(x, &t);
     let terrain = t.number as u32;
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
 }
 
-/// Clignotement final : l'objet est caché une image sur deux (parité du compteur `+0x50`).
+/// Final blinking: the object is hidden every other frame (parity of counter `+0x50`).
 fn blink_by_timer<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, true);
     let t = x.u8(0x50);
@@ -37,7 +37,7 @@ fn blink_by_timer<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Type 0 (0x51c64) : marqueur de coup suivant son porteur (`+0x5c`).
+/// Type 0 (0x51c64): hit marker following its bearer (`+0x5c`).
 mod marker {
     use super::*;
 
@@ -83,8 +83,8 @@ mod marker {
     }
 }
 
-/// Types 1 et 9 (0x51da6) : tir d'objet lancé (kind 1 : jeu 0x15ae8a, kind 9 : jeu 0x15c552) qui vole
-/// en ligne droite, rebondit sur l'impact, retombe puis clignote.
+/// Types 1 and 9 (0x51da6): thrown-object shot (kind 1: set 0x15ae8a, kind 9: set 0x15c552) that flies in a straight
+/// line, bounces on impact, falls back then blinks.
 mod thrown {
     use super::*;
 
@@ -170,7 +170,7 @@ mod thrown {
         }
     }
 
-    /// Animation d'après l'angle `+0x2d` (`0x51f48`).
+    /// Animation from angle `+0x2d` (`0x51f48`).
     fn pose<R: Bench>(x: &mut Cx<'_, R>) {
         let angle = (x.u8(0x2d) & 7) as u32;
         let set = if x.u8(0x2) == 1 { ANIMS_A } else { ANIMS_B };
@@ -178,8 +178,8 @@ mod thrown {
     }
 }
 
-/// Types 2, 10 et 11 (0x5204e) : tir lancé en ligne droite (kinds 2, 0xa, 0xb : jeux 0x15af1c,
-/// 0x15c5e4, 0x15c62a), qui s'écrase au sol, s'élève un peu puis clignote.
+/// Types 2, 10 and 11 (0x5204e): shot thrown in a straight line (kinds 2, 0xa, 0xb: sets 0x15af1c, 0x15c5e4, 0x15c62a),
+/// which crashes to the ground, rises a little then blinks.
 mod flung {
     use super::*;
 
@@ -271,8 +271,8 @@ mod flung {
     }
 }
 
-/// Type 3 (0x52234) : tir à vitesse longue (le long `+0x14` = 0x1800000), qui retombe, puis s'arrête et
-/// se consume (30 + 80 images).
+/// Type 3 (0x52234): shot with long speed (long `+0x14` = 0x1800000), which falls back, then stops and burns out (30 +
+/// 80 frames).
 mod arc {
     use super::*;
 
@@ -355,8 +355,8 @@ mod arc {
     }
 }
 
-/// Type 4 (0x523c4) : projectile qui rebondit sur le terrain (hache, `+0x5c` rebonds) puis se
-/// consume en clignotant (`+0x5d` : 0x20 images).
+/// Type 4 (0x523c4): projectile that bounces on the terrain (axe, `+0x5c` bounces) then burns out blinking (`+0x5d`:
+/// 0x20 frames).
 mod bouncer {
     use super::*;
 
@@ -453,7 +453,7 @@ mod bouncer {
         }
     }
 
-    /// Fin de vie : clignote 0x20 images, retombe puis disparaît.
+    /// End of life: blinks 0x20 frames, falls back then disappears.
     fn burn<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x5d, 0xff);
         if x.u8(0x5d) == 0 {
@@ -472,8 +472,8 @@ mod bouncer {
     }
 }
 
-/// Type 5 (0x5265a) : explosion en gerbe (variante 0 : projectile qui part en arc et éclate ; variante 1 :
-/// flamme posée par l'éclatement, décalée selon son rang `+0x2f`).
+/// Type 5 (0x5265a): burst explosion (variant 0: projectile that leaves in an arc and bursts; variant 1: flame placed
+/// by the bursting, offset according to its rank `+0x2f`).
 mod burst {
     use super::*;
 
@@ -483,7 +483,7 @@ mod burst {
     const SFX_RIGHT: u32 = 0xe89a4;
     const SFX_LEFT: u32 = 0xe8a2e;
     const SFX_FLAME: u32 = 0xe8ab8;
-    /// Compteur des flammes en vie (`A5-0x5fbc`, adresse absolue).
+    /// Counter of the flames alive (`A5-0x5fbc`, absolute address).
     const FLAMES: u32 = 0xff2044;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -559,7 +559,7 @@ mod burst {
         x.reinsert();
     }
 
-    /// `0x525ce` : crée les flammes (variante 1), une de plus tous les 4 pas de retard.
+    /// `0x525ce`: creates the flames (variant 1), one more every 4 steps of delay.
     fn spawn_flames<R: Bench>(x: &mut Cx<'_, R>) {
         wr16(x.b, FLAMES, 0);
         let owner = x.linked(f::OWNER);

@@ -1,6 +1,6 @@
-//! Petites routines communes (V2) : direction entre deux points (0x1386), objet saisi (0x2810),
-//! fin de partie quand tous les joueurs sont à terre (0x28d8, dernière étape de la phase 12) et division
-//! entière (0x17ea).
+//! Small shared routines (V2): direction between two points (0x1386), grabbed object (0x2810),
+//! game over when all players are down (0x28d8, last step of phase 12) and integer
+//! division (0x17ea).
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -18,27 +18,27 @@ fn set_low_byte(r: &mut u32, v: u8) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// 0x1386 : direction (0..31) de (D3, D4) vers (D1, D2)
+// 0x1386: direction (0..31) from (D3, D4) to (D1, D2)
 // ---------------------------------------------------------------------------------------------
 
-/// Table des directions, en ROM programme : indexée par (octant << 3) | pas.
+/// Direction table, in program ROM: indexed by (octant << 3) | step.
 const DIRECTIONS: u32 = 0x140c;
 
-/// Calcul de 0x1386 sur les registres de l'original (D1-D4), avec les registres de travail qu'il laisse.
+/// Computation of 0x1386 on the registers of the original (D1-D4), with the work registers it leaves.
 pub(crate) struct Compute {
     pub direction: u8,
     pub d1: u32,
     pub d2: u32,
     pub d3: u32,
-    /// D4.w : unité de la comparaison.
+    /// D4.w: unit of the comparison.
     pub unit: u16,
-    /// D6 : compteur de la boucle d'estimation, s'il a été posé.
+    /// D6: counter of the estimation loop, if it was set.
     pub d6: Option<u32>,
 }
 
-/// Direction du point (D3, D4) vers le point (D1, D2). Les écarts sont pris en valeur absolue (16 bits,
-/// positions biaisées de 0x8000 pour comparer en non signé) ; l'octant dépend des signes et du plus grand
-/// écart, le pas (0 à 3) du rapport entre le petit écart et le grand, estimé par soustractions.
+/// Direction from point (D3, D4) to point (D1, D2). The differences are taken as absolute values (16 bits,
+/// positions biased by 0x8000 to compare unsigned); the octant depends on the signs and the larger
+/// difference, the step (0 to 3) on the ratio between the small and the large difference, estimated by subtractions.
 pub(crate) fn compute(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Compute {
     let mut octant = 0u8;
     let mut dx = d1.wrapping_add(0x8000);
@@ -55,7 +55,7 @@ pub(crate) fn compute(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Co
     if borrow {
         octant += 2;
     }
-    // le grand écart passe dans `dx`
+    // the large difference goes into `dx`
     if (dy as u16) < dx as u16 {
         std::mem::swap(&mut dx, &mut dy);
         if octant == 0 || octant == 4 {
@@ -93,24 +93,24 @@ pub(crate) fn compute(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Co
     Compute { direction, d1: dx, d2: dy, d3: step as u32, unit: unit, d6 }
 }
 
-/// 0x1386 : direction (0 à 31) du point `de` vers le point `to` (x, z).
+/// 0x1386: direction (0 to 31) from point `de` to point `to` (x, z).
 pub fn direction(b: &mut Cps2Bus, de: (u16, u16), to: (u16, u16)) -> u8 {
     compute(b, to.0 as u32, to.1 as u32, de.0 as u32, de.1 as u32).direction
 }
 
-/// 0x137e : direction de l'objet `o` (x, z) vers le point `to`.
+/// 0x137e: direction from object `o` (x, z) to point `to`.
 pub fn direction_from(b: &mut Cps2Bus, o: crate::objects::Obj, to: (u16, u16)) -> u8 {
     let de = (rd16(b, o.0 + 8), rd16(b, o.0 + 0x10));
     direction(b, de, to)
 }
 
-/// 0x1376 : direction de l'objet `o` vers l'objet `target`.
+/// 0x1376: direction from object `o` to object `target`.
 pub fn direction_to(b: &mut Cps2Bus, o: crate::objects::Obj, target: crate::objects::Obj) -> u8 {
     let to = (rd16(b, target.0 + 8), rd16(b, target.0 + 0x10));
     direction_from(b, o, to)
 }
 
-/// Native de 0x1386 : registres de travail comme l'original les laisse (D1 à D4 et D6), D0 = la direction.
+/// Native of 0x1386: work registers as the original leaves them (D1 to D4 and D6), D0 = the direction.
 fn direction_native(c: &mut Cpu, b: &mut Cps2Bus) {
     let r = compute(b, c.d[1], c.d[2], c.d[3], c.d[4]);
     if let Some(d6) = r.d6 {
@@ -119,7 +119,7 @@ fn direction_native(c: &mut Cpu, b: &mut Cps2Bus) {
     c.d[1] = r.d1;
     c.d[2] = r.d2;
     c.d[3] = r.d3;
-    // `add.l #0x8000,D4` (retenue dans le mot haut), puis l'unité dans D4.w
+    // `add.l #0x8000,D4` (carry in the high word), then the unit in D4.w
     c.d[4] = c.d[4].wrapping_add(0x8000);
     set_low_word(&mut c.d[4], r.unit);
     c.d[0] = r.direction as u32;
@@ -127,7 +127,7 @@ fn direction_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x137e : direction de l'objet A0 (D3, D4 = son x et son z) vers (D1, D2).
+/// 0x137e: direction from object A0 (D3, D4 = its x and z) to (D1, D2).
 fn direction_from_object(c: &mut Cpu, b: &mut Cps2Bus) {
     let (x, z) = (rd16(b, c.a[0] + 8), rd16(b, c.a[0] + 0x10));
     set_low_word(&mut c.d[3], x);
@@ -135,7 +135,7 @@ fn direction_from_object(c: &mut Cpu, b: &mut Cps2Bus) {
     direction_native(c, b);
 }
 
-/// 0x1376 : direction de l'objet A0 vers l'objet A1.
+/// 0x1376: direction from object A0 to object A1.
 fn direction_to_object(c: &mut Cpu, b: &mut Cps2Bus) {
     let (x, z) = (rd16(b, c.a[1] + 8), rd16(b, c.a[1] + 0x10));
     set_low_word(&mut c.d[1], x);
@@ -168,22 +168,22 @@ pub const DIRECTION: Native = Native {
 };
 
 // ---------------------------------------------------------------------------------------------
-// 0x2810 : l'objet A0 est-il saisi par un joueur ?
+// 0x2810: is object A0 grabbed by a player?
 // ---------------------------------------------------------------------------------------------
 
-/// Résultat de 0x2810.
+/// Result of 0x2810.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum NameEntry {
-    /// Jeu gelé (`A5+0x42` non nul) : rien n'est lu (Z = 0).
+    /// Game frozen (`A5+0x42` non-zero): nothing is read (Z = 0).
     Frozen,
-    /// Personne ne tient l'objet (mot `+0x46` nul ; Z = 1).
+    /// Nobody holds the object (word `+0x46` zero; Z = 1).
     Free,
-    /// Le joueur `player` le tient ; `normal` : son octet `+0x2c` est nul (Z).
+    /// Player `player` holds it; `normal`: its byte `+0x2c` is zero (Z).
     By { player: crate::objects::Obj, normal: bool },
 }
 
 impl NameEntry {
-    /// Le drapeau Z que l'original laisse (le test des appelants).
+    /// The Z flag that the original leaves (the callers' test).
     pub fn z(self) -> bool {
         match self {
             NameEntry::Frozen => false,
@@ -193,7 +193,7 @@ impl NameEntry {
     }
 }
 
-/// 0x2810 : l'objet `o` est-il saisi par un joueur (mot `+0x46`) ?
+/// 0x2810: is object `o` grabbed by a player (word `+0x46`)?
 pub fn grabbed(b: &mut Cps2Bus, o: crate::objects::Obj) -> NameEntry {
     if rd8(b, A5 + 0x42) != 0 {
         return NameEntry::Frozen;
@@ -206,7 +206,7 @@ pub fn grabbed(b: &mut Cps2Bus, o: crate::objects::Obj) -> NameEntry {
     NameEntry::By { player, normal: rd8(b, player.0 + 0x2c) == 0 }
 }
 
-/// Native : D0.w = le mot `+0x46`, A1 = le joueur (mot étendu en signe), drapeaux du dernier test.
+/// Native: D0.w = the word `+0x46`, A1 = the player (word sign-extended), flags of the last test.
 fn grabbed_native(c: &mut Cpu, b: &mut Cps2Bus) {
     if grabbed(b, crate::objects::Obj(c.a[0])) == NameEntry::Frozen {
         ops::logic(c, 1, Size::Byte);
@@ -232,10 +232,10 @@ pub const GRABBED: Native = Native {
 };
 
 // ---------------------------------------------------------------------------------------------
-// 0x28d8 : tous les joueurs à terre
+// 0x28d8: all players down
 // ---------------------------------------------------------------------------------------------
 
-/// Variables de A5.
+/// A5 variables.
 mod var {
     pub const STAGE: u32 = 0x34;
     pub const GAME_ON: u32 = 0x42;
@@ -251,25 +251,25 @@ mod player {
     pub const STATE: u32 = 0x04;
     pub const ALTITUDE: u32 = 0x0c;
     pub const HP: u32 = 0x62;
-    /// Octets remis à zéro quand le joueur revient (effets, saisie, magie...).
+    /// Bytes reset to zero when the player comes back (effects, grab, magic...).
     pub const CLEARED: [u32; 8] = [0x2a, 0x66, 0x15c, 0x79, 0x7a, 0x182, 0x183, 0x184];
     pub const RANK: u32 = 0x7d;
     pub const GRAB: u32 = 0x8a;
     pub const GRAB_OBJECT: u32 = 0x86;
 }
 
-/// Scènes sans fin de partie (boutique, cinématique) et scènes de démonstration particulières.
+/// Scenes without game over (shop, cutscene) and particular demo scenes.
 const STAGE_NO_END: [u8; 2] = [6, 0xc];
 const STAGE_SKIP_CHECK: u8 = 0x43;
 const STAGE_SKIP_WAIT: u8 = 0x22;
-/// État d'un joueur qui attend (`0x2000c00` sans l'octet bas) : la fin n'est pas déclenchée.
+/// State of a waiting player (`0x2000c00` without the low byte): the end is not triggered.
 const STATE_WAITING: u32 = 0x0200_0c00;
-/// Phase de fin de partie (`A5+0x2c` = 0x10, étape 0...) et temporisation selon la scène.
+/// Game over phase (`A5+0x2c` = 0x10, step 0...) and timer according to the scene.
 const PHASE_END: u32 = 0x1000_0000;
 
-/// 0x28d8, fin de la phase 12 : quand `A5+0x42` est non nul (partie en cours) et que des joueurs sont à terre
-/// (PV nuls), ils sont remis à l'état d'attente et la phase de fin de partie démarre. Rien ne se passe si un joueur
-/// est encore en l'air ou dans l'état d'attente. (Le processeur ne sert qu'au contexte des joueurs, pour
+/// 0x28d8, end of phase 12: when `A5+0x42` is non-zero (game in progress) and players are down
+/// (zero HP), they are put back in the waiting state and the game over phase starts. Nothing happens if a player
+/// is still in the air or in the waiting state. (The processor is only used for the players' context, for
 /// `player::actions::to_stand`.)
 pub fn game_over(c: &mut Cpu, b: &mut Cps2Bus) {
     let stage = rd8(b, A5 + var::STAGE);
@@ -330,9 +330,9 @@ pub const GAME_OVER: Native = Native {
     outputs: 0,
 };
 
-/// `0x17ea` : division non signée de 32 bits par décalages et soustractions (32 tours). Rend le quotient et
-/// le reste ; avec un diviseur de plus de 2^31 le reste déborde comme dans l'original (diviseur nul :
-/// quotient 0xffffffff, reste le dividende).
+/// `0x17ea`: 32-bit unsigned division by shifts and subtractions (32 rounds). Returns the quotient and
+/// the remainder; with a divisor above 2^31 the remainder overflows as in the original (zero divisor:
+/// quotient 0xffffffff, remainder the dividend).
 pub fn divide(mut n: u32, d: u32) -> (u32, u32) {
     let mut r = 0u32;
     for _ in 0..32 {
@@ -347,7 +347,7 @@ pub fn divide(mut n: u32, d: u32) -> (u32, u32) {
     (n, r)
 }
 
-/// D0 / D1 : quotient dans D0, reste dans D2 ; D3 = 0xffff (compteur de la boucle).
+/// D0 / D1: quotient in D0, remainder in D2; D3 = 0xffff (loop counter).
 fn divide_native(c: &mut Cpu, b: &mut Cps2Bus) {
     let (q, r) = divide(c.d[0], c.d[1]);
     c.d[0] = q;
@@ -368,6 +368,6 @@ pub const NATIVES: &[Native] = &[DIRECTION, DIRECTION_FROM_OBJECT, DIRECTION_TO_
 
 #[cfg(test)]
 mod tests {
-    // Les fonctions travaillent sur les registres du processeur : validées par la comparaison
-    // image par image (`tools/validate_all.sh`) et le mode contrôle.
+    // The functions work on the processor registers: validated by the frame-by-frame
+    // comparison (`tools/validate_all.sh`) and the check mode.
 }

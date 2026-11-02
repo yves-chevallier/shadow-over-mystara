@@ -1,13 +1,13 @@
-//! Créateurs d'effets joueur (pool PEFF) et de tirs joueur (pool PSHL).
+//! Creators of player effects (PEFF pool) and player shots (PSHL pool).
 //!
-//! Les actions des personnages ne dessinent rien elles-mêmes : au geste porté elles créent un objet lié
-//! au joueur (coup d'épée, souffle, lumière, ombre...). L'objet naît dans un pool avec son genre
-//! (`Obj::KIND`), qui choisit le gestionnaire en ROM chargé de le faire vivre, et quelques paramètres
-//! propres au genre. Le mot `+0x50` le relie au joueur qui l'a créé ; le gestionnaire y retrouve la
-//! position et l'orientation du joueur.
+//! The characters' actions draw nothing themselves: at the carried gesture they create an object linked
+//! to the player (sword stroke, breath, light, shadow...). The object is born in a pool with its kind
+//! (`Obj::KIND`), which selects the ROM handler in charge of animating it, and a few parameters
+//! specific to the kind. The word `+0x50` links it to the player who created it; the handler finds there the
+//! player's position and orientation.
 //!
-//! Chaque créateur a une fonction Rust (appelée par les actions) et une native à l'adresse d'origine pour
-//! les appelants restés en ROM. Quand le pool est plein l'allocation échoue et rien n'est créé.
+//! Each creator has a Rust function (called by the actions) and a native at the original address for
+//! the callers left in ROM. When the pool is full the allocation fails and nothing is created.
 
 use m68k::decode::Size;
 
@@ -19,17 +19,17 @@ use crate::objects::pools;
 use crate::player::ram;
 use crate::machine::Machine;
 
-/// Octets de l'objet créé.
+/// Bytes of the created object.
 mod field {
-    /// Lien vers le joueur créateur (mot : adresse).
+    /// Link to the creating player (word: address).
     pub const LINK: u32 = 0x50;
-    /// Paramètre du genre.
+    /// Kind parameter.
     pub const PARAM: u32 = 0x2f;
-    /// Numéro de la scène (octet de A5) copié dans l'objet : l'objet disparaît quand la scène change.
+    /// Scene number (byte of A5) copied into the object: the object disappears when the scene changes.
     pub const SCENE: u32 = 0x5b;
 }
 
-/// Genres d'effets joueur.
+/// Kinds of player effects.
 mod kind {
     pub const BLOOD: u8 = 2;
     pub const SLASH: u8 = 3;
@@ -57,36 +57,36 @@ mod kind {
     pub const DASH: u8 = 0x25;
     pub const METEORS: u8 = 0x28;
     pub const WALL_TARGET: u8 = 0x29;
-    /// Créature invoquée par le magicien (PEFF).
+    /// Creature summoned by the magic-user (PEFF).
     pub const SUMMON: u8 = 0x12;
-    /// Portail du magicien (PEFF ; même numéro que la boule de feu, qui est un tir PSHL).
+    /// Magic-user's portal (PEFF; same number as the fireball, which is a PSHL shot).
     pub const PORTAL: u8 = 0x16;
-    /// Sorcière invoquée par le magicien (tir PSHL).
+    /// Witch summoned by the magic-user (PSHL shot).
     pub const WITCH: u8 = 0x12;
-    /// Arme maudite qui s'échappe (PEFF).
+    /// Cursed weapon that escapes (PEFF).
     pub const CURSED_WEAPON: u8 = 0x26;
-    /// Éclats du joueur mourant (PEFF).
+    /// Shards of the dying player (PEFF).
     pub const SHARD: u8 = 0x27;
-    /// Effets des sorts du magicien (PEFF) : étincelles et éclat du portail, lueur, nuée de l'orage ; et pluie de
-    /// traits (PSHL).
+    /// Effects of the magic-user's spells (PEFF): sparks and portal flash, glow, storm swarm; and rain of
+    /// bolts (PSHL).
     pub const PORTAL_SPARK: u8 = 0x13;
     pub const PORTAL_BURST: u8 = 0x14;
     pub const RAIN: u8 = 0x14;
     pub const PORTAL_GLOW: u8 = 0x2d;
     pub const STORM_CLOUD: u8 = 0x2e;
-    /// Effets des sorts orage (vers la gauche), pluie, mur de feu et vague du magicien (PEFF).
+    /// Effects of the magic-user's storm (leftward), rain, wall of fire and wave spells (PEFF).
     pub const STORM_SPELL: u8 = 0x14;
     pub const RAIN_GLOW: u8 = 0x17;
     pub const WALL_SPARK: u8 = 0x15;
     pub const WAVE_BOLT: u8 = 0x1a;
-    /// Lunes de l'elfe (PEFF).
+    /// Elf's moons (PEFF).
     pub const MOON: u8 = 0x1c;
     pub const MOON_B: u8 = 0x1e;
 }
 
-/// Réserve un emplacement dans `pool` et l'active avec le genre `kind`. Les créateurs sont des natives appelées par
-/// adresse (tables des sorts, `g.rom`) : l'allocation garde ses registres (A1 = l'objet, ou le reste laissé par un
-/// échec ; retenue), que relisent les appelants (`items::lightning`, `items::wall`) et les drapeaux de sortie.
+/// Reserves a slot in `pool` and activates it with kind `kind`. The creators are natives called by
+/// address (spell tables, `g.rom`): the allocation keeps its registers (A1 = the object, or the leftover from a
+/// failure; carry), which the callers re-read (`items::lightning`, `items::wall`), and the output flags.
 fn create(g: &mut Ctx, _p: Player, pool: &pools::Pool, kind: u8) -> Option<Obj> {
     cov!();
     let o = pool.alloc_68k(g.c, g.b)?;
@@ -95,14 +95,15 @@ fn create(g: &mut Ctx, _p: Player, pool: &pools::Pool, kind: u8) -> Option<Obj> 
     Some(o)
 }
 
-/// Dernier geste d'un créateur : le lien vers le joueur. Les drapeaux N et Z sont ceux de ce `move.w`.
+/// Last gesture of a creator: the link to the player. The N and Z flags are those of this `move.w`.
 fn link(g: &mut Ctx, o: Obj, p: Player) {
     cov!();
     o.set_u16(g.b, field::LINK, p.0 as u16);
     g.c.flags_logic(p.0 & 0xffff, Size::Word);
 }
 
-/// Crée un effet lié au joueur : genre, variante (`Obj::VARIANT`), puis le lien. `fill` écrit les autres octets.
+/// Creates an effect linked to the player: kind, variant (`Obj::VARIANT`), then the link. `fill` writes the other
+/// bytes.
 fn effect(g: &mut Ctx, p: Player, kind: u8, variant: Option<u8>, fill: impl FnOnce(&mut Ctx, Obj)) -> Option<Obj> {
     cov!();
     let o = create(g, p, &pools::PEFF, kind)?;
@@ -114,15 +115,15 @@ fn effect(g: &mut Ctx, p: Player, kind: u8, variant: Option<u8>, fill: impl FnOn
     Some(o)
 }
 
-/// Le pas de l'action en cours du créateur (copié dans l'objet pour que son gestionnaire sache d'où il vient).
+/// The step of the creator's current action (copied into the object so that its handler knows where it comes from).
 fn step_of(g: &mut Ctx, p: Player) -> u8 {
     p.u8(g, Player::STEP)
 }
 
-// ---- créateurs d'effets joueur --------------------------------------------------------------------
+// ---- player effect creators --------------------------------------------------------------------
 
-/// 0x4a99a : trace d'un coup. `Some(n)` : trace du coup n° `n` (variante 0), sauf avec les armes 0x10 à 0x13 qui
-/// n'en laissent pas ; `None` : trace simple (variante 1).
+/// 0x4a99a: hit trail. `Some(n)`: trail of hit no. `n` (variant 0), except with weapons 0x10 to 0x13 which
+/// leave none; `None`: simple trail (variant 1).
 pub fn slash(g: &mut Ctx, p: Player, numbered: Option<u8>) {
     cov!();
     match numbered {
@@ -143,33 +144,33 @@ pub fn slash(g: &mut Ctx, p: Player, numbered: Option<u8>) {
     }
 }
 
-/// 0x4a860 : sang du tourbillon du combattant.
+/// 0x4a860: blood of the fighter's whirlwind.
 pub fn blood(g: &mut Ctx, p: Player) {
     cov!();
     let step = step_of(g, p);
     effect(g, p, kind::BLOOD, None, |g, o| o.set_u8(g.b, 0x5c, step));
 }
 
-/// 0x4ab48 : soin d'un allié (prière du clerc), numéro de prière `n`.
+/// 0x4ab48: healing of an ally (cleric's prayer), prayer number `n`.
 pub fn cure(g: &mut Ctx, p: Player, n: u8) {
     cov!();
     effect(g, p, kind::CURE, None, |g, o| o.set_u8(g.b, field::PARAM, n));
 }
 
-/// 0x4ab64 : soin de la potion (variante 2).
+/// 0x4ab64: potion healing (variant 2).
 pub fn potion(g: &mut Ctx, p: Player) {
     cov!();
     effect(g, p, kind::CURE, Some(2), |_, _| {});
 }
 
-/// 0x4aeb2 : lumière sacrée du clerc.
+/// 0x4aeb2: cleric's holy light.
 pub fn holy_light(g: &mut Ctx, p: Player) {
     cov!();
     let step = step_of(g, p);
     effect(g, p, kind::HOLY_LIGHT, None, |g, o| o.set_u8(g.b, 0x56, step));
 }
 
-/// 0x4b5ac : rayon. `aimed` faux : deux rayons (paramètre 0 et 1) ; vrai : un seul, dirigé (variante 1).
+/// 0x4b5ac: ray. `aimed` false: two rays (parameter 0 and 1); true: a single aimed one (variant 1).
 pub fn beam(g: &mut Ctx, p: Player, aimed: bool) {
     cov!();
     if aimed {
@@ -188,14 +189,15 @@ pub fn beam(g: &mut Ctx, p: Player, aimed: bool) {
     }
 }
 
-/// 0x4c19a : bénédiction, variante `v`.
+/// 0x4c19a: blessing, variant `v`.
 pub fn blessing(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     effect(g, p, kind::BLESSING, Some(v), |_, _| {});
 }
 
-/// 0x4c26c : renvoi de monstres. Sans monstre visé (`None`) : un seul effet ; sinon quatre (paramètres 3 à 0)
-/// qui suivent le monstre `foe`.
+/// 0x4c26c: turning away of monsters. Without a targeted monster (`None`): a single effect; otherwise four
+/// (parameters 3 to 0)
+/// that follow the monster `foe`.
 pub fn banish(g: &mut Ctx, p: Player, foe: Option<u32>) {
     cov!();
     let Some(foe) = foe else {
@@ -213,7 +215,7 @@ pub fn banish(g: &mut Ctx, p: Player, foe: Option<u32>) {
     }
 }
 
-/// 0x4c58e : traînée de l'arme (armes 0x10 à 0x13), variante `v` ; le paramètre est le numéro de l'arme.
+/// 0x4c58e: weapon trail (weapons 0x10 to 0x13), variant `v`; the parameter is the weapon number.
 pub fn weapon_trail(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_A).wrapping_sub(0x10);
@@ -223,7 +225,7 @@ pub fn weapon_trail(g: &mut Ctx, p: Player, v: u8) {
     effect(g, p, kind::WEAPON_TRAIL, Some(v), |g, o| o.set_u8(g.b, field::PARAM, weapon));
 }
 
-/// 0x4dcda : averse de sorts, côté `side`.
+/// 0x4dcda: spell downpour, side `side`.
 pub fn shower(g: &mut Ctx, p: Player, side: u8) {
     cov!();
     let step = step_of(g, p);
@@ -233,20 +235,20 @@ pub fn shower(g: &mut Ctx, p: Player, side: u8) {
     });
 }
 
-/// 0x4e6a8 : aura de prière, variante `v`.
+/// 0x4e6a8: prayer aura, variant `v`.
 pub fn aura(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     let step = step_of(g, p);
     effect(g, p, kind::AURA, Some(v), |g, o| o.set_u8(g.b, 0x59, step));
 }
 
-/// 0x4f004 : cible de la foudre, variante `v`. Renvoie l'effet créé (ou rien si le pool est plein).
+/// 0x4f004: lightning target, variant `v`. Returns the created effect (or nothing if the pool is full).
 pub fn lightning_target(g: &mut Ctx, p: Player, v: u8) -> Option<Obj> {
     cov!();
     effect(g, p, kind::LIGHTNING_TARGET, Some(v), |_, _| {})
 }
 
-/// 0x4f272 : essaim de `count` objets, tant qu'il en reste dans la réserve de la scène.
+/// 0x4f272: swarm of `count` objects, as long as some remain in the scene's reserve.
 pub fn swarm(g: &mut Ctx, p: Player, count: u32) {
     cov!();
     const RESERVE: u32 = 0x5fc0;
@@ -265,7 +267,7 @@ pub fn swarm(g: &mut Ctx, p: Player, count: u32) {
     }
 }
 
-/// 0x4fbde : effet du bond (variante `v`), sauf avec les armes 0x10 à 0x12.
+/// 0x4fbde: leap effect (variant `v`), except with weapons 0x10 to 0x12.
 pub fn leap(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     if matches!(p.u8(g, Player::WEAPON_A), 0x10..=0x12) {
@@ -275,33 +277,33 @@ pub fn leap(g: &mut Ctx, p: Player, v: u8) {
     effect(g, p, kind::LEAP, Some(v), |g, o| o.set_u8(g.b, 0x5c, step));
 }
 
-/// 0x4fd2c : échange d'équipement, variante `v`.
+/// 0x4fd2c: equipment swap, variant `v`.
 pub fn swap(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     effect(g, p, kind::SWAP, Some(v), |_, _| {});
 }
 
-/// 0x4fe18 : longue glissade du nain ; l'objet garde la sous-action en cours.
+/// 0x4fe18: dwarf's long slide; the object keeps the current sub-action.
 pub fn dash(g: &mut Ctx, p: Player) {
     cov!();
     let sub = p.u8(g, Player::SUBACTION);
     effect(g, p, kind::DASH, None, |g, o| o.set_u8(g.b, 0x5c, sub));
 }
 
-/// 0x50324 : cible du mur ; la réserve de murs de la scène (`A5 - 0x5fbe`) compte un de plus.
+/// 0x50324: wall target; the scene's wall reserve (`A5 - 0x5fbe`) counts one more.
 pub fn wall_target(g: &mut Ctx, p: Player) -> Option<Obj> {
     cov!();
     let scene = ram::SCENE.get(g.b);
     let o = effect(g, p, kind::WALL_TARGET, None, |g, o| o.set_u8(g.b, field::SCENE, scene))?;
     let walls = A5.wrapping_sub(0x5fbe);
     let old = rd8(g.b, walls);
-    // addq.b #1 : les drapeaux de cette addition sont ceux que testent les appelants
+    // addq.b #1: the flags of this addition are those the callers test
     let new = g.c.addsub(false, 1, old as u32, false, Size::Byte, false);
     wr8(g.b, walls, new as u8);
     Some(o)
 }
 
-/// 0x4cdd0 : éclair sur la cible `target`, à sa position, 0x40 au-dessus.
+/// 0x4cdd0: bolt on the target `target`, at its position, 0x40 above.
 pub fn lightning(g: &mut Ctx, p: Player, target: u32) {
     cov!();
     let step = step_of(g, p);
@@ -318,7 +320,7 @@ pub fn lightning(g: &mut Ctx, p: Player, target: u32) {
     o.set_u8(g.b, 0x5d, step);
 }
 
-/// 0x4cd8e : éclair de la tempête, à la position du joueur, 0x48 plus haut et juste devant lui.
+/// 0x4cd8e: storm bolt, at the player's position, 0x48 higher and just in front of them.
 pub fn flare(g: &mut Ctx, p: Player) {
     cov!();
     let step = step_of(g, p);
@@ -337,7 +339,7 @@ pub fn flare(g: &mut Ctx, p: Player) {
     o.set_u8(g.b, 0x5d, step);
 }
 
-/// 0x4ccac : créature invoquée, tournée comme le joueur.
+/// 0x4ccac: summoned creature, turned like the player.
 pub fn summon(g: &mut Ctx, p: Player) {
     cov!();
     let Some(o) = create(g, p, &pools::PEFF, kind::SUMMON) else { return };
@@ -346,40 +348,40 @@ pub fn summon(g: &mut Ctx, p: Player) {
     link(g, o, p);
 }
 
-/// 0x4d3c6 : portail, variante `v`.
+/// 0x4d3c6: portal, variant `v`.
 pub fn portal(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     effect(g, p, kind::PORTAL, Some(v), |_, _| {});
 }
 
-// ---- effets des magies lancées ---------------------------------------------------------------------
+// ---- effects of the cast spells ---------------------------------------------------------------------
 
-/// 0x4e2f4 : anneau (magie 16), variante `v` ; l'objet garde le pas de l'action.
+/// 0x4e2f4: ring (spell 16), variant `v`; the object keeps the action step.
 pub fn ring(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     let step = step_of(g, p);
     effect(g, p, kind::RING, Some(v), |g, o| o.set_u8(g.b, 0x5b, step));
 }
 
-/// 0x4b196 : rayon (magie 17), variante `v`.
+/// 0x4b196: ray (spell 17), variant `v`.
 pub fn beam_cast(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     effect(g, p, kind::BEAM_CAST, Some(v), |g, o| o.set_u8(g.b, field::PARAM, 0));
 }
 
-/// 0x4ec66 : tempête (magie 18), variante `v`.
+/// 0x4ec66: storm (spell 18), variant `v`.
 pub fn storm(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     effect(g, p, kind::STORM, Some(v), |_, _| {});
 }
 
-/// 0x5012e : météores (magie 20).
+/// 0x5012e: meteors (spell 20).
 pub fn meteors(g: &mut Ctx, p: Player) {
     cov!();
     effect(g, p, kind::METEORS, None, |_, _| {});
 }
 
-/// 0x4bb68 : gel (magie 15), colonnes de glace : quatre effets (paramètres 0 à 3, décalages 1, 9, 17, 25).
+/// 0x4bb68: freeze (spell 15), ice columns: four effects (parameters 0 to 3, offsets 1, 9, 17, 25).
 pub fn ice_columns(g: &mut Ctx, p: Player) {
     cov!();
     for n in 0..4u8 {
@@ -393,7 +395,8 @@ pub fn ice_columns(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Le gel (magie 15, une partie) : sol gelé, colonnes, brume et éclats, créés l'un après l'autre même si l'un échoue.
+/// The freeze (spell 15, one part): frozen ground, columns, mist and shards, created one after the other even if one
+/// fails.
 pub fn ice_spell(g: &mut Ctx, p: Player) {
     cov!();
     ice_ground(g, p);
@@ -402,13 +405,13 @@ pub fn ice_spell(g: &mut Ctx, p: Player) {
     ice_shards(g, p);
 }
 
-/// 0x4bbbe : gel, brume de glace (variante 2).
+/// 0x4bbbe: freeze, ice mist (variant 2).
 pub fn ice_mist(g: &mut Ctx, p: Player) {
     cov!();
     effect(g, p, kind::ICE, Some(2), |_, _| {});
 }
 
-/// 0x4bbf6 : gel, six éclats (paramètres 0, 2... 10) qui naissent à la position du lanceur, un pixel plus bas.
+/// 0x4bbf6: freeze, six shards (parameters 0, 2... 10) born at the caster's position, one pixel lower.
 pub fn ice_shards(g: &mut Ctx, p: Player) {
     cov!();
     let facing = p.u8(g, Player::FACING);
@@ -426,16 +429,16 @@ pub fn ice_shards(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x4bc42 : gel, dernier effet (variante 5, garde le pas de l'action).
+/// 0x4bc42: freeze, last effect (variant 5, keeps the action step).
 pub fn ice_crown(g: &mut Ctx, p: Player) {
     cov!();
     let step = step_of(g, p);
     effect(g, p, kind::ICE, Some(5), |g, o| o.set_u8(g.b, 0x56, step));
 }
 
-// ---- créateurs de tirs joueur ---------------------------------------------------------------------
+// ---- player shot creators ---------------------------------------------------------------------
 
-/// Les huit tirs d'objets lancés (attaque spéciale, numéros 0 à 8 sauf 3), dans l'ordre de leurs adresses d'origine :
+/// The eight thrown-item shots (special attack, numbers 0 to 8 except 3), in the order of their original addresses:
 /// 0x51d02, 0x51d54, 0x51f6a, 0x51fb6, 0x52002, 0x52204, 0x5308c, 0x52394.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Thrown {
@@ -449,9 +452,9 @@ pub enum Thrown {
     H,
 }
 
-/// Description d'un tir lancé : genre, puissances (contre les ennemis ordinaires et contre les boss), vitesse horizontale
-/// de départ dans le sens du regard (les tirs F, G et H n'en ont pas : leur gestionnaire les place), le tir copie
-/// l'orientation du lanceur ou (A et B) choisit une direction d'animation.
+/// Description of a thrown shot: kind, powers (against ordinary enemies and against bosses), initial horizontal speed
+/// in the facing direction (shots F, G and H have none: their handler places them), the shot copies
+/// the caster's orientation or (A and B) chooses an animation direction.
 struct Shot {
     kind: u8,
     power: (u8, u8),
@@ -475,7 +478,7 @@ impl Thrown {
     }
 }
 
-/// 0x51d02 à 0x5308c : tir d'un objet lancé. Renvoie faux si le pool est plein (D0 = 0 et Z levé comme l'original).
+/// 0x51d02 to 0x5308c: shot of a thrown item. Returns false if the pool is full (D0 = 0 and Z set as in the original).
 pub fn thrown(g: &mut Ctx, p: Player, which: Thrown) -> bool {
     cov!();
     let shot = which.shot();
@@ -499,7 +502,7 @@ pub fn thrown(g: &mut Ctx, p: Player, which: Thrown) -> bool {
     o.set_u16(g.b, Obj::VX, speed);
     o.set_u16(g.b, Obj::AX, 0);
     o.set_u32(g.b, Obj::VZ, 0);
-    // les tirs A et B choisissent leur direction d'animation (2 vers la droite, 6 vers la gauche)
+    // shots A and B choose their animation direction (2 to the right, 6 to the left)
     let directional = !shot.copies_facing;
     if directional {
         o.set_u8(g.b, Obj::SPEED_INDEX, 2);
@@ -515,8 +518,8 @@ pub fn thrown(g: &mut Ctx, p: Player, which: Thrown) -> bool {
     true
 }
 
-/// Baguettes du magicien : réserve de la baguette (`+0x18b..+0x18d`), son compteur d'objets en vie (mot de la RAM) et le
-/// numéro d'objet SET qu'affiche l'interface quand la réserve tombe à 5.
+/// Magic-user wands: wand reserve (`+0x18b..+0x18d`), its counter of living objects (RAM word) and the
+/// SET object number the interface displays when the reserve drops to 5.
 struct Rod {
     counter: u32,
     kind: u8,
@@ -528,7 +531,7 @@ const ROD_FLAME: Rod = Rod { counter: 0xff_2046, kind: 0xe, reserve: 0x18c, inte
 const ROD_STAR: Rod = Rod { counter: 0xff_204a, kind: 0x10, reserve: 0x18d, interface: 0xd };
 const ROD_BALL: Rod = Rod { counter: 0xff_2048, kind: 0xf, reserve: 0x18b, interface: 0xc };
 
-/// Fin commune des baguettes (0x533de) : une charge de moins, et à 5 l'interface est avertie (0xcc352, D0).
+/// Common end of the wands (0x533de): one charge less, and at 5 the interface is notified (0xcc352, D0).
 fn rod_used(g: &mut Ctx, p: Player, rod: &Rod) {
     cov!();
     let left = p.u8(g, rod.reserve).wrapping_sub(1);
@@ -539,9 +542,9 @@ fn rod_used(g: &mut Ctx, p: Player, rod: &Rod) {
     }
 }
 
-/// 0x5336a (flammes, genre 0xe) et 0x535f2 (étoiles, genre 0x10) : une rangée de tirs devant le magicien, tant qu'aucune
-/// rangée précédente n'est en vie. Le nombre de tirs vient du niveau (octets à `counts`), chacun 0x28 pixels plus loin
-/// que le précédent, avec sa variante et un retard (`+0x5c`) croissants. Le pool plein arrête la rangée.
+/// 0x5336a (flames, kind 0xe) and 0x535f2 (stars, kind 0x10): a row of shots in front of the magic-user, as long as no
+/// previous row is alive. The number of shots comes from the level (bytes at `counts`), each 0x28 pixels further
+/// than the previous one, with its variant and a delay (`+0x5c`) increasing. A full pool stops the row.
 fn rod_row(g: &mut Ctx, p: Player, rod: &Rod, first_offset: u16, counts: u32) {
     cov!();
     if rd16(g.b, rod.counter) != 0 {
@@ -551,7 +554,7 @@ fn rod_row(g: &mut Ctx, p: Player, rod: &Rod, first_offset: u16, counts: u32) {
     let (mut variant, mut delay) = (0u8, 1u8);
     let mut offset = if forward { first_offset } else { first_offset.wrapping_neg() };
     let level = p.u8(g, 0x10c) as u32;
-    // `subq.w #1` sur un compte nul donnerait 65 536 tours : le pool plein les arrête
+    // `subq.w #1` on a zero count would give 65,536 iterations: the full pool stops them
     let mut left = (g.prog8(counts + level) as u16).wrapping_sub(1);
     loop {
         let Some(o) = create(g, p, &pools::PSHL, rod.kind) else { break };
@@ -575,8 +578,8 @@ fn rod_row(g: &mut Ctx, p: Player, rod: &Rod, first_offset: u16, counts: u32) {
     rod_used(g, p, rod);
 }
 
-/// 0x53478 : boule de la baguette (genre 0xf) : au plus autant en vie que l'indique le niveau (octets à 0x534b8). Un échec
-/// d'allocation ne consomme pas de charge.
+/// 0x53478: wand ball (kind 0xf): at most as many alive as the level indicates (bytes at 0x534b8). An allocation
+/// failure does not consume a charge.
 fn rod_ball(g: &mut Ctx, p: Player) {
     cov!();
     let level = p.u8(g, 0x10c) as u32;
@@ -592,14 +595,15 @@ fn rod_ball(g: &mut Ctx, p: Player) {
     rod_used(g, p, &ROD_BALL);
 }
 
-/// 0x54522 : boule de feu (magie 14), tir de genre 0x16.
+/// 0x54522: fireball (spell 14), shot of kind 0x16.
 pub fn fireball(g: &mut Ctx, p: Player) {
     cov!();
     let Some(o) = create(g, p, &pools::PSHL, kind::FIREBALL) else { return };
     link(g, o, p);
 }
 
-/// 0x52b54 : gel, sol gelé (magie 15) : deux tirs de genre 7 (variantes 0 et 1). Renvoie faux si le pool est plein.
+/// 0x52b54: freeze, frozen ground (spell 15): two shots of kind 7 (variants 0 and 1). Returns false if the pool is
+/// full.
 pub fn ice_ground(g: &mut Ctx, p: Player) -> bool {
     cov!();
     for v in 0..2 {
@@ -614,7 +618,7 @@ pub fn ice_ground(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// 0x54426 : couteau lancé (tir de genre 0x15, puissances 10 et 5). Renvoie faux si le pool est plein.
+/// 0x54426: thrown knife (shot of kind 0x15, powers 10 and 5). Returns false if the pool is full.
 pub fn knife(g: &mut Ctx, p: Player) -> bool {
     cov!();
     let Some(o) = create(g, p, &pools::PSHL, kind::KNIFE) else {
@@ -628,7 +632,7 @@ pub fn knife(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// 0x52e20 : six ombres du coup de pied arrière (tirs de genre 8, variantes 5 à 0).
+/// 0x52e20: six shadows of the backward kick (shots of kind 8, variants 5 to 0).
 pub fn shadows(g: &mut Ctx, p: Player) {
     cov!();
     for v in (0..6).rev() {
@@ -638,7 +642,7 @@ pub fn shadows(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Ombre du coup de pied sauté (tir de genre 8, paramètre 2), tel que le crée 0x49212 du voleur.
+/// Shadow of the jumping kick (shot of kind 8, parameter 2), as created by the thief's 0x49212.
 pub fn shadow(g: &mut Ctx, p: Player) {
     cov!();
     let Some(o) = create(g, p, &pools::PSHL, kind::SHADOW) else { return };
@@ -646,7 +650,7 @@ pub fn shadow(g: &mut Ctx, p: Player) {
     link(g, o, p);
 }
 
-/// 0x53918 : la sorcière, cinq tirs (paramètres 0 à 4) ; l'octet `+0x2d` de chacun vient de la table 0x5394e.
+/// 0x53918: the witch, five shots (parameters 0 to 4); the byte `+0x2d` of each comes from the table 0x5394e.
 pub fn witch(g: &mut Ctx, p: Player) {
     cov!();
     const SLOTS: u32 = 0x5394e;
@@ -661,8 +665,8 @@ pub fn witch(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x53954 (variante 1) et 0x539e4 (variante 4) : coups de la sorcière ; leurs puissances (contre les ennemis
-/// ordinaires et contre les boss) dépendent du niveau du joueur (`+0x10c`).
+/// 0x53954 (variant 1) and 0x539e4 (variant 4): witch's hits; their powers (against ordinary enemies
+/// and against bosses) depend on the player's level (`+0x10c`).
 pub fn witch_strike(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     const POWER: u32 = 0x10_41f2;
@@ -676,16 +680,17 @@ pub fn witch_strike(g: &mut Ctx, p: Player, v: u8) {
     o.set_u8(g.b, 0x46, boss);
 }
 
-// ---- créateurs sans native jusqu'ici (atteignables, jamais exercés par les scénarios) --------------------
+// ---- creators without a native until now (reachable, never exercised by the scenarios) --------------------
 
-/// 0x4fefe : l'arme maudite qui s'échappe des mains (`checks::item_curse`), avec la sous-action en cours (`+0x5c`).
+/// 0x4fefe: the cursed weapon that escapes from the hands (`checks::item_curse`), with the current sub-action
+/// (`+0x5c`).
 pub fn cursed_weapon(g: &mut Ctx, p: Player) {
     cov!();
     let sub = p.u8(g, Player::SUBACTION);
     effect(g, p, kind::CURSED_WEAPON, None, |g, o| o.set_u8(g.b, 0x5c, sub));
 }
 
-/// Recopie l'orientation et la position du joueur dans l'éclat, un peu devant lui (profondeur + 1).
+/// Copies the player's orientation and position into the shard, a bit in front of them (depth + 1).
 fn shard_place(g: &mut Ctx, p: Player, o: Obj) {
     let facing = p.u8(g, Player::FACING);
     o.set_u8(g.b, Player::FACING, facing);
@@ -696,9 +701,9 @@ fn shard_place(g: &mut Ctx, p: Player, o: Obj) {
     o.set_u32(g.b, Obj::Y, y);
 }
 
-/// 0x5009e : éclats du joueur mourant (`effects::dying_countdown`) : le premier reprend le cadre et la palette du
-/// joueur (`+0x34`, `+0x3c`, `+0x3f`) ; un second (variante 1), qui retient le joueur (`+0x42`), si `+0x42` est non
-/// nul. Rien sans `+0x68`, ni pendant un scénario.
+/// 0x5009e: shards of the dying player (`effects::dying_countdown`): the first takes the frame and palette of the
+/// player (`+0x34`, `+0x3c`, `+0x3f`); a second (variant 1), which holds the player (`+0x42`), if `+0x42` is
+/// non-zero. Nothing without `+0x68`, nor during a scenario.
 pub fn dying_shards(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, 0x68) == 0 || ram::INPUT_RAW.get(g.b) != 0 {
@@ -721,7 +726,7 @@ pub fn dying_shards(g: &mut Ctx, p: Player) {
     o.set_u16(g.b, 0x42, p.0 as u16);
 }
 
-/// 0x51aa4 : nuée de l'orage (genre 0x2e), en deux moitiés : la seconde (variante 1) tournée vers la gauche.
+/// 0x51aa4: storm swarm (kind 0x2e), in two halves: the second (variant 1) turned to the left.
 pub fn storm_cloud(g: &mut Ctx, p: Player) {
     cov!();
     if create(g, p, &pools::PEFF, kind::STORM_CLOUD).is_none() {
@@ -732,8 +737,8 @@ pub fn storm_cloud(g: &mut Ctx, p: Player) {
     o.set_u8(g.b, Player::FACING, 0x20);
 }
 
-/// 0x51872 : lueur du portail (genre 0x2d) au-dessus du joueur (0x48 plus haut, un peu devant), avec le pas de
-/// l'action (`+0x5d`).
+/// 0x51872: portal glow (kind 0x2d) above the player (0x48 higher, a bit in front), with the action
+/// step (`+0x5d`).
 pub fn portal_glow(g: &mut Ctx, p: Player) {
     cov!();
     let Some(o) = create(g, p, &pools::PEFF, kind::PORTAL_GLOW) else { return };
@@ -752,8 +757,8 @@ pub fn portal_glow(g: &mut Ctx, p: Player) {
     o.set_u8(g.b, 0x5d, step);
 }
 
-/// 0x4cfee : quatre étincelles du portail (genre 0x13, variante 1, numéros 3 à 0 en `+0x2f`), puis l'écran prend la
-/// couleur de l'éclair (0x1ac68), même si le pool est plein.
+/// 0x4cfee: four portal sparks (kind 0x13, variant 1, numbers 3 to 0 at `+0x2f`), then the screen takes the
+/// bolt color (0x1ac68), even if the pool is full.
 pub fn portal_sparks(g: &mut Ctx, p: Player) {
     cov!();
     for n in (0..=3u8).rev() {
@@ -766,29 +771,29 @@ pub fn portal_sparks(g: &mut Ctx, p: Player) {
     crate::palette::set_flash_color(g.b, crate::palette::FLASH_COLOR_RED);
 }
 
-/// 0x4d020 : effet du sort d'orage lancé vers la gauche (genre 0x14, gestionnaire 0x4d08c), lié au joueur.
+/// 0x4d020: effect of the storm spell cast to the left (kind 0x14, handler 0x4d08c), linked to the player.
 pub fn storm_spell(g: &mut Ctx, p: Player) {
     cov!();
     effect(g, p, kind::STORM_SPELL, None, |_, _| {});
 }
 
-/// 0x4d660 : lueur de la pluie (genre 0x17), variante `v` (0 : préparation, 1 : lancer), avec le pas de l'action
-/// du joueur (`+0x5d`).
+/// 0x4d660: glow of the rain (kind 0x17), variant `v` (0: preparation, 1: cast), with the action step
+/// of the player (`+0x5d`).
 pub fn rain_glow(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     let step = step_of(g, p);
     effect(g, p, kind::RAIN_GLOW, Some(v), |g, o| o.set_u8(g.b, 0x5d, step));
 }
 
-/// 0x4d2c0 : étincelle du mur de feu (genre 0x15), variante `v` (0 : préparation, 1 : lancer).
+/// 0x4d2c0: spark of the wall of fire (kind 0x15), variant `v` (0: preparation, 1: cast).
 pub fn wall_spark(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     effect(g, p, kind::WALL_SPARK, Some(v), |_, _| {});
 }
 
-/// 0x4dfe2 : foudre de la vague (genre 0x1a) avec le pas de l'action du joueur (`+0x59`). `columns` faux : la
-/// colonne (variante laissée par l'allocation), puis le mot `+0x12` du joueur passe à 0x8000 si elle a pu être
-/// créée ; vrai : deux effets de variante 1 (paramètres 1 puis 0).
+/// 0x4dfe2: wave lightning (kind 0x1a) with the player's action step (`+0x59`). `columns` false: the
+/// column (variant left by the allocation), then the player's word `+0x12` becomes 0x8000 if it could be
+/// created; true: two effects of variant 1 (parameters 1 then 0).
 pub fn wave_bolt(g: &mut Ctx, p: Player, columns: bool) {
     cov!();
     let step = step_of(g, p);
@@ -809,27 +814,27 @@ pub fn wave_bolt(g: &mut Ctx, p: Player, columns: bool) {
     }
 }
 
-/// 0x4e4de : lune de l'elfe (genre 0x1c), variante `v` (0, 2 et 3 : les trois lunes posées ; 1 : la frappe).
+/// 0x4e4de: elf's moon (kind 0x1c), variant `v` (0, 2 and 3: the three placed moons; 1: the strike).
 pub fn moon(g: &mut Ctx, p: Player, v: u8) {
     cov!();
     effect(g, p, kind::MOON, Some(v), |_, _| {});
 }
 
-/// 0x4e782 : second effet de la lune de l'elfe (genre 0x1e).
+/// 0x4e782: second effect of the elf's moon (kind 0x1e).
 pub fn moon_b(g: &mut Ctx, p: Player) {
     cov!();
     effect(g, p, kind::MOON_B, None, |_, _| {});
 }
 
-/// 0x4d064 : éclat du portail (genre 0x14, variante 1) numéroté `n` (`+0x5e`). Vrai s'il a pu être créé (D0 = 0).
+/// 0x4d064: portal shard (kind 0x14, variant 1) numbered `n` (`+0x5e`). True if it could be created (D0 = 0).
 pub fn portal_burst(g: &mut Ctx, p: Player, n: u8) -> bool {
     cov!();
     effect(g, p, kind::PORTAL_BURST, Some(1), |g, o| o.set_u8(g.b, 0x5e, n)).is_some()
 }
 
-/// 0x54274 : pluie de traits (tirs PSHL de genre 0x14, variantes 0, 1, 2...) : un trait tous les 0x40 pixels, à
-/// partir de 0x80 pixels derrière le joueur, jusqu'au bord de l'écran devant lui (bord gauche de la caméra - 0x40,
-/// ou + 0x1c0 en regardant à gauche). Les positions ne sont pas écrites : seul le nombre de traits en dépend.
+/// 0x54274: rain of bolts (PSHL shots of kind 0x14, variants 0, 1, 2...): one bolt every 0x40 pixels, from
+/// 0x80 pixels behind the player, up to the screen edge in front of them (left camera edge - 0x40,
+/// or + 0x1c0 when facing left). The positions are not written: only the number of bolts depends on them.
 pub fn rain(g: &mut Ctx, p: Player) {
     cov!();
     let left = p.faces_left(g);
@@ -854,15 +859,15 @@ pub fn rain(g: &mut Ctx, p: Player) {
 
 // ---- natives --------------------------------------------------------------------------------------
 
-/// Exécute un créateur sur l'état des registres du 68000 (A0 = le joueur) puis rend la main.
+/// Runs a creator on the 68000 register state (A0 = the player) then returns control.
 fn run(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, f: impl FnOnce(&mut Ctx, Player)) {
     let p = Player(c.a[0]);
     f(&mut Ctx::new(c, b), p);
     rts(c, b);
 }
 
-/// Déclare la native d'un créateur à son adresse d'origine ; `$body` lit ses paramètres dans les
-/// registres (`g.c.d[0]`...).
+/// Declares the native of a creator at its original address; `$body` reads its parameters from the
+/// registers (`g.c.d[0]`...).
 macro_rules! creator {
     ($name:ident, $entry:expr, $label:expr, $outputs:expr, |$g:ident, $p:ident| $body:expr) => {
         pub const $name: Native = Native {
@@ -1002,7 +1007,7 @@ creator!(PORTAL_SPARKS, 0x4cfee, "spawn_portal_sparks", 0, |g, p| portal_sparks(
 creator!(PORTAL_BURST, 0x4d064, "spawn_portal_burst", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
     let n = g.c.d[0] as u8;
     let made = portal_burst(g, p, n);
-    // `moveq #0` si l'éclat est créé, `moveq #1` sinon
+    // `moveq #0` if the shard is created, `moveq #1` otherwise
     g.c.d[0] = (!made) as u32;
     g.c.flags_logic(g.c.d[0], Size::Long);
 });

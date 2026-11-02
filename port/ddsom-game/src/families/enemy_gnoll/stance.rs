@@ -1,5 +1,4 @@
-//! Type 13, sous-état 2 (debout : approche, demi-tour, attente) et sous-état 10 (promenade tant qu'aucun joueur
-//! n'est en vie).
+//! Type 13, substate 2 (standing: approach, turn-around, wait) and substate 10 (stroll as long as no player is alive).
 
 use crate::families::cx::Bench;
 use super::*;
@@ -7,7 +6,7 @@ use crate::objects::Current;
 use crate::objects::Obj;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    // la variante 10 est saisie dès qu'elle se met debout
+    // variant 10 is grabbed as soon as it stands up
     if x.u8(Obj::VARIANT) == 0xa || grabbed(x) {
         x.set16(f::STATE, 0x0408);
         x.set16(f::SUB2, 0);
@@ -24,7 +23,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6affa : (re)commence la marche vers la cible.
+/// 0x6affa: (re)starts the walk toward the target.
 pub(super) fn approach_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(LOOK_PREV, 0xf0);
@@ -32,7 +31,7 @@ pub(super) fn approach_start<R: Bench>(x: &mut Cx<'_, R>) {
     approach_restart(x);
 }
 
-/// 0x6b00a : suite de `approach_start` sans avancer l'étape (appelé directement après un coup).
+/// 0x6b00a: continuation of `approach_start` without advancing the step (called directly after an attack).
 pub(super) fn approach_restart<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_speed(x, 0x12);
@@ -42,7 +41,7 @@ pub(super) fn approach_restart<R: Bench>(x: &mut Cx<'_, R>) {
     lib::draw_6b(x);
 }
 
-/// +6 = 0 : marche vers le joueur ; choisit un geste dès qu'il est à portée.
+/// +6 = 0: walks toward the player; chooses a move as soon as it is in range.
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         return approach_start(x);
@@ -65,7 +64,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
     }
-    // joueur au contact : coup immédiat (4 ou 6), au hasard
+    // player in contact: immediate attack (4 or 6), at random
     if lib::target_in_box(x, -0x20, 0x20, 0xc) {
         x.set16(f::STATE, 0x0204);
         let r = rand_and(x, 1);
@@ -113,7 +112,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 4 : attente sur place.
+/// +6 = 4: waits in place.
 fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
@@ -128,7 +127,7 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-/// Sous-état 10 : promenade sur place tant qu'aucun joueur n'est en vie, puis retour debout.
+/// Substate 10: strolls in place as long as no player is alive, then back to standing.
 pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);

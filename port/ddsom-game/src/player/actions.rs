@@ -1,13 +1,13 @@
-//! Actions communes du jeu normal (`+4` = 2, `+5` = 0) : immobile, marche, demi-tour, et aiguillage
-//! vers le code des personnages.
+//! Common actions of the normal game (`+4` = 2, `+5` = 0): standing, walking, turning, and dispatch
+//! to the characters' code.
 //!
-//! L'octet `+6` choisit l'action dans la table de gestionnaires 0x35586 (26 actions, toutes
-//! paires) ; l'octet `+7` est le pas de l'action (`0` : premier appel, l'action y prépare son
-//! animation ; les valeurs suivantes sont les pas d'un petit automate). Une action se termine en
-//! rebasculant sur `to_stand` ou en changeant `+4..+7`.
+//! Byte `+6` selects the action in the handler table 0x35586 (26 actions, all
+//! even); byte `+7` is the step of the action (`0`: first call, the action prepares its
+//! animation; the following values are the steps of a small automaton). An action ends by
+//! switching back to `to_stand` or by changing `+4..+7`.
 //!
-//! Les actions 0x0a..0x12 (saut, attaques) sont du code propre au personnage : `characters::run`
-//! lit leur adresse dans une table indexée par `Player::CHARACTER`.
+//! Actions 0x0a..0x12 (jump, attacks) are character-specific code: `characters::run`
+//! reads their address in a table indexed by `Player::CHARACTER`.
 
 use super::characters::{self, Slot};
 use super::moves;
@@ -19,15 +19,15 @@ use crate::mem::wr8;
 
 
 
-/// 0x35620 : animation d'immobilité selon les modes (marche lente, monture, arme).
+/// 0x35620: standing animation depending on the modes (slow walk, mount, weapon).
 pub fn start_stand(g: &mut Ctx, p: Player) {
     cov!();
     let anim = stand_animation(g, p);
     animation::start(g, p, anim);
 }
 
-/// Entrées par adresse de `to_stand` (0x35614, appelée par `aids.rs`) et `start_stand` (0x35620). Les
-/// registres que laissait l'animation (D5, D6, A4) ne sont relus par personne (`DDSOM_POISON=anim`).
+/// Address entries of `to_stand` (0x35614, called by `aids.rs`) and `start_stand` (0x35620). The
+/// registers left by the animation (D5, D6, A4) are read by nobody (`DDSOM_POISON=anim`).
 fn stand_native(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, reset: bool) {
     let p = Player(c.a[0]);
     let mut g = Ctx::new(c, b);
@@ -69,7 +69,7 @@ fn stand_animation(g: &mut Ctx, p: Player) -> u16 {
     anim
 }
 
-/// 0x35614 : retour à l'état immobile. Renvoie vrai (Z = 0 après l'animation).
+/// 0x35614: return to the standing state. Returns true (Z = 0 after the animation).
 pub fn to_stand(g: &mut Ctx, p: Player) -> bool {
     cov!();
     p.set_state(g, state::STAND.0);
@@ -78,7 +78,7 @@ pub fn to_stand(g: &mut Ctx, p: Player) -> bool {
     true
 }
 
-/// 0x3553c : exécute l'action courante puis recale le joueur (décor, limites de l'écran).
+/// 0x3553c: runs the current action then re-snaps the player (scenery, screen limits).
 pub fn act(g: &mut Ctx, p: Player) {
     cov!();
     run_action(g, p);
@@ -96,7 +96,7 @@ pub fn act(g: &mut Ctx, p: Player) {
     clamp_to_screen(g.b, p);
 }
 
-/// Aiguille vers le gestionnaire de l'action (`+6`).
+/// Dispatches to the handler of the action (`+6`).
 fn run_action(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::ACTION) {
@@ -129,8 +129,8 @@ fn run_action(g: &mut Ctx, p: Player) {
         action::NO_TERRAIN_A => moves::exit_scene(g, p),
         action::NO_TERRAIN_C => moves::fall_in(g, p),
         action::SPELL_FIZZLE => moves::spell_fizzle(g, p),
-        // poses rares : l'aiguillage d'origine leur laisse D0 = numéro d'action (octet haut nul), que les routines
-        // qu'elles appellent par adresse peuvent lire
+        // rare poses: the original dispatch leaves them D0 = action number (high byte zero), which the routines
+        // they call by address may read
         0x26 => {
             g.c.d[0] = 0x26;
             moves::curse_drop(g, p)
@@ -143,11 +143,11 @@ fn run_action(g: &mut Ctx, p: Player) {
             g.c.d[0] = 0x30;
             moves::box_recoil(g, p)
         }
-        other => unreachable!("action {other:#x} hors de la table d'origine 0x35586 (26 actions paires)"),
+        other => unreachable!("action {other:#x} outside the original table 0x35586 (26 even actions)"),
     }
 }
 
-/// Au premier pas d'une attaque, le compteur d'aura (`+0x182`) baisse ; à zéro l'aura s'éteint.
+/// At the first step of an attack, the aura counter (`+0x182`) decreases; at zero the aura goes out.
 fn aura_countdown(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 && p.u8(g, Player::AURA) != 0 {
@@ -161,8 +161,8 @@ fn aura_countdown(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x355ba : immobile. Les entrées déclenchent demi-tour, attaque, saut ou marche ; après un
-/// changement d'état l'animation avance quand même d'un pas.
+/// 0x355ba: standing. Inputs trigger turn, attack, jump or walk; after a
+/// state change the animation still advances by one step.
 fn stand(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
@@ -189,7 +189,7 @@ fn stand(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x35652 : bascule marche lente / normale (animation de transition) (h).
+/// 0x35652: toggles slow / normal walk (transition animation) (h).
 fn slow_switch(g: &mut Ctx, p: Player) {
     cov!();
     let entering = p.u8(g, Player::STEP) == 0;
@@ -199,7 +199,7 @@ fn slow_switch(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x3567a : marche.
+/// 0x3567a: walk.
 fn walk(g: &mut Ctx, p: Player) {
     cov!();
     if ram::SLOW_MODE.get(g.b) == 0 && p.class(g) == 4 {
@@ -217,7 +217,7 @@ fn walk(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// 0x356c2 : marche du magicien (arrêt et reprise passent par une animation de transition).
+/// 0x356c2: magic-user walk (stopping and resuming go through a transition animation).
 fn walk_magic_user(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) != 0 {
@@ -250,7 +250,7 @@ fn walk_magic_user(g: &mut Ctx, p: Player) {
     animation::step(g, p);
 }
 
-/// 0x358dc : demi-tour.
+/// 0x358dc: turn.
 fn turn(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
@@ -263,8 +263,8 @@ fn turn(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x36abe : le joueur est saisi (action `GRAB`), trois pas : animation de saisie (0x27, 0x28 en
-/// marche lente), attente du geste de l'agresseur puis libération de l'objet lié (`+0x8c`).
+/// 0x36abe: the player is grabbed (action `GRAB`), three steps: grab animation (0x27, 0x28 in
+/// slow walk), wait for the aggressor's gesture then release of the linked object (`+0x8c`).
 fn grabbed(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -294,6 +294,6 @@ fn grabbed(g: &mut Ctx, p: Player) {
                 to_stand(g, p);
             }
         }
-        v => unreachable!("0x36abe : valeur {v:#x} hors de la table de sauts de l'original"),
+        v => unreachable!("0x36abe : value {v:#x} outside the original jump table"),
     }
 }

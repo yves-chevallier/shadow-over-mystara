@@ -1,14 +1,13 @@
-//! Familles d'objets ITEM (ramassables), BOX (coffres) et EFFCT (effets) : un gestionnaire par type.
+//! Families of ITEM (pickups), BOX (chests) and EFFCT (effects) objects: one handler per type.
 //!
-//! La boucle de dispatch d'une classe (`0x39f34` pour ITEM, `0x39e50` BOX, `0x39cba` EFFCT) appelle,
-//! pour chaque objet actif, le gestionnaire du type de l'objet (`jsr (table + 4 × type)`) avec
-//! `A0` = objet et `D7` = compteur de boucle. Chaque gestionnaire est une petite machine à états
-//! (octets `+4`, `+5`, `+6` de l'objet) ; il rend la main par `rts` en laissant `A0` et `D7` intacts.
+//! The dispatch loop of a class (`0x39f34` for ITEM, `0x39e50` BOX, `0x39cba` EFFCT) calls, for each active object, the
+//! handler of the object's type (`jsr (table + 4 × type)`) with `A0` = object and `D7` = loop counter. Each handler is
+//! a small state machine (bytes `+4`, `+5`, `+6` of the object); it yields with `rts`, leaving `A0` and `D7` intact.
 //!
 //! A native routine replaces a whole handler: the logic is written on a generic [`cx::Cx`] (without registers:
 //! `#[without]`, see `handler!` and `cx::handlers!`).
 //!
-//! Voir `docs/families.md` pour la description de chaque type.
+//! See `docs/families.md` for the description of each type.
 
 pub mod boss_common;
 pub mod boss_0;
@@ -88,7 +87,7 @@ pub mod sobj;
 use crate::objects::Obj;
 use crate::Native;
 
-/// Toutes les routines natives des familles.
+/// All the native routines of the families.
 pub const NATIVES: &[Native] = &[
     items::ITEM_0,
     items::ITEM_1,
@@ -128,7 +127,7 @@ pub const NATIVES: &[Native] = &[
     effects::EFFCT_62,
 ];
 
-/// Routines du jeu appelées par les gestionnaires (adresses d'origine).
+/// Game routines called by the handlers (original addresses).
 pub mod rom {
     pub const IN_ZONE: u32 = 0xfbae;
     pub const OMBRE: u32 = 0x33fe4;
@@ -163,8 +162,8 @@ macro_rules! handler {
 }
 pub(crate) use handler;
 
-/// Routines natives des familles ESHL, SET et SOBJ (voir `docs/families-eshl-set-sobj.md`) : un
-/// gestionnaire par type, écrit sur [`cx::Cx`].
+/// Native routines of the ESHL, SET and SOBJ families (see `docs/families-eshl-set-sobj.md`): one handler per type,
+/// written on [`cx::Cx`].
 pub fn natives() -> impl Iterator<Item = &'static Native> {
     [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, eshl_d::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES, effects_b::NATIVES, effects_c::NATIVES, effects_d::NATIVES, effects_e::NATIVES, effects_f::NATIVES, enemy::NATIVES, enemy_double::NATIVES, enemy_part::NATIVES, enemy_common::NATIVES, enemy_riyakaa::NATIVES, enemy_dbeast::NATIVES, enemy_owlbear::NATIVES, enemy_harpy::NATIVES, enemy_warrior::NATIVES, enemy_skeleton::NATIVES, enemy_elf::NATIVES, enemy_trog::NATIVES, enemy_ghoul::NATIVES, enemy_beetle::NATIVES, enemy_scorpion::NATIVES, enemy_gargoyle::NATIVES, enemy_hellhound::NATIVES, enemy_ogre::NATIVES, enemy_kobold::NATIVES, enemy_goblin::NATIVES, enemy_troll::NATIVES, enemy_gnoll::NATIVES, enemy_bow::NATIVES, enemy_golem::NATIVES, enemy_warmachine::NATIVES, boss_dragon::NATIVES, boss_17::NATIVES, boss_6::NATIVES, boss_10::NATIVES, boss_5::NATIVES, boss_21::NATIVES, boss_19::NATIVES, boss_15::NATIVES, boss_18::NATIVES, boss_4::NATIVES, boss_7::NATIVES, boss_8::NATIVES, boss_11::NATIVES, boss_1::NATIVES, boss_3::NATIVES, boss_9::NATIVES]
         .into_iter()

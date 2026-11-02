@@ -1,20 +1,20 @@
-//! Fuzz différentiel du changement de zone de la porte de sortie (SET 7, 0xcb29c) : les chemins qui cèdent la
-//! main au fondu 0x1460, que `fuzz families` n'atteint pas (il faut tous les joueurs prêts au même moment).
+//! Differential fuzz of the zone change of the exit door (SET 7, 0xcb29c): the paths that cede control
+//! to the fade 0x1460, which `fuzz families` does not reach (all players must be ready at the same time).
 //!
-//!   fuzz_door <roms> <eeprom> <scénario> <chauffe> <essais>
+//!   fuzz_door <roms> <eeprom> <scenario> <warm-up> <trials>
 //!
-//! `DDSOM_PORTE=29` : la porte de passage (SET 29, 0xd8dce) à la place, que les scénarios n'atteignent pas : état 2
-//! avec des joueurs actifs tirés près de la porte (genre de sortie `+0x48` tiré, 0 à 3), ou état 4.
+//! `DDSOM_PORTE=29`: the passage door (SET 29, 0xd8dce) instead, which the scenarios do not reach: state 2
+//! with active players drawn near the door (exit kind `+0x48` drawn, 0 to 3), or state 4.
 //!
-//! Chaque essai part de l'état du jeu après la chauffe, pose une porte de variante tirée, déjà initialisée,
-//! dans l'état 2 avec tous les joueurs prêts (genre de sortie `+0x48` tiré, 0 à 3), ou dans l'état 4 (retour
-//! de zone, champs mémorisés tirés). Le code d'origine s'exécute seul (interpréteur) jusqu'à son retour ou
-//! jusqu'à la première cession du fondu 0x1460 (`jsr 0xa40`) ; la native de même (elle appelle le fondu en Rust,
-//! qui cède : `Unwound`). Les deux mémoires sont comparées (hors table des tâches et piles), avec A0 et D7 du
-//! contexte rangé par la cession, et la suite rangée dans les appels en cours (l'étape de la porte) avec l'adresse
-//! de retour de l'appel d'origine. Puis chacun finit le fondu sans attendre : l'original en revenant aussitôt de
-//! chaque `jsr 0xa40`, la native en exécutant les étapes de la tâche jusqu'au retour du gestionnaire. Les mémoires
-//! finales sont comparées.
+//! Each trial starts from the game state after the warm-up, places a door of drawn variant, already initialised,
+//! in state 2 with all players ready (exit kind `+0x48` drawn, 0 to 3), or in state 4 (return
+//! from zone, remembered fields drawn). The original code runs alone (interpreter) until it returns or
+//! until the first yield of the fade 0x1460 (`jsr 0xa40`); the native likewise (it calls the fade in Rust,
+//! which yields: `Unwound`). Both memories are compared (except the task table and stacks), with A0 and D7 of the
+//! context stored by the yield, and the continuation stored in the pending calls (the door's step) with the
+//! return address of the original call. Then each finishes the fade without waiting: the original by
+//! returning immediately from each `jsr 0xa40`, the native by executing the task's steps until the handler
+//! returns. The final memories are compared.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
@@ -24,14 +24,14 @@ use ddsom_game::mem::{rd32, wr16, wr32, wr8, A5};
 use ddsom_game::tasks::table::{self, Resume, Next};
 use m68k::Cpu;
 
-/// Entrées des deux portes (types SET 7 et 29).
+/// Entries of the two doors (SET types 7 and 29).
 const EXIT: u32 = 0xcb29c;
 const PASSAGE: u32 = 0xd8dce;
 const FADING: u32 = 0x1460;
-/// Enveloppe de cession (`jsr 0xa40`) appelée par chaque pas du fondu.
+/// Yield wrapper (`jsr 0xa40`) called by each step of the fade.
 const CESSION: u32 = 0xa40;
 const SENTINELLE: u32 = 0xfffe;
-/// Table des tâches FF0064 et piles : propres à chaque machine.
+/// Task table FF0064 and stacks: specific to each machine.
 const IGNORED: std::ops::Range<u32> = 0xff_0000..0xff_0e66;
 
 struct Rng(u64);
@@ -48,8 +48,8 @@ impl Rng {
     }
 }
 
-/// Code d'origine seul jusqu'au retour à la sentinelle, ou jusqu'à `stop`. Vrai si `stop` est atteint. Avec
-/// `without_cession`, chaque `jsr 0xa40` revient aussitôt (le fondu se fait sans attendre).
+/// Original code alone until the return to the sentinel, or until `stop`. True if `stop` is reached. With
+/// `without_cession`, each `jsr 0xa40` returns immediately (the fade runs without waiting).
 fn original(c: &mut Cpu, b: &mut Cps2Bus, stop: u32, without_cession: bool) -> Option<bool> {
     for _ in 0..2_000_000 {
         if c.pc == SENTINELLE {
@@ -68,7 +68,7 @@ fn original(c: &mut Cpu, b: &mut Cps2Bus, stop: u32, without_cession: bool) -> O
     None
 }
 
-/// L'étape où reprendra la tâche courante, qui a cédé (SR du mode utilisateur, comme `kernel::launch`).
+/// The step where the current task, which has yielded, will resume (user-mode SR, like `kernel::launch`).
 fn resume(c: &mut Cpu, b: &mut Cps2Bus) -> Option<ddsom_game::tasks::Step> {
     let t = table::table(b);
     let Resume::Step(step) = t.slots[t.current].resume else { return None };
@@ -82,7 +82,7 @@ fn calls(c: &mut Cpu, b: &mut Cps2Bus, address: u32) {
     c.pc = address;
 }
 
-/// Écarts entre les deux mémoires (hors zone ignorée), et entre A0 / D7.
+/// Differences between the two memories (outside the ignored zone), and between A0 / D7.
 fn gaps(c1: &Cpu, b1: &Cps2Bus, c2: &Cpu, b2: &Cps2Bus) -> Vec<String> {
     let mut d = Vec::new();
     ddsom_game::mem::diff_bus(b1, b2, IGNORED, &mut d);
@@ -102,14 +102,14 @@ fn main() {
 fn principal() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, warmup, tests, ..] = &a[..] else {
-        eprintln!("usage : fuzz_door <roms> <eeprom> <scénario> <chauffe> <essais>");
+        eprintln!("usage: fuzz_door <roms> <eeprom> <scenario> <warm-up> <trials>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
     ddsom_game::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
@@ -133,7 +133,7 @@ fn principal() {
         wr8(&mut b, door + 2, kind);
         wr8(&mut b, door + 3, (rng.next() % variants) as u8);
         wr8(&mut b, door + 0x28, 0x10);
-        // initialisation (état 0) par la native, sur la copie : champs de la table des portes
+        // initialisation (state 0) by the native, on the copy: fields of the door table
         c.a[0] = door;
         c.a[5] = A5;
         for (off, v) in [(0x3d, 0), (0x50, 0), (0x42, 0)] {
@@ -161,7 +161,7 @@ fn principal() {
             wr8(&mut b, door + 4, 2);
             wr8(&mut b, door + 0x40, 0);
             wr8(&mut b, door + 0x48, rng.among(&[0, 0, 1, 1, 2, 3]));
-            // joueurs actifs ou non, près de la porte (emprise 0x60 x 0x40) ou un peu au-delà
+            // players active or not, near the door (footprint 0x60 x 0x40) or a bit beyond
             for j in 0..4u32 {
                 let p = 0xff_85de + 0x200 * j;
                 wr8(&mut b, p, rng.among(&[0, 1, 1, 2]));
@@ -182,7 +182,7 @@ fn principal() {
             wr16(&mut b, door + 0x20, 5);
         }
         wr16(&mut b, A5 + 0x52, if rng.next() % 2 == 0 { 0 } else { door as u16 });
-        // quelques objets des autres pools suspendus ou non (réveil, libération)
+        // a few objects of the other pools suspended or not (wake-up, release)
         for pool in ddsom_game::objects::pools::POOLS {
             for i in 0..pool.slots {
                 let o = pool.slot(i).0;
@@ -197,7 +197,7 @@ fn principal() {
         c.d[0] = kind as u32 * 4;
         c.a[1] = entry;
         let (mut c2, mut b2) = (c.clone(), b.clone());
-        // l'original, jusqu'à l'entrée du fondu (adresse de retour au sommet de la pile), puis jusqu'à sa cession
+        // the original, up to the entry of the fade (return address at the top of the stack), then up to its yield
         calls(&mut c2, &mut b2, entry);
         let Some(fading) = original(&mut c2, &mut b2, FADING, false) else {
             abandons += 1;
@@ -208,27 +208,27 @@ fn principal() {
             abandons += 1;
             continue;
         }
-        // la native : le fondu cède la main (`call` s'arrête alors sur une panique), ou elle revient
+        // the native: the fade cedes control (`call` then stops on a panic), or it returns
         let r = catch_unwind(AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entry)));
         let native_fading = match r {
             Ok(()) => false,
-            Err(e) if e.downcast_ref::<String>().is_some_and(|m| m.contains("a cédé la main")) => true,
+            Err(e) if e.downcast_ref::<String>().is_some_and(|m| m.contains("ceded control")) => true,
             Err(_) => {
-                println!("essai {test} : panique de la native");
+                println!("trial {test}: native panicked");
                 seen_gaps += 1;
                 continue;
             }
         };
         summary += 1;
         if fading != native_fading {
-            println!("essai {test} : fondu {fading} (original) / {native_fading} (native)");
+            println!("trial {test}: fade {fading} (original) / {native_fading} (native)");
             seen_gaps += 1;
             continue;
         }
         let step = if fading { resume(&mut c, &mut b) } else { None };
         let d = gaps(&c, &b, &c2, &b2);
         if !d.is_empty() {
-            println!("essai {test} état4={state4} variante {:02x} : avant le fondu {}", ddsom_game::mem::rd8(&mut b2, door + 3), d.join(", "));
+            println!("trial {test} state4={state4} variant {:02x}: before the fade {}", ddsom_game::mem::rd8(&mut b2, door + 3), d.join(", "));
             seen_gaps += 1;
             continue;
         }
@@ -236,14 +236,14 @@ fn principal() {
             continue;
         }
         fadings += 1;
-        // la suite du fondu : l'étape de la porte, à l'adresse de retour de l'appel d'origine
+        // the rest of the fade: the door's step, at the return address of the original call
         let next = table::table(&mut b).frames().top().map(|k| k.next);
         if !matches!(next, Some(Next::Step(e)) if e.address() == ret) {
-            println!("essai {test} : suite {next:x?} au lieu de {ret:06x}");
+            println!("trial {test}: continuation {next:x?} instead of {ret:06x}");
             seen_gaps += 1;
             continue;
         }
-        // fin du fondu sans attendre : chaque pas de la tâche, jusqu'au retour du gestionnaire
+        // end of the fade without waiting: each step of the task, until the handler returns
         let mut step = step;
         let r = catch_unwind(AssertUnwindSafe(|| {
             for _ in 0..64 {
@@ -257,16 +257,16 @@ fn principal() {
             false
         }));
         if r.ok() != Some(true) || original(&mut c2, &mut b2, SENTINELLE, true) != Some(false) {
-            println!("essai {test} : reprise interrompue");
+            println!("trial {test}: resumption interrupted");
             seen_gaps += 1;
             continue;
         }
         let d = gaps(&c, &b, &c2, &b2);
         if !d.is_empty() {
-            println!("essai {test} état4={state4} variante {:02x} : après le fondu {}", ddsom_game::mem::rd8(&mut b2, door + 3), d.join(", "));
+            println!("trial {test} state4={state4} variant {:02x}: after the fade {}", ddsom_game::mem::rd8(&mut b2, door + 3), d.join(", "));
             seen_gaps += 1;
         }
     }
-    println!("{summary} essais comparés, {fadings} avec fondu, {abandons} abandons, {seen_gaps} écarts");
-    println!("{}", if seen_gaps == 0 { "FUZZ OK" } else { "FUZZ ÉCARTS" });
+    println!("{summary} trials compared, {fadings} with fade, {abandons} abandons, {seen_gaps} mismatches");
+    println!("{}", if seen_gaps == 0 { "FUZZ OK" } else { "FUZZ MISMATCHES" });
 }

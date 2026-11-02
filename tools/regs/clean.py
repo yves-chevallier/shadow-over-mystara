@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """After generic.py: handles the register accesses ("no field d/a on type R") in the files whose path
 contains <pattern>: leftovers D2-D5 -> bench (*x.c.dN()), D7 read -> x.compteur(), write-only D0/D1/D6/An -> removed
-(dead register: the function becomes generic, and between handlers only D2-D5 are read back, DDSOM_POISON=sortie).
+(dead register: the function becomes generic, and between handlers only D2-D5 are read back, DDSOM_POISON=exit).
 Prints what is left.   clean.py <port/> <pattern>
 """
 import re, subprocess, sys, json, pathlib

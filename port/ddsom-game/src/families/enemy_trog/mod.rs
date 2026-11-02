@@ -1,20 +1,20 @@
-//! Ennemi « Troglodyte » (ENEMY type 2, 0x59baa). Voir `docs/families/enemy.md`.
+//! "Troglodyte" enemy (ENEMY type 2, 0x59baa). See `docs/families/enemy.md`.
 //!
-//! Charpente commune : `+4` état (0 création, 2 actif, 4 touché, 6 libération), `+5` groupe de
-//! comportements, `+6` et `+7` étapes. En état actif :
+//! Common framework: `+4` state (0 creation, 2 active, 4 hit, 6 release), `+5` group of behaviours, `+6` and `+7`
+//! steps. In the active state:
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `mod` | arrivée selon la variante `+3` |
-//! | 2 | `stance` | debout : marche, demi-tour, attente, choix d'un coup |
-//! | 4 | `attacks` | coups au corps à corps et bonds (`+6` = le coup) |
-//! | 6 | `attacks` | bonds d'esquive et de garde |
-//! | 8 | `attacks` | coups de repli |
-//! | 10 | `stance` | repos : attend qu'un joueur soit en vie |
-//! | état 4 | `hit` | réactions aux coups |
+//! | 0 | `mod` | arrival according to variant `+3` |
+//! | 2 | `stance` | standing: walk, turn-around, wait, choice of an attack |
+//! | 4 | `attacks` | melee attacks and leaps (`+6` = the attack) |
+//! | 6 | `attacks` | dodge and guard leaps |
+//! | 8 | `attacks` | fallback attacks |
+//! | 10 | `stance` | rest: waits for a player to be alive |
+//! | state 4 | `hit` | reactions to hits |
 //!
-//! Animations : 0x15faa0 (mouvements) et 0x15fabe (coups). La série 0 (`+0x2f`) clignote après un
-//! coup encaissé : `flicker` (compteurs `+0xa5..+0xa8`, `+0xaa`, `+0xae`).
+//! Animations: 0x15faa0 (movements) and 0x15fabe (attacks). Series 0 (`+0x2f`) blinks after a hit taken: `flicker`
+//! (counters `+0xa5..+0xa8`, `+0xaa`, `+0xae`).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -25,27 +25,27 @@ mod attacks;
 mod hit;
 mod stance;
 
-/// Champs propres à ce type (les champs communs sont dans `enemy_common::f`).
+/// Fields specific to this type (the common fields are in `enemy_common::f`).
 pub(self) mod g {
-    /// Série : 0 troglodyte (clignote), 1 variante armée.
+    /// Series: 0 troglodyte (blinks), 1 armed variant.
     pub const SERIES: u32 = 0x2f;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
     pub const VULNERABLE: u32 = 0x67;
     pub const POSTURE: u32 = 0x68;
-    /// Compteurs d'IA : délai avant un nouveau choix, attente, marche.
+    /// AI counters: delay before a new choice, wait, walk.
     pub const AI_CHOICE: u32 = 0x6b;
     pub const AI_WAIT: u32 = 0x6e;
     pub const AI_WALK: u32 = 0x71;
     pub const COOLDOWN: u32 = 0x77;
     pub const AI_KIND: u32 = 0x78;
     pub const AI_SHOT: u32 = 0x79;
-    /// Aspect courant et précédent (octet de teinte lu par l'affichage).
+    /// Current and previous look (tint byte read by the display).
     pub const LOOK: u32 = 0xa0;
     pub const LOOK_PREV: u32 = 0xa1;
-    /// Répétitions ou minuterie d'une étape.
+    /// Repetitions or timer of a step.
     pub const REPEAT: u32 = 0xa2;
-    /// Coup à reprendre après une annonce ou un demi-tour.
+    /// Attack to resume after an announcement or a turn-around.
     pub const RESUME: u32 = 0xa3;
     /// Clignotement : phase (`+0xa5`, 0xff = au repos), alternance, attente, compteurs.
     pub const BLINK_PHASE: u32 = 0xa5;
@@ -54,20 +54,20 @@ pub(self) mod g {
     pub const BLINK_COUNT: u32 = 0xa8;
     pub const BLINK_DELAY: u32 = 0xaa;
     pub const BLINK_REST: u32 = 0xae;
-    /// Octet non nul : l'état touché ne dessine pas l'ombre.
+    /// Non-zero byte: the hit state does not draw the shadow.
     pub const NO_SHADOW: u32 = 0xb0;
 }
 
 use g::*;
 use crate::objects::Current;
 
-/// Jeux d'animations : mouvements et coups.
+/// Animation sets: movements and attacks.
 const SET_BODY: u32 = 0x15faa0;
 const SET_STRIKE: u32 = 0x15fabe;
-/// États longs (`+4..+7`).
+/// Long states (`+4..+7`).
 const STANCE: u32 = 0x0202_0000;
 const IDLE: u32 = 0x020a_0000;
-/// Tables de la ROM : coups à choisir par niveau de difficulté (`A5+0x7f92`), 32 octets par niveau.
+/// ROM tables: attacks to choose per difficulty level (`A5+0x7f92`), 32 bytes per level.
 const FALLBACK_MOVES: u32 = 0x5bba6;
 const CLOSE_ATTACKS: u32 = 0x5b074;
 const CLOSE_ATTACKS_ARMED: u32 = 0x5b274;
@@ -75,7 +75,7 @@ const REPEATS_TABLE: u32 = 0x5b4d6;
 const JUMP_MOVES: u32 = 0x5b6f8;
 const BLINK_DELAYS: u32 = 0x5b974;
 const BLINK_TIMES: u32 = 0x5b96c;
-/// Vitesses de marche par série (2 mots par série).
+/// Walking speeds per series (2 words per series).
 const WALK_SPEEDS: u32 = 0x5af64;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -106,7 +106,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
-/// Direction de marche selon l'orientation : `flipped` si `+0x2c` est non nul, `otherwise` sinon.
+/// Walking direction according to the orientation: `flipped` if `+0x2c` is non-zero, `otherwise` if not.
 fn set_angle<R: Bench>(x: &mut Cx<'_, R>, flipped: u8, otherwise: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { otherwise };
     x.set8(Obj::SPEED_INDEX, angle);
@@ -116,26 +116,26 @@ fn move_xy<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
-/// Ligne de 32 octets de la difficulté dans `table` (`A5+0x7f92`).
+/// Row of 32 bytes of the difficulty in `table` (`A5+0x7f92`).
 fn difficulty_row<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     (((var::RANK.get(x.b) >> 1) << 5) as u32) & 0xffff
 }
 
-/// Octet tiré au hasard dans la ligne de la difficulté de `table` (A4 = ligne, D0 = indice).
+/// Byte drawn at random from the difficulty row of `table` (A4 = row, D0 = index).
 fn pick_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = difficulty_row(x);
     let n = rand_and(x, 0x1f);
     x.data8(table + row + n)
 }
 
-/// 0x5af4e : choisit la table de vitesses selon la série (`idx` : 0, 2 ou 4).
+/// 0x5af4e: chooses the speed table according to the series (`idx`: 0, 2 or 4).
 fn walk_speed<R: Bench>(x: &mut Cx<'_, R>, idx: u32) {
     let series = x.u8(SERIES) as u32;
     let n = x.data16(WALK_SPEEDS + ((series << 2) & 0xff) + idx);
     x.select_speed(&crate::objects::motion::SPEEDS_B, n);
 }
 
-/// Un joueur dans la boîte ? Les deux décisions par masque (0xa4c2, 0xa4b4) doivent accepter.
+/// A player in the box? Both mask decisions (0xa4c2, 0xa4b4) must accept.
 fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     let ok = lib::target_in_box(x, d0, d1, d2) && {
         load_target(x);
@@ -146,17 +146,17 @@ fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     ok
 }
 
-/// 0x5afa0 : cible devant, à portée courte.
+/// 0x5afa0: target in front, at short range.
 fn front_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_attack(x, 0, 0x70, 8)
 }
 
-/// 0x5af90 : cible derrière ou loin devant.
+/// 0x5af90: target behind or far in front.
 fn side_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_attack(x, -0xb5, 0x35, 0x15)
 }
 
-/// 0x5afda : la cible est de l'autre côté de l'orientation.
+/// 0x5afda: the target is on the other side of the orientation.
 fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
@@ -168,7 +168,7 @@ fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     turn
 }
 
-/// 0x5af78 : retour debout ; si la décision 0x79ce le veut, au repos.
+/// 0x5af78: back to standing; if decision 0x79ce wants it, to rest.
 fn back_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
@@ -176,7 +176,7 @@ fn back_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin des coups : le suivant est tiré dans la ligne de la difficulté (0x5bb74).
+/// End of the attacks: the next one is drawn from the difficulty row (0x5bb74).
 fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_KIND, 0xff);
     let row = difficulty_row(x);
@@ -187,7 +187,7 @@ fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 0);
 }
 
-/// Le clignotement est lancé s'il ne l'est pas déjà (série 0, phase positive).
+/// Blinking is started if it is not already (series 0, positive phase).
 fn blink_if_running<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SERIES) == 0 && (x.u8(BLINK_PHASE) as i8) > 0 {
         x.set8(BLINK_ON, 1);
@@ -196,7 +196,7 @@ fn blink_if_running<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
@@ -223,14 +223,14 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x81, 0xa);
     x.set8(AI_SHOT, 0x14);
     if pick_target(x) {
-        // la création enchaîne directement sur l'état actif
+        // creation chains directly into the active state
         active(x);
     } else {
         set_state_long(x, IDLE);
     }
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
@@ -238,7 +238,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(f::FREEZE, (freeze - 1) as u8);
         true
     } else {
-        // le jeu en pause empêche le comportement (mais pas l'ombre)
+        // the paused game prevents the behaviour (but not the shadow)
         !paused(x)
     };
     if !dispatch {
@@ -265,8 +265,8 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Clignotement de la série 0 (0x59d02) : `+0xa5` est la phase (0xff : au repos, décompte `+0xae` ; 0 : lance le
-/// clignotement ; positive : alterne la visibilité `+1` bit 1).
+/// Blinking of series 0 (0x59d02): `+0xa5` is the phase (0xff: at rest, countdown `+0xae`; 0: starts the blinking;
+/// positive: alternates visibility `+1` bit 1).
 fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
     let phase = x.u8(BLINK_PHASE) as i8;
     if phase == 0 {
@@ -301,7 +301,7 @@ fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5b940 : durée d'invisibilité tirée au hasard.
+/// 0x5b940: invisibility duration drawn at random.
 fn pick_blink_delay<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(BLINK_WAIT, 1);
     let mut d2 = var::RANK.get(x.b);
@@ -314,7 +314,7 @@ fn pick_blink_delay<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(BLINK_DELAY, w);
 }
 
-/// Sous-état 0 : arrivée selon la variante `+3` (0 marche, 1 chute, 2 bond, 3 et 4 saut, 5 réveil).
+/// Substate 0: arrival according to variant `+3` (0 walk, 1 fall, 2 leap, 3 and 4 jump, 5 wake-up).
 fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => {
@@ -427,7 +427,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x59f38 : l'animation d'arrivée finie, le troglodyte se met debout.
+/// 0x59f38: once the arrival animation is over, the troglodyte stands up.
 fn end_arrival<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         x.set8(LOOK_PREV, 0xe0);
@@ -436,14 +436,14 @@ fn end_arrival<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5a010 : aspect de repos et animation 0xe.
+/// 0x5a010: rest look and animation 0xe.
 fn rest_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set8(LOOK_PREV, 1);
     body(x, 0xe);
 }
 
-// --- état 6 : libération ------------------------------------------------------------------------
+// --- state 6: release ------------------------------------------------------------------------
 
 fn dead<R: Bench>(x: &mut Cx<'_, R>) {
     free(x);

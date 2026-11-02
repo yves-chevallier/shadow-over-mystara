@@ -1,5 +1,5 @@
-//! Effets des joueurs (PEFF), onzième série : types 40 (météores) et 45 (voyants de l'écran de choix).
-//! Voir `docs/families/player.md`.
+//! Player effects (PEFF), eleventh series: types 40 (meteors) and 45 (indicators of the selection screen).
+//! See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -8,13 +8,13 @@ use crate::mem::{rd32, wr32};
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Fenêtre de palette de la RAM graphique recopiée par les effets (8 longs).
+/// Palette window of the graphics RAM copied by the effects (8 longs).
 const PALETTE_WINDOW: u32 = 0x91c1e0;
-/// Masque ajouté ou combiné aux couleurs copiées (bit de transparence des mots).
+/// Mask added or combined with the copied colours (transparency bit of the words).
 const PALETTE_MASK: u32 = 0xf000_f000;
 
-/// Recopie 8 longs de la ROM vers la fenêtre de palette (`movem.l (A2)+,{D1-D6,A3,A4}` puis `movem.l`
-/// vers `(A1)`) : les six premiers longs sont combinés au masque par OU, les deux derniers l'additionnent.
+/// Copies 8 longs from the ROM to the palette window (`movem.l (A2)+,{D1-D6,A3,A4}` then `movem.l` to `(A1)`): the
+/// first six longs are combined with the mask by OR, the last two add it.
 fn copy_palette<R: Bench>(x: &mut Cx<'_, R>, source: u32) {
     let mut words = [0u32; 8];
     for (i, w) in words.iter_mut().enumerate() {
@@ -29,14 +29,13 @@ fn copy_palette<R: Bench>(x: &mut Cx<'_, R>, source: u32) {
     for (i, w) in words.iter().enumerate() {
         wr32(x.b, PALETTE_WINDOW + 4 * i as u32, *w);
     }
-    // Glitch d'origine : D1-D6 gardent les six premiers longs ; D2-D5 restent aux gestionnaires suivants
-    // (`dispatch::Leftovers`)
+    // Original glitch: D1-D6 keep the first six longs; D2-D5 remain for the following handlers (`dispatch::Leftovers`)
     (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (words[1], words[2], words[3], words[4]);
 }
 
-/// Type 40 (0x50148) : pluie de météores (magie 20, kind 0x28). Variante 0 : le nuage, qui change la
-/// palette de l'écran puis lâche des météores (variante 1) en se tenant `+0x168` images ; variante 1 :
-/// un météore qui tombe d'un point aléatoire autour du nuage.
+/// Type 40 (0x50148): meteor rain (magic 20, kind 0x28). Variant 0: the cloud, which changes the palette of the screen
+/// then drops meteors (variant 1) while holding for `+0x168` frames; variant 1: a meteor that falls from a random point
+/// around the cloud.
 mod meteors {
     use super::*;
 
@@ -133,8 +132,8 @@ mod meteors {
     }
 }
 
-/// Type 45 (0x518b4) : voyant de l'écran de choix (kind 0x2d) posé sur le joueur ; la variante `+0x38`
-/// choisit l'effet de palette lancé quand le script le signale.
+/// Type 45 (0x518b4): indicator of the selection screen (kind 0x2d) placed on the player; variant `+0x38` chooses the
+/// palette effect launched when the script signals it.
 mod lamp {
     use super::*;
 
@@ -190,14 +189,13 @@ mod lamp {
         x.reinsert();
     }
 
-    /// 0x3afe : palette d'effet ordinaire. Glitch d'origine : les longs copiés restent dans D2-D5
-    /// (`dispatch::Leftovers`).
+    /// 0x3afe: ordinary effect palette. Original glitch: the copied longs remain in D2-D5 (`dispatch::Leftovers`).
     fn normal_palette<R: Bench>(x: &mut Cx<'_, R>) {
         let (longs, _) = crate::placement::load_effect_palette(x.b, crate::placement::effect_palette::NORMAL);
         (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (longs[2], longs[3], longs[4], longs[5]);
     }
 
-    /// `0x519b0` : effet de palette de la variante.
+    /// `0x519b0`: palette effect of the variant.
     fn palette_effect<R: Bench>(x: &mut Cx<'_, R>) {
         let v = x.u8(0x38);
         match v {

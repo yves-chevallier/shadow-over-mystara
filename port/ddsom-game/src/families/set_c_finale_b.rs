@@ -1,4 +1,4 @@
-//! Variantes 8 à 24 du type SET 15 (voir `set_c_finale.rs`). Les noms de rôle sont des hypothèses.
+//! Variants 8 to 24 of SET type 15 (see `set_c_finale.rs`). The role names are guesses.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -8,45 +8,45 @@ use crate::objects::pools;
 /// Joueurs : quatre enregistrements de 0x200 octets.
 const PLAYERS: u32 = A5 + 0x5de;
 const PLAYER_STRIDE: u32 = 0x200;
-/// Gestionnaire de pause des objets liés (mot A5+0x14 : bits d'activité des tâches de fond).
+/// Pause handler of the linked objects (word A5+0x14: activity bits of the background tasks).
 const TASK_FLAGS: u32 = 0x14;
 
 fn players() -> impl Iterator<Item = u32> {
     (0..4).map(|i| PLAYERS + i * PLAYER_STRIDE)
 }
 
-/// Joueur en jeu : actif et état principal (octet `+4`) inférieur à 4.
+/// Player in game: active and main state (byte `+4`) below 4.
 fn present<R: Bench>(x: &mut Cx<'_, R>, p: u32) -> bool {
     rd8(x.b, p) != 0 && (rd8(x.b, p + 4) as i8) < 4
 }
 
-/// Libère l'objet au passage suivant : `+4 = 6` et les trois octets suivants à zéro.
+/// Releases the object on the next pass: `+4 = 6` and the next three bytes at zero.
 fn retire<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x4, 0x0600_0000);
 }
 
-/// Adresse RAM stockée sur 16 bits (`movea.w` : extension de signe).
+/// RAM address stored on 16 bits (`movea.w`: sign extension).
 fn adr16(v: u16) -> u32 {
     v as i16 as i32 as u32
 }
 
-/// Crée un SET de type 15 (variante `variant`) : routine 0xce00a. Rend l'objet ou `None`.
+/// Creates a SET of type 15 (variant `variant`): routine 0xce00a. Returns the object or `None`.
 fn spawn_finale<R: Bench>(x: &mut Cx<'_, R>, variant: u32) -> Option<Obj> {
     crate::families::creators::set_15_pure(x.b, variant as u8).ok()
 }
 
-/// Crée un SOBJ de type 6 (routine 0xddeaa), variante `variant`.
+/// Creates a SOBJ of type 6 (routine 0xddeaa), variant `variant`.
 fn spawn_sobj<R: Bench>(x: &mut Cx<'_, R>, variant: u32) -> Option<Obj> {
     crate::effects_aids::scenery_6(x.b, variant as u8).ok()
 }
 
-/// Crée un effet (type 0x1f de 0xb1a7a) : variante, valeur de `+0x2f`.
+/// Creates an effect (type 0x1f of 0xb1a7a): variant, value of `+0x2f`.
 fn spawn_effct<R: Bench>(x: &mut Cx<'_, R>, variant: u32, extra: u32) -> Option<Obj> {
     crate::families::effects_creators::countdown(x.b, variant as u8, extra as u8)
 }
 
-/// Secousse à quatre composantes (0xce24c) : caméra du fond et du second plan, avec recopie des
-/// positions « précédentes ». `table` : enregistrements de 8 octets, un par pas de `+0x18` & 3.
+/// Four-component shake (0xce24c): background and second plane camera, with copy of the
+/// "previous" positions. `table`: 8-byte records, one per step of `+0x18` & 3.
 fn shake4<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let at = table + 8 * (x.u8(0x18) & 3) as u32;
     x.add8(0x18, 1);
@@ -70,10 +70,10 @@ fn mask_tasks<R: Bench>(x: &mut Cx<'_, R>, keep: u16) {
     x.set_a5_u16(TASK_FLAGS, v);
 }
 
-// --- variantes 8 et 23 : remplissage des PV ----------------------------------------------------------
+// --- variants 8 and 23: HP refill ----------------------------------------------------------
 
-/// Prépare la liste (joueur, réserve) : `+0x30 + 4 i` = adresse du joueur, `+0x32 + 4 i` = PV rendus
-/// d'office ; le pas de base dépend du score `A5+0x38`, majoré (variante 23) du `+0x64` du joueur.
+/// Prepares the list (player, reserve): `+0x30 + 4 i` = player's address, `+0x32 + 4 i` = HP given back
+/// automatically; the base step depends on the score `A5+0x38`, increased (variant 23) by the player's `+0x64`.
 fn refill_setup<R: Bench>(x: &mut Cx<'_, R>, with_player_bonus: bool) {
     let score = x.a5_u16(0x38) as i16;
     let mut step: u16 = 0x14;
@@ -96,9 +96,9 @@ fn refill_setup<R: Bench>(x: &mut Cx<'_, R>, with_player_bonus: bool) {
     }
 }
 
-/// Un tour de remplissage : chaque joueur dont les PV (`+0x62`) sont sous le maximum (`+0x60`) en
-/// gagne un tant que sa réserve est non vide, puis jusqu'à 1,25 fois la moitié du maximum. Vrai
-/// si un joueur a reçu un PV.
+/// One refill round: each player whose HP (`+0x62`) are below the maximum (`+0x60`)
+/// gains one as long as their reserve is non-empty, then up to 1.25 times half the maximum. True
+/// if a player received an HP.
 fn refill_step<R: Bench>(x: &mut Cx<'_, R>, variant_b: bool) -> bool {
     let mut slot = 0x30;
     let mut gave = 0u8;
@@ -127,7 +127,7 @@ fn refill_step<R: Bench>(x: &mut Cx<'_, R>, variant_b: bool) -> bool {
     gave != 0
 }
 
-/// Variante 8 (0xcf3a8) : fin de niveau, les PV remontent.
+/// Variant 8 (0xcf3a8): end of level, the HP climb back up.
 pub fn hp_refill_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
@@ -143,7 +143,7 @@ pub fn hp_refill_a<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variante 23 (0xd0932) : idem avec le bonus propre à chaque joueur.
+/// Variant 23 (0xd0932): same with the bonus specific to each player.
 pub fn hp_refill_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
@@ -159,11 +159,11 @@ pub fn hp_refill_b<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variantes 9 et 11 : effets attachés aux joueurs ------------------------------------------------------
+// --- variants 9 and 11: effects attached to the players ------------------------------------------------------
 
-/// Choisit, pour un effet sans joueur, un numéro de personnage libre dans le masque `taken` :
-/// examine les couples (0,1), (2,3)... ; la première paire entièrement libre donne son premier, sinon
-/// le premier numéro libre. Le résultat est marqué pris.
+/// Picks, for an effect with no player, a free character number in the `taken` mask:
+/// examines the pairs (0,1), (2,3)...; the first entirely free pair gives its first, otherwise
+/// the first free number. The result is marked taken.
 fn free_character(taken: &mut u32) -> Option<u32> {
     let bit = |t: u32, n: u32| t >> (n & 31) & 1 != 0;
     let mut n = 0;
@@ -188,7 +188,7 @@ fn free_character(taken: &mut u32) -> Option<u32> {
     None
 }
 
-/// Masque des personnages présents (variante `+3` de chaque joueur en jeu).
+/// Mask of the characters present (variant `+3` of each player in game).
 fn characters_present<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     let mut mask = 0;
     for p in players() {
@@ -199,8 +199,8 @@ fn characters_present<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     mask
 }
 
-/// Variante 9 (0xcf476) : lance six effets (un par joueur, puis par personnage absent), prévient le
-/// chef d'orchestre (`+8 = 1`), attend la fin, puis lui rend la main (`+8 = 0xff`).
+/// Variant 9 (0xcf476): launches six effects (one per player, then per absent character), notifies the
+/// conductor (`+8 = 1`), waits for the end, then hands control back to it (`+8 = 0xff`).
 pub fn spawn_player_effects<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
@@ -243,7 +243,7 @@ fn player_effects<R: Bench>(x: &mut Cx<'_, R>) {
     boss.set_u8(x.b, 8, 1);
 }
 
-/// Premier temps : après le délai `+0x42`, crée l'écran de bonus (type 15 variante 0x17).
+/// First phase: after the delay `+0x42`, creates the bonus screen (type 15 variant 0x17).
 fn handover_step<R: Bench>(x: &mut Cx<'_, R>, mark: u8) {
     x.add16(0x42, 0xffff);
     if x.u16(0x42) != 0 {
@@ -278,8 +278,8 @@ fn handover_step3<R: Bench>(x: &mut Cx<'_, R>) {
     next_state(x);
 }
 
-/// Variante 11 (0xcf6e8) : comme 9 pour l'état 0 ; ensuite elle attend que le chef d'orchestre
-/// passe à 2 avant de lancer l'écran de bonus (`+0x42 = 1`).
+/// Variant 11 (0xcf6e8): like 9 for state 0; then it waits for the conductor
+/// to go to 2 before launching the bonus screen (`+0x42 = 1`).
 pub fn handover_effects<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => spawn_player_effects(x),
@@ -300,9 +300,9 @@ pub fn handover_effects<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- variante 10 : secousse d'ouverture ------------------------------------------------------------------
 
-/// Variante 10 (0xcf5e6) : secousse (table 0xd0b30) jusqu'à la fin du fondu (`A5+0x48f`), puis le fond
-/// accélère en défilement horizontal (`+0x14`, `+0x16`) jusqu'à ce que la vitesse tombe sous 0x100,
-/// et enfin met le chef d'orchestre à 2. `+5` : 0 secousse, 2 attente du chef, 4 défilement.
+/// Variant 10 (0xcf5e6): shake (table 0xd0b30) until the end of the fade (`A5+0x48f`), then the background
+/// accelerates in horizontal scrolling (`+0x14`, `+0x16`) until the speed falls below 0x100,
+/// and finally sets the conductor to 2. `+5`: 0 shake, 2 wait for the conductor, 4 scrolling.
 pub fn shaking_intro<R: Bench>(x: &mut Cx<'_, R>) {
     const SHAKE: u32 = 0xd0b30;
     const SCROLL_SHAKE: u32 = 0xd0b50;
@@ -360,9 +360,9 @@ pub fn shaking_intro<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- variante 12 : marqueurs de joueurs --------------------------------------------------------------------
 
-/// Variante 12 (0xcf782) : crée six objets SOBJ (type 6, variante 0xe), un par joueur puis par
-/// personnage absent (comme la variante 9), puis un dernier (variante 0, `+0x2f = 0xb`) à (0x108, 0x100,
-/// -0x80). L'objet passe ensuite à l'état 6.
+/// Variant 12 (0xcf782): creates six SOBJ objects (type 6, variant 0xe), one per player then per
+/// absent character (like variant 9), then a last one (variant 0, `+0x2f = 0xb`) at (0x108, 0x100,
+/// -0x80). The object then goes to state 6.
 pub fn spawn_player_markers<R: Bench>(x: &mut Cx<'_, R>) {
     if !matches!(x.u8(0x4), 0 | 2) {
         return;
@@ -397,9 +397,9 @@ pub fn spawn_player_markers<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- variante 13 : feu d'artifice ----------------------------------------------------------------------------
 
-/// Variante 13 (0xcf8a0) : prépare la palette (0x91c280, avec 0xf000f000), puis, tant que le chef
-/// d'orchestre ne passe pas à un `+8` négatif, lance de temps à autre un objet SOBJ de variante 0x10
-/// (position tirée dans la table 0xcf974) et, une fois, un écran de bonus (type 15 variante 0xf).
+/// Variant 13 (0xcf8a0): prepares the palette (0x91c280, with 0xf000f000), then, as long as the
+/// conductor does not switch to a negative `+8`, launches from time to time a SOBJ object of variant 0x10
+/// (position drawn from table 0xcf974) and, once, a bonus screen (type 15 variant 0xf).
 pub fn fireworks<R: Bench>(x: &mut Cx<'_, R>) {
     const PALETTE_ROM: u32 = 0x253280;
     const PALETTE: u32 = 0x91c280;
@@ -443,11 +443,11 @@ pub fn fireworks<R: Bench>(x: &mut Cx<'_, R>) {
     f.set_u32(x.b, 0x4c, owner);
 }
 
-// --- variante 14 : éclairs --------------------------------------------------------------------------------------
+// --- variant 14: lightning --------------------------------------------------------------------------------
 
-/// Variante 14 (0xcf994) : crée des éclairs (SOBJ variante 0x11, numéro 0 à 4 tiré sans répétition
-/// parmi les bits libres de `+0x30`) tant que le second plan (`A5+0x55a`) n'est pas revenu à zéro ;
-/// l'appel sonore 0xea83e retentit de temps à autre.
+/// Variant 14 (0xcf994): creates lightning bolts (SOBJ variant 0x11, number 0 to 4 drawn without repetition
+/// among the free bits of `+0x30`) as long as the second plane (`A5+0x55a`) has not returned to zero;
+/// the sound call 0xea83e rings out from time to time.
 pub fn lightning<R: Bench>(x: &mut Cx<'_, R>) {
     const ORDER: u32 = 0xcfa3c;
     const SOUND: u32 = 0xea83e;
@@ -489,9 +489,9 @@ pub fn lightning<R: Bench>(x: &mut Cx<'_, R>) {
     o.set_u16(x.b, 0x46, x.o.0 as u16);
 }
 
-// --- variante 15 : secousse légère -----------------------------------------------------------------------------------
+// --- variant 15: light shake -----------------------------------------------------------------------------------
 
-/// Variante 15 (0xcfa4c) : secoue le fond (table 0xd0b70) tant que le chef d'orchestre a `+8 >= 0`.
+/// Variant 15 (0xcfa4c): shakes the background (table 0xd0b70) as long as the conductor has `+8 >= 0`.
 pub fn quake_light<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
@@ -507,11 +507,11 @@ pub fn quake_light<R: Bench>(x: &mut Cx<'_, R>) {
     shake4(x, 0xd0b70);
 }
 
-// --- variante 16 : liste d'arrivée (h) ------------------------------------------------------------------------------------
+// --- variant 16: arrival list (h) ------------------------------------------------------------------------------------
 
-/// Variante 16 (0xcfa86) : un effet (type 0x1f variante 7) par joueur présent, espacés de 0xb4
-/// images et pris dans un ordre aléatoire parmi 16 numéros (masque `+0x20`) ; `+0x22` compte les
-/// effets lancés, `+0x23` ceux encore vivants. Quand tout est parti, passe à l'état 4 et avance
+/// Variant 16 (0xcfa86): one effect (type 0x1f variant 7) per player present, spaced 0xb4
+/// frames apart and taken in random order among 16 numbers (mask `+0x20`); `+0x22` counts the
+/// effects launched, `+0x23` those still alive. When everything has left, goes to state 4 and advances
 /// `A5+0x2d`.
 pub fn ranking_start<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
@@ -575,11 +575,12 @@ pub fn ranking_start<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variante 17 : fondu de palette ---------------------------------------------------------------------------------------
+// --- variante 17 : fondu de palette
+// ---------------------------------------------------------------------------------------
 
-/// Variante 17 (0xcfb76) : fondu des trois lignes de palette 0x91c1e0, 0x91c300, 0x91c400 : `+5` = 0
-/// éclaircit 15 fois (+0x1000 sur deux mots de chaque ligne toutes les 4 images), 2 attend `+0x42`,
-/// 4 assombrit de la même façon puis met `+0x32 = 1` à l'objet `+0x46`.
+/// Variant 17 (0xcfb76): fade of the three palette lines 0x91c1e0, 0x91c300, 0x91c400: `+5` = 0
+/// brightens 15 times (+0x1000 on two words of each line every 4 frames), 2 waits for `+0x42`,
+/// 4 darkens the same way then sets `+0x32 = 1` on object `+0x46`.
 pub fn palette_fade<R: Bench>(x: &mut Cx<'_, R>) {
     const LINES: [u32; 3] = [0x91c1e0, 0x91c300, 0x91c400];
     if x.u8(0x4) == 0 {
@@ -637,11 +638,11 @@ pub fn palette_fade<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variante 18 : choix des bonus de fin de niveau ----------------------------------------------------------------
+// --- variant 18: choice of end-of-level bonuses ----------------------------------------------------------------
 
-/// Variante 18 (0xcfc56) : choisit, joueur après joueur, un bonus parmi des candidats (tests de la
-/// table 0xcff10, selon le personnage et le tour), affiche la récompense (création d'un SET par
-/// 0xc8312), anime la palette du joueur et recommence jusqu'à avoir servi tous les joueurs (`+0x25`).
+/// Variant 18 (0xcfc56): chooses, player after player, a bonus among candidates (tests of
+/// table 0xcff10, depending on the character and the turn), shows the reward (creation of a SET by
+/// 0xc8312), animates the player's palette and starts over until all players are served (`+0x25`).
 pub fn bonus_selection<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
@@ -721,7 +722,7 @@ fn bonus_step<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fait varier huit longs de la palette du joueur courant (`+0x26`) toutes les 4 images, 8 fois.
+/// Varies eight longs of the current player's palette (`+0x26`) every 4 frames, 8 times.
 fn palette_pulse<R: Bench>(x: &mut Cx<'_, R>, delta: u32) {
     x.add8(0x2a, 0xff);
     if x.u8(0x2a) != 0 {
@@ -743,14 +744,14 @@ fn palette_pulse<R: Bench>(x: &mut Cx<'_, R>, delta: u32) {
     }
 }
 
-/// Un candidat est écarté (vrai) selon le test que la table 0xcff10 associe au couple (personnage,
-/// rang) : les listes d'objets déjà possédés, la place dans l'inventaire (+0x18a, +0x114...).
+/// A candidate is discarded (true) according to the test that table 0xcff10 associates with the pair (character,
+/// rank): the lists of objects already owned, the room in the inventory (+0x18a, +0x114...).
 fn reward_blocked<R: Bench>(x: &mut Cx<'_, R>, player: u32, rank: u32) -> bool {
     const TESTS: u32 = 0xcff10;
     let character = (rd8(x.b, player + 3) & !1) as u32;
     let index = (character << 2) + 2 * rank;
     let target = TESTS + x.rom16(TESTS + index) as u32;
-    // listes d'objets (octets, fin = négatif) comparées à un octet du joueur
+    // lists of objects (bytes, end = negative) compared with a byte of the player
     let listed = |x: &mut Cx<'_, R>, list: u32, value: u8| {
         let mut p = list;
         loop {
@@ -830,11 +831,11 @@ fn choose_reward<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variante 19 : décompte en chiffres ---------------------------------------------------------------------------------
+// --- variant 19: countdown in digits ---------------------------------------------------------------------------------
 
-/// Variante 19 (0xd004a) : l'objet porte un nombre en BCD dans `+0x4c` (4 chiffres de 4 bits en
-/// octets 0x100, 0x1000, 0x10000, 0x100000) ; chaque image retire une unité du chiffre de poids
-/// faible non nul et lance l'événement 0x19ae6 (son/score) pour ce chiffre ; à zéro, se libère.
+/// Variant 19 (0xd004a): the object carries a BCD number in `+0x4c` (4 digits of 4 bits in
+/// bytes 0x100, 0x1000, 0x10000, 0x100000); each frame removes one unit from the lowest
+/// non-zero digit and launches event 0x19ae6 (sound/score) for that digit; at zero, it releases itself.
 pub fn countdown_digits<R: Bench>(x: &mut Cx<'_, R>) {
     let mut value = x.u32(0x4c);
     if value == 0 {
@@ -855,11 +856,11 @@ pub fn countdown_digits<R: Bench>(x: &mut Cx<'_, R>) {
     crate::events::enqueue_points(x.b, event_word as u16);
 }
 
-// --- variante 20 : défilement des crédits ---------------------------------------------------------------------------------
+// --- variant 20: credits scroll ---------------------------------------------------------------------------------
 
-/// Variante 20 (0xd00c2) : texte défilant (h : crédits) écrit ligne par ligne dans la tilemap
-/// 0x910000 à partir du texte en ROM 0xd01de : un octet par case (0xfe : fin, 0xff n : attribut n,
-/// 0x2f : fin de page). Le fond (`A5+0x4ba`) défile de 0x4000/65536 pixel par image.
+/// Variant 20 (0xd00c2): scrolling text (h: credits) written line by line into the tilemap
+/// 0x910000 from the ROM text 0xd01de: one byte per cell (0xfe: end, 0xff n: attribute n,
+/// 0x2f: end of page). The background (`A5+0x4ba`) scrolls by 0x4000/65536 pixel per frame.
 pub fn credits_scroll<R: Bench>(x: &mut Cx<'_, R>) {
     const TEXT: u32 = 0xd01de;
     if x.u8(0x4) == 6 {
@@ -903,7 +904,7 @@ pub fn credits_scroll<R: Bench>(x: &mut Cx<'_, R>) {
         x.set16(0x2c, v);
     }
     let mut attr = x.u8(0x2e) as u16;
-    // case effacée en même temps : celle de la page opposée (0x2000 plus loin), fixée une fois
+    // cell cleared at the same time: the one on the opposite page (0x2000 further), set once
     let erase = 0x910000u32 + ((dest as u16).wrapping_add(0x2000) & 0x3fff) as u32;
     loop {
         let c = x.data8(text);
@@ -932,10 +933,11 @@ pub fn credits_scroll<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variante 21 : scintillement ---------------------------------------------------------------------------------------------
+// --- variante 21 : scintillement
+// ---------------------------------------------------------------------------------------------
 
-/// Variante 21 (0xd06e6) : fait scintiller une couleur de la palette (0x91cfb2 prend 0xf00 de temps
-/// à autre) et lance un objet SOBJ de variante 0x14 ; se retire quand le chef d'orchestre a `+8 < 0`.
+/// Variant 21 (0xd06e6): makes a palette color twinkle (0x91cfb2 takes 0xf00 from time
+/// to time) and launches a SOBJ object of variant 0x14; withdraws when the conductor has `+8 < 0`.
 pub fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
     const COLOR: u32 = 0x91cfb2;
     const REFERENCE: u32 = 0x91cc00;
@@ -968,12 +970,12 @@ pub fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
     o.set_u32(x.b, 0x4c, owner);
 }
 
-// --- variante 22 : saisie des initiales (h) ---------------------------------------------------------------------------------------------
+// --- variant 22: entering initials (h) -----------------------------------------------------------
 
-/// Variante 22 (0xd077c) : passe en revue les joueurs présents, un après l'autre (`+0x20` = joueur,
-/// `+0x22` = joueurs restants) ; pour chacun crée un SOBJ de variante 0x15 qui affiche son nom
-/// (liste de tuiles à `+0x118` du joueur, écrite par 0xb230e sur un fond de 0x912000), attend 0x78
-/// images, retire l'objet et passe au suivant. Termine par 0xca8 et 0xcc8.
+/// Variant 22 (0xd077c): goes through the players present, one after the other (`+0x20` = player,
+/// `+0x22` = remaining players); for each one creates a SOBJ of variant 0x15 that displays their name
+/// (list of tiles at `+0x118` of the player, written by 0xb230e on a background of 0x912000), waits 0x78
+/// frames, removes the object and moves on to the next. Ends with 0xca8 and 0xcc8.
 pub fn name_entry<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x4) == 0 {
         next_state(x);
@@ -1052,7 +1054,7 @@ pub fn name_entry<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Écrit le nom (sous-routine 0xd0870) : liste d'indices de tuiles à `list` (fin 0xff ; au-delà de
+/// Writes the name (subroutine 0xd0870): list of tile indices at `list` (end 0xff; beyond
 /// 0xf8, a pattern of six consecutive tiles from a table), each tile drawn by 0xb230e at `at` (which moves on) with
 /// attribute `attr`.
 fn write_name<R: Bench>(x: &mut Cx<'_, R>, list: u32, mut at: u32, attr: u16) {
@@ -1063,7 +1065,7 @@ fn write_name<R: Bench>(x: &mut Cx<'_, R>, list: u32, mut at: u32, attr: u16) {
         let code = (x.data8(p) as i8 as i16).wrapping_neg().wrapping_sub(2) as u16;
         let mut tile = x.data16(PATTERNS.wrapping_add(code.wrapping_mul(2) as i16 as i32 as u32));
         for _ in 0..6 {
-            // 0xb230e laisse D0 = tuile + 0x11 ; le motif avance de deux (D0 - 0xf)
+            // 0xb230e leaves D0 = tile + 0x11; the pattern advances by two (D0 - 0xf)
             at = crate::families::effects_creators::tile_block(x.b, at, tile, attr).0;
             tile = tile.wrapping_add(2);
         }
@@ -1080,11 +1082,11 @@ fn write_name<R: Bench>(x: &mut Cx<'_, R>, list: u32, mut at: u32, attr: u16) {
     }
 }
 
-// --- variante 24 : tableau des résultats ----------------------------------------------------------------------------------------
+// --- variant 24: results table -----------------------------------------------------------
 
-/// Variante 24 (0xd0a0c) : prépare le fond des résultats (blocs 4x4 à 0x91ba00, copie de la palette
-/// 0x91cc00 dans l'objet, fond à 0x200), puis fait clignoter la palette et lance de temps à autre un
-/// SOBJ (variante 0x16) lié à l'objet. L'état 4 éteint le clignotement.
+/// Variant 24 (0xd0a0c): prepares the results background (4x4 blocks at 0x91ba00, copy of palette
+/// 0x91cc00 into the object, background at 0x200), then blinks the palette and from time to time launches a
+/// SOBJ (variant 0x16) tied to the object. State 4 turns the blinking off.
 pub fn results_panel<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {

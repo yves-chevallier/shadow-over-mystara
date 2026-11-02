@@ -8,7 +8,7 @@ reste vrai à la frontière, mais le but est maintenant de **faire disparaître 
 
 1. **Le comportement ne change pas.** Mêmes écritures, au même endroit, dans le même ordre ; mêmes tirages du hasard ;
    mêmes glitches. Ce qui paraît un bug de l'original reste, marqué :
-   `// Glitch d'origine : <ce qui se passe, et quand>`. Un écart déjà assumé (plafond de 64 essais d'une allocation
+   `// Glitch d'original : <ce qui se passe, et quand>`. Un écart déjà assumé (plafond de 64 essais d'une allocation
    que l'original répète sans fin...) se marque `// Écart assumé : …` et se cite dans le rapport.
 2. **Un pas = une validation.** Petits commits, chacun validé (ciblé pendant le travail, complet en fin de lot). Ne
    jamais mélanger un changement de forme et un changement de logique dans le même pas.
@@ -26,14 +26,14 @@ reste vrai à la frontière, mais le but est maintenant de **faire disparaître 
    native appelée directement, ou par `unreachable!("…")` documenté si l'aiguillage de la ROM ne peut pas y mener.
    Ne pas inventer de logique pour un chemin jamais exercé : le dire.
 8. **Rester dans son lot.** Ne pas modifier `lib.rs`, `families/mod.rs`, `families/cx.rs`, `objects/`, `machine.rs`, `rng.rs`, `mem.rs`, `ram.rs`,
-   `diag.rs`, `taches/table.rs` hors du lot 0 ; un besoin d'API se code d'abord dans son module et se signale.
+   `diag.rs`, `tasks/table.rs` hors du lot 0 ; un besoin d'API se code d'abord dans son module et se signale.
 
 ## Convention de nommage des couches
 
 | Forme | Exemple | Sens |
 |---|---|---|
 | cœur | `Pool::alloc(&self, b) -> Option<Obj>` | logique pure sur l'état ; aucun `Cpu` |
-| adaptateur | `Pool::alloc_68k(&self, c, b) -> Option<Obj>` | cœur + registres et drapeaux de l'original ; appelle `diag::registres_morts` |
+| adaptateur | `Pool::alloc_68k(&self, c, b) -> Option<Obj>` | cœur + registres et drapeaux de l'original ; appelle `diag::dead_regs` |
 | méthode de contexte | `Cx::alloc(&mut self, pool)` | raccourci pour les gestionnaires ; appelle le cœur une fois les registres prouvés morts |
 | native | `pools::ALLOC_SET` (`entry: 0x2348`) | appels par adresse restants : adaptateur puis `rts` ; jamais empoisonnée |
 
@@ -64,15 +64,15 @@ disjoints. `Machine` (`src/machine.rs`) est implémenté pour `families::cx::Cx`
 
 `use crate::machine::Machine;` dans le fichier. Les accesseurs propres à chaque contexte (`a5_u8`, `ram8`, `v8`,
 `rom16`...) restent pour l'instant (inhérents, prioritaires sur le trait) : chaque lot les remplace dans son périmètre par
-les vues typées (`ram::Octet/Mot/Long`, `Obj`) ou par `Machine`, puis les supprime. Attention aux homonymes trompeurs :
+les vues typées (`ram::Byte/Word/Long`, `Obj`) ou par `Machine`, puis les supprime. Attention aux homonymes trompeurs :
 `families::Ctx::rom16` lit l'espace **données**, `Cx::rom16` l'espace **programme** ; `Machine` les distingue
 (`data16` / `prog16`). Le générateur n'a plus qu'une implémentation (`rng.rs`) ; les copies (`camera_modes`,
 `player::Ctx::random`, `ai_aids::random`, `effects_b`) sont supprimées.
 
-### Le moteur d'objets vu d'un gestionnaire : le trait `objects::Courant`
+### Le moteur d'objets vu d'un gestionnaire : le trait `objects::Current`
 
 Pour les contextes qui traitent un objet (`Cx` : `x.o` ; `families::Ctx` : A0 au moment de l'appel).
-`use crate::objects::Courant;` dans le fichier.
+`use crate::objects::Current;` dans le fichier.
 
 | Méthode | Original | Rend |
 |---|---|---|
@@ -116,14 +116,14 @@ Un contexte sans objet courant (joueurs, combat, IA, scènes, natives `(c, b)`) 
 
 ### Ce qui reste en adaptateur, et pourquoi
 
-Les méthodes de `Courant` (sauf `reinsert` et `reinsert_foreground`, voir plus bas) et `Machine::random` appellent
+Les méthodes de `Current` (sauf `reinsert` et `reinsert_foreground`, voir plus bas) et `Machine::random` appellent
 **le cœur** : la validation complète avec
 `DDSOM_POISON=anim,motion,lists,cull,rank,random` a désigné les lecteurs de registres, et chacun a été soit replié dans
-une valeur Rust (`if x.anim_step()`, `x.move_xz().gt()`, `let alea = x.random()`), soit laissé sur l'adaptateur,
+une valeur Rust (`if x.anim_step()`, `x.move_xz().gt()`, `let rng = x.random()`), soit laissé sur l'adaptateur,
 écrit en clair à l'endroit qui relit le registre :
 
 * `x.random_68k()` suivi d'une lecture de D0 plus loin (`effects_c.rs`, `boss_7/fight.rs`, `boss_8/fight.rs`,
-  `boss_11`, `joueur/peff_e.rs`) ; `pshell::rand_and`/`rand_and_b` (contrat : D0 masqué en place) ; `ai::Mach::random`
+  `boss_11`, `player/peff_e.rs`) ; `pshell::rand_and`/`rand_and_b` (contrat : D0 masqué en place) ; `ai::Mach::random`
   et `combat::World::random` (machines à registres de leurs lots).
 * Les natives appelées par adresse (`(c, b)`, `scene::Ctx`, `player::Ctx` via `g.rom`, `modes`, `game.rs`) : créateurs
   (`creators.rs`, `eshl_creators.rs`, `effects_creators.rs`, `items.rs` : D0 du tirage relu), `ai_aids.rs` (animation,
@@ -131,14 +131,14 @@ une valeur Rust (`if x.anim_step()`, `x.move_xz().gt()`, `let alea = x.random()`
   (`scene/shop.rs`, `set.rs`, `creators.rs`), animations des joueurs (`player/`, `effects_f.rs`). Leur contrat de
   registres est à prouver par leur lot, comme au pilote.
 * `reinsert`, `reinsert_foreground` : la fin ordinaire d'un gestionnaire laisse D0-D2, A1-A4 au gestionnaire
-  **suivant** de la boucle de dispatch, et certains les relisent (`joueur/peff_e.rs` tire son rebond dans le D2
-  hérité ; `pshl_b.rs` aussi ; `scorpion_scene36`, `mash_c5`). `Courant::reinsert` garde donc l'adaptateur. Le cœur
+  **suivant** de la boucle de dispatch, et certains les relisent (`player/peff_e.rs` tire son rebond dans le D2
+  hérité ; `pshl_b.rs` aussi ; `scorpion_scene36`, `mash_c5`). `Current::reinsert` garde donc l'adaptateur. Le cœur
   `ACTORS.reinsert(b, o)` reste pour les appelants hors boucle de dispatch.
 * Lecteurs repérés et documentés sur place : `effects.rs` (D0 haut après la remise en liste : `reinsert_68k`),
   `reactions.rs` (`bhi` après 0x1e92 : `in_arena_68k`).
 
 Pour un lot : `rtk proxy grep -rn "_68k(" <rép>` donne ses adaptateurs restants ; chacun se prouve avec
-`DDSOM_POISON='<étiquette>@<fichier>'` (validation des scénarios qui l'exercent), puis passe au cœur.
+`DDSOM_POISON='<étiquette>@<file>'` (validation des scénarios qui l'exercent), puis passe au cœur.
 
 ## Les services communs (lot S) : son, palettes, texte, terrain, aides, événements
 
@@ -148,20 +148,20 @@ appelle le cœur et n'a plus à garder ses registres pour lui.
 
 | Module | Cœur | Remplace |
 |---|---|---|
-| `sound` | `jouer(b, son, objet)` ; `jouer_global(b, son)` (son qui ne lit pas d'objet : musiques, interface) ; `jouer_avec(b, son, Source { objet, a1, d4 })` (sept entrées lisent D4 ou A1 : 0xe17a4, 0xe17e2, 0xe6910, 0xe7c20, 0xe7e10, 0xec046, 0xec200) ; `service(b, Service::ArretGeneral / Ff05 / Ff06 { verrou, ligne } / Ff07 {..} / Ff08(p) / Ff09(p))` ; `emettre(b, Commande)` | `x.call(sfx::…)` (A0 = l'objet), `x.call(0xe0882)`, `x.call_d0(0xe0a82, n)`… |
-| `palette` | `full_brightness(b)`, `no_brightness(b)`, `or_brightness(b, niveau)`, `set_brightness(b, niveau)` ; `flash(b, Flash::Gray / A…G)`, `save_flash(b)`, `restore_flash(b)`, `set_flash_color(b, FLASH_COLOR_RED / FLASH_COLOR_WHITE_VALUE)` ; `character_palette(b, o)` | 0x1686, 0x168c, 0x168e, 0x173c ; 0x1ab56, 0x1aaa0-0x1ab3c, 0x1ac24, 0x1abe0, 0x1ac68/0x1ac86/0x35288 ; 0x37882 |
-| `text` | `print(b, descripteur) -> fin`, `erase`, `print_over`, `print_tall`, `print_tall_at(b, d, col, row)`, `draw_blocks(b, d, objet)`, `clear_blocks`, `clear_box(b, d) -> fin` | `x.c.a[4] = d; x.call(0xd5e)`… (la fin rendue est l'A4 de l'original, pour enchaîner) |
-| `video` | `terrain(b, x, y) -> Terrain { numero, x, y, case, index, colonne, .. }`, `terrain_of(b, o)` ; `terrain_68k(c, &t)` laisse D0-D4/A1/Z | 0x24b0, 0x24a8 (`x.call(…)` puis `x.c.d[2]`) |
-| `aides` | `direction(b, de, vers) -> u8`, `direction_from(b, o, vers)`, `direction_to(b, o, cible)` ; `grabbed(b, o) -> Saisie` (`.z()` : le drapeau testé) ; `divide(n, d)` ; `game_over(c, b)` | 0x1386, 0x137e, 0x1376 (D1-D4 puis D0) ; 0x2810 ; 0x17ea ; 0x28d8 |
-| `evenements` | `enfiler_points(b, ev) -> bool`, `enfiler_compteur`, `evenement_objet(b, o)`, `crediter_points(b)`, `crediter_compteur(b)`, `vider_points/compteur/popups(b)`, `effacer_popup_courant(b)`, `creer_popup(b, Popup { entete, max, valeur, brut })` | 0x19ae6, 0x19b08, 0x19ad6, 0x19b2a, 0x19b9c, 0x19aa2, 0x19abc, 0x19db4, 0x19e10, 0x19dce (barre de vie : `brut` = D3.b == 2) |
+| `sound` | `play(b, sound, object)` ; `play_global(b, sound)` (son qui ne lit pas d'objet : musiques, interface) ; `play_with(b, sound, Source { object, a1, d4 })` (sept entrées lisent D4 ou A1 : 0xe17a4, 0xe17e2, 0xe6910, 0xe7c20, 0xe7e10, 0xec046, 0xec200) ; `service(b, Service::GeneralStop / Ff05 / Ff06 { lock, line } / Ff07 {..} / Ff08(p) / Ff09(p))` ; `emit(b, Command)` | `x.call(sfx::…)` (A0 = l'objet), `x.call(0xe0882)`, `x.call_d0(0xe0a82, n)`… |
+| `palette` | `full_brightness(b)`, `no_brightness(b)`, `or_brightness(b, level)`, `set_brightness(b, level)` ; `flash(b, Flash::Gray / A…G)`, `save_flash(b)`, `restore_flash(b)`, `set_flash_color(b, FLASH_COLOR_RED / FLASH_COLOR_WHITE_VALUE)` ; `character_palette(b, o)` | 0x1686, 0x168c, 0x168e, 0x173c ; 0x1ab56, 0x1aaa0-0x1ab3c, 0x1ac24, 0x1abe0, 0x1ac68/0x1ac86/0x35288 ; 0x37882 |
+| `text` | `print(b, descriptor) -> end`, `erase`, `print_over`, `print_tall`, `print_tall_at(b, d, col, row)`, `draw_blocks(b, d, object)`, `clear_blocks`, `clear_box(b, d) -> end` | `x.c.a[4] = d; x.call(0xd5e)`… (la fin rendue est l'A4 de l'original, pour enchaîner) |
+| `video` | `terrain(b, x, y) -> Terrain { number, x, y, case, index, column, .. }`, `terrain_of(b, o)` ; `terrain_68k(c, &t)` laisse D0-D4/A1/Z | 0x24b0, 0x24a8 (`x.call(…)` puis `x.c.d[2]`) |
+| `aids` | `direction(b, de, to) -> u8`, `direction_from(b, o, to)`, `direction_to(b, o, target)` ; `grabbed(b, o) -> NameEntry` (`.z()` : le drapeau testé) ; `divide(n, d)` ; `game_over(c, b)` | 0x1386, 0x137e, 0x1376 (D1-D4 puis D0) ; 0x2810 ; 0x17ea ; 0x28d8 |
+| `events` | `enqueue_points(b, ev) -> bool`, `enqueue_counter`, `object_event(b, o)`, `credit_points(b)`, `credit_counter(b)`, `clear_points/counter/popups(b)`, `clear_current_popup(b)`, `create_popup(b, Popup { header, max, value, raw })` | 0x19ae6, 0x19b08, 0x19ad6, 0x19b2a, 0x19b9c, 0x19aa2, 0x19abc, 0x19db4, 0x19e10, 0x19dce (barre de vie : `raw` = D3.b == 2) |
 | `terrain`, `placement` | `terrain::push(b, o) -> bool` (Z de 0x33fe4) ; `placement::place_on_free_ground(b, o)` | `push_68k`, `place_on_free_ground_68k`, `call(0x3668)` |
-| `ram` | `JOUEURS_EN_VIE` (0x35, appelé à tort `DIFFICULTE`), `DEFILEMENT_Y_PLAN1` (0x4ba), `DSW` (0x7fd0) | `a5_u8(0x35)`, `set_a5_u16(0x4ba, …)`… |
+| `ram` | `PLAYERS_ALIVE` (0x35, appelé à tort `DIFFICULTE`), `SCROLL_Y_PLANE1` (0x4ba), `DSW` (0x7fd0) | `a5_u8(0x35)`, `set_a5_u16(0x4ba, …)`… |
 
 **Pour les lots A et B** (familles non converties par le lot S : `boss*`, `enemy*`, `reactions`, `effects*`,
-`items*`, `boxes`, `petites`, `creators`) :
+`items*`, `boxes`, `small`, `creators`) :
 
-* Son : `x.call(SON)` dans un gestionnaire `Cx` devient `crate::sound::jouer(x.b, SON, x.o)` ; un son qui lit D4
-  (`ParD4`, `DuD4`) prend `jouer_avec(x.b, SON, Source { objet: Some(x.o), d4: Some(valeur), ..Default::default() })`
+* Son : `x.call(SOUND)` dans un gestionnaire `Cx` devient `crate::sound::play(x.b, SOUND, x.o)` ; un son qui lit D4
+  (`ByD4`, `FromD4`) prend `play_with(x.b, SOUND, Source { object: Some(x.o), d4: Some(value), ..Default::default() })`
   avec la valeur que l'appelant posait dans D4, et la pose de D4 disparaît. Un son appelé avec un objet absent
   ou sans D4 qu'il lit s'arrête (panique avec le message « ce son lit … ») : la validation le montre aussitôt.
   Conversion mécanique : `tools/convert_sounds.py <fichiers>` (constantes résolues ; motifs `x.call`, `g.rom`,
@@ -169,14 +169,14 @@ appelle le cœur et n'a plus à garder ses registres pour lui.
 * **La sauvegarde fantôme n'existe plus** ([son-68000.md](son-68000.md)) : un gestionnaire qui joue un son n'a plus
   à garder ses registres « pour le son ». Les registres que le gestionnaire **suivant** relit (fin ordinaire,
   `reinsert`) restent à prouver par `DDSOM_POISON` comme avant.
-* Terrain : `let t = crate::video::terrain_of(x.b, x.o); if t.numero …` ; garder `video::terrain_68k(x.c, &t)` tant
+* Terrain : `let t = crate::video::terrain_of(x.b, x.o); if t.number …` ; garder `video::terrain_68k(x.c, &t)` tant
   qu'un gestionnaire suivant peut relire D3 (vu : `pshl.rs`, `boss11_scene42_mort` image 4447).
 * Direction : `x.c.d[1] = …; x.call(0x137e); let a = x.c.d[0] as u8` devient
-  `let a = crate::aides::direction_from(x.b, x.o, (tx, ty))` ; `x.c.a[1] = cible.0; x.call(0x1376)` devient
-  `direction_to(x.b, x.o, cible)`.
-* Saisie : `x.call(0x2810); if x.c.sr & SR_Z != 0` devient `if crate::aides::grabbed(x.b, x.o).z()` (ou un `match`
-  sur `Saisie` : `Gele`, `Libre`, `Par { joueur, normal }`).
-* Barre de vie : `x.c.d[0..4] = …; x.call(0x19dce)` devient `crate::evenements::creer_popup(x.b, Popup { … })`.
+  `let a = crate::aids::direction_from(x.b, x.o, (tx, ty))` ; `x.c.a[1] = target.0; x.call(0x1376)` devient
+  `direction_to(x.b, x.o, target)`.
+* Saisie : `x.call(0x2810); if x.c.sr & SR_Z != 0` devient `if crate::aids::grabbed(x.b, x.o).z()` (ou un `match`
+  sur `NameEntry` : `Frozen`, `Free`, `By { player, normal }`).
+* Barre de vie : `x.c.d[0..4] = …; x.call(0x19dce)` devient `crate::events::create_popup(x.b, Popup { … })`.
 
 ## Registres morts : `DDSOM_POISON`
 
@@ -186,28 +186,28 @@ Un adaptateur appelle, après avoir posé les registres de l'original :
 crate::diag::registres_morts(c, "alloc", regs::a(1) | regs::d(6) | regs::CCR);
 ```
 
-Avec `DDSOM_POISON=alloc` (plusieurs étiquettes séparées par des virgules, `tout` pour toutes), ces registres sont
+Avec `DDSOM_POISON=alloc` (plusieurs étiquettes séparées par des virgules, `all` pour toutes), ces registres sont
 **inversés** juste après : toute lecture ultérieure obtient une valeur fausse. Les natives (appels par adresse) n'empoisonnent
 jamais. Méthode :
 
 1. convertir les appelants Rust vers l'adaptateur, valider (comportement identique par construction) ;
 2. valider avec `DDSOM_POISON=<étiquette>` (complet, ou au moins les scénarios qui exercent la routine, dans les deux
    modes) ;
-3. VALIDE partout : remplacer l'adaptateur par le cœur chez ces appelants, supprimer l'appel à `registres_morts` ;
+3. VALIDE partout : remplacer l'adaptateur par le cœur chez ces appelants, supprimer l'appel à `dead_regs` ;
    un écart : il désigne le lecteur (image, adresse). Garder l'adaptateur à cet endroit, avec un commentaire qui nomme
    le lecteur (« A1 relu par le gestionnaire suivant, 0x…  »), et continuer ailleurs.
 
 **Exemple réel (pilote).** `DDSOM_POISON=alloc,free` sur toute la validation : tous les scénarios échouent à l'image 389
-(`ram fff9aa : 0000 au lieu de 00ff`). `free` seul passe ; `alloc` non. Le champ `+0x4c` de l'emplacement 0 du pool SOBJ
+(`ram fff9aa : 0000 au place de 00ff`). `free` seul passe ; `alloc` non. Le champ `+0x4c` de l'emplacement 0 du pool SOBJ
 n'est pas écrit : la machine à modes (`modes/title.rs`, étape `0xfa472`) appelle par adresse le créateur
 `SOBJ_VARIANT`, une native en `(c, b)` qui alloue, puis **relit A1** — l'objet créé — que la native laisse parce que
 l'allocation l'y a mis. A1 fait partie du contrat de cette native. D'où la règle : une native appelée par adresse (contexte
 `(c, b)`, `scene::Ctx`, `player::Ctx`) garde l'adaptateur `_68k` tant que ses appelants relisent ses registres ; les
 gestionnaires de la boucle de dispatch (`Cx`, `families::Ctx`, contrat A0/D7) ont leur propre étiquette
-(`gestionnaires`) pour être prouvés à part.
+(`handlers`) pour être prouvés à part.
 
-**Par site** (lot 0b). Une entrée `étiquette@motif` n'empoisonne que les appels dont le site (`fichier:ligne:colonne`
-du gestionnaire, propagé par `#[track_caller]` à travers `Courant` et les adaptateurs) contient le motif ; `!étiquette@motif`
+**Par site** (lot 0b). Une entrée `étiquette@pattern` n'empoisonne que les appels dont le site (`file:line:column`
+du gestionnaire, propagé par `#[track_caller]` à travers `Current` et les adaptateurs) contient le motif ; `!étiquette@pattern`
 exclut ces sites : `DDSOM_POISON='motion,!motion@enemy_dbeast/parts.rs'`. Avec `DDSOM_POISON_TRACE=1`, la liste des
 sites empoisonnés avant l'image de l'écart se réduit à quelques candidats qu'on essaie un par un (`motion@shell.rs:57`).
 
@@ -216,50 +216,50 @@ les résultats ordinaires.
 
 ### Sondes des appels, des cessions et des retours (sortie du `Cpu`)
 
-Pour un appel par adresse, une étape de tâche ou un rendu, il n'y a pas d'adaptateur où poser `registres_morts` :
+Pour un appel par adresse, une étape de tâche ou un rendu, il n'y a pas d'adaptateur où poser `dead_regs` :
 des sondes génériques (`diag.rs`) inversent les registres au bon endroit.
 
 | Étiquette | Où | Registres inversés | Site (motif) |
 |---|---|---|---|
-| `appel_<adresse>` | retour de `crate::call` | ceux que l'appelé a changés | `fichier:ligne:colonne` de l'appel |
-| `retour` | `taches::executer`, pas qui rend `Flow::Done` | D0-D7, A0-A4, A6, drapeaux | nom de l'étape : `Exit(Both)` |
-| `rendu` | `dispatch::Class::update_sans_suite`, mises à jour du monde des écrans | D0-D7, A0-A4, A6, drapeaux | appelant (`#[track_caller]`) |
-| `reprise` | `kernel::lancer`, tâche qui reprend après une cession | D0-D7, A0-A4, A6, drapeaux | étape reprise, sans espaces ni virgules : `Partie(Pas)` |
-| `neuve` | `kernel::lancer`, tâche neuve | D0-D7, A0-A4, A6, drapeaux | étape d'entrée : `Gel(Entree)` |
-| `pile` | `sans68k::ligne`, avant chaque point (hors démarrage) | aucun : la RAM des piles d'origine FF0166-FF0E65 est remplie d'une valeur changeante | — |
+| `appel_<address>` | retour de `crate::call` | ceux que l'appelé a changés | `file:line:column` de l'appel |
+| `ret` | `tasks::execute`, pas qui rend `Flow::Done` | D0-D7, A0-A4, A6, drapeaux | nom de l'étape : `Exit(Both)` |
+| `rendering` | `dispatch::Class::update_no_next`, mises à jour du monde des écrans | D0-D7, A0-A4, A6, drapeaux | appelant (`#[track_caller]`) |
+| `resume` | `kernel::launch`, tâche qui reprend après une cession | D0-D7, A0-A4, A6, drapeaux | étape reprise, sans espaces ni virgules : `Game(Step)` |
+| `neuve` | `kernel::launch`, tâche neuve | D0-D7, A0-A4, A6, drapeaux | étape d'entrée : `Freeze(Entry)` |
+| `stack` | `no68k::line`, avant chaque point (hors démarrage) | aucun : la RAM des piles d'origine FF0166-FF0E65 est remplie d'une valeur changeante | — |
 
-VALIDE avec `reprise@Ending(,retour@Ending(` : aucune étape du générique ne relit, après une cession ou au retour d'un
-sous-programme, un registre d'avant ; avec `rendu@modes/` : les gestionnaires d'objets ne relisent rien de l'écran
+VALIDE avec `resume@Ending(,ret@Ending(` : aucune étape du générique ne relit, après une cession ou au retour d'un
+sous-programme, un registre d'avant ; avec `rendering@modes/` : les gestionnaires d'objets ne relisent rien de l'écran
 qui les fait tourner. Les drapeaux sont inversés en deux parts (`nzvc` et `x`) pour savoir lequel est relu.
 
-**Registres épargnés.** Une entrée `étiquette@motif#a1+nzvc` empoisonne le site sauf A1 et N/Z/V/C (une lecture
+**Registres épargnés.** Une entrée `étiquette@pattern#a1+nzvc` empoisonne le site sauf A1 et N/Z/V/C (une lecture
 connue, écrite en clair, comme l'objet rendu par un créateur) ; précédée de `=`, elle épargne ces registres sans
-empoisonner le site (à ajouter à une liste large : `tout@modes/,=appel_ddeaa@modes/#a1+nzvc`).
+empoisonner le site (à ajouter à une liste large : `all@modes/,=appel_ddeaa@modes/#a1+nzvc`).
 
-**Bissection.** `tools/bisect_poison.py <validate> <scénario> <images> <liste>` relance le scénario avec la trace
+**Bissection.** `tools/bisect_poison.py <validate> <scénario> <images> <list>` relance le scénario avec la trace
 (`DDSOM_POISON_TRACE`), cherche par dichotomie l'entrée responsable parmi les sites empoisonnés avant l'écart, puis le
 ou les registres relus, l'épargne et recommence jusqu'à VALIDE ; il imprime les lecteurs trouvés et la ligne
 `GARDES` à ajouter. Méthode du lot « écrans » : une validation complète du code d'origine (avant conversion) avec
-`tout@<fichiers du lot>` et les sondes de reprise et de retour des tâches du lot, puis une bissection par scénario
+`all@<fichiers du lot>` et les sondes de reprise et de retour des tâches du lot, puis une bissection par scénario
 qui échoue, jusqu'à ce que tout échec restant soit une lecture connue (épargnée) ; enfin la même validation sur le code
-converti avec `rendu` en plus.
+converti avec `rendering` en plus.
 
 ## Gestionnaires sans registres (sortie du Cpu, partie 3)
 
-* **Sonde de sortie** : `DDSOM_POISON=sortie` inverse, au retour de chaque gestionnaire de la boucle d'aiguillage, les
-  registres qu'il a changés (sauf A0, D7) ; `sortie.d2@4bc66` (un registre, un gestionnaire), `!sortie.d4@ba310`
+* **Sonde de sortie** : `DDSOM_POISON=exit` inverse, au retour de chaque gestionnaire de la boucle d'aiguillage, les
+  registres qu'il a changés (sauf A0, D7) ; `exit.d2@4bc66` (un registre, un gestionnaire), `!exit.d4@ba310`
   (exclusion). La liste des gestionnaires dont la sortie est relue est dans [refactorisation.md](refactorisation.md)
-  § 18 ; un scénario nouveau peut en ajouter (bissection : `sortie@<boucle>`, `sortie@<gestionnaire>`, puis par
+  § 18 ; un scénario nouveau peut en ajouter (bissection : `exit@<looped>`, `exit@<handler>`, puis par
   registre).
-* **Écrire une fonction sans registres** : `fn f<R: Banc>(x: &mut Cx<'_, R>, …)` ; elle sert aux gestionnaires sur le
+* **Écrire une fonction sans registres** : `fn f<R: Bench>(x: &mut Cx<'_, R>, …)` ; elle sert aux gestionnaires sur le
   processeur (`Cx`) comme aux convertis (`Gx`). `x.reinsert()`, `x.keep_in_zone()`, `x.keep_on_screen(m)`,
   `x.push_terrain()` font ce qu'il faut selon le banc. Un reste relu par un autre gestionnaire passe par
-  `dispatch::Restes` (`x.restes().d4` sur `Gx`, `*x.c.d5()` générique).
-* **Déclarer un gestionnaire converti** : `0x… "nom" #[sans] chemin` dans `handlers!` (natif
-  `Corps::Gestionnaire`). Seulement si sa sortie n'est relue par personne, ou si ses restes relus sont écrits dans
-  `Restes`.
-* **Créateurs** : écrits sur `effects_creators::restes::Registres` (`r.alloue`, `r.d(n, v)`…) ; les appelants Rust
-  passent `&mut Pur` (aucun registre), la native passe le processeur.
+  `dispatch::Leftovers` (`x.leftovers().d4` sur `Gx`, `*x.c.d5()` générique).
+* **Déclarer un gestionnaire converti** : `0x… "name" #[without] chemin` dans `handlers!` (natif
+  `Body::Handler`). Seulement si sa sortie n'est relue par personne, ou si ses restes relus sont écrits dans
+  `Leftovers`.
+* **Créateurs** : écrits sur `effects_creators::leftovers::Regs` (`r.allocated`, `r.d(n, v)`…) ; les appelants Rust
+  passent `&mut Pure` (aucun registre), la native passe le processeur.
 
 ## Exemple : l'allocation d'objets (pilote)
 
@@ -288,7 +288,7 @@ L'original qui ne teste pas l'échec garde son glitch, visible :
     let Obj(spawned) = x.alloc_unchecked(&pools::BOSS);
 ```
 
-Une table de la ROM qui désigne le pool par l'adresse de sa routine passe par `pools::pool_of_alloc_routine(adresse)`.
+Une table de la ROM qui désigne le pool par l'adresse de sa routine passe par `pools::pool_of_alloc_routine(address)`.
 Libération : `x.call(sub::FREE_SET)` devient `x.free(&pools::SET)`.
 
 ## Exemple : une tâche qui cède (lot E, machines à états)
@@ -301,8 +301,8 @@ resume!(AFTER_WAIT, at::AFTER_WAIT, |x| tour(x));
 fn tour(x: &mut Ctx) -> Flow { …; x.tail(at::WAIT_ONE_FRAME, at::AFTER_WAIT) }
 ```
 
-Après : chaque point de reprise est une variante d'une `enum Etape` du module ; l'adresse d'origine n'est plus que
-`Etape::adresse()` (diagnostic, comparaison de la table avec FF0064), et la cession passe directement par le noyau.
+Après : chaque point de reprise est une variante d'une `enum Step` du module ; l'adresse d'origine n'est plus que
+`Step::address()` (diagnostic, comparaison de la table avec FF0064), et la cession passe directement par le noyau.
 
 ```rust
 crate::etapes! {
@@ -316,49 +316,49 @@ crate::etapes! {
 fn tour(x: &mut Ctx) -> Flow { …; crate::taches::une_image(x, Etape::AfterWait) }
 ```
 
-Le modèle (`taches/mod.rs`, `taches/table.rs`, `kernel.rs`) :
+Le modèle (`tasks/mod.rs`, `tasks/table.rs`, `kernel.rs`) :
 
-* **`etapes!`** déclare l'enum (variantes sans champ), `adresse()` et `pas(x) -> Flow`. Une étape qui porte un état
+* **`steps!`** déclare l'enum (variantes sans champ), `address()` et `step(x) -> Flow`. Une étape qui porte un état
   (le sens d'un fondu, les registres sauvés par un `movem`, le D0 gardé par un `move.l D0,-(SP)`) s'écrit à la main :
-  `fondu::Etape::Luminosite(Luminosite)`, `Composante { fondu, registres }`, `tache_credits::Etape::PulseAfterWait
+  `fading::Step::Brightness(Brightness)`, `Component { fading, regs }`, `tache_credits::Etape::PulseAfterWait
   { d0 }`. Ce que l'original garde sur la pile pendant qu'il cède devient ainsi un champ nommé de l'étape.
-* **`taches::Etape`** réunit les étapes de tous les modules (`etapes_des_taches!`, une ligne par module) ; `From`
-  permet de passer `Etape::X` du module partout où une suite est attendue (`impl Into<Suite>`).
-* **`table::Suite`** : `Adresse(u32)` (une native, pour ce qui reste appelé ou repris par adresse) ou
-  `Etape(Etape)`. Une cession range `Reprise::Etape(etape)` (sans registres depuis la partie 4 de la sortie du Cpu : ce que l'étape relit est dans ses champs) ; un appel en cours (`Cadre`) n'est plus
+* **`tasks::Step`** réunit les étapes de tous les modules (`task_steps!`, une ligne par module) ; `From`
+  permet de passer `Step::X` du module partout où une suite est attendue (`impl Into<Next>`).
+* **`table::Next`** : `Address(u32)` (une native, pour ce qui reste appelé ou repris par adresse) ou
+  `Step(Step)`. Une cession range `Resume::Step(step)` (sans registres depuis la partie 4 de la sortie du Cpu : ce que l'étape relit est dans ses champs) ; un appel en cours (`Frame`) n'est plus
   qu'une suite et sa hauteur de pile.
-* **Le noyau appelle le pas** : `kernel::lancer` remet registres, SR et pile du contexte puis
-  `taches::executer(etape)` au lieu de poser `c.pc` ; une tâche neuve dont l'entrée est une étape
-  (`taches::entree`) démarre de même. `executer` exécute le pas et, s'il rend `Flow::Done` (retour de
-  sous-programme), `taches::revenir` : la suite de l'appel en cours, étape exécutée aussitôt ou adresse posée au PC.
-  `mem::rts` passe par `revenir`.
-* **Cessions** : `taches::ceder(x, Attente, suite)`, `une_image` (`jsr 0xb64`, D0.w = 1), `attendre` (`jsr 0xa40`,
-  D0 tel quel), `attendre_puis_revenir` (`jmp 0xa40`), `terminer` (`0x9f8`), `recommencer` (`0xae4`),
-  `creer_puis_revenir` (`jmp 0x9b6`) ; création et mort d'une autre tâche : `kernel::creer_tache`, `tuer_tache`.
-* **Sous-programmes qui cèdent** (fondus, écran noir) : des fonctions Rust (`taches::fondu::descente`, `montee`,
-  `descente_d0`, `vers_le_blanc`..., `video::ecran_noir::debut`) appelées par `x.sous_programme(f, suite)` (suite
-  rangée en cadre, exécutée aussitôt si `f` revient sans céder), ou en appel terminal (`return fondu::montee(x)`).
+* **Le noyau appelle le pas** : `kernel::launch` remet registres, SR et pile du contexte puis
+  `tasks::execute(step)` au lieu de poser `c.pc` ; une tâche neuve dont l'entrée est une étape
+  (`tasks::entry`) démarre de même. `execute` exécute le pas et, s'il rend `Flow::Done` (retour de
+  sous-programme), `tasks::return_to_caller` : la suite de l'appel en cours, étape exécutée aussitôt ou adresse posée au PC.
+  `mem::rts` passe par `return_to_caller`.
+* **Cessions** : `tasks::cede(x, Wait, next)`, `one_frame` (`jsr 0xb64`, D0.w = 1), `wait` (`jsr 0xa40`,
+  D0 tel quel), `wait_then_return` (`jmp 0xa40`), `finish` (`0x9f8`), `restart` (`0xae4`),
+  `create_then_return` (`jmp 0x9b6`) ; création et mort d'une autre tâche : `kernel::create_task`, `kill_task`.
+* **Sous-programmes qui cèdent** (fondus, écran noir) : des fonctions Rust (`tasks::fading::descent`, `rise`,
+  `descent_d0`, `to_white`..., `video::black_screen::start`) appelées par `x.subroutine(f, next)` (suite
+  rangée en cadre, exécutée aussitôt si `f` revient sans céder), ou en appel terminal (`return fading::rise(x)`).
   Leurs entrées restent des natives tant que des gestionnaires d'objets les appellent par adresse.
 
 Convertir un module :
 
-1. `resume!(NOM, ADRESSE, CORPS)` → variante `Nom = ADRESSE => CORPS` d'un bloc `etapes!` (mécanique : le lot E
+1. `resume!(NOM, ADDRESS, CORPS)` → variante `Nom = ADDRESS => CORPS` d'un bloc `steps!` (mécanique : le lot E
    l'a fait par script pour 330 reprises) ; retirer la native de `NATIVES` ; ajouter la ligne du module à
-   `etapes_des_taches!` (et à `taches::entree` si c'est une entrée de tâche).
-2. Remplacer chaque adresse de reprise passée à `wait`, `tail`, `push_return`, `ceder`... par la variante ; les aides
-   qui prenaient une adresse prennent l'`Etape` du module ou `impl Into<Suite>`. Une adresse oubliée compile encore
-   (`u32` est une `Suite`) : chercher les adresses converties restées en clair, sinon la reprise s'arrête sur « pas
+   `task_steps!` (et à `tasks::entry` si c'est une entrée de tâche).
+2. Remplacer chaque adresse de reprise passée à `wait`, `tail`, `push_return`, `cede`... par la variante ; les aides
+   qui prenaient une adresse prennent l'`Step` du module ou `impl Into<Next>`. Une adresse oubliée compile encore
+   (`u32` est une `Next`) : chercher les adresses converties restées en clair, sinon la reprise s'arrête sur « pas
    de native ».
 3. Valider (scénarios qui exercent les écrans : `modes/`, `scene_end/`, `cov_*`).
 
 Depuis le lot « noyau final » (`refactorisation.md` § 14), plus aucune reprise n'est une native : le pas de jeu
-(`taches::partie::Etape::Pas`, plafond des pas compté par `sans68k::pas_de_jeu`), les retours des phases de la
+(`tasks::game::Step::Step`, plafond des pas compté par `no68k::game_step`), les retours des phases de la
 démonstration, la boucle de la machine à modes et les appels en cours de la boucle de partie (fin d'image, mise à jour
-du monde, boucles d'aiguillage : `game::Etape`, `dispatch::Etape`) sont des étapes. Un gestionnaire d'objet qui fait
+du monde, boucles d'aiguillage : `game::Step`, `dispatch::Step`) sont des étapes. Un gestionnaire d'objet qui fait
 céder la main à la tâche (fondu des portes, feu d'artifice) cède, puis revient aussitôt ; le code Rust encore en
-cours sous lui le voit (`taches::a_cede`, `taches::table::revenu`) et revient sans rien faire, et la tâche reprendra
+cours sous lui le voit (`tasks::has_ceded`, `tasks::table::returned`) et revient sans rien faire, et la tâche reprendra
 par les étapes rangées dans ses appels en cours. Une fonction Rust qui appelle une native puis continue après elle
-ouvre un **appel attendu** (`taches::table::appeler_attendu` + `crate::appeler_attendu`) : le `rts` de la native lui
+ouvre un **appel attendu** (`tasks::table::call_expected` + `crate::call_expected`) : le `rts` de la native lui
 rend la main, et si la native cède, l'appel garde la suite où la tâche reprendra. `crate::call` (appel par adresse)
 n'admet plus de cession : il s'arrête sur une panique qui nomme le site.
 
@@ -379,14 +379,14 @@ n'admet plus de cession : il s'arrête sur une panique qui nomme le site.
 * **Remplacements automatiques** : un script qui réécrit des identifiants par leur valeur doit exclure les constantes
   homonymes d'autres types (`dispatch::PSHL` est une `Class`) ; relire le diff.
 * **`rts` pour jeter un appel en cours** : `mem::rts` exécute aussitôt une suite qui est une étape ; pour abandonner
-  un cadre sans le suivre, `Sequence::drop_return` ou `table::depiler_retour`.
+  un cadre sans le suivre, `Sequence::drop_return` ou `table::pop_return`.
 * **Durée d'animation nulle** : `anim_step` d'une entrée de durée 0 fait repartir la durée de 0xFFFF et lève la
   retenue (le `bcs` de l'appelant la prend pour une fin de script). `anim::Step::Wrapped`, `Step::finished()` ; le
   premier essai du lot 0b, qui ne rendait vrai qu'en fin de script, faisait diverger `ending` (un son manquant).
 * **Drapeaux d'un mouvement** : `bgt`/`ble`/`bpl` après un `move_*` testent la dernière addition ; utiliser la
   `LastAdd` rendue, pas `x.c.cond(...)` (qui ne vaut plus rien depuis que les méthodes appellent le cœur).
 * **Lectures de drapeaux indirectes** : des aides (`carry(x)`, `zero(x)`, `ctx.gt()`) lisent les drapeaux de la
-  dernière routine ; après une méthode de `Courant`, elles lisent n'importe quoi. Les remplacer par la valeur rendue.
+  dernière routine ; après une méthode de `Current`, elles lisent n'importe quoi. Les remplacer par la valeur rendue.
 * **Une validation lancée recompile** : ne pas modifier les sources pendant le `cargo build` de `validate_all.sh`.
 
 ## Check-list d'un lot

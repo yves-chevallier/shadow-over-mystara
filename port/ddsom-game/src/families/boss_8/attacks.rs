@@ -1,23 +1,23 @@
-//! Boss 8, groupe 4 : les attaques (`+6` = 0 à 18), chacune en étapes `+7` = 0, 2, 4...
-//! À la fin d'une attaque, `aids::after_attack` choisit la suite.
+//! Boss 8, group 4: the attacks (`+6` = 0 to 18), each in steps `+7` = 0, 2, 4...
+//! At the end of an attack, `aids::after_attack` chooses what follows.
 
 use crate::families::cx::Bench;
 use super::aids;
 use super::*;
 use crate::objects::Current;
 
-/// Clé d'animation `kind` (`+0xa2`, recopiée en `+0xa3`).
+/// Animation key `kind` (`+0xa2`, copied to `+0xa3`).
 fn key<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
 }
 
-/// Fin d'une étape de décompte : le décompte de `+0xa0` est-il écoulé ?
+/// End of a countdown step: has the countdown of `+0xa0` elapsed?
 fn timer_done<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     sub16(x, TIMER, 1).mi()
 }
 
-/// Étape finale commune des attaques (0x8880a) : joue l'animation jusqu'au bout, puis choisit la suite.
+/// Common final step of the attacks (0x8880a): plays the animation to the end, then chooses what follows.
 fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         aids::after_attack(x);
@@ -42,7 +42,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch(x, table, f::SUB3)
 }
 
-/// 0x887ce (`+6` = 0) : un seul coup.
+/// 0x887ce (`+6` = 0): a single hit.
 fn slash<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x, 0x887dc) == 0x887e0 {
         addq8(x, f::SUB3, 2);
@@ -55,7 +55,7 @@ fn slash<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8881a (`+6` = 8) : coup en trois temps (le boss ne frappe qu'aux images clés `+0x33`).
+/// 0x8881a (`+6` = 8): three-beat hit (the boss only strikes at the key frames `+0x33`).
 fn combo<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x88828) {
         0x88830 => {
@@ -92,13 +92,13 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Lance un projectile (0xb4f44, réglage 5) vers un joueur choisi par `pick`.
+/// Launches a projectile (0xb4f44, setting 5) toward a player chosen by `pick`.
 fn shoot<'a, R: Bench>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
     pick(x);
     crate::families::effects_creators::spell(x.b, x.o, 5);
 }
 
-/// 0x888ac (`+6` = 4, 6) et 0x88cae (`+6` = 14) : rafale de projectiles, chacun vers un joueur.
+/// 0x888ac (`+6` = 4, 6) and 0x88cae (`+6` = 14): volley of projectiles, each toward a player.
 fn volley_start<R: Bench>(x: &mut Cx<'_, R>, kind: u8, extra: bool) {
     addq8(x, f::SUB3, 2);
     if !extra {
@@ -116,7 +116,7 @@ fn volley_start<R: Bench>(x: &mut Cx<'_, R>, kind: u8, extra: bool) {
     strike(x, 3);
 }
 
-/// Premier tir d'une rafale : sons, effet, puis un tir par joueur en vie.
+/// First shot of a volley: sounds, effect, then one shot per living player.
 fn volley_fire<'a, R: Bench>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
     lib::shake_58(x, 0x30);
     lib::sound(x, 0xedd2c);
@@ -129,7 +129,7 @@ fn volley_fire<'a, R: Bench>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
     strike(x, 4);
 }
 
-/// Un tir de plus tant qu'il reste des joueurs à viser.
+/// One more shot as long as there are players left to aim at.
 fn volley_next<'a, R: Bench>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
     let f = sub8(x, VOLLEY, 1);
     if !f.eq() && !f.mi() {
@@ -156,7 +156,7 @@ fn throw_knives<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x88cae (`+6` = 14) : pluie de projectiles, répétée jusqu'à épuisement de `+0xaa`.
+/// 0x88cae (`+6` = 14): rain of projectiles, repeated until `+0xaa` is exhausted.
 fn rain<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x88cbc) {
         0x88cc4 => volley_start(x, 0x11, true),
@@ -182,7 +182,7 @@ fn rain<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x88a64 (`+6` = 10) : charge latérale avec bouffées de poussière, puis arrêt.
+/// 0x88a64 (`+6` = 10): lateral charge with puffs of dust, then stop.
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x88a72) {
         0x88a7c => {
@@ -243,7 +243,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Toutes les 4 images, une bouffée de poussière sous les pieds (`andi.w #3,(0x6e,A5) ; beq`).
+/// Every 4 frames, a puff of dust under the feet (`andi.w #3,(0x6e,A5) ; beq`).
 fn dust<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.a5_u16(0x6e) & 3;
     x.set_a5_u16(0x6e, v);
@@ -252,7 +252,7 @@ fn dust<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x88b92 (`+6` = 12) : bond avec chute, atterrissage et gerbe d'effets.
+/// 0x88b92 (`+6` = 12): leap with fall, landing and burst of effects.
 fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x88ba0, f::SUB3) {
         0x88bac => leap_start(x, -0x400, 0x10, 9),
@@ -260,7 +260,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Début du bond : élan horizontal `vx` (inversé si le boss regarde à gauche), clé d'animation `kind`.
+/// Start of the leap: horizontal momentum `vx` (reversed if the boss faces left), animation key `kind`.
 pub(super) fn leap_start<R: Bench>(x: &mut Cx<'_, R>, vx: i16, kind: u8, anim: u32) {
     addq8(x, f::SUB3, 2);
     x.set8(VULNERABLE, 1);
@@ -277,7 +277,7 @@ pub(super) fn leap_start<R: Bench>(x: &mut Cx<'_, R>, vx: i16, kind: u8, anim: u
     strike(x, anim);
 }
 
-/// Étapes communes du bond (0x88bf8, 0x88c0e, 0x88c34, 0x88c7e, 0x88c9a).
+/// Common steps of the leap (0x88bf8, 0x88c0e, 0x88c34, 0x88c7e, 0x88c9a).
 pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, t: u32) {
     match t {
         0x88bf8 => {
@@ -290,7 +290,7 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, t: u32) {
         0x88c0e => {
             x.move_xz();
             if !Fl::sub16(x.u16(0x18), 0xfd00).gt() || true {
-                // cmpi.w #-0x300,(0x18,A0) ; bgt : l'élan vertical se réduit
+                // cmpi.w #-0x300,(0x18,A0) ; bgt: the vertical momentum shrinks
             }
             if (x.u16(0x18) as i16) <= -0x300 {
                 x.set16(0x1a, (-0x98i16) as u16);
@@ -329,7 +329,7 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, t: u32) {
     }
 }
 
-/// 0x88d86 (`+6` = 16) : disparition, réapparition à côté.
+/// 0x88d86 (`+6` = 16): disappearance, reappearance beside.
 fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x88d94) {
         0x88d9c => {
@@ -359,7 +359,7 @@ fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x88e0e (`+6` = 2, `first`) et 0x88e50 (`+6` = 18) : bond en avant puis coup (0xa4e84 reçoit D4).
+/// 0x88e0e (`+6` = 2, `first`) and 0x88e50 (`+6` = 18): forward leap then hit (0xa4e84 receives D4).
 fn lunge<R: Bench>(x: &mut Cx<'_, R>, first: bool) {
     let t = step(x, if first { 0x88e1c } else { 0x88e5e });
     match t {
@@ -373,7 +373,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>, first: bool) {
             if x.anim_step() {
                 addq8(x, f::SUB3, 2);
                 x.set16(TIMER, 0x20);
-                // D4 = `first` (reste relu par les gestionnaires suivants, `dispatch::Leftovers`)
+                // D4 = `first` (leftover re-read by the following handlers, `dispatch::Leftovers`)
                 *x.c.d4() = first as u32;
                 crate::families::eshl_creators::series_36(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o, first as u8);
                 strike(x, 0xd);

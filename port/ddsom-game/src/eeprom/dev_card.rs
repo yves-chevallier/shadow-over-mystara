@@ -1,45 +1,45 @@
-//! RAM supplémentaire de la carte de développement (`A5+0x82` non nul ; jamais sur une borne).
+//! Extra RAM of the development card (`A5+0x82` non-zero; never on a cabinet).
 //!
-//! La carte de développement a, en 0x660000, une RAM de 16 Ko qui tient une comptabilité plus fine que
-//! l'EEPROM : pièces, départs, parties payantes et gratuites, temps de jeu, parties par personnage, durées
-//! extrêmes. Chaque zone existe en **trois exemplaires** (0x661xxx, 0x662xxx, 0x663xxx) : un vote
-//! (`vote`, 0x2e41c) compare les octets bas des mots des trois exemplaires, répare l'exemplaire
-//! minoritaire d'après les deux autres, et remet la zone à zéro si le désaccord est total. Les compteurs
-//! sont des longs rangés « à la `movep` » : un octet par mot, aux adresses impaires.
+//! The development card has, at 0x660000, a 16 KB RAM that holds finer bookkeeping than the
+//! EEPROM: coins, starts, paid and free games, play time, games per character, extreme
+//! durations. Each zone exists in **three copies** (0x661xxx, 0x662xxx, 0x663xxx): a vote
+//! (`vote`, 0x2e41c) compares the low bytes of the words of the three copies, repairs the
+//! minority copy from the other two, and resets the zone to zero if the disagreement is total. The counters
+//! are longs stored "`movep`-style": one byte per word, at odd addresses.
 //!
-//! Zones (décalage dans l'exemplaire, mots, variable de travail qui en reçoit la valeur) :
+//! Zones (offset in the copy, words, work variable that receives the value):
 //!
-//! | Décalage | Mots | Contenu | Variable (A5 -) | Bornes |
+//! | Offset | Words | Contents | Variable (A5 -) | Limits |
 //! |---|---|---|---|---|
-//! | 0x1140 | 32 | signature « CAPCOM… Dungeons & Dragons 2 » propre à la région | - | recopiée de la ROM |
-//! | 0x1020 | 4 | pièces insérées | 0x6164 | > 999 999 : 0 |
-//! | 0x1028 | 4 | départs | 0x6160 | > 999 999 : 0 |
-//! | 0x1030 | 4 | temps de jeu total | 0x615c | > 0x127a3980 : plafonné |
-//! | 0x1038 | 4 | parties payantes | 0x6158 | > 0x4f5880 : plafonné |
-//! | 0x1040 | 4 | parties gratuites | 0x6154 | > 0x4f5880 : plafonné |
-//! | 0x1048 | 4 | cartes distribuées | 0x6150 | > 0x4f5880 : plafonné |
-//! | 0x1200 | 48 | parties par personnage (12 compteurs de 8 octets) | 0x614c (48 octets) | - |
-//! | 0x1260 | 8 | durée de partie maximale, puis minimale (secondes) | 0x611c, 0x6118 | - |
-//! | 0x1270 | 2 | deux réglages d'un octet (0x1c3 par défaut) | A5+0x1a (2 octets) | octet nul : défaut |
+//! | 0x1140 | 32 | signature "CAPCOM… Dungeons & Dragons 2" specific to the region | - | copied from the ROM |
+//! | 0x1020 | 4 | coins inserted | 0x6164 | > 999 999: 0 |
+//! | 0x1028 | 4 | starts | 0x6160 | > 999 999: 0 |
+//! | 0x1030 | 4 | total play time | 0x615c | > 0x127a3980: capped |
+//! | 0x1038 | 4 | paid games | 0x6158 | > 0x4f5880: capped |
+//! | 0x1040 | 4 | free games | 0x6154 | > 0x4f5880: capped |
+//! | 0x1048 | 4 | cards dispensed | 0x6150 | > 0x4f5880: capped |
+//! | 0x1200 | 48 | games per character (12 counters of 8 bytes) | 0x614c (48 bytes) | - |
+//! | 0x1260 | 8 | maximum game duration, then minimum (seconds) | 0x611c, 0x6118 | - |
+//! | 0x1270 | 2 | two one-byte settings (0x1c3 by default) | A5+0x1a (2 bytes) | zero byte: default |
 //!
-//! (Le temps de jeu moyen que montre GAME DATA est le quotient du temps total par les parties payantes.)
-//! Particularités de l'original reproduites : la réparation ne recopie que les 8 premiers octets d'une
-//! zone, même celles de 48 ou 16 octets ; la zone 0x1048 n'est pas remise à zéro par la réinitialisation
-//! complète ; la zone 0x1240, qui a un vote mais aucun appelant, n'existe pas ici.
+//! (The average play time shown by GAME DATA is the quotient of the total time by the paid games.)
+//! Quirks of the original reproduced: the repair only copies the first 8 bytes of a
+//! zone, even those of 48 or 16 bytes; zone 0x1048 is not reset to zero by the full
+//! reset; zone 0x1240, which has a vote but no caller, does not exist here.
 
 use cps2::Cps2Bus;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 
 const RAM: u32 = 0x66_0000;
-/// Écart entre deux exemplaires d'une zone.
+/// Gap between two copies of a zone.
 const INSTANCE: u32 = 0x1000;
 
-/// Début de la signature de région dans le programme (lue comme donnée) ; 16 octets par région.
+/// Start of the region signature in the program (read as data); 16 bytes per region.
 const SIGNATURE: u32 = 0x2ebfc;
 const REGION: u32 = 0x70;
 
-/// Zone de la RAM supplémentaire : décalage de son premier exemplaire, et nombre de mots.
+/// Zone of the extra RAM: offset of its first copy, and number of words.
 #[derive(Clone, Copy)]
 struct Zone {
     start: u32,
@@ -57,7 +57,7 @@ const CHARACTERS: Zone = Zone { start: 0x1200, words: 48 };
 const DURATIONS: Zone = Zone { start: 0x1260, words: 8 };
 const SETTINGS: Zone = Zone { start: 0x1270, words: 2 };
 
-/// Variables de travail qui reçoivent les valeurs (décalage depuis A5, négatif).
+/// Work variables that receive the values (offset from A5, negative).
 const VAR_PIECES: u32 = 0x6164;
 const VAR_STARTS: u32 = 0x6160;
 const VAR_TIME: u32 = 0x615c;
@@ -74,14 +74,14 @@ fn var(negative_offset: u32) -> u32 {
 }
 
 impl Zone {
-    /// Adresse de l'exemplaire `k` (0, 1 ou 2).
+    /// Address of copy `k` (0, 1 or 2).
     fn instance(self, k: u32) -> u32 {
         RAM + self.start + k * INSTANCE
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// Valeurs « movep » : un octet par mot, aux adresses impaires
+// "movep" values: one byte per word, at odd addresses
 
 fn read_long(b: &mut Cps2Bus, address: u32) -> u32 {
     (0..4).fold(0, |v, i| v << 8 | rd8(b, address + 1 + 2 * i) as u32)
@@ -100,9 +100,9 @@ fn write_three(b: &mut Cps2Bus, zone: Zone, value: u32) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Vote entre les trois exemplaires
+// Vote between the three copies
 
-/// Résultat du vote : quels exemplaires diffèrent (bits de `0x2e41c`).
+/// Result of the vote: which copies differ (bits of `0x2e41c`).
 #[derive(PartialEq, Eq, Clone, Copy)]
 struct Vote(u16);
 
@@ -112,8 +112,8 @@ impl Vote {
     const C_DIFFERS_FROM_B: u16 = 8;
 }
 
-/// Compare les octets bas des mots des trois exemplaires (les écarts s'accumulent sur toute la zone) ;
-/// s'arrête au premier mot où les trois diffèrent.
+/// Compares the low bytes of the words of the three copies (the differences accumulate over the whole zone);
+/// stops at the first word where all three differ.
 fn vote(b: &mut Cps2Bus, zone: Zone) -> Vote {
     let mut v = 0;
     for i in 0..zone.words {
@@ -134,12 +134,12 @@ fn vote(b: &mut Cps2Bus, zone: Zone) -> Vote {
     Vote(v)
 }
 
-/// Exemplaire fautif quand deux exemplaires s'accordent contre le troisième.
+/// Faulty copy when two copies agree against the third.
 enum Verdict {
     Good,
-    /// Recopier l'exemplaire `de` sur l'exemplaire `to`.
+    /// Copy copy `de` onto copy `to`.
     Repair { de: u32, to: u32 },
-    /// Désaccord sans majorité : la zone est perdue.
+    /// Disagreement without a majority: the zone is lost.
     Lost,
 }
 
@@ -153,7 +153,7 @@ fn verdict(v: Vote) -> Verdict {
     }
 }
 
-/// Recopie les 8 premiers octets d'un exemplaire sur un autre (toute la réparation de l'original).
+/// Copies the first 8 bytes of a copy onto another (the whole repair of the original).
 fn repair(b: &mut Cps2Bus, zone: Zone, de: u32, to: u32) {
     for i in 0..2 {
         let v = rd32(b, zone.instance(de) + 4 * i);
@@ -161,7 +161,7 @@ fn repair(b: &mut Cps2Bus, zone: Zone, de: u32, to: u32) {
     }
 }
 
-/// Vote, puis réparation ou remise à zéro (`lost`) de la zone.
+/// Vote, then repair or reset to zero (`lost`) of the zone.
 fn check(b: &mut Cps2Bus, zone: Zone, lost: fn(&mut Cps2Bus)) {
     match verdict(vote(b, zone)) {
         Verdict::Good => {}
@@ -171,13 +171,13 @@ fn check(b: &mut Cps2Bus, zone: Zone, lost: fn(&mut Cps2Bus)) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Réinitialisations
+// Resets
 
 fn region(b: &mut Cps2Bus) -> u32 {
     rd16(b, A5 + REGION) as u32
 }
 
-/// Octet `i` de la signature de la région (le décalage `region << 4` est un mot signé, comme dans l'original).
+/// Byte `i` of the region signature (the offset `region << 4` is a signed word, as in the original).
 fn signature_byte(b: &mut Cps2Bus, i: u32) -> u8 {
     let offset = (region(b) << 4) as u16 as i16 as i32;
     rd8(b, SIGNATURE.wrapping_add(offset as u32) + i)
@@ -217,7 +217,7 @@ fn zero_durations(b: &mut Cps2Bus) {
     zone_zero(b, DURATIONS, 16)
 }
 
-/// Remet à zéro les `bytes` premiers octets de chaque exemplaire (longs pleins, pas « movep »).
+/// Resets to zero the first `bytes` bytes of each copy (full longs, not "movep").
 fn zone_zero(b: &mut Cps2Bus, zone: Zone, bytes: u32) {
     for k in 0..3 {
         for i in 0..bytes / 4 {
@@ -226,14 +226,14 @@ fn zone_zero(b: &mut Cps2Bus, zone: Zone, bytes: u32) {
     }
 }
 
-/// Valeurs par défaut des deux réglages : le long 0x1c3 (écrit plein, pas « movep »).
+/// Default values of the two settings: the long 0x1c3 (written in full, not "movep").
 fn default_settings(b: &mut Cps2Bus) {
     for k in 0..3 {
         wr32(b, SETTINGS.instance(k), 0x1c3);
     }
 }
 
-/// Réinitialisation complète (0x2e91a, 0x2e8e4) : toutes les zones, sauf les cartes distribuées.
+/// Full reset (0x2e91a, 0x2e8e4): all the zones, except the cards dispensed.
 fn reset_zones(b: &mut Cps2Bus) {
     zero_pieces(b);
     zero_starts(b);
@@ -247,10 +247,10 @@ fn reset_zones(b: &mut Cps2Bus) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Contrôle de la signature (0x2dd14)
+// Signature check (0x2dd14)
 
-/// Vote sur la signature, puis réparation en la comparant à celle de la ROM. Faux si la signature ne
-/// correspond pas à la région (RAM vierge ou d'une autre version : tout est réinitialisé).
+/// Vote on the signature, then repair by comparing it with the one in the ROM. False if the signature does not
+/// match the region (blank RAM or from another version: everything is reset).
 fn valid_signature(b: &mut Cps2Bus) -> bool {
     let (de, to) = match verdict(vote(b, SIGNATURE_ZONE)) {
         Verdict::Good => (0, 1),
@@ -268,13 +268,13 @@ fn valid_signature(b: &mut Cps2Bus) -> bool {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Contrôle des compteurs
+// Counter checks
 
-/// Valeur maximale d'un compteur et ce qu'on fait au-delà.
+/// Maximum value of a counter and what is done beyond it.
 enum Cabinet {
-    /// Remis à zéro (pièces, départs).
+    /// Reset to zero (coins, starts).
     Zero(u32),
-    /// Ramené au maximum.
+    /// Brought down to the maximum.
     Cap(u32),
 }
 
@@ -313,13 +313,13 @@ fn check_durations(b: &mut Cps2Bus) {
     check(b, DURATIONS, zero_durations)
 }
 
-/// Les deux réglages : un octet nul (en 0x...1 ou 0x...3) fait remettre 0x1c3 dans les trois mots, en
-/// « movep » (octets impairs 1, 3, 5, 7 : 0x01 0x01 0x01 0xc3).
+/// The two settings: a zero byte (at 0x...1 or 0x...3) makes 0x1c3 be put back in the three words, in
+/// "movep" (odd bytes 1, 3, 5, 7: 0x01 0x01 0x01 0xc3).
 fn check_settings(b: &mut Cps2Bus) {
     check(b, SETTINGS, default_settings);
     for byte in [1, 3] {
         if rd8(b, SETTINGS.instance(0) + byte) == 0 {
-            // movep.w D1,(1,A1), (3,A1), (5,A1) : les écritures se recouvrent
+            // movep.w D1,(1,A1), (3,A1), (5,A1): the writes overlap
             for offset in [1, 3, 5] {
                 wr8(b, SETTINGS.instance(0) + offset, 0x01);
                 wr8(b, SETTINGS.instance(0) + offset + 2, 0xc3);
@@ -329,7 +329,7 @@ fn check_settings(b: &mut Cps2Bus) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Variables de travail
+// Work variables
 
 fn copy_counter(b: &mut Cps2Bus, zone: Zone, variable: u32) {
     let v = read_long(b, zone.instance(0));
@@ -357,7 +357,7 @@ fn copy_settings(b: &mut Cps2Bus) {
     }
 }
 
-/// 0x2dcd2 : toutes les zones vers les variables de travail.
+/// 0x2dcd2: all the zones to the work variables.
 fn copy_all(b: &mut Cps2Bus) {
     copy_counter(b, PIECES, VAR_PIECES);
     copy_counter(b, STARTS, VAR_STARTS);
@@ -371,9 +371,9 @@ fn copy_all(b: &mut Cps2Bus) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Points d'entrée
+// Entry points
 
-/// 0x2dc9a au reset (0x2dca6 puis 0x2dcd2) : contrôle de toute la RAM supplémentaire, puis variables.
+/// 0x2dc9a at reset (0x2dca6 then 0x2dcd2): check of the whole extra RAM, then variables.
 pub fn start_up(b: &mut Cps2Bus) {
     if valid_signature(b) {
         check_coins(b);
@@ -391,7 +391,7 @@ pub fn start_up(b: &mut Cps2Bus) {
     copy_all(b);
 }
 
-/// 0x2e8e4 (boutons tenus au reset) : réinitialisation de la RAM supplémentaire, puis variables.
+/// 0x2e8e4 (buttons held at reset): reset of the extra RAM, then variables.
 pub fn reset(b: &mut Cps2Bus) {
     reset_zones(b);
     copy_all(b);
@@ -405,8 +405,8 @@ fn increment(b: &mut Cps2Bus, zone: Zone) {
     }
 }
 
-/// Un compteur de plus (pièce 0x2e456, départ 0x2e4a8, partie payante 0x2e4fc, gratuite 0x2e59a), sa zone
-/// contrôlée, et sa variable de travail mise à jour. Rend la nouvelle valeur (dernier long chargé).
+/// One more count (coin 0x2e456, start 0x2e4a8, paid game 0x2e4fc, free 0x2e59a), its zone
+/// checked, and its work variable updated. Returns the new value (last long loaded).
 pub fn pieces(b: &mut Cps2Bus) -> u32 {
     count(b, PIECES, check_coins, VAR_PIECES)
 }
@@ -427,12 +427,12 @@ fn count(b: &mut Cps2Bus, zone: Zone, control: fn(&mut Cps2Bus), variable: u32) 
     rd32(b, var(variable))
 }
 
-/// 0x2e540 (une fois par seconde de jeu) : une seconde de plus au temps de jeu total.
+/// 0x2e540 (once per second of play): one more second on the total play time.
 pub fn play_time(b: &mut Cps2Bus) -> u32 {
     count(b, TIME, check_time, VAR_TIME)
 }
 
-/// 0x2e638 : une partie de plus pour le personnage `character` (mot signé ; les compteurs font 8 octets).
+/// 0x2e638: one more game for character `character` (signed word; the counters are 8 bytes).
 pub fn character_part(b: &mut Cps2Bus, character: u16) {
     let offset = ((character as i16) << 3) as i32 as u32;
     for k in 0..3 {
@@ -444,7 +444,7 @@ pub fn character_part(b: &mut Cps2Bus, character: u16) {
     copy_characters(b);
 }
 
-/// 0x2e69e : durée d'une partie (`images`, long signé), en secondes ; garde la plus longue et la plus courte.
+/// 0x2e69e: duration of a game (`images`, signed long), in seconds; keeps the longest and the shortest.
 pub fn game_duration(b: &mut Cps2Bus, images: u32) {
     let seconds = (images as i32).wrapping_div(60) as u32;
     if seconds > rd32(b, var(VAR_MAX_DURATION)) {

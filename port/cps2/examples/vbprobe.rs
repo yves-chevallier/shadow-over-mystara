@@ -1,4 +1,4 @@
-//! Compteur de vblank (FF806C), SR et PC à la fin des images 60 à 100.
+//! Vblank counter (FF806C), SR and PC at the end of frames 60 to 100.
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ee = std::fs::read(&a[2]).ok();

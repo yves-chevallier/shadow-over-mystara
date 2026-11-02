@@ -1,4 +1,4 @@
-//! Scripts d'apparition des scènes (0xf2e5c, `ddsom-game/src/scene/script.rs`).
+//! Scene spawn scripts (0xf2e5c, `ddsom-game/src/scene/script.rs`).
 
 use std::io;
 use std::path::Path;
@@ -9,7 +9,7 @@ use ddsom_assets::spawns::{Entry, Script, Spawns};
 use crate::rom::Program;
 
 const TABLE: u32 = 0xf2f62;
-/// Scènes 0 à 114.
+/// Scenes 0 to 114.
 const SCENES: u32 = 115;
 const END: u16 = 0xffff;
 
@@ -51,7 +51,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     starts.sort();
     starts.dedup();
     let mut scripts: Vec<Script> = starts.iter().map(|&a| script(&rom, a)).collect();
-    // bourrage entre un script et le suivant (au plus 2 octets, 0x4e71)
+    // padding between one script and the next (at most 2 bytes, 0x4e71)
     for i in 0..scripts.len().saturating_sub(1) {
         let end = scripts[i].rom + scripts[i].bytes().len() as u32;
         let next = scripts[i + 1].rom;
@@ -60,7 +60,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         }
     }
     eprintln!(
-        "apparitions : {} scènes, {} scripts, {} entrées",
+        "spawns: {} scenes, {} scripts, {} entries",
         scenes.len(),
         scripts.len(),
         scripts.iter().map(|s| s.entries.len()).sum::<usize>()

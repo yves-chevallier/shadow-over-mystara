@@ -1,5 +1,5 @@
-//! Type 1, squelette debout (`+5 = 2`). `+6` : 0 et 6 début de l'idée (cible, regard), 2 marche,
-//! 4 demi-tour. Une idée qui dure (`+7 != 0`) marche vers la cible et décide d'attaquer.
+//! Type 1, standing skeleton (`+5 = 2`). `+6`: 0 and 6 start of the idea (target, gaze), 2 walk, 4 turn-around. A
+//! lasting idea (`+7 != 0`) walks toward the target and decides to attack.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -49,7 +49,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x580ae : l'idée commence, le squelette se tourne vers sa cible.
+/// 0x580ae: the idea begins, the skeleton turns toward its target.
 fn begin_idle<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
@@ -60,7 +60,7 @@ fn begin_idle<R: Bench>(x: &mut Cx<'_, R>) {
     lib::draw_6b(x);
 }
 
-/// `+6 = 2` : attend la fin de l'animation en marchant, puis tire l'idée suivante.
+/// `+6 = 2`: waits for the end of the animation while walking, then draws the next idea.
 fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         if x.u8(f::KEY_FRAME) != 0xff {
@@ -83,7 +83,7 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     begin_idle(x);
 }
 
-/// `+6 = 4` : demi-tour (animation 1 puis inversion de l'orientation).
+/// `+6 = 4`: turn-around (animation 1 then orientation inversion).
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         if x.u16(ANIM_STATE) != 0xff {
@@ -104,7 +104,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x58126 : marche vers la cible ; décide de se retourner, d'attendre ou d'attaquer.
+/// 0x58126: walks toward the target; decides to turn around, wait or attack.
 fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     lib::walk_point_reached(x);
     let (y, z) = (x.u16(WALK_ARGS_Y), x.u16(WALK_ARGS_Z));
@@ -134,7 +134,7 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     attack_choice(x);
 }
 
-/// 0x58194 : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
+/// 0x58194: a player in range? If so, attacks; otherwise advances by one animation step.
 fn attack_choice<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SERIES) != 0 && lib::target_in_box(x, -0x20, 0x20, 0xc) {
         set_state_long(x, DASH);
@@ -156,7 +156,7 @@ fn attack_choice<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x59254 : cible devant ; l'attaque est lancée si la décision par masque le veut.
+/// 0x59254: target in front; the attack is launched if the mask decision wants it.
 fn front_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let side = lib::target_in_front(x, -8, 0x68, 8);
     if !side.found() {
@@ -170,7 +170,7 @@ fn front_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x592a4 : cible plus loin (boîte large) ; même décision, attaque de loin.
+/// 0x592a4: target further away (wide box); same decision, long-range attack.
 fn far_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let side = lib::target_in_front(x, -0xa0, 0x30, 8);
     if !side.found() {
@@ -184,7 +184,7 @@ fn far_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// Décision par masque (0xa4c2 si cible et squelette regardent du même côté, 0xa4b4 sinon).
+/// Decision by mask (0xa4c2 if target and skeleton look the same way, 0xa4b4 otherwise).
 fn decision<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;

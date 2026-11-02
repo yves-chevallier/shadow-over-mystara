@@ -1,12 +1,12 @@
-//! Boss 6, groupe `+5` = 4 : les cinq attaques (`+6` = 0 à 8).
+//! Boss 6, group `+5` = 4: the five attacks (`+6` = 0 to 8).
 //!
-//! | `+6` | Attaque (h) |
+//! | `+6` | Attack (h) |
 //! |---|---|
-//! | 0 | rugissement |
-//! | 2 | piqué : s'élève, plonge avec un ESHL 0x2a lié, remonte |
-//! | 4 | piqué depuis l'arrière de la caméra : même vol, autre approche |
-//! | 6 | bond sur la cible |
-//! | 8 | vol bas avec un ESHL 0x2a (variante 2) : le tir part en bout de course |
+//! | 0 | roar |
+//! | 2 | dive: rises, plunges with a linked ESHL 0x2a, climbs back |
+//! | 4 | dive from behind the camera: same flight, other approach |
+//! | 6 | leap onto the target |
+//! | 8 | low flight with an ESHL 0x2a (variant 2): the shot leaves at the end of the run |
 
 use crate::families::cx::Bench;
 use super::decide;
@@ -15,9 +15,9 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::objects::Obj;
 
-/// Table des incréments de hauteur (longs) du vol bas, indexée par l'image-clé `+0x33` (espace des opcodes).
+/// Table of height increments (longs) of the low flight, indexed by the key frame `+0x33` (opcode space).
 const LOW_FLIGHT: u32 = 0x8508c;
-/// Table des incréments de hauteur de 0x8596c.
+/// Table of height increments of 0x8596c.
 const SKIM: u32 = 0x8599a;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -49,8 +49,8 @@ fn resume_stand<R: Bench>(x: &mut Cx<'_, R>) {
     decide::stand(x);
 }
 
-/// Battement d'ailes : l'image-clé a son bit 7 levé (posé par le script) : on le retire, on alterne `+0xb3`
-/// et le son suit (0x11a36).
+/// Wing beat: the key frame has its bit 7 raised (set by the script): it is removed, `+0xb3` alternates
+/// and the sound follows (0x11a36).
 fn wing_beat<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::KEY_FRAME).pl() {
         return;
@@ -62,7 +62,7 @@ fn wing_beat<R: Bench>(x: &mut Cx<'_, R>) {
     lib::ground_debris(x, flap);
 }
 
-/// `(0xc).l += (word << 16) >> 8` : la hauteur avance de `v` pixels par image (8.8).
+/// `(0xc).l += (word << 16) >> 8`: the height advances by `v` pixels per frame (8.8).
 fn climb<R: Bench>(x: &mut Cx<'_, R>, v: u16) {
     let d0 = ((v as i16 as i32) << 8) as u32;
     let z = x.u32(0xc).wrapping_add(d0);
@@ -89,9 +89,9 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- tir lié ----------------------------------------------------------------------------------------
+// --- linked shot ----------------------------------------------------------------------------------------
 
-/// Crée l'ESHL 0x2a lié au boss (variante `v`) ; faux si le pool est plein.
+/// Creates the ESHL 0x2a linked to the boss (variant `v`); false if the pool is full.
 fn make_shot<R: Bench>(x: &mut Cx<'_, R>, v: u8) -> bool {
     let Some(shot) = x.alloc(&pools::ESHL) else { return false };
     x.set16(CHILD, shot.0 as u16);
@@ -106,7 +106,7 @@ fn make_shot<R: Bench>(x: &mut Cx<'_, R>, v: u8) -> bool {
     true
 }
 
-/// 0x84b9c : le boss s'élève (ailes) une fois le tir créé.
+/// 0x84b9c: the boss rises (wings) once the shot is created.
 fn take_off<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set16(0x18, 0x400);
@@ -114,7 +114,7 @@ fn take_off<R: Bench>(x: &mut Cx<'_, R>) {
     fly(x, 1);
 }
 
-/// 0x84b6e : création du tir puis envol de la première attaque en piqué.
+/// 0x84b6e: creation of the shot then takeoff of the first dive attack.
 fn start_swoop<R: Bench>(x: &mut Cx<'_, R>) {
     if make_shot(x, 1) {
         take_off(x);
@@ -123,7 +123,7 @@ fn start_swoop<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 2 : piqué A -----------------------------------------------------------------------------------
+// --- +6 = 2: dive A -----------------------------------------------------------------------------------
 
 fn swoop_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
@@ -183,7 +183,7 @@ fn swoop_a<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +7 = 2 des piqués A et B (0x84bb8) : vol jusqu'à la hauteur de l'écran, avec les battements d'ailes.
+/// +7 = 2 of dives A and B (0x84bb8): flight up to the screen height, with the wing beats.
 fn swoop_flight<R: Bench>(x: &mut Cx<'_, R>) {
     let ceiling = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0);
     let height = x.u16(0x10).wrapping_add(x.u16(0xc));
@@ -214,7 +214,7 @@ fn swoop_flight<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 4 : piqué B -----------------------------------------------------------------------------------
+// --- +6 = 4: dive B -----------------------------------------------------------------------------------
 
 fn swoop_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
@@ -280,7 +280,7 @@ fn swoop_b<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 6 : bond sur la cible ----------------------------------------------------------------------
+// --- +6 = 6: leap onto the target ----------------------------------------------------------------------
 
 fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
@@ -358,9 +358,9 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 8 : vol bas avec tir ---------------------------------------------------------------------------
+// --- +6 = 8: low flight with shot ---------------------------------------------------------------------------
 
-/// 0x8596c : la hauteur avance d'un incrément de la table `SKIM` (signe selon `+0xa8`).
+/// 0x8596c: the height advances by one increment of the `SKIM` table (sign according to `+0xa8`).
 fn skim_step<R: Bench>(x: &mut Cx<'_, R>) {
     let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
     let mut d0 = rom32(x, SKIM + i) as i32;

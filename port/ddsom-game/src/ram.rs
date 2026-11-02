@@ -1,33 +1,33 @@
-//! Variables de la RAM de travail, nommées et typées (socle de la refactorisation, `docs/guide-refactorisation.md`).
+//! Work RAM variables, named and typed (foundation of the refactoring, `docs/guide-refactorisation.md`).
 //!
-//! L'état du jeu reste dans la RAM émulée tant que la validation compare la RAM image par image avec l'original : une
-//! variable est donc une *adresse* typée, et `get`/`set` lisent et écrivent le bus (big-endian, comme le 68000). On
-//! écrit `ram::SCENE.get(b)` au lieu de `rd8(b, A5 + 0x34)`, et `ram::PLAYERS.nth(k)` au lieu de
+//! The game state stays in the emulated RAM as long as validation compares the RAM frame by frame with the original: a
+//! variable is therefore a typed *address*, and `get`/`set` read and write the bus (big-endian, like the 68000). One
+//! writes `ram::SCENE.get(b)` instead of `rd8(b, A5 + 0x34)`, and `ram::PLAYERS.nth(k)` instead of
 //! `A5 + 0x5de + 0x200 * k`.
 //!
-//! Règle : une variable propre à un sous-système est déclarée dans son module (`hud::var`, `objects::ram`...) avec
-//! ces mêmes types ; ici ne figurent que les variables lues par plusieurs sous-systèmes. Les noms viennent de
-//! `docs/*.md` ; une hypothèse de sens est marquée (h).
+//! Rule: a variable specific to one subsystem is declared in its module (`hud::var`, `objects::ram`...) with
+//! these same types; only the variables read by several subsystems appear here. The names come from
+//! `docs/*.md`; a guessed meaning is marked (h).
 
 use cps2::Cps2Bus;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 
-/// Octet de la RAM de travail.
+/// Work RAM byte.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Byte(pub u32);
 
-/// Mot (16 bits) de la RAM de travail.
+/// Work RAM word (16 bits).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Word(pub u32);
 
-/// Long (32 bits) de la RAM de travail.
+/// Work RAM long (32 bits).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Long(pub u32);
 
 impl Byte {
-    /// Variable à `A5 + décalage` (les décalages négatifs de l'original s'écrivent en absolu : `0xff2472`).
+    /// Variable at `A5 + offset` (the negative offsets of the original are written as absolute: `0xff2472`).
     pub const fn a5(offset: u32) -> Self {
         Byte(A5 + offset)
     }
@@ -40,7 +40,7 @@ impl Byte {
     pub fn set(self, b: &mut Cps2Bus, v: u8) {
         wr8(b, self.0, v)
     }
-    /// Octet non nul (`tst.b` suivi de `bne`).
+    /// Non-zero byte (`tst.b` followed by `bne`).
     pub fn is_set(self, b: &mut Cps2Bus) -> bool {
         self.get(b) != 0
     }
@@ -73,7 +73,7 @@ impl Long {
     }
 }
 
-/// Tableau d'enregistrements de taille fixe (joueurs, panneaux, compteurs de pièces...).
+/// Array of fixed-size records (players, panels, coin counters...).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Table {
     pub base: u32,
@@ -82,7 +82,7 @@ pub struct Table {
 }
 
 impl Table {
-    /// Enregistrement `k` (non vérifié : l'original indexe parfois au-delà).
+    /// Record `k` (unchecked: the original sometimes indexes beyond).
     pub const fn nth(self, k: u32) -> Obj {
         Obj(self.base + self.step * k)
     }
@@ -91,43 +91,43 @@ impl Table {
     }
 }
 
-/// Germe du générateur pseudo-aléatoire `0x19a88` (`rng.rs`).
+/// Seed of the pseudo-random generator `0x19a88` (`rng.rs`).
 pub const RNG_SEED: Word = Word::a5(0x1a);
-/// Type de borne : nombre de joueurs (h) ; choisit la disposition de l'interface.
+/// Cabinet type: number of players (h); selects the interface layout.
 pub const CABINET: Byte = Byte::a5(0x20);
-/// Phase de la partie (pas de 2 : 8 entrée de scène, 0xc jeu, 0x10 sortie, 0x14 fin de partie ; `docs/looped.md`)
-/// et son étape.
+/// Game phase (step of 2: 8 scene entry, 0xc game, 0x10 exit, 0x14 end of game; `docs/looped.md`)
+/// and its step.
 pub const PHASE: Byte = Byte::a5(0x2c);
 pub const STEP: Byte = Byte::a5(0x2d);
-/// Une partie est en cours.
+/// A game is in progress.
 pub const GAME: Byte = Byte::a5(0x30);
-/// Numéro de scène (1-114 ; `docs/rewrite-guide.md`, « Atteindre un stage »).
+/// Scene number (1-114; `docs/rewrite-guide.md`, "Atteindre un stage").
 pub const SCENE: Byte = Byte::a5(0x34);
-/// Nombre de joueurs en vie (lot D : appelé à tort « difficulté » jusqu'au lot S).
+/// Number of players alive (batch D: wrongly called "difficulty" until batch S).
 pub const PLAYERS_ALIVE: Byte = Byte::a5(0x35);
-/// Caméra alternative choisie (non nul) au lieu de la caméra principale.
+/// Alternative camera selected (non-zero) instead of the main camera.
 pub const CAMERA_ALT_ACTIVE: Byte = Byte::a5(0x36);
-/// Mode d'affichage des panneaux de l'interface (`hud`).
+/// Display mode of the interface panels (`hud`).
 pub const DISPLAY_PANELS: Byte = Byte::a5(0x3c);
-/// Pause : un bit par joueur.
+/// Pause: one bit per player.
 pub const PAUSE: Byte = Byte::a5(0x4a);
-/// Compteur d'images du VBLANK (`vblank.rs`).
+/// VBLANK frame counter (`vblank.rs`).
 pub const IMAGES: Word = Word::a5(0x6c);
-/// Défilement vertical voulu du plan 1 (`vblank` le recopie dans le registre du plan) : les sorts font trembler
-/// l'écran en le basculant entre 0 et 0x100.
+/// Desired vertical scroll of plane 1 (`vblank` copies it into the plane register): spells make the
+/// screen shake by toggling it between 0 and 0x100.
 pub const SCROLL_Y_PLANE1: Word = Word::a5(0x4ba);
-/// Caméra principale : position à l'écran (x, y) ; caméra alternative.
+/// Main camera: position on screen (x, y); alternative camera.
 pub const CAMERA_X: Word = Word::a5(0x506);
 pub const CAMERA_Y: Word = Word::a5(0x50a);
 pub const CAMERA_ALT_X: Word = Word::a5(0x556);
 pub const CAMERA_ALT_Y: Word = Word::a5(0x55a);
-/// Mot des commutateurs (DSW) lu au VBLANK (`FF7FD0`) : bit 0x200 sans affichage des dégâts, 0x400 jauge de
-/// charge inactive, 0x800 collisions avec le décor.
+/// Switches word (DSW) read at VBLANK (`FF7FD0`): bit 0x200 no damage display, 0x400 charge gauge
+/// inactive, 0x800 collisions with the terrain.
 pub const DSW: Word = Word::a5(0x7fd0);
-/// Les quatre enregistrements de joueurs (0x200 octets ; champs : `player::Player`).
+/// The four player records (0x200 bytes; fields: `player::Player`).
 pub const PLAYERS: Table = Table { base: A5 + 0x5de, step: 0x200, count: 4 };
 
-/// Caméra de l'image : la caméra alternative si elle est choisie, sinon la principale.
+/// Camera of the frame: the alternative camera if selected, otherwise the main one.
 pub fn camera(b: &mut Cps2Bus) -> (u16, u16) {
     if CAMERA_ALT_ACTIVE.is_set(b) {
         (CAMERA_ALT_X.get(b), CAMERA_ALT_Y.get(b))

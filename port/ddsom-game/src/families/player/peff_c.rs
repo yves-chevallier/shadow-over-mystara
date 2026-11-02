@@ -1,5 +1,5 @@
-//! Effets des joueurs (PEFF), troisième série : types 2 à 5 (aura de maintien, coup, soin, lumière).
-//! Voir `docs/families/player.md`.
+//! Player effects (PEFF), third series: types 2 to 5 (hold aura, hit, healing, light).
+//! See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -8,8 +8,8 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Type 2 (0x4a880) : halo du joueur qui garde la pose 0x18 (`+0x6a` du joueur) tant que son
-/// animation tourne (jeu 0x1b540c).
+/// Type 2 (0x4a880): halo of the player who holds pose 0x18 (`+0x6a` of the player) as long as its animation runs (set
+/// 0x1b540c).
 mod halo {
     use super::*;
 
@@ -55,8 +55,8 @@ mod halo {
     }
 }
 
-/// Type 3 (0x4a9fe) : trace d'un coup, collée au joueur le temps de son geste (`+0x5c` = geste du
-/// joueur, `+7`). La variante 0 prend l'animation `+0x2f`, la variante 1 l'animation 3.
+/// Type 3 (0x4a9fe): trail of an attack, stuck to the player for the duration of its move (`+0x5c` = the player's move,
+/// `+7`). Variant 0 takes animation `+0x2f`, variant 1 animation 3.
 mod slash {
     use super::*;
 
@@ -84,7 +84,7 @@ mod slash {
         x.anim_start(ANIMS, 3);
     }
 
-    /// Place la trace devant le joueur (décalage selon sa variante, inversé selon son regard).
+    /// Places the trail in front of the player (offset according to its variant, inverted according to its facing).
     fn follow<R: Bench>(x: &mut Cx<'_, R>, owner: Obj, table: u32) {
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
@@ -117,8 +117,8 @@ mod slash {
     }
 }
 
-/// Type 4 (0x4abaa) : soin (variante 0 : étoiles autour du soigneur, 1 : étincelle qui monte, 2 :
-/// potion). Voir `player/spawn.rs` (`cure`, `potion`).
+/// Type 4 (0x4abaa): healing (variant 0: stars around the healer, 1: rising spark, 2: potion). See `player/spawn.rs`
+/// (`cure`, `potion`).
 mod cure {
     use super::*;
 
@@ -190,7 +190,7 @@ mod cure {
         x.anim_start(ANIMS, (r + 2) as u16);
     }
 
-    /// Potion : l'effet se pose sur le joueur qui boit (le soigneur lui-même, ou le premier joueur actif).
+    /// Potion: the effect is placed on the player who drinks (the healer itself, or the first active player).
     fn init_potion<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let owner = x.linked(f::OWNER);
@@ -228,8 +228,8 @@ mod cure {
         crate::sound::play(x.b, SFX_PRAYER, x.o);
     }
 
-    /// Variantes 0 et 2 : l'étoile tourne une image puis disparaît ; tous les 4 temps de la durée de
-    /// soin (`+0x168` du joueur) elle crée une étincelle.
+    /// Variants 0 and 2: the star spins for one frame then disappears; every 4 ticks of the healing duration (`+0x168`
+    /// of the player) it creates a spark.
     fn hold<R: Bench>(x: &mut Cx<'_, R>) {
         x.anim_step();
         if x.a5_u8(0x3d) == 0 {
@@ -243,7 +243,7 @@ mod cure {
         x.reinsert();
     }
 
-    /// `0x4ab82` : étincelle (variante 1) ; le compteur `+0x5f` tourne sur 8.
+    /// `0x4ab82`: spark (variant 1); counter `+0x5f` cycles over 8.
     fn spawn_spark<R: Bench>(x: &mut Cx<'_, R>) {
         if let Some(o) = x.alloc(&pools::PEFF) {
             o.set_u8(x.b, 0, 1);
@@ -272,9 +272,8 @@ mod cure {
     }
 }
 
-/// Type 5 (0x4af14) : lumière sacrée (variante 0 : colonne qui clignote puis éclate, créant deux
-/// halos de variante 1, avec secousses d'écran selon un script de la ROM ; variante 1 : halo posé
-/// au sol, +2f = 0 devant, 1 derrière).
+/// Type 5 (0x4af14): holy light (variant 0: column that blinks then bursts, creating two halos of variant 1, with
+/// screen shakes according to a ROM script; variant 1: halo placed on the ground, +2f = 0 in front, 1 behind).
 mod holy {
     use super::*;
 
@@ -341,7 +340,7 @@ mod holy {
         x.reinsert();
     }
 
-    /// Colonne qui clignote de plus en plus lentement, puis s'élève quand le joueur change de geste.
+    /// Column that blinks more and more slowly, then rises when the player changes move.
     fn rise<R: Bench>(x: &mut Cx<'_, R>) {
         x.add16(0x58, 1);
         x.set_bit(0x1, 1, false);
@@ -369,7 +368,7 @@ mod holy {
         }
     }
 
-    /// Chute de la colonne jusqu'au sol, puis éclatement.
+    /// Fall of the column to the ground, then bursting.
     fn fall<R: Bench>(x: &mut Cx<'_, R>) {
         x.anim_step();
         x.move_z();
@@ -392,7 +391,7 @@ mod holy {
         x.set8(0x5b, 0);
     }
 
-    /// Script de secousses d'écran : paires (commande, durée) lues à la suite dans la ROM.
+    /// Screen shake script: (command, duration) pairs read in sequence in the ROM.
     fn script<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x5b) == 0 {
             let mut at = x.u32(0x5c);
@@ -408,7 +407,7 @@ mod holy {
                 owner.set_u16(x.b, 0x168, 1);
                 crate::sound::play(x.b, SFX_END, x.o);
             } else {
-                // la table désigne la secousse par sa routine (0x2824, 0x2860, 0x289c)
+                // the table designates the shake by its routine (0x2824, 0x2860, 0x289c)
                 let mode = crate::camera_modes::shake::of_routine(x.rom32(SHAKE_TABLE + command as u32));
                 crate::camera_modes::start_shake(x.b, mode, duration as u16);
             }

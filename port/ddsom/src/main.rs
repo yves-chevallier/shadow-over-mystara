@@ -1,22 +1,22 @@
 //! Dungeons & Dragons: Shadow over Mystara — port Rust jouable.
 //!
-//! ddsom [dossier_roms] [--assets dossier] : ROMs extraites (ddsom.zip + dl-1425.bin de qsound.zip), défaut
-//! ../rom. Avec `--assets`, les graphismes et les échantillons viennent du dossier produit par `extract`
-//! (PNG et WAV) au lieu des ROMs graphiques et sonores (`dd2.11m`...`dd2.20m` non lues) ; `--assets` seul
-//! (sans dossier) lit `../assets`.
-//! Le jeu tourne sans 68000 : seulement les routines réécrites en Rust (`docs/noyau.md`). Avec `--assets`
-//! sans dossier de ROMs, il se joue **sans aucune ROM** : tout vient du dossier d'assets (tables du programme,
-//! graphismes, données du pilote son, tables du DSP, échantillons ; `docs/without-rom.md`), le pilote son est
-//! celui en Rust, et aucun fichier ROM n'est ouvert.
-//! Diagnostic : `DDSOM_ORIGINE=1` (code d'origine à la vitesse de l'arcade), `DDSOM_INTERP=1` (tout interprété) ; ces modes
-//! lisent les ROMs.
-//! Touches (comme MAME) : 5 pièce, 1 Start, flèches, Ctrl/Alt/Espace/Maj = boutons 1-4
-//! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, F11 plein écran, Échap quitter ;
-//! à changer dans touches.cfg (`keys.rs`), manettes Xbox comprises sous Windows (`gamepad.rs`).
-//! L'EEPROM (réglages, compteurs) est conservée dans nvram/ddsom.eeprom.
-//! F5 sauvegarde la partie dans sauvegardes/rapide.txt, F9 la reprend (`save.rs` : rejeu des entrées).
-//! `DDSOM_ENREGISTRE=game.txt` écrit de même la partie en quittant : `validate <roms> partie.txt.eeprom
-//! partie.txt <images>` la rejoue.
+//! ddsom [roms_dir] [--assets dir] : extracted ROMs (ddsom.zip + dl-1425.bin from qsound.zip), default
+//! ../rom. With `--assets`, the graphics and samples come from the folder produced by `extract`
+//! (PNG and WAV) instead of the graphics and sound ROMs (`dd2.11m`...`dd2.20m` not read); `--assets` alone
+//! (without a folder) reads `../assets`.
+//! The game runs without the 68000: only the routines rewritten in Rust (`docs/noyau.md`). With `--assets`
+//! and no ROM folder, it plays **without any ROM at all**: everything comes from the assets folder (program tables,
+//! graphics, sound driver data, DSP tables, samples; `docs/without-rom.md`), the sound driver is
+//! the Rust one, and no ROM file is opened.
+//! Diagnostics: `DDSOM_ORIGINE=1` (original code at arcade speed), `DDSOM_INTERP=1` (everything interpreted); these modes
+//! read the ROMs.
+//! Keys (as in MAME): 5 coin, 1 Start, arrows, Ctrl/Alt/Space/Shift = buttons 1-4
+//! (or W X C V), 6 coin P2 / 2 Start P2, F2 test, P pause, Tab fast forward, F11 full screen, Esc quit;
+//! rebindable in touches.cfg (`keys.rs`), Xbox gamepads included under Windows (`gamepad.rs`).
+//! The EEPROM (settings, counters) is kept in nvram/ddsom.eeprom.
+//! F5 saves the game to sauvegardes/rapide.txt, F9 resumes it (`save.rs`: input replay).
+//! `DDSOM_ENREGISTRE=game.txt` likewise writes the game on exit: `validate <roms> partie.txt.eeprom
+//! partie.txt <frames>` replays it.
 
 mod audio;
 mod gamepad;
@@ -36,15 +36,15 @@ fn main() {
     let nvram = PathBuf::from("nvram/ddsom.eeprom");
     let mut keys = keys::Keys::charge("touches.cfg".as_ref());
     let eeprom = std::fs::read(&nvram).ok();
-    // le jeu : sans 68000, routines Rust seules (il s'arrête sur une adresse qui n'en a pas). Diagnostic :
-    // DDSOM_ORIGINE=1 : code d'origine à la vitesse de l'arcade ; DDSOM_INTERP=1 : tout interprété. (Le mode hybride,
-    // DDSOM_HYBRIDE=1, est retiré.)
+    // the game: without the 68000, Rust routines only (it stops on an address that has none). Diagnostics:
+    // DDSOM_ORIGINE=1: original code at arcade speed; DDSOM_INTERP=1: everything interpreted. (The hybrid mode,
+    // DDSOM_HYBRIDE=1, is removed.)
     ddsom_game::refuse_hybrid();
     let mut no_68k = !(std::env::var_os("DDSOM_ORIGINE").is_some() || std::env::var_os("DDSOM_INTERP").is_some());
-    // sans ROM : assets seuls, ce qui demande le jeu sans 68000 (le programme 68000 n'est pas dans les assets)
+    // no ROM: assets only, which requires the game without the 68000 (the 68000 program is not in the assets)
     let romdir = match (&assets, romdir) {
         (Some(_), None) if !no_68k && !PathBuf::from(DEFAULT_ROMS).is_dir() => {
-            eprintln!("Pas de dossier de ROMs : jeu sans ROM, depuis les assets seuls (sans 68000, pas de diagnostic).");
+            eprintln!("No ROM folder: playing without ROMs, from the assets alone (no 68000, no diagnostics).");
             no_68k = true;
             None
         }
@@ -63,14 +63,14 @@ fn main() {
         Ok(c) => c,
         Err(e) => {
             match (&assets, &romdir) {
-                (Some(dir), None) => eprintln!("Impossible de charger les assets depuis {} : {e}", dir.display()),
-                (_, Some(romdir)) => eprintln!("Impossible de charger les ROMs depuis {} : {e}", romdir.display()),
+                (Some(dir), None) => eprintln!("Cannot load the assets from {}: {e}", dir.display()),
+                (_, Some(romdir)) => eprintln!("Cannot load the ROMs from {}: {e}", romdir.display()),
                 (None, None) => unreachable!(),
             }
             std::process::exit(1);
         }
     };
-    // une machine neuve : au démarrage, et à chaque reprise d'une sauvegarde (`save.rs`)
+    // a fresh machine: at startup, and on each resume from a save (`save.rs`)
     let machine = |eeprom: Option<&[u8]>| {
         let mut m = Machine::ddsom(contents.clone(), eeprom);
         if no_68k {
@@ -78,8 +78,8 @@ fn main() {
         } else if std::env::var_os("DDSOM_ORIGINE").is_some() {
             ddsom_rc::install(&mut m);
         }
-        // pilote son réécrit en Rust à la place du programme du Z80 : DDSOM_SON_RUST=1, et toujours sans ROM (la
-        // région du Z80 reconstruite depuis les assets n'a que les données du pilote, pas son programme)
+        // sound driver rewritten in Rust in place of the Z80 program: DDSOM_SON_RUST=1, and always without ROMs (the
+        // Z80 region rebuilt from the assets has only the driver's data, not its program)
         if std::env::var_os("DDSOM_SON_RUST").is_some() || romdir.is_none() {
             m.sound.use_rust_driver();
         }
@@ -92,7 +92,7 @@ fn main() {
 
     let audio = audio::Audio::open(qsound::SAMPLE_RATE.round() as u32);
     if audio.is_none() {
-        eprintln!("Son indisponible (pas de sortie audio) : le jeu tourne sans son.");
+        eprintln!("Sound unavailable (no audio output): the game runs without sound.");
     }
 
     let frame_time = Duration::from_secs_f64(1.0 / FRAME_HZ);
@@ -100,8 +100,8 @@ fn main() {
     let mut paused = false;
     let mut game = save::Game::new(&m);
     let saved = |game: &save::Game, file: &Path| match game.saved(file) {
-        Ok(()) => eprintln!("Partie sauvegardée dans {} (image {}).", file.display(), game.images()),
-        Err(e) => eprintln!("Sauvegarde dans {} impossible : {e}", file.display()),
+        Ok(()) => eprintln!("Game saved to {} (frame {}).", file.display(), game.images()),
+        Err(e) => eprintln!("Cannot save to {}: {e}", file.display()),
     };
     let mut buf = vec![0u32; 384 * 224];
 
@@ -124,7 +124,7 @@ fn main() {
             let start = Instant::now();
             match save::Game::charge(SAVE.as_ref(), |ee| machine(Some(ee))) {
                 Ok((new, p)) => {
-                    eprintln!("Partie reprise à l'image {} ({:.1} s).", p.images(), start.elapsed().as_secs_f64());
+                    eprintln!("Game resumed at frame {} ({:.1} s).", p.images(), start.elapsed().as_secs_f64());
                     (m, game) = (new, p);
                     next = Instant::now();
                 }
@@ -142,10 +142,10 @@ fn main() {
         game.image(&m);
         let img = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.run_frame())) {
             Ok(img) => img,
-            // sans 68000 : arrêt sur une adresse sans routine Rust (diagnostic déjà affiché par la panique)
+            // without the 68000: stop on an address with no Rust routine (diagnostic already printed by the panic)
             Err(e) if no_68k => {
                 let m = e.downcast_ref::<String>().cloned().unwrap_or_default();
-                eprintln!("Le jeu sans 68000 s'arrête : {}", m.trim_start_matches(ddsom_game::no68k::STOP));
+                eprintln!("The game without the 68000 stops: {}", m.trim_start_matches(ddsom_game::no68k::STOP));
                 break;
             }
             Err(e) => std::panic::resume_unwind(e),
@@ -153,14 +153,14 @@ fn main() {
         for (d, p) in buf.iter_mut().zip(&img) {
             *d = (p[0] as u32) << 16 | (p[1] as u32) << 8 | p[2] as u32;
         }
-        win.update_with_buffer(&buf, 384, 224).expect("affichage");
+        win.update_with_buffer(&buf, 384, 224).expect("display");
 
         let samples: Vec<i16> = m.sound.audio.drain(..).flat_map(|s| s).collect();
         let fast = t.fast;
         if let (Some(a), false) = (&audio, fast) {
             a.push(samples);
         }
-        // cadence : 59,64 images/s (sauf avance rapide)
+        // pacing: 59.64 frames/s (except fast forward)
         if !fast {
             next += frame_time;
             let now = Instant::now();
@@ -179,25 +179,25 @@ fn main() {
         let _ = std::fs::create_dir_all(dir);
     }
     if let Err(e) = std::fs::write(&nvram, m.bus.eeprom.to_bytes()) {
-        eprintln!("Sauvegarde de l'EEPROM impossible : {e}");
+        eprintln!("Cannot save the EEPROM: {e}");
     }
 }
 
 const TITLE: &str = "Dungeons & Dragons: Shadow over Mystara (port Rust)";
 
-/// Fenêtre de jeu, ou fenêtre sans bord couvrant l'écran (image étirée sans déformation) en plein écran.
+/// Game window, or a borderless window covering the screen (frame stretched without distortion) in full screen.
 fn window(full_screen: bool) -> Window {
     let mut win = if full_screen {
         let opts = WindowOptions { none: true, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() };
         match screen_size() {
             Some((l, h)) => Window::new(TITLE, l, h, opts),
-            // taille de l'écran inconnue : plus grand multiple entier qui y tient
+            // unknown screen size: largest whole multiple that fits
             None => Window::new(TITLE, 384, 224, WindowOptions { scale: Scale::FitScreen, ..opts }),
         }
     } else {
         Window::new(TITLE, 384, 224, WindowOptions { scale: Scale::X2, ..WindowOptions::default() })
     }
-    .expect("fenêtre");
+    .expect("window");
     if full_screen {
         win.set_position(0, 0);
         win.set_cursor_visibility(false);
@@ -205,11 +205,11 @@ fn window(full_screen: bool) -> Window {
     win
 }
 
-/// Taille de l'écran principal en pixels (Windows : `GetSystemMetrics` de user32).
+/// Size of the main screen in pixels (Windows: `GetSystemMetrics` from user32).
 #[cfg(windows)]
 fn screen_size() -> Option<(usize, usize)> {
     type GetSystemMetricsFn = unsafe extern "system" fn(index: i32) -> i32;
-    // SAFETY : signature conforme à <winuser.h> ; la bibliothèque reste chargée pendant les appels.
+    // SAFETY: signature matches <winuser.h>; the library stays loaded during the calls.
     unsafe {
         let lib = libloading::Library::new("user32.dll").ok()?;
         let metrique = *lib.get::<GetSystemMetricsFn>(b"GetSystemMetrics").ok()?;
@@ -223,13 +223,13 @@ fn screen_size() -> Option<(usize, usize)> {
     None
 }
 
-/// Fichier de la sauvegarde rapide (F5 / F9).
+/// File of the quick save (F5 / F9).
 const SAVE: &str = "sauvegardes/rapide.txt";
 
-/// Dossier des ROMs par défaut.
+/// Default ROM folder.
 const DEFAULT_ROMS: &str = "../rom";
 
-/// Dossier des ROMs s'il est donné, et dossier des ressources si `--assets` est donné.
+/// ROM folder if given, and resources folder if `--assets` is given.
 fn arguments(args: Vec<String>) -> (Option<PathBuf>, Option<PathBuf>) {
     let mut romdir = None;
     let mut assets = None;

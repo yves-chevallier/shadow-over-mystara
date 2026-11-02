@@ -25,7 +25,7 @@ images (`examples/determinism.rs`). Conséquences :
   d'origine) : toute machine d'origine créée par un outil doit passer par `install_reference`, jamais par
   `ddsom_rc::install` seul. `DDSOM_STEP_CAP=n` change la valeur, 0 la supprime (mesures à ×1). Voir `docs/boucle.md` §1.
 - le test de mémoire du menu TEST (8. MEMORY CHECK) : il dure une vingtaine d'images interruptions masquées et sa durée
-  dépend de la fréquence du 68000 ; il est instantané dans les deux machines (correctif `service::memoire::patch_instant_check`
+  dépend de la fréquence du 68000 ; il est instantané dans les deux machines (correctif `service::memory::patch_instant_check`
   de la liste `patches` de `lib.rs`, qui exécute le code d'origine sans faire avancer le temps). Voir `docs/service.md` §4.
 
 La réécriture se fait **de haut en bas** : le Rust pilote (boucle de partie, phases, mise à jour du
@@ -72,12 +72,12 @@ pub const NOM: Native = Native {
 - **Pas de calcul de cycles**, pas d'exécution « à blanc », pas de reproduction des drapeaux qu'aucun
   appelant ne lit. Si du code existant le fait encore, c'est un reste de l'ancienne méthode : on peut
   le simplifier.
-- **Sous-routines non réécrites** : `ddsom_game::call(c, b, adresse)` (comme un JSR).
+- **Sous-routines non réécrites** : `ddsom_game::call(c, b, address)` (comme un JSR).
 - Une routine qui **cède la main** à l'ordonnanceur (0xa40 attend l'image suivante, 0xa86 cède sans
   attendre) ne peut pas être une native d'un seul tenant : la découper aux points de cession, ou
   réécrire la tâche entière comme une machine à états Rust.
 - Ajouter la routine à la liste `NATIVES` de son module, chaînée dans `all_natives()` de `src/lib.rs`
-  (le test `entrees_uniques` vérifie qu'aucune adresse n'est remplacée deux fois).
+  (le test `unique_inputs` vérifie qu'aucune adresse n'est remplacée deux fois).
 
 ## Style
 
@@ -111,7 +111,7 @@ est affichée) et si possible ajouter un scénario qui l'exerce.
 
 ## Format des scénarios (`scenarios/*.txt`)
 
-Une action par ligne, `image champ valeur` (voir l'en-tête de `port/ddsom-game/src/scenario.rs`) :
+Une action par ligne, `image field value` (voir l'en-tête de `port/ddsom-game/src/scenario.rs`) :
 
 | Ligne | Effet |
 |---|---|

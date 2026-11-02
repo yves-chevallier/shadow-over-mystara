@@ -1,4 +1,4 @@
-//! Boss 16, groupe 4 : les huit attaques (`+6` = 0 à 14). Chacune finit par `next_attack` (0x94e24).
+//! Boss 16, group 4: the eight attacks (`+6` = 0 to 14). Each ends with `next_attack` (0x94e24).
 
 use crate::families::cx::Bench;
 use super::*;
@@ -21,7 +21,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0xb59a6 / 0xb59c8 : un EFFCT 0x30 (variante 1 ou 2) lié au boss (`+0x46`).
+/// 0xb59a6 / 0xb59c8: an EFFCT 0x30 (variant 1 or 2) linked to the boss (`+0x46`).
 fn spawn_trail<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
     if let Some(e) = x.alloc(&pools::EFFCT) {
         e.set_u8(x.b, 0, 1);
@@ -32,7 +32,7 @@ fn spawn_trail<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
     }
 }
 
-/// 0xa3b4a / 0xa3b66 : un ESHL 0x2d (variante 0 ou, avec `index` en `+0x2f`, 1) lié au boss (`+0x46`).
+/// 0xa3b4a / 0xa3b66: an ESHL 0x2d (variant 0 or, with `index` in `+0x2f`, 1) linked to the boss (`+0x46`).
 fn spawn_flame<R: Bench>(x: &mut Cx<'_, R>, variant: u8, index: u8) {
     if let Some(s) = x.alloc(&pools::ESHL) {
         s.set_u8(x.b, 0, 1);
@@ -45,7 +45,7 @@ fn spawn_flame<R: Bench>(x: &mut Cx<'_, R>, variant: u8, index: u8) {
     }
 }
 
-/// 0x93950 : cherche un joueur à saisir (0xfc44) et le saisit (0xfd64) ; vrai s'il est saisi.
+/// 0x93950: looks for a player to grab (0xfc44) and grabs them (0xfd64); true if grabbed.
 fn try_grab<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let Some(player) = lib::attack_hits_a_player(x, 2) else {
         return false;
@@ -54,7 +54,7 @@ fn try_grab<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x93884 : le boss se baisse en tremblant, bondit sur le joueur et tente de le saisir pendant le saut.
+/// 0x93884: the boss crouches down trembling, leaps onto the player and tries to grab them during the jump.
 fn crawl_leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -86,7 +86,7 @@ fn crawl_leap<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x938ce : décollage vers l'avant, puis la suite du vol dans la même image.
+/// 0x938ce: forward takeoff, then the rest of the flight in the same frame.
 fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     next7(x);
     x.set8(TIMER, 3);
@@ -99,7 +99,7 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     in_flight(x);
 }
 
-/// 0x938fe : en vol ; après trois images le boss essaie de saisir un joueur, et à l'atterrissage il freine.
+/// 0x938fe: in flight; after three frames the boss tries to grab a player, and on landing it brakes.
 fn in_flight<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, TIMER).gt() {
         sub8(x, TIMER, 1);
@@ -118,7 +118,7 @@ fn in_flight<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(TIMER, 0x10);
 }
 
-/// 0x9396a : charge à toute vitesse, tremble puis repart en arrière.
+/// 0x9396a: charges at full speed, trembles then goes back.
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -166,7 +166,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x93a26 : crache une flamme (ESHL 0x2d variante 0 ; les EFFCT 0x30 l'accompagnent).
+/// 0x93a26: spits a flame (ESHL 0x2d variant 0; the EFFCT 0x30 accompany it).
 fn tail_flame<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -201,7 +201,7 @@ fn tail_flame<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x93a9a : souffle long (variante 1 de la flamme tous les seize images).
+/// 0x93a9a: long breath (variant 1 of the flame every sixteen frames).
 fn sweep_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -236,7 +236,7 @@ fn sweep_a<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x93b0c et 0x93b80 : souffle de feu qui laisse une traînée (EFFCT 0x30 variante 2).
+/// 0x93b0c and 0x93b80: fire breath that leaves a trail (EFFCT 0x30 variant 2).
 fn sweep_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -271,7 +271,7 @@ fn sweep_b<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x93bf4 : rugissement (ESHL 0x2d variante 1 à l'image-clé).
+/// 0x93bf4: roar (ESHL 0x2d variant 1 at the key frame).
 fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -304,7 +304,7 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x93c60 : deux sauts successifs, le second plus long.
+/// 0x93c60: two successive jumps, the second longer.
 fn double_jump<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {

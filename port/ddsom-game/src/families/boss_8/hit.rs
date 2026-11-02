@@ -1,5 +1,5 @@
-//! Boss 8, état 4 « touché » (0x89292). Groupes `+5` : 0 réaction (routine commune des ennemis choisie par le code de coup
-//! `+0x49` dans la table de longs 0x89330), 2 projeté, 4 chute, 6 mort, 8 et 10 retour au combat.
+//! Boss 8, state 4 "hit" (0x89292). `+5` groups: 0 reaction (common enemy routine chosen by the hit code
+//! `+0x49` in the table of longs 0x89330), 2 thrown, 4 fall, 6 death, 8 and 10 return to combat.
 
 use crate::families::cx::Bench;
 use super::aids;
@@ -32,7 +32,7 @@ fn paused<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PAUSE.get(x.b) != 0
 }
 
-/// 0x892ce : le coup est traité par la routine commune ; sans PV le boss meurt.
+/// 0x892ce: the hit is handled by the common routine; with no HP the boss dies.
 fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set_bit(0x1, 1, false);
@@ -57,7 +57,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x893dc : le boss est projeté en arrière, rebondit, puis se relève ou riposte.
+/// 0x893dc: the boss is thrown backward, bounces, then gets up or counterattacks.
 fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -96,7 +96,7 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(0x58, 0);
             x.set32(0x14, 0);
             let n = var::PLAYERS_ALIVE.get(x.b) as u32;
-            // D5 = l'index (reste relu par les gestionnaires suivants, `dispatch::Leftovers`)
+            // D5 = the index (leftover re-read by the following handlers, `dispatch::Leftovers`)
             let i = ((n as u16) << 2) as u32;
             *x.c.d5() = i;
             let mask = rom32(x, 0x894cc + i);
@@ -121,7 +121,7 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x894f4 : chute, attente au sol, relevé.
+/// 0x894f4: fall, wait on the ground, getting up.
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x89500) {
         0x8950a => {
@@ -175,7 +175,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x895c2 : mort (chute, effets, attente, clignotement, libération).
+/// 0x895c2: death (fall, effects, wait, blinking, release).
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x895d0, f::SUB2) {
         0x895da => {

@@ -1,18 +1,18 @@
 # Feuilles réécrites : RNG et événements (U1), pièces (C1), EEPROM (M2)
 
 Routines natives de `port/ddsom-game` correspondant aux sous-systèmes « feuilles » de l'atlas. Le son
-(S1) a son propre document : `docs/son-68000.md`. Pour chaque routine : adresse d'entrée, module,
+(S1) a son propre document : `docs/sound-68000.md`. Pour chaque routine : adresse d'entrée, module,
 contrat de registres (ce que les appelants lisent) et mode de validation.
 
 ## Outils communs
 
 * `chemin.rs` : durée exacte d'un chemin du code d'origine. La routine native enregistre dans un
   `Chemin` les décisions des branchements conditionnels qu'elle prend (dans l'ordre où l'original les
-  rencontre), puis `duree` parcourt le code d'origine en additionnant les durées de l'interpréteur
+  rencontre), puis `duration` parcourt le code d'origine en additionnant les durées de l'interpréteur
   (sous-routines, boucles `dbf`, tronçons). `duree_hors` laisse à `call` la durée des sous-routines
   non réécrites (leur durée s'ajoute à l'exécution) ; les durées sont mises en cache.
 * `ops.rs` : CMP/ADD/ABCD avec les drapeaux exacts du 68000.
-* `examples/fuzz.rs <groupe>` : validation différentielle sur états aléatoires (groupes `son`, `u1`,
+* `examples/fuzz.rs <group>` : validation différentielle sur états aléatoires (groupes `sound`, `u1`,
   `c1`, `m2`). Chaque routine du groupe est appelée en mode contrôle ; l'original s'exécute à côté sur une
   copie ; mémoire, registres du contrat et durée (si elle est déclarée exacte) sont comparés. C'est ce
   qui valide les chemins que les scénarios n'atteignent pas.
@@ -32,11 +32,11 @@ t = ((3 × état) mod 65536) >> 8 ;  octet bas += t ;  octet haut = t ;  résult
 Les 537 appelants masquent le résultat (`andi`) ; aucun ne lit les drapeaux, mais X (retenue de
 l'addition d'octets) et N/Z sont reproduits. Contrat : D0 (mot bas), CCR. Durée exacte.
 
-## U1 : files d'événements (`evenements.rs`)
+## U1 : files d'événements (`events.rs`)
 
 Trois anneaux (case vide = 0xFFFF) : points de score (index `A5+0x108/0x109`, cases `A5+0x10a`), second
 compteur (`A5+0x18a/0x18b`, `A5+0x18c`), pop-ups (`A5+0x20c/0x20d`, entrées de 8 octets en `A5+0x20e`).
-Un événement de score est `(joueur << 8) | type` ; il est enfilé par `0x19ad6` (depuis un objet :
+Un événement de score est `(player << 8) | type` ; il est enfilé par `0x19ad6` (depuis un objet :
 type = octet `+0x7e`, joueur = bits 8-9 du mot `+0x48`), `0x19ae6` / `0x19b08` (mot dans D0).
 `0x19b2a` / `0x19b9c` (appelés à chaque image par la tâche d'interface) vident les anneaux : la valeur BCD
 du type (table de ROM : `0x19c0e` pour les points, `0x19d52` pour le second compteur) est ajoutée en
@@ -74,7 +74,7 @@ Non réécrits : `0x13c2c` (démarrage/continue, attentes de tâche), `0x140b4`,
 EEPROM 93C46 (64 mots de 16 bits) pilotée par le port 0x804040 : bit 12 = DI, bit 13 = CLK, bit 14 = CS ;
 DO se lit dans le bit 0 de 0x804020. Les autres bits du port viennent de `A5+0x16` (mot) et `A5+0x18`
 (octet). Commande de 10 bits (un 0, le bit de départ, 2 bits d'opération, 6 bits d'adresse) : lecture
-`0x180 | adresse`, effacement `0x1c0`, écriture `0x140`, autorisation d'écriture `0x130`. Chaque bit est
+`0x180 | address`, effacement `0x1c0`, écriture `0x140`, autorisation d'écriture `0x130`. Chaque bit est
 posé sur DI puis validé par une impulsion d'horloge (deux écritures du port).
 
 * `0x2d846` lecture de `A5-0x616c + 1` mots depuis l'adresse `décalage / 2` ; `0x2d90e` écriture

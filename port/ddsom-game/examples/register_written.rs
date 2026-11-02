@@ -1,8 +1,8 @@
-//! Qui a laissé ce registre ? Pendant l'image donnée, à chaque passage en <pc>, montre A0, D<r> et les douze
-//! derniers changements de D<r> (PC de l'instruction suivante, valeur) : pour trouver le gestionnaire qui laisse un
-//! registre résiduel relu par un autre (machine de référence ; `1` en dernier argument : machine hybride).
+//! Who left this register? During the given frame, at each pass through <pc>, shows A0, D<r> and the last twelve
+//! changes of D<r> (PC of the next instruction, value): to find the handler that leaves a
+//! leftover register read again by another (reference machine; `1` as last argument: hybrid machine).
 //!
-//!   register_written <roms> <eeprom> <scénario> <image> <pc hex> <n° de registre D> [1]
+//!   register_written <roms> <eeprom> <scenario> <frame> <pc hex> <D register number> [1]
 use std::sync::Mutex;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
@@ -32,7 +32,7 @@ fn main() {
             *last = c.d[r];
         }
         if pc == target {
-            println!("en {pc:06x} : A0={:08x} D{r}={:08x} ; écritures avant (pc suivant, valeur) : {:x?}", c.a[0], c.d[r], *h);
+            println!("at {pc:06x}: A0={:08x} D{r}={:08x}; earlier writes (next pc, value): {:x?}", c.a[0], c.d[r], *h);
         }
     }));
     m.run_frame();

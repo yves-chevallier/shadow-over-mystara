@@ -1,26 +1,26 @@
-//! Phase 20 (`0x1c80c`) : fin de partie.
+//! Phase 20 (`0x1c80c`): game over.
 //!
-//! La partie est finie (plus de joueur ni de crédit) : la tâche de l'interface des joueurs est tuée, le
-//! décor s'efface en fondu, tout est vidé, puis la tâche principale est *remplacée* par la machine à modes
-//! (`jmp 0xae4` avec A0 = `0x133fe`). Le drapeau de démarrage est levé : la machine commence par
-//! l'écran de fin de partie (sous-mode 20, `ranking.rs`) au lieu du titre.
+//! The game is over (no player or credit left): the player interface task is killed, the
+//! terrain fades out, everything is cleared, then the main task is *replaced* by the mode machine
+//! (`jmp 0xae4` with A0 = `0x133fe`). The startup flag is raised: the machine begins with
+//! the game-over screen (sub-mode 20, `ranking.rs`) instead of the title.
 //!
-//! Le remplacement de la tâche ne touche pas à sa pile : la machine à modes repart avec le pointeur de
-//! pile que la tâche avait à sa dernière cession (celle de l'effacement vidéo, `0xc32`).
+//! Replacing the task does not touch its stack: the mode machine restarts with the stack pointer
+//! the task had at its last yield (the video clear one, `0xc32`).
 
 use super::{mode, Flow, Sequence};
 use crate::mem::{rd16, rts, wr16, wr32, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
 
-/// Boucle de la machine à modes, que la tâche devient.
+/// Mode machine loop, which the task becomes.
 const MODE_LOOP: u32 = 0x133fe;
 
-/// Tâche d'interface des joueurs (emplacement 0x30).
+/// Player interface task (slot 0x30).
 const PLAYER_UI_SLOT: u16 = 0x30;
 const VIDEO_ON: u16 = 0x12ce;
 const CPS_REG_VIDEO_B: u32 = 0x804166;
-/// Reprises d'origine après chaque cession.
+/// Original resumes after each yield.
 const FADED: u32 = 0x1c828;
 const CLEARED: u32 = 0x1c846;
 
@@ -37,7 +37,7 @@ pub const PHASE_20: Native = Native {
     outputs: 0,
 };
 
-/// Phase 20 de la partie (`0x1c80c`) : fin de partie.
+/// Phase 20 of the game (`0x1c80c`): game over.
 pub fn phase_20(x: &mut Ctx) -> Flow {
     crate::kernel::kill_task(x.b, PLAYER_UI_SLOT as u32);
     wr16(x.b, A5 + 0x490, 1);
@@ -46,7 +46,7 @@ pub fn phase_20(x: &mut Ctx) -> Flow {
 }
 
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
         Faded = FADED => |x| {
             wr16(x.b, CPS_REG_VIDEO_B, VIDEO_ON);
@@ -68,8 +68,8 @@ crate::steps! {
     }
 }
 
-/// `0x133dc` : remet à zéro le bloc d'état de la machine à modes (64 octets) et celui de l'écran de
-/// classement (quatre longs à `FF2B10`, `0xfc562`).
+/// `0x133dc`: clears the mode machine state block (64 bytes) and that of the ranking
+/// screen (four longs at `FF2B10`, `0xfc562`).
 pub fn reset_modes(x: &mut Ctx) {
     for i in 0..16 {
         wr32(x.b, mode::BASE + 4 * i, 0);

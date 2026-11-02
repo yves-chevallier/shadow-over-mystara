@@ -1,11 +1,11 @@
-//! Présence à l'écran des objets : sortie d'écran, zones de jeu, inscription aux collisions.
+//! On-screen presence of objects: leaving the screen, play areas, registration for collisions.
 //!
-//! Les coordonnées écran sont des mots : abscisse = partie entière de `Obj::X` moins celle de la
-//! caméra ; hauteur = `Z + Y` moins l'ordonnée de la caméra. Les tests de l'original se font en
-//! arithmétique non signée sur 16 bits avec une marge ajoutée.
+//! Screen coordinates are words: abscissa = integer part of `Obj::X` minus that of the
+//! camera; height = `Z + Y` minus the camera ordinate. The original's tests use
+//! unsigned 16-bit arithmetic with an added margin.
 //!
-//! Les routines natives reproduisent les registres et les drapeaux de l'original (les appelants
-//! enchaînent sur `bcs`, `bhi`, `beq`...) en appliquant les mêmes opérations 16 bits.
+//! The native routines reproduce the registers and flags of the original (the callers
+//! chain on `bcs`, `bhi`, `beq`...) by applying the same 16-bit operations.
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -17,19 +17,19 @@ use super::Obj;
 use crate::mem::{rd16, rd8, rts, set_low_byte, wr16, A5};
 use crate::{regs, Native};
 
-/// Adresse de la caméra courante (x en +8, y en +0xc).
+/// Address of the current camera (x at +8, y at +0xc).
 pub fn camera(b: &mut Cps2Bus) -> u32 {
     let alt = rd8(b, A5 + super::ram::USE_ALT_CAMERA) != 0;
     A5 + if alt { super::ram::ALT_CAMERA } else { super::ram::CAMERA }
 }
 
-/// Boîtes de visibilité par index (`BOUNDS_INDEX`) : (dx, largeur, dy, hauteur), 8 octets chacune.
+/// Visibility boxes by index (`BOUNDS_INDEX`): (dx, width, dy, height), 8 bytes each.
 const BOUNDS_TABLE: u32 = 0x1ca538;
-/// Octet de l'objet qui désigne sa boîte de visibilité (octet haut de `FRAME_DATA_B`).
+/// Object byte designating its visibility box (high byte of `FRAME_DATA_B`).
 const BOUNDS_INDEX: u32 = 0x3c;
 
-/// File de candidats aux collisions pour la classe d'objet : tirs joueur, ennemis et boss, tirs
-/// ennemis, caisses, objets ramassables.
+/// Collision candidate queue for the object class: player shots, enemies and bosses, enemy
+/// shots, crates, pickable items.
 fn queue_of(class: u8) -> Option<&'static super::pools::Queue> {
     match class {
         2 | 4 => Some(&QUEUE_ENEMY_BOSS),
@@ -41,7 +41,7 @@ fn queue_of(class: u8) -> Option<&'static super::pools::Queue> {
     }
 }
 
-/// Ajoute l'objet à la file de candidats ; renvoie le nouveau pointeur d'écriture.
+/// Adds the object to the candidate queue; returns the new write pointer.
 pub fn push_candidate(b: &mut Cps2Bus, obj: Obj, queue: &super::pools::Queue) -> u16 {
     let n = rd16(b, A5 + queue.count).wrapping_add(1);
     wr16(b, A5 + queue.count, n);
@@ -52,7 +52,7 @@ pub fn push_candidate(b: &mut Cps2Bus, obj: Obj, queue: &super::pools::Queue) ->
     next
 }
 
-/// Abscisse à l'écran (avant marge) et hauteur à l'écran de l'objet.
+/// Screen abscissa (before margin) and screen height of the object.
 fn screen_x(b: &mut Cps2Bus, obj: Obj, cam: u32) -> u16 {
     obj.u16(b, Obj::X).wrapping_sub(rd16(b, cam + 8))
 }
@@ -60,7 +60,7 @@ fn screen_height(b: &mut Cps2Bus, obj: Obj, cam: u32) -> u16 {
     obj.u16(b, Obj::Z).wrapping_add(obj.u16(b, Obj::Y)).wrapping_sub(rd16(b, cam + 0xc))
 }
 
-// ---- opérations 16 bits sur D0-D2 avec les drapeaux du 68000 ----
+// ---- 16-bit operations on D0-D2 with the 68000 flags ----
 
 fn dw(c: &Cpu, n: usize) -> u16 {
     c.d[n] as u16
@@ -87,21 +87,21 @@ fn sub_w(c: &mut Cpu, n: usize, src: u16) {
 fn cmp_w(c: &mut Cpu, n: usize, src: u16) {
     cmp(c, src as u32, dw(c, n) as u32, Size::Word);
 }
-/// D`n`.w = abscisse écran ; `move.w X,Dn ; sub.w cam.x,Dn`.
+/// D`n`.w = screen abscissa; `move.w X,Dn ; sub.w cam.x,Dn`.
 fn load_screen_x(c: &mut Cpu, b: &mut Cps2Bus, n: usize, obj: Obj, cam: u32) {
     move_w(c, n, obj.u16(b, Obj::X));
     sub_w(c, n, rd16(b, cam + 8));
 }
-/// D`n`.w = hauteur écran ; `move.w Z,Dn ; add.w Y,Dn ; sub.w cam.y,Dn`.
+/// D`n`.w = screen height; `move.w Z,Dn ; add.w Y,Dn ; sub.w cam.y,Dn`.
 fn load_screen_height(c: &mut Cpu, b: &mut Cps2Bus, n: usize, obj: Obj, cam: u32) {
     move_w(c, n, obj.u16(b, Obj::Z));
     add_w(c, n, obj.u16(b, Obj::Y));
     sub_w(c, n, rd16(b, cam + 0xc));
 }
 
-// ---- 0x1e1a : sortie d'écran ----
+// ---- 0x1e1a: leaving the screen ----
 
-/// Un objet hors de l'écran (marge 0x40) et actif passe à l'état 6 (disparition).
+/// An object off screen (margin 0x40) and active goes to state 6 (disappearance).
 pub fn despawn_if_offscreen(b: &mut Cps2Bus, obj: Obj) {
     let cam = camera(b);
     let x_out = screen_x(b, obj, cam).wrapping_add(0x40) >= 0x200;
@@ -111,19 +111,19 @@ pub fn despawn_if_offscreen(b: &mut Cps2Bus, obj: Obj) {
     }
 }
 
-/// Registres que laissent les routines d'origine (voir `diag::dead_regs`, étiquette `cull`).
+/// Registers left behind by the original routines (see `diag::dead_regs`, label `cull`).
 pub const REGS_DESPAWN: u32 = regs::d(0) | regs::a(1) | regs::CCR;
 pub const REGS_IN_ARENA: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::CCR;
 pub const REGS_VISIBILITY: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::a(2) | regs::CCR;
 
-/// `despawn_if_offscreen` avec les registres de l'original (A1 = caméra, D0 = dernier test).
+/// `despawn_if_offscreen` with the original's registers (A1 = camera, D0 = last test).
 #[track_caller]
 pub fn despawn_if_offscreen_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
     cull_offscreen(c, b, obj);
     crate::diag::dead_regs(c, "cull", REGS_DESPAWN);
 }
 
-/// 0x1e1a, registres compris.
+/// 0x1e1a, registers included.
 fn cull_offscreen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
     let cam = camera(b);
     c.a[1] = cam;
@@ -158,14 +158,14 @@ pub const CULL_OFFSCREEN: Native = Native {
     outputs: regs::ALL,
 };
 
-// ---- 0x1e92 : zone de jeu élargie ----
+// ---- 0x1e92: widened play area ----
 
-/// Marge de la zone de jeu par défaut (0x1e90) ; c'est aussi la marge fixe de la hauteur.
+/// Margin of the default play area (0x1e90); it is also the fixed margin of the height.
 pub const ARENA_MARGIN: u16 = 0x3e;
 
-/// 0x1e92 : l'objet est-il dans la zone de jeu élargie de `margin` pixels ? En largeur, l'abscisse à l'écran
-/// plus la marge doit rester sous 0x180 + 2 × marge ; en profondeur (`Obj::Y` seul, sans l'altitude), avec la marge
-/// fixe `ARENA_MARGIN`, sous 0x100 + 2 × 0x3e. Comparaisons non signées sur 16 bits, comme l'original.
+/// 0x1e92: is the object within the play area widened by `margin` pixels? In width, the screen abscissa
+/// plus the margin must stay below 0x180 + 2 × margin; in depth (`Obj::Y` alone, without altitude), with the
+/// fixed margin `ARENA_MARGIN`, below 0x100 + 2 × 0x3e. Unsigned 16-bit comparisons, like the original.
 pub fn in_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
     let cam = camera(b);
     let x = screen_x(b, obj, cam).wrapping_add(margin);
@@ -176,8 +176,8 @@ pub fn in_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
     y < 0x100 + 2 * ARENA_MARGIN
 }
 
-/// Le `bhi` qui suit 0x1e92 : vrai si la dernière valeur comparée dépasse strictement sa borne (l'abscisse, quand elle
-/// sort de la zone en largeur ; sinon la profondeur). Faux dans la zone, et aussi pile sur le bord en largeur.
+/// The `bhi` following 0x1e92: true if the last compared value strictly exceeds its bound (the abscissa, when it
+/// leaves the area in width; otherwise the depth). False inside the area, and also exactly on the edge in width.
 pub fn beyond_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
     let cam = camera(b);
     let x = screen_x(b, obj, cam).wrapping_add(margin);
@@ -189,8 +189,8 @@ pub fn beyond_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
     y > 0x100 + 2 * ARENA_MARGIN
 }
 
-/// `in_arena` avec les registres de l'original : D0 = marge (long), puis D0-D2 et A1 (caméra) des calculs,
-/// retenue = dedans.
+/// `in_arena` with the original's registers: D0 = margin (long), then D0-D2 and A1 (camera) of the computations,
+/// carry = inside.
 #[track_caller]
 pub fn in_arena_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
     c.d[0] = margin as u32;
@@ -201,7 +201,7 @@ pub fn in_arena_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool
     inside
 }
 
-/// 0x1e92, registres compris : marge dans D0.w.
+/// 0x1e92, registers included: margin in D0.w.
 fn in_arena_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
     let cam = camera(b);
     c.a[1] = cam;
@@ -235,7 +235,7 @@ pub const IN_ARENA: Native = Native {
     outputs: regs::ALL,
 };
 
-/// 0x1e90 : `in_arena` avec la marge par défaut 0x3e.
+/// 0x1e90: `in_arena` with the default margin 0x3e.
 pub const IN_ARENA_DEFAULT: Native = Native {
     entry: 0x1e90,
     name: "obj_in_arena_default",
@@ -249,10 +249,10 @@ pub const IN_ARENA_DEFAULT: Native = Native {
     outputs: regs::ALL,
 };
 
-// ---- 0x1ed2 : visibilité et inscription aux collisions ----
+// ---- 0x1ed2: visibility and registration for collisions ----
 
-/// Visibilité d'un objet : décors (classe 0) dans l'écran avec une marge de 0x60 pixels, les autres
-/// dans leur boîte de visibilité.
+/// Visibility of an object: scenery (class 0) within the screen with a margin of 0x60 pixels, the others
+/// within their visibility box.
 pub fn is_visible(b: &mut Cps2Bus, obj: Obj) -> bool {
     let cam = camera(b);
     let class = obj.u8(b, Obj::CLASS);
@@ -266,8 +266,8 @@ pub fn is_visible(b: &mut Cps2Bus, obj: Obj) -> bool {
     }
 }
 
-/// Met à jour le bit 0 de `Obj::FLAGS` (visible à cette image) et inscrit l'objet visible dans la
-/// file de candidats aux collisions de sa classe. Renvoie vrai si l'objet est visible.
+/// Updates bit 0 of `Obj::FLAGS` (visible this frame) and registers the visible object in the
+/// collision candidate queue of its class. Returns true if the object is visible.
 pub fn update_visibility(b: &mut Cps2Bus, obj: Obj) -> bool {
     let flags = obj.u8(b, Obj::FLAGS);
     if !is_visible(b, obj) || flags & 2 != 0 {
@@ -281,8 +281,8 @@ pub fn update_visibility(b: &mut Cps2Bus, obj: Obj) -> bool {
     true
 }
 
-/// `update_visibility` avec les registres de l'original : D0 = 0 hors écran ou caché, 1 sans file de candidats,
-/// sinon classe × 2 ; D1, D2, A1, A2 des calculs.
+/// `update_visibility` with the original's registers: D0 = 0 off screen or hidden, 1 without candidate queue,
+/// otherwise class × 2; D1, D2, A1, A2 of the computations.
 #[track_caller]
 pub fn update_visibility_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
     let visible = on_screen(c, b, obj);
@@ -290,7 +290,7 @@ pub fn update_visibility_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
     visible
 }
 
-/// 0x1ed2, registres compris ; vrai si l'objet est visible.
+/// 0x1ed2, registers included; true if the object is visible.
 fn on_screen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
     let cam = camera(b);
     c.a[2] = cam;

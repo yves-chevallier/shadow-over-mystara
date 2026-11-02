@@ -1,5 +1,5 @@
-//! Boss 11/12, état 4 « touché » (0x8e39a). Groupes `+5` : 0 réaction (table de longs 0x8e3dc : six routines selon le code de
-//! coup `+0x49`), 4 étourdi, 2, 6, 8, 10 mort.
+//! Boss 11/12, state 4 "hit" (0x8e39a). `+5` groups: 0 reaction (table of longs 0x8e3dc: six routines according to
+//! the hit code `+0x49`), 4 stunned, 2, 6, 8, 10 death.
 
 use crate::families::cx::Bench;
 use super::*;
@@ -19,7 +19,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8e8ca : vrai si le jeu est en pause (le serpent reste alors affiché : `+0` = 2).
+/// 0x8e8ca: true if the game is paused (the snake then stays displayed: `+0` = 2).
 fn paused<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
@@ -28,7 +28,7 @@ fn paused<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     false
 }
 
-/// 0x8e8de : fin de la réaction, retour à la poursuite.
+/// 0x8e8de: end of the reaction, return to the pursuit.
 fn recover<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(0x86, 0);
@@ -39,7 +39,7 @@ fn recover<R: Bench>(x: &mut Cx<'_, R>) {
     to_chase(x)
 }
 
-/// Plus de PV : le groupe 6 (mort) prend le relais.
+/// Out of HP: group 6 (death) takes over.
 fn dying<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB, 6);
     x.set16(f::SUB2, 0);
@@ -120,7 +120,7 @@ fn hit_a<R: Bench>(x: &mut Cx<'_, R>) {
     hit_b(x)
 }
 
-/// 0x8e574 : recul répété `+0x87` fois (code 0x68).
+/// 0x8e574: knockback repeated `+0x87` times (code 0x68).
 fn hit_b<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         if !sub8(x, 0x87, 1).eq() {
@@ -146,7 +146,7 @@ fn hit_b<R: Bench>(x: &mut Cx<'_, R>) {
     crate::families::effects_creators::attack(x.b, x.o, 3, 0);
 }
 
-/// 0x8e5da : projection (codes 4 à 0x94 sans routine propre).
+/// 0x8e5da: throw (codes 4 to 0x94 with no routine of their own).
 fn generic<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch0(x, 0x8e5e8, f::SUB2) {
         0x8e5ee => {
@@ -197,7 +197,7 @@ fn generic<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8e8fc : relevé après la chute (état 4, groupe 4).
+/// 0x8e8fc: getting up after the fall (state 4, group 4).
 fn fallen<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set32(f::STATE, 0x0404_0000);
@@ -208,7 +208,7 @@ fn fallen<R: Bench>(x: &mut Cx<'_, R>) {
     lib::draw_84(x)
 }
 
-/// 0x8e69e : étourdissement (code 0x4c).
+/// 0x8e69e: stun (code 0x4c).
 fn stun<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch0(x, 0x8e6ac, f::SUB2) {
         0x8e6b0 => {
@@ -263,7 +263,7 @@ fn stun<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8e740 : projection en arc (code 0xa4).
+/// 0x8e740: arcing throw (code 0xa4).
 fn throw<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x8e74e, f::SUB2) {
         0x8e756 => {
@@ -317,7 +317,7 @@ fn arc_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x16, 0);
 }
 
-/// 0x8e7b4 : la tête décrit un arc (vecteurs de la table 0x1c94b6).
+/// 0x8e7b4: the head describes an arc (vectors from table 0x1c94b6).
 fn arc<R: Bench>(x: &mut Cx<'_, R>) {
     let a4 = 0x1c94b6;
     let z = x.u32(0xc).wrapping_add(0x20000);
@@ -351,7 +351,7 @@ fn arc<R: Bench>(x: &mut Cx<'_, R>) {
     x.add32(0x10, step);
 }
 
-/// 0x8e922 (`+5` = 4) : au sol, étourdi.
+/// 0x8e922 (`+5` = 4): on the ground, stunned.
 fn stunned<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
@@ -392,7 +392,7 @@ fn stunned<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8e95a : durée de l'étourdissement (`+0xb8`, selon la difficulté), posée à la première image.
+/// 0x8e95a: stun duration (`+0xb8`, depending on difficulty), set on the first frame.
 fn wait_init<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) != 0 {
         return;
@@ -405,7 +405,7 @@ fn wait_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xb8, v);
 }
 
-/// 0x8e9d2 : mort (chute, effets, attente de la fin de l'animation).
+/// 0x8e9d2: death (fall, effects, wait for the end of the animation).
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch0(x, 0x8e9e0, f::SUB2) {
         0x8e9e6 => {

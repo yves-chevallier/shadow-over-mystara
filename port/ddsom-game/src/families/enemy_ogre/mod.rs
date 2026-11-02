@@ -1,18 +1,19 @@
-//! Ennemi « Ogre » (ENEMY type 18, 0x703dc). Voir `docs/families/enemy.md`.
+//! "Ogre" enemy (ENEMY type 18, 0x703dc). See `docs/families/enemy.md`.
 //!
-//! Deux sortes d'objets partagent ce gestionnaire : l'ogre (variantes `+3` = 0 à 2, ou 0xff dans les scènes 65 et 66)
-//! et ses « bras » lancés (type 0x2a, hors de ce gestionnaire). Comme le Gargoyle il s'appuie sur la bibliothèque
-//! `enemy_lib` ; la variante négative n'est pas saisissable (`tst.b (3,A0) ; bmi` saute le test de saisie).
+//! Two kinds of objects share this handler: the ogre (variants `+3` = 0 to 2, or 0xff in scenes 65 and 66) and its
+//! thrown "arms" (type 0x2a, outside this handler). Like the Gargoyle it relies on the library `enemy_lib`; the
+//! negative variant cannot be grabbed (`tst.b (3,A0) ; bmi` skips the grab test).
 //!
-//! | `+5` | Fichier | Rôle (h) |
+//! | `+5` | File | Role (h) |
 //! |---|---|---|
-//! | 0 | `arrival` | arrivée (`+6` = 0 chute d'entrée, 2 apparition au sol, 4 attente d'un joueur, 6 apparition cachée) |
-//! | 2 | `stance` | déplacements (`+6` = 0 à 10) |
-//! | 4 | `attacks` | coups (`+6` = 0 à 8) |
-//! | 6, 8, 10 | `attacks` | repos |
-//! | état 4 | `hit` | réactions (table `0x715d4`), recul, chute, mort, fuite |
+//! | 0 | `arrival` | arrival (`+6` = 0 entrance fall, 2 appearance on the ground, 4 wait for a player, 6 hidden
+//! appearance) |
+//! | 2 | `stance` | movements (`+6` = 0 to 10) |
+//! | 4 | `attacks` | attacks (`+6` = 0 to 8) |
+//! | 6, 8, 10 | `attacks` | rest |
+//! | state 4 | `hit` | reactions (table `0x715d4`), recoil, fall, death, flight |
 //!
-//! Animations 0x177874 et 0x17788c (mouvements et coups), 0x1778a4 (mort).
+//! Animations 0x177874 and 0x17788c (movements and attacks), 0x1778a4 (death).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -77,7 +78,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x71dde : un objet de variante négative (le « bras ») meurt avec l'objet `+0x46` qu'il accompagne.
+/// 0x71dde: an object with a negative variant (the "arm") dies with the object `+0x46` it accompanies.
 fn arm_dies_with_ogre<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(Obj::VARIANT) as i8) >= 0 || x.u16(f::STATE) == 0x0406 {
         return;
@@ -127,13 +128,13 @@ pub(self) fn count_down<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     (n as i16) > 0
 }
 
-/// Orientation vers la droite (0x18) ou la gauche (8) selon `flip`.
+/// Orientation to the right (0x18) or the left (8) according to `flip`.
 pub(self) fn angle_by_flip<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
-/// L'ogre peut être saisi par un joueur (pas les variantes négatives) : abandonne alors le geste.
+/// The ogre can be grabbed by a player (not the negative variants): it then abandons the move.
 pub(self) fn held_by_player<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u8(Obj::VARIANT) as i8) < 0 || !grabbed(x) {
         return false;
@@ -142,7 +143,7 @@ pub(self) fn held_by_player<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// Plus de joueur en vie : retraite ; vrai si l'état a changé.
+/// No player alive any more: retreat; true if the state has changed.
 pub(self) fn nobody_left<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if lib::players_alive(x) {
         return false;
@@ -151,7 +152,7 @@ pub(self) fn nobody_left<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x71d98 : ondulation verticale en vol selon la clé d'animation (table de longs `0x71dc6`).
+/// 0x71d98: vertical undulation in flight according to the animation key (table of longs `0x71dc6`).
 pub(self) fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = ((x.u8(f::KEY_FRAME) & 0x7f) as u32) << 2;
     let mut d = rom32(x, 0x71dc6 + idx) as i32;
@@ -164,7 +165,7 @@ pub(self) fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Étincelle de la clé d'animation : bit 7 de `+0x33` → effet 0x11a36, alterné par `+0xb3`.
+/// Spark of the animation key: bit 7 of `+0x33` → effect 0x11a36, alternated by `+0xb3`.
 pub(self) fn flash_key<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(f::KEY_FRAME) as i8) < 0 {
         let k = x.u8(f::KEY_FRAME) & 0x7f;
@@ -175,7 +176,7 @@ pub(self) fn flash_key<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- transitions d'état : le geste suivant ----------------------------------------------------------
+// --- state transitions: the next move ----------------------------------------------------------
 
 pub(self) mod go {
     use super::*;
@@ -185,7 +186,7 @@ pub(self) mod go {
         x.set8(VULNERABLE, 1);
         set_state_long(x, 0x0202_0000);
     }
-    /// 0x71cbc : demi-tour, avec mémorisation de l'état courant.
+    /// 0x71cbc: turn-around, saving the current state.
     pub fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         let s = x.u32(f::STATE);
@@ -246,9 +247,9 @@ pub(self) mod go {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
-/// 0x71e04 : PV initiaux ; la variante négative les calcule comme un type 6 (0x453c) puis reprend le type 0x12.
+/// 0x71e04: initial HP; the negative variant computes them like a type 6 (0x453c) then resumes type 0x12.
 fn initial_hp<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(Obj::VARIANT) as i8) >= 0 {
         return lib::initial_hp(x);
@@ -304,7 +305,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, state);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::FREEZE) as i8 > 0 {
@@ -329,6 +330,6 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 
 handlers! {
     0x703dc "enemy_18" #[without] run,
-    // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
+    // get up after a common reaction (table 0x3e000 of `reactions.rs`)
     0x717ea "enemy_18_releve" hit::regroup,
 }

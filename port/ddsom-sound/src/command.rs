@@ -1,8 +1,8 @@
-//! Commandes du 68000 : file d'attente, démarrage des musiques et des effets, commandes système.
+//! 68000 commands: queue, starting of music and effects, system commands.
 //!
-//! Une commande fait 16 octets. Si l'octet 0 vaut 0xFF c'est une commande système dont l'octet 1
-//! est le numéro. Sinon les octets 0-1 (grand-boutiste) sont le numéro d'une musique ou d'un effet,
-//! et les octets 6 et suivants règlent le pan (voir `setup_pan`).
+//! A command is 16 bytes long. If byte 0 is 0xFF it is a system command whose byte 1 is the
+//! number. Otherwise bytes 0-1 (big-endian) are the number of a song or effect, and bytes 6
+//! onwards set the pan (see `setup_pan`).
 
 use crate::math::*;
 use crate::pan::PanFade;
@@ -10,7 +10,7 @@ use crate::voice::Voice;
 use crate::Driver;
 
 impl Driver {
-    /// Prend la prochaine commande de la file et l'exécute.
+    /// Takes the next command from the queue and executes it.
     pub(crate) fn process_command(&mut self) {
         if self.queue_tail == self.queue_head {
             return;
@@ -22,8 +22,8 @@ impl Driver {
         if cmd[0] == 0xff {
             return self.system_command(&cmd);
         }
-        // Numéro de musique ou d'effet (modulo leur nombre) -> entrée de 4 octets : adresse sur 3
-        // octets de la définition.
+        // Song or effect number (modulo their count) -> 4-byte entry: 3-byte address of the
+        // definition.
         let number = (u16::from(cmd[0]) << 8 | u16::from(cmd[1])) % self.song_count.max(1);
         let entry = self.song_table.wrapping_add(u32::from(number.wrapping_mul(4))) & 0xff_ffff;
         let song = u32::from(self.rom.byte(entry)) << 16 | u32::from(self.rom.word(entry + 1).swap_bytes());
@@ -40,8 +40,8 @@ impl Driver {
         }
     }
 
-    /// Musique : 16 pistes (une par canal), chacune désignée par un déplacement de 2 octets
-    /// depuis le début de la définition (0 = canal absent).
+    /// Song: 16 tracks (one per channel), each designated by a 2-byte offset
+    /// from the start of the definition (0 = channel absent).
     fn start_music(&mut self, mut p: u32) {
         for ch in 0..16u8 {
             self.cur = ch;
@@ -56,7 +56,7 @@ impl Driver {
                 m.pan.pan = 0x10;
             }
             self.music[usize::from(ch)] = m;
-            // Canal libre côté effets : pan centré, et coupure si une musique y jouait.
+            // Channel free on the effects side: centred pan, and silenced if a song was playing on it.
             if self.sfx[usize::from(ch)].state == 0 {
                 self.qsound(0x80 + ch, PAN_BASE + 0x10);
                 if was_active {
@@ -73,13 +73,13 @@ impl Driver {
         g.music_volume = hi16(hi16(0xfffe, g.sfx_volume), g.music_factor);
     }
 
-    /// Banc d'instruments par défaut des pistes.
+    /// Default instrument bank of the tracks.
     fn inst_bank0(&self) -> u16 {
         self.rom.word(INSTRUMENT_BANKS_PTR)
     }
 
-    /// Effet à plusieurs pistes : même format que la musique, mais une piste ne démarre que si la
-    /// priorité de la commande est au moins celle de la voie qu'elle remplace.
+    /// Multi-track effect: same format as a song, but a track only starts if the command
+    /// priority is at least that of the voice it replaces.
     fn start_effect(&mut self, priority: u8, mut p: u32, cmd: &[u8; 16]) {
         self.priority = priority;
         for ch in 0..16u8 {
@@ -96,8 +96,8 @@ impl Driver {
         }
     }
 
-    /// Effet à une seule voie (note simple d'un échantillon ou d'un instrument) ; les voies
-    /// 0x10 et suivantes sont les voies ADPCM.
+    /// Single-voice effect (simple note of a sample or an instrument); voices
+    /// 0x10 and above are the ADPCM voices.
     fn start_single(&mut self, channel: u8, mut p: u32, cmd: &[u8; 16]) {
         if channel >= 0x10 {
             return self.start_adpcm(channel - 0x10, p, cmd);
@@ -129,15 +129,15 @@ impl Driver {
             continuous: flags & 0x80,
             ..Voice::default()
         };
-        // Une fois la voie acceptée, le Z80 ne garde que la priorité (sans le bit « continue »).
+        // Once the voice is accepted, the Z80 keeps only the priority (without the "continuous" bit).
         self.priority = priority;
         self.setup_pan(&mut v, cmd);
         self.sfx[slot] = v;
     }
 
-    /// Règle le pan d'une voie qui démarre d'après la commande, puis coupe le canal (la voie
-    /// démarre au tic suivant). Pour le type 7 le canal voisin reçoit une copie de la voie qui
-    /// part dans l'autre sens, après un délai de 4 tics, si sa priorité le permet.
+    /// Sets the pan of a starting voice from the command, then silences the channel (the voice
+    /// starts on the next tick). For type 7 the neighbouring channel receives a copy of the voice
+    /// moving in the other direction, after a 4-tick delay, if its priority allows it.
     pub(crate) fn setup_pan(&mut self, v: &mut Voice, cmd: &[u8; 16]) {
         let Some(fade) = PanFade::from_command(cmd) else { return };
         v.pan = fade;
@@ -155,7 +155,7 @@ impl Driver {
 }
 
 impl Driver {
-    /// Commandes système (octet 0 = 0xFF, numéro en octet 1, paramètres en 2 et suivants).
+    /// System commands (byte 0 = 0xFF, number in byte 1, parameters from byte 2 on).
     fn system_command(&mut self, cmd: &[u8; 16]) {
         match cmd[1] {
             0 => self.stop_all(),
@@ -174,7 +174,7 @@ impl Driver {
         }
     }
 
-    /// Coupe tout : voies d'effets, de musique et ADPCM.
+    /// Silences everything: effect, music and ADPCM voices.
     fn stop_all(&mut self) {
         self.g.fade_dir = 0;
         for i in 0..32usize {
@@ -212,7 +212,7 @@ impl Driver {
         self.sfx[usize::from(ch)] = v;
     }
 
-    /// Coupe la musique ; les canaux occupés par un effet continuent de sonner.
+    /// Stops the music; channels occupied by an effect keep sounding.
     fn stop_music(&mut self) {
         for ch in 0..16u8 {
             if self.music[usize::from(ch)].state != 0 {
@@ -224,8 +224,8 @@ impl Driver {
         }
     }
 
-    /// Rampe du volume de la musique : octet 2 = niveau visé (index de la table de niveaux),
-    /// octets 3-4 = vitesse. `dir` : 1 monte depuis 0, 0xFF descend depuis le maximum.
+    /// Music volume ramp: byte 2 = target level (index into the level table),
+    /// bytes 3-4 = speed. `dir`: 1 rises from 0, 0xFF falls from the maximum.
     fn music_ramp(&mut self, cmd: &[u8; 16], dir: u8) {
         if self.g.ramp_dir == 0 {
             self.g.ramp_level = if dir == 1 { 0 } else { 0xffff };
@@ -236,7 +236,7 @@ impl Driver {
         self.g.ramp_target = self.rom.word(TABLE_LEVELS + u32::from(cmd[2] & 0xfe));
     }
 
-    /// Fondu général de tous les canaux : octets 3-4 = vitesse.
+    /// Global fade of all channels: bytes 3-4 = speed.
     fn master_fade(&mut self, cmd: &[u8; 16], dir: u8) {
         if self.g.fade_dir == 0 {
             self.g.fade_level = if dir == 1 { 0 } else { 0xffff };
@@ -246,20 +246,20 @@ impl Driver {
         self.g.fade_step = if dir == 1 { step } else { 0u16.wrapping_sub(step) };
     }
 
-    /// Ajustement du tempo de la musique : octet 4 = valeur, octet 3 = 0xFF si négatif.
+    /// Music tempo adjustment: byte 4 = value, byte 3 = 0xFF if negative.
     fn set_tempo(&mut self, cmd: &[u8; 16]) {
         let value = ((u32::from(cmd[4]) * 0x369) >> 8) as u16;
         self.g.tempo_adjust = if cmd[3] == 0xff { 0u16.wrapping_sub(value) } else { value };
     }
 
-    /// Variation de hauteur des voies de musique : octet 4 = valeur, octet 3 = 0xFF si négatif.
+    /// Pitch variation of the music voices: byte 4 = value, byte 3 = 0xFF if negative.
     fn set_pitch_bend(&mut self, cmd: &[u8; 16]) {
         let value = u16::from(cmd[4]) << 4;
         self.g.pitch_bend = if cmd[3] == 0xff { 0u16.wrapping_sub(value) } else { value };
     }
 }
 
-/// Borne la hauteur à 0x6B demi-tons.
+/// Clamps the pitch to 0x6B semitones.
 fn clamp_pitch(pitch: u16) -> u16 {
     if (pitch >> 8) as u8 >= 0x6c {
         0x6b00 | (pitch & 0xff)

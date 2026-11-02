@@ -1,14 +1,14 @@
-//! Boucle des quatre joueurs et aiguillage des états (P4).
+//! Loop over the four players and dispatch of the states (P4).
 //!
-//! `update_players` (0x35292) est appelée une fois par image par la boucle de partie (0x1c86e). Pour
-//! chaque joueur actif, l'octet `+4` aiguille vers l'état principal :
+//! `update_players` (0x35292) is called once per frame by the game loop (0x1c86e). For
+//! each active player, byte `+4` dispatches to the main state:
 //!
-//! | `+4` | état |
+//! | `+4` | state |
 //! |---|---|
-//! | 0 | scénarisé (cinématiques par scène, P3) ; `+5` choisit le sous-état |
-//! | 2 | jeu normal ; `+5` : 0 action, 4 touché, 8 paré |
-//! | 4 | à terre / expulsé (`+5` doit valoir 0) |
-//! | 6 | retiré : sauvegarde du joueur, effacement de l'enregistrement et de ses sous-objets |
+//! | 0 | scripted (cinematics per scene, P3); `+5` selects the sub-state |
+//! | 2 | normal game; `+5`: 0 action, 4 hit, 8 parried |
+//! | 4 | on the ground / ejected (`+5` must be 0) |
+//! | 6 | removed: save of the player, clearing of the record and its sub-objects |
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -21,13 +21,13 @@ use crate::objects::lists;
 use crate::Native;
 use crate::machine::Machine;
 
-/// Routines d'origine encore appelées telles quelles.
+/// Original routines still called as they are.
 mod rom {
-    /// Table (adresses de 4 octets, dans le code) des gestionnaires de sous-état `+5`.
+    /// Table (4-byte addresses, in the code) of the `+5` sub-state handlers.
     pub const SUB_HANDLERS: u32 = 0x3541c;
 }
 
-/// Une image de tous les joueurs actifs.
+/// One frame of all the active players.
 pub fn update_all(g: &mut Ctx) {
     cov!();
     for p in Player::all() {
@@ -37,7 +37,7 @@ pub fn update_all(g: &mut Ctx) {
     }
 }
 
-/// 0x352c4 : aiguillage selon l'état principal.
+/// 0x352c4: dispatch according to the main state.
 pub fn update_one(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::MAIN) {
@@ -53,8 +53,8 @@ pub fn update_one(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x352f4 : un joueur en jeu normal. Décompte des compteurs, effets de statut, puis le gestionnaire
-/// du sous-état, puis les contrôles de fin d'image.
+/// 0x352f4: a player in normal game. Counter countdown, status effects, then the sub-state
+/// handler, then the end-of-frame checks.
 fn update_playing(g: &mut Ctx, p: Player) {
     cov!();
     loop {
@@ -66,7 +66,7 @@ fn update_playing(g: &mut Ctx, p: Player) {
         }
         let hitstop = p.u8(g, Player::HITSTOP);
         if hitstop != 0 && (hitstop as i8) >= 0 {
-            // gel de coup : le gestionnaire ne tourne pas
+            // hit freeze: the handler does not run
             p.set_u8(g, Player::HITSTOP, hitstop - 1);
             return end_of_frame(g, p);
         }
@@ -102,7 +102,7 @@ fn update_playing(g: &mut Ctx, p: Player) {
         if p.u16(g, Player::HP) == 0 {
             return finish(g, p);
         }
-        // l'aura de vitesse (+0x183) fait jouer l'image deux fois, sauf pendant une attaque 0xe
+        // the speed aura (+0x183) makes the frame play twice, except during an attack 0xe
         if p.u8(g, Player::AURA_B) == 0
             || p.state(g) & !0xff == 0x0200_0e00
             || ram::SCENE.get(g.b) == 0x43
@@ -117,7 +117,7 @@ fn update_playing(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x35344..0x353a4 : bonus temporaires (puissance, aura), clignotement et couleurs d'aura.
+/// 0x35344..0x353a4: temporary bonuses (power, aura), blinking and aura colors.
 fn status_effects(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::POWERUP) != 0 {
@@ -147,7 +147,7 @@ fn status_effects(g: &mut Ctx, p: Player) {
     effects::dying_countdown(g, p);
 }
 
-/// 0x353ea : lancer d'arme (bouton 3) ou attaque spéciale (bouton 4).
+/// 0x353ea: weapon throw (button 3) or special attack (button 4).
 fn end_of_frame(g: &mut Ctx, p: Player) {
     cov!();
     if !checks::throw_button(g, p) {
@@ -156,7 +156,7 @@ fn end_of_frame(g: &mut Ctx, p: Player) {
     finish(g, p);
 }
 
-/// 0x353f4 : fin d'image.
+/// 0x353f4: end of frame.
 fn finish(g: &mut Ctx, p: Player) {
     cov!();
     if ram::SCENE.get(g.b) == 0x29
@@ -168,8 +168,8 @@ fn finish(g: &mut Ctx, p: Player) {
     lists::ACTORS.reinsert(g.b, p.obj());
 }
 
-/// 0x35436 : retire le joueur de la partie : sauvegarde de ses données (score, objets, personnage),
-/// effacement de son enregistrement et de ses deux sous-objets.
+/// 0x35436: removes the player from the game: save of their data (score, items, character),
+/// clearing of their record and their two sub-objects.
 fn remove(g: &mut Ctx, p: Player) {
     cov!();
     lists::unlink(g.b, p.obj());
@@ -188,7 +188,7 @@ fn remove(g: &mut Ctx, p: Player) {
     clear_overlays_of(g, k);
 }
 
-/// 0x35292 : mise à jour des joueurs.
+/// 0x35292: update of the players.
 pub fn update_cpu(c: &mut Cpu, b: &mut Cps2Bus) {
     update_all(&mut Ctx::new(c, b));
 }
@@ -206,24 +206,24 @@ pub const UPDATE_PLAYERS: Native = Native {
     outputs: 0,
 };
 
-/// Tableau des meilleurs scores : dix entrées de 14 octets en FF0FD0, du meilleur au moins bon.
+/// High-score table: ten 14-byte entries at FF0FD0, from best to worst.
 mod scores {
     pub const TABLE: u32 = 0xff_0fd0;
     pub const ENTRY: u32 = 0xe;
     pub const COUNT: u32 = 10;
-    /// Champs : niveau, personnage, nom (6 octets), score (long), magie (`+0xd`).
+    /// Fields: level, character, name (6 bytes), score (long), magic (`+0xd`).
     pub const LEVEL: u32 = 0x0;
     pub const CHARACTER: u32 = 0x1;
     pub const NAME: u32 = 0x2;
     pub const SCORE: u32 = 0x8;
     pub const MAGIC: u32 = 0xd;
-    /// Noms prédéfinis (en clair) : par personnage (8 octets, seconde série à partir de 12 pour la version
-    /// `A5+0x71`), ou désignés par un premier octet négatif.
+    /// Predefined names (in clear): per character (8 bytes, second series starting at 12 for version
+    /// `A5+0x71`), or designated by a negative first byte.
     pub const NAMES: u32 = 0x1829e;
 }
 
-/// 0x180c8 : le score du joueur qui quitte la partie (`+0x110`) prend sa place dans le tableau, les moins bons
-/// descendant d'un rang. Un nom commençant par -1 à -7 est remplacé par un nom prédéfini.
+/// 0x180c8: the score of the player leaving the game (`+0x110`) takes its place in the table, the worse ones
+/// dropping a rank. A name starting with -1 to -7 is replaced by a predefined name.
 fn record_high_score(g: &mut Ctx, p: Player) {
     let score = p.u32(g, Player::SCORE_BCD) as i32;
     let entry = |rank: u32| scores::TABLE + scores::ENTRY * rank;

@@ -1,7 +1,7 @@
-//! Écrans de la machine à modes : démarrage, avertissements, images fixes de l'attract.
+//! Screens of the mode machine: startup, warnings, fixed attract frames.
 //!
-//! Chaque sous-mode (`FF0E71`) est un écran ; on y entre à l'étape 0 (préparation) et l'on y
-//! reste, une étape à la fois, jusqu'à ce que sa minuterie (`FF0E78`) atteigne zéro.
+//! Each sub-mode (`FF0E71`) is a screen; it is entered at step 0 (preparation) and stays there,
+//! one step at a time, until its timer (`FF0E78`) reaches zero.
 
 use super::{mode, Flow, Sequence};
 use crate::scene::fading;
@@ -10,31 +10,31 @@ use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
 
-/// Variables de la RAM de travail (décalages depuis A5).
+/// Work RAM variables (offsets from A5).
 mod var {
-    /// Bits 1 à 3 : plans de fond allumés (mot de commande vidéo).
+    /// Bits 1 to 3: background planes turned on (video command word).
     pub const LAYERS: u32 = 0x14;
-    /// Fondu : pages, délai.
-    /// Défilement vertical du plan 2 ; abscisses des caméras (longs).
+    /// Fade: pages, delay.
+    /// Vertical scroll of plane 2; camera x positions (longs).
     pub const SCROLL_2: u32 = 0x4ba;
     pub const CAMERA: u32 = 0x506;
     pub const CAMERA_2: u32 = 0x50a;
 }
 
-/// Plans de fond (bits 1 à 3 du mot de commande vidéo).
+/// Background planes (bits 1 to 3 of the video command word).
 const LAYER_BITS: u16 = 0xe;
-/// Octet à FF0F53, posé par la tâche d'écran fixe quand l'écran est prêt.
+/// Byte at FF0F53, set by the fixed-screen task when the screen is ready.
 const SCREEN_READY: u32 = 0xff_0f53;
-/// Tâche d'écran fixe (exécuteur d'objets) et son emplacement.
+/// Fixed-screen task (object executor) and its slot.
 const FIXED_SCREEN_TASK: u32 = 0x1835e;
 const FIXED_SCREEN_SLOT: u32 = 0xf0;
-/// Palette des écrans de texte et ses deux blocs de tuiles (écran « copyright »).
+/// Palette of the text screens and its two tile blocks ("copyright" screen).
 const TEXT_PALETTE: u16 = 0x53;
 const TILE_PLANE_3: u32 = 0x917000;
 const SOUND_SCREEN_A: u32 = 0xe0be2;
 const SOUND_SCREEN_B: u32 = 0xe0c16;
 
-/// Écran du sous-mode `sub`, s'il est réécrit.
+/// Screen of sub-mode `sub`, if it is rewritten.
 pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
     Some(match sub {
         0 | 6 => fixed_screen(x),
@@ -45,7 +45,7 @@ pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
     })
 }
 
-/// Sous-modes 0 et 6 (`0x1371e`) : crée la tâche d'écran fixe, attend qu'elle ait fini, puis fond.
+/// Sub-modes 0 and 6 (`0x1371e`): creates the fixed-screen task, waits for it to finish, then fades.
 fn fixed_screen(x: &mut Ctx) -> Flow {
     if rd8(x.b, mode::STEP) == 0 {
         wr8(x.b, mode::STEP, 2);
@@ -68,7 +68,7 @@ fn fixed_screen(x: &mut Ctx) -> Flow {
 
 const FIXED_SCREEN_FADED: u32 = 0x1376e;
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
         FixedScreenAfterFade = FIXED_SCREEN_FADED => |x| {
             x.set_v32(var::SCROLL_2, 0);
@@ -152,7 +152,7 @@ crate::steps! {
         },
         NoticeFadeIn = NOTICE_FADE_IN => |x| {
             fading::PAGES.set(x.b, 0xf);
-            // `jsr 0x144c` : la suite est le décompte, juste après
+            // `jsr 0x144c`: what follows is the countdown, just after
             x.subroutine(crate::tasks::fading::rise, Step::NoticeCountdown)
         },
         NoticeCountdown = NOTICE_COUNTDOWN => notice_countdown,
@@ -169,13 +169,13 @@ crate::steps! {
     }
 }
 
-/// Deux blocs de tuiles de la couche 2 (`n`, `n + 1`) à la suite, à partir de `TILE_PLANE_3`.
+/// Two tile blocks of layer 2 (`n`, `n + 1`) in a row, starting from `TILE_PLANE_3`.
 fn two_tile_blocks(x: &mut Ctx, n: u16) {
     let end = load_grid(x.b, Grid::Layer2, n, TILE_PLANE_3);
     load_grid(x.b, Grid::Layer2, n + 1, end.destination);
 }
 
-/// Sous-mode 8 (`0x1377e`) : image à deux blocs de tuiles pendant 300 images, entre deux fondus.
+/// Sub-mode 8 (`0x1377e`): picture made of two tile blocks for 300 frames, between two fades.
 fn legal_screen(x: &mut Ctx) -> Flow {
     if rd8(x.b, mode::STEP) != 0 {
         return legal_screen_wait(x);
@@ -190,7 +190,7 @@ const LEGAL_TILES: u32 = 0x137bc;
 
 const LEGAL_SOUND: u32 = 0x137e8;
 
-/// Étape d'attente du sous-mode 8 : à la fin de la minuterie, fondu au noir et écran suivant.
+/// Wait step of sub-mode 8: when the timer ends, fade to black and next screen.
 fn legal_screen_wait(x: &mut Ctx) -> Flow {
     let left = rd16(x.b, mode::TIMER).wrapping_sub(1);
     wr16(x.b, mode::TIMER, left);
@@ -211,7 +211,7 @@ const LEGAL_CLEARED: u32 = 0x1382a;
 const LEGAL_PALETTE: u32 = 0x1383e;
 
 // ---------------------------------------------------------------------------------------------
-// Sous-mode 16 (`0x1384c`) : seconde image de droits, seulement si `A5+0x70` vaut 2
+// Sub-mode 16 (`0x1384c`): second rights picture, only if `A5+0x70` equals 2
 
 fn second_legal_screen(x: &mut Ctx) -> Flow {
     if rd16(x.b, A5 + 0x70) != 2 {
@@ -245,9 +245,9 @@ const SECOND_CLEARED: u32 = 0x13906;
 const SECOND_PALETTE: u32 = 0x1391a;
 
 // ---------------------------------------------------------------------------------------------
-// Sous-mode 18 (`0x13922`) : mention « violence animée », 120 images
+// Sub-mode 18 (`0x13922`): "animated violence" notice, 120 frames
 
-/// Texte de la mention (dans le code d'origine).
+/// Text of the notice (in the original code).
 const NOTICE_TEXT: u32 = 0x13b52;
 
 fn notice_screen(x: &mut Ctx) -> Flow {

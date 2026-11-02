@@ -1,61 +1,61 @@
-//! Pièces et crédits (C1) : lecture des monnayeurs dans le VBLANK (0x143da), boutons de départ
-//! (0x141e0) et verrouillage des compteurs de pièces (0x14290).
+//! Coins and credits (C1): reading of the coin slots in VBLANK (0x143da), start buttons
+//! (0x141e0) and locking of the coin counters (0x14290).
 //!
-//! Le port `IN2` (0x804020) porte les lignes des monnayeurs (bits 4 à 7 : pièces 1 à 4) ; `IN2+1`
-//! (0x804021) les boutons de service. Jusqu'à quatre monnayeurs, chacun avec un enregistrement de
-//! 16 octets en `A5+0x44e + 0x10 k` :
+//! Port `IN2` (0x804020) carries the coin slot lines (bits 4 to 7: coins 1 to 4); `IN2+1`
+//! (0x804021) the service buttons. Up to four coin slots, each with a 16-byte record
+//! at `A5+0x44e + 0x10 k`:
 //!
-//! | Octet | Rôle |
+//! | Byte | Role |
 //! |---|---|
-//! | +0 | antirebond : images consécutives où la ligne est restée basse (plafonné à 50) |
-//! | +1 | pièces insérées pas encore converties en crédit |
-//! | +2 | crédits (plafonnés à 9) |
-//! | +3 | total des pièces insérées |
-//! | +7 | « départ pris en compte » |
+//! | +0 | debounce: consecutive frames where the line stayed low (capped at 50) |
+//! | +1 | coins inserted not yet converted into credits |
+//! | +2 | credits (capped at 9) |
+//! | +3 | total of coins inserted |
+//! | +7 | "start taken into account" |
 //!
-//! Compteurs communs (`SEPARATE_MODE` nul) : tout se passe dans l'enregistrement du premier monnayeur,
-//! les autres ne servent que d'antirebond. Compteurs séparés : chaque monnayeur a les siens.
+//! Common counters (`SEPARATE_MODE` zero): everything happens in the record of the first coin slot,
+//! the others only serve for debouncing. Separate counters: each coin slot has its own.
 //!
-//! Les routines lisent, décident et écrivent comme l'original ; le bruit de pièce, la comptabilité EEPROM et les
-//! verrous (0xb96/0xbac) sont appelés par leurs fonctions Rust.
+//! The routines read, decide and write like the original; the coin sound, the EEPROM bookkeeping and the
+//! locks (0xb96/0xbac) are called through their Rust functions.
 
 use cps2::Cps2Bus;
 
 use crate::mem::{rd16, rd8, wr8, A5};
 use crate::Native;
 
-/// Port des monnayeurs et port des boutons de service.
+/// Coin slot port and service button port.
 const PORT_PIECES: u32 = 0x804020;
 const PORT_SERVICE: u32 = 0x804021;
 
-/// Réglages et états, relatifs à A5.
+/// Settings and states, relative to A5.
 mod ram {
-    /// Pièces nécessaires pour un crédit.
+    /// Coins needed for one credit.
     pub const COINS_PER_CREDIT: u32 = 0x1e;
-    /// Crédits accordés quand le seuil est atteint.
+    /// Credits granted when the threshold is reached.
     pub const CREDITS_PER_THRESHOLD: u32 = 0x1f;
-    /// Mode de partage des pièces (≠ 0 : le 2e monnayeur lit la ligne 3 ; lockout du 2e).
+    /// Coin sharing mode (≠ 0: the 2nd coin slot reads line 3; lockout of the 2nd).
     pub const SHARED_MODE: u32 = 0x20;
-    /// Nombre de monnayeurs moins un.
+    /// Number of coin slots minus one.
     pub const COIN_SLOTS: u32 = 0x21;
-    /// Compteurs séparés par monnayeur (0 : compteurs communs).
+    /// Separate counters per coin slot (0: common counters).
     pub const SEPARATE_MODE: u32 = 0x22;
-    /// Jeu gratuit : pas de verrouillage.
+    /// Free play: no locking.
     pub const FREE: u32 = 0x25;
-    /// Partie en cours.
+    /// Game in progress.
     pub const GAME: u32 = 0x30;
-    /// Mot non nul pendant le menu de test : rien n'est lu.
+    /// Non-zero word during the test menu: nothing is read.
     pub const MENU_TEST: u32 = 0x7fcc;
-    /// Drapeau qui, avec `GAME`, autorise le bruit de pièce (A5 - 0x713c).
+    /// Flag that, with `GAME`, enables the coin sound (A5 - 0x713c).
     pub const COIN_SOUND: u32 = 0xffff_8ec4;
-    /// Premier enregistrement monnayeur, et pas.
+    /// First coin slot record, and stride.
     pub const COIN_SLOT_1: u32 = 0x44e;
     pub const STEP: u32 = 0x10;
 }
 
-/// 0x14cb8 : les quatre enregistrements de monnayeur à zéro, puis leurs réglages : `+0xb` = 0xff, `+8` =
-/// « plus d'une pièce par crédit », `+9` = 4 et `+0xf` = « départ gratuit » (`A5+0x24`) en mode de
-/// monnayage 17 ; jeu gratuit (`A5+0x25`) en mode 18.
+/// 0x14cb8: the four coin slot records zeroed, then their settings: `+0xb` = 0xff, `+8` =
+/// "more than one coin per credit", `+9` = 4 and `+0xf` = "free start" (`A5+0x24`) in coin
+/// mode 17; free play (`A5+0x25`) in mode 18.
 pub fn initialize(b: &mut Cps2Bus) {
     use crate::mem::{wr32, wr8, A5};
     const COIN_MODE: u32 = 0x1c;
@@ -79,25 +79,25 @@ pub fn initialize(b: &mut Cps2Bus) {
     }
 }
 
-/// Antirebond : saturation, et durée minimale d'une pièce valide (en images).
+/// Debounce: saturation, and minimum duration of a valid coin (in frames).
 const DEBOUNCE_MAX: u8 = 50;
 const DEBOUNCE_MIN: u8 = 2;
-/// Crédits maximum.
+/// Maximum credits.
 const CREDITS_MAX: u8 = 9;
 
-/// Bruit d'insertion de pièce (wrapper son).
+/// Coin insertion sound (sound wrapper).
 const COIN_NOISE: u32 = 0xe18f8;
 
-/// Une ligne de monnayeur : indice de l'enregistrement et masque dans `IN2`.
+/// One coin slot line: record index and mask in `IN2`.
 #[derive(Clone, Copy)]
 struct Line {
     k: u32,
     mask: u8,
 }
 
-/// Parcourt les monnayeurs configurés dans l'ordre de l'original : les lignes à examiner et, entre
-/// elles, les décisions des tests sur le nombre de monnayeurs (`apres_ligne(k)` est appelé après chaque
-/// ligne). Le deuxième monnayeur lit la ligne 3 si les pièces sont partagées.
+/// Walks the configured coin slots in the original's order: the lines to examine and, between
+/// them, the decisions of the tests on the number of coin slots (`apres_ligne(k)` is called after each
+/// line). The second coin slot reads line 3 if the coins are shared.
 fn walk(b: &mut Cps2Bus, mut line: impl FnMut(&mut Cps2Bus, Line)) {
     let n = rd8(b, A5 + ram::COIN_SLOTS) as i8;
     line(b, Line { k: 0, mask: 0x10 });
@@ -121,19 +121,19 @@ fn walk(b: &mut Cps2Bus, mut line: impl FnMut(&mut Cps2Bus, Line)) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Lecture des monnayeurs (0x143da)
+// Reading the coin slots (0x143da)
 
-/// Traite une ligne (0x14546 compteurs communs, 0x145cc compteurs séparés). `level` : `IN2 & mask`.
+/// Processes a line (0x14546 common counters, 0x145cc separate counters). `level`: `IN2 & mask`.
 fn handle_line(b: &mut Cps2Bus, separate: bool, l: Line, level: u8) {
     let a0 = A5 + ram::COIN_SLOT_1 + ram::STEP * l.k;
     let counters = if separate { a0 } else { A5 + ram::COIN_SLOT_1 };
     let debounce = rd8(b, a0);
     if !(level != 0) {
-        // ligne basse : l'antirebond compte les images, plafonné
+        // line low: the debounce counts frames, capped
         wr8(b, a0, debounce.wrapping_add(1).min(DEBOUNCE_MAX));
         return;
     }
-    // ligne haute : la pièce est comptée si la ligne était restée basse assez longtemps, sans saturer
+    // line high: the coin is counted if the line had stayed low long enough, without saturating
     if (debounce < DEBOUNCE_MIN) || (debounce == DEBOUNCE_MAX) {
         wr8(b, a0, 0);
         return;
@@ -154,18 +154,18 @@ fn handle_line(b: &mut Cps2Bus, separate: bool, l: Line, level: u8) {
         let cap_reached = !(credits < 10);
         wr8(b, counters + 2, if cap_reached { CREDITS_MAX } else { credits });
     }
-    // bruit de pièce si une partie est en cours ou si le drapeau son est levé
+    // coin sound if a game is in progress or if the sound flag is raised
     let sum = rd8(b, A5 + ram::GAME).wrapping_add(rd8(b, A5.wrapping_add(ram::COIN_SOUND)));
     if !(sum == 0) {
         crate::sound::play_global(b, COIN_NOISE);
     }
-    // 0x2e448 : comptabilité
+    // 0x2e448: bookkeeping
     crate::eeprom::count_coin(b);
     wr8(b, a0, 0);
 }
 
-/// 0x143da (VBLANK) : lit les lignes des monnayeurs. L'original rend D0 et A0 intacts et le VBLANK rend tous les
-/// registres : rien ne sort dans les registres.
+/// 0x143da (VBLANK): reads the coin slot lines. The original leaves D0 and A0 intact and VBLANK restores all the
+/// registers: nothing comes out in the registers.
 pub fn read_coin_slots(b: &mut Cps2Bus) {
     let menu = rd16(b, A5 + ram::MENU_TEST);
     if menu != 0 {
@@ -180,13 +180,13 @@ pub fn read_coin_slots(b: &mut Cps2Bus) {
 
 
 // ---------------------------------------------------------------------------------------------
-// Boutons de départ (0x141e0)
+// Start buttons (0x141e0)
 
-/// Absolu de l'enregistrement du premier monnayeur (comparé à A0 par l'original).
+/// Absolute address of the first coin slot's record (compared to A0 by the original).
 const FIRST_ABSOLUTE: u32 = 0xff844e;
 
-/// 0x1422e : bouton de départ du monnayeur `coin_slot` (`service` = octet de IN2+1). Un départ ajoute un crédit
-/// gratuit au monnayeur (0x1427a), avec comptabilité pour le premier.
+/// 0x1422e: start button of coin slot `coin_slot` (`service` = byte of IN2+1). A start adds a free credit
+/// to the coin slot (0x1427a), with bookkeeping for the first.
 fn line_start(b: &mut Cps2Bus, coin_slot: u32, service: u8) {
     if service & 4 != 0 {
         wr8(b, coin_slot + 7, 0);
@@ -203,7 +203,7 @@ fn line_start(b: &mut Cps2Bus, coin_slot: u32, service: u8) {
     if coin_slot == FIRST_ABSOLUTE {
         crate::eeprom::count_start(b);
     }
-    // le crédit ajouté est l'octet `+7` (relu après la comptabilité : 1)
+    // the credit added is byte `+7` (reread after the bookkeeping: 1)
     let credits = rd8(b, coin_slot + 2).wrapping_add(rd8(b, coin_slot + 7));
     wr8(b, coin_slot + 2, credits);
     if credits >= 10 {
@@ -211,13 +211,13 @@ fn line_start(b: &mut Cps2Bus, coin_slot: u32, service: u8) {
     }
 }
 
-/// 0x141e0 : les boutons de départ des monnayeurs configurés.
+/// 0x141e0: the start buttons of the configured coin slots.
 pub fn read_starts(b: &mut Cps2Bus) {
     let service = rd8(b, PORT_SERVICE);
     let absolute = |k: u32| FIRST_ABSOLUTE + ram::STEP * k;
     line_start(b, absolute(0), service);
     for k in 1..4 {
-        // tst.b COIN_SLOTS ; beq (k = 1) puis SEPARATE_MODE ; beq, puis cmpi ; beq après chaque ligne
+        // tst.b COIN_SLOTS; beq (k = 1) then SEPARATE_MODE; beq, then cmpi; beq after each line
         let coin_slots = rd8(b, A5 + ram::COIN_SLOTS);
         let continue_game = match k {
             1 => coin_slots != 0 && rd8(b, A5 + ram::SEPARATE_MODE) != 0,
@@ -231,10 +231,10 @@ pub fn read_starts(b: &mut Cps2Bus) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Verrouillage des compteurs de pièces (0x14290)
+// Locking of the coin counters (0x14290)
 
-/// Décide du verrou pour le monnayeur `coin_slot` (0x14322) : verrouillé (vrai) si le jeu n'est pas gratuit et que
-/// les crédits plus le gain d'un seuil restent sous 10.
+/// Decides the lock for coin slot `coin_slot` (0x14322): locked (true) if the game is not free and
+/// the credits plus the gain of a threshold stay below 10.
 fn simple_lock(b: &mut Cps2Bus, coin_slot: u32) -> bool {
     if rd8(b, A5 + ram::FREE) != 0 {
         return false;
@@ -243,7 +243,7 @@ fn simple_lock(b: &mut Cps2Bus, coin_slot: u32) -> bool {
     (sum as i8) < 10
 }
 
-/// Idem pour les monnayeurs 2 à 4 (0x14300) : `rank` est leur numéro.
+/// Same for coin slots 2 to 4 (0x14300): `rank` is their number.
 fn rank_lock(b: &mut Cps2Bus, coin_slot: u32, rank: u8) -> bool {
     if rd8(b, A5 + ram::FREE) != 0 {
         return false;
@@ -251,13 +251,13 @@ fn rank_lock(b: &mut Cps2Bus, coin_slot: u32, rank: u8) -> bool {
     let coin_slots = rd8(b, A5 + ram::COIN_SLOTS);
     let shared = rd8(b, A5 + ram::SHARED_MODE) != 0;
     if rank as i8 > coin_slots as i8 {
-        // monnayeur absent : verrouillé seulement s'il partage les pièces du premier (hors rang 3)
+        // coin slot absent: locked only if it shares the coins of the first (except rank 3)
         if coin_slots != 1 || !shared || rank == 3 {
             return false;
         }
         return simple_lock(b, coin_slot);
     }
-    // un seul monnayeur supplémentaire en mode partagé : pas de verrou propre
+    // a single extra coin slot in shared mode: no lock of its own
     if coin_slots == 1 && shared {
         return false;
     }
@@ -272,7 +272,7 @@ fn apply_lock(b: &mut Cps2Bus, locked: bool, mask: u8) {
     }
 }
 
-/// 0x14290 : verrouille ou libère le compteur de pièces de chaque monnayeur.
+/// 0x14290: locks or releases the coin counter of each coin slot.
 pub fn lock_counters(b: &mut Cps2Bus) {
     let separate = rd8(b, A5 + ram::SEPARATE_MODE) != 0;
     let coin_slot = |k: u32| A5 + ram::COIN_SLOT_1 + ram::STEP * k;
@@ -294,21 +294,21 @@ pub const READ_COIN_SLOTS: Native = Native {
 };
 
 // ---------------------------------------------------------------------------------------------
-// Chiffre de l'affichage des crédits (0x14e46)
+// Digit of the credits display (0x14e46)
 
-/// 0x14e46 : écrit le chiffre `value & 15` (tuile) puis l'attribut `attr` dans la couche de caractères en
-/// `case`. Rend la case qui suit la tuile (A4 de l'original n'avance que d'un mot).
+/// 0x14e46: writes the digit `value & 15` (tile) then the attribute `attr` into the character layer at
+/// `case`. Returns the cell following the tile (the original's A4 only advances by one word).
 pub fn write_digit(b: &mut Cps2Bus, case: u32, value: u8, attr: u16) -> u32 {
-    // addi.w #0,D0 : décalage de la tuile de base des chiffres, nul dans cette ROM
+    // addi.w #0,D0: offset of the base tile of the digits, zero in this ROM
     let tile = (value & 15) as u16;
     crate::mem::wr16(b, case, tile);
     crate::mem::wr16(b, case.wrapping_add(2), attr);
     case.wrapping_add(2)
 }
-/// Sous-programme d'origine réécrit dans le corps de la tâche des crédits, présenté comme une native pour le fuzz
-/// différentiel (`examples/fuzz_couv`) ; le jeu ne l'appelle pas par son adresse.
+/// Original subroutine rewritten in the body of the credits task, presented as a native for the differential
+/// fuzz (`examples/fuzz_couv`); the game does not call it by its address.
 pub const TEST_NATIVES: &[Native] = &[Native {
-    // 0x1422e : bouton de départ d'un monnayeur (A0 monnayeur, D1.b octet de IN2+1)
+    // 0x1422e: start button of a coin slot (A0 coin slot, D1.b byte of IN2+1)
     entry: 0x1422e,
     name: "credits_depart_ligne",
     run: crate::Body::Processeur(|c, b| {

@@ -3,7 +3,7 @@ name = "cps2-gfx"
 version = "0.1.0"
 edition = "2021"
 license = "BSD-3-Clause"
-description = "Décodage des ROMs graphiques et rendu vidéo CPS2 (d'après MAME cps1_v.cpp / cps2.cpp)"
+description = "Graphics ROM decoding and CPS2 video rendering (after MAME cps1_v.cpp / cps2.cpp)"
 
 [dependencies]
 

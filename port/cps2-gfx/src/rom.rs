@@ -1,10 +1,10 @@
-//! Chargement de la région graphique CPS2 (ROM_LOAD64_WORD + désentrelacement « unshuffle »).
+//! Loading of the CPS2 graphics region (ROM_LOAD64_WORD + "unshuffle" deinterleaving).
 
 use std::io;
 use std::path::Path;
 
-/// Puces graphiques de ddsom : (fichier, offset dans la région). Chaque puce fournit un mot
-/// (2 octets) tous les 8 octets, à l'offset indiqué (0, 2, 4 ou 6).
+/// ddsom graphics chips: (file, offset in the region). Each chip provides one word
+/// (2 bytes) every 8 bytes, at the given offset (0, 2, 4 or 6).
 pub const DDSOM_GFX: &[(&str, usize)] = &[
     ("dd2.13m", 0x0000000),
     ("dd2.15m", 0x0000002),
@@ -17,7 +17,7 @@ pub const DDSOM_GFX: &[(&str, usize)] = &[
 ];
 pub const DDSOM_GFX_SIZE: usize = 0x1800000;
 
-/// Construit la région graphique telle que le matériel la voit.
+/// Builds the graphics region as the hardware sees it.
 pub fn load_gfx(romdir: &Path, chips: &[(&str, usize)], size: usize) -> io::Result<Vec<u8>> {
     let mut region = vec![0u8; size];
     for &(name, offset) in chips {
@@ -35,7 +35,7 @@ pub fn load_gfx(romdir: &Path, chips: &[(&str, usize)], size: usize) -> io::Resu
     Ok(region)
 }
 
-/// cps2_state::unshuffle, sur des unités de 8 octets.
+/// cps2_state::unshuffle, on units of 8 bytes.
 fn unshuffle(buf: &mut [u8]) {
     let len = buf.len() / 8;
     if len == 2 {
@@ -45,7 +45,7 @@ fn unshuffle(buf: &mut [u8]) {
     let (a, b) = buf.split_at_mut(half * 8);
     unshuffle(a);
     unshuffle(b);
-    // échange de la 2e moitié de a avec la 1re moitié de b
+    // swap of the 2nd half of a with the 1st half of b
     let quarter = half / 2;
     a[quarter * 8..].swap_with_slice(&mut b[..quarter * 8]);
 }

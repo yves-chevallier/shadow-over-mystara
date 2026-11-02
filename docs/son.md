@@ -116,20 +116,20 @@ Octets 0-1 : si l'octet 0 vaut **0xFF**, commande système de numéro octet 1 ; 
 |---|---|
 | 0 | tout couper : fondu général arrêté, voies d'effets et de musique (32 enregistrements), ADPCM |
 | 1 | couper tous les effets (la musique du canal reprend) |
-| 2 | couper l'effet du canal `octet 4` |
+| 2 | couper l'effet du canal `byte 4` |
 | 3 | couper les 3 voies ADPCM |
-| 4 | couper la voie ADPCM `octet 4` |
+| 4 | couper la voie ADPCM `byte 4` |
 | 5 | couper la musique (les canaux occupés par un effet continuent) |
-| 6 / 7 | rampe du volume de la musique vers le haut / vers le bas : niveau visé = mot de la table des niveaux à l'index `octet 2 & 0xFE`, vitesse = mot `octets 3-4` |
-| 8 | ajustement du tempo de la musique : `octet 4 x 0x369 >> 8`, négatif si `octet 3 == 0xFF` |
-| 9 | variation de hauteur des voies de musique : `octet 4 << 4`, négative si `octet 3 == 0xFF` |
-| 12 / 13 | fondu général de tous les canaux, montant / descendant, vitesse `octets 3-4` |
+| 6 / 7 | rampe du volume de la musique vers le haut / vers le bas : niveau visé = mot de la table des niveaux à l'index `byte 2 & 0xFE`, vitesse = mot `bytes 3-4` |
+| 8 | ajustement du tempo de la musique : `byte 4 x 0x369 >> 8`, négatif si `byte 3 == 0xFF` |
+| 9 | variation de hauteur des voies de musique : `byte 4 << 4`, négative si `byte 3 == 0xFF` |
+| 12 / 13 | fondu général de tous les canaux, montant / descendant, vitesse `bytes 3-4` |
 
 (Les numéros 10, 11, 14 et 15 sont sans effet ; au-delà de 15 le Z80 saute dans le vide.)
 
 ### Démarrage d'un son
 
-Le numéro indexe la table des sons (§7) : entrée de 4 octets `[adresse sur 3 octets, 0]`, nulle = vide.
+Le numéro indexe la table des sons (§7) : entrée de 4 octets `[address over 3 bytes, 0]`, nulle = vide.
 Le premier octet de la définition donne le type :
 
 | Octet | Type | Contenu |
@@ -218,11 +218,11 @@ du facteur de volume de la musique, index du volume de base des effets]`, puis l
 
 ### Échantillons (table dont l'adresse est le mot en 0x39E3, à 0x49E9)
 
-Fiches de 8 octets : `[banque, début, début de boucle, fin, note de référence]` (mots petit-
+Fiches de 8 octets : `[banque, début, début de looped, end, note de référence]` (mots petit-
 boutistes). La note de référence est celle de la hauteur nominale de l'échantillon (voir §9). La
 lecture d'une fiche donne la banque, le début (registre +1), la fin (+5) et la longueur de boucle
-`fin - début de boucle` (+4). *(Lue depuis 0x49E8, la table paraît faite de fiches
-`[note, banque, début, boucle, fin]` : la note de la fiche n est alors l'octet qui précède.)*
+`end - début de looped` (+4). *(Lue depuis 0x49E8, la table paraît faite de fiches
+`[note, banque, début, looped, end]` : la note de la fiche n est alors l'octet qui précède.)*
 
 ### Instruments (bancs de 256 fiches de 8 octets)
 
@@ -278,7 +278,7 @@ d'enveloppe x (0xFFFF - trémolo si profondeur non nulle) x amplitude de la voie
 16 bits de poids fort du produit.
 
 Hauteur (registre `8v + 2`) : hauteur 8.8 (+ vibrato = profondeur x LFO, signé selon le mode, + variation
-globale si le bit 7 est posé) ; `n = (demi-ton - 1) + 0x3C - note de référence`, borné ; `octave =
+globale si le bit 7 est posé) ; `n = (half-ton - 1) + 0x3C - note de référence`, borné ; `octave =
 table1[n]`, `d = n - table2[octave]` ; taux = `table_taux[n] + (interpolation[d][fraction] << octave)`.
 La hauteur n'est réécrite que si elle a changé (bit 0), ou si un LFO ou un glissando la fait bouger.
 *(Le bornage de l'original est atypique : au-delà de 0x6B il rend 0x6B si le bit de signe de
@@ -393,5 +393,5 @@ loop { driver.irq_request(&mut shared, &mut out); /* toutes les 32 000 périodes
 
 `shared` est la RAM partagée (4 096 octets, un octet par mot côté 68000) ; `out` reçoit les
 `Write::Qsound { reg, data }` à appliquer à la puce (les écritures dans la RAM partagée sont déjà faites
-dans `shared`, et rappelées dans `out` pour les outils). Dans `cps2`, `Sound::use_rust_driver()` (ou `DDSOM_SON_RUST=1` pour `jouer.sh`) fait
+dans `shared`, et rappelées dans `out` pour les outils). Dans `cps2`, `Sound::use_rust_driver()` (ou `DDSOM_SON_RUST=1` pour `play.sh`) fait
 tout cela à la place du Z80.

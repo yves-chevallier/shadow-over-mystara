@@ -1,10 +1,10 @@
-//! Textes et effacements sur la couche de caractères 8x8 (tilemap 0x912000).
+//! Texts and erasures on the 8x8 character layer (tilemap 0x912000).
 //!
-//! La couche est rangée par colonnes : une case = 2 mots (tuile, attributs), la case suivante d'une
-//! même colonne est 4 octets plus loin, la colonne suivante 0x80 octets plus loin.
-//! Un texte est décrit en ROM par : colonne, ligne, attributs, puis les caractères et des codes de
-//! contrôle. Toutes ces routines rendent `A4` positionné après le descripteur (les appelants
-//! enchaînent les textes) et préservent les autres registres.
+//! The layer is stored by columns: one cell = 2 words (tile, attributes), the next cell of the
+//! same column is 4 bytes further, the next column 0x80 bytes further.
+//! A text is described in ROM by: column, row, attributes, then the characters and control
+//! codes. All these routines return `A4` positioned after the descriptor (callers
+//! chain the texts) and preserve the other registers.
 
 use cps2::Cps2Bus;
 use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
@@ -17,7 +17,7 @@ const ROW: u32 = 4;
 const COLUMN: u32 = 0x80;
 const BLANK: u16 = 0x20;
 
-/// Lecteur séquentiel du descripteur pointé par A4.
+/// Sequential reader of the descriptor pointed to by A4.
 struct Script<'a> {
     b: &'a mut Cps2Bus,
     at: u32,
@@ -36,9 +36,9 @@ impl Script<'_> {
     }
 }
 
-/// Case (colonne, ligne) de la couche ; positions signées, avec le calcul 16 bits de l'original
-/// (ext.l puis décalage du mot bas seulement). Renvoie aussi la retenue de l'addition finale
-/// (drapeau X laissé par l'original).
+/// Cell (column, row) of the layer; signed positions, with the 16-bit computation of the original
+/// (ext.l then shift of the low word only). Also returns the carry of the final addition
+/// (X flag left by the original).
 fn cell_signed(col: u8, row: u8) -> (u32, bool) {
     let shift = |v: u8, n: u32| {
         let x = v as i8 as i32 as u32;
@@ -57,26 +57,26 @@ fn put(b: &mut Cps2Bus, at: u32, code: u16, attr: u16) {
     wr16(b, at + 2, attr);
 }
 
-/// Fin de routine : A4 avancé, drapeaux de la comparaison finale (égalité) et X laissé par la
-/// dernière opération qui le modifie.
+/// End of routine: A4 advanced, flags of the final comparison (equality) and X left by the
+/// last operation that modifies it.
 fn finish(c: &mut Cpu, b: &mut Cps2Bus, a4: u32, x: bool) {
     c.a[4] = a4;
     c.sr = (c.sr & !(SR_X | SR_N | SR_V | SR_C)) | SR_Z | if x { SR_X } else { 0 };
     rts(c, b);
 }
 
-/// Les trois variantes du texte simple.
+/// The three variants of the simple text.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind {
-    /// 0x0d5e : '@' fin, '/' ligne suivante, 0xff n : n espaces.
+    /// 0x0d5e: '@' end, '/' next line, 0xff n: n spaces.
     Text,
-    /// 0x0d32 : mêmes descripteurs, chaque caractère devient un espace (les attributs sont sans effet).
+    /// 0x0d32: same descriptors, each character becomes a space (the attributes have no effect).
     Clear,
-    /// 0x0dca : comme le texte, mais '_' passe à la ligne et les espaces laissent le fond intact.
+    /// 0x0dca: like the text, but '_' goes to the next line and spaces leave the background intact.
     Overlay,
 }
 
-/// Rend la fin du descripteur et le drapeau X que laisse l'original.
+/// Returns the end of the descriptor and the X flag left by the original.
 fn text(b: &mut Cps2Bus, descriptor: u32, kind: Kind) -> (u32, bool) {
     let mut s = Script { b, at: descriptor };
     let (col, row) = (s.byte(), s.byte());
@@ -110,18 +110,18 @@ fn text(b: &mut Cps2Bus, descriptor: u32, kind: Kind) -> (u32, bool) {
     (s.at, x)
 }
 
-/// 0x0d5e : écrit le texte décrit en `descriptor` (colonne, ligne, attributs, caractères) ; rend l'adresse qui
-/// suit le descripteur (A4 de l'original : les appelants enchaînent les textes).
+/// 0x0d5e: writes the text described at `descriptor` (column, row, attributes, characters); returns the address
+/// following the descriptor (A4 of the original: callers chain the texts).
 pub fn print(b: &mut Cps2Bus, descriptor: u32) -> u32 {
     text(b, descriptor, Kind::Text).0
 }
 
-/// 0x0d32 : efface le texte décrit en `descriptor` ; rend la fin du descripteur.
+/// 0x0d32: erases the text described at `descriptor`; returns the end of the descriptor.
 pub fn erase(b: &mut Cps2Bus, descriptor: u32) -> u32 {
     text(b, descriptor, Kind::Clear).0
 }
 
-/// 0x0dca : texte en surimpression ; rend la fin du descripteur.
+/// 0x0dca: overlay text; returns the end of the descriptor.
 pub fn print_over(b: &mut Cps2Bus, descriptor: u32) -> u32 {
     text(b, descriptor, Kind::Overlay).0
 }
@@ -131,8 +131,8 @@ fn native_text(c: &mut Cpu, b: &mut Cps2Bus, kind: Kind) {
     finish(c, b, end, x);
 }
 
-/// Corps commun des textes hauts (2 tuiles l'une sous l'autre, codes sur un mot) :
-/// '@@' fin, '##' colonne sautée, '/@' ligne suivante, '//' deux lignes plus bas.
+/// Common body of the tall texts (2 tiles one under the other, codes on a word):
+/// '@@' end, '##' column skipped, '/@' next line, '//' two lines down.
 fn tall_body(s: &mut Script, start: u32, attr: u16) {
     let mut line = start;
     let mut at = line;
@@ -157,7 +157,7 @@ fn tall_body(s: &mut Script, start: u32, attr: u16) {
     }
 }
 
-/// 0x1136 : texte haut à la position du descripteur ; rend la fin du descripteur.
+/// 0x1136: tall text at the position of the descriptor; returns the end of the descriptor.
 pub fn print_tall(b: &mut Cps2Bus, descriptor: u32) -> u32 {
     let mut s = Script { b, at: descriptor };
     let (col, row) = (s.byte(), s.byte());
@@ -166,8 +166,8 @@ pub fn print_tall(b: &mut Cps2Bus, descriptor: u32) -> u32 {
     s.at
 }
 
-/// 0x1234 : texte haut à la position (`col`, `row`) (D5, D6 de l'original) ; le descripteur commence aux
-/// attributs. Rend la fin du descripteur.
+/// 0x1234: tall text at position (`col`, `row`) (D5, D6 of the original); the descriptor starts at the
+/// attributes. Returns the end of the descriptor.
 pub fn print_tall_at(b: &mut Cps2Bus, descriptor: u32, col: u8, row: u8) -> u32 {
     let mut s = Script { b, at: descriptor };
     let attr = s.word();
@@ -185,10 +185,10 @@ fn print_tall_at_native(c: &mut Cpu, b: &mut Cps2Bus) {
     finish(c, b, end, false);
 }
 
-/// Blocs de 2x2 cases : '@@' fin, '##' saute deux colonnes, '//' deux lignes plus bas, 0xffff n : n
-/// blocs vides (tuile 0x20). Un autre mot `t` dessine un bloc : tuiles `t, t+1` puis `t+0x10, t+0x11` en
-/// dessous avec les attributs du descripteur (négatifs : palette `+0x2b` de l'objet A0) pour 0x0f38 ;
-/// bloc vide (tuile 0x2fc, attributs 0) pour 0x0f4a.
+/// 2x2-cell blocks: '@@' end, '##' skips two columns, '//' two lines down, 0xffff n: n
+/// empty blocks (tile 0x20). Any other word `t` draws a block: tiles `t, t+1` then `t+0x10, t+0x11`
+/// below with the attributes of the descriptor (negative: palette `+0x2b` of object A0) for 0x0f38;
+/// empty block (tile 0x2fc, attributes 0) for 0x0f4a.
 fn blocks(b: &mut Cps2Bus, descriptor: u32, object: u32, drawn: bool) -> (u32, bool) {
     let attr = rd16(b, descriptor + 2);
     let attr = if attr & 0x8000 != 0 { rd8(b, object + 0x2b) as u16 } else { attr };
@@ -222,7 +222,7 @@ fn blocks(b: &mut Cps2Bus, descriptor: u32, object: u32, drawn: bool) -> (u32, b
                 put(s.b, at + ROW, code.wrapping_add(0x10), attr);
                 put(s.b, at + COLUMN, code.wrapping_add(1), attr);
                 put(s.b, at + COLUMN + ROW, code.wrapping_add(0x11), attr);
-                // retenue du dernier addi.w #0x10
+                // carry of the last addi.w #0x10
                 x = code.wrapping_add(1).checked_add(0x10).is_none();
                 at += 2 * COLUMN;
             }
@@ -231,14 +231,14 @@ fn blocks(b: &mut Cps2Bus, descriptor: u32, object: u32, drawn: bool) -> (u32, b
     (s.at, x)
 }
 
-/// 0x0f4a : efface des blocs de 2x2 cases (`object` : A0 de l'original, lu seulement si les attributs du
-/// descripteur sont négatifs) ; rend la fin du descripteur.
+/// 0x0f4a: erases 2x2-cell blocks (`object`: A0 of the original, read only if the attributes of the
+/// descriptor are negative); returns the end of the descriptor.
 pub fn clear_blocks(b: &mut Cps2Bus, descriptor: u32, object: u32) -> u32 {
     blocks(b, descriptor, object, false).0
 }
 
-/// 0x0f38 : dessine des blocs de 2x2 cases (attributs négatifs : palette `+0x2b` de `object`) ; rend la fin du
-/// descripteur.
+/// 0x0f38: draws 2x2-cell blocks (negative attributes: palette `+0x2b` of `object`); returns the end of the
+/// descriptor.
 pub fn draw_blocks(b: &mut Cps2Bus, descriptor: u32, object: u32) -> u32 {
     blocks(b, descriptor, object, true).0
 }
@@ -248,8 +248,8 @@ fn blocks_native(c: &mut Cpu, b: &mut Cps2Bus, drawn: bool) {
     finish(c, b, end, x);
 }
 
-/// Efface un rectangle de la couche (colonne, ligne, largeur, hauteur) avec des espaces. Une ligne
-/// d'au moins 0x20 est ramenée dans la couche.
+/// Erases a rectangle of the layer (column, row, width, height) with spaces. A row
+/// of at least 0x20 is brought back into the layer.
 pub fn clear_cells(b: &mut Cps2Bus, col: u8, row: u8, width: u8, height: u8) {
     let row = if row >= 0x20 { row - 0x20 } else { row };
     let origin = LAYER + ((col as u32) << 7) + ((row as u32) << 2);
@@ -260,8 +260,8 @@ pub fn clear_cells(b: &mut Cps2Bus, col: u8, row: u8, width: u8, height: u8) {
     }
 }
 
-/// 0x1324 : efface le rectangle décrit en `descriptor` (colonne, ligne, largeur, hauteur) avec des espaces. Rend
-/// la fin du descripteur, qui n'avance que de 3 octets (la hauteur est lue sans post-incrément).
+/// 0x1324: erases the rectangle described at `descriptor` (column, row, width, height) with spaces. Returns
+/// the end of the descriptor, which only advances by 3 bytes (the height is read without post-increment).
 pub fn clear_box(b: &mut Cps2Bus, descriptor: u32) -> u32 {
     clear_box_height(b, descriptor).0
 }
@@ -280,7 +280,7 @@ fn clear_box_height(b: &mut Cps2Bus, descriptor: u32) -> (u32, u8) {
 fn clear_box_native(c: &mut Cpu, b: &mut Cps2Bus) {
     let (end, height) = clear_box_height(b, c.a[4]);
     c.a[4] = end;
-    // drapeaux : dernier move.w #0 (Z) ; X = retenue de « hauteur - 1 »
+    // flags: last move.w #0 (Z); X = carry of "height - 1"
     let x = if height == 0 { SR_X } else { 0 };
     c.sr = (c.sr & !(SR_X | SR_N | SR_V | SR_C)) | SR_Z | x;
     rts(c, b);

@@ -1,6 +1,6 @@
-//! Génère le code recompilé à partir des ROMs locales (jamais versionné : dérivé du jeu).
-//! ROMs : $DDSOM_ROMS ou ../../rom. Points d'entrée supplémentaires : entries.txt (adresses hex,
-//! appris à l'exécution). Sans ROMs, génère un module vide (tout est interprété).
+//! Generates the recompiled code from the local ROMs (never versioned: derived from the game).
+//! ROMs: $DDSOM_ROMS or ../../rom. Extra entry points: entries.txt (hex addresses,
+//! learned at run time). Without ROMs, generates an empty module (everything is interpreted).
 
 use std::path::PathBuf;
 
@@ -25,7 +25,7 @@ fn main() {
             recomp::generate(&p, &recomp::Options { bus_type: "cps2::Cps2Bus", modules, max_block: 64 })
         }
         Err(e) => {
-            println!("cargo:warning=ROMs introuvables ({e}) : aucun code recompilé, tout sera interprété");
+            println!("cargo:warning=ROMs not found ({e}): no recompiled code, everything will be interpreted");
             vec![(
                 "mod.rs".to_string(),
                 "pub const BLOCKS: usize = 0;\n\

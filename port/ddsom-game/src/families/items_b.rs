@@ -1,12 +1,11 @@
-//! Famille ITEM (suite) : type 2 (`0xdb0c2`), pièce d'équipement à emplacement fixe.
+//! ITEM family (continued): type 2 (`0xdb0c2`), equipment piece with a fixed slot.
 //!
-//! Une fiche par variante (table en clair `0xdb522`, 8 octets) donne l'emplacement du joueur où la pièce se
-//! range (`+0x5b`, huit gestionnaires `0xdb392`), son identifiant, la variante de son scintillement
-//! (`+0x54`), son compteur de coups (`+0x5c`), son indice dans le tableau des objets de collection
-//! (`+0x5d`) et la variante de l'objet SET 0xa qui l'annonce (`+0x5e`). Ramassée, elle remplace la pièce
-//! que le joueur portait à cet emplacement : l'ancienne est rejetée en arc, comme un ITEM 2 lancé par le
-//! joueur (mode `+0x2f` = 1, délai `+0x59`) qui retombe et attend d'être repris. Déjà portée, elle ne
-//! rapporte qu'un événement de score.
+//! One sheet per variant (table in the clear `0xdb522`, 8 bytes) gives the player slot where the piece is stored
+//! (`+0x5b`, eight handlers `0xdb392`), its identifier, the variant of its sparkle (`+0x54`), its hit counter
+//! (`+0x5c`), its index in the collectible objects table (`+0x5d`) and the variant of the SET 0xa object that announces
+//! it (`+0x5e`). When picked up, it replaces the piece the player was wearing in that slot: the old one is thrown off
+//! in an arc, like an ITEM 2 thrown by the player (mode `+0x2f` = 1, delay `+0x59`) that falls back and waits to be
+//! picked up again. If already worn, it yields only a score event.
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -30,31 +29,31 @@ mod f {
     pub const VZ: u32 = 0x18;
     pub const AZ: u32 = 0x1a;
     pub const SHADOWS: u32 = 0x2e;
-    /// Non nul : pièce rejetée par un joueur.
+    /// Non-zero: piece thrown off by a player.
     pub const THROWN: u32 = 0x2f;
-    /// Images avant la disparition (mot).
+    /// Frames before disappearance (word).
     pub const LIFETIME: u32 = 0x42;
-    /// Joueur qui ramasse ou qui a rejeté la pièce.
+    /// Player who picks up or threw off the piece.
     pub const OWNER: u32 = 0x50;
     pub const SPARKLE: u32 = 0x54;
-    /// Posé par le code des joueurs : la pièce est ramassée.
+    /// Set by the player code: the piece is picked up.
     pub const PICKED: u32 = 0x58;
     pub const DELAY: u32 = 0x59;
-    /// Fiche : emplacement, coups, indice de collection, variante du SET 0xa.
+    /// Sheet: slot, hits, collection index, SET 0xa variant.
     pub const SLOT: u32 = 0x5b;
     pub const HITS: u32 = 0x5c;
     pub const COLLECTION: u32 = 0x5d;
     pub const ANNOUNCE: u32 = 0x5e;
 }
 
-/// Champs du joueur.
+/// Player fields.
 mod p {
     pub const NUMBER: u32 = 0x02;
     pub const CHARACTER: u32 = 0x03;
     pub const Y: u32 = 0x10;
-    /// Prêt à ramasser.
+    /// Ready to pick up.
     pub const READY: u32 = 0x33;
-    /// Second équipement en main.
+    /// Second equipment in hand.
     pub const SECOND_HAND: u32 = 0x10e;
 }
 
@@ -63,17 +62,17 @@ mod rom {
     pub const SUB_STATES: u32 = 0xdb1fa;
     pub const SHEETS: u32 = 0xdb522;
     pub const SLOT_HANDLERS: u32 = 0xdb392;
-    /// Par personnage : la pièce de l'emplacement 4 lui est interdite.
+    /// Per character: the piece of slot 4 is forbidden to it.
     pub const SLOT_4_FORBIDDEN: u32 = 0xdb482;
     pub const ANIMATIONS: u32 = 0x1bee82;
 }
 
-/// Tableau des objets de collection ramassés (octets).
+/// Table of collected objects picked up (bytes).
 const COLLECTED: u32 = A5 - 0x5b88;
 const SHADOW_SET: u8 = 0x3c;
 const LIFETIME: u16 = 0x4b0;
 
-/// `jmp (table,PC,D0.w)` : D0 = indice, D1.w = mot de la table ; renvoie la cible.
+/// `jmp (table,PC,D0.w)`: D0 = index, D1.w = word of the table; returns the target.
 fn jump<R: Bench>(x: &mut Cx<'_, R>, table: u32, i: u8) -> u32 {
     let w = x.rom16(table + i as u32);
     table.wrapping_add(w as i16 as i32 as u32)
@@ -90,8 +89,7 @@ fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Recopie la fiche de la variante (le scintillement sauf pour une pièce rejetée) ; A1 = la table, D0 =
-/// le décalage de la ligne.
+/// Copies the variant's sheet (the sparkle except for a thrown-off piece); A1 = the table, D0 = the row offset.
 fn load_sheet<R: Bench>(x: &mut Cx<'_, R>, sparkle: bool) {
     let row = 8 * x.u8(f::VARIANT) as u32;
     let sheet = rom::SHEETS + row;
@@ -113,7 +111,7 @@ fn start_animation<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// État 0 : une pièce rejetée attend son délai ; une autre tombe (en l'air) ou attend au sol en scintillant.
+/// State 0: a thrown-off piece waits for its delay; another one falls (in the air) or waits on the ground, sparkling.
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::THROWN) != 0 {
         let delay = x.u8(f::DELAY);
@@ -164,7 +162,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Sous-état 0 : chute ; au sol, la pièce est ramenée dans la vue (sauf rejetée) et scintille.
+/// Substate 0: fall; on the ground, the piece is brought back into view (unless thrown off) and sparkles.
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.move_xyz().gt() {
         x.add8(f::SUB, 2);
@@ -180,7 +178,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Ramène la pièce dans la vue : au plus haut à `caméra.y + 0x20`, entre `caméra.x + 0x18` et `+ 0x168`.
+/// Brings the piece back into view: at most as high as `camera.y + 0x20`, between `camera.x + 0x18` and `+ 0x168`.
 fn into_view<R: Bench>(x: &mut Cx<'_, R>) {
     let cam2 = crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0;
     let (cam_x, cam_y) = if cam2 { (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b)) } else { (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b)) };
@@ -200,8 +198,7 @@ fn into_view<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// `0xdb320` : la durée de vie s'écoule ; la pièce clignote pendant ses 0x3c dernières images, puis
-/// disparaît.
+/// `0xdb320`: the lifetime runs out; the piece blinks during its last 0x3c frames, then disappears.
 fn age<R: Bench>(x: &mut Cx<'_, R>) {
     let left = x.u16(f::LIFETIME).wrapping_sub(1);
     x.set16(f::LIFETIME, left);
@@ -215,8 +212,8 @@ fn age<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Sous-état 6 : la pièce rejetée attend son délai, puis part en arc depuis le joueur, vers le centre de
-/// l'écran ; retombée, elle attend d'être ramassée.
+/// Substate 6: the thrown-off piece waits for its delay, then leaves in an arc from the player, toward the center of
+/// the screen; once fallen, it waits to be picked up.
 fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         x.move_xz();
@@ -252,15 +249,15 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// `0xdb350` : la pièce ramassée prend sa place sur le joueur (gestionnaire de son emplacement), est notée
-/// dans le tableau des objets de collection, puis annoncée (SET 0xa).
+/// `0xdb350`: the picked-up piece takes its place on the player (handler of its slot), is recorded in the collectible
+/// objects table, then announced (SET 0xa).
 fn equip<R: Bench>(x: &mut Cx<'_, R>) {
     let player = x.linked(f::OWNER);
     let row = 8 * x.u8(f::VARIANT) as u32;
     let id = x.data8(rom::SHEETS + row + 1);
     let slot = x.u8(f::SLOT) as u32;
     let handler = x.rom32(rom::SLOT_HANDLERS + 4 * slot);
-    // emplacement : (octet porté, compteur de coups, décalage du numéro de la pièce rejetée)
+    // slot: (worn byte, hit counter, offset of the number of the thrown-off piece)
     match slot {
         0 => replace(x, player, id, 0x160, None, 0),
         1 => {}
@@ -281,8 +278,8 @@ fn equip<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Une pièce portée à `worn` (compteur de coups `hits`) remplacée par `id` : déjà portée, simple
-/// événement ; sinon l'ancienne (numéro + `shift`) est rejetée. L'emplacement 2 ne rejette pas la pièce 1.
+/// A piece worn at `worn` (hit counter `hits`) replaced by `id`: already worn, simple event; otherwise the old one
+/// (number + `shift`) is thrown off. Slot 2 does not throw off piece 1.
 fn replace<R: Bench>(x: &mut Cx<'_, R>, player: Obj, id: u8, worn: u32, hits: Option<u32>, shift: u8) {
     let old = player.u8(x.b, worn);
     if old == id {
@@ -310,8 +307,8 @@ fn replace<R: Bench>(x: &mut Cx<'_, R>, player: Obj, id: u8, worn: u32, hits: Op
     drop_old(x, player, dropped);
 }
 
-/// Emplacement 4 : interdit à certains personnages (la pièce elle-même est rejetée) ; sinon comme les
-/// autres, et le second équipement en main suit la nouvelle pièce s'il en dépendait.
+/// Slot 4: forbidden to some characters (the piece itself is thrown off); otherwise like the others, and the second
+/// equipment in hand follows the new piece if it depended on it.
 fn slot_4<R: Bench>(x: &mut Cx<'_, R>, player: Obj, id: u8) {
     let character = player.u8(x.b, p::CHARACTER) as u32;
     // Original glitch: the character stays in D2 (`dispatch::Leftovers`)
@@ -338,7 +335,7 @@ fn slot_4<R: Bench>(x: &mut Cx<'_, R>, player: Obj, id: u8) {
     drop_old(x, player, old.wrapping_add(0xa));
 }
 
-/// `0xdb500` : la pièce était déjà portée : événement de score du joueur, puis son.
+/// `0xdb500`: the piece was already worn: score event of the player, then sound.
 fn already_worn<R: Bench>(x: &mut Cx<'_, R>) {
     let player = x.linked(f::OWNER);
     let number = (player.u8(x.b, p::NUMBER) as u32) << 8;
@@ -347,7 +344,7 @@ fn already_worn<R: Bench>(x: &mut Cx<'_, R>) {
     super::effects_creators::pickup(x.b, o, 5);
 }
 
-/// `0xdb672` : crée l'ITEM 2 de variante `variant` rejeté par le joueur (A2), avec le compteur de coups D2.
+/// `0xdb672`: creates the ITEM 2 of variant `variant` thrown off by the player (A2), with hit counter D2.
 fn drop_old<R: Bench>(x: &mut Cx<'_, R>, player: Obj, variant: u8) {
     let Some(n) = x.alloc(&pools::ITEM) else { return };
     n.set_u8(x.b, f::ACTIVE, 1);

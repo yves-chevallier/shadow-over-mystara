@@ -1,5 +1,5 @@
-//! Effets des joueurs (PEFF), treizième série : type 34 (le familier de la prière du clerc,
-//! `player/spawn.rs::swarm`). Voir `docs/families/player.md`.
+//! Player effects (PEFF), thirteenth series: type 34 (the familiar of the cleric's prayer,
+//! `player/spawn.rs::swarm`). See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -11,12 +11,12 @@ use crate::objects::Current;
 const SFX_BITE: u32 = 0xe8ba2;
 const ANIMS: u32 = 0x1bc346;
 const SPEEDS: u32 = 0x1c7836;
-/// Table des cadres de boîtes de collision (un pointeur par jeu de boîtes).
+/// Table of collision box frames (one pointer per box set).
 const FRAMES: u32 = 0x11bffa;
-/// Boîtes du familier : pour s'engager, pour mordre.
+/// Boxes of the familiar: to engage, to bite.
 const BOX_ATTACK: u32 = 0x4fbcc;
 const BOX_BITE: u32 = 0x4fbd4;
-/// Décalage (X, Z) par étape de l'animation du lanceur.
+/// Offset (X, Z) per step of the caster's animation.
 const OFFSETS: u32 = 0x4f3ea;
 /// Compteur de familiers en vie (`A5-0x5fc0`, adresse absolue).
 const COUNTER: u32 = 0xff2040;
@@ -25,9 +25,9 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Le familier du clerc : sort de terre (sous-état 0), cherche l'ennemi le plus proche (`+0x5c`) et s'en
-/// approche (2), erre faute de cible (4), le mord jusqu'à `+0x5a` fois (6), puis retombe (état 4). `+0x42`
-/// est sa durée de vie restante ; le long `+4..+7` est recopié en `+0x52` à chaque image.
+/// The cleric's familiar: comes out of the ground (substate 0), looks for the nearest enemy (`+0x5c`) and approaches it
+/// (2), wanders for lack of a target (4), bites it up to `+0x5a` times (6), then falls back (state 4). `+0x42` is its
+/// remaining lifetime; the long `+4..+7` is copied to `+0x52` every frame.
 mod pet {
     use super::*;
 
@@ -51,7 +51,7 @@ mod pet {
         x.free_peff();
     }
 
-    /// `move.l #0x4000000,(4,A0)` : état 4, sous-états nuls.
+    /// `move.l #0x4000000,(4,A0)`: state 4, substates zero.
     fn die<R: Bench>(x: &mut Cx<'_, R>) {
         x.set32(0x4, 0x0400_0000);
     }
@@ -94,7 +94,7 @@ mod pet {
         x.reinsert();
     }
 
-    /// `0x4f388` : suit l'étape d'animation du lanceur (`+0x33`) : place et image.
+    /// `0x4f388`: follows the caster's animation step (`+0x33`): position and frame.
     fn pose<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(f::OWNER);
         let step = owner.u8(x.b, 0x33);
@@ -125,7 +125,7 @@ mod pet {
         if x.a5_u8(a5::PAUSED) != 0 || owner.u8(x.b, 0x4) as i8 >= 4 || x.a5_u8(0x35) == 0 {
             return die(x);
         }
-        // la fin (zone, ombre, réinsertion) suit toujours le sous-état, même quand il a basculé à l'état 4
+        // the end (zone, shadow, re-insertion) always follows the substate, even when it has switched to state 4
         let tail = match x.u8(0x5) {
             0 => emerge(x),
             2 => approach(x),
@@ -134,14 +134,14 @@ mod pet {
         };
         if tail {
             x.keep_in_zone();
-            // Glitch d'origine : les registres de la collision (D2...) passent aux gestionnaires suivants ; l'éclat de gel
-            // (0x4bda8) tire son rebond dans le D2 hérité (`sorts_combattant`)
+            // Original glitch: the collision registers (D2...) pass on to the following handlers; the freeze shard
+            // (0x4bda8) draws its bounce in the inherited D2 (`sorts_combattant`)
             x.push_terrain();
             x.reinsert();
         }
     }
 
-    // --- sous-état 0 : sortie de terre ---------------------------------------------------------------
+    // --- substate 0: comes out of the ground ---------------------------------------------------------------
 
     fn emerge<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         match x.u8(0x6) {
@@ -166,7 +166,7 @@ mod pet {
         true
     }
 
-    // --- sous-état 2 : se dirige vers sa cible ------------------------------------------------------------
+    // --- substate 2: heads for its target ------------------------------------------------------------
 
     fn approach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         x.add16(0x42, 0xffff);
@@ -188,8 +188,8 @@ mod pet {
             let mut lost = false;
             if x.u8(0x46) == 0 {
                 x.set8(0x46, 2);
-                // A1 : la cible, ou le dernier objet examiné par la recherche (glitch d'origine : pas forcément
-                // la nouvelle cible)
+                // A1: the target, or the last object examined by the search (original glitch: not necessarily the new
+                // target)
                 let mut toward = x.linked(0x5c);
                 if toward.u16(x.b, 0x62) == 0 {
                     if let Some(o) = find_target(x) {
@@ -214,7 +214,7 @@ mod pet {
         true
     }
 
-    // --- sous-état 4 : errance sans cible ----------------------------------------------------------------
+    // --- substate 4: wandering without a target ----------------------------------------------------------------
 
     fn chase<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         x.add16(0x42, 0xffff);
@@ -239,7 +239,7 @@ mod pet {
         true
     }
 
-    /// Fin de vie : état 4, sous-états nuls, puis la retombée (`bra 0x4f7d2`, qui revient au sous-état appelant).
+    /// End of life: state 4, substates zero, then the fall back (`bra 0x4f7d2`, which returns to the calling substate).
     fn leave<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
@@ -247,7 +247,7 @@ mod pet {
         back(x);
     }
 
-    // --- sous-état 6 : bond et morsure ----------------------------------------------------------------
+    // --- substate 6: leap and bite ----------------------------------------------------------------
 
     fn attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         if x.u8(0x6) == 0 {
@@ -315,7 +315,7 @@ mod pet {
         true
     }
 
-    /// Le familier colle à sa cible et la mord toutes les 30 images (`+0x58`).
+    /// The familiar sticks to its target and bites it every 30 frames (`+0x58`).
     fn bite<R: Bench>(x: &mut Cx<'_, R>, target: Obj) -> bool {
         if (target.u16(x.b, 0x62) as i16) <= 0 {
             die(x);
@@ -390,7 +390,7 @@ mod pet {
         true
     }
 
-    // --- état 4 : retombée -----------------------------------------------------------------------------------
+    // --- state 4: fall back -----------------------------------------------------------------------------------
 
     fn back<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
@@ -430,8 +430,8 @@ mod pet {
 
     // --- recherches de cibles ------------------------------------------------------------------------------------
 
-    /// `0x4f874` : l'ennemi (puis le boss) le plus proche, mordu moins de 3 fois ; `+0x5c` reçoit son adresse.
-    /// Comme l'original, laisse dans A1 le dernier objet examiné.
+    /// `0x4f874`: the nearest enemy (then boss), bitten fewer than 3 times; `+0x5c` receives its address. As in the
+    /// original, leaves the last examined object in A1.
     fn find_target<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let mut best = u32::MAX;
         let mut found = 0u16;
@@ -472,7 +472,7 @@ mod pet {
         last
     }
 
-    /// `0x4f920` : tourne d'un cran vers `toward` (l'objet que l'appelant laisse dans A1).
+    /// `0x4f920`: turns one notch toward `toward` (the object the caller leaves in A1).
     fn turn<R: Bench>(x: &mut Cx<'_, R>, toward: Obj) {
         let diff = crate::aids::direction_to(x.b, x.o, toward).wrapping_sub(x.u8(0x2d)) & 0x1f;
         let step: u8 = if diff > 0x10 { 0xff } else { 1 };
@@ -488,8 +488,8 @@ mod pet {
         }
     }
 
-    /// Recouvrement de la boîte du monstre `frame` et de la boîte `mine` du familier : profondeur (`0x4fb44`),
-    /// largeur (`0x4fb6c`) et, pour la morsure, hauteur (`0x4fba4`).
+    /// Overlap of the box of monster `frame` and box `mine` of the familiar: depth (`0x4fb44`), width (`0x4fb6c`) and,
+    /// for the bite, height (`0x4fba4`).
     fn overlap<R: Bench>(x: &mut Cx<'_, R>, m: Obj, frame: u32, mine: u32, with_z: bool) -> bool {
         let (e, p) = (frame, mine);
         let d = (x.data8(e + 4) as i8 as i16 as u16).wrapping_add(m.u16(x.b, 0x10));
@@ -514,8 +514,8 @@ mod pet {
         d.wrapping_sub(q).wrapping_add(reach) <= reach.wrapping_mul(2)
     }
 
-    /// Premier monstre (ENEMY puis BOSS) dont une boîte recouvre celle du familier (`0x4f95a` pour
-    /// s'engager, `0x4f9be` pour la morsure, qui exclut en plus les monstres déjà mordus 3 fois ou frappés).
+    /// First monster (ENEMY then BOSS) of which a box overlaps that of the familiar (`0x4f95a` to engage, `0x4f9be` for
+    /// the bite, which additionally excludes monsters already bitten 3 times or struck).
     fn search_hit<R: Bench>(x: &mut Cx<'_, R>, bite: bool) -> Option<Obj> {
         for (first, count) in [(0x299eu32, 22u32), (0x3a1e, 3)] {
             let mut a1 = 0xff8000 + first;
@@ -544,7 +544,7 @@ mod pet {
         None
     }
 
-    /// `0x4f95a` : engage l'attaque (sous-état 6) quand un monstre touche le familier.
+    /// `0x4f95a`: engages the attack (substate 6) when a monster touches the familiar.
     fn attack_test<R: Bench>(x: &mut Cx<'_, R>) {
         if let Some(m) = search_hit(x, false) {
             x.set16(0x5c, m.0 as u16);
@@ -553,7 +553,7 @@ mod pet {
         }
     }
 
-    /// `0x4f9be` : un monstre est à portée de morsure : la cible est fixée et la morsure s'engage.
+    /// `0x4f9be`: a monster is within biting range: the target is fixed and the bite engages.
     fn find_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let Some(m) = search_hit(x, true) else {
             return false;

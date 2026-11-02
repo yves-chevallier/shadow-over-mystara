@@ -1,5 +1,5 @@
-//! Tests SingleStepTests/z80 (JSON, licence MIT). Fichiers dans $Z80_TESTS (défaut ~/tools/z80-tests/v1).
-//! Vérifie registres, RAM et nombre de T-états. cargo test --release -p z80 -- --nocapture
+//! SingleStepTests/z80 tests (JSON, MIT license). Files in $Z80_TESTS (default ~/tools/z80-tests/v1).
+//! Checks registers, RAM and T-state count. cargo test --release -p z80 -- --nocapture
 
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -109,7 +109,7 @@ fn singlestep() {
         PathBuf::from(std::env::var("HOME").unwrap()).join("tools/z80-tests/v1")
     });
     let Ok(rd) = std::fs::read_dir(&dir) else {
-        eprintln!("{} absent, test ignoré", dir.display());
+        eprintln!("{} missing, test skipped", dir.display());
         return;
     };
     let filter = std::env::var("Z80_FILTER").ok();
@@ -137,11 +137,11 @@ fn singlestep() {
         if nfail > 0 {
             bad_files += 1;
             if bad_files <= 40 {
-                println!("ÉCHEC {:12} {nfail} faux — ex. {}", f.file_name().unwrap().to_string_lossy(), first.unwrap());
+                println!("FAILED {:12} {nfail} wrong — e.g. {}", f.file_name().unwrap().to_string_lossy(), first.unwrap());
             }
         }
         fail += nfail;
     }
-    println!("TOTAL {ok} ok, {fail} faux, {} fichiers ({bad_files} en échec)", files.len());
+    println!("TOTAL {ok} ok, {fail} wrong, {} files ({bad_files} failed)", files.len());
     assert_eq!(fail, 0);
 }

@@ -1,8 +1,8 @@
-//! Nombre de passages par image au PC donné (par exemple 1c86e, la mise à jour du monde : une par image en temps normal,
-//! une centaine dans la « tempête de pas », voir docs/couverture.md). Natives désactivées par `DDSOM_SANS=` (vide : toutes),
-//! sans quoi le PC n'est vu que s'il est exécuté hors d'une native.
+//! Number of passes per frame at the given PC (for example 1c86e, the world update: one per frame in normal time,
+//! about a hundred in the « step storm », see docs/couverture.md). Natives disabled by `DDSOM_SANS=` (empty: all),
+//! otherwise the PC is seen only if it is executed outside a native.
 //!
-//! pc_hits <roms> <eeprom> <scénario> <image début> <image fin> <pc hexa>
+//! pc_hits <roms> <eeprom> <scenario> <start frame> <end frame> <pc hex>
 use std::cell::Cell;
 use std::rc::Rc;
 fn main() {

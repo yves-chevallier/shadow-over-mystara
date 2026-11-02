@@ -1,5 +1,5 @@
-//! Machine CPS2 : 68000 + bus + vidéo, cadencée ligne par ligne comme dans MAME.
-//! Son : Z80 + QSound (HLE), exécutés ligne par ligne en alternance avec le 68000.
+//! CPS2 machine: 68000 + bus + video, clocked line by line as in MAME.
+//! Sound: Z80 + QSound (HLE), run line by line alternating with the 68000.
 
 pub mod bus;
 pub mod crypt;
@@ -14,29 +14,29 @@ pub use bus::{Cps2Bus, Inputs};
 use eeprom::Eeprom93c46;
 use m68k::Cpu;
 
-/// Horloge 68000 : 16 MHz x 0,7375 (MAME compense ainsi les états d'attente non émulés).
+/// 68000 clock: 16 MHz x 0.7375 (MAME compensates this way for the unemulated wait states).
 pub const CPU_HZ: f64 = 16_000_000.0 * 0.7375;
-/// 512 pixels par ligne à 8 MHz.
+/// 512 pixels per line at 8 MHz.
 pub const LINE_HZ: f64 = 8_000_000.0 / 512.0;
 pub const LINES: u32 = 262;
 pub const VBLANK_LINE: u32 = 240;
 
-/// Programme de ddsom (Europe 960619).
+/// ddsom program (Europe 960619).
 pub const DDSOM_PROG: [&str; 8] = [
     "dd2e.03e", "dd2e.04e", "dd2e.05e", "dd2e.06e", "dd2e.07", "dd2e.08", "dd2e.09", "dd2e.10",
 ];
 
-/// Exécuteur de blocs recompilés : (pc, cpu, bus, échéance) -> Some(pc suivant) ou None si aucun bloc.
+/// Recompiled-block executor: (pc, cpu, bus, deadline) -> Some(next pc) or None if there is no block.
 pub type BlockExecutor = fn(u32, &mut Cpu, &mut Cps2Bus, u64) -> Option<u32>;
 
-/// Plafond de passages par image en un point du programme (voir `Machine::step_cap`).
+/// Cap on passes per frame through a program point (see `Machine::step_cap`).
 #[derive(Clone, Copy, Debug)]
 pub struct StepCap {
-    /// Adresse du point compté (début du pas de jeu).
+    /// Address of the counted point (start of the game step).
     pub pc: u32,
-    /// Nombre maximal de passages exécutés par image.
+    /// Maximum number of passes executed per frame.
     pub max: u32,
-    /// Passages exécutés depuis le début de l'image.
+    /// Passes executed since the start of the frame.
     count: u32,
 }
 
@@ -45,8 +45,8 @@ impl StepCap {
         StepCap { pc, max, count: 0 }
     }
 
-    /// Passage en `pc` : vrai s'il s'exécute dans cette image (il est compté), faux s'il est retenu jusqu'à la
-    /// suivante.
+    /// Pass at `pc`: true if it runs in this frame (it is counted), false if it is held back until the
+    /// next one.
     pub fn passage(&mut self) -> bool {
         if self.count >= self.max {
             return false;
@@ -56,69 +56,70 @@ impl StepCap {
     }
 }
 
-/// Travail du processeur pendant une ligne, à la place du 68000 (voir `Machine::line_work`) : (registres, bus, cycle de
-/// fin de la ligne, plafond de pas de l'image).
+/// Processor work during a line, in place of the 68000 (see `Machine::line_work`): (registers, bus, end-of-line cycle,
+/// frame step cap).
 pub type LineWork = fn(&mut Cpu, &mut Cps2Bus, u64, Option<&mut StepCap>);
 
-/// Correctif d'un comportement indéfini du jeu d'origine (voir `Machine::patches`).
+/// Fix for an undefined behavior of the original game (see `Machine::patches`).
 #[derive(Clone, Copy)]
 pub struct Patch {
-    /// Adresse (début de bloc) où il s'applique.
+    /// Address (block start) where it applies.
     pub entry: u32,
-    /// Modifie l'état et renvoie vrai pour remplacer l'exécution de l'instruction à `entry`.
+    /// Modifies the state and returns true to replace the execution of the instruction at `entry`.
     pub apply: fn(&mut Cpu, &mut Cps2Bus) -> bool,
 }
 
 pub struct Machine {
-    /// Code recompilé (None = tout interprété).
+    /// Recompiled code (None = everything interpreted).
     pub executor: Option<BlockExecutor>,
-    /// Adresses où aucun bloc recompilé n'existait (exécutées par l'interpréteur).
+    /// Addresses where no recompiled block existed (executed by the interpreter).
     pub misses: std::collections::BTreeMap<u32, u64>,
-    /// Instructions 68000 exécutées par l'interpréteur (le reste l'est par le code recompilé).
+    /// 68000 instructions executed by the interpreter (the rest is run by the recompiled code).
     pub interp_steps: u64,
-    /// Rappel après chaque instruction interprétée (outils de diagnostic) : (cpu, bus, pc).
+    /// Callback after each interpreted instruction (diagnostic tools): (cpu, bus, pc).
     pub step_hook: Option<Box<dyn FnMut(&Cpu, &Cps2Bus, u32)>>,
-    /// Le programme attend-il seulement une interruption ? (boucle d'attente du jeu) Le temps
-    /// restant de la ligne est alors sauté.
+    /// Is the program only waiting for an interrupt? (the game's wait loop) The remaining time
+    /// of the line is then skipped.
     pub idle: Option<fn(&Cpu, &Cps2Bus) -> bool>,
-    /// Plafond de pas de jeu par image. Le jeu d'origine enchaîne parfois plusieurs pas dans une même image
-    /// (« avance rapide » : une tâche remet la tâche principale prête sans attendre l'image) ; leur nombre vaut
-    /// alors (durée de l'image) / (durée d'un pas) et dépend donc de la fréquence du 68000. Quand `max` passages
-    /// en `pc` ont eu lieu dans l'image, le suivant est retenu : le temps restant de l'image est sauté (comme
-    /// `idle`) et le pas s'exécute au début de l'image suivante, après l'interruption de vblank.
+    /// Cap on game steps per frame. The original game sometimes chains several steps within one frame
+    /// ("fast forward": a task makes the main task ready again without waiting for the frame); their number is
+    /// then (frame duration) / (step duration) and so depends on the 68000 frequency. When `max` passes
+    /// at `pc` have occurred in the frame, the next one is held back: the remaining frame time is skipped (like
+    /// `idle`) and the step runs at the start of the next frame, after the vblank interrupt.
     pub step_cap: Option<StepCap>,
-    /// Correctifs de comportements que le jeu d'origine laisse au hasard (registres ou mémoire non initialisés) et
-    /// qu'aucune réécriture ne peut reproduire : appliqués à l'identique par le jeu et par la machine de référence.
+    /// Fixes for behaviors the original game leaves to chance (uninitialized registers or memory) and
+    /// that no rewrite can reproduce: applied identically by the game and by the reference machine.
     pub patches: Vec<Patch>,
-    /// Remplace l'exécution du 68000 (exécuteur, interpréteur, `idle`, correctifs) : appelée une fois par ligne, elle
-    /// fait le travail du processeur jusqu'au cycle donné ; le Z80 suit, comme d'ordinaire. `cpu` n'est alors qu'un
-    /// banc de registres (jeu sans 68000, `ddsom_game::install_no_68k`).
+    /// Replaces the execution of the 68000 (executor, interpreter, `idle`, fixes): called once per line, it
+    /// does the processor's work up to the given cycle; the Z80 follows as usual. `cpu` is then only a
+    /// register bench (game without 68000, `ddsom_game::install_no_68k`).
     pub line_work: Option<LineWork>,
-    /// `run_frame` rend l'image (vrai par défaut). Faux : l'image n'est pas calculée et `run_frame` rend un vecteur vide.
-    /// Le rendu ne lit que l'état (aucun effet) ; les outils qui ne regardent pas l'image (`validate`, `bench`)
-    /// l'éteignent : c'est l'essentiel du temps d'une image du jeu sans 68000.
+    /// `run_frame` returns the frame (true by default). False: the frame is not computed and
+    /// `run_frame` returns an empty vector.
+    /// Rendering only reads the state (no side effect); tools that do not look at the frame (`validate`, `bench`)
+    /// turn it off: it is most of the time of a frame in the game without 68000.
     pub rendering: bool,
     pub cpu: Cpu,
     pub bus: Cps2Bus,
     pub sound: sound::Sound,
     pub gfx: Vec<u8>,
     pub frame: u64,
-    /// Table d'objets verrouillée au dernier vblank (affichée à l'image suivante).
+    /// Object table latched at the last vblank (displayed on the next frame).
     pub obj_buffer: Vec<u16>,
     pub pri_ctrl_buffer: [u16; 6],
     line_cycles: f64,
-    /// Cycle CPU absolu de fin de la ligne en cours.
+    /// Absolute CPU cycle at the end of the current line.
     cycle_debt: f64,
-    /// Idem pour le Z80.
+    /// Same for the Z80.
     z80_debt: f64,
 }
 
-/// Programme 68000 de ddsom : (vue données en clair, vue espace programme déchiffrée), mots big-endian.
+/// ddsom 68000 program: (plain data view, decrypted program-space view), big-endian words.
 pub fn load_program(romdir: &Path) -> io::Result<(Vec<u16>, Vec<u16>)> {
     let mut rom = Vec::with_capacity(0x200000);
     for name in DDSOM_PROG {
         let d = std::fs::read(romdir.join(name))?;
-        // ROM_LOAD16_WORD_SWAP : mots stockés petit-boutiste dans la puce
+        // ROM_LOAD16_WORD_SWAP: words stored little-endian in the chip
         rom.extend(d.chunks_exact(2).map(|w| u16::from_le_bytes([w[0], w[1]])));
     }
     let key = std::fs::read(romdir.join("ddsom.key"))?;
@@ -127,41 +128,41 @@ pub fn load_program(romdir: &Path) -> io::Result<(Vec<u16>, Vec<u16>)> {
     Ok((rom, dec))
 }
 
-/// Contenu des puces de ddsom, tel que la machine le range : depuis les ROMs (`Contents::from_roms`) ou reconstruit
-/// depuis les ressources extraites (`ddsom_assets::rebuild::contents`, jeu sans ROM).
+/// Contents of the ddsom chips, as the machine stores them: from the ROMs (`Contents::from_roms`) or rebuilt
+/// from the extracted resources (`ddsom_assets::rebuild::contents`, ROM-less game).
 #[derive(Clone)]
 pub struct Contents {
-    /// Programme 68000, vue données (mots grand-boutistes, 0x200000 mots).
+    /// 68000 program, data view (big-endian words, 0x200000 words).
     pub program: Vec<u16>,
-    /// Programme 68000, vue espace programme déchiffrée (opcodes et lectures relatives au PC).
+    /// 68000 program, decrypted program-space view (opcodes and PC-relative reads).
     pub decrypted_program: Vec<u16>,
-    /// Région graphique (`cps2_gfx::rom::load_gfx`).
+    /// Graphics region (`cps2_gfx::rom::load_gfx`).
     pub graphics: Vec<u8>,
-    /// Région du Z80 (0x50000 : 0-7FFF fixe, banques à partir de 0x10000).
+    /// Z80 region (0x50000: 0-7FFF fixed, banks from 0x10000).
     pub audio: Vec<u8>,
-    /// Programme du DSP QSound (`dl-1425.bin`, au moins 0x2000 octets : seules ses tables servent).
+    /// QSound DSP program (`dl-1425.bin`, at least 0x2000 bytes: only its tables are used).
     pub dsp: Vec<u8>,
-    /// ROM d'échantillons QSound (4 Mo).
+    /// QSound sample ROM (4 MB).
     pub samples: Vec<u8>,
 }
 
 impl Contents {
-    /// Lit les ROMs (ddsom.zip et dl-1425.bin). `gfx` et `samples`, s'ils sont donnés, remplacent les ROMs graphiques
-    /// (`dd2.13m`...) et d'échantillons (`dd2.11m`, `dd2.12m`), qui ne sont alors pas lues.
+    /// Reads the ROMs (ddsom.zip and dl-1425.bin). `gfx` and `samples`, if given, replace the graphics ROMs
+    /// (`dd2.13m`...) and the sample ROMs (`dd2.11m`, `dd2.12m`), which are then not read.
     pub fn from_roms(romdir: &Path, gfx: Option<Vec<u8>>, samples: Option<Vec<u8>>) -> io::Result<Self> {
         let (program, decrypted_program) = load_program(romdir)?;
         let graphics = match gfx {
             Some(g) => g,
             None => cps2_gfx::rom::load_gfx(romdir, cps2_gfx::rom::DDSOM_GFX, cps2_gfx::rom::DDSOM_GFX_SIZE)?,
         };
-        // Z80 : dd2.01 = 0x8000 en 0, puis 0x18000 en 0x10000 (ROM_CONTINUE) ; dd2.02 en 0x28000
+        // Z80: dd2.01 = 0x8000 at 0, then 0x18000 at 0x10000 (ROM_CONTINUE); dd2.02 at 0x28000
         let mut audio = vec![0u8; 0x50000];
         let d1 = std::fs::read(romdir.join("dd2.01"))?;
         audio[..0x8000].copy_from_slice(&d1[..0x8000]);
         audio[0x10000..0x28000].copy_from_slice(&d1[0x8000..0x20000]);
         let d2 = std::fs::read(romdir.join("dd2.02"))?;
         audio[0x28000..0x48000].copy_from_slice(&d2);
-        // échantillons QSound : ROM_LOAD16_WORD_SWAP
+        // QSound samples: ROM_LOAD16_WORD_SWAP
         let samples = match samples {
             Some(s) => s,
             None => {
@@ -179,13 +180,13 @@ impl Contents {
 }
 
 impl Machine {
-    /// Charge ddsom depuis un dossier de ROMs extraites. `eeprom` : contenu nvram MAME (128 octets).
+    /// Loads ddsom from a folder of extracted ROMs. `eeprom`: MAME nvram contents (128 bytes).
     pub fn load_ddsom(romdir: &Path, eeprom: Option<&[u8]>) -> io::Result<Self> {
         Self::load_ddsom_with(romdir, eeprom, None, None)
     }
 
-    /// Comme `load_ddsom`, mais `gfx` (région graphique) et `samples` (ROM d'échantillons QSound, 4 Mo)
-    /// remplacent, s'ils sont donnés, les ROMs `dd2.13m`... et `dd2.11m`/`dd2.12m`, qui ne sont alors pas lues
+    /// Like `load_ddsom`, but `gfx` (graphics region) and `samples` (QSound sample ROM, 4 MB)
+    /// replace, if given, the ROMs `dd2.13m`... and `dd2.11m`/`dd2.12m`, which are then not read
     /// (voir `ddsom_assets::rebuild`).
     pub fn load_ddsom_with(
         romdir: &Path,
@@ -196,7 +197,7 @@ impl Machine {
         Ok(Self::ddsom(Contents::from_roms(romdir, gfx, samples)?, eeprom))
     }
 
-    /// Machine ddsom faite de ces contenus de puces (aucun fichier lu).
+    /// ddsom machine built from these chip contents (no file read).
     pub fn ddsom(contents: Contents, eeprom: Option<&[u8]>) -> Self {
         let Contents { program: rom, decrypted_program: rom_dec, graphics: gfx, audio: zrom, dsp, samples: samples } =
             contents;
@@ -230,8 +231,8 @@ impl Machine {
         m
     }
 
-    /// Multiplie la fréquence du 68000 (1.0 = arcade). Surcadencé, le jeu finit toujours son travail
-    /// avant la fin d'image : plus de ralentissements, comportement déterminé image par image.
+    /// Multiplies the 68000 frequency (1.0 = arcade). Overclocked, the game always finishes its work
+    /// before the end of the frame: no more slowdowns, behavior determined frame by frame.
     pub fn set_overclock(&mut self, k: f64) {
         self.line_cycles = k * CPU_HZ / LINE_HZ;
     }
@@ -241,8 +242,8 @@ impl Machine {
         self.cpu.reset(&mut self.bus);
     }
 
-    /// Exécute le CPU pendant une ligne de balayage, puis le Z80. La cible est absolue (le dépassement d'une
-    /// ligne est retranché de la suivante) pour garder exactement 755,2 cycles par ligne en moyenne.
+    /// Runs the CPU for one scanline, then the Z80. The target is absolute (the overrun of a
+    /// line is subtracted from the next one) to keep exactly 755.2 cycles per line on average.
     fn run_line(&mut self) {
         self.cycle_debt += self.line_cycles;
         let target = self.cycle_debt as u64;
@@ -250,13 +251,13 @@ impl Machine {
             Some(work) => work(&mut self.cpu, &mut self.bus, target, self.step_cap.as_mut()),
             None => self.run_cpu(target),
         }
-        // puis le Z80 sur la même tranche de temps (512 cycles à 8 MHz par ligne)
+        // then the Z80 over the same time slice (512 cycles at 8 MHz per line)
         self.sound.set_reset(!self.bus.z80_running);
         self.z80_debt += sound::Z80_HZ / LINE_HZ;
         self.sound.run(&mut self.bus.qram, self.z80_debt as u64, 1.0 / LINE_HZ);
     }
 
-    /// Exécute le 68000 jusqu'au cycle `target`.
+    /// Runs the 68000 up to cycle `target`.
     fn run_cpu(&mut self, target: u64) {
         while self.cpu.cycles < target {
             self.cpu.irq_level = self.bus.irq_level();
@@ -269,7 +270,7 @@ impl Machine {
                 && self.cpu.sr & m68k::SR_T == 0;
             if let Some(cap) = self.step_cap.as_mut().filter(|cap| plain && cap.pc == self.cpu.pc) {
                 if !cap.passage() {
-                    // pas retenu jusqu'à l'image suivante (le temps passe, l'interruption de vblank viendra)
+                    // step held back until the next frame (time passes, the vblank interrupt will come)
                     self.cpu.cycles = target;
                     break;
                 }
@@ -294,10 +295,10 @@ impl Machine {
         }
     }
 
-    /// Exécute une image comme MAME : au reset le faisceau est en début de vblank (ligne 240) et
-    /// la notification d'image de MAME tombe au début de chaque vblank. Une image exécute donc les
-    /// lignes 240..261 puis 0..239 ; elle se termine sur l'événement de vblank (rendu de l'écran,
-    /// verrouillage de la table d'objets, IRQ2), traité au début de l'image suivante.
+    /// Runs one frame like MAME: at reset the beam is at the start of vblank (line 240) and
+    /// MAME's frame notification falls at the start of each vblank. A frame thus runs
+    /// lines 240..261 then 0..239; it ends on the vblank event (screen render,
+    /// object table latch, IRQ2), handled at the start of the next frame.
     /// Renvoie l'image 384x224 RGB.
     pub fn run_frame(&mut self) -> Vec<[u8; 3]> {
         if let Some(cap) = self.step_cap.as_mut() {
@@ -309,8 +310,8 @@ impl Machine {
             let line = (VBLANK_LINE + i) % LINES;
             self.bus.scanline = line;
             self.raster_tick(line);
-            // compteurs raster armés (rechargement < nombre de lignes) : une IRQ peut tomber à
-            // chaque ligne ; sinon la prochaine interruption possible est le vblank de fin d'image
+            // armed raster counters (reload < number of lines): an IRQ may fall on
+            // every line; otherwise the next possible interrupt is the end-of-frame vblank
             let raster = self.bus.raster_reload[..2].iter().any(|&r| (r as u32) < LINES);
             self.bus.irq_horizon = if raster { (self.cycle_debt + self.line_cycles) as u64 } else { frame_end };
             self.run_line();
@@ -324,7 +325,7 @@ impl Machine {
         image
     }
 
-    /// Compteurs raster du CPS-B (cps_state::raster_scanline). L'IRQ4 est déclenchée sans délai.
+    /// CPS-B raster counters (cps_state::raster_scanline). IRQ4 is triggered without delay.
     fn raster_tick(&mut self, line: u32) {
         let b = &mut self.bus;
         for i in 0..2 {

@@ -1,9 +1,9 @@
-//! Famille EFFCT (classe 0xE) : effets visuels (étincelles, éclats, bannières, éléments d'interface
-//! animés). Dispatch `0x39cba`, table des types `0x39ce0` (92 types, 38 emplacements de 0x60 octets).
+//! EFFCT family (class 0xE): visual effects (sparks, bursts, banners, animated interface elements). Dispatch `0x39cba`,
+//! type table `0x39ce0` (92 types, 38 slots of 0x60 bytes).
 //!
-//! Tous les gestionnaires ont la même charpente : l'octet d'état `+4` choisit, par une table de mots
-//! relatifs, l'initialisation (0), l'état actif (2) ou la libération (4). Les types portés ici sont
-//! ceux que les scénarios exercent ; les autres restent en code d'origine. Voir `docs/families.md`.
+//! All the handlers share the same framework: the state byte `+4` chooses, through a table of relative words, the
+//! initialization (0), the active state (2) or the release (4). The types ported here are those that the scenarios
+//! exercise; the others stay in original code. See `docs/families.md`.
 
 use crate::objects::pools;
 use crate::objects::Obj;
@@ -13,17 +13,17 @@ use super::cx::{Bench, Cx};
 use crate::objects::Current;
 use crate::machine::Machine;
 
-/// Valeurs de l'octet d'état `+4`.
+/// Values of the state byte `+4`.
 mod state {
     pub const INIT: u8 = 0;
     pub const ACTIVE: u8 = 2;
     pub const LIBERE: u8 = 4;
-    /// Posé par l'objet parent qui détruit ses effets (ou par l'effet lui-même, `accessoire_suit`) : libération,
-    /// sans le travail de l'état 4 (`jmp 0x2218`).
+    /// Set by the parent object that destroys its effects (or by the effect itself, `accessoire_suit`): release,
+    /// without the work of state 4 (`jmp 0x2218`).
     pub const DETRUIT: u8 = 6;
 }
 
-/// Champs partagés.
+/// Shared fields.
 mod field {
     pub const SUB_STATE: u32 = 0x05;
     pub const MODE: u32 = 0x2f;
@@ -31,33 +31,32 @@ mod field {
     pub const OWNER: u32 = 0x50;
 }
 
-/// Joueurs (4 enregistrements de 0x200 octets).
+/// Players (4 records of 0x200 bytes).
 const PLAYERS: u32 = 0xff85de;
 const STEP_PLAYER: u32 = 0x200;
-/// Jeu d'animations « interface » commun à de nombreux effets.
+/// "Interface" animation set common to many effects.
 const ANIMATIONS_INTERFACE: u32 = 0x1c03a6;
 
-/// Cible du saut par table `move.w (table,PC,Dn.w),D1 ; jmp (table,PC,D1.w)` pour l'indice `index` (l'adresse que
-/// l'original atteindrait ; seuls les indices hors table y mènent encore, `outside_table`).
+/// Target of the table jump `move.w (table,PC,Dn.w),D1 ; jmp (table,PC,D1.w)` for the index `index` (the address the
+/// original would reach; only the indices outside the table still lead there, `outside_table`).
 pub(crate) fn target<R: Bench>(ctx: &mut Cx<'_, R>, table: u32, index: u32) -> u32 {
     let word = ctx.prog16(table.wrapping_add(index)) as i16;
     table.wrapping_add(word as i32 as u32)
 }
 
-/// Valeur d'état ou de variante hors de la table de sauts de l'original, qui sauterait dans des données ou au milieu
-/// du code : jamais produite (docs/code-mort.md, lot B).
+/// State or variant value outside the original's jump table, which would jump into data or into the middle of code:
+/// never produced (docs/code-mort.md, batch B).
 pub(crate) fn outside_table(target: u32) -> ! {
-    unreachable!("indice hors de la table de sauts : l'original sauterait en {target:#x}")
+    unreachable!("index outside the jump table: the original would jump to {target:#x}")
 }
 
-/// Pool plein là où l'original saute en `address` : `tst.w (1,A5)`, lecture d'un mot à une adresse impaire. Le 68000
-/// lève une erreur d'adresse et le jeu s'arrête sur son écran d'exception ; le moteur s'arrête aussi
-/// (docs/code-mort.md, lot B).
+/// Pool full where the original jumps to `address`: `tst.w (1,A5)`, reading a word at an odd address. The 68000 raises
+/// an address error and the game stops on its exception screen; the engine stops too (docs/code-mort.md, batch B).
 pub(crate) fn address_error(address: u32) -> ! {
-    panic!("pool plein : l'original lit un mot à une adresse impaire en {address:#x} (erreur d'adresse, écran d'exception)")
+    panic!("pool full: the original reads a word at an odd address {address:#x} (address error, exception screen)")
 }
 
-/// Passe `X`, `Z`, `Y` (mots hauts) de `o` à ceux de `source`.
+/// Copies `X`, `Z`, `Y` (high words) of `source` to those of `o`.
 fn copy_position<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, source: Obj) {
     for off in [Obj::X, Obj::Z, Obj::Y] {
         let v = source.u16(ctx.b, off);
@@ -65,14 +64,14 @@ fn copy_position<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, source: Obj) {
     }
 }
 
-/// Ajoute `n` au mot haut d'une coordonnée.
+/// Adds `n` to the high word of a coordinate.
 fn shifted_u16<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, off: u32, n: u16) {
     let v = o.u16(ctx.b, off).wrapping_add(n);
     o.set_u16(ctx.b, off, v);
 }
 
-/// Gestionnaire à trois états (init, actif, libération) : lit l'état, saute par la table de mots
-/// `table`, exécute `init` ou `active` ; l'état 4 libère l'objet.
+/// Three-state handler (init, active, release): reads the state, jumps through the word table `table`, runs `init` or
+/// `active`; state 4 frees the object.
 fn three_states<R: Bench>(
     ctx: &mut Cx<'_, R>,
     table: u32,
@@ -92,17 +91,17 @@ fn three_states<R: Bench>(
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 5 : halo attaché à un joueur (0xab726)
+// Type 5: halo attached to a player (0xab726)
 
-/// Type 5 : apparaît à la position du joueur propriétaire (`+0x50`), décalée selon la variante (paire,
-/// 0 à 10) et l'orientation du joueur, attend un délai (octet `+0x18`, fonction de l'octet `+0x7d` du
-/// joueur) puis vit `0x28` images avant de disparaître. Animation 0 du jeu `0x18e650`.
+/// Type 5: appears at the position of the owner player (`+0x50`), offset according to the variant (even, 0 to 10) and
+/// the player's orientation, waits for a delay (byte `+0x18`, a function of byte `+0x7d` of the player) then lives
+/// `0x28` frames before disappearing. Animation 0 of set `0x18e650`.
 mod halo {
     pub const ENTRY: u32 = 0xab726;
     pub const TABLE: u32 = 0xab734;
-    /// Décalages (dx, dz) par demi-variante, mots.
+    /// Offsets (dx, dz) per half-variant, words.
     pub const OFFSETS: u32 = 0xab79a;
-    /// Délais d'apparition selon `+0x7d` du joueur.
+    /// Appearance delays according to `+0x7d` of the player.
     pub const DELAYS: u32 = 0xab7b2;
     pub const ANIMATIONS: u32 = 0x18e650;
     pub const DURATION: u32 = 0x14;
@@ -148,11 +147,11 @@ fn halo<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 21 : bandeau d'interface qui glisse (0xaf360)
+// Type 21: sliding interface banner (0xaf360)
 
-/// Type 21 : bandeau d'interface (variante 0 : en bas, 1 : en haut) qui glisse en `Z` d'un pixel par
-/// image (tant que `A5+0x6f` bit 0 est nul) jusqu'à la hauteur cible `+0x18`, puis se libère en
-/// décrémentant l'octet pointé par `+0x58` (compteur de bandeaux du créateur).
+/// Type 21: interface banner (variant 0: at the bottom, 1: at the top) that slides in `Z` by one pixel per frame (as
+/// long as `A5+0x6f` bit 0 is zero) up to the target height `+0x18`, then frees itself by decrementing the byte pointed
+/// to by `+0x58` (banner counter of the creator).
 mod banner {
     pub const ENTRY: u32 = 0xaf360;
     pub const TABLE: u32 = 0xaf36e;
@@ -175,7 +174,7 @@ fn banner_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     ctx.reinsert();
 }
 
-/// Fin du bandeau : décrémente le compteur du créateur et libère l'objet.
+/// End of the banner: decrements the creator's counter and frees the object.
 fn banner_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let counter = crate::mem::rd32(ctx.b, o.0 + banner::CREATOR);
     let v = crate::mem::rd8(ctx.b, counter).wrapping_sub(1);
@@ -212,18 +211,17 @@ fn banner<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 32 : aura qui suit son propriétaire (0xb2c56)
+// Type 32: aura that follows its owner (0xb2c56)
 
-/// Type 32 : se place 0x10 pixels devant (selon son orientation) et un sous-pixel devant le
-/// propriétaire (`+0x50`), 0x18 pixels au-dessus de lui, et le suit à chaque image (animation 0 du
-/// jeu `0x193fea`).
+/// Type 32: places itself 0x10 pixels in front (according to its orientation) and a sub-pixel in front of the owner
+/// (`+0x50`), 0x18 pixels above it, and follows it at each frame (animation 0 of set `0x193fea`).
 mod aura {
     pub const ENTRY: u32 = 0xb2c56;
     pub const TABLE: u32 = 0xb2c64;
     pub const ANIMATIONS: u32 = 0x193fea;
 }
 
-/// `0xb2ca4` : position du propriétaire, un seizième de pixel devant, décalée de 0x10 pixels.
+/// `0xb2ca4`: position of the owner, one sixteenth of a pixel in front, offset by 0x10 pixels.
 fn aura_follow<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> Obj {
     let player = pointeur(ctx, o, field::OWNER);
     let x = player.u32(ctx.b, Obj::X);
@@ -256,12 +254,12 @@ fn aura<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 15 : scintillement d'un objet (0xae428)
+// Type 15: sparkle of an object (0xae428)
 
-/// Type 15 : scintillement posé sur un objet ramassable (`+0x5c`, créé par `0xae3ec` avec la variante
-/// `+0x54` de l'objet) ; suit l'objet, 0x10 pixels plus haut, tant qu'il est actif (état 2). Tant
-/// qu'aucun joueur n'est passé à proximité (±0x20 en profondeur, ±0x60 en abscisse) il reste visible ;
-/// ensuite il clignote par périodes de 0x30 images, huit fois, puis disparaît.
+/// Type 15: sparkle placed on a pickup object (`+0x5c`, created by `0xae3ec` with the object's variant `+0x54`);
+/// follows the object, 0x10 pixels higher, as long as it is active (state 2). As long as no player has passed nearby
+/// (±0x20 in depth, ±0x60 in abscissa) it stays visible; then it blinks in periods of 0x30 frames, eight times, then
+/// disappears.
 mod scintillement {
     pub const ENTRY: u32 = 0xae428;
     pub const TABLE: u32 = 0xae436;
@@ -286,7 +284,7 @@ fn scintillement_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     ctx.reinsert();
 }
 
-/// `0xae4e4` : un joueur est-il passé près du scintillement ?
+/// `0xae4e4`: has a player passed near the sparkle?
 fn shimmer_player_near<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     for i in 0..4u32 {
         let player = Obj(PLAYERS + i * STEP_PLAYER);
@@ -314,7 +312,7 @@ fn shimmer_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
     let declenche = o.u8(ctx.b, scintillement::DECLENCHE);
     if !(declenche != 0) {
-        // pas encore déclenché : on guette les joueurs (et on rend la main sans trier)
+        // not triggered yet: watching for the players (and cede control without sorting)
         return shimmer_player_near(ctx, o);
     }
     let remainder = o.u16(ctx.b, scintillement::DELAY).wrapping_sub(1);
@@ -342,11 +340,11 @@ fn scintillement<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 9 : traînée qui traverse l'écran (0xabbee)
+// Type 9: trail that crosses the screen (0xabbee)
 
-/// Type 9 : objet qui naît à une position d'écran tirée d'une table (selon `+0x52`), avance en `X`
-/// (vitesse 0x200), attend 0x120 images (animation `variant + 0xc`) puis joue son animation de
-/// sortie 0x200 images, en avançant les 0x50 dernières, avant de disparaître.
+/// Type 9: object born at a screen position drawn from a table (according to `+0x52`), advances in `X` (speed 0x200),
+/// waits 0x120 frames (animation `variant + 0xc`) then plays its exit animation for 0x200 frames, advancing during the
+/// last 0x50, before disappearing.
 mod trainee {
     pub const ENTRY: u32 = 0xabbee;
     pub const TABLE: u32 = 0xabbfc;
@@ -406,11 +404,11 @@ fn trainee<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 33 : gravats qui retombent (0xb2cca)
+// Type 33: rubble that falls back (0xb2cca)
 
-/// Type 33 : éclat lancé depuis une position d'écran (variante 0 à 3, vitesses tirées d'une table),
-/// dessiné au premier plan. Il retombe ; au contact du sol, les variantes non nulles disparaissent, la
-/// variante 0 (hors pause) crée deux tirs ennemis (ESHL 0x17, modes 0 et 1) avant de disparaître.
+/// Type 33: burst thrown from a screen position (variant 0 to 3, speeds drawn from a table), drawn in the foreground.
+/// It falls back; on touching the ground, the non-zero variants disappear, variant 0 (outside pause) creates two enemy
+/// shots (ESHL 0x17, modes 0 and 1) before disappearing.
 mod eclat {
     pub const ENTRY: u32 = 0xb2cca;
     pub const TABLE: u32 = 0xb2cd8;
@@ -448,7 +446,7 @@ fn eclat_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     ctx.reinsert_foreground();
 }
 
-/// Atterrissage (`0xb2d92`) : disparition, ou deux tirs pour la variante 0.
+/// Landing (`0xb2d92`): disappearance, or two shots for variant 0.
 fn eclat_atterrit<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variant = o.u8(ctx.b, Obj::VARIANT);
     if !(variant != 0) {
@@ -500,16 +498,15 @@ fn eclat<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 25 : poussière projetée (0xb111a)
+// Type 25: thrown dust (0xb111a)
 
-/// Type 25 : éclats projetés à la naissance (vitesse `+0x14` / `+0x1c`, dispersés au hasard selon le
-/// mode `+0x2f`, orientés selon `+0x2c`), puis qui dérivent horizontalement en clignotant jusqu'à la
-/// fin de leur animation.
+/// Type 25: bursts thrown at birth (speed `+0x14` / `+0x1c`, scattered at random according to the mode `+0x2f`,
+/// oriented according to `+0x2c`), then drifting horizontally while blinking until the end of their animation.
 mod poussiere {
     pub const ENTRY: u32 = 0xb111a;
     pub const TABLE: u32 = 0xb1128;
     pub const ANIMATIONS: u32 = 0x1901ba;
-    /// Sens de la dérive (`+0x2d`) et sur quel axe se fait le saut (`+0x43`).
+    /// Direction of the drift (`+0x2d`) and on which axis the jump is made (`+0x43`).
     pub const SENS: u32 = 0x2d;
     pub const ON_Z: u32 = 0x43;
 }
@@ -577,11 +574,10 @@ fn poussiere<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 26 : nuage qui traverse l'écran (0xb11f4)
+// Type 26: cloud that crosses the screen (0xb11f4)
 
-/// Type 26 : nuage qui naît à droite de l'écran (hauteur aléatoire), attend un délai aléatoire (`+0x5c`,
-/// 0 à 63 images) puis traverse l'écran vers la gauche (vitesse selon la variante) jusqu'à 0x40 pixels
-/// au-delà du bord.
+/// Type 26: cloud born at the right of the screen (random height), waits a random delay (`+0x5c`, 0 to 63 frames) then
+/// crosses the screen to the left (speed according to the variant) up to 0x40 pixels beyond the edge.
 mod nuage {
     pub const ENTRY: u32 = 0xb11f4;
     pub const TABLE: u32 = 0xb1202;
@@ -621,8 +617,8 @@ fn cloud_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         return;
     }
     ctx.anim_step();
-    // l'original relit D0 après la remise en liste, qui n'en change que le mot bas : le mot haut est celui de
-    // l'aiguillage des états (`moveq #0,D0`), nul ; `swap D0 ; asr.l #8,D0` donne donc la vitesse × 256
+    // the original rereads D0 after the re-listing, which changes only its low word: the high word is that of the state
+    // dispatch (`moveq #0,D0`), zero; `swap D0 ; asr.l #8,D0` therefore gives the speed × 256
     ctx.reinsert();
     let o = ctx.obj();
     let vx = o.u16(ctx.b, Obj::VX) as u32;
@@ -641,18 +637,18 @@ fn nuage<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 17 : éléments d'interface des joueurs (0xae78c)
+// Type 17: player interface elements (0xae78c)
 
-/// Type 17 : éléments de l'interface de partie, cinq variantes (0 à 4), posés par rapport à la
-/// caméra. Tous se libèrent quand la phase de jeu `A5+0x2c` atteint 8 (fin de partie).
+/// Type 17: game interface elements, five variants (0 to 4), placed relative to the camera. All free themselves when
+/// the game phase `A5+0x2c` reaches 8 (end of game).
 ///
-/// - variante 0 : attend que `+0x1c` soit non nul puis remplit 8 longs de la palette `0x91c0e0` ;
-/// - variante 1 : curseur du joueur `+0x2f` (pointeur du joueur en `+0x1a`), animation selon le
-///   personnage ;
-/// - variante 2 : fenêtre de joueur (jauge) : recopie dans la palette, selon l'état de l'objet
-///   parent (`+0x1e`), les couleurs de la fenêtre ; clignote quand la jauge change ;
-/// - variante 3 : indicateur placé en bas à droite, animation `0xe3 - +0x14` ;
-/// - variante 4 : élément fixe décalé selon le joueur.
+/// - variant 0: waits for `+0x1c` to be non-zero then fills 8 longs of the palette `0x91c0e0`;
+/// - variant 1: cursor of player `+0x2f` (player pointer in `+0x1a`), animation according to the
+///   character;
+/// - variant 2: player window (gauge): copies into the palette, according to the state of the parent
+///   object (`+0x1e`), the colors of the window; blinks when the gauge changes;
+/// - variant 3: indicator placed at the bottom right, animation `0xe3 - +0x14`;
+/// - variant 4: fixed element offset according to the player.
 mod interface {
     pub const ENTRY: u32 = 0xae78c;
     pub const TABLE: u32 = 0xae79c;
@@ -663,12 +659,12 @@ mod interface {
     pub const STATES_4: u32 = 0xaec3c;
     pub const PALETTE: u32 = 0x91c000;
     pub const PALETTE_0: u32 = 0x91c0e0;
-    /// Palettes sources (données) et listes d'adresses de palette (par joueur).
+    /// Source palettes (data) and palette address lists (per player).
     pub const SOURCES: u32 = 0x28ff00;
     pub const LISTS: u32 = 0xaeb62;
-    /// Décalages de la variante 1 par personnage.
+    /// Offsets of variant 1 per character.
     pub const OFFSETS_1: u32 = 0xae93c;
-    /// Variante 2 : animations et décalages par joueur.
+    /// Variant 2: animations and offsets per player.
     pub const ANIMATIONS_2: u32 = 0xae9e6;
     pub const FORMES_2: u32 = 0xae9c2;
     pub const OFFSETS_2: u32 = 0xae9ce;
@@ -676,18 +672,18 @@ mod interface {
     pub const PORTEUR: u32 = 0x1e;
     pub const PLAYER: u32 = 0x1a;
     pub const CHARACTER: u32 = 0x42;
-    // sous-routines non réécrites
+    // subroutines not rewritten
     pub const CHANGE_CHARACTER: u32 = 0xea344;
     pub const SOUND_GAUGE: u32 = 0xea3b6;
 }
 
-/// Phase de jeu : 8 ou plus, la partie est finie.
+/// Game phase: 8 or more, the game is over.
 fn game_finished<R: Bench>(ctx: &mut Cx<'_, R>) -> bool {
     let phase = crate::ram::PHASE.get(ctx.b) as i8;
     phase >= 8
 }
 
-/// Place l'objet sur la caméra (`X` = caméra x, `Z` = caméra y, `Y` = 0).
+/// Places the object on the camera (`X` = camera x, `Z` = camera y, `Y` = 0).
 fn place_on_camera<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let (cam_x, cam_y) = (crate::ram::CAMERA_X.get(ctx.b), crate::ram::CAMERA_Y.get(ctx.b));
     o.set_u16(ctx.b, Obj::X, cam_x);
@@ -776,8 +772,8 @@ fn interface_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
 }
 
-/// `0xaeb08` : recopie dans la palette (OR du bit de priorité 0xF000F000) les deux fois 16 octets de
-/// chaque emplacement de la liste du joueur ; `offset` choisit la palette source (0 ou 0x400/0x800).
+/// `0xaeb08`: copies into the palette (OR of the priority bit 0xF000F000) the two 16-byte blocks of each slot of the
+/// player's list; `offset` chooses the source palette (0 or 0x400/0x800).
 fn copy_palette<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, offset: u16) {
     let player = (o.u8(ctx.b, field::MODE) as u32) << 1 & 0xff;
     let rank = ctx.prog16(interface::LISTS + player) as i16 as i32 as u32;
@@ -786,7 +782,7 @@ fn copy_palette<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, offset: u16) {
         let slot = ctx.data16(list);
         list += 2;
         if (slot as i16) < 0 {
-            return; // bmi : fin de liste
+            return; // bmi: end of list
         }
         let destination = interface::PALETTE.wrapping_add(slot as i16 as i32 as u32);
         let source = interface::SOURCES.wrapping_add(slot.wrapping_add(offset) as i16 as i32 as u32);
@@ -842,7 +838,7 @@ fn interface_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 // 0xae9f2
                 let offset = if d1 == 0 { 0 } else { 0x400 };
                 copy_palette(ctx, o, offset);
-                // la routine enchaîne sur l'animation (0xaea0c), qui trie l'objet puis revient ici
+                // the routine chains onto the animation (0xaea0c), which sorts the object then comes back here
                 interface_2_animation(ctx, o, d1 as u16);
             }
             let bits = 3u16 << ((number << 1) & 0x1f);
@@ -890,7 +886,7 @@ fn interface_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
 }
 
-/// Fin de l'initialisation de la variante 2 (`0xaea0c`) : animation de la fenêtre.
+/// End of the initialization of variant 2 (`0xaea0c`): window animation.
 fn interface_2_animation<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, d1: u16) {
     let number = (o.u8(ctx.b, field::MODE) as u32) << 1;
     let animation = ctx.prog16(interface::ANIMATIONS_2 + number).wrapping_add(d1);
@@ -923,7 +919,7 @@ fn interface_3<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
 }
 
-/// `0xaebfe` : animation `0xe3 - +0x14` du jeu d'interface.
+/// `0xaebfe`: animation `0xe3 - +0x14` of the interface set.
 fn interface_3_animation<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let value = o.u8(ctx.b, 0x14);
     o.set_u8(ctx.b, 0x15, value);
@@ -975,34 +971,34 @@ fn interface_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 29 : étincelle d'impact sur une cible (0xb1440)
+// Type 29: impact spark on a target (0xb1440)
 
-/// Type 29 : étincelle collée à une cible (`+0x5c`, ennemi ou boss) à l'endroit d'impact tiré d'une
-/// table selon le type de la cible ; elle joue une animation (tirée au hasard selon un drapeau `+0x42`
-/// lu dans une table par type de cible) et disparaît à la fin de l'animation. Si la cible n'existe plus
-/// ou ne convient pas, l'étincelle passe directement à l'état 6 (libération).
+/// Type 29: spark stuck to a target (`+0x5c`, enemy or boss) at the impact point drawn from a table according to the
+/// target's type; it plays an animation (drawn at random according to a flag `+0x42` read from a table per target type)
+/// and disappears at the end of the animation. If the target no longer exists or does not fit, the spark goes directly
+/// to state 6 (release).
 mod impact {
     pub const ENTRY: u32 = 0xb1440;
     pub const TABLE: u32 = 0xb144e;
     pub const ANIMATIONS: u32 = 0x1908d6;
     pub const HASARD_A: u32 = 0xb14a2;
     pub const HASARD_B: u32 = 0xb14b2;
-    /// Drapeaux par type d'ennemi / de boss (deux octets : interdit, drapeau).
+    /// Flags per enemy / boss type (two bytes: forbidden, flag).
     pub const ENEMIES: u32 = 0xb1544;
     pub const BOSS: u32 = 0xb1586;
-    /// Décalages d'impact (dx, dz) par type de cible (4 octets), pour les ennemis puis pour le reste.
+    /// Impact offsets (dx, dz) per target type (4 bytes), for the enemies then for the rest.
     pub const OFFSETS_ENEMY: u32 = 0xb165a;
     pub const OFFSETS_OTHER: u32 = 0xb16de;
     pub const TARGET: u32 = 0x5c;
     pub const VARIANT_RANDOM: u32 = 0x42;
 }
 
-/// Pose l'état 6 (libération à l'image suivante).
+/// Sets state 6 (release on the next frame).
 fn impact_abandon<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u32(ctx.b, Obj::STATE, 0x0600_0000);
 }
 
-/// `0xb14dc` : lit dans les tables le drapeau de la cible, ou abandonne.
+/// `0xb14dc`: reads the target's flag from the tables, or gives up.
 fn impact_drapeau<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let pointer_target = o.u16(ctx.b, impact::TARGET);
     if pointer_target == 0 {
@@ -1034,7 +1030,7 @@ fn impact_drapeau<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u8(ctx.b, impact::VARIANT_RANDOM, drapeau);
 }
 
-/// `0xb15c8` (variante non nulle) : position de la cible décalée de `(+0x14, +0x16)`.
+/// `0xb15c8` (non-zero variant): position of the target offset by `(+0x14, +0x16)`.
 fn impact_position_decalee<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let pointer_target = o.u16(ctx.b, impact::TARGET);
     if pointer_target == 0 {
@@ -1052,7 +1048,7 @@ fn impact_position_decalee<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     shifted_u16(ctx, o, Obj::Z, dz);
 }
 
-/// `0xb15fe` (variante 0) : position de la cible décalée de l'impact tiré de la table.
+/// `0xb15fe` (variant 0): position of the target offset by the impact drawn from the table.
 fn impact_position_table<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let pointer_target = o.u16(ctx.b, impact::TARGET);
     if pointer_target == 0 {
@@ -1117,17 +1113,16 @@ fn impact_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 6 : gerbe de débris (0xab7fa)
+// Type 6: burst of debris (0xab7fa)
 
-/// Type 6 : débris projetés depuis un propriétaire (`+0x50`). Le premier objet (`+0x42` nul) crée
-/// autant de frères qu'indiqué par une table (selon la variante) puis devient lui-même un débris ;
-/// chaque débris reprend la position du propriétaire, lit sa vitesse, son orientation, son décalage et
-/// son animation dans une fiche (variante, mode `+0x2f`) de la ROM, monte et retombe en clignotant,
-/// puis disparaît.
+/// Type 6: debris thrown from an owner (`+0x50`). The first object (`+0x42` zero) creates as many siblings as indicated
+/// by a table (according to the variant) then becomes a debris itself; each debris takes the owner's position, reads
+/// its speed, orientation, offset and animation from a ROM sheet (variant, mode `+0x2f`), rises and falls back
+/// blinking, then disappears.
 mod debris {
     pub const ENTRY: u32 = 0xab7fa;
     pub const TABLE: u32 = 0xab808;
-    /// Nombre de frères par variante (espace programme) ; fiches de la ROM (données).
+    /// Number of siblings per variant (program space); ROM sheets (data).
     pub const NOMBRES: u32 = 0xab95e;
     pub const SHEETS: u32 = 0xab8a2;
     pub const ANIMATIONS: u32 = 0x18e664;
@@ -1135,10 +1130,10 @@ mod debris {
     pub const CLIGNOTEMENT: u32 = 0x53;
 }
 
-/// `0xab7d8` : crée un débris (type 6, variante `variant`) rattaché à l'objet courant.
+/// `0xab7d8`: creates a debris (type 6, variant `variant`) attached to the current object.
 fn created_debris<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, variant: u8) -> Option<Obj> {
     let new = ctx.alloc(&pools::EFFCT);
-    // deux `bcs` successifs : dans `0xab7d8`, puis chez l'appelant (la retenue est restée levée)
+    // two successive `bcs`: in `0xab7d8`, then in the caller (the carry stayed set)
     let n = new?;
     n.set_u8(ctx.b, Obj::ACTIVE, 1);
     n.set_u8(ctx.b, Obj::KIND, 6);
@@ -1148,7 +1143,7 @@ fn created_debris<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, variant: u8) -> Option<
     Some(n)
 }
 
-/// Premier débris : crée ses frères, puis passe à l'initialisation commune.
+/// First debris: creates its siblings, then goes to the common initialization.
 fn debris_parent<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u8(ctx.b, debris::ENFANT, 1);
     let variant = o.u8(ctx.b, Obj::VARIANT);
@@ -1261,19 +1256,19 @@ fn debris_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 1 : effet supprimé (0xa8758)
+// Type 1: removed effect (0xa8758)
 
-/// Type 1 : emplacement de table inutilisé dans cette version du jeu : le gestionnaire libère
-/// l'objet aussitôt (`bra` vers `jmp 0x2218`).
+/// Type 1: unused table slot in this version of the game: the handler frees the object immediately (`bra` to `jmp
+/// 0x2218`).
 fn supprime<R: Bench>(ctx: &mut Cx<'_, R>) {
     ctx.free(&pools::EFFCT);
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 7 : éclat à animation unique (0xaba4e)
+// Type 7: single-animation burst (0xaba4e)
 
-/// Type 7 : joue l'animation (tirée selon le mode `+0x2f`) ; à la fin de l'animation il monte de deux
-/// unités en profondeur puis clignote 0x1e images avant de disparaître. Non exercé.
+/// Type 7: plays the animation (drawn according to the mode `+0x2f`); at the end of the animation it rises by two units
+/// in depth then blinks for 0x1e frames before disappearing. Not exercised.
 mod eclat_unique {
     pub const ENTRY: u32 = 0xaba4e;
     pub const TABLE: u32 = 0xaba5c;
@@ -1324,11 +1319,10 @@ fn shard_single_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 19 : balayage d'écran (0xaecce)
+// Type 19: screen sweep (0xaecce)
 
-/// Type 19 : objet qui entre par la gauche de l'écran (x = -0x80, y = 0x150), attend 0x70 images en
-/// avançant de deux pixels par image, puis ralentit (accélération -0x10) jusqu'à repartir en arrière.
-/// Non exercé.
+/// Type 19: object that enters from the left of the screen (x = -0x80, y = 0x150), waits 0x70 frames advancing two
+/// pixels per frame, then slows down (acceleration -0x10) until it goes back. Not exercised.
 mod balayage {
     pub const ENTRY: u32 = 0xaecce;
     pub const TABLE: u32 = 0xaecdc;
@@ -1369,10 +1363,10 @@ fn sweep_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 27 : effet de ramassage qui monte (0xb12e6)
+// Type 27: rising pickup effect (0xb12e6)
 
-/// Type 27 : effet posé sur l'objet propriétaire (`+0x50`, créé par `0xb12c0` : ramassage) qui monte de 0x8000 (un demi
-/// pixel) par image pendant 0x1c images. Non exercé.
+/// Type 27: effect placed on the owner object (`+0x50`, created by `0xb12c0`: pickup) that rises by 0x8000 (half a
+/// pixel) per frame for 0x1c frames. Not exercised.
 mod fumee {
     pub const ENTRY: u32 = 0xb12e6;
     pub const TABLE: u32 = 0xb12f4;
@@ -1409,11 +1403,10 @@ fn smoke_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 28 : étincelle posée sur un objet (0xb136e)
+// Type 28: spark placed on an object (0xb136e)
 
-/// Type 28 : étincelle collée à un objet (`+0x5c`), 0x20 au-dessus de lui ; l'animation dépend de la
-/// variante et de `A5+0x70`. À la fin de l'animation, elle prévient son objet (`+0x77` ← 1, sauf
-/// variante 6) puis disparaît. Non exercé.
+/// Type 28: spark stuck to an object (`+0x5c`), 0x20 above it; the animation depends on the variant and on `A5+0x70`.
+/// At the end of the animation, it notifies its object (`+0x77` ← 1, except variant 6) then disappears. Not exercised.
 mod etincelle {
     pub const ENTRY: u32 = 0xb136e;
     pub const TABLE: u32 = 0xb137c;
@@ -1463,10 +1456,10 @@ fn spark_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 57 : marque attachée à un joueur (0xb6bca)
+// Type 57: mark attached to a player (0xb6bca)
 
-/// Type 57 : marque posée 0x18 à droite et 0x2d au-dessus du propriétaire (`+0x50`) tant qu'il reste
-/// dans l'état `0x0204` / `+6 = 0x2c` ; sinon elle disparaît. Non exercé.
+/// Type 57: mark placed 0x18 to the right and 0x2d above the owner (`+0x50`) as long as it stays in state `0x0204` /
+/// `+6 = 0x2c`; otherwise it disappears. Not exercised.
 mod mark {
     pub const ENTRY: u32 = 0xb6bca;
     pub const TABLE: u32 = 0xb6bd8;
@@ -1515,11 +1508,11 @@ fn mark_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 62 : gerbe d'éclats (0xb77ac)
+// Type 62: burst of fragments (0xb77ac)
 
-/// Type 62 : reprend variante et mode de l'objet qu'il suit (`+0x5c`), se place 0x48 à gauche de lui et
-/// attend qu'il soit touché (`+0x33` non nul) ; il explose alors en neuf objets EFFCT 0x40 (et un dixième
-/// décrit par le mode) puis disparaît. Non exercé.
+/// Type 62: takes the variant and mode of the object it follows (`+0x5c`), places itself 0x48 to the left of it and
+/// waits for it to be hit (`+0x33` non-zero); it then explodes into nine EFFCT 0x40 objects (and a tenth described by
+/// the mode) then disappears. Not exercised.
 mod gerbe {
     pub const ENTRY: u32 = 0xb77ac;
     pub const TABLE: u32 = 0xb77ba;
@@ -1546,7 +1539,7 @@ fn gerbe_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     ctx.reinsert();
 }
 
-/// `0xb7810` : l'explosion.
+/// `0xb7810`: the explosion.
 fn gerbe_explose<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let mut last = None;
     for _ in 0..9 {
@@ -1565,7 +1558,7 @@ fn gerbe_explose<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
     let mode = o.u8(ctx.b, field::MODE);
     if !(mode == 0) {
-        // le dernier objet créé est repris pour porter le mode
+        // the last object created is reused to carry the mode
         let n = last.unwrap();
         n.set_u8(ctx.b, Obj::ACTIVE, 1);
         n.set_u8(ctx.b, Obj::KIND, 0x40);
@@ -1601,11 +1594,10 @@ fn sheaf_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 56 : éclats de débris (0xb6c6e)
+// Type 56: debris fragments (0xb6c6e)
 
-/// Type 56 : éclat lancé en l'air depuis sa position (dispersion aléatoire de ±128 en X et ±32 en
-/// profondeur, vitesses tirées dans deux tables, animation 0x164 à 0x167) ; disparaît quand il
-/// retombe sous le sol. Non exercé.
+/// Type 56: burst thrown into the air from its position (random scatter of ±128 in X and ±32 in depth, speeds drawn
+/// from two tables, animation 0x164 to 0x167); disappears when it falls back below the ground. Not exercised.
 mod eclats_debris {
     pub const ENTRY: u32 = 0xb6c6e;
     pub const TABLE: u32 = 0xb6c7c;
@@ -1613,7 +1605,7 @@ mod eclats_debris {
     pub const SPEEDS_Y: u32 = 0xb6d28;
 }
 
-/// Tirage aléatoire masqué.
+/// Masked random draw.
 fn draw<R: Bench>(ctx: &mut Cx<'_, R>, mask: u16) -> u16 {
     let rng = ctx.random();
     rng & mask
@@ -1669,11 +1661,11 @@ fn shards_debris_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 51 : projectile lancé d'un objet (0xb64c8)
+// Type 51: projectile thrown from an object (0xb64c8)
 
-/// Type 51 : naît sur l'objet `+0x5c` (si cet objet disparaît, il passe à l'état 6), décalé de 0x84
-/// pixels vers l'avant et 0x16 en profondeur, puis part en arc (vitesses 0x140 et 0x3c0, gravité 0x38)
-/// jusqu'à toucher le sol. Non exercé.
+/// Type 51: born on the object `+0x5c` (if that object disappears, it goes to state 6), offset by 0x84 pixels forward
+/// and 0x16 in depth, then leaves in an arc (speeds 0x140 and 0x3c0, gravity 0x38) until it touches the ground. Not
+/// exercised.
 mod projectile {
     pub const ENTRY: u32 = 0xb64c8;
     pub const TABLE: u32 = 0xb64de;
@@ -1748,11 +1740,10 @@ fn projectile_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 52 : scintillement d'un personnage (0xb65e0)
+// Type 52: sparkle of a character (0xb65e0)
 
-/// Type 52 : variante du scintillement (type 15) qui guette seulement les joueurs de la classe 5 encore
-/// en vie (points de vie `+0x62` non nuls) ; une fois déclenché il clignote huit fois, caché tant que
-/// son objet (`+0x5c`) l'est. Non exercé.
+/// Type 52: variant of the sparkle (type 15) that only watches the players of class 5 still alive (non-zero hit points
+/// `+0x62`); once triggered it blinks eight times, hidden as long as its object (`+0x5c`) is. Not exercised.
 mod shimmer_class {
     pub const ENTRY: u32 = 0xb65e0;
     pub const TABLE: u32 = 0xb65ee;
@@ -1775,7 +1766,7 @@ fn shimmer_class_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     ctx.reinsert();
 }
 
-/// `0xb668a` : un joueur de la classe 5 en vie est-il passé près de l'objet ?
+/// `0xb668a`: has a living class 5 player passed near the object?
 fn shimmer_class_player<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     for i in 0..4u32 {
         let player = Obj(PLAYERS + i * STEP_PLAYER);
@@ -1843,11 +1834,10 @@ fn shimmer_class_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 24 : accessoire de personnage (0xb0ff2)
+// Type 24: character accessory (0xb0ff2)
 
-/// Type 24 : accessoire collé à son propriétaire (`+0x50`) à un décalage (dx, dy, dz) lu selon la
-/// variante ; actif seulement quand la scène n'est pas figée (`A5+0x3d`). Si le propriétaire a disparu
-/// il passe à l'état 6. Non exercé.
+/// Type 24: accessory stuck to its owner (`+0x50`) at an offset (dx, dy, dz) read according to the variant; active only
+/// when the scene is not frozen (`A5+0x3d`). If the owner has disappeared it goes to state 6. Not exercised.
 mod accessoire {
     pub const ENTRY: u32 = 0xb0ff2;
     pub const TABLE: u32 = 0xb1000;
@@ -1856,7 +1846,7 @@ mod accessoire {
     pub const END_ANIMATION: u32 = 0x43;
 }
 
-/// `0xb1052` : recolle l'objet au propriétaire.
+/// `0xb1052`: sticks the object back to the owner.
 fn accessoire_suit<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let pointer_owner = o.u16(ctx.b, field::OWNER);
     if !(pointer_owner != 0) {
@@ -1871,7 +1861,7 @@ fn accessoire_suit<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let flip = owner.u8(ctx.b, field::FLIP);
     o.set_u8(ctx.b, field::FLIP, flip);
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    let rank = (variant << 3) as u32; // décalage sur un octet, comme l'original
+    let rank = (variant << 3) as u32; // one-byte offset, like the original
     let mut dx = ctx.prog16(accessoire::OFFSETS + rank);
     let dy = ctx.prog16(accessoire::OFFSETS + rank + 2);
     let dprofondeur = ctx.prog16(accessoire::OFFSETS + rank + 4) as i16 as i32;
@@ -1921,11 +1911,11 @@ fn accessory_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 45 : déclencheur de proximité (0xb5340)
+// Type 45: proximity trigger (0xb5340)
 
-/// Type 45 : objet posé dans le décor qui attend que le joueur principal (`A5+0x46`) passe sur lui : il
-/// donne alors un événement à chaque joueur présent (`0x19b08`, décalé par joueur) puis disparaît ; il
-/// disparaît aussi s'il reste en arrière de la caméra. Non exercé.
+/// Type 45: object placed in the scenery that waits for the main player (`A5+0x46`) to pass over it: it then gives an
+/// event to each present player (`0x19b08`, offset per player) then disappears; it also disappears if it stays behind
+/// the camera. Not exercised.
 mod declencheur {
     pub const ENTRY: u32 = 0xb5340;
     pub const TABLE: u32 = 0xb534e;
@@ -1935,7 +1925,7 @@ mod declencheur {
     pub const OFFSETS: u32 = 0xb53ec;
 }
 
-/// `0xb53b0` : déclenchement.
+/// `0xb53b0`: trigger.
 fn trigger_effect<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     crate::sound::play(ctx.b, declencheur::EFFECT, ctx.obj());
     let level = ctx.ram8(0x35) as u32;
@@ -1991,31 +1981,31 @@ fn trigger_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 4 : bulle d'action d'un personnage (0xaaac0)
+// Type 4: action bubble of a character (0xaaac0)
 
-/// Type 4 : bulle (icône animée) liée à un joueur (`+0x50`) ou à l'objet qu'il manipule (`+0x54`).
-/// L'animation est choisie d'après l'action en cours du porteur (`+0x3d` du joueur, `+0x10d/0x10e`,
-/// personnage `+3`) dans de petites tables de la ROM ; huit variantes :
+/// Type 4: bubble (animated icon) linked to a player (`+0x50`) or to the object it handles (`+0x54`). The animation is
+/// chosen from the carrier's current action (`+0x3d` of the player, `+0x10d/0x10e`, character `+3`) in small ROM
+/// tables; eight variants:
 ///
-/// - 0 : action du joueur (`+0x3d` de 0 à 32 ; au-delà, la table de l'original saute dans des données) ;
-/// - 1, 2, 5, 6 : action de l'objet porté (`+0x54`) ou fixe (`0x10`, `0x25` à `0x27`) ;
-/// - 3 : bulle secondaire qui se pose sur l'objet porté (`0xaadba`) ;
-/// - 4, 7 : animations fixes (`0x23`, `4`).
+/// - 0: player action (`+0x3d` from 0 to 32; beyond that, the original's table jumps into data);
+/// - 1, 2, 5, 6: action of the carried object (`+0x54`) or fixed (`0x10`, `0x25` to `0x27`);
+/// - 3: secondary bubble that settles on the carried object (`0xaadba`);
+/// - 4, 7: fixed animations (`0x23`, `4`).
 ///
-/// L'état 2 anime la bulle (variante 3 : la fait clignoter et la recolle à son porteur) ; l'état 4
-/// libère ; un code de table valant `0x29` fait naître une bulle de variante 3.
+/// State 2 animates the bubble (variant 3: makes it blink and sticks it back to its carrier); state 4 frees; a table
+/// code equal to `0x29` spawns a bubble of variant 3.
 mod bulle {
     pub const ENTRY: u32 = 0xaaac0;
     pub const STATES: u32 = 0xaaace;
     pub const VARIANTS: u32 = 0xaaaee;
     pub const ANIMATIONS: u32 = 0x18d53e;
-    // tables de sauts selon l'action (`+0x3d`)
+    // jump tables according to the action (`+0x3d`)
     pub const ACTIONS_0: u32 = 0xaab0e;
     pub const ACTIONS_1: u32 = 0xaab40;
     pub const ACTIONS_2: u32 = 0xaab5e;
     pub const ACTIONS_5: u32 = 0xaab84;
     pub const ACTIONS_6: u32 = 0xaab9c;
-    // tables d'animations (données)
+    // animation tables (data)
     pub const TABLE_77: u32 = 0xab4de;
     pub const TABLE_COUP: u32 = 0xab4f6;
     pub const TABLE_CHARACTER: u32 = 0xab4f0;
@@ -2024,7 +2014,7 @@ mod bulle {
     pub const TABLE_10D_A: u32 = 0xab676;
     pub const TABLE_10D_B: u32 = 0xab6a6;
     pub const TABLE_10D_C: u32 = 0xab6d6;
-    /// Décalages de la variante 3 (selon la classe du porteur, `+0x43` et `+0x86` du joueur).
+    /// Offsets of variant 3 (according to the carrier's class, `+0x43` and `+0x86` of the player).
     pub const OFFSETS_3: u32 = 0xaae2a;
     pub const OWNER: u32 = 0x50;
     pub const DOOR: u32 = 0x54;
@@ -2034,7 +2024,7 @@ mod bulle {
     pub const PALETTE_GAUGE: u32 = 0x91c41c;
 }
 
-/// `0xaac00` : affiche l'animation `number` du jeu des bulles, puis trie l'objet.
+/// `0xaac00`: displays animation `number` of the bubble set, then sorts the object.
 fn bulle_affiche<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, number: u8) {
     if !(number != 0x2b) {
         o.set_u16(ctx.b, 0x2a, 0x115);
@@ -2043,8 +2033,7 @@ fn bulle_affiche<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, number: u8) {
     ctx.reinsert();
 }
 
-/// `0xab26a` : un code `0x29` fait naître une bulle de variante 3 (ou, si le porteur est une BOX, joue
-/// l'animation 4).
+/// `0xab26a`: a `0x29` code spawns a bubble of variant 3 (or, if the carrier is a BOX, plays animation 4).
 fn bubble_created_next<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let door = pointeur(ctx, o, bulle::DOOR);
     let class = door.u8(ctx.b, Obj::CLASS);
@@ -2067,8 +2056,8 @@ fn bubble_created_next<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     n.set_u8(ctx.b, bulle::END_ANIMATION, 1);
 }
 
-/// `0xaabf4` : lit le code d'animation dans la table `table` (donnée) à l'indice `index` ; le code
-/// `0x29` crée la suite, les autres sont affichés.
+/// `0xaabf4`: reads the animation code in the table `table` (data) at index `index`; code `0x29` creates the
+/// continuation, the others are displayed.
 fn bulle_lit<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, table: u32, index: u16) {
     let code = ctx.data8(table + index as u32);
     if code == 0x29 {
@@ -2088,8 +2077,8 @@ fn foreign_epilogue<R>(ctx: &mut Cx<'_, R>) {
     crate::tasks::table::pop_calls(ctx.b, 4);
 }
 
-/// `0xaace8` : suite commune. Pour le personnage 1 l'original saute dans l'épilogue d'une autre
-/// routine (`movem.l (SP)+,{A1-A4} ; rts`) : on reproduit l'effet sur la pile.
+/// `0xaace8`: common continuation. For character 1 the original jumps into the epilogue of another routine (`movem.l
+/// (SP)+,{A1-A4} ; rts`): the effect is reproduced on the stack.
 fn bubble_next<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let owner = pointeur(ctx, o, bulle::OWNER);
     let character = (owner.u8(ctx.b, 3) >> 1).wrapping_sub(1);
@@ -2099,8 +2088,8 @@ fn bubble_next<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     create_impact(ctx, o);
 }
 
-/// `0xb13fa` : crée l'étincelle d'impact (type 29, variante 0) sur l'objet porté (`+0x54`). Pour le personnage 1,
-/// l'appelant saute dans l'épilogue `0xaa9fe` d'une autre routine (voir `foreign_epilogue`).
+/// `0xb13fa`: creates the impact spark (type 29, variant 0) on the carried object (`+0x54`). For character 1, the
+/// caller jumps into the epilogue `0xaa9fe` of another routine (see `foreign_epilogue`).
 fn create_impact<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     if let Some(n) = ctx.alloc(&pools::EFFCT) {
         n.set_u8(ctx.b, Obj::ACTIVE, 1);
@@ -2111,7 +2100,7 @@ fn create_impact<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
 }
 
-/// `0xaacfe` : une fois sur seize environ, tire au hasard si on poursuit (`0x5555` : bits pairs).
+/// `0xaacfe`: about one time out of sixteen, draws at random whether to continue (`0x5555`: even bits).
 fn bulle_hasard<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let rng = ctx.random();
     let draw = rng & 0xf;
@@ -2120,7 +2109,7 @@ fn bulle_hasard<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
 }
 
-/// Cas communs de la variante 0 : `0xaabc4` (octet `+0x10d` ou `+0x10e` du joueur dans D0).
+/// Common cases of variant 0: `0xaabc4` (byte `+0x10d` or `+0x10e` of the player in D0).
 fn bubble_0_common<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj, d0: u8) {
     let class = player.u8(ctx.b, 3) >> 1;
     let mark = player.u8(ctx.b, 0x77);
@@ -2134,7 +2123,7 @@ fn bubble_0_common<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj, d0: u8) {
     bulle_hasard(ctx, o);
 }
 
-/// `0xaabac` : animation selon `+0x10d` (ou `+0x10e` pour le personnage 4).
+/// `0xaabac`: animation according to `+0x10d` (or `+0x10e` for character 4).
 fn bulle_0_action_10d<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj) {
     let mut d0 = player.u8(ctx.b, 0x10d);
     let class = player.u8(ctx.b, 3) >> 1;
@@ -2144,7 +2133,7 @@ fn bulle_0_action_10d<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj) {
     bubble_0_common(ctx, o, player, d0);
 }
 
-/// Tables de la variante 0 : l'action `0x3d` du joueur mène à l'une des dix routines.
+/// Tables of variant 0: the player's action `0x3d` leads to one of the ten routines.
 fn bulle_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let player = pointeur(ctx, o, bulle::OWNER);
     let action = player.u8(ctx.b, 0x3d);
@@ -2194,7 +2183,7 @@ fn bulle_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             bulle_lit(ctx, o, bulle::TABLE_OBJECT_A, class as u16);
             bubble_next(ctx, o);
         }
-        // 0xaacba (les actions 18 et 20 partagent le même code)
+        // 0xaacba (actions 18 and 20 share the same code)
         18 | 20 => {
             let door = pointeur(ctx, o, bulle::DOOR);
             let is_box = door.u8(ctx.b, Obj::CLASS) == 0xa;
@@ -2210,7 +2199,7 @@ fn bulle_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         }
         // 0xaac82
         22 => bulle_affiche(ctx, o, 0x23),
-        // 0xaad12 : la jauge du joueur (`+0x77`) vient d'être remplie
+        // 0xaad12: the player's gauge (`+0x77`) has just been filled
         24 | 26 | 28 | 30 | 32 => {
             let gauge = player.u8(ctx.b, 0x77) != 0;
             if gauge {
@@ -2225,15 +2214,15 @@ fn bulle_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
 }
 
-/// Variantes 1, 2, 5 et 6 : l'action `0x3d` de l'objet porté (`+0x54` ; joueur pour la variante 1) choisit
-/// une animation fixe.
+/// Variants 1, 2, 5 and 6: the action `0x3d` of the carried object (`+0x54`; player for variant 1) chooses a fixed
+/// animation.
 fn bubble_by_action<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, offset_pointeur: u32, doubler: bool, table: u32, count: u32) {
     let source = pointeur(ctx, o, offset_pointeur);
     let action = source.u8(ctx.b, 0x3d) as u32;
     let index = if doubler { action * 2 } else { action };
     let target = target(ctx, table, index);
     if index >= count || (!doubler && index & 1 != 0) {
-        // une action hors de la table mènerait l'original dans le code qui la suit
+        // an action outside the table would lead the original into the code that follows it
         outside_table(target);
     }
     let code = match (table, index / if doubler { 2 } else { 1 }) {
@@ -2245,7 +2234,7 @@ fn bubble_by_action<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, offset_pointeur: u32,
     bulle_affiche(ctx, o, code);
 }
 
-/// Variante 3 (`0xaadba`) : recolle la bulle à son porteur.
+/// Variant 3 (`0xaadba`): sticks the bubble back to its carrier.
 fn bulle_3_recolle<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let door = pointeur(ctx, o, bulle::DOOR);
     let mut d0: u8 = 0;
@@ -2303,7 +2292,7 @@ fn bulle_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 fn bubble_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variant = o.u8(ctx.b, Obj::VARIANT);
     if variant == 3 {
-        // variante 3 : clignote, se recolle, et passe à l'état suivant au bout de `MINUTEUR` images
+        // variant 3: blinks, sticks back, and goes to the next state after `MINUTEUR` frames
         let flags = o.u8(ctx.b, Obj::FLAGS);
         o.set_u8(ctx.b, Obj::FLAGS, flags ^ 2);
         ctx.anim_step();
@@ -2320,7 +2309,7 @@ fn bubble_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         ajoute_u8(ctx, o, Obj::STATE, 2);
         return;
     }
-    // la jauge de scroll du fond suit l'appui du bouton lié au coup (`+0x33`)
+    // the background scroll gauge follows the press of the button linked to the hit (`+0x33`)
     let mut value = 0u16;
     let coup = o.u8(ctx.b, bulle::COUP);
     if !(coup == 0) {
@@ -2337,7 +2326,7 @@ fn bubble_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     ctx.reinsert();
 }
 
-/// Libération (`0xab24c`) : rend la palette de la jauge si la bulle l'avait modifiée.
+/// Release (`0xab24c`): gives back the gauge palette if the bubble modified it.
 fn bubble_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let modifiee = o.u8(ctx.b, field::MODE);
     if !(modifiee == 0) {
@@ -2369,11 +2358,10 @@ handler!(EFFCT_51, projectile::ENTRY, "effct_projectile", #[without] projectile_
 handler!(EFFCT_52, shimmer_class::ENTRY, "effct_scintille_classe", #[without] shimmer_class_handler);
 handler!(EFFCT_56, eclats_debris::ENTRY, "effct_eclats_debris", #[without] shards_debris_handler);
 // ---------------------------------------------------------------------------------------------
-// Type 8 : trace sur un objet (0xababa)
+// Type 8: trace on an object (0xababa)
 
-/// Type 8 : trace collée à un objet (`+0x5c`), un sous-pixel devant ou derrière selon la variante ; son
-/// animation dépend du type de l'objet (et de sa classe : BOX) ; elle disparaît à la fin de l'animation.
-/// Non exercé.
+/// Type 8: trace stuck to an object (`+0x5c`), a sub-pixel in front or behind according to the variant; its animation
+/// depends on the object's type (and its class: BOX); it disappears at the end of the animation. Not exercised.
 mod trace {
     pub const ENTRY: u32 = 0xababa;
     pub const TABLE: u32 = 0xabac8;

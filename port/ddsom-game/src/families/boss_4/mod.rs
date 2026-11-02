@@ -1,22 +1,22 @@
-//! Boss de type 4 (0x81b3a) : la Chimère (scènes 104 et 105, et dans `cov_2p_c`, `cov_tour4_c3`). Voir
+//! Boss of type 4 (0x81b3a): the Chimera (stages 104 and 105, and in `cov_2p_c`, `cov_tour4_c3`). See
 //! `docs/families/boss.md`.
 //!
-//! Charpente des boss à IA (`+4` état, `+5` groupe, `+6` et `+7` étapes, états posés d'un coup en longs,
-//! bibliothèque d'IA 0x103d6..0x105b6). Le corps est accompagné de trois doubles graphiques (ENEMY 22, 23, 24 de
-//! `enemy_double`), créés avec lui et liés par `+0xb4`, `+0xb6`, `+0xb8` ; le premier (`+0xb4`) rejoue sur demande
-//! (`+0xb6` du double) les gestes du souffle et dit par son `+0x33` quand souffler.
+//! Skeleton of the AI bosses (`+4` state, `+5` group, `+6` and `+7` steps, states set in one go as longs,
+//! AI library 0x103d6..0x105b6). The body is accompanied by three graphic doubles (ENEMY 22, 23, 24 of
+//! `enemy_double`), created with it and linked by `+0xb4`, `+0xb6`, `+0xb8`; the first (`+0xb4`) replays on request
+//! (`+0xb6` of the double) the breath gestures and says through its `+0x33` when to breathe.
 //!
-//! | `+5` | Fichier | Rôle |
+//! | `+5` | File | Role |
 //! |---|---|---|
-//! | 0 | `fight` | arrivée en descendant du haut de l'écran |
-//! | 2 | `fight` | combat : attente, demi-tour, marche (`+6` = 4, 6), charge (8), bond (10) |
-//! | 4 | `attacks` | sept attaques (`+6` = 0 à 12) : cri, envol et piqué, traversée, bond, souffles |
-//! | 6 à 12 | `fight` | attente tant qu'aucun joueur n'est en vie |
-//! | 14 | `hit` | retour au combat |
-//! | état 4 | `hit` | réactions aux coups (table de la ROM), recul, chute, mort |
+//! | 0 | `fight` | arrival, descending from the top of the screen |
+//! | 2 | `fight` | combat: wait, about-face, walk (`+6` = 4, 6), charge (8), leap (10) |
+//! | 4 | `attacks` | seven attacks (`+6` = 0 to 12): cry, takeoff and dive, crossing, leap, breaths |
+//! | 6 to 12 | `fight` | wait while no player is alive |
+//! | 14 | `hit` | return to combat |
+//! | state 4 | `hit` | reactions to hits (ROM table), knockback, fall, death |
 //!
-//! Les choix d'attaque (tirages dans les tables de la ROM selon la phase `+0xaa`) et les états qu'ils posent sont
-//! dans `decide`. Animations : 0x17557e (corps), 0x175596 (vol et attaques), 0x1755ae (coups reçus).
+//! The attack choices (draws in the ROM tables according to phase `+0xaa`) and the states they set are
+//! in `decide`. Animations: 0x17557e (body), 0x175596 (flight and attacks), 0x1755ae (hits received).
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -28,54 +28,54 @@ mod decide;
 mod fight;
 pub(crate) mod hit;
 
-/// Champs propres à ce type.
+/// Fields specific to this type.
 pub(self) mod g {
-    /// Pas restants de la marche (`+0x6b`), décompte avant le prochain pas (`+0x71`), attente debout (`+0x6e`).
+    /// Walk steps remaining (`+0x6b`), countdown before the next step (`+0x71`), standing wait (`+0x6e`).
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
     pub const WALK_DELAY: u32 = 0x71;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
     pub const SHOT: u32 = 0x79;
-    /// Compteur du tremblement (réaction 0x4c).
+    /// Shaking counter (reaction 0x4c).
     pub const SHAKE: u32 = 0x90;
-    /// Jeu d'animations courant et animation en cours.
+    /// Current animation set and current animation.
     pub const ANIM_KIND: u32 = 0xa0;
     pub const ANIM_LAST: u32 = 0xa1;
-    /// État mémorisé (long) à reprendre après un demi-tour.
+    /// Saved state (long) to resume after an about-face.
     pub const SAVED_STATE: u32 = 0xa2;
-    /// Minuterie de l'étape et cadence de la poussière (ou de l'oscillation en vol).
+    /// Step timer and dust rhythm (or oscillation rhythm in flight).
     pub const TIMER: u32 = 0xa6;
     pub const DUST: u32 = 0xa8;
     pub const PHASE: u32 = 0xaa;
     pub const PHASES: u32 = 0xab;
-    /// Octet non nul : le boss est invulnérable (`+0x38` remis à zéro à chaque image).
+    /// Non-zero byte: the boss is invulnerable (`+0x38` reset to zero every frame).
     pub const INVULNERABLE: u32 = 0xad;
-    /// Décompte entre deux jets du souffle, et rang du jet dans la table des angles (`+0x42`).
+    /// Countdown between two jets of the breath, and rank of the jet in the angle table (`+0x42`).
     pub const BREATH: u32 = 0xaf;
     pub const BREATH_STEP: u32 = 0x42;
-    /// Charge : 0 vers le milieu de l'écran, 1 vers l'abscisse retenue de la cible (`+0xbc`).
+    /// Charge: 0 toward the middle of the screen, 1 toward the target's retained X position (`+0xbc`).
     pub const CHARGE_AT_TARGET: u32 = 0xb2;
     pub const MARK_X: u32 = 0xbc;
-    /// Battement d'ailes : alterné à chaque marque (0x11a36).
+    /// Wing beat: alternated at each mark (0x11a36).
     pub const WING: u32 = 0xb3;
-    /// Les trois doubles (mots).
+    /// The three doubles (words).
     pub const DOUBLE_A: u32 = 0xb4;
     pub const DOUBLE_B: u32 = 0xb6;
     pub const DOUBLE_C: u32 = 0xb8;
-    /// Coups encaissés au sol (mot).
+    /// Hits taken on the ground (word).
     pub const HITS: u32 = 0x84;
 }
 use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// Jeux d'animations : corps, vol et attaques, coups reçus.
+/// Animation sets: body, flight and attacks, hits received.
 pub(self) const SET_BODY: u32 = 0x17557e;
 pub(self) const SET_AIR: u32 = 0x175596;
 pub(self) const SET_HURT: u32 = 0x1755ae;
 
-/// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
+/// Starts animation `n` of a set via the AI (0x103d6).
 pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
@@ -90,8 +90,8 @@ pub(self) fn kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     x.set8(ANIM_LAST, k);
 }
 
-/// Mot de poids faible d'un registre de données : seuls D2 à D5 sont gardés (restes relus par les gestionnaires
-/// suivants) ; D0, D1 et D6 ne sont relus par personne.
+/// Low-order word of a data register: only D2 to D5 are kept (leftovers re-read by the following handlers);
+/// D0, D1 and D6 are re-read by no one.
 pub(self) fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
     let r = match n {
         2 => x.c.d2(),
@@ -103,28 +103,28 @@ pub(self) fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
     *r = *r & 0xffff_0000 | v as u32;
 }
 
-/// `subq.w #1,(off,A0)` : vrai quand le décompte est écoulé (`ble`).
+/// `subq.w #1,(off,A0)`: true when the countdown has elapsed (`ble`).
 pub(self) fn expired<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     sub16(x, off, 1).le()
 }
 
-/// Au moins un joueur en vie (0x10474).
+/// At least one player alive (0x10474).
 pub(self) fn alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::players_alive(x)
 }
 
-/// Le double `off` (`movea.w (off,A0),A1`).
+/// The double `off` (`movea.w (off,A0),A1`).
 pub(self) fn double<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> Obj {
     x.linked(off)
 }
 
-/// Demande au premier double de rejouer son geste (`+0xb6` du double).
+/// Asks the first double to replay its gesture (`+0xb6` of the double).
 pub(self) fn cue_double<R: Bench>(x: &mut Cx<'_, R>) {
     let d = double(x, DOUBLE_A);
     d.set_u8(x.b, 0xb6, 1);
 }
 
-/// Toutes les 4 images, une bouffée de poussière (0x1172e, sorte 3).
+/// Every 4 frames, a puff of dust (0x1172e, kind 3).
 pub(self) fn dust_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if !sub16(x, DUST, 1).gt() {
         x.set16(DUST, 4);
@@ -132,7 +132,7 @@ pub(self) fn dust_tick<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Image-clé marquée (bit 7 de `+0x33`) : un battement d'ailes, de côté alterné.
+/// Marked key frame (bit 7 of `+0x33`): a wing beat, on alternating sides.
 pub(self) fn flap<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(f::KEY_FRAME) as i8) < 0 {
         let k = x.u8(f::KEY_FRAME) & 0x7f;
@@ -143,7 +143,7 @@ pub(self) fn flap<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// `moveq #0,D0 ; move.w (off,A0),D0 ; swap D0 ; asr.l #8,D0` : vitesse (mot) en long à 8 bits de fraction.
+/// `moveq #0,D0 ; move.w (off,A0),D0 ; swap D0 ; asr.l #8,D0`: speed (word) as a long with 8 fractional bits.
 pub(self) fn speed_long<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> u32 {
     let v = ((x.u16(off) as i16 as i32) << 8) as u32;
     v
@@ -168,9 +168,9 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- état 0 : création --------------------------------------------------------------------------
+// --- state 0: creation --------------------------------------------------------------------------
 
-/// 0x81b74 : réglages du boss, création des trois doubles ; en partie, il entre par le haut de l'écran.
+/// 0x81b74: boss setup, creation of the three doubles; in game, it enters from the top of the screen.
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
@@ -212,7 +212,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     ] {
         x.set8(off, v);
     }
-    // deux doubles avec leurs propres PV (ceux du boss moins 0xfa ou 0x12c, au moins 0x96 ou 0x64), un troisième sans
+    // two doubles with their own HP (the boss's minus 0xfa or 0x12c, at least 0x96 or 0x64), a third without
     spawn_double(x, 0x16, Some((0xfa, 0x96, 0x43)), DOUBLE_A);
     spawn_double(x, 0x17, Some((0x12c, 0x64, 0x44)), DOUBLE_B);
     spawn_double(x, 0x18, None, DOUBLE_C);
@@ -228,8 +228,8 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Crée un double ENEMY de type `kind` (le pool est attendu tant qu'il est plein) et le lie au boss (`link`).
-/// `life` : (retrait, minimum, jeu de boîtes) pour un double qui a ses propres PV.
+/// Creates an ENEMY double of type `kind` (the pool is awaited as long as it is full) and links it to the boss
+/// (`link`). `life`: (deduction, minimum, box set) for a double that has its own HP.
 fn spawn_double<R: Bench>(x: &mut Cx<'_, R>, kind: u8, life: Option<(u16, u16, u8)>, link: u32) {
     let Some(d) = alloc_retry(x, &pools::ENEMY) else { return };
     d.set_u8(x.b, 0, 1);
@@ -255,9 +255,9 @@ fn spawn_double<R: Bench>(x: &mut Cx<'_, R>, kind: u8, life: Option<(u16, u16, u
     x.set16(link, d.0 as u16);
 }
 
-// --- état 2 : actif -----------------------------------------------------------------------------
+// --- state 2: active -----------------------------------------------------------------------------
 
-/// 0x81d6e : un groupe par image (hors gel et pause), puis zone de jeu et ombre.
+/// 0x81d6e: one group per frame (outside freeze and pause), then play area and shadow.
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
@@ -276,6 +276,6 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 
 handlers! {
     0x81b3a "boss_4" #[without] run,
-    // retour au combat après une réaction commune (table 0x3e000 de `reactions.rs`)
+    // return to combat after a common reaction (table 0x3e000 of `reactions.rs`)
     0x82ea0 "boss_4_releve" hit::resume,
 }

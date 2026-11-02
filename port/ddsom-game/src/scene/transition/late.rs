@@ -1,5 +1,5 @@
-//! Scripts de transition des niveaux suivants : scènes 27, 31, 33, 32 (34, 35, 67), 38 (40, 42, 44), 46, et la fin
-//! du jeu (69, prise par la 105).
+//! Transition scripts of the following levels: scenes 27, 31, 33, 32 (34, 35, 67), 38 (40, 42, 44), 46, and the end
+//! of the game (69, taken over by 105).
 
 use super::*;
 use crate::scene::fading;
@@ -13,12 +13,12 @@ mod ext {
     pub const MUSIC_FINALE: u32 = 0xe5480;
 }
 
-/// Page de palettes 0x91c400 et sa sauvegarde.
+/// Palette page 0x91c400 and its backup.
 const PALETTE_PAGE: u32 = 0x91c400;
 const PALETTE_SAVE: u32 = 0xff1190;
 
 // ---------------------------------------------------------------------------------------------
-// Scène 27 : la scène suivante dépend du choix gardé en `+4` (table 0xf9454)
+// Scene 27: the next scene depends on the choice kept in `+4` (table 0xf9454)
 
 pub fn scene_27(x: &mut Ctx) -> Flow {
     let choice = get8(x, var::MESSAGE);
@@ -30,9 +30,9 @@ pub fn scene_27(x: &mut Ctx) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scène 31 : dialogue 141, prime du temps restant versée à chaque joueur, puis la scène 31
+// Scene 31: dialogue 141, remaining-time bonus paid to each player, then scene 31
 
-/// Prime à verser (long BCD, six chiffres) et durée affichée.
+/// Bonus to pay (BCD long, six digits) and displayed duration.
 const PRIZE: u32 = 18;
 const SHOWN_TIME: u32 = 16;
 
@@ -47,7 +47,7 @@ pub fn scene_31(x: &mut Ctx) -> Flow {
             set16(x, var::TIMER, 120);
             next(x);
             crate::text::print_tall(x.b, 0xf985e);
-            // prime et durée d'après le temps restant (table de 8 octets par dizaine de secondes)
+            // bonus and duration from the remaining time (8-byte table per ten seconds)
             let clock = x.v16(a5::CLOCK);
             let at = (clock >> 8 & 15) * 48 + (clock & 0xf0) / 2;
             let time = x.prog16(0xf95ba + at as u32);
@@ -90,7 +90,7 @@ pub fn scene_31(x: &mut Ctx) -> Flow {
 }
 const PRIZE_AT: u32 = 0x912c58;
 crate::steps! {
-    /// Étapes (points de reprise) de la machine à états.
+    /// Steps (resume points) of the state machine.
     pub enum Step {
         S31Shown = 0xf9530 => |x| {
             next(x);
@@ -113,7 +113,7 @@ crate::steps! {
         S33Hidden = 0xf9942 => |x| {
             clear_layer(x.b, Layer::Three);
             dark_palette(x, 88);
-            // 0x1a366 (A0-A6 gardés) : palettes de la scène 33
+            // 0x1a366 (A0-A6 kept): palettes of scene 33
             crate::palette::load_scene_palettes_of(x.b, 33);
             yield_frames(x, 4, At(Step::S33Dark.into()))
         },
@@ -142,7 +142,7 @@ crate::steps! {
             fade_task(x, 3, ALL_PAGES, crate::scene::fading::RISE);
             Flow::Done
         },
-        /// Glitch d'origine : la reprise ne recharge pas D0 : l'original rouvre alors le message 1 (D0 de l'attente).
+        /// Original glitch: the resume does not reload D0: the original then reopens message 1 (D0 of the wait).
         S32Retry59 = 0xf9a7e => |x| s32_message_59(x, 1),
         S32Hidden = 0xf9acc => |x| {
             clear_layer(x.b, Layer::Two);
@@ -182,7 +182,7 @@ crate::steps! {
             yield_frames(x, 4, At(Step::S38Scenery.into()))
         },
         S38Scenery = 0xf9d22 => |x| {
-            // décor 540, ou 551 si un joueur en jeu est dans la posture 11 (le premier dans la posture 10 arrête la recherche)
+            // terrain 540, or 551 if a player in the game is in posture 11 (the first in posture 10 stops the search)
             let mut scenery = 540;
             for k in 0..4u32 {
                 let p = A5 + a5::PLAYERS + k * 0x200;
@@ -296,7 +296,7 @@ fn s31_message(x: &mut Ctx) -> Flow {
     Flow::Done
 }
 
-/// Durée `m:ss` en chiffres de deux cases (attributs 2), dizaines de minutes omises si nulles (0xf96b2).
+/// `m:ss` duration in two-cell digits (attributes 2), tens of minutes omitted if zero (0xf96b2).
 fn duration(x: &mut Ctx, at: u32, t: u16) {
     let nib = |k: u32| (t >> (12 - 4 * k)) as u8 & 15;
     if nib(0) != 0 {
@@ -308,8 +308,8 @@ fn duration(x: &mut Ctx, at: u32, t: u16) {
     tiles::digit(x.b, at + 4 * tiles::COLUMN, nib(3), 2);
 }
 
-/// Une tranche de la prime à chaque joueur en jeu (état `+4` < 4) tant qu'il en reste ; vrai si une tranche a été
-/// versée. La prime est commune : chaque joueur en reçoit une tranche à la même image.
+/// One slice of the bonus to each player in the game (state `+4` < 4) while any remains; true if a slice was
+/// paid. The bonus is shared: each player receives a slice on the same frame.
 fn pay_players(x: &mut Ctx) -> bool {
     let mut paid = false;
     for k in 0..4u32 {
@@ -322,7 +322,7 @@ fn pay_players(x: &mut Ctx) -> bool {
             continue;
         }
         paid = true;
-        // la plus petite tranche non vide : centaines (4), milliers (14), dizaines de milliers (33)
+        // the smallest non-empty slice: hundreds (4), thousands (14), tens of thousands (33)
         let (left, amount) = if left & 0xf00 != 0 {
             (left - 0x100, 4)
         } else if left & 0xf000 != 0 {
@@ -339,7 +339,7 @@ fn pay_players(x: &mut Ctx) -> bool {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scène 33 : objet système 0, dialogues 39 et 40 ; la réponse fixe `A5+0x59` (table 0xf99e2) ; puis la scène 34
+// Scene 33: system object 0, dialogues 39 and 40; the answer sets `A5+0x59` (table 0xf99e2); then scene 34
 
 pub fn scene_33(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf9884) {
@@ -368,8 +368,8 @@ pub fn scene_33(x: &mut Ctx) -> Flow {
         _ => Flow::Done,
     }
 }
-/// Objet système 0 (sous-type 3, X 96, Y 176), puis le dialogue 39 (0xf98be). La reprise du dialogue 40 y revient
-/// aussi dans l'original (`bra 0xf98be`).
+/// System object 0 (subtype 3, X 96, Y 176), then dialogue 39 (0xf98be). The resume of dialogue 40 comes back here
+/// too in the original (`bra 0xf98be`).
 fn s33_object(x: &mut Ctx) -> Flow {
     let Some(o) = system_object(x, 0, Step::S33RetryObject) else { return Flow::Yield };
     wr8(x.b, o.0 + 0x2f, 3);
@@ -386,7 +386,7 @@ fn s33_message_39(x: &mut Ctx) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scènes 32, 34, 35, 67 : dialogues 59 à 62, fondu vers une couleur ; la sortie de scène continue
+// Scenes 32, 34, 35, 67: dialogues 59 to 62, fade to a colour; the scene exit continues
 
 pub fn scene_32(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf99f0) {
@@ -454,7 +454,7 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
         _ => Flow::Done,
     }
 }
-/// Le message `n` (59 ; 1 à la reprise, voir [`Step::S32Retry59`]).
+/// Message `n` (59; 1 on resume, see [`Step::S32Retry59`]).
 fn s32_message_59(x: &mut Ctx, n: u8) -> Flow {
     or_yield!(message(x, n, Step::S32Retry59));
     next(x);
@@ -476,8 +476,8 @@ fn s32_message_62(x: &mut Ctx) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scènes 38, 40, 42, 44 : objets système 4 et 5, dialogues 97, 73, 98, 74 ; décor selon les personnages ;
-// puis la scène 47
+// Scenes 38, 40, 42, 44: system objects 4 and 5, dialogues 97, 73, 98, 74; terrain depending on the characters;
+// then scene 47
 
 pub fn scene_38(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf9bee) {
@@ -549,7 +549,7 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
         _ => Flow::Done,
     }
 }
-/// Ferme le dialogue 97 (mot `+0x32`), puis le dialogue 73.
+/// Closes dialogue 97 (word `+0x32`), then dialogue 73.
 fn s38_close_message(x: &mut Ctx) -> Flow {
     let o = message_obj(x);
     wr16(x.b, o.0 + 0x32, 1);
@@ -573,12 +573,12 @@ fn s38_message_74(x: &mut Ctx) -> Flow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Scène 46 : objets SET 12 et 21, dialogue 69, la caméra 2 descend ; puis la scène 46
+// Scene 46: SET objects 12 and 21, dialogue 69, camera 2 goes down; then scene 46
 
 pub fn scene_46(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf9e58) {
         0 => {
-            // palettes de la scène 7
+            // palettes of scene 7
             x.set_v8(a5::SCENE, 7);
             crate::palette::load_scene_palettes(x.b);
             x.set_v8(a5::SCENE, 46);
@@ -610,7 +610,7 @@ pub fn scene_46(x: &mut Ctx) -> Flow {
         _ => Flow::Done,
     }
 }
-/// La caméra 2 descend d'un demi-pixel par image (position à virgule en `+4`).
+/// Camera 2 goes down by half a pixel per frame (fixed-point position in `+4`).
 fn descend(x: &mut Ctx) {
     let y = rd32(x.b, VARS + var::MESSAGE).wrapping_add(0x8000);
     wr32(x.b, VARS + var::MESSAGE, y);
@@ -618,7 +618,7 @@ fn descend(x: &mut Ctx) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Fin du jeu (scène 69, prise par la 105) : écran blanc clignotant, fondus, décor final ; la sortie de scène continue
+// End of the game (scene 69, taken over by 105): flashing white screen, fades, final terrain; the scene exit continues
 
 pub fn finale(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf9fc8) {
@@ -636,7 +636,7 @@ pub fn finale(x: &mut Ctx) -> Flow {
             Flow::Done
         }
         _ => {
-            // le plan 1 clignote pendant 180 images
+            // plane 1 blinks for 180 frames
             let layers = x.v8(a5::LAYERS + 1) ^ 4;
             x.set_v8(a5::LAYERS + 1, layers);
             let t = get16(x, var::MESSAGE).wrapping_sub(1);

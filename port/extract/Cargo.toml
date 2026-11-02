@@ -2,7 +2,7 @@
 name = "extract"
 version = "0.1.0"
 edition = "2021"
-description = "Extrait les ressources de ddsom (graphismes, palettes, sons, sprites, décors) depuis les ROMs de l'utilisateur"
+description = "Extracts the ddsom resources (graphics, palettes, sounds, sprites, scenery) from the user's ROMs"
 
 [dependencies]
 cps2-gfx = { path = "../cps2-gfx" }

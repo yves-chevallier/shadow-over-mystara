@@ -1,17 +1,17 @@
-//! Logique de jeu de ddsom réécrite en Rust idiomatique.
+//! Game logic of ddsom rewritten in idiomatic Rust.
 //!
-//! Une *routine native* remplace une routine 68000 à son adresse d'entrée. Elle produit exactement
-//! le même état (mémoire, registres, drapeaux).
+//! A *native routine* replaces a 68000 routine at its entry address. It produces exactly
+//! the same state (memory, registers, flags).
 //!
-//! Le jeu est le jeu sans 68000 (`install_no_68k`, module `no68k`) : natives seules, toujours exécutées en
-//! entier, et boucle d'image du noyau ; une adresse sans native arrête le jeu.
+//! The game is the game without a 68000 (`install_no_68k`, module `no68k`): natives only, always run in
+//! full, and the kernel's frame loop; an address without a native stops the game.
 //!
-//! Mode hybride (`install`, diagnostic) : natives et code d'origine recompilé pour le reste, sur le 68000 surcadencé.
-//! Chaque native dure [`NATIVE_DURATION`] cycles ; si elle ne tient pas avant l'échéance de la ligne, la version
-//! d'origine s'exécute à sa place. Ce mode n'a plus à reproduire l'original image par image.
+//! Hybrid mode (`install`, diagnostics): natives and recompiled original code for the rest, on the overclocked 68000.
+//! Each native lasts [`NATIVE_DURATION`] cycles; if it does not fit before the line's deadline, the original
+//! version runs in its place. This mode no longer has to reproduce the original frame by frame.
 //!
-//! Mode contrôle (`set_check(true)`) : chaque appel exécute aussi la routine d'origine sur une copie
-//! de l'état et compare les deux ; les écarts sont comptés dans `report()`.
+//! Check mode (`set_check(true)`): each call also runs the original routine on a copy
+//! of the state and compares the two; the differences are counted in `report()`.
 
 pub mod camera_modes;
 pub mod config;
@@ -64,37 +64,37 @@ use std::sync::{Mutex, OnceLock};
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-/// Routine native.
+/// Native routine.
 pub struct Native {
     pub entry: u32,
     pub name: &'static str,
-    /// Le corps de la routine (durée non comptée : ajoutée par l'appelant, [`NATIVE_DURATION`]).
+    /// The body of the routine (duration not counted: added by the caller, [`NATIVE_DURATION`]).
     pub run: Body,
-    /// La routine accède à la RAM partagée avec le Z80 : elle doit tenir dans la ligne en cours,
-    /// sinon l'entrelacement avec le Z80 changerait.
+    /// The routine accesses the RAM shared with the Z80: it must fit within the current line,
+    /// otherwise the interleaving with the Z80 would change.
     pub touches_sound: bool,
-    /// Contrat : registres et drapeaux que l'appelant peut lire au retour (voir `regs`). Les autres
-    /// registres sont libres ; la mémoire doit toujours être identique.
+    /// Contract: registers and flags that the caller may read on return (see `regs`). The other
+    /// registers are free; the memory must always be identical.
     pub outputs: u32,
 }
 
-/// Corps d'une native.
+/// Body of a native.
 #[derive(Clone, Copy)]
 pub enum Body {
-    /// Sur le processeur : lit des registres de l'original ou en laisse à ses appelants (contrat d'un appel par
-    /// adresse), et finit par son `rts`.
+    /// On the processor: reads registers of the original or leaves some to its callers (contract of a call by
+    /// address), and ends with its `rts`.
     Processeur(fn(&mut Cpu, &mut Cps2Bus)),
-    /// Comme `Processeur`, pour un corps partagé par plusieurs entrées : il reçoit l'adresse de la sienne.
+    /// Like `Processeur`, for a body shared by several entries: it receives the address of its own.
     CpuIn(fn(&mut Cpu, &mut Cps2Bus, u32)),
-    /// Sans registre (la forme cible : la mémoire seule) ; le retour (`rts`) est fait pour lui.
+    /// Without registers (the target form: memory only); the return (`rts`) is done for it.
     Memory(fn(&mut Cps2Bus)),
-    /// Gestionnaire d'objet sans registre : il reçoit ce que la boucle d'aiguillage lui passe (l'objet, le compteur,
-    /// les restes que les gestionnaires se transmettent : `dispatch::Dispatch`) ; le retour est fait pour lui.
+    /// Object handler without registers: it receives what the dispatch loop passes it (the object, the counter,
+    /// the leftovers that the handlers pass to each other: `dispatch::Dispatch`); the return is done for it.
     Handler(fn(&mut Cps2Bus, &mut dispatch::Dispatch)),
 }
 
 impl Native {
-    /// Exécute la routine, retour (`rts`) compris.
+    /// Runs the routine, return (`rts`) included.
     pub fn execute(&self, c: &mut Cpu, b: &mut Cps2Bus) {
         match self.run {
             Body::Processeur(f) => f(c, b),
@@ -104,8 +104,8 @@ impl Native {
                 mem::rts(c, b);
             }
             Body::Handler(f) => {
-                // appelé depuis le processeur (boucle d'aiguillage) : les restes passent du banc à la table, le
-                // gestionnaire les lit et les écrit par leur nom, puis ils reviennent au banc
+                // called from the processor (dispatch loop): the leftovers go from the bench to the table, the
+                // handler reads and writes them by name, then they return to the bench
                 dispatch::Leftovers::from_bench(c, b);
                 let leftovers = tasks::table::table(b).leftovers;
                 let mut a = dispatch::Dispatch { object: objects::Obj(c.a[0]), counter: c.d[7] as u16, leftovers };
@@ -117,16 +117,16 @@ impl Native {
         }
     }
 
-    /// Le corps n'utilise pas le processeur.
+    /// The body does not use the processor.
     pub fn without_cpu(&self) -> bool {
         matches!(self.run, Body::Memory(_) | Body::Handler(_))
     }
 }
 
-/// Durée d'une native en mode hybride (cycles du 68000), la même pour toutes : ce mode ne sert plus qu'au diagnostic.
+/// Duration of a native in hybrid mode (68000 cycles), the same for all: this mode is now only for diagnostics.
 pub const NATIVE_DURATION: u64 = 100;
 
-/// Masques de registres pour `Native::outputs`.
+/// Register masks for `Native::outputs`.
 pub mod regs {
     pub const fn d(n: u32) -> u32 {
         1 << n
@@ -135,11 +135,11 @@ pub mod regs {
         1 << (8 + n)
     }
     pub const CCR: u32 = 1 << 16;
-    /// Tous les registres et les drapeaux (remplacement exact d'une routine feuille).
+    /// All the registers and the flags (exact replacement of a leaf routine).
     pub const ALL: u32 = 0x1_ffff;
 }
 
-/// Toutes les routines natives.
+/// All the native routines.
 pub const NATIVES: &[Native] = &[
     combat::COMBAT_UPDATE,
     inputs::READ_INPUTS,
@@ -209,8 +209,8 @@ pub const NATIVES: &[Native] = &[
     eeprom::FULL_STARTS_NATIVE,
 ];
 
-/// Index des routines natives par adresse d'entrée : `NATIVES`, le modèle d'objets et les wrappers
-/// son (décrits par une table). Un tamis binaire évite la recherche pour la grande majorité des blocs.
+/// Index of the native routines by entry address: `NATIVES`, the object model and the sound wrappers
+/// (described by a table). A binary sieve avoids the search for the vast majority of blocks.
 struct Index {
     sieve: Vec<u64>,
     by_address: HashMap<u32, &'static Native>,
@@ -219,7 +219,7 @@ struct Index {
 fn lookup(pc: u32) -> Option<&'static Native> {
     static INDEX: OnceLock<Index> = OnceLock::new();
     let index = INDEX.get_or_init(|| {
-        // DDSOM_SANS=préfixe,... : routines natives désactivées (recherche d'une routine fautive)
+        // DDSOM_SANS=prefix,...: native routines disabled (search for a faulty routine)
         let without: Vec<String> = std::env::var("DDSOM_SANS")
             .map(|v| v.split(',').map(str::to_owned).collect())
             .unwrap_or_default();
@@ -240,14 +240,14 @@ fn lookup(pc: u32) -> Option<&'static Native> {
     index.by_address.get(&pc).copied()
 }
 
-/// Une routine native remplace le code d'origine à l'adresse `pc`.
+/// A native routine replaces the original code at address `pc`.
 pub fn is_native(pc: u32) -> bool {
     lookup(pc).is_some()
 }
 
-/// Toutes les routines natives, wrappers son compris (outils de couverture).
+/// All the native routines, sound wrappers included (coverage tools).
 pub fn all_natives() -> impl Iterator<Item = &'static Native> {
-    // une source par ligne (les branches parallèles ajoutent chacune la leur)
+    // one source per line (parallel branches each add their own)
     std::iter::empty()
         .chain(NATIVES)
         .chain(objects::NATIVES)
@@ -274,61 +274,62 @@ pub fn all_natives() -> impl Iterator<Item = &'static Native> {
         .chain(hud::NATIVES)
 }
 
-/// Appelle une routine par son adresse depuis une routine native, comme un `jsr`. Dans le jeu, la native s'exécute
-/// aussitôt et son `rts` ferme l'appel (`tasks::table::open_call`) : ni PC, ni pile 68000. Dans les outils, les
-/// natives et le code d'origine s'exécutent jusqu'au retour à une adresse sentinelle empilée. La routine ne doit ni
-/// céder la main ni revenir plus haut que son appelant : les appels qui le peuvent ont une suite (étape Rust, voir
-/// `tasks::table::call` et [`call_expected`]).
+/// Calls a routine by its address from a native routine, like a `jsr`. In the game, the native runs
+/// immediately and its `rts` closes the call (`tasks::table::open_call`): no PC, no 68000 stack. In the tools, the
+/// natives and the original code run until the return to a pushed sentinel address. The routine must neither
+/// cede control nor return higher than its caller: the calls that may do so have a continuation (Rust step, see
+/// `tasks::table::call` and [`call_expected`]).
 #[track_caller]
 pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
-    // jamais exécutée par le jeu
+    // never run by the game
     const RETURN: u32 = 0x00_fffe;
     let site = std::panic::Location::caller();
     let _site = (TRACE.get().is_some() || no68k::active()).then(|| CallSite::enter(site, addr));
     let before = (c.d, c.a, c.sr);
     if no68k::active() {
-        // le jeu : la native s'exécute aussitôt ; son `rts` revient à un appel attendu de la tâche (ni PC, ni pile 68000)
+        // the game: the native runs immediately; its `rts` returns to an expected call of the task (no PC, no 68000
+        // stack)
         let n = no68k::native(c, b, addr);
         let frame = tasks::table::open_call(b);
         execute(n, c, b, 0);
         if tasks::has_ceded() || !tasks::table::call_returned(b, frame) {
-            panic!("appel de {addr:06x} ({site}) : la routine a cédé la main ou est revenue plus haut que son appelant");
+            panic!("call of {addr:06x} ({site}): the routine ceded control or returned higher than its caller");
         }
         diag::probe_call(c, addr, &before, site);
         return;
     }
-    // outils (machine sans table des tâches Rust) : natives et code d'origine, jusqu'au retour à une sentinelle
+    // tools (machine without a Rust task table): natives and original code, until the return to a sentinel
     let sp = c.a[7];
     c.a[7] = sp.wrapping_sub(4);
     mem::wr32(b, c.a[7], RETURN);
     c.pc = addr;
     while !(c.pc == RETURN && c.a[7] == sp) {
         if tasks::has_ceded() || c.pc == TASK_SWITCH || c.sr & 0x2000 == 0 && c.a[7] > sp && c.a[7] - sp < 0x1000 {
-            panic!("appel de {addr:06x} ({site}) : la routine a cédé la main ou est revenue plus haut que son appelant (PC {:06x})", c.pc);
+            panic!("call of {addr:06x} ({site}): the routine ceded control or returned higher than its caller (PC {:06x})", c.pc);
         }
         one_step(c, b);
     }
     diag::probe_call(c, addr, &before, site);
 }
 
-/// Appel terminal (`jmp`) de la native `n` depuis une fonction Rust : elle s'exécute aussitôt (avec les diagnostics de
-/// `DDSOM_CHECK`...), et son `rts` revient à la suite de l'appel en cours de la tâche. Remplace la pose du PC (saut d'une
-/// native à une autre).
+/// Terminal call (`jmp`) of native `n` from a Rust function: it runs immediately (with the diagnostics of
+/// `DDSOM_CHECK`...), and its `rts` returns to the continuation of the task's current call. Replaces setting the PC
+/// (jump from one native to another).
 pub fn jump(c: &mut Cpu, b: &mut Cps2Bus, n: &'static Native) {
     execute(n, c, b, 0);
 }
 
-/// Comme [`jump`], vers la native posée à `address` (gestionnaire désigné par une table de la ROM).
+/// Like [`jump`], to the native set at `address` (handler designated by a ROM table).
 #[track_caller]
 pub fn jump_to(c: &mut Cpu, b: &mut Cps2Bus, address: u32) {
-    let n = lookup(address).unwrap_or_else(|| panic!("saut vers {address:06x} ({}) : pas de native", std::panic::Location::caller()));
+    let n = lookup(address).unwrap_or_else(|| panic!("jump to {address:06x} ({}): no native", std::panic::Location::caller()));
     execute(n, c, b, 0);
 }
 
-/// Point de bascule de l'ordonnanceur : une tâche qui cède la main (0xa40, 0xa86) ou se termine y passe.
+/// Switch point of the scheduler: a task that cedes control (0xa40, 0xa86) or ends goes through it.
 const TASK_SWITCH: u32 = 0x984;
 
-/// Outils : une native, ou une instruction ou un bloc d'origine, à l'adresse du PC.
+/// Tools: a native, or an original instruction or block, at the PC address.
 fn one_step(c: &mut Cpu, b: &mut Cps2Bus) {
     if TRACE.get().is_some() {
         run_traced(c.pc, c, b, u64::MAX);
@@ -337,11 +338,11 @@ fn one_step(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-/// Appelle la native `address` (gestionnaire désigné par une table de la ROM) pour une fonction Rust qui continue
-/// après elle : l'appel attendu `frame` a été ouvert par `tasks::table::call_expected`, avec la suite de la tâche si
-/// la native cède. Les natives s'enchaînent (sauts) jusqu'au retour. Rend vrai si la native est revenue ; faux si la
-/// tâche a cédé la main, ou si l'appelé a dépilé l'appel pour revenir plus haut (épilogue étranger des bulles) : la
-/// fonction Rust abandonne alors, et la tâche continuera par les suites des appels en cours.
+/// Calls the native `address` (handler designated by a ROM table) for a Rust function that continues
+/// after it: the expected call `frame` was opened by `tasks::table::call_expected`, with the task's continuation if
+/// the native cedes. The natives chain (jumps) until the return. Returns true if the native returned; false if the
+/// task ceded control, or if the callee popped the call to return higher (foreign epilogue of the bubbles): the
+/// Rust function then gives up, and the task will continue through the continuations of the pending calls.
 pub fn call_expected(c: &mut Cpu, b: &mut Cps2Bus, address: u32, frame: tasks::table::Call) -> bool {
     if no68k::active() {
         let n = no68k::native(c, b, address);
@@ -349,7 +350,7 @@ pub fn call_expected(c: &mut Cpu, b: &mut Cps2Bus, address: u32, frame: tasks::t
     } else if let Some(n) = lookup(address) {
         execute(n, c, b, 0);
     } else {
-        // outils : code d'origine, jusqu'au retour à une adresse sentinelle empilée
+        // tools: original code, until the return to a pushed sentinel address
         const RETURN: u32 = 0x00_fffe;
         let sp = c.a[7];
         c.a[7] = sp.wrapping_sub(4);
@@ -373,8 +374,8 @@ pub fn set_trace(f: fn(u32)) {
     let _ = TRACE.set(f);
 }
 
-/// Diagnostic (`examples/who_enters`) : appelée à l'entrée (vrai) et à la sortie (faux) de chaque native exécutée
-/// par `run_traced`.
+/// Diagnostics (`examples/who_enters`): called on entry (true) and on exit (false) of each native run
+/// by `run_traced`.
 static NATIVE_HOOK: OnceLock<fn(u32, bool)> = OnceLock::new();
 
 pub fn set_native_hook(f: fn(u32, bool)) {
@@ -382,11 +383,11 @@ pub fn set_native_hook(f: fn(u32, bool)) {
 }
 
 thread_local! {
-    /// Appels de code d'origine en cours pendant l'inventaire : site de l'appel en Rust et routine appelée.
+    /// Calls of original code in progress during the inventory: call site in Rust and routine called.
     static CALLS: std::cell::RefCell<Vec<(&'static std::panic::Location<'static>, u32)>> = const { std::cell::RefCell::new(Vec::new()) };
 }
 
-/// Appel en cours (rendu à la fin de l'appel).
+/// Call in progress (restored at the end of the call).
 struct CallSite;
 
 impl CallSite {
@@ -402,14 +403,14 @@ impl Drop for CallSite {
     }
 }
 
-/// Inventaire : l'appel Rust le plus intérieur en cours (site et routine appelée), s'il y en a un. Le site est
-/// l'appel de `call` ou d'une de ses enveloppes (`Ctx::call`, `Cx::call`...).
+/// Inventory: the innermost Rust call in progress (site and routine called), if there is one. The site is
+/// the call of `call` or one of its wrappers (`Ctx::call`, `Cx::call`...).
 pub fn call_site() -> Option<(&'static std::panic::Location<'static>, u32)> {
     CALLS.with(|a| a.borrow().last().copied())
 }
 
-/// Exécuteur d'inventaire : routines natives, sinon une instruction 68000 à la fois, signalée à
-/// `set_trace`. Les durées ne sont pas contrôlées (le 68000 est surcadencé).
+/// Inventory executor: native routines, otherwise one 68000 instruction at a time, reported to
+/// `set_trace`. The durations are not checked (the 68000 is overclocked).
 pub fn run_traced(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, _dl: u64) -> Option<u32> {
     if let Some(n) = lookup(pc) {
         let hook = NATIVE_HOOK.get();
@@ -433,14 +434,14 @@ pub fn run_traced(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, _dl: u64) -> Option<u32
 }
 
 thread_local! {
-    /// Natives en cours d'exécution les unes dans les autres (appels par adresse, étapes).
+    /// Natives running inside one another (calls by address, steps).
     static DEPTH: std::cell::Cell<u32> = const { std::cell::Cell::new(0) };
 }
 
-/// Exécute une native. Une native de premier niveau (ordonnanceur, VBLANK, native enchaînée par un saut) commence sans
-/// cession en cours (`tasks::has_ceded`).
+/// Runs a native. A top-level native (scheduler, VBLANK, native chained by a jump) starts with no
+/// cession in progress (`tasks::has_ceded`).
 fn exec(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
-    /// Rend la profondeur, même si la native panique (outils qui rattrapent les paniques).
+    /// Restores the depth, even if the native panics (tools that catch panics).
     struct Level(u32);
     impl Drop for Level {
         fn drop(&mut self) {
@@ -454,7 +455,7 @@ fn exec(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
     n.execute(c, b);
 }
 
-/// Exécuteur : routine native si disponible, sinon bloc recompilé.
+/// Executor: native routine if available, otherwise recompiled block.
 pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     if let Some(n) = lookup(pc) {
         let limit = if n.touches_sound { dl } else { b.irq_horizon };
@@ -468,18 +469,18 @@ pub fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     ddsom_rc::run_block(pc, c, b, dl)
 }
 
-/// Exécute la native `n`, qui dure `duration` cycles, avec les diagnostics demandés : contrôle contre l'original
-/// (`DDSOM_CHECK`), registres repris de l'original (`DDSOM_ADOPT_REGS`), comptage des appels.
+/// Runs native `n`, which lasts `duration` cycles, with the requested diagnostics: check against the original
+/// (`DDSOM_CHECK`), registers taken from the original (`DDSOM_ADOPT_REGS`), call counting.
 fn execute(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, duration: u64) {
     if CHECK.load(Ordering::Relaxed) && checked(n) {
         check(n, c, b);
     } else if adopt_regs(n) {
-        // diagnostic : registres de sortie repris de l'original (registres hérités)
+        // diagnostics: output registers taken from the original (inherited registers)
         let c2 = original(n, c, b);
         exec(n, c, b);
         c.cycles += duration;
         if c.pc == c2.pc {
-            // DDSOM_ADOPT_MASK=hex : seuls les registres du masque (bits de `regs`) sont repris
+            // DDSOM_ADOPT_MASK=hex: only the registers of the mask (bits of `regs`) are taken
             let mask = adopt_mask();
             if std::env::var_os("DDSOM_ADOPT_TRACE").is_some() {
                 let d: Vec<String> = (0..8).filter(|&i| c.d[i] != c2.d[i]).map(|i| format!("d{i}={:08x}/{:08x}", c.d[i], c2.d[i])).chain((0..7).filter(|&i| c.a[i] != c2.a[i]).map(|i| format!("a{i}={:08x}/{:08x}", c.a[i], c2.a[i]))).collect();
@@ -506,14 +507,14 @@ fn execute(n: &Native, c: &mut Cpu, b: &mut Cps2Bus, duration: u64) {
     }
 }
 
-/// Natives qui tiennent leur état dans la table des tâches Rust (noyau, VBLANK, démarrage) : le code
-/// d'origine, qui le chercherait en RAM, ne doit jamais s'exécuter à leur place, même quand elles débordent sur
-/// l'interruption suivante (ce qui n'arrive que dans un appel de code d'origine qui dure).
+/// Natives that keep their state in the Rust task table (kernel, VBLANK, startup): the original
+/// code, which would look for it in RAM, must never run in their place, even when they overflow onto
+/// the next interrupt (which only happens in an original-code call that lasts).
 fn holds_table(n: &Native) -> bool {
     kernel::NATIVES.iter().any(|k| k.entry == n.entry)
 }
 
-/// Exécuteur : routines natives seulement (le reste est laissé à l'interpréteur). Outils de diagnostic.
+/// Executor: native routines only (the rest is left to the interpreter). Diagnostic tools.
 pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     let n = lookup(pc)?;
     let limit = if n.touches_sound { dl } else { b.irq_horizon };
@@ -527,31 +528,31 @@ pub fn run_native_only(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option
     Some(c.pc)
 }
 
-/// Début d'un pas de jeu dans la boucle principale (0x1c4b0 : `st (-0x660e,A5)` juste avant l'appel de la phase).
+/// Start of a game step in the main loop (0x1c4b0: `st (-0x660e,A5)` just before the call of the phase).
 pub const GAME_STEP: u32 = 0x1c4b0;
 
-/// Pas de jeu maximal par image.
+/// Maximum game steps per frame.
 ///
-/// La boucle principale (0x1c48c) cède d'ordinaire une image par pas (0xa40, D0 = 1). Mais quand un bouton est
-/// pressé à l'entrée d'une scène ou à l'attract, une tâche auxiliaire (entrée 13 de la table, 0xee080) remet la
-/// tâche principale prête à chaque passage de l'ordonnanceur : le jeu enchaîne ses pas sans attendre l'image
-/// (« avance rapide »). Le nombre de pas par image vaut alors (durée de l'image) / (durée d'un pas) : 5 à 10 sur
-/// l'arcade (mesuré à l'attract : 7-8, `examples/pc_hits` ; en jeu : 5-7 ; entrée de scène : 9-10) mais 128 à
-/// ×16, et il dépend de la durée des routines, donc diffère entre le code d'origine et les natives.
+/// The main loop (0x1c48c) usually cedes one frame per step (0xa40, D0 = 1). But when a button is
+/// pressed at a scene entry or in the attract mode, an auxiliary task (entry 13 of the table, 0xee080) makes the main
+/// task ready again at each pass of the scheduler: the game chains its steps without waiting for the frame
+/// ("fast forward"). The number of steps per frame is then (frame duration) / (step duration): 5 to 10 on
+/// the arcade (measured in the attract mode: 7-8, `examples/pc_hits`; in game: 5-7; scene entry: 9-10) but 128 at
+/// ×16, and it depends on the duration of the routines, hence differs between the original code and the natives.
 ///
-/// Écart volontaire avec le code d'origine surcadencé (pas avec l'arcade) : au plus `MAX_STEPS_PER_FRAME` pas
-/// par image, quelle que soit la fréquence du 68000 (`cps2::Machine::step_cap`). Appliqué à l'identique par le
-/// jeu (`install`) et par la machine de référence (`install_reference`), il rend ces phases déterministes.
+/// Deliberate difference from the overclocked original code (not from the arcade): at most `MAX_STEPS_PER_FRAME` steps
+/// per frame, whatever the 68000 frequency (`cps2::Machine::step_cap`). Applied identically by the
+/// game (`install`) and by the reference machine (`install_reference`), it makes these phases deterministic.
 pub const MAX_STEPS_PER_FRAME: u32 = 8;
 
-/// Plafonne les pas de jeu par image (`DDSOM_STEP_CAP=n` : autre valeur, 0 = sans plafond, diagnostic).
+/// Caps the game steps per frame (`DDSOM_STEP_CAP=n`: other value, 0 = no cap, diagnostics).
 fn cap_steps(m: &mut cps2::Machine) {
     let max = std::env::var("DDSOM_STEP_CAP").ok().and_then(|v| v.parse().ok()).unwrap_or(MAX_STEPS_PER_FRAME);
     m.step_cap = (max > 0).then(|| cps2::StepCap::new(GAME_STEP, max));
     m.patches = patches();
 }
 
-/// Correctifs communs au jeu et à la machine de référence (`cps2::Machine::patches`).
+/// Patches common to the game and the reference machine (`cps2::Machine::patches`).
 fn patches() -> Vec<cps2::Patch> {
     let mut v = vec![
         cps2::Patch { entry: player::scripted::END_BY_SCENE_ENTRY, apply: player::scripted::patch_end_by_scene },
@@ -562,55 +563,55 @@ fn patches() -> Vec<cps2::Patch> {
     v
 }
 
-/// Active les routines natives (et le code recompilé) sur la machine.
+/// Enables the native routines (and the recompiled code) on the machine.
 ///
-/// Le jeu est le jeu sans 68000 (`install_no_68k`). Le mode hybride (natives et code d'origine recompilé pour le reste,
-/// `DDSOM_HYBRIDE=1`) est retiré : les tâches sont des machines à états Rust lancées par un ordonnanceur Rust, et les
-/// appels en cours ne sont plus sur la pile 68000 ; le code d'origine ne pourrait plus prendre la suite d'une native au
-/// milieu d'une tâche. Seule la machine de référence (`install_reference`) exécute encore le 68000.
+/// The game is the game without a 68000 (`install_no_68k`). The hybrid mode (natives and recompiled original code for
+/// the rest, `DDSOM_HYBRIDE=1`) is removed: the tasks are Rust state machines launched by a Rust scheduler, and the
+/// pending calls are no longer on the 68000 stack; the original code could no longer take over from a native in
+/// the middle of a task. Only the reference machine (`install_reference`) still runs the 68000.
 pub fn install(m: &mut cps2::Machine) {
     install_no_68k(m);
 }
 
-/// `DDSOM_HYBRIDE=1` demandait le mode hybride, retiré (voir [`install`]) : arrêt avec un message.
+/// `DDSOM_HYBRIDE=1` asked for the hybrid mode, removed (see [`install`]): stop with a message.
 pub fn refuse_hybrid() {
     if std::env::var("DDSOM_HYBRIDE").is_ok_and(|v| v == "1") {
-        eprintln!("DDSOM_HYBRIDE=1 : le mode hybride est retiré (docs/refactorisation.md, lot « noyau final ») ; le jeu est le jeu sans 68000.");
+        eprintln!("DDSOM_HYBRIDE=1: the hybrid mode is removed (docs/refactorisation.md, batch « noyau final »); the game is the game without a 68000.");
         std::process::exit(2);
     }
 }
 
-/// Jeu sans 68000 : natives seules, boucle d'image du noyau (`no68k`). Le `Cpu` de la machine n'est plus qu'un banc
-/// de registres ; une adresse sans native arrête le jeu avec un diagnostic.
+/// Game without a 68000: natives only, kernel frame loop (`no68k`). The machine's `Cpu` is now only a register
+/// bench; an address without a native stops the game with a diagnostic.
 pub fn install_no_68k(m: &mut cps2::Machine) {
     cap_steps(m);
     no68k::install(m);
 }
 
-/// Machine de référence de la validation : code d'origine seul, avec le même plafond de pas que `install`.
+/// Validation reference machine: original code only, with the same step cap as `install`.
 pub fn install_reference(m: &mut cps2::Machine) {
     ddsom_rc::install(m);
     m.idle = Some(idle);
     cap_steps(m);
 }
 
-/// Machine de référence : l'ordonnanceur d'origine (0x932-0x95e) tourne à vide : aucune tâche prête (table FF0064)
-/// et pas de nouvelle image, ou seule la tâche du gel est prête et son prochain pas ne ferait rien
-/// (`tasks::freeze::idle_wait_original`). Le jeu a son propre critère (`no68k`).
+/// Reference machine: the original scheduler (0x932-0x95e) idles: no task ready (table FF0064)
+/// and no new frame, or only the freeze task is ready and its next step would do nothing
+/// (`tasks::freeze::idle_wait_original`). The game has its own criterion (`no68k`).
 pub fn idle(c: &Cpu, b: &Cps2Bus) -> bool {
-    const NEW_FRAME: usize = 0x164 / 2; // FF0164 (octet haut) : posé par le VBLANK, effacé au début d'un parcours
-    const TASKS: usize = 0x64 / 2; // FF0064 : 16 tâches de 16 octets, état dans l'octet haut
+    const NEW_FRAME: usize = 0x164 / 2; // FF0164 (high byte): set by VBLANK, cleared at the start of a walk
+    const TASKS: usize = 0x64 / 2; // FF0064: 16 tasks of 16 bytes, state in the high byte
     (0x932..0x960).contains(&c.pc)
         && b.ram[NEW_FRAME] >> 8 == 0
         && ((0..16).all(|t| b.ram[TASKS + 8 * t] >> 8 < 4) || tasks::freeze::idle_wait_original(&b.ram))
 }
 
 static CHECK: AtomicBool = AtomicBool::new(false);
-/// Compte les appels des routines natives hors mode contrôle (couverture).
+/// Counts the calls of the native routines outside check mode (coverage).
 static COUNT: AtomicBool = AtomicBool::new(false);
 
-/// Mode contrôle : comparer tous les registres, pas seulement le contrat (diagnostic d'un contrat
-/// incomplet ; beaucoup d'écarts sont alors sans conséquence).
+/// Check mode: compare all the registers, not just the contract (diagnosing an incomplete
+/// contract; many differences are then harmless).
 static CHECK_ALL: AtomicBool = AtomicBool::new(false);
 
 pub fn set_check_all(on: bool) {
@@ -626,9 +627,9 @@ pub struct Stats {
     pub calls: u64,
     pub mismatches: u64,
     pub first: Option<String>,
-    /// Dernier écart (outils de diagnostic).
+    /// Last difference (diagnostic tools).
     pub last: Option<String>,
-    /// Mode `CHECK_ALL` : nombre d'appels où chaque registre (D0-D7, A0-A7) diffère de l'original.
+    /// `CHECK_ALL` mode: number of calls where each register (D0-D7, A0-A7) differs from the original.
     pub regs: [u64; 16],
 }
 
@@ -638,15 +639,15 @@ pub fn set_check(on: bool) {
     CHECK.store(on, Ordering::Relaxed);
 }
 
-/// Bilan du mode contrôle par routine.
+/// Check mode summary per routine.
 pub fn report() -> BTreeMap<&'static str, Stats> {
     STATS.lock().unwrap().clone()
 }
 
-/// Exécute la routine d'origine sur une copie et la native sur l'état réel, puis compare.
-/// DDSOM_ADOPT_REGS=préfixe,... : les routines natives nommées ainsi rendent les registres de
-/// l'original (exécuté sur une copie). Si un écart disparaît, l'une d'elles laisse un registre
-/// qu'un appelant 68000 (ou le handler suivant) relit.
+/// Runs the original routine on a copy and the native on the real state, then compares.
+/// DDSOM_ADOPT_REGS=prefix,...: the native routines named this way return the registers of
+/// the original (run on a copy). If a difference disappears, one of them leaves a register
+/// that a 68000 caller (or the next handler) rereads.
 fn adopt_regs(n: &Native) -> bool {
     static PREFIXES: OnceLock<Vec<String>> = OnceLock::new();
     let p = PREFIXES.get_or_init(|| {
@@ -662,7 +663,7 @@ fn adopt_mask() -> u32 {
     })
 }
 
-/// Exécute la routine d'origine sur une copie de la machine jusqu'à son retour ; rend le CPU obtenu.
+/// Runs the original routine on a copy of the machine until its return; returns the resulting CPU.
 fn original(n: &Native, c: &Cpu, b: &Cps2Bus) -> Cpu {
     let (mut c2, mut b2) = (c.clone(), b.clone());
     stack_for_original(n, &mut c2, &mut b2);
@@ -674,14 +675,14 @@ fn original(n: &Native, c: &Cpu, b: &Cps2Bus) -> Cpu {
             c2.step(&mut b2);
         }
         guard += 1;
-        assert!(guard < 1_000_000, "{} : la routine d'origine ne revient pas", n.name);
+        assert!(guard < 1_000_000, "{}: the original routine does not return", n.name);
     }
     c2
 }
 
-/// Contrôle d'une native dans le jeu (appelée par du Rust : son retour est un appel en cours tenu en Rust, pas une
-/// adresse empilée) : la copie qui exécute l'original reçoit une adresse de retour sentinelle, et part de l'entrée de la
-/// native (le PC du banc n'est pas tenu sans 68000 : `call` ne le pose pas).
+/// Check of a native in the game (called from Rust: its return is a call in progress held in Rust, not a pushed
+/// address): the copy that runs the original receives a sentinel return address, and starts from the entry of the
+/// native (the bench PC is not maintained without a 68000: `call` does not set it).
 fn stack_for_original(n: &Native, c2: &mut Cpu, b2: &mut Cps2Bus) {
     if no68k::active() {
         c2.a[7] = c2.a[7].wrapping_sub(4);
@@ -690,8 +691,8 @@ fn stack_for_original(n: &Native, c2: &mut Cpu, b2: &mut Cps2Bus) {
     }
 }
 
-/// `DDSOM_CHECK_ONLY=préfixe,...` : seules les natives nommées sont contrôlées (les autres, dont celles
-/// du noyau qui ne reviennent jamais à leur appelant, s'exécutent sans contrôle).
+/// `DDSOM_CHECK_ONLY=prefix,...`: only the named natives are checked (the others, including those
+/// of the kernel that never return to their caller, run without a check).
 fn checked(n: &Native) -> bool {
     static ONLY: OnceLock<Option<Vec<String>>> = OnceLock::new();
     let only = ONLY.get_or_init(|| std::env::var("DDSOM_CHECK_ONLY").ok().map(|v| v.split(',').map(str::to_owned).collect()));
@@ -699,7 +700,7 @@ fn checked(n: &Native) -> bool {
 }
 
 fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
-    // dans le jeu, une native ne pose pas de PC au retour
+    // in the game, a native does not set a PC on return
     let by_frame = no68k::active();
     let pre = if std::env::var("DDSOM_TRACE_ORIG").map_or(false, |v| n.name == v) { Some((c.clone(), b.clone())) } else { None };
     let mut c2 = c.clone();
@@ -713,7 +714,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
             c2.step(&mut b2);
         }
         guard += 1;
-        assert!(guard < 1_000_000, "{} : la routine d'origine ne revient pas", n.name);
+        assert!(guard < 1_000_000, "{}: the original routine does not return", n.name);
     }
     n.execute(c, b);
     let mut diffs = Vec::new();
@@ -721,26 +722,27 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
     let outputs = if CHECK_ALL.load(Ordering::Relaxed) { regs::ALL } else { n.outputs };
     for i in 0..8 {
         if outputs & regs::d(i as u32) != 0 && c.d[i] != c2.d[i] {
-            diffs.push(format!("d{i}={:08x} au lieu de {:08x}", c.d[i], c2.d[i]));
+            diffs.push(format!("d{i}={:08x} instead of {:08x}", c.d[i], c2.d[i]));
             reg_diffs[i] = true;
         }
-        // A7 (pile) doit toujours être rétabli
+        // A7 (stack) must always be restored
         if (outputs & regs::a(i as u32) != 0 || i == 7) && c.a[i] != c2.a[i] {
-            diffs.push(format!("a{i}={:08x} au lieu de {:08x}", c.a[i], c2.a[i]));
+            diffs.push(format!("a{i}={:08x} instead of {:08x}", c.a[i], c2.a[i]));
             reg_diffs[8 + i] = true;
         }
     }
     let sr_mask = if outputs & regs::CCR != 0 { 0xffff } else { 0xff00 };
     if c.sr & sr_mask != c2.sr & sr_mask {
-        diffs.push(format!("sr={:04x} au lieu de {:04x}", c.sr, c2.sr));
+        diffs.push(format!("sr={:04x} instead of {:04x}", c.sr, c2.sr));
     }
     if !by_frame && c.pc != c2.pc {
-        diffs.push(format!("pc={:06x} au lieu de {:06x}", c.pc, c2.pc));
+        diffs.push(format!("pc={:06x} instead of {:06x}", c.pc, c2.pc));
     }
     let sp = c2.a[7] & 0xff_ffff;
     mem::diff_bus(b, &b2, sp.saturating_sub(0x400)..sp, &mut diffs);
-    // On reprend la durée réelle de l'original. Les registres hors contrat gardent les valeurs de la routine native : si un
-    // appelant en dépendait (contrat incomplet), la suite divergera et la validation le verra.
+    // The real duration of the original is taken. The registers outside the contract keep the values of the native
+    // routine: if a caller depended on them (incomplete contract), the continuation will diverge and validation will
+    // see it.
     c.cycles = c2.cycles;
     if let (Some((mut c3, mut b3)), false) = (pre, diffs.is_empty()) {
         eprintln!("TRACE {} A0={:06x}: {}", n.name, c3.a[0], diffs.join(", "));
@@ -768,7 +770,7 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
             s.first = Some(diffs.join(", "));
         }
         s.last = Some(diffs.join(", "));
-        // on garde l'état d'origine pour ne pas propager l'écart
+        // the original state is kept so as not to propagate the difference
         *c = c2;
         *b = b2;
     }
@@ -780,7 +782,7 @@ mod tests {
     fn unique_inputs() {
         let mut views = std::collections::HashSet::new();
         for n in super::all_natives() {
-            assert!(views.insert(n.entry), "{:06x} ({}) remplacée deux fois", n.entry, n.name);
+            assert!(views.insert(n.entry), "{:06x} ({}) replaced twice", n.entry, n.name);
         }
     }
 }

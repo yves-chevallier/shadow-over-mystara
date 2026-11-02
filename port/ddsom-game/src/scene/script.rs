@@ -1,20 +1,20 @@
-//! Lecteur de script d'apparition (`0xf2e5c`) : fait entrer ennemis, décors et objets au fil du défilement.
+//! Spawn script reader (`0xf2e5c`): brings in enemies, terrain and objects as the screen scrolls.
 //!
-//! Chaque scène a un script en ROM (table de pointeurs `0xf2f62`, un long par scène) : une suite
-//! d'entrées triées par abscisse de caméra croissante. Le lecteur tourne à chaque image de jeu (et
-//! d'entrée de scène) ; il consomme les entrées dont l'abscisse est atteinte par la caméra, puis
-//! attend. Deux formats d'entrée, distingués par le mot `+2` :
+//! Each scene has a script in ROM (pointer table `0xf2f62`, one long per scene): a sequence
+//! of entries sorted by increasing camera x position. The reader runs every game frame (and
+//! at scene entry); it consumes the entries whose x position the camera has reached, then
+//! waits. Two entry formats, distinguished by word `+2`:
 //!
-//! | Entrée | Taille | Contenu |
+//! | Entry | Size | Content |
 //! |---|---|---|
-//! | apparition | 0x12 | `+0` abscisse de déclenchement, `+2` décalage en X, `+4` Z, `+6` Y, `+8` rang maximal, `+9` joueurs minimaux, `+0xb` classe (octet pair, index dans la table des allocateurs), `+0xc` `+0x2c`, `+0xd` type, `+0xe` variante, `+0xf` `+0x2f`, `+0x10` mot `+0x42` de l'objet |
-//! | appel | 10 | `+0` abscisse, `+2` = 0xffff, `+4` adresse d'une routine (long), `+8` son argument D0 (mot) |
+//! | spawn | 0x12 | `+0` trigger x position, `+2` X offset, `+4` Z, `+6` Y, `+8` maximum rank, `+9` minimum players, `+0xb` class (even byte, index into the allocator table), `+0xc` `+0x2c`, `+0xd` type, `+0xe` variant, `+0xf` `+0x2f`, `+0x10` word `+0x42` of the object |
+//! | call | 10 | `+0` x position, `+2` = 0xffff, `+4` address of a routine (long), `+8` its D0 argument (word) |
 //!
-//! Un mot `+0` égal à 0xffff termine le script. Une apparition dont le rang dépasse le maximum de
-//! l'entrée (`A5+0x7f93`) ou qui exige plus de joueurs que `A5+0x35` est sautée ; si le pool de la
-//! classe est plein, la lecture s'arrête et reprend à la même entrée à l'image suivante.
+//! A word `+0` equal to 0xffff ends the script. A spawn whose rank exceeds the entry's maximum
+//! (`A5+0x7f93`) or that requires more players than `A5+0x35` is skipped; if the class's
+//! pool is full, reading stops and resumes at the same entry on the next frame.
 //!
-//! États (octet `A5-0x55cc`) : 0 charge le script de la scène, 2 lit, 4 passe à 6, 6 fini.
+//! States (byte `A5-0x55cc`): 0 loads the scene's script, 2 reads, 4 moves to 6, 6 done.
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
@@ -25,15 +25,15 @@ use crate::objects::{pools, Obj};
 use crate::scene::var;
 use crate::Native;
 
-/// État du lecteur (octet) et curseur dans le script (long).
+/// Reader state (byte) and cursor in the script (long).
 const STATE: u32 = A5 - 0x55cc;
 const CURSOR: u32 = A5 - 0x55d0;
-/// Table des scripts (un long par scène, en données) et des allocateurs par classe (mots, espace programme).
+/// Script table (one long per scene, as data) and per-class allocators (words, program space).
 const SCRIPTS: u32 = 0xf2f62;
 const ALLOCATORS: u32 = 0xf2f38;
-/// Table de branchement des états (mots, espace programme).
+/// State branch table (words, program space).
 const STATE_JUMPS: u32 = 0xf2e70;
-/// Rang du jeu (octet bas du mot `A5+0x7f92`).
+/// Game rank (low byte of word `A5+0x7f92`).
 const RANK: u32 = 0x7f93;
 
 mod state {
@@ -42,13 +42,13 @@ mod state {
     pub const ENDING: u8 = 4;
 }
 
-/// Fin du script (mot `+0`) et marque d'une entrée d'appel (mot `+2`).
+/// End of script (word `+0`) and mark of a call entry (word `+2`).
 const END: u16 = 0xffff;
 const CALL_MARK: u16 = 0xffff;
 const CALL_ENTRY_SIZE: u32 = 10;
 const SPAWN_ENTRY_SIZE: u32 = 0x12;
 
-/// Champs d'une entrée d'apparition.
+/// Fields of a spawn entry.
 mod entry {
     pub const TRIGGER_X: u32 = 0;
     pub const OFFSET_X: u32 = 2;
@@ -81,7 +81,7 @@ fn script_routine(c: &mut Cpu, b: &mut Cps2Bus, routine: u32, arg: u16) {
     }
 }
 
-/// Un pas du lecteur (une image).
+/// One reader step (one frame).
 pub fn step(c: &mut Cpu, b: &mut Cps2Bus) {
     if rd8(b, A5 + var::PLAYERS) == 0 {
         return;
@@ -135,13 +135,13 @@ pub fn step(c: &mut Cpu, b: &mut Cps2Bus) {
 
 #[derive(PartialEq)]
 enum Spawn {
-    /// Créé, ou sauté (rang ou nombre de joueurs insuffisant).
+    /// Created, or skipped (rank or number of players insufficient).
     Done,
-    /// Pas de place dans le pool : on réessaie à l'image suivante.
+    /// No room in the pool: retry on the next frame.
     PoolFull,
 }
 
-/// Une entrée d'apparition.
+/// A spawn entry.
 fn spawn(c: &mut Cpu, b: &mut Cps2Bus, e: u32) -> Spawn {
     let max_rank = rd8(b, e + entry::MAX_RANK);
     set_low_byte(&mut c.d[6], max_rank);
@@ -182,23 +182,23 @@ fn spawn(c: &mut Cpu, b: &mut Cps2Bus, e: u32) -> Spawn {
     Spawn::Done
 }
 
-/// Le pool de la classe `class` (octet pair) : la table des allocateurs (0xf2f38, mots de l'espace programme) donne
-/// l'adresse de la routine d'allocation de l'un des pools.
+/// The pool of class `class` (even byte): the allocator table (0xf2f38, program-space words) gives
+/// the address of the allocation routine of one of the pools.
 fn pool_of_class(b: &mut Cps2Bus, class: u16) -> &'static pools::Pool {
     let alloc = b.fetch16(ALLOCATORS + class as i16 as i32 as u32) as i16 as i32 as u32 & 0xff_ffff;
     pools::POOLS
         .into_iter()
         .find(|p| p.alloc_routine == alloc)
-        // la dixième entrée (0x226e) n'est l'allocateur d'aucun pool : aucun script ne l'emploie
-        .unwrap_or_else(|| unreachable!("script d'apparition : classe {class:#x} sans allocateur ({alloc:#x})"))
+        // the tenth entry (0x226e) is the allocator of no pool: no script uses it
+        .unwrap_or_else(|| unreachable!("spawn script: class {class:#x} without allocator ({alloc:#x})"))
 }
 
-/// Remet le lecteur à l'état « charger le script » (0xf2e56, changement de scène).
+/// Resets the reader to the "load the script" state (0xf2e56, scene change).
 pub fn reset(b: &mut Cps2Bus) {
     wr8(b, STATE, state::LOAD);
 }
 
-/// Entrées des deux routines.
+/// Entries of the two routines.
 pub const SPAWN_ENTRY: u32 = 0xf2e5c;
 pub const RESET_ENTRY: u32 = 0xf2e56;
 
@@ -213,7 +213,7 @@ pub const SPAWN_SCRIPT: Native = Native {
     outputs: 0,
 };
 
-/// Remet le lecteur à l'état « charger le script » (changement de scène).
+/// Resets the reader to the "load the script" state (scene change).
 pub const SCRIPT_RESET: Native = Native {
     entry: RESET_ENTRY,
     name: "scene_script_reset",

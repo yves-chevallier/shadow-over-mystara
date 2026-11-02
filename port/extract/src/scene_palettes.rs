@@ -1,4 +1,4 @@
-//! Palettes des scènes : tables qui désignent, par scène, les palettes de la bibliothèque à charger
+//! Scene palettes: tables that designate, per scene, the library palettes to load
 //! (`ddsom-game/src/palette.rs`, docs/video.md V3).
 
 use std::io;
@@ -11,7 +11,7 @@ use crate::rom::Program;
 
 const LIBRARY: u32 = 0x253000;
 const STAGES: u32 = 0x2ae81e;
-/// Scènes 0 à 114 (les tables par scène s'arrêtent là : la suite est du code ou d'autres données).
+/// Scenes 0 to 114 (the per-scene tables stop there: what follows is code or other data).
 const SCENES: u32 = 115;
 
 fn table(rom: &Program, at: u32, program: bool, count: u32, n: u32) -> AddressTable {
@@ -28,7 +28,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
             *p = match w {
                 0xffff => -1,
                 w if w < 0x8000 && w % 32 == 0 => (w / 32) as i16,
-                _ => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("scène {s:#x} : déplacement {w:#x}"))),
+                _ => return Err(io::Error::new(io::ErrorKind::InvalidData, format!("scene {s:#x}: displacement {w:#x}"))),
             };
         }
         stages.push(list);

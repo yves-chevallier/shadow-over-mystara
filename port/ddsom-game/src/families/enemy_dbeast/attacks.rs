@@ -1,8 +1,8 @@
-//! Type 19, les coups de la bête (sous-état `+5 = 4`, 0x72faa) : `+6` choisit le coup, `+7` ses étapes.
+//! Type 19, the beast's attacks (substate `+5 = 4`, 0x72faa): `+6` chooses the attack, `+7` its steps.
 //!
-//! Tous les coups commencent de la même façon : `+7 = 0` la bête se prépare (animation de repos),
-//! `+7 = 2` elle suit sa cible du regard (demi-tour si elle est derrière) ; les étapes suivantes
-//! sont propres au coup. Quand le coup est fini, `next_move` enchaîne ou remet la bête debout.
+//! All attacks start the same way: `+7 = 0` the beast gets ready (rest animation), `+7 = 2` it follows its target with
+//! its gaze (turns around if the target is behind); the following steps are specific to the attack. When the attack is
+//! over, `next_move` chains on or puts the beast back on its feet.
 
 use crate::families::cx::Bench;
 use crate::families::eshl_creators;
@@ -11,7 +11,7 @@ use super::stance::{engage, next_move};
 use super::*;
 use crate::objects::Current;
 
-/// État long à reprendre après un demi-tour : sous-état 4 (ici) ou 6 (`attacks_b`).
+/// Long state to resume after a turn-around: substate 4 (here) or 6 (`attacks_b`).
 pub(super) const RESUME_ATTACK: u32 = 0x0204_0000;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -37,9 +37,9 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- étapes communes ----------------------------------------------------------------------------
+// --- common steps ----------------------------------------------------------------------------
 
-/// +7 = 0 (0x72e80) : la bête se prépare (animation de repos).
+/// +7 = 0 (0x72e80): the beast gets ready (rest animation).
 pub(super) fn ready<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 1);
@@ -50,8 +50,8 @@ pub(super) fn ready<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +7 = 2 (0x72ffc / 0x72ff0) : elle suit sa cible du regard pendant `+0x77` images (demi-tour au
-/// besoin, puis reprise de l'attaque `resume`).
+/// +7 = 2 (0x72ffc / 0x72ff0): it follows its target with its gaze for `+0x77` frames (turns around if needed, then
+/// resumes the attack `resume`).
 pub(super) fn track<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
     x.set32(RESUME_STATE, resume);
     let n = x.u8(AI_KICK).wrapping_sub(1);
@@ -67,7 +67,7 @@ pub(super) fn track<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
     step(x);
 }
 
-/// Les trois premières étapes communes, puis `later(étape)` pour les autres.
+/// The first three common steps, then `later(step)` for the others.
 pub(super) fn phased<'a, R: Bench>(x: &mut Cx<'a, R>, resume: u32, later: impl FnOnce(&mut Cx<'a, R>, u8)) {
     match x.u8(0x7) {
         0 => ready(x),
@@ -76,13 +76,13 @@ pub(super) fn phased<'a, R: Bench>(x: &mut Cx<'a, R>, resume: u32, later: impl F
     }
 }
 
-/// Ce que doit faire un coup quand il voudrait jouer son animation `+0xa5`.
+/// What an attack must do when it wants to play its animation `+0xa5`.
 pub(super) enum Replay {
-    /// Une autre animation tournait : la lancer.
+    /// Another animation was running: start it.
     New,
-    /// La même tournait déjà : une répétition de moins (`+0xae`), il en reste.
+    /// The same one was already running: one repetition fewer (`+0xae`), some remain.
     Again,
-    /// Plus de répétition : la bête est remise debout.
+    /// No more repetitions: the beast is put back on its feet.
     End,
 }
 
@@ -101,7 +101,7 @@ pub(super) fn replay<R: Bench>(x: &mut Cx<'_, R>) -> Replay {
     Replay::Again
 }
 
-/// Début d'un coup : étape suivante, vulnérabilité, animation voulue, force du coup.
+/// Start of an attack: next step, vulnerability, wanted animation, strength of the attack.
 fn strike_begin<R: Bench>(x: &mut Cx<'_, R>, vulnerable: u8, want: u8, power: u8, kind: u8) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, vulnerable);
@@ -110,14 +110,14 @@ fn strike_begin<R: Bench>(x: &mut Cx<'_, R>, vulnerable: u8, want: u8, power: u8
     x.set8(WANT_ANIM, want);
 }
 
-/// Lance l'animation `n` de la série des coups, sauf si la série de répétitions est finie.
+/// Starts animation `n` of the attack series, unless the series of repetitions is over.
 fn strike_play<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
     if !matches!(replay(x), Replay::End) {
         play_b(x, n);
     }
 }
 
-/// Fin d'animation d'un coup, retour au repos puis choix du coup suivant.
+/// End of an attack animation, back to rest then choice of the next attack.
 fn strike_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         play(x, 0);
@@ -125,14 +125,14 @@ fn strike_end<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Fin d'animation d'un coup, choix immédiat du coup suivant (0x73108).
+/// End of an attack animation, immediate choice of the next attack (0x73108).
 fn strike_end_quick<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         next_move(x);
     }
 }
 
-/// Un tir lancé (0x9dda8 ou 0x9e062), quand l'image-clé est atteinte.
+/// A launched shot (0x9dda8 or 0x9e062), when the key frame is reached.
 fn key_throw<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
@@ -140,7 +140,7 @@ fn key_throw<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::o
     }
 }
 
-/// Direction de marche : vers la droite (8) ou la gauche (0x18) selon l'orientation.
+/// Walking direction: to the right (8) or the left (0x18) according to the orientation.
 fn walk_angle<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) == 0 {
@@ -152,7 +152,7 @@ fn random_bit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     random(x) & 1 != 0
 }
 
-// --- les coups ----------------------------------------------------------------------------------
+// --- the attacks ----------------------------------------------------------------------------------
 
 /// 0x72fdc : coup de patte rapide.
 fn jab<R: Bench>(x: &mut Cx<'_, R>) {
@@ -178,7 +178,7 @@ fn jab_b<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x73118 : avance puis bondit sur un joueur en le griffant.
+/// 0x73118: advances then leaps on a player, clawing.
 fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
@@ -216,7 +216,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x731da : deux ou trois coups de patte d'affilée.
+/// 0x731da: two or three paw strikes in a row.
 fn double_strike<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
@@ -267,7 +267,7 @@ fn claw_pair<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// Bond griffes dehors, vitesse initiale en X `vx` (0x7337a et ses trois entrées).
+/// Leap with claws out, initial X speed `vx` (0x7337a and its three entry points).
 fn leap_strike_start<R: Bench>(x: &mut Cx<'_, R>, vx: i16) {
     strike_begin(x, 1, 0x2f, 6, 2);
     let vx = if x.u8(f::FLIP) != 0 { vx.wrapping_neg() } else { vx };
@@ -275,7 +275,7 @@ fn leap_strike_start<R: Bench>(x: &mut Cx<'_, R>, vx: i16) {
     strike_play(x, 5);
 }
 
-/// Retombée d'un bond griffu : attendre l'image-clé, atterrir, finir l'animation.
+/// Landing of a clawing leap: wait for the key frame, land, finish the animation.
 fn leap_landing<R: Bench>(x: &mut Cx<'_, R>, n: u8, first: u8) {
     match n.wrapping_sub(first) {
         0 => bound_wait(x),
@@ -292,7 +292,7 @@ fn leap_strike<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x73754 : le même bond, plus rapide.
+/// 0x73754: the same leap, faster.
 fn leap_strike_b<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => leap_strike_start(x, -0x300),
@@ -312,7 +312,7 @@ fn jump_in<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x7346a : prend son élan.
+/// 0x7346a: takes a run-up.
 fn crouch<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
@@ -327,7 +327,7 @@ fn crouch<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x734a8 : saute sur place plusieurs fois (le nombre est tiré dans une table).
+/// 0x734a8: jumps in place several times (the number is drawn from a table).
 fn pounce<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => pounce_start(x),
@@ -336,7 +336,7 @@ fn pounce<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// Tire le nombre de sauts sur place (table de la ROM en 0x73516).
+/// Draws the number of jumps in place (ROM table at 0x73516).
 pub(super) fn roll_pounces<R: Bench>(x: &mut Cx<'_, R>) {
     const COUNTS: u32 = 0x73516;
     let r = random(x) & 0x1f;
@@ -344,7 +344,7 @@ pub(super) fn roll_pounces<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(REPEAT, count);
 }
 
-/// 0x734bc : début d'une série de sauts sur place.
+/// 0x734bc: start of a series of jumps in place.
 fn pounce_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 1);
@@ -355,7 +355,7 @@ fn pounce_start<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x73536 : un saut sur place fini ; au hasard un cri accompagne l'image-clé.
+/// 0x73536: a jump in place is over; at random a cry accompanies the key frame.
 pub(super) fn pounce_repeat<R: Bench>(x: &mut Cx<'_, R>) {
     const SOUNDS: u32 = 0x73584;
     if x.u8(f::KEY_FRAME) != 0 {
@@ -376,7 +376,7 @@ pub(super) fn pounce_repeat<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x73594 : saut périlleux.
+/// 0x73594: somersault.
 fn backflip<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
@@ -410,7 +410,7 @@ fn backflip<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x7365e : fait demi-tour en courant, repart vers le joueur puis s'arrête.
+/// 0x7365e: turns around while running, heads back toward the player then stops.
 fn turn_run<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
@@ -455,7 +455,7 @@ fn turn_run<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// Début d'une griffe (0x73786, 0x7382c) : animation 4 de la série des coups.
+/// Start of a claw (0x73786, 0x7382c): animation 4 of the attack series.
 fn claw_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(WANT_ANIM, 0x2e);
@@ -463,7 +463,7 @@ fn claw_begin<R: Bench>(x: &mut Cx<'_, R>) {
     strike_play(x, 4);
 }
 
-/// Fin d'une griffe simple : son d'impact, puis repos et coup suivant.
+/// End of a simple claw: impact sound, then rest and next attack.
 fn claw_end<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     key_throw(x, throw);
     strike_end(x);
@@ -478,7 +478,7 @@ fn claw<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x737fe : griffe, autre son.
+/// 0x737fe: claw, other sound.
 fn claw_b<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => claw_begin(x),
@@ -487,7 +487,7 @@ fn claw_b<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// Fin d'une griffe d'une série de `+0xab` : la dernière ramène au repos.
+/// End of a claw in a series of `+0xab`: the last one brings it back to rest.
 fn series_end<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     key_throw(x, throw);
     if x.anim_step() {
@@ -501,7 +501,7 @@ fn series_end<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::
     }
 }
 
-/// 0x738a4 : une griffe, puis coup suivant.
+/// 0x738a4: one claw, then next attack.
 fn claw_series<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
@@ -513,7 +513,7 @@ fn claw_series<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x73904 : une ou deux griffes.
+/// 0x73904: one or two claws.
 fn claw_series_b<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
@@ -526,7 +526,7 @@ fn claw_series_b<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x73964 : griffe puis bond griffu.
+/// 0x73964: claw then clawing leap.
 fn claw_leap<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => claw_begin(x),

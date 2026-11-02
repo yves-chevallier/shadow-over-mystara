@@ -1,15 +1,15 @@
-//! Boss 21, groupe `+5` = 4 : les attaques (`+6` = 0 à 16), chacune en étapes `+7`.
+//! Boss 21, group `+5` = 4: the attacks (`+6` = 0 to 16), each in steps `+7`.
 //!
-//! | `+6` | Attaque |
+//! | `+6` | Attack |
 //! |---|---|
-//! | 0 | coup simple (animation 0 du jeu des coups) |
-//! | 2 | coup avec effet 0x32 à l'image-clé |
-//! | 4 | bond en avant, effet 0x32 (variante 3), poussée de 0x900 |
-//! | 6 | saut sur la cible avec retombée, effet 0x32 (variante 2) |
-//! | 8, 10 | tir ESHL 0x20 (rayon), `+0xb2` en compte les restants |
-//! | 12 | tir ESHL 0x21 en cinématique (`A5+0x51e` = 4), `+0xb3` en compte les restants |
-//! | 14 | lâcher d'objets autour de la caméra (`+0xb4`) |
-//! | 16 | tourbillon : entrée dans le ralenti |
+//! | 0 | simple hit (animation 0 of the hits set) |
+//! | 2 | hit with effect 0x32 at the key frame |
+//! | 4 | forward leap, effect 0x32 (variant 3), push of 0x900 |
+//! | 6 | jump onto the target with landing, effect 0x32 (variant 2) |
+//! | 8, 10 | ESHL 0x20 shot (beam), `+0xb2` counts the remaining ones |
+//! | 12 | ESHL 0x21 shot in cutscene (`A5+0x51e` = 4), `+0xb3` counts the remaining ones |
+//! | 14 | dropping objects around the camera (`+0xb4`) |
+//! | 16 | whirlwind: entry into slow motion |
 
 use crate::families::cx::Bench;
 use super::decide;
@@ -31,19 +31,19 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Anime l'attaque `n` du jeu des coups et fixe le jeu courant (`+0xa0` et `+0xa1`).
+/// Animates attack `n` of the hits set and sets the current set (`+0xa0` and `+0xa1`).
 fn strike_anim<R: Bench>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
     strike(x, n);
 }
 
-/// Fin d'une attaque : retour au combat (l'hôte mort et l'absence de joueurs l'emportent).
+/// End of an attack: return to combat (the dead host and the absence of players take precedence).
 fn finish<R: Bench>(x: &mut Cx<'_, R>, to: fn(&mut Cx<'_, R>)) {
     decide::after_attack(x, to);
 }
 
-/// Consomme l'image-clé `+0x33` ; vrai si elle était levée.
+/// Consumes the key frame `+0x33`; true if it was raised.
 fn take_key<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(f::KEY_FRAME) == 0 {
         return false;
@@ -52,7 +52,7 @@ fn take_key<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// Un effet 0x32 lié au boss avec la variante `v` (poussière, étincelles...), sans insister.
+/// An effect 0x32 linked to the boss with variant `v` (dust, sparks...), without insisting.
 fn puff<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     effect(x, false, 0x32, Some(v), true);
 }
@@ -77,7 +77,7 @@ fn strike_0<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 2 : coup avec effet ------------------------------------------------------------------
+// --- +6 = 2: hit with effect ------------------------------------------------------------------
 
 fn strike_2<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
@@ -98,7 +98,7 @@ fn strike_2<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 4 : bond en avant --------------------------------------------------------------------
+// --- +6 = 4: forward leap --------------------------------------------------------------------
 
 fn strike_4<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
@@ -155,10 +155,10 @@ fn strike_4<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 6 : saut sur la cible ------------------------------------------------------------------
+// --- +6 = 6: jump onto the target ------------------------------------------------------------------
 
-/// Distance parcourue en X pour atteindre le joueur visé (`+0x50`) à la vitesse courante, convertie en vitesse
-/// verticale de saut : 0x100 + 0xe par pas de vitesse nécessaire.
+/// Distance covered in X to reach the targeted player (`+0x50`) at the current speed, converted into the vertical
+/// jump speed: 0x100 + 0xe per step of required speed.
 fn leap_speed<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     let target = x.linked(f::TARGET);
     let mut gap = x.u32(0x8).wrapping_sub(target.u32(x.b, 0x8)) as i32;
@@ -170,7 +170,7 @@ fn leap_speed<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
         per_step = per_step.wrapping_neg();
     }
     let mut v = 0x100u16;
-    // l'original boucle tant que le reste est positif ; une vitesse nulle ne finirait jamais
+    // the original loops while the remainder is positive; a zero speed would never finish
     for _ in 0..0x10000 {
         gap = gap.wrapping_sub(per_step);
         if gap <= 0 {
@@ -197,7 +197,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             body(x, 5);
         }
         2 => {
-            // 0x99e52 : `jsr 0x1a56`, un pas d'animation sans recopie de la sorte de coup (`+0x44`)
+            // 0x99e52: `jsr 0x1a56`, one animation step without copying the hit kind (`+0x44`)
             x.anim_step();
             if x.u8(f::KEY_FRAME) != 0 {
                 return;
@@ -241,7 +241,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 8 et 10 : rayon ------------------------------------------------------------------------
+// --- +6 = 8 and 10: beam ------------------------------------------------------------------------
 
 fn beam<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
@@ -263,7 +263,7 @@ fn beam<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(0x7, 2);
             x.set16(TIMER, 0x14);
-            // pas de place : on saute à la dernière étape
+            // no room: jump to the last step
             let Some(shot) = x.alloc(&pools::ESHL) else { return beam_end_anim(x) };
             x.set16(CHILD, shot.0 as u16);
             shot.set_u8(x.b, 0, 1);
@@ -315,7 +315,7 @@ fn beam_end_anim<R: Bench>(x: &mut Cx<'_, R>) {
     strike(x, 8);
 }
 
-// --- +6 = 12 : tir en cinématique ---------------------------------------------------------------
+// --- +6 = 12: shot in cutscene ---------------------------------------------------------------
 
 fn cinematic_shot<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
@@ -398,7 +398,7 @@ fn step_only<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// La clé est levée ? (sans la consommer ici : l'original la consomme plus loin).
+/// Is the key raised? (without consuming it here: the original consumes it further on).
 fn take_key_keep<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.u8(f::KEY_FRAME) != 0
 }
@@ -409,7 +409,7 @@ fn cinematic_end<R: Bench>(x: &mut Cx<'_, R>) {
     strike(x, 0xa);
 }
 
-// --- +6 = 14 : lâcher d'objets --------------------------------------------------------------------
+// --- +6 = 14: dropping objects --------------------------------------------------------------------
 
 fn summon<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
@@ -454,7 +454,7 @@ fn summon<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 16 : tourbillon (entrée dans le ralenti) ------------------------------------------------
+// --- +6 = 16: whirlwind (entry into slow motion) ------------------------------------------------
 
 fn whirl<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {

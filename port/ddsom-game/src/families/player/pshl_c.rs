@@ -1,5 +1,5 @@
-//! Tirs des joueurs (PSHL), troisième série : types 12 à 17 (objets lancés des magiciens et du
-//! clerc : jarre, flèches, gerbes de flamme). Voir `docs/families/player.md`.
+//! Player shots (PSHL), third series: types 12 to 17 (objects thrown by the wizards and the cleric: jar, arrows, bursts
+//! of flame). See `docs/families/player.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -18,14 +18,14 @@ const COUNTER_14: u32 = 0xff2046;
 const COUNTER_15: u32 = 0xff2048;
 const COUNTER_16: u32 = 0xff204a;
 
-/// Décrémente un compteur de la RAM (`subq.w #1`).
+/// Decrements a RAM counter (`subq.w #1`).
 fn decrement<R: Bench>(x: &mut Cx<'_, R>, address: u32) {
     let v = rd16(x.b, address).wrapping_sub(1);
     wr16(x.b, address, v);
 }
 
-/// Type 12 (0x530bc) : jet de flammes. Variante 0 : projectile à vitesse longue (comme le type 3) qui
-/// retombe et crée trois gerbes (variante 1) ; variante 1 : gerbe qui attend `+0x5c` images puis brûle.
+/// Type 12 (0x530bc): jet of flames. Variant 0: projectile with long speed (like type 3) that falls back and creates
+/// three bursts (variant 1); variant 1: burst that waits `+0x5c` frames then burns.
 mod jet {
     use super::*;
 
@@ -111,8 +111,8 @@ mod jet {
     }
 }
 
-/// Type 13 (0x53290) : objet lancé consommant un objet d'inventaire (jeu 0x15b0a2) ; il retombe avec
-/// la vitesse que lui a donnée son créateur.
+/// Type 13 (0x53290): thrown object consuming an inventory item (set 0x15b0a2); it falls back with the speed its
+/// creator gave it.
 mod item {
     use super::*;
 
@@ -157,7 +157,7 @@ mod item {
     }
 }
 
-/// Type 14 (0x53412) : flamme de jet (compteur `A5-0x5fba`) qui attend `+0x5c` images puis brûle.
+/// Type 14 (0x53412): jet flame (counter `A5-0x5fba`) that waits `+0x5c` frames then burns.
 mod flame {
     use super::*;
 
@@ -192,8 +192,7 @@ mod flame {
     }
 }
 
-/// Type 15 (0x534d6) : projectile de lanceur (compteur `A5-0x5fb8`), qui avance de 4 pixels par image
-/// pendant `+0x5c` images.
+/// Type 15 (0x534d6): thrower projectile (counter `A5-0x5fb8`), which advances 4 pixels per frame for `+0x5c` frames.
 mod volley {
     use super::*;
 
@@ -255,7 +254,7 @@ mod volley {
     }
 }
 
-/// Type 16 (0x5369a) : étoile de lanceur (compteur `A5-0x5fb6`), animation à couleurs tournantes.
+/// Type 16 (0x5369a): thrower star (counter `A5-0x5fb6`), animation with rotating colours.
 mod star {
     use super::*;
 
@@ -306,7 +305,7 @@ mod star {
     }
 }
 
-/// Type 17 (0x537fa) : pierre qui part en arc, s'écrase au sol avec secousse d'écran et éclair.
+/// Type 17 (0x537fa): stone that leaves in an arc, crashes to the ground with a screen shake and flash.
 mod stone {
     use super::*;
 

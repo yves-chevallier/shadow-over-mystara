@@ -1,14 +1,14 @@
-//! L'elfe (personnages 4 et 5 : les deux variantes ont le même code).
+//! The elf (characters 4 and 5: both variants have the same code).
 //!
-//! Quatre actions, atteintes par `characters::run` :
-//! - `jump` (0x42012) : le saut commun (`common::jump`) avec deux gestes en l'air (coup, tir) ;
-//! - `attack` (0x4241c) : le bouton 1 ; `Player::SUBACTION` choisit le coup (voir `kind`) ;
-//! - `special` (0x42b0c) : l'objet ou la magie choisie (`field::SPECIAL_KIND`, 0..0x1c) ;
-//! - l'action 0x10 (0x444ca) est la glissade du combattant (`common::dash`).
+//! Four actions, reached through `characters::run`:
+//! - `jump` (0x42012): the common jump (`common::jump`) with two aerial gestures (strike, shot);
+//! - `attack` (0x4241c): button 1; `Player::SUBACTION` selects the strike (see `kind`);
+//! - `special` (0x42b0c): the chosen item or spell (`field::SPECIAL_KIND`, 0..0x1c);
+//! - action 0x10 (0x444ca) is the fighter's slide (`common::dash`).
 //!
-//! Les objets lancés, la foudre, le mur et les magies 13..20 sont ceux du combattant (`items`) avec les
-//! animations de l'elfe et une pose finale ; les magies 0x15..0x1c lui sont propres. Les routines d'origine
-//! qui créent tirs, effets et sons restent appelées telles quelles.
+//! The thrown items, lightning, the wall and spells 13..20 are the fighter's (`items`) with the
+//! elf's animations and a final pose; spells 0x15..0x1c are its own. The original routines
+//! that create shots, effects and sounds are still called as they are.
 
 use super::common::{self, countdown, field, is_cancelled, next_step, take_event, wind_down};
 use super::foes::{self, Boost, Damage, Live, Strike};
@@ -24,11 +24,11 @@ use crate::player::ram;
 use crate::machine::Machine;
 use crate::player::external as ext;
 
-/// Routines d'origine appelées telles quelles : effets joueur, sons, palettes et effets d'écran.
+/// Original routines called as they are: player effects, sounds, palettes and screen effects.
 mod rom {
     /// Whirl sounds (the effect: `creators::for_players::whirl_68k`).
     pub const WHIRL_SOUND_A: u32 = 0xe82fe;
-    /// Sons des magies, dans l'ordre d'appel de chaque sort.
+    /// Sounds of the spells, in the call order of each spell.
     pub const WARD_SOUNDS: [u32; 2] = [0xe28e4, 0xe96e0];
     pub const WARD_END_SOUNDS: [u32; 2] = [0xe2e3a, 0xe8e88];
     pub const SHIELD_SOUNDS: [u32; 2] = [0xe28e4, 0xe8e1e];
@@ -49,42 +49,42 @@ mod rom {
     pub const MOON_SOUND_B: u32 = 0xe9a88;
 }
 
-/// Champ qui garde l'allié béni par la magie 0x15 (mot : adresse de son enregistrement).
+/// Field that keeps the ally blessed by spell 0x15 (word: address of its record).
 const ALLY: u32 = 0x1ec;
 
-/// Table de l'elfe (données de la ROM) : vitesses des sauts (quatre mots par type de saut).
+/// Elf table (ROM data): jump speeds (four words per jump type).
 const JUMP_SPEEDS: u32 = 0x10_453e;
 
-/// Sous-actions du bouton 1 (`Player::SUBACTION`), toutes paires.
+/// Sub-actions of button 1 (`Player::SUBACTION`), all even.
 mod kind {
-    /// Enchaînement de sept coups.
+    /// Chain of seven strikes.
     pub const COMBO: u8 = 0x00;
     pub const THRUST_HIGH: u8 = 0x02;
     pub const THRUST_LOW: u8 = 0x04;
     pub const TURN_STRIKE: u8 = 0x06;
     pub const SLOW_STRIKE: u8 = 0x08;
     pub const AFTER_JUMP: u8 = 0x0a;
-    /// Charge : élan de 12 pixels par image suivi de deux effets.
+    /// Charge: run-up of 12 pixels per frame followed by two effects.
     pub const CHARGE: u8 = 0x0c;
     pub const RUN_STRIKE: u8 = 0x0e;
     pub const LOW_BLOW: u8 = 0x10;
     pub const BACK_HOP: u8 = 0x12;
     pub const GUARD_BREAK: u8 = 0x14;
-    /// Tir en reculant.
+    /// Shot while backing away.
     pub const RETREAT_SHOT: u8 = 0x16;
-    /// Tourbillon (sacrifie des points de vie).
+    /// Whirlwind (sacrifices hit points).
     pub const WHIRL: u8 = 0x18;
-    /// Coup avec un petit bond en arrière.
+    /// Strike with a small backward leap.
     pub const HOP_STRIKE_A: u8 = 0x1a;
     pub const HOP_STRIKE_B: u8 = 0x1c;
-    /// Volée de tirs.
+    /// Volley of shots.
     pub const VOLLEY: u8 = 0x1e;
 }
 
-// ---- saut (0x42012) --------------------------------------------------------------------------
+// ---- jump (0x42012) --------------------------------------------------------------------------
 
-/// Le saut de l'elfe : table de vitesses 0x10453e, poussée de 0x20 en l'air, deux gestes en l'air (pas
-/// 0xa : coup, 0xc : tir d'objet) pendant lesquels le saut est suspendu.
+/// The elf's jump: speed table 0x10453e, push of 0x20 in the air, two aerial gestures (step
+/// 0xa: strike, 0xc: item shot) during which the jump is suspended.
 const JUMP_KIT: common::JumpKit = common::JumpKit {
     speeds: JUMP_SPEEDS,
     steer_push: 0x20,
@@ -101,14 +101,14 @@ const JUMP_KIT: common::JumpKit = common::JumpKit {
     extra_step,
 };
 
-/// 0x42012 : saut.
+/// 0x42012: jump.
 pub fn jump(g: &mut Ctx, p: Player) {
     cov!();
     common::jump(g, p, &JUMP_KIT);
 }
 
-/// 0x4233a : en l'air, le bouton 1 donne un coup (`AIR_ATTACK_DONE` = 1, pas 0xa) ; la touche 4 avec
-/// l'objet 0x23..0x26 en ligne 2 lance un tir (`AIR_ATTACK_DONE` = 2, pas 0xc). Une fois par saut.
+/// 0x4233a: in the air, button 1 gives a strike (`AIR_ATTACK_DONE` = 1, step 0xa); key 4 with
+/// item 0x23..0x26 in row 2 launches a shot (`AIR_ATTACK_DONE` = 2, step 0xc). Once per jump.
 fn air_attack(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, field::AIR_ATTACK_DONE) != 0 {
@@ -138,7 +138,7 @@ fn air_attack(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pas 0xa et 0xc du saut : le coup en l'air (rebond possible sur un monstre) et le tir d'objet.
+/// Steps 0xa and 0xc of the jump: the aerial strike (bounce possible off a monster) and the item shot.
 fn extra_step(g: &mut Ctx, p: Player, step: u8) {
     cov!();
     match step {
@@ -163,7 +163,7 @@ fn extra_step(g: &mut Ctx, p: Player, step: u8) {
     }
 }
 
-/// Rebond : le coup plongeant a touché, l'elfe repart vers le haut (au plus cinq fois).
+/// Bounce: the diving strike landed, the elf goes back up (at most five times).
 fn bounce(g: &mut Ctx, p: Player) {
     cov!();
     p.set_u8(g, 0x58, 0);
@@ -178,8 +178,8 @@ fn bounce(g: &mut Ctx, p: Player) {
     crate::events::enqueue_points(g.b, tag as u16);
 }
 
-/// Un pas de vol pendant un geste en l'air ; à l'atterrissage le saut reprend à la récupération (pas
-/// 8). Renvoie vrai si l'elfe a atterri.
+/// One flight step during an aerial gesture; on landing the jump resumes at the recovery (step
+/// 8). Returns true if the elf has landed.
 fn air_fall(g: &mut Ctx, p: Player) -> bool {
     cov!();
     animation::step(g, p);
@@ -193,10 +193,10 @@ fn air_fall(g: &mut Ctx, p: Player) -> bool {
     false
 }
 
-// ---- attaque (0x4241c) -----------------------------------------------------------------------
+// ---- attack (0x4241c) -----------------------------------------------------------------------
 
-/// 0x4241c : attaque du bouton 1. `kind` (voir plus haut) choisit le coup ; la plupart des coups sont
-/// suivis d'un contrôle de prolongement (`common::follow_up`).
+/// 0x4241c: button 1 attack. `kind` (see above) selects the strike; most strikes are
+/// followed by a continuation check (`common::follow_up`).
 pub fn attack(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::SUBACTION) {
@@ -241,8 +241,8 @@ pub fn attack(g: &mut Ctx, p: Player) {
     common::flush_pending_effect(g, p);
 }
 
-/// Coup de base (0x424ee) : sept gestes enchaînés tant que les coups portent ; le dernier peut finir par
-/// un petit bond en arrière.
+/// Basic strike (0x424ee): seven chained gestures as long as the strikes land; the last may end with
+/// a small backward leap.
 fn combo(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -265,7 +265,7 @@ fn combo(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coups d'estoc (0x425f8 haut, 0x4265a bas) : un seul geste, de rang 0 ou 1 selon le coup précédent.
+/// Thrusts (0x425f8 high, 0x4265a low): a single gesture, of rank 0 or 1 depending on the previous strike.
 fn thrust(g: &mut Ctx, p: Player, hit_bit: u8, base_anim: u16) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -280,7 +280,7 @@ fn thrust(g: &mut Ctx, p: Player, hit_bit: u8, base_anim: u16) {
     }
 }
 
-/// Coup donné en se retournant (0x426ac) : le pas 2 est le pas 0 d'une entrée par état (combos).
+/// Strike given while turning (0x426ac): step 2 is step 0 of a per-state entry (combos).
 fn turn_strike(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -298,7 +298,7 @@ fn turn_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup donné en marche lente (0x426ee) : sans prolongement.
+/// Strike given in slow walk (0x426ee): without continuation.
 fn slow_strike(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -312,7 +312,7 @@ fn slow_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup de retombée (0x42728).
+/// Landing strike (0x42728).
 fn after_jump(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -328,7 +328,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Charge (0x4275a) : élan, premier geste, second geste avec deux effets, glissade.
+/// Charge (0x4275a): run-up, first gesture, second gesture with two effects, slide.
 fn charge(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -359,7 +359,7 @@ fn charge(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup donné en courant (0x42810) : élan de 5 pixels par image, puis arrêt.
+/// Strike given while running (0x42810): run-up of 5 pixels per frame, then stop.
 fn run_strike(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -380,7 +380,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Tir en reculant (0x42948) : geste, élan en avant avec deux effets, bond en arrière, retombée.
+/// Shot while backing away (0x42948): gesture, forward run-up with two effects, backward leap, landing.
 fn retreat_shot(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -434,7 +434,7 @@ fn retreat_shot(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Tourbillon (0x42a2e) : coûte 12 points de vie au premier contact.
+/// Whirlwind (0x42a2e): costs 12 hit points at the first contact.
 fn whirl(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -472,8 +472,9 @@ fn whirl(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Coup avec petit bond (sous-actions 0x1a et 0x1c, et fin du coup de base) : geste, puis, au geste porté,
-/// bond en arrière.
+/// Strike with small leap (sub-actions 0x1a and 0x1c, and end of the basic strike): gesture, then, at the carried
+/// gesture,
+/// backward leap.
 fn hop_strike(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -489,7 +490,7 @@ fn hop_strike(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Le geste se joue ; au geste porté (`EVENT`) l'elfe bondit en arrière de 16 pixels (0x4248c).
+/// The gesture plays; at the carried gesture (`EVENT`) the elf leaps back 16 pixels (0x4248c).
 fn hop_wait(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -509,8 +510,8 @@ fn hop_wait(g: &mut Ctx, p: Player) {
     p.set_u16(g, Obj::X, x);
 }
 
-/// Vol du bond (0x424c8) : tant que le geste n'est pas fini, l'elfe avance ; à la fin il est de retour
-/// au sol.
+/// Flight of the leap (0x424c8): as long as the gesture is not finished, the elf advances; at the end it is back
+/// on the ground.
 fn hop_flight(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, field::EVENT) == 0 {
@@ -524,7 +525,7 @@ fn hop_flight(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Volée (0x42ac0) : 144 images de tirs d'objet au geste porté.
+/// Volley (0x42ac0): 144 frames of item shots at the carried gesture.
 fn volley(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -546,10 +547,10 @@ fn volley(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- attaque spéciale (0x42b0c) --------------------------------------------------------------
+// ---- special attack (0x42b0c) --------------------------------------------------------------
 
-/// Animations de l'elfe pour les magies lancées (voir `items::Style`) : la cible de la foudre et du
-/// mur est gardée en `+0x1ec`, les monstres sont blessés à la dernière image de la foudre.
+/// The elf's animations for cast spells (see `items::Style`): the target of lightning and of the
+/// wall is kept at `+0x1ec`, the monsters are hurt on the last frame of the lightning.
 const STYLE: items::Style = items::Style {
     cast_anim: 0x24,
     bolt_anim: 0x23,
@@ -561,14 +562,14 @@ const STYLE: items::Style = items::Style {
     undim_mode: 2,
 };
 
-/// L'anneau rouge (n° 16) de l'elfe : l'aura n'est posée qu'à la fin du décompte.
+/// The elf's red ring (no. 16): the aura is only placed at the end of the countdown.
 const CAST_16: items::Cast = items::Cast {
     fire: items::ring_fire,
     on_end: |g, p| items::red_aura(g, p, 0x708),
     ..items::CAST_13
 };
 
-/// 0x42b0c : l'objet ou la magie choisie (`field::SPECIAL_KIND`).
+/// 0x42b0c: the chosen item or spell (`field::SPECIAL_KIND`).
 pub fn special(g: &mut Ctx, p: Player) {
     cov!();
     let which = p.u8(g, field::SPECIAL_KIND);
@@ -596,7 +597,7 @@ pub fn special(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Objets 2..5 (0x42bb0) : une pose de 48 images, un tir au geste porté ; le numéro 3 ne consomme pas de
+/// Items 2..5 (0x42bb0): a 48-frame pose, a shot at the carried gesture; number 3 does not consume a
 /// charge.
 fn timed_throw(g: &mut Ctx, p: Player) {
     cov!();
@@ -626,14 +627,14 @@ fn timed_throw(g: &mut Ctx, p: Player) {
 }
 
 
-/// Joue des sons de la ROM.
+/// Plays ROM sounds.
 fn sounds(g: &mut Ctx, p: Player, list: &[u32]) {
     for &sound in list {
         g.rom(sound, p);
     }
 }
 
-/// Fin des sorts qui passent d'abord par un pas final d'animation (sans rétablir le drapeau d'annulation).
+/// End of the spells that first go through a final animation step (without restoring the cancellation flag).
 fn end_when_done(g: &mut Ctx, p: Player) {
     cov!();
     if animation::step(g, p) {
@@ -641,13 +642,13 @@ fn end_when_done(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Mot de la ROM (code) indexé par le niveau du lanceur.
+/// ROM word (code) indexed by the caster's level.
 fn by_level(g: &mut Ctx, p: Player, table: u32) -> u16 {
     let level = p.u8(g, Player::LEVEL) as u32;
     g.prog16(table + 2 * level)
 }
 
-/// Aura pour `target` : durée `duration` (`AURA_TIMER`), puissance 1, sans les autres drapeaux.
+/// Aura for `target`: duration `duration` (`AURA_TIMER`), power 1, without the other flags.
 fn guard_aura(g: &mut Ctx, target: Player, duration: u16) {
     target.set_u16(g, Player::AURA_TIMER, duration);
     target.set_u8(g, Player::AURA_B, 1);
@@ -655,7 +656,7 @@ fn guard_aura(g: &mut Ctx, target: Player, duration: u16) {
     target.set_u8(g, Player::AURA_C, 0);
 }
 
-/// 0x43b04, n° 0x15 (h) : anneau rouge sur l'allié devant l'elfe (à portée de 76 pixels) ou sur lui-même.
+/// 0x43b04, no. 0x15 (h): red ring on the ally in front of the elf (within 76 pixels) or on themselves.
 fn ward_ally(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -709,8 +710,8 @@ fn ward_ally(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x43cac : cherche l'allié béni (voir `common::find_ally`, portée 76) : sans annulation il se retourne
-/// vers l'elfe et passe à la pose de bénédiction ; `AREA` = 1 si un allié est trouvé.
+/// 0x43cac: looks for the blessed ally (see `common::find_ally`, range 76): without cancellation they turn
+/// toward the elf and go to the blessing pose; `AREA` = 1 if an ally is found.
 fn pick_ally(g: &mut Ctx, p: Player) {
     cov!();
     let ally = common::find_ally(g, p, 0x4c, |_, _| ());
@@ -728,7 +729,7 @@ fn pick_ally(g: &mut Ctx, p: Player) {
     p.set_u8(g, field::AREA, ally.is_some() as u8);
 }
 
-/// 0x43e4e, n° 0x16 (h) : anneau rouge, puis aura de garde sur tous les joueurs en vie (durée par niveau).
+/// 0x43e4e, no. 0x16 (h): red ring, then guard aura on all living players (duration per level).
 fn ward_party(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -774,10 +775,10 @@ fn ward_party(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Mots (code) : durée de l'aura de garde par niveau.
+/// Words (code): duration of the guard aura per level.
 const WARD_DURATIONS: u32 = 0x43f70;
 
-/// 0x43d5e, n° 0x17 (h) : rayon de lumière en deux temps.
+/// 0x43d5e, no. 0x17 (h): ray of light in two stages.
 fn beam(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -814,10 +815,10 @@ fn beam(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Octets (code) : numéro de la variante du geste de la magie 0x18 par niveau.
+/// Bytes (code): variant number of the gesture of spell 0x18 per level.
 const SPARK_GESTURES: u32 = 0x43476;
 
-/// 0x433e4, n° 0x18 (h) : gerbe d'étincelles, qui alterne deux variantes à chaque geste.
+/// 0x433e4, no. 0x18 (h): burst of sparks, alternating two variants at each gesture.
 fn sparks(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -860,7 +861,7 @@ fn sparks(g: &mut Ctx, p: Player) {
     }
 }
 
-/// 0x4350c, n° 0x19 (h) : éclair en deux temps.
+/// 0x4350c, no. 0x19 (h): lightning bolt in two stages.
 fn bolt(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -904,11 +905,11 @@ fn bolt(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Mots (code) : durée de la gelée de la magie 0x1a par niveau.
+/// Words (code): duration of the freeze of spell 0x1a per level.
 const FROST_DURATIONS: u32 = 0x436c8;
 
-/// 0x4362a, n° 0x1a (h) : gelée. Pendant la phase finale le joueur règle l'intensité avec haut et bas
-/// (geste 0x2f + intensité) ; l'écran tremble.
+/// 0x4362a, no. 0x1a (h): freeze. During the final phase the player sets the intensity with up and down
+/// (gesture 0x2f + intensity); the screen shakes.
 fn frost(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -953,7 +954,7 @@ fn frost(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pas 6 de la gelée (0x43788) : l'écran clignote trois fois ; l'intensité suit les touches haut et bas.
+/// Step 6 of the freeze (0x43788): the screen flashes three times; the intensity follows the up and down keys.
 fn frost_steer(g: &mut Ctx, p: Player) {
     cov!();
     common::blink_screen(g, p);
@@ -966,10 +967,10 @@ fn frost_steer(g: &mut Ctx, p: Player) {
     common::intensity_keys(g, p, 0x2f);
 }
 
-/// Mots (code) : durée de la magie 0x1b par niveau.
+/// Words (code): duration of spell 0x1b per level.
 const QUAKE_DURATIONS: u32 = 0x4395a;
 
-/// Tremblement de terre (0x43892, n° 0x1b) : blesse les monstres au bon moment.
+/// Earthquake (0x43892, no. 0x1b): hurts the monsters at the right moment.
 const QUAKE_STRIKE: Strike = Strike {
     damage: Damage::Table(0x10_442c, 0x10_440e),
     live: Live::Any,
@@ -983,7 +984,7 @@ const QUAKE_STRIKE: Strike = Strike {
     sound: None,
 };
 
-/// 0x43892, n° 0x1b (h) : tremblement de terre.
+/// 0x43892, no. 0x1b (h): earthquake.
 fn quake(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -1023,7 +1024,7 @@ fn quake(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pas 4 du tremblement de terre (0x4398c) : au 0x64e tour de décompte, les monstres sont blessés.
+/// Step 4 of the earthquake (0x4398c): at countdown turn 0x64e, the monsters are hurt.
 fn quake_rumble(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);
@@ -1037,7 +1038,7 @@ fn quake_rumble(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pluie de lune (0x44314, n° 0x1c, regard à gauche) : les monstres au sol sont blessés.
+/// Moon rain (0x44314, no. 0x1c, facing left): the monsters on the ground are hurt.
 const MOON_STRIKE: Strike = Strike {
     damage: Damage::Table(0x10_4468, 0x10_444a),
     live: Live::Any,
@@ -1051,8 +1052,8 @@ const MOON_STRIKE: Strike = Strike {
     sound: None,
 };
 
-/// 0x43ff4, n° 0x1c (h) : magie de la lune. Deux variantes selon le regard : vers la droite (pas 0 à 6,
-/// effet 0x4e4de) ou vers la gauche (pas 8 à 0xc, effet 0x4e782).
+/// 0x43ff4, no. 0x1c (h): moon spell. Two variants depending on facing: to the right (steps 0 to 6,
+/// effect 0x4e4de) or to the left (steps 8 to 0xc, effect 0x4e782).
 fn moonlight(g: &mut Ctx, p: Player) {
     cov!();
     match p.u8(g, Player::STEP) {
@@ -1134,7 +1135,7 @@ fn moonlight(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Pas 6 de la magie de la lune (0x4410e) : à la fin du décompte l'éclair d'écran s'éteint.
+/// Step 6 of the moon spell (0x4410e): at the end of the countdown the screen flash goes out.
 fn moon_finish(g: &mut Ctx, p: Player) {
     cov!();
     animation::step(g, p);

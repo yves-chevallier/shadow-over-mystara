@@ -55,7 +55,7 @@ C'est l'approche des projets N64Recomp / XenonRecomp, adaptée au 68000.
 | 1. Rendu | ✅ pixel près sur 11 instantanés + 6 captures de jeu |
 | 2. Interpréteur de référence | ✅ 68000 et Z80 exacts au cycle près (SingleStepTests) ; machine identique à MAME sur 4800 images avec entrées |
 | 3. Recompilation | ✅ `recomp` + `ddsom-rc` : 53 000 blocs générés à la compilation depuis les ROMs locales ; 98 % des instructions exécutées en Rust généré, résultats identiques à l'interpréteur et à MAME |
-| 4. Jeu jouable avec son | ✅ `./jouer.sh` (code recompilé par défaut, `DDSOM_INTERP=1` pour l'interpréteur) |
+| 4. Jeu jouable avec son | ✅ `./play.sh` (code recompilé par défaut, `DDSOM_INTERP=1` pour l'interpréteur) |
 | 5. Réécriture idiomatique | à faire |
 
 ### Fonctionnement du code recompilé
@@ -123,8 +123,8 @@ travail progressif, piloté par les tests de non-régression contre l'original.
 
 État : l'ordonnanceur (0x928), les traps 0 à 7 et 12, leurs enveloppes (0x9b6, 0xa14, 0xa40, 0xa86,
 0xb64...) et le VBLANK (0x574) sont des routines natives (`kernel.rs`, `vblank.rs`, [noyau.md](noyau.md)) ;
-la tâche des crédits est du Rust (`tache_credits.rs`, `ecran_credits.rs`). La table des tâches est une structure Rust
-(`taches/table.rs`) : plus d'enregistrements FF0064, de tas des piles ni de pile de l'ordonnanceur en RAM, et les
+la tâche des crédits est du Rust (`credits_task.rs`, `credits_screen.rs`). La table des tâches est une structure Rust
+(`tasks/table.rs`) : plus d'enregistrements FF0064, de tas des piles ni de pile de l'ordonnanceur en RAM, et les
 registres d'une tâche qui cède sont rangés dans la table au lieu de sa pile. Une tâche est encore « du code qui reprend
 à une adresse avec le contexte du 68000 sauvé » ; c'est l'adresse de reprise qui devient une native quand la tâche est
 réécrite. (Depuis : toutes les reprises sont des étapes Rust et l'ordonnanceur est une machine à états Rust, voir
@@ -134,21 +134,21 @@ réécrite. (Depuis : toutes les reprises sont des étapes Rust et l'ordonnanceu
 Plan pour supprimer la machine 68000 :
 
 1. **Découper chaque tâche aux points de cession** (fait pour la machine à modes, la fin de partie, les crédits,
-   la tâche de partie `0x1c45a` et la tâche du gel `0xee080`, `taches/`, voir [noyau.md](noyau.md), les tâches et
-   sous-programmes de fondu (`taches/fondu.rs`), l'écran des scores `0x1835e` (`taches/ecran_fixe.rs`) et l'interface
-   joueurs `0x150ac` (`hud/`), les invites `0xe03fe` (`taches/invite.rs`) et les scripts de transition de la sortie de
-   scène, qui cédaient à presque chaque pas (`scene/transition/`) ; le menu TEST `0x29162` et la carte de développement sont en Rust aussi (`taches/service.rs`,
-   `eeprom/carte_dev.rs`) ; l'écran `0x19068` est du code mort (`noyau.md`). Il ne reste aucune tâche en 68000. Les « listes de bulles des boss » créées par `0x9b6` sont des
+   la tâche de partie `0x1c45a` et la tâche du gel `0xee080`, `tasks/`, voir [noyau.md](noyau.md), les tâches et
+   sous-programmes de fondu (`tasks/fading.rs`), l'écran des scores `0x1835e` (`tasks/fixed_screen.rs`) et l'interface
+   joueurs `0x150ac` (`hud/`), les invites `0xe03fe` (`tasks/prompt.rs`) et les scripts de transition de la sortie de
+   scène, qui cédaient à presque chaque pas (`scene/transition/`) ; le menu TEST `0x29162` et la carte de développement sont en Rust aussi (`tasks/service.rs`,
+   `eeprom/dev_card.rs`) ; l'écran `0x19068` est du code mort (`noyau.md`). Il ne reste aucune tâche en 68000. Les « listes de bulles des boss » créées par `0x9b6` sont des
    tâches de fondu, déjà en Rust).
    Chaque tâche devient une machine à états Rust : une `enum` d'étapes et une fonction
-   `pas(&mut Monde) -> Attente` qui rend `Images(n)`, `Prête`, `Suspendue` ou `Terminée`.
-2. **Remplacer l'enregistrement de tâche** (fait, `taches/table.rs`, [noyau.md](noyau.md) « Table des tâches en
+   `step(&mut World) -> Wait` qui rend `Images(n)`, `Prête`, `Suspended` ou `Terminée`.
+2. **Remplacer l'enregistrement de tâche** (fait, `tasks/table.rs`, [noyau.md](noyau.md) « Table des tâches en
    Rust ») : 16 emplacements (les numéros d'emplacement servent encore : `kill(0x30)`), l'état (libre, attend,
    suspendue, prête, en cours, neuve), le compte d'attente décrémenté par le VBLANK, la pile 68000 donnée à la tâche et
    sa reprise (entrée, ou contexte du 68000 sauvé à la cession). `validate` compare à chaque image la table Rust à la
    table FF0064 de la machine d'origine (états, comptes, piles, entrées, tas). Le tas des piles, la pile de
-   l'ordonnanceur et les registres sauvés sur la pile des tâches ne servent plus au noyau. Les tâches Rust cèdent la main directement au noyau (`taches::ceder` → `kernel::attendre`/`ceder_prete`/`terminer`), sans enveloppe 68000 ni adresse de retour empilée ; chaque emplacement porte le nom de sa tâche (`table::Tache`). Leurs appels en cours (adresses
-   de retour, registres sauvés par les sous-programmes qui cèdent) sont aussi dans la table (`table::Cadre`) : la pile
+   l'ordonnanceur et les registres sauvés sur la pile des tâches ne servent plus au noyau. Les tâches Rust cèdent la main directement au noyau (`tasks::cede` → `kernel::wait`/`cede_ready`/`finish`), sans enveloppe 68000 ni adresse de retour empilée ; chaque emplacement porte le nom de sa tâche (`table::Task`). Leurs appels en cours (adresses
+   de retour, registres sauvés par les sous-programmes qui cèdent) sont aussi dans la table (`table::Frame`) : la pile
    68000 d'une tâche est vide à chaque cession, et le code d'origine qui reste ne la retrouve remplie que le temps où il
    s'exécute ([noyau.md](noyau.md), « Appels en cours en Rust »). Ce qui manque pour le point 4 : [noyau.md](noyau.md),
    « Vers une boucle sans 68000 ».

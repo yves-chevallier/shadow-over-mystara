@@ -1,10 +1,10 @@
-//! Objets spéciaux (classe SOBJ, pool de 16 objets de 0x50 octets, table 0x39fa8) : décors défilants
-//! et éléments de scènes (écran-titre, fins, intermèdes), types 0 à 15 sauf le 4 (commun, voir
+//! Special objects (SOBJ class, pool of 16 objects of 0x50 bytes, table 0x39fa8): scrolling scenery
+//! and scene elements (title screen, endings, interludes), types 0 to 15 except 4 (shared, see
 //! `set.rs`). Voir `docs/families/sobj.md`.
 //!
-//! Les objets SOBJ figurent dans les listes triées : `+0x42` choisit la liste du premier plan
-//! (non nul) ou celle des acteurs. Le créateur renseigne `+3` (variante) et souvent `+0x4c` /
-//! `+0x2f` / `+0x14` (paramètres propres au type).
+//! SOBJ objects appear in the sorted lists: `+0x42` picks the foreground list
+//! (non-zero) or the actors' list. The creator fills in `+3` (variant) and often `+0x4c` /
+//! `+0x2f` / `+0x14` (type-specific parameters).
 
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
@@ -16,25 +16,25 @@ use super::effects_creators::leftovers::Pure;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-/// Variables de la RAM de travail (A5+) : caméra du jeu et caméra secondaire.
+/// Work RAM variables (A5+): game camera and secondary camera.
 mod ram {
     pub const CAMERA_X: u32 = 0x506;
     pub const CAMERA_Y: u32 = 0x50a;
-    /// Position précédente de la caméra (pour en déduire le défilement de l'image).
+    /// Previous camera position (to derive the frame's scroll from it).
     pub const PREV_CAMERA_X: u32 = 0x524;
     pub const PREV_CAMERA_Y: u32 = 0x528;
     pub const CAMERA2_X: u32 = 0x556;
     pub const CAMERA2_Y: u32 = 0x55a;
     pub const PREV_CAMERA2_X: u32 = 0x574;
-    /// `A5+0x36` non nul : la caméra de référence est la secondaire.
+    /// `A5+0x36` non-zero: the reference camera is the secondary one.
     pub const USE_CAMERA2: u32 = 0x36;
 }
 
-/// Jeu d'animations commun des objets SOBJ.
+/// Animation set shared by SOBJ objects.
 const ANIMS: u32 = 0x1c03a6;
 
-/// Fin de gestionnaire des objets à liste variable : liste du premier plan si `+0x42` est non nul,
-/// liste des acteurs sinon.
+/// End of handler for objects with a variable list: foreground list if `+0x42` is non-zero,
+/// actors' list otherwise.
 fn reinsert_by_layer<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x42) != 0 {
         x.reinsert_foreground();
@@ -43,8 +43,8 @@ fn reinsert_by_layer<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Sort de l'écran de plus que `margin` pixels : état 4 (disparition). La marge est dans D2 ; le
-/// test se fait en mots non signés (routine 0xddbfc de l'original).
+/// Leaves the screen by more than `margin` pixels: state 4 (disappearance). The margin is in D2; the
+/// test is done in unsigned words (original routine 0xddbfc).
 fn cull_beyond<R: Bench>(x: &mut Cx<'_, R>, margin: u16) {
     let mut camera = x.a5_u16(ram::CAMERA_X);
     if x.a5_u8(ram::USE_CAMERA2) != 0 {
@@ -59,7 +59,7 @@ fn cull_beyond<R: Bench>(x: &mut Cx<'_, R>, margin: u16) {
     }
 }
 
-/// Décalage de la caméra depuis la précédente image (X puis Y), en 16.16.
+/// Camera offset since the previous frame (X then Y), in 16.16.
 fn camera_delta<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u32) {
     (
         x.a5_u32(ram::CAMERA_X).wrapping_sub(x.a5_u32(ram::PREV_CAMERA_X)),
@@ -67,10 +67,10 @@ fn camera_delta<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u32) {
     )
 }
 
-/// Bits de luminosité forcés au maximum des couleurs copiées dans les palettes de GFX RAM.
+/// Brightness bits forced to maximum on the colors copied into the GFX RAM palettes.
 const BRIGHT: u32 = 0xf000_f000;
 
-/// Copie `n` longs de la ROM (espace de données) vers la mémoire vidéo ou la RAM.
+/// Copies `n` longs from the ROM (data space) to video memory or RAM.
 fn copy_longs<R: Bench>(x: &mut Cx<'_, R>, from: u32, to: u32, n: u32) {
     for i in 0..n {
         let v = x.data32(from + 4 * i);
@@ -78,7 +78,7 @@ fn copy_longs<R: Bench>(x: &mut Cx<'_, R>, from: u32, to: u32, n: u32) {
     }
 }
 
-/// Force des bits dans `n` longs consécutifs.
+/// Forces bits in `n` consecutive longs.
 fn or_longs<R: Bench>(x: &mut Cx<'_, R>, at: u32, mask: u32, n: u32) {
     for i in 0..n {
         let v = rd32(x.b, at + 4 * i) | mask;
@@ -86,18 +86,18 @@ fn or_longs<R: Bench>(x: &mut Cx<'_, R>, at: u32, mask: u32, n: u32) {
     }
 }
 
-/// Opération arithmétique `asr.l` sur 32 bits.
+/// Arithmetic operation `asr.l` on 32 bits.
 fn asr(v: u32, n: u32) -> u32 {
     ((v as i32) >> n) as u32
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 0 (0xdd61e) : élément de décor lié aux caméras
+// Type 0 (0xdd61e): scenery element tied to the cameras
 // ---------------------------------------------------------------------------------------------
 
-/// Élément de décor dont la position suit le défilement des caméras à une fraction de leur
-/// vitesse (parallaxe, nuages, avant-plan). La variante `+3` choisit, par deux tables d'octets de
-/// la ROM, la routine d'initialisation et la routine de suivi par image.
+/// Scenery element whose position follows the cameras' scrolling at a fraction of their
+/// speed (parallax, clouds, foreground). Variant `+3` picks, through two ROM byte tables,
+/// the initialization routine and the per-frame following routine.
 mod scenery {
     use super::*;
 
@@ -109,7 +109,7 @@ mod scenery {
     const FOLLOW: u8 = 2;
     const GONE: u8 = 4;
     const FREE: u8 = 6;
-    /// Fin du script d'animation (octet haut des drapeaux).
+    /// End of the animation script (high byte of the flags).
     const ANIM_END: u8 = 0xfe;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -171,7 +171,7 @@ mod scenery {
         reinsert_by_layer(x);
     }
 
-    /// Positionne le décor (X, Y) et le remonte (Z = -0x100), au premier plan.
+    /// Positions the scenery (X, Y) and lifts it (Z = -0x100), in the foreground.
     fn place_at<R: Bench>(x: &mut Cx<'_, R>, px: u16, py: u16) {
         x.set16(0x8, px);
         x.set16(0x10, py);
@@ -303,7 +303,7 @@ mod scenery {
         }
     }
 
-    /// Passe à l'état suivant (+`step`) quand l'animation est terminée.
+    /// Goes to the next state (+`step`) when the animation is finished.
     fn wait_script_end<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
         if x.u8(0x32) == ANIM_END {
             x.add8(0x4, step);
@@ -312,18 +312,18 @@ mod scenery {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 1 (0xddc28) : décor fixe à deux comportements
+// Type 1 (0xddc28): fixed scenery with two behaviors
 // ---------------------------------------------------------------------------------------------
 
-/// Décor animé (jeu d'animations 0x1c40c6) qui reste en place, se déplace avec la caméra à demi
-/// vitesse ou suit la caméra secondaire selon la variante.
+/// Animated scenery (animation set 0x1c40c6) that stays in place, moves with the camera at half
+/// speed or follows the secondary camera depending on the variant.
 mod fixture {
     use super::*;
 
     const ANIMS: u32 = 0x1c40c6;
-    /// Variante -> forme du comportement à la création (0 : aucun, 1 : mémorise X/Y).
+    /// Variant -> shape of the behavior at creation (0: none, 1: saves X/Y).
     const INIT_KIND: u32 = 0xddc6e;
-    /// Variante -> forme du comportement par image (0 : sortie d'écran, 1 : défilement, 2 : suivi).
+    /// Variant -> shape of the per-frame behavior (0: screen exit, 1: scrolling, 2: following).
     const STEP_KIND: u32 = 0xddd16;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -369,11 +369,11 @@ mod fixture {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 2 (0xdddb2) : décor clignotant
+// Type 2 (0xdddb2): blinking scenery
 // ---------------------------------------------------------------------------------------------
 
-/// Décor animé qui disparaît 16 fois de suite à chaque fin de script (`+0x14` compte les
-/// clignotements) ; sa marge d'écran est le D2 laissé par l'appelant.
+/// Animated scenery that disappears 16 times in a row at each end of script (`+0x14` counts the
+/// blinks); its screen margin is the D2 left by the caller.
 mod flasher {
     use super::*;
 
@@ -411,11 +411,11 @@ mod flasher {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 3 (0xdde18) : étiquette collée à un objet
+// Type 3 (0xdde18): label stuck to an object
 // ---------------------------------------------------------------------------------------------
 
-/// Étiquette qui suit un objet (adresse longue dans `+0x14`) avec un décalage constant (X + 0x50,
-/// Y - 0x58) tant qu'il n'est pas dans l'état 6.
+/// Label that follows an object (long address in `+0x14`) with a constant offset (X + 0x50,
+/// Y - 0x58) as long as it is not in state 6.
 mod tag {
     use super::*;
 
@@ -451,10 +451,10 @@ mod tag {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 5 (0xdde8c) : objet fantôme
+// Type 5 (0xdde8c): ghost object
 // ---------------------------------------------------------------------------------------------
 
-/// Objet sans comportement : il se libère dès sa première image.
+/// Object with no behavior: it releases itself on its first frame.
 mod ghost {
     use super::*;
 
@@ -467,20 +467,20 @@ mod ghost {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 6 (0xddec4) : éléments des scènes scriptées
+// Type 6 (0xddec4): elements of the scripted scenes
 // ---------------------------------------------------------------------------------------------
 
-/// Éléments des scènes (présentation, intermèdes, fin) : 24 variantes (`+3`), chacune une petite
-/// machine à états. Les variantes sont reliées à un objet « maître » (`+0x4c`, souvent un autre
-/// objet de ce type) dont l'octet `+8` sert de boîte aux lettres : 1 « top », 2 « étape suivante »,
-/// négatif « fin ». Beaucoup chargent aussi des palettes depuis la ROM (0x28f340...) dans la
-/// palette de la page 0x91c080-0x91c3ff et lancent des sons (0xea2e8...).
+/// Scene elements (presentation, interludes, ending): 24 variants (`+3`), each a small
+/// state machine. The variants are linked to a "master" object (`+0x4c`, often another
+/// object of this type) whose byte `+8` serves as a mailbox: 1 "go", 2 "next step",
+/// negative "end". Many also load palettes from the ROM (0x28f340...) into the
+/// page palette 0x91c080-0x91c3ff and launch sounds (0xea2e8...).
 mod scene {
     use super::*;
 
-    /// État 4 (« mort ») : l'objet est marqué à supprimer puis libéré tout de suite.
+    /// State 4 ("dead"): the object is marked for deletion then released right away.
     const DEAD: u32 = 0x0600_0000;
-    /// Palettes de la page des éléments (GFX RAM) : 16 couleurs.
+    /// Palettes of the elements page (GFX RAM): 16 colors.
     const PALETTE_A: u32 = 0x91c080;
     const PALETTE_B: u32 = 0x91c3e0;
 
@@ -524,7 +524,7 @@ mod scene {
         }
     }
 
-    /// Cycle de vie commun : 0 initialisation, 2 vie, 4 mort, 6 libération.
+    /// Common life cycle: 0 initialization, 2 alive, 4 dead, 6 release.
     fn lifecycle<R: Bench>(x: &mut Cx<'_, R>, init: fn(&mut Cx<'_, R>), step: fn(&mut Cx<'_, R>)) {
         match x.u8(0x4) {
             0 => init(x),
@@ -544,12 +544,12 @@ mod scene {
         (x.rom16(addr) as u32) << 16 | x.rom16(addr + 2) as u32
     }
 
-    /// Le maître de la scène (`+0x4c`).
+    /// The scene's master (`+0x4c`).
     fn master<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
         Obj(x.u32(0x4c) & 0xff_ffff)
     }
 
-    /// Octet de signal du maître (`+8`).
+    /// Master's signal byte (`+8`).
     fn signal<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
         let m = master(x);
         m.u8(x.b, 0x8)
@@ -560,13 +560,13 @@ mod scene {
         m.set_u8(x.b, 0x8, v);
     }
 
-    /// Démarre le script `n` et remet l'objet en place dans la liste des acteurs.
+    /// Starts script `n` and puts the object back in the actors' list.
     fn start<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
         x.anim_start(ANIMS, n as u16);
         x.reinsert();
     }
 
-    /// Crée un objet SOBJ de type 6 (routine 0xddeaa), de variante `variant` ; rien en cas d'échec.
+    /// Creates a SOBJ object of type 6 (routine 0xddeaa), of variant `variant`; nothing on failure.
     fn spawn<R: Bench>(x: &mut Cx<'_, R>, variant: u8) -> Option<Obj> {
         let Some(child) = x.alloc(&pools::SOBJ) else { return None };
         child.set_u8(x.b, 0, 1);
@@ -575,8 +575,8 @@ mod scene {
         Some(child)
     }
 
-    /// Fait défiler l'écran d'un pixel toutes les 8 images (routine 0xdea4a) en gardant l'objet
-    /// immobile à l'écran.
+    /// Scrolls the screen by one pixel every 8 frames (routine 0xdea4a) while keeping the object
+    /// still on screen.
     fn scroll_creep<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x6f) & 7 != 0 {
             return;
@@ -592,8 +592,8 @@ mod scene {
         x.add32(0x10, dy);
     }
 
-    /// Variante 0 : sprite lié au maître (jeu d'animations, indicateur de flip et numéro lus dans
-    /// une table à 8 octets par valeur de `+0x2f`), flip aléatoire si l'indicateur est négatif.
+    /// Variant 0: sprite tied to the master (animation set, flip indicator and number read from
+    /// a table with 8 bytes per value of `+0x2f`), random flip if the indicator is negative.
     const V0_ENTRIES: u32 = 0xddf6c;
 
     fn random_flip<R: Bench>(x: &mut Cx<'_, R>) {
@@ -629,7 +629,7 @@ mod scene {
         x.add8(0x4, 2);
     }
 
-    /// Variante 1 : lumière qui grandit lentement jusqu'au signal du maître.
+    /// Variant 1: light that slowly grows until the master's signal.
     fn v1_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x8, 0x30_0000);
@@ -647,7 +647,7 @@ mod scene {
         x.add32(0xc, 0x8000);
     }
 
-    /// Variante 2 : décor qui défile, trois temps (`+5`) rythmés par le signal du maître.
+    /// Variant 2: scrolling scenery, three phases (`+5`) paced by the master's signal.
     fn v2_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x8, 0x100);
@@ -679,8 +679,8 @@ mod scene {
         }
     }
 
-    /// Variante 3 : lance des objets SET décoratifs d'après une liste d'octets (0xde1e0, ou
-    /// 0xde1e8 si `A5+0x38`), un toutes les 30 images, jusqu'à la fin de son script.
+    /// Variant 3: launches decorative SET objects from a byte list (0xde1e0, or
+    /// 0xde1e8 if `A5+0x38`), one every 30 frames, until the end of its script.
     const V3_LISTS: u32 = 0xde1e0;
 
     fn v3_init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -730,7 +730,7 @@ mod scene {
         send_signal(x, 1);
     }
 
-    /// Variante 4 : monte vers le haut de l'écran (Z - 1,25 par image) et s'arrête à Z = 0x20.
+    /// Variant 4: rises toward the top of the screen (Z - 1.25 per frame) and stops at Z = 0x20.
     fn v4_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0x4000);
@@ -748,8 +748,8 @@ mod scene {
         x.set8(0x5, 0);
     }
 
-    /// Variante 5 : meneur qui descend, déclenche le défilement puis crée des variantes 0 (deux au
-    /// plus ; décalages X puis Z en table 0xde386).
+    /// Variant 5: leader that descends, triggers the scrolling then creates variants 0 (two at
+    /// most; X then Z offsets in table 0xde386).
     const V5_OFFSETS: u32 = 0xde386;
 
     fn v5_init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -818,8 +818,8 @@ mod scene {
         x.add8(0x42, 1);
     }
 
-    /// Variante 6 : lettre qui tombe du haut (Z 0x300) jusqu'à sa hauteur d'arrêt (table 0xde3ee :
-    /// X, arrêt), attend le signal 2 puis remonte de 0x290.
+    /// Variant 6: letter that falls from the top (Z 0x300) down to its stop height (table 0xde3ee:
+    /// X, stop), waits for signal 2 then rises by 0x290.
     const V6_TABLE: u32 = 0xde3ee;
 
     fn v6_init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -867,8 +867,8 @@ mod scene {
         x.reinsert();
     }
 
-    /// Variante 7 : fondu de palette (page B) puis attente de 180 images ; charge aussi un script
-    /// de transition (`A5+0x5c6`...). Script choisi par `+0x2f` et par `A5+0x72`.
+    /// Variant 7: palette fade (page B) then a 180-frame wait; also loads a transition
+    /// script (`A5+0x5c6`...). Script chosen by `+0x2f` and by `A5+0x72`.
     const V7_SCRIPTS: u32 = 0xde4d2;
     const V7_PALETTES: u32 = 0x292240;
 
@@ -921,7 +921,7 @@ mod scene {
         }
     }
 
-    /// Variante 8 : barre qui descend (Z + 8 par image) jusqu'en bas de l'écran, puis lève l'octet
+    /// Variant 8: bar that descends (Z + 8 per frame) to the bottom of the screen, then raises the byte
     /// 0xff0eaa (A5-0x7156).
     const SCENE_DONE_FLAG: u32 = 0xff_0eaa;
 
@@ -950,7 +950,7 @@ mod scene {
         x.reinsert();
     }
 
-    /// Variante 9 : texte animé sur la caméra secondaire ; signale sa fin au maître.
+    /// Variant 9: animated text on the secondary camera; signals its end to the master.
     fn v9_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.a5_u16(ram::CAMERA2_X);
@@ -974,8 +974,8 @@ mod scene {
         x.set16(0x30, 6);
     }
 
-    /// Variante 10 : plaque qui descend en deux temps (Z 0x88 puis 0xa0), attend le signal 2,
-    /// remonte à Z 0x80 et attend la fin.
+    /// Variant 10: plate that descends in two phases (Z 0x88 then 0xa0), waits for signal 2,
+    /// rises back to Z 0x80 and waits for the end.
     fn v10_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x8, 0x98_0000);
@@ -1038,7 +1038,7 @@ mod scene {
         }
     }
 
-    /// Variante 11 : sprite fixe sur la caméra principale.
+    /// Variant 11: fixed sprite on the main camera.
     fn v11_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0x8000);
@@ -1050,8 +1050,8 @@ mod scene {
         crate::sound::play(x.b, 0xea7fe, x.o);
     }
 
-    /// Variante 12 : sprite qui traverse l'écran (1 pixel par image vers la droite, ou vers la
-    /// gauche si `+0x2f`) et fait reculer la caméra.
+    /// Variant 12: sprite that crosses the screen (1 pixel per frame to the right, or to the
+    /// left if `+0x2f`) and moves the camera back.
     fn v12_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x2c, 0);
@@ -1087,8 +1087,8 @@ mod scene {
         }
     }
 
-    /// Variante 13 : cadre dont le script est une entrée directe (16 octets par `+0x2f` à partir de
-    /// 0xdea84), sur un fond de palette 0x91c340 (8 couleurs identiques).
+    /// Variant 13: frame whose script is a direct entry (16 bytes per `+0x2f` starting from
+    /// 0xdea84), on a palette background 0x91c340 (8 identical colors).
     const V13_SCRIPTS: u32 = 0xdea84;
 
     fn v13_init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1110,8 +1110,8 @@ mod scene {
         x.reinsert();
     }
 
-    /// Variante 14 : insigne dont le sprite et la position dépendent de `+0x46` (numéro, ou objet
-    /// dont on prend la variante si le bit 15 est levé) ; table à 8 octets en 0xdef1e.
+    /// Variant 14: badge whose sprite and position depend on `+0x46` (number, or object
+    /// whose variant is taken if bit 15 is raised); 8-byte table at 0xdef1e.
     const V14_TABLE: u32 = 0xdef1e;
 
     fn v14_init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1139,8 +1139,8 @@ mod scene {
         }
     }
 
-    /// Variante 15 : fanion coloré (palette 0x28f960, une ligne de 32 octets par numéro tiré de
-    /// la table 0xdefa4), position en table 0xdf01a.
+    /// Variant 15: colored pennant (palette 0x28f960, one 32-byte row per number drawn from
+    /// table 0xdefa4), position in table 0xdf01a.
     const V15_PALETTE_SELECT: u32 = 0xdefa4;
     const V15_PALETTES: u32 = 0x28f960;
     const V15_POSITIONS: u32 = 0xdf01a;
@@ -1160,8 +1160,8 @@ mod scene {
         start(x, 0x19c + v);
     }
 
-    /// Variante 16 : sprite flippé au hasard, qui vit tant que le maître n'a pas fini et que son
-    /// animation n'est pas terminée.
+    /// Variant 16: randomly flipped sprite, which lives as long as the master has not finished and its
+    /// animation is not complete.
     fn v16_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         random_flip(x);
@@ -1176,8 +1176,8 @@ mod scene {
         x.add8(0x4, 2);
     }
 
-    /// Variante 17 : bulle qui sort du bas de l'écran (deux positions selon `+0x2f`) ; en fin
-    /// d'animation, rend le bit (`+0x2f` modulo 8) de `+0x30` au propriétaire `+0x46`.
+    /// Variant 17: bubble that comes out of the bottom of the screen (two positions according to `+0x2f`); at the end
+    /// of the animation, gives bit (`+0x2f` modulo 8) of `+0x30` back to the owner `+0x46`.
     fn v17_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0x4000);
@@ -1187,7 +1187,7 @@ mod scene {
             x.set16(0x8, 0x20);
             x.set32(0x10, 0x2000);
         }
-        // `move.w #0x1a3,D0w ; add.b (0x2f,A0),D0b` : l'addition ne déborde pas sur l'octet haut
+        // `move.w #0x1a3,D0w ; add.b (0x2f,A0),D0b`: the addition does not overflow into the high byte
         let n = 0x100 | (0xa3 + x.u8(0x2f) as u32) & 0xff;
         start(x, n);
         crate::sound::play(x.b, 0xea83e, x.o);
@@ -1204,7 +1204,7 @@ mod scene {
         x.add8(0x4, 2);
     }
 
-    /// Variante 18 : sprite posé sur la caméra secondaire.
+    /// Variant 18: sprite placed on the secondary camera.
     fn v18_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.a5_u16(ram::CAMERA2_X);
@@ -1218,9 +1218,9 @@ mod scene {
         x.reinsert();
     }
 
-    /// Variante 19 : pastille de palette (0x28f340 + 0x60 + 32 par ligne, ligne de la table
-    /// 0xdf182) posée sur la caméra ; elle disparaît quand l'animation de son porteur (`+0x46`)
-    /// est finie.
+    /// Variant 19: palette dot (0x28f340 + 0x60 + 32 per row, row from table
+    /// 0xdf182) placed on the camera; it disappears when the animation of its carrier (`+0x46`)
+    /// is finished.
     const V19_LINES: u32 = 0xdf182;
     const V19_PALETTES: u32 = 0x28f340 + 0x60;
     const V19_POSITIONS: u32 = 0xdf234;
@@ -1238,7 +1238,7 @@ mod scene {
         v19_place(x);
     }
 
-    /// Place la pastille d'après la table, relativement à la caméra courante.
+    /// Places the dot from the table, relative to the current camera.
     fn v19_place<R: Bench>(x: &mut Cx<'_, R>) {
         let v = x.u8(0x2f) as u32;
         let px = x.rom16(V19_POSITIONS + 4 * v);
@@ -1265,8 +1265,8 @@ mod scene {
         kill(x);
     }
 
-    /// Variantes 20 et 22 : débris qui tombent d'un point tiré au hasard sous le bord bas de la
-    /// caméra (8 abscisses en table 0xdf2a8, 4 couples accélération/animation en 0xdf2ea).
+    /// Variants 20 and 22: debris falling from a randomly drawn point below the camera's bottom edge (8 abscissas
+    /// in table 0xdf2a8, 4 acceleration/animation pairs at 0xdf2ea).
     const V20_X: u32 = 0xdf2a8;
     const V20_FALL: u32 = 0xdf2ea;
 
@@ -1300,7 +1300,7 @@ mod scene {
         v20_fall(x);
     }
 
-    /// Chute : sort (état mort) quand le bas du sprite repasse au-dessus du bord haut de l'écran.
+    /// Fall: leaves (dead state) when the bottom of the sprite goes back above the top edge of the screen.
     fn v20_fall<R: Bench>(x: &mut Cx<'_, R>) {
         x.move_xz();
         let below = x.u16(0xc).wrapping_add(x.u16(0x10));
@@ -1309,8 +1309,8 @@ mod scene {
         }
     }
 
-    /// Variante 21 : comme 15, avec la ligne de palette désignée par `+0x2f / 2` (table 0xdf332),
-    /// sans éclaircissement ; positions en table 0xdf396.
+    /// Variant 21: like 15, with the palette row designated by `+0x2f / 2` (table 0xdf332),
+    /// without brightening; positions in table 0xdf396.
     const V21_PALETTE_SELECT: u32 = 0xdf332;
     const V21_POSITIONS: u32 = 0xdf396;
 
@@ -1328,8 +1328,8 @@ mod scene {
         start(x, 0x19c + (v >> 1));
     }
 
-    /// Variante 23 : étincelle collée au coin de la structure de caméra (A5+0x4fe, ou 0x54e si
-    /// `A5+0x36`), dont la couleur de la palette 0x91c180 reprend la luminosité de la couleur 0.
+    /// Variant 23: spark stuck to the corner of the camera structure (A5+0x4fe, or 0x54e if
+    /// `A5+0x36`), whose color of palette 0x91c180 takes the brightness of color 0.
     const V23_PALETTE: u32 = 0x28f4c0;
 
     fn v23_init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1368,22 +1368,22 @@ mod scene {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Types 7, 9, 10 : aides à l'écran (bulle de conseil, cadre clignotant, flèche)
+// Types 7, 9, 10: on-screen helps (advice bubble, blinking frame, arrow)
 // ---------------------------------------------------------------------------------------------
 
-/// Drapeau de l'état 6 posé à la sortie des objets d'aide : état 6, sous-état 0.
+/// State 6 flag set on exit of the help objects: state 6, substate 0.
 const LEAVE_6_0: u16 = 0x0600;
-/// État 6, sous-état 2 : l'objet se libérera à la prochaine image (voir `hint`).
+/// State 6, substate 2: the object will release itself on the next frame (see `hint`).
 const LEAVE_6_2: u16 = 0x0602;
-/// Octet de la RAM (0xff0ec6, A5-0x713a) : l'aide est inhibée tant qu'il est non nul.
+/// RAM byte (0xff0ec6, A5-0x713a): the help is inhibited as long as it is non-zero.
 const HINT_INHIBIT: u32 = 0xff_0ec6;
 
-/// Lit les quatre joueurs enregistrés en 0xff2aa4 (A5-0x555c) : mots, 0 = absent.
+/// Reads the four players registered at 0xff2aa4 (A5-0x555c): words, 0 = absent.
 const PLAYERS: u32 = 0xff_2aa4;
 
-/// Bulle de conseil (type 7) : tableau de 0x28ff20 pour la palette 0x91c380, animations 0x118 à
-/// 0x136 (une par conseil) lues dans `+0x14`, durée de chaque conseil dans `+0x16`. Elle est liée à
-/// un objet (`+0x46`) dont `+0x42` bit 1 demande la fin et bit 0 signale que le conseil a été lu.
+/// Advice bubble (type 7): table at 0x28ff20 for palette 0x91c380, animations 0x118 to
+/// 0x136 (one per piece of advice) read in `+0x14`, duration of each piece of advice in `+0x16`. It is tied to
+/// an object (`+0x46`) whose `+0x42` bit 1 requests the end and bit 0 signals that the advice has been read.
 mod hint {
     use super::*;
 
@@ -1419,7 +1419,7 @@ mod hint {
         x.anim_start(ANIMS, FIRST_ADVICE as u16);
     }
 
-    /// Palette de la bulle, luminosité maximale ; l'objet devient visible (`+0x2a`, `+0x2b`).
+    /// Bubble palette, maximum brightness; the object becomes visible (`+0x2a`, `+0x2b`).
     fn load_palette<R: Bench>(x: &mut Cx<'_, R>) {
         copy_longs(x, PALETTE, PALETTE_DST, 8);
         or_longs(x, PALETTE_DST, BRIGHT, 8);
@@ -1456,8 +1456,8 @@ mod hint {
         x.reinsert();
     }
 
-    /// Sous-état 0 : le conseil reste affiché `+0x16` images, puis passe au suivant (sous-état 2)
-    /// ou, après le dernier, rend la main à l'objet lié.
+    /// Substate 0: the advice stays displayed for `+0x16` frames, then moves on to the next (substate 2)
+    /// or, after the last, cedes control to the linked object.
     fn countdown<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(0x46) == 0 {
             return x.set16(0x4, LEAVE_6_2);
@@ -1468,7 +1468,7 @@ mod hint {
             if x.u16(0x14) != LAST_ADVICE {
                 x.add8(0x5, 2);
             } else {
-                // le dernier conseil reste tant que la partie est dans l'état 0xc ou 6
+                // the last piece of advice stays as long as the game is in state 0xc or 6
                 let mode = x.a5_u8(0x34);
                 if mode == 0xc || mode == 6 {
                     return x.set8(0x16, ADVICE_FRAMES);
@@ -1492,7 +1492,7 @@ mod hint {
         follow(x);
     }
 
-    /// La bulle suit la caméra (X + 0xb0, Z + 0xcf) et avance son animation.
+    /// The bubble follows the camera (X + 0xb0, Z + 0xcf) and advances its animation.
     fn follow<R: Bench>(x: &mut Cx<'_, R>) {
         let v = x.a5_u16(ram::CAMERA_X).wrapping_add(0xb0);
         x.set16(0x8, v);
@@ -1511,8 +1511,8 @@ mod hint {
     }
 }
 
-/// Repère attaché (type 8) : un petit marqueur (animation 0x13b ou 0x13c selon `+3`) collé à
-/// l'objet `+0x14`, un peu au-dessus (0x20 ou 0x10) ; il disparaît quand il sort à gauche de l'écran.
+/// Attached marker (type 8): a small marker (animation 0x13b or 0x13c according to `+3`) stuck to
+/// the object `+0x14`, a bit above it (0x20 or 0x10); it disappears when it leaves the screen on the left.
 mod marker {
     use super::*;
 
@@ -1547,8 +1547,8 @@ mod marker {
     }
 }
 
-/// Cadre clignotant (type 9) : 8 clignotements de 20 images, placé d'après une table (par `+3`)
-/// relative à la caméra, ou (si `+0x2f`) sur le premier joueur à une profondeur donnée.
+/// Blinking frame (type 9): 8 blinks of 20 frames, placed from a table (by `+3`)
+/// relative to the camera, or (if `+0x2f`) on the first player at a given depth.
 mod frame {
     use super::*;
 
@@ -1556,7 +1556,7 @@ mod frame {
     const OFFSETS: u32 = 0xdf87a;
     const BLINK_FRAMES: u16 = 0x14;
     const BLINKS: u8 = 8;
-    /// Mot de la RAM (A5+0x46) : joueur suivi.
+    /// RAM word (A5+0x46): followed player.
     const TRACKED: u32 = 0x46;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1597,8 +1597,8 @@ mod frame {
         }
     }
 
-    /// Position : avec `+0x2f`, ne reste que si le joueur suivi est dans la zone de profondeur
-    /// 0x170..0x260 ; sinon, caméra + décalage de la table.
+    /// Position: with `+0x2f`, it only stays if the followed player is in the depth zone
+    /// 0x170..0x260; otherwise, camera + table offset.
     fn place<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x2f) != 0 {
             let who = x.a5_u16(TRACKED);
@@ -1621,9 +1621,9 @@ mod frame {
     }
 }
 
-/// Flèche de conseil (type 10) : posée sur la caméra, clignote 10 fois (20 images) ; son animation
-/// et les événements donnés (4 appels à 0x19ae6, avec un code par joueur) viennent du numéro de
-/// conseil de l'objet lié (`+0x14` de la bulle, 0x118...). Naît à la fin d'une bulle (type 7).
+/// Advice arrow (type 10): placed on the camera, blinks 10 times (20 frames); its animation
+/// and the given events (4 calls to 0x19ae6, with one code per player) come from the advice number
+/// of the linked object (`+0x14` of the bubble, 0x118...). Born at the end of a bubble (type 7).
 mod arrow {
     use super::*;
 
@@ -1638,7 +1638,7 @@ mod arrow {
             x.set32(0x4, 0x0600_0000);
         }
         if suspended(x) {
-            // une flèche cachée ou suspendue disparaît
+            // a hidden or suspended arrow disappears
             return x.set32(0x4, 0x0600_0000);
         }
         match x.u8(0x4) {
@@ -1678,12 +1678,12 @@ mod arrow {
         x.set32(0x10, 0);
     }
 
-    /// Quatre événements consécutifs (codes +0x100 par joueur).
+    /// Four consecutive events (codes +0x100 per player).
     fn announce<R: Bench>(x: &mut Cx<'_, R>) {
         let advice = advice_of_owner(x);
         let i = advice.wrapping_sub(0x118).wrapping_mul(2);
         let code = x.rom16(EVENT_BY_ADVICE.wrapping_add(i as i16 as i32 as u32));
-        // un événement par joueur (octet haut : 0 à 3)
+        // one event per player (high byte: 0 to 3)
         for player in 0..4u16 {
             crate::events::enqueue_points(x.b, code.wrapping_add(player << 8));
         }
@@ -1717,16 +1717,16 @@ mod arrow {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Types 11, 12 : éléments de l'interface collés à la caméra
+// Types 11, 12: interface elements stuck to the camera
 // ---------------------------------------------------------------------------------------------
 
-/// Adresse (mot) de la structure de caméra dans la RAM : A5+0x4fe, ou A5+0x54e si `A5+0x36`.
+/// Address (word) of the camera structure in RAM: A5+0x4fe, or A5+0x54e if `A5+0x36`.
 fn camera_record<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     let record = if x.a5_u8(ram::USE_CAMERA2) != 0 { 0x54e } else { 0x4fe };
     (0xff_8000u32 + record) as u16
 }
 
-/// Place l'objet à la position de la structure de caméra `+0x42`, décalée de (`+0x14`, `+0x18`).
+/// Places the object at the position of camera structure `+0x42`, offset by (`+0x14`, `+0x18`).
 fn stick_to_camera<R: Bench>(x: &mut Cx<'_, R>) {
     let camera = x.linked(0x42);
     let v = camera.u16(x.b, 0x8).wrapping_add(x.u16(0x14));
@@ -1735,11 +1735,11 @@ fn stick_to_camera<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0xc, v);
 }
 
-/// Marque de l'interface (type 11) : deux variantes. La variante 0 (la bulle) entre par le bas
-/// (Z 0x100 -> 0x80, 3 par image), crée une variante 1 (le doigt, avec son paramètre `+0x2c`),
-/// attend qu'elle ait fini puis ressort (Z -> 0x110). La variante 1 se colle à la bulle et suit le
-/// compteur `+0x33` du propriétaire `+0x46` (clignote, sons, prévient `+0x44` quand il a épuisé
-/// ses essais).
+/// Interface mark (type 11): two variants. Variant 0 (the bubble) enters from the bottom
+/// (Z 0x100 -> 0x80, 3 per frame), creates a variant 1 (the finger, with its parameter `+0x2c`),
+/// waits for it to finish then leaves again (Z -> 0x110). Variant 1 sticks to the bubble and follows the
+/// counter `+0x33` of the owner `+0x46` (blinks, sounds, notifies `+0x44` when it has used up
+/// its attempts).
 mod badge {
     use super::*;
 
@@ -1755,7 +1755,7 @@ mod badge {
         }
     }
 
-    /// Crée un objet SOBJ de type 11 de variante `variant` et de paramètre `param` (`+0x2c`).
+    /// Creates a SOBJ object of type 11 of variant `variant` and parameter `param` (`+0x2c`).
     fn spawn<R: Bench>(x: &mut Cx<'_, R>, variant: u8, param: u8) -> Option<Obj> {
         let Some(o) = x.alloc(&pools::SOBJ) else { return None };
         o.set_u8(x.b, 0, 1);
@@ -1895,7 +1895,7 @@ mod badge {
     }
 }
 
-/// Pastille d'interface (type 12) : collée à la caméra (Z + 0x30), animation 0x1ab + variante.
+/// Interface dot (type 12): stuck to the camera (Z + 0x30), animation 0x1ab + variant.
 mod hud_dot {
     use super::*;
 
@@ -1908,7 +1908,7 @@ mod hud_dot {
                 let camera = camera_record(x);
                 x.set16(0x42, camera);
                 stick_to_camera(x);
-                // `move.w #0x1ab,D0w ; add.b (3,A0),D0b` : l'addition ne déborde pas sur l'octet haut
+                // `move.w #0x1ab,D0w ; add.b (3,A0),D0b`: the addition does not overflow into the high byte
                 let n = 0x100 | (0xab + x.u8(0x3) as u32) & 0xff;
                 x.anim_start(ANIMS, n as u16);
                 x.reinsert();
@@ -1923,9 +1923,9 @@ mod hud_dot {
     }
 }
 
-/// Panneau défilant (type 13) : naît à droite de la caméra (X + 0x20, Z 0x1c8, profondeur -0x100),
-/// avance avec elle jusqu'à la fin de son animation (script 0x3b) puis ordonne aux quatre joueurs
-/// enregistrés (0xff2aa4...) de passer à l'état 4 et se libère.
+/// Scrolling panel (type 13): born to the right of the camera (X + 0x20, Z 0x1c8, depth -0x100),
+/// advances with it until the end of its animation (script 0x3b) then orders the four registered
+/// players (0xff2aa4...) to go to state 4 and releases itself.
 mod panel {
     use super::*;
 
@@ -1968,10 +1968,10 @@ mod panel {
 // Type 14 : titre de niveau
 // ---------------------------------------------------------------------------------------------
 
-/// Titre de niveau (type 14) : bandeau animé (jeu 0x1c03a6, numéro tiré de la table 0xdff0c selon
-/// le niveau `A5+0x34`) collé à la caméra, dont la palette (0x91c1e0) s'éclaircit par pas de 4
-/// images en 16 étapes lues dans 0x291f00 ; il dure 0xb4 images. Les niveaux 7 et 0x2b ont leur
-/// propre déroulement.
+/// Level title (type 14): animated banner (set 0x1c03a6, number drawn from table 0xdff0c according to
+/// level `A5+0x34`) stuck to the camera, whose palette (0x91c1e0) brightens in steps of 4
+/// frames in 16 stages read from 0x291f00; it lasts 0xb4 frames. Levels 7 and 0x2b have their
+/// own sequence.
 mod stage_title {
     use super::*;
 
@@ -1984,10 +1984,10 @@ mod stage_title {
     const STEPS: u16 = 0x10;
     const STAGE_7: u8 = 7;
     const STAGE_2B: u8 = 0x2b;
-    /// Scripts d'animation directs du niveau 0x2b (normal, avec `A5+0x70`).
+    /// Direct animation scripts of level 0x2b (normal, with `A5+0x70`).
     const SCRIPT_2B: u32 = 0xe0152;
     const SCRIPT_2B_ALT: u32 = 0xe01cc;
-    /// `A5+0x70` : jeu à deux joueurs (h), décale le titre.
+    /// `A5+0x70`: two-player game (h), shifts the title.
     const ALT: u32 = 0x70;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -2047,7 +2047,7 @@ mod stage_title {
         place(x);
     }
 
-    /// Titre à (X caméra + 0x44, Z caméra + 0xa8) ; un peu plus à gauche à deux joueurs.
+    /// Title at (camera X + 0x44, camera Z + 0xa8); a bit further left in two-player mode.
     fn place<R: Bench>(x: &mut Cx<'_, R>) {
         let camera = Obj(0xff_0000 | camera_record(x) as u32);
         let v = camera.u16(x.b, 0x8);
@@ -2078,8 +2078,8 @@ mod stage_title {
         finish_tick(x)
     }
 
-    /// Un pas du fondu : toutes les 4 images, palette suivante ; à l'étape 0 le compteur reste
-    /// bloqué à 0xffff.
+    /// One fade step: every 4 frames, next palette; at stage 0 the counter stays
+    /// stuck at 0xffff.
     fn tick_fade<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let n = x.u16(0x18).wrapping_sub(1);
         x.set16(0x18, n);
@@ -2098,7 +2098,7 @@ mod stage_title {
         true
     }
 
-    /// Décompte de la durée du titre ; à zéro il passe à l'état 4. Remise en place dans la liste.
+    /// Countdown of the title's duration; at zero it goes to state 4. Put back in the list.
     fn finish_tick<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u16(0x14).wrapping_sub(1);
         x.set16(0x14, n);
@@ -2108,15 +2108,15 @@ mod stage_title {
         x.reinsert();
     }
 
-    /// Niveau 0x2b : comme le fondu normal mais sans avancer l'animation.
+    /// Level 0x2b: like the normal fade but without advancing the animation.
     fn step_stage_2b<R: Bench>(x: &mut Cx<'_, R>) {
         tick_fade(x);
         place(x);
         finish_tick(x);
     }
 
-    /// Niveau 7, sous-état 0 : le fondu dure jusqu'à l'étape négative, où la palette finale
-    /// (0x292120) est posée et le sous-état passe à 2.
+    /// Level 7, substate 0: the fade lasts until the negative stage, where the final palette
+    /// (0x292120) is set and the substate goes to 2.
     fn step_stage_7<R: Bench>(x: &mut Cx<'_, R>) {
         place(x);
         let n = x.u16(0x18).wrapping_sub(1);
@@ -2138,14 +2138,14 @@ mod stage_title {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 15 : cible à frapper (h)
+// Type 15: target to hit (h)
 // ---------------------------------------------------------------------------------------------
 
-/// Cible (type 15, variantes 0x25 et autres, rectangle `+0x16..+0x1c` autour de l'objet) : quand
-/// un joueur la touche d'une attaque (`+0x58` du joueur positif), elle encaisse ; au troisième
-/// coup (`+0x14`) elle lève un drapeau de la RAM (0xff2ac0 pour la variante 0x25, 0xff2ac1
-/// sinon), joue un son et passe à l'état 4. `+0x15` mémorise qu'un joueur est dedans, `+0x1e`
-/// le code (mot) mémorisé en 0xff2ab2 au premier contact.
+/// Target (type 15, variants 0x25 and others, rectangle `+0x16..+0x1c` around the object): when
+/// a player touches it with an attack (player's `+0x58` positive), it takes the hit; on the third
+/// hit (`+0x14`) it raises a RAM flag (0xff2ac0 for variant 0x25, 0xff2ac1
+/// otherwise), plays a sound and goes to state 4. `+0x15` records that a player is inside, `+0x1e`
+/// the code (word) saved at 0xff2ab2 on first contact.
 mod target {
     use super::*;
 
@@ -2207,7 +2207,7 @@ mod target {
         x.set16(0x8, v);
     }
 
-    /// Le joueur `p` est-il dans le rectangle ? Si oui, `+0x15` = 1 ; une attaque en cours
+    /// Is player `p` inside the rectangle? If so, `+0x15` = 1; an attack in progress
     /// (`+0x58` > 0) compte un coup.
     fn probe<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
         let dx = x.u16(0x8).wrapping_sub(p.u16(x.b, 0x8)).wrapping_add(x.u16(0x16));

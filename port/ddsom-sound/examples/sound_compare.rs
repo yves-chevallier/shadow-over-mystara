@@ -1,9 +1,9 @@
-//! Validation différentielle sur le jeu : la machine complète (68000 + Z80 d'origine) tourne sur
-//! un scénario d'entrées ; pour chaque interruption à 250 Hz du Z80 on relève les écritures dans la
-//! QSound et dans la RAM partagée, et on les compare à celles du pilote Rust nourri des mêmes
-//! commandes (c'est-à-dire de ce que le Z80 a lu dans la RAM partagée).
+//! Differential validation on the game: the complete machine (68000 + original Z80) runs an
+//! input scenario; for each 250 Hz interrupt of the Z80 the writes to the QSound and to the
+//! shared RAM are collected and compared with those of the Rust driver fed with the same
+//! commands (that is, with what the Z80 read from the shared RAM).
 //!
-//! sound_compare <roms> <eeprom> <scenario> <images>
+//! sound_compare <roms> <eeprom> <scenario> <frames>
 
 #[path = "support/mod.rs"]
 mod support;
@@ -16,18 +16,18 @@ use support::Report;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames] = &a[..] else {
-        eprintln!("usage : sound_compare <roms> <eeprom> <scenario> <images>");
+        eprintln!("usage: sound_compare <roms> <eeprom> <scenario> <frames>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_rc::install(&mut m);
-    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
+    let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
     m.sound.trace = Some(Vec::new());
 
-    let mut driver = Driver::new(Rom::load(Path::new(roms)).expect("rom son"));
-    // Ce que le Z80 a vu de la RAM partagée : reconstitué à partir de ses lectures.
+    let mut driver = Driver::new(Rom::load(Path::new(roms)).expect("sound rom"));
+    // What the Z80 saw of the shared RAM: reconstructed from its reads.
     let mut shared = vec![0u8; ddsom_sound::SHARED_SIZE];
     let mut report = Report::default();
     let mut latch = [0u8; 2];
@@ -47,9 +47,9 @@ fn main() {
     }
     run_interval(&mut interval, &mut latch, &mut shared, &mut driver, irq, &mut report);
 
-    println!("{frames} images, {irq} interruptions à 250 Hz");
+    println!("{frames} frames, {irq} interrupts at 250 Hz");
     println!(
-        "écritures du Z80 : {} (QSound {}, RAM partagée {}) ; du pilote Rust : {} (QSound {}, RAM partagée {})",
+        "Z80 writes: {} (QSound {}, shared RAM {}); Rust driver: {} (QSound {}, shared RAM {})",
         report.real.total,
         report.real.qsound,
         report.real.total - report.real.qsound,
@@ -58,27 +58,27 @@ fn main() {
         report.drv.total - report.drv.qsound
     );
     println!(
-        "identiques et dans le même ordre : {} écritures QSound/pan + {} acquittements",
+        "identical and in the same order: {} QSound/pan writes + {} acknowledgements",
         report.matched_main, report.matched_acks
     );
     println!(
-        "interruptions : {} exactes, {} avec débordement du travail sur la suivante, {} sans écriture",
+        "interrupts: {} exact, {} with work spilling over into the next one, {} without writes",
         report.exact_intervals, report.spill_intervals, report.idle_intervals
     );
     println!(
-        "registres QSound identiques en fin d'interruption : {} sur {}",
+        "QSound registers identical at the end of the interrupt: {} out of {}",
         report.same_state_intervals,
         irq + 1
     );
     match &report.first_divergence {
-        None if report.identical() => println!("RÉSULTAT : identité exacte des suites d'écritures"),
-        None => println!("RÉSULTAT : préfixe identique, longueurs différentes"),
-        Some(d) => println!("RÉSULTAT : première divergence : {d}"),
+        None if report.identical() => println!("RESULT: exact identity of the write sequences"),
+        None => println!("RESULT: identical prefix, different lengths"),
+        Some(d) => println!("RESULT: first divergence: {d}"),
     }
 }
 
-/// Termine un intervalle (de l'acquittement d'une interruption à la suivante) : met à jour la RAM
-/// partagée d'après ce que le Z80 y a lu, déroule le pilote et range les écritures des deux côtés.
+/// Ends an interval (from the acknowledgement of one interrupt to the next): updates the shared
+/// RAM from what the Z80 read there, runs the driver and files the writes of both sides.
 fn run_interval(
     interval: &mut Vec<Event>,
     latch: &mut [u8; 2],
@@ -105,7 +105,7 @@ fn run_interval(
     }
     let mut drv: Vec<Write> = Vec::new();
     if reset {
-        // Remise en route du Z80 par le 68000 : le pilote redémarre aussi.
+        // Z80 restarted by the 68000: the driver restarts too.
         driver.reset(shared, &mut drv);
     } else if irq > 0 {
         driver.interrupt(shared, &mut drv);
