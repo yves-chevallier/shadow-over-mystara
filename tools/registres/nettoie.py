@@ -31,7 +31,9 @@ for f, lignes in sites.items():
         if ms:
             k = int(ms.group(2))
             if k in (2, 3, 4, 5):
-                L[n - 1] = f'{ms.group(1)}*x.c.d{k}() = *x.c.d{k}() & 0xffff_0000 | ({ms.group(3)}) as u32;'
+                e = ms.group(3)
+                e = e if re.fullmatch(r'[\w.]+', e) else f'({e})'
+                L[n - 1] = f'{ms.group(1)}*x.c.d{k}() = *x.c.d{k}() & 0xffff_0000 | {e} as u32;'
                 print(f'{f}:{n} reste : {L[n-1].strip()}')
             else:
                 print(f'{f}:{n} retiré : {l.strip()}')
@@ -45,6 +47,7 @@ for f, lignes in sites.items():
         l2 = re.sub(r'x\.c\.d\[([2-5])\]', r'(*x.c.d\1())', l)
         l2 = re.sub(r'\(\*x\.c\.d([2-5])\(\)\)(\s*=[^=])', r'*x.c.d\1()\2', l2)
         l2 = re.sub(r'\(\*x\.c\.d([2-5])\(\)\)(\s*(\|=|&=|\+=|-=))', r'*x.c.d\1()\2', l2)
+        l2 = re.sub(r'= \(\*x\.c\.d([2-5])\(\)\) ([&|])', r'= *x.c.d\1() \2', l2)
         if l2 != l:
             L[n - 1] = l2
             print(f'{f}:{n} reste : {l2.strip()}')

@@ -229,14 +229,14 @@ pub(super) fn walk_delay_slow<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x96f48 : nombre de pas d'une marche.
-pub(super) fn walk_steps_fast(x: &mut Cx) {
+pub(super) fn walk_steps_fast<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     let v = table8(x, 0x96f6c, r);
     x.set8(WALK_STEPS, v);
 }
 
 /// 0x96f5a.
-pub(super) fn walk_steps_slow(x: &mut Cx) {
+pub(super) fn walk_steps_slow<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     let v = table8(x, 0x96f8c, r);
     x.set8(WALK_STEPS, v);
@@ -266,7 +266,7 @@ pub(super) fn pick_slow_time<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x97464 : mode du ralenti (1 ou 2), tiré dans un masque de bits par difficulté et nombre de joueurs.
-pub(super) fn pick_slow_mode(x: &mut Cx) {
+pub(super) fn pick_slow_mode<R: Banc>(x: &mut Cx<'_, R>) {
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let row = players.saturating_sub(1) << 3;
     let level = ((var::RANK.get(x.b) & 0x18) >> 2) as u32;
@@ -278,14 +278,14 @@ pub(super) fn pick_slow_mode(x: &mut Cx) {
 }
 
 /// 0x974ea : lâche un nombre d'objets lu dans la table 0x97530 (difficulté, joueurs).
-pub(super) fn spawn_by_level(x: &mut Cx) {
+pub(super) fn spawn_by_level<R: Banc>(x: &mut Cx<'_, R>) {
     let i = level_index(x, 2);
     let count = table8(x, 0x97530, i) as i8 as i16;
     spawn_ring(x, count);
 }
 
 /// 0x97506 : lâche `count + 1` objets autour de la caméra (0x57c8c) ; `+0xaf` compte ceux qui ont pu naître.
-pub(super) fn spawn_ring(x: &mut Cx, count: i16) {
+pub(super) fn spawn_ring<R: Banc>(x: &mut Cx<'_, R>, count: i16) {
     let mut d5 = count as u16;
     loop {
         let i = (d5 as u32).wrapping_mul(4) & 0xffff;
@@ -293,11 +293,9 @@ pub(super) fn spawn_ring(x: &mut Cx, count: i16) {
         let dy = table16(x, 0x97572, i);
         let px = dx.wrapping_add(var::CAMERA1_X.get(x.b));
         let py = dy.wrapping_add(var::CAMERA1_Y.get(x.b));
-        set_dw(x, 0, px);
-        set_dw(x, 2, py);
-        x.c.d[1] = 0;
-        x.call(call::SPAWN_RING);
-        if !carry(x) {
+        // (D0, D1, D2) = (x, 0, y) ; D2 (mot bas) reste
+        *x.c.d2() = *x.c.d2() & 0xffff_0000 | py as u32;
+        if crate::families::creators::enemy_1_at_pur(x.b, x.o, (px, 0, py)).is_some() {
             x.add8(SPAWNED, 1);
         }
         if d5 == 0 {
@@ -305,12 +303,14 @@ pub(super) fn spawn_ring(x: &mut Cx, count: i16) {
         }
         d5 = d5.wrapping_sub(1);
     }
+    // `dbf D5` : D5.w = -1 en sortie (reste ; le mot haut est celui de l'appelant)
+    *x.c.d5() = *x.c.d5() & 0xffff_0000 | 0xffff;
 }
 
 // --- choix d'attaque d'après les boîtes de portée ------------------------------------------------
 
 /// 0x96fac, 0x96fc8 : un joueur est-il dans la boîte `(d0, d1, d2)` ? Rend 0 sinon, ou 1 / 2 : le côté (0x1047a).
-pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
+pub(super) fn probe<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u8 {
     if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
@@ -318,7 +318,7 @@ pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
 }
 
 /// 0x96fe4 : un joueur est tout près devant ; la table 0x96ffa choisit l'entrée de 0x9700a.
-pub(super) fn choose_close(x: &mut Cx) {
+pub(super) fn choose_close<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
     let pick = table8(x, 0x96ffa, r);
     let target = 0x9700a_i32 + table16(x, 0x9700a, pick as u32) as i16 as i32;
@@ -329,7 +329,7 @@ pub(super) fn choose_close(x: &mut Cx) {
 }
 
 /// 0x9700c : un joueur est devant : selon la phase de combat, une charge ou une attaque.
-pub(super) fn choose_front(x: &mut Cx) {
+pub(super) fn choose_front<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
     let phase = x.u8(PHASE) as i8 as i32;
     let entry = x.rom16(0x97026 + (2 * phase) as u32) as i16 as i32;
@@ -348,7 +348,7 @@ pub(super) fn choose_front(x: &mut Cx) {
 }
 
 /// 0x97078 : un joueur est à mi-distance ; `side` = 1 ou 2 (0x1047a).
-pub(super) fn choose_mid(x: &mut Cx) {
+pub(super) fn choose_mid<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
     let pick = table8(x, 0x970aa, r);
     let target = 0x970ba_i32 + table16(x, 0x970ba, pick as u32) as i16 as i32;
@@ -361,7 +361,7 @@ pub(super) fn choose_mid(x: &mut Cx) {
 }
 
 /// 0x970c0 : un joueur est loin ; `side` = 1 ou 2.
-pub(super) fn choose_far(x: &mut Cx, side: u8) {
+pub(super) fn choose_far<R: Banc>(x: &mut Cx<'_, R>, side: u8) {
     let r = random(x) & 0xf;
     let entry = (side as u32 - 1) * 2 + 4 * (x.u8(PHASE) as i8 as i32 as u32);
     let which = x.rom16(0x970e4 + entry) as i16 as i32;

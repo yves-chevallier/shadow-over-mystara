@@ -83,7 +83,7 @@ pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 /// Lance l'animation `n` du jeu des entrées en scène.
-pub(self) fn entry(x: &mut Cx, n: u32) {
+pub(self) fn entry<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_ENTRY, n);
 }
 
@@ -95,7 +95,7 @@ pub(self) fn next7<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -118,7 +118,7 @@ pub fn run(x: &mut Cx) {
 
 /// 0x794e8 : réglages du boss ; la moitié principale (variante 0) attend invulnérable en pose, la seconde moitié
 /// (variante 1) attend son tour. Rien n'est réglé si la scène est déjà lancée (`A5+0x52`).
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, true);
     if x.a5_u16(0x52) == 0 {
         x.add8(f::STATE, 2);
@@ -192,7 +192,7 @@ fn partner_waits<R: Banc>(x: &mut Cx<'_, R>) {
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 /// 0x79600 : un groupe par image (hors gel et pause), puis zone de jeu et ombre.
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
@@ -217,7 +217,7 @@ fn state<R: Banc>(x: &mut Cx<'_, R>, vulnerable: bool, s: u32) {
 }
 
 /// 0x7ab74 : debout.
-pub(self) fn stand(x: &mut Cx) {
+pub(self) fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     state(x, true, 0x0202_0000);
 }
 
@@ -237,7 +237,7 @@ pub(self) fn run_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7abba : fin de la course (0x35 ou 0x37).
-pub(self) fn run_end(x: &mut Cx) {
+pub(self) fn run_end<R: Banc>(x: &mut Cx<'_, R>) {
     let kind = if x.u8(3) == 0 { 0x35 } else { 0x37 };
     x.set8(0x79, kind);
     state(x, true, 0x0202_0600);
@@ -283,7 +283,7 @@ pub(self) fn transform<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Exécute la décision dont l'adresse d'origine est `at` (sauts par tables de la ROM).
-pub(self) fn go(x: &mut Cx, at: u32) {
+pub(self) fn go<R: Banc>(x: &mut Cx<'_, R>, at: u32) {
     match at {
         0x7ac02 => strike(x, 0, false),
         0x7ac10 => strike(x, 2, false),
@@ -300,7 +300,7 @@ pub(self) fn go(x: &mut Cx, at: u32) {
 }
 
 /// 0x7a8d2 : cible à courte portée : tirage dans la table 0x7a8e8.
-pub(self) fn from_close(x: &mut Cx) {
+pub(self) fn from_close<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7a8e8 + r) as u32;
     let at = jump_target(x, 0x7a8f8, i);
@@ -308,7 +308,7 @@ pub(self) fn from_close(x: &mut Cx) {
 }
 
 /// 0x7a8fa : cible devant (boîte de la course) ; les trois routines de la phase `+0xaa` lisent la même table 0x7a932.
-pub(self) fn from_front(x: &mut Cx) {
+pub(self) fn from_front<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7a932 + r) as u32;
     let at = jump_target(x, 0x7a942, i);
@@ -317,7 +317,7 @@ pub(self) fn from_front(x: &mut Cx) {
 
 /// 0x7a944 : l'IA a choisi le geste `g` (1 ou 2) pour la boîte proche ; tirage dans les tables 0x7a9ae (principale),
 /// 0x7a9be (seconde moitié, geste 1) ou 0x7a9ce.
-pub(self) fn from_near_gesture(x: &mut Cx, g: u32) {
+pub(self) fn from_near_gesture<R: Banc>(x: &mut Cx<'_, R>, g: u32) {
     let r = rand_and(x, 0xf);
     let table = if x.u8(3) == 0 {
         0x7a9ae
@@ -332,7 +332,7 @@ pub(self) fn from_near_gesture(x: &mut Cx, g: u32) {
 }
 
 /// 0x7a9e4 : l'IA a choisi le geste `g` (1 ou 2) pour la boîte lointaine : sélection de la table d'après la phase.
-pub(self) fn from_far_gesture(x: &mut Cx, g: u32) {
+pub(self) fn from_far_gesture<R: Banc>(x: &mut Cx<'_, R>, g: u32) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32 as u32;
     let index = g.wrapping_sub(1).wrapping_mul(2).wrapping_add(phase.wrapping_mul(4));
@@ -360,7 +360,7 @@ pub(self) fn walk_delay<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
 }
 
 /// 0x7a7fc et 0x7a80e : nombre de pas de la course, tiré dans la table du sens.
-pub(self) fn draw_steps(x: &mut Cx, kind: u8) {
+pub(self) fn draw_steps<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
     let r = rand_and(x, 0x1f);
     let table = if kind == 3 { 0x7a840 } else { 0x7a820 };
     let n = x.rom8(table + r);
@@ -368,13 +368,13 @@ pub(self) fn draw_steps(x: &mut Cx, kind: u8) {
 }
 
 /// 0x7a860 : cible devant (boîte étroite) et geste choisi par l'IA.
-pub(self) fn close_gesture(x: &mut Cx) -> Option<u32> {
+pub(self) fn close_gesture<R: Banc>(x: &mut Cx<'_, R>) -> Option<u32> {
     ai_box(x, -0x50, 0x30, 5)
 }
 
 /// 0x7a87e : si le boss est dans l'écran, cible dans une boîte profonde (plus étroite pour la seconde moitié) et
 /// geste choisi par l'IA.
-pub(self) fn far_gesture(x: &mut Cx) -> Option<u32> {
+pub(self) fn far_gesture<R: Banc>(x: &mut Cx<'_, R>) -> Option<u32> {
     let cam = camera_x(x);
     let px = x.u16(0x8);
     if Fl::sub16(cam.wrapping_sub(0x10), px).ge() || Fl::sub16(cam.wrapping_add(0x190), px).le() {
@@ -385,7 +385,7 @@ pub(self) fn far_gesture(x: &mut Cx) -> Option<u32> {
 }
 
 handlers! {
-    0x794ae "boss_0" run,
+    0x794ae "boss_0" #[sans] run,
     // retour au combat après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x7a5ac "boss_0_releve" hit::get_up,
 }

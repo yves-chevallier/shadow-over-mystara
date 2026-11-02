@@ -10,7 +10,7 @@ use crate::objects::Obj;
 /// Poussée d'esprit inconnue de la ROM : lecture de la table de coups d'un bond, par difficulté.
 fn pick_jump_move<R: Banc>(x: &mut Cx<'_, R>) {
     let row = difficulty_row(x);
-    *x.c.d2() = (*x.c.d2()) & 0xffff_0000 | row;
+    *x.c.d2() = *x.c.d2() & 0xffff_0000 | row;
     let mv = pick_byte(x, JUMP_MOVES);
     x.set8(f::SUB2, mv);
     x.set8(f::SUB3, 0);

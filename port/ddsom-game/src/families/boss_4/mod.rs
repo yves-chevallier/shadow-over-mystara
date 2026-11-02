@@ -90,13 +90,21 @@ pub(self) fn kind<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
     x.set8(ANIM_LAST, k);
 }
 
-/// Mot de poids faible d'un registre de données.
-pub(self) fn setw(x: &mut Cx, n: usize, v: u16) {
-    set_dw(x, n, v);
+/// Mot de poids faible d'un registre de données : seuls D2 à D5 sont gardés (restes relus par les gestionnaires
+/// suivants) ; D0, D1 et D6 ne sont relus par personne.
+pub(self) fn setw<R: Banc>(x: &mut Cx<'_, R>, n: usize, v: u16) {
+    let r = match n {
+        2 => x.c.d2(),
+        3 => x.c.d3(),
+        4 => x.c.d4(),
+        5 => x.c.d5(),
+        _ => return,
+    };
+    *r = *r & 0xffff_0000 | v as u32;
 }
 
 /// `subq.w #1,(off,A0)` : vrai quand le décompte est écoulé (`ble`).
-pub(self) fn expired(x: &mut Cx, off: u32) -> bool {
+pub(self) fn expired<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> bool {
     sub16(x, off, 1).le()
 }
 
@@ -117,7 +125,7 @@ pub(self) fn cue_double<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Toutes les 4 images, une bouffée de poussière (0x1172e, sorte 3).
-pub(self) fn dust_tick(x: &mut Cx) {
+pub(self) fn dust_tick<R: Banc>(x: &mut Cx<'_, R>) {
     if !sub16(x, DUST, 1).gt() {
         x.set16(DUST, 4);
         lib::debris(x, 3);
@@ -125,7 +133,7 @@ pub(self) fn dust_tick(x: &mut Cx) {
 }
 
 /// Image-clé marquée (bit 7 de `+0x33`) : un battement d'ailes, de côté alterné.
-pub(self) fn flap(x: &mut Cx) {
+pub(self) fn flap<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(f::KEY_FRAME) as i8) < 0 {
         let k = x.u8(f::KEY_FRAME) & 0x7f;
         x.set8(f::KEY_FRAME, k);
@@ -141,7 +149,7 @@ pub(self) fn speed_long<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> u32 {
     v
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -163,7 +171,7 @@ pub fn run(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// 0x81b74 : réglages du boss, création des trois doubles ; en partie, il entre par le haut de l'écran.
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -209,7 +217,6 @@ fn init(x: &mut Cx) {
     spawn_double(x, 0x17, Some((0x12c, 0x64, 0x44)), DOUBLE_B);
     spawn_double(x, 0x18, None, DOUBLE_C);
     if var::GAME_ON.get(x.b) != 0 {
-        x.c.d[0] = 0;
         body(x, 0);
         lib::sound(x, 0xe1330);
     } else {
@@ -251,7 +258,7 @@ fn spawn_double<R: Banc>(x: &mut Cx<'_, R>, kind: u8, life: Option<(u16, u16, u8
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 /// 0x81d6e : un groupe par image (hors gel et pause), puis zone de jeu et ombre.
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
@@ -268,7 +275,7 @@ fn active(x: &mut Cx) {
 }
 
 handlers! {
-    0x81b3a "boss_4" run,
+    0x81b3a "boss_4" #[sans] run,
     // retour au combat après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x82ea0 "boss_4_releve" hit::resume,
 }

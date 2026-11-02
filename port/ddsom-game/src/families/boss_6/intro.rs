@@ -6,7 +6,7 @@ use super::decide;
 use super::*;
 use crate::objects::Courant;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => enter(x),
         2 => rise(x),
@@ -76,7 +76,7 @@ fn land<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 8 : glissade d'atterrissage, avec de la poussière toutes les 4 images.
-fn roar_wait(x: &mut Cx) {
+fn roar_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if !sub16(x, COUNT, 1).gt() {
         x.set16(COUNT, 4);
         lib::debris(x, 3);
@@ -91,7 +91,7 @@ fn roar_wait(x: &mut Cx) {
 }
 
 /// +6 = 10 : pause avant de se relever.
-fn settle(x: &mut Cx) {
+fn settle<R: Banc>(x: &mut Cx<'_, R>) {
     if sub16(x, TIMER, 1).le() {
         x.add8(f::SUB2, 2);
         lib::sound(x, 0xe3da6);
@@ -108,7 +108,7 @@ fn stand_up<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 14 : attend que la caméra soit prête (`A5+0x2c` = 0xc), puis combat.
-fn wait_camera(x: &mut Cx) {
+fn wait_camera<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PHASE.get(x.b) == 0xc {
         lib::create_set_14(x);
         decide::chase(x);

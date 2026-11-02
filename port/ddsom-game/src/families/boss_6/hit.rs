@@ -21,7 +21,7 @@ const STUN_REACTION: u32 = 0x85326;
 /// Seuils de PV par phase (mots).
 const THRESHOLDS: u32 = 0x10de2;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else {
@@ -48,7 +48,7 @@ fn out_of_hp<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-fn reaction(x: &mut Cx) {
+fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::drop_once(x);
         lib::set_68(x);
@@ -64,7 +64,7 @@ fn reaction(x: &mut Cx) {
 }
 
 /// 0x85326 : étourdissement : le boss tremble sur place puis repart.
-fn stun(x: &mut Cx) {
+fn stun<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -100,7 +100,7 @@ fn stun(x: &mut Cx) {
     }
 }
 
-fn pushed_back(x: &mut Cx) {
+fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -135,7 +135,7 @@ fn pushed_back(x: &mut Cx) {
     }
 }
 
-fn get_up(x: &mut Cx) {
+fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -182,7 +182,7 @@ pub(crate) fn recovered_tail<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn down(x: &mut Cx) {
+fn down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -206,7 +206,7 @@ fn down(x: &mut Cx) {
             let mut vx: i16 = 0x200;
             let mut side = 0;
             let edge = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
-            set_dw(x, 2, edge); // relu : D2 relu par la suite (DDSOM_POISON : cov_tour1_c0, cov_tour5_c4)
+            *x.c.d2() = *x.c.d2() & 0xffff_0000 | edge as u32; // D2 relu par la suite (DDSOM_POISON : cov_tour1_c0, cov_tour5_c4)
             if !Fl::sub16(edge, x.u16(0x8)).ge() {
                 vx = -vx;
                 side = 0x20;

@@ -92,7 +92,7 @@ pub mod rom {
 
 /// Alloue un objet du pool `alloc` (adresse d'une routine d'allocation) et rend son adresse (`A1`).
 /// L'original n'examine pas la retenue : il écrit à travers `A1` même si le pool est plein.
-pub fn alloc(x: &mut Cx, pool: &pools::Pool) -> Obj {
+pub fn alloc<R: Banc>(x: &mut Cx<'_, R>, pool: &pools::Pool) -> Obj {
     x.alloc_unchecked(pool)
 }
 

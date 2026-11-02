@@ -20,7 +20,7 @@ const LOW_FLIGHT: u32 = 0x8508c;
 /// Table des incréments de hauteur de 0x8596c.
 const SKIM: u32 = 0x8599a;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => roar(x),
         2 => swoop_a(x),
@@ -35,14 +35,14 @@ fn players_alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
-fn resume_chase(x: &mut Cx) {
+fn resume_chase<R: Banc>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return decide::wait(x);
     }
     decide::chase(x);
 }
 
-fn resume_stand(x: &mut Cx) {
+fn resume_stand<R: Banc>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return decide::wait(x);
     }
@@ -51,7 +51,7 @@ fn resume_stand(x: &mut Cx) {
 
 /// Battement d'ailes : l'image-clé a son bit 7 levé (posé par le script) : on le retire, on alterne `+0xb3`
 /// et le son suit (0x11a36).
-fn wing_beat(x: &mut Cx) {
+fn wing_beat<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, f::KEY_FRAME).pl() {
         return;
     }
@@ -71,7 +71,7 @@ fn climb<R: Banc>(x: &mut Cx<'_, R>, v: u16) {
 
 // --- +6 = 0 : rugissement -----------------------------------------------------------------------
 
-fn roar(x: &mut Cx) {
+fn roar<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -115,7 +115,7 @@ fn take_off<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x84b6e : création du tir puis envol de la première attaque en piqué.
-fn start_swoop(x: &mut Cx) {
+fn start_swoop<R: Banc>(x: &mut Cx<'_, R>) {
     if make_shot(x, 1) {
         take_off(x);
     } else {
@@ -125,7 +125,7 @@ fn start_swoop(x: &mut Cx) {
 
 // --- +6 = 2 : piqué A -----------------------------------------------------------------------------------
 
-fn swoop_a(x: &mut Cx) {
+fn swoop_a<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if !pick_target(x) {
@@ -184,7 +184,7 @@ fn swoop_a(x: &mut Cx) {
 }
 
 /// +7 = 2 des piqués A et B (0x84bb8) : vol jusqu'à la hauteur de l'écran, avec les battements d'ailes.
-fn swoop_flight(x: &mut Cx) {
+fn swoop_flight<R: Banc>(x: &mut Cx<'_, R>) {
     let ceiling = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0);
     let height = x.u16(0x10).wrapping_add(x.u16(0xc));
     if Fl::sub16(height, ceiling).ge() {
@@ -216,7 +216,7 @@ fn swoop_flight(x: &mut Cx) {
 
 // --- +6 = 4 : piqué B -----------------------------------------------------------------------------------
 
-fn swoop_b(x: &mut Cx) {
+fn swoop_b<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if !pick_target(x) {
@@ -282,7 +282,7 @@ fn swoop_b(x: &mut Cx) {
 
 // --- +6 = 6 : bond sur la cible ----------------------------------------------------------------------
 
-fn leap(x: &mut Cx) {
+fn leap<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -361,7 +361,7 @@ fn leap(x: &mut Cx) {
 // --- +6 = 8 : vol bas avec tir ---------------------------------------------------------------------------
 
 /// 0x8596c : la hauteur avance d'un incrément de la table `SKIM` (signe selon `+0xa8`).
-fn skim_step(x: &mut Cx) {
+fn skim_step<R: Banc>(x: &mut Cx<'_, R>) {
     let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
     let mut d0 = rom32(x, SKIM + i) as i32;
     if !cmp16(x, COUNT, 0x24).gt() {
@@ -374,7 +374,7 @@ fn skim_step(x: &mut Cx) {
     }
 }
 
-fn spit(x: &mut Cx) {
+fn spit<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if !pick_target(x) {

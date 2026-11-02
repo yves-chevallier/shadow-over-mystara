@@ -307,7 +307,7 @@ fn pick_blink_delay<R: Banc>(x: &mut Cx<'_, R>) {
     let mut d2 = var::RANK.get(x.b);
     d2 = d2 & 0xff00 | (d2 as u8 >> 1) as u16;
     let row = (d2 << 5) as u32;
-    *x.c.d2() = (*x.c.d2()) & 0xffff_0000 | row;
+    *x.c.d2() = *x.c.d2() & 0xffff_0000 | row;
     let n = rand_and(x, 0x1f);
     let idx = x.data8(BLINK_DELAYS + row + n) as u32;
     let w = x.rom16(BLINK_TIMES + idx);

@@ -23,7 +23,7 @@ const STUN_REACTION: u32 = 0x96ab8;
 const THRESHOLDS_A: u32 = 0x10ee2;
 const THRESHOLDS_B: u32 = 0x110e2;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else {
@@ -49,7 +49,7 @@ fn out_of_hp<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-fn reaction(x: &mut Cx) {
+fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         if x.u8(SLOW) != 0 {
             let mut add = x.u8(STUN);
@@ -77,7 +77,7 @@ fn reaction(x: &mut Cx) {
 }
 
 /// 0x96ab8 : étourdissement : le boss tremble sur place puis repart.
-fn stun(x: &mut Cx) {
+fn stun<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -116,7 +116,7 @@ fn stun(x: &mut Cx) {
 
 // --- +5 = 2 : recul -----------------------------------------------------------------------------
 
-fn pushed_back(x: &mut Cx) {
+fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -157,7 +157,7 @@ fn pushed_back(x: &mut Cx) {
 
 // --- +5 = 4 : relevé ----------------------------------------------------------------------------
 
-fn get_up(x: &mut Cx) {
+fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -230,7 +230,7 @@ fn body_hurt<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 /// 0x96ee6 : fin de relevé (sans compter le coup).
-fn back_on_feet(x: &mut Cx) {
+fn back_on_feet<R: Banc>(x: &mut Cx<'_, R>) {
     recovered_tail(x);
 }
 
@@ -278,7 +278,7 @@ pub(crate) fn recovered_tail<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 6, 8 : mort ---------------------------------------------------------------------------
 
-fn down(x: &mut Cx) {
+fn down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             if x.u8(Obj::VARIANT) == 0 {

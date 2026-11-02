@@ -30,10 +30,6 @@ const STOPS: u32 = 0x8f97a;
 /// chevauchent, comme l'original), espace de données.
 const BOB_TABLE: u32 = 0x8faa2;
 
-mod rom {
-    pub const BEGIN_A: u32 = 0xdf4bc;
-}
-
 /// Champs propres à ce type.
 mod g {
     /// Bit 0 : cinématique demandée ; bit 1 : étape franchie.
@@ -68,7 +64,7 @@ const PLAYERS: u32 = 0xff85de;
 const ACTIVE_FIRST: u32 = 0x0200_0000;
 const ACTIVE_LEAVE: u32 = 0x0200_0e00;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if var::FROZEN.get(x.b) != 0 {
         return;
     }
@@ -79,7 +75,7 @@ pub fn run(x: &mut Cx) {
     }
 }
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.a5_u16(SHOT_SLOTS) as i16) < 2 {
         return;
     }
@@ -110,7 +106,7 @@ fn init(x: &mut Cx) {
     x.anim_start(ANIMS, 0);
 }
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -122,7 +118,7 @@ fn active(x: &mut Cx) {
     x.reinsert();
 }
 
-fn stage(x: &mut Cx) {
+fn stage<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => begin(x),
         2 => wait_stop(x),
@@ -136,7 +132,7 @@ fn stage(x: &mut Cx) {
 }
 
 /// Vol libre : accroché à la gauche de l'écran, avec le flottement.
-fn drift(x: &mut Cx) {
+fn drift<R: Banc>(x: &mut Cx<'_, R>) {
     let left = scroll_x(x).wrapping_sub(0x80);
     x.set16(0x8, left);
     bob(x);
@@ -145,7 +141,7 @@ fn drift(x: &mut Cx) {
 }
 
 /// Déplacement du dragon qui suit le meneur.
-fn glide(x: &mut Cx) {
+fn glide<R: Banc>(x: &mut Cx<'_, R>) {
     chase(x);
     x.move_yz();
     x.anim_step();
@@ -173,12 +169,13 @@ fn leave_now<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(SLOW, 1);
 }
 
-fn begin(x: &mut Cx) {
+fn begin<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set_bit(CUTSCENE, 0, false);
     x.set_bit(CUTSCENE, 1, false);
     x.set8(LEAVING, 0);
-    x.call(rom::BEGIN_A);
+    // 0xdf4bc : objet SOBJ 7 lié par `+0x46`
+    super::petites::linked_par(&mut super::effects_creators::restes::Pur, x.b, x.o, &crate::objects::pools::SOBJ, 0x7, 0x46);
     drift(x);
 }
 
@@ -192,7 +189,7 @@ fn freeze_players<R: Banc>(x: &mut Cx<'_, R>, on: bool) {
     }
 }
 
-fn wait_stop(x: &mut Cx) {
+fn wait_stop<R: Banc>(x: &mut Cx<'_, R>) {
     if next_stop(x) {
         x.set32(f::STATE, ACTIVE_FIRST);
         x.set_bit(CUTSCENE, 1, true);
@@ -214,7 +211,7 @@ fn wait_stop(x: &mut Cx) {
     drift(x);
 }
 
-fn wait_cutscene(x: &mut Cx) {
+fn wait_cutscene<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u16(MESSAGE) != 0 && x.linked(MESSAGE).u8(x.b, 0x22) != 0 {
         var::PAUSE.set(x.b, 0);
         x.set_a5_u8(0x33, 0);
@@ -231,7 +228,7 @@ fn wait_cutscene(x: &mut Cx) {
     drift(x);
 }
 
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     if must_leave(x) {
         return leave_now(x);
     }
@@ -239,8 +236,7 @@ fn approach(x: &mut Cx) {
         let dx = lead.u16(x.b, 0x58);
         x.add16(0x8, dx);
         let reach = scroll_x(x).wrapping_add(0x50);
-        set_dw(x, 0, reach);
-        if x.in_arena(x.c.d[0] as u16) {
+        if x.in_arena(reach) {
             x.add8(f::SUB2, 2);
             x.set16(TIMER, 0xb4);
         }
@@ -250,7 +246,7 @@ fn approach(x: &mut Cx) {
     x.anim_step();
 }
 
-fn follow(x: &mut Cx) {
+fn follow<R: Banc>(x: &mut Cx<'_, R>) {
     if must_leave(x) {
         return leave_now(x);
     }
@@ -263,7 +259,7 @@ fn follow(x: &mut Cx) {
     }
 }
 
-fn follow_and_hold(x: &mut Cx) {
+fn follow_and_hold<R: Banc>(x: &mut Cx<'_, R>) {
     if must_leave(x) {
         x.set8(LEAVING, 1);
         return leave_now(x);
@@ -283,7 +279,7 @@ fn follow_and_hold(x: &mut Cx) {
     }
 }
 
-fn leave(x: &mut Cx) {
+fn leave<R: Banc>(x: &mut Cx<'_, R>) {
     next_stop(x);
     let Some(lead) = leader(x) else { return };
     let left = scroll_x(x).wrapping_sub(0x80);
@@ -312,7 +308,7 @@ fn leave(x: &mut Cx) {
 }
 
 /// Se place près du meneur : même profondeur, abscisse maintenue dans `[meneur - 0xe0, meneur - 0x60]`.
-fn chase(x: &mut Cx) {
+fn chase<R: Banc>(x: &mut Cx<'_, R>) {
     let Some(lead) = leader(x) else { return };
     let y = lead.u16(x.b, 0x10).wrapping_sub(0x10);
     x.set16(0x10, y);
@@ -336,7 +332,7 @@ fn chase(x: &mut Cx) {
 }
 
 /// Flottement : toutes les 16 images, de nouvelles vitesses tirées dans `BOB_TABLE`, puis leurs opposées.
-fn bob(x: &mut Cx) {
+fn bob<R: Banc>(x: &mut Cx<'_, R>) {
     let inverse = x.u8(BOB_PHASE) != 0;
     let t = x.u8(BOB_TIMER).wrapping_sub(1);
     x.set8(BOB_TIMER, t);
@@ -361,5 +357,5 @@ fn bob(x: &mut Cx) {
 }
 
 handlers! {
-    0x8f59c "boss_13" run,
+    0x8f59c "boss_13" #[sans] run,
 }

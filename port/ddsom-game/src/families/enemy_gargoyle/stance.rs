@@ -234,7 +234,7 @@ fn pick_a<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x657c8 : comme `pick_a`, mais selon le résultat `gate` de la décision de l'IA (1 : devant, 2 : derrière).
 fn pick_a2<R: Banc>(x: &mut Cx<'_, R>, gate: u32) {
-    *x.c.d2() = (*x.c.d2()) & !0xffff | gate;
+    *x.c.d2() = *x.c.d2() & !0xffff | gate;
     let r = rand_and(x, 0xf);
     let table = if gate == 1 { 0x65822 } else { 0x65832 };
     let v = x.rom8(table + r);
@@ -248,7 +248,7 @@ fn pick_a2<R: Banc>(x: &mut Cx<'_, R>, gate: u32) {
 
 /// 0x65848 : tire un geste de repli (table par palier `+0xaa`).
 fn pick_b<R: Banc>(x: &mut Cx<'_, R>, gate: u32) {
-    *x.c.d2() = (*x.c.d2()) & !0xffff | gate;
+    *x.c.d2() = *x.c.d2() & !0xffff | gate;
     let r = rand_and(x, 0xf);
     let table = 0x658a2 + 0x10 * x.u8(PHASE).min(2) as u32;
     let v = x.rom8(table + r);

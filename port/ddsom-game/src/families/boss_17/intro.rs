@@ -15,7 +15,7 @@ use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => arrival(x),
         2 => entrance(x),
@@ -48,7 +48,7 @@ fn effect<R: Banc>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8>
 }
 
 /// Ouvre une bulle de dialogue de type `kind` (0xc8312) ; son adresse va en `+0x42`.
-fn open_message(x: &mut Cx, kind: u32) {
+fn open_message<R: Banc>(x: &mut Cx<'_, R>, kind: u32) {
     for _ in 0..64 {
         if let Some(bulle) = crate::families::creators::scene_set(x.b, kind as u8) {
             x.set16(0x42, bulle.word());
@@ -63,13 +63,14 @@ fn message_done<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     m.u8(x.b, 0x22) != 0
 }
 
-fn fx(x: &mut Cx, addr: u32) {
-    x.call(addr);
+/// Son `addr` (`jsr`).
+fn fx<R: Banc>(x: &mut Cx<'_, R>, addr: u32) {
+    lib::sound(x, addr);
 }
 
 // --- +6 = 0 : arrivée -----------------------------------------------------------------------------
 
-fn arrival(x: &mut Cx) {
+fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -136,6 +137,8 @@ fn arrival(x: &mut Cx) {
                     let v = x.u16(0x1c).wrapping_neg();
                     x.set16(0x1c, v);
                     if cmp16(x, COUNT, 5).eq() {
+                        // `moveq #3,D5`
+                        *x.c.d5() = 3;
                         decide::spawn_ring(x, 3);
                         fx(x, 0xe5ac2);
                     } else if cmp16(x, COUNT, 2).eq() {
@@ -168,7 +171,7 @@ fn arrival(x: &mut Cx) {
 
 // --- +6 = 2 : entrée par la droite ---------------------------------------------------------------
 
-fn entrance(x: &mut Cx) {
+fn entrance<R: Banc>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -181,7 +184,7 @@ fn entrance(x: &mut Cx) {
             x.set8(0, 2);
             x.set_bit(0x1, 1, false);
             x.set8(f::FLIP, 0);
-            fx(x, 0x1f0be);
+            x.unlink(); // 0x1f0be
             body(x, 0x18);
         }
         1 => {
@@ -220,7 +223,7 @@ fn entrance(x: &mut Cx) {
 
 // --- +6 = 4 : mort, cinématique de fin -------------------------------------------------------------
 
-fn finale(x: &mut Cx) {
+fn finale<R: Banc>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -416,7 +419,7 @@ fn finale(x: &mut Cx) {
 }
 
 /// +7 = 32 (0x959cc) : la caméra monte de 4 par image jusqu'à 0x1c8, puis le boss lâche un nuage de 4 effets autour d'un effet central.
-fn camera_rise(x: &mut Cx) {
+fn camera_rise<R: Banc>(x: &mut Cx<'_, R>) {
     if tst16(x, TIMER).gt() && sub16(x, TIMER, 1).gt() {
         return;
     }
@@ -450,7 +453,7 @@ fn camera_rise(x: &mut Cx) {
 /// Ordonnée de la caméra principale lue en long (16.16).
 const SCROLL_Y_LONG: crate::ram::Long = crate::ram::Long(var::SCROLL_Y.0);
 
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     let first = x.u8(0x7) == 36;
     let rate = if first { 0x12000 } else { 0x11000 };
     let y = SCROLL_Y_LONG.get(x.b).wrapping_sub(rate);
@@ -466,7 +469,7 @@ fn fall(x: &mut Cx) {
 }
 
 /// +7 = 40 (0x95aea) : retombe vers le sol.
-fn land(x: &mut Cx) {
+fn land<R: Banc>(x: &mut Cx<'_, R>) {
     let y = SCROLL_Y_LONG.get(x.b).wrapping_sub(0x10000);
     SCROLL_Y_LONG.set(x.b, y);
     x.move_xyz();
@@ -482,7 +485,7 @@ fn land(x: &mut Cx) {
 // --- +6 = 6 et 8 : variantes 1 et 2 ----------------------------------------------------------------
 
 /// `second` : variante 2 (caméra 2 ; sa sortie de premier plan teste la hauteur seule).
-fn variant(x: &mut Cx, second: bool) {
+fn variant<R: Banc>(x: &mut Cx<'_, R>, second: bool) {
     match state7(x) {
         0 => variant_start(x, second),
         1 => {
@@ -562,7 +565,7 @@ fn variant(x: &mut Cx, second: bool) {
 }
 
 /// Première étape des variantes 1 (0x95bf8) et 2 (0x95dd8) : le boss tombe du haut de l'écran.
-fn variant_start(x: &mut Cx, second: bool) {
+fn variant_start<R: Banc>(x: &mut Cx<'_, R>, second: bool) {
     x.add8(0x7, 2);
     x.set8(0, 2);
     x.set_bit(0x1, 1, false);

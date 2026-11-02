@@ -8,7 +8,7 @@ use crate::families::cx::Banc;
 use super::*;
 
 /// 0x8328e : combat, debout.
-pub(super) fn idle(x: &mut Cx) {
+pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set32(f::STATE, 0x0202_0000);
 }
@@ -36,14 +36,14 @@ pub(super) fn walk_slow<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x832de / 0x832f0 : charge vers le milieu de l'écran, ou vers la cible.
-pub(super) fn charge(x: &mut Cx, at_target: bool) {
+pub(super) fn charge<R: Banc>(x: &mut Cx<'_, R>, at_target: bool) {
     x.set8(VULNERABLE, 0);
     x.set8(CHARGE_AT_TARGET, at_target as u8);
     x.set32(f::STATE, 0x0202_0800);
 }
 
 /// 0x83304 : bond en arrière.
-fn hop(x: &mut Cx) {
+fn hop<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     x.set32(f::STATE, 0x0202_0a00);
 }
@@ -72,7 +72,7 @@ pub(super) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Pose l'état de la routine `target` d'une table de sauts de décision.
-fn enter(x: &mut Cx, target: u32) {
+fn enter<R: Banc>(x: &mut Cx<'_, R>, target: u32) {
     match target {
         0x8328e => idle(x),
         0x832c8 => walk_slow(x),
@@ -116,9 +116,8 @@ fn jump<R: Banc>(x: &mut Cx<'_, R>, table: u32, i: u16) -> u32 {
 }
 
 /// Tire `r` (0 à 15), lit l'indice de saut dans `bytes`, puis entre dans l'état désigné par la table `jumps`.
-fn roll(x: &mut Cx, r: u32, bytes: u32, jumps: u32) {
+fn roll<R: Banc>(x: &mut Cx<'_, R>, r: u32, bytes: u32, jumps: u32) {
     let k = x.rom8(bytes + r);
-    x.c.d[0] = x.c.d[0] & !0xff | k as u32;
     let t = jump(x, jumps, k as u16);
     enter(x, t)
 }
@@ -129,13 +128,13 @@ fn phase<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
 }
 
 /// 0x830ce : la cible est dans la boîte large (0x7ef4) : table 0x830e4 (un seul choix, le bond en arrière).
-pub(super) fn from_wide_box(x: &mut Cx) {
+pub(super) fn from_wide_box<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     roll(x, r, 0x830e4, 0x830f4);
 }
 
 /// 0x830f6 : la cible est tout près (0xb5e0) : selon la phase, tables 0x8312e, 0x8313e, 0x8314e.
-pub(super) fn from_close(x: &mut Cx) {
+pub(super) fn from_close<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let p = phase(x).wrapping_add(phase(x));
     setw(x, 1, p);
@@ -145,7 +144,7 @@ pub(super) fn from_close(x: &mut Cx) {
 
 /// 0x83164 (boîte proche, `near`) et 0x831f6 (boîte lointaine) : selon la phase et le geste `gesture` (1 ou 2) de
 /// l'IA.
-pub(super) fn from_ai(x: &mut Cx, gesture: u16, near: bool) {
+pub(super) fn from_ai<R: Banc>(x: &mut Cx<'_, R>, gesture: u16, near: bool) {
     setw(x, 2, gesture);
     let r = rand_and(x, 0xf);
     let p = phase(x);

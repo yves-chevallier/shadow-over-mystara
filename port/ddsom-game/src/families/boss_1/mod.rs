@@ -89,8 +89,7 @@ pub(self) fn attack<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 /// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
-pub(self) fn kind(x: &mut Cx, k: u8) {
-    x.c.d[0] = k as u32;
+pub(self) fn kind<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
     x.set8(ANIM_KIND, k);
     x.set8(ANIM_LAST, k);
 }
@@ -119,17 +118,17 @@ pub(self) fn turn_needed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Boîte large devant le boss (0x7ef4).
-pub(self) fn in_wide_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
+pub(self) fn in_wide_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     lib::guard_in_front(x, d0, d1, d2)
 }
 
 /// Bouffée de poussière de sorte `k` (0x1172e).
-pub(self) fn dust(x: &mut Cx, k: u32) {
+pub(self) fn dust<R: Banc>(x: &mut Cx<'_, R>, k: u32) {
     lib::debris(x, k);
 }
 
 /// `subq.w #1,(off,A0)` : vrai quand le décompte est écoulé (`ble`).
-pub(self) fn expired(x: &mut Cx, off: u32) -> bool {
+pub(self) fn expired<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> bool {
     sub16(x, off, 1).le()
 }
 
@@ -143,7 +142,7 @@ pub(self) fn jump_target<R: Banc>(x: &mut Cx<'_, R>, base: u32, i: u32) -> u32 {
     base.wrapping_add(x.rom16(base + i) as i16 as u32)
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -167,7 +166,7 @@ pub fn run(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// 0x7ad2a : réglages du boss ; il attend, en pose, le début de la cinématique d'arrivée.
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -214,7 +213,7 @@ fn init(x: &mut Cx) {
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 /// 0x7ae16 : un groupe par image (hors gel et pause), puis zone de jeu et ombre une fois arrivé.
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
@@ -357,48 +356,45 @@ pub(self) fn go<R: Banc>(x: &mut Cx<'_, R>, at: u32) {
 }
 
 /// 0x7c0ba : cible dans la boîte large, tirage dans la table 0x7c0d0.
-pub(self) fn from_wide_box(x: &mut Cx) {
+pub(self) fn from_wide_box<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7c0d0 + r) as u32;
-    x.c.d[0] = i;
     let at = jump_target(x, 0x7c0e0, i);
     go(x, at)
 }
 
 /// 0x7c0e2 : cible tout près ; tirage dans la table de la phase `+0xaa`.
-pub(self) fn from_close(x: &mut Cx) {
+pub(self) fn from_close<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32 as u32;
     let table = [0x7c11a, 0x7c12a, 0x7c13a][phase as usize % 3];
     let i = x.rom8(table + r) as u32;
-    x.c.d[0] = i;
     let at = jump_target(x, 0x7c14a, i);
     go(x, at)
 }
 
 /// 0x7c14e et 0x7c1cc : l'IA a choisi le geste `g` (1 ou 2) ; tirage dans la table de la phase.
-fn from_gesture(x: &mut Cx, g: u32, tables: [u32; 6], jumps: u32) {
+fn from_gesture<R: Banc>(x: &mut Cx<'_, R>, g: u32, tables: [u32; 6], jumps: u32) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32;
     let i = (g as i32 - 1 + 2 * phase) as usize;
     let k = x.rom8(tables[i.min(5)] + r) as u32;
-    x.c.d[0] = k;
     let at = jump_target(x, jumps, k);
     go(x, at)
 }
 
 /// 0x7c14e : boîte proche (-0x70).
-pub(self) fn from_near_gesture(x: &mut Cx, g: u32) {
+pub(self) fn from_near_gesture<R: Banc>(x: &mut Cx<'_, R>, g: u32) {
     from_gesture(x, g, [0x7c1a8, 0x7c1a8, 0x7c1b8, 0x7c1b8, 0x7c1b8, 0x7c1b8], 0x7c1c8)
 }
 
 /// 0x7c1cc : boîte lointaine (-0xe0).
-pub(self) fn from_far_gesture(x: &mut Cx, g: u32) {
+pub(self) fn from_far_gesture<R: Banc>(x: &mut Cx<'_, R>, g: u32) {
     from_gesture(x, g, [0x7c226, 0x7c226, 0x7c226, 0x7c226, 0x7c236, 0x7c236], 0x7c246)
 }
 
 /// 0x7c080 / 0x7c09e : cible dans la boîte et geste choisi par l'IA (0x1047a), ou rien.
-pub(self) fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u32> {
+pub(self) fn ai_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u32> {
     if !lib::target_in_box(x, d0, d1, d2) {
         return None;
     }
@@ -431,7 +427,7 @@ pub(self) fn try_split_leap<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x7c01c / 0x7c02e : nombre de bonds de la marche, tiré dans la table `table`.
-pub(self) fn draw_steps(x: &mut Cx, table: u32) {
+pub(self) fn draw_steps<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     let r = rand_and(x, 0x1f);
     let n = x.rom8(table + r);
     x.set8(WALK_STEPS, n);
@@ -439,39 +435,34 @@ pub(self) fn draw_steps(x: &mut Cx, table: u32) {
 
 /// 0x7c396 / 0x7c3b0 : point visé près de la cible (décalages tirés dans `table`, `mask` + 1 entrées), du côté
 /// du boss ; l'angle vers ce point (0x137e) devient la direction.
-pub(self) fn aim_near_target(x: &mut Cx, table: u32, mask: u32) {
+pub(self) fn aim_near_target<R: Banc>(x: &mut Cx<'_, R>, table: u32, mask: u32) {
     let i = rand_and(x, mask) * 4;
-    x.c.d[0] = i;
     let dx = x.rom16(table + i);
     let dz = x.rom16(table + i + 2);
-    set_dw(x, 1, dx);
-    set_dw(x, 2, dz);
+    *x.c.d2() = *x.c.d2() & 0xffff_0000 | dz as u32;
     let t = target_obj(x);
     let tx = t.u16(x.b, 0x8);
-    set_dw(x, 0, tx);
     let mut px = dx;
     if tx as i16 >= x.u16(0x8) as i16 {
         px = px.wrapping_neg();
     }
     let mx = px.wrapping_add(tx);
     let mz = dz.wrapping_add(t.u16(x.b, 0x10));
-    set_dw(x, 1, mx); // relu : D1, D2 relus par la suite (DDSOM_POISON : covb_long_27, covb_long3p_27)
-    set_dw(x, 2, mz); // relu : relu
+    *x.c.d2() = *x.c.d2() & 0xffff_0000 | mz as u32;
     x.set16(MARK_X, mx);
     x.set16(MARK_Z, mz);
-    aim_at_mark(x);
+    aim_at_mark(x, (mx, mz));
 }
 
-/// 0x137e vers (D1, D2) puis `+0x2d` = l'angle.
-pub(self) fn aim_at_mark(x: &mut Cx) {
-    x.c.d[0] = lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16)) as u32;
-    let a = x.c.d[0] as u8;
+/// 0x137e vers le point `mark` (D1, D2 de l'original) puis `+0x2d` = l'angle.
+pub(self) fn aim_at_mark<R: Banc>(x: &mut Cx<'_, R>, mark: (u16, u16)) {
+    let a = lib::aim_from(x, mark);
     x.set8(Obj::SPEED_INDEX, a);
 }
 
 /// 0x7c430 : vitesse verticale du bond selon la distance au point visé : 10 de plus par tranche de la vitesse
 /// horizontale (la plus grande des deux distances, avec la vitesse correspondante).
-pub(self) fn hop_height(x: &mut Cx) {
+pub(self) fn hop_height<R: Banc>(x: &mut Cx<'_, R>) {
     let abs = |v: u16| if (v as i16) < 0 { v.wrapping_neg() } else { v };
     // `move.w (0x1c,A0),D3` : le mot haut de D3 est celui que laisse la direction 0x137e appelée juste avant par
     // les deux appelants (`moveq #0,D3` puis le pas) : nul
@@ -495,15 +486,13 @@ pub(self) fn hop_height(x: &mut Cx) {
         d1 = d1.wrapping_add(10);
     }
     x.add16(0x18, d1);
-    x.c.d[1] = d1 as u32;
-    x.c.d[2] = d2;
-    x.c.d[3] = d3;
-    x.c.d[4] = d4;
+    *x.c.d2() = d2;
+    *x.c.d3() = d3;
+    *x.c.d4() = d4;
 }
 
 /// 0x7c4da : une bouffée (EFFCT 0x32, variante 4) toutes les `n` + 1 images.
-pub(self) fn puff(x: &mut Cx, n: u8) {
-    x.c.d[0] = n as u32;
+pub(self) fn puff<R: Banc>(x: &mut Cx<'_, R>, n: u8) {
     x.add8(PUFFS, 1);
     if (n as i8) > x.u8(PUFFS) as i8 {
         return;
@@ -540,7 +529,7 @@ pub(self) fn spawn_double<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x7acea "boss_1" run,
+    0x7acea "boss_1" #[sans] run,
     // retour au combat après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x7bece "boss_1_releve" hit::get_up,
 }

@@ -9,7 +9,7 @@ use crate::objects::Obj;
 // --- aides communes -----------------------------------------------------------------------------
 
 /// Suite d'un coup, d'une course ou d'une attente : un nouveau départ si un joueur vit, sinon l'attente.
-fn restart_or_idle(x: &mut Cx) {
+fn restart_or_idle<R: Banc>(x: &mut Cx<'_, R>) {
     if lib::players_alive(x) {
         run_start(x)
     } else {
@@ -18,7 +18,7 @@ fn restart_or_idle(x: &mut Cx) {
 }
 
 /// Fin d'une animation de coup (0x79e88) : la course reprend quand elle est terminée.
-fn end_of_strike(x: &mut Cx) {
+fn end_of_strike<R: Banc>(x: &mut Cx<'_, R>) {
     if lib::step(x) {
         restart_or_idle(x);
     }
@@ -41,7 +41,7 @@ fn reached<R: Banc>(x: &mut Cx<'_, R>, limit: Option<u16>) -> bool {
 }
 
 /// Pas de course vers l'avant à vitesse horizontale `+0x14` : animation, déplacement, poussière à la mi-pas.
-fn gallop_step(x: &mut Cx) {
+fn gallop_step<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     x.move_x();
     if x.u8(f::KEY_FRAME) == 2 {
@@ -68,7 +68,7 @@ fn start_slide<R: Banc>(x: &mut Cx<'_, R>, v: u16, extra: bool) {
 }
 
 /// Glissade (0x79750) : une bouffée de poussière toutes les 4 images, puis la fin de la glissade.
-fn slide(x: &mut Cx) {
+fn slide<R: Banc>(x: &mut Cx<'_, R>) {
     if !sub16(x, TIMER2, 1).gt() {
         x.set16(TIMER2, 4);
         lib::debris(x, 0);
@@ -91,7 +91,7 @@ fn mark_target<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- groupe 0 : entrées en scène --------------------------------------------------------------------
 
-pub(super) fn intro(x: &mut Cx) {
+pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => arrival(x),
         2 => transformation(x),
@@ -101,7 +101,7 @@ pub(super) fn intro(x: &mut Cx) {
 }
 
 /// 0x7964c : la moitié principale arrive en courant depuis un bord de l'écran.
-fn arrival(x: &mut Cx) {
+fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -140,7 +140,7 @@ fn arrival(x: &mut Cx) {
 
 /// 0x797ae : la transformation (PV à la moitié) : la moitié principale se redresse, crée la seconde et attend
 /// qu'elle ait fini son entrée.
-fn transformation(x: &mut Cx) {
+fn transformation<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -213,7 +213,7 @@ fn place_partner<R: Banc>(x: &mut Cx<'_, R>, partner: crate::objects::Obj) {
 }
 
 /// 0x798ac : la seconde moitié entre en courant, glisse, puis attend la fin de la cinématique de son hôte.
-fn partner_arrival(x: &mut Cx) {
+fn partner_arrival<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -266,7 +266,7 @@ fn partner_arrival(x: &mut Cx) {
 
 // --- groupe 2 : combat -------------------------------------------------------------------------
 
-pub(super) fn fight(x: &mut Cx) {
+pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(3) == 0 && x.u8(TRANSFORMED) == 0 && Fl::sub16(x.u16(0x60) >> 1, x.u16(f::HP)).gt() {
         return transform(x);
     }
@@ -281,14 +281,13 @@ pub(super) fn fight(x: &mut Cx) {
 }
 
 /// 0x79a70 : debout, attend un temps tiré puis repart.
-fn idle(x: &mut Cx) {
+fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     if !lib::players_alive(x) {
         return idle_alone(x);
     }
     if x.u8(0x7) == 0 {
         next7(x);
         lib::draw_6e(x);
-        x.c.d[0] = 0;
         x.set8(ANIM_KIND, 0);
         if x.u8(ANIM_LAST) != 0 {
             x.set8(ANIM_LAST, 0);
@@ -347,7 +346,7 @@ fn select_run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x79b3a (kind 2) et 0x79b5c (kind 3) : course ; elle commence par tirer le nombre de pas et leur délai.
-fn run_phase(x: &mut Cx, kind: u8) {
+fn run_phase<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
     if !lib::players_alive(x) {
         return idle_alone(x);
     }
@@ -379,7 +378,7 @@ fn run_phase(x: &mut Cx, kind: u8) {
 
 /// 0x79bf0 : un pas de course ; tous les `+0x71` images la cible est reconsidérée et les attaques possibles sont
 /// essayées dans l'ordre des portées.
-fn keep_running(x: &mut Cx) {
+fn keep_running<R: Banc>(x: &mut Cx<'_, R>) {
     if sub8(x, WALK_DELAY, 1).mi() {
         if sub8(x, WALK_STEPS, 1).le() {
             return run_end(x);
@@ -417,7 +416,7 @@ fn keep_running(x: &mut Cx) {
 }
 
 /// 0x79cac : charge vers la caméra ou vers la position mémorisée de la cible.
-fn charge_phase(x: &mut Cx) {
+fn charge_phase<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -465,7 +464,7 @@ fn charge_phase(x: &mut Cx) {
 
 // --- groupe 4 : attaques -------------------------------------------------------------------------
 
-pub(super) fn attacks(x: &mut Cx) {
+pub(super) fn attacks<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => simple_strike(x, 0x10, 0),
         2 => simple_strike(x, 0x11, 1),
@@ -479,7 +478,7 @@ pub(super) fn attacks(x: &mut Cx) {
 }
 
 /// 0x79e5a, 0x79ea0 et 0x79ece : un coup d'une animation (`n` du jeu des attaques).
-fn simple_strike(x: &mut Cx, kind: u8, n: u32) {
+fn simple_strike<R: Banc>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -492,7 +491,7 @@ fn simple_strike(x: &mut Cx, kind: u8, n: u32) {
 }
 
 /// 0x79efc : bond sur la cible suivi d'un coup.
-fn leap_strike(x: &mut Cx) {
+fn leap_strike<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -525,7 +524,7 @@ fn leap_strike(x: &mut Cx) {
 }
 
 /// 0x7a034 : grand saut en arc vers la cible, retombée et rugissement.
-fn arc_jump(x: &mut Cx) {
+fn arc_jump<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -595,7 +594,7 @@ fn arc_jump(x: &mut Cx) {
 }
 
 /// 0x7a166 : trois coups enchaînés (nombre tiré dans la table 0x7a1ca d'après la difficulté et le nombre de joueurs).
-fn triple_strike(x: &mut Cx) {
+fn triple_strike<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -642,7 +641,7 @@ fn triple_strike(x: &mut Cx) {
 }
 
 /// 0x7a248 : crache un projectile (ESHL 0x43) devant lui.
-fn spit(x: &mut Cx) {
+fn spit<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -689,7 +688,7 @@ fn spit(x: &mut Cx) {
 // --- groupes 6 à 10 : attente --------------------------------------------------------------------
 
 /// 0x7a30c : tant qu'aucun joueur n'est en vie, le boss attend en pose ; dès qu'un joueur revient, il repart.
-pub(super) fn wait_for_players(x: &mut Cx) {
+pub(super) fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
     if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return run_start(x);
     }

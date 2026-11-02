@@ -69,11 +69,11 @@ pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn strike(x: &mut Cx, n: u32) {
+pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_STRIKE, n);
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -97,7 +97,7 @@ pub fn run(x: &mut Cx) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -149,7 +149,7 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
@@ -165,7 +165,7 @@ fn active(x: &mut Cx) {
 }
 
 /// `+5` = 6, 8, 10 (0x98640) : attend que des joueurs reviennent.
-fn wait_for_players(x: &mut Cx) {
+fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return decide::chase(x);
     }
@@ -183,5 +183,5 @@ fn wait_for_players(x: &mut Cx) {
 }
 
 handlers! {
-    0x975ec "boss_18" run,
+    0x975ec "boss_18" #[sans] run,
 }

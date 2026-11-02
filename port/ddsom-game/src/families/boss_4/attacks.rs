@@ -16,7 +16,7 @@ use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => roar(x),
         2 => dive(x),
@@ -60,7 +60,7 @@ fn take_off<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x823c2 : montée jusqu'au-dessus de l'écran, au rythme des battements d'ailes ; puis le boss disparaît
 /// (invulnérable) 0x28 images.
-fn climb(x: &mut Cx) {
+fn climb<R: Banc>(x: &mut Cx<'_, R>) {
     let top = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0);
     let h = x.u16(0x10).wrapping_add(x.u16(0xc));
     setw(x, 0, top);
@@ -91,7 +91,7 @@ fn climb(x: &mut Cx) {
 }
 
 /// 0x8237a (`+6` = 2) : envol, puis piqué à la verticale de la cible.
-fn dive(x: &mut Cx) {
+fn dive<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if !pick_target(x) {
@@ -105,7 +105,6 @@ fn dive(x: &mut Cx) {
             if expired(x, TIMER) {
                 x.add8(0x7, 2);
                 x.set8(INVULNERABLE, 0);
-                x.c.d[0] = 2;
                 return air(x, 2);
             }
             // dix images avant la fin, le boss reparaît au-dessus de la cible
@@ -137,7 +136,6 @@ fn dive(x: &mut Cx) {
             lib::shake_58(x, 0x1e);
             lib::debris(x, 5);
             lib::sound(x, 0xecc0a);
-            x.c.d[0] = 3;
             air(x, 3);
         }
         _ => {
@@ -158,7 +156,7 @@ fn dive(x: &mut Cx) {
 }
 
 /// 0x82546 (`+6` = 4) : envol, puis traversée de l'écran au ras du sol à hauteur de la cible.
-fn swoop(x: &mut Cx) {
+fn swoop<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if !pick_target(x) {
@@ -228,7 +226,7 @@ fn landing<R: Banc>(x: &mut Cx<'_, R>, shake: u16, n: u32) {
 }
 
 /// 0x82660 (`+6` = 6) : bond par-dessus la cible ; l'élan vertical dépend de la distance à parcourir.
-fn leap(x: &mut Cx) {
+fn leap<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -311,7 +309,7 @@ fn leap(x: &mut Cx) {
 }
 
 /// Les étapes en vol : un pas d'animation, l'oscillation (0x833b6), le vent des ailes, un battement.
-fn hover(x: &mut Cx) {
+fn hover<R: Banc>(x: &mut Cx<'_, R>) {
     lib::step(x);
     bob(x);
     lib::push_players(x);
@@ -320,7 +318,7 @@ fn hover(x: &mut Cx) {
 
 /// 0x827c6 (`+6` = 8) : envol à faible hauteur, souffle en éventail (jets ESHL 0x32 tant que le premier double
 /// garde la gueule ouverte), puis descente.
-fn breath_in_flight(x: &mut Cx) {
+fn breath_in_flight<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             kind(x, 0x14);
@@ -338,7 +336,6 @@ fn breath_in_flight(x: &mut Cx) {
             }
             let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
             let v = rom32(x, 0x82852 + i);
-            x.c.d[0] = v;
             x.add32(0xc, v);
             lib::step(x);
         }
@@ -427,7 +424,7 @@ fn breath_shot<R: Banc>(x: &mut Cx<'_, R>, angles: u32, variant: Option<u8>) -> 
 }
 
 /// Attente de `+0xa6` images, puis étape suivante avec la minuterie `next` (et un signal au premier double).
-fn timed(x: &mut Cx, next: Option<u16>, cue: bool) {
+fn timed<R: Banc>(x: &mut Cx<'_, R>, next: Option<u16>, cue: bool) {
     if expired(x, TIMER) {
         x.add8(0x7, 2);
         if let Some(t) = next {
@@ -441,7 +438,7 @@ fn timed(x: &mut Cx, next: Option<u16>, cue: bool) {
 }
 
 /// Dernière étape commune : attente, puis la marche.
-fn last(x: &mut Cx) {
+fn last<R: Banc>(x: &mut Cx<'_, R>) {
     if !expired(x, TIMER) {
         lib::step(x);
         return;
@@ -450,7 +447,7 @@ fn last(x: &mut Cx) {
 }
 
 /// 0x82a0c (`+6` = 10) : deux signaux au premier double, puis attente.
-fn double_gesture(x: &mut Cx) {
+fn double_gesture<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -466,7 +463,7 @@ fn double_gesture(x: &mut Cx) {
 }
 
 /// 0x82ab6 (`+6` = 12) : souffle au sol, jets ESHL 0x32 variante 1 toutes les 3 images pendant 0x64 images.
-fn breath(x: &mut Cx) {
+fn breath<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);

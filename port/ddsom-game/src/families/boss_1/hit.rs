@@ -18,7 +18,7 @@ const REACTIONS: u32 = 0x7bbbe;
 /// La seule routine propre au boss (code 0x4c) : tremblement sur place.
 const SHAKE_REACTION: u32 = 0x7bc6a;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else {
@@ -35,7 +35,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x7bb96 : premier passage : dégâts (0xb648, 0x10112) et, sans PV, la mort ; puis la routine du code de coup.
-fn reaction(x: &mut Cx) {
+fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::drop_once(x);
         lib::set_68(x);
@@ -44,23 +44,20 @@ fn reaction(x: &mut Cx) {
         if !tst16(x, f::HP).gt() {
             x.set8(f::SUB, 6);
             x.set8(0, 2);
-            x.c.d[0] = 1;
             return death(x);
         }
     }
     let code = x.u8(0x49) as u32;
-    x.c.d[0] = code;
     let routine = rom32(x, REACTIONS + code);
-    x.c.a[1] = routine;
     if routine == SHAKE_REACTION {
         shake(x)
     } else {
-        x.call(routine)
+        run_reaction(x, routine)
     }
 }
 
 /// 0x7bc6a : tremblement sur place (16 images), puis à terre.
-fn shake(x: &mut Cx) {
+fn shake<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         next6(x);
         x.set8(0, 2);
@@ -82,7 +79,6 @@ fn shake(x: &mut Cx) {
         if x.u8(f::FLIP) != 0 {
             d = d.wrapping_neg();
         }
-        set_dw(x, 0, d);
         x.add16(0x8, d);
         return;
     }
@@ -94,14 +90,12 @@ fn shake(x: &mut Cx) {
 }
 
 /// 0x7bce2 : recul en glissant, puis riposte selon la position de la cible.
-fn pushed_back(x: &mut Cx) {
+fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0xa);
             x.set16(0xc, 0);
             let (angle, vz) = if x.u8(f::FLIP) != 0 { (0x18u32, 0x20u16) } else { (8, (-0x20i16) as u16) };
-            x.c.d[0] = angle;
-            set_dw(x, 1, vz);
             x.set8(Obj::SPEED_INDEX, angle as u8);
             x.set16(0x16, vz);
             speed(x, 0x17);
@@ -124,7 +118,6 @@ fn pushed_back(x: &mut Cx) {
                 lib::step(x);
                 return;
             }
-            x.c.d[0] = 0;
             x.set32(0x58, 0);
             if lib::target_in_box(x, -0x60, 0x35, 6) {
                 return go(x, 0x7c344);
@@ -138,7 +131,7 @@ fn pushed_back(x: &mut Cx) {
 }
 
 /// 0x7bda4 : à terre (`+0x84` images hors pause), relevé, et bond si la cible est devant.
-fn down(x: &mut Cx) {
+fn down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -166,7 +159,6 @@ fn down(x: &mut Cx) {
                 return;
             }
             next6(x);
-            x.c.d[0] = 0;
             x.set16(0x16, 0);
             x.set16(0x1e, 0);
             x.set16(0x18, 0x480);
@@ -222,7 +214,7 @@ pub(crate) fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7bf22 : mort : la scène est prévenue, le boss est projeté puis s'effondre.
-fn death(x: &mut Cx) {
+fn death<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -243,10 +235,8 @@ fn death(x: &mut Cx) {
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);
             let center = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
-            set_dw(x, 2, center);
+            *x.c.d2() = *x.c.d2() & 0xffff_0000 | center as u32;
             let (vx, side) = if center as i16 >= x.u16(0x8) as i16 { (0x200u16, 0u32) } else { ((-0x200i16) as u16, 0x20) };
-            set_dw(x, 0, vx);
-            x.c.d[1] = side;
             x.set16(0x14, vx);
             x.set8(f::FLIP, side as u8);
             x.move_xz();

@@ -95,41 +95,24 @@ impl Fl {
     }
 }
 
-/// `addq.b #k,(off,A0)` : ajoute `k` à l'octet et fixe les drapeaux X N Z V C comme le 68000 (utile quand une
-/// routine appelée ensuite, sonore par exemple, rend les drapeaux qu'elle a reçus).
-pub fn addq8(x: &mut Cx, off: u32, k: u8) {
-    let old = x.u8(off);
-    let new = old.wrapping_add(k);
-    x.set8(off, new);
-    let c = old.checked_add(k).is_none();
-    let v = !(old ^ k) & (old ^ new) & 0x80 != 0;
-    let ccr = (c as u16) << 4 | ((new & 0x80 != 0) as u16) << 3 | ((new == 0) as u16) << 2 | (v as u16) << 1 | c as u16;
-    x.c.sr = x.c.sr & 0xffe0 | ccr;
+/// `addq.b #k,(off,A0)` : ajoute `k` à l'octet. Les drapeaux de l'original ne sont relus par personne (les appelants
+/// testent les valeurs rendues ; seuls `carry`/`zero` relisent ceux d'une routine appelée par adresse).
+pub fn addq8<R: Banc>(x: &mut Cx<'_, R>, off: u32, k: u8) {
+    x.add8(off, k);
 }
 
-/// Écrit les drapeaux X N Z V C d'une soustraction dans le registre d'état (les routines sonores rendent ceux qu'elles
-/// ont reçus).
-fn set_ccr(x: &mut Cx, f: Fl) {
-    let ccr = (f.c as u16) << 4 | (f.n as u16) << 3 | (f.z as u16) << 2 | (f.v as u16) << 1 | f.c as u16;
-    x.c.sr = x.c.sr & 0xffe0 | ccr;
-}
-
-/// `subq.b #k,(off,A0)` : retire `k` à l'octet et rend les drapeaux (aussi écrits dans le registre d'état).
-pub fn sub8(x: &mut Cx, off: u32, k: u8) -> Fl {
+/// `subq.b #k,(off,A0)` : retire `k` à l'octet et rend les drapeaux.
+pub fn sub8<R: Banc>(x: &mut Cx<'_, R>, off: u32, k: u8) -> Fl {
     let old = x.u8(off);
     x.set8(off, old.wrapping_sub(k));
-    let f = Fl::sub8(old, k);
-    set_ccr(x, f);
-    f
+    Fl::sub8(old, k)
 }
 
 /// `subq.w #k,(off,A0)`.
-pub fn sub16(x: &mut Cx, off: u32, k: u16) -> Fl {
+pub fn sub16<R: Banc>(x: &mut Cx<'_, R>, off: u32, k: u16) -> Fl {
     let old = x.u16(off);
     x.set16(off, old.wrapping_sub(k));
-    let f = Fl::sub16(old, k);
-    set_ccr(x, f);
-    f
+    Fl::sub16(old, k)
 }
 
 /// `cmpi.b #imm,(off,A0)` : drapeaux de `octet - imm`.
@@ -181,7 +164,7 @@ pub fn zero(x: &Cx) -> bool {
 
 
 /// Cible dans la boîte (0xb5e0) puis geste choisi par l'IA (0x1047a) : `Some(D0)` si l'IA en a choisi un.
-pub fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u32> {
+pub fn ai_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u32> {
     if !lib::target_in_box(x, d0, d1, d2) {
         return None;
     }
@@ -198,7 +181,7 @@ pub fn anim_kind<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
 }
 
 /// `subq.w #1,(off,A0)` : vrai quand le décompte est écoulé (`ble`).
-pub fn expired(x: &mut Cx, off: u32) -> bool {
+pub fn expired<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> bool {
     sub16(x, off, 1).le()
 }
 
@@ -273,14 +256,13 @@ fn push_out_of_boss_68k(x: &mut Cx) {
 const BOB_OFFSETS: u32 = 0x833e4;
 
 /// 0x833b6 : un pas de l'oscillation verticale d'un boss (D0 = décalage appliqué, comme l'original).
-pub fn bob(x: &mut Cx) {
+pub fn bob<R: Banc>(x: &mut Cx<'_, R>) {
     let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
     let mut d = prog32(x.b, BOB_OFFSETS + i);
     if x.u16(0xa8) as i16 <= 36 {
         d = d.wrapping_neg();
     }
     x.add32(Obj::Z, d);
-    x.c.d[0] = d;
     // `subq.w #1` puis `bgt` : comparaison signée exacte de l'ancienne valeur (0x8000 repart aussi à 72)
     let avant = x.u16(0xa8);
     x.set16(0xa8, avant.wrapping_sub(1));

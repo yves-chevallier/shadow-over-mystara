@@ -768,21 +768,28 @@ fn enemy_7_pair(c: &mut Cpu, b: &mut Cps2Bus) {
 /// Ennemi de type `kind` (variante 5) placé en (D0, D1, D2) = (x, z, y), lié au créateur par `link` ;
 /// drapeaux de D0.b (`or.b D0b,D0b`).
 fn enemy_at(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, link: u32, extra: &[(u32, u8)]) {
-    let me = c.a[0];
-    if let Some(o) = alloc(c, b, &pools::ENEMY) {
-        o.set_u8(b, 0x0, 1);
-        o.set_u8(b, 0x2, kind);
-        o.set_u16(b, 0x8, c.d[0] as u16);
-        o.set_u16(b, 0xc, c.d[1] as u16);
-        o.set_u16(b, 0x10, c.d[2] as u16);
-        o.set_u16(b, link, me as u16);
-        o.set_u8(b, 0x3, 5);
-        for &(off, v) in extra {
-            o.set_u8(b, off, v);
-        }
-        moved(c, c.d[0] & 0xff, Size::Byte);
+    let (me, pos) = (Obj(c.a[0]), (c.d[0] as u16, c.d[1] as u16, c.d[2] as u16));
+    let d0 = c.d[0];
+    if enemy_at_par(c, b, me, kind, link, extra, pos).is_some() {
+        moved(c, d0 & 0xff, Size::Byte);
     }
     rts(c, b);
+}
+
+/// Cœur de `enemy_at` : l'ennemi créé en `pos` = (x, z, y).
+fn enemy_at_par(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, kind: u8, link: u32, extra: &[(u32, u8)], pos: (u16, u16, u16)) -> Option<Obj> {
+    let o = r.alloue(b, &pools::ENEMY)?;
+    o.set_u8(b, 0x0, 1);
+    o.set_u8(b, 0x2, kind);
+    o.set_u16(b, 0x8, pos.0);
+    o.set_u16(b, 0xc, pos.1);
+    o.set_u16(b, 0x10, pos.2);
+    o.set_u16(b, link, me.word());
+    o.set_u8(b, 0x3, 5);
+    for &(off, v) in extra {
+        o.set_u8(b, off, v);
+    }
+    Some(o)
 }
 
 /// 0x5f764 : ennemi de type 5 en (D0, D1, D2), lié par `+0xa4`.
@@ -790,9 +797,19 @@ fn enemy_5_at(c: &mut Cpu, b: &mut Cps2Bus) {
     enemy_at(c, b, 5, 0xa4, &[]);
 }
 
+/// 0x5f764 sans registres : ennemi de type 5 en `pos` = (x, z, y), lié par `+0xa4`.
+pub(crate) fn enemy_5_at_pur(b: &mut Cps2Bus, me: Obj, pos: (u16, u16, u16)) -> Option<Obj> {
+    enemy_at_par(&mut Pur, b, me, 5, 0xa4, &[], pos)
+}
+
 /// 0x57c8c : ennemi de type 1 en (D0, D1, D2), lié par `+0xaa` (`+0xac` = 1, `+0x2f` = 0).
 fn enemy_1_at(c: &mut Cpu, b: &mut Cps2Bus) {
     enemy_at(c, b, 1, 0xaa, &[(0xac, 1), (0x2f, 0)]);
+}
+
+/// 0x57c8c sans registres : ennemi de type 1 en `pos` = (x, z, y), lié par `+0xaa`.
+pub(crate) fn enemy_1_at_pur(b: &mut Cps2Bus, me: Obj, pos: (u16, u16, u16)) -> Option<Obj> {
+    enemy_at_par(&mut Pur, b, me, 1, 0xaa, &[(0xac, 1), (0x2f, 0)], pos)
 }
 
 /// 0x57c66 : l'objet `o` est-il dans la moitié droite de l'écran (x >= caméra + 0xc0) ? Cœur.

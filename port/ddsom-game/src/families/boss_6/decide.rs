@@ -28,7 +28,7 @@ pub(super) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8588a : debout et vulnérable.
-pub(super) fn stand(x: &mut Cx) {
+pub(super) fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     set_state(x, 1, STAND);
 }
 
@@ -53,7 +53,7 @@ pub(super) fn chase_b<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x858da (`at_target` faux) et 0x858ec : charge vers la caméra ou vers la cible.
-pub(super) fn charge(x: &mut Cx, at_target: bool) {
+pub(super) fn charge<R: Banc>(x: &mut Cx<'_, R>, at_target: bool) {
     x.set8(VULNERABLE, 0);
     x.set8(CHARGE_AT_TARGET, at_target as u8);
     x.set32(f::STATE, CHARGE);
@@ -94,7 +94,7 @@ fn target<R: Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u32 {
 }
 
 /// Applique le changement d'état dont l'adresse d'origine est `routine`.
-fn apply(x: &mut Cx, routine: u32) {
+fn apply<R: Banc>(x: &mut Cx<'_, R>, routine: u32) {
     match routine {
         0x858ec => charge(x, true),
         0x85900 => shoot(x),
@@ -128,20 +128,20 @@ pub(super) fn walk_delay_slow<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(WALK_DELAY, v);
 }
 
-pub(super) fn walk_steps_fast(x: &mut Cx) {
+pub(super) fn walk_steps_fast<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     let v = x.rom8(0x85678 + r);
     x.set8(WALK_STEPS, v);
 }
 
-pub(super) fn walk_steps_slow(x: &mut Cx) {
+pub(super) fn walk_steps_slow<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     let v = x.rom8(0x85698 + r);
     x.set8(WALK_STEPS, v);
 }
 
 /// Un joueur est-il dans la boîte `(d0, d1, d2)` ? 0 sinon, ou 1 / 2 : le côté (0x1047a).
-pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
+pub(super) fn probe<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u8 {
     if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
@@ -149,7 +149,7 @@ pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
 }
 
 /// 0x856f2 : un joueur est tout près devant.
-pub(super) fn choose_close(x: &mut Cx) {
+pub(super) fn choose_close<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
     let pick = x.rom8(0x85708 + r);
     let t = target(x, 0x85718, pick as u32);
@@ -157,7 +157,7 @@ pub(super) fn choose_close(x: &mut Cx) {
 }
 
 /// 0x8571a : un joueur est devant ; la table dépend de la phase.
-pub(super) fn choose_front(x: &mut Cx) {
+pub(super) fn choose_front<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
     let phase = x.u8(PHASE) as i8 as i32;
     let routine = target(x, 0x85734, (2 * phase) as u32);
@@ -173,7 +173,7 @@ pub(super) fn choose_front(x: &mut Cx) {
 }
 
 /// 0x85788 : un joueur est à mi-distance (côté `side`).
-pub(super) fn choose_mid(x: &mut Cx, side: u8) {
+pub(super) fn choose_mid<R: Banc>(x: &mut Cx<'_, R>, side: u8) {
     let r = random(x) & 0xf;
     let index = (side as u32 - 1) * 2 + 4 * (x.u8(PHASE) as i8 as i32 as u32);
     // les six routines lisent la même table d'octets
@@ -184,7 +184,7 @@ pub(super) fn choose_mid(x: &mut Cx, side: u8) {
 }
 
 /// 0x857f6 : un joueur est loin (côté `side`).
-pub(super) fn choose_far(x: &mut Cx, side: u8) {
+pub(super) fn choose_far<R: Banc>(x: &mut Cx<'_, R>, side: u8) {
     let r = random(x) & 0xf;
     let index = (side as u32 - 1) * 2 + 4 * (x.u8(PHASE) as i8 as i32 as u32);
     let routine = target(x, 0x8581a, index);

@@ -12,7 +12,7 @@ const CROSSING_SPEEDS: u32 = 0x7af94;
 const CROSSING_ANIMS: u32 = 0x7afb4;
 
 /// 0x7ae5a : le boss traverse l'écran en huit sauts (en cinématique), disparaît, puis tombe du haut de l'écran.
-pub(super) fn intro(x: &mut Cx) {
+pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -30,8 +30,6 @@ pub(super) fn intro(x: &mut Cx) {
             x.set16(0x14, (-0x1000i16) as u16);
             x.set16(0x18, 0);
             puff(x, 0);
-            x.c.d[0] = 0;
-            x.c.a[4] = SET_BODY;
             lib::step(x);
         }
         2 => crossing(x),
@@ -47,10 +45,8 @@ pub(super) fn intro(x: &mut Cx) {
             let z = cy.wrapping_add(0x58);
             x.set16(0x10, z);
             let h = cy.wrapping_add(0xf0).wrapping_sub(z);
-            set_dw(x, 0, h);
             x.set16(0xc, h);
             x.set8(f::FLIP, 0);
-            x.c.d[0] = 0;
             for off in [0x14, 0x16, 0x18] {
                 x.set16(off, 0);
             }
@@ -69,7 +65,6 @@ pub(super) fn intro(x: &mut Cx) {
             if random(x) & 1 != 0 {
                 negate(x, 0x1c);
             }
-            x.c.d[0] = 0;
             x.set32(0x14, 0);
             x.set16(0x1e, 0);
             lib::sound(x, 0xec820);
@@ -125,7 +120,7 @@ pub(super) fn intro(x: &mut Cx) {
 }
 
 /// 0x7aeda : la traversée, maintenue dans l'écran ; un saut par la table des vitesses à chaque bord touché.
-fn crossing(x: &mut Cx) {
+fn crossing<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     let mut bumped = false;
     let cam_x = var::CAMERA1_X.get(x.b);
@@ -154,7 +149,7 @@ fn crossing(x: &mut Cx) {
     } else {
         setw0(x, high);
     }
-    x.c.d[5] = bumped as u32;
+    *x.c.d5() = bumped as u32;
     if !bumped {
         return puff(x, 6);
     }
@@ -178,13 +173,12 @@ fn crossing(x: &mut Cx) {
 }
 
 /// Mot faible de D0 (bornes calculées par la traversée).
-fn setw0(x: &mut Cx, v: u16) {
-    set_dw(x, 0, v);
+fn setw0<R: Banc>(x: &mut Cx<'_, R>, v: u16) {
 }
 
 // --- groupe 2 : combat -------------------------------------------------------------------------
 
-pub(super) fn fight(x: &mut Cx) {
+pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => idle(x),
         2 => turning(x),
@@ -196,21 +190,20 @@ pub(super) fn fight(x: &mut Cx) {
 }
 
 /// Animation de repos : 4, ou 5 si la cible est à terre (`+0x66`).
-fn rest_anim(x: &mut Cx) {
+fn rest_anim<R: Banc>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     let n = if t.u8(x.b, 0x66) != 0 { 5 } else { 4 };
     body(x, n);
 }
 
 /// 0x7b150 : debout ; sorti de l'écran il bondit, au bout de l'attente il marche, cible proche : attaque.
-fn idle(x: &mut Cx) {
+fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     if !alive(x) {
         return idle_alone(x);
     }
     if x.u8(0x7) == 0 {
         next7(x);
         lib::draw_6e(x);
-        x.c.d[0] = 0;
         x.set8(ANIM_KIND, 0);
         x.set8(ANIM_LAST, 0);
         return rest_anim(x);
@@ -231,10 +224,9 @@ fn idle(x: &mut Cx) {
 }
 
 /// 0x7b1d0 : demi-tour (animation 6), puis reprise de l'état mémorisé.
-fn turning(x: &mut Cx) {
+fn turning<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         next7(x);
-        x.c.d[0] = 1;
         x.set8(ANIM_KIND, 1);
         return body(x, 6);
     }
@@ -257,7 +249,7 @@ fn turning(x: &mut Cx) {
 }
 
 /// 0x7b236 et 0x7b422 : marche par bonds vers des points tirés près de la cible.
-fn hop_walk(x: &mut Cx, second: bool) {
+fn hop_walk<R: Banc>(x: &mut Cx<'_, R>, second: bool) {
     match x.u8(0x7) {
         0 => {
             if second {
@@ -314,7 +306,6 @@ fn hop_walk(x: &mut Cx, second: bool) {
             }
             next7(x);
             let pause = if x.u8(ANIM_KIND) == 0 { 8 } else { 0x10 };
-            x.c.d[0] = pause;
             x.set16(TIMER, pause as u16);
             rest_anim(x);
         }
@@ -329,13 +320,12 @@ fn hop_anim<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
 }
 
 /// 0x7b268 : un bond vers un point près de la cible, sauf s'il faut d'abord se retourner.
-fn hop(x: &mut Cx) {
+fn hop<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0xbb, 0);
     if turn_needed(x) {
         return turn(x);
     }
     x.set8(0x7, 2);
-    x.c.d[0] = 0;
     x.set16(0x16, 0);
     x.set16(0x1e, 0);
     aim_near_target(x, 0x7c410, 7);
@@ -343,15 +333,13 @@ fn hop(x: &mut Cx) {
     x.set16(0x18, 0x500);
     x.set16(0x1a, (-0x70i16) as u16);
     hop_height(x);
-    x.c.d[0] = 7;
     let first = if lib::moving_forward(x) { 0xf } else { 7 };
-    x.c.d[0] = first;
     x.set8(HOP_ANIM, first as u8);
     body(x, first);
 }
 
 /// 0x7b38e : entre deux bonds ; les boîtes devant le boss décident d'une attaque.
-fn between_hops(x: &mut Cx) {
+fn between_hops<R: Banc>(x: &mut Cx<'_, R>) {
     if !alive(x) {
         return idle_alone(x);
     }
@@ -386,7 +374,7 @@ fn between_hops(x: &mut Cx) {
 }
 
 /// 0x7b45c : grand bond vers la cible ou le milieu de l'écran, puis attaque si on lui a riposté.
-fn leap_attack(x: &mut Cx) {
+fn leap_attack<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             let (mx, mz);
@@ -401,18 +389,15 @@ fn leap_attack(x: &mut Cx) {
             } else {
                 let center = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
                 let side = if center as i16 >= x.u16(0x8) as i16 { 0x20 } else { 0 };
-                x.c.d[0] = side;
                 x.set8(f::FLIP, side as u8);
                 mx = center;
                 mz = x.u16(0x10);
             }
-            set_dw(x, 1, mx);
-            set_dw(x, 2, mz);
+            *x.c.d2() = *x.c.d2() & 0xffff_0000 | mz as u32;
             x.set16(MARK_X, mx);
             x.set16(MARK_Z, mz);
-            aim_at_mark(x);
+            aim_at_mark(x, (mx, mz));
             speed(x, 0x35);
-            x.c.d[0] = 0;
             x.set16(0x16, 0);
             x.set16(0x1e, 0);
             x.set16(0x18, 0x500);
@@ -487,7 +472,7 @@ fn leap_attack(x: &mut Cx) {
 }
 
 /// 0x7b5fe : bond en arrière, glissade, puis riposte si la cible est devant.
-fn backing(x: &mut Cx) {
+fn backing<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -501,8 +486,6 @@ fn backing(x: &mut Cx) {
             }
             next7(x);
             let (angle, vz) = if x.u8(f::FLIP) != 0 { (0x18u32, 0x20u16) } else { (8, (-0x20i16) as u16) };
-            x.c.d[0] = angle;
-            set_dw(x, 1, vz);
             x.set8(Obj::SPEED_INDEX, angle as u8);
             x.set16(0x16, vz);
             lib::drift_heading(x);
@@ -533,7 +516,6 @@ fn backing(x: &mut Cx) {
             if x.u8(f::FLIP) != 0 {
                 v = v.wrapping_neg();
             }
-            set_dw(x, 0, v);
             x.set16(0x16, v);
             x.move_x();
             lib::sound(x, 0xec820);
@@ -566,7 +548,7 @@ fn backing(x: &mut Cx) {
 
 // --- groupe 4 : attaques -----------------------------------------------------------------------
 
-pub(super) fn attacks(x: &mut Cx) {
+pub(super) fn attacks<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         k @ 0..=6 => strike(x, k / 2),
         8 => grab_attempt(x),
@@ -575,7 +557,7 @@ pub(super) fn attacks(x: &mut Cx) {
 }
 
 /// 0x7b764 à 0x7b86a : coup `k` (0 à 3) : cri (0xe3da6), animation `k`, bouffées aux images-clés.
-fn strike(x: &mut Cx, k: u8) {
+fn strike<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
     if x.u8(0x7) == 0 {
         next7(x);
         lib::sound(x, 0xe3da6);
@@ -595,7 +577,6 @@ fn strike(x: &mut Cx, k: u8) {
     if sub8(x, COMBO, 1).gt() && x.bit(0x57, 2) {
         if x.u16(0x54) != 0 {
             let victim = x.linked(0x54);
-            x.c.a[1] = victim.0;
             victim.set_u8(x.b, 0x7e, 0);
             victim.set_u8(x.b, 0x53, 0);
         }
@@ -614,7 +595,7 @@ fn strike(x: &mut Cx, k: u8) {
 }
 
 /// 0x7b89e : saisie : une cible à portée de l'image-clé est attrapée (0xfd64).
-fn grab_attempt(x: &mut Cx) {
+fn grab_attempt<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -647,7 +628,7 @@ fn grab_attempt(x: &mut Cx) {
 }
 
 /// 0x7b91c : bond en ciseaux : un double (ENEMY 0x1a) saute de l'autre côté.
-fn split(x: &mut Cx) {
+fn split<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -656,7 +637,6 @@ fn split(x: &mut Cx) {
             if random(x) & 1 != 0 {
                 negate(x, 0x1c);
             }
-            x.c.d[0] = 0;
             x.set32(0x14, 0);
             x.set16(0x1e, 0);
             x.set16(0x18, 0x480);
@@ -710,7 +690,7 @@ fn split(x: &mut Cx) {
 // --- groupes 6 à 10 : attente --------------------------------------------------------------------
 
 /// 0x7ba18 : tant qu'aucun joueur n'est en vie, le boss reste en pose.
-pub(super) fn wait_for_players(x: &mut Cx) {
+pub(super) fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
     if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return walk(x);
     }
@@ -728,7 +708,7 @@ pub(super) fn wait_for_players(x: &mut Cx) {
 const BITE_DELAYS: u32 = 0x7bb3e;
 
 /// 0x7ba50 : le joueur saisi (`+0x50`) est tenu (0xfda2) et mordu (4 PV) jusqu'au relâchement.
-pub(super) fn holding(x: &mut Cx) {
+pub(super) fn holding<R: Banc>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     if t.u8(x.b, 0) == 0 || t.u8(x.b, 0x188) == 0 {
         return stand(x);
@@ -747,17 +727,15 @@ pub(super) fn holding(x: &mut Cx) {
             if !sub16(x, TIMER2, 1).gt() {
                 lib::sound(x, 0xedd96);
                 // bouffée de sang à la gueule (0xaaa40)
-                x.c.d[1] = 2;
                 let mut dx = (-0x69i16) as u16;
                 if x.u8(f::FLIP) != 0 {
                     dx = dx.wrapping_neg();
                 }
-                set_dw(x, 0, dx);
                 let (px, ph, pz) = (x.u16(0x8), x.u16(0xc), x.u16(0x10));
                 let pos = (px.wrapping_add(dx), ph.wrapping_add(0x28), pz.wrapping_sub(1));
-                set_dw(x, 2, pos.0);
-                set_dw(x, 3, pos.1);
-                set_dw(x, 4, pos.2);
+                *x.c.d2() = *x.c.d2() & 0xffff_0000 | pos.0 as u32;
+                *x.c.d3() = *x.c.d3() & 0xffff_0000 | pos.1 as u32;
+                *x.c.d4() = *x.c.d4() & 0xffff_0000 | pos.2 as u32;
                 // l'autre objet de l'étincelle est A1, la cible chargée en tête de l'état
                 crate::families::effects_creators::spark_at(x.b, x.o, t.0, 2, pos);
                 let t = target_obj(x);
@@ -771,7 +749,6 @@ pub(super) fn holding(x: &mut Cx) {
                     return release(x);
                 }
                 let phase = x.u8(PHASE) as u32;
-                x.c.d[0] = phase * 2;
                 let d = x.rom16(BITE_DELAYS + phase * 2);
                 x.set16(TIMER2, d);
             }
@@ -787,7 +764,7 @@ pub(super) fn holding(x: &mut Cx) {
 }
 
 /// 0x7bb1c : relâche le joueur (0xfd8c) et rejoue l'animation 7.
-fn release(x: &mut Cx) {
+fn release<R: Banc>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     t.set_u8(x.b, 0x6f, 1);
     lib::release_player(x, t);

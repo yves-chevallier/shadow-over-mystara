@@ -17,7 +17,7 @@ use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => strike_0(x),
         2 => strike_2(x),
@@ -32,7 +32,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Anime l'attaque `n` du jeu des coups et fixe le jeu courant (`+0xa0` et `+0xa1`).
-fn strike_anim(x: &mut Cx, kind: u8, n: u32) {
+fn strike_anim<R: Banc>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
     strike(x, n);
@@ -59,7 +59,7 @@ fn puff<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
 
 // --- +6 = 0 : coup simple -----------------------------------------------------------------------
 
-fn strike_0(x: &mut Cx) {
+fn strike_0<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -79,7 +79,7 @@ fn strike_0(x: &mut Cx) {
 
 // --- +6 = 2 : coup avec effet ------------------------------------------------------------------
 
-fn strike_2(x: &mut Cx) {
+fn strike_2<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -100,7 +100,7 @@ fn strike_2(x: &mut Cx) {
 
 // --- +6 = 4 : bond en avant --------------------------------------------------------------------
 
-fn strike_4(x: &mut Cx) {
+fn strike_4<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -181,7 +181,7 @@ fn leap_speed<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     v
 }
 
-fn leap(x: &mut Cx) {
+fn leap<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -243,7 +243,7 @@ fn leap(x: &mut Cx) {
 
 // --- +6 = 8 et 10 : rayon ------------------------------------------------------------------------
 
-fn beam(x: &mut Cx) {
+fn beam<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -310,14 +310,14 @@ fn beam(x: &mut Cx) {
     }
 }
 
-fn beam_end_anim(x: &mut Cx) {
+fn beam_end_anim<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     strike(x, 8);
 }
 
 // --- +6 = 12 : tir en cinématique ---------------------------------------------------------------
 
-fn cinematic_shot(x: &mut Cx) {
+fn cinematic_shot<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -403,7 +403,7 @@ fn take_key_keep<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.u8(f::KEY_FRAME) != 0
 }
 
-fn cinematic_end(x: &mut Cx) {
+fn cinematic_end<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set_a5_u16(0x51e, 0);
     strike(x, 0xa);
@@ -411,7 +411,7 @@ fn cinematic_end(x: &mut Cx) {
 
 // --- +6 = 14 : lâcher d'objets --------------------------------------------------------------------
 
-fn summon(x: &mut Cx) {
+fn summon<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -456,7 +456,7 @@ fn summon(x: &mut Cx) {
 
 // --- +6 = 16 : tourbillon (entrée dans le ralenti) ------------------------------------------------
 
-fn whirl(x: &mut Cx) {
+fn whirl<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);

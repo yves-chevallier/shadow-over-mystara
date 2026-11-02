@@ -18,7 +18,7 @@ use super::decide;
 use super::*;
 use crate::objects::pools;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => strike_0(x),
         2 => sidestep(x),
@@ -35,14 +35,14 @@ pub(super) fn run(x: &mut Cx) {
     }
 }
 
-fn strike_anim(x: &mut Cx, kind: u8, n: u32) {
+fn strike_anim<R: Banc>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
     strike(x, n);
 }
 
 /// Fin d'attaque : l'absence de joueurs l'emporte ; sinon `to`.
-fn finish(x: &mut Cx, to: fn(&mut Cx)) {
+fn finish<'a, R: Banc>(x: &mut Cx<'a, R>, to: fn(&mut Cx<'a, R>)) {
     if !lib::players_alive(x) {
         return decide::wait(x);
     }
@@ -64,7 +64,7 @@ fn key_bit0<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Fin d'un tir : l'état de la scène est rendu (`A5+0x43`), puis `to`.
-fn end_shot(x: &mut Cx, to: fn(&mut Cx)) {
+fn end_shot<'a, R: Banc>(x: &mut Cx<'a, R>, to: fn(&mut Cx<'a, R>)) {
     set_abs8(x, 0xff8043, 0xff);
     finish(x, to);
 }
@@ -82,7 +82,7 @@ fn step_with_spark<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 // --- +6 = 0 : coup simple -----------------------------------------------------------------------
 
-fn strike_0(x: &mut Cx) {
+fn strike_0<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -100,7 +100,7 @@ fn strike_0(x: &mut Cx) {
 
 // --- +6 = 2 : pas de côté -----------------------------------------------------------------------
 
-fn sidestep(x: &mut Cx) {
+fn sidestep<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -153,7 +153,7 @@ fn sidestep(x: &mut Cx) {
 
 // --- +6 = 4 : geste ------------------------------------------------------------------------------
 
-fn gesture(x: &mut Cx) {
+fn gesture<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -193,7 +193,7 @@ fn gesture(x: &mut Cx) {
 
 // --- +6 = 6 : poursuite magique ------------------------------------------------------------------
 
-fn chase_spell(x: &mut Cx) {
+fn chase_spell<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -243,14 +243,14 @@ fn chase_spell(x: &mut Cx) {
     }
 }
 
-fn end_chase(x: &mut Cx) {
+fn end_chase<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(AIM_ON, 0);
     finish(x, decide::chase);
 }
 
 // --- +6 = 8 : bond en arrière --------------------------------------------------------------------
 
-fn hop_back(x: &mut Cx) {
+fn hop_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -301,7 +301,7 @@ fn hop_back(x: &mut Cx) {
 
 // --- +6 = 10 : boule (ESHL 0x20) ----------------------------------------------------------------
 
-fn ball(x: &mut Cx) {
+fn ball<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -360,7 +360,7 @@ fn ball(x: &mut Cx) {
 
 // --- +6 = 12 : rayon (ESHL 0x21) ----------------------------------------------------------------
 
-fn beam(x: &mut Cx) {
+fn beam<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -475,7 +475,7 @@ fn topple_all<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x99274 : lâche des projectiles autour de la caméra (0x5f764) tant qu'aucun n'est en jeu.
-fn spawn_blast(x: &mut Cx) {
+fn spawn_blast<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(SPAWNED) as i8) > 0 {
         return;
     }
@@ -490,11 +490,9 @@ fn spawn_blast(x: &mut Cx) {
         let dy = x.rom16(0x9930c + i);
         let px = dx.wrapping_add(var::CAMERA1_X.get(x.b));
         let py = dy.wrapping_add(var::CAMERA1_Y.get(x.b));
-        set_dw(x, 0, px);
-        set_dw(x, 2, py);
-        x.c.d[1] = 0;
-        x.call(0x5f764);
-        if !carry(x) {
+        // (D0, D1, D2) = (x, 0, y) ; D2 (mot bas) reste
+        *x.c.d2() = *x.c.d2() & 0xffff_0000 | py as u32;
+        if crate::families::creators::enemy_5_at_pur(x.b, x.o, (px, 0, py)).is_some() {
             x.add8(SPAWNED, 1);
         }
         if d5 == 0 {
@@ -502,9 +500,11 @@ fn spawn_blast(x: &mut Cx) {
         }
         d5 = d5.wrapping_sub(1);
     }
+    // `dbf D5` : D5.w = -1 en sortie (reste ; le mot haut est celui de l'appelant)
+    *x.c.d5() = *x.c.d5() & 0xffff_0000 | 0xffff;
 }
 
-fn shockwave(x: &mut Cx) {
+fn shockwave<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -605,7 +605,7 @@ fn place_after_teleport<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(0xc, 0);
 }
 
-fn teleport(x: &mut Cx) {
+fn teleport<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -650,7 +650,7 @@ fn teleport(x: &mut Cx) {
 
 // --- +6 = 18 : pluie d'effets ----------------------------------------------------------------------
 
-fn rain(x: &mut Cx) {
+fn rain<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -708,7 +708,7 @@ fn rain(x: &mut Cx) {
 
 // --- +6 = 20 : tirs successifs ----------------------------------------------------------------------
 
-fn volley(x: &mut Cx) {
+fn volley<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);

@@ -84,16 +84,11 @@ pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn strike(x: &mut Cx, n: u32) {
+pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_STRIKE, n);
 }
 
-/// Routines du moteur appelées par ce boss.
-pub(self) mod call {
-    pub const SPAWN_RING: u32 = 0x57c8c;
-}
-
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -137,7 +132,7 @@ pub fn run(x: &mut Cx) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -179,7 +174,7 @@ fn init(x: &mut Cx) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = tst8(x, f::FREEZE);
     if freeze.gt() {
         sub8(x, f::FREEZE, 1);
@@ -199,7 +194,7 @@ fn active(x: &mut Cx) {
 }
 
 /// `+5` = 6, 8, 10 (0x96958) : attend que des joueurs reviennent.
-fn wait_for_players(x: &mut Cx) {
+fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) as i8 > 0 {
         return decide::chase(x);
     }
@@ -217,7 +212,7 @@ fn wait_for_players(x: &mut Cx) {
 }
 
 handlers! {
-    0x952b4 "boss_17" run,
+    0x952b4 "boss_17" #[sans] run,
     // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x96ce0 "boss_17_releve" hit::recovered_tail,
 }

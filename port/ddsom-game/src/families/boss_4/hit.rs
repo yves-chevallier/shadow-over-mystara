@@ -20,7 +20,7 @@ const SHAKE_REACTION: u32 = 0x82d36;
 /// Seuils de PV par phase (mots, 128 octets par ligne).
 const THRESHOLDS: u32 = 0x10ce2;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else {
@@ -37,8 +37,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x82c68 : premier passage : dégâts (0x10112) et, sans PV, la mort ; puis la routine du code de coup.
-fn reaction(x: &mut Cx) {
-    x.c.d[0] = 0;
+fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::set_68(x);
         x.set8(INVULNERABLE, 0);
@@ -48,21 +47,18 @@ fn reaction(x: &mut Cx) {
             x.set8(0, 2);
             return death(x);
         }
-        x.c.d[0] = 0;
     }
     let code = x.u8(0x49) as u32;
-    x.c.d[0] = code;
     let routine = rom32(x, REACTIONS + code);
-    x.c.a[1] = routine;
     if routine == SHAKE_REACTION {
         shake(x)
     } else {
-        x.call(routine)
+        run_reaction(x, routine)
     }
 }
 
 /// 0x82d36 : tremblement sur place (16 images, ±2 pixels), puis retour au recul (état 4, groupe 4, étape 2).
-fn shake(x: &mut Cx) {
+fn shake<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(0, 2);
@@ -84,7 +80,6 @@ fn shake(x: &mut Cx) {
         if x.u8(f::FLIP) != 0 {
             d = d & 0xffff_0000 | (d as u16).wrapping_neg() as u32;
         }
-        x.c.d[0] = d;
         x.add16(0x8, d as u16);
         return;
     }
@@ -96,7 +91,7 @@ fn shake(x: &mut Cx) {
 }
 
 /// 0x82dae : recul (0x14 images en arrière, puis 0x14 sur place), puis la traversée en vol.
-fn pushed_back(x: &mut Cx) {
+fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -130,7 +125,7 @@ fn pushed_back(x: &mut Cx) {
 }
 
 /// 0x82e40 : à terre (`+0x84` images hors pause), puis relevé.
-fn down(x: &mut Cx) {
+fn down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -174,7 +169,7 @@ pub(crate) fn resume<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x82ee2 : mort. Projeté en l'air vers le milieu de l'écran, le boss retombe dans la poussière ; la fin de scène
 /// est lancée au premier passage.
-fn death(x: &mut Cx) {
+fn death<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -201,7 +196,6 @@ fn death(x: &mut Cx) {
             x.set16(0x14, vx);
             x.set8(f::FLIP, side);
             x.move_xz();
-            x.c.d[0] = 0;
             x.anim_start(SET_HURT, 0);
         }
         2 => {

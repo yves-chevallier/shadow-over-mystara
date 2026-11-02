@@ -20,7 +20,7 @@ const WALK_FORWARD: u32 = 0x175740;
 // --- groupe 0 : arrivée ------------------------------------------------------------------------
 
 /// 0x81daa : le boss paraît en haut de l'écran, descend, rugit, puis se met en marche.
-pub(super) fn intro(x: &mut Cx) {
+pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -35,7 +35,6 @@ pub(super) fn intro(x: &mut Cx) {
             setw(x, 0, h);
             x.set16(0xc, h);
             lib::sound(x, 0xe3f76);
-            x.c.d[0] = 1;
             air(x, 1);
         }
         2 => {
@@ -67,7 +66,7 @@ pub(super) fn intro(x: &mut Cx) {
 
 // --- groupe 2 : combat -----------------------------------------------------------------------
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => idle(x),
         2 => turn(x),
@@ -94,14 +93,13 @@ fn facing_forward<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x81e7a : debout ; sorti de l'écran il charge, au bout de l'attente il marche, sinon il se tourne vers sa cible.
-fn idle(x: &mut Cx) {
+fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     if !alive(x) {
         return decide::wait(x);
     }
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         lib::draw_6e(x);
-        x.c.d[0] = 0;
         x.set8(ANIM_KIND, 0);
         if x.u8(ANIM_LAST) != 0 {
             x.set8(ANIM_LAST, 0);
@@ -134,13 +132,12 @@ fn walk_select<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x81ede : demi-tour (animation 1), puis reprise de l'état mémorisé.
-fn turn(x: &mut Cx) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         let side = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, side);
         x.set8(ANIM_KIND, 1);
-        x.c.d[0] = 1;
         return body(x, 1);
     }
     if !lib::step(x) {
@@ -161,7 +158,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// 0x81f44 (`slow` = faux) et 0x81f66 : marche vers la cible, `+0x6b` pas espacés de `+0x71` images.
-fn walk(x: &mut Cx, slow: bool) {
+fn walk<R: Banc>(x: &mut Cx<'_, R>, slow: bool) {
     if !alive(x) {
         return decide::wait(x);
     }
@@ -175,7 +172,6 @@ fn walk(x: &mut Cx, slow: bool) {
     set_delay(x, delay);
     x.set8(ANIM_KIND, k);
     x.add8(0x7, 2);
-    x.c.d[0] = 0;
     x.set16(0x16, 0);
     x.set16(0x1e, 0);
     if !pick_target(x) {
@@ -205,7 +201,7 @@ fn aim<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// La marche : un pas toutes les `+0x71` images ; entre deux pas, les boîtes devant le boss décident de la suite.
-fn walking(x: &mut Cx) {
+fn walking<R: Banc>(x: &mut Cx<'_, R>) {
     if sub8(x, WALK_DELAY, 1).mi() {
         if !sub8(x, WALK_STEPS, 1).gt() {
             return decide::walk_slow(x);
@@ -243,7 +239,7 @@ fn walking(x: &mut Cx) {
 }
 
 /// 0x83094 / 0x830b2 : la cible est dans la boîte et l'IA (0x1047a) choisit un geste (1 ou 2).
-fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u16> {
+fn ai_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u16> {
     if !lib::target_in_box(x, d0, d1, d2) {
         return None;
     }
@@ -252,12 +248,12 @@ fn ai_box(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> Option<u16> {
 }
 
 /// Boîte large devant le boss (0x7ef4).
-fn target_in_box_7ef4(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
+fn target_in_box_7ef4<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     lib::guard_in_front(x, d0, d1, d2)
 }
 
 /// 0x820b6 : charge en ligne droite jusqu'au point visé, poussière et grondement, puis marche.
-fn charge(x: &mut Cx) {
+fn charge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -301,7 +297,7 @@ fn charge(x: &mut Cx) {
 }
 
 /// 0x82128 : la charge avance jusqu'au point visé ; à l'arrivée (marque négative) le boss freine.
-fn charging(x: &mut Cx) {
+fn charging<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     let key = x.u8(f::KEY_FRAME);
     if key != 0x80 {
@@ -313,13 +309,8 @@ fn charging(x: &mut Cx) {
         } else {
             (x.u16(MARK_X), x.u16(0x8))
         };
-        setw(x, 0, goal);
-        setw(x, 1, px);
         // vers la gauche, les rôles s'échangent (`exg D0,D1`)
-        if (x.u16(0x14) as i16) < 0 {
-            x.c.d.swap(0, 1);
-        }
-        let (a, b) = (x.c.d[0] as u16, x.c.d[1] as u16);
+        let (a, b) = if (x.u16(0x14) as i16) < 0 { (px, goal) } else { (goal, px) };
         if !Fl::sub16(b, a).lt() && (x.u8(f::KEY_FRAME) as i8) < 0 {
             return brake(x);
         }
@@ -348,12 +339,11 @@ fn brake<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x82202 : bond en arrière (élan, saut, chute, glissade).
-fn hop(x: &mut Cx) {
+fn hop<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
             kind(x, 5);
-            x.c.d[0] = 6;
             body(x, 6);
         }
         2 => {
@@ -363,7 +353,6 @@ fn hop(x: &mut Cx) {
             }
             x.add8(0x7, 2);
             let (angle, vy) = if x.u8(f::FLIP) != 0 { (0x18u8, 0x20u16) } else { (8, (-0x20i16) as u16) };
-            x.c.d[0] = angle as u32;
             setw(x, 1, vy);
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(0x16, vy);
@@ -397,7 +386,6 @@ fn hop(x: &mut Cx) {
             setw(x, 0, d);
             x.set16(0x16, d);
             x.move_x();
-            x.c.d[0] = 7;
             body(x, 7);
         }
         _ => {

@@ -18,7 +18,7 @@ use crate::objects::pools;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => strike_0(x),
         2 => strike_2(x),
@@ -95,7 +95,7 @@ fn spark<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 0 -----------------------------------------------------------------------------------
 
-fn strike_0(x: &mut Cx) {
+fn strike_0<R: Banc>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -119,7 +119,7 @@ fn strike_0(x: &mut Cx) {
 
 // --- +6 = 2 -----------------------------------------------------------------------------------
 
-fn strike_2(x: &mut Cx) {
+fn strike_2<R: Banc>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -145,7 +145,7 @@ fn strike_2(x: &mut Cx) {
 
 // --- +6 = 4 : coup double avec élan ---------------------------------------------------------------
 
-fn strike_4(x: &mut Cx) {
+fn strike_4<R: Banc>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -195,7 +195,7 @@ fn strike_4(x: &mut Cx) {
 
 // --- +6 = 6 : bond ------------------------------------------------------------------------------
 
-fn leap(x: &mut Cx) {
+fn leap<R: Banc>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -270,7 +270,7 @@ fn leap(x: &mut Cx) {
 
 // --- +6 = 8, 10 : lancer -------------------------------------------------------------------------
 
-fn throw(x: &mut Cx) {
+fn throw<R: Banc>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -349,7 +349,7 @@ fn throw_end<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 12 : souffle ----------------------------------------------------------------------------
 
-fn breath(x: &mut Cx) {
+fn breath<R: Banc>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -442,7 +442,7 @@ fn breath_end<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 14 : cri ---------------------------------------------------------------------------------
 
-fn roar(x: &mut Cx) {
+fn roar<R: Banc>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -486,7 +486,7 @@ fn roar(x: &mut Cx) {
 
 // --- +6 = 16 : cri final ---------------------------------------------------------------------------
 
-fn final_roar(x: &mut Cx) {
+fn final_roar<R: Banc>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);

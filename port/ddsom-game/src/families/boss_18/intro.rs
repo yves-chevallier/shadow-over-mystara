@@ -8,9 +8,10 @@
 //! | 6 | prend la main : immunités, puis marche vers un joueur |
 
 use super::decide;
+use crate::families::cx::Banc;
 use super::*;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             if sub16(x, TIMER, 1).gt() {

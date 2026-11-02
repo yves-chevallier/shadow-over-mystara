@@ -18,7 +18,7 @@ const REACTIONS: u32 = 0x7a396;
 /// La seule routine propre au boss (code 0x4c) : tremblement sur place.
 const SHAKE_REACTION: u32 = 0x7a442;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else {
@@ -36,7 +36,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x7a374 : premier passage : dégâts (0x10112) et, sans PV, la mort ; puis la routine du code de coup.
-fn reaction(x: &mut Cx) {
+fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::set_68(x);
         x.set8(INVULNERABLE, 0);
@@ -44,23 +44,20 @@ fn reaction(x: &mut Cx) {
             x.set8(f::SUB, 6);
             x.set16(f::SUB2, 0);
             x.set8(0, 2);
-            x.c.d[0] = 1;
             return death(x);
         }
     }
     let code = x.u8(0x49) as u32;
-    x.c.d[0] = code;
     let routine = rom32(x, REACTIONS + code);
-    x.c.a[1] = routine;
     if routine == SHAKE_REACTION {
         shake(x)
     } else {
-        x.call(routine)
+        run_reaction(x, routine)
     }
 }
 
 /// 0x7a442 : tremblement sur place (16 images), puis à terre.
-fn shake(x: &mut Cx) {
+fn shake<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         next6(x);
         x.set8(0, 2);
@@ -82,7 +79,6 @@ fn shake(x: &mut Cx) {
         if x.u8(f::FLIP) != 0 {
             d = d.wrapping_neg();
         }
-        set_dw(x, 0, d);
         x.add16(0x8, d);
         return;
     }
@@ -94,7 +90,7 @@ fn shake(x: &mut Cx) {
 }
 
 /// 0x7a4ba : recul en glissant, puis riposte (attaque 10, invulnérable).
-fn pushed_back(x: &mut Cx) {
+fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -128,7 +124,7 @@ fn pushed_back(x: &mut Cx) {
 }
 
 /// 0x7a552 : à terre (`+0x84` images hors pause), puis relevé.
-fn down(x: &mut Cx) {
+fn down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -175,7 +171,7 @@ pub(crate) fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x7a5fe : mort. Quand l'autre moitié vit encore, seule une chute (0x19ad6) ; la dernière à tomber prévient la
 /// scène du boss vaincu.
-fn death(x: &mut Cx) {
+fn death<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set32(f::IMMUNITY, 0xffff_ffff);
@@ -215,7 +211,6 @@ fn death(x: &mut Cx) {
             x.set16(0x1a, (-0x38i16) as u16);
             let center = camera_x(x).wrapping_add(0xc0);
             let (vx, side) = if Fl::sub16(center, x.u16(0x8)).ge() { (0x200u16, 0u32) } else { ((-0x200i16) as u16, 0x20) };
-            set_dw(x, 0, vx);
             x.set16(0x14, vx);
             x.set8(f::FLIP, side as u8);
             x.move_xz();
@@ -256,7 +251,7 @@ fn death(x: &mut Cx) {
 }
 
 /// 0x7a76e : retour au combat après une attente (`+5` = 10).
-fn resting(x: &mut Cx) {
+fn resting<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         next7(x);
         return body(x, 0xc);

@@ -21,7 +21,7 @@ pub(super) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x98f9c : debout, vulnérable.
-pub(super) fn stand(x: &mut Cx) {
+pub(super) fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set32(f::STATE, STAND);
 }
@@ -35,7 +35,7 @@ pub(super) fn interrupt<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x98fc0 : marche vers un joueur (tir 0x29).
-pub(super) fn chase(x: &mut Cx) {
+pub(super) fn chase<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(SHOT, 0x29);
     x.set32(f::STATE, CHASE);
@@ -49,7 +49,7 @@ pub(super) fn chase_b<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x98fec : la charge si le boss est dans la bande utile de l'écran, sinon l'attaque 16.
-pub(super) fn dash_or_attack(x: &mut Cx) {
+pub(super) fn dash_or_attack<R: Banc>(x: &mut Cx<'_, R>) {
     let cam = var::CAMERA1_X.get(x.b);
     let here = x.u16(0x8);
     if Fl::sub16(cam.wrapping_add(0x20), here).ge() || Fl::sub16(cam.wrapping_add(0x160), here).lt() {
@@ -83,7 +83,7 @@ pub(super) fn attack_4<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x99062 : attaque 6 (poursuite magique) si une cible existe.
-pub(super) fn attack_6(x: &mut Cx) {
+pub(super) fn attack_6<R: Banc>(x: &mut Cx<'_, R>) {
     if !lib::pick_target_any(x) {
         return wait(x);
     }
@@ -100,7 +100,7 @@ pub(super) fn attack_8<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9909a : attaque 10 tant qu'il en reste ; sinon l'attaque 20.
-pub(super) fn attack_10(x: &mut Cx) {
+pub(super) fn attack_10<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(BUDGET_A) as i8) <= 0 {
         return attack_20(x);
     }
@@ -126,7 +126,7 @@ pub(super) fn attack_14<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x990e8 : attaque 16 tant qu'il en reste ; sinon l'attaque 2.
-pub(super) fn attack_16(x: &mut Cx) {
+pub(super) fn attack_16<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(BUDGET_D) as i8) <= 0 {
         return attack_2(x);
     }
@@ -135,7 +135,7 @@ pub(super) fn attack_16(x: &mut Cx) {
 }
 
 /// 0x99102 : attaque 18 (le boss est dans la fenêtre de l'écran) ou 16, 0.
-pub(super) fn attack_18(x: &mut Cx) {
+pub(super) fn attack_18<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(BUDGET_E) == 0 {
         return attack_0(x);
     }
@@ -154,7 +154,7 @@ pub(super) fn attack_18(x: &mut Cx) {
 }
 
 /// 0x99156 : attaque 20 (si la phase le permet) ; sinon attaque 6 ou 8.
-pub(super) fn attack_20(x: &mut Cx) {
+pub(super) fn attack_20<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(BUDGET_F) as i8) <= 0 {
         return attack_6(x);
     }
@@ -194,20 +194,20 @@ pub(super) fn walk_delay_slow<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x98d06, 0x98d18 : nombre de pas d'une marche.
-pub(super) fn walk_steps_fast(x: &mut Cx) {
+pub(super) fn walk_steps_fast<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     let v = table8(x, 0x98d2a, r);
     x.set8(WALK_STEPS, v);
 }
 
-pub(super) fn walk_steps_slow(x: &mut Cx) {
+pub(super) fn walk_steps_slow<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     let v = table8(x, 0x98d4a, r);
     x.set8(WALK_STEPS, v);
 }
 
 /// 0x98d6a, 0x98d86 : un joueur est-il dans la boîte ? Rend 0, ou 1 / 2 : le côté (0x1047a).
-pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
+pub(super) fn probe<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u8 {
     if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
@@ -215,7 +215,7 @@ pub(super) fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> u8 {
 }
 
 /// Exécute la routine d'état dont une table donne l'adresse.
-fn go(x: &mut Cx, routine: u32) {
+fn go<R: Banc>(x: &mut Cx<'_, R>, routine: u32) {
     match routine {
         0x98fec => dash_or_attack(x),
         0x99032 => attack_0(x),
@@ -232,7 +232,7 @@ fn go(x: &mut Cx, routine: u32) {
 }
 
 /// 0x98da2 : un joueur est tout près.
-pub(super) fn choose_close(x: &mut Cx) {
+pub(super) fn choose_close<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
     let pick = table8(x, 0x98db8, r);
     let routine = target(x, 0x98dc8, pick as u32);
@@ -240,7 +240,7 @@ pub(super) fn choose_close(x: &mut Cx) {
 }
 
 /// 0x98dcc : un joueur est devant (boîte 0 / 0x2c / 0xc) ; la phase règle le choix.
-pub(super) fn choose_front(x: &mut Cx) {
+pub(super) fn choose_front<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
     let phase = x.u8(PHASE) as i8 as i32;
     let kind = target(x, 0x98de6, (2 * phase) as u32);
@@ -256,7 +256,7 @@ pub(super) fn choose_front(x: &mut Cx) {
 }
 
 /// 0x98e3c : un joueur est à mi-distance ; `side` = 1 ou 2.
-pub(super) fn choose_mid(x: &mut Cx, side: u8) {
+pub(super) fn choose_mid<R: Banc>(x: &mut Cx<'_, R>, side: u8) {
     let r = random(x) & 0xf;
     let table = if side == 1 { 0x98e6e } else { 0x98e7e };
     let pick = table8(x, table, r);
@@ -265,7 +265,7 @@ pub(super) fn choose_mid(x: &mut Cx, side: u8) {
 }
 
 /// 0x98e96 : un joueur est loin ; `side` = 1 ou 2.
-pub(super) fn choose_far(x: &mut Cx, side: u8) {
+pub(super) fn choose_far<R: Banc>(x: &mut Cx<'_, R>, side: u8) {
     let r = random(x) & 0xf;
     let phase = x.u8(PHASE) as i8 as i32;
     let entry = (side as i32 - 1) * 2 + 4 * phase;
@@ -301,7 +301,7 @@ pub(super) fn choose_far(x: &mut Cx, side: u8) {
 // --- budgets et tirages de la phase ---------------------------------------------------------------------
 
 /// 0x9946e..: le boss est debout, choisit sa suite d'après sa phase (0x99428).
-pub(super) fn back_on_feet(x: &mut Cx) {
+pub(super) fn back_on_feet<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(REACTION, 0);
     x.set32(0x58, 0);
     x.set8(0, 1);

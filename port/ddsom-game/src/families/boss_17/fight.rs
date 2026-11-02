@@ -19,7 +19,7 @@ use crate::objects::Obj;
 const WALK_SIDEWAYS: u32 = 0x180a46;
 const WALK_FORWARD: u32 = 0x180aea;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => idle(x),
         2 => turn(x),
@@ -58,7 +58,7 @@ fn walk_select<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 0 : debout --------------------------------------------------------------------------
 
-fn idle(x: &mut Cx) {
+fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return decide::wait(x);
     }
@@ -110,7 +110,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 et 6 : marche -----------------------------------------------------------------------
 
-fn walk(x: &mut Cx, slow: bool) {
+fn walk<R: Banc>(x: &mut Cx<'_, R>, slow: bool) {
     if !players_alive(x) {
         return decide::wait(x);
     }
@@ -145,7 +145,7 @@ fn walk(x: &mut Cx, slow: bool) {
 
 /// 0x95ff8 : un pas de marche de plus ; à la fin des pas, la marche s'arrête (`chase_b`) ; tant qu'une
 /// attaque est possible, le boss la déclenche.
-fn keep_walking(x: &mut Cx) {
+fn keep_walking<R: Banc>(x: &mut Cx<'_, R>) {
     if sub8(x, WALK_DELAY, 1).mi() {
         if sub8(x, WALK_STEPS, 1).le() {
             return decide::chase_b(x);
@@ -181,7 +181,7 @@ fn keep_walking(x: &mut Cx) {
 
 // --- +6 = 8 et 10 : charge ----------------------------------------------------------------------
 
-fn dash(x: &mut Cx) {
+fn dash<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);

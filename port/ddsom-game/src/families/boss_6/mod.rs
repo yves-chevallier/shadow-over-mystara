@@ -63,7 +63,7 @@ pub(self) fn fly<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_FLY, n);
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -96,7 +96,7 @@ fn guard<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 2);
 }
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -127,7 +127,7 @@ fn init(x: &mut Cx) {
     body(x, 0);
 }
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
@@ -144,7 +144,7 @@ fn active(x: &mut Cx) {
 }
 
 /// `+5` = 6 à 12 (0x851d6) : attend que des joueurs reviennent.
-fn wait_for_players(x: &mut Cx) {
+fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) as i8 > 0 {
         return decide::chase(x);
     }
@@ -162,14 +162,14 @@ fn wait_for_players(x: &mut Cx) {
 }
 
 /// `+5` = 14 (0x8520e) : reprise (le seul état de `+6` est la fin de relevé).
-fn recovered(x: &mut Cx) {
+fn recovered<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         hit::recovered_tail(x);
     }
 }
 
 handlers! {
-    0x8430e "boss_6" run,
+    0x8430e "boss_6" #[sans] run,
     // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x85490 "boss_6_releve" hit::recovered_tail,
 }
