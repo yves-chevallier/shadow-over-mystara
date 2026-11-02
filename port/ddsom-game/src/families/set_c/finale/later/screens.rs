@@ -3,6 +3,12 @@ use crate::families::set::tables as set_tables;
 use crate::families::set::vars;
 use crate::objects::Obj;
 use crate::families::set::fields::SetObj;
+use crate::families::set_c::fields::ScreenObj;
+use crate::families::set_c::fields::CreditsObj;
+use crate::families::set_c::fields::FlickerObj;
+use crate::families::set_c::fields::NameShowObj;
+use crate::families::set_c::fields::ResultsObj;
+use crate::families::set_c::fields::Conductor;
 
 // --- variant 20: credits scroll ---------------------------------------------------------------------------------
 
@@ -19,39 +25,39 @@ pub fn credits_scroll<R: Bench>(x: &mut Cx<'_, R>) {
         crate::video::clear_layer(x.b, crate::video::Layer::One);
         x.set_a5_u8(vars::FADE_PAGES, 2);
         crate::palette::full_brightness(x.b);
-        x.set32(0x20, 0);
-        x.set32(0x24, TEXT);
-        x.set8(0x29, 0);
-        x.set8(0x2a, 0);
-        x.set16(0x2c, 0xf00);
-        x.set8(0x2e, 0);
+        x.set32(CreditsObj::SCROLL, 0);
+        x.set32(CreditsObj::TEXT, TEXT);
+        x.set8(CreditsObj::COLUMN, 0);
+        x.set8(CreditsObj::PHASE, 0);
+        x.set16(CreditsObj::DEST, 0xf00);
+        x.set8(CreditsObj::ATTR, 0);
     }
-    let v = x.u32(0x20).wrapping_sub(0x4000);
-    x.set32(0x20, v);
-    let scroll = x.u16(0x20) & 0x1ff;
-    x.set16(0x20, scroll);
+    let v = x.u32(CreditsObj::SCROLL).wrapping_sub(0x4000);
+    x.set32(CreditsObj::SCROLL, v);
+    let scroll = x.u16(CreditsObj::SCROLL) & 0x1ff;
+    x.set16(CreditsObj::SCROLL, scroll);
     x.set_a5_u16(vars::SCROLL_Y_PLANE1, scroll);
     if x.u8(SetObj::SUBSTATE) != 0 {
         return;
     }
     let phase = (x.a5_u16(vars::SCROLL_Y_PLANE1) & 8) as u8;
-    if x.u8(0x2a) == phase {
+    if x.u8(CreditsObj::PHASE) == phase {
         return;
     }
-    let toggled = x.u8(0x2a) ^ 8;
-    x.set8(0x2a, toggled);
-    let mut text = x.u32(0x24);
-    let mut dest = 0x910000u32.wrapping_add(adr16(x.u16(0x2c)));
-    x.add16(0x2c, 4);
-    x.add8(0x29, 1);
-    if x.u8(0x29) == 0x20 {
-        let v = x.u16(0x2c).wrapping_sub(0x80);
-        x.set16(0x2c, v);
-        x.set8(0x29, 0);
-        let v = x.u16(0x2c).wrapping_add(0x2000) & 0x3fff;
-        x.set16(0x2c, v);
+    let toggled = x.u8(CreditsObj::PHASE) ^ 8;
+    x.set8(CreditsObj::PHASE, toggled);
+    let mut text = x.u32(CreditsObj::TEXT);
+    let mut dest = 0x910000u32.wrapping_add(adr16(x.u16(CreditsObj::DEST)));
+    x.add16(CreditsObj::DEST, 4);
+    x.add8(CreditsObj::COLUMN, 1);
+    if x.u8(CreditsObj::COLUMN) == 0x20 {
+        let v = x.u16(CreditsObj::DEST).wrapping_sub(0x80);
+        x.set16(CreditsObj::DEST, v);
+        x.set8(CreditsObj::COLUMN, 0);
+        let v = x.u16(CreditsObj::DEST).wrapping_add(0x2000) & 0x3fff;
+        x.set16(CreditsObj::DEST, v);
     }
-    let mut attr = x.u8(0x2e) as u16;
+    let mut attr = x.u8(CreditsObj::ATTR) as u16;
     // cell cleared at the same time: the one on the opposite page (0x2000 further), set once
     let erase = 0x910000u32 + ((dest as u16).wrapping_add(0x2000) & 0x3fff) as u32;
     loop {
@@ -62,11 +68,11 @@ pub fn credits_scroll<R: Bench>(x: &mut Cx<'_, R>) {
             0xff => {
                 let a = set_tables::byte(x.b, text);
                 text += 1;
-                x.set8(0x2e, a);
+                x.set8(CreditsObj::ATTR, a);
                 attr = a as u16;
             }
             0x2f => {
-                x.set32(0x24, text);
+                x.set32(CreditsObj::TEXT, text);
                 for i in 0..17 {
                     wr32(x.b, erase + 0x80 * i, 0x20_0000);
                 }
@@ -92,30 +98,30 @@ pub fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
-            x.set8(0x20, 0);
+            x.set8(FlickerObj::LIT, 0);
             let v = rd16(x.b, COLOR);
-            x.set16(0x22, v);
+            x.set16(FlickerObj::COLOR, v);
         }
         2 => {}
         _ => return,
     }
-    if (conductor(x).u8(x.b, 8) as i8) < 0 {
+    if (conductor(x).u8(x.b, Conductor::SIGNAL) as i8) < 0 {
         return x.set8(Obj::STATE, 6);
     }
-    if x.u8(0x20) != 0 {
-        x.set8(0x20, 0);
-        let v = x.u16(0x22) & 0xfff | rd16(x.b, REFERENCE) & 0xf000;
+    if x.u8(FlickerObj::LIT) != 0 {
+        x.set8(FlickerObj::LIT, 0);
+        let v = x.u16(FlickerObj::COLOR) & 0xfff | rd16(x.b, REFERENCE) & 0xf000;
         return wr16(x.b, COLOR, v);
     }
     if rng(x) & 7 != 0 {
         return;
     }
-    x.set8(0x20, 1);
+    x.set8(FlickerObj::LIT, 1);
     let v = 0xf00 | rd16(x.b, REFERENCE) & 0xf000;
     wr16(x.b, COLOR, v);
     let Some(o) = spawn_sobj(x, 0x14) else { return };
-    let owner = x.u32(0x4c);
-    o.set_u32(x.b, 0x4c, owner);
+    let owner = x.u32(ScreenObj::CONDUCTOR);
+    o.set_u32(x.b, ScreenObj::CONDUCTOR, owner);
 }
 
 // --- variant 22: entering initials (h) -----------------------------------------------------------
@@ -127,26 +133,26 @@ pub fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
 pub fn name_entry<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::STATE) == 0 {
         next_state(x);
-        x.set16(0x20, PLAYERS as u16);
-        x.set8(0x22, 4);
+        x.set16(NameShowObj::PLAYER, PLAYERS as u16);
+        x.set8(NameShowObj::LEFT, 4);
     } else if x.u8(Obj::STATE) != 2 {
         return;
     }
     match x.u8(SetObj::SUBSTATE) {
         0 => {
-            let mut a1 = adr16(x.u16(0x20));
+            let mut a1 = adr16(x.u16(NameShowObj::PLAYER));
             loop {
-                if x.u8(0x22) == 0 {
+                if x.u8(NameShowObj::LEFT) == 0 {
                     next_state(x);
                     let v = x.a5_u8(vars::STEP).wrapping_add(2);
                     x.set_a5_u8(vars::STEP, v);
                     crate::video::clear_layer(x.b, crate::video::Layer::One);
                     return crate::video::clear_layer(x.b, crate::video::Layer::Two);
                 }
-                x.add8(0x22, 0xff);
+                x.add8(NameShowObj::LEFT, 0xff);
                 if rd8(x.b, a1) != 0 && (rd8(x.b, a1 + 4) as i8) < 4 {
                     next_substate(x);
-                    x.set16(0x20, a1 as u16);
+                    x.set16(NameShowObj::PLAYER, a1 as u16);
                     mask_tasks(x, 0xfff1);
                     return;
                 }
@@ -154,13 +160,13 @@ pub fn name_entry<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         2 => {
-            let player = adr16(x.u16(0x20));
+            let player = adr16(x.u16(NameShowObj::PLAYER));
             let Some(o) = spawn_sobj(x, 0x15) else { return };
             crate::video::clear_layer(x.b, crate::video::Layer::One);
             next_substate(x);
-            x.set16(0x24, o.0 as u16);
+            x.set16(NameShowObj::CURSOR, o.0 as u16);
             let character = rd8(x.b, player + 3);
-            o.set_u8(x.b, 0x2f, character);
+            o.set_u8(x.b, SetObj::PARAM, character);
             let dest = 0x912000u32.wrapping_add(set_tables::pc_word(x.b, 0xd0858 + 2 * character as u32) as i16 as i32 as u32);
             let kind = rd8(x.b, player + 2) as u32;
             let attr = set_tables::pc_byte(x.b, 0xd0854 + kind) as u16;
@@ -171,30 +177,30 @@ pub fn name_entry<R: Bench>(x: &mut Cx<'_, R>) {
             next_substate(x);
             let v = x.a5_u16(TASK_FLAGS) | 0xe;
             x.set_a5_u16(TASK_FLAGS, v);
-            x.set16(0x26, 0x78);
+            x.set16(NameShowObj::DELAY, 0x78);
         }
         6 | 0xa => {}
         8 => {
-            x.add16(0x26, 0xffff);
-            if x.u16(0x26) == 0 {
+            x.add16(NameShowObj::DELAY, 0xffff);
+            if x.u16(NameShowObj::DELAY) == 0 {
                 next_substate(x);
             }
         }
         0xc => {
             next_substate(x);
-            let o = Obj(adr16(x.u16(0x24)));
+            let o = Obj(adr16(x.u16(NameShowObj::CURSOR)));
             o.set_u32(x.b, Obj::STATE, 0x0600_0000);
         }
         0xe => {
             next_substate(x);
-            let next = adr16(x.u16(0x20)) + PLAYER_STRIDE;
-            x.set16(0x20, next as u16);
+            let next = adr16(x.u16(NameShowObj::PLAYER)) + PLAYER_STRIDE;
+            x.set16(NameShowObj::PLAYER, next as u16);
             mask_tasks(x, 0xfff1);
-            x.set16(0x26, 4);
+            x.set16(NameShowObj::DELAY, 4);
         }
         0x10 => {
-            x.add16(0x26, 0xffff);
-            if x.u16(0x26) == 0 {
+            x.add16(NameShowObj::DELAY, 0xffff);
+            if x.u16(NameShowObj::DELAY) == 0 {
                 x.set8(SetObj::SUBSTATE, 0);
             }
         }
@@ -244,15 +250,15 @@ pub fn results_panel<R: Bench>(x: &mut Cx<'_, R>) {
             load_blocks(x, rom::LOAD_SMALL, end, 8);
             for i in 0..8 {
                 let v = rd32(x.b, 0x91cc00 + 4 * i);
-                x.set32(0x30 + 4 * i, v);
+                x.set32(ResultsObj::PALETTE + 4 * i, v);
             }
-            x.set8(0x20, 0);
+            x.set8(ResultsObj::FADE, 0);
             x.set_a5_u16(a5::BG_X, 0x200);
             x.set_a5_u16(a5::BG_Y, 0);
             let (px, py) = (x.a5_u16(a5::BG_X), x.a5_u16(a5::BG_Y));
             x.set_a5_u16(a5::BG_X_PREV, px);
             x.set_a5_u16(a5::BG_Y_PREV, py);
-            x.set8(0x20, 1);
+            x.set8(ResultsObj::FADE, 1);
             let low = rd32(x.b, 0x91cc00) & 0xf000_f000;
             for i in 0..8 {
                 wr32(x.b, 0x91cc00 + 4 * i, 0x0f00_0f00 | low);
@@ -269,20 +275,20 @@ pub fn results_panel<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn fade_flag<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x20, 0xff);
+    x.add8(ResultsObj::FADE, 0xff);
     mask_tasks(x, 0xfff7);
 }
 
 fn results_tick<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x20) != 0 {
+    if x.u8(ResultsObj::FADE) != 0 {
         return fade_flag(x);
     }
-    x.set8(0x20, 2);
+    x.set8(ResultsObj::FADE, 2);
     if rng(x) & 7 != 0 {
         return;
     }
     let v = x.a5_u16(TASK_FLAGS) | 8;
     x.set_a5_u16(TASK_FLAGS, v);
     let Some(o) = spawn_sobj(x, 0x16) else { return };
-    o.set_u16(x.b, 0x46, x.o.0 as u16);
+    o.set_u16(x.b, SetObj::OWNER, x.o.0 as u16);
 }

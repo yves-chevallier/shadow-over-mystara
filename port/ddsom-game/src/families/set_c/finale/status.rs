@@ -13,6 +13,7 @@ use crate::mem::{rd8, wr16, wr32, wr8};
 use crate::families::set::tables as set_tables;
 use crate::objects::Obj;
 use crate::families::set::fields::SetObj;
+use crate::families::set_c::fields::StatusObj;
 
 /// ROM tables (program space: PC-relative accesses).
 const LEVEL_RANGE: u32 = 0xce728;
@@ -61,9 +62,9 @@ fn next_state<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// State 0: computes the player's tier, creates the window object, draws the frame and displays the first message.
 fn open<R: Bench>(x: &mut Cx<'_, R>) {
-    let player = adr(x.u16(0x34));
+    let player = adr(x.u16(StatusObj::PLAYER));
     let half = rd8(x.b, player + 3) >> 1;
-    x.set8(0x37, half);
+    x.set8(StatusObj::HALF, half);
     let at = LEVEL_RANGE + 2 * half as u32;
     let (min, max) = (set_tables::pc_byte(x.b, at) as i8, set_tables::pc_byte(x.b, at + 1) as i8);
     let mut level = rd8(x.b, player + 0x10c).wrapping_add(1) as i8;
@@ -72,14 +73,14 @@ fn open<R: Bench>(x: &mut Cx<'_, R>) {
     }
     wr8(x.b, player + 0x10c, level as u8);
     let step = level.wrapping_sub(min) as u8;
-    x.set8(0x36, step);
+    x.set8(StatusObj::LEVEL_STEP, step);
     let base = set_tables::pc_word(x.b, FRAME_BY_LEVEL + 2 * half as u32);
     let low = (base as u8).wrapping_add(step);
     let frame = set_tables::pc_byte(x.b, FRAME_BY_LEVEL + (base & 0xff00 | low as u16) as i16 as i32 as u32);
     x.set_a5_u16(BOX_TOP, 0xb8u16.wrapping_sub(0x18 * frame as u16));
     // 0xddeaa: scenery 6 of variant 0xd, which keeps the frame
     if let Ok(scenery) = crate::effects_aids::scenery_6(x.b, 0xd) {
-        scenery.set_u8(x.b, 0x2f, frame);
+        scenery.set_u8(x.b, SetObj::PARAM, frame);
     }
     draw_frame(x, frame);
     pick_message(x, player);
@@ -123,14 +124,14 @@ fn draw_frame<R: Bench>(x: &mut Cx<'_, R>, frame: u8) {
 
 /// Chooses the message (0xceaba): table of records per character, page rank, tier.
 fn pick_message<R: Bench>(x: &mut Cx<'_, R>, player: u32) {
-    let half = x.u8(0x37) as u32;
+    let half = x.u8(StatusObj::HALF) as u32;
     let tables = {
         let at = MESSAGE_TABLES + 4 * half;
         set_tables::pc_long(x.b, at)
     };
     let page = (x.a5_u16(MESSAGE_PAGE).wrapping_sub(2)).wrapping_mul(2);
     let messages = set_tables::long(x.b, tables.wrapping_add(page as i16 as i32 as u32));
-    let step = x.u8(0x36) as u16;
+    let step = x.u8(StatusObj::LEVEL_STEP) as u16;
     let record = tables + 0xc + step.wrapping_mul(20) as i16 as i32 as u32;
     let hp = set_tables::word(x.b, record);
     wr16(x.b, player + 0x60, hp);

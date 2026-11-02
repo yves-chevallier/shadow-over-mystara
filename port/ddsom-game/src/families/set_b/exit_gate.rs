@@ -31,7 +31,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(Obj::STATE, 2);
             for off in [0x42, 0x43, 0x44, 0x45, 0x16, 0x17] {
-                x.set8(off, 0);
+                x.set8(off, 0u8);
             }
             let door_y = if x.u8(Obj::VARIANT) == 0 { 0x160 } else { 0x114 };
             x.set16(Obj::Y, door_y);
@@ -56,9 +56,9 @@ fn at_door<R: Bench>(x: &mut Cx<'_, R>, p: Obj, input: u8, counter: u32) {
         && (p.u16(x.b, pl::X) as i16) >= DOOR_X
         && y <= 0x40
     {
-        x.add8(counter, 1);
+        x.add8(counter, 1u8);
     } else {
-        x.set8(counter, 0);
+        x.set8(counter, 0u8);
     }
 }
 

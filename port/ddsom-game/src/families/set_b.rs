@@ -363,9 +363,9 @@ fn at_gate<R: Bench>(x: &mut Cx<'_, R>, p: Obj, input: u32, counter: u32) {
         && p.u16(x.b, pl::Z) == 0
         && aligned
     {
-        x.add8(counter, 1);
+        x.add8(counter, 1u8);
     } else {
-        x.set8(counter, 0);
+        x.set8(counter, 0u8);
     }
 }
 

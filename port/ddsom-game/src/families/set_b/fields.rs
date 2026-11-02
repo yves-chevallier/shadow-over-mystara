@@ -365,7 +365,17 @@ record! {
         speaker, set_speaker, SPEAKER: u8 @ 0x43;
         /// Object that opened the window (low word of its address).
         owner, set_owner, OWNER: u16 @ 0x46;
-        /// The window that the vote object answers (low word of its address).
+    }
+}
+
+view! {
+    /// An effect tied to a dialog window (the vote of SET 24, the EFFCT 23 of SET 3), which closes it.
+    WindowEffect;
+}
+
+record! {
+    impl WindowEffect {
+        /// The window to close (low word of its address).
         window, set_window, WINDOW: u16 @ 0x50;
     }
 }

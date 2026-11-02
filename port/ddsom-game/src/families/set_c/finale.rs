@@ -18,6 +18,10 @@ use crate::machine::Machine;
 use crate::families::set::tables as set_tables;
 use crate::families::set::vars;
 use crate::families::set::fields::SetObj;
+use crate::families::set_c::fields::ScreenObj;
+use crate::families::set_c::fields::ScrollScreenObj;
+use crate::families::set_c::fields::BossCameraFields;
+use crate::families::set_c::fields::ScrollSpeedObj;
 
 /// Table (program space) of the machines' movements, one relative word per variant.
 const VARIANTS: u32 = 25;
@@ -105,7 +109,7 @@ fn free<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// The conductor: the object pointed to by `+0x4c` (long address).
 fn conductor<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
-    Obj(x.u32(0x4c))
+    Obj(x.u32(ScreenObj::CONDUCTOR))
 }
 
 fn rng<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
@@ -121,8 +125,8 @@ pub(super) fn load_blocks<R: Bench>(x: &mut Cx<'_, R>, grid_kind: crate::video::
 /// Shake: adds to the camera displacement number `+0x18` & 3 of table `table` (word pairs); returns the X offset (the
 /// original's D1, read back by the effect creation that follows).
 fn shake<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u16 {
-    let step = (x.u8(0x18) & 3) as u32;
-    x.add8(0x18, 1);
+    let step = (x.u8(ScrollScreenObj::STEP) & 3) as u32;
+    x.add8(ScrollScreenObj::STEP, 1);
     let (dx, dy) = (set_tables::word(x.b, table + 4 * step), set_tables::word(x.b, table + 4 * step + 2));
     // Original glitch: the Y offset stays in D2 (`dispatch::Leftovers`)
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | dy as u32;
@@ -150,13 +154,13 @@ fn title_blink<R: Bench>(x: &mut Cx<'_, R>) {
             next_state(x);
             crate::families::small::clear_scroll1_start(x);
             crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
-            x.set8(0x42, 0);
+            x.set8(ScrollScreenObj::DELAY, 0);
             x.set_a5_u16(FLASH, 0);
         }
         2 => {
-            if x.u8(0x42) != 0 {
-                x.add8(0x42, 0xff);
-                if x.u8(0x42) == 0 {
+            if x.u8(ScrollScreenObj::DELAY) != 0 {
+                x.add8(ScrollScreenObj::DELAY, 0xff);
+                if x.u8(ScrollScreenObj::DELAY) == 0 {
                     x.set_a5_u16(FLASH, 0);
                 }
                 return;
@@ -164,10 +168,10 @@ fn title_blink<R: Bench>(x: &mut Cx<'_, R>) {
             if x.a5_u8(vars::FRAMES_LOW) & 3 != 0 || rng(x) & 7 != 0 {
                 return;
             }
-            x.set8(0x42, 3);
+            x.set8(ScrollScreenObj::DELAY, 3);
             x.set_a5_u16(FLASH, 0x100);
-            let was_on = x.bit(0x43, 0);
-            x.set_bit(0x43, 0, !was_on);
+            let was_on = x.bit(ScrollScreenObj::FLASH, 0);
+            x.set_bit(ScrollScreenObj::FLASH, 0, !was_on);
             crate::sound::play_global(x.b, if was_on { ON } else { OFF });
         }
         _ => free(x),
@@ -186,7 +190,7 @@ fn quake<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
-            x.set8(0x14, 0x28);
+            x.set8(ScrollScreenObj::TIMER, 0x28);
             let v = x.a5_u16(a5::CAM_X).wrapping_add(0xc0);
             x.set16(Obj::X, v);
             let v = x.a5_u16(a5::CAM_Y).wrapping_add(0x80);
@@ -195,28 +199,28 @@ fn quake<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => match x.u8(SetObj::SUBSTATE) {
             0 => {
-                x.add8(0x14, 0xff);
-                if x.u8(0x14) != 0 {
+                x.add8(ScrollScreenObj::TIMER, 0xff);
+                if x.u8(ScrollScreenObj::TIMER) != 0 {
                     return;
                 }
                 next_substate(x);
-                x.set8(0x14, 0x3c);
-                x.set8(0x18, 0);
+                x.set8(ScrollScreenObj::TIMER, 0x3c);
+                x.set8(ScrollScreenObj::STEP, 0);
             }
             2 => {
                 shake(x, SHAKE_A);
-                x.add8(0x14, 0xff);
-                if x.u8(0x14) != 0 {
+                x.add8(ScrollScreenObj::TIMER, 0xff);
+                if x.u8(ScrollScreenObj::TIMER) != 0 {
                     return;
                 }
-                x.set8(0x14, 0x78);
+                x.set8(ScrollScreenObj::TIMER, 0x78);
                 next_substate(x);
             }
             4 => {
                 let dx = shake(x, SHAKE_B);
                 quake_effects(x, DELAYS, dx as u8);
-                x.add8(0x14, 0xff);
-                if x.u8(0x14) != 0 {
+                x.add8(ScrollScreenObj::TIMER, 0xff);
+                if x.u8(ScrollScreenObj::TIMER) != 0 {
                     return;
                 }
                 next_substate(x);
@@ -254,21 +258,21 @@ fn quake<R: Bench>(x: &mut Cx<'_, R>) {
 fn quake_delay<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let r = rng(x) & 7;
     let d = set_tables::pc_byte(x.b, table + r as u32);
-    x.set8(0x42, d);
+    x.set8(ScrollScreenObj::DELAY, d);
 }
 
 /// Creates an effect (type 0 of 0xb1a7a) tied to the object when the delay `+0x42` has elapsed.
 fn quake_effects<R: Bench>(x: &mut Cx<'_, R>, table: u32, setting: u8) {
-    x.add8(0x42, 0xff);
-    if x.u8(0x42) != 0 {
+    x.add8(ScrollScreenObj::DELAY, 0xff);
+    if x.u8(ScrollScreenObj::DELAY) != 0 {
         return;
     }
-    x.set8(0x42, 1);
+    x.set8(ScrollScreenObj::DELAY, 1);
     // 0xb1a7a, variant 0; original glitch: the setting is the low byte of the D1 left by the shake
     let Some(child) = crate::families::effects_creators::countdown(x.b, 0, setting) else { return };
-    child.set_u16(x.b, 0x42, x.o.0 as u16);
-    let owner = x.u32(0x4c);
-    child.set_u32(x.b, 0x4c, owner);
+    child.set_u16(x.b, ScrollScreenObj::PARENT, x.o.0 as u16);
+    let owner = x.u32(ScreenObj::CONDUCTOR);
+    child.set_u32(x.b, ScreenObj::CONDUCTOR, owner);
     quake_delay(x, table);
 }
 
@@ -282,12 +286,12 @@ fn backdrop_slide<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             next_state(x);
             x.set32(Obj::X, 0);
-            x.set32(0x34, 0);
+            x.set32(ScrollScreenObj::SLIDE, 0);
         }
         2 => {
             let leaving = x.u8(SetObj::SUBSTATE) != 0;
-            x.add32(0x34, if leaving { 0x4000 } else { 0x3800 });
-            let at = x.a5_u16(a5::CAM_X).wrapping_add(x.u16(0x34));
+            x.add32(ScrollScreenObj::SLIDE, if leaving { 0x4000 } else { 0x3800 });
+            let at = x.a5_u16(a5::CAM_X).wrapping_add(x.u16(ScrollScreenObj::SLIDE));
             if leaving {
                 if at >= 0xa0 {
                     x.set8(Obj::STATE, 6);
@@ -296,7 +300,7 @@ fn backdrop_slide<R: Bench>(x: &mut Cx<'_, R>) {
             } else if at >= 0x60 {
                 return next_substate(x);
             }
-            let pos = x.u16(0x34);
+            let pos = x.u16(ScrollScreenObj::SLIDE);
             if pos == x.u16(Obj::X) {
                 return;
             }
@@ -320,12 +324,12 @@ fn camera_script<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             next_state(x);
             let boss = conductor(x);
-            let row = TABLE + ((boss.u8(x.b, 0x3f) as u32) << 4);
+            let row = TABLE + ((boss.u8(x.b, BossCameraFields::CAMERA_ROW) as u32) << 4);
             let w = |x: &mut Cx<'_, R>, i: u32| set_tables::word(x.b, row + 2 * i);
             let (cam_x, cam_y) = (w(x, 0), w(x, 1));
             x.set_a5_u16(a5::CAM_X, cam_x);
             x.set_a5_u16(a5::CAM_Y, cam_y);
-            for (field, i) in [(0x14, 2), (0x18, 3), (0x8, 4), (0xc, 5)] {
+            for (field, i) in [(ScrollSpeedObj::SPEED_X, 2), (ScrollSpeedObj::SPEED_Y, 3), (Obj::X, 4), (Obj::Z, 5)] {
                 let v = w(x, i);
                 x.set16(field, v);
             }
@@ -334,7 +338,7 @@ fn camera_script<R: Bench>(x: &mut Cx<'_, R>) {
             load_blocks(x, rom::LOAD_BLOCKS, end, g1);
         }
         2 => {
-            let (vx, vy) = (velocity(x.u16(0x14)), velocity(x.u16(0x18)));
+            let (vx, vy) = (velocity(x.u16(ScrollSpeedObj::SPEED_X)), velocity(x.u16(ScrollSpeedObj::SPEED_Y)));
             let v = x.a5_u32(a5::CAM_X).wrapping_add(vx);
             x.set_a5_u32(a5::CAM_X, v);
             let v = x.a5_u32(a5::CAM_Y).wrapping_add(vy);
@@ -364,7 +368,7 @@ fn load_scene<R: Bench>(x: &mut Cx<'_, R>, index: u32) {
         p += 2;
         w
     };
-    for field in [0x8, 0xc, 0x14, 0x18, 0x1c, 0x1e] {
+    for field in [Obj::X, Obj::Z, ScrollSpeedObj::SPEED_X, ScrollSpeedObj::SPEED_Y, ScrollScreenObj::MASK_X, ScrollScreenObj::MASK_Y] {
         let w = next(x);
         x.set16(field, w);
     }
@@ -373,7 +377,7 @@ fn load_scene<R: Bench>(x: &mut Cx<'_, R>, index: u32) {
     x.set_a5_u16(a5::BG_Y, py);
     let count = next(x);
     let w = next(x);
-    x.set16(0x16, w);
+    x.set16(ScrollScreenObj::OFFSET_X, w);
     for _ in 0..=count {
         let offset = next(x) as i16 as i32 as u32;
         let grid = next(x);
@@ -384,16 +388,16 @@ fn load_scene<R: Bench>(x: &mut Cx<'_, R>, index: u32) {
 /// One step of background scrolling: position += speed (8.8), masked by `+0x1c` / `+0x1e`, then
 /// published to the second plane with the offset `+0x16`.
 fn scroll_step<R: Bench>(x: &mut Cx<'_, R>) {
-    let v = x.u32(Obj::X).wrapping_add(velocity(x.u16(0x14)));
+    let v = x.u32(Obj::X).wrapping_add(velocity(x.u16(ScrollSpeedObj::SPEED_X)));
     x.set32(Obj::X, v);
-    let v = x.u32(Obj::Z).wrapping_add(velocity(x.u16(0x18)));
+    let v = x.u32(Obj::Z).wrapping_add(velocity(x.u16(ScrollSpeedObj::SPEED_Y)));
     x.set32(Obj::Z, v);
-    let mask = x.u16(0x1c);
+    let mask = x.u16(ScrollScreenObj::MASK_X);
     let v = x.u16(Obj::X) & mask;
     x.set16(Obj::X, v);
-    let bg_x = x.u16(Obj::X).wrapping_add(x.u16(0x16));
+    let bg_x = x.u16(Obj::X).wrapping_add(x.u16(ScrollScreenObj::OFFSET_X));
     x.set_a5_u16(a5::BG_X, bg_x);
-    let mask = x.u16(0x1e);
+    let mask = x.u16(ScrollScreenObj::MASK_Y);
     let v = x.u16(Obj::Z) & mask;
     x.set16(Obj::Z, v);
     let bg_y = x.u16(Obj::Z);
@@ -405,7 +409,7 @@ fn scene_scroll<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
-            let index = (x.u8(0x2f) as u32 & !1) * 4;
+            let index = (x.u8(SetObj::PARAM) as u32 & !1) * 4;
             load_scene(x, index & 0xffff);
         }
         2 => scroll_step(x),
@@ -425,14 +429,14 @@ fn scene_scroll_follow<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
-            let index = (x.u8(0x2f) as u32) * 4;
+            let index = (x.u8(SetObj::PARAM) as u32) * 4;
             load_scene(x, index & 0xffff);
             publish_background(x);
         }
         2 => {
             scroll_step(x);
             publish_background(x);
-            if conductor(x).u8(x.b, 3) == 2 {
+            if conductor(x).u8(x.b, Obj::VARIANT) == 2 {
                 next_state(x);
             }
         }
@@ -447,7 +451,7 @@ fn block_loader<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
-            let index = x.u8(0x2f) as u32;
+            let index = x.u8(SetObj::PARAM) as u32;
             block_loader_for(x, index);
         }
         2 => next_state(x),

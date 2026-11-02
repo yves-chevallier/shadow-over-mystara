@@ -378,7 +378,7 @@ fn refresh_player_count<R: Bench>(x: &mut Cx<'_, R>) {
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(Obj::STATE, 2);
     for off in [NEAR_COUNTERS, NEAR_COUNTERS + 1, NEAR_COUNTERS + 2, NEAR_COUNTERS + 3, ARRIVED, TRIGGERED] {
-        x.set8(off, 0);
+        x.set8(off, 0u8);
     }
     let row = GATES + (((x.u8(Obj::VARIANT) as u16) << GATE_SHIFT) as i16 as i32 as u32);
     let (gx, gz, gy) = (set_tables::pc_word(x.b, row + GATE_X), set_tables::pc_word(x.b, row + GATE_Z), set_tables::pc_word(x.b, row + GATE_Y));

@@ -29,6 +29,7 @@ use crate::objects::pools;
 use crate::families::set::tables as set_tables;
 use crate::families::set::vars;
 use crate::families::set::fields::SetObj;
+use crate::families::set_c::fields::SceneObj;
 
 /// Controller fields.
 mod f {
@@ -298,7 +299,7 @@ fn run_entry<R: Bench>(x: &mut Cx<'_, R>, entry: u32, word: u16) {
     }
     if class_offset != ITEM_CLASS {
         x.add16(f::LIVE, 1);
-        o.set_u16(x.b, 0x46, x.o.0 as u16);
+        o.set_u16(x.b, SetObj::OWNER, x.o.0 as u16);
     }
     if set_tables::byte(x.b, entry + 0x12) == 0 {
         let cam = if x.a5_u8(a5::USE_ALT_CAMERA) != 0 { a5::ALT_CAMERA } else { a5::CAMERA };
@@ -388,7 +389,7 @@ fn title_cards<R: Bench>(x: &mut Cx<'_, R>, param: u16, cards: [(u8, u8); 2]) {
     x.set_a5_u8(vars::PLANE2_SHOWN, 0);
     for (variant, extra) in cards {
         let Some(o) = spawn(x, &pools::SET, 0, Some(variant)) else { return };
-        o.set_u8(x.b, 0x2f, extra);
+        o.set_u8(x.b, SetObj::PARAM, extra);
     }
     let Some(o) = spawn(x, &pools::SOBJ, 0, Some(0x56)) else { return };
     o.set_u8(x.b, Obj::VARIANT, 0x57);
@@ -428,18 +429,18 @@ fn players_leave<R: Bench>(x: &mut Cx<'_, R>) {
 fn curtain<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SetObj::SUBSTATE) == 0 {
         x.add8(SetObj::SUBSTATE, 2);
-        x.set16(0x14, 0x80);
+        x.set16(SceneObj::CURTAIN_DELAY, 0x80);
         x.set_a5_u8(a5::SCENE_LATCH, 0x1f);
         x.set_a5_u8(a5::FROZEN, 1);
         x.set_a5_u8(a5::SCENE_SYNC, 0);
         wr8(x.b, PARALLAX_FLAG, 1);
         return;
     }
-    x.add16(0x14, 0xffff);
-    if x.u16(0x14) & 0x8000 == 0 {
+    x.add16(SceneObj::CURTAIN_DELAY, 0xffff);
+    if x.u16(SceneObj::CURTAIN_DELAY) & 0x8000 == 0 {
         return;
     }
-    x.set16(0x14, 0);
+    x.set16(SceneObj::CURTAIN_DELAY, 0);
     if !(0..4).any(|i| rd8(x.b, PLAYERS + i * PLAYER_STRIDE + 4) == 2) {
         return;
     }
@@ -481,7 +482,7 @@ fn clear_all<R: Bench>(x: &mut Cx<'_, R>) {
             if hold & 0x80 != 0 {
                 o.set_u16(x.b, Obj::STATE, 0x600);
                 o.set_u8(x.b, Obj::HIDDEN, 0);
-                o.set_u8(x.b, 0x41, 0);
+                o.set_u8(x.b, SetObj::SUSPEND_PHASE, 0);
             }
         }
     }
@@ -500,7 +501,7 @@ fn effects_wave<R: Bench>(x: &mut Cx<'_, R>) {
     for (variant, extra) in [(1, 0x20), (2, 0), (3, 0x20)] {
         let Some(o) = spawn(x, &pools::EFFCT, 0x21, Some(variant)) else { return };
         if extra != 0 {
-            o.set_u8(x.b, 0x2c, extra);
+            o.set_u8(x.b, SetObj::ATTR, extra);
         }
     }
 }

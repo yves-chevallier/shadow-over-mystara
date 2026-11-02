@@ -1,6 +1,8 @@
 use super::*;
 use crate::families::set::tables as set_tables;
 use crate::player::Player;
+use crate::families::set::fields::SetObj;
+use crate::families::set_b::fields::WindowEffect;
 
 /// Write into the buffer (register A4 of the original) and number of characters written (D6).
 pub(super) struct Text {
@@ -267,7 +269,7 @@ pub(super) fn compose<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot
             if let Some(o) = spawn(x, &pools::SOBJ, 6, 19) {
                 o.set_u16(x.b, f::LINKED, x.o.0 as u16);
                 let v = x.u8(f::PARAM);
-                o.set_u8(x.b, 0x2f, v);
+                o.set_u8(x.b, SetObj::PARAM, v);
             }
         }
         // 0xc8eea: text preceded by a color command, with the saved name
@@ -348,8 +350,8 @@ fn linked_effect<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text) {
     let Some(o) = spawn(x, &pools::EFFCT, 23, 0) else {
         return x.add8(f::SUB, 0xfe);
     };
-    o.set_u8(x.b, 0x2f, setting);
-    o.set_u16(x.b, 0x50, x.o.0 as u16);
+    o.set_u8(x.b, SetObj::PARAM, setting);
+    o.set_u16(x.b, WindowEffect::WINDOW, x.o.0 as u16);
     x.set16(f::DURATION, 0xffff);
     copy_text(x, t);
 }

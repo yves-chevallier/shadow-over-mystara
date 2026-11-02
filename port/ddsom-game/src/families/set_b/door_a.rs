@@ -35,7 +35,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(Obj::STATE, 2);
     for off in [0x42, 0x43, 0x44, 0x45, 0x16, 0x17] {
-        x.set8(off, 0);
+        x.set8(off, 0u8);
     }
     x.set_a5_u8(vars::PASSAGE, 0);
     let row = PARAMS + ((x.u8(Obj::VARIANT) as u32) << 4);

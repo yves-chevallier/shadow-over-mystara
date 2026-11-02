@@ -4,7 +4,7 @@ use crate::families::set::vars;
 use crate::objects::Obj;
 use crate::player::Player;
 use crate::families::set::fields::SetObj;
-use crate::families::set_b::fields::DialogObj;
+use crate::families::set_b::fields::{DialogObj, WindowEffect};
 use crate::families::set::fields::PlayerFields;
 
 // --- token output ----------------------------------------------------------------------
@@ -190,7 +190,7 @@ pub(super) fn build<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
                 x.add8(SetObj::SUBSTATE, 0xfe);
                 return;
             };
-            other.set_u16(x.b, DialogObj::WINDOW, x.o.0 as u16);
+            other.set_u16(x.b, WindowEffect::WINDOW, x.o.0 as u16);
             x.set16(DialogObj::WAIT, 0xffff);
             build(x, 1);
         }

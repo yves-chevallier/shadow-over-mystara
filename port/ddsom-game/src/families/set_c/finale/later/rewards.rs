@@ -3,6 +3,8 @@ use crate::families::set::tables as set_tables;
 use crate::families::set::vars;
 use crate::objects::Obj;
 use crate::families::set::fields::SetObj;
+use crate::families::set_c::fields::ScreenObj;
+use crate::families::set_c::fields::RewardObj;
 
 
 // --- variant 18: choice of end-of-level bonuses ----------------------------------------------------------------
@@ -14,15 +16,15 @@ pub fn bonus_selection<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
-            x.set32(0x20, 0xff00_0000);
-            x.set8(0x24, 0);
+            x.set32(RewardObj::TAKEN, 0xff00_0000);
+            x.set8(RewardObj::CANDIDATE, 0);
             let mut n = 0;
             for p in players() {
                 if present(x, p) {
                     n += 1;
                 }
             }
-            x.set8(0x25, n);
+            x.set8(RewardObj::LEFT, n);
         }
         2 => bonus_step(x),
         _ => {}
@@ -36,17 +38,17 @@ fn bonus_step<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             let Some(o) = crate::families::creators::scene_set(x.b, 0x94) else { return };
             next_substate(x);
-            x.set16(0x46, o.0 as u16);
-            o.set_u16(x.b, 0x46, 0);
+            x.set16(RewardObj::REWARD, o.0 as u16);
+            o.set_u16(x.b, RewardObj::OWNER, 0);
             for p in players() {
                 if present(x, p) && rd8(x.b, p + 0x18a) != 0 {
-                    o.set_u16(x.b, 0x46, p as u16);
+                    o.set_u16(x.b, RewardObj::OWNER, p as u16);
                     return;
                 }
             }
         }
         2 | 0xa => {
-            let reward = adr16(x.u16(0x46));
+            let reward = adr16(x.u16(RewardObj::REWARD));
             if rd8(x.b, reward + 0x22) == 0 {
                 return;
             }
@@ -56,24 +58,24 @@ fn bonus_step<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         4 => {
-            let index = x.u8(0x24) as u16;
-            x.add8(0x24, 1);
+            let index = x.u8(RewardObj::CANDIDATE) as u16;
+            x.add8(RewardObj::CANDIDATE, 1);
             let mut a1 = PLAYERS.wrapping_add(adr16(index.rotate_right(7)));
             while !present(x, a1) {
-                x.add8(0x24, 1);
+                x.add8(RewardObj::CANDIDATE, 1);
                 a1 = a1.wrapping_add(PLAYER_STRIDE);
             }
             next_substate(x);
-            x.set16(0x26, a1 as u16);
-            x.set8(0x2b, 8);
-            x.set8(0x2a, 4);
+            x.set16(RewardObj::PLAYER, a1 as u16);
+            x.set8(RewardObj::PULSES, 8);
+            x.set8(RewardObj::PULSE_TICK, 4);
         }
         6 => palette_pulse(x, 0x1000_1000),
         0xc => palette_pulse(x, 0xefff_f000),
         8 => choose_reward(x),
         0xe => {
-            x.add8(0x25, 0xff);
-            if x.u8(0x25) == 0 {
+            x.add8(RewardObj::LEFT, 0xff);
+            if x.u8(RewardObj::LEFT) == 0 {
                 next_substate(x);
             } else {
                 x.set8(SetObj::SUBSTATE, 4);
@@ -91,12 +93,12 @@ fn bonus_step<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Varies eight longs of the current player's palette (`+0x26`) every 4 frames, 8 times.
 fn palette_pulse<R: Bench>(x: &mut Cx<'_, R>, delta: u32) {
-    x.add8(0x2a, 0xff);
-    if x.u8(0x2a) != 0 {
+    x.add8(RewardObj::PULSE_TICK, 0xff);
+    if x.u8(RewardObj::PULSE_TICK) != 0 {
         return;
     }
-    x.set8(0x2a, 4);
-    let player = adr16(x.u16(0x26));
+    x.set8(RewardObj::PULSE_TICK, 4);
+    let player = adr16(x.u16(RewardObj::PLAYER));
     let character = rd8(x.b, player + 3) as u32;
     let offset = adr16(set_tables::pc_word(x.b, REWARD_PALETTE_ROM + 2 * character));
     let base = 0x91c000u32.wrapping_add(offset);
@@ -104,9 +106,9 @@ fn palette_pulse<R: Bench>(x: &mut Cx<'_, R>, delta: u32) {
         let v = rd32(x.b, base + 4 * i).wrapping_add(delta);
         wr32(x.b, base + 4 * i, v);
     }
-    x.add8(0x2b, 0xff);
-    if x.u8(0x2b) == 0 {
-        x.set8(0x2b, 8);
+    x.add8(RewardObj::PULSES, 0xff);
+    if x.u8(RewardObj::PULSES) == 0 {
+        x.set8(RewardObj::PULSES, 8);
         next_substate(x);
     }
 }
@@ -158,9 +160,9 @@ fn reward_blocked<R: Bench>(x: &mut Cx<'_, R>, player: u32, rank: u32) -> bool {
 fn choose_reward<R: Bench>(x: &mut Cx<'_, R>) {
     const REWARD_IDS: u32 = 0xcfe98;
     const REWARD_ICONS: u32 = 0xcfec8;
-    let player = adr16(x.u16(0x26));
+    let player = adr16(x.u16(RewardObj::PLAYER));
     let character = rd8(x.b, player + 3) as u32;
-    let mut taken = x.u32(0x20);
+    let mut taken = x.u32(RewardObj::TAKEN);
     let mut candidate = character & !1;
     candidate = (candidate << 1) & 0xffff;
     let mut rank = 0u32;
@@ -174,13 +176,13 @@ fn choose_reward<R: Bench>(x: &mut Cx<'_, R>) {
     }
     taken |= 1 << (candidate & 31);
     taken &= 0xff77_7777;
-    x.set32(0x20, taken);
+    x.set32(RewardObj::TAKEN, taken);
     let id = set_tables::pc_word(x.b, REWARD_IDS + 2 * candidate);
     let Some(o) = crate::families::creators::scene_set(x.b, id as u8) else { return };
     next_substate(x);
-    x.set16(0x46, o.0 as u16);
-    let chosen = x.u16(0x26);
-    o.set_u16(x.b, 0x46, chosen);
+    x.set16(RewardObj::REWARD, o.0 as u16);
+    let chosen = x.u16(RewardObj::PLAYER);
+    o.set_u16(x.b, RewardObj::OWNER, chosen);
     let low = candidate & 3;
     let icons = REWARD_ICONS.wrapping_add((candidate & 0x1c) << 1);
     let mut at = 0x912224;
@@ -204,7 +206,7 @@ fn choose_reward<R: Bench>(x: &mut Cx<'_, R>) {
 /// bytes 0x100, 0x1000, 0x10000, 0x100000); each frame removes one unit from the lowest
 /// non-zero digit and launches event 0x19ae6 (sound/score) for that digit; at zero, it releases itself.
 pub fn countdown_digits<R: Bench>(x: &mut Cx<'_, R>) {
-    let mut value = x.u32(0x4c);
+    let mut value = x.u32(ScreenObj::CONDUCTOR);
     if value == 0 {
         return x.free(&pools::SET);
     }
@@ -218,8 +220,8 @@ pub fn countdown_digits<R: Bench>(x: &mut Cx<'_, R>) {
         (0x10_0000, 0x28)
     };
     value = value.wrapping_sub(sub);
-    x.set32(0x4c, value);
-    let event_word = event | (x.u8(0x2f) as u32) << 8;
+    x.set32(ScreenObj::CONDUCTOR, value);
+    let event_word = event | (x.u8(SetObj::PARAM) as u32) << 8;
     crate::events::enqueue_points(x.b, event_word as u16);
 }
 

@@ -8,6 +8,8 @@ use crate::families::set::tables as set_tables;
 use crate::families::set::vars;
 use crate::objects::Obj;
 use crate::families::set::fields::SetObj;
+use crate::families::set_c::fields::RefillObj;
+use crate::families::set_c::fields::Conductor;
 
 /// Players: four records of 0x200 bytes.
 const PLAYERS: u32 = crate::ram::PLAYERS.base;
@@ -52,8 +54,8 @@ fn spawn_effct<R: Bench>(x: &mut Cx<'_, R>, variant: u32, extra: u32) -> Option<
 /// Four-component shake (0xce24c): background and second plane camera, with copy of the
 /// "previous" positions. `table`: 8-byte records, one per step of `+0x18` & 3.
 fn shake4<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
-    let at = table + 8 * (x.u8(0x18) & 3) as u32;
-    x.add8(0x18, 1);
+    let at = table + 8 * (x.u8(RefillObj::STEP) & 3) as u32;
+    x.add8(RefillObj::STEP, 1);
     for (i, var) in [a5::CAM_X, a5::CAM_Y, a5::BG_X, a5::BG_Y].into_iter().enumerate() {
         let d = set_tables::word(x.b, at + 2 * i as u32);
         let v = x.a5_u16(var).wrapping_add(d);
@@ -119,7 +121,7 @@ fn refill_step<R: Bench>(x: &mut Cx<'_, R>, variant_b: bool) -> bool {
                 x.set16(slot + 2, left);
             } else {
                 let half = (max as u16) >> 1;
-                let bonus = if variant_b && x.u8(0x42) == 0 { 0 } else { half >> 2 };
+                let bonus = if variant_b && x.u8(RefillObj::DELAY) == 0 { 0 } else { half >> 2 };
                 if (half.wrapping_add(bonus) as i16) > cur {
                     gave = gave.wrapping_add(1);
                     wr16(x.b, p + 0x62, cur.wrapping_add(1) as u16);
@@ -209,7 +211,7 @@ pub fn spawn_player_effects<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
-            x.set8(0x30, 0);
+            x.set8(RefillObj::PHASE, 0);
             player_effects(x);
         }
         2 => match x.u8(SetObj::SUBSTATE) {
@@ -234,51 +236,51 @@ fn player_effects<R: Bench>(x: &mut Cx<'_, R>) {
         let here = d1 as i8 > 1 && present(x, a6);
         let Some(fx) = spawn_effct(x, 1, d1) else { break };
         if here {
-            fx.set_u16(x.b, 0x50, a6 as u16);
-            fx.set_u16(x.b, 0x5c, x.o.0 as u16);
+            fx.set_u16(x.b, RefillObj::TARGET, a6 as u16);
+            fx.set_u16(x.b, RefillObj::CREATOR, x.o.0 as u16);
         } else if let Some(n) = free_character(&mut taken) {
-            fx.set_u16(x.b, 0x50, n as u16);
-            fx.set_u16(x.b, 0x5c, x.o.0 as u16);
+            fx.set_u16(x.b, RefillObj::TARGET, n as u16);
+            fx.set_u16(x.b, RefillObj::CREATOR, x.o.0 as u16);
         }
         a6 += PLAYER_STRIDE;
     }
-    x.set16(0x42, 0x3c);
+    x.set16(RefillObj::DELAY, 0x3c);
     let boss = conductor(x);
     boss.set_u8(x.b, Obj::X, 1);
 }
 
 /// First phase: after the delay `+0x42`, creates the bonus screen (type 15 variant 0x17).
 fn handover_step<R: Bench>(x: &mut Cx<'_, R>, mark: u8) {
-    x.add16(0x42, 0xffff);
-    if x.u16(0x42) != 0 {
+    x.add16(RefillObj::DELAY, 0xffff);
+    if x.u16(RefillObj::DELAY) != 0 {
         return;
     }
     if let Some(o) = spawn_finale(x, 0x17) {
-        o.set_u8(x.b, 0x42, mark);
+        o.set_u8(x.b, RefillObj::MARK, mark);
     }
     next_substate(x);
-    x.set8(0x30, 1);
-    x.set8(0x31, 6);
+    x.set8(RefillObj::PHASE, 1);
+    x.set8(RefillObj::MARK, 6);
     x.set_a5_u8(vars::BONUS_SCREEN, 1);
 }
 
 fn handover_step2<R: Bench>(x: &mut Cx<'_, R>) {
-    if (x.u8(0x31) as i8) >= 0 {
+    if (x.u8(RefillObj::MARK) as i8) >= 0 {
         return;
     }
     x.set_a5_u8(vars::BONUS_SCREEN, 0);
     next_substate(x);
-    x.set16(0x42, 1);
+    x.set16(RefillObj::DELAY, 1);
 }
 
 fn handover_step3<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add16(0x42, 0xffff);
-    if x.u16(0x42) != 0 {
+    x.add16(RefillObj::DELAY, 0xffff);
+    if x.u16(RefillObj::DELAY) != 0 {
         return;
     }
     let boss = conductor(x);
     boss.set_u8(x.b, Obj::X, 0xff);
-    x.set8(0x30, 2);
+    x.set8(RefillObj::PHASE, 2);
     next_state(x);
 }
 
@@ -289,7 +291,7 @@ pub fn handover_effects<R: Bench>(x: &mut Cx<'_, R>) {
         0 => spawn_player_effects(x),
         2 => match x.u8(SetObj::SUBSTATE) {
             0 => {
-                if conductor(x).u8(x.b, 8) != 2 {
+                if conductor(x).u8(x.b, Conductor::SIGNAL) != 2 {
                     return;
                 }
                 handover_step(x, 1)

@@ -4,6 +4,9 @@
 
 use super::cx::handlers;
 
+/// Typed views of the SET C objects.
+pub mod fields;
+
 mod scene;
 mod finale;
 mod window;

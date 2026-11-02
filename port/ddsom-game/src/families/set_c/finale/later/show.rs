@@ -3,6 +3,11 @@ use crate::families::set::tables as set_tables;
 use crate::families::set::vars;
 use crate::objects::Obj;
 use crate::families::set::fields::SetObj;
+use crate::families::set_c::fields::ScreenObj;
+use crate::families::set_c::fields::IntroObj;
+use crate::families::set_c::fields::FireworksObj;
+use crate::families::set_c::fields::RankingObj;
+use crate::families::set_c::fields::Conductor;
 
 // --- variant 10: opening shake ------------------------------------------------------------------------
 
@@ -14,7 +19,7 @@ pub fn shaking_intro<R: Bench>(x: &mut Cx<'_, R>) {
     const SCROLL_SHAKE: u32 = 0xd0b50;
     if x.u8(Obj::STATE) == 0 {
         next_state(x);
-        x.set8(0x18, 0);
+        x.set8(IntroObj::STEP, 0);
     } else if x.u8(Obj::STATE) != 2 {
         return;
     }
@@ -25,8 +30,8 @@ pub fn shaking_intro<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             next_substate(x);
-            x.set16(0x14, 0x800);
-            x.set16(0x16, 0xfff8);
+            x.set16(IntroObj::SPEED, 0x800);
+            x.set16(IntroObj::ACCEL, 0xfff8);
             x.set_a5_u16(a5::CAM_X, 0);
             x.set_a5_u16(a5::CAM_Y, 0);
             x.set_a5_u16(a5::BG_X, 0x80);
@@ -34,7 +39,7 @@ pub fn shaking_intro<R: Bench>(x: &mut Cx<'_, R>) {
             copy_cameras(x);
         }
         2 => {
-            if conductor(x).u8(x.b, 8) == 1 {
+            if conductor(x).u8(x.b, Conductor::SIGNAL) == 1 {
                 next_substate(x);
             }
             let v = x.a5_u16(a5::CAM_X).wrapping_add(8);
@@ -42,9 +47,9 @@ pub fn shaking_intro<R: Bench>(x: &mut Cx<'_, R>) {
             shake4(x, SCROLL_SHAKE);
         }
         4 => {
-            if x.u8(0x14) != 0 {
-                let speed = x.u16(0x14).wrapping_add(x.u16(0x16));
-                x.set16(0x14, speed);
+            if x.u8(IntroObj::SPEED) != 0 {
+                let speed = x.u16(IntroObj::SPEED).wrapping_add(x.u16(IntroObj::ACCEL));
+                x.set16(IntroObj::SPEED, speed);
                 let v = x.a5_u16(a5::CAM_X).wrapping_add(((speed as i16) >> 8) as u16);
                 x.set_a5_u16(a5::CAM_X, v);
                 if (v as i16) >= 0x300 {
@@ -56,7 +61,7 @@ pub fn shaking_intro<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set_a5_u16(a5::BG_X, 0x80);
                 x.set_a5_u16(a5::BG_Y, 0);
                 copy_cameras(x);
-                conductor(x).set_u8(x.b, 8, 2);
+                conductor(x).set_u8(x.b, Conductor::SIGNAL, 2);
                 next_state(x);
             }
         }
@@ -73,7 +78,7 @@ pub fn spawn_player_markers<R: Bench>(x: &mut Cx<'_, R>) {
     if !matches!(x.u8(Obj::STATE), 0 | 2) {
         return;
     }
-    let boss = x.u32(0x4c);
+    let boss = x.u32(ScreenObj::CONDUCTOR);
     let mut taken = characters_present(x);
     let mut a6 = PLAYERS;
     for d1 in (0..=5u32).rev() {
@@ -82,23 +87,23 @@ pub fn spawn_player_markers<R: Bench>(x: &mut Cx<'_, R>) {
             break;
         };
         if here {
-            m.set_u8(x.b, 0x2f, d1 as u8);
-            m.set_u16(x.b, 0x46, a6 as u16);
-            m.set_u32(x.b, 0x4c, boss);
+            m.set_u8(x.b, SetObj::PARAM, d1 as u8);
+            m.set_u16(x.b, SetObj::OWNER, a6 as u16);
+            m.set_u32(x.b, ScreenObj::CONDUCTOR, boss);
         } else if let Some(n) = free_character(&mut taken) {
-            m.set_u8(x.b, 0x2f, d1 as u8);
-            m.set_u16(x.b, 0x46, n as u16);
-            m.set_u32(x.b, 0x4c, boss);
+            m.set_u8(x.b, SetObj::PARAM, d1 as u8);
+            m.set_u16(x.b, SetObj::OWNER, n as u16);
+            m.set_u32(x.b, ScreenObj::CONDUCTOR, boss);
         }
         a6 += PLAYER_STRIDE;
     }
     retire(x);
     let Some(m) = spawn_sobj(x, 0) else { return };
-    m.set_u8(x.b, 0x2f, 0xb);
+    m.set_u8(x.b, SetObj::PARAM, 0xb);
     m.set_u16(x.b, Obj::X, 0x108);
     m.set_u16(x.b, Obj::Y, 0x100);
     m.set_u16(x.b, Obj::Z, 0xff80);
-    m.set_u32(x.b, 0x4c, boss);
+    m.set_u32(x.b, ScreenObj::CONDUCTOR, boss);
 }
 
 // --- variant 13: fireworks ----------------------------------------------------------------------------------
@@ -121,32 +126,32 @@ pub fn fireworks<R: Bench>(x: &mut Cx<'_, R>) {
                 let v = rd32(x.b, PALETTE + 4 * i) | 0xf000_f000;
                 wr32(x.b, PALETTE + 4 * i, v);
             }
-            x.set8(0x42, 0);
+            x.set8(FireworksObj::STARTED, 0);
         }
         2 => {}
         _ => return,
     }
-    if (conductor(x).u8(x.b, 8) as i8) < 0 {
+    if (conductor(x).u8(x.b, Conductor::SIGNAL) as i8) < 0 {
         return retire(x);
     }
     if rng(x) & 7 != 0 {
         return;
     }
     let Some(o) = spawn_sobj(x, 0x10) else { return };
-    let owner = x.u32(0x4c);
-    o.set_u32(x.b, 0x4c, owner);
+    let owner = x.u32(ScreenObj::CONDUCTOR);
+    o.set_u32(x.b, ScreenObj::CONDUCTOR, owner);
     let pick = ((rng(x) & 7) as u32) << 2;
     let (px, pz) = (set_tables::pc_word(x.b, POSITIONS + pick), set_tables::pc_word(x.b, POSITIONS + pick + 2));
     o.set_u16(x.b, Obj::X, px);
     o.set_u16(x.b, Obj::Z, pz);
     o.set_u32(x.b, Obj::Y, 0);
-    if x.u8(0x42) != 0 {
+    if x.u8(FireworksObj::STARTED) != 0 {
         return;
     }
     let Some(f) = spawn_finale(x, 0xf) else { return };
-    x.set8(0x42, 1);
-    let owner = x.u32(0x4c);
-    f.set_u32(x.b, 0x4c, owner);
+    x.set8(FireworksObj::STARTED, 1);
+    let owner = x.u32(ScreenObj::CONDUCTOR);
+    f.set_u32(x.b, ScreenObj::CONDUCTOR, owner);
 }
 
 // --- variant 14: lightning --------------------------------------------------------------------------------
@@ -160,7 +165,7 @@ pub fn lightning<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
-            x.set8(0x30, 1);
+            x.set8(FireworksObj::USED, 1);
         }
         2 => {}
         _ => return,
@@ -173,9 +178,9 @@ pub fn lightning<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if x.u8(SetObj::SUBSTATE) == 0 && x.a5_u16(a5::CAM_X) == 0 {
         next_substate(x);
-        x.set_bit(0x30, 0, false);
+        x.set_bit(FireworksObj::USED, 0, false);
     }
-    if x.u8(0x30) == 0x1f {
+    if x.u8(FireworksObj::USED) == 0x1f {
         return;
     }
     if x.a5_u16(vars::FRAMES_WORD) & 0xf != 0 {
@@ -184,15 +189,15 @@ pub fn lightning<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(o) = spawn_sobj(x, 0x11) else { return };
     let pick = (rng(x) & 0xf) as u32;
     let mut bit = set_tables::pc_byte(x.b, ORDER + pick);
-    while x.u8(0x30) >> (bit & 7) & 1 != 0 {
+    while x.u8(FireworksObj::USED) >> (bit & 7) & 1 != 0 {
         bit = bit.wrapping_sub(1);
         if bit & 0x80 != 0 {
             bit = 4;
         }
     }
-    x.set_bit(0x30, bit & 7, true);
-    o.set_u8(x.b, 0x2f, bit);
-    o.set_u16(x.b, 0x46, x.o.0 as u16);
+    x.set_bit(FireworksObj::USED, bit & 7, true);
+    o.set_u8(x.b, SetObj::PARAM, bit);
+    o.set_u16(x.b, SetObj::OWNER, x.o.0 as u16);
 }
 
 // --- variant 15: light shake -----------------------------------------------------------------------------------
@@ -202,12 +207,12 @@ pub fn quake_light<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
-            x.set8(0x18, 0);
+            x.set8(IntroObj::STEP, 0);
         }
         2 => {}
         _ => return,
     }
-    if (conductor(x).u8(x.b, 8) as i8) < 0 {
+    if (conductor(x).u8(x.b, Conductor::SIGNAL) as i8) < 0 {
         return retire(x);
     }
     shake4(x, 0xd0b70);
@@ -224,29 +229,29 @@ pub fn ranking_start<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             next_state(x);
             let mut taken: u32 = 0xf000;
-            x.set8(0x22, 0);
-            x.set8(0x23, 0);
+            x.set8(RankingObj::ORDER, 0);
+            x.set8(RankingObj::SHOWN, 0);
             for p in players() {
                 if present(x, p) {
                     taken |= 1 << (rd8(x.b, p + 3) & 31);
-                    x.add8(0x22, 1);
+                    x.add8(RankingObj::ORDER, 1);
                 }
             }
-            x.set16(0x20, taken as u16);
-            x.set16(0x24, 0xb4);
-            let mut left = x.u8(0x22);
-            x.add8(0x22, 0xff);
+            x.set16(RankingObj::TAKEN, taken as u16);
+            x.set16(RankingObj::DELAY, 0xb4);
+            let mut left = x.u8(RankingObj::ORDER);
+            x.add8(RankingObj::ORDER, 0xff);
             loop {
                 left = left.wrapping_sub(1);
                 if left == 0 {
                     break;
                 }
-                x.add16(0x24, 0xb4);
+                x.add16(RankingObj::DELAY, 0xb4);
             }
         }
         2 => {
             if x.u8(SetObj::SUBSTATE) != 0 {
-                if x.u8(0x23) != 0 {
+                if x.u8(RankingObj::SHOWN) != 0 {
                     return;
                 }
                 next_state(x);
@@ -254,26 +259,26 @@ pub fn ranking_start<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set_a5_u8(vars::STEP, v);
                 return;
             }
-            x.add16(0x24, 0xffff);
-            if x.u16(0x24) != 0 {
+            x.add16(RankingObj::DELAY, 0xffff);
+            if x.u16(RankingObj::DELAY) != 0 {
                 return;
             }
-            x.set16(0x24, 0xb4);
-            let mut taken = x.u16(0x20) as u32;
+            x.set16(RankingObj::DELAY, 0xb4);
+            let mut taken = x.u16(RankingObj::TAKEN) as u32;
             let mut n = (rng(x) & 0xf) as u32;
             while taken >> n & 1 != 0 {
                 n = (n + 1) & 0xf;
             }
             taken |= 1 << n;
-            x.set16(0x20, taken as u16);
+            x.set16(RankingObj::TAKEN, taken as u16);
             let Some(fx) = spawn_effct(x, 7, n) else { return };
-            fx.set_u8(x.b, 0x2f, n as u8);
-            let order = x.u8(0x22);
-            fx.set_u8(x.b, 0x42, order);
-            fx.set_u16(x.b, 0x46, x.o.0 as u16);
-            x.add8(0x22, 1);
-            x.add8(0x23, 1);
-            if x.u16(0x20) == 0xffff {
+            fx.set_u8(x.b, SetObj::PARAM, n as u8);
+            let order = x.u8(RankingObj::ORDER);
+            fx.set_u8(x.b, RankingObj::ORDER, order);
+            fx.set_u16(x.b, SetObj::OWNER, x.o.0 as u16);
+            x.add8(RankingObj::ORDER, 1);
+            x.add8(RankingObj::SHOWN, 1);
+            if x.u16(RankingObj::TAKEN) == 0xffff {
                 next_substate(x);
             }
         }
@@ -291,8 +296,8 @@ pub fn palette_fade<R: Bench>(x: &mut Cx<'_, R>) {
     const LINES: [u32; 3] = [0x91c1e0, 0x91c300, 0x91c400];
     if x.u8(Obj::STATE) == 0 {
         next_state(x);
-        x.set8(0x20, 4);
-        x.set8(0x21, 0xf);
+        x.set8(RankingObj::TAKEN, 4);
+        x.set8(RankingObj::STEPS, 0xf);
     } else if x.u8(Obj::STATE) != 2 {
         return;
     }
@@ -306,38 +311,38 @@ pub fn palette_fade<R: Bench>(x: &mut Cx<'_, R>) {
     };
     match x.u8(SetObj::SUBSTATE) {
         0 => {
-            x.add8(0x20, 0xff);
-            if x.u8(0x20) != 0 {
+            x.add8(RankingObj::TAKEN, 0xff);
+            if x.u8(RankingObj::TAKEN) != 0 {
                 return;
             }
-            x.set8(0x20, 4);
+            x.set8(RankingObj::TAKEN, 4);
             fade(x, 0x1000_1000);
-            x.add8(0x21, 0xff);
-            if x.u8(0x21) != 0 {
+            x.add8(RankingObj::STEPS, 0xff);
+            if x.u8(RankingObj::STEPS) != 0 {
                 return;
             }
             next_substate(x);
-            x.set8(0x21, 0xf);
+            x.set8(RankingObj::STEPS, 0xf);
         }
         2 => {
-            x.add16(0x42, 0xffff);
-            if x.u16(0x42) == 0 {
+            x.add16(RankingObj::WAIT, 0xffff);
+            if x.u16(RankingObj::WAIT) == 0 {
                 next_substate(x);
             }
         }
         4 => {
-            x.add8(0x20, 0xff);
-            if x.u8(0x20) != 0 {
+            x.add8(RankingObj::TAKEN, 0xff);
+            if x.u8(RankingObj::TAKEN) != 0 {
                 return;
             }
-            x.set8(0x20, 4);
+            x.set8(RankingObj::TAKEN, 4);
             fade(x, 0xefff_f000);
-            x.add8(0x21, 0xff);
-            if x.u8(0x21) != 0 {
+            x.add8(RankingObj::STEPS, 0xff);
+            if x.u8(RankingObj::STEPS) != 0 {
                 return;
             }
             next_state(x);
-            let target = adr16(x.u16(0x46));
+            let target = adr16(x.u16(RankingObj::TARGET));
             wr16(x.b, target + 0x32, 1);
         }
         _ => {}

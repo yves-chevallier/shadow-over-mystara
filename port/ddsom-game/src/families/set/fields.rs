@@ -32,6 +32,8 @@ record! {
     impl SetObj {
         /// Sub-state of the handler's automaton (`+4` is the main state).
         substate, set_substate, SUBSTATE: u8 @ 0x05;
+        /// Phase of the suspension counter `Obj::HIDDEN` (any pooled object: the doors and the curtain reset it).
+        suspend_phase, set_suspend_phase, SUSPEND_PHASE: u8 @ 0x41;
         /// Display attribute byte: bit 0x20 flips the object horizontally (h).
         attr, set_attr, ATTR: u8 @ 0x2c;
         /// Creation parameter (`+0x2f` of the object scripts; variant of the created controller...).
@@ -68,6 +70,8 @@ record! {
     impl WeaponObj {
         /// Sub-state (8: dropped).
         substate, set_substate, SUBSTATE: u8 @ 0x05;
+        /// Phase of the suspension counter `Obj::HIDDEN` (any pooled object: the doors and the curtain reset it).
+        suspend_phase, set_suspend_phase, SUSPEND_PHASE: u8 @ 0x41;
         /// Action word, reset to zero.
         action, set_action, ACTION: u16 @ 0x06;
     }

@@ -9,7 +9,7 @@ use crate::families::set::fields::NameBoardObj;
 pub fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(Obj::STATE, 2);
     for off in [0x30, 0x34, 0x38, 0x3c] {
-        x.set32(off, 0);
+        x.set32(off, 0u32);
     }
     x.set8(COUNT_DONE, 0);
     x.set8(PAIRS, 0);
@@ -51,7 +51,7 @@ pub fn update<R: Bench>(x: &mut Cx<'_, R>) {
         x.set32(NameBoardObj::PREV_RECORD_3, u32::MAX);
     }
     for off in [0x30, 0x34, 0x38, 0x3c] {
-        x.set32(off, 0);
+        x.set32(off, 0u32);
     }
     let pairs = find_shared_cells(x);
     x.set8(PAIRS, pairs);
