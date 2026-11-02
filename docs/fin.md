@@ -717,7 +717,14 @@ libre.
   * Mesures (`measure_end.py`, zone `eshl_sobj_items`) : 10 → 113 fichiers, 15 766 → 16 553 lignes, accesseurs ROM
     274 → 0, décalages littéraux 2 426 → 0, `A5 + littéral` 70 → 0, constantes d'adresses ROM 361 → 0,
     `rd*`/`wr*` 51 → 39, plus gros fichier 3 289 → 649 lignes.
-  * Validation : VALIDATION_FINALE
+  * Validation : 308/308 VALID après (a) et après (b) (mode par défaut) ; final, après fusion de main (71846a8,
+    L4 et L8a) : 308/308 VALID en mode par défaut et avec `DDSOM_ASSETS` (assets réextraits par la branche),
+    `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1`. Résidu de la zone : une lecture restante (mode 0x1e du guide,
+    `scene_end/end_01`), table étendue ensuite (0xdcbdc) et `end_01` revalidé dans les deux modes sans résidu de la
+    zone ; les clés restantes sont celles de L1 (images, animations, vitesses). Tests `ddsom-assets`
+    (`objects_lossless`), `extract` (`to_data`) ; `examples/names` identique à main ; `cargo clippy` sans
+    avertissement, avec et sans `tools`. `rom_reads` (`rom-trace`) n'a pas été relancé : les lectures `rd*`
+    restantes de la zone sont toutes en RAM (relevé à la main).
 
 **L8. Ennemis** (grand, coupé en deux lots successifs ou parallèles) — **L8a fait** (branche `wt-l8a-ennemis`, voir
 « Résultat L8a »)

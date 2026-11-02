@@ -450,7 +450,7 @@ la réécriture) est retiré, le comportement est documenté dans `families/enem
 * `eshl_c/debris45` (variante 1, 0xa3dc2) : la hauteur est lue à `table + 2 + dx` ; avec un `dx` négatif, la lecture
   tombe dans le code qui précède la table. La table `debris45_place_offsets` commence donc 0x16 octets plus tôt
   (0xa3dac), comme `beacon_sheets` au lot L5.
-* `items/scene` (guide, 0xdcbbc) : un mode au-delà de 3 lit les octets du code qui suit la table des animations
-  d'arrivée ; la table `item_scene_guide_animations_arrival` va jusqu'à 0xdcbcc.
+* `items/scene` (guide, 0xdcbbc) : le mode 0x1e que donne le niveau 0 (`item_scene_guide_animations`) lit l'octet 0xdcbda, dans le code qui suit la table des animations
+  d'arrivée (scénario `scene_end/end_01`) ; la table `item_scene_guide_animations_arrival` va jusqu'à 0xdcbdc.
 
 Les deux cas apparaissent dans le résidu de la validation (une lecture chacun) avant l'extension des tables.

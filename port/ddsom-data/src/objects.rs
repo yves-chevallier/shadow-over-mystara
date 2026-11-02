@@ -283,9 +283,9 @@ tables! {
     item_scene_stop_sounds: prog 1 @ 0xdcaa0;
     /// `items/scene`: Guide: (animation, mode) per level.
     item_scene_guide_animations: prog 1 @ 0xdcb6e;
-    /// `items/scene`: Guide: arrival animation per mode; the modes past 3 read the code that follows (glitch of the
-    /// original).
-    item_scene_guide_animations_arrival: prog 1 @ 0xdcbbc .. 0xdcbcc;
+    /// `items/scene`: Guide: arrival animation per mode; the mode 0x1e of level 0 (`item_scene_guide_animations`) reads
+    /// the code that follows (glitch of the original).
+    item_scene_guide_animations_arrival: prog 1 @ 0xdcbbc .. 0xdcbdc;
     /// `items/scene`: Guide 3: its 16-color palette, copied to the palette page 0x91c300.
     item_scene_guide_3_palette: data 4 @ 0xdccec .. 0xdcd0c;
     /// `items/scene`: X offset from the player, facing right then left.
