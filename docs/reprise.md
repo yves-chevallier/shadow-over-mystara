@@ -41,7 +41,12 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
      générés par `examples/creatures.rs` et `examples/level_maps.rs` (docs/creatures.md, docs/niveaux.md restent en
      français), renvois aux fichiers de docs/. Validé 308/308 dans les deux modes (8812560, DDSOM_LONG=1) ; non fusionné.
 
-1. **Retirer `m68k::Cpu` du jeu.** Plus de `Body::Processeur` : la machine de référence garde son 68000, le jeu n'en a plus.
+1. **Retirer `m68k::Cpu` du jeu.** Plus de `Body::WithCpu` : la machine de référence garde son 68000, le jeu n'en a plus.
+   En cours, deux branches : `wt-cpu-core` (noyau, tâches, écrans, aiguillage : refactorisation.md § 19, « partie 7 »)
+   et `wt-cpu-player` (joueurs, combat, natives des familles). Dans `wt-cpu-core`, le jeu n'a plus de banc de
+   registres : le code encore sur le processeur passe par `bench::on_bench` (banc neuf, seuls les restes D2-D5 entrent
+   et sortent). Après les deux fusions : retirer `bench`, `Body::WithCpu`/`CpuIn` et les natives qui ne servent plus
+   qu'au code d'origine des outils.
 2. ~~**Le reste de la couverture.**~~ Fait par le lot « couverture » (`wt-couv2`, [couverture.md](couverture.md),
    « Votes, boutiques, interface et démarrage ») :
    * votes de chemin (sorties des scènes 2, 13, 33 et 38, en décimal : les « routes 0x14/0x38 » étaient les scènes 20

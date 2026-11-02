@@ -62,8 +62,6 @@ pub fn execute(b: &mut Cps2Bus, point: Point) -> Option<Point> {
 
 /// Original subroutines.
 mod ext {
-    /// Development card configuration (0x2dc9a, `eeprom::dev_card`).
-    pub const CONFIG: u32 = 0x2dc9a;
     pub const STARTUP_TASK: u32 = 0x11b16;
 }
 
@@ -173,8 +171,8 @@ fn reset(b: &mut Cps2Bus) -> Point {
     wr8(b, a5(var::SPECIAL_CARD), 0);
     if rd16(b, io::CARD) & 0x4000 == 0 {
         wr8(b, a5(var::SPECIAL_CARD), 1);
-        // never: bit 14 of the port is always set on this board (code-mort.md)
-        crate::bench::on_bench(b, |c, b| crate::call(c, b, ext::CONFIG));
+        // 0x2dc9a (never: bit 14 of the port is set on this board)
+        crate::eeprom::initialize_accounting(b);
         // button combination 0x3304 (active low) of IN2 pressed at startup
         if !rd16(b, io::TEST) & 0x3304 == 0x3304 {
             crate::eeprom::reset_card(b);
