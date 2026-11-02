@@ -138,23 +138,6 @@ pub(crate) mod restes {
         }
     }
 
-    /// Exécute `f`, du code encore écrit pour le processeur (caméras, palettes, placement des joueurs...), pour un
-    /// gestionnaire générique, sur un banc de travail : A0 = l'objet, A5, D7 = le compteur de la boucle d'aiguillage ;
-    /// seuls les restes D2-D5 (`dispatch::Restes`) entrent et en ressortent, les autres registres de l'appelant ne sont
-    /// pas lus et ceux que laisse `f` sont morts.
-    pub(crate) fn sur_banc_de_travail<R: crate::families::cx::Banc>(
-        x: &mut crate::families::cx::Cx<'_, R>,
-        f: impl FnOnce(&mut Cpu, &mut Cps2Bus),
-    ) {
-        let mut c = Cpu::default();
-        (c.d[2], c.d[3], c.d[4], c.d[5]) = (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5());
-        c.d[7] = x.compteur() as u32;
-        c.a[0] = x.o.0;
-        c.a[5] = crate::mem::A5;
-        f(&mut c, x.b);
-        (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (c.d[2], c.d[3], c.d[4], c.d[5]);
-    }
-
     /// Le cœur appelé par un gestionnaire générique (`Cx<'_, R: Banc>`) : seuls les restes D2-D5 que l'original
     /// laisse aux gestionnaires suivants (`dispatch::Restes`) sont gardés, dans le banc ; le reste est mort.
     pub(crate) struct SurBanc<'a, R>(pub &'a mut R);
@@ -843,7 +826,7 @@ fn thrown_shard(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, variante
 
 /// 0xb230e : bloc de 2 × 2 tuiles écrit en `at` (tuile `tile`, attribut `attr` ; rangée suivante 0x80 plus
 /// loin) ; rend l'adresse après les deux rangées (A1) et la tuile + 0x11 (D0).
-fn tile_block(b: &mut Cps2Bus, mut at: u32, mut tile: u16, attr: u16) -> (u32, u16) {
+pub(crate) fn tile_block(b: &mut Cps2Bus, mut at: u32, mut tile: u16, attr: u16) -> (u32, u16) {
     for _ in 0..2 {
         wr16(b, at, tile);
         wr16(b, at + 2, attr);
@@ -1013,6 +996,13 @@ fn camera_mode_60(c: &mut Cpu, b: &mut Cps2Bus) {
 pub fn set_list(b: &mut Cps2Bus, liste: u8) -> Option<Obj> {
     set_list_par(&mut Pur, b, liste)
 }
+/// 0xa8ae8 for the scene script, on the processor: scenery list `list` (the script's D0.w, copied to D1.w), with the
+/// registers the original leaves.
+pub(crate) fn set_list_d0_68k(c: &mut Cpu, b: &mut Cps2Bus, list: u16) -> Option<Obj> {
+    set_low_word(&mut c.d[1], list);
+    set_list_par(c, b, list as u8)
+}
+
 pub(crate) fn set_list_par(r: &mut impl Registres, b: &mut Cps2Bus, liste: u8) -> Option<Obj> {
     let k = (liste as u16) << 2;
     r.d_mot(1, k);
@@ -1221,6 +1211,49 @@ fn tile_block_native(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub(crate) const CREATED: u32 = regs::a(1) | regs::CCR;
 
+/// Creators called by the player module, still on the processor: the arguments are passed, and the registers the
+/// original leaves (A0 = the creator, A1 = the effect, carry when the pool is full, flags) are written like the native
+/// writes them.
+pub(crate) mod for_players {
+    use super::*;
+
+    /// 0xb378a: blow stars (type 40) attached to `me`, variant `variant`, setting `setting`.
+    pub(crate) fn blow_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8, setting: u8) -> Option<Obj> {
+        c.a[0] = me.0;
+        attached_par(c, b, kind::BLOW, me, variant, setting)
+    }
+    /// 0xab708: halo of `me`.
+    pub(crate) fn halo_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        halo_par(c, b, me)
+    }
+    /// 0xab7d8: debris spray of `me`, variant `variant`.
+    pub(crate) fn debris_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+        c.a[0] = me.0;
+        debris_par(c, b, me, variant)
+    }
+    /// 0xb6ba8: effect of type 57 of `me`.
+    pub(crate) fn type_57_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8, setting: u8) -> Option<Obj> {
+        c.a[0] = me.0;
+        type_57(c, b, me, variant, setting)
+    }
+    /// 0xb97ba: posed flash (variant 1) linked to `me`.
+    pub(crate) fn posed_flash_b_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        linked_par(c, b, me, kind::POSED_FLASH, Some(1))
+    }
+    /// 0xb96c0: thrown shard of variant `variant` linked to `me`.
+    pub(crate) fn thrown_shard_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+        c.a[0] = me.0;
+        thrown_shard(c, b, me, variant)
+    }
+    /// 0xb9c6a: wisp (type 86, variant 0) linked to `me`.
+    pub(crate) fn wisp_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        linked_par(c, b, me, kind::WISP, Some(0))
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Créateurs appelés par les écrans (machine à modes, scènes) : cœurs sans registre
 
@@ -1347,7 +1380,6 @@ creators! {
     0xb7dec "cree_colonnes" |c, b, me| pillars_par(c, b), CREATED | D(5) | D(6) | regs::a(2);
     0xabb70 "cree_trainees" |c, b, me| trails(c, b), CREATED | D(0) | D(4) | D(5) | D(6) | regs::a(2) | regs::a(4);
     0xa8a42 "camera_mode_60" |c, b, me| camera_mode_60(c, b), regs::CCR;
-    0xa8ae8 "cree_liste_decors_d0" |c, b, me| { let v = c.d[0] as u16; set_low_word(&mut c.d[1], v); set_list_par(c, b, v as u8) }, CREATED | D(0) | D(1) | regs::a(4);
     0xa8af8 "cree_liste_decors" |c, b, me| { let v = d1b(c); set_list_par(c, b, v) }, CREATED | D(0) | D(1) | regs::a(4);
     0xb3e4e "cree_cris" |c, b, me| shouts_par(c, b, me, 1, 0xb3e86), CREATED | D(0) | D(1) | regs::a(2);
     0xb3ec6 "cree_cris_b" |c, b, me| shouts_par(c, b, me, 2, 0xb3f00), CREATED | D(0) | D(1) | regs::a(2);

@@ -18,7 +18,7 @@ use crate::families::effects_creators::{ecran_de_fin, ou_reste};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::pools;
 use crate::scene::Ctx;
-use crate::video::{clear_layer, Layer};
+use crate::video::{effacer_couche, Couche};
 use crate::Native;
 
 const STATE: u32 = 0xff_2b10;
@@ -56,8 +56,8 @@ fn post_game(x: &mut Ctx) -> Flow {
         0 => s0_prepare(x),
         2 => s2_scroll(x),
         4 => s4_scores(x),
-        6 => s6_scenery(x),
-        8 => s8_scenery(x),
+        6 => s6_decor(x),
+        8 => s8_decor(x),
         10 => sa_leave(x),
         _ => Flow::Done,
     }
@@ -77,11 +77,11 @@ crate::etapes! {
         },
         S0Palettes = S0_PALETTES => |x| {
             clear_layers(x);
-            crate::palette::load_scene_page(x.b, 1);
-            crate::palette::load_palette_page(x.b, 2, 83);
-            crate::palette::load_palette_page(x.b, 2, 83);
+            crate::palette::charger_page_de_la_scene(x.b, 1);
+            crate::palette::charger_page(x.b, 2, 83);
+            crate::palette::charger_page(x.b, 2, 83);
             wr8(x.b, A5 + 0x34, 0);
-            crate::palette::load_scene_palettes_of(x.b, 89);
+            crate::palette::charger_palettes_de_scene(x.b, 89);
             // quatre blocs de palette, de la ROM vers la table des palettes
             for (dst, src) in [(0x91c3e0u32, 0x291f00u32), (0x91c2e0, 0xfc6d8), (0x91c000, 0x292260), (0x91c3c0, 0x2537c0)] {
                 for i in 0..8 {
@@ -108,7 +108,7 @@ crate::etapes! {
             Flow::Done
         },
         SaFaded = SA_FADED => |x| {
-            crate::sound::service(x.b, crate::sound::Service::GeneralStop);
+            crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
             reset_objects(x);
             x.wait(1, Etape::SaVideo)
         },
@@ -139,8 +139,8 @@ fn next_step(x: &mut Ctx) {
 
 /// Les trois couches effacées.
 fn clear_layers(x: &mut Ctx) {
-    for layer in [Layer::One, Layer::Two, Layer::Three] {
-        clear_layer(x.b, layer);
+    for couche in [Couche::Un, Couche::Deux, Couche::Trois] {
+        effacer_couche(x.b, couche);
     }
 }
 
@@ -148,7 +148,7 @@ fn clear_layers(x: &mut Ctx) {
 fn reset_objects(x: &mut Ctx) {
     crate::objects::lists::unlink_all(x.b);
     crate::sprites::vider_listes(x.b);
-    crate::video::clear_objects(x.b);
+    crate::video::vider_objets(x.b);
     for pool in pools::POOLS {
         pool.reset(x.b);
     }
@@ -156,33 +156,33 @@ fn reset_objects(x: &mut Ctx) {
 
 /// Un rendu : PEFF, EFFCT, sprites (`0xfc91c`).
 fn render(x: &mut Ctx) {
-    for class in [&crate::dispatch::PEFF, &crate::dispatch::EFFCT] {
-        class.update_no_next(x.c, x.b);
+    for classe in [&crate::dispatch::PEFF, &crate::dispatch::EFFCT] {
+        classe.update_sans_suite(x.c, x.b);
     }
-    crate::sprites::build_68k(x.c, x.b);
+    crate::sprites::construire_68k(x.c, x.b);
     x.c.a[0] = STATE;
 }
 
 /// Vitesse du défilement et boutons pressés (D0 et D1.b de l'original).
-struct Speed {
-    speed: u32,
-    top_buttons: u8,
+struct Vitesse {
+    vitesse: u32,
+    boutons: u8,
 }
 
 /// `0xfc6f8` : vitesse du défilement (1 pixel par image, 1/4 si un bouton est pressé).
-fn speed(x: &mut Ctx) -> Speed {
+fn speed(x: &mut Ctx) -> Vitesse {
     let mut buttons = 0;
     for k in 0..4 {
         buttons |= rd8(x.b, A5 + k);
     }
-    let top_buttons = buttons & 0xf0;
-    Speed { speed: if top_buttons == 0 { 0x10000 } else { 0x4000 }, top_buttons }
+    let boutons = buttons & 0xf0;
+    Vitesse { vitesse: if boutons == 0 { 0x10000 } else { 0x4000 }, boutons }
 }
 
 /// Fait avancer le défilement du fond d'une image ; la caméra 2 le suit.
-fn scroll(x: &mut Ctx) -> Speed {
+fn scroll(x: &mut Ctx) -> Vitesse {
     let v = speed(x);
-    let s = rd32(x.b, SCROLL).wrapping_sub(v.speed);
+    let s = rd32(x.b, SCROLL).wrapping_sub(v.vitesse);
     wr32(x.b, SCROLL, s);
     wr16(x.b, A5 + 0x55a, (s >> 16) as u16);
     v
@@ -219,8 +219,8 @@ fn s2_scroll(x: &mut Ctx) -> Flow {
         }
         // 0x517ba : une ligne du classement (variante = compteur), son réglage est l'octet suivant du texte, qui
         // n'avance que si l'effet est créé
-        let setting = rd8(x.b, a4);
-        if crate::effects_aids::effect_44(x.b, counter, setting).is_some() {
+        let reglage = rd8(x.b, a4);
+        if crate::effects_aids::effet_44(x.b, counter, reglage).is_some() {
             a4 += 1;
         }
     }
@@ -242,32 +242,32 @@ fn s4_scores(x: &mut Ctx) -> Flow {
     next_step(x);
     // les deux premiers cartouches reçoivent pour réglage le D1.b de la vitesse (les boutons pressés)
     for kind in [4u8, 6] {
-        ecran_de_fin(x.b, kind, v.top_buttons);
+        ecran_de_fin(x.b, kind, v.boutons);
     }
     // Glitch d'origine : la retenue n'est pas testée, un échec écrit dans l'A1 laissé par l'allocation
-    let mut rank = 3u8;
+    let mut rang = 3u8;
     let mut a4 = SCORES;
     for counter in (0..4u8).rev() {
         if rd32(x.b, a4) != 0 || rd32(x.b, a4 + 4) != 0 {
             let o = ecran_de_fin(x.b, 5, counter);
             let o = ou_reste(x.b, o);
-            wr8(x.b, o.0 + 0x42, rank);
-            rank = rank.wrapping_sub(1);
+            wr8(x.b, o.0 + 0x42, rang);
+            rang = rang.wrapping_sub(1);
             wr32(x.b, o.0 + 0x4c, a4);
         }
         a4 += 0x10;
     }
-    let mut rank = 3u8;
+    let mut rang = 3u8;
     a4 = SCORES;
     for counter in (0..4u8).rev() {
         if rd8(x.b, a4) != 0 {
             if rd8(x.b, a4 + 14) != 0 {
                 let o = ecran_de_fin(x.b, 9, counter);
                 let o = ou_reste(x.b, o);
-                wr8(x.b, o.0 + 0x42, rank);
+                wr8(x.b, o.0 + 0x42, rang);
                 wr32(x.b, o.0 + 0x4c, a4);
             }
-            rank = rank.wrapping_sub(1);
+            rang = rang.wrapping_sub(1);
         }
         a4 += 0x10;
     }
@@ -275,7 +275,7 @@ fn s4_scores(x: &mut Ctx) -> Flow {
 }
 
 /// Étape 6 : le fond descend jusqu'à l'ordonnée 1064, puis un second plan se met à défiler.
-fn s6_scenery(x: &mut Ctx) -> Flow {
+fn s6_decor(x: &mut Ctx) -> Flow {
     render(x);
     scroll(x);
     if rd16(x.b, A5 + 0x55a) != 1064 {
@@ -288,10 +288,10 @@ fn s6_scenery(x: &mut Ctx) -> Flow {
 }
 
 /// Étape 8 : les deux plans défilent ensemble jusqu'à l'ordonnée 832.
-fn s8_scenery(x: &mut Ctx) -> Flow {
+fn s8_decor(x: &mut Ctx) -> Flow {
     render(x);
-    let speed = scroll(x).speed;
-    let v = rd32(x.b, SCROLL_2).wrapping_sub(speed);
+    let vitesse = scroll(x).vitesse;
+    let v = rd32(x.b, SCROLL_2).wrapping_sub(vitesse);
     wr32(x.b, SCROLL_2, v);
     wr16(x.b, A5 + 0x4ba, (v >> 16) as u16);
     if rd16(x.b, A5 + 0x55a) != 832 {

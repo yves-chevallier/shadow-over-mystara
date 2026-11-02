@@ -61,17 +61,17 @@ pub fn enemies(rom: &Program) -> (Vec<Region>, Vec<Spec>) {
 pub fn boxes(rom: &Program) -> (Vec<Region>, Vec<Spec>) {
     const START: u32 = 0x1051ae;
     const COUNT: u32 = 122;
-    const SHEET: &str = "u8*10 u8*16 u8*16";
-    let sheets: Vec<u32> = (0..COUNT).map(|i| rom.rd32(START + 4 * i)).collect();
+    const FICHE: &str = "u8*10 u8*16 u8*16";
+    let fiches: Vec<u32> = (0..COUNT).map(|i| rom.rd32(START + 4 * i)).collect();
     // une seule fiche est suivie de 8 octets inutilisés : les fiches forment deux suites
-    let gap = sheets.windows(2).find(|w| w[1] - w[0] != 0x2a).map(|w| w[0] + 0x2a).unwrap();
-    let next = sheets.iter().copied().find(|&f| f > gap).unwrap();
-    let end = sheets[COUNT as usize - 1] + 0x2a;
+    let gap = fiches.windows(2).find(|w| w[1] - w[0] != 0x2a).map(|w| w[0] + 0x2a).unwrap();
+    let next = fiches.iter().copied().find(|&f| f > gap).unwrap();
+    let end = fiches[COUNT as usize - 1] + 0x2a;
     let s = vec![
         data("fiches", START, "addr", &[], COUNT as usize),
-        span("fiches/a", sheets[0], gap, false, SHEET, &[]),
+        span("fiches/a", fiches[0], gap, false, FICHE, &[]),
         span("pad/fiches", gap, next, false, "u8", &[]),
-        span("fiches/b", next, end, false, SHEET, &[]),
+        span("fiches/b", next, end, false, FICHE, &[]),
         data("loot", 0xda28a, "u8*2", &["kind", "variant"], 135),
         data("wear_chances", 0xdb7b8, "x16*6", &[], 3),
     ];

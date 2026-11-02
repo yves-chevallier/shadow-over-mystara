@@ -334,3 +334,23 @@ de F1, F4 et F7 sont désormais joués (`cov_demarrage_boutons`, `long_noms_embl
   `obj_on_screen`, O1), 0x19aa.
 * **Écran 0x19068** (F4, 0x196ae et la fin de 0x19038) : tâche jamais créée, déjà consignée plus haut (« Tâche de
   l'écran 0x19068 »).
+
+## Lot « sortie du Cpu », partie 5 (ESHL, SOBJ, SET, ITEM, BOX, EFFCT restants en gestionnaires sans registres, wt-familles3)
+
+### Aides de la barrière en natives (0xb9ee6, 0xb9eba, 0xba094 ; `effects.rs`, module `barriere`)
+
+Trois feuilles de l'effet « barrière » (EFFCT 0xb9f36) transcrites instruction par instruction sur le processeur :
+« l'objet A1 est-il dans la boîte de A0 » (0xb9ee6, D0 = 1/0), « un joueur vivant touche-t-il la boîte » (0xb9eba,
+lève `+0x30`), « tous les fils ont-ils fini » (0xba094, drapeau Z). Elles ne servaient qu'au code d'origine de la
+barrière, désormais réécrite dans `effects_c` (`barrier`, `in_box`, interrupteurs) : plus aucun appel par adresse
+ne les atteint (recherche de 0xb9ee6, 0xb9eba, 0xba094 dans `src/` ; seul `examples/fuzz_monde.rs` les citait).
+Doublon : supprimées, avec leurs entrées de `fuzz_monde`.
+
+### Guide de scène sans joueur vivant (ITEM 6, variante 1, 0xdcddc ; `items::guide_cible`)
+
+0xdcddc choisit le joueur vivant le plus proche ; s'il n'y en a aucun, l'original garde l'A2 de son appelant comme
+« propriétaire ». Pour le guide 3 (attract), c'est la fin de sa copie de palette (0x91c320), écrite en clair. Pour le
+guide 1, c'est l'A2 laissé par les gestionnaires précédents de la boucle (aucun n'est tenu sans registres). Le
+guide 1 naît du script de la scène, joueurs présents ; aucun scénario ne le voit naître sans joueur vivant.
+Hypothèse : cas impossible en jeu (repli de l'original sans sens). Devenu un `unreachable!`.
+||||||| a00e694

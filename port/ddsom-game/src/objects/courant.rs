@@ -1,6 +1,6 @@
 //! Le moteur d'objets vu d'un gestionnaire : les routines appliquées à l'objet traité.
 //!
-//! Le trait [`Courant`] donne aux contextes qui traitent un objet (`families::cx::Cx`, `families::Ctx`) les routines
+//! Le trait [`Courant`] donne aux contextes qui traitent un objet (`families::cx::Cx`) les routines
 //! du moteur sous des noms Rust : `x.move_xz()`, `x.anim_step()`, `x.reinsert()`... au lieu de
 //! `x.call(sub::MOVE_XZ)`. Chaque méthode appelle la fonction du module (`motion`, `anim`, `lists`, `cull`, `pools`)
 //! sur `self.obj()`.
@@ -168,7 +168,7 @@ pub trait Courant: Machine {
 
     /// 0x1ee1a : remet l'objet à sa place dans la liste des acteurs (fin ordinaire d'un gestionnaire).
     /// Adaptateur : les registres que laisse la réinsertion (D0-D2, A1-A4) passent au gestionnaire suivant de la boucle
-    /// de dispatch, qui les relit parfois (glitch d'origine : `player/peff_e.rs` tire son rebond dans le D2 hérité ;
+    /// de dispatch, qui les relit parfois (glitch d'origine : `joueur/peff_e.rs` tire son rebond dans le D2 hérité ;
     /// `DDSOM_POISON=lists` le montre sur `scorpion_scene36`, `mash_c5`).
     #[track_caller]
     fn reinsert(&mut self)
@@ -232,9 +232,3 @@ impl<R> Courant for crate::families::cx::Cx<'_, R> {
     }
 }
 
-impl Courant for crate::families::Ctx<'_> {
-    /// L'objet désigné par A0 au moment de l'appel (un gestionnaire peut le changer).
-    fn obj(&self) -> Obj {
-        Obj(self.c.a[0])
-    }
-}

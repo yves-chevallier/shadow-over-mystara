@@ -230,11 +230,35 @@ impl World<'_> {
         self.a2 = self.c.a[2];
         self.c.sr & SR_Z != 0
     }
-    /// Idem avec un paramètre D1 (type d'étincelle / d'effet).
-    fn call_d1(&mut self, addr: u32, a0: Obj, a1: Obj, d1: u32) -> bool {
-        self.c.d[1] = d1;
-        self.call_ao(addr, a0, a1)
+    /// Spark of variant `variant` (D1) from `a0` toward `a1`: 0xaa96c (`Spark::Linked`), 0xaaa04 / 0xaaa84
+    /// (`Spark::Between`, the owner first or second). The registers are left like the original routine leaves them
+    /// (A1 to A4 restored, D0-D3 of the placement, flags) ; returns the Z flag.
+    fn spark(&mut self, spark: Spark, a0: Obj, a1: Obj, variant: u8) -> bool {
+        self.c.d[1] = variant as u32;
+        self.c.a[0] = a0.0;
+        self.c.a[1] = a1.0;
+        self.c.a[5] = A5;
+        self.c.a[2] = self.a2;
+        let saved = [self.c.a[1], self.c.a[2], self.c.a[3], self.c.a[4]];
+        match spark {
+            Spark::Linked => crate::effects_aids::spark_par(self.c, self.b, a0, a1.0, variant),
+            Spark::Between { owner_first } => {
+                crate::effects_aids::spark_between_par(self.c, self.b, a0, a1.0, variant, owner_first)
+            }
+        };
+        [self.c.a[1], self.c.a[2], self.c.a[3], self.c.a[4]] = saved;
+        self.a2 = self.c.a[2];
+        self.c.sr & SR_Z != 0
     }
+}
+
+/// The spark creators of the hit resolution.
+#[derive(Clone, Copy)]
+enum Spark {
+    /// 0xaa96c: linked to its creator, placed between it and the other object.
+    Linked,
+    /// 0xaaa04 (`owner_first`) / 0xaaa84: between the creator and the object hit.
+    Between { owner_first: bool },
 }
 
 fn set_low8(r: &mut u32, v: u8) {
@@ -446,7 +470,7 @@ fn scan(w: &mut World, list: List, counter: u32, mut body: impl FnMut(&mut World
 
 /// Les 4 enregistrements joueur.
 fn players() -> impl Iterator<Item = Obj> {
-    crate::ram::PLAYERS.iter()
+    crate::ram::JOUEURS.iter()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -536,7 +560,7 @@ fn player_blow_on_box(w: &mut World, p: Obj, bx: Obj) {
     }
     bx.set_u16(w.b, f::KEYS_HELD, p.word());
     bx.set_u8(w.b, f::KEYS_NEW, 1);
-    w.call_d1(0xaa96c, p, bx, 0);
+    w.spark(Spark::Linked, p, bx, 0);
 }
 
 /// 0x2630e : un joueur `p` frappe l'ennemi `e` : mémorise le coup, calcule les dégâts, lance la
@@ -553,7 +577,7 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
     }
     w.set_bit(p, f::HIT_MARK, 0);
     // un même coup (ATTACK_ID) ne touche qu'une fois chaque victime : la victime retient le
-    // dernier coup reçu de chaque joueur (octet `HIT_MARK + n° du player`)
+    // dernier coup reçu de chaque joueur (octet `HIT_MARK + n° du joueur`)
     let id = p.u8(w.b, f::ATTACK_ID);
     let slot = e.0 + f::HIT_MARK + p.u8(w.b, f::KIND) as u32;
     if rd8(w.b, slot) == id {
@@ -613,7 +637,7 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
             p.set_u32(w.b, f::STATE, state::ATTACKING);
             p.set_u8(w.b, f::SUBACTION, 0x12);
         }
-        w.call_d1(0xaaa04, p, e, 4);
+        w.spark(Spark::Between { owner_first: true }, p, e, 4);
         return;
     }
     count_combo(w, p, e);
@@ -666,13 +690,13 @@ fn show_enemy_hp(w: &mut World, attacker: Obj, e: Obj) {
     cov::hit("show_enemy_hp");
     let key = ((attacker.u8(w.b, f::KIND) as u32) << 8) + e.u8(w.b, f::KIND) as u32;
     let (hp_max, hp, class) = (e.u16(w.b, f::HP_MAX), e.u16(w.b, f::HP), e.u8(w.b, f::CLASS));
-    let bar = crate::evenements::Popup { entete: key as u16, max: hp_max, valeur: hp, brut: class == 2 };
+    let barre = crate::evenements::Popup { entete: key as u16, max: hp_max, valeur: hp, brut: class == 2 };
     // Glitch d'origine : 0x19dce laisse A2 sur la file des pop-ups (sauf s'ils sont inhibés), et A2 est la boîte
     // d'attaque du joueur pour les ennemis suivants de `player_hits_enemies`
-    if !crate::evenements::popups_inhibited(w.b) {
-        w.a2 = crate::evenements::POPUP_INPUTS_ADDR;
+    if !crate::evenements::popups_inhibes(w.b) {
+        w.a2 = crate::evenements::ENTREES_POPUPS;
     }
-    crate::evenements::creer_popup(w.b, bar);
+    crate::evenements::creer_popup(w.b, barre);
 }
 
 /// Fin de 0x2630e (0x264e4) : la victime passe en réaction "touchée", l'étincelle est créée et le
@@ -683,9 +707,12 @@ fn enemy_reacts_to_hit(w: &mut World, p: Obj, e: Obj) {
     e.set_u8(w.b, f::FLAGS, 1);
     e.set_u8(w.b, f::REACTION, 0x4c);
     if e.u8(w.b, f::FLIES) == 0 {
-        w.call_ao(0xf232e, p, e);
+        // 0xf232e
+        (w.c.a[0], w.c.a[1], w.c.a[5], w.c.a[2]) = (p.0, e.0, A5, w.a2);
+        crate::player::hit_reactions::enemy_reacts_68k(w.c, w.b, crate::player::Player(p.0), e.0);
+        w.a2 = w.c.a[2];
     }
-    w.call_d1(0xaa96c, p, e, 0);
+    w.spark(Spark::Linked, p, e, 0);
     let mut d4 = p.u8(w.b, f::WEAPON_10D);
     if p.u8(w.b, f::ATTACK_KIND) != 0 {
         d4 = p.u8(w.b, f::WEAPON_10E);
@@ -714,7 +741,7 @@ fn count_combo(w: &mut World, p: Obj, e: Obj) {
 // Routines natives
 
 /// 0x260ee : les collisions de l'image.
-pub fn update_cpu(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn mettre_a_jour(c: &mut Cpu, b: &mut Cps2Bus) {
     combat_update(&mut World { c, b, a2: 0 });
 }
 

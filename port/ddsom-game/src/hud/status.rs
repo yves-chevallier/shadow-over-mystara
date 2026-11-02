@@ -279,7 +279,7 @@ fn wait_game_over(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     x.set_v8(var::PHASE, over::PHASE_GAME_OVER);
-    crate::sound::service(x.b, crate::sound::Service::GeneralStop);
+    crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
     crate::families::petites::demarrage_fait(x.b, true);
     Flow::Done
 }

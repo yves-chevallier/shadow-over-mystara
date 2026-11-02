@@ -2,15 +2,15 @@
 //!
 //! À chaque passage de l'ordonnanceur elle fait ce que fait le VBLANK pour les tâches qui dorment, mais
 //! seulement pour la tâche principale (emplacement 0), et seulement quand un joueur présent presse un bouton
-//! pendant une partie : le jeu enchaîne alors ses pas sans attendre l'image (voir `docs/looped.md` §1). Dans tous
-//! les autres cas elle cède la main sans rien faire (`Wait::Ready`) : c'est l'attente active qui occupe le
-//! processeur surcadencé ([`idle_wait`] la reconnaît).
+//! pendant une partie : le jeu enchaîne alors ses pas sans attendre l'image (voir `docs/boucle.md` §1). Dans tous
+//! les autres cas elle cède la main sans rien faire (`Attente::Prete`) : c'est l'attente active qui occupe le
+//! processeur surcadencé ([`attente_vide`] la reconnaît).
 //!
 //! Le pas est le même à l'entrée (`0xee080`, tâche neuve) et après chacune des deux cessions (`0xee0fa`,
 //! `0xee16a` : l'original reboucle par un `bra 0xee080`) : trois étapes ([`Etape`]), un seul pas.
 
-use super::table::{record, table, State, Resume, Table, SLOTS};
-use super::{cede, Wait};
+use super::table::{enregistrement, table, Etat, Reprise, Table, EMPLACEMENTS};
+use super::{ceder, Attente};
 use crate::mem::{set_low_byte, set_low_word, A5};
 use crate::modes::Flow;
 use crate::scene::Ctx;
@@ -38,11 +38,11 @@ const NORMAL: u16 = 0x80;
 crate::etapes! {
     /// Étapes de la tâche : son entrée, et les retours de ses deux cessions.
     pub enum Etape {
-        Entry = 0xee080 => step,
+        Entree = 0xee080 => step,
         /// Après une cession sans effet.
-        AfterCession = 0xee0fa => step,
+        ApresCession = 0xee0fa => step,
         /// Après une cession qui a décompté la tâche principale.
-        AfterCountdown = 0xee16a => step,
+        ApresDecompte = 0xee16a => step,
     }
 }
 
@@ -52,22 +52,22 @@ fn step(x: &mut Ctx) -> Flow {
     set_low_word(&mut x.c.d[0], normal);
     let resume = if normal == 0 {
         wake_all(x);
-        Etape::AfterCession
+        Etape::ApresCession
     } else if x.v8(var::SCREEN) != 0 && x.v8(var::GAME) != 0 {
         fast_forward(x)
     } else {
-        Etape::AfterCession
+        Etape::ApresCession
     };
-    cede(x, Wait::Ready, resume)
+    ceder(x, Attente::Prete, resume)
 }
 
 /// `0xee0ce` (réglages sans le bit 7, jamais vus dans ce jeu) : décompte comme le VBLANK, pour toutes les tâches.
 fn wake_all(x: &mut Ctx) {
     let tasks = table(x.b);
-    for slot in 0..SLOTS {
-        tasks.count_down(slot);
+    for slot in 0..EMPLACEMENTS {
+        tasks.decompter(slot);
     }
-    x.c.a[0] = record(SLOTS);
+    x.c.a[0] = enregistrement(EMPLACEMENTS);
     set_low_word(&mut x.c.d[0], 0xffff);
 }
 
@@ -84,42 +84,42 @@ fn fast_forward(x: &mut Ctx) -> Etape {
         }
     }
     if x.c.d[0] as u8 == 0 {
-        return Etape::AfterCession;
+        return Etape::ApresCession;
     }
-    table(x.b).count_down(MAIN);
-    Etape::AfterCountdown
+    table(x.b).decompter(MAIN);
+    Etape::ApresDecompte
 }
 
 /// L'ordonnanceur tourne à vide : la tâche du gel est la seule prête, elle vient de céder la main, et son prochain
 /// pas ne ferait rien. L'état du jeu ne peut plus changer avant la prochaine interruption : `idle` (`lib.rs`) peut
 /// avancer jusqu'à elle. `ram` est la RAM de travail (FF0000-FFFFFF).
-pub fn idle_wait(tasks: &Table, ram: &[u16]) -> bool {
-    let ready = |slot: usize| tasks.slots[slot].state.castable();
-    if !ready(SLOT) || (0..SLOTS).any(|slot| slot != SLOT && ready(slot)) {
+pub fn attente_vide(tasks: &Table, ram: &[u16]) -> bool {
+    let ready = |slot: usize| tasks.emplacements[slot].etat.lancable();
+    if !ready(SLOT) || (0..EMPLACEMENTS).any(|slot| slot != SLOT && ready(slot)) {
         return false;
     }
     // elle a cédé par `jsr 0xa86` depuis l'une de ses deux cessions, et c'est la dernière tâche lancée
     // (l'état de l'ordonnanceur est alors celui de chaque passage suivant)
-    let ceded = matches!(tasks.slots[SLOT].resume, Resume::Etape(super::Etape::Freeze(Etape::AfterCession | Etape::AfterCountdown)));
-    let main_waiting = tasks.slots[MAIN].state == State::Waiting;
-    ceded && tasks.current == SLOT && !step_would_act(ram, main_waiting)
+    let ceded = matches!(tasks.emplacements[SLOT].reprise, Reprise::Etape(super::Etape::Gel(Etape::ApresCession | Etape::ApresDecompte)));
+    let main_waiting = tasks.emplacements[MAIN].etat == Etat::Attend;
+    ceded && tasks.courante == SLOT && !step_would_act(ram, main_waiting)
 }
 
 /// Même test sur la table de la RAM d'une machine d'origine (enregistrements FF0064 : état, PC de reprise `0xa8c`
 /// de l'enveloppe, pile où l'adresse de retour suit les 15 registres sauvés ; tâche courante en FF0056).
-pub fn idle_wait_original(ram: &[u16]) -> bool {
+pub fn attente_vide_origine(ram: &[u16]) -> bool {
     let byte = |a: u32| (ram[(a as usize & 0xffff) / 2] >> if a & 1 == 0 { 8 } else { 0 }) as u8;
     let long = |a: u32| (ram[(a as usize & 0xffff) / 2] as u32) << 16 | ram[(a as usize & 0xffff) / 2 + 1] as u32;
-    let ready = |slot: usize| byte(record(slot)) >= State::Ready.byte();
-    let freeze = record(SLOT);
-    if !ready(SLOT) || (0..SLOTS).any(|slot| slot != SLOT && ready(slot)) {
+    let ready = |slot: usize| byte(enregistrement(slot)) >= Etat::Prete.octet();
+    let gel = enregistrement(SLOT);
+    if !ready(SLOT) || (0..EMPLACEMENTS).any(|slot| slot != SLOT && ready(slot)) {
         return false;
     }
-    let after_yield = [Etape::AfterCession.adresse(), Etape::AfterCountdown.adresse()];
-    if long(freeze + 4) != 0xa8c || !after_yield.contains(&long(long(freeze + 8) + 60)) || long(0xff_0056) != freeze {
+    let after_yield = [Etape::ApresCession.adresse(), Etape::ApresDecompte.adresse()];
+    if long(gel + 4) != 0xa8c || !after_yield.contains(&long(long(gel + 8) + 60)) || long(0xff_0056) != gel {
         return false;
     }
-    let main_waiting = byte(record(MAIN)) == State::Waiting.byte();
+    let main_waiting = byte(enregistrement(MAIN)) == Etat::Attend.octet();
     !step_would_act(ram, main_waiting)
 }
 

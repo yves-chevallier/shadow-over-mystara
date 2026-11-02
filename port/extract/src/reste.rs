@@ -1,4 +1,4 @@
-//! Le reste de la région programme : `data/remainder.json` (`ddsom_assets::remainder`, docs/sans-rom.md « Couverture
+//! Le reste de la région programme : `data/reste.json` (`ddsom_assets::reste`, docs/sans-rom.md « Couverture
 //! complète des données »).
 //!
 //! Tout octet de la région programme que les autres fichiers ne décrivent pas y est rangé, sauf le code 68000 :
@@ -11,7 +11,7 @@
 use std::io;
 use std::path::Path;
 
-use ddsom_assets::remainder::{ranges, Block, Remainder};
+use ddsom_assets::reste::{plages, Bloc, Reste};
 use m68k::decode::{Ea, Fetch, Op};
 
 const CODE: &str = include_str!("../code_68k.txt");
@@ -28,9 +28,9 @@ pub fn code() -> Vec<(u32, u32)> {
 }
 
 /// Espace programme vu par le décodeur.
-struct View<'a>(&'a [u16]);
+struct Vue<'a>(&'a [u16]);
 
-impl Fetch for View<'_> {
+impl Fetch for Vue<'_> {
     fn fetch16(&mut self, a: u32) -> u16 {
         self.0.get((a as usize & 0xff_ffff) >> 1).copied().unwrap_or(0)
     }
@@ -38,9 +38,9 @@ impl Fetch for View<'_> {
 
 /// Opérandes mémoire d'une instruction : (lus ou écrits comme données, seulement calculés par `lea`/`pea`).
 /// Les sauts et appels ne comptent pas : leur cible est du code.
-fn operands(op: &Op) -> (Vec<Ea>, Vec<Ea>) {
+fn operandes(op: &Op) -> (Vec<Ea>, Vec<Ea>) {
     use Op::*;
-    let read = match *op {
+    let lus = match *op {
         Add(_, a, b) | Addx(_, a, b) | Sub(_, a, b) | Subx(_, a, b) | Cmp(_, a, b) | And(_, a, b) | Or(_, a, b)
         | Eor(_, a, b) | Abcd(a, b) | Sbcd(a, b) | Move(_, a, b) => vec![a, b],
         Adda(_, a, _) | Suba(_, a, _) | Cmpa(_, a, _) | Neg(_, a) | Negx(_, a) | Not(_, a) | Clr(_, a) | Tst(_, a)
@@ -49,15 +49,15 @@ fn operands(op: &Op) -> (Vec<Ea>, Vec<Ea>) {
         | Movem { ea: a, .. } => vec![a],
         _ => vec![],
     };
-    let addresses = match *op {
+    let adresses = match *op {
         Lea(a, _) | Pea(a) => vec![a],
         _ => vec![],
     };
-    (read, addresses)
+    (lus, adresses)
 }
 
 /// Adresse ROM fixe d'un opérande (relatif au PC ou absolu).
-fn address(ea: Ea) -> Option<u32> {
+fn adresse(ea: Ea) -> Option<u32> {
     match ea {
         Ea::PcDisp(a) | Ea::PcIdx(a, _) | Ea::AbsL(a) => Some(a & 0xff_ffff),
         Ea::AbsW(a) => Some(a & 0xff_ffff),
@@ -69,88 +69,88 @@ fn address(ea: Ea) -> Option<u32> {
 /// d'instruction) une adresse fixe qui tombe dans le code. Ces octets sont des données (par exemple une table indexée
 /// qui commence dans le déplacement d'un `bra`) : la plage de code est rendue aux données de la cible à sa fin.
 /// Renvoie les plages rendues.
-fn data_in_code(prog: &[u16], code: &[(u32, u32)], is_code: &[bool]) -> Vec<(u32, u32)> {
-    let mut view = View(prog);
-    let mut starts = vec![false; is_code.len()];
+fn donnees_dans_le_code(prog: &[u16], code: &[(u32, u32)], est_code: &[bool]) -> Vec<(u32, u32)> {
+    let mut vue = Vue(prog);
+    let mut debuts = vec![false; est_code.len()];
     let mut instructions = Vec::new();
     for &(d, f) in code {
         let mut pc = d;
         while pc < f {
-            let ins = m68k::decode(&mut view, pc);
-            starts[pc as usize] = true;
+            let ins = m68k::decode(&mut vue, pc);
+            debuts[pc as usize] = true;
             instructions.push(ins);
             pc += ins.len;
         }
     }
-    let mut returned = Vec::new();
+    let mut rendues = Vec::new();
     for ins in &instructions {
-        let (read, addresses) = operands(&ins.op);
-        let targets = read.into_iter().filter_map(address).chain(
-            addresses.into_iter().filter_map(address).filter(|&t| (t as usize) < starts.len() && !starts[t as usize]),
+        let (lus, adresses) = operandes(&ins.op);
+        let cibles = lus.into_iter().filter_map(adresse).chain(
+            adresses.into_iter().filter_map(adresse).filter(|&t| (t as usize) < debuts.len() && !debuts[t as usize]),
         );
-        for t in targets {
-            if (t as usize) < is_code.len() && is_code[t as usize] {
+        for t in cibles {
+            if (t as usize) < est_code.len() && est_code[t as usize] {
                 let &(_, fin) = code.iter().find(|&&(d, f)| (d..f).contains(&t)).unwrap();
-                returned.push((t, fin));
+                rendues.push((t, fin));
             }
         }
     }
-    returned
+    rendues
 }
 
 pub fn extract(roms: &Path, assets: &Path) -> io::Result<()> {
     let (data, prog) = cps2::load_program(roms)?;
-    let byte = |v: &[u16], a: u32| v[(a / 2) as usize].to_be_bytes()[(a % 2) as usize];
-    let size = 2 * data.len() as u32;
+    let octet = |v: &[u16], a: u32| v[(a / 2) as usize].to_be_bytes()[(a % 2) as usize];
+    let taille = 2 * data.len() as u32;
     let key = std::fs::read(roms.join("ddsom.key"))?;
     let (_, debut, fin) = cps2::crypt::parse_key(&key);
     assert_eq!(debut, 0, "zone chiffrée inattendue");
     // le déchiffrement (comme MAME) inclut le mot de la borne haute
-    let encrypted_end = 2 * fin + 2;
+    let fin_chiffree = 2 * fin + 2;
     // hors de la zone chiffrée, l'espace programme égale l'espace données (la reconstruction le recopie)
     if let Some(w) = (fin as usize + 1..data.len()).find(|&w| data[w] != prog[w]) {
         panic!("espace programme différent de l'espace données hors de la zone chiffrée, en {:#x}", 2 * w);
     }
-    let mut is_code = vec![false; size as usize];
+    let mut est_code = vec![false; taille as usize];
     for &(a, b) in &code() {
-        is_code[a as usize..b as usize].fill(true);
+        est_code[a as usize..b as usize].fill(true);
     }
-    let returned = data_in_code(&prog, &code(), &is_code);
-    for &(a, b) in &returned {
-        is_code[a as usize..b as usize].fill(false);
+    let rendues = donnees_dans_le_code(&prog, &code(), &est_code);
+    for &(a, b) in &rendues {
+        est_code[a as usize..b as usize].fill(false);
     }
-    let others = ddsom_assets::rebuild::Program::load_files(assets, &|f| f != "data/reste.json")?;
-    let blocks = |view: &[u16], covered: &dyn Fn(u32) -> bool, n: u32| -> Vec<Block> {
-        ranges(n, |a| !is_code[a as usize] && !covered(a))
+    let autres = ddsom_assets::rebuild::Program::load_files(assets, &|f| f != "data/reste.json")?;
+    let blocs = |vue: &[u16], couvert: &dyn Fn(u32) -> bool, n: u32| -> Vec<Bloc> {
+        plages(n, |a| !est_code[a as usize] && !couvert(a))
             .into_iter()
-            .map(|(a, b)| Block::new(a, &(a..b).map(|x| byte(view, x)).collect::<Vec<u8>>()))
+            .map(|(a, b)| Bloc::new(a, &(a..b).map(|x| octet(vue, x)).collect::<Vec<u8>>()))
             .collect()
     };
-    let data_blocks = blocks(&data, &|a| others.data.is_covered(a), size);
-    let programme = blocks(&prog, &|a| others.prog.is_covered(a), encrypted_end);
-    let code = ranges(size, |a| is_code[a as usize]);
-    let remainder = Remainder {
+    let donnees = blocs(&data, &|a| autres.data.is_covered(a), taille);
+    let programme = blocs(&prog, &|a| autres.prog.is_covered(a), fin_chiffree);
+    let code = plages(taille, |a| est_code[a as usize]);
+    let reste = Reste {
         description: "Région programme hors code 68000 et hors des autres fichiers (docs/sans-rom.md)".into(),
-        encrypted_end,
-        code_bytes: code.iter().map(|(a, b)| b - a).sum(),
+        fin_chiffree,
+        octets_de_code: code.iter().map(|(a, b)| b - a).sum(),
         code: code.iter().map(|(a, b)| format!("{a:#x}-{b:#x}")).collect(),
-        data: data_blocks,
+        donnees,
         programme,
     };
     let path = assets.join("data/reste.json");
-    remainder.save(&path)?;
-    let n = |v: &[Block]| v.iter().map(|b| b.bytes().unwrap().len()).sum::<usize>();
+    reste.save(&path)?;
+    let n = |v: &[Bloc]| v.iter().map(|b| b.bytes().unwrap().len()).sum::<usize>();
     println!(
         "{} : {} blocs, {} octets (données), {} blocs, {} octets (programme), code exclu {} octets en {} plages \
          ({} plages rendues aux données : cibles d'opérandes dans le code)",
         path.display(),
-        remainder.data.len(),
-        n(&remainder.data),
-        remainder.programme.len(),
-        n(&remainder.programme),
-        remainder.code_bytes,
-        remainder.code.len(),
-        returned.len()
+        reste.donnees.len(),
+        n(&reste.donnees),
+        reste.programme.len(),
+        n(&reste.programme),
+        reste.octets_de_code,
+        reste.code.len(),
+        rendues.len()
     );
     Ok(())
 }

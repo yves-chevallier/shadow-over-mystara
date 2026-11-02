@@ -43,7 +43,6 @@
 
 use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
-use super::effects_creators::restes::sur_banc_de_travail;
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
@@ -458,7 +457,6 @@ mod purse {
     /// Fin de la jauge : tuile selon le reste (mots, indexés de -7 à 0).
     pub const GAUGE_END: u32 = 0xaefee;
     pub const ANIM_SET: u32 = 0x1c40c6;
-    pub const PALETTE_PAGE: u32 = 0x1a608;
     /// Suite du code d'origine quand un pool est plein : `tst.w (1,A5)` (`effects::erreur_d_adresse`).
     pub const POOL_FULL: u32 = 0xaf2bc;
     /// Nombre de curseurs encore ouverts (`A5-0x5553`).
@@ -512,7 +510,7 @@ fn purse_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add16(Obj::X, dx);
     x.add16(Obj::Z, dz);
     // 0x1a608 (page de palettes 1), encore sur le processeur ; D7 conservé par l'original
-    sur_banc_de_travail(x, |c, b| crate::call(c, b, purse::PALETTE_PAGE));
+    super::scenery::palette_page_1(x);
     x.set8(0x2a, 1);
     let owner = x.linked(purse::OWNER);
     let player = owner.u8(x.b, 2);
@@ -1436,11 +1434,8 @@ fn spark_init<R: Banc>(x: &mut Cx<'_, R>) {
 fn spark_active<R: Banc>(x: &mut Cx<'_, R>) {
     if !paused(x) {
         if let Some(target) = scenery_live_target(x) {
-            // 0x930a4 (rapprochement du boss 15) avec A1 = la cible, encore sur le processeur
-            sur_banc_de_travail(x, |c, b| {
-                c.a[1] = target.0;
-                crate::call(c, b, 0x930a4)
-            });
+            // 0x930a4: boss 15's approach, toward the target (A1)
+            super::boss_15::attacks::approach_toward(x, target);
         }
         if x.anim_step() {
             return scenery_done(x);
@@ -3531,7 +3526,12 @@ fn swimmer_active<R: Banc>(x: &mut Cx<'_, R>) {
                 x.add16(Obj::X, 4);
                 x.anim_step();
                 // 0x3403c (collision avec le décor, seconde forme), encore sur le processeur
-                sur_banc_de_travail(x, |c, b| crate::call(c, b, crate::terrain::SHADOW_SECOND.entry));
+                let o = x.o;
+                let [d2, d3, d4, d5] = [*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()];
+                let mut restes = [d2, d3, d4, d5];
+                let [r2, r3, r4, r5] = &mut restes;
+                crate::terrain::push_second_restes(x.b, o, [r2, r3, r4, r5]);
+                (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (restes[0], restes[1], restes[2], restes[3]);
                 let gap = x.u16(Obj::X).wrapping_sub(crate::ram::CAMERA_X.get(x.b));
                 if (gap as i16) > 0x1a0 {
                     free(x);
@@ -4781,7 +4781,7 @@ fn finale_step<R: Banc>(x: &mut Cx<'_, R>) {
             x.set_a5_u16(0x490, 4);
             x.set_a5_u8(0x48e, 8);
             x.set_a5_u8(0x48f, 1);
-            sur_banc_de_travail(x, super::petites::palette_page_restore);
+            super::scenery::restore_palette_page(x);
             x.set_a5_u32(0x49e, 0xff1190);
             start_script(x, 0x1cf12);
             finale_end(x);

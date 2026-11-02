@@ -12,7 +12,7 @@ use crate::service::{self, MENU, MENU_LONGS};
 crate::etapes! {
     /// Étapes de la tâche.
     pub enum Etape {
-        Entry = 0x29162 => entry,
+        Entree = 0x29162 => entry,
         /// Après l'image d'attente : un tour.
         Turn = 0x29190 => turn,
         /// Retour du gestionnaire quand il a cédé la main en route : l'image d'attente.
@@ -30,7 +30,7 @@ fn entry(x: &mut Ctx) -> Flow {
         crate::mem::wr32(x.b, MENU + 4 * k, 0);
     }
     set_low_word(&mut x.c.d[0], KILLED_SLOT);
-    crate::kernel::kill_task(x.b, KILLED_SLOT as u32);
+    crate::kernel::tuer_tache(x.b, KILLED_SLOT as u32);
     turn(x)
 }
 
@@ -49,5 +49,5 @@ fn turn(x: &mut Ctx) -> Flow {
 
 /// `0x2918a` : `jsr 0xb64`, puis un nouveau tour.
 fn wait(x: &mut Ctx) -> Flow {
-    crate::taches::one_frame(x, Etape::Turn)
+    crate::taches::une_image(x, Etape::Turn)
 }

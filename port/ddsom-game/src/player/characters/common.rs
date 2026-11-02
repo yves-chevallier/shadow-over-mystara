@@ -21,7 +21,7 @@ use super::super::{animation, ram, Ctx, Player};
 use crate::mem::{wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::machine::Machine;
-use crate::player::external as ext;
+use crate::player::externes as ext;
 
 /// Octets de l'enregistrement joueur propres aux actions des personnages.
 pub mod field {
@@ -78,7 +78,6 @@ pub mod rom {
     /// Lancement d'une tâche (A0 = programme, D0 = priorité) : trap 0.
     pub const START_TASK: u32 = 0x9b6;
     /// Programmes des tâches d'écran du sort : assombrir et rétablir.
-    pub const PALETTE_FADE: u32 = 0x173c;
     pub const DIM_TASK: u32 = 0x153e;
     pub const UNDIM_TASK: u32 = 0x1536;
 }
@@ -442,7 +441,8 @@ fn dust(g: &mut Ctx, p: Player, table: u32) {
     let class = (p.u8(g, Player::CHARACTER) >> 1) as u32;
     let vx = g.prog16(table + 4 * class) as u32;
     let vy = g.prog16(table + 2 + 4 * class) as u32;
-    call(g, p, ext::effect::DUST, &[(0, 0), (1, 0x101), (2, vx), (3, vy)]);
+    (g.c.d[0], g.c.d[1], g.c.d[2], g.c.d[3]) = (0, 0x101, vx, vy);
+    g.shock(p, 0, 0x101, vx as u16, vy as u16);
 }
 
 /// 0x3fa7c : poussière du freinage ou de la marche (une image sur quatre).
@@ -484,15 +484,16 @@ pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
     let (d0, d1, d2, height) = (g.prog16(row), g.prog16(row + 2), g.prog16(row + 4), g.prog16(row + 6));
     g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
     g.c.d[4] = height as u32;
-    let z = call(g, p, ext::effect::DUST, &[(0, d0 as i16 as u32), (1, d1 as u32), (2, d2 as u32)]);
-    let failed = g.c.sr & m68k::SR_C != 0;
-    let _ = z;
-    if failed {
+    (g.c.d[0], g.c.d[1], g.c.d[2]) = (d0 as i16 as u32, d1 as u32, d2 as u32);
+    g.shock(p, d0 as u8, d1, d2, 0xffff);
+    // Original glitch: only the carry is tested; in the scene without shocks (no effect, carry clear) the height is
+    // written through the A1 left before the call
+    if g.c.sr & m68k::SR_C != 0 {
         return;
     }
     let spark = g.c.a[1];
     wr16(g.b, spark + 0x0c, height);
-    g.sound(rom::SPARK_SOUND, p);
+    g.son(rom::SPARK_SOUND, p);
 }
 
 // ---- soins (clerc, potion de soin du combattant) -----------------------------------------------
@@ -674,7 +675,7 @@ fn jump_takeoff(g: &mut Ctx, p: Player, kit: &JumpKit) {
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
-    g.sound(ext::sound::JUMP_VOICE, p);
+    g.son(ext::son::JUMP_VOICE, p);
     let kind = p.u8(g, 0x67);
     launch_jump(g, p, kit.speeds, kind);
 }
@@ -739,7 +740,7 @@ pub fn land(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     let anim = by_jump_kind(g, p, 0x18, 0x13, 0xe);
     animation::start(g, p, anim);
-    g.sound(ext::sound::LANDING, p);
+    g.son(ext::son::LANDING, p);
 }
 
 /// Pas 8 : récupération, puis retour à l'état immobile.
@@ -790,7 +791,7 @@ pub fn dash(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, 0x1e8, 8);
                 animation::start(g, p, 0x1d);
-                g.sound(ext::sound::SLIDE, p);
+                g.son(ext::son::SLIDE, p);
             }
         }
         4 => {

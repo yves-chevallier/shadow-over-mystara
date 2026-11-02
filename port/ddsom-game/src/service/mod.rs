@@ -18,13 +18,13 @@
 //! l'écran) reprennent dans une native posée à l'adresse de retour d'origine, la pile de la tâche contenant
 //! les mêmes adresses de retour que l'original.
 
-pub mod io_tests;
-pub mod memory;
-pub mod test_pattern;
-pub mod settings;
+pub mod essais;
+pub mod memoire;
+pub mod mire;
+pub mod reglages;
 
 use crate::config;
-use crate::video::Layer;
+use crate::video::Couche;
 use crate::mem::wr32;
 use crate::modes::Flow;
 use crate::scene::Ctx;
@@ -60,7 +60,7 @@ pub mod var {
     pub const PREV: u32 = 6;
     pub const LAYERS: u32 = 0x14;
     pub const FLAGS: u32 = 0x12;
-    pub const FALLS: u32 = 0x1d;
+    pub const CHUTES: u32 = 0x1d;
     pub const VARIANT: u32 = 0x70;
     pub const DEV_BOARD: u32 = 0x82;
     pub const CARD_DISPENSER: u32 = 0x84;
@@ -140,24 +140,24 @@ pub fn print(x: &mut Ctx, descriptor: u32) {
 /// Couches de l'écran coupées / rétablies (masque 0x12ce).
 pub const ALL_LAYERS: u16 = 0x12ce;
 pub fn layers_off(x: &mut Ctx) {
-    crate::video::turn_layers_off(x.b, ALL_LAYERS);
+    crate::video::desactiver_couches(x.b, ALL_LAYERS);
 }
 pub fn layers_on(x: &mut Ctx) {
-    crate::video::turn_layers_on(x.b, ALL_LAYERS);
+    crate::video::activer_couches(x.b, ALL_LAYERS);
 }
 
 /// Objets et couches effacés, palettes de la scène rechargées (0xc58, 0xca8, 0xcc8, 0xce8, 0x1a296). Rend le D0 que
 /// laisse le chargement des palettes (relu par le menu de configuration).
 pub fn clear_screen(x: &mut Ctx) -> u32 {
     clear_layers(x);
-    crate::palette::load_all_palettes(x.b)
+    crate::palette::charger_tout(x.b)
 }
 
 /// Objets et couches effacés (0xc58, 0xca8, 0xcc8, 0xce8).
 fn clear_layers(x: &mut Ctx) {
-    crate::video::clear_objects(x.b);
-    for layer in [Layer::One, Layer::Two, Layer::Three] {
-        crate::video::clear_layer(x.b, layer);
+    crate::video::vider_objets(x.b);
+    for couche in [Couche::Un, Couche::Deux, Couche::Trois] {
+        crate::video::effacer_couche(x.b, couche);
     }
 }
 
@@ -299,7 +299,7 @@ pub fn show_menu(x: &mut Ctx) -> Flow {
     for off in var::SCROLLS {
         x.set_v16(off, 0);
     }
-    crate::taches::one_frame(x, crate::taches::service::Etape::MenuAfterClear)
+    crate::taches::une_image(x, crate::taches::service::Etape::MenuAfterClear)
 }
 
 /// `0x291ec` : le menu, une fois l'écran effacé.
@@ -308,7 +308,7 @@ pub fn menu_after_clear(x: &mut Ctx) -> Flow {
     set(x, f::SECRET, 0);
     set(x, f::REPEAT_V, 1);
     x.wr16(OUTPUTS, MENU_OUTPUTS);
-    crate::video::unlock_counters(x.b, 0xf1);
+    crate::video::deverrouiller_compteurs(x.b, 0xf1);
     print(x, text::MENU);
     print(x, text::HELP);
     let line = get(x, f::CURSOR);
@@ -343,7 +343,7 @@ fn menu(x: &mut Ctx) -> Flow {
     if pressed(x) & key::SHOT1 != 0 {
         set(x, f::STATE, state::SCREEN);
         if get(x, f::CURSOR) != LAST_LINE {
-            crate::video::clear_layer(x.b, Layer::One);
+            crate::video::effacer_couche(x.b, Couche::Un);
         }
     }
     Flow::Done
@@ -352,14 +352,14 @@ fn menu(x: &mut Ctx) -> Flow {
 /// `0x292da` : l'écran de la ligne choisie.
 fn screen(x: &mut Ctx) -> Flow {
     match get(x, f::CURSOR) {
-        0 => io_tests::input(x),
-        2 => io_tests::output(x),
-        4 => io_tests::sound(x),
-        6 => test_pattern::color(x),
-        8 => test_pattern::cross_hatch(x),
-        10 => test_pattern::game_data(x),
-        12 => settings::configuration(x),
-        14 => memory::memory(x),
+        0 => essais::input(x),
+        2 => essais::output(x),
+        4 => essais::sound(x),
+        6 => mire::color(x),
+        8 => mire::cross_hatch(x),
+        10 => mire::game_data(x),
+        12 => reglages::configuration(x),
+        14 => memoire::memory(x),
         _ => exit(x),
     }
 }
@@ -372,7 +372,7 @@ fn exit(x: &mut Ctx) -> Flow {
     }
     x.set_v16(var::ACTIVE, 0);
     x.c.a[0] = BOOT_TASK;
-    crate::taches::restart(x)
+    crate::taches::recommencer(x)
 }
 
 /// `0x29a48` : départ 1P tenu et tir 1 : retour au menu.
@@ -385,7 +385,7 @@ pub fn exit_check(x: &mut Ctx) -> Flow {
 
 /// `0x29a5a` : retour au menu (le son est coupé).
 pub fn back_to_menu(x: &mut Ctx) -> Flow {
-    crate::sound::service(x.b, crate::sound::Service::GeneralStop);
+    crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
     set(x, f::STATE, state::MENU);
     // étape de l'écran et curseurs de la configuration (octets 2 à 5)
     x.wr16(MENU + f::STEP, 0);

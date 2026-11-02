@@ -6,31 +6,31 @@
 //!   lectures_rom <roms> <eeprom> <sortie.txt> <scénario>:<images> ...
 //!
 //! Variables : `DDSOM_MASQUE=n` décale de n bits les numéros de scénario du masque (pour fusionner plusieurs
-//! exécutions) ; `DDSOM_COUVERT=file` (écrit par `couverture_rom`) : pour chaque mot lu hors des zones
-//! couvertes, la sortie ajoute une ligne `s d|p address file:ligne;...` : les trois premiers appelants dans
+//! exécutions) ; `DDSOM_COUVERT=fichier` (écrit par `couverture_rom`) : pour chaque mot lu hors des zones
+//! couvertes, la sortie ajoute une ligne `s d|p adresse fichier:ligne;...` : les trois premiers appelants dans
 //! `ddsom-game/src` de la première lecture.
 //!
 //! Chaque scénario est rejoué sur la machine sans 68000 (natives seules : toute lecture compte ; un arrêt faute de
 //! native finit le scénario à cette image, signalé sur la sortie d'erreur). La sortie donne, pour chaque zone dont tous les mots sont lus par les mêmes scénarios :
-//! `d|p début fin mask reads` (hexadécimal, `d` : espace données, `p` : espace programme ; `fin` exclue ;
-//! `mask` : bit n = scénario n). Les zones sont comparées aux ressources par l'exemple `couverture_rom`
+//! `d|p début fin masque lectures` (hexadécimal, `d` : espace données, `p` : espace programme ; `fin` exclue ;
+//! `masque` : bit n = scénario n). Les zones sont comparées aux ressources par l'exemple `couverture_rom`
 //! de `ddsom-assets` (docs/assets.md).
 
 use std::fmt::Write as _;
 use std::path::Path;
 
 thread_local! {
-    static COVERED: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
-    static ORIGINALS: std::cell::RefCell<std::collections::BTreeMap<(bool, u32), String>> = const { std::cell::RefCell::new(std::collections::BTreeMap::new()) };
+    static COUVERT: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+    static ORIGINES: std::cell::RefCell<std::collections::BTreeMap<(bool, u32), String>> = const { std::cell::RefCell::new(std::collections::BTreeMap::new()) };
 }
 
 /// Appelé à la première lecture d'un mot : si les ressources ne le couvrent pas, note qui l'a lu.
-fn original(programme: bool, address: u32) {
-    let covered = COVERED.with(|c| {
+fn origine(programme: bool, adresse: u32) {
+    let couvert = COUVERT.with(|c| {
         let c = c.borrow();
-        c.is_empty() || c[programme as usize * 0x200000 + (address >> 1) as usize] != 0
+        c.is_empty() || c[programme as usize * 0x200000 + (adresse >> 1) as usize] != 0
     });
-    if covered {
+    if couvert {
         return;
     }
     let trace = std::backtrace::Backtrace::force_capture().to_string();
@@ -47,7 +47,7 @@ fn original(programme: bool, address: u32) {
             }
         }
     }
-    ORIGINALS.with(|o| o.borrow_mut().insert((programme, address), sites.join(";")));
+    ORIGINES.with(|o| o.borrow_mut().insert((programme, adresse), sites.join(";")));
 }
 
 fn main() {
@@ -59,16 +59,16 @@ fn main() {
     let ee = std::fs::read(&a[2]).ok();
     let base: usize = std::env::var("DDSOM_MASQUE").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     if let Some(f) = std::env::var_os("DDSOM_COUVERT") {
-        COVERED.with(|c| *c.borrow_mut() = std::fs::read(f).expect("fichier de couverture"));
-        cps2::bus::rom_trace::set_hook(original);
+        COUVERT.with(|c| *c.borrow_mut() = std::fs::read(f).expect("fichier de couverture"));
+        cps2::bus::rom_trace::set_hook(origine);
     }
-    ddsom_game::refuse_hybrid();
+    ddsom_game::refuser_hybride();
     let mut mask = vec![[0u32; 2]; 0x200000];
     let mut reads = vec![[0u64; 2]; 0x200000];
     for (n, spec) in a[4..].iter().enumerate() {
         let (path, frames) = spec.rsplit_once(':').expect("scénario:images");
         let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
-        ddsom_game::install_no_68k(&mut m);
+        ddsom_game::install_sans_68k(&mut m);
         let script = ddsom_game::scenario::Scenario::load(Path::new(path)).expect("scénario");
         cps2::bus::rom_trace::take();
         for f in 0..frames.parse::<usize>().unwrap() {
@@ -104,9 +104,9 @@ fn main() {
             writeln!(out, "{name} {:06x} {:06x} {m:x} {n}", 2 * start, 2 * w).unwrap();
         }
     }
-    ORIGINALS.with(|o| {
-        for (&(p, address), sites) in o.borrow().iter() {
-            writeln!(out, "s {} {address:06x} {sites}", if p { 'p' } else { 'd' }).unwrap();
+    ORIGINES.with(|o| {
+        for (&(p, adresse), sites) in o.borrow().iter() {
+            writeln!(out, "s {} {adresse:06x} {sites}", if p { 'p' } else { 'd' }).unwrap();
         }
     });
     std::fs::write(&a[3], out).unwrap();

@@ -1,5 +1,5 @@
 //! Trace des états des boss d'un scénario : à chaque changement de (type, +4..+7, PV) d'un objet BOSS,
-//! une ligne `image slot type état PV`. Montre quelles phases (dont la mort) un scénario exerce.
+//! une ligne `image emplacement type état PV`. Montre quelles phases (dont la mort) un scénario exerce.
 //!   boss_trace <roms> <eeprom> <scénario> <images>
 use std::path::Path;
 

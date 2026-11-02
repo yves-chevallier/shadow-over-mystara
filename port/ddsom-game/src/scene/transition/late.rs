@@ -107,21 +107,21 @@ crate::etapes! {
             sprites_next_frame(x, Etape::S33Clear)
         },
         S33Clear = 0xf9938 => |x| {
-            crate::video::clear_objects(x.b);
+            crate::video::vider_objets(x.b);
             hide_layers(x, At(Etape::S33Hidden.into()))
         },
         S33Hidden = 0xf9942 => |x| {
-            clear_layer(x.b, Layer::Three);
+            effacer_couche(x.b, Couche::Trois);
             dark_palette(x, 88);
             // 0x1a366 (A0-A6 gardés) : palettes de la scène 33
-            crate::palette::load_scene_palettes_of(x.b, 33);
+            crate::palette::charger_palettes_de_scene(x.b, 33);
             yield_frames(x, 4, At(Etape::S33Dark.into()))
         },
         S33Dark = 0xf996a => |x| {
             tiles(x, TB, 0x20f, SCROLL_2);
             show_layers(x, At(Etape::S33Drawn2.into()))
         },
-        S33Drawn2 = 0xf9980 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::rise, At(Etape::S33Shown2.into())),
+        S33Drawn2 = 0xf9980 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::montee, At(Etape::S33Shown2.into())),
         S33Shown2 = 0xf9984 => |x| {
             if try_message(x, 40) {
                 next(x);
@@ -132,27 +132,27 @@ crate::etapes! {
         S33Retry40 = 0xf9998 => s33_object,
         S33EndFaded = 0xf99cc => |x| hide_layers(x, At(Etape::S33EndHidden.into())),
         S33EndHidden = 0xf99d0 => |x| {
-            clear_layer(x.b, Layer::Two);
+            effacer_couche(x.b, Couche::Deux);
             show_layers(x, At(Etape::S33End.into()))
         },
         S33End = 0xf99da => |x| finish(x, 34),
         S32Shown = 0xf9a4a => |x| {
             crate::families::petites::fond_1_allume(x.b);
             next(x);
-            fade_task(x, 3, ALL_PAGES, crate::scene::fondu::RISE);
+            fade_task(x, 3, ALL_PAGES, crate::scene::fondu::MONTEE);
             Flow::Done
         },
         /// Glitch d'origine : la reprise ne recharge pas D0 : l'original rouvre alors le message 1 (D0 de l'attente).
         S32Retry59 = 0xf9a7e => |x| s32_message_59(x, 1),
         S32Hidden = 0xf9acc => |x| {
-            clear_layer(x.b, Layer::Two);
-            clear_layer(x.b, Layer::Three);
+            effacer_couche(x.b, Couche::Deux);
+            effacer_couche(x.b, Couche::Trois);
             s32_message_60(x)
         },
         S32Retry60 = 0xf9af0 => s32_message_60,
         S32SecondShown = 0xf9b40 => |x| {
             next(x);
-            fade(x, SCENE_PAGES, crate::taches::fondu::rise, At(Etape::S32SecondIn.into()))
+            fade(x, SCENE_PAGES, crate::taches::fondu::montee, At(Etape::S32SecondIn.into()))
         },
         S32SecondIn = 0xf9b46 => s32_message_61,
         S32Retry61 = 0xf9b5a => s32_message_61,
@@ -160,8 +160,8 @@ crate::etapes! {
         S32Retry62 = 0xf9ba0 => s32_message_62,
         S32Faded = 0xf9bba => |x| hide_layers(x, At(Etape::S32End.into())),
         S32End = 0xf9bbe => |x| {
-            clear_layer(x.b, Layer::Two);
-            clear_layer(x.b, Layer::Three);
+            effacer_couche(x.b, Couche::Deux);
+            effacer_couche(x.b, Couche::Trois);
             end(x)
         },
         S38Drawn = 0xf9c54 => |x| {
@@ -172,18 +172,18 @@ crate::etapes! {
         S38Retry73 = 0xf9cbe => s38_message_73,
         S38Gone = 0xf9cfc => |x| {
             set8(x, var::SIGNAL, 0);
-            crate::video::clear_objects(x.b);
+            crate::video::vider_objets(x.b);
             hide_layers(x, At(Etape::S38Hidden.into()))
         },
         S38Hidden = 0xf9d0a => |x| home_cameras(x, At(Etape::S38Homed.into())),
         S38Homed = 0xf9d0e => |x| {
-            clear_layer(x.b, Layer::Three);
-            clear_layer(x.b, Layer::Two);
+            effacer_couche(x.b, Couche::Trois);
+            effacer_couche(x.b, Couche::Deux);
             yield_frames(x, 4, At(Etape::S38Scenery.into()))
         },
         S38Scenery = 0xf9d22 => |x| {
             // décor 540, ou 551 si un joueur en jeu est dans la posture 11 (le premier dans la posture 10 arrête la recherche)
-            let mut scenery = 540;
+            let mut decor = 540;
             for k in 0..4u32 {
                 let p = A5 + a5::PLAYERS + k * 0x200;
                 if rd8(x.b, p) == 0 || (rd8(x.b, p + 4) as i8) >= 4 {
@@ -191,24 +191,24 @@ crate::etapes! {
                 }
                 match rd8(x.b, p + 3) {
                     10 => break,
-                    11 => scenery = 551,
+                    11 => decor = 551,
                     _ => {}
                 }
             }
-            tiles(x, TB, scenery, SCROLL_2);
+            tiles(x, TB, decor, SCROLL_2);
             show_layers(x, At(Etape::S38SceneryShown.into()))
         },
-        S38SceneryShown = 0xf9d70 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::rise, At(Etape::S38SceneryIn.into())),
+        S38SceneryShown = 0xf9d70 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::montee, At(Etape::S38SceneryIn.into())),
         S38SceneryIn = 0xf9d74 => s38_message_98,
         S38Retry98 = 0xf9d88 => s38_message_98,
         S38LastFaded = 0xf9da2 => |x| hide_layers(x, At(Etape::S38LastHidden.into())),
         S38LastHidden = 0xf9da6 => |x| yield_frames(x, 4, At(Etape::S38LastScenery.into())),
         S38LastScenery = 0xf9dae => |x| {
-            let last_tile = tiles(x, TB, 0x21d, SCROLL_2);
-            tiles(x, TB, 0x21e, last_tile);
+            let fin = tiles(x, TB, 0x21d, SCROLL_2);
+            tiles(x, TB, 0x21e, fin);
             show_layers(x, At(Etape::S38LastShown.into()))
         },
-        S38LastShown = 0xf9dd0 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::rise, At(Etape::S38LastIn.into())),
+        S38LastShown = 0xf9dd0 => |x| fade(x, SCENE_PAGES, crate::taches::fondu::montee, At(Etape::S38LastIn.into())),
         S38LastIn = 0xf9dd4 => s38_message_74,
         S38Retry74 = 0xf9de8 => s38_message_74,
         S38End = 0xf9e26 => |x| {
@@ -217,10 +217,10 @@ crate::etapes! {
         },
         S46Homed = 0xf9e7c => |x| {
             x.set_v8(0x3c, 0xff);
-            let last_tile = tiles(x, TB2, 385, 0x91b000);
-            tiles(x, TB2, 386, last_tile);
-            let last_tile = tiles(x, TB2, 387, SCROLL_3);
-            tiles(x, TB2, 388, last_tile);
+            let fin = tiles(x, TB2, 385, 0x91b000);
+            tiles(x, TB2, 386, fin);
+            let fin = tiles(x, TB2, 387, SCROLL_3);
+            tiles(x, TB2, 388, fin);
             set8(x, var::SIGNAL, 0);
             if try_set_object(x, 12).is_none() {
                 return Flow::Done;
@@ -240,16 +240,16 @@ crate::etapes! {
             yield_frames(x, 1, At(Etape::S46Shown.into()))
         },
         S46Shown = 0xf9f0c => |x| {
-            fade_task(x, 3, ALL_PAGES, crate::scene::fondu::RISE);
+            fade_task(x, 3, ALL_PAGES, crate::scene::fondu::MONTEE);
             Flow::Done
         },
         S46Gone = 0xf9f96 => |x| {
-            crate::video::clear_objects(x.b);
+            crate::video::vider_objets(x.b);
             hide_layers(x, At(Etape::S46Hidden.into()))
         },
         S46Hidden = 0xf9fa0 => |x| {
-            clear_layer(x.b, Layer::Two);
-            clear_layer(x.b, Layer::Three);
+            effacer_couche(x.b, Couche::Deux);
+            effacer_couche(x.b, Couche::Trois);
             home_cameras(x, At(Etape::S46End.into()))
         },
         S46End = 0xf9fb0 => |x| {
@@ -258,7 +258,7 @@ crate::etapes! {
         },
         FinaleFaded = 0xfa058 => |x| {
             fondu::PAGES.set(x.b, ALL_PAGES);
-            fondu::DELAY.set(x.b, 1);
+            fondu::DELAI.set(x.b, 1);
             goto(x, crate::taches::fondu::descente, At(Etape::FinaleBlack.into()))
         },
         FinaleBlack = 0xfa06a => |x| {
@@ -266,10 +266,10 @@ crate::etapes! {
             yield_frames(x, 1, At(Etape::FinalePalettes.into()))
         },
         FinalePalettes = 0xfa078 => |x| {
-            crate::palette::load_scene_palettes(x.b);
+            crate::palette::charger_palettes_de_la_scene(x.b);
             copy_palettes(x, PALETTE_SAVE, PALETTE_PAGE);
-            crate::palette::load_scene_page(x.b, 2);
-            crate::palette::load_scene_page(x.b, 3);
+            crate::palette::charger_page_de_la_scene(x.b, 2);
+            crate::palette::charger_page_de_la_scene(x.b, 3);
             yield_frames(x, 4, At(Etape::FinaleEnd.into()))
         },
         FinaleEnd = 0xfa0a2 => |x| {
@@ -345,8 +345,8 @@ pub fn scene_33(x: &mut Ctx) -> Flow {
     match dispatch(x, var::STATE, 0xf9884) {
         0 => {
             tiles(x, TB, 0x207, SCROLL_2);
-            let last_tile = tiles(x, TB2, 0x158, SCROLL_3);
-            tiles(x, TB2, 0x159, last_tile);
+            let fin = tiles(x, TB2, 0x158, SCROLL_3);
+            tiles(x, TB2, 0x159, fin);
             set8(x, var::SIGNAL, 0);
             s33_object(x)
         }
@@ -393,14 +393,14 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
         0 => {
             x.set_v16(a5::LAYERS, 0x138e);
             crate::sound::jouer_global(x.b, ext::MUSIC_B);
-            let last_tile = tiles(x, TB, 0x228, SCROLL_2);
-            tiles(x, TB, 0x229, last_tile);
-            let last_tile = tiles(x, TB2, 0x15a, SCROLL_3);
-            tiles(x, TB2, 0x15b, last_tile);
+            let fin = tiles(x, TB, 0x228, SCROLL_2);
+            tiles(x, TB, 0x229, fin);
+            let fin = tiles(x, TB2, 0x15a, SCROLL_3);
+            tiles(x, TB2, 0x15b, fin);
             show_layers(x, At(Etape::S32Shown.into()))
         }
         2 => {
-            if fondu::STEP.get(x.b) != 0 {
+            if fondu::PAS.get(x.b) != 0 {
                 return Flow::Done;
             }
             s32_message_59(x, 59)
@@ -409,12 +409,12 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
             if message_done(x) {
                 sound(x, 0);
                 next(x);
-                fade_task(x, 3, SCENE_PAGES, crate::scene::fondu::DESCENT);
+                fade_task(x, 3, SCENE_PAGES, crate::scene::fondu::DESCENTE);
             }
             Flow::Done
         }
         6 => {
-            if fondu::STEP.get(x.b) != 0 {
+            if fondu::PAS.get(x.b) != 0 {
                 return Flow::Done;
             }
             x.set_v16(0x51e, 4);
@@ -430,8 +430,8 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
             }
             crate::sound::jouer_global(x.b, ext::MUSIC_F);
             tiles(x, TB, 0x226, SCROLL_2);
-            let last_tile = tiles(x, TB2, 8, SCROLL_3);
-            tiles(x, TB2, 8, last_tile);
+            let fin = tiles(x, TB2, 8, SCROLL_3);
+            tiles(x, TB2, 8, fin);
             wr16(x.b, 0x91cc00, 0);
             show_layers(x, At(Etape::S32SecondShown.into()))
         }
@@ -439,11 +439,11 @@ pub fn scene_32(x: &mut Ctx) -> Flow {
             if !message_done(x) {
                 return Flow::Done;
             }
-            fondu::DELAY.set(x.b, 1);
+            fondu::DELAI.set(x.b, 1);
             fondu::PAGES.set(x.b, 12);
             x.set_v16(0x49a, 15);
             x.set_v16(0x49e, 15);
-            goto(x, crate::taches::fondu::to_colours, At(Etape::S32Coloured.into()))
+            goto(x, crate::taches::fondu::vers_les_couleurs, At(Etape::S32Coloured.into()))
         }
         12 => {
             if !message_done(x) {
@@ -485,8 +485,8 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
             next(x);
             crate::sound::jouer_global(x.b, ext::MUSIC_G);
             set_camera(x, a5::CAM2_Y, 8);
-            let last_tile = tiles(x, TB2, 0x15c, SCROLL_3);
-            tiles(x, TB2, 0x15d, last_tile);
+            let fin = tiles(x, TB2, 0x15c, SCROLL_3);
+            tiles(x, TB2, 0x15d, fin);
             set8(x, var::SIGNAL, 0);
             for n in [4, 5] {
                 system_object_untested(x, n);
@@ -518,12 +518,12 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
         8 => {
             if message_done(x) {
                 next(x);
-                fade_task(x, 4, SCENE_PAGES, crate::scene::fondu::DESCENT);
+                fade_task(x, 4, SCENE_PAGES, crate::scene::fondu::DESCENTE);
             }
             Flow::Done
         }
         10 => {
-            if fondu::STEP.get(x.b) != 0 {
+            if fondu::PAS.get(x.b) != 0 {
                 return Flow::Done;
             }
             set8(x, var::SIGNAL, 0xff);
@@ -542,9 +542,9 @@ pub fn scene_38(x: &mut Ctx) -> Flow {
             }
             copy_palettes(x, PALETTE_PAGE, PALETTE_SAVE);
             crate::sound::jouer_global(x.b, ext::MUSIC_H);
-            fondu::DELAY.set(x.b, 1);
+            fondu::DELAI.set(x.b, 1);
             fondu::PAGES.set(x.b, ALL_PAGES);
-            goto(x, crate::taches::fondu::to_white, At(Etape::S38End.into()))
+            goto(x, crate::taches::fondu::vers_le_blanc, At(Etape::S38End.into()))
         }
         _ => Flow::Done,
     }
@@ -580,12 +580,12 @@ pub fn scene_46(x: &mut Ctx) -> Flow {
         0 => {
             // palettes de la scène 7
             x.set_v8(a5::SCENE, 7);
-            crate::palette::load_scene_palettes(x.b);
+            crate::palette::charger_palettes_de_la_scene(x.b);
             x.set_v8(a5::SCENE, 46);
             home_cameras(x, At(Etape::S46Homed.into()))
         }
         2 => {
-            if get8(x, var::SUB) == 0 && fondu::STEP.get(x.b) == 0 {
+            if get8(x, var::SUB) == 0 && fondu::PAS.get(x.b) == 0 {
                 message_untested(x, 69);
                 next_sub(x);
             }
@@ -594,13 +594,13 @@ pub fn scene_46(x: &mut Ctx) -> Flow {
                 return Flow::Done;
             }
             next(x);
-            fondu::STEP.set(x.b, 1);
-            fade_task(x, 4, ALL_PAGES, crate::scene::fondu::DESCENT);
+            fondu::PAS.set(x.b, 1);
+            fade_task(x, 4, ALL_PAGES, crate::scene::fondu::DESCENTE);
             Flow::Done
         }
         4 => {
             descend(x);
-            if fondu::STEP.get(x.b) != 0 {
+            if fondu::PAS.get(x.b) != 0 {
                 return Flow::Done;
             }
             set8(x, var::SIGNAL, 0xff);
@@ -627,10 +627,10 @@ pub fn finale(x: &mut Ctx) -> Flow {
             fondu::PAGES.set(x.b, 12);
             crate::palette::full_brightness(x.b);
             crate::sound::jouer_global(x.b, ext::MUSIC_FINALE);
-            let last_tile = tiles(x, TB, 544, 0x915000);
-            tiles(x, TB, 545, last_tile);
-            let last_tile = tiles(x, TB2, 389, 0x919000);
-            tiles(x, TB2, 390, last_tile);
+            let fin = tiles(x, TB, 544, 0x915000);
+            tiles(x, TB, 545, fin);
+            let fin = tiles(x, TB2, 389, 0x919000);
+            tiles(x, TB2, 390, fin);
             x.set_v16(a5::LAYERS, 0x12cc);
             set16(x, var::MESSAGE, 180);
             Flow::Done
@@ -647,8 +647,8 @@ pub fn finale(x: &mut Ctx) -> Flow {
             x.set_v8(a5::LAYERS + 1, layers | 4);
             copy_palettes(x, PALETTE_PAGE, PALETTE_SAVE);
             fondu::PAGES.set(x.b, 12);
-            fondu::DELAY.set(x.b, 1);
-            goto(x, crate::taches::fondu::to_white, At(Etape::FinaleFaded.into()))
+            fondu::DELAI.set(x.b, 1);
+            goto(x, crate::taches::fondu::vers_le_blanc, At(Etape::FinaleFaded.into()))
         }
     }
 }

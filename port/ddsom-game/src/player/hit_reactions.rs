@@ -14,9 +14,7 @@ use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use super::{ram, Ctx, Player};
-use crate::mem::{rd16, rd8, rts, wr8};
-use crate::Native;
-use crate::player::external as ext;
+use crate::mem::{rd16, rd8, wr8};
 
 mod tables {
     /// Par classe de l'attaquant (pointeurs) puis type de victime (pointeurs) : lignes de réaction.
@@ -116,7 +114,7 @@ pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
                         wr8(g.b, att + f::WAND_CHARGE, charge - 1);
                         if charge - 1 == 5 {
                             g.c.d[0] = 0xf;
-                            g.rom(ext::effect::WAND, a);
+                            crate::families::creators::set_a_68k(g.c, g.b, a.obj(), 0xf);
                         }
                     }
                 }
@@ -189,20 +187,12 @@ fn set_stun_time(g: &mut Ctx, v: u32) {
     wr8(g.b, v + f::STUN_TIME, time);
 }
 
-fn enemy_reacts_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let (a, v) = (Player(c.a[0]), c.a[1]);
+/// `enemy_reacts` for the hit resolution (`combat`), still on the processor: the registers are left like the
+/// original leaves them (A0 = the attacker, A1 = the victim, A2 = the threshold table, which the hit resolution reads
+/// back).
+pub fn enemy_reacts_68k(c: &mut Cpu, b: &mut Cps2Bus, a: Player, v: u32) {
     let is_enemy = rd8(b, v + f::CLASS) == CLASS_ENEMY;
     enemy_reacts(&mut Ctx::new(c, b), a, v);
-    // l'original laisse dans A2 la table de seuils choisie ; la résolution des coups la relit
     c.a[2] = if is_enemy { tables::THRESHOLD_ENEMY } else { tables::THRESHOLD_OTHER };
     (c.a[0], c.a[1]) = (a.0, v);
-    rts(c, b);
 }
-
-pub const ENEMY_REACTS: Native = Native {
-    entry: 0xf232e,
-    name: "enemy_reacts_to_player_hit",
-    run: crate::Corps::Processeur(enemy_reacts_native),
-    touches_sound: false,
-    outputs: crate::regs::a(0) | crate::regs::a(1) | crate::regs::a(2),
-};

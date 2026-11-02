@@ -20,11 +20,11 @@ pub(crate) mod late;
 
 use super::Ctx;
 use crate::scene::fondu;
-use crate::video::{charger_grille, clear_layer, Layer, Grille};
+use crate::video::{charger_grille, effacer_couche, Couche, Grille};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::objects::Obj;
-use crate::taches::table::Next;
+use crate::taches::table::Suite;
 use crate::Native;
 
 /// Variables du script (A6).
@@ -65,7 +65,7 @@ const SCENE_PAGES: u8 = 13;
 
 /// Grilles de blocs de tuiles : couche 2 (0x26d4) et couche 3 (0x2766).
 const TB: Grille = Grille::Couche2;
-const TB2: Grille = Grille::Layer3;
+const TB2: Grille = Grille::Couche3;
 
 /// Plans des décors : plan 1 (caractères), plan 2 et plan 3, en GFX RAM.
 const SCROLL_2: u32 = 0x917000;
@@ -75,7 +75,7 @@ const SCROLL_3: u32 = 0x91b800;
 /// (`bra`, l'aiguillage de la sortie de scène).
 #[derive(Clone, Copy)]
 enum Ret {
-    At(Next),
+    At(Suite),
     Caller,
 }
 use Ret::{At, Caller};
@@ -138,8 +138,8 @@ fn layers_and(x: &mut Ctx, mask: u16) {
 
 /// Bloc de tuiles `n` de la grille à `destination` ; rend la case qui suit (A1 de l'original : le bloc suivant
 /// d'une suite s'y écrit).
-fn tiles(x: &mut Ctx, grid: Grille, n: u16, destination: u32) -> u32 {
-    charger_grille(x.b, grid, n, destination).destination
+fn tiles(x: &mut Ctx, grille: Grille, n: u16, destination: u32) -> u32 {
+    charger_grille(x.b, grille, n, destination).destination
 }
 
 /// Commande son 0xff07 de la ligne `ligne` (0xe0a82, sans verrou).
@@ -176,7 +176,7 @@ fn end(x: &mut Ctx) -> Flow {
 /// Cède `n` images (`moveq #n,D0 ; jsr/jmp 0xa40`).
 fn yield_frames(x: &mut Ctx, n: u32, ret: Ret) -> Flow {
     x.c.d[0] = n;
-    goto(x, crate::taches::wait_then_return, ret)
+    goto(x, crate::taches::attendre_puis_revenir, ret)
 }
 
 /// Saute à un sous-programme qui cède (`bsr`, ou `bra` qui revient à l'appelant du script), en rangeant la suite
@@ -199,9 +199,9 @@ fn show_and_fade_in(x: &mut Ctx, ret: Ret) -> Flow {
 crate::etapes! {
     /// Étapes (points de reprise) de la machine à états.
     pub enum Etape {
-        FadeInAfterFrame = 0xfa110 => |x| fade(x, ALL_PAGES, crate::taches::fondu::rise, Caller),
+        FadeInAfterFrame = 0xfa110 => |x| fade(x, ALL_PAGES, crate::taches::fondu::montee, Caller),
         SpritesAfterFrame = 0xfa1ca => |x| {
-            crate::sprites::build_68k(x.c, x.b);
+            crate::sprites::construire_68k(x.c, x.b);
             Flow::Done
         },
     }
@@ -209,14 +209,14 @@ crate::etapes! {
 
 /// Fondu (délai 3) des `pages` vers le noir (0x1460) ou depuis le noir (0x144c) : 0xfa122, 0xfa134, 0xfa146.
 fn fade(x: &mut Ctx, pages: u8, routine: fn(&mut Ctx) -> Flow, ret: Ret) -> Flow {
-    fondu::DELAY.set(x.b, 3);
+    fondu::DELAI.set(x.b, 3);
     fondu::PAGES.set(x.b, pages);
     goto(x, routine, ret)
 }
 
 /// Fondu avec délai et pages donnés, sans attendre sa fin : tâche de fondu `task` (0xfa1fa, 0xfa214).
 fn fade_task(x: &mut Ctx, delay: u16, pages: u8, task: u32) {
-    fondu::DELAY.set(x.b, delay);
+    fondu::DELAI.set(x.b, delay);
     fondu::PAGES.set(x.b, pages);
     start_task(x, task);
 }
@@ -249,7 +249,7 @@ fn home_cameras(x: &mut Ctx, ret: Ret) -> Flow {
 }
 
 /// 0xfa1c2 : une image, puis la liste de sprites (reprise 0xfa1ca), retour en `ret`.
-fn sprites_next_frame(x: &mut Ctx, ret: impl Into<Next>) -> Flow {
+fn sprites_next_frame(x: &mut Ctx, ret: impl Into<Suite>) -> Flow {
     x.push_return(ret);
     x.wait(1, Etape::SpritesAfterFrame)
 }
@@ -257,8 +257,8 @@ fn sprites_next_frame(x: &mut Ctx, ret: impl Into<Next>) -> Flow {
 /// 0xfa1e2 : mise à jour du monde (A0 et A6 gardés).
 fn world(x: &mut Ctx) {
     let (a0, a6) = (x.c.a[0], x.c.a[6]);
-    // sonde `rendu` (voir `dispatch::Class::update_no_next`)
-    crate::diag::registres_morts(x.c, "rendu", crate::diag::TASK_REGS);
+    // sonde `rendu` (voir `dispatch::Class::update_sans_suite`)
+    crate::diag::registres_morts(x.c, "rendu", crate::diag::REGISTRES_DE_TACHE);
     let flow = crate::game::update_world(x.c, x.b);
     assert!(flow == Flow::Done, "script de transition : un gestionnaire a cédé la main pendant la mise à jour du monde");
     (x.c.a[0], x.c.a[6]) = (a0, a6);
@@ -273,7 +273,7 @@ fn reset_pools(x: &mut Ctx) {
 
 /// 0xfa22e : palette `n` des pages de fond (0x1a67e), puis noir sur la page 2.
 fn dark_palette(x: &mut Ctx, n: u16) {
-    crate::palette::load_palette_page(x.b, 2, n);
+    crate::palette::charger_page(x.b, 2, n);
     fondu::PAGES.set(x.b, 4);
     crate::palette::no_brightness(x.b);
 }
@@ -329,16 +329,16 @@ fn message_untested(x: &mut Ctx, n: u8) -> Obj {
 }
 /// Boucle `moveq #n,D0 ; jsr 0xc8312 ; bcc ; moveq #1,D0 ; jsr 0xa40 ; bra` : vrai si le message est ouvert ;
 /// sinon la tâche cède une image et reprendra en `retry`.
-fn message(x: &mut Ctx, n: u8, retry: impl Into<Next>) -> bool {
+fn message(x: &mut Ctx, n: u8, retry: impl Into<Suite>) -> bool {
     try_message(x, n) || retry_next_frame(x, retry)
 }
-fn retry_next_frame(x: &mut Ctx, retry: impl Into<Next>) -> bool {
+fn retry_next_frame(x: &mut Ctx, retry: impl Into<Suite>) -> bool {
     yield_frames(x, 1, At(retry.into()));
     false
 }
 
 /// Objet système de variante `n` (0xddeaa) qui reçoit l'adresse des variables ; sinon cède et reprendra en `retry`.
-fn system_object(x: &mut Ctx, n: u8, retry: impl Into<Next>) -> Option<Obj> {
+fn system_object(x: &mut Ctx, n: u8, retry: impl Into<Suite>) -> Option<Obj> {
     let Ok(o) = crate::effects_aids::decor_6(x.b, n) else {
         retry_next_frame(x, retry);
         return None;
@@ -356,7 +356,7 @@ fn try_set_object(x: &mut Ctx, n: u8) -> Option<Obj> {
     let o = crate::families::creators::set_15_pur(x.b, n).ok()?;
     Some(attach(x, o))
 }
-fn set_object(x: &mut Ctx, n: u8, retry: impl Into<Next>) -> bool {
+fn set_object(x: &mut Ctx, n: u8, retry: impl Into<Suite>) -> bool {
     try_set_object(x, n).is_some() || retry_next_frame(x, retry)
 }
 /// `move.l A6,0x4c(A1)` : l'objet créé connaît les variables du script (A6 de l'original).

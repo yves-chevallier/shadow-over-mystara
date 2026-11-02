@@ -23,7 +23,7 @@ use m68k::Cpu;
 use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, set_low_word, wr32, wr8, A5};
 use crate::objects::{pools, Obj};
 use crate::scene::var;
-use crate::{call, Native};
+use crate::Native;
 
 /// État du lecteur (octet) et curseur dans le script (long).
 const STATE: u32 = A5 - 0x55cc;
@@ -62,6 +62,23 @@ mod entry {
     pub const VARIANT: u32 = 0xe;
     pub const FIELD_2F: u32 = 0xf;
     pub const FIELD_42: u32 = 0x10;
+}
+
+/// The routines called by the `call` entries of the scene scripts (all those of the ROM's scripts: table 0xf2f62),
+/// with their argument (the D0.w of the entry); the registers are left like the original routines leave them.
+fn script_routine(c: &mut Cpu, b: &mut Cps2Bus, routine: u32, arg: u16) {
+    use crate::families::{effects_creators, petites, set_b, set_residu::camera};
+    match routine {
+        0x2a24 => camera::set_limit_x(c, b, arg),
+        0x2a2a => camera::set_position_y(c, b, arg),
+        0x2a30 => camera::set_mode(c, b, arg as u8),
+        0xa8ae8 => {
+            effects_creators::set_list_d0_68k(c, b, arg);
+        }
+        0xd40e8 => set_b::spawn_bumpers(c, b),
+        0xdd12c => petites::item_lock_clear(c, b),
+        r => unreachable!("scene script routine {r:#x}: the ROM's scripts only call 0x2a24, 0x2a2a, 0x2a30, 0xa8ae8, 0xd40e8, 0xdd12c"),
+    }
 }
 
 /// Un pas du lecteur (une image).
@@ -104,7 +121,7 @@ pub fn step(c: &mut Cpu, b: &mut Cps2Bus) {
         if rd16(b, cursor + entry::OFFSET_X) == CALL_MARK {
             c.a[1] = rd32(b, cursor + 4);
             set_low_word(&mut c.d[0], rd16(b, cursor + 8));
-            call(c, b, c.a[1]);
+            script_routine(c, b, c.a[1], c.d[0] as u16);
             cursor += CALL_ENTRY_SIZE;
             continue;
         }
@@ -200,7 +217,7 @@ pub const SPAWN_SCRIPT: Native = Native {
 pub const SCRIPT_RESET: Native = Native {
     entry: RESET_ENTRY,
     name: "scene_script_reset",
-    run: crate::Corps::Memory(reset),
+    run: crate::Corps::Memoire(reset),
     touches_sound: false,
     outputs: 0,
 };

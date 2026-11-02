@@ -43,7 +43,7 @@ mod shot0 {
     const FALL_DROP: u8 = 2;
     const FALL_BLINK: u8 = 4;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 if !spawn(x) {
@@ -82,7 +82,7 @@ mod shot0 {
     }
 
     /// Vol : détruit au contact, s'arrête sur les terrains 5 à 8 sans mur (bit 6), sinon avance.
-    fn fly(x: &mut Cx) {
+    fn fly<R: Banc>(x: &mut Cx<'_, R>) {
         let hit = x.u8(f::HIT_FLAGS);
         if hit & 0x08 != 0 {
             crate::sound::jouer(x.b, sfx::E7376, x.o);
@@ -106,7 +106,7 @@ mod shot0 {
     }
 
     /// Chute après l'impact : tombe, puis clignote 20 images avant de disparaître.
-    fn fall(x: &mut Cx) {
+    fn fall<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x6) {
             FALL_START => {
                 x.add8(0x6, 2);
@@ -156,7 +156,7 @@ mod shot1 {
     const LANDED: u8 = 2;
     const BLINK: u8 = 4;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.set8(f::BOX_SET, 7);
@@ -203,7 +203,7 @@ mod shot1 {
         }
     }
 
-    fn body(x: &mut Cx) {
+    fn body<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             LOB => {
                 if !x.move_xyz().gt() {
@@ -244,7 +244,7 @@ mod shot1 {
     }
 
     /// Fin du gestionnaire quand l'état est inchangé : liste triée puis retrait hors écran.
-    fn finish(x: &mut Cx) {
+    fn finish<R: Banc>(x: &mut Cx<'_, R>) {
         x.reinsert();
         x.cull_offscreen();
     }
@@ -361,7 +361,7 @@ mod shot4 {
     const BOUNCING: u8 = 2;
     const EXPLODING: u8 = 4;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => {
@@ -401,7 +401,7 @@ mod shot4 {
         x.anim_start(ANIMS, 0);
     }
 
-    fn fall(x: &mut Cx) {
+    fn fall<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_xz();
         x.anim_step();
         x.cull_offscreen();
@@ -419,7 +419,7 @@ mod shot4 {
         }
     }
 
-    fn bounce(x: &mut Cx) {
+    fn bounce<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_by_table_xy();
         x.anim_step();
         x.cull_offscreen();
@@ -840,7 +840,7 @@ mod shot10 {
     const ANIMS: u32 = 0x16da84;
     const PLACEMENT: u32 = 0x9f3c8;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -848,7 +848,8 @@ mod shot10 {
                 x.set8(f::ATTACK_ID, 1);
                 x.set8(f::BOX_SET, 0x40);
                 x.add32(0x10, u32::MAX);
-                let row = PLACEMENT.wrapping_add(x.c.d[5] as u16 as i16 as i32 as u32);
+                // Original glitch: the placement row is the low word of D5, left by the previous handler
+                let row = PLACEMENT.wrapping_add(*x.c.d5() as u16 as i16 as i32 as u32);
                 let (z, dx) = (x.rom16(row), x.rom16(row + 2));
                 x.set16(0xc, z);
                 let flip = x.u8(f::FLIP) != 0;
@@ -1019,9 +1020,11 @@ mod shot13 {
 
     const ANIMS: u32 = 0x17a276;
     const OFFSETS: u32 = 0x9f776;
+    /// The handler's address (A1 left by the dispatch loop).
+    const HANDLER: u32 = 0x9f67c;
     const CURRENT_ANIM: u32 = 0x42;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 if x.a5_u8(GAME_PAUSED) != 0 {
@@ -1054,13 +1057,14 @@ mod shot13 {
         }
     }
 
-    /// Colle l'effet au propriétaire (0x9f712). Sans propriétaire, l'effet passe à l'état 6 (`move.l #0x6000000,(4,A0)`
-    /// en 0x9f692, dont le `rts` revient à l'appelant, qui continue) et A1 garde la valeur laissée par le dispatch
-    /// (adresse du gestionnaire).
-    fn attach(x: &mut Cx) -> Obj {
+    /// Sticks the effect to its owner (0x9f712). Without an owner, the effect goes to state 6 (`move.l #0x6000000,(4,A0)`
+    /// at 0x9f692, whose `rts` returns to the caller, which goes on) and A1 keeps the value left by the dispatch loop.
+    /// Original glitch: that A1 is the handler's address (0x9f67c); the "owner's `+0xa1`" byte read next is a constant
+    /// byte of its code.
+    fn attach<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
         if x.u16(f::OWNER) == 0 {
             x.set32(0x4, 0x0600_0000);
-            return Obj(x.c.a[1]);
+            return Obj(HANDLER);
         }
         let owner = x.linked(f::OWNER);
         for off in [0x8, 0x10, 0xc] {
@@ -1102,7 +1106,7 @@ mod shot14 {
     const ACTIVE: u8 = 2;
     const ENDING: u8 = 4;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             START => {
                 if x.a5_u8(GAME_PAUSED) != 0 {
@@ -1177,13 +1181,13 @@ mod shot14 {
 
     /// Premier sous-état de la phase active : selon la variante et les drapeaux d'attaque du
     /// propriétaire, fixe les états (`+4..+7`) de la partie, puis anime.
-    fn enter(x: &mut Cx, owner: Obj) {
+    fn enter<R: Banc>(x: &mut Cx<'_, R>, owner: Obj) {
         attach(x);
         let v = x.u8(0x3);
-        let flags = |x: &mut Cx, off: u32| owner.u8(x.b, off) >> (v & 7) & 1 != 0;
+        let flags = |x: &mut Cx<'_, R>, off: u32| owner.u8(x.b, off) >> (v & 7) & 1 != 0;
         let (launched, preparing) = (flags(x, LAUNCHED), flags(x, PREPARING));
         let owner_state = owner.u32(x.b, 0x4);
-        let remap = |x: &mut Cx, rules: &[(u32, u32)]| {
+        let remap = |x: &mut Cx<'_, R>, rules: &[(u32, u32)]| {
             for &(from, to) in rules {
                 if owner_state == from {
                     x.set32(0x4, to);
@@ -1401,7 +1405,7 @@ mod shot14 {
 
     /// Phase 4, sous-état 0 : relâche le drapeau de préparation du propriétaire et lance
     /// l'animation de fin choisie par `+6`.
-    fn finish(x: &mut Cx) {
+    fn finish<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x5, 2);
         let v = x.u8(0x3);
         let owner = x.linked(f::OWNER);
@@ -1439,7 +1443,7 @@ mod shot5 {
     const BOXES: u32 = 0x9e55c;
     const HOST: u32 = 0x46;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -1507,12 +1511,12 @@ mod shot5 {
     }
 
     /// Tableau de cadres numéro `set` d'une table de décalages (mots, relatifs à la table).
-    fn table(x: &mut Cx, base: u32, set: u32) -> u32 {
+    fn table<R: Banc>(x: &mut Cx<'_, R>, base: u32, set: u32) -> u32 {
         base.wrapping_add(x.rom16(base + 2 * set) as i16 as i32 as u32)
     }
 
     /// Choisit le cadre du sprite (`+0x34`) ; `+0x2d` est un compteur 1..=0x11.
-    fn select_frame(x: &mut Cx) {
+    fn select_frame<R: Banc>(x: &mut Cx<'_, R>) {
         let mut n = x.u8(0x2d) as u16;
         if n >= 0x11 {
             n = 0;
@@ -1539,19 +1543,19 @@ mod shot5 {
 }
 
 handlers! {
-    0x9dbfc "eshl_00" shot0::run,
-    0x9de10 "eshl_01" shot1::run,
+    0x9dbfc "eshl_00" #[sans] shot0::run,
+    0x9de10 "eshl_01" #[sans] shot1::run,
     0x9e0aa "eshl_02" #[sans] shot2::run,
     0x9e1b6 "eshl_03" #[sans] shot3::run,
-    0x9e2dc "eshl_04" shot4::run,
+    0x9e2dc "eshl_04" #[sans] shot4::run,
     0x9ebca "eshl_06" #[sans] shot6::run,
     0x9ecc0 "eshl_07" #[sans] shot7::run,
     0x9ee00 "eshl_08" #[sans] shot8::run,
     0x9ef46 "eshl_09" #[sans] shot9::run,
-    0x9f376 "eshl_10" shot10::run,
+    0x9f376 "eshl_10" #[sans] shot10::run,
     0x9f426 "eshl_11" #[sans] shot11::run,
     0x9f5a8 "eshl_12" #[sans] shot12::run,
-    0x9f67c "eshl_13" shot13::run,
-    0x9f786 "eshl_14" shot14::run,
-    0x9e458 "eshl_05" shot5::run,
+    0x9f67c "eshl_13" #[sans] shot13::run,
+    0x9f786 "eshl_14" #[sans] shot14::run,
+    0x9e458 "eshl_05" #[sans] shot5::run,
 }

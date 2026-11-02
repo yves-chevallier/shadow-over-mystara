@@ -25,14 +25,14 @@ fn camera(b: &mut Cps2Bus) -> (u16, u16) {
 }
 
 /// Fin de la recherche de 0x3668, de quoi reconstituer les registres de l'original.
-struct Search {
+struct Recherche {
     /// Compteurs de boucle (D5, D6) au moment de la sortie.
     d5: u32,
     d6: u32,
     /// Dernier terrain examiné (D0-D4, A1).
-    last: crate::video::Terrain,
+    dernier: crate::video::Terrain,
     /// Hauteur posée (D0).
-    height: u16,
+    hauteur: u16,
     /// Profondeur posée (D1).
     y: u16,
 }
@@ -42,10 +42,10 @@ struct Search {
 /// puis en x) ; à défaut, le centre de l'écran (+192, +80). La hauteur fait tomber le joueur du haut de l'écran
 /// (caméra + 256 - profondeur).
 pub fn place_on_free_ground(b: &mut Cps2Bus, o: Obj) {
-    search(b, o);
+    rechercher(b, o);
 }
 
-fn search(b: &mut Cps2Bus, o: Obj) -> Search {
+fn rechercher(b: &mut Cps2Bus, o: Obj) -> Recherche {
     let me = o.0;
     let player = 2 * rd8(b, me + 2) as u32;
     let (cam_x, _) = camera(b);
@@ -53,7 +53,7 @@ fn search(b: &mut Cps2Bus, o: Obj) -> Search {
     wr16(b, LAST_X, x0);
     let mut found = None;
     let (mut d5, mut d6) = (0, 0);
-    let mut last = None;
+    let mut dernier = None;
     'search: for i in 0..5u16 {
         d5 = (4 - i) as u32;
         // x de l'essai : la recherche reprend la coordonnée corrigée par le terrain précédent (D0 de 0x24b0)
@@ -64,7 +64,7 @@ fn search(b: &mut Cps2Bus, o: Obj) -> Search {
         for j in 0..10u16 {
             d6 = (9 - j) as u32;
             let t = crate::video::terrain(b, x, if j == 0 { y0 } else { y0.wrapping_add(16) });
-            last = Some(t);
+            dernier = Some(t);
             if t.numero < FREE_TERRAIN {
                 found = Some((t.x, t.y));
                 break 'search;
@@ -81,20 +81,20 @@ fn search(b: &mut Cps2Bus, o: Obj) -> Search {
     wr16(b, me + 8, x);
     wr16(b, me + 0x10, y);
     let (_, cam_y) = camera(b);
-    let height = cam_y.wrapping_add(256).wrapping_sub(y);
-    wr16(b, me + 0x0c, height);
-    Search { d5, d6, last: last.expect("au moins un essai"), height, y }
+    let hauteur = cam_y.wrapping_add(256).wrapping_sub(y);
+    wr16(b, me + 0x0c, hauteur);
+    Recherche { d5, d6, dernier: dernier.expect("au moins un essai"), hauteur, y }
 }
 
 /// Native de 0x3668 (appels par adresse) : laisse les registres de l'original (D0, D1 : hauteur et profondeur
 /// trouvées, D2-D4, A1 : dernier terrain examiné, D5, D6 : compteurs de la recherche).
 fn place_on_free_ground_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let r = search(b, Obj(c.a[0]));
-    crate::video::terrain_68k(c, &r.last);
+    let r = rechercher(b, Obj(c.a[0]));
+    crate::video::terrain_68k(c, &r.dernier);
     c.d[5] = r.d5;
     c.d[6] = r.d6;
     set_low_word(&mut c.d[1], r.y);
-    set_low_word(&mut c.d[0], r.height);
+    set_low_word(&mut c.d[0], r.hauteur);
     rts(c, b);
 }
 
@@ -131,7 +131,7 @@ const REGS_EFFECT_PALETTE: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::d(
 
 /// `load_effect_palette` avec les registres de l'original : D0-D6 et A3 gardent les huit longs copiés, A1 et A2 la
 /// destination et la source suivante, comme le `movem` de l'original.
-fn load_effect_palette_regs(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
+pub(crate) fn load_effect_palette_regs(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
     let (longs, next) = load_effect_palette(b, offset);
     c.d[..7].copy_from_slice(&longs[..7]);
     c.a[3] = longs[7];

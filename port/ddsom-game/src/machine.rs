@@ -1,6 +1,6 @@
 //! Contexte commun des routines natives : la machine (processeur et bus) et les services partagés.
 //!
-//! Chaque sous-système a son contexte (`families::cx::Cx`, `families::Ctx`, `player::Ctx`, `scene::Ctx`,
+//! Chaque sous-système a son contexte (`families::cx::Cx`, `player::Ctx`, `scene::Ctx`,
 //! `combat::World`...) ; tous tiennent `c: &mut Cpu` et `b: &mut Cps2Bus`. Plutôt qu'une structure de base qu'ils
 //! embarqueraient (les accès `x.c`, `x.b` séparés, partout, ne survivraient pas à un `Deref`), ils implémentent le
 //! trait [`Machine`], qui leur donne les services communs une seule fois : le tirage du hasard, les lectures dans
@@ -76,7 +76,6 @@ macro_rules! machine {
 }
 
 machine!(
-    crate::families::Ctx<'_>,
     crate::player::Ctx<'_>,
     crate::scene::Ctx<'_>,
     crate::combat::World<'_>,

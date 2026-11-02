@@ -18,21 +18,21 @@ const SPARK_KIND: u8 = 4;
 
 /// 0xb10c8 : effet de choc (poussière, étincelle ; type 25) à la position du créateur : variante, réglage (octet bas :
 /// `+0x2d`, haut : `+0x2f`), vitesses (`+0x14`, `+0x1c`). Rien dans la scène 41.
-pub fn shock(b: &mut Cps2Bus, creator: Obj, variant: u8, setting: u16, vx: u16, vy: u16) -> Option<Obj> {
-    shock_by(&mut Pur, b, creator, variant, setting, vx, vy)
+pub fn shock(b: &mut Cps2Bus, createur: Obj, variante: u8, reglage: u16, vx: u16, vy: u16) -> Option<Obj> {
+    shock_par(&mut Pur, b, createur, variante, reglage, vx, vy)
 }
 
 /// `shock` avec les registres de l'original (appelants par adresse : `player/`) : A0 = le créateur ; A1, D1.w (octet
 /// haut du réglage), retenue et drapeaux comme l'original.
 #[track_caller]
-pub fn shock_68k(c: &mut Cpu, b: &mut Cps2Bus, creator: Obj, variant: u8, setting: u16, vx: u16, vy: u16) -> Option<Obj> {
-    c.a[0] = creator.0;
-    let r = shock_by(c, b, creator, variant, setting, vx, vy);
+pub fn shock_68k(c: &mut Cpu, b: &mut Cps2Bus, createur: Obj, variante: u8, reglage: u16, vx: u16, vy: u16) -> Option<Obj> {
+    c.a[0] = createur.0;
+    let r = shock_par(c, b, createur, variante, reglage, vx, vy);
     crate::diag::registres_morts(c, "effets", regs::a(1) | regs::d(1) | regs::CCR);
     r
 }
 
-pub(crate) fn shock_by(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, variant: u8, setting: u16, vx: u16, vy: u16) -> Option<Obj> {
+pub(crate) fn shock_par(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, variante: u8, reglage: u16, vx: u16, vy: u16) -> Option<Obj> {
     let scene = crate::ram::SCENE.get(b);
     r.comparaison(NO_SHOCK_SCENE as u32, scene as u32, Size::Byte);
     if scene == NO_SHOCK_SCENE {
@@ -49,11 +49,11 @@ pub(crate) fn shock_by(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, variant
     fx.set_u16(b, Obj::VY, vy);
     let facing = me.u8(b, 0x2c);
     fx.set_u8(b, 0x2c, facing);
-    fx.set_u8(b, Obj::VARIANT, variant);
-    fx.set_u8(b, 0x2d, setting as u8);
+    fx.set_u8(b, Obj::VARIANT, variante);
+    fx.set_u8(b, 0x2d, reglage as u8);
     // `lsr.w #8,D1w` : X = dernier bit sorti (bit 7), gardé jusqu'au retour
-    let high = setting >> 8;
-    r.x(setting & 0x80 != 0);
+    let high = reglage >> 8;
+    r.x(reglage & 0x80 != 0);
     r.d_mot(1, high);
     fx.set_u8(b, 0x2f, high as u8);
     fx.set_u16(b, 0x42, 0);
@@ -62,14 +62,14 @@ pub(crate) fn shock_by(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, variant
 }
 
 fn shock_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let (me, variant, setting, vx, vy) = (Obj(c.a[0]), c.d[0] as u8, c.d[1] as u16, c.d[2] as u16, c.d[3] as u16);
-    shock_by(c, b, me, variant, setting, vx, vy);
+    let (me, variante, reglage, vx, vy) = (Obj(c.a[0]), c.d[0] as u8, c.d[1] as u16, c.d[2] as u16, c.d[3] as u16);
+    shock_par(c, b, me, variante, reglage, vx, vy);
     rts(c, b);
 }
 
-/// 0xaa96c : étincelle (type 4, variante `variant`) liée au créateur et posée entre lui et `other` (A1), sauf pour un
+/// 0xaa96c : étincelle (type 4, variante `variante`) liée au créateur et posée entre lui et `autre` (A1), sauf pour un
 /// joueur dans certains états. Le processeur reçoit D0 à D3 de la pose (`place_between`) ; la native rend A1 à A4.
-pub(crate) fn spark_by(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, other: u32, variant: u8) -> Option<Obj> {
+pub(crate) fn spark_par(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, autre: u32, variante: u8) -> Option<Obj> {
     let skip = (rd8(b, me.0 + 0x3c) as i8) < 2 && rd8(b, me.0 + 0x10d).wrapping_sub(16) <= 3;
     if skip {
         return None;
@@ -77,18 +77,18 @@ pub(crate) fn spark_by(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, other: 
     let fx = r.alloue(b, &pools::EFFCT)?;
     fx.set_u8(b, Obj::ACTIVE, 1);
     fx.set_u8(b, Obj::KIND, SPARK_KIND);
-    fx.set_u8(b, Obj::VARIANT, variant);
+    fx.set_u8(b, Obj::VARIANT, variante);
     let facing = me.u8(b, 0x2c) ^ 32;
     fx.set_u8(b, 0x2c, facing);
     fx.set_u16(b, 0x50, me.word());
-    fx.set_u16(b, 0x54, other as u16);
-    poser(r, b, me, fx, other);
+    fx.set_u16(b, 0x54, autre as u16);
+    poser(r, b, me, fx, autre);
     Some(fx)
 }
 
 /// Pose l'étincelle (`place_between`) ; le processeur reçoit D0, D1 (longs) et les mots bas de D2, D3.
-fn poser(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, fx: Obj, other: u32) -> u16 {
-    let (d0, d1, d2, d3) = place_between(b, me.0, fx.0, other);
+fn poser(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, fx: Obj, autre: u32) -> u16 {
+    let (d0, d1, d2, d3) = place_between(b, me.0, fx.0, autre);
     r.d(0, d0 as u32);
     r.d(1, d1 as u32);
     r.d_mot(2, d2);
@@ -96,30 +96,30 @@ fn poser(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, fx: Obj, other: u32) 
     d1
 }
 
-/// 0xaaa04 (`owner_first`) / 0xaaa84 : étincelle (type 4, variante `variant`) entre le créateur et l'objet touché
-/// `other` ; `+0x50` / `+0x54` désignent l'un ou l'autre selon la routine. Drapeaux de D1.w.
-pub(crate) fn spark_between_by(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, other: u32, variant: u8, owner_first: bool) -> Option<Obj> {
+/// 0xaaa04 (`owner_first`) / 0xaaa84 : étincelle (type 4, variante `variante`) entre le créateur et l'objet touché
+/// `autre` ; `+0x50` / `+0x54` désignent l'un ou l'autre selon la routine. Drapeaux de D1.w.
+pub(crate) fn spark_between_par(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, autre: u32, variante: u8, owner_first: bool) -> Option<Obj> {
     let fx = r.alloue(b, &pools::EFFCT)?;
     fx.set_u8(b, Obj::ACTIVE, 1);
     fx.set_u8(b, Obj::KIND, SPARK_KIND);
-    fx.set_u8(b, Obj::VARIANT, variant);
+    fx.set_u8(b, Obj::VARIANT, variante);
     let facing = me.u8(b, 0x2c) ^ 32;
     fx.set_u8(b, 0x2c, facing);
-    let (first, second) = if owner_first { (me.0, other) } else { (other, me.0) };
+    let (first, second) = if owner_first { (me.0, autre) } else { (autre, me.0) };
     fx.set_u16(b, 0x50, first as u16);
     fx.set_u16(b, 0x54, second as u16);
-    let d1 = poser(r, b, me, fx, other);
+    let d1 = poser(r, b, me, fx, autre);
     r.drapeaux(d1 as u32, Size::Word);
     Some(fx)
 }
 
 /// Natives des étincelles : A0 = le créateur, A1 = l'autre objet, D1.b = variante ; A1 à A4 sont rendus.
-fn spark_native(c: &mut Cpu, b: &mut Cps2Bus, between: Option<bool>) {
+fn spark_native(c: &mut Cpu, b: &mut Cps2Bus, entre: Option<bool>) {
     let saved = [c.a[1], c.a[2], c.a[3], c.a[4]];
-    let (me, other, variant) = (Obj(c.a[0]), c.a[1], c.d[1] as u8);
-    match between {
-        None => spark_by(c, b, me, other, variant),
-        Some(owner_first) => spark_between_by(c, b, me, other, variant, owner_first),
+    let (me, autre, variante) = (Obj(c.a[0]), c.a[1], c.d[1] as u8);
+    match entre {
+        None => spark_par(c, b, me, autre, variante),
+        Some(owner_first) => spark_between_par(c, b, me, autre, variante, owner_first),
     };
     [c.a[1], c.a[2], c.a[3], c.a[4]] = saved;
     rts(c, b);
@@ -180,32 +180,32 @@ fn place_between(b: &mut Cps2Bus, me: u32, fx: u32, victim: u32) -> (u16, u16, u
 }
 
 
-/// Crée un objet actif de type `kind` dans `pool`, de variante `variant`. L'échec rend l'A1 que l'original laisse
+/// Crée un objet actif de type `kind` dans `pool`, de variante `variante`. L'échec rend l'A1 que l'original laisse
 /// (`Pool::alloc_or_leftover`), pour les appelants qui ne testent pas la retenue.
-fn create(b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, variant: u8) -> Result<Obj, Obj> {
+fn creer(b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, variante: u8) -> Result<Obj, Obj> {
     let object = pool.alloc_or_leftover(b)?;
     object.set_u8(b, Obj::ACTIVE, 1);
     object.set_u8(b, Obj::KIND, kind);
-    object.set_u8(b, Obj::VARIANT, variant);
+    object.set_u8(b, Obj::VARIANT, variante);
     Ok(object)
 }
 
-/// 0xddeaa : décor (SOBJ) de type 6, de variante `variant`.
-pub fn decor_6(b: &mut Cps2Bus, variant: u8) -> Result<Obj, Obj> {
-    create(b, &pools::SOBJ, 6, variant)
+/// 0xddeaa : décor (SOBJ) de type 6, de variante `variante`.
+pub fn decor_6(b: &mut Cps2Bus, variante: u8) -> Result<Obj, Obj> {
+    creer(b, &pools::SOBJ, 6, variante)
 }
 
-/// 0xdfa4a : décor (SOBJ) de type 11, de variante `variant`, orienté selon `orientation` (`+0x2c`).
-pub fn decor_11(b: &mut Cps2Bus, variant: u8, orientation: u8) -> Result<Obj, Obj> {
-    let object = create(b, &pools::SOBJ, 11, variant)?;
+/// 0xdfa4a : décor (SOBJ) de type 11, de variante `variante`, orienté selon `orientation` (`+0x2c`).
+pub fn decor_11(b: &mut Cps2Bus, variante: u8, orientation: u8) -> Result<Obj, Obj> {
+    let object = creer(b, &pools::SOBJ, 11, variante)?;
     object.set_u8(b, 0x2c, orientation);
     Ok(object)
 }
 
-/// 0x517ba : effet de joueur (PEFF) de type 44, de variante `variant`, réglage `+0x2f` = `setting`.
-pub fn effect_44(b: &mut Cps2Bus, variant: u8, setting: u8) -> Option<Obj> {
-    let object = create(b, &pools::PEFF, 44, variant).ok()?;
-    object.set_u8(b, 0x2f, setting);
+/// 0x517ba : effet de joueur (PEFF) de type 44, de variante `variante`, réglage `+0x2f` = `reglage`.
+pub fn effet_44(b: &mut Cps2Bus, variante: u8, reglage: u8) -> Option<Obj> {
+    let object = creer(b, &pools::PEFF, 44, variante).ok()?;
+    object.set_u8(b, 0x2f, reglage);
     Some(object)
 }
 

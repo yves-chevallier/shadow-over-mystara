@@ -56,7 +56,7 @@ fn check(what: &str, put: impl FnOnce(&mut Program)) {
 }
 
 #[test]
-fn graphics_lossless() {
+fn graphismes_sans_perte() {
     if !available() {
         return;
     }
@@ -70,7 +70,7 @@ fn graphics_lossless() {
 }
 
 #[test]
-fn palettes_lossless() {
+fn palettes_sans_perte() {
     if !available() {
         return;
     }
@@ -80,7 +80,7 @@ fn palettes_lossless() {
 }
 
 #[test]
-fn sounds_lossless() {
+fn sons_sans_perte() {
     if !available() {
         return;
     }
@@ -110,7 +110,7 @@ fn sounds_lossless() {
 }
 
 #[test]
-fn sprite_frames_lossless() {
+fn images_de_sprites_sans_perte() {
     if !has("sprites/frames.json") {
         return;
     }
@@ -143,7 +143,7 @@ fn sprite_frames_lossless() {
 }
 
 #[test]
-fn animations_lossless() {
+fn animations_sans_perte() {
     if !has("sprites/anims.json") || !has("sprites/frames.json") {
         return;
     }
@@ -157,7 +157,7 @@ fn animations_lossless() {
 }
 
 #[test]
-fn scenery_lossless() {
+fn decors_sans_perte() {
     if !has("levels.json") {
         return;
     }
@@ -176,7 +176,7 @@ fn scenery_lossless() {
             next = t.rom + 2 + 2 * (t.rows.len() * t.width()) as u32;
         }
         assert_eq!(next, l.banks_rom, "{} : fin des tables", l.name);
-        // cases : même lecture que les caméras du jeu (`map_cell` de scroll.rs, `case_a` de cards.rs)
+        // cases : même lecture que les caméras du jeu (`map_cell` de scroll.rs, `case_a` de cartes.rs)
         let rd16 = |a: u32| u16::from_be_bytes(at(a, 2).try_into().unwrap());
         let n = l.strip_cases();
         let colonne = if l.case == 16 { 0x40 } else { 0x20 };
@@ -202,7 +202,7 @@ fn scenery_lossless() {
 }
 
 #[test]
-fn scroll1_lossless() {
+fn scroll1_sans_perte() {
     if !has("levels.json") {
         return;
     }
@@ -244,7 +244,7 @@ fn scroll1_lossless() {
 }
 
 #[test]
-fn terrain_lossless() {
+fn terrain_sans_perte() {
     if !has("terrain.json") {
         return;
     }
@@ -272,7 +272,7 @@ fn terrain_lossless() {
 }
 
 #[test]
-fn scene_palettes_lossless() {
+fn palettes_des_scenes_sans_perte() {
     if !has("scene_palettes.json") {
         return;
     }
@@ -288,7 +288,7 @@ fn scene_palettes_lossless() {
 }
 
 #[test]
-fn object_tables_lossless() {
+fn tables_des_objets_sans_perte() {
     if !has("sprites/tables.json") || !has("sprites/frames.json") {
         return;
     }
@@ -335,7 +335,7 @@ fn object_tables_lossless() {
 }
 
 #[test]
-fn texts_lossless() {
+fn textes_sans_perte() {
     if !has("texts.json") {
         return;
     }
@@ -370,7 +370,7 @@ fn texts_lossless() {
 }
 
 #[test]
-fn music_lossless() {
+fn musique_sans_perte() {
     if !has("sound/music.json") {
         return;
     }
@@ -440,7 +440,7 @@ fn music_lossless() {
 }
 
 #[test]
-fn spawns_lossless() {
+fn apparitions_sans_perte() {
     if !has("data/spawns.json") {
         return;
     }
@@ -507,7 +507,7 @@ fn check_data(rel: &str) {
 }
 
 #[test]
-fn players_lossless() {
+fn joueurs_sans_perte() {
     check_data("data/players.json");
     if !has("data/players.json") {
         return;
@@ -521,12 +521,12 @@ fn players_lossless() {
 }
 
 #[test]
-fn combat_lossless() {
+fn combat_sans_perte() {
     check_data("data/combat.json");
 }
 
 #[test]
-fn enemies_lossless() {
+fn ennemis_sans_perte() {
     check_data("data/enemies.json");
     if !has("data/enemies.json") {
         return;
@@ -540,38 +540,38 @@ fn enemies_lossless() {
 }
 
 #[test]
-fn crates_lossless() {
+fn caisses_sans_perte() {
     check_data("data/boxes.json");
 }
 
 #[test]
-fn scenes_lossless() {
+fn scenes_sans_perte() {
     check_data("data/scenes.json");
 }
 
 #[test]
-fn misc_lossless() {
+fn divers_sans_perte() {
     check_data("data/misc.json");
 }
 
 #[test]
-fn dialogues_lossless() {
+fn dialogues_sans_perte() {
     check_data("data/dialogs.json");
 }
 
 #[test]
-fn leftovers_lossless() {
+fn restes_sans_perte() {
     check_data("data/rest.json");
 }
 
 #[test]
-fn natives_lossless() {
+fn natives_sans_perte() {
     check_data("data/natives.json");
 }
 
 /// Tables du DSP QSound : les mots de `qsound_dsp.json` sont ceux de `dl-1425.bin`.
 #[test]
-fn dsp_lossless() {
+fn dsp_sans_perte() {
     if !has("sound/qsound_dsp.json") {
         return;
     }
@@ -586,7 +586,7 @@ fn dsp_lossless() {
 
 /// Région du Z80 reconstruite : chaque octet écrit vaut celui des ROMs `dd2.01`/`dd2.02`, sans conflit.
 #[test]
-fn audio_region_lossless() {
+fn region_audio_sans_perte() {
     if !has("sound/music.json") {
         return;
     }

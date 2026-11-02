@@ -4,8 +4,10 @@
 use crate::objects::pools;
 use crate::objects::Obj;
 
-use super::{ajoute_u8, gestionnaire, pointeur, Ctx};
+use super::{ajoute_u8, gestionnaire, pointeur};
+use super::cx::{Banc, Cx};
 use crate::objects::Courant;
+use crate::machine::Machine;
 
 /// Valeurs de l'octet d'état `+4`.
 mod etat {
@@ -140,7 +142,6 @@ use crate::objects::Courant;
         /// Par classe du porteur : table des décalages (X, Z) de la caisse portée, par pose.
         pub const PRISES: u32 = 0xda398;
         // sous-routines non réécrites, ou natives
-        pub const TERRAIN: u32 = 0x24a8;
         pub const SON_COUP: u32 = 0xeb59e;
         pub const SON_CASSE: u32 = 0xeb610;
         pub const SON_ATTERRIT: u32 = 0xeb52c;
@@ -154,7 +155,7 @@ use crate::objects::Courant;
     const OMBRES: u8 = 0x35;
     const DUREE_CLIGNOTEMENT: u8 = 0x1e;
 
-    fn run(x: &mut Cx) {
+    fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::HIDDEN) != 0 {
             return;
         }
@@ -203,7 +204,7 @@ use crate::objects::Courant;
         // pointeurs de lecture de la fiche laissés par l'original
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(f::ETAT, 2);
         x.set8(f::SECOND_COUP, 0);
         x.set8(f::COUP_B, 0);
@@ -221,7 +222,7 @@ use crate::objects::Courant;
         x.anim(rom::ANIMATIONS, sorte);
     }
 
-    fn actif(x: &mut Cx) {
+    fn actif<R: Banc>(x: &mut Cx<'_, R>) {
         let sous_etat = x.u8(f::SOUS_ETAT);
         let cible = saut(x, rom::SOUS_ETATS, sous_etat);
         match sous_etat {
@@ -287,16 +288,13 @@ use crate::objects::Courant;
     }
 
     /// `0xda04e` : joue l'effet spécial de la caisse, une seule fois (`moment` dans D1).
-    fn effet_special(x: &mut Cx, moment: u32) {
-        x.c.d[1] = moment;
+    fn effet_special<R: Banc>(x: &mut Cx<'_, R>, moment: u32) {
         if x.u8(f::SPECIAL_JOUE) != 0 {
             return;
         }
         x.set8(f::SPECIAL_JOUE, 1);
         let i = 4 * x.u8(f::SPECIAL) as u32;
-        x.c.d[0] = i;
         let effet = x.rom32(rom::SPECIAUX + i);
-        x.c.a[1] = effet;
         // créateurs ESHL désignés par la table d'origine
         use crate::families::eshl_creators as eshl;
         let r = &mut crate::families::effects_creators::restes::Pur;
@@ -310,7 +308,7 @@ use crate::objects::Courant;
             }
             // Glitch d'origine : le D5 que laisse ce qui précède (`Restes`) fixe l'octet haut du compte des éclats.
             0xa17d0 => {
-                let d5 = x.c.d[5] as u16;
+                let d5 = *x.c.d5() as u16;
                 eshl::row_1a(r, x.b, x.o, moment as u16, d5);
             }
             0xa1c6a => eshl::four_1c(r, x.b, x.o),
@@ -389,7 +387,7 @@ use crate::objects::Courant;
 
     /// Touchée, sous-sous-état 0 : la caisse joue son animation de casse et lâche son butin ; un coffre
     /// redevient intact.
-    fn casse(x: &mut Cx) {
+    fn casse<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::SORTE) >= 3 {
             x.set32(f::ETAT, 0x0200_0000);
             x.set8(f::COUP_B, 0);
@@ -438,7 +436,7 @@ use crate::objects::Courant;
     /// Ouverte, sous-sous-état 0 (`0xd9b9a`) : un coffre verrouillé consomme une clé (sauf pour la classe
     /// 5) ou refuse de s'ouvrir ; l'effet spécial est créé une fois ; puis animation d'ouverture et
     /// butin au premier coup.
-    fn ouverture(x: &mut Cx) {
+    fn ouverture<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::VERROU) != 0 && classe(x) != 5 {
             let cles = crate::mem::rd8(x.b, CLES);
             if cles == 0 {
@@ -521,7 +519,7 @@ use crate::objects::Courant;
 
     /// `0xd9cea` : la caisse portée suit les mains du joueur (décalage par classe et par pose, retourné
     /// avec lui) ; rien si le joueur ne porte plus.
-    fn suit_porteur(x: &mut Cx) {
+    fn suit_porteur<R: Banc>(x: &mut Cx<'_, R>) {
         let joueur = x.linked(f::JOUEUR);
         let classe = joueur.u8(x.b, j::CLASSE) as u32;
         let prises = x.data32(rom::PRISES + 4 * classe);
@@ -543,7 +541,7 @@ use crate::objects::Courant;
     }
 
     /// Lancée (`0xd9d38`) : attend `ATTENTE_VOL`, puis vole (sous-sous-états) et se recale sur le décor.
-    fn lancee(x: &mut Cx) {
+    fn lancee<R: Banc>(x: &mut Cx<'_, R>) {
         let attente = x.u8(f::ATTENTE_VOL);
         if attente != 0 {
             x.set8(f::ATTENTE_VOL, attente.wrapping_sub(1) & 7);
@@ -563,7 +561,7 @@ use crate::objects::Courant;
 
     /// Lancée, 0 : tant que le joueur la tient, elle suit ses mains ; lâchée, elle part en arc devant
     /// lui (et commence aussitôt son vol).
-    fn lancee_depart(x: &mut Cx) {
+    fn lancee_depart<R: Banc>(x: &mut Cx<'_, R>) {
         let joueur = x.linked(f::JOUEUR);
         if joueur.u8(x.b, j::POSE) != 0 {
             return suit_porteur(x);
@@ -582,10 +580,11 @@ use crate::objects::Courant;
     }
 
     /// Terrain sous la caisse (`0x24a8`, D2) : vrai si c'est un obstacle (attributs 5 à 8).
-    fn obstacle(x: &mut Cx) -> bool {
-        x.call(rom::TERRAIN);
-        let d0 = (x.c.d[2] as u16 & 0x3f).wrapping_sub(5);
-        d0 <= 3
+    fn obstacle<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+        let t = crate::video::terrain_of(x.b, x.o);
+        // Original glitch: 0x24a8 leaves its work registers as leftovers (D2-D4)
+        crate::families::joueur::pshell::restes_terrain(x, &t);
+        (t.numero & 0x3f).wrapping_sub(5) <= 3
     }
 
     /// Avance en X et Z (`0x1da6`) ; rend Z.
@@ -596,7 +595,7 @@ use crate::objects::Courant;
 
     /// Lancée, 2 : une caisse se brise contre un obstacle ou en touchant le sol ; un coffre rebondit une
     /// fois sur l'obstacle, puis retombe.
-    fn lancee_vol(x: &mut Cx) {
+    fn lancee_vol<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::SORTE) < 3 {
             if x.u8(f::SANS_DECOR) == 0 && !obstacle(x) && avance(x) >= 0 {
                 return;
@@ -702,7 +701,7 @@ use crate::objects::Courant;
     }
 
     /// Lâchée, 4 : au premier coup, butin et effet spécial ; fin d'animation : clignotement.
-    fn lachee_casse(x: &mut Cx) {
+    fn lachee_casse<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::COUP) != 0 {
             x.set8(f::COUP, 0);
             lache_butin(x);
@@ -720,7 +719,7 @@ use crate::objects::Courant;
     }
 
     handlers! {
-        0xd99fa "box_caisse" run,
+        0xd99fa "box_caisse" #[sans] run,
     }
 }
 
@@ -735,7 +734,7 @@ mod decor {
     pub const ANIMATION: u16 = 5;
 }
 
-fn box_2(ctx: &mut Ctx) {
+fn box_2<R: Banc>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
     if cache {
@@ -781,7 +780,7 @@ mod barriere {
 }
 
 /// `0xda6f4` : crée l'objet SET de la barrière et le rattache.
-fn barriere_cree_set(ctx: &mut Ctx, o: Obj) {
+fn barriere_cree_set<R: Banc>(ctx: &mut Cx<'_, R>, o: Obj) {
     let Some(nouveau) = super::creators::scene_set(ctx.b, 0x8b) else { return };
     let frappeur = pointeur(ctx, o, barriere::FRAPPEUR);
     let mode = (o.u8(ctx.b, champ::MODE) as u32) << 3;
@@ -793,7 +792,7 @@ fn barriere_cree_set(ctx: &mut Ctx, o: Obj) {
     o.set_u16(ctx.b, barriere::SET_CREE, nouveau.0 as u16);
 }
 
-fn barriere_init(ctx: &mut Ctx, o: Obj) {
+fn barriere_init<R: Banc>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variante = o.u8(ctx.b, Obj::VARIANT);
     let cible = super::effects::cible(ctx, barriere::INITS, 2 * variante as u32);
     match variante {
@@ -815,7 +814,7 @@ fn barriere_init(ctx: &mut Ctx, o: Obj) {
 
 /// Variante 0, actif : sous-état 0 attend le coup, sous-état 2 attend la fin du SET ; puis disparaît
 /// quand elle sort de l'écran.
-fn barriere_actif_0(ctx: &mut Ctx, o: Obj) {
+fn barriere_actif_0<R: Banc>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
     let cible = super::effects::cible(ctx, barriere::SOUS_ETATS_0, sous_etat as u32);
     match sous_etat {
@@ -844,7 +843,7 @@ fn barriere_actif_0(ctx: &mut Ctx, o: Obj) {
     }
 }
 
-fn barriere_actif_1(ctx: &mut Ctx, o: Obj) {
+fn barriere_actif_1<R: Banc>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sous_etat = o.u8(ctx.b, champ::SOUS_ETAT);
     let cible = super::effects::cible(ctx, barriere::SOUS_ETATS_1, sous_etat as u32);
     match sous_etat {
@@ -876,7 +875,7 @@ fn barriere_actif_1(ctx: &mut Ctx, o: Obj) {
     }
 }
 
-fn barriere_gestionnaire(ctx: &mut Ctx) {
+fn barriere_gestionnaire<R: Banc>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let cache = o.u8(ctx.b, Obj::HIDDEN) != 0;
     if cache {
@@ -900,8 +899,8 @@ fn barriere_gestionnaire(ctx: &mut Ctx) {
     }
 }
 
-gestionnaire!(BOX_1, barriere::ENTREE, "box_barriere", barriere_gestionnaire);
-gestionnaire!(BOX_2, decor::ENTREE, "box_decor", box_2);
+gestionnaire!(BOX_1, barriere::ENTREE, "box_barriere", #[sans] barriere_gestionnaire);
+gestionnaire!(BOX_2, decor::ENTREE, "box_decor", #[sans] box_2);
 
 // ---------------------------------------------------------------------------------------------
 // Type 3 : bloc poussable (0xda7f2)
@@ -918,7 +917,6 @@ use crate::objects::Courant;
 
     const ANIMATIONS: u32 = 0x1bebc2;
     /// Recalage de l'objet après la collision avec le décor (`terrain::push_68k`).
-    const RECALE: u32 = 0x35c0;
     /// Décalage du joueur contre le bloc, par personnage (mots, en clair) : selon la direction de poussée.
     const CONTRE_HAUT: u32 = 0xdab52;
     const CONTRE_BAS: u32 = 0xdab62;
@@ -961,7 +959,7 @@ use crate::objects::Courant;
         pub const DROITE: u8 = 8;
     }
 
-    fn run(x: &mut Cx) {
+    fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::HIDDEN) != 0 {
             return;
         }
@@ -1065,18 +1063,19 @@ use crate::objects::Courant;
     }
 
     /// Un pas de la variante 1 : le bloc avance puis se recale sur le décor.
-    fn pas(x: &mut Cx, axe: u32, d: i16) {
+    fn pas<R: Banc>(x: &mut Cx<'_, R>, axe: u32, d: i16) {
         x.add16(axe, d as u16);
         recale_decor(x);
     }
 
-    fn recale_decor(x: &mut Cx) {
+    fn recale_decor<R: Banc>(x: &mut Cx<'_, R>) {
         x.push_terrain();
-        x.call(RECALE);
+        // 0x35c0: keeps the crate on screen like a player
+        crate::player::walk::clamp_to_screen(x.b, crate::player::Player(x.o.0));
     }
 
     /// Variante 1 : glissement en hauteur (directions 2 et 4) ou en X (6 et 8).
-    fn actif_1(x: &mut Cx) {
+    fn actif_1<R: Banc>(x: &mut Cx<'_, R>) {
         let Some(joueur) = pousseur(x) else { return };
         let direction = joueur.u8(x.b, j::DIRECTION);
         let (axe, signe, table) = match direction {
@@ -1107,6 +1106,6 @@ use crate::objects::Courant;
     }
 
     handlers! {
-        0xda7f2 "box_pousse" run,
+        0xda7f2 "box_pousse" #[sans] run,
     }
 }

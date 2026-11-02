@@ -181,9 +181,9 @@ pub fn in_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
 pub fn beyond_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
     let cam = camera(b);
     let x = screen_x(b, obj, cam).wrapping_add(margin);
-    let edge_x = 0x180u16.wrapping_add(margin.wrapping_add(margin));
-    if x >= edge_x {
-        return x > edge_x;
+    let bord_x = 0x180u16.wrapping_add(margin.wrapping_add(margin));
+    if x >= bord_x {
+        return x > bord_x;
     }
     let y = obj.u16(b, Obj::Y).wrapping_sub(rd16(b, cam + 0xc)).wrapping_add(ARENA_MARGIN);
     y > 0x100 + 2 * ARENA_MARGIN

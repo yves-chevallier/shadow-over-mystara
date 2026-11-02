@@ -1,6 +1,6 @@
 //! Tables des scènes : `data/scenes.json` (`scene/entry.rs`, `scene/exit.rs`, `scene/blackout.rs`,
 //! `scene/tally.rs`, `scene/shop.rs`, `scene/bonus.rs`, `camera_modes.rs`, `popups.rs`, `sprites.rs`,
-//! `families/player/peff.rs`, `families/set_b.rs`).
+//! `families/joueur/peff.rs`, `families/set_b.rs`).
 
 use ddsom_assets::data::Region;
 

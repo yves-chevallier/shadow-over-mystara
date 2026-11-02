@@ -146,7 +146,7 @@ impl Row {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Table {
-    /// Nom (unique dans le fichier) ; `rôle/character` pour les tables par personnage.
+    /// Nom (unique dans le fichier) ; `rôle/personnage` pour les tables par personnage.
     pub name: String,
     #[serde(with = "hex")]
     pub rom: u32,
@@ -391,7 +391,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn formats_and_lines() {
+    fn formats_et_lignes() {
         assert_eq!(parse_format("u8 i16*2 addr").unwrap(), vec![Kind::U8, Kind::I16, Kind::I16, Kind::Addr]);
         assert!(parse_format("u7").is_err());
         let bytes = [0x01, 0xff, 0xfe, 0x00, 0x10, 0x00, 0x12, 0x34, 0x56];
@@ -405,7 +405,7 @@ mod tests {
     }
 
     #[test]
-    fn texts_tiles_and_bytes() {
+    fn textes_tuiles_et_octets() {
         let words = [0x18c8, 0x18e9, 0x1800, 0xfffe, 0x000c, 0x18fb, 0x0000];
         let s = encode_units(&words, true);
         assert_eq!(s, "Hi {fffe}{000c}{18fb}{0000}");

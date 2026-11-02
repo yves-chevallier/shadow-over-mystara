@@ -10,7 +10,7 @@ use std::io;
 use std::path::Path;
 
 use crate::data::DataFile;
-use crate::remainder::Remainder;
+use crate::reste::Reste;
 use crate::texts;
 use crate::{
     Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, SpriteTables, Terrain, Texts,
@@ -187,7 +187,7 @@ impl Program {
         }
         // en dernier : le reste complète ce que les autres fichiers décrivent
         if need(&mut p, "data/reste.json") {
-            p.put_rest(&Remainder::load(&dir.join("data/reste.json"))?).map_err(io::Error::other)?;
+            p.put_reste(&Reste::load(&dir.join("data/reste.json"))?).map_err(io::Error::other)?;
         }
         Ok(p)
     }
@@ -395,16 +395,16 @@ impl Program {
         }
     }
 
-    /// Le reste de la région programme (`data/remainder.json`) : ses blocs, puis l'espace programme hors de la zone
+    /// Le reste de la région programme (`data/reste.json`) : ses blocs, puis l'espace programme hors de la zone
     /// chiffrée, recopié de l'espace données (il lui est égal).
-    pub fn put_rest(&mut self, r: &Remainder) -> Result<(), String> {
-        for b in &r.data {
+    pub fn put_reste(&mut self, r: &Reste) -> Result<(), String> {
+        for b in &r.donnees {
             self.data.put(b.debut, &b.bytes()?);
         }
         for b in &r.programme {
             self.prog.put(b.debut, &b.bytes()?);
         }
-        for a in r.encrypted_end..PROGRAM_SIZE as u32 {
+        for a in r.fin_chiffree..PROGRAM_SIZE as u32 {
             if self.data.is_covered(a) && !self.prog.is_covered(a) {
                 let v = self.data.bytes[a as usize];
                 self.prog.put(a, &[v]);
@@ -547,7 +547,7 @@ fn words(img: &Image) -> Vec<u16> {
 }
 
 /// Tout ce que la machine range dans ses puces, reconstruit depuis le dossier d'assets, sans aucune ROM : programme
-/// 68000 (seulement ses tables : le jeu doit tourner sans 68000, `ddsom_game::install_no_68k`), graphismes,
+/// 68000 (seulement ses tables : le jeu doit tourner sans 68000, `ddsom_game::install_sans_68k`), graphismes,
 /// région du Z80 (sans son programme : pilote son Rust obligatoire), tables du DSP QSound, échantillons.
 pub fn contenus(dir: &Path) -> io::Result<cps2::Contenus> {
     let p = Program::load(dir)?;

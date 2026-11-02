@@ -2,8 +2,8 @@
 //!
 //! Quatre enregistrements de 0x200 octets à `A5+0x5de` (`PLAYER_BASE`, pas `PLAYER_STRIDE`) ; un joueur
 //! est aussi un objet (`objects::Obj`) : les champs communs (position, vitesses, animation, liens de
-//! liste) sont ceux de `docs/objects.md`, les champs propres aux joueurs sont nommés dans `Player`.
-//! Voir `docs/player.md` pour le détail des structures et des états.
+//! liste) sont ceux de `docs/objets.md`, les champs propres aux joueurs sont nommés dans `Player`.
+//! Voir `docs/joueur.md` pour le détail des structures et des états.
 //!
 //! Organisation (les lettres P1.. sont celles de `docs/atlas.md`) :
 //! - `states` : valeurs de la machine à états (`+4..+7`) ;
@@ -41,7 +41,7 @@ pub mod cinematics;
 pub mod combos;
 pub mod checks;
 pub mod effects;
-pub mod external;
+pub mod externes;
 pub mod hit_reactions;
 pub mod hurt;
 pub mod init;
@@ -71,7 +71,6 @@ pub const NATIVES: &[Native] = &[
     update::UPDATE_PLAYERS,
     overlays::UPDATE,
     walk::CLAMP,
-    hit_reactions::ENEMY_REACTS,
     characters::fighter::JUMP,
     characters::fighter::ATTACK,
     characters::fighter::SPECIAL,
@@ -188,7 +187,7 @@ pub mod ram {
     /// Bit k : le joueur k participe à la partie.
     pub const PLAYERS_MASK: Octet = Octet::a5(0x31);
     /// Nombre de joueurs en vie.
-    pub use crate::ram::PLAYERS_ALIVE as PLAYERS_ALIVE;
+    pub use crate::ram::JOUEURS_EN_VIE as PLAYERS_ALIVE;
     /// Pause du jeu pendant un sort : les joueurs ne vieillissent plus, les collisions sont suspendues.
     pub const PAUSE: Octet = Octet::a5(0x3d);
     /// Jeu gelé (cinématique).
@@ -224,7 +223,7 @@ pub mod ram {
     pub const FADE_STEPS: Octet = Octet::a5(0x48f);
     pub const FADE_DELAY: Mot = Mot::a5(0x490);
     /// Défilement vertical du plan 1 (`vblank`) : les sorts font trembler l'écran en le basculant.
-    pub use crate::ram::SCROLL_Y_PLANE1 as SCROLL1_Y;
+    pub use crate::ram::DEFILEMENT_Y_PLAN1 as SCROLL1_Y;
     /// Signal d'un boss aux joueurs scénarisés (lancer, atterrissage).
     pub const BOSS_SIGNAL: Mot = Mot::a5(0x51e);
     /// Cinématique en cours (h).
@@ -257,9 +256,17 @@ impl<'a> Ctx<'a> {
         self.c.sr & SR_Z != 0
     }
 
-    /// Joue le son `sound` pour le joueur `p` (panoramique, personnage : `sound::jouer`).
-    pub fn sound(&mut self, sound: u32, p: Player) {
-        crate::sound::jouer(self.b, sound, Obj(p.0));
+    /// 0xb10c8: shock effect (dust, spark) of `variant` and `setting`, speeds `vx`, `vy`, created for player `p`.
+    /// The registers are left like the original routine leaves them (A0 = the player, A1 = the effect, carry when the
+    /// pool is full, D1, flags).
+    pub fn shock(&mut self, p: Player, variant: u8, setting: u16, vx: u16, vy: u16) -> Option<Obj> {
+        self.c.a[5] = A5;
+        crate::effects_aids::shock_68k(self.c, self.b, p.obj(), variant, setting, vx, vy)
+    }
+
+    /// Joue le son `son` pour le joueur `p` (panoramique, personnage : `sound::jouer`).
+    pub fn son(&mut self, son: u32, p: Player) {
+        crate::sound::jouer(self.b, son, Obj(p.0));
     }
 
     /// Idem avec le paramètre D6 (numéro d'animation, d'effet...).

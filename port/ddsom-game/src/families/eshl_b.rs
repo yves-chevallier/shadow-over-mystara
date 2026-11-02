@@ -93,7 +93,7 @@ mod shot15 {
     const PHASE_LAST: u8 = 8;
     const PHASE_BLINK: u8 = 10;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => spawn(x),
             2 => active(x),
@@ -185,7 +185,7 @@ mod shot15 {
         place_in_front(x, owner, 0x42, 0x2e);
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(f::OWNER) == 0 {
             return kill(x);
         }
@@ -332,7 +332,7 @@ mod shot16 {
     const ANIMS: u32 = 0x16e146;
     const HELD: u8 = 0;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -348,7 +348,7 @@ mod shot16 {
         }
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             HELD => {
                 let owner = x.linked(f::OWNER);
@@ -451,7 +451,7 @@ mod shot17 {
     const AIM: u8 = 2;
     const FALL: u8 = 4;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
@@ -502,7 +502,7 @@ mod shot17 {
         }
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         let mode = x.u8(0x43);
         let state = x.u8(0x5);
         match state {
@@ -531,7 +531,7 @@ mod shot17 {
     }
 
     /// Charge : animation 0 pendant 60 images.
-    fn charge(x: &mut Cx) {
+    fn charge<R: Banc>(x: &mut Cx<'_, R>) {
         let parent = ptr(x, 0x56);
         if (parent.u8(x.b, 0x4) as i8) >= 4 {
             return kill(x);
@@ -663,7 +663,7 @@ mod shot17 {
     }
 
     /// Chute après le tir (modes 0 et < 0) : touche le sol (Z < 0) → animation d'impact.
-    fn land(x: &mut Cx, mover: fn(&mut Cx), clear_state: bool) {
+    fn land<R: Banc>(x: &mut Cx<'_, R>, mover: fn(&mut Cx<'_, R>), clear_state: bool) {
         mover(x);
         x.anim_step();
         if (x.u16(0xc) as i16) >= 0 {
@@ -884,7 +884,7 @@ mod shot20 {
     const IDLE: u8 = 0;
     const STRIKE: u8 = 2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
@@ -907,7 +907,7 @@ mod shot20 {
         x.anim_start(ANIMS, anim);
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return;
         }
@@ -936,12 +936,11 @@ mod shot20 {
         x.anim_start(ANIMS, 3);
     }
 
-    fn idle(x: &mut Cx) {
+    fn idle<R: Banc>(x: &mut Cx<'_, R>) {
         match (x.u8(0x6), x.u8(0x3)) {
             (0, 0) => {
                 x.set8(0x1d, 0);
                 x.add8(0x6, 2);
-                x.c.d[0] = 0;
                 let alea = x.random();
                 let anim = x.rom8(IDLE_ANIMS + (alea as u32 & 7)) as u32;
                 x.anim_start(ANIMS, anim as u16);
@@ -981,7 +980,6 @@ mod shot20 {
             (2, _) => {
                 if x.anim_step() {
                     x.add8(0x6, 0xfe);
-                    x.c.d[0] = 0;
                     let alea = x.random();
                     let delay = x.rom16(DELAYS + 2 * (alea as u32 & 7));
                     x.set16(f::TIMER, delay);
@@ -994,7 +992,7 @@ mod shot20 {
         }
     }
 
-    fn strike(x: &mut Cx) {
+    fn strike<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x6) {
             0 => {
                 x.add8(0x6, 2);
@@ -1065,7 +1063,7 @@ mod shot21 {
     const LOOP: u8 = 0;
     const END: u8 = 2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
@@ -1095,7 +1093,7 @@ mod shot21 {
         kill(x);
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return;
         }
@@ -1305,7 +1303,7 @@ mod shot24 {
     const GROUP_SIZE_SELECTOR: u32 = 0x7f92;
     const SPAWN_ENEMIES_AT: u16 = 0x20;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
@@ -1314,7 +1312,7 @@ mod shot24 {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let source = x.linked(0x5c);
         if x.u8(0x3) == 0 {
@@ -1340,7 +1338,7 @@ mod shot24 {
         }
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) != 0 {
             if x.anim_step() {
                 x.add8(0x4, 2);
@@ -1375,7 +1373,7 @@ mod shot24 {
     }
 
     /// Fait apparaître le groupe d'ennemis autour du créateur.
-    fn spawn_enemies(x: &mut Cx) {
+    fn spawn_enemies<R: Banc>(x: &mut Cx<'_, R>) {
         let mut d0 = x.a5_u8(0x35) as u16;
         if d0 != 0 {
             d0 = d0.wrapping_sub(1) & 3;
@@ -1384,7 +1382,6 @@ mod shot24 {
         let mut count = x.rom8(GROUP_SIZES.wrapping_add(d0 as i16 as i32 as u32)) as u16;
         count = count.wrapping_sub(1);
         let mut label: u16 = 1;
-        x.c.d[0] = 0;
         let alea = x.random();
         let mut table = GROUP_OFFSETS + ((alea as u32 & 7) << 3);
         loop {
@@ -1421,7 +1418,7 @@ mod shot25 {
     const ANIMS: u32 = 0x16ea18;
     const IMPACT_EFFECT: u32 = 0xeafdc;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => wait_and_drop(x),
             2 => fall(x),
@@ -1430,7 +1427,7 @@ mod shot25 {
         }
     }
 
-    fn wait_and_drop(x: &mut Cx) {
+    fn wait_and_drop<R: Banc>(x: &mut Cx<'_, R>) {
         x.add16(0x58, 0xffff);
         if x.u16(0x58) != 0 {
             return;
@@ -1448,7 +1445,6 @@ mod shot25 {
         x.set16(0x1a, -0x40i16 as u16);
         let variant = x.u8(0x3);
         if variant != 0 {
-            x.c.d[0] = 0;
             let alea = x.random();
             let mut dx = alea & 0x7f;
             if variant & 1 != 0 {
@@ -1467,7 +1463,7 @@ mod shot25 {
         x.reinsert();
     }
 
-    fn fall(x: &mut Cx) {
+    fn fall<R: Banc>(x: &mut Cx<'_, R>) {
         x.anim_step();
         x.move_z();
         if (x.u16(0xc) as i16) >= 0 {
@@ -1475,7 +1471,6 @@ mod shot25 {
         }
         x.add8(0x4, 2);
         x.set32(0xc, 0);
-        x.c.d[0] = 3;
         crate::families::effects_creators::debris(x.b, x.o, 3);
         crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
         crate::sound::jouer(x.b, IMPACT_EFFECT, x.o);
@@ -1504,7 +1499,7 @@ mod shot26 {
     const GROUND: u8 = 2;
     const BLINK: u8 = 4;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => {
@@ -1521,7 +1516,7 @@ mod shot26 {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add16(0x58, 0xffff);
         if x.u16(0x58) != 0 {
             return;
@@ -1535,7 +1530,6 @@ mod shot26 {
         let row = x.u8(0x60) as u32;
         let height = x.rom16(HEIGHTS + 2 * row);
         x.set16(0xc, height);
-        x.c.d[0] = 0;
         let alea = x.random();
         let mut table = x.rom16(SPEED_TABLES + 2 * (alea as u32 & 3)) as u32;
         if x.u8(0x56) != 0 && x.u8(0x3) == 0 {
@@ -1548,7 +1542,7 @@ mod shot26 {
         x.reinsert();
     }
 
-    fn fly(x: &mut Cx) {
+    fn fly<R: Banc>(x: &mut Cx<'_, R>) {
         x.anim_step();
         x.move_xyz();
         if (x.u16(0xc) as i16) >= 0 {
@@ -1607,7 +1601,7 @@ mod shot27 {
     const RISE: u8 = 0;
     const FADE: u8 = 2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
@@ -1640,7 +1634,7 @@ mod shot27 {
         x.reinsert();
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) == 0 {
             x.add16(0x58, 0xffff);
             if x.u16(0x58) == 0 {
@@ -1812,7 +1806,7 @@ fn blink_by_parity<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Gabarit des types 32, 33, 35, 36 et 38 : pause (objet suspendu), état, puis, si l'objet existe
 /// encore, remise en place dans la liste.
-fn guarded(x: &mut Cx, state: fn(&mut Cx)) {
+fn guarded<R: Banc>(x: &mut Cx<'_, R>, state: fn(&mut Cx<'_, R>)) {
     if suspended(x) {
         return;
     }
@@ -1841,7 +1835,7 @@ mod shot29 {
     const WAIT: u8 = 0;
     const HOLD: u8 = 2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
@@ -1884,7 +1878,7 @@ mod shot29 {
         x.add8(0x4, 2);
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         let source = x.linked(0x5c);
         if (source.u8(x.b, 0x4) as i8) >= 4 || source.u16(x.b, 0x4) == 0x20a {
             return stop(x);
@@ -1940,8 +1934,8 @@ mod shot29 {
     }
 
     /// Élément de la rangée : clignote selon `A5+0x6f`, change d'animation quand l'épicentre s'éteint.
-    fn satellite(x: &mut Cx, source: Obj) {
-        let flicker = |x: &mut Cx| {
+    fn satellite<R: Banc>(x: &mut Cx<'_, R>, source: Obj) {
+        let flicker = |x: &mut Cx<'_, R>| {
             let hidden = x.a5_u8(0x6f) & 1 == 0;
             x.set_bit(0x1, 1, hidden);
         };
@@ -2005,7 +1999,7 @@ mod shot30 {
     const SOUND_END: u32 = 0xed90a;
     const OWNER_ARMED: u32 = 0xaf;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
@@ -2035,7 +2029,7 @@ mod shot30 {
         x.anim_start(ANIMS, 0);
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(f::OWNER) == 0 {
             return;
         }
@@ -2099,7 +2093,7 @@ mod shot31 {
     const SEARCH: u8 = 0;
     const HUNT: u8 = 2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(0x5c) == 0 {
             return kill(x);
         }
@@ -2144,7 +2138,7 @@ mod shot31 {
         }
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         let source = x.linked(0x5c);
         if (source.u16(x.b, 0x4) as i16) >= 0x406 {
             return fly_away(x);
@@ -2176,7 +2170,7 @@ mod shot31 {
                     let angle = crate::aides::direction_from(x.b, x.o, vers).wrapping_add(x.u8(0x58)) & 0x1f;
                     x.set8(0x2d, angle);
                 }
-                let touching = |x: &mut Cx, a: u16, b: u16| a.wrapping_sub(b).wrapping_add(8) <= 0x20 && x.a5_u8(GAME_PAUSED) == 0;
+                let touching = |x: &mut Cx<'_, R>, a: u16, b: u16| a.wrapping_sub(b).wrapping_add(8) <= 0x20 && x.a5_u8(GAME_PAUSED) == 0;
                 let (sx, sy) = (source.u16(x.b, 0x8), source.u16(x.b, 0x10));
                 let (mx, my) = (x.u16(0x8), x.u16(0x10));
                 let hit = source.u8(x.b, 0x4) != 4 && touching(x, sx, mx) && touching(x, sy, my);
@@ -2223,11 +2217,11 @@ mod shot32 {
     const FALL: u8 = 2;
     const END: u8 = 4;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         guarded(x, state)
     }
 
-    fn state(x: &mut Cx) {
+    fn state<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => match x.u8(0x5) {
@@ -2408,7 +2402,7 @@ mod shot34 {
     const TINT: u32 = 0xf000_f000;
     const SOURCE_BUSY: u32 = 0xa0;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(0x5c) == 0 {
             return kill(x);
         }
@@ -2451,7 +2445,7 @@ mod shot34 {
         source
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         let variant = x.u8(0x3);
         if variant == 0 && x.u8(0x5) == 0 {
             x.add8(0x5, 2);
@@ -2485,9 +2479,7 @@ mod shot34 {
             x.set16(0xc, camera_y.wrapping_add(0xda));
             x.set16(0x10, 0);
             x.set16(0x42, 0x258);
-            x.c.d[0] = x.c.d[0] & 0xffff_0000 | 0xf0;
-            let anim = x.c.d[0];
-            x.anim_start(ANIMS_SCREEN, anim as u16);
+            x.anim_start(ANIMS_SCREEN, 0xf0);
         } else {
             let dx = if source.u8(x.b, f::FLIP) != 0 { 8 } else { -8i16 as u16 };
             x.add16(0x8, dx);
@@ -2497,7 +2489,7 @@ mod shot34 {
         }
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return;
         }
@@ -2559,11 +2551,11 @@ mod shot35 {
     const FLY: u8 = 0;
     const FADE: u8 = 2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         guarded(x, state)
     }
 
-    fn state(x: &mut Cx) {
+    fn state<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -2623,11 +2615,11 @@ mod shot36 {
     const Y_OFFSETS: u32 = 0xa2b2a;
     const SOUND_LAND: u32 = 0xed548;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         guarded(x, state)
     }
 
-    fn state(x: &mut Cx) {
+    fn state<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -2710,7 +2702,7 @@ mod shot37 {
     const FALL: u8 = 0;
     const BLINK: u8 = 2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(0x5c) == 0 {
             return kill(x);
         }
@@ -2729,8 +2721,7 @@ mod shot37 {
         }
     }
 
-    fn launch(x: &mut Cx) {
-        x.c.d[0] = 0;
+    fn launch<R: Banc>(x: &mut Cx<'_, R>) {
         let alea = x.random();
         let r = alea as u32 & 0xf;
         let vz = x.rom16(SPEEDS + 2 * r);
@@ -2755,7 +2746,7 @@ mod shot37 {
         x.set16(0xc, 0x100);
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         let source = x.linked(0x5c);
         if (source.u8(x.b, 0x4) as i8) >= 4 {
             return x.free_eshl();
@@ -2769,17 +2760,14 @@ mod shot37 {
                     x.add8(0x5, 2);
                     x.set16(0xc, 0);
                     x.set8(0x42, 0x19);
-                    x.c.d[0] = 0;
-                    x.c.d[1] = x.c.d[1] & 0xffff_0000 | 0x201;
-                    x.c.d[2] &= 0xffff_0000;
-                    x.c.d[3] &= 0xffff_0000;
+                    *x.c.d2() &= 0xffff_0000;
+                    *x.c.d3() &= 0xffff_0000;
                     let choc = crate::effects_aids::shock(x.b, x.o, 0, 0x201, 0, 0);
                     // Glitch d'origine : la variante des débris est le D1.b que laisse le choc (0xb10c8) : l'octet
                     // haut de son réglage, ou l'octet bas quand le choc n'est pas créé (scène 41, pool plein).
                     let variante = if choc.is_some() { 2 } else { 1 };
-                    x.c.d[1] = x.c.d[1] & 0xffff_0000 | if choc.is_some() { 2 } else { 0x201 };
                     for _ in 0..2 {
-                        x.c.d[2] = 1;
+                        *x.c.d2() = 1;
                         crate::families::effects_creators::debris_rain(x.b, x.o, variante, 1);
                     }
                 }
@@ -2817,7 +2805,7 @@ mod shot38 {
     const SPEED_ROWS_VARIANT: u32 = 0xa2f34;
     const SPRITES: u32 = 0xa2e10;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -2829,7 +2817,7 @@ mod shot38 {
         a.wrapping_sub(0x10).wrapping_neg().wrapping_add(0x10)
     }
 
-    fn state(x: &mut Cx) {
+    fn state<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => {
@@ -2844,7 +2832,7 @@ mod shot38 {
     }
 
     /// Déplacement tant que Z > 0 ; au sol, passe à l'état suivant.
-    fn fall(x: &mut Cx) {
+    fn fall<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x29) == 0 {
             x.move_by_table_xz();
             x.move_y();
@@ -2933,7 +2921,7 @@ mod shot39 {
     const SETTLE: u8 = 2;
     const BURN: u8 = 4;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(0x5c) == 0 {
             return kill(x);
         }
@@ -2972,7 +2960,7 @@ mod shot39 {
     }
 
     /// Fait tourner les 8 images de flamme toutes les 4 images.
-    fn spin(x: &mut Cx) {
+    fn spin<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x46, 0xff);
         if (x.u8(0x46) as i8) >= 0 {
             return;
@@ -2985,7 +2973,7 @@ mod shot39 {
         x.set8(0x2b, frame);
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         spin(x);
         let source = x.linked(0x5c);
         if source.u16(x.b, 0x4) == 0x406 {
@@ -3041,29 +3029,29 @@ mod shot39 {
     }
 }
 handlers! {
-    0x9fe0a "eshl_15" shot15::run,
-    0xa03e0 "eshl_16" shot16::run,
-    0xa05ce "eshl_17" shot17::run,
+    0x9fe0a "eshl_15" #[sans] shot15::run,
+    0xa03e0 "eshl_16" #[sans] shot16::run,
+    0xa05ce "eshl_17" #[sans] shot17::run,
     0xa0a06 "eshl_18" #[sans] shot18::run,
     0xa0b20 "eshl_19" #[sans] shot19::run,
-    0xa0c5a "eshl_20" shot20::run,
-    0xa0f96 "eshl_21" shot21::run,
+    0xa0c5a "eshl_20" #[sans] shot20::run,
+    0xa0f96 "eshl_21" #[sans] shot21::run,
     0xa1180 "eshl_22" #[sans] shot22::run,
     0xa1292 "eshl_23" #[sans] shot23::run,
-    0xa137e "eshl_24" shot24::run,
-    0xa16bc "eshl_25" shot25::run,
-    0xa18dc "eshl_26" shot26::run,
-    0xa1a64 "eshl_27" shot27::run,
+    0xa137e "eshl_24" #[sans] shot24::run,
+    0xa16bc "eshl_25" #[sans] shot25::run,
+    0xa18dc "eshl_26" #[sans] shot26::run,
+    0xa1a64 "eshl_27" #[sans] shot27::run,
     0xa1c96 "eshl_28" #[sans] shot28::run,
-    0xa1d70 "eshl_29" shot29::run,
-    0xa2060 "eshl_30" shot30::run,
-    0xa21b6 "eshl_31" shot31::run,
-    0xa239a "eshl_32" shot32::run,
+    0xa1d70 "eshl_29" #[sans] shot29::run,
+    0xa2060 "eshl_30" #[sans] shot30::run,
+    0xa21b6 "eshl_31" #[sans] shot31::run,
+    0xa239a "eshl_32" #[sans] shot32::run,
     0xa2524 "eshl_33" #[sans] shot33::run,
-    0xa2630 "eshl_34" shot34::run,
-    0xa28d2 "eshl_35" shot35::run,
-    0xa29cc "eshl_36" shot36::run,
-    0xa2b62 "eshl_37" shot37::run,
-    0xa2d48 "eshl_38" shot38::run,
-    0xa2fb8 "eshl_39" shot39::run,
+    0xa2630 "eshl_34" #[sans] shot34::run,
+    0xa28d2 "eshl_35" #[sans] shot35::run,
+    0xa29cc "eshl_36" #[sans] shot36::run,
+    0xa2b62 "eshl_37" #[sans] shot37::run,
+    0xa2d48 "eshl_38" #[sans] shot38::run,
+    0xa2fb8 "eshl_39" #[sans] shot39::run,
 }

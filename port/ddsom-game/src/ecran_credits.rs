@@ -1,11 +1,11 @@
 //! Écran des crédits (C1) : textes et chiffres des crédits et des pièces affichés pendant
 //! l'attente d'un départ (`0x148be` texte du crédit, `0x14b74` texte d'un joueur, `0x14c1e` effacement,
-//! `0x14652` chiffres). La tâche des crédits (`credits_task.rs`) les appelle avec le premier monnayeur
+//! `0x14652` chiffres). La tâche des crédits (`tache_credits.rs`) les appelle avec le premier monnayeur
 //! (`A5+0x44e`, voir `credits.rs`, A1 de l'original) ; ils ne cèdent jamais la main.
 //!
 //! Les textes sont des tables de pointeurs de la ROM, indexées par le nombre de crédits ou de pièces
 //! en attente : l'index se calcule en 4 octets par pas. Les chiffres s'écrivent dans la couche de
-//! caractères (GFX RAM 0x912000) par `credits::write_digit` (0x14e46).
+//! caractères (GFX RAM 0x912000) par `credits::ecrire_chiffre` (0x14e46).
 //!
 //! Variables : `A5+0x20` monnayeur partagé, `+0x21` nombre de monnayeurs moins un, `+0x22` compteurs
 //! séparés, `+0x1e` pièces par crédit, `+0x456` écran à gros chiffres. Dans un monnayeur : `+1` pièces
@@ -13,7 +13,7 @@
 
 use cps2::Cps2Bus;
 
-use crate::credits::write_digit;
+use crate::credits::ecrire_chiffre;
 use crate::mem::{prog16, rd32, rd8, set_low_byte, wr8, A5};
 use crate::text;
 
@@ -33,7 +33,7 @@ mod table {
 }
 
 /// Premier monnayeur (`A5+0x44e`).
-pub const FIRST_COIN_SLOT: u32 = A5 + 0x44e;
+pub const PREMIER_MONNAYEUR: u32 = A5 + 0x44e;
 
 const CHARACTERS: u32 = 0x912000;
 
@@ -42,13 +42,13 @@ fn v8(b: &mut Cps2Bus, off: u32) -> u8 {
 }
 
 /// Pointeur de texte `table[index]` (A4 de l'original).
-fn text_at(b: &mut Cps2Bus, table: u32, index: u32) -> u32 {
+fn texte(b: &mut Cps2Bus, table: u32, index: u32) -> u32 {
     rd32(b, table + (index & 0xffff))
 }
 
 /// Écrit un chiffre (attribut 1) par `0x14e46` ; rend la case qui suit.
 fn digit(b: &mut Cps2Bus, case: u32, value: u8) -> u32 {
-    write_digit(b, case, value, 1)
+    ecrire_chiffre(b, case, value, 1)
 }
 
 /// Reste de `value` modulo `by` par soustractions (`sub.b ; bgt`), comme l'original.
@@ -111,7 +111,7 @@ fn count_text(b: &mut Cps2Bus, m: u32, col: u8) {
         2 => 1,
         _ => 0,
     };
-    let t = text_at(b, table::PLAYER_TEXT[variant][two_coins], index);
+    let t = texte(b, table::PLAYER_TEXT[variant][two_coins], index);
     text::print_tall_at(b, t, col, 0xd);
 }
 
@@ -139,7 +139,7 @@ pub fn credit_text(b: &mut Cps2Bus, m: u32) {
         wr8(b, m + 0xb, index as u8);
         clear_credit_text(b);
         let index = rd8(b, m + 0xb) as u32;
-        let t = text_at(b, table::TEXT_TWO_COINS, index);
+        let t = texte(b, table::TEXT_TWO_COINS, index);
         text::print_tall(b, t);
         return;
     }
@@ -169,7 +169,7 @@ pub fn credit_text(b: &mut Cps2Bus, m: u32) {
     clear_credit_text(b);
     let table = if rd8(b, m + 2) != 0 { table::TEXT_ONE } else { table::TEXT_ONE_EMPTY };
     let index = rd8(b, m + 0xb) as u32;
-    let t = text_at(b, table, index);
+    let t = texte(b, table, index);
     text::print_tall(b, t);
 }
 
@@ -213,8 +213,8 @@ fn credit_text_separate(b: &mut Cps2Bus) {
     } else {
         &[(P1, 0xa), (P2, 0x18)]
     };
-    for &(coin_slot, col) in layout {
-        count_text(b, A5 + coin_slot, col);
+    for &(monnayeur, col) in layout {
+        count_text(b, A5 + monnayeur, col);
     }
 }
 
@@ -245,7 +245,7 @@ pub fn digits(b: &mut Cps2Bus, m: u32) {
     for player in 0..=v8(b, 0x21) as u32 {
         let index = (rank(b) as u32 + player) << 2;
         if tall {
-            let t = text_at(b, table::TALL_TEXT, index);
+            let t = texte(b, table::TALL_TEXT, index);
             text::print_over(b, t);
             let offset = rd32(b, table::TALL_OFFSETS + index);
             let credits = rd8(b, a2 + 2);
@@ -261,7 +261,7 @@ pub fn digits(b: &mut Cps2Bus, m: u32) {
             digit(b, at, per);
         } else {
             let two_coins = rd8(b, m + 9) != 0;
-            let t = text_at(b, table::DIGIT_TEXT[two_coins as usize], index);
+            let t = texte(b, table::DIGIT_TEXT[two_coins as usize], index);
             text::print(b, t);
             // la table des décalages se lit relativement au PC (programme déchiffré)
             let mut offset = prog16(b, table::DIGIT_OFFSETS + index + 2) as u32;
@@ -278,7 +278,7 @@ pub fn digits(b: &mut Cps2Bus, m: u32) {
 /// Un seul tableau (0x14700) : crédits d'un monnayeur.
 fn digits_single(b: &mut Cps2Bus, m: u32) {
     let two_coins = rd8(b, m + 9) != 0;
-    let t = text_at(b, table::DIGIT_TEXT[two_coins as usize], 0x24);
+    let t = texte(b, table::DIGIT_TEXT[two_coins as usize], 0x24);
     text::print(b, t);
     let at = if rd8(b, m + 9) != 0 { 0x912df4 } else { 0x912e74 };
     let credits = v8(b, 0x450);
@@ -287,7 +287,7 @@ fn digits_single(b: &mut Cps2Bus, m: u32) {
 
 /// Gros chiffres, un seul tableau (0x1484c).
 fn digits_tall_single(b: &mut Cps2Bus) {
-    let t = text_at(b, table::TALL_TEXT, 0x24);
+    let t = texte(b, table::TALL_TEXT, 0x24);
     text::print_over(b, t);
     let credits = v8(b, 0x450);
     let mut at = digit(b, 0x912cf4, credits);

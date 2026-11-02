@@ -371,13 +371,13 @@ pub fn target_in_range(g: &mut Ctx, p: Player) -> bool {
 /// 0x3776 : les boss puis les ennemis.
 fn probe(g: &mut Ctx, p: Player, attack_box: u32, second: bool) -> bool {
     cov!();
-    pools::BOSS.iter().chain(pools::ENEMY.iter()).any(|o| keys(g, p, attack_box, o.0, second))
+    pools::BOSS.iter().chain(pools::ENEMY.iter()).any(|o| touches(g, p, attack_box, o.0, second))
 }
 
 /// 0x3796 : la boîte d'attaque du joueur recouvre-t-elle la boîte de corps de l'objet `o` ?
 /// Pour la première boîte, l'objet ne doit pas être en l'air ; pour la seconde, il doit être
 /// porté (`+0x86`) ou être un ennemi de type 0xa.
-fn keys(g: &mut Ctx, p: Player, attack_box: u32, o: u32, second: bool) -> bool {
+fn touches(g: &mut Ctx, p: Player, attack_box: u32, o: u32, second: bool) -> bool {
     cov!();
     let b = &mut *g.b;
     if rd8(b, o) & 1 == 0 || rd8(b, o + 0x38) == 0 {

@@ -80,7 +80,7 @@ pub fn cross_hatch(x: &mut Ctx) -> Flow {
             next_step(x);
             x.set_v16(var::LAYERS, super::ALL_LAYERS);
             // D0 vaut l'étape (0) : aucune couche coupée
-            crate::video::turn_layers_off(x.b, 0);
+            crate::video::desactiver_couches(x.b, 0);
             print(x, hatch::TITLE);
             print(x, HELP);
             for k in 0..8 {
@@ -94,7 +94,7 @@ pub fn cross_hatch(x: &mut Ctx) -> Flow {
             grid(x);
             x.set_v16(var::LAYERS, super::ALL_LAYERS);
             // D0 vaut l'étape (2)
-            crate::video::turn_layers_on(x.b, 2);
+            crate::video::activer_couches(x.b, 2);
             Flow::Done
         }
         _ => exit_check(x),

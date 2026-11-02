@@ -5,7 +5,7 @@
 //!   couverture_rom <assets> --octets <fichier> [--sans <fichier d'assets>]
 //!
 //! La seconde forme écrit la couverture mot par mot (un octet par mot, données puis programme, 1 = couvert)
-//! pour `DDSOM_COUVERT` de `lectures_rom` ; `--without data/natives.json` l'écrit sans ce fichier (pour
+//! pour `DDSOM_COUVERT` de `lectures_rom` ; `--sans data/natives.json` l'écrit sans ce fichier (pour
 //! `tools/zones_natives.py`, qui le régénère).
 //!
 //! Affiche, par espace (données `d`, programme `p`), le total lu, la part couverte, puis les zones lues non
@@ -19,8 +19,8 @@ use ddsom_assets::rebuild::Program;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if (a.len() == 4 || a.len() == 6 && a[4] == "--sans") && a[2] == "--octets" {
-        let without = a.get(5).cloned().unwrap_or_default();
-        let p = Program::load_files(Path::new(&a[1]), &|f| f != without).expect("ressources");
+        let sans = a.get(5).cloned().unwrap_or_default();
+        let p = Program::load_files(Path::new(&a[1]), &|f| f != sans).expect("ressources");
         let mut out = Vec::new();
         for img in [&p.data, &p.prog] {
             out.extend((0..0x200000u32).map(|w| (img.is_covered(2 * w) && img.is_covered(2 * w + 1)) as u8));
@@ -28,14 +28,14 @@ fn main() {
         std::fs::write(&a[3], out).unwrap();
         return;
     }
-    let [_, assets, reads_path, ..] = &a[..] else {
+    let [_, assets, lectures, ..] = &a[..] else {
         eprintln!("usage : couverture_rom <assets> <lectures.txt> [écart]");
         std::process::exit(2);
     };
     let gap: u32 = a.get(3).map_or(0x10, |g| u32::from_str_radix(g, 16).unwrap());
     let p = Program::load(Path::new(assets)).expect("ressources");
     // octets lus couverts par chaque fichier : (fichier, données, programme)
-    let reads: Vec<(char, u32, u32)> = std::fs::read_to_string(reads_path)
+    let reads: Vec<(char, u32, u32)> = std::fs::read_to_string(lectures)
         .unwrap()
         .lines()
         .filter(|l| l.starts_with(['d', 'p']) && l.as_bytes()[1] == b' ')
@@ -56,7 +56,7 @@ fn main() {
         let (mut total, mut covered) = (0u64, 0u64);
         // zones non couvertes : (début, fin, lectures, masque)
         let mut miss: Vec<(u32, u32, u64, u32)> = Vec::new();
-        for l in std::fs::read_to_string(reads_path).unwrap().lines() {
+        for l in std::fs::read_to_string(lectures).unwrap().lines() {
             let f: Vec<&str> = l.split(' ').collect();
             if f[0].chars().next() != Some(view) {
                 continue;

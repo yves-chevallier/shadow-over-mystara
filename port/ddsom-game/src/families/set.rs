@@ -27,7 +27,7 @@ mod scene_spawner {
     /// Paramètre du créateur : variante du contrôleur à créer.
     const VARIANT_PARAM: u32 = 0x2f;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             WAIT => x.add8(0x4, 2),
             SPAWN => {
@@ -43,7 +43,11 @@ mod scene_spawner {
                 let offset = (class.wrapping_sub(0xe) as u16).wrapping_mul(2) as i16;
                 let at = FREE_BY_CLASS.wrapping_add(offset as i32 as u32);
                 let free = (x.rom16(at) as u32) << 16 | x.rom16(at + 2) as u32;
-                x.call(free);
+                let pool = pools::POOLS
+                    .into_iter()
+                    .find(|p| p.free_routine == free)
+                    .unwrap_or_else(|| unreachable!("{free:#x}: not a pool release routine (class {class:#x})"));
+                x.free(pool);
             }
         }
     }
@@ -337,24 +341,24 @@ mod tile_anim {
     const TABLE_6: u32 = 0xcb024;
     const GAME_PAUSED: u32 = 0x3d;
 
-    pub fn run4(x: &mut Cx) {
+    pub fn run4<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 || x.u8(0x40) != 0 {
             return;
         }
         run(x, TABLE_4, false);
     }
 
-    pub fn run6(x: &mut Cx) {
+    pub fn run6<R: Banc>(x: &mut Cx<'_, R>) {
         run(x, TABLE_6, true);
     }
 
-    fn run(x: &mut Cx, table: u32, skip_transparent: bool) {
+    fn run<R: Banc>(x: &mut Cx<'_, R>, table: u32, skip_transparent: bool) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
                 x.set16(TIMER, 0);
                 let at = table.wrapping_add((((x.u8(0x3) as u16) << ENTRY_SIZE_SHIFT) as i16) as u32);
-                let long = |x: &mut Cx, off: u32| (x.rom16(at + off) as u32) << 16 | x.rom16(at + off + 2) as u32;
+                let long = |x: &mut Cx<'_, R>, off: u32| (x.rom16(at + off) as u32) << 16 | x.rom16(at + off + 2) as u32;
                 let (script, tilemap, looping) = (long(x, ENTRY_SCRIPT), long(x, ENTRY_TILEMAP), x.rom16(at + ENTRY_LOOP));
                 x.set32(SCRIPT, script);
                 x.set32(TILEMAP, tilemap);
@@ -481,7 +485,7 @@ mod wave_leader {
     const E_PARENT: u32 = 0x42;
     const E_ANCHOR: u32 = 0x50;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(util::IN_GAME) == 0 {
             return;
         }
@@ -505,7 +509,7 @@ mod wave_leader {
         }
     }
 
-    fn substate(x: &mut Cx) {
+    fn substate<R: Banc>(x: &mut Cx<'_, R>) {
         let boss = x.linked(BOSS);
         match x.u8(0x5) {
             0 => {
@@ -519,7 +523,7 @@ mod wave_leader {
             }
             2 => {
                 let (a, b) = (x.u8(DEFEATED_A), x.u8(DEFEATED_B));
-                let finished = |x: &mut Cx| {
+                let finished = |x: &mut Cx<'_, R>| {
                     x.add8(0x5, 2);
                     boss.set_u16(x.b, BOSS_DONE, 1);
                     x.set8(DIFF, a.wrapping_sub(b));
@@ -670,7 +674,7 @@ mod wave_leader {
 /// puis revient dans la boucle de dispatch (son appel en cours, `dispatch::Etape::Aiguillage`).
 pub mod fondu_de_sortie {
     use super::super::set_b;
-    use super::Cx;
+    use super::{Banc, Cx};
     use crate::mem::A5;
     use crate::modes::{Flow, Sequence};
     use crate::objects::Obj;
@@ -712,19 +716,24 @@ pub mod fondu_de_sortie {
         }
     }
 
-    /// Fondu complet vers le noir (`jsr 0x1460`, délai 2, quatre pages), suivi de `suite`. Le fondu cède la main : le
-    /// gestionnaire doit revenir aussitôt (appel terminal), et la boucle de dispatch qui l'a appelé abandonne ; la
-    /// tâche reprendra par les étapes du fondu, puis `suite`, puis la boucle (`dispatch::Etape::Aiguillage`).
-    pub fn fondu_au_noir(x: &mut Cx, suite: fn(Obj) -> Etape) {
+    /// Full fade to black (`jsr 0x1460`, delay 2, four pages), followed by `suite`. The fade yields: the handler must
+    /// return at once (tail call), and the dispatch loop that called it gives up; the task will resume through the
+    /// fade's steps, then `suite`, then the loop (`dispatch::Etape::Aiguillage`).
+    pub fn fondu_au_noir<R: Banc>(x: &mut Cx<'_, R>, suite: fn(Obj) -> Etape) {
         x.set_a5_u16(DELAI, 2);
         x.set_a5_u8(PAGES, 0xf);
-        // registres de l'appel d'origine, gardés par le contexte de la tâche jusqu'à la reprise
+        // The fade steps still run on a scene context, which holds a processor: a work bench, A0 = the gate (kept by
+        // the fade's steps for the resumption), D2-D5 = the leftovers (`dispatch::Restes`), passed back afterwards
+        // (an empty fade returns at once and runs `suite` on it).
         let porte = x.o;
-        x.c.a[0] = porte.0;
-        x.c.a[5] = A5;
-        let mut s = crate::scene::Ctx::new(&mut *x.c, &mut *x.b);
-        // s'il revenait sans céder, la suite et le retour du gestionnaire seraient déjà faits (`revenir`)
+        let mut banc = m68k::Cpu::default();
+        banc.a[0] = porte.0;
+        banc.a[5] = A5;
+        (banc.d[2], banc.d[3], banc.d[4], banc.d[5]) = (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5());
+        banc.d[7] = x.compteur() as u32;
+        let mut s = crate::scene::Ctx::new(&mut banc, &mut *x.b);
         s.sous_programme(crate::taches::fondu::descente, suite(porte));
+        (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (banc.d[2], banc.d[3], banc.d[4], banc.d[5]);
     }
 }
 
@@ -816,7 +825,7 @@ mod exit_gate {
     const PLAYER_STATE_GONE: u16 = 0x402;
     const STATE_DONE: u8 = 2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         refresh_player_count(x);
         if !gate_active(x.b, x.o) {
             return;
@@ -860,7 +869,7 @@ mod exit_gate {
     const KIND_GAME_OVER: u8 = 3;
 
     /// Tous les joueurs sont prêts (0xcb844) : prime, palette, joueurs morts cachés, puis la sortie.
-    fn change_zone(x: &mut Cx) {
+    fn change_zone<R: Banc>(x: &mut Cx<'_, R>) {
         let bonus = rd8(x.b, BONUS_TOTAL).wrapping_add(x.u8(BONUS));
         wr8(x.b, BONUS_TOTAL, bonus);
         crate::text::clear_box(x.b, CLEARED_TEXT_BOX);
@@ -888,7 +897,7 @@ mod exit_gate {
     }
 
     /// Après le fondu d'un changement de zone (0xcb896) : retour d'une zone annexe, ou entrée.
-    pub fn after_fade(x: &mut Cx) {
+    pub fn after_fade<R: Banc>(x: &mut Cx<'_, R>) {
         let scene = x.u8(NEXT_SCENE);
         x.set_a5_u8(SCENE, scene);
         if x.u8(EXIT_KIND) == KIND_RETURN {
@@ -971,13 +980,12 @@ mod exit_gate {
     }
 
     /// Entrée dans la zone annexe (0xcc0ca) : caméras, script de scène, palettes, joueurs replacés.
-    fn enter_annex(x: &mut Cx) {
-        x.c.a[0] = x.o.0;
-        crate::families::creators::restart_scene(x.c, x.b);
+    fn enter_annex<R: Banc>(x: &mut Cx<'_, R>) {
+        crate::families::scenery::restart_scene(x);
     }
 
     /// Retour d'une zone annexe (0xcbeba) : joueurs relâchés, la porte se libère, le monde se réveille.
-    fn leave_annex(x: &mut Cx) {
+    fn leave_annex<R: Banc>(x: &mut Cx<'_, R>) {
         for p in players() {
             if p.u8(x.b, P_ACTIVE) == 0 {
                 continue;
@@ -994,7 +1002,7 @@ mod exit_gate {
         // les autres portes réveillées s'exécutent aussitôt (`bsr` récursif de l'original)
         set_b::resume_with(x, &set_b::SET_POOL, |x, o| {
             if o.u8(x.b, 2) == 7 {
-                set_b::run_on_68k(x, o, run);
+                set_b::run_on(x, o, run);
             }
         });
         for pool in &SUSPENDED[1..] {
@@ -1005,9 +1013,8 @@ mod exit_gate {
     }
 
     /// État 4 (0xcba48) : retour de la zone annexe, la scène d'avant est rechargée.
-    fn arrive(x: &mut Cx) {
-        x.c.a[0] = x.o.0;
-        crate::families::creators::reprendre_decor(x.c, x.b, 0x33b24);
+    fn arrive<R: Banc>(x: &mut Cx<'_, R>) {
+        crate::families::scenery::resume_scenery_lit(x, crate::families::scenery::Cameras::Return);
         x.set_a5_u16(OWNER_GATE, 0);
         crate::text::clear_box(x.b, CLEARED_TEXT_BOX);
         set_b::restore_camera(x);
@@ -1019,8 +1026,6 @@ mod exit_gate {
         x.set_a5_u8(0x58, v);
         let musique = x.u16(0x1c);
         crate::sound::jouer_avec(x.b, 0xe17a4, crate::sound::Source { d4: Some(musique as u32), ..Default::default() });
-        let camera = if x.a5_u8(0x36) != 0 { 0x54e } else { 0x4fe };
-        x.c.a[4] = A5 + camera;
         for p in players() {
             if p.u8(x.b, P_ACTIVE) != 0 {
                 place(x, p);
@@ -1037,7 +1042,7 @@ mod exit_gate {
 
     /// Replace un joueur devant la porte (0xcbb3c) ; un joueur hors de l'état 2 est seulement caché
     /// et posé au sol.
-    fn place(x: &mut Cx, p: Obj) {
+    fn place<R: Banc>(x: &mut Cx<'_, R>, p: Obj) {
         if p.u8(x.b, P_STATE) != 2 {
             let flags = p.u8(x.b, P_FLAGS) | P_HIDDEN;
             p.set_u8(x.b, P_FLAGS, flags);
@@ -1056,8 +1061,8 @@ mod exit_gate {
         p.set_u16(x.b, P_X, gx.wrapping_add(dx));
         p.set_u16(x.b, P_Y, gy.wrapping_add(dy));
         p.set_u16(x.b, P_Z, 0);
-        crate::mem::set_low_word(&mut x.c.d[1], dx);
-        crate::mem::set_low_word(&mut x.c.d[2], dy);
+        // Original glitch: the Y offset stays in D2.w (`dispatch::Restes`)
+        crate::mem::set_low_word(x.c.d2(), dy);
     }
 
     fn alive(b: &mut Cps2Bus, p: Obj) -> bool {
@@ -1150,7 +1155,7 @@ mod exit_gate {
 
     /// État 2 : un joueur reste dans l'emprise assez longtemps (déclenchement), ou arrive à l'état
     /// « prêt » (compté une fois) ; quand tous sont prêts, la zone change.
-    fn watch(x: &mut Cx) {
+    fn watch<R: Banc>(x: &mut Cx<'_, R>) {
         for (i, p) in players().enumerate() {
             let bit = 1u8 << i;
             let counter = NEAR_COUNTERS + i as u32;
@@ -1375,7 +1380,6 @@ mod dialogue {
     const TEXT_TABLES: u32 = 0xcc438;
     const GAME_MODE: u32 = 0x72;
     /// Création d'un objet SOBJ de type 0xc : D0 = variante, retenue = échec ; A1 = l'objet.
-    const SPAWN_FRAME: u32 = 0xdfc78;
     const PALETTE_SRC: u32 = 0x292260;
     const PALETTE_DST: u32 = 0x91c180;
     /// Variable d'arrêt (A5 - 0x5fbe) et variable « bulle affichée » (A5 - 0x5b8c).
@@ -1392,7 +1396,7 @@ mod dialogue {
     const FRAME_WIDTH: u32 = 0x14;
     const FRAME_FREE_STATE: u32 = 0x6000000;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if crate::mem::rd8(x.b, STOP) == 0 {
             if x.u8(0x4) == 0 {
                 return create(x);
@@ -1412,7 +1416,7 @@ mod dialogue {
         x.free(&pools::SET);
     }
 
-    fn create(x: &mut Cx) {
+    fn create<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(TIMER, LIFETIME);
         let variant = (x.u8(0x3) << 2) as u32;
@@ -1421,11 +1425,8 @@ mod dialogue {
         let text = x.data32(table + variant);
         let width = x.data16(text);
         x.set16(FRAME, 0);
-        x.c.d[0] = x.u8(0x2f) as u32;
-        x.c.d[1] = x.c.d[1] & !0xffff | width as u32;
-        x.call(SPAWN_FRAME);
-        if x.c.sr & m68k::SR_C == 0 {
-            let frame = Obj(x.c.a[1]);
+        let variante = x.u8(0x2f);
+        if let Ok(frame) = crate::families::creators::sobj_12_pur(x.b, variante) {
             frame.set_u16(x.b, FRAME_WIDTH, width);
             x.set16(FRAME, frame.0 as u16);
         }
@@ -1544,7 +1545,7 @@ mod name_entry {
     const GRID_COLS: u16 = 11;
     const GRID_ROWS: u16 = 6;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) != 0 {
             return cursor::run(x);
         }
@@ -1856,7 +1857,7 @@ mod name_entry {
     mod cursor {
         use super::*;
 
-        pub fn run(x: &mut Cx) {
+        pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
             match x.u8(0x4) {
                 0 => init(x),
                 2 => step(x),
@@ -1871,7 +1872,7 @@ mod name_entry {
 
         /// 0xc9a74 : état 0. Un joueur qui a déjà un nom (tampon non vide) est marqué terminé ; sinon
         /// le curseur se place sur la case de départ de son joueur.
-        fn init(x: &mut Cx) {
+        fn init<R: Banc>(x: &mut Cx<'_, R>) {
             let player = owner(x);
             x.set8(ACTIVE, 0);
             x.set8(DONE, 0);
@@ -1900,7 +1901,7 @@ mod name_entry {
         }
 
         /// 0xc9b9e : état 2, une image de saisie.
-        fn step(x: &mut Cx) {
+        fn step<R: Banc>(x: &mut Cx<'_, R>) {
             x.set8(TYPED, 0);
             let (c, r) = (x.u16(COL), x.u16(ROW));
             x.set16(PREV_X, c);
@@ -1918,7 +1919,7 @@ mod name_entry {
         }
 
         /// Un déplacement : la grille répète la direction toutes les 6 images, 30 la première fois.
-        fn handle_input(x: &mut Cx) {
+        fn handle_input<R: Banc>(x: &mut Cx<'_, R>) {
             let player = x.u8(PLAYER) as u32;
             let (held, pressed) = inputs(x, player);
             let mut repeat = 0x1e;
@@ -1954,7 +1955,7 @@ mod name_entry {
         }
 
         /// 0xc9ef8 : déplace le curseur d'une case dans la direction `dir`.
-        fn step_cursor(x: &mut Cx, dir: u32, repeat: u8) {
+        fn step_cursor<R: Banc>(x: &mut Cx<'_, R>, dir: u32, repeat: u8) {
             x.set8(REPEAT, repeat);
             let (col, row) = (x.u16(COL), x.u16(ROW));
             let slot = (dir * 2 + if wide(x) { 8 } else { 0 }) as u16;
@@ -1962,8 +1963,8 @@ mod name_entry {
         }
 
         /// Routines de déplacement (table 0xc9f26) : `slot` = direction × 2 (+ 8 en grille large).
-        fn move_cursor(x: &mut Cx, slot: u16, col: u16, row: u16) {
-            let width = |x: &mut Cx, table: u32, row: u16| x.data16(table.wrapping_add(row.wrapping_mul(2) as i16 as i32 as u32));
+        fn move_cursor<R: Banc>(x: &mut Cx<'_, R>, slot: u16, col: u16, row: u16) {
+            let width = |x: &mut Cx<'_, R>, table: u32, row: u16| x.data16(table.wrapping_add(row.wrapping_mul(2) as i16 as i32 as u32));
             match slot {
                 // vers la droite, grille étroite
                 0 => {
@@ -2065,7 +2066,7 @@ mod name_entry {
         }
 
         /// 0xc9c1a : bouton 1 — choisit la case courante : commande (colonne spéciale) ou caractère.
-        fn confirm_button(x: &mut Cx) {
+        fn confirm_button<R: Banc>(x: &mut Cx<'_, R>) {
             let special = if !wide(x) {
                 x.u16(COL) == 0xa
             } else {
@@ -2089,7 +2090,7 @@ mod name_entry {
 
         /// 0xc9cd8 : commande de la colonne spéciale selon la ligne : 1 valider (0x81), 2 nom par
         /// défaut, 3 effacer, 4 terminer.
-        fn special_command(x: &mut Cx) {
+        fn special_command<R: Banc>(x: &mut Cx<'_, R>) {
             let n = if !wide(x) { x.u16(ROW) } else { x.u16(COL).wrapping_sub(2) };
             match n {
                 1 => {
@@ -2205,7 +2206,7 @@ mod name_entry {
 
         /// 0xc9eb0 : termine la saisie (nom vide → nom par défaut), contrôle les codes secrets, calcule
         /// le chiffre de contrôle et écrit le résultat dans le joueur.
-        fn finish(x: &mut Cx) {
+        fn finish<R: Banc>(x: &mut Cx<'_, R>) {
             let n;
             if x.u8(LENGTH) == 0 {
                 load_default_name(x);
@@ -2225,9 +2226,9 @@ mod name_entry {
 
         /// 0xca33c : un tampon de lettres identiques ou entièrement « valider » redevient le nom par
         /// défaut.
-        fn check_repeated_name(x: &mut Cx) {
+        fn check_repeated_name<R: Banc>(x: &mut Cx<'_, R>) {
             let player = owner(x);
-            let b = |x: &mut Cx, i: u32| player.u8(x.b, BUFFER + i);
+            let b = |x: &mut Cx<'_, R>, i: u32| player.u8(x.b, BUFFER + i);
             let first = b(x, 0);
             let mut same = true;
             for i in 0..5 {
@@ -2465,7 +2466,7 @@ mod name_entry {
 
         /// 0xca2f8 : état 6. Si le joueur est encore là et la saisie pas terminée, la termine d'office ;
         /// puis libération.
-        fn finish_and_free(x: &mut Cx) {
+        fn finish_and_free<R: Banc>(x: &mut Cx<'_, R>) {
             let player = owner(x);
             if player.u8(x.b, 0) != 0 && (player.u8(x.b, 4) as i8) < 4 && x.u8(DONE) == 0 {
                 x.set8(DONE, 1);
@@ -2484,15 +2485,15 @@ macro_rules! entry {
 }
 
 pub const NATIVES: &[crate::Native] = &[
-    entry!(0xcc25a "set_commun_cc25a", scene_spawner::run),
+    entry!(0xcc25a "set_commun_cc25a", #[sans] scene_spawner::run),
     entry!(0xba310 "set_0", #[sans] palette_script::run),
-    entry!(0xbc518 "set_1", wave_leader::run),
-    entry!(0xc935a "set_4", tile_anim::run4),
-    entry!(0xc9780 "set_5", name_entry::run),
-    entry!(0xcafec "set_6", tile_anim::run6),
-    entry!(0xcb29c "set_7", exit_gate::run),
+    entry!(0xbc518 "set_1", #[sans] wave_leader::run),
+    entry!(0xc935a "set_4", #[sans] tile_anim::run4),
+    entry!(0xc9780 "set_5", #[sans] name_entry::run),
+    entry!(0xcafec "set_6", #[sans] tile_anim::run6),
+    entry!(0xcb29c "set_7", #[sans] exit_gate::run),
     entry!(0xcc2c8 "set_9", #[sans] inert::run),
-    entry!(0xcc3c2 "set_10", dialogue::run),
+    entry!(0xcc3c2 "set_10", #[sans] dialogue::run),
     entry!(0xcdcaa "set_11", #[sans] level_end::run),
     entry!(0xcdd70 "set_12", #[sans] fade_white::run),
     entry!(0xcdef6 "set_13", #[sans] palette_anim::run),

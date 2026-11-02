@@ -79,7 +79,7 @@ fn jump<R: Banc>(x: &mut Cx<'_, R>, table: u32, i: u8) -> u32 {
     table.wrapping_add(w as i16 as i32 as u32)
 }
 
-fn run(x: &mut Cx) {
+fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let state = x.u8(f::STATE);
     let target = jump(x, rom::STATES, state);
     match state {
@@ -107,14 +107,14 @@ fn load_sheet<R: Banc>(x: &mut Cx<'_, R>, sparkle: bool) {
     }
 }
 
-fn start_animation(x: &mut Cx) {
+fn start_animation<R: Banc>(x: &mut Cx<'_, R>) {
     let variant = x.u8(f::VARIANT) as u32;
     x.anim(rom::ANIMATIONS, variant);
     x.reinsert();
 }
 
 /// État 0 : une pièce rejetée attend son délai ; une autre tombe (en l'air) ou attend au sol en scintillant.
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::THROWN) != 0 {
         let delay = x.u8(f::DELAY);
         if delay != 0 {
@@ -141,7 +141,7 @@ fn init(x: &mut Cx) {
     start_animation(x);
 }
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     let sub = x.u8(f::SUB);
     let target = jump(x, rom::SUB_STATES, sub);
     match sub {
@@ -165,7 +165,7 @@ fn active(x: &mut Cx) {
 }
 
 /// Sous-état 0 : chute ; au sol, la pièce est ramenée dans la vue (sauf rejetée) et scintille.
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     if !x.move_xyz().gt() {
         x.add8(f::SUB, 2);
         x.set16(f::LIFETIME, LIFETIME);
@@ -202,7 +202,7 @@ fn into_view<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// `0xdb320` : la durée de vie s'écoule ; la pièce clignote pendant ses 0x3c dernières images, puis
 /// disparaît.
-fn age(x: &mut Cx) {
+fn age<R: Banc>(x: &mut Cx<'_, R>) {
     let left = x.u16(f::LIFETIME).wrapping_sub(1);
     x.set16(f::LIFETIME, left);
     if (left as i16) < 0 {
@@ -210,7 +210,7 @@ fn age(x: &mut Cx) {
         x.set8(f::ACTIVE, 2);
     }
     if left <= 0x3c {
-        let phase = left.wrapping_add(x.c.d[7] as u16) & 1;
+        let phase = left.wrapping_add(x.compteur()) & 1;
         x.set_bit(f::FLAGS, 1, phase == 0);
     }
 }
@@ -254,7 +254,7 @@ fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// `0xdb350` : la pièce ramassée prend sa place sur le joueur (gestionnaire de son emplacement), est notée
 /// dans le tableau des objets de collection, puis annoncée (SET 0xa).
-fn equip(x: &mut Cx) {
+fn equip<R: Banc>(x: &mut Cx<'_, R>) {
     let player = x.linked(f::OWNER);
     let row = 8 * x.u8(f::VARIANT) as u32;
     let id = x.data8(rom::SHEETS + row + 1);
@@ -283,7 +283,7 @@ fn equip(x: &mut Cx) {
 
 /// Une pièce portée à `worn` (compteur de coups `hits`) remplacée par `id` : déjà portée, simple
 /// événement ; sinon l'ancienne (numéro + `shift`) est rejetée. L'emplacement 2 ne rejette pas la pièce 1.
-fn replace(x: &mut Cx, player: Obj, id: u8, worn: u32, hits: Option<u32>, shift: u8) {
+fn replace<R: Banc>(x: &mut Cx<'_, R>, player: Obj, id: u8, worn: u32, hits: Option<u32>, shift: u8) {
     let old = player.u8(x.b, worn);
     if old == id {
         if let Some(h) = hits {
@@ -295,7 +295,8 @@ fn replace(x: &mut Cx, player: Obj, id: u8, worn: u32, hits: Option<u32>, shift:
     player.set_u8(x.b, worn, id);
     if let Some(h) = hits {
         let previous = player.u8(x.b, h);
-        x.c.d[2] = x.c.d[2] & !0xff | previous as u32;
+        // Original glitch: the previous hit count stays in D2.b (`dispatch::Restes`)
+        *x.c.d2() = *x.c.d2() & !0xff | previous as u32;
         let v = x.u8(f::HITS);
         player.set_u8(x.b, h, v);
     }
@@ -311,9 +312,10 @@ fn replace(x: &mut Cx, player: Obj, id: u8, worn: u32, hits: Option<u32>, shift:
 
 /// Emplacement 4 : interdit à certains personnages (la pièce elle-même est rejetée) ; sinon comme les
 /// autres, et le second équipement en main suit la nouvelle pièce s'il en dépendait.
-fn slot_4(x: &mut Cx, player: Obj, id: u8) {
+fn slot_4<R: Banc>(x: &mut Cx<'_, R>, player: Obj, id: u8) {
     let character = player.u8(x.b, p::CHARACTER) as u32;
-    x.c.d[2] = character;
+    // Original glitch: the character stays in D2 (`dispatch::Restes`)
+    *x.c.d2() = character;
     let forbidden = x.rom8(rom::SLOT_4_FORBIDDEN + character);
     if forbidden != 0 {
         let variant = x.u8(f::VARIANT);
@@ -328,7 +330,7 @@ fn slot_4(x: &mut Cx, player: Obj, id: u8) {
         return;
     }
     let hand = player.u8(x.b, p::SECOND_HAND).wrapping_sub(4);
-    x.c.d[2] = x.c.d[2] & !0xff | hand as u32;
+    *x.c.d2() = *x.c.d2() & !0xff | hand as u32;
     if hand as i8 > 3 {
         let v = id.wrapping_add(0x28);
         player.set_u8(x.b, p::SECOND_HAND, v);
@@ -346,7 +348,7 @@ fn already_worn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `0xdb672` : crée l'ITEM 2 de variante `variant` rejeté par le joueur (A2), avec le compteur de coups D2.
-fn drop_old(x: &mut Cx, player: Obj, variant: u8) {
+fn drop_old<R: Banc>(x: &mut Cx<'_, R>, player: Obj, variant: u8) {
     let Some(n) = x.alloc(&pools::ITEM) else { return };
     n.set_u8(x.b, f::ACTIVE, 1);
     n.set_u8(x.b, f::KIND, 2);
@@ -355,7 +357,9 @@ fn drop_old(x: &mut Cx, player: Obj, variant: u8) {
     n.set_u16(x.b, f::OWNER, player.0 as u16);
     let slot = x.u8(f::SLOT);
     n.set_u8(x.b, f::SLOT, slot);
-    n.set_u8(x.b, f::HITS, x.c.d[2] as u8);
+    // the hit count is D2.b, whatever the caller left there (`dispatch::Restes`)
+    let hits = *x.c.d2() as u8;
+    n.set_u8(x.b, f::HITS, hits);
     let px = x.u16(f::X);
     n.set_u16(x.b, f::X, px);
     let y = player.u16(x.b, p::Y).wrapping_sub(1);
@@ -366,5 +370,5 @@ fn drop_old(x: &mut Cx, player: Obj, variant: u8) {
 }
 
 handlers! {
-    0xdb0c2 "item_piece" run,
+    0xdb0c2 "item_piece" #[sans] run,
 }

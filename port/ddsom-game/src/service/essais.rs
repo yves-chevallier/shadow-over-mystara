@@ -9,7 +9,7 @@ use crate::scene::Ctx;
 
 /// Joueurs affichés selon le type de monnayeurs (`A5+0x1d` : 0-2 deux joueurs, 3-6 trois, 7+ quatre).
 fn players(x: &mut Ctx) -> u32 {
-    match x.v8(var::FALLS) as i8 {
+    match x.v8(var::CHUTES) as i8 {
         c if c >= 7 => 4,
         c if c >= 3 => 3,
         _ => 2,
@@ -122,9 +122,9 @@ pub fn output(x: &mut Ctx) -> Flow {
         print(x, output::TITLE);
         print(x, output::HELP);
         print(x, output::LOCKS_12);
-        let falls = x.v8(var::FALLS) as i8;
-        if falls > 2 {
-            print(x, if falls > 6 { output::LOCKS_34 } else { output::LOCKS_3 });
+        let chutes = x.v8(var::CHUTES) as i8;
+        if chutes > 2 {
+            print(x, if chutes > 6 { output::LOCKS_34 } else { output::LOCKS_3 });
         }
         if card_variant(x) && x.v8(var::CARD_DISPENSER) != 0 {
             print(x, output::CARD);
@@ -141,9 +141,9 @@ pub fn output(x: &mut Ctx) -> Flow {
 fn coin_lock(x: &mut Ctx, p: u32, mask: u8) {
     let (cur, prev) = (x.v8(var::INPUT + p), x.v8(var::PREV + p));
     if cur & !prev & key::SHOT1 != 0 {
-        crate::video::lock_counters(x.b, mask);
+        crate::video::verrouiller_compteurs(x.b, mask);
     } else if !cur & prev & key::SHOT1 != 0 {
-        crate::video::unlock_counters(x.b, mask);
+        crate::video::deverrouiller_compteurs(x.b, mask);
     }
 }
 
@@ -151,10 +151,10 @@ fn coin_lock(x: &mut Ctx, p: u32, mask: u8) {
 fn output_update(x: &mut Ctx) {
     coin_lock(x, 0, 0x10);
     coin_lock(x, 1, 0x20);
-    let falls = x.v8(var::FALLS) as i8;
-    if falls >= 3 {
+    let chutes = x.v8(var::CHUTES) as i8;
+    if chutes >= 3 {
         coin_lock(x, 2, 0x40);
-        if falls >= 7 {
+        if chutes >= 7 {
             coin_lock(x, 3, 0x80);
         }
     }
@@ -163,9 +163,9 @@ fn output_update(x: &mut Ctx) {
         let on = crate::mem::rd8(x.b, output::COUNTER) ^ 1;
         crate::mem::wr8(x.b, output::COUNTER, on);
         if on != 0 {
-            crate::video::lock_counters(x.b, 1);
+            crate::video::verrouiller_compteurs(x.b, 1);
         } else {
-            crate::video::unlock_counters(x.b, 1);
+            crate::video::deverrouiller_compteurs(x.b, 1);
         }
     }
     if card_variant(x) && x.v8(var::CARD_DISPENSER) != 0 {
@@ -266,10 +266,10 @@ fn request(x: &mut Ctx, new: u8) {
         let code = get16(x, sound::CODE);
         if code != 0 {
             // D2 et D3 sont ceux que laissent les touches du code (0x2b50e)
-            crate::sound::emit(x.b, crate::sound::Command { d1: code as u32, d2: 1, d3: 3 });
+            crate::sound::emettre(x.b, crate::sound::Commande { d1: code as u32, d2: 1, d3: 3 });
         }
     } else if new & key::SHOT2 != 0 {
-        crate::sound::service(x.b, crate::sound::Service::GeneralStop);
+        crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
     }
 }
 

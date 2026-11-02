@@ -8,7 +8,7 @@
 //! des pools ENEMY et BOSS et le joueur 1. Pour chaque objet dont le cadre de sprite (`+0x34`) change, il
 //! reconstruit les entrées d'Object RAM de cet objet seul (même décodage que `sprites.rs` : morceaux,
 //! miroir, palette imposée, objets rattachés), les rend avec la palette courante de la machine sur un fond
-//! transparent et range l'échantillon recadré dans `<cache>/<family>_<type>_<variant>/`.
+//! transparent et range l'échantillon recadré dans `<cache>/<famille>_<type>_<variante>/`.
 //! `build` choisit la pose de base de chaque type (premier cadre en état actif, sous-état « marche »),
 //! écrit les PNG (1:1 et x2), la planche récapitulative et l'index Markdown.
 //!
@@ -575,7 +575,7 @@ struct Entry {
     frames: Vec<Sprite>,
 }
 
-/// Scènes où chaque clé (`famille_type_variante`) a été vue, d'après les `<prefix>_*.txt` de `scan` (`scenes`)
+/// Scènes où chaque clé (`famille_type_variante`) a été vue, d'après les `<prefixe>_*.txt` de `scan` (`scenes`)
 /// ou de `spawn` (`forced`).
 fn load_scenes(cache: &Path, prefix: &str) -> BTreeMap<String, BTreeSet<u8>> {
     let mut scenes: BTreeMap<String, BTreeSet<u8>> = BTreeMap::new();

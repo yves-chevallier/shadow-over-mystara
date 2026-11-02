@@ -14,14 +14,13 @@ use super::{animation, ram, Ctx, Player};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::{pools, Obj};
 use crate::machine::Machine;
-use crate::player::external as ext;
+use crate::player::externes as ext;
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
     /// Son de la poussée.
     pub const PUSH_SOUND: u32 = 0xeae14;
     /// Pose rare 0x26 : son, éclat, création d'un objet SET (D0.b = genre ; A1 et retenue en retour).
-    pub const CURSE_SHARD: u32 = 0xb97ba;
     pub const CREATE_SET: u32 = 0xc8312;
 }
 
@@ -70,7 +69,7 @@ fn dust(g: &mut Ctx, p: Player, d0: u16, d1: u16, d2: u16, d3: u16) {
     set(&mut g.c.d[1], d1);
     set(&mut g.c.d[2], d2);
     set(&mut g.c.d[3], d3);
-    g.rom(ext::effect::DUST, p);
+    g.shock(p, d0 as u8, d1, d2, d3);
 }
 
 fn dust_turn(g: &mut Ctx, p: Player) -> bool {
@@ -137,7 +136,7 @@ fn run_steer(g: &mut Ctx, p: Player) -> bool {
     } else {
         start_skid(g, p, 6, 56, 27);
     }
-    g.sound(ext::sound::SLIDE, p);
+    g.son(ext::son::SLIDE, p);
     true
 }
 
@@ -781,7 +780,7 @@ pub fn curse_drop(g: &mut Ctx, p: Player) {
         next_step(g, p);
         p.set_u8(g, RARE_TIMER, 0xc0);
         animation::start(g, p, 0x23);
-        g.sound(ext::sound::FANFARE, p);
+        g.son(ext::son::FANFARE, p);
         return;
     }
     animation::step(g, p);
@@ -796,7 +795,7 @@ pub fn curse_drop(g: &mut Ctx, p: Player) {
         return;
     }
     p.set_u8(g, field::GESTURE, 0);
-    g.rom(rom::CURSE_SHARD, p);
+    crate::families::effects_creators::for_players::posed_flash_b_68k(g.c, g.b, p.obj());
     crate::mem::set_low_byte(&mut g.c.d[0], 0x29);
     g.rom(rom::CREATE_SET, p);
     if g.c.sr & m68k::SR_C == 0 {
@@ -831,7 +830,8 @@ pub fn dust_puffs(g: &mut Ctx, p: Player) {
             }
             g.c.d[4] = height as u32;
             crate::mem::set_low_word(&mut g.c.d[3], 0xffff);
-            g.rom(ext::effect::DUST, p);
+            let (variant, setting, vx) = (g.c.d[0] as u8, g.c.d[1] as u16, g.c.d[2] as u16);
+            g.shock(p, variant, setting, vx, 0xffff);
             if g.c.sr & m68k::SR_C == 0 {
                 wr16(g.b, g.c.a[1] + Obj::Z, height);
             }
@@ -961,7 +961,7 @@ pub fn fall_in(g: &mut Ctx, p: Player) {
             next_step(g, p);
             p.set_u32(g, Obj::Z, 0);
             animation::start(g, p, 14);
-            g.sound(ext::sound::LANDING, p);
+            g.son(ext::son::LANDING, p);
         }
         6 => {
             if animation::step(g, p) {
@@ -1014,7 +1014,7 @@ pub fn push(g: &mut Ctx, p: Player) {
     }
     if p.u8(g, field::ANIM_EVENT) != 0 {
         p.set_u8(g, field::ANIM_EVENT, 0);
-        g.sound(rom::PUSH_SOUND, p);
+        g.son(rom::PUSH_SOUND, p);
     }
 }
 
@@ -1066,7 +1066,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 p.set_u16(g, Obj::VX, (-0x200i16) as u16);
             }
             animation::start(g, p, 31);
-            g.sound(ext::sound::JUMP_VOICE, p);
+            g.son(ext::son::JUMP_VOICE, p);
         }
         2 => {
             animation::step(g, p);
@@ -1076,7 +1076,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u32(g, Obj::Z, 0);
                 animation::start(g, p, 14);
-                g.sound(ext::sound::LANDING, p);
+                g.son(ext::son::LANDING, p);
             }
         }
         4 => {

@@ -31,7 +31,7 @@ const OBJ_TERRAIN: u32 = 0x29;
 /// Champs d'un type de terrain (entrée de 16 octets, mots).
 mod kind {
     /// 0 : franchissable ; 1 : obstacle plein ; plus : pente.
-    pub const CATEGORY: u32 = 0;
+    pub const GENRE: u32 = 0;
     /// Sous-programme de l'obstacle (0, 4, 8 ou 12).
     pub const ROUTINE: u32 = 2;
     /// Pente : sens (0 ou autre).
@@ -138,9 +138,9 @@ impl Push<'_> {
         ops::drapeaux(self.c, SR_C | SR_X, if carry { SR_C | SR_X } else { 0 });
         let a2 = self.variant.types.wrapping_add((d2 << 4) as i16 as u32);
         self.c.a[2] = a2;
-        let category = self.field(a2, kind::CATEGORY);
-        ops::cmp(self.c, 1, category as u32, Size::Word);
-        match category {
+        let genre = self.field(a2, kind::GENRE);
+        ops::cmp(self.c, 1, genre as u32, Size::Word);
+        match genre {
             0 => self.free(),
             1 => self.solid(a2),
             _ => {
@@ -288,6 +288,21 @@ pub fn push_restes(b: &mut Cps2Bus, o: Obj, d2: &mut u32, d3: &mut u32, d5: &mut
     (c.d[2], c.d[3], c.d[5]) = (*d2, *d3, *d5);
     Push { c: &mut c, b, variant: FIRST }.run();
     (*d2, *d3, *d5) = (c.d[2], c.d[3], c.d[5]);
+    c.sr & m68k::SR_Z != 0
+}
+
+/// 0x3403c (the second copy of the routine) on object `o`, without registers; `restes` are the D2-D5 leftovers
+/// (`dispatch::Restes`) passed to it and left by it. Returns the original's Z flag.
+pub fn push_second_restes(b: &mut Cps2Bus, o: Obj, restes: [&mut u32; 4]) -> bool {
+    let mut c = Cpu::default();
+    c.a[0] = o.0;
+    for (k, r) in restes.iter().enumerate() {
+        c.d[2 + k] = **r;
+    }
+    Push { c: &mut c, b, variant: SECOND }.run();
+    for (k, r) in restes.into_iter().enumerate() {
+        *r = c.d[2 + k];
+    }
     c.sr & m68k::SR_Z != 0
 }
 

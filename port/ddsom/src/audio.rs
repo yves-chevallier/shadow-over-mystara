@@ -12,7 +12,7 @@ impl Audio {
     pub fn open(rate: u32) -> Option<Self> {
         let (tx, rx) = sync_channel::<Vec<i16>>(8);
         let (ok_tx, ok_rx) = sync_channel::<bool>(1);
-        std::thread::spawn(move || exit::audio_thread(rate, rx, ok_tx));
+        std::thread::spawn(move || sortie::audio_thread(rate, rx, ok_tx));
         if ok_rx.recv().unwrap_or(false) { Some(Audio { tx }) } else { None }
     }
 
@@ -26,7 +26,7 @@ impl Audio {
 }
 
 #[cfg(unix)]
-mod exit {
+mod sortie {
     use super::*;
     use std::ffi::{c_char, c_int, c_void, CString};
 
@@ -82,7 +82,7 @@ mod exit {
 }
 
 #[cfg(windows)]
-mod exit {
+mod sortie {
     use super::*;
     use std::ffi::c_void;
 
@@ -113,7 +113,7 @@ mod exit {
     type HdrFn = unsafe extern "system" fn(*mut c_void, *mut WaveHdr, u32) -> u32;
 
     /// Blocs en file dans le périphérique (un par image, environ 17 ms chacun).
-    const BLOCKS: usize = 4;
+    const BLOCS: usize = 4;
 
     pub fn audio_thread(rate: u32, rx: Receiver<Vec<i16>>, ok: SyncSender<bool>) {
         // SAFETY : signatures conformes à <mmeapi.h> ; la bibliothèque reste chargée tout le fil, et chaque en-tête
@@ -148,7 +148,7 @@ mod exit {
             }
             let _ = ok.send(true);
             let size = std::mem::size_of::<WaveHdr>() as u32;
-            let mut hdrs: Box<[WaveHdr]> = (0..BLOCKS)
+            let mut hdrs: Box<[WaveHdr]> = (0..BLOCS)
                 .map(|_| WaveHdr {
                     data: std::ptr::null_mut(),
                     len: 0,
@@ -160,7 +160,7 @@ mod exit {
                     reserved: 0,
                 })
                 .collect();
-            let mut bufs: Vec<Vec<i16>> = vec![Vec::new(); BLOCKS];
+            let mut bufs: Vec<Vec<i16>> = vec![Vec::new(); BLOCS];
             let mut i = 0;
             while let Ok(buf) = rx.recv() {
                 let h = &mut hdrs[i] as *mut WaveHdr;
@@ -175,7 +175,7 @@ mod exit {
                 if prepare(dev, h, size) != 0 || write(dev, h, size) != 0 {
                     break;
                 }
-                i = (i + 1) % BLOCKS;
+                i = (i + 1) % BLOCS;
             }
         }
     }

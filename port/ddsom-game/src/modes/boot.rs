@@ -5,15 +5,15 @@
 //! le décompte. Le texte dépend de la région (octet 0xc4 du programme et réglage `A5+0x70`).
 
 use super::{Flow, Sequence};
-use crate::video::Layer;
+use crate::video::Couche;
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
 
 /// Tâches créées à la fin du démarrage : crédits et gel.
-mod task {
+mod tache {
     pub const CREDITS: u32 = 0x13c0a;
-    pub const FREEZE: u32 = 0xee080;
+    pub const GEL: u32 = 0xee080;
 }
 
 /// Palette de départ : huit longs de la ROM copiés dans la table des palettes.
@@ -39,31 +39,31 @@ crate::etapes! {
     /// Étapes (points de reprise) de la machine à états.
     pub enum Etape {
         /// Entrée de la tâche (`0x11b16`) : écran noir, puis l'initialisation.
-        Entry = 0x11b16 => |x| x.sous_programme(crate::video::black_screen::debut, Etape::Init),
+        Entree = 0x11b16 => |x| x.sous_programme(crate::video::ecran_noir::debut, Etape::Init),
         Init = INIT => |x| {
-            crate::palette::load_all_palettes(x.b);
+            crate::palette::charger_tout(x.b);
             for i in 0..8 {
                 let v = rd32(x.b, START_PALETTE_SRC + 4 * i);
                 wr32(x.b, START_PALETTE_DST + 4 * i, v);
             }
             wr8(x.b, A5 + 0x48e, 0xf);
             crate::palette::full_brightness(x.b);
-            if !crate::config::initialize(x.c, x.b) {
+            if !crate::config::initialiser(x.c, x.b) {
                 return Flow::Yield;
             }
-            crate::credits::initialize(x.b);
-            crate::evenements::clear_points(x.b);
-            crate::evenements::clear_counter(x.b);
+            crate::credits::initialiser(x.b);
+            crate::evenements::vider_points(x.b);
+            crate::evenements::vider_compteur(x.b);
             crate::evenements::vider_popups(x.b);
-            crate::sound::clear_private_stack(x.b);
-            crate::player::init::clear_all_players(x.c, x.b);
-            crate::player::init::clear_sub_objects(x.c, x.b);
+            crate::sound::vider_pile_privee(x.b);
+            crate::player::init::effacer_joueurs(x.c, x.b);
+            crate::player::init::effacer_sous_objets(x.c, x.b);
             clear_mode_state(x);
             crate::rng::seed(x.b);
             default_high_scores(x);
-            crate::video::copy_fixed_screens(x.b);
+            crate::video::copier_ecrans_fixes(x.b);
             crate::families::items::effacer_ramasses(x.b);
-            crate::taches::game::clear_variables(x.c, x.b);
+            crate::taches::partie::effacer_variables(x.c, x.b);
             wr8(x.b, A5 - 0x713c, 0);
             wr16(x.b, CPS_REG_VIDEO, 0xe);
             wr16(x.b, A5 + 0x12, 0xe);
@@ -83,7 +83,7 @@ crate::etapes! {
             if countdown_tick(x) {
                 return x.wait(1, Etape::WarningTick);
             }
-            crate::video::clear_layer(x.b, Layer::One);
+            crate::video::effacer_couche(x.b, Couche::Un);
             print_region_text(x, NOTICE_TABLE);
             wr16(x.b, COUNTDOWN, NOTICE_FRAMES);
             x.wait(1, Etape::NoticeTick)
@@ -92,17 +92,17 @@ crate::etapes! {
             if countdown_tick(x) {
                 return x.wait(1, Etape::NoticeTick);
             }
-            crate::video::clear_layer(x.b, Layer::One);
+            crate::video::effacer_couche(x.b, Couche::Un);
             wr16(x.b, A5 + 0x7fc6, 0);
             if rd8(x.b, A5 + 4) & 1 != 0 {
                 wr16(x.b, A5 + 0x7fc6, 1);
             }
-            crate::eeprom::initialize_accounting(x.b);
-            if !crate::config::initialize(x.c, x.b) {
+            crate::eeprom::initialiser_compta(x.b);
+            if !crate::config::initialiser(x.c, x.b) {
                 return Flow::Yield;
             }
-            crate::kernel::creer_tache(x.b, SLOT_CREDITS, task::CREDITS);
-            crate::kernel::creer_tache(x.b, SLOT_FREEZE, task::FREEZE);
+            crate::kernel::creer_tache(x.b, SLOT_CREDITS, tache::CREDITS);
+            crate::kernel::creer_tache(x.b, SLOT_FREEZE, tache::GEL);
             // la tâche continue dans la boucle de la machine à modes (`jmp 0x133fe`)
             crate::modes::start(x)
         },
@@ -138,8 +138,8 @@ fn default_high_scores(x: &mut Ctx) {
 /// Affiche le texte de la région courante : mot `A5+0x70` (modulo 16) indexe la table de pointeurs.
 fn print_region_text(x: &mut Ctx, table: u32) {
     let region = (rd16(x.b, A5 + 0x70) & 0xf) as u32;
-    let text = rd32(x.b, table + 2 * region);
-    crate::text::print(x.b, text);
+    let texte = rd32(x.b, table + 2 * region);
+    crate::text::print(x.b, texte);
 }
 
 /// Un tour du décompte : un bouton pressé le raccourcit de neuf images.

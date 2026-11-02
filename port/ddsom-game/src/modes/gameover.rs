@@ -39,7 +39,7 @@ pub const PHASE_20: Native = Native {
 
 /// Phase 20 de la partie (`0x1c80c`) : fin de partie.
 pub fn phase_20(x: &mut Ctx) -> Flow {
-    crate::kernel::kill_task(x.b, PLAYER_UI_SLOT as u32);
+    crate::kernel::tuer_tache(x.b, PLAYER_UI_SLOT as u32);
     wr16(x.b, A5 + 0x490, 1);
     wr8(x.b, A5 + 0x48e, 0xf);
     x.sous_programme(crate::taches::fondu::descente, Etape::Faded)
@@ -54,16 +54,16 @@ crate::etapes! {
             wr8(x.b, A5 + 0x53c, 0);
             let flags = rd16(x.b, A5 + 0x12) & !1;
             wr16(x.b, A5 + 0x12, flags);
-            x.sous_programme(crate::video::black_screen::debut, Etape::Cleared)
+            x.sous_programme(crate::video::ecran_noir::debut, Etape::Cleared)
         },
         Cleared = CLEARED => |x| {
             crate::families::petites::variables_de_partie_a_zero(x.b);
             wr8(x.b, A5 + 0x30, 1);
             reset_modes(x);
             wr8(x.b, mode::BOOTED, 1);
-            crate::sound::service(x.b, crate::sound::Service::GeneralStop);
+            crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
             x.c.a[0] = MODE_LOOP;
-            crate::taches::restart(x)
+            crate::taches::recommencer(x)
         },
     }
 }

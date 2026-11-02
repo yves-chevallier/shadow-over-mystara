@@ -1,7 +1,7 @@
 //! Validation de la réécriture sur un scénario, image par image.
 //!
 //! Deux machines rejouent les mêmes entrées :
-//!   A : le jeu, sans 68000 (natives seules, boucle d'image du noyau, `ddsom_game::install_no_68k`) ; une
+//!   A : le jeu, sans 68000 (natives seules, boucle d'image du noyau, `ddsom_game::install_sans_68k`) ; une
 //!       adresse sans native l'arrête (« ÉCHEC : arrêt sans 68000 ») ;
 //!   B : code d'origine seul, 68000 surcadencé (il finit toujours son travail dans l'image : il est alors
 //!       déterminé image par image).
@@ -11,7 +11,7 @@
 //!
 //! Le mode hybride (`DDSOM_HYBRIDE=1`) est retiré.
 //!
-//! `DDSOM_ASSETS=<dir>` : la machine A est faite des seules ressources extraites
+//! `DDSOM_ASSETS=<dossier>` : la machine A est faite des seules ressources extraites
 //! (`ddsom_assets::rebuild::contenus`, aucune ROM lue : jeu sans ROM, docs/sans-rom.md), avec le pilote son Rust ;
 //! la machine B garde les ROMs et le Z80.
 //!
@@ -19,23 +19,23 @@
 
 use std::path::Path;
 
-use ddsom_game::taches::table::{gaps, read, kernel_ram};
+use ddsom_game::taches::table::{ecarts, lire, ram_du_noyau};
 
 /// Fréquence du 68000, en multiple de celle de l'arcade.
 const OVERCLOCK: f64 = 16.0;
 
 /// Mots de RAM sans signification propre, ou que le jeu réécrit ne tient plus en RAM :
-/// - le noyau (`kernel_ram`) : pile de l'ordonnanceur, tâche courante, tas des piles, enregistrements des tâches. Le
+/// - le noyau (`ram_du_noyau`) : pile de l'ordonnanceur, tâche courante, tas des piles, enregistrements des tâches. Le
 ///   jeu les garde dans sa table des tâches en Rust, comparée à part à celle de la RAM de la machine d'origine
-///   (`gaps`) ;
+///   (`ecarts`) ;
 /// - les piles des tâches (FF01A6-FF0DA5) et celle du superviseur (jusqu'à FF0E65), dans la même zone : le jeu n'y
 ///   sauve plus les registres des tâches qui cèdent la main (ce qu'elles relisent est dans leurs étapes) et le reste
 ///   n'est qu'adresses de retour et sauvegardes de registres ; FF0E66 et la suite (variables du jeu relatives à A5)
 ///   sont comparés ;
-/// - la sauvegarde fantôme des wrappers son (FF297E-FF2A19, `sound::play_wrapper`).
+/// - la sauvegarde fantôme des wrappers son (FF297E-FF2A19, `sound::jouer_wrapper`).
 fn ignored(word: usize) -> bool {
     let a = 2 * word;
-    kernel_ram(a as u32) || GHOST_SAVE.contains(&a)
+    ram_du_noyau(a as u32) || SAUVEGARDE_FANTOME.contains(&a)
 }
 
 /// Écart assumé : chaque wrapper son de l'original empile D0-D7/A0-A4 (52 octets) sous le pointeur de sa pile privée
@@ -45,13 +45,13 @@ fn ignored(word: usize) -> bool {
 /// de la RAM du menu TEST (0x2d096, qui remet la valeur lue) ; trois niveaux d'aiguillage au plus, soit FF297E-FF2A19.
 /// (Jusqu'au lot S, FF2900-FF2A19 entier était ignoré : la fin de la file des sons, ses têtes et l'alternance des voix
 /// sont maintenant comparées.)
-const GHOST_SAVE: std::ops::Range<usize> = 0x297e..0x2a1a;
+const SAUVEGARDE_FANTOME: std::ops::Range<usize> = 0x297e..0x2a1a;
 
-/// Images du démarrage (1 à 5) : le code d'origine y teste encore la RAM (`ddsom_game::startup`). Ce test est non
+/// Images du démarrage (1 à 5) : le code d'origine y teste encore la RAM (`ddsom_game::demarrage`). Ce test est non
 /// destructif mais, à la fin d'une image, le mot en cours de test peut porter un motif (0x8888, 0x4444...) au lieu de sa
 /// valeur ; la version native n'a pas d'état intermédiaire. Pendant ces images, un mot de différence au plus est toléré,
 /// en RAM de travail ou en GFX RAM ; tout le reste est comparé. En pratique seules les images 1 et 2 (GFX RAM) en ont un.
-const STARTUP: usize = 5;
+const DEMARRAGE: usize = 5;
 
 fn first_diff(a: &[u16], b: &[u16]) -> Option<usize> {
     a.iter().zip(b).position(|(x, y)| x != y)
@@ -69,7 +69,7 @@ fn main() {
         m.set_overclock(std::env::var("DDSOM_OVERCLOCK").ok().and_then(|v| v.parse().ok()).unwrap_or(OVERCLOCK));
         m
     };
-    ddsom_game::refuse_hybrid();
+    ddsom_game::refuser_hybride();
     let mut ma = match std::env::var_os("DDSOM_ASSETS") {
         Some(dir) => {
             let contenus = ddsom_assets::rebuild::contenus(Path::new(&dir)).expect("assets");
@@ -80,14 +80,14 @@ fn main() {
         None => load(),
     };
     let mut mb = load();
-    ddsom_game::install_no_68k(&mut ma);
+    ddsom_game::install_sans_68k(&mut ma);
     ddsom_game::install_reference(&mut mb);
     // l'image n'est pas comparée (seulement l'état) : pas de rendu, c'était l'essentiel du temps d'une image
     ma.rendu = false;
     mb.rendu = false;
     mb.idle = Some(ddsom_game::idle);
     let check = std::env::var("DDSOM_CHECK").is_ok();
-    let all_tasks = std::env::var("DDSOM_TACHES_TOUT").is_ok();
+    let taches_tout = std::env::var("DDSOM_TACHES_TOUT").is_ok();
     ddsom_game::set_check(check);
     ddsom_game::set_check_all(std::env::var("DDSOM_CHECK_ALL").is_ok());
     ddsom_game::set_count(true);
@@ -95,7 +95,7 @@ fn main() {
     let frames: usize = frames.parse().unwrap();
     let t0 = std::time::Instant::now();
     let mut failure = None;
-    let mut stop: Option<String> = None;
+    let mut arret: Option<String> = None;
     let lent: Option<u128> = std::env::var("DDSOM_LENT").ok().and_then(|v| v.parse().ok());
     // DDSOM_CHECK_FRAME=n : contrôle de tous les registres de chaque appel natif pendant l'image n
     // DDSOM_DIFF_MAX=n : nombre de mots de RAM différents affichés (10 par défaut)
@@ -111,9 +111,9 @@ fn main() {
         let t = std::time::Instant::now();
         if let Err(e) = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ma.run_frame())) {
             // arrêt du jeu sans 68000 (adresse sans native...) ; toute autre panique suit son cours
-            match e.downcast_ref::<String>().and_then(|m| m.strip_prefix(ddsom_game::no68k::STOP)) {
+            match e.downcast_ref::<String>().and_then(|m| m.strip_prefix(ddsom_game::sans68k::ARRET)) {
                 Some(m) => {
-                    stop = Some(m.to_owned());
+                    arret = Some(m.to_owned());
                     failure = Some(f + 1);
                     break;
                 }
@@ -127,19 +127,19 @@ fn main() {
         if lent.is_some() && (f + 1) % 1000 == 0 {
             println!("image {} : {:.1?}", f + 1, t0.elapsed());
         }
-        if let Some(threshold) = lent {
-            if ta.as_millis() > threshold || tb.as_millis() > threshold {
+        if let Some(seuil) = lent {
+            if ta.as_millis() > seuil || tb.as_millis() > seuil {
                 println!("image {} lente : réécrit {:.0?}, origine {:.0?}", f + 1, ta, tb);
             }
         }
         let ram: Vec<usize> = (0..0x8000).filter(|&i| ma.bus.ram[i] != mb.bus.ram[i] && !ignored(i)).collect();
         let gfx = ma.bus.gfxram.iter().zip(&mb.bus.gfxram).filter(|(x, y)| x != y).count();
-        let word_under_test = f < STARTUP && ram.len() + gfx <= 1;
+        let mot_en_test = f < DEMARRAGE && ram.len() + gfx <= 1;
         let mut what = Vec::new();
-        for &i in ram.iter().take(diff_max).filter(|_| !word_under_test) {
+        for &i in ram.iter().take(diff_max).filter(|_| !mot_en_test) {
             what.push(format!("ram {:06x} : {:04x} au lieu de {:04x}", 0xff0000 + 2 * i, ma.bus.ram[i], mb.bus.ram[i]));
         }
-        if let Some(i) = first_diff(&ma.bus.gfxram, &mb.bus.gfxram).filter(|_| !word_under_test) {
+        if let Some(i) = first_diff(&ma.bus.gfxram, &mb.bus.gfxram).filter(|_| !mot_en_test) {
             what.push(format!("gfxram {:06x} : {:04x} au lieu de {:04x}", 0x900000 + 2 * i, ma.bus.gfxram[i], mb.bus.gfxram[i]));
         }
         if let Some(i) = first_diff(&ma.obj_buffer, &mb.obj_buffer) {
@@ -155,8 +155,8 @@ fn main() {
             what.push(format!("palette, mot {i}"));
         }
         // test différentiel de la table des tâches (DDSOM_TACHES_TOUT=1 : SR et registres sauvés aussi)
-        if let Some(t) = read(&ma.bus) {
-            what.extend(gaps(t, &mb.bus.ram, all_tasks).into_iter().take(10));
+        if let Some(t) = lire(&ma.bus) {
+            what.extend(ecarts(t, &mb.bus.ram, taches_tout).into_iter().take(10));
         }
         if !what.is_empty() {
             println!("image {} : {} mots de RAM différents", f + 1, ram.len());
@@ -180,26 +180,26 @@ fn main() {
     if std::env::var("DDSOM_CHECK_ALL").is_ok() {
         // registres de sortie qui diffèrent de l'original, par routine native
         for (name, st) in &report {
-            let list: Vec<String> = st
+            let liste: Vec<String> = st
                 .regs
                 .iter()
                 .enumerate()
                 .filter(|(_, &n)| n > 0)
                 .map(|(i, n)| format!("{}{}:{n}", if i < 8 { 'd' } else { 'a' }, i % 8))
                 .collect();
-            if !list.is_empty() {
-                println!("REGS {name} {} appels : {}", st.calls, list.join(" "));
+            if !liste.is_empty() {
+                println!("REGS {name} {} appels : {}", st.calls, liste.join(" "));
             }
         }
     }
-    let (is_empty, capped) = ddsom_game::no68k::summary();
-    println!("sans 68000 : {is_empty} images finies sur une attente active, {capped} arrêtées par le plafond de natives");
-    if let Some(m) = &stop {
+    let (a_vide, plafonnees) = ddsom_game::sans68k::bilan();
+    println!("sans 68000 : {a_vide} images finies sur une attente active, {plafonnees} arrêtées par le plafond de natives");
+    if let Some(m) = &arret {
         println!("ARRÊT {m}");
     }
     match failure {
         None => println!("VALIDE : état identique sur {frames} images"),
-        Some(f) if stop.is_some() => println!("ÉCHEC : arrêt sans 68000 à l'image {f}"),
+        Some(f) if arret.is_some() => println!("ÉCHEC : arrêt sans 68000 à l'image {f}"),
         Some(f) => println!("ÉCHEC : première différence à l'image {f}"),
     }
 }

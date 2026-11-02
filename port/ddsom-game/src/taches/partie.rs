@@ -1,21 +1,21 @@
-//! Tâche de partie (`0x1c45a`) : la boucle de jeu, un pas par image (voir `docs/looped.md` §1).
+//! Tâche de partie (`0x1c45a`) : la boucle de jeu, un pas par image (voir `docs/boucle.md` §1).
 //!
-//! Créée au premier départ (`credits_task.rs`) à l'emplacement 0, elle boucle sans fin :
+//! Créée au premier départ (`tache_credits.rs`) à l'emplacement 0, elle boucle sans fin :
 //! compteur d'images, service tous les 60 images (`0x2e540`), cession d'une image, puis un pas de jeu
-//! (la phase `A5+0x2c`, table `0x1c502`, suivie de la fin d'image, [`Etape::FrameEnd`]). Les phases ne cèdent jamais : tout le
+//! (la phase `A5+0x2c`, table `0x1c502`, suivie de la fin d'image, [`Etape::FinImage`]). Les phases ne cèdent jamais : tout le
 //! travail d'un pas tient dans une native.
 //!
 //! | Adresse | Étape |
 //! |---|---|
-//! | `0x1c45a` | entrée ([`Etape::Entry`]) : variables de phase remises à zéro, puis boucle |
-//! | `0x1c468` | début de tour ([`Etape::Tour`], retour de la fin d'image `0x1c4c4`, [`Etape::FrameEnd`]) : compteurs, service, puis la cession `0x1c48c` : une image d'attente, sauf tour sauté (voir `wait`) |
-//! | `0x1c4b0` | pas de jeu ([`Etape::Frame`]) : appel de la phase |
+//! | `0x1c45a` | entrée ([`Etape::Entree`]) : variables de phase remises à zéro, puis boucle |
+//! | `0x1c468` | début de tour ([`Etape::Tour`], retour de la fin d'image `0x1c4c4`, [`Etape::FinImage`]) : compteurs, service, puis la cession `0x1c48c` : une image d'attente, sauf tour sauté (voir `wait`) |
+//! | `0x1c4b0` | pas de jeu ([`Etape::Pas`]) : appel de la phase |
 //!
 //! Le pas commence à `0x1c4b0` = [`crate::GAME_STEP`], où la machine de référence plafonne le nombre de pas par image
-//! (`cps2::StepCap`, testé sur le PC) ; le jeu compte ses pas lui-même (`no68k::game_step`) : un pas au-delà du
-//! plafond est retenu jusqu'au début de l'image suivante, juste après le VBLANK (`kernel::Point::StepKept`).
+//! (`cps2::StepCap`, testé sur le PC) ; le jeu compte ses pas lui-même (`sans68k::pas_de_jeu`) : un pas au-delà du
+//! plafond est retenu jusqu'au début de l'image suivante, juste après le VBLANK (`kernel::Point::PasRetenu`).
 
-use super::{cede, Wait};
+use super::{ceder, Attente};
 use crate::mem::{rd8, wr32, wr8, A5};
 use crate::modes::Flow;
 use crate::scene::Ctx;
@@ -23,39 +23,39 @@ use crate::scene::Ctx;
 /// Étapes de la tâche de partie (le pas de jeu, `0x1c4b0`, reste une native : voir plus haut).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Etape {
-    Entry,
+    Entree,
     /// Début de tour : retour de la fin d'image, ou d'une phase qui dépile son propre retour.
     Tour,
     /// Le pas de jeu : la phase courante. `d4` : le D4 que le pas précédent a laissé et que la phase relit (reste de la
     /// boucle d'aiguillage, `dispatch::Restes::d4` : le radeau sans pilote, 0xad7b0, l'ajoute à la position des
     /// joueurs) ; l'original le garde dans ses registres, que la cession sauve et rend.
-    Frame { d4: u32 },
-    /// Retour de la phase : fin d'image (`game::frame_end`), puis le tour suivant.
-    FrameEnd,
+    Pas { d4: u32 },
+    /// Retour de la phase : fin d'image (`game::fin_d_image`), puis le tour suivant.
+    FinImage,
 }
 
 impl Etape {
     /// Adresse que l'original reprend à cette étape.
     pub const fn adresse(self) -> u32 {
         match self {
-            Etape::Entry => at::ENTRY,
+            Etape::Entree => at::ENTRY,
             Etape::Tour => at::TURN,
-            Etape::Frame { .. } => at::STEP,
-            Etape::FrameEnd => at::FRAME_END,
+            Etape::Pas { .. } => at::STEP,
+            Etape::FinImage => at::FRAME_END,
         }
     }
 
     /// Le pas de l'étape.
     pub fn pas(self, x: &mut Ctx) -> Flow {
         match self {
-            Etape::Entry => entry(x),
+            Etape::Entree => entry(x),
             Etape::Tour => turn(x),
-            Etape::Frame { d4 } => {
+            Etape::Pas { d4 } => {
                 x.c.d[4] = d4;
                 step(x)
             }
-            Etape::FrameEnd => {
-                crate::game::frame_end(x.c, x.b);
+            Etape::FinImage => {
+                crate::game::fin_d_image(x.c, x.b);
                 Flow::Done
             }
         }
@@ -92,9 +92,9 @@ mod at {
     pub const FRAME_END: u32 = 0x1c4c4;
 }
 
-/// Appel en cours de la tâche : `next` reprendra quand l'appelé reviendra (rien n'est empilé sur la pile 68000).
-fn push(x: &mut Ctx, next: impl Into<super::table::Next>) {
-    super::table::appeler(x.b, next);
+/// Appel en cours de la tâche : `suite` reprendra quand l'appelé reviendra (rien n'est empilé sur la pile 68000).
+fn push(x: &mut Ctx, suite: impl Into<super::table::Suite>) {
+    super::table::appeler(x.b, suite);
 }
 
 /// Drapeaux N et Z d'un octet chargé (`move.b`), V et C à zéro.
@@ -104,7 +104,7 @@ fn flags(x: &mut Ctx, value: u8) {
 
 /// `0x1c44a` : les variables de partie `A5+0x2c..0x6b` (phase, étape...) à zéro ; registres de la boucle
 /// d'origine (D0 = 0, D6.w = -1, A0 = fin de la zone).
-pub fn clear_variables(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+pub fn effacer_variables(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     for i in 0..16 {
         wr32(b, A5 + var::PHASE + 4 * i, 0);
     }
@@ -128,7 +128,7 @@ fn turn(x: &mut Ctx) -> Flow {
         let count = rd8(x.b, SERVICE_COUNT).wrapping_add(1);
         wr8(x.b, SERVICE_COUNT, if count < SERVICE_PERIOD { count } else { 0 });
         if count >= SERVICE_PERIOD {
-            crate::eeprom::dev_card::play_time(x.b);
+            crate::eeprom::carte_dev::temps_de_jeu(x.b);
         }
     }
     wait(x)
@@ -145,14 +145,14 @@ fn wait(x: &mut Ctx) -> Flow {
     }
     wr8(x.b, FREE_STEPS, 0);
     let d4 = x.c.d[4];
-    cede(x, Wait::Images(1), Etape::Frame { d4 })
+    ceder(x, Attente::Images(1), Etape::Pas { d4 })
 }
 
 /// `0x1c4b0` : le pas de jeu, s'il tient dans l'image (sinon il est retenu jusqu'à la suivante). La phase revient à
 /// la fin d'image, qui revient au début du tour.
 fn step(x: &mut Ctx) -> Flow {
-    if !crate::no68k::game_step() {
-        crate::kernel::keep_step(x.b, x.c.d[4]);
+    if !crate::sans68k::pas_de_jeu() {
+        crate::kernel::retenir_le_pas(x.b, x.c.d[4]);
         return Flow::Yield;
     }
     wr8(x.b, STEPPED, 0xff);
@@ -162,13 +162,13 @@ fn step(x: &mut Ctx) -> Flow {
     flags(x, phase);
     let handler = (x.prog16(PHASES + phase as u32) as u32) << 16 | x.prog16(PHASES + phase as u32 + 2) as u32;
     x.c.a[0] = handler;
-    push(x, Etape::FrameEnd);
-    run_handler(x, phase)
+    push(x, Etape::FinImage);
+    gestionnaire(x, phase)
 }
 
 /// Le gestionnaire de la phase (table `0x1c502` de l'original, une adresse par phase, laissée dans A0), appelé
 /// directement : il revient (`Flow::Done`, à la fin d'image) ou a cédé la main.
-fn run_handler(x: &mut Ctx, phase: u8) -> Flow {
+fn gestionnaire(x: &mut Ctx, phase: u8) -> Flow {
     match phase {
         0 => {
             crate::game::phase0(x.c, x.b);

@@ -16,7 +16,7 @@ const END: u32 = 0x1051ae;
 const CLASSES: [&str; 6] = ["fighter", "cleric", "elf", "dwarf", "magic_user", "thief"];
 
 /// Nom des personnages qui partagent une table : la classe si ce sont ses deux variantes, sinon chaque
-/// variante (`class.0`, `class.1`) ; plusieurs classes sont jointes par `+`.
+/// variante (`classe.0`, `classe.1`) ; plusieurs classes sont jointes par `+`.
 fn owners(chars: &[usize]) -> String {
     let mut names = Vec::new();
     for (c, class) in CLASSES.iter().enumerate() {

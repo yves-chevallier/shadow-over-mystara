@@ -38,13 +38,12 @@ fn free<R: Banc>(x: &mut Cx<'_, R>) {
     x.free(&pools::EFFCT);
 }
 
-fn random(x: &mut Cx) -> u32 {
-    let alea = x.random();
-    x.c.d[0] & 0xffff_0000 | alea as u32
+fn random<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+    x.random() as u32
 }
 
 /// État 4 (`0xb2916`) : passe à 6 et libère ; état 6 : libère.
-fn finish(x: &mut Cx) {
+fn finish<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::STATE) == 4 {
         x.add8(f::STATE, 2);
     }
@@ -56,7 +55,7 @@ fn sequence_step<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
     rd8(x.b, seq + 8)
 }
 
-fn countdown_screen(x: &mut Cx) {
+fn countdown_screen<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.u8(f::VARIANT);
     match (v, x.u8(f::STATE)) {
         (_, 4 | 6) => finish(x),
@@ -103,7 +102,7 @@ fn finish_from_active<R: Banc>(x: &mut Cx<'_, R>) {
 const COIN_SPEEDS: u32 = 0xb1b76;
 const COIN_ANIMS: u32 = 0xb1b66;
 
-fn coin_init(x: &mut Cx) {
+fn coin_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let source = x.linked(0x42);
     let (sx, sz) = (source.u16(x.b, Obj::X), source.u16(x.b, Obj::Z));
@@ -198,7 +197,7 @@ fn trophy_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-fn trophy_active(x: &mut Cx) {
+fn trophy_active<R: Banc>(x: &mut Cx<'_, R>) {
     let controller = x.linked(trophy::CONTROLLER);
     match x.u8(f::SUB_STATE) {
         0 => {
@@ -289,7 +288,7 @@ fn reward_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-fn reward_active(x: &mut Cx) {
+fn reward_active<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if x.u8(f::SUB_STATE) != 0 || sequence_step(x) != 2 {
         return;
@@ -300,10 +299,9 @@ fn reward_active(x: &mut Cx) {
     let (mode, kind) = (x.u8(f::MODE), x.u8(f::VALUE));
     x.set8(f::VARIANT, mode);
     x.set8(0x02, kind);
-    x.c.d[0] = x.c.d[0] & !0xff | variant as u32;
+    // the variant is kept in D0.b during the sound, then put back
     crate::sound::jouer(x.b, 0xe24d8, x.o);
-    let back = x.c.d[0] as u8;
-    x.set8(f::VARIANT, back);
+    x.set8(f::VARIANT, variant);
     x.set8(0x02, 31);
     x.add8(f::SUB_STATE, 2);
 }
@@ -511,7 +509,7 @@ fn line_init<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// La ligne (montante) atteint le haut de la caméra : elle se dessine une fois dans le fond 2.
-fn line_active(x: &mut Cx) {
+fn line_active<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB_STATE) != 0 || (x.u16(Obj::Z) as i16) < (crate::ram::CAMERA_ALT_Y.get(x.b) as i16) {
         return;
     }
@@ -538,12 +536,12 @@ struct LineDraw {
 }
 
 impl LineDraw {
-    fn class(&self, x: &mut Cx) -> u8 {
+    fn class<R: Banc>(&self, x: &mut Cx<'_, R>) -> u8 {
         rd8(x.b, self.record + 0xc)
     }
 
     /// 0xb222e : paire de tuiles `tile`, `tile + 0x10`, puis rangée suivante.
-    fn pair(&self, x: &mut Cx, at: &mut u32, tile: u16) {
+    fn pair<R: Banc>(&self, x: &mut Cx<'_, R>, at: &mut u32, tile: u16) {
         wr16(x.b, *at, tile);
         wr16(x.b, *at + 2, self.attr);
         wr16(x.b, *at + 4, tile.wrapping_add(0x10));
@@ -552,7 +550,7 @@ impl LineDraw {
     }
 
     /// 0xb2212 : petit chiffre (zéros de tête effacés tant que `shown` est faux).
-    fn digit(&mut self, x: &mut Cx, at: &mut u32, digit: u16) {
+    fn digit<R: Banc>(&mut self, x: &mut Cx<'_, R>, at: &mut u32, digit: u16) {
         let digit = digit & 0xf;
         if digit == 0 && !self.shown {
             *at += 0x80;
@@ -564,7 +562,7 @@ impl LineDraw {
     }
 
     /// 0xb20d2 : chaîne de tuiles (une par octet) terminée par 0x40, une colonne par caractère.
-    fn text(&self, x: &mut Cx, at: &mut u32, mut s: u32) {
+    fn text<R: Banc>(&self, x: &mut Cx<'_, R>, at: &mut u32, mut s: u32) {
         loop {
             let c = x.data8(s);
             s += 1;
@@ -578,7 +576,7 @@ impl LineDraw {
     }
 
     /// 0xb1ff8 : portrait (palette recopiée, puis 4 colonnes de 2 tuiles).
-    fn portrait(&mut self, x: &mut Cx, mut at: u32) {
+    fn portrait<R: Banc>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let class = self.class(x) as u32;
         let mode = x.u8(f::MODE) as u32;
         let src = line::PORTRAITS + (class << 5);
@@ -596,7 +594,7 @@ impl LineDraw {
     }
 
     /// 0xb21d8 : numéro du joueur (petit chiffre) et une tuile fixe.
-    fn number(&mut self, x: &mut Cx, mut at: u32) {
+    fn number<R: Banc>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let mode = x.u8(f::MODE);
         self.attr = x.rom8(line::NUMBER_ATTRS + mode as u32) as u16;
         self.shown = true;
@@ -605,7 +603,7 @@ impl LineDraw {
     }
 
     /// 0xb2078 : niveau du joueur (deux chiffres) après deux tuiles fixes.
-    fn level(&mut self, x: &mut Cx, mut at: u32) {
+    fn level<R: Banc>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         for tile in [0x4c, 0x5f] {
             wr16(x.b, at, tile);
             wr16(x.b, at + 2, self.attr);
@@ -620,7 +618,7 @@ impl LineDraw {
     }
 
     /// 0xb20b8 : nom du personnage.
-    fn name(&mut self, x: &mut Cx, mut at: u32) {
+    fn name<R: Banc>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let mode = x.u8(f::MODE) as u32;
         self.attr = x.rom8(line::NAME_ATTRS + mode) as u16;
         let pair = (self.class(x) & !1) as u32;
@@ -630,7 +628,7 @@ impl LineDraw {
     }
 
     /// 0xb219e : trois tuiles fixes, le score (huit chiffres BCD), puis le texte qui suit.
-    fn score(&mut self, x: &mut Cx, mut at: u32) {
+    fn score<R: Banc>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         for tile in [0x1f6, 0x219, 0x211] {
             self.pair(x, &mut at, tile);
         }
@@ -646,7 +644,7 @@ impl LineDraw {
 
     /// 0xb212c : titre en gros caractères ; 0xff : titre par défaut du personnage recopié dans la fiche ;
     /// 0xf9 à 0xfe : titre spécial de six caractères consécutifs.
-    fn title(&mut self, x: &mut Cx, mut at: u32) {
+    fn title<R: Banc>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let mut p = self.record;
         if rd8(x.b, p) == 0xff {
             let mut k = (self.class(x) as u32) << 3;
@@ -912,5 +910,5 @@ fn walker_run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xb1a98 "effct_decompte" countdown_screen,
+    0xb1a98 "effct_decompte" #[sans] countdown_screen,
 }

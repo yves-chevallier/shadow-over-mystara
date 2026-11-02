@@ -83,22 +83,22 @@ pub mod fondu {
     /// Pages concernées (bit k : page k).
     pub const PAGES: Octet = Octet::a5(0x48e);
     /// Pas restants (nul : le fondu est fini).
-    pub const STEP: Octet = Octet::a5(0x48f);
+    pub const PAS: Octet = Octet::a5(0x48f);
     /// Délai entre deux pas (images).
-    pub const DELAY: Mot = Mot::a5(0x490);
+    pub const DELAI: Mot = Mot::a5(0x490);
 
     /// Tâches : montée et descente complètes, descente et montée du nombre de pas de l'état, fondu vers le blanc,
     /// fondu par composante depuis le blanc vers les palettes.
-    pub const RISE: u32 = 0x14ba;
-    pub const DESCENT: u32 = 0x14d0;
+    pub const MONTEE: u32 = 0x14ba;
+    pub const DESCENTE: u32 = 0x14d0;
     pub const DESCENTE_PAS: u32 = 0x14de;
-    pub const RISE_STEP: u32 = 0x14c8;
-    pub const TO_WHITE: u32 = 0x1ccf8;
-    pub const FROM_WHITE: u32 = 0x1ced4;
+    pub const MONTEE_PAS: u32 = 0x14c8;
+    pub const VERS_LE_BLANC: u32 = 0x1ccf8;
+    pub const DEPUIS_LE_BLANC: u32 = 0x1ced4;
 
-    /// Crée la tâche de fondu `entry` dans l'emplacement 0x10 (`jsr 0x9b6`).
-    pub fn lancer(b: &mut cps2::Cps2Bus, entry: u32) {
-        crate::kernel::creer_tache(b, 0x10, entry);
+    /// Crée la tâche de fondu `entree` dans l'emplacement 0x10 (`jsr 0x9b6`).
+    pub fn lancer(b: &mut cps2::Cps2Bus, entree: u32) {
+        crate::kernel::creer_tache(b, 0x10, entree);
     }
 }
 
@@ -191,11 +191,11 @@ impl<'a> Ctx<'a> {
     /// gestionnaire n'y cède la main (l'appel par adresse de l'original ne l'admettait pas).
     #[track_caller]
     pub fn world(&mut self) {
-        // sonde `rendu` (voir `dispatch::Class::update_no_next`)
-        crate::diag::registres_morts(self.c, "rendu", crate::diag::TASK_REGS);
+        // sonde `rendu` (voir `dispatch::Class::update_sans_suite`)
+        crate::diag::registres_morts(self.c, "rendu", crate::diag::REGISTRES_DE_TACHE);
         let flow = crate::game::update_world(self.c, self.b);
         assert!(flow == crate::modes::Flow::Done, "séquence de scène : un gestionnaire a cédé la main pendant la mise à jour du monde");
-        crate::sprites::build_68k(self.c, self.b);
+        crate::sprites::construire_68k(self.c, self.b);
     }
 
     /// Objet système « carton » de début de scène (SOBJ de type 14, 0xdfe26).
@@ -203,15 +203,15 @@ impl<'a> Ctx<'a> {
         let _ = crate::families::creators::sobj_14_pur(self.b);
     }
 
-    /// Objet système de type 6, de variante `variant` (0xddeaa).
-    pub fn sobj_6(&mut self, variant: u8) {
-        let _ = crate::effects_aids::decor_6(self.b, variant);
+    /// Objet système de type 6, de variante `variante` (0xddeaa).
+    pub fn sobj_6(&mut self, variante: u8) {
+        let _ = crate::effects_aids::decor_6(self.b, variante);
     }
 
     /// Copie des entrées vers les joueurs (0x2aec). Glitch d'origine : D0-D4 qu'elle laisse sont relus par des
-    /// gestionnaires de la mise à jour du monde (`inputs::copy_68k`).
+    /// gestionnaires de la mise à jour du monde (`inputs::recopier_68k`).
     pub fn inputs(&mut self) {
-        crate::inputs::copy_68k(self.c, self.b);
+        crate::inputs::recopier_68k(self.c, self.b);
     }
 
     // --- minuteries ------------------------------------------------------------------------------
@@ -227,17 +227,17 @@ impl<'a> Ctx<'a> {
 
     /// Écran noir puis fondu d'ouverture : délai 2, toutes les pages, tâche de fondu.
     pub fn fade_in(&mut self) {
-        fondu::DELAY.set(self.b, 2);
+        fondu::DELAI.set(self.b, 2);
         fondu::PAGES.set(self.b, 15);
         crate::palette::no_brightness(self.b);
-        self.start_fade_task(crate::scene::fondu::RISE);
+        self.start_fade_task(crate::scene::fondu::MONTEE);
     }
     /// Variante : fondu à un niveau par pas (`A5+0x48f` = 1), sans passer par le noir.
     pub fn fade_in_stepped(&mut self) {
-        fondu::DELAY.set(self.b, 2);
+        fondu::DELAI.set(self.b, 2);
         fondu::PAGES.set(self.b, 15);
-        fondu::STEP.set(self.b, 1);
-        self.start_fade_task(crate::scene::fondu::FROM_WHITE);
+        fondu::PAS.set(self.b, 1);
+        self.start_fade_task(crate::scene::fondu::DEPUIS_LE_BLANC);
     }
     fn start_fade_task(&mut self, entry: u32) {
         crate::kernel::creer_tache(self.b, 0x10, entry);

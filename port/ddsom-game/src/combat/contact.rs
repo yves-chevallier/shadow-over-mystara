@@ -97,7 +97,7 @@ pub(super) fn parry(w: &mut World, p: Obj, other: Obj) {
     other.set_u8(w.b, f::HITSTOP_VICTIM, 8);
     w.set_bit(p, f::HIT_MARK, 5);
     w.set_bit(other, f::HIT_FLAGS, 5);
-    w.call_d1(0xaa96c, p, other, 0);
+    w.spark(Spark::Linked, p, other, 0);
     crate::sound::jouer(w.b, 0xe75b0, p);
 }
 
@@ -228,7 +228,7 @@ pub(super) fn enemy_hits_player(w: &mut World, p: Obj, e: Obj) {
             _ => {}
         }
     }
-    w.call_d1(0xaaa04, p, e, 2);
+    w.spark(Spark::Between { owner_first: true }, p, e, 2);
     crate::sound::jouer_avec(w.b, 0xec046, crate::sound::Source { objet: Some(p), a1: Some(e.0), d4: None });
 }
 
@@ -266,7 +266,7 @@ pub(super) fn enemy_shot_hits_player(w: &mut World, p: Obj, s: Obj) {
     hurt_setup(w, p, s, 3);
     p.set_u8(w.b, f::ACTION, action);
     player_loses_hp(w, p, s);
-    w.call_d1(0xaaa04, p, s, 5);
+    w.spark(Spark::Between { owner_first: true }, p, s, 5);
     crate::sound::jouer_avec(w.b, 0xec200, crate::sound::Source { objet: Some(p), a1: Some(s.0), d4: None });
 }
 
@@ -358,7 +358,7 @@ pub(super) fn box_hits_player(w: &mut World, p: Obj, bx: Obj) {
     } else {
         p.set_u16(w.b, f::HP, left);
     }
-    w.call_d1(0xaa96c, p, bx, 2);
+    w.spark(Spark::Linked, p, bx, 2);
 }
 
 /// 0x28116 : les caisses (lancées) blessent les ennemis.
@@ -416,7 +416,7 @@ pub(super) fn box_hits_enemy(w: &mut World, e: Obj, bx: Obj) {
     e.set_u16(w.b, f::HP_PREV, hp);
     let dmg = box_damage(w, bx);
     enemy_loses_hp(w, e, dmg);
-    w.call_d1(0xaaa84, e, bx, 7);
+    w.spark(Spark::Between { owner_first: false }, e, bx, 7);
 }
 
 // ---------------------------------------------------------------------------------------------

@@ -25,7 +25,7 @@ impl HitBox {
 }
 
 /// Table de jeux de boîtes : un long par jeu (`+0x2e` de l'objet), adresse de la boîte d'index 0 du jeu ;
-/// la boîte d'index `n` (octet de l'objet, 0 = aucune) est à `address + 8 n`.
+/// la boîte d'index `n` (octet de l'objet, 0 = aucune) est à `adresse + 8 n`.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct BoxTable {
     /// `body` (index `+0x38`), `push` (`+0x39`) ou `attack` (`+0x3a`).
@@ -57,7 +57,7 @@ impl BoxBlock {
 }
 
 /// Boîte de visibilité (0x1ed2, index `+0x3c`), mots : l'objet est à l'écran si `x écran + dx <= width`
-/// et `height écran + dy <= height` (comparaisons non signées).
+/// et `hauteur écran + dy <= height` (comparaisons non signées).
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Bounds(pub i16, pub u16, pub i16, pub u16);
 

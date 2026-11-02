@@ -67,7 +67,7 @@ mod v {
 /// Valeurs d'entrée des réglages (A5 - 0x6292...), pour la mise en évidence des changements.
 mod saved {
     pub const COIN_MODE: u32 = 0xff_1d6e;
-    pub const FALLS: u32 = 0xff_1d6f;
+    pub const CHUTES: u32 = 0xff_1d6f;
     pub const CONTINUE: u32 = 0xff_1d70;
     /// CONTINUE choisi (rétabli quand le mode de monnayage quitte le départ gratuit).
     pub const CONTINUE_CHOSEN: u32 = 0xff_1d71;
@@ -130,7 +130,7 @@ const fn text(table: u32, stride: u32, width: u32) -> Show {
 
 const COIN_MODE: Setting =
     Setting { var: v::COIN_MODE, word: false, step: 1, max: 0x12, saved: saved::COIN_MODE, cell: 0x91299c, show: text(0x2c042, 32, 32) };
-const FALLS: Setting = Setting { var: 0x1d, word: false, step: 1, max: 0xb, saved: saved::FALLS, cell: 0x9129a4, show: text(0x2c314, 26, 26) };
+const CHUTES: Setting = Setting { var: 0x1d, word: false, step: 1, max: 0xb, saved: saved::CHUTES, cell: 0x9129a4, show: text(0x2c314, 26, 26) };
 const CONTINUE: Setting = Setting { var: v::CONTINUE, word: false, step: 1, max: 1, saved: saved::CONTINUE, cell: 0x9129ac, show: Show::OnOff };
 const MONITOR: Setting = Setting { var: 0x26, word: false, step: 1, max: 1, saved: saved::MONITOR, cell: 0x9129b4, show: text(0x2c4e8, 8, 8) };
 const DEMO_SOUND: Setting = Setting { var: 0x27, word: false, step: 1, max: 1, saved: saved::DEMO_SOUND, cell: 0x9129bc, show: Show::OnOff };
@@ -149,7 +149,7 @@ const DIFFICULTY: Setting =
 #[derive(Clone, Copy)]
 enum Line {
     Coin,
-    Falls,
+    Chutes,
     Setting(Setting),
     Exit,
 }
@@ -158,12 +158,12 @@ enum Line {
 fn system_lines(variant: Variant) -> &'static [Line] {
     use Line::*;
     const PLAIN: &[Line] =
-        &[Coin, Falls, Setting(CONTINUE), Setting(MONITOR), Setting(DEMO_SOUND), Setting(SOUND_MODE), Exit];
+        &[Coin, Chutes, Setting(CONTINUE), Setting(MONITOR), Setting(DEMO_SOUND), Setting(SOUND_MODE), Exit];
     const LANGUAGE_LINES: &[Line] =
-        &[Coin, Falls, Setting(CONTINUE), Setting(MONITOR), Setting(DEMO_SOUND), Setting(SOUND_MODE), Setting(LANGUAGE), Exit];
+        &[Coin, Chutes, Setting(CONTINUE), Setting(MONITOR), Setting(DEMO_SOUND), Setting(SOUND_MODE), Setting(LANGUAGE), Exit];
     const CARD_LINES: &[Line] = &[
         Coin,
-        Falls,
+        Chutes,
         Setting(CONTINUE),
         Setting(MONITOR),
         Setting(DEMO_SOUND),
@@ -241,12 +241,12 @@ fn setting(x: &mut Ctx, s: &Setting) {
 }
 
 /// `0x2c2a4` : type de monnayeurs (0-2 avec les cartes, 0-11 sinon).
-fn falls(x: &mut Ctx, variant: Variant) {
-    let max = if let Variant::Cards(_) = variant { 2 } else { FALLS.max };
-    let current = read(x, &FALLS);
+fn chutes(x: &mut Ctx, variant: Variant) {
+    let max = if let Variant::Cards(_) = variant { 2 } else { CHUTES.max };
+    let current = read(x, &CHUTES);
     let Some(value) = edit(x, current, 1, max) else { return };
-    write(x, &FALLS, value);
-    draw(x, &FALLS);
+    write(x, &CHUTES, value);
+    draw(x, &CHUTES);
 }
 
 /// `0x2bf86` : mode de monnayage. Avec les cartes, la valeur choisie indexe une liste réduite de modes
@@ -302,7 +302,7 @@ pub fn configuration(x: &mut Ctx) -> Flow {
 fn remember(x: &mut Ctx) {
     let bytes = [
         (saved::COIN_MODE, v::COIN_MODE),
-        (saved::FALLS, 0x1d),
+        (saved::CHUTES, 0x1d),
         (saved::CONTINUE, v::CONTINUE),
         (saved::CONTINUE_CHOSEN, v::CONTINUE),
         (saved::MONITOR, 0x26),
@@ -377,7 +377,7 @@ fn menu(x: &mut Ctx) -> Flow {
         line::SAVE => {
             if new & key::SHOT1 != 0 {
                 layers_off(x);
-                crate::video::clear_layer(x.b, crate::video::Layer::One);
+                crate::video::effacer_couche(x.b, crate::video::Couche::Un);
                 print(x, text::SAVING);
                 layers_on(x);
                 if !config::save(x.c, x.b) {
@@ -410,7 +410,7 @@ fn sub_screen(x: &mut Ctx, texts: &[u32]) {
     let s = get(x, field::SUB_STEP).wrapping_add(2);
     set(x, field::SUB_STEP, s);
     set(x, field::SUB_LINE, 0);
-    crate::video::clear_layer(x.b, crate::video::Layer::One);
+    crate::video::effacer_couche(x.b, crate::video::Couche::Un);
     for &t in texts {
         print(x, t);
     }
@@ -429,7 +429,7 @@ fn system(x: &mut Ctx) -> Flow {
             Variant::Plain => text::SYSTEM_LINES,
         };
         sub_screen(x, &[text::SYSTEM_TITLE, lines]);
-        for s in [COIN_MODE, FALLS, CONTINUE, MONITOR, DEMO_SOUND, SOUND_MODE] {
+        for s in [COIN_MODE, CHUTES, CONTINUE, MONITOR, DEMO_SOUND, SOUND_MODE] {
             draw(x, &s);
         }
         match variant {
@@ -453,7 +453,7 @@ fn system(x: &mut Ctx) -> Flow {
     }
     match lines[get(x, field::SUB_LINE) as usize / 2] {
         Line::Coin => coin_mode(x, variant),
-        Line::Falls => falls(x, variant),
+        Line::Chutes => chutes(x, variant),
         Line::Setting(s) => setting(x, &s),
         Line::Exit => return exit_line(x),
     }

@@ -6,7 +6,7 @@
 
 use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
-use super::effects_creators::restes::{sur_banc_de_travail, Pur, SurBanc};
+use super::effects_creators::restes::{Pur, SurBanc};
 use super::eshl_creators;
 use crate::mem::{rd32, rd8, wr32, wr8, A5};
 use crate::objects::Obj;
@@ -19,28 +19,6 @@ const PLAYERS: u32 = A5 + 0x5de;
 const PLAYER_SIZE: u32 = 0x200;
 
 /// Champs d'un enregistrement de joueur utilisés par les décors.
-
-/// Routines du décor encore écrites pour le processeur (caméras 0x33aa6 / 0x33b24, palettes 0x1a360 / 0x1a678 /
-/// 0x1a8ac, placement des joueurs 0x20de6...), appelées à la suite comme dans l'original, sur un banc de travail
-/// (`sur_banc_de_travail` : seuls les restes D2-D5 entrent et reviennent ; D4 : les caméras).
-fn sur_le_processeur<R: Banc>(x: &mut Cx<'_, R>, routines: &[u32]) {
-    let o = x.o;
-    sur_banc_de_travail(x, |c, b| {
-        for &routine in routines {
-            c.a[0] = o.0;
-            c.a[5] = A5;
-            crate::call(c, b, routine);
-        }
-    });
-}
-
-/// Décor de la zone repris à l'entrée (0x33aa6) ou au retour (0x33b24) d'une porte de zone : caméras, script de la
-/// scène remis à zéro, pages de palettes de la scène.
-fn reprendre_decor<R: Banc>(x: &mut Cx<'_, R>, cameras: u32) {
-    sur_le_processeur(x, &[cameras]);
-    crate::scene::script::reset(x.b);
-    sur_le_processeur(x, &[0x1a360, 0x1a678, 0x1a8ac]);
-}
 
 /// 0xc8312 : objet SET de la scène, de variante `variante`. Glitch d'origine : l'appelant ne teste pas l'échec et
 /// écrit dans l'objet que laisse A1 (`Pool::alloc_or_leftover`).
@@ -71,26 +49,17 @@ fn players() -> impl Iterator<Item = Obj> {
 /// 0xd40e8, routine des scripts d'apparition (scènes 14 et 109) : libère le verrou des tremplins
 /// (`A5+0x46`) et crée les treize tremplins de la scène, SET 16 de variantes 13 à 1 ; s'arrête si le
 /// pool est plein. Laisse comme l'original D5 (compteur de boucle), A1 et D6 (de l'allocation).
-pub const SPAWN_BUMPERS: crate::Native = crate::Native {
-    entry: 0xd40e8,
-    name: "set_tremplins_d40e8",
-    run: crate::Corps::Processeur(spawn_bumpers),
-    touches_sound: false,
-    outputs: crate::regs::d(5) | crate::regs::d(6) | crate::regs::a(1),
-};
-
-fn spawn_bumpers(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+pub(crate) fn spawn_bumpers(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
     crate::mem::wr16(b, A5 + 0x46, 0);
     // `moveq #12,D5` : compteur long, mot haut nul
     for counter in (0..13u32).rev() {
         c.d[5] = counter;
-        let Some(o) = pools::SET.alloc_68k(c, b) else { return crate::mem::rts(c, b) };
+        let Some(o) = pools::SET.alloc_68k(c, b) else { return };
         o.set_u8(b, Obj::ACTIVE, 1);
         o.set_u8(b, Obj::KIND, 0x10);
         o.set_u8(b, Obj::VARIANT, counter as u8 + 1);
     }
     c.d[5] |= 0xffff;
-    crate::mem::rts(c, b);
 }
 
 /// Tremplin / pare-chocs (h) : une zone de contact (boîtes lues dans la ROM d'après `+0x2e` et les
@@ -1856,19 +1825,6 @@ pub(super) fn run_on<R: Banc>(x: &mut Cx<'_, R>, other: Obj, run: fn(&mut Cx<'_,
     x.o = me;
 }
 
-/// `run_on` pour les gestionnaires encore sur le processeur (portes qui cèdent la main pendant leur fondu : SET 7 de
-/// `set.rs`, SET 29).
-pub(super) fn run_on_68k(x: &mut Cx, other: Obj, run: fn(&mut Cx)) {
-    let me = x.o;
-    let d6 = x.c.d[6];
-    x.o = other;
-    x.c.a[0] = other.0;
-    run(x);
-    x.o = me;
-    x.c.a[0] = me.0;
-    x.c.d[6] = d6;
-}
-
 /// Suspend les objets d'un pool (compteur `+0x40` + 1, phase remise à zéro).
 pub(super) fn suspend<R: Banc>(x: &mut Cx<'_, R>, pool: &Pool) {
     for i in 0..pool.count {
@@ -2181,12 +2137,12 @@ mod door_a {
 
     /// Chargement de la zone cachée (état 0x400 de la porte).
     fn enter_zone<R: Banc>(x: &mut Cx<'_, R>) {
-        reprendre_decor(x, 0x33aa6);
+        crate::families::scenery::resume_scenery(x, crate::families::scenery::Cameras::Start);
         x.set_a5_u8(0x48e, 0xf);
         crate::palette::full_brightness(x.b);
         x.set_a5_u16(GATE_LOCK, 0);
         reset_players_after_exit(x);
-        sur_le_processeur(x, &[crate::scene::entry::PLACE_PLAYERS.entry]);
+        crate::families::scenery::place_players(x);
     }
 
     /// Retour à la zone d'origine : les joueurs sont libérés et tous les objets de la zone cachée
@@ -2208,7 +2164,7 @@ mod door_a {
 
     /// État 4 : arrivée dans la zone cachée (chargement de la nouvelle zone).
     fn arrive<R: Banc>(x: &mut Cx<'_, R>) {
-        reprendre_decor(x, 0x33b24);
+        crate::families::scenery::resume_scenery(x, crate::families::scenery::Cameras::Return);
         x.set_a5_u8(0x48e, 0xf);
         crate::palette::full_brightness(x.b);
         x.set_a5_u16(GATE_LOCK, 0);
@@ -2354,7 +2310,7 @@ pub(super) mod door_b {
     const NEAR_Y: u16 = 0x20;
 
     /// Reste sur le processeur : le fondu de sortie (`watch`) cède la main (`set::fondu_de_sortie`).
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let me = x.o;
         crate::effects_aids::decompte_joueurs_vivants(x.b, me);
         if x.u8(0x40) != 0 || x.a5_u8(0x3d) != 0 {
@@ -2404,7 +2360,7 @@ pub(super) mod door_b {
         dy <= 2 * NEAR_Y
     }
 
-    fn watch(x: &mut Cx) {
+    fn watch<R: Banc>(x: &mut Cx<'_, R>) {
         if !players().any(|p| p.u8(x.b, pl::ACTIVE) == 1 && near(x, p)) {
             return;
         }
@@ -2418,7 +2374,7 @@ pub(super) mod door_b {
     }
 
     /// Après le fondu de sortie (0xd8f06).
-    pub fn after_fade(x: &mut Cx) {
+    pub fn after_fade<R: Banc>(x: &mut Cx<'_, R>) {
         let level = x.u8(0x4f);
         x.set_a5_u8(0x34, level);
         match x.u8(0x48) as i8 {
@@ -2437,21 +2393,21 @@ pub(super) mod door_b {
     }
 
     fn enter_zone<R: Banc>(x: &mut Cx<'_, R>) {
-        reprendre_decor(x, 0x33aa6);
+        crate::families::scenery::resume_scenery(x, crate::families::scenery::Cameras::Start);
         x.set_a5_u8(0x48e, 0xf);
         crate::palette::full_brightness(x.b);
         crate::sound::jouer(x.b, 0xe0c5c, x.o);
         x.set_a5_u16(GATE_LOCK, 0);
         reset_players_after_exit(x);
-        sur_le_processeur(x, &[crate::scene::entry::PLACE_PLAYERS.entry]);
+        crate::families::scenery::place_players(x);
     }
 
-    fn exit_zone(x: &mut Cx) {
+    fn exit_zone<R: Banc>(x: &mut Cx<'_, R>) {
         release_players(x);
         x.set8(0x4, 6);
         resume_with(x, &SET_POOL, |x, o| {
             if o.u8(x.b, 2) == 0x1d {
-                run_on_68k(x, o, run);
+                run_on(x, o, run);
             }
         });
         for pool in [&ENEMY_POOL, &EFFCT_POOL, &BOX_POOL, &ITEM_POOL, &BOSS_POOL, &ESHL_POOL, &SOBJ_POOL] {
@@ -2460,7 +2416,7 @@ pub(super) mod door_b {
     }
 
     fn arrive<R: Banc>(x: &mut Cx<'_, R>) {
-        reprendre_decor(x, 0x33b24);
+        crate::families::scenery::resume_scenery(x, crate::families::scenery::Cameras::Return);
         x.set_a5_u8(0x48e, 0xf);
         crate::palette::full_brightness(x.b);
         x.set_a5_u16(GATE_LOCK, 0);
@@ -2507,7 +2463,6 @@ mod game_over {
     use super::*;
 
     const WAIT_FRAMES: u16 = 0x80;
-    const AFTER_MUSIC: u32 = 0x1ad2a;
     /// Tâche de fondu par composante vers le blanc.
     const FADE_TO_WHITE_TASK: u32 = 0x1ccf8;
 
@@ -2521,7 +2476,7 @@ mod game_over {
                 crate::families::effects_creators::set_list_par(&mut SurBanc(&mut x.c), x.b, 7);
                 x.add8(0x4, 2);
                 x.set16(0x4c, WAIT_FRAMES);
-                sur_le_processeur(x, &[AFTER_MUSIC]);
+                crate::families::scenery::save_palette_page_1(x);
                 // l'original enchaîne sur le décompte (0xd9458) dès cette image : 0x80 devient 0x7f
                 countdown(x);
             }
@@ -2555,7 +2510,6 @@ mod game_over {
 mod level_clock {
     use super::*;
 
-    const SPEECH: u32 = 0xa66c0;
     const ON: u32 = 0xeda26;
     const OFF: u32 = 0xeda66;
     const TIME: u32 = 0x42;
@@ -2578,8 +2532,9 @@ mod level_clock {
 
     /// 0xa66c0, qui lit sa ligne de table dans D2 (laissé aux gestionnaires suivants, `dispatch::Restes`).
     fn speech<R: Banc>(x: &mut Cx<'_, R>, kind: u32) {
+        // the row stays in D2 (`dispatch::Restes`)
         *x.c.d2() = kind;
-        sur_le_processeur(x, &[SPEECH]);
+        crate::families::scenery::eshl_volley(x, kind);
     }
 
     fn countdown<R: Banc>(x: &mut Cx<'_, R>, reset: u16, kind: u32) {
@@ -3683,7 +3638,7 @@ handlers! {
     0xd96d0 "set_32" #[sans] test_selector::run,
     0xd8458 "set_27" #[sans] door_a::run,
     0xd8ce4 "set_28" #[sans] zone_end::run,
-    0xd8dce "set_29" door_b::run,
+    0xd8dce "set_29" #[sans] door_b::run,
     0xd801e "set_25" #[sans] rearguard::run,
     0xd810a "set_26" #[sans] idle_hunter::run,
     0xd69c2 "set_22" #[sans] rank_adjust::run,

@@ -4,7 +4,7 @@
 //! X (abscisse), Y (profondeur sur le sol, clé de tri) et Z (altitude).
 //!
 //! Deux façons de bouger :
-//! - *balistique* : `speed += accélération ; position += speed` (`advance`) ;
+//! - *balistique* : `vitesse += accélération ; position += vitesse` (`advance`) ;
 //! - *par table* : la vitesse est lue dans la table `Obj::SPEED_TABLE` à l'index `Obj::SPEED_INDEX`
 //!   (deux mots par index : vx puis vy ou vz), on y ajoute l'accélération (`advance_by_table`).
 

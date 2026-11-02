@@ -9,11 +9,11 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 thread_local! {
-    static CALLS: RefCell<BTreeMap<u32, u64>> = RefCell::new(BTreeMap::new());
+    static APPELS: RefCell<BTreeMap<u32, u64>> = RefCell::new(BTreeMap::new());
 }
 
 fn run(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u32> {
-    CALLS.with(|m| {
+    APPELS.with(|m| {
         if let Some(n) = m.borrow_mut().get_mut(&pc) {
             *n += 1;
         }
@@ -22,8 +22,8 @@ fn run(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u32
 }
 
 /// Code d'origine seul (pour compter les appels des fonctions d'origine, natives ou non).
-fn run_original(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u32> {
-    CALLS.with(|m| {
+fn run_origine(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u32> {
+    APPELS.with(|m| {
         if let Some(n) = m.borrow_mut().get_mut(&pc) {
             *n += 1;
         }
@@ -39,7 +39,7 @@ fn main() {
     };
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
-    CALLS.with(|c| {
+    APPELS.with(|c| {
         for n in ddsom_game::all_natives() {
             c.borrow_mut().insert(n.entry, 0);
         }
@@ -47,19 +47,19 @@ fn main() {
     if let Some(index) = a.get(5) {
         for l in std::fs::read_to_string(index).expect("index").lines().skip(1) {
             if let Some(addr) = l.split('\t').next().and_then(|x| u32::from_str_radix(x, 16).ok()) {
-                CALLS.with(|c| {
+                APPELS.with(|c| {
                     c.borrow_mut().entry(addr).or_insert(0);
                 });
             }
         }
     }
-    m.executor = Some(if a.get(5).is_some() { run_original } else { run });
+    m.executor = Some(if a.get(5).is_some() { run_origine } else { run });
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
     for f in 0..frames.parse().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
     }
-    for (entry, n) in CALLS.with(|c| c.borrow().clone()) {
+    for (entry, n) in APPELS.with(|c| c.borrow().clone()) {
         println!("{entry:06x} {n}");
     }
 }

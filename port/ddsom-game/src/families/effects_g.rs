@@ -18,7 +18,6 @@
 
 use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
-use crate::mem::set_low_word;
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Courant;
@@ -77,7 +76,7 @@ const THROWS: [Throw; 2] = [
     Throw { vz: 0x500, az: 0xffd8, dx: 0xffc8, vx: 0x280, anims: chunk::ANIMS_1 },
 ];
 
-fn chunk(x: &mut Cx) {
+fn chunk<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => chunk_init(x),
         2 => chunk_active(x),
@@ -118,7 +117,7 @@ fn chunk_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_start(throw.anims, 0x14);
 }
 
-fn chunk_active(x: &mut Cx) {
+fn chunk_active<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB_STATE) {
         0 => {
             x.move_xz();
@@ -131,7 +130,9 @@ fn chunk_active(x: &mut Cx) {
             x.set16(Obj::Z, 0);
             x.set16(chunk::TIMER, 0x5a);
             crate::sound::jouer(x.b, rom::SOUND_LANDING, x.o);
-            crate::ai_aids::debris_set(x.b, x.o, chunk::DEBRIS_KIND as u16); x.c.d[5] = 0xffff; // D5 : compteur épuisé du `dbf`, relu plus loin (voir `ai::keep_on_screen_d5`)
+            crate::ai_aids::debris_set(x.b, x.o, chunk::DEBRIS_KIND as u16);
+            // Original glitch: the exhausted `dbf` counter stays in D5 (`dispatch::Restes`)
+            *x.c.d5() = 0xffff;
             match x.u8(f::VARIANT) {
                 0 => {
                 x.anim_start(chunk::ANIMS_0, 0x15);
@@ -393,7 +394,7 @@ fn on_screen<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-fn armour(x: &mut Cx) {
+fn armour<R: Banc>(x: &mut Cx<'_, R>) {
     if x.suspended() {
         return;
     }
@@ -450,12 +451,11 @@ fn armour_worn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// La pièce tombe : elle se brise en éclats (variante 1) posés sur elle.
-fn armour_break(x: &mut Cx) {
+fn armour_break<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let mut at = armour::SHARDS + 4 * x.u8(armour::PIECE) as u32;
     let count = x.data8(at);
     at += 1;
-    x.c.a[4] = at;
     let mut n = count as u16;
     loop {
         let Some(o) = x.alloc(&pools::EFFCT) else { return };
@@ -817,11 +817,9 @@ mod sfx {
     pub const JUMP: u32 = 0xe3da6;
     pub const CHEER: u32 = 0xe4e5a;
     pub const LANDING: u32 = 0xec7ae;
-    /// Efface le début du scroll 1.
-    pub const CLEAR_SCROLL1: u32 = 0x3525c;
 }
 
-fn fireworks(x: &mut Cx) {
+fn fireworks<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => fireworks_init(x),
         2 => fireworks_active(x),
@@ -877,7 +875,7 @@ fn follow_host<R: Banc>(x: &mut Cx<'_, R>, dx: u16) {
     x.add16(Obj::Y + 2, 0xffff);
 }
 
-fn fireworks_init(x: &mut Cx) {
+fn fireworks_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     match x.u8(f::VARIANT) {
         0 => {
@@ -930,32 +928,24 @@ fn fireworks_init(x: &mut Cx) {
     }
 }
 
-/// Copie `n` couleurs de la ROM (données) dans la palette, opaques (`| 0xf000`) ; D0 et D1 comme l'original.
-fn load_colours(x: &mut Cx, from: u32, to: u32, n: u32) {
-    let mut v = 0;
+/// Copies `n` colours from the ROM (data space) into the palette, opaque (`| 0xf000`).
+fn load_colours<R: Banc>(x: &mut Cx<'_, R>, from: u32, to: u32, n: u32) {
     for k in 0..n {
-        v = x.data16(from + 2 * k) | 0xf000;
+        let v = x.data16(from + 2 * k) | 0xf000;
         crate::mem::wr16(x.b, to + 2 * k, v);
     }
-    set_low_word(&mut x.c.d[0], v);
 }
 
-/// `0xb95b8` : copie 0x400 octets de `from` vers `to` par blocs de huit longs (registres D1-D6, A3, A4
-/// laissés comme l'original).
-fn copy_block(x: &mut Cx, from: u32, to: u32) {
+/// `0xb95b8`: copies 0x400 bytes from `from` to `to` in blocks of eight longs (`movem` through D1-D6, A3, A4).
+/// Original glitch: the last block's longs 1 to 4 stay in D2-D5 (`dispatch::Restes`).
+fn copy_block<R: Banc>(x: &mut Cx<'_, R>, from: u32, to: u32) {
     let mut last = [0u32; 8];
     for k in 0..0x100 {
         let v = crate::mem::rd32(x.b, from + 4 * k);
         crate::mem::wr32(x.b, to + 4 * k, v);
         last[(k % 8) as usize] = v;
     }
-    for (r, v) in [1usize, 2, 3, 4, 5, 6].into_iter().zip(&last[..6]) {
-        x.c.d[r] = *v;
-    }
-    x.c.a[3] = last[6];
-    x.c.a[4] = last[7];
-    x.c.a[1] = from + 0x400;
-    x.c.a[2] = to + 0x400;
+    (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (last[1], last[2], last[3], last[4]);
 }
 
 /// Lance la tâche de fondu `program` (`0x9b6`, D0.w = 0x10), A0 gardé.
@@ -963,7 +953,7 @@ fn fade_task<R: Banc>(x: &mut Cx<'_, R>, program: u32) {
     crate::kernel::creer_tache(x.b, 0x10, program);
 }
 
-fn fireworks_active(x: &mut Cx) {
+fn fireworks_active<R: Banc>(x: &mut Cx<'_, R>) {
     let sub = x.u8(f::SUB_STATE);
     match x.u8(f::VARIANT) {
         0 => hero(x, sub),
@@ -1084,7 +1074,7 @@ fn last_actor<R: Banc>(x: &mut Cx<'_, R>, sub: u8) {
 }
 
 /// Variante 0 : le personnage qui tire le feu d'artifice (neuf étapes).
-fn hero(x: &mut Cx, sub: u8) {
+fn hero<R: Banc>(x: &mut Cx<'_, R>, sub: u8) {
     match sub {
         0 => {
             if !scene_go(x) {
@@ -1125,7 +1115,7 @@ fn hero(x: &mut Cx, sub: u8) {
             if !fading(x) {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(fireworks::TIMER, 0x14);
-                x.call(sfx::CLEAR_SCROLL1);
+                crate::families::petites::clear_scroll1_start(x);
             }
             x.anim_step();
         }
@@ -1170,7 +1160,7 @@ fn hero(x: &mut Cx, sub: u8) {
 
 /// Étape 4 : une fusée à chaque délai écoulé, la dernière avec un son ; puis quatre images d'attente
 /// (la tâche cède la main) et le fondu de retour.
-fn hero_rockets(x: &mut Cx) {
+fn hero_rockets<R: Banc>(x: &mut Cx<'_, R>) {
     if countdown(x, fireworks::DELAY) > 0 {
         return;
     }
@@ -1182,13 +1172,15 @@ fn hero_rockets(x: &mut Cx) {
         return rocket(x);
     }
     x.add8(f::SUB_STATE, 2);
-    // la partie entière attend quatre images (`jsr 0xa40` au milieu de la boucle de dispatch) : la tâche reprendra
-    // à l'étape `ApresAttente`, puis, au retour, à `ApresEtat` (la fin du gestionnaire), comme l'original
+    // The whole game waits four frames (`jsr 0xa40` in the middle of the dispatch loop): the task will resume at step
+    // `ApresAttente`, then, on return, at `ApresEtat` (the end of the handler), like the original. The trap runs on a
+    // work bench (D0 = 4; it only leaves D0 and D1, which nobody reads).
     crate::taches::table::appeler(x.b, Etape::ApresEtat);
-    x.c.d[0] = 4;
-    crate::kernel::attendre(x.c, x.b, Etape::ApresAttente);
-    // la boucle de dispatch et les appelants Rust en cours abandonnent (`taches::a_cede`) : la tâche reprendra par les
-    // étapes, puis par l'appel en cours de la boucle (`dispatch::Etape::Aiguillage`)
+    let mut banc = m68k::Cpu::default();
+    banc.d[0] = 4;
+    crate::kernel::attendre(&mut banc, x.b, Etape::ApresAttente);
+    // the dispatch loop and the pending Rust callers give up (`taches::a_cede`): the task will resume through the
+    // steps, then through the loop's pending call (`dispatch::Etape::Aiguillage`)
 }
 
 /// Après l'attente : fondu de retour depuis les palettes sauvées.
@@ -1273,10 +1265,10 @@ crate::etapes! {
 }
 
 handlers! {
-    0xb8ef6 "effct_feu_artifice" fireworks,
+    0xb8ef6 "effct_feu_artifice" #[sans] fireworks,
     0xb59ea "effct_machine_volante" #[sans] flyer,
-    0xb5454 "effct_armure" armour,
+    0xb5454 "effct_armure" #[sans] armour,
     0xb4bec "effct_pluie_debris" #[sans] debris_rain,
-    0xb7866 "effct_morceau_ennemi" chunk,
+    0xb7866 "effct_morceau_ennemi" #[sans] chunk,
     0xb96dc "effct_eclat_lance" #[sans] shard,
 }

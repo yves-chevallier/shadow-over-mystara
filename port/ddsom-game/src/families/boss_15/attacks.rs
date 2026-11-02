@@ -13,11 +13,9 @@
 
 use crate::families::cx::Banc;
 use super::*;
-use crate::mem::{rd16, rts};
+use crate::mem::rd16;
 use crate::objects::Obj;
-use crate::{regs, Native};
 use cps2::Cps2Bus;
-use m68k::Cpu;
 use crate::objects::Courant;
 
 pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
@@ -634,38 +632,26 @@ fn step_toward(b: &mut Cps2Bus, o: Obj, direction: u8) -> (u32, u32) {
     (dx, dy)
 }
 
-/// `step_toward` dans la direction de (D3, D4) vers (D1, D2) (0x1386, registres de travail laissés) ; D0 et D1 rendent le
-/// pas, A2 la table.
-fn shove(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) {
-    crate::call(c, b, 0x1386);
-    let (dx, dy) = step_toward(b, o, c.d[0] as u8);
-    c.a[2] = SHOVE_STEPS;
-    c.d[0] = dx;
-    c.d[1] = dy;
-}
-
-/// 0x930a4 (appelé par un effet, 0xb482e) : l'objet A0 se rapproche de l'objet A1 d'un pas tant qu'il en est à
-/// plus de 0x10 pixels (X + Y).
-fn approach(c: &mut Cpu, b: &mut Cps2Bus) {
-    let (me, other) = (Obj(c.a[0] & 0xff_ffff), Obj(c.a[1] & 0xff_ffff));
-    let dx = (me.u16(b, 0x8).wrapping_sub(other.u16(b, 0x8)) as i16).wrapping_abs() as u16;
-    let dy = (me.u16(b, 0x10).wrapping_sub(other.u16(b, 0x10)) as i16).wrapping_abs() as u16;
-    let sum = dx.wrapping_add(dy);
-    c.d[0] = c.d[0] & 0xffff_0000 | sum as u32;
-    c.d[1] = c.d[1] & 0xffff_0000 | dy as u32;
-    if (sum as i16) > 0x10 {
-        for (n, v) in [(1, other.u16(b, 0x8)), (2, other.u16(b, 0x10)), (3, me.u16(b, 0x8)), (4, me.u16(b, 0x10))] {
-            c.d[n] = c.d[n] & 0xffff_0000 | v as u32;
-        }
-        shove(c, b, me);
+/// 0x930a4 (called by an EFFCT, 0xb482e, `effects_c::spark_active`): the current object steps toward `other` while it is
+/// more than 0x10 pixels away (X + Y), by 0x1386 and 0x93158. Original glitch: 0x1386 leaves its work registers (D2,
+/// D3, D4) to the next handlers (`dispatch::Restes`); the X written to D1.w keeps a null high word (the caller's D1).
+pub(crate) fn approach_toward<R: Banc>(x: &mut Cx<'_, R>, other: Obj) {
+    let me = x.o;
+    let dx = (me.u16(x.b, 0x8).wrapping_sub(other.u16(x.b, 0x8)) as i16).wrapping_abs() as u16;
+    let dy = (me.u16(x.b, 0x10).wrapping_sub(other.u16(x.b, 0x10)) as i16).wrapping_abs() as u16;
+    if (dx.wrapping_add(dy) as i16) <= 0x10 {
+        return;
     }
-    rts(c, b);
+    let low = |r: u32, v: u16| r & 0xffff_0000 | v as u32;
+    let d1 = other.u16(x.b, 0x8) as u32;
+    let d2 = low(*x.c.d2(), other.u16(x.b, 0x10));
+    let d3 = low(*x.c.d3(), me.u16(x.b, 0x8));
+    let d4 = low(*x.c.d4(), me.u16(x.b, 0x10));
+    let r = crate::aides::calcul(x.b, d1, d2, d3, d4);
+    *x.c.d2() = r.d2;
+    *x.c.d3() = r.d3;
+    // `add.l #0x8000,D4` (carry into the high word), then the unit in D4.w
+    *x.c.d4() = d4.wrapping_add(0x8000) & 0xffff_0000 | r.unite as u32;
+    step_toward(x.b, me, r.direction);
 }
 
-pub(super) const APPROACH: Native = Native {
-    entry: 0x930a4,
-    name: "boss_15_rapprochement",
-    run: crate::Corps::Processeur(approach),
-    touches_sound: false,
-    outputs: regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::a(2),
-};

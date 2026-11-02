@@ -40,7 +40,7 @@ mod flame64 {
     const SFX_FLAME: u32 = 0xed548;
     const SFX_LAND: u32 = 0xed4de;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 if x.u16(CREATOR) != 0 {
@@ -65,7 +65,7 @@ mod flame64 {
         x.set8(f::ATTACK_ID, 0x26);
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) == 0 {
             let g = x.u8(GENERATION).wrapping_sub(1);
             x.set8(GENERATION, g);
@@ -110,9 +110,8 @@ mod flame64 {
     }
 
     /// Position (longs) et orientation du créateur, un pixel devant lui.
-    fn follow(x: &mut Cx) {
+    fn follow<R: Banc>(x: &mut Cx<'_, R>) {
         let creator = x.linked(CREATOR);
-        x.c.a[1] = x.u16(CREATOR) as i16 as i32 as u32;
         for off in [0x8, 0x10, 0xc] {
             let v = creator.u32(x.b, off);
             x.set32(off, v);
@@ -122,7 +121,7 @@ mod flame64 {
         x.add16(0x10, 0xffff);
     }
 
-    fn active_0(x: &mut Cx) {
+    fn active_0<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(GENERATION) != LAST_GENERATION {
             if count_down(x, TIMER) {
                 spawn_all(x);
@@ -162,14 +161,14 @@ mod flame64 {
     }
 
     /// Colonne : à la fin de son temps, crée la flamme suivante de sa variante.
-    fn column(x: &mut Cx, variant: u8) {
+    fn column<R: Banc>(x: &mut Cx<'_, R>, variant: u8) {
         if count_down(x, TIMER) {
             spawn(x, variant);
         }
         finish(x);
     }
 
-    fn finish(x: &mut Cx) {
+    fn finish<R: Banc>(x: &mut Cx<'_, R>) {
         if x.anim_step() {
             x.add8(0x4, 2);
         }
@@ -222,7 +221,7 @@ mod rocks65 {
     const SCREEN_P2: u32 = 0x54e;
     const SFX: [u32; 2] = [0xeafdc, 0xed548];
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -242,13 +241,12 @@ mod rocks65 {
         }
     }
 
-    fn init(x: &mut Cx, v: usize) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>, v: usize) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_ID, ATTACK[v]);
         let screen = if x.a5_u8(0x36) != 0 { SCREEN_P2 } else { SCREEN };
-        x.c.a[2] = crate::mem::A5 + screen;
         x.set16(0xc, 0x100);
         let r = random(x) & 0x1ff;
         let dx = if r > 0x180 { (r >> 1) + 0x40 } else { r };
@@ -264,7 +262,6 @@ mod rocks65 {
         x.set32(0x1c, 0);
         let rank = (x.u8(RANK) & 0x1f) as u32;
         let delay = x.rom8(DELAYS[v] + rank);
-        x.c.d[0] = delay as u32;
         x.set16(TIMER, delay as u16);
         x.anim_start(ANIMS[v], 0);
     }
@@ -274,7 +271,7 @@ mod rocks65 {
         x.random()
     }
 
-    fn fall(x: &mut Cx, v: usize) {
+    fn fall<R: Banc>(x: &mut Cx<'_, R>, v: usize) {
         if x.u16(TIMER) as i16 > 0 {
             x.add16(TIMER, 0xffff);
             return;
@@ -289,7 +286,6 @@ mod rocks65 {
         x.set16(0xc, 0);
         x.add8(0x4, 2);
         if v == 0 {
-            x.c.d[0] = 3;
             crate::families::effects_creators::debris(x.b, x.o, 3);
         } else {
             x.anim_start(ANIMS[1], 1);
@@ -323,7 +319,7 @@ mod shard66 {
     /// États `+4.w` de l'éclat dans lequel il reste tenu.
     const HELD_STATE: u16 = 0x204;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
@@ -351,15 +347,14 @@ mod shard66 {
         x.anim_start(ANIMS, n as u16);
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         let carrier = x.u16(CARRIER);
         if carrier as i16 >= 0 {
             // pas de porteur : l'original repart de l'initialisation (sous-état 4)
             x.set16(0x4, 4);
             return;
         }
-        x.c.a[1] = carrier as i16 as i32 as u32;
-        let carrier = Obj(x.c.a[1] & 0xff_ffff);
+        let carrier = Obj(carrier as i16 as i32 as u32 & 0xff_ffff);
         match x.u8(0x5) {
             0 => {
                 for off in [0x8, 0xc, 0x10] {
@@ -459,7 +454,7 @@ mod barrel67 {
     const DUST_TIMER: u32 = 0x5a;
     const SPIN_TIMER: u32 = 0x5e;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -473,7 +468,7 @@ mod barrel67 {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(f::BOX_SET, 7);
         let dir = if x.u8(f::FLIP) != 0 { 8 } else { 24 };
@@ -481,7 +476,6 @@ mod barrel67 {
         x.select_speed(&crate::objects::motion::SPEEDS_B, SPEED_TABLE as u16);
         let step = ((x.u16(0x14) as i16).unsigned_abs() as i32) << 16 >> 8;
         let owner = x.linked(f::OWNER);
-        x.c.a[1] = x.u16(f::OWNER) as i16 as i32 as u32;
         let mut distance = (owner.u32(x.b, 0x8).wrapping_sub(x.u32(0x8)) as i32).wrapping_abs();
         let mut vz = (x.u32(0xc) as i32 >> 8) as i16 >> 6;
         loop {
@@ -497,7 +491,7 @@ mod barrel67 {
     }
 
     /// 0xa7af4 : bascule l'orientation toutes les 4 images.
-    fn spin(x: &mut Cx) {
+    fn spin<R: Banc>(x: &mut Cx<'_, R>) {
         x.add16(SPIN_TIMER, 0xffff);
         if x.u16(SPIN_TIMER) as i16 > 0 {
             return;
@@ -507,8 +501,10 @@ mod barrel67 {
         x.set8(f::FLIP, flip);
     }
 
-    fn impact(x: &mut Cx, kind: u32) {
-        crate::ai_aids::debris_set(x.b, x.o, kind as u16); x.c.d[5] = 0xffff; // D5 : compteur épuisé du `dbf`, relu plus loin (voir `ai::keep_on_screen_d5`)
+    fn impact<R: Banc>(x: &mut Cx<'_, R>, kind: u32) {
+        crate::ai_aids::debris_set(x.b, x.o, kind as u16);
+        // Original glitch: the exhausted `dbf` counter stays in D5 (`dispatch::Restes`)
+        *x.c.d5() = 0xffff;
     }
 
     /// Mouvement en X et en hauteur ; vrai quand l'objet touche le sol (hauteur remise à 0).
@@ -521,7 +517,7 @@ mod barrel67 {
         true
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 if crate::ai_aids::outside_band(x.b, x.o, 0xffc0, 448) {
@@ -636,7 +632,7 @@ mod stone68 {
     const RELEASE_STATE: u32 = 0x0204_0200;
     const RISE_HEIGHT: u16 = 0x20;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -657,14 +653,13 @@ mod stone68 {
         }
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         let carrier = x.u16(CARRIER);
         if carrier as i16 >= 0 {
             x.set16(0x4, 4);
             return;
         }
-        x.c.a[1] = carrier as i16 as i32 as u32;
-        let carrier = Obj(x.c.a[1] & 0xff_ffff);
+        let carrier = Obj(carrier as i16 as i32 as u32 & 0xff_ffff);
         match x.u8(0x5) {
             0 => {
                 let z = x.u16(0xc);
@@ -747,7 +742,7 @@ mod bouncer69 {
     const CAMERA_X: u32 = 0x506;
     const CAMERA2_X: u32 = 0x556;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
@@ -756,7 +751,7 @@ mod bouncer69 {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
         x.set8(f::BOX_SET, 0x2c);
@@ -775,7 +770,7 @@ mod bouncer69 {
     }
 
     /// 0xa7ed4 : vitesses d'un bond (vers l'avant), son.
-    fn bounce(x: &mut Cx) {
+    fn bounce<R: Banc>(x: &mut Cx<'_, R>) {
         let vx: u16 = if x.u8(f::FLIP) != 0 { 0x400 } else { 0x400u16.wrapping_neg() };
         x.set16(0x14, vx);
         x.set16(0x16, 0);
@@ -785,7 +780,7 @@ mod bouncer69 {
         crate::sound::jouer(x.b, SFX_BOUNCE, x.o);
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             x.add16(TIMER, 0xffff);
             if x.u16(TIMER) as i16 > 0 {
@@ -827,7 +822,7 @@ mod gate70 {
     const CAMERA_X: u32 = 0x506;
     const LIMITS: [u16; 2] = [0x500, 0x650];
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -845,7 +840,6 @@ mod gate70 {
                     return;
                 }
                 let set = x.linked(SET);
-                x.c.a[1] = x.u16(SET) as i16 as i32 as u32;
                 set.set_u8(x.b, 0x2f, 0);
                 x.add8(0x4, 2);
                 if variant == 0 {
@@ -907,7 +901,7 @@ mod ball71 {
     const SPEED_TABLE: u32 = 33;
     const SFX_THROW: u32 = 0xed4de;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -955,11 +949,9 @@ mod ball71 {
     }
 
     /// Tenue par le lanceur : libérée par `+0x58`, détruite si le lanceur meurt (état 4 hors 0x204).
-    fn held(x: &mut Cx) {
+    fn held<R: Banc>(x: &mut Cx<'_, R>) {
         let owner = x.linked(OWNER);
-        x.c.a[1] = x.u16(OWNER) as i16 as i32 as u32;
         let dying = owner.u8(x.b, 0x4) == 4 && owner.u16(x.b, 0x4) != 0x204;
-        x.c.d[0] = dying as u32;
         if dying {
             return x.free_eshl();
         }
@@ -1016,7 +1008,7 @@ mod splinter72 {
     const SFX_THROW: u32 = 0xed4de;
     const SFX_LAND: u32 = 0xed548;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(CREATOR) == 0 {
             x.set32(0x4, 0x0600_0000);
             return;
@@ -1065,9 +1057,8 @@ mod splinter72 {
 
     /// 0xa8478 : position (longs) et orientation du créateur, un pixel devant lui, plus le décalage et
     /// les vitesses de la fiche.
-    fn place(x: &mut Cx) {
+    fn place<R: Banc>(x: &mut Cx<'_, R>) {
         let creator = x.linked(CREATOR);
-        x.c.a[1] = x.u16(CREATOR) as i16 as i32 as u32;
         for off in [0x8, 0x10, 0xc] {
             let v = creator.u32(x.b, off);
             x.set32(off, v);
@@ -1091,13 +1082,13 @@ mod splinter72 {
 }
 
 handlers! {
-    0xa6efa "eshl_64" flame64::run,
-    0xa72c4 "eshl_65" rocks65::run,
-    0xa75c6 "eshl_66" shard66::run,
-    0xa78c2 "eshl_67" barrel67::run,
-    0xa7b76 "eshl_68" stone68::run,
-    0xa7e30 "eshl_69" bouncer69::run,
-    0xa801a "eshl_70" gate70::run,
-    0xa81ca "eshl_71" ball71::run,
-    0xa838e "eshl_72" splinter72::run,
+    0xa6efa "eshl_64" #[sans] flame64::run,
+    0xa72c4 "eshl_65" #[sans] rocks65::run,
+    0xa75c6 "eshl_66" #[sans] shard66::run,
+    0xa78c2 "eshl_67" #[sans] barrel67::run,
+    0xa7b76 "eshl_68" #[sans] stone68::run,
+    0xa7e30 "eshl_69" #[sans] bouncer69::run,
+    0xa801a "eshl_70" #[sans] gate70::run,
+    0xa81ca "eshl_71" #[sans] ball71::run,
+    0xa838e "eshl_72" #[sans] splinter72::run,
 }

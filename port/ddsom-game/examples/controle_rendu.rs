@@ -3,7 +3,7 @@
 //! controle_rendu <roms> <eeprom> <scénario> <images> [sortie]
 //!
 //! Fait tourner le jeu sans 68000 avec le rendu et l'audio (`DDSOM_SON_RUST=1` : pilote son Rust ; sinon Z80 émulé)
-//! et imprime une ligne par image : hachage des pixels, hachage des échantillons audio produits. Avec `exit`, écrit
+//! et imprime une ligne par image : hachage des pixels, hachage des échantillons audio produits. Avec `sortie`, écrit
 //! ces lignes dans un fichier ; sinon seule la ligne de synthèse est imprimée. Comparer deux sorties avec `cmp`/`diff`.
 
 use std::hash::Hasher;
@@ -35,7 +35,7 @@ fn main() {
     if std::env::var_os("DDSOM_SON_RUST").is_some() {
         m.sound.use_rust_driver();
     }
-    ddsom_game::install_no_68k(&mut m);
+    ddsom_game::install_sans_68k(&mut m);
     m.rendu = true;
     let script = ddsom_game::scenario::Scenario::load(Path::new(&a[3])).expect("scénario");
     let frames: usize = a[4].parse().unwrap();

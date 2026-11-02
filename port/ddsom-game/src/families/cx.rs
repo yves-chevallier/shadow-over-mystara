@@ -290,6 +290,26 @@ impl<R> Cx<'_, R> {
         self.b.fetch16(addr) as i16
     }
 
+    /// Byte of the work RAM at `A5 + offset` (sign-extended offset).
+    pub fn ram8(&mut self, offset: i32) -> u8 {
+        rd8(self.b, A5.wrapping_add(offset as u32))
+    }
+    pub fn ram16(&mut self, offset: i32) -> u16 {
+        rd16(self.b, A5.wrapping_add(offset as u32))
+    }
+    pub fn set_ram8(&mut self, offset: i32, v: u8) {
+        wr8(self.b, A5.wrapping_add(offset as u32), v)
+    }
+
+    /// The frame camera: screen (x, y), the alternate camera when `A5+0x36` is set.
+    pub fn camera(&mut self) -> (u16, u16) {
+        if self.a5_u8(0x36) != 0 {
+            (self.a5_u16(0x556), self.a5_u16(0x55a))
+        } else {
+            (self.a5_u16(0x506), self.a5_u16(0x50a))
+        }
+    }
+
     /// Fin du gestionnaire : l'objet est libéré (tir détruit).
     pub fn free_eshl(&mut self)
     where

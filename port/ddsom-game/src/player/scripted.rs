@@ -22,13 +22,12 @@ use super::{animation, cinematics, ram, Ctx, Player};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
 use crate::machine::Machine;
-use crate::player::external as ext;
+use crate::player::externes as ext;
 
 type Handler = fn(&mut Ctx, Player);
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
-    pub const REVIVE_SETUP: u32 = 0x4c930;
     pub const INTRO_ACTION: u32 = 0xe1330;
 }
 
@@ -287,7 +286,7 @@ fn scene1_wait_progress(g: &mut Ctx, p: Player) {
         let k = p.u8(g, 0x7d) as u32;
         let delay = g.prog16(tables::SCENE1_WAIT + 2 * k);
         p.set_u16(g, 0x1e0, delay);
-        g.rom(ext::effect::HALO, p);
+        crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
     }
     animation::step(g, p);
 }
@@ -443,7 +442,7 @@ fn revive_start(g: &mut Ctx, p: Player) {
         p.set_u8(g, field, 0);
     }
     crate::placement::place_on_free_ground(g.b, p.obj());
-    g.rom(rom::REVIVE_SETUP, p);
+    crate::families::petites::revive_68k(g.c, g.b, p.obj());
     animation::start(g, p, 0xd);
     restore_palette(g, p);
     ram::FADE_PAGES.set(g.b, 0xf);
@@ -474,7 +473,7 @@ fn revive_land(g: &mut Ctx, p: Player) {
     }
     next_action(g, p);
     animation::start(g, p, 0x23);
-    g.sound(ext::sound::FANFARE, p);
+    g.son(ext::son::FANFARE, p);
 }
 
 /// 0x23c58: end of the animation: the player gets control back, invulnerable for 150 frames.
@@ -506,9 +505,9 @@ fn revive_frozen(g: &mut Ctx, p: Player) {
     cinematics::place_by_focus(g, p, tables::FROZEN_OFFSETS);
     let y = p.u16(g, Obj::Y).wrapping_sub(1);
     p.set_u16(g, Obj::Y, y);
-    g.rom(rom::REVIVE_SETUP, p);
+    crate::families::petites::revive_68k(g.c, g.b, p.obj());
     animation::start(g, p, 0x23);
-    g.sound(ext::sound::FANFARE, p);
+    g.son(ext::son::FANFARE, p);
     restore_palette(g, p);
     ram::FADE_PAGES.set(g.b, 0xf);
     crate::palette::full_brightness(g.b);
@@ -527,7 +526,7 @@ fn revive_in_place(g: &mut Ctx, p: Player) {
     p.set_u8(g, 0x68, 0);
     crate::placement::place_on_free_ground(g.b, p.obj());
     p.set_u32(g, Obj::Z, 0);
-    g.rom(rom::REVIVE_SETUP, p);
+    crate::families::petites::revive_68k(g.c, g.b, p.obj());
     animation::start(g, p, 0x35);
     crate::objects::rank::raise(g.b);
 }
@@ -543,9 +542,9 @@ fn wait_start(g: &mut Ctx, p: Player) {
     let k = p.u8(g, 0x7d) as u32;
     let delay = g.prog16(tables::WAIT_DELAYS + 2 * k);
     p.set_u16(g, 0x1e0, delay);
-    g.rom(ext::effect::HALO, p);
+    crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
     animation::step(g, p);
-    g.sound(rom::INTRO_ACTION, p);
+    g.son(rom::INTRO_ACTION, p);
 }
 
 /// 0x23db4 : attend, puis se tourne vers la droite si nécessaire.

@@ -34,7 +34,7 @@ use crate::dispatch;
 use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::modes::Sequence as _;
 use crate::objects::Obj;
-use crate::taches::table::Next;
+use crate::taches::table::Suite;
 use crate::Native;
 use crate::objects::pools;
 
@@ -94,7 +94,7 @@ pub struct Ex<'a> {
     /// Adresse d'origine de la séquence en cours (pour lui céder la main).
     entry: u32,
     /// Où l'aiguillage d'origine reprend après l'état (`jsr (A1)`), vide pour la séquence 0.
-    dispatch_return: Option<Next>,
+    dispatch_return: Option<Suite>,
     /// La mise à jour du monde faite dans l'état a laissé A0 sur un objet : l'aiguillage d'origine compare
     /// alors l'octet `+2` de cet objet (et non l'état de la séquence) à l'état final.
     a0_clobbered: bool,
@@ -131,7 +131,7 @@ impl<'a> Ex<'a> {
 
     /// Lance la tâche de fondu `entry` (délai `delay`) ; A0 revient sur le bloc.
     fn fade(&mut self, delay: u16, entry: u32) {
-        fondu::DELAY.set(self.x.b, delay);
+        fondu::DELAI.set(self.x.b, delay);
         fondu::PAGES.set(self.x.b, 15);
         crate::kernel::creer_tache(self.x.b, 0x10, entry);
         self.x.c.a[0] = BASE;
@@ -182,7 +182,7 @@ impl<'a> Ex<'a> {
     fn start_walk_out(&mut self, rank: bool) {
         self.x.set_v8(PAUSE, 0);
         self.x.set_v8(var::INPUT_LOCK, 0);
-        crate::inputs::clear_inputs(self.x.b);
+        crate::inputs::effacer_entrees(self.x.b);
         self.release_players(rank);
     }
     /// Les joueurs en jeu et vivants sont-ils tous dans l'état `state` (octet `+6`) ?
@@ -210,7 +210,7 @@ impl<'a> Ex<'a> {
 
     /// Séquence ou étape sans réécriture : la table des séquences par scène (0xf3170) ne désigne que des séquences
     /// réécrites, dont les étapes restent dans leurs états (code-mort.md, lot « sortie du Cpu »).
-    fn outside_table(&mut self) -> ! {
+    fn hors_table(&mut self) -> ! {
         let (sequence, step) = (self.b8(blk::SEQUENCE), self.b8(blk::STEP));
         unreachable!("sortie de scène : séquence {sequence:#x}, étape {step:#x} sans réécriture (entrée {:#x})", self.entry)
     }
@@ -222,11 +222,11 @@ impl<'a> Ex<'a> {
             self.x.push_return(back);
         }
         // `jsr 0xa40` (ou `jmp 0xa40` sans reprise propre : la tâche reprendra à la suite de l'appel en cours)
-        let resume_point = match resume {
+        let reprise = match resume {
             Some(resume) => resume.into(),
-            None => crate::taches::table::pop_return(self.x.c, self.x.b),
+            None => crate::taches::table::depiler_retour(self.x.c, self.x.b),
         };
-        crate::kernel::attendre(self.x.c, self.x.b, resume_point);
+        crate::kernel::attendre(self.x.c, self.x.b, reprise);
         self.handed_off = true;
     }
 }
@@ -413,7 +413,7 @@ fn run_sequence(ex: &mut Ex) {
         27 if ex.x.v8(0x66) != 0 => (&SEQ_29, None),
         27 => (&SEQ_27, Some(ex.entry + 20)),
         index => {
-            let Some(s) = sequence(index) else { ex.outside_table() };
+            let Some(s) = sequence(index) else { ex.hors_table() };
             // l'aiguillage d'origine (10 octets) appelle l'état par `jsr (A1)` : sa pile en garde le retour ;
             // les séquences dont les états finissent eux-mêmes l'image sautent à l'état (`jmp (A1)`)
             (s, (s.update != Nothing).then(|| ex.entry + 10))
@@ -422,7 +422,7 @@ fn run_sequence(ex: &mut Ex) {
     ex.dispatch_return = dispatcher.map(dispatch_tail_at);
     let step = ex.b8(blk::STEP);
     match sequence.states.get(step as usize / 4) {
-        None => ex.outside_table(),
+        None => ex.hors_table(),
         Some(&St::Shared(shared)) => run_shared(ex, shared),
         Some(&state) => run_state(ex, state),
     }
@@ -443,7 +443,7 @@ fn run_shared(ex: &mut Ex, shared: Shared) {
         Shared::Shop => super::shop::run,
         Shared::Blackout => super::blackout::run,
     };
-    let Some(back) = ex.dispatch_return else { ex.outside_table() };
+    let Some(back) = ex.dispatch_return else { ex.hors_table() };
     ex.x.c.a[0] = BASE;
     ex.x.push_return(back);
     if run(&mut ex.x) == Flow::Yield {
@@ -460,7 +460,7 @@ fn redispatch(ex: &mut Ex, sequence: &Sequence) {
     let step = ex.b8(blk::STEP);
     ex.x.c.a[0] = BASE;
     match sequence.states.get(step as usize / 4) {
-        None => ex.outside_table(),
+        None => ex.hors_table(),
         Some(&St::Shared(shared)) => run_shared(ex, shared),
         Some(&state) => run_state(ex, state),
     }
@@ -484,19 +484,19 @@ fn run_update(ex: &mut Ex, update: Update) {
     }
     match update {
         Update::Reduced => {
-            // sonde `rendu` (voir `dispatch::Class::update_no_next`)
-            crate::diag::registres_morts(ex.x.c, "rendu", crate::diag::TASK_REGS);
-            crate::player::update::update_cpu(ex.x.c, ex.x.b);
-            crate::player::overlays::update_cpu(ex.x.c, ex.x.b);
+            // sonde `rendu` (voir `dispatch::Class::update_sans_suite`)
+            crate::diag::registres_morts(ex.x.c, "rendu", crate::diag::REGISTRES_DE_TACHE);
+            crate::player::update::mettre_a_jour(ex.x.c, ex.x.b);
+            crate::player::overlays::mettre_a_jour(ex.x.c, ex.x.b);
             for class in CLASSES {
-                class.update_no_next(ex.x.c, ex.x.b);
+                class.update_sans_suite(ex.x.c, ex.x.b);
             }
-            crate::sprites::build_68k(ex.x.c, ex.x.b);
+            crate::sprites::construire_68k(ex.x.c, ex.x.b);
         }
         _ => {
             ex.x.world();
             if update == Update::Full {
-                crate::combat::update_cpu(ex.x.c, ex.x.b);
+                crate::combat::mettre_a_jour(ex.x.c, ex.x.b);
             }
         }
     }
@@ -534,7 +534,7 @@ fn run_state(ex: &mut Ex, state: St) {
         St::FadeScript { timer } => {
             ex.next();
             ex.set_b16(blk::TIMER, timer);
-            ex.fade(2, fondu::RISE);
+            ex.fade(2, fondu::MONTEE);
             ex.clear_text();
         }
         St::PlayersThen { state, timer } => {
@@ -600,8 +600,8 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
         }
     }
     ex.x.set_v32(var::PHASE, leave.phase);
-    if let Some(sound) = leave.extra_sound {
-        crate::sound::jouer_global(ex.x.b, sound);
+    if let Some(son) = leave.extra_sound {
+        crate::sound::jouer_global(ex.x.b, son);
     }
     let resume = match leave.tail {
         Tail::Both => Some(Etape::Both),
@@ -644,7 +644,7 @@ const DISPATCHERS: [(u8, u32); 29] = [
 ];
 
 /// Fin d'aiguillage à l'adresse `at` (`entrée + 10`).
-fn dispatch_tail_at(at: u32) -> Next {
+fn dispatch_tail_at(at: u32) -> Suite {
     match DISPATCHERS.iter().find(|&&(_, entry)| entry + 10 == at) {
         Some(&(index, _)) => Etape::DispatchTail(index).into(),
         None => unreachable!("sortie de scène : aiguillage {at:#x} absent de DISPATCHERS"),
@@ -668,13 +668,13 @@ impl Etape {
         match self {
             Etape::DispatchTail(index) => dispatch_tail(x, index),
             Etape::Both => {
-                crate::video::black_screen(x.b);
-                crate::sound::service(x.b, crate::sound::Service::GeneralStop);
+                crate::video::ecran_noir(x.b);
+                crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
             }
-            Etape::Sound => crate::video::black_screen(x.b),
-            Etape::Command | Etape::TwiceEnd => crate::sound::service(x.b, crate::sound::Service::GeneralStop),
+            Etape::Sound => crate::video::ecran_noir(x.b),
+            Etape::Command | Etape::TwiceEnd => crate::sound::service(x.b, crate::sound::Service::ArretGeneral),
             Etape::Twice => {
-                crate::video::black_screen(x.b);
+                crate::video::ecran_noir(x.b);
                 x.c.d[0] = 2;
                 crate::kernel::attendre(x.c, x.b, Etape::TwiceEnd);
                 return crate::modes::Flow::Yield;
@@ -696,7 +696,7 @@ pub const PHASE_16: Native = Native {
     outputs: 0,
 };
 
-/// Fin d'image de l'aiguillage d'origine d'une séquence (`entrée + 10` : `cmpi.b #last,2(A0)`, puis la mise à
+/// Fin d'image de l'aiguillage d'origine d'une séquence (`entrée + 10` : `cmpi.b #dernier,2(A0)`, puis la mise à
 /// jour), où reviennent les reprises après une cession. A0 est celui que l'état a laissé.
 fn dispatch_tail(x: &mut Ctx, index: u8) {
     let sequence = if index == 27 { &SEQ_27 } else { sequence(index).expect("séquence réécrite") };
@@ -1061,18 +1061,18 @@ fn sequence(index: u8) -> Option<&'static Sequence> {
 /// Séquence 0 (la plus courante) : les joueurs sortent, fondu.
 fn seq0_start(ex: &mut Ex) {
     ex.next();
-    ex.fade(2, fondu::DESCENT);
+    ex.fade(2, fondu::DESCENTE);
     ex.x.set_v8(var::INPUT_LOCK, 0);
-    crate::inputs::clear_inputs(ex.x.b);
+    crate::inputs::effacer_entrees(ex.x.b);
     ex.x.world();
 }
 
 /// Séquence 6 : comme `seq0_start`, avec la commande sonore 0xe0a82(4).
 fn seq6_start(ex: &mut Ex) {
     ex.next();
-    ex.fade(2, fondu::DESCENT);
+    ex.fade(2, fondu::DESCENTE);
     ex.x.set_v8(var::INPUT_LOCK, 0);
-    crate::inputs::clear_inputs(ex.x.b);
+    crate::inputs::effacer_entrees(ex.x.b);
     crate::sound::service(ex.x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
     ex.x.world();
 }
@@ -1087,7 +1087,7 @@ fn seq20_walk(ex: &mut Ex) {
 fn fade_out_world(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
-        ex.fade(2, fondu::DESCENT);
+        ex.fade(2, fondu::DESCENTE);
     }
     ex.x.world();
 }
@@ -1116,7 +1116,7 @@ fn seq29_walk(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
         ex.start_walk_out(false);
-        ex.fade(2, fondu::DESCENT);
+        ex.fade(2, fondu::DESCENTE);
     }
     run_update(ex, Update::Full);
 }
@@ -1126,7 +1126,7 @@ fn seq31_start(ex: &mut Ex) {
     ex.next();
     ex.set_b16(blk::TIMER, 192);
     ex.x.set_v8(var::INPUT_LOCK, 0);
-    crate::inputs::clear_inputs(ex.x.b);
+    crate::inputs::effacer_entrees(ex.x.b);
     ex.x.world();
 }
 
@@ -1144,8 +1144,8 @@ fn seq33_walk(ex: &mut Ex) {
         ex.next();
         ex.x.set_v8(PAUSE, 0);
         ex.x.set_v8(var::INPUT_LOCK, 0);
-        crate::inputs::clear_inputs(ex.x.b);
-        ex.fade(2, fondu::DESCENT);
+        crate::inputs::effacer_entrees(ex.x.b);
+        ex.fade(2, fondu::DESCENTE);
         ex.release_players(false);
     }
     ex.x.world();
@@ -1279,12 +1279,12 @@ fn walk_with_effect(ex: &mut Ex) {
     ex.next();
     ex.x.set_v8(PAUSE, 0);
     ex.x.set_v8(var::INPUT_LOCK, 0);
-    crate::inputs::clear_inputs(ex.x.b);
+    crate::inputs::effacer_entrees(ex.x.b);
     ex.set_b16(blk::TIMER, 144);
     ex.release_players(false);
     let effect = Obj(ex.x.v16(0x46) as i16 as i32 as u32 & 0xff_ffff);
     wr32(ex.x.b, effect.0 + 0x58, 0x2_0000);
-    ex.fade(1, fondu::DESCENT);
+    ex.fade(1, fondu::DESCENTE);
 }
 
 /// Séquence 10 : les joueurs reçoivent leur rang puis 0xd5f12.
@@ -1309,7 +1309,7 @@ fn seq14_message_done(ex: &mut Ex) {
     if ex.message_done() {
         ex.next();
         ex.set_b16(blk::TIMER, 256);
-        crate::video::clear_layer1_start(ex.x.b);
+        crate::video::effacer_debut_couche1(ex.x.b);
     }
 }
 
@@ -1339,7 +1339,7 @@ fn seq15_clear(ex: &mut Ex) {
 /// Séquence 15 : fondu, script de fondu, événement 0xdc5fe(3).
 fn seq15_fade(ex: &mut Ex) {
     ex.next();
-    ex.fade(2, fondu::RISE);
+    ex.fade(2, fondu::MONTEE);
     ex.clear_text();
     crate::families::creators::objet_de_scene(ex.x.b, 3);
 }
@@ -1357,7 +1357,7 @@ fn seq21_start(ex: &mut Ex) {
     ex.next();
     ex.x.set_v8(PAUSE, 0);
     ex.x.set_v8(var::INPUT_LOCK, 0);
-    crate::inputs::clear_inputs(ex.x.b);
+    crate::inputs::effacer_entrees(ex.x.b);
     ex.reset_transition();
     ex.reset_shop();
     ex.message(70);
@@ -1374,7 +1374,7 @@ fn seq21_route(ex: &mut Ex) {
         let scene = ex.x.prog16((NEXT_SCENES + index) & !1);
         let scene = if (NEXT_SCENES + index) & 1 == 0 { (scene >> 8) as u8 } else { scene as u8 };
         ex.set_b8(blk::NEXT_SCENE, scene);
-        ex.fade(1, fondu::DESCENT);
+        ex.fade(1, fondu::DESCENTE);
     }
 }
 
@@ -1385,7 +1385,7 @@ fn seq23_walk(ex: &mut Ex) {
     }
     ex.next();
     ex.start_walk_out(false);
-    ex.fade(2, fondu::DESCENT);
+    ex.fade(2, fondu::DESCENTE);
 }
 
 /// Séquence 25 : selon la route (`A5+0x5c`), saute à l'état 20 (écran de bonus) ou fond.
@@ -1396,7 +1396,7 @@ fn seq25_route(ex: &mut Ex) {
     }
     ex.next();
     ex.set_b16(blk::TIMER, 128);
-    ex.fade(2, fondu::RISE);
+    ex.fade(2, fondu::MONTEE);
     ex.clear_text();
 }
 
@@ -1472,14 +1472,14 @@ fn seq35_walk(ex: &mut Ex) {
     ex.x.set_v8(PAUSE, 0);
     ex.x.wr16(scratch(0xaa84), 0x1400);
     ex.x.set_v8(var::INPUT_LOCK, 0);
-    crate::inputs::clear_inputs(ex.x.b);
+    crate::inputs::effacer_entrees(ex.x.b);
     ex.release_players(false);
 }
 
 fn seq35_fade(ex: &mut Ex) {
     ex.next();
     ex.set_b16(blk::TIMER, 64);
-    ex.fade(2, fondu::RISE);
+    ex.fade(2, fondu::MONTEE);
     ex.clear_text();
     crate::sound::service(ex.x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
 }
@@ -1511,14 +1511,14 @@ mod tests {
     use super::*;
 
     #[test]
-    fn block_and_temp_var_addresses() {
+    fn adresses_du_bloc_et_des_variables_temporaires() {
         assert_eq!(BASE, 0xff_2a36);
         assert_eq!(scratch(0x9a2a), 0xff_1a2a);
     }
 
     /// Chaque séquence a un état final multiple de 4 (ou 0xff) et se termine par un état de sortie.
     #[test]
-    fn consistent_sequences() {
+    fn sequences_coherentes() {
         for index in 0..36 {
             let Some(s) = sequence(index) else { continue };
             assert!(s.last % 4 == 0 || s.last == 0xff, "séquence {index}");

@@ -16,7 +16,7 @@ use super::fondu;
 use m68k::Cpu;
 
 use super::{player, scratch, script, var, Ctx, PLAYERS, PLAYER_STRIDE};
-use crate::families::effects_creators as creators;
+use crate::families::effects_creators as createurs;
 use crate::game;
 use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
@@ -103,15 +103,15 @@ fn init_scene(x: &mut Ctx) {
     crate::modes::demo::reset_recorder(x.b);
     crate::sprites::vider_listes(x.b);
     // 0x33aa6 : caméras au départ, puis leur mise à jour (dont le D4 est relu : `scroll::update_cameras_68k`)
-    crate::scroll::cameras_start(x.b);
+    crate::scroll::cameras_depart(x.b);
     crate::scroll::update_cameras_68k(x.c, x.b);
     script::reset(x.b);
     for pool in crate::objects::pools::POOLS {
         pool.reset(x.b);
     }
-    crate::palette::load_all_palettes(x.b);
-    crate::evenements::clear_points(x.b);
-    crate::evenements::clear_counter(x.b);
+    crate::palette::charger_tout(x.b);
+    crate::evenements::vider_points(x.b);
+    crate::evenements::vider_compteur(x.b);
     crate::evenements::vider_popups(x.b);
     crate::evenements::effacer_popup_courant(x.b);
     super::screen::clear_longs(x.b, super::screen::blocks::EXIT, 8);
@@ -153,21 +153,21 @@ fn clear_player(x: &mut Ctx, p: u32) {
 
 /// Ce que le placement des joueurs laisse dans les registres de l'original : D0/D1 = la caméra (ou la scène
 /// décalée), D2 = le rang, A2/A3 = les fins des tables.
-struct PlacementLeftovers {
+pub(crate) struct RestesPlacement {
     d0: u32,
     d1: u32,
-    rank: u8,
+    pub(crate) rang: u8,
     positions: u32,
-    states: u32,
+    etats: u32,
 }
 
 /// 0x20de6 : place chaque joueur en jeu devant la caméra, d'après les tables de la scène (consommées dans l'ordre
 /// des joueurs en jeu).
 pub fn place_players(b: &mut Cps2Bus) {
-    place_players_leftovers(b);
+    placer_joueurs(b);
 }
 
-fn place_players_leftovers(b: &mut Cps2Bus) -> PlacementLeftovers {
+pub(crate) fn placer_joueurs(b: &mut Cps2Bus) -> RestesPlacement {
     let scene = rd8(b, A5 + var::SCENE) as u32;
     let mut positions = table::START_POSITIONS + (scene << 4);
     let mut states = table::START_STATES + (scene << 2);
@@ -192,7 +192,7 @@ fn place_players_leftovers(b: &mut Cps2Bus) -> PlacementLeftovers {
         wr8(b, p + 0x7d, rank);
         rank += 1;
     }
-    PlacementLeftovers { d0, d1, rank: rank, positions, states: states }
+    RestesPlacement { d0, d1, rang: rank, positions, etats: states }
 }
 
 /// 0x20de6 appelée par le code d'origine (renaissance d'un joueur, `families/creators.rs`) : `place_players`, avec
@@ -201,9 +201,9 @@ pub const PLACE_PLAYERS: Native = Native {
     entry: 0x20de6,
     name: "scene_place_joueurs",
     run: crate::Corps::Processeur(|c, b| {
-        let r = place_players_leftovers(b);
-        (c.d[0], c.d[1], c.d[2], c.d[6]) = (r.d0, r.d1, r.rank as u32, 0xffff);
-        (c.a[1], c.a[2], c.a[3]) = (PLAYERS + 4 * PLAYER_STRIDE, r.positions, r.states);
+        let r = placer_joueurs(b);
+        (c.d[0], c.d[1], c.d[2], c.d[6]) = (r.d0, r.d1, r.rang as u32, 0xffff);
+        (c.a[1], c.a[2], c.a[3]) = (PLAYERS + 4 * PLAYER_STRIDE, r.positions, r.etats);
         crate::mem::rts(c, b);
     }),
     touches_sound: false,
@@ -362,7 +362,7 @@ fn stage_1(x: &mut Ctx) {
             begin(x);
             x.wr16(TIMER, 0x140);
             x.fade_in();
-            creators::trainees(x.b);
+            createurs::trainees(x.b);
             x.title_card();
             crate::objects::rank::reset(x.b);
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
@@ -522,8 +522,8 @@ fn scene_8(x: &mut Ctx) {
             effect.set_u16(x.b, Obj::X, camera_x.wrapping_sub(0x60));
             effect.set_u16(x.b, Obj::Y, camera_y.wrapping_add(0x50));
             x.set_v16(0x46, effect.0 as u16);
-            crate::sound::service(x.b, crate::sound::Service::GeneralStop);
-            creators::minuteur(x.b, 1);
+            crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
+            createurs::minuteur(x.b, 1);
         }
         2 => {
             if x.tick(TIMER) {
@@ -575,7 +575,7 @@ fn scene_11(x: &mut Ctx) {
             x.wr16(TIMER, 0x78);
             x.fade_in();
             x.title_card();
-            creators::nageurs(x.b);
+            createurs::nageurs(x.b);
             crate::objects::rank::reset(x.b);
             crate::sound::jouer_global(x.b, sfx::COMMAND_EA6E2);
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
@@ -584,7 +584,7 @@ fn scene_11(x: &mut Ctx) {
             if x.tick(TIMER) {
                 x.next_sub();
                 x.wr16(TIMER, 0xa0);
-                creators::banc(x.b);
+                createurs::banc(x.b);
             }
         }
         4 => {
@@ -592,7 +592,7 @@ fn scene_11(x: &mut Ctx) {
                 x.next_sub();
                 x.message(95, MESSAGE);
             } else if x.rd16(TIMER) == 0x40 {
-                creators::banc(x.b);
+                createurs::banc(x.b);
             }
         }
         6 => {
@@ -771,7 +771,7 @@ fn scene_26(x: &mut Ctx) {
             if x.message_done(MESSAGE) {
                 x.next_sub();
                 x.wr16(TIMER, 30);
-                creators::camera_en_mode_60(x.b);
+                createurs::camera_en_mode_60(x.b);
             }
         }
         6 => {
@@ -900,9 +900,9 @@ fn scene_34(x: &mut Ctx) {
             x.wr16(TIMER, 1);
             x.fade_in();
             if x.v8(0x59) != 0 {
-                creators::type_68_pur(x.b);
+                createurs::type_68_pur(x.b);
             }
-            crate::sound::service(x.b, crate::sound::Service::GeneralStop);
+            crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
             crate::sound::service(x.b, crate::sound::Service::Ff06 { verrou: 144, ligne: 0 });
         }
@@ -991,10 +991,10 @@ fn scene_38(x: &mut Ctx) {
             let players = x.v8(var::PLAYERS) as u32;
             let duration = x.prog16(DURATIONS + 2 * players);
             x.wr16(TIMER, duration);
-            fondu::DELAY.set(x.b, 2);
+            fondu::DELAI.set(x.b, 2);
             fondu::PAGES.set(x.b, 15);
             crate::palette::no_brightness(x.b);
-            crate::kernel::creer_tache(x.b, 0x10, fondu::RISE);
+            crate::kernel::creer_tache(x.b, 0x10, fondu::MONTEE);
         }
         2 => {
             if x.tick(TIMER) {
@@ -1048,23 +1048,23 @@ fn wait_players_6(x: &mut Ctx) {
 /// Scène 40 : joueurs dans l'état 4, éclair gris (0x1ab56) et quatre effets 0x13 (0x4cfbc), puis un boss (type 12)
 /// apparaît pendant le compte à rebours.
 fn scene_40(x: &mut Ctx) {
-    boss_gate(x, Opening::Lightning, 0x60, 12, 0x90)
+    boss_gate(x, Ouverture::Eclairs, 0x60, 12, 0x90)
 }
 
 /// Scène 42 : comme la 40 avec un éclair (0x1aaba) et la pluie (0xb9942), et le boss de type 11.
 fn scene_42(x: &mut Ctx) {
-    boss_gate(x, Opening::Rain, 0x40, 11, 0x80)
+    boss_gate(x, Ouverture::Pluie, 0x40, 11, 0x80)
 }
 
 /// Ce que les scènes 40 et 42 lancent quand les joueurs sont en place.
 #[derive(Clone, Copy)]
-enum Opening {
-    Lightning,
-    Rain,
+enum Ouverture {
+    Eclairs,
+    Pluie,
 }
 
 /// Sous-programme commun des scènes 40 et 42.
-fn boss_gate(x: &mut Ctx, opening: Opening, spawn_at: u16, boss: u8, wait: u16) {
+fn boss_gate(x: &mut Ctx, ouverture: Ouverture, spawn_at: u16, boss: u8, wait: u16) {
     const TIMER: u32 = scratch(0x9a56);
     match x.sub() {
         0 => {
@@ -1076,15 +1076,15 @@ fn boss_gate(x: &mut Ctx, opening: Opening, spawn_at: u16, boss: u8, wait: u16) 
             if x.players_in_state(4) {
                 x.next_sub();
                 x.wr16(TIMER, wait);
-                match opening {
-                    Opening::Lightning => {
+                match ouverture {
+                    Ouverture::Eclairs => {
                         crate::palette::flash(x.b, crate::palette::Flash::Gray);
                         // Glitch d'origine : les effets sont liés à l'objet A0 laissé par la boucle de partie
                         crate::families::creators::effets_13(x.b, Obj(x.c.a[0]));
                     }
-                    Opening::Rain => {
+                    Ouverture::Pluie => {
                         crate::palette::flash(x.b, crate::palette::Flash::B);
-                        creators::pluie(x.b);
+                        createurs::pluie(x.b);
                     }
                 }
             }
@@ -1156,9 +1156,9 @@ fn scene_47(x: &mut Ctx) {
             crate::sound::jouer_global(x.b, sfx::SCENE_MUSIC);
         }
         2 => {
-            if fondu::STEP.get(x.b) == 0 {
+            if fondu::PAS.get(x.b) == 0 {
                 x.end_scene();
-                crate::video::clear_layer1_start(x.b);
+                crate::video::effacer_debut_couche1(x.b);
             }
         }
         _ => {}
@@ -1328,7 +1328,7 @@ fn scene_66(x: &mut Ctx) {
             if x.players_in_state(4) {
                 x.next_sub();
                 x.message(82, MESSAGE);
-                crate::video::clear_layer1_start(x.b);
+                crate::video::effacer_debut_couche1(x.b);
             }
         }
         4 => {
@@ -1357,7 +1357,7 @@ fn scene_66(x: &mut Ctx) {
             if x.tick(TIMER) {
                 x.next_sub();
                 x.message(83, MESSAGE);
-                crate::video::clear_layer1_start(x.b);
+                crate::video::effacer_debut_couche1(x.b);
             }
         }
         14 => {
@@ -1460,7 +1460,7 @@ mod tests {
 
     /// Toutes les scènes ont une séquence d'ouverture.
     #[test]
-    fn one_sequence_per_scene() {
+    fn une_sequence_par_scene() {
         for scene in 0..=114u8 {
             let _ = sequence(scene);
         }
@@ -1470,7 +1470,7 @@ mod tests {
 /// 0xb9aa0 : objet de la finale (type 74). Glitch d'origine : il est lié à l'objet A0 laissé par la boucle de partie,
 /// et l'échec de l'allocation n'est pas testé (l'A1 laissé est mémorisé).
 fn finale(x: &mut Ctx) -> Obj {
-    let creator = Obj(x.c.a[0]);
-    let o = creators::finale(x.b, creator);
-    creators::ou_reste(x.b, o)
+    let createur = Obj(x.c.a[0]);
+    let o = createurs::finale(x.b, createur);
+    createurs::ou_reste(x.b, o)
 }

@@ -25,7 +25,7 @@ fn set_low_byte(r: &mut u32, v: u8) {
 const DIRECTIONS: u32 = 0x140c;
 
 /// Calcul de 0x1386 sur les registres de l'original (D1-D4), avec les registres de travail qu'il laisse.
-pub(crate) struct Compute {
+pub(crate) struct Calcul {
     pub direction: u8,
     pub d1: u32,
     pub d2: u32,
@@ -39,7 +39,7 @@ pub(crate) struct Compute {
 /// Direction du point (D3, D4) vers le point (D1, D2). Les écarts sont pris en valeur absolue (16 bits,
 /// positions biaisées de 0x8000 pour comparer en non signé) ; l'octant dépend des signes et du plus grand
 /// écart, le pas (0 à 3) du rapport entre le petit écart et le grand, estimé par soustractions.
-pub(crate) fn calcul(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Compute {
+pub(crate) fn calcul(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Calcul {
     let mut octant = 0u8;
     let mut dx = d1.wrapping_add(0x8000);
     let (diff, borrow) = (dx as u16).overflowing_sub(d3.wrapping_add(0x8000) as u16);
@@ -90,24 +90,24 @@ pub(crate) fn calcul(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Com
     }
     let index = (octant << 3 | step) as u32;
     let direction = prog8(b, DIRECTIONS + index);
-    Compute { direction, d1: dx, d2: dy, d3: step as u32, unite: unit, d6 }
+    Calcul { direction, d1: dx, d2: dy, d3: step as u32, unite: unit, d6 }
 }
 
-/// 0x1386 : direction (0 à 31) du point `de` vers le point `to` (x, z).
-pub fn direction(b: &mut Cps2Bus, de: (u16, u16), to: (u16, u16)) -> u8 {
-    calcul(b, to.0 as u32, to.1 as u32, de.0 as u32, de.1 as u32).direction
+/// 0x1386 : direction (0 à 31) du point `de` vers le point `vers` (x, z).
+pub fn direction(b: &mut Cps2Bus, de: (u16, u16), vers: (u16, u16)) -> u8 {
+    calcul(b, vers.0 as u32, vers.1 as u32, de.0 as u32, de.1 as u32).direction
 }
 
-/// 0x137e : direction de l'objet `o` (x, z) vers le point `to`.
-pub fn direction_from(b: &mut Cps2Bus, o: crate::objects::Obj, to: (u16, u16)) -> u8 {
+/// 0x137e : direction de l'objet `o` (x, z) vers le point `vers`.
+pub fn direction_from(b: &mut Cps2Bus, o: crate::objects::Obj, vers: (u16, u16)) -> u8 {
     let de = (rd16(b, o.0 + 8), rd16(b, o.0 + 0x10));
-    direction(b, de, to)
+    direction(b, de, vers)
 }
 
-/// 0x1376 : direction de l'objet `o` vers l'objet `target`.
-pub fn direction_to(b: &mut Cps2Bus, o: crate::objects::Obj, target: crate::objects::Obj) -> u8 {
-    let to = (rd16(b, target.0 + 8), rd16(b, target.0 + 0x10));
-    direction_from(b, o, to)
+/// 0x1376 : direction de l'objet `o` vers l'objet `cible`.
+pub fn direction_to(b: &mut Cps2Bus, o: crate::objects::Obj, cible: crate::objects::Obj) -> u8 {
+    let vers = (rd16(b, cible.0 + 8), rd16(b, cible.0 + 0x10));
+    direction_from(b, o, vers)
 }
 
 /// Native de 0x1386 : registres de travail comme l'original les laisse (D1 à D4 et D6), D0 = la direction.
@@ -173,42 +173,42 @@ pub const DIRECTION: Native = Native {
 
 /// Résultat de 0x2810.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum NameEntry {
+pub enum Saisie {
     /// Jeu gelé (`A5+0x42` non nul) : rien n'est lu (Z = 0).
-    Frozen,
+    Gele,
     /// Personne ne tient l'objet (mot `+0x46` nul ; Z = 1).
-    Free,
-    /// Le joueur `player` le tient ; `normal` : son octet `+0x2c` est nul (Z).
-    By { player: crate::objects::Obj, normal: bool },
+    Libre,
+    /// Le joueur `joueur` le tient ; `normal` : son octet `+0x2c` est nul (Z).
+    Par { joueur: crate::objects::Obj, normal: bool },
 }
 
-impl NameEntry {
+impl Saisie {
     /// Le drapeau Z que l'original laisse (le test des appelants).
     pub fn z(self) -> bool {
         match self {
-            NameEntry::Frozen => false,
-            NameEntry::Free => true,
-            NameEntry::By { normal, .. } => normal,
+            Saisie::Gele => false,
+            Saisie::Libre => true,
+            Saisie::Par { normal, .. } => normal,
         }
     }
 }
 
 /// 0x2810 : l'objet `o` est-il saisi par un joueur (mot `+0x46`) ?
-pub fn grabbed(b: &mut Cps2Bus, o: crate::objects::Obj) -> NameEntry {
+pub fn grabbed(b: &mut Cps2Bus, o: crate::objects::Obj) -> Saisie {
     if rd8(b, A5 + 0x42) != 0 {
-        return NameEntry::Frozen;
+        return Saisie::Gele;
     }
     let holder = rd16(b, o.0 + 0x46);
     if holder == 0 {
-        return NameEntry::Free;
+        return Saisie::Libre;
     }
-    let player = crate::objects::Obj::from_word(holder);
-    NameEntry::By { player, normal: rd8(b, player.0 + 0x2c) == 0 }
+    let joueur = crate::objects::Obj::from_word(holder);
+    Saisie::Par { joueur, normal: rd8(b, joueur.0 + 0x2c) == 0 }
 }
 
 /// Native : D0.w = le mot `+0x46`, A1 = le joueur (mot étendu en signe), drapeaux du dernier test.
 fn grabbed_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    if grabbed(b, crate::objects::Obj(c.a[0])) == NameEntry::Frozen {
+    if grabbed(b, crate::objects::Obj(c.a[0])) == Saisie::Gele {
         ops::logique(c, 1, Size::Byte);
     } else {
         let holder = rd16(b, c.a[0] + 0x46);
@@ -277,11 +277,11 @@ pub fn game_over(c: &mut Cpu, b: &mut Cps2Bus) {
         return;
     }
     wr8(b, A5 + var::STAGE_FLAG, 0x3f);
-    if rd8(b, A5 + var::LOCK) != 0 || crate::ram::PLAYERS_ALIVE.get(b) == 0 {
+    if rd8(b, A5 + var::LOCK) != 0 || crate::ram::JOUEURS_EN_VIE.get(b) == 0 {
         return;
     }
-    let (mut rank, mut downed) = (0u8, 0u8);
-    for p in crate::ram::PLAYERS.iter() {
+    let (mut rang, mut a_terre) = (0u8, 0u8);
+    for p in crate::ram::JOUEURS.iter() {
         let p = p.0;
         if rd8(b, p + player::ACTIVE) != 0 && rd16(b, p + player::HP) != 0 {
             if stage != STAGE_SKIP_CHECK {
@@ -289,7 +289,7 @@ pub fn game_over(c: &mut Cpu, b: &mut Cps2Bus) {
                     return;
                 }
             }
-            downed = downed.wrapping_add(1);
+            a_terre = a_terre.wrapping_add(1);
             for off in player::CLEARED {
                 wr8(b, p + off, 0);
             }
@@ -303,16 +303,16 @@ pub fn game_over(c: &mut Cpu, b: &mut Cps2Bus) {
                 wr8(b, object + 5, 8);
                 wr16(b, object + 6, 0);
             }
-            wr8(b, p + player::RANK, rank);
-            rank = rank.wrapping_add(1);
+            wr8(b, p + player::RANK, rang);
+            rang = rang.wrapping_add(1);
             if stage != STAGE_SKIP_WAIT && stage != STAGE_SKIP_CHECK {
                 crate::player::actions::to_stand(&mut crate::player::Ctx::new(c, b), crate::player::Player(p));
             }
         }
     }
-    if downed != 0 {
+    if a_terre != 0 {
         wr32(b, A5 + var::PHASE, PHASE_END);
-        crate::ram::SCROLL_Y_PLANE1.set(b, 0);
+        crate::ram::DEFILEMENT_Y_PLAN1.set(b, 0);
         wr16(b, A5.wrapping_add(var::HOLD), if stage == 1 { 0x60 } else { 0x120 });
     }
 }

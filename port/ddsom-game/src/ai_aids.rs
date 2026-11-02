@@ -94,18 +94,18 @@ struct Restes {
     d1: Option<u16>,
     d2: Option<u16>,
     d3: Option<u16>,
-    d2_byte: Option<u8>,
-    d3_byte: Option<u8>,
-    d4_byte: Option<u8>,
+    d2_octet: Option<u8>,
+    d3_octet: Option<u8>,
+    d4_octet: Option<u8>,
 }
 
 impl Restes {
     fn poser(&self, c: &mut Cpu) {
         // dans l'ordre de l'original : octets puis mots, chacun à sa place
-        if let Some(v) = self.d3_byte {
+        if let Some(v) = self.d3_octet {
             set_b(&mut c.d[3], v);
         }
-        if let Some(v) = self.d4_byte {
+        if let Some(v) = self.d4_octet {
             set_b(&mut c.d[4], v);
         }
         for (r, v) in [(0, self.d0), (1, self.d1), (2, self.d2), (3, self.d3)] {
@@ -113,19 +113,19 @@ impl Restes {
                 set_w(&mut c.d[r], v);
             }
         }
-        if let Some(v) = self.d2_byte {
+        if let Some(v) = self.d2_octet {
             set_b(&mut c.d[2], v);
         }
     }
 }
 
 /// L'objet `other` est-il dans la boîte devant `me` ? Écarts biaisés comparés en non signé, comme l'original.
-fn in_hitbox(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Boite, r: &mut Restes) -> bool {
+fn dans_la_boite(b: &mut Cps2Bus, me: u32, other: u32, boite: Boite, r: &mut Restes) -> bool {
     let facing = rd8(b, me + f::FACING);
-    let offset_x = if facing != 0 { hitbox.decalage.wrapping_neg() } else { hitbox.decalage };
+    let offset_x = if facing != 0 { boite.decalage.wrapping_neg() } else { boite.decalage };
     let other_x = rd16(b, other + f::X);
     r.d3 = Some(other_x);
-    let half_x = hitbox.demi_largeur;
+    let half_x = boite.demi_largeur;
     let reach_x = offset_x.wrapping_add(rd16(b, me + f::X)).wrapping_sub(other_x).wrapping_add(half_x);
     r.d0 = Some(reach_x);
     r.d1 = Some(half_x.wrapping_mul(2));
@@ -134,7 +134,7 @@ fn in_hitbox(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Boite, r: &mut Restes
     }
     let other_depth = rd16(b, other + f::DEPTH);
     r.d1 = Some(other_depth);
-    let half_depth = hitbox.demi_profondeur;
+    let half_depth = boite.demi_profondeur;
     let reach_depth = rd16(b, me + f::DEPTH).wrapping_sub(other_depth).wrapping_add(half_depth);
     r.d0 = Some(reach_depth);
     r.d2 = Some(half_depth.wrapping_mul(2));
@@ -144,12 +144,12 @@ fn in_hitbox(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Boite, r: &mut Restes
 /// 0x7f0c (`strict`) et 0x7ef4 : un adversaire (l'objet visé `+0x50`) est-il dans la boîte devant l'ennemi `o`, de
 /// face, au sol et dans l'état 12 (ou 14 si `strict`) ? Si oui, après un tirage de probabilité (table `+0x74`),
 /// l'ennemi passe à l'état 6 avec une animation tirée au hasard (table `+0x75`) et le résultat est vrai.
-pub fn in_front(b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Boite) -> bool {
-    in_front_leftovers(b, o.0, strict, hitbox).0
+pub fn in_front(b: &mut Cps2Bus, o: Obj, strict: bool, boite: Boite) -> bool {
+    in_front_restes(b, o.0, strict, boite).0
 }
 
 /// (résultat, restes, adversaire lu (A1), table lue (A4), D2 et D0 longs du tirage).
-fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox: Boite) -> (bool, Restes, Option<u32>, Option<u32>, Option<(u32, u32)>) {
+fn in_front_restes(b: &mut Cps2Bus, me: u32, strict: bool, boite: Boite) -> (bool, Restes, Option<u32>, Option<u32>, Option<(u32, u32)>) {
     let mut r = Restes::default();
     let target = rd16(b, me + f::TARGET);
     if target == 0 {
@@ -162,24 +162,24 @@ fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox: Boite) -> 
         return (false, r, Some(other), None, None);
     }
     let facing = rd8(b, me + f::FACING);
-    r.d3_byte = Some(facing);
+    r.d3_octet = Some(facing);
     if facing == rd8(b, other + f::FACING) {
         return (false, r, Some(other), None, None);
     }
     let gap = rd16(b, me + f::X).wrapping_sub(rd16(b, other + f::X));
     r.d3 = Some(gap);
     let side = if (gap as i16) >= 0 { 0 } else { 32 };
-    r.d4_byte = Some(side);
-    if side != facing || !in_hitbox(b, me, other, hitbox, &mut r) {
+    r.d4_octet = Some(side);
+    if side != facing || !dans_la_boite(b, me, other, boite, &mut r) {
         return (false, r, Some(other), None, None);
     }
     let number = rd8(b, me + f::BOX_CHANCE);
     let chances = crate::mem::rd32(b, BOX_CHANCE_POINTERS + 4 * number as u32);
     let tick = rd16(b, TICK);
-    let mask = rd32(b, chances.wrapping_add(offset(tick << 2)));
+    let masque = rd32(b, chances.wrapping_add(offset(tick << 2)));
     let roll = rng::random(b) as u32 & 31;
-    if mask >> roll & 1 == 0 {
-        return (false, r, Some(other), Some(chances), Some((mask, roll)));
+    if masque >> roll & 1 == 0 {
+        return (false, r, Some(other), Some(chances), Some((masque, roll)));
     }
     let number = rd8(b, me + f::BOX_ANIMATION);
     // l'octet `+0x75` est déjà un multiple de 4 : pas de décalage
@@ -189,7 +189,7 @@ fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox: Boite) -> 
     let v = rd8(b, animations.wrapping_add(pick));
     wr8(b, me + f::SUB_STATE, v);
     wr8(b, me + f::SUB_STEP, 0);
-    (true, r, Some(other), Some(animations), Some((mask, roll)))
+    (true, r, Some(other), Some(animations), Some((masque, roll)))
 }
 
 /// Position de l'objet par rapport à la boîte devant un autre (0x7f19c).
@@ -204,19 +204,19 @@ pub enum DansBoite {
 }
 
 /// 0x7f19c : l'objet `other` est-il dans la boîte devant l'objet `me` ?
-pub fn box_around(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Boite) -> DansBoite {
-    box_reach(b, me.0, other.0, hitbox, &mut Restes::default())
+pub fn box_around(b: &mut Cps2Bus, me: Obj, other: Obj, boite: Boite) -> DansBoite {
+    box_reach(b, me.0, other.0, boite, &mut Restes::default())
 }
 
-fn box_reach(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Boite, r: &mut Restes) -> DansBoite {
-    if rd16(b, other + 0x0c) != 0 || !in_hitbox(b, me, other, hitbox, r) {
+fn box_reach(b: &mut Cps2Bus, me: u32, other: u32, boite: Boite, r: &mut Restes) -> DansBoite {
+    if rd16(b, other + 0x0c) != 0 || !dans_la_boite(b, me, other, boite, r) {
         return DansBoite::Non;
     }
     let facing = rd8(b, me + f::FACING);
     let gap = rd16(b, me + f::X).wrapping_sub(rd16(b, other + f::X));
     r.d1 = Some(gap);
     let side = if (gap as i16) < 0 { 32 } else { 0 };
-    r.d2_byte = Some(side);
+    r.d2_octet = Some(side);
     if side == facing {
         DansBoite::Face
     } else {
@@ -230,17 +230,17 @@ fn box_reach(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Boite, r: &mut Restes
 pub struct RestesBoite {
     restes: Restes,
     /// D2 long : le masque du tirage de `in_front`.
-    mask: Option<u32>,
+    masque: Option<u32>,
 }
 
 impl RestesBoite {
     /// Pose les restes dans D2, D3 et D4 (les registres que l'original laisse et que d'autres relisent).
     pub fn poser(&self, d2: &mut u32, d3: &mut u32, d4: &mut u32) {
         let r = &self.restes;
-        if let Some(v) = r.d3_byte {
+        if let Some(v) = r.d3_octet {
             set_b(d3, v);
         }
-        if let Some(v) = r.d4_byte {
+        if let Some(v) = r.d4_octet {
             set_b(d4, v);
         }
         if let Some(v) = r.d2 {
@@ -249,47 +249,47 @@ impl RestesBoite {
         if let Some(v) = r.d3 {
             set_w(d3, v);
         }
-        if let Some(v) = r.d2_byte {
+        if let Some(v) = r.d2_octet {
             set_b(d2, v);
         }
-        if let Some(v) = self.mask {
+        if let Some(v) = self.masque {
             *d2 = v;
         }
     }
 }
 
 /// 0xb5e0 (`ai::target_in_front`) : la cible `+0x50` est-elle dans la boîte devant l'objet ? Avec les restes relus.
-pub fn target_in_front_restes(b: &mut Cps2Bus, o: Obj, hitbox: Boite) -> (DansBoite, RestesBoite) {
+pub fn target_in_front_restes(b: &mut Cps2Bus, o: Obj, boite: Boite) -> (DansBoite, RestesBoite) {
     let pointer = rd16(b, o.0 + f::TARGET);
     let mut restes = Restes::default();
-    let found = if pointer == 0 { DansBoite::Non } else { box_reach(b, o.0, object(pointer), hitbox, &mut restes) };
-    (found, RestesBoite { restes, mask: None })
+    let found = if pointer == 0 { DansBoite::Non } else { box_reach(b, o.0, object(pointer), boite, &mut restes) };
+    (found, RestesBoite { restes, masque: None })
 }
 
 /// 0x7f19c (`box_around`), avec les restes relus.
-pub fn box_around_restes(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Boite) -> (DansBoite, RestesBoite) {
+pub fn box_around_restes(b: &mut Cps2Bus, me: Obj, other: Obj, boite: Boite) -> (DansBoite, RestesBoite) {
     let mut restes = Restes::default();
-    let found = box_reach(b, me.0, other.0, hitbox, &mut restes);
-    (found, RestesBoite { restes, mask: None })
+    let found = box_reach(b, me.0, other.0, boite, &mut restes);
+    (found, RestesBoite { restes, masque: None })
 }
 
 /// 0x7f0c / 0x7ef4 (`in_front`), avec les restes relus.
-pub fn in_front_avec_restes(b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Boite) -> (bool, RestesBoite) {
-    let (yes, restes, _, _, draw) = in_front_leftovers(b, o.0, strict, hitbox);
-    (yes, RestesBoite { restes, mask: draw.map(|(m, _)| m) })
+pub fn in_front_avec_restes(b: &mut Cps2Bus, o: Obj, strict: bool, boite: Boite) -> (bool, RestesBoite) {
+    let (oui, restes, _, _, tirage) = in_front_restes(b, o.0, strict, boite);
+    (oui, RestesBoite { restes, masque: tirage.map(|(m, _)| m) })
 }
 
 /// 0xb5e0 (`ai::target_in_front`) avec les registres de l'original : A1 = la cible, D0 = 0/1/2 et drapeaux de
 /// `moveq`, D1-D3 laissés par les tests de la boîte. Pour les appelants dont la suite relit ces restes (boss 11 :
 /// D2, glitch d'origine).
-pub fn target_in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, hitbox: Boite) -> DansBoite {
+pub fn target_in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, boite: Boite) -> DansBoite {
     let pointer = rd16(b, o.0 + f::TARGET);
     let mut restes = Restes::default();
     let found = if pointer == 0 {
         DansBoite::Non
     } else {
         c.a[1] = object(pointer);
-        box_reach(b, o.0, object(pointer), hitbox, &mut restes)
+        box_reach(b, o.0, object(pointer), boite, &mut restes)
     };
     restes.poser(c);
     moveq(c, found as i32);
@@ -298,9 +298,9 @@ pub fn target_in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, hitbox: Boite) 
 
 /// 0x7f19c (`box_around`) avec les registres de l'original : D0 = 0/1/2 et drapeaux de `moveq`, D1-D3 laissés par
 /// les tests de la boîte.
-pub fn box_around_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Boite) -> DansBoite {
+pub fn box_around_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, other: Obj, boite: Boite) -> DansBoite {
     let mut restes = Restes::default();
-    let found = box_reach(b, me.0, other.0, hitbox, &mut restes);
+    let found = box_reach(b, me.0, other.0, boite, &mut restes);
     restes.poser(c);
     moveq(c, found as i32);
     found
@@ -308,21 +308,21 @@ pub fn box_around_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, other: Obj, hitbox:
 
 /// 0x7f0c / 0x7ef4 (`in_front`) avec les registres de l'original : D0 (1 / 0) et drapeaux de `moveq`, D1-D4, A1
 /// et A4 laissés comme l'original.
-pub fn in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Boite) -> bool {
-    let (yes, restes, other, table, draw) = in_front_leftovers(b, o.0, strict, hitbox);
-    if let Some(other) = other {
-        c.a[1] = other;
+pub fn in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, strict: bool, boite: Boite) -> bool {
+    let (oui, restes, autre, table, tirage) = in_front_restes(b, o.0, strict, boite);
+    if let Some(autre) = autre {
+        c.a[1] = autre;
     }
     restes.poser(c);
     if let Some(table) = table {
         c.a[4] = table;
     }
-    if let Some((mask, roll)) = draw {
-        c.d[2] = mask;
+    if let Some((masque, roll)) = tirage {
+        c.d[2] = masque;
         c.d[0] = roll;
     }
-    moveq(c, yes as i32);
-    yes
+    moveq(c, oui as i32);
+    oui
 }
 
 /// Profils de poussée : table d'octets (indexée par l'écart en x / 16) en espace programme, puis
@@ -722,7 +722,7 @@ pub fn animation_of_mark(b: &mut Cps2Bus, o: Obj, set: u32) {
 
 /// 0x10474 : au moins un joueur est en vie.
 pub fn players_alive(b: &mut Cps2Bus) -> bool {
-    crate::ram::PLAYERS_ALIVE.get(b) != 0
+    crate::ram::JOUEURS_EN_VIE.get(b) != 0
 }
 
 /// 0x104a2 : `o` est-il hors de la bande `[écran + left, écran + right]` (bornes exclues de l'intérieur) ? L'écran
@@ -897,7 +897,7 @@ pub fn choose_near_walk_point(b: &mut Cps2Bus, o: Obj) {
 /// 0xfc44 : un joueur est-il touché par la boîte d'attaque `attack` de `o` ? Rend le premier touché.
 pub fn attack_hits_a_player(b: &mut Cps2Bus, o: Obj, attack: u8) -> Option<Obj> {
     let boxes = ATTACK_BOXES.wrapping_add(offset((attack as u16) << 3));
-    crate::ram::PLAYERS.iter().find(|p| player_hit(b, o.0, boxes, p.0))
+    crate::ram::JOUEURS.iter().find(|p| player_hit(b, o.0, boxes, p.0))
 }
 
 /// 0xfd64 : le joueur `player` est saisi par `o` (animation de prise `anim` de `o`).
@@ -982,7 +982,7 @@ pub fn countdown_then_state(b: &mut Cps2Bus, o: Obj) {
     if left as i8 > 0 {
         return again(b);
     }
-    let row = ((crate::ram::PLAYERS_ALIVE.get(b) as u16) << 4).wrapping_add((rd16(b, TICK) >> 2) << 1);
+    let row = ((crate::ram::JOUEURS_EN_VIE.get(b) as u16) << 4).wrapping_add((rd16(b, TICK) >> 2) << 1);
     let mask = crate::mem::prog16(b, COUNTDOWN_MASKS.wrapping_add(offset(row))) as u32;
     let roll = rng::random(b) as u32 & 15;
     if mask >> roll & 1 == 0 {
@@ -1096,7 +1096,7 @@ pub fn set_68(b: &mut Cps2Bus, o: Obj) {
     let v = if level == 0 {
         8
     } else {
-        let players = crate::ram::PLAYERS_ALIVE.get(b).wrapping_mul(4);
+        let players = crate::ram::JOUEURS_EN_VIE.get(b).wrapping_mul(4);
         let row = ((level.wrapping_sub(1) as i8).min(3) as u8).wrapping_add(players);
         crate::mem::prog8(b, PARRY_LEVELS + row as u32)
     };
@@ -1108,7 +1108,7 @@ pub fn set_68(b: &mut Cps2Bus, o: Obj) {
 /// 0x115e2 : le boss `o` pousse chaque joueur présent devant lui, sauf le voleur ou le nain dans leur état 26
 /// (`+0x6a`), un joueur en sortie (`+0x66`) ou protégé (`+0x188`).
 pub fn push_players(b: &mut Cps2Bus, o: Obj) {
-    for p in crate::ram::PLAYERS.iter() {
+    for p in crate::ram::JOUEURS.iter() {
         let player = p.0;
         if rd8(b, player) == 0 {
             continue;
@@ -1300,7 +1300,7 @@ pub fn drop_treasure(b: &mut Cps2Bus, o: Obj) -> (u16, Option<u32>) {
 /// Les joueurs en jeu et en vie (présents, PV non nuls), dans l'ordre, avec leur classe (`+3` / 2).
 fn party_classes(b: &mut Cps2Bus) -> Vec<u8> {
     let mut classes = Vec::with_capacity(4);
-    for p in crate::ram::PLAYERS.iter() {
+    for p in crate::ram::JOUEURS.iter() {
         if p.u8(b, Obj::ACTIVE) != 0 && p.u16(b, crate::ai::f::HP) != 0 {
             classes.push(p.u8(b, Obj::VARIANT) >> 1);
         }
@@ -1331,7 +1331,7 @@ pub fn drop_special(b: &mut Cps2Bus, o: Obj) -> Option<u16> {
         return None;
     }
     let mut d3 = None;
-    let mut left = (crate::ram::PLAYERS_ALIVE.get(b) > 3) as u16;
+    let mut left = (crate::ram::JOUEURS_EN_VIE.get(b) > 3) as u16;
     let mut step = Draw::Row;
     loop {
         step = match step {

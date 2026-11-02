@@ -376,6 +376,31 @@ fn scene_music(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// 0xd9778 without registers: the music of the variant of scene object `scene` (nothing, 0xe0d8c or 0xe0c5c).
+pub fn play_scene_music(b: &mut Cps2Bus, scene: Obj) {
+    let variant = scene.u8(b, Obj::VARIANT) as u32;
+    let i = 4 * prog8(b, 0xd9798 + variant) as u32;
+    let routine = prog32(b, 0xd978c + i);
+    scene_routine(b, scene, routine);
+}
+
+/// 0xd981a without registers: the scene exit routine of the variant of `scene`.
+pub fn run_scene_exit(b: &mut Cps2Bus, scene: Obj) {
+    let variant = scene.u8(b, Obj::VARIANT) as u32;
+    let i = 4 * prog8(b, 0xd9836 + variant) as u32;
+    let routine = prog32(b, 0xd982e + i);
+    scene_routine(b, scene, routine);
+}
+
+/// A routine of the scene tables: nothing (0xd99f8) or a music (0xe0d8c, 0xe0c5c, played on `scene`).
+fn scene_routine(b: &mut Cps2Bus, scene: Obj, routine: u32) {
+    match routine {
+        0xd99f8 => {}
+        0xe0c5c | 0xe0d8c => crate::sound::jouer(b, routine, scene),
+        r => unreachable!("scene routine {r:#x}: tables 0xd978c and 0xd982e only hold 0xd99f8, 0xe0d8c and 0xe0c5c"),
+    }
+}
+
 /// 0xd99f8 : routine vide des tables de scène.
 fn nothing(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
@@ -643,6 +668,42 @@ fn peff(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, variant: Option<u8>) -> Option<O
     fx.set_u16(b, 0x50, me as u16);
     moved(c, me & 0xffff, Size::Word);
     Some(fx)
+}
+
+/// Player effects created by the player module, still on the processor: the arguments are passed, A0 = the player,
+/// and the registers the original leaves (A1, carry, flags) are written like the native writes them.
+pub(crate) mod for_players {
+    use super::*;
+
+    /// 0x4b7a0: bolt (PEFF 10) of variant `variant`.
+    pub(crate) fn bolt_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+        c.a[0] = me.0;
+        bolt_par(c, b, me, variant)
+    }
+    /// 0x4dc9a: two sparks (PEFF 25).
+    pub(crate) fn sparks_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        sparks_par(c, b, me)
+    }
+    /// 0x4b518: effect 8 linked to `me`.
+    pub(crate) fn effect_8_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        peff(c, b, 8, None)
+    }
+    /// 0x51bb6: effect 0x2f (not linked).
+    pub(crate) fn effect_2f_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        let fx = alloc(c, b, &pools::PEFF)?;
+        fx.set_u8(b, 0x0, 1);
+        fx.set_u8(b, 0x2, 0x2f);
+        moved(c, 0x2f, Size::Byte);
+        Some(fx)
+    }
+    /// 0x4b8d0: effect 0xb (variant 0).
+    pub(crate) fn whirl_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        peff(c, b, 0xb, Some(0))
+    }
 }
 
 /// 0x4b8d0 : effet 0xb (variante 0).
