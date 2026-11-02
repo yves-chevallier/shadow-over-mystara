@@ -6,6 +6,7 @@
 //! modes. Formats: docs/assets.md.
 
 pub mod data;
+pub mod effects;
 pub mod json;
 pub mod levels;
 pub mod pointers;
@@ -18,6 +19,7 @@ pub mod terrain;
 pub mod texts;
 
 pub use data::DataFile;
+pub use effects::EffectTables;
 pub use levels::Levels;
 pub use scene_palettes::ScenePalettes;
 pub use spawns::Spawns;
@@ -49,11 +51,17 @@ pub struct GameData {
     pub frames: Frames,
     pub anims: Anims,
     pub speeds: Speeds,
+    pub effects: EffectTables,
 }
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 3] = ["sprites/frames.json", "sprites/anims.json", "data/speeds.json"];
+    pub const FILES: [&'static str; 4] = [
+        "sprites/frames.json",
+        "sprites/anims.json",
+        "data/speeds.json",
+        "data/effects.json",
+    ];
 
     /// Loads the game data from an assets folder (written by `extract`).
     pub fn load(dir: &Path) -> io::Result<Self> {
@@ -61,6 +69,7 @@ impl GameData {
             frames: Frames::load(&dir.join(Self::FILES[0]))?,
             anims: Anims::load(&dir.join(Self::FILES[1]))?,
             speeds: Speeds::load(&dir.join(Self::FILES[2]))?,
+            effects: EffectTables::load(&dir.join(Self::FILES[3]))?,
         })
     }
 }

@@ -93,6 +93,15 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    voir les paragraphes « Résultat » de L0-L2 dans fin.md. Réextraire les assets (`speeds.json`, `extra` de
    `frames.json`, `character_sets` d'`anims.json`). Suite (données typées, jeu sans image ROM, découpage, optimisation, cœur de jeu en bibliothèque + façade de présentation, pack HD, documentation finale, saisie du nom).
 
+7. **Lot L5 (effets)** fait (branche `wt-l5-effets`, [fin.md](fin.md) « L5 », « Résultat ») : `families/effects/`
+   découpé (plus gros fichier 881 lignes), tables typées `data/effects.json` (204 tables, `tables!` de
+   `ddsom-data/src/effects.rs`), champs en `record!` et variables nommées : zone `effects` à 0 accesseur ROM,
+   0 décalage littéral, 0 `A5 + littéral`, 0 constante d'adresse ROM. **Réextraire les assets**
+   (`data/effects.json`). Pour les lots suivants : `effects::target` ne lit plus la ROM (rend la case de la
+   table, `items.rs` l'appelle encore) ; `Missing::byte_in/word_in/long_in` dans `data.rs` ; `PlayerView`
+   (`effects/records.rs`) est à fusionner avec la fiche de joueur de L10 ; les extraits de palettes de
+   `effects.json` sont à remplacer par la bibliothèque typée (L12).
+
 ## Méthode qui marche
 
 * **Consignes des agents.** Elles sont dans [agents/brief-commun.md](agents/brief-commun.md) (règles) et [agents/brief-lots.md](agents/brief-lots.md) (mission type d'un lot de refactorisation et règle du code mort). Remplacer `<scratchpad>` par le dossier temporaire de la session.

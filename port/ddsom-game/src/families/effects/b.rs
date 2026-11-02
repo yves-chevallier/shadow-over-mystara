@@ -9,11 +9,13 @@
 
 use crate::families::cx::Bench;
 use crate::machine::Machine;
-use super::cx::{handlers, Cx};
-use crate::mem::{rd16, rd8, wr16, wr8, A5};
+use crate::families::cx::{handlers, Cx};
+use crate::mem::{rd16, rd8, wr16, wr8};
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
+use crate::families::effects::records::*;
+use crate::families::effects::vars;
 
 /// Values of the state byte `+4` (the next one is computed with `+2`).
 mod state {
@@ -40,20 +42,17 @@ mod f {
 
 /// Animation sets.
 mod anims {
-    pub const INTERFACE: u32 = 0x19431a;
-    pub const MENU: u32 = 0x196baa;
-    pub const BUBBLE: u32 = 0x1790f6;
-    pub const BLINK: u32 = 0x1bc77c;
+    pub const INTERFACE: crate::data::RomAddr = crate::data::RomAddr(0x19431a);
+    pub const MENU: crate::data::RomAddr = crate::data::RomAddr(0x196baa);
+    pub const BUBBLE: crate::data::RomAddr = crate::data::RomAddr(0x1790f6);
+    pub const BLINK: crate::data::RomAddr = crate::data::RomAddr(0x1bc77c);
 }
 
-/// Players: four records of 0x200 bytes.
-const PLAYERS: u32 = A5 + 0x5de;
-const PLAYER_STRIDE: u32 = 0x200;
 /// Jeu en pause.
 const PAUSED: u32 = 0x3d;
 
 fn players() -> impl Iterator<Item = u32> {
-    (0..4).map(|k| PLAYERS + k * PLAYER_STRIDE)
+    (0..4).map(|k| crate::ram::PLAYERS.nth(k).0)
 }
 
 /// Creator of the object.
@@ -110,8 +109,8 @@ fn pickup_detector<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);
-            x.set8(0, 1);
-            if x.u8(0x2f) != 0 {
+            x.set8(Obj::ACTIVE, 1);
+            if x.u8(Effect::SETTING) != 0 {
                 return spawn_blink(x);
             }
             pickup_waiting(x);
@@ -129,7 +128,7 @@ fn pickup_detector<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn pickup_waiting<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x40) != 0 || x.a5_u8(PAUSED) != 0 {
+    if x.u8(Obj::HIDDEN) != 0 || x.a5_u8(PAUSED) != 0 {
         return;
     }
     if player_on_detector(x) {
@@ -145,7 +144,7 @@ fn pickup_waiting<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Blinking: hidden every other frame according to the parity of the game frame counter.
 fn blink_by_frame<R: Bench>(x: &mut Cx<'_, R>) {
-    let hidden = x.a5_u16(0x6e) & 1 == 0;
+    let hidden = vars::FRAME_LOW.get(x.b) & 1 == 0;
     let flags = x.u8(f::FLAGS);
     x.set8(f::FLAGS, if hidden { flags | 2 } else { flags & !2 });
 }
@@ -154,18 +153,18 @@ fn victory_screen<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);
-            let (cx, cy) = (x.a5_u16(0x5a6).wrapping_add(0xc0), x.a5_u16(0x5aa).wrapping_add(0x68));
+            let (cx, cy) = (vars::CAMERA1_X.get(x.b).wrapping_add(0xc0), vars::CAMERA1_Y.get(x.b).wrapping_add(0x68));
             x.set16(Obj::X, cx);
             x.set16(Obj::Y, cy);
             x.set16(Obj::Z, 0x80);
-            x.set16(0x18, 0xf000);
+            x.set16(Obj::VZ, 0xf000);
             crate::sound::play(x.b, crate::sound::CMD_333, x.o);
-            x.anim_start(anims::INTERFACE, 0);
+            x.anim_start(anims::INTERFACE.0, 0);
         }
         state::ACTIVE => victory_active(x),
         _ => free(x),
     }
-    if x.u8(0) != 0 {
+    if x.u8(Obj::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -189,7 +188,7 @@ fn victory_active<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB_STATE, 2);
             blink_by_frame(x);
             crate::sound::play(x.b, crate::sound::CMD_332, x.o);
-            x.anim_start(anims::INTERFACE, 1);
+            x.anim_start(anims::INTERFACE.0, 1);
         }
         4 => {
             blink_by_frame(x);
@@ -199,7 +198,7 @@ fn victory_active<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB_STATE, 2);
             crate::sound::play(x.b, crate::sound::CMD_337, x.o);
-            x.anim_start(anims::INTERFACE, 2);
+            x.anim_start(anims::INTERFACE.0, 2);
         }
         6 => {
             blink_by_frame(x);
@@ -231,16 +230,16 @@ fn bubble<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(f::FACING, facing);
             x.add16(Obj::Y, 1);
             let (mut dx, dz) = (36u16, 106u16);
-            x.set16(0x14, 128);
-            x.set16(0x18, 1472);
-            x.set16(0x1a, 0xffc8);
+            x.set16(Obj::VX, 128);
+            x.set16(Obj::VZ, 1472);
+            x.set16(Obj::AZ, 0xffc8);
             if facing != 0 {
                 dx = dx.wrapping_neg();
-                x.set16(0x14, 128u16.wrapping_neg());
+                x.set16(Obj::VX, 128u16.wrapping_neg());
             }
             x.add16(Obj::X, dx);
             x.add16(Obj::Z, dz);
-            x.anim_start(anims::BUBBLE, 14);
+            x.anim_start(anims::BUBBLE.0, 14);
             x.reinsert();
         }
         state::ACTIVE => match x.u8(f::SUB_STATE) {
@@ -253,7 +252,7 @@ fn bubble<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(Obj::Z, 0);
                 x.set16(f::TIMER_B, 150);
-                x.anim_start(anims::BUBBLE, 15);
+                x.anim_start(anims::BUBBLE.0, 15);
             }
             2 => {
                 let t = x.u16(f::TIMER_B).wrapping_sub(1);
@@ -295,13 +294,13 @@ fn menu_button<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(f::VARIANT) == 0 {
                 x.set16(Obj::X, 328);
                 x.set16(Obj::Y, 368);
-                x.anim_start(anims::MENU, 0);
+                x.anim_start(anims::MENU.0, 0);
             } else {
                 let (cx, cy) = (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b));
                 x.set16(Obj::X, cx.wrapping_add(0xc0));
                 x.set16(Obj::Y, cy.wrapping_add(0x40));
                 x.set16(Obj::Z, 40);
-                x.anim_start(anims::INTERFACE, 3);
+                x.anim_start(anims::INTERFACE.0, 3);
             }
             x.reinsert();
         }
@@ -321,7 +320,7 @@ fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let advance = |x: &mut Cx<'_, R>, n: u32| {
         x.add8(f::SUB_STATE, 2);
-        x.anim_start(anims::MENU, n as u16);
+        x.anim_start(anims::MENU.0, n as u16);
     };
     match x.u8(f::SUB_STATE) {
         0 => {
@@ -335,8 +334,8 @@ fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
             if x.anim_step() {
                 advance(x, 5);
                 crate::sound::play(x.b, crate::sound::CMD_331, x.o);
-            } else if x.u8(0x33) != 0 {
-                x.set8(0x33, 0);
+            } else if x.u8(Effect::ANIM_EVENT) != 0 {
+                x.set8(Effect::ANIM_EVENT, 0);
                 // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
                 let Obj(spawned) = x.alloc_unchecked(&pools::BOSS);
                 wr8(x.b, spawned, 1);
@@ -355,7 +354,7 @@ fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB_STATE, 2);
                 let flags = x.u8(f::FLAGS) & !2;
                 x.set8(f::FLAGS, flags);
-                x.anim_start(anims::MENU, 6);
+                x.anim_start(anims::MENU.0, 6);
                 crate::sound::play(x.b, crate::sound::CMD_331, x.o);
             }
         }
@@ -403,10 +402,10 @@ fn blinking<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::STATE, 2);
             let flags = x.u8(f::FLAGS) | 2;
             x.set8(f::FLAGS, flags);
-            x.set8(0x57, 8);
+            x.set8(Blinker::BLINKS, 8);
             let v = x.random();
             x.set16(f::TIMER, v & 31);
-            x.anim_start(anims::BLINK, 0);
+            x.anim_start(anims::BLINK.0, 0);
             x.reinsert();
         }
         state::ACTIVE => {
@@ -414,13 +413,13 @@ fn blinking<R: Bench>(x: &mut Cx<'_, R>) {
             if creator.u8(x.b, f::STATE) != 2 {
                 x.add8(f::STATE, 2);
             }
-            if x.u8(0x5b) == 0 {
+            if x.u8(Blinker::ARMED) == 0 {
                 if class_5_player_near(x) {
-                    x.set8(0x5b, 1);
+                    x.set8(Blinker::ARMED, 1);
                 }
                 return;
             }
-            if creator.u8(x.b, 0x40) != 0 {
+            if creator.u8(x.b, Carrier::HIDDEN) != 0 {
                 let flags = x.u8(f::FLAGS) | 2;
                 return x.set8(f::FLAGS, flags);
             }
@@ -430,16 +429,16 @@ fn blinking<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.set16(f::TIMER, 48);
-            let on = x.u8(0x5a) ^ 1;
-            x.set8(0x5a, on);
+            let on = x.u8(Blinker::ON) ^ 1;
+            x.set8(Blinker::ON, on);
             let flags = x.u8(f::FLAGS) & !2;
             x.set8(f::FLAGS, flags);
-            if x.u8(0x5a) != 0 {
+            if x.u8(Blinker::ON) != 0 {
                 return;
             }
             x.set8(f::FLAGS, flags | 2);
-            let left = x.u8(0x57).wrapping_sub(1);
-            x.set8(0x57, left);
+            let left = x.u8(Blinker::BLINKS).wrapping_sub(1);
+            x.set8(Blinker::BLINKS, left);
             if left == 0 {
                 x.set32(f::STATE, 0x0400_0000);
             }

@@ -9,12 +9,15 @@
 //!   then counts itself down with the controller; 9: sign placed on the alternate camera.
 
 use crate::families::cx::Bench;
-use super::cx::{handlers, Cx};
+use crate::families::cx::{handlers, Cx};
 use crate::mem::{rd8, wr16, wr32};
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
+use crate::families::effects::tables::{tables, Read, Table};
+use crate::families::effects::records::*;
+use crate::families::effects::vars;
 
 mod f {
     pub const STATE: u32 = 0x04;
@@ -32,7 +35,7 @@ mod f {
     pub const SEQUENCE: u32 = 0x4c;
 }
 
-const ANIM_SET: u32 = 0x1c03a6;
+const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x1c03a6);
 
 fn free<R: Bench>(x: &mut Cx<'_, R>) {
     x.free(&pools::EFFCT);
@@ -98,13 +101,10 @@ fn finish_from_active<R: Bench>(x: &mut Cx<'_, R>) {
 // variant 0: thrown coin
 // ---------------------------------------------------------------------------------------------
 
-/// Speeds (vx, vz, az) per draw (8 entries of 8 bytes, program space) and animations.
-const COIN_SPEEDS: u32 = 0xb1b76;
-const COIN_ANIMS: u32 = 0xb1b66;
 
 fn coin_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
-    let source = x.linked(0x42);
+    let source = x.linked(Coin::SOURCE);
     let (sx, sz) = (source.u16(x.b, Obj::X), source.u16(x.b, Obj::Z));
     x.set16(Obj::X, sx);
     x.set16(Obj::Z, sz);
@@ -115,14 +115,14 @@ fn coin_init<R: Bench>(x: &mut Cx<'_, R>) {
     let k = (random(x) & 7) << 3;
     x.set16(Obj::AX, 0);
     for (off, field) in [(0, Obj::VX), (2, Obj::VZ), (4, Obj::AZ)] {
-        let v = x.rom16(COIN_SPEEDS + k + off);
+        let v = tables().coin_speeds.at16(x.b, k + off);
         x.set16(field, v);
     }
     let r = random(x);
     x.set8(f::FACING, if r & 1 != 0 { 0x20 } else { 0 });
     let r = random(x);
-    let anim = (x.rom8(COIN_ANIMS + (r & 0xf)) as u16).wrapping_add(0x104);
-    x.anim_start(ANIM_SET, (r & 0xffff_0000 | anim as u32) as u16);
+    let anim = (tables().coin_anims.at8(x.b, r & 0xf) as u16).wrapping_add(0x104);
+    x.anim_start(ANIM_SET.0, (r & 0xffff_0000 | anim as u32) as u16);
     x.set8(f::STEP, 0);
     x.reinsert();
 }
@@ -163,11 +163,6 @@ mod trophy {
     pub const PENDING: u32 = 0x31;
     /// Object whose variant chooses the animation (negative pointer), otherwise `+0x50` is the rank itself.
     pub const SOURCE: u32 = 0x50;
-    /// Places (x, depth, orientation: 8 bytes) per mode `+0x2f`, shifted by 6 places for a controller of variant 11
-    /// (data).
-    pub const PLACES: u32 = 0xb1cb4;
-    /// Delays before the animation, drawn at random (bytes, program space).
-    pub const DELAYS: u32 = 0xb1d4e;
     pub const DELAY: u32 = 0x42;
     /// Scenery created when only five trophies remain, and which must have finished (`+0x22`).
     pub const SCENERY: u32 = 0x58;
@@ -183,17 +178,17 @@ fn trophy_init<R: Bench>(x: &mut Cx<'_, R>) {
     if controller.u8(x.b, f::VARIANT) == 0xb {
         place += 0x30;
     }
-    let at = trophy::PLACES + place;
-    let (px, py, facing) = (x.data16(at), x.data16(at + 2), x.data8(at + 4));
+    let places = &tables().trophy_places;
+    let (px, py, facing) = (places.at16(x.b, place), places.at16(x.b, place + 2), places.at8(x.b, place + 4));
     x.set16(Obj::X, px);
     x.set16(Obj::Y, py);
     x.set8(f::FACING, facing);
     x.set32(Obj::Z, 0);
-    let mut anim = x.data16(REWARD_ANIMS + 2 * rank as u32);
+    let mut anim = tables().reward_anims.at16(x.b, 2 * rank as u32);
     if x.u8(f::MODE) & 1 != 0 {
         anim = anim & 0xff00 | (anim as u8).wrapping_add(1) as u16;
     }
-    x.anim_start(REWARD_SET, (anim as u32) as u16);
+    x.anim_start(REWARD_SET.0, (anim as u32) as u16);
     x.reinsert();
 }
 
@@ -206,7 +201,7 @@ fn trophy_active<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB_STATE, 2);
             let r = random(x) & 7;
-            let delay = x.rom8(trophy::DELAYS + r);
+            let delay = tables().trophy_delays.at8(x.b, r);
             x.set8(trophy::DELAY, delay);
         }
         2 => {
@@ -226,12 +221,12 @@ fn trophy_active<R: Bench>(x: &mut Cx<'_, R>) {
             if pending != 5 {
                 return x.add8(f::SUB_STATE, 2);
             }
-            if let Some(scenery) = super::creators::scene_set(x.b, trophy::SCENERY_KIND as u8) {
+            if let Some(scenery) = crate::families::creators::scene_set(x.b, trophy::SCENERY_KIND as u8) {
                 x.set16(trophy::SCENERY, scenery.0 as u16);
             }
         }
         6 => {
-            if x.linked(trophy::SCENERY).u8(x.b, 0x22) == 0 {
+            if x.linked(trophy::SCENERY).u8(x.b, Carrier::HALTED) == 0 {
                 return;
             }
             x.add8(f::SUB_STATE, 2);
@@ -250,8 +245,6 @@ fn trophy_active<R: Bench>(x: &mut Cx<'_, R>) {
 // variant 9: sign placed on the alternate camera
 // ---------------------------------------------------------------------------------------------
 
-/// Heights per value `+0x42` (words, program space).
-const SIGN_HEIGHTS: u32 = 0xb2908;
 
 fn sign_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
@@ -261,9 +254,9 @@ fn sign_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Obj::Y, 0xffff_ffff);
     x.add16(Obj::X, 0x110);
     let k = 2 * x.u8(f::VALUE) as u32;
-    let lift = x.rom16(SIGN_HEIGHTS + k);
+    let lift = tables().sign_heights.at16(x.b, k);
     x.add16(Obj::Z, lift);
-    x.anim_start(ANIM_SET, 0x1b7);
+    x.anim_start(ANIM_SET.0, 0x1b7);
     x.reinsert();
 }
 
@@ -271,15 +264,13 @@ fn sign_init<R: Bench>(x: &mut Cx<'_, R>) {
 // variant 2: reward icon
 // ---------------------------------------------------------------------------------------------
 
-/// Base animations per mode `+0x2f` (words, data) in set 0x190ba8.
-const REWARD_ANIMS: u32 = 0xb1c9a;
-const REWARD_SET: u32 = 0x190ba8;
+const REWARD_SET: crate::data::RomAddr = crate::data::RomAddr(0x190ba8);
 
 /// 0xb24b6: base animation of the mode + `n`.
 fn reward_anim<R: Bench>(x: &mut Cx<'_, R>, n: u16) {
     let mode = x.u8(f::MODE) as u32;
-    let base = x.data16(REWARD_ANIMS + 2 * mode);
-    x.anim_start(REWARD_SET, (base.wrapping_add(n) as u32) as u16);
+    let base = tables().reward_anims.at16(x.b, 2 * mode);
+    x.anim_start(REWARD_SET.0, (base.wrapping_add(n) as u32) as u16);
 }
 
 fn reward_init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -298,11 +289,11 @@ fn reward_active<R: Bench>(x: &mut Cx<'_, R>) {
     let variant = x.u8(f::VARIANT);
     let (mode, kind) = (x.u8(f::MODE), x.u8(f::VALUE));
     x.set8(f::VARIANT, mode);
-    x.set8(0x02, kind);
+    x.set8(Obj::KIND, kind);
     // the variant is kept in D0.b during the sound, then put back
     crate::sound::play(x.b, crate::sound::CMD_A9_BY_CHARACTER, x.o);
     x.set8(f::VARIANT, variant);
-    x.set8(0x02, 31);
+    x.set8(Obj::KIND, 31);
     x.add8(f::SUB_STATE, 2);
 }
 
@@ -318,7 +309,7 @@ fn at_camera<R: Bench>(x: &mut Cx<'_, R>, cx: u32, cy: u32) {
 }
 
 fn rank_anim<R: Bench>(x: &mut Cx<'_, R>, value: u8) {
-    x.anim_start(ANIM_SET, (0xe3u16.wrapping_sub(value as u16) as u32) as u16);
+    x.anim_start(ANIM_SET.0, (0xe3u16.wrapping_sub(value as u16) as u32) as u16);
     x.reinsert();
 }
 
@@ -347,16 +338,14 @@ fn plate_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Obj::Y, 0);
     x.set16(Obj::Z, 0x460);
     x.add16(Obj::X, 0x80);
-    let anim = if x.a5_u16(0x70) == 0 { 0x168 } else { 0x169 };
-    x.anim_start(ANIM_SET, anim);
+    let anim = if vars::DAMAGE_SETTING.get(x.b) == 0 { 0x168 } else { 0x169 };
+    x.anim_start(ANIM_SET.0, anim);
     x.reinsert();
 }
 
 /// Scene counters (two bytes at `A5-0x5b21`) and their places in background 2.
 const COUNTERS: u32 = 0xff24df;
 const COUNTER_TILES: [u32; 2] = [0x910f6c, 0x910f74];
-/// Digit tiles (words, program space).
-const DIGIT_TILES: u32 = 0xb2334;
 
 /// 0xb2348: binary value (< 1000) in BCD on three digits.
 fn to_bcd(value: u16) -> u16 {
@@ -408,7 +397,7 @@ fn draw_big_number<R: Bench>(x: &mut Cx<'_, R>, mut at: u32, bcd: u16) {
             at += 0x100;
             continue;
         }
-        let tile = x.rom16(DIGIT_TILES + 2 * digit as u32);
+        let tile = tables().digit_tiles.at16(x.b, 2 * digit as u32);
         draw_block(x, &mut at, tile, 3);
     }
 }
@@ -420,7 +409,7 @@ fn counters_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Obj::Y, 0);
     x.set16(Obj::Z, 0x448);
     x.add16(Obj::X, 0x50);
-    let at = if x.a5_u16(0x70) == 0 { 0xb2af0 } else { 0xb2b6a };
+    let at = if vars::DAMAGE_SETTING.get(x.b) == 0 { 0xb2af0 } else { 0xb2b6a };
     x.anim_start_entry(at);
     x.reinsert();
     for (k, at) in COUNTER_TILES.into_iter().enumerate() {
@@ -447,8 +436,8 @@ fn player_line_init<R: Bench>(x: &mut Cx<'_, R>) {
     let player = Obj(0xff85de + 0x200 * mode);
     let present = player.is_active(x.b)
         && (player.u8(x.b, f::STATE) as i8) < 4
-        && player.u32(x.b, 0x118) == 0xffff_ffff
-        && player.u32(x.b, 0x11c) == 0xffff_ffff;
+        && player.u32(x.b, PlayerView::GOLD_END) == 0xffff_ffff
+        && player.u32(x.b, PlayerView::NAME_TAIL) == 0xffff_ffff;
     if !present {
         return finish_from_active(x);
     }
@@ -457,7 +446,7 @@ fn player_line_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add16(Obj::X, 0x10);
     x.add16(Obj::Z, 0xb8);
     x.add16(Obj::Z, ((mode as u16) << 5).wrapping_neg());
-    x.anim_start(ANIM_SET, (0x173 + mode) as u16);
+    x.anim_start(ANIM_SET.0, (0x173 + mode) as u16);
     x.reinsert();
 }
 
@@ -466,29 +455,8 @@ fn player_line_init<R: Bench>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 mod line {
-    /// Vertical offset per rank (words, program space).
-    pub const OFFSETS: u32 = 0xb1f6a;
-    /// Place in background 2 (offset from 0x912000) per rank, program space.
-    pub const PLACES: u32 = 0xb1fa8;
     pub const LAYER: u32 = 0x912000;
-    /// Portrait: palettes of 8 longs per character (0x25c4c0), to palette 0x91c600 + 32 × player.
-    pub const PORTRAITS: u32 = 0x25c4c0;
     pub const PALETTES: u32 = 0x91c600;
-    /// First tile of the portrait per character (words, program space).
-    pub const PORTRAIT_TILES: u32 = 0xb1fe0;
-    /// Attribute of the number and of the name per player (bytes, program space).
-    pub const NUMBER_ATTRS: u32 = 0xb21d4;
-    pub const NAME_ATTRS: u32 = 0xb20b4;
-    /// Character names (long pointers per pair of classes, program space; strings terminated by 0x40, data).
-    pub const NAMES: u32 = 0xb20e8;
-    /// Small digits (words, program space); text that follows the score (data).
-    pub const SMALL_DIGITS: u32 = 0xb2240;
-    pub const SCORE_SUFFIX: u32 = 0xb21d0;
-    /// Big title characters (words, data), default titles (8 bytes per character, + 0x60 with `A5+0x70`), special
-    /// titles (codes 0xf9 to 0xfe).
-    pub const GLYPHS: u32 = 0xb2920;
-    pub const DEFAULT_TITLES: u32 = 0xb2a30;
-    pub const SPECIAL_TITLES: u32 = 0xb2a24;
 }
 
 fn line_init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -499,11 +467,11 @@ fn line_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Obj::Y, 0);
     x.add16(Obj::X, 0x20);
     let rank = x.u8(f::VALUE) as u32;
-    let dz = x.rom16(line::OFFSETS + 2 * rank);
+    let dz = tables().line_offsets.at16(x.b, 2 * rank);
     x.add16(Obj::Z, dz);
     let mode = x.u8(f::MODE) ^ 3;
     x.set8(f::MODE, mode);
-    x.anim_start(ANIM_SET, 0x16a);
+    x.anim_start(ANIM_SET.0, 0x16a);
     x.reinsert();
 }
 
@@ -514,7 +482,7 @@ fn line_active<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.add8(f::SUB_STATE, 2);
     let rank = x.u8(f::VALUE) as u32;
-    let place = x.rom16(line::PLACES + 2 * rank) as i16 as i32 as u32;
+    let place = tables().line_places.at16(x.b, 2 * rank) as i16 as i32 as u32;
     let base = line::LAYER.wrapping_add(place);
     let record = x.u32(f::SEQUENCE);
     let mut d = LineDraw { record, attr: 0, shown: false };
@@ -556,14 +524,14 @@ impl LineDraw {
             return;
         }
         self.shown = true;
-        let tile = x.rom16(line::SMALL_DIGITS + 2 * digit as u32);
+        let tile = tables().line_small_digits.at16(x.b, 2 * digit as u32);
         self.pair(x, at, tile);
     }
 
     /// 0xb20d2: tile string (one per byte) terminated by 0x40, one column per character.
-    fn text<R: Bench>(&self, x: &mut Cx<'_, R>, at: &mut u32, mut s: u32) {
+    fn text<R: Bench>(&self, x: &mut Cx<'_, R>, at: &mut u32, table: &Table, mut s: u32) {
         loop {
-            let c = x.data8(s);
+            let c = table.at8(x.b, s);
             s += 1;
             if c == 0x40 {
                 return;
@@ -578,13 +546,13 @@ impl LineDraw {
     fn portrait<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let class = self.class(x) as u32;
         let mode = x.u8(f::MODE) as u32;
-        let src = line::PORTRAITS + (class << 5);
+        let src = class << 5;
         let dst = line::PALETTES + (mode << 5);
         for k in 0..8 {
-            let v = x.data32(src + 4 * k) | 0xf000_f000;
+            let v = tables().line_portraits.at32(x.b, src + 4 * k) | 0xf000_f000;
             wr32(x.b, dst + 4 * k, v);
         }
-        let mut tile = x.rom16(line::PORTRAIT_TILES + 2 * class);
+        let mut tile = tables().line_portrait_tiles.at16(x.b, 2 * class);
         self.attr = 0x10u8.wrapping_add(mode as u8) as u16;
         for _ in 0..4 {
             self.pair(x, &mut at, tile);
@@ -595,7 +563,7 @@ impl LineDraw {
     /// 0xb21d8: player number (small digit) and a fixed tile.
     fn number<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let mode = x.u8(f::MODE);
-        self.attr = x.rom8(line::NUMBER_ATTRS + mode as u32) as u16;
+        self.attr = tables().line_number_attrs.at8(x.b, mode as u32) as u16;
         self.shown = true;
         self.digit(x, &mut at, mode.wrapping_add(1) as u16);
         self.pair(x, &mut at, 0x211);
@@ -619,11 +587,13 @@ impl LineDraw {
     /// 0xb20b8: character name.
     fn name<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let mode = x.u8(f::MODE) as u32;
-        self.attr = x.rom8(line::NAME_ATTRS + mode) as u16;
+        self.attr = tables().line_name_attrs.at8(x.b, mode) as u16;
         let pair = (self.class(x) & !1) as u32;
-        let s = x.rom16(line::NAMES + 2 * pair) as u32;
-        let s = s << 16 | x.rom16(line::NAMES + 2 * pair + 2) as u32;
-        self.text(x, &mut at, s);
+        let s = tables().line_names.at16(x.b, 2 * pair) as u32;
+        let s = s << 16 | tables().line_names.at16(x.b, 2 * pair + 2) as u32;
+        // the names are strings of `line_name_texts`, designated by their address
+        let texts = &tables().line_name_texts;
+        self.text(x, &mut at, texts, s.wrapping_sub(texts.rom));
     }
 
     /// 0xb219e: three fixed tiles, the score (eight BCD digits), then the text that follows.
@@ -633,12 +603,12 @@ impl LineDraw {
         }
         at += 0x100;
         self.shown = false;
-        let score = x.data32(self.record + 8);
+        let score = crate::mem::rd32(x.b, self.record + 8);
         for i in 0..8 {
             self.digit(x, &mut at, (score >> (28 - 4 * i)) as u16);
         }
         at += 4;
-        self.text(x, &mut at, line::SCORE_SUFFIX);
+        self.text(x, &mut at, &tables().line_score_suffix, 0);
     }
 
     /// 0xb212c: title in big characters; 0xff: default title of the character copied into the sheet; 0xf9 to 0xfe:
@@ -647,17 +617,17 @@ impl LineDraw {
         let mut p = self.record;
         if rd8(x.b, p) == 0xff {
             let mut k = (self.class(x) as u32) << 3;
-            if x.a5_u16(0x70) != 0 {
+            if vars::DAMAGE_SETTING.get(x.b) != 0 {
                 k += 0x60;
             }
-            let (a, b) = (x.data32(line::DEFAULT_TITLES + k), x.data32(line::DEFAULT_TITLES + k + 4));
+            let (a, b) = (tables().line_default_titles.at32(x.b, k), tables().line_default_titles.at32(x.b, k + 4));
             wr32(x.b, p, a);
             wr32(x.b, p + 4, b);
         }
         let first = rd8(x.b, p);
         if first >= 0xf9 {
             let k = ((first as i8 as i16).wrapping_neg() - 2) as i32 * 2;
-            let mut tile = x.data16(line::SPECIAL_TITLES.wrapping_add(k as u32));
+            let mut tile = tables().line_special_titles.at16(x.b, k as u32);
             for _ in 0..6 {
                 tile = draw_block(x, &mut at, tile, self.attr);
             }
@@ -669,7 +639,7 @@ impl LineDraw {
             if c == 0xff {
                 return;
             }
-            let tile = x.data16(line::GLYPHS + 2 * c as u32);
+            let tile = tables().line_glyphs.at16(x.b, 2 * c as u32);
             draw_block(x, &mut at, tile, self.attr);
         }
     }
@@ -680,25 +650,24 @@ impl LineDraw {
 // ---------------------------------------------------------------------------------------------
 
 mod walker {
-    /// Sheets of 12 bytes per rank: x, z, y, target x, target y (words) and first substate (byte), program space.
-    pub const PLACES: u32 = 0xb2432;
     pub const TARGET_X: u32 = 0x50;
     pub const TARGET_Y: u32 = 0x52;
     /// Object that the character notifies when leaving (16-bit pointer), whose `+0x23` counts the characters still on
     /// their way.
     pub const WAITER: u32 = 0x46;
-    pub const WALK_SPEEDS: u32 = 0x1c75b6;
-    pub const RUN_SPEEDS: u32 = 0x1c7eb6;
+    pub const WALK_SPEEDS: crate::data::RomAddr = crate::data::RomAddr(0x1c75b6);
+    pub const RUN_SPEEDS: crate::data::RomAddr = crate::data::RomAddr(0x1c7eb6);
 }
 
 fn walker_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
-    let place = walker::PLACES + 12 * x.u8(f::VALUE) as u32;
+    let places = &tables().walker_places;
+    let place = 12 * x.u8(f::VALUE) as u32;
     for (k, off) in [Obj::X, Obj::Z, Obj::Y, walker::TARGET_X, walker::TARGET_Y].into_iter().enumerate() {
-        let v = x.rom16(place + 2 * k as u32);
+        let v = places.at16(x.b, place + 2 * k as u32);
         x.set16(off, v);
     }
-    let sub = x.rom8(place + 10);
+    let sub = places.at8(x.b, place + 10);
     x.set8(f::SUB_STATE, sub);
     let (cam_x, cam_y) = (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b));
     x.add16(Obj::X, cam_x);
@@ -746,8 +715,8 @@ fn walker_wait<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::STEP, 2);
         reward_anim(x, 2);
         let waiter = x.linked(walker::WAITER);
-        let n = waiter.u8(x.b, 0x23).wrapping_sub(1);
-        waiter.set_u8(x.b, 0x23, n);
+        let n = waiter.u8(x.b, Carrier::WAITING).wrapping_sub(1);
+        waiter.set_u8(x.b, Carrier::WAITING, n);
     }
     x.anim_step();
 }
@@ -772,7 +741,7 @@ fn walker_walk<R: Bench>(x: &mut Cx<'_, R>) {
         }
         x.add8(f::STEP, 2);
         reward_anim(x, 4);
-        x.set32(Obj::SPEED_TABLE, walker::WALK_SPEEDS);
+        x.set32(Obj::SPEED_TABLE, walker::WALK_SPEEDS.0);
     }
     walker_move(x);
     x.anim_step();
@@ -862,7 +831,7 @@ fn walker_run<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::AX, 0);
             let vx: u16 = if x.u8(f::FACING) == 0 { 0x380u16.wrapping_neg() } else { 0x380 };
             x.set16(Obj::VX, vx);
-            x.set32(Obj::SPEED_TABLE, walker::RUN_SPEEDS);
+            x.set32(Obj::SPEED_TABLE, walker::RUN_SPEEDS.0);
             reward_anim(x, 9);
         }
         2 => {

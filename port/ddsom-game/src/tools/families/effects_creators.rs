@@ -114,8 +114,8 @@ creators! {
     0xabb70 "create_trails" |c, b, me| trails(c, b), CREATED | D(0) | D(4) | D(5) | D(6) | regs::a(2) | regs::a(4);
     0xa8a42 "camera_mode_60" |c, b, me| camera_mode_60(c, b), regs::CCR;
     0xa8af8 "create_scenery_list" |c, b, me| { let v = d1b(c); set_list_via(c, b, v) }, CREATED | D(0) | D(1) | regs::a(4);
-    0xb3e4e "create_cries" |c, b, me| shouts_via(c, b, me, 1, 0xb3e86), CREATED | D(0) | D(1) | regs::a(2);
-    0xb3ec6 "create_cries_b" |c, b, me| shouts_via(c, b, me, 2, 0xb3f00), CREATED | D(0) | D(1) | regs::a(2);
+    0xb3e4e "create_cries" |c, b, me| shouts_via(c, b, me, 1, &crate::families::effects::tables::tables().cries_a), CREATED | D(0) | D(1) | regs::a(2);
+    0xb3ec6 "create_cries_b" |c, b, me| shouts_via(c, b, me, 2, &crate::families::effects::tables::tables().cries_b), CREATED | D(0) | D(1) | regs::a(2);
     0xb4bcc "create_rain_debris" |c, b, me| { let (v, s) = (d1b(c), c.d[2] as u8); debris_rain_via(c, b, me, v, s) }, CREATED;
     0xb4f1c "create_spells_c" |c, b, me| spell_ring_via(c, b, me, 4), CREATED | D(1);
     0xb53f4 "create_type_46" |c, b, me| type_46_trio(c, b, me), CREATED;
