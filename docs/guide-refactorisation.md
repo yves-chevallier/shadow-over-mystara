@@ -20,7 +20,7 @@ reste vrai à la frontière, mais le but est maintenant de **faire disparaître 
 5. **Une seule déclaration par adresse ou variable.** On ne recopie pas `const ALLOC_SET: u32 = 0x2348` dans son module :
    on appelle la fonction (`pools::SET.alloc`), ou on importe la constante de son propriétaire.
 6. **Noms.** Champs et variables nommés d'après `docs/*.md` (vue `Obj`, `Player`, `ram::SCENE`) ; un sens incertain est
-   marqué (h). Commentaires en français, brefs ; on garde la langue des identifiants du module.
+   marqué (h). Code entièrement en anglais : identifiants et commentaires (jamais de français dans le code), commentaires brefs.
 7. **Code mort et replis.** Un bras `_ => x.call(0x…)` ou un `deleguer` jamais atteint (vérifier : couverture-fonctions.md,
    compteurs d'appels de `validate`, le jeu sans 68000 qui s'arrête sur une adresse sans native) se remplace par la
    native appelée directement, ou par `unreachable!("…")` documenté si l'aiguillage de la ROM ne peut pas y mener.

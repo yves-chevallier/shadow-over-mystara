@@ -25,6 +25,8 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
 
 ## Après ces lots
 
+0. **Traduire tout le code en anglais** (règle de l'utilisateur, 2026-11-02 : jamais de français dans le code). Identifiants (renommage outillé, module par module) et commentaires ; comportement inchangé, validation complète comme filet. À lancer quand aucune autre branche n'est ouverte (conflits partout sinon).
+
 1. **Retirer `m68k::Cpu` du jeu.** Plus de `Corps::Processeur` : la machine de référence garde son 68000, le jeu n'en a plus.
 2. ~~**Le reste de la couverture.**~~ Fait par le lot « couverture » (`wt-couv2`, [couverture.md](couverture.md),
    « Votes, boutiques, interface et démarrage ») :

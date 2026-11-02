@@ -81,7 +81,7 @@ pub const NOM: Native = Native {
 
 ## Style
 
-- Un module par sous-système, commentaires en français, brefs. Le code doit être beau et lisible :
+- Un module par sous-système, code ENTIÈREMENT EN ANGLAIS (identifiants et commentaires, jamais de français dans le code), commentaires brefs. Le code doit être beau et lisible :
   c'est le produit final, pas un outil.
 - Nommer les champs : vues typées (`objects::Obj`, `player::Player`...), constantes de décalage
   regroupées, pas de nombres magiques dispersés. Machines à états en `enum`.
