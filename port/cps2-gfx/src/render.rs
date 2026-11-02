@@ -1,6 +1,8 @@
 //! Rendering of a CPS2 frame from the video state (GFX RAM, CPS-A/CPS-B registers, Object RAM).
 //! Translation of cps_state::screen_update_cps1 / cps2_state::render_layers / cps2_render_sprites.
 
+use crate::TileAtlas;
+
 pub const SCREEN_W: usize = 384;
 pub const SCREEN_H: usize = 224;
 /// Visible area in MAME's 512x262 bitmap (CPS_HBEND, CPS_VBEND).
@@ -29,7 +31,7 @@ const OUT_PRI: usize = word(0x04);
 const OUT_XOFFS: usize = word(0x08);
 const OUT_YOFFS: usize = word(0x0a);
 
-/// Base of the scenery tiles in the gfx region (mapper_cps2: bank 1, 0x20000 units of 64 bytes).
+/// Base of the scenery tiles in the hardware graphics region (mapper_cps2: bank 1, 0x20000 units of 64 bytes).
 const SCROLL_TILE_BASE: usize = 0x20000 * 64;
 
 pub struct VideoState<'a> {
@@ -46,8 +48,8 @@ pub struct VideoState<'a> {
 }
 
 /// 0xC00-color RGB palette, built like cps1_build_palette.
-pub fn build_palette(v: &VideoState) -> Vec<[u8; 3]> {
-    let mut pal = vec![[0u8; 3]; 0xc00];
+pub fn build_palette(v: &VideoState) -> Box<[[u8; 3]; 0xc00]> {
+    let mut pal = Box::new([[0u8; 3]; 0xc00]);
     let (ram, base) = match v.palette_ram {
         Some(p) => (p, 0),
         None => (v.gfxram, gfx_base(v.cps_a[A_PALETTE_BASE], 0x400)),
@@ -76,88 +78,65 @@ fn gfx_base(reg: u16, boundary: usize) -> usize {
     (base & 0x3ffff) / 2
 }
 
-/// `BURST[b]`: the 8 bits of `b` laid out one per byte, the most significant bit in byte 0 (pixel 0).
-const BURST: [u64; 256] = {
-    let mut t = [0u64; 256];
-    let mut b = 0;
-    while b < 256 {
-        let mut k = 0;
-        while k < 8 {
-            t[b] |= (((b >> (7 - k)) & 1) as u64) << (8 * k);
-            k += 1;
-        }
-        b += 1;
-    }
-    t
-};
-
-/// The 8 pixels (0..15) of a graphics row: `row` points to 4 bytes (one plane per byte, MSB = pixel 0).
-#[inline]
-fn pixels8(gfx: &[u8], row: usize) -> [u8; 8] {
-    let r = &gfx[row..row + 4];
-    (BURST[r[0] as usize] | BURST[r[1] as usize] << 1 | BURST[r[2] as usize] << 2 | BURST[r[3] as usize] << 3)
-        .to_le_bytes()
-}
-
 struct Layer {
-    tile: usize,     // 8, 16, 32
     base: usize,     // word index in the GFX RAM
     color_base: u16, // 0x20, 0x40, 0x60
 }
 
 impl Layer {
-    /// Mappers tilemap0_scan / tilemap1_scan / tilemap2_scan: (col, row) -> tile index.
-    fn tile_index(&self, col: usize, row: usize) -> usize {
-        match self.tile {
+    /// Mappers tilemap0_scan / tilemap1_scan / tilemap2_scan for tiles of side `T`: (col, row) -> tile index.
+    fn tile_index<const T: usize>(col: usize, row: usize) -> usize {
+        match T {
             8 => (row & 0x1f) + ((col & 0x3f) << 5) + ((row & 0x20) << 6),
             16 => (row & 0x0f) + ((col & 0x3f) << 4) + ((row & 0x30) << 6),
             _ => (row & 0x07) + ((col & 0x3f) << 3) + ((row & 0x38) << 6),
         }
     }
 
-    /// Draws onto the line `out` (pens, prio) the pixels of the tiles covering tilemap abscissa `tx0`
-    /// (for x = 0..W) at tilemap ordinate `ty`: a tile is read once for its whole portion of the line.
-    fn draw_row(&self, v: &VideoState, gfx: &[u8], tx0: usize, ty: usize, pbit: u8, pens: &mut [u16], prio: &mut [u8]) {
-        let t = self.tile;
-        let size = 64 * t;
-        let ram = v.gfxram;
+    /// Row `ty % T` of the tile at tilemap (column, row) = (`tx / T`, `ty / T`): its `T` pens in screen order and
+    /// its colour base.
+    #[inline]
+    fn tile_row<const T: usize>(&self, ram: &[u16], atlas: &[u8], tx: usize, ty: usize) -> ([u8; T], u16) {
+        let idx = Self::tile_index::<T>(tx / T, ty / T);
+        let code = ram[wrap(self.base + 2 * idx, ram.len())] as usize;
+        let attr = ram[wrap(self.base + 2 * idx + 1, ram.len())];
+        let mut py = ty % T;
+        if attr & 0x40 != 0 {
+            py = T - 1 - py;
+        }
+        // hardware offset of the tile's pixel row (8x8 tiles: the half of the 16-pixel cell row is chosen by the
+        // column); the row is contiguous in the atlas, at twice that offset (`TileAtlas`)
+        let row = match T {
+            8 => SCROLL_TILE_BASE + code * 64 + py * 8 + ((idx >> 5) & 1) * 4,
+            16 => SCROLL_TILE_BASE + code * 128 + py * 8,
+            _ => SCROLL_TILE_BASE + (code & 0x3fff) * 512 + py * 16,
+        };
+        let mut line = atlas_row::<T>(atlas, 2 * row);
+        if attr & 0x20 != 0 {
+            line.reverse();
+        }
+        (line, ((attr & 0x1f) + self.color_base) * 16)
+    }
+
+    /// Draws onto a screen line (pens, prio) the tiles of side `T` covering tilemap abscissas `tx0..` at tilemap
+    /// ordinate `ty`: each tile row is read once from the atlas; whole tiles are drawn as fixed-size blocks.
+    fn draw_row<const T: usize>(&self, ram: &[u16], atlas: &[u8], tx0: usize, ty: usize, pbit: u8,
+                                pens: &mut [u16; SCREEN_W], prio: &mut [u8; SCREEN_W]) {
+        let size = 64 * T;
         let mut x = 0;
         let mut tx = tx0;
-        while x < pens.len() {
-            let n = (t - tx % t).min(pens.len() - x);
-            let idx = self.tile_index(tx / t, ty / t);
-            let code = ram[(self.base + 2 * idx) % ram.len()] as usize;
-            let attr = ram[(self.base + 2 * idx + 1) % ram.len()];
-            let mut py = ty % t;
-            if attr & 0x40 != 0 {
-                py = t - 1 - py;
-            }
-            // start of the tile's pixel row; half (4 bytes) depends on the pixel for 16 and 32
-            let row = match t {
-                8 => SCROLL_TILE_BASE + code * 64 + py * 8 + ((idx >> 5) & 1) * 4,
-                16 => SCROLL_TILE_BASE + code * 128 + py * 8,
-                _ => SCROLL_TILE_BASE + (code & 0x3fff) * 512 + py * 16,
-            };
-            let pen_base = ((attr & 0x1f) + self.color_base) * 16;
-            let flip = attr & 0x20 != 0;
-            // tile pixel row, in screen order; a group outside the graphics region stays transparent
-            let mut line = [15u8; 32];
-            for g in 0..t / 8 {
-                let r = row + g * 4 * (t > 8) as usize;
-                if r + 4 <= gfx.len() {
-                    line[g * 8..g * 8 + 8].copy_from_slice(&pixels8(gfx, r));
-                }
-            }
-            if flip {
-                line[..t].reverse();
-            }
-            let u = tx % t;
+        while x < SCREEN_W {
+            let u = tx % T;
+            let n = (T - u).min(SCREEN_W - x);
+            let (line, pen_base) = self.tile_row::<T>(ram, atlas, tx, ty);
             let dest = x..x + n;
-            for ((&p, pen), pr) in line[u..u + n].iter().zip(&mut pens[dest.clone()]).zip(&mut prio[dest]) {
-                if p != 15 {
-                    *pen = pen_base + p as u16;
-                    *pr |= pbit;
-                }
+            if transparent(&line) {
+                // nothing to draw (frequent: the 8x8 layer is mostly empty)
+            } else if n == T {
+                draw_pens::<T>(&line, pen_base, pbit, (&mut pens[dest.clone()]).try_into().unwrap(),
+                               (&mut prio[dest]).try_into().unwrap());
+            } else {
+                draw_some_pens(&line[u..u + n], pen_base, pbit, &mut pens[dest.clone()], &mut prio[dest]);
             }
             x += n;
             tx = (tx + n) % size;
@@ -165,8 +144,59 @@ impl Layer {
     }
 }
 
+/// Are all the pens of a tile row transparent (15)?
+#[inline]
+fn transparent<const T: usize>(line: &[u8; T]) -> bool {
+    line.as_chunks::<8>().0.iter().all(|&g| u64::from_ne_bytes(g) == 0x0f0f_0f0f_0f0f_0f0f)
+}
+
+/// `i % len`, without the division in the usual case (`i` already below `len`).
+#[inline]
+fn wrap(i: usize, len: usize) -> usize {
+    if i < len { i } else { i % len }
+}
+
+/// The `T` pens at atlas offset `at`: a group of 8 pixels outside the graphics stays transparent.
+#[inline]
+fn atlas_row<const T: usize>(atlas: &[u8], at: usize) -> [u8; T] {
+    if let Some(src) = atlas.get(at..at + T) {
+        return src.try_into().unwrap();
+    }
+    let mut line = [15u8; T];
+    for g in 0..T / 8 {
+        if let Some(src) = atlas.get(at + 8 * g..at + 8 * g + 8) {
+            line[8 * g..8 * g + 8].copy_from_slice(src);
+        }
+    }
+    line
+}
+
+/// Draws the opaque pens of a whole tile row (all but 15) with colour base `pen_base`, marking them with layer bit
+/// `pbit`.
+#[inline]
+fn draw_pens<const T: usize>(src: &[u8; T], pen_base: u16, pbit: u8, pens: &mut [u16; T], prio: &mut [u8; T]) {
+    // branchless (a mask per pixel), so that the block is vectorised
+    for i in 0..T {
+        let opaque = ((src[i] != 15) as u8).wrapping_neg();
+        let opaque16 = opaque as i8 as u16;
+        pens[i] = (pens[i] & !opaque16) | ((pen_base + src[i] as u16) & opaque16);
+        prio[i] |= pbit & opaque;
+    }
+}
+
+/// `draw_pens` for part of a tile row (at the edges of the screen).
+fn draw_some_pens(src: &[u8], pen_base: u16, pbit: u8, pens: &mut [u16], prio: &mut [u8]) {
+    for ((&p, pen), pr) in src.iter().zip(pens).zip(prio) {
+        if p != 15 {
+            *pen = pen_base + p as u16;
+            *pr |= pbit;
+        }
+    }
+}
+
 /// Renders a 384x224 RGB frame.
-pub fn render(v: &VideoState, gfx: &[u8]) -> Vec<[u8; 3]> {
+pub fn render(v: &VideoState, atlas: &TileAtlas) -> Vec<[u8; 3]> {
+    let cells = atlas.pens();
     let pal = build_palette(v);
     const W: usize = SCREEN_W;
     const H: usize = SCREEN_H;
@@ -175,10 +205,11 @@ pub fn render(v: &VideoState, gfx: &[u8]) -> Vec<[u8; 3]> {
 
     let layer_control = v.cps_b[B_LAYER_CONTROL];
     let video_control = v.cps_a[A_VIDEOCONTROL];
+    const TILE: [usize; 3] = [8, 16, 32];
     let layers = [
-        Layer { tile: 8, base: gfx_base(v.cps_a[A_SCROLL_BASE[0]], 0x4000), color_base: 0x20 },
-        Layer { tile: 16, base: gfx_base(v.cps_a[A_SCROLL_BASE[1]], 0x4000), color_base: 0x40 },
-        Layer { tile: 32, base: gfx_base(v.cps_a[A_SCROLL_BASE[2]], 0x4000), color_base: 0x60 },
+        Layer { base: gfx_base(v.cps_a[A_SCROLL_BASE[0]], 0x4000), color_base: 0x20 },
+        Layer { base: gfx_base(v.cps_a[A_SCROLL_BASE[1]], 0x4000), color_base: 0x40 },
+        Layer { base: gfx_base(v.cps_a[A_SCROLL_BASE[2]], 0x4000), color_base: 0x60 },
     ];
     let enabled = [
         layer_control & LAYER_ENABLE_MASK[0] != 0,
@@ -231,7 +262,7 @@ pub fn render(v: &VideoState, gfx: &[u8]) -> Vec<[u8; 3]> {
         }
         let li = l as usize - 1;
         let layer = &layers[li];
-        let size = 64 * layer.tile;
+        let size = 64 * TILE[li];
         let sx = v.cps_a[A_SCROLLX[li]] as i32;
         let sy = v.cps_a[A_SCROLLY[li]] as i32;
         for y in 0..H {
@@ -244,16 +275,22 @@ pub fn render(v: &VideoState, gfx: &[u8]) -> Vec<[u8; 3]> {
             let ty = ((by + sy).rem_euclid(size as i32)) as usize;
             let tx0 = ((VIS_X0 + scrollx).rem_euclid(size as i32)) as usize;
             let line = y * W..(y + 1) * W;
-            layer.draw_row(v, gfx, tx0, ty, pbit, &mut pens[line.clone()], &mut prio[line]);
+            let (pens, prio) = ((&mut pens[line.clone()]).try_into().unwrap(), (&mut prio[line]).try_into().unwrap());
+            match li {
+                0 => layer.draw_row::<8>(v.gfxram, cells, tx0, ty, pbit, pens, prio),
+                1 => layer.draw_row::<16>(v.gfxram, cells, tx0, ty, pbit, pens, prio),
+                _ => layer.draw_row::<32>(v.gfxram, cells, tx0, ty, pbit, pens, prio),
+            }
         }
     }
 
-    draw_sprites(v, gfx, &primasks, &mut pens, &mut prio);
+    draw_sprites(v, cells, &primasks, &mut pens, &mut prio);
 
-    pens.iter().map(|&p| pal[p as usize % pal.len()]).collect()
+    // every pen is below 0xc00 (layers: at most 0x7ff, sprites: 0x1ff)
+    pens.iter().map(|&p| pal[(p as usize).min(0xbff)]).collect()
 }
 
-fn draw_sprites(v: &VideoState, gfx: &[u8], primasks: &[u32; 8], pens: &mut [u16], prio: &mut [u8]) {
+fn draw_sprites(v: &VideoState, atlas: &[u8], primasks: &[u32; 8], pens: &mut [u16], prio: &mut [u8]) {
     let obj = v.objram;
     // find_last_sprite
     let mut last: isize = obj.len() as isize - 4;
@@ -267,7 +304,7 @@ fn draw_sprites(v: &VideoState, gfx: &[u8], primasks: &[u32; 8], pens: &mut [u16
     }
     let xoffs = 64 - v.output[OUT_XOFFS] as i32;
     let yoffs = 16 - v.output[OUT_YOFFS] as i32;
-    let elements = gfx.len() / 128;
+    let elements = atlas.len() / TileAtlas::CELL_PENS;
 
     let mut i = last;
     while i >= 0 {
@@ -299,11 +336,11 @@ fn draw_sprites(v: &VideoState, gfx: &[u8], primasks: &[u32; 8], pens: &mut [u16
                     } else {
                         code + cx + 0x10 * cy
                     };
-                    draw_tile16(gfx, c % elements, col, flipx, flipy, sx, sy, pmask, pens, prio);
+                    draw_tile16(atlas, c % elements, col, flipx, flipy, sx, sy, pmask, pens, prio);
                 }
             }
         } else {
-            draw_tile16(gfx, code % elements, col, flipx, flipy, (x + xoffs) & 0x3ff, (y + yoffs) & 0x3ff, pmask, pens, prio);
+            draw_tile16(atlas, code % elements, col, flipx, flipy, (x + xoffs) & 0x3ff, (y + yoffs) & 0x3ff, pmask, pens, prio);
         }
         i -= 4;
     }
@@ -313,31 +350,35 @@ fn draw_sprites(v: &VideoState, gfx: &[u8], primasks: &[u32; 8], pens: &mut [u16
 /// MAME forces bit 31 of the mask: a pixel already covered by a sprite (prio 31) blocks the
 /// sprites drawn afterwards. Since the table is walked from end to start, the entry
 /// with the highest index is the one that stays visible.
-#[allow(clippy::too_many_arguments)]
-fn draw_tile16(gfx: &[u8], code: usize, col: u16, flipx: bool, flipy: bool, sx: i32, sy: i32,
+fn draw_tile16(atlas: &[u8], code: usize, col: u16, flipx: bool, flipy: bool, sx: i32, sy: i32,
                pmask: u32, pens: &mut [u16], prio: &mut [u8]) {
-    let base = code * 128;
+    const CELL: usize = TileAtlas::CELL;
+    let cell = &atlas[code * TileAtlas::CELL_PENS..][..TileAtlas::CELL_PENS];
     let pmask = pmask | 1 << 31;
-    for py in 0..16 {
+    let pen_base = col * 16;
+    // columns of the cell that fall on the screen
+    let left = sx - VIS_X0;
+    let px0 = (-left).clamp(0, CELL as i32) as usize;
+    let px1 = (SCREEN_W as i32 - left).clamp(0, CELL as i32) as usize;
+    if px0 >= px1 {
+        return;
+    }
+    for py in 0..CELL {
         let by = sy + py as i32 - VIS_Y0;
         if by < 0 || by >= SCREEN_H as i32 {
             continue;
         }
-        let ry = if flipy { 15 - py } else { py };
-        let (g, d) = (pixels8(gfx, base + ry * 8), pixels8(gfx, base + ry * 8 + 4));
-        for px in 0..16 {
-            let bx = sx + px as i32 - VIS_X0;
-            if bx < 0 || bx >= SCREEN_W as i32 {
-                continue;
-            }
-            let rx = if flipx { 15 - px } else { px };
-            let p = if rx < 8 { g[rx] } else { d[rx - 8] };
+        let ry = if flipy { CELL - 1 - py } else { py };
+        let src = &cell[ry * CELL..][..CELL];
+        let line = by as usize * SCREEN_W;
+        for px in px0..px1 {
+            let p = src[if flipx { CELL - 1 - px } else { px }];
             if p == 15 {
                 continue;
             }
-            let o = by as usize * SCREEN_W + bx as usize;
+            let o = line + (left + px as i32) as usize;
             if (1u32 << (prio[o] & 0x1f)) & pmask == 0 {
-                pens[o] = col * 16 + p as u16;
+                pens[o] = pen_base + p as u16;
             }
             prio[o] = 31;
         }

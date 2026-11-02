@@ -31,6 +31,7 @@ fn main() {
     }
     let snap = Path::new(&a[2]);
     let gfx = rom::load_gfx(Path::new(&a[1]), rom::DDSOM_GFX, rom::DDSOM_GFX_SIZE).expect("roms gfx");
+    let atlas = cps2_gfx::TileAtlas::from_planar(&gfx);
 
     if let Some(mame_gfx) = a.get(5) {
         let m = std::fs::read(mame_gfx).expect("gfx mame");
@@ -54,7 +55,7 @@ fn main() {
         gfxram: &gfxram, cps_a: &cps_a, cps_b: &cps_b, objram: &objram, output: &output,
         palette_ram: palette.as_deref(),
     };
-    let img = render(&v, &gfx);
+    let img = render(&v, &atlas);
 
     let f = std::fs::File::create(&a[3]).expect("output");
     let mut enc = png::Encoder::new(f, SCREEN_W as u32, SCREEN_H as u32);

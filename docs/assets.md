@@ -56,8 +56,8 @@ d'un chargement de fichier (les encodeurs des tests sans perte y sont réunis ; 
 
 | Fonction | Reconstruit | Test |
 |---|---|---|
-| `gfx_region(assets/gfx)` | région graphique (0x1800000 octets, 4 plans par groupe de 8 pixels) | `rebuilt_graphics` : identique à `cps2_gfx::rom::load_gfx` |
-| `qsound_samples(assets)` | ROM d'échantillons (4 Mo) : les 342 `sounds/NNN.wav` à leur adresse (fiches de `music.json`) et la suite de chacun (`sample_tails`) ; le reste à zéro | `rebuilt_samples` : octets couverts identiques à `dd2.11m` + `dd2.12m` |
+| `gfx_region(assets/gfx)` | région graphique (0x1800000 octets, 4 plans par groupe de 8 pixels), pour le test seulement : le jeu lit l'atlas de tuiles `ddsom_assets::tile_atlas` (cellules 8 bits de `gfx/cells_NN.png`, sans réencodage) | `rebuilt_graphics` : identique à `cps2_gfx::rom::load_gfx` |
+| `ddsom_assets::samples::bank(assets)` | banque d'échantillons (4 Mo) : les 342 `sounds/NNN.wav` à leur adresse (fiches de `music.json`) et la suite de chacun (`sample_tails`) ; le reste à zéro | `rebuilt_samples` : octets couverts identiques à `dd2.11m` + `dd2.12m` |
 | `Program::load(assets)` | ROM programme, vue données et vue espace programme déchiffrée (`Image`), à leurs adresses : tous les fichiers du tableau ci-dessus | `rebuilt_program` : octets couverts identiques à `cps2::load_program` ; aucune écriture contradictoire |
 
 `Image::covered()` donne les zones décrites par les fichiers ; les autres octets valent zéro. Sur la ROM

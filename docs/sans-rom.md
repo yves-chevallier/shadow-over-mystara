@@ -40,8 +40,8 @@ d'`extract`, supprimer `assets\` puis relancer `play.bat`.
 | Programme 68000, vue données et vue programme déchiffrée (`Program::load`) | toutes les tables décrites (`palettes.png`, `sprites/*.json`, `levels.json`, `terrain.json`, `scene_palettes.json`, `texts.json`, `data/*.json`) ; `data/natives.json` : les zones lues par les natives qu'aucun autre fichier ne décrit (ci-dessous) ; `data/reste.json` : tout le reste, sauf le code 68000 (« Couverture complète des données ») | le code 68000 exécuté (486 399 octets, zéro) : sans 68000 il n'est plus exécuté ni lu |
 | Région du Z80 (`rebuild::audio_region`) | `sound/music.json` (`ddsom_sound::SoundData`, tableaux indexés), replacé à ses adresses d'origine par `SoundData::region_parts` | le programme du Z80 : remplacé par le pilote Rust (`ddsom-sound`), qui ne lit que ces données |
 | DSP QSound (`rebuild::qsound_dsp`) | `sound/qsound_dsp.json` : pan (0x110, 0x150 mots), pas de l'ADPCM (0x9dc, 16), coefficients des filtres (0xd53-0xfff, et 0-2 où le second filtre déborde) | le code du DSP : l'émulation haut niveau (`qsound`, d'après MAME) le remplace et ne lit que ces tables |
-| Graphismes (`rebuild::gfx_region`) | `gfx/cells_NN.png` | rien |
-| Échantillons (`rebuild::qsound_samples`) | `sound/music.json` et `sounds/NNN.wav` (et la suite de chaque échantillon, `sample_tails`) | les octets qu'aucune voix ne lit |
+| Graphismes (`ddsom_assets::tile_atlas`, `cps2_gfx::TileAtlas`) | `gfx/cells_NN.png`, lus tels quels (un octet par pixel) | rien |
+| Échantillons (`ddsom_assets::samples::bank`) | `sound/music.json` et `sounds/NNN.wav` (et la suite de chaque échantillon, `sample_tails`) | les octets qu'aucune voix ne lit |
 
 **Le Z80.** Son programme n'est plus nécessaire : le pilote Rust, seul pilote du jeu, le remplace écriture par
 écriture ([son.md](son.md)) et ne lit que les tableaux indexés de `music.json` (`ddsom_sound::SoundData` : sons,
