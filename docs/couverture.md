@@ -194,20 +194,20 @@ scenarios/long/<nom>.images)`.
 
 | Scénario | Images | Contenu |
 |---|---|---|
-| `long_2p_magies` | 90 000 | clerc et magicien, magies et objets très fréquents (scènes 1, 2, 4, 0xb, 0xd, 0xe, 0x10, boutique 0x45) |
-| `long_28_scenes` | 90 000 | nain seul, 28 scènes (1, 5, 9… 109), difficulté 7, langue 4, boutique enchaînée |
+| `long_2p_magies` | 90 000 | deux magiciens, magies et objets très fréquents (scènes 1, 2, 4, 0xb, 0xd, 0xe, 0x10, boutique 0x45) |
+| `long_28_scenes` | 90 000 | voleur seul, 28 scènes (1, 5, 9… 109), difficulté 7, langue 4, boutique enchaînée |
 | `long_3p_mortels` | 60 000 | combattant, elfe et nain mortels |
-| `long_4p` | 60 000 | combattant, elfe, magicien, voleur (scènes 1-0xc, boutique 0x45) |
-| `long_route_14` | 60 000 | elfe depuis le choix de route 0x14 (0x18, boutique 0x4c, 0x6a) |
-| `long_route_38` | 60 000 | voleur et nain au choix de route 0x38 |
-| `long_boutiques` | 40 000 | clerc, les 14 boutiques 0x45-0x52, difficulté 0 |
+| `long_4p` | 60 000 | combattant, elfe, elfe bis, voleur (scènes 1-0xc, boutique 0x45) |
+| `long_route_14` | 60 000 | clerc depuis le choix de route 0x14 (0x18, boutique 0x4c, 0x6a) |
+| `long_route_38` | 60 000 | elfe et combattant au choix de route 0x38 |
+| `long_boutiques` | 40 000 | magicien, les 14 boutiques 0x45-0x52, difficulté 0 |
 | `long_2p_d3_mortels` | 60 000 | combattant et magicien mortels, difficulté 3, scènes 0x1d-0x38 |
-| `long_nain_mortel` | 60 000 | nain seul mortel, jeu naturel (game over) |
-| `long_voleur_objets` | 60 000 | voleur, objets et magies très fréquents, scènes 1-56 |
-| `long_magicien_57_86` | 60 000 | magicien, magies très fréquentes, scènes 57-86 |
-| `long_2p_d7_mortels` | 60 000 | clerc et elfe mortels, difficulté 7 |
-| `long_4p_route_38` | 60 000 | quatre joueurs au choix de route 0x38 |
-| `long_route_14_2p` | 60 000 | combattant et clerc depuis le choix de route 0x14 |
+| `long_voleur_mortel` | 60 000 | voleur seul mortel, jeu naturel (game over) |
+| `long_elfe_objets` | 60 000 | elfe, objets et magies très fréquents, scènes 1-56 |
+| `long_nain_57_86` | 60 000 | nain, magies très fréquentes, scènes 57-86 |
+| `long_2p_d7_mortels` | 60 000 | magicien et elfe mortels, difficulté 7 |
+| `long_4p_route_38` | 60 000 | magicien, clerc, elfe, voleur au choix de route 0x38 |
+| `long_route_14_2p` | 60 000 | combattant et nain depuis le choix de route 0x14 |
 
 Trous trouvés et corrigés (2026-10-27) ; chacun passait inaperçu des 272 scénarios de la validation complète :
 
@@ -232,9 +232,11 @@ Ils sont rangés dans `scenarios/long/` (validés avec `DDSOM_LONG=1`) et géné
 (`examples/autobot.rs`) gagne `--spells`, `--spell-period`, `--rods` et `--door`, et `tools/bot_lib.py` l'argument `late`.
 
 **Numéros de sélection.** L'ordre réel des personnages du choix est : 0 combattant, 1 magicien, 2 clerc, 3 voleur, 4 nain,
-5 elfe (octet `+3` du joueur : 0, 8, 2, 0xa, 6, 4 ; classe = `+3 >> 1`). Les commentaires et les noms des bots
-`long_*` plus haut suivent un ordre erroné (« clerc » pour le 1, « magicien » pour le 4...) : les noms des `sorts_*`
-sont les bons.
+5 elfe (octet `+3` du joueur : 0, 8, 2, 0xa, 6, 4 ; classe = `+3 >> 1`). Les personnages des bots `long_*` du tableau
+précédent sont ceux relevés en RAM (`+3` des joueurs à l'image 4700) ; trois bots ont été renommés en conséquence
+(`long_voleur_mortel`, `long_elfe_objets` et `long_nain_57_86`, ex-`long_nain_mortel`, `long_voleur_objets` et
+`long_magicien_57_86`). Les joueurs 2 à 4 n'ont pas le numéro de `chars` (curseur décalé, personnages pris sautés) ;
+deux joueurs peuvent avoir le même personnage (« bis » : second jeu de couleurs, `+3` impair).
 
 **Méthode des magies.** Le bouton 4 (attaque spéciale, `checks::special_attack`) lit l'identifiant de la ligne
 d'équipement choisie (`+0x120 + 16 × (+0x15d)`) et la table 0x372e4 le convertit en numéro de sort (`+0x15e`, identifiant

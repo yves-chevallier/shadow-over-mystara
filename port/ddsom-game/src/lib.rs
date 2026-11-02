@@ -365,7 +365,7 @@ pub fn appeler_attendu(c: &mut Cpu, b: &mut Cps2Bus, adresse: u32, appel: taches
     taches::table::revenu(b, appel)
 }
 
-/// Inventaire du 68000 restant (`examples/reste68k`) : fonction appelée avec l'adresse de chaque
+/// Trace du 68000 (`examples/qui`, `recensement`, `fuzz_porte`) : fonction appelée avec l'adresse de chaque
 /// instruction 68000 exécutée hors routine native.
 static TRACE: OnceLock<fn(u32)> = OnceLock::new();
 

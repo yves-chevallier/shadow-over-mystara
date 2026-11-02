@@ -172,7 +172,7 @@ const JSR: u32 = 6;
 /// Jauge de charge, avec son marqueur (D1).
 fn gauge(c: &mut Cpu, b: &mut Cps2Bus, marker: u32) {
     // 0xb3e. Glitch d'origine : la jauge masquée laisse D2.w = 0x400 (test de DSW), qu'un gestionnaire écrit dans un
-    // champ d'objet (DDSOM_POISON=appel_b3e : long_magicien_57_86, image 13398, ram ffd692)
+    // champ d'objet (DDSOM_POISON=appel_b3e : long_nain_57_86, image 13398, ram ffd692)
     c.d[1] = marker;
     crate::video::jauge_68k(c, b);
 }
@@ -485,7 +485,7 @@ pub fn phase12(c: &mut Cpu, b: &mut Cps2Bus) -> Flow {
     // 0x2aec
     // Glitch d'origine : les octets d'entrée que la copie laisse dans D0-D4 (et ses drapeaux) sont relus par un
     // gestionnaire de la mise à jour du monde, qui les écrit dans un objet (DDSOM_POISON=appel_2aec :
-    // long_voleur_objets, image 13133, ram ffd694)
+    // long_elfe_objets, image 13133, ram ffd694)
     crate::inputs::recopier_68k(c, b);
     table::appeler(b, Etape::ApresMonde);
     if update_world(c, b) == Flow::Yield {

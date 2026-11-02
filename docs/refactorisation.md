@@ -715,7 +715,7 @@ But : lever, hors de `families/`, ce qui empêche le `Cpu` de quitter le chemin 
   (0x3f/0x40, 0x1f/0xe0) : relu par un gestionnaire d'objet (`boss13_dragon`, image 7241) — `update_cameras` le
   rend (`[RestesD4; 2]`), `update_cameras_68k` le pose. D4 de la liste de sprites (attributs du dernier morceau,
   relu par 0xad7b0) — `sprites::Restes::d4`. D2.w = 0x400 laissé par la jauge masquée (test de DSW), écrit par un
-  gestionnaire dans un champ d'objet (`long_magicien_57_86`, image 13398, `ram ffd692`) — `video::jauge_68k`.
+  gestionnaire dans un champ d'objet (`long_nain_57_86`, image 13398, `ram ffd692`) — `video::jauge_68k`.
 * **Preuve.** Sonde générique `DDSOM_POISON=appel_<adresse>` dans `crate::call` (registres changés par l'appelé,
   inversés au retour, au site d'appel) et étiquettes des adaptateurs restreintes hors des familles
   (`alloc,!alloc@families/`...). Faux positifs écartés : enchaînement des blocs de tuiles (A1 = fin du bloc
@@ -725,7 +725,7 @@ But : lever, hors de `families/`, ce qui empêche le `Cpu` de quitter le chemin 
   scénarios), passés au cœur : allocations des modes, scènes, boutique, tableau des scores, crédits et phase 0 (16),
   `rank::reset/lower/tick` et `charger_preset` (12), `lists::unlink_all` (3), `rng::seed` (3), pop-ups et
   effacement de la couche 1 de la phase 12, A0 des caméras. Registres relus, gardés et documentés (glitches
-  d'origine) : copie des entrées 0x2aec (`inputs::recopier_68k`, D0-D4 relus : `long_voleur_objets`, image 13133),
+  d'origine) : copie des entrées 0x2aec (`inputs::recopier_68k`, D0-D4 relus : `long_elfe_objets`, image 13133),
   pas d'animation des personnages (`step_keeping_regs`, D0.b relu : `long_3p_mortels`, image 22018), jauge (D2),
   sprites (D4), caméras (D4). Contrats de natives appelées par adresse (restent tant que leurs appelants le
   sont) : créateurs (`effects_aids.rs`, `player/spawn.rs` : A1 relu par `modes/title.rs`), terrain

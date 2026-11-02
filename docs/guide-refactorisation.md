@@ -21,7 +21,7 @@ reste vrai à la frontière, mais le but est maintenant de **faire disparaître 
    on appelle la fonction (`pools::SET.alloc`), ou on importe la constante de son propriétaire.
 6. **Noms.** Champs et variables nommés d'après `docs/*.md` (vue `Obj`, `Player`, `ram::SCENE`) ; un sens incertain est
    marqué (h). Commentaires en français, brefs ; on garde la langue des identifiants du module.
-7. **Code mort et replis.** Un bras `_ => x.call(0x…)` ou un `deleguer` jamais atteint (vérifier : `examples/reste68k`,
+7. **Code mort et replis.** Un bras `_ => x.call(0x…)` ou un `deleguer` jamais atteint (vérifier : couverture-fonctions.md,
    compteurs d'appels de `validate`, le jeu sans 68000 qui s'arrête sur une adresse sans native) se remplace par la
    native appelée directement, ou par `unreachable!("…")` documenté si l'aiguillage de la ROM ne peut pas y mener.
    Ne pas inventer de logique pour un chemin jamais exercé : le dire.
@@ -369,7 +369,7 @@ n'admet plus de cession : il s'arrête sur une panique qui nomme le site.
   ordonnanceur Rust, et leurs appels en cours ne sont plus sur la pile 68000, le code d'origine ne pourrait plus
   prendre la suite d'une native. Les diagnostics qui exécutent l'original sur une copie (`DDSOM_CHECK`,
   `DDSOM_ADOPT_REGS`) marchent toujours ; `cessions` et `reste68k`, qui mesuraient le 68000 restant du mode hybride,
-  n'ont plus d'objet. Il n'y a plus de durée à tenir à jour (lot 0a).
+  sont retirés. Il n'y a plus de durée à tenir à jour (lot 0a).
 * **Registres hérités** : le gestionnaire suivant de la boucle de dispatch, une tâche neuve, une étape qui reprend
   héritent des registres (le contexte d'une cession les garde, que la reprise soit une étape ou une native). C'est ce que `DDSOM_POISON` attrape ; `DDSOM_ADOPT_REGS`/`DDSOM_CHECK_ALL` aident à trouver
   lequel.
