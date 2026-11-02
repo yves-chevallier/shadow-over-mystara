@@ -1,0 +1,709 @@
+# Plan de fin : du port fidèle au moteur lisible
+
+État de départ : main 9a69409 (2026-11-02). Le jeu tourne en Rust pur : `ddsom` ne lie ni `m68k` ni `z80`. 308
+scénarios sur 308 sont VALID contre l'original, en mode par défaut et avec `DDSOM_ASSETS`. Tout le code est en anglais.
+
+Le moteur reste pourtant organisé comme la ROM :
+
+* `ddsom --assets` reconstruit en mémoire une image de la ROM (`ddsom_assets::rebuild::contents`) : programme,
+  graphismes, échantillons, région du Z80 et DSP.
+* Le code lit ses données par adresse dans cette image.
+* L'état vit dans la RAM émulée 0xFF0000-0xFFFFFF, à des décalages de champs.
+* La vidéo passe par les tampons CPS2. Le son passe par la région d'adresses du Z80.
+
+Ce document mesure cet écart, fixe l'architecture d'arrivée et découpe le travail en lots validables. Il remplace la
+liste « Suite » de [reprise.md](reprise.md) (point 5).
+
+Objectif de l'utilisateur, rappelé :
+
+* un moteur Rust beau, minimal, lisible et modulaire, sans ROM ;
+* des assets lisibles : PNG pour les graphismes et les palettes, WAV pour les échantillons, JSON pour les données et
+  la musique séquencée ;
+* un comportement **strictement identique**, avec la validation image par image contre l'original gardée comme filet ;
+* aucun asset dérivé des ROMs dans git.
+
+## 1. Mesures (main 9a69409)
+
+### Méthode
+
+Les chiffres viennent de scripts Python lancés sur `port/ddsom-game/src` :
+
+* les commentaires `//` sont retirés avant le comptage ;
+* le dossier `tools/` est exclu, sauf mention contraire ;
+* les comptes sont faits par expressions régulières, donc approchés à quelques pour cent près.
+
+Un autre agent nettoie les lints et le module `tools` en parallèle : les chiffres peuvent bouger un peu. Le lot L0
+versionne le script (`tools/measure_end.py`) pour que chaque lot donne ses chiffres avant et après.
+
+### Taille des crates
+
+| Crate | Lignes (src) | Exemples, tests | Rôle aujourd'hui |
+|---|---:|---:|---|
+| `ddsom-game` | 174 701 | 16 611 (58 exemples) | le jeu (natives Rust), plus `tools/` (7 018 lignes, 70 fichiers, fonctionnalité `tools`) |
+| `ddsom-assets` | 2 604 | 1 168 | chargement des assets et **reconstruction de la ROM** (`rebuild.rs`, 599 lignes) |
+| `extract` | 3 003 | — | ROMs → assets |
+| `ddsom-sound` | 2 194 | 1 305 | pilote son Rust (séquenceur), données lues par accesseurs nommés sur la région du Z80 |
+| `m68k` | 2 342 | — | 68000, pour la référence et les outils seulement |
+| `cps2` | 1 480 | 186 | machine CPS2 (bus, déchiffrement, EEPROM, liaison son) ; `m68k`/`z80` optionnels |
+| `z80` | 1 133 | — | référence et outils seulement |
+| `ddsom` | 789 | — | application (minifb, clavier, manette, audio, sauvegarde) |
+| `qsound` | 563 | — | DSP QSound haut niveau (d'après MAME) |
+| `recomp` | 460 | — | recompilateur, outils seulement |
+| `cps2-gfx` | 398 | 60 | rendu CPS-A/CPS-B (tilemaps, sprites, priorités, palettes) |
+| `ddsom-rc` | 13 | 178 | code 68000 recompilé (généré à la compilation depuis les ROMs locales) |
+| `vrender` | 71 | — | rendu d'instantanés |
+
+### `ddsom-game` par zone
+
+Les zones ci-dessous correspondent aux périmètres des lots de la section 3.
+
+| Zone (périmètre) | Fichiers | Lignes | Lectures ROM par accesseur¹ | Champs à décalage littéral² | A5 + littéral³ | `rd*`/`wr*` bruts | Appels de son par adresse⁴ | Constantes `u32` dans 0x400-0x3fffff⁵ | Plus gros fichier |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---|
+| Effets (`families/effects*.rs`) | 8 | 13 267 | 292 | 525 | 135 | 322 | 58 | 358 | `effects_c.rs` (5 162) |
+| SET (`families/set*.rs`, `scenery.rs`) | 10 | 9 911 | 247 | 1 108 | 182 | 346 | 22 | 184 | `set_b.rs` (3 628) |
+| ESHL, SOBJ, objets, caisses | 10 | 15 808 | 274 | 2 378 | 71 | 51 | 91 | 424 | `eshl_c.rs` (3 300), `eshl_b.rs` (3 054) |
+| Ennemis (`families/enemy*`, `reactions.rs`) | 94 | 32 564 | 170 | 1 302 | 18 | 25 | 1 | 205 | `reactions.rs` (2 223) |
+| Boss (`families/boss*`) | 83 | 30 835 | 207 | 3 182 | 171 | 146 | 0 | 114 | `boss_11/` (2 419 en 5 fichiers) |
+| Joueurs (`player/`, `families/player/`, `combat*`) | 57 | 29 048 | 378 | 2 545 | 67 | 383 | 68 | 494 | `player/hurt.rs` (1 761) |
+| Écrans (`modes/`, `hud/`, `service/`, `scene/`, `credits*`, `text`, `popups`) | 41 | 18 134 | 62 | 15 | 137 | 1 637 | 74 | 437 | `scene/exit.rs` (1 535) |
+| Communs des familles (`cx.rs`, `mod.rs`, `small.rs`, `creators.rs`) | 4 | 1 413 | 11 | 164 | 20 | 61 | 1 | 7 | `creators.rs` (520) |
+| Moteur (`objects/`, `tasks/`, `ai*`, `terrain`, `scroll`, `camera_modes`, `palette`, `video`, `sprites`, `sound*`, `dispatch`, `kernel`...) | 48 | 16 703 | 58 | 30 | 56 | 1 232 | 1 | 175 | `camera_modes.rs` (1 605) |
+| **Total (hors `tools/`)** | 355 | ~167 700 | **1 699** | **~11 250** | **~785** | **~4 200** | **317** | **~2 400** | |
+
+Notes du tableau :
+
+1. Appels de `data8/16/32`, `rom8/16/32`, `rom_i16` et `prog8/16/32`. Leurs arguments se répartissent ainsi :
+   * 812 pointeurs ou expressions (souvent une adresse ROM lue dans un champ de l'objet) ;
+   * 704 constantes plus un index ;
+   * 167 littéraux plus un index ;
+   * 16 constantes ou littéraux seuls.
+
+   S'y ajoutent les lectures `rd16(b, TABLE + i)` vers la ROM, que l'expression régulière ne distingue pas de la RAM.
+   La mesure exacte reste `rom_reads` (fonctionnalité `rom-trace`, [sans-rom.md](sans-rom.md)).
+2. Appels `x.u8(0x5a)`, `o.set_u16(b, 0x1c, …)`, etc. dont le décalage est un nombre. Il y a 30 170 accès aux champs en
+   tout, dont 18 900 par une constante nommée (`Obj::X`) ou une variable.
+3. `A5 + 0x…`, `a5_u8(0x…)`, `ram8(…)`. Les variables nommées de `ram.rs` (`Byte`/`Word`/`Long`/`Table`) sont 61
+   déclarations et 702 utilisations `ram::X`.
+4. `sound::play(b, 0xede08, o)` et ses variantes `play_global` et `play_with` : le son est désigné par l'adresse de
+   son enveloppe 68000 (504 enveloppes dans `sound_table.rs`, générée par `tools/gen_sound_wrappers.py`). Les boss
+   jouent leurs sons par un autre chemin, `x.sound(…)`.
+5. Adresses de tables ROM et adresses de routines d'origine (entrées des natives, étapes, cibles des tables
+   d'aiguillage). Sur ~2 400, `families/` en compte 1 565.
+
+**Données brutes encore lues par adresse.**
+
+* `data/natives.json` : 2 963 zones lues sans table décrite. Par lecteur :
+  * `families/cx.rs` : 1 069 (accesseurs génériques, donc tous les gestionnaires) ;
+  * `player/mod.rs` : 363 ;
+  * `scene/mod.rs` : 290 ;
+  * `sound.rs` : 193 ;
+  * `boss_11/chain.rs` : 184 ;
+  * `ai_aids.rs` : 156 ;
+  * `families/player/peff_e.rs` : 154 ;
+  * `objects/anim.rs` : 126 ;
+  * `families/mod.rs` : 121.
+* `data/reste.json` : environ 540 000 octets en 7 400 blocs (espace données) et 528 000 octets en 5 450 blocs (espace
+  programme). C'est tout le non-code de la ROM, gardé pour que la couverture soit complète par construction.
+
+**Accès aux zones matérielles par adresse littérale.**
+
+* GFX RAM (0x90xxxx) : 407 littéraux dans 61 fichiers (couches de texte, HUD, écrans).
+* Registres CPS-A/CPS-B (0x80xxxx) : 72 littéraux dans 17 fichiers.
+* Sortie objets (0x40000x) : 21.
+* RAM partagée du son (0x618xxx) : 20.
+
+`Cps2Bus` est nommé dans 1 495 lignes, dont 366 dans `tools/`. Toutes les fonctions du jeu prennent `&mut Cps2Bus`.
+
+**Doublons repérés.**
+
+* `random` : 5 copies (`reactions.rs`, `effects_d.rs`, `eshl_c.rs`, `eshl_d.rs`, `enemy_common.rs`, en plus de
+  `rng.rs` et `machine.rs`).
+* `rom32` : 4 copies (`pshell.rs`, `sobj.rs`, `enemy_common.rs`, `eshl_b.rs`).
+* `set8`/`set16` locaux : 4 copies (`camera_modes.rs`, `scene/transition/mod.rs`, `credits_task.rs`, `service/mod.rs`).
+* `alloc` : 4 versions (`objects/pools.rs`, `objects/current.rs`, `enemy_common.rs`, `ai_aids.rs`).
+* `camera_modes.rs` réimplémente les accesseurs de `Cx` et de `Machine` pour son propre contexte.
+
+### Dépendances entre modules
+
+On ne compte que les arêtes `crate::x` hors `tools/`. Les 46 modules de tête et leurs 286 arêtes forment **une seule
+composante fortement connexe de 37 modules**. Seuls `mem`, `ops`, `diag`, `text`, `rng`, `scenario` et `sound_table`
+restent en dehors.
+
+Arêtes « à l'envers » qui ferment les cycles (une couche basse qui appelle une couche haute) :
+
+| Arête | Site | Remède |
+|---|---|---|
+| `objects → families` | `objects/current.rs:199`, `impl Current for families::cx::Cx` | déplacer l'`impl` dans `families/cx.rs` |
+| `video`, `sprites`, `inputs`, `scroll → tasks` | `tasks::table::table(b).leftovers` (`video.rs:82`, `sprites.rs:207`, `inputs.rs:161`, `scroll.rs:711`) | passer `&mut Leftovers` en argument ; déplacer `Leftovers` de `dispatch` vers le module de l'état du monde |
+| `video → modes`, `scene`, `tasks` | `video.rs:166-168` (étape d'un écran logée dans `video`) | déplacer cette étape dans `scene/` |
+| `machine → scene` | `machine.rs:54`, `impl Machine for scene::Ctx` | déplacer l'`impl` dans `scene/` |
+| `ram`, `sound → objects` | `use crate::objects::Obj` | sortir `Obj` et `Link` dans un module de base (`world::obj`) |
+| `eeprom ↔ config` | `eeprom.rs:319` → `config::validate` | inverser : `config` appelle `eeprom` |
+| `kernel ↔ tasks` | l'ordonnanceur appelle les étapes (`tasks::execute`), et les tâches cèdent (`kernel::wait`) | légitime, mais à loger dans un même module `core` |
+| `ai_aids`, `effects_aids → families` | `effects_creators::impact_spark`, `leftovers::{Pure, Regs}` | descendre ces créateurs et traits dans `objects/` ou `world/` |
+
+### Échafaudage hérité de la ROM
+
+| Élément | Où | Taille | Sort prévu |
+|---|---|---|---|
+| Image ROM reconstruite | `ddsom_assets::rebuild` (599 lignes) ; `cps2::Contents` ; `Cps2Bus::rom` et `rom_dec` | 4 Mo par espace, plus 0x1800000 octets de graphismes, plus 4 Mo d'échantillons | lot L14 : le jeu charge `GameData` ; `rebuild` ne sert plus qu'aux tests sans perte d'`extract` |
+| Accès aux données par adresse | `data*`/`rom*`/`prog*`, `rd*` vers la ROM | 1 699 appels, plus les lectures `rd*` | lots L4 à L11 (données typées) |
+| `reste.json` et `natives.json` | assets | 2 963 zones, environ 1 Mo de blocs | décrits table par table ; `reste.json` devient un filet de dernier recours (lot L14) |
+| RAM émulée sur le bus | `Cps2Bus::ram`, `mem::rd*`/`wr*` avec décodage d'adresse à chaque accès | ~4 200 accès bruts, ~30 000 accès aux champs | vues typées (lots L4 à L11), puis RAM tenue par le jeu (L15) |
+| Natives et registre d'adresses | `lib.rs` (`Native`, `lookup`, crible et table de hachage), `dispatch.rs` (10 tables d'aiguillage lues en ROM par `prog32`, puis `lookup`), `kernel.rs:213` (`tasks::entry(entry)`) | 481 natives côté jeu (`G` 434 + `M` 47), 992 côté outils (`P` + `E`) | lot L13 : tableaux de fonctions par classe et `enum` d'entrées de tâche ; le registre par adresse ne sert plus qu'aux outils |
+| `ram.rs`, `mem.rs` | variables `Byte`/`Word`/`Long` à adresse ; `A5 = 0xff8000` | 149 et 114 lignes | absorbés par les vues typées (L1 pour le socle) |
+| Sons par adresse d'enveloppe | `sound.rs`, `sound_table.rs` | 317 sites, 504 enveloppes | lot L2 (sons nommés) |
+| `no68k` | nom du module de boucle d'image | 319 lignes | renommé `frame` (L15) |
+| Région du Z80 | `ddsom_sound::Rom` (accesseurs nommés sur une région de 0x50000 octets) ; l'état du pilote garde des adresses Z80 | 299 lignes | lot L3 (tableaux indexés) |
+| Programme du DSP | `qsound` lit `qsound_dsp.json` placé aux adresses du DSP | 3 tables | lot L4 (tables nommées) |
+
+### Performance (base de mesure)
+
+Dernière mesure : lot F, `examples/bench` sur bot30k, 12 000 images, pilote son Rust.
+
+* 1 862 images/s avec le rendu, et 11 408 images/s sans.
+* Avec le rendu, les couches prennent 35 % du temps (`pixels8`, lecture des tuiles) et les sprites 7 %.
+* Sans le rendu, QSound prend environ 45 % (110 ns par échantillon). Le jeu lui-même prend environ 25 µs par image.
+* Le bus (`read_word`/`write_word`, décodage d'adresse) et `lookup` pèsent chacun moins de 5 %.
+
+## 2. Architecture d'arrivée
+
+### Principes
+
+1. **Le filet reste.** `validate` compare chaque image à la machine de référence : RAM de travail, GFX RAM, RAM
+   d'objets, palette, RAM partagée et écritures du pilote son. On ne renonce à aucune de ces comparaisons. Toute forme
+   d'état et de données doit donc pouvoir se **projeter exactement** sur ce que l'original a en mémoire.
+2. **Les adresses deviennent des identifiants, pas des emplacements.** L'original range des adresses ROM dans la RAM :
+   * le script d'animation suivant (`Obj::ANIM_NEXT`) ;
+   * la table de vitesses (`Obj::SPEED_TABLE`) ;
+   * les pointeurs de script de scène ;
+   * les entrées des tâches.
+
+   Ces valeurs sont comparées par `validate` : elles restent dans l'état, mais comme **clés** (`RomAddr(u32)`) de
+   tables typées. Elles ne sont plus lues comme des octets d'une image. Les JSON gardent déjà les adresses en clé
+   (`"0x2b45d8"`, [assets.md](assets.md) « Conventions »).
+3. **Un seul chemin de code dans les deux modes.** Le mode par défaut (avec ROMs) et le mode assets chargent la même
+   structure `GameData` :
+   * depuis les ROMs, par `extract` en mémoire ;
+   * depuis les fichiers, par `ddsom-data`.
+
+   La validation dans les deux modes compare alors bien les données. Elle ne compare plus deux chemins de lecture
+   différents.
+
+### Crates d'arrivée
+
+```
+port/
+  ddsom/          application : fenêtre, clavier/manette (keys.rs, gamepad.rs), sortie audio, sauvegarde EEPROM
+  ddsom-game/     le moteur du jeu (ci-dessous), sans 68000, sans ROM, sans Cps2Bus
+  ddsom-data/     données typées : structures, chargement depuis assets/ (et depuis les ROMs pour extract et les tests)
+  ddsom-sound/    pilote son (séquenceur), données en tableaux indexés
+  cps2-gfx/       moteur de rendu de sprites et tilemaps au format CPS2, atlas de tuiles décodé
+  qsound/         mixeur QSound (échantillons depuis une banque chargée des WAV)
+  extract/        ROMs → assets (et ROMs → GameData en mémoire)
+  -- référence et outils (jamais liés par ddsom) --
+  cps2/  m68k/  z80/  recomp/  ddsom-rc/  vrender/
+  ddsom-tools/    (lot L17, facultatif) validate, fuzz_*, couverture : aujourd'hui ddsom_game::tools + exemples
+```
+
+`ddsom-assets` se scinde en deux :
+
+* le chargement passe dans `ddsom-data` ;
+* `rebuild` (réencodage au format ROM) ne sert plus qu'aux tests sans perte et à `programme_complet`. Il passe dans
+  `extract` (`extract/src/rebuild.rs`) ou dans les tests.
+
+### Modules d'arrivée de `ddsom-game`
+
+L'arrivée est un graphe sans cycle, en couches. Chaque couche n'appelle que celles du dessous.
+
+| Couche | Modules (d'après les fichiers d'aujourd'hui) | Rôle |
+|---|---|---|
+| `data` (crate `ddsom-data`) | — | tables immuables : sprites, animations, décors, palettes, terrain, textes, tables de jeu, scripts |
+| `hw` | `video` (tilemaps, sprites, registres CPS, palette), `sound` (file de commandes vers le pilote), `inputs`, `eeprom` | interface avec le matériel modélisé ; aucune logique de jeu |
+| `world` | `world::ram` (RAM de travail), `obj` (`Obj`, `Link`, enregistrements typés), `objects/` (pools, listes, animation, mouvement, rang, visibilité), `terrain`, `rng`, `placement`, `events` | état du monde et moteur d'objets |
+| `services` | `palette`, `text`, `sprites`, `scroll`, `camera_modes`, `ai`, `ai_aids`, `aids`, `effects_aids`, `combat` | services de jeu appelés par les acteurs |
+| `actors` | `families/` (ennemis, boss, effets, SET, ESHL...), `player/` | gestionnaires d'objets et joueurs |
+| `screens` | `modes/`, `scene/`, `hud/`, `service/`, `credits*`, `popups` | écrans et séquences |
+| `core` | `kernel`, `tasks/`, `dispatch`, `vblank`, `startup`, `frame` (ex-`no68k`), `game`, `config` | ordonnanceur, tâches, boucle d'image |
+
+### État du jeu : la RAM reste l'état, d'abord typée, puis détachée du bus
+
+Faut-il garder l'état dans une RAM émulée tant que la validation compare la RAM ? **Oui.** C'est même la forme
+d'arrivée pour l'essentiel de l'état. Trois raisons, mesurées :
+
+* L'original exploite la disposition de la RAM :
+  * liens de listes sur 16 bits (`Link`, adresse étendue par `movea.w`) ;
+  * objets lus au-delà de leur pool ;
+  * champs relus par un autre gestionnaire (les restes) ;
+  * pointeurs ROM rangés dans les champs ;
+  * tableaux indexés hors bornes (`Table::nth`, « the original sometimes indexes beyond »).
+
+  Un état en structures Rust devrait reproduire chacun de ces cas par une projection à chaque image. Ce serait plus
+  long et moins sûr que la RAM elle-même.
+* La comparaison de la RAM à chaque image est le meilleur filet : elle voit une divergence des centaines d'images
+  avant qu'elle ne se voie à l'écran. Une validation « à l'image » seule (pixels plus son) serait plus faible.
+* Le précédent existe et montre le coût d'une projection : la table des tâches est un état Rust
+  (`tasks::table::Table`, rangée dans `Cps2Bus::ext`). `validate` la compare champ par champ à FF0064 de la référence
+  (`gaps`). Il a fallu une sonde par champ et plusieurs lots.
+
+La stratégie a trois étapes.
+
+1. **Vues typées sur la RAM (lots L1, puis L4 à L11).**
+   * Chaque enregistrement devient un type avec des champs nommés, déclarés une fois. Exemples : `Enemy(Obj)`,
+     `Player(Obj)`, `Boss11(Obj)`, et les variables de `world::ram`.
+   * Une macro `record!` produit les accesseurs, par exemple `hp: u16 @ 0x5a`.
+   * Plus de décalage littéral hors des déclarations. Cible : environ 11 250 décalages littéraux et 785 `A5 + littéral`
+     ramenés à 0.
+2. **RAM tenue par le jeu, plus par le bus (lot L15).**
+   * `World { ram: Box<[u16; 0x8000]> }` est lu et écrit sans décodage d'adresse.
+   * Le matériel (vidéo, son, entrées, EEPROM) passe par `hw`.
+   * `Cps2Bus` ne reste qu'à la machine de référence. `validate` compare `world.ram` comme aujourd'hui `bus.ram`.
+3. **État Rust plus projection, au cas par cas (lot L16, facultatif).**
+   * À ne faire que pour un bloc que personne ne lit hors de son module : condition vérifiée par une trace de lecture
+     par adresse (`watch_writes`, étendu aux lectures).
+   * Candidats : la file du son (FF2900...), les états propres à un écran (modes, menu TEST) et les compteurs de pièces.
+   * Non candidats : les pools d'objets, les fiches de joueurs (0x200 octets lus partout) et la caméra.
+
+   La projection s'écrit comme `gaps` : comparaison dans `validate`, et écriture dans la RAM seulement si un lecteur
+   d'origine en a besoin.
+
+### Données : `ddsom-data`, chargées directement
+
+`GameData` est immuable et chargée une fois. Les fonctions du jeu y accèdent par `data()`, un `static OnceLock`.
+C'est un choix assumé : les données sont constantes, et les faire passer en argument dans 30 000 sites n'apporte rien.
+La machine de référence garde ses ROMs ; elle n'utilise pas `GameData`.
+
+| Famille | Fichier d'asset (existant) | Type | Consommateurs principaux |
+|---|---|---|---|
+| Images de sprites, listes de morceaux | `sprites/frames.json` | `Frames` indexé par `RomAddr` | `sprites.rs`, `objects/anim.rs` |
+| Scripts d'animation | `sprites/anims.json` | `Anim` (entrées 16/24 octets, sauts) | `objects/anim.rs` |
+| Tables d'objets (boîtes, marques au sol, visibilité) | `sprites/tables.json` | `Hitbox`, `Mark`... | `combat/`, `objects/cull.rs`, `ai_aids.rs` |
+| Décors scroll 1/2/3 | `levels.json` | `Level` (bandes, blocs) | `scroll.rs`, `camera_modes.rs`, `scene/` |
+| Palettes | `palettes.png` (RGBA, une palette par ligne), `scene_palettes.json` | `PaletteLib`, `ScenePalettes` | `palette.rs` |
+| Terrain | `terrain.json` | `TerrainMap`, `TerrainKind` | `terrain.rs` |
+| Textes, dialogues, bulles | `texts.json`, `data/dialogs.json` | `Text`, `Dialog` | `text.rs`, `hud/`, `families/set_c_window.rs` |
+| Tables de jeu | `data/players.json`, `combat.json`, `enemies.json`, `boxes.json`, `scenes.json`, `misc.json`, `spawns.json` | `DataFile` → structures nommées par table | familles, joueurs, scènes |
+| Zones brutes | `data/natives.json` → nouvelles tables nommées dans `data/*.json` | une structure par table | lots L4 à L11 |
+| Reste | `data/reste.json` | `Residue` : lecture de dernier recours, comptée | L14 |
+
+Formats d'assets visés. On garde ceux d'aujourd'hui, qui sont déjà lisibles :
+
+* Graphismes : PNG indexé, cellules 16x16 (`gfx/cells_NN.png`). Sans changement.
+* Palettes : PNG RGBA (`palettes.png`). On le garde : chaque couleur CPS2 (4 bits par composante, plus la
+  luminosité) s'y relit sans perte, ce que vérifie `palettes_lossless`.
+* Échantillons : WAV PCM 16 bits, avec la boucle et la note dans les métadonnées (`sounds/NNN.wav`). Sans changement.
+* Données : JSON. On ne passe pas à RON : serde_json est déjà là, les tests sans perte existent, et un format de plus
+  n'apporte rien.
+* Musique séquencée : `sound/music.json`, réorganisé en tableaux indexés au lot L3.
+
+Pour chaque table nouvelle, le lot qui la décrit fournit trois choses :
+
+* son extraction (`extract/src/<famille>.rs`) ;
+* son type et son chargement (`ddsom-data/src/<famille>.rs`) ;
+* son test sans perte (`<famille>_lossless`).
+
+**Lectures hors bornes.** Une table typée a des bornes. L'original, lui, lit parfois au-delà :
+
+* la table des boutiques avec un numéro hors bornes ([sans-rom.md](sans-rom.md)) ;
+* les durées du pilote son ;
+* les 32 palettes copiées depuis l'adresse 0.
+
+Chacun de ces cas devient un cas nommé dans le type (`Table::get_or_overread`), avec les octets qui suivent extraits.
+Un accès hors bornes non prévu passe par `Residue`, qui compte et journalise l'accès (panique avec `DDSOM_STRICT=1`).
+Ainsi, un chemin jamais joué ne casse pas le jeu de l'utilisateur, et on le voit.
+
+### Rendu : le modèle CPS2 est gardé comme moteur de rendu
+
+Garder `cps2-gfx` est légitime. C'est un moteur de rendu de sprites et de tilemaps à priorités, de 340 lignes, exact
+au pixel près, et `validate` compare justement ses entrées. Ce qui change :
+
+* **L'interface du jeu vers la vidéo** (`hw::video`) devient typée :
+  * `Sprites::push(x, y, code, attr)` remplace les écritures dans la RAM d'objets à 0x70xxxx et 0x40000x ;
+  * `Tilemap::{scroll1, scroll2, scroll3}.set(col, row, code, attr)` remplace les 407 littéraux 0x90xxxx ;
+  * `Registers::{scroll_x, scroll_y, layer_enable, priority}` remplace les 72 littéraux 0x80xxxx ;
+  * `Palette::set(page, index, color)`.
+
+  Les tampons sous-jacents gardent le format CPS2, puisque c'est ce que `validate` compare.
+* **L'interface du rendu** est `cps2_gfx::render(&VideoState, &TileAtlas) -> Frame`. Le `TileAtlas` est fait des
+  cellules 8 bits décodées depuis les PNG. On cesse de réencoder en plans 4 bits (`rebuild::gfx_region`) pour décoder
+  aussitôt à chaque pixel (`pixels8`). C'est plus simple, et c'est le gain de rendu attendu (couches : 35 % du temps).
+
+### Audio
+
+* **Pilote** (`ddsom-sound`) : il garde son rôle, en lecture de tableaux indexés (lot L3).
+  * Son état ne garde plus d'adresses Z80 : un pointeur de piste devient `(piste, position)`, un banc d'instruments
+    devient un index.
+  * Les débordements utiles restent écrits comme cas nommés : une durée pointée et en triolet lit les décalages
+    d'octave qui suivent.
+  * `validate` compare les écritures du pilote, les registres QSound et la RAM partagée. Les adresses d'échantillons
+    écrites dans les registres QSound restent donc les adresses d'origine.
+* **Banque d'échantillons** : une mémoire d'échantillons construite au chargement depuis les WAV, aux adresses des
+  fiches. Ce n'est pas une image ROM : c'est l'espace d'adresses que les registres QSound désignent.
+* **Mixeur** (`qsound`) : ses trois tables (pan, pas de l'ADPCM, filtres) deviennent des tableaux nommés chargés
+  depuis `qsound_dsp.json`. Il ne lit plus aux adresses du programme du DSP.
+
+### Entrées et plateforme
+
+`ddsom` (`main.rs`, `keys.rs`, `gamepad.rs`, `audio.rs`, `save.rs`) reste la seule crate de plateforme. Elle remplit
+`hw::inputs` et lit `Frame` et les échantillons. Son ouverture devient
+`Game::new(GameData::load(assets)?, eeprom)` au lieu de `rebuild::contents` suivi de `Machine::ddsom`.
+
+## 3. Lots
+
+### Règles communes
+
+Celles de [agents/brief-commun.md](agents/brief-commun.md) et de [reprise.md](reprise.md), « Méthode qui marche ».
+
+* **Parallélisme.** Au plus 3 agents. Un worktree par lot (`wt-<lot>`). Les périmètres de fichiers sont disjoints. Un
+  seul lot à la fois touche les API communes : `families/cx.rs`, `families/mod.rs`, `objects/current.rs`,
+  `world::ram`, `ddsom-data/src/lib.rs`.
+* **Validation.** `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1 DDSOM_JOBS=8 setsid -w tools/validate_all.sh 30000`, une
+  fois en mode par défaut et une fois avec `DDSOM_ASSETS` sur des assets **réextraits par la branche**. Il faut
+  308/308 dans chaque mode. Après chaque fusion de deux lots, on relance la validation complète.
+* **Code mort.** Il est consigné dans [code-mort.md](code-mort.md) avant d'être retiré.
+* **Mesure.** Chaque lot de familles met à jour sa ligne du tableau de la section 1 (avant/après) avec
+  `tools/measure_end.py`.
+* **Fichiers partagés par tous les lots de données.** Ce sont `extract/src/main.rs` et `ddsom-data/src/lib.rs`. Chaque
+  lot y ajoute **une ligne** : enregistrement de son module. Le conflit à la fusion est alors trivial. Les tables vont
+  dans `extract/src/<famille>.rs` et `ddsom-data/src/<famille>.rs`, propres au lot.
+
+### Démarche d'un lot de famille
+
+Un lot de famille suit trois étapes, dans cet ordre. Chaque étape fait l'objet d'un commit validé.
+
+* **(a) Découpage.**
+  * On ne fait que déplacer : fichiers géants en modules par type ou par thème.
+  * Le comportement ne change pas. On vérifie que `examples/names` donne les mêmes natives et adresses avant et après.
+  * Une seule validation en mode par défaut suffit.
+* **(b) Données typées.**
+  * Les appels `data*`/`rom*`/`prog*` et les `rd*` vers la ROM du périmètre sont remplacés par des accès à `data()`.
+  * Les zones de `natives.json` dont le lecteur est dans le périmètre deviennent des tables nommées.
+  * Fin : zéro accesseur ROM dans le périmètre, et `rom_reads` (`rom-trace`, 308 scénarios) n'attribue plus aucune
+    lecture du bus dans 0-0x3fffff aux fichiers du périmètre.
+* **(c) Vues typées.**
+  * Les décalages littéraux deviennent des champs d'un `record!` par type. Les noms viennent de
+    [familles.md](familles.md), [creatures.md](creatures.md), [objets.md](objets.md) ou [joueur.md](joueur.md).
+  * Un sens deviné est marqué `(h)` dans le commentaire, jamais par un nom vide de sens comme `field_5a`.
+  * Les doublons du périmètre sont factorisés.
+  * Fin : zéro décalage littéral et zéro `A5 + littéral` hors des déclarations.
+
+### Ordre et parallélisme
+
+```
+Série 0   L0 ─ L1 ─ L2
+Vague 1   L3 (son)  ║  L4 (rendu, mixage, perf)  ║  L5 (effets)
+Vague 2   L6 (SET)  ║  L7 (ESHL/SOBJ/objets)     ║  L8 (ennemis)
+Vague 3   L9 (boss) ║  L10 (joueurs)             ║  L11 (écrans)
+Vague 4   L12 (moteur, puis communs des familles)
+Série 5   L13 ─ L14 ─ L15 ─ (L16) ─ (L17) ─ L18
+Bonus     L19 (saisie du nom), à tout moment, en parallèle de n'importe quelle vague
+```
+
+Les lots L3 et L4 ne touchent pas `ddsom-game` : ils peuvent aussi tourner pendant les vagues 2 et 3 si un agent est
+libre.
+
+### Série 0 (un agent, API communes)
+
+**L0. Mesure et point de départ** (petit)
+* Périmètre : `tools/measure_end.py` (nouveau) et `docs/fin.md`.
+* Travail :
+  * le script reproduit le tableau de la section 1 par périmètre ;
+  * il ajoute le graphe des modules et ses composantes fortement connexes ;
+  * il prend un `--json` pour comparer deux révisions.
+* Lancer `rom_reads` sur les 308 scénarios et ranger le résultat par lecteur : c'est la mesure de référence des
+  étapes (b).
+* Fin : le script versionné redonne les chiffres de la section 1 à ±2 %.
+
+**L1. Socle des données typées et des vues typées** (moyen)
+* Périmètre :
+  * `ddsom-data/` (nouvelle crate : loaders repris de `ddsom-assets/src/{lib,sprites,levels,tables,data,texts,terrain,scene_palettes,spawns}.rs`) ;
+  * `extract/src/lib.rs` (`extract::to_data(roms) -> GameData` en mémoire) ;
+  * `ddsom-game/src/{lib.rs, objects/anim.rs, objects/motion.rs, sprites.rs, ram.rs, mem.rs, objects/mod.rs, families/cx.rs}` ;
+  * `ddsom/src/main.rs`.
+* Travail :
+  * `GameData`, `RomAddr`, `data()` ;
+  * chargement dans les deux modes : ROMs → `extract::to_data`, assets → `GameData::load` ;
+  * première famille : `sprites/frames.json` et `anims.json`, la plus lue (380 Ko et 113 Ko d'octets lus) ;
+  * vitesses de `motion.rs` (0x1c67ce-0x1ca180, aujourd'hui dans `natives.json`) ;
+  * macro `record!` et premier enregistrement `Obj` en champs déclarés.
+* Fin :
+  * `objects/anim.rs`, `objects/motion.rs` et `sprites.rs` sans accesseur ROM ;
+  * `rom_reads` à zéro dans les régions des images et des animations ;
+  * 308/308 dans les deux modes ;
+  * `bench` : même empreinte d'état final.
+* Risques :
+  * les pointeurs d'animation lus en RAM doivent tomber sur une entrée connue. Les 35 entrées incohérentes et la
+    paire chevauchante `0x174c70`/`0x174c78` ([assets.md](assets.md) « Ce qui reste ») passent par `Residue` ;
+  * `extract` dépend de `m68k`, pour la découverte du code. Il ne faut pas lier `extract` à `ddsom` : `to_data` reste
+    dans une fonctionnalité utilisée par `validate` et le mode avec ROMs. Sinon, le mode ROM passe par une extraction
+    dans un dossier temporaire.
+
+**L2. Sons nommés** (petit, mécanique, transverse)
+* Périmètre :
+  * `sound.rs` et `sound_table.rs` ;
+  * les 317 sites `sound::play*` (39 fichiers) et les appels de son des boss ;
+  * `tools/gen_sound_wrappers.py`.
+* Pourquoi en série : ce lot touche tous les périmètres. Fait d'un coup, au début, il évite 9 conflits plus tard.
+* Travail :
+  * chaque enveloppe devient une constante `Sound` (commande, D2, D3, options : la ligne de `sound_table.rs`), nommée
+    d'après la commande et [son.md](son.md) quand le sens est connu (`sound::SWORD_HIT`), sinon d'après la commande
+    (`sound::CMD_3A`) ;
+  * `play(b, Sound, o)` sans adresse ;
+  * l'adresse de l'enveloppe reste un champ de la constante, pour les outils et les natives des outils.
+* Fin : `grep -E 'sound::play[a-z_]*\([^,]+, *0x'` ne trouve rien ; 308/308 dans les deux modes.
+
+### Vague 1 (trois agents)
+
+**L3. Son en tableaux indexés** (moyen)
+* Périmètre : `ddsom-sound/`, `extract/src/music.rs`, `ddsom-assets/src/music.rs` (ou `ddsom-data/src/music.rs`),
+  `qsound/src/lib.rs`, `cps2/src/sound.rs`.
+* Travail :
+  * `music.json` réorganisé : sons, pistes (octets du séquenceur), instruments (bancs), fiches d'échantillons, tables
+    du pilote (durées, octaves, tons, amplitudes...) ;
+  * état du pilote en indices au lieu des adresses Z80 ;
+  * débordements écrits en clair ;
+  * `Driver::ram_image` garde la projection vers la RAM du Z80 pour les outils ;
+  * tables du DSP en tableaux nommés.
+* Fin :
+  * `ddsom_sound::Rom` n'a plus de `region: Vec<u8>` ;
+  * `music_driver_identical`, `sound_compare`, `no_rom` et 308/308 dans les deux modes, avec le son comparé ;
+  * l'écart connu du Z80 en retard ne doit pas grandir (10 scénarios en ordre, 2 en valeur).
+* Risque : un pointeur de piste qui saute d'une piste à l'autre, par une suite d'octets contiguë entre deux
+  définitions, ne se modélise pas en `(piste, position)`. Il faut d'abord mesurer avec `sound_reads`, puis garder une
+  « piste » couvrant la plage contiguë si le cas existe.
+
+**L4. Rendu et mixage depuis les assets, optimisation** (moyen)
+* Périmètre : `cps2-gfx/`, `qsound/` (boucle des voix, hors tables), `ddsom-assets/src/rebuild.rs` (parties
+  `gfx_region` et `qsound_samples`), `cps2/src/lib.rs` (`render`, `Contents`), `ddsom/src/main.rs`,
+  `ddsom-game/examples/{bench,render_check}.rs`. Coordination avec L3 sur `qsound/src/lib.rs` : L3 prend les tables,
+  L4 la boucle des voix. Les deux lots font des commits séparés sur des fonctions différentes.
+* Travail :
+  * `TileAtlas` décodé depuis `gfx/cells_NN.png`, sans passer par les plans 4 bits ;
+  * banque d'échantillons construite depuis les WAV ;
+  * rendu des couches par lignes de tuiles depuis l'atlas ;
+  * QSound : boucle des 16 voix.
+* Fin :
+  * `render_check` donne les mêmes hachages (pixels et audio) sur attract, bot30k, boss10_scene65 et cov_4p_a,
+    4 000 images ;
+  * `bench` bot30k progresse : au moins 2 500 images/s avec le rendu (base 1 862), au moins 14 000 sans (base 11 408) ;
+  * 308/308 dans les deux modes.
+* Risque : le rendu n'est pas vérifié par `validate`, qui ne calcule plus l'image. `render_check` et le test
+  `mame_snapshots` sont le seul filet : les lancer à chaque étape.
+
+**L5. Effets** (moyen)
+* Périmètre : `families/effects.rs`, `effects_b.rs` à `effects_g.rs`, `effects_creators.rs`, plus
+  `extract/src/effects.rs` et `ddsom-data/src/effects.rs`.
+* (a) Découpage : `effects_c.rs` (5 162 lignes) en `families/effects/c/` par groupe de types EFFCT (8 à 10 fichiers de
+  moins de 800 lignes) ; `effects.rs` (2 424) et `effects_g.rs` (1 273) idem.
+* (b) Données : 292 accesseurs ROM et 358 constantes d'adresses ROM. Par exemple, le rideau de la porte du SET E
+  (`effects_e.rs`, 0xadad0-0xae118), et les tables de pièces et de couleurs.
+* (c) Champs : 525 décalages littéraux et 135 `A5 + littéral`.
+* Fin : chiffres (b) et (c) à 0, aucun fichier au-delà de 1 000 lignes, 308/308 dans les deux modes.
+
+### Vague 2 (trois agents)
+
+**L6. SET** (moyen)
+* Périmètre : `families/set.rs`, `set_b.rs`, `set_c*.rs`, `set_residue.rs`, `scenery.rs`.
+* (a) `set_b.rs` (3 628 lignes) et `set.rs` (2 500) découpés par type de SET.
+* (b) 247 accesseurs ROM. Tables par variante des scènes de SET C (`set_c_scene.rs`, 0xbcfc6-0xc821c), finales
+  (0xce51a), positions (0xd4198), table du rideau (0xbcea4).
+* (c) 1 108 décalages littéraux, 182 `A5 + littéral`.
+* Fin : comme L5.
+
+**L7. ESHL, SOBJ, objets, caisses** (moyen à grand, peut se couper en L7a ESHL et L7b SOBJ/objets/caisses)
+* Périmètre : `families/eshl*.rs`, `sobj.rs`, `items.rs`, `items_b.rs`, `boxes.rs`, `shell.rs`.
+* (a) `eshl_c.rs` (3 300 lignes), `eshl_b.rs` (3 054), `items.rs` (2 397) et `sobj.rs` (2 269) découpés par type.
+* (b) 274 accesseurs ROM, dont le tir ESHL 5 (listes d'images, boîtes, retournements déjà dans `sprites/tables.json`),
+  les types d'objets de SET de `sobj.rs` et la table `0xda398` des objets par personnage.
+* (c) 2 378 décalages littéraux, dont 599 dans `sobj.rs` pour 6 nommés : c'est le pire ratio du jeu.
+* Factoriser : `rom32` de `sobj.rs` et `eshl_b.rs`, `random` de `eshl_c.rs` et `eshl_d.rs`.
+
+**L8. Ennemis** (grand, coupé en deux lots successifs ou parallèles)
+* L8a : `enemy_common.rs`, `enemy_lib.rs`, `enemy.rs` et `reactions.rs` (2 223 lignes, à découper), d'abord seul, car
+  ce sont les façades des autres.
+* L8b : `enemy_*/` et `enemy_*.rs`, en 94 fichiers, plus réguliers.
+* (b) 170 accesseurs ROM : tables d'attitude par niveau (squelette 0x5942a, bête 0x7473e, trog 0x5af66, guerrier
+  0x77634...) et cercle de réactions 0x1c94b6. Elles vont dans `data/enemies.json`.
+* (c) 1 302 décalages littéraux. Un `record!` par famille d'ennemi, avec les champs de [creatures.md](creatures.md).
+* Factoriser : `random` et `rom32` de `enemy_common.rs` sur la version de `world`.
+
+### Vague 3 (trois agents)
+
+**L9. Boss** (grand, coupé : L9a boss 0 à 9, L9b boss 10 à 22, avec `boss_common.rs` dans L9a)
+* (b) 207 accesseurs ROM : tables de décision des boss 5, 7, 17 et 21, vitesses du boss 15 (0x1c67b8), oscillation du
+  dragon (0x8faa2), chaîne du boss 11 (`0x1069f8`..., lignes de 32 octets et trajectoires : la seule donnée de jeu
+  relevée mais non extraite, [assets.md](assets.md)).
+* (c) 3 182 décalages littéraux, le plus gros stock. Un `record!` par boss.
+* Fin : comme L5 ; `fuzz_enemy families` et `fuzz_boss` sans nouvel écart contre main, mêmes graines.
+
+**L10. Joueurs** (grand)
+* Périmètre : `player/`, `families/player/`, `combat/`, `combat.rs`.
+* (a) `player/hurt.rs` (1 761 lignes), `cinematics.rs` (1 733), `moves.rs` (1 376) et `characters/*.rs` (cinq
+  fichiers de plus de 1 100 lignes).
+* (b) 378 accesseurs ROM, le plus gros stock. Réactions aux coups (0xf1cc4-0x1010b2), combos (0xf193a), trajectoires
+  de l'anneau (`peff_ring.rs`), déplacements des coquilles (`pshell.rs`), tables de décalages des états de blessure et
+  des cinématiques. `data/players.json` et `combat.json` existent déjà : les brancher.
+* (c) 2 545 décalages littéraux, dont 2 350 dans `families/player/`. Le `record!` `Player` (0x200 octets) est commun :
+  il est déclaré dans `world` par L1, et L10 en est le seul rédacteur pendant la vague.
+* Fin : comme L5, plus `fuzz_player` et `fuzz_player_shots` sans nouvel écart.
+
+**L11. Écrans** (moyen)
+* Périmètre : `modes/`, `hud/`, `service/`, `scene/`, `credits*.rs`, `text.rs`, `popups.rs`.
+* (b) 62 accesseurs ROM et 437 constantes d'adresses. Scripts de démonstration (0x20070), écrans fixes, colonnes du
+  HUD (`hud/layer.rs`, 0x3f54c2-0x3f6300), chaînes terminées par `@`, tables des scènes, classement (0xfc6d8).
+* (c) Ici, peu de champs d'objets (15) mais 1 637 `rd*`/`wr*` bruts : variables de la RAM de travail et GFX RAM. On
+  les fait passer par `world::ram` et par l'interface `hw::video` (tilemaps, couche de texte), à créer dans ce lot
+  pour la couche 8x8.
+* Factoriser : `set8`/`set16` locaux de `scene/transition/mod.rs`, `credits_task.rs` et `service/mod.rs`.
+
+### Vague 4
+
+**L12. Moteur et communs des familles** (moyen, seul, car il touche les API communes)
+* Périmètre : `objects/`, `ai.rs`, `ai_aids.rs` (1 431 lignes), `aids.rs`, `effects_aids.rs`, `terrain.rs`,
+  `scroll.rs`, `camera_modes.rs` (1 605), `palette.rs`, `video.rs`, `sprites.rs`, `placement.rs`, `events.rs`,
+  `families/{cx,mod,small,creators}.rs`.
+* (b) 58 et 11 accesseurs ROM. Pointeurs d'aides à la visée (`ai_aids.rs`, 0x78ae-0x16c78c), tables de scrolls
+  (0x33bdc, 0x321fc), index d'entrées (`anim.rs`).
+* (c) 1 232 `rd*`/`wr*` bruts, dont une bonne part de vidéo (sprites, scroll, palette) vers `hw::video`.
+* Factoriser :
+  * `camera_modes.rs` passe sur `Cx` et `Machine` au lieu de sa copie d'accesseurs ;
+  * les 4 `alloc` se réduisent à `objects/pools.rs` plus `Current::alloc` ;
+  * `random` se réduit à `rng.rs`.
+
+### Série 5 (un agent, transverse)
+
+**L13. Aiguillage sans adresses** (moyen)
+* Périmètre : `dispatch.rs`, `families/mod.rs` et les macros `handler!`, `lib.rs` (`Native`, `lookup`, `NATIVES`),
+  `kernel.rs`, `tasks/mod.rs`, `no68k.rs`.
+* Travail :
+  * les 10 tables d'aiguillage (`Class::table`, lues en ROM par `prog32`) deviennent des tableaux
+    `[Handler; N]` construits à la compilation, indexés par `Obj::KIND`. Les adresses ne restent que comme
+    métadonnées, pour les outils ;
+  * les entrées de tâches (`tasks::entry(entry)`) deviennent un `enum Task`. Leur adresse, comparée par `gaps` à la
+    table FF0064 de la référence, est rendue par `Task::address()` ;
+  * `lookup`, le crible et la table de hachage passent dans `tools`. Le jeu n'a plus de registre par adresse.
+* Fin :
+  * `grep -n 'lookup\|prog32' ddsom-game/src --exclude-dir=tools` est vide ;
+  * `cargo build -p ddsom-game --no-default-features` ne compile plus `all_natives` ;
+  * `DDSOM_CHECK=1` compare toujours (via `tools`) ;
+  * 308/308 dans les deux modes.
+* Risque : un type hors table, comme l'original le permet (`(kind << 2) as u16`), devient un index hors bornes. Il
+  faut le garder comme cas nommé : `unreachable!` consigné dans [code-mort.md](code-mort.md), ou lecture de la suite
+  de la table.
+
+**L14. Le jeu sans image ROM** (moyen)
+* Préalable : L1, L5 à L13. `rom_reads` doit compter zéro lecture du bus dans 0-0x3fffff sur les 308 scénarios.
+* Périmètre : `cps2/src/{lib,bus}.rs` (machine du jeu sans `rom`/`rom_dec`, les vecteurs de reset ne sont plus lus),
+  `ddsom/src/main.rs`, `ddsom-assets/src/rebuild.rs` (déplacé vers `extract`/tests), `ddsom-game/src/startup.rs`.
+* Travail :
+  * `ddsom --assets` appelle `GameData::load`, la banque d'échantillons et l'atlas ;
+  * plus de `rebuild::contents` dans le jeu ;
+  * `reste.json` n'est plus lu que par `Residue`.
+* Fin :
+  * `grep -rn rebuild ddsom/src ddsom-game/src` est vide ;
+  * `Cps2Bus` de la machine du jeu n'a plus de ROM ;
+  * `no_rom` (ex-`sans_rom`), et 308/308 dans les deux modes ;
+  * `Residue` est consulté 0 fois sur les 308 scénarios et sur `fuzz_couv` (C02, C04, C06, C10).
+* Décision laissée à l'utilisateur : retirer `reste.json` des assets une fois `Residue` à zéro, ou le garder comme
+  assurance contre les chemins jamais joués.
+
+**L15. RAM du jeu hors du bus, modules en couches** (moyen à grand, en deux commits validés)
+* L15a, `World` :
+  * la RAM de travail (`[u16; 0x8000]`) et la table des tâches appartiennent au jeu ;
+  * `world::ram` y accède sans décodage d'adresse ;
+  * `hw` regroupe vidéo, son, entrées et EEPROM ;
+  * les fonctions prennent `&mut World` au lieu de `&mut Cps2Bus` (renommage mécanique, 1 129 lignes hors `tools`) ;
+  * `validate` lit `world.ram`.
+* L15b, couches : supprimer les arêtes à l'envers de la section 1 et déplacer les modules dans
+  `core/world/services/actors/screens`. `no68k` devient `frame`.
+* Fin :
+  * `measure_end.py` ne trouve plus de composante fortement connexe de plus d'un module entre couches (les cycles à
+    l'intérieur d'une couche sont tolérés : `kernel ↔ tasks` dans `core`) ;
+  * `bench` sans rendu progresse d'au moins 5 % (bus) ;
+  * 308/308 dans les deux modes.
+
+**L16. État Rust plus projection** (facultatif, petit par bloc). Voir la section 2. Un bloc par commit, avec la
+preuve qu'aucune lecture d'origine ne sort du module (trace des lectures par adresse sur les 308 scénarios).
+
+**L17. Outils hors du jeu** (facultatif, moyen)
+* `ddsom_game::tools` (7 018 lignes, 70 fichiers) et les exemples passent dans `ddsom-tools`. Le jeu exporte les
+  points d'accroche nécessaires (`check_handler`, `natives` des outils) derrière une fonctionnalité `hooks`.
+* Gain : `ddsom-game` n'a plus de `#[cfg(feature = "tools")]`.
+* Risque : beaucoup de `pub(crate)` à ouvrir. Si la liste dépasse une centaine d'éléments, on garde le module en
+  l'état.
+
+**L18. Documentation finale** (petit à moyen)
+* `README.md` réécrit pour le joueur :
+  * installer Rust ;
+  * extraire ses assets (`extract <roms> <assets>`, avec les fichiers ROM attendus) ;
+  * jouer (`ddsom --assets`, `play.sh`, `play.bat`) ;
+  * touches (`touches.cfg`), manette, sauvegarde ;
+  * ce qui n'est jamais versionné.
+* La partie « rétro-ingénierie » du README actuel passe dans `docs/`.
+* `docs/moteur.md` (nouveau, le guide du moteur) :
+  * les couches de la section 2 ;
+  * la boucle d'image, les tâches et l'aiguillage des objets ;
+  * comment lire et écrire un champ (`record!`) ou une donnée (`data()`) ;
+  * comment ajouter une table d'asset ;
+  * comment valider : `validate_all.sh`, `DDSOM_ASSETS`, `fuzz_couv`, `DDSOM_CHECK`.
+* `docs/README.md` (index) : documents de référence (assets, son, familles, créatures, niveaux, code mort) et
+  historique (refactorisation, guides des lots, sans-rom, atlas, couverture). On n'efface rien.
+* Fin : un lecteur qui n'a que le dépôt et ses ROMs joue en suivant le README, sans autre document ; les liens de
+  `docs/` sont vérifiés par un script (`tools/check_links.py`).
+
+### Bonus
+
+**L19. Bug de saisie du nom**
+* Petit, à tout moment. Périmètre : `scenarios/`, `hud/` ou `modes/` (le classement), `docs/modes.md`.
+* Selon [reprise.md](reprise.md), ce bug existe dans d'autres révisions du jeu, pas dans la nôtre (Euro 960619).
+* Travail :
+  1. écrire un scénario qui entre un nom au classement en reproduisant la manipulation connue des autres révisions ;
+  2. constater qu'il est VALID, donc que le port fait comme l'original ;
+  3. documenter le bug, sa cause dans les autres révisions si on la trouve dans `docs/modes.md`, et le scénario.
+
+  Corriger le bug ne se ferait que derrière une option (`DDSOM_*`), hors validation, sur décision de l'utilisateur.
+  Le comportement par défaut reste celui de l'original.
+* Fin : le scénario est dans la validation (309/309), et la section de `docs/modes.md` est écrite.
+
+### Présentation (décidé avec l'utilisateur le 2026-11-02)
+
+La logique ne migre pas dans un moteur 2D (Godot, Unity, Bevy) : elle perdrait le comportement identique et le filet de
+validation. Le moteur 2D n'est qu'une façade interchangeable.
+
+**L20. Cœur de jeu en bibliothèque**
+* Après L15. Interface unique : `Game::step(inputs)`, puis `Game::frame() -> DrawList` (sprites avec leur numéro
+  d'image de `frames.json`, couches de décor, palettes, effets) et `Game::sound() -> SoundCommands`. Aucune fenêtre,
+  aucun matériel dans le cœur ; le modèle CPS2 (`cps2-gfx`) devient une façade de rendu parmi d'autres.
+* Fin : `ddsom` ne parle au jeu que par cette interface ; validation 308/308 inchangée.
+
+**L21. Façade de présentation**
+* Choix à confirmer avec l'utilisateur : Bevy (Rust natif, sprites, shaders, audio, wasm) ou wgpu/macroquad (minimal).
+* Rendu à échelle variable, filtres (CRT…), mixage, manettes, plein écran, build web.
+* Fin : le jeu se joue dans la façade, image identique au rendu CPS2 à l'échelle 1.
+
+**L22. Pack HD (upgrade graphique)**
+* Outil d'export : chaque image de sprite assemblée et colorée (palette principale) en PNG RGBA, chaque niveau en une
+  grande image continue.
+* Retour aux index : l'image retouchée (upscaler pixel art, Gemini…) est requantifiée sur les 16 index de sa palette
+  d'origine → PNG HD indexé ; variantes de palette, flashs et fondus continuent de marcher.
+* Chargement d'un dossier `hd/` (`frames/NNNNN.png`, `levels/NN.png`) par la façade, repli sur l'original si absent.
+  Jamais versionné (dérivé des graphismes de Capcom).
+* Fin : un pack partiel s'affiche, la logique et la validation ne changent pas.
+
+## 4. Fin du projet : critères mesurables
+
+| Critère | Aujourd'hui | Cible |
+|---|---:|---:|
+| Validation (deux modes, `DDSOM_LONG=1`) | 308/308 | 308/308 (plus les nouveaux scénarios) |
+| Accesseurs ROM `data*`/`rom*`/`prog*` dans le jeu | 1 699 | 0 |
+| Zones brutes `natives.json` lues par le jeu | 2 963 | 0 (toutes nommées) |
+| Lectures de `Residue` (308 scénarios) | — | 0 |
+| Décalages de champs littéraux | ~11 250 | 0 hors des `record!` |
+| `A5 + littéral` | ~785 | 0 hors de `world::ram` |
+| Littéraux GFX RAM et registres CPS dans le jeu | 407 + 72 | 0 hors de `hw::video` |
+| Sons par adresse | 317 | 0 |
+| Registre de natives dans le jeu | 481 | 0 (outils seulement) |
+| Fichiers de plus de 1 500 lignes (hors `tools/`) | 14 | 0 |
+| Plus grande composante fortement connexe des modules | 37 | 1 module par couche, plus `core` |
+| `rebuild` dans le jeu | oui | non |
+| `bench` bot30k, avec et sans rendu | 1 862 et 11 408 images/s | au moins 2 500 et 14 000 images/s |
