@@ -22,10 +22,14 @@
 use crate::families::cx::Bench;
 use crate::objects::Current;
 use crate::families::cx::Cx;
-use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, wr16, wr32, wr8};
 use crate::objects::pools::{BOSS, EFFCT, ENEMY, ESHL, ITEM, PEFF, SET, SOBJ};
 use crate::objects::Obj;
 use crate::objects::pools;
+use crate::families::set::tables as set_tables;
+use crate::families::set::vars;
+use crate::families::set::fields::SetObj;
+use crate::families::set_c::fields::SceneObj;
 
 /// Controller fields.
 mod f {
@@ -76,7 +80,7 @@ mod a5 {
 /// Byte of the background screen at A5 - 0x5b8e.
 const PARALLAX_FLAG: u32 = 0xff2472;
 /// Players: four records of 0x200 bytes.
-const PLAYERS: u32 = A5 + 0x5de;
+const PLAYERS: u32 = crate::ram::PLAYERS.base;
 const PLAYER_STRIDE: u32 = 0x200;
 
 // ROM tables.
@@ -99,10 +103,10 @@ const PREPARE_EFFECTS: crate::sound::Sound = crate::sound::CMD_322_422;
 const FADE_OUT: crate::sound::Sound = crate::sound::SCENE_MUSIC;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x40) != 0 || x.a5_u8(a5::DIFFICULTY) == 0 {
+    if x.u8(Obj::HIDDEN) != 0 || x.a5_u8(a5::DIFFICULTY) == 0 {
         return;
     }
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => init(x),
         2 => script(x),
         4 => finish(x),
@@ -114,16 +118,16 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 /// Allocates and activates an object of type `kind` (and variant `variant`).
 fn spawn<R: Bench>(x: &mut Cx<'_, R>, pool: &pools::Pool, kind: u8, variant: Option<u8>) -> Option<Obj> {
     let o = x.alloc(pool)?;
-    o.set_u8(x.b, 0, 1);
-    o.set_u8(x.b, 2, kind);
+    o.set_u8(x.b, Obj::ACTIVE, 1);
+    o.set_u8(x.b, Obj::KIND, kind);
     if let Some(v) = variant {
-        o.set_u8(x.b, 3, v);
+        o.set_u8(x.b, Obj::VARIANT, v);
     }
     Some(o)
 }
 
 fn next_state<R: Bench>(x: &mut Cx<'_, R>, by: u8) {
-    x.add8(0x4, by);
+    x.add8(Obj::STATE, by);
 }
 
 // --- state 0: initialization ----------------------------------------------------------------
@@ -135,13 +139,13 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::LIVE, 0);
     x.set8(f::DONE, 0);
     x.set8(f::HOLD, 0);
-    let variant = x.u8(0x3) as u32;
-    let script = x.data32(SCRIPT_TABLE + 4 * variant);
-    let time = x.data16(script);
+    let variant = x.u8(Obj::VARIANT) as u32;
+    let script = set_tables::long(x.b, SCRIPT_TABLE + 4 * variant);
+    let time = set_tables::word(x.b, script);
     x.set16(f::TIMER, time);
     x.set32(f::CURSOR, script + 2);
     crate::families::creators::play_scene_music(x.b, x.o);
-    let action = x.rom8(START_ACTION + variant);
+    let action = set_tables::pc_byte(x.b, START_ACTION + variant);
     start(x, action);
 }
 
@@ -149,7 +153,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
 fn start<R: Bench>(x: &mut Cx<'_, R>, action: u8) {
     match action {
         // 10 and 11: with no game in progress (A5+0x66 zero), the controller frees itself
-        10 | 11 if x.a5_u8(0x66) == 0 => x.free(&pools::SET),
+        10 | 11 if x.a5_u8(vars::NO_WALK_IN) == 0 => x.free(&pools::SET),
         10 | 0 => {
             x.set_a5_u16(a5::TRANSITION, 4);
             next_state(x, 2);
@@ -164,14 +168,14 @@ fn start<R: Bench>(x: &mut Cx<'_, R>, action: u8) {
         // jumps directly to the release
         7 => next_state(x, 6),
         8 => {
-            x.set_a5_u16(0x46, 0);
+            x.set_a5_u16(vars::CAMERA_FOCUS, 0);
             next_state(x, 2)
         }
         3 => {
             next_state(x, 2);
             x.set_a5_u16(a5::TRANSITION, 0x30);
-            let v = x.a5_u16(0x556);
-            x.set_a5_u16(0x574, v);
+            let v = x.a5_u16(vars::CAMERA_ALT_X);
+            x.set_a5_u16(vars::CAMERA_SPEED, v);
         }
         4 => opening_wipe(x),
         9 => {
@@ -251,12 +255,12 @@ fn end_of_script<R: Bench>(x: &mut Cx<'_, R>, done: bool) {
 fn next_entry<R: Bench>(x: &mut Cx<'_, R>) {
     loop {
         let entry = x.u32(f::CURSOR);
-        let word = x.data16(entry);
+        let word = set_tables::word(x.b, entry);
         if word == 0x8000 {
             return end_of_script(x, false);
         }
-        let min_difficulty = x.data8(entry + 0xa) as i8;
-        let max_rank = x.data16(entry + 2) as i16;
+        let min_difficulty = set_tables::byte(x.b, entry + 0xa) as i8;
+        let max_rank = set_tables::word(x.b, entry + 2) as i16;
         if min_difficulty > x.a5_u8(a5::DIFFICULTY) as i8 || max_rank > x.a5_u16(a5::RANK) as i16 {
             x.set32(f::CURSOR, entry + 0x14);
             continue;
@@ -277,32 +281,32 @@ fn run_entry<R: Bench>(x: &mut Cx<'_, R>, entry: u32, word: u16) {
         }
         x.set16(f::LIVE_LIMIT, low);
     }
-    let class_offset = x.data8(entry + 0xb);
-    let allocator = x.data32(ALLOC_TABLE + class_offset as u32);
+    let class_offset = set_tables::byte(x.b, entry + 0xb);
+    let allocator = set_tables::long(x.b, ALLOC_TABLE + class_offset as u32);
     let Some(o) = x.alloc(pools::pool_of_alloc_routine(allocator)) else {
         x.set16(f::LIVE_LIMIT, 0xffff);
         x.set16(f::WAIT, 0);
         return;
     };
-    o.set_u8(x.b, 0, 1);
+    o.set_u8(x.b, Obj::ACTIVE, 1);
     for (to, from) in [(2, 0xc), (3, 0xd), (0x2f, 0xe), (0x2c, 0xf)] {
-        let v = x.data8(entry + from);
+        let v = set_tables::byte(x.b, entry + from);
         o.set_u8(x.b, to, v);
     }
     for (to, from) in [(0x8, 4), (0xc, 6), (0x10, 8), (0x42, 0x10)] {
-        let v = x.data16(entry + from);
+        let v = set_tables::word(x.b, entry + from);
         o.set_u16(x.b, to, v);
     }
     if class_offset != ITEM_CLASS {
         x.add16(f::LIVE, 1);
-        o.set_u16(x.b, 0x46, x.o.0 as u16);
+        o.set_u16(x.b, SetObj::OWNER, x.o.0 as u16);
     }
-    if x.data8(entry + 0x12) == 0 {
+    if set_tables::byte(x.b, entry + 0x12) == 0 {
         let cam = if x.a5_u8(a5::USE_ALT_CAMERA) != 0 { a5::ALT_CAMERA } else { a5::CAMERA };
         let (cam_x, cam_y) = (x.a5_u16(cam + 8), x.a5_u16(cam + 0xc));
-        let (px, py) = (o.u16(x.b, 0x8), o.u16(x.b, 0x10));
-        o.set_u16(x.b, 0x8, px.wrapping_add(cam_x));
-        o.set_u16(x.b, 0x10, py.wrapping_add(cam_y));
+        let (px, py) = (o.u16(x.b, Obj::X), o.u16(x.b, Obj::Y));
+        o.set_u16(x.b, Obj::X, px.wrapping_add(cam_x));
+        o.set_u16(x.b, Obj::Y, py.wrapping_add(cam_y));
     }
     x.set32(f::CURSOR, entry + 0x14);
 }
@@ -322,8 +326,8 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u8(a5::SCENES, if n & 0x80 != 0 { 0 } else { n });
     x.set_a5_u8(a5::TRANSITION_FLAG, 0);
     crate::families::creators::run_scene_exit(x.b, x.o);
-    let variant = x.u8(0x3) as u32;
-    let action = x.rom8(END_ACTION + variant);
+    let variant = x.u8(Obj::VARIANT) as u32;
+    let action = set_tables::pc_byte(x.b, END_ACTION + variant);
     end_action(x, action);
 }
 
@@ -335,8 +339,8 @@ fn end_action<R: Bench>(x: &mut Cx<'_, R>, action: u8) {
             end_action(x, 0)
         }
         0 => {
-            let v = x.a5_u16(0x506);
-            x.set_a5_u16(0x52c, v);
+            let v = x.a5_u16(vars::CAMERA_X);
+            x.set_a5_u16(vars::CAMERA_MAX_X, v);
             end_action(x, 11)
         }
         11 => {
@@ -357,8 +361,8 @@ fn end_action<R: Bench>(x: &mut Cx<'_, R>, action: u8) {
         4 => players_leave(x),
         5 => {
             x.set_a5_u16(a5::TRANSITION, 0);
-            let v = x.a5_u16(0x556);
-            x.set_a5_u16(0x57c, v);
+            let v = x.a5_u16(vars::CAMERA_ALT_X);
+            x.set_a5_u16(vars::SCROLL_MODE, v);
             next_state(x, 2)
         }
         6 => curtain(x),
@@ -381,14 +385,14 @@ fn end_action<R: Bench>(x: &mut Cx<'_, R>, action: u8) {
 /// Actions 2 and 3: intertitle. Two SET scenery objects (variants `cards`, the second with `+0x2f = 2`) and a SOBJ
 /// object (variant 0x56 then 0x57), then transition request of 0x3c frames.
 fn title_cards<R: Bench>(x: &mut Cx<'_, R>, param: u16, cards: [(u8, u8); 2]) {
-    x.set_a5_u16(0x56e, param);
-    x.set_a5_u8(0x54f, 0);
+    x.set_a5_u16(vars::TITLE_CARD, param);
+    x.set_a5_u8(vars::PLANE2_SHOWN, 0);
     for (variant, extra) in cards {
         let Some(o) = spawn(x, &pools::SET, 0, Some(variant)) else { return };
-        o.set_u8(x.b, 0x2f, extra);
+        o.set_u8(x.b, SetObj::PARAM, extra);
     }
     let Some(o) = spawn(x, &pools::SOBJ, 0, Some(0x56)) else { return };
-    o.set_u8(x.b, 3, 0x57);
+    o.set_u8(x.b, Obj::VARIANT, 0x57);
     end_action(x, 1)
 }
 
@@ -423,20 +427,20 @@ fn players_leave<R: Bench>(x: &mut Cx<'_, R>) {
 /// 2, copies two blocks of 22 colors (0xbcfc6) to the addresses of table 0xbcea4 on each frame; when the table is
 /// exhausted, pushes all the objects toward their disappearance (see `clear_all`).
 fn curtain<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x5) == 0 {
-        x.add8(0x5, 2);
-        x.set16(0x14, 0x80);
+    if x.u8(SetObj::SUBSTATE) == 0 {
+        x.add8(SetObj::SUBSTATE, 2);
+        x.set16(SceneObj::CURTAIN_DELAY, 0x80);
         x.set_a5_u8(a5::SCENE_LATCH, 0x1f);
         x.set_a5_u8(a5::FROZEN, 1);
         x.set_a5_u8(a5::SCENE_SYNC, 0);
         wr8(x.b, PARALLAX_FLAG, 1);
         return;
     }
-    x.add16(0x14, 0xffff);
-    if x.u16(0x14) & 0x8000 == 0 {
+    x.add16(SceneObj::CURTAIN_DELAY, 0xffff);
+    if x.u16(SceneObj::CURTAIN_DELAY) & 0x8000 == 0 {
         return;
     }
-    x.set16(0x14, 0);
+    x.set16(SceneObj::CURTAIN_DELAY, 0);
     if !(0..4).any(|i| rd8(x.b, PLAYERS + i * PLAYER_STRIDE + 4) == 2) {
         return;
     }
@@ -444,16 +448,16 @@ fn curtain<R: Bench>(x: &mut Cx<'_, R>) {
     crate::events::clear_current_popup(x.b);
     for _ in 0..2 {
         let at = x.u16(f::WAIT) as i16 as i32 as u32;
-        let offset = x.rom16(CURTAIN_TABLE.wrapping_add(at)) as i16;
+        let offset = set_tables::pc_word(x.b, CURTAIN_TABLE.wrapping_add(at)) as i16;
         if offset < 0 {
             return clear_all(x);
         }
-        let hi = x.rom16(CURTAIN_TABLE.wrapping_add(at) + 2) as u32;
-        let dest = hi << 16 | x.rom16(CURTAIN_TABLE.wrapping_add(at) + 4) as u32;
+        let hi = set_tables::pc_word(x.b, CURTAIN_TABLE.wrapping_add(at) + 2) as u32;
+        let dest = hi << 16 | set_tables::pc_word(x.b, CURTAIN_TABLE.wrapping_add(at) + 4) as u32;
         x.add16(f::WAIT, 6);
         let colors = CURTAIN_PALETTE.wrapping_add(offset as i32 as u32);
         for i in 0..22 {
-            let c = x.data16(colors + 2 * i);
+            let c = set_tables::word(x.b, colors + 2 * i);
             wr16(x.b, dest + 4 * i, c);
             wr16(x.b, dest + 4 * i + 2, 0x1f);
         }
@@ -470,15 +474,15 @@ fn clear_all<R: Bench>(x: &mut Cx<'_, R>) {
     for pool in [&SET, &ENEMY, &SOBJ, &BOSS, &EFFCT, &ITEM, &ESHL, &PEFF] {
         for i in 0..pool.slots {
             let o = pool.slot(i);
-            if o.u8(x.b, 0) == 0 {
+            if o.u8(x.b, Obj::ACTIVE) == 0 {
                 continue;
             }
-            let hold = o.u8(x.b, 0x40).wrapping_sub(1);
-            o.set_u8(x.b, 0x40, hold);
+            let hold = o.u8(x.b, Obj::HIDDEN).wrapping_sub(1);
+            o.set_u8(x.b, Obj::HIDDEN, hold);
             if hold & 0x80 != 0 {
-                o.set_u16(x.b, 0x4, 0x600);
-                o.set_u8(x.b, 0x40, 0);
-                o.set_u8(x.b, 0x41, 0);
+                o.set_u16(x.b, Obj::STATE, 0x600);
+                o.set_u8(x.b, Obj::HIDDEN, 0);
+                o.set_u8(x.b, SetObj::SUSPEND_PHASE, 0);
             }
         }
     }
@@ -497,7 +501,7 @@ fn effects_wave<R: Bench>(x: &mut Cx<'_, R>) {
     for (variant, extra) in [(1, 0x20), (2, 0), (3, 0x20)] {
         let Some(o) = spawn(x, &pools::EFFCT, 0x21, Some(variant)) else { return };
         if extra != 0 {
-            o.set_u8(x.b, 0x2c, extra);
+            o.set_u8(x.b, SetObj::ATTR, extra);
         }
     }
 }

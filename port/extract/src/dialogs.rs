@@ -355,7 +355,7 @@ fn level_text_end(rom: &Program, at: u32, tiles: bool) -> u32 {
     p
 }
 
-/// Level transition (SET C 7, `families/set_c_finale_c.rs`): per class, three message lists (one
+/// Level transition (SET C 7, `families/set_c/finale/status.rs`): per class, three message lists (one
 /// per language: English in tiles, French, German), then a 20-byte record per level
 /// reached; the message lists follow.
 fn levelup(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>) -> Vec<Region> {
@@ -449,8 +449,8 @@ pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>, Vec<TextBlock>) {
             w.end = w.items.values().map(|&(e, _)| e).max().unwrap();
         }
         let end = w.end;
-        let (gaps, raw) = w.fill();
-        eprintln!("dialogs {}: {} elements, {gaps} gaps, of which {raw} raw", lang.code, w.items.len());
+        // the gaps between the elements (raw words among them); no message: the game loads these tables too
+        w.fill();
         // tables: contiguous definitions grouped
         let mut run: Option<(u32, u32)> = None;
         let flush = |run: &mut Option<(u32, u32)>, specs: &mut Vec<Spec>| {

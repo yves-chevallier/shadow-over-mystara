@@ -621,6 +621,11 @@ fn natives_lossless() {
     check_data("data/natives.json");
 }
 
+#[test]
+fn set_lossless() {
+    check_data("data/set.json");
+}
+
 /// QSound DSP tables: the words of `qsound_dsp.json` are those of `dl-1425.bin`.
 #[test]
 fn dsp_lossless() {

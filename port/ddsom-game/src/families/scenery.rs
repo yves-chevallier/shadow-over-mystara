@@ -4,9 +4,12 @@
 //! (`dispatch::Leftovers`).
 
 use crate::families::cx::{Bench, Cx};
-use crate::mem::{rd32, rd8, wr16, wr32, wr8, A5};
+use crate::mem::{rd8, wr32};
+use crate::families::set::vars;
 use crate::objects::pools;
 use crate::objects::Obj;
+use crate::families::set::tables as set_tables;
+use crate::player::Player;
 
 /// Sets the four leftovers D2-D5.
 fn set_leftovers<R: Bench>(x: &mut Cx<'_, R>, [d2, d3, d4, d5]: [u32; 4]) {
@@ -18,7 +21,7 @@ fn set_leftovers<R: Bench>(x: &mut Cx<'_, R>, [d2, d3, d4, d5]: [u32; 4]) {
 fn movem_blocks(b: &mut cps2::Cps2Bus, from: u32, to: u32, blocks: u32, step: u32) -> [u32; 8] {
     let mut last = [0; 8];
     for k in 0..blocks {
-        last = std::array::from_fn(|i| rd32(b, from + 0x20 * k + 4 * i as u32));
+        last = std::array::from_fn(|i| set_tables::long(b, from + 0x20 * k + 4 * i as u32));
         for (i, v) in last.iter().enumerate() {
             wr32(b, to + step * k + 4 * i as u32, *v);
         }
@@ -76,7 +79,7 @@ pub(crate) fn resume_scenery<R: Bench>(x: &mut Cx<'_, R>, cameras: Cameras) {
 /// of the passage (EFFCT 14).
 pub(crate) fn resume_scenery_lit<R: Bench>(x: &mut Cx<'_, R>, cameras: Cameras) {
     resume_scenery(x, cameras);
-    wr8(x.b, A5 + 0x48e, 0xf);
+    x.set_a5_u8(vars::FADE_PAGES, 0xf);
     crate::palette::full_brightness(x.b);
 }
 
@@ -90,24 +93,24 @@ pub(crate) fn place_players<R: Bench>(x: &mut Cx<'_, R>) {
 /// scripted entry if it was down or dead), is placed again (0x20de6) and sorted into the actors' list.
 pub(crate) fn restart_scene<R: Bench>(x: &mut Cx<'_, R>) {
     resume_scenery_lit(x, Cameras::Start);
-    wr16(x.b, A5 + 0x52, 0);
-    let players = || (0..4).map(|k| Obj(A5 + 0x5de + 0x200 * k));
-    let alive = |b: &mut cps2::Cps2Bus, p: Obj| p.u8(b, 0) != 0 && p.u16(b, 0x62) != 0;
+    x.set_a5_u16(vars::OWNER_GATE, 0);
+    let players = || crate::ram::PLAYERS.iter();
+    let alive = |b: &mut cps2::Cps2Bus, p: Obj| p.u8(b, Player::ACTIVE) != 0 && p.u16(b, Player::HP) != 0;
     for p in players() {
         if !alive(x.b, p) {
             continue;
         }
-        p.set_u8(x.b, 0, 1);
+        p.set_u8(x.b, Player::ACTIVE, 1);
         let state = rd8(x.b, p.0 + 4);
-        p.set_u32(x.b, 4, 0);
-        let flags = p.u8(x.b, 1) & !2;
-        p.set_u8(x.b, 1, flags);
+        p.set_u32(x.b, Player::MAIN, 0);
+        let flags = p.u8(x.b, Player::FLAGS) & !2;
+        p.set_u8(x.b, Player::FLAGS, flags);
         for off in [0x66, 0x15c, 0x8a, 0x10f] {
             p.set_u8(x.b, off, 0);
         }
         if state as i8 > 2 {
-            p.set_u8(x.b, 1, flags | 2);
-            p.set_u16(x.b, 4, 0x402);
+            p.set_u8(x.b, Player::FLAGS, flags | 2);
+            p.set_u16(x.b, Player::MAIN, 0x402);
         }
     }
     place_players(x);
@@ -124,11 +127,11 @@ pub(crate) fn restart_scene<R: Bench>(x: &mut Cx<'_, R>) {
 /// full pool refused).
 pub(crate) fn eshl_volley<R: Bench>(x: &mut Cx<'_, R>, row: u32) {
     let at = 0xa66e2u32.wrapping_add(row as i16 as i32 as u32);
-    let mut d5 = crate::mem::prog8(x.b, at) as u32;
+    let mut d5 = set_tables::pc_byte(x.b, at) as u32;
     while let Some(o) = pools::ESHL.alloc(x.b) {
-        o.set_u8(x.b, 0x0, 1);
-        o.set_u8(x.b, 0x2, 0x3e);
-        o.set_u8(x.b, 0x3, d5 as u8);
+        o.set_u8(x.b, Obj::ACTIVE, 1);
+        o.set_u8(x.b, Obj::KIND, 0x3e);
+        o.set_u8(x.b, Obj::VARIANT, d5 as u8);
         let n = (d5 as u16).wrapping_sub(1);
         d5 = d5 & 0xffff_0000 | n as u32;
         if n == 0xffff {
