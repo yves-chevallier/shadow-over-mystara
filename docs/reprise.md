@@ -77,7 +77,11 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
      **réextraire ses assets** (`extract <roms> <assets> music`).
    * Le pilote lit ses données par accesseurs nommés (`ddsom_sound::Rom`) ; elles restent rangées à leurs adresses
      d'origine (voir [sans-rom.md](sans-rom.md) « Ce qui manque »).
-5. **Suite :** optimisation (base : `examples/bench`, refactorisation.md « Performance »), documentation finale, et le bug de saisie du nom. Ce bug existe dans d'autres révisions du jeu, pas dans la nôtre (Euro 960619).
+5. ~~**Nettoyage.**~~ Fait (branche `wt-nettoyage`, refactorisation.md § 21) : plus aucun `allow` de code mort, les
+   restes de registres lus par les seuls outils sont reconstruits dans `tools`, `cargo build` et `cargo clippy` sans
+   avertissement (avec et sans `tools`), `fuzz_enemy families` sans écart. Reste à factoriser les exemples de fuzz
+   recopiés (`fuzz.rs`, `fuzz_enemy.rs`, `fuzz_eshl_c.rs`, `fuzz_set_a.rs` partagent l'essentiel de leur code).
+6. **Suite :** optimisation (base : `examples/bench`, refactorisation.md « Performance »), documentation finale, et le bug de saisie du nom. Ce bug existe dans d'autres révisions du jeu, pas dans la nôtre (Euro 960619).
 
 ## Méthode qui marche
 
