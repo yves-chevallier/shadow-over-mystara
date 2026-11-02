@@ -15,12 +15,21 @@
 //! * `--plan` : parcours de scènes. La première est écrite en FF8034 pendant la sélection du
 //!   personnage ; ensuite, après `durée` images de jeu dans la scène (ou 400 images après une
 //!   progression naturelle), le bot saute à la suivante (FF8034 ← scène, phase FF802C ← 8 : entrée de scène du jeu).
+//!   `scène:durée:f` force à la place la sortie de la scène (phase FF802C ← 0x10, comme `tools/gen_scene_end.py`) ;
+//!   `scène:durée:t` la force à l'état de fondu de la séquence 18, qui joue le script de transition de la scène (comme
+//!   les `trans_*`) ; le bot attend alors la scène suivante choisie par le jeu (votes de chemin), puis 400 images.
 //! * `--spawn famille:type:variante:image` : à l'image indiquée, crée à la main un objet `enemy` ou `boss` du type
 //!   et de la variante donnés, à 0x60 pixels à droite du joueur 1 (comme `creatures spawn`), pour les types que les
 //!   parcours ne font jamais apparaître ; les écritures RAM font partie du scénario produit.
 //! * `--door image:x:y:touche[:durée]` : à l'image donnée, tous les joueurs sont posés au sol en (x, y) et tiennent la
 //!   touche (bit de `+0x6c` : 0 droite, 1 gauche, 2 bas, 3 haut) `durée` images (60 par défaut), puis le bot reprend : pour
 //!   traverser les portes de passage (SET 27 et 29) et de sortie de zone (SET 7), voir `tools/gen_long.py`.
+//! * `--wander` : dans les boutiques (scènes 0x45 à 0x52) et pendant un vote de chemin (EFFCT 23), chaque joueur tient
+//!   une direction tirée au hasard pendant 20 à 90 images et tape parfois un bouton (curseurs de boutique : articles,
+//!   dons d'or, sortie ; curseurs de vote : choix variés, ex æquo) ; à chaque vote, un joueur sur quatre s'abstient (fin
+//!   du compte à rebours). Voir `tools/gen_long.py` (`long_votes_*`, `long_boutiques_*`).
+//! * `--frail N` : toutes les N images, les joueurs 3 et 4 en vie (état < 4) sont ramenés à 1 PV : ils tombent au
+//!   prochain coup (reprises pendant les combats de boss, interface F3 : effacement du cadre quand un boss est là).
 //! * `--patience N` : un objet ou une caisse poursuivi plus de N images est ignorée 2 000 images
 //!   (sinon le bot reste bloqué devant un objet hors d'atteinte et la scène n'avance plus).
 //! * `--cast N`, `--charges V` : magies et objets fréquents (voir `Magic`).
@@ -52,6 +61,11 @@ struct Bot {
     rods: usize,
     /// `--door` : (image, x, y, touche, durée)
     doors: Vec<(usize, u32, u32, u32, usize)>,
+    /// `--wander` : (début et fin du geste, touches, abstention au vote en cours) par joueur
+    wander: bool,
+    wander_keys: [(usize, usize, [bool; 8], bool); 4],
+    voting: bool,
+    frail: usize,
 }
 
 impl Bot {
@@ -84,13 +98,15 @@ fn main() {
     let base_path = &a[3];
     let frames: usize = a[4].parse().unwrap();
     let out_path = &a[5];
-    let (mut players, mut god, mut plan, mut seed, mut weaken) = (1usize, 0u32, Vec::<(u32, usize)>::new(), 1u64, 0usize);
+    let (mut players, mut god, mut plan, mut seed, mut weaken) = (1usize, 0u32, Vec::<(u32, usize, u8)>::new(), 1u64, 0usize);
     let mut offset = 0usize;
     let mut magic = Magic::default();
     let mut patience = 0usize;
     let mut spawn: Option<(bool, u32, u32, usize)> = None;
     let (mut spells, mut spell_period, mut rods) = (Vec::<u32>::new(), 0usize, 0usize);
     let mut doors = Vec::<(usize, u32, u32, u32, usize)>::new();
+    let mut wander = false;
+    let mut frail = 0usize;
     let mut i = 6;
     while i < a.len() {
         match a[i].as_str() {
@@ -111,6 +127,11 @@ fn main() {
                 doors.push((t[0], t[1] as u32, t[2] as u32, t[3] as u32, t.get(4).copied().unwrap_or(60)));
             }
             "--rods" => rods = a[i + 1].parse().unwrap(),
+            "--frail" => frail = a[i + 1].parse().unwrap(),
+            "--wander" => {
+                wander = true;
+                i -= 1;
+            }
             "--spawn" => {
                 let t: Vec<&str> = a[i + 1].split(':').collect();
                 spawn = Some((t[0] == "boss", t[1].parse().unwrap(), t[2].parse().unwrap(), t[3].parse().unwrap()));
@@ -119,8 +140,8 @@ fn main() {
                 plan = a[i + 1]
                     .split(',')
                     .map(|t| {
-                        let (s, d) = t.split_once(':').unwrap();
-                        (s.parse().unwrap(), d.parse().unwrap())
+                        let v: Vec<&str> = t.split(':').collect();
+                        (v[0].parse().unwrap(), v[1].parse().unwrap(), v.get(2).map_or(0, |m| m.as_bytes()[0]))
                     })
                     .collect()
             }
@@ -133,13 +154,14 @@ fn main() {
     ddsom_game::install_reference(&mut m);
     m.idle = Some(ddsom_game::idle);
     let base = ddsom_game::scenario::Scenario::load(Path::new(base_path)).unwrap();
-    let mut b = Bot { m, f: 0, held: Default::default(), out: Vec::new(), patience, chase: [(0, 0); 4], ignore: Default::default(), spells, spell_period, spell_next: 0, spell_at: [usize::MAX; 4], rod_at: [usize::MAX; 4], rods, doors };
+    let mut b = Bot { m, f: 0, held: Default::default(), out: Vec::new(), patience, chase: [(0, 0); 4], ignore: Default::default(), spells, spell_period, spell_next: 0, spell_at: [usize::MAX; 4], rod_at: [usize::MAX; 4], rods, doors, wander, wander_keys: [(0, 0, [false; 8], false); 4], voting: false, frail };
     let mut rng = seed.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
     let mut rnd = move |n: u32| {
         rng = rng.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
         ((rng >> 33) % n as u64) as u32
     };
     let (mut k, mut since, mut trans): (usize, usize, usize) = (0, 0, 0);
+    let mut forced = false;
     let mut last_scene = 0;
     let mut visited = std::collections::BTreeSet::new();
     for f in 0..frames {
@@ -210,16 +232,34 @@ fn main() {
                 }
             }
             // séquences de transition (phases 8 et 0x10) trop longues : on passe à la scène suivante
-            trans = if phase == 0x08 || phase == 0x10 { trans + 1 } else { 0 };
-            if !plan.is_empty() && k + 1 < plan.len() && (trans > 1500 || (phase != 0x08 && phase != 0x10)) {
+            // (un vote de chemin en cours, avec --wander, ne compte pas : il dure jusqu'à 20 s après ses dialogues)
+            trans = if (phase == 0x08 || phase == 0x10) && !(b.wander && vote_open(&b)) { trans + 1 } else { 0 };
+            // (sortie forcée : dialogues et vote peuvent durer bien plus)
+            let trans_max = if forced { 6000 } else { 1500 };
+            if !plan.is_empty() && (trans > trans_max || (phase != 0x08 && phase != 0x10)) {
                 // un boss vivant prolonge le séjour (jusqu'à 5 fois la durée prévue)
                 let boss = (0..3).any(|i| b.rd8(0xffba1e + 0xc0 * i) != 0);
                 let limit = if boss { 5 * plan[k].1 } else { plan[k].1 };
-                let timeout = trans > 1500 || if scene == plan[k].0 { since >= limit } else { since >= 400 };
-                if timeout {
+                let timeout = trans > trans_max || if scene == plan[k].0 && !forced { since >= limit } else { since >= 400 };
+                if plan[k].2 != 0 && !forced && scene == plan[k].0 && since >= limit {
+                    // sortie de scène forcée (gen_scene_end.py) : séquence de la scène, ou script de transition
+                    forced = true;
+                    eprintln!("image {f} : sortie forcée de la scène {}", plan[k].0);
+                    b.poke(0xff802c, 0x10, 1);
+                    b.poke(0xff802d, 0, 1);
+                    b.poke(0xff802e, 0, 2);
+                    if plan[k].2 == b't' {
+                        b.poke(0xff2a36, 0x0224_1400, 4);
+                        for r in 0..4 {
+                            b.poke(0xff2ae0 + 4 * r, 0, 4);
+                        }
+                    }
+                    phase = 0x10;
+                } else if timeout && k + 1 < plan.len() {
                     k += 1;
                     since = 0;
                     trans = 0;
+                    forced = false;
                     eprintln!("image {f} : saut vers la scène {}", plan[k].0);
                     b.poke(0xff8034, plan[k].0, 1);
                     b.poke(0xff802c, 0x08, 1);
@@ -245,6 +285,8 @@ fn main() {
                     let mut keys = [false; 8];
                     keys[[0, 1, 3, 2][key as usize]] = f > at + 2;
                     apply_keys(&mut b, pl, keys);
+                } else if b.wander && (matches!(scene, 0x45..=0x52) || vote_open(&b)) {
+                    wander_step(&mut b, pl, &mut rnd);
                 } else {
                     policy(&mut b, pl, &mut rnd, god, magic);
                 }
@@ -312,6 +354,9 @@ fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32, ma
         for flag in 0x18b..0x192 {
             b.poke(base + flag, [1, 6, 0][(n as usize / 4) % 3], 1);
         }
+    }
+    if b.frail != 0 && pl >= 2 && b.f % b.frail == 0 && b.rd8(base + 4) < 4 && b.rd16(base + 0x62) > 1 {
+        b.poke(base + 0x62, 1, 2);
     }
     let hp = b.rd16(base + 0x62);
     if god != 0 && hp < god - 8 && hp > 0 && b.rd8(base + 4) < 4 {
@@ -387,6 +432,56 @@ fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32, ma
     // variété : quelques actions aléatoires
     if rnd(400) == 0 { b2 = true }
     apply_keys(b, pl, [right, left, up, down, b1, b2, b3, b4]);
+}
+
+/// Un vote de chemin est-il ouvert ? (un EFFCT de type 23 en vie, FFD49E : 38 emplacements de 0x60 octets)
+fn vote_open(b: &Bot) -> bool {
+    (0..38).any(|i| {
+        let o = 0xffd49e + 0x60 * i;
+        b.rd8(o) != 0 && b.rd8(o + 2) == 23
+    })
+}
+
+/// `--wander` : gestes au hasard (direction tenue jusqu'à la fin du geste, bouton tapé pendant ses quatre premières images).
+fn wander_step(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32) {
+    let vote = vote_open(b);
+    if vote && !b.voting {
+        // nouveau vote : abstentions tirées pour tous les joueurs
+        for k in 0..4 {
+            b.wander_keys[k].3 = rnd(4) == 0;
+        }
+    }
+    if pl == 0 {
+        b.voting = vote;
+    }
+    let (_, until, _, abstain) = b.wander_keys[pl];
+    if b.f >= until {
+        let mut keys = [false; 8];
+        match rnd(9) {
+            0 => keys[0] = true,
+            1 => keys[1] = true,
+            2 => keys[2] = true,
+            3 => keys[3] = true,
+            4 => (keys[0], keys[2]) = (true, true),
+            5 => (keys[1], keys[3]) = (true, true),
+            _ => {}
+        }
+        if !(vote && abstain) {
+            match rnd(16) {
+                0..=5 => keys[4] = true,
+                6 | 7 => keys[5] = true,
+                8 | 9 => keys[6] = true,
+                10 => keys[7] = true,
+                _ => {}
+            }
+        }
+        b.wander_keys[pl] = (b.f, b.f + 20 + rnd(70) as usize, keys, abstain);
+    }
+    let (start, _, mut keys, _) = b.wander_keys[pl];
+    if b.f >= start + 4 {
+        keys[4..].fill(false);
+    }
+    apply_keys(b, pl, keys);
 }
 
 fn apply_keys(b: &mut Bot, pl: usize, keys: [bool; 8]) {

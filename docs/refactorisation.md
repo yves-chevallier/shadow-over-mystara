@@ -671,7 +671,7 @@ des événements (0x19ae6, 0x19b08, 0x19dce) et des palettes (0x1686, 0x3af8), p
   caisse (0xa17d0, glitch de `row_1a`) : tests de zone (`ai::keep_on_screen_d5`), cibles (D5 = 0 / 2), débris
   (D5.w = -1) et trésor (compteur) l'écrivent en clair ; les restes D1-D3 des tests de boîte
   (`target_in_front_68k`, `box_around_68k`, `in_front_68k`) et les registres de la collision avec le décor
-  (`terrain::push_68k`) donnent ses vitesses à l'étincelle de 0x103ba (`long_route_14_2p`). Ces tests de boîte et la
+  (`terrain::push_68k`) donnent ses vitesses à l'étincelle de 0x103ba (`long_scene_20_2p`). Ces tests de boîte et la
   collision gardent donc les registres de l'original dans la façade. Outil : `examples/registre_ecrit` compilé sans
   ROM (interprété, sinon les blocs recompilés ne passent pas par le crochet).
 * **Fuzz.** `examples/fuzz_ia.rs` compare chaque cœur à la routine d'origine (interpréteur seul) sur des états tirés

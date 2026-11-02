@@ -8,8 +8,8 @@ scénarios ne contiennent que des entrées et des écritures RAM (`poke`, voir `
 
 * `FF8034` = numéro de scène (`A5+0x34`), 1 à 114 (0x72) :
   1-68 les stages (dont les boss : 24 Manticore, 26, 32 Black Dragon, 40/42 salamandres, 44, 46, 54 Tel'Arin,
-  58, 64, 66-67…) et leurs scènes intermédiaires (choix de route : 14 et 38 ; scènes à décor propre 43, 47, 4b, 4d, 4f,
-  50, 52 atteintes par progression naturelle), 69-82 boutiques, 83-89 écrans à graphismes non initialisés quand on
+  58, 64, 66-67…) et leurs scènes intermédiaires (votes de chemin à la sortie des scènes 2, 13, 33 et 38, en décimal comme
+  les `poke8 ff8034` ; scènes à décor propre 0x43, 0x47, 0x4b, 0x4d, 0x4f, 0x50, 0x52 atteintes par progression naturelle), 69-82 boutiques, 83-89 écrans à graphismes non initialisés quand on
   y entre directement, 90-114 scènes de démonstration de l'attract (jouées par l'IA du mode démo).
   Un `poke8 ff8034 N` pendant la sélection du personnage (image 2400) lance la partie dans la scène N ;
   vérifié par captures d'écran pour les 114 scènes (aucun plantage, le jeu se déroule normalement).
@@ -185,7 +185,7 @@ images dans une boucle (compteur FF806E qui avance par à-coups) est un comporte
 ## Bots longs (`scenarios/long/`, `DDSOM_LONG=1`)
 
 Parties longues jouées par `examples/autobot.rs` (40 000 à 90 000 images chacune) : plusieurs joueurs, magies et
-objets fréquents, routes des choix 0x14 et 0x38, boutiques, difficultés 0, 3 et 7, langue 4, joueurs mortels. Elles
+objets fréquents, scènes 20 et 56 (0x14 et 0x38, prises à tort pour les choix de route), boutiques, difficultés 0, 3 et 7, langue 4, joueurs mortels. Elles
 sortent des chemins des scénarios de 30 000 images et ont trouvé des trous du mode sans 68000. Génération :
 `tools/gen_long.py [nom...]` (écrit `<nom>.txt` et `<nom>.images`, le nombre d'images du scénario). Validation :
 `DDSOM_LONG=1 tools/validate_all.sh` les ajoute (en tête de liste : chacune dure 1 à 3 minutes) ; sans la variable,
@@ -198,16 +198,16 @@ scenarios/long/<nom>.images)`.
 | `long_28_scenes` | 90 000 | voleur seul, 28 scènes (1, 5, 9… 109), difficulté 7, langue 4, boutique enchaînée |
 | `long_3p_mortels` | 60 000 | combattant, elfe et nain mortels |
 | `long_4p` | 60 000 | combattant, elfe, elfe bis, voleur (scènes 1-0xc, boutique 0x45) |
-| `long_route_14` | 60 000 | clerc depuis le choix de route 0x14 (0x18, boutique 0x4c, 0x6a) |
-| `long_route_38` | 60 000 | elfe et combattant au choix de route 0x38 |
+| `long_scene_20` | 60 000 | clerc depuis la scène 20 (0x14) (0x18, boutique 0x4c, 0x6a) |
+| `long_scene_56` | 60 000 | elfe et combattant depuis la scène 56 (0x38) |
 | `long_boutiques` | 40 000 | magicien, les 14 boutiques 0x45-0x52, difficulté 0 |
 | `long_2p_d3_mortels` | 60 000 | combattant et magicien mortels, difficulté 3, scènes 0x1d-0x38 |
 | `long_voleur_mortel` | 60 000 | voleur seul mortel, jeu naturel (game over) |
 | `long_elfe_objets` | 60 000 | elfe, objets et magies très fréquents, scènes 1-56 |
 | `long_nain_57_86` | 60 000 | nain, magies très fréquentes, scènes 57-86 |
 | `long_2p_d7_mortels` | 60 000 | magicien et elfe mortels, difficulté 7 |
-| `long_4p_route_38` | 60 000 | magicien, clerc, elfe, voleur au choix de route 0x38 |
-| `long_route_14_2p` | 60 000 | combattant et nain depuis le choix de route 0x14 |
+| `long_4p_scene_56` | 60 000 | magicien, clerc, elfe, voleur depuis la scène 56 (0x38) |
+| `long_scene_20_2p` | 60 000 | combattant et nain depuis la scène 20 (0x14) |
 
 Trous trouvés et corrigés (2026-10-27) ; chacun passait inaperçu des 272 scénarios de la validation complète :
 
@@ -274,7 +274,7 @@ Trous trouvés et corrigés (chacun dans un commit séparé) :
 Limites : `fuzz_player spawn` s'arrête sur les trois tirs de baguette (« la routine d'origine ne revient pas » : depuis un état tiré
 au hasard, l'original dépasse la garde du contrôle) ; ils sont validés par les scénarios (les quatre baguettes sont tirées, pleines et épuisées). Les portes de passage SET 27 et 29
 (0xd8458, 0xd8dce) étaient déjà exécutées presque en entier par les scénarios (restent 0xd8316, 0xd8366, 0xd83b8, 0xd840a,
-helpers de suspension) ; les boutiques et les routes 0x14 et 0x38 ne reçoivent pas de bot nouveau ici.
+helpers de suspension) ; les boutiques et les votes de chemin ont leurs bots dans la section suivante.
 
 Résultat (après les quatre corrections et les trois zones) : `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1 DDSOM_JOBS=8
 tools/validate_all.sh 30000` donne 296 scénarios VALIDE sur 296, en mode par défaut et avec `DDSOM_ASSETS` (assets

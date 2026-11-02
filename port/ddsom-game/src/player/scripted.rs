@@ -56,6 +56,8 @@ mod tables {
     pub const THROWN_SUBSTEPS: u32 = 0x23e0e;
     /// Profondeur visée (mots) selon le joueur.
     pub const THROWN_ROWS: u32 = 0x23e58;
+    /// Résurrection pendant que les entrées sont figées : décalages en x (mots) selon le joueur.
+    pub const FROZEN_OFFSETS: u32 = 0x23d04;
 }
 
 // Signal de la cinématique partagé avec le boss 21 (`ram::BOSS_SIGNAL`) : 0x5c quand il projette les
@@ -87,6 +89,7 @@ const HANDLERS: &[(u32, Handler)] = &[
     (0x23c16, revive_fall),
     (0x23c3c, revive_land),
     (0x23c58, revive_end),
+    (0x23c7a, revive_frozen),
     (0x23d0c, revive_in_place),
     (0x23d6e, |g, p| substep_table(g, p, tables::WAIT_SUBSTEPS)),
     (0x23d82, wait_start),
@@ -484,6 +487,32 @@ fn revive_end(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::ACTIVE, 1);
     p.set_u8(g, Player::INVULN, 0x96);
     start_stand(g, p);
+}
+
+/// 0x23c7a (pas 8, état 0x00040800 : le joueur rejoint la partie pendant que les entrées sont figées,
+/// `ram::INPUT_RAW`) : il apparaît au sol devant l'objet suivi par la caméra, décalé selon son numéro, et joue
+/// directement l'animation de résurrection (0x23) avec sa fanfare ; le pas 10 (0x23c58) lui rend la main.
+fn revive_frozen(g: &mut Ctx, p: Player) {
+    cov!();
+    next_action(g, p);
+    p.set_u8(g, Player::ACTIVE, 2);
+    p.set_u8(g, 0x68, 1);
+    p.set_u8(g, Player::INVULN, 0x96);
+    let flags = p.u8(g, Player::FLAGS) & !2;
+    p.set_u8(g, Player::FLAGS, flags);
+    for field in [Player::SLOW, 0x15c, Player::POWERUP, Player::AURA, Player::AURA_B, Player::AURA_C, Player::FACING] {
+        p.set_u8(g, field, 0);
+    }
+    cinematics::place_by_focus(g, p, tables::FROZEN_OFFSETS);
+    let y = p.u16(g, Obj::Y).wrapping_sub(1);
+    p.set_u16(g, Obj::Y, y);
+    g.rom(rom::REVIVE_SETUP, p);
+    animation::start(g, p, 0x23);
+    g.son(ext::son::FANFARE, p);
+    restore_palette(g, p);
+    ram::FADE_PAGES.set(g.b, 0xf);
+    crate::palette::full_brightness(g.b);
+    crate::objects::rank::raise(g.b);
 }
 
 /// 0x23d0c (pas 12) : le joueur réapparaît directement à sa place, debout et sans arme en main : il

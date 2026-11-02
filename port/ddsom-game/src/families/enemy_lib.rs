@@ -134,7 +134,7 @@ pub fn keep_in_zone<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x33fe4 : collision avec le décor (`terrain.rs`) : l'objet est repoussé hors d'un obstacle.
 /// Glitch d'origine : D2, D3 et D5 (1 en cas de choc) de la recherche du terrain traversent les gestionnaires ;
-/// l'étincelle de `flash_and_shake` en tire ses vitesses (D2, D3 : `long_route_14_2p`), le squelette relit D5 : ils
+/// l'étincelle de `flash_and_shake` en tire ses vitesses (D2, D3 : `long_scene_20_2p`), le squelette relit D5 : ils
 /// sont rendus dans les restes (`Cx::push_terrain`).
 pub fn collide_terrain<R: Banc>(x: &mut Cx<'_, R>) {
     x.push_terrain();
@@ -230,7 +230,7 @@ fn boite(dx: i16, half_w: u16, half_d: u16) -> ai_aids::Boite {
 /// 0xb5e0 : la cible `+0x50` (au sol) est-elle dans la boîte devant l'objet ?
 ///
 /// Glitch d'origine : les tests de boîte laissent D2 et D3 (et l'octet bas de D4), qui traversent les gestionnaires
-/// et donnent ses vitesses à l'étincelle de `flash_and_shake` (vu sur `long_route_14_2p`) ; le boss 11 relit D2
+/// et donnent ses vitesses à l'étincelle de `flash_and_shake` (vu sur `long_scene_20_2p`) ; le boss 11 relit D2
 /// (`roll`). Ils sont rendus dans les restes.
 pub fn target_in_front<R: Banc>(x: &mut Cx<'_, R>, dx: i16, half_w: u16, half_d: u16) -> InBox {
     let (found, restes) = ai_aids::target_in_front_restes(x.b, x.o, boite(dx, half_w, half_d));

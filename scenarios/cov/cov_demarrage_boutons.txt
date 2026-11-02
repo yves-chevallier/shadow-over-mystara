@@ -1,0 +1,12 @@
+# Démarrage (F1, tâche 0x11b16) : bouton 1 du joueur 1 tenu pendant les deux écrans d'avertissement (attentes abrégées,
+# 0x11c14 et 0x11c58) et Start tenu à la fin (0x11c76 : A5+0x7fc6 = 1, affichage de débogage des verrous du son, que le
+# mot 0xc0 de la ROM, nul, n'active pas). Puis écran titre (F7, 0xfa762) avec le pool SOBJ vu plein (compteur
+# A5+0x7e70 mis à 0 de l'image 1600 à 1720, rendu ensuite à sa valeur, 10) : le texte du titre n'est pas créé (l'original
+# réessaie une image plus tard en repassant par le décompte, qui déborde), l'attract continue.
+20 P1 Button 1 1
+50 1 Player Start 1
+600 P1 Button 1 0
+600 1 Player Start 0
+1600 poke16 fffe70 0
+1720 poke16 fffe70 10
+30001 quit

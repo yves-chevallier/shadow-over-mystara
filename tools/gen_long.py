@@ -35,10 +35,10 @@ SPECS = {
     'long_3p_mortels': dict(players=3, chars=(0, 2, 3), frames=60000, seed=503),
     # quatre joueurs (combattant, elfe, elfe bis, voleur)
     'long_4p': dict(players=4, chars=(0, 2, 4, 5), frames=60000, seed=504, god='0x70', cast=20, charges=2),
-    # clerc seul depuis le choix de route 0x14
-    'long_route_14': dict(players=1, chars=(2,), frames=60000, seed=505, god='0x70', plan='20:40000', cast=10, charges=1),
-    # elfe et combattant depuis le choix de route 0x38
-    'long_route_38': dict(players=2, chars=(5, 3), frames=60000, seed=506, god='0x70', plan='56:40000', cast=10,
+    # clerc seul depuis la scène 20 (0x14 ; ce n'est pas un choix de route : les votes sont dans les `long_votes_*`)
+    'long_scene_20': dict(players=1, chars=(2,), frames=60000, seed=505, god='0x70', plan='20:40000', cast=10, charges=1),
+    # elfe et combattant depuis la scène 56 (0x38)
+    'long_scene_56': dict(players=2, chars=(5, 3), frames=60000, seed=506, god='0x70', plan='56:40000', cast=10,
                           charges=1),
     # magicien, les boutiques 69 à 82 (0x45-0x52), difficulté 0
     'long_boutiques': dict(players=1, chars=(1,), frames=40000, seed=507, god='0x70',
@@ -58,11 +58,11 @@ SPECS = {
     # magicien et elfe mortels, difficulté 7
     'long_2p_d7_mortels': dict(players=2, chars=(1, 2), frames=60000, seed=512, cast=10, charges=1,
                                pokes=['800:ff802a:7:1']),
-    # quatre joueurs (magicien, clerc, elfe, voleur) depuis le choix de route 0x38
-    'long_4p_route_38': dict(players=4, chars=(1, 3, 4, 5), frames=60000, seed=513, god='0x70', plan='56:40000',
+    # quatre joueurs (magicien, clerc, elfe, voleur) depuis la scène 56 (0x38)
+    'long_4p_scene_56': dict(players=4, chars=(1, 3, 4, 5), frames=60000, seed=513, god='0x70', plan='56:40000',
                              cast=15, charges=1),
-    # combattant et nain depuis le choix de route 0x14
-    'long_route_14_2p': dict(players=2, chars=(0, 1), frames=60000, seed=514, god='0x70', plan='20:40000'),
+    # combattant et nain depuis la scène 20 (0x14)
+    'long_scene_20_2p': dict(players=2, chars=(0, 1), frames=60000, seed=514, god='0x70', plan='20:40000'),
 }
 
 # bots de sorts : les magies et objets valides de chaque personnage, lancés tour à tour (--spells : identifiant posé dans la
@@ -123,12 +123,84 @@ SPECS['sorts_porte_34'] = dict(players=1, chars=(0,), frames=7500, seed=631, god
                                pokes=[f'{f}:ffff92:0:2' for f in range(4100, 4400, 2)])
 
 
+# votes de chemin (EFFCT 23, scènes 0x14 et 0x38) et boutiques (0x45 à 0x52) joués au hasard (`--wander` d'autobot :
+# curseurs déplacés dans tous les sens, boutons tapés, abstentions qui laissent finir le compte à rebours), avec 2 à 4
+# joueurs, l'interface à trois joueurs (ff8020 = 1 : colonnes étroites de F3), les langues 4 et 6 (ff8072 : textes des
+# choix en octets ; la langue 0, que le menu de réglages saute, fait redémarrer la machine dans la scène 33) ; l'or des joueurs (+0x114, BCD) est remis tour à tour à 99 999 et à 0 (achats et refus)
+def bourse(joueurs, debut, fin, periode=2500):
+    return [f'{f}:{0xff85de + 0x114 + 0x200 * k:x}:{0x99999 if (f // periode) % 3 else 0}:4'
+            for f in range(debut, fin, periode) for k in range(joueurs)]
+
+
+def trois(pokes):
+    # borne à trois joueurs : FF8020 = 1 (bot_lib.build pose 2 pour plus de deux joueurs, à la même image)
+    return pokes + ['800:ff8020:1:1']
+
+
+# votes de fin de scène (scènes 2, 13, 33 et 38 en décimal : réponse au dialogue 13, question 136 à 138, dialogue 40,
+# dialogue 70 vers 39, 41 ou 43) : après 1 200 images de jeu, la sortie de la scène est forcée (`:t`, script de transition
+# comme les `trans_*` de gen_scene_end.py ; `:f`, séquence de sortie comme `end_38`) et le bot vote, puis joue 400 images
+# dans la scène choisie ; les anciens `long_route_14` et `long_route_38`, renommés `long_scene_20` et `long_scene_56`, ne passaient par aucun vote
+ROUTES = ','.join(['2:1200:t', '13:1200:t', '33:1200:t', '38:1200:f'] * 3)
+SPECS['long_votes_4p'] = dict(players=4, chars=(0, 1, 2, 3), frames=50000, seed=701, god='0x70', plan=ROUTES,
+                              wander=True)
+SPECS['long_votes_3p_l4'] = dict(players=3, chars=(4, 5, 0), frames=50000, seed=702, god='0x70', plan=ROUTES,
+                                 wander=True, pokes=trois(['800:ff8072:4:2']))
+SPECS['long_votes_2p_l6'] = dict(players=2, chars=(2, 3), frames=50000, seed=703, god='0x70', plan=ROUTES,
+                                 wander=True, pokes=['800:ff8072:6:2'])
+BOUTIQUES = ','.join(f'{s}:2000' for s in range(69, 83))
+SPECS['long_boutiques_4p'] = dict(players=4, chars=(5, 4, 3, 2), frames=34000, seed=711, god='0x70', plan=BOUTIQUES,
+                                  wander=True, pokes=bourse(4, 4500, 34000))
+SPECS['long_boutiques_3p_l6'] = dict(players=3, chars=(1, 0, 5), frames=34000, seed=712, god='0x70', plan=BOUTIQUES,
+                                     wander=True, pokes=trois(['800:ff8072:6:2'] + bourse(3, 4500, 34000)))
+SPECS['long_boutiques_2p_l4'] = dict(players=2, chars=(3, 0), frames=34000, seed=713, god='0x70', plan=BOUTIQUES,
+                                     wander=True, pokes=['800:ff8072:4:2'] + bourse(2, 4500, 34000))
+
+
+# interface des joueurs (F3) hors curseur et noms :
+# * cadre effacé quand un joueur 3 ou 4 tombe pendant un combat de boss (`A5+0x50` posé par les boss, 0x16f54) : quatre
+#   joueurs mortels, les joueurs 3 et 4 ramenés à 1 PV toutes les 600 images (`--frail`), scènes de boss ;
+# * bannières « INSERT COIN » avec pièces manquantes (0x155ba) d'un emplacement libre : deux joueurs dans une borne à
+#   trois ou quatre joueurs (monnayeurs séparés, ff8021 = 3), prix de 2 pièces par crédit (`A5+0x1e`) ou parties à deux
+#   crédits (`A5+0x457` et suivants) réglés après le départ, et des pièces glissées une à une dans les monnayeurs 3 et 4
+#   sans appuyer sur Start (`events` : entrées brutes ajoutées à la base)
+BOSS = ','.join(f'{s}:3000' for s in (24, 26, 32, 40, 44, 46, 54, 58, 64))
+SPECS['long_boss_4p_frail'] = dict(players=4, chars=(0, 1, 2, 3), frames=40000, seed=721, plan=BOSS, frail=600,
+                                   cast=20, charges=1)
+SPECS['long_credits_prix2'] = dict(players=2, chars=(3, 4), frames=24000, seed=722, cast=10, charges=1,
+                                   plan='1:3000,5:3000,9:3000,12:3000,16:3000,19:3000,23:3000',
+                                   pokes=['800:ff8021:3:1', '800:ff8020:1:1', '3000:ff801e:2:1'],
+                                   events=[(5000, 'Coin 3'), (11000, 'Coin 3'), (15000, 'Coin 3')])
+SPECS['long_credits_deux'] = dict(players=2, chars=(5, 2), frames=24000, seed=723, cast=10, charges=1,
+                                  plan='2:3000,6:3000,10:3000,13:3000,17:3000,21:3000,25:3000',
+                                  pokes=['800:ff8021:3:1', '800:ff8020:2:1'] +
+                                  [f'3000:{0xff8457 + 0x10 * k:x}:1:1' for k in range(4)],
+                                  events=[(5000, 'Coin 3'), (7000, 'Coin 4'), (12000, 'Coin 4')])
+
+# * emblème du tableau des meilleurs scores (F4, 0x18a0e) : un joueur passé par la scène 46 (`+0x193` = 1, posé par
+#   0x24394) qui entre au tableau y laisse l'octet `+0xd` ; l'écran des scores de l'attract crée alors l'objet EFFCT 0x5b
+#   de la ligne. `+0x193` est posé par poke ; sans pièces périodiques, les joueurs ramenés à 1 PV (image 9000) tombent
+#   l'un après l'autre, la partie finit et l'attract montre le tableau
+# Premier essai de ce bot, gardé : avec les pièces périodiques, un joueur rejoint la partie pendant que les entrées sont
+# figées (`A5+0x44` : état 0x00040800, pas 8 de la résurrection, 0x23c7a, image 19 259), routine qui n'avait pas de native
+SPECS['long_rejoint_fige'] = dict(players=4, chars=(2, 3, 4, 5), frames=40000, seed=613, pokes=noms(
+    (0x41, 0xfe, 0x42, 0xfb), (0x00900000, 0x00050000, 0x00002000, 0x00700000)) +
+    [f'{f}:{0xff85de + 0x193 + 0x200 * k:x}:1:1' for f in range(5000, 30000, 1000) for k in range(4)])
+SPECS['long_noms_embleme'] = dict(players=4, chars=(2, 3, 4, 5), frames=30000, seed=613, coin_period=0, pokes=noms(
+    (0x41, 0xfe, 0x42, 0xfb), (0x00900000, 0x00050000, 0x00002000, 0x00700000)) +
+    [f'{f}:{0xff85de + 0x193 + 0x200 * k:x}:1:1' for f in (5000, 7000, 8900) for k in range(4)] +
+    [f'9000:{0xff85de + 0x62 + 0x200 * k:x}:1:2' for k in range(4)])
+
+
 def gen(nom):
     sp = SPECS[nom]
     roms = os.environ.get('DDSOM_ROMS', os.path.join(RACINE, 'rom'))
     eeprom = os.environ.get('DDSOM_EEPROM', os.path.join(RACINE, 'testdata/eeprom_ddsom.bin'))
-    lignes = bot_lib.build(frames=sp['frames'], players=sp['players'], chars=sp['chars'], coin_period=1500,
+    lignes = bot_lib.build(frames=sp['frames'], players=sp['players'], chars=sp['chars'], coin_period=sp.get('coin_period', 1500),
                            base_only=True, pokes=sp.get('pokes', []), late=sp.get('late', ()))
+    for f, nom_entree in sp.get('events', ()):
+        lignes += [f'{f} {nom_entree} 1', f'{f + 6} {nom_entree} 0']
+    lignes.sort(key=lambda l: int(l.split()[0]))
     os.makedirs(SORTIE, exist_ok=True)
     base = os.path.join(SORTIE, nom + '.base')
     with open(base, 'w') as f:
@@ -146,6 +218,10 @@ def gen(nom):
         cmd += ['--spells', sp['spells'], '--spell-period', str(sp['spell_period'])]
     for d in sp.get('doors', ()):
         cmd += ['--door', d]
+    if sp.get('frail'):
+        cmd += ['--frail', str(sp['frail'])]
+    if sp.get('wander'):
+        cmd += ['--wander']
     if sp.get('rods'):
         cmd += ['--rods', str(sp['rods'])]
     r = subprocess.run(cmd, capture_output=True, text=True)
