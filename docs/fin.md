@@ -404,7 +404,7 @@ libre.
 
 ### Série 0 (un agent, API communes)
 
-**L0. Mesure et point de départ** (petit)
+**L0. Mesure et point de départ** (petit) — **fait** (branche `wt-serie0`)
 * Périmètre : `tools/measure_end.py` (nouveau) et `docs/fin.md`.
 * Travail :
   * le script reproduit le tableau de la section 1 par périmètre ;
@@ -413,6 +413,21 @@ libre.
 * Lancer `rom_reads` sur les 308 scénarios et ranger le résultat par lecteur : c'est la mesure de référence des
   étapes (b).
 * Fin : le script versionné redonne les chiffres de la section 1 à ±2 %.
+* Résultat :
+  * `tools/measure_end.py` (zones de la section 1, tailles des crates, graphe des modules et composantes fortement
+    connexes, `--graph`, `--json`, `--rev REV`, `--compare A B`). Sur 9a69409, il redonne la section 1 à ±2 % pour
+    les fichiers, lignes, accesseurs ROM (1 700), constantes d'adresses (2 398), `rd*`/`wr*` (4 203), fichiers de
+    plus de 1 500 lignes (14), graphe (286 arêtes, composante de 37). Écarts connus : décalages littéraux 11 742
+    (+4 %, tous dans `players` : 2 912 contre 2 545, définition plus large des accesseurs), `A5 + littéral` 854 (la
+    somme des lignes du tableau donne 857 : le total « ~785 » était faux), sons par adresse 302 (appels dont
+    l'argument est un littéral ou une constante `u32` ; 316 appels `sound::play*` en tout).
+  * Mesure de référence par lecteur : `rom_reads` avec `DDSOM_READERS=1` (premier appelant de chaque mot lu,
+    hors accesseurs génériques) sur les 308 scénarios, rangée par `tools/rom_readers.py report` (5b55ead) :
+    914 567 mots lus (1,83 Mo). Par zone : moteur 772 327 (`sprites.rs` 394 571, `objects/anim.rs` 156 070,
+    `scroll.rs` 102 399, `palette.rs` 68 765, `video.rs` 38 356), SET 59 695, écrans 37 827, joueurs 25 619,
+    ESHL/SOBJ/objets 4 928, effets 4 726, boss 4 649, ennemis 4 495, communs des familles 297.
+    `tools/rom_readers.py zones <fichier> <sorties>` donne les zones lues par un fichier : c'est la liste de
+    départ de chaque étape (b).
 
 **L1. Socle des données typées et des vues typées** (moyen)
 * Périmètre :
