@@ -32,8 +32,6 @@ mod rom {
     /// Sons du saut tournoyant.
     pub const SOUND_LEAP_LAND: u32 = 0xe2760;
     pub const SOUND_SPIN: u32 = 0xe81c8;
-    /// Effets du renvoi des morts-vivants (attaque 0x18) : écran, palettes, sons.
-    pub const TURN_EFFECTS: [u32; 5] = [0x4b518, 0x3b0c, 0x1ac86, 0x51bb6, 0xe27da];
     /// Prières : effets joueur (pool PEFF) créés au geste, avec leurs sons.
     pub const PRAYER_EVENT_SOUND: u32 = 0xe2aba;
     pub const PRAYER_AURA_SOUND: u32 = 0xe96e0;
@@ -419,9 +417,14 @@ fn turn_undead(g: &mut Ctx, p: Player) {
                 p.set_u8(g, 0x1eb, 3);
                 p.set_u8(g, 0x1ec, 1);
                 ram::SCROLL1_Y.set(g.b, 0x100);
-                for addr in rom::TURN_EFFECTS {
-                    g.rom(addr, p);
-                }
+                // 0x4b518, 0x3b0c, 0x1ac86, 0x51bb6, 0xe27da, with the registers they leave
+                crate::families::creators::for_players::effect_8_68k(g.c, g.b, p.obj());
+                g.c.a[0] = p.0;
+                crate::placement::load_effect_palette_regs(g.c, g.b, crate::placement::effect_palette::P380);
+                crate::palette::set_flash_color(g.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
+                g.c.flags_logic(crate::palette::FLASH_COLOR_WHITE_VALUE as u32, m68k::decode::Size::Word);
+                crate::families::creators::for_players::effect_2f_68k(g.c, g.b, p.obj());
+                g.son(0xe27da, p);
             }
             animation::step(g, p);
         }

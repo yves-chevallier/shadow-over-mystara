@@ -18,7 +18,6 @@ use crate::mem::{wr16, wr8};
 use crate::objects::anim::{load_entry, script_of};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
-use crate::player::externes as ext;
 
 type Handler = fn(&mut Ctx, Player);
 
@@ -747,7 +746,7 @@ fn slide(g: &mut Ctx, p: Player) {
         g.c.d[1] = 0;
         g.c.d[2] = 0;
         g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
-        g.rom(ext::effet::DUST, p);
+        g.shock(p, 0, 0, 0, 0xffff);
     }
     stop_at_wall(g, p);
     if p.u8(g, Obj::VX) == 0 {
@@ -819,7 +818,7 @@ pub fn fall(g: &mut Ctx, p: Player) {
                 g.c.d[1] = 0;
                 g.c.d[2] = 0;
                 g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
-                g.rom(ext::effet::DUST, p);
+                g.shock(p, 0, 0, 0, 0xffff);
             }
             stop_xy_at_wall(g, p);
             if p.u8(g, Obj::VX) == 0 {
@@ -1049,7 +1048,7 @@ fn hurled_slide(g: &mut Ctx, p: Player, stop: u8) {
         g.c.d[1] = 0;
         g.c.d[2] = 0;
         g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
-        g.rom(ext::effet::DUST, p);
+        g.shock(p, 0, 0, 0, 0xffff);
     }
     stop_at_wall(g, p);
     if p.u8(g, Obj::VX) == 0 {
@@ -1372,7 +1371,7 @@ fn frozen_start(g: &mut Ctx, p: Player) {
     if (p.u16(g, Player::HP) as i16) > 0 {
         next_step(g, p);
         p.set_u8(g, Player::TIMER_6F, 60);
-        g.rom(0x3baea, p);
+        crate::families::petites::player_table_byte(g.c, g.b, p.obj());
         hurt_animation(g, p, 19);
         g.son(FROZEN_SOUND, p);
         if p.u16(g, Obj::Z) == 0 {

@@ -71,7 +71,6 @@ pub const NATIVES: &[Native] = &[
     update::UPDATE_PLAYERS,
     overlays::UPDATE,
     walk::CLAMP,
-    hit_reactions::ENEMY_REACTS,
     characters::fighter::JUMP,
     characters::fighter::ATTACK,
     characters::fighter::SPECIAL,
@@ -255,6 +254,14 @@ impl<'a> Ctx<'a> {
         self.c.a[5] = A5;
         call(self.c, self.b, addr);
         self.c.sr & SR_Z != 0
+    }
+
+    /// 0xb10c8: shock effect (dust, spark) of `variant` and `setting`, speeds `vx`, `vy`, created for player `p`.
+    /// The registers are left like the original routine leaves them (A0 = the player, A1 = the effect, carry when the
+    /// pool is full, D1, flags).
+    pub fn shock(&mut self, p: Player, variant: u8, setting: u16, vx: u16, vy: u16) -> Option<Obj> {
+        self.c.a[5] = A5;
+        crate::effects_aids::shock_68k(self.c, self.b, p.obj(), variant, setting, vx, vy)
     }
 
     /// Joue le son `son` pour le joueur `p` (panoramique, personnage : `sound::jouer`).

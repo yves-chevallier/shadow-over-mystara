@@ -12,7 +12,7 @@
 //! d'origine qui créent tirs, effets et sons restent appelées telles quelles.
 
 use crate::machine::Machine;
-use super::common::{self, call, countdown, field, is_cancelled, next_step, take_event};
+use super::common::{self, countdown, field, is_cancelled, next_step, take_event};
 use super::foes::{self, Boost, Damage, Live, Strike};
 use super::items;
 use super::super::spawn;
@@ -25,10 +25,6 @@ use crate::player::ram;
 use crate::player::externes as ext;
 
 /// Routines d'origine appelées telles quelles : tirs, effets joueur, sons, palettes et effets d'écran.
-mod rom {
-    /// Interface des baguettes : mise à jour de la liste d'objets (D0 = reste, D1 = baguette) et son.
-    pub const ROD_LIST: u32 = 0xb96c0;
-}
 
 /// Table du magicien (données de la ROM) : vitesses des sauts (quatre mots par type de saut).
 const JUMP_SPEEDS: u32 = 0x10_459e;
@@ -130,8 +126,10 @@ fn rod_shot(g: &mut Ctx, p: Player) {
             if p.u8(g, 0x140 + i) == 0x50 {
                 p.set_u8(g, 0x140 + i, 0x56);
                 p.set_u8(g, 0x148 + i, 0);
-                call(g, p, rom::ROD_LIST, &[(0, 5 - i), (1, tag)]);
-                call(g, p, ext::effet::WAND, &[(0, sound)]);
+                (g.c.d[0], g.c.d[1]) = (5 - i, tag);
+                crate::families::effects_creators::for_players::thrown_shard_68k(g.c, g.b, p.obj(), tag as u8);
+                g.c.d[0] = sound;
+                crate::families::creators::set_a_68k(g.c, g.b, p.obj(), sound as u8);
                 return;
             }
         }
@@ -480,7 +478,7 @@ fn sparks(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.rom(ext::effet::SPARKS, p);
+                crate::families::creators::for_players::sparks_68k(g.c, g.b, p.obj());
                 g.son(0xe84c6, p);
             }
             if countdown(g, p) {
@@ -533,7 +531,8 @@ fn bolt(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, ext::effet::BOLT, &[(0, 0)]);
+                g.c.d[0] = 0;
+                crate::families::creators::for_players::bolt_68k(g.c, g.b, p.obj(), 0);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.son(0xe2a34, p);
             }
@@ -552,7 +551,8 @@ fn bolt(g: &mut Ctx, p: Player) {
                     common::cancel_cast(g, p, 0x1d);
                     return linger(g, p);
                 }
-                call(g, p, ext::effet::BOLT, &[(0, 1)]);
+                g.c.d[0] = 1;
+                crate::families::creators::for_players::bolt_68k(g.c, g.b, p.obj(), 1);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -660,7 +660,7 @@ fn frost_end(g: &mut Ctx, p: Player) {
     ram::FADE_DELAY.set(g.b, 2);
     ram::FADE_PAGES.set(g.b, 0xc);
     g.c.d[0] = g.c.d[0] & 0xffff_0000 | 0xa000;
-    g.rom(common::rom::PALETTE_FADE, p);
+    crate::palette::set_brightness(g.b, 0xa000);
     common::undim_screen_mode(g, p, UNDIM);
     to_stand(g, p);
 }
@@ -701,7 +701,8 @@ fn quake(g: &mut Ctx, p: Player) {
                 animation::start_plain(g, p, 0x3e);
                 g.son(0xe2ffa, p);
             } else if take_event(g, p) {
-                call(g, p, ext::effet::QUAKE, &[(0, 0)]);
+                g.c.d[0] = 0;
+                crate::families::creators::quake_68k(g.c, g.b, p.obj(), true);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 g.son(0xe8db4, p);
             }
@@ -716,8 +717,9 @@ fn quake(g: &mut Ctx, p: Player) {
                     crate::palette::restore_flash(g.b);
                     return linger(g, p);
                 }
-                call(g, p, ext::effet::QUAKE, &[(0, 1)]);
-                g.rom(ext::effet::QUAKE_B, p);
+                g.c.d[0] = 1;
+                crate::families::creators::quake_68k(g.c, g.b, p.obj(), false);
+                crate::families::petites::quake_b_68k(g.c, g.b, p.obj());
                 g.son(0xe8b22, p);
             }
             if countdown(g, p) {
@@ -779,7 +781,8 @@ fn storm(g: &mut Ctx, p: Player) {
         2 | 0xa => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, ext::effet::BOLT, &[(0, 0)]);
+                g.c.d[0] = 0;
+                crate::families::creators::for_players::bolt_68k(g.c, g.b, p.obj(), 0);
                 crate::placement::load_effect_palette(g.b, if step == 2 { crate::placement::effect_palette::LIGHT } else { crate::placement::effect_palette::NORMAL });
                 g.son(0xe2a74, p);
                 g.son(if step == 2 { 0xe97b4 } else { 0xe974a }, p);

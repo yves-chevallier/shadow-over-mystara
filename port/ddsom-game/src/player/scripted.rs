@@ -28,7 +28,6 @@ type Handler = fn(&mut Ctx, Player);
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
-    pub const REVIVE_SETUP: u32 = 0x4c930;
     pub const INTRO_ACTION: u32 = 0xe1330;
 }
 
@@ -440,7 +439,7 @@ fn revive_start(g: &mut Ctx, p: Player) {
         p.set_u8(g, field, 0);
     }
     crate::placement::place_on_free_ground(g.b, p.obj());
-    g.rom(rom::REVIVE_SETUP, p);
+    crate::families::petites::revive_68k(g.c, g.b, p.obj());
     animation::start(g, p, 0xd);
     restore_palette(g, p);
     ram::FADE_PAGES.set(g.b, 0xf);
@@ -498,7 +497,7 @@ fn revive_in_place(g: &mut Ctx, p: Player) {
     p.set_u8(g, 0x68, 0);
     crate::placement::place_on_free_ground(g.b, p.obj());
     p.set_u32(g, Obj::Z, 0);
-    g.rom(rom::REVIVE_SETUP, p);
+    crate::families::petites::revive_68k(g.c, g.b, p.obj());
     animation::start(g, p, 0x35);
     crate::objects::rank::raise(g.b);
 }

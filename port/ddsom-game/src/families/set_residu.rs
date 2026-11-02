@@ -145,32 +145,29 @@ pub fn wave_end(c: &mut Cpu, b: &mut Cps2Bus) {
 /// Réglages de la caméra posés par les entrées « appel » des scripts de scène (D0 = valeur) : limite de
 /// défilement en X (`A5+0x52c`), position verticale (`A5+0x57c`) et mode de la caméra (`A5+0x4ff`) ; les
 /// autres réglages (0x2a36, 0x2a42) sont dans `petites`.
-mod camera {
+pub(crate) mod camera {
     use super::*;
 
     const LIMIT_X: u32 = 0x52c;
     const POSITION_Y: u32 = 0x57c;
     const MODE: u32 = 0x4ff;
 
-    /// 0x2a24
-    pub fn set_limit_x(c: &mut Cpu, b: &mut Cps2Bus) {
-        wr16(b, A5 + LIMIT_X, c.d[0] as u16);
-        c.flags_logic(c.d[0] as u16 as u32, Size::Word);
-        rts(c, b);
+    /// 0x2a24: scroll limit `v`; the flags of the `move.w` for the caller still on the processor.
+    pub fn set_limit_x(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
+        wr16(b, A5 + LIMIT_X, v);
+        c.flags_logic(v as u32, Size::Word);
     }
 
-    /// 0x2a2a
-    pub fn set_position_y(c: &mut Cpu, b: &mut Cps2Bus) {
-        wr16(b, A5 + POSITION_Y, c.d[0] as u16);
-        c.flags_logic(c.d[0] as u16 as u32, Size::Word);
-        rts(c, b);
+    /// 0x2a2a: vertical position `v`.
+    pub fn set_position_y(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
+        wr16(b, A5 + POSITION_Y, v);
+        c.flags_logic(v as u32, Size::Word);
     }
 
-    /// 0x2a30
-    pub fn set_mode(c: &mut Cpu, b: &mut Cps2Bus) {
-        wr8(b, A5 + MODE, c.d[0] as u8);
-        c.flags_logic(c.d[0] as u8 as u32, Size::Byte);
-        rts(c, b);
+    /// 0x2a30: camera mode `v`.
+    pub fn set_mode(c: &mut Cpu, b: &mut Cps2Bus, v: u8) {
+        wr8(b, A5 + MODE, v);
+        c.flags_logic(v as u32, Size::Byte);
     }
 }
 
@@ -183,7 +180,4 @@ pub const NATIVES: &[Native] = &[
     native(0xce668, "set_deux_grilles", load_two_grids, regs::ALL),
     native(0xd98b8, "set_vague_debut", |c, b| { wave_start(c, b); rts(c, b) }, regs::ALL),
     native(0xd995a, "set_vague_fin", |c, b| { wave_end(c, b); rts(c, b) }, regs::ALL),
-    native(0x2a24, "camera_limite_x", camera::set_limit_x, regs::CCR),
-    native(0x2a2a, "camera_position_y", camera::set_position_y, regs::CCR),
-    native(0x2a30, "camera_mode", camera::set_mode, regs::CCR),
 ];

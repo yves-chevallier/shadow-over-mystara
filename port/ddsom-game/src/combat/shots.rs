@@ -222,7 +222,7 @@ pub(super) fn launch(w: &mut World, shot: Obj, e: Obj, face: Launch) -> bool {
             e.set_u8(w.b, f::REACTION_FLIP, 0x20);
         }
     }
-    w.call_d1(0xaa96c, shot, e, 1);
+    w.spark(Spark::Linked, shot, e, 1);
     true
 }
 
@@ -297,7 +297,7 @@ pub(super) fn shot_stagger(w: &mut World, shot: Obj, e: Obj) -> bool {
         e.set_u8(w.b, f::REACTION, 0x68);
         e.set_u8(w.b, f::STAGGER_DELAY, 0xb4);
     }
-    w.call_d1(0xaa96c, shot, e, 1);
+    w.spark(Spark::Linked, shot, e, 1);
     crate::sound::jouer(w.b, 0xe745a, shot);
     true
 }
@@ -385,7 +385,7 @@ pub(super) fn shot_spark(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
     e.set_u8(w.b, f::REACTION, 0xc);
     let fl = shot.u8(w.b, f::FLIP) ^ 0x20;
     e.set_u8(w.b, f::REACTION_FLIP, fl);
-    w.call_d1(0xaa96c, shot, e, 1);
+    w.spark(Spark::Linked, shot, e, 1);
     crate::sound::jouer(w.b, 0xe7376, shot);
     true
 }
@@ -492,7 +492,7 @@ pub(super) fn shot_push(w: &mut World, shot: Obj, e: Obj) -> bool {
     if (shot.u16(w.b, f::VX) as i16) >= 0 {
         e.set_u8(w.b, f::REACTION_FLIP, 0x20);
     }
-    w.call_d1(0xaa96c, shot, e, 1);
+    w.spark(Spark::Linked, shot, e, 1);
     true
 }
 

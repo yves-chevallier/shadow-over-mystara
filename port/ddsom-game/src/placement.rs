@@ -131,7 +131,7 @@ const REGS_EFFECT_PALETTE: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::d(
 
 /// `load_effect_palette` avec les registres de l'original : D0-D6 et A3 gardent les huit longs copiés, A1 et A2 la
 /// destination et la source suivante, comme le `movem` de l'original.
-fn load_effect_palette_regs(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
+pub(crate) fn load_effect_palette_regs(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
     let (longs, next) = load_effect_palette(b, offset);
     c.d[..7].copy_from_slice(&longs[..7]);
     c.a[3] = longs[7];

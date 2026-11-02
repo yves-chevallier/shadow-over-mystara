@@ -78,7 +78,6 @@ pub mod rom {
     /// Lancement d'une tâche (A0 = programme, D0 = priorité) : trap 0.
     pub const START_TASK: u32 = 0x9b6;
     /// Programmes des tâches d'écran du sort : assombrir et rétablir.
-    pub const PALETTE_FADE: u32 = 0x173c;
     pub const DIM_TASK: u32 = 0x153e;
     pub const UNDIM_TASK: u32 = 0x1536;
 }
@@ -442,7 +441,8 @@ fn dust(g: &mut Ctx, p: Player, table: u32) {
     let class = (p.u8(g, Player::CHARACTER) >> 1) as u32;
     let vx = g.prog16(table + 4 * class) as u32;
     let vy = g.prog16(table + 2 + 4 * class) as u32;
-    call(g, p, ext::effet::DUST, &[(0, 0), (1, 0x101), (2, vx), (3, vy)]);
+    (g.c.d[0], g.c.d[1], g.c.d[2], g.c.d[3]) = (0, 0x101, vx, vy);
+    g.shock(p, 0, 0x101, vx as u16, vy as u16);
 }
 
 /// 0x3fa7c : poussière du freinage ou de la marche (une image sur quatre).
@@ -484,10 +484,11 @@ pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
     let (d0, d1, d2, height) = (g.prog16(row), g.prog16(row + 2), g.prog16(row + 4), g.prog16(row + 6));
     g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
     g.c.d[4] = height as u32;
-    let z = call(g, p, ext::effet::DUST, &[(0, d0 as i16 as u32), (1, d1 as u32), (2, d2 as u32)]);
-    let failed = g.c.sr & m68k::SR_C != 0;
-    let _ = z;
-    if failed {
+    (g.c.d[0], g.c.d[1], g.c.d[2]) = (d0 as i16 as u32, d1 as u32, d2 as u32);
+    g.shock(p, d0 as u8, d1, d2, 0xffff);
+    // Original glitch: only the carry is tested; in the scene without shocks (no effect, carry clear) the height is
+    // written through the A1 left before the call
+    if g.c.sr & m68k::SR_C != 0 {
         return;
     }
     let spark = g.c.a[1];

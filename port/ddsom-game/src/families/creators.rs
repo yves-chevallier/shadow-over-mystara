@@ -670,6 +670,42 @@ fn peff(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, variant: Option<u8>) -> Option<O
     Some(fx)
 }
 
+/// Player effects created by the player module, still on the processor: the arguments are passed, A0 = the player,
+/// and the registers the original leaves (A1, carry, flags) are written like the native writes them.
+pub(crate) mod for_players {
+    use super::*;
+
+    /// 0x4b7a0: bolt (PEFF 10) of variant `variant`.
+    pub(crate) fn bolt_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+        c.a[0] = me.0;
+        bolt_par(c, b, me, variant)
+    }
+    /// 0x4dc9a: two sparks (PEFF 25).
+    pub(crate) fn sparks_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        sparks_par(c, b, me)
+    }
+    /// 0x4b518: effect 8 linked to `me`.
+    pub(crate) fn effect_8_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        peff(c, b, 8, None)
+    }
+    /// 0x51bb6: effect 0x2f (not linked).
+    pub(crate) fn effect_2f_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        let fx = alloc(c, b, &pools::PEFF)?;
+        fx.set_u8(b, 0x0, 1);
+        fx.set_u8(b, 0x2, 0x2f);
+        moved(c, 0x2f, Size::Byte);
+        Some(fx)
+    }
+    /// 0x4b8d0: effect 0xb (variant 0).
+    pub(crate) fn whirl_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        peff(c, b, 0xb, Some(0))
+    }
+}
+
 /// 0x4b8d0 : effet 0xb (variante 0).
 fn peff_b(c: &mut Cpu, b: &mut Cps2Bus) {
     peff(c, b, 0xb, Some(0));

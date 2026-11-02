@@ -69,7 +69,7 @@ fn dust(g: &mut Ctx, p: Player, d0: u16, d1: u16, d2: u16, d3: u16) {
     set(&mut g.c.d[1], d1);
     set(&mut g.c.d[2], d2);
     set(&mut g.c.d[3], d3);
-    g.rom(ext::effet::DUST, p);
+    g.shock(p, d0 as u8, d1, d2, d3);
 }
 
 fn dust_turn(g: &mut Ctx, p: Player) -> bool {
@@ -830,7 +830,8 @@ pub fn dust_puffs(g: &mut Ctx, p: Player) {
             }
             g.c.d[4] = height as u32;
             crate::mem::set_low_word(&mut g.c.d[3], 0xffff);
-            g.rom(ext::effet::DUST, p);
+            let (variant, setting, vx) = (g.c.d[0] as u8, g.c.d[1] as u16, g.c.d[2] as u16);
+            g.shock(p, variant, setting, vx, 0xffff);
             if g.c.sr & m68k::SR_C == 0 {
                 wr16(g.b, g.c.a[1] + Obj::Z, height);
             }

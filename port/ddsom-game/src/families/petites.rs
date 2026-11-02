@@ -43,6 +43,13 @@ fn linked(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, link: u32)
     rts(c, b);
 }
 
+/// 0x4c930 for the player module, still on the processor: player effect 0x10 (revival) linked to `joueur`, with the
+/// registers the original leaves (A0 = the player, A1, carry, flags).
+pub fn revive_68k(c: &mut Cpu, b: &mut Cps2Bus, joueur: Obj) -> Option<Obj> {
+    c.a[0] = joueur.0;
+    linked_par(c, b, joueur, &pools::PEFF, 0x10, 0x50)
+}
+
 /// 0x4f132 : effet de joueur 0x21 (second temps du séisme des sorts), lié au joueur par `+0x50`.
 pub fn quake_b(b: &mut Cps2Bus, joueur: Obj) -> Option<Obj> {
     linked_par(&mut Pur, b, joueur, &pools::PEFF, 0x21, 0x50)
@@ -583,20 +590,19 @@ fn booted_clear(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0xdd12c : le verrou d'apparition des objets de ramassage (`A5-0x5ac4`) levé.
-fn item_lock_clear(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn item_lock_clear(c: &mut Cpu, b: &mut Cps2Bus) {
     wr8(b, A5 - 0x5ac4, 0);
     moved(c, 0, Size::Byte);
-    rts(c, b);
 }
 
 /// 0x3baea : `+0x1f0` du joueur, d'après la table 0x3baf8 indexée par le quart du compteur `A5+0x7f92`.
-fn player_table_byte(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn player_table_byte(c: &mut Cpu, b: &mut Cps2Bus, joueur: Obj) {
+    c.a[0] = joueur.0;
     let i = rd16(b, A5 + 0x7f92) >> 2;
     set_low_word(&mut c.d[0], i);
     let v = prog8(b, 0x3baf8 + i as u32);
-    wr8(b, c.a[0] + 0x1f0, v);
+    wr8(b, joueur.0 + 0x1f0, v);
     moved(c, v as u32, Size::Byte);
-    rts(c, b);
 }
 
 /// 0x1c44a : les variables de partie `A5+0x2c..0x6b` à zéro.
@@ -736,8 +742,6 @@ pub const NATIVES: &[Native] = &[
     native(0x2a42, "fond_1_allume_d0", scroll_1_on_at_d0, regs::CCR),
     native(0x133f6, "demarrage_leve", booted_set, regs::CCR),
     native(0x133f0, "demarrage_baisse", booted_clear, regs::CCR),
-    native(0xdd12c, "verrou_item_baisse", item_lock_clear, regs::CCR),
-    native(0x3baea, "octet_table_joueur", player_table_byte, regs::d(0)),
     native(0x1c44a, "variables_partie_a_zero", game_vars_clear, regs::ALL),
     native(0x180ac, "ecran_fixe_remise", fixed_screen_reset, regs::CCR),
 ];

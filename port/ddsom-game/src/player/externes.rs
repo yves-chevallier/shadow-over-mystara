@@ -29,8 +29,6 @@ pub mod son {
 
 /// Effets créés par d'autres sous-systèmes (`families`, `effects_aids`).
 pub mod effet {
-    /// Effet de choc (poussière, étincelle) : D0 genre, D1 réglages, D2 et D3 vitesses ; A1 et retenue en retour.
-    pub const DUST: u32 = 0xb10c8;
     /// Barre de vie d'un monstre frappé (D0 = joueur et type, D1 = PV max, D2 = PV, D3 = classe).
     pub const HEALTH_BAR: u32 = 0x19dce;
     /// Objet SET de la baguette.

@@ -996,6 +996,13 @@ fn camera_mode_60(c: &mut Cpu, b: &mut Cps2Bus) {
 pub fn set_list(b: &mut Cps2Bus, liste: u8) -> Option<Obj> {
     set_list_par(&mut Pur, b, liste)
 }
+/// 0xa8ae8 for the scene script, on the processor: scenery list `list` (the script's D0.w, copied to D1.w), with the
+/// registers the original leaves.
+pub(crate) fn set_list_d0_68k(c: &mut Cpu, b: &mut Cps2Bus, list: u16) -> Option<Obj> {
+    set_low_word(&mut c.d[1], list);
+    set_list_par(c, b, list as u8)
+}
+
 pub(crate) fn set_list_par(r: &mut impl Registres, b: &mut Cps2Bus, liste: u8) -> Option<Obj> {
     let k = (liste as u16) << 2;
     r.d_mot(1, k);
@@ -1235,6 +1242,11 @@ pub(crate) mod for_players {
         c.a[0] = me.0;
         linked_par(c, b, me, kind::POSED_FLASH, Some(1))
     }
+    /// 0xb96c0: thrown shard of variant `variant` linked to `me`.
+    pub(crate) fn thrown_shard_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+        c.a[0] = me.0;
+        thrown_shard(c, b, me, variant)
+    }
     /// 0xb9c6a: wisp (type 86, variant 0) linked to `me`.
     pub(crate) fn wisp_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
         c.a[0] = me.0;
@@ -1368,7 +1380,6 @@ creators! {
     0xb7dec "cree_colonnes" |c, b, me| pillars_par(c, b), CREATED | D(5) | D(6) | regs::a(2);
     0xabb70 "cree_trainees" |c, b, me| trails(c, b), CREATED | D(0) | D(4) | D(5) | D(6) | regs::a(2) | regs::a(4);
     0xa8a42 "camera_mode_60" |c, b, me| camera_mode_60(c, b), regs::CCR;
-    0xa8ae8 "cree_liste_decors_d0" |c, b, me| { let v = c.d[0] as u16; set_low_word(&mut c.d[1], v); set_list_par(c, b, v as u8) }, CREATED | D(0) | D(1) | regs::a(4);
     0xa8af8 "cree_liste_decors" |c, b, me| { let v = d1b(c); set_list_par(c, b, v) }, CREATED | D(0) | D(1) | regs::a(4);
     0xb3e4e "cree_cris" |c, b, me| shouts_par(c, b, me, 1, 0xb3e86), CREATED | D(0) | D(1) | regs::a(2);
     0xb3ec6 "cree_cris_b" |c, b, me| shouts_par(c, b, me, 2, 0xb3f00), CREATED | D(0) | D(1) | regs::a(2);
