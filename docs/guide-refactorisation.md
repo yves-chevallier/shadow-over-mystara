@@ -222,14 +222,13 @@ des sondes génériques (`diag.rs`) inversent les registres au bon endroit.
 | Étiquette | Où | Registres inversés | Site (motif) |
 |---|---|---|---|
 | `appel_<adresse>` | retour de `crate::call` | ceux que l'appelé a changés | `fichier:ligne:colonne` de l'appel |
-| `cession` | `kernel::ceder` (contexte rangé) | D0-D7, A0-A4, A6, drapeaux | nom de l'étape de reprise : `Ending(S04Timer)` |
 | `retour` | `taches::executer`, pas qui rend `Flow::Done` | D0-D7, A0-A4, A6, drapeaux | nom de l'étape : `Exit(Both)` |
 | `rendu` | `dispatch::Class::update_sans_suite`, mises à jour du monde des écrans | D0-D7, A0-A4, A6, drapeaux | appelant (`#[track_caller]`) |
 | `reprise` | `kernel::lancer`, tâche qui reprend après une cession | D0-D7, A0-A4, A6, drapeaux | étape reprise, sans espaces ni virgules : `Partie(Pas)` |
 | `neuve` | `kernel::lancer`, tâche neuve | D0-D7, A0-A4, A6, drapeaux | étape d'entrée : `Gel(Entree)` |
 | `pile` | `sans68k::ligne`, avant chaque point (hors démarrage) | aucun : la RAM des piles d'origine FF0166-FF0E65 est remplie d'une valeur changeante | — |
 
-VALIDE avec `cession@Ending(,retour@Ending(` : aucune étape du générique ne relit, après une cession ou au retour d'un
+VALIDE avec `reprise@Ending(,retour@Ending(` : aucune étape du générique ne relit, après une cession ou au retour d'un
 sous-programme, un registre d'avant ; avec `rendu@modes/` : les gestionnaires d'objets ne relisent rien de l'écran
 qui les fait tourner. Les drapeaux sont inversés en deux parts (`nzvc` et `x`) pour savoir lequel est relu.
 
@@ -241,7 +240,7 @@ empoisonner le site (à ajouter à une liste large : `tout@modes/,=appel_ddeaa@m
 (`DDSOM_POISON_TRACE`), cherche par dichotomie l'entrée responsable parmi les sites empoisonnés avant l'écart, puis le
 ou les registres relus, l'épargne et recommence jusqu'à VALIDE ; il imprime les lecteurs trouvés et la ligne
 `GARDES` à ajouter. Méthode du lot « écrans » : une validation complète du code d'origine (avant conversion) avec
-`tout@<fichiers du lot>` et les sondes de cession et de retour des tâches du lot, puis une bissection par scénario
+`tout@<fichiers du lot>` et les sondes de reprise et de retour des tâches du lot, puis une bissection par scénario
 qui échoue, jusqu'à ce que tout échec restant soit une lecture connue (épargnée) ; enfin la même validation sur le code
 converti avec `rendu` en plus.
 
@@ -326,7 +325,7 @@ Le modèle (`taches/mod.rs`, `taches/table.rs`, `kernel.rs`) :
 * **`taches::Etape`** réunit les étapes de tous les modules (`etapes_des_taches!`, une ligne par module) ; `From`
   permet de passer `Etape::X` du module partout où une suite est attendue (`impl Into<Suite>`).
 * **`table::Suite`** : `Adresse(u32)` (une native, pour ce qui reste appelé ou repris par adresse) ou
-  `Etape(Etape)`. Une cession range `Reprise::Etape(etape, contexte)` ; un appel en cours (`Cadre`) n'est plus
+  `Etape(Etape)`. Une cession range `Reprise::Etape(etape)` (sans registres depuis la partie 4 de la sortie du Cpu : ce que l'étape relit est dans ses champs) ; un appel en cours (`Cadre`) n'est plus
   qu'une suite et sa hauteur de pile.
 * **Le noyau appelle le pas** : `kernel::lancer` remet registres, SR et pile du contexte puis
   `taches::executer(etape)` au lieu de poser `c.pc` ; une tâche neuve dont l'entrée est une étape

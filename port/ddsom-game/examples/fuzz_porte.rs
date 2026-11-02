@@ -68,11 +68,11 @@ fn origine(c: &mut Cpu, b: &mut Cps2Bus, arret: u32, sans_cession: bool) -> Opti
     None
 }
 
-/// Contexte (SR, registres relus) rangé par la cession de la tâche courante (comme `kernel::remettre`), et son étape.
+/// L'étape où reprendra la tâche courante, qui a cédé (SR du mode utilisateur, comme `kernel::lancer`).
 fn reprise(c: &mut Cpu, b: &mut Cps2Bus) -> Option<ddsom_game::taches::Etape> {
     let t = table::table(b);
-    let Reprise::Etape(etape, ctx) = t.emplacements[t.courante].reprise else { return None };
-    ctx.remettre(c);
+    let Reprise::Etape(etape) = t.emplacements[t.courante].reprise else { return None };
+    c.set_sr(0);
     Some(etape)
 }
 
@@ -248,7 +248,7 @@ fn principal() {
         let r = catch_unwind(AssertUnwindSafe(|| {
             for _ in 0..64 {
                 let Some(e) = etape else { break };
-                ddsom_game::taches::executer(e, &mut c, &mut b);
+                ddsom_game::taches::reprendre(e, &mut c, &mut b);
                 if c.pc == SENTINELLE {
                     return true;
                 }

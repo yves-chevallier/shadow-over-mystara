@@ -20,19 +20,45 @@ use crate::mem::{rd8, wr32, wr8, A5};
 use crate::modes::Flow;
 use crate::scene::Ctx;
 
-crate::etapes! {
-    /// Étapes de la tâche de partie (le pas de jeu, `0x1c4b0`, reste une native : voir plus haut).
-    pub enum Etape {
-        Entree = at::ENTRY => entry,
-        /// Début de tour : retour de la fin d'image, ou d'une phase qui dépile son propre retour.
-        Tour = at::TURN => turn,
-        /// Le pas de jeu : la phase courante.
-        Pas = at::STEP => step,
-        /// Retour de la phase : fin d'image (`game::fin_d_image`), puis le tour suivant.
-        FinImage = at::FRAME_END => |x| {
-            crate::game::fin_d_image(x.c, x.b);
-            Flow::Done
-        },
+/// Étapes de la tâche de partie (le pas de jeu, `0x1c4b0`, reste une native : voir plus haut).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Etape {
+    Entree,
+    /// Début de tour : retour de la fin d'image, ou d'une phase qui dépile son propre retour.
+    Tour,
+    /// Le pas de jeu : la phase courante. `d4` : le D4 que le pas précédent a laissé et que la phase relit (reste de la
+    /// boucle d'aiguillage, `dispatch::Restes::d4` : le radeau sans pilote, 0xad7b0, l'ajoute à la position des
+    /// joueurs) ; l'original le garde dans ses registres, que la cession sauve et rend.
+    Pas { d4: u32 },
+    /// Retour de la phase : fin d'image (`game::fin_d_image`), puis le tour suivant.
+    FinImage,
+}
+
+impl Etape {
+    /// Adresse que l'original reprend à cette étape.
+    pub const fn adresse(self) -> u32 {
+        match self {
+            Etape::Entree => at::ENTRY,
+            Etape::Tour => at::TURN,
+            Etape::Pas { .. } => at::STEP,
+            Etape::FinImage => at::FRAME_END,
+        }
+    }
+
+    /// Le pas de l'étape.
+    pub fn pas(self, x: &mut Ctx) -> Flow {
+        match self {
+            Etape::Entree => entry(x),
+            Etape::Tour => turn(x),
+            Etape::Pas { d4 } => {
+                x.c.d[4] = d4;
+                step(x)
+            }
+            Etape::FinImage => {
+                crate::game::fin_d_image(x.c, x.b);
+                Flow::Done
+            }
+        }
     }
 }
 
@@ -118,14 +144,15 @@ fn wait(x: &mut Ctx) -> Flow {
         return step(x);
     }
     wr8(x.b, FREE_STEPS, 0);
-    ceder(x, Attente::Images(1), Etape::Pas)
+    let d4 = x.c.d[4];
+    ceder(x, Attente::Images(1), Etape::Pas { d4 })
 }
 
 /// `0x1c4b0` : le pas de jeu, s'il tient dans l'image (sinon il est retenu jusqu'à la suivante). La phase revient à
 /// la fin d'image, qui revient au début du tour.
 fn step(x: &mut Ctx) -> Flow {
     if !crate::sans68k::pas_de_jeu() {
-        crate::kernel::retenir_le_pas(x.b);
+        crate::kernel::retenir_le_pas(x.b, x.c.d[4]);
         return Flow::Yield;
     }
     wr8(x.b, STEPPED, 0xff);

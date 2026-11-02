@@ -100,7 +100,7 @@ pub fn attente_vide(tasks: &Table, ram: &[u16]) -> bool {
     }
     // elle a cédé par `jsr 0xa86` depuis l'une de ses deux cessions, et c'est la dernière tâche lancée
     // (l'état de l'ordonnanceur est alors celui de chaque passage suivant)
-    let ceded = matches!(tasks.emplacements[SLOT].reprise, Reprise::Etape(super::Etape::Gel(Etape::ApresCession | Etape::ApresDecompte), _));
+    let ceded = matches!(tasks.emplacements[SLOT].reprise, Reprise::Etape(super::Etape::Gel(Etape::ApresCession | Etape::ApresDecompte)));
     let main_waiting = tasks.emplacements[MAIN].etat == Etat::Attend;
     ceded && tasks.courante == SLOT && !step_would_act(ram, main_waiting)
 }

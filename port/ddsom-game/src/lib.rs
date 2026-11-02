@@ -104,9 +104,14 @@ impl Native {
                 mem::rts(c, b);
             }
             Corps::Gestionnaire(f) => {
-                let mut a = dispatch::Aiguillage::du_processeur(c);
+                // appelé depuis le processeur (boucle d'aiguillage) : les restes passent du banc à la table, le
+                // gestionnaire les lit et les écrit par leur nom, puis ils reviennent au banc
+                dispatch::Restes::depuis_le_banc(c, b);
+                let restes = taches::table::table(b).restes;
+                let mut a = dispatch::Aiguillage { objet: objects::Obj(c.a[0]), compteur: c.d[7] as u16, restes };
                 f(b, &mut a);
-                a.rendre(c);
+                taches::table::table(b).restes = a.restes;
+                dispatch::Restes::vers_le_banc(c, b);
                 mem::rts(c, b);
             }
         }

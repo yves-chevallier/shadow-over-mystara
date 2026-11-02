@@ -56,8 +56,10 @@ pub enum Etape {
     TacheLuminosite { fondu: Luminosite, pas: Option<u8> },
     /// Début d'une tâche de fondu par composante (`blanchir` : la tâche `0x1ced4` blanchit d'abord les pages).
     TacheComposante { fondu: Composante, blanchir: bool },
-    /// Pas suivant d'un fondu de luminosité.
-    Luminosite(Luminosite),
+    /// Pas suivant d'un fondu de luminosité ; `a0` : A0 de l'appelant du sous-programme, que le fondu ne touche pas
+    /// (l'original le garde dans ses registres, que la cession sauve et rend) et que l'appelant relit au retour (bloc
+    /// de l'état partagé des séquences de sortie de scène, objet d'une porte SET...).
+    Luminosite { fondu: Luminosite, a0: u32 },
     /// Pas suivant d'un fondu par composante ; `registres` : D0-D7/A0-A6 sauvés à l'entrée.
     Composante { fondu: Composante, registres: Registres },
 }
@@ -95,7 +97,7 @@ impl Etape {
             Etape::TacheLuminosite { .. } | Etape::TacheComposante { .. } => {
                 TACHES.into_iter().find(|&(_, e)| e == self).expect("tâche de fondu").0
             }
-            Etape::Luminosite(f) => f.reprise(),
+            Etape::Luminosite { fondu, .. } => fondu.reprise(),
             Etape::Composante { fondu, .. } => fondu.reprise,
         }
     }
@@ -104,7 +106,10 @@ impl Etape {
         match self {
             Etape::TacheLuminosite { fondu, pas } => fondu.debut_tache(x, pas),
             Etape::TacheComposante { fondu, blanchir } => fondu.debut(x, blanchir),
-            Etape::Luminosite(fondu) => fondu.pas(x),
+            Etape::Luminosite { fondu, a0 } => {
+                x.c.a[0] = a0;
+                fondu.pas(x)
+            }
             Etape::Composante { fondu, registres } => fondu.pas(x, registres),
         }
     }
@@ -180,7 +185,8 @@ impl Luminosite {
             return self.fin(x);
         }
         let delai = rd16(x.b, etat::DELAI);
-        attendre(x, delai, Etape::Luminosite(self))
+        let a0 = x.c.a[0];
+        attendre(x, delai, Etape::Luminosite { fondu: self, a0 })
     }
 
     /// Fin : plus de pages ; le sous-programme revient à son appelant, la tâche se termine.

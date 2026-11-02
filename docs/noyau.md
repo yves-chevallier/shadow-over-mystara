@@ -43,7 +43,7 @@ réécrit tient tout cela dans une structure Rust, rangée dans le bus (`Cps2Bus
 | `emplacements[k].etat` : `Libre`, `Attend`, `Suspendue`, `Prete`, `EnCours`, `Neuve` | octet +0 de l'enregistrement FF0064 + 0x10 k (0, 1, 2, 4, 8, 0xc) |
 | `emplacements[k].compte` | octet +1 (images avant le réveil ; gardé tel quel dans les autres états) |
 | `emplacements[k].pile` | long +0xc : pile 68000 donnée à la création |
-| `emplacements[k].reprise` : `Entree(pc)` ou `Etape(etape, Contexte)` | PC (+4) d'une tâche neuve ; sinon SR (+2), USP (+8) et, sur la pile, les 15 registres et l'adresse de retour de l'enveloppe (`Etape::adresse()` pour une étape) |
+| `emplacements[k].reprise` : `Entree(pc)` ou `Etape(etape)` (ce que la tâche relit à sa reprise est dans les champs de l'étape) | PC (+4) d'une tâche neuve ; sinon SR (+2), USP (+8) et, sur la pile, les 15 registres et l'adresse de retour de l'enveloppe (`Etape::adresse()` pour une étape) |
 | `courante` | FF0056 (dernière tâche lancée) |
 | `piles` | tas des piles (FF005A, FF0166-FF01A5) |
 

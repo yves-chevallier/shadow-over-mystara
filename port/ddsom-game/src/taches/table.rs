@@ -4,8 +4,8 @@
 //! L'ordonnanceur les examine de 0 à 15 (dans l'original, D0 décompte alors de 15 à 0). Chaque emplacement porte
 //! l'état et le compte d'attente de l'original, la pile 68000 donnée à la tâche et ce qu'il faut pour la reprendre :
 //! son entrée tant qu'elle n'a pas tourné (son étape d'entrée : `taches::entree`), puis l'étape Rust où elle reprendra
-//! et le contexte du 68000 sauvé à sa dernière cession (registres, SR et pointeur de pile ; l'adresse d'origine de
-//! l'étape), et ses appels en cours ([`Cadre`]). La table garde aussi où en est le processeur (`kernel::Point`).
+//! (ce qu'elle relit à sa reprise est dans les champs de l'étape, et non plus dans des registres sauvés), et ses
+//! appels en cours ([`Cadre`]). La table garde aussi où en est le processeur (`kernel::Point`).
 //!
 //! La table vit dans le bus (`Cps2Bus::ext`) : la machine du jeu n'écrit plus FF0052-FF01A5 (pile de
 //! l'ordonnanceur, tâche courante, tas des piles, enregistrements), et les enveloppes de cession ne sauvent plus les
@@ -131,55 +131,17 @@ impl Tache {
     }
 }
 
-/// Ce qu'une tâche qui a cédé la main retrouve à sa reprise. L'original sauve ses 15 registres et son SR à la cession
-/// (sur sa pile et dans son enregistrement) et les restaure ; la sonde `DDSOM_POISON=reprise` (`diag::sonder_lancement`,
-/// tous les registres inversés à la reprise, 296 scénarios) montre que seuls ceux-ci sont relus. Les autres registres
-/// d'une tâche qui reprend sont ceux que l'ordonnanceur laisse : personne ne les lit.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Contexte {
-    /// SR de la tâche : son masque d'interruption (`trap #12`, `kernel::masquer`), mode utilisateur.
-    pub sr: u16,
-    /// A0 de l'appelant d'un sous-programme qui cède, relu au retour (registre gardé à travers la cession) : fondu de
-    /// luminosité appelé en sous-programme (`taches::fondu`, reprise `0x14b4`), bonus de fin de scène
-    /// (`Bonus(SetUp)`), sortie de scène (`Exit(..)` : le bloc de l'état partagé), transitions entre scènes
-    /// (`Transition(SpritesAfterFrame)`, `TransitionEarly(..)`, `TransitionLate(..)`), objet courant de la boucle
-    /// d'aiguillage interrompue (voir `d7`).
-    pub a0: u32,
-    /// D4 laissé par le pas de jeu précédent, relu par la phase du pas suivant (tâche de partie, `Partie(Pas)`).
-    pub d4: u32,
-    /// D7 : compteur de la boucle d'aiguillage des objets (`dispatch`) qu'un gestionnaire interrompt en cédant (feu
-    /// d'artifice, `FeuArtifice(ApresAttente)` ; fondu de luminosité appelé par un gestionnaire, `Fondu(Luminosite)`) ;
-    /// la boucle reprend avec lui (et l'objet dans A0).
-    pub d7: u32,
-}
-
-impl Contexte {
-    /// Rend le contexte à la reprise de la tâche.
-    pub fn remettre(self, c: &mut Cpu) {
-        c.a[0] = self.a0;
-        c.d[4] = self.d4;
-        c.d[7] = self.d7;
-        c.set_sr(self.sr);
-    }
-}
-
 /// Où reprendre une tâche.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Reprise {
     /// Pas encore lancée : son entrée (son étape Rust : `taches::entree`).
     Entree(u32),
-    /// A cédé la main ; reprendra à cette étape Rust (le `pc` du contexte n'est que son adresse d'origine).
-    Etape(Etape, Contexte),
-}
-
-impl Reprise {
-    /// Contexte d'une tâche qui a cédé.
-    pub fn contexte(self) -> Option<Contexte> {
-        match self {
-            Reprise::Entree(_) => None,
-            Reprise::Etape(_, c) => Some(c),
-        }
-    }
+    /// A cédé la main ; reprendra à cette étape Rust. L'original sauve ses 15 registres et son SR à la cession et les
+    /// restaure ; la sonde `DDSOM_POISON=reprise` (`diag::sonder_lancement`, tous les registres et drapeaux inversés à la
+    /// reprise, 296 scénarios) montre que seuls quelques-uns sont relus, et ils sont des champs nommés des étapes qui
+    /// les relisent (voir `taches::reprendre`). Le SR rendu est toujours celui du mode utilisateur, interruptions
+    /// permises : aucune tâche ne cède en les masquant (`kernel::ceder`).
+    Etape(Etape),
 }
 
 /// Ce qui suit un appel en cours, ou une cession : une native à son adresse, ou une étape Rust.
@@ -326,6 +288,11 @@ pub struct Table {
     /// (`crate::call`), et, dans les outils, natives appelées par le code d'origine. Ils ne cèdent jamais la main :
     /// aucun n'est en cours à une cession (ils ne sont donc à aucune tâche).
     pub appels: Vec<HorsCadre>,
+    /// Restes de registres que les gestionnaires d'objets se transmettent (`dispatch::Restes`) : un état de la partie.
+    /// Le code encore sur le processeur (gestionnaires non convertis, liste des sprites, caméras...) les tient dans le
+    /// banc (D2-D5) : ils passent du banc à la table à l'entrée d'un gestionnaire converti, et reviennent au banc à sa
+    /// sortie (`Native::executer`).
+    pub restes: crate::dispatch::Restes,
 }
 
 /// Un appel en cours hors des cadres d'une tâche.
@@ -633,7 +600,6 @@ pub fn ram_du_noyau(decalage: u32) -> bool {
 mod champ {
     pub const ETAT: u32 = 0;
     pub const COMPTE: u32 = 1;
-    pub const SR: u32 = 2;
     pub const PC: u32 = 4;
     pub const USP: u32 = 8;
     pub const PILE: u32 = 0xc;
@@ -673,10 +639,9 @@ fn un_decompte_d_ecart(rust: (Etat, u8), origine: (u8, u8)) -> bool {
 /// Différences entre la table Rust et la table FF0064 de la RAM `ram` (FF0000-FFFFFF) d'une machine d'origine, à la
 /// même image : état (« prête » et « en cours » confondus : la fin d'image peut tomber pendant qu'une tâche tourne
 /// dans l'original ; pour la tâche principale, une image d'écart décomptée par le gel est admise, voir
-/// [`un_decompte_d_ecart`]), compte, pile, entrée d'une tâche neuve, et tas des piles. Avec `tout`, le contexte des tâches
-/// qui ont cédé aussi (diagnostic) : adresse de reprise, SR et registres gardés ([`Contexte`]). Ils peuvent différer sans effet : une
-/// native reprend parfois à une copie identique du code de reprise d'origine (`0xf32cc` pour `0xf5902`), ou laisse
-/// un registre que personne ne relit.
+/// [`un_decompte_d_ecart`]), compte, pile, entrée d'une tâche neuve, et tas des piles. Avec `tout`, l'adresse de reprise
+/// des tâches qui ont cédé aussi (diagnostic) : elle peut différer sans effet (une native reprend parfois à une copie
+/// identique du code de reprise d'origine, `0xf32cc` pour `0xf5902`).
 pub fn ecarts(t: &Table, ram: &[u16], tout: bool) -> Vec<String> {
     let mot = |a: u32| ram[(a as usize & 0xffff) / 2];
     let octet = |a: u32| (mot(a & !1) >> if a & 1 == 0 { 8 } else { 0 }) as u8;
@@ -704,19 +669,15 @@ pub fn ecarts(t: &Table, ram: &[u16], tout: bool) -> Vec<String> {
         match e.reprise {
             Reprise::Entree(entree) => ecart("entrée", entree, long(r + champ::PC)),
             // la pile d'une tâche en cours a changé depuis sa cession
-            Reprise::Etape(etape, c) if tout && !en_cours => {
+            Reprise::Etape(etape) if tout && !en_cours => {
                 let usp = long(r + champ::USP);
                 if !REPRISES_ORIGINE.contains(&long(r + champ::PC)) {
                     ecart("reprise (PC de l'enregistrement)", etape.adresse(), long(r + champ::PC));
                     continue;
                 }
                 ecart("reprise", etape.adresse(), long(usp + 60));
-                ecart("SR", c.sr as u32, mot(r + champ::SR) as u32);
-                ecart("D4", c.d4, long(usp + 4 * 4));
-                ecart("D7", c.d7, long(usp + 4 * 7));
-                ecart("A0", c.a0, long(usp + 32));
             }
-            Reprise::Etape(..) => {}
+            Reprise::Etape(_) => {}
         }
     }
     let sommet = if long(TAS) == 0 { TAS_FOND } else { long(TAS) };

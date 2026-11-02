@@ -15,7 +15,7 @@
 //! restants, de 15 à 0). Chaque emplacement est examiné par un point séparé ([`Point::Examen`]), interruptions
 //! masquées jusqu'au niveau 6 ; entre deux, la fenêtre de 0x952 les autorise. Un VBLANK pose l'indicateur
 //! `NOUVELLE_IMAGE` (FF0164) : le parcours reprend alors au début. Une tâche prête reprend à l'étape qui suit son appel
-//! de l'enveloppe, avec son SR et les seuls registres relus après une cession ([`Contexte`]) ; une tâche neuve démarre à son
+//! de l'enveloppe, SR = 0, sans registre : ce que l'étape relit est dans ses champs (`taches::reprendre`) ; une tâche neuve démarre à son
 //! entrée, SR = 0 (mode utilisateur), sans registre : elle ne lit pas ceux que l'original lui donne (A0 =
 //! enregistrement, A1 = entrée, A4 = pile, D1.w = état ; sonde `DDSOM_POISON=neuve`). Quand elle cède, l'ordonnanceur
 //! reprend à l'emplacement suivant ([`Point::Retour`] 0x984, puis [`Point::Suivant`] 0x952).
@@ -44,7 +44,7 @@ use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use crate::mem::{rd16, rd8, rts, set_low_byte, set_low_word, wr8, A5};
-use crate::taches::table::{emplacement, enregistrement, table, Contexte, Etat, Reprise, Suite, ENREGISTREMENTS};
+use crate::taches::table::{emplacement, enregistrement, table, Etat, Reprise, Suite, ENREGISTREMENTS};
 use crate::Native;
 
 /// Adresses de la RAM.
@@ -85,8 +85,9 @@ pub enum Point {
     /// Une tâche s'exécute (le pas de son étape, `taches::executer`) ; elle en sort en cédant la main, en se terminant
     /// ou en bloquant.
     Tache,
-    /// Le pas de jeu attend l'image suivante (plafond des pas par image, `taches::partie`).
-    PasRetenu,
+    /// Le pas de jeu attend l'image suivante (plafond des pas par image, `taches::partie`), avec le D4 qu'il relira
+    /// (`taches::partie::Etape::Pas`).
+    PasRetenu { d4: u32 },
     /// Boucle sans fin de l'original (`bra.b *` à cette adresse : blocages du menu TEST et de l'EEPROM, [`bloquer`]) :
     /// plus rien ne s'exécute, hors des interruptions.
     Bloque(u32),
@@ -110,7 +111,7 @@ impl Point {
             Point::Suivant => 0x952,
             Point::Retour => 0x984,
             Point::Tache => c.pc,
-            Point::PasRetenu => crate::GAME_STEP,
+            Point::PasRetenu { .. } => crate::GAME_STEP,
             Point::Bloque(adresse) => adresse,
             Point::Interruption => 0x574,
         }
@@ -214,11 +215,14 @@ fn lancer(c: &mut Cpu, b: &mut Cps2Bus, k: usize) -> Point {
             crate::diag::sonder_lancement(c, "neuve", &etape, crate::regs::a(5));
             etape
         }
-        (Etat::Prete | Etat::EnCours, Reprise::Etape(etape, ctx)) => {
+        (Etat::Prete | Etat::EnCours, Reprise::Etape(etape)) => {
             e.etat = Etat::EnCours;
-            ctx.remettre(c);
+            // mode utilisateur, interruptions permises (aucune tâche ne cède en les masquant) ; les registres que
+            // l'étape relit sont ses champs (`taches::reprendre`)
+            c.set_sr(0);
             crate::diag::sonder_lancement(c, "reprise", &etape, crate::regs::a(5));
-            etape
+            crate::taches::reprendre(etape, c, b);
+            return table(b).point;
         }
         (etat, reprise) => unreachable!("tâche {k} lancée dans l'état {etat:?} avec la reprise {reprise:?}"),
     };
@@ -267,27 +271,24 @@ pub fn fin_d_interruption(b: &mut Cps2Bus) -> Point {
 }
 
 /// Le pas de jeu est retenu jusqu'à l'image suivante (plafond des pas par image) : la tâche de partie reste en cours.
-pub fn retenir_le_pas(b: &mut Cps2Bus) {
-    table(b).point = Point::PasRetenu;
+pub fn retenir_le_pas(b: &mut Cps2Bus, d4: u32) {
+    table(b).point = Point::PasRetenu { d4 };
 }
 
 // ---------------------------------------------------------------------------------------------
-// Cessions : la tâche courante rend la main ; elle reprendra à l'étape `reprise` avec son SR et les registres
-// qu'elle relit ([`Contexte`]). Les tâches Rust cèdent directement (`taches::ceder`) ; les enveloppes de l'original dépilent
+// Cessions : la tâche courante rend la main ; elle reprendra à l'étape `reprise`, qui porte ce qu'elle relit
+// (`taches::reprendre`). Les tâches Rust cèdent directement (`taches::ceder`) ; les enveloppes de l'original dépilent
 // d'abord leur adresse de retour (la suite d'un appel en cours).
 
-/// Range le contexte de la tâche courante dans la table (ce qu'elle relira à sa reprise : [`Contexte`]), puis rend la
-/// main à l'ordonnanceur.
+/// Range la reprise de la tâche courante dans la table (son étape, sans registres : ce qu'elle relira est dans
+/// l'étape), puis rend la main à l'ordonnanceur.
 fn ceder(c: &mut Cpu, b: &mut Cps2Bus, etat: Etat, compte: Option<u8>, reprise: Suite) {
     let Suite::Etape(etape) = reprise else {
         unreachable!("cession vers l'adresse {:x} : toutes les reprises sont des étapes Rust", reprise.adresse())
     };
-    // la sonde `cession` inverse les registres sauvés (une copie : la tâche continue jusqu'à son retour sans rien faire)
-    let (mut d, mut a, mut sr) = (c.d, [0; 7], c.sr);
-    a.copy_from_slice(&c.a[..7]);
-    crate::diag::sonder_cession(&mut d, &mut a, &mut sr, &etape);
-    let ctx = Contexte { sr, a0: a[0], d4: d[4], d7: d[7] };
-    table(b).ceder(etat, compte, Reprise::Etape(etape, ctx));
+    // le seul masquage du jeu (test de la mémoire du menu TEST) ne cède pas : la reprise rend un SR sans masque
+    assert!(c.sr & 0x0700 == 0, "cession vers {etape:?} interruptions masquées");
+    table(b).ceder(etat, compte, Reprise::Etape(etape));
     vers_ordonnanceur(c, b);
 }
 
