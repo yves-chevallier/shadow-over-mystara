@@ -8,8 +8,8 @@
 //!
 //! The magic-user's weapon is in `WEAPON_B` (`+0x10e`): a staff or one of the four rods (0x24..0x27)
 //! that shoot at the carried gesture (`rod_shot`). The thrown items, lightning, the wall and spells 13..20 are
-//! those of the other characters (`items`); spells 0x18..0x24 are its own. The original
-//! routines that create shots, effects and sounds are still called as they are.
+//! those of the other characters (`items`); spells 0x18..0x24 are its own. The shots, effects and
+//! sounds are created by Rust calls.
 
 use crate::machine::Machine;
 use super::common::{self, countdown, field, is_cancelled, next_step, take_event};
@@ -24,7 +24,7 @@ use crate::objects::Obj;
 use crate::player::ram;
 use crate::player::external as ext;
 
-/// Original routines called as they are: shots, player effects, sounds, palettes and screen effects.
+/// Identifiers (original addresses) of the routines reached: shots, player effects, sounds, palettes and screen effects.
 
 /// Magic-user table (ROM data): jump speeds (four words per jump type).
 const JUMP_SPEEDS: u32 = 0x10_459e;
@@ -104,11 +104,11 @@ fn rod_shot(g: &mut Ctx, p: Player) {
     if !take_event(g, p) {
         return;
     }
-    // (rod, shot, reserve flag, interface marker, interface sound)
-    const RODS: [(u8, Option<u32>, u32, u32, u32); 4] = [
-        (0x24, Some(0x5336a), 0x18c, 0, 0xa),
-        (0x25, Some(0x53478), 0x18b, 2, 8),
-        (0x26, Some(0x535f2), 0x18d, 4, 9),
+    // (rod, shot: 0x5336a, 0x53478, 0x535f2, reserve flag, interface marker, interface sound)
+    const RODS: [(u8, Option<spawn::RodShot>, u32, u32, u32); 4] = [
+        (0x24, Some(spawn::RodShot::Flame), 0x18c, 0, 0xa),
+        (0x25, Some(spawn::RodShot::Ball), 0x18b, 2, 8),
+        (0x26, Some(spawn::RodShot::Star), 0x18d, 4, 9),
         (0x27, None, 0x191, 6, 0xb),
     ];
     for (weapon, shot, flag, tag, sound) in RODS {
@@ -116,7 +116,7 @@ fn rod_shot(g: &mut Ctx, p: Player) {
             continue;
         }
         if let Some(shot) = shot {
-            g.rom(shot, p);
+            spawn::rod_shot(g, p, shot);
         }
         if p.u8(g, flag) != 0 {
             continue;
@@ -126,10 +126,8 @@ fn rod_shot(g: &mut Ctx, p: Player) {
             if p.u8(g, 0x140 + i) == 0x50 {
                 p.set_u8(g, 0x140 + i, 0x56);
                 p.set_u8(g, 0x148 + i, 0);
-                (g.c.d[0], g.c.d[1]) = (5 - i, tag);
-                crate::families::effects_creators::for_players::thrown_shard_68k(g.c, g.b, p.obj(), tag as u8);
-                g.c.d[0] = sound;
-                crate::families::creators::set_a_68k(g.c, g.b, p.obj(), sound as u8);
+                crate::families::effects_creators::for_players::thrown_shard(&mut g.leftovers, g.b, p.obj(), tag as u8);
+                crate::families::creators::for_players::set_a(&mut g.leftovers, g.b, p.obj(), sound as u8);
                 return;
             }
         }
@@ -385,7 +383,7 @@ const UNDIM: u16 = 1;
 /// The magic-user's red ring (no. 16): the countdown lasts 30 frames and the aura is only placed at the end.
 const CAST_16: items::Cast = items::Cast {
     frames: 0x1e,
-    fire: items::ring_fire,
+    fire: |g, p, _| items::ring_fire(g, p),
     on_end: |g, p| items::red_aura(g, p, 0x8000),
     ..items::CAST_13
 };
@@ -478,7 +476,7 @@ fn sparks(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                crate::families::creators::for_players::sparks_68k(g.c, g.b, p.obj());
+                crate::families::creators::for_players::sparks(&mut g.leftovers, g.b, p.obj());
                 g.sound(0xe84c6, p);
             }
             if countdown(g, p) {
@@ -531,8 +529,7 @@ fn bolt(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.c.d[0] = 0;
-                crate::families::creators::for_players::bolt_68k(g.c, g.b, p.obj(), 0);
+                crate::families::creators::for_players::bolt(&mut g.leftovers, g.b, p.obj(), 0);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.sound(0xe2a34, p);
             }
@@ -551,8 +548,7 @@ fn bolt(g: &mut Ctx, p: Player) {
                     common::cancel_cast(g, p, 0x1d);
                     return linger(g, p);
                 }
-                g.c.d[0] = 1;
-                crate::families::creators::for_players::bolt_68k(g.c, g.b, p.obj(), 1);
+                crate::families::creators::for_players::bolt(&mut g.leftovers, g.b, p.obj(), 1);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -599,7 +595,6 @@ fn frost(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, 0x1e8, 0x10);
                 p.set_u8(g, 0x1e9, 2);
-                g.c.d[0] = 0;
                 p.set_u16(g, field::TIMER, 0x78);
                 animation::start_plain(g, p, 0x22);
                 g.sound(0xe2fba, p);
@@ -659,7 +654,6 @@ fn frost_end(g: &mut Ctx, p: Player) {
     common::clear_spell_state(g);
     ram::FADE_DELAY.set(g.b, 2);
     ram::FADE_PAGES.set(g.b, 0xc);
-    g.c.d[0] = g.c.d[0] & 0xffff_0000 | 0xa000;
     crate::palette::set_brightness(g.b, 0xa000);
     common::undim_screen_mode(g, p, UNDIM);
     to_stand(g, p);
@@ -701,8 +695,7 @@ fn quake(g: &mut Ctx, p: Player) {
                 animation::start_plain(g, p, 0x3e);
                 g.sound(0xe2ffa, p);
             } else if take_event(g, p) {
-                g.c.d[0] = 0;
-                crate::families::creators::quake_68k(g.c, g.b, p.obj(), true);
+                crate::families::creators::for_players::quake(&mut g.leftovers, g.b, p.obj(), true);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 g.sound(0xe8db4, p);
             }
@@ -717,9 +710,8 @@ fn quake(g: &mut Ctx, p: Player) {
                     crate::palette::restore_flash(g.b);
                     return linger(g, p);
                 }
-                g.c.d[0] = 1;
-                crate::families::creators::quake_68k(g.c, g.b, p.obj(), false);
-                crate::families::small::quake_b_68k(g.c, g.b, p.obj());
+                crate::families::creators::for_players::quake(&mut g.leftovers, g.b, p.obj(), false);
+                crate::families::small::quake_b(g.b, p.obj());
                 g.sound(0xe8b22, p);
             }
             if countdown(g, p) {
@@ -781,8 +773,7 @@ fn storm(g: &mut Ctx, p: Player) {
         2 | 0xa => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.c.d[0] = 0;
-                crate::families::creators::for_players::bolt_68k(g.c, g.b, p.obj(), 0);
+                crate::families::creators::for_players::bolt(&mut g.leftovers, g.b, p.obj(), 0);
                 crate::placement::load_effect_palette(g.b, if step == 2 { crate::placement::effect_palette::LIGHT } else { crate::placement::effect_palette::NORMAL });
                 g.sound(0xe2a74, p);
                 g.sound(if step == 2 { 0xe97b4 } else { 0xe974a }, p);

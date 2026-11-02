@@ -7,12 +7,11 @@
 //! frame (`+0x40`, `+0x42`, `+0x44`) and the weapon. It also makes the weapon palette sparkle
 //! when a player is under a power bonus.
 //!
-//! Registers: the game loop chains this routine and the object dispatch loops without
-//! resetting anything, and some handlers read registers it leaves (D3 for example:
-//! an effect copies the last horizontal offset). The code below therefore reproduces the registers
-//! that the original modifies, in the same format (byte, word or long) as it.
+//! Leftovers: the game loop chains this routine and the object dispatch loops without
+//! resetting anything, and some handlers read the registers D2-D5 it leaves (D3 for example:
+//! an effect copies the last horizontal offset). The code below therefore writes them (`Ctx::leftovers`) where
+//! the original does, in the same format (byte, word or long) as it.
 
-use cps2::Cps2Bus;
 use m68k::Cpu;
 
 use super::checks::team_score_reached;
@@ -66,19 +65,17 @@ struct Row {
     behind: u8,
 }
 
-/// Common start of the sub-objects: D1 = character × 4, A4 = character table, D2.w = frame.
-fn select_table(g: &mut Ctx, table: u32, character: u32, frame: u32) {
+/// Common start of the sub-objects: D2.w = frame.
+fn select_table(g: &mut Ctx, frame: u32) {
     cov!();
-    g.c.d[1] = character << 2;
-    g.c.a[4] = g.data32(table + 4 * character);
-    set_low_word(&mut g.c.d[2], frame as u16);
+    set_low_word(&mut g.leftovers.d2, frame as u16);
 }
 
-/// Row `index` of the table chosen by `select_table` (D2.w = index × 8, D0.w = animation).
+/// Row `index` of the table of `character` (D2.w = index × 8).
 fn row(g: &mut Ctx, table: u32, character: u32, index: u32) -> Row {
     cov!();
     let base = g.data32(table + 4 * character) + 8 * index;
-    set_low_word(&mut g.c.d[2], (index << 3) as u16);
+    set_low_word(&mut g.leftovers.d2, (index << 3) as u16);
     let row = Row {
         anim: g.data16(base),
         dx: g.data16(base + 2) as i16,
@@ -86,7 +83,6 @@ fn row(g: &mut Ctx, table: u32, character: u32, index: u32) -> Row {
         flip: g.data8(base + 6),
         behind: g.data8(base + 7),
     };
-    set_low_word(&mut g.c.d[0], row.anim);
     row
 }
 
@@ -109,10 +105,9 @@ fn place(g: &mut Ctx, p: Player, o: Obj, r: &Row) {
     let dx = if p.u8(g, Player::FACING) != 0 { r.dx.wrapping_neg() } else { r.dx };
     wr16(g.b, o.at(0x08), dx as u16);
     wr16(g.b, o.at(0x0c), r.dz as u16);
-    set_low_word(&mut g.c.d[3], dx as u16);
-    set_low_word(&mut g.c.d[4], r.dz as u16);
-    set_low_byte(&mut g.c.d[5], r.flip);
-    set_low_byte(&mut g.c.d[6], r.behind);
+    set_low_word(&mut g.leftovers.d3, dx as u16);
+    set_low_word(&mut g.leftovers.d4, r.dz as u16);
+    set_low_byte(&mut g.leftovers.d5, r.flip);
 }
 
 /// Loads animation `n` of the weapon script `weapon` into the sub-object.
@@ -120,9 +115,7 @@ fn load_animation(g: &mut Ctx, o: Obj, weapon: u32, n: u16) {
     cov!();
     let set = g.data32(tables::ANIMATIONS + 4 * weapon);
     let off = rd16(g.b, set.wrapping_add(2 * n as u32)) as i16 as i32 as u32;
-    g.c.d[1] = weapon << 2;
-    set_low_word(&mut g.c.d[0], off as u16);
-    g.c.a[4] = load_entry(g.b, o, set.wrapping_add(off), false);
+    load_entry(g.b, o, set.wrapping_add(off), false);
     if rd8(g.b, o.at(0x38)) != 0 {
         let facing = rd8(g.b, o.at(0x2c)) ^ 0x20;
         wr8(g.b, o.at(0x2c), facing);
@@ -162,7 +155,7 @@ fn body(g: &mut Ctx, p: Player, o: Obj) {
     }
     let frame = p.u16(g, f::WEAPON_FRAME) as u32;
     let character = p.u8(g, Player::CHARACTER) as u32;
-    select_table(g, tables::BODY, character, frame);
+    select_table(g, frame);
     if frame == 0 {
         p.set_u16(g, Player::OVERLAY_BODY, 0);
         return;
@@ -185,8 +178,7 @@ fn shield(g: &mut Ctx, p: Player, o: Obj) {
     let character = p.u8(g, Player::CHARACTER) as u32;
     if shield_kind >= 0x28 {
         let frame = p.u16(g, f::SHIELD_HIGH_FRAME) as u32;
-        g.c.a[4] = tables::SHIELD_HIGH;
-        set_low_word(&mut g.c.d[2], frame as u16);
+        set_low_word(&mut g.leftovers.d2, frame as u16);
         if frame == 0 {
             p.set_u16(g, Player::OVERLAY_ATTACK, 0);
             return;
@@ -194,7 +186,7 @@ fn shield(g: &mut Ctx, p: Player, o: Obj) {
         follow(g, p, o);
         wr8(g.b, o.at(0x2a), 2);
         wr8(g.b, o.at(0x2b), 0x10);
-        select_table(g, tables::SHIELD_HIGH, character, frame);
+        select_table(g, frame);
         let mut r = row(g, tables::SHIELD_HIGH, character, frame);
         // one palette per pair of characters: the animation index is shifted by 0x20 per class
         r.anim = r.anim.wrapping_add(((character >> 1) << 5) as u16);
@@ -208,8 +200,7 @@ fn shield(g: &mut Ctx, p: Player, o: Obj) {
         return;
     }
     let frame = p.u16(g, f::SHIELD_LOW_FRAME) as u32;
-    g.c.a[4] = tables::BODY;
-    set_low_word(&mut g.c.d[2], frame as u16);
+    set_low_word(&mut g.leftovers.d2, frame as u16);
     if frame == 0 {
         p.set_u16(g, Player::OVERLAY_ATTACK, 0);
         return;
@@ -221,7 +212,7 @@ fn shield(g: &mut Ctx, p: Player, o: Obj) {
         wr8(g.b, o.at(0x2a), 1);
         wr8(g.b, o.at(0x2b), 0xe);
     }
-    select_table(g, tables::BODY, character, frame);
+    select_table(g, frame);
     let r = row(g, tables::BODY, character, frame);
     place(g, p, o, &r);
     p.set_u16(g, Player::OVERLAY_ATTACK, o.0 as u16);
@@ -245,12 +236,10 @@ fn blink_unless_idle(g: &mut Ctx, p: Player) {
         0x26 => p.u8(g, 0x18d),
         _ => p.u8(g, 0x191),
     };
-    set_low_byte(&mut g.c.d[0], charge);
     if !(0x24..=0x27).contains(&kind) || (charge as i8) > 5 {
         return;
     }
     let phase = ram::FRAME_COUNTER.get(g.b) & 7;
-    set_low_byte(&mut g.c.d[0], phase);
     if phase & 4 != 0 {
         p.set_u16(g, Player::OVERLAY_ATTACK, 0);
     }
@@ -262,37 +251,19 @@ fn blink_unless_idle(g: &mut Ctx, p: Player) {
 fn sparkle(g: &mut Ctx, target: u32) {
     cov!();
     let phase = ram::FRAME_COUNTER.get(g.b) & 7;
-    set_low_byte(&mut g.c.d[0], phase);
     if phase != 0 {
         return;
     }
     let step = rd8(g.b, target + f::SPARKLE_STEP).wrapping_add(1) & 7;
     wr8(g.b, target + f::SPARKLE_STEP, step);
     let src = tables::POWER_PALETTES + ((step as u32) << 5);
-    // the original loads the eight longs into D0-D6 and A3, then stores them all at once
+    // the original loads the eight longs into D0-D6 and A3, then stores them all at once: D2-D5 stay
     let mut words = [0u32; 8];
     for (i, w) in words.iter_mut().enumerate() {
         *w = rd32(g.b, src + 4 * i as u32);
         wr32(g.b, SPARKLE_RAM + 4 * i as u32, *w);
     }
-    g.c.d[..7].copy_from_slice(&words[..7]);
-    g.c.a[3] = words[7];
-    g.c.a[1] = src + 32;
-    g.c.a[2] = SPARKLE_RAM;
-}
-
-/// Registers left by `team_score_reached` (0x37658): D0 = result, D5 and D6 = exhausted loop counters,
-/// A1 = after the last player, A2 = sum, A3 = score of the last player added.
-fn team_score_regs(g: &mut Ctx, reached: bool) {
-    cov!();
-    g.c.d[0] = reached as u32;
-    g.c.d[5] = 0xffff;
-    g.c.a[1] = Player::nth(PLAYER_COUNT).0;
-    g.c.a[2] = super::checks::TEAM_SCORE;
-    if let Some(last) = Player::all().filter(|q| q.u8(g, Player::ACTIVE) != 0 && q.u16(g, Player::HP) != 0).last() {
-        g.c.d[6] = 0xffff;
-        g.c.a[3] = last.at(Player::SCORE_BCD);
-    }
+    (g.leftovers.d2, g.leftovers.d3, g.leftovers.d4, g.leftovers.d5) = (words[2], words[3], words[4], words[5]);
 }
 
 /// 0x392e4: updates all the sub-objects. A0 on entry stays in place if no player is active.
@@ -301,40 +272,35 @@ pub fn update(g: &mut Ctx) {
     wr16(g.b, TEAM_READY, 0);
     if ram::PLAYERS_ALIVE.get(g.b) as i8 >= 3 {
         let reached = team_score_reached(g);
-        team_score_regs(g, reached);
+        // 0x37658 leaves D5 = its exhausted loop counter
+        g.leftovers.d5 = 0xffff;
         if reached {
             wr16(g.b, TEAM_READY, 1);
         }
     }
+    // Original glitch: the sparkle counts its steps in the last sub-object handled (A0); without one, in the record of
+    // player 4, the A0 that the player loop (0x35292) leaves
+    let mut last = Player::nth(PLAYER_COUNT - 1).0;
     for k in 0..PLAYER_COUNT {
         let p = Player::nth(k);
-        g.c.a[1] = p.0;
         if p.u8(g, Player::ACTIVE) == 0 || p.u16(g, Player::MAIN) == 0x402 {
             continue;
         }
-        g.c.a[0] = overlay(k, false);
-        body(g, p, Obj(g.c.a[0]));
-        g.c.a[0] = overlay(k, true);
-        shield(g, p, Obj(g.c.a[0]));
+        body(g, p, Obj(overlay(k, false)));
+        last = overlay(k, true);
+        shield(g, p, Obj(last));
     }
     if rd8(g.b, NO_SPARKLE) != 0 {
         return;
     }
     let powered: u8 = Player::all().map(|q| q.u8(g, f::POWERUP)).fold(0, |a, b| a.wrapping_add(b));
-    g.c.d[0] = powered as u32;
     if powered != 0 || Player::all().any(|q| q.u8(g, Player::WEAPON_B) == 0x21) {
-        let target = g.c.a[0];
-        sparkle(g, target);
+        sparkle(g, last);
     }
 }
 
-/// 0x392e4: update of the players' weapons and shields.
-pub fn update_cpu(c: &mut Cpu, b: &mut Cps2Bus) {
-    update(&mut Ctx::new(c, b));
-}
-
-fn update_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    update(&mut Ctx::new(c, b));
+fn update_native(c: &mut Cpu, b: &mut cps2::Cps2Bus) {
+    super::on_bench(c, b, update);
     rts(c, b);
 }
 

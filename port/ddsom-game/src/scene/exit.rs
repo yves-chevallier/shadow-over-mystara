@@ -486,8 +486,8 @@ fn run_update(ex: &mut Ex, update: Update) {
         Update::Reduced => {
             // `rendering` probe (see `dispatch::Class::update_no_next`)
             crate::diag::dead_regs(ex.x.c, "handback", crate::diag::TASK_REGS);
-            crate::player::update::update_cpu(ex.x.c, ex.x.b);
-            crate::player::overlays::update_cpu(ex.x.c, ex.x.b);
+            crate::player::on_bench(ex.x.c, ex.x.b, crate::player::update::update_all);
+            crate::player::on_bench(ex.x.c, ex.x.b, crate::player::overlays::update);
             for class in CLASSES {
                 class.update_no_next(ex.x.c, ex.x.b);
             }
@@ -496,7 +496,7 @@ fn run_update(ex: &mut Ex, update: Update) {
         _ => {
             ex.x.world();
             if update == Update::Full {
-                crate::combat::update_cpu(ex.x.c, ex.x.b);
+                crate::combat::on_bench(ex.x.c, ex.x.b);
             }
         }
     }

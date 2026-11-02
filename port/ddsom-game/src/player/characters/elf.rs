@@ -7,8 +7,8 @@
 //! - action 0x10 (0x444ca) is the fighter's slide (`common::dash`).
 //!
 //! The thrown items, lightning, the wall and spells 13..20 are the fighter's (`items`) with the
-//! elf's animations and a final pose; spells 0x15..0x1c are its own. The original routines
-//! that create shots, effects and sounds are still called as they are.
+//! elf's animations and a final pose; spells 0x15..0x1c are its own. The shots, effects
+//! and sounds are created by Rust calls.
 
 use super::common::{self, countdown, field, is_cancelled, next_step, take_event, wind_down};
 use super::foes::{self, Boost, Damage, Live, Strike};
@@ -24,9 +24,9 @@ use crate::player::ram;
 use crate::machine::Machine;
 use crate::player::external as ext;
 
-/// Original routines called as they are: player effects, sounds, palettes and screen effects.
+/// Identifiers (original addresses) of the routines reached: player effects, sounds, palettes and screen effects.
 mod rom {
-    /// Whirl sounds (the effect: `creators::for_players::whirl_68k`).
+    /// Whirl sounds (the effect: `creators::for_players::whirl`).
     pub const WHIRL_SOUND_A: u32 = 0xe82fe;
     /// Sounds of the spells, in the call order of each spell.
     pub const WARD_SOUNDS: [u32; 2] = [0xe28e4, 0xe96e0];
@@ -452,7 +452,7 @@ fn whirl(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                crate::families::creators::for_players::whirl_68k(g.c, g.b, p.obj());
+                crate::families::creators::for_players::whirl(&mut g.leftovers, g.b, p.obj());
                 g.sound(rom::WHIRL_SOUND_A, p);
                 g.sound(ext::sound::SPIN, p);
             }
@@ -564,7 +564,7 @@ const STYLE: items::Style = items::Style {
 
 /// The elf's red ring (no. 16): the aura is only placed at the end of the countdown.
 const CAST_16: items::Cast = items::Cast {
-    fire: items::ring_fire,
+    fire: |g, p, _| items::ring_fire(g, p),
     on_end: |g, p| items::red_aura(g, p, 0x708),
     ..items::CAST_13
 };
@@ -630,7 +630,7 @@ fn timed_throw(g: &mut Ctx, p: Player) {
 /// Plays ROM sounds.
 fn sounds(g: &mut Ctx, p: Player, list: &[u32]) {
     for &sound in list {
-        g.rom(sound, p);
+        g.sound(sound, p);
     }
 }
 
@@ -826,7 +826,7 @@ fn sparks(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                crate::families::creators::for_players::sparks_68k(g.c, g.b, p.obj());
+                crate::families::creators::for_players::sparks(&mut g.leftovers, g.b, p.obj());
                 g.sound(rom::SPARK_SOUND, p);
             }
             if countdown(g, p) {
@@ -869,8 +869,7 @@ fn bolt(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.c.d[0] = 0;
-                crate::families::creators::for_players::bolt_68k(g.c, g.b, p.obj(), 0);
+                crate::families::creators::for_players::bolt(&mut g.leftovers, g.b, p.obj(), 0);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
                 g.sound(rom::BOLT_SOUND, p);
             }
@@ -890,8 +889,7 @@ fn bolt(g: &mut Ctx, p: Player) {
                     common::item_spark(g, p, 6);
                     return wind_down(g, p, 2);
                 }
-                g.c.d[0] = 1;
-                crate::families::creators::for_players::bolt_68k(g.c, g.b, p.obj(), 1);
+                crate::families::creators::for_players::bolt(&mut g.leftovers, g.b, p.obj(), 1);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -997,8 +995,7 @@ fn quake(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.c.d[0] = 0;
-                crate::families::creators::quake_68k(g.c, g.b, p.obj(), true);
+                crate::families::creators::for_players::quake(&mut g.leftovers, g.b, p.obj(), true);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 g.sound(ext::sound::PRAYER_QUAKE, p);
             }
@@ -1013,9 +1010,8 @@ fn quake(g: &mut Ctx, p: Player) {
                     p.set_u16(g, field::TIMER, 0x10);
                     return quake_rumble(g, p);
                 }
-                g.c.d[0] = 1;
-                crate::families::creators::quake_68k(g.c, g.b, p.obj(), false);
-                crate::families::small::quake_b_68k(g.c, g.b, p.obj());
+                crate::families::creators::for_players::quake(&mut g.leftovers, g.b, p.obj(), false);
+                crate::families::small::quake_b(g.b, p.obj());
                 g.sound(rom::QUAKE_SECOND_SOUND, p);
             }
         }
@@ -1116,7 +1112,6 @@ fn moonlight(g: &mut Ctx, p: Player) {
             } else if p.u16(g, field::TIMER) == 0x20 {
                 if !is_cancelled(g, p) {
                     spawn::moon_b(g, p);
-                    g.c.d[0] = 2;
                     crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 }
                 { crate::palette::flash(g.b, crate::palette::Flash::C); };

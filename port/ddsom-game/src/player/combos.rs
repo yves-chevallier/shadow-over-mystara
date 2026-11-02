@@ -92,10 +92,8 @@ fn low8(reg: &mut u32, v: u8) {
 /// `mirror`: direction mirror mask (0 or 3), `side`: value written at completion.
 /// Returns true when the sequence is finished.
 ///
-/// Leaves the original's registers (re-read by the code that follows, e.g. D3 then D2 by a boss's death:
-/// the blood created at 0xb141a takes its position from them): D0 = index, D1 = previous keys (then high part of the
-/// expected),
-/// D2 = held keys, D3 = mask (then expected), D7.b = expected & mirror.
+/// Leaves the original's leftovers (re-read by the code that follows, e.g. D3 then D2 by a boss's death:
+/// the blood created at 0xb141a takes its position from them): D2.b = held keys, D3.b = mask (then expected).
 fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, mirror: u8, side: u8) -> bool {
     cov!();
     let mut held = p.u8(g, Player::KEYS_HELD);
@@ -110,28 +108,19 @@ fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, m
     let mask = g.data8(table + at);
     held &= mask;
     prev &= mask;
-    g.c.d[0] = at;
-    low8(&mut g.c.d[1], prev);
-    low8(&mut g.c.d[2], held);
-    low8(&mut g.c.d[3], mask);
+    low8(&mut g.leftovers.d2, held);
+    low8(&mut g.leftovers.d3, mask);
     if (mask as i8) < 0 && prev == held {
         return false;
     }
     let mut expected = g.data8(table + at + 1);
-    low8(&mut g.c.d[3], expected);
-    low8(&mut g.c.d[7], expected & mirror);
+    low8(&mut g.leftovers.d3, expected);
     if expected & mirror != 0 {
         expected ^= mirror;
-        low8(&mut g.c.d[3], expected);
+        low8(&mut g.leftovers.d3, expected);
     }
-    let matched = if prev == expected {
-        true
-    } else {
-        low8(&mut g.c.d[1], expected & 0xf0);
-        expected & 0xf0 != 0 && held == expected
-    };
+    let matched = prev == expected || (expected & 0xf0 != 0 && held == expected);
     if !matched {
-        g.c.d[0] = 0;
         return false;
     }
     if rd16(g.b, table + at + 2) == 0xffff {
@@ -149,8 +138,8 @@ fn step(g: &mut Ctx, p: Player, rec: u32, state: u32, table: u32, timeout: u8, m
 /// Leaves D4 (mirror mask) and D5 (value written at completion) of the last automaton tried, re-read later.
 fn recognize_both(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8) -> bool {
     cov!();
-    g.c.d[4] = 0;
-    g.c.d[5] = 0x20;
+    g.leftovers.d4 = 0;
+    g.leftovers.d5 = 0x20;
     if step(g, p, rec, rec, table, timeout, 0, 0x20) {
         return true;
     }
@@ -160,8 +149,8 @@ fn recognize_both(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8) -> 
 /// 0xf187c: tries only the mirrored orientation.
 fn recognize_mirror(g: &mut Ctx, p: Player, rec: u32, table: u32, timeout: u8) -> bool {
     cov!();
-    g.c.d[4] = 3;
-    g.c.d[5] = 0;
+    g.leftovers.d4 = 3;
+    g.leftovers.d5 = 0;
     step(g, p, rec, rec + 2, table, timeout, 3, 0)
 }
 

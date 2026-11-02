@@ -1,7 +1,7 @@
 //! Common context of the native routines: the machine (processor and bus) and the shared services.
 //!
 //! Each subsystem has its own context (`families::cx::Cx`, `player::Ctx`, `scene::Ctx`,
-//! `combat::World`...); all of them hold `c: &mut Cpu` and `b: &mut Cps2Bus`. Rather than a base structure that
+//! `combat::World`...); all of them hold `b: &mut Cps2Bus` (and some still `c: &mut Cpu`). Rather than a base structure that
 //! they would embed (the separate `x.c`, `x.b` accesses, everywhere, would not survive a `Deref`), they implement
 //! the [`Machine`] trait, which gives them the common services once: the random draw, and reads in the
 //! program space and the data space. The work RAM variables are read through their typed views
@@ -75,8 +75,4 @@ macro_rules! machine {
     };
 }
 
-machine!(
-    crate::player::Ctx<'_>,
-    crate::scene::Ctx<'_>,
-    crate::combat::World<'_>,
-);
+machine!(crate::scene::Ctx<'_>);

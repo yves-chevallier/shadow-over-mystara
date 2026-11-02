@@ -66,35 +66,25 @@ pub fn clear_overlays_of(g: &mut Ctx, k: u32) {
 }
 
 /// 0x2d9e: the four player records to zero.
-pub fn clear_all_players(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut g = Ctx::new(c, b);
+pub fn clear_all_players(b: &mut Cps2Bus) {
+    let mut g = Ctx::new(b);
     for k in 0..PLAYER_COUNT {
         clear_player(&mut g, k);
     }
 }
 
 /// 0x2df8: the eight player sub-objects to zero.
-pub fn clear_sub_objects(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut g = Ctx::new(c, b);
+pub fn clear_sub_objects(b: &mut Cps2Bus) {
+    let mut g = Ctx::new(b);
     for k in 0..PLAYER_COUNT {
         clear_overlays_of(&mut g, k);
     }
 }
 
-fn clear_players(c: &mut Cpu, b: &mut Cps2Bus) {
-    clear_all_players(c, b);
-    rts(c, b);
-}
-
-fn clear_overlays(c: &mut Cpu, b: &mut Cps2Bus) {
-    clear_sub_objects(c, b);
-    rts(c, b);
-}
-
 pub const CLEAR_PLAYERS: Native = Native {
     entry: 0x2d9e,
     name: "players_clear",
-    run: crate::Body::WithCpu(clear_players),
+    run: crate::Body::Memory(clear_all_players),
     touches_sound: false,
     outputs: 0,
 };
@@ -102,7 +92,7 @@ pub const CLEAR_PLAYERS: Native = Native {
 pub const CLEAR_OVERLAYS: Native = Native {
     entry: 0x2df8,
     name: "players_clear_overlays",
-    run: crate::Body::WithCpu(clear_overlays),
+    run: crate::Body::Memory(clear_sub_objects),
     touches_sound: false,
     outputs: 0,
 };
@@ -285,40 +275,26 @@ pub fn init_slot(g: &mut Ctx, p: Player, k: u8) {
     ram::PLAYERS_ALIVE.set(g.b, alive);
 }
 
-/// The entries 0x2e58, 0x2e6e, 0x2e86, 0x2e9e: build player `k`; D0 and A0-A3 are kept (movem).
-pub fn initialize(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
-    let (d0, a) = (c.d[0], [c.a[0], c.a[1], c.a[2], c.a[3]]);
-    init_slot(&mut Ctx::new(c, b), Player::nth(k), k as u8);
-    c.d[0] = d0;
-    c.a[..4].copy_from_slice(&a);
+/// The entries 0x2e58, 0x2e6e, 0x2e86, 0x2e9e: build player `k` (the original keeps its registers: `movem`).
+pub fn initialize(b: &mut Cps2Bus, k: u32) {
+    init_slot(&mut Ctx::new(b), Player::nth(k), k as u8);
 }
 
-fn init_entry(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
-    initialize(c, b, k);
-    rts(c, b);
+fn init_p1(b: &mut Cps2Bus) {
+    initialize(b, 0)
+}
+fn init_p2(b: &mut Cps2Bus) {
+    initialize(b, 1)
+}
+fn init_p3(b: &mut Cps2Bus) {
+    initialize(b, 2)
+}
+fn init_p4(b: &mut Cps2Bus) {
+    initialize(b, 3)
 }
 
-fn init_p1(c: &mut Cpu, b: &mut Cps2Bus) {
-    init_entry(c, b, 0)
-}
-fn init_p2(c: &mut Cpu, b: &mut Cps2Bus) {
-    init_entry(c, b, 1)
-}
-fn init_p3(c: &mut Cpu, b: &mut Cps2Bus) {
-    init_entry(c, b, 2)
-}
-fn init_p4(c: &mut Cpu, b: &mut Cps2Bus) {
-    init_entry(c, b, 3)
-}
-
-const fn init_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native {
-        entry,
-        name,
-        run: crate::Body::WithCpu(run),
-        touches_sound: false,
-        outputs: regs::d(0) | regs::a(0) | regs::a(1) | regs::a(2) | regs::a(3),
-    }
+const fn init_native(entry: u32, name: &'static str, run: fn(&mut Cps2Bus)) -> Native {
+    Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
 }
 
 pub const INIT_P1: Native = init_native(0x2e58, "player_init_1", init_p1);
@@ -343,8 +319,8 @@ pub enum Join {
 /// `0x00040800` frozen inputs, `0x00040c00` global slow walk), then all enemies and bosses receive
 /// a shock (`join_shockwave`).
 /// The entries 0x2f46.., 0x3048.., 0x3142.. (one per player `k`): the player arrives during the game.
-pub fn join_player(c: &mut Cpu, b: &mut Cps2Bus, k: u8, how: Join) {
-    join(&mut Ctx::new(c, b), k, how);
+pub fn join_player(b: &mut Cps2Bus, k: u8, how: Join) {
+    join(&mut Ctx::new(b), k, how);
 }
 
 fn join(g: &mut Ctx, k: u8, how: Join) {
@@ -401,7 +377,6 @@ fn join(g: &mut Ctx, k: u8, how: Join) {
     let alive = ram::PLAYERS_ALIVE.get(g.b).wrapping_add(1);
     ram::PLAYERS_ALIVE.set(g.b, alive);
     let strength = if how == Join::New { 0 } else { alive };
-    g.c.a[0] = p.0;
     join_shockwave(g, p, strength);
 }
 
@@ -459,16 +434,13 @@ fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
     }
 }
 
-const fn join_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: 0 }
+const fn join_native(entry: u32, name: &'static str, run: fn(&mut Cps2Bus)) -> Native {
+    Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
 }
 
 macro_rules! join_entry {
     ($entry:literal, $name:literal, $k:literal, $how:expr) => {
-        join_native($entry, $name, |c, b| {
-            join(&mut Ctx::new(c, b), $k, $how);
-            rts(c, b);
-        })
+        join_native($entry, $name, |b| join_player(b, $k, $how))
     };
 }
 
@@ -487,16 +459,16 @@ pub const JOIN: &[Native] = &[
     join_entry!(0x317c, "player_join_refill_4", 3, Join::Refill),
 ];
 
-/// 0x3552 called by the original code (end of game, shop): registers left like the original
-/// (A4 = character table, D0 = last weapon number read, doubled if it is in the table).
+/// 0x3552 for the tools (the game calls `init_weapon_stats`): registers left like the original (A4 = character
+/// table, D0 = last weapon number read, doubled if it is in the table).
 fn weapon_stats_native(c: &mut Cpu, b: &mut Cps2Bus) {
     let p = Player(c.a[0]);
-    let mut g = Ctx::new(c, b);
+    let mut g = Ctx::new(b);
     init_weapon_stats(&mut g, p);
     let table = table_of(&mut g, p, tables::WEAPON_STATS);
     let w = p.u8(&mut g, Player::WEAPON_B);
-    g.c.a[4] = table;
-    g.c.d[0] = if w <= 0x27 { (2 * w) as u32 } else { w as u32 };
+    c.a[4] = table;
+    c.d[0] = if w <= 0x27 { (2 * w) as u32 } else { w as u32 };
     rts(c, b);
 }
 

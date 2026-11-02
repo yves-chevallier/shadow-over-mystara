@@ -225,7 +225,7 @@ fn clear_layers(x: &mut Ctx, layers: &[Layer]) {
 
 /// Players cleared (0x2d9e) and pools reset (0x2062).
 fn clear_players_and_pools(x: &mut Ctx) {
-    crate::player::init::clear_all_players(x.c, x.b);
+    crate::player::init::clear_all_players(x.b);
     for pool in pools::POOLS {
         pool.reset(x.b);
     }
@@ -301,7 +301,7 @@ fn scene_start(x: &mut Ctx, mut a1: u32) -> Flow {
             wr8(x.b, a0 + 0x15d, variant);
             // the routine of table 0x1f8a8 (indexed by the counter, counting down) is the player's initialisation
             // of that number (0x2e58...: `player::init`), D6/A0/A1 kept around the call (`movem.l`)
-            crate::player::init::initialize(x.c, x.b, 3 - d6);
+            crate::player::init::initialize(x.b, 3 - d6);
             apply_record(x, a0, a1);
         }
         a1 += 6;

@@ -8,7 +8,7 @@
 //!   the fighter's (`items`);
 //! - `dash` (0x45988): action 0x10, the common slide (`common::dash`).
 //!
-//! The original routines that create shots, effects and sounds are still called as they are.
+//! The shots, effects and sounds are created by Rust calls.
 
 use super::common::{self, field, next_step, set_forward_motion};
 use super::items;
@@ -22,7 +22,7 @@ use crate::objects::Obj;
 use crate::player::ram;
 use crate::player::external as ext;
 
-/// Original routines called as they are: player effects and sounds of the dwarf.
+/// Identifiers (original addresses) of the routines reached: player effects and sounds of the dwarf.
 mod rom {
     /// Sounds.
     pub const SOUND_DASH: u32 = 0xe7eaa;

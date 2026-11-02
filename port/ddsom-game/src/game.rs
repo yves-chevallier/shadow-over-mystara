@@ -141,9 +141,9 @@ fn run_steps(c: &mut Cpu, b: &mut Cps2Bus, order_index: u8, from: usize) -> Flow
         match step {
             Gauge(marker) => gauge(c, b, marker),
             // 0x35292
-            Players => crate::player::update::update_all(&mut crate::player::Ctx::new(c, b)),
+            Players => crate::player::on_bench(c, b, crate::player::update::update_all),
             // 0x392e4: sub-objects of the players (front and back weapons)
-            PlayerParts => crate::player::overlays::update(&mut crate::player::Ctx::new(c, b)),
+            PlayerParts => crate::player::on_bench(c, b, crate::player::overlays::update),
             // last call: a `jmp`, the dispatch loop returns directly to the caller
             Objs(class) if i + 1 == order.len() => return class.update(c, b),
             Objs(class) => {
@@ -512,7 +512,7 @@ pub fn after_world(c: &mut Cpu, b: &mut Cps2Bus) {
     crate::sprites::build_68k(c, b);
     gauge(c, b, 0x48_0002);
     // 0x260ee
-    crate::combat::combat_update(&mut crate::combat::World { c, b, a2: 0 });
+    crate::combat::on_bench(c, b);
     gauge(c, b, 0x4f_001e);
     // 0x19e20: pop-ups; 0xf2e5c: spawn script reader
     crate::popups::animate_obj(b);

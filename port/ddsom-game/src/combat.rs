@@ -7,16 +7,16 @@
 //!
 //! The logic follows the original instruction by instruction (same RAM reads/writes,
 //! same 8/16-bit arithmetic) but is expressed on typed views of the objects. The subroutines
-//! outside the scope (effect allocation, sounds, gauge display, RNG...) are called as is
-//! through `crate::call`.
+//! outside the scope (effect allocation, sounds, gauge display, RNG...) are called directly.
 
 use cps2::Cps2Bus;
-use m68k::{Cpu, SR_Z};
+use m68k::Cpu;
 
+use crate::dispatch::Leftovers;
 use crate::mem::{rd16, rd32, rd8, wr16, wr8, A5};
 pub use crate::objects::Obj;
 use crate::objects::pools;
-use crate::{call, Native};
+use crate::Native;
 
 /// Call counters of the rewritten routines (validation coverage).
 mod cov {
@@ -180,8 +180,6 @@ mod rom {
     pub const BODY: u32 = 0x11bffa;
     pub const PUSH: u32 = 0x11c11a;
     pub const ATTACK: u32 = 0x11c23a;
-    /// Table of contact behaviours of the player shots (routine addresses).
-    pub const SHOT_HANDLERS: u32 = 0x267c4;
     /// Reaction of the players to hits and enemy shots: by attack identifier, 4 bytes
     /// (action on the ground, action in the air, power, power at difficulty > 5).
     pub const ENEMY_ATTACK_REACTIONS: u32 = 0x1067a4;
@@ -193,13 +191,21 @@ mod rom {
 // ---------------------------------------------------------------------------------------------
 // Memory access
 
-/// Memory and registers, for the routines that must call original code.
+/// The memory and the state of the hit resolution that the original keeps in registers.
 pub struct World<'a> {
-    pub c: &'a mut Cpu,
     pub b: &'a mut Cps2Bus,
     /// Value of A2 in the original: box of the hit in progress, which certain subroutines
-    /// (0x19dce, 0x388a) overwrite without the original restoring it in `player_hits_enemies`.
+    /// (0x19dce, 0x388a, 0xf232e) overwrite without the original restoring it in `player_hits_enemies`.
     pub a2: u32,
+    /// The leftovers D2-D5 that the resolution leaves to what follows (spark placement, D4 of the impact sound):
+    /// see `dispatch::Leftovers`.
+    pub leftovers: Leftovers,
+}
+
+impl crate::machine::Machine for World<'_> {
+    fn bus(&mut self) -> &mut Cps2Bus {
+        &mut *self.b
+    }
 }
 
 impl World<'_> {
@@ -220,35 +226,16 @@ impl World<'_> {
     fn is_active(&mut self, o: Obj) -> bool {
         o.u8(self.b, f::ACTIVE) & 1 != 0
     }
-    /// Calls an original routine with A0 and A1 (actor, target); returns the Z flag.
-    fn call_ao(&mut self, addr: u32, a0: Obj, a1: Obj) -> bool {
-        self.c.a[0] = a0.0;
-        self.c.a[1] = a1.0;
-        self.c.a[5] = A5;
-        self.c.a[2] = self.a2;
-        call(self.c, self.b, addr);
-        self.a2 = self.c.a[2];
-        self.c.sr & SR_Z != 0
-    }
-    /// Spark of variant `variant` (D1) from `a0` toward `a1`: 0xaa96c (`Spark::Linked`), 0xaaa04 / 0xaaa84
-    /// (`Spark::Between`, the owner first or second). The registers are left like the original routine leaves them
-    /// (A1 to A4 restored, D0-D3 of the placement, flags) ; returns the Z flag.
-    fn spark(&mut self, spark: Spark, a0: Obj, a1: Obj, variant: u8) -> bool {
-        self.c.d[1] = variant as u32;
-        self.c.a[0] = a0.0;
-        self.c.a[1] = a1.0;
-        self.c.a[5] = A5;
-        self.c.a[2] = self.a2;
-        let saved = [self.c.a[1], self.c.a[2], self.c.a[3], self.c.a[4]];
+    /// Spark of variant `variant` from `a0` toward `a1`: 0xaa96c (`Spark::Linked`), 0xaaa04 / 0xaaa84
+    /// (`Spark::Between`, the owner first or second). The placement leaves D2.w and D3.w (leftovers); the native
+    /// restores A1 to A4, so A2 is unchanged.
+    fn spark(&mut self, spark: Spark, a0: Obj, a1: Obj, variant: u8) {
         match spark {
-            Spark::Linked => crate::effects_aids::spark_by(self.c, self.b, a0, a1.0, variant),
+            Spark::Linked => crate::effects_aids::spark_by(&mut self.leftovers, self.b, a0, a1.0, variant),
             Spark::Between { owner_first } => {
-                crate::effects_aids::spark_between_by(self.c, self.b, a0, a1.0, variant, owner_first)
+                crate::effects_aids::spark_between_by(&mut self.leftovers, self.b, a0, a1.0, variant, owner_first)
             }
         };
-        [self.c.a[1], self.c.a[2], self.c.a[3], self.c.a[4]] = saved;
-        self.a2 = self.c.a[2];
-        self.c.sr & SR_Z != 0
     }
 }
 
@@ -708,18 +695,16 @@ fn enemy_reacts_to_hit(w: &mut World, p: Obj, e: Obj) {
     e.set_u8(w.b, f::REACTION, 0x4c);
     if e.u8(w.b, f::FLIES) == 0 {
         // 0xf232e
-        (w.c.a[0], w.c.a[1], w.c.a[5], w.c.a[2]) = (p.0, e.0, A5, w.a2);
-        crate::player::hit_reactions::enemy_reacts_68k(w.c, w.b, crate::player::Player(p.0), e.0);
-        w.a2 = w.c.a[2];
+        w.a2 = crate::player::hit_reactions::enemy_reacts_from_hit(w.b, crate::player::Player(p.0), e.0);
     }
     w.spark(Spark::Linked, p, e, 0);
     let mut d4 = p.u8(w.b, f::WEAPON_10D);
     if p.u8(w.b, f::ATTACK_KIND) != 0 {
         d4 = p.u8(w.b, f::WEAPON_10E);
     }
-    set_low8(&mut w.c.d[4], d4);
+    set_low8(&mut w.leftovers.d4, d4);
     let target = if p.u8(w.b, f::ATTACK_KIND) <= 1 { 0xe662a } else { 0xe823a };
-    let source = crate::sound::Source { object: Some(p), a1: Some(e.0), d4: Some(w.c.d[4]) };
+    let source = crate::sound::Source { object: Some(p), a1: Some(e.0), d4: Some(w.leftovers.d4) };
     crate::sound::play_with(w.b, target, source);
 }
 
@@ -740,13 +725,18 @@ fn count_combo(w: &mut World, p: Obj, e: Obj) {
 // ---------------------------------------------------------------------------------------------
 // Native routines
 
-/// 0x260ee: the frame's collisions.
-pub fn update_cpu(c: &mut Cpu, b: &mut Cps2Bus) {
-    combat_update(&mut World { c, b, a2: 0 });
+/// 0x260ee: the frame's collisions, for a caller still on the processor (game loop, natives for the tools): the
+/// leftovers D2-D5 go from the register bench to `World::leftovers` and back; nothing else is read or written there.
+pub fn on_bench(c: &mut Cpu, b: &mut Cps2Bus) {
+    let leftovers = Leftovers { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] };
+    let mut w = World { b, a2: 0, leftovers };
+    combat_update(&mut w);
+    let l = w.leftovers;
+    (c.d[2], c.d[3], c.d[4], c.d[5]) = (l.d2, l.d3, l.d4, l.d5);
 }
 
 fn combat_update_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    combat_update(&mut World { c, b, a2: 0 });
+    on_bench(c, b);
     crate::mem::rts(c, b);
 }
 

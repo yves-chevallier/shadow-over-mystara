@@ -30,12 +30,13 @@ pub fn start_stand(g: &mut Ctx, p: Player) {
 /// registers left by the animation (D5, D6, A4) are read by nobody (`DDSOM_POISON=anim`).
 fn stand_native(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, reset: bool) {
     let p = Player(c.a[0]);
-    let mut g = Ctx::new(c, b);
-    if reset {
-        to_stand(&mut g, p);
-    } else {
-        start_stand(&mut g, p);
-    }
+    super::on_bench(c, b, |g| {
+        if reset {
+            to_stand(g, p);
+        } else {
+            start_stand(g, p);
+        }
+    });
     crate::mem::rts(c, b);
 }
 
@@ -129,20 +130,10 @@ fn run_action(g: &mut Ctx, p: Player) {
         action::NO_TERRAIN_A => moves::exit_scene(g, p),
         action::NO_TERRAIN_C => moves::fall_in(g, p),
         action::SPELL_FIZZLE => moves::spell_fizzle(g, p),
-        // rare poses: the original dispatch leaves them D0 = action number (high byte zero), which the routines
-        // they call by address may read
-        0x26 => {
-            g.c.d[0] = 0x26;
-            moves::curse_drop(g, p)
-        }
-        0x2c => {
-            g.c.d[0] = 0x2c;
-            moves::dust_puffs(g, p)
-        }
-        0x30 => {
-            g.c.d[0] = 0x30;
-            moves::box_recoil(g, p)
-        }
+        // rare poses
+        0x26 => moves::curse_drop(g, p),
+        0x2c => moves::dust_puffs(g, p),
+        0x30 => moves::box_recoil(g, p),
         other => unreachable!("action {other:#x} outside the original table 0x35586 (26 even actions)"),
     }
 }

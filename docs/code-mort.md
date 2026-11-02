@@ -303,7 +303,6 @@ est devenue un `unreachable!` (repli défensif ; l'A6 de l'original y désignera
   au lieu du `_ => {}` qui ignorait aussi 0xa ; au-delà de la table, `unreachable!`. Validées par `fuzz_couv`
   (`boss/boss15_scene46` et `boss/boss19_scene32`, 12 000 images, un appel sur 4, 48 essais par appel : environ
   14 300 essais chacun, les deux entrées sont atteintes par des essais sans écart).
-||||||| 3bec3f5
 
 ### Interface des joueurs (F3) : 0x15234-0x1523e après le `bra.w` de 0x15230
 
@@ -353,4 +352,34 @@ Doublon : supprimées, avec leurs entrées de `fuzz_world`.
 guide 1, c'est l'A2 laissé par les gestionnaires précédents de la boucle (aucun n'est tenu sans registres). Le
 guide 1 naît du script de la scène, joueurs présents ; aucun scénario ne le voit naître sans joueur vivant.
 Hypothèse : cas impossible en jeu (repli de l'original sans sens). Devenu un `unreachable!`.
-||||||| a00e694
+
+## Sortie du Cpu, partie 6 (joueurs, `player/`, `combat`, `creators`, `set_residue` ; wt-cpu-player)
+
+### Replis par adresse des tables du joueur (`player/update.rs`, `scripted.rs`, `cinematics.rs`, `hurt.rs`)
+
+* **Ce que faisait le code.** Quand une entrée des tables d'aiguillage du joueur (sous-états 0x3541c, cinématiques
+  par scène 0x23826 et 0x23f4e, attente 0x23d66, réactions 0x3a0f4 et 0x3b820 et leurs tables de pas, pas des
+  cinématiques de fin) n'avait pas de fonction Rust, `Ctx::rom` appelait l'adresse par `crate::call`.
+* **Pourquoi jamais atteint.** Relevé statique (`cpup_tables`, scratchpad) : toutes les entrées des tables par scène
+  et d'attente sont réécrites ; la table 0x3541c n'a que trois entrées (0, 4, 8), les octets suivants sont du code ;
+  aucune native n'existe dans les plages 0x23000-0x25200 et 0x3a0f4-0x3bb52, donc le jeu sans 68000 s'y arrêtait déjà
+  (`no68k::native`). Aucun de ces appels n'apparaît dans les compteurs des 308 scénarios (seules les baguettes
+  `spawn_rod_*` et des sons étaient appelés par adresse depuis `player/`).
+* **Nature.** Repli défensif. Devenus des `unreachable!` qui nomment la table.
+
+### Tir de joueur de type inconnu (`combat/shots.rs`, table 0x267c4)
+
+* **Ce que faisait le code.** Pour un type de tir hors 0..0x18, appel par adresse de l'entrée de la table 0x267c4
+  (A0 = tir, A1 = victime, A3 = propriétaire, Z = le tir porte).
+* **Pourquoi jamais atteint.** Les tirs de joueur (PSHL) n'ont que les types 0 à 0x18 (gestionnaires `pshl_0` à
+  `pshl_24`) ; un autre type arrêterait déjà la boucle d'aiguillage. Repli défensif : `unreachable!`.
+
+### Étincelle d'objet et bouffées de poussière dans la scène 41 (`common::item_spark`, `moves::dust_puffs`)
+
+* **Ce que fait l'original.** 0xb10c8 ne crée rien dans la scène 41 et rend la retenue nulle ; l'appelant
+  (0x3fb8c, 0x36cb8) ne teste que la retenue et écrit la hauteur à `(0xc,A1)`, A1 étant celui que le code d'avant
+  laisse (l'enveloppe du son 0xe2430 sauve et rend tous les registres : c'est l'A1 de l'entrée de l'action).
+* **Pourquoi non reproduit.** Aucun scénario ne le joue, et cet A1 vient de bien avant l'action (boucle des joueurs,
+  combinaisons) : le Rust ne le connaît pas. L'ancienne version Rust écrivait à l'A1 du banc, qui n'était pas non plus
+  celui de l'original. L'écriture est omise (le son est joué comme dans l'original). À reprendre si un scénario
+  atteint ce cas (objet utilisé dans la scène 41).

@@ -10,8 +10,8 @@
 //! | 8 | wait for controls to open | step `+6` -> routine (table 0x23d66) |
 //! | 0xc | end cinematic | scene number -> routine (table 0x23f4e), without reinsertion |
 //!
-//! Like `hurt`, the original routines are reached through the code tables; `HANDLERS`
-//! gives the Rust version of the rewritten routines, the others run as they are.
+//! Like `hurt`, the routines are reached through the code tables of the original; `HANDLERS`
+//! gives their Rust version (all the reachable ones are rewritten).
 
 use super::actions::start_stand;
 use super::checks::{special_attack, throw_button};
@@ -26,7 +26,7 @@ use crate::player::external as ext;
 
 type Handler = fn(&mut Ctx, Player);
 
-/// Original routines still called as they are.
+/// Identifiers (original addresses) of the routines reached (sounds).
 mod rom {
     pub const INTRO_ACTION: u32 = 0xe1330;
 }
@@ -118,10 +118,9 @@ fn run_at(g: &mut Ctx, p: Player, addr: u32) {
     cov!();
     match handler(addr) {
         Some(f) => f(g, p),
-        None => {
-            g.c.d[0] = 0; // the original routines complete the low byte of D0: the remainder must be zero
-            g.rom(addr, p);
-        }
+        // every entry of the tables by scene is rewritten, and there is no native at the addresses of the step
+        // tables: the game without 68000 already stopped there (`docs/code-mort.md`, "Sortie du Cpu, partie 6")
+        None => unreachable!("scripted routine {addr:06x} not rewritten"),
     }
 }
 
@@ -166,16 +165,10 @@ pub fn update(g: &mut Ctx, p: Player) {
         }
         0xc => {
             let scene = ram::SCENE.get(g.b) as u32;
+            // the original dispatch (0x23f40) jumps with D0 = 4 × scene and A1 = routine: only the step out of the
+            // table of 0x24aba reads A1 (`cinematics::stray_hex_dump`)
             let routine = end_routine(g, scene);
-            // the original dispatch (0x23f40) jumps with D0 = 4 × scene and A1 = routine
-            g.c.d[0] = scene << 2;
-            g.c.a[1] = routine;
-            match handler(routine) {
-                Some(f) => f(g, p),
-                None => {
-                    g.rom(routine, p);
-                }
-            }
+            run_at(g, p, routine);
         }
         _ => {}
     }
@@ -286,7 +279,7 @@ fn scene1_wait_progress(g: &mut Ctx, p: Player) {
         let k = p.u8(g, 0x7d) as u32;
         let delay = g.prog16(tables::SCENE1_WAIT + 2 * k);
         p.set_u16(g, 0x1e0, delay);
-        crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
+        crate::families::effects_creators::for_players::halo(&mut g.leftovers, g.b, p.obj());
     }
     animation::step(g, p);
 }
@@ -442,7 +435,7 @@ fn revive_start(g: &mut Ctx, p: Player) {
         p.set_u8(g, field, 0);
     }
     crate::placement::place_on_free_ground(g.b, p.obj());
-    crate::families::small::revive_68k(g.c, g.b, p.obj());
+    crate::families::small::revive(&mut g.leftovers, g.b, p.obj());
     animation::start(g, p, 0xd);
     restore_palette(g, p);
     ram::FADE_PAGES.set(g.b, 0xf);
@@ -505,7 +498,7 @@ fn revive_frozen(g: &mut Ctx, p: Player) {
     cinematics::place_by_focus(g, p, tables::FROZEN_OFFSETS);
     let y = p.u16(g, Obj::Y).wrapping_sub(1);
     p.set_u16(g, Obj::Y, y);
-    crate::families::small::revive_68k(g.c, g.b, p.obj());
+    crate::families::small::revive(&mut g.leftovers, g.b, p.obj());
     animation::start(g, p, 0x23);
     g.sound(ext::sound::FANFARE, p);
     restore_palette(g, p);
@@ -526,7 +519,7 @@ fn revive_in_place(g: &mut Ctx, p: Player) {
     p.set_u8(g, 0x68, 0);
     crate::placement::place_on_free_ground(g.b, p.obj());
     p.set_u32(g, Obj::Z, 0);
-    crate::families::small::revive_68k(g.c, g.b, p.obj());
+    crate::families::small::revive(&mut g.leftovers, g.b, p.obj());
     animation::start(g, p, 0x35);
     crate::objects::rank::raise(g.b);
 }
@@ -542,7 +535,7 @@ fn wait_start(g: &mut Ctx, p: Player) {
     let k = p.u8(g, 0x7d) as u32;
     let delay = g.prog16(tables::WAIT_DELAYS + 2 * k);
     p.set_u16(g, 0x1e0, delay);
-    crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
+    crate::families::effects_creators::for_players::halo(&mut g.leftovers, g.b, p.obj());
     animation::step(g, p);
     g.sound(rom::INTRO_ACTION, p);
 }

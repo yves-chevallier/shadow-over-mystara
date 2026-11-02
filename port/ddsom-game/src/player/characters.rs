@@ -22,7 +22,7 @@ macro_rules! action_native {
             name: $label,
             run: crate::Body::WithCpu(|c, b| {
                 let p = $crate::player::Player(c.a[0]);
-                $f(&mut $crate::player::Ctx::new(c, b), p);
+                $crate::player::on_bench(c, b, |g| $f(g, p));
                 $crate::mem::rts(c, b)
             }),
             touches_sound: false,
@@ -100,8 +100,5 @@ pub fn routine(slot: Slot, character: u8) -> CharacterFn {
 /// Runs action `slot` of player `p`'s character.
 pub fn run(g: &mut Ctx, p: Player, slot: Slot) {
     let character = p.u8(g, Player::CHARACTER);
-    // D0 = action number, high byte zero, like the original dispatch: the register-faithful animation step
-    // (`common::step_keeping_regs`) and the creators that follow can still read it
-    g.c.d[0] = p.u8(g, Player::ACTION) as u32;
     routine(slot, character)(g, p)
 }

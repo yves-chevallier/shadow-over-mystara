@@ -136,6 +136,46 @@ pub(crate) mod leftovers {
         }
     }
 
+    /// Register `n` among the leftovers D2-D5.
+    pub(crate) fn leftover(l: &mut crate::dispatch::Leftovers, n: usize) -> Option<&mut u32> {
+        match n {
+            2 => Some(&mut l.d2),
+            3 => Some(&mut l.d3),
+            4 => Some(&mut l.d4),
+            5 => Some(&mut l.d5),
+            _ => None,
+        }
+    }
+
+    /// Code without a bench that keeps by name the leftovers D2-D5 that the original leaves to what follows
+    /// (`player::Ctx::leftovers`); the rest is dead.
+    impl Regs for crate::dispatch::Leftovers {
+        fn allocated(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Option<Obj> {
+            pool.alloc(b)
+        }
+        fn alloc_without_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj {
+            pool.alloc_unchecked(b)
+        }
+        fn alloc_or_rest(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Result<Obj, Obj> {
+            pool.alloc_or_leftover(b)
+        }
+        fn d(&mut self, n: usize, v: u32) {
+            if let Some(r) = leftover(self, n) {
+                *r = v;
+            }
+        }
+        fn d_word(&mut self, n: usize, v: u16) {
+            if let Some(r) = leftover(self, n) {
+                set_low_word(r, v);
+            }
+        }
+        fn d_byte(&mut self, n: usize, v: u8) {
+            if let Some(r) = leftover(self, n) {
+                set_low_byte(r, v);
+            }
+        }
+    }
+
     /// The core called by a generic handler (`Cx<'_, R: Bench>`): only the leftovers D2-D5 that the original leaves to
     /// the following handlers (`dispatch::Leftovers`) are kept, in the bench; the rest is dead.
     pub(crate) struct OnBench<'a, R>(pub &'a mut R);
@@ -1206,46 +1246,37 @@ fn tile_block_native(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub(crate) const CREATED: u32 = regs::a(1) | regs::CCR;
 
-/// Creators called by the player module, still on the processor: the arguments are passed, and the registers the
-/// original leaves (A0 = the creator, A1 = the effect, carry when the pool is full, flags) are written like the native
-/// writes them.
+/// Creators called by the player module (`player/`): cores on `r` (the player's leftovers D2-D5).
 pub(crate) mod for_players {
     use super::*;
 
     /// 0xb378a: blow stars (type 40) attached to `me`, variant `variant`, setting `setting`.
-    pub(crate) fn blow_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8, setting: u8) -> Option<Obj> {
-        c.a[0] = me.0;
-        attached_via(c, b, kind::BLOW, me, variant, setting)
+    pub(crate) fn blow(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8, setting: u8) -> Option<Obj> {
+        attached_via(r, b, kind::BLOW, me, variant, setting)
     }
     /// 0xab708: halo of `me`.
-    pub(crate) fn halo_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
-        c.a[0] = me.0;
-        halo_via(c, b, me)
+    pub(crate) fn halo(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        halo_via(r, b, me)
     }
     /// 0xab7d8: debris spray of `me`, variant `variant`.
-    pub(crate) fn debris_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
-        c.a[0] = me.0;
-        debris_via(c, b, me, variant)
+    pub(crate) fn debris(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+        debris_via(r, b, me, variant)
     }
     /// 0xb6ba8: effect of type 57 of `me`.
-    pub(crate) fn type_57_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8, setting: u8) -> Option<Obj> {
-        c.a[0] = me.0;
-        type_57(c, b, me, variant, setting)
+    pub(crate) fn type_57(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8, setting: u8) -> Option<Obj> {
+        super::type_57(r, b, me, variant, setting)
     }
     /// 0xb97ba: posed flash (variant 1) linked to `me`.
-    pub(crate) fn posed_flash_b_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
-        c.a[0] = me.0;
-        linked_via(c, b, me, kind::POSED_FLASH, Some(1))
+    pub(crate) fn posed_flash_b(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        linked_via(r, b, me, kind::POSED_FLASH, Some(1))
     }
     /// 0xb96c0: thrown shard of variant `variant` linked to `me`.
-    pub(crate) fn thrown_shard_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
-        c.a[0] = me.0;
-        thrown_shard(c, b, me, variant)
+    pub(crate) fn thrown_shard(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+        super::thrown_shard(r, b, me, variant)
     }
     /// 0xb9c6a: wisp (type 86, variant 0) linked to `me`.
-    pub(crate) fn wisp_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
-        c.a[0] = me.0;
-        linked_via(c, b, me, kind::WISP, Some(0))
+    pub(crate) fn wisp(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        linked_via(r, b, me, kind::WISP, Some(0))
     }
 }
 

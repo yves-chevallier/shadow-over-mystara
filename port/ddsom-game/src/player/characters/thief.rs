@@ -9,7 +9,7 @@
 //!   fighter (`items`) plus a thrown knife (no. 11);
 //! - `dash` (0x49d46): action 0x10, a slide close to `common::dash`.
 //!
-//! The original routines that create shots, effects and sounds are still called as they are.
+//! The shots, effects and sounds are created by Rust calls.
 
 use super::common::{self, field, next_step, set_forward_motion};
 use super::items;
@@ -25,7 +25,7 @@ use crate::player::ram;
 use crate::machine::Machine;
 use crate::player::external as ext;
 
-/// Original routines called as they are: player effects, created objects and sounds of the thief.
+/// Identifiers (original addresses) of the routines reached: player effects, created objects and sounds of the thief.
 mod rom {
     pub const KNIFE_SOUND: u32 = 0xeb8bc;
     /// Sounds.

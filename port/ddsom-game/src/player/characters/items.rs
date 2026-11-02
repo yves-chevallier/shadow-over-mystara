@@ -121,13 +121,13 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
             animation::start_plain(g, p, style.bolt_anim);
         }
         2 => {
-            // the variant of the created effect is D0.b, which the original animation step leaves
+            // Original glitch: the variant of the created effect is D0.b, which the original animation step leaves
             let step = p.u8(g, Player::STEP);
-            common::step_keeping_regs(g, p, step);
+            let (_, d0) = common::step_with_d0(g, p, step);
             if p.u8(g, field::EVENT) != 0 {
                 next_step(g, p);
                 p.set_u8(g, field::EVENT, 0);
-                match spawn::lightning_target(g, p, g.c.d[0] as u8) {
+                match spawn::lightning_target(g, p, d0) {
                     Some(target) => p.set_u16(g, style.target, target.word()),
                     None => {
                         to_stand(g, p);
@@ -140,7 +140,6 @@ pub fn lightning(g: &mut Ctx, p: Player, style: Style) {
             let target = target_of(g, p, style.target);
             if crate::mem::rd16(g.b, target + 0x0c) == 0 {
                 // the bolt is born at the target's position (A2)
-                g.c.a[2] = target;
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0xc0);
                 spawn::lightning(g, p, target);
@@ -195,13 +194,12 @@ pub fn wall(g: &mut Ctx, p: Player, style: Style) {
             if p.u8(g, field::EVENT) != 0 {
                 next_step(g, p);
                 p.set_u8(g, field::EVENT, 0);
-                spawn::wall_target(g, p);
                 // Original glitch: the caller tests Z, that of the wall counter's `addq`, or that of the allocation
                 // that fails (Z clear): pool full, it believes the target created and keeps the A1 left by the
                 // allocation.
-                let target_found = g.c.sr & m68k::SR_Z == 0;
+                let (target_found, target) = spawn::wall_target(g, p);
                 if target_found {
-                    p.set_u16(g, style.target, g.c.a[1] as u16);
+                    p.set_u16(g, style.target, target.word());
                 } else {
                     to_stand(g, p);
                 }
@@ -230,7 +228,8 @@ pub struct Cast {
     /// On each frame after the first step.
     pub every_frame: fn(&mut Ctx, Player),
     /// At the gesture (event) when the spell is not cancelled.
-    pub fire: fn(&mut Ctx, Player),
+    /// Receives the D0.b left by the animation step (see `common::step_with_d0`).
+    pub fire: fn(&mut Ctx, Player, u8),
     /// At the end of the countdown, before the final pose (characters that have one).
     pub on_end: fn(&mut Ctx, Player),
 }
@@ -256,7 +255,7 @@ pub fn cast(g: &mut Ctx, p: Player, spell: &Cast, style: Style) {
     // the effect of spell 13 reads D0.b: the step, or twice the attack number, or the flags of
     // the animation
     let d0 = if style.d0_is_step { step } else { p.u8(g, field::SPECIAL_KIND).wrapping_mul(2) };
-    common::step_keeping_regs(g, p, d0);
+    let (_, d0) = common::step_with_d0(g, p, d0);
     (spell.every_frame)(g, p);
     if p.u8(g, field::EVENT) != 0 {
         p.set_u8(g, field::EVENT, 0);
@@ -265,7 +264,7 @@ pub fn cast(g: &mut Ctx, p: Player, spell: &Cast, style: Style) {
             common::item_spark(g, p, style.spark);
             p.set_u16(g, field::TIMER, 0xa);
         } else {
-            (spell.fire)(g, p);
+            (spell.fire)(g, p, d0);
         }
     }
     cast_timer(g, p, spell, style);
@@ -308,7 +307,7 @@ fn finish_cast(g: &mut Ctx, p: Player, style: Style) {
     common::end_spell_mode(g, p, style.undim_mode);
 }
 
-fn no_effect(_: &mut Ctx, _: Player) {}
+fn no_effect(_: &mut Ctx, _: Player, _: u8) {}
 
 const BASE: Cast = Cast {
     frames: 0x28,
@@ -320,16 +319,14 @@ const BASE: Cast = Cast {
 };
 
 pub const CAST_13: Cast = Cast {
-    fire: |g, p| {
-        let side = g.c.d[0] as u8;
-        spawn::shower(g, p, side);
-    },
+    // Original glitch: the side of the shower is D0.b left by the animation step
+    fire: |g, p, d0| spawn::shower(g, p, d0),
     ..BASE
 };
 
 pub const CAST_14: Cast = Cast {
     frames: 0x3c,
-    fire: |g, p| {
+    fire: |g, p, _| {
         spawn::fireball(g, p);
         crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
     },
@@ -339,7 +336,7 @@ pub const CAST_14: Cast = Cast {
 pub const CAST_15: Cast = Cast {
     frames: 0x78,
     prepare: |g, p| p.set_u8(g, 0x1e9, 2),
-    fire: |g, p| {
+    fire: |g, p, _| {
         spawn::ice_spell(g, p);
         spawn::ice_crown(g, p);
     },
@@ -369,7 +366,7 @@ pub fn red_aura(g: &mut Ctx, p: Player, duration: u16) {
 
 /// Fighter and cleric: the aura is placed at the gesture.
 pub const CAST_16: Cast = Cast {
-    fire: |g, p| {
+    fire: |g, p, _| {
         ring_fire(g, p);
         red_aura(g, p, 0x8000);
     },
@@ -377,7 +374,7 @@ pub const CAST_16: Cast = Cast {
 };
 
 pub const CAST_17: Cast = Cast {
-    fire: |g, p| {
+    fire: |g, p, _| {
         spawn::beam_cast(g, p, 1);
         crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
     },
@@ -386,7 +383,7 @@ pub const CAST_17: Cast = Cast {
 
 pub const CAST_18: Cast = Cast {
     frames: 0x78,
-    fire: |g, p| {
+    fire: |g, p, _| {
         spawn::storm(g, p, 0);
     },
     ..BASE
@@ -398,7 +395,7 @@ pub const CAST_19: Cast = Cast {
     prepare: |g, p| p.set_u8(g, 0x1ed, 0),
     after_freeze: common::heal_scan,
     every_frame: common::heal_flicker,
-    fire: |g, p| {
+    fire: |g, p, _| {
         spawn::potion(g, p);
         crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
     },

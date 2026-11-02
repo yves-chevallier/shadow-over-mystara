@@ -271,7 +271,7 @@ const PHASE_END: u32 = 0x1000_0000;
 /// (zero HP), they are put back in the waiting state and the game over phase starts. Nothing happens if a player
 /// is still in the air or in the waiting state. (The processor is only used for the players' context, for
 /// `player::actions::to_stand`.)
-pub fn game_over(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn game_over(_c: &mut Cpu, b: &mut Cps2Bus) {
     let stage = rd8(b, A5 + var::STAGE);
     if STAGE_NO_END.contains(&stage) || rd8(b, A5 + var::GAME_ON) == 0 {
         return;
@@ -306,7 +306,7 @@ pub fn game_over(c: &mut Cpu, b: &mut Cps2Bus) {
             wr8(b, p + player::RANK, rank);
             rank = rank.wrapping_add(1);
             if stage != STAGE_SKIP_WAIT && stage != STAGE_SKIP_CHECK {
-                crate::player::actions::to_stand(&mut crate::player::Ctx::new(c, b), crate::player::Player(p));
+                crate::player::actions::to_stand(&mut crate::player::Ctx::new(b), crate::player::Player(p));
             }
         }
     }

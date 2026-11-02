@@ -298,7 +298,7 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
     set8(x, var::CLEAR_FLAG, 0);
     set8(x, var::SCREEN_FLAG, 1);
     crate::tasks::game::clear_variables(x.c, x.b);
-    crate::player::init::clear_all_players(x.c, x.b);
+    crate::player::init::clear_all_players(x.b);
     crate::sprites::clear_lists(x.b);
     wr16(x.b, OUTPUT_4, OUTPUT_ON);
     video_on(x);
@@ -559,7 +559,7 @@ fn start_after_clear(x: &mut Ctx, d: GameStart) -> Flow {
     let flags = rd16(x.b, a5(var::FLAGS)) & !1;
     set16(x, var::FLAGS, flags);
     crate::tasks::game::clear_variables(x.c, x.b);
-    crate::player::init::clear_all_players(x.c, x.b);
+    crate::player::init::clear_all_players(x.b);
     set8(x, var::SCROLL_MODE, 0);
     crate::sprites::clear_lists(x.b);
     join(x, d)

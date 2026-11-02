@@ -67,6 +67,9 @@ pub mod field {
     pub const AREA: u32 = 0x1ee;
 }
 
+/// Scene in which the shock effects (0xb10c8) are not created.
+const NO_SHOCK_SCENE: u8 = 41;
+
 /// Original routines called by these tools.
 pub mod rom {
     /// Sound associated with the spark of `item_spark`.
@@ -75,8 +78,8 @@ pub mod rom {
     pub const WEAPON_VOICE: u32 = 0xe7e10;
     /// Creation of a player effect (PEFF pool) of the type given by D0, according to the weapon.
     pub const SPAWN_EFFECT: u32 = 0x4c58e;
-    /// Launching of a task (A0 = program, D0 = priority): trap 0.
-    pub const START_TASK: u32 = 0x9b6;
+    /// Task slot (offset in the task table, D0 of 0x9b6) of the spell's screen tasks.
+    pub const SCREEN_TASK_SLOT: u32 = 0x10;
     /// Programs of the spell's screen tasks: darken and restore.
     pub const DIM_TASK: u32 = 0x153e;
     pub const UNDIM_TASK: u32 = 0x1536;
@@ -90,15 +93,6 @@ mod tables {
     pub const DUST_JUMP: u32 = 0x3fb48;
     /// Item sparks: rows of 8 bytes (D0, D1, D2, height) indexed by kind.
     pub const SPARKS: u32 = 0x3fbb8;
-}
-
-/// Calls an original routine with data registers (index, value); returns Z.
-#[track_caller]
-pub fn call(g: &mut Ctx, p: Player, addr: u32, data: &[(usize, u32)]) -> bool {
-    for &(r, v) in data {
-        g.c.d[r] = v;
-    }
-    g.rom(addr, p)
 }
 
 /// Advances the action's automaton by one step (`addq.b #2,(7,A0)`).
@@ -115,15 +109,18 @@ pub fn wait_then_stand(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Animation step through the original routine (0x2d58, register-faithful): it leaves D0.b (flags
-/// of the entry left behind) which some routines called afterwards read as a parameter of the created effect.
-/// `d0`: value of D0.b before the call, inherited from the original dispatch (the action step for the
-/// table actions, twice the special attack number for the others).
-pub fn step_keeping_regs(g: &mut Ctx, p: Player, d0: u8) -> bool {
+/// Animation step (0x2d58) with the D0.b that the original leaves, which some routines called afterwards read as a
+/// parameter of the created effect (original glitch; `DDSOM_POISON=anim`: long_3p_mortels, frame 22018): the flags of
+/// the entry left behind when the duration runs out, otherwise `d0`, the value of D0.b before the call, inherited from
+/// the original dispatch (the action step for the table actions, twice the special attack number for the others).
+/// Returns (end of the script, D0.b).
+pub fn step_with_d0(g: &mut Ctx, p: Player, d0: u8) -> (bool, u8) {
     cov!();
-    g.c.d[0] = g.c.d[0] & !0xff | d0 as u32;
-    // original registers re-read afterwards (DDSOM_POISON=anim: long_3p_mortels, frame 22018)
-    crate::objects::anim::step_68k(g.c, g.b, p.obj(), true).finished()
+    let o = p.obj();
+    let entry_ends = o.u16(g.b, Obj::ANIM_TIMER) == 1;
+    let flags = o.u8(g.b, Obj::ANIM_FLAGS);
+    let finished = crate::objects::anim::step(g.b, o, true).finished();
+    (finished, if entry_ends { flags } else { d0 })
 }
 
 /// Plays the voice of the held weapon (D4 = `WEAPON_A`).
@@ -338,27 +335,21 @@ pub fn freeze_others(g: &mut Ctx, p: Player) {
 
 /// Darkens or restores the screen: starts the screen task `program` (0x153e / 0x1536) after the
 /// fade 0x1686. `mode`: 1 darken, 2 restore.
-fn screen_task(g: &mut Ctx, p: Player, mode: u16, program: u32, fade: bool) {
+fn screen_task(g: &mut Ctx, mode: u16, program: u32, fade: bool) {
     ram::FADE_DELAY.set(g.b, mode);
     ram::FADE_PAGES.set(g.b, 0xd);
     ram::FADE_STEPS.set(g.b, 5);
     if fade {
         crate::palette::full_brightness(g.b);
     }
-    g.c.a[1] = p.0;
-    g.c.a[0] = program;
-    g.c.d[0] = 0x10;
-    // the original `move.w #0x10,D0w` clears N, Z, V, C (X is that of the previous instructions, almost
-    // always zero): the launch routine pushes these flags with the trap, under the stack
-    g.c.sr &= !0xf;
-    crate::call(g.c, g.b, rom::START_TASK);
-    g.c.a[0] = p.0;
+    // 0x9b6 (A0 = program, D0 = slot); the new task reads none of the registers it inherits (`DDSOM_POISON=new`)
+    crate::kernel::create_task(g.b, rom::SCREEN_TASK_SLOT, program);
 }
 
 /// 0x3f926: the spell begins, the screen darkens.
-pub fn dim_screen(g: &mut Ctx, p: Player) {
+pub fn dim_screen(g: &mut Ctx, _p: Player) {
     cov!();
-    screen_task(g, p, 1, rom::DIM_TASK, true);
+    screen_task(g, 1, rom::DIM_TASK, true);
 }
 
 /// 0x3f954: the spell is over, the screen is restored.
@@ -368,9 +359,9 @@ pub fn undim_screen(g: &mut Ctx, p: Player) {
 }
 
 /// Restores the screen with mode `mode`: the magic-user's code (0x48772) passes 1 instead of 2.
-pub fn undim_screen_mode(g: &mut Ctx, p: Player, mode: u16) {
+pub fn undim_screen_mode(g: &mut Ctx, _p: Player, mode: u16) {
     cov!();
-    screen_task(g, p, mode, rom::UNDIM_TASK, false);
+    screen_task(g, mode, rom::UNDIM_TASK, false);
 }
 
 /// Start of a spell (next action step): game pause (`A5+0x3d`), spell indicator (`A5+0x4a`),
@@ -441,7 +432,8 @@ fn dust(g: &mut Ctx, p: Player, table: u32) {
     let class = (p.u8(g, Player::CHARACTER) >> 1) as u32;
     let vx = g.prog16(table + 4 * class) as u32;
     let vy = g.prog16(table + 2 + 4 * class) as u32;
-    (g.c.d[0], g.c.d[1], g.c.d[2], g.c.d[3]) = (0, 0x101, vx, vy);
+    // the speeds stay in D2 and D3 (leftovers of the original)
+    (g.leftovers.d2, g.leftovers.d3) = (vx, vy);
     g.shock(p, 0, 0x101, vx as u16, vy as u16);
 }
 
@@ -482,17 +474,19 @@ pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
     cov!();
     let row = tables::SPARKS + 8 * kind as u32;
     let (d0, d1, d2, height) = (g.prog16(row), g.prog16(row + 2), g.prog16(row + 4), g.prog16(row + 6));
-    g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
-    g.c.d[4] = height as u32;
-    (g.c.d[0], g.c.d[1], g.c.d[2]) = (d0 as i16 as u32, d1 as u32, d2 as u32);
-    g.shock(p, d0 as u8, d1, d2, 0xffff);
-    // Original glitch: only the carry is tested; in the scene without shocks (no effect, carry clear) the height is
-    // written through the A1 left before the call
-    if g.c.sr & m68k::SR_C != 0 {
-        return;
+    // the speed and the height stay in D2-D4 (leftovers of the original)
+    crate::mem::set_low_word(&mut g.leftovers.d3, 0xffff);
+    g.leftovers.d4 = height as u32;
+    g.leftovers.d2 = d2 as u32;
+    match g.shock(p, d0 as u8, d1, d2, 0xffff) {
+        Some(spark) => wr16(g.b, spark.0 + 0x0c, height),
+        // Original glitch: only the carry is tested; in the scene without shocks (41: no effect, carry clear) the
+        // height is written through the A1 left by the code before the action, and the sound is played. That A1 is
+        // not known here (no scenario plays it): the write is left out (`docs/code-mort.md`, "Sortie du Cpu,
+        // partie 6").
+        None if crate::ram::SCENE.get(g.b) == NO_SHOCK_SCENE => {}
+        None => return,
     }
-    let spark = g.c.a[1];
-    wr16(g.b, spark + 0x0c, height);
     g.sound(rom::SPARK_SOUND, p);
 }
 

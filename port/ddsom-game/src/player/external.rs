@@ -1,7 +1,6 @@
-//! Routines of subsystems other than the players that are still called by their original address (`Ctx::rom`) and that
-//! several files share: a single declaration per address. They will become Rust calls when their
-//! module has an API (sound: `sound`, palettes: `palette`, effects: `families`); the names marked (h) are
-//! hypotheses based on usage.
+//! Identifiers (original addresses) of routines of other subsystems that several files of the players share: a single
+//! declaration per address (sounds: `sound::play` through `Ctx::sound`); the names marked (h) are hypotheses based on
+//! usage.
 
 /// Sounds ("wrappers" of `sound`, A0 = the player for the panning).
 pub mod sound {

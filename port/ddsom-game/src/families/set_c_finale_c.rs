@@ -179,10 +179,8 @@ fn equip<R: Bench>(x: &mut Cx<'_, R>, player: u32, at: u32) {
     } else {
         wr8(x.b, player + 0x10d, new);
     }
-    // 0x3552: the player's weapon power is recomputed (the player context still holds a processor, whose output
-    // registers, D0 and A4, are not read)
-    let mut bench = m68k::Cpu::default();
-    crate::player::init::init_weapon_stats(&mut crate::player::Ctx::new(&mut bench, x.b), crate::player::Player(player));
+    // 0x3552: the player's weapon power is recomputed (its output registers, D0 and A4, are not read)
+    crate::player::init::init_weapon_stats(&mut crate::player::Ctx::new(x.b), crate::player::Player(player));
 }
 
 /// Window palette and text header (0xce88a): copies three palette blocks, sets the text buffer and composes the

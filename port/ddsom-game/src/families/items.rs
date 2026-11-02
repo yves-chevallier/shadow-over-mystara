@@ -14,6 +14,7 @@ use crate::objects::pools;
 use crate::objects::Obj;
 
 use super::{add_u8, effects_creators, handler, pointer};
+use super::effects_creators::leftovers::Regs;
 use super::cx::{Bench, Cx};
 use crate::objects::Current;
 use crate::machine::Machine;
@@ -2346,26 +2347,27 @@ const RING: Door = Door { object: 0x162, hits: 0x16b, chances: 0xdb7d0 };
 /// Number of objects dropped at this hit (word).
 const DROPPED: u32 = A5 - 0x5ac8;
 
-/// The hit counter of `p` is exhausted, or the draw makes the object fall.
-fn falls(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, p: &Door) -> bool {
+/// The hit counter of `p` is exhausted, or the draw makes the object fall. The registers the original leaves (A4 = the
+/// chance table, D0.w = the draw, D2.w = the mask) go to `r`.
+fn falls(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj, p: &Door) -> bool {
     let n = o.u8(b, p.hits).wrapping_sub(1);
     o.set_u8(b, p.hits, n);
     if (n as i8) < 0 {
         return true;
     }
-    c.a[4] = p.chances;
+    r.a(4, p.chances);
     let i = 2 * n as u32;
-    c.d[0] = i;
+    r.d(0, i);
     let mask = rd16(b, p.chances + i);
-    c.d[2] = c.d[2] & 0xffff_0000 | mask as u32;
+    r.d_word(2, mask);
     let bit = crate::rng::random(b) & 0xf;
-    c.d[0] = c.d[0] & 0xffff_0000 | bit as u32;
-    c.d[2] >> bit & 1 != 0
+    r.d_word(0, bit);
+    mask >> bit & 1 != 0
 }
 
-fn dropped(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, p: &Door, number: u8) {
-    c.d[0] = c.d[0] & !0xff | number as u32;
-    super::creators::set_a_via(c, b, number, |b| o.u8(b, Obj::VARIANT));
+fn dropped(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj, p: &Door, number: u8) {
+    r.d_byte(0, number);
+    super::creators::set_a_via(r, b, number, |b| o.u8(b, Obj::VARIANT));
     o.set_u8(b, p.object, 0xff);
     o.set_u8(b, p.hits, 0);
 }
@@ -2375,29 +2377,28 @@ fn count_dropped(b: &mut Cps2Bus) {
     wr16(b, DROPPED, n);
 }
 
-/// `0xdb6c0`: equipment dropped by the hit player `o`, for a caller still on the processor (`player::hurt`): the
-/// registers are left like the original (D0, D2, A4, A0 = the player).
-pub fn fall_equipment_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) {
-    c.a[0] = o.0;
+/// `0xdb6c0`: equipment dropped by the hit player `o` (`player::hurt`); the registers the original leaves (D0, D2, A4)
+/// go to `r`.
+pub(crate) fn fall_equipment(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj) {
     wr16(b, DROPPED, 0);
     let shield = o.u8(b, SHIELD.object);
-    if shield <= 3 && falls(c, b, o, &SHIELD) {
-        dropped(c, b, o, &SHIELD, shield + 4);
+    if shield <= 3 && falls(r, b, o, &SHIELD) {
+        dropped(r, b, o, &SHIELD, shield + 4);
         count_dropped(b);
     }
-    if (o.u8(b, WEAPON.object) as i8) >= 0 && falls(c, b, o, &WEAPON) && rd16(b, DROPPED) == 0 {
-        c.d[0] = 0;
-        dropped(c, b, o, &WEAPON, 3);
+    if (o.u8(b, WEAPON.object) as i8) >= 0 && falls(r, b, o, &WEAPON) && rd16(b, DROPPED) == 0 {
+        r.d(0, 0);
+        dropped(r, b, o, &WEAPON, 3);
         count_dropped(b);
     }
     let ring = o.u8(b, RING.object);
-    if (ring as i8) >= 0 && ring != 1 && falls(c, b, o, &RING) && rd16(b, DROPPED) == 0 {
-        c.d[0] = c.d[0] & !0xff | ring as u32;
-        super::creators::set_a_via(c, b, ring, |b| o.u8(b, Obj::VARIANT));
+    if (ring as i8) >= 0 && ring != 1 && falls(r, b, o, &RING) && rd16(b, DROPPED) == 0 {
+        r.d_byte(0, ring);
+        super::creators::set_a_via(r, b, ring, |b| o.u8(b, Obj::VARIANT));
         o.set_u8(b, RING.object, 0xff);
         // character 5 keeps its original ring (1)
         let character = o.u8(b, 0x3) >> 1;
-        c.d[0] = character as u32;
+        r.d(0, character as u32);
         if character == 5 {
             o.set_u8(b, RING.object, 1);
         }

@@ -684,7 +684,7 @@ fn choose(x: &mut Ctx, s: Slot) {
 /// `player::init::join_player` specific to the player.
 fn start_player(x: &mut Ctx, s: Slot, how: Join) {
     let index = s.index(x.b);
-    crate::player::init::join_player(x.c, x.b, index, how);
+    crate::player::init::join_player(x.b, index, how);
     let b = &mut *x.b;
     if (s.g8(b, player::CHARACTER) & 0x7f) >> 1 == 5 {
         s.set_g8(b, 0x162, 1);

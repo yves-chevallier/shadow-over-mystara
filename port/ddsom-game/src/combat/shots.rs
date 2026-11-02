@@ -71,12 +71,9 @@ pub(super) fn shot_hits_enemy(w: &mut World, shot: Obj, e: Obj) {
         20 => shot_sweep(w, shot, e, owner),
         21 => shot_push(w, shot, e),
         23 => shot_execute(w, shot, e, owner),
-        _ => {
-            // unknown type: let the original decide (Z clear = the shot hits)
-            let h = rd32(w.b, rom::SHOT_HANDLERS + 4 * kind as u32);
-            w.c.a[3] = owner.0;
-            !w.call_ao(h, shot, e)
-        }
+        // the player shots have the kinds 0 to 0x18 (their handlers, `families/player/pshl*`): the table 0x267c4
+        // has no other entry (`docs/code-mort.md`, "Sortie du Cpu, partie 6")
+        _ => unreachable!("player shot of kind {kind:#x}: no PSHL kind beyond 0x18"),
     };
     trace!("shot {:06x} type {kind} on {:06x}: {hit}", shot.0, e.0);
     if !hit {

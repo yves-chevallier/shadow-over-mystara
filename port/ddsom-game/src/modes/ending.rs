@@ -419,7 +419,7 @@ crate::steps! {
                 let score = bcd_add(rd32(x.b, p + 0x110), reward);
                 wr32(x.b, p + 0x110, if score as i32 > 0x0999_9999 { 0x0999_9999 } else { score });
             }
-            crate::player::update::update_cpu(x.c, x.b);
+            crate::player::on_bench(x.c, x.b, crate::player::update::update_all);
             wr8(x.b, var::PHASE, 20);
             crate::sound::service(x.b, crate::sound::Service::GeneralStop);
             // `jmp 0x133f6`: the scored startup done, then the return to the caller
