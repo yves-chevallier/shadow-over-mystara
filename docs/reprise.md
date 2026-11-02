@@ -19,7 +19,7 @@ Point de départ pour la prochaine session. L'historique détaillé des lots est
 Aucune branche ouverte : `wt-pile` (partie 4) et `wt-locales` (partie 5, étapes 1-2 et 11 familles d'ennemis) sont fusionnés dans main (edd4e00), 296/296 VALIDE dans les deux modes.
 
 Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 5 » de refactorisation.md) :
-* **Partie 4, point 5** : `dispatch::Restes` en état nommé dans la table des tâches. A0, D4, D7 sortiront du `Contexte` en devenant des champs des étapes qui les relisent. Resserrer `ram_du_noyau` (FF0E66-FF0FFF contient de vraies variables du jeu, aujourd'hui non comparées).
+* **Partie 4, point 5** (branche `wt-restes`, validée 296/296 dans les deux modes et empoisonnée `reprise,neuve,pile` sans exemption, non fusionnée) : `ram_du_noyau` resserré aux piles ; `dispatch::Restes` dans `Table::restes` ; `Contexte` supprimé (A0, D4, D7 en champs des étapes, SR utilisateur sans masque).
 * **Partie 5, suite** : familles d'ennemis à vraie lecture de registre (squelette D1, trog A1, gargouille D0, golem D0, bête de l'ombre D0), familles pas encore tentées (scarabée, scorpion, harpie, Riyakaa, guerrier, double, part), puis boss, `joueur/`, `set_b`, `effects_c`, enfin `registres_generique.py` et `registres_sans.py`.
 * Outils de la partie 5 : `tools/registres/` (`lecteurs.py` liste les lecteurs de registres d'entrée, `generique.py`/`nettoie.py`/`famille.sh` rendent une famille générique, `fuzz.sh`/`compare_fuzz.py` comparent fuzz_couv branche/main ; variables `SCRATCH` et `W`).
 

@@ -36,8 +36,8 @@ pub enum Attente {
     Prete,
 }
 
-/// Cède la main : le noyau range l'attente et le contexte de la tâche dans la table ; elle reprendra à `reprise`
-/// (une étape Rust, ou la native posée à une adresse), avec ses registres et sa pile actuels.
+/// Cède la main : le noyau range l'attente et la reprise de la tâche dans la table ; elle reprendra à `reprise`
+/// (une étape Rust, qui porte ce qu'elle relira).
 pub fn ceder(x: &mut Ctx, attente: Attente, reprise: impl Into<Suite>) -> Flow {
     let reprise = reprise.into();
     match attente {
@@ -186,6 +186,39 @@ pub fn executer(etape: Etape, c: &mut Cpu, b: &mut Cps2Bus) {
     if etape.pas(&mut x) == Flow::Done {
         crate::diag::sonder_retour(x.c, &etape);
         revenir(x.c, x.b);
+    }
+}
+
+/// Reprise d'une tâche qui a cédé la main : l'étape `etape`. L'original rend à la tâche les registres sauvés à la
+/// cession ; seuls quelques-uns sont relus (sonde `DDSOM_POISON=reprise`), et ils sont nommés : champs des étapes qui
+/// les relisent (objet et compteur de la boucle d'aiguillage, D4 du pas de jeu, A0 de l'appelant d'un fondu), que leur
+/// pas remet dans le banc, ou A0 que les étapes de certaines tâches retrouvent toujours ([`a0_de_reprise`]).
+pub fn reprendre(etape: Etape, c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(a0) = a0_de_reprise(etape, b) {
+        c.a[0] = a0;
+    }
+    executer(etape, c, b);
+}
+
+/// L'A0 qu'une étape reprise retrouve et relit, quand il ne dépend que d'elle :
+/// * les séquences de sortie de scène (aiguillage, états partagés, transitions) travaillent sur le bloc de la sortie
+///   de scène, que l'aiguillage pose dans A0 et que les cessions gardent ;
+/// * le gestionnaire qui fait attendre la partie (feu d'artifice) retrouve son objet : celui de la boucle d'aiguillage
+///   en cours (`dispatch::objet_en_cours`).
+fn a0_de_reprise(etape: Etape, b: &mut Cps2Bus) -> Option<u32> {
+    match etape {
+        Etape::Exit(_)
+        | Etape::Bonus(_)
+        | Etape::Tally(_)
+        | Etape::Characters(_)
+        | Etape::Transition(_)
+        | Etape::TransitionEarly(_)
+        | Etape::TransitionLate(_) => Some(crate::scene::screen::blocks::EXIT),
+        Etape::FeuArtifice(_) => {
+            let objet = crate::dispatch::objet_en_cours(b).expect("reprise du feu d'artifice hors d'une boucle d'aiguillage");
+            Some(objet.0)
+        }
+        _ => None,
     }
 }
 

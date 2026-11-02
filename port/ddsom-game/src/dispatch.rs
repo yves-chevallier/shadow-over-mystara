@@ -7,8 +7,8 @@
 //! natives, désignées par leur adresse dans la table de la ROM.
 //!
 //! Un gestionnaire peut faire céder la main à la tâche (fondu au noir des portes, feu d'artifice) : la boucle est alors
-//! abandonnée, et la tâche la reprendra à l'étape [`Etape::Aiguillage`] (après l'emplacement courant, avec A0 et D7
-//! rendus par le contexte de la tâche), puis à la suite de l'appelant de la boucle.
+//! abandonnée, et la tâche la reprendra à l'étape [`Etape::Aiguillage`] (après l'emplacement courant, avec l'objet et
+//! le compteur notés dans l'étape), puis à la suite de l'appelant de la boucle.
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -92,7 +92,8 @@ impl Class {
                 let address = self.handler(b, kind);
                 c.a[1] = address;
                 let avant = (c.d, c.a, c.sr);
-                let appel = crate::taches::table::appeler_attendu(b, Etape::Aiguillage(index));
+                let suite = Etape::Aiguillage { classe: index, objet: obj, compteur: c.d[7] as u16 };
+                let appel = crate::taches::table::appeler_attendu(b, suite);
                 if !crate::appeler_attendu(c, b, address, appel) {
                     return Flow::Yield;
                 }
@@ -126,7 +127,10 @@ pub struct Aiguillage {
 /// scénarios ; les autres registres qu'un gestionnaire laisse ne sont relus par personne. Ils vivent encore dans le
 /// banc du processeur, que d'autres routines (liste des sprites, caméras) écrivent aussi : la boucle les y prend et
 /// les y rend.
-#[derive(Clone, Copy, Debug, Default)]
+///
+/// Ils sont un état de la partie, rangé dans la table des tâches (`taches::table::Table::restes`) : voir
+/// [`Restes::depuis_le_banc`] et [`Restes::vers_le_banc`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Restes {
     /// D2 : ce que laissent la collision avec le décor (0x33fe4, `terrain::push`), les tests de boîte (0xb5e0,
     /// 0x7f19c, 0x7ef4), la ligne de trésor du butin (0xb780) ; l'étincelle de `flash_and_shake` (0x103ba) en tire sa
@@ -142,6 +146,19 @@ pub struct Restes {
     /// collision avec le décor (0x33fe4), le compteur épuisé d'une boucle `dbf`... ; la rangée d'éclats d'une caisse
     /// (0xa17d0, `eshl_creators::row_1a`) en relit l'octet haut.
     pub d5: u32,
+}
+
+impl Restes {
+    /// Le code sur le processeur a fini : ses restes (D2-D5 du banc) deviennent ceux de la partie (table des tâches).
+    pub fn depuis_le_banc(c: &Cpu, b: &mut Cps2Bus) {
+        crate::taches::table::table(b).restes = Restes { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] };
+    }
+
+    /// Le code sur le processeur reprend : les restes de la partie reviennent dans le banc (D2-D5).
+    pub fn vers_le_banc(c: &mut Cpu, b: &mut Cps2Bus) {
+        let r = crate::taches::table::table(b).restes;
+        (c.d[2], c.d[3], c.d[4], c.d[5]) = (r.d2, r.d3, r.d4, r.d5);
+    }
 }
 
 impl Aiguillage {
@@ -162,22 +179,37 @@ impl Aiguillage {
 /// Reprise d'une boucle de dispatch dont un gestionnaire a fait céder la main à la tâche.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Etape {
-    /// Retour du gestionnaire de l'emplacement courant de la classe `CLASSES[k]` (A0 et D7 rendus par la tâche) : le
-    /// parcours continue à l'emplacement suivant, puis revient à l'appelant de la boucle.
-    Aiguillage(u8),
+    /// Retour du gestionnaire de l'emplacement courant de la classe `CLASSES[classe]` : le parcours continue à
+    /// l'emplacement suivant, puis revient à l'appelant de la boucle. L'original garde l'objet (A0) et le compteur
+    /// (D7.w) dans ses registres, que la cession sauve et rend ; ils sont ici dans l'étape, notés à l'appel du
+    /// gestionnaire (aucun gestionnaire qui cède ne les change).
+    Aiguillage { classe: u8, objet: Obj, compteur: u16 },
 }
 
 impl Etape {
     /// Adresse que l'original reprend : celle qui suit le `jsr (A1)` de la boucle.
     pub const fn adresse(self) -> u32 {
-        let Etape::Aiguillage(k) = self;
-        CLASSES[k as usize].entry + HANDLER_RETURN
+        let Etape::Aiguillage { classe, .. } = self;
+        CLASSES[classe as usize].entry + HANDLER_RETURN
     }
 
     pub fn pas(self, x: &mut crate::scene::Ctx) -> Flow {
-        let Etape::Aiguillage(k) = self;
-        CLASSES[k as usize].sweep(x.c, x.b, true)
+        let Etape::Aiguillage { classe, objet, compteur } = self;
+        // la boucle reprend sur le processeur, avec son objet et son compteur
+        x.c.a[0] = objet.0;
+        set_low_word(&mut x.c.d[7], compteur);
+        CLASSES[classe as usize].sweep(x.c, x.b, true)
     }
+}
+
+/// L'objet que la boucle d'aiguillage en cours de la tâche courante fait traiter (le plus récent de ses appels en
+/// cours [`Etape::Aiguillage`]) : celui d'un gestionnaire qui a cédé la main et reprend (feu d'artifice).
+pub fn objet_en_cours(b: &mut Cps2Bus) -> Option<Obj> {
+    let cadres = crate::taches::table::table(b).cadres();
+    cadres.iter().filter_map(|cadre| match cadre.suite {
+        crate::taches::table::Suite::Etape(crate::taches::Etape::Aiguillage(Etape::Aiguillage { objet, .. })) => Some(objet),
+        _ => None,
+    }).last()
 }
 
 /// Décalage de l'adresse de retour du `jsr (A1)` qui appelle le gestionnaire, dans chacune des dix

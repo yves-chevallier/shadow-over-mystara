@@ -32,7 +32,7 @@ fn main() {
     for (k, e) in table.emplacements.iter().enumerate() {
         let reprise = match e.reprise {
             Reprise::Entree(pc) => format!("entrée {pc:x}"),
-            Reprise::Etape(etape, c) => format!("étape {etape:?} ({:x}) {c:x?}", etape.adresse()),
+            Reprise::Etape(etape) => format!("étape {etape:?} ({:x})", etape.adresse()),
         };
         println!("  tâche {k:2} : {:?} {:?} {} pile {:x} {reprise}", e.tache, e.etat, e.compte, e.pile);
     }

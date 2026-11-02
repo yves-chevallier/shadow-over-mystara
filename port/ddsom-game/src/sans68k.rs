@@ -182,12 +182,12 @@ pub fn ligne(c: &mut Cpu, b: &mut Cps2Bus, fin: u64, plafond: Option<&mut StepCa
             Point::Tache => arreter(c, b, "la tâche a rendu la main sans céder".into()),
             // la boucle sans fin de l'original : l'image est finie
             Point::Bloque(_) => break,
-            Point::PasRetenu => {
+            Point::PasRetenu { d4 } => {
                 if plafond_atteint() {
                     break;
                 }
                 table(b).point = Point::Tache;
-                crate::taches::executer(crate::taches::partie::Etape::Pas.into(), c, b);
+                crate::taches::executer(crate::taches::partie::Etape::Pas { d4 }.into(), c, b);
                 crate::kernel::point(b)
             }
         };

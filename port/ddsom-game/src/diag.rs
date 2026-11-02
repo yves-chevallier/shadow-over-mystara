@@ -189,24 +189,6 @@ fn inverser(d: &mut [u32; 8], a: &mut [u32], sr: &mut u16, masque: u32) {
     inverser_drapeaux(sr, masque);
 }
 
-/// Sonde d'une cession (`kernel::ceder`) : avec l'étiquette `cession` (`cession@<motif>` : le motif est cherché dans
-/// le nom de l'étape de reprise, `Ending(S04Timer)`), les registres que la tâche retrouvera à sa reprise (D0-D7,
-/// A0-A4, A6, drapeaux) sont inversés. Si la validation reste VALIDE, aucune étape de ces tâches ne relit, après une
-/// cession, un registre d'avant : leur contexte de registres est mort (sinon il devient un champ nommé de l'état).
-pub fn sonder_cession(d: &mut [u32; 8], a: &mut [u32; 7], sr: &mut u16, etape: &dyn std::fmt::Debug) {
-    if etiquettes().is_empty() {
-        return;
-    }
-    let site = format!("{etape:?}");
-    let Some(choisis) = gardes("cession", &site) else {
-        return;
-    };
-    if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
-        eprintln!("POISON cession {site}");
-    }
-    inverser(d, a, sr, REGISTRES_DE_TACHE & choisis);
-}
-
 /// Sonde du retour d'une étape (`taches::executer`, pas qui rend `Flow::Done`) : avec l'étiquette `retour`
 /// (`retour@<motif>`, motif cherché dans le nom de l'étape), tous les registres de la tâche (D0-D7, A0-A4, A6,
 /// drapeaux) sont inversés avant la suite de l'appel en cours. VALIDE : aucune suite ne relit ce que l'étape (ou ce
