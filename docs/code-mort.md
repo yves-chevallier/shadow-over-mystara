@@ -417,3 +417,12 @@ coup (`hurt_slow`, réaction 0x14) passe par 0x3b8a6 → 0x3aa2e, qui arrêtait 
 (glitch écrit en clair : réglage des étoiles de 0x3b7ca = D1.b, l'offset du pas) et validés par `fuzz_couv`
 (`nom:players_update`, 10 scénarios, ~59 000 essais : plus aucune panique ni écart plausible ; avant : 163 paniques).
 Les entrées au-delà de la fin des tables (0x3b880, 0x3b8a2, 0x3ba0e : milieu d'instruction) ne sont pas des pas.
+
+## Lot « nettoyage » (wt-nettoyage)
+
+### Coléoptère : parité de côté calculée puis ignorée (0x65efe, 0x65f18)
+
+0x65efe calcule un côté (`+0xa4`, inversé selon la parité de `+0x2f`) et le passe en D0 à 0x65f18, qui teste sa
+parité puis fait la même chose dans les deux branches. Aucun effet : le paramètre `side` de `cross_turn` (vide depuis
+la réécriture) est retiré, le comportement est documenté dans `families/enemy_beetle.rs`. Hypothèse : tour à gauche ou
+à droite prévu puis unifié.

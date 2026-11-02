@@ -1019,6 +1019,45 @@ But : que le jeu n'ait plus de processeur du tout ; la machine de référence (`
   `examples/bench` (état final haché) compilé sans `tools` (machine sans 68000) et avec : même empreinte (bot30k,
   20 000 images).
 
+## 21. Nettoyage (wt-nettoyage)
+
+But : code minimal et lisible, à comportement identique, sans avertissement de compilation ni de clippy.
+
+* **Outils.** `#![allow(unused_imports)]` retiré de `tools/mod.rs`, imports nettoyés. La visibilité des outils est
+  resserrée : `pub(crate)` partout, sauf ce que les exemples utilisent (`pub`), si bien que rustc signale désormais le
+  code mort des outils. 48 éléments sans utilisateur retirés (adaptateurs `_68k` d'animation, de mouvement, de
+  culling, de rang, de terrain, `seed_68k`, codes de condition inutilisés, trait `WithCpu`, `Cx::without`, `handler`,
+  `TASK_REGS`...), `tools/ai.rs` et `tools/ai_aids.rs` (vides) supprimés, ainsi que l'outil de preuve
+  `effects_creators::leftovers` (étiquette `DDSOM_POISON=leftovers`, plus produite).
+* **Restes de registres : le jeu ne calcule que ce qu'il lit.** Plus aucun `allow(dead_code)` dans `ddsom-game`.
+  Les registres que l'original laisse et que seul le code d'origine relit sont reconstruits dans `tools`, d'après
+  l'état avant ou après l'appel, ou en rejouant la recherche avec les briques du jeu :
+  * `events` : `enqueue`, `create_popup` rendent un booléen, `credit` rien (outils : cellule d'écriture lue avant,
+    dernier événement crédité rejoué) ; `Queued`, `Handled`, `Last`, `Creation` supprimés ;
+  * `eeprom::count` rend le succès de l'écriture éventuelle (`Count` supprimé) ;
+  * `aids::Compute` sans D1 ni D6 (outils : plus petite différence, compteur du `dbf` d'après le pas) ;
+  * `palette` : `load_stage_palettes` sans `StageEnd`, `load_all_palettes` sans `load_all_with`/`Loaded` (outils :
+    `stage_end`, fin de liste et sources de page ; `stage_count`, `stage_list`, `stage_extra`, `page_source` partagés) ;
+  * `placement` : `search`/`Search` supprimés (outils : recherche rejouée, `start_x`, `start_y`, `is_free`) ;
+  * `scene::entry::place_players` rend le rang (D2, relu par `scenery`) ; `PlacementLeftovers` supprimé ; les
+    drapeaux de la native 0x20de6 sont désormais exacts (`fuzz_couv` : 25 écarts `ccr` préexistants → 0) ;
+  * `sound::enqueue`/`service_enqueue` rendent un booléen (`Queueing` supprimé).
+* **Créateurs « appelés seulement par le code d'origine ».** 0xb53f4, 0xb59a6/0xb59c8, 0xb64b0, 0xa2f96, 0xa6824,
+  0x9ddee avaient chacun un doublon dans le jeu (`enemy_common`, `boss_16`) : le jeu appelle désormais les créateurs
+  d'origine (`Pure`), qui ont un vrai lecteur ; `reactions::rom::PLAYER_HURT` est passé dans `tools`.
+* **clippy.** Corrections automatiques puis manuelles (voir le commit). Désactivées par crate dans `Cargo.toml`, avec
+  justification : `collapsible_match` (les machines à états testent leur condition dans le bras de l'état, comme
+  l'original) et `too_many_arguments` (paramètres des routines d'origine ; `cps2-gfx` : ligne de tuiles). Exemple
+  `compare` de `ddsom-rc` renommé `rc_compare` (collision de nom avec celui de `cps2`).
+* **`fuzz_enemy families`.** Les cinq signatures d'écarts (`enemy_28`, `eshl_15`, `eshl_45`, `eshl_61`,
+  `set_common_cc25a`) étaient des états tirés hors contrat : variante 2 pour des objets que le jeu crée en variantes 0
+  et 1 (ESHL 15 : 0x9fa3c, 0x9face, 0x9fc14 ; ESHL 45 : boss 16 ; Nagpa ; créateurs SET 0xcc25a, dont la table de
+  variantes n'a qu'une entrée) ou créateur de variante > 2 (ESHL 61, créé par l'effet 0xb8b..). L'original saute
+  alors hors de ses tables. Le tirage est restreint (`variants_of`), l'écart est attribué à la native qui diffère.
+  Résultat (kobold_scene7, 300 tours) : **0 écart** sur 1 624 840 appels comparés (avant : 20 785 écarts) ; restent
+  2 390 trajectoires abandonnées (« the original routine does not return » : l'original cède la main) et une panique
+  `unreachable` (réaction 0x77b98 du type 26 sur un état tiré).
+
 ## Avancement
 
 | Étape | Commit | Validation |

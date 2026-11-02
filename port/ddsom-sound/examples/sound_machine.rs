@@ -26,7 +26,9 @@ fn main() {
         z80.sound.trace = Some(Vec::new());
         rust.sound.trace = Some(Vec::new());
     }
-    let mut irq_flags: (Vec<(usize, u8)>, Vec<(usize, u8)>) = Default::default();
+    // (frame, mailbox flag) after each interrupt: Z80 driver, Rust driver
+    type Flags = Vec<(usize, u8)>;
+    let mut irq_flags: (Flags, Flags) = Default::default();
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scenario");
     let frames: usize = frames.parse().unwrap();
 
@@ -39,7 +41,7 @@ fn main() {
         script.apply(f, &mut rust);
         z80.run_frame();
         rust.run_frame();
-        if z80.sound.trace.is_some() {
+        if let Some(z80_trace) = z80.sound.trace.as_mut() {
             use cps2::sound::Event;
             let keep = |t: Vec<Event>, out: &mut Vec<(usize, u8)>| {
                 let mut after_irq = false;
@@ -54,7 +56,7 @@ fn main() {
                     }
                 }
             };
-            keep(std::mem::take(z80.sound.trace.as_mut().unwrap()), &mut irq_flags.0);
+            keep(std::mem::take(z80_trace), &mut irq_flags.0);
             keep(std::mem::take(rust.sound.trace.as_mut().unwrap()), &mut irq_flags.1);
         }
         log_ends.push((z80.sound.qsound.log.as_ref().map_or(0, Vec::len), rust.sound.qsound.log.as_ref().map_or(0, Vec::len)));

@@ -221,17 +221,17 @@ pub fn print_writes(who: &str, w: &[Write]) {
 
 /// "One song" run: the command, then a second sound and a system command.
 pub fn song_session(rom: &Rom, n: usize, irqs: usize) -> Session {
-    let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ (n as u64 + 1) * 0x1234_5679);
+    let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ ((n as u64 + 1) * 0x1234_5679));
     let mut commands = vec![(12, play_command(&mut rng, n as u16))];
     let other = rng.below(u64::from(song_count(rom))) as u16;
     commands.push((irqs / 3, play_command(&mut rng, other)));
     commands.push((2 * irqs / 3, system_command(&mut rng)));
-    Session { patches: Vec::new(), stereo: if n % 5 == 0 { 0 } else { 0xff }, commands, irqs }
+    Session { patches: Vec::new(), stereo: if n.is_multiple_of(5) { 0 } else { 0xff }, commands, irqs }
 }
 
 /// Random run: a sequence of commands of all kinds.
 pub fn random_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Session {
-    let mut rng = Rng(0x2545_f491 ^ (seed as u64 + 1) * 0x9e37_79b9 + i as u64 * 0x85eb_ca6b);
+    let mut rng = Rng(0x2545_f491 ^ ((seed as u64 + 1) * 0x9e37_79b9 + i as u64 * 0x85eb_ca6b));
     let mut commands = Vec::new();
     let mut at = 12;
     for _ in 0..4 + rng.below(8) {
@@ -255,7 +255,7 @@ pub fn synth_short_session(rom: &Rom, seed: usize, i: usize, irqs: usize) -> Ses
 }
 
 pub fn synth_session_with(rom: &Rom, seed: usize, i: usize, irqs: usize, track_len: u64) -> Session {
-    let mut rng = Rng(0x3c6e_f372 ^ (seed as u64 + 1) * 0x9e37_79b9 + i as u64 * 0xc2b2_ae35);
+    let mut rng = Rng(0x3c6e_f372 ^ ((seed as u64 + 1) * 0x9e37_79b9 + i as u64 * 0xc2b2_ae35));
     let mut patches = Vec::new();
     let mut numbers = Vec::new();
     // Every other time the data straddles a bank boundary (4C000), to exercise the

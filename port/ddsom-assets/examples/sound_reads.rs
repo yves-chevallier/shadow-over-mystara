@@ -70,11 +70,12 @@ fn main() {
     }
 
     // byte ranges described by music.json (linear addresses)
-    let mut kinds: Vec<(String, u32, u32)> = Vec::new();
-    kinds.push(("pointer to the sound header".into(), music.header_ptr, music.header_ptr + 2));
-    kinds.push(("pointer to the sample table".into(), music.samples_ptr, music.samples_ptr + 2));
-    kinds.push(("instrument bank table".into(), music.banks_table, music.banks_table + 2 * music.banks.len() as u32));
-    kinds.push(("sound header and table".into(), music.header, music.header + 6 + 4 * music.songs.len() as u32));
+    let mut kinds: Vec<(String, u32, u32)> = vec![
+        ("pointer to the sound header".into(), music.header_ptr, music.header_ptr + 2),
+        ("pointer to the sample table".into(), music.samples_ptr, music.samples_ptr + 2),
+        ("instrument bank table".into(), music.banks_table, music.banks_table + 2 * music.banks.len() as u32),
+        ("sound header and table".into(), music.header, music.header + 6 + 4 * music.songs.len() as u32),
+    ];
     for s in music.songs.iter().flatten() {
         kinds.push(("sound definitions".into(), s.rom, s.rom + s.bytes().len() as u32));
     }

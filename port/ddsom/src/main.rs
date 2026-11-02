@@ -160,7 +160,7 @@ fn main() {
         }
         win.update_with_buffer(&buf, 384, 224).expect("display");
 
-        let samples: Vec<i16> = m.sound.audio.drain(..).flat_map(|s| s).collect();
+        let samples: Vec<i16> = m.sound.audio.drain(..).flatten().collect();
         let fast = t.fast;
         if let (Some(a), false) = (&audio, fast) {
             a.push(samples);

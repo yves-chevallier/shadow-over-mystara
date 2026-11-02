@@ -39,6 +39,10 @@ pub enum Output {
     Shared { offset: u16, value: u8 },
 }
 
+/// Callback before each Z80 instruction (coverage).
+#[cfg(feature = "z80")]
+pub type PcHook = Box<dyn FnMut(&z80::Z80)>;
+
 pub struct Sound {
     /// Event log, if enabled.
     pub trace: Option<Vec<Event>>,
@@ -46,7 +50,7 @@ pub struct Sound {
     pub output: Option<Vec<Output>>,
     /// Callback before each Z80 instruction (coverage), if enabled.
     #[cfg(feature = "z80")]
-    pub pc_hook: Option<Box<dyn FnMut(&z80::Z80)>>,
+    pub pc_hook: Option<PcHook>,
     #[cfg(feature = "z80")]
     pub z80: z80::Z80,
     /// audiocpu region (0x50000): 0-7FFF fixed, 0x4000 banks from 0x10000.
@@ -71,6 +75,8 @@ pub struct Sound {
     /// Stereo samples produced (to be drained by the application).
     pub audio: Vec<[i16; 2]>,
     sample_acc: f64,
+    /// The Z80 acknowledged its interrupt (the line drops: irq0_line_hold).
+    #[cfg(feature = "z80")]
     irq_acked: bool,
 }
 
@@ -111,6 +117,7 @@ impl Sound {
             driver_restart: false,
             audio: Vec::new(),
             sample_acc: 0.0,
+            #[cfg(feature = "z80")]
             irq_acked: false,
         };
         if !cfg!(feature = "z80") {

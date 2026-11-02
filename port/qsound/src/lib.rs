@@ -269,7 +269,7 @@ impl QSound {
     /// `dsp_rom`: dl-1425.bin (only the first 0x2000 bytes, little-endian words).
     /// `samples`: sample ROM (size a power of 2).
     pub fn new(dsp_rom: &[u8], samples: Vec<u8>) -> Self {
-        let rom = dsp_rom[..0x2000].chunks_exact(2).map(|w| u16::from_le_bytes([w[0], w[1]])).collect();
+        let rom = dsp_rom[..0x2000].as_chunks::<2>().0.iter().map(|w| u16::from_le_bytes([w[0], w[1]])).collect();
         let sample_mask = samples.len().next_power_of_two() - 1;
         let mut q = QSound {
             dsp_rom: rom,
