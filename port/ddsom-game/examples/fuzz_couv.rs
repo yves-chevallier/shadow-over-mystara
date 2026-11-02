@@ -1070,7 +1070,8 @@ fn main() {
     let native_tests = ddsom_game::hud::TEST_NATIVES.iter().chain(ddsom_game::credits::TEST_NATIVES).chain(ddsom_game::credits_task::TEST_NATIVES);
     for n in ddsom_game::all_natives().chain(native_tests) {
         let wanted = |s: &str| {
-            if let Some(p) = s.strip_prefix("nom:") {
+            // `nom:` is the former spelling, still accepted by the existing scripts
+            if let Some(p) = s.strip_prefix("name:").or_else(|| s.strip_prefix("nom:")) {
                 n.name.starts_with(p)
             } else if let Some(h) = s.strip_prefix("0x") {
                 u32::from_str_radix(h, 16).is_ok_and(|x| x == n.entry)
