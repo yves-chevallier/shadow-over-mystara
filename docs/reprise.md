@@ -28,7 +28,8 @@ Point de départ pour la prochaine session. L'historique détaillé des lots est
 * **L6, SET** (branche `wt-l6-set`, 2026-11-02) : SET découpés par type (`families/set/`, `set_b/`, `set_c/`),
   tables dans le nouveau `data/set.json` et `data/dialogs.json` chargés dans `GameData` (**réextraire `data`**),
   vues `record!` (`*/fields.rs`), variables A5 dans `set/vars.rs` ; accesseurs ROM, décalages littéraux et
-  `A5 + littéral` à 0 dans la zone set. Validation : voir [fin.md](fin.md) (L6, « Résultat »). Non fusionné.
+  `A5 + littéral` à 0 dans la zone set. Validé 308/308 dans les deux modes après fusion de main 71846a8 ; non
+  fusionné. Voir [fin.md](fin.md) (L6, « Résultat »).
 
 Aucune branche ouverte : `wt-pile` (partie 4) et `wt-locales` (partie 5, étapes 1-2 et 11 familles d'ennemis) sont fusionnés dans main (edd4e00), 296/296 VALIDE dans les deux modes.
 

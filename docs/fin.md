@@ -62,7 +62,7 @@ Les zones ci-dessous correspondent aux périmètres des lots de la section 3.
 | Effets (`families/effects*.rs`) | 8 | 13 267 | 292 | 525 | 135 | 322 | 58 | 358 | `effects_c.rs` (5 162) |
 | Effets après L5 (`families/effects/`, `effects_creators/`) | 33 | 13 908 | 0 | 0 | 0 | 311 | 0 | 0 | `effects/d.rs` (881) |
 | SET (`families/set*.rs`, `scenery.rs`) | 10 | 9 911 | 247 | 1 108 | 182 | 346 | 22 | 184 | `set_b.rs` (3 628) |
-| SET après L6 (`families/set*`, `scenery.rs`) | 52 | 11 094 | 0 | 0 | 0 | 287 | 0 | 196 | `set/name_entry/cursor.rs` (623) |
+| SET après L6 (`families/set*`, `scenery.rs`) | 52 | 11 104 | 0 | 0 | 0 | 287 | 0 | 196 | `set/name_entry/cursor.rs` (623) |
 | ESHL, SOBJ, objets, caisses | 10 | 15 808 | 274 | 2 378 | 71 | 51 | 91 | 424 | `eshl_c.rs` (3 300), `eshl_b.rs` (3 054) |
 | Ennemis (`families/enemy*`, `reactions.rs`) | 94 | 32 564 | 170 | 1 302 | 18 | 25 | 1 | 205 | `reactions.rs` (2 223) |
 | Ennemis après L8a (façades `enemy_common/`, `enemy_lib`, `enemy`, `reactions/` : 12 fichiers) | 102 | 32 859 | 135 (façades 0) | 1 132 (façades 0) | 14 (façades 0) | 8 | 0 | 180 (façades 0) | `enemy_riyakaa.rs` (1 051) |
@@ -694,6 +694,13 @@ libre.
     `PlayerFields` pour les champs de joueur que `player::Player` ne nomme pas encore (0x7d, 0x140, 0x15c) ;
     variables A5 dans `set/vars.rs` ; le `Pool` en double de `set_b` remplacé par `pools::Pool`. Décalages
     littéraux 1 141 → 0, `A5 + littéral` 180 → 0 (`measure_end.py`).
+  * Validation (après fusion de main 71846a8 : L4, L5, L8a) : 308/308 VALID en mode par défaut et avec
+    `DDSOM_ASSETS` (assets réextraits par la branche), `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1` ; résidu sans
+    clé « set » ; tests `ddsom-assets` (dont `set_lossless`), `extract` (`to_data` : set et dialogs) ; `clippy` sans
+    avertissement avec et sans `tools`. Une première validation de (c) avait trouvé 9 échecs : deux noms de champ
+    identiques dans une même vue (`RefillObj::MARK`, `RankingObj::ORDER`) avaient fait écrire l'ordre d'un effet
+    créé au mauvais décalage ; corrigé (`ScreenEffect::ORDER`). Les constantes d'adresses ROM restent (196 dans la
+    zone : tables nommées par leur adresse, routines d'origine).
   * Décisions pour les lots suivants : un lot de données peut charger un fichier `data/*.json` déjà extrait dans
     `GameData` (comme `dialogs`) plutôt que de le recopier ; les champs nommés ici que d'autres familles lisent
     (`SetObj::OWNER`/`PARAM`/`ARG` des objets créés par les scripts, `PlayerFields`, `WindowEffect`) sont à
