@@ -4,6 +4,7 @@
 //! number. Otherwise bytes 0-1 (big-endian) are the number of a song or effect, and bytes 6
 //! onwards set the pan (see `setup_pan`).
 
+use crate::data::{Note, SoundKind, TrackPos};
 use crate::math::*;
 use crate::pan::PanFade;
 use crate::voice::Voice;
@@ -22,37 +23,29 @@ impl Driver {
         if cmd[0] == 0xff {
             return self.system_command(&cmd);
         }
-        // Song or effect number (modulo their count) -> 4-byte entry: 3-byte address of the
-        // definition.
-        let number = (u16::from(cmd[0]) << 8 | u16::from(cmd[1])) % self.song_count.max(1);
-        let entry = self.song_table.wrapping_add(u32::from(number.wrapping_mul(4))) & 0xff_ffff;
-        let song = self.rom.sound(entry);
-        if song == 0 {
-            return;
-        }
-        self.song = song;
-        let kind = self.rom.byte(song);
-        let body = song + 1;
-        match kind {
-            0 => self.start_music(body),
-            1..=0x7f => self.start_effect(kind, body, &cmd),
-            _ => self.start_single(kind & 0x7f, body, &cmd),
+        // Song or effect number, modulo their count.
+        let count = self.data.sounds.len() as u16;
+        let number = (u16::from(cmd[0]) << 8 | u16::from(cmd[1])) % count.max(1);
+        let Some(sound) = self.data.sounds[usize::from(number)].clone() else { return };
+        self.song = Some(number);
+        match sound.kind {
+            SoundKind::Music { tracks } => self.start_music(&tracks),
+            SoundKind::Effect { priority, tracks } => self.start_effect(priority, &tracks, &cmd),
+            SoundKind::Note(note) => self.start_single(&note, &cmd),
+            SoundKind::Adpcm(note) => self.start_adpcm(&note, &cmd),
         }
     }
 
-    /// Song: 16 tracks (one per channel), each designated by a 2-byte offset
-    /// from the start of the definition (0 = channel absent).
-    fn start_music(&mut self, mut p: u32) {
+    /// Song: one track per channel.
+    fn start_music(&mut self, tracks: &[Option<TrackPos>; 16]) {
         for ch in 0..16u8 {
             self.cur = ch;
             let mut m = std::mem::take(&mut self.music[usize::from(ch)]);
             let was_active = m.state != 0;
             self.priority = m.state;
             m.state = 0;
-            let offset = u32::from(self.rom.word_be(p));
-            p += 2;
-            if offset != 0 {
-                m = Voice::track(self.song + offset, self.inst_bank0());
+            if let Some(start) = tracks[usize::from(ch)] {
+                m = Voice::track(start);
                 m.pan.pan = 0x10;
             }
             self.music[usize::from(ch)] = m;
@@ -73,60 +66,43 @@ impl Driver {
         g.music_volume = hi16(hi16(0xfffe, g.sfx_volume), g.music_factor);
     }
 
-    /// Default instrument bank of the tracks.
-    fn inst_bank0(&self) -> u16 {
-        self.rom.instrument_bank(0)
-    }
-
     /// Multi-track effect: same format as a song, but a track only starts if the command
     /// priority is at least that of the voice it replaces.
-    fn start_effect(&mut self, priority: u8, mut p: u32, cmd: &[u8; 16]) {
+    fn start_effect(&mut self, priority: u8, tracks: &[Option<TrackPos>; 16], cmd: &[u8; 16]) {
         self.priority = priority;
         for ch in 0..16u8 {
             self.cur = ch;
-            let offset = u32::from(self.rom.word_be(p));
-            p += 2;
-            if offset == 0 || priority < self.sfx[usize::from(ch)].priority {
+            let Some(start) = tracks[usize::from(ch)] else { continue };
+            if priority < self.sfx[usize::from(ch)].priority {
                 continue;
             }
-            let mut v = Voice::track(self.song + offset, self.inst_bank0());
+            let mut v = Voice::track(start);
             v.priority = priority;
             self.setup_pan(&mut v, cmd);
             self.sfx[usize::from(ch)] = v;
         }
     }
 
-    /// Single-voice effect (simple note of a sample or an instrument); voices
-    /// 0x10 and above are the ADPCM voices.
-    fn start_single(&mut self, channel: u8, mut p: u32, cmd: &[u8; 16]) {
-        if channel >= 0x10 {
-            return self.start_adpcm(channel - 0x10, p, cmd);
-        }
-        self.cur = channel;
-        let flags = self.rom.byte(p);
-        p += 1;
-        self.priority = flags;
-        let priority = flags & 0x7f;
-        let slot = usize::from(channel);
-        if priority < self.sfx[slot].priority {
+    /// Single-voice effect: a simple note of a sample or an instrument.
+    fn start_single(&mut self, note: &Note, cmd: &[u8; 16]) {
+        self.cur = note.channel;
+        self.priority = note.flags;
+        let priority = note.flags & 0x7f;
+        let slot = usize::from(note.channel);
+        if priority < self.sfx[slot].priority || note.duration == 0 {
             return;
         }
-        let duration = self.rom.word_be(p);
-        p += 2;
-        if duration == 0 {
-            return;
-        }
-        let note = u16::from(self.rom.byte(p + 5).wrapping_add(1)) << 8;
+        let pitch = u16::from(note.note.wrapping_add(1)) << 8;
         let mut v = Voice {
             state: 1,
             fresh: 0xff,
-            wait: duration,
-            gate: self.rom.word_be(p),
-            amplitude: self.rom.amplitude(self.rom.byte(p + 2)),
-            instrument: u16::from(self.rom.byte(p + 3)) << 8 | u16::from(self.rom.byte(p + 4)),
-            pitch: clamp_pitch(note.wrapping_add(sext(self.rom.byte(p + 6)))),
+            wait: note.duration,
+            gate: note.gate,
+            amplitude: self.data.amplitude(note.amplitude),
+            instrument: note.instrument,
+            pitch: clamp_pitch(pitch.wrapping_add(sext(note.detune))),
             priority,
-            continuous: flags & 0x80,
+            continuous: note.flags & 0x80,
             ..Voice::default()
         };
         // Once the voice is accepted, the Z80 keeps only the priority (without the "continuous" bit).
@@ -233,7 +209,7 @@ impl Driver {
         self.g.ramp_dir = dir;
         let step = u16::from(cmd[3]) << 8 | u16::from(cmd[4]);
         self.g.ramp_step = if dir == 1 { step } else { 0u16.wrapping_sub(step) };
-        self.g.ramp_target = self.rom.level(cmd[2] >> 1);
+        self.g.ramp_target = self.data.level(cmd[2] >> 1);
     }
 
     /// Global fade of all channels: bytes 3-4 = speed.
@@ -256,14 +232,5 @@ impl Driver {
     fn set_pitch_bend(&mut self, cmd: &[u8; 16]) {
         let value = u16::from(cmd[4]) << 4;
         self.g.pitch_bend = if cmd[3] == 0xff { 0u16.wrapping_sub(value) } else { value };
-    }
-}
-
-/// Clamps the pitch to 0x6B semitones.
-fn clamp_pitch(pitch: u16) -> u16 {
-    if (pitch >> 8) as u8 >= 0x6c {
-        0x6b00 | (pitch & 0xff)
-    } else {
-        pitch
     }
 }

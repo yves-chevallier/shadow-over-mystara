@@ -11,7 +11,7 @@
 mod support;
 
 use cps2::sound::Event;
-use ddsom_sound::{Driver, Rom, Write};
+use ddsom_sound::{Driver, SoundData, Write};
 use std::path::Path;
 use support::Report;
 
@@ -42,7 +42,7 @@ fn main() {
     let frames: usize = frames.parse().unwrap();
     m.sound.trace = Some(Vec::new());
 
-    let mut driver = Driver::new(Rom::load(Path::new(roms)).expect("sound rom"));
+    let mut driver = Driver::new(SoundData::load(Path::new(roms)).expect("sound rom"));
     // What the Z80 saw of the shared RAM: reconstructed from its reads.
     let mut shared = vec![0u8; ddsom_sound::SHARED_SIZE];
     let mut report = Report::default();

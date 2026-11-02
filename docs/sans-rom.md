@@ -38,15 +38,14 @@ d'`extract`, supprimer `assets\` puis relancer `play.bat`.
 | Puce (`cps2::Contents`) | Depuis les assets | Ce qui manque, et pourquoi c'est sans effet |
 |---|---|---|
 | Programme 68000, vue données et vue programme déchiffrée (`Program::load`) | toutes les tables décrites (`palettes.png`, `sprites/*.json`, `levels.json`, `terrain.json`, `scene_palettes.json`, `texts.json`, `data/*.json`) ; `data/natives.json` : les zones lues par les natives qu'aucun autre fichier ne décrit (ci-dessous) ; `data/reste.json` : tout le reste, sauf le code 68000 (« Couverture complète des données ») | le code 68000 exécuté (486 399 octets, zéro) : sans 68000 il n'est plus exécuté ni lu |
-| Région du Z80 (`rebuild::audio_region`) | `sound/music.json` : pointeurs de la ROM fixe, table des sons, définitions, pistes, instruments, fiches d'échantillons, tables du pilote | le programme du Z80 : remplacé par le pilote Rust (`ddsom-sound`), qui ne lit que ces données |
+| Région du Z80 (`rebuild::audio_region`) | `sound/music.json` (`ddsom_sound::SoundData`, tableaux indexés), replacé à ses adresses d'origine par `SoundData::region_parts` | le programme du Z80 : remplacé par le pilote Rust (`ddsom-sound`), qui ne lit que ces données |
 | DSP QSound (`rebuild::qsound_dsp`) | `sound/qsound_dsp.json` : pan (0x110, 0x150 mots), pas de l'ADPCM (0x9dc, 16), coefficients des filtres (0xd53-0xfff, et 0-2 où le second filtre déborde) | le code du DSP : l'émulation haut niveau (`qsound`, d'après MAME) le remplace et ne lit que ces tables |
 | Graphismes (`rebuild::gfx_region`) | `gfx/cells_NN.png` | rien |
 | Échantillons (`rebuild::qsound_samples`) | `sound/music.json` et `sounds/NNN.wav` (et la suite de chaque échantillon, `sample_tails`) | les octets qu'aucune voix ne lit |
 
 **Le Z80.** Son programme n'est plus nécessaire : le pilote Rust, seul pilote du jeu, le remplace écriture par
-écriture ([son.md](son.md)) et ne lit dans la région du Z80 que des données, toutes dans `music.json`, par des
-accesseurs nommés (`ddsom_sound::Rom` : tables, en-tête, instruments, échantillons, octets des définitions et des
-pistes). Contrôles : `sans_rom` compare aussi les échantillons audio produits (pilote Rust sur la région des ROMs
+écriture ([son.md](son.md)) et ne lit que les tableaux indexés de `music.json` (`ddsom_sound::SoundData` : sons,
+pistes, bancs d'instruments, fiches d'échantillons, tables), relus depuis la région du Z80 au démarrage. Contrôles : `sans_rom` compare aussi les échantillons audio produits (pilote Rust sur la région des ROMs
 contre pilote Rust sur la région reconstruite, DSP complet contre DSP réduit à ses tables) ; le test
 `music_driver_identical` joue chaque son de la table sur les deux régions ; `validate` avec `DDSOM_ASSETS` compare les
 écritures du pilote du jeu à celles du Z80 de la référence. Ce dernier contrôle a trouvé le seul écart : l'octet bas
@@ -190,11 +189,9 @@ aujourd'hui, couvrent les octets qui deviendraient du code si `code_68k.txt` gra
   `rom_reads` (avec `DDSOM_COUVERT`) sur ce scénario et d'ajouter la zone. Ranger aussi le code dans les assets
   supprimerait ce dernier risque (au prix de 486 Ko de plus, le programme entier).
 * **Les trous du mode sans 68000** (natives manquantes : arrêt avec diagnostic) sont les mêmes avec ou sans ROM.
-* L'émulation du DSP QSound lit ses tables comme le DSP (adresses du programme d'origine). Le pilote son lit les
-  siennes par des accesseurs nommés (`ddsom_sound::Rom`), mais toujours rangées à leurs adresses d'origine dans une
-  région reconstruite depuis `music.json` : l'état du pilote garde ces adresses (pointeurs de lecture des pistes,
-  bancs d'instruments, définitions), comme la RAM du Z80 que `Driver::ram_image` reproduit pour les outils, et
-  l'original lit au-delà d'une table (une durée à la fois pointée et en triolet lit les décalages d'octave qui
-  suivent la table des durées). Le pilote ne lit aucun octet hors des rubriques de `music.json`. Mesure par `sound_reads`
-  ([son.md](son.md) « Lectures du pilote »). Ranger les données en tableaux Rust indexés (et non en région)
-  demandera de remplacer ces adresses dans l'état du pilote et de garder les débordements utiles.
+* Le pilote son lit ses données en tableaux indexés (`ddsom_sound::SoundData`, lot L3) : son état ne garde plus
+  d'adresses (positions `(piste, octet)`, numéros de banc et de son) et les débordements utiles de l'original sont
+  écrits en clair. L'émulation du DSP QSound lit ses trois tables nommées (`qsound::DspTables`). Reste un détour :
+  sans ROM, `cps2::Contents` porte encore la région du Z80 (reconstruite depuis `music.json` par
+  `rebuild::audio_region`) et le programme du DSP (`rebuild::qsound_dsp`), que `cps2` relit en tables au démarrage ;
+  le jeu chargera directement `SoundData` et `DspTables` quand `Contents` cédera la place aux données du jeu (lot L14).

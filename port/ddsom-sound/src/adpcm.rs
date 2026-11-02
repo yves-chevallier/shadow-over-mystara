@@ -3,6 +3,7 @@
 //! The original program has no notion of pitch here: an ADPCM voice is started by a
 //! "single-voice effect" command whose voice number is at least 0x10.
 
+use crate::data::AdpcmNote;
 use crate::math::*;
 use crate::pan::PanFade;
 use crate::Driver;
@@ -55,22 +56,21 @@ impl Driver {
         self.silence_adpcm(ch);
     }
 
-    /// Starts an ADPCM voice. `p` points to the effect definition: flags and priority,
-    /// 4 ignored bytes, amplitude, sample number.
-    pub(crate) fn start_adpcm(&mut self, ch: u8, mut p: u32, cmd: &[u8; 16]) {
+    /// Starts an ADPCM voice.
+    pub(crate) fn start_adpcm(&mut self, note: &AdpcmNote, cmd: &[u8; 16]) {
+        let ch = note.channel;
         let slot = usize::from(ch);
         if slot >= self.adpcm.len() {
             return;
         }
         self.cur = ch;
-        let flags = self.rom.byte(p);
-        p += 1;
+        let flags = note.flags;
         self.priority = flags;
         if flags & 0x7f < self.adpcm[slot].priority {
             return;
         }
-        let amplitude = self.rom.amplitude(self.rom.byte(p + 4));
-        let sample = self.rom.adpcm_sample(self.rom.word_be(p + 5));
+        let amplitude = self.data.amplitude(note.amplitude);
+        let sample = self.data.sample(note.sample).adpcm();
         let (start, end) = (sample.start, sample.end);
         let Some(fade) = PanFade::from_command(cmd) else { return };
         let mut a = AdpcmChannel {

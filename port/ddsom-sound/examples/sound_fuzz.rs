@@ -17,11 +17,10 @@
 #[path = "support/mod.rs"]
 mod support;
 
-use ddsom_sound::Rom;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use support::session::*;
-use support::Report;
+use support::{Report, SoundRom as Rom};
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();

@@ -120,8 +120,9 @@ Fixed terrain maps (scenes 2 and 0x14) and terrain type tables (collision with t
 
 ## sound/music.json
 
-Music and effects of the sound driver: sound table, tracks (instructions as tokens), instrument
-banks, sample entries and driver tables (volumes, envelopes, pitches).
+Music and effects of the sound driver, as indexed tables (`ddsom_sound::SoundData`): sounds, tracks
+(instructions as tokens; a read position is `[track, byte]`), instrument banks, sample records and driver
+tables (volumes, envelopes, pitches).
 
 ## sound/qsound_dsp.json
 

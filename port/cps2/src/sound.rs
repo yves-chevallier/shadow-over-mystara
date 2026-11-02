@@ -53,7 +53,8 @@ pub struct Sound {
     pub pc_hook: Option<PcHook>,
     #[cfg(feature = "z80")]
     pub z80: z80::Z80,
-    /// audiocpu region (0x50000): 0-7FFF fixed, 0x4000 banks from 0x10000.
+    /// audiocpu region (0x50000): 0-7FFF fixed, 0x4000 banks from 0x10000. The Z80 runs it; the Rust driver
+    /// reads its data from it once (`ddsom_sound::SoundData::from_region`).
     pub rom: Vec<u8>,
     #[cfg(feature = "z80")]
     pub bank: usize,
@@ -143,7 +144,7 @@ impl Sound {
         if self.driver.is_some() {
             return;
         }
-        self.driver = Some(ddsom_sound::Driver::new(ddsom_sound::Rom::from_region(self.rom.clone())));
+        self.driver = Some(ddsom_sound::Driver::new(ddsom_sound::SoundData::from_region(&self.rom)));
         self.driver_restart = true;
     }
 

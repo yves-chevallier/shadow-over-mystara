@@ -5,7 +5,7 @@
 
 use crate::adpcm::AdpcmChannel;
 use crate::voice::Voice;
-use crate::Driver;
+use crate::{Boot, Driver, SoundData};
 
 /// Start of the Z80 RAM.
 pub const RAM_BASE: usize = 0xf000;
@@ -26,19 +26,17 @@ fn put(ram: &mut [u8], addr: usize, v: u8) {
 }
 
 impl Voice {
-    /// Bytes of the voice record (0x50 bytes).
-    pub fn image(&self) -> [u8; VOICE_SIZE] {
+    /// Bytes of the voice record (0x50 bytes); track positions and instrument banks become Z80 addresses.
+    pub fn image(&self, data: &SoundData) -> [u8; VOICE_SIZE] {
         let mut b = [0u8; VOICE_SIZE];
         let w = |b: &mut [u8], at: usize, v: u16| {
             b[at] = v as u8;
             b[at + 1] = (v >> 8) as u8;
         };
         // Pointer: bank (0 in the fixed area) then address in the 8000-BFFF window.
-        let (bank, addr) = if self.seq < 0x8000 {
-            (0, self.seq as u16)
-        } else {
-            (((self.seq >> 14) - 2) as u8, 0x8000 | (self.seq & 0x3fff) as u16)
-        };
+        let seq = self.seq.map_or(0, |at| data.addr(at));
+        let (bank, addr) = if seq < 0x8000 { (0, seq as u16) } else { (((seq >> 14) - 2) as u8, 0x8000 | (seq & 0x3fff) as u16) };
+        let inst_bank = self.inst_bank.and_then(|i| data.banks.get(usize::from(i))).map_or(0, |b| b.addr as u16);
         b[0x00] = self.state;
         b[0x01] = bank;
         w(&mut b, 0x02, addr);
@@ -69,7 +67,7 @@ impl Voice {
         w(&mut b, 0x2a, self.vibrato);
         w(&mut b, 0x2c, self.tremolo);
         w(&mut b, 0x2e, self.instrument);
-        w(&mut b, 0x30, self.inst_bank);
+        w(&mut b, 0x30, inst_bank);
         b[0x33] = self.env_phase;
         w(&mut b, 0x34, self.env_level);
         w(&mut b, 0x36, self.env_attack);
@@ -138,13 +136,18 @@ impl Driver {
         put(&mut r, 0xf008, self.stereo);
         put16(&mut r, 0xf009, g.sfx_volume);
         put16(&mut r, 0xf00b, g.step);
-        put16(&mut r, 0xf010, self.song_count);
-        put(&mut r, 0xf012, (self.song_table >> 16) as u8);
-        put16(&mut r, 0xf013, self.song_table as u16);
+        // Sound header, read at initialisation: number of sounds, address of the sound table.
+        if self.boot >= Boot::WaitHandshake {
+            let table = self.data.header.addr + 6;
+            put16(&mut r, 0xf010, self.data.sounds.len() as u16);
+            put(&mut r, 0xf012, (table >> 16) as u8);
+            put16(&mut r, 0xf013, table as u16);
+        }
         put(&mut r, 0xf015, self.queue_head);
         put(&mut r, 0xf016, self.queue_tail);
-        put(&mut r, 0xf017, (self.song >> 16) as u8);
-        put16(&mut r, 0xf018, self.song as u16);
+        let song = self.song.and_then(|n| self.data.sounds[usize::from(n)].as_ref()).map_or(0, |s| s.addr);
+        put(&mut r, 0xf017, (song >> 16) as u8);
+        put16(&mut r, 0xf018, song as u16);
         put(&mut r, 0xf01b, self.priority);
         put16(&mut r, 0xf020, g.music_step);
         put16(&mut r, 0xf022, g.tempo_adjust);
@@ -163,11 +166,11 @@ impl Driver {
         r[0x100..0x200].copy_from_slice(&self.queue);
         for (i, v) in self.sfx.iter().enumerate() {
             let at = SFX_VOICES - RAM_BASE + i * VOICE_SIZE;
-            r[at..at + VOICE_SIZE].copy_from_slice(&v.image());
+            r[at..at + VOICE_SIZE].copy_from_slice(&v.image(&self.data));
         }
         for (i, v) in self.music.iter().enumerate() {
             let at = MUSIC_VOICES - RAM_BASE + i * VOICE_SIZE;
-            r[at..at + VOICE_SIZE].copy_from_slice(&v.image());
+            r[at..at + VOICE_SIZE].copy_from_slice(&v.image(&self.data));
         }
         for (i, a) in self.adpcm.iter().enumerate() {
             let at = ADPCM_CHANNELS - RAM_BASE + i * ADPCM_SIZE;

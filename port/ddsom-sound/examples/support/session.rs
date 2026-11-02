@@ -1,8 +1,8 @@
 //! Validation runs: simulated 68000 commands, original Z80 and Rust driver executed side by
 //! side, comparison of the writes and of the internal state.
 
-use super::{reference::RefZ80, Report};
-use ddsom_sound::{Driver, Rom, Write, SHARED_SIZE};
+use super::{reference::RefZ80, Report, SoundRom as Rom};
+use ddsom_sound::{Driver, Write, SHARED_SIZE};
 
 /// Pseudo-random generator (xorshift64*).
 pub struct Rng(pub u64);
@@ -73,7 +73,7 @@ pub fn system_command(rng: &mut Rng) -> [u8; 16] {
 }
 
 pub fn song_count(rom: &Rom) -> u16 {
-    rom.sound_header().count
+    rom.data.sounds.len() as u16
 }
 
 pub fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverage: Option<&mut [bool]>) -> Report {
@@ -81,7 +81,7 @@ pub fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverag
     let rom = if s.patches.is_empty() {
         rom
     } else {
-        let mut region = rom.region().to_vec();
+        let mut region = rom.region.clone();
         for (at, bytes) in &s.patches {
             region[*at..*at + bytes.len()].copy_from_slice(bytes);
         }
@@ -89,7 +89,7 @@ pub fn run_session(rom: &Rom, s: &Session, dump: Option<(usize, usize)>, coverag
         &patched
     };
     let mut real = RefZ80::new(rom);
-    let mut driver = Driver::new(rom.clone());
+    let mut driver = Driver::new(rom.data.clone());
     let mut dshared = vec![0u8; SHARED_SIZE];
     let mut report = Report::default();
     let boot = real.run_interval();
