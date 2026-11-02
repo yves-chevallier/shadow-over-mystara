@@ -7,6 +7,7 @@ use std::path::{Path, PathBuf};
 
 use ddsom_assets::data::{Cell, DataFile, Kind};
 use ddsom_assets::rebuild::{self, Program};
+use ddsom_sound::data::SoundKind;
 use ddsom_assets::{Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, SpriteTables, Terrain, Texts};
 
 fn root() -> PathBuf {
@@ -387,67 +388,88 @@ fn music_lossless() {
         return;
     }
     let m = Music::load(&assets().join("sound/music.json")).unwrap();
-    // same read as the driver: linear addresses of ddsom_sound::Rom
-    let rom = ddsom_sound::Rom::load(&roms()).unwrap();
-    let at = |a: u32, n: usize| (0..n as u32).map(|k| rom.byte(a + k)).collect::<Vec<u8>>();
-    assert_eq!(u32::from(rom.word(m.header_ptr)), m.header);
-    let mut head = m.count.to_be_bytes().to_vec();
-    head.extend([m.music_factor, m.sfx_volume]);
-    head.extend(m.header_rest);
-    assert_eq!(at(m.header, 6), head, "sound header");
-    assert_eq!(m.songs.len(), m.count as usize);
-    // sound table, definitions
-    for (i, s) in m.songs.iter().enumerate() {
-        let a = s.as_ref().map_or(0, |s| s.rom);
-        assert_eq!(at(m.header + 6 + 4 * i as u32, 4), [(a >> 16) as u8, (a >> 8) as u8, a as u8, 0], "sound {i}: entry");
-        if let Some(s) = s {
-            let b = s.bytes();
-            assert_eq!(at(s.rom, b.len()), b, "sound {i}: definition");
-        }
-    }
-    // tracks: contiguous blocks re-encoded; each track and each jump target lands on an instruction
+    let data = ddsom_sound::SoundData::load(&roms()).unwrap();
+    assert!(m.data == data, "music.json differs from the data read in the ROMs");
+    // The tokens are the instructions the driver reads: every track start and every jump target is the start of
+    // a token.
     let mut starts = std::collections::BTreeSet::new();
     let mut targets = Vec::new();
-    let mut end = 0;
-    for b in &m.code {
-        assert!(b.rom >= end, "block {:#x}: overlap", b.rom);
-        let bytes = b.bytes().unwrap_or_else(|| panic!("block {:#x}: unreadable token", b.rom));
-        assert_eq!(at(b.rom, bytes.len()), bytes, "block {:#x}", b.rom);
-        let mut a = b.rom;
-        for t in b.ops.split(' ') {
-            starts.insert(a);
-            let n = ddsom_assets::music::encode_op(t).unwrap().len() as u32;
-            if let Some((name, args)) = t.split_once('=') {
+    for (k, t) in data.tracks.iter().enumerate() {
+        let mut pos = 0;
+        while pos < t.bytes.len() {
+            let (tok, n) = ddsom_sound::tokens::decode(&t.bytes[pos..]).unwrap_or_else(|| panic!("track {k}: cut"));
+            starts.insert(t.addr + pos as u32);
+            if let Some((name, args)) = tok.split_once('=') {
                 if name == "jump" || name.starts_with("loop") || name.starts_with("exit") {
-                    let off: i32 = args.rsplit(',').next().unwrap().parse().unwrap();
-                    targets.push((a, (a + n).wrapping_add(off as u32)));
+                    let offset: i32 = args.rsplit(',').next().unwrap().parse().unwrap();
+                    targets.push((t.addr + (pos + n) as u32).wrapping_add(offset as u32));
                 }
             }
-            a += n;
-        }
-        end = a;
-    }
-    for (a, t) in targets {
-        assert!(starts.contains(&t), "jump at {a:#x} to {t:#x}: not an instruction");
-    }
-    for s in m.songs.iter().flatten() {
-        for (c, a) in s.track_starts() {
-            assert!(starts.contains(&a), "sound {:#x} channel {c}: track {a:#x}", s.rom);
-            assert!(m.track(a).is_some());
+            pos += n;
         }
     }
-    // instrument banks, samples, driver tables
-    for (k, b) in m.banks.iter().enumerate() {
-        assert_eq!(u32::from(rom.word(m.banks_table + 2 * k as u32)), b.rom, "bank {k}");
-        let bytes: Vec<u8> = b.instruments.iter().flatten().copied().collect();
-        assert_eq!(at(b.rom, bytes.len()), bytes, "bank {k}");
+    let track_starts = data.sounds.iter().flatten().flat_map(|s| match &s.kind {
+        SoundKind::Music { tracks } | SoundKind::Effect { tracks, .. } => tracks.iter().flatten().map(|&t| data.addr(t)).collect(),
+        _ => Vec::new(),
+    });
+    for a in targets.into_iter().chain(track_starts) {
+        assert!(starts.contains(&a), "{a:#x}: not an instruction");
     }
-    assert_eq!(u32::from(rom.word(m.samples_ptr)), m.samples_rom);
-    let bytes: Vec<u8> = m.samples.iter().flatten().copied().collect();
-    assert_eq!(at(m.samples_rom, bytes.len()), bytes, "sample records");
-    for t in &m.tables {
-        let b = t.bytes();
-        assert_eq!(at(t.rom, b.len()), b, "table {}", t.name);
+}
+
+/// The game's data never index past the end of a driver table (the driver still reads on like the original if
+/// they did, see `ddsom_sound::data::LevelTables`), nor a missing bank; the sound definitions only play samples of
+/// the table (the bank records past it are in `Samples::past_end`).
+#[test]
+fn music_indices_in_bounds() {
+    if !has("sound/music.json") {
+        return;
+    }
+    let data = Music::load(&assets().join("sound/music.json")).unwrap().data;
+    let l = &data.tables.levels;
+    let samples = data.samples.records.len();
+    let check = |what: &str, i: usize, len: usize| assert!(i < len, "{what} {i} out of {len}");
+    for b in &data.banks {
+        for inst in &b.instruments {
+            let [attack, decay, sustain, slow, release] = inst.envelope.map(usize::from);
+            check("attack", attack, l.attack.len());
+            check("sustain", sustain, l.levels.len());
+            for d in [decay, slow, release] {
+                check("decay", d, l.decay.len());
+            }
+        }
+    }
+    for t in &data.tracks {
+        for tok in ddsom_sound::tokens::to_text(&t.bytes).unwrap().split(' ') {
+            let Some((name, arg)) = tok.split_once('=') else { continue };
+            let table = match name {
+                "amp" | "echo" => l.amplitudes.len(),
+                "vol" => l.levels.len(),
+                "vib" => l.vibrato.len(),
+                "trem" => l.tremolo.len(),
+                "lfo" => l.lfo_rates.len(),
+                "bank" => data.banks.len(),
+                _ => continue,
+            };
+            check(name, arg.parse().unwrap(), table);
+        }
+    }
+    for s in data.sounds.iter().flatten() {
+        match &s.kind {
+            SoundKind::Note(n) => {
+                check("amplitude", usize::from(n.amplitude), l.amplitudes.len());
+                if n.instrument & 0x8000 != 0 {
+                    check("bank", usize::from(n.instrument >> 8 & 0x7f), data.banks.len());
+                } else {
+                    check("sample", usize::from(n.instrument & 0x1fff), samples);
+                }
+            }
+            SoundKind::Adpcm(a) => {
+                check("amplitude", usize::from(a.amplitude), l.amplitudes.len());
+                check("sample", usize::from(a.sample & 0x1fff), samples);
+            }
+            _ => {}
+        }
     }
 }
 
@@ -604,25 +626,24 @@ fn audio_region_lossless() {
     }
     let img = ddsom_assets::rebuild::audio_region(&assets()).unwrap();
     assert!(img.conflicts.is_empty(), "contradictory writes: {:x?}", &img.conflicts[..img.conflicts.len().min(8)]);
-    let rom = ddsom_sound::Rom::load(&roms()).unwrap();
-    let region = rom.region();
-    let first = ddsom_assets::rebuild::first_difference(&img, region);
+    let region = ddsom_sound::region::load(&roms()).unwrap();
+    let first = ddsom_assets::rebuild::first_difference(&img, &region);
     assert!(first.is_none(), "Z80 region: difference at {:#x}", first.unwrap());
 }
 
-/// The sound driver plays every sound identically from the ROMs and from the Z80 region rebuilt from `music.json`:
-/// same writes (QSound, shared RAM) and same state, interrupt by interrupt. Catches a byte the driver reads that the
-/// assets do not describe (the 8th byte of the ADPCM definitions was missing until 2026-11-02).
+/// The sound driver plays every sound identically from the ROMs and from the Z80 region rebuilt from `music.json` (the
+/// path of the game without ROMs): same writes (QSound, shared RAM) and same state, interrupt by interrupt. Catches a
+/// byte the driver reads that the assets do not describe (the 8th byte of the ADPCM definitions was missing until
+/// 2026-11-02).
 #[test]
 fn music_driver_identical() {
     if !has("sound/music.json") {
         return;
     }
-    use ddsom_sound::{Driver, Rom, SHARED_SIZE};
-    let from_roms = Rom::load(&roms()).unwrap();
-    let rebuilt = Rom::from_region(rebuild::audio_region(&assets()).unwrap().bytes);
-    let count = from_roms.sound_header().count;
-    for n in 0..count {
+    use ddsom_sound::{Driver, SoundData, SHARED_SIZE};
+    let from_roms = SoundData::load(&roms()).unwrap();
+    let rebuilt = SoundData::from_region(&rebuild::audio_region(&assets()).unwrap().bytes);
+    for n in 0..from_roms.sounds.len() as u16 {
         let mut drivers = [Driver::new(from_roms.clone()), Driver::new(rebuilt.clone())];
         let mut shared = [vec![0u8; SHARED_SIZE], vec![0u8; SHARED_SIZE]];
         let mut out: [Vec<ddsom_sound::Write>; 2] = Default::default();

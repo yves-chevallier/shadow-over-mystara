@@ -537,6 +537,19 @@ libre.
 * Risque : un pointeur de piste qui saute d'une piste à l'autre, par une suite d'octets contiguë entre deux
   définitions, ne se modélise pas en `(piste, position)`. Il faut d'abord mesurer avec `sound_reads`, puis garder une
   « piste » couvrant la plage contiguë si le cas existe.
+* **Avancement** (branche `wt-l3-son`, détails dans [son.md](son.md) « Tableaux indexés ») :
+  * fait : `ddsom_sound::Rom` remplacé par `SoundData` (sons typés, pistes en octets jointifs, bancs, fiches
+    d'échantillons, tables), sérialisé tel quel dans `music.json` (fonctionnalité `serde`) ; état du pilote en
+    `TrackPos`, numéro de banc et numéro de son ; `ram_image` retraduit en adresses ; débordements en clair (durées,
+    `LevelTables`, fiches d'échantillons au-delà de la table que les données désignent : bancs 1 175-255 et
+    l'instrument initial 0xff00 d'une piste, rejoué à la fin d'un effet) ; région du Z80 dans `region.rs` (lecture
+    et réécriture) ; `qsound::DspTables` ; `sound_reads` retiré ;
+  * risque mesuré : un saut relatif peut changer de piste (`SoundData::jump`), aucune lecture ne déborde d'une piste ;
+  * validé après fusion de main (39be0e4) : 308/308 VALID en mode par défaut et avec `DDSOM_ASSETS` (assets
+    réextraits, `DDSOM_LONG=1`) ; écart du Z80 en retard inchangé ou moindre (ordre global différent dans 5 scénarios,
+    valeurs suspendues dans 2 : `covb_long_59`, `long_scene_20`) ; fuzz et tests dans [son.md](son.md) ;
+  * reste (L14) : sans ROM, `cps2::Contents` transporte encore la région du Z80 et le programme du DSP, relus en
+    tables au démarrage ; `music.rs` est resté dans `ddsom-assets` (à déplacer dans `ddsom-data` avec le lot L1).
 
 **L4. Rendu et mixage depuis les assets, optimisation** (moyen)
 * Périmètre : `cps2-gfx/`, `qsound/` (boucle des voix, hors tables), `ddsom-assets/src/rebuild.rs` (parties

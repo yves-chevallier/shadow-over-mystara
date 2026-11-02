@@ -1,10 +1,28 @@
 #![allow(dead_code)]
 //! Tools shared by the examples: comparison of write sequences and reference Z80.
 
-use ddsom_sound::Write;
+use ddsom_sound::{SoundData, Write};
 
 pub mod session;
 use std::collections::VecDeque;
+use std::path::Path;
+
+/// The sound ROM as the original Z80 runs it (region) and as the Rust driver reads it (data).
+#[derive(Clone)]
+pub struct SoundRom {
+    pub region: Vec<u8>,
+    pub data: SoundData,
+}
+
+impl SoundRom {
+    pub fn load(dir: &Path) -> std::io::Result<Self> {
+        Ok(Self::from_region(ddsom_sound::region::load(dir)?))
+    }
+
+    pub fn from_region(region: Vec<u8>) -> Self {
+        SoundRom { data: SoundData::from_region(&region), region }
+    }
+}
 
 /// Writes on one side, with the number of the interrupt in which they occurred.
 #[derive(Default)]
@@ -141,7 +159,8 @@ const MAX_TAIL: usize = 120;
 /// Original Z80 alone (no 68000 or QSound): runs the driver ROM and records its writes.
 /// The QSound always answers "ready".
 pub mod reference {
-    use ddsom_sound::{Rom, Write};
+    use super::SoundRom;
+    use ddsom_sound::Write;
 
     const IRQ_PERIOD: u64 = 32_000;
 
@@ -211,11 +230,11 @@ pub mod reference {
     }
 
     impl RefZ80 {
-        pub fn new(rom: &Rom) -> Self {
+        pub fn new(rom: &SoundRom) -> Self {
             let mut cpu = z80::Z80::new();
             cpu.reset();
             let bus = Bus {
-                region: rom.region().to_vec(),
+                region: rom.region.clone(),
                 bank: 0,
                 ram: vec![0; 0x1000],
                 shared: vec![0; ddsom_sound::SHARED_SIZE],

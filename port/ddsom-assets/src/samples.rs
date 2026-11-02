@@ -16,7 +16,7 @@ pub const SAMPLES_SIZE: usize = 0x40_0000;
 pub fn bank(dir: &Path) -> io::Result<Image> {
     let music = Music::load(&dir.join("sound/music.json"))?;
     let mut img = Image::new(SAMPLES_SIZE);
-    for i in 0..music.samples.len() {
+    for i in 0..music.sample_count() {
         let path = dir.join(format!("sounds/{i:03}.wav"));
         if !path.exists() || !music.sample_valid(i) {
             continue;

@@ -2,9 +2,24 @@
 //! Port of MAME src/devices/sound/qsoundhle.cpp (BSD-3-Clause, superctr, Valley Bell),
 //! based on the disassembly of the DSP program. The integer arithmetic is reproduced exactly.
 
+/// DSP word addresses of the tables of the DSP program (`DspTables`).
 const DATA_PAN_TAB: u16 = 0x110;
 const DATA_ADPCM_TAB: u16 = 0x9dc;
 const DATA_FILTER_TAB: u16 = 0xd53;
+
+/// The tables of the DSP program: name, DSP word address, size in words.
+pub const DSP_TABLES: [(&str, u16, usize); 4] = [
+    // pan gains: pan register (0x110 + position 0-0x20), +98 for the wet path, +196 for the right channel
+    ("pan", DATA_PAN_TAB, 0x150),
+    // ADPCM step size factors: 0x9dc + 8 + signed step (-8..7)
+    ("adpcm", DATA_ADPCM_TAB, 16),
+    // FIR filter coefficients up to the end of the 12-bit address space (95 per entry from 0xd53, and the two
+    // filters of the second mode at 0xf73 and 0xfa4)
+    ("filters", DATA_FILTER_TAB, 0x1000 - DATA_FILTER_TAB as usize),
+    // the second filter at 0xfa4 overflows by 3 words and wraps to the start of the program
+    ("filters_wrap", 0, 3),
+];
+
 const STATE_INIT2: u16 = 0x61a;
 const STATE_REFRESH1: u16 = 0x039;
 const STATE_REFRESH2: u16 = 0x04f;
@@ -239,8 +254,50 @@ fn register_map() -> [Option<Reg>; 256] {
     m
 }
 
+/// The tables of the DSP program (`dl-1425.bin`) that the high-level emulation reads; the rest of the program is code,
+/// which the emulation replaces. The registers designate them by DSP word address.
+pub struct DspTables {
+    pan: Vec<u16>,
+    adpcm_steps: Vec<u16>,
+    filters: Vec<u16>,
+    filters_wrap: Vec<u16>,
+}
+
+impl DspTables {
+    /// Reads the tables from the DSP program (little-endian words).
+    pub fn from_program(program: &[u8]) -> Self {
+        let word = |a: usize| u16::from_le_bytes([program[2 * a], program[2 * a + 1]]);
+        let [pan, adpcm_steps, filters, filters_wrap] =
+            DSP_TABLES.map(|(_, at, n)| (usize::from(at)..usize::from(at) + n).map(word).collect());
+        DspTables { pan, adpcm_steps, filters, filters_wrap }
+    }
+
+    /// Pan gain at DSP address `addr` (a pan register value, plus the wet and right channel offsets). The driver only
+    /// writes pans within the table: elsewhere the DSP would read its code, here 0.
+    fn pan_gain(&self, addr: u16) -> i16 {
+        let i = usize::from(addr.wrapping_sub(DATA_PAN_TAB));
+        self.pan.get(i).map_or(0, |&g| g as i16)
+    }
+
+    /// Step size factor of the ADPCM decoder for a signed 4-bit step.
+    fn adpcm_step(&self, step: i8) -> u16 {
+        self.adpcm_steps[(8 + step) as usize]
+    }
+
+    /// Filter coefficient at DSP address `addr` (a filter register value plus the tap number, on 12 bits). The driver
+    /// only designates filters within the table: elsewhere the DSP would read its code, here 0.
+    fn filter_tap(&self, addr: u16) -> i16 {
+        let a = usize::from(addr & 0xfff);
+        let tap = match a.checked_sub(usize::from(DATA_FILTER_TAB)) {
+            Some(i) => self.filters.get(i),
+            None => self.filters_wrap.get(a),
+        };
+        tap.map_or(0, |&t| t as i16)
+    }
+}
+
 pub struct QSound {
-    dsp_rom: Vec<u16>,
+    dsp: DspTables,
     samples: Vec<u8>,
     sample_mask: usize,
     regs: [Option<Reg>; 256],
@@ -266,13 +323,12 @@ pub struct QSound {
 }
 
 impl QSound {
-    /// `dsp_rom`: dl-1425.bin (only the first 0x2000 bytes, little-endian words).
+    /// `dsp_rom`: dl-1425.bin, or its tables alone (the first 0x2000 bytes, little-endian words).
     /// `samples`: sample ROM (size a power of 2).
     pub fn new(dsp_rom: &[u8], samples: Vec<u8>) -> Self {
-        let rom = dsp_rom[..0x2000].as_chunks::<2>().0.iter().map(|w| u16::from_le_bytes([w[0], w[1]])).collect();
         let sample_mask = samples.len().next_power_of_two() - 1;
         let mut q = QSound {
-            dsp_rom: rom,
+            dsp: DspTables::from_program(dsp_rom),
             samples,
             sample_mask,
             regs: register_map(),
@@ -303,10 +359,6 @@ impl QSound {
         self.out = [0; 2];
         self.state = 0; // STATE_BOOT
         self.state_counter = 0;
-    }
-
-    fn dsp(&self, addr: u16) -> u16 {
-        self.dsp_rom[(addr & 0xfff) as usize]
     }
 
     fn read_sample(&self, bank: u16, address: u16) -> i16 {
@@ -435,7 +487,7 @@ impl QSound {
             self.filter[ch].delay_pos = 0;
             self.filter[ch].tap_count = 95;
             for i in 0..95 {
-                self.filter[ch].taps[i] = self.dsp(self.filter[ch].table_pos.wrapping_add(i as u16)) as i16;
+                self.filter[ch].taps[i] = self.dsp.filter_tap(self.filter[ch].table_pos.wrapping_add(i as u16));
             }
         }
         self.state = STATE_NORMAL1;
@@ -447,12 +499,12 @@ impl QSound {
             self.filter[ch].delay_pos = 0;
             self.filter[ch].tap_count = 45;
             for i in 0..45 {
-                self.filter[ch].taps[i] = self.dsp(self.filter[ch].table_pos.wrapping_add(i as u16)) as i16;
+                self.filter[ch].taps[i] = self.dsp.filter_tap(self.filter[ch].table_pos.wrapping_add(i as u16));
             }
             self.alt_filter[ch].delay_pos = 0;
             self.alt_filter[ch].tap_count = 44;
             for i in 0..44 {
-                self.alt_filter[ch].taps[i] = self.dsp(self.alt_filter[ch].table_pos.wrapping_add(i as u16)) as i16;
+                self.alt_filter[ch].taps[i] = self.dsp.filter_tap(self.alt_filter[ch].table_pos.wrapping_add(i as u16));
             }
         }
         self.state = STATE_NORMAL2;
@@ -506,7 +558,7 @@ impl QSound {
             delta = -delta;
         }
         delta = (delta + curr_sample as i32).clamp(-32768, 32767);
-        let tab = self.dsp((DATA_ADPCM_TAB as i32 + 8 + step as i32) as u16);
+        let tab = self.dsp.adpcm_step(step);
         let a = &mut self.adpcm[i];
         a.step_size = ((((tab as i32) * a.step_size as i32) >> 6) as i16).clamp(1, 2000);
         ((delta * a.cur_vol as i32) >> 16) as i16
@@ -536,8 +588,8 @@ impl QSound {
                 if vo == 0 {
                     continue; // contribution nulle
                 }
-                dry = dry.wrapping_sub(vo * self.dsp(pan.wrapping_add(PAN_TABLE_DRY)) as i16 as i32);
-                wet = wet.wrapping_sub(vo * self.dsp(pan.wrapping_add(PAN_TABLE_WET)) as i16 as i32);
+                dry = dry.wrapping_sub(vo * i32::from(self.dsp.pan_gain(pan.wrapping_add(PAN_TABLE_DRY))));
+                wet = wet.wrapping_sub(vo * i32::from(self.dsp.pan_gain(pan.wrapping_add(PAN_TABLE_WET))));
             }
             dry = dry.clamp(-0x1fffffff, 0x1fffffff) << 2;
             wet = wet.clamp(-0x1fffffff, 0x1fffffff) << 2;

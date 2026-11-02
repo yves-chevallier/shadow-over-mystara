@@ -9,18 +9,23 @@
 //! - `command` : execution of the commands sent by the 68000;
 //! - `voice` : sequencer voices (music and effects), envelopes, output to the QSound;
 //! - `adpcm` : the three ADPCM voices;
-//! - [`Rom`] : access to the Z80 data (sequences, instruments, samples).
+//! - [`SoundData`] : the driver data as indexed tables (sounds, tracks, instruments, samples, tables);
+//! - [`region`] : the same data in the Z80 ROM region (extraction, tools).
 
 mod adpcm;
 mod command;
+pub mod data;
 pub mod image;
 mod math;
 mod pan;
-mod rom;
+pub mod region;
+#[cfg(feature = "serde")]
+mod serde_formats;
+pub mod tokens;
 mod track;
 mod voice;
 
-pub use rom::{AdpcmSample, Instrument, Rom, Sample, SoundHeader};
+pub use data::{SoundData, TrackPos};
 
 use adpcm::AdpcmChannel;
 use voice::Voice;
@@ -62,13 +67,13 @@ pub enum Write {
 }
 
 /// Where the driver startup stands.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Boot {
     /// Waiting for the first "tick" (4 interrupts).
     WaitFirstTick,
     /// Waiting for the second tick, then QSound initialisation.
     WaitSecondTick,
-    /// Initialisation done: waiting for the 68000's 0xFF answer at 0xFFF.
+    /// Initialisation done (sound header read): waiting for the 68000's 0xFF answer at 0xFFF.
     WaitHandshake,
     /// Main loop.
     Running,
@@ -117,7 +122,7 @@ pub(crate) struct Globals {
 
 /// The sound driver.
 pub struct Driver {
-    rom: Rom,
+    data: SoundData,
     boot: Boot,
     /// Copy of the shared RAM while an interrupt is being processed.
     shared: Vec<u8>,
@@ -131,11 +136,8 @@ pub struct Driver {
     queue: [u8; 256],
     queue_head: u8,
     queue_tail: u8,
-    /// Header of the music table: number of entries and table address.
-    song_count: u16,
-    song_table: u32,
-    /// Address of the music or effect being started.
-    song: u32,
+    /// Number of the music or effect last started.
+    song: Option<u16>,
     /// Priority of the current command.
     priority: u8,
     pub(crate) g: Globals,
@@ -156,9 +158,9 @@ pub struct Driver {
 }
 
 impl Driver {
-    pub fn new(rom: Rom) -> Self {
+    pub fn new(data: SoundData) -> Self {
         Driver {
-            rom,
+            data,
             boot: Boot::WaitFirstTick,
             shared: vec![0; SHARED_SIZE],
             out: Vec::new(),
@@ -168,9 +170,7 @@ impl Driver {
             queue: [0; 256],
             queue_head: 0,
             queue_tail: 0,
-            song_count: 0,
-            song_table: 0,
-            song: 0,
+            song: None,
             priority: 0,
             g: Globals::default(),
             cur: 0,
@@ -187,9 +187,9 @@ impl Driver {
     /// Power-up (or reset released by the 68000): the Z80 announces its presence. Its RAM is
     /// not cleared by the reset: the interrupt counter, which paces startup, is kept.
     pub fn reset(&mut self, shared: &mut [u8], out: &mut Vec<Write>) {
-        let rom = std::mem::replace(&mut self.rom, Rom::from_region(Vec::new()));
+        let data = std::mem::take(&mut self.data);
         let irq_count = self.irq_count;
-        *self = Driver::new(rom);
+        *self = Driver::new(data);
         self.irq_count = irq_count;
         self.shared.copy_from_slice(shared);
         self.write_shared(shared::HANDSHAKE, 0x77);
@@ -281,8 +281,9 @@ impl Driver {
     /// QSound initialisation, RAM clearing and reading of the music header.
     fn init_hardware(&mut self) {
         // Filter and echo settings.
-        for (reg, data) in self.rom.init_registers() {
-            self.qsound(reg, data);
+        for i in 0..self.data.tables.qsound_init.len() {
+            let (reg, value) = self.data.tables.qsound_init[i];
+            self.qsound(reg, value);
         }
         for ch in 0..16 {
             self.silence_voice(ch);
@@ -302,17 +303,19 @@ impl Driver {
         self.sfx = Default::default();
         self.music = Default::default();
         self.adpcm = Default::default();
-        self.song = 0;
+        self.song = None;
         self.priority = 0;
         self.cur = 0;
         self.is_music = false;
         self.sfx_override = false;
-        // Sound header: number of sounds, volumes, sound table.
-        let header = self.rom.sound_header();
-        self.song_count = header.count;
-        self.g.music_factor = self.rom.level(header.music_factor);
-        self.g.sfx_volume = self.rom.level(header.sfx_volume);
-        self.song_table = header.table;
+        // Sound header: volumes.
+        self.g.music_factor = self.data.level(self.data.header.music_factor);
+        self.g.sfx_volume = self.data.level(self.data.header.sfx_volume);
+    }
+
+    /// The driver data.
+    pub fn data(&self) -> &SoundData {
+        &self.data
     }
 
     pub(crate) fn qsound(&mut self, reg: u8, data: u16) {

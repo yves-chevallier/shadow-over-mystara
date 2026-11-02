@@ -10,6 +10,7 @@ cps2 = { path = "../cps2", default-features = false }
 ddsom-assets = { path = "../ddsom-assets" }
 ddsom-data = { path = "../ddsom-data" }
 ddsom-sound = { path = "../ddsom-sound" }
+qsound = { path = "../qsound" }
 png = "0.17"
 # The 68000 decoder, for the `remainder` category only (the program): the library (`to_data`) has no 68000.
 m68k = { path = "../m68k", optional = true }
