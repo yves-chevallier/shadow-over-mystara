@@ -30,7 +30,7 @@ fn signed(v: u16, negate: bool) -> u16 {
 mod guardian {
     use super::*;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x34) != x.u8(0x5b) {
             return gone(x);
         }
@@ -42,7 +42,7 @@ mod guardian {
         }
     }
 
-    fn gone(x: &mut Cx) {
+    fn gone<R: Banc>(x: &mut Cx<'_, R>) {
         let n = rd8(x.b, COUNTER).wrapping_sub(1);
         wr8(x.b, COUNTER, n);
         x.free_peff();
@@ -52,13 +52,13 @@ mod guardian {
         x.set32(0x4, 0x0400_0000);
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         for i in 0..8u32 {
             let v = rd32(x.b, PALETTE_SOURCE + 4 * i);
             wr32(x.b, PALETTE_WINDOW + 4 * i, v);
         }
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         for off in [0x8, 0xc, 0x10] {
             let v = owner.u32(x.b, off);
             x.set32(off, v);
@@ -75,7 +75,6 @@ mod guardian {
         x.set32(0x1c, 0);
         let (mut vx, mut angle) = (-0x200i16 as u16, 0x18u8);
         let row = ((owner.u8(x.b, 0x3) >> 1) as u32) << 2;
-        x.c.d[0] = row;
         let mut dx = x.rom16(OFFSETS + row);
         let dz = x.rom16(OFFSETS + row + 2);
         let flip = owner.u8(x.b, f::FLIP);
@@ -94,8 +93,8 @@ mod guardian {
         x.reinsert();
     }
 
-    fn active(x: &mut Cx) {
-        let owner = x.link_a1(f::OWNER);
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
+        let owner = x.linked(f::OWNER);
         if owner.u8(x.b, 0x4) as i8 >= 4 || x.a5_u8(a5::PAUSED) != 0 || x.a5_u8(0x35) == 0 {
             return die(x);
         }
@@ -109,12 +108,12 @@ mod guardian {
         x.keep_in_zone();
         // Glitch d'origine : les registres de la collision (D2...) passent aux gestionnaires suivants ; l'éclat de gel
         // (0x4bda8) tire son rebond dans le D2 hérité (`sorts_combattant`, `sorts_voleur`)
-        crate::terrain::push_68k(x.c, x.b, x.o);
+        x.push_terrain();
         x.reinsert();
     }
 
     /// Fin de vie : état 4, sous-états nuls, puis la sortie (`bra 0x50794`).
-    fn leave(x: &mut Cx) {
+    fn leave<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
         x.set16(0x6, 0);
@@ -123,7 +122,7 @@ mod guardian {
 
     // --- sous-état 0 : sortie de terre -------------------------------------------------------------------
 
-    fn start(x: &mut Cx) {
+    fn start<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x6) {
             0 => {
                 x.move_xyz();
@@ -163,7 +162,7 @@ mod guardian {
     }
 
     /// Poussière de l'arrivée (`0xb10c8`) : effet EFFCT 7 à une hauteur légèrement plus haute.
-    fn dust(x: &mut Cx) {
+    fn dust<R: Banc>(x: &mut Cx<'_, R>) {
         let Some(o) = crate::effects_aids::shock(x.b, x.o, 7, 0x200, 0, 0xffff) else { return };
         o.set_u8(x.b, 0x43, 1);
         let z = o.u16(x.b, 0xc).wrapping_add(0x18);
@@ -172,7 +171,7 @@ mod guardian {
 
     // --- sous-état 2 : se dirige vers sa cible ----------------------------------------------------------------
 
-    fn seek(x: &mut Cx) {
+    fn seek<R: Banc>(x: &mut Cx<'_, R>) {
         x.add16(0x42, 0xffff);
         if x.u16(0x42) == 0 {
             return leave(x);
@@ -195,10 +194,14 @@ mod guardian {
         x.add8(0x46, 0xff);
         if x.u8(0x46) == 0 {
             x.set8(0x46, 2);
-            let target = x.link_a1(0x5c);
+            // A1 : la cible, ou le dernier objet examiné par la recherche (glitch d'origine : pas forcément la
+            // nouvelle cible)
+            let mut toward = x.linked(0x5c);
             let mut lost = false;
-            if target.u16(x.b, 0x62) == 0 {
-                find_target(x);
+            if toward.u16(x.b, 0x62) == 0 {
+                if let Some(o) = find_target(x) {
+                    toward = o;
+                }
                 lost = x.u16(0x5c) == 0;
                 if lost {
                     x.set8(0x5, 4);
@@ -208,7 +211,7 @@ mod guardian {
             if lost {
                 return;
             }
-            turn(x);
+            turn(x, toward);
         }
         if (x.u8(0x33) as i8) >= 0 {
             x.move_by_table_xy();
@@ -217,7 +220,7 @@ mod guardian {
     }
 
     /// Demi-tour en cours : l'animation 2 puis retour à l'image 3 avec le regard inversé.
-    fn flip_turn(x: &mut Cx) {
+    fn flip_turn<R: Banc>(x: &mut Cx<'_, R>) {
         if !x.anim_step() {
             return;
         }
@@ -229,7 +232,7 @@ mod guardian {
 
     // --- sous-état 4 : errance sans cible ---------------------------------------------------------------------
 
-    fn wander(x: &mut Cx) {
+    fn wander<R: Banc>(x: &mut Cx<'_, R>) {
         x.add16(0x42, 0xffff);
         if x.u16(0x42) == 0 {
             return leave(x);
@@ -247,8 +250,8 @@ mod guardian {
                 x.set8(0x6, 2);
                 return;
             }
-            x.link_a1(f::OWNER);
-            turn(x);
+            let owner = x.linked(f::OWNER);
+            turn(x, owner);
         }
         if (x.u8(0x33) as i8) >= 0 {
             x.move_by_table_xy();
@@ -257,7 +260,7 @@ mod guardian {
 
     // --- sous-état 6 : bond sur la cible -----------------------------------------------------------------------
 
-    fn lunge(x: &mut Cx) {
+    fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
         x.add16(0x42, 0xffff);
         if x.u16(0x42) == 0 {
             return leave(x);
@@ -314,7 +317,7 @@ mod guardian {
 
     // --- état 4 : sortie ------------------------------------------------------------------------------------
 
-    fn leaving(x: &mut Cx) {
+    fn leaving<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 x.add8(0x5, 2);
@@ -349,7 +352,7 @@ mod guardian {
     }
 
     /// `0x507bc` : poussière de la disparition pendant 0x1e images, puis le gardien s'enfonce.
-    fn fade_dust(x: &mut Cx) {
+    fn fade_dust<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4b, 0xff);
         if x.u8(0x4b) == 0 {
             x.add8(0x5, 2);
@@ -363,9 +366,10 @@ mod guardian {
     // --- recherches et tests ---------------------------------------------------------------------------------------
 
     /// `0x5085a` : l'ennemi (puis le boss) le plus proche ; `+0x5c` reçoit son adresse.
-    fn find_target(x: &mut Cx) {
+    fn find_target<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let mut best = u32::MAX;
         let mut found = 0u16;
+        let mut last = None;
         for (first, free, total) in [(0x299eu32, 0x7e62u32, 0x16u16), (0x3a1e, 0x7e6c, 3)] {
             let mut left = total.wrapping_sub(x.a5_u16(free)) as u8;
             if left == 0 {
@@ -375,7 +379,7 @@ mod guardian {
             loop {
                 let o = Obj(a1);
                 if o.u8(x.b, 0) != 0 {
-                    x.c.a[1] = a1;
+                    last = Some(o);
                     if o.u16(x.b, 0x62) != 0 && o.u8(x.b, 0x95) & 2 == 0 && o.u8(x.b, 0x1) & 2 == 0 {
                         let mut d = 0u32;
                         for off in [0x8u32, 0xc, 0x10] {
@@ -394,20 +398,17 @@ mod guardian {
                 a1 += 0xc0;
             }
         }
-        x.c.d[1] = best;
-        x.c.a[2] = found as i16 as i32 as u32;
         x.set16(0x5c, found);
+        last
     }
 
-    /// `0x508fc` : tourne d'un cran vers l'objet que désigne A1 ; si le regard doit changer, lance le demi-tour.
-    fn turn(x: &mut Cx) {
-        // la cible est l'objet que l'appelant a laissé dans A1
-        let diff = crate::aides::direction_to(x.b, x.o, Obj(x.c.a[1])).wrapping_sub(x.u8(0x2d)) & 0x1f;
+    /// `0x508fc` : tourne d'un cran vers `toward` (l'objet que l'appelant laisse dans A1) ; si le regard doit changer, lance le demi-tour.
+    fn turn<R: Banc>(x: &mut Cx<'_, R>, toward: Obj) {
+        let diff = crate::aides::direction_to(x.b, x.o, toward).wrapping_sub(x.u8(0x2d)) & 0x1f;
         let step: u8 = if diff > 0x10 { 0xff } else { 1 };
         let angle = x.u8(0x2d).wrapping_add(step) & 0x1f;
         x.set8(0x2d, angle);
         let want: u8 = if (angle as i8) > 0x10 { 0 } else { 0x20 };
-        x.c.d[0] = want as u32;
         if want != x.u8(f::FLIP) {
             x.set8(0x4a, 1);
             x.anim(ANIMS, 2);
@@ -445,7 +446,7 @@ mod guardian {
     }
 
     /// `0x5094a` : le gardien s'engage quand un monstre touche sa boîte (profondeur et largeur).
-    fn engage_test(x: &mut Cx) {
+    fn engage_test<R: Banc>(x: &mut Cx<'_, R>) {
         for (first, count) in [(0x299eu32, 22u32), (0x3a1e, 3)] {
             let mut a1 = 0xff8000 + first;
             for _ in 0..count {
@@ -455,7 +456,6 @@ mod guardian {
                     continue;
                 }
                 let frame = frame_of(x, m);
-                x.c.a[1] = m.0;
                 if overlap(x, m, frame, BOX_ENGAGE, false) {
                     x.set16(0x5c, m.0 as u16);
                     x.set16(0x4, 0x206);
@@ -467,9 +467,8 @@ mod guardian {
     }
 
     /// `0x509ae` : pendant le bond, blesse tous les monstres que touche la boîte du gardien.
-    fn strike(x: &mut Cx) {
-        let owner = x.link_a1(f::OWNER);
-        x.c.a[2] = ext(owner);
+    fn strike<R: Banc>(x: &mut Cx<'_, R>) {
+        let owner = x.linked(f::OWNER);
         for (first, count) in [(0x299eu32, 22u32), (0x3a1e, 3)] {
             let mut a1 = 0xff8000 + first;
             for _ in 0..count {
@@ -479,16 +478,14 @@ mod guardian {
                     continue;
                 }
                 let frame = frame_of(x, m);
-                x.c.a[1] = m.0;
                 if overlap(x, m, frame, BOX_STRIKE, true) {
                     hurt(x, owner, m);
                 }
             }
         }
-        x.c.d[0] = 0;
     }
 
-    fn hurt(x: &mut Cx, owner: Obj, m: Obj) {
+    fn hurt<R: Banc>(x: &mut Cx<'_, R>, owner: Obj, m: Obj) {
         m.set_u32(x.b, 0x4, 0x0400_0000);
         m.set_u8(x.b, 0x49, 8);
         m.set_u8(x.b, 0, 2);
@@ -501,7 +498,6 @@ mod guardian {
         if damage == 0 {
             damage = owner.u8(x.b, 0x10a) as u16;
         }
-        x.c.d[0] = damage as u32;
         let hp = m.u16(x.b, 0x62);
         if hp >= damage {
             m.set_u16(x.b, 0x62, hp - damage);
@@ -519,5 +515,5 @@ mod guardian {
 }
 
 handlers! {
-    0x50348 "peff_41" guardian::run,
+    0x50348 "peff_41" #[sans] guardian::run,
 }

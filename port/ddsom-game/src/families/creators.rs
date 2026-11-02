@@ -585,60 +585,50 @@ pub(crate) fn restart_scene(c: &mut Cpu, b: &mut Cps2Bus) {
     c.d[6] = 0xffff;
 }
 
-/// Tir de joueur créé : actif, type `kind`, résistances `+0x45`/`+0x46` lues dans deux tables (en clair)
-/// selon le niveau `+0x10c` du joueur (A4 garde la seconde table).
-fn shot_strength(c: &mut Cpu, b: &mut Cps2Bus, shot: Obj, level: u8, tables: (u32, u32)) {
+/// Tir de joueur créé : résistances `+0x45`/`+0x46` lues dans deux tables (en clair) selon le niveau `+0x10c`
+/// du joueur.
+fn shot_strength_core(b: &mut Cps2Bus, shot: Obj, level: u8, tables: (u32, u32)) {
     let (a, d) = (rd8(b, tables.0 + level as u32), rd8(b, tables.1 + level as u32));
     shot.set_u8(b, 0x45, a);
     shot.set_u8(b, 0x46, d);
-    c.a[4] = tables.1;
-    moved(c, d as u32, Size::Byte);
 }
 
-/// 0x53e48 : éclair du joueur (PSHL 0x13), vitesses D0.w et D1.w, tant qu'il en reste (`A5-0x5fb4`).
-fn bolt_shot(c: &mut Cpu, b: &mut Cps2Bus) {
+/// 0x53e48 : éclair du joueur `me` (PSHL 0x13) de vitesses `vx`, `vz` (D0.w, D1.w de l'original), tant qu'il en
+/// reste (`A5-0x5fb4`). Appelé par l'orage du magicien (PEFF 25).
+pub(crate) fn bolt_shot(b: &mut Cps2Bus, me: Obj, vx: u16, vz: u16) {
     let left = rd16(b, A5 - 0x5fb4);
-    moved(c, left as u32, Size::Word);
     if left == 0 {
-        return rts(c, b);
+        return;
     }
     wr16(b, A5 - 0x5fb4, left - 1);
-    let me = Obj(c.a[0]);
-    if let Some(shot) = alloc(c, b, &pools::PSHL) {
+    if let Some(shot) = pools::PSHL.alloc(b) {
         shot.set_u8(b, 0x0, 1);
         shot.set_u8(b, 0x2, 0x13);
         shot.set_u16(b, 0x50, me.0 as u16);
-        shot.set_u16(b, 0x14, c.d[0] as u16);
-        shot.set_u16(b, 0x18, c.d[1] as u16);
+        shot.set_u16(b, 0x14, vx);
+        shot.set_u16(b, 0x18, vz);
         let level = me.u8(b, 0x10c);
-        c.d[6] = level as u32;
-        shot_strength(c, b, shot, level, (0x1042a6, 0x1042c4));
+        shot_strength_core(b, shot, level, (0x1042a6, 0x1042c4));
     }
-    rts(c, b);
 }
 
-/// 0x52578 : tir de type 5 à la position et dans l'orientation du créateur, même joueur ; pool plein : D0 = 0.
-fn shot_5(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = Obj(c.a[0]);
-    let Some(shot) = alloc(c, b, &pools::PSHL) else {
-        c.d[0] = 0;
-        moved(c, 0, Size::Long);
-        return rts(c, b);
-    };
-    shot.set_u8(b, 0x0, 1);
-    shot.set_u8(b, 0x2, 5);
-    for off in [0x8, 0xc, 0x10] {
-        let v = me.u16(b, off);
-        shot.set_u16(b, off, v);
+/// 0x52578 : tir de type 5 à la position et dans l'orientation de `me`, même joueur (pool plein : rien). Appelé
+/// par l'impact du rayon (PEFF 10).
+pub(crate) fn shot_5(b: &mut Cps2Bus, me: Obj) {
+    if let Some(shot) = pools::PSHL.alloc(b) {
+        shot.set_u8(b, 0x0, 1);
+        shot.set_u8(b, 0x2, 5);
+        for off in [0x8, 0xc, 0x10] {
+            let v = me.u16(b, off);
+            shot.set_u16(b, off, v);
+        }
+        let flip = me.u8(b, 0x2c);
+        shot.set_u8(b, 0x2c, flip);
+        let owner = me.u16(b, 0x50);
+        shot.set_u16(b, 0x50, owner);
+        let level = me.u8(b, 0x10c);
+        shot_strength_core(b, shot, level, (0x10426a, 0x104288));
     }
-    let flip = me.u8(b, 0x2c);
-    shot.set_u8(b, 0x2c, flip);
-    let owner = me.u16(b, 0x50);
-    shot.set_u16(b, 0x50, owner);
-    let level = me.u8(b, 0x10c);
-    c.d[1] = level as u32;
-    shot_strength(c, b, shot, level, (0x10426a, 0x104288));
-    rts(c, b);
 }
 
 /// Effet de joueur (PEFF) de type `kind`, variante `variant`, lié au joueur (`+0x50`).
@@ -844,8 +834,6 @@ pub const NATIVES: &[Native] = &[
     native(0xd99f8, "scene_rien", nothing, regs::ALL),
     native(0xce00a, "cree_set_15", set_15, CREATED),
     native(0xcc0ca, "scene_repart", |c, b| { restart_scene(c, b); rts(c, b) }, regs::a(0) | regs::d(7)),
-    native(0x53e48, "cree_eclair_joueur", bolt_shot, CREATED | regs::d(6) | regs::a(4)),
-    native(0x52578, "cree_tir_5", shot_5, CREATED | regs::d(0) | regs::d(1) | regs::a(4)),
     native(0x4b8d0, "cree_effet_b", peff_b, CREATED),
     native(0x4b518, "cree_effet_8", peff_8, CREATED),
     native(0x51bb6, "cree_effet_2f", peff_2f, CREATED),

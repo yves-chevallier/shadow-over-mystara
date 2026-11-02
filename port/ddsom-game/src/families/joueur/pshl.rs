@@ -19,21 +19,19 @@ fn signed(v: u16, negate: bool) -> u16 {
 }
 
 /// Le tir est arrêté par le terrain : terrains 5 à 8 sans le bit 6 de l'attribut (D2).
-fn stopped_by_terrain(x: &mut Cx) -> bool {
-    // registres de 0x24a8 laissés : D3 (index de la case) est relu par un gestionnaire suivant (lot C :
+fn stopped_by_terrain<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    // Glitch d'origine : les restes de 0x24a8 (D3 = index de la case) sont relus par un gestionnaire suivant (lot C :
     // `boss11_scene42_mort`, image 4447)
     let t = crate::video::terrain_of(x.b, x.o);
-    crate::video::terrain_68k(x.c, &t);
+    restes_terrain(x, &t);
     let terrain = t.numero as u32;
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | ((terrain & 0x3f).wrapping_sub(5) & 0xffff);
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
 }
 
 /// Clignotement final : l'objet est caché une image sur deux (parité du compteur `+0x50`).
-fn blink_by_timer(x: &mut Cx) {
+fn blink_by_timer<R: Banc>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, true);
     let t = x.u8(0x50);
-    x.c.d[0] = x.c.d[0] & !0xff | (t & 1) as u32;
     if t & 1 != 0 {
         x.set_bit(0x1, 1, false);
     }
@@ -45,27 +43,25 @@ mod marker {
 
     const ANIMS: u32 = 0x15ad38;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x51c72) {
             0 => {
                 x.add8(0x4, 2);
-                let carrier = x.link_a1(0x5c);
+                let carrier = x.linked(0x5c);
                 x.set8(f::BOX_SET, 6);
                 let kind = carrier.u8(x.b, 0x2) as u32;
-                x.c.d[0] = kind;
                 x.copy_pos(carrier);
                 x.anim(ANIMS, kind);
                 x.set32(0x34, 0);
                 x.reinsert();
             }
             2 => {
-                let carrier = x.link_a1(0x5c);
+                let carrier = x.linked(0x5c);
                 for off in [0x8, 0x10] {
                     let v = carrier.u16(x.b, off);
                     x.set16(off, v);
                 }
                 let id = carrier.u8(x.b, 0x49);
-                x.c.d[0] = x.c.d[0] & !0xff | id as u32;
                 if id != x.u8(0x42) {
                     return x.free_pshl();
                 }
@@ -97,12 +93,12 @@ mod thrown {
     const ANIMS_B: u32 = 0x15c552;
     const SFX_START: u32 = 0xeb84a;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x51db4) {
             0 => {
                 x.add8(0x4, 2);
                 x.set8(f::BOX_SET, 6);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 for off in [0x8, 0xc] {
                     let v = owner.u16(x.b, off);
                     x.set16(off, v);
@@ -110,12 +106,9 @@ mod thrown {
                 let y = owner.u32(x.b, 0x10).wrapping_sub(1);
                 x.set32(0x10, y);
                 let row = (owner.u8(x.b, 0x3) as u32) << 2 & 0xffff;
-                x.c.d[0] = row;
-                x.c.a[4] = OFFSETS;
                 let dx = x.data16(OFFSETS + row);
                 let dz = x.data16(OFFSETS + row + 2);
-                x.c.d[1] = dx as u32;
-                x.c.d[2] = dz as u32;
+                *x.c.d2() = dz as u32;
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
@@ -138,10 +131,8 @@ mod thrown {
                 x.set16(0x18, 0x300);
                 x.set16(0x1a, -0x30i16 as u16);
                 x.set16(0x14, 0x100);
-                x.c.d[0] = 1;
                 if x.u8(0x2d) == 2 {
                     x.set16(0x14, 0x100u16.wrapping_neg());
-                    x.c.d[0] = 0xff;
                 }
                 pose(x);
                 crate::sound::jouer(x.b, SFX_LAND, x.o);
@@ -152,10 +143,8 @@ mod thrown {
                     if x.u8(0x50) == 0 {
                         x.set8(0x50, 2);
                         let step: u8 = if (x.u16(0x14) as i16) < 0 { 0xff } else { 1 };
-                        x.c.d[0] = x.c.d[0] & !0xff | step as u32;
                         let angle = x.u8(0x2d).wrapping_add(step);
                         x.set8(0x2d, angle);
-                        x.c.d[0] = (angle & 7) as u32;
                         x.anim(ANIMS_A, (angle & 7) as u32);
                     }
                     x.move_xz();
@@ -197,7 +186,7 @@ mod flung {
     const OFFSETS: u32 = 0x520f6;
     const SFX_START: u32 = 0xeb7d8;
 
-    fn set(x: &mut Cx) -> u32 {
+    fn set<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
         match x.u8(0x2) {
             2 => 0x15af1c,
             0xa => 0x15c5e4,
@@ -205,12 +194,12 @@ mod flung {
         }
     }
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x5205c) {
             0 => {
                 x.add8(0x4, 2);
                 x.set8(f::BOX_SET, 6);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 for off in [0x8, 0xc] {
                     let v = owner.u16(x.b, off);
                     x.set16(off, v);
@@ -218,17 +207,13 @@ mod flung {
                 let y = owner.u32(x.b, 0x10).wrapping_sub(1);
                 x.set32(0x10, y);
                 let mut row = (owner.u8(x.b, 0x3) >> 1) as u32;
-                x.c.d[0] = row;
                 if row == 2 && x.u16(0xc) != 0 {
                     row += 4;
                 }
                 let row = row << 2;
-                x.c.d[0] = row;
-                x.c.a[4] = OFFSETS;
                 let dx = x.data16(OFFSETS + row);
                 let dz = x.data16(OFFSETS + row + 2);
-                x.c.d[1] = dx as u32;
-                x.c.d[2] = dz as u32;
+                *x.c.d2() = dz as u32;
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
@@ -255,7 +240,6 @@ mod flung {
                 crate::sound::jouer(x.b, SFX_LAND, x.o);
             }
             4 => {
-                x.c.d[0] = x.u8(0x5) as u32;
                 match x.u8(0x5) {
                     0 => {
                         x.anim_step();
@@ -297,11 +281,11 @@ mod arc {
     const SFX_BURST: u32 = 0xeb3d6;
     const SFX_MID: u32 = 0xeb280;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x52242) {
             0 => {
                 x.add8(0x4, 2);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let flip = owner.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 x.copy_pos(owner);
@@ -310,18 +294,14 @@ mod arc {
                 x.set16(0x18, 0x300);
                 x.set16(0x1a, -0x38i16 as u16);
                 let row = (owner.u8(x.b, 0x3) as u32) << 2 & 0xffff;
-                x.c.d[0] = row;
-                x.c.a[4] = OFFSETS;
                 let dx = x.data16(OFFSETS + row);
                 let dz = x.data16(OFFSETS + row + 2);
-                x.c.d[1] = dx as u32;
-                x.c.d[2] = dz as u32;
+                *x.c.d2() = dz as u32;
                 let mut dx = dx;
                 if x.u8(f::FLIP) == 0 {
                     dx = dx.wrapping_neg();
                     let vx = x.u16(0x14);
                     x.set16(0x14, vx.wrapping_neg());
-                    x.c.d[1] = dx as u32;
                 }
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
@@ -334,8 +314,7 @@ mod arc {
         }
     }
 
-    fn active(x: &mut Cx) {
-        x.c.d[0] = x.c.d[0] & !0xff | x.u8(0x5) as u32;
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 x.move_xz();
@@ -368,7 +347,6 @@ mod arc {
                 }
                 x.set_bit(0x1, 1, true);
                 let t = x.u16(0x5c);
-                x.c.d[0] = (t & 1) as u32;
                 if t & 1 != 0 {
                     x.set_bit(0x1, 1, false);
                 }
@@ -386,7 +364,7 @@ mod bouncer {
     const ANIMS: u32 = 0x15b0a2;
     const SFX_START: u32 = 0xeb8bc;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x523d2) {
             0 => {
                 x.add8(0x4, 2);
@@ -394,7 +372,7 @@ mod bouncer {
                 x.set8(0x5e, 0);
                 x.set8(0x5c, 2);
                 x.set8(f::BOX_SET, 6);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let flip = owner.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 x.copy_pos(owner);
@@ -403,12 +381,9 @@ mod bouncer {
                 x.set16(0x18, 0x800);
                 x.set16(0x1a, -0x60i16 as u16);
                 let row = (owner.u8(x.b, 0x3) as u32) << 2 & 0xffff;
-                x.c.d[0] = row;
-                x.c.a[4] = OFFSETS;
                 let dx = x.data16(OFFSETS + row);
                 let dz = x.data16(OFFSETS + row + 2);
-                x.c.d[1] = dx as u32;
-                x.c.d[2] = dz as u32;
+                *x.c.d2() = dz as u32;
                 let mut dx = dx;
                 if x.u8(f::FLIP) == 0 {
                     dx = dx.wrapping_neg();
@@ -426,7 +401,7 @@ mod bouncer {
         }
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) != 0 {
             return burn(x);
         }
@@ -471,7 +446,7 @@ mod bouncer {
         finish(x);
     }
 
-    fn finish(x: &mut Cx) {
+    fn finish<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x33) != 0 {
             x.set8(0x33, 0);
             crate::sound::jouer(x.b, SFX_START, x.o);
@@ -479,14 +454,13 @@ mod bouncer {
     }
 
     /// Fin de vie : clignote 0x20 images, retombe puis disparaît.
-    fn burn(x: &mut Cx) {
+    fn burn<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x5d, 0xff);
         if x.u8(0x5d) == 0 {
             return x.free_pshl();
         }
         x.set_bit(0x1, 1, true);
         let t = x.u8(0x5d);
-        x.c.d[0] = x.c.d[0] & !0xff | (t & 1) as u32;
         if t & 1 != 0 {
             x.set_bit(0x1, 1, false);
         }
@@ -512,7 +486,7 @@ mod burst {
     /// Compteur des flammes en vie (`A5-0x5fbc`, adresse absolue).
     const FLAMES: u32 = 0xff2044;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.state(0x52668) {
             0 if !child => {
@@ -560,7 +534,7 @@ mod burst {
         }
     }
 
-    fn flame_init(x: &mut Cx) {
+    fn flame_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x5c, 0xff);
         if x.u8(0x5c) != 0 {
             return;
@@ -568,16 +542,12 @@ mod burst {
         x.add8(0x4, 2);
         x.set8(f::BOX_SET, 6);
         let count = rd16(x.b, FLAMES) as u32;
-        x.c.d[0] = count << 2 & 0xffff;
         let table = x.data32(OFFSET_TABLES + (count << 2 & 0xffff));
-        x.c.a[1] = table;
         let k = (x.u8(0x2f) as u32) << 2 & 0xffff;
-        x.c.d[0] = k;
         let dx = x.data16(table + k);
         let dy = x.data16(table + k + 2);
         let dx = signed(dx, x.u8(f::FLIP) != 0);
-        x.c.d[1] = dx as u32;
-        x.c.d[2] = dy as u32;
+        *x.c.d2() = dy as u32;
         x.add16(0x8, dx);
         x.add16(0x10, dy);
         x.set8(0x5e, 4);
@@ -590,14 +560,14 @@ mod burst {
     }
 
     /// `0x525ce` : crée les flammes (variante 1), une de plus tous les 4 pas de retard.
-    fn spawn_flames(x: &mut Cx) {
+    fn spawn_flames<R: Banc>(x: &mut Cx<'_, R>) {
         wr16(x.b, FLAMES, 0);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let player = owner.u8(x.b, 0x10c) as u32;
         let n = x.rom8(SHOT_COUNTS + player).wrapping_sub(1);
         let (mut rank, mut delay) = (0u8, 1u8);
         let mut remaining = n as u16;
-        x.c.d[5] = n as u32;
+        *x.c.d5() = n as u32;
         loop {
             let Some(o) = x.alloc(&pools::PSHL) else { break };
             o.set_u8(x.b, 0, 1);
@@ -626,16 +596,16 @@ mod burst {
                 break;
             }
         }
-        x.c.d[3] = rank as u32;
-        x.c.d[4] = delay as u32;
+        *x.c.d3() = rank as u32;
+        *x.c.d4() = delay as u32;
     }
 }
 
 handlers! {
-    0x51c64 "pshl_0" marker::run,
-    0x51da6 "pshl_1" thrown::run,
-    0x5204e "pshl_2" flung::run,
-    0x52234 "pshl_3" arc::run,
-    0x523c4 "pshl_4" bouncer::run,
-    0x5265a "pshl_5" burst::run,
+    0x51c64 "pshl_0" #[sans] marker::run,
+    0x51da6 "pshl_1" #[sans] thrown::run,
+    0x5204e "pshl_2" #[sans] flung::run,
+    0x52234 "pshl_3" #[sans] arc::run,
+    0x523c4 "pshl_4" #[sans] bouncer::run,
+    0x5265a "pshl_5" #[sans] burst::run,
 }

@@ -27,11 +27,10 @@ mod orbit {
     const TARGET_ANGLES: u32 = 0x52a76;
     const TURN_TABLE: u32 = 0x52b32;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x527fa) {
             0 => init(x),
             2 => {
-                x.c.d[0] = x.c.d[0] & !0xff | x.u8(0x5) as u32;
                 match x.u8(0x5) {
                     0 => wait(x),
                     2 => {
@@ -43,7 +42,7 @@ mod orbit {
                 x.reinsert();
             }
             _ => {
-                let parent = x.link_a1(0x5c);
+                let parent = x.linked(0x5c);
                 let n = parent.u8(x.b, 0x5d).wrapping_sub(1);
                 parent.set_u8(x.b, 0x5d, n);
                 x.free_pshl();
@@ -51,30 +50,26 @@ mod orbit {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
-        let parent = x.link_a1(0x5c);
+        let parent = x.linked(0x5c);
         x.copy_pos(parent);
         let flip = parent.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         let v = x.u8(0x3) as u32;
-        x.c.d[0] = v;
         let delay = x.rom8(DELAYS + v);
         x.set8(0x53, delay);
         x.set8(f::BOX_SET, 8);
         let row = v << 3;
-        x.c.d[0] = row;
         let dx = x.rom16(OFFSETS + row);
         let dz = x.rom16(OFFSETS + row + 2);
         let dy = x.rom16(OFFSETS + row + 4);
         x.add16(0xc, dz);
         x.add16(0x10, dy);
         let dx = signed(dx, x.u8(f::FLIP) != 0);
-        x.c.d[1] = dx as u32;
         x.add16(0x8, dx);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let class = owner.u8(x.b, 0x10c) as u32;
-        x.c.d[0] = class;
         let p1 = x.rom8(POWER_A + class);
         let p2 = x.rom8(POWER_B + class);
         x.set8(f::POWER, p1);
@@ -85,7 +80,7 @@ mod orbit {
     }
 
     /// Sous-état 0 : attend le retard `+0x53`, puis passe à l'animation d'ouverture.
-    fn wait(x: &mut Cx) {
+    fn wait<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x6) == 0 {
             let delay = x.u8(0x53);
             if delay != 0 {
@@ -106,7 +101,7 @@ mod orbit {
     }
 
     /// Sous-état 4 : vol en cercle.
-    fn fly(x: &mut Cx) {
+    fn fly<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x6) {
             0 => {
                 x.add8(0x6, 2);
@@ -121,10 +116,9 @@ mod orbit {
                     x.add8(0x2f, 2);
                 }
                 x.set8(0x5b, 0);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let cam_y = if x.a5_u8(a5::USE_CAM2) != 0 { x.a5_u16(a5::CAM2_Y) } else { x.a5_u16(a5::CAM_Y) };
                 let d0 = owner.u16(x.b, 0x10).wrapping_sub(cam_y);
-                x.c.d[0] = d0 as u32;
                 if d0 < 0x60 {
                     x.set8(0x5b, 0x10);
                     x.add8(0x2f, 1);
@@ -136,8 +130,6 @@ mod orbit {
                 0 => {
                     let cam_x = if x.a5_u8(a5::USE_CAM2) != 0 { x.a5_u16(0x556) } else { x.a5_u16(a5::CAM_X) };
                     let d1 = x.u16(0x8).wrapping_sub(cam_x) as i16;
-                    x.c.d[0] = cam_x as u32;
-                    x.c.d[1] = d1 as u16 as u32;
                     if x.u8(0x2d) == 8 {
                         if d1 > 0x130 {
                             x.add8(0x7, 2);
@@ -151,7 +143,6 @@ mod orbit {
                 2 => {
                     turn(x);
                     let k = (x.u8(0x2f) as u32) << 1;
-                    x.c.d[0] = k;
                     let want_a = x.rom8(TARGET_ANGLES + k);
                     let want_b = x.rom8(TARGET_ANGLES + k + 1);
                     if want_a == x.u8(0x5b) && want_b == x.u8(0x2d) {
@@ -169,7 +160,7 @@ mod orbit {
     }
 
     /// `0x52a9e` : avance d'un pas de rotation tous les `+0x58` images.
-    fn turn(x: &mut Cx) {
+    fn turn<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_by_table_xy();
         x.add8(0x59, 0xff);
         if x.u8(0x59) != 0 {
@@ -184,17 +175,14 @@ mod orbit {
         let angle = x.u8(0x2d).wrapping_add(step) & 0x1f;
         x.set8(0x2d, angle);
         let low = angle & 0xf;
-        x.c.d[0] = low as u32;
         let row = x.u8(0x5a).wrapping_add(x.u8(0x5b)) as u32;
         let at = TURN_TABLE + row;
-        x.c.a[3] = at;
         let expected = x.data8(at);
-        x.c.d[1] = expected as u32;
         if low != expected {
             return;
         }
         let d5 = x.u8(0x5a) & 6;
-        x.c.d[5] = d5 as u32;
+        *x.c.d5() = d5 as u32;
         if d5 == 6 && low == x.data8(at) {
             let flip = x.u8(f::FLIP) ^ 0x20;
             x.set8(f::FLIP, flip);
@@ -216,10 +204,9 @@ mod fountain {
     const ANIMS: u32 = 0x15cb54;
     const TURN: u32 = 0x53c7c;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x53a16) {
             0 => {
-                x.c.d[0] = x.u8(0x3) as u32 * 2;
                 match x.u8(0x3) {
                     0 => init_ring(x),
                     1 => init_ball(x),
@@ -229,7 +216,6 @@ mod fountain {
                 }
             }
             2 => {
-                x.c.d[0] = x.u8(0x3) as u32 * 2;
                 match x.u8(0x3) {
                     0 => ring(x),
                     1 => ball(x),
@@ -242,24 +228,23 @@ mod fountain {
         }
     }
 
-    fn init_ring(x: &mut Cx) {
+    fn init_ring<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x5a, 0x10);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         x.copy_pos(owner);
-        x.set_d0w(0x45);
-        let n = x.c.d[0] as u16;
+        let n = 0x45;
         x.select_speed(&crate::objects::motion::SPEEDS_B, n);
         x.move_xy();
         x.anim(ANIMS, 0);
         x.reinsert();
     }
 
-    fn init_ball(x: &mut Cx) {
+    fn init_ball<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x5a, 1);
         x.set8(0x5c, 2);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
@@ -271,7 +256,6 @@ mod fountain {
             x.set32(0x14, v);
             dx = dx.wrapping_neg();
         }
-        x.set_d0w(dx);
         x.add16(0x8, dx);
         x.add16(0x10, 0xffff);
         x.anim(ANIMS, 3);
@@ -281,9 +265,9 @@ mod fountain {
         x.reinsert();
     }
 
-    fn init_spark(x: &mut Cx) {
+    fn init_spark<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
@@ -292,12 +276,12 @@ mod fountain {
         x.reinsert();
     }
 
-    fn init_ember(x: &mut Cx) {
+    fn init_ember<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x5a, 0x90);
         let r = x.rand_and(7);
         x.add16(0x5a, r as u16);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
@@ -306,11 +290,11 @@ mod fountain {
         x.reinsert();
     }
 
-    fn init_halo(x: &mut Cx) {
+    fn init_halo<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x5a, 1);
         x.set8(0x5c, 4);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
         x.copy_pos(owner);
@@ -320,10 +304,8 @@ mod fountain {
             dx = dx.wrapping_neg();
             x.set8(0x2d, 0x18);
         }
-        x.set_d0w(dx);
         x.add16(0x8, dx);
-        x.set_d0w(0x4a);
-        let n = x.c.d[0] as u16;
+        let n = 0x4a;
         x.select_speed(&crate::objects::motion::SPEEDS_B, n);
         x.move_xy();
         x.anim(ANIMS, 3);
@@ -335,8 +317,7 @@ mod fountain {
 
     // --- états actifs ----------------------------------------------------------------------------
 
-    fn ring(x: &mut Cx) {
-        x.c.d[0] = x.c.d[0] & !0xff | x.u8(0x5) as u32;
+    fn ring<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             x.add16(0x5a, 0xffff);
             if x.u16(0x5a) == 0 {
@@ -355,11 +336,9 @@ mod fountain {
                 x.add8(0x5, 2);
                 x.set16(0x5a, 0x14);
                 let mut i = x.u8(0x5d) as u32;
-                x.c.d[0] = i;
                 if x.u8(f::FLIP) != 0 {
                     i += 6;
                 }
-                x.c.d[0] = i;
                 let v = x.rom8(TURN + i);
                 x.set8(0x5d, v);
             }
@@ -370,15 +349,13 @@ mod fountain {
                 x.add8(0x4, 2);
             }
             let want: u8 = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-            x.c.d[0] = x.c.d[0] & !0xff | want as u32;
             if want != x.u8(0x2d) {
                 let step = x.u8(0x5d);
                 let angle = x.u8(0x2d).wrapping_add(step) & 0x1f;
                 x.set8(0x2d, angle);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 x.copy_pos(owner);
-                x.set_d0w(0x45);
-                let n = x.c.d[0] as u16;
+                let n = 0x45;
                 x.select_speed(&crate::objects::motion::SPEEDS_B, n);
                 x.move_xy();
             }
@@ -386,7 +363,7 @@ mod fountain {
         }
     }
 
-    fn ball(x: &mut Cx) {
+    fn ball<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(0x5e) != 0 {
             x.add16(0x5e, 0xffff);
             if x.u16(0x5e) == 0 {
@@ -442,8 +419,7 @@ mod fountain {
         x.anim_step();
     }
 
-    fn halo(x: &mut Cx) {
-        x.c.d[0] = x.c.d[0] & !0xff | x.u8(0x5) as u32;
+    fn halo<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             if x.u16(0x5e) != 0 {
                 x.add16(0x5e, 0xffff);
@@ -461,28 +437,19 @@ mod fountain {
             x.add16(0x5a, 0xffff);
             if x.u16(0x5a) == 0 {
                 x.set16(0x5a, 1);
-                let (mut step, mut target): (u8, u8) = (1, 0x18);
-                if x.u8(f::FLIP) != 0 {
-                    step = 0xff;
-                    target = 8;
-                }
-                x.c.d[0] = x.c.d[0] & !0xff | step as u32;
-                x.c.d[1] = x.c.d[1] & !0xff | target as u32;
+                let step: u8 = if x.u8(f::FLIP) != 0 { 0xff } else { 1 };
                 let angle = x.u8(0x2d).wrapping_add(step) & 0x1f;
                 x.set8(0x2d, angle);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let flip = owner.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 x.copy_pos(owner);
                 let dx = signed(0x30, x.u8(f::FLIP) == 0);
-                x.set_d0w(dx);
                 x.add16(0x8, dx);
-                x.set_d0w(0x4a);
-                let n = x.c.d[0] as u16;
+                let n = 0x4a;
                 x.select_speed(&crate::objects::motion::SPEEDS_B, n);
                 x.move_xy();
                 let want: u8 = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
-                x.c.d[0] = x.c.d[0] & !0xff | want as u32;
                 if want == x.u8(0x2d) {
                     x.add8(0x4, 2);
                 }
@@ -499,6 +466,6 @@ mod fountain {
 }
 
 handlers! {
-    0x527ec "pshl_6" orbit::run,
-    0x53a08 "pshl_18" fountain::run,
+    0x527ec "pshl_6" #[sans] orbit::run,
+    0x53a08 "pshl_18" #[sans] fountain::run,
 }

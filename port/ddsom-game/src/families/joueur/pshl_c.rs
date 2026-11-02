@@ -34,12 +34,12 @@ mod jet {
     const SFX: u32 = 0xeb364;
     const KIND: u8 = 0xc;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.state(0x530ca) {
             0 if !child => {
                 x.add8(0x4, 2);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let flip = owner.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 x.copy_pos(owner);
@@ -48,12 +48,9 @@ mod jet {
                 x.set16(0x18, 0x300);
                 x.set16(0x1a, -0x38i16 as u16);
                 let row = (owner.u8(x.b, 0x3) as u32) << 2 & 0xffff;
-                x.c.d[0] = row;
-                x.c.a[4] = OFFSETS;
                 let dx = x.data16(OFFSETS + row);
                 let dz = x.data16(OFFSETS + row + 2);
-                x.c.d[1] = dx as u32;
-                x.c.d[2] = dz as u32;
+                *x.c.d2() = dz as u32;
                 let mut dx = dx;
                 if x.u8(f::FLIP) == 0 {
                     dx = dx.wrapping_neg();
@@ -80,7 +77,7 @@ mod jet {
         }
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) != 0 {
             if x.anim_step() {
                 x.add8(0x4, 2);
@@ -108,8 +105,8 @@ mod jet {
             o.set_u16(x.b, 0x5c, delay);
             offset = offset.wrapping_add(signed(0x28, x.u8(f::FLIP) == 0));
             delay += 8;
-            x.c.d[4] = offset as u32;
-            x.c.d[3] = delay as u32;
+            *x.c.d4() = offset as u32;
+            *x.c.d3() = delay as u32;
         }
     }
 }
@@ -122,15 +119,12 @@ mod item {
     const OFFSETS: u32 = 0x53314;
     const ANIMS: u32 = 0x15b0a2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x5329e) {
             0 => {
                 x.add8(0x4, 2);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let page = (owner.u8(x.b, 0x15d) as u32) << 4 & 0xffff;
-                x.c.d[0] = page;
-                let base = ext(owner).wrapping_add(0x120);
-                x.c.a[4] = base;
                 let count = owner.0 + 0x120 + page + 8;
                 let left = x.data8(count).wrapping_sub(1);
                 crate::mem::wr8(x.b, count, left);
@@ -140,12 +134,9 @@ mod item {
                 x.copy_pos(owner);
                 x.add16(0x10, 0xffff);
                 let row = (owner.u8(x.b, 0x3) as u32) << 2 & 0xffff;
-                x.c.d[0] = row;
-                x.c.a[4] = OFFSETS;
                 let dx = x.data16(OFFSETS + row);
                 let dz = x.data16(OFFSETS + row + 2);
-                x.c.d[1] = dx as u32;
-                x.c.d[2] = dz as u32;
+                *x.c.d2() = dz as u32;
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
@@ -173,7 +164,7 @@ mod flame {
     const ANIMS: u32 = 0x15c7a6;
     const SFX: u32 = 0xe83e2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x53420) {
             0 => {
                 x.add8(0x5c, 0xff);
@@ -210,10 +201,10 @@ mod volley {
     const LIFETIMES: u32 = 0x535a4;
     const ANIMS: u32 = 0x15c85a;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x534e4) {
             0 => {
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, 0x5) != 0 {
                     return die(x);
                 }
@@ -227,22 +218,18 @@ mod volley {
                 x.set8(f::FLIP, flip);
                 x.copy_pos(owner);
                 let mut v = owner.u8(x.b, 0x6a) as u32;
-                x.c.d[0] = v;
                 if owner.u16(x.b, 0xc) != 0 {
                     v = 0x10;
                 }
                 let row = v * 2;
-                x.c.d[0] = row;
                 let dx = x.rom16(OFFSETS + row);
                 let dz = x.rom16(OFFSETS + row + 2);
-                x.c.d[1] = dx as u32;
-                x.c.d[2] = dz as u32;
+                *x.c.d2() = dz as u32;
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) != 0);
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
                 x.add16(0x10, 0xffff);
                 let class = owner.u8(x.b, 0x10c) as u32;
-                x.c.d[0] = class;
                 let life = x.rom8(LIFETIMES + class);
                 x.set8(0x5c, life);
                 x.anim(ANIMS, 0);
@@ -250,7 +237,6 @@ mod volley {
             }
             2 => {
                 let dx = signed(4, x.u8(f::FLIP) == 0);
-                x.set_d0w(dx);
                 x.add16(0x8, dx);
                 x.add8(0x5c, 0xff);
                 if x.u8(0x5c) == 0 {
@@ -263,7 +249,7 @@ mod volley {
         }
     }
 
-    fn die(x: &mut Cx) {
+    fn die<R: Banc>(x: &mut Cx<'_, R>) {
         decrement(x, COUNTER_15);
         x.free_pshl();
     }
@@ -277,7 +263,7 @@ mod star {
     const ANIMS: u32 = 0x15c8a2;
     const SFX: u32 = 0xe8454;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x536a8) {
             0 => {
                 x.add8(0x5c, 0xff);
@@ -304,11 +290,9 @@ mod star {
                     x.add8(0x4, 2);
                 }
                 let frame = x.a5_u8(a5::FRAME) & 3;
-                x.c.d[0] = x.c.d[0] & !0xff | frame as u32;
                 if frame == 0 {
                     let n = x.u8(0x5d).wrapping_add(1) & 7;
                     x.set8(0x5d, n);
-                    x.c.d[0] = n as u32;
                     let c = x.rom8(COLORS + n as u32);
                     x.set8(0x2b, c);
                 }
@@ -329,7 +313,7 @@ mod stone {
     const ANIMS: u32 = 0x15c90a;
     const SFX: u32 = 0xe8ab8;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x53808) {
             0 => {
                 x.add16(0x5c, 0xffff);
@@ -348,7 +332,6 @@ mod stone {
                     let vx = x.u16(0x14);
                     x.set16(0x14, vx.wrapping_neg());
                 }
-                x.set_d0w(dx);
                 x.add16(0x8, dx);
                 x.anim(ANIMS, 0);
                 x.reinsert();
@@ -405,10 +388,10 @@ mod stone {
 }
 
 handlers! {
-    0x530bc "pshl_12" jet::run,
-    0x53290 "pshl_13" item::run,
-    0x53412 "pshl_14" flame::run,
-    0x534d6 "pshl_15" volley::run,
-    0x5369a "pshl_16" star::run,
-    0x537fa "pshl_17" stone::run,
+    0x530bc "pshl_12" #[sans] jet::run,
+    0x53290 "pshl_13" #[sans] item::run,
+    0x53412 "pshl_14" #[sans] flame::run,
+    0x534d6 "pshl_15" #[sans] volley::run,
+    0x5369a "pshl_16" #[sans] star::run,
+    0x537fa "pshl_17" #[sans] stone::run,
 }

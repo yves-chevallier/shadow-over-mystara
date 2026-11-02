@@ -31,7 +31,7 @@ fn signed(v: u16, negate: bool) -> u16 {
 mod pet {
     use super::*;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x34) != x.u8(0x5b) {
             return gone(x);
         }
@@ -45,7 +45,7 @@ mod pet {
         x.set32(0x52, states);
     }
 
-    fn gone(x: &mut Cx) {
+    fn gone<R: Banc>(x: &mut Cx<'_, R>) {
         let n = rd16(x.b, COUNTER).wrapping_add(1);
         wr16(x.b, COUNTER, n);
         x.free_peff();
@@ -56,10 +56,10 @@ mod pet {
         x.set32(0x4, 0x0400_0000);
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5e, 0);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         for off in [0x8, 0xc, 0x10] {
             let v = owner.u32(x.b, off);
             x.set32(off, v);
@@ -95,10 +95,9 @@ mod pet {
     }
 
     /// `0x4f388` : suit l'étape d'animation du lanceur (`+0x33`) : place et image.
-    fn pose(x: &mut Cx) {
-        let owner = x.link_a1(f::OWNER);
+    fn pose<R: Banc>(x: &mut Cx<'_, R>) {
+        let owner = x.linked(f::OWNER);
         let step = owner.u8(x.b, 0x33);
-        x.c.d[0] = step as u32;
         if step == x.u8(0x47) {
             return;
         }
@@ -121,8 +120,8 @@ mod pet {
         x.anim(ANIMS, anim as u32);
     }
 
-    fn active(x: &mut Cx) {
-        let owner = x.link_a1(f::OWNER);
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
+        let owner = x.linked(f::OWNER);
         if x.a5_u8(a5::PAUSED) != 0 || owner.u8(x.b, 0x4) as i8 >= 4 || x.a5_u8(0x35) == 0 {
             return die(x);
         }
@@ -137,14 +136,14 @@ mod pet {
             x.keep_in_zone();
             // Glitch d'origine : les registres de la collision (D2...) passent aux gestionnaires suivants ; l'éclat de gel
             // (0x4bda8) tire son rebond dans le D2 hérité (`sorts_combattant`)
-            crate::terrain::push_68k(x.c, x.b, x.o);
+            x.push_terrain();
             x.reinsert();
         }
     }
 
     // --- sous-état 0 : sortie de terre ---------------------------------------------------------------
 
-    fn emerge(x: &mut Cx) -> bool {
+    fn emerge<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         match x.u8(0x6) {
             0 => pose(x),
             2 => {
@@ -169,7 +168,7 @@ mod pet {
 
     // --- sous-état 2 : se dirige vers sa cible ------------------------------------------------------------
 
-    fn approach(x: &mut Cx) -> bool {
+    fn approach<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         x.add16(0x42, 0xffff);
         if x.u16(0x42) == 0 {
             leave(x);
@@ -189,9 +188,13 @@ mod pet {
             let mut lost = false;
             if x.u8(0x46) == 0 {
                 x.set8(0x46, 2);
-                let target = x.link_a1(0x5c);
-                if target.u16(x.b, 0x62) == 0 {
-                    find_target(x);
+                // A1 : la cible, ou le dernier objet examiné par la recherche (glitch d'origine : pas forcément
+                // la nouvelle cible)
+                let mut toward = x.linked(0x5c);
+                if toward.u16(x.b, 0x62) == 0 {
+                    if let Some(o) = find_target(x) {
+                        toward = o;
+                    }
                     lost = x.u16(0x5c) == 0;
                     if lost {
                         x.set8(0x5, 4);
@@ -199,7 +202,7 @@ mod pet {
                     }
                 }
                 if !lost {
-                    turn(x);
+                    turn(x, toward);
                 }
             }
             if !lost {
@@ -213,7 +216,7 @@ mod pet {
 
     // --- sous-état 4 : errance sans cible ----------------------------------------------------------------
 
-    fn chase(x: &mut Cx) -> bool {
+    fn chase<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         x.add16(0x42, 0xffff);
         if x.u16(0x42) == 0 {
             leave(x);
@@ -229,15 +232,15 @@ mod pet {
                 x.set8(0x6, 2);
                 return true;
             }
-            x.link_a1(f::OWNER);
-            turn(x);
+            let owner = x.linked(f::OWNER);
+            turn(x, owner);
         }
         x.move_by_table_xy();
         true
     }
 
     /// Fin de vie : état 4, sous-états nuls, puis la retombée (`bra 0x4f7d2`, qui revient au sous-état appelant).
-    fn leave(x: &mut Cx) {
+    fn leave<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
         x.set16(0x6, 0);
@@ -246,20 +249,20 @@ mod pet {
 
     // --- sous-état 6 : bond et morsure ----------------------------------------------------------------
 
-    fn attack(x: &mut Cx) -> bool {
+    fn attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         if x.u8(0x6) == 0 {
             x.add8(0x6, 2);
             x.set8(0x7, 0);
             x.set16(0x18, 0x400);
             x.set16(0x1a, -0x40i16 as u16);
-            x.link_a1(0x5c);
-            let angle = crate::aides::direction_to(x.b, x.o, Obj(x.c.a[1]));
+            let target = x.linked(0x5c);
+            let angle = crate::aides::direction_to(x.b, x.o, target);
             x.set8(0x2d, angle);
             flip_by_angle(x);
             x.anim(ANIMS, 0xa);
             return true;
         }
-        let target = x.link_a1(0x5c);
+        let target = x.linked(0x5c);
         if target.u16(x.b, 0x4) == 0x406 || x.a5_u8(a5::PAUSED) != 0 {
             die(x);
             return true;
@@ -271,7 +274,7 @@ mod pet {
         }
     }
 
-    fn leap(x: &mut Cx) -> bool {
+    fn leap<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         x.add16(0x42, 0xffff);
         if x.u16(0x42) == 0 {
             leave(x);
@@ -291,7 +294,7 @@ mod pet {
         true
     }
 
-    fn land(x: &mut Cx) -> bool {
+    fn land<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         x.add16(0x42, 0xffff);
         if x.u16(0x42) == 0 {
             leave(x);
@@ -313,7 +316,7 @@ mod pet {
     }
 
     /// Le familier colle à sa cible et la mord toutes les 30 images (`+0x58`).
-    fn bite(x: &mut Cx, target: Obj) -> bool {
+    fn bite<R: Banc>(x: &mut Cx<'_, R>, target: Obj) -> bool {
         if (target.u16(x.b, 0x62) as i16) <= 0 {
             die(x);
             return true;
@@ -330,7 +333,6 @@ mod pet {
         x.add16(0xc, vz);
         let mut d0 = x.u16(0x14);
         let t_flip = target.u8(x.b, f::FLIP);
-        x.c.d[1] = t_flip as u32;
         if t_flip != x.u8(0x47) {
             let own = x.u8(0x48) ^ 0x20;
             x.set8(f::FLIP, own);
@@ -354,8 +356,8 @@ mod pet {
         x.set8(0x5a, left);
         if (left as i8) < 0 {
             die(x);
-            x.c.d[2] = 0x10;
-            x.c.d[3] = 0x10;
+            *x.c.d2() = 0x10;
+            *x.c.d3() = 0x10;
             crate::families::effects_creators::impact_spark(x.b, x.o, 0x10, 0x10);
             return true;
         }
@@ -375,26 +377,26 @@ mod pet {
             let owner = x.u16(f::OWNER);
             target.set_u16(x.b, 0x54, owner);
             if target.u8(x.b, 0x28) == 4 && target.u8(x.b, 0x93) != 0 {
-                let player = x.link_a1(f::OWNER);
+                let player = x.linked(f::OWNER);
                 player.set_u8(x.b, 0x18a, 1);
                 let v = target.u8(x.b, 0x9a);
                 x.set_a5_u8(0x4f, v);
             }
             die(x);
         }
-        x.c.d[2] = 0x10;
-        x.c.d[3] = 0x10;
+        *x.c.d2() = 0x10;
+        *x.c.d3() = 0x10;
         crate::families::effects_creators::impact_spark(x.b, x.o, 0x10, 0x10);
         true
     }
 
     // --- état 4 : retombée -----------------------------------------------------------------------------------
 
-    fn back(x: &mut Cx) {
+    fn back<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 if x.u8(0x5e) != 0 {
-                    let target = x.link_a1(0x5c);
+                    let target = x.linked(0x5c);
                     let n = target.u8(x.b, 0x9b).wrapping_sub(1);
                     target.set_u8(x.b, 0x9b, n);
                 }
@@ -430,9 +432,10 @@ mod pet {
 
     /// `0x4f874` : l'ennemi (puis le boss) le plus proche, mordu moins de 3 fois ; `+0x5c` reçoit son adresse.
     /// Comme l'original, laisse dans A1 le dernier objet examiné.
-    fn find_target(x: &mut Cx) {
+    fn find_target<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let mut best = u32::MAX;
         let mut found = 0u16;
+        let mut last = None;
         for (first, free, total) in [(0x299eu32, 0x7e62u32, 0x16u16), (0x3a1e, 0x7e6c, 3)] {
             let mut left = total.wrapping_sub(x.a5_u16(free)) as u8;
             if left == 0 {
@@ -442,7 +445,7 @@ mod pet {
             loop {
                 let o = Obj(a1);
                 if o.u8(x.b, 0) != 0 {
-                    x.c.a[1] = a1;
+                    last = Some(o);
                     if o.u16(x.b, 0x62) != 0
                         && o.u8(x.b, 0x95) & 2 == 0
                         && o.u8(x.b, 0x9b) < 3
@@ -465,15 +468,13 @@ mod pet {
                 a1 += 0xc0;
             }
         }
-        x.c.d[1] = best;
-        x.c.a[2] = found as i16 as i32 as u32;
         x.set16(0x5c, found);
+        last
     }
 
-    /// `0x4f920` : tourne d'un cran vers l'objet que désigne A1.
-    fn turn(x: &mut Cx) {
-        // la cible est l'objet que l'appelant a laissé dans A1
-        let diff = crate::aides::direction_to(x.b, x.o, Obj(x.c.a[1])).wrapping_sub(x.u8(0x2d)) & 0x1f;
+    /// `0x4f920` : tourne d'un cran vers `toward` (l'objet que l'appelant laisse dans A1).
+    fn turn<R: Banc>(x: &mut Cx<'_, R>, toward: Obj) {
+        let diff = crate::aides::direction_to(x.b, x.o, toward).wrapping_sub(x.u8(0x2d)) & 0x1f;
         let step: u8 = if diff > 0x10 { 0xff } else { 1 };
         let angle = x.u8(0x2d).wrapping_add(step) & 0x1f;
         x.set8(0x2d, angle);
@@ -515,7 +516,7 @@ mod pet {
 
     /// Premier monstre (ENEMY puis BOSS) dont une boîte recouvre celle du familier (`0x4f95a` pour
     /// s'engager, `0x4f9be` pour la morsure, qui exclut en plus les monstres déjà mordus 3 fois ou frappés).
-    fn search_hit(x: &mut Cx, bite: bool) -> Option<Obj> {
+    fn search_hit<R: Banc>(x: &mut Cx<'_, R>, bite: bool) -> Option<Obj> {
         for (first, count) in [(0x299eu32, 22u32), (0x3a1e, 3)] {
             let mut a1 = 0xff8000 + first;
             for _ in 0..count {
@@ -535,7 +536,6 @@ mod pet {
                 let table = rd32(x.b, FRAMES + boxes);
                 let frame = table.wrapping_add(set << 3);
                 let mine = if bite { BOX_BITE } else { BOX_ATTACK };
-                x.c.a[1] = m.0;
                 if overlap(x, m, frame, mine, bite) {
                     return Some(m);
                 }
@@ -545,9 +545,8 @@ mod pet {
     }
 
     /// `0x4f95a` : engage l'attaque (sous-état 6) quand un monstre touche le familier.
-    fn attack_test(x: &mut Cx) {
+    fn attack_test<R: Banc>(x: &mut Cx<'_, R>) {
         if let Some(m) = search_hit(x, false) {
-            x.c.a[1] = m.0;
             x.set16(0x5c, m.0 as u16);
             x.set16(0x4, 0x206);
             x.set16(0x6, 0);
@@ -555,12 +554,10 @@ mod pet {
     }
 
     /// `0x4f9be` : un monstre est à portée de morsure : la cible est fixée et la morsure s'engage.
-    fn find_hit(x: &mut Cx) -> bool {
+    fn find_hit<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         let Some(m) = search_hit(x, true) else {
-            x.c.d[0] = 0;
             return false;
         };
-        x.c.a[1] = m.0;
         let dz = x.u16(0xc).wrapping_sub(m.u16(x.b, 0xc));
         x.set16(0x18, dz);
         let dx = x.u16(0x8).wrapping_sub(m.u16(x.b, 0x8));
@@ -577,7 +574,7 @@ mod pet {
         x.set8(0x58, 5);
         let hits = m.u8(x.b, 0x9b).wrapping_add(1);
         m.set_u8(x.b, 0x9b, hits);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let class = owner.u8(x.b, 0x10c);
         let (d1, d2) = if class <= 0xe {
             (6, 4)
@@ -588,8 +585,7 @@ mod pet {
         } else {
             (8, 2)
         };
-        x.c.d[1] = d1 as u32;
-        x.c.d[2] = d2 as u32;
+        *x.c.d2() = d2 as u32;
         x.set8(0x5a, d1);
         x.set8(0x49, d2);
         true
@@ -597,5 +593,5 @@ mod pet {
 }
 
 handlers! {
-    0x4f2a6 "peff_34" pet::run,
+    0x4f2a6 "peff_34" #[sans] pet::run,
 }

@@ -994,7 +994,7 @@ mod exit_gate {
         // les autres portes réveillées s'exécutent aussitôt (`bsr` récursif de l'original)
         set_b::resume_with(x, &set_b::SET_POOL, |x, o| {
             if o.u8(x.b, 2) == 7 {
-                set_b::run_on(x, o, run);
+                set_b::run_on_68k(x, o, run);
             }
         });
         for pool in &SUSPENDED[1..] {

@@ -29,7 +29,7 @@ mod storm {
     const SFX_END: u32 = 0xea032;
     const KIND: u8 = 0x1e;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let variant = x.u8(0x3);
         match x.state(0x4e7aa) {
             0 => match variant {
@@ -46,7 +46,7 @@ mod storm {
         }
     }
 
-    fn init_cloud(x: &mut Cx) {
+    fn init_cloud<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         follow_owner(x);
         x.add16(0xc, 0x20);
@@ -56,9 +56,9 @@ mod storm {
         x.reinsert();
     }
 
-    fn init_bolt(x: &mut Cx) {
+    fn init_bolt<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
-        let parent = x.link_a1(0x5c);
+        let parent = x.linked(0x5c);
         let (px, py) = (parent.u16(x.b, 0x8), parent.u16(x.b, 0x10));
         x.set16(0x54, px);
         x.set16(0x56, py.wrapping_add(1));
@@ -72,24 +72,22 @@ mod storm {
         let b = b.wrapping_add(0x1f);
         d2 = d2.wrapping_add(0xff).wrapping_add(b);
         let vz = ((d2 as i16) >> 4) as u16;
-        x.c.d[0] = b as u32;
-        x.c.d[2] = d2 as u32;
+        *x.c.d2() = d2 as u32;
         x.set16(0x1a, vz);
         x.set16(0x18, 0);
         let anim = x.rand_and(1) + 1;
         x.anim(ANIMS, anim);
     }
 
-    fn init_spark(x: &mut Cx) {
+    fn init_spark<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let px = owner.u16(x.b, 0x8);
         x.set16(0x8, px);
         x.set16(0xc, 0);
         let py = owner.u16(x.b, 0x10);
         x.set16(0x10, py);
         let k = (x.u8(0x2f) as u32) << 3;
-        x.c.d[0] = k;
         let (dx, dz, dy) = (x.rom16(OFFSETS_A + k), x.rom16(OFFSETS_A + k + 2), x.rom16(OFFSETS_A + k + 4));
         x.add16(0x8, dx);
         x.add16(0xc, dz);
@@ -105,8 +103,7 @@ mod storm {
 
     // --- états actifs -------------------------------------------------------------------------------
 
-    fn cloud(x: &mut Cx) {
-        x.c.d[0] = x.u8(0x5) as u32;
+    fn cloud<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 x.add16(0x58, 0xffff);
@@ -116,7 +113,7 @@ mod storm {
                 }
                 let hidden = x.u8(0x1) & 2 == 0;
                 x.set_bit(0x1, 1, hidden);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let d0 = owner.u16(x.b, 0x168);
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, d0 as u16);
                 crate::sound::jouer(x.b, SFX_RUMBLE, x.o);
@@ -125,7 +122,7 @@ mod storm {
                 if x.a5_u8(0x3d) == 0 {
                     return end(x);
                 }
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let d0 = owner.u16(x.b, 0x168);
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, d0 as u16);
                 if x.u8(0x5a) != 0 {
@@ -141,7 +138,7 @@ mod storm {
                 x.add16(0x58, 0xffff);
                 if (x.u16(0x58) as i16) < 0 {
                     x.add8(0x5, 4);
-                    let owner = x.link_a1(f::OWNER);
+                    let owner = x.linked(f::OWNER);
                     let d0 = owner.u16(x.b, 0x168);
                     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, d0 as u16);
                     spawn_sparks(x);
@@ -158,8 +155,7 @@ mod storm {
     }
 
     /// Sous-état 0xc : la tempête continue de trembler tant que le jeu est figé.
-    fn shake_tail(x: &mut Cx) {
-        x.link_a1(f::OWNER);
+    fn shake_tail<R: Banc>(x: &mut Cx<'_, R>) {
         toggle(x, 0x9, 1);
         toggle(x, 0xd, 1);
         if x.a5_u8(0x3d) == 0 {
@@ -223,12 +219,11 @@ mod storm {
         }
     }
 
-    fn bolt(x: &mut Cx) {
+    fn bolt<R: Banc>(x: &mut Cx<'_, R>) {
         x.reinsert();
         if x.u8(0x5) != 0 {
-            let parent = x.link_a1(0x5c);
+            let parent = x.linked(0x5c);
             let k = (x.u8(0x2f) as u32) << 2;
-            x.c.d[0] = k;
             let (dx, dz) = (x.rom16(OFFSETS_B + k), x.rom16(OFFSETS_B + k + 2));
             x.set16(0x8, dx);
             x.set16(0xc, dz);
@@ -257,17 +252,16 @@ mod storm {
             return;
         }
         x.add8(0x5, 2);
-        let parent = x.link_a1(0x5c);
+        let parent = x.linked(0x5c);
         let n = parent.u8(x.b, 0x5a).wrapping_sub(1);
         parent.set_u8(x.b, 0x5a, n);
         x.set8(0x2f, n);
         crate::sound::jouer(x.b, SFX_BOLT, x.o);
         let k = (n as u32) << 2;
-        x.c.d[0] = k;
         let (dx, dz) = (x.rom16(OFFSETS_B + k), x.rom16(OFFSETS_B + k + 2));
         x.set16(0x8, dx);
         x.set16(0xc, dz);
-        let parent = x.link_a1(0x5c);
+        let parent = x.linked(0x5c);
         let (px, pz) = (parent.u16(x.b, 0x8), parent.u16(x.b, 0xc));
         let py = parent.u16(x.b, 0x10);
         x.set16(0x10, py);
@@ -315,7 +309,7 @@ mod whirl {
     const SFX_LOOP: u32 = 0xe9da8;
     const KIND: u8 = 0x1f;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.state(0x4ec90) {
             0 if !child => init_eye(x),
@@ -332,7 +326,7 @@ mod whirl {
         }
     }
 
-    fn init_eye(x: &mut Cx) {
+    fn init_eye<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x59, 0);
         let owner = follow_owner(x);
@@ -340,12 +334,10 @@ mod whirl {
         let (mut dx, mut dz) = (-0x37i16 as u16, 0x4au16);
         if owner.u8(x.b, 0x15e) != 0x25 {
             let row = ((owner.u8(x.b, 0x3) >> 1) as u32) << 2;
-            x.c.d[0] = row;
             dx = x.rom16(OFFSETS + row);
             dz = x.rom16(OFFSETS + row + 2);
         }
-        x.c.d[1] = dx as u32;
-        x.c.d[2] = dz as u32;
+        *x.c.d2() = dz as u32;
         let dx = signed(dx, owner.u8(x.b, f::FLIP) != 0);
         x.add16(0x8, dx);
         x.add16(0xc, dz);
@@ -353,22 +345,19 @@ mod whirl {
         crate::sound::jouer(x.b, SFX_START, x.o);
     }
 
-    fn init_satellite(x: &mut Cx) {
+    fn init_satellite<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         x.copy_pos(owner);
         x.set8(0x58, 8);
         let k = x.u8(0x2d) as u32;
-        x.c.d[0] = k;
         let flip = x.rom8(FLIPS + k);
         x.set8(f::FLIP, flip);
         let n = x.u8(0x5a) as i32;
         let (mut d4, mut d5) = (0u16, 0u16);
         let mut left = n;
         loop {
-            x.set_d0w(0x21);
-            let n = x.c.d[0] as u16;
-            x.select_speed(&crate::objects::motion::SPEEDS_A, n);
+            x.select_speed(&crate::objects::motion::SPEEDS_A, 0x21);
             d4 = d4.wrapping_add(x.u16(0x14));
             d5 = d5.wrapping_add(x.u16(0x1c));
             left -= 1;
@@ -376,13 +365,11 @@ mod whirl {
                 break;
             }
         }
-        x.c.d[4] = d4 as u32;
-        x.c.d[5] = d5 as u32;
+        *x.c.d4() = d4 as u32;
+        *x.c.d5() = d5 as u32;
         x.add16(0x8, ((d4 as i16) >> 8) as u16);
         x.add16(0xc, ((d5 as i16) >> 8) as u16);
-        x.set_d0w(0x19);
-        let n = x.c.d[0] as u16;
-        x.select_speed(&crate::objects::motion::SPEEDS_A, n);
+        x.select_speed(&crate::objects::motion::SPEEDS_A, 0x19);
         let vy = x.u16(0x1c);
         x.set16(0x18, vy);
         let vx = x.u16(0x14).wrapping_neg();
@@ -394,9 +381,9 @@ mod whirl {
         x.reinsert();
     }
 
-    fn eye(x: &mut Cx) {
+    fn eye<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
-            let owner = x.link_a1(f::OWNER);
+            let owner = x.linked(f::OWNER);
             if owner.u16(x.b, 0x168) <= 0x10 {
                 x.add8(0x5, 2);
                 x.set8(0x5b, 4);
@@ -413,7 +400,6 @@ mod whirl {
             x.add8(0x59, 1);
             let n = x.u8(0x59) & 0x1f;
             x.set8(0x59, n);
-            x.c.d[0] = k * 2;
             let angle = x.rom8(SPAWN_TABLE + 2 * k);
             let count = x.rom8(SPAWN_TABLE + 2 * k + 1);
             if let Some(o) = x.alloc(&pools::PEFF) {
@@ -450,8 +436,8 @@ mod whirl {
     }
 
     /// `0x4eefe` : attire (et blesse) tous les monstres (boss, puis ennemis) dans la zone devant le lanceur.
-    fn sweep(x: &mut Cx) {
-        let owner = x.link_a1(f::OWNER);
+    fn sweep<R: Banc>(x: &mut Cx<'_, R>) {
+        let owner = x.linked(f::OWNER);
         for (first, count) in [(0x3a1eu32, 3u32), (0x299e, 22)] {
             let mut a2 = 0xff8000 + first;
             for _ in 0..count {
@@ -508,7 +494,7 @@ mod target {
     const OFFSETS: u32 = 0x4f0b0;
     const ANIMS: u32 = 0x1bc23e;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(0x4f034) {
             0 => {
                 x.add8(0x4, 2);
@@ -518,11 +504,9 @@ mod target {
                 let owner = follow_owner(x);
                 x.add16(0x10, 0xffff);
                 let row = ((owner.u8(x.b, 0x3) >> 1) as u32) << 2;
-                x.c.d[0] = row;
                 let dx = x.rom16(OFFSETS + row);
                 let dz = x.rom16(OFFSETS + row + 2);
-                x.c.d[1] = dx as u32;
-                x.c.d[2] = dz as u32;
+                *x.c.d2() = dz as u32;
                 let mut dx = dx;
                 if owner.u8(x.b, f::FLIP) != 0 {
                     dx = dx.wrapping_neg();
@@ -567,7 +551,7 @@ mod target {
 }
 
 handlers! {
-    0x4e79c "peff_30" storm::run,
-    0x4ec82 "peff_31" whirl::run,
-    0x4f026 "peff_32" target::run,
+    0x4e79c "peff_30" #[sans] storm::run,
+    0x4ec82 "peff_31" #[sans] whirl::run,
+    0x4f026 "peff_32" #[sans] target::run,
 }

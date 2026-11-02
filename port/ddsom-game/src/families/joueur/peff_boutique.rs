@@ -9,7 +9,7 @@
 use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
-use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::Courant;
 
@@ -38,11 +38,10 @@ mod p {
 const SLOTS: u32 = 6;
 const EMPTY: u8 = 0x56;
 
-/// Joueur du client A2 (`movea.w (0x50,A2),A6`).
-fn player_of(x: &mut Cx) -> Obj {
-    let w = rd16(x.b, x.c.a[2].wrapping_add(c::PLAYER));
-    x.c.a[6] = w as i16 as i32 as u32;
-    Obj(x.c.a[6] & 0xff_ffff)
+/// Joueur du client (`movea.w (0x50,A2),A6`).
+fn player_of<R: Banc>(x: &mut Cx<'_, R>, customer: Obj) -> Obj {
+    let w = customer.u16(x.b, c::PLAYER);
+    Obj(w as i16 as i32 as u32 & 0xff_ffff)
 }
 
 /// Première case de l'inventaire qui contient `item`.
@@ -95,7 +94,7 @@ mod item {
     const PURCHASED: u32 = A5 - 0x5b88;
     const MAX_COUNT: i8 = 9;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.state(STATES) {
             0 => init(x),
             2 => active(x),
@@ -103,18 +102,17 @@ mod item {
         }
     }
 
-    fn parent_ready(x: &mut Cx) -> bool {
-        let parent = x.link_a1(PARENT);
+    fn parent_ready<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+        let parent = x.linked(PARENT);
         parent.u8(x.b, 0x6) == 2
     }
 
-    fn follow_scroll(x: &mut Cx) {
+    fn follow_scroll<R: Banc>(x: &mut Cx<'_, R>) {
         let d = x.a5_u32(a5::CAM_X).wrapping_sub(x.a5_u32(0x524));
-        x.c.d[0] = d;
         x.add32(0x8, d);
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         if !parent_ready(x) {
             return x.free_peff();
         }
@@ -145,43 +143,32 @@ mod item {
         x.set16(PURCHASE_INDEX, purchase);
         let anim = x.data16(ANIMATIONS + 2 * v);
         let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ANIMS_ALT } else { ANIMS };
-        x.c.a[1] = ANIMATIONS;
-        x.set_d0w(anim);
-        let n = x.c.d[0] as u16;
-        x.anim_start(set, n);
+        x.anim_start(set, anim);
         x.reinsert();
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         follow_scroll(x);
         if !parent_ready(x) {
             return x.free_peff();
         }
-        x.c.d[6] = 3;
-        x.c.a[1] = CUSTOMERS;
         x.set8(NEAR, 0);
-        loop {
-            let w = rd16(x.b, x.c.a[1]);
-            x.set_d0w(w);
-            if w != 0 {
-                x.c.a[2] = w as i16 as i32 as u32;
-                if in_zone(x) {
-                    x.set8(NEAR, 1);
-                    if x.u8(SHOWN) == 0 && x.u16(OWN_MESSAGE) != 0 {
-                        let m = x.u16(OWN_MESSAGE);
-                        wr16(x.b, MESSAGE, m);
-                        x.set8(SHOWN, 1);
-                    }
-                    if (rd8(x.b, x.c.a[2].wrapping_add(c::READY)) as i8) > 0 {
-                        sell(x);
-                    }
-                }
+        for k in 0..4 {
+            let w = rd16(x.b, CUSTOMERS + 2 * k);
+            if w == 0 {
+                continue;
             }
-            x.c.a[1] = x.c.a[1].wrapping_add(2);
-            let n = (x.c.d[6] as u16).wrapping_sub(1);
-            x.c.d[6] = x.c.d[6] & 0xffff_0000 | n as u32;
-            if n == 0xffff {
-                break;
+            let customer = Obj(w as i16 as i32 as u32 & 0xff_ffff);
+            if in_zone(x, customer) {
+                x.set8(NEAR, 1);
+                if x.u8(SHOWN) == 0 && x.u16(OWN_MESSAGE) != 0 {
+                    let m = x.u16(OWN_MESSAGE);
+                    wr16(x.b, MESSAGE, m);
+                    x.set8(SHOWN, 1);
+                }
+                if (customer.u8(x.b, c::READY) as i8) > 0 {
+                    sell(x, customer);
+                }
             }
         }
         if x.u8(NEAR) == 0 {
@@ -189,11 +176,9 @@ mod item {
         }
     }
 
-    /// Le client A2 est-il dans la zone de vente ? (D0.w laissé comme l'original)
-    fn in_zone(x: &mut Cx) -> bool {
-        let customer = Obj(x.c.a[2] & 0xff_ffff);
+    /// Le client est-il dans la zone de vente ?
+    fn in_zone<R: Banc>(x: &mut Cx<'_, R>, customer: Obj) -> bool {
         let dx = x.u16(0x8).wrapping_sub(customer.u16(x.b, 0x8)).wrapping_add(x.u16(ZONE));
-        x.set_d0w(dx);
         if dx > x.u16(ZONE + 2) {
             return false;
         }
@@ -203,22 +188,20 @@ mod item {
             .wrapping_sub(customer.u16(x.b, 0xc))
             .wrapping_sub(customer.u16(x.b, 0x10))
             .wrapping_add(x.u16(DEPTH));
-        x.set_d0w(dz);
         dz <= x.u16(DEPTH + 2)
     }
 
     /// Le client s'adresse au marchand (0x50d9c) : selon la variante, l'article est refusé (message 0x86 :
     /// déjà équipé ; 0x84 : pas pour ce personnage) ou vendu.
-    fn sell(x: &mut Cx) {
-        wr8(x.b, x.c.a[2].wrapping_add(c::READY), 0xff);
+    fn sell<R: Banc>(x: &mut Cx<'_, R>, customer: Obj) {
+        customer.set_u8(x.b, c::READY, 0xff);
         let variant = x.u8(0x3);
-        x.c.d[0] = 4 * variant as u32;
-        let player = player_of(x);
+        let player = player_of(x, customer);
         let state = player.u8(x.b, p::STATE_10D);
         let character = player.u8(x.b, p::CHARACTER);
-        crate::mem::set_low_byte(&mut x.c.d[0], character);
-        let class = (x.c.d[0] as u16) >> 1;
-        crate::mem::set_low_word(&mut x.c.d[0], class);
+        // D0 = 4 * variante, octet bas remplacé par le personnage, puis D0.w >> 1 : 4 * variante < 0x100 pour les
+        // variantes qui s'en servent (0 à 11), la « classe » est le personnage divisé par deux
+        let class = character >> 1;
         // équipement (variantes 0 et 5 à 11) : refusé s'il est déjà porté ou interdit au personnage
         let equipment = match variant {
             0 => Some((Some(8), class != 0)),
@@ -236,20 +219,18 @@ mod item {
                 if forbidden {
                     return say(x, 0x84);
                 }
-                buy(x, false);
+                buy(x, player, false);
             }
-            None => buy(x, true),
+            None => buy(x, player, true),
         }
     }
 
     /// Achat (0x50f2a équipement, 0x50f94 consommable empilable) : stock, bourse, case libre, puis paiement.
-    fn buy(x: &mut Cx, stackable: bool) {
+    fn buy<R: Banc>(x: &mut Cx<'_, R>, player: Obj, stackable: bool) {
         if (x.u8(STOCK) as i8) < 0 {
             return crate::sound::jouer(x.b, SOUND_MESSAGE, x.o);
         }
-        let player = player_of(x);
         let gold = player.u32(x.b, p::GOLD);
-        x.c.d[0] = gold;
         if (gold as i32) < (x.u32(PRICE) as i32) {
             return say(x, 0x82);
         }
@@ -265,8 +246,6 @@ mod item {
                 None => return say(x, 0x87),
             },
         };
-        x.c.a[3] = player.0 + p::SLOTS + slot;
-        x.c.a[4] = player.0 + p::COUNTS + slot;
         let count = player.u8(x.b, p::COUNTS + slot);
         if (count as i8) >= MAX_COUNT {
             return say(x, 0x86);
@@ -274,7 +253,6 @@ mod item {
         player.set_u8(x.b, p::SLOTS + slot, item);
         player.set_u8(x.b, p::COUNTS + slot, count.wrapping_add(1));
         let index = x.u8(PURCHASE_INDEX) as u32;
-        x.c.d[0] = index;
         wr8(x.b, PURCHASED + index, 1);
         let stock = x.u8(STOCK).wrapping_sub(1);
         x.set8(STOCK, stock);
@@ -287,7 +265,7 @@ mod item {
     }
 
     /// Bourse du joueur (six octets BCD `+0x112..+0x117`) moins le prix (`+0x4e..+0x53`), par `sbcd`.
-    fn pay(x: &mut Cx, player: Obj) {
+    fn pay<R: Banc>(x: &mut Cx<'_, R>, player: Obj) {
         let mut borrow = false;
         for k in 1..=6 {
             let price = x.u8(PRICE_END - k);
@@ -296,9 +274,8 @@ mod item {
             borrow = b;
             player.set_u8(x.b, p::GOLD_END - k, v);
         }
-        x.c.a[3] = x.o.0 + PRICE_END - 6;
-        x.c.a[4] = player.0 + p::GOLD_END - 6;
-        x.c.d[5] = x.c.d[5] & 0xffff_0000 | 0xffff;
+        // Glitch d'origine : le compteur épuisé du `dbf` reste dans D5 (`dispatch::Restes`)
+        *x.c.d5() = *x.c.d5() & 0xffff_0000 | 0xffff;
     }
 }
 
@@ -331,110 +308,117 @@ mod talk {
     const ITEM_2B_FLAG: u32 = A5 - 0x5b60;
     const IDLE: u8 = 0xff;
 
-    pub fn zone_a(x: &mut Cx) {
-        run(x, 0x1c);
+    pub fn zone_a<R: Banc>(x: &mut Cx<'_, R>, customer: Obj) {
+        run(x, customer, 0x1c);
     }
 
-    pub fn zone_b(x: &mut Cx) {
-        run(x, 0x58);
+    pub fn zone_b<R: Banc>(x: &mut Cx<'_, R>, customer: Obj) {
+        run(x, customer, 0x58);
     }
 
-    /// Prochaine commande : `+5`, `+6`, D1.w ; A3 avancé.
-    fn fetch(x: &mut Cx) -> u8 {
-        let a3 = x.c.a[3];
-        let (op, param) = (rd8(x.b, a3), rd8(x.b, a3 + 1));
+    /// Lecture du script : position (A3 de l'original), champ du comptoir qui la range (A4), mot de la commande
+    /// courante (D1.w : message ou saut relatif).
+    struct Script {
+        pos: u32,
+        field: u32,
+        word: u16,
+    }
+
+    /// Prochaine commande : `+5`, `+6`, mot ; position avancée.
+    fn fetch<R: Banc>(x: &mut Cx<'_, R>, s: &mut Script) -> u8 {
+        let (op, param) = (rd8(x.b, s.pos), rd8(x.b, s.pos + 1));
         x.set8(0x5, op);
         x.set8(0x6, param);
-        let d1 = rd16(x.b, a3 + 2);
-        crate::mem::set_low_word(&mut x.c.d[1], d1);
-        x.c.a[3] = a3 + 4;
-        crate::mem::set_low_byte(&mut x.c.d[0], op);
+        s.word = rd16(x.b, s.pos + 2);
+        s.pos += 4;
         op
     }
 
-    /// Saut relatif de D1.w (`lea (0,A3,D1.w),A3`).
-    fn skip(x: &mut Cx) {
-        x.c.a[3] = x.c.a[3].wrapping_add(x.c.d[1] as u16 as i16 as i32 as u32);
+    /// Saut relatif du mot (`lea (0,A3,D1.w),A3`).
+    fn skip(s: &mut Script) {
+        s.pos = s.pos.wrapping_add(s.word as i16 as i32 as u32);
     }
 
     /// Range la position du script (`move.l A3,(A4)`).
-    fn save(x: &mut Cx) {
-        wr32(x.b, x.c.a[4], x.c.a[3]);
+    fn save<R: Banc>(x: &mut Cx<'_, R>, s: &Script) {
+        let field = s.field;
+        x.set32(field, s.pos);
     }
 
     /// Le client entre dans le menu (état 2 du joueur, sous-état 5) : son, menu ouvert.
-    fn open_menu(x: &mut Cx, player: Obj) {
+    fn open_menu<R: Banc>(x: &mut Cx<'_, R>, s: &mut Script, player: Obj) {
         crate::sound::jouer(x.b, SOUND_OK, x.o);
         player.set_u8(x.b, 0x162, 2);
         player.set_u8(x.b, 0x16b, 5);
         player.set_u8(x.b, p::SHOP, IDLE);
         wr8(x.b, MENU_FLAG, 1);
-        skip(x);
+        skip(s);
     }
 
-    fn run(x: &mut Cx, field: u32) {
-        wr8(x.b, x.c.a[2].wrapping_add(c::READY), 0xff);
-        x.c.a[3] = x.u32(field);
-        x.c.a[4] = x.o.0 + field;
-        let mut op = fetch(x);
+    fn run<R: Banc>(x: &mut Cx<'_, R>, customer: Obj, field: u32) {
+        customer.set_u8(x.b, c::READY, 0xff);
+        let pos = x.u32(field);
+        let s = &mut Script { pos, field, word: 0 };
+        let mut op = fetch(x, s);
         loop {
-            // l'original indexe sa table par D0.w, dont l'octet haut vient de l'appelant (le comptoir y laisse
-            // un écart de position inférieur à 0x100) : seul l'octet de commande compte
+            // l'original indexe sa table par D0.w, dont l'octet haut vient de l'appelant : le comptoir y laisse
+            // un écart en profondeur au plus égal à l'étendue de la zone, inférieure à 0x100 (0x51306, 0x51376),
+            // donc nul : seul l'octet de commande compte
             match op {
                 SAY => {
                     if rd16(x.b, MESSAGE) == 0 {
-                        let m = x.c.d[1] as u16;
-                        wr16(x.b, MESSAGE, m);
-                        save(x);
+                        wr16(x.b, MESSAGE, s.word);
+                        save(x, s);
                     }
                     return;
                 }
                 STOP => return,
                 SAY_NEXT_UNLESS => {
                     if x.a5_u8(0x5e) != 0 {
-                        skip(x);
+                        skip(s);
                     }
-                    fetch(x);
+                    fetch(x, s);
                     op = SAY;
                     continue;
                 }
                 OPEN_MENU => {
                     let waiting = x.u8(0x6) != 0;
                     if waiting {
-                        save(x);
+                        save(x, s);
                     }
-                    let player = player_of(x);
+                    let player = player_of(x, customer);
                     if player.u8(x.b, p::SHOP) != 0 {
                         if waiting {
                             return;
                         }
                     } else {
-                        open_menu(x, player);
+                        open_menu(x, s, player);
                     }
                 }
-                JUMP => skip(x),
+                JUMP => skip(s),
                 SELL_CONFIRMED => {
-                    let player = player_of(x);
+                    let player = player_of(x, customer);
                     if player.u8(x.b, p::SHOP) == 1 {
                         crate::sound::jouer(x.b, SOUND_OK, x.o);
                         player.set_u8(x.b, p::SHOP, 0xa);
                         wr8(x.b, SOLD_FLAG, 1);
-                        skip(x);
+                        skip(s);
                     }
                 }
                 CANCELLED => {
-                    let player = player_of(x);
+                    let player = player_of(x, customer);
                     if player.u8(x.b, p::SHOP) == 4 {
                         player.set_u8(x.b, p::SHOP, IDLE);
-                        skip(x);
+                        skip(s);
                     }
                 }
                 LEARN => {
-                    let player = player_of(x);
+                    let player = player_of(x, customer);
                     if player.u8(x.b, p::SHOP) == 3 {
                         let character = player.u8(x.b, p::CHARACTER);
-                        crate::mem::set_low_byte(&mut x.c.d[0], character);
-                        if (x.c.d[0] as u16 as i16) < 8 {
+                        // D0.w = personnage : l'octet haut est celui de l'écart en profondeur que le comptoir y
+                        // laisse, nul (étendues de 0x51306 / 0x51376 toutes inférieures à 0x100)
+                        if character < 8 {
                             player.set_u8(x.b, p::SHOP, IDLE);
                             player.set_u8(x.b, 0x164, 4);
                             player.set_u8(x.b, 0x10e, 0x2c);
@@ -445,27 +429,27 @@ mod talk {
                             wr8(x.b, SOLD_FLAG, 1);
                         }
                         wr16(x.b, MESSAGE, 0xeb);
-                        save(x);
+                        save(x, s);
                         return;
                     }
                 }
                 JUMP_AND_STOP => {
-                    skip(x);
-                    save(x);
+                    skip(s);
+                    save(x, s);
                     return;
                 }
                 GIVE_WEAPON => {
-                    let player = player_of(x);
+                    let player = player_of(x, customer);
                     if player.u8(x.b, p::SHOP) == 8 {
-                        if give_weapon(x, player) {
+                        if give_weapon(x, s, player) {
                             return;
                         }
                     }
                 }
                 GIVE_ITEM_2B => {
-                    let player = player_of(x);
+                    let player = player_of(x, customer);
                     if player.u8(x.b, p::SHOP) == 5 {
-                        if give_item_2b(x, player) {
+                        if give_item_2b(x, s, player) {
                             return;
                         }
                     }
@@ -473,13 +457,13 @@ mod talk {
                 FREE => return x.free_peff(),
                 _ => unreachable!("commande de dialogue {op:#x}"),
             }
-            op = fetch(x);
+            op = fetch(x, s);
         }
     }
 
     /// Arme offerte selon la classe (0x5164c) dans la première case vide ; sans place, message 0x87 et la
     /// lecture continue. Vrai quand le dialogue s'arrête.
-    fn give_weapon(x: &mut Cx, player: Obj) -> bool {
+    fn give_weapon<R: Banc>(x: &mut Cx<'_, R>, s: &Script, player: Obj) -> bool {
         let Some(k) = find_slot(x, player, EMPTY) else {
             wr16(x.b, MESSAGE, 0x87);
             crate::sound::jouer(x.b, SOUND_MESSAGE, x.o);
@@ -488,9 +472,8 @@ mod talk {
         player.set_u8(x.b, p::SHOP, IDLE);
         crate::sound::jouer(x.b, SOUND_OK, x.o);
         let character = player.u8(x.b, p::CHARACTER);
-        crate::mem::set_low_byte(&mut x.c.d[0], character);
-        let class = (x.c.d[0] as u16) >> 1;
-        crate::mem::set_low_word(&mut x.c.d[0], class);
+        // D0.w = personnage (octet haut nul, voir `LEARN`), divisé par deux
+        let class = character >> 1;
         let (item, flag) = match class {
             4 => (0x4e, A5 - 0x5b76),
             1 => (0x51, A5 - 0x5b73),
@@ -500,16 +483,16 @@ mod talk {
         player.set_u8(x.b, p::COUNTS + k, 0);
         wr8(x.b, flag, 1);
         wr16(x.b, MESSAGE, 0xea);
-        save(x);
+        save(x, s);
         true
     }
 
     /// Objet 0x2b offert (0x51706) : déjà possédé, le dialogue s'arrête sur un son ; sinon dans la première
     /// case vide (message 0xfa), et sans place, message 0x87 et la lecture continue.
-    fn give_item_2b(x: &mut Cx, player: Obj) -> bool {
+    fn give_item_2b<R: Banc>(x: &mut Cx<'_, R>, s: &Script, player: Obj) -> bool {
         const ITEM: u8 = 0x2b;
         if find_slot(x, player, ITEM).is_some() {
-            save(x);
+            save(x, s);
             player.set_u8(x.b, p::SHOP, IDLE);
             crate::sound::jouer(x.b, SOUND_OK, x.o);
             return true;
@@ -525,20 +508,20 @@ mod talk {
         player.set_u8(x.b, p::COUNTS + k, 1);
         wr8(x.b, ITEM_2B_FLAG, 1);
         wr16(x.b, MESSAGE, 0xfa);
-        save(x);
+        save(x, s);
         true
     }
 }
 
 handlers! {
-    0x50b9c "peff_42" item::run,
+    0x50b9c "peff_42" #[sans] item::run,
 }
 
 /// Interprètes du dialogue (0x514ac, 0x514cc) : appelés par le comptoir (PEFF 43, `peff.rs`) avec x.o = le comptoir,
-/// A2 = le client.
-pub fn talk_a(x: &mut Cx) {
-    talk::zone_a(x);
+/// `customer` = le client (A2 de l'original).
+pub fn talk_a<R: Banc>(x: &mut Cx<'_, R>, customer: Obj) {
+    talk::zone_a(x, customer);
 }
-pub fn talk_b(x: &mut Cx) {
-    talk::zone_b(x);
+pub fn talk_b<R: Banc>(x: &mut Cx<'_, R>, customer: Obj) {
+    talk::zone_b(x, customer);
 }

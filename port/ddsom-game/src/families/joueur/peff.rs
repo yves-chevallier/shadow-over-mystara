@@ -21,7 +21,7 @@ mod badge {
     const ANIMS: u32 = 0x1bcbbe;
     const ANIMS_ALT: u32 = 0x1bcd5a;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
@@ -47,7 +47,7 @@ mod badge {
         x.reinsert();
     }
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         let d = x.u16(0xc).wrapping_sub(x.a5_u16(a5::CAM2_Y));
         if d >= 0x110 {
             x.free_peff();
@@ -81,7 +81,7 @@ mod shop {
     /// Octet du joueur : positif quand il peut parler au marchand.
     const PLAYER_READY: u32 = 0x58;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => active(x),
@@ -89,7 +89,7 @@ mod shop {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let scene = x.a5_u8(0x34);
         let row = (scene.wrapping_sub(FIRST_SCENE as u8) as u32) << 3;
@@ -109,25 +109,17 @@ mod shop {
         x.reinsert();
     }
 
-    /// Deux tours des quatre joueurs (D6 compteur, A1 pointeur dans la liste, comme l'original : l'interprète du
-    /// dialogue, appelé avec A2 = le joueur prêt dans la zone, sauve tous les registres dans ses appels de son), puis
+    /// Deux tours des quatre joueurs (l'interprète du dialogue est appelé avec le joueur prêt dans la zone), puis
     /// suivi du défilement et pas d'animation.
-    fn active(x: &mut Cx) {
-        let zones: [(u32, fn(&mut Cx)); 2] = [(ZONE_A, peff_boutique::talk_a), (ZONE_B, peff_boutique::talk_b)];
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
+        let zones: [(u32, fn(&mut Cx<'_, R>, Obj)); 2] =
+            [(ZONE_A, peff_boutique::talk_a), (ZONE_B, peff_boutique::talk_b)];
         for (zone, talk) in zones {
-            x.c.d[6] = 3;
-            x.c.a[1] = PLAYERS;
-            loop {
-                if let Some(player) = in_zone(x, zone) {
+            for k in 0..4 {
+                if let Some(player) = in_zone(x, zone, k) {
                     if (player.u8(x.b, PLAYER_READY) as i8) > 0 {
-                        talk(x);
+                        talk(x, player);
                     }
-                }
-                x.c.a[1] = x.c.a[1].wrapping_add(2);
-                let n = (x.c.d[6] as u16).wrapping_sub(1);
-                x.c.d[6] = x.c.d[6] & 0xffff_0000 | n as u32;
-                if n == 0xffff {
-                    break;
                 }
             }
         }
@@ -139,28 +131,24 @@ mod shop {
         x.anim_step();
     }
 
-    /// Le joueur de la case A1, s'il est dans la zone (`D0` et `A2` laissés comme l'original).
-    fn in_zone(x: &mut Cx, zone: u32) -> Option<Obj> {
-        let w = rd16(x.b, x.c.a[1]);
-        x.set_d0w(w);
+    /// Le joueur de la case `k` de la liste, s'il est dans la zone.
+    fn in_zone<R: Banc>(x: &mut Cx<'_, R>, zone: u32, k: u32) -> Option<Obj> {
+        let w = rd16(x.b, PLAYERS + 2 * k);
         if w == 0 {
             return None;
         }
-        x.c.a[2] = w as i16 as i32 as u32;
-        let p = Obj(x.c.a[2] & 0xff_ffff);
+        let p = Obj(w as i16 as i32 as u32 & 0xff_ffff);
         let dx = x.u16(0x8).wrapping_sub(p.u16(x.b, 0x8)).wrapping_add(x.u16(zone));
-        x.set_d0w(dx);
         if dx > x.u16(zone + 2) {
             return None;
         }
         let dz = x.u16(0xc).wrapping_add(x.u16(0x10)).wrapping_sub(p.u16(x.b, 0xc)).wrapping_sub(p.u16(x.b, 0x10));
         let dz = dz.wrapping_add(x.u16(zone + 4));
-        x.set_d0w(dz);
         (dz <= x.u16(zone + 6)).then_some(p)
     }
 }
 
 handlers! {
-    0x51076 "peff_43" shop::run,
-    0x517dc "peff_44" badge::run,
+    0x51076 "peff_43" #[sans] shop::run,
+    0x517dc "peff_44" #[sans] badge::run,
 }

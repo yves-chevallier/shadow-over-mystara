@@ -270,6 +270,18 @@ n'est piloté que par les touches du quatrième joueur) : `enemy_golem::control:
 que 0x1a56 écrase par l'octet `+0x32` quand l'image en cours se termine, et laisse le drapeau « a bougé » dans D2.
 Écrit d'après le désassemblage (0x67926-0x679a0), non validé par un scénario.
 
+## Lot « sortie du Cpu », partie 5 (joueur, set_b, effects_c en gestionnaires sans registres, wt-joueur2)
+
+### Minuteur du vote : état 4 (EFFCT `effct_vote` 0xafe20, variante 2, 0xb0374)
+
+Le minuteur du vote (`effects_c::ballot_timer`) ne prend que les états 0 (initialisation), 2 (décompte, puis fin
+du scrutin et libération) et 6 (posé par le retrait hors écran) : aucune écriture de `+4` ne vaut 4 (recherche dans
+`effects_c.rs` ; aucun scénario n'y passe). L'entrée 4 de sa table d'états mène à 0xb0374, qui efface le mot `+0x54`
+de l'objet désigné par A6 (le registre que laisse le code exécuté avant le gestionnaire, sans rapport avec le vote),
+rend la palette du minuteur (0x2531c0) et libère l'objet. Hypothèse : reste d'une version où la fin du scrutin
+passait par un état propre, l'objet du scrutin étant tenu dans A6. Sans registres, A6 n'existe plus : l'entrée
+est devenue un `unreachable!` (repli défensif ; l'A6 de l'original y désignerait un objet quelconque).
+
 ## Lot « couverture » (wt-couv2)
 
 ### Boss 15 et 19 : sous-états 8 et 0xa de l'état 4 « touché » (tables 0x929b8 et 0x90970)
@@ -291,3 +303,4 @@ que 0x1a56 écrase par l'octet `+0x32` quand l'image en cours se termine, et lai
   au lieu du `_ => {}` qui ignorait aussi 0xa ; au-delà de la table, `unreachable!`. Validées par `fuzz_couv`
   (`boss/boss15_scene46` et `boss/boss19_scene32`, 12 000 images, un appel sur 4, 48 essais par appel : environ
   14 300 essais chacun, les deux entrées sont atteintes par des essais sans écart).
+||||||| 3bec3f5

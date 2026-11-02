@@ -1,6 +1,7 @@
 //! Effets des joueurs (PEFF), huitième série : types 25 à 29 (averse, foudre du magicien, anneau, lune,
 //! aura de prière). Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use super::pshell::*;
 use crate::objects::Obj;
@@ -11,10 +12,9 @@ fn signed(v: u16, negate: bool) -> u16 {
 }
 
 /// Le geste du joueur (`+7`) a-t-il changé depuis la création (octet `field`) ?
-fn gesture_changed(x: &mut Cx, field: u32) -> bool {
-    let owner = x.link_a1(f::OWNER);
+fn gesture_changed<R: Banc>(x: &mut Cx<'_, R>, field: u32) -> bool {
+    let owner = x.linked(f::OWNER);
     let gesture = owner.u8(x.b, 0x7);
-    x.c.d[0] = x.c.d[0] & !0xff | gesture as u32;
     gesture != x.u8(field)
 }
 
@@ -29,10 +29,9 @@ mod shower {
     const OFFSETS_C: u32 = 0x4deac;
     const SPEEDS_A: u32 = 0x4df52;
     const SPEEDS_B: u32 = 0x4dfc4;
-    const SPAWN_BOLT: u32 = 0x53e48;
     const SFX: u32 = 0xe8530;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.state(0x4dd10) {
             0 if !child => {
@@ -70,7 +69,7 @@ mod shower {
 
     /// Place le nuage sur le lanceur : décalage lu dans une table, ligne de 8 octets (variante du
     /// lanceur, plus 4 pour le second exemplaire) ou de 4 octets.
-    fn place(x: &mut Cx, table: u32, wide: bool) {
+    fn place<R: Banc>(x: &mut Cx<'_, R>, table: u32, wide: bool) {
         let owner = follow_owner(x);
         let mut row = (owner.u8(x.b, 0x3) >> 1) as u32;
         if wide {
@@ -81,11 +80,9 @@ mod shower {
         } else {
             row <<= 2;
         }
-        x.c.d[0] = row;
         let dx = x.rom16(table + row);
         let dz = x.rom16(table + row + 2);
-        x.c.d[1] = dx as u32;
-        x.c.d[2] = dz as u32;
+        *x.c.d2() = dz as u32;
         let dx = signed(dx, x.u8(f::FLIP) != 0);
         x.add16(0x8, dx);
         x.add16(0xc, dz);
@@ -93,7 +90,7 @@ mod shower {
     }
 
     /// Variante 1, état 2 : une goutte fait tomber un éclair à la fin de son animation.
-    fn bolt(x: &mut Cx) {
+    fn bolt<R: Banc>(x: &mut Cx<'_, R>) {
         let wide = x.u8(0x15e) == 0x18;
         if x.anim_step() {
             x.add8(0x4, 2);
@@ -101,7 +98,7 @@ mod shower {
         if x.u8(0x33) == 0 {
             return;
         }
-        let owner = x.link_a1(f::OWNER);
+        let owner = x.linked(f::OWNER);
         let rank = x.u8(0x2f);
         let mut row = (owner.u8(x.b, 0x3) >> 1) as u32;
         if wide {
@@ -115,16 +112,11 @@ mod shower {
         let speeds = if wide { SPEEDS_A } else { SPEEDS_B };
         let vx = x.rom16(speeds + row);
         let vz = x.rom16(speeds + row + 2);
-        let saved = x.c.a[0];
-        x.c.d[3] = rank as u32;
-        x.c.d[2] = row;
-        x.c.d[0] = vx as u32;
-        x.c.d[1] = vz as u32;
-        x.c.a[0] = ext(owner);
-        x.c.a[5] = crate::mem::A5;
-        crate::call(x.c, x.b, SPAWN_BOLT);
+        // Glitch d'origine : le rang et la ligne restent dans D3 et D2 (`dispatch::Restes`)
+        *x.c.d3() = rank as u32;
+        *x.c.d2() = row;
+        crate::families::creators::bolt_shot(x.b, owner, vx, vz);
         crate::sound::jouer(x.b, SFX, Obj(ext(owner)));
-        x.c.a[0] = saved;
         x.set8(0x33, 0);
     }
 }
@@ -140,7 +132,7 @@ mod strike {
     const POWER_BOSS: u32 = 0x1043b4;
     const POWER_ENEMY: u32 = 0x104396;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.state(0x4e046) {
             0 if !child => {
@@ -148,8 +140,6 @@ mod strike {
                 let owner = follow_owner(x);
                 let _ = owner;
                 let dx = signed(4, x.u8(f::FLIP) != 0);
-                x.c.d[0] = dx as u32;
-                x.c.d[1] = 0x7c;
                 x.add16(0x8, dx);
                 x.add16(0xc, 0x7c);
                 x.set16(0x12, 0x4000);
@@ -158,7 +148,7 @@ mod strike {
             }
             0 => {
                 x.add8(0x4, 2);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 for off in [0x8, 0x10] {
                     let v = owner.u16(x.b, off);
                     x.set16(off, v);
@@ -179,9 +169,8 @@ mod strike {
             2 => {
                 if x.u8(0x5) == 0 {
                     x.anim_step();
-                    let owner = x.link_a1(f::OWNER);
+                    let owner = x.linked(f::OWNER);
                     let same = owner.u8(x.b, 0x7) == x.u8(0x59);
-                    x.c.d[0] = x.c.d[0] & !0xff | owner.u8(x.b, 0x7) as u32;
                     if !same {
                         x.add8(0x5, 2);
                         x.set_bit(0x1, 1, false);
@@ -190,7 +179,6 @@ mod strike {
                     }
                     x.set_bit(0x1, 1, true);
                     let timer = owner.u16(x.b, 0x168) & 1;
-                    x.c.d[0] = timer as u32;
                     if timer != 0 {
                         x.set_bit(0x1, 1, false);
                     }
@@ -203,10 +191,9 @@ mod strike {
                         x.add8(0x4, 2);
                     }
                     x.set_bit(0x1, 1, true);
-                    // l'original relit `(0x168,A1)` avec le A1 qu'il a sous la main (l'adresse du gestionnaire)
-                    let a1 = x.c.a[1];
-                    let timer = x.data16(a1.wrapping_add(0x168)) & 1;
-                    x.c.d[0] = timer as u32;
+                    // Glitch d'origine : l'original relit `(0x168,A1)` avec le A1 que lui laisse la boucle
+                    // d'aiguillage, l'adresse du gestionnaire (0x4e038) : un mot de son code, et non le joueur
+                    let timer = x.data16(0x4e038 + 0x168) & 1;
                     if timer != 0 {
                         x.set_bit(0x1, 1, false);
                     }
@@ -218,9 +205,8 @@ mod strike {
 
     /// `0x4e190` : blesse les monstres dans la zone de la foudre : les boss (3 emplacements), puis les
     /// ennemis (22).
-    fn sweep(x: &mut Cx) {
-        let owner = x.link_a1(f::OWNER);
-        x.c.a[2] = ext(owner);
+    fn sweep<R: Banc>(x: &mut Cx<'_, R>) {
+        let owner = x.linked(f::OWNER);
         for (first, count, power) in [(0x3a1eu32, 3u32, POWER_BOSS), (0x299e, 22, POWER_ENEMY)] {
             let mut a1 = 0xff8000 + first;
             for _ in 0..count {
@@ -230,7 +216,7 @@ mod strike {
         }
     }
 
-    fn hit(x: &mut Cx, player: Obj, m: Obj, power: u32) {
+    fn hit<R: Banc>(x: &mut Cx<'_, R>, player: Obj, m: Obj, power: u32) {
         if m.u8(x.b, 0) == 0 || m.u16(x.b, 0x62) == 0 || m.u8(x.b, 0x38) == 0 || m.u8(x.b, 0x40) != 0 {
             return;
         }
@@ -288,7 +274,6 @@ mod strike {
             let v = m.u8(x.b, 0x9a);
             x.set_a5_u8(0x4f, v);
         }
-        x.c.d[0] = d0 as u32;
     }
 }
 
@@ -300,12 +285,12 @@ mod ring {
     const ANIMS: u32 = 0x1bb80a;
     const OFFSETS: u32 = 0x4e412;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.state(0x4e324) {
             0 => {
                 x.add8(0x4, 2);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let flip = owner.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 x.copy_pos(owner);
@@ -318,14 +303,11 @@ mod ring {
                             (dx, dz) = (-0x37i16 as u16, 0x36);
                         }
                     }
-                    x.c.d[0] = dx as u32;
-                    x.c.d[1] = dz as u32;
                     let dx = signed(dx, x.u8(f::FLIP) != 0);
                     x.add16(0x8, dx);
                     x.add16(0xc, dz);
                 } else {
                     let row = ((owner.u8(x.b, 0x3) >> 1) as u32) << 2;
-                    x.c.d[0] = row;
                     let dx = x.rom16(OFFSETS + row);
                     let dz = x.rom16(OFFSETS + row + 2);
                     let dx = signed(dx, x.u8(f::FLIP) != 0);
@@ -358,7 +340,7 @@ mod ring {
                 x.set8(0x5c, 8);
                 x.set8(0x5d, 3);
                 x.set8(0x5e, 1);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, 0x15e) == 0x16 {
                     crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_JAUNE);
                 } else {
@@ -396,14 +378,13 @@ mod moon {
     const ANIMS: u32 = 0x1bb8f4;
     const OFFSETS: u32 = 0x4e578;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.state(0x4e508) {
             0 => {
                 x.add8(0x4, 2);
                 follow_owner(x);
                 let row = (x.u8(0x3) as u32) << 3;
-                x.c.d[0] = row;
                 let dx = x.rom16(OFFSETS + row);
                 let dz = x.rom16(OFFSETS + row + 2);
                 let dy = x.rom16(OFFSETS + row + 4);
@@ -419,7 +400,7 @@ mod moon {
             }
             2 => {
                 x.anim_step();
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, 0x7) == 6 {
                     x.add8(0x4, 2);
                     return x.anim(ANIMS, if child { 5 } else { 4 });
@@ -445,7 +426,6 @@ mod moon {
                     x.set_bit(0x1, 1, true);
                     x.add16(0x58, 1);
                     let t = x.u16(0x58) & 1;
-                    x.c.d[0] = t as u32;
                     if t == 0 {
                         x.set_bit(0x1, 1, false);
                     }
@@ -458,7 +438,6 @@ mod moon {
                 x.set_bit(0x1, 1, true);
                 x.add16(0x58, 1);
                 let t = x.u16(0x58) & 1;
-                x.c.d[0] = t as u32;
                 if t == 0 {
                     x.set_bit(0x1, 1, false);
                 }
@@ -467,10 +446,9 @@ mod moon {
         }
     }
 
-    fn blink(x: &mut Cx) {
+    fn blink<R: Banc>(x: &mut Cx<'_, R>) {
         x.set_bit(0x1, 1, true);
         let t = x.u16(0x58) & 1;
-        x.c.d[0] = t as u32;
         if t == 0 {
             x.set_bit(0x1, 1, false);
         }
@@ -483,12 +461,12 @@ mod aura {
 
     const ANIMS: u32 = 0x1bbc9a;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.state(0x4e6d8) {
             0 => {
                 x.add8(0x4, 2);
-                let owner = x.link_a1(f::OWNER);
+                let owner = x.linked(f::OWNER);
                 let flip = owner.u8(x.b, f::FLIP);
                 x.set8(f::FLIP, flip);
                 if child {
@@ -499,8 +477,6 @@ mod aura {
                 if child {
                     (dx, dz) = (-0x17i16 as u16, 0x68);
                 }
-                x.c.d[0] = dx as u32;
-                x.c.d[1] = dz as u32;
                 let dx = signed(dx, owner.u8(x.b, f::FLIP) != 0);
                 x.add16(0x8, dx);
                 x.add16(0xc, dz);
@@ -525,9 +501,9 @@ mod aura {
 }
 
 handlers! {
-    0x4dd02 "peff_25" shower::run,
-    0x4e038 "peff_26" strike::run,
-    0x4e316 "peff_27" ring::run,
-    0x4e4fa "peff_28" moon::run,
-    0x4e6ca "peff_29" aura::run,
+    0x4dd02 "peff_25" #[sans] shower::run,
+    0x4e038 "peff_26" #[sans] strike::run,
+    0x4e316 "peff_27" #[sans] ring::run,
+    0x4e4fa "peff_28" #[sans] moon::run,
+    0x4e6ca "peff_29" #[sans] aura::run,
 }

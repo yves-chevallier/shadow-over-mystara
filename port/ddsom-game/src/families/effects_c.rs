@@ -43,6 +43,7 @@
 
 use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
+use super::effects_creators::restes::sur_banc_de_travail;
 use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
@@ -134,7 +135,7 @@ mod shop {
     pub const OCCUPIED: u32 = 0x5d;
 }
 
-fn shop(x: &mut Cx) {
+fn shop<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => shop_init(x),
         2 => shop_watch(x, shop_buy),
@@ -169,14 +170,13 @@ fn shop_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-/// Cherche un acheteur dans la zone ; annonce l'article au premier qui entre.
-fn shop_watch(x: &mut Cx, buy: fn(&mut Cx, Obj)) {
+/// Cherche un acheteur dans la zone ; annonce l'article au premier qui entre. `buy` reçoit l'acheteur et sa case
+/// dans la liste des acheteurs (A1 de la boucle de l'original).
+fn shop_watch<R: Banc>(x: &mut Cx<'_, R>, buy: fn(&mut Cx<'_, R>, Obj, u32)) {
     x.set8(shop::OCCUPIED, 0);
-    // la boucle de l'original tient dans A1 (pointeur) et D6 (compteur), que l'achat peut modifier
-    x.c.a[1] = shop::BUYERS;
-    x.c.d[6] = 3;
-    loop {
-        let p = rd16(x.b, x.c.a[1]);
+    for k in 0..4u32 {
+        let slot = shop::BUYERS + 2 * k;
+        let p = rd16(x.b, slot);
         if p != 0 {
             let buyer = Obj(p as i16 as i32 as u32 & 0xff_ffff);
             if shop_in_zone(x, buyer) {
@@ -187,16 +187,9 @@ fn shop_watch(x: &mut Cx, buy: fn(&mut Cx, Obj)) {
                     x.set8(shop::ANNOUNCED, 1);
                 }
                 if (buyer.u8(x.b, 0x58) as i8) > 0 {
-                    x.c.a[2] = buyer.0;
-                    buy(x, buyer);
+                    buy(x, buyer, slot);
                 }
             }
-        }
-        x.c.a[1] = x.c.a[1].wrapping_add(2);
-        let n = (x.c.d[6] as u16).wrapping_sub(1);
-        x.c.d[6] = x.c.d[6] & 0xffff_0000 | n as u32;
-        if n == 0xffff {
-            break;
         }
     }
     if x.u8(shop::OCCUPIED) == 0 {
@@ -216,9 +209,9 @@ fn shop_refuse<R: Banc>(x: &mut Cx<'_, R>, message: u16) {
     crate::mem::wr16(x.b, shop::MESSAGE, message);
 }
 
-/// `0xafad0` : achat par l'acheteur `buyer` (A2), selon la sorte d'achat de la variante. A1 et D6 (la boucle
-/// de `shop_watch`) sont rendus comme l'original les laisse.
-fn shop_buy(x: &mut Cx, buyer: Obj) {
+/// `0xafad0` : achat par l'acheteur `buyer` (A2), de la case `slot` de la liste des acheteurs, selon la sorte
+/// d'achat de la variante.
+fn shop_buy<R: Banc>(x: &mut Cx<'_, R>, buyer: Obj, slot: u32) {
     let v = x.u8(f::VARIANT) as u32;
     if v >= shop::PURCHASE_COUNT {
         return;
@@ -228,12 +221,10 @@ fn shop_buy(x: &mut Cx, buyer: Obj) {
     match kind {
         shop::EXIT => {
             // la sortie : l'acheteur quitte la liste et passe à l'état 4, la palette revient
-            crate::mem::wr16(x.b, x.c.a[1], 0);
+            crate::mem::wr16(x.b, slot, 0);
             buyer.set_u16(x.b, Obj::STATE, 0x400);
-            let (a1, d6) = (x.c.a[1], x.c.d[6]);
             x.set_a5_u8(0x48e, 0xf);
             crate::palette::full_brightness(x.b);
-            (x.c.a[1], x.c.d[6]) = (a1, d6);
         }
         shop::MEAL_BIG => shop_meal(x, buyer, 0x30),
         shop::MEAL => shop_meal(x, buyer, 0x20),
@@ -270,7 +261,7 @@ fn shop_can_pay<R: Banc>(x: &mut Cx<'_, R>, player: Obj) -> bool {
 
 /// `0xafd18` : l'article rejoint l'inventaire (six emplacements `+0x140`, quantités `+0x148`) : même
 /// article, ou emplacement vide (0x56) ; au plus 9.
-fn shop_take(x: &mut Cx, buyer: Obj) {
+fn shop_take<R: Banc>(x: &mut Cx<'_, R>, buyer: Obj) {
     buyer.set_u8(x.b, 0x58, 0xff);
     let player = buyer_player(x, buyer);
     if !shop_can_pay(x, player) {
@@ -305,7 +296,7 @@ fn shop_take(x: &mut Cx, buyer: Obj) {
 
 /// `0xafdaa` : le prix (six octets BCD finissant en `+0x53`) est retiré de l'or du joueur (six octets
 /// finissant en `+0x117`), sauf pour un objet gratuit (`+0x167` = 9, remis à 0xff).
-fn shop_pay(x: &mut Cx, player: Obj) {
+fn shop_pay<R: Banc>(x: &mut Cx<'_, R>, player: Obj) {
     if player.u8(x.b, 0x167) == 9 {
         player.set_u8(x.b, 0x167, 0xff);
     } else {
@@ -315,14 +306,13 @@ fn shop_pay(x: &mut Cx, player: Obj) {
             player.set_u8(x.b, 0x118 - k, v);
             borrow = b;
         }
-        x.c.sr = x.c.sr & !m68k::SR_X | if borrow { m68k::SR_X } else { 0 };
     }
     crate::sound::jouer(x.b, shop::SOUND_BOUGHT, x.o);
 }
 
 /// `0xafc3c` : repas (soin de `heal`) : refusé si la vie est pleine ; le dernier du stock fait reculer
 /// l'étal et efface son annonce.
-fn shop_meal(x: &mut Cx, buyer: Obj, heal: u16) {
+fn shop_meal<R: Banc>(x: &mut Cx<'_, R>, buyer: Obj, heal: u16) {
     buyer.set_u8(x.b, 0x58, 0xff);
     if x.u8(shop::STOCK_LEFT) == 0 {
         return;
@@ -500,7 +490,7 @@ fn two_players<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.a5_u8(0x20) == 1
 }
 
-fn purse(x: &mut Cx) {
+fn purse<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => purse_init(x),
         2 => purse_active(x),
@@ -510,7 +500,7 @@ fn purse(x: &mut Cx) {
 }
 
 /// Allocation par une routine d'origine : l'emplacement (A1), ou `None` (retenue).
-fn purse_init(x: &mut Cx) {
+fn purse_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set16(0x18, 0);
     let (cx, cy) = (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b));
@@ -521,9 +511,8 @@ fn purse_init(x: &mut Cx) {
     let (dx, dz) = (x.data16(offsets + mode), x.data16(offsets + mode + 2));
     x.add16(Obj::X, dx);
     x.add16(Obj::Z, dz);
-    let d7 = x.c.d[7];
-    x.call(purse::PALETTE_PAGE);
-    x.c.d[7] = d7;
+    // 0x1a608 (page de palettes 1), encore sur le processeur ; D7 conservé par l'original
+    sur_banc_de_travail(x, |c, b| crate::call(c, b, purse::PALETTE_PAGE));
     x.set8(0x2a, 1);
     let owner = x.linked(purse::OWNER);
     let player = owner.u8(x.b, 2);
@@ -608,7 +597,7 @@ fn purse_release_linked<R: Banc>(x: &mut Cx<'_, R>) {
     linked.set_u8(x.b, 0x56, 0xff);
 }
 
-fn purse_active(x: &mut Cx) {
+fn purse_active<R: Banc>(x: &mut Cx<'_, R>) {
     let owner = x.linked(purse::OWNER);
     let player = owner.u8(x.b, 2) as u32;
     let moves = A5 + player;
@@ -745,7 +734,7 @@ fn purse_draw_gold<R: Banc>(x: &mut Cx<'_, R>, owner: Obj) {
 }
 
 /// Déplacement par les directions du joueur (bit 5 : rapide), borné à l'écran.
-fn purse_move(x: &mut Cx, moves: u32) {
+fn purse_move<R: Banc>(x: &mut Cx<'_, R>, moves: u32) {
     let m = rd8(x.b, moves);
     let step: u16 = if m & 0x20 != 0 { 5 } else { 2 };
     if m & 8 != 0 {
@@ -760,7 +749,7 @@ fn purse_move(x: &mut Cx, moves: u32) {
     if m & 1 != 0 {
         x.add16(Obj::X, step);
     }
-    let clamp = |x: &mut Cx, off: u32, origin: u16, span: u16| {
+    let clamp = |x: &mut Cx<'_, R>, off: u32, origin: u16, span: u16| {
         let v = x.u16(off) as i16;
         let (low, high) = (origin.wrapping_add(0x14), origin.wrapping_add(span));
         if low as i16 > v {
@@ -840,7 +829,7 @@ fn copy_position<R: Banc>(x: &mut Cx<'_, R>, from: Obj) {
     }
 }
 
-fn attached(x: &mut Cx) {
+fn attached<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => attached_init(x),
         2 => attached_active(x),
@@ -921,7 +910,7 @@ fn attached_init<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn attached_active(x: &mut Cx) {
+fn attached_active<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.u8(f::VARIANT);
     let sub = x.u8(f::SUB_STATE);
     match v {
@@ -996,7 +985,7 @@ fn attached_active(x: &mut Cx) {
 }
 
 /// Variante 14 : attend que le porteur quitte l'état actif, tremble, puis s'efface en clignotant.
-fn attached_shake(x: &mut Cx, sub: u8) {
+fn attached_shake<R: Banc>(x: &mut Cx<'_, R>, sub: u8) {
     match sub {
         0 => {
             let carrier = x.linked(attached::CARRIER);
@@ -1027,7 +1016,9 @@ fn attached_shake(x: &mut Cx, sub: u8) {
             } else if x.anim_step() {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(attached::TIMER, 0x3c);
-                crate::ai_aids::debris_set(x.b, x.o, 0xb); x.c.d[5] = 0xffff; // D5 : compteur épuisé du `dbf`, relu plus loin (voir `ai::keep_on_screen_d5`)
+                crate::ai_aids::debris_set(x.b, x.o, 0xb);
+                // Glitch d'origine : le compteur épuisé du `dbf` reste dans D5 (`dispatch::Restes`)
+                *x.c.d5() = 0xffff;
             }
         }
         8 => {
@@ -1051,7 +1042,6 @@ mod scenery {
     pub const THROWS_1: u32 = 0xb4202;
     /// Variante 2 : par réglage, décalage (dx, dy) (données) ; poussée avec les joueurs.
     pub const PLACES_2: u32 = 0xb4394;
-    pub const PUSH_PLAYERS: u32 = 0x81aa4;
     /// Variante 9 : par réglage (`& 7`), fiche de 8 octets (dx, dz en octets signés, puis vz, az ; programme).
     pub const SPRAY: u32 = 0xb4a32;
     pub const ANIM_SPRAY: u32 = 0x17b9d6;
@@ -1103,7 +1093,7 @@ fn reinsert_foreground<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert_foreground();
 }
 
-fn scenery(x: &mut Cx) {
+fn scenery<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.u8(f::VARIANT);
     match x.u8(f::STATE) {
         0 => match v {
@@ -1181,12 +1171,12 @@ fn thrown_init<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
     x.anim_start(scenery::ANIM_DUST, 0);
 }
 
-fn thrown_active(x: &mut Cx, v: u8) {
+fn thrown_active<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
     if !paused(x) {
         if v == 1 {
             x.move_xy();
         } else {
-            x.call(scenery::PUSH_PLAYERS);
+            super::boss_common::push_out_of_boss(x);
         }
         if x.anim_step() {
             return x.add8(f::STATE, 4);
@@ -1443,11 +1433,14 @@ fn spark_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_start(scenery::ANIM_DUST, 0);
 }
 
-fn spark_active(x: &mut Cx) {
+fn spark_active<R: Banc>(x: &mut Cx<'_, R>) {
     if !paused(x) {
         if let Some(target) = scenery_live_target(x) {
-            x.c.a[1] = target.0;
-            x.call(0x930a4);
+            // 0x930a4 (rapprochement du boss 15) avec A1 = la cible, encore sur le processeur
+            sur_banc_de_travail(x, |c, b| {
+                c.a[1] = target.0;
+                crate::call(c, b, 0x930a4)
+            });
         }
         if x.anim_step() {
             return scenery_done(x);
@@ -2044,7 +2037,7 @@ fn spark<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Type 83 : la variante 0 crée pendant 0xe6 images une goutte (variante 1) par image, qui tombe en
 /// arc depuis le haut de l'écran.
-fn shard_rain(x: &mut Cx) {
+fn shard_rain<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.u8(f::VARIANT);
     match x.u8(f::STATE) {
         0 if v == 0 => {
@@ -2053,8 +2046,9 @@ fn shard_rain(x: &mut Cx) {
             crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_BLEU);
         }
         0 => {
-            // A1 : adresse du gestionnaire, laissée par la boucle de dispatch (octet `+0x2c` constant)
-            let handler = Obj(x.c.a[1]);
+            // Glitch d'origine : A1 est l'adresse du gestionnaire (0xb997c), laissée par la boucle de dispatch :
+            // l'octet « `+0x2c` » lu est un octet constant de son code
+            let handler = Obj(0xb997c);
             x.add8(f::STATE, 2);
             x.set16(Obj::VX, 0xfc00);
             x.set16(Obj::VZ, 0xf900);
@@ -2365,7 +2359,7 @@ mod link {
     pub const BREAKS: u32 = 0xad5e2;
 }
 
-fn chain_link(x: &mut Cx) {
+fn chain_link<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -2388,8 +2382,9 @@ fn chain_link(x: &mut Cx) {
         }
         2 => chain_link_follow(x),
         4 => {
-            // A1 : adresse du gestionnaire laissée par le dispatch (écriture en ROM, sans effet)
-            let a1 = x.c.a[1];
+            // Glitch d'origine : A1 est l'adresse du gestionnaire (0xad476) laissée par le dispatch (écriture en
+            // ROM, sans effet)
+            let a1 = 0xad476;
             let n = rd8(x.b, a1 + 0x42).wrapping_sub(1);
             wr8(x.b, a1 + 0x42, n);
             free(x);
@@ -2652,7 +2647,7 @@ fn divide(mut n: u32, d: u32) -> u32 {
     n
 }
 
-fn lob(x: &mut Cx) {
+fn lob<R: Banc>(x: &mut Cx<'_, R>) {
     if x.suspended() {
         return;
     }
@@ -2701,7 +2696,7 @@ fn lob_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_start(lob::ANIM_SET, 0);
 }
 
-fn lob_active(x: &mut Cx) {
+fn lob_active<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.u8(f::VARIANT);
     match x.u8(f::SUB_STATE) {
         0 => {
@@ -2749,7 +2744,6 @@ fn lob_active(x: &mut Cx) {
                 _ => return,
             };
             x.set_a5_u16(0x4be, shake);
-            x.c.d[1] = shake as u32;
             crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
             crate::sound::jouer(x.b, 0xe5d36, x.o);
         }
@@ -2874,7 +2868,7 @@ fn spawn_vote<R: Banc>(x: &mut Cx<'_, R>, variant: u8, mode: u8) -> Option<Obj> 
     Some(o)
 }
 
-fn vote(x: &mut Cx) {
+fn vote<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::VARIANT) {
         0 => ballot(x),
         1 => ballot_cursor(x),
@@ -2889,7 +2883,7 @@ fn by_players<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     x.data32(table.wrapping_add(k))
 }
 
-fn ballot(x: &mut Cx) {
+fn ballot<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.set8(0x53, 0);
@@ -2944,7 +2938,7 @@ fn ballot_end<R: Banc>(x: &mut Cx<'_, R>) {
     free(x);
 }
 
-fn ballot_count(x: &mut Cx) {
+fn ballot_count<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB_STATE) {
         0 => {
             // choix gagnant : le plus de voix, au hasard parmi les ex æquo
@@ -3055,7 +3049,7 @@ fn text_token<R: Banc>(x: &mut Cx<'_, R>, format: TextFormat, at: u32) -> (u32, 
 
 /// Avance de `n + 1` caractères (commandes comprises) depuis `at`, en appelant `each` sur chaque
 /// élément (adresse, longueur, caractère ?). Rend l'adresse qui suit.
-fn text_walk(x: &mut Cx, format: TextFormat, mut at: u32, n: u16, mut each: impl FnMut(&mut Cx, u32, u32, bool)) -> u32 {
+fn text_walk<R: Banc>(x: &mut Cx<'_, R>, format: TextFormat, mut at: u32, n: u16, mut each: impl FnMut(&mut Cx<'_, R>, u32, u32, bool)) -> u32 {
     let mut n = n;
     loop {
         let (len, is_char) = text_token(x, format, at);
@@ -3071,7 +3065,7 @@ fn text_walk(x: &mut Cx, format: TextFormat, mut at: u32, n: u16, mut each: impl
 }
 
 /// Recopie `n + 1` caractères (commandes comprises) de `from` vers `to`.
-fn text_copy(x: &mut Cx, format: TextFormat, from: u32, to: u32, n: u16) {
+fn text_copy<R: Banc>(x: &mut Cx<'_, R>, format: TextFormat, from: u32, to: u32, n: u16) {
     text_walk(x, format, from, n, |x, at, len, _| {
         for k in 0..len {
             let v = rd8(x.b, at + k);
@@ -3081,7 +3075,7 @@ fn text_copy(x: &mut Cx, format: TextFormat, from: u32, to: u32, n: u16) {
 }
 
 /// 0xb0102 : saute `count + 1` caractères, note l'adresse et sauvegarde le texte du choix gagnant.
-fn ballot_save_text(x: &mut Cx, count: u16) {
+fn ballot_save_text<R: Banc>(x: &mut Cx<'_, R>, count: u16) {
     let format = text_format(x);
     let at = text_walk(x, format, vote::TEXT, count, |_, _, _, _| {});
     x.set32(0x30, at);
@@ -3091,7 +3085,7 @@ fn ballot_save_text(x: &mut Cx, count: u16) {
 
 /// 0xb0076 : efface le texte (caractère blanc : 0x1800 en mots ; 0x80, ou 1 puis 0 pour un
 /// caractère de 2 octets), commandes conservées.
-fn ballot_erase_text(x: &mut Cx, at: u32, n: u16) {
+fn ballot_erase_text<R: Banc>(x: &mut Cx<'_, R>, at: u32, n: u16) {
     let format = text_format(x);
     text_walk(x, format, at, n, |x, at, len, is_char| {
         if !is_char {
@@ -3234,7 +3228,7 @@ fn timer_show<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-fn ballot_timer(x: &mut Cx) {
+fn ballot_timer<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -3267,14 +3261,10 @@ fn ballot_timer(x: &mut Cx) {
             timer_palette(x, 0x2531c0);
             free(x);
         }
-        // état 4 (0xb0374) : aucune étape n'y mène ; l'original efface le mot `+0x54` de l'objet désigné par
-        // A6, laissé par le code précédent, rend la palette et libère l'objet
-        4 => {
-            let a6 = x.c.a[6];
-            crate::mem::wr16(x.b, a6.wrapping_add(0x54), 0);
-            timer_palette(x, 0x2531c0);
-            free(x);
-        }
+        // Code mort d'origine : état 4 (0xb0374), auquel aucune étape ne mène ; l'original y efface le mot `+0x54`
+        // de l'objet désigné par l'A6 que laisse le code précédent, rend la palette et libère l'objet (voir
+        // docs/code-mort.md, « Minuteur du vote : état 4 »)
+        4 => unreachable!("minuteur du vote (effct_vote 0xafe20, variante 2) : aucune étape ne mène à l'état 4 (0xb0374)"),
         // état 6 (posé par le retrait hors écran) : libération (0xb02e8)
         6 => free(x),
         _ => {}
@@ -3440,7 +3430,7 @@ mod swimmer {
     pub const TIMER: u32 = 0x42;
 }
 
-fn swimmer(x: &mut Cx) {
+fn swimmer<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -3476,7 +3466,7 @@ fn swimmer_anim<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 /// Étapes de 4 en 4 ; une étape achevée enchaîne la suivante dans la même image.
-fn swimmer_active(x: &mut Cx) {
+fn swimmer_active<R: Banc>(x: &mut Cx<'_, R>) {
     let mut right = x.u8(f::VARIANT) != 0;
     let mut sub = x.u8(f::SUB_STATE);
     loop {
@@ -3540,7 +3530,8 @@ fn swimmer_active(x: &mut Cx) {
             20 => {
                 x.add16(Obj::X, 4);
                 x.anim_step();
-                x.call(0x3403c);
+                // 0x3403c (collision avec le décor, seconde forme), encore sur le processeur
+                sur_banc_de_travail(x, |c, b| crate::call(c, b, crate::terrain::SHADOW_SECOND.entry));
                 let gap = x.u16(Obj::X).wrapping_sub(crate::ram::CAMERA_X.get(x.b));
                 if (gap as i16) > 0x1a0 {
                     free(x);
@@ -3587,7 +3578,7 @@ mod counter {
 
 /// `0xb83d8` : premier acheteur dans la zone : le comptoir prend la vente (s'il n'y en a pas d'autre) et
 /// fait venir le vendeur (décor 0x64) ; A1 et D6 gardés comme l'original.
-fn counter_buy(x: &mut Cx, _buyer: Obj) {
+fn counter_buy<R: Banc>(x: &mut Cx<'_, R>, _buyer: Obj, _slot: u32) {
     let active = rd16(x.b, counter::ACTIVE);
     if active != 0 && active != x.o.0 as u16 {
         return;
@@ -3604,7 +3595,7 @@ fn counter_buy(x: &mut Cx, _buyer: Obj) {
 /// `0xb81d6` : la vente. Après un délai, l'enseigne s'affiche, le message est annoncé et les articles sont
 /// posés (PEFF 0x2a) ; puis on attend un acheteur devant le vendeur, qui fait accélérer le vendeur ; enfin
 /// la vente se termine.
-fn counter_sale(x: &mut Cx) {
+fn counter_sale<R: Banc>(x: &mut Cx<'_, R>) {
     let step = x.u8(counter::STEP) as i8;
     if step > 2 {
         if countdown_word(x, counter::TIMER) {
@@ -3615,9 +3606,7 @@ fn counter_sale(x: &mut Cx) {
         return;
     }
     if step == 2 {
-        // la boucle de l'original tient dans A1 (pointeur) et D6 (compteur)
         for k in 0..4u32 {
-            x.c.a[1] = shop::BUYERS + 2 * (k + 1);
             let p = rd16(x.b, shop::BUYERS + 2 * k);
             if p == 0 {
                 continue;
@@ -3682,7 +3671,7 @@ fn countdown_word<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> bool {
     (t as i16) < 0
 }
 
-fn counter(x: &mut Cx) {
+fn counter<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -4259,7 +4248,7 @@ fn spell_copy<R: Banc>(x: &mut Cx<'_, R>, from: Obj) {
 }
 
 /// 0xb524a / 0xb52b0 : posé sur le propriétaire, décalé selon la variante (D1, D2, D3 : ceux de l'original).
-fn spell_place(x: &mut Cx, wide: bool) {
+fn spell_place<R: Banc>(x: &mut Cx<'_, R>, wide: bool) {
     let owner = x.linked(spell::OWNER);
     spell_copy(x, owner);
     x.add16(Obj::Y, 0xffff);
@@ -4280,7 +4269,6 @@ fn spell_place(x: &mut Cx, wide: bool) {
             x.set8(0x2c, facing);
         }
     }
-    crate::mem::set_low_word(&mut x.c.d[1], dx);
     x.add16(Obj::X, dx);
     x.add16(Obj::Z, dz);
 }
@@ -4304,7 +4292,7 @@ fn spell_tint<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x2b, tint);
 }
 
-fn spell(x: &mut Cx) {
+fn spell<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u16(spell::OWNER) == 0 {
         return x.set32(f::STATE, 0x0600_0000);
     }
@@ -4408,9 +4396,9 @@ fn spell(x: &mut Cx) {
 // clignote et change avec l'état de son créateur)
 // ---------------------------------------------------------------------------------------------
 
-fn title_card(x: &mut Cx) {
+fn title_card<R: Banc>(x: &mut Cx<'_, R>) {
     let creator = x.linked(0x42);
-    let gone = |x: &mut Cx| {
+    let gone = |x: &mut Cx<'_, R>| {
         crate::sound::jouer(x.b, 0xed90a, x.o);
         free(x);
     };
@@ -4525,21 +4513,21 @@ mod toss {
 }
 
 /// Son de la table `table` pour la sorte courante (`jsr (A1)` de l'original, s'il y en a un).
-fn toss_sound(x: &mut Cx, table: u32) {
+fn toss_sound<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     let k = 4 * x.u8(f::VARIANT) as u32;
     let routine = (x.rom16(table + k) as u32) << 16 | x.rom16(table + k + 2) as u32;
     if routine != 0 {
-        x.call(routine);
+        crate::sound::jouer(x.b, routine, x.o);
     }
 }
 
-fn toss_land(x: &mut Cx) {
+fn toss_land<R: Banc>(x: &mut Cx<'_, R>) {
     let kind = x.u8(f::VARIANT) as u32;
     x.anim_start(toss::ANIM_SET, (5 + kind) as u16);
     toss_sound(x, toss::SOUNDS_LAND);
 }
 
-fn toss(x: &mut Cx) {
+fn toss<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -4608,8 +4596,8 @@ fn toss(x: &mut Cx) {
 // Type 3 : élément d'écran fixé à la caméra (hauteur suivant le tremblement `A5+0x4ba`)
 // ---------------------------------------------------------------------------------------------
 
-fn screen_piece(x: &mut Cx) {
-    let follow = |x: &mut Cx| {
+fn screen_piece<R: Banc>(x: &mut Cx<'_, R>) {
+    let follow = |x: &mut Cx<'_, R>| {
         let z = crate::ram::CAMERA_Y.get(x.b).wrapping_sub(x.a5_u16(0x4ba)).wrapping_add(x.u16(0x50));
         x.set16(Obj::Z, z);
     };
@@ -4638,7 +4626,7 @@ fn screen_piece(x: &mut Cx) {
 // Type 76 : minuteur de scène (joue un son, puis lance la transition 0x15 ou 0x14 après un délai)
 // ---------------------------------------------------------------------------------------------
 
-fn scene_timer(x: &mut Cx) {
+fn scene_timer<R: Banc>(x: &mut Cx<'_, R>) {
     let v = x.u8(f::VARIANT);
     match x.u8(f::STATE) {
         0 => {
@@ -4652,7 +4640,8 @@ fn scene_timer(x: &mut Cx) {
                 return;
             }
             let musique = if v == 0 { 0x15 } else { 0x14 };
-            x.c.d[4] = musique;
+            // Glitch d'origine : D4 = la musique reste aux gestionnaires suivants (`dispatch::Restes`)
+            *x.c.d4() = musique;
             crate::sound::jouer_avec(x.b, 0xe17a4, crate::sound::Source { objet: Some(x.o), d4: Some(musique), ..Default::default() });
             free(x);
         }
@@ -4746,7 +4735,7 @@ fn start_script<R: Banc>(x: &mut Cx<'_, R>, entry: u32) {
     crate::kernel::creer_tache(x.b, 0x10, entry);
 }
 
-fn finale_trigger(x: &mut Cx) {
+fn finale_trigger<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -4761,7 +4750,7 @@ fn finale_trigger(x: &mut Cx) {
     }
 }
 
-fn finale_step(x: &mut Cx) {
+fn finale_step<R: Banc>(x: &mut Cx<'_, R>) {
     let mut sub = x.u8(f::SUB_STATE);
     if sub == 0 {
         x.add8(f::SUB_STATE, 4);
@@ -4792,7 +4781,7 @@ fn finale_step(x: &mut Cx) {
             x.set_a5_u16(0x490, 4);
             x.set_a5_u8(0x48e, 8);
             x.set_a5_u8(0x48f, 1);
-            super::petites::palette_page_restore(x.c, x.b);
+            sur_banc_de_travail(x, super::petites::palette_page_restore);
             x.set_a5_u32(0x49e, 0xff1190);
             start_script(x, 0x1cf12);
             finale_end(x);
@@ -4899,8 +4888,8 @@ fn big_letters<R: Banc>(x: &mut Cx<'_, R>) {
 // Type 91 : autre élément d'écran fixé à la caméra ; type 47 : repère qui clignote lentement
 // ---------------------------------------------------------------------------------------------
 
-fn screen_piece_b(x: &mut Cx) {
-    let follow = |x: &mut Cx| {
+fn screen_piece_b<R: Banc>(x: &mut Cx<'_, R>) {
+    let follow = |x: &mut Cx<'_, R>| {
         let z = crate::ram::CAMERA_Y.get(x.b).wrapping_sub(x.a5_u16(0x4ba)).wrapping_add(x.u16(0x50));
         x.set16(Obj::Z, z);
     };
@@ -5129,44 +5118,44 @@ fn courier<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xaa8e8 "effct_ecran_fixe" screen_piece,
+    0xaa8e8 "effct_ecran_fixe" #[sans] screen_piece,
     0xabccc "effct_dalle" #[sans] floor_tile,
-    0xad476 "effct_maillon" chain_link,
+    0xad476 "effct_maillon" #[sans] chain_link,
     0xae52a "effct_double" #[sans] double,
-    0xaed4c "effct_bourse" purse,
-    0xaf3f2 "effct_boutique" shop,
-    0xafe20 "effct_vote" vote,
+    0xaed4c "effct_bourse" #[sans] purse,
+    0xaf3f2 "effct_boutique" #[sans] shop,
+    0xafe20 "effct_vote" #[sans] vote,
     0xb1818 "effct_poisson" #[sans] fish,
     0xb2dea "effct_plateau" #[sans] ferry,
     0xb3050 "effct_flotteur" #[sans] floater,
-    0xb33ba "effct_titre" title_card,
+    0xb33ba "effct_titre" #[sans] title_card,
     0xb3454 "effct_resultat" #[sans] result_card,
-    0xb3570 "effct_projete" lob,
+    0xb3570 "effct_projete" #[sans] lob,
     0xb37ac "effct_coup" #[sans] blow,
-    0xb3c48 "effct_lance" toss,
-    0xb40f8 "effct_decor" scenery,
-    0xb4f88 "effct_sort" spell,
+    0xb3c48 "effct_lance" #[sans] toss,
+    0xb40f8 "effct_decor" #[sans] scenery,
+    0xb4f88 "effct_sort" #[sans] spell,
     0xb5764 "effct_repere" #[sans] beacon,
     0xb5dbe "effct_accessoire_porte" #[sans] prop,
-    0xb5fb6 "effct_attache" attached,
+    0xb5fb6 "effct_attache" #[sans] attached,
     0xb6d48 "effct_machine" #[sans] machine,
     0xb6ef2 "effct_surgissant" #[sans] riser,
     0xb7248 "effct_double_b" #[sans] double2,
-    0xb751e "effct_nageur" swimmer,
+    0xb751e "effct_nageur" #[sans] swimmer,
     0xb7a14 "effct_eclat_tombant" #[sans] spark_fall,
     0xb7ac8 "effct_messager" #[sans] courier,
     0xb7c40 "effct_lettres" #[sans] big_letters,
     0xb7e26 "effct_colonne" #[sans] pillar,
     0xb802a "effct_silhouette" #[sans] pacer,
-    0xb80bc "effct_comptoir" counter,
-    0xb88a8 "effct_minuteur" scene_timer,
+    0xb80bc "effct_comptoir" #[sans] counter,
+    0xb88a8 "effct_minuteur" #[sans] scene_timer,
     0xb97d8 "effct_eclat_pose" #[sans] spark,
-    0xb997c "effct_pluie" shard_rain,
-    0xb9aba "effct_finale" finale_trigger,
+    0xb997c "effct_pluie" #[sans] shard_rain,
+    0xb9aba "effct_finale" #[sans] finale_trigger,
     0xb9bbc "effct_piece_fin" #[sans] ending_piece,
     0xb9ca6 "effct_flammeche" #[sans] ending_wisp,
     0xb9db8 "effct_interrupteur" #[sans] barrier_switch,
     0xb9f36 "effct_barriere" #[sans] barrier,
     0xba1aa "effct_poussiere_haute" #[sans] drift_dust,
-    0xba244 "effct_ecran_fixe_b" screen_piece_b,
+    0xba244 "effct_ecran_fixe_b" #[sans] screen_piece_b,
 }

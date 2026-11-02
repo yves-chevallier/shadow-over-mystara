@@ -1,6 +1,7 @@
 //! Effets des joueurs (PEFF), quinzième série : type 24 (le tas d'or de l'interface qui reprend les objets
 //! du joueur contre des points). Voir `docs/familles/joueur.md`.
 
+use crate::families::cx::Banc;
 use crate::families::cx::{handlers, Cx};
 use crate::mem::{rd32, wr32, wr8};
 use super::pshell::*;
@@ -37,7 +38,7 @@ fn bcd_add(a: u8, b: u8, carry: bool) -> (u8, bool) {
 mod coins {
     use super::*;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -63,7 +64,7 @@ mod coins {
     }
 
     /// `0x4d7ac`
-    fn check(x: &mut Cx) {
+    fn check<R: Banc>(x: &mut Cx<'_, R>) {
         let linked = x.linked(0x5c);
         let flags = x.u8(0x17);
         let had = flags & 1 != 0;
@@ -95,7 +96,7 @@ mod coins {
         sell(x);
     }
 
-    fn away(x: &mut Cx) {
+    fn away<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x16) == 0 {
             return;
         }
@@ -104,7 +105,7 @@ mod coins {
     }
 
     /// `0x4d81c` : le joueur du lien (`+0x1a`) rend l'équipement de son emplacement `+3`.
-    fn sell(x: &mut Cx) {
+    fn sell<R: Banc>(x: &mut Cx<'_, R>) {
         let who = Obj(x.u16(0x1a) as i16 as i32 as u32 & 0xff_ffff);
         let player_word = who.u16(x.b, f::OWNER);
         let player = Obj(player_word as i16 as i32 as u32 & 0xff_ffff);
@@ -154,5 +155,5 @@ mod coins {
 }
 
 handlers! {
-    0x4d718 "peff_24" coins::run,
+    0x4d718 "peff_24" #[sans] coins::run,
 }

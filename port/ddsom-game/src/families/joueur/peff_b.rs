@@ -21,7 +21,7 @@ mod hail {
     const PARENT: u32 = 0x5c;
     const ANGLE: u32 = 0x2d;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.u8(0x4) {
             0 if !child => {
@@ -68,7 +68,7 @@ mod hail {
         }
     }
 
-    fn child_init(x: &mut Cx) {
+    fn child_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP);
@@ -93,7 +93,7 @@ mod hail {
     }
 
     /// `0x4bae6` : table de vitesses d'après `+0x58`.
-    fn select_table(x: &mut Cx) {
+    fn select_table<R: Banc>(x: &mut Cx<'_, R>) {
         let index = x.u8(TIMER) as u32;
         let table = x.rom32(SPEED_TABLES + index);
         x.set32(0x4c, table);
@@ -123,7 +123,7 @@ mod hail {
         x.move_xy();
     }
 
-    fn child_active(x: &mut Cx) {
+    fn child_active<R: Banc>(x: &mut Cx<'_, R>) {
         let parent = x.linked(PARENT);
         if parent.u8(x.b, 0x5a) == 0 {
             x.anim_step();
@@ -178,7 +178,7 @@ mod spark {
     const THROWS: u32 = 0x4f1f6;
     const ANIMS: u32 = 0x1bc298;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => init(x),
             2 => flight(x),
@@ -193,7 +193,7 @@ mod spark {
         }
     }
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x58, 1);
         let cam = if x.a5_u8(a5::USE_CAM2) != 0 { 0x54e } else { 0x4fe };
@@ -249,7 +249,7 @@ mod witch {
     const SPREAD: u32 = 0x4d1bc;
     const KIND: u8 = 0x14;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
         match x.u8(0x4) {
             0 if !child => parent_init(x),
@@ -260,7 +260,7 @@ mod witch {
         }
     }
 
-    fn parent_init(x: &mut Cx) {
+    fn parent_init<R: Banc>(x: &mut Cx<'_, R>) {
         let Some(set) = x.alloc(&pools::SET) else { return };
         set.set_u8(x.b, 0, 1);
         set.set_u8(x.b, 2, 0);
@@ -281,7 +281,7 @@ mod witch {
         x.reinsert();
     }
 
-    fn child_init(x: &mut Cx) {
+    fn child_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let owner = x.linked(f::OWNER);
         let flip = owner.u8(x.b, f::FLIP) ^ 0x20;
@@ -383,7 +383,7 @@ mod witch {
 }
 
 handlers! {
-    0x4b93c "peff_11" hail::run,
-    0x4d08c "peff_20" witch::run,
-    0x4f14c "peff_33" spark::run,
+    0x4b93c "peff_11" #[sans] hail::run,
+    0x4d08c "peff_20" #[sans] witch::run,
+    0x4f14c "peff_33" #[sans] spark::run,
 }

@@ -7,7 +7,7 @@
 
 use crate::machine::Machine;
 use crate::objects::Courant;
-use crate::families::cx::Cx;
+use crate::families::cx::{Banc, Cx};
 use crate::objects::Obj;
 use crate::objects::pools;
 
@@ -57,20 +57,10 @@ pub mod a5 {
     pub const PAUSED: u32 = 0x42;
 }
 
-impl Cx<'_> {
-    /// `movea.w (off,A0),A1` : le joueur (ou l'objet) lié ; le registre A1 en garde l'adresse étendue.
-    pub fn link_a1(&mut self, off: u32) -> Obj {
-        let w = self.u16(off);
-        self.c.a[1] = w as i16 as i32 as u32;
-        Obj(self.c.a[1] & 0xff_ffff)
-    }
-
-    /// `jsr rng ; andi.w #mask,D0w` : D0 garde son mot haut, le mot bas est masqué ; renvoie le mot bas.
+impl<R: Banc> Cx<'_, R> {
+    /// Tirage masqué (`jsr rng ; andi.w #mask,D0`) : le mot bas du tirage, masqué.
     pub fn rand_and(&mut self, mask: u16) -> u32 {
-        let alea = self.random();
-        let low = alea & mask;
-        self.c.d[0] = self.c.d[0] & 0xffff_0000 | low as u32;
-        low as u32
+        (self.random() & mask) as u32
     }
 
     /// Tirage masqué (`jsr rng ; andi.w #mask,D0`), sans registre.
@@ -78,23 +68,21 @@ impl Cx<'_> {
         self.random() & mask
     }
 
-    /// `jsr rng ; andi.b #mask,D0b` : seul l'octet bas de D0 est masqué (le reste du mot garde le tirage).
+    /// `jsr rng ; andi.b #mask,D0b` : l'octet bas du tirage, masqué.
     pub fn rand_and_b(&mut self, mask: u8) -> u8 {
-        let alea = self.random();
-        let low = alea as u8 & mask;
-        // D0.w garde l'octet haut du tirage (relu : index des délais de l'éclat de gel)
-        self.c.d[0] = self.c.d[0] & 0xffff_0000 | (alea & 0xff00) as u32 | low as u32;
-        low
+        self.random() as u8 & mask
     }
 
-    /// Début d'un gestionnaire : lit l'état `+4` et, comme `jmp (table,PC,D0.w)`, laisse D0 = état et D1.w =
-    /// mot de la table (les registres que l'original laisse au gestionnaire suivant).
-    pub fn state(&mut self, table: u32) -> u8 {
-        let state = self.u8(0x4);
-        self.c.d[0] = state as u32;
-        let word = self.rom16(table + state as u32);
-        self.c.d[1] = self.c.d[1] & 0xffff_0000 | word as u32;
-        state
+    /// `rand_and_b`, mais rend le mot D0.w qu'il laisse : l'octet haut du tirage et l'octet bas masqué (relu par
+    /// l'éclat de gel, index de ses délais).
+    pub fn rand_and_b_mot(&mut self, mask: u8) -> u16 {
+        let alea = self.random();
+        alea & 0xff00 | (alea as u8 & mask) as u16
+    }
+
+    /// État `+4` du gestionnaire (`jmp (table,PC,D0.w)` de l'original ; `_table` : sa table de sauts).
+    pub fn state(&mut self, _table: u32) -> u8 {
+        self.u8(0x4)
     }
 
     /// Libère le tir.
@@ -124,28 +112,36 @@ impl Cx<'_> {
     pub fn anim(&mut self, set: u32, n: u32) {
         self.anim_start(set, n as u16);
     }
-
-    /// Remplace le mot bas de D0 (`move.w`).
-    pub fn set_d0w(&mut self, v: u16) {
-        self.c.d[0] = self.c.d[0] & 0xffff_0000 | v as u32;
-    }
 }
 
 /// Copie l'orientation et la position du joueur lié (`+0x50`) ; renvoie le joueur.
-pub fn follow_owner(x: &mut Cx) -> Obj {
-    let owner = x.link_a1(f::OWNER);
+pub fn follow_owner<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
+    let owner = x.linked(f::OWNER);
     let flip = owner.u8(x.b, f::FLIP);
     x.set8(f::FLIP, flip);
     x.copy_pos(owner);
     owner
 }
 
-/// Décalage (X, Z) lu dans une table de mots de la ROM (lecture relative au PC), ligne `row` ; D1 et D2
-/// en gardent les valeurs comme l'original.
-pub fn offset(x: &mut Cx, table: u32, row: u32) -> (u16, u16) {
+/// Décalage (X, Z) lu dans une table de mots de la ROM (lecture relative au PC), ligne `row`.
+/// Glitch d'origine : D2 garde le décalage Z (reste relu par d'autres gestionnaires, `dispatch::Restes`).
+pub fn offset<R: Banc>(x: &mut Cx<'_, R>, table: u32, row: u32) -> (u16, u16) {
     let dx = x.rom16(table + row);
     let dz = x.rom16(table + row + 2);
-    x.c.d[1] = dx as u32;
-    x.c.d[2] = dz as u32;
+    *x.c.d2() = dz as u32;
     (dx, dz)
+}
+
+/// Restes de la recherche du terrain (0x24a8 / 0x24b0, `video::terrain_68k`) : D2 (numéro), D3 (index de la case),
+/// D4.w (colonne). Glitch d'origine : des gestionnaires suivants les relisent (`dispatch::Restes` ; D3 :
+/// `boss11_scene42_mort`, D2 : rebond de l'éclat de gel).
+pub fn restes_terrain<R: Banc>(x: &mut Cx<'_, R>, t: &crate::video::Terrain) {
+    if t.carte_fixe {
+        *x.c.d3() = t.index as u32;
+    } else {
+        *x.c.d3() = *x.c.d3() & 0xffff_0000 | t.index as u32;
+        *x.c.d2() = 0;
+    }
+    *x.c.d4() = *x.c.d4() & 0xffff_0000 | t.colonne as u32;
+    *x.c.d2() = *x.c.d2() & 0xffff_0000 | t.numero as u32;
 }

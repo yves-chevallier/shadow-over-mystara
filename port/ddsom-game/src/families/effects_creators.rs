@@ -137,6 +137,66 @@ pub(crate) mod restes {
             self.sr = self.sr & 0xff00 | m68k::SR_C;
         }
     }
+
+    /// Exécute `f`, du code encore écrit pour le processeur (caméras, palettes, placement des joueurs...), pour un
+    /// gestionnaire générique, sur un banc de travail : A0 = l'objet, A5, D7 = le compteur de la boucle d'aiguillage ;
+    /// seuls les restes D2-D5 (`dispatch::Restes`) entrent et en ressortent, les autres registres de l'appelant ne sont
+    /// pas lus et ceux que laisse `f` sont morts.
+    pub(crate) fn sur_banc_de_travail<R: crate::families::cx::Banc>(
+        x: &mut crate::families::cx::Cx<'_, R>,
+        f: impl FnOnce(&mut Cpu, &mut Cps2Bus),
+    ) {
+        let mut c = Cpu::default();
+        (c.d[2], c.d[3], c.d[4], c.d[5]) = (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5());
+        c.d[7] = x.compteur() as u32;
+        c.a[0] = x.o.0;
+        c.a[5] = crate::mem::A5;
+        f(&mut c, x.b);
+        (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (c.d[2], c.d[3], c.d[4], c.d[5]);
+    }
+
+    /// Le cœur appelé par un gestionnaire générique (`Cx<'_, R: Banc>`) : seuls les restes D2-D5 que l'original
+    /// laisse aux gestionnaires suivants (`dispatch::Restes`) sont gardés, dans le banc ; le reste est mort.
+    pub(crate) struct SurBanc<'a, R>(pub &'a mut R);
+
+    impl<R: crate::families::cx::Banc> SurBanc<'_, R> {
+        fn reste(&mut self, n: usize) -> Option<&mut u32> {
+            match n {
+                2 => Some(self.0.d2()),
+                3 => Some(self.0.d3()),
+                4 => Some(self.0.d4()),
+                5 => Some(self.0.d5()),
+                _ => None,
+            }
+        }
+    }
+
+    impl<R: crate::families::cx::Banc> Registres for SurBanc<'_, R> {
+        fn alloue(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Option<Obj> {
+            pool.alloc(b)
+        }
+        fn alloue_sans_test(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Obj {
+            pool.alloc_unchecked(b)
+        }
+        fn alloue_ou_reste(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Result<Obj, Obj> {
+            pool.alloc_or_leftover(b)
+        }
+        fn d(&mut self, n: usize, v: u32) {
+            if let Some(r) = self.reste(n) {
+                *r = v;
+            }
+        }
+        fn d_mot(&mut self, n: usize, v: u16) {
+            if let Some(r) = self.reste(n) {
+                set_low_word(r, v);
+            }
+        }
+        fn d_octet(&mut self, n: usize, v: u8) {
+            if let Some(r) = self.reste(n) {
+                set_low_byte(r, v);
+            }
+        }
+    }
 }
 
 /// Variables de la RAM de travail lues par les routines du lot (en attendant `ram.rs`).
