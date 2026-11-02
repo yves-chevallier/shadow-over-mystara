@@ -111,7 +111,7 @@ fn decide<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5b002: an attack is drawn from the difficulty row; it will be played after the announcement.
 pub(super) fn pick_attack_close<R: Bench>(x: &mut Cx<'_, R>) {
     let table = if x.u8(Enemy::GROUP) != 0 { CLOSE_ATTACKS_ARMED } else { CLOSE_ATTACKS };
-    let mv = pick_byte(x, table);
+    let mv = rank_byte(x, table);
     *x.c.d4() = *x.c.d4() & !0xff | mv as u32;
     if mv <= 8 && lib::chance_10_16(x) {
             return x.set8(Enemy::AI_POINT_SET, 0x15);

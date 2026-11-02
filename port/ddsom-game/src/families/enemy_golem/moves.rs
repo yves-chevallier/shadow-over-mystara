@@ -63,7 +63,7 @@ fn back_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
         2 => wait(x),
         4 => {
             if x.u8(Enemy::GROUP) != 0 {
-                x.set16(0xa8, 0);
+                x.set16(Golem::SQUAT_MODE, 0);
                 x.set8(f::SUB2, 8);
                 return squat_begin(x);
             }
@@ -110,8 +110,8 @@ fn forward_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
             if x.u8(Enemy::GROUP) != 0 {
                 x.set8(f::SUB2, 8);
                 let r = rand_and(x, 1);
-                x.set8(0xa9, (r * 2) as u8);
-                x.set8(0xa8, 0xff);
+                x.set8(Golem::SQUAT_SIDE, (r * 2) as u8);
+                x.set8(Golem::SQUAT_MODE, 0xff);
                 return squat_begin(x);
             }
             x.add8(f::SUB3, 2);
@@ -207,8 +207,8 @@ fn squat_again<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
         2 => wait(x),
         4 => {
             let r = rand_and(x, 1);
-            x.set8(0xa9, (r * 2) as u8);
-            x.set8(0xa8, 0xff);
+            x.set8(Golem::SQUAT_SIDE, (r * 2) as u8);
+            x.set8(Golem::SQUAT_MODE, 0xff);
             squat_begin(x);
         }
         6 => {
@@ -221,7 +221,7 @@ fn squat_again<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
                 x.add8(f::SUB3, 2);
                 x.set16(Obj::ANIM_TIMER, 1);
                 let group = x.u8(Enemy::GROUP) as i8 as i32 as u32;
-                let v = x.rom8(0x682e8u32.wrapping_add(group));
+                let v = tables::table("golem/parry_by_group").at8(x.b, group);
                 x.set8(Enemy::AI_68, v);
             }
             x.anim_step();

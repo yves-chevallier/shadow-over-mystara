@@ -11,7 +11,7 @@ use crate::objects::Obj;
 fn pick_jump_move<R: Bench>(x: &mut Cx<'_, R>) {
     let row = difficulty_row(x);
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | row;
-    let mv = pick_byte(x, JUMP_MOVES);
+    let mv = rank_byte(x, JUMP_MOVES);
     x.set8(f::SUB2, mv);
     x.set8(f::SUB3, 0);
 }
@@ -171,9 +171,7 @@ fn stab<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(Enemy::AI_SHOT, 2);
-        let row = difficulty_row(x);
-        let n = rand_and(x, 0x1f);
-        let v = x.data8(REPEATS_TABLE + row + n);
+        let v = rank_byte(x, REPEATS_TABLE);
         x.set8(Trog::REPEAT, v);
         return stab_begin(x);
     }

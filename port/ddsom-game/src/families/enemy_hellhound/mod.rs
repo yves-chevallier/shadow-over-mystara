@@ -38,6 +38,8 @@ impl Hellhound {
 
 record! {
     impl Hellhound {
+        /// Second value of the current step of the flame script (low byte of the word `Enemy::CREATOR`) (h).
+        flame_arg, set_flame_arg, FLAME_ARG: u8 @ 0x43;
         timer, set_timer, TIMER: u8 @ 0xa0;
         look, set_look, LOOK: u8 @ 0xa1;
         look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa2;
@@ -135,8 +137,8 @@ fn dust<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// One smoke step every `mask + 1` frames (`A5+0x6e` is the frame counter, which the original masks in place).
 fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
-    let v = x.a5_u16(0x6e) & mask;
-    x.set_a5_u16(0x6e, v);
+    let v = var::FRAME_COUNTER.get(x.b) & mask;
+    var::FRAME_COUNTER.set(x.b, v);
     if v == 0 {
         lib::shock(x, d0, d1 as u16, d2 as u16, d3 as u16);
     }
@@ -171,10 +173,10 @@ fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// series.
 fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
     let profile = x.u8(Enemy::GROUP) as u32;
-    let list = x.data32(0x62f80 + bias as u32 + 4 * profile);
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
+    let list = tables::table("hellhound/move_lists").at32(x.b, bias as u32 + 4 * profile);
+    let row = rank_row(x);
     let r = rand_and(x, 0x1f);
-    let mv = x.data8(list + row + r);
+    let mv = tables::held8(x.b, list + row + r);
     x.set8(f::SUB2, mv.wrapping_add(bias));
     x.set16(f::STATE, 0x0204);
     x.set8(f::SUB3, 0);
@@ -183,7 +185,7 @@ fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
     }
 }
 
-/// 0x63790: end of a move: if the target is in a range box, an attack of series `0x637fe` follows; otherwise standing.
+/// 0x63790: end of a move: if the target is in a range box, an attack of the table `follow_moves` follows; otherwise standing.
 fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
@@ -192,9 +194,7 @@ fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if !close {
         return set_state_long(x, STANCE);
     }
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    let r = rand_and(x, 0x1f);
-    let mv = x.data8(0x637fe + row + r);
+    let mv = rank_byte(x, "hellhound/follow_moves");
     x.set8(f::SUB2, mv);
     x.set16(f::STATE, 0x0208);
     x.set8(f::SUB3, 0);
@@ -211,7 +211,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.add8(f::STATE, 2);
-    x.set8(0x6f, 1);
+    x.set8(Enemy::AI_SPARE_ROW, 1);
     x.set8(f::BOX_SET, 0x12);
     lib::initial_hp(x);
     for (off, v) in [(Enemy::AI_STANCE_ROW, 0), (Enemy::EVENT_KIND, 0xf), (Enemy::EVENT_LOW, 0), (Enemy::AI_ROW_8E, 0), (Enemy::AI_SHOT, 0xff), (Enemy::LOOT, 0xf), (Enemy::LOOT_ROW, 0x10)] {

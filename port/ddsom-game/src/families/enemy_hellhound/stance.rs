@@ -37,7 +37,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         x.set8(f::FLIP, flip);
-        let mask = x.prog32(0x61a00);
+        let mask = tables::table("hellhound/turn_mask").at32(x.b, 0);
         let r = rand_and(x, 0x1f);
         let next = if mask >> r & 1 != 0 { 0x0202_0600 } else { 0x0202_0a00 };
         return set_state_long(x, next);

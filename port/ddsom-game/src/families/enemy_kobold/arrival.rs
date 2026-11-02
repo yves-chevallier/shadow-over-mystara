@@ -264,7 +264,7 @@ fn dash<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB3, 2);
             let r = rand_and(x, 0xf);
-            let t = x.rom16(0x553b4 + 2 * r);
+            let t = tables::table("kobold/dash_times").at16(x.b, 2 * r);
             x.set16(Kobold::TIMER, t);
             set_angle(x);
             mv(x, 0xc);
@@ -300,7 +300,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB3, 2);
             let r = rand_and(x, 0xf);
-            let t = x.rom16(0x553b4 + 2 * r);
+            let t = tables::table("kobold/dash_times").at16(x.b, 2 * r);
             x.set16(Kobold::TIMER, t);
             set_angle(x);
             mv(x, 0xc);

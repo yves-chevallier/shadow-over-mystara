@@ -56,6 +56,10 @@ record! {
         /// Counter-attack: flag (`+0xa8`, 0xff = at random) and attack to play (`+0xa9`).
         counter, set_counter, COUNTER: u16 @ 0xa8;
         counter_move, set_counter_move, COUNTER_MOVE: u8 @ 0xa9;
+        /// Object that spawned the skeleton (word, RAM address), when `SPAWNED`.
+        spawner, set_spawner, SPAWNER: u16 @ 0xaa;
+        /// Non-zero: spawned by an object (`SPAWNER`), told of its death.
+        spawned, set_spawned, SPAWNED: u8 @ 0xac;
     }
 }
 
@@ -72,9 +76,9 @@ const IDLE: u32 = 0x020a_0000;
 const DASH: u32 = 0x0206_0800;
 const KNOCKED: u32 = 0x0408_0000;
 /// ROM tables: attacks to choose per difficulty level (`A5+0x7f92`), 32 bytes per level.
-const CLOSE_ATTACKS: u32 = 0x5932a;
-const FAR_ATTACKS: u32 = 0x5952a;
-const NEXT_MOVES: u32 = 0x59982;
+const CLOSE_ATTACKS: &str = "skeleton/close_attacks";
+const FAR_ATTACKS: &str = "skeleton/far_attacks";
+const NEXT_MOVES: &str = "skeleton/next_moves";
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -127,10 +131,8 @@ fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Chooses attack `+6` from the difficulty row (32 bytes) of `table`, and sets `+4/+5` to `state`.
-fn pick_move<R: Bench>(x: &mut Cx<'_, R>, table: u32, state: u16) {
-    let row = (var::RANK.get(x.b) >> 1) << 5;
-    let n = rand_and(x, 0x1f);
-    let mv = x.data8(table + row as u32 + n);
+fn pick_move<R: Bench>(x: &mut Cx<'_, R>, table: &str, state: u16) {
+    let mv = rank_byte(x, table);
     x.set8(f::SUB2, mv);
     x.set16(f::STATE, state);
     x.set8(f::SUB3, 0);
@@ -199,8 +201,8 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::LOOT_ROW, 0);
     x.set32(Enemy::RESUME_STATE, 0);
     x.set8(Skeleton::CAUGHT, 0);
-    x.set8(0xac, 0);
-    x.set8(0x83, 1);
+    x.set8(Skeleton::SPAWNED, 0);
+    x.set8(Enemy::WEAK_TO_C, 1);
     x.set32(f::IMMUNITY, 0x1001);
     lib::set_immunities(x);
     let series = x.u8(Enemy::GROUP) as u32;
@@ -208,10 +210,10 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(Enemy::OWN_PALETTE, 1);
         x.set8(Enemy::PALETTE, 0x1a);
     }
-    // four bytes per series: 0x6d, 0x72, 0x73, 0x68
-    let row = 0x57de6 + 4 * series;
-    for (i, off) in [0x6d, 0x72, 0x73, Enemy::AI_68].into_iter().enumerate() {
-        let v = x.data8(row + i as u32);
+    // four bytes per series: the AI rows of the wait, of the two decisions and of the first parry
+    let row = 4 * series;
+    for (i, off) in [Enemy::AI_WAIT_ROW, Enemy::AI_DECISION_A, Enemy::AI_DECISION_B, Enemy::AI_68].into_iter().enumerate() {
+        let v = tables::table("skeleton/series_ai").at8(x.b, row + i as u32);
         x.set8(off, v);
     }
     x.set16(f::SUB2, 0);
@@ -322,7 +324,7 @@ fn blink<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB3, 2);
             x.set8(Enemy::ACTIVE, 2);
-            x.set8(0xac, 1);
+            x.set8(Skeleton::SPAWNED, 1);
             x.set8(Enemy::VULNERABLE, 1);
             x.set16(Enemy::CREATOR, 0x703);
             let d7 = x.counter() as u8;
@@ -341,12 +343,12 @@ fn blink<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(Enemy::DISPLAY, 1, true);
     let t = x.u8(Skeleton::TIMER).wrapping_sub(1);
     x.set8(Skeleton::TIMER, t);
-    if t & x.u8(0x42) != 0 {
+    if t & x.u8(Enemy::BLINK_MASK) != 0 {
         return;
     }
     x.set_bit(Enemy::DISPLAY, 1, false);
-    let n = x.u8(0x43).wrapping_sub(1);
-    x.set8(0x43, n);
+    let n = x.u8(Enemy::BLINK_COUNT).wrapping_sub(1);
+    x.set8(Enemy::BLINK_COUNT, n);
     if n != 0 {
         return;
     }
@@ -357,10 +359,10 @@ fn blink<R: Bench>(x: &mut Cx<'_, R>) {
 // --- state 6: release ------------------------------------------------------------------------
 
 fn dead<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0xac) != 0 {
-        let parent = x.linked(0xaa);
-        let n = parent.u8(x.b, 0xaf).wrapping_sub(1);
-        parent.set_u8(x.b, 0xaf, n);
+    if x.u8(Skeleton::SPAWNED) != 0 {
+        let parent = x.linked(Skeleton::SPAWNER);
+        let n = parent.u8(x.b, Enemy::CHILDREN).wrapping_sub(1);
+        parent.set_u8(x.b, Enemy::CHILDREN, n);
     }
     free(x);
 }

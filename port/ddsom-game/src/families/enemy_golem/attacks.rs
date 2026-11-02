@@ -262,10 +262,10 @@ fn squat_step<R: Bench>(x: &mut Cx<'_, R>) {
         0 => next_anim(x),
         2 => wait(x),
         4 => {
-            x.set16(0xa8, 0x100);
+            x.set16(Golem::SQUAT_MODE, 0x100);
             // (the test is on step `+7`, not on `+6`)
             if x.u8(f::SUB3) != 0x12 {
-                x.set8(0xa9, 1);
+                x.set8(Golem::SQUAT_SIDE, 1);
             }
             squat_begin(x);
         }
@@ -279,7 +279,7 @@ fn squat_step<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB3, 2);
                 x.set16(Obj::ANIM_TIMER, 1);
                 let group = x.u8(Enemy::GROUP) as i8 as i32 as u32;
-                let v = x.rom8(0x682e8u32.wrapping_add(group));
+                let v = tables::table("golem/parry_by_group").at8(x.b, group);
                 x.set8(Enemy::AI_68, v);
             }
             x.anim_step();

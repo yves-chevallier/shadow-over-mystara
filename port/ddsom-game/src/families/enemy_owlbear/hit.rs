@@ -53,8 +53,8 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
             lib::sound(x, crate::sound::CMD_329_429);
         }
         4 => {
-            let low = x.a5_u16(0x6e) & 3;
-            x.set_a5_u16(0x6e, low);
+            let low = var::FRAME_COUNTER.get(x.b) & 3;
+            var::FRAME_COUNTER.set(x.b, low);
             if low == 0 {
                 lib::shock(x, 1, 2, 0x18, 0xffff);
             }

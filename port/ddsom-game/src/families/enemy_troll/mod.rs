@@ -229,7 +229,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.set8(Enemy::AI_SHOT, 0xff);
     x.set8(Enemy::LOOT_ROW, 0xf);
     x.set8(Enemy::LOOT, 0xc);
-    x.set8(0xab, 0x20);
+    x.set8(Enemy::HP_TIERS, 0x20);
     x.set8(Troll::NO_ZONE, 0);
     true
 }

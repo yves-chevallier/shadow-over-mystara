@@ -33,10 +33,10 @@ record! {
         state, set_state, STATE: u8 @ 0x04;
         /// The four state bytes as a long (`st::DEAD_LONG`...).
         state_long, set_state_long, STATE_LONG: u32 @ 0x04;
-        /// Substate (group of the active state; in the hit state, 6 = death).
-        substate, set_substate, SUB: u8 @ 0x05;
         /// State and substate as a word (`0x205`: active state, group 5).
         state_word, set_state_word, STATE_WORD: u16 @ 0x04;
+        /// Substate (group of the active state; in the hit state, 6 = death).
+        substate, set_substate, SUB: u8 @ 0x05;
         /// Step of the substate (the steps of a reaction routine, by 2).
         step, set_step, STEP: u8 @ 0x06;
         /// Step and sub-step as a word.
@@ -110,10 +110,15 @@ record! {
         key_frame, set_key_frame, KEY_FRAME: u8 @ 0x33;
         /// First byte of the frame data (h).
         frame_tag, set_frame_tag, FRAME_TAG: u8 @ 0x38;
+        /// Mark of the shadow on the ground (`sprites`: `GROUND_MARK`), cleared at the end of some attacks.
+        ground_mark, set_ground_mark, GROUND_MARK: u8 @ 0x3b;
         /// Strike key of the animation entry (copied to `STRIKE_KIND` by `enemy_lib`).
         strike_key, set_strike_key, STRIKE_KEY: u8 @ 0x3e;
         /// Creator of a sub-object (word, RAM address).
         creator, set_creator, CREATOR: u16 @ 0x42;
+        /// Blinking arrival: mask of the frames shown and number of blinks left (the word `CREATOR`, set to 0x703).
+        blink_mask, set_blink_mask, BLINK_MASK: u8 @ 0x42;
+        blink_count, set_blink_count, BLINK_COUNT: u8 @ 0x43;
         /// Strike type and strength of the current attack (docs/combat.md).
         strike_kind, set_strike_kind, STRIKE_KIND: u8 @ 0x44;
         strike_power, set_strike_power, STRIKE_POWER: u8 @ 0x45;
@@ -133,6 +138,8 @@ record! {
         holder, set_holder, HOLDER: u16 @ 0x54;
         /// Stun duration given by the hit: copied to `FREEZE`.
         stun, set_stun, STUN: u8 @ 0x56;
+        /// Strength of the hit of an attacker (read on the object `HOLDER`; halved into the freeze of the golem) (h).
+        hit_strength, set_hit_strength, HIT_STRENGTH: u8 @ 0x57;
         /// Hit lock (long) cleared at the end of a reaction (h).
         hit_lock, set_hit_lock, HIT_LOCK: u32 @ 0x58;
         /// Creator that a created object reports to (word, RAM address).
@@ -155,6 +162,8 @@ record! {
         /// AI: row of the wait draw (`enemy_lib::draw_6e`) and the drawn duration.
         ai_wait_row, set_ai_wait_row, AI_WAIT_ROW: u8 @ 0x6d;
         ai_wait, set_ai_wait, AI_WAIT: u8 @ 0x6e;
+        /// AI row parameter set at the creation by some families, read by no code of the port (h).
+        ai_spare_row, set_ai_spare_row, AI_SPARE_ROW: u8 @ 0x6f;
         /// AI: row of the stance draw (`enemy_lib::draw_stance`) and the drawn stance (or its duration).
         ai_stance_row, set_ai_stance_row, AI_STANCE_ROW: u8 @ 0x70;
         ai_stance, set_ai_stance, AI_STANCE: u8 @ 0x71;
@@ -179,6 +188,10 @@ record! {
         loot_row, set_loot_row, LOOT_ROW: u8 @ 0x80;
         /// Loot that a thief's hit can make the enemy drop (`combat::damage::steal_loot`; 0: none).
         loot, set_loot, LOOT: u8 @ 0x81;
+        /// Non-zero: a hit of the weapon 0xb of a player deals one and a half times the damage (`combat`).
+        weak_to_b, set_weak_to_b, WEAK_TO_B: u8 @ 0x82;
+        /// Non-zero: a hit of the weapon 0xc of a player kills at once (0x200 damage, `combat`).
+        weak_to_c, set_weak_to_c, WEAK_TO_C: u8 @ 0x83;
         /// Hits before the end of a grab (word).
         recover, set_recover, RECOVER: u16 @ 0x84;
         /// Non-zero: the object was down (lying on the ground); 0 makes it not grabbable for some types.
@@ -197,7 +210,30 @@ record! {
         pending_palette, set_pending_palette, PENDING_PALETTE: u8 @ 0x91;
         /// Immunities (one bit per shot behaviour).
         immunity, set_immunity, IMMUNITY: u32 @ 0x94;
+        /// HP tiers (`ai_aids::next_threshold`): current tier, number of tiers, column of the thresholds (HP rank).
+        hp_tier, set_hp_tier, HP_TIER: u8 @ 0xaa;
+        hp_tiers, set_hp_tiers, HP_TIERS: u8 @ 0xab;
+        hp_rank, set_hp_rank, HP_RANK: u8 @ 0xac;
+        /// On the object that spawned skeletons or ghouls: its children still alive (h).
+        children, set_children, CHILDREN: u8 @ 0xaf;
         /// Offset of the animation series (added by the routines of `anim_set_routines`).
         anim_variant, set_anim_variant, ANIM_VARIANT: u8 @ 0xbf;
+    }
+}
+
+/// A player as seen by the enemies that grab it (the fields of the player record are those of `player::Player`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Prey(pub Obj);
+
+impl Prey {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
+}
+
+record! {
+    impl Prey {
+        /// Non-zero: the player is held by an enemy (`player::hurt`, reaction 0x32).
+        held, set_held, HELD: u8 @ 0x188;
     }
 }

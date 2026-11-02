@@ -10,7 +10,7 @@
 //! * the tables of the families themselves (`enemy_*/`: moves by difficulty level, decisions, offsets...), named
 //!   `<family>/<table>` ([`families`]).
 
-use crate::data::{data, prog, Spec};
+use crate::data::{data, prog, row_size, Spec};
 use crate::rom::Program;
 
 /// Number of hit codes of a reaction table (codes 0 to 0xa8, step 4).
@@ -116,17 +116,40 @@ pub fn specs(rom: &Program) -> Vec<Spec> {
             s.push(data(&format!("{name}/{k}"), at + 2, "u8*4 u16*3", PIECE, entries));
         }
     }
-    families(rom, &mut s);
+    let mut bounded = Vec::new();
+    families(rom, &mut s, &mut bounded);
+    resolve(&mut s, bounded);
     s
+}
+
+/// A table whose end is not known from the code: it runs up to the next table of the file or the next code executed by
+/// the original (`code_68k.txt`), at most `max` bytes (index of the table in the specs, maximum).
+type Bounded = Vec<(usize, u32)>;
+
+fn resolve(s: &mut [Spec], bounded: Bounded) {
+    let code = crate::effects::code_starts();
+    let starts: Vec<u32> = s.iter().map(|t| t.rom).collect();
+    for (i, max) in bounded {
+        let at = s[i].rom;
+        let next_table = starts.iter().copied().filter(|&a| a > at).min();
+        let next_code = code.iter().copied().find(|&a| a > at);
+        let end = [next_table, next_code, Some(at + max)].into_iter().flatten().min().unwrap();
+        s[i].rows = (end - at) as usize / row_size(s[i].format);
+    }
 }
 
 /// A row of 32 bytes per pair of difficulty levels (`rank / 2`), drawn with a 5-bit random number.
 const BY_RANK: (&str, usize) = ("u8*32", 16);
 
 /// Tables of the families (`enemy_*/`), one per line: name `<family>/<table>`, space, address, format, rows.
-fn families(rom: &Program, s: &mut Vec<Spec>) {
+fn families(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     let _ = rom;
     let rank = |s: &mut Vec<Spec>, name: &str, at: u32| s.push(data(name, at, BY_RANK.0, &[], BY_RANK.1));
+    // a table whose end is not known (see `Bounded`), of the program or the data space
+    let mut upto = |s: &mut Vec<Spec>, name: &str, at: u32, program: bool, format: &'static str, max: u32| {
+        bounded.push((s.len(), max));
+        s.push(if program { prog(name, at, format, &[], 0) } else { data(name, at, format, &[], 0) });
+    };
     // ---- goblin (type 15) ----
     rank(s, "goblin/near_moves", 0x6ebc0);
     rank(s, "goblin/far_moves", 0x6edc0);
@@ -134,10 +157,81 @@ fn families(rom: &Program, s: &mut Vec<Spec>) {
     rank(s, "goblin/follow_moves", 0x6e904);
     s.push(prog("goblin/teleport_x", 0x6e44c, "i16", &[], 4));
     s.push(prog("goblin/teleport_y", 0x6e43e, "i16", &[], 8));
-    // ---- gnoll (type 14) ----
+    // ---- gnoll (type 13) ----
     s.push(prog("gnoll/teleport_x", 0x6b8a4, "i16", &[], 4));
     s.push(prog("gnoll/teleport_y", 0x6b89c, "i16", &[], 4));
-    // ---- troll (type 13) ----
+    // ---- troll (type 14) ----
     s.push(prog("troll/teleport_x", 0x6ceaa, "i16", &[], 4));
     s.push(prog("troll/teleport_y", 0x6ce9c, "i16", &[], 8));
+    rank(s, "troll/near_moves", 0x6d620);
+    rank(s, "troll/far_moves", 0x6d820);
+    rank(s, "troll/follow_moves", 0x6d364);
+    rank(s, "gnoll/near_moves", 0x6c0d6);
+    rank(s, "gnoll/far_moves", 0x6c2d6);
+    rank(s, "gnoll/follow_moves", 0x6be1a);
+    // ---- bow gnoll (type 3) ----
+    rank(s, "bow/first_actions", 0x5d47a);
+    rank(s, "bow/second_actions", 0x5d67a);
+    rank(s, "bow/shot_repeats", 0x5d07a);
+    rank(s, "bow/follow_moves", 0x5ce72);
+    s.push(prog("bow/shot_mask", 0x5cde0, "x16", &[], 1));
+    // ---- shadow elf (type 12) ----
+    rank(s, "elf/fallback_moves", 0x6a480);
+    rank(s, "elf/close_attacks", 0x6a73c);
+    rank(s, "elf/far_attacks", 0x6a93c);
+    s.push(prog("elf/jump_dx", 0x69f4a, "i16", &[], 4));
+    s.push(prog("elf/jump_dy", 0x69f42, "i16", &[], 4));
+    // ---- mud golem (type 11) ----
+    rank(s, "golem/next_moves", 0x69146);
+    upto(s, "golem/parry_by_group", 0x682e8, true, "u8", 0x10);
+    // ---- kobold (type 0) ----
+    lists(rom, s, "kobold/near_lists", 0x56d04, 4);
+    lists(rom, s, "kobold/far_lists", 0x56d14, 4);
+    rank(s, "kobold/follow_moves", 0x5799c);
+    upto(s, "kobold/strike_powers", 0x57c52, false, "u8*4", 0x40);
+    s.push(prog("kobold/dash_times", 0x553b4, "u16", &[], 16));
+    s.push(data("kobold/breath_repeats", 0x55de6, "u8", &[], 32));
+    s.push(prog("kobold/breath_sounds", 0x55e50, "u8", &[], 16));
+    // ---- skeleton (type 1) ----
+    rank(s, "skeleton/close_attacks", 0x5932a);
+    rank(s, "skeleton/far_attacks", 0x5952a);
+    rank(s, "skeleton/next_moves", 0x59982);
+    upto(s, "skeleton/series_ai", 0x57de6, false, "u8*4", 0x20);
+    upto(s, "skeleton/parry_by_series", 0x589da, true, "u8", 0x10);
+    // ---- troglodyte (type 2) ----
+    rank(s, "trog/close_attacks", 0x5b074);
+    rank(s, "trog/close_attacks_armed", 0x5b274);
+    rank(s, "trog/repeats", 0x5b4d6);
+    rank(s, "trog/jump_moves", 0x5b6f8);
+    rank(s, "trog/blink_delays", 0x5b974);
+    rank(s, "trog/fallback_moves", 0x5bba6);
+    s.push(prog("trog/blink_times", 0x5b96c, "u16", &[], 4));
+    upto(s, "trog/walk_speeds", 0x5af64, false, "u16", 0x20);
+    // ---- owlbear (type 4) ----
+    rank(s, "owlbear/close_attacks", 0x5eec6);
+    rank(s, "owlbear/far_attacks", 0x5f0c6);
+    rank(s, "owlbear/next_moves", 0x5f3d8);
+    s.push(data("owlbear/series", 0x5f5fa, "u8*16", &[], 16));
+    s.push(prog("owlbear/attack_chance", 0x5f2ea, "x32", &[], 32));
+    // ---- ghoul (type 5) ----
+    rank(s, "ghoul/close_attacks", 0x60d38);
+    rank(s, "ghoul/far_attacks", 0x60f38);
+    rank(s, "ghoul/fallback_moves", 0x61164);
+    // ---- hellhound (type 6) ----
+    lists(rom, s, "hellhound/move_lists", 0x62f80, 4);
+    rank(s, "hellhound/follow_moves", 0x637fe);
+    s.push(prog("hellhound/turn_mask", 0x61a00, "x32", &[], 1));
+    upto(s, "hellhound/flame_script", 0x62284, false, "u8*2", 0x20);
+}
+
+/// A table of `count` addresses of tables by difficulty level (data space), and the tables it points to, named
+/// `<name>/<k>` (unless an earlier list already declared them).
+fn lists(rom: &Program, s: &mut Vec<Spec>, name: &str, at: u32, count: u32) {
+    s.push(data(name, at, "addr", &[], count as usize));
+    for k in 0..count {
+        let target = rom.rd32(at + 4 * k);
+        if !s.iter().any(|t| t.rom == target && !t.program) {
+            s.push(data(&format!("{name}/{k}"), target, BY_RANK.0, &[], BY_RANK.1));
+        }
+    }
 }

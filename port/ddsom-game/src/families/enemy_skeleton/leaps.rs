@@ -225,7 +225,7 @@ fn guard_wait<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB3, 2);
         x.set16(Obj::ANIM_TIMER, 1);
         let series = x.u8(Enemy::GROUP) as i8 as i16 as u16 as u32;
-        let v = x.rom8(0x589da + series);
+        let v = tables::table("skeleton/parry_by_series").at8(x.b, series);
         x.set8(Enemy::AI_68, v);
     }
     step(x);

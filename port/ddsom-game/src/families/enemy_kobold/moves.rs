@@ -59,7 +59,7 @@ fn b_roar<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Enemy::VULNERABLE, 1);
             x.set8(Kobold::LOOK, 7);
             let r = rand_and(x, 0x1f);
-            let n = x.data8(0x55de6 + r);
+            let n = tables::table("kobold/breath_repeats").at8(x.b, r);
             x.set8(Kobold::REPEAT, n);
             mv(x, 7);
         }

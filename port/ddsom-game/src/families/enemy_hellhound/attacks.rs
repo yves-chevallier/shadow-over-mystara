@@ -14,7 +14,7 @@ use crate::objects::Current;
 use crate::objects::Obj;
 
 /// ROM table: duration and shot key of the breath flames.
-const FLAME_SCRIPT: u32 = 0x62284;
+const FLAME_SCRIPT: &str = "hellhound/flame_script";
 
 /// Effect of a bite or an attack (0x9eba6 then 0xebd30); the animation key is reset to zero.
 fn bite_effect<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
@@ -316,10 +316,10 @@ fn flame_tick<R: Bench>(x: &mut Cx<'_, R>, both: bool) -> bool {
         return true;
     }
     let idx = 2 * x.u8(Hellhound::SCRIPT) as u32;
-    let t = x.data8(FLAME_SCRIPT + idx);
+    let t = tables::table(FLAME_SCRIPT).at8(x.b, idx);
     x.set8(Hellhound::TIMER, t);
-    let v = x.data8(FLAME_SCRIPT + idx + 1);
-    x.set8(0x43, v);
+    let v = tables::table(FLAME_SCRIPT).at8(x.b, idx + 1);
+    x.set8(Hellhound::FLAME_ARG, v);
     x.add8(Hellhound::SCRIPT, 1);
     if (x.u8(Hellhound::SCRIPT) as i8) > 0xc {
         return false;
@@ -701,7 +701,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
         return set_state_long(x, STANCE);
     }
     let victim = x.linked(f::TARGET);
-    if victim.u8(x.b, Enemy::ACTIVE) == 0 || victim.u8(x.b, 0x188) == 0 {
+    if victim.u8(x.b, Enemy::ACTIVE) == 0 || victim.u8(x.b, Prey::HELD) == 0 {
         return set_state_long(x, STANCE);
     }
     match x.u8(f::SUB3) {
@@ -763,6 +763,6 @@ fn bite_victim<R: Bench>(x: &mut Cx<'_, R>, which: u8) {
 
 fn release<R: Bench>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
-    victim.set_u8(x.b, 0x6f, 1);
+    victim.set_u8(x.b, crate::player::Player::TIMER_6F, 1);
     lib::release_player(x, victim);
 }

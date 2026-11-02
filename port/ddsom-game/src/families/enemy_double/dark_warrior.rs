@@ -361,6 +361,6 @@ pub(super) mod dark_warrior_double {
         let code = m.u8(x.b, Enemy::REACTION) as u32;
         let routine = x.prog32(REACTIONS.0 + code);
         run_reaction(x, routine);
-        x.set8(0x3b, 0);
+        x.set8(Enemy::GROUND_MARK, 0);
     }
 }

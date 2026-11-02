@@ -46,6 +46,10 @@ record! {
         look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa1;
         /// Timer of a step.
         timer, set_timer, TIMER: u8 @ 0xa2;
+        /// Object that spawned the ghoul (word, RAM address), when `SPAWNED`.
+        spawner, set_spawner, SPAWNER: u16 @ 0xa4;
+        /// Non-zero: spawned by an object (`SPAWNER`), told of its death.
+        spawned, set_spawned, SPAWNED: u8 @ 0xa6;
         /// Saved position (flight).
         saved_x, set_saved_x, SAVED_X: u16 @ 0xa8;
     }
@@ -59,9 +63,9 @@ const STANCE: u32 = 0x0202_0000;
 const IDLE: u32 = 0x020a_0000;
 const KNOCKED: u32 = 0x0408_0000;
 /// ROM tables: attacks to choose per difficulty level (`A5+0x7f92`), 32 bytes per level.
-const CLOSE_ATTACKS: u32 = 0x60d38;
-const FAR_ATTACKS: u32 = 0x60f38;
-const FALLBACK_MOVES: u32 = 0x61164;
+const CLOSE_ATTACKS: &str = "ghoul/close_attacks";
+const FAR_ATTACKS: &str = "ghoul/far_attacks";
+const FALLBACK_MOVES: &str = "ghoul/fallback_moves";
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -112,29 +116,18 @@ fn set_speed<R: Bench>(x: &mut Cx<'_, R>, speed: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, speed as u16);
 }
 
-/// Row of 32 bytes for the difficulty (`A5+0x7f92`).
-fn difficulty_row<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
-    ((var::RANK.get(x.b) >> 1) << 5) as u32
-}
-
-/// Byte drawn at random from the difficulty row of `table` (A4 = row, D0 = index).
-fn pick_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let row = difficulty_row(x);
-    let n = rand_and(x, 0x1f);
-    x.data8(table + row + n)
-}
 
 /// 0x61138: end of an attack, the next one is drawn from the difficulty row.
 fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
-    let mv = pick_byte(x, FALLBACK_MOVES);
+    let mv = rank_byte(x, FALLBACK_MOVES);
     x.set8(f::SUB, 8);
     x.set8(f::SUB2, mv);
     x.set8(f::SUB3, 0);
 }
 
 /// 0x60d04 / 0x60d0c: chooses the attack move (`+6` = table byte + `bias`).
-fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32, bias: u8) {
-    let mv = pick_byte(x, table);
+fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: &str, bias: u8) {
+    let mv = rank_byte(x, table);
     x.set8(f::SUB2, mv.wrapping_add(bias));
     x.set8(f::SUB3, 0);
 }
@@ -159,7 +152,7 @@ fn decision<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x5fe22 / 0x5fe70: a player in the box and the decision accepts it; the attack is then chosen.
-fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, table: u32, bias: u8) -> bool {
+fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, table: &str, bias: u8) -> bool {
     let ok = lib::target_in_box(x, d0, d1, d2) && decision(x);
     if ok {
         set_state_long(x, 0x0204_0000);
@@ -389,7 +382,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB2, 2);
                 x.set8(Enemy::LOOT, 0);
                 x.set8(Enemy::LOOT_ROW, 0);
-                x.set8(0xa6, 1);
+                x.set8(Ghoul::SPAWNED, 1);
                 x.set8(Enemy::VULNERABLE, 1);
                 look(x, 0xff);
                 x.set16(Enemy::CREATOR, 0x703);
@@ -422,12 +415,12 @@ fn blink<R: Bench>(x: &mut Cx<'_, R>, next: u16) {
     x.set_bit(Enemy::DISPLAY, 1, true);
     let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
     x.set8(Ghoul::TIMER, t);
-    if t & x.u8(0x42) != 0 {
+    if t & x.u8(Enemy::BLINK_MASK) != 0 {
         return;
     }
     x.set_bit(Enemy::DISPLAY, 1, false);
-    let n = x.u8(0x43).wrapping_sub(1);
-    x.set8(0x43, n);
+    let n = x.u8(Enemy::BLINK_COUNT).wrapping_sub(1);
+    x.set8(Enemy::BLINK_COUNT, n);
     if n != 0 {
         return;
     }
@@ -438,10 +431,10 @@ fn blink<R: Bench>(x: &mut Cx<'_, R>, next: u16) {
 // --- state 6: release ------------------------------------------------------------------------
 
 fn dead<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0xa6) != 0 {
-        let parent = x.linked(0xa4);
-        let n = parent.u8(x.b, 0xaf).wrapping_sub(1);
-        parent.set_u8(x.b, 0xaf, n);
+    if x.u8(Ghoul::SPAWNED) != 0 {
+        let parent = x.linked(Ghoul::SPAWNER);
+        let n = parent.u8(x.b, Enemy::CHILDREN).wrapping_sub(1);
+        parent.set_u8(x.b, Enemy::CHILDREN, n);
     }
     free(x);
 }

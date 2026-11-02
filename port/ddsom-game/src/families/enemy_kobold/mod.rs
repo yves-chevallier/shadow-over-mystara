@@ -120,8 +120,8 @@ fn stand_when_done<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// A puff of dust (0xb10c8) every `mask + 1` frames (counter `A5+0x6e` is masked in place).
 fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d1: u16, d2: i16, d3: i16) {
-    let v = x.a5_u16(0x6e) & mask;
-    x.set_a5_u16(0x6e, v);
+    let v = var::FRAME_COUNTER.get(x.b) & mask;
+    var::FRAME_COUNTER.set(x.b, v);
     if v == 0 {
         lib::shock(x, 0, d1, d2 as u16, d3 as u16);
     }
@@ -156,7 +156,7 @@ fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn set_power<R: Bench>(x: &mut Cx<'_, R>) {
     let kind = x.u8(Enemy::STRIKE_KIND).wrapping_mul(4) as u32;
     let group = x.u8(Enemy::GROUP) as u32;
-    let p = x.data8(0x57c52 + kind + group);
+    let p = tables::table("kobold/strike_powers").at8(x.b, kind + group);
     x.set8(Enemy::STRIKE_POWER, p);
 }
 
@@ -171,11 +171,11 @@ fn on_right_half<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// far series.
 fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
     let profile = x.u8(Enemy::GROUP).wrapping_mul(4) as u32;
-    let table = if bias == 0 { 0x56d04 } else { 0x56d14 };
-    let list = x.data32(table + profile);
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
+    let lists = if bias == 0 { "kobold/near_lists" } else { "kobold/far_lists" };
+    let list = tables::table(lists).at32(x.b, profile);
+    let row = rank_row(x);
     let r = rand_and(x, 0x1f);
-    let mv = x.data8(list + row + r);
+    let mv = tables::held8(x.b, list + row + r);
     x.set8(f::SUB2, mv.wrapping_add(bias));
     x.set16(f::STATE, 0x0204);
     x.set8(f::SUB3, 0);
@@ -185,7 +185,7 @@ fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
 }
 
 /// 0x57924: end of a move: variant 0 gets back on its feet; the others, if the target is in a range box, chain an
-/// attack of series `0x5799c`.
+/// attack of the table `follow_moves`.
 fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::VARIANT) == 0 || x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
@@ -194,9 +194,7 @@ fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if !close {
         return set_state_long(x, STANCE);
     }
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    let r = rand_and(x, 0x1f);
-    let mv = x.data8(0x5799c + row + r);
+    let mv = rank_byte(x, "kobold/follow_moves");
     x.set8(f::SUB2, mv);
     x.set16(f::STATE, 0x0208);
     x.set8(f::SUB3, 0);

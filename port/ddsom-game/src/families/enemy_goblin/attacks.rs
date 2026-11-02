@@ -51,7 +51,7 @@ fn crouch<R: Bench>(x: &mut Cx<'_, R>, ticks: u8) {
         return;
     }
     x.add8(f::SUB3, 2);
-    x.set8(0x3b, 0);
+    x.set8(Enemy::GROUND_MARK, 0);
     x.set_bit(Enemy::DISPLAY, 1, true);
     x.set8(Goblin::TIMER, ticks);
 }
@@ -177,7 +177,7 @@ fn side_hop<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             x.add8(f::SUB3, 2);
             x.set_bit(Enemy::DISPLAY, 1, true);
-            x.set8(0x3b, 0);
+            x.set8(Enemy::GROUND_MARK, 0);
             x.set8(Goblin::TIMER, 0x14);
         }
         6 => shift(x, 0x40),

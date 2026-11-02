@@ -476,7 +476,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     if victim.u8(x.b, Enemy::ACTIVE) == 0 {
         return go::strike_10(x);
     }
-    if victim.u8(x.b, 0x188) == 0 {
+    if victim.u8(x.b, Prey::HELD) == 0 {
         return go::circle(x);
     }
     if x.u8(f::SUB2) != 0 {
@@ -538,7 +538,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x650a6: the victim is released (`+0x6f` raised) and the creature goes into circular flight.
 fn dismount<R: Bench>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
-    victim.set_u8(x.b, 0x6f, 1);
+    victim.set_u8(x.b, crate::player::Player::TIMER_6F, 1);
     lib::release_player(x, victim);
     go::circle(x);
 }

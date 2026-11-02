@@ -4,11 +4,11 @@ use crate::families::cx::Bench;
 use super::*;
 
 /// ROM tables: attacks to choose per difficulty level (`A5+0x7f92`), 32 bytes per level.
-const CLOSE_ATTACKS: u32 = 0x5eec6;
-const FAR_ATTACKS: u32 = 0x5f0c6;
-const NEXT_MOVES: u32 = 0x5f3d8;
+const CLOSE_ATTACKS: &str = "owlbear/close_attacks";
+const FAR_ATTACKS: &str = "owlbear/far_attacks";
+const NEXT_MOVES: &str = "owlbear/next_moves";
 /// Draw of the chance to attack, one long per difficulty level.
-const ATTACK_CHANCE: u32 = 0x5f2ea;
+const ATTACK_CHANCE: &str = "owlbear/attack_chance";
 
 // --- substate 0: arrival ----------------------------------------------------------------------
 
@@ -74,7 +74,7 @@ pub(super) fn turn_end<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5f2c6: does the beast feel like attacking? (one bit drawn from a mask per difficulty level).
 fn attack_chance<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let level = (var::RANK.get(x.b).wrapping_mul(4)) as u32;
-    let mask = x.prog32(ATTACK_CHANCE + level);
+    let mask = tables::table(ATTACK_CHANCE).at32(x.b, level);
     let bit = (x.random() as u32) & 0x1f;
     mask >> bit & 1 != 0
 }
@@ -164,7 +164,7 @@ pub(super) fn engage<R: Bench>(x: &mut Cx<'_, R>) {
 /// A player is right in front (0x5dd7a or 0x5ddf4): at random an attack from the `attacks` table or a short attack
 /// (state `0x02020800`). `mask`: bits of the draw that choose the short attack (`0xf`: up to 10 out of 16, `0x2`: one
 /// time in two).
-fn reach<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, mask: u16, attacks: u32) -> bool {
+fn reach<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, mask: u16, attacks: &str) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
     }
@@ -186,10 +186,8 @@ fn reach<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, mask: u16, atta
 }
 
 /// 0x5ee94 and 0x5ee9a: draws the attack (`+6`) from the difficulty-level table.
-pub(super) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
-    let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
-    let r = (x.random() as u32) & 0x1f;
-    let pick = x.data8(table + level + r);
+pub(super) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, table: &str) {
+    let pick = rank_byte(x, table);
     x.set8(f::SUB2, pick);
     x.set16(f::STATE, 0x0204);
     x.set8(Enemy::SUB_STEP, 0);
@@ -287,9 +285,7 @@ pub(super) fn next_move<R: Bench>(x: &mut Cx<'_, R>) {
     if !lib::target_in_box(x, -0x38, 0x38, 0x20) && !lib::target_in_box(x, -0xb0, 0x40, 0x20) {
         return set_state_long(x, ACTIVE_STANCE);
     }
-    let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
-    let r = (x.random() as u32) & 0x1f;
-    let pick = x.data8(NEXT_MOVES + level + r);
+    let pick = rank_byte(x, NEXT_MOVES);
     x.set8(f::SUB2, pick);
     x.set16(f::STATE, 0x0208);
     x.set8(Enemy::SUB_STEP, 0);

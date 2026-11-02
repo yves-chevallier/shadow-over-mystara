@@ -69,15 +69,16 @@ const SET_STRIKE: RomAddr = RomAddr(0x15fabe);
 const STANCE: u32 = 0x0202_0000;
 const IDLE: u32 = 0x020a_0000;
 /// ROM tables: attacks to choose per difficulty level (`A5+0x7f92`), 32 bytes per level.
-const FALLBACK_MOVES: u32 = 0x5bba6;
-const CLOSE_ATTACKS: u32 = 0x5b074;
-const CLOSE_ATTACKS_ARMED: u32 = 0x5b274;
-const REPEATS_TABLE: u32 = 0x5b4d6;
-const JUMP_MOVES: u32 = 0x5b6f8;
-const BLINK_DELAYS: u32 = 0x5b974;
-const BLINK_TIMES: u32 = 0x5b96c;
-/// Walking speeds per series (2 words per series).
-const WALK_SPEEDS: u32 = 0x5af64;
+const FALLBACK_MOVES: &str = "trog/fallback_moves";
+const CLOSE_ATTACKS: &str = "trog/close_attacks";
+const CLOSE_ATTACKS_ARMED: &str = "trog/close_attacks_armed";
+const REPEATS_TABLE: &str = "trog/repeats";
+const JUMP_MOVES: &str = "trog/jump_moves";
+/// Invisibility delays: index (in bytes) in `BLINK_TIMES`, by difficulty level.
+const BLINK_DELAYS: &str = "trog/blink_delays";
+const BLINK_TIMES: &str = "trog/blink_times";
+/// Speed tables of the walk per series (words, read at the series × 4 plus 0, 2 or 4).
+const WALK_SPEEDS: &str = "trog/walk_speeds";
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -122,17 +123,11 @@ fn difficulty_row<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     (((var::RANK.get(x.b) >> 1) << 5) as u32) & 0xffff
 }
 
-/// Byte drawn at random from the difficulty row of `table` (A4 = row, D0 = index).
-fn pick_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
-    let row = difficulty_row(x);
-    let n = rand_and(x, 0x1f);
-    x.data8(table + row + n)
-}
 
 /// 0x5af4e: chooses the speed table according to the series (`idx`: 0, 2 or 4).
 fn walk_speed<R: Bench>(x: &mut Cx<'_, R>, idx: u32) {
     let series = x.u8(Enemy::GROUP) as u32;
-    let n = x.data16(WALK_SPEEDS + ((series << 2) & 0xff) + idx);
+    let n = tables::table(WALK_SPEEDS).at16(x.b, ((series << 2) & 0xff) + idx);
     x.select_speed(&crate::objects::motion::SPEEDS_B, n);
 }
 
@@ -178,10 +173,8 @@ fn back_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
 /// End of the attacks: the next one is drawn from the difficulty row (0x5bb74).
 fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::AI_SHOT, 0xff);
-    let row = difficulty_row(x);
-    let n = rand_and(x, 0x1f);
+    let mv = rank_byte(x, FALLBACK_MOVES);
     x.set8(f::SUB, 8);
-    let mv = x.data8(FALLBACK_MOVES + row + n);
     x.set8(f::SUB2, mv);
     x.set8(f::SUB3, 0);
 }
@@ -308,8 +301,8 @@ fn pick_blink_delay<R: Bench>(x: &mut Cx<'_, R>) {
     let row = (d2 << 5) as u32;
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | row;
     let n = rand_and(x, 0x1f);
-    let idx = x.data8(BLINK_DELAYS + row + n) as u32;
-    let w = x.rom16(BLINK_TIMES + idx);
+    let idx = tables::table(BLINK_DELAYS).at8(x.b, row + n) as u32;
+    let w = tables::table(BLINK_TIMES).at16(x.b, idx);
     x.set16(Trog::BLINK_DELAY, w);
 }
 

@@ -314,7 +314,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 {
         x.add8(f::SUB, 2);
         body(x, 5);
-        x.set8(0x3b, 0);
+        x.set8(Enemy::GROUND_MARK, 0);
     }
     x.set8(Warrior::BOB_PENDING, 1);
     bob(x);

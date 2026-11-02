@@ -206,7 +206,7 @@ fn enter_from_edge<R: Bench>(x: &mut Cx<'_, R>) {
 fn nest<R: Bench>(x: &mut Cx<'_, R>) {
     start_walk(x);
     x.set8(f::SUB, 8);
-    let list = x.u8(0x42) as u32;
+    let list = x.u8(Enemy::BLINK_MASK) as u32;
     if list == 3 {
         x.set16(Obj::Z, 0x60);
     }

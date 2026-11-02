@@ -73,8 +73,8 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
             play(x, 0x13);
         }
         2 => {
-            let low = x.a5_u16(0x6e) & 3;
-            x.set_a5_u16(0x6e, low);
+            let low = var::FRAME_COUNTER.get(x.b) & 3;
+            var::FRAME_COUNTER.set(x.b, low);
             if low == 0 {
                 lib::shock(x, 0, 2, 8, 0xffff);
             }

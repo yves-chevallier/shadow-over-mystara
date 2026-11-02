@@ -45,6 +45,12 @@ record! {
         timer2, set_timer2, TIMER2: u16 @ 0xa4;
         /// Orientation of the target as seen by the boxes (0, 2) or box number.
         side, set_side, SIDE: u8 @ 0xa6;
+        /// Set when a player grabs the golem; not read by the family (h).
+        grabbed, set_grabbed, GRABBED: u8 @ 0xa7;
+        /// Set before a squat (0x100, or 0xff with `SQUAT_SIDE`); not read by the family (h).
+        squat_mode, set_squat_mode, SQUAT_MODE: u16 @ 0xa8;
+        /// Side drawn before a squat (0 or 2), 1 at the end of a freeze; not read by the family (h).
+        squat_side, set_squat_side, SQUAT_SIDE: u8 @ 0xa9;
     }
 }
 use crate::objects::pools;

@@ -235,7 +235,7 @@ fn drop_strike<R: Bench>(x: &mut Cx<'_, R>, kind: Drop) {
             if step(x) {
                 x.add8(f::SUB3, 2);
                 x.set_bit(Enemy::DISPLAY, 1, true);
-                x.set8(0x3b, 0);
+                x.set8(Enemy::GROUND_MARK, 0);
                 x.set8(Elf::REPEAT, 0x1e);
             }
         }
@@ -471,7 +471,7 @@ fn backstep_group<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB3, 2);
                 x.set8(Elf::REPEAT, 0x1e);
                 x.set_bit(Enemy::DISPLAY, 1, true);
-                x.set8(0x3b, 0);
+                x.set8(Enemy::GROUND_MARK, 0);
             }
         }
         4 => {

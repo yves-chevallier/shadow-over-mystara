@@ -37,7 +37,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         let attacker = x.linked(Enemy::HOLDER);
-        let strength = attacker.u8(x.b, 0x57) >> 1;
+        let strength = attacker.u8(x.b, Enemy::HIT_STRENGTH) >> 1;
         x.set8(f::FREEZE, strength);
         x.set16(Golem::TIMER, 0xf);
         x.set16(Obj::VX, 0x480);
@@ -114,7 +114,7 @@ fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(0xa7, 1);
+            x.set8(Golem::GRABBED, 1);
             let at = x.u16(Obj::X);
             x.set16(Golem::TIMER2, at);
             let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };

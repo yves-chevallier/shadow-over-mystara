@@ -10,7 +10,7 @@ use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Series of repetitions of an attack, drawn from a table per difficulty level (0x5f5fa).
-const SERIES_TABLE: u32 = 0x5f5fa;
+const SERIES_TABLE: &str = "owlbear/series";
 /// Long states to resume after a turn-around: attacks (substate 4) or second series (6).
 const RESUME_STRIKES: u32 = 0x0204_0000;
 const RESUME_LEAPS: u32 = 0x0206_0000;
@@ -129,7 +129,7 @@ fn swipe_begin<R: Bench>(x: &mut Cx<'_, R>) {
 fn roll_series<R: Bench>(x: &mut Cx<'_, R>) {
     let level = (var::RANK.get(x.b) >> 1 << 4) as u32;
     let r = (x.random() as u32) & 0xf;
-    let n = x.data8(SERIES_TABLE + level + r);
+    let n = tables::table(SERIES_TABLE).at8(x.b, level + r);
     x.set8(Owlbear::SERIES, n);
 }
 
@@ -224,8 +224,8 @@ fn dust<R: Bench>(x: &mut Cx<'_, R>, d2: i16) {
 
 /// Recoil slide (0x5e27a): dust every four steps, then stop.
 fn slide<R: Bench>(x: &mut Cx<'_, R>) {
-    let low = x.a5_u16(0x6e) & 3;
-    x.set_a5_u16(0x6e, low);
+    let low = var::FRAME_COUNTER.get(x.b) & 3;
+    var::FRAME_COUNTER.set(x.b, low);
     if low == 0 {
         dust(x, -0x18);
     }
@@ -449,8 +449,8 @@ fn hop_wait<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x5e6da: slide after the small leap; it lasts as long as the X speed stays positive.
 fn hop_slide<R: Bench>(x: &mut Cx<'_, R>) {
-    let low = x.a5_u16(0x6e) & 3;
-    x.set_a5_u16(0x6e, low);
+    let low = var::FRAME_COUNTER.get(x.b) & 3;
+    var::FRAME_COUNTER.set(x.b, low);
     if low == 0 {
         dust(x, -0x18);
     }
