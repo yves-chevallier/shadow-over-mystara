@@ -49,3 +49,8 @@ fn unshuffle(buf: &mut [u8]) {
     let quarter = half / 2;
     a[quarter * 8..].swap_with_slice(&mut b[..quarter * 8]);
 }
+
+/// The ddsom graphics, decoded once into a tile atlas.
+pub fn load_atlas(romdir: &Path) -> io::Result<crate::TileAtlas> {
+    Ok(crate::TileAtlas::from_planar(&load_gfx(romdir, DDSOM_GFX, DDSOM_GFX_SIZE)?))
+}

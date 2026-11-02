@@ -29,7 +29,7 @@ fn render_identical_to_mame() {
         eprintln!("ROMs or snapshots missing, test skipped");
         return;
     }
-    let gfx = rom::load_gfx(&romdir, rom::DDSOM_GFX, rom::DDSOM_GFX_SIZE).unwrap();
+    let atlas = rom::load_atlas(&romdir).unwrap();
 
     let mut frames: Vec<u32> = std::fs::read_dir(&snaps).unwrap()
         .filter_map(|e| e.ok()?.file_name().to_str()?.parse().ok())
@@ -52,7 +52,7 @@ fn render_identical_to_mame() {
             gfxram: &gfxram, cps_a: &cps_a, cps_b: &cps_b, objram: &objram, output: &output,
             palette_ram: pal.as_deref(),
         };
-        let img = render(&v, &gfx);
+        let img = render(&v, &atlas);
         let reference = read_png(&snaps.join(format!("png/ddsom/{n:04}.png")));
         let diff = img.iter().zip(&reference).filter(|(a, b)| a != b).count();
         assert_eq!(diff, 0, "frame {f}: {diff} pixels differ from MAME");

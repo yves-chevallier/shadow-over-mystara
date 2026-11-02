@@ -15,7 +15,7 @@ use crate::sprites::Frame;
 use crate::remainder::Remainder;
 use crate::texts;
 use crate::{
-    Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, Speeds, SpriteTables, Terrain, Texts,
+    Anims, Cells, Frames, Levels, Music, Palettes, ScenePalettes, Spawns, Speeds, SpriteTables, Terrain, Texts,
 };
 
 /// Size of the program ROM (space 0x000000-0x3fffff).
@@ -483,7 +483,8 @@ impl Program {
 }
 
 /// Graphics region (16x16 cells in hardware format: 4 planes per group of 8 pixels, 128 bytes per
-/// cell), as `cps2_gfx::rom::load_gfx` builds it from the ROMs.
+/// cell), as `cps2_gfx::rom::load_gfx` builds it from the ROMs. Only for the lossless tests: the game reads the
+/// cells decoded once (`crate::tile_atlas`).
 pub fn gfx_region(dir: &Path) -> io::Result<Vec<u8>> {
     Ok(Cells::load(dir)?.to_region())
 }
@@ -507,34 +508,6 @@ impl Cells {
     pub fn to_region(&self) -> Vec<u8> {
         (0..self.len()).flat_map(|c| self.encode(c)).collect()
     }
-}
-
-/// Size of the QSound sample ROM (`dd2.11m` and `dd2.12m`).
-pub const SAMPLES_SIZE: usize = 0x40_0000;
-
-/// Sample ROM: the zones described by the driver's sample table (`music.json`) and the
-/// `sounds/NNN.wav` files and what follows each sample (`Music::sample_tails`), the rest zero. `Image::covered` gives the filled zones.
-pub fn qsound_samples(dir: &Path) -> io::Result<Image> {
-    let music = Music::load(&dir.join("sound/music.json"))?;
-    let mut img = Image::new(SAMPLES_SIZE);
-    for i in 0..music.sample_count() {
-        let path = dir.join(format!("sounds/{i:03}.wav"));
-        if !path.exists() || !music.sample_valid(i) {
-            continue;
-        }
-        let pcm: Vec<u8> = Sample::load(&path)?.pcm.iter().map(|&v| v as u8).collect();
-        let (start, end) = music.sample_span(i);
-        img.put(start as u32, &pcm);
-        // what follows up to the next sample (zeros omitted in the file)
-        let mut tail = vec![0; music.sample_tail_end(i) - end - 1];
-        if let Some(hex) = music.sample_tails.get(i) {
-            for (k, b) in tail.iter_mut().zip(hex.as_bytes().chunks(2)) {
-                *k = u8::from_str_radix(std::str::from_utf8(b).unwrap_or("00"), 16).unwrap_or(0);
-            }
-        }
-        img.put(end as u32 + 1, &tail);
-    }
-    Ok(img)
 }
 
 /// Z80 region (`cps2::sound::Sound::rom`) with the driver data of `sound/music.json` at their original
@@ -581,10 +554,10 @@ pub fn contents(dir: &Path) -> io::Result<cps2::Contents> {
     Ok(cps2::Contents {
         program: words(&p.data),
         decrypted_program: words(&p.prog),
-        graphics: gfx_region(&dir.join("gfx"))?,
+        graphics: crate::tile_atlas(&dir.join("gfx"))?,
         audio: audio_region(dir)?.bytes,
         dsp: qsound_dsp(dir)?,
-        samples: qsound_samples(dir)?.bytes,
+        samples: crate::samples::bank(dir)?.bytes,
     })
 }
 

@@ -10,13 +10,12 @@
 use std::path::Path;
 
 use cps2::Machine;
-use ddsom_assets::rebuild;
 
 fn machine(roms: &Path, eeprom: Option<&[u8]>, assets: Option<&Path>) -> Machine {
     let mut m = match assets {
         Some(dir) => {
-            let gfx = rebuild::gfx_region(&dir.join("gfx")).expect("graphics");
-            let pcm = rebuild::qsound_samples(dir).expect("samples").bytes;
+            let gfx = ddsom_assets::tile_atlas(&dir.join("gfx")).expect("graphics");
+            let pcm = ddsom_assets::samples::bank(dir).expect("samples").bytes;
             Machine::load_ddsom_with(roms, eeprom, Some(gfx), Some(pcm))
         }
         None => Machine::load_ddsom(roms, eeprom),

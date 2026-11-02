@@ -20,6 +20,10 @@ Point de départ pour la prochaine session. L'historique détaillé des lots est
   d'octets du pilote, `music.json` change de format (**réextraire `music`**), `qsound::DspTables` ; validé 308/308
   dans les deux modes après fusion de main 39be0e4, non fusionné. Voir [fin.md](fin.md) (L3) et [son.md](son.md)
   « Tableaux indexés ».
+* **L4, rendu et mixage depuis les assets** (branche `wt-l4-rendu`, 2026-11-02) : atlas de tuiles
+  `cps2_gfx::TileAtlas` (cellules 8 bits lues telles quelles dans `gfx/cells_NN.png`), rendu des couches par lignes
+  de tuiles, banque d'échantillons `ddsom_assets::samples::bank`, boucle des voix et filtres QSound vectorisés ;
+  `bench` bot30k ~15 500 images/s sans rendu, ~3 300 avec ; `render_check` identique. Voir [fin.md](fin.md) (L4).
 
 Aucune branche ouverte : `wt-pile` (partie 4) et `wt-locales` (partie 5, étapes 1-2 et 11 familles d'ennemis) sont fusionnés dans main (edd4e00), 296/296 VALIDE dans les deux modes.
 

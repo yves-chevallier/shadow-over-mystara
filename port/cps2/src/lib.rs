@@ -11,6 +11,7 @@ use std::io;
 use std::path::Path;
 
 pub use bus::{Cps2Bus, Inputs};
+pub use cps2_gfx::TileAtlas;
 use eeprom::Eeprom93c46;
 #[cfg(feature = "m68k")]
 use m68k::Cpu;
@@ -116,7 +117,8 @@ pub struct Machine {
     pub cpu: Cpu,
     pub bus: Cps2Bus,
     pub sound: sound::Sound,
-    pub gfx: Vec<u8>,
+    /// The graphics, as the renderer reads them.
+    pub gfx: TileAtlas,
     pub frame: u64,
     /// Object table latched at the last vblank (displayed on the next frame).
     pub obj_buffer: Vec<u16>,
@@ -150,24 +152,24 @@ pub struct Contents {
     pub program: Vec<u16>,
     /// 68000 program, decrypted program-space view (opcodes and PC-relative reads).
     pub decrypted_program: Vec<u16>,
-    /// Graphics region (`cps2_gfx::rom::load_gfx`).
-    pub graphics: Vec<u8>,
+    /// Graphics, decoded into 8-bit pens (`cps2_gfx::TileAtlas`).
+    pub graphics: TileAtlas,
     /// Z80 region (0x50000: 0-7FFF fixed, banks from 0x10000).
     pub audio: Vec<u8>,
     /// QSound DSP program (`dl-1425.bin`, at least 0x2000 bytes: only its tables are used).
     pub dsp: Vec<u8>,
-    /// QSound sample ROM (4 MB).
+    /// QSound sample bank (4 MB: the sample ROMs, or `ddsom_assets::samples::bank` from the WAV files).
     pub samples: Vec<u8>,
 }
 
 impl Contents {
     /// Reads the ROMs (ddsom.zip and dl-1425.bin). `gfx` and `samples`, if given, replace the graphics ROMs
     /// (`dd2.13m`...) and the sample ROMs (`dd2.11m`, `dd2.12m`), which are then not read.
-    pub fn from_roms(romdir: &Path, gfx: Option<Vec<u8>>, samples: Option<Vec<u8>>) -> io::Result<Self> {
+    pub fn from_roms(romdir: &Path, gfx: Option<TileAtlas>, samples: Option<Vec<u8>>) -> io::Result<Self> {
         let (program, decrypted_program) = load_program(romdir)?;
         let graphics = match gfx {
             Some(g) => g,
-            None => cps2_gfx::rom::load_gfx(romdir, cps2_gfx::rom::DDSOM_GFX, cps2_gfx::rom::DDSOM_GFX_SIZE)?,
+            None => cps2_gfx::rom::load_atlas(romdir)?,
         };
         // Z80: dd2.01 = 0x8000 at 0, then 0x18000 at 0x10000 (ROM_CONTINUE); dd2.02 at 0x28000
         let mut audio = vec![0u8; 0x50000];
@@ -199,13 +201,13 @@ impl Machine {
         Self::load_ddsom_with(romdir, eeprom, None, None)
     }
 
-    /// Like `load_ddsom`, but `gfx` (graphics region) and `samples` (QSound sample ROM, 4 MB)
+    /// Like `load_ddsom`, but `gfx` (tile atlas) and `samples` (QSound sample bank, 4 MB)
     /// replace, if given, the ROMs `dd2.13m`... and `dd2.11m`/`dd2.12m`, which are then not read
-    /// (voir `ddsom_assets::rebuild`).
+    /// (see `ddsom_assets::tile_atlas`).
     pub fn load_ddsom_with(
         romdir: &Path,
         eeprom: Option<&[u8]>,
-        gfx: Option<Vec<u8>>,
+        gfx: Option<TileAtlas>,
         samples: Option<Vec<u8>>,
     ) -> io::Result<Self> {
         Ok(Self::ddsom(Contents::from_roms(romdir, gfx, samples)?, eeprom))
@@ -333,7 +335,7 @@ impl Machine {
     /// MAME's frame notification falls at the start of each vblank. A frame thus runs
     /// lines 240..261 then 0..239; it ends on the vblank event (screen render,
     /// object table latch, IRQ2), handled at the start of the next frame.
-    /// Renvoie l'image 384x224 RGB.
+    /// Returns the 384x224 RGB frame.
     pub fn run_frame(&mut self) -> Vec<[u8; 3]> {
         if let Some(cap) = self.step_cap.as_mut() {
             cap.count = 0;

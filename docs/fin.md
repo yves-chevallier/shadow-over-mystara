@@ -166,6 +166,8 @@ Dernière mesure : lot F, `examples/bench` sur bot30k, 12 000 images, pilote son
 * Avec le rendu, les couches prennent 35 % du temps (`pixels8`, lecture des tuiles) et les sprites 7 %.
 * Sans le rendu, QSound prend environ 45 % (110 ns par échantillon). Le jeu lui-même prend environ 25 µs par image.
 * Le bus (`read_word`/`write_word`, décodage d'adresse) et `lookup` pèsent chacun moins de 5 %.
+* Après L4 (atlas de tuiles, QSound vectorisé) : environ 15 500 images/s sans rendu et 3 300 avec ; le rendu seul
+  prend ~230 µs par image. Détail dans le « Résultat » de L4.
 
 ## 2. Architecture d'arrivée
 
@@ -552,7 +554,7 @@ libre.
   * reste (L14) : sans ROM, `cps2::Contents` transporte encore la région du Z80 et le programme du DSP, relus en
     tables au démarrage ; `music.rs` est resté dans `ddsom-assets` (à déplacer dans `ddsom-data` avec le lot L1).
 
-**L4. Rendu et mixage depuis les assets, optimisation** (moyen)
+**L4. Rendu et mixage depuis les assets, optimisation** (moyen) — **fait** (branche `wt-l4-rendu`, voir « Résultat »)
 * Périmètre : `cps2-gfx/`, `qsound/` (boucle des voix, hors tables), `ddsom-assets/src/rebuild.rs` (parties
   `gfx_region` et `qsound_samples`), `cps2/src/lib.rs` (`render`, `Contents`), `ddsom/src/main.rs`,
   `ddsom-game/examples/{bench,render_check}.rs`. Coordination avec L3 sur `qsound/src/lib.rs` : L3 prend les tables,
@@ -569,6 +571,44 @@ libre.
   * 308/308 dans les deux modes.
 * Risque : le rendu n'est pas vérifié par `validate`, qui ne calcule plus l'image. `render_check` et le test
   `mame_snapshots` sont le seul filet : les lancer à chaque étape.
+* Résultat :
+  * **Atlas de tuiles** (`cps2_gfx::TileAtlas`, `cps2-gfx/src/atlas.rs`) : les cellules 16x16 en un octet par
+    pixel (crayon 0-15, 15 transparent), 256 octets par cellule, partagées (`Arc`, cloner `Contents` ne copie plus
+    les graphismes). Sans ROM, `ddsom_assets::tile_atlas(gfx)` lit `gfx/cells_NN.png` tels quels (`Cells::into_atlas`,
+    aucune conversion) ; avec les ROMs, `cps2_gfx::rom::load_atlas` décode les plans une fois au chargement.
+    Correspondance : les 4 octets de plans au décalage matériel `o` deviennent les 8 crayons au décalage `2 * o` de
+    l'atlas ; le rendu garde donc l'adressage matériel des tuiles (8x8 : demi-ligne choisie par la colonne).
+    `cps2::Contents::graphics`, `Machine::gfx` et `render(&VideoState, &TileAtlas)` prennent l'atlas ;
+    `rebuild::gfx_region` ne sert plus qu'au test `rebuilt_graphics`.
+  * **Rendu des couches** par lignes de tuiles depuis l'atlas : une ligne de tuile est une tranche de l'atlas
+    (`[u8; T]`, retournée si miroir), les tuiles entières sont dessinées en blocs de taille fixe sans branchement
+    (vectorisés), les lignes entièrement transparentes sont sautées (la couche 8x8 est surtout vide), plus de
+    division par `% ram.len()` ni par `% pal.len()`. Sprites : lignes de cellule découpées une fois à l'écran.
+  * **Banque d'échantillons** : `ddsom_assets::samples::bank` (sorti de `rebuild`) place les WAV aux adresses des
+    fiches ; `qsound` la lit par un masque (complétée à une puissance de deux, plus de lecture hors bornes).
+  * **QSound** : registres des 16 voix en tableaux (`Voices`), échantillons lus pour toutes les voix puis phases
+    avancées sur des tableaux entiers (vectorisé) ; gains de pan lus dans `DspTables` à l'écriture du pan
+    (`path_gains`, un tableau par chemin) ; mixage des 19 voix et filtres FIR en produits scalaires par
+    `pmaddwd` SSE2 (`dot_product`, seul `unsafe` du mixeur, exact modulo 2^32, test `dot_product_wraps_like_the_dsp`) ;
+    FIR sur un tampon circulaire déroulé (lu d'un seul tenant depuis `delay_pos`, reconstruit si le nombre de
+    coefficients change, invalidé par le chemin général).
+  * Outils : `render_check` accepte `DDSOM_ASSETS` et `DDSOM_DUMP_VIDEO=<dir>` (états vidéo d'une image sur
+    `DDSOM_DUMP_EVERY`) ; `cps2-gfx/examples/render_bench <roms> <dumps>...` rend ces états seuls et vérifie le
+    hachage de chaque image (boucle d'optimisation du rendu en secondes, sans recompiler le jeu).
+  * Contrôle : `render_check` identique au code d'avant le lot (39be0e4) sur attract, bot30k, boss10_scene65 et
+    cov_4p_a, 4 000 images, pixels et audio, à chaque étape, avec les ROMs et avec `DDSOM_ASSETS` (assets
+    réextraits) ; `mame_snapshots` identique à MAME ; tests `ddsom-assets` (dont `rebuilt_graphics`,
+    `rebuilt_samples`) et `qsound`.
+  * `bench` bot30k, 12 000 images, meilleur de 3 en alternance avec le binaire de 39be0e4 (machine partagée avec
+    d'autres agents) : sans rendu 15 505 images/s (base mesurée au même moment 11 542) ; avec rendu 3 268 images/s
+    (base 1 623 au même moment, 1 862 au lot F). Même empreinte d'état final `a65ecd8aa6e38d4f`. Rendu seul
+    (`render_bench`) : de ~500 à ~230 µs par image.
+  * Validation (après fusion de main 498db69, L3 et L5 compris) : 308/308 VALID en mode par défaut et avec
+    `DDSOM_ASSETS` (assets réextraits par la branche), `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1` ; `cargo clippy`
+    sans avertissement (espace de travail avec les outils, `ddsom-game` et `ddsom` sans).
+  * Pour les lots suivants : `cps2::Contents::graphics` est un `TileAtlas` (plus de région planaire dans le jeu) ;
+    un outil qui lisait `Machine::gfx` en plans lit `atlas.pens()` au décalage `2 * o` (voir `level_maps`). La
+    banque d'échantillons dépend de `Music::sample_count`/`sample_span`/`sample_tails` (L3).
 
 **L5. Effets** (moyen) — **fait** (branche `wt-l5-effets`, voir « Résultat »)
 * Périmètre : `families/effects.rs`, `effects_b.rs` à `effects_g.rs`, `effects_creators.rs`, plus

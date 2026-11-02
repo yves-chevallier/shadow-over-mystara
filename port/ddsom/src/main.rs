@@ -59,8 +59,8 @@ fn main() {
     };
     let contents = match (&assets, &romdir) {
         (Some(dir), None) => ddsom_assets::rebuild::contents(dir),
-        (Some(dir), Some(romdir)) => ddsom_assets::rebuild::gfx_region(&dir.join("gfx"))
-            .and_then(|gfx| Ok((gfx, ddsom_assets::rebuild::qsound_samples(dir)?.bytes)))
+        (Some(dir), Some(romdir)) => ddsom_assets::tile_atlas(&dir.join("gfx"))
+            .and_then(|gfx| Ok((gfx, ddsom_assets::samples::bank(dir)?.bytes)))
             .and_then(|(gfx, pcm)| cps2::Contents::from_roms(romdir, Some(gfx), Some(pcm))),
         (None, Some(romdir)) => cps2::Contents::from_roms(romdir, None, None),
         (None, None) => unreachable!(),
