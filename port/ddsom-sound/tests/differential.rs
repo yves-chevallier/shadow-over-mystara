@@ -7,8 +7,8 @@
 #[path = "../examples/support/mod.rs"]
 mod support;
 
-use ddsom_sound::Rom;
 use std::path::PathBuf;
+use support::SoundRom as Rom;
 use support::session::{random_session, run_session, song_session, synth_short_session, Session};
 
 fn rom() -> Option<Rom> {

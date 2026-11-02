@@ -6,11 +6,12 @@
 //!
 //! A voice is in one of two states:
 //! - `state == 1` : simple note (a sample or an instrument played for a duration);
-//! - `state == 0xFF` : sequenced track, read byte by byte from the ROM (notes and instructions).
+//! - `state == 0xFF` : sequenced track, read byte by byte (notes and instructions).
 //!
 //! On each tick (62.5 Hz) a voice advances its track, then updates pan, LFO, glissando and
 //! envelope, and writes volume and pitch to the QSound.
 
+use crate::data::{SoundData, TrackPos, NO_INSTRUMENT};
 use crate::math::*;
 use crate::pan::PanFade;
 use crate::{shared, Driver};
@@ -37,8 +38,8 @@ pub mod flag {
 pub struct Voice {
     /// 0 free, 1 simple note, 0xFF sequenced track.
     pub state: u8,
-    /// Read address in the track.
-    pub seq: u32,
+    /// Read position in the track (sequenced tracks only).
+    pub seq: Option<TrackPos>,
     /// Track flags: see [`flag`].
     pub flags: u8,
     /// Time left before the next event (8.8 fixed point).
@@ -76,9 +77,9 @@ pub struct Voice {
     pub lfo_phase: u16,
     pub vibrato: u16,
     pub tremolo: u16,
-    /// Current instrument (bit 15: chosen by a track instruction) and instrument bank.
+    /// Current instrument (bit 15: chosen by a track instruction) and instrument bank (sequenced tracks only).
     pub instrument: u16,
-    pub inst_bank: u16,
+    pub inst_bank: Option<u8>,
     /// Envelope phase: 0 attack, 1 decay, 2 sustain, 3 slow decay, 4 release, 5 end.
     pub env_phase: u8,
     pub env_level: u16,
@@ -101,23 +102,33 @@ pub struct Voice {
 }
 
 impl Voice {
-    /// New sequenced track starting at `seq`.
-    pub(crate) fn track(seq: u32, inst_bank: u16) -> Self {
-        Voice { state: 0xff, seq, inst_bank, instrument: 0xff00, lfo: 1, env_phase: 5, ..Voice::default() }
+    /// New sequenced track starting at `start`, with instrument bank 0.
+    pub(crate) fn track(start: TrackPos) -> Self {
+        Voice { state: 0xff, seq: Some(start), inst_bank: Some(0), instrument: NO_INSTRUMENT, lfo: 1, env_phase: 5, ..Voice::default() }
+    }
+
+    fn seq_mut(&mut self) -> &mut TrackPos {
+        self.seq.as_mut().expect("sequenced voice")
     }
 
     /// Reads the next byte of the track.
-    pub(crate) fn fetch(&mut self, rom: &crate::Rom) -> u8 {
-        let b = rom.byte(self.seq);
-        self.seq = (self.seq + 1) & 0xff_ffff;
+    pub(crate) fn fetch(&mut self, data: &SoundData) -> u8 {
+        let at = self.seq_mut();
+        let b = data.track_byte(*at);
+        at.pos += 1;
         b
     }
 
     /// Reads a big-endian word.
-    pub(crate) fn fetch_be16(&mut self, rom: &crate::Rom) -> u16 {
-        let h = self.fetch(rom);
-        let l = self.fetch(rom);
+    pub(crate) fn fetch_be16(&mut self, data: &SoundData) -> u16 {
+        let h = self.fetch(data);
+        let l = self.fetch(data);
         u16::from(h) << 8 | u16::from(l)
+    }
+
+    /// Skips `n` bytes of the track.
+    pub(crate) fn skip(&mut self, n: u16) {
+        self.seq_mut().pos += n;
     }
 }
 
@@ -154,7 +165,7 @@ impl Driver {
     pub(crate) fn start_sample(&mut self, v: &mut Voice, id: u16) {
         let base = self.cur.wrapping_mul(8);
         self.qsound(base.wrapping_add(2), 0);
-        let sample = self.rom.sample(id);
+        let sample = self.data.sample(id).voice();
         let (bank, loop_start, end) = (sample.bank, sample.loop_start, sample.end);
         v.start = sample.start;
         v.root = sample.root;
@@ -191,10 +202,7 @@ impl Driver {
         } else {
             0
         };
-        let octave = self.rom.semitone_octave(n);
-        let semitone = n.wrapping_sub(self.rom.octave_start(octave));
-        let fine = u16::from(self.rom.fine(semitone, pitch as u8)) << octave;
-        self.rom.rate(n).wrapping_add(fine)
+        self.data.pitch_rate(n, pitch as u8)
     }
 
     /// Writes volume and frequency of the current voice.

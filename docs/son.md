@@ -384,7 +384,7 @@ Outils (`port/ddsom-sound/examples`, à lancer depuis `port/` avec `DDSOM_ROMS=/
 - `sound_cost <roms> <eeprom> <scénario> <images>` : durée en cycles du Z80 de chaque tâche de la boucle principale
   (commande, tic ADPCM, tic du séquenceur) selon le nombre d'écritures QSound, sur la machine de référence de
   `validate` ; `sound_compare` accepte `SON_REFERENCE=1` (même machine) et `SON_SHOW=<de>-<à>` ;
-- `sound_reads <roms> <assets> <interruptions> [<eeprom> <scénario>:<images> ...]` (exemple de `ddsom-assets`) :
+- `sound_reads` (exemple de `ddsom-assets`, retiré au lot L3 : le pilote ne lit plus de région d'octets) mesurait les
   octets de la région du Z80 lus par le pilote Rust, par rubrique de `music.json` (voir « Lectures du pilote »).
 
 Résultats (ROMs dans `/home/ycr/som/rom`, `cd port && DDSOM_ROMS=/home/ycr/som/rom cargo build --release -p ddsom-sound --examples`) :
@@ -448,17 +448,46 @@ des sons 3 509 / 4 678 ; instruments 2 656 / 4 096 ; fiches d'échantillons 2 65
 `qsound_init_regs` 12 / 12, `lfo_rates` 8 / 256, `octave_start` 8 / 9, `tremolo` 4 / 256 ; pointeurs (en-tête,
 échantillons, bancs) 8 / 8.
 
-Le pilote lit donc tout par les rubriques nommées de `music.json`, mais encore au travers d'une région d'octets
-rangée aux adresses du Z80 (reconstruite par `ddsom_assets::rebuild::audio_region` sans ROM). Ce qu'il reste pour des
-tableaux Rust sans adresses : les pointeurs de l'état du pilote (lecture des pistes, banc d'instruments courant,
-définition en cours) devraient devenir des index, et `Driver::ram_image` (outils) les retraduire en adresses ; le
-débordement de l'original (une durée à la fois pointée et en triolet lit après la table des durées, dans les
-décalages d'octave) serait à garder explicitement.
+Le pilote lisait donc tout par les rubriques nommées de `music.json`, au travers d'une région d'octets rangée aux
+adresses du Z80 ; c'était la mesure préalable du lot L3.
+
+### Tableaux indexés (lot L3, branche `wt-l3-son`)
+
+Le pilote lit désormais `ddsom_sound::SoundData` (`data.rs`), sans région ni adresse :
+
+* **sons** : `sounds[n]`, un des quatre genres (`SoundKind` : musique, effet, note simple, ADPCM) aux champs nommés ;
+* **pistes** : suites d'octets jointives du séquenceur (`Track`), coupées là où les octets lus cessent d'être jointifs
+  (`region::cut_tracks`, qui suit les sauts comme le séquenceur) ; une position de lecture est
+  `TrackPos { piste, octet }`. Mesure préalable du risque de la fin.md : un saut relatif peut mener dans une autre
+  piste (`SoundData::jump` retrouve la piste qui contient la cible), mais aucune lecture ne déborde d'une piste ;
+* **bancs d'instruments** (`Bank`, fiches `Instrument` décodées), **fiches d'échantillons** brutes (`SampleRecord`,
+  lues selon deux dispositions : voix du séquenceur et voies ADPCM) ;
+* **tables** : init QSound, durées, octaves, tons, interpolation fine, et les sept tables de mots indexées par un octet
+  (`LevelTables`).
+
+**État du pilote sans adresse.** Une voix garde `seq: Option<TrackPos>` et `inst_bank: Option<u8>` (index du banc),
+le pilote `song: Option<u16>` (numéro du son) ; `Driver::ram_image` (outils) les retraduit en adresses Z80 par les
+champs `addr` des tables, de sorte que `sound_fuzz` (`FUZZ_STATE`) compare toujours la RAM du Z80 octet par octet.
+
+**Débordements écrits en clair.** Une durée pointée et en triolet lit les décalages d'octave qui suivent la table
+(`SoundData::duration`) ; un index au-delà d'une table de `LevelTables` lit la suivante, jusqu'aux 128 mots qui
+suivent `tremolo` (`after_tremolo`, extraits) : seules les pistes synthétiques de `sound_fuzz` le font, et le test
+`music_indices_in_bounds` vérifie que les données du jeu restent dans les bornes. Un banc ou un échantillon inexistant
+arrête le pilote avec un message (jamais atteint : même test).
+
+**Région du Z80** (`region.rs`, outils et extraction) : `SoundData::load`/`from_region` lit les données comme le
+programme du Z80 (extraction, machine de référence, mode avec ROMs) ; `region_parts`/`to_region` les replace à leurs
+adresses (assets sans ROM, tests sans perte). Sans ROM, `cps2` relit encore les tables depuis la région reconstruite
+(`cps2::Contents`, lot L14).
+
+**DSP QSound.** `qsound::DspTables` : pan (0x110), pas de l'ADPCM (0x9dc), coefficients des filtres (0xd53-0xfff, et
+les 3 mots de 0 où le second filtre déborde), décrits par `qsound::DSP_TABLES` (aussi utilisé par `extract`) ;
+l'émulation ne lit plus le programme du DSP par adresse.
 
 ## 14. Utilisation
 
 ```rust
-let mut driver = ddsom_sound::Driver::new(ddsom_sound::Rom::load(rom_dir)?);
+let mut driver = ddsom_sound::Driver::new(ddsom_sound::SoundData::load(rom_dir)?);
 let mut out = Vec::new();
 driver.reset(&mut shared, &mut out);          // écrit 0x77 en CFFF
 loop { driver.irq_request(&mut shared, &mut out); /* toutes les 32 000 périodes Z80 */ }
@@ -469,12 +498,6 @@ loop { driver.irq_request(&mut shared, &mut out); /* toutes les 32 000 périodes
 dans `shared`, et rappelées dans `out` pour les outils). Dans `cps2`, la machine du jeu fait tout cela (sans la
 fonctionnalité `z80`, ou après `Sound::use_rust_driver()` avec elle).
 
-**Données.** Le pilote lit ses données par les accesseurs nommés de `Rom` (`rom.rs`) : tables de la ROM fixe
-(`amplitude`, `level`, `attack`, `decay`, `lfo_rate`, `vibrato`, `tremolo`, `duration`, `octave_offset`,
-`semitone_octave`, `octave_start`, `rate`, `fine`, `init_registers`), en-tête et table des sons (`sound_header`,
-`sound`), instruments (`instrument_bank`, `instrument` → `Instrument`), échantillons (`sample` → `Sample`,
-`adpcm_sample` → `AdpcmSample`), et les octets des définitions et des pistes (`byte`, `word_be`), lus par le
-pointeur de lecture des voies. Aucune adresse de table n'est plus dans le code du pilote. Les données restent
-rangées à leurs adresses d'origine, dans la région du Z80 (ROM, ou reconstruite depuis `sound/music.json` sans
-ROM) : l'état du pilote garde ces adresses (pointeurs de lecture, bancs, définitions), comme la RAM du Z80 que
-`Driver::ram_image` reproduit, et l'original lit au-delà de certaines tables (voir « Lectures du pilote »).
+**Données.** `ddsom_sound::SoundData` (tableaux indexés, voir « Tableaux indexés »), lue depuis les ROMs
+(`SoundData::load`), depuis une région du Z80 (`SoundData::from_region`) ou depuis `sound/music.json` (fonctionnalité
+`serde`, `ddsom_assets::Music`).

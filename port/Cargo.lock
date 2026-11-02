@@ -131,6 +131,7 @@ dependencies = [
  "cps2",
  "ddsom-game",
  "ddsom-rc",
+ "serde",
  "z80",
 ]
 
@@ -169,6 +170,7 @@ dependencies = [
  "ddsom-sound",
  "m68k",
  "png",
+ "qsound",
 ]
 
 [[package]]

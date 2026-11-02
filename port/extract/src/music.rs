@@ -1,161 +1,28 @@
-//! Music and effects: sound table, tracks, instruments, samples and Z80 driver tables, read
-//! the way `ddsom-sound` reads them (linear addresses of `ddsom_sound::Rom`).
+//! Music and effects: the sound driver data (`ddsom_sound::SoundData`, read from the Z80 ROM as the
+//! driver program reads it) and what follows each sample in the sample ROM.
 
-use std::collections::BTreeMap;
 use std::io;
 use std::path::Path;
 
 use ddsom_assets::json;
-use ddsom_assets::music::{decode_op, Bank, CodeBlock, DriverTable, Music, Song};
-use ddsom_sound::Rom;
-
-const HEADER_PTR: u32 = 0x39e1;
-const SAMPLES_PTR: u32 = 0x39e3;
-const BANKS_TABLE: u32 = 0x39e5;
-/// Banks: two (the first starts right after the table, at 0x39e9), 256 entries each.
-const BANKS: u32 = 2;
-const INSTRUMENTS: u32 = 256;
-/// Samples: 345 entries (like `sounds/`, which only writes the valid entries).
-const SAMPLES: u32 = 345;
-/// Driver tables in the fixed ROM: (name, address, little-endian words, number of values).
-const TABLES: [(&str, u32, bool, u32); 14] = [
-    ("qsound_init_regs", 0xd5, false, 12),
-    ("qsound_init_values", 0xe1, true, 12),
-    ("durations", 0x1119, true, 24),
-    ("octave_offsets", 0x1149, false, 16),
-    ("semitone_octave", 0x1fc6, false, 108),
-    ("octave_start", 0x2032, false, 9),
-    ("rates", 0x203b, true, 108),
-    ("fine", 0x2113, false, 12 * 256),
-    ("amplitudes", 0x33e1, true, 128),
-    ("levels", 0x34e1, true, 128),
-    ("attack", 0x35e1, true, 64),
-    ("decay", 0x3661, true, 64),
-    ("lfo_rates", 0x36e1, true, 128),
-    ("vibrato", 0x37e1, true, 128),
-];
-const TREMOLO: (&str, u32, bool, u32) = ("tremolo", 0x38e1, true, 128);
-
-fn bad(msg: String) -> io::Error {
-    io::Error::new(io::ErrorKind::InvalidData, msg)
-}
+use ddsom_assets::music::{DspTable, DspTables, Music};
+use ddsom_sound::data::SoundKind;
+use ddsom_sound::SoundData;
 
 pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
-    let rom = Rom::load(roms)?;
-    let be = |p: u32| u16::from(rom.byte(p)) << 8 | u16::from(rom.byte(p + 1));
-    let header = u32::from(rom.word(HEADER_PTR));
-    let count = be(header);
-    let mut songs = Vec::new();
-    for i in 0..u32::from(count) {
-        let e = header + 6 + 4 * i;
-        if rom.byte(e + 3) != 0 {
-            return Err(bad(format!("sound {i}: fourth byte non-null")));
-        }
-        let at = u32::from(rom.byte(e)) << 16 | u32::from(be(e + 1));
-        if at == 0 {
-            songs.push(None);
-            continue;
-        }
-        let kind = rom.byte(at);
-        let mut s = Song { rom: at, kind, tracks: Vec::new(), body: Vec::new() };
-        match kind {
-            0..=0x7f => s.tracks = (0..16).map(|c| be(at + 1 + 2 * c)).collect(),
-            0x80..=0x8f => s.body = (1..=10).map(|k| rom.byte(at + k)).collect(),
-            0x90..=0x92 => s.body = (1..=8).map(|k| rom.byte(at + k)).collect(),
-            _ => return Err(bad(format!("sound {i}: type {kind:#x}"))),
-        }
-        songs.push(Some(s));
+    let data = SoundData::load(roms)?;
+    let defined = data.sounds.iter().flatten().count();
+    eprintln!("music: {} sounds ({defined} defined), {} tracks", data.sounds.len(), data.tracks.len());
+    if let Some(s) = data.sounds.iter().flatten().find(|s| matches!(&s.kind, SoundKind::Adpcm(a) if a.channel > 2)) {
+        return Err(io::Error::new(io::ErrorKind::InvalidData, format!("sound at {:#x}: unknown kind", s.addr)));
     }
-    // instructions reached from the tracks, following the jumps
-    let mut ops: BTreeMap<u32, (String, u32)> = BTreeMap::new();
-    let mut todo: Vec<u32> = songs.iter().flatten().flat_map(|s| s.track_starts().map(|(_, a)| a).collect::<Vec<_>>()).collect();
-    while let Some(mut p) = todo.pop() {
-        while !ops.contains_key(&p) {
-            let bytes: Vec<u8> = (0..4).map(|k| rom.byte(p + k)).collect();
-            let (tok, n) = decode_op(&bytes).ok_or_else(|| bad(format!("unreadable track at {p:#x}")))?;
-            let n = n as u32;
-            let op = bytes[0];
-            ops.insert(p, (tok, n));
-            let target = |off_at: u32| (off_at + 2).wrapping_add(be(off_at) as i16 as u32);
-            match op {
-                22 => {
-                    todo.push(target(p + 1));
-                    break;
-                }
-                23 => break,
-                14..=21 => todo.push(target(p + 2)),
-                _ => {}
-            }
-            p += n;
-            if p >= 0x40000 {
-                return Err(bad("track outside the ROM".into()));
-            }
-        }
-    }
-    // blocks of contiguous instructions; an instruction must not overlap another
-    let mut code: Vec<CodeBlock> = Vec::new();
-    let mut next = 0;
-    for (&a, (tok, n)) in &ops {
-        if a < next {
-            return Err(bad(format!("overlapping instructions at {a:#x}")));
-        }
-        match code.last_mut() {
-            Some(b) if a == next => {
-                b.ops.push(' ');
-                b.ops.push_str(tok);
-            }
-            _ => code.push(CodeBlock { rom: a, ops: tok.clone() }),
-        }
-        next = a + n;
-    }
-    let banks = (0..BANKS)
-        .map(|k| {
-            let at = u32::from(rom.word(BANKS_TABLE + 2 * k));
-            Bank { rom: at, instruments: (0..INSTRUMENTS).map(|i| std::array::from_fn(|j| rom.byte(at + 8 * i + j as u32))).collect() }
-        })
-        .collect();
-    let samples_rom = u32::from(rom.word(SAMPLES_PTR));
-    let samples: Vec<[u8; 8]> = (0..SAMPLES).map(|i| std::array::from_fn(|j| rom.byte(samples_rom + 8 * i + j as u32))).collect();
-    let tables = TABLES
-        .iter()
-        .chain([&TREMOLO])
-        .map(|&(name, at, words, n)| DriverTable {
-            name: name.into(),
-            rom: at,
-            words,
-            values: (0..n).map(|i| if words { rom.word(at + 2 * i) } else { u16::from(rom.byte(at + i)) }).collect(),
-        })
-        .collect();
-    eprintln!(
-        "music: {} sounds ({} defined), {} track instructions in {} blocks",
-        count,
-        songs.iter().flatten().count(),
-        ops.len(),
-        code.len()
-    );
-    let mut music = Music {
-        header_ptr: HEADER_PTR,
-        header,
-        count,
-        music_factor: rom.byte(header + 2),
-        sfx_volume: rom.byte(header + 3),
-        header_rest: [rom.byte(header + 4), rom.byte(header + 5)],
-        songs,
-        code,
-        banks_table: BANKS_TABLE,
-        banks,
-        samples_ptr: SAMPLES_PTR,
-        samples_rom,
-        samples,
-        sample_tails: Vec::new(),
-        tables,
-    };
+    let mut music = Music { data, sample_tails: Vec::new() };
     // sample ROM (ROM_LOAD16_WORD_SWAP): what follows the end of each sample
     let mut pcm = Vec::new();
     for name in ["dd2.11m", "dd2.12m"] {
         pcm.extend(std::fs::read(roms.join(name))?.as_chunks::<2>().0.iter().flat_map(|w| [w[1], w[0]]));
     }
-    music.sample_tails = (0..music.samples.len())
+    music.sample_tails = (0..music.sample_count())
         .map(|i| {
             let tail = &pcm[music.sample_span(i).1 + 1..music.sample_tail_end(i)];
             let used = tail.iter().rposition(|&b| b != 0).map_or(0, |p| p + 1);
@@ -163,29 +30,17 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         })
         .collect();
     std::fs::create_dir_all(path.parent().unwrap())?;
-    json::save(path, &music, 2)
+    json::save(path, &music, 3)
 }
 
 /// Tables of the QSound DSP program (`dl-1425.bin`, little-endian words) read by the high-level emulation
-/// (`qsound`): (name, address in words, number of words). The rest of the DSP program is just code, which
-/// the emulation replaces.
-const DSP_TABLES: [(&str, u32, u32); 4] = [
-    // pan: PAN_BASE (0x110) + position (0-0x20), then +98 (reverb), +196 (right channel)
-    ("pan", 0x110, 0x150),
-    // ADPCM step: 0x9dc + 8 + signed step (-8..7)
-    ("adpcm", 0x9dc, 0x10),
-    // FIR filters: 95 coefficients per entry from 0xd53, and the two original filters 0xf73 and 0xfa4
-    ("filters", 0xd53, 0x1000 - 0xd53),
-    // the second filter overflows by 3 words and wraps to the start (12-bit addresses)
-    ("filters_wrap", 0, 3),
-];
-
+/// (`qsound::DSP_TABLES`). The rest of the DSP program is code, which the emulation replaces.
 pub fn extract_dsp(roms: &Path, path: &Path) -> io::Result<()> {
     let bytes = std::fs::read(roms.join("dl-1425.bin"))?;
-    let word = |a: u32| u16::from_le_bytes([bytes[2 * a as usize], bytes[2 * a as usize + 1]]);
-    let tables = DSP_TABLES
+    let word = |a: usize| u16::from_le_bytes([bytes[2 * a], bytes[2 * a + 1]]);
+    let tables = qsound::DSP_TABLES
         .iter()
-        .map(|&(name, rom, n)| DriverTable { name: name.into(), rom, words: true, values: (rom..rom + n).map(word).collect() })
+        .map(|&(name, at, n)| DspTable { name: name.into(), rom: u32::from(at), values: (usize::from(at)..usize::from(at) + n).map(word).collect() })
         .collect();
-    json::save(path, &ddsom_assets::music::DspTables { tables }, 2)
+    json::save(path, &DspTables { tables }, 2)
 }

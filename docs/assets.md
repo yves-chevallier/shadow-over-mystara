@@ -348,33 +348,40 @@ Le test réencode chaque descripteur, chaque table, les noms des bulles et les g
 
 ## Musiques et effets : `sound/music.json`
 
-Tout ce que lit le pilote son réécrit (`ddsom-sound`, [son.md](son.md)) hors échantillons PCM
-(`sounds/`) : l'extraction lit la ROM Z80 avec `ddsom_sound::Rom` (adresses « linéaires » : décalage dans
-`dd2.01` puis `dd2.02`), et le test aussi.
+Tout ce que lit le pilote son réécrit (`ddsom-sound`, [son.md](son.md)) hors échantillons PCM (`sounds/`), en
+tableaux indexés : le fichier est la sérialisation de `ddsom_sound::SoundData` (fonctionnalité `serde`), plus
+`sample_tails`. L'extraction lit la ROM Z80 comme le programme du pilote (`SoundData::load`,
+`ddsom_sound::region`) ; les champs `addr` sont les adresses « linéaires » d'origine (décalage dans `dd2.01` puis
+`dd2.02`), gardées pour les outils seulement (`Driver::ram_image`, `SoundData::region_parts`) : le pilote ne lit
+plus aucune adresse (lot L3, [fin.md](fin.md)).
 
 ```json
-{"header_ptr":"0x39e1","header":"0x9000","count":1168,"music_factor":122,"sfx_volume":127,"header_rest":[0,0],
- "songs":[null,
-   {"rom":"0xa245","kind":0,"tracks":[33,201,346, ...16 déplacements...]}, ...],
- "code":[{"rom":"0xa266","ops":"step=307 vol=100 5:0 dot tie 5:0 tie 3:0 oct=5 gate=180 inst=31 ..."}, ...],
- "banks_table":"0x39e5","banks":[{"rom":"0x39e9","instruments":[[...8 octets...], ...256]}, ...],
- "samples_ptr":"0x39e3","samples_rom":"0x49e9","samples":[[...8 octets...], ...345],
- "sample_tails":["", "", "0a1b...", ...345],
- "tables":[{"name":"amplitudes","rom":"0x33e1","words":true,"values":[...]}, ...]}
+{"header":{"addr":"0x9000","music_factor":122,"sfx_volume":127,"unused":[0,0]},
+ "sounds":[null,
+   {"addr":"0xa245","music":{"tracks":[[0,0],[1,0],[2,0], ...16 positions (piste, octet) ou null...]}},
+   {"addr":"...","effect":{"priority":5,"tracks":[...]}},
+   {"addr":"...","adpcm":{"channel":0,"flags":..,"unused":[..4..],"amplitude":..,"sample":..}}, ...],
+ "tracks":[{"addr":"0xa266","ops":"step=307 vol=100 5:0 dot tie 5:0 tie 3:0 oct=5 gate=180 inst=31 ..."}, ...],
+ "banks":[{"addr":"0x39e9","instruments":[{"sample":..,"detune":..,"envelope":[..5..]}, ...256]}, ...],
+ "samples":{"addr":"0x49e9","records":[[...8 octets...], ...345]},
+ "tables":{"qsound_init":[[reg,valeur], ...],"durations":[...],"octave_offsets":[...],"semitone_octave":[...],
+           "octave_start":[...],"rates":[...],"fine":[[...256...], ...12],
+           "levels":{"amplitudes":[...],"levels":[...],"attack":[...],"decay":[...],"lfo_rates":[...],
+                     "vibrato":[...],"tremolo":[...],"after_tremolo":[...]}},
+ "sample_tails":["", "", "0a1b...", ...345]}
 ```
 
-* **Table des sons** : l'en-tête (`header`, adresse lue dans le mot `0x39e1`) donne le nombre de sons, les
-  index du facteur de volume de la musique et du volume des effets (table `levels`) et 2 octets non lus ;
-  suit une entrée de 4 octets par son (adresse sur 3 octets grand-boutiste, 0). `songs[n]` : définition du
-  son `n` (`null` : entrée vide, 245 sur 1 168). `kind` : 0 musique (53), 1 à 0x7f effet de cette priorité
-  (868), 0x80-0x8f note simple (aucune), 0x90-0x92 ADPCM (2). Musique et effet : `tracks`, 16 déplacements
-  (mots grand-boutistes depuis `rom`, 0 = canal sans piste) ; note simple (10 octets) et ADPCM (8 octets ; jusqu'au 2026-11-02 l'extraction en prenait 7 et perdait l'octet bas du numéro d'échantillon) :
-  `body`, voir [son.md](son.md) §5. La première définition (`0xa245`) commence sur le dernier octet nul de
-  la table.
-* **Pistes** (`code`) : toutes les instructions qu'atteignent les pistes des sons, en suivant les sauts
-  (`jump`, débuts et sorties de boucles), regroupées en blocs d'instructions jointives (1 612 blocs,
-  123 659 instructions, aucun chevauchement). `Music::track(address)` rend les jetons d'une piste jusqu'à
-  sa fin ou son premier saut. Jetons (`music::decode_op` / `encode_op`) :
+* **Table des sons** : l'en-tête (`header`, adresse lue dans le mot `0x39e1`) donne les index du facteur de
+  volume de la musique et du volume des effets (table `levels`) et 2 octets non lus ; le nombre de sons est la
+  longueur de `sounds`. `sounds[n]` : définition du son `n` (`null` : entrée vide, 245 sur 1 168), d'un des quatre
+  genres (`ddsom_sound::data::SoundKind`) : `music` (premier octet 0, 53 sons), `effect` (1 à 0x7f, la priorité ;
+  868), `note` (0x80 + canal ; aucune) et `adpcm` (0x90 + canal ; 2). Musique et effet : `tracks`, une position
+  `[piste, octet]` par canal (`null` : canal sans piste) ; note simple et ADPCM : leurs champs nommés, voir
+  [son.md](son.md) §5. La première définition (`0xa245`) commence sur le dernier octet nul de la table.
+* **Pistes** (`tracks`) : tous les octets qu'atteignent les pistes des sons, en suivant les sauts (`jump`, débuts
+  et sorties de boucles), regroupés en suites jointives (1 612 pistes, 123 659 instructions, aucun chevauchement) ;
+  une position de lecture est `(piste, octet)`. Un saut relatif peut mener dans une autre piste
+  (`SoundData::jump`). Jetons (`ddsom_sound::tokens`) :
 
   | Jeton | Octets | Sens |
   |---|---|---|
@@ -391,24 +398,28 @@ Tout ce que lit le pilote son réécrit (`ddsom-sound`, [son.md](son.md)) hors �
   | `pan=`, `echo=`, `vol=`, `vib=`, `trem=`, `lfo=`, `lfomode=`, `bank=` | 24 à 31 | pan, écho, volume de la musique, vibrato, trémolo, vitesse et mode du LFO, banc d'instruments |
 
   Les déplacements des sauts sont des mots signés relatifs à l'adresse qui suit le déplacement (comme en
-  ROM) ; le test vérifie que chaque cible est le début d'une instruction. Les octets de la région des sons
+  ROM) ; le test `music_lossless` vérifie que chaque cible et chaque début de piste est le début d'un jeton. Les octets de la région des sons
   (`0x9000-0x3bf2b`) non couverts par l'en-tête, les définitions et les pistes : 742 (738 trous, surtout un
   `end` isolé que rien n'atteint après un `jump`) ; la suite de la ROM est nulle.
 * **Instruments** : la table `0x39e5` donne l'adresse de 2 bancs (`0x39e9`, `0x41e9`, juste après elle) de
-  256 fiches de 8 octets (échantillon en mot petit-boutiste dont le bit 15 suit la variation de hauteur
-  globale, accord fin, 5 index d'enveloppe : attaque, decay, tenue, chute lente, relâchement).
-* **Échantillons** : 345 fiches de 8 octets à l'adresse du mot `0x39e3` (`0x49e9`) : banque, début,
-  boucle, fin (mots petit-boutistes), note de référence ; les données PCM sont dans `sounds/NNN.wav`
-  (342 fichiers : les fiches 290, 293 et 305 sont invalides, début après la fin, et n'ont pas de fichier).
-  `sample_tails` : la suite de chaque échantillon dans la ROM d'échantillons, en hexadécimal sans les zéros
-  finaux, jusqu'au prochain échantillon de la banque ou à la fin de la banque (`Music::sample_tail_end`) :
-  une voix QSound qui ne boucle pas continue de lire après la fin tant que le Z80 ne l'arrête pas.
-* **Tables du pilote** (`tables`, ROM fixe ; `words` : mots petit-boutistes) : `qsound_init_regs` (0xd5,
-  12 octets) et `qsound_init_values` (0xe1, 12 mots), `durations` (0x1119, 24 mots), `octave_offsets`
-  (0x1149, 16 octets), `semitone_octave` (0x1fc6, 108), `octave_start` (0x2032, 9), `rates` (0x203b, 108
-  mots), `fine` (0x2113, 12 x 256 octets), `amplitudes` (0x33e1, 128 mots), `levels` (0x34e1, 128), `attack`
-  (0x35e1, 64), `decay` (0x3661, 64), `lfo_rates` (0x36e1, 128), `vibrato` (0x37e1, 128), `tremolo`
-  (0x38e1, 128).
+  256 fiches (échantillon dont le bit 15 suit la variation de hauteur globale, accord fin, 5 index d'enveloppe :
+  attaque, decay, tenue, chute lente, relâchement).
+* **Échantillons** : 345 fiches brutes de 8 octets à l'adresse du mot `0x39e3` (`0x49e9`) : banque, début,
+  boucle, fin (mots petit-boutistes), note de référence pour les voix du séquenceur ; les voies ADPCM lisent
+  banque, début et fin un octet plus loin (`SampleRecord::voice`, `SampleRecord::adpcm`). Les données PCM sont dans
+  `sounds/NNN.wav` (342 fichiers : les fiches 290, 293 et 305 sont invalides, début après la fin, et n'ont pas de
+  fichier). `sample_tails` : la suite de chaque échantillon dans la ROM d'échantillons, en hexadécimal sans les
+  zéros finaux, jusqu'au prochain échantillon de la banque ou à la fin de la banque (`Music::sample_tail_end`) :
+  une voix QSound qui ne boucle pas continue de lire après la fin tant que le pilote ne l'arrête pas.
+* **Tables du pilote** (`tables`, ROM fixe) : `qsound_init` (registres 0xd5 et valeurs 0xe1, 12 paires),
+  `durations` (0x1119, 24 mots), `octave_offsets` (0x1149, 16 octets), `semitone_octave` (0x1fc6, 108),
+  `octave_start` (0x2032, 9), `rates` (0x203b, 108 mots), `fine` (0x2113, 12 x 256 octets), et les tables de mots
+  indexées par un octet, jointives à partir de 0x33e1 (`levels`) : `amplitudes` (128 mots), `levels` (128),
+  `attack` (64), `decay` (64), `lfo_rates` (128), `vibrato` (128), `tremolo` (128), puis `after_tremolo`, les 128
+  mots qui suivent (pointeurs et banc 0). **Débordements** de l'original, écrits en clair dans le pilote : un index
+  au-delà d'une de ces tables lit la suivante (`LevelTables`, seulement avec des données synthétiques : le test
+  `music_indices_in_bounds` vérifie que les données du jeu restent dans les bornes) ; une durée à la fois pointée et
+  en triolet lit les décalages d'octave qui suivent `durations` (`SoundData::duration`).
 
 Reste dans le code du pilote (et `ddsom-sound`) : le tableau de saut des instructions (0x1179), la
 logique d'enveloppe, de LFO et de pan.

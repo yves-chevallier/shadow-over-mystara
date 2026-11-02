@@ -461,7 +461,7 @@ pub const SAMPLES_SIZE: usize = 0x40_0000;
 pub fn qsound_samples(dir: &Path) -> io::Result<Image> {
     let music = Music::load(&dir.join("sound/music.json"))?;
     let mut img = Image::new(SAMPLES_SIZE);
-    for i in 0..music.samples.len() {
+    for i in 0..music.sample_count() {
         let path = dir.join(format!("sounds/{i:03}.wav"));
         if !path.exists() || !music.sample_valid(i) {
             continue;
@@ -481,48 +481,16 @@ pub fn qsound_samples(dir: &Path) -> io::Result<Image> {
     Ok(img)
 }
 
-/// Size of the Z80 region (`cps2::sound::Sound::rom`).
-pub const AUDIO_SIZE: usize = 0x5_0000;
-
-/// Z80 region (0-7FFF fixed, banks from 0x10000) with everything the rewritten sound driver reads
-/// (`ddsom_sound`, `sound/music.json`): fixed-ROM pointers, header and sound table, definitions,
-/// tracks, instrument banks, sample records and driver tables. The Z80 program is not in it:
-/// only the Rust driver (`cps2::sound::Sound::use_rust_driver`) can play it. Linear addresses of
-/// `ddsom_sound::Rom` (shift of 0x8000 from 0x8000).
+/// Z80 region (`cps2::sound::Sound::rom`) with the driver data of `sound/music.json` at their original
+/// addresses (`ddsom_sound::SoundData::region_parts`). The Z80 program is not in it: only the Rust driver
+/// can play it.
 pub fn audio_region(dir: &Path) -> io::Result<Image> {
     let m = Music::load(&dir.join("sound/music.json"))?;
-    let mut img = Image::new(AUDIO_SIZE);
-    let mut put = |at: u32, bytes: &[u8]| {
+    let mut img = Image::new(ddsom_sound::region::REGION_SIZE);
+    for (at, bytes) in m.data.region_parts() {
         for (k, &b) in bytes.iter().enumerate() {
-            let p = at + k as u32;
-            img.put(if p < 0x8000 { p } else { p + 0x8000 }, &[b]);
+            img.put(ddsom_sound::region::offset(at + k as u32) as u32, &[b]);
         }
-    };
-    let le = |v: u32| (v as u16).to_le_bytes();
-    put(m.header_ptr, &le(m.header));
-    put(m.samples_ptr, &le(m.samples_rom));
-    let mut head = m.count.to_be_bytes().to_vec();
-    head.extend([m.music_factor, m.sfx_volume]);
-    head.extend(m.header_rest);
-    put(m.header, &head);
-    for (i, s) in m.songs.iter().enumerate() {
-        let a = s.as_ref().map_or(0, |s| s.rom);
-        put(m.header + 6 + 4 * i as u32, &[(a >> 16) as u8, (a >> 8) as u8, a as u8, 0]);
-    }
-    for s in m.songs.iter().flatten() {
-        put(s.rom, &s.bytes());
-    }
-    for b in &m.code {
-        let bytes = b.bytes().ok_or_else(|| io::Error::other(format!("music.json: unreadable track {:#x}", b.rom)))?;
-        put(b.rom, &bytes);
-    }
-    for (k, b) in m.banks.iter().enumerate() {
-        put(m.banks_table + 2 * k as u32, &le(b.rom));
-        put(b.rom, &b.instruments.concat());
-    }
-    put(m.samples_rom, &m.samples.concat());
-    for t in &m.tables {
-        put(t.rom, &t.bytes());
     }
     Ok(img)
 }

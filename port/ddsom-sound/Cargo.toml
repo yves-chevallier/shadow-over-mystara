@@ -5,6 +5,11 @@ edition = "2021"
 description = "ddsom sound driver (Z80 QSound sequencer) rewritten in Rust"
 
 [dependencies]
+# `sound/music.json` reads and writes `SoundData` directly.
+serde = { version = "1", features = ["derive"], optional = true }
+
+[features]
+serde = ["dep:serde"]
 
 [dev-dependencies]
 cps2 = { path = "../cps2" }
