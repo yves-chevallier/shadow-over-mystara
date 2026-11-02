@@ -56,20 +56,8 @@ mod field {
 /// "Interface" animation set common to many effects.
 const ANIMATIONS_INTERFACE: crate::data::RomAddr = crate::data::RomAddr(0x1c03a6);
 
-/// Slot of the table jump `move.w (table,PC,Dn.w),D1 ; jmp (table,PC,D1.w)` for the index `index`: what
-/// `outside_table` reports when an index has no case (the jump table itself is not read: its targets are the cases of
-/// the `match`).
-pub(crate) fn target<R: Bench>(_ctx: &mut Cx<'_, R>, table: u32, index: u32) -> u32 {
-    table.wrapping_add(index)
-}
-
-/// State or variant value outside the original's jump table, which would jump into data or into the middle of code:
-/// never produced (docs/code-mort.md, batch B). `slot`: the slot of the jump table ([`target`]).
-pub(crate) fn outside_table(slot: u32) -> ! {
-    unreachable!("index outside the jump table: slot {slot:#x}")
-}
-
-/// State, sub-state or variant `index` outside the original's jump table of the handler (see [`outside_table`]).
+/// State, sub-state or variant `index` outside the original's jump table of the handler, which would jump into data or
+/// into the middle of code: never produced (docs/code-mort.md, batch B).
 pub(crate) fn bad_index(index: impl Into<u32>) -> ! {
     unreachable!("index {:#x} outside the jump table of the handler", index.into())
 }

@@ -52,6 +52,7 @@ fn main() {
             spawns::extract(roms, &out.join("data/spawns.json"))?;
             speeds::extract(roms, &out.join("data/speeds.json"))?;
             effects::extract(roms, &out.join("data/effects.json"))?;
+            objects::extract(roms, &out.join("data/objects.json"))?;
             data::extract(roms, &out.join("data"))?;
         }
         if wanted("data") {
@@ -148,6 +149,11 @@ Speed tables of the objects (motion by table): (vx, vy) per index, and the two a
 ## data/effects.json
 
 Tables of the visual effects (EFFCT family), by name: address, space, element size, values.
+
+## data/objects.json
+
+Tables of the enemy shots, special objects, pickup objects and crates (ESHL, SOBJ, ITEM and BOX families), in the
+same form as data/effects.json.
 
 ## data/spawns.json
 

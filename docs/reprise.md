@@ -114,6 +114,17 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    Pour L8b : voir « Pour L8b » dans fin.md (une ligne par table dans `extract/src/enemies.rs`, lecture par
    `enemy_common::tables`, champs communs d'`Enemy`).
 
+8. **Lot L7 (ESHL, SOBJ, objets, caisses)** fait (branche `wt-l7-objets`, [fin.md](fin.md) « L7 », « Résultat ») :
+   `families/eshl*/`, `sobj/`, `items/`, `boxes/` découpés par type (plus gros fichier 649 lignes), tables typées
+   `data/objects.json` (172 tables, `ddsom-data/src/objects.rs`), champs en vues `view!`/`record!` et variables
+   nommées (`families/shell/{tables,records,vars}.rs`) : zone à 0 accesseur ROM, 0 décalage littéral,
+   0 `A5 + littéral`, 0 constante d'adresse ROM. **Réextraire les assets** (`data/objects.json`). Pour les lots
+   suivants : la macro `tables!` de `ddsom-data/src/effects.rs` sert à toute famille de tables nommées
+   (`tables! { struct Nom; ... }`, `extract::effects::read_table`, `rebuild::put_named`) ; `GameData::sprite_tables`
+   (`sprites/tables.json`) est chargé (boîtes de collision, tir ESHL 5) ; `effects::target` et `outside_table`
+   n'existent plus (`effects::bad_index`) ; `PlayerView` de `shell/records.rs` (comme celle de L5) est à fusionner
+   avec la fiche de joueur de L10, `Host` avec les fiches d'ennemis et de boss (L8, L9).
+
 ## Méthode qui marche
 
 * **Consignes des agents.** Elles sont dans [agents/brief-commun.md](agents/brief-commun.md) (règles) et [agents/brief-lots.md](agents/brief-lots.md) (mission type d'un lot de refactorisation et règle du code mort). Remplacer `<scratchpad>` par le dossier temporaire de la session.

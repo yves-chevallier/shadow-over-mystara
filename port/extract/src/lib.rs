@@ -13,6 +13,7 @@ pub mod gfx;
 pub mod levels;
 pub mod misc;
 pub mod music;
+pub mod objects;
 pub mod natives;
 pub mod palettes;
 pub mod players;
@@ -48,5 +49,13 @@ pub fn to_data_from(rom: &Program) -> io::Result<GameData> {
     let anims = sprites::anims(rom, &frames)?;
     let (regions, specs) = combat::enemies(rom);
     let enemies = data::build(rom, regions, &specs, Vec::new());
-    Ok(GameData { frames, anims, speeds: speeds::speeds(rom), effects: effects::effects(rom), enemies })
+    Ok(GameData {
+        frames,
+        anims,
+        speeds: speeds::speeds(rom),
+        effects: effects::effects(rom),
+        enemies,
+        objects: objects::objects(rom),
+        sprite_tables: tables::sprite_tables(rom)?,
+    })
 }
