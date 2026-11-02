@@ -249,7 +249,7 @@ fn principal() {
             for _ in 0..64 {
                 let Some(e) = step else { break };
                 ddsom_game::tasks::resume_step(e, &mut b);
-                ddsom_game::tasks::apply_tools_return(&mut c, &mut b);
+                ddsom_game::tools::frames::apply_tools_return(&mut c, &mut b);
                 if c.pc == SENTINEL {
                     return true;
                 }

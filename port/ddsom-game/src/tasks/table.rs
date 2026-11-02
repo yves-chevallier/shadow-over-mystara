@@ -19,10 +19,8 @@
 //! of a call by address (`crate::call`, sentinel) or of a diagnostic tool that calls a native.
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use super::Step;
-use crate::mem::rd32;
 
 /// Number of slots.
 pub const SLOTS: usize = 16;
@@ -162,7 +160,6 @@ impl Next {
         }
     }
 }
-
 
 impl From<Step> for Next {
     fn from(e: Step) -> Self {
@@ -435,7 +432,7 @@ pub fn read(b: &Cps2Bus) -> Option<&Table> {
 }
 
 /// The task table, if the machine has one, without creating it.
-fn table_if(b: &mut Cps2Bus) -> Option<&mut Table> {
+pub(crate) fn table_if(b: &mut Cps2Bus) -> Option<&mut Table> {
     b.ext.as_deref_mut()?.as_any_mut().downcast_mut()
 }
 
@@ -482,7 +479,7 @@ impl Table {
     /// The most recent of the calls in progress of the current task: a call outside frames opened after the last
     /// frame (it
     /// is popped and returned), otherwise the last frame (popped and returned).
-    fn pop_most_recent(&mut self) -> Option<Result<OutsideFrame, Frame>> {
+    pub(crate) fn pop_most_recent(&mut self) -> Option<Result<OutsideFrame, Frame>> {
         let top = self.frames().top();
         let height = top.map_or(0, |k| k.calls);
         assert!(
@@ -519,13 +516,6 @@ impl Table {
 /// Return of a subroutine (`rts`): it goes back to the most recent of the calls in progress ([`Frame`]).
 pub fn ret(b: &mut Cps2Bus) -> Return {
     table_if(b).map_or(Return::Stack68000, Table::ret)
-}
-
-/// Tools: pops the return address from the 68000 stack (`rts` of a native called by the original code).
-pub fn pop_68000(c: &mut Cpu, b: &mut Cps2Bus) -> u32 {
-    let address = rd32(b, c.a[7]);
-    c.a[7] = c.a[7].wrapping_add(4);
-    address
 }
 
 /// A call by address (`crate::call`) begins; its `rts` will close it ([`ret`]). Returns the depth to
@@ -567,18 +557,6 @@ pub fn pop_return(b: &mut Cps2Bus) -> Next {
         Some(Err(frame)) => frame.next,
         Some(Ok(OutsideFrame::ByAddress)) => panic!("cession or abandon of the call in progress inside a call by address"),
         Some(Ok(OutsideFrame::By68000)) | None => panic!("cession or abandon without a call in progress"),
-    }
-}
-
-/// [`pop_return`] for a native called by the original code (tools): its return address may be on the 68000 stack.
-pub fn pop_return_68k(c: &mut Cpu, b: &mut Cps2Bus) -> Next {
-    match table_if(b).and_then(Table::pop_most_recent) {
-        Some(Err(frame)) => frame.next,
-        Some(Ok(OutsideFrame::ByAddress)) => panic!("cession or abandon of the call in progress inside a call by address"),
-        Some(Ok(OutsideFrame::By68000)) | None => {
-            assert!(!crate::no68k::active(), "cession or abandon without a call in progress");
-            Next::Address(pop_68000(c, b))
-        }
     }
 }
 

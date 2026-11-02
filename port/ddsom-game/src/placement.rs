@@ -1,11 +1,9 @@
 //! Placement of a player on free ground and the players' effect palettes (subsystem X2).
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
-use crate::mem::{prog16, rd16, rd32, rd8, rts, set_low_word, wr16, wr32, A5};
+use crate::mem::{prog16, rd16, rd32, rd8, wr16, wr32, A5};
 use crate::objects::Obj;
-use crate::{regs, Native};
 
 /// Free terrains: numbers below 4.
 const FREE_TERRAIN: u16 = 4;
@@ -25,16 +23,17 @@ fn camera(b: &mut Cps2Bus) -> (u16, u16) {
 }
 
 /// End of the 0x3668 search, enough to rebuild the registers of the original.
-struct Search {
+#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
+pub(crate) struct Search {
     /// Loop counters (D5, D6) at the time of exit.
-    d5: u32,
-    d6: u32,
+    pub(crate) d5: u32,
+    pub(crate) d6: u32,
     /// Last terrain examined (D0-D4, A1).
-    last: crate::video::Terrain,
+    pub(crate) last: crate::video::Terrain,
     /// Height set (D0).
-    height: u16,
+    pub(crate) height: u16,
     /// Depth set (D1).
-    y: u16,
+    pub(crate) y: u16,
 }
 
 /// 0x3668: places player `o` at resurrection. From a player-specific starting point, looks for a free terrain
@@ -45,7 +44,7 @@ pub fn place_on_free_ground(b: &mut Cps2Bus, o: Obj) {
     search(b, o);
 }
 
-fn search(b: &mut Cps2Bus, o: Obj) -> Search {
+pub(crate) fn search(b: &mut Cps2Bus, o: Obj) -> Search {
     let me = o.0;
     let player = 2 * rd8(b, me + 2) as u32;
     let (cam_x, _) = camera(b);
@@ -86,21 +85,9 @@ fn search(b: &mut Cps2Bus, o: Obj) -> Search {
     Search { d5, d6, last: last.expect("at least one attempt"), height, y }
 }
 
-/// Native of 0x3668 (calls by address): leaves the registers of the original (D0, D1: height and depth
-/// found, D2-D4, A1: last terrain examined, D5, D6: search counters).
-fn place_on_free_ground_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let r = search(b, Obj(c.a[0]));
-    crate::video::terrain_68k(c, &r.last);
-    c.d[5] = r.d5;
-    c.d[6] = r.d6;
-    set_low_word(&mut c.d[1], r.y);
-    set_low_word(&mut c.d[0], r.height);
-    rts(c, b);
-}
-
 /// 16-colour palettes (data) copied into the palette 0x91c1e0 by 0x3af8..0x3b14.
 const EFFECT_PALETTES: u32 = 0x25a640;
-const EFFECT_PALETTE_RAM: u32 = 0x91c1e0;
+pub(crate) const EFFECT_PALETTE_RAM: u32 = 0x91c1e0;
 
 /// Players' effect palettes: offset in `EFFECT_PALETTES` (entries 0x3af8, 0x3afe, 0x3b04, 0x3b0c, 0x3b14).
 pub mod effect_palette {
@@ -124,41 +111,3 @@ pub fn load_effect_palette(b: &mut Cps2Bus, offset: u16) -> ([u32; 8], u32) {
     }
     (longs, from + 32)
 }
-
-/// Registers left by 0x3b1c (output of the natives; the Rust callers of the players do not read them back:
-/// `DDSOM_POISON=placement`, batch D).
-const REGS_EFFECT_PALETTE: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::d(5) | regs::d(6) | regs::a(1) | regs::a(2) | regs::a(3);
-
-/// `load_effect_palette` with the registers of the original: D0-D6 and A3 hold the eight longs copied, A1 and A2 the
-/// destination and the next source, like the `movem` of the original.
-pub(crate) fn load_effect_palette_regs(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
-    let (longs, next) = load_effect_palette(b, offset);
-    c.d[..7].copy_from_slice(&longs[..7]);
-    c.a[3] = longs[7];
-    c.a[1] = EFFECT_PALETTE_RAM;
-    c.a[2] = next;
-}
-
-fn effect_palette_native(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
-    load_effect_palette_regs(c, b, offset);
-    rts(c, b);
-}
-
-const fn palette(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: REGS_EFFECT_PALETTE }
-}
-
-pub const NATIVES: &[Native] = &[
-    Native {
-        entry: 0x3668,
-        name: "player_placed_on_ground",
-        run: crate::Body::WithCpu(place_on_free_ground_native),
-        touches_sound: false,
-        outputs: regs::d(0) | regs::d(1) | regs::d(2) | regs::d(5) | regs::d(6),
-    },
-    palette(0x3af8, "palette_effect_20", |c, b| effect_palette_native(c, b, effect_palette::LIGHT)),
-    palette(0x3afe, "palette_effect_0", |c, b| effect_palette_native(c, b, effect_palette::NORMAL)),
-    palette(0x3b04, "palette_effect_360", |c, b| effect_palette_native(c, b, effect_palette::P360)),
-    palette(0x3b0c, "palette_effect_380", |c, b| effect_palette_native(c, b, effect_palette::P380)),
-    palette(0x3b14, "palette_effect_3a0", |c, b| effect_palette_native(c, b, effect_palette::RED)),
-];

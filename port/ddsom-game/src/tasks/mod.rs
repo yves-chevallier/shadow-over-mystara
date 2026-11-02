@@ -20,7 +20,6 @@ pub mod service;
 pub mod table;
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use crate::modes::Flow;
 use crate::scene::Ctx;
@@ -185,10 +184,10 @@ pub fn resume_step(step: Step, b: &mut Cps2Bus) {
 }
 
 /// Return from a subroutine (`rts`): the continuation of the call in progress, Rust stage executed immediately;
-/// nothing if a Rust function was waiting for this return (`table::call_expected`, `crate::call`), or if the task has
-/// already ceded control (the Rust code following a cession only returns: see [`has_ceded`]). In the tools (natives
-/// called by the original code), a return to the original code: noted, the processor jumps there at the end of the
-/// native ([`return_to_caller_68k`], `Native::execute`).
+/// nothing if a Rust function was waiting for this return (`table::call_expected`), or if the task has already ceded
+/// control (the Rust code following a cession only returns: see [`has_ceded`]). In the tools (natives called by the
+/// original code), a return to the original code: noted, the processor jumps there at the end of the native
+/// (`tools::frames`).
 pub fn return_to_caller(b: &mut Cps2Bus) {
     if has_ceded() {
         return;
@@ -197,39 +196,19 @@ pub fn return_to_caller(b: &mut Cps2Bus) {
         table::Return::Render => {}
         table::Return::Next(Next::Step(e)) => execute(e, b),
         // a frame whose continuation is an address: tools (natives called by a diagnostic tool)
-        table::Return::Next(Next::Address(a)) => TOOLS_RETURN.with(|r| r.set(Some(ToolsReturn::Address(a)))),
-        // game: each return is that of a call in progress (stage, expected call, call by address)
+        table::Return::Next(Next::Address(a)) => original_code_resumes(Some(a)),
+        // game: each return is that of a call in progress (stage, expected call)
         table::Return::Stack68000 if crate::no68k::active() => panic!("return without a call in progress"),
-        table::Return::Stack68000 => TOOLS_RETURN.with(|r| r.set(Some(ToolsReturn::Stack))),
+        table::Return::Stack68000 => original_code_resumes(None),
     }
 }
 
-/// Tools: where the original code resumes after a native that returned to it.
-#[derive(Clone, Copy)]
-enum ToolsReturn {
-    Address(u32),
-    /// The return address popped from the 68000 stack.
-    Stack,
-}
-
-thread_local! {
-    static TOOLS_RETURN: std::cell::Cell<Option<ToolsReturn>> = const { std::cell::Cell::new(None) };
-}
-
-/// `rts` of a native on the processor: [`return_to_caller`], then, in the tools, the PC of the original code that
-/// resumes.
-pub fn return_to_caller_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    return_to_caller(b);
-    apply_tools_return(c, b);
-}
-
-/// Tools: a native returned to the original code ([`return_to_caller`]): its PC.
-pub fn apply_tools_return(c: &mut Cpu, b: &mut Cps2Bus) {
-    match TOOLS_RETURN.with(|r| r.take()) {
-        None => {}
-        Some(ToolsReturn::Address(a)) => c.pc = a,
-        Some(ToolsReturn::Stack) => c.pc = table::pop_68000(c, b),
-    }
+/// Tools: a native called by the original code returns to it, at `address` or at the address on the 68000 stack.
+fn original_code_resumes(address: Option<u32>) {
+    #[cfg(feature = "tools")]
+    crate::tools::frames::original_code_resumes(address);
+    #[cfg(not(feature = "tools"))]
+    unreachable!("return to the original code ({address:x?}): the game has no 68000");
 }
 
 thread_local! {

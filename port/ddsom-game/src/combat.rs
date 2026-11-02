@@ -10,16 +10,14 @@
 //! outside the scope (effect allocation, sounds, gauge display, RNG...) are called directly.
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use crate::dispatch::Leftovers;
 use crate::mem::{rd16, rd32, rd8, wr16, wr8, A5};
 pub use crate::objects::Obj;
 use crate::objects::pools;
-use crate::Native;
 
 /// Call counters of the rewritten routines (validation coverage).
-mod cov {
+pub(crate) mod cov {
     use std::collections::BTreeMap;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Mutex;
@@ -50,9 +48,9 @@ macro_rules! trace {
     ($($a:tt)*) => { if std::env::var("DDSOM_TRACE").is_ok() { eprintln!($($a)*); } };
 }
 
-mod contact;
-mod damage;
-mod shots;
+pub(crate) mod contact;
+pub(crate) mod damage;
+pub(crate) mod shots;
 
 use contact::*;
 use damage::*;
@@ -724,26 +722,3 @@ fn count_combo(w: &mut World, p: Obj, e: Obj) {
 
 // ---------------------------------------------------------------------------------------------
 // Native routines
-
-/// 0x260ee: the frame's collisions, for a caller still on the processor (game loop, natives for the tools): the
-/// leftovers D2-D5 go from the register bench to `World::leftovers` and back; nothing else is read or written there.
-pub fn on_bench(c: &mut Cpu, b: &mut Cps2Bus) {
-    let leftovers = Leftovers { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] };
-    let mut w = World { b, a2: 0, leftovers };
-    combat_update(&mut w);
-    let l = w.leftovers;
-    (c.d[2], c.d[3], c.d[4], c.d[5]) = (l.d2, l.d3, l.d4, l.d5);
-}
-
-fn combat_update_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    on_bench(c, b);
-    crate::mem::rts(c, b);
-}
-
-pub const COMBAT_UPDATE: Native = Native {
-    entry: 0x260ee,
-    name: "combat_update",
-    run: crate::Body::WithCpu(combat_update_native),
-    touches_sound: false,
-    outputs: 0,
-};

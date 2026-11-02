@@ -2351,12 +2351,12 @@ fn bubble_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     }
 }
 
-handler!(EFFCT_4, bubble::ENTRY, "effct_bubble", #[without] bubble_handler);
-handler!(EFFCT_24, accessory::ENTRY, "effct_accessory", #[without] accessory_handler);
-handler!(EFFCT_45, trigger::ENTRY, "effct_trigger", #[without] trigger_handler);
-handler!(EFFCT_51, projectile::ENTRY, "effct_projectile", #[without] projectile_handler);
-handler!(EFFCT_52, shimmer_class::ENTRY, "effct_shimmer_class", #[without] shimmer_class_handler);
-handler!(EFFCT_56, shards_debris::ENTRY, "effct_shards_debris", #[without] shards_debris_handler);
+handler!(EFFCT_4, bubble::ENTRY, "effct_bubble", bubble_handler);
+handler!(EFFCT_24, accessory::ENTRY, "effct_accessory", accessory_handler);
+handler!(EFFCT_45, trigger::ENTRY, "effct_trigger", trigger_handler);
+handler!(EFFCT_51, projectile::ENTRY, "effct_projectile", projectile_handler);
+handler!(EFFCT_52, shimmer_class::ENTRY, "effct_shimmer_class", shimmer_class_handler);
+handler!(EFFCT_56, shards_debris::ENTRY, "effct_shards_debris", shards_debris_handler);
 // ---------------------------------------------------------------------------------------------
 // Type 8: trace on an object (0xababa)
 
@@ -2403,22 +2403,22 @@ fn trace_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     three_states(ctx, trace::TABLE, trace_init, trace_active)
 }
 
-handler!(EFFCT_8, trace::ENTRY, "effct_trace", #[without] trace_handler);
-handler!(EFFCT_28, spark::ENTRY, "effct_spark", #[without] spark_handler);
-handler!(EFFCT_57, mark::ENTRY, "effct_mark", #[without] mark_handler);
-handler!(EFFCT_62, sheaf::ENTRY, "effct_sheaf", #[without] sheaf_handler);
-handler!(EFFCT_7, shard_single::ENTRY, "effct_shard_single", #[without] shard_single_handler);
-handler!(EFFCT_19, sweep::ENTRY, "effct_sweep", #[without] sweep_handler);
-handler!(EFFCT_27, smoke::ENTRY, "effct_smoke", #[without] smoke_handler);
-handler!(EFFCT_1, 0xa8758, "effct_removed", #[without] removed);
-handler!(EFFCT_6, debris::ENTRY, "effct_debris", #[without] debris_handler);
-handler!(EFFCT_29, impact::ENTRY, "effct_impact", #[without] impact_handler);
-handler!(EFFCT_17, interface::ENTRY, "effct_interface", #[without] interface_handler);
-handler!(EFFCT_5, halo::ENTRY, "effct_halo", #[without] halo);
-handler!(EFFCT_9, trail::ENTRY, "effct_trail", #[without] trail);
-handler!(EFFCT_15, shimmering::ENTRY, "effct_shimmer", #[without] shimmering);
-handler!(EFFCT_21, banner::ENTRY, "effct_banner", #[without] banner);
-handler!(EFFCT_25, dust::ENTRY, "effct_dust", #[without] dust);
-handler!(EFFCT_26, cloud::ENTRY, "effct_cloud", #[without] cloud);
-handler!(EFFCT_32, aura::ENTRY, "effct_aura", #[without] aura);
-handler!(EFFCT_33, shard::ENTRY, "effct_shard", #[without] shard);
+handler!(EFFCT_8, trace::ENTRY, "effct_trace", trace_handler);
+handler!(EFFCT_28, spark::ENTRY, "effct_spark", spark_handler);
+handler!(EFFCT_57, mark::ENTRY, "effct_mark", mark_handler);
+handler!(EFFCT_62, sheaf::ENTRY, "effct_sheaf", sheaf_handler);
+handler!(EFFCT_7, shard_single::ENTRY, "effct_shard_single", shard_single_handler);
+handler!(EFFCT_19, sweep::ENTRY, "effct_sweep", sweep_handler);
+handler!(EFFCT_27, smoke::ENTRY, "effct_smoke", smoke_handler);
+handler!(EFFCT_1, 0xa8758, "effct_removed", removed);
+handler!(EFFCT_6, debris::ENTRY, "effct_debris", debris_handler);
+handler!(EFFCT_29, impact::ENTRY, "effct_impact", impact_handler);
+handler!(EFFCT_17, interface::ENTRY, "effct_interface", interface_handler);
+handler!(EFFCT_5, halo::ENTRY, "effct_halo", halo);
+handler!(EFFCT_9, trail::ENTRY, "effct_trail", trail);
+handler!(EFFCT_15, shimmering::ENTRY, "effct_shimmer", shimmering);
+handler!(EFFCT_21, banner::ENTRY, "effct_banner", banner);
+handler!(EFFCT_25, dust::ENTRY, "effct_dust", dust);
+handler!(EFFCT_26, cloud::ENTRY, "effct_cloud", cloud);
+handler!(EFFCT_32, aura::ENTRY, "effct_aura", aura);
+handler!(EFFCT_33, shard::ENTRY, "effct_shard", shard);

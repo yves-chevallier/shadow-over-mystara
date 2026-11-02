@@ -915,11 +915,11 @@ fn rng_creators(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
 /// Entries of the `creator_entries` group (without the table dispatches and the scene reset, which call code
 /// chosen by the state and are not creators).
 fn creator_entries() -> Vec<u32> {
-    use ddsom_game::families::{creators, effects_creators, small};
+    use ddsom_game::tools::families::{creators, effects_creators, small};
     // the sparks placed between two objects read their collision boxes: on randomly drawn objects,
     // the original loops forever (out of contract), they are validated by the scenarios
     let excluded = [0xa8ae8, 0xa8af8, 0xd981a, 0xd9778, 0xcc0ca, 0x180ac, 0x1c44a, 0xaa96c, 0xaaa04, 0xaaa84];
-    effects_creators::NATIVES.iter().chain(creators::NATIVES).chain(small::NATIVES).chain(ddsom_game::effects_aids::NATIVES)
+    effects_creators::NATIVES.iter().chain(creators::NATIVES).chain(small::NATIVES).chain(ddsom_game::tools::effects_aids::NATIVES)
         .map(|n| n.entry)
         .filter(|e| !excluded.contains(e))
         .collect()

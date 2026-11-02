@@ -5,10 +5,9 @@
 //! `0x804102/04/06`; `0x804166` (CPS-B) enables the layers.
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
-use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, wr16, wr32, wr8, A5};
-use crate::{regs, Native};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::Native;
 
 /// Work RAM variables (offsets from A5 = FF8000) specific to the video subsystem.
 pub mod ram {
@@ -50,7 +49,7 @@ pub mod hw {
     pub const OBJ_BANK: u32 = 0x8040e1;
 }
 
-fn set_low_word(r: &mut u32, v: u16) {
+pub(crate) fn set_low_word(r: &mut u32, v: u16) {
     *r = *r & 0xffff_0000 | v as u32;
 }
 
@@ -58,16 +57,8 @@ fn set_low_word(r: &mut u32, v: u16) {
 // V1: loading gauge, locks, layers, clearings
 // ---------------------------------------------------------------------------------------------
 
-/// Fill value of the loading gauge: tile 0x20 (space), attribute 3.
-const GAUGE: u32 = 0x0020_0003;
 /// The gauge occupies the first 32 longs of the character layer (the first column).
-const GAUGE_LONGS: u32 = 32;
-
-/// 0xb40: called at each wait (0xa40); sets D1 then draws the gauge (0xb46).
-fn gauge_with_value(c: &mut Cpu, b: &mut Cps2Bus) {
-    c.d[1] = GAUGE;
-    gauge(c, b);
-}
+pub(crate) const GAUGE_LONGS: u32 = 32;
 
 /// 0xb46: fills the first column of the character layer with `marker` (the loading gauge), unless
 /// the settings hide it (bit 0x400 of DSW: always, in this game). Returns true if the gauge is drawn.
@@ -79,27 +70,6 @@ pub fn update_gauge(b: &mut Cps2Bus, marker: u32) -> bool {
         }
     }
     !hidden
-}
-
-/// `update_gauge` (D1 = marker) with the registers of the original: D2 and the flags of the last computation, A0
-/// after the last write (the world update leaves them to the next handler).
-pub fn gauge_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    let flags_clear = !(m68k::SR_N | m68k::SR_Z | m68k::SR_V | m68k::SR_C);
-    if !update_gauge(b, c.d[1]) {
-        c.d[2] = c.d[2] & 0xffff_0000 | 0x400;
-        c.sr &= flags_clear;
-    } else {
-        c.d[2] |= 0xffff;
-        c.a[0] = hw::TEXT_LAYER + 4 * GAUGE_LONGS;
-        c.sr = c.sr & flags_clear
-            | if c.d[1] == 0 { m68k::SR_Z } else { 0 }
-            | if c.d[1] & 0x8000_0000 != 0 { m68k::SR_N } else { 0 };
-    }
-}
-
-fn gauge(c: &mut Cpu, b: &mut Cps2Bus) {
-    gauge_68k(c, b);
-    rts(c, b);
 }
 
 /// `update_gauge` called by the world update (class marker `marker`, D1 of the original). Original glitch: the D2.w
@@ -133,19 +103,6 @@ pub fn unlock_counters(b: &mut Cps2Bus, bits: u8) -> u8 {
     forced
 }
 
-fn lock(c: &mut Cpu, b: &mut Cps2Bus) {
-    let forced = lock_counters(b, c.d[0] as u8);
-    set_low_byte(&mut c.d[1], forced);
-    rts(c, b);
-}
-
-/// D0 is returned unchanged.
-fn unlock(c: &mut Cpu, b: &mut Cps2Bus) {
-    let forced = unlock_counters(b, c.d[0] as u8);
-    set_low_byte(&mut c.d[1], forced);
-    rts(c, b);
-}
-
 /// 0xbc6: enables the layers `bits` (added to the register image) and programs the display registers, unless
 /// the screen is frozen. No register or flag changes.
 pub fn turn_layers_on(b: &mut Cps2Bus, bits: u16) {
@@ -161,23 +118,11 @@ pub fn turn_layers_on(b: &mut Cps2Bus, bits: u16) {
     }
 }
 
-fn enable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
-    turn_layers_on(b, c.d[0] as u16);
-    rts(c, b);
-}
-
 /// 0xbfc: disables the layers `bits`. The processor receives D0.w complemented.
 pub fn turn_layers_off(b: &mut Cps2Bus, bits: u16) {
     let enable = rd16(b, A5 + ram::LAYER_ENABLE) & !bits;
     wr16(b, A5 + ram::LAYER_ENABLE, enable);
     wr16(b, hw::LAYER_ENABLE, enable);
-}
-
-fn disable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
-    let bits = c.d[0] as u16;
-    set_low_word(&mut c.d[0], !bits);
-    turn_layers_off(b, bits);
-    rts(c, b);
 }
 
 /// 0xc58: writes the end-of-list entry (0x8000, 0x18000000) at the head of the Object RAM, twice,
@@ -191,7 +136,6 @@ pub fn clear_objects(b: &mut Cps2Bus) {
         wr8(b, hw::OBJ_BANK, bank);
     }
 }
-
 
 /// Black screen, first half (0xc0c, 0xc32): all layers off (`0xbfc` with D0 = 0x12ce, after
 /// resetting `A5+0x14` to zero).
@@ -281,37 +225,13 @@ fn clear_scroll1(b: &mut Cps2Bus) {
     clear_layer(b, Layer::One);
 }
 /// Bytes cleared by 0x3525c.
-const SCROLL1_START: u32 = 0x2000;
+pub(crate) const SCROLL1_START: u32 = 0x2000;
 
 /// 0x3525c: clears the first 8 KB of layer 1 with the empty tile 0x1f.
 pub fn clear_layer1_start(b: &mut Cps2Bus) {
     fill_layer(b, hw::SCROLL1, hw::SCROLL1 + SCROLL1_START, 0x1f);
 }
 
-/// `clear_layer1_start` with the registers of the original: the cell in D0-D5, A2 and A3, D6 = -1 and A1 at the end
-/// of the zone.
-pub fn clear_layer1_start_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    clear_layer1_start(b);
-    leftovers_clear_layer1_start(c);
-}
-
-/// The registers that 0x3525c leaves.
-pub fn leftovers_clear_layer1_start(c: &mut Cpu) {
-    const SIZE: u32 = SCROLL1_START;
-    for n in 0..6 {
-        c.d[n] = 0x1f_0000;
-    }
-    c.a[2] = 0x1f_0000;
-    c.a[3] = 0x1f_0000;
-    c.a[1] = hw::SCROLL1 + SIZE;
-    set_low_word(&mut c.d[6], 0xffff);
-    c.sr &= !(m68k::SR_N | m68k::SR_Z | m68k::SR_V | m68k::SR_C);
-}
-
-fn clear_scroll1_start(c: &mut Cpu, b: &mut Cps2Bus) {
-    clear_layer1_start_68k(c, b);
-    rts(c, b);
-}
 fn clear_scroll2(b: &mut Cps2Bus) {
     clear_layer(b, Layer::Two);
 }
@@ -323,25 +243,11 @@ const fn memory(entry: u32, name: &'static str, run: fn(&mut Cps2Bus)) -> Native
     Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
 }
 
-const fn fixed(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
-}
-
-pub const GAUGE_NATIVE: Native = fixed(0xb46, "video_gauge", gauge, regs::d(2) | regs::a(0) | regs::CCR);
-/// 0xb3e: `bra.b 0xb46`, called by the world update (D1 = class marker).
-pub const GAUGE_THUNK_NATIVE: Native = fixed(0xb3e, "video_gauge_b3e", gauge, regs::d(2) | regs::a(0) | regs::CCR);
-pub const GAUGE_VALUE_NATIVE: Native = fixed(0xb40, "video_gauge_d1", gauge_with_value, regs::d(1) | regs::d(2) | regs::a(0) | regs::CCR);
-pub const LOCK: Native = fixed(0xb96, "video_lock", lock, regs::d(1));
-pub const UNLOCK: Native = fixed(0xbac, "video_deverrou", unlock, regs::d(0) | regs::d(1));
-pub const ENABLE_LAYERS: Native = fixed(0xbc6, "video_layers_on", enable_layers, 0);
-pub const DISABLE_LAYERS: Native = fixed(0xbfc, "video_layers_off", disable_layers, regs::d(0));
 pub const BLANK_SCREEN: Native = memory(0xc0c, "video_black_screen", black_screen);
 pub const CLEAR_OBJECTS: Native = memory(0xc58, "video_clear_objects", clear_objects);
 pub const CLEAR_SCROLL1: Native = memory(0xca8, "video_clear_scroll1", clear_scroll1);
-pub const CLEAR_SCROLL1_START: Native = fixed(0x3525c, "video_clear_start_scroll1", clear_scroll1_start, regs::ALL);
 pub const CLEAR_SCROLL2: Native = memory(0xcc8, "video_clear_scroll2", clear_scroll2);
 pub const CLEAR_SCROLL3: Native = memory(0xce8, "video_clear_scroll3", clear_scroll3);
-
 
 // ---------------------------------------------------------------------------------------------
 // V2: terrain attribute under a point
@@ -404,47 +310,28 @@ pub fn terrain(b: &mut Cps2Bus, x: u16, y: u16) -> Terrain {
     Terrain { number: (word & 0xff80) >> 7, x, y, case, index, column, fixed_map: fixed_map.is_some() }
 }
 
+/// Registers left by 0x24b0: D0/D1 (corrected coordinates), D2 (number), D3/D4 (computation leftovers, read by
+/// callers that take them as arguments), A1 (cell) and Z (zero number, the other flags cleared).
+pub(crate) fn terrain_regs(r: &mut impl crate::ops::Alu, t: &Terrain) {
+    if t.fixed_map {
+        r.d()[3] = t.index as u32;
+    } else {
+        set_low_word(&mut r.d()[3], t.index);
+        r.d()[2] = 0;
+    }
+    set_low_word(&mut r.d()[4], t.column);
+    r.a()[1] = t.case;
+    set_low_word(&mut r.d()[0], t.x);
+    set_low_word(&mut r.d()[1], t.y);
+    set_low_word(&mut r.d()[2], t.number);
+    r.flags(crate::ops::ALL, if t.number == 0 { crate::ops::Z } else { 0 });
+}
+
 /// Terrain number under object `o` (0x24a8: x position at +8, y at +0x10).
 pub fn terrain_of(b: &mut Cps2Bus, o: crate::objects::Obj) -> Terrain {
     let (x, y) = (rd16(b, o.0 + 8), rd16(b, o.0 + 0x10));
     terrain(b, x, y)
 }
-
-/// Registers left by 0x24b0: D0/D1 (corrected coordinates), D2 (number), D3/D4 (computation leftovers, read by
-/// callers that take them as arguments), A1 (cell) and Z (zero number).
-pub fn terrain_68k(c: &mut Cpu, t: &Terrain) {
-    if t.fixed_map {
-        c.d[3] = t.index as u32;
-    } else {
-        set_low_word(&mut c.d[3], t.index);
-        c.d[2] = 0;
-    }
-    set_low_word(&mut c.d[4], t.column);
-    c.a[1] = t.case;
-    set_low_word(&mut c.d[0], t.x);
-    set_low_word(&mut c.d[1], t.y);
-    set_low_word(&mut c.d[2], t.number);
-    c.sr = c.sr & !crate::ops::ALL | if t.number == 0 { m68k::SR_Z } else { 0 };
-}
-
-/// 0x24b0: terrain number at (D0, D1).
-fn terrain_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let t = terrain(b, c.d[0] as u16, c.d[1] as u16);
-    terrain_68k(c, &t);
-    rts(c, b);
-}
-
-/// 0x24a8: terrain number under object A0 (x position at +8, y at +0x10).
-fn terrain_of_object(c: &mut Cpu, b: &mut Cps2Bus) {
-    set_low_word(&mut c.d[0], rd16(b, c.a[0] + 8));
-    set_low_word(&mut c.d[1], rd16(b, c.a[0] + 0x10));
-    terrain_native(c, b);
-}
-
-const TERRAIN_OUT: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::a(1) | regs::CCR;
-
-pub const TERRAIN: Native = fixed(0x24b0, "video_terrain", terrain_native, TERRAIN_OUT);
-pub const TERRAIN_OF_OBJECT: Native = fixed(0x24a8, "video_terrain_object", terrain_of_object, TERRAIN_OUT);
 
 // ---------------------------------------------------------------------------------------------
 // V2: tile block loaders
@@ -588,75 +475,9 @@ pub fn load_grid(b: &mut Cps2Bus, grid: Grid, n: u16, destination: u32) -> GridE
     GridEnd { destination, indices }
 }
 
-/// `load_grid` (D0 = number, A1 = destination) with the registers of the original: D0 = 0xffff, A1 and A2 at the end
-/// of the grid.
-pub fn load_grid_68k(c: &mut Cpu, b: &mut Cps2Bus, grid: Grid) {
-    let end = load_grid(b, grid, c.d[0] as u16, c.a[1]);
-    c.d[0] = 0xffff;
-    c.a[1] = end.destination;
-    c.a[2] = end.indices;
-}
-
-fn load_blocks(c: &mut Cpu, b: &mut Cps2Bus, grid: Grid) {
-    load_grid_68k(c, b, grid);
-    rts(c, b);
-}
-
-const LOAD_OUT: u32 = regs::d(0) | regs::a(1) | regs::a(2);
-
-pub const LOAD_BLOCKS_4X4: Native = fixed(0x260c, "video_blocks_4x4", |c, b| load_blocks(c, b, Grid::Blocks4x4), LOAD_OUT);
-pub const LOAD_BLOCKS_SCROLL2: Native = fixed(0x26d4, "video_blocks_scroll2", |c, b| load_blocks(c, b, Grid::Layer2), LOAD_OUT);
-pub const LOAD_BLOCKS_SMALL: Native = fixed(0x2766, "video_blocks_small", |c, b| load_blocks(c, b, Grid::Layer3), LOAD_OUT);
-
 // ---------------------------------------------------------------------------------------------
 // V2: digits in the character layer
 // ---------------------------------------------------------------------------------------------
-
-/// Writes a digit (tile number = value, attribute 0) at `at`; the next cell of the row is
-/// `COLUMN` further in the character layer.
-fn put_digit(b: &mut Cps2Bus, at: u32, digit: u16) {
-    wr16(b, at, digit);
-    wr16(b, at + 2, 0);
-}
-
-/// Next column of the character layer (see `text.rs`).
-const COLUMN: u32 = 0x80;
-
-/// 0x255a: D0 (0 to 99, saturated) as two decimal digits: tens in A1, units one column further.
-/// Returns D0 = units, D1 = tens, A1 = units cell + 2.
-fn decimal_digits(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut value = c.d[0] as u16;
-    if value >= 100 {
-        value = 99;
-    }
-    let (tens, units) = (value / 10, value % 10);
-    put_digit(b, c.a[1], tens);
-    put_digit(b, c.a[1] + COLUMN, units);
-    c.d[1] = tens as u32;
-    set_low_word(&mut c.d[0], units);
-    c.a[1] += COLUMN + 2;
-    crate::ops::logic(c, 0, m68k::decode::Size::Word);
-    rts(c, b);
-}
-
-/// 0x25e8: D0 as four hexadecimal digits (high nibble first), one per column starting at A1.
-/// Returns A1 = A1 + 4 columns.
-fn hex_digits(c: &mut Cpu, b: &mut Cps2Bus) {
-    for i in 0..4 {
-        put_digit(b, c.a[1] + COLUMN * i, (c.d[0] as u16) >> (12 - 4 * i) & 0xf);
-    }
-    c.a[1] += 4 * COLUMN;
-    crate::ops::logic(c, 0, m68k::decode::Size::Word);
-    rts(c, b);
-}
-
-pub const DECIMAL_DIGITS: Native = fixed(0x255a, "video_digits_decimal", decimal_digits, regs::d(0) | regs::d(1) | regs::a(1) | regs::CCR);
-pub const HEX_DIGITS: Native = fixed(
-    0x25e8,
-    "video_digits_hex",
-    hex_digits,
-    regs::a(1) | regs::CCR,
-);
 
 /// Table of fixed screens (logos and rankings): 10 entries of 12 bytes from the ROM, copied into work
 /// RAM at startup (0x19038).
@@ -682,24 +503,24 @@ pub const COPY_FIXED_SCREENS: Native = Native {
 /// Native routines of this module.
 pub const NATIVES: &[Native] = &[
     COPY_FIXED_SCREENS,
-    GAUGE_NATIVE,
-    GAUGE_THUNK_NATIVE,
-    GAUGE_VALUE_NATIVE,
-    LOCK,
-    UNLOCK,
-    ENABLE_LAYERS,
-    DISABLE_LAYERS,
+    
+    
+    
+    
+    
+    
+    
     CLEAR_OBJECTS,
     BLANK_SCREEN,
     CLEAR_SCROLL1,
-    CLEAR_SCROLL1_START,
+    
     CLEAR_SCROLL2,
     CLEAR_SCROLL3,
-    TERRAIN,
-    TERRAIN_OF_OBJECT,
-    LOAD_BLOCKS_4X4,
-    LOAD_BLOCKS_SCROLL2,
-    LOAD_BLOCKS_SMALL,
-    DECIMAL_DIGITS,
-    HEX_DIGITS,
+    
+    
+    
+    
+    
+    
+    
 ];

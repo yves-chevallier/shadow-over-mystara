@@ -8,7 +8,6 @@ use crate::families::effects_creators::leftovers::OnBench;
 use crate::objects::pools;
 use crate::objects::Current;
 
-
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
@@ -334,8 +333,8 @@ mod flash {
 }
 
 handlers! {
-    0x4c5be "peff_15" #[without] trail::run,
-    0x4c948 "peff_16" #[without] bubble::run,
-    0x4ccca "peff_18" #[without] storm::run,
-    0x4ce0c "peff_19" #[without] flash::run,
+    0x4c5be "peff_15" trail::run,
+    0x4c948 "peff_16" bubble::run,
+    0x4ccca "peff_18" storm::run,
+    0x4ce0c "peff_19" flash::run,
 }

@@ -31,64 +31,64 @@ use crate::Native;
 
 /// All the native routines of the object model.
 pub const NATIVES: &[Native] = &[
-    pools::INIT_ALL,
-    pools::INIT_PEFF,
-    pools::INIT_SET,
-    pools::INIT_EFFCT,
-    pools::INIT_SOBJ,
-    pools::ALLOC_PSHL,
-    pools::ALLOC_PEFF,
-    pools::ALLOC_ENEMY,
-    pools::ALLOC_ESHL,
-    pools::ALLOC_EFFCT,
-    pools::ALLOC_SET,
-    pools::ALLOC_BOX,
-    pools::ALLOC_BOSS,
-    pools::ALLOC_ITEM,
-    pools::ALLOC_SOBJ,
-    pools::FREE_PSHL,
-    pools::FREE_PEFF,
-    pools::FREE_ENEMY,
-    pools::FREE_ESHL,
-    pools::FREE_SET,
-    pools::FREE_EFFCT,
-    pools::FREE_BOX,
-    pools::FREE_BOSS,
-    pools::FREE_ITEM,
-    pools::FREE_SOBJ,
-    lists::REINSERT_ACTORS,
-    lists::REINSERT_FOREGROUND,
-    lists::UNLINK,
-    lists::UNLINK_ALL,
-    anim::ANIM_START_INDEXED,
-    anim::ANIM_START,
-    anim::ANIM_STEP,
-    anim::ANIM_START_LONG_DOUBLE,
-    anim::ANIM_START_LONG_BY_CHAR,
-    anim::ANIM_START_LONG_BY_VARIANT,
-    anim::ANIM_STEP_LONG,
-    motion::MOVE_XY,
-    motion::MOVE_X,
-    motion::MOVE_XYZ,
-    motion::MOVE_XZ,
-    motion::MOVE_Z,
-    motion::MOVE_YZ,
-    motion::MOVE_Y,
-    motion::SPEED_TABLE_A,
-    motion::SPEED_TABLE_B,
-    motion::MOVE_BY_TABLE_XY,
-    motion::MOVE_BY_TABLE_XZ,
-    motion::PAUSE_HOOK,
-    motion::COUNTDOWNS,
-    cull::CULL_OFFSCREEN,
-    cull::IN_ARENA,
-    cull::IN_ARENA_DEFAULT,
-    cull::ON_SCREEN,
-    rank::RANK_RESET,
-    rank::RANK_LOAD_PRESET,
-    rank::RANK_RAISE,
-    rank::RANK_LOWER,
-    rank::RANK_TICK,
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 ];
 
 /// Work RAM variables (offsets from A5 = 0xFF8000) used by the object model.

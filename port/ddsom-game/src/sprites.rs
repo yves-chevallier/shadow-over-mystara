@@ -6,9 +6,8 @@
 //! the number of pieces per frame; a shadow is added under the characters.
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
-use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::Native;
 
 /// A5 variables (RAM FF8000) used by rendering.
@@ -201,13 +200,6 @@ pub fn build(b: &mut Cps2Bus, d4: u32) -> Option<Leftovers> {
     }
 }
 
-/// `build` with the registers of the original (D4, A4, A6 when the table is built).
-pub fn build_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(r) = build(b, c.d[4]) {
-        (c.d[4], c.a[4], c.a[6]) = (r.d4, r.end, r.camera);
-    }
-}
-
 /// `build` in the game. Original glitch: the D4 that the list leaves (attributes of the last piece) is reread later
 /// (`DDSOM_POISON=call_1de96`: long_28_scenes, frame 10431): it is the leftover D4 of the game
 /// (`dispatch::Leftovers`). A4 and A6 are reread by nobody.
@@ -216,11 +208,6 @@ pub fn build_in_game(b: &mut Cps2Bus) {
     if let Some(r) = build(b, d4) {
         crate::tasks::table::table(b).leftovers.d4 = r.d4;
     }
-}
-
-fn build_sprite_list(c: &mut Cpu, b: &mut Cps2Bus) {
-    build_68k(c, b);
-    rts(c, b);
 }
 
 /// 0x1df14: foreground objects.
@@ -638,29 +625,6 @@ fn draw_text(p: &mut Painter, slot: u32) {
     }
 }
 
-/// Object frame without a piece (zero count). The original then loops with `dbf` on a counter of -1: 65,536 entries
-/// written one after another, going around the object RAM several times, over several frames (the task is
-/// interrupted by IRQs in the middle of the loop, at cycles that only cycle-exact routines
-/// would reproduce). This only happens in states that the game does not produce (scene exit forced at any
-/// instant, coverage scenarios): no piece is drawn, as here (`emit_frame`). Same patch in the original
-/// code (reference machine), at the four entries of the emission loop.
-pub const EMPTY_FRAME_PATCHES: [cps2::Patch; 4] = [
-    // object: count read from D6 (0x1e22a), attached object (0x1e1aa); individual pieces: count in D4 (0x1e110);
-    // object with individual pieces: D6 already decremented (0x1e2aa)
-    cps2::Patch { entry: 0x1e22a, apply: |c, b| return_if(c, b, c.d[6] as u16 == 0) },
-    cps2::Patch { entry: 0x1e1aa, apply: |c, b| return_if(c, b, c.d[6] as u16 == 0) },
-    cps2::Patch { entry: 0x1e110, apply: |c, b| return_if(c, b, c.d[4] as u16 == 0) },
-    cps2::Patch { entry: 0x1e2aa, apply: |c, b| return_if(c, b, c.d[6] as u16 == 0xffff) },
-];
-
-/// `rts` if `empty`.
-fn return_if(c: &mut Cpu, b: &mut Cps2Bus, empty: bool) -> bool {
-    if empty {
-        c.pc = crate::mem::rd32(b, c.a[7]);
-        c.a[7] = c.a[7].wrapping_add(4);
-    }
-    empty
-}
 /// 0x1de7c: clears the heads of the object lists, the player markers and the three texts.
 pub fn clear_lists(b: &mut Cps2Bus) {
     let a5 = crate::mem::A5;
@@ -672,19 +636,10 @@ pub fn clear_lists(b: &mut Cps2Bus) {
     }
 }
 
-
 pub const RESET_LISTS: Native = Native {
     entry: 0x1de7c,
     name: "sprites_clear_lists",
     run: crate::Body::Memory(clear_lists),
-    touches_sound: false,
-    outputs: 0,
-};
-
-pub const BUILD_SPRITE_LIST: Native = Native {
-    entry: 0x1de96,
-    name: "build_sprite_list",
-    run: crate::Body::WithCpu(build_sprite_list),
     touches_sound: false,
     outputs: 0,
 };

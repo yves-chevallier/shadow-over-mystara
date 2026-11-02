@@ -222,6 +222,6 @@ mod lamp {
 }
 
 handlers! {
-    0x50148 "peff_40" #[without] meteors::run,
-    0x518b4 "peff_45" #[without] lamp::run,
+    0x50148 "peff_40" meteors::run,
+    0x518b4 "peff_45" lamp::run,
 }

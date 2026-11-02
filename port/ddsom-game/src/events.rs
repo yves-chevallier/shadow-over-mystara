@@ -18,34 +18,31 @@
 //! which hundreds of callers (enemy objects...) may reread.
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_X};
 
-use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, wr16, wr32, wr8};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::ops;
-use crate::{regs, Native};
 
-const EMPTY: u16 = 0xffff;
+pub(crate) const EMPTY: u16 = 0xffff;
 /// The ring indices advance by 2 (bytes) modulo 0x80.
-const MASK: u8 = 0x7f;
+pub(crate) const MASK: u8 = 0x7f;
 
 /// A score event ring.
-struct Ring {
+pub(crate) struct Ring {
     /// Write index (byte); the read index is the next byte.
     write: u32,
     /// First cell (words).
-    cases: u32,
+    pub(crate) cases: u32,
 }
 
-const POINTS: Ring = Ring { write: 0x108, cases: 0x10a };
-const COUNTER: Ring = Ring { write: 0x18a, cases: 0x18c };
+pub(crate) const POINTS: Ring = Ring { write: 0x108, cases: 0x10a };
+pub(crate) const COUNTER: Ring = Ring { write: 0x18a, cases: 0x18c };
 
 /// Pop-up queue: write and read index (bytes), first entry.
 const POPUP_WRITE: u32 = 0x20c;
 const POPUP_READ: u32 = 0x20d;
-const POPUP_INPUTS: u32 = 0x20e;
+pub(crate) const POPUP_INPUTS: u32 = 0x20e;
 /// Current pop-up (4 longs at `A5-0x6e80`).
-const CURRENT_POPUP: u32 = 0xffff_9180;
+pub(crate) const CURRENT_POPUP: u32 = 0xffff_9180;
 /// Non-zero byte: no more new pop-ups.
 const POPUP_INHIBITED: u32 = 0x50;
 
@@ -53,12 +50,8 @@ const POPUP_INHIBITED: u32 = 0x50;
 const PLAYER_1: u32 = 0x5de;
 
 /// Address `A5 + off` (A5 is always `mem::A5`).
-const fn a5(off: u32) -> u32 {
+pub(crate) const fn a5(off: u32) -> u32 {
     crate::mem::A5.wrapping_add(off)
-}
-
-fn set_word(r: &mut u32, v: u16) {
-    *r = *r & 0xffff_0000 | v as u32;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -71,16 +64,7 @@ fn fill(b: &mut Cps2Bus, start: u32, n: u32) {
     }
 }
 
-/// Registers of `move.l D1,(A)+ ; dbf D0`: D1 = -1, low word of D0 = 0xFFFF, the address register `ptr` returns the end
-/// of the zone.
-fn fill_68k(c: &mut Cpu, end: u32, ptr: usize) {
-    c.a[ptr] = end;
-    set_word(&mut c.d[0], 0xffff);
-    c.d[1] = 0xffff_ffff;
-    ops::logic(c, 0xffff_ffff, Size::Long);
-}
-
-fn clear_ring(b: &mut Cps2Bus, ring: &Ring) {
+pub(crate) fn clear_ring(b: &mut Cps2Bus, ring: &Ring) {
     wr8(b, a5(ring.write), 0);
     wr8(b, a5(ring.write + 1), 0);
     fill(b, a5(ring.cases), 32);
@@ -110,38 +94,17 @@ pub fn clear_current_popup(b: &mut Cps2Bus) {
     }
 }
 
-fn clear_ring_68k(c: &mut Cpu, b: &mut Cps2Bus, ring: &Ring) {
-    clear_ring(b, ring);
-    fill_68k(c, a5(ring.cases) + 4 * 32, 0);
-    rts(c, b);
-}
-
-fn clear_popups_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    clear_popups(b);
-    fill_68k(c, a5(POPUP_INPUTS) + 4 * 64, 1);
-    rts(c, b);
-}
-
-/// Leaves A1 after the zone, D0 = 0, D6 = 0xFFFF.
-fn clear_popup_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    clear_current_popup(b);
-    c.a[1] = a5(CURRENT_POPUP) + 16;
-    c.d[0] = 0;
-    c.d[6] = 0xffff;
-    ops::logic(c, 0, Size::Long);
-    rts(c, b);
-}
-
 // ---------------------------------------------------------------------------------------------
 // Enqueuing a score event
 
 /// Outcome of an enqueue: the write index read, and the content of the cell if it was not free.
-struct Queued {
-    index: u8,
-    busy: Option<u16>,
+#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
+pub(crate) struct Queued {
+    pub(crate) index: u8,
+    pub(crate) busy: Option<u16>,
 }
 
-fn enqueue(b: &mut Cps2Bus, ring: &Ring, event: u16) -> Queued {
+pub(crate) fn enqueue(b: &mut Cps2Bus, ring: &Ring, event: u16) -> Queued {
     let index = rd8(b, a5(ring.write));
     let case = a5(ring.cases).wrapping_add(index as u32);
     let content = rd16(b, case);
@@ -176,69 +139,30 @@ pub fn object_event(b: &mut Cps2Bus, o: crate::objects::Obj) -> bool {
     enqueue_points(b, event)
 }
 
-/// Registers and flags of 0x19ae6 / 0x19b08: D6 (index), A4 (start of the cells).
-fn enqueue_68k(c: &mut Cpu, b: &mut Cps2Bus, ring: &Ring, event: u16) {
-    let e = enqueue(b, ring, event);
-    c.d[6] = e.index as u32;
-    c.a[4] = a5(ring.cases);
-    match e.busy {
-        Some(content) => ops::cmp(c, EMPTY as u32, content as u32, Size::Word),
-        None => {
-            ops::add(c, 2, e.index as u32, Size::Byte);
-            let reduced = e.index.wrapping_add(2) & MASK;
-            set_word(&mut c.d[6], reduced as u16);
-            ops::logic(c, reduced as u32, Size::Byte);
-        }
-    }
-}
-
-fn enqueue_points_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    enqueue_68k(c, b, &POINTS, c.d[0] as u16);
-    rts(c, b);
-}
-
-fn enqueue_counter_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    enqueue_68k(c, b, &COUNTER, c.d[0] as u16);
-    rts(c, b);
-}
-
-/// 0x19ad6: D0 = the event, D1.w = the player (bits 8-9).
-fn object_event_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    let o = crate::objects::Obj(c.a[0]);
-    let type_ = rd8(b, o.0 + 0x7e) as u32;
-    c.d[0] = type_;
-    let player = rd16(b, o.0 + 0x48) & 0x300;
-    set_word(&mut c.d[1], player);
-    let event = ops::add(c, player as u32, type_, Size::Word) as u16;
-    set_word(&mut c.d[0], event);
-    enqueue_68k(c, b, &POINTS, event);
-    rts(c, b);
-}
-
 // ---------------------------------------------------------------------------------------------
 // Crediting the points
 
 /// A ring to empty, with the value table and the player counter to increment.
-struct Credit {
-    ring: Ring,
+pub(crate) struct Credit {
+    pub(crate) ring: Ring,
     /// Read index (byte).
-    read: u32,
+    pub(crate) read: u32,
     /// ROM table of BCD values (4 bytes per type).
-    table: u32,
+    pub(crate) table: u32,
     /// Offset of the BCD counter in the player record.
-    counter: u32,
+    pub(crate) counter: u32,
     /// BCD cap (signed 32-bit comparison).
     cap: u32,
 }
 
-const CREDIT_POINTS: Credit = Credit {
+pub(crate) const CREDIT_POINTS: Credit = Credit {
     ring: POINTS,
     read: 0x109,
     table: 0x19c0e,
     counter: 0x110,
     cap: 0x0999_9999,
 };
-const CREDIT_COUNTER: Credit = Credit {
+pub(crate) const CREDIT_COUNTER: Credit = Credit {
     ring: COUNTER,
     read: 0x18b,
     table: 0x19d52,
@@ -247,9 +171,10 @@ const CREDIT_COUNTER: Credit = Credit {
 };
 
 /// What the processing of an event leaves in the registers.
-struct Handled {
-    player: u32,
-    line: u32,
+#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
+pub(crate) struct Handled {
+    pub(crate) player: u32,
+    pub(crate) line: u32,
 }
 
 /// Processes the event of cell `index`: empties the cell, adds the BCD value of the type to the player's
@@ -283,12 +208,13 @@ fn pending(b: &mut Cps2Bus, k: &Credit) -> Option<(u8, u16)> {
 }
 
 /// Last event processed by a credit: enough to rebuild the registers of the original.
-struct Last {
-    index: u8,
-    handled: Handled,
+#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
+pub(crate) struct Last {
+    pub(crate) index: u8,
+    pub(crate) handled: Handled,
 }
 
-fn credit(b: &mut Cps2Bus, k: &Credit) -> Option<Last> {
+pub(crate) fn credit(b: &mut Cps2Bus, k: &Credit) -> Option<Last> {
     let mut last = None;
     while let Some((index, event)) = pending(b, k) {
         let handled = handle(b, k, index, event);
@@ -307,29 +233,6 @@ pub fn credit_counter(b: &mut Cps2Bus) {
     credit(b, &CREDIT_COUNTER);
 }
 
-/// Registers of 0x19b2a / 0x19b9c: leftovers of the last iteration, D0 = final read index.
-fn credit_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Credit) {
-    c.d[1] = 0;
-    c.d[2] = 0;
-    c.a[2] = a5(k.ring.cases);
-    let last = credit(b, k);
-    if let Some(d) = &last {
-        c.d[0] = d.index as u32;
-        c.d[1] = d.handled.line;
-        c.a[0] = d.handled.player;
-        c.a[3] = k.table + d.handled.line;
-        c.a[4] = d.handled.player + k.counter;
-        c.d[6] = 0xffff;
-    }
-    c.d[0] = rd8(b, a5(k.read)) as u32;
-    // last cmpi.w #-1: equality; X: carry of the `addq.b #2` on the read index of the last iteration
-    ops::cmp(c, EMPTY as u32, EMPTY as u32, Size::Word);
-    if let Some(d) = last {
-        ops::flags(c, SR_X, if d.index as u16 + 2 > 0xff { SR_X } else { 0 });
-    }
-    rts(c, b);
-}
-
 // ---------------------------------------------------------------------------------------------
 // Pop-ups
 
@@ -346,13 +249,14 @@ pub struct Popup {
 }
 
 /// Outcome of 0x19dce: nothing (pop-ups inhibited), cell occupied, or enqueued.
-enum Creation {
+#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
+pub(crate) enum Creation {
     Inhibited(u8),
     Busy { index: u8, content: u16 },
     Done { index: u8, header: u16 },
 }
 
-fn create(b: &mut Cps2Bus, p: Popup) -> Creation {
+pub(crate) fn create(b: &mut Cps2Bus, p: Popup) -> Creation {
     let inhibited = rd8(b, a5(POPUP_INHIBITED));
     if inhibited != 0 {
         return Creation::Inhibited(inhibited);
@@ -386,51 +290,3 @@ pub const POPUP_INPUTS_ADDR: u32 = a5(POPUP_INPUTS);
 pub fn create_popup(b: &mut Cps2Bus, p: Popup) -> bool {
     matches!(create(b, p), Creation::Done { .. })
 }
-
-/// Registers and flags of 0x19dce: D6 (index), A2 (entries), D0.b (header), flags of the last test.
-fn create_popup_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    let p = Popup { header: c.d[0] as u16, max: c.d[1] as u16, value: c.d[2] as u16, raw: c.d[3] as u8 == 2 };
-    match create(b, p) {
-        Creation::Inhibited(inhibited) => ops::logic(c, inhibited as u32, Size::Byte),
-        Creation::Busy { index, content } => {
-            c.d[6] = index as u32;
-            c.a[2] = a5(POPUP_INPUTS);
-            ops::cmp(c, EMPTY as u32, content as u32, Size::Word);
-        }
-        Creation::Done { index, header } => {
-            c.a[2] = a5(POPUP_INPUTS);
-            ops::cmp(c, 2, c.d[3] & 0xff, Size::Byte);
-            if !p.raw {
-                ops::add(c, 0x20, c.d[0] & 0xff, Size::Byte);
-                set_low_byte(&mut c.d[0], header as u8);
-            }
-            let next = ops::add(c, 8, index as u32, Size::Byte) as u8;
-            c.d[6] = next as u32;
-            ops::logic(c, next as u32, Size::Byte);
-        }
-    }
-    rts(c, b);
-}
-
-macro_rules! native {
-    ($ident:ident, $entry:expr, $name:expr, $run:expr) => {
-        pub const $ident: Native = Native {
-            entry: $entry,
-            name: $name,
-            run: crate::Body::WithCpu($run),
-            touches_sound: false,
-            outputs: regs::ALL,
-        };
-    };
-}
-
-native!(CLEAR_POINTS, 0x19aa2, "evt_clear_points", |c, b| clear_ring_68k(c, b, &POINTS));
-native!(CLEAR_COUNTER, 0x19abc, "evt_clear_counter", |c, b| clear_ring_68k(c, b, &COUNTER));
-native!(CLEAR_POPUPS, 0x19db4, "evt_clear_popups", clear_popups_68k);
-native!(CLEAR_POPUP, 0x19e10, "evt_clear_popup", clear_popup_68k);
-native!(ENQUEUE_POINTS, 0x19ae6, "evt_enqueue_points", enqueue_points_68k);
-native!(ENQUEUE_COUNTER, 0x19b08, "evt_enqueue_counter", enqueue_counter_68k);
-native!(OBJECT_EVENT, 0x19ad6, "evt_event_object", object_event_68k);
-native!(CREATE_POPUP, 0x19dce, "evt_create_popup", create_popup_68k);
-native!(CREDIT_POINTS_NATIVE, 0x19b2a, "evt_credit_points", |c, b| credit_68k(c, b, &CREDIT_POINTS));
-native!(CREDIT_COUNTER_NATIVE, 0x19b9c, "evt_credit_counter", |c, b| credit_68k(c, b, &CREDIT_COUNTER));

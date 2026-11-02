@@ -13,17 +13,16 @@
 //! moves on to the next object without resetting the registers. Some handlers then read a
 //! register left by the previous one: 0x4bd32 does `andi.b #$f,D0` then indexes a table with all of
 //! D0.w, whose high byte is the list link left by `reinsert`. The natives 0x1ee1a and
-//! 0x1ef6c (`Reinsert`) therefore transcribe the original instruction by instruction and return
-//! D0-D2, A1-A4 and the flags as it does, depending on the path followed (`SortedList::reinsert_68k`). The
-//! callers without this contract use `SortedList::reinsert`, the same transcription without registers.
+//! 0x1ef6c (`Reinsert`) therefore transcribe the original instruction by instruction on the registers of the
+//! original (`ops::Alu`): the game keeps the D2 that it leaves to the next handler (`reinsert_leftovers`); the tools
+//! return D0-D2, A1-A4 and the flags as it does, depending on the path followed (`tools::objects::lists`). The
+//! callers without this contract use `SortedList::reinsert`, the same writes without registers.
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use super::{Link, Obj};
-use crate::mem::{rd16, rd32, rts, set_low_word, wr16, A5};
-use crate::{ops, regs, Native};
-use m68k::decode::Size;
+use crate::mem::{rd16, rd32, set_low_word, wr16, A5};
+use crate::ops::{Alu, Registers, Size};
 
 #[derive(Clone, Copy, Debug)]
 pub struct SortedList {
@@ -230,6 +229,8 @@ fn apply_removal(b: &mut Cps2Bus, obj: Obj, removal: Removal) {
     obj.set_next(b, Link::NONE);
 }
 
+// ---- adaptation to the 68000 registers ----
+
 /// Removes from their lists all the actor objects then, if the actors were not empty,
 /// those of the foreground: `0x1f184`. Returns the last object removed.
 pub fn unlink_all(b: &mut Cps2Bus) -> Option<Obj> {
@@ -252,8 +253,6 @@ pub fn unlink_all(b: &mut Cps2Bus) -> Option<Obj> {
     }
     last
 }
-
-// ---- adaptation to the 68000 registers ----
 
 /// Direction in which a misplaced object looks for its new place.
 #[derive(Clone, Copy)]
@@ -285,15 +284,15 @@ impl Way {
 /// handlers re-read D0, D1, D2, A1-A4 and the flags as the original leaves them
 /// (see the module header), depending on the path followed. The `move.w` to memory set N and Z
 /// (`store`), the `movea.w` sign-extend and touch no flag.
-struct Reinsert<'a> {
-    c: &'a mut Cpu,
-    b: &'a mut Cps2Bus,
+pub(crate) struct Reinsert<'a, R: Alu> {
+    pub(crate) c: &'a mut R,
+    pub(crate) b: &'a mut Cps2Bus,
     /// The reinserted object (A0 of the original).
-    obj: Obj,
-    list: SortedList,
+    pub(crate) obj: Obj,
+    pub(crate) list: SortedList,
 }
 
-impl Reinsert<'_> {
+impl<R: Alu> Reinsert<'_, R> {
     fn a0(&self) -> u32 {
         self.obj.0
     }
@@ -302,8 +301,8 @@ impl Reinsert<'_> {
     }
     /// `movea.w src,An`.
     fn movea(&mut self, n: usize, w: u16) -> u32 {
-        self.c.a[n] = w as i16 as i32 as u32;
-        self.c.a[n]
+        self.c.a()[n] = w as i16 as i32 as u32;
+        self.c.a()[n]
     }
     /// `movea.w (off,Am),An`.
     fn movea_mem(&mut self, n: usize, base: u32, off: u32) -> u32 {
@@ -313,28 +312,28 @@ impl Reinsert<'_> {
     /// `move.w (off,An),Dn`: low word of Dn and flags.
     fn load(&mut self, d: usize, base: u32, off: u32) -> u16 {
         let v = rd16(self.b, base.wrapping_add(off));
-        set_low_word(&mut self.c.d[d], v);
-        ops::logic(self.c, v as u32, Size::Word);
+        set_low_word(&mut self.c.d()[d], v);
+        self.c.logic(v as u32, Size::Word);
         v
     }
     /// `move.w src,(off,An)`: writes and sets the flags.
     fn store(&mut self, base: u32, off: u32, v: u16) {
         wr16(self.b, base.wrapping_add(off), v);
-        ops::logic(self.c, v as u32, Size::Word);
+        self.c.logic(v as u32, Size::Word);
     }
     /// `cmp.l (Y,An),Dn`: flags; returns the depth of the neighbor.
     fn compare_depth(&mut self, d: usize, an: u32) -> u32 {
         let y = rd32(self.b, an.wrapping_add(Obj::Y));
-        let dn = self.c.d[d];
-        ops::cmp(self.c, y, dn, Size::Long);
+        let dn = self.c.d()[d];
+        self.c.cmp(y, dn, Size::Long);
         y
     }
 
-    fn run(&mut self) {
+    pub(crate) fn run(&mut self) {
         let a0 = self.a0();
         let prev = self.load(0, a0, Obj::PREV);
-        let sum = ops::add(self.c, rd16(self.b, a0 + Obj::NEXT) as u32, prev as u32, Size::Word);
-        set_low_word(&mut self.c.d[0], sum as u16);
+        let sum = self.c.add(rd16(self.b, a0 + Obj::NEXT) as u32, prev as u32, Size::Word);
+        set_low_word(&mut self.c.d()[0], sum as u16);
         if sum as u16 == 0 {
             return self.insert();
         }
@@ -353,9 +352,9 @@ impl Reinsert<'_> {
             return false;
         }
         let mut a1 = self.movea(1, link);
-        self.c.d[1] = rd32(self.b, a0 + Obj::Y);
+        self.c.d()[1] = rd32(self.b, a0 + Obj::Y);
         let y1 = self.compare_depth(1, a1);
-        if w.settled(self.c.d[1], y1) {
+        if w.settled(self.c.d()[1], y1) {
             return false;
         }
         // searches for the last neighbor that the object still has to pass
@@ -367,7 +366,7 @@ impl Reinsert<'_> {
             }
             let a2 = self.movea(2, link);
             let y2 = self.compare_depth(1, a2);
-            if w.settled(self.c.d[1], y2) {
+            if w.settled(self.c.d()[1], y2) {
                 break;
             }
             a1 = self.movea(1, link);
@@ -384,7 +383,7 @@ impl Reinsert<'_> {
             self.store(A5, w.far, a3 as u16);
         }
         // insertion in front of A1 (in the `ahead` direction)
-        let d0 = self.c.d[0] as u16;
+        let d0 = self.c.d()[0] as u16;
         self.store(a0, w.ahead, d0);
         if (d0 as i16) < 0 {
             let a2 = self.movea(2, d0);
@@ -399,7 +398,7 @@ impl Reinsert<'_> {
     fn insert(&mut self) {
         let (a0, list) = (self.a0(), self.list);
         let y = rd32(self.b, a0 + Obj::Y);
-        self.c.d[0] = y;
+        self.c.d()[0] = y;
         let tail = self.load(1, A5, list.tail);
         if tail == 0 {
             self.store(a0, Obj::PREV, list.end.0);
@@ -443,93 +442,15 @@ impl Reinsert<'_> {
     }
 }
 
-/// Registers left by the original reinsertion (see `diag::dead_regs`, label `lists`).
-pub const REGS_REINSERT: u32 =
-    regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::a(2) | regs::a(3) | regs::a(4) | regs::CCR;
-
 impl SortedList {
     /// `reinsert`, with the leftover D2 of the original (`dispatch::Leftovers`): when the object is moved, the low
     /// word of D2
     /// receives the link it leaves (`move.w (behind,A0),D2`). Original glitch: a following handler re-reads it (the
     /// bounce of the freeze shard, 0x4bda8). D2 goes in and out unchanged otherwise.
     pub fn reinsert_leftovers(self, b: &mut Cps2Bus, obj: Obj, d2: &mut u32) {
-        let mut c = Cpu::default();
+        let mut c = Registers::default();
         c.d[2] = *d2;
         Reinsert { c: &mut c, b, obj, list: self }.run();
         *d2 = c.d[2];
     }
-
-    /// `reinsert` with the original's registers, depending on the path followed (see `Reinsert`).
-    #[track_caller]
-    pub fn reinsert_68k(self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
-        Reinsert { c, b, obj, list: self }.run();
-        crate::diag::dead_regs(c, "lists", REGS_REINSERT);
-    }
 }
-
-/// `unlink_all` with the original's register: A0 = last object removed (unchanged if the lists are empty).
-#[track_caller]
-pub fn unlink_all_68k(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
-    let last = unlink_all_regs(c, b);
-    crate::diag::dead_regs(c, "lists", regs::a(0));
-    last
-}
-
-fn unlink_all_regs(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
-    let last = unlink_all(b);
-    if let Some(o) = last {
-        c.a[0] = o.0 | 0xff00_0000; // movea.w: sign-extended
-    }
-    last
-}
-
-fn reinsert_native(list: SortedList, c: &mut Cpu, b: &mut Cps2Bus) {
-    let obj = Obj(c.a[0]);
-    Reinsert { c, b, obj, list }.run();
-    rts(c, b);
-}
-
-/// 0x1f0be: removes object A0 from its list. The original leaves no useful register: the Rust callers
-/// call `unlink` directly.
-fn unlink_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    unlink(b, Obj(c.a[0]));
-    rts(c, b);
-}
-
-/// 0x1f184: empties both lists.
-fn unlink_all_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    unlink_all_regs(c, b);
-    rts(c, b);
-}
-
-pub const REINSERT_ACTORS: Native = Native {
-    entry: 0x1ee1a,
-    name: "list_reinsert_actors",
-    run: crate::Body::WithCpu(|c, b| reinsert_native(ACTORS, c, b)),
-    touches_sound: false,
-    outputs: regs::ALL,
-};
-
-pub const REINSERT_FOREGROUND: Native = Native {
-    entry: 0x1ef6c,
-    name: "list_reinsert_foreground",
-    run: crate::Body::WithCpu(|c, b| reinsert_native(FOREGROUND, c, b)),
-    touches_sound: false,
-    outputs: regs::ALL,
-};
-
-pub const UNLINK: Native = Native {
-    entry: 0x1f0be,
-    name: "list_unlink",
-    run: crate::Body::WithCpu(unlink_native),
-    touches_sound: false,
-    outputs: regs::a(0),
-};
-
-pub const UNLINK_ALL: Native = Native {
-    entry: 0x1f184,
-    name: "list_unlink_all",
-    run: crate::Body::WithCpu(unlink_all_native),
-    touches_sound: false,
-    outputs: regs::a(0),
-};

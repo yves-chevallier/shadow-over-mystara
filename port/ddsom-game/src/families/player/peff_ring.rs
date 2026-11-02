@@ -648,6 +648,6 @@ mod ring1 {
 }
 
 handlers! {
-    0x49e36 "peff_0" #[without] ring0::run,
-    0x4a21e "peff_1" #[without] ring1::run,
+    0x49e36 "peff_0" ring0::run,
+    0x4a21e "peff_1" ring1::run,
 }

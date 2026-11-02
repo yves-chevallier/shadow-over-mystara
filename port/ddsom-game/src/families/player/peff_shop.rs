@@ -512,7 +512,7 @@ mod talk {
 }
 
 handlers! {
-    0x50b9c "peff_42" #[without] item::run,
+    0x50b9c "peff_42" item::run,
 }
 
 /// Dialogue interpreters (0x514ac, 0x514cc): called by the counter (PEFF 43, `peff.rs`) with x.o = the counter,

@@ -182,8 +182,8 @@ pub const END_BY_SCENE_ENTRY: u32 = 0x23f40;
 /// addresses and jumps at random (scene 110 ends up at animation 0x1a32 with the registers left by the
 /// previous routine, hence sprite pieces written by tens of thousands). These scenes have no
 /// cinematic: the inactive routine 0x24102.
-const LAST_END_SCENE: u32 = 108;
-const NO_END: u32 = 0x24102;
+pub(crate) const LAST_END_SCENE: u32 = 108;
+pub(crate) const NO_END: u32 = 0x24102;
 
 fn end_routine(g: &mut Ctx, scene: u32) -> u32 {
     if scene > LAST_END_SCENE {
@@ -191,18 +191,6 @@ fn end_routine(g: &mut Ctx, scene: u32) -> u32 {
     } else {
         g.prog32(tables::END_BY_SCENE + 4 * scene)
     }
-}
-
-/// Same fix in the original code (reference machine of the validation): at the entry of the dispatch.
-pub fn patch_end_by_scene(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) -> bool {
-    let scene = ram::SCENE.get(b) as u32;
-    if scene <= LAST_END_SCENE {
-        return false;
-    }
-    c.d[0] = scene << 2 & 0xffff;
-    c.a[1] = NO_END;
-    c.pc = NO_END;
-    true
 }
 
 // ---- tools -----------------------------------------------------------------------------------

@@ -28,7 +28,7 @@ mod fight;
 mod hit;
 
 /// Fields specific to this type.
-pub(self) mod g {
+pub(crate) mod g {
     pub const VULNERABLE: u32 = 0x67;
     /// Leaps remaining in the walk, standing wait, countdown before the next target choice.
     pub const WALK_STEPS: u32 = 0x6b;
@@ -329,23 +329,6 @@ pub(crate) fn counter_reaction<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u16) {
     (r, mask)
 }
 
-/// Natives: handler, counterattack and body shapes (called by 0x81aa4 of `boss_common`).
-pub const NATIVES: &[crate::Native] = &[
-    super::cx::handler_without(0x7f41a, "boss_3", |b, a| run(&mut super::cx::Gx::dispatch(b, a))),
-    crate::Native {
-        entry: 0x81ae0,
-        name: "boss_3_riposte",
-        run: crate::Body::WithCpu(|c, b| {
-            let mut x = Cx::new(c, b);
-            let (r, mask) = counter_reaction(&mut x);
-            // original's output contract: D0 = the draw, D1.w = the mask
-            x.c.d[0] = r;
-            x.c.d[1] = x.c.d[1] & 0xffff_0000 | mask as u32;
-            x.ret();
-        }),
-        touches_sound: false,
-        outputs: crate::regs::d(0) | crate::regs::d(1),
-    },
-    body::SHOVE_FRONT,
-    body::SHOVE_SIDE,
-];
+/// Native of the handler.
+pub const NATIVES: &[crate::Native] =
+    &[crate::families::cx::handler_without(0x7f41a, "boss_3", |b, a| run(&mut crate::families::cx::Gx::dispatch(b, a)))];

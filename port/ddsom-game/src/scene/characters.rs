@@ -270,19 +270,6 @@ fn end(x: &mut Ctx) -> Flow {
     crate::tasks::wait_then_return(x, 1)
 }
 
-pub const CHARACTERS: Native = Native {
-    entry: 0xf6492,
-    name: "scene_characters",
-    run: crate::Body::WithCpu(|c, b| {
-        // entry for the original code (tools): returns only if the state did not cede control
-        if run(&mut Ctx::new(b)) == Flow::Done {
-            crate::mem::rts(c, b);
-        }
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
-
 pub const NATIVES: &[Native] = &[
-    CHARACTERS,
+    
 ];

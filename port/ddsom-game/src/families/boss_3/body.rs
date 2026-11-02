@@ -6,12 +6,10 @@
 //! (`boss_common`), which calls these shapes through `push`.
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::Cpu;
 
 use super::*;
 use crate::families::cx::Bench;
-use crate::mem::{rd16, rts};
+use crate::mem::rd16;
 
 /// A shape: slices (bytes, PC-relative) and rows (height, half-depth, push; data).
 struct Shape {
@@ -43,7 +41,7 @@ fn shove_amount(b: &mut Cps2Bus, shape: &Shape, me: Obj, other: Obj, d: u16) -> 
 }
 
 /// 0x818e6: shape 1: object `other` in front of boss `me` (up to 0x20 behind it) is pushed forward.
-fn shove_front(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
+pub(crate) fn shove_front(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
     let ahead = me.u8(b, 0x2c) != 0;
     let mut d = other.u16(b, 0x8).wrapping_sub(me.u16(b, 0x8));
     if !ahead {
@@ -66,7 +64,7 @@ fn shove_front(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
 }
 
 /// 0x819e2: shape 2: object `other` is pushed away from boss `me`, on the side where it is.
-fn shove_side(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
+pub(crate) fn shove_side(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
     let mut d = other.u16(b, 0x8).wrapping_sub(me.u16(b, 0x8));
     if (d as i16) < 0 {
         d = d.wrapping_neg();
@@ -113,28 +111,3 @@ pub fn push(b: &mut Cps2Bus, me: Obj, other: Obj, routine: u32) -> bool {
         _ => unreachable!("boss 3 body shape at {routine:#x}: table 0x81ad4 only has 0x818e6 and 0x819e2"),
     }
 }
-
-/// Adapter for the natives (fuzz against the original): A0 = the boss, A1 = the object; D0 = 1 / 0 and its flags. The
-/// only original caller, 0x81aa4 (`boss_common::push_out_of_boss`), re-reads neither D1 nor A2, which the original
-/// leaves.
-fn native(c: &mut Cpu, b: &mut Cps2Bus, f: fn(&mut Cps2Bus, Obj, Obj) -> bool) {
-    c.d[0] = f(b, Obj(c.a[0]), Obj(c.a[1])) as u32;
-    c.flags_logic(c.d[0], Size::Long);
-    rts(c, b);
-}
-
-pub const SHOVE_FRONT: crate::Native = crate::Native {
-    entry: 0x818e6,
-    name: "boss_3_pushes_front",
-    run: crate::Body::WithCpu(|c, b| native(c, b, shove_front)),
-    touches_sound: false,
-    outputs: crate::regs::d(0) | crate::regs::CCR,
-};
-
-pub const SHOVE_SIDE: crate::Native = crate::Native {
-    entry: 0x819e2,
-    name: "boss_3_pushes_side",
-    run: crate::Body::WithCpu(|c, b| native(c, b, shove_side)),
-    touches_sound: false,
-    outputs: crate::regs::d(0) | crate::regs::CCR,
-};

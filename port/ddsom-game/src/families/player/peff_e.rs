@@ -520,7 +520,7 @@ mod banish {
 }
 
 handlers! {
-    0x4bc66 "peff_12" #[without] ice::run,
-    0x4c1b6 "peff_13" #[without] blessing::run,
-    0x4c2b4 "peff_14" #[without] banish::run,
+    0x4bc66 "peff_12" ice::run,
+    0x4c1b6 "peff_13" blessing::run,
+    0x4c2b4 "peff_14" banish::run,
 }

@@ -565,5 +565,5 @@ fn hit<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x76f0e "enemy_25" #[without] run,
+    0x76f0e "enemy_25" run,
 }

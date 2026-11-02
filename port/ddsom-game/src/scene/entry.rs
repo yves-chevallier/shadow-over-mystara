@@ -17,9 +17,8 @@ use super::fading;
 use super::{player, scratch, script, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::families::effects_creators as creators;
 use crate::game;
-use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
-use crate::Native;
 use crate::objects::pools;
 
 /// Sound commands called by the sequences (wrappers of `sound_table.rs`).
@@ -47,7 +46,6 @@ mod table {
     /// One byte per player and per scene (`+0x2c` of the player).
     pub const START_STATES: u32 = 0x2196c;
 }
-
 
 /// Work RAM variables outside the A5 ± 0x7fff page, cleared on entry.
 mod ram {
@@ -152,12 +150,13 @@ fn clear_player(x: &mut Ctx, p: u32) {
 
 /// What the player placement leaves in the original's registers: D0/D1 = the camera (or the shifted
 /// scene), D2 = the rank, A2/A3 = the ends of the tables.
+#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
 pub(crate) struct PlacementLeftovers {
-    d0: u32,
-    d1: u32,
+    pub(crate) d0: u32,
+    pub(crate) d1: u32,
     pub(crate) rank: u8,
-    positions: u32,
-    states: u32,
+    pub(crate) positions: u32,
+    pub(crate) states: u32,
 }
 
 /// 0x20de6: places each player in the game in front of the camera, from the scene tables (consumed in the order
@@ -193,21 +192,6 @@ pub(crate) fn place_players_leftovers(b: &mut Cps2Bus) -> PlacementLeftovers {
     }
     PlacementLeftovers { d0, d1, rank: rank, positions, states: states }
 }
-
-/// 0x20de6 called by the original code (respawn of a player, `families/creators.rs`): `place_players`, with
-/// the original's registers (D6 = -1, A1 after the last player).
-pub const PLACE_PLAYERS: Native = Native {
-    entry: 0x20de6,
-    name: "scene_place_players",
-    run: crate::Body::WithCpu(|c, b| {
-        let r = place_players_leftovers(b);
-        (c.d[0], c.d[1], c.d[2], c.d[6]) = (r.d0, r.d1, r.rank as u32, 0xffff);
-        (c.a[1], c.a[2], c.a[3]) = (PLAYERS + 4 * PLAYER_STRIDE, r.positions, r.states);
-        crate::mem::rts(c, b);
-    }),
-    touches_sound: false,
-    outputs: crate::regs::ALL,
-};
 
 // ---------------------------------------------------------------------------------------------
 // Step 2: opening sequences
@@ -274,18 +258,6 @@ pub fn phase_8(b: &mut Cps2Bus, handler: u32) {
         _ => {}
     }
 }
-
-pub const PHASE_8: Native = Native {
-    entry: 0x20c38,
-    name: "scene_phase_8",
-    run: crate::Body::WithCpu(|c, b| {
-        // called by the original code (tools): A0 = the phase handler
-        phase_8(b, c.a[0]);
-        rts(c, b);
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
 
 // --- stateless sequences -----------------------------------------------------------------------
 

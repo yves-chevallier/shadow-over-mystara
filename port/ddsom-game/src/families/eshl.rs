@@ -139,7 +139,6 @@ mod shot0 {
     }
 }
 
-
 /// Shot 1 (0x9de10): ball thrown in a lob. Two modes according to `+0x2f`: 0, the owner throws it in front of itself;
 /// otherwise it springs out with a speed drawn from an 8-row table (variant `+3`). It falls back, bounces on the ground
 /// (Z < 0: Z reset to 0), waits 80 frames in an animation then blinks for 80 frames before disappearing.
@@ -246,7 +245,6 @@ mod shot1 {
         x.cull_offscreen();
     }
 }
-
 
 /// Shot 2 (0x9e0aa): horizontal projectile without its own animation (the sprite is that of the owner's variant).
 /// Destroyed on contact (sound), or on a blocking terrain.
@@ -1535,19 +1533,19 @@ mod shot5 {
 }
 
 handlers! {
-    0x9dbfc "eshl_00" #[without] shot0::run,
-    0x9de10 "eshl_01" #[without] shot1::run,
-    0x9e0aa "eshl_02" #[without] shot2::run,
-    0x9e1b6 "eshl_03" #[without] shot3::run,
-    0x9e2dc "eshl_04" #[without] shot4::run,
-    0x9ebca "eshl_06" #[without] shot6::run,
-    0x9ecc0 "eshl_07" #[without] shot7::run,
-    0x9ee00 "eshl_08" #[without] shot8::run,
-    0x9ef46 "eshl_09" #[without] shot9::run,
-    0x9f376 "eshl_10" #[without] shot10::run,
-    0x9f426 "eshl_11" #[without] shot11::run,
-    0x9f5a8 "eshl_12" #[without] shot12::run,
-    0x9f67c "eshl_13" #[without] shot13::run,
-    0x9f786 "eshl_14" #[without] shot14::run,
-    0x9e458 "eshl_05" #[without] shot5::run,
+    0x9dbfc "eshl_00" shot0::run,
+    0x9de10 "eshl_01" shot1::run,
+    0x9e0aa "eshl_02" shot2::run,
+    0x9e1b6 "eshl_03" shot3::run,
+    0x9e2dc "eshl_04" shot4::run,
+    0x9ebca "eshl_06" shot6::run,
+    0x9ecc0 "eshl_07" shot7::run,
+    0x9ee00 "eshl_08" shot8::run,
+    0x9ef46 "eshl_09" shot9::run,
+    0x9f376 "eshl_10" shot10::run,
+    0x9f426 "eshl_11" shot11::run,
+    0x9f5a8 "eshl_12" shot12::run,
+    0x9f67c "eshl_13" shot13::run,
+    0x9f786 "eshl_14" shot14::run,
+    0x9e458 "eshl_05" shot5::run,
 }

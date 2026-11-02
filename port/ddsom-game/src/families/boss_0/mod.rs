@@ -385,7 +385,7 @@ pub(self) fn far_gesture<R: Bench>(x: &mut Cx<'_, R>) -> Option<u32> {
 }
 
 handlers! {
-    0x794ae "boss_0" #[without] run,
+    0x794ae "boss_0" run,
     // return to combat after a common reaction (table 0x3e000 of `reactions.rs`)
     0x7a5ac "boss_0_getup" hit::get_up,
 }

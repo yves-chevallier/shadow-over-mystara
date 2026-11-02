@@ -183,5 +183,5 @@ fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x975ec "boss_18" #[without] run,
+    0x975ec "boss_18" run,
 }

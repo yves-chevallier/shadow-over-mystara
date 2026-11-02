@@ -87,7 +87,6 @@ pub(self) const ESHL_FREE: u32 = 0x7e64;
 /// "Hard" mode (non-zero word): speeds from the fast table.
 pub(self) const HARD: u32 = 0x70;
 
-
 /// One animation step (0x1a56).
 pub(self) fn anim<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
@@ -561,7 +560,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x8a75c "boss_9" #[without] run,
+    0x8a75c "boss_9" run,
 }
 
 use super::cx::handlers;

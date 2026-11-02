@@ -4,8 +4,6 @@
 //! state, `+5` and `+6` substates (even bytes, indices into the original's jump tables);
 //! `+0x50` designates the owner (16-bit word, or long for a few types).
 
-
-
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::shell::*;
@@ -24,7 +22,6 @@ mod sfx {
     pub const E7376: u32 = 0xe7376;
     pub const ED686: u32 = 0xed686;
 }
-
 
 /// Long "to release" state (`+4 = 6`, `+5..+7` = 0).
 const DEAD: u32 = 0x0600_0000;
@@ -3029,29 +3026,29 @@ mod shot39 {
     }
 }
 handlers! {
-    0x9fe0a "eshl_15" #[without] shot15::run,
-    0xa03e0 "eshl_16" #[without] shot16::run,
-    0xa05ce "eshl_17" #[without] shot17::run,
-    0xa0a06 "eshl_18" #[without] shot18::run,
-    0xa0b20 "eshl_19" #[without] shot19::run,
-    0xa0c5a "eshl_20" #[without] shot20::run,
-    0xa0f96 "eshl_21" #[without] shot21::run,
-    0xa1180 "eshl_22" #[without] shot22::run,
-    0xa1292 "eshl_23" #[without] shot23::run,
-    0xa137e "eshl_24" #[without] shot24::run,
-    0xa16bc "eshl_25" #[without] shot25::run,
-    0xa18dc "eshl_26" #[without] shot26::run,
-    0xa1a64 "eshl_27" #[without] shot27::run,
-    0xa1c96 "eshl_28" #[without] shot28::run,
-    0xa1d70 "eshl_29" #[without] shot29::run,
-    0xa2060 "eshl_30" #[without] shot30::run,
-    0xa21b6 "eshl_31" #[without] shot31::run,
-    0xa239a "eshl_32" #[without] shot32::run,
-    0xa2524 "eshl_33" #[without] shot33::run,
-    0xa2630 "eshl_34" #[without] shot34::run,
-    0xa28d2 "eshl_35" #[without] shot35::run,
-    0xa29cc "eshl_36" #[without] shot36::run,
-    0xa2b62 "eshl_37" #[without] shot37::run,
-    0xa2d48 "eshl_38" #[without] shot38::run,
-    0xa2fb8 "eshl_39" #[without] shot39::run,
+    0x9fe0a "eshl_15" shot15::run,
+    0xa03e0 "eshl_16" shot16::run,
+    0xa05ce "eshl_17" shot17::run,
+    0xa0a06 "eshl_18" shot18::run,
+    0xa0b20 "eshl_19" shot19::run,
+    0xa0c5a "eshl_20" shot20::run,
+    0xa0f96 "eshl_21" shot21::run,
+    0xa1180 "eshl_22" shot22::run,
+    0xa1292 "eshl_23" shot23::run,
+    0xa137e "eshl_24" shot24::run,
+    0xa16bc "eshl_25" shot25::run,
+    0xa18dc "eshl_26" shot26::run,
+    0xa1a64 "eshl_27" shot27::run,
+    0xa1c96 "eshl_28" shot28::run,
+    0xa1d70 "eshl_29" shot29::run,
+    0xa2060 "eshl_30" shot30::run,
+    0xa21b6 "eshl_31" shot31::run,
+    0xa239a "eshl_32" shot32::run,
+    0xa2524 "eshl_33" shot33::run,
+    0xa2630 "eshl_34" shot34::run,
+    0xa28d2 "eshl_35" shot35::run,
+    0xa29cc "eshl_36" shot36::run,
+    0xa2b62 "eshl_37" shot37::run,
+    0xa2d48 "eshl_38" shot38::run,
+    0xa2fb8 "eshl_39" shot39::run,
 }

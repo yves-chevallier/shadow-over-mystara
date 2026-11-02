@@ -1264,10 +1264,10 @@ crate::steps! {
 }
 
 handlers! {
-    0xb8ef6 "effct_firework" #[without] fireworks,
-    0xb59ea "effct_machine_volante" #[without] flyer,
-    0xb5454 "effct_armure" #[without] armour,
-    0xb4bec "effct_rain_debris" #[without] debris_rain,
-    0xb7866 "effct_enemy_piece" #[without] chunk,
-    0xb96dc "effct_shard_thrown" #[without] shard,
+    0xb8ef6 "effct_firework" fireworks,
+    0xb59ea "effct_machine_volante" flyer,
+    0xb5454 "effct_armure" armour,
+    0xb4bec "effct_rain_debris" debris_rain,
+    0xb7866 "effct_enemy_piece" chunk,
+    0xb96dc "effct_shard_thrown" shard,
 }

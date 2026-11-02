@@ -12,12 +12,11 @@
 //! 68000 reached through a jump table, corrected D1...).
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_X};
 
-use crate::mem::{rd16, rts, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
-use crate::{ops, regs, Native};
+use crate::{ops, Native};
+use crate::ops::{Alu, Registers, Size};
 
 /// Switch bit (`ram::DSW`): terrain collision active.
 const ENABLED: u16 = 0x800;
@@ -47,7 +46,7 @@ mod kind {
 /// The two copies of the routine (`Variant`): only the type table and the subroutine addresses
 /// (visible in A1) change.
 #[derive(Clone, Copy)]
-struct Variant {
+pub(crate) struct Variant {
     entry: u32,
     /// The second copy sets D5 before knowing whether the object touches the solid obstacle.
     early_flag: bool,
@@ -55,58 +54,62 @@ struct Variant {
     solid: [u32; 4],
 }
 
-const FIRST: Variant = Variant { entry: 0x33fe4, early_flag: false, types: 0x3425c, solid: [0x340b6, 0x340d4, 0x340f2, 0x34108] };
-const SECOND: Variant = Variant { entry: 0x3403c, early_flag: true, types: 0x34a5c, solid: [0x34120, 0x3413e, 0x3415c, 0x34172] };
+pub(crate) const FIRST: Variant = Variant { entry: 0x33fe4, early_flag: false, types: 0x3425c, solid: [0x340b6, 0x340d4, 0x340f2, 0x34108] };
+pub(crate) const SECOND: Variant = Variant { entry: 0x3403c, early_flag: true, types: 0x34a5c, solid: [0x34120, 0x3413e, 0x3415c, 0x34172] };
+
 /// Slope subroutines, common to both copies.
 const SLOPES: [u32; 4] = [0x341a4, 0x341d0, 0x341fe, 0x3422e];
 
-struct Push<'a> {
-    c: &'a mut Cpu,
-    b: &'a mut Cps2Bus,
-    variant: Variant,
+/// The transcription of 0x33fe4 / 0x3403c on the registers of the original (`Alu`): the game keeps the leftovers
+/// D2-D5 and the Z flag that follow it, the tools all the registers and flags.
+pub(crate) struct Push<'a, R: Alu> {
+    pub(crate) c: &'a mut R,
+    pub(crate) b: &'a mut Cps2Bus,
+    pub(crate) variant: Variant,
 }
 
-impl Push<'_> {
+impl<R: Alu> Push<'_, R> {
     fn d(&self, n: usize) -> u16 {
-        self.c.d[n] as u16
+        self.c.data(n) as u16
     }
     fn set_d(&mut self, n: usize, v: u16) {
-        set_low_word(&mut self.c.d[n], v);
+        set_low_word(&mut self.c.d()[n], v);
     }
     fn field(&mut self, a2: u32, off: u32) -> u16 {
         rd16(self.b, a2 + off)
     }
     /// `sub.w src,Dn`: flags of the original; returns the carry.
     fn sub_d(&mut self, n: usize, src: u16) -> bool {
-        let r = self.c.addsub(true, src as u32, self.d(n) as u32, false, Size::Word, false);
+        let r = self.c.sub(src as u32, self.d(n) as u32, Size::Word);
         self.set_d(n, r as u16);
-        self.c.sr & SR_C != 0
+        self.c.carry()
     }
     /// `add.w src,(off,A0)` / `sub.w src,(off,A0)`.
     fn add_obj(&mut self, sub: bool, src: u16, off: u32) {
-        let a = self.c.a[0] + off;
-        let r = self.c.addsub(sub, src as u32, rd16(self.b, a) as u32, false, Size::Word, false);
+        let a = self.c.a()[0] + off;
+        let v = rd16(self.b, a) as u32;
+        let r = if sub { self.c.sub(src as u32, v, Size::Word) } else { self.c.add(src as u32, v, Size::Word) };
         wr16(self.b, a, r as u16);
     }
     /// `tst.w (off,A2)`: true if zero.
     fn zero(&mut self, a2: u32, off: u32) -> bool {
         let v = self.field(a2, off);
-        ops::logic(self.c, v as u32, Size::Word);
+        self.c.logic(v as u32, Size::Word);
         v == 0
     }
     /// `moveq #1,D5`.
     fn collided(&mut self) {
-        self.c.d[5] = 1;
+        self.c.d()[5] = 1;
     }
 
     /// Repeats the passes as long as a solid obstacle restarts the routine (`beq entry`).
-    fn run(&mut self) {
+    pub(crate) fn run(&mut self) {
         while self.pass() {}
     }
 
     /// One pass; true to start over.
     fn pass(&mut self) -> bool {
-        let a0 = self.c.a[0];
+        let a0 = self.c.a()[0];
         if self.variant.entry == FIRST.entry {
             wr16(self.b, A5 + LAST_OBJECT, a0 as u16);
             let (x, y) = (rd16(self.b, a0 + 8), rd16(self.b, a0 + 0x10));
@@ -115,7 +118,7 @@ impl Push<'_> {
         }
         let enabled = crate::ram::DSW.get(self.b) & ENABLED;
         self.set_d(0, enabled);
-        ops::logic(self.c, enabled as u32, Size::Word);
+        self.c.logic(enabled as u32, Size::Word);
         if enabled == 0 {
             return false;
         }
@@ -123,10 +126,10 @@ impl Push<'_> {
         self.set_d(0, x);
         self.set_d(1, y);
         let t = crate::video::terrain(self.b, x, y);
-        crate::video::terrain_68k(self.c, &t);
-        let number = self.c.d[2] as u8;
+        crate::video::terrain_regs(self.c, &t);
+        let number = self.c.d()[2] as u8;
         wr8(self.b, a0 + OBJ_TERRAIN, number);
-        ops::logic(self.c, number as u32, Size::Byte);
+        self.c.logic(number as u32, Size::Byte);
         if number == 0 {
             return self.free();
         }
@@ -134,12 +137,12 @@ impl Push<'_> {
         let d2 = self.d(2);
         self.set_d(2, d2 << 4);
         let carry = d2 >> 12 & 1 != 0;
-        ops::logic(self.c, (d2 << 4) as u32, Size::Word);
-        ops::flags(self.c, SR_C | SR_X, if carry { SR_C | SR_X } else { 0 });
+        self.c.logic((d2 << 4) as u32, Size::Word);
+        self.c.flags(ops::C | ops::X, if carry { ops::C | ops::X } else { 0 });
         let a2 = self.variant.types.wrapping_add((d2 << 4) as i16 as u32);
-        self.c.a[2] = a2;
+        self.c.a()[2] = a2;
         let category = self.field(a2, kind::CATEGORY);
-        ops::cmp(self.c, 1, category as u32, Size::Word);
+        self.c.cmp(1, category as u32, Size::Word);
         match category {
             0 => self.free(),
             1 => self.solid(a2),
@@ -152,12 +155,12 @@ impl Push<'_> {
 
     /// Nothing to correct: the object is free (0x3402c).
     fn free(&mut self) -> bool {
-        let a0 = self.c.a[0];
+        let a0 = self.c.a()[0];
         wr16(self.b, A5 + LAST_OBJECT, 0);
         wr32(self.b, A5 + LAST_X, 0);
-        self.c.d[2] = 0;
+        self.c.d()[2] = 0;
         wr8(self.b, a0 + OBJ_TERRAIN, 0);
-        ops::logic(self.c, 0, Size::Byte);
+        self.c.logic(0, Size::Byte);
         false
     }
 
@@ -165,7 +168,7 @@ impl Push<'_> {
     fn solid(&mut self, a2: u32) -> bool {
         let routine = self.field(a2, kind::ROUTINE);
         self.set_d(2, routine);
-        self.c.a[1] = self.variant.solid[routine as usize / 4];
+        self.c.a()[1] = self.variant.solid[routine as usize / 4];
         let edge = self.field(a2, kind::EDGE);
         match routine {
             // below / above the edge: corrects y
@@ -199,7 +202,7 @@ impl Push<'_> {
     fn slope(&mut self, a2: u32) {
         let routine = self.field(a2, kind::ROUTINE);
         self.set_d(2, routine);
-        self.c.a[1] = SLOPES[routine as usize / 4];
+        self.c.a()[1] = SLOPES[routine as usize / 4];
         let flipped = self.field(a2, kind::FLIP) != 0;
         let (edge, shift) = (self.field(a2, kind::EDGE), self.field(a2, kind::SHIFT));
         match routine {
@@ -247,35 +250,16 @@ impl Push<'_> {
     }
 }
 
-fn run(variant: Variant, c: &mut Cpu, b: &mut Cps2Bus) {
-    Push { c, b, variant }.run();
-    rts(c, b);
-}
-
-/// 0x33fe4 on object `o`, without registers: returns the original's Z flag (true: the last cell examined is
-/// free, or the collision is disabled). The routine is transcribed on work registers (`Push`); here
-/// these are private registers, discarded on return (the players' callers did not reread those of the original:
-/// `DDSOM_POISON=terrain`, batch D).
-/// Adapter: like `push`, but on the caller's registers, left as in the original (families of batch B,
-/// registers not yet proven dead: `DDSOM_POISON=terrain`).
-pub fn push_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) -> bool {
-    c.a[0] = o.0;
-    Push { c, b, variant: FIRST }.run();
-    let z = c.sr & m68k::SR_Z != 0;
-    crate::diag::dead_regs(c, "terrain", regs::d(0) | regs::d(1) | regs::d(2) | regs::d(5) | regs::a(1) | regs::a(2) | regs::CCR);
-    z
-}
-
 pub fn push(b: &mut Cps2Bus, o: Obj) -> bool {
     push_collides(b, o).0
 }
 
 /// `push`, and true second if the object hit an obstacle (the original's D5 = 1, which callers reread).
 pub fn push_collides(b: &mut Cps2Bus, o: Obj) -> (bool, bool) {
-    let mut c = Cpu::default();
+    let mut c = Registers::default();
     c.a[0] = o.0;
     Push { c: &mut c, b, variant: FIRST }.run();
-    (c.sr & m68k::SR_Z != 0, c.d[5] == 1)
+    (c.zero(), c.d[5] == 1)
 }
 
 /// `push`, with the leftovers of the original that the following handlers reread (`dispatch::Leftovers`): D2 and D3
@@ -283,18 +267,18 @@ pub fn push_collides(b: &mut Cps2Bus, o: Obj) -> (bool, bool) {
 /// frost shard) and D5 (1 after a collision). The leftovers go in and out unchanged when the routine does not write
 /// them. Returns the original's Z flag.
 pub fn push_leftovers(b: &mut Cps2Bus, o: Obj, d2: &mut u32, d3: &mut u32, d5: &mut u32) -> bool {
-    let mut c = Cpu::default();
+    let mut c = Registers::default();
     c.a[0] = o.0;
     (c.d[2], c.d[3], c.d[5]) = (*d2, *d3, *d5);
     Push { c: &mut c, b, variant: FIRST }.run();
     (*d2, *d3, *d5) = (c.d[2], c.d[3], c.d[5]);
-    c.sr & m68k::SR_Z != 0
+    c.zero()
 }
 
 /// 0x3403c (the second copy of the routine) on object `o`, without registers; `leftovers` are the D2-D5 leftovers
 /// (`dispatch::Leftovers`) passed to it and left by it. Returns the original's Z flag.
 pub fn push_second_leftovers(b: &mut Cps2Bus, o: Obj, leftovers: [&mut u32; 4]) -> bool {
-    let mut c = Cpu::default();
+    let mut c = Registers::default();
     c.a[0] = o.0;
     for (k, r) in leftovers.iter().enumerate() {
         c.d[2 + k] = **r;
@@ -303,23 +287,7 @@ pub fn push_second_leftovers(b: &mut Cps2Bus, o: Obj, leftovers: [&mut u32; 4]) 
     for (k, r) in leftovers.into_iter().enumerate() {
         *r = c.d[2 + k];
     }
-    c.sr & m68k::SR_Z != 0
+    c.zero()
 }
 
-pub const SHADOW: Native = Native {
-    entry: 0x33fe4,
-    name: "terrain_push",
-    run: crate::Body::WithCpu(|c, b| run(FIRST, c, b)),
-    touches_sound: false,
-    outputs: regs::ALL,
-};
-
-pub const SHADOW_SECOND: Native = Native {
-    entry: 0x3403c,
-    name: "terrain_push_2",
-    run: crate::Body::WithCpu(|c, b| run(SECOND, c, b)),
-    touches_sound: false,
-    outputs: regs::ALL,
-};
-
-pub const NATIVES: &[Native] = &[SHADOW, SHADOW_SECOND];
+pub const NATIVES: &[Native] = &[];

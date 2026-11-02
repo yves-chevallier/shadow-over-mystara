@@ -4,8 +4,8 @@
 //! handler of the object's type (`jsr (table + 4 × type)`) with `A0` = object and `D7` = loop counter. Each handler is
 //! a small state machine (bytes `+4`, `+5`, `+6` of the object); it yields with `rts`, leaving `A0` and `D7` intact.
 //!
-//! A native routine replaces a whole handler: the logic is written on a generic [`cx::Cx`] (without registers:
-//! `#[without]`, see `handler!` and `cx::handlers!`).
+//! A native routine replaces a whole handler: the logic is written on a generic [`cx::Cx`], called without registers
+//! (see `handler!` and `cx::handlers!`).
 //!
 //! See `docs/familles.md` for the description of each type.
 
@@ -144,17 +144,10 @@ pub(crate) fn pointer<R>(x: &mut cx::Cx<'_, R>, o: Obj, off: u32) -> Obj {
     Obj(o.u16(x.b, off) as i16 as i32 as u32 & 0xff_ffff)
 }
 
-/// Declares the native routine of a handler: entry address, name, logic (on `cx::Cx`, the processor), or `#[without]`
-/// logic (without registers: what the dispatch loop passes).
+/// Declares the native routine of a handler: entry address, name, logic (on a generic `cx::Cx`, called without
+/// registers: what the dispatch loop passes).
 macro_rules! handler {
     ($const:ident, $entry:expr, $name:expr, $logic:path) => {
-        pub const $const: crate::Native = crate::families::cx::handler($entry, $name, |c, b| {
-            let mut x = crate::families::cx::Cx::new(c, b);
-            $logic(&mut x);
-            x.ret();
-        });
-    };
-    ($const:ident, $entry:expr, $name:expr, #[without] $logic:path) => {
         pub const $const: crate::Native = crate::families::cx::handler_without($entry, $name, |b, a| {
             $logic(&mut crate::families::cx::Gx::dispatch(b, a));
         });
@@ -165,24 +158,18 @@ pub(crate) use handler;
 /// Native routines of the ESHL, SET and SOBJ families (see `docs/families-eshl-set-sobj.md`): one handler per type,
 /// written on [`cx::Cx`].
 pub fn natives() -> impl Iterator<Item = &'static Native> {
-    [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, eshl_d::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES, effects_b::NATIVES, effects_c::NATIVES, effects_d::NATIVES, effects_e::NATIVES, effects_f::NATIVES, enemy::NATIVES, enemy_double::NATIVES, enemy_part::NATIVES, enemy_common::NATIVES, enemy_riyakaa::NATIVES, enemy_dbeast::NATIVES, enemy_owlbear::NATIVES, enemy_harpy::NATIVES, enemy_warrior::NATIVES, enemy_skeleton::NATIVES, enemy_elf::NATIVES, enemy_trog::NATIVES, enemy_ghoul::NATIVES, enemy_beetle::NATIVES, enemy_scorpion::NATIVES, enemy_gargoyle::NATIVES, enemy_hellhound::NATIVES, enemy_ogre::NATIVES, enemy_kobold::NATIVES, enemy_goblin::NATIVES, enemy_troll::NATIVES, enemy_gnoll::NATIVES, enemy_bow::NATIVES, enemy_golem::NATIVES, enemy_warmachine::NATIVES, boss_dragon::NATIVES, boss_17::NATIVES, boss_6::NATIVES, boss_10::NATIVES, boss_5::NATIVES, boss_21::NATIVES, boss_19::NATIVES, boss_15::NATIVES, boss_18::NATIVES, boss_4::NATIVES, boss_7::NATIVES, boss_8::NATIVES, boss_11::NATIVES, boss_1::NATIVES, boss_3::NATIVES, boss_9::NATIVES]
+    [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, eshl_d::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES, effects_b::NATIVES, effects_c::NATIVES, effects_d::NATIVES, effects_e::NATIVES, effects_f::NATIVES, enemy::NATIVES, enemy_double::NATIVES, enemy_part::NATIVES, enemy_riyakaa::NATIVES, enemy_dbeast::NATIVES, enemy_owlbear::NATIVES, enemy_harpy::NATIVES, enemy_warrior::NATIVES, enemy_skeleton::NATIVES, enemy_elf::NATIVES, enemy_trog::NATIVES, enemy_ghoul::NATIVES, enemy_beetle::NATIVES, enemy_scorpion::NATIVES, enemy_gargoyle::NATIVES, enemy_hellhound::NATIVES, enemy_ogre::NATIVES, enemy_kobold::NATIVES, enemy_goblin::NATIVES, enemy_troll::NATIVES, enemy_gnoll::NATIVES, enemy_bow::NATIVES, enemy_golem::NATIVES, enemy_warmachine::NATIVES, boss_dragon::NATIVES, boss_17::NATIVES, boss_6::NATIVES, boss_10::NATIVES, boss_5::NATIVES, boss_21::NATIVES, boss_19::NATIVES, boss_15::NATIVES, boss_18::NATIVES, boss_4::NATIVES, boss_7::NATIVES, boss_8::NATIVES, boss_11::NATIVES, boss_1::NATIVES, boss_9::NATIVES]
         .into_iter()
         .flatten()
         .chain(items_b::NATIVES)
-        .chain(eshl_creators::NATIVES)
         .chain(boxes::chest::NATIVES)
         .chain(boxes::pushes::NATIVES)
-        .chain(boss_common::NATIVES)
         .chain(boss_0::NATIVES)
         .chain(boss_16::NATIVES)
         .chain(boss_22::NATIVES)
-        .chain(creators::NATIVES)
-        .chain(set_residue::NATIVES)
-        .chain(small::NATIVES)
         .chain(small::SHAKES)
-        .chain(effects_creators::NATIVES)
         .chain(effects_g::NATIVES)
         .chain(player::natives())
         .chain(reactions::NATIVES)
-        .chain([&reactions::PLAYER_HURT_ANIMATION])
+        .chain(boss_3::NATIVES)
 }

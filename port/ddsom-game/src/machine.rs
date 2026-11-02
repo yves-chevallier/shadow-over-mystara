@@ -1,19 +1,17 @@
-//! Common context of the native routines: the machine (processor and bus) and the shared services.
+//! Common context of the native routines: the machine (the bus) and the shared services.
 //!
 //! Each subsystem has its own context (`families::cx::Cx`, `player::Ctx`, `scene::Ctx`,
-//! `combat::World`...); all of them hold `b: &mut Cps2Bus` (and some still `c: &mut Cpu`). Rather than a base structure that
+//! `combat::World`...); all of them hold `b: &mut Cps2Bus`. Rather than a base structure that
 //! they would embed (the separate `x.c`, `x.b` accesses, everywhere, would not survive a `Deref`), they implement
 //! the [`Machine`] trait, which gives them the common services once: the random draw, and reads in the
 //! program space and the data space. The work RAM variables are read through their typed views
 //! (`ram::SCENE.get(x.bus())`, `Obj`, `Player`). The object engine (animation, movement, lists, screen) is in
 //! [`crate::objects::Current`], for the contexts that process an object.
 //!
-//! The processor is only used by the `_68k` adapters (registers of the original, `docs/guide-refactorisation.md`); a
-//! converted routine only uses `bus()`.
+//! The game has no processor; only the tools (`crate::tools`, natives for the original code) add one
+//! (`tools::WithCpu`).
 
 use cps2::Cps2Bus;
-use m68k::decode::Fetch;
-use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8};
 use crate::rng;
@@ -51,12 +49,6 @@ pub trait Machine {
     fn data32(&mut self, a: u32) -> u32 {
         rd32(self.bus(), a)
     }
-}
-
-/// Context that also holds the processor: the `_68k` adapters (registers of the original) go through it.
-pub trait WithCpu: Machine {
-    /// The processor and the bus, borrowed together (the `_68k` adapters need both).
-    fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus);
 }
 
 impl Machine for crate::scene::Ctx<'_> {

@@ -17,7 +17,6 @@
 //! States (byte `A5-0x55cc`): 0 loads the scene's script, 2 reads, 4 moves to 6, 6 done.
 
 use cps2::Cps2Bus;
-use m68k::decode::Fetch;
 
 use crate::mem::{rd16, rd32, rd8, wr32, wr8, A5};
 use crate::objects::{pools, Obj};

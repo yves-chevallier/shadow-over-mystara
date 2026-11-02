@@ -8,7 +8,6 @@ use crate::mem::{rd16, wr16};
 use crate::objects::pools;
 use crate::objects::Current;
 
-
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
@@ -387,10 +386,10 @@ mod stone {
 }
 
 handlers! {
-    0x530bc "pshl_12" #[without] jet::run,
-    0x53290 "pshl_13" #[without] item::run,
-    0x53412 "pshl_14" #[without] flame::run,
-    0x534d6 "pshl_15" #[without] volley::run,
-    0x5369a "pshl_16" #[without] star::run,
-    0x537fa "pshl_17" #[without] stone::run,
+    0x530bc "pshl_12" jet::run,
+    0x53290 "pshl_13" item::run,
+    0x53412 "pshl_14" flame::run,
+    0x534d6 "pshl_15" volley::run,
+    0x5369a "pshl_16" star::run,
+    0x537fa "pshl_17" stone::run,
 }

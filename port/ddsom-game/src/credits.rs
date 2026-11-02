@@ -178,7 +178,6 @@ pub fn read_coin_slots(b: &mut Cps2Bus) {
     });
 }
 
-
 // ---------------------------------------------------------------------------------------------
 // Start buttons (0x141e0)
 
@@ -187,7 +186,7 @@ const FIRST_ABSOLUTE: u32 = 0xff844e;
 
 /// 0x1422e: start button of coin slot `coin_slot` (`service` = byte of IN2+1). A start adds a free credit
 /// to the coin slot (0x1427a), with bookkeeping for the first.
-fn line_start(b: &mut Cps2Bus, coin_slot: u32, service: u8) {
+pub(crate) fn line_start(b: &mut Cps2Bus, coin_slot: u32, service: u8) {
     if service & 4 != 0 {
         wr8(b, coin_slot + 7, 0);
         return;
@@ -305,17 +304,3 @@ pub fn write_digit(b: &mut Cps2Bus, case: u32, value: u8, attr: u16) -> u32 {
     crate::mem::wr16(b, case.wrapping_add(2), attr);
     case.wrapping_add(2)
 }
-/// Original subroutine rewritten in the body of the credits task, presented as a native for the differential
-/// fuzz (`examples/fuzz_couv`); the game does not call it by its address.
-pub const TEST_NATIVES: &[Native] = &[Native {
-    // 0x1422e: start button of a coin slot (A0 coin slot, D1.b byte of IN2+1)
-    entry: 0x1422e,
-    name: "credits_start_line",
-    run: crate::Body::WithCpu(|c, b| {
-        let (a0, service) = (c.a[0], c.d[1] as u8);
-        line_start(b, a0, service);
-        crate::mem::rts(c, b);
-    }),
-    touches_sound: false,
-    outputs: 0,
-}];

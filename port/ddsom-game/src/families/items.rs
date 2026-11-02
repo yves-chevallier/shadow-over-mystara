@@ -7,7 +7,6 @@
 //! each type.
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use crate::mem::{rd16, wr16, wr32, A5};
 use crate::objects::pools;
@@ -2300,15 +2299,15 @@ fn equipment_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     }
 }
 
-handler!(ITEM_3, equipment::ENTRY, "item_equipment", #[without] equipment_handler);
-handler!(ITEM_0, treasure::ENTRY, "item_treasure", #[without] treasure);
-handler!(ITEM_1, consumable::ENTRY, "item_consumable", #[without] consumable_handler);
-handler!(ITEM_4, inventory::ENTRY, "item_inventory", #[without] inventory_handler);
-handler!(ITEM_5, bonus::ENTRY, "item_bonus", #[without] bonus_handler);
-handler!(ITEM_6, scene::ENTRY, "item_scene", #[without] scene_handler);
-handler!(ITEM_7, reserve::ENTRY, "item_reserve", #[without] reserve_handler);
-handler!(ITEM_8, contact::ENTRY, "item_contact", #[without] contact_handler);
-handler!(ITEM_9, escort::ENTRY, "item_accompagnement", #[without] escort_handler);
+handler!(ITEM_3, equipment::ENTRY, "item_equipment", equipment_handler);
+handler!(ITEM_0, treasure::ENTRY, "item_treasure", treasure);
+handler!(ITEM_1, consumable::ENTRY, "item_consumable", consumable_handler);
+handler!(ITEM_4, inventory::ENTRY, "item_inventory", inventory_handler);
+handler!(ITEM_5, bonus::ENTRY, "item_bonus", bonus_handler);
+handler!(ITEM_6, scene::ENTRY, "item_scene", scene_handler);
+handler!(ITEM_7, reserve::ENTRY, "item_reserve", reserve_handler);
+handler!(ITEM_8, contact::ENTRY, "item_contact", contact_handler);
+handler!(ITEM_9, escort::ENTRY, "item_accompagnement", escort_handler);
 
 // ---------------------------------------------------------------------------------------------
 // Subroutines called outside the handlers
@@ -2319,15 +2318,6 @@ pub fn clear_picked_up(b: &mut Cps2Bus) {
     for k in 0..48 {
         wr32(b, start + 4 * k, 0);
     }
-}
-
-/// `clear_picked_up` for a caller still on the processor (`game::leave`), registers left like the original: D0 = 0,
-/// D6.w = 0xffff, A0 = end of the array.
-pub fn clear_picked_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    clear_picked_up(b);
-    c.d[0] = 0;
-    c.d[6] = c.d[6] & 0xffff_0000 | 0xffff;
-    c.a[0] = A5.wrapping_add(PICKED as u32) + 4 * 48;
 }
 
 /// A player's equipment that can drop when it is hit: (byte of the carried object, hit counter, chance table per hit).

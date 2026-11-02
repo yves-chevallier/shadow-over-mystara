@@ -286,5 +286,5 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x69384 "enemy_12" #[without] run,
+    0x69384 "enemy_12" run,
 }

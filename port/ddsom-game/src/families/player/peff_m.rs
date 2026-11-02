@@ -593,5 +593,5 @@ mod pet {
 }
 
 handlers! {
-    0x4f2a6 "peff_34" #[without] pet::run,
+    0x4f2a6 "peff_34" pet::run,
 }

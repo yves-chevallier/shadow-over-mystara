@@ -7,7 +7,8 @@
 //!       deterministic frame by frame).
 //! At every frame, the game state (work RAM outside stacks, GFX RAM, sprite table, palette)
 //! must be identical, and the game's Rust task table must equal that of the original's RAM. `DDSOM_CHECK=1`
-//! additionally enables the call-by-call check of the native routines (diagnostic: registers and memory compared to the original on a copy).
+//! additionally compares each object handler called by the game with its original on a copy of the machine (memory;
+//! diagnostic, `ddsom_game::tools::check_handler`); it fails if it compares nothing.
 //!
 //! The hybrid mode (`DDSOM_HYBRIDE=1`) is removed.
 //!
@@ -171,7 +172,7 @@ fn main() {
     let report = ddsom_game::report();
     for (name, st) in &report {
         let errors = if check {
-            format!(" {:>5} mismatches", st.mismatches)
+            format!(" {:>5} mismatches {:>5} skipped", st.mismatches, st.skipped)
         } else {
             String::new()
         };
@@ -190,6 +191,16 @@ fn main() {
             if !list.is_empty() {
                 println!("REGS {name} {} calls: {}", st.calls, list.join(" "));
             }
+        }
+    }
+    // DDSOM_CHECK compares the object handlers with their original (`tools::check_handler`): it must compare something
+    let compared: u64 = report.values().map(|s| s.calls).sum();
+    let mismatches: u64 = report.values().map(|s| s.mismatches).sum();
+    if check {
+        println!("DDSOM_CHECK: {compared} calls compared with the original, {mismatches} mismatches");
+        if compared == 0 {
+            println!("FAILED: DDSOM_CHECK compared nothing");
+            std::process::exit(1);
         }
     }
     let (is_empty, capped) = ddsom_game::no68k::summary();

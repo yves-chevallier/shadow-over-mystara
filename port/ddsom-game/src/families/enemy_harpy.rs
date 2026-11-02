@@ -642,5 +642,5 @@ fn dead<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x756c4 "enemy_21" #[without] run,
+    0x756c4 "enemy_21" run,
 }

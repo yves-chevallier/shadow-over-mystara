@@ -7,10 +7,8 @@
 //! chain the texts) and preserve the other registers.
 
 use cps2::Cps2Bus;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
-use crate::mem::{rd16, rd8, rts, wr16};
-use crate::{regs, Native};
+use crate::mem::{rd16, rd8, wr16};
 
 const LAYER: u32 = 0x912000;
 const ROW: u32 = 4;
@@ -57,17 +55,9 @@ fn put(b: &mut Cps2Bus, at: u32, code: u16, attr: u16) {
     wr16(b, at + 2, attr);
 }
 
-/// End of routine: A4 advanced, flags of the final comparison (equality) and X left by the
-/// last operation that modifies it.
-fn finish(c: &mut Cpu, b: &mut Cps2Bus, a4: u32, x: bool) {
-    c.a[4] = a4;
-    c.sr = (c.sr & !(SR_X | SR_N | SR_V | SR_C)) | SR_Z | if x { SR_X } else { 0 };
-    rts(c, b);
-}
-
 /// The three variants of the simple text.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Kind {
+pub(crate) enum Kind {
     /// 0x0d5e: '@' end, '/' next line, 0xff n: n spaces.
     Text,
     /// 0x0d32: same descriptors, each character becomes a space (the attributes have no effect).
@@ -77,7 +67,7 @@ enum Kind {
 }
 
 /// Returns the end of the descriptor and the X flag left by the original.
-fn text(b: &mut Cps2Bus, descriptor: u32, kind: Kind) -> (u32, bool) {
+pub(crate) fn text(b: &mut Cps2Bus, descriptor: u32, kind: Kind) -> (u32, bool) {
     let mut s = Script { b, at: descriptor };
     let (col, row) = (s.byte(), s.byte());
     let attr = s.word();
@@ -126,11 +116,6 @@ pub fn print_over(b: &mut Cps2Bus, descriptor: u32) -> u32 {
     text(b, descriptor, Kind::Overlay).0
 }
 
-fn native_text(c: &mut Cpu, b: &mut Cps2Bus, kind: Kind) {
-    let (end, x) = text(b, c.a[4], kind);
-    finish(c, b, end, x);
-}
-
 /// Common body of the tall texts (2 tiles one under the other, codes on a word):
 /// '@@' end, '##' column skipped, '/@' next line, '//' two lines down.
 fn tall_body(s: &mut Script, start: u32, attr: u16) {
@@ -175,21 +160,11 @@ pub fn print_tall_at(b: &mut Cps2Bus, descriptor: u32, col: u8, row: u8) -> u32 
     s.at
 }
 
-fn print_tall_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let end = print_tall(b, c.a[4]);
-    finish(c, b, end, false);
-}
-
-fn print_tall_at_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let end = print_tall_at(b, c.a[4], c.d[5] as u8, c.d[6] as u8);
-    finish(c, b, end, false);
-}
-
 /// 2x2-cell blocks: '@@' end, '##' skips two columns, '//' two lines down, 0xffff n: n
 /// empty blocks (tile 0x20). Any other word `t` draws a block: tiles `t, t+1` then `t+0x10, t+0x11`
 /// below with the attributes of the descriptor (negative: palette `+0x2b` of object A0) for 0x0f38;
 /// empty block (tile 0x2fc, attributes 0) for 0x0f4a.
-fn blocks(b: &mut Cps2Bus, descriptor: u32, object: u32, drawn: bool) -> (u32, bool) {
+pub(crate) fn blocks(b: &mut Cps2Bus, descriptor: u32, object: u32, drawn: bool) -> (u32, bool) {
     let attr = rd16(b, descriptor + 2);
     let attr = if attr & 0x8000 != 0 { rd8(b, object + 0x2b) as u16 } else { attr };
     let mut s = Script { b, at: descriptor };
@@ -243,11 +218,6 @@ pub fn draw_blocks(b: &mut Cps2Bus, descriptor: u32, object: u32) -> u32 {
     blocks(b, descriptor, object, true).0
 }
 
-fn blocks_native(c: &mut Cpu, b: &mut Cps2Bus, drawn: bool) {
-    let (end, x) = blocks(b, c.a[4], c.a[0], drawn);
-    finish(c, b, end, x);
-}
-
 /// Erases a rectangle of the layer (column, row, width, height) with spaces. A row
 /// of at least 0x20 is brought back into the layer.
 pub fn clear_cells(b: &mut Cps2Bus, col: u8, row: u8, width: u8, height: u8) {
@@ -266,7 +236,7 @@ pub fn clear_box(b: &mut Cps2Bus, descriptor: u32) -> u32 {
     clear_box_height(b, descriptor).0
 }
 
-fn clear_box_height(b: &mut Cps2Bus, descriptor: u32) -> (u32, u8) {
+pub(crate) fn clear_box_height(b: &mut Cps2Bus, descriptor: u32) -> (u32, u8) {
     let mut s = Script { b, at: descriptor };
     let col = s.byte();
     let row = s.byte();
@@ -276,25 +246,3 @@ fn clear_box_height(b: &mut Cps2Bus, descriptor: u32) -> (u32, u8) {
     clear_cells(b, col, row, width, height);
     (end, height)
 }
-
-fn clear_box_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let (end, height) = clear_box_height(b, c.a[4]);
-    c.a[4] = end;
-    // flags: last move.w #0 (Z); X = carry of "height - 1"
-    let x = if height == 0 { SR_X } else { 0 };
-    c.sr = (c.sr & !(SR_X | SR_N | SR_V | SR_C)) | SR_Z | x;
-    rts(c, b);
-}
-
-const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::a(4) | regs::CCR }
-}
-
-pub const PRINT: Native = native(0x0d5e, "text_print", |c, b| native_text(c, b, Kind::Text));
-pub const ERASE: Native = native(0x0d32, "text_erase", |c, b| native_text(c, b, Kind::Clear));
-pub const PRINT_OVER: Native = native(0x0dca, "text_print_over", |c, b| native_text(c, b, Kind::Overlay));
-pub const PRINT_TALL: Native = native(0x1136, "text_print_tall", print_tall_native);
-pub const PRINT_TALL_AT: Native = native(0x1234, "text_print_tall_at", print_tall_at_native);
-pub const CLEAR_BLOCKS: Native = native(0x0f4a, "text_clear_blocks", |c, b| blocks_native(c, b, false));
-pub const DRAW_BLOCKS: Native = native(0x0f38, "text_draw_blocks", |c, b| blocks_native(c, b, true));
-pub const CLEAR_BOX: Native = native(0x1324, "text_clear_box", clear_box_native);

@@ -54,7 +54,6 @@ pub mod update;
 pub mod walk;
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use crate::dispatch::Leftovers;
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
@@ -69,9 +68,9 @@ pub const NATIVES: &[Native] = &[
     init::INIT_P2,
     init::INIT_P3,
     init::INIT_P4,
-    update::UPDATE_PLAYERS,
-    overlays::UPDATE,
-    walk::CLAMP,
+    
+    
+    
     characters::fighter::JUMP,
     characters::fighter::ATTACK,
     characters::fighter::SPECIAL,
@@ -98,73 +97,73 @@ pub const NATIVES: &[Native] = &[
     characters::thief::SPECIAL,
     characters::thief::DASH,
     characters::thief::ROLL,
-    actions::TO_STAND,
-    actions::START_STAND,
-    moves::LEAP,
-    moves::HOP_BACK,
+    
+    
+    
+    
     moves::CURSE_DROP,
     moves::DUST_PUFFS,
     moves::BOX_RECOIL,
-    spawn::SLASH,
-    spawn::BLOOD,
-    spawn::CURE,
-    spawn::POTION,
-    spawn::HOLY_LIGHT,
-    spawn::BEAM,
-    spawn::BLESSING,
-    spawn::BANISH,
-    spawn::WEAPON_TRAIL,
-    spawn::SHOWER,
-    spawn::AURA,
-    spawn::LIGHTNING_TARGET,
-    spawn::SWARM,
-    spawn::STORM,
-    spawn::RING,
-    spawn::BEAM_CAST,
-    spawn::METEORS,
-    spawn::ICE_COLUMNS,
-    spawn::ICE_MIST,
-    spawn::ICE_SHARDS,
-    spawn::ICE_CROWN,
-    spawn::FIREBALL,
-    spawn::ICE_GROUND,
-    spawn::THROWN_A,
-    spawn::THROWN_B,
-    spawn::THROWN_C,
-    spawn::THROWN_D,
-    spawn::THROWN_E,
-    spawn::THROWN_F,
-    spawn::THROWN_G,
-    spawn::THROWN_H,
-    spawn::LEAP,
-    spawn::SWAP,
-    spawn::DASH,
-    spawn::WALL_TARGET,
-    spawn::LIGHTNING,
-    spawn::KNIFE,
-    spawn::SHADOWS,
-    spawn::FLARE,
-    spawn::SUMMON,
-    spawn::PORTAL,
-    spawn::WITCH,
-    spawn::WITCH_A,
-    spawn::WITCH_B,
-    spawn::ROD_FLAME_SHOT,
-    spawn::ROD_BALL_SHOT,
-    spawn::ROD_STAR_SHOT,
-    spawn::CURSED_WEAPON,
-    spawn::DYING_SHARDS,
-    spawn::STORM_CLOUD,
-    spawn::PORTAL_GLOW,
-    spawn::PORTAL_SPARKS,
-    spawn::PORTAL_BURST,
-    spawn::RAIN,
-    spawn::STORM_SPELL,
-    spawn::RAIN_GLOW,
-    spawn::WALL_SPARK,
-    spawn::WAVE_BOLT,
-    spawn::MOON,
-    spawn::MOON_B,
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
 ];
 
 /// First player record (offset from A5) and stride between two players.
@@ -261,6 +260,14 @@ impl<'a> Ctx<'a> {
         Ctx { b, jumped: Jumped::default(), leftovers: Leftovers::default() }
     }
 
+    /// Runs `f` on the player that a native at an original address receives (`Body::Handler`: the player is the
+    /// object, A0 of the original), the leftovers D2-D5 passing in and out like those of the dispatch loop.
+    pub fn on_player(b: &mut Cps2Bus, a: &mut crate::dispatch::Dispatch, f: impl FnOnce(&mut Ctx, Player)) {
+        let mut g = Ctx { b, jumped: Jumped::default(), leftovers: a.leftovers };
+        f(&mut g, Player(a.object.0));
+        a.leftovers = g.leftovers;
+    }
+
     /// 0xb10c8: shock effect (dust, spark) of `variant` and `setting`, speeds `vx`, `vy`, created for player `p`;
     /// `None` when the pool is full or in the scene without shocks (41).
     pub fn shock(&mut self, p: Player, variant: u8, setting: u16, vx: u16, vy: u16) -> Option<Obj> {
@@ -271,17 +278,6 @@ impl<'a> Ctx<'a> {
     pub fn sound(&mut self, sound: u32, p: Player) {
         crate::sound::play(self.b, sound, Obj(p.0));
     }
-}
-
-/// Runs the players' code `f` for a caller still on the processor (game loop, natives for the tools): the leftovers
-/// D2-D5 go from the register bench to `Ctx::leftovers` and back; nothing else is read or written there.
-pub fn on_bench<T>(c: &mut Cpu, b: &mut Cps2Bus, f: impl FnOnce(&mut Ctx) -> T) -> T {
-    let leftovers = Leftovers { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] };
-    let mut g = Ctx { b, jumped: Jumped::default(), leftovers };
-    let r = f(&mut g);
-    let l = g.leftovers;
-    (c.d[2], c.d[3], c.d[4], c.d[5]) = (l.d2, l.d3, l.d4, l.d5);
-    r
 }
 
 impl crate::machine::Machine for Ctx<'_> {

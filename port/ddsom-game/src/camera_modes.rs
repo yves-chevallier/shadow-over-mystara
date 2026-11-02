@@ -9,17 +9,15 @@
 //! touch memory: no register or processor ([`Cam`]).
 
 use cps2::Cps2Bus;
-use m68k::decode::Fetch;
-use m68k::Cpu;
 
-use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::motion::{self, LastAdd};
 use crate::objects::pools::{self, Pool};
 use crate::objects::Obj;
 use crate::player::{Player, PLAYER_BASE, PLAYER_COUNT, PLAYER_STRIDE};
 use crate::scroll::{cam, CAMERA_1, CAMERA_2};
 use crate::video::Grid;
-use crate::{regs, Native};
+use crate::Native;
 
 /// Context of a camera script: the bus and the camera that the script modifies.
 struct Cam<'a> {
@@ -158,11 +156,9 @@ const CAM2_PREVIOUS_X: u32 = CAMERA_2 + cam::PREVIOUS_X;
 const CAM2_PREVIOUS_Y: u32 = CAMERA_2 + cam::PREVIOUS_Y;
 const CAM2_MIN_X: u32 = CAMERA_2 + cam::MIN_X;
 
-
 // ---------------------------------------------------------------------------------------------
 // Following the players
 // ---------------------------------------------------------------------------------------------
-
 
 fn record(k: u32) -> u32 {
     A5 + PLAYER_BASE + k * PLAYER_STRIDE
@@ -1442,15 +1438,6 @@ pub fn update_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     }
 }
 
-/// Native: D4 of the copy, A0 = the output camera.
-fn camera1_update(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some((v, m)) = update_camera_1(b) {
-        c.d[4] = c.d[4] & !m | v;
-    }
-    c.a[0] = A5 + CAMERA_1;
-    rts(c, b);
-}
-
 fn init_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     let mut x = Cam { b, o: Obj(A5 + CAMERA_1) };
     x.set16(0, 0x0200);
@@ -1530,15 +1517,6 @@ pub fn update_camera_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     }
 }
 
-/// Native: D4 of the copy, A0 = the output camera.
-fn camera2_update(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some((v, m)) = update_camera_2(b) {
-        c.d[4] = c.d[4] & !m | v;
-    }
-    c.a[0] = A5 + CAMERA_2;
-    rts(c, b);
-}
-
 fn init_camera_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     let mut x = Cam { b, o: Obj(A5 + CAMERA_2) };
     x.set16(0, 0x0200);
@@ -1585,13 +1563,6 @@ fn step(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     crate::scroll::after_mode(x.b)
 }
 
-pub const CAMERA1_UPDATE: Native = camera(0x2ede0, "camera1_update", camera1_update);
-pub const CAMERA2_UPDATE: Native = camera(0x32108, "camera2_update", camera2_update);
-
-const fn camera(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::a(0) }
-}
-
 /// Camera shake modes (`cam::MODE`) and their original entries.
 pub mod shake {
     /// 0x2824.
@@ -1631,4 +1602,4 @@ pub fn start_shake(b: &mut Cps2Bus, mode: u16, frames: u16) -> Obj {
     cam
 }
 
-pub const NATIVES: &[Native] = &[CAMERA1_UPDATE, CAMERA2_UPDATE];
+pub const NATIVES: &[Native] = &[];

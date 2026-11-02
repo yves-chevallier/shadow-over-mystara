@@ -11,13 +11,10 @@
 //! the counter noted in the step), then at the continuation of the loop's caller.
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
-use crate::mem::rts;
 use crate::modes::Flow;
 use crate::objects::pools::{self, Pool};
 use crate::objects::Obj;
-use crate::Native;
 
 /// A class of objects: its pool and its handler table.
 pub struct Class {
@@ -117,6 +114,9 @@ fn run_handler(b: &mut Cps2Bus, address: u32, object: Obj, counter: u16) {
         panic!("handler {address:06x} ({}): not a handler without registers", native.name)
     };
     let mut a = Dispatch { object, counter, leftovers: crate::tasks::table::table(b).leftovers };
+    #[cfg(feature = "tools")]
+    crate::tools::check_handler(native, handler, b, &mut a);
+    #[cfg(not(feature = "tools"))]
     handler(b, &mut a);
     crate::tasks::table::table(b).leftovers = a.leftovers;
     crate::tasks::return_to_caller(b);
@@ -157,35 +157,6 @@ pub struct Leftovers {
     /// collision with the terrain (0x33fe4), the exhausted counter of a `dbf` loop...; the row of shards of a crate
     /// (0xa17d0, `eshl_creators::row_1a`) rereads its high byte.
     pub d5: u32,
-}
-
-impl Leftovers {
-    /// The code on the processor has finished: its leftovers (D2-D5 of the bench) become those of the game (task
-    /// table).
-    pub fn from_bench(c: &Cpu, b: &mut Cps2Bus) {
-        crate::tasks::table::table(b).leftovers = Leftovers { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] };
-    }
-
-    /// The code on the processor resumes: the game's leftovers return to the bench (D2-D5).
-    pub fn to_bench(c: &mut Cpu, b: &mut Cps2Bus) {
-        let r = crate::tasks::table::table(b).leftovers;
-        (c.d[2], c.d[3], c.d[4], c.d[5]) = (r.d2, r.d3, r.d4, r.d5);
-    }
-}
-
-impl Dispatch {
-    /// The values that the original finds in the registers on entry to the handler.
-    pub fn from_cpu(c: &Cpu) -> Self {
-        Dispatch { object: Obj(c.a[0]), counter: c.d[7] as u16, leftovers: Leftovers { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] } }
-    }
-
-    /// Returns the leftovers to the processor (the handler leaves the other registers as they are).
-    pub fn give_back(&self, c: &mut Cpu) {
-        c.d[2] = self.leftovers.d2;
-        c.d[3] = self.leftovers.d3;
-        c.d[4] = self.leftovers.d4;
-        c.d[5] = self.leftovers.d5;
-    }
 }
 
 /// Resumption of a dispatch loop in which a handler made the task cede control.
@@ -247,43 +218,3 @@ pub fn resume_handler(b: &mut Cps2Bus, object: Option<Obj>, f: impl FnOnce(&mut 
 /// Offset of the return address of the `jsr (A1)` that calls the handler, in each of the ten
 /// original loops (`entry + 0x1a`).
 const HANDLER_RETURN: u32 = 0x1c;
-
-macro_rules! natives {
-    ($($ident:ident, $name:literal, $class:expr;)*) => {$(
-        pub const $ident: Native = Native {
-            entry: $class.entry,
-            name: $name,
-            run: crate::Body::WithCpu(|c, b| {
-                // called by address (tools): a handler never cedes control there; the leftovers pass from the
-                // bench to the game and back
-                Leftovers::from_bench(c, b);
-                let flow = $class.update(b);
-                Leftovers::to_bench(c, b);
-                if flow == Flow::Done {
-                    rts(c, b);
-                }
-            }),
-            touches_sound: false,
-            outputs: 0, // the callers chain to other calls
-        };
-    )*};
-}
-
-natives! {
-    UPDATE_PSHL, "dispatch_pshl", PSHL;
-    UPDATE_PEFF, "dispatch_peff", PEFF;
-    UPDATE_ENEMY, "dispatch_enemy", ENEMY;
-    UPDATE_BOSS, "dispatch_boss", BOSS;
-    UPDATE_ESHL, "dispatch_eshl", ESHL;
-    UPDATE_EFFCT, "dispatch_effct", EFFCT;
-    UPDATE_BOX, "dispatch_box", BOX;
-    UPDATE_SET, "dispatch_set", SET;
-    UPDATE_ITEM, "dispatch_item", ITEM;
-    UPDATE_SOBJ, "dispatch_sobj", SOBJ;
-}
-
-/// The ten dispatch loops, for the calls by address that remain (screens outside the game).
-pub const NATIVES: &[Native] = &[
-    UPDATE_PSHL, UPDATE_PEFF, UPDATE_ENEMY, UPDATE_BOSS, UPDATE_ESHL, UPDATE_EFFCT, UPDATE_BOX, UPDATE_SET,
-    UPDATE_ITEM, UPDATE_SOBJ,
-];

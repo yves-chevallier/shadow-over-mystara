@@ -877,11 +877,7 @@ macro_rules! rare_native {
         pub const $name: crate::Native = crate::Native {
             entry: $entry,
             name: $label,
-            run: crate::Body::WithCpu(|c, b| {
-                let p = Player(c.a[0]);
-                super::on_bench(c, b, |g| $f(g, p));
-                crate::mem::rts(c, b)
-            }),
+            run: crate::Body::Handler(|b, a| super::Ctx::on_player(b, a, $f)),
             touches_sound: false,
             outputs: 0,
         };
@@ -1150,32 +1146,6 @@ pub fn hop_back(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Natives of the characters' actions 0x12 (table `characters::Slot::Action12`): the Rust function receives
-/// the player (A0); the callers read no register.
-pub const LEAP: crate::Native = crate::Native {
-    entry: 0x35a78,
-    name: "leap_attack",
-    run: crate::Body::WithCpu(|c, b| {
-        let p = Player(c.a[0]);
-        super::on_bench(c, b, |g| leap_attack(g, p));
-        crate::mem::rts(c, b)
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
-
-pub const HOP_BACK: crate::Native = crate::Native {
-    entry: 0x35b96,
-    name: "magic_user_hop_back",
-    run: crate::Body::WithCpu(|c, b| {
-        let p = Player(c.a[0]);
-        super::on_bench(c, b, |g| hop_back(g, p));
-        crate::mem::rts(c, b)
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
-
 // ---- parry (`+5` = 8, 0x39ff0) ----------------------------------------------------------------------
 
 /// Counterattack after a parry: attack sub-action per class (code bytes).
@@ -1404,4 +1374,3 @@ fn within_reach(b: &mut cps2::Cps2Bus, me: u32, e: u32, body: u32) -> bool {
     let gap = reach.wrapping_add(rd16(b, me + Obj::X)).wrapping_sub(offset.wrapping_add(rd16(b, e + Obj::X)));
     near(gap, 48u8.wrapping_add(rd8(b, e + 1)) as u16)
 }
-

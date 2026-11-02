@@ -5,11 +5,9 @@
 //! flags of a `moveq`, which the handlers test right after the call (`beq`).
 
 use cps2::Cps2Bus;
-use m68k::decode::{Fetch, Size};
-use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
-use crate::ops::logic;
+
 use crate::objects::Obj;
 use crate::rng;
 use crate::objects::pools;
@@ -19,7 +17,7 @@ const TICK: u32 = A5 + 0x7f92;
 /// State of the pseudo-random generator.
 
 /// Fields of the enemy (A0).
-mod f {
+pub(crate) mod f {
     pub const X: u32 = 0x08;
     pub const DEPTH: u32 = 0x10;
     pub const FACING: u32 = 0x2c;
@@ -40,18 +38,11 @@ const STANCE_POINTERS: u32 = 0xa48c;
 const BOX_CHANCE_POINTERS: u32 = 0x7fec;
 const BOX_ANIMATION_POINTERS: u32 = 0x800c;
 
-/// `moveq #v,D0`: D0 and the flags N, Z (V and C zero).
-fn moveq(c: &mut Cpu, v: i32) {
-    c.d[0] = v as u32;
-    logic(c, v as u32, Size::Long);
-}
-
 /// Word of the pointer table `table` designated by `index`, sign-extended as a `Dn.w` index
 /// does on the 68000.
 fn offset(index: u16) -> u32 {
     index as i16 as i32 as u32
 }
-
 
 /// 0xa470: draws the stance of enemy `o` (byte of the table `+0x70`, indexed by the frame counter), stores it
 /// at `+0x71` and returns it (the callers' `beq` tests whether it is zero).
@@ -69,15 +60,13 @@ fn stance_at(b: &mut Cps2Bus, o: Obj) -> (u32, u8) {
     (table, v)
 }
 
-
 /// Replaces the low byte / low word of a register (the other bits remain).
-fn set_b(r: &mut u32, v: u8) {
+pub(crate) fn set_b(r: &mut u32, v: u8) {
     *r = *r & !0xff | v as u32;
 }
-fn set_w(r: &mut u32, v: u16) {
+pub(crate) fn set_w(r: &mut u32, v: u16) {
     *r = *r & !0xffff | v as u32;
 }
-
 
 /// Box in front of an object: x offset (forwards), half-width, half-depth (D0, D1, D2 of the original).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -89,34 +78,14 @@ pub struct Hitbox {
 
 /// Work registers left by the original's box tests (low words, if they were set).
 #[derive(Clone, Copy, Debug, Default)]
-struct Leftovers {
-    d0: Option<u16>,
-    d1: Option<u16>,
-    d2: Option<u16>,
-    d3: Option<u16>,
-    d2_byte: Option<u8>,
-    d3_byte: Option<u8>,
-    d4_byte: Option<u8>,
-}
-
-impl Leftovers {
-    fn set(&self, c: &mut Cpu) {
-        // in the original's order: bytes then words, each in its place
-        if let Some(v) = self.d3_byte {
-            set_b(&mut c.d[3], v);
-        }
-        if let Some(v) = self.d4_byte {
-            set_b(&mut c.d[4], v);
-        }
-        for (r, v) in [(0, self.d0), (1, self.d1), (2, self.d2), (3, self.d3)] {
-            if let Some(v) = v {
-                set_w(&mut c.d[r], v);
-            }
-        }
-        if let Some(v) = self.d2_byte {
-            set_b(&mut c.d[2], v);
-        }
-    }
+pub(crate) struct Leftovers {
+    pub(crate) d0: Option<u16>,
+    pub(crate) d1: Option<u16>,
+    pub(crate) d2: Option<u16>,
+    pub(crate) d3: Option<u16>,
+    pub(crate) d2_byte: Option<u8>,
+    pub(crate) d3_byte: Option<u8>,
+    pub(crate) d4_byte: Option<u8>,
 }
 
 /// Is object `other` in the box in front of `me`? Biased gaps compared unsigned, like the original.
@@ -149,7 +118,7 @@ pub fn in_front(b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Hitbox) -> bool {
 }
 
 /// (result, leftovers, opponent read (A1), table read (A4), D2 and D0 longs of the draw).
-fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox: Hitbox) -> (bool, Leftovers, Option<u32>, Option<u32>, Option<(u32, u32)>) {
+pub(crate) fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox: Hitbox) -> (bool, Leftovers, Option<u32>, Option<u32>, Option<(u32, u32)>) {
     let mut r = Leftovers::default();
     let target = rd16(b, me + f::TARGET);
     if target == 0 {
@@ -208,7 +177,7 @@ pub fn box_around(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox) -> InHit
     box_reach(b, me.0, other.0, hitbox, &mut Leftovers::default())
 }
 
-fn box_reach(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Hitbox, r: &mut Leftovers) -> InHitbox {
+pub(crate) fn box_reach(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Hitbox, r: &mut Leftovers) -> InHitbox {
     if rd16(b, other + 0x0c) != 0 || !in_hitbox(b, me, other, hitbox, r) {
         return InHitbox::No;
     }
@@ -280,52 +249,6 @@ pub fn in_front_with_leftovers(b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Hi
     (yes, HitboxLeftovers { leftovers, mask: draw.map(|(m, _)| m) })
 }
 
-/// 0xb5e0 (`ai::target_in_front`) with the registers of the original: A1 = the target, D0 = 0/1/2 and flags of
-/// `moveq`, D1-D3 left by the box tests. For the callers whose continuation rereads these leftovers (boss 11:
-/// D2, original glitch).
-pub fn target_in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, hitbox: Hitbox) -> InHitbox {
-    let pointer = rd16(b, o.0 + f::TARGET);
-    let mut leftovers = Leftovers::default();
-    let found = if pointer == 0 {
-        InHitbox::No
-    } else {
-        c.a[1] = object(pointer);
-        box_reach(b, o.0, object(pointer), hitbox, &mut leftovers)
-    };
-    leftovers.set(c);
-    moveq(c, found as i32);
-    found
-}
-
-/// 0x7f19c (`box_around`) with the registers of the original: D0 = 0/1/2 and flags of `moveq`, D1-D3 left by
-/// the box tests.
-pub fn box_around_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox) -> InHitbox {
-    let mut leftovers = Leftovers::default();
-    let found = box_reach(b, me.0, other.0, hitbox, &mut leftovers);
-    leftovers.set(c);
-    moveq(c, found as i32);
-    found
-}
-
-/// 0x7f0c / 0x7ef4 (`in_front`) with the registers of the original: D0 (1 / 0) and flags of `moveq`, D1-D4, A1
-/// and A4 left as in the original.
-pub fn in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Hitbox) -> bool {
-    let (yes, leftovers, other, table, draw) = in_front_leftovers(b, o.0, strict, hitbox);
-    if let Some(other) = other {
-        c.a[1] = other;
-    }
-    leftovers.set(c);
-    if let Some(table) = table {
-        c.a[4] = table;
-    }
-    if let Some((mask, roll)) = draw {
-        c.d[2] = mask;
-        c.d[0] = roll;
-    }
-    moveq(c, yes as i32);
-    yes
-}
-
 /// Push profiles: byte table (indexed by the x gap / 16) in program space, then
 /// 8-byte entries (maximum height, maximum depth gap, push) in data space.
 const PUSH_PROFILE_INDEX: u32 = 0x1168e;
@@ -382,7 +305,7 @@ fn push_player_once(b: &mut Cps2Bus, me: u32, player: u32) -> bool {
 const ANIM_MARK: u32 = 0x3e;
 
 /// Address of the object designated by a 16-bit pointer (sign-extended).
-fn object(pointer: u16) -> u32 {
+pub(crate) fn object(pointer: u16) -> u32 {
     pointer as i16 as i32 as u32
 }
 
@@ -488,7 +411,6 @@ fn keep_inside_camera(b: &mut Cps2Bus, me: u32) -> bool {
 // ---------------------------------------------------------------------------------------------
 // Choosing a target according to an imposed criterion (0x43bc)
 // ---------------------------------------------------------------------------------------------
-
 
 // ---------------------------------------------------------------------------------------------
 // Table-driven draws: stance, counterattack, dodge (0x788c, 0x79ce, 0x79f6, 0xb048, 0xb068, 0xf118,
@@ -626,7 +548,6 @@ fn reroll_or_none(b: &mut Cps2Bus, at: u32) -> Draw {
 
 /// Landing routines by type (longs of the code): enemies (class 2) at indices 0..31, bosses afterwards.
 const LANDING_BY_KIND: u32 = 0x3e49c;
-
 
 // ---------------------------------------------------------------------------------------------
 // Cores of the AI batch: each original routine is a Rust function on the processed object, without registers.

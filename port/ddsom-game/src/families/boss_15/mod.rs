@@ -381,6 +381,5 @@ fn step_anim<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 handlers! {
-    0x91530 "boss_15" #[without] run,
+    0x91530 "boss_15" run,
 }
-

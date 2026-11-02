@@ -5,21 +5,17 @@
 //! `x.call(sub::MOVE_XZ)`. Each method calls the module function (`motion`, `anim`, `lists`, `cull`, `pools`)
 //! on `self.obj()`.
 //!
-//! Three forms per routine (`docs/guide-refactorisation.md`): the core (`motion::ballistic(b, o, motion::XZ)`), its
-//! `_68k` adapter which also leaves the original's registers (`motion::ballistic_68k(c, b, o, motion::XZ)`), the
-//! native serving the remaining calls by address. The methods below call the core when the registers are
-//! proven dead for all handlers (`DDSOM_POISON`); only `reinsert` and `reinsert_foreground` keep
-//! the adapter (registers inherited by the next handler).
+//! The methods call the core (`motion::ballistic(b, o, motion::XZ)`): no register. The re-listing, which leaves D2 to
+//! the next handler, goes through the bench of the handler (`families::cx::Bench::relink`). The tools keep, for the
+//! original code, the natives with the registers that the original leaves (`tools::objects`).
 
 use super::anim::{self, CharacterSets};
 use super::cull;
-use super::lists::{self, ACTORS, FOREGROUND};
+use super::lists::{self};
 use super::motion::{self, LastAdd, SpeedTables, AXIS_Y, AXIS_Z};
 use super::pools::Pool;
 use super::Obj;
-use crate::machine::{Machine, WithCpu};
-
-
+use crate::machine::Machine;
 
 /// Context that processes an object (A0 of the original).
 pub trait Current: Machine {
@@ -93,7 +89,6 @@ pub trait Current: Machine {
     // The motions return the last addition (`LastAdd`): `if x.move_xz().gt()` replaces the `bgt` of
     // the original; a caller that tests nothing ignores the value.
 
-
     /// Ballistic motions (speed += acceleration, position += speed) on the axes of the original routine.
     fn move_axes(&mut self, axes: motion::Axes) -> LastAdd {
         let o = self.obj();
@@ -166,31 +161,6 @@ pub trait Current: Machine {
 
     // --- display lists (`lists`) -------------------------------------------------------------
 
-    /// 0x1ee1a: puts the object back in its place in the actor list (ordinary end of a handler).
-    /// Adapter: the registers left by the reinsertion (D0-D2, A1-A4) pass to the next handler of the dispatch
-    /// loop, which sometimes reads them (original glitch: `player/peff_e.rs` draws its bounce from the inherited D2;
-    /// `DDSOM_POISON=lists` shows it on `scorpion_scene36`, `mash_c5`).
-    #[track_caller]
-    fn reinsert(&mut self)
-    where
-        Self: WithCpu,
-    {
-        let o = self.obj();
-        let (c, b) = self.machine();
-        ACTORS.reinsert_68k(c, b, o);
-    }
-
-    /// 0x1ef6c: puts the object back in its place in the foreground list (adapter, like `reinsert`).
-    #[track_caller]
-    fn reinsert_foreground(&mut self)
-    where
-        Self: WithCpu,
-    {
-        let o = self.obj();
-        let (c, b) = self.machine();
-        FOREGROUND.reinsert_68k(c, b, o);
-    }
-
     /// 0x1f0be: removes the object from its list. Core (the original leaves no useful register).
     fn unlink(&mut self) {
         let o = self.obj();
@@ -231,4 +201,3 @@ impl<R> Current for crate::families::cx::Cx<'_, R> {
         self.o
     }
 }
-

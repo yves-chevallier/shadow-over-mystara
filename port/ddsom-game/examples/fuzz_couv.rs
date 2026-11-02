@@ -88,7 +88,7 @@ impl m68k::Bus for Journal<'_> {
         self.b.reset_devices()
     }
     fn irq_ack(&mut self, l: u8) {
-        self.b.irq_ack(l)
+        m68k::Bus::irq_ack(self.b, l)
     }
 }
 
@@ -1067,7 +1067,7 @@ fn main() {
     let handlers = handlers(&mut m.bus.clone());
     let mut targets = HashMap::new();
     let specs: Vec<&str> = a[5].split(',').collect();
-    let native_tests = ddsom_game::hud::TEST_NATIVES.iter().chain(ddsom_game::credits::TEST_NATIVES).chain(ddsom_game::credits_task::TEST_NATIVES);
+    let native_tests = ddsom_game::tools::hud::TEST_NATIVES.iter().chain(ddsom_game::tools::credits::TEST_NATIVES).chain(ddsom_game::tools::credits_task::TEST_NATIVES);
     for n in ddsom_game::all_natives().chain(native_tests) {
         let wanted = |s: &str| {
             // `nom:` is the former spelling, still accepted by the existing scripts
@@ -1080,7 +1080,7 @@ fn main() {
             }
         };
         let excluded = specs.iter().filter_map(|s| s.strip_prefix('-')).any(wanted);
-        if !excluded && specs.iter().filter(|s| !s.starts_with('-')).any(|s| wanted(s)) && !ddsom_game::kernel::NATIVES.iter().any(|k| k.entry == n.entry) {
+        if !excluded && specs.iter().filter(|s| !s.starts_with('-')).any(|s| wanted(s)) && !ddsom_game::tools::kernel::NATIVES.iter().any(|k| k.entry == n.entry) {
             targets.insert(n.entry, Target { n, bases: Vec::new(), corpus: Vec::new(), summary: Summary::default(), points: 0, zone: zone_of(n.entry).to_string(), handler: handlers.get(&n.entry).copied(), substitutions: 0, unfocused: 0 });
         }
     }

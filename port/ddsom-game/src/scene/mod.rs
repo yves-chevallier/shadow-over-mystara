@@ -28,7 +28,6 @@ pub mod tiles;
 pub mod transition;
 
 use cps2::Cps2Bus;
-use m68k::decode::Fetch;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::{pools, Obj};
@@ -100,7 +99,6 @@ pub mod fading {
         crate::kernel::create_task(b, 0x10, entry);
     }
 }
-
 
 /// Context of a scene sequence: the machine, and named accesses to work RAM.
 pub struct Ctx<'a> {
@@ -285,7 +283,7 @@ impl<'a> Ctx<'a> {
 }
 
 /// Native routines of scene flow.
-pub const NATIVES: &[Native] = &[entry::PHASE_8, entry::PLACE_PLAYERS, intermission::PHASE_24, script::SPAWN_SCRIPT, script::SCRIPT_RESET];
+pub const NATIVES: &[Native] = &[intermission::PHASE_24, script::SPAWN_SCRIPT, script::SCRIPT_RESET];
 
 /// Native routines of all the scene modules.
 pub fn natives() -> impl Iterator<Item = &'static Native> {

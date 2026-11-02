@@ -5,12 +5,17 @@ edition = "2021"
 description = "Dungeons & Dragons: Shadow over Mystara — playable Rust port"
 
 [dependencies]
-cps2 = { path = "../cps2" }
-ddsom-rc = { path = "../ddsom-rc" }
-ddsom-game = { path = "../ddsom-game" }
+cps2 = { path = "../cps2", default-features = false }
+# The original code (diagnostics DDSOM_ORIGINE / DDSOM_INTERP, feature `original`): the game itself has no 68000.
+ddsom-rc = { path = "../ddsom-rc", optional = true }
+ddsom-game = { path = "../ddsom-game", default-features = false }
 ddsom-assets = { path = "../ddsom-assets" }
 libloading = "0.8"
 qsound = { path = "../qsound" }
+
+[features]
+# `cargo run -p ddsom --features original`: the original code on the emulated 68000 (DDSOM_ORIGINE=1, DDSOM_INTERP=1).
+original = ["dep:ddsom-rc", "cps2/m68k"]
 
 [target.'cfg(unix)'.dependencies]
 minifb = { version = "0.27", default-features = false, features = ["x11"] }

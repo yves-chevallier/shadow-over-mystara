@@ -148,6 +148,6 @@ mod shop {
 }
 
 handlers! {
-    0x51076 "peff_43" #[without] shop::run,
-    0x517dc "peff_44" #[without] badge::run,
+    0x51076 "peff_43" shop::run,
+    0x517dc "peff_44" badge::run,
 }

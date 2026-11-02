@@ -7,11 +7,8 @@
 //! Bits of a player byte: 0 right, 1 left, 2 down, 3 up, 4..7 buttons 1..4.
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
-use crate::mem::{rd16, rd8, rts, set_low_byte, wr16, wr8, A5};
-use crate::Native;
+use crate::mem::{rd16, rd8, set_low_byte, wr16, wr8, A5};
 
 /// Offsets relative to A5 (RAM FF8000).
 pub mod ram {
@@ -46,10 +43,6 @@ pub mod ram {
 
 /// Panel ports, in the order in which the original reads them (low-order byte first).
 const PORTS: [u32; 6] = [0x804001, 0x804000, 0x804011, 0x804010, 0x804020, 0x804021];
-
-fn set_nz_byte(c: &mut Cpu, v: u8) {
-    c.flags_logic(v as u32, Size::Byte);
-}
 
 /// 0x080c (VBLANK): panel read. Returns what the original leaves in its registers (`InputsRead`).
 pub fn read_panel(b: &mut Cps2Bus) -> InputsRead {
@@ -115,30 +108,6 @@ pub struct InputsRead {
     pub last: Last,
 }
 
-fn read_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
-    let r = read_panel(b);
-    for (n, v) in r.d.into_iter().enumerate() {
-        set_low_byte(&mut c.d[n], v);
-    }
-    if !r.four_players {
-        // lsl.b #3 on (cur2 & 0x10): the last bit shifted out is 0, X and C become 0
-        c.sr &= !SR_X;
-    }
-    match r.last {
-        Last::Byte(v) => set_nz_byte(c, v),
-        Last::Word(v) => c.flags_logic(v as u32, Size::Word),
-    }
-    rts(c, b);
-}
-
-pub const READ_INPUTS: Native = Native {
-    entry: 0x080c,
-    name: "read_inputs",
-    run: crate::Body::WithCpu(read_inputs),
-    touches_sound: false,
-    outputs: crate::regs::ALL,
-};
-
 /// 0x2aec: copies the inputs into the player records. Returns the leftovers of the original (`InputCopy`).
 pub fn copy(b: &mut Cps2Bus) -> InputCopy {
     let a5 = A5;
@@ -183,22 +152,6 @@ pub enum InputCopy {
     Masked { mask: u8, d: [u8; 4] },
 }
 
-/// `copy` with the registers of the original.
-pub fn copy_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    match copy(b) {
-        // final clr.b
-        InputCopy::Frozen => c.sr = (c.sr & !(SR_N | SR_V | SR_C)) | SR_Z,
-        InputCopy::Masked { mask, d } => {
-            set_low_byte(&mut c.d[4], mask);
-            for (n, v) in d.into_iter().enumerate() {
-                set_low_byte(&mut c.d[n], v);
-            }
-            // final move.b d3,(...)
-            set_nz_byte(c, d[3]);
-        }
-    }
-}
-
 /// `copy` in the game (phase 12, demo, scene sequences). Original glitch: the input bytes that the copy leaves in
 /// D2-D4 are reread by a handler of the world update, which writes them into an object (`DDSOM_POISON=call_2aec`:
 /// long_elfe_objets, frame 13133, ram ffd694): they are leftovers of the game (`dispatch::Leftovers`). D0, D1 and the
@@ -211,19 +164,6 @@ pub fn copy_in_game(b: &mut Cps2Bus) {
         set_low_byte(&mut leftovers.d4, mask);
     }
 }
-
-fn copy_inputs_to_players(c: &mut Cpu, b: &mut Cps2Bus) {
-    copy_68k(c, b);
-    rts(c, b);
-}
-
-pub const COPY_INPUTS_TO_PLAYERS: Native = Native {
-    entry: 0x2aec,
-    name: "copy_inputs_to_players",
-    run: crate::Body::WithCpu(copy_inputs_to_players),
-    touches_sound: false,
-    outputs: crate::regs::ALL,
-};
 
 /// Inputs of a player: keys held and new presses.
 #[derive(Clone, Copy)]
@@ -238,28 +178,6 @@ pub fn player_inputs(b: &mut Cps2Bus, object: u32) -> Inputs {
     Inputs { held: rd8(b, A5 + player), fresh: rd8(b, A5 + ram::NEW + player) }
 }
 
-/// 0x2bfe: inputs of the player of object A0. Output: D0 = held, D1 = new presses.
-fn get_player_input(c: &mut Cpu, b: &mut Cps2Bus) {
-    let player = rd8(b, c.a[0] + 2) as u32;
-    c.d[2] = player;
-    c.a[3] = c.a[5];
-    c.a[4] = c.a[5].wrapping_add(ram::NEW);
-    let held = rd8(b, c.a[3] + player);
-    let new = rd8(b, c.a[4] + player);
-    set_low_byte(&mut c.d[0], held);
-    set_low_byte(&mut c.d[1], new);
-    set_nz_byte(c, new);
-    rts(c, b);
-}
-
-pub const GET_PLAYER_INPUT: Native = Native {
-    entry: 0x2bfe,
-    name: "get_player_input",
-    run: crate::Body::WithCpu(get_player_input),
-    touches_sound: false,
-    outputs: crate::regs::ALL,
-};
-
 /// 0x2bdc: inputs of the four players cleared (word of held keys `+0x6c`, byte `+0x6e`).
 pub fn clear_inputs(b: &mut Cps2Bus) {
     for k in 0..4 {
@@ -268,18 +186,3 @@ pub fn clear_inputs(b: &mut Cps2Bus) {
         crate::mem::wr8(b, player + 0x6e, 0);
     }
 }
-
-/// `clear_inputs`, flags of the last `clr.b`.
-fn clear_player_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
-    clear_inputs(b);
-    c.sr = c.sr & !0xf | m68k::SR_Z;
-    rts(c, b);
-}
-
-pub const CLEAR_PLAYER_INPUTS: Native = Native {
-    entry: 0x2bdc,
-    name: "clear_player_inputs",
-    run: crate::Body::WithCpu(clear_player_inputs),
-    touches_sound: false,
-    outputs: crate::regs::CCR,
-};

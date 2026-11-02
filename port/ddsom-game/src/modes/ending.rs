@@ -16,7 +16,7 @@ use crate::families::creators::set_15_pure;
 use crate::families::effects_creators::end_screen;
 use crate::palette::{load_palette_set, load_palette_page};
 use crate::video::{load_grid, clear_layer, Layer, Grid};
-use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
 use crate::objects::{pools, Obj};
@@ -60,18 +60,6 @@ mod at {
 
 const FADE_ALL: u8 = 0xf;
 
-pub const PHASE_28: Native = Native {
-    entry: 0xfb292,
-    name: "ending_phase_28",
-    run: crate::Body::WithCpu(|c, b| {
-        // entry for the original code (tools): returns only if the phase did not cede control
-        if phase_28(&mut Ctx::new(b)) == Flow::Done {
-            rts(c, b);
-        }
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
 /// Phase 28 of the game (`0xfb292`): the ending credits. The state returns to [`Step::Return`].
 pub fn phase_28(x: &mut Ctx) -> Flow {
     let step = rd8(x.b, var::STEP);
@@ -1104,7 +1092,7 @@ fn bcd_add(dest: u32, src: u32) -> u32 {
 }
 
 pub const NATIVES: &[Native] = &[
-    PHASE_28,
+    
 ];
 
 #[cfg(test)]

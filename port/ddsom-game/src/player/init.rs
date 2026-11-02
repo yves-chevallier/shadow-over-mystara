@@ -10,14 +10,13 @@
 
 use crate::machine::Machine;
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use super::{ram, Ctx, Player, PLAYER_COUNT, PLAYER_STRIDE};
-use crate::mem::{rts, wr32, A5};
-use crate::{regs, Native};
+use crate::mem::{wr32, A5};
+use crate::Native;
 
 /// Program ROM tables: one pointer per character (12), each to its own table.
-mod tables {
+pub(crate) mod tables {
     /// Initial level (`LEVEL`) per scene.
     pub const LEVEL_BY_SCENE: u32 = 0x3208;
     /// Hit points (words) per level.
@@ -98,7 +97,7 @@ pub const CLEAR_OVERLAYS: Native = Native {
 };
 
 /// Pointer to the table of `p`'s character in the pointer table `table`.
-fn table_of(g: &mut Ctx, p: Player, table: u32) -> u32 {
+pub(crate) fn table_of(g: &mut Ctx, p: Player, table: u32) -> u32 {
     cov!();
     let character = p.u8(g, Player::CHARACTER) as u32;
     g.prog32(table + 4 * character)
@@ -458,24 +457,3 @@ pub const JOIN: &[Native] = &[
     join_entry!(0x3168, "player_join_refill_3", 2, Join::Refill),
     join_entry!(0x317c, "player_join_refill_4", 3, Join::Refill),
 ];
-
-/// 0x3552 for the tools (the game calls `init_weapon_stats`): registers left like the original (A4 = character
-/// table, D0 = last weapon number read, doubled if it is in the table).
-fn weapon_stats_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let p = Player(c.a[0]);
-    let mut g = Ctx::new(b);
-    init_weapon_stats(&mut g, p);
-    let table = table_of(&mut g, p, tables::WEAPON_STATS);
-    let w = p.u8(&mut g, Player::WEAPON_B);
-    c.a[4] = table;
-    c.d[0] = if w <= 0x27 { (2 * w) as u32 } else { w as u32 };
-    rts(c, b);
-}
-
-pub const NATIVES: &[Native] = &[Native {
-    entry: 0x3552,
-    name: "player_weapon_stats",
-    run: crate::Body::WithCpu(weapon_stats_native),
-    touches_sound: false,
-    outputs: regs::d(0) | regs::a(4),
-}];

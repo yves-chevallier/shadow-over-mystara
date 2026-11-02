@@ -12,15 +12,12 @@
 //! an effect copies the last horizontal offset). The code below therefore writes them (`Ctx::leftovers`) where
 //! the original does, in the same format (byte, word or long) as it.
 
-use m68k::Cpu;
-
 use super::checks::team_score_reached;
 use super::init::overlay;
 use super::{Ctx, Player, PLAYER_COUNT};
-use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, set_low_byte, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::anim::load_entry;
 use crate::objects::Obj;
-use crate::Native;
 use crate::player::ram;
 use crate::machine::Machine;
 
@@ -298,16 +295,3 @@ pub fn update(g: &mut Ctx) {
         sparkle(g, last);
     }
 }
-
-fn update_native(c: &mut Cpu, b: &mut cps2::Cps2Bus) {
-    super::on_bench(c, b, update);
-    rts(c, b);
-}
-
-pub const UPDATE: Native = Native {
-    entry: 0x392e4,
-    name: "player_overlays_update",
-    run: crate::Body::WithCpu(update_native),
-    touches_sound: false,
-    outputs: 0,
-};

@@ -8,17 +8,13 @@
 //! overflow (`Fl`) and the helpers of the AI library (0x103d6..0x105b6, still in 68000).
 
 use crate::families::cx::Bench;
-use m68k::decode::Size;
-use m68k::SR_C;
 
 pub use super::cx::Cx;
 pub use super::enemy_common::*;
-use crate::mem::{prog16, prog32, rts, A5};
+use crate::mem::{prog16, prog32, A5};
 use crate::objects::Obj;
-use crate::{regs, Native};
 use crate::objects::pools;
 use crate::objects::Current;
-
 
 /// The object followed by the camera, if there is one.
 pub fn leader<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
@@ -137,31 +133,12 @@ pub fn tst16<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> Fl {
 
 // --- 68000 AI library (0x103d6..) -----------------------------------------------------
 
-
-
-
 /// Picks speed table `n` (`0x1b64`).
 pub fn speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
-/// Carry raised by the last routine called.
-pub fn carry(x: &Cx) -> bool {
-    x.c.sr & SR_C != 0
-}
-
-/// Z raised by the last routine called.
-pub fn zero(x: &Cx) -> bool {
-    x.c.cond(7)
-}
-
 // --- helpers shared by the bosses with decision tables ------------------------------------------
-
-
-
-
-
-
 
 /// Target in the box (0xb5e0) then gesture chosen by the AI (0x1047a): `Some(D0)` if the AI chose one.
 pub fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u32> {
@@ -171,8 +148,6 @@ pub fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<
     let turn = lib::turn_decision(x);
     (turn != lib::Turn::None).then_some(turn as u32)
 }
-
-
 
 /// `moveq #k,D0 ; move.b D0,(0xa0,A0) ; move.b D0,(0xa1,A0)`: animation kind `k` (fields `+0xa0` and `+0xa1`).
 pub fn anim_kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
@@ -239,18 +214,6 @@ pub fn push_out_of_boss<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     super::boss_3::body::push(x.b, boss, x.o, routine)
 }
 
-/// `push_out_of_boss` with the original's registers: D0 = 1 / 0 (flags of `tst.l`), A0 intact, A1 = A6 =
-/// l'objet.
-fn push_out_of_boss_68k(x: &mut Cx) {
-    let moved = push_out_of_boss(x);
-    let me = x.o.0;
-    x.c.a[6] = me;
-    x.c.a[1] = me;
-    x.c.d[0] = moved as u32;
-    x.c.flags_logic(x.c.d[0], Size::Long);
-    x.c.a[0] = me;
-}
-
 /// Vertical oscillation (by `+0x33`): long offsets added to the height `+0xc`, in one direction
 /// then the other depending on the countdown `+0xa8` (period 72 frames, reversal at 36).
 const BOB_OFFSETS: u32 = 0x833e4;
@@ -296,25 +259,3 @@ pub fn hp_threshold<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x43, 1);
     x.set8(0xb9, 0);
 }
-
-/// Native of a boss function called by address (the RTS is added).
-macro_rules! native {
-    ($entry:expr, $name:expr, $outputs:expr, $f:expr) => {
-        Native {
-            entry: $entry,
-            name: $name,
-            run: crate::Body::WithCpu(|c, b| {
-                $f(&mut Cx::new(c, b));
-                rts(c, b);
-            }),
-            touches_sound: false,
-            outputs: $outputs,
-        }
-    };
-}
-
-pub const NATIVES: &[Native] = &[
-    native!(0x81aa4, "boss_repousse", regs::d(0) | regs::a(0) | regs::a(1) | regs::a(6) | regs::CCR, push_out_of_boss_68k),
-    native!(0x833b6, "boss_oscillation", regs::d(0), bob),
-    native!(0x87048, "boss_hp_threshold", regs::d(0) | regs::d(1), hp_threshold),
-];

@@ -602,10 +602,10 @@ mod burst {
 }
 
 handlers! {
-    0x51c64 "pshl_0" #[without] marker::run,
-    0x51da6 "pshl_1" #[without] thrown::run,
-    0x5204e "pshl_2" #[without] flung::run,
-    0x52234 "pshl_3" #[without] arc::run,
-    0x523c4 "pshl_4" #[without] bouncer::run,
-    0x5265a "pshl_5" #[without] burst::run,
+    0x51c64 "pshl_0" marker::run,
+    0x51da6 "pshl_1" thrown::run,
+    0x5204e "pshl_2" flung::run,
+    0x52234 "pshl_3" arc::run,
+    0x523c4 "pshl_4" bouncer::run,
+    0x5265a "pshl_5" burst::run,
 }

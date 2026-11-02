@@ -875,12 +875,12 @@ pub fn reset_recorder(b: &mut Cps2Bus) {
 
 /// What 0xe0538 leaves in the registers: D5.w = the settings read, A0 = the demonstration replayed.
 #[derive(Default)]
-struct RecorderLeftovers {
-    settings: Option<u16>,
-    demo: Option<u32>,
+pub(crate) struct RecorderLeftovers {
+    pub(crate) settings: Option<u16>,
+    pub(crate) demo: Option<u32>,
 }
 
-fn reset_recorder_by(b: &mut Cps2Bus) -> RecorderLeftovers {
+pub(crate) fn reset_recorder_by(b: &mut Cps2Bus) -> RecorderLeftovers {
     const DEMO: u32 = A5 - 0x5aa8;
     const RECORD_AREA: u32 = 0x93_0000;
     let mut leftovers = RecorderLeftovers::default();
@@ -926,23 +926,6 @@ pub fn stop_recorder(b: &mut Cps2Bus) {
     wr32(b, A5 - 0x5aa8, 0);
 }
 
-pub const RECORDER_RESET: Native = Native {
-    entry: 0xe0538,
-    name: "demo_recorder_start",
-    run: crate::Body::WithCpu(|c, b| {
-        let leftovers = reset_recorder_by(b);
-        if let Some(dsw) = leftovers.settings {
-            c.d[5] = c.d[5] & 0xffff_0000 | dsw as u32;
-        }
-        if let Some(demo) = leftovers.demo {
-            c.a[0] = demo;
-        }
-        crate::mem::rts(c, b);
-    }),
-    touches_sound: false,
-    outputs: crate::regs::d(5) | crate::regs::a(0),
-};
-
 pub const RECORDER_STOP: Native = Native {
     entry: 0xe05d6,
     name: "demo_recorder_stop",
@@ -977,23 +960,9 @@ fn record_inputs(x: &mut Ctx) {
 // ---------------------------------------------------------------------------------------------
 // Phase 12 of the demonstration (`0x1fa38`)
 
-/// The demonstration game: AI inputs, world, gauges, collisions, spawn script.
-pub const DEMO_PHASE_12: Native = Native {
-    entry: 0x1fa38,
-    name: "demo_phase_12",
-    run: crate::Body::WithCpu(|c, b| {
-        // entry for the original code (tools): returns only if the state did not cede control
-        if demo_phase_12(&mut Ctx::new(b)) == Flow::Done {
-            crate::mem::rts(c, b);
-        }
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
-
 /// `0x1fa38`: AI inputs, then the world update (an object handler may make the task cede control there; it
 /// will resume at [`Step::AfterWorld`]).
-fn demo_phase_12(x: &mut Ctx) -> Flow {
+pub(crate) fn demo_phase_12(x: &mut Ctx) -> Flow {
     // Original glitch: D2-D4 of the input copy (0x2aec) are re-read by handlers (see game.rs)
     crate::inputs::copy_in_game(x.b);
     demo_inputs(x);
@@ -1013,7 +982,7 @@ fn demo_after_world(x: &mut Ctx) -> Flow {
 }
 
 pub const NATIVES: &[Native] = &[
-    DEMO_PHASE_12,
-    RECORDER_RESET,
+    
+    
     RECORDER_STOP,
 ];

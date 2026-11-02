@@ -1,0 +1,93 @@
+//! Tools: the natives of `crate::kernel` for the original code that calls them (arguments and results in the registers
+//! of the original).
+
+use cps2::Cps2Bus;
+use m68k::decode::Size;
+use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+
+use crate::kernel::*;
+use crate::tools::frames::*;
+use crate::{regs, Body, Native};
+use crate::mem::{rd16, rd8, wr8};
+use crate::tasks::table::{slot, table, State, Resume, Next, SLOTS};
+
+macro_rules! native {
+    ($ident:ident, $entry:expr, $body:expr) => {
+        pub const $ident: Native = Native {
+            entry: $entry,
+            name: stringify!($ident),
+            run: crate::Body::WithCpu($body),
+            touches_sound: false,
+            outputs: 0,
+        };
+    };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The wrappers, natives for the calls by address that remain (arguments in registers: D0 = offset of a task in the
+// table, A0 = entry, D1 = count). They leave registers and flags intact, except the cessions: the cession
+// wrappers called by `jsr` take their return address as resumption (the continuation of the call in progress).
+
+/// Cession wrapper called by `jsr`: its return address is the resumption.
+fn envelope(c: &mut Cpu, b: &mut Cps2Bus, frames: Option<u8>) {
+    let resume = crate::tools::frames::pop_return_68k(c, b);
+    match frames {
+        Some(frames) => wait(b, frames, resume),
+        None => cede_ready(b, resume),
+    }
+}
+
+/// 0x9b6: creates task D0 (offset), entry A0.
+fn create(c: &mut Cpu, b: &mut Cps2Bus) {
+    create_task(b, c.d[0], c.a[0]);
+    rts(c, b);
+}
+
+/// 0xa14: kills task D0.
+fn kill(c: &mut Cpu, b: &mut Cps2Bus) {
+    kill_task(b, c.d[0]);
+    rts(c, b);
+}
+
+/// 0xaac: suspends task D0.
+fn suspend(c: &mut Cpu, b: &mut Cps2Bus) {
+    table(b).suspend(slot(c.d[0]));
+    rts(c, b);
+}
+
+/// 0xac8: wakes task D0 with count D1.
+fn wake(c: &mut Cpu, b: &mut Cps2Bus) {
+    table(b).wake(slot(c.d[0]), c.d[1] as u8);
+    rts(c, b);
+}
+
+/// `0xaf6` (`trap #12`): D0.b ≠ 0 masks all the task's interrupts, D0.b = 0 enables them.
+fn mask(c: &mut Cpu, b: &mut Cps2Bus) {
+    set_interrupt_mask(b, if c.d[0] as u8 == 0 { 0 } else { MASK_ALL });
+    rts(c, b);
+}
+
+// wrappers
+native!(CREATE_TASK, 0x9b6, create);
+native!(FINISH_TASK, 0x9f8, |_, b| finish(b));
+native!(KILL_TASK, 0xa14, kill);
+native!(WAIT, 0xa40, |c, b| envelope(c, b, Some(c.d[0] as u8)));
+native!(CEDE, 0xa86, |c, b| envelope(c, b, None));
+native!(SUSPEND_TASK, 0xaac, suspend);
+native!(WAKE_TASK, 0xac8, wake);
+native!(RESTART_TASK, 0xae4, |c, b| restart(b, c.a[0]));
+native!(MASK, 0xaf6, mask);
+native!(WAIT_ONE_FRAME, 0xb64, |c, b| envelope(c, b, Some(1)));
+
+pub const NATIVES: &[Native] = &[
+    CREATE_TASK,
+    FINISH_TASK,
+    KILL_TASK,
+    WAIT,
+    CEDE,
+    SUSPEND_TASK,
+    WAKE_TASK,
+    RESTART_TASK,
+    MASK,
+    WAIT_ONE_FRAME,
+];

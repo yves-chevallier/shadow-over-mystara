@@ -1,13 +1,11 @@
 //! Player movement: walking speeds, motion integration, screen limits.
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use super::{ram, Ctx, Player};
-use crate::mem::{rd16, rts, wr16, wr8};
+use crate::mem::{rd16, wr16, wr8};
 use crate::objects::motion::{advance, AXIS_X, AXIS_Y, AXIS_Z};
 use crate::objects::Obj;
-use crate::{regs, Native};
 use crate::machine::Machine;
 
 /// Speed tables (ROM): one pointer per character to 16 pairs (vx, vy) 8.8, one per
@@ -102,7 +100,6 @@ pub fn move_z(g: &mut Ctx, p: Player) {
     advance(g.b, p.obj(), AXIS_Z);
 }
 
-
 /// Last edge touched: byte `+0x5a` (1 left, 2 right).
 const EDGE_HIT: u32 = 0x5a;
 
@@ -143,19 +140,3 @@ pub fn clamp_x(b: &mut Cps2Bus, p: Player) -> bool {
     }
     edge.is_some()
 }
-
-/// 68000 entry (0x35c0): D0 = 1 if the abscissa was corrected, A1 = camera.
-fn clamp_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let cam = crate::objects::cull::camera(b);
-    c.d[0] = clamp_to_screen(b, Player(c.a[0])) as u32;
-    c.a[1] = cam;
-    rts(c, b);
-}
-
-pub const CLAMP: Native = Native {
-    entry: 0x35c0,
-    name: "player_clamp_to_screen",
-    run: crate::Body::WithCpu(clamp_native),
-    touches_sound: false,
-    outputs: regs::d(0) | regs::a(1),
-};

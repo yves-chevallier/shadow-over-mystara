@@ -178,7 +178,8 @@ fn wake_tasks(b: &mut Cps2Bus) {
 /// (`tasks::table::kernel_ram`), and the game does not reread them
 /// (proof: docs/refactorisation.md, batch "CPU removal", part 4).
 pub fn interruption(b: &mut Cps2Bus, level: u8) {
-    m68k::Bus::irq_ack(b, level);
+    let _ = level;
+    b.irq_ack();
     vblank(b);
 }
 

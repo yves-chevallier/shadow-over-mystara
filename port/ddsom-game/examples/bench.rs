@@ -8,6 +8,8 @@
 //! Only `Machine::run_frame` is measured (game, Z80 or sound driver, QSound), without rendering the frame
 //! (`DDSOM_RENDU=1`: with it), nor the application's audio and video output.
 //! Basis of the optimisation phase: docs/refactorisation.md, "Performance".
+//! Also prints a hash of the final state (work RAM, GFX RAM, object RAM, palette): built without the tools
+//! (`--no-default-features`, machine without 68000) it must equal that of the build with the tools.
 
 use std::path::Path;
 
@@ -46,6 +48,13 @@ fn main() {
         m.run_frame();
     }
     let dt = t0.elapsed();
+    // FNV-1a of the final state
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let words = m.bus.ram.iter().chain(&m.bus.gfxram).chain(&m.bus.objram[0]).chain(&m.bus.objram[1]).chain(&m.bus.palette);
+    for &w in words {
+        hash = (hash ^ w as u64).wrapping_mul(0x100_0000_01b3);
+    }
+    println!("final state hash {hash:016x}");
     println!(
         "{}: {frames} frames in {:.2?}, {:.0} frames/s ({:.1} µs per frame)",
         Path::new(scenario).file_name().unwrap().to_string_lossy(),

@@ -763,5 +763,5 @@ fn dying_burst<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x8341c "boss_5" #[without] run,
+    0x8341c "boss_5" run,
 }

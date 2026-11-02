@@ -5,26 +5,22 @@
 //! each `Slot` is a table of 12 addresses (one per value of `Player::CHARACTER`);
 //! `actions::act` calls the address in the table.
 //!
-//! `run` dispatches to the character's Rust function (`routine`); the natives (`action_native!`) now only serve
-//! the remaining calls by address (fuzz, `DDSOM_CHECK`).
+//! `run` dispatches to the character's Rust function (`routine`); the natives (`action_native!`) only serve the tools
+//! (differential fuzz against the original routine).
 //!
 //! The common functions that the characters reuse are public: `checks::turn_check`,
 //! `attack_button`, `jump_button`, `actions::to_stand`, `walk::walk_speed`, `walk::move_xy`,
 //! `animation::start`, `animation::step`, `hurt::hurt_animation`...
 
 /// Declares a `Native` at the original address of a character action: the Rust function receives the
-/// player (A0); no register is read by the callers. The game calls the function directly (`routine`); the
-/// native serves the differential validation of each action (`DDSOM_CHECK=1`, `fuzz_player`).
+/// player (A0) and the leftovers D2-D5; no other register is read by the callers. The game calls the function directly
+/// (`routine`); the native serves the differential validation of each action (`fuzz_player`, `fuzz_couv`).
 macro_rules! action_native {
     ($name:ident, $entry:expr, $label:expr, $f:path) => {
         pub const $name: crate::Native = crate::Native {
             entry: $entry,
             name: $label,
-            run: crate::Body::WithCpu(|c, b| {
-                let p = $crate::player::Player(c.a[0]);
-                $crate::player::on_bench(c, b, |g| $f(g, p));
-                $crate::mem::rts(c, b)
-            }),
+            run: crate::Body::Handler(|b, a| $crate::player::Ctx::on_player(b, a, $f)),
             touches_sound: false,
             outputs: 0,
         };

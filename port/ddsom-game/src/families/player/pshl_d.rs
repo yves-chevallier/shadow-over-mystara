@@ -9,7 +9,6 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
 
-
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
@@ -602,10 +601,10 @@ mod spark {
 }
 
 handlers! {
-    0x53e94 "pshl_19" #[without] chain::run,
-    0x542ee "pshl_20" #[without] wall::run,
-    0x54450 "pshl_21" #[without] knife::run,
-    0x54560 "pshl_22" #[without] fireball::run,
-    0x5471a "pshl_23" #[without] bolt::run,
-    0x548a0 "pshl_24" #[without] spark::run,
+    0x53e94 "pshl_19" chain::run,
+    0x542ee "pshl_20" wall::run,
+    0x54450 "pshl_21" knife::run,
+    0x54560 "pshl_22" fireball::run,
+    0x5471a "pshl_23" bolt::run,
+    0x548a0 "pshl_24" spark::run,
 }

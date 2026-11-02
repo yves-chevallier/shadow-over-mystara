@@ -8,7 +8,8 @@
 //! and no ROM folder, it plays **without any ROM at all**: everything comes from the assets folder (program tables,
 //! graphics, sound driver data, DSP tables, samples; `docs/without-rom.md`), the sound driver is
 //! the Rust one, and no ROM file is opened.
-//! Diagnostics: `DDSOM_ORIGINE=1` (original code at arcade speed), `DDSOM_INTERP=1` (everything interpreted); these modes
+//! Diagnostics (build with `--features original`): `DDSOM_ORIGINE=1` (original code at arcade speed), `DDSOM_INTERP=1`
+//! (everything interpreted); these modes
 //! read the ROMs.
 //! Keys (as in MAME): 5 coin, 1 Start, arrows, Ctrl/Alt/Space/Shift = buttons 1-4
 //! (or W X C V), 6 coin P2 / 2 Start P2, F2 test, P pause, Tab fast forward, F11 full screen, Esc quit;
@@ -40,7 +41,12 @@ fn main() {
     // DDSOM_ORIGINE=1: original code at arcade speed; DDSOM_INTERP=1: everything interpreted. (The hybrid mode,
     // DDSOM_HYBRIDE=1, is removed.)
     ddsom_game::refuse_hybrid();
-    let mut no_68k = !(std::env::var_os("DDSOM_ORIGINE").is_some() || std::env::var_os("DDSOM_INTERP").is_some());
+    let original = std::env::var_os("DDSOM_ORIGINE").is_some() || std::env::var_os("DDSOM_INTERP").is_some();
+    if original && !cfg!(feature = "original") {
+        eprintln!("DDSOM_ORIGINE / DDSOM_INTERP: the original code needs the build with `--features original`.");
+        std::process::exit(2);
+    }
+    let mut no_68k = !original;
     // no ROM: assets only, which requires the game without the 68000 (the 68000 program is not in the assets)
     let romdir = match (&assets, romdir) {
         (Some(_), None) if !no_68k && !PathBuf::from(DEFAULT_ROMS).is_dir() => {
@@ -76,6 +82,7 @@ fn main() {
         if no_68k {
             ddsom_game::install_no_68k(&mut m);
         } else if std::env::var_os("DDSOM_ORIGINE").is_some() {
+            #[cfg(feature = "original")]
             ddsom_rc::install(&mut m);
         }
         // sound driver rewritten in Rust in place of the Z80 program: DDSOM_SON_RUST=1, and always without ROMs (the

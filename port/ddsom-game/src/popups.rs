@@ -17,17 +17,15 @@
 //! game (`A5+0x20` bit 0) the bubble is halved.
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
-use crate::mem::{prog16, rd16, rd8, rts, wr16, wr32, wr8, A5};
+use crate::mem::{prog16, rd16, rd8, wr16, wr32, wr8, A5};
 use crate::text::clear_cells;
-use crate::Native;
 
 const EMPTY: u16 = 0xffff;
 /// Current pop-up (4 words); the remaining duration is the last one.
-const CURRENT: u32 = 0xffff_9180;
+pub(crate) const CURRENT: u32 = 0xffff_9180;
 const DURATION: u32 = 6;
-const INPUTS: u32 = 0x20e;
+pub(crate) const INPUTS: u32 = 0x20e;
 const READ: u32 = 0x20d;
 const ENTRY_SIZE: u8 = 8;
 /// Default duration of a pop-up without a second parameter (frames), and shortened duration.
@@ -206,16 +204,6 @@ pub fn animate_obj(b: &mut Cps2Bus) -> Option<u8> {
     Some(next(b, current))
 }
 
-/// `animate_obj` with the registers of the original: A0 = the current pop-up, A2 = the queue, D0 = the index read.
-/// `animate_obj` with the registers of the original (A0 = the current pop-up, A2 = the queue, D0 = the index read).
-pub fn animate_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    c.a[0] = A5.wrapping_add(CURRENT);
-    c.a[2] = A5 + INPUTS;
-    if let Some(index) = animate_obj(b) {
-        c.d[0] = index as u32;
-    }
-}
-
 /// 0x19eb0: erases the bubbles of all slots (4, or 3 reduced), from last to first. Returns the erase table
 /// read (the A2 of the original). Core.
 pub fn clear_all(b: &mut Cps2Bus) -> u32 {
@@ -229,17 +217,6 @@ pub fn clear_all(b: &mut Cps2Bus) -> u32 {
     }
     table
 }
-
-pub const ANIMATE: Native = Native {
-    entry: 0x19e20,
-    name: "popups_animer",
-    run: crate::Body::WithCpu(|c, b| {
-        animate_68k(c, b);
-        rts(c, b);
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
 
 #[cfg(test)]
 mod tests {

@@ -9,7 +9,7 @@
 //! the task had at its last yield (the video clear one, `0xc32`).
 
 use super::{mode, Flow, Sequence};
-use crate::mem::{rd16, rts, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, wr16, wr32, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
 
@@ -23,19 +23,6 @@ const CPS_REG_VIDEO_B: u32 = 0x804166;
 /// Original resumes after each yield.
 const FADED: u32 = 0x1c828;
 const CLEARED: u32 = 0x1c846;
-
-pub const PHASE_20: Native = Native {
-    entry: 0x1c80c,
-    name: "gameover_phase_20",
-    run: crate::Body::WithCpu(|c, b| {
-        // entry for the original code (tools): returns only if the phase did not cede control
-        if phase_20(&mut Ctx::new(b)) == Flow::Done {
-            rts(c, b);
-        }
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
 
 /// Phase 20 of the game (`0x1c80c`): game over.
 pub fn phase_20(x: &mut Ctx) -> Flow {
@@ -78,4 +65,4 @@ pub fn reset_modes(x: &mut Ctx) {
     }
 }
 
-pub const NATIVES: &[Native] = &[PHASE_20];
+pub const NATIVES: &[Native] = &[];

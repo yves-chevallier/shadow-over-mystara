@@ -2478,23 +2478,23 @@ mod name_entry {
 
 /// Declares a handler native: address, name, function.
 macro_rules! entry {
-    ($entry:literal $name:literal, $(#[$without:ident])? $f:path) => {
-        super::cx::handlers!(@one $entry $name $(#[$without])? $f)
+    ($entry:literal $name:literal, $f:path) => {
+        super::cx::handlers!(@one $entry $name $f)
     };
 }
 
 pub const NATIVES: &[crate::Native] = &[
-    entry!(0xcc25a "set_common_cc25a", #[without] scene_spawner::run),
-    entry!(0xba310 "set_0", #[without] palette_script::run),
-    entry!(0xbc518 "set_1", #[without] wave_leader::run),
-    entry!(0xc935a "set_4", #[without] tile_anim::run4),
-    entry!(0xc9780 "set_5", #[without] name_entry::run),
-    entry!(0xcafec "set_6", #[without] tile_anim::run6),
-    entry!(0xcb29c "set_7", #[without] exit_gate::run),
-    entry!(0xcc2c8 "set_9", #[without] inert::run),
-    entry!(0xcc3c2 "set_10", #[without] dialogue::run),
-    entry!(0xcdcaa "set_11", #[without] level_end::run),
-    entry!(0xcdd70 "set_12", #[without] fade_white::run),
-    entry!(0xcdef6 "set_13", #[without] palette_anim::run),
-    entry!(0xcdf86 "set_14", #[without] scene_trigger::run),
+    entry!(0xcc25a "set_common_cc25a", scene_spawner::run),
+    entry!(0xba310 "set_0", palette_script::run),
+    entry!(0xbc518 "set_1", wave_leader::run),
+    entry!(0xc935a "set_4", tile_anim::run4),
+    entry!(0xc9780 "set_5", name_entry::run),
+    entry!(0xcafec "set_6", tile_anim::run6),
+    entry!(0xcb29c "set_7", exit_gate::run),
+    entry!(0xcc2c8 "set_9", inert::run),
+    entry!(0xcc3c2 "set_10", dialogue::run),
+    entry!(0xcdcaa "set_11", level_end::run),
+    entry!(0xcdd70 "set_12", fade_white::run),
+    entry!(0xcdef6 "set_13", palette_anim::run),
+    entry!(0xcdf86 "set_14", scene_trigger::run),
 ];

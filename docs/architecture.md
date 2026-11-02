@@ -36,6 +36,20 @@ C'est l'approche des projets N64Recomp / XenonRecomp, adaptée au 68000.
 | `audio` | Z80 + QSound (d'abord émulé, c'est un pilote son autonome) |
 | `app` | Fenêtre, entrées clavier/manette, audio (winit/pixels ou SDL2) |
 
+### Le jeu et les outils (depuis la sortie du Cpu, 2026-11)
+
+* **Le jeu** : `ddsom` (application) et `ddsom-game` compilé sans la fonctionnalité `tools`
+  (`default-features = false`). Il n'a ni 68000 ni banc de registres : `cps2::Machine` sans sa fonctionnalité `m68k`
+  n'a plus de `Cpu`, et la boucle d'image du jeu (`ddsom_game::no68k::line`) fait tout le travail du processeur sur le
+  seul bus. `cargo tree -p ddsom -e normal` ne contient ni `m68k`, ni `ddsom-rc`, ni `recomp` (le `z80` reste pour le
+  pilote son émulé, choisi quand on a les ROMs). `ddsom --features original` rajoute le code d'origine pour les
+  diagnostics `DDSOM_ORIGINE=1` / `DDSOM_INTERP=1`.
+* **Les outils** (exemples de `ddsom-game` : `validate`, `fuzz_*`, couverture, traces) : fonctionnalité `tools`, active
+  par défaut pour le crate et ses exemples. Elle ajoute le module `ddsom_game::tools` : machine de référence (code
+  d'origine recompilé, `install_reference`), natives à l'adresse d'origine pour le code d'origine (arguments et
+  résultats dans ses registres : `Body::WithCpu`/`CpuIn`, sous-modules calqués sur ceux du jeu), exécution des natives
+  par le processeur (`Native::execute`, `call`, `run`), `DDSOM_CHECK` et les sondes de registres.
+
 ## Jalons, chacun vérifié contre MAME
 
 1. **Rendu** : à partir d'un instantané MAME (GFX RAM, Object RAM, registres CPS), le moteur Rust

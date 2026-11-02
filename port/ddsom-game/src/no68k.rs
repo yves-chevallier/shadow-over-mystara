@@ -1,8 +1,8 @@
 //! The game without a 68000: natives only and the kernel's frame loop (see `docs/noyau.md`, "towards a loop
 //! without 68000").
 //!
-//! The game does not use the machine's `Cpu` (only its cycle counter, for the machine's schedule); what remains on a
-//! register bench are the natives called by address by the other modules. The processor is at a
+//! The game has no processor: the machine's `Cpu` is not used (the machine advances its cycle counter for its
+//! schedule). The game is at a
 //! *point* (`kernel::Point`, stored in the task table): a startup step, a scheduler point
 //! (Rust state machine, `kernel`), a task, or the held game step. A task is launched by calling the step of its
 //! stage (`tasks::execute`). A native always runs in full, even when
@@ -40,7 +40,6 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use cps2::{Cps2Bus, StepCap};
-use m68k::Cpu;
 
 use crate::kernel::Point;
 use crate::tasks::table::{read, table};
@@ -57,9 +56,7 @@ pub fn active() -> bool {
 /// Hooks the loop without a 68000 onto the machine (the machine's step cap is only used for its value).
 pub(crate) fn install(m: &mut cps2::Machine) {
     ACTIVE.store(true, Ordering::Relaxed);
-    m.executor = None;
-    m.idle = None;
-    m.patches.clear();
+    // the line work replaces the processor: recompiled code, interpreter, `idle` and patches are no longer used
     m.line_work = Some(line);
 }
 
@@ -134,7 +131,7 @@ thread_local! {
 
 /// Processor work during a line (`cps2::Machine::line_work`). The cap on game steps is only read for
 /// its value: the count of the frame's steps is kept here ([`game_step`]).
-pub fn line(c: &mut Cpu, b: &mut Cps2Bus, end: u64, cap: Option<&mut StepCap>) {
+pub fn line(b: &mut Cps2Bus, cap: Option<&mut StepCap>) {
     if b.irq_raster {
         stop(b, "raster interrupt (level 4): never armed by the game".into());
     }
@@ -193,7 +190,6 @@ pub fn line(c: &mut Cpu, b: &mut Cps2Bus, end: u64, cap: Option<&mut StepCap>) {
         }
         table(b).point = next;
     }
-    c.cycles = c.cycles.max(end);
 }
 
 /// RAM of the original stacks (offsets from FF0000): stack heap, stacks of the tasks and of the supervisor
@@ -315,6 +311,7 @@ fn stop(b: &mut Cps2Bus, cause: String) -> ! {
     m += &format!(" ; interrupt mask {}", crate::kernel::interrupt_mask(b));
     let last = LAST.with(|d| d.borrow().iter().map(|n| format!("{}@{:x}", n.name, n.entry)).collect::<Vec<_>>());
     m += &format!(" ; last natives: {}", last.join(" "));
+    #[cfg(feature = "tools")]
     if let Some((site, routine)) = crate::call_site() {
         m += &format!(" ; Rust call in progress: {site} -> {routine:x}");
     }

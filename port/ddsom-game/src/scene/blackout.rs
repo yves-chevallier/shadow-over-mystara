@@ -144,17 +144,4 @@ fn script(x: &mut Ctx) -> Flow {
     super::transition::run(x, scene)
 }
 
-pub const BLACKOUT: Native = Native {
-    entry: 0xf7ecc,
-    name: "scene_blackout",
-    run: crate::Body::WithCpu(|c, b| {
-        // entry for the original code (tools): returns only if the state did not cede control
-        if run(&mut Ctx::new(b)) == Flow::Done {
-            crate::mem::rts(c, b);
-        }
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
-
-pub const NATIVES: &[Native] = &[BLACKOUT];
+pub const NATIVES: &[Native] = &[];

@@ -26,12 +26,10 @@
 
 use cps2::Cps2Bus;
 use super::fading;
-use m68k::decode::Fetch;
-use m68k::Cpu;
 
 use super::{player, scratch, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::dispatch;
-use crate::mem::{rd16, rd8, rts, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::modes::Sequence as _;
 use crate::objects::Obj;
 use crate::tasks::table::Next;
@@ -285,7 +283,7 @@ enum WaitFade {
 }
 
 #[derive(Clone, Copy)]
-struct Leave {
+pub(crate) struct Leave {
     wait_fade: WaitFade,
     /// Palettes to black before leaving (`A5+0x48e` = 15, `0x168c`).
     black: bool,
@@ -318,7 +316,7 @@ const fn leave_to(scene: u8) -> St {
 
 /// A state of a sequence.
 #[derive(Clone, Copy)]
-enum St {
+pub(crate) enum St {
     /// Does nothing (waits for an external event).
     Idle,
     /// State shared by several sequences (end-of-level screens).
@@ -342,7 +340,7 @@ enum St {
 
 /// End of frame of the sequence, after its state (except at the final state).
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Update {
+pub(crate) enum Update {
     /// Inputs, world, sprites, collisions.
     Full,
     /// Inputs, world, sprites.
@@ -367,7 +365,7 @@ use St::Idle;
 
 /// The shared states of the exit sequences, at their original address.
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum Shared {
+pub(crate) enum Shared {
     /// 0xf590e: end-of-level tally ([`super::tally`]).
     Tally,
     /// 0xf5938: bonus screen.
@@ -698,18 +696,6 @@ impl Step {
     }
 }
 
-pub const PHASE_16: Native = Native {
-    entry: 0xf3142,
-    name: "scene_phase_16",
-    run: crate::Body::WithCpu(|c, b| {
-        if !phase_16(b) {
-            rts(c, b);
-        }
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
-
 /// End of frame of the original dispatch of a sequence (`entry + 10`: `cmpi.b #last,2(A0)`, then the
 /// update), where the resumes after a yield return. A0 is the one the state left.
 fn dispatch_tail(x: &mut Ctx, index: u8) {
@@ -719,7 +705,7 @@ fn dispatch_tail(x: &mut Ctx, index: u8) {
     finish_frame(&mut ex, sequence);
 }
 
-pub const NATIVES: &[Native] = &[PHASE_16];
+pub const NATIVES: &[Native] = &[];
 
 // ---------------------------------------------------------------------------------------------
 // The sequences (index = sequence number / 2; see `docs/scenes.md` for the scenes)
@@ -1547,16 +1533,3 @@ mod tests {
 /// the table and the original jumps to an address read from code: it crashes and restarts. Outside the table: no
 /// continuation (zero table byte, branch at 0xf792c). Same fix in the original code (reference machine).
 pub const SHARED_NEXT_ENTRY: u32 = 0xf7b62;
-const SHARED_NEXT_TABLE_LEN: u8 = 20;
-const SHARED_NEXT_NONE: u32 = 0xf792c;
-
-pub fn patch_shared_next(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
-    if rd8(b, c.a[6] + 0xc) < SHARED_NEXT_TABLE_LEN {
-        return false;
-    }
-    wr16(b, c.a[6] + 0x12, 0x65);
-    c.d[0] &= 0xffff_0000;
-    c.a[1] = 0xf7b88;
-    c.pc = SHARED_NEXT_NONE;
-    true
-}

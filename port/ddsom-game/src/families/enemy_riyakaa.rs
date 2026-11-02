@@ -1050,5 +1050,5 @@ mod riyakaa {
 }
 
 handlers! {
-    0x6f1c0 "enemy_16" #[without] riyakaa::run,
+    0x6f1c0 "enemy_16" riyakaa::run,
 }

@@ -720,7 +720,7 @@ use crate::objects::Current;
     }
 
     handlers! {
-        0xd99fa "box_crate" #[without] run,
+        0xd99fa "box_crate" run,
     }
 }
 
@@ -900,8 +900,8 @@ fn barrier_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     }
 }
 
-handler!(BOX_1, barrier::ENTRY, "box_barrier", #[without] barrier_handler);
-handler!(BOX_2, scenery::ENTRY, "box_scenery", #[without] box_2);
+handler!(BOX_1, barrier::ENTRY, "box_barrier", barrier_handler);
+handler!(BOX_2, scenery::ENTRY, "box_scenery", box_2);
 
 // ---------------------------------------------------------------------------------------------
 // Type 3 : bloc poussable (0xda7f2)
@@ -1107,6 +1107,6 @@ use crate::objects::Current;
     }
 
     handlers! {
-        0xda7f2 "box_pushes" #[without] run,
+        0xda7f2 "box_pushes" run,
     }
 }

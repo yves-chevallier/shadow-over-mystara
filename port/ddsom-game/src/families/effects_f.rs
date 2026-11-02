@@ -787,12 +787,12 @@ fn walker<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xa8594 "effct_opening" #[without] opening,
-    0xb2f40 "effct_silhouette_reflection" #[without] mirrored,
-    0xb66f8 "effct_traversee" #[without] crossing,
-    0xb68f4 "effct_passage" #[without] passage,
-    0xb6a74 "effct_launcher" #[without] launcher,
-    0xb7f28 "effct_sign_start" #[without] start_sign,
-    0xb896e "effct_sound_fade" #[without] sound_fade,
-    0xba0b0 "effct_passant" #[without] walker,
+    0xa8594 "effct_opening" opening,
+    0xb2f40 "effct_silhouette_reflection" mirrored,
+    0xb66f8 "effct_traversee" crossing,
+    0xb68f4 "effct_passage" passage,
+    0xb6a74 "effct_launcher" launcher,
+    0xb7f28 "effct_sign_start" start_sign,
+    0xb896e "effct_sound_fade" sound_fade,
+    0xba0b0 "effct_passant" walker,
 }

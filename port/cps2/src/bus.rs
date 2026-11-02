@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+#[cfg(feature = "m68k")]
 use m68k::decode::Fetch;
 
 use crate::eeprom::Eeprom93c46;
@@ -252,8 +253,11 @@ impl Cps2Bus {
     }
 }
 
-impl Fetch for Cps2Bus {
-    fn fetch16(&mut self, a: u32) -> u16 {
+/// Accesses of the 68000 address space, without the processor (the game without 68000 uses them directly; the
+/// processor goes through the `m68k::Bus` implementation, which forwards to them).
+impl Cps2Bus {
+    /// Word of the program space (decrypted program below 0x400000).
+    pub fn fetch16(&mut self, a: u32) -> u16 {
         let a = a & 0xff_ffff;
         if a < 0x400000 {
             #[cfg(feature = "rom-trace")]
@@ -263,30 +267,53 @@ impl Fetch for Cps2Bus {
             self.read_word(a & !1)
         }
     }
-}
-
-impl m68k::Bus for Cps2Bus {
-    fn read8(&mut self, a: u32) -> u8 {
+    pub fn read8(&mut self, a: u32) -> u8 {
         let w = self.read_word(a & !1);
         if a & 1 == 0 { (w >> 8) as u8 } else { w as u8 }
     }
-    fn read16(&mut self, a: u32) -> u16 {
+    pub fn read16(&mut self, a: u32) -> u16 {
         self.read_word(a & !1)
     }
-    fn write8(&mut self, a: u32, v: u8) {
+    pub fn write8(&mut self, a: u32, v: u8) {
         if a & 1 == 0 {
             self.write_word(a & !1, (v as u16) << 8, 0xff00);
         } else {
             self.write_word(a & !1, v as u16, 0x00ff);
         }
     }
-    fn write16(&mut self, a: u32, v: u16) {
+    pub fn write16(&mut self, a: u32, v: u16) {
         self.write_word(a & !1, v, 0xffff);
     }
-    fn irq_ack(&mut self, _level: u8) {
-        // the acknowledge clears IPL1 and IPL2 (cps_state::irqack_r)
+    /// Interrupt acknowledge: clears IPL1 and IPL2 (cps_state::irqack_r).
+    pub fn irq_ack(&mut self) {
         self.irq_vblank = false;
         self.irq_raster = false;
+    }
+}
+
+#[cfg(feature = "m68k")]
+impl Fetch for Cps2Bus {
+    fn fetch16(&mut self, a: u32) -> u16 {
+        Cps2Bus::fetch16(self, a)
+    }
+}
+
+#[cfg(feature = "m68k")]
+impl m68k::Bus for Cps2Bus {
+    fn read8(&mut self, a: u32) -> u8 {
+        Cps2Bus::read8(self, a)
+    }
+    fn read16(&mut self, a: u32) -> u16 {
+        Cps2Bus::read16(self, a)
+    }
+    fn write8(&mut self, a: u32, v: u8) {
+        Cps2Bus::write8(self, a, v)
+    }
+    fn write16(&mut self, a: u32, v: u16) {
+        Cps2Bus::write16(self, a, v)
+    }
+    fn irq_ack(&mut self, _level: u8) {
+        Cps2Bus::irq_ack(self)
     }
 }
 

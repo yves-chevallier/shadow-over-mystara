@@ -329,7 +329,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x703dc "enemy_18" #[without] run,
+    0x703dc "enemy_18" run,
     // get up after a common reaction (table 0x3e000 of `reactions.rs`)
     0x717ea "enemy_18_getup" hit::regroup,
 }

@@ -348,5 +348,5 @@ pub(self) fn dispatch0<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32
 }
 
 handlers! {
-    0x8d59e "boss_11" #[without] run,
+    0x8d59e "boss_11" run,
 }

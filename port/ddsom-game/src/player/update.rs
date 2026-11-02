@@ -15,7 +15,6 @@ use super::states::sub;
 use super::{actions, checks, combos, effects, hurt, ram, scripted, Ctx, Player};
 use crate::mem::{wr32, wr8};
 use crate::objects::lists;
-use crate::Native;
 use crate::machine::Machine;
 
 /// One frame of all the active players.
@@ -176,18 +175,6 @@ fn remove(g: &mut Ctx, p: Player) {
     clear_player(g, k);
     clear_overlays_of(g, k);
 }
-
-/// 0x35292: update of the players, for the tools (the game calls `update_all`).
-pub const UPDATE_PLAYERS: Native = Native {
-    entry: 0x35292,
-    name: "players_update",
-    run: crate::Body::WithCpu(|c, b| {
-        super::on_bench(c, b, update_all);
-        crate::mem::rts(c, b)
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
 
 /// High-score table: ten 14-byte entries at FF0FD0, from best to worst.
 mod scores {

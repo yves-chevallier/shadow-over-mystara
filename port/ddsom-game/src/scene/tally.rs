@@ -581,18 +581,4 @@ fn pay_digit(v: u32) -> (u32, u32) {
     }
 }
 
-/// Original entry (exit sequences left in 68000).
-pub const TALLY: Native = Native {
-    entry: 0xf590e,
-    name: "scene_tally",
-    run: crate::Body::WithCpu(|c, b| {
-        // entry for the original code (tools): returns only if the state did not cede control
-        if run(&mut Ctx::new(b)) == Flow::Done {
-            crate::mem::rts(c, b);
-        }
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
-
-pub const NATIVES: &[Native] = &[TALLY];
+pub const NATIVES: &[Native] = &[];

@@ -418,20 +418,6 @@ fn end(x: &mut Ctx) -> Flow {
     fade(x, crate::tasks::fading::descent, Step::Ended)
 }
 
-/// Original entry (sequences still in 68000).
-pub const BONUS: Native = Native {
-    entry: 0xf5938,
-    name: "scene_bonus",
-    run: crate::Body::WithCpu(|c, b| {
-        // entry for the original code (tools): returns only if the state did not cede control
-        if run(&mut Ctx::new(b)) == Flow::Done {
-            crate::mem::rts(c, b);
-        }
-    }),
-    touches_sound: false,
-    outputs: 0,
-};
-
 pub const NATIVES: &[Native] = &[
-    BONUS,
+    
 ];

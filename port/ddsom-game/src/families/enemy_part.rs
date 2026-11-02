@@ -357,5 +357,5 @@ mod tentacle {
 }
 
 handlers! {
-    0x63b2a "enemy_7" #[without] tentacle::run,
+    0x63b2a "enemy_7" tentacle::run,
 }

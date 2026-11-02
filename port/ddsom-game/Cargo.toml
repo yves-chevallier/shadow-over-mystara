@@ -5,9 +5,10 @@ edition = "2021"
 description = "ddsom game logic rewritten in idiomatic Rust (native routines replacing the 68000 code)"
 
 [dependencies]
-m68k = { path = "../m68k" }
-cps2 = { path = "../cps2" }
-ddsom-rc = { path = "../ddsom-rc" }
+cps2 = { path = "../cps2", default-features = false }
+# The 68000 and the recompiled original code: tools only (feature `tools`), never the game.
+m68k = { path = "../m68k", optional = true }
+ddsom-rc = { path = "../ddsom-rc", optional = true }
 
 [dev-dependencies]
 png = "0.17"
@@ -15,6 +16,11 @@ cps2-gfx = { path = "../cps2-gfx" }
 ddsom-assets = { path = "../ddsom-assets" }
 
 [features]
+# The game alone (`ddsom` depends on it with `default-features = false`) has no 68000. The tools (examples: validate,
+# fuzz_*, coverage...) also need the reference machine and the natives at the original addresses, whose arguments
+# and results are in the registers of the original (module `tools`).
+default = ["tools"]
+tools = ["dep:m68k", "dep:ddsom-rc", "cps2/m68k"]
 # Log of the program ROM reads made by the Rust code (examples/rom_reads.rs).
 rom-trace = ["cps2/rom-trace"]
 # Call stack of the writes to an address (examples/fuzz_couv, FUZZ_SURVEILLE).

@@ -36,7 +36,6 @@ pub fn ext(o: Obj) -> u32 {
     o.0 as u16 as i16 as i32 as u32
 }
 
-
 /// Offsets of the work RAM (A5).
 pub mod a5 {
     /// Secondary camera.
@@ -132,7 +131,7 @@ pub fn offset<R: Bench>(x: &mut Cx<'_, R>, table: u32, row: u32) -> (u16, u16) {
     (dx, dz)
 }
 
-/// Leftovers of the terrain search (0x24a8 / 0x24b0, `video::terrain_68k`): D2 (number), D3 (cell index), D4.w
+/// Leftovers of the terrain search (0x24a8 / 0x24b0, `video::terrain_regs`): D2 (number), D3 (cell index), D4.w
 /// (column). Original glitch: following handlers re-read them (`dispatch::Leftovers`; D3: `boss11_scene42_mort`, D2:
 /// bounce of the freeze shard).
 pub fn leftovers_terrain<R: Bench>(x: &mut Cx<'_, R>, t: &crate::video::Terrain) {

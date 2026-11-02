@@ -12,6 +12,7 @@ use std::path::Path;
 
 pub use bus::{Cps2Bus, Inputs};
 use eeprom::Eeprom93c46;
+#[cfg(feature = "m68k")]
 use m68k::Cpu;
 
 /// 68000 clock: 16 MHz x 0.7375 (MAME compensates this way for the unemulated wait states).
@@ -27,6 +28,7 @@ pub const DDSOM_PROG: [&str; 8] = [
 ];
 
 /// Recompiled-block executor: (pc, cpu, bus, deadline) -> Some(next pc) or None if there is no block.
+#[cfg(feature = "m68k")]
 pub type BlockExecutor = fn(u32, &mut Cpu, &mut Cps2Bus, u64) -> Option<u32>;
 
 /// Cap on passes per frame through a program point (see `Machine::step_cap`).
@@ -56,11 +58,12 @@ impl StepCap {
     }
 }
 
-/// Processor work during a line, in place of the 68000 (see `Machine::line_work`): (registers, bus, end-of-line cycle,
-/// frame step cap).
-pub type LineWork = fn(&mut Cpu, &mut Cps2Bus, u64, Option<&mut StepCap>);
+/// Processor work during a line, in place of the 68000 (see `Machine::line_work`): (bus, frame step cap). It has no
+/// duration: the line's time passes for the processor all the same.
+pub type LineWork = fn(&mut Cps2Bus, Option<&mut StepCap>);
 
 /// Fix for an undefined behavior of the original game (see `Machine::patches`).
+#[cfg(feature = "m68k")]
 #[derive(Clone, Copy)]
 pub struct Patch {
     /// Address (block start) where it applies.
@@ -70,14 +73,19 @@ pub struct Patch {
 }
 
 pub struct Machine {
+    #[cfg(feature = "m68k")]
     /// Recompiled code (None = everything interpreted).
     pub executor: Option<BlockExecutor>,
+    #[cfg(feature = "m68k")]
     /// Addresses where no recompiled block existed (executed by the interpreter).
     pub misses: std::collections::BTreeMap<u32, u64>,
+    #[cfg(feature = "m68k")]
     /// 68000 instructions executed by the interpreter (the rest is run by the recompiled code).
     pub interp_steps: u64,
+    #[cfg(feature = "m68k")]
     /// Callback after each interpreted instruction (diagnostic tools): (cpu, bus, pc).
     pub step_hook: Option<Box<dyn FnMut(&Cpu, &Cps2Bus, u32)>>,
+    #[cfg(feature = "m68k")]
     /// Is the program only waiting for an interrupt? (the game's wait loop) The remaining time
     /// of the line is then skipped.
     pub idle: Option<fn(&Cpu, &Cps2Bus) -> bool>,
@@ -87,18 +95,20 @@ pub struct Machine {
     /// at `pc` have occurred in the frame, the next one is held back: the remaining frame time is skipped (like
     /// `idle`) and the step runs at the start of the next frame, after the vblank interrupt.
     pub step_cap: Option<StepCap>,
+    #[cfg(feature = "m68k")]
     /// Fixes for behaviors the original game leaves to chance (uninitialized registers or memory) and
     /// that no rewrite can reproduce: applied identically by the game and by the reference machine.
     pub patches: Vec<Patch>,
     /// Replaces the execution of the 68000 (executor, interpreter, `idle`, fixes): called once per line, it
-    /// does the processor's work up to the given cycle; the Z80 follows as usual. `cpu` is then only a
-    /// register bench (game without 68000, `ddsom_game::install_no_68k`).
+    /// does the processor's work of the line; the Z80 follows as usual. `cpu` is then unused, only its cycle counter
+    /// advances (game without 68000, `ddsom_game::install_no_68k`).
     pub line_work: Option<LineWork>,
     /// `run_frame` returns the frame (true by default). False: the frame is not computed and
     /// `run_frame` returns an empty vector.
     /// Rendering only reads the state (no side effect); tools that do not look at the frame (`validate`, `bench`)
     /// turn it off: it is most of the time of a frame in the game without 68000.
     pub rendering: bool,
+    #[cfg(feature = "m68k")]
     pub cpu: Cpu,
     pub bus: Cps2Bus,
     pub sound: sound::Sound,
@@ -207,15 +217,22 @@ impl Machine {
             None => Eeprom93c46::new([0xffff; 64]),
         };
         let mut m = Machine {
+            #[cfg(feature = "m68k")]
             executor: None,
+            #[cfg(feature = "m68k")]
             misses: Default::default(),
+            #[cfg(feature = "m68k")]
             interp_steps: 0,
+            #[cfg(feature = "m68k")]
             step_hook: None,
+            #[cfg(feature = "m68k")]
             idle: None,
             step_cap: None,
+            #[cfg(feature = "m68k")]
             patches: Vec::new(),
             line_work: None,
             rendering: true,
+            #[cfg(feature = "m68k")]
             cpu: Cpu::new(),
             bus: Cps2Bus::new(rom, rom_dec, ee),
             sound: snd,
@@ -238,8 +255,11 @@ impl Machine {
     }
 
     pub fn reset(&mut self) {
-        self.cpu = Cpu::new();
-        self.cpu.reset(&mut self.bus);
+        #[cfg(feature = "m68k")]
+        {
+            self.cpu = Cpu::new();
+            self.cpu.reset(&mut self.bus);
+        }
     }
 
     /// Runs the CPU for one scanline, then the Z80. The target is absolute (the overrun of a
@@ -248,8 +268,17 @@ impl Machine {
         self.cycle_debt += self.line_cycles;
         let target = self.cycle_debt as u64;
         match self.line_work {
-            Some(work) => work(&mut self.cpu, &mut self.bus, target, self.step_cap.as_mut()),
+            Some(work) => {
+                work(&mut self.bus, self.step_cap.as_mut());
+                #[cfg(feature = "m68k")]
+                {
+                    self.cpu.cycles = self.cpu.cycles.max(target);
+                }
+            }
+            #[cfg(feature = "m68k")]
             None => self.run_cpu(target),
+            #[cfg(not(feature = "m68k"))]
+            None => panic!("machine without 68000: no line work installed (cycle {target})"),
         }
         // then the Z80 over the same time slice (512 cycles at 8 MHz per line)
         self.sound.set_reset(!self.bus.z80_running);
@@ -258,6 +287,7 @@ impl Machine {
     }
 
     /// Runs the 68000 up to cycle `target`.
+    #[cfg(feature = "m68k")]
     fn run_cpu(&mut self, target: u64) {
         while self.cpu.cycles < target {
             self.cpu.irq_level = self.bus.irq_level();

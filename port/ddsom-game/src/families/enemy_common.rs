@@ -5,7 +5,6 @@
 //! `+6` substates; the values are even bytes that index jump tables. The "dead" state frees the slot (`0x21f4`).
 
 use crate::families::cx::Bench;
-use m68k::SR_C;
 
 use super::cx::Cx;
 /// Common library of enemies and bosses (`lib::draw_stance(x)`...).
@@ -196,11 +195,6 @@ pub fn eshl_shot_34<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
     }
 }
 
-/// True if the allocation failed (carry set by the allocation routine).
-pub fn alloc_failed(x: &Cx) -> bool {
-    x.c.sr & SR_C != 0
-}
-
 /// Frees the current enemy ("dead" state handled).
 pub fn free<R: Bench>(x: &mut Cx<'_, R>) {
     x.free(&pools::ENEMY);
@@ -294,11 +288,6 @@ pub fn run_reaction<R: Bench>(x: &mut Cx<'_, R>, routine: u32) {
         super::small::own_reaction(x, routine)
             .unwrap_or_else(|| unreachable!("reaction {routine:#x}: neither common nor specific to the type"));
     }
-}
-
-/// `move.w #v,Dn`: changes only the low word of the register.
-pub fn set_dw(x: &mut Cx, n: usize, v: u16) {
-    x.c.d[n] = x.c.d[n] & 0xffff_0000 | v as u32;
 }
 
 /// `add.b #v,(off,An)` on another object (modulo 2^8).
@@ -461,20 +450,3 @@ pub fn detach_from_host<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
 }
-
-pub const NATIVES: &[crate::Native] = &[crate::Native {
-    entry: 0x27ee,
-    name: "enemy_detach_host",
-    run: crate::Body::WithCpu(|c, b| {
-        // D0.w and A1: the link and the host, like the original
-        let host = crate::mem::rd16(b, c.a[0] + f::HOST);
-        c.d[0] = c.d[0] & 0xffff_0000 | host as u32;
-        if host != 0 {
-            c.a[1] = host as i16 as i32 as u32;
-        }
-        detach_from_host(&mut Cx::new(c, b));
-        crate::mem::rts(c, b);
-    }),
-    touches_sound: false,
-    outputs: crate::regs::d(0) | crate::regs::a(1),
-}];

@@ -12,21 +12,17 @@
 //! reproduced (accepted difference, `play_wrapper`): a sound only reads from its caller the object (A0) and, for
 //! a few, D4 or A1 ([`Source`]).
 
-use std::sync::OnceLock;
-
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C};
 
-use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::Obj;
-use crate::{regs, Native};
+use crate::Native;
 
 #[path = "sound_table.rs"]
-mod table;
+pub(crate) mod table;
 
 /// Offsets relative to A5 (signed words/bytes extended: `A5 + n` modulo 2^32).
-mod ram {
+pub(crate) mod ram {
     /// Start of the queue (64 entries of 16 bytes).
     pub const FILE: u32 = 0xffff_a55c;
     /// Read head (next entry to transmit to the Z80), word.
@@ -131,7 +127,7 @@ fn hex_byte(b: &mut Cps2Bus, mut at: u32, value: u8, attribute: u16) -> u32 {
 }
 
 /// Address `A5 + off` (A5 is always `mem::A5`; negative offsets are written modulo 2^32).
-const fn a5(off: u32) -> u32 {
+pub(crate) const fn a5(off: u32) -> u32 {
     crate::mem::A5.wrapping_add(off)
 }
 
@@ -147,15 +143,16 @@ pub struct Command {
 }
 
 /// Outcome of an enqueue, with the contents of the registers that the original leaves behind.
-struct Queueing {
+#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
+pub(crate) struct Queueing {
     /// Low word of D0 on return (new write head, or computed head if the queue is full).
-    d0: u16,
+    pub(crate) d0: u16,
     /// Cell written (A1 = end of the write), if the command was enqueued.
-    written: Option<u32>,
+    pub(crate) written: Option<u32>,
 }
 
 /// Can the command be emitted? (sound allowed: 0xe0836)
-fn sound_allowed(b: &mut Cps2Bus) -> bool {
+pub(crate) fn sound_allowed(b: &mut Cps2Bus) -> bool {
     rd16(b, a5(ram::SOUND_WORD)) != 0
         || rd8(b, a5(ram::GAME_SOUND)) != 0
         || rd8(b, a5(ram::ATTRACT_SOUND)) != 0
@@ -169,7 +166,7 @@ fn queue_full(b: &mut Cps2Bus) -> bool {
 }
 
 /// Enqueues a command (0xe0848, without the permission test).
-fn enqueue(b: &mut Cps2Bus, cmd: Command) -> Queueing {
+pub(crate) fn enqueue(b: &mut Cps2Bus, cmd: Command) -> Queueing {
     let read = rd16(b, a5(ram::READ_HEAD));
     let write = rd16(b, a5(ram::WRITE_HEAD));
     if queue_full(b) {
@@ -184,60 +181,11 @@ fn enqueue(b: &mut Cps2Bus, cmd: Command) -> Queueing {
     Queueing { d0: next, written: Some(case + 8) }
 }
 
-/// Reproduces D0, A1 and the flags left by 0xe0848.
-fn finish_enqueue(c: &mut Cpu, e: &Queueing) {
-    c.d[0] = c.d[0] & 0xffff_0000 | e.d0 as u32;
-    match e.written {
-        Some(end) => {
-            c.a[1] = end;
-            c.flags_logic(e.d0 as u32, Size::Word);
-        }
-        None => c.sr = c.sr & 0xff00 | SR_C, // move #1,CCR: only the carry is raised
-    }
-}
-
-fn register_command(c: &Cpu) -> Command {
-    Command { d1: c.d[1], d2: c.d[2], d3: c.d[3] }
-}
-
 /// 0xe0836: enqueues the command if sound is allowed; returns `false` if nothing is enqueued (sound forbidden, queue
 /// full).
 pub fn emit(b: &mut Cps2Bus, cmd: Command) -> bool {
     sound_allowed(b) && enqueue(b, cmd).written.is_some()
 }
-
-/// 0xe0848: enqueues D1, D2, D3 (C raised if the queue is full).
-fn enqueue_direct(c: &mut Cpu, b: &mut Cps2Bus) {
-    let e = enqueue(b, register_command(c));
-    finish_enqueue(c, &e);
-    rts(c, b);
-}
-
-/// 0xe0836: enqueues D1, D2, D3 if sound is allowed.
-fn enqueue_if_sound(c: &mut Cpu, b: &mut Cps2Bus) {
-    if sound_allowed(b) {
-        enqueue_direct(c, b);
-    } else {
-        c.sr = c.sr & 0xff00 | SR_C;
-        rts(c, b);
-    }
-}
-
-pub const ENQUEUE_IF_SOUND: Native = Native {
-    entry: 0xe0836,
-    name: "sound_enqueue",
-    run: crate::Body::WithCpu(enqueue_if_sound),
-    touches_sound: false,
-    outputs: regs::d(0) | regs::a(1) | regs::CCR,
-};
-
-pub const ENQUEUE_DIRECT: Native = Native {
-    entry: 0xe0848,
-    name: "sound_enqueue_direct",
-    run: crate::Body::WithCpu(enqueue_direct),
-    touches_sound: false,
-    outputs: regs::d(0) | regs::a(1) | regs::CCR,
-};
 
 // ---------------------------------------------------------------------------------------------
 // The wrappers
@@ -245,7 +193,7 @@ pub const ENQUEUE_DIRECT: Native = Native {
 /// "Program space" read: the command tables are stored in the code and read by
 /// PC-relative accesses, which see the decrypted opcodes.
 fn program_read(b: &mut Cps2Bus, address: u32) -> u16 {
-    m68k::Bus::read_prog16(b, address & 0xff_ffff)
+    b.fetch16(address & 0xff_ffff)
 }
 
 /// Origin of the command index in a word table in ROM.
@@ -331,12 +279,15 @@ pub fn play_with(b: &mut Cps2Bus, sound: u32, source: Source) {
     } else if let Some(&(_, normal, alternate)) = BY_VERSION.iter().find(|(e, ..)| *e == sound) {
         let target = if version_alternative(b) { alternate } else { normal };
         play_with(b, target, source);
-    } else if sound == NONE.entry {
+    } else if sound == NO_SOUND {
         // objects without sound
     } else {
         panic!("sound {sound:x}: neither wrapper nor dispatcher")
     }
 }
+
+/// 0xec238: the sound of the objects without sound (a bare `rts`).
+pub(crate) const NO_SOUND: u32 = 0xec238;
 
 /// Does the sound read its object (A0)? The targets of the dispatchers by D4 or A1 are only known at run time:
 /// presumed to read it.
@@ -351,7 +302,7 @@ fn reads_object(sound: u32) -> bool {
     if let Some(&(_, normal, alternate)) = BY_VERSION.iter().find(|(e, ..)| *e == sound) {
         return reads_object(normal) || reads_object(alternate);
     }
-    sound != NONE.entry
+    sound != NO_SOUND
 }
 
 /// Pan (0-0x2f -> byte of the ROM table) of an object: screen position of the object relative to
@@ -435,36 +386,6 @@ fn play_wrapper(b: &mut Cps2Bus, w: &Wrapper, source: Source) {
     }
 }
 
-/// Native of a wrapper or a dispatcher (calls by address): the core, with what it reads from the registers;
-/// all registers are returned intact, the flags are those of the last `move.l` of the private stack pointer.
-fn native_sound_in(c: &mut Cpu, b: &mut Cps2Bus, sound: u32) {
-    play_with(b, sound, Source { object: Some(Obj(c.a[0])), a1: Some(c.a[1]), d4: Some(c.d[4]) });
-    let top = rd32(b, a5(ram::PRIVATE_STACK));
-    c.flags_logic(top, Size::Long);
-    rts(c, b);
-}
-
-/// The native routines of each described wrapper and of the dispatchers (built once, then kept).
-pub fn native_wrappers() -> &'static [Native] {
-    static LIST: OnceLock<Vec<Native>> = OnceLock::new();
-    LIST.get_or_init(|| {
-        let wrappers = table::WRAPPERS.iter().map(|w| (w.entry, "sound_wrapper"));
-        let dispatches = DISPATCHES.iter().map(|&(entry, _)| (entry, "sound_dispatch"));
-        let versions = BY_VERSION.iter().map(|&(entry, ..)| (entry, "sound_by_version"));
-        wrappers
-            .chain(dispatches)
-            .chain(versions)
-            .map(|(entry, name)| Native {
-                entry,
-                name,
-                run: crate::Body::CpuIn(native_sound_in),
-                touches_sound: false,
-                outputs: 0, // all registers are returned intact: nothing to compare
-            })
-            .collect()
-    })
-}
-
 // ---------------------------------------------------------------------------------------------
 // The dispatchers
 
@@ -472,7 +393,7 @@ pub fn native_wrappers() -> &'static [Native] {
 /// register or the object, another wrapper that they call (after their own save on the private
 /// stack, D0-D3 zeroed), or else a music command.
 #[derive(Clone, Copy, Debug)]
-enum Dispatch {
+pub(crate) enum Dispatch {
     /// `tst.b D4 ; bmi` then D4.w = 2 × D4.b, D0.w = table[D4], target = table + D0 (nothing if D4 < 0).
     ByD4(u32),
     /// D1.w = table[A0[3] & 0xe], target = table + D1.
@@ -488,7 +409,7 @@ enum Dispatch {
     Music { table: u32, strict: bool },
 }
 
-const DISPATCHES: &[(u32, Dispatch)] = {
+pub(crate) const DISPATCHES: &[(u32, Dispatch)] = {
     use Dispatch::*;
     &[
         (0xe0c5c, Music { table: 0xe0ca6, strict: true }),
@@ -663,7 +584,7 @@ pub fn service(b: &mut Cps2Bus, s: Service) {
     service_enqueue(b, s);
 }
 
-fn service_enqueue(b: &mut Cps2Bus, s: Service) -> Queueing {
+pub(crate) fn service_enqueue(b: &mut Cps2Bus, s: Service) -> Queueing {
     let simple = |d1: u32| Command { d1, d2: 0, d3: 0 };
     let cmd = match s {
         Service::GeneralStop => simple(0xff00),
@@ -685,52 +606,12 @@ fn has_delay(b: &mut Cps2Bus, command: u16, lock: u8, line: u16) -> Command {
     Command { d1: high << 16 | command as u32, d2: 0, d3: 0 }
 }
 
-/// Native of a service command: all registers are returned (movem on the stack), only the flags of
-/// 0xe0848 remain.
-fn service_native_run(c: &mut Cpu, b: &mut Cps2Bus, s: Service) {
-    let e = service_enqueue(b, s);
-    let (d0, a1) = (c.d[0], c.a[1]);
-    finish_enqueue(c, &e);
-    c.d[0] = d0;
-    c.a[1] = a1;
-    rts(c, b);
-}
-
-/// Service command of entry `entry`, from D0 and D1 (for the natives).
-fn service_in(entry: u32, c: &Cpu) -> Service {
-    let (d0, d1) = (c.d[0] as u16, c.d[1] as u8);
-    match entry {
-        0xe0882 => Service::GeneralStop,
-        0xe0a10 => Service::Ff05,
-        0xe0a2e => Service::Ff06 { lock: d1, line: d0 },
-        0xe0a40 => Service::Ff06 { lock: 0xff, line: d0 },
-        0xe0a70 => Service::Ff07 { lock: d1, line: d0 },
-        0xe0a82 => Service::Ff07 { lock: 0, line: d0 },
-        0xe0ad8 => Service::Ff08(d0),
-        0xe0af8 => Service::Ff09(d0),
-        _ => unreachable!("{entry:x} is not a service command"),
-    }
-}
-
-const fn service_native(entry: u32, name: &'static str, touches_sound: bool) -> Native {
-    Native { entry, name, run: crate::Body::CpuIn(|c, b, entry| service_native_run(c, b, service_in(entry, c))), touches_sound, outputs: regs::CCR }
-}
-
-pub const SERVICE_FF00: Native = service_native(0xe0882, "sound_service_ff00", false);
-pub const SERVICE_FF05: Native = service_native(0xe0a10, "sound_service_ff05", false);
-pub const SERVICE_FF06_D1: Native = service_native(0xe0a2e, "sound_service_ff06", true);
-pub const SERVICE_FF06: Native = service_native(0xe0a40, "sound_service_ff06", true);
-pub const SERVICE_FF07_D1: Native = service_native(0xe0a70, "sound_service_ff07", true);
-pub const SERVICE_FF07: Native = service_native(0xe0a82, "sound_service_ff07", true);
-pub const SERVICE_FF08: Native = service_native(0xe0ad8, "sound_service_ff08", false);
-pub const SERVICE_FF09: Native = service_native(0xe0af8, "sound_service_ff09", false);
-
 /// Entries that test the alternate-palette version (`A5+0x70` non-zero) before calling the wrapper
 /// `normal` or, in this version, the wrapper `alternate`: 0xe2240 / 0xe22e8 (character noise),
 /// 0xe2430 (noise per object), 0xe27da (noise per kind), 0xe285c (sound 0xd5 or 0xd6, cleric's prayer), 0xe2a74 (sound
 /// 0xf7 or 0xf6, magician's storm), 0xe296c (sound 0xea or 0xe6, elf's moon: hole found by the bot
 /// `longue_d`).
-const BY_VERSION: [(u32, u32, u32); 7] = [
+pub(crate) const BY_VERSION: [(u32, u32, u32); 7] = [
     (0xe2240, 0xe2248, 0xe2390),
     (0xe22e8, 0xe22f0, 0xe2390),
     (0xe2430, 0xe2438, 0xe24d8),
@@ -750,29 +631,3 @@ pub fn clear_private_stack(b: &mut Cps2Bus) {
     let p = a5(ram::PRIVATE_STACK);
     wr32(b, p, p);
 }
-
-/// `clear_private_stack`; A0 = the pointer, flags of its value.
-fn init_private_stack(c: &mut Cpu, b: &mut Cps2Bus) {
-    clear_private_stack(b);
-    let p = a5(ram::PRIVATE_STACK);
-    c.a[0] = p;
-    c.flags_logic(p, Size::Long);
-    rts(c, b);
-}
-
-pub const INIT_PRIVATE_STACK: Native = Native {
-    entry: 0xee044,
-    name: "sound_init_stack",
-    run: crate::Body::WithCpu(init_private_stack),
-    touches_sound: false,
-    outputs: regs::a(0) | regs::CCR,
-};
-
-/// 0xec238: empty sound (a plain `rts`), target of the dispatcher 0xec200 for objects without sound.
-pub const NONE: Native = Native {
-    entry: 0xec238,
-    name: "sound_none",
-    run: crate::Body::WithCpu(rts),
-    touches_sound: false,
-    outputs: regs::ALL,
-};

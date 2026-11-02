@@ -150,11 +150,11 @@ fn main() {
         ("startup 0x2dc9a", 0x2dc9a, natives(0x2dc9a)),
         ("reset 0x2e8e4", 0x2e8e4, Box::new(|c, b| {
             ddsom_game::eeprom::reset_card(b);
-            ddsom_game::mem::rts(c, b);
+            ddsom_game::tools::frames::rts(c, b);
         })),
         ("game time 0x2e540", 0x2e540, Box::new(|c, b| {
             ddsom_game::eeprom::dev_card::play_time(b);
-            ddsom_game::mem::rts(c, b);
+            ddsom_game::tools::frames::rts(c, b);
         })),
         ("coin 0x2e448", 0x2e448, natives(0x2e448)),
         ("start 0x2e49a", 0x2e49a, natives(0x2e49a)),

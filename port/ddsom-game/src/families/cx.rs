@@ -1,30 +1,25 @@
 //! Execution context of an object handler (ESHL, SET, SOBJ).
 //!
-//! A handler is called by the dispatch loop of its class (`jsr (table + type * 4)`) with A0 = the object, A5 = 0xFF8000
-//! and D7 = loop counter; it yields with RTS, leaving A0 and D7 intact. `Cx` groups the processor, the bus and the
-//! current object. The object engine (animation, movement, lists, screen, pools) is called through the
+//! A handler is called by the dispatch loop of its class for one object (A0 of the original), with the loop counter
+//! (D7) and the leftovers that the handlers pass to each other (`dispatch::Dispatch`). `Cx` groups the bus, the
+//! current object and this bench. The object engine (animation, movement, lists, screen, pools) is called through the
 //! `objects::Current` trait (`x.move_xz()`, `x.anim_step()`, `x.reinsert()`...), the common services through
 //! `machine::Machine` (`x.random()`).
-//!
-//! The subroutines still called by address (`call`) are executed by `crate::call`, which finds their native.
 
 use cps2::Cps2Bus;
-use m68k::decode::Fetch;
-use m68k::Cpu;
 
-use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::dispatch::{Dispatch, Leftovers};
 use crate::objects::pools;
 use crate::objects::{Current, Obj};
-use crate::{call, regs, Native};
+use crate::{regs, Native};
 
 /// Context of a handler: the current object (A0) and the machine.
 ///
-/// `R` is the register bench: the processor (`&mut Cpu`, by default) as long as the handler reads or leaves registers
-/// of the original, or [`SansRegistres`] for a converted handler, of which nothing enters or leaves through the
-/// registers (the compiler guarantees it: `x.c.d[0]` does not exist). Functions that do not use registers are written
-/// for both (`fn f<R>(x: &mut Cx<'_, R>)`).
-pub struct Cx<'a, R = &'a mut Cpu> {
+/// `R` is the bench: in the game, what the dispatch loop passes ([`Gx`], no register: `x.c.d[0]` does not exist); in
+/// the tools, the processor for the original code that calls a handler (`tools::families::cx`). The handlers are
+/// written for both (`fn f<R: Bench>(x: &mut Cx<'_, R>)`).
+pub struct Cx<'a, R> {
     pub c: R,
     pub b: &'a mut Cps2Bus,
     /// The object that the dispatch has processed (A0).
@@ -53,16 +48,10 @@ impl<R> crate::machine::Machine for Cx<'_, R> {
     }
 }
 
-impl crate::machine::WithCpu for Cx<'_> {
-    fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus) {
-        (&mut *self.c, &mut *self.b)
-    }
-}
-
 /// Register bench of a handler: what changes depending on whether it still works on the processor or not.
 pub trait Bench {
-    /// Re-listing (0x1ee1a / 0x1ef6c, `foreground`): on the processor, the adapter leaves the original's registers to
-    /// the next handler; without registers, the core.
+    /// Re-listing (0x1ee1a / 0x1ef6c, `foreground`): without registers, the core, which leaves D2 to the next
+    /// handler; on the processor (tools), the adapter leaves the original's registers.
     fn relink(&mut self, b: &mut Cps2Bus, o: Obj, foreground: bool);
     /// The leftovers D2 to D5 (see `dispatch::Leftovers`): the processor register, or the leftover of the dispatch
     /// loop.
@@ -72,29 +61,6 @@ pub trait Bench {
     fn d5(&mut self) -> &mut u32;
     /// Dispatch loop counter (D7.w of the original): phase of the "every other frame" blinking.
     fn counter(&self) -> u16;
-}
-
-impl Bench for &mut Cpu {
-    #[track_caller]
-    fn relink(&mut self, b: &mut Cps2Bus, o: Obj, foreground: bool) {
-        let list = if foreground { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
-        list.reinsert_68k(self, b, o);
-    }
-    fn d2(&mut self) -> &mut u32 {
-        &mut self.d[2]
-    }
-    fn d3(&mut self) -> &mut u32 {
-        &mut self.d[3]
-    }
-    fn d4(&mut self) -> &mut u32 {
-        &mut self.d[4]
-    }
-    fn d5(&mut self) -> &mut u32 {
-        &mut self.d[5]
-    }
-    fn counter(&self) -> u16 {
-        self.d[7] as u16
-    }
 }
 
 impl Bench for &mut Dispatch {
@@ -166,38 +132,6 @@ pub mod sub {
     /// Attribute of the terrain under the object (D2); `terrain_at` takes (D0, D1) = (x, y).
     pub const TERRAIN_OF_OBJECT: u32 = 0x24a8;
     pub const TERRAIN_AT: u32 = 0x24b0;
-}
-
-impl<'a> Cx<'a> {
-    /// Context for the object designated by A0.
-    pub fn new(c: &'a mut Cpu, b: &'a mut Cps2Bus) -> Self {
-        let o = Obj(c.a[0]);
-        Cx { c, b, o }
-    }
-
-    /// Calls the converted function `f` on the same object, without registers (the leftovers go through the processor).
-    pub fn without<T>(&mut self, f: impl FnOnce(&mut Gx) -> T) -> T {
-        let mut a = Dispatch::from_cpu(self.c);
-        a.object = self.o;
-        let r = f(&mut Cx { c: &mut a, b: &mut *self.b, o: self.o });
-        a.give_back(self.c);
-        r
-    }
-
-    // --- subroutines ---------------------------------------------------------------------------
-
-    /// JSR `addr` with A0 = the object and A5 = base of the work RAM.
-    #[track_caller]
-    pub fn call(&mut self, addr: u32) {
-        self.c.a[0] = self.o.0;
-        self.c.a[5] = A5;
-        call(self.c, self.b, addr);
-    }
-
-    /// RTS.
-    pub fn ret(self) {
-        rts(self.c, self.b);
-    }
 }
 
 impl<R> Cx<'_, R> {
@@ -318,35 +252,23 @@ impl<R> Cx<'_, R> {
     }
 }
 
-/// Native of a handler: contract of the dispatch loop (A0 and D7 preserved).
-pub const fn handler(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
-}
-
-/// Native of a converted handler (`Gx`, without registers): what the dispatch loop passes as argument.
-pub const fn handler_without(entry: u32, name: &'static str, run: fn(&mut Cps2Bus, &mut Dispatch)) -> Native {
-    Native { entry, name, run: crate::Body::Handler(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
-}
-
-/// Declares the `NATIVES` table of a type file: `address "name" path::to::handler` (on `Cx`), or `address "name"
-/// #[without] path::to::handler` (on `Gx`, without registers).
+/// Declares the `NATIVES` table of a type file: `address "name" path::to::handler` (on a generic `Cx`, called as a
+/// handler without registers: what the dispatch loop passes, `Gx`).
 macro_rules! handlers {
-    ($( $entry:literal $name:literal $(#[$without:ident])? $f:path ),* $(,)?) => {
+    ($( $entry:literal $name:literal $f:path ),* $(,)?) => {
         pub const NATIVES: &[$crate::Native] = &[ $(
-            $crate::families::cx::handlers!(@one $entry $name $(#[$without])? $f),
+            $crate::families::cx::handlers!(@one $entry $name $f),
         )* ];
     };
     (@one $entry:literal $name:literal $f:path) => {
-        $crate::families::cx::handler($entry, $name, |c, b| {
-            let mut x = $crate::families::cx::Cx::new(c, b);
-            $f(&mut x);
-            x.ret();
-        })
-    };
-    (@one $entry:literal $name:literal #[without] $f:path) => {
         $crate::families::cx::handler_without($entry, $name, |b, a| {
             $f(&mut $crate::families::cx::Gx::dispatch(b, a));
         })
     };
 }
 pub(crate) use handlers;
+
+/// Native of a converted handler (`Gx`, without registers): what the dispatch loop passes as argument.
+pub const fn handler_without(entry: u32, name: &'static str, run: fn(&mut Cps2Bus, &mut Dispatch)) -> Native {
+    Native { entry, name, run: crate::Body::Handler(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
+}

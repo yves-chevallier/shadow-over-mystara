@@ -17,9 +17,7 @@ use super::cx::Cx;
 use super::enemy_lib as lib;
 use super::enemy_common::var;
 use super::enemy_common::detach_from_host;
-use crate::mem::{rd16, rd32, rd8, rts};
-use crate::objects::anim::load_entry;
-use crate::objects::Obj;
+use crate::mem::{rd16, rd32, rd8};
 use crate::Native;
 use crate::objects::pools;
 use crate::objects::Current;
@@ -73,7 +71,7 @@ const ENEMY: u8 = 2;
 const BOSS: u8 = 4;
 
 /// ROM tables.
-mod rom {
+pub(crate) mod rom {
     /// Animation sets per type (longs read as data; high word zero: own routine, offset).
     pub const ANIM_SETS: u32 = 0x3de58;
     /// Animation variant by `+0xbf` (bytes, PC-relative).
@@ -90,6 +88,7 @@ mod rom {
     /// Empty routine (`rts`) of the per-type tables.
     pub const NOTHING: [u32; 2] = [0x3e2aa, 0x3bb9a];
     /// Player reaction animations (longs per character, data).
+    #[cfg_attr(not(feature = "tools"), allow(dead_code))] // read by the tools
     pub const PLAYER_HURT: u32 = 0x3bb52;
 }
 
@@ -2177,49 +2176,12 @@ fn run_entry<R: Bench>(x: &mut Cx<'_, R>, entry: u32) {
     assert!(run_entry_flag(x, entry), "reaction {entry:#x}: step {step:#x} outside the original table");
 }
 
-/// 0x3bb16: player reaction animation `D6` (set per character `+3`, table 0x3bb52).
-fn player_hurt_animation(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
-    let o = Obj(c.a[0]);
-    let character = rd8(b, o.0 + 3) as u32;
-    c.d[5] = 4 * character;
-    let set = rd32(b, rom::PLAYER_HURT + 4 * character);
-    let index = (c.d[6] as u16).wrapping_mul(2) as i16 as i32 as u32;
-    let off = rd16(b, set.wrapping_add(index));
-    c.d[6] = c.d[6] & !0xffff | off as u32;
-    let at = set.wrapping_add(off as i16 as i32 as u32);
-    c.a[4] = load_entry(b, o, at, true);
-    rts(c, b);
-}
-
-/// Runs the common reaction routine `entry` if it is one (false otherwise): direct call from
-/// `enemy_common::react`, without going through the native.
-pub fn run_common<R: Bench>(x: &mut Cx<'_, R>, entry: u32) -> bool {
-    if !NATIVES.iter().any(|n| n.entry == entry) {
-        return false;
-    }
-    let step = x.u8(f::STEP);
-    assert!(run_entry_flag(x, entry), "reaction {entry:#x}: step {step:#x} outside the original table");
-    true
-}
-
-/// Runs the reaction routine `entry` (RTS included). All the steps of the original tables are rewritten: the step
-/// (`+6`) starts at 0 and only advances by 2 up to the last step of the table, which no longer advances it (death,
-/// end of
-/// grab...), and the `BURNT` index (D0.w) is the reaction code set by the caller (high byte zero). A step
-/// outside the table would make the original jump into data: it cannot happen.
-fn native_run(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, entry: u32) {
-    let mut x = Cx::new(c, b);
-    let step = x.u8(f::STEP);
-    assert!(run_entry_flag(&mut x, entry), "reaction {entry:#x}: step {step:#x} outside the original table");
-    x.ret();
-}
-
 macro_rules! reaction_natives {
     ($($entry:expr),* $(,)?) => {
         &[$(Native {
             entry: $entry,
             name: "enemy_reaction",
-            run: crate::Body::WithCpu(|c, b| native_run(c, b, $entry)),
+            run: crate::Body::Handler(|b, a| run_entry(&mut crate::families::cx::Gx::dispatch(b, a), $entry)),
             touches_sound: false,
             outputs: 0,
         }),*]
@@ -2235,15 +2197,6 @@ pub const NATIVES: &[Native] = reaction_natives![
     0x3da86, 0x3dab0, 0x3dd72, 0x3ddf6,
 ];
 
-/// Player reaction animation (called by the player states that remained in 68000).
-pub const PLAYER_HURT_ANIMATION: Native = Native {
-    entry: 0x3bb16,
-    name: "player_hurt_animation",
-    run: crate::Body::WithCpu(player_hurt_animation),
-    touches_sound: false,
-    outputs: 0,
-};
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2256,4 +2209,15 @@ mod tests {
         }
         assert_eq!(NATIVES.len(), REACTIONS.len() + 6);
     }
+}
+
+/// Runs the common reaction routine `entry` if it is one (false otherwise): direct call from
+/// `enemy_common::react`, without going through the native.
+pub fn run_common<R: Bench>(x: &mut Cx<'_, R>, entry: u32) -> bool {
+    if !NATIVES.iter().any(|n| n.entry == entry) {
+        return false;
+    }
+    let step = x.u8(f::STEP);
+    assert!(run_entry_flag(x, entry), "reaction {entry:#x}: step {step:#x} outside the original table");
+    true
 }

@@ -268,15 +268,19 @@ recompilé. C'est **le jeu** (décision D1, [refactorisation.md](refactorisation
 recompilé pour le reste ; depuis que les tâches sont des machines à états lancées par un ordonnanceur Rust et que leurs
 appels en cours ne sont plus sur la pile 68000, le code d'origine ne peut plus prendre la suite d'une native au milieu
 d'une tâche. `install` installe le jeu sans 68000, et `DDSOM_HYBRIDE=1` arrête `validate`, `bench`, `rom_reads` et
-l'application avec un message (`ddsom_game::refuse_hybrid`). `DDSOM_CHECK` et `DDSOM_ADOPT_REGS` (l'original exécuté sur
-une copie, à chaque native) marchent sans lui ; `examples/cessions` et `reste68k`, qui mesuraient le 68000 restant du
+l'application avec un message (`ddsom_game::refuse_hybrid`). `DDSOM_CHECK` compare désormais chaque gestionnaire
+d'objet appelé par le jeu à son original exécuté sur une copie (`tools::check_handler`, mémoire comparée ; `validate`
+échoue s'il n'a rien comparé) ; `DDSOM_ADOPT_REGS` ne sert plus qu'aux natives appelées par le code d'origine des outils ; `examples/cessions` et `reste68k`, qui mesuraient le 68000 restant du
 mode hybride, sont retirés (historique git).
 
-* **Exécuteur.** La boucle d'image exécute les points (`kernel::Point`) ; au point `Task`, `no68k::step` cherche la
-  native posée au PC (`lookup`) et l'exécute, comme `call` (plus de `c.step`, plus de `ddsom_rc`). Le `Cpu` ne sert
-  plus que de banc de registres et de pile. Une native s'exécute toujours en entier, et `Ctx::jsr_origine` (familles)
-  appelle la native au lieu du code d'origine. Une native qui cède, ou un épilogue qui revient plus haut : le code
-  Rust en cours revient sans rien faire (« Appels en cours en Rust »).
+* **Exécuteur.** La boucle d'image exécute les points (`kernel::Point`) : chaque étape est une fonction Rust appelée
+  directement, et la boucle d'aiguillage trouve par adresse (table de la ROM) le gestionnaire `Body::Handler` de chaque
+  objet. **Le jeu n'a plus de processeur** (étape finale de la sortie du Cpu, `wt-sans-cpu`, refactorisation.md § 20) :
+  ni `m68k::Cpu` ni banc de registres ; `no68k::line(bus, plafond)` ne reçoit plus que le bus (le compteur de cycles du
+  68000 est avancé par la machine elle-même, et seulement quand elle a un 68000) ; le crate `ddsom-game` compilé sans
+  la fonctionnalité `tools` ne dépend plus de `m68k` ni de `ddsom-rc`, et `ddsom` ne les lie plus
+  (`cargo tree -p ddsom`). Le code pour le processeur (natives à l'adresse d'origine avec arguments en registres,
+  machine de référence, `DDSOM_CHECK`, sondes de registres) est dans le module `tools`, réservé aux outils.
 * **Arrêt net.** Une adresse sans native arrête le jeu (panique `without 68000 : …`, que `validate` rapporte en
   `ARRÊT …` puis « ÉCHEC : arrêt sans 68000 à l'image n ») : c'est le cas des replis de natives vers le code d'origine
   sur des chemins non réécrits (`g.rom(...)`/`call` des joueurs, `_ =>` des boss qui appellent l'original, `x.call`
