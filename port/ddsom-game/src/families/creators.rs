@@ -376,6 +376,31 @@ fn scene_music(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// 0xd9778 without registers: the music of the variant of scene object `scene` (nothing, 0xe0d8c or 0xe0c5c).
+pub fn play_scene_music(b: &mut Cps2Bus, scene: Obj) {
+    let variant = scene.u8(b, Obj::VARIANT) as u32;
+    let i = 4 * prog8(b, 0xd9798 + variant) as u32;
+    let routine = prog32(b, 0xd978c + i);
+    scene_routine(b, scene, routine);
+}
+
+/// 0xd981a without registers: the scene exit routine of the variant of `scene`.
+pub fn run_scene_exit(b: &mut Cps2Bus, scene: Obj) {
+    let variant = scene.u8(b, Obj::VARIANT) as u32;
+    let i = 4 * prog8(b, 0xd9836 + variant) as u32;
+    let routine = prog32(b, 0xd982e + i);
+    scene_routine(b, scene, routine);
+}
+
+/// A routine of the scene tables: nothing (0xd99f8) or a music (0xe0d8c, 0xe0c5c, played on `scene`).
+fn scene_routine(b: &mut Cps2Bus, scene: Obj, routine: u32) {
+    match routine {
+        0xd99f8 => {}
+        0xe0c5c | 0xe0d8c => crate::sound::jouer(b, routine, scene),
+        r => unreachable!("scene routine {r:#x}: tables 0xd978c and 0xd982e only hold 0xd99f8, 0xe0d8c and 0xe0c5c"),
+    }
+}
+
 /// 0xd99f8 : routine vide des tables de scène.
 fn nothing(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);

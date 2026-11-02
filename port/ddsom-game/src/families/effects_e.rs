@@ -181,7 +181,7 @@ mod gate {
     pub const PLAY_MUSIC: u32 = 0xe17a4;
 }
 
-fn gate(x: &mut Cx) {
+fn gate<R: Banc>(x: &mut Cx<'_, R>) {
     if !scene_running(x, |_| {}) {
         return;
     }
@@ -277,7 +277,7 @@ fn gate_watch<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 2 : palette du rideau, puis deux bandes de 22 tuiles par image.
-fn gate_curtain(x: &mut Cx) {
+fn gate_curtain<R: Banc>(x: &mut Cx<'_, R>) {
     for k in 0..8 {
         let v = x.data32(0x25c4a0 + 4 * k);
         let v = if k < 6 { v | 0xf000_f000 } else { v.wrapping_add(0xf000_f000) };
@@ -306,7 +306,7 @@ fn gate_curtain(x: &mut Cx) {
 
 /// 0xada96 : entrée dans la sous-scène (scène 7 → 6, sinon 12). Le contexte de la scène est sauvé dans
 /// l'objet, les objets des pools sont gelés, le décor de la variante est créé, puis la scène repart.
-fn gate_enter(x: &mut Cx) {
+fn gate_enter<R: Banc>(x: &mut Cx<'_, R>) {
     let scene = if crate::ram::SCENE.get(x.b) == 7 { 6 } else { 0xc };
     x.set_a5_u8(0x34, scene);
     x.set16(f::STATE, 0x400);
@@ -337,23 +337,22 @@ fn gate_enter(x: &mut Cx) {
         }
     }
     // 0xae37c : décor de la variante (D0 = 0, D1 = variante)
-    x.c.d[0] = 0;
     let v = x.u8(f::VARIANT);
-    x.c.d[1] = x.c.d[1] & !0xff | v as u32;
-    scene_prop(x);
+    scene_prop(x, 0, v);
     crate::sound::jouer(x.b, gate::MUSIC_OF_SCENE, x.o);
-    x.c.a[0] = x.o.0;
-    super::creators::restart_scene(x.c, x.b);
+    // 0xcc0ca
+    super::scenery::restart_scene(x);
 }
 
-/// 0xcc200 : décor (SET 8) de variante D0 et de réglage D1 ; à défaut un SOBJ 4, à défaut un EFFCT 18.
-fn scene_prop(x: &mut Cx) {
+/// 0xcc200: scenery (SET 8) of variant `variant` (D0) and setting `setting` (D1); failing that a SOBJ 4, failing that an
+/// EFFCT 18.
+fn scene_prop<R: Banc>(x: &mut Cx<'_, R>, variant: u8, setting: u8) {
     for (alloc, kind) in [(&pools::SET, 8), (&pools::SOBJ, 4), (&pools::EFFCT, 0x12)] {
         if let Some(o) = x.alloc(alloc) {
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, kind);
-            o.set_u8(x.b, f::VARIANT, x.c.d[0] as u8);
-            o.set_u8(x.b, 0x2f, x.c.d[1] as u8);
+            o.set_u8(x.b, f::VARIANT, variant);
+            o.set_u8(x.b, 0x2f, setting);
             return;
         }
     }
@@ -361,11 +360,11 @@ fn scene_prop(x: &mut Cx) {
 
 /// 0xae11a, sous-état 0 : retour de la sous-scène (scène 6 → 7, sinon 9). La scène repart avec le
 /// contexte sauvé par `gate_enter`, les joueurs vivants sont replacés devant l'objet suivi.
-fn gate_leave(x: &mut Cx) {
+fn gate_leave<R: Banc>(x: &mut Cx<'_, R>) {
     let scene = if crate::ram::SCENE.get(x.b) == 6 { 7 } else { 9 };
     x.set_a5_u8(0x34, scene);
     x.set_a5_u8(0x44, 1);
-    super::creators::reprendre_decor(x.c, x.b, 0x33aa6);
+    super::scenery::resume_scenery_lit(x, super::scenery::Cameras::Start);
     for p in players() {
         if p.u8(x.b, 0) == 0 || p.u16(x.b, 0x62) == 0 {
             continue;
@@ -403,7 +402,8 @@ fn gate_leave(x: &mut Cx) {
     let step = x.u8(gate::SCROLL_STEP);
     wr8(x.b, gate::SCENE_SCROLL_STEP, step);
     let music = x.u16(gate::MUSIC);
-    x.c.d[4] = x.c.d[4] & 0xffff_0000 | music as u32;
+    // Original glitch: the music stays in D4.w (`dispatch::Restes`)
+    *x.c.d4() = *x.c.d4() & 0xffff_0000 | music as u32;
     x.add8(f::SUB_STATE, 2);
     crate::sound::jouer_avec(x.b, gate::PLAY_MUSIC, crate::sound::Source { objet: Some(x.o), d4: Some(music as u32), ..Default::default() });
 }
@@ -473,7 +473,7 @@ fn attacker_index<R: Banc>(x: &mut Cx<'_, R>, a: Obj, class: u8, when_equal: boo
     base.wrapping_add(a.u8(x.b, 2)) as u32
 }
 
-fn attack_fx(x: &mut Cx) {
+fn attack_fx<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::VARIANT) {
         0 => attack_fx_flash(x),
         1 => attack_fx_burst(x),
@@ -605,7 +605,7 @@ fn attack_fx_trail<R: Banc>(x: &mut Cx<'_, R>) {
 /// Variantes 8 et 9 : gerbe d'éclats de l'attaquant. Le premier (réglage 0) crée les éclats d'une fiche
 /// propre au type de l'attaquant (vitesses, réglage) puis disparaît ; chaque éclat suit l'attaquant tant
 /// qu'il est dans l'action prévue, puis se détache, retombe en clignotant et disparaît au sol.
-fn attack_fx_shower(x: &mut Cx) {
+fn attack_fx_shower<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x2f) == 0 {
         return attack_fx_shower_spawn(x);
     }
@@ -657,7 +657,7 @@ fn attack_fx_shower_spawn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Un éclat de la gerbe (`0xad384`).
-fn attack_fx_shard(x: &mut Cx) {
+fn attack_fx_shard<R: Banc>(x: &mut Cx<'_, R>) {
     let owner = x.linked(attack_fx::OWNER);
     if x.u8(f::SUB_STATE) == 0 {
         let first = x.u8(f::VARIANT) == 8;
@@ -701,7 +701,7 @@ fn attack_fx_shard(x: &mut Cx) {
             vx = vx.wrapping_neg();
         }
         x.set16(Obj::VX, vx);
-        if x.c.d[7] & 1 != 0 {
+        if x.compteur() & 1 != 0 {
             let v = x.u8(0x01) ^ 2;
             x.set8(0x01, v);
         }
@@ -996,7 +996,7 @@ fn attack_fx_sparks<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xabeea "effct_attaque" attack_fx,
+    0xabeea "effct_attaque" #[sans] attack_fx,
     0xad63e "effct_radeau" #[sans] raft,
-    0xad866 "effct_passage" gate,
+    0xad866 "effct_passage" #[sans] gate,
 }

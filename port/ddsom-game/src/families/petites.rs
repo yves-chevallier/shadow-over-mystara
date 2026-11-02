@@ -350,6 +350,35 @@ fn palette_blocks(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// 0x10158 (`brighten`) and 0x101da for a generic handler: the four blocks of eight colours copied into the palette,
+/// like `palette_blocks_lit` and `palette_blocks`. Original glitch: the last block's `movem.l` leaves its colours 2 to
+/// 5 in D2-D5, read back by the next handlers (`dispatch::Restes`).
+pub(crate) fn four_palette_blocks<R: Banc>(x: &mut Cx<'_, R>, brighten: bool) {
+    const DESTINATIONS: [u32; 4] = [0x91c2e0, 0x91c300, 0x91c360, 0x91c3e0];
+    const BRIGHT_SOURCES: [u32; 4] = [0x2538c0, 0x2538e0, 0x253900, 0x253920];
+    const SOURCES_69: u32 = 0x10218;
+    let mut last = 0;
+    for (k, dst) in DESTINATIONS.into_iter().enumerate() {
+        let src = if brighten { BRIGHT_SOURCES[k] } else { SOURCES_69 + 0x20 * k as u32 };
+        for i in 0..8 {
+            let v = rd32(x.b, src + 4 * i);
+            wr32(x.b, dst + 4 * i, if brighten { v | 0xf000_f000 } else { v });
+        }
+        last = src;
+    }
+    *x.c.d2() = rd32(x.b, last + 8);
+    *x.c.d3() = rd32(x.b, last + 12);
+    *x.c.d4() = rd32(x.b, last + 16);
+    *x.c.d5() = rd32(x.b, last + 20);
+}
+
+/// 0x3525c for a generic handler: clears the start of scroll layer 1 (`video::effacer_debut_couche1`).
+/// Original glitch: the empty cell stays in D2-D5 (`dispatch::Restes`).
+pub(crate) fn clear_scroll1_start<R: Banc>(x: &mut Cx<'_, R>) {
+    crate::video::effacer_debut_couche1(x.b);
+    (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (0x1f_0000, 0x1f_0000, 0x1f_0000, 0x1f_0000);
+}
+
 /// 0x4aed0 : deux effets de type 5, variante 1, indices `+0x2f` 0 et 1, liés au créateur (`+0x50`).
 pub(crate) fn peff_5_pair(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj) {
     for index in [0, 1] {

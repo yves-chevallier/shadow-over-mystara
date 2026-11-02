@@ -21,7 +21,7 @@ use crate::families::cx::Banc;
 use super::boss_common::*;
 use super::cx::handlers;
 
-mod attacks;
+pub(crate) mod attacks;
 mod fight;
 mod hit;
 mod intro;
@@ -376,5 +376,3 @@ handlers! {
     0x91530 "boss_15" #[sans] run,
 }
 
-/// Routine du boss appelée par un effet (0xb482e) : rapprochement d'un objet vers un autre.
-pub const HELPERS: &[crate::Native] = &[attacks::APPROACH];

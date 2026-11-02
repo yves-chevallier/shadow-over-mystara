@@ -12,6 +12,7 @@ use super::shell::{suspended, GAME_PAUSED};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::Obj;
 use crate::objects::pools;
+use super::effects_creators::restes::Pur;
 use crate::objects::Courant;
 use crate::machine::Machine;
 
@@ -44,18 +45,15 @@ fn reinsert_by_layer<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Sort de l'écran de plus que `margin` pixels : état 4 (disparition). La marge est dans D2 ; le
 /// test se fait en mots non signés (routine 0xddbfc de l'original).
-fn cull_beyond(x: &mut Cx, margin: u16) {
+fn cull_beyond<R: Banc>(x: &mut Cx<'_, R>, margin: u16) {
     let mut camera = x.a5_u16(ram::CAMERA_X);
     if x.a5_u8(ram::USE_CAMERA2) != 0 {
         camera = x.a5_u16(ram::CAMERA2_X);
     }
     let screen_x = x.u16(0x8).wrapping_sub(camera).wrapping_add(margin);
     let limit = margin.wrapping_mul(2).wrapping_add(0x180);
-    // restes laissés par 0xddbfc, que le gestionnaire suivant peut lire (D2 pour SOBJ 2)
-    let low = |r: u32, v: u16| r & 0xffff_0000 | v as u32;
-    x.c.d[0] = low(x.c.d[0], screen_x);
-    x.c.d[1] = low(x.c.d[1], camera);
-    x.c.d[2] = low(x.c.d[2], limit);
+    // Original glitch: 0xddbfc leaves the limit in D2.w, which the next handler may read (margin of SOBJ 2)
+    *x.c.d2() = *x.c.d2() & 0xffff_0000 | limit as u32;
     if screen_x > limit {
         x.set8(0x4, 4);
     }
@@ -114,7 +112,7 @@ mod scenery {
     /// Fin du script d'animation (octet haut des drapeaux).
     const ANIM_END: u8 = 0xfe;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -181,7 +179,7 @@ mod scenery {
         x.set8(0x42, 1);
     }
 
-    fn follow(x: &mut Cx) {
+    fn follow<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x2f) == 0 {
             x.anim_step();
         }
@@ -328,7 +326,7 @@ mod fixture {
     /// Variante -> forme du comportement par image (0 : sortie d'écran, 1 : défilement, 2 : suivi).
     const STEP_KIND: u32 = 0xddd16;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -381,7 +379,7 @@ mod flasher {
 
     const BLINKS: u8 = 0x10;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -400,7 +398,7 @@ mod flasher {
             }
             _ => return x.free(&pools::SOBJ),
         }
-        let margin = x.c.d[2] as u16;
+        let margin = *x.c.d2() as u16;
         cull_beyond(x, margin);
         x.reinsert();
     }
@@ -486,7 +484,7 @@ mod scene {
     const PALETTE_A: u32 = 0x91c080;
     const PALETTE_B: u32 = 0x91c3e0;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x3) {
             0 => lifecycle(x, v0_init, v0_step),
             1 => lifecycle(x, v1_init, v1_step),
@@ -527,7 +525,7 @@ mod scene {
     }
 
     /// Cycle de vie commun : 0 initialisation, 2 vie, 4 mort, 6 libération.
-    fn lifecycle(x: &mut Cx, init: fn(&mut Cx), step: fn(&mut Cx)) {
+    fn lifecycle<R: Banc>(x: &mut Cx<'_, R>, init: fn(&mut Cx<'_, R>), step: fn(&mut Cx<'_, R>)) {
         match x.u8(0x4) {
             0 => init(x),
             2 => step(x),
@@ -606,7 +604,7 @@ mod scene {
         }
     }
 
-    fn v0_init(x: &mut Cx) {
+    fn v0_init<R: Banc>(x: &mut Cx<'_, R>) {
         if (signal(x) as i8) < 0 {
             return x.free(&pools::SOBJ);
         }
@@ -623,7 +621,7 @@ mod scene {
         x.reinsert();
     }
 
-    fn v0_step(x: &mut Cx) {
+    fn v0_step<R: Banc>(x: &mut Cx<'_, R>) {
         x.anim_step();
         if signal(x) as i8 >= 0 {
             return;
@@ -632,7 +630,7 @@ mod scene {
     }
 
     /// Variante 1 : lumière qui grandit lentement jusqu'au signal du maître.
-    fn v1_init(x: &mut Cx) {
+    fn v1_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x8, 0x30_0000);
         x.set32(0xc, 0xd0_0000);
@@ -641,7 +639,7 @@ mod scene {
         crate::sound::jouer(x.b, 0xea662, x.o);
     }
 
-    fn v1_step(x: &mut Cx) {
+    fn v1_step<R: Banc>(x: &mut Cx<'_, R>) {
         if signal(x) != 0 {
             return kill(x);
         }
@@ -650,7 +648,7 @@ mod scene {
     }
 
     /// Variante 2 : décor qui défile, trois temps (`+5`) rythmés par le signal du maître.
-    fn v2_init(x: &mut Cx) {
+    fn v2_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x8, 0x100);
         x.set16(0xc, 0xc0);
@@ -659,7 +657,7 @@ mod scene {
         start(x, 0xef);
     }
 
-    fn v2_step(x: &mut Cx) {
+    fn v2_step<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 if signal(x) != 0 {
@@ -700,7 +698,7 @@ mod scene {
         crate::sound::jouer(x.b, 0xea6a2, x.o);
     }
 
-    fn v3_step(x: &mut Cx) {
+    fn v3_step<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(0x48) != 0 {
             let child = x.linked(0x48);
             if child.u8(x.b, 0x22) == 0 {
@@ -733,7 +731,7 @@ mod scene {
     }
 
     /// Variante 4 : monte vers le haut de l'écran (Z - 1,25 par image) et s'arrête à Z = 0x20.
-    fn v4_init(x: &mut Cx) {
+    fn v4_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0x4000);
         x.set16(0x8, 5);
@@ -741,7 +739,7 @@ mod scene {
         start(x, 0xf5);
     }
 
-    fn v4_step(x: &mut Cx) {
+    fn v4_step<R: Banc>(x: &mut Cx<'_, R>) {
         x.add32(0xc, 0u32.wrapping_sub(0x14000));
         if x.u16(0xc) as i16 > 0x20 {
             return;
@@ -754,7 +752,7 @@ mod scene {
     /// plus ; décalages X puis Z en table 0xde386).
     const V5_OFFSETS: u32 = 0xde386;
 
-    fn v5_init(x: &mut Cx) {
+    fn v5_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0x8000);
         x.set16(0x8, 0x78);
@@ -762,7 +760,7 @@ mod scene {
         start(x, 0xf6);
     }
 
-    fn v5_step(x: &mut Cx) {
+    fn v5_step<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 x.add32(0xc, 0x10000);
@@ -824,7 +822,7 @@ mod scene {
     /// X, arrêt), attend le signal 2 puis remonte de 0x290.
     const V6_TABLE: u32 = 0xde3ee;
 
-    fn v6_init(x: &mut Cx) {
+    fn v6_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0xf000);
         x.set32(0xc, 0x300_0000);
@@ -840,7 +838,7 @@ mod scene {
         x.reinsert();
     }
 
-    fn v6_step(x: &mut Cx) {
+    fn v6_step<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 x.add16(0xc, 2);
@@ -874,7 +872,7 @@ mod scene {
     const V7_SCRIPTS: u32 = 0xde4d2;
     const V7_PALETTES: u32 = 0x292240;
 
-    fn v7_init(x: &mut Cx) {
+    fn v7_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x42, 6);
         let mut off = 4 * x.u8(0x2f) as u32;
@@ -892,7 +890,7 @@ mod scene {
         crate::palette::no_brightness(x.b);
     }
 
-    fn v7_step(x: &mut Cx) {
+    fn v7_step<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             if rd8(x.b, PALETTE_B) & 0xf0 == 0xf0 {
                 x.set16(0x42, 0xb4);
@@ -927,7 +925,7 @@ mod scene {
     /// 0xff0eaa (A5-0x7156).
     const SCENE_DONE_FLAG: u32 = 0xff_0eaa;
 
-    fn v8_init(x: &mut Cx) {
+    fn v8_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.a5_u16(ram::CAMERA_X);
         x.set16(0x8, v);
@@ -939,7 +937,7 @@ mod scene {
         start(x, 0x112);
     }
 
-    fn v8_step(x: &mut Cx) {
+    fn v8_step<R: Banc>(x: &mut Cx<'_, R>) {
         x.add16(0xc, 8);
         let below = x.u16(0xc).wrapping_add(x.u16(0x10)).wrapping_sub(x.a5_u16(ram::CAMERA_Y));
         if below < 0x1c8 {
@@ -953,7 +951,7 @@ mod scene {
     }
 
     /// Variante 9 : texte animé sur la caméra secondaire ; signale sa fin au maître.
-    fn v9_init(x: &mut Cx) {
+    fn v9_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.a5_u16(ram::CAMERA2_X);
         x.set16(0x8, v);
@@ -965,7 +963,7 @@ mod scene {
         crate::sound::jouer(x.b, 0xea2e8, x.o);
     }
 
-    fn v9_step(x: &mut Cx) {
+    fn v9_step<R: Banc>(x: &mut Cx<'_, R>) {
         if x.anim_step() || (signal(x) as i8) < 0 {
             return x.set8(0x4, 6);
         }
@@ -978,7 +976,7 @@ mod scene {
 
     /// Variante 10 : plaque qui descend en deux temps (Z 0x88 puis 0xa0), attend le signal 2,
     /// remonte à Z 0x80 et attend la fin.
-    fn v10_init(x: &mut Cx) {
+    fn v10_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x8, 0x98_0000);
         x.set32(0xc, 0x70_0000);
@@ -987,7 +985,7 @@ mod scene {
         crate::sound::jouer(x.b, 0xea77e, x.o);
     }
 
-    fn v10_step(x: &mut Cx) {
+    fn v10_step<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 x.add32(0xc, 0x4000);
@@ -1041,7 +1039,7 @@ mod scene {
     }
 
     /// Variante 11 : sprite fixe sur la caméra principale.
-    fn v11_init(x: &mut Cx) {
+    fn v11_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0x8000);
         let y = x.a5_u16(ram::CAMERA_Y);
@@ -1054,7 +1052,7 @@ mod scene {
 
     /// Variante 12 : sprite qui traverse l'écran (1 pixel par image vers la droite, ou vers la
     /// gauche si `+0x2f`) et fait reculer la caméra.
-    fn v12_init(x: &mut Cx) {
+    fn v12_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x2c, 0);
         x.set32(0x8, 0xf0_0000);
@@ -1073,7 +1071,7 @@ mod scene {
         x.reinsert();
     }
 
-    fn v12_step(x: &mut Cx) {
+    fn v12_step<R: Banc>(x: &mut Cx<'_, R>) {
         let d = (((x.u16(0x14) as u32) << 16) as i32 >> 8) as u32;
         x.add32(0x8, d);
         let screen = x.u16(0x8).wrapping_sub(x.a5_u16(ram::CAMERA_X));
@@ -1093,7 +1091,7 @@ mod scene {
     /// 0xdea84), sur un fond de palette 0x91c340 (8 couleurs identiques).
     const V13_SCRIPTS: u32 = 0xdea84;
 
-    fn v13_init(x: &mut Cx) {
+    fn v13_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.a5_u16(ram::CAMERA_X);
         x.set16(0x8, v);
@@ -1116,7 +1114,7 @@ mod scene {
     /// dont on prend la variante si le bit 15 est levé) ; table à 8 octets en 0xdef1e.
     const V14_TABLE: u32 = 0xdef1e;
 
-    fn v14_init(x: &mut Cx) {
+    fn v14_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let mut which = x.u16(0x46);
         if (which as i16) < 0 {
@@ -1135,7 +1133,7 @@ mod scene {
         x.reinsert();
     }
 
-    fn v14_step(x: &mut Cx) {
+    fn v14_step<R: Banc>(x: &mut Cx<'_, R>) {
         if (signal(x) as i8) < 0 {
             x.add8(0x4, 2);
         }
@@ -1147,7 +1145,7 @@ mod scene {
     const V15_PALETTES: u32 = 0x28f960;
     const V15_POSITIONS: u32 = 0xdf01a;
 
-    fn v15_init(x: &mut Cx) {
+    fn v15_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
         x.set32(0x10, 0);
@@ -1164,14 +1162,14 @@ mod scene {
 
     /// Variante 16 : sprite flippé au hasard, qui vit tant que le maître n'a pas fini et que son
     /// animation n'est pas terminée.
-    fn v16_init(x: &mut Cx) {
+    fn v16_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         random_flip(x);
         start(x, 0x1a2);
         crate::sound::jouer(x.b, 0xea7be, x.o);
     }
 
-    fn v16_step(x: &mut Cx) {
+    fn v16_step<R: Banc>(x: &mut Cx<'_, R>) {
         if signal(x) as i8 >= 0 && !x.anim_step() {
             return;
         }
@@ -1180,7 +1178,7 @@ mod scene {
 
     /// Variante 17 : bulle qui sort du bas de l'écran (deux positions selon `+0x2f`) ; en fin
     /// d'animation, rend le bit (`+0x2f` modulo 8) de `+0x30` au propriétaire `+0x46`.
-    fn v17_init(x: &mut Cx) {
+    fn v17_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0x4000);
         x.set16(0xc, 0x1c0);
@@ -1195,7 +1193,7 @@ mod scene {
         crate::sound::jouer(x.b, 0xea83e, x.o);
     }
 
-    fn v17_step(x: &mut Cx) {
+    fn v17_step<R: Banc>(x: &mut Cx<'_, R>) {
         if !x.anim_step() {
             return;
         }
@@ -1207,7 +1205,7 @@ mod scene {
     }
 
     /// Variante 18 : sprite posé sur la caméra secondaire.
-    fn v18_init(x: &mut Cx) {
+    fn v18_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.a5_u16(ram::CAMERA2_X);
         x.set16(0x8, v);
@@ -1227,7 +1225,7 @@ mod scene {
     const V19_PALETTES: u32 = 0x28f340 + 0x60;
     const V19_POSITIONS: u32 = 0xdf234;
 
-    fn v19_init(x: &mut Cx) {
+    fn v19_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.u8(0x2f) as u32;
         let line = x.rom8(V19_LINES + 2 * v) as u32;
@@ -1257,7 +1255,7 @@ mod scene {
         x.add16(0xc, cy);
     }
 
-    fn v19_step(x: &mut Cx) {
+    fn v19_step<R: Banc>(x: &mut Cx<'_, R>) {
         v19_place(x);
         let owner = x.linked(0x46);
         if owner.u16(x.b, 0x32) != 0 {
@@ -1272,7 +1270,7 @@ mod scene {
     const V20_X: u32 = 0xdf2a8;
     const V20_FALL: u32 = 0xdf2ea;
 
-    fn v20_init(x: &mut Cx) {
+    fn v20_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.a5_u16(ram::CAMERA_Y);
         x.set16(0xc, v);
@@ -1295,7 +1293,7 @@ mod scene {
         x.reinsert();
     }
 
-    fn v20_step(x: &mut Cx) {
+    fn v20_step<R: Banc>(x: &mut Cx<'_, R>) {
         if (signal(x) as i8) < 0 {
             return kill(x);
         }
@@ -1303,7 +1301,7 @@ mod scene {
     }
 
     /// Chute : sort (état mort) quand le bas du sprite repasse au-dessus du bord haut de l'écran.
-    fn v20_fall(x: &mut Cx) {
+    fn v20_fall<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_xz();
         let below = x.u16(0xc).wrapping_add(x.u16(0x10));
         if (below as i16) <= x.a5_u16(ram::CAMERA_Y) as i16 {
@@ -1316,7 +1314,7 @@ mod scene {
     const V21_PALETTE_SELECT: u32 = 0xdf332;
     const V21_POSITIONS: u32 = 0xdf396;
 
-    fn v21_init(x: &mut Cx) {
+    fn v21_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
         x.set32(0x10, 0);
@@ -1334,7 +1332,7 @@ mod scene {
     /// `A5+0x36`), dont la couleur de la palette 0x91c180 reprend la luminosité de la couleur 0.
     const V23_PALETTE: u32 = 0x28f4c0;
 
-    fn v23_init(x: &mut Cx) {
+    fn v23_init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         copy_longs(x, V23_PALETTE, 0x91c180, 8);
         let top = rd32(x.b, 0x91c000) & BRIGHT;
@@ -1348,7 +1346,7 @@ mod scene {
         x.reinsert();
     }
 
-    fn v23_follow_and_insert(x: &mut Cx) {
+    fn v23_follow_and_insert<R: Banc>(x: &mut Cx<'_, R>) {
         v23_follow(x);
         x.reinsert();
     }
@@ -1395,9 +1393,8 @@ mod hint {
     const LAST_ADVICE: u16 = 0x136;
     const ADVICE_FRAMES: u8 = 0x50;
     const LEAVE_SOUND: u32 = 0xea49a;
-    const SPAWN_ARROW: u32 = 0xdf896;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         let owner = x.linked(0x46);
         if owner.u8(x.b, 0x43) == 0 && rd8(x.b, HINT_INHIBIT) != 0 {
             x.set32(0x4, 0);
@@ -1430,7 +1427,7 @@ mod hint {
         x.set8(0x2b, 0x1c);
     }
 
-    fn step(x: &mut Cx) {
+    fn step<R: Banc>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return;
         }
@@ -1444,7 +1441,8 @@ mod hint {
         let owner = x.linked(0x46);
         if owner.u8(x.b, 0x42) & 2 != 0 {
             crate::sound::jouer(x.b, LEAVE_SOUND, x.o);
-            x.call(SPAWN_ARROW);
+            // 0xdf896: SOBJ 0xa linked through `+0x46`
+            crate::families::petites::linked_par(&mut Pur, x.b, x.o, &pools::SOBJ, 0xa, 0x46);
             let owner = x.linked(0x46);
             let v = owner.u8(x.b, 0x42) & !2;
             owner.set_u8(x.b, 0x42, v);
@@ -2253,13 +2251,13 @@ mod target {
 }
 
 handlers! {
-    0xdd61e "sobj_00" scenery::run,
-    0xddc28 "sobj_01" fixture::run,
-    0xdddb2 "sobj_02" flasher::run,
+    0xdd61e "sobj_00" #[sans] scenery::run,
+    0xddc28 "sobj_01" #[sans] fixture::run,
+    0xdddb2 "sobj_02" #[sans] flasher::run,
     0xdde18 "sobj_03" #[sans] tag::run,
     0xdde8c "sobj_05" #[sans] ghost::run,
-    0xddec4 "sobj_06" scene::run,
-    0xdf4d4 "sobj_07" hint::run,
+    0xddec4 "sobj_06" #[sans] scene::run,
+    0xdf4d4 "sobj_07" #[sans] hint::run,
     0xdf6b0 "sobj_08" #[sans] marker::run,
     0xdf774 "sobj_09" #[sans] frame::run,
     0xdf8ae "sobj_10" #[sans] arrow::run,

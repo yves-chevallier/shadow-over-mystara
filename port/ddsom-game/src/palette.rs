@@ -408,6 +408,12 @@ pub fn charger_page_de_la_scene(b: &mut Cps2Bus, page: usize) {
     charger_page(b, page, n);
 }
 
+/// The D2-D5 that a page loader (0x1a608...) leaves: longs 2 to 5 of the page's last palette (`page`: 1 to 3).
+pub fn page_leftovers(b: &mut Cps2Bus, page: usize) -> [u32; 4] {
+    let l = palette_longs(b, PALETTES + PAGE_SIZE * page as u32 + (PAGE_PALETTES - 1) * PALETTE_BYTES);
+    [l[2], l[3], l[4], l[5]]
+}
+
 macro_rules! page_native {
     ($name:ident, $nom:literal, $k:literal, $entry:expr) => {
         pub const $name: Native = native(

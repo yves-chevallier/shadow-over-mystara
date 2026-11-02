@@ -281,3 +281,22 @@ de l'objet désigné par A6 (le registre que laisse le code exécuté avant le g
 rend la palette du minuteur (0x2531c0) et libère l'objet. Hypothèse : reste d'une version où la fin du scrutin
 passait par un état propre, l'objet du scrutin étant tenu dans A6. Sans registres, A6 n'existe plus : l'entrée
 est devenue un `unreachable!` (repli défensif ; l'A6 de l'original y désignerait un objet quelconque).
+
+## Lot « sortie du Cpu », partie 5 (ESHL, SOBJ, SET, ITEM, BOX, EFFCT restants en gestionnaires sans registres, wt-familles3)
+
+### Aides de la barrière en natives (0xb9ee6, 0xb9eba, 0xba094 ; `effects.rs`, module `barriere`)
+
+Trois feuilles de l'effet « barrière » (EFFCT 0xb9f36) transcrites instruction par instruction sur le processeur :
+« l'objet A1 est-il dans la boîte de A0 » (0xb9ee6, D0 = 1/0), « un joueur vivant touche-t-il la boîte » (0xb9eba,
+lève `+0x30`), « tous les fils ont-ils fini » (0xba094, drapeau Z). Elles ne servaient qu'au code d'origine de la
+barrière, désormais réécrite dans `effects_c` (`barrier`, `in_box`, interrupteurs) : plus aucun appel par adresse
+ne les atteint (recherche de 0xb9ee6, 0xb9eba, 0xba094 dans `src/` ; seul `examples/fuzz_monde.rs` les citait).
+Doublon : supprimées, avec leurs entrées de `fuzz_monde`.
+
+### Guide de scène sans joueur vivant (ITEM 6, variante 1, 0xdcddc ; `items::guide_cible`)
+
+0xdcddc choisit le joueur vivant le plus proche ; s'il n'y en a aucun, l'original garde l'A2 de son appelant comme
+« propriétaire ». Pour le guide 3 (attract), c'est la fin de sa copie de palette (0x91c320), écrite en clair. Pour le
+guide 1, c'est l'A2 laissé par les gestionnaires précédents de la boucle (aucun n'est tenu sans registres). Le
+guide 1 naît du script de la scène, joueurs présents ; aucun scénario ne le voit naître sans joueur vivant.
+Hypothèse : cas impossible en jeu (repli de l'original sans sens). Devenu un `unreachable!`.

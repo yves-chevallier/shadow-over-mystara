@@ -291,6 +291,21 @@ pub fn push_restes(b: &mut Cps2Bus, o: Obj, d2: &mut u32, d3: &mut u32, d5: &mut
     c.sr & m68k::SR_Z != 0
 }
 
+/// 0x3403c (the second copy of the routine) on object `o`, without registers; `restes` are the D2-D5 leftovers
+/// (`dispatch::Restes`) passed to it and left by it. Returns the original's Z flag.
+pub fn push_second_restes(b: &mut Cps2Bus, o: Obj, restes: [&mut u32; 4]) -> bool {
+    let mut c = Cpu::default();
+    c.a[0] = o.0;
+    for (k, r) in restes.iter().enumerate() {
+        c.d[2 + k] = **r;
+    }
+    Push { c: &mut c, b, variant: SECOND }.run();
+    for (k, r) in restes.into_iter().enumerate() {
+        *r = c.d[2 + k];
+    }
+    c.sr & m68k::SR_Z != 0
+}
+
 pub const SHADOW: Native = Native {
     entry: 0x33fe4,
     name: "terrain_push",

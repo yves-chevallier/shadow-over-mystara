@@ -41,9 +41,8 @@ fn ai_step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 /// Alloue un objet ESHL ; `None` si le pool est plein.
 /// Tirage pseudo-aléatoire.
-fn random(x: &mut Cx) -> u32 {
-    let alea = x.random();
-    x.c.d[0] & 0xffff_0000 | alea as u32
+fn random<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+    x.random() as u32
 }
 
 /// Les trois coordonnées 16.16 (X, Y, Z) de `from`, copiées en long.
@@ -107,7 +106,7 @@ mod shot40 {
     /// Variable `A5+0x6e` : bit 0 = phase de clignotement globale.
     const BLINK_PHASE: u32 = 0x6e;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => spawn(x),
             2 => live(x),
@@ -115,7 +114,7 @@ mod shot40 {
         }
     }
 
-    fn spawn(x: &mut Cx) {
+    fn spawn<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(CREATOR) == 0 {
             return;
         }
@@ -205,7 +204,7 @@ mod shot41 {
     const TARGET_X: u32 = 0xb0;
     const TARGET_Y: u32 = 0xb2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => spawn(x),
             2 => live(x),
@@ -260,7 +259,7 @@ mod shot41 {
         }
     }
 
-    fn live(x: &mut Cx) {
+    fn live<R: Banc>(x: &mut Cx<'_, R>) {
         if x.linked(f::OWNER).u16(x.b, 0x4) == 0x406 {
             return x.free_eshl();
         }
@@ -276,7 +275,7 @@ mod shot41 {
         x.reinsert();
     }
 
-    fn fall(x: &mut Cx) {
+    fn fall<R: Banc>(x: &mut Cx<'_, R>) {
         x.move_xyz();
         if s16(x.u16(0xc)) > 0 {
             x.anim_step();
@@ -325,7 +324,7 @@ mod shot42 {
     const PAUSE: u8 = 6;
     const RECOVER: u8 = 8;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -354,7 +353,7 @@ mod shot42 {
         x.add16(0xc, 0x40);
     }
 
-    fn live(x: &mut Cx) {
+    fn live<R: Banc>(x: &mut Cx<'_, R>) {
         let host = x.linked(HOST);
         if host.u8(x.b, 4) == 4 {
             return x.free_eshl();
@@ -371,7 +370,7 @@ mod shot42 {
         }
     }
 
-    fn idle(x: &mut Cx, host: Obj) {
+    fn idle<R: Banc>(x: &mut Cx<'_, R>, host: Obj) {
         if x.u8(ARMED) != 0 {
             if x.u8(0x3) != 2 {
                 return x.free_eshl();
@@ -698,7 +697,7 @@ mod debris45 {
     /// Marge de la retenue à l'écran.
     const MARGIN: u32 = 0x10;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -728,7 +727,7 @@ mod debris45 {
         Some(o)
     }
 
-    fn variant0(x: &mut Cx) {
+    fn variant0<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -905,7 +904,7 @@ mod spawn47 {
     const WAIT: u8 = 0;
     const PLAY: u8 = 2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -945,7 +944,7 @@ mod spawn47 {
     }
 
     /// Décale la position au hasard : ramène vers l'écran si elle en est trop loin.
-    fn place(x: &mut Cx) {
+    fn place<R: Banc>(x: &mut Cx<'_, R>) {
         let idx = 2 * (random(x) & 0xf);
         let cam = x.a5_u16(CAMERA_X);
         let (lo, hi) = (cam.wrapping_add(0x20), cam.wrapping_add(0x160));
@@ -986,7 +985,7 @@ mod lob48 {
     const HOME_Z: u32 = 0x4e;
     const TARGET: u32 = 0x58;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1017,7 +1016,7 @@ mod lob48 {
         }
     }
 
-    fn sub_state(x: &mut Cx) {
+    fn sub_state<R: Banc>(x: &mut Cx<'_, R>) {
                 match x.u8(0x5) {
                     0 => {
                         if dec_wait(x) {
@@ -1079,7 +1078,7 @@ mod strike49 {
     const HOST: u32 = 0x42;
     const SOUND: u32 = 0xed398;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -1131,7 +1130,7 @@ mod strike49 {
     }
 
     /// Passe à l'animation finale.
-    fn finish(x: &mut Cx) {
+    fn finish<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x5, 2);
         x.set8(0x6, 0);
         ai_anim(x, ANIMS, 2);
@@ -1339,7 +1338,7 @@ mod drop51 {
     const SCREEN_TOP: u32 = 0x50a;
     const SCREEN_TOP_P2: u32 = 0x55a;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 if wait(x) {
@@ -1378,7 +1377,6 @@ mod drop51 {
                     return;
                 }
                 x.add8(0x4, 2);
-                x.c.d[0] = 3;
                 crate::families::effects_creators::debris(x.b, x.o, 3);
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
             }
@@ -1442,11 +1440,9 @@ mod finale52 {
     /// Premier joueur (`A5+0x5de`) et pas.
     const PLAYERS: u32 = 0x5de;
     const PLAYER_SIZE: u32 = 0x200;
-    const STAGE_REAL_FX_1: u32 = 0x10158;
-    const STAGE_REAL_FX_2: u32 = 0x101da;
     const SCREEN_END_FX: u32 = 0xe55fe;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -1503,7 +1499,7 @@ mod finale52 {
 
     // ----- variante 0 -----
 
-    fn variant0(x: &mut Cx) {
+    fn variant0<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1537,7 +1533,7 @@ mod finale52 {
     }
 
     /// Sous-type 0 : suit l'animation de lancement, puis lance trois éléments et colle à côté du boss.
-    fn orb(x: &mut Cx, boss: Obj) {
+    fn orb<R: Banc>(x: &mut Cx<'_, R>, boss: Obj) {
         let mut source = boss;
         if x.u8(0x5) == 0 {
             if !x.anim_step() {
@@ -1561,14 +1557,14 @@ mod finale52 {
 
     /// Crée trois éléments de sous-types 3, 2, 1 (table), liés au même boss. Rend l'A1 de l'original : le dernier
     /// élément créé, ou ce que l'allocation qui échoue laisse (`Pool::alloc_or_leftover`).
-    fn spawn_followers(x: &mut Cx) -> Obj {
-        let mut a1 = Obj(x.c.a[1]);
+    fn spawn_followers<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
+        let mut a1 = None;
         for i in (0..3u32).rev() {
             let c = match x.alloc_or_leftover(&pools::ESHL) {
                 Ok(c) => c,
                 Err(a1) => return a1,
             };
-            a1 = c;
+            a1 = Some(c);
             c.set_u8(x.b, 0, 1);
             c.set_u8(x.b, 2, 0x34);
             c.set_u8(x.b, 3, 0);
@@ -1577,7 +1573,7 @@ mod finale52 {
             let boss = x.u16(PARENT);
             c.set_u16(x.b, PARENT, boss);
         }
-        a1
+        a1.expect("three followers created")
     }
 
     /// Sous-types 1 à 3 : invisibles tant que le boss n'a pas armé `+0x3e` (sauf le sous-type 2).
@@ -1667,7 +1663,7 @@ mod finale52 {
         init_boxes(x);
     }
 
-    fn variant2(x: &mut Cx) {
+    fn variant2<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1676,7 +1672,7 @@ mod finale52 {
                 attach(x, boss);
                 x.anim_start(ANIMS, 0x1e);
                 lock_screen(x);
-                x.call(STAGE_REAL_FX_1);
+                crate::families::petites::four_palette_blocks(x, true);
             }
             2 => {
                 let boss = parent(x).filter(|b| b.u16(x.b, PARENT_STATE) == 0x215);
@@ -1717,15 +1713,16 @@ mod finale52 {
         }
     }
 
-    fn variant3(x: &mut Cx) {
+    fn variant3<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
                 x.set8(0x5, 0);
                 x.anim_start(ANIMS, 0x23);
                 lock_screen(x);
-                let fx = if x.a5_u8(STAGE) == 0x69 { STAGE_REAL_FX_2 } else { STAGE_REAL_FX_1 };
-                x.call(fx);
+                // 0x101da in scene 0x69, 0x10158 otherwise
+                let brighten = x.a5_u8(STAGE) != 0x69;
+                crate::families::petites::four_palette_blocks(x, brighten);
             }
             2 => {
                 if x.a5_u8(STAGE) == 0x2d && s16(x.a5_u16(SCREEN_X)) >= 0x340 {
@@ -2003,7 +2000,7 @@ mod burst54 {
     /// Lignes de 10 mots : les mêmes, puis l'animation.
     const ROWS_ANIM: u32 = 0xa51b4;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u16(LINK) == 0 {
             return x.free_eshl();
         }
@@ -2046,7 +2043,7 @@ mod burst54 {
     }
 
     /// Se place sur le lanceur et prend les vitesses de la ligne de la variante.
-    fn launch(x: &mut Cx, with_anim: bool) {
+    fn launch<R: Banc>(x: &mut Cx<'_, R>, with_anim: bool) {
         let src = x.linked(LINK);
         for off in [0x8, 0x10, 0xc] {
             let v = src.u32(x.b, off);
@@ -2059,7 +2056,7 @@ mod burst54 {
         x.set8(f::FLIP, flip);
         let v = x.u8(0x3) as u32;
         let row = if with_anim { ROWS_ANIM + 20 * v } else { ROWS + 18 * v };
-        let word = |x: &mut Cx, i: u32| x.rom16(row + 2 * i);
+        let word = |x: &mut Cx<'_, R>, i: u32| x.rom16(row + 2 * i);
         let (mut dx, dz, dy, mut vx, mut ax) = (word(x, 0), word(x, 1), word(x, 2), word(x, 3), word(x, 4));
         for (i, off) in [0x18u32, 0x1a, 0x1c, 0x1e].into_iter().enumerate() {
             let w = word(x, 5 + i as u32);
@@ -2093,7 +2090,7 @@ mod fall55 {
     const Y_START: u32 = 0x5a;
     const TIMER: u32 = 0x56;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 spawn(x);
@@ -2137,7 +2134,7 @@ mod fall55 {
         x.anim_start(ANIMS, 0);
     }
 
-    fn fall(x: &mut Cx) {
+    fn fall<R: Banc>(x: &mut Cx<'_, R>) {
         if x.move_xz().gt() {
             return;
         }
@@ -2147,7 +2144,7 @@ mod fall55 {
         x.anim_start(ANIMS, 1);
     }
 
-    fn land(x: &mut Cx) {
+    fn land<R: Banc>(x: &mut Cx<'_, R>) {
         let t = x.u16(TIMER).wrapping_sub(1);
         x.set16(TIMER, t);
         if t == 0 {
@@ -2155,7 +2152,7 @@ mod fall55 {
         }
         if s16(x.u16(TIMER)) <= 0x20 {
             x.set_bit(0x1, 1, true);
-            let visible = x.u16(TIMER).wrapping_add(x.c.d[7] as u16) & 1 != 0;
+            let visible = x.u16(TIMER).wrapping_add(x.compteur() as u16) & 1 != 0;
             if visible {
                 x.set_bit(0x1, 1, false);
             }
@@ -2199,7 +2196,7 @@ mod pickup56 {
     const LINK: u32 = 0x5c;
     const HIDDEN: u32 = 0x40;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 let v = x.u8(0x3);
@@ -2213,7 +2210,7 @@ mod pickup56 {
         }
     }
 
-    fn init(x: &mut Cx, v: u8) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
         let k = v as usize / 2;
         x.add8(0x4, 2);
         x.set8(f::BOX_SET, 7);
@@ -2231,13 +2228,13 @@ mod pickup56 {
     }
 
     /// Délai tiré dans la table 0xa55b2.
-    fn random_delay(x: &mut Cx) {
+    fn random_delay<R: Banc>(x: &mut Cx<'_, R>) {
         let r = random(x) & 0xf;
         let d = x.rom16(DELAYS + 2 * r);
         x.set16(COUNTDOWN, d);
     }
 
-    fn live(x: &mut Cx) {
+    fn live<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(HIDDEN) != 0 {
             return x.reinsert();
         }
@@ -2262,14 +2259,14 @@ mod pickup56 {
     }
 
     /// Rend l'objet visible puis le cache une image sur deux (sauf si `A5+0x33`).
-    fn flash(x: &mut Cx) {
+    fn flash<R: Banc>(x: &mut Cx<'_, R>) {
         x.set_bit(0x1, 1, false);
-        if x.a5_u8(BLINK_OFF) == 0 && x.a5_u8(BLINK_PHASE).wrapping_add(x.c.d[7] as u8) & 1 != 0 {
+        if x.a5_u8(BLINK_OFF) == 0 && x.a5_u8(BLINK_PHASE).wrapping_add(x.compteur() as u8) & 1 != 0 {
             x.set_bit(0x1, 1, true);
         }
     }
 
-    fn flash_animate(x: &mut Cx) {
+    fn flash_animate<R: Banc>(x: &mut Cx<'_, R>) {
         flash(x);
         x.anim_step();
     }
@@ -2333,7 +2330,7 @@ mod pickup56 {
     }
 
     /// Variantes 6, 7 : attend un délai (hors pause), puis rejoue l'animation 5 avec un nouveau délai.
-    fn wait_and_replay(x: &mut Cx) {
+    fn wait_and_replay<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             if x.u8(HIDDEN) != 0 || x.a5_u8(GAME_PAUSED) != 0 {
                 return;
@@ -2352,7 +2349,7 @@ mod pickup56 {
 
     /// Variantes 8, 9 : vivant tant que les PV du créateur sont non nuls ; à sa mort, animation 6,
     /// puis clignote 32 images avant de disparaître.
-    fn hp_dependent(x: &mut Cx) {
+    fn hp_dependent<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 let maker = x.linked(LINK);
@@ -2740,7 +2737,7 @@ mod platform60 {
     const REST: u8 = 4;
     const RISE: u8 = 6;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -2751,7 +2748,7 @@ mod platform60 {
         }
     }
 
-    fn start(x: &mut Cx) {
+    fn start<R: Banc>(x: &mut Cx<'_, R>) {
         let top = screen_top(x);
         x.set16(LAST_SCROLL, top);
         match x.u8(0x3) {
@@ -2992,7 +2989,7 @@ mod meteor62 {
     const IMPACT_SOUND: u32 = 0xeafdc;
     const TIMER: u32 = 0x42;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => start(x),
             2 => live(x),
@@ -3001,7 +2998,7 @@ mod meteor62 {
         }
     }
 
-    fn start(x: &mut Cx) {
+    fn start<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
         x.set8(f::BOX_SET, 7);
@@ -3031,7 +3028,7 @@ mod meteor62 {
         x.anim_start(ANIMS, 0);
     }
 
-    fn live(x: &mut Cx) {
+    fn live<R: Banc>(x: &mut Cx<'_, R>) {
         if s8(x.u8(TIMER)) > 0 {
             let t = x.u8(TIMER) - 1;
             return x.set8(TIMER, t);
@@ -3042,7 +3039,6 @@ mod meteor62 {
             crate::families::effects_creators::linked(x.b, x.o, crate::families::effects_creators::kind::WISP, Some(1));
             x.set16(0xc, 0);
             x.add8(0x4, 2);
-            x.c.d[0] = 3;
             crate::families::effects_creators::debris(x.b, x.o, 3);
             crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 8);
             crate::sound::jouer(x.b, IMPACT_SOUND, x.o);
@@ -3081,7 +3077,7 @@ mod hand63 {
     const REACH: u16 = 0x30;
     const SPEED: u16 = 2;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -3099,7 +3095,7 @@ mod hand63 {
     }
 
     /// Phase 1 / 2 (`+4 = 2`), puis remise dans la liste triée.
-    fn resting_or_attacking(x: &mut Cx) {
+    fn resting_or_attacking<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             match x.u8(0x6) {
                 0 => {
@@ -3128,7 +3124,7 @@ mod hand63 {
     }
 
     /// Délai avant le prochain tir au sort, selon le nombre de joueurs.
-    fn pick_delay(x: &mut Cx) {
+    fn pick_delay<R: Banc>(x: &mut Cx<'_, R>) {
         let players = x.a5_u8(PLAYER_COUNT) as u32;
         let table = x.data32(DELAY_TABLES + 4 * players);
         let r = random(x) & 0x1f;
@@ -3137,7 +3133,7 @@ mod hand63 {
     }
 
     /// Tirage : le bit tiré dans le masque de la configuration courante est-il levé ?
-    fn gate(x: &mut Cx) -> bool {
+    fn gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         let players = x.a5_u8(PLAYER_COUNT) as u32;
         let table = x.data32(GATE_TABLES + 4 * players);
         let index = x.a5_u16(GATE_INDEX).wrapping_shl(2) as u32;
@@ -3151,7 +3147,7 @@ mod hand63 {
     }
 
     /// Repos : décompte, tirage, puis attaque si la cible est du bon côté.
-    fn rest(x: &mut Cx) {
+    fn rest<R: Banc>(x: &mut Cx<'_, R>) {
         let boss = x.linked(LINK);
         if x.a5_u8(GAME_PAUSED) == 0 {
             let t = x.u16(DELAY).wrapping_sub(1);
@@ -3294,28 +3290,28 @@ mod hand63 {
 }
 
 handlers! {
-    0xa31e4 "eshl_40" shot40::run,
-    0xa336c "eshl_41" shot41::run,
-    0xa3568 "eshl_42" shot42::run,
+    0xa31e4 "eshl_40" #[sans] shot40::run,
+    0xa336c "eshl_41" #[sans] shot41::run,
+    0xa3568 "eshl_42" #[sans] shot42::run,
     0xa3762 "eshl_43" #[sans] shot43::run,
     0xa380a "eshl_44" #[sans] beam44::run,
-    0xa3b88 "eshl_45" debris45::run,
+    0xa3b88 "eshl_45" #[sans] debris45::run,
     0xa3e72 "eshl_46" #[sans] scroller46::run,
-    0xa3ebe "eshl_47" spawn47::run,
-    0xa4088 "eshl_48" lob48::run,
-    0xa418e "eshl_49" strike49::run,
+    0xa3ebe "eshl_47" #[sans] spawn47::run,
+    0xa4088 "eshl_48" #[sans] lob48::run,
+    0xa418e "eshl_49" #[sans] strike49::run,
     0xa4266 "eshl_50" #[sans] bullet50::run,
-    0xa4522 "eshl_51" drop51::run,
-    0xa46c6 "eshl_52" finale52::run,
+    0xa4522 "eshl_51" #[sans] drop51::run,
+    0xa46c6 "eshl_52" #[sans] finale52::run,
     0xa4d82 "eshl_53" #[sans] aimed53::run,
-    0xa4eaa "eshl_54" burst54::run,
-    0xa5358 "eshl_55" fall55::run,
-    0xa5466 "eshl_56" pickup56::run,
+    0xa4eaa "eshl_54" #[sans] burst54::run,
+    0xa5358 "eshl_55" #[sans] fall55::run,
+    0xa5466 "eshl_56" #[sans] pickup56::run,
     0xa593c "eshl_57" #[sans] seeker57::run,
     0xa5ad6 "eshl_58" #[sans] shard58::run,
     0xa5cc2 "eshl_59" #[sans] ring59::run,
-    0xa5f5c "eshl_60" platform60::run,
+    0xa5f5c "eshl_60" #[sans] platform60::run,
     0xa63d8 "eshl_61" #[sans] marker61::run,
-    0xa66ea "eshl_62" meteor62::run,
-    0xa6864 "eshl_63" hand63::run,
+    0xa66ea "eshl_62" #[sans] meteor62::run,
+    0xa6864 "eshl_63" #[sans] hand63::run,
 }

@@ -10,7 +10,7 @@
 
 use crate::families::cx::Banc;
 use super::*;
-use crate::mem::{rd8, wr16, wr32, wr8, A5};
+use crate::mem::{rd8, wr16, wr32, wr8};
 
 /// Tables en ROM (espace programme : accès relatifs au PC).
 const LEVEL_RANGE: u32 = 0xce728;
@@ -32,7 +32,7 @@ const BOX_TOP: u32 = 0x5cc;
 const LANGUAGE: u32 = 0x73;
 const MESSAGE_PAGE: u32 = 0x72;
 
-pub fn status_window(x: &mut Cx) {
+pub fn status_window<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -59,7 +59,7 @@ fn next_state<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// État 0 : calcule le palier du joueur, crée l'objet de fenêtre, dessine le cadre et affiche le
 /// premier message.
-fn open(x: &mut Cx) {
+fn open<R: Banc>(x: &mut Cx<'_, R>) {
     let player = adr(x.u16(0x34));
     let half = rd8(x.b, player + 3) >> 1;
     x.set8(0x37, half);
@@ -76,10 +76,9 @@ fn open(x: &mut Cx) {
     let low = (base as u8).wrapping_add(step);
     let frame = x.rom8(FRAME_BY_LEVEL + (base & 0xff00 | low as u16) as i16 as i32 as u32);
     x.set_a5_u16(BOX_TOP, 0xb8u16.wrapping_sub(0x18 * frame as u16));
-    x.c.d[0] = 0xd;
-    x.call(0xddeaa);
-    if x.c.sr & m68k::SR_C == 0 {
-        Obj(x.c.a[1]).set_u8(x.b, 0x2f, frame);
+    // 0xddeaa: scenery 6 of variant 0xd, which keeps the frame
+    if let Ok(decor) = crate::effects_aids::decor_6(x.b, 0xd) {
+        decor.set_u8(x.b, 0x2f, frame);
     }
     draw_frame(x, frame);
     pick_message(x, player);
@@ -92,12 +91,12 @@ fn adr(v: u16) -> u32 {
 
 /// Cadre de la fenêtre n° `frame` (0xce7fc) : enregistrement de 8 octets (adresse de GFX RAM, largeur)
 /// dans la table 0xce7e4 ; un bord haut, deux colonnes latérales (42 lignes de 0x80 octets) et un fond.
-fn draw_frame(x: &mut Cx, frame: u8) {
+fn draw_frame<R: Banc>(x: &mut Cx<'_, R>, frame: u8) {
     let entry = FRAMES + 8 * frame as u32;
     let origin = (x.rom16(entry) as u32) << 16 | x.rom16(entry + 2) as u32;
     let width = x.rom16(entry + 4);
     let longs = width as u32 + 1;
-    let row = |x: &mut Cx, at: u32, value: u32, count: u32, stride: u32| {
+    let row = |x: &mut Cx<'_, R>, at: u32, value: u32, count: u32, stride: u32| {
         for i in 0..count {
             wr32(x.b, at + i * stride, value);
         }
@@ -122,7 +121,7 @@ fn draw_frame(x: &mut Cx, frame: u8) {
 }
 
 /// Choisit le message (0xceaba) : table d'enregistrements par personnage, rang de la page, palier.
-fn pick_message(x: &mut Cx, player: u32) {
+fn pick_message<R: Banc>(x: &mut Cx<'_, R>, player: u32) {
     let half = x.u8(0x37) as u32;
     let tables = {
         let at = MESSAGE_TABLES + 4 * half;
@@ -163,7 +162,7 @@ fn merge_statistics<R: Banc>(x: &mut Cx<'_, R>, player: u32, at: u32) -> u32 {
 /// 0xceb6c : change une pièce d'équipement du joueur. L'enregistrement donne (nouvelle valeur,
 /// ancienne valeur) pour `+0x10d` ou, sinon, pour la case de `+0x140..` qui porte l'ancienne valeur ;
 /// puis 0x3552 recalcule les caractéristiques du joueur.
-fn equip(x: &mut Cx, player: u32, at: u32) {
+fn equip<R: Banc>(x: &mut Cx<'_, R>, player: u32, at: u32) {
     if x.data8(at) as i8 <= -1 {
         return;
     }
@@ -183,11 +182,10 @@ fn equip(x: &mut Cx, player: u32, at: u32) {
     } else {
         wr8(x.b, player + 0x10d, new);
     }
-    // le recalcul travaille sur le joueur (A0)
-    x.c.a[0] = player;
-    x.c.a[5] = A5;
-    crate::call(x.c, x.b, 0x3552);
-    x.c.a[0] = x.o.0;
+    // 0x3552: the player's weapon power is recomputed (the player context still holds a processor, whose output
+    // registers, D0 and A4, are not read)
+    let mut banc = m68k::Cpu::default();
+    crate::player::init::init_weapon_stats(&mut crate::player::Ctx::new(&mut banc, x.b), crate::player::Player(player));
 }
 
 /// Palette de la fenêtre et en-tête du texte (0xce88a) : recopie trois blocs de palette, fixe le

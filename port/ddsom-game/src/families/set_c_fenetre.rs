@@ -121,7 +121,7 @@ const BLANK: u32 = 0x0020_0000;
 const FLIP: u32 = 0x20;
 const ROW_STRIDE: u32 = 0x80;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => start(x),
         2 => match x.u8(f::SUB) {
@@ -454,7 +454,7 @@ fn open_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0xc872a : une ligne de plus à chaque délai ; à la fin, le texte.
-fn opening(x: &mut Cx) {
+fn opening<R: Banc>(x: &mut Cx<'_, R>) {
     if !tick(x) {
         return;
     }
@@ -476,7 +476,7 @@ fn slot<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
 }
 
 /// 0xc875a : cadre ouvert ; confie le texte au moteur de texte, composé selon le style.
-fn show_text(x: &mut Cx) {
+fn show_text<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     let rows = x.u8(f::ROWS);
     x.set8(f::ROWS_LEFT, rows);
@@ -594,23 +594,23 @@ struct Text {
 }
 
 impl Text {
-    fn byte(&mut self, x: &mut Cx, v: u8) {
+    fn byte<R>(&mut self, x: &mut Cx<'_, R>, v: u8) {
         wr8(x.b, self.at, v);
         self.at += 1;
     }
-    fn word(&mut self, x: &mut Cx, v: u16) {
+    fn word<R>(&mut self, x: &mut Cx<'_, R>, v: u16) {
         wr16(x.b, self.at, v);
         self.at += 2;
     }
     /// Octet final, sans avancer.
-    fn end(&mut self, x: &mut Cx, v: u8) {
+    fn end<R>(&mut self, x: &mut Cx<'_, R>, v: u8) {
         wr8(x.b, self.at, v);
     }
     fn char(&mut self) {
         self.count = self.count.wrapping_add(1);
     }
     /// Caractère (> 15) ou commande et son argument, lus en `src`.
-    fn plain(&mut self, x: &mut Cx, c: u8, src: &mut u32) {
+    fn plain<R>(&mut self, x: &mut Cx<'_, R>, c: u8, src: &mut u32) {
         self.byte(x, c);
         if c <= 15 {
             let arg = rd8(x.b, *src);
@@ -620,7 +620,7 @@ impl Text {
         self.char();
     }
     /// 0xc8cda : 0xfe + argument, ou 0xff + compte + argument (l'octet qui suit 0xff est sauté).
-    fn escape(&mut self, x: &mut Cx, c: u8, src: &mut u32) {
+    fn escape<R>(&mut self, x: &mut Cx<'_, R>, c: u8, src: &mut u32) {
         self.byte(x, c);
         if c != 0xfe {
             let n = self.count as u8;
@@ -633,7 +633,7 @@ impl Text {
         self.byte(x, arg);
     }
     /// 0xc88d8 : 0xff, compte, 0x10.
-    fn counted(&mut self, x: &mut Cx) {
+    fn counted<R>(&mut self, x: &mut Cx<'_, R>) {
         self.byte(x, 0xff);
         let n = self.count as u8;
         self.byte(x, n);
@@ -660,7 +660,7 @@ enum Defaults {
 
 /// Nom de 6 caractères codés (0x51 = premier glyphe, 0xff fin) en `src`, ou nom par défaut, écrit
 /// avec les glyphes de la table 0xc9216.
-fn name(x: &mut Cx, t: &mut Text, mut src: u32, defaults: Defaults, glyph: Glyph) {
+fn name<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, defaults: Defaults, glyph: Glyph) {
     let first = rd8(x.b, src);
     let default = match defaults {
         Defaults::High if first.wrapping_add(1) >= 250 => Some(first.wrapping_neg().wrapping_sub(3).wrapping_mul(4)),
@@ -705,7 +705,7 @@ fn name(x: &mut Cx, t: &mut Text, mut src: u32, defaults: Defaults, glyph: Glyph
 }
 
 /// Copie d'un texte jusqu'à 0xfd : `special(c, src)` traite d'abord un octet (vrai s'il l'a fait).
-fn copy_until_end(x: &mut Cx, t: &mut Text, mut src: u32, special: &mut dyn FnMut(&mut Cx, &mut Text, u8, &mut u32) -> bool) -> u32 {
+fn copy_until_end<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, special: &mut dyn FnMut(&mut Cx<'_, R>, &mut Text, u8, &mut u32) -> bool) -> u32 {
     loop {
         let c = rd8(x.b, src);
         src += 1;
@@ -725,7 +725,7 @@ fn copy_until_end(x: &mut Cx, t: &mut Text, mut src: u32, special: &mut dyn FnMu
 }
 
 /// 0xc87de : le texte tel quel.
-fn copy_text(x: &mut Cx, t: &mut Text) {
+fn copy_text<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text) {
     let src = x.u32(f::TEXT);
     copy_until_end(x, t, src, &mut |_, _, _, _| false);
 }
@@ -735,7 +735,7 @@ fn is_insert<R: Banc>(x: &mut Cx<'_, R>, c: u8, src: u32, arg: u8) -> bool {
     c == 7 && rd8(x.b, src) == arg
 }
 
-fn compose(x: &mut Cx, t: &mut Text, style: u8, slot: u32) {
+fn compose<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot: u32) {
     match style {
         1 | 5 | 9 | 11 | 14 | 19 | 20 | 22 => copy_text(x, t),
         // 0xc8816 : titre de classe et nom de chaque joueur présent
@@ -882,7 +882,7 @@ fn compose(x: &mut Cx, t: &mut Text, style: u8, slot: u32) {
 }
 
 /// 0xc8844 : titre de la classe du joueur, son nom encadré, et le compte.
-fn title_and_name(x: &mut Cx, t: &mut Text, p: Obj) {
+fn title_and_name<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, p: Obj) {
     let class = (p.u8(x.b, 3) >> 1).wrapping_mul(4);
     let mut src = rd32(x.b, CLASS_TITLES + class as u32);
     loop {
@@ -908,7 +908,7 @@ fn title_and_name(x: &mut Cx, t: &mut Text, p: Obj) {
 }
 
 /// 0xc88e8 : nom précédé de la commande 0xfe 0x18.
-fn prefixed_name(x: &mut Cx, t: &mut Text, src: u32) {
+fn prefixed_name<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, src: u32) {
     t.byte(x, 0xfe);
     t.byte(x, 0x18);
     name(x, t, src, Defaults::High, Glyph::Twice);
@@ -925,7 +925,7 @@ fn spawn<R: Banc>(x: &mut Cx<'_, R>, pool: &pools::Pool, kind: u8, variant: u8) 
 
 /// 0xc8a9c : un effet EFFCT 23 (réglé par `PARAM`) lié à la fenêtre, qui la fermera ; texte tel quel.
 /// Sans place, on réessaie à l'image suivante.
-fn linked_effect(x: &mut Cx, t: &mut Text) {
+fn linked_effect<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text) {
     let setting = x.u8(f::PARAM);
     let Some(o) = spawn(x, &pools::EFFCT, 23, 0) else {
         return x.add8(f::SUB, 0xfe);
@@ -938,7 +938,7 @@ fn linked_effect(x: &mut Cx, t: &mut Text) {
 
 /// 0xc8b08 : texte en mots ; 0x7001 et 0x7002 insèrent la liste de mots désignée par l'entrée du
 /// moteur de texte selon le nombre de joueurs ; un mot négatif est une commande 0xfe/0xff.
-fn words(x: &mut Cx, t: &mut Text, slot: u32) {
+fn words<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, slot: u32) {
     let mut src = x.u32(f::TEXT);
     let mut list = slot;
     loop {
@@ -971,7 +971,7 @@ fn words(x: &mut Cx, t: &mut Text, slot: u32) {
 /// 0xc8d22 : texte qui parle de l'objet lié (`LINKED`) : code 7 suivi de 6 à 9 (nom, objet
 /// d'équipement) ; à la fin, un SET 15 (variante 17) lié, réglé par `PARAM`. Sans place, on
 /// recommence à l'image suivante.
-fn linked_message(x: &mut Cx, t: &mut Text) {
+fn linked_message<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text) {
     let src = x.u32(f::TEXT);
     copy_until_end(x, t, src, &mut |x, t, c, src| {
         if c != 7 || (rd8(x.b, *src) as i8) < 6 {
@@ -1002,7 +1002,7 @@ fn linked_message(x: &mut Cx, t: &mut Text) {
 
 /// 0xc8d88 : message de la première pièce d'équipement du joueur `p` reconnue dans les listes de sa
 /// classe (deux emplacements d'arme, puis six objets).
-fn equipment_message(x: &mut Cx, t: &mut Text, p: Obj) {
+fn equipment_message<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, p: Obj) {
     let (main, items) = EQUIP_LISTS[(p.u8(x.b, 3) >> 1 != 0) as usize];
     let candidates = [(main, p.u8(x.b, EQUIP_A)), (main, p.u8(x.b, EQUIP_B))]
         .into_iter()
@@ -1025,7 +1025,7 @@ fn find_in_list<R: Banc>(x: &mut Cx<'_, R>, list: u32, item: u8) -> Option<u32> 
 }
 
 /// 0xc8e5c : message n° `i` (deux tables selon la langue), jusqu'à 0xfd non compris.
-fn message(x: &mut Cx, t: &mut Text, i: u32) {
+fn message<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, i: u32) {
     let table = if x.a5_u16(ram::LANGUAGE) == 4 { MESSAGES_LANG4 } else { MESSAGES_OTHER };
     let mut src = prog32(x.b, table + 4 * i);
     loop {

@@ -98,12 +98,10 @@ const CURTAIN_TABLE: u32 = 0xbcea4;
 const CURTAIN_PALETTE: u32 = 0xbcfc6;
 
 // Routines du moteur appelées.
-const INIT_SCENE: u32 = 0xd9778;
-const EXIT_SCENE: u32 = 0xd981a;
 const PREPARE_EFFECTS: u32 = 0xebe86;
 const FADE_OUT: u32 = 0xe0c5c;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x40) != 0 || x.a5_u8(a5::DIFFICULTY) == 0 {
         return;
     }
@@ -133,7 +131,7 @@ fn next_state<R: Banc>(x: &mut Cx<'_, R>, by: u8) {
 
 // --- état 0 : initialisation ----------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     let n = x.a5_u8(a5::SCENES).wrapping_add(1);
     x.set_a5_u8(a5::SCENES, n);
     x.set16(f::LIVE_LIMIT, 0xffff);
@@ -145,7 +143,7 @@ fn init(x: &mut Cx) {
     let time = x.data16(script);
     x.set16(f::TIMER, time);
     x.set32(f::CURSOR, script + 2);
-    x.call(INIT_SCENE);
+    crate::families::creators::play_scene_music(x.b, x.o);
     let action = x.rom8(START_ACTION + variant);
     start(x, action);
 }
@@ -314,7 +312,7 @@ fn run_entry<R: Banc>(x: &mut Cx<'_, R>, entry: u32, word: u16) {
 
 // --- état 4 : fin de scène ----------------------------------------------------------------------
 
-fn finish(x: &mut Cx) {
+fn finish<R: Banc>(x: &mut Cx<'_, R>) {
     x.add16(f::TIMER, 0xffff);
     if x.u16(f::TIMER) & 0x8000 != 0 {
         x.set8(f::DONE, 1);
@@ -326,14 +324,14 @@ fn finish(x: &mut Cx) {
     let n = x.a5_u8(a5::SCENES).wrapping_sub(1);
     x.set_a5_u8(a5::SCENES, if n & 0x80 != 0 { 0 } else { n });
     x.set_a5_u8(a5::TRANSITION_FLAG, 0);
-    x.call(EXIT_SCENE);
+    crate::families::creators::run_scene_exit(x.b, x.o);
     let variant = x.u8(0x3) as u32;
     let action = x.rom8(END_ACTION + variant);
     end_action(x, action);
 }
 
 /// Action de fin de scène (0 à 15), choisie par la variante.
-fn end_action(x: &mut Cx, action: u8) {
+fn end_action<R: Banc>(x: &mut Cx<'_, R>, action: u8) {
     match action {
         12 => {
             x.set_a5_u8(a5::FROZEN, 1);
@@ -385,7 +383,7 @@ fn end_action(x: &mut Cx, action: u8) {
 
 /// Actions 2 et 3 : intertitre. Deux décors SET (variantes `cards`, la seconde avec `+0x2f = 2`) et
 /// un objet SOBJ (variante 0x56 puis 0x57), puis demande de transition de 0x3c images.
-fn title_cards(x: &mut Cx, param: u16, cards: [(u8, u8); 2]) {
+fn title_cards<R: Banc>(x: &mut Cx<'_, R>, param: u16, cards: [(u8, u8); 2]) {
     x.set_a5_u16(0x56e, param);
     x.set_a5_u8(0x54f, 0);
     for (variant, extra) in cards {
@@ -400,10 +398,10 @@ fn title_cards(x: &mut Cx, param: u16, cards: [(u8, u8); 2]) {
 /// Action 4 : les joueurs vivants doivent être revenus à l'état d'attente (`+4 = 0x200`, `+6 = 0`) ;
 /// alors ils reçoivent l'ordre de sortie (état 0x80400) et leur rang d'arrivée (`+0x7d`), et la phase
 /// de partie passe à 0x18 (sortie du niveau).
-fn players_leave(x: &mut Cx) {
+fn players_leave<R: Banc>(x: &mut Cx<'_, R>) {
     x.set_a5_u8(a5::SCENE_LATCH, 0);
     x.set_a5_u8(a5::PLAYERS_LOCK, 1);
-    let alive = |x: &mut Cx, p: u32| rd8(x.b, p) != 0 && rd16(x.b, p + 0x62) != 0;
+    let alive = |x: &mut Cx<'_, R>, p: u32| rd8(x.b, p) != 0 && rd16(x.b, p + 0x62) != 0;
     for i in 0..4 {
         let p = PLAYERS + i * PLAYER_STRIDE;
         if alive(x, p) && (rd16(x.b, p + 4) != 0x200 || rd8(x.b, p + 6) != 0) {

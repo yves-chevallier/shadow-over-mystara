@@ -11,7 +11,7 @@ use crate::families::cx::Banc;
 use crate::families::cx::Cx;
 use crate::mem::wr16;
 use crate::objects::Obj;
-use m68k::SR_C;
+
 use crate::objects::pools;
 use crate::objects::Courant;
 use crate::machine::Machine;
@@ -19,13 +19,11 @@ use crate::machine::Machine;
 /// Table (espace programme) des déplacements des machines, un mot relatif par variante.
 const VARIANTS: u32 = 25;
 
-/// Routines du moteur appelées.
+/// Block grid loaders: 0x26d4 (scroll 2) and 0x2766 (small blocks, scroll 3).
 mod rom {
-    /// Chargeur de blocs 8x8 du scroll 2 / 3 (D0 = grille, A1 = destination).
-    pub const LOAD_BLOCKS: u32 = 0x26d4;
-    /// Chargeur de blocs 4x4.
-    pub const LOAD_SMALL: u32 = 0x2766;
-    pub const SPAWN_SOBJ: u32 = 0xddeaa;
+    use crate::video::Grille;
+    pub const LOAD_BLOCKS: Grille = Grille::Couche2;
+    pub const LOAD_SMALL: Grille = Grille::Couche3;
 }
 
 /// Variables de la RAM de travail (offsets depuis A5).
@@ -42,7 +40,7 @@ mod a5 {
     pub const BG_Y_PREV: u32 = 0x562;
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let variant = x.u8(0x3) as u32;
     if variant >= VARIANTS {
         return;
@@ -111,30 +109,24 @@ fn rng<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     x.random()
 }
 
-/// Charge la grille de blocs `grid` à `dest` par 0x26d4 ou 0x2766 (D0 = grille, A1 = destination).
-fn load_blocks(x: &mut Cx, routine: u32, dest: u32, grid: u16) {
-    x.c.a[1] = dest;
-    load_next(x, routine, grid);
+/// Loads block grid `grid` at `dest` through 0x26d4 or 0x2766; returns the end of the written blocks (the original's
+/// A1, where the next call goes on).
+pub(super) fn load_blocks<R: Banc>(x: &mut Cx<'_, R>, grille: crate::video::Grille, dest: u32, grid: u16) -> u32 {
+    crate::video::charger_grille(x.b, grille, grid, dest).destination
 }
 
-/// Idem sans repositionner A1 (le chargeur le laisse après les blocs écrits).
-fn load_next(x: &mut Cx, routine: u32, grid: u16) {
-    // `move.w (A4)+,D0w` : seul le mot bas de D0 change (le chargeur laisse D0 en sortie)
-    x.c.d[0] = x.c.d[0] & 0xffff_0000 | grid as u32;
-    x.call(routine);
-}
-
-/// Secousse : ajoute à la caméra le déplacement n° (`+0x18` & 3) de la table `table` (couples de mots).
-fn shake(x: &mut Cx, table: u32) {
+/// Shake: adds to the camera displacement number `+0x18` & 3 of table `table` (word pairs); returns the X offset (the
+/// original's D1, read back by the effect creation that follows).
+fn shake<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u16 {
     let step = (x.u8(0x18) & 3) as u32;
     x.add8(0x18, 1);
     let (dx, dy) = (x.data16(table + 4 * step), x.data16(table + 4 * step + 2));
-    // l'original laisse les décalages dans D1 et D2 (la création d'effet qui suit lit D1)
-    x.c.d[1] = x.c.d[1] & 0xffff_0000 | dx as u32;
-    x.c.d[2] = x.c.d[2] & 0xffff_0000 | dy as u32;
+    // Original glitch: the Y offset stays in D2 (`dispatch::Restes`)
+    *x.c.d2() = *x.c.d2() & 0xffff_0000 | dy as u32;
     let (cx, cy) = (x.a5_u16(a5::CAM_X), x.a5_u16(a5::CAM_Y));
     x.set_a5_u16(a5::CAM_X, cx.wrapping_add(dx));
     x.set_a5_u16(a5::CAM_Y, cy.wrapping_add(dy));
+    dx
 }
 
 /// Avance un champ de 32 bits d'un mot de vitesse 8.8 (`vitesse << 8` signée).
@@ -146,15 +138,14 @@ fn velocity(speed: u16) -> u32 {
 
 /// Variante 0 (0xce066) : initialise deux routines (0x3525c, 0x1ac86), puis, de temps à autre (rng
 /// et parité de l'image), bascule `+0x43` et lance l'une de deux routines sonores/vidéo.
-fn title_blink(x: &mut Cx) {
-    const INIT_A: u32 = 0x3525c;
+fn title_blink<R: Banc>(x: &mut Cx<'_, R>) {
     const ON: u32 = 0xea22c;
     const OFF: u32 = 0xea1d0;
     const FLASH: u32 = 0x4ba;
     match x.u8(0x4) {
         0 => {
             next_state(x);
-            x.call(INIT_A);
+            crate::families::petites::clear_scroll1_start(x);
             crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
             x.set8(0x42, 0);
             x.set_a5_u16(FLASH, 0);
@@ -185,7 +176,7 @@ fn title_blink(x: &mut Cx) {
 /// Variante 1 (0xce0f0) : place l'objet au bas de l'écran, attend, puis fait trembler la caméra avec
 /// des tables de secousses (0xd0b10, 0xd0b20) en lançant des effets ; le chef d'orchestre (`+0x4c`)
 /// est prévenu par son octet `+8` et par `+0xc`.
-fn quake(x: &mut Cx) {
+fn quake<R: Banc>(x: &mut Cx<'_, R>) {
     const SHAKE_A: u32 = 0xd0b10;
     const SHAKE_B: u32 = 0xd0b20;
     const DELAYS: u32 = 0xce138;
@@ -219,8 +210,8 @@ fn quake(x: &mut Cx) {
                 next_substate(x);
             }
             4 => {
-                shake(x, SHAKE_B);
-                quake_effects(x, DELAYS);
+                let dx = shake(x, SHAKE_B);
+                quake_effects(x, DELAYS, dx as u8);
                 x.add8(0x14, 0xff);
                 if x.u8(0x14) != 0 {
                     return;
@@ -240,8 +231,8 @@ fn quake(x: &mut Cx) {
                 x.add16(0xc, 0u16.wrapping_sub(0x290));
             }
             8 => {
-                shake(x, SHAKE_B);
-                quake_effects(x, DELAYS);
+                let dx = shake(x, SHAKE_B);
+                quake_effects(x, DELAYS, dx as u8);
                 let boss = conductor(x);
                 if boss.u8(x.b, 0x8) != 3 {
                     return;
@@ -264,14 +255,13 @@ fn quake_delay<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
 }
 
 /// Crée un effet (type 0 de 0xb1a7a) lié à l'objet quand le délai `+0x42` est écoulé.
-fn quake_effects(x: &mut Cx, table: u32) {
+fn quake_effects<R: Banc>(x: &mut Cx<'_, R>, table: u32, reglage: u8) {
     x.add8(0x42, 0xff);
     if x.u8(0x42) != 0 {
         return;
     }
     x.set8(0x42, 1);
-    // 0xb1a7a, variante 0 ; le réglage est l'octet bas de D1, laissé par ce qui précède
-    let reglage = x.c.d[1] as u8;
+    // 0xb1a7a, variant 0; original glitch: the setting is the low byte of the D1 left by the shake
     let Some(child) = crate::families::effects_creators::countdown(x.b, 0, reglage) else { return };
     child.set_u16(x.b, 0x42, x.o.0 as u16);
     let owner = x.u32(0x4c);
@@ -321,14 +311,14 @@ fn backdrop_slide<R: Banc>(x: &mut Cx<'_, R>) {
 /// Variante 3 (0xce324) : lit dans une table (0xce37a, 16 octets) la position de caméra, la vitesse
 /// et le but selon `+0x3f` du chef d'orchestre, charge deux grilles de blocs dans le scroll 3
 /// (0x917000), puis fait glisser la caméra vers le but ; le chef d'orchestre est alors décrémenté.
-fn camera_script(x: &mut Cx) {
+fn camera_script<R: Banc>(x: &mut Cx<'_, R>) {
     const TABLE: u32 = 0xce37a;
     match x.u8(0x4) {
         0 => {
             next_state(x);
             let boss = conductor(x);
             let row = TABLE + ((boss.u8(x.b, 0x3f) as u32) << 4);
-            let w = |x: &mut Cx, i: u32| x.data16(row + 2 * i);
+            let w = |x: &mut Cx<'_, R>, i: u32| x.data16(row + 2 * i);
             let (cam_x, cam_y) = (w(x, 0), w(x, 1));
             x.set_a5_u16(a5::CAM_X, cam_x);
             x.set_a5_u16(a5::CAM_Y, cam_y);
@@ -337,9 +327,8 @@ fn camera_script(x: &mut Cx) {
                 x.set16(field, v);
             }
             let (g0, g1) = (w(x, 6), w(x, 7));
-            x.c.d[0] = 0;
-            load_blocks(x, rom::LOAD_BLOCKS, 0x917000, g0);
-            load_next(x, rom::LOAD_BLOCKS, g1);
+            let fin = load_blocks(x, rom::LOAD_BLOCKS, 0x917000, g0);
+            load_blocks(x, rom::LOAD_BLOCKS, fin, g1);
         }
         2 => {
             let (vx, vy) = (velocity(x.u16(0x14)), velocity(x.u16(0x18)));
@@ -363,12 +352,11 @@ fn camera_script(x: &mut Cx) {
 
 /// Paramètres de scène (sous-routine 0xce4a2, table de pointeurs 0xce4ea indexée par `index`
 /// octets) : position et vitesses du fond, puis une liste de blocs 4x4 chargés dans 0x918000.
-fn load_scene(x: &mut Cx, index: u32) {
+fn load_scene<R: Banc>(x: &mut Cx<'_, R>, index: u32) {
     const SCENES: u32 = 0xce4ea;
     let at = SCENES.wrapping_add(index);
     let mut p = (x.rom16(at) as u32) << 16 | x.rom16(at + 2) as u32;
-    x.c.d[0] = 0;
-    let mut next = |x: &mut Cx| {
+    let mut next = |x: &mut Cx<'_, R>| {
         let w = x.data16(p);
         p += 2;
         w
@@ -410,7 +398,7 @@ fn scroll_step<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 4 (0xce47c) : charge la scène `+0x2f` (bit 0 ignoré), puis la fait défiler sans fin.
-fn scene_scroll(x: &mut Cx) {
+fn scene_scroll<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -430,7 +418,7 @@ fn publish_background<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Variante 6 (0xce6bc) : comme 4 (scène `+0x2f`, bit 0 compris), en recopiant le fond dans sa copie
 /// « précédente », jusqu'à ce que le chef d'orchestre passe à la variante 2.
-fn scene_scroll_follow(x: &mut Cx) {
+fn scene_scroll_follow<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -452,7 +440,7 @@ fn scene_scroll_follow(x: &mut Cx) {
 // --- variante 5 : chargeur de blocs ---------------------------------------------------------------------
 
 /// Variante 5 (0xce64a) : charge deux grilles de blocs (0xce686 + 4 × `+0x2f`) dans le scroll 3.
-fn block_loader(x: &mut Cx) {
+fn block_loader<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -465,13 +453,12 @@ fn block_loader(x: &mut Cx) {
 }
 
 /// Charge les deux grilles de blocs n° `index` (couples de mots à 0xce686) dans le scroll 3.
-fn block_loader_for(x: &mut Cx, index: u32) {
+fn block_loader_for<R: Banc>(x: &mut Cx<'_, R>, index: u32) {
     const GRIDS: u32 = 0xce686;
     let at = GRIDS + 4 * index;
     let (g0, g1) = (x.data16(at), x.data16(at + 2));
-    x.c.d[0] = 0;
-    load_blocks(x, rom::LOAD_BLOCKS, 0x917000, g0);
-    load_next(x, rom::LOAD_BLOCKS, g1);
+    let fin = load_blocks(x, rom::LOAD_BLOCKS, 0x917000, g0);
+    load_blocks(x, rom::LOAD_BLOCKS, fin, g1);
 }
 
 #[path = "set_c_finale_b.rs"]

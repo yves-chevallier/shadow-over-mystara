@@ -131,33 +131,6 @@ fn alea_camera_y(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
     wr16(b, c.a[0] + 0xc, y);
 }
 
-fn alea_effet(c: &mut Cpu, b: &mut Bus, alea: &mut Alea) {
-    let (e, autre) = (objet(0), objet(1));
-    let (x, y) = (alea.dans(0x400) as u16, alea.dans(0x200) as u16);
-    wr16(b, e + 8, x);
-    wr16(b, e + 0x10, y);
-    for o in [autre] {
-        wr16(b, o + 8, x.wrapping_add(alea.dans(0x100) as u16).wrapping_sub(0x80));
-        wr16(b, o + 0x10, y.wrapping_add(alea.dans(0x80) as u16).wrapping_sub(0x40));
-    }
-    for rec in [0x5deu32, 0x7de, 0x9de, 0xbde] {
-        wr8(b, A5 + rec, alea.dans(3).min(1) as u8);
-        wr16(b, A5 + rec + 0xc, alea.next() as u16 % 0x20 - 8);
-        wr16(b, A5 + rec + 8, x.wrapping_add(alea.dans(0x100) as u16).wrapping_sub(0x80));
-        wr16(b, A5 + rec + 0x10, y.wrapping_add(alea.dans(0x80) as u16).wrapping_sub(0x40));
-    }
-    // fils (0xba094)
-    let n = alea.dans(6);
-    wr16(b, e + 0x58, n as u16);
-    for k in 0..6u32 {
-        let fils = objet(2 + k);
-        wr16(b, e + 0x50 + 2 * k, fils as u16);
-        wr8(b, fils + 0x30, alea.parmi(&[0, 1, 1, 3, 0xff]));
-    }
-    c.a[0] = e;
-    c.a[1] = if alea.dans(2) == 0 { autre } else { A5 + 0x5de };
-}
-
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 6 {
@@ -190,9 +163,6 @@ fn main() {
         (0x33fe4, "terrain_push", alea_terrain),
         (0x3403c, "terrain_push_2", alea_terrain),
         (0x31616, "camera_suit_joueurs_y", alea_camera_y),
-        (0xb9ee6, "effct_dans_la_boite", alea_effet),
-        (0xb9eba, "effct_joueur_dans_la_boite", alea_effet),
-        (0xba094, "effct_fils_finis", alea_effet),
     ];
     for _ in 0..tours {
         for &(entree, nom, prep) in &routines {

@@ -30,8 +30,8 @@ pub mod st {
 
 /// Clignotement : l'objet est caché une image sur deux (parité de `+0x5c` ajoutée au compteur de
 /// boucle D7 du dispatch).
-pub fn blink(x: &mut Cx) {
-    let visible = x.u16(f::TIMER).wrapping_add(x.c.d[7] as u16) & 1 != 0;
+pub fn blink<R: Banc>(x: &mut Cx<'_, R>) {
+    let visible = x.u16(f::TIMER).wrapping_add(x.compteur()) & 1 != 0;
     x.set_bit(0x1, 1, !visible);
 }
 

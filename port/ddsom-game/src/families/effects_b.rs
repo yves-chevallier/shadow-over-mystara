@@ -296,7 +296,7 @@ const MENU_STEP: u32 = 0xff2a38;
 /// Variable `A5+0x2e` : étape de la sélection.
 const SELECT_STEP: u32 = 0x2e;
 
-fn menu_button(x: &mut Cx) {
+fn menu_button<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);
@@ -322,12 +322,12 @@ fn menu_step<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
     crate::mem::rd8(x.b, MENU_STEP)
 }
 
-fn menu_button_active(x: &mut Cx) {
+fn menu_button_active<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::VARIANT) != 0 {
         x.anim_step();
         return;
     }
-    let advance = |x: &mut Cx, n: u32| {
+    let advance = |x: &mut Cx<'_, R>, n: u32| {
         x.add8(f::SUB_STATE, 2);
         x.anim_start(anims::MENU, n as u16);
     };
@@ -460,6 +460,6 @@ handlers! {
     0xb841c "effct_detecteur" #[sans] pickup_detector,
     0xb84c6 "effct_victoire" #[sans] victory_screen,
     0xb85fa "effct_bulle_createur" #[sans] bubble,
-    0xb871a "effct_bouton" menu_button,
+    0xb871a "effct_bouton" #[sans] menu_button,
     0xb8df2 "effct_clignotement" #[sans] blinking,
 }

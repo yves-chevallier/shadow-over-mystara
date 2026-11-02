@@ -153,10 +153,10 @@ fn clear_player(x: &mut Ctx, p: u32) {
 
 /// Ce que le placement des joueurs laisse dans les registres de l'original : D0/D1 = la caméra (ou la scène
 /// décalée), D2 = le rang, A2/A3 = les fins des tables.
-struct RestesPlacement {
+pub(crate) struct RestesPlacement {
     d0: u32,
     d1: u32,
-    rang: u8,
+    pub(crate) rang: u8,
     positions: u32,
     etats: u32,
 }
@@ -167,7 +167,7 @@ pub fn place_players(b: &mut Cps2Bus) {
     placer_joueurs(b);
 }
 
-fn placer_joueurs(b: &mut Cps2Bus) -> RestesPlacement {
+pub(crate) fn placer_joueurs(b: &mut Cps2Bus) -> RestesPlacement {
     let scene = rd8(b, A5 + var::SCENE) as u32;
     let mut positions = table::START_POSITIONS + (scene << 4);
     let mut states = table::START_STATES + (scene << 2);

@@ -239,7 +239,7 @@ mod mirrored {
     pub const REFLECTIONS: u32 = 0xb300c;
 }
 
-fn mirrored(x: &mut Cx) {
+fn mirrored<R: Banc>(x: &mut Cx<'_, R>) {
     if x.suspended() {
         return;
     }
@@ -255,7 +255,7 @@ fn mirrored(x: &mut Cx) {
     }
 }
 
-fn mirrored_follow(x: &mut Cx) {
+fn mirrored_follow<R: Banc>(x: &mut Cx<'_, R>) {
     let pointer = x.u16(mirrored::BEARER);
     let bearer = x.linked(mirrored::BEARER);
     if (pointer as i16) >= 0 || bearer.u8(x.b, 0) == 0 {
@@ -284,11 +284,10 @@ fn mirrored_follow(x: &mut Cx) {
         x.add16(Obj::Y, 1);
         x.add16(Obj::Z, 0xffff);
         if x.a5_u8(0x3d) == 0 {
-            // le porteur est dans A1, que l'original relit après le pas d'animation
-            x.c.a[1] = bearer.0;
+            // the bearer (A1 in the original) gets the frame after the animation step
             x.anim_step();
             let frame = x.u8(mirrored::FRAME);
-            Obj(x.c.a[1]).set_u8(x.b, mirrored::BEARER_FRAME, frame);
+            bearer.set_u8(x.b, mirrored::BEARER_FRAME, frame);
         }
     } else {
         // reflet : un pixel derrière et au-dessous
@@ -327,7 +326,7 @@ mod crossing {
     pub const SOUND_DONE: u32 = 0xe3b02;
 }
 
-fn crossing(x: &mut Cx) {
+fn crossing<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -348,7 +347,7 @@ fn crossing(x: &mut Cx) {
 }
 
 /// Les étapes (sous-état de 4 en 4) s'enchaînent dans la même image quand l'une se termine.
-fn crossing_steps(x: &mut Cx) {
+fn crossing_steps<R: Banc>(x: &mut Cx<'_, R>) {
     let mut step = x.u8(f::SUB_STATE);
     loop {
         match step {
@@ -392,12 +391,12 @@ fn crossing_steps(x: &mut Cx) {
             // attend que le décor ait fini, en jouant un son toutes les 0x30 images
             16 => {
                 x.anim_step();
-                x.c.a[1] = x.linked(crossing::SCENERY).0;
+                let scenery = x.linked(crossing::SCENERY);
                 if timer_out(x) {
                     x.set16(crossing::TIMER, 0x30);
                     crate::sound::jouer(x.b, crossing::SOUND_WAIT, x.o);
                 }
-                if Obj(x.c.a[1]).u8(x.b, 0x22) == 0 {
+                if scenery.u8(x.b, 0x22) == 0 {
                     return;
                 }
                 x.add8(f::SUB_STATE, 4);
@@ -543,7 +542,7 @@ mod launcher {
     pub const FADE_PROGRAM: u32 = 0x1ccf8;
 }
 
-fn launcher(x: &mut Cx) {
+fn launcher<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
@@ -567,7 +566,7 @@ fn launcher(x: &mut Cx) {
     }
 }
 
-fn launch(x: &mut Cx) {
+fn launch<R: Banc>(x: &mut Cx<'_, R>) {
     let partner = x.linked(launcher::PARTNER);
     partner.set_u16(x.b, f::STATE, 0x400);
     for k in 0..4 {
@@ -577,7 +576,6 @@ fn launch(x: &mut Cx) {
         }
         let px = p.u16(x.b, Obj::X).wrapping_add(0x310);
         p.set_u16(x.b, Obj::X, px);
-        x.c.a[1] = p.0;
         crate::sound::service(x.b, crate::sound::Service::Ff05);
         crate::sound::jouer(x.b, launcher::SOUND_LAUNCH, x.o);
         // animation 2 du joueur, puis le joueur est projeté en l'air
@@ -790,10 +788,10 @@ fn walker<R: Banc>(x: &mut Cx<'_, R>) {
 
 handlers! {
     0xa8594 "effct_ouverture" #[sans] opening,
-    0xb2f40 "effct_silhouette_reflet" mirrored,
-    0xb66f8 "effct_traversee" crossing,
+    0xb2f40 "effct_silhouette_reflet" #[sans] mirrored,
+    0xb66f8 "effct_traversee" #[sans] crossing,
     0xb68f4 "effct_passage" #[sans] passage,
-    0xb6a74 "effct_lanceur" launcher,
+    0xb6a74 "effct_lanceur" #[sans] launcher,
     0xb7f28 "effct_enseigne_depart" #[sans] start_sign,
     0xb896e "effct_fondu_sonore" #[sans] sound_fade,
     0xba0b0 "effct_passant" #[sans] walker,

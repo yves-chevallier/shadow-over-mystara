@@ -138,23 +138,6 @@ pub(crate) mod restes {
         }
     }
 
-    /// Exécute `f`, du code encore écrit pour le processeur (caméras, palettes, placement des joueurs...), pour un
-    /// gestionnaire générique, sur un banc de travail : A0 = l'objet, A5, D7 = le compteur de la boucle d'aiguillage ;
-    /// seuls les restes D2-D5 (`dispatch::Restes`) entrent et en ressortent, les autres registres de l'appelant ne sont
-    /// pas lus et ceux que laisse `f` sont morts.
-    pub(crate) fn sur_banc_de_travail<R: crate::families::cx::Banc>(
-        x: &mut crate::families::cx::Cx<'_, R>,
-        f: impl FnOnce(&mut Cpu, &mut Cps2Bus),
-    ) {
-        let mut c = Cpu::default();
-        (c.d[2], c.d[3], c.d[4], c.d[5]) = (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5());
-        c.d[7] = x.compteur() as u32;
-        c.a[0] = x.o.0;
-        c.a[5] = crate::mem::A5;
-        f(&mut c, x.b);
-        (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (c.d[2], c.d[3], c.d[4], c.d[5]);
-    }
-
     /// Le cœur appelé par un gestionnaire générique (`Cx<'_, R: Banc>`) : seuls les restes D2-D5 que l'original
     /// laisse aux gestionnaires suivants (`dispatch::Restes`) sont gardés, dans le banc ; le reste est mort.
     pub(crate) struct SurBanc<'a, R>(pub &'a mut R);
@@ -843,7 +826,7 @@ fn thrown_shard(r: &mut impl Registres, b: &mut Cps2Bus, createur: Obj, variante
 
 /// 0xb230e : bloc de 2 × 2 tuiles écrit en `at` (tuile `tile`, attribut `attr` ; rangée suivante 0x80 plus
 /// loin) ; rend l'adresse après les deux rangées (A1) et la tuile + 0x11 (D0).
-fn tile_block(b: &mut Cps2Bus, mut at: u32, mut tile: u16, attr: u16) -> (u32, u16) {
+pub(crate) fn tile_block(b: &mut Cps2Bus, mut at: u32, mut tile: u16, attr: u16) -> (u32, u16) {
     for _ in 0..2 {
         wr16(b, at, tile);
         wr16(b, at + 2, attr);
