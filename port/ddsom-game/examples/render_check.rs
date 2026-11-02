@@ -2,8 +2,8 @@
 //!
 //! render_check <roms> <eeprom> <scenario> <frames> [output]
 //!
-//! Runs the game without 68000 with rendering and audio (`DDSOM_SON_RUST=1`: Rust sound driver; otherwise emulated Z80)
-//! and prints one line per frame: hash of the pixels, hash of the audio samples produced. With `exit`, writes
+//! Runs the game (without 68000, Rust sound driver) with rendering and audio (`DDSOM_SON_Z80=1`: the emulated Z80
+//! instead) and prints one line per frame: hash of the pixels, hash of the audio samples produced. With `exit`, writes
 //! these lines to a file; otherwise only the summary line is printed. Compare two outputs with `cmp`/`diff`.
 
 use std::hash::Hasher;
@@ -32,7 +32,7 @@ fn main() {
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(&a[1]), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
-    if std::env::var_os("DDSOM_SON_RUST").is_some() {
+    if std::env::var_os("DDSOM_SON_Z80").is_none() {
         m.sound.use_rust_driver();
     }
     ddsom_game::install_no_68k(&mut m);

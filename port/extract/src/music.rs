@@ -61,7 +61,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         match kind {
             0..=0x7f => s.tracks = (0..16).map(|c| be(at + 1 + 2 * c)).collect(),
             0x80..=0x8f => s.body = (1..=10).map(|k| rom.byte(at + k)).collect(),
-            0x90..=0x92 => s.body = (1..=7).map(|k| rom.byte(at + k)).collect(),
+            0x90..=0x92 => s.body = (1..=8).map(|k| rom.byte(at + k)).collect(),
             _ => return Err(bad(format!("sound {i}: type {kind:#x}"))),
         }
         songs.push(Some(s));

@@ -20,7 +20,7 @@ mod rom;
 mod track;
 mod voice;
 
-pub use rom::Rom;
+pub use rom::{AdpcmSample, Instrument, Rom, Sample, SoundHeader};
 
 use adpcm::AdpcmChannel;
 use voice::Voice;
@@ -280,14 +280,9 @@ impl Driver {
 
     /// QSound initialisation, RAM clearing and reading of the music header.
     fn init_hardware(&mut self) {
-        // Register table (0xD5) and their values (0xE1): filter and echo settings.
-        for i in 0.. {
-            let reg = self.rom.byte(0xd5 + i);
-            let data = self.rom.word(0xe1 + 2 * i);
+        // Filter and echo settings.
+        for (reg, data) in self.rom.init_registers() {
             self.qsound(reg, data);
-            if reg == 0xe3 {
-                break;
-            }
         }
         for ch in 0..16 {
             self.silence_voice(ch);
@@ -312,13 +307,12 @@ impl Driver {
         self.cur = 0;
         self.is_music = false;
         self.sfx_override = false;
-        // Music header: header address, then [number of songs (2 bytes,
-        // big-endian), music factor index, effects volume index].
-        let header = u32::from(self.rom.word(math::HEADER_PTR));
-        self.song_count = u16::from(self.rom.byte(header)) << 8 | u16::from(self.rom.byte(header + 1));
-        self.g.music_factor = self.rom.table(math::TABLE_LEVELS, self.rom.byte(header + 2));
-        self.g.sfx_volume = self.rom.table(math::TABLE_LEVELS, self.rom.byte(header + 3));
-        self.song_table = header + 6;
+        // Sound header: number of sounds, volumes, sound table.
+        let header = self.rom.sound_header();
+        self.song_count = header.count;
+        self.g.music_factor = self.rom.level(header.music_factor);
+        self.g.sfx_volume = self.rom.level(header.sfx_volume);
+        self.song_table = header.table;
     }
 
     pub(crate) fn qsound(&mut self, reg: u8, data: u16) {

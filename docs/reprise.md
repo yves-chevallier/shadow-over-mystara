@@ -65,7 +65,19 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    * `native_zones.txt` gardé : `extract` l'inclut (`natives.rs`) pour les zones lues dans le code ; ses zones hors du
      code font double emploi avec `reste.json` aujourd'hui, mais protègent si `code_68k.txt` grandit (docs/sans-rom.md) ;
    * `examples/reste68k`, `tools/reste68k.sh` et `docs/reste68k.md` retirés (`examples/cessions` l'était déjà).
-4. **Suite :** optimisation (base : `examples/bench`, refactorisation.md « Performance »), documentation finale, et le bug de saisie du nom. Ce bug existe dans d'autres révisions du jeu, pas dans la nôtre (Euro 960619).
+4. **Son : le pilote Rust seul pilote du jeu** (branche `wt-son`, [son.md](son.md) § 13) :
+   * `ddsom` (avec ou sans ROM) n'a plus de Z80 : `cps2` a une fonctionnalité `z80` (machine de référence et outils,
+     activée par `ddsom-game/tools`) ; `cargo tree -p ddsom -e normal` ne contient plus `z80`. `DDSOM_SON_RUST` retiré.
+   * `validate` compare désormais le son : chaque registre QSound et octet de RAM partagée doit recevoir les mêmes
+     valeurs du pilote Rust (machine du jeu) et du Z80 (référence), à 4 images près ; la comparaison est suspendue
+     quand le Z80 en retard de plusieurs périodes réordonne une commande et un tic (écart connu : ordre différent
+     dans 10 scénarios sur 308, valeurs différentes dans 2), jusqu'à ce que les deux pilotes aient le même état.
+   * Validé 308/308 dans les deux modes (`DDSOM_LONG=1`, assets réextraits), non fusionné.
+   * Écart corrigé : la définition des deux sons ADPCM perdait un octet dans `music.json` (son faux sans ROM) :
+     **réextraire ses assets** (`extract <roms> <assets> music`).
+   * Le pilote lit ses données par accesseurs nommés (`ddsom_sound::Rom`) ; elles restent rangées à leurs adresses
+     d'origine (voir [sans-rom.md](sans-rom.md) « Ce qui manque »).
+5. **Suite :** optimisation (base : `examples/bench`, refactorisation.md « Performance »), documentation finale, et le bug de saisie du nom. Ce bug existe dans d'autres révisions du jeu, pas dans la nôtre (Euro 960619).
 
 ## Méthode qui marche
 

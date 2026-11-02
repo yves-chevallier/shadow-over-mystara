@@ -12,14 +12,20 @@
 //!
 //! The hybrid mode (`DDSOM_HYBRIDE=1`) is removed.
 //!
+//! Sound: machine A has the game's sound driver (Rust, `ddsom-sound`), machine B the original Z80 program. Each QSound
+//! register and each shared RAM byte must receive the same values from both drivers, in the same order, up to a few
+//! frames of delay (`SoundStreams`), and the shared RAM must be identical at every frame (except the pan report byte,
+//! compared in the sequences). `DDSOM_SON_Z80=1` (diagnostic): the Z80 in machine A too.
+//!
 //! `DDSOM_ASSETS=<dir>`: machine A is built from the extracted resources alone
-//! (`ddsom_assets::rebuild::contents`, no ROM read: game without ROM, docs/sans-rom.md), with the Rust sound driver;
-//! machine B keeps the ROMs and the Z80.
+//! (`ddsom_assets::rebuild::contents`, no ROM read: game without ROM, docs/sans-rom.md); machine B keeps the ROMs.
 //!
 //! validate <roms> <eeprom> <scenario> <frames>
 
+use std::collections::{BTreeMap, VecDeque};
 use std::path::Path;
 
+use cps2::sound::Output;
 use ddsom_game::tasks::table::{gaps, read, kernel_ram};
 
 /// 68000 frequency, as a multiple of the arcade's.
@@ -54,6 +60,201 @@ const GHOST_SAVE: std::ops::Range<usize> = 0x297e..0x2a1a;
 /// in work RAM or in GFX RAM; everything else is compared. In practice only frames 1 and 2 (GFX RAM) have one.
 const STARTUP: usize = 5;
 
+/// Shared RAM byte where the sound driver reports the pan of the last voice set (docs/son.md): the original Z80 often
+/// finishes a sequencer tick after the next interrupt, so the byte may change one frame later or earlier than with the
+/// Rust driver, which does the whole tick at once. Its writes are compared in the sequences instead.
+const PAN_REPORT: usize = 0x005;
+
+/// Mailbox flag of the shared RAM: acknowledged (0xFF) by the interrupt routine, whose writes the original
+/// interleaves with those of the main loop depending on the Z80's execution time. Left out of the sequences; the byte
+/// itself is compared at every frame with the rest of the shared RAM.
+const MAILBOX_FLAG: u16 = 0x00f;
+
+/// Frames a driver write may wait for its counterpart from the other driver: the Z80 lags behind the Rust driver by
+/// the time it takes to write a tick (at most one frame measured over all the scenarios).
+const SOUND_MAX_LAG: usize = 4;
+
+/// The writes of the two sound drivers (game: Rust driver; reference: Z80). Each QSound register, and each shared
+/// RAM byte, must receive the same sequence of values from both, up to a delay of `SOUND_MAX_LAG` frames.
+///
+/// The order between registers is not required: when the Z80 is several periods late (after starting a music, which
+/// takes it up to two periods), a command that arrives meanwhile is processed before the sequencer tick still pending,
+/// while the Rust driver, which has no execution time, has already done that tick (docs/son.md §13, « Écart
+/// restant »). The voices the command starts then begin one tick later than with the Z80. The global order is still
+/// measured (`in_order`, `reordered_at`).
+#[derive(Default)]
+struct SoundStreams {
+    /// Values not yet matched, per destination: (frame, value).
+    game: BTreeMap<Dest, VecDeque<(usize, u16)>>,
+    reference: BTreeMap<Dest, VecDeque<(usize, u16)>>,
+    compared: u64,
+    max_lag: usize,
+    /// Global order: the writes of each side not yet matched in order, and the first frame where it differs.
+    order: (VecDeque<Output>, VecDeque<Output>),
+    in_order: u64,
+    reordered_at: Option<usize>,
+    /// Comparison suspended since this frame (the Z80 reordered its work while late), until both drivers are in the
+    /// same state again (`resync`).
+    desynced: Option<usize>,
+    /// Suspensions, and the longest one in frames.
+    desyncs: usize,
+    longest_desync: usize,
+    /// Last frame that ended with work pending in the Z80 (it is late), and whether the order broke while it was.
+    z80_late_at: Option<usize>,
+    reordered_late: bool,
+}
+
+/// The Z80 RAM (F000-FFFF) and the Rust driver state (`Driver::ram_image`) are the same, except for what the driver does
+/// not model: current bank, temporaries, stack, unused bytes of the voices, stale fields of free voices
+/// (same rules as the `sound_fuzz` tool, FUZZ_STATE).
+fn same_driver_state(z80: &[u8], image: &[u8]) -> bool {
+    let ignored = |a: usize| {
+        matches!(a, 0xf005 | 0xf006 | 0xf007 | 0xf00d | 0xf01a)
+            || (0xf050..0xf200).contains(&a)
+            || (0xff00..0x10000).contains(&a)
+            || (0xf200..0xfc00).contains(&a) && matches!((a - 0xf200) % 0x50, 0x21..=0x24 | 0x32 | 0x45)
+    };
+    (0..0x1000).all(|i| {
+        let a = 0xf000 + i;
+        if z80[i] == image[i] || ignored(a) {
+            return true;
+        }
+        if (0xf200..0xfc00).contains(&a) {
+            let start = i - (a - 0xf200) % 0x50;
+            if z80[start] == 0 && image[start] == 0 {
+                return !matches!((a - 0xf200) % 0x50, 0x00 | 0x40);
+            }
+        }
+        if (0xfc00..0xfc48).contains(&a) {
+            let start = i - (a - 0xfc00) % 0x18;
+            if z80[start + 2] | z80[start + 3] == 0 && image[start + 2] | image[start + 3] == 0 {
+                return !matches!((a - 0xfc00) % 0x18, 0x02 | 0x03 | 0x10);
+            }
+        }
+        false
+    })
+}
+
+/// Destination of a driver write.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+enum Dest {
+    Qsound(u8),
+    Shared(u16),
+}
+
+impl SoundStreams {
+    /// End of frame `frame`: compares the drivers' writes, then suspends or resumes the comparison. A mismatch is
+    /// accepted only after the Z80, being late, reordered its work (the order differs since a frame where it was
+    /// late); the comparison then waits until both drivers are in the same state again. Otherwise it is an error.
+    fn end_frame(&mut self, frame: usize, game: &mut cps2::Machine, reference: &mut cps2::Machine) -> Result<(), String> {
+        let writes = |m: &mut cps2::Machine| std::mem::take(m.sound.output.as_mut().unwrap());
+        let (a, b) = (writes(game), writes(reference));
+        let z80 = &reference.sound;
+        let pending_work = z80.ram[1] | z80.ram[2] | z80.ram[3] != 0;
+        if self.desynced.is_none() {
+            let before = self.reordered_at;
+            let result = self.push(frame, a, b);
+            if before.is_none() && self.reordered_at.is_some() {
+                self.reordered_late = self.z80_late_at.is_some_and(|l| frame - l <= 2) || pending_work;
+            }
+            if let Err(e) = result {
+                if !(self.reordered_at.is_some() && self.reordered_late) {
+                    return Err(e);
+                }
+                self.desynced = Some(frame);
+                self.desyncs += 1;
+                self.game.clear();
+                self.reference.clear();
+            }
+        }
+        if pending_work {
+            self.z80_late_at = Some(frame);
+        }
+        // the Z80 at rest in its main loop, nothing pending, and the same state as the Rust driver: in sync again
+        let idle = (0x017d..0x019a).contains(&z80.z80.pc) && !pending_work;
+        if (self.desynced.is_some() || self.reordered_at.is_some()) && idle {
+            if let Some(driver) = game.sound.driver.as_ref() {
+                if same_driver_state(&z80.ram, &driver.ram_image()) {
+                    if let Some(since) = self.desynced.take() {
+                        self.longest_desync = self.longest_desync.max(frame - since);
+                    }
+                    self.reordered_at = None;
+                    self.order.0.clear();
+                    self.order.1.clear();
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Adds the writes of frame `frame` and compares what both sides have; an error describes the first mismatch.
+    fn push(&mut self, frame: usize, game: Vec<Output>, reference: Vec<Output>) -> Result<(), String> {
+        let kept = |w: &&Output| !matches!(w, Output::Shared { offset: MAILBOX_FLAG, .. });
+        let split = |w: &Output| match *w {
+            Output::Qsound { reg, data } => (Dest::Qsound(reg), data),
+            Output::Shared { offset, value } => (Dest::Shared(offset), u16::from(value)),
+        };
+        if self.reordered_at.is_none() {
+            self.order.0.extend(game.iter().filter(kept));
+            self.order.1.extend(reference.iter().filter(kept));
+            while let (Some(a), Some(b)) = (self.order.0.front(), self.order.1.front()) {
+                if a != b {
+                    self.reordered_at = Some(frame + 1);
+                    break;
+                }
+                self.order.0.pop_front();
+                self.order.1.pop_front();
+                self.in_order += 1;
+            }
+        }
+        let mut touched = Vec::new();
+        for w in game.iter().filter(kept) {
+            let (d, v) = split(w);
+            self.game.entry(d).or_default().push_back((frame, v));
+            touched.push(d);
+        }
+        for w in reference.iter().filter(kept) {
+            let (d, v) = split(w);
+            self.reference.entry(d).or_default().push_back((frame, v));
+        }
+        touched.extend(reference.iter().filter(kept).map(|w| split(w).0));
+        touched.sort();
+        touched.dedup();
+        for d in touched {
+            let (Some(a), Some(b)) = (self.game.get_mut(&d), self.reference.get_mut(&d)) else { continue };
+            while let (Some(&(fa, va)), Some(&(fb, vb))) = (a.front(), b.front()) {
+                if va != vb {
+                    let next = |q: &VecDeque<(usize, u16)>| q.iter().take(4).map(|(f, v)| format!("{v:x}@{}", f + 1)).collect::<Vec<_>>().join(" ");
+                    return Err(format!(
+                        "sound {d:x?}: {va:x} (frame {}) instead of {vb:x} (frame {}); next game {}; next reference {}",
+                        fa + 1,
+                        fb + 1,
+                        next(a),
+                        next(b)
+                    ));
+                }
+                self.max_lag = self.max_lag.max(fa.abs_diff(fb));
+                a.pop_front();
+                b.pop_front();
+                self.compared += 1;
+            }
+        }
+        for (side, streams) in [("game", &self.game), ("reference", &self.reference)] {
+            for (d, q) in streams {
+                if let Some(&(f, v)) = q.front().filter(|(f, _)| frame - f > SOUND_MAX_LAG) {
+                    return Err(format!("sound {d:x?}: {v:x} written by the {side} at frame {} without counterpart after {SOUND_MAX_LAG} frames", f + 1));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Writes still waiting for their counterpart (game, reference).
+    fn pending(&self) -> (usize, usize) {
+        (self.game.values().map(VecDeque::len).sum(), self.reference.values().map(VecDeque::len).sum())
+    }
+}
+
 fn first_diff(a: &[u16], b: &[u16]) -> Option<usize> {
     a.iter().zip(b).position(|(x, y)| x != y)
 }
@@ -74,13 +275,18 @@ fn main() {
     let mut ma = match std::env::var_os("DDSOM_ASSETS") {
         Some(dir) => {
             let contents = ddsom_assets::rebuild::contents(Path::new(&dir)).expect("assets");
-            let mut m = cps2::Machine::ddsom(contents, ee.as_deref());
-            m.sound.use_rust_driver();
-            m
+            cps2::Machine::ddsom(contents, ee.as_deref())
         }
         None => load(),
     };
     let mut mb = load();
+    // the game's sound driver against the original Z80 (DDSOM_SON_Z80=1, diagnostic: the Z80 in both machines)
+    if std::env::var_os("DDSOM_SON_Z80").is_none() {
+        ma.sound.use_rust_driver();
+    }
+    ma.sound.output = Some(Vec::new());
+    mb.sound.output = Some(Vec::new());
+    let mut sound = SoundStreams::default();
     ddsom_game::install_no_68k(&mut ma);
     ddsom_game::install_reference(&mut mb);
     // the frame is not compared (only the state): no rendering, it was the bulk of a frame's time
@@ -155,6 +361,12 @@ fn main() {
         if let Some(i) = first_diff(&ma.bus.palette, &mb.bus.palette) {
             what.push(format!("palette, mot {i}"));
         }
+        if let Some(i) = (0..ma.bus.qram.len()).find(|&i| i != PAN_REPORT && ma.bus.qram[i] != mb.bus.qram[i]) {
+            what.push(format!("shared RAM {i:03x}: {:02x} instead of {:02x}", ma.bus.qram[i], mb.bus.qram[i]));
+        }
+        if let Err(e) = sound.end_frame(f, &mut ma, &mut mb) {
+            what.push(e);
+        }
         // differential test of the task table (DDSOM_TACHES_TOUT=1: SR and saved registers too)
         if let Some(t) = read(&ma.bus) {
             what.extend(gaps(t, &mb.bus.ram, all_tasks).into_iter().take(10));
@@ -169,6 +381,18 @@ fn main() {
         }
     }
     println!("{frames} frames in {:.1?}", t0.elapsed());
+    let (pending_game, pending_reference) = sound.pending();
+    println!(
+        "sound: {} driver writes identical (largest delay {} frames, {} game and {} reference writes pending); {} in the global order; {} suspensions (Z80 late), the longest {} frames{}",
+        sound.compared,
+        sound.max_lag,
+        pending_game,
+        pending_reference,
+        sound.in_order,
+        sound.desyncs,
+        sound.longest_desync,
+        sound.desynced.map(|f| format!(", suspended since frame {}", f + 1)).unwrap_or_default()
+    );
     let report = ddsom_game::report();
     for (name, st) in &report {
         let errors = if check {

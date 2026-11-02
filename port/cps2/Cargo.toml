@@ -9,7 +9,9 @@ description = "CPS2 machine: 68000 bus, EEPROM, interrupts, ROM loading (after M
 # The 68000 (the original code): the reference machine and the tools; the game without 68000 does not need it.
 m68k = { path = "../m68k", optional = true }
 cps2-gfx = { path = "../cps2-gfx" }
-z80 = { path = "../z80" }
+# The emulated Z80 running the original sound program: the reference machine and the tools; the game uses the Rust
+# sound driver (`ddsom-sound`).
+z80 = { path = "../z80", optional = true }
 qsound = { path = "../qsound" }
 ddsom-sound = { path = "../ddsom-sound" }
 
@@ -17,7 +19,8 @@ ddsom-sound = { path = "../ddsom-sound" }
 png = "0.17"
 
 [features]
-default = ["m68k"]
+default = ["m68k", "z80"]
 m68k = ["dep:m68k"]
+z80 = ["dep:z80"]
 # Log of program ROM reads made by Rust code (outside 68000 instructions): `rom_trace`.
 rom-trace = ["m68k", "m68k/rom-trace"]

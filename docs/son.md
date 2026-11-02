@@ -335,6 +335,39 @@ n'ont pas de priorité (elles remplacent toujours la musique en cours).
 
 ## 13. Validation et écarts
 
+**Le pilote Rust est le seul pilote du jeu** (2026-11, branche `wt-son`). `ddsom`, avec ou sans ROM, n'a plus de
+Z80 : dans `cps2`, le Z80 émulé et le programme d'origine sont derrière la fonctionnalité `z80` (par défaut, activée
+par `ddsom-game/tools` pour la machine de référence et les outils) ; sans elle `Sound::new` installe le pilote Rust
+(`cargo tree -p ddsom -e normal` ne contient plus `z80`). `DDSOM_SON_RUST` n'existe plus.
+
+**`validate` compare le son à chaque image** sur tous les scénarios : la machine du jeu (A) a toujours le pilote Rust,
+la machine de référence (B) le Z80 d'origine. `Sound::output` relève dans l'ordre les écritures du pilote (registres
+QSound, octets de la RAM partagée). Critères (`SoundStreams` dans `examples/validate.rs`) :
+
+* chaque registre QSound et chaque octet de la RAM partagée reçoit **la même suite de valeurs** des deux pilotes, à
+  un retard de `SOUND_MAX_LAG` (4) images près (mesuré : 1 image au plus) ;
+* la RAM partagée est identique à chaque image, sauf l'octet 5 (rapport de pan, comparé dans les suites) ;
+  l'acquittement (octet 00F, écrit par la routine d'interruption) est hors des suites mais dans la RAM partagée ;
+* l'ordre global des écritures est mesuré (pas exigé) : il est identique tant que le Z80 n'est pas en retard de
+  plusieurs périodes (voir « Écart restant ») ;
+* une valeur différente n'est acceptée que si l'ordre global a été rompu pendant un retard du Z80 (travail en
+  attente dans F001-F003 en fin d'image) : la comparaison est alors **suspendue jusqu'à ce que les deux pilotes aient
+  de nouveau le même état** (Z80 au repos dans sa boucle, RAM F000-FFFF égale à `Driver::ram_image()`, règles de
+  `sound_fuzz` / `FUZZ_STATE`), puis reprend. Toute autre différence fait échouer `validate`.
+
+La ligne `sound: N driver writes identical (largest delay k frames…); M in the global order; S suspensions (Z80 late),
+the longest L frames` de `validate` donne les comptes. Validation complète (2026-11-02, `DDSOM_LONG=1`) : 308 VALIDE
+sur 308 en mode par défaut et avec `DDSOM_ASSETS` (assets réextraits), retard maximal 1 image, 2 suspensions. Témoins : une donnée QSound altérée côté jeu (bot30k, image
+3 001, Z80 à jour) fait échouer `validate` à cette image ; l'octet ADPCM manquant des assets (ci-dessous) aussi.
+`DDSOM_SON_Z80=1` (diagnostic) remet le Z80 dans la machine A.
+
+**Écart trouvé et corrigé : le son ADPCM sans ROM.** Une définition ADPCM fait 8 octets (type, drapeaux, 4 octets
+ignorés, amplitude, numéro d'échantillon sur un mot) ; `extract` n'en rangeait que 7 dans `music.json` : sans ROM,
+l'octet bas du numéro d'échantillon valait 0 et les sons 126 et 127 jouaient le mauvais échantillon (22 scénarios en
+échec avec `DDSOM_ASSETS` dès que le son est comparé). Test `music_driver_identical` (`ddsom-assets/tests/roundtrip.rs`) :
+le pilote joue chaque son de la table sur la région des ROMs et sur la région reconstruite des assets, mêmes écritures
+et même état à chaque interruption.
+
 Outils (`port/ddsom-sound/examples`, à lancer depuis `port/` avec `DDSOM_ROMS=/home/ycr/som/rom`) :
 
 - `son_compare <roms> <eeprom> <scénario> <images>` : machine complète (68000 recompilé + Z80 + QSound)
@@ -347,7 +380,12 @@ Outils (`port/ddsom-sound/examples`, à lancer depuis `port/` avec `DDSOM_ROMS=/
 - `son_machine` : machine complète avec le pilote Rust à la place du Z80 (`Sound::use_rust_driver`),
   comparée image par image à la machine d'origine (RAM du 68000, RAM partagée, écritures QSound) ;
 - `son_explore`, `son_timing` : journal d'évènements et couverture du Z80, durée du masquage des
-  interruptions au démarrage.
+  interruptions au démarrage ;
+- `sound_cost <roms> <eeprom> <scénario> <images>` : durée en cycles du Z80 de chaque tâche de la boucle principale
+  (commande, tic ADPCM, tic du séquenceur) selon le nombre d'écritures QSound, sur la machine de référence de
+  `validate` ; `sound_compare` accepte `SON_REFERENCE=1` (même machine) et `SON_SHOW=<de>-<à>` ;
+- `sound_reads <roms> <assets> <interruptions> [<eeprom> <scénario>:<images> ...]` (exemple de `ddsom-assets`) :
+  octets de la région du Z80 lus par le pilote Rust, par rubrique de `music.json` (voir « Lectures du pilote »).
 
 Résultats (ROMs dans `/home/ycr/som/rom`, `cd port && DDSOM_ROMS=/home/ycr/som/rom cargo build --release -p ddsom-sound --examples`) :
 
@@ -379,8 +417,43 @@ D007, les multiplications se font par décalages). Conséquences mesurées sur `
   boucle longtemps sans note), l'ordre entre une commande et le travail en attente dépend de la durée
   d'exécution : les essais de validation n'envoient une commande que quand le Z80 a rattrapé son retard.
 
-Reproduire la répartition exacte exigerait de modéliser la durée de chaque instruction du Z80 et les
-attentes sur D007 de la QSound émulée ; ce n'est pas fait.
+**Retard de plusieurs périodes dans le jeu.** Démarrer une musique coûte au Z80 jusqu'à 75 000 cycles (plus de deux
+périodes de 250 Hz : 48 à 76 écritures QSound, chacune attend D007, que la QSound émulée ne remet prête qu'à la fin de
+la tranche de ligne), et un tic du séquenceur 4 000 à 70 000 cycles (mesure `sound_cost` sur `boss0_poke`, machine de
+référence). Pendant ce retard le compteur de tics monte ; si une commande arrive avant que le Z80 ait commencé le tic
+en attente, sa boucle principale (commande, puis ADPCM, puis tic) traite la commande d'abord, alors que le pilote
+Rust, sans durée, a déjà fait ce tic. Les voies que la commande démarre commencent alors un tic (4 ms) plus tard qu'avec
+le Z80, jusqu'à leur fin. Sur la validation complète (308 scénarios, 78 millions d'écritures comparées en mode par
+défaut), l'ordre global diffère dans 10 scénarios (par exemple `boss0_poke`, `long_28_scenes` ; seulement avec la
+machine de référence surcadencée de `validate` : `sound_machine` au rythme de la borne ne le voit pas sur
+`boss0_poke`). Dans 8 d'entre eux les valeurs par registre restent identiques ; dans 2 (`covb_long_59`,
+`long_scene_20`), le décalage change des valeurs (registre de banque partagé avec la voie voisine, volume) : la
+comparaison y est suspendue, et les deux pilotes retrouvent le même état 137 images plus tard au plus.
+
+Reproduire cet ordre exigerait de modéliser la durée d'exécution du Z80 (multiplications par décalages dont la durée
+dépend des opérandes, attentes de D007 rythmées par les tranches de ligne de la machine émulée) ; une estimation
+approchée (coût par écriture et par voie) se tromperait près des bords d'interruption. Ce n'est pas fait : le pilote
+Rust reste sans durée, et `validate` suspend la comparaison comme décrit plus haut. `sound_compare` avec
+`SON_REFERENCE=1 SON_SHOW=<de>-<à>` montre les écritures des deux côtés, interruption par interruption.
+
+### Lectures du pilote
+
+`sound_reads` (exemple de `ddsom-assets`) compte les octets de la région du Z80 que le pilote Rust lit : chacun des
+1 168 sons joué seul pendant 3 000 interruptions, puis `bot30k`, `bot_2p` (30 000 images), `modes/ending` (12 000)
+et `long_28_scenes` (90 000) sur le jeu. **Aucun octet lu hors des rubriques de `sound/music.json`** (141 679 octets
+lus). Par rubrique (lus / taille) : pistes 100 568 / 172 856 ; définitions des sons 30 402 / 30 411 ; en-tête et table
+des sons 3 509 / 4 678 ; instruments 2 656 / 4 096 ; fiches d'échantillons 2 650 / 2 760 ; tables `fine` 1 272 /
+3 072, `rates` 176 / 216, `amplitudes` 166 / 256, `semitone_octave` 88 / 108, `durations` 38 / 48, `levels` 30 / 256,
+`qsound_init_values` 24 / 24, `decay` 18 / 128, `vibrato` 18 / 256, `attack` 12 / 128, `octave_offsets` 12 / 16,
+`qsound_init_regs` 12 / 12, `lfo_rates` 8 / 256, `octave_start` 8 / 9, `tremolo` 4 / 256 ; pointeurs (en-tête,
+échantillons, bancs) 8 / 8.
+
+Le pilote lit donc tout par les rubriques nommées de `music.json`, mais encore au travers d'une région d'octets
+rangée aux adresses du Z80 (reconstruite par `ddsom_assets::rebuild::audio_region` sans ROM). Ce qu'il reste pour des
+tableaux Rust sans adresses : les pointeurs de l'état du pilote (lecture des pistes, banc d'instruments courant,
+définition en cours) devraient devenir des index, et `Driver::ram_image` (outils) les retraduire en adresses ; le
+débordement de l'original (une durée à la fois pointée et en triolet lit après la table des durées, dans les
+décalages d'octave) serait à garder explicitement.
 
 ## 14. Utilisation
 
@@ -393,5 +466,15 @@ loop { driver.irq_request(&mut shared, &mut out); /* toutes les 32 000 périodes
 
 `shared` est la RAM partagée (4 096 octets, un octet par mot côté 68000) ; `out` reçoit les
 `Write::Qsound { reg, data }` à appliquer à la puce (les écritures dans la RAM partagée sont déjà faites
-dans `shared`, et rappelées dans `out` pour les outils). Dans `cps2`, `Sound::use_rust_driver()` (ou `DDSOM_SON_RUST=1` pour `play.sh`) fait
-tout cela à la place du Z80.
+dans `shared`, et rappelées dans `out` pour les outils). Dans `cps2`, la machine du jeu fait tout cela (sans la
+fonctionnalité `z80`, ou après `Sound::use_rust_driver()` avec elle).
+
+**Données.** Le pilote lit ses données par les accesseurs nommés de `Rom` (`rom.rs`) : tables de la ROM fixe
+(`amplitude`, `level`, `attack`, `decay`, `lfo_rate`, `vibrato`, `tremolo`, `duration`, `octave_offset`,
+`semitone_octave`, `octave_start`, `rate`, `fine`, `init_registers`), en-tête et table des sons (`sound_header`,
+`sound`), instruments (`instrument_bank`, `instrument` → `Instrument`), échantillons (`sample` → `Sample`,
+`adpcm_sample` → `AdpcmSample`), et les octets des définitions et des pistes (`byte`, `word_be`), lus par le
+pointeur de lecture des voies. Aucune adresse de table n'est plus dans le code du pilote. Les données restent
+rangées à leurs adresses d'origine, dans la région du Z80 (ROM, ou reconstruite depuis `sound/music.json` sans
+ROM) : l'état du pilote garde ces adresses (pointeurs de lecture, bancs, définitions), comme la RAM du Z80 que
+`Driver::ram_image` reproduit, et l'original lit au-delà de certaines tables (voir « Lectures du pilote »).
