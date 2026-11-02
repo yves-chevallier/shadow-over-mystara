@@ -269,3 +269,25 @@ Pas du code mort, mais un comportement qu'aucun scénario n'exerce (le golem n'a
 n'est piloté que par les touches du quatrième joueur) : `enemy_golem::control::walk` relit les boutons dans D0,
 que 0x1a56 écrase par l'octet `+0x32` quand l'image en cours se termine, et laisse le drapeau « a bougé » dans D2.
 Écrit d'après le désassemblage (0x67926-0x679a0), non validé par un scénario.
+
+## Lot « couverture » (wt-couv2)
+
+### Boss 15 et 19 : sous-états 8 et 0xa de l'état 4 « touché » (tables 0x929b8 et 0x90970)
+
+* **Ce que fait le code.** L'état 4 de chacun des deux dragons aiguille par `+5` dans une table de six mots :
+  0 réaction, 2 recul, 4 relevé (boss 15) ou réaction (boss 19), 6 mort, puis 8 et 0xa. L'entrée 8 est un `rts`
+  (0x9152e pour le boss 15, 0x8fae2 pour le 19) ; l'entrée 0xa ramène au combat, marche vers un joueur
+  (0x92ce0 → 0x9300c : `+0xa2` effacé, état 0x02020400, animation de repos ; 0x9101a → 0x913e8 pour le boss 19).
+* **Pourquoi jamais atteint.** Les écrivains de l'état d'un de ces boss qui mènent à l'état 4 sont : les coups
+  (`move.l #0x04000000,(4,A1)`, 0x10074 et les collisions 0x264e4...), la mort du boss 19 (0x9141a : 0x04060000),
+  les écritures de `+5` dans l'état 4 lui-même (6 seulement : 0x9290c, 0x92a92 ; 0x90a5e, 0x90b18, 0x90b3e) et
+  les retours à un état sauvé : `+0xb0` (0x9292e, seulement si l'octet sauvé vaut 2), `+0xa8` (0x90916, seulement
+  0x0204 04xx) et `+0x8a` (0x92b04, 0x90c84), copie de l'état au moment du coup (0x10092, 0x263c2...). Aucun
+  `addq.b #2,(5,A0)` dans les routines de l'état 4 (0x928ee-0x92ce0, 0x908ea-0x91010). Par récurrence, `+5` ne vaut
+  donc que 0, 2, 4 ou 6 dans l'état 4. (Le constat du lot fuzz citait 0x9101a comme table du boss 19 : c'est
+  l'entrée 0xa de la table 0x90970.)
+* **Nature.** Entrées de table jamais choisies, mais un vrai comportement de jeu (retour au combat).
+* **Décision.** Gardées en Rust comme l'original (`boss_15/hit.rs`, `boss_19/hit.rs` : `8 => {}`, `0xa => chase`),
+  au lieu du `_ => {}` qui ignorait aussi 0xa ; au-delà de la table, `unreachable!`. Validées par `fuzz_couv`
+  (`boss/boss15_scene46` et `boss/boss19_scene32`, 12 000 images, un appel sur 4, 48 essais par appel : environ
+  14 300 essais chacun, les deux entrées sont atteintes par des essais sans écart).
