@@ -23,7 +23,6 @@ use crate::machine::Machine;
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
-    pub const SCENE_29_HOOK: u32 = 0xb9c6a;
     /// Table (adresses de 4 octets, dans le code) des gestionnaires de sous-état `+5`.
     pub const SUB_HANDLERS: u32 = 0x3541c;
 }
@@ -164,7 +163,7 @@ fn finish(g: &mut Ctx, p: Player) {
         && p.u16(g, 0xc) == 0
         && (ram::FRAME_COUNTER.get(g.b).wrapping_add(p.u8(g, Player::INDEX)) & 0xf) == 0
     {
-        g.rom(rom::SCENE_29_HOOK, p);
+        crate::families::effects_creators::for_players::wisp_68k(g.c, g.b, p.obj());
     }
     lists::ACTORS.reinsert(g.b, p.obj());
 }

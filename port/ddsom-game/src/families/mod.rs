@@ -99,8 +99,6 @@ pub const NATIVES: &[Native] = &[
     items::ITEM_7,
     items::ITEM_8,
     items::ITEM_9,
-    items::EFFACE_RAMASSES,
-    items::CHUTE_EQUIPEMENT,
     boxes::BOX_1,
     boxes::BOX_2,
     effects::EFFCT_1,

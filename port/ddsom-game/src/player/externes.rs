@@ -33,10 +33,6 @@ pub mod effet {
     pub const DUST: u32 = 0xb10c8;
     /// Barre de vie d'un monstre frappé (D0 = joueur et type, D1 = PV max, D2 = PV, D3 = classe).
     pub const HEALTH_BAR: u32 = 0x19dce;
-    /// Halo d'entrée en scène.
-    pub const HALO: u32 = 0xab708;
-    /// Étoiles et étincelles d'un coup (D0, D1 : genre).
-    pub const STARS: u32 = 0xb378a;
     /// Objet SET de la baguette.
     pub const WAND: u32 = 0xcc352;
     /// Effets joueur des magies de l'elfe et du magicien : étincelles, éclair, séisme.

@@ -510,7 +510,7 @@ const END_245EC: Steps = &[
         let delay = g.prog8(0x24660 + k);
         p.set_u8(g, TIMER, delay);
         start_stand(g, p);
-        g.rom(ext::effet::HALO, p);
+        crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
     }),
     (0x24664, |g, p| {
         let left = p.u8(g, TIMER).wrapping_sub(1);
@@ -632,7 +632,8 @@ const END_247B2: Steps = &[
         p.set_u16(g, TIMER, left);
         if left == 0 {
             g.c.d[0] = 4;
-            g.rom(ext::effet::STARS, p);
+            let setting = g.c.d[1] as u8;
+            crate::families::effects_creators::for_players::blow_68k(g.c, g.b, p.obj(), 4, setting);
         }
         anim_step(g, p);
     }),
@@ -1030,7 +1031,7 @@ const INTRO_24FE2: Steps = &[
             next(g, p);
             let wait = per_rank16(g, p, 0x25066);
             p.set_u16(g, WAIT, wait);
-            g.rom(ext::effet::HALO, p);
+            crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
             anim_0(g, p);
         } else {
             anim_step(g, p);
@@ -1275,7 +1276,7 @@ const INTRO_25504: Steps = &[
             next(g, p);
             let wait = per_rank16(g, p, 0x2558e);
             p.set_u16(g, WAIT, wait);
-            g.rom(ext::effet::HALO, p);
+            crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
         }
         anim_step(g, p);
     }),
@@ -1504,7 +1505,7 @@ fn intro_25a24(g: &mut Ctx, p: Player) {
 /// effet de pas dans l'eau (h).
 fn splash(g: &mut Ctx, p: Player) {
     if ram::SCENE.get(g.b) == 41 && ram::FRAME_COUNTER.get(g.b).wrapping_add(ram::INPUTS_2.get(g.b)) & 15 == 0 {
-        g.rom(0xb9c6a, p);
+        crate::families::effects_creators::for_players::wisp_68k(g.c, g.b, p.obj());
     }
 }
 
@@ -1564,7 +1565,7 @@ const INTRO_25BA0: Steps = &[
         walk_right(g, p, TIMER_B, |g, p| {
             let wait = per_rank16(g, p, 0x25c4a);
             p.set_u16(g, WAIT, wait);
-            g.rom(ext::effet::HALO, p);
+            crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
             anim_0(g, p);
         })
     }),

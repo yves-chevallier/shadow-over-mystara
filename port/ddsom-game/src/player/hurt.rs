@@ -25,7 +25,6 @@ type Handler = fn(&mut Ctx, Player);
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
     pub const BEFORE_HURT_A: u32 = 0xe2100;
-    pub const BEFORE_HURT_B: u32 = 0xdb6c0;
     /// Effets de la mort (son, points).
     pub const DEATH_EFFECT: u32 = 0xe21a0;
     /// Poussière et son à l'atterrissage.
@@ -1067,8 +1066,6 @@ fn struggling(g: &mut Ctx, p: Player) -> bool {
 
 /// Durée de la prise, décomptée par les secousses.
 const HOLD: u32 = 0x1f0;
-/// Son de la prise et de la libération (D0 = 1).
-const HOLD_SOUND: u32 = 0xab7d8;
 
 /// 0x3adbe : petite projection, palette 1/19, 30 images ; s'il n'a plus de PV, à terre.
 fn shock_start(g: &mut Ctx, p: Player) {
@@ -1114,7 +1111,7 @@ fn shock_struggle(g: &mut Ctx, p: Player) {
         p.set_u8(g, HOLD, left);
         if left == 0 {
             g.c.d[0] = 1;
-            g.rom(HOLD_SOUND, p);
+            crate::families::effects_creators::for_players::debris_68k(g.c, g.b, p.obj(), 1);
             p.set_u16(g, Player::PALETTE_GROUP, 0);
             return recover(g, p);
         }
@@ -1126,7 +1123,7 @@ fn shock_struggle(g: &mut Ctx, p: Player) {
     }
     next_step(g, p);
     g.c.d[0] = 1;
-    g.rom(HOLD_SOUND, p);
+    crate::families::effects_creators::for_players::debris_68k(g.c, g.b, p.obj(), 1);
 }
 
 /// 0x3ae7a : palette rétablie, projection.
@@ -1144,7 +1141,7 @@ fn dizzy_start(g: &mut Ctx, p: Player) {
     cov!();
     g.c.d[0] = 0;
     g.c.d[1] = 0;
-    g.rom(ext::effet::STARS, p);
+    crate::families::effects_creators::for_players::blow_68k(g.c, g.b, p.obj(), 0, 0);
     next_step(g, p);
     p.set_u8(g, Player::TIMER_6F, 40);
     p.set_u8(g, Player::HITSTOP, 1);
@@ -1161,7 +1158,7 @@ fn dizzy(g: &mut Ctx, p: Player) {
         if g.random() & 127 == 0 {
             g.c.d[0] = 0;
             g.c.d[1] = 1;
-            g.rom(ext::effet::STARS, p);
+            crate::families::effects_creators::for_players::blow_68k(g.c, g.b, p.obj(), 0, 1);
         }
         let mut dx: u16 = 1;
         if left & 1 != 0 {
@@ -1261,7 +1258,8 @@ fn fallen_stars(g: &mut Ctx, p: Player) {
     g.c.d[0] = g.c.d[0] & !0xff | (left & 0xf) as u32;
     if left & 0xf == 0 {
         g.c.d[0] = 3;
-        g.rom(ext::effet::STARS, p);
+        let setting = g.c.d[1] as u8;
+        crate::families::effects_creators::for_players::blow_68k(g.c, g.b, p.obj(), 3, setting);
     }
     let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
     p.set_u8(g, Player::TIMER_6F, left);
@@ -1352,10 +1350,9 @@ fn struggle_out(g: &mut Ctx, p: Player) -> bool {
 
 // ---- réaction à pas 0x3b30e (0x3b326..0x3b44a) -------------------------------------------------------
 
-/// Sons et effets de la réaction : 0xe21a0 (mort), 0xe7b3c (touché) ; 0xb6ba8 crée l'effet de fin de pas.
+/// Sounds of the reaction: 0xe21a0 (death), 0xe7b3c (hit); 0xb6ba8 (`effects_creators::for_players::type_57_68k`) creates the step-end effect.
 const FROZEN_DEATH_SOUND: u32 = 0xe21a0;
 const FROZEN_SOUND: u32 = 0xe7b3c;
-const FROZEN_EFFECT: u32 = 0xb6ba8;
 /// Octets de comparaison des pas d'attente (`+0x6c`, `+0x6d`) et compteur d'animation (`+0x1f0`).
 const WAIT_LEFT: u32 = 0x6c;
 const WAIT_RIGHT: u32 = 0x6d;
@@ -1380,7 +1377,9 @@ fn frozen_start(g: &mut Ctx, p: Player) {
         g.son(FROZEN_SOUND, p);
         if p.u16(g, Obj::Z) == 0 {
             next_step(g, p);
-            g.rom(FROZEN_EFFECT, p);
+            // variant and setting: the D0.b and D1.b left by the code before
+            let (variant, setting) = (g.c.d[0] as u8, g.c.d[1] as u8);
+            crate::families::effects_creators::for_players::type_57_68k(g.c, g.b, p.obj(), variant, setting);
         } else {
             frozen_drift(g, p);
         }
@@ -1414,7 +1413,8 @@ fn frozen_fall(g: &mut Ctx, p: Player) {
     // le créateur prend la variante dans D0.b : celui que laisse le mouvement 0x1da6 (`swap` puis `asr.l #8` de
     // la vitesse verticale), dont l'octet bas est nul
     g.c.d[0] = ((p.u16(g, Obj::VZ) as i16 as i32) << 8) as u32;
-    g.rom(FROZEN_EFFECT, p);
+    let (variant, setting) = (g.c.d[0] as u8, g.c.d[1] as u8);
+    crate::families::effects_creators::for_players::type_57_68k(g.c, g.b, p.obj(), variant, setting);
 }
 
 /// 0x3b3d8 / 0x3b3de : pas 4 / 6, attente. Tant que les deux octets de comparaison diffèrent, l'animation
@@ -1503,7 +1503,7 @@ pub fn hurt(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
         g.son(rom::BEFORE_HURT_A, p);
-        g.rom(rom::BEFORE_HURT_B, p);
+        crate::families::items::chute_equipement_68k(g.c, g.b, crate::objects::Obj(p.0));
         if p.u8(g, Player::SLOW_8A) != 0 {
             p.set_u8(g, Player::SLOW_8A, 0);
             let held = p.u32(g, Player::LINK);

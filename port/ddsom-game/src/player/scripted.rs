@@ -284,7 +284,7 @@ fn scene1_wait_progress(g: &mut Ctx, p: Player) {
         let k = p.u8(g, 0x7d) as u32;
         let delay = g.prog16(tables::SCENE1_WAIT + 2 * k);
         p.set_u16(g, 0x1e0, delay);
-        g.rom(ext::effet::HALO, p);
+        crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
     }
     animation::step(g, p);
 }
@@ -514,7 +514,7 @@ fn wait_start(g: &mut Ctx, p: Player) {
     let k = p.u8(g, 0x7d) as u32;
     let delay = g.prog16(tables::WAIT_DELAYS + 2 * k);
     p.set_u16(g, 0x1e0, delay);
-    g.rom(ext::effet::HALO, p);
+    crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
     animation::step(g, p);
     g.son(rom::INTRO_ACTION, p);
 }

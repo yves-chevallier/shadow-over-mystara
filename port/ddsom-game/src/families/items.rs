@@ -9,10 +9,9 @@
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use crate::mem::{rd16, rts, wr16, wr32, A5};
+use crate::mem::{rd16, wr16, wr32, A5};
 use crate::objects::pools;
 use crate::objects::Obj;
-use crate::{regs, Native};
 
 use super::{ajoute_u8, effects_creators, gestionnaire, pointeur};
 use super::cx::{Banc, Cx};
@@ -2330,22 +2329,14 @@ pub fn effacer_ramasses(b: &mut Cps2Bus) {
     }
 }
 
-/// `effacer_ramasses`, registres laissés comme l'original : D0 = 0, D6.w = 0xffff, A0 = fin du tableau.
-fn efface_ramasses(c: &mut Cpu, b: &mut Cps2Bus) {
+/// `effacer_ramasses` for a caller still on the processor (`game::leave`), registers left like the original: D0 = 0,
+/// D6.w = 0xffff, A0 = end of the array.
+pub fn effacer_ramasses_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     effacer_ramasses(b);
     c.d[0] = 0;
     c.d[6] = c.d[6] & 0xffff_0000 | 0xffff;
     c.a[0] = A5.wrapping_add(RAMASSES as u32) + 4 * 48;
-    rts(c, b);
 }
-
-pub const EFFACE_RAMASSES: Native = Native {
-    entry: 0xdabba,
-    name: "item_efface_ramasses",
-    run: crate::Corps::Processeur(efface_ramasses),
-    touches_sound: false,
-    outputs: regs::d(0) | regs::d(6) | regs::a(0),
-};
 
 /// Un équipement du joueur qui peut tomber quand il est touché : (octet de l'objet porté, compteur de
 /// coups, table des chances par coup).
@@ -2394,9 +2385,10 @@ fn compte_lache(b: &mut Cps2Bus) {
     wr16(b, LACHES, n);
 }
 
-/// `0xdb6c0` : chute d'équipement du joueur A0 touché.
-fn chute_equipement(c: &mut Cpu, b: &mut Cps2Bus) {
-    let o = Obj(c.a[0]);
+/// `0xdb6c0`: equipment dropped by the hit player `o`, for a caller still on the processor (`player::hurt`): the
+/// registers are left like the original (D0, D2, A4, A0 = the player).
+pub fn chute_equipement_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) {
+    c.a[0] = o.0;
     wr16(b, LACHES, 0);
     let bouclier = o.u8(b, BOUCLIER.objet);
     if bouclier <= 3 && tombe(c, b, o, &BOUCLIER) {
@@ -2421,13 +2413,4 @@ fn chute_equipement(c: &mut Cpu, b: &mut Cps2Bus) {
         }
         o.set_u8(b, ANNEAU.coups, 0);
     }
-    rts(c, b);
 }
-
-pub const CHUTE_EQUIPEMENT: Native = Native {
-    entry: 0xdb6c0,
-    name: "item_chute_equipement",
-    run: crate::Corps::Processeur(chute_equipement),
-    touches_sound: false,
-    outputs: regs::d(0) | regs::d(2) | regs::a(4),
-};

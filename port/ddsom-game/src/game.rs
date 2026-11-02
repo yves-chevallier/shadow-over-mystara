@@ -41,7 +41,6 @@ mod ram {
 /// Natives d'autres modules encore appelées par leur adresse (`call`).
 mod ext {
     pub const PHASE0_END_FADE: u32 = 0x1cf3c;
-    pub const CLEAR_STATUS: u32 = 0xdabba;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -355,7 +354,7 @@ fn leave(c: &mut Cpu, b: &mut Cps2Bus) {
     wr16(b, A5 + ram::TIMER, 0);
     wr16(b, A5 + ram::TIMER + 2, 0);
     wr8(b, A5 + EXIT_CLEARED_BYTES[1], 0);
-    call(c, b, ext::CLEAR_STATUS);
+    crate::families::items::effacer_ramasses_68k(c, b);
     c.d[0] = c.d[0] & 0xffff_0000 | PLAYER_UI_SLOT;
     c.a[0] = PLAYER_UI_TASK;
     crate::kernel::creer_tache(b, PLAYER_UI_SLOT as u32, PLAYER_UI_TASK);

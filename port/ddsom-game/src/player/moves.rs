@@ -21,7 +21,6 @@ mod rom {
     /// Son de la poussée.
     pub const PUSH_SOUND: u32 = 0xeae14;
     /// Pose rare 0x26 : son, éclat, création d'un objet SET (D0.b = genre ; A1 et retenue en retour).
-    pub const CURSE_SHARD: u32 = 0xb97ba;
     pub const CREATE_SET: u32 = 0xc8312;
 }
 
@@ -796,7 +795,7 @@ pub fn curse_drop(g: &mut Ctx, p: Player) {
         return;
     }
     p.set_u8(g, field::GESTURE, 0);
-    g.rom(rom::CURSE_SHARD, p);
+    crate::families::effects_creators::for_players::posed_flash_b_68k(g.c, g.b, p.obj());
     crate::mem::set_low_byte(&mut g.c.d[0], 0x29);
     g.rom(rom::CREATE_SET, p);
     if g.c.sr & m68k::SR_C == 0 {

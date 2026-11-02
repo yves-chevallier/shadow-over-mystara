@@ -129,8 +129,9 @@ Pool de 21 emplacements de 0x80 octets (`0xFFEEDE`), 4 types.
 Le type 0 n'a plus d'état délégué (anciennement : sous-états 2, 4, 6 et 8 de l'état actif et tremblement des
 coffres). Encore délégués dans le type 1 (jamais exercés) : variantes 2 et 3.
 
-Sous-routines de la famille appelées hors des gestionnaires (natives de `items.rs`) : `0xdabba` efface le tableau des
-objets de collection (48 longs en `A5-0x5b88`, appelé par la boucle de partie et les modes) ; `0xdb6c0` fait tomber au
+Sous-routines de la famille appelées hors des gestionnaires (fonctions de `items.rs`, plus de natives : `effacer_ramasses_68k`,
+`chute_equipement_68k`) : `0xdabba` efface le tableau des
+objets de collection (48 longs en `A5-0x5b88`, appelé par la sortie de la phase 0) ; `0xdb6c0` fait tomber au
 plus un équipement du joueur touché (bouclier `+0x165`, arme spéciale `+0x163`, anneau `+0x162`), chacun avec un compteur
 de coups (`+0x16d`, `+0x16c`, `+0x16b`) et une table de chances par coup (bit `rng & 0xf`, tables en clair 0xdb7c4,
 0xdb7b8, 0xdb7d0), par `0xcc352` (SET 0xa, native de `creators.rs`) ; le personnage 5 garde son anneau d'origine (1).

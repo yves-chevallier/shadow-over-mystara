@@ -1204,6 +1204,44 @@ fn tile_block_native(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub(crate) const CREATED: u32 = regs::a(1) | regs::CCR;
 
+/// Creators called by the player module, still on the processor: the arguments are passed, and the registers the
+/// original leaves (A0 = the creator, A1 = the effect, carry when the pool is full, flags) are written like the native
+/// writes them.
+pub(crate) mod for_players {
+    use super::*;
+
+    /// 0xb378a: blow stars (type 40) attached to `me`, variant `variant`, setting `setting`.
+    pub(crate) fn blow_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8, setting: u8) -> Option<Obj> {
+        c.a[0] = me.0;
+        attached_par(c, b, kind::BLOW, me, variant, setting)
+    }
+    /// 0xab708: halo of `me`.
+    pub(crate) fn halo_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        halo_par(c, b, me)
+    }
+    /// 0xab7d8: debris spray of `me`, variant `variant`.
+    pub(crate) fn debris_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+        c.a[0] = me.0;
+        debris_par(c, b, me, variant)
+    }
+    /// 0xb6ba8: effect of type 57 of `me`.
+    pub(crate) fn type_57_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8, setting: u8) -> Option<Obj> {
+        c.a[0] = me.0;
+        type_57(c, b, me, variant, setting)
+    }
+    /// 0xb97ba: posed flash (variant 1) linked to `me`.
+    pub(crate) fn posed_flash_b_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        linked_par(c, b, me, kind::POSED_FLASH, Some(1))
+    }
+    /// 0xb9c6a: wisp (type 86, variant 0) linked to `me`.
+    pub(crate) fn wisp_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        c.a[0] = me.0;
+        linked_par(c, b, me, kind::WISP, Some(0))
+    }
+}
+
 // ---------------------------------------------------------------------------------------------
 // Créateurs appelés par les écrans (machine à modes, scènes) : cœurs sans registre
 
