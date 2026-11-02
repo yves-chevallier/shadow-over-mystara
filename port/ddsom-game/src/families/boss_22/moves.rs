@@ -20,7 +20,7 @@ pub(super) fn step_anim<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 0 : arrivée ------------------------------------------------------------------------
 
 /// 0x9b066 : attend (`+0xbc` images), puis tombe du haut de l'écran.
-pub(super) fn arrive(x: &mut Cx) {
+pub(super) fn arrive<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if sub16(x, SPOT_TIMER, 1).pl() {
@@ -71,7 +71,7 @@ pub(super) fn arrive(x: &mut Cx) {
 // --- groupe 2 : combat ------------------------------------------------------------------------
 
 /// 0x9b14e.
-pub(super) fn fight(x: &mut Cx) {
+pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(HIT_TICK, 0);
     if !two(x) {
         x.set8(0xad, 0);
@@ -89,7 +89,7 @@ pub(super) fn fight(x: &mut Cx) {
 }
 
 /// Une cible au hasard (424e ou 44ee) d'après un tirage ; le résultat n'est pas utilisé.
-fn pick_some_target(x: &mut Cx) {
+fn pick_some_target<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     if 0xffc0u32 >> r & 1 != 0 {
         lib::pick_target(x);
@@ -99,7 +99,7 @@ fn pick_some_target(x: &mut Cx) {
 }
 
 /// 0x9b180 : debout ; la marche tire sa durée dans `+0x6b`, `+0x71`, puis une attaque est choisie selon la portée.
-fn stand(x: &mut Cx) {
+fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     if target_far(x) {
         return x.set32(f::STATE, state::LEAP);
     }
@@ -151,7 +151,7 @@ fn stand(x: &mut Cx) {
 }
 
 /// 0x9b3fe : demi-tour.
-fn turn(x: &mut Cx) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -183,7 +183,6 @@ fn turn(x: &mut Cx) {
                 x.set8(f::FLIP, side);
                 x.set8(ANIM_ID, 0);
                 x.set8(ANIM_LAST, 0);
-                x.c.d[0] = 0;
                 start(x, Set::A, 0);
             }
         }
@@ -206,7 +205,7 @@ fn turn_not_needed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9b51a : élan ; avec une chance sur huit, le boss se laisse tomber (état touché).
-fn dash(x: &mut Cx) {
+fn dash<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) != 0 {
         if sub8(x, IDLE_COUNT, 1).mi() {
             return x.set32(f::STATE, state::STAND);
@@ -237,13 +236,12 @@ fn dash(x: &mut Cx) {
     sounds(x, 0x27, 5);
     if x.u8(ANIM_ID) != x.u8(ANIM_LAST) {
         x.set8(ANIM_LAST, 0);
-        x.c.d[0] = 0;
         start(x, Set::A, 0);
     }
 }
 
 /// 0x9b5e6 : bond vers la cible, qui se retourne si besoin.
-fn leap(x: &mut Cx) {
+fn leap<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -287,7 +285,7 @@ fn leap_pose<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupes 6 et 8 : course vers un point de l'écran -------------------------------------------
 
 /// 0x9c506 : course vers le point choisi (`+6` = 0), pause (2), bond (4 et 6).
-pub(super) fn run_to_spot(x: &mut Cx) {
+pub(super) fn run_to_spot<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => spot_run(x),
         2 => spot_pause(x),
@@ -298,7 +296,7 @@ pub(super) fn run_to_spot(x: &mut Cx) {
 }
 
 /// 0x9c90c : même chose après une attaque ; `+6` = 0 est une courte attente.
-pub(super) fn run_to_spot_after_attack(x: &mut Cx) {
+pub(super) fn run_to_spot_after_attack<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => spot_wait(x),
         2 => spot_pause(x),
@@ -310,7 +308,7 @@ pub(super) fn run_to_spot_after_attack(x: &mut Cx) {
 }
 
 /// 0x9c586.
-fn spot_run(x: &mut Cx) {
+fn spot_run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -347,7 +345,7 @@ fn spot_run(x: &mut Cx) {
 }
 
 /// 0x9c69c : marche courte vers l'avant puis retour au combat.
-fn spot_pause(x: &mut Cx) {
+fn spot_pause<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -370,7 +368,7 @@ fn spot_pause(x: &mut Cx) {
 }
 
 /// 0x9c924 : courte attente avant la course (`+0xa0` images), puis retour au combat ou demi-tour.
-fn spot_wait(x: &mut Cx) {
+fn spot_wait<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 | 4 => {
             if x.u8(0x7) == 0 {
@@ -384,7 +382,6 @@ fn spot_wait(x: &mut Cx) {
             sounds(x, 0x27, 5);
             let id = x.u8(ANIM_ID);
             x.set8(ANIM_LAST, id);
-            x.c.d[0] = 0;
             start(x, Set::A, 0);
         }
         2 => {
@@ -413,7 +410,7 @@ fn leap_rise_wait<R: Banc>(x: &mut Cx<'_, R>) {
     step_anim(x);
 }
 
-fn leap_climb(x: &mut Cx, f_move: fn(&mut Cx), up: bool) {
+fn leap_climb<'a, R: Banc>(x: &mut Cx<'a, R>, f_move: fn(&mut Cx<'a, R>), up: bool) {
     f_move(x);
     let vz = x.u16(0x18);
     let reached = if up { Fl::sub16(vz, 0x100).gt() } else { Fl::sub16(vz, 0xff00).gt() };
@@ -424,7 +421,7 @@ fn leap_climb(x: &mut Cx, f_move: fn(&mut Cx), up: bool) {
     step_anim(x);
 }
 
-fn leap_land(x: &mut Cx, f_move: fn(&mut Cx)) {
+fn leap_land<'a, R: Banc>(x: &mut Cx<'a, R>, f_move: fn(&mut Cx<'a, R>)) {
     f_move(x);
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
@@ -447,7 +444,7 @@ fn leap_end<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9c74a : grand bond vers l'avant (vitesse horizontale).
-fn spot_leap_a(x: &mut Cx) {
+fn spot_leap_a<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -473,7 +470,7 @@ fn spot_leap_a(x: &mut Cx) {
 }
 
 /// 0x9c7d2 : grand bond de côté (vitesse en profondeur tirée au hasard).
-fn spot_leap_b(x: &mut Cx) {
+fn spot_leap_b<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -483,7 +480,6 @@ fn spot_leap_b(x: &mut Cx) {
             if x.u8(f::FLIP) == 0 {
                 v = v.wrapping_neg();
             }
-            set_dw(x, 0, v);
             x.set16(0x1c, v);
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x50i16) as u16);
@@ -538,7 +534,7 @@ pub(super) fn paused<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 12 : joueur saisi ---------------------------------------------------------------------
 
 /// 0x9cade.
-pub(super) fn holding(x: &mut Cx) {
+pub(super) fn holding<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         return;
     }
@@ -554,7 +550,6 @@ pub(super) fn holding(x: &mut Cx) {
             next7(x);
             let z = prey.u16(x.b, 0x10);
             x.set16(0x10, z);
-            x.c.a[1] = prey.0;
             if prey.u16(x.b, 0xc) != 0 {
                 return lib::release_player(x, prey);
             }
@@ -574,14 +569,12 @@ pub(super) fn holding(x: &mut Cx) {
                 return release_prey(x);
             }
             x.set8(0x53, 8);
-            x.c.a[1] = prey.0;
-            x.c.d[1] = 2;
             let mut dx = 0x4eu16;
             if x.u8(f::FLIP) == 0 {
                 dx = dx.wrapping_neg();
             }
             let pos = (dx.wrapping_add(x.u16(0x8)), x.u16(0xc).wrapping_add(0x38), x.u16(0x10).wrapping_sub(1));
-            (x.c.d[2], x.c.d[3], x.c.d[4]) = (pos.0 as u32, pos.1 as u32, pos.2 as u32);
+            (*x.c.d2(), *x.c.d3(), *x.c.d4()) = (pos.0 as u32, pos.1 as u32, pos.2 as u32);
             crate::families::effects_creators::spark_at(x.b, x.o, prey.0, 2, pos);
             if (prey.u16(x.b, f::HP) as i16) <= 1 {
                 return release_prey(x);
@@ -599,7 +592,7 @@ pub(super) fn holding(x: &mut Cx) {
     }
 }
 
-fn release_prey(x: &mut Cx) {
+fn release_prey<R: Banc>(x: &mut Cx<'_, R>) {
     let prey = x.linked(f::TARGET);
     prey.set_u8(x.b, 0x6f, 1);
     lib::release_player(x, prey);
@@ -609,7 +602,7 @@ fn release_prey(x: &mut Cx) {
 
 /// 0xffda : tirage dont les chances (un bit par résultat, mot de la table 0xfff4 choisi par la difficulté) décident si la
 /// transformation s'enchaîne sur une riposte.
-fn flee_roll(x: &mut Cx) -> bool {
+fn flee_roll<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let row = (((var::RANK.get(x.b) >> 3) << 1)) as u32;
     let chances = x.rom16(0xfff4 + row);
     let r = rand_and(x, 0xf);
@@ -617,7 +610,7 @@ fn flee_roll(x: &mut Cx) -> bool {
 }
 
 /// 0x9cbe8.
-pub(super) fn transform(x: &mut Cx) {
+pub(super) fn transform<R: Banc>(x: &mut Cx<'_, R>) {
     if second_form(x) {
         return x.set32(f::STATE, 0x0404_0200);
     }

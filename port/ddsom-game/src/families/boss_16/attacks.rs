@@ -5,7 +5,7 @@ use super::*;
 use crate::objects::pools;
 use crate::objects::Courant;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => crawl_leap(x),
         2 => charge(x),
@@ -55,7 +55,7 @@ fn try_grab<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x93884 : le boss se baisse en tremblant, bondit sur le joueur et tente de le saisir pendant le saut.
-fn crawl_leap(x: &mut Cx) {
+fn crawl_leap<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -87,7 +87,7 @@ fn crawl_leap(x: &mut Cx) {
 }
 
 /// 0x938ce : décollage vers l'avant, puis la suite du vol dans la même image.
-fn launch(x: &mut Cx) {
+fn launch<R: Banc>(x: &mut Cx<'_, R>) {
     next7(x);
     x.set8(TIMER, 3);
     stop(x);
@@ -100,7 +100,7 @@ fn launch(x: &mut Cx) {
 }
 
 /// 0x938fe : en vol ; après trois images le boss essaie de saisir un joueur, et à l'atterrissage il freine.
-fn in_flight(x: &mut Cx) {
+fn in_flight<R: Banc>(x: &mut Cx<'_, R>) {
     if tst8(x, TIMER).gt() {
         sub8(x, TIMER, 1);
     } else if try_grab(x) {
@@ -119,7 +119,7 @@ fn in_flight(x: &mut Cx) {
 }
 
 /// 0x9396a : charge à toute vitesse, tremble puis repart en arrière.
-fn charge(x: &mut Cx) {
+fn charge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -167,7 +167,7 @@ fn charge(x: &mut Cx) {
 }
 
 /// 0x93a26 : crache une flamme (ESHL 0x2d variante 0 ; les EFFCT 0x30 l'accompagnent).
-fn tail_flame(x: &mut Cx) {
+fn tail_flame<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -202,7 +202,7 @@ fn tail_flame(x: &mut Cx) {
 }
 
 /// 0x93a9a : souffle long (variante 1 de la flamme tous les seize images).
-fn sweep_a(x: &mut Cx) {
+fn sweep_a<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -237,7 +237,7 @@ fn sweep_a(x: &mut Cx) {
 }
 
 /// 0x93b0c et 0x93b80 : souffle de feu qui laisse une traînée (EFFCT 0x30 variante 2).
-fn sweep_b(x: &mut Cx) {
+fn sweep_b<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -272,7 +272,7 @@ fn sweep_b(x: &mut Cx) {
 }
 
 /// 0x93bf4 : rugissement (ESHL 0x2d variante 1 à l'image-clé).
-fn roar(x: &mut Cx) {
+fn roar<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -305,7 +305,7 @@ fn roar(x: &mut Cx) {
 }
 
 /// 0x93c60 : deux sauts successifs, le second plus long.
-fn double_jump(x: &mut Cx) {
+fn double_jump<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);

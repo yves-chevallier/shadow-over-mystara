@@ -141,13 +141,9 @@ fn crossing<R: Banc>(x: &mut Cx<'_, R>) {
     if low as i16 >= h {
         bumped = true;
         x.set16(0xc, low);
-        setw0(x, low);
     } else if high as i16 <= h {
         bumped = true;
         x.set16(0xc, high);
-        setw0(x, high);
-    } else {
-        setw0(x, high);
     }
     *x.c.d5() = bumped as u32;
     if !bumped {
@@ -170,10 +166,6 @@ fn crossing<R: Banc>(x: &mut Cx<'_, R>) {
     let t = x.u16(TIMER).wrapping_mul(2) as i16 as i32 as u32;
     let n = x.rom16(CROSSING_ANIMS.wrapping_add(t));
     body(x, n as u32);
-}
-
-/// Mot faible de D0 (bornes calculées par la traversée).
-fn setw0<R: Banc>(x: &mut Cx<'_, R>, v: u16) {
 }
 
 // --- groupe 2 : combat -------------------------------------------------------------------------

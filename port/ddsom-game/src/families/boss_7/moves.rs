@@ -8,12 +8,12 @@ use super::attacks::{leap_rest, leap_start};
 use super::*;
 use crate::objects::Courant;
 
-fn step(x: &mut Cx, table: u32) -> u32 {
+fn step<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch(x, table, f::SUB3)
 }
 
 /// 0x8699e : le boss s'efface (début commun des esquives).
-fn fade_out(x: &mut Cx) {
+fn fade_out<R: Banc>(x: &mut Cx<'_, R>) {
     addq8(x, f::SUB3, 2);
     x.set8(0, 2);
     key(x, 0x12);
@@ -22,7 +22,7 @@ fn fade_out(x: &mut Cx) {
 }
 
 /// 0x86a06 : le boss reparaît quand le décompte est écoulé.
-fn fade_in(x: &mut Cx) {
+fn fade_in<R: Banc>(x: &mut Cx<'_, R>) {
     if timer_done(x) {
         addq8(x, f::SUB3, 2);
         x.set_bit(0x1, 1, false);
@@ -32,7 +32,7 @@ fn fade_in(x: &mut Cx) {
 }
 
 /// Fin des esquives : joue l'animation, puis passe à `state`.
-fn finish(x: &mut Cx, state: u32) {
+fn finish<R: Banc>(x: &mut Cx<'_, R>, state: u32) {
     if x.anim_step() {
         x.set32(f::STATE, state);
     }
@@ -46,7 +46,7 @@ fn reappear<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x869c6 : réapparition un peu en arrière (0x60 pixels), dans l'aire de jeu.
-fn back_off(x: &mut Cx) {
+fn back_off<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         addq8(x, f::SUB3, 2);
         let mut d = (-0x60i16) as u16;
@@ -60,7 +60,7 @@ fn back_off(x: &mut Cx) {
 }
 
 /// 0x86a4e : réapparition à un point tiré selon le quart d'écran.
-fn jump_away(x: &mut Cx) {
+fn jump_away<R: Banc>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         addq8(x, f::SUB3, 2);
         aids::dodge_spot(x);
@@ -69,7 +69,7 @@ fn jump_away(x: &mut Cx) {
 }
 
 /// 0x868a4 (`+5` = 6).
-pub(super) fn group6(x: &mut Cx) {
+pub(super) fn group6<R: Banc>(x: &mut Cx<'_, R>) {
     let table = if dispatch(x, 0x868b2, f::SUB2) == 0x868ba { 0x868c8 } else { 0x868de };
     match step(x, table) {
         0x8699e => fade_out(x),
@@ -81,7 +81,7 @@ pub(super) fn group6(x: &mut Cx) {
 }
 
 /// 0x868e6 (`+5` = 8).
-pub(super) fn group8(x: &mut Cx) {
+pub(super) fn group8<R: Banc>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x868f4, f::SUB2) {
         0x868fe => short_walk(x),
         0x86988 => match step(x, 0x86996) {
@@ -106,7 +106,7 @@ pub(super) fn group8(x: &mut Cx) {
 }
 
 /// 0x868fe (`+6` = 0) : quelques pas sur place (0x14 images) en surveillant l'adversaire.
-fn short_walk(x: &mut Cx) {
+fn short_walk<R: Banc>(x: &mut Cx<'_, R>) {
     match step(x, 0x8690c) {
         0x86950 => {
             if timer_done(x) {

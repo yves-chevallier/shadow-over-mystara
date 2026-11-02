@@ -255,7 +255,7 @@ fn push_out_of_boss_68k(x: &mut Cx) {
 /// puis dans l'autre selon le compte à rebours `+0xa8` (période 72 images, retournement à 36).
 const BOB_OFFSETS: u32 = 0x833e4;
 
-/// 0x833b6 : un pas de l'oscillation verticale d'un boss (D0 = décalage appliqué, comme l'original).
+/// 0x833b6 : un pas de l'oscillation verticale d'un boss.
 pub fn bob<R: Banc>(x: &mut Cx<'_, R>) {
     let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
     let mut d = prog32(x.b, BOB_OFFSETS + i);
@@ -273,10 +273,9 @@ pub fn bob<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x87048 : selon la difficulté de la scène (`A5+0x5a` : 0 rien, 3 toujours) et la forme `+0xad`
 /// (2 ou 3 : selon les PV), pose `+0x43` (pas de seuil) ou, si la moitié des PV `+0x62` dépasse 72,
-/// retient ce seuil en `+0xb6` et pose `+0x42`. D0, D1 comme l'original.
-pub fn hp_threshold(x: &mut Cx) {
+/// retient ce seuil en `+0xb6` et pose `+0x42`.
+pub fn hp_threshold<R: Banc>(x: &mut Cx<'_, R>) {
     let level = var::SCENE_LEVEL.get(x.b);
-    x.c.d[0] = level as u32;
     if level == 0 {
         return;
     }
@@ -287,7 +286,6 @@ pub fn hp_threshold(x: &mut Cx) {
         }
         let half = x.u16(f::HP) >> 1;
         // l'original calcule la moitié dans D1.w (contrat de sortie)
-        x.c.d[1] = (x.c.d[1] & 0xffff_0000) | half as u32;
         if half as i16 > 72 {
             x.set8(0xb9, 0);
             x.set16(0xb6, half);

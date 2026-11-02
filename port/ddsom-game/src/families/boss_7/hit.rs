@@ -7,7 +7,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::machine::Machine;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(HIT_ACK, 0);
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
@@ -24,7 +24,7 @@ pub(super) fn run(x: &mut Cx) {
     lib::collide_terrain(x);
 }
 
-fn step(x: &mut Cx, table: u32) -> u32 {
+fn step<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch(x, table, f::SUB2)
 }
 
@@ -33,7 +33,7 @@ fn paused<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x86be6 : le coup est traité par la routine commune ; sans PV le boss meurt.
-fn reaction(x: &mut Cx) {
+fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set_bit(0x1, 1, false);
     }
@@ -46,11 +46,9 @@ fn reaction(x: &mut Cx) {
     }
     sub16(x, IDLE_WAIT, 1);
     let code = x.u8(REACTION) as u32;
-    // D0 = le code : 0x10112 (`set_68`) a laissé le reste de D0 à zéro. Relu par la routine de réaction.
-    x.c.d[0] = code;
+    // routines communes seulement (table 0x86c3a)
     let routine = rom32(x, 0x86c3a + code);
-    x.c.a[1] = routine;
-    x.call(routine);
+    run_reaction(x, routine);
     if x.u8(f::FREEZE) != 0 && x.u8(0x46) != 0 {
         addq8(x, f::FREEZE, 1);
         x.set8(0x46, 0);
@@ -58,7 +56,7 @@ fn reaction(x: &mut Cx) {
 }
 
 /// 0x86ce6 : le boss est projeté en arrière, rebondit, puis se relève ou riposte.
-fn thrown(x: &mut Cx) {
+fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -96,9 +94,9 @@ fn thrown(x: &mut Cx) {
             x.set32(0x58, 0);
             x.set32(0x14, 0);
             let n = var::PLAYERS_ALIVE.get(x.b) as u32;
-            x.c.d[5] = ((n as u16) << 2) as u32;
-            let mask = rom32(x, 0x86dd6 + x.c.d[5]);
-            x.c.d[5] = mask;
+            let mask = rom32(x, 0x86dd6 + ((n as u16) << 2) as u32);
+            // D5 = le masque (reste)
+            *x.c.d5() = mask;
             let alea = x.random();
             let i = alea & 0x1f;
             setw(x, 0, i);
@@ -126,7 +124,7 @@ fn thrown(x: &mut Cx) {
 }
 
 /// 0x86e10 : chute, attente au sol, relevé (en s'écartant si un joueur est trop près).
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     match step(x, 0x86e1c) {
         0x86e26 => {
             x.add8(f::SUB2, 2);
@@ -179,11 +177,10 @@ fn fall(x: &mut Cx) {
 }
 
 /// 0x86ed8 : mort (projection, atterrissage dans la poussière, fin de scène).
-fn death(x: &mut Cx) {
+fn death<R: Banc>(x: &mut Cx<'_, R>) {
     // `move.w (tbl,PC,D0w),D0w ; jmp (tbl,PC,D0w)` : ici le décalage remplace D0 (D1 n'est pas touché)
     let i = x.u8(f::SUB2) as u32;
     let off = x.rom16(0x86ee6 + i);
-    x.c.d[0] = off as u32;
     match i {
         0 => {
             x.add8(f::SUB2, 2);
@@ -237,9 +234,7 @@ fn death(x: &mut Cx) {
             }
         }
         6 => {}
-        _ => {
-            let target = 0x86ee6u32.wrapping_add(off as i16 as i32 as u32);
-            x.call(target);
-        }
+        // la table 0x86ee6 n'a que quatre entrées (voir docs/code-mort.md)
+        _ => unreachable!("boss 7 : étape de mort {i:#x} hors table ({off:#x})"),
     }
 }

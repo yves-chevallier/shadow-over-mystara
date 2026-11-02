@@ -173,7 +173,7 @@ pub(self) fn next6<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Une poussière / explosion `D0 .. D3` (0xb10c8) tous les huit appels (`+0xb7`).
-pub(self) fn rubble(x: &mut Cx, d0: u32, d1: u32, d2: u32, d3: u32) {
+pub(self) fn rubble<R: Banc>(x: &mut Cx<'_, R>, d0: u32, d1: u32, d2: u32, d3: u32) {
     x.add8(EFFECT_COUNT, 1);
     let n = x.u8(EFFECT_COUNT) & 7;
     x.set8(EFFECT_COUNT, n);
@@ -209,7 +209,7 @@ pub(self) fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9b30a et 0x9b384 : une cible dans la boîte, avec des coups possibles (0xa4b4 / 0xa4c2) ; le boss fonce ou attaque.
-fn hunt_box(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32) -> bool {
+fn hunt_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, table: u32) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) || x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -229,17 +229,17 @@ fn hunt_box(x: &mut Cx, d0: i16, d1: u16, d2: u16, table: u32) -> bool {
     true
 }
 
-pub(self) fn hunt_close(x: &mut Cx) -> bool {
+pub(self) fn hunt_close<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let table = kit(x).close;
     hunt_box(x, -0x40, 0x40, 8, table)
 }
-pub(self) fn hunt_far(x: &mut Cx) -> bool {
+pub(self) fn hunt_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let table = kit(x).far;
     hunt_box(x, -0xd0, 0x50, 0x50, table)
 }
 
 /// 0x9d24e et 0x9d254 : attaque tirée dans la ligne de la difficulté de `table` (32 octets par couple de niveaux).
-pub(self) fn attack_from_table(x: &mut Cx, table: u32) {
+pub(self) fn attack_from_table<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     let row = ((var::RANK.get(x.b) >> 1) as u32) << 5;
     let r = rand_and(x, 0x1f);
     let step = x.data8(table + row + r);
@@ -249,7 +249,7 @@ pub(self) fn attack_from_table(x: &mut Cx, table: u32) {
 }
 
 /// 0x9d680 (0x7ee1e pour le type 2) : fin d'une attaque : debout, ou une nouvelle attaque si un joueur est tout près.
-pub(self) fn next_attack(x: &mut Cx) {
+pub(self) fn next_attack<R: Banc>(x: &mut Cx<'_, R>) {
     for k in 0..4u32 {
         let p = crate::objects::Obj(0xff85de + 0x200 * k);
         if p.u8(x.b, 0) == 0 {
@@ -328,14 +328,14 @@ pub(self) fn choose_spot<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9db72 : cinq poussières en ligne sous le boss qui retombe.
-pub(self) fn dust_line(x: &mut Cx) {
+pub(self) fn dust_line<R: Banc>(x: &mut Cx<'_, R>) {
     for dz in [-0x30i16, -0x18, 0, 0x18, 0x30] {
         lib::shock(x, 1, 0, dz as u16, 4);
     }
 }
 
 /// 0x7f328 et 0x7f3a0 : poussières en ligne, vers la droite (le boss regarde à gauche) ou vers la gauche.
-pub(self) fn dust_trail(x: &mut Cx, right: bool) {
+pub(self) fn dust_trail<R: Banc>(x: &mut Cx<'_, R>, right: bool) {
     const RIGHT: [i16; 6] = [-0x10, 8, 0x20, 0x38, 0x50, 0x68];
     const LEFT: [i16; 6] = [-0x68, -0x58, -0x38, -0x20, -0x8, 0x10];
     for dz in if right { RIGHT } else { LEFT } {
@@ -344,12 +344,12 @@ pub(self) fn dust_trail(x: &mut Cx, right: bool) {
 }
 
 /// Cinq appels de 0x9eca4 (éclats), D5 = 4 à 0 comme la boucle `dbf` de l'original.
-pub(self) fn scatter(x: &mut Cx) {
+pub(self) fn scatter<R: Banc>(x: &mut Cx<'_, R>) {
     for i in (0..5u32).rev() {
-        x.c.d[5] = i;
+        *x.c.d5() = i;
         eshl_debris(x, i as u8);
     }
-    x.c.d[5] |= 0xffff;
+    *x.c.d5() |= 0xffff;
 }
 
 /// 0x9db28 : quinze couleurs de palette écrites en 0x91c340 ; le boss prend le décalage de palette 0x1a.
@@ -363,7 +363,7 @@ fn set_palette<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x2b, 0x1a);
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -387,7 +387,7 @@ pub fn run(x: &mut Cx) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     set_palette(x);
     let r = random(x);
@@ -424,7 +424,7 @@ fn init(x: &mut Cx) {
 
 /// 0x9afbc : un groupe par image (hors gel et pause) ; un compte à rebours (`+0x5c`, reprise à 0xf0) déclenche, quand
 /// le boss est au sol et que `+0x46` désigne un objet, l'état 0x0204_1600 (colère).
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         pick_target(x);
     }
@@ -457,7 +457,7 @@ fn active(x: &mut Cx) {
     x.reinsert();
 }
 
-fn group(x: &mut Cx) {
+fn group<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB) {
         0 if two(x) => two::arrive(x),
         0 => moves::arrive(x),
@@ -473,6 +473,6 @@ fn group(x: &mut Cx) {
 }
 
 handlers! {
-    0x9aeaa "boss_22" run,
-    0x7c5a8 "boss_2" run,
+    0x9aeaa "boss_22" #[sans] run,
+    0x7c5a8 "boss_2" #[sans] run,
 }

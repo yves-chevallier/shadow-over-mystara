@@ -9,10 +9,11 @@
 //! | 8, 10 | retour au combat |
 
 use super::*;
+use crate::families::cx::Banc;
 use crate::objects::Courant;
 
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(HIT_TICK) == 0 {
         x.set_a5_u16(0x51e, 0);
         x.set_a5_u8(0x43, 0xff);
@@ -42,7 +43,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x9ce28 : dégâts (0x10112) ; sans PV la mort, sinon la routine commune du code de coup.
-fn reaction(x: &mut Cx) {
+fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
     if !second_form(x) {
         x.set8(SECOND_FX, 0);
     }
@@ -60,12 +61,12 @@ fn reaction(x: &mut Cx) {
 }
 
 /// Une poussière (0xb10c8) sans le compteur de huit : le type 2 en lâche une quand il est repoussé vers la droite.
-fn rubble_once(x: &mut Cx) {
+fn rubble_once<R: Banc>(x: &mut Cx<'_, R>) {
     lib::shock(x, 0, 0x201, 0x20, 0x20);
 }
 
 /// 0x9cf12 : recul en glissant, puis retour au combat ou riposte.
-fn pushed_back(x: &mut Cx) {
+fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -128,7 +129,7 @@ fn pushed_back(x: &mut Cx) {
 }
 
 /// 0x9d026 : à terre (`+0x84` images hors pause), puis relevé.
-fn down(x: &mut Cx) {
+fn down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -162,7 +163,6 @@ fn down(x: &mut Cx) {
             x.set32(f::STATE, state::STAND);
             x.set8(ANIM_ID, 0);
             x.set8(ANIM_LAST, 0);
-            x.c.d[0] = 0;
             start(x, Set::A, 0);
         }
         _ => {}
@@ -171,7 +171,7 @@ fn down(x: &mut Cx) {
 
 /// 0x9d0d6 : mort. Si l'hôte a rendu l'âme avant ou en même temps, seule une chute (0x19ad6) ; sinon la scène est
 /// prévenue : boss vaincu (type 2).
-fn death(x: &mut Cx) {
+fn death<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             lib::sound(x, 0xe3b6c);
@@ -211,7 +211,6 @@ fn death(x: &mut Cx) {
             // l'original charge 0x180 dans D0 puis l'écrase par la position de la caméra : la vitesse est cette position + 0xc0
             let center = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
             let (vx, side) = if Fl::sub16(center, x.u16(0x8)).ge() { (center, 0u8) } else { (center.wrapping_neg(), 0x20) };
-            x.c.d[0] = vx as u32;
             x.set16(0x14, vx);
             x.set8(f::FLIP, side);
             x.move_xz();

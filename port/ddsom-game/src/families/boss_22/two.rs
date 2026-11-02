@@ -8,7 +8,7 @@ use crate::objects::pools;
 use crate::objects::Courant;
 
 /// 0x7c5b8 : quand le compte à rebours `+0xbc` est écoulé, crée le contrôleur de scène SET 2 (variante 0x3e), une fois.
-pub(super) fn spawn_scene_controller(x: &mut Cx) {
+pub(super) fn spawn_scene_controller<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0xa4) != 0 || !sub16(x, SPOT_TIMER, 1).mi() {
         return;
     }
@@ -20,7 +20,7 @@ pub(super) fn spawn_scene_controller(x: &mut Cx) {
 }
 
 /// 0x7c600 : création. Selon le nombre de joueurs et la difficulté, un boss de type 22 lui est lié (`+0xac`).
-pub(super) fn init(x: &mut Cx) {
+pub(super) fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
     lib::clear_popup(x);
@@ -76,7 +76,7 @@ pub(super) fn init(x: &mut Cx) {
 // --- groupe 0 : arrivée -----------------------------------------------------------------------------
 
 /// 0x7c814 : le boss arrive par un grand bond depuis la droite, retombe en poussière et passe en combat.
-pub(super) fn arrive(x: &mut Cx) {
+pub(super) fn arrive<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -145,7 +145,7 @@ pub(super) fn climb<R: Banc>(x: &mut Cx<'_, R>, up: bool) {
 }
 
 /// 0x7d112 : retombée du saut (son, poussière en ligne, vulnérable).
-pub(super) fn land(x: &mut Cx) {
+pub(super) fn land<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
@@ -183,7 +183,7 @@ fn jump_speeds<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x7d05c : bond-écrasement. Étapes `+7` : 0 saut, 2 à 8 bond (comme à l'arrivée), 10 réception et coup, 12 demi-tour,
 /// 14 coup double, 16 course, 18 course vers un point, 20 virage, 22 à 30 fin.
-pub(super) fn slam(x: &mut Cx) {
+pub(super) fn slam<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             jump_speeds(x);
@@ -356,7 +356,7 @@ fn edge_spot<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7d4a0 : le boss tourne autour d'un point du bord de l'écran, se retourne, rugit (effets, cinématique) puis reprend.
-pub(super) fn spin_roar(x: &mut Cx) {
+pub(super) fn spin_roar<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -382,10 +382,8 @@ pub(super) fn spin_roar(x: &mut Cx) {
                 let b6 = x.u8(0xb6).wrapping_neg();
                 x.set8(0xb6, b6);
                 let (sx, sz) = (x.u16(SPOT_X), x.u16(SPOT_Z));
-                set_dw(x, 1, sx);
-                set_dw(x, 2, sz);
-                x.c.d[0] = lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16)) as u32;
-                let angle = (x.c.d[0] as u8).wrapping_add(b6);
+                *x.c.d2() = *x.c.d2() & 0xffff_0000 | sz as u32;
+                let angle = lib::aim_from(x, (sx, sz)).wrapping_add(b6);
                 x.set8(0x2d, angle);
             }
             let cam = var::SCROLL_X.get(x.b);
@@ -424,7 +422,6 @@ pub(super) fn spin_roar(x: &mut Cx) {
         10 => {
             if x.u8(f::KEY_FRAME) == 1 {
                 x.set8(f::KEY_FRAME, 0);
-                x.c.d[1] = 2;
                 eshl_sweep_1d(x, 2);
             }
             if x.u8(f::KEY_FRAME) == 2 {

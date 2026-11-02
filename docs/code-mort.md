@@ -252,3 +252,20 @@ Les remises à zéro des blocs de la sortie de scène, de la boutique et du clas
 l'effacement du texte des écrans de fin (0xf683c) n'ont plus d'appelant par adresse : leurs natives restent (outils,
 fuzz), en `Corps::Memoire`, sans les registres que laissait l'original (D0 = 0, A4/D6 de la boucle, A1/A2/D0-D2 de
 l'effacement), qu'aucun appelant ne relit plus (le D1.w = -1 de 0xf683c, relu par le bonus, y est écrit en clair).
+
+## Lot « sortie du Cpu », partie 5 (familles et boss en gestionnaires sans registres, wt-familles2)
+
+### Boss 7 : replis hors table des aiguillages (0x85cc8, 0x86ee6)
+
+`active` (0x85bd0) saute par la table de 8 mots 0x85cc8 indexée par `+5` (groupe 0 à 14) ; `death` (0x86ed8) par
+la table de 4 mots 0x86ee6 indexée par `+6` (0 à 6). Au-delà, l'original lirait des mots de code comme décalages et
+sauterait au milieu d'instructions : aucun état n'y mène (`+5` et `+6` ne prennent que les valeurs paires des
+tables : écritures relevées dans `boss_7/`). Les replis Rust `x.call(t)` (appel par adresse d'une routine sans
+native) sont devenus des `unreachable!` : repli défensif, supprimé.
+
+### Golem (type 11, 0x67926) : boutons relus dans D0 après le pas d'animation
+
+Pas du code mort, mais un comportement qu'aucun scénario n'exerce (le golem n'apparaît dans aucune scène et
+n'est piloté que par les touches du quatrième joueur) : `enemy_golem::control::walk` relit les boutons dans D0,
+que 0x1a56 écrase par l'octet `+0x32` quand l'image en cours se termine, et laisse le drapeau « a bougé » dans D2.
+Écrit d'après le désassemblage (0x67926-0x679a0), non validé par un scénario.

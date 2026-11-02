@@ -1,6 +1,7 @@
 //! Boss 7, groupes 0 (arrivée, pose de l'attract), 2 (combat), 10 (attente sans joueur) et 14 (relevé).
 
 use super::aids;
+use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 use crate::machine::Machine;
@@ -8,7 +9,7 @@ use crate::machine::Machine;
 // --- groupe 0 : arrivée --------------------------------------------------------------------------------------
 
 /// 0x85d08 : `+6` = 0, chute et atterrissage ; `+6` = 2, pose de l'attract.
-pub(super) fn intro(x: &mut Cx) {
+pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
     if dispatch(x, 0x85d16, f::SUB2) == 0x85d1a {
         arrival(x)
     } else {
@@ -17,7 +18,7 @@ pub(super) fn intro(x: &mut Cx) {
 }
 
 /// 0x85d1a : le boss apparaît, tombe, atterrit dans un nuage de poussière, puis se met en garde.
-fn arrival(x: &mut Cx) {
+fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x85d28, f::SUB3) {
         0x85d30 => {
             addq8(x, f::SUB3, 2);
@@ -60,7 +61,7 @@ fn arrival(x: &mut Cx) {
 }
 
 /// 0x85dd6 : pose de l'attract (animation 0, relancée seulement si la clé change).
-fn pose(x: &mut Cx) {
+fn pose<R: Banc>(x: &mut Cx<'_, R>) {
     dispatch(x, 0x85de4, f::SUB3);
     x.set8(VULNERABLE, 0);
     x.set8(ANIM_KIND, 0);
@@ -76,7 +77,7 @@ fn pose(x: &mut Cx) {
 // --- groupe 2 : combat -----------------------------------------------------------------------------------------
 
 /// 0x85e18 : tant qu'un joueur est en vie, marche, demi-tour, arrêt, approche.
-pub(super) fn fight(x: &mut Cx) {
+pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
         x.set32(f::STATE, WAIT);
         return;
@@ -93,7 +94,7 @@ pub(super) fn fight(x: &mut Cx) {
 }
 
 /// Animation `kind` (clé `+0xa2`) ; le script `anim` ne repart que si la clé change.
-fn keyed_body(x: &mut Cx, kind: u8, anim: u32) {
+fn keyed_body<R: Banc>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
     x.set8(ANIM_KIND, kind);
     setb(x, 2, kind);
     if kind != x.u8(ANIM_LAST) {
@@ -103,7 +104,7 @@ fn keyed_body(x: &mut Cx, kind: u8, anim: u32) {
 }
 
 /// 0x85e54 : marche vers l'adversaire, et regarde s'il peut attaquer.
-fn walk(x: &mut Cx) {
+fn walk<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         addq8(x, f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -129,7 +130,7 @@ fn walk(x: &mut Cx) {
 }
 
 /// 0x85eee : décide d'attaquer, de frapper ce qui est devant, ou de continuer la marche.
-fn near_checks(x: &mut Cx) {
+fn near_checks<R: Banc>(x: &mut Cx<'_, R>) {
     if aids::player_near(x, false) {
         x.set32(f::STATE, 0x0204_0000);
         return lib::pick_byte(x);
@@ -169,9 +170,8 @@ fn near_checks(x: &mut Cx) {
 
 /// 0x85fc4 (devant, `front`) et 0x8603e (plus loin) : un adversaire à portée de coup. Rend vrai si le boss
 /// engage une attaque ou s'écarte.
-fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
+fn guard<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) || x.u16(f::TARGET) == 0 {
-        x.c.d[0] = 0;
         return false;
     }
     let t = load_target(x);
@@ -179,7 +179,6 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
     setb(x, 0, side);
     let mine = x.u8(f::FLIP);
     if !lib::decision(x, side == mine) {
-        x.c.d[0] = 0;
         return false;
     }
     let i = x.random() & 0xf;
@@ -194,7 +193,7 @@ fn guard(x: &mut Cx, d0: i16, d1: u16, d2: u16, front: bool) -> bool {
 }
 
 /// 0x860b8 : demi-tour, puis reprise de l'état mémorisé (`+0xa6`, `+0xa5`).
-fn turn(x: &mut Cx) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         addq8(x, f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -213,7 +212,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// 0x86110 : arrêt face à l'adversaire.
-fn stop(x: &mut Cx) {
+fn stop<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         addq8(x, f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -238,7 +237,7 @@ fn stop(x: &mut Cx) {
 }
 
 /// 0x86180 : approche lente de l'adversaire.
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x8618c, f::SUB3) {
         0x861d8 => {
             if timer_done(x) {
@@ -280,7 +279,7 @@ fn approach(x: &mut Cx) {
 // --- groupe 10 : attente sans joueur ----------------------------------------------------------------------------
 
 /// 0x86af6 : attend qu'un joueur soit en vie.
-pub(super) fn wait(x: &mut Cx) {
+pub(super) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, FIGHT);
         x.set8(ANIM_KIND, 0x7f);
@@ -298,7 +297,7 @@ pub(super) fn wait(x: &mut Cx) {
 // --- groupe 14 : relevé -------------------------------------------------------------------------------------------
 
 /// 0x86b32 : le boss se relève, invisible un instant, puis riposte (attaque 10).
-pub(super) fn stand_up(x: &mut Cx) {
+pub(super) fn stand_up<R: Banc>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x86b40, f::SUB2) {
         0x86b46 => {
             x.add8(f::SUB2, 2);

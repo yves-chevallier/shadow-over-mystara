@@ -8,7 +8,7 @@ use crate::objects::Courant;
 // --- groupe 0 : réveil --------------------------------------------------------------------------
 
 /// 0x93454 : les variantes 0 et 1 attendent qu'un joueur s'approche ; les autres vont droit au combat.
-pub(super) fn wake(x: &mut Cx) {
+pub(super) fn wake<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(3) {
         0 => wake_low(x),
         1 => wake_high(x),
@@ -17,7 +17,7 @@ pub(super) fn wake(x: &mut Cx) {
 }
 
 /// 0x93606 : combat d'emblée (le groupe 2 tourne dans la même image).
-fn fight_from_wake(x: &mut Cx) {
+fn fight_from_wake<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     lib::set_immunities(x);
     x.set32(f::STATE, state::WALK);
@@ -26,7 +26,7 @@ fn fight_from_wake(x: &mut Cx) {
 
 /// 0x9351a : étage de proximité (0 à 7) du joueur le plus proche, d'après la distance horizontale (le test vertical de
 /// l'original compare la position du joueur avec elle-même : il est toujours nul).
-fn proximity(x: &mut Cx) -> u8 {
+fn proximity<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
     let mut best: u16 = 0x7fff;
     for k in 0..4u32 {
         let p = crate::objects::Obj(0xff85de + 0x200 * k);
@@ -41,9 +41,7 @@ fn proximity(x: &mut Cx) -> u8 {
             best = dx;
         }
     }
-    x.c.d[0] = x.c.d[0] & !0xffff | best as u32;
     if (best as i16) >= 0x1ff {
-        x.c.d[0] = 0;
         return 0;
     }
     let level = x.rom8(0x93562 + (best >> 4) as u32);
@@ -52,7 +50,7 @@ fn proximity(x: &mut Cx) -> u8 {
 
 /// 0x93470 : variante 0, accroupie : se retourne quand un joueur approche, et attaque quand l'animation de
 /// réveil est terminée.
-fn wake_low(x: &mut Cx) {
+fn wake_low<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(FALLS, 1);
     match x.u8(f::SUB2) {
         0 => {
@@ -104,7 +102,7 @@ fn wake_low(x: &mut Cx) {
 }
 
 /// 0x93582 : variante 1, en hauteur : lance le script de palette 0x10298 au rythme de l'animation, puis combat.
-fn wake_high(x: &mut Cx) {
+fn wake_high<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -120,7 +118,7 @@ fn wake_high(x: &mut Cx) {
 }
 
 /// 0x935b0.
-fn wake_high_wait(x: &mut Cx) {
+fn wake_high_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         if proximity(x) == 0 {
             return;
@@ -133,7 +131,6 @@ fn wake_high_wait(x: &mut Cx) {
         return fight_from_wake(x);
     }
     let event = x.u8(0x3e);
-    x.c.d[0] = event as u32;
     if event == 8 {
         x.set_a5_u16(0x4be, 2);
         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
@@ -149,7 +146,7 @@ fn wake_high_wait(x: &mut Cx) {
 // --- groupe 2 : combat -------------------------------------------------------------------------
 
 /// 0x93618 : combat ; sans joueur en vie, le boss attend.
-pub(super) fn fight(x: &mut Cx) {
+pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => stand(x),
         2 => turn(x),
@@ -164,7 +161,7 @@ pub(super) fn fight(x: &mut Cx) {
 }
 
 /// 0x93642 : debout, attend `+0x6e` images, se retourne si la cible est derrière.
-fn stand(x: &mut Cx) {
+fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(FALLS, 1);
     if x.u8(0x7) == 0 {
         next7(x);
@@ -182,7 +179,7 @@ fn stand(x: &mut Cx) {
 }
 
 /// 0x9368e : demi-tour.
-fn turn(x: &mut Cx) {
+fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(FALLS, 1);
     match x.u8(0x7) {
         0 => {
@@ -204,7 +201,7 @@ fn turn(x: &mut Cx) {
 }
 
 /// 0x936ee (kind 0x2f) et 0x936e6 (kind 0x30) : marche vers la cible ; à portée, elle devient une attaque.
-fn walk(x: &mut Cx, kind: u8) {
+fn walk<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(0x79, kind);
     x.set8(FALLS, 1);
     if x.u8(0x7) == 0 {
@@ -262,7 +259,7 @@ fn walk(x: &mut Cx, kind: u8) {
 
 /// 0x949b2 et 0x949d4 : une cible à portée ; au dé près le boss fonce (0x0202_0800), sinon il choisit une attaque dans la
 /// table 0x94a24 (la seconde table de l'original, 0x94c24, est écrasée avant d'être lue).
-fn attack_choice(x: &mut Cx) {
+fn attack_choice<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     if 0xffc0u32 >> r & 1 != 0 {
         return x.set32(f::STATE, state::WALK_B);
@@ -276,7 +273,7 @@ fn attack_choice(x: &mut Cx) {
 }
 
 /// 0x937e2 : bond vers la cible (le boss est loin d'elle).
-fn leap(x: &mut Cx) {
+fn leap<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(FALLS, 1);
     match x.u8(0x7) {
         0 => {
@@ -306,7 +303,7 @@ fn leap(x: &mut Cx) {
 // --- groupe 6 : course vers un point de l'écran ---------------------------------------------------
 
 /// 0x93cfa : course (`+6` = 0, 2) puis saut (4) vers un point près de la caméra ; sans joueur, attente.
-pub(super) fn jump_to_spot(x: &mut Cx) {
+pub(super) fn jump_to_spot<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 2 => run_to_spot(x),
         4 => spot_jump(x),
@@ -341,7 +338,7 @@ fn choose_spot<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x93d20.
-fn run_to_spot(x: &mut Cx) {
+fn run_to_spot<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -377,7 +374,7 @@ fn run_to_spot(x: &mut Cx) {
 }
 
 /// 0x93dd4 : saut sur place.
-fn spot_jump(x: &mut Cx) {
+fn spot_jump<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -409,7 +406,7 @@ fn spot_jump(x: &mut Cx) {
 // --- groupe 8 : attente avant une attaque ---------------------------------------------------------
 
 /// 0x93e52.
-pub(super) fn before_attack(x: &mut Cx) {
+pub(super) fn before_attack<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => wait_then_turn(x),
         2 => spot_jump(x),
@@ -419,7 +416,7 @@ pub(super) fn before_attack(x: &mut Cx) {
 }
 
 /// 0x93e64.
-fn wait_then_turn(x: &mut Cx) {
+fn wait_then_turn<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -450,7 +447,7 @@ fn wait_then_turn(x: &mut Cx) {
 // --- groupe 10 : pause ------------------------------------------------------------------------------
 
 /// 0x93ece.
-pub(super) fn paused(x: &mut Cx) {
+pub(super) fn paused<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         if var::PLAYERS_ALIVE.get(x.b) != 0 {
             return x.set32(f::STATE, state::WALK);
@@ -491,7 +488,7 @@ fn drop_prey<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x93f30 : le boss tient un joueur (`+0x50`) : morsures qui lui retirent 0x10 PV puis 1, relâché à 1 PV.
-pub(super) fn holding(x: &mut Cx) {
+pub(super) fn holding<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) as i16 >= 0 {
         return drop_prey(x);
     }
@@ -535,7 +532,7 @@ pub(super) fn holding(x: &mut Cx) {
 
 /// 0x93fbc : animation de la morsure ; à sa fin, le joueur perd 1 PV (jamais le dernier) puis le boss le relâche
 /// quand le décompte est écoulé.
-fn hold_bite(x: &mut Cx, prey: crate::objects::Obj) {
+fn hold_bite<R: Banc>(x: &mut Cx<'_, R>, prey: crate::objects::Obj) {
     if !lib::step(x) {
         return lib::hold_seized(x);
     }
@@ -546,15 +543,13 @@ fn hold_bite(x: &mut Cx, prey: crate::objects::Obj) {
         return lib::release_player(x, prey);
     }
     add16(x, prey, f::HP, 0xffff);
-    x.c.a[1] = prey.0;
     lib::sound(x, 0xedd96);
-    x.c.d[1] = 2;
     let mut dx = 0x18u16;
     if x.u8(f::FLIP) == 0 {
         dx = dx.wrapping_neg();
     }
     let pos = (dx.wrapping_add(x.u16(0x8)), x.u16(0xc).wrapping_add(8), x.u16(0x10).wrapping_sub(2));
-    (x.c.d[2], x.c.d[3], x.c.d[4]) = (pos.0 as u32, pos.1 as u32, pos.2 as u32);
+    (*x.c.d2(), *x.c.d3(), *x.c.d4()) = (pos.0 as u32, pos.1 as u32, pos.2 as u32);
     crate::families::effects_creators::spark_at(x.b, x.o, prey.0, 2, pos);
     lib::hold_seized(x);
 }

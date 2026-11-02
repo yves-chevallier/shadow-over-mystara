@@ -5,7 +5,7 @@ use super::moves::step_anim;
 use super::*;
 use crate::objects::Courant;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let step = x.u8(f::SUB2);
     match (two(x), step) {
         (_, 0 | 6) => shot(x),
@@ -23,7 +23,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x9b752 : image-clé de l'animation d'attaque (son 0xebfdc), puis fin quand l'animation est finie.
-fn finish_attack(x: &mut Cx) {
+fn finish_attack<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         lib::sound(x, 0xebfdc);
         x.set8(f::KEY_FRAME, 0);
@@ -34,7 +34,7 @@ fn finish_attack(x: &mut Cx) {
 }
 
 /// 0x9b712 : tir.
-fn shot(x: &mut Cx) {
+fn shot<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -42,7 +42,6 @@ fn shot(x: &mut Cx) {
             x.set8(ANIM_ID, 0xa);
             sounds(x, 0x28, 5);
             x.set8(ANIM_LAST, 0xa);
-            x.c.d[0] = 0;
             start(x, Set::B, 0);
         }
         2 => finish_attack(x),
@@ -51,7 +50,7 @@ fn shot(x: &mut Cx) {
 }
 
 /// 0x9b774 : souffle.
-fn breath(x: &mut Cx) {
+fn breath<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -69,7 +68,7 @@ fn breath(x: &mut Cx) {
 }
 
 /// 0x9bfb4 : image-clé de la morsure : saisit un joueur à portée (0xfc44, 0xfd64), sinon fin de l'animation.
-fn grab_on_key(x: &mut Cx) {
+fn grab_on_key<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         if let Some(player) = lib::attack_hits_a_player(x, 5) {
             return lib::seize_player(x, player, 0);
@@ -81,7 +80,7 @@ fn grab_on_key(x: &mut Cx) {
 }
 
 /// 0x9bf80 : morsure.
-fn bite(x: &mut Cx) {
+fn bite<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -106,7 +105,7 @@ fn facing_wrong<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9c0ac : attaque de la seconde forme (rugissement qui la déclenche, course, coup).
-fn second_form_strike(x: &mut Cx) {
+fn second_form_strike<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if second_form(x) {
@@ -233,7 +232,7 @@ fn still_close<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9b7ae : charge (course vers la cible, coup à portée).
-fn charge_strike(x: &mut Cx) {
+fn charge_strike<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -280,7 +279,7 @@ fn charge_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9bfe0 : piétinement (course vers un joueur proche, puis morsure).
-fn stomp(x: &mut Cx) {
+fn stomp<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -325,18 +324,17 @@ fn stomp_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9c354 : plongeon sur la cible.
-fn dive(x: &mut Cx) {
+fn dive<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if x.u16(f::TARGET) != 0 {
                 next7(x);
                 x.set8(VULNERABLE, 1);
                 let t = x.linked(f::TARGET);
-                x.c.a[1] = t.0;
-                x.c.d[1] = t.u16(x.b, 0x8) as u32;
-                x.c.d[2] = t.u16(x.b, 0x10) as u32;
-                x.c.d[0] = lib::aim_from(x, (x.c.d[1] as u16, x.c.d[2] as u16)) as u32;
-                let angle = x.c.d[0] as u8;
+                let (tx, tz) = (t.u16(x.b, 0x8), t.u16(x.b, 0x10));
+                // D2 = la profondeur de la cible (reste)
+                *x.c.d2() = tz as u32;
+                let angle = lib::aim_from(x, (tx, tz));
                 x.set8(0x2d, angle);
                 let v = if x.u8(f::FLIP) != 0 { 0x500u16 } else { (-0x500i16) as u16 };
                 x.set16(0x14, v);
@@ -382,7 +380,7 @@ fn climb<R: Banc>(x: &mut Cx<'_, R>, up: bool) {
 }
 
 /// Retombée du plongeon : son, poussière en ligne ; `down` (0x9c4a2) ajoute cinq éclats et ne rend pas vulnérable.
-fn land(x: &mut Cx, down: bool) {
+fn land<R: Banc>(x: &mut Cx<'_, R>, down: bool) {
     x.move_xz();
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
@@ -402,7 +400,7 @@ fn land(x: &mut Cx, down: bool) {
 }
 
 /// 0x9c3ee : saut sur place avec retombée en poussière.
-fn dive_down(x: &mut Cx) {
+fn dive_down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);

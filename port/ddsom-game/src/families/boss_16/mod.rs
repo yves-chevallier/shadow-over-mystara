@@ -78,9 +78,7 @@ pub(self) mod call {
 // --- animations --------------------------------------------------------------------------------
 
 /// 0x95256 : lance l'animation `n` du jeu `set` (de sorte `kind`) par l'IA, sauf si c'est déjà celle en cours.
-fn play_set(x: &mut Cx, set: u32, kind: u8, n: u32) {
-    x.c.d[0] = n;
-    x.c.d[1] = x.c.d[1] & !0xff | kind as u32;
+fn play_set<R: Banc>(x: &mut Cx<'_, R>, set: u32, kind: u8, n: u32) {
     if x.u8(ANIM_SET) == kind && x.u8(ANIM_N) == n as u8 {
         return;
     }
@@ -90,17 +88,17 @@ fn play_set(x: &mut Cx, set: u32, kind: u8, n: u32) {
 }
 
 /// 0x95234 : animation `n` du jeu des mouvements.
-pub(self) fn anim_a(x: &mut Cx, n: u32) {
+pub(self) fn anim_a<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     play_set(x, SET_A, 0, n);
 }
 
 /// 0x95240 : animation `n` du jeu des attaques.
-pub(self) fn anim_b(x: &mut Cx, n: u32) {
+pub(self) fn anim_b<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     play_set(x, SET_B, 2, n);
 }
 
 /// 0x9524c : animation `n` du jeu des coups reçus.
-pub(self) fn anim_c(x: &mut Cx, n: u32) {
+pub(self) fn anim_c<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     play_set(x, SET_C, 4, n);
 }
 
@@ -114,7 +112,7 @@ pub(self) fn stop<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x93420 : plus de cible, attente.
-pub(self) fn idle(x: &mut Cx) {
+pub(self) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, state::IDLE);
 }
 
@@ -131,7 +129,7 @@ pub(self) fn camera_record<R: Banc>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
 }
 
 /// 0x950b8 : la cible est-elle derrière le boss ? (sans cible, le boss attend et la réponse est oui.)
-pub(self) fn target_behind(x: &mut Cx) -> bool {
+pub(self) fn target_behind<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) as i16 >= 0 {
         idle(x);
         return true;
@@ -145,7 +143,7 @@ pub(self) fn target_behind(x: &mut Cx) -> bool {
 }
 
 /// 0x9489a : la cible est-elle loin (hors de ±0x20 en profondeur ou ±0xc0 en X) ?
-pub(self) fn target_far(x: &mut Cx) -> bool {
+pub(self) fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) as i16 >= 0 {
         idle(x);
         return true;
@@ -160,10 +158,10 @@ pub(self) fn target_far(x: &mut Cx) -> bool {
 }
 
 /// 0x94902, 0x9491e, 0x94968 : une cible dans la boîte de portée (et, pour les deux dernières, des coups possibles).
-pub(self) fn close_target(x: &mut Cx) -> bool {
+pub(self) fn close_target<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     lib::target_in_box(x, 0, 0x28, 0x20)
 }
-pub(self) fn edge_target(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
+pub(self) fn edge_target<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
     }
@@ -216,7 +214,7 @@ fn count_victims<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     n
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -233,7 +231,7 @@ pub fn run(x: &mut Cx) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// 0x93286 : attend la fin de la pause ; les variantes 0 et 1 sont choisies d'après la hauteur de la caméra.
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -283,7 +281,7 @@ fn init(x: &mut Cx) {
 
 /// 0x933b8 : un groupe par image ; pendant une pause de scène, le boss reste en attente (0x020a0200) tant que des
 /// joueurs sont sous son emprise.
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(HIT_BUDGET, 5);
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
@@ -321,7 +319,7 @@ fn paused_dispatch<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-fn group(x: &mut Cx) {
+fn group<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB) {
         0 => moves::wake(x),
         2 => moves::fight(x),
@@ -336,7 +334,7 @@ fn group(x: &mut Cx) {
 
 /// 0x94e24 : choix de la suite d'une attaque : debout si la cible est hors de portée, sinon une nouvelle attaque tirée
 /// dans la table de la difficulté (0x94e7c, une ligne de 32 octets par couple de niveaux).
-pub(self) fn next_attack(x: &mut Cx) {
+pub(self) fn next_attack<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) as i16 >= 0 {
         return idle(x);
     }
@@ -352,5 +350,5 @@ pub(self) fn next_attack(x: &mut Cx) {
 }
 
 handlers! {
-    0x9325e "boss_16" run,
+    0x9325e "boss_16" #[sans] run,
 }

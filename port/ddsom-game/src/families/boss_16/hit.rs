@@ -24,7 +24,7 @@ const KILL: u32 = 0x94154;
 const DEATHS: u32 = 0x94644;
 const DEATH_HEAVY: u32 = 0x947c6;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, false);
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
@@ -44,14 +44,14 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// Mort immédiate : plus de PV, séquence de mort dans la même image.
-fn die(x: &mut Cx) {
+fn die<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB, 6);
     x.set16(f::SUB2, 0);
     death_normal(x);
 }
 
 /// 0x94092 : premier passage : dégâts (0xb648) ; puis la routine du code de coup.
-fn reaction(x: &mut Cx) {
+fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::drop_once(x);
     }
@@ -72,7 +72,7 @@ fn reaction(x: &mut Cx) {
 
 /// 0x9453a : compte les coups encaissés d'affilée (`+0xa5`, 5 au départ) ; au dernier, le boss contre-attaque
 /// (état 0x0204_0c00).
-fn counter(x: &mut Cx) -> bool {
+fn counter<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if sub8(x, HIT_BUDGET, 1).gt() {
         return false;
     }
@@ -110,7 +110,7 @@ fn recover_position<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9416e et 0x941f8 : projeté en l'air (`hard`) ou repoussé au sol ; à la fin le boss se relève.
-fn knockback(x: &mut Cx, hard: bool) {
+fn knockback<R: Banc>(x: &mut Cx<'_, R>, hard: bool) {
     if x.u8(f::SUB2) == 0 {
         return knockback_start(x, hard);
     }
@@ -121,7 +121,7 @@ fn knockback(x: &mut Cx, hard: bool) {
 }
 
 /// 0x94174 et 0x9421e... : démarrage (PV encore positifs, sinon mort).
-fn knockback_start(x: &mut Cx, hard: bool) {
+fn knockback_start<R: Banc>(x: &mut Cx<'_, R>, hard: bool) {
     if !tst16(x, f::HP).gt() {
         return die(x);
     }
@@ -164,7 +164,7 @@ fn knockback_hold<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x94254 : projeté : retombée sur le sol.
-fn knockback_hard_hold(x: &mut Cx) {
+fn knockback_hard_hold<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(SHAKE) != 0 {
         sub8(x, SHAKE, 1);
         x.set8(SHAKE, 0x10);
@@ -179,7 +179,7 @@ fn knockback_hard_hold(x: &mut Cx) {
 }
 
 /// 0x942da : coups spéciaux (codes 0x60, 0x70, 0x78, 0x90, 0x94) : gerbes d'effets, puis le recul.
-fn burst(x: &mut Cx) {
+fn burst<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -197,7 +197,6 @@ fn burst(x: &mut Cx) {
             let r = rand_and(x, 3);
             let t = x.rom8(0x94368 + r);
             x.set8(SHAKE, t);
-            x.c.d[0] = 0;
             anim_c(x, 0);
             if !tst16(x, f::HP).gt() {
                 die(x);
@@ -234,7 +233,7 @@ fn burst(x: &mut Cx) {
 }
 
 /// 0x94564 : recul en glissant, puis la suite par `next_attack`.
-fn pushed_back(x: &mut Cx) {
+fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -260,7 +259,7 @@ fn pushed_back(x: &mut Cx) {
 }
 
 /// 0x945c8 : à terre (`+0x84` images hors pause), puis relevé et contre-attaque.
-fn down(x: &mut Cx) {
+fn down<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -291,9 +290,8 @@ fn down(x: &mut Cx) {
 }
 
 /// 0x94638 : mort ; la séquence dépend du code du coup.
-fn death(x: &mut Cx) {
+fn death<R: Banc>(x: &mut Cx<'_, R>) {
     let code = x.u8(0x49) as u32;
-    x.c.d[0] = code;
     if rom32(x, DEATHS + code) == DEATH_HEAVY {
         death_heavy(x);
     } else {
@@ -302,7 +300,7 @@ fn death(x: &mut Cx) {
 }
 
 /// Prévient la scène : boss vaincu (type 0x10, variante 0), score `+0x7e` ; effets de mort.
-fn announce(x: &mut Cx) {
+fn announce<R: Banc>(x: &mut Cx<'_, R>) {
     x.set_a5_u8(0x42, 1);
     x.set_a5_u8(0x50, 0);
     let score = x.u8(0x7e);
@@ -316,17 +314,17 @@ fn announce(x: &mut Cx) {
 }
 
 /// 0x946fc : séquence de mort ordinaire (animations 0xb, 0xc).
-fn death_normal(x: &mut Cx) {
+fn death_normal<R: Banc>(x: &mut Cx<'_, R>) {
     death_sequence(x, 0xb, 0xc);
 }
 
 /// 0x947c6 : séquence de mort des coups lourds (animations 3, 4).
-fn death_heavy(x: &mut Cx) {
+fn death_heavy<R: Banc>(x: &mut Cx<'_, R>) {
     death_sequence(x, 3, 4);
 }
 
 /// Projection (`first`), retombée (`second`) puis délai de 0x28 images.
-fn death_sequence(x: &mut Cx, first: u32, second: u32) {
+fn death_sequence<R: Banc>(x: &mut Cx<'_, R>, first: u32, second: u32) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -363,7 +361,7 @@ fn death_sequence(x: &mut Cx, first: u32, second: u32) {
 }
 
 /// 0x947b8 : attend la fin du délai.
-fn death_wait(x: &mut Cx) {
+fn death_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if sub8(x, SHAKE, 1).pl() {
         return;
     }

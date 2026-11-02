@@ -75,26 +75,40 @@ pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-pub(self) fn strike(x: &mut Cx, n: u32) {
+pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-/// Mot de poids faible d'un registre de données.
-pub(self) fn setw(x: &mut Cx, n: usize, v: u16) {
-    set_dw(x, n, v);
+/// Les restes D2 à D5 (relus par les gestionnaires suivants) ; D0, D1 et D6 ne sont relus par personne.
+fn reste<'a, R: Banc>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32> {
+    match n {
+        2 => Some(x.c.d2()),
+        3 => Some(x.c.d3()),
+        4 => Some(x.c.d4()),
+        5 => Some(x.c.d5()),
+        _ => None,
+    }
 }
 
-/// Octet de poids faible d'un registre de données.
-pub(self) fn setb(x: &mut Cx, n: usize, v: u8) {
-    x.c.d[n] = x.c.d[n] & !0xff | v as u32;
+/// Mot de poids faible d'un registre de données (gardé s'il est un reste).
+pub(self) fn setw<R: Banc>(x: &mut Cx<'_, R>, n: usize, v: u16) {
+    if let Some(r) = reste(x, n) {
+        *r = *r & 0xffff_0000 | v as u32;
+    }
+}
+
+/// Octet de poids faible d'un registre de données (gardé s'il est un reste).
+pub(self) fn setb<R: Banc>(x: &mut Cx<'_, R>, n: usize, v: u8) {
+    if let Some(r) = reste(x, n) {
+        *r = *r & !0xff | v as u32;
+    }
 }
 
 /// Saut par table relative (`move.w (tbl,PC,D0w),D1w ; jmp (tbl,PC,D1w)`) indexée par l'octet `idx` de l'objet :
 /// rend l'adresse d'arrivée. D0 reçoit l'octet (après un `moveq 0,D0`), D1w le décalage.
-pub(self) fn dispatch(x: &mut Cx, table: u32, idx: u32) -> u32 {
+pub(self) fn dispatch<R: Banc>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
     let off = x.rom16(table + i);
-    setw(x, 1, off);
     table.wrapping_add(off as i16 as i32 as u32)
 }
 
@@ -105,11 +119,11 @@ pub(self) fn key<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
 }
 
 /// Décompte de `+0xa0` : vrai quand il est écoulé (passé sous zéro).
-pub(self) fn timer_done(x: &mut Cx) -> bool {
+pub(self) fn timer_done<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     sub16(x, TIMER, 1).mi()
 }
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -157,7 +171,7 @@ pub fn run(x: &mut Cx) {
 
 /// 0x85a80 : en partie, le boss tombe du haut de l'écran (groupe 0) ; dans l'attract, il prend la pose (groupe 0,
 /// étape 2).
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) == 0 {
         x.set32(f::STATE, 0x0200_0200);
     } else {
@@ -190,14 +204,13 @@ fn init(x: &mut Cx) {
     x.set_bit(0x1, 1, true);
     // points de vie « affaiblis » (seuil du ralenti) selon le nombre de joueurs
     let hp = x.u16(0x60);
-    setw(x, 1, hp >> 1);
-    setw(x, 2, hp >> 2);
+    let (mut d1, d2) = (hp >> 1, hp >> 2);
+    setw(x, 2, d2);
     let players = var::PLAYERS_ALIVE.get(x.b);
-    let mut d1 = x.c.d[1] as u16;
     if Fl::sub8(players, 1).gt() {
         if players == 2 {
             x.set8(PHASES, 2);
-            d1 = d1.wrapping_add(x.c.d[2] as u16);
+            d1 = d1.wrapping_add(d2);
         } else {
             x.set8(PHASES, 3);
             d1 = d1.wrapping_add(d1);
@@ -216,7 +229,7 @@ fn init(x: &mut Cx) {
 
 /// 0x85bd0 : hors partie (attract), le boss garde la pose ; sinon un groupe par image, une créature d'appoint
 /// (SET 0x3f) au bout de 0xf0 images, et une attaque forcée s'il reste trop longtemps sans combattre.
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) == 0 {
         x.set32(f::STATE, 0x0200_0200);
         x.set8(0, 1);
@@ -247,7 +260,8 @@ fn active(x: &mut Cx) {
             0x86af6 => fight::wait(x),
             0x85ce8 => x.set32(f::STATE, FIGHT),
             0x86b32 => fight::stand_up(x),
-            t => x.call(t),
+            // la table n'a que ces huit entrées (`+5` pair, de 0 à 14 ; voir docs/code-mort.md)
+            t => unreachable!("boss 7 : groupe {:#x} hors table ({t:#x})", x.u8(f::SUB)),
         }
         if (x.u8(PHASE_TIMER) as i8) > 0 {
             sub8(x, PHASE_TIMER, 1);
@@ -285,5 +299,5 @@ fn idle_attack<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x859f8 "boss_7" run,
+    0x859f8 "boss_7" #[sans] run,
 }
