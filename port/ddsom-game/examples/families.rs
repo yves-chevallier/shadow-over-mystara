@@ -35,10 +35,10 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
     }
     let mut diffs = Vec::new();
     if c1.d[7] != c.d[7] {
-        diffs.push(format!("d7={:08x} au lieu de {:08x}", c1.d[7], c.d[7]));
+        diffs.push(format!("d7={:08x} instead of {:08x}", c1.d[7], c.d[7]));
     }
     if c1.a[0] != c.a[0] {
-        diffs.push(format!("a0={:08x} au lieu de {:08x}", c1.a[0], c.a[0]));
+        diffs.push(format!("a0={:08x} instead of {:08x}", c1.a[0], c.a[0]));
     }
     let sp = c.a[7] & 0xff_ffff;
     ddsom_game::mem::diff_bus(&b1, b, sp.saturating_sub(0x400)..sp, &mut diffs);

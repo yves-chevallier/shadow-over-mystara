@@ -103,7 +103,7 @@ mod scenery {
 
     /// Variante -> routine d'initialisation (13 routines).
     const INIT_KIND: u32 = 0xdd6a4;
-    /// Variante -> routine de suivi (23 routines).
+    /// Variant -> follow routine (23 routines).
     const STEP_KIND: u32 = 0xdd8ea;
     const WAIT: u8 = 0;
     const FOLLOW: u8 = 2;

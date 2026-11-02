@@ -115,7 +115,7 @@ fn wait_anim<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x6957c : l'animation finie, retour debout.
+/// 0x6957c: the animation over, back to standing.
 fn end_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         set_state_long(x, STANCE);

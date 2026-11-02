@@ -8,7 +8,7 @@ use crate::machine::Machine;
 
 // --- group 0: arrival --------------------------------------------------------------------------------------
 
-/// 0x882ae : pause, apparition, saut, atterrissage, premier combat.
+/// 0x882ae: pause, appearance, jump, landing, first fight.
 pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x882ba, f::SUB2) {
         0x882c4 => {

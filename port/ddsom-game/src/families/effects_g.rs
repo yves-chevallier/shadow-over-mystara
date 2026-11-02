@@ -34,7 +34,7 @@ mod f {
 
 /// Routines d'origine.
 mod rom {
-    /// Son d'impact au sol.
+    /// Sound of the impact on the ground.
     pub const SOUND_LANDING: u32 = 0xece9e;
 }
 

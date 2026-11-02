@@ -36,7 +36,7 @@ pub(self) mod g {
     pub const AI_SHOT: u32 = 0x78;
     pub const SHOT_KIND: u32 = 0x79;
     pub const LOOK_PREV: u32 = 0xa1;
-    /// Minuterie (octet) d'un geste.
+    /// Timer (byte) of a gesture.
     pub const TIMER: u32 = 0xa2;
     pub const COOLDOWN: u32 = 0xa4;
     /// Chosen move (value of `+6` to resume).

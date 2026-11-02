@@ -223,7 +223,7 @@ fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
         let v = if rng.next() % 5 == 0 { colour(rng) } else { colour(rng) & 0xf0ff | (i as u16 & 0xf00) };
         wr16(b, 0x91c000 + 2 * i, v);
     }
-    // palettes cibles en RAM (0xff1190, 512 couleurs)
+    // target palettes in RAM (0xff1190, 512 colours)
     for i in 0..512u32 {
         wr16(b, 0xff1190 + 2 * i, colour(rng));
     }
@@ -697,7 +697,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                 wr8(&mut b, A5 + 0x36, (rng.next() % 2) as u8);
             }
             if entry == 0xd5f5a {
-                // barre de vie (SET 20) : joueur suivi en +0x20, second joueur en +0x34
+                // life bar (SET 20): followed player at +0x20, second player at +0x34
                 wr16(&mut b, obj.0 + 0x20, 0x85de + 0x200 * (rng.next() % 4) as u16);
                 wr16(&mut b, obj.0 + 0x34, 0x85de + 0x200 * (rng.next() % 4) as u16);
             }
@@ -855,7 +855,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                 .map(|(i, n)| format!("{}{}:{n}", if i < 8 { 'd' } else { 'a' }, i % 8))
                 .collect();
             if !list.is_empty() {
-                println!("REGS {name} {} appels : {}", st.calls, list.join(" "));
+                println!("REGS {name} {} calls: {}", st.calls, list.join(" "));
             }
         }
     }
@@ -865,7 +865,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
         println!("  {name:28} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches,
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
-    println!("{tests} appels de gestionnaires");
+    println!("{tests} handler calls");
     if let Ok(file) = std::env::var("DDSOM_COUVERTURE") {
         let text: Vec<String> = seen.iter().map(|a| format!("{a:06x}")).collect();
         std::fs::write(file, text.join("\n")).expect("coverage write");
@@ -874,7 +874,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
 }
 
 /// Small routines called by the family handlers (creators, palettes, tile cells, cameras
-/// au retour de zone).
+/// on the zone return).
 const SMALL: [u32; 8] = [0x101da, 0x1ac90, 0x4aed0, 0x53746, 0xb230e, 0xa462c, 0xa2b4a, 0x33b24];
 
 fn rng_small_effects(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
@@ -1039,7 +1039,7 @@ fn main() {
         "shop" => (rng_shop, 0x50b9c..0x514d0),
         "creators" => (rng_creators, 0x0..0x100000),
         _ => {
-            eprintln!("groupe inconnu : {group}");
+            eprintln!("unknown group: {group}");
             std::process::exit(2);
         }
     };
@@ -1077,7 +1077,7 @@ fn main() {
                 let var = ddsom_game::mem::rd16(b, A5 + 0x70);
                 let copy: Vec<u8> = (0..18).map(|i| ddsom_game::mem::rd8(b, 0xff1d8e + i)).collect();
                 let block: Vec<u8> = (0..18).map(|i| ddsom_game::mem::rd8(b, c.a[6] + i)).collect();
-                format!(" var={var} copie={copy:02x?} defauts={block:02x?}")
+                format!(" var={var} copy={copy:02x?} defaults={block:02x?}")
             } else if *group == "camera" {
                 let cam = c.a[0];
                 let fields: Vec<String> = [0x08u32, 0x0c, 0x10, 0x14, 0x20, 0x2e, 0x34, 0x40]

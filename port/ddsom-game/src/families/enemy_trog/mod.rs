@@ -47,7 +47,7 @@ pub(self) mod g {
     pub const REPEAT: u32 = 0xa2;
     /// Attack to resume after an announcement or a turn-around.
     pub const RESUME: u32 = 0xa3;
-    /// Clignotement : phase (`+0xa5`, 0xff = au repos), alternance, attente, compteurs.
+    /// Blinking: phase (`+0xa5`, 0xff = at rest), alternation, wait, counters.
     pub const BLINK_PHASE: u32 = 0xa5;
     pub const BLINK_ON: u32 = 0xa6;
     pub const BLINK_WAIT: u32 = 0xa7;

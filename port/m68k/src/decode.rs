@@ -41,7 +41,7 @@ pub enum Ea {
     PostInc(u8),
     PreDec(u8),
     Disp(u8, i16),
-    /// (d8,An,Xn) : mot d'extension brut
+    /// (d8,An,Xn): raw extension word
     Idx(u8, u16),
     /// (xxx).w: sign-extended address.
     AbsW(u32),

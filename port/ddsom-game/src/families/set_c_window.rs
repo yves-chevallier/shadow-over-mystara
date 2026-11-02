@@ -9,7 +9,7 @@
 //! line, then chains the next window or disappears.
 //!
 //! States: `+4` 0 (loading), 2 (alive), 4/6 (release); when alive, `+5`: 0 start of opening,
-//! 2 ouverture, 4 affichage, 6 fermeture.
+//! 2 opening, 4 display, 6 closing.
 //!
 //! The composed text is a sequence of bytes: character (> 15), command (≤ 15) followed by its argument,
 //! 0xfe + argument, 0xff + number of characters written since the previous 0xff + argument, 0xfd end.

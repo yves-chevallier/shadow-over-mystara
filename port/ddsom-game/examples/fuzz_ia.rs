@@ -231,7 +231,7 @@ fn player_a1(c: &mut Cpu, _: &mut Bus, a: &mut Rng) {
 }
 
 fn parade(c: &mut Cpu, b: &mut Bus, a: &mut Rng) {
-    // agresseur A0 = un joueur, victime A1 = l'objet
+    // attacker A0 = a player, victim A1 = the object
     let o = c.a[0];
     c.a[1] = o;
     c.a[0] = A5 + 0x5de + 0x200 * a.below(4);

@@ -134,7 +134,7 @@ fn velocity(speed: u16) -> u32 {
     (((speed as u32) << 16) as i32 >> 8) as u32
 }
 
-// --- variante 0 : clignotement de titre ------------------------------------------------------------
+// --- variant 0: title blinking ----------------------------------------------------------------------
 
 /// Variant 0 (0xce066): initializes two routines (0x3525c, 0x1ac86), then, from time to time (rng
 /// and frame parity), toggles `+0x43` and launches one of two sound/video routines.
@@ -171,7 +171,7 @@ fn title_blink<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variante 1 : secousse de fin de niveau --------------------------------------------------------
+// --- variant 1: end-of-level shake ----------------------------------------------------------------
 
 /// Variant 1 (0xce0f0): places the object at the bottom of the screen, waits, then shakes the camera with
 /// shake tables (0xd0b10, 0xd0b20) while launching effects; the conductor (`+0x4c`)
@@ -437,7 +437,7 @@ fn scene_scroll_follow<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variante 5 : chargeur de blocs ---------------------------------------------------------------------
+// --- variant 5: block loader ---------------------------------------------------------------------------
 
 /// Variant 5 (0xce64a): loads two block grids (0xce686 + 4 × `+0x2f`) into scroll 3.
 fn block_loader<R: Bench>(x: &mut Cx<'_, R>) {

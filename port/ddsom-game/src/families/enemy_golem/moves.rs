@@ -101,7 +101,7 @@ fn back_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     }
 }
 
-/// +6 = 4 : bond en avant (vitesse ±0x200).
+/// +6 = 4: leap forward (speed ±0x200).
 fn forward_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),

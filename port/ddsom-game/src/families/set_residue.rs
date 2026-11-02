@@ -15,7 +15,7 @@ const COLUMNS: [u32; 3] = [0x91_215c, 0x91_2160, 0x91_2164];
 const COLUMN_ROWS: u32 = 44;
 /// Step of one row of the buffer.
 const ROW: u32 = 0x80;
-/// Tuile vide (code 0x20, attribut 0).
+/// Empty tile (code 0x20, attribute 0).
 const BLANK: u32 = 0x20_0000;
 
 /// Clears the three columns of the tile buffer; returns the end of the last one (A1 of the original).

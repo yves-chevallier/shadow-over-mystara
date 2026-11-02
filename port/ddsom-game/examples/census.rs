@@ -184,7 +184,7 @@ fn principal() {
         }
     }
     println!("# dispatch table entries");
-    println!("classe type adresse native appels appels_68k instr_68k hors_contrat cessions");
+    println!("class type address native calls calls_68k instr_68k outside_contract cessions");
     for &(name, kind, entry, native, duplicate) in &lines {
         let b = summaries.get(&entry);
         let detail = match (native, b) {

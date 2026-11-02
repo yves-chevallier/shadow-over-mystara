@@ -87,10 +87,10 @@ fn gaps(c1: &Cpu, b1: &Cps2Bus, c2: &Cpu, b2: &Cps2Bus) -> Vec<String> {
     let mut d = Vec::new();
     ddsom_game::mem::diff_bus(b1, b2, IGNORED, &mut d);
     if c1.a[0] != c2.a[0] {
-        d.push(format!("a0={:08x} au lieu de {:08x}", c1.a[0], c2.a[0]));
+        d.push(format!("a0={:08x} instead of {:08x}", c1.a[0], c2.a[0]));
     }
     if c1.d[7] as u16 != c2.d[7] as u16 {
-        d.push(format!("d7={:08x} au lieu de {:08x}", c1.d[7], c2.d[7]));
+        d.push(format!("d7={:08x} instead of {:08x}", c1.d[7], c2.d[7]));
     }
     d
 }

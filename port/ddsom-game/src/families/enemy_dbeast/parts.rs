@@ -406,7 +406,7 @@ pub(super) fn bound_y_land<R: Bench>(x: &mut Cx<'_, R>) {
     play(x, 0xf);
 }
 
-/// +6 = 12 (0x7282c) : bond en profondeur vers l'avant.
+/// +6 = 12 (0x7282c): leap forward in depth.
 fn bound_x<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {

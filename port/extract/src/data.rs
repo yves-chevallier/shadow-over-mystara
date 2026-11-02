@@ -80,7 +80,7 @@ pub fn save(rom: &Program, path: &Path, regions: Vec<Region>, specs: &[Spec], te
         }
         assert_eq!(at, r.end, "region {}: end", r.name);
     }
-    eprintln!("{} : {} tables, {} textes", path.display(), tables.len(), texts.len());
+    eprintln!("{}: {} tables, {} texts", path.display(), tables.len(), texts.len());
     std::fs::create_dir_all(path.parent().unwrap())?;
     json::save(path, &DataFile { regions, tables, texts }, 4)
 }

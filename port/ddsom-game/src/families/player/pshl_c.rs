@@ -13,7 +13,7 @@ fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
 }
 
-/// Compteurs d'objets en vie (`A5-0x5fba`, `-0x5fb8`, `-0x5fb6`, `-0x5fb4`) : adresses absolues.
+/// Counters of live objects (`A5-0x5fba`, `-0x5fb8`, `-0x5fb6`, `-0x5fb4`): absolute addresses.
 const COUNTER_14: u32 = 0xff2046;
 const COUNTER_15: u32 = 0xff2048;
 const COUNTER_16: u32 = 0xff204a;

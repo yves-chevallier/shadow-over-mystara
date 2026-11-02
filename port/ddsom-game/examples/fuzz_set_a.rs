@@ -223,7 +223,7 @@ fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
         let v = if rng.next() % 5 == 0 { colour(rng) } else { colour(rng) & 0xf0ff | (i as u16 & 0xf00) };
         wr16(b, 0x91c000 + 2 * i, v);
     }
-    // palettes cibles en RAM (0xff1190, 512 couleurs)
+    // target palettes in RAM (0xff1190, 512 colours)
     for i in 0..512u32 {
         wr16(b, 0xff1190 + 2 * i, colour(rng));
     }
@@ -684,7 +684,7 @@ fn main() {
         "video" => (rng_video, 0xb40..0x1d100),
         "camera" => (rng_camera, 0x2f000..0x33400),
         _ => {
-            eprintln!("groupe inconnu : {group}");
+            eprintln!("unknown group: {group}");
             std::process::exit(2);
         }
     };
@@ -716,7 +716,7 @@ fn main() {
                 let var = ddsom_game::mem::rd16(b, A5 + 0x70);
                 let copy: Vec<u8> = (0..18).map(|i| ddsom_game::mem::rd8(b, 0xff1d8e + i)).collect();
                 let block: Vec<u8> = (0..18).map(|i| ddsom_game::mem::rd8(b, c.a[6] + i)).collect();
-                format!(" var={var} copie={copy:02x?} defauts={block:02x?}")
+                format!(" var={var} copy={copy:02x?} defaults={block:02x?}")
             } else if *group == "camera" {
                 let cam = c.a[0];
                 let fields: Vec<String> = [0x08u32, 0x0c, 0x10, 0x14, 0x20, 0x2e, 0x34, 0x40]

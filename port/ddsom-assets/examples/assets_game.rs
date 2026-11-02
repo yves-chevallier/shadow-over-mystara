@@ -61,5 +61,5 @@ fn main() {
     enc.set_depth(png::BitDepth::Eight);
     let rgb: Vec<u8> = image.iter().flatten().copied().collect();
     enc.write_header().unwrap().write_image_data(&rgb).unwrap();
-    println!("IDENTIQUE: {frames} frames ({non_blank} not uniform), {audio} audio samples compared, last frame in {out}");
+    println!("IDENTICAL: {frames} frames ({non_blank} not uniform), {audio} audio samples compared, last frame in {out}");
 }

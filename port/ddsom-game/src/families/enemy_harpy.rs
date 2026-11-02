@@ -254,7 +254,7 @@ fn fly_loop_b<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Variante 8 (0x75aa2) : vol au premier plan.
+/// Variant 8 (0x75aa2): flight in the foreground.
 fn fly_front<R: Bench>(x: &mut Cx<'_, R>) {
     move_xz_table(x);
     step(x);

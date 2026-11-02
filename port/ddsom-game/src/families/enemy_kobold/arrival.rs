@@ -157,7 +157,7 @@ fn somersault<R: Bench>(x: &mut Cx<'_, R>, variant: u8, vx2: i16, anim: u32) {
     }
 }
 
-/// +6 = 10 : chute d'en haut.
+/// +6 = 10: fall from above.
 fn drop_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {

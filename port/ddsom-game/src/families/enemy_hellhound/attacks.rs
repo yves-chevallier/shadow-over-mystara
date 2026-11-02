@@ -48,7 +48,7 @@ fn hold<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
     x.anim_step();
 }
 
-/// 0x61eb0 : fin de l'animation d'un coup → suite (0x63790).
+/// 0x61eb0: end of a hit animation → next (0x63790).
 fn step_then_after<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         after_strike(x);

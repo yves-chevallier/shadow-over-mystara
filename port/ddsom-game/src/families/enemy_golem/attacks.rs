@@ -182,7 +182,7 @@ fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x67e46 : descente jusqu'au sol.
+/// 0x67e46: descent down to the ground.
 fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     x.anim_step();

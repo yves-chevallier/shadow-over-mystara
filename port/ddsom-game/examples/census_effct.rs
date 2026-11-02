@@ -41,7 +41,7 @@ fn trace(pc: u32) {
     if ZONE.contains(&pc) {
         PCS.with(|p| p.borrow_mut().insert(pc));
     }
-    let site = ddsom_game::call_site().map_or(("hors appel".to_string(), 0), |(l, r)| (format!("{}:{}", l.file().rsplit('/').next().unwrap(), l.line()), r));
+    let site = ddsom_game::call_site().map_or(("outside call".to_string(), 0), |(l, r)| (format!("{}:{}", l.file().rsplit('/').next().unwrap(), l.line()), r));
     SITES.with(|s| s.borrow_mut().insert(site));
 }
 
@@ -100,7 +100,7 @@ fn principal() {
             println!("TYPE {t} {entry:06x}: no native");
             continue;
         }
-        // (variante, site, routine) -> (nombre de trajectoires, exemple)
+        // (variant, site, routine) -> (number of trajectories, example)
         let mut reading: BTreeMap<(u32, String, u32), (u32, String)> = BTreeMap::new();
         let mut zone: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
         let mut panics = 0;

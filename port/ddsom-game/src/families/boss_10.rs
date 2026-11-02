@@ -7,7 +7,7 @@
 //! | `+5` | Role |
 //! |---|---|
 //! | 0 | opening: waits for the scene (`A5+0x2e` = 6), creates its two companions, introduces itself |
-//! | 2 | combat : attente (`+6` = 0), demi-tour (2), marche (4), saut (6) |
+//! | 2 | fight: wait (`+6` = 0), U-turn (2), walk (4), jump (6) |
 //! | 4 | ranged shot: recovery (`+6` = 0), shot with cutscene (2) |
 //! | 6 | waiting with no player |
 //! | state 4 | hit: reactions (table 0x8d176 of which 0x8d294 is specific), get-up, death |
@@ -569,7 +569,7 @@ fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-/// 0x8d57a : plus de PV ? Passe alors au groupe 6 (mort).
+/// 0x8d57a: no HP left? Then goes to group 6 (death).
 fn out_of_hp<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if tst16(x, f::HP).gt() {
         return false;

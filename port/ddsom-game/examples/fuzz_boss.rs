@@ -1671,7 +1671,7 @@ fn main() {
         total += st.mismatches;
         println!("  {name:28} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
-    println!("{tests} appels de gestionnaires");
+    println!("{tests} handler calls");
     if let Ok(file) = std::env::var("DDSOM_COUVERTURE") {
         let text: Vec<String> = seen.iter().map(|a| format!("{a:06x}")).collect();
         std::fs::write(file, text.join("\n")).expect("coverage write");

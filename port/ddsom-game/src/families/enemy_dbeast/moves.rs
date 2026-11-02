@@ -21,7 +21,7 @@ pub(super) fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Repos debout pendant 16 images avant de repartir (0x73ca6).
+/// Standing rest for 16 frames before moving off again (0x73ca6).
 fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
@@ -106,7 +106,7 @@ fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
     engage(x);
 }
 
-/// +6 = 2 (0x73d26) : bond vers un joueur, de face.
+/// +6 = 2 (0x73d26): leap towards a player, facing.
 fn leap_to_player<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => jump_toward(x),

@@ -435,7 +435,7 @@ use crate::objects::Current;
 
     /// Opened, sub-substate 0 (`0xd9b9a`): a locked chest consumes a key (except for class
     /// 5) or refuses to open; the special effect is created once; then opening animation and
-    /// butin au premier coup.
+    /// loot on the first hit.
     fn opening<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::LOCK) != 0 && class(x) != 5 {
             let keys = crate::mem::rd8(x.b, KEYS);

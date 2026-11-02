@@ -296,10 +296,10 @@ fn test(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: bool
         Ok(()) => {}
     }
     if c1.d[7] != c2.d[7] {
-        diffs.push(format!("d7={:08x} au lieu de {:08x}", c1.d[7], c2.d[7]));
+        diffs.push(format!("d7={:08x} instead of {:08x}", c1.d[7], c2.d[7]));
     }
     if c1.a[0] != c2.a[0] {
-        diffs.push(format!("a0={:08x} au lieu de {:08x}", c1.a[0], c2.a[0]));
+        diffs.push(format!("a0={:08x} instead of {:08x}", c1.a[0], c2.a[0]));
     }
     let sp = c2.a[7] & 0xff_ffff;
     ddsom_game::mem::diff_bus(&b1, &b2, sp.saturating_sub(0x400)..sp, &mut diffs);

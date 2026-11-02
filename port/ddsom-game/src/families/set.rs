@@ -61,7 +61,7 @@ mod util {
     /// First player record (A5 + 0x5de), four players spaced 0x200 bytes apart.
     pub const PLAYERS: u32 = A5 + 0x5de;
     pub const PLAYER_STRIDE: u32 = 0x200;
-    /// Champs d'un joueur : actif (octet), points de vie (mot).
+    /// Fields of a player: active (byte), hit points (word).
     pub const P_ACTIVE: u32 = 0x0;
     pub const P_LIFE: u32 = 0x62;
     /// A5 variable: the game is in progress (non-zero).
@@ -263,7 +263,7 @@ mod palette_anim {
 /// camera abscissa `A5+0x506` has reached 0x1c80, it puts all living players in state 2
 /// (player's byte `+0`), raises `A5+0x42` and `A5+0x4a`, sets `A5+0x2c` to 0x10000000 and goes to
 /// state 4 (release). Variant `+3` has no effect: the original's two branches are
-/// identiques.
+/// identical.
 mod scene_trigger {
     use super::*;
     use util::*;
@@ -315,7 +315,7 @@ mod scene_trigger {
 /// (0x20 if `+0x2f` is non-zero). At the end of the script, the object restarts from state 0 if `+0x38` is
 /// non-zero, otherwise goes to state 4 (release). Type 4 stops during the game pause and when
 /// the object is suspended; type 6 ignores the pause, but leaves untouched the cells whose
-/// premier mot vaut 0x1800.
+/// first word is 0x1800.
 mod tile_anim {
     use super::*;
     use crate::mem::{rd16, rd32, wr32};
@@ -415,7 +415,7 @@ mod tile_anim {
     }
 }
 
-/// Type 1 (0xbc518) : meneur de vagues d'ennemis (h), actif seulement en partie (`A5+0x35`).
+/// Type 1 (0xbc518): leader of enemy waves (h), active only in a game (`A5+0x35`).
 ///
 /// A chief (the owner `+0x46`, an ENEMY object) calls for waves of three enemies. The leader
 /// first waits 180 frames (`+0x22` counts down from 0xf0 to 0x3c, then it locks the camera through
@@ -595,7 +595,7 @@ mod wave_leader {
         }
     }
 
-    /// Le chef compte un ennemi de moins.
+    /// The leader counts one enemy less.
     fn release_one<R: Bench>(x: &mut Cx<'_, R>, boss: Obj) {
         let n = boss.u16(x.b, BOSS_COUNT).wrapping_sub(1);
         boss.set_u16(x.b, BOSS_COUNT, n);
@@ -801,7 +801,7 @@ mod exit_gate {
     const IGNORE_DEPTH: u32 = 0x1b;
     const BONUS: u32 = 0x24;
 
-    // --- champs d'un joueur ---
+    // --- fields of a player ---
     const P_ACTIVE: u32 = 0x0;
     const P_STATE: u32 = 0x4;
     const P_X: u32 = 0x8;
@@ -838,7 +838,7 @@ mod exit_gate {
         }
     }
 
-    // --- conditions communes (lecture seule) ---------------------------------------------------------
+    // --- common conditions (read only) --------------------------------------------------------------
 
     fn players() -> impl Iterator<Item = Obj> {
         util::players()
@@ -847,7 +847,7 @@ mod exit_gate {
     // --- changement de zone (0xcb844) ---------------------------------------------------------------
 
     /// Text rectangle cleared on zone change and on return (`text::CLEAR_BOX`, A4 = column, row,
-    /// largeur, hauteur).
+    /// width, height).
     const CLEARED_TEXT_BOX: u32 = 0xcbc02;
     /// Accumulated exit bonus (byte at A5 - 0x5b20).
     const BONUS_TOTAL: u32 = A5 - 0x5b20;

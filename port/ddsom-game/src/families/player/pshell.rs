@@ -53,7 +53,7 @@ pub mod a5 {
     pub const FRAME: u32 = 0x6f;
     /// Free slots of the PEFF pool.
     pub const PEFF_FREE: u32 = 0x7e60;
-    /// Jeu en pause (octet non nul).
+    /// Game paused (non-zero byte).
     pub const PAUSED: u32 = 0x42;
 }
 

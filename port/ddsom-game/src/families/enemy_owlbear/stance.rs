@@ -49,7 +49,7 @@ pub(super) fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x5daa6 : marche vers l'avant (animation 2, vitesse 0xb) pendant `0x24` images.
+/// 0x5daa6: walks forward (animation 2, speed 0xb) for `0x24` frames.
 pub(super) fn walk_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(TIMER, 0x24);
@@ -297,7 +297,7 @@ pub(super) fn next_move<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- substate 10: rest -----------------------------------------------------------------------
 
-/// Repos : attend qu'un joueur soit en vie (`+6` = 0 seulement).
+/// Rest: waits until a player is alive (`+6` = 0 only).
 pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         match x.u8(0x7) {

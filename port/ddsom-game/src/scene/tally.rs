@@ -524,7 +524,7 @@ fn announce(x: &mut Ctx, first: u16) -> Flow {
     if t & 2 != 0 {
         sign(x, first);
     } else {
-        // 0x0f5ccc : quatre colonnes vides
+        // 0x0f5ccc: four empty columns
         let w = winner(x);
         let at = panel_at(x, rom::PANEL_AT, w, false);
         tiles::blank_columns(x.b, at, 4);

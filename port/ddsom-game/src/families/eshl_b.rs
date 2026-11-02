@@ -72,7 +72,7 @@ fn speed_table<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Type 15 (0x9fe0a) : arme d'un ennemi composite, sous-objet d'un sous-objet (h)
+// Type 15 (0x9fe0a): weapon of a composite enemy, sub-object of a sub-object (h)
 // ---------------------------------------------------------------------------------------------
 
 /// Piece thrown by a part of a composite enemy (ESHL type 14 then its shot): the owner
@@ -530,7 +530,7 @@ mod shot17 {
         x.reinsert();
     }
 
-    /// Charge : animation 0 pendant 60 images.
+    /// Charge: animation 0 for 60 frames.
     fn charge<R: Bench>(x: &mut Cx<'_, R>) {
         let parent = ptr(x, 0x56);
         if (parent.u8(x.b, 0x4) as i8) >= 4 {
@@ -874,7 +874,7 @@ mod shot20 {
     const ANIMS: u32 = 0x17d7d2;
     const ANIMS_STRIKE: u32 = 0x17d7e0;
     const ATTACH: u32 = 0xa0f86;
-    /// Animation d'attente selon un tirage 0..7.
+    /// Wait animation by a 0..7 draw.
     const IDLE_ANIMS: u32 = 0xa0d60;
     /// Wait (frames) of variant 1 from a 0..7 draw.
     const DELAYS: u32 = 0xa0e2c;
@@ -1296,7 +1296,7 @@ mod shot24 {
     const ANIMS: u32 = 0x16e920;
     /// Offsets (X, Z, Y) of the 16 effects (8 bytes per row).
     const OFFSETS: u32 = 0xa1438;
-    /// Nombre d'ennemis selon (A5+0x7f92 / 2) * 4 + A5+0x35.
+    /// Number of enemies by (A5+0x7f92 / 2) * 4 + A5+0x35.
     const GROUP_SIZES: u32 = 0xa15ae;
     /// Relative positions (X, Y) of the enemies: 2 pairs per row, drawn at random.
     const GROUP_OFFSETS: u32 = 0xa15ee;

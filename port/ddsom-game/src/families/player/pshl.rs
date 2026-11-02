@@ -424,7 +424,7 @@ mod bouncer {
                 x.set16(0xc, 0);
                 bounce = true;
             } else {
-                // contre un mur : demi-tour
+                // against a wall: U-turn
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
                 let vx = x.u16(0x14);

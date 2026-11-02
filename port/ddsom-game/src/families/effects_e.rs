@@ -23,7 +23,7 @@ mod f {
 }
 
 const ANIM_SET: u32 = 0x1c03a6;
-/// Joueurs : quatre enregistrements de 0x200 octets.
+/// Players: four records of 0x200 bytes.
 const PLAYERS: u32 = A5 + 0x5de;
 
 fn players() -> impl DoubleEndedIterator<Item = Obj> {

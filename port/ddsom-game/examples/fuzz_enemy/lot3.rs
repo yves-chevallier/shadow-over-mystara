@@ -615,7 +615,7 @@ fn troglodyte(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     for off in [0xa0u32, 0xa1] {
         wr8(b, obj + off, [0u8, 1, 0xe, 0xdf, 0xe0, 0xf0, 0x7f, 0xee, rng.next() as u8][rng.next() as usize % 9]);
     }
-    // clignotement : phase, alternance, attente, compteurs
+    // blinking: phase, alternation, wait, counters
     wr8(b, obj + 0xa5, [0xffu8, 0xff, 0, 1, 2, 3][rng.next() as usize % 6]);
     wr8(b, obj + 0xa6, (rng.next() % 2) as u8);
     wr8(b, obj + 0xa7, (rng.next() % 2) as u8);
@@ -746,7 +746,7 @@ fn gargoyle(b: &mut Bus, rng: &mut Rng, obj: u32, fresh: bool) {
     if rng.next() % 8 == 0 {
         wr16(b, obj + 0x50, 0);
     }
-    // victime saisie
+    // seized victim
     let victim = 0x85de + 0x200 * (rng.next() % 4) as u16;
     wr16(b, obj + 0x54, if rng.next() % 5 == 0 { 0 } else { victim });
     let v = 0xff0000 | victim as u32;

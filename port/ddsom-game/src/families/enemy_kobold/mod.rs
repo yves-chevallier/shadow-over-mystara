@@ -36,7 +36,7 @@ pub(self) mod g {
     pub const AI_LUNGE: u32 = 0x77;
     pub const AI_SHOT: u32 = 0x78;
     pub const SHOT_KIND: u32 = 0x79;
-    /// Minuterie (mot) d'un geste.
+    /// Timer (word) of a gesture.
     pub const TIMER: u32 = 0xa0;
     pub const LOOK: u32 = 0xa2;
     pub const LOOK_PREV: u32 = 0xa3;

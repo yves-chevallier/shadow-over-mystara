@@ -122,7 +122,7 @@ struct Mutation {
 }
 
 /// Key of a field: (pool, object type, offset in the slot) for objects, (player, offset) for
-/// joueurs, sinon l'adresse.
+/// players, otherwise the address.
 fn key(b: &Cps2Bus, a: u32) -> u32 {
     use ddsom_game::objects::pools::POOLS;
     for (i, p) in POOLS.iter().enumerate() {
@@ -141,7 +141,7 @@ fn key(b: &Cps2Bus, a: u32) -> u32 {
 
 /// Existence (`+0`) and type (`+2`) bytes of the pool objects: an object is neither born nor changes type under
 /// a handler (its other fields would not have the state of this type, and the dispatch loop would leave
-/// registres d'un autre gestionnaire).
+/// registers of another handler).
 fn existence_or_type(a: u32) -> bool {
     use ddsom_game::objects::pools::POOLS;
     POOLS.iter().any(|p| {
@@ -663,17 +663,17 @@ fn compare(n: &ddsom_game::Native, c0: &Cpu, b0: &Cps2Bus, o: &Original) -> Resu
     let (c2, b2) = (&o.c, &o.b);
     for i in 0..8 {
         if n.outputs & ddsom_game::regs::d(i as u32) != 0 && c1.d[i] != c2.d[i] {
-            diffs.push(format!("d{i}={:08x} au lieu de {:08x}", c1.d[i], c2.d[i]));
+            diffs.push(format!("d{i}={:08x} instead of {:08x}", c1.d[i], c2.d[i]));
         }
         if (n.outputs & ddsom_game::regs::a(i as u32) != 0 || i == 7) && c1.a[i] != c2.a[i] {
-            diffs.push(format!("a{i}={:08x} au lieu de {:08x}", c1.a[i], c2.a[i]));
+            diffs.push(format!("a{i}={:08x} instead of {:08x}", c1.a[i], c2.a[i]));
         }
     }
     if n.outputs & ddsom_game::regs::CCR != 0 && c1.sr & 0x1f != c2.sr & 0x1f {
-        diffs.push(format!("ccr={:02x} au lieu de {:02x}", c1.sr & 0x1f, c2.sr & 0x1f));
+        diffs.push(format!("ccr={:02x} instead of {:02x}", c1.sr & 0x1f, c2.sr & 0x1f));
     }
     if c1.pc != c2.pc {
-        diffs.push(format!("pc={:06x} au lieu de {:06x}", c1.pc, c2.pc));
+        diffs.push(format!("pc={:06x} instead of {:06x}", c1.pc, c2.pc));
     }
     // original kernel RAM: the native keeps the task table in Rust; compared separately
     if let Some(t) = ddsom_game::tasks::table::read(&b1) {
@@ -794,7 +794,7 @@ fn test(e: &mut State, entry: u32, ib: usize, muts: Vec<Mutation>) {
     let o = run_original(&c0, &b0, max_step, None).unwrap_or(o);
     let r = compare(n, &c0, &b0, &o);
     let text = format!(
-        "{} ; perturbations [{}] ; A0={:06x} A6={:06x} D0={:08x} D1={:08x} ; chemin neuf {}",
+        "{} ; perturbations [{}] ; A0={:06x} A6={:06x} D0={:08x} D1={:08x} ; new path {}",
         match &r {
             Err(m) => format!("PANIQUE {m}"),
             Ok(d) => d.join(", "),

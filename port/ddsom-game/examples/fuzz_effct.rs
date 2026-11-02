@@ -127,10 +127,10 @@ fn compare(orig: &(Cpu, Cps2Bus), c: &Cpu, b: &Cps2Bus) -> Vec<String> {
     let (co, bo) = orig;
     let mut d = Vec::new();
     if co.a[0] != c.a[0] {
-        d.push(format!("a0={:08x} au lieu de {:08x}", c.a[0], co.a[0]));
+        d.push(format!("a0={:08x} instead of {:08x}", c.a[0], co.a[0]));
     }
     if co.d[7] != c.d[7] {
-        d.push(format!("d7={:08x} au lieu de {:08x}", c.d[7], co.d[7]));
+        d.push(format!("d7={:08x} instead of {:08x}", c.d[7], co.d[7]));
     }
     let sp = co.a[7] & 0xff_ffff;
     // private stack of the sound wrappers (pointer at FF2A1A), like `mem::diff_bus`
@@ -139,12 +139,12 @@ fn compare(orig: &(Cpu, Cps2Bus), c: &Cpu, b: &Cps2Bus) -> Vec<String> {
         let a = 0xff0000 + 2 * i as u32;
         let dead = (sp.saturating_sub(0x400)..sp).contains(&a) || (private.saturating_sub(0x400)..private).contains(&a) || a < 0xff0400;
         if bo.ram[i] != b.ram[i] && !dead && d.len() < 8 {
-            d.push(format!("ram[{a:06x}]={:04x} au lieu de {:04x}", b.ram[i], bo.ram[i]));
+            d.push(format!("ram[{a:06x}]={:04x} instead of {:04x}", b.ram[i], bo.ram[i]));
         }
     }
     for (name, x, y) in [("gfxram", &b.gfxram, &bo.gfxram), ("palette", &b.palette, &bo.palette), ("objram0", &b.objram[0], &bo.objram[0])] {
         if let Some(i) = x.iter().zip(y.iter()).position(|(p, q)| p != q) {
-            d.push(format!("{name}[{i:x}]={:04x} au lieu de {:04x}", x[i], y[i]));
+            d.push(format!("{name}[{i:x}]={:04x} instead of {:04x}", x[i], y[i]));
         }
     }
     d

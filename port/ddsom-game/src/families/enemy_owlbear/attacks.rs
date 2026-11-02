@@ -425,7 +425,7 @@ fn rush_b<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- second series (substate 6) ----------------------------------------------------------------
 
-/// 0x5e64a : petit bond en avant.
+/// 0x5e64a: small leap forward.
 fn hop_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     let vx = if x.u8(f::FLIP) != 0 { -0x200 } else { 0x200 };

@@ -204,15 +204,15 @@ fn main() {
             if std::env::var_os("FUZZ_REGISTRES").is_some() {
                 for i in 0..8 {
                     if c.d[i] != c2.d[i] {
-                        diffs.push(format!("d{i}={:08x} au lieu de {:08x}", c.d[i], c2.d[i]));
+                        diffs.push(format!("d{i}={:08x} instead of {:08x}", c.d[i], c2.d[i]));
                     }
                     if i < 7 && c.a[i] != c2.a[i] {
-                        diffs.push(format!("a{i}={:08x} au lieu de {:08x}", c.a[i], c2.a[i]));
+                        diffs.push(format!("a{i}={:08x} instead of {:08x}", c.a[i], c2.a[i]));
                     }
                 }
             }
             if c.pc != c2.pc {
-                diffs.push(format!("pc={:06x} au lieu de {:06x}", c.pc, c2.pc));
+                diffs.push(format!("pc={:06x} instead of {:06x}", c.pc, c2.pc));
             }
             if !diffs.is_empty() {
                 gaps += 1;

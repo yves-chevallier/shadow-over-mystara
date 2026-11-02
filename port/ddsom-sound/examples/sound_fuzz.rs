@@ -77,7 +77,7 @@ fn summary(r: &Report) {
         r.real.total, r.drv.total, r.matched_main, r.matched_acks, r.spill_intervals
     );
     match &r.first_divergence {
-        None if r.identical() => println!("IDENTIQUE"),
+        None if r.identical() => println!("IDENTICAL"),
         None => println!("identical prefix, different lengths"),
         Some(d) => println!("DIVERGENCE : {d}"),
     }

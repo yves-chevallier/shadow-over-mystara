@@ -27,9 +27,9 @@ mod moves;
 
 pub(self) mod g {
     pub const GROUP: u32 = 0x2f;
-    /// Temps (mot) de l'animation courante.
+    /// Time (word) of the current animation.
     pub const ANIM_TIME: u32 = 0x30;
-    /// Drapeau de fin (mot) de l'animation courante.
+    /// End flag (word) of the current animation.
     pub const ANIM_END: u32 = 0x32;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;

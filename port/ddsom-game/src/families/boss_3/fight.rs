@@ -379,7 +379,7 @@ fn sweep<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-// --- groupe 6 : ronde, groupe 8 : envol -------------------------------------------------------------
+// --- group 6: round, group 8: takeoff -------------------------------------------------------------
 
 /// Waypoints of the patrol, per quarter of the screen (words X, Z, bytes angle and direction; PC-relative).
 const ROUND_POINTS: u32 = 0x81876;
@@ -519,7 +519,7 @@ pub(super) fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupe 10 : attente --------------------------------------------------------------------------
+// --- group 10: wait ------------------------------------------------------------------------------
 
 /// 0x808d4: a player comes back: low flight or approach; otherwise the boss stays in its pose (on the ground or in the
 /// air).
@@ -610,7 +610,7 @@ pub(super) fn carrying<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupe 14 : riposte ----------------------------------------------------------------------------
+// --- group 14: riposte ----------------------------------------------------------------------------
 
 /// 0x80a5c: counterattack drawn according to difficulty (0xffda): attack 16 (diving rush) or 20 (low sweep).
 pub(super) fn counter<R: Bench>(x: &mut Cx<'_, R>) {

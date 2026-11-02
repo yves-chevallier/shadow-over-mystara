@@ -108,7 +108,7 @@ fn leap_start<R: Bench>(x: &mut Cx<'_, R>, vx: i16, vz: u16, anim: Option<u8>) {
     }
 }
 
-/// 0x73b18 : petit bond en avant.
+/// 0x73b18: small leap forward.
 fn short_leap<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => leap_start(x, 0x80, 0x2c0, None),

@@ -54,7 +54,7 @@ mod anims {
     pub const BLINK: u32 = 0x1bc77c;
 }
 
-/// Joueurs : quatre enregistrements de 0x200 octets.
+/// Players: four records of 0x200 bytes.
 const PLAYERS: u32 = A5 + 0x5de;
 const PLAYER_STRIDE: u32 = 0x200;
 /// Jeu en pause.

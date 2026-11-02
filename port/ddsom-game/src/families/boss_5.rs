@@ -14,7 +14,7 @@
 //! | 0x18 | chase: turns toward the target then grabs |
 //! | state 4 | hit: reactions, whirlwind fall (`+0x49` = 0xa8), death |
 //!
-//! Animations : 0x175da6 (corps), 0x175dc4 (attaques), 0x175e0c (chute, mort).
+//! Animations: 0x175da6 (body), 0x175dc4 (attacks), 0x175e0c (fall, death).
 
 use crate::families::cx::Bench;
 use super::boss_common::*;
@@ -485,7 +485,7 @@ fn chase_stop<R: Bench>(x: &mut Cx<'_, R>) {
     end_of_script(x);
 }
 
-// --- choix de l'action suivante (0x83e3e) ----------------------------------------------------------
+// --- choice of the next action (0x83e3e) ----------------------------------------------------------
 
 /// Group `+5` and angle from the target's position: rows of table 0x83f4e (2 bytes per entry:
 /// angle and group, duration and half-turn).

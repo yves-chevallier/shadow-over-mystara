@@ -63,7 +63,7 @@ mod rom {
 }
 
 
-/// Joueurs : quatre enregistrements de 0x200 octets.
+/// Players: four records of 0x200 bytes.
 const PLAYERS: u32 = A5 + 0x5de;
 const PLAYER_STRIDE: u32 = 0x200;
 
@@ -93,7 +93,7 @@ fn in_box<R: Bench>(x: &mut Cx<'_, R>, o: Obj, (dx, half_w, dy, half_d): (u16, u
 
 mod shop {
     /// Tables indexed by the variant: zone (4 words, data), price (long), item (word), announcement
-    /// (mot, espace programme), animation (mot).
+    /// (word, program space), animation (word).
     pub const ZONES: u32 = 0xaf7d6;
     pub const PRICES: u32 = 0xaf566;
     pub const ITEMS: u32 = 0xaf73a;
@@ -114,7 +114,7 @@ mod shop {
     pub const NOT_CLASSES_4_1: u32 = 0xafce8;
     pub const NOT_CLASS_1: u32 = 0xafd00;
     /// Shop messages (`A5-0x554e`): insufficient gold, class refusal, full life,
-    /// objet au maximum, inventaire plein.
+    /// object at maximum, inventory full.
     pub const NO_GOLD: u16 = 0x82;
     pub const WRONG_CLASS: u16 = 0x84;
     pub const FULL_LIFE: u16 = 0x85;
@@ -197,7 +197,7 @@ fn shop_watch<R: Bench>(x: &mut Cx<'_, R>, buy: fn(&mut Cx<'_, R>, Obj, u32)) {
     }
 }
 
-/// Joueur d'un acheteur (`+0x50`).
+/// Player of a buyer (`+0x50`).
 fn buyer_player<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) -> Obj {
     let p = buyer.u16(x.b, 0x50);
     Obj(p as i16 as i32 as u32 & 0xff_ffff)
@@ -370,7 +370,7 @@ mod switch {
     pub const BARRIER: u32 = 0x42;
     /// "Touched" flag read by the barrier.
     pub const PRESSED: u32 = 0x30;
-    /// Pool BOX : 21 emplacements de 0x80 octets.
+    /// BOX pool: 21 slots of 0x80 bytes.
     pub const BOXES: u32 = 0xffeede;
 }
 
@@ -2619,7 +2619,7 @@ fn fish_swim<R: Bench>(x: &mut Cx<'_, R>) {
 mod lob {
     pub const ANIM_SET: u32 = 0x16f58c;
     /// Per variant: target (x, y) relative to the camera (words), speed table (bytes), speed
-    /// (long, 16.16), espace programme.
+    /// (long, 16.16), program space.
     pub const TARGETS: u32 = 0xb3762;
     pub const SPEED_TABLES: u32 = 0xb3614;
     pub const SPEEDS: u32 = 0xb361e;
@@ -4506,7 +4506,7 @@ fn result_card<R: Bench>(x: &mut Cx<'_, R>) {
 mod toss {
     pub const ANIM_SET: u32 = 0x1944f0;
     /// Per kind: speeds (x, az) (words) and start / landing sound (longs, 0: none),
-    /// espace programme.
+    /// program space.
     pub const SPEEDS: u32 = 0xb3cbc;
     pub const SOUNDS_START: u32 = 0xb3cd0;
     pub const SOUNDS_LAND: u32 = 0xb3d52;
@@ -4550,7 +4550,7 @@ fn toss<R: Bench>(x: &mut Cx<'_, R>) {
             0 => {
                 x.anim_step();
                 if x.move_z().le() {
-                    // au sol
+                    // on the ground
                     x.add8(f::SUB_STATE, 4);
                     x.set16(Obj::Z, 0);
                     return toss_land(x);
@@ -4653,7 +4653,7 @@ fn scene_timer<R: Bench>(x: &mut Cx<'_, R>) {
 
 // ---------------------------------------------------------------------------------------------
 // Type 69: silhouette that paces at the top of the screen; type 64: thrown spark that
-// retombe sous l'horizon
+// falls back below the horizon
 // ---------------------------------------------------------------------------------------------
 
 fn pacer<R: Bench>(x: &mut Cx<'_, R>) {

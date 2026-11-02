@@ -158,7 +158,7 @@ pub(super) fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x8d998 : animation de marche selon l'orientation.
+/// 0x8d998: walk animation by orientation.
 fn pose<R: Bench>(x: &mut Cx<'_, R>) {
     let w = x.u16(ANIM_KIND);
     if w == 1 {

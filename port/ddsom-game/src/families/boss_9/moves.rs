@@ -541,7 +541,7 @@ fn volley<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupe 6 : attente --------------------------------------------------------------------------
+// --- group 6: wait ------------------------------------------------------------------------------
 
 /// 0x8b46a: a player comes back: departure.
 pub(super) fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {

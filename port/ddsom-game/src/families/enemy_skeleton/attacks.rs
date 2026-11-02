@@ -194,11 +194,11 @@ fn double_cut<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) enum Leap {
     /// Bond court : coup de type 7.
     Short,
-    /// Grand bond : type 8, plus rapide.
+    /// Big leap: type 8, faster.
     Long,
     /// Leap with turn-around on landing.
     Turning,
-    /// Idem, suivi d'un second coup.
+    /// Same, followed by a second hit.
     TurningCombo,
 }
 
@@ -270,7 +270,7 @@ pub(super) fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x58536 : descente jusqu'au sol.
+/// 0x58536: descent down to the ground.
 pub(super) fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     step(x);

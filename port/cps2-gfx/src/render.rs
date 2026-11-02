@@ -19,7 +19,7 @@ const A_VIDEOCONTROL: usize = 0x22 / 2;
 const B_LAYER_CONTROL: usize = 0x26 / 2;
 const B_PALETTE_CONTROL: usize = 0x30 / 2;
 const LAYER_ENABLE_MASK: [u16; 3] = [0x02, 0x04, 0x08];
-// Sortie objets CPS2 (0x400000)
+// CPS2 object output (0x400000)
 const OUT_PRI: usize = 0x04 / 2;
 const OUT_XOFFS: usize = 0x08 / 2;
 const OUT_YOFFS: usize = 0x0a / 2;

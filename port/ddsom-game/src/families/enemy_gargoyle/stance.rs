@@ -56,7 +56,7 @@ fn charge_b<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(CHARGE, v);
 }
 
-/// 0x65694 / 0x656a6 : nombre de passages avant de changer de geste.
+/// 0x65694 / 0x656a6: number of passes before changing gesture.
 fn wander_a<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
     let v = x.rom8(0x656b8 + r);

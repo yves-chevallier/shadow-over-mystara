@@ -476,7 +476,7 @@ pub(super) fn paused<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupe 12 : joueur saisi ---------------------------------------------------------------------------
+// --- group 12: seized player ---------------------------------------------------------------------------
 
 /// 0x9402a: no prey left, the boss moves away with a leap.
 fn drop_prey<R: Bench>(x: &mut Cx<'_, R>) {

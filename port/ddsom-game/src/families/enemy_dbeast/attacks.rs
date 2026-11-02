@@ -154,7 +154,7 @@ fn random_bit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 // --- the attacks ----------------------------------------------------------------------------------
 
-/// 0x72fdc : coup de patte rapide.
+/// 0x72fdc: fast paw strike.
 fn jab<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
@@ -248,7 +248,7 @@ fn double_strike<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x732b4 : coup de patte suivi, au hasard, d'un second.
+/// 0x732b4: paw strike followed, at random, by a second one.
 fn claw_pair<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => {
@@ -300,7 +300,7 @@ fn leap_strike_b<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// 0x733e8 : saute vers un joueur.
+/// 0x733e8: jumps towards a player.
 fn jump_in<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK, |x, n| match n {
         4 => super::moves::jump_toward(x),

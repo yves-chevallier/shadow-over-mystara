@@ -207,7 +207,7 @@ mod ring0 {
     fn parent<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
-                // attente de l'ouverture de l'anneau
+                // wait for the ring to open
                 x.add8(g::DELAY, 0xff);
                 if x.u8(g::DELAY) == 0 {
                     x.add8(0x5, 2);

@@ -37,7 +37,7 @@ fn image(m: &mut Machine) -> Result<Vec<[u8; 3]>, String> {
 fn gap(r: &Machine, a: &Machine) -> Option<String> {
     let first = |x: &[u16], y: &[u16]| x.iter().zip(y).position(|(p, q)| p != q);
     if let Some(i) = first(&r.bus.ram, &a.bus.ram) {
-        return Some(format!("RAM {:06x} : {:04x} au lieu de {:04x}", 0xff0000 + 2 * i, a.bus.ram[i], r.bus.ram[i]));
+        return Some(format!("RAM {:06x}: {:04x} instead of {:04x}", 0xff0000 + 2 * i, a.bus.ram[i], r.bus.ram[i]));
     }
     if let Some(i) = first(&r.bus.gfxram, &a.bus.gfxram) {
         return Some(format!("GFX RAM {:06x}", 0x900000 + 2 * i));

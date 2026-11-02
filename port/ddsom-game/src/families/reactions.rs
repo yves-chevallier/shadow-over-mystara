@@ -8,7 +8,7 @@
 //! `dead`). The animations and sounds depend on the type (`+2`) and the class (`+0x28`: 2 ENEMY, 4 BOSS),
 //! through ROM tables.
 //!
-//! Champs (en plus de ceux de `enemy_common::f`) : vitesses `+0x14` (X), `+0x16` (profondeur), `+0x18`
+//! Fields (besides those of `enemy_common::f`): speeds `+0x14` (X), `+0x16` (depth), `+0x18`
 //! (height), `+0x1a` (gravity), `+0x1c`/`+0x1e` (secondary); height `+0xc` (long); counter `+0x90`;
 //! liaison en attente `+0x91` (bit 7) vers `+0x2a`/`+0x2b` ; orientation de l'agresseur `+0x4a`.
 
@@ -76,7 +76,7 @@ const BOSS: u8 = 4;
 mod rom {
     /// Animation sets per type (longs read as data; high word zero: own routine, offset).
     pub const ANIM_SETS: u32 = 0x3de58;
-    /// Variante d'animation selon `+0xbf` (octets, relatifs au PC).
+    /// Animation variant by `+0xbf` (bytes, PC-relative).
     pub const ANIM_VARIANTS: u32 = 0x3e28a;
     /// Hit and death sounds per type (PC-relative longs), get-up routine per type.
     pub const HIT_SOUNDS: u32 = 0x3e2ac;
@@ -348,7 +348,7 @@ fn boss_3_hook<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x3be52 : rebond au sol (animation 5).
+/// 0x3be52: bounce on the ground (animation 5).
 fn bounce_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::VY, 0);
     x.set16(f::VZ, 0x300);
@@ -684,7 +684,7 @@ fn uppercut_3<R: Bench>(x: &mut Cx<'_, R>) {
     uppercut(x, 3);
 }
 
-/// 0x3c192 : rebond haut (animation 5).
+/// 0x3c192: high bounce (animation 5).
 fn bounce_high<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
     x.set16(f::VX, 0x300);
@@ -1929,7 +1929,7 @@ fn spin_fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::HEIGHT, 0);
     next_sub(x);
 }
-/// 0x3dbec : rebond haut (60 images, animation 13).
+/// 0x3dbec: high bounce (60 frames, animation 13).
 fn spin_bounce<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
     x.set32(f::VX, 0);

@@ -41,7 +41,7 @@ const SCENE_STEP: u32 = 0x4ff;
 /// Object the scene follows (`A5+0x46`, word).
 const FOCUS: u32 = 0x46;
 
-/// Joueurs : quatre enregistrements de 0x200 octets.
+/// Players: four records of 0x200 bytes.
 const PLAYERS: u32 = A5 + 0x5de;
 
 /// Players present and alive.
@@ -83,7 +83,7 @@ fn new_task<R: Bench>(x: &mut Cx<'_, R>, program: u32, param: u16) {
 mod opening {
     pub const ANIM_SET: u32 = 0x18c04c;
     /// Start position (x, depth) and arrival abscissa (`+0x18`) per variant (words,
-    /// espace programme).
+    /// program space).
     pub const STARTS: u32 = 0xa8602;
     pub const TARGETS: u32 = 0xa8612;
     pub const TARGET: u32 = 0x18;
@@ -351,7 +351,7 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
     let mut step = x.u8(f::SUB_STATE);
     loop {
         match step {
-            // vol en cloche jusqu'au sol
+            // arched flight down to the ground
             0 => {
                 x.anim_step();
                 if x.move_xz().pl() {

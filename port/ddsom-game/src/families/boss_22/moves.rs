@@ -533,7 +533,7 @@ pub(super) fn paused<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- groupe 12 : joueur saisi ---------------------------------------------------------------------
+// --- group 12: seized player ---------------------------------------------------------------------
 
 /// 0x9cade.
 pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {

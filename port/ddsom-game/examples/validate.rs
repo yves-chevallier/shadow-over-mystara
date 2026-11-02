@@ -137,10 +137,10 @@ fn main() {
         let word_under_test = f < STARTUP && ram.len() + gfx <= 1;
         let mut what = Vec::new();
         for &i in ram.iter().take(diff_max).filter(|_| !word_under_test) {
-            what.push(format!("ram {:06x} : {:04x} au lieu de {:04x}", 0xff0000 + 2 * i, ma.bus.ram[i], mb.bus.ram[i]));
+            what.push(format!("ram {:06x}: {:04x} instead of {:04x}", 0xff0000 + 2 * i, ma.bus.ram[i], mb.bus.ram[i]));
         }
         if let Some(i) = first_diff(&ma.bus.gfxram, &mb.bus.gfxram).filter(|_| !word_under_test) {
-            what.push(format!("gfxram {:06x} : {:04x} au lieu de {:04x}", 0x900000 + 2 * i, ma.bus.gfxram[i], mb.bus.gfxram[i]));
+            what.push(format!("gfxram {:06x}: {:04x} instead of {:04x}", 0x900000 + 2 * i, ma.bus.gfxram[i], mb.bus.gfxram[i]));
         }
         if let Some(i) = first_diff(&ma.obj_buffer, &mb.obj_buffer) {
             what.push(format!("sprites, mot {i}"));
@@ -148,7 +148,7 @@ fn main() {
         // the two banks of the object RAM (the bank read by the game is that of the previous frame)
         for k in 0..2 {
             if let Some(i) = first_diff(&ma.bus.objram[k], &mb.bus.objram[k]) {
-                what.push(format!("RAM d'objets, banque {k}, mot {i} : {:04x} au lieu de {:04x}", ma.bus.objram[k][i], mb.bus.objram[k][i]));
+                what.push(format!("object RAM, bank {k}, word {i}: {:04x} instead of {:04x}", ma.bus.objram[k][i], mb.bus.objram[k][i]));
             }
         }
         if let Some(i) = first_diff(&ma.bus.palette, &mb.bus.palette) {

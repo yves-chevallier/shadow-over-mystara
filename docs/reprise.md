@@ -26,6 +26,20 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
 ## Après ces lots
 
 0. **Traduire tout le code en anglais** (règle de l'utilisateur, 2026-11-02 : jamais de français dans le code). Identifiants (renommage outillé, module par module) et commentaires ; comportement inchangé, validation complète comme filet. À lancer quand aucune autre branche n'est ouverte (conflits partout sinon).
+   **Fait** (branche `wt-anglais1`, après fusion de main 53f80d6) : tout `port/` (families compris) et `tools/` sont en anglais :
+   * identifiants renommés par un outil par jeton (code, commentaires entre accents graves, captures de format ; contrôle des
+     collisions par fonction) : ~2 300 identifiants, modules et fichiers (`taches/` → `tasks/`, `evenements` → `events`,
+     `demarrage` → `startup`, `families/joueur/` → `families/player/`, `Restes` → `Leftovers`, `Etape` → `Step`,
+     `Aiguillage` → `Dispatch`, `Banc` → `Bench`, `*_par` → `*_via`...), exemples (`couverture` → `coverage`,
+     `fuzz_joueur` → `fuzz_player_shots`...), scripts de `tools/` (`registres/` → `regs/`...), `jouer.sh` → `play.sh` ;
+   * commentaires, messages et noms des natives traduits ; étiquettes `DDSOM_POISON` en anglais (`exit`, `resume`, `new`,
+     `stack`, `handback`, `call_<adresse>`, `effects`, `leftovers`, `all`) ; verdicts `VALID`/`FAILED` (les outils
+     acceptent aussi `VALIDE`) ;
+   * gardés en français par compatibilité : noms des variables d'environnement (`DDSOM_*`, `FUZZ_*`), clés JSON de
+     `data/reste.json` (`serde(rename)`), noms de fichiers d'assets et de sauvegarde, format de `touches.cfg` (actions
+     `j1.haut`..., touches `Pad1Haut`...), étiquettes de lecteur de `native_zones.txt` (noms d'assets), textes des docs
+     générés par `examples/creatures.rs` et `examples/level_maps.rs` (docs/creatures.md, docs/niveaux.md restent en
+     français), renvois aux fichiers de docs/.
 
 1. **Retirer `m68k::Cpu` du jeu.** Plus de `Body::Processeur` : la machine de référence garde son 68000, le jeu n'en a plus.
 2. ~~**Le reste de la couverture.**~~ Fait par le lot « couverture » (`wt-couv2`, [couverture.md](couverture.md),

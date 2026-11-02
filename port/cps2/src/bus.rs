@@ -71,7 +71,7 @@ pub struct Cps2Bus {
     /// Requested vblank/raster IRQ line (68000 level), cleared on acknowledge.
     pub irq_vblank: bool,
     pub irq_raster: bool,
-    /// Compteurs raster CPS-B (registres 0x0e/0x10/0x12).
+    /// CPS-B raster counters (registers 0x0e/0x10/0x12).
     pub raster_counter: [u16; 3],
     pub raster_reload: [u16; 3],
     /// Current line (for reading the raster counters).

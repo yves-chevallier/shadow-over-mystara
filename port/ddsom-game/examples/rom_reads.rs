@@ -59,7 +59,7 @@ fn main() {
     let ee = std::fs::read(&a[2]).ok();
     let base: usize = std::env::var("DDSOM_MASQUE").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     if let Some(f) = std::env::var_os("DDSOM_COUVERT") {
-        COVERED.with(|c| *c.borrow_mut() = std::fs::read(f).expect("fichier de couverture"));
+        COVERED.with(|c| *c.borrow_mut() = std::fs::read(f).expect("coverage file"));
         cps2::bus::rom_trace::set_hook(original);
     }
     ddsom_game::refuse_hybrid();

@@ -16,7 +16,7 @@
 //! | 4 | wait of 20 frames before continuing |
 //! | 6 | players frozen on their character, fade, waiting screen |
 //! | 8 | background of the second screen (route choice), objects |
-//! | 10 / 12 | attente d'un bouton, annonce clignotante |
+//! | 10 / 12 | wait for a button, blinking announcement |
 //! | 14 | fondu final, phase 8 |
 
 use super::{Flow, Sequence};

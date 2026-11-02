@@ -25,7 +25,7 @@ const ANIMS_HIT: u32 = 0x163a9e;
 /// Fields specific to this type.
 mod g {
     pub const GROUP: u32 = 0x2f;
-    /// Table de vitesses courante (long).
+    /// Current speed table (long).
     pub const SPEEDS: u32 = 0x4c;
     pub const HIT_CODE: u32 = 0x49;
     pub const FREEZE_AT_HIT: u32 = 0x56;

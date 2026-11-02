@@ -38,7 +38,7 @@ mod ice {
     const SPREAD: u32 = 0x4c0ae;
     const CROWN_A: u32 = 0x4c140;
     const CROWN_B: u32 = 0x4c158;
-    /// Octets d'angle de rebond (haut, bas, gauche, droite...).
+    /// Bounce angle bytes (up, down, left, right...).
     const BOUNCE_LEFT: u32 = 0x4be70;
     const BOUNCE_RIGHT: u32 = 0x4be78;
     const BOUNCE_TOP: u32 = 0x4be80;

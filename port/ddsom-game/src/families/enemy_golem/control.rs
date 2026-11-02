@@ -59,7 +59,7 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// +6 = 2 : saut en arc (vitesse verticale 0x800).
+/// +6 = 2: arched jump (vertical speed 0x800).
 fn arc<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set32(Obj::VX, 0);

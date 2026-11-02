@@ -5,7 +5,7 @@ use super::*;
 use crate::mem::{rd16, rd32, rd8, wr32, A5};
 use crate::objects::pools;
 
-/// Joueurs : quatre enregistrements de 0x200 octets.
+/// Players: four records of 0x200 bytes.
 const PLAYERS: u32 = A5 + 0x5de;
 const PLAYER_STRIDE: u32 = 0x200;
 /// Pause handler of the linked objects (word A5+0x14: activity bits of the background tasks).
@@ -298,7 +298,7 @@ pub fn handover_effects<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variante 10 : secousse d'ouverture ------------------------------------------------------------------
+// --- variant 10: opening shake ------------------------------------------------------------------------
 
 /// Variant 10 (0xcf5e6): shake (table 0xd0b30) until the end of the fade (`A5+0x48f`), then the background
 /// accelerates in horizontal scrolling (`+0x14`, `+0x16`) until the speed falls below 0x100,
@@ -358,7 +358,7 @@ pub fn shaking_intro<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variante 12 : marqueurs de joueurs --------------------------------------------------------------------
+// --- variant 12: player markers ---------------------------------------------------------------------------
 
 /// Variant 12 (0xcf782): creates six SOBJ objects (type 6, variant 0xe), one per player then per
 /// absent character (like variant 9), then a last one (variant 0, `+0x2f = 0xb`) at (0x108, 0x100,
@@ -395,7 +395,7 @@ pub fn spawn_player_markers<R: Bench>(x: &mut Cx<'_, R>) {
     m.set_u32(x.b, 0x4c, boss);
 }
 
-// --- variante 13 : feu d'artifice ----------------------------------------------------------------------------
+// --- variant 13: fireworks ----------------------------------------------------------------------------------
 
 /// Variant 13 (0xcf8a0): prepares the palette (0x91c280, with 0xf000f000), then, as long as the
 /// conductor does not switch to a negative `+8`, launches from time to time a SOBJ object of variant 0x10
@@ -575,7 +575,7 @@ pub fn ranking_start<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variante 17 : fondu de palette
+// --- variant 17: palette fade
 // ---------------------------------------------------------------------------------------
 
 /// Variant 17 (0xcfb76): fade of the three palette lines 0x91c1e0, 0x91c300, 0x91c400: `+5` = 0
@@ -933,7 +933,7 @@ pub fn credits_scroll<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- variante 21 : scintillement
+// --- variant 21: shimmer
 // ---------------------------------------------------------------------------------------------
 
 /// Variant 21 (0xd06e6): makes a palette color twinkle (0x91cfb2 takes 0xf00 from time

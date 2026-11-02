@@ -490,7 +490,7 @@ fn spawn_blast<R: Bench>(x: &mut Cx<'_, R>) {
         let dy = x.rom16(0x9930c + i);
         let px = dx.wrapping_add(var::CAMERA1_X.get(x.b));
         let py = dy.wrapping_add(var::CAMERA1_Y.get(x.b));
-        // (D0, D1, D2) = (x, 0, y) ; D2 (mot bas) reste
+        // (D0, D1, D2) = (x, 0, y); D2 (low word) remains
         *x.c.d2() = *x.c.d2() & 0xffff_0000 | py as u32;
         if crate::families::creators::enemy_5_at_pure(x.b, x.o, (px, 0, py)).is_some() {
             x.add8(SPAWNED, 1);
@@ -648,7 +648,7 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-// --- +6 = 18 : pluie d'effets ----------------------------------------------------------------------
+// --- +6 = 18: rain of effects ----------------------------------------------------------------------
 
 fn rain<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
