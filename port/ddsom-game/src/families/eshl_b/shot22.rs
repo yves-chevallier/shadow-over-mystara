@@ -1,10 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x1649d0;
-/// Offsets (X, Z) according to `+0x2f` (4 bytes per row).
-const OFFSETS: u32 = 0xa1194;
-/// Speeds (VX+AX, VZ+AZ) according to the variant (8 bytes per row).
-const SPEEDS: u32 = 0xa123a;
 const FLY: u8 = 0;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -36,17 +33,17 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x54, 0x1e);
     x.set8(f::ATTACK_ID, 0x1a);
     x.set8(f::ATTACK_POWER, 5);
-    let row = OFFSETS + ((x.u8(0x2f) << 2) as u32);
-    let mut dx = x.rom16(row);
-    let dz = x.rom16(row + 2);
+    let row = (x.u8(0x2f) << 2) as u32;
+    let mut dx = tables().shot22_offsets.at16(x.b, row);
+    let dz = tables().shot22_offsets.at16(x.b, row + 2);
     x.add16(0xc, dz);
     x.add16(0x10, 0xffff);
     x.add16(0xc, 1);
     let variant = x.u8(0x3);
-    let row = SPEEDS + ((variant as u32) << 3);
-    let vx = rom32(x, row);
+    let row = (variant as u32) << 3;
+    let vx = tables().shot22_speeds.at32(x.b, row);
     x.set32(0x14, vx);
-    let vz = rom32(x, row + 4);
+    let vz = tables().shot22_speeds.at32(x.b, row + 4);
     x.set32(0x18, vz);
     if x.u8(f::FLIP) != 0 {
         dx = dx.wrapping_neg();

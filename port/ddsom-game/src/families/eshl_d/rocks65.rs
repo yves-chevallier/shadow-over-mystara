@@ -1,9 +1,9 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
-/// Per variant: animation set, attack identifier, waits per rank (bytes, program ROM).
+/// Per variant: animation set, attack identifier (the waits per rank are `rocks65_delays_0` and `_1`).
 const ANIMS: [u32; 2] = [0x16ea18, 0x171574];
 const ATTACK: [u8; 2] = [0x25, 0x38];
-const DELAYS: [u32; 2] = [0xa739a, 0xa74b6];
 const TIMER: u32 = 0x42;
 const RANK: u32 = 0x2f;
 /// Corner of the screen (player 1, or player 2 if `A5+0x36`).
@@ -51,7 +51,8 @@ fn init<R: Bench>(x: &mut Cx<'_, R>, v: usize) {
     x.set32(0x14, 0);
     x.set32(0x1c, 0);
     let rank = (x.u8(RANK) & 0x1f) as u32;
-    let delay = x.rom8(DELAYS[v] + rank);
+    let delays = [&tables().rocks65_delays_0, &tables().rocks65_delays_1][v];
+    let delay = delays.at8(x.b, rank);
     x.set16(TIMER, delay as u16);
     x.anim_start(ANIMS[v], 0);
 }

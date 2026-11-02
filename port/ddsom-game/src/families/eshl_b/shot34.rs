@@ -1,9 +1,10 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS_SCREEN: u32 = 0x1c03a6;
 const ANIMS: u32 = 0x17e03a;
-/// (destination in the palette, source in the ROM), 8 longs each.
-const PALETTES: [(u32, u32); 4] = [(0x91c2e0, 0x2538c0), (0x91c300, 0x2538e0), (0x91c360, 0x253900), (0x91c3e0, 0x253920)];
+/// (destination in the palette, offset of the source in `shot34_palettes`), 8 longs each.
+const PALETTES: [(u32, u32); 4] = [(0x91c2e0, 0), (0x91c300, 0x20), (0x91c360, 0x40), (0x91c3e0, 0x60)];
 const TINT: u32 = 0xf000_f000;
 const SOURCE_BUSY: u32 = 0xa0;
 
@@ -21,7 +22,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn load_palettes<R: Bench>(x: &mut Cx<'_, R>) {
     for (dst, src) in PALETTES {
         for i in 0..8 {
-            let v = x.data32(src + 4 * i);
+            let v = tables().shot34_palettes.at32(x.b, src + 4 * i);
             wr32(x.b, dst + 4 * i, v);
         }
         for i in 0..8 {

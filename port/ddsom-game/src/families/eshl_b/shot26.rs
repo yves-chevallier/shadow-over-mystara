@@ -1,8 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16ea90;
-const HEIGHTS: u32 = 0xa1968;
-const SPEED_TABLES: u32 = 0xa1972;
 const LAND_SOUND: crate::sound::Sound = crate::sound::CMD_8D;
 const FLY: u8 = 0;
 const GROUND: u8 = 2;
@@ -37,10 +36,10 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x8, sx);
     x.set16(0x10, sy);
     let row = x.u8(0x60) as u32;
-    let height = x.rom16(HEIGHTS + 2 * row);
+    let height = tables().shot26_heights.at16(x.b, 2 * row);
     x.set16(0xc, height);
     let rng = x.random();
-    let mut table = x.rom16(SPEED_TABLES + 2 * (rng as u32 & 3)) as u32;
+    let mut table = tables().shot26_speed_tables.at16(x.b, 2 * (rng as u32 & 3)) as u32;
     if x.u8(0x56) != 0 && x.u8(0x3) == 0 {
         table = 2;
     }

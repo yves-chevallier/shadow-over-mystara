@@ -1,10 +1,9 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x170c3e;
 /// Creation animation per object type (variant / 2).
 const INIT_ANIMS: [u32; 6] = [2, 4, 5, 5, 4, 7];
-/// Delays (16 words) drawn at random for variants 6 and 7.
-const DELAYS: u32 = 0xa55b2;
 const PICKUP_SOUND: crate::sound::Sound = crate::sound::CMD_36E_46E;
 const COUNTDOWN: u32 = 0x56;
 /// Variable `A5+0x6f`: blinking phase; `A5+0x33`: blinking suspended.
@@ -49,7 +48,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
 /// Delay drawn from table 0xa55b2.
 fn random_delay<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
-    let d = x.rom16(DELAYS + 2 * r);
+    let d = tables().pickup56_delays.at16(x.b, 2 * r);
     x.set16(COUNTDOWN, d);
 }
 

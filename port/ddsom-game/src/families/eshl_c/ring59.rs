@@ -1,12 +1,9 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x171026;
 const LINK: u32 = 0x5c;
 const TIMER: u32 = 0x42;
-/// Offsets (X, Y) per variant for sub-type 1 (4 bytes per row).
-const OFFSETS: u32 = 0xa5db2;
-/// Value of `+0x2b` (palette (h)) by `+0x47`.
-const PALETTES: u32 = 0xa5f30;
 const FX_START_0: crate::sound::Sound = crate::sound::CMD_389;
 const FX_START_1: crate::sound::Sound = crate::sound::CMD_38B;
 const FX_END: crate::sound::Sound = crate::sound::CMD_38A;
@@ -60,8 +57,8 @@ fn start<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(0xc, z);
             copy_flip(x, maker);
             x.set16(0xc, 0);
-            let row = OFFSETS + 4 * x.u8(0x3) as u32;
-            let (dx, dy) = (x.rom16(row), x.rom16(row + 2));
+            let row = 4 * x.u8(0x3) as u32;
+            let (dx, dy) = (tables().ring59_offsets.at16(x.b, row), tables().ring59_offsets.at16(x.b, row + 2));
             x.set16(0x8, dx.wrapping_add(mx));
             x.set16(0x10, dy.wrapping_add(my));
             x.anim_start(ANIMS, 0);
@@ -130,6 +127,6 @@ fn cycle_palette<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x2a, 1);
     let i = x.u8(PALETTE_INDEX).wrapping_add(1) & 7;
     x.set8(PALETTE_INDEX, i);
-    let p = x.rom8(PALETTES + i as u32);
+    let p = tables().ring59_palettes.at8(x.b, i as u32);
     x.set8(0x2b, p);
 }

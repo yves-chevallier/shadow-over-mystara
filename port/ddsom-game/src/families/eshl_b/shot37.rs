@@ -1,10 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16fe3e;
-const SPEEDS: u32 = 0xa2c7e;
-const START_ANIMS: u32 = 0xa2c9e;
-const X_OFFSETS: u32 = 0xa2ce0;
-const Y_OFFSETS: u32 = 0xa2d00;
 const FALL: u8 = 0;
 const BLINK: u8 = 2;
 
@@ -30,21 +27,21 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     let rng = x.random();
     let r = rng as u32 & 0xf;
-    let vz = x.rom16(SPEEDS + 2 * r);
+    let vz = tables().shot37_speeds.at16(x.b, 2 * r);
     x.set16(0x18, vz);
     let rng = x.random();
     let r = rng as u32 & 7;
-    let anim = x.rom8(START_ANIMS + r) as u32;
+    let anim = tables().shot37_start_anims.at8(x.b, r) as u32;
     x.anim_start(ANIMS, anim as u16);
 }
 
 fn place<R: Bench>(x: &mut Cx<'_, R>) {
     let rng = x.random();
     let r = rng as u32 & 0xf;
-    let dx = x.rom16(X_OFFSETS + 2 * r);
+    let dx = tables().shot37_x_offsets.at16(x.b, 2 * r);
     let rng = x.random();
     let r = rng as u32 & 0xf;
-    let dy = x.rom16(Y_OFFSETS + 2 * r);
+    let dy = tables().shot37_y_offsets.at16(x.b, 2 * r);
     let px = dx.wrapping_add(x.a5_u16(0x506));
     let py = dy.wrapping_add(x.a5_u16(0x50a));
     x.set16(0x8, px);

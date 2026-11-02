@@ -1,14 +1,11 @@
 use super::*;
+use crate::families::shell::tables::{box_byte, tables, Read};
 
 const ANIMS: u32 = 0x17e048;
 const PARENT: u32 = 0x46;
 const PARENT_STATE: u32 = 0xa0;
 const SUBTYPE: u32 = 0x2f;
 const TIMER: u32 = 0x42;
-/// Animation per sub-type of variant 0 (bytes).
-const ANIM_OF_SUBTYPE: u32 = 0xa473e;
-/// Sub-types of the three elements launched by variant 0.
-const ORB_SUBTYPES: u32 = 0xa46c2;
 /// Screen: X (`A5+0x506`), Y (long `A5+0x50a`).
 const SCREEN_X: u32 = 0x506;
 const SCREEN_Y: u32 = 0x50a;
@@ -17,14 +14,8 @@ const SCREEN_LOCK: u32 = 0x43;
 const LOCK_TAKEN: u8 = 0x3f;
 const LOCK_FREE: u8 = 0xff;
 const FLAG_4BA: u32 = 0x4ba;
-/// Stage 0x2e: pairs (start, length) of the safe zones in X, terminated by 0.
-const SAFE_RANGES: u32 = 0xa4bca;
-/// Stage 0x69: safe rectangles (X, width, Y, height), one per bit of `0xff2064`.
-const SAFE_RECTS: u32 = 0xa4bd4;
+/// Safe rectangles of stage 0x69, one per bit (h).
 const RECT_FLAGS: u32 = 0xff2064;
-/// Attack boxes (rows of 16 bytes per `+0x3e`) and pointers to the players' boxes.
-const ATTACK_BOXES: u32 = 0xa4cd2;
-const PLAYER_BOXES: u32 = 0xa4cba;
 /// First player (`A5+0x5de`) and step.
 const PLAYERS: u32 = 0x5de;
 const PLAYER_SIZE: u32 = 0x200;
@@ -95,7 +86,7 @@ fn variant0<R: Bench>(x: &mut Cx<'_, R>) {
             let Some(boss) = parent(x) else { return vanish(x) };
             attach(x, boss);
             let sub = x.u8(SUBTYPE) as u32;
-            let anim = x.rom8(ANIM_OF_SUBTYPE + sub);
+            let anim = tables().finale52_anims_of_subtype.at8(x.b, sub);
             x.anim_start(ANIMS, (anim as u32) as u16);
             init_boxes(x);
         }
@@ -156,7 +147,7 @@ fn spawn_followers<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
         c.set_u8(x.b, 0, 1);
         c.set_u8(x.b, 2, 0x34);
         c.set_u8(x.b, 3, 0);
-        let sub = x.rom8(ORB_SUBTYPES + i);
+        let sub = tables().finale52_orb_subtypes.at8(x.b, i);
         c.set_u8(x.b, SUBTYPE, sub);
         let boss = x.u16(PARENT);
         c.set_u16(x.b, PARENT, boss);
@@ -382,8 +373,8 @@ fn fall_check<R: Bench>(x: &mut Cx<'_, R>) {
         let hurts = if stage == 0x2e {
             !on_safe_range(x, p)
         } else if stage == 0x69 {
-            let flags = x.data8(RECT_FLAGS);
-            !(flags & 2 != 0 && in_rect(x, p, SAFE_RECTS) || flags & 1 != 0 && in_rect(x, p, SAFE_RECTS + 8))
+            let flags = crate::mem::rd8(x.b, RECT_FLAGS);
+            !(flags & 2 != 0 && in_rect(x, p, 0) || flags & 1 != 0 && in_rect(x, p, 8))
         } else {
             true
         };
@@ -398,9 +389,10 @@ fn on_safe_range<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
     if p.u8(x.b, 0xc) != 0 {
         return false;
     }
-    let mut a2 = SAFE_RANGES;
+    let t = &tables().finale52_safe_ranges;
+    let mut a2 = 0;
     loop {
-        let start = x.data16(a2);
+        let start = t.at16(x.b, a2);
         a2 += 2;
         if start == 0 {
             return false;
@@ -409,7 +401,7 @@ fn on_safe_range<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
         if s16(d) < 0 {
             return false;
         }
-        let len = x.data16(a2);
+        let len = t.at16(x.b, a2);
         a2 += 2;
         if s16(d) <= s16(len) {
             return true;
@@ -417,20 +409,22 @@ fn on_safe_range<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
     }
 }
 
-/// Stage 0x69: the player is on the ground and in the rectangle (X, width, Y, height).
+/// Stage 0x69: the player is on the ground and in the rectangle (X, width, Y, height) at offset `rect` of
+/// `finale52_safe_rects`.
 fn in_rect<R: Bench>(x: &mut Cx<'_, R>, p: Obj, rect: u32) -> bool {
+    let t = &tables().finale52_safe_rects;
     if p.u8(x.b, 0xc) != 0 {
         return false;
     }
     let px = s16(p.u16(x.b, 0x8));
-    let x0 = x.data16(rect);
+    let x0 = t.at16(x.b, rect);
     if s16(x0) >= px {
         return false;
     }
-    if s16(x0.wrapping_add(x.data16(rect + 2))) <= px {
+    if s16(x0.wrapping_add(t.at16(x.b, rect + 2))) <= px {
         return false;
     }
-    let y1 = x.data16(rect + 4).wrapping_add(x.data16(rect + 6));
+    let y1 = t.at16(x.b, rect + 4).wrapping_add(t.at16(x.b, rect + 6));
     s16(y1) > s16(p.u16(x.b, 0x10))
 }
 
@@ -445,14 +439,15 @@ fn overlap<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
     if n == 0 {
         return false;
     }
-    let rows = ATTACK_BOXES + 16 * (n - 1) as u32;
+    let rows = 16 * (n - 1) as u32;
+    let attack = &tables().finale52_attack_boxes;
     let character = p.u8(x.b, 3) as u32 & 0xe;
-    let table = x.data32(PLAYER_BOXES + 2 * character);
+    let table = tables().finale52_player_boxes.at32(x.b, 2 * character);
     let boxes = table + 8 * p.u8(x.b, 0x38) as u32;
     for (k, pos) in [0x8u32, 0xc, 0x10].into_iter().enumerate() {
         let k = k as u32;
-        let mut mine = x.data16(rows + 4 * k);
-        let mut theirs = x.data8(boxes + 2 * k) as i8 as i16 as u16;
+        let mut mine = attack.at16(x.b, rows + 4 * k);
+        let mut theirs = box_byte(x.b, boxes + 2 * k) as i8 as i16 as u16;
         if k == 0 {
             if x.u8(f::FLIP) != 0 {
                 mine = neg(mine);
@@ -467,7 +462,7 @@ fn overlap<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
         if s16(d) < 0 {
             d = neg(d);
         }
-        let reach = x.data16(rows + 4 * k + 2).wrapping_add(x.data8(boxes + 2 * k + 1) as u16);
+        let reach = attack.at16(x.b, rows + 4 * k + 2).wrapping_add(box_byte(x.b, boxes + 2 * k + 1) as u16);
         if s16(reach) < s16(d) {
             return false;
         }

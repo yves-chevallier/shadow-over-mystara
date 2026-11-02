@@ -1,12 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16e920;
-/// Offsets (X, Z, Y) of the 16 effects (8 bytes per row).
-const OFFSETS: u32 = 0xa1438;
-/// Number of enemies by (A5+0x7f92 / 2) * 4 + A5+0x35.
-const GROUP_SIZES: u32 = 0xa15ae;
-/// Relative positions (X, Y) of the enemies: 2 pairs per row, drawn at random.
-const GROUP_OFFSETS: u32 = 0xa15ee;
 const GROUP_SIZE_SELECTOR: u32 = 0x7f92;
 const SPAWN_ENEMIES_AT: u16 = 0x20;
 
@@ -35,9 +30,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         active(x);
     } else {
         copy_position16(x, source);
-        let row = OFFSETS + ((x.u16(0x56) << 3) as u32);
+        let row = (x.u16(0x56) << 3) as u32;
         for (off, column) in [(0x8, 0), (0xc, 2), (0x10, 4)] {
-            let d = x.rom16(row + column);
+            let d = tables().shot24_offsets.at16(x.b, row + column);
             x.add16(off, d);
         }
         x.anim_start(ANIMS, 1);
@@ -86,11 +81,11 @@ fn spawn_enemies<R: Bench>(x: &mut Cx<'_, R>) {
         d0 = d0.wrapping_sub(1) & 3;
     }
     d0 = d0.wrapping_add((x.a5_u16(GROUP_SIZE_SELECTOR) >> 1) << 2);
-    let mut count = x.rom8(GROUP_SIZES.wrapping_add(d0 as i16 as i32 as u32)) as u16;
+    let mut count = tables().shot24_group_sizes.at8(x.b, d0 as i16 as i32 as u32) as u16;
     count = count.wrapping_sub(1);
     let mut label: u16 = 1;
     let rng = x.random();
-    let mut table = GROUP_OFFSETS + ((rng as u32 & 7) << 3);
+    let mut table = (rng as u32 & 7) << 3;
     loop {
         let Some(e) = x.alloc(&pools::ENEMY) else { return };
         e.set_u8(x.b, 0, 1);
@@ -98,7 +93,7 @@ fn spawn_enemies<R: Bench>(x: &mut Cx<'_, R>) {
         e.set_u8(x.b, 3, 4);
         let source = x.linked(0x5c);
         let (sx, sy) = (source.u16(x.b, 0x8), source.u16(x.b, 0x10));
-        let (dx, dy) = (x.data16(table), x.data16(table + 2));
+        let (dx, dy) = (tables().shot24_group_offsets.at16(x.b, table), tables().shot24_group_offsets.at16(x.b, table + 2));
         table += 4;
         e.set_u16(x.b, 0x8, sx.wrapping_add(dx));
         e.set_u16(x.b, 0x10, sy.wrapping_add(dy));

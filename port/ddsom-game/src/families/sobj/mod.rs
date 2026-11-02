@@ -9,6 +9,8 @@
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::shell::{suspended, GAME_PAUSED};
+use super::shell::tables::{self, Read};
+use crate::data::RomAddr;
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::Obj;
 use crate::objects::pools;
@@ -70,10 +72,12 @@ fn camera_delta<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u32) {
 /// Brightness bits forced to maximum on the colors copied into the GFX RAM palettes.
 const BRIGHT: u32 = 0xf000_f000;
 
-/// Copies `n` longs from the ROM (data space) to video memory or RAM.
-fn copy_longs<R: Bench>(x: &mut Cx<'_, R>, from: u32, to: u32, n: u32) {
+/// Copies `n` longs of the palette library (`sobj_palettes`, designated by their address `from`) to video memory or
+/// RAM.
+fn copy_longs<R: Bench>(x: &mut Cx<'_, R>, from: RomAddr, to: u32, n: u32) {
+    let t = &tables::tables().sobj_palettes;
     for i in 0..n {
-        let v = x.data32(from + 4 * i);
+        let v = t.at32(x.b, from.0.wrapping_sub(t.rom) + 4 * i);
         wr32(x.b, to + 4 * i, v);
     }
 }

@@ -1,9 +1,10 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x174776;
-const SPEED_ROWS: u32 = 0xa2ed4;
-const SPEED_ROWS_VARIANT: u32 = 0xa2f34;
-const SPRITES: u32 = 0xa2e10;
+/// Rows of `shot38_speed_rows`: variant 0, other variants.
+const SPEED_ROWS: u32 = 0;
+const SPEED_ROWS_VARIANT: u32 = 0x60;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -75,7 +76,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         angle
     };
     x.set8(0x2d, chosen as u8);
-    let sprite = x.rom8(SPRITES + ((mapped(chosen) >> 1) & 0xf) as u32) as u32;
+    let sprite = tables().shot38_sprites.at8(x.b, ((mapped(chosen) >> 1) & 0xf) as u32) as u32;
     ai_start(x, ANIMS, sprite);
     x.set8(f::BOX_SET, 7);
     x.set8(f::ATTACK_POWER, 8);
@@ -85,10 +86,11 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
 fn speeds<R: Bench>(x: &mut Cx<'_, R>) {
     let base = if x.u8(0x3) != 0 { SPEED_ROWS_VARIANT } else { SPEED_ROWS };
     let row = base + ((x.u8(0x2f) as u32) << 4);
-    let table = x.data32(row);
+    let t = &tables().shot38_speed_rows;
+    let table = t.at32(x.b, row);
     x.set32(0x4c, table);
-    let mut vx = x.data16(row + 4);
-    let mut ax = x.data16(row + 6);
+    let mut vx = t.at16(x.b, row + 4);
+    let mut ax = t.at16(x.b, row + 6);
     if x.u8(f::FLIP) == 0 {
         vx = vx.wrapping_neg();
         ax = ax.wrapping_neg();
@@ -96,7 +98,7 @@ fn speeds<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x14, vx);
     x.set16(0x16, ax);
     for i in 0..4 {
-        let v = x.data16(row + 8 + 2 * i);
+        let v = t.at16(x.b, row + 8 + 2 * i);
         x.set16(0x18 + 2 * i, v);
     }
 }

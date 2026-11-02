@@ -1,7 +1,6 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
-const ANIM_BY_VARIANT: u32 = 0xdf80a;
-const OFFSETS: u32 = 0xdf87a;
 const BLINK_FRAMES: u16 = 0x14;
 const BLINKS: u8 = 8;
 /// RAM word (A5+0x46): followed player.
@@ -21,7 +20,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(0x16, BLINKS);
             place(x);
             let variant = x.u8(0x3) as u32;
-            let anim = x.rom16(ANIM_BY_VARIANT + 2 * variant) as u32;
+            let anim = tables().sobj_frame_anims_by_variant.at16(x.b, 2 * variant) as u32;
             x.anim_start(ANIMS, anim as u16);
             x.reinsert();
         }
@@ -58,9 +57,9 @@ fn place<R: Bench>(x: &mut Cx<'_, R>) {
             return x.set16(0x4, LEAVE_6_0);
         }
     }
-    let row = OFFSETS + 4 * x.u8(0x3) as u32;
-    let dx = x.rom16(row);
-    let dz = x.rom16(row + 2);
+    let row = 4 * x.u8(0x3) as u32;
+    let dx = tables().sobj_frame_offsets.at16(x.b, row);
+    let dz = tables().sobj_frame_offsets.at16(x.b, row + 2);
     let v = x.a5_u16(ram::CAMERA_X).wrapping_add(dx);
     x.set16(0x8, v);
     let v = x.a5_u16(ram::CAMERA_Y).wrapping_add(dz);

@@ -1,13 +1,10 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x1706f6;
 const LINK: u32 = 0x5c;
 const TIMER: u32 = 0x42;
 const SOUND: crate::sound::Sound = crate::sound::CMD_366;
-/// Rows of 9 words: DX, DZ, DY, VX, AX, VZ, AZ, VY, AY.
-const ROWS: u32 = 0xa4fe6;
-/// Rows of 10 words: the same, then the animation.
-const ROWS_ANIM: u32 = 0xa51b4;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(LINK) == 0 {
@@ -64,8 +61,8 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>, with_anim: bool) {
     let flip = x.u8(f::FLIP) ^ 0x20;
     x.set8(f::FLIP, flip);
     let v = x.u8(0x3) as u32;
-    let row = if with_anim { ROWS_ANIM + 20 * v } else { ROWS + 18 * v };
-    let word = |x: &mut Cx<'_, R>, i: u32| x.rom16(row + 2 * i);
+    let (table, row) = if with_anim { (&tables().burst54_rows_anim, 20 * v) } else { (&tables().burst54_rows, 18 * v) };
+    let word = |x: &mut Cx<'_, R>, i: u32| table.at16(x.b, row + 2 * i);
     let (mut dx, dz, dy, mut vx, mut ax) = (word(x, 0), word(x, 1), word(x, 2), word(x, 3), word(x, 4));
     for (i, off) in [0x18u32, 0x1a, 0x1c, 0x1e].into_iter().enumerate() {
         let w = word(x, 5 + i as u32);

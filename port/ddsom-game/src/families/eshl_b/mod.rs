@@ -9,6 +9,8 @@ use super::cx::{handlers, Cx};
 use super::shell::*;
 use crate::mem::{rd32, wr32};
 use crate::objects::Obj;
+use ddsom_data::effects::Table;
+use super::shell::tables::Read;
 use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
@@ -109,14 +111,9 @@ mod shot19;
 // Helper shared by types 20 and 21: sticking to the owner through an offset table
 // ---------------------------------------------------------------------------------------------
 
-/// Long read in program space (table addressed PC-relative).
-fn rom32<R: Bench>(x: &mut Cx<'_, R>, addr: u32) -> u32 {
-    (x.rom16(addr) as u32) << 16 | x.rom16(addr + 2) as u32
-}
-
 /// Sticks to the owner with the offset of row `variant` of a table (8 bytes per row:
 /// X, integer Y, signed fractional Y, Z). With no owner, the object is released on the next frame.
-fn attach<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
+fn attach<R: Bench>(x: &mut Cx<'_, R>, table: &Table) {
     if x.u16(f::OWNER) == 0 {
         return kill(x);
     }
@@ -124,17 +121,17 @@ fn attach<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     copy_position32(x, owner);
     let flip = owner.u8(x.b, f::FLIP);
     x.set8(f::FLIP, flip);
-    let row = table + (x.u8(0x3) << 3) as u32;
-    let mut dx = x.rom16(row);
+    let row = (x.u8(0x3) << 3) as u32;
+    let mut dx = table.at16(x.b, row);
     if flip != 0 {
         dx = dx.wrapping_neg();
     }
     x.add16(0x8, dx);
-    let dy = x.rom16(row + 2);
+    let dy = table.at16(x.b, row + 2);
     x.add16(0x10, dy);
-    let dy_fraction = x.rom16(row + 4) as i16 as i32 as u32;
+    let dy_fraction = table.at16(x.b, row + 4) as i16 as i32 as u32;
     x.add32(0x10, dy_fraction);
-    let dz = x.rom16(row + 6);
+    let dz = table.at16(x.b, row + 6);
     x.add16(0xc, dz);
 }
 

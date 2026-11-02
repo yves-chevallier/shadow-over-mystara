@@ -1,8 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16ee30;
-const HEIGHTS: u32 = 0xa1d18;
-const ANGLES: u32 = 0xa1d22;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
@@ -16,11 +15,11 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(off, v);
             }
             let row = (source.u8(x.b, 0x60) & 0xf) as u32;
-            let dz = x.rom16(HEIGHTS + 2 * row);
+            let dz = tables().shot28_heights.at16(x.b, 2 * row);
             x.add16(0xc, dz);
             x.add16(0x10, 0xffff);
             let variant = x.u8(0x3);
-            let angle = x.rom8(ANGLES + (variant & 3) as u32);
+            let angle = tables().shot28_angles.at8(x.b, (variant & 3) as u32);
             x.set8(0x2d, angle);
             speed_table(x, 0x3f);
             x.anim_start(ANIMS, (variant as u32) as u16);

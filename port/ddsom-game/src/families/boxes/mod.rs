@@ -3,11 +3,11 @@
 
 use crate::objects::pools;
 use crate::objects::Obj;
+use super::shell::tables::{tables, Read};
 
 use super::{add_u8, handler, pointer};
 use super::cx::{Bench, Cx};
 use crate::objects::Current;
-use crate::machine::Machine;
 
 /// Values of the state byte `+4`.
 mod state {
@@ -50,7 +50,6 @@ pub mod chest;
 /// then just sorts itself every frame until its release. Not exercised by the scenarios.
 mod scenery {
     pub const ENTRY: u32 = 0xda7ac;
-    pub const TABLE_STATES: u32 = 0xda7c2;
     pub const ANIMATION: u16 = 5;
 }
 
@@ -61,7 +60,6 @@ fn box_2<R: Bench>(ctx: &mut Cx<'_, R>) {
         return;
     }
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = super::effects::target(ctx, scenery::TABLE_STATES, state as u32);
     match state {
         state::INIT => {
             add_u8(ctx, o, Obj::STATE, 2);
@@ -72,7 +70,7 @@ fn box_2<R: Bench>(ctx: &mut Cx<'_, R>) {
         }
         state::ACTIVE => ctx.reinsert(),
         state::FREED | state::OUTSIDE_SCREEN => ctx.free(&pools::BOX),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(state as u32),
     }
 }
 
@@ -86,14 +84,8 @@ fn box_2<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Not exercised.
 mod barrier {
     pub const ENTRY: u32 = 0xda578;
-    pub const STATES: u32 = 0xda58e;
-    pub const INITS: u32 = 0xda5a6;
-    pub const ACTIVE_COUNT: u32 = 0xda5f4;
-    pub const SUB_STATES_0: u32 = 0xda624;
-    pub const SUB_STATES_1: u32 = 0xda65e;
     pub const ANIMATIONS_0: u32 = 0x1bed06;
     pub const ANIMATIONS_1: u32 = 0x1712d4;
-    pub const POSITIONS: u32 = 0xda72c;
     pub const SOUND: crate::sound::Sound = crate::sound::CMD_37C_47C;
     pub const HITTER: u32 = 0x6c;
     pub const SET_CREATED: u32 = 0x7c;
@@ -105,7 +97,7 @@ fn barrier_created_set<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let hitter = pointer(ctx, o, barrier::HITTER);
     let mode = (o.u8(ctx.b, field::MODE) as u32) << 3;
     let class = ((hitter.u8(ctx.b, 3) & 0xf) >> 1) as u32;
-    let position = ctx.prog8(barrier::POSITIONS + ((mode + class) & 0xffff));
+    let position = tables().barrier_positions.at8(ctx.b, (mode + class) & 0xffff);
     new.set_u8(ctx.b, 0x42, position);
     let character = hitter.u8(ctx.b, 2);
     new.set_u8(ctx.b, 0x43, character);
@@ -114,7 +106,6 @@ fn barrier_created_set<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 fn barrier_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    let target = super::effects::target(ctx, barrier::INITS, 2 * variant as u32);
     match variant {
         0 | 3 => {
             add_u8(ctx, o, Obj::STATE, 2);
@@ -128,7 +119,7 @@ fn barrier_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             super::eshl_creators::single_3c(&mut crate::families::effects_creators::leftovers::Pure, ctx.b, o);
             ctx.anim_start(barrier::ANIMATIONS_1, 4);
         }
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(2 * variant as u32),
     }
 }
 
@@ -136,7 +127,6 @@ fn barrier_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 /// when it leaves the screen.
 fn barrier_active_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sub_state = o.u8(ctx.b, field::SUB_STATE);
-    let target = super::effects::target(ctx, barrier::SUB_STATES_0, sub_state as u32);
     match sub_state {
         0 => {
             let hit = o.u8(ctx.b, field::HIT_B);
@@ -154,7 +144,7 @@ fn barrier_active_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 o.set_u8(ctx.b, field::HIT_B, 0);
             }
         }
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(sub_state as u32),
     }
     let (cam_x, _) = ctx.camera();
     let gap = cam_x.wrapping_sub(o.u16(ctx.b, Obj::X));
@@ -165,7 +155,6 @@ fn barrier_active_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 fn barrier_active_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sub_state = o.u8(ctx.b, field::SUB_STATE);
-    let target = super::effects::target(ctx, barrier::SUB_STATES_1, sub_state as u32);
     match sub_state {
         0 | 4 => {
             let hit = o.u8(ctx.b, field::HIT_B);
@@ -191,7 +180,7 @@ fn barrier_active_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             o.set_u8(ctx.b, field::HIT_B, 0);
             crate::sound::play(ctx.b, barrier::SOUND, ctx.obj());
         }
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(sub_state as u32),
     }
 }
 
@@ -202,20 +191,18 @@ fn barrier_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
         return;
     }
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = super::effects::target(ctx, barrier::STATES, state as u32);
     match state {
         state::INIT => barrier_init(ctx, o),
         state::ACTIVE => {
             let variant = o.u8(ctx.b, Obj::VARIANT);
-            let target = super::effects::target(ctx, barrier::ACTIVE_COUNT, 2 * variant as u32);
             match variant {
                 0 => barrier_active_0(ctx, o),
                 1 => barrier_active_1(ctx, o),
-                _ => crate::families::effects::outside_table(target),
+                _ => crate::families::effects::bad_index(2 * variant as u32),
             }
         }
         state::FREED | state::OUTSIDE_SCREEN => ctx.free(&pools::BOX),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(state as u32),
     }
 }
 

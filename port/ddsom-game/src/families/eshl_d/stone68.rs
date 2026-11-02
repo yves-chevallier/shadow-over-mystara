@@ -1,11 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x17b9d6;
-/// Abscissa per rank (words, program ROM), direction per rank (bytes, program ROM).
-const COLUMNS: u32 = 0xa7be4;
-const DIRECTIONS: u32 = 0xa7c7c;
-/// Animations according to the height on the screen: count then pairs (animation, threshold) (words, in the clear).
-const HEIGHT_ANIMS: u32 = 0xa7d50;
 const CARRIER: u32 = 0x46;
 const RANK: u32 = 0x2f;
 const TIMER: u32 = 0x42;
@@ -26,7 +22,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x10, 0x1c0);
             x.set16(0xc, 0xff90);
             let rank = x.u8(RANK) as u32;
-            let column = x.rom16(COLUMNS + 2 * rank);
+            let column = tables().stone68_columns.at16(x.b, 2 * rank);
             x.set16(0x8, column);
             x.set16(TIMER, 8);
             x.anim_start(ANIMS, 0x2a);
@@ -60,7 +56,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(0x1c, 0);
             x.set32(0x18, 0);
             let rank = (x.u8(RANK) & 7) as u32;
-            let dir = x.rom8(DIRECTIONS + rank);
+            let dir = tables().stone68_directions.at8(x.b, rank);
             x.set8(0x2d, dir);
             x.select_speed(&crate::objects::motion::SPEEDS_A, SPEED_TABLE as u16);
             x.unlink();
@@ -94,11 +90,11 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 fn height_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let top = if x.a5_u8(0x36) != 0 { SCREEN_TOP_P2 } else { SCREEN_TOP };
     let h = x.u16(0x10).wrapping_sub(x.a5_u16(top)) as i16;
-    let count = x.data16(HEIGHT_ANIMS);
+    let count = tables().stone68_height_anims.at16(x.b, 0);
     let mut anim = 0;
     for k in 0..=count as u32 {
-        anim = x.data16(HEIGHT_ANIMS + 2 + 4 * k);
-        if h < x.data16(HEIGHT_ANIMS + 4 + 4 * k) as i16 {
+        anim = tables().stone68_height_anims.at16(x.b, 2 + 4 * k);
+        if h < tables().stone68_height_anims.at16(x.b, 4 + 4 * k) as i16 {
             break;
         }
     }

@@ -1,7 +1,6 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
-const ANIM_BY_ADVICE: u32 = 0xdf9ae;
-const EVENT_BY_ADVICE: u32 = 0xdfa0e;
 const LAST_ADVICE: u16 = 0x136;
 const BLINK_FRAMES: u16 = 0x14;
 const BLINKS: u8 = 0xa;
@@ -55,7 +54,7 @@ fn place<R: Bench>(x: &mut Cx<'_, R>, dz: u16) {
 fn announce<R: Bench>(x: &mut Cx<'_, R>) {
     let advice = advice_of_owner(x);
     let i = advice.wrapping_sub(0x118).wrapping_mul(2);
-    let code = x.rom16(EVENT_BY_ADVICE.wrapping_add(i as i16 as i32 as u32));
+    let code = tables().sobj_arrow_events_by_advice.at16(x.b, i as i16 as i32 as u32);
     // one event per player (high byte: 0 to 3)
     for player in 0..4u16 {
         crate::events::enqueue_points(x.b, code.wrapping_add(player << 8));
@@ -68,7 +67,7 @@ fn pick_anim<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let advice = advice_of_owner(x);
     let i = advice.wrapping_sub(0x118).wrapping_mul(2);
-    let anim = x.rom16(ANIM_BY_ADVICE.wrapping_add(i as i16 as i32 as u32)) as u32;
+    let anim = tables().sobj_arrow_anims_by_advice.at16(x.b, i as i16 as i32 as u32) as u32;
     x.anim_start(ANIMS, anim as u16);
 }
 

@@ -1,11 +1,10 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16e5fa;
-/// Rows of 16 bytes (one per direction): (value of `+0x2d`, animation) per angle step.
-const STEPS_FACING_RIGHT: u32 = 0xa0bea;
-const STEPS_FACING_LEFT: u32 = 0xa0bda;
-/// Offsets (X, Z) of the sprite per angle step.
-const OFFSETS: u32 = 0xa0bfa;
+/// Rows of `shot19_steps` (one per direction).
+const STEPS_FACING_RIGHT: u32 = 0x10;
+const STEPS_FACING_LEFT: u32 = 0;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
@@ -53,13 +52,13 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         r as u32
     };
     let entry = steps + 2 * step;
-    let sprite = x.data8(entry);
+    let sprite = tables().shot19_steps.at8(x.b, entry);
     x.set8(0x2d, sprite);
-    let anim = x.data8(entry + 1) as i8 as i16 as u16 as u32;
-    let off = OFFSETS + 4 * step;
-    let dx = x.data16(off);
+    let anim = tables().shot19_steps.at8(x.b, entry + 1) as i8 as i16 as u16 as u32;
+    let off = 4 * step;
+    let dx = tables().shot19_offsets.at16(x.b, off);
     x.add16(0x8, dx);
-    let dz = x.data16(off + 2);
+    let dz = tables().shot19_offsets.at16(x.b, off + 2);
     x.add16(0xc, dz);
     x.set8(f::FLIP, 0);
     x.anim_start(ANIMS, anim as u16);

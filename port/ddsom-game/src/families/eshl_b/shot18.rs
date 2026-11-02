@@ -1,8 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16e534;
-/// Speed table number (byte) according to A5+0x7f92.
-const SPEED_TABLES: u32 = 0xa0a60;
 const LEVEL_VARIABLE: u32 = 0x7f92;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -15,7 +14,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             x.set8(0x2d, angle);
             let level = x.a5_u16(LEVEL_VARIABLE);
-            let table = x.rom8(SPEED_TABLES.wrapping_add(level as i16 as i32 as u32));
+            let table = tables().shot18_speed_tables.at8(x.b, level as i16 as i32 as u32);
             speed_table(x, level as u32 & 0xff00 | table as u32);
             x.anim_start(ANIMS, 7);
         }

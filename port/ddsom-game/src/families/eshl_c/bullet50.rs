@@ -1,10 +1,9 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x170468;
 const HOST: u32 = 0x42;
 const SOUND: crate::sound::Sound = crate::sound::CMD_35B_45B;
-/// Duration of the animation phases (bytes).
-const PHASE_LENGTHS: u32 = 0xa44aa;
 const PHASE: u32 = 0x5a;
 const PHASE_TIMER: u32 = 0x5b;
 const FALL_TIMER: u32 = 0x58;
@@ -70,7 +69,7 @@ fn phase_tick<R: Bench>(x: &mut Cx<'_, R>) {
 /// Starts the animation of the current phase, then one step.
 fn start_phase<R: Bench>(x: &mut Cx<'_, R>) {
     let phase = x.u8(PHASE);
-    let len = x.rom8(PHASE_LENGTHS + phase as u32);
+    let len = tables().bullet50_phase_lengths.at8(x.b, phase as u32);
     x.set8(PHASE_TIMER, len);
     ai_anim(x, ANIMS, phase as u32 + 3);
     let p = x.u8(0x3b);

@@ -1,7 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x170222;
-const ANIM_OF_DIRECTION: u32 = 0xa37ba;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -13,7 +13,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(f::BOX_SET, 7);
             x.select_speed(&crate::objects::motion::SPEEDS_B, 0x40);
             let dir = x.u8(0x2d) as u32 >> 1;
-            let extra = x.rom8(ANIM_OF_DIRECTION + dir);
+            let extra = tables().shot43_anims_of_direction.at8(x.b, dir);
             ai_anim(x, ANIMS, 0x10u32.wrapping_add(extra as u32) & 0xff);
         }
         2 => fly(x),

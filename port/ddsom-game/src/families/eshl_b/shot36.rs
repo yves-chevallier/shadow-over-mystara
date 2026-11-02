@@ -1,9 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16fbf4;
-const SPEEDS: u32 = 0xa2aa4;
-const X_OFFSETS: u32 = 0xa2b0a;
-const Y_OFFSETS: u32 = 0xa2b2a;
 const SOUND_LAND: crate::sound::Sound = crate::sound::CMD_330;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -51,7 +49,7 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     speed_table(x, 0x17);
     let rng = x.random();
     let r = rng as u32 & 0xf;
-    let vz = x.rom16(SPEEDS + 2 * r);
+    let vz = tables().shot36_speeds.at16(x.b, 2 * r);
     x.set16(0x18, vz);
 }
 
@@ -59,10 +57,10 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
 fn place<R: Bench>(x: &mut Cx<'_, R>) {
     let rng = x.random();
     let r = rng as u32 & 0xf;
-    let mut dx = x.rom16(X_OFFSETS + 2 * r);
+    let mut dx = tables().shot36_x_offsets.at16(x.b, 2 * r);
     let rng = x.random();
     let r = rng as u32 & 0xf;
-    let dy = x.rom16(Y_OFFSETS + 2 * r);
+    let dy = tables().shot36_y_offsets.at16(x.b, 2 * r);
     if x.u8(f::FLIP) == 0 {
         dx = dx.wrapping_sub(0xc0);
     }

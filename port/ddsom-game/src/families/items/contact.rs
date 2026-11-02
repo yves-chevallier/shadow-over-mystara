@@ -1,4 +1,6 @@
 use super::*;
+use crate::families::shell::tables::{box_byte, held8, tables, Read};
+use ddsom_data::effects::Table;
 
 // ---------------------------------------------------------------------------------------------
 // Type 8: contact objects (0xdd132)
@@ -13,34 +15,20 @@ use super::*;
 ///
 /// `A5-0x5ac4` is non-zero as long as a player is picking one up: only one at a time.
 pub const ENTRY: u32 = 0xdd132;
-pub const TABLE_VARIANTS: u32 = 0xdd142;
 pub const ANIMATIONS: u32 = 0x1bf8fe;
 // variant 0
-pub const V0_STATES: u32 = 0xdd156;
-pub const V0_SUB_STATES: u32 = 0xdd190;
-pub const V0_ANIMATIONS: u32 = 0xdd180;
-pub const V0_ANIMATIONS_KEY: u32 = 0xdd1d2;
-pub const V0_ANIMATIONS_SET: u32 = 0xdd22a;
-pub const V0_ANIMATIONS_END: u32 = 0xdd246;
 // variant 1
-pub const V1_STATES: u32 = 0xdd280;
-pub const V1_SUB_STATES: u32 = 0xdd2d4;
 // variant 2
-pub const V2_STATES: u32 = 0xdd3ca;
-pub const V2_SUB_STATES: u32 = 0xdd400;
 /// Lock: a player is picking up (A5-0x5ac4) and the event set in `A5+0x5e`.
 pub const BUSY: i32 = -0x5ac4;
 pub const SET_CREATED: u32 = 0x42;
 pub const DELAY: u32 = 0x4c;
-/// Contact boxes: one per type (`+0x39`) for the object, one per character and per `+0x38` for the player.
-pub const BOXES_OBJECT: u32 = 0xdd590;
-pub const BOXES_PLAYER: u32 = 0xdd578;
 pub const PLAYERS: u32 = 0xff85de;
 
 /// `0xdd470`: does a player touch the object? If so, the substate advances, the lock is lifted and the player becomes
 /// the owner.
 pub(super) fn contact_player<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
-    let busy = ctx.ram8(contact::BUSY) != 0;
+    let busy = ctx.ram8(BUSY) != 0;
     if busy {
         return false;
     }
@@ -48,12 +36,13 @@ pub(super) fn contact_player<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
     if hitbox == 0 {
         return false;
     }
-    let my_box = contact::BOXES_OBJECT + (hitbox << 3);
+    // the box is designated by its address, like the player's (`item_contact_boxes_object`)
+    let my_box = tables().item_contact_boxes_object.rom + (hitbox << 3);
     for i in 0..4u32 {
-        let player = Obj(contact::PLAYERS + i * 0x200);
+        let player = Obj(PLAYERS + i * 0x200);
         if player_key(ctx, o, player, my_box) {
             add_u8(ctx, o, field::SUB_STATE, 2);
-            ctx.set_ram8(contact::BUSY, 1);
+            ctx.set_ram8(BUSY, 1);
             o.set_u16(ctx.b, field::OWNER, player.0 as u16);
             return true;
         }
@@ -80,36 +69,38 @@ pub(super) fn player_key<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj, my_
         return false;
     }
     let class = (player.u8(ctx.b, 3) >> 1) as u32;
-    let table = ctx.data32(contact::BOXES_PLAYER + (class << 2));
+    let table = tables().item_contact_boxes_player.at32(ctx.b, class << 2);
     let its_box = table + (number << 3);
     overlaps(ctx, o, player, my_box, its_box)
 }
 
 /// The three box overlaps (X, Y then Z) between the object `o` (box `a`) and the player (box `b`).
 pub(super) fn overlaps<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj, a: u32, b: u32) -> bool {
-    let byte = |ctx: &mut Cx<'_, R>, address: u32| ctx.data8(address) as i8 as i16 as u16;
+    // `a`: a box of the object (`item_contact_boxes_object`); `b`: a body box of the player (sprites/tables.json)
+    let byte_a = |ctx: &mut Cx<'_, R>, address: u32| held8(ctx.b, address) as i8 as i16 as u16;
+    let byte_b = |ctx: &mut Cx<'_, R>, address: u32| box_byte(ctx.b, address) as i8 as i16 as u16;
     // X: the offsets invert with the orientation of each
-    let mut da = byte(ctx, a);
+    let mut da = byte_a(ctx, a);
     let turned = o.u8(ctx.b, field::FLIP) != 0;
     if turned {
         da = da.wrapping_neg();
     }
-    let mut db = byte(ctx, b);
+    let mut db = byte_b(ctx, b);
     let player_turned = player.u8(ctx.b, field::FLIP) != 0;
     if player_turned {
         db = db.wrapping_neg();
     }
     let gap = da.wrapping_add(o.u16(ctx.b, Obj::X)).wrapping_sub(db).wrapping_sub(player.u16(ctx.b, Obj::X));
-    let half = ctx.data8(a + 1).wrapping_add(ctx.data8(b + 1)) as u16;
+    let half = held8(ctx.b, a + 1).wrapping_add(box_byte(ctx.b, b + 1)) as u16;
     if gap.wrapping_add(half) > half.wrapping_mul(2) {
         return false;
     }
     // Y then Z: fixed offsets
     for (offset, size, position) in [(4u32, 5u32, Obj::Y), (2, 3, Obj::Z)] {
-        let da = byte(ctx, a + offset);
-        let db = byte(ctx, b + offset);
+        let da = byte_a(ctx, a + offset);
+        let db = byte_b(ctx, b + offset);
         let gap = da.wrapping_add(o.u16(ctx.b, position)).wrapping_sub(db.wrapping_add(player.u16(ctx.b, position)));
-        let half = ctx.data8(a + size).wrapping_add(ctx.data8(b + size)) as u16;
+        let half = held8(ctx.b, a + size).wrapping_add(box_byte(ctx.b, b + size)) as u16;
         if gap.wrapping_add(half) > half.wrapping_mul(2) {
             return false;
         }
@@ -119,28 +110,28 @@ pub(super) fn overlaps<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj, a: u3
 
 /// `0xdd16e`: starts animation `animation`, then sorts the object.
 pub(super) fn contact_animate<R: Bench>(ctx: &mut Cx<'_, R>, animation: u8) {
-    ctx.anim_start(contact::ANIMATIONS, animation as u16);
+    ctx.anim_start(ANIMATIONS, animation as u16);
     ctx.reinsert();
 }
 
 /// Animation drawn from a table indexed by the mode (`+0x2f`).
-pub(super) fn contact_animate_mode<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, table: u32) {
+pub(super) fn contact_animate_mode<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, table: &Table) {
     let mode = o.u8(ctx.b, field::MODE) as u32;
-    let animation = ctx.prog8(table + mode);
+    let animation = table.at8(ctx.b, mode);
     contact_animate(ctx, animation);
 }
 
 /// Creates the SET object of the pickup scene (type `+0x42`, word) and attaches it to the object. False if the type is
 /// negative (no scene) or if the pool is full.
 pub(super) fn contact_created_set<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
-    let word = o.u16(ctx.b, contact::SET_CREATED);
+    let word = o.u16(ctx.b, SET_CREATED);
     if word as i16 <= -1 {
         return false;
     }
     let Some(new) = scene_set_of(ctx, word as u8) else {
         return false;
     };
-    o.set_u16(ctx.b, contact::SET_CREATED, new.0 as u16);
+    o.set_u16(ctx.b, SET_CREATED, new.0 as u16);
     let owner = pointer(ctx, o, field::OWNER);
     let character = owner.u8(ctx.b, 2);
     new.set_u8(ctx.b, 0x37, character);
@@ -157,15 +148,15 @@ pub(super) fn contact_facing<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 /// Has the SET object finished? (`+0x22` of the SET object non-zero.)
 pub(super) fn contact_set_finished<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
-    let set = pointer(ctx, o, contact::SET_CREATED);
+    let set = pointer(ctx, o, SET_CREATED);
     set.u8(ctx.b, 0x22) != 0
 }
 
 /// Variant 0, end of the scene (`0xdd22e`): lifts the lock and goes to the flee substate.
 pub(super) fn contact_0_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ctx.set_ram8(contact::BUSY, 0);
+    ctx.set_ram8(BUSY, 0);
     o.set_u8(ctx.b, field::SUB_STATE, 6);
-    contact_animate_mode(ctx, o, contact::V0_ANIMATIONS_END);
+    contact_animate_mode(ctx, o, &tables().item_contact_v0_animations_end);
 }
 
 pub(super) fn shifted_x<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, step: u16) {
@@ -175,18 +166,16 @@ pub(super) fn shifted_x<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, step: u16) {
 
 pub(super) fn contact_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = crate::families::effects::target(ctx, contact::V0_STATES, state as u32);
     match state {
         state::INIT => {
             add_u8(ctx, o, Obj::STATE, 2);
             let mode = o.u8(ctx.b, field::MODE) as u32;
-            let animation = ctx.prog8(contact::V0_ANIMATIONS + mode);
+            let animation = tables().item_contact_v0_animations.at8(ctx.b, mode);
             o.set_u8(ctx.b, field::SUB_STATE, 0);
             contact_animate(ctx, animation);
         }
         state::ACTIVE => {
             let sub_state = o.u8(ctx.b, field::SUB_STATE);
-            let target = crate::families::effects::target(ctx, contact::V0_SUB_STATES, sub_state as u32);
             match sub_state {
                 0 => {
                     ctx.anim_step();
@@ -194,15 +183,15 @@ pub(super) fn contact_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                     if pickup == 0 {
                         return;
                     }
-                    let busy = ctx.ram8(contact::BUSY) != 0;
+                    let busy = ctx.ram8(BUSY) != 0;
                     if busy {
                         o.set_u8(ctx.b, field::PICKUP, 0);
                         return;
                     }
-                    ctx.set_ram8(contact::BUSY, 1);
+                    ctx.set_ram8(BUSY, 1);
                     add_u8(ctx, o, field::SUB_STATE, 2);
                     shard(ctx, o);
-                    contact_animate_mode(ctx, o, contact::V0_ANIMATIONS_KEY);
+                    contact_animate_mode(ctx, o, &tables().item_contact_v0_animations_key);
                 }
                 2 => {
                     ctx.anim_step();
@@ -215,7 +204,7 @@ pub(super) fn contact_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                         return contact_0_end(ctx, o);
                     }
                     contact_facing(ctx, o);
-                    contact_animate_mode(ctx, o, contact::V0_ANIMATIONS_SET);
+                    contact_animate_mode(ctx, o, &tables().item_contact_v0_animations_set);
                 }
                 4 => {
                     if contact_set_finished(ctx, o) {
@@ -229,11 +218,11 @@ pub(super) fn contact_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                     ctx.anim_step();
                     ctx.cull_offscreen();
                 }
-                _ => crate::families::effects::outside_table(target),
+                _ => crate::families::effects::bad_index(sub_state as u32),
             }
         }
         state::FREED | state::OUTSIDE_SCREEN => ctx.free(&pools::ITEM),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(state as u32),
     }
 }
 
@@ -264,39 +253,37 @@ pub(super) fn contact_1_speed<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 /// Variant 1, scene exit (`0xdd37c`): the lock is lifted, the bonus moves away.
 pub(super) fn contact_1_exit<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     contact_1_speed(ctx, o);
-    ctx.set_ram8(contact::BUSY, 0);
+    ctx.set_ram8(BUSY, 0);
     o.set_u8(ctx.b, field::SUB_STATE, 6);
     contact_1_animate(ctx);
 }
 
 pub(super) fn contact_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = crate::families::effects::target(ctx, contact::V1_STATES, state as u32);
     match state {
         state::INIT => {
             add_u8(ctx, o, Obj::STATE, 2);
             o.set_u8(ctx.b, field::SUB_STATE, 0);
-            o.set_u8(ctx.b, contact::DELAY, 0x3c);
+            o.set_u8(ctx.b, DELAY, 0x3c);
             contact_1_speed(ctx, o);
             contact_1_animate(ctx);
         }
         state::ACTIVE => {
             let sub_state = o.u8(ctx.b, field::SUB_STATE);
-            let target = crate::families::effects::target(ctx, contact::V1_SUB_STATES, sub_state as u32);
             match sub_state {
                 0 => {
                     let key = contact_player(ctx, o);
                     if key {
                         // no next contact: the substates advance by themselves
                         ctx.set_ram8(0x5e, 1);
-                        ctx.anim_start(contact::ANIMATIONS, 0x19);
+                        ctx.anim_start(ANIMATIONS, 0x19);
                         return;
                     }
                     contact_1_advance(ctx, o);
-                    let remainder = o.u8(ctx.b, contact::DELAY).wrapping_sub(1);
-                    o.set_u8(ctx.b, contact::DELAY, remainder);
+                    let remainder = o.u8(ctx.b, DELAY).wrapping_sub(1);
+                    o.set_u8(ctx.b, DELAY, remainder);
                     if !(remainder != 0) {
-                        o.set_u8(ctx.b, contact::DELAY, 0x3c);
+                        o.set_u8(ctx.b, DELAY, 0x3c);
                         let flip = o.u8(ctx.b, field::FLIP) ^ 0x20;
                         o.set_u8(ctx.b, field::FLIP, flip);
                         let v = o.u16(ctx.b, Obj::VX).wrapping_neg();
@@ -315,7 +302,7 @@ pub(super) fn contact_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                     contact_facing(ctx, o);
                 }
                 4 => {
-                    let set = pointer(ctx, o, contact::SET_CREATED);
+                    let set = pointer(ctx, o, SET_CREATED);
                     let in_progress = set.u8(ctx.b, 0x22) == 0;
                     if !in_progress {
                         contact_1_exit(ctx, o);
@@ -327,23 +314,22 @@ pub(super) fn contact_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                     ctx.reinsert();
                     ctx.cull_offscreen();
                 }
-                _ => crate::families::effects::outside_table(target),
+                _ => crate::families::effects::bad_index(sub_state as u32),
             }
         }
         state::FREED | state::OUTSIDE_SCREEN => ctx.free(&pools::ITEM),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(state as u32),
     }
 }
 
 /// Variant 2, end of the scene (`0xdd44e`).
 pub(super) fn contact_2_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ctx.set_ram8(contact::BUSY, 0);
+    ctx.set_ram8(BUSY, 0);
     add_u8(ctx, o, field::SUB_STATE, 2);
 }
 
 pub(super) fn contact_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = crate::families::effects::target(ctx, contact::V2_STATES, state as u32);
     match state {
         state::INIT => {
             add_u8(ctx, o, Obj::STATE, 2);
@@ -353,7 +339,6 @@ pub(super) fn contact_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         }
         state::ACTIVE => {
             let sub_state = o.u8(ctx.b, field::SUB_STATE);
-            let target = crate::families::effects::target(ctx, contact::V2_SUB_STATES, sub_state as u32);
             match sub_state {
                 0 => {
                     ctx.anim_step();
@@ -361,12 +346,12 @@ pub(super) fn contact_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                     if pickup == 0 {
                         return;
                     }
-                    let busy = ctx.ram8(contact::BUSY) != 0;
+                    let busy = ctx.ram8(BUSY) != 0;
                     if busy {
                         o.set_u8(ctx.b, field::PICKUP, 0);
                         return;
                     }
-                    ctx.set_ram8(contact::BUSY, 1);
+                    ctx.set_ram8(BUSY, 1);
                     add_u8(ctx, o, field::SUB_STATE, 2);
                     if !contact_created_set(ctx, o) {
                         contact_2_end(ctx, o);
@@ -380,22 +365,21 @@ pub(super) fn contact_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 4 => {
                     ctx.anim_step();
                 }
-                _ => crate::families::effects::outside_table(target),
+                _ => crate::families::effects::bad_index(sub_state as u32),
             }
         }
         state::FREED | state::OUTSIDE_SCREEN => ctx.free(&pools::ITEM),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(state as u32),
     }
 }
 
 pub(super) fn contact_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    let target = crate::families::effects::target(ctx, contact::TABLE_VARIANTS, 2 * variant as u32);
     match variant {
         0 => contact_0(ctx, o),
         1 => contact_1(ctx, o),
         2 => contact_2(ctx, o),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(2 * variant as u32),
     }
 }

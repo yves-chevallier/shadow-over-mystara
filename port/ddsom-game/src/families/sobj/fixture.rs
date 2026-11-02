@@ -1,10 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x1c40c6;
-/// Variant -> shape of the behavior at creation (0: none, 1: saves X/Y).
-const INIT_KIND: u32 = 0xddc6e;
-/// Variant -> shape of the per-frame behavior (0: screen exit, 1: scrolling, 2: following).
-const STEP_KIND: u32 = 0xddd16;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
@@ -13,7 +10,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             let variant = x.u8(0x3) as u32;
             x.anim_start(ANIMS, variant as u16);
             x.reinsert();
-            if x.rom8(INIT_KIND + variant) == 1 {
+            if tables().sobj_fixture_init_kind.at8(x.b, variant) == 1 {
                 let v = x.u16(0x8);
                 x.set16(0xa, v);
                 let v = x.u16(0x10);
@@ -25,7 +22,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
                 x.anim_step();
             }
             let variant = x.u8(0x3) as u32;
-            match x.rom8(STEP_KIND + variant) {
+            match tables().sobj_fixture_step_kind.at8(x.b, variant) {
                 0 => cull_beyond(x, 0x60),
                 1 => {
                     let (dx, dy) = camera_delta(x);

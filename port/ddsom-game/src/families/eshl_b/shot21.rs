@@ -1,7 +1,7 @@
 use super::*;
+use crate::families::shell::tables::tables;
 
 const ANIMS: u32 = 0x16e752;
-const ATTACH: u32 = 0xa113a;
 const LOOP: u8 = 0;
 const END: u8 = 2;
 
@@ -21,7 +21,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.add8(0x4, 2);
-    attach(x, ATTACH);
+    attach(x, &tables().shot21_attach);
     x.set8(f::BOX_SET, 7);
     x.set8(f::ATTACK_ID, 0xb);
     x.set8(0x42, 0x4f);
@@ -49,7 +49,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     }
     match x.u8(0x5) {
         LOOP => {
-            attach(x, ATTACH);
+            attach(x, &tables().shot21_attach);
             if !x.anim_step() {
                 return x.reinsert();
             }
@@ -73,7 +73,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         END => {
-            attach(x, ATTACH);
+            attach(x, &tables().shot21_attach);
             if x.anim_step() {
                 burn(x);
             }

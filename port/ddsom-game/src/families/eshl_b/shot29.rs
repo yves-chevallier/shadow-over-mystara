@@ -1,7 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16eec2;
-const ATTACH_SHIFT: u32 = 0xa1fac;
 const SOUND_START: crate::sound::Sound = crate::sound::CMD_32D;
 const SOUND_END: crate::sound::Sound = crate::sound::CMD_337;
 const SOURCE_ARMED: u32 = 0xaf;
@@ -140,7 +140,7 @@ fn follow<R: Bench>(x: &mut Cx<'_, R>) {
     let attack = source.u8(x.b, 0x7);
     if attack == 0x16 || attack == 0x18 {
         let index = source.u8(x.b, 0x33) as u32;
-        let mut dx = x.rom16(ATTACH_SHIFT + index);
+        let mut dx = tables().shot29_attach_shift.at16(x.b, index);
         if flip != 0 {
             dx = dx.wrapping_neg();
         }

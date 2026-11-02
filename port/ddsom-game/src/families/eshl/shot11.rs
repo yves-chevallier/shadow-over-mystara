@@ -1,7 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x169fb0;
-const OFFSETS: u32 = 0x9f524;
 /// Variable `A5+0x6f`: bit 0 = forced animation rate.
 const FORCE_ANIM: u32 = 0x6f;
 
@@ -63,8 +63,8 @@ fn attach<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
         let v = owner.u32(x.b, off);
         x.set32(off, v);
     }
-    let row = OFFSETS + ((4 * x.u8(0x3) as u32) & 0xff);
-    let (dx, dy) = (x.rom16(row), x.rom16(row + 2));
+    let row = (4 * x.u8(0x3) as u32) & 0xff;
+    let (dx, dy) = (tables().shot11_offsets.at16(x.b, row), tables().shot11_offsets.at16(x.b, row + 2));
     x.add16(0x8, dx);
     x.add16(0x10, dy);
     owner

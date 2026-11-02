@@ -1,8 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x17a276;
-/// Speeds (VX VZ AZ AX), one 8-byte row per range (8, 0x10, 0x18).
-const SPEEDS: u32 = 0xa034e;
 /// Substates of state 2 (`+5`).
 const FLY: u8 = 0;
 const HOLD: u8 = 2;
@@ -79,16 +78,16 @@ fn aim<R: Bench>(x: &mut Cx<'_, R>) {
             0x18
         }
     };
-    let mut vx = x.rom16(SPEEDS + row);
+    let mut vx = tables().shot15_speeds.at16(x.b, row);
     if enemy.u8(x.b, f::FLIP) != 0 {
         vx = vx.wrapping_neg();
     }
     x.set16(0x14, vx);
-    let vz = x.rom16(SPEEDS + row + 2);
+    let vz = tables().shot15_speeds.at16(x.b, row + 2);
     x.set16(0x18, vz);
-    let az = x.rom16(SPEEDS + row + 4);
+    let az = tables().shot15_speeds.at16(x.b, row + 4);
     x.set16(0x1a, az);
-    let ax = x.rom16(SPEEDS + row + 6);
+    let ax = tables().shot15_speeds.at16(x.b, row + 6);
     x.set16(0x16, ax);
 }
 

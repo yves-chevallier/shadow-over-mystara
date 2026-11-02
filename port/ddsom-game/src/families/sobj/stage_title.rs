@@ -1,8 +1,8 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
-const ANIM_BY_STAGE: u32 = 0xdff0c;
-const FADE: u32 = 0x291f00;
-const FADE_OUT_FINAL: u32 = 0x292120;
+const FADE: RomAddr = RomAddr(0x291f00);
+const FADE_OUT_FINAL: RomAddr = RomAddr(0x292120);
 const PALETTE_DST: u32 = 0x91c1e0;
 const DURATION: u16 = 0xb4;
 const STEP_FRAMES: u16 = 4;
@@ -33,7 +33,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn fade_to<R: Bench>(x: &mut Cx<'_, R>, step: u16) {
-    let from = FADE + ((step as u32) << 5 & 0xffff);
+    let from = FADE.offset(((step as u32) << 5 & 0xffff) as i32);
     copy_longs(x, from, PALETTE_DST, 8);
 }
 
@@ -53,7 +53,7 @@ fn start<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x18, STEP_FRAMES);
     x.set16(0x1c, STEPS);
     fade_to(x, STEPS);
-    let mut anim = x.rom16(ANIM_BY_STAGE + 2 * stage as u32);
+    let mut anim = tables().sobj_stage_title_anims_by_stage.at16(x.b, 2 * stage as u32);
     if x.a5_u16(ALT) != 0 {
         anim = anim.wrapping_add(0x10d);
     }

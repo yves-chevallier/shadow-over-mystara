@@ -1,12 +1,9 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x17a276;
 const ANIMS_CHARGE: u32 = 0x17a29e;
 const ANIMS_END: u32 = 0x17a2b4;
-const ANIM_OF_VARIANT: u32 = 0x9f7dc;
-const OFFSETS: u32 = 0x9fd50;
-/// Byte table (data space) of the edge shot animations.
-const BREATH_ANIMS: u32 = 0x9fe00;
 /// Attack flags of the owner.
 const LAUNCHED: u32 = 0xa8;
 const PREPARING: u32 = 0xa9;
@@ -30,7 +27,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(0xc, 0);
             x.set8(f::BOX_SET, 7);
             let variant = x.u8(0x3) as u32;
-            let anim = x.rom8(ANIM_OF_VARIANT + variant);
+            let anim = tables().shot14_anims_of_variant.at8(x.b, variant);
             x.anim_start(ANIMS, (anim as u32) as u16);
         }
         ACTIVE => {
@@ -73,8 +70,8 @@ fn attach<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let flip = owner.u8(x.b, f::FLIP);
     x.set8(f::FLIP, flip);
-    let row = OFFSETS + ((8 * x.u8(0x3) as u32) & 0xff);
-    let (mut dx, mut dy, mut dfrac, dz) = (x.rom16(row), x.rom16(row + 2), x.rom16(row + 4), x.rom16(row + 6));
+    let row = (8 * x.u8(0x3) as u32) & 0xff;
+    let (mut dx, mut dy, mut dfrac, dz) = (tables().shot14_offsets.at16(x.b, row), tables().shot14_offsets.at16(x.b, row + 2), tables().shot14_offsets.at16(x.b, row + 4), tables().shot14_offsets.at16(x.b, row + 6));
     if flip != 0 {
         dx = dx.wrapping_neg();
         if x.u8(0x3) == 2 {
@@ -307,8 +304,8 @@ fn breath_anim<R: Bench>(x: &mut Cx<'_, R>) {
         index = if (b.wrapping_sub(a) as i16) > 0xfc { 3 } else { 2 };
     }
     index *= 2;
-    let first = x.data8(BREATH_ANIMS + index);
-    let second = x.data8(BREATH_ANIMS + index + 1);
+    let first = tables().shot14_breath_anims.at8(x.b, index);
+    let second = tables().shot14_breath_anims.at8(x.b, index + 1);
     let anim = if x.u8(0x3) == 3 { first } else { second };
     x.anim_start(ANIMS_CHARGE, (anim as u32) as u16);
 }

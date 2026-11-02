@@ -92,34 +92,54 @@ pub struct Spec {
     pub end: Option<u32>,
 }
 
-/// Declares the tables: `/// meaning` then `name: space size @ address [.. end];` with `space` = `data` or `prog`.
+/// Declares a family of tables: `/// doc` then `struct Name;`, then per table `/// meaning` and
+/// `name: space size @ address [.. end];` with `space` = `data` or `prog`. Produces the struct (one field per table),
+/// its declarations (`SPECS`), `build`, `tables`, `load`, `to_map` and `find`. Used by every family of named tables
+/// (`effects`, `objects`).
 macro_rules! tables {
-    ($( $(#[$doc:meta])* $name:ident: $space:ident $size:literal @ $rom:literal $(.. $end:literal)?; )*) => {
-        /// The tables of the EFFCT family, one field per table.
+    ($(#[$sdoc:meta])* struct $ty:ident;
+     $( $(#[$doc:meta])* $name:ident: $space:ident $size:literal @ $rom:literal $(.. $end:literal)?; )*) => {
+        $(#[$sdoc])*
         #[derive(Clone, Debug, PartialEq, Eq)]
-        pub struct EffectTables {
-            $( $(#[$doc])* pub $name: Table, )*
+        pub struct $ty {
+            $( $(#[$doc])* pub $name: $crate::effects::Table, )*
         }
 
-        impl EffectTables {
+        impl $ty {
             /// The declarations of the tables, in the order of the fields.
-            pub const SPECS: &'static [Spec] = &[ $( Spec {
+            pub const SPECS: &'static [$crate::effects::Spec] = &[ $( $crate::effects::Spec {
                 name: stringify!($name),
                 rom: $rom,
-                program: tables!(@program $space),
+                program: $crate::effects::tables!(@program $space),
                 size: $size,
-                end: tables!(@end $($end)?),
+                end: $crate::effects::tables!(@end $($end)?),
             }, )* ];
 
             /// The tables built by `make` from their declarations.
-            pub fn build(mut make: impl FnMut(&Spec) -> Table) -> Self {
+            pub fn build(mut make: impl FnMut(&$crate::effects::Spec) -> $crate::effects::Table) -> Self {
                 let mut specs = Self::SPECS.iter();
-                EffectTables { $( $name: make(specs.next().unwrap()), )* }
+                $ty { $( $name: make(specs.next().unwrap()), )* }
             }
 
             /// The tables with their names, in the order of the fields.
-            pub fn tables(&self) -> Vec<&Table> {
+            pub fn tables(&self) -> Vec<&$crate::effects::Table> {
                 vec![ $( &self.$name, )* ]
+            }
+
+            /// Loads the tables written by `extract` (a JSON object, one entry per table name).
+            pub fn load(path: &std::path::Path) -> std::io::Result<Self> {
+                $crate::effects::load_tables(path, |make| Self::build(make))
+            }
+
+            /// The tables by name, as written in the JSON file.
+            pub fn to_map(&self) -> std::collections::BTreeMap<&'static str, &$crate::effects::Table> {
+                self.tables().into_iter().map(|t| (t.name, t)).collect()
+            }
+
+            /// The table that holds the address `a` of the given space (data held by address in the state of an
+            /// object).
+            pub fn find(&self, a: u32, program: bool) -> Option<&$crate::effects::Table> {
+                self.tables().into_iter().find(|t| t.program == program && t.contains(a))
             }
         }
     };
@@ -128,36 +148,30 @@ macro_rules! tables {
     (@end) => { None };
     (@end $end:literal) => { Some($end) };
 }
+pub(crate) use tables;
 
-impl EffectTables {
-    pub fn load(path: &Path) -> io::Result<Self> {
-        let mut map: BTreeMap<String, Table> = crate::json::load(path)?;
-        let mut missing = None;
-        let t = EffectTables::build(|spec| match map.remove(spec.name) {
-            Some(t) => Table { name: spec.name, ..t },
-            None => {
-                missing.get_or_insert(spec.name);
-                Table { rom: spec.rom, program: spec.program, size: spec.size, values: Vec::new(), name: spec.name }
-            }
-        });
-        match missing {
-            Some(name) => Err(io::Error::other(format!("{}: table `{name}` missing", path.display()))),
-            None => Ok(t),
+/// Loads a family of tables from `path` through its `build` (see [`tables!`]): every declared table must be in the
+/// file.
+pub fn load_tables<T>(path: &Path, build: impl FnOnce(&mut dyn FnMut(&Spec) -> Table) -> T) -> io::Result<T> {
+    let mut map: BTreeMap<String, Table> = crate::json::load(path)?;
+    let mut missing = None;
+    let t = build(&mut |spec: &Spec| match map.remove(spec.name) {
+        Some(t) => Table { name: spec.name, ..t },
+        None => {
+            missing.get_or_insert(spec.name);
+            Table { rom: spec.rom, program: spec.program, size: spec.size, values: Vec::new(), name: spec.name }
         }
-    }
-
-    /// The tables by name, as written in `data/effects.json`.
-    pub fn to_map(&self) -> BTreeMap<&'static str, &Table> {
-        self.tables().into_iter().map(|t| (t.name, t)).collect()
-    }
-
-    /// The table that holds the address `a` of the given space (data held by address in the state of an object).
-    pub fn find(&self, a: u32, program: bool) -> Option<&Table> {
-        self.tables().into_iter().find(|t| t.program == program && t.contains(a))
+    });
+    match missing {
+        Some(name) => Err(io::Error::other(format!("{}: table `{name}` missing", path.display()))),
+        None => Ok(t),
     }
 }
 
 tables! {
+    /// The tables of the EFFCT family, one field per table.
+    struct EffectTables;
+
     /// `effects/f`: Start position (x, depth) and arrival abscissa (`+0x18`) per variant (words, program space).
     opening_starts: prog 2 @ 0xa8602;
     /// `effects/f`.

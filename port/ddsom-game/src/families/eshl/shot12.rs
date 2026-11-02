@@ -1,8 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16dda2;
-const OFFSETS: u32 = 0x9f654;
-const ANIM_OF_VARIANT: u32 = 0x9f5e0;
 /// Attachment point (RAM address on 16 bits).
 const ANCHOR: u32 = 0x5a;
 
@@ -12,7 +11,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(0x4, 2);
             attach(x);
             let variant = x.u8(0x3) as u32;
-            let anim = x.rom8(ANIM_OF_VARIANT + variant);
+            let anim = tables().shot12_anims_of_variant.at8(x.b, variant);
             x.anim_start(ANIMS, (anim as u32) as u16);
             animate(x);
         }
@@ -35,8 +34,8 @@ fn attach<R: Bench>(x: &mut Cx<'_, R>) {
         x.set16(off, v);
     }
     x.add32(0x10, u32::MAX);
-    let row = OFFSETS + ((4 * x.u8(0x3) as u32) & 0xff);
-    let (dx, dz) = (x.rom16(row), x.rom16(row + 2));
+    let row = (4 * x.u8(0x3) as u32) & 0xff;
+    let (dx, dz) = (tables().shot12_offsets.at16(x.b, row), tables().shot12_offsets.at16(x.b, row + 2));
     let flip = anchor.u8(x.b, f::FLIP) != 0;
     x.add16(0x8, if flip { dx } else { dx.wrapping_neg() });
     x.add16(0xc, dz);

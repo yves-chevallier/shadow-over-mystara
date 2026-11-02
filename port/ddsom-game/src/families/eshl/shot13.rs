@@ -1,7 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x17a276;
-const OFFSETS: u32 = 0x9f776;
 /// The handler's address (A1 left by the dispatch loop).
 const HANDLER: u32 = 0x9f67c;
 const CURRENT_ANIM: u32 = 0x42;
@@ -55,8 +55,8 @@ fn attach<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
     }
     let flip = owner.u8(x.b, f::FLIP);
     x.set8(f::FLIP, flip);
-    let row = OFFSETS + ((8 * x.u8(0x3) as u32) & 0xff);
-    let (dx, dy, dfrac, dz) = (x.rom16(row), x.rom16(row + 2), x.rom16(row + 4), x.rom16(row + 6));
+    let row = (8 * x.u8(0x3) as u32) & 0xff;
+    let (dx, dy, dfrac, dz) = (tables().shot13_offsets.at16(x.b, row), tables().shot13_offsets.at16(x.b, row + 2), tables().shot13_offsets.at16(x.b, row + 4), tables().shot13_offsets.at16(x.b, row + 6));
     x.add16(0x8, if flip != 0 { dx.wrapping_neg() } else { dx });
     x.add16(0x10, dy);
     x.add32(0x10, dfrac as i16 as i32 as u32);

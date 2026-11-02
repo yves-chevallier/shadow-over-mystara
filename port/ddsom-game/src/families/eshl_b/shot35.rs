@@ -1,7 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16fafa;
-const DIRECTIONS: u32 = 0xa2934;
 const FLY: u8 = 0;
 const FADE: u8 = 2;
 
@@ -17,7 +17,7 @@ fn state<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(f::ATTACK_POWER, 0xc);
             x.set16(0x58, 0x5a);
             let variant = x.u8(0x3) as u32;
-            let direction = x.rom8(DIRECTIONS + variant);
+            let direction = tables().shot35_directions.at8(x.b, variant);
             x.set8(0x2d, direction);
             speed_table(x, 0xb);
             ai_start(x, ANIMS, 0);

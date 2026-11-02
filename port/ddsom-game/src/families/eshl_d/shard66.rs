@@ -1,11 +1,9 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x17b9d6;
-/// Animation per variant, at creation then at impact (bytes, program ROM).
-const START_ANIMS: u32 = 0xa760e;
-const LAND_ANIMS: u32 = 0xa777a;
-/// Offsets (X, depth) per variant, four bytes per rank (words, in the clear).
-const OFFSETS: [u32; 6] = [0xa7834, 0xa7834, 0xa7854, 0xa7870, 0xa7890, 0xa78a8];
+/// Offsets per variant of its rows in `shard66_offsets`.
+const OFFSETS: [u32; 6] = [0, 0, 0x20, 0x3c, 0x5c, 0x74];
 const CARRIER: u32 = 0x46;
 const TIMER: u32 = 0x42;
 const RANK: u32 = 0x2f;
@@ -30,14 +28,14 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.u8(0x3) as usize;
     let table = OFFSETS.get(v).copied().unwrap_or(OFFSETS[0]);
     let row = table + 4 * x.u8(RANK) as u32;
-    let dx = x.data16(row);
+    let dx = tables().shard66_offsets.at16(x.b, row);
     let dx = if x.u8(f::FLIP) != 0 { dx.wrapping_neg() } else { dx };
     x.set16(0x14, dx);
-    let dz = x.data16(row + 2);
+    let dz = tables().shard66_offsets.at16(x.b, row + 2);
     x.set16(0x1c, dz);
     x.set16(0x18, 0x60);
     x.set16(TIMER, 8);
-    let n = x.rom8(START_ANIMS + v as u32) as u32;
+    let n = tables().shard66_start_anims.at8(x.b, v as u32) as u32;
     x.anim_start(ANIMS, n as u16);
 }
 
@@ -87,7 +85,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(f::ATTACK_ID, 0x32);
                 x.set16(TIMER, 16);
                 let v = x.u8(0x3) as u32;
-                let n = x.rom8(LAND_ANIMS + v) as u32;
+                let n = tables().shard66_land_anims.at8(x.b, v) as u32;
                 x.anim_start(ANIMS, n as u16);
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 4);
                 crate::sound::play(x.b, SFX_LAND, x.o);

@@ -1,4 +1,5 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 // ---------------------------------------------------------------------------------------------
 // Type 7: player reserve (0xdce6e)
@@ -7,14 +8,8 @@ use super::*;
 /// (table per character, then per class). Same cycle as type 4: fall, wait (0x4b0 frames, blinking), pickup (refused:
 /// thrown off in an arc), mode 1: thrown object.
 pub const ENTRY: u32 = 0xdce6e;
-pub const TABLE_STATES: u32 = 0xdce84;
-pub const TABLE_SUB_STATES: u32 = 0xdcf38;
 pub const ANIMATIONS: u32 = 0x1c001e;
 pub const DURATION_TO_GROUND: u16 = 0x4b0;
-/// Per character (program space): is the object usable?
-pub const CHARACTERS: u32 = 0xdd01e;
-/// Per class (data): reserve accepted?
-pub const CLASSES: u32 = 0xdd122;
 pub const COUNTERS: u32 = 0x150;
 
 pub(super) fn reserve_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
@@ -28,7 +23,7 @@ pub(super) fn reserve_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         }
         add_u8(ctx, o, Obj::STATE, 2);
         o.set_u8(ctx.b, field::GAME_SHADOWS, SHADOWS);
-        return animate_and_sort(ctx, reserve::ANIMATIONS, variant.wrapping_add(0xa));
+        return animate_and_sort(ctx, ANIMATIONS, variant.wrapping_add(0xa));
     }
     if airborne(ctx, o) {
         state_next(ctx, o, sub::FALL);
@@ -36,9 +31,9 @@ pub(super) fn reserve_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     } else {
         state_next(ctx, o, sub::WAIT);
         o.set_u8(ctx.b, field::GAME_SHADOWS, SHADOWS);
-        o.set_u16(ctx.b, field::DURATION, reserve::DURATION_TO_GROUND);
+        o.set_u16(ctx.b, field::DURATION, DURATION_TO_GROUND);
     }
-    animate_and_sort(ctx, reserve::ANIMATIONS, variant);
+    animate_and_sort(ctx, ANIMATIONS, variant);
 }
 
 /// Wait substate: the player who touches the object (`PICKUP`) makes it go to the pickup.
@@ -54,7 +49,7 @@ pub(super) fn reserve_wait<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn reserve_add<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
     let player = pointer(ctx, o, field::OWNER);
     let class = (player.u8(ctx.b, 3) >> 1) as u32;
-    let accepted = ctx.data8(reserve::CLASSES + class);
+    let accepted = tables().item_reserve_classes.at8(ctx.b, class);
     if !(accepted != 0) {
         o.set_u8(ctx.b, field::SUB_STATE, 6);
         o.set_u8(ctx.b, field::SUB_SUB_STATE, 0);
@@ -62,7 +57,7 @@ pub(super) fn reserve_add<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
         return true;
     }
     let variant = o.u8(ctx.b, Obj::VARIANT) as u32;
-    let counter = player.0 + reserve::COUNTERS + variant;
+    let counter = player.0 + COUNTERS + variant;
     let n = crate::mem::rd8(ctx.b, counter).wrapping_add(1);
     crate::mem::wr8(ctx.b, counter, n);
     if !(n <= 9) {
@@ -81,7 +76,7 @@ pub(super) fn reserve_pickup<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         }
     }
     let character = player.u8(ctx.b, 3) as u32;
-    let allowed = ctx.prog8(reserve::CHARACTERS + character);
+    let allowed = tables().item_reserve_characters.at8(ctx.b, character);
     if !(allowed != 0) {
         add_u8(ctx, o, field::SUB_STATE, 0xfe);
         o.set_u8(ctx.b, field::PICKUP, 0);
@@ -95,7 +90,6 @@ pub(super) fn reserve_pickup<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 pub(super) fn reserve_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sub_state = o.u8(ctx.b, field::SUB_STATE);
-    let target = crate::families::effects::target(ctx, reserve::TABLE_SUB_STATES, sub_state as u32);
     match sub_state {
         sub::FALL => {
             let pose = o.u8(ctx.b, field::SUB_SUB_STATE);
@@ -103,7 +97,7 @@ pub(super) fn reserve_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 let in_flight = ctx.move_xyz().gt();
                 if !in_flight {
                     add_u8(ctx, o, field::SUB_SUB_STATE, 2);
-                    o.set_u16(ctx.b, field::DURATION, reserve::DURATION_TO_GROUND);
+                    o.set_u16(ctx.b, field::DURATION, DURATION_TO_GROUND);
                     o.set_u32(ctx.b, Obj::Z, 0);
                     let mode = o.u8(ctx.b, field::MODE);
                     if !(mode != 0) {
@@ -125,7 +119,7 @@ pub(super) fn reserve_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         sub::WAIT => reserve_wait(ctx, o),
         sub::PICKUP => reserve_pickup(ctx, o),
         6 => inventory_reject(ctx, o),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(sub_state as u32),
     }
 }
 
@@ -136,11 +130,10 @@ pub(super) fn reserve_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
         return;
     }
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = crate::families::effects::target(ctx, reserve::TABLE_STATES, state as u32);
     match state {
         state::INIT => reserve_init(ctx, o),
         state::ACTIVE => reserve_active(ctx, o),
         state::FREED | state::OUTSIDE_SCREEN => ctx.free(&pools::ITEM),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(state as u32),
     }
 }

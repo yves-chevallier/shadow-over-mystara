@@ -1,6 +1,6 @@
 use super::*;
 
-const PALETTE: u32 = 0x28ff20;
+const PALETTE: RomAddr = RomAddr(0x28ff20);
 const PALETTE_DST: u32 = 0x91c3c0;
 const SLIDE_ANIMS: u32 = 0x1c40c6;
 

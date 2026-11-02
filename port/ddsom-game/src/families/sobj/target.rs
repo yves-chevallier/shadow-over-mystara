@@ -1,6 +1,6 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
-const RECTS: u32 = 0xe02c6;
 const HITS_TO_BREAK: u8 = 3;
 const SOUND: crate::sound::Sound = crate::sound::CMD_135_235;
 const SHOOTER_CODE: u32 = 0xff_2ab2;
@@ -14,9 +14,9 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(0x4, 2);
             x.set8(0x14, 0);
             let row = if x.u8(0x3) == VARIANT_A { 0 } else { 1 };
-            let rect = RECTS + 8 * row;
+            let rect = 8 * row;
             for i in 0..4 {
-                let v = x.data16(rect + 2 * i);
+                let v = tables().sobj_target_rects.at16(x.b, rect + 2 * i);
                 x.set16(0x16 + 2 * i, v);
             }
             let v = x.u16(0x8);

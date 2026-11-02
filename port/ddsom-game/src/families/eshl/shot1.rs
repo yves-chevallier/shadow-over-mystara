@@ -1,8 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16c946;
-/// Speed table (16 bytes per variant: VX AX VZ AZ VY AY).
-const SPEEDS: u32 = 0x9dfe2;
 const LOB: u8 = 0;
 const LANDED: u8 = 2;
 const BLINK: u8 = 4;
@@ -47,9 +46,9 @@ fn burst<R: Bench>(x: &mut Cx<'_, R>) {
     copy_position(x, owner);
     x.add16(0x10, 0xffff);
     x.add16(0xc, 0x32);
-    let row = SPEEDS + 16 * x.u8(0x3) as u32;
+    let row = 16 * x.u8(0x3) as u32;
     for i in 0..6 {
-        let v = x.rom16(row + 2 * i);
+        let v = tables().shot1_speeds.at16(x.b, row + 2 * i);
         x.set16(0x14 + 2 * i, v);
     }
 }

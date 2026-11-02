@@ -1,4 +1,5 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 // ---------------------------------------------------------------------------------------------
 // Type 3: equipment (0xdb7de)
@@ -9,15 +10,7 @@ use super::*;
 /// if it is better, or takes a free slot; refused if the class cannot carry it or if the first slot is locked (thrown
 /// off in an arc). Variants 0x24 to 0x27 also give the player a temporary bonus (`+0x18b..0x191`).
 pub const ENTRY: u32 = 0xdb7de;
-pub const STATES: u32 = 0xdb7f4;
-pub const SUB_STATES: u32 = 0xdb88c;
 pub const ANIMATIONS: u32 = 0x1bf156;
-/// Pickup index per variant.
-pub const INDICES: u32 = 0xdbdcc;
-/// Sheets (data); bytes 0 to 5: authorized classes, 6: identifier, 7: group.
-pub const SHEETS: u32 = 0xdbc8c;
-/// Per class, 8 identifiers that the first slot cannot replace.
-pub const LOCKED: u32 = 0xdbc5c;
 pub const FIRST_EQUIPPED: u32 = 0x10d;
 pub const SECOND_EQUIPPED: u32 = 0x10e;
 
@@ -59,7 +52,7 @@ pub(super) fn equipment_refused<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
 /// Group of an equipment (byte 7 of its sheet).
 pub(super) fn equipment_group<R: Bench>(ctx: &mut Cx<'_, R>, id: u8) -> u8 {
     let rank = ((id.wrapping_sub(0x2e) as u32) << 3) & 0xffff;
-    ctx.data8(equipment::SHEETS + 7 + rank)
+    tables().item_equipment_sheets.at8(ctx.b, 7 + rank)
 }
 
 /// `0xdbad8`: stores the equipment in the owner's inventory. Returns true if refused.
@@ -67,13 +60,13 @@ pub(super) fn equipment_add<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
     let player = pointer(ctx, o, field::OWNER);
     let line = ((o.u8(ctx.b, Obj::VARIANT) as u32) << 3) & 0xffff;
     let class = (player.u8(ctx.b, 3) >> 1) as u32;
-    let allowed = ctx.data8(equipment::SHEETS + line + class);
+    let allowed = tables().item_equipment_sheets.at8(ctx.b, line + class);
     if !(allowed != 0) {
         return equipment_refused(ctx, o);
     }
-    let mut id = ctx.data8(equipment::SHEETS + 6 + line);
+    let mut id = tables().item_equipment_sheets.at8(ctx.b, 6 + line);
     // already equipped?
-    for off in [equipment::FIRST_EQUIPPED, equipment::SECOND_EQUIPPED] {
+    for off in [FIRST_EQUIPPED, SECOND_EQUIPPED] {
         let equipped = player.u8(ctx.b, off).wrapping_add(0x2e);
         if equipped == id {
             return equipment_accepted(ctx, o, player);
@@ -104,17 +97,17 @@ pub(super) fn equipment_add<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
         }
     }
     // equipment held in hand (byte 0x10d, or 0x10e for class 4)
-    let mut door = player.u8(ctx.b, equipment::FIRST_EQUIPPED);
+    let mut door = player.u8(ctx.b, FIRST_EQUIPPED);
     let class_main = player.u8(ctx.b, 3) >> 1;
     if !(class_main != 4) {
-        door = player.u8(ctx.b, equipment::SECOND_EQUIPPED);
+        door = player.u8(ctx.b, SECOND_EQUIPPED);
     }
-    let group_door = ctx.data8(equipment::SHEETS + 7 + ((door as u32) << 3));
+    let group_door = tables().item_equipment_sheets.at8(ctx.b, 7 + ((door as u32) << 3));
     let group_new = equipment_group(ctx, id);
     if !(group_new != group_door) {
         let new = id.wrapping_sub(0x2e);
         if !(door as i8 > new as i8) {
-            player.set_u8(ctx.b, equipment::FIRST_EQUIPPED, new);
+            player.set_u8(ctx.b, FIRST_EQUIPPED, new);
         }
         return equipment_accepted(ctx, o, player);
     }
@@ -130,7 +123,7 @@ pub(super) fn equipment_add<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
     // swap with the first slot, unless it is locked for this class
     let first = player.u8(ctx.b, inventory::IDS);
     for k in 0..8u32 {
-        let lock = ctx.data8(equipment::LOCKED + (class << 3) + k);
+        let lock = tables().item_equipment_locked.at8(ctx.b, (class << 3) + k);
         if first == lock {
             return equipment_refused(ctx, o);
         }
@@ -165,9 +158,9 @@ pub(super) fn equipment_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         o.set_u16(ctx.b, field::DURATION, 0x4b0);
     }
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    let index = ctx.data8(equipment::INDICES + variant as u32);
+    let index = tables().item_equipment_indices.at8(ctx.b, variant as u32);
     o.set_u8(ctx.b, field::INDEX, index);
-    animate_and_sort(ctx, equipment::ANIMATIONS, variant);
+    animate_and_sort(ctx, ANIMATIONS, variant);
 }
 
 /// Substate 6: the refused equipment is thrown off in an arc; on landing, a variant 0x0f picked up by class 1 more than
@@ -223,7 +216,7 @@ pub(super) fn equipment_reject<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u16(ctx.b, field::DURATION, 0x4b0);
     o.set_u8(ctx.b, Obj::FLAGS, 1);
     o.set_u8(ctx.b, Obj::VARIANT, 0xc);
-    ctx.anim_start(equipment::ANIMATIONS, 0xc);
+    ctx.anim_start(ANIMATIONS, 0xc);
     effects_creators::posed_flash(ctx.b, o);
     ctx.set_ram8(-0x5b83, 1);
     scene_set_of(ctx, 0x29);
@@ -231,7 +224,6 @@ pub(super) fn equipment_reject<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 pub(super) fn equipment_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sub_state = o.u8(ctx.b, field::SUB_STATE);
-    let target = crate::families::effects::target(ctx, equipment::SUB_STATES, sub_state as u32);
     match sub_state {
         sub::FALL => {
             let in_flight = ctx.move_xyz().gt();
@@ -260,7 +252,7 @@ pub(super) fn equipment_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             mark_pickup(ctx, o);
         }
         6 => equipment_reject(ctx, o),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(sub_state as u32),
     }
 }
 
@@ -271,11 +263,10 @@ pub(super) fn equipment_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
         return;
     }
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = crate::families::effects::target(ctx, equipment::STATES, state as u32);
     match state {
         state::INIT => equipment_init(ctx, o),
         state::ACTIVE => equipment_active(ctx, o),
         state::FREED | state::OUTSIDE_SCREEN => ctx.free(&pools::ITEM),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(state as u32),
     }
 }

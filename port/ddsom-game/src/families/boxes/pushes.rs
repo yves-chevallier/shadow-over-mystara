@@ -2,16 +2,17 @@ use crate::families::cx::Bench;
 use crate::objects::Current;
 use crate::families::cx::{handlers, Cx};
 use crate::objects::{pools, Obj};
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMATIONS: u32 = 0x1bebc2;
 /// Realignment of the object after the collision with the terrain (`terrain::push_68k`).
-/// Offset of the player against the block, per character (words, plain): according to the push direction.
-const AGAINST_HIGH: u32 = 0xdab52;
-const AGAINST_LOW: u32 = 0xdab62;
-const AGAINST_LEFT_1: u32 = 0xdab72;
-const AGAINST_RIGHT_1: u32 = 0xdab82;
-const AGAINST_LEFT_0: u32 = 0xdab92;
-const AGAINST_RIGHT_0: u32 = 0xdaba2;
+/// Rows of `pushes_against` (offset of the player against the block, per character) by push direction.
+const AGAINST_HIGH: u32 = 0;
+const AGAINST_LOW: u32 = 0x10;
+const AGAINST_LEFT_1: u32 = 0x20;
+const AGAINST_RIGHT_1: u32 = 0x30;
+const AGAINST_LEFT_0: u32 = 0x40;
+const AGAINST_RIGHT_0: u32 = 0x50;
 
 mod f {
     /// Non nul : objet suspendu.
@@ -121,7 +122,7 @@ fn realign_player<R: Bench>(x: &mut Cx<'_, R>, axe: u32, table: u32) {
     let v = x.u16(axe);
     player.set_u16(x.b, axe, v);
     let i = x.u16(f::CHARACTER) as i16 as i32 as u32;
-    let d = x.data16(table.wrapping_add(i));
+    let d = tables().pushes_against.at16(x.b, table.wrapping_add(i));
     player.set_u16(x.b, axe, v.wrapping_add(d));
 }
 

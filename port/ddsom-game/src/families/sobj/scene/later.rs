@@ -1,6 +1,7 @@
 //! Scene elements, variants 8 to 23 (see the parent module).
 
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 /// Variant 8: bar that descends (Z + 8 per frame) to the bottom of the screen, then raises the byte
 /// 0xff0eaa (A5-0x7156).
@@ -191,10 +192,9 @@ pub(super) fn v13_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
+
 /// Variant 14: badge whose sprite and position depend on `+0x46` (number, or object
 /// whose variant is taken if bit 15 is raised); 8-byte table at 0xdef1e.
-pub(super) const V14_TABLE: u32 = 0xdef1e;
-
 pub(super) fn v14_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
     let mut which = x.u16(0x46);
@@ -203,12 +203,12 @@ pub(super) fn v14_init<R: Bench>(x: &mut Cx<'_, R>) {
         which = owner.u8(x.b, 0x3) as u16;
     }
     x.set32(0xc, 0);
-    let row = V14_TABLE.wrapping_add((which << 3) as i16 as i32 as u32);
-    let v = x.rom16(row);
+    let row = (which << 3) as i16 as i32 as u32;
+    let v = tables().sobj_scene_v14_table.at16(x.b, row);
     x.set16(0x8, v);
-    let v = x.rom16(row + 2);
+    let v = tables().sobj_scene_v14_table.at16(x.b, row + 2);
     x.set16(0x10, v);
-    let v = x.rom8(row + 6);
+    let v = tables().sobj_scene_v14_table.at8(x.b, row + 6);
     x.set8(0x2c, v);
     x.anim_start(ANIMS, (0x190 + which as u32) as u16);
     x.reinsert();
@@ -220,23 +220,21 @@ pub(super) fn v14_step<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
+pub(super) const V15_PALETTES: RomAddr = RomAddr(0x28f960);
+
 /// Variant 15: colored pennant (palette 0x28f960, one 32-byte row per number drawn from
 /// table 0xdefa4), position in table 0xdf01a.
-pub(super) const V15_PALETTE_SELECT: u32 = 0xdefa4;
-pub(super) const V15_PALETTES: u32 = 0x28f960;
-pub(super) const V15_POSITIONS: u32 = 0xdf01a;
-
 pub(super) fn v15_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
     x.set8(0x5, 0);
     x.set32(0x10, 0);
     let v = x.u8(0x2f) as u32;
-    let line = x.rom8(V15_PALETTE_SELECT + v) as u32;
-    copy_longs(x, V15_PALETTES + (line << 5), PALETTE_A, 8);
+    let line = tables().sobj_scene_v15_palette_select.at8(x.b, v) as u32;
+    copy_longs(x, V15_PALETTES.offset((line << 5) as i32), PALETTE_A, 8);
     or_longs(x, PALETTE_A, BRIGHT, 8);
-    let px = x.rom16(V15_POSITIONS + 4 * v);
+    let px = tables().sobj_scene_v15_positions.at16(x.b, 4 * v);
     x.set16(0x8, px);
-    let py = x.rom16(V15_POSITIONS + 4 * v + 2);
+    let py = tables().sobj_scene_v15_positions.at16(x.b, 4 * v + 2);
     x.set16(0xc, py);
     start(x, 0x19c + v);
 }
@@ -299,20 +297,18 @@ pub(super) fn v18_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
+pub(super) const V19_PALETTES: RomAddr = RomAddr(0x28f340 + 0x60);
+
 /// Variant 19: palette dot (0x28f340 + 0x60 + 32 per row, row from table
 /// 0xdf182) placed on the camera; it disappears when the animation of its carrier (`+0x46`)
 /// is finished.
-pub(super) const V19_LINES: u32 = 0xdf182;
-pub(super) const V19_PALETTES: u32 = 0x28f340 + 0x60;
-pub(super) const V19_POSITIONS: u32 = 0xdf234;
-
 pub(super) fn v19_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
     let v = x.u8(0x2f) as u32;
-    let line = x.rom8(V19_LINES + 2 * v) as u32;
-    let flip = x.rom8(V19_LINES + 2 * v + 1);
+    let line = tables().sobj_scene_v19_lines.at8(x.b, 2 * v) as u32;
+    let flip = tables().sobj_scene_v19_lines.at8(x.b, 2 * v + 1);
     x.set8(0x2c, flip);
-    copy_longs(x, V19_PALETTES + (line << 5), PALETTE_B, 8);
+    copy_longs(x, V19_PALETTES.offset((line << 5) as i32), PALETTE_B, 8);
     or_longs(x, PALETTE_B, BRIGHT, 8);
     let anim = if line == 3 { 0 } else { line };
     start(x, 0x1a8 + anim);
@@ -322,9 +318,9 @@ pub(super) fn v19_init<R: Bench>(x: &mut Cx<'_, R>) {
 /// Places the dot from the table, relative to the current camera.
 pub(super) fn v19_place<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.u8(0x2f) as u32;
-    let px = x.rom16(V19_POSITIONS + 4 * v);
+    let px = tables().sobj_scene_v19_positions.at16(x.b, 4 * v);
     x.set16(0x8, px);
-    let py = x.rom16(V19_POSITIONS + 4 * v + 2);
+    let py = tables().sobj_scene_v19_positions.at16(x.b, 4 * v + 2);
     x.set16(0xc, py);
     x.set32(0x10, 0);
     let (cx, cy) = if x.a5_u8(ram::USE_CAMERA2) != 0 {
@@ -346,11 +342,9 @@ pub(super) fn v19_step<R: Bench>(x: &mut Cx<'_, R>) {
     kill(x);
 }
 
+
 /// Variants 20 and 22: debris falling from a randomly drawn point below the camera's bottom edge (8 abscissas
 /// in table 0xdf2a8, 4 acceleration/animation pairs at 0xdf2ea).
-pub(super) const V20_X: u32 = 0xdf2a8;
-pub(super) const V20_FALL: u32 = 0xdf2ea;
-
 pub(super) fn v20_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
     let v = x.a5_u16(ram::CAMERA_Y);
@@ -361,15 +355,15 @@ pub(super) fn v20_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x10, 0x10);
     let rng = x.random();
     let k = rng as u32 & 7;
-    let dx = x.rom16(V20_X + 2 * k);
+    let dx = tables().sobj_scene_v20_x.at16(x.b, 2 * k);
     x.add16(0x8, dx);
     x.set32(0x14, 0);
     x.set16(0x18, 0);
     let rng = x.random();
     let k = rng as u32 & 3;
-    let az = x.rom16(V20_FALL + 4 * k);
+    let az = tables().sobj_scene_v20_fall.at16(x.b, 4 * k);
     x.set16(0x1a, az);
-    let anim = x.rom16(V20_FALL + 4 * k + 2) as u32;
+    let anim = tables().sobj_scene_v20_fall.at16(x.b, 4 * k + 2) as u32;
     x.anim_start(ANIMS, anim as u16);
     x.reinsert();
 }
@@ -390,28 +384,26 @@ pub(super) fn v20_fall<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
+
 /// Variant 21: like 15, with the palette row designated by `+0x2f / 2` (table 0xdf332),
 /// without brightening; positions in table 0xdf396.
-pub(super) const V21_PALETTE_SELECT: u32 = 0xdf332;
-pub(super) const V21_POSITIONS: u32 = 0xdf396;
-
 pub(super) fn v21_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
     x.set8(0x5, 0);
     x.set32(0x10, 0);
     let v = x.u8(0x2f) as u32;
-    let line = x.rom8(V21_PALETTE_SELECT + (v >> 1)) as u32;
-    copy_longs(x, V15_PALETTES + (line << 5), PALETTE_A, 8);
-    let px = x.rom16(V21_POSITIONS + 4 * v);
+    let line = tables().sobj_scene_v21_palette_select.at8(x.b, v >> 1) as u32;
+    copy_longs(x, V15_PALETTES.offset((line << 5) as i32), PALETTE_A, 8);
+    let px = tables().sobj_scene_v21_positions.at16(x.b, 4 * v);
     x.set16(0x8, px);
-    let py = x.rom16(V21_POSITIONS + 4 * v + 2);
+    let py = tables().sobj_scene_v21_positions.at16(x.b, 4 * v + 2);
     x.set16(0xc, py);
     start(x, 0x19c + (v >> 1));
 }
 
 /// Variant 23: spark stuck to the corner of the camera structure (A5+0x4fe, or 0x54e if
 /// `A5+0x36`), whose color of palette 0x91c180 takes the brightness of color 0.
-pub(super) const V23_PALETTE: u32 = 0x28f4c0;
+pub(super) const V23_PALETTE: RomAddr = RomAddr(0x28f4c0);
 
 pub(super) fn v23_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);

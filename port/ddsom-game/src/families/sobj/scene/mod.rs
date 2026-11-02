@@ -1,4 +1,6 @@
 use super::*;
+use crate::families::shell::tables::{held16, held8, tables, Read};
+use crate::data::RomAddr;
 
 /// State 4 ("dead"): the object is marked for deletion then released right away.
 const DEAD: u32 = 0x0600_0000;
@@ -62,10 +64,6 @@ fn kill<R: Bench>(x: &mut Cx<'_, R>) {
     x.free(&pools::SOBJ);
 }
 
-fn rom32<R: Bench>(x: &mut Cx<'_, R>, addr: u32) -> u32 {
-    (x.rom16(addr) as u32) << 16 | x.rom16(addr + 2) as u32
-}
-
 /// The scene's master (`+0x4c`).
 fn master<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
     Obj(x.u32(0x4c) & 0xff_ffff)
@@ -114,9 +112,6 @@ fn scroll_creep<R: Bench>(x: &mut Cx<'_, R>) {
     x.add32(0x10, dy);
 }
 
-/// Variant 0: sprite tied to the master (animation set, flip indicator and number read from
-/// a table with 8 bytes per value of `+0x2f`), random flip if the indicator is negative.
-const V0_ENTRIES: u32 = 0xddf6c;
 
 fn random_flip<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x2c, 0);
@@ -126,16 +121,18 @@ fn random_flip<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
+/// Variant 0: sprite tied to the master (animation set, flip indicator and number read from
+/// a table with 8 bytes per value of `+0x2f`), random flip if the indicator is negative.
 fn v0_init<R: Bench>(x: &mut Cx<'_, R>) {
     if (signal(x) as i8) < 0 {
         return x.free(&pools::SOBJ);
     }
     x.add8(0x4, 2);
-    let e = V0_ENTRIES + 8 * x.u8(0x2f) as u32;
-    let set = rom32(x, e);
-    let flip = x.rom8(e + 4);
+    let e = 8 * x.u8(0x2f) as u32;
+    let set = tables().sobj_scene_v0_entries.at32(x.b, e);
+    let flip = tables().sobj_scene_v0_entries.at8(x.b, e + 4);
     x.set8(0x2c, flip);
-    let n = x.rom16(e + 6) as u32;
+    let n = tables().sobj_scene_v0_entries.at16(x.b, e + 6) as u32;
     x.anim_start(set, n as u16);
     if (x.u8(0x2c) as i8) < 0 {
         random_flip(x);
@@ -203,15 +200,14 @@ fn v2_step<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Variant 3: launches decorative SET objects from a byte list (0xde1e0, or
 /// 0xde1e8 if `A5+0x38`), one every 30 frames, until the end of its script.
-const V3_LISTS: u32 = 0xde1e0;
-
 fn v3_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
     x.set16(0x8, 0x60);
     x.set16(0xc, 0xc0);
     x.set32(0x10, 0);
     x.set16(0x42, 0x1e);
-    x.set32(0x44, V3_LISTS);
+    // the list is designated by its address (`sobj_scene_v3_lists`)
+    x.set32(0x44, tables().sobj_scene_v3_lists.rom);
     if x.a5_u16(0x38) != 0 {
         x.add32(0x44, 8);
     }
@@ -234,7 +230,7 @@ fn v3_step<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     let mut list = x.u32(0x44);
-    let kind = x.data8(list);
+    let kind = held8(x.b, list);
     list += 1;
     if kind != 0 {
         if let Some(set) = crate::families::creators::scene_set(x.b, kind) {
@@ -270,10 +266,9 @@ fn v4_step<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x5, 0);
 }
 
+
 /// Variant 5: leader that descends, triggers the scrolling then creates variants 0 (two at
 /// most; X then Z offsets in table 0xde386).
-const V5_OFFSETS: u32 = 0xde386;
-
 fn v5_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
     x.set32(0x10, 0x8000);
@@ -328,9 +323,9 @@ fn v5_spawn<R: Bench>(x: &mut Cx<'_, R>) {
         let v = x.u32(off);
         child.set_u32(x.b, off, v);
     }
-    let at = V5_OFFSETS + 4 * which as u32;
-    let dx = x.rom16(at);
-    let dz = x.rom16(at + 2);
+    let at = 4 * which as u32;
+    let dx = tables().sobj_scene_v5_offsets.at16(x.b, at);
+    let dz = tables().sobj_scene_v5_offsets.at16(x.b, at + 2);
     let v = child.u16(x.b, 0x8).wrapping_add(dx);
     child.set_u16(x.b, 0x8, v);
     let v = child.u16(x.b, 0xc).wrapping_add(dz);
@@ -340,10 +335,9 @@ fn v5_spawn<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x42, 1);
 }
 
+
 /// Variant 6: letter that falls from the top (Z 0x300) down to its stop height (table 0xde3ee:
 /// X, stop), waits for signal 2 then rises by 0x290.
-const V6_TABLE: u32 = 0xde3ee;
-
 fn v6_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
     x.set32(0x10, 0xf000);
@@ -352,9 +346,9 @@ fn v6_init<R: Bench>(x: &mut Cx<'_, R>) {
     let shift = (v << 8) & 0xffff;
     let y = x.u32(0x10).wrapping_sub(shift);
     x.set32(0x10, y);
-    let px = x.rom16(V6_TABLE + 4 * v);
+    let px = tables().sobj_scene_v6_table.at16(x.b, 4 * v);
     x.set16(0x8, px);
-    let stop = x.rom16(V6_TABLE + 4 * v + 2);
+    let stop = tables().sobj_scene_v6_table.at16(x.b, 4 * v + 2);
     x.set16(0x14, stop);
     x.anim_start(ANIMS, (v + 0xfe) as u16);
     x.reinsert();
@@ -391,8 +385,7 @@ fn v6_step<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Variant 7: palette fade (page B) then a 180-frame wait; also loads a transition
 /// script (`A5+0x5c6`...). Script chosen by `+0x2f` and by `A5+0x72`.
-const V7_SCRIPTS: u32 = 0xde4d2;
-const V7_PALETTES: u32 = 0x292240;
+const V7_PALETTES: RomAddr = RomAddr(0x292240);
 
 fn v7_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
@@ -401,10 +394,10 @@ fn v7_init<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u16(0x72) != 2 {
         off += 8;
     }
-    let script = rom32(x, V7_SCRIPTS + off);
-    let w = x.data16(script);
+    let script = tables().sobj_scene_v7_scripts.at32(x.b, off);
+    let w = held16(x.b, script);
     x.set_a5_u16(0x5ca, w);
-    let w = x.data16(script + 2);
+    let w = held16(x.b, script + 2);
     x.set_a5_u16(0x5cc, w);
     x.set_a5_u32(0x5c6, script + 4);
     copy_longs(x, V7_PALETTES, PALETTE_B, 8);

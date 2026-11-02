@@ -1,7 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16cb10;
-const FAN: u32 = 0x9e280;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::OWNER) == 0 {
@@ -35,11 +35,11 @@ fn place<R: Bench>(x: &mut Cx<'_, R>, owner: Obj) {
     copy_position(x, owner);
     let flip = owner.u8(x.b, f::FLIP);
     x.set8(f::FLIP, flip);
-    let row = FAN + 8 * x.u8(0x3) as u32;
-    let (dx, dz) = (x.rom16(row), x.rom16(row + 2));
+    let row = 8 * x.u8(0x3) as u32;
+    let (dx, dz) = (tables().shot3_fan.at16(x.b, row), tables().shot3_fan.at16(x.b, row + 2));
     x.add16(0x8, dx);
     x.add16(0xc, dz);
-    let (vx, vy) = (x.rom16(row + 4), x.rom16(row + 6));
+    let (vx, vy) = (tables().shot3_fan.at16(x.b, row + 4), tables().shot3_fan.at16(x.b, row + 6));
     x.set16(0x14, vx);
     x.set16(0x1c, vy);
     for off in [0x16, 0x1a, 0x18, 0x1e] {

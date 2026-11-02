@@ -3,6 +3,7 @@ use crate::objects::Current;
 use crate::families::cx::{handlers, Cx};
 use crate::mem::A5;
 use crate::objects::{pools, Obj};
+use crate::families::shell::tables::{held16, held8, tables, Read};
 use crate::families::effects_creators;
 use crate::machine::Machine;
 
@@ -82,21 +83,7 @@ mod j {
 
 /// Tables and subroutines.
 mod rom {
-    pub const STATES: u32 = 0xd9a10;
-    pub const SUB_STATES: u32 = 0xd9a6a;
-    pub const STRUCK: u32 = 0xd9abc;
-    pub const OPEN: u32 = 0xd9b94;
-    pub const LAUNCHED: u32 = 0xd9d64;
-    pub const DROPPED: u32 = 0xd9f82;
     pub const ANIMATIONS: u32 = 0x1bebc2;
-    /// Per kind: address of its 0x2a-byte sheet (characteristics, random loot).
-    pub const SHEETS: u32 = 0x1051ae;
-    /// Per loot number: (type, variant) of the created ITEM (read PC-relative).
-    pub const LOOTS: u32 = 0xda28a;
-    /// Special effects (routine addresses), by value of `SPECIAL`.
-    pub const SPECIALS: u32 = 0xda06a;
-    /// Per carrier class: table of offsets (X, Z) of the carried crate, per pose.
-    pub const TAKEN: u32 = 0xda398;
     // subroutines not rewritten, or native
     pub const SOUND_HIT: crate::sound::Sound = crate::sound::CMD_139_239;
     pub const SOUND_BROKEN: crate::sound::Sound = crate::sound::CMD_146_246;
@@ -116,19 +103,12 @@ fn run<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     let state = x.u8(f::STATE);
-    let target = jump(x, rom::STATES, state);
     match state {
         0 => init(x),
         2 => active(x),
         4 | 6 => x.free(&pools::BOX),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(state),
     }
-}
-
-/// Target of the jump through table `move.w (table,PC,D0.w),D1.w ; jmp` for index `i` (`outside_table`).
-fn jump<R: Bench>(x: &mut Cx<'_, R>, table: u32, i: u8) -> u32 {
-    let w = x.rom16(table + i as u32);
-    table.wrapping_add(w as i16 as i32 as u32)
 }
 
 /// Class of the linked player (`+3 >> 1`).
@@ -145,17 +125,17 @@ fn count_broken<R: Bench>(x: &mut Cx<'_, R>) {
 /// `0xda082`: copies the kind's sheet (10 bytes) and draws two random loots.
 fn charge_sheet<R: Bench>(x: &mut Cx<'_, R>) {
     let variant = x.u8(f::VARIANT) as u32;
-    let sheet = x.data32(rom::SHEETS + 4 * variant);
+    let sheet = tables().chest_sheets.at32(x.b, 4 * variant);
     let fields = [f::KIND, f::LOCK, f::LOOT_HIGH, f::LOOT_BONUS, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68];
     for (i, off) in fields.into_iter().enumerate() {
-        let v = x.data8(sheet + i as u32);
+        let v = held8(x.b, sheet + i as u32);
         x.set8(off, v);
     }
     let draw = (x.random() & 0xf) as u32;
-    let v = x.data8(sheet + 0xa + draw);
+    let v = held8(x.b, sheet + 0xa + draw);
     x.set8(f::LOOT_LEFT, v);
     let draw = (x.random() & 0xf) as u32;
-    let v = x.data8(sheet + 0x1a + draw);
+    let v = held8(x.b, sheet + 0x1a + draw);
     x.set8(f::SPECIAL, v);
     // sheet read pointers left by the original
 }
@@ -180,17 +160,15 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let sub_state = x.u8(f::SUB_STATE);
-    let target = jump(x, rom::SUB_STATES, sub_state);
     match sub_state {
         sub::INTACT => intact(x),
         sub::OPEN => {
             let n = x.u8(f::SUB_SUB_STATE);
-            let target = jump(x, rom::OPEN, n);
             match n {
                 0 => opening(x),
                 2 => open_wait(x),
                 4 => blinks(x),
-                _ => crate::families::effects::outside_table(target),
+                _ => crate::families::effects::bad_index(n),
             }
         }
         sub::RANGE => {
@@ -200,7 +178,6 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
         sub::LAUNCHED => launched(x),
         sub::DROPPED => {
             let n = x.u8(f::SUB_SUB_STATE);
-            let target = jump(x, rom::DROPPED, n);
             match n {
                 0 => {
                     x.add8(f::SUB_SUB_STATE, 2);
@@ -210,20 +187,19 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
                 2 => dropped_fall(x),
                 4 => dropped_broken(x),
                 6 => blinks(x),
-                _ => crate::families::effects::outside_table(target),
+                _ => crate::families::effects::bad_index(n),
             }
         }
         sub::STRUCK => {
             let n = x.u8(f::SUB_SUB_STATE);
-            let target = jump(x, rom::STRUCK, n);
             match n {
                 0 => broken(x),
                 2 => blinks(x),
                 4 => tremble(x),
-                _ => crate::families::effects::outside_table(target),
+                _ => crate::families::effects::bad_index(n),
             }
         }
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(sub_state),
     }
     x.reinsert();
 }
@@ -249,26 +225,25 @@ fn effect_special<R: Bench>(x: &mut Cx<'_, R>, moment: u32) {
         return;
     }
     x.set8(f::SPECIAL_PLAYED, 1);
-    let i = 4 * x.u8(f::SPECIAL) as u32;
-    let effect = x.rom32(rom::SPECIALS + i);
-    // ESHL creators designated by the original table
+    let special = x.u8(f::SPECIAL);
+    // ESHL creators of the original table of routines 0xda06a (0xa1360, 0xa1a40, 0xa1670, 0xa17d0, 0xa1c6a, 0xa1360)
     use crate::families::eshl_creators as eshl;
     let r = &mut crate::families::effects_creators::leftovers::Pure;
-    match effect {
-        0xa1360 => eshl::single_18(r, x.b, x.o),
-        0xa1a40 => {
+    match special {
+        0 | 5 => eshl::single_18(r, x.b, x.o),
+        1 => {
             eshl::single_1b(r, x.b, x.o, moment as u16);
         }
-        0xa1670 => {
+        2 => {
             eshl::row_19(r, x.b, x.o);
         }
         // Original glitch: the D5 left by what precedes (`Leftovers`) sets the high byte of the spark count.
-        0xa17d0 => {
+        3 => {
             let d5 = *x.c.d5() as u16;
             eshl::row_1a(r, x.b, x.o, moment as u16, d5);
         }
-        0xa1c6a => eshl::four_1c(r, x.b, x.o),
-        _ => crate::families::effects::outside_table(effect),
+        4 => eshl::four_1c(r, x.b, x.o),
+        _ => crate::families::effects::bad_index(special),
     }
 }
 
@@ -278,9 +253,9 @@ fn created_loot<R: Bench>(x: &mut Cx<'_, R>, loot: u8, vx: u16, vy: u16) -> Opti
     let n = x.alloc(&pools::ITEM)?;
     let rank = 2 * loot as u32;
     n.set_u8(x.b, f::ACTIVE, 1);
-    let kind = x.data8(rom::LOOTS + rank);
+    let kind = tables().chest_loots.at8(x.b, rank);
     n.set_u8(x.b, 0x2, kind);
-    let variant = x.data8(rom::LOOTS + rank + 1);
+    let variant = tables().chest_loots.at8(x.b, rank + 1);
     n.set_u8(x.b, f::VARIANT, variant);
     for off in [f::X, f::Z, f::Y] {
         let v = x.u16(off);
@@ -476,14 +451,14 @@ fn spark_placed<R: Bench>(x: &mut Cx<'_, R>, variant: u8) -> Option<Obj> {
 fn follow_carrier<R: Bench>(x: &mut Cx<'_, R>) {
     let player = x.linked(f::PLAYER);
     let class = player.u8(x.b, j::CLASS) as u32;
-    let taken = x.data32(rom::TAKEN + 4 * class);
+    let taken = tables().chest_taken.at32(x.b, 4 * class);
     let pose = player.u8(x.b, j::POSE);
     if pose == 0 {
         return;
     }
     let i = (4 * (((4 * class) & 0xff00) | pose as u32)) & 0xffff;
-    let mut dx = x.data16(taken + i);
-    let dz = x.data16(taken + i + 2);
+    let mut dx = held16(x.b, taken + i);
+    let dz = held16(x.b, taken + i + 2);
     let turned = player.u8(x.b, j::TURNED);
     if turned != 0 {
         dx = dx.wrapping_neg();
@@ -502,13 +477,12 @@ fn launched<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     let n = x.u8(f::SUB_SUB_STATE);
-    let target = jump(x, rom::LAUNCHED, n);
     match n {
         0 => launched_start(x),
         2 => launched_flight(x),
         4 => launched_lands(x),
         6 => blinks(x),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(n),
     }
     x.push_terrain();
 }

@@ -1,9 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16ff22;
-const DIRECTIONS: u32 = 0xa3148;
-const START_ANIMS: u32 = 0xa3158;
-const FRAMES: u32 = 0xa31ba;
 const SOUND_IMPACT: crate::sound::Sound = crate::sound::CMD_327_427_C;
 const FLY: u8 = 0;
 const SETTLE: u8 = 2;
@@ -41,9 +39,9 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x18, -0x500i16 as u16);
     x.set16(0x1a, -0x38i16 as u16);
     let variant = x.u8(0x3) as u32;
-    let direction = x.rom8(DIRECTIONS + variant);
+    let direction = tables().shot39_directions.at8(x.b, variant);
     x.set8(0x2d, direction);
-    let anim = x.rom8(START_ANIMS + variant) as u32;
+    let anim = tables().shot39_start_anims.at8(x.b, variant) as u32;
     x.anim_start(ANIMS, anim as u16);
 }
 
@@ -57,7 +55,7 @@ fn spin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x2a, 1);
     let n = x.u8(0x47).wrapping_add(1) & 7;
     x.set8(0x47, n);
-    let frame = x.rom8(FRAMES + n as u32);
+    let frame = tables().shot39_frames.at8(x.b, n as u32);
     x.set8(0x2b, frame);
 }
 

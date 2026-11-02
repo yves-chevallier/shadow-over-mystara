@@ -1,12 +1,8 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x17d7d2;
 const ANIMS_STRIKE: u32 = 0x17d7e0;
-const ATTACH: u32 = 0xa0f86;
-/// Wait animation by a 0..7 draw.
-const IDLE_ANIMS: u32 = 0xa0d60;
-/// Wait (frames) of variant 1 from a 0..7 draw.
-const DELAYS: u32 = 0xa0e2c;
 const FROZEN: u32 = 0x4e;
 const ARMED: u32 = 0xa5;
 /// Substates (`+5`).
@@ -27,7 +23,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.add8(0x4, 2);
     x.set8(0x1d, 0);
-    attach(x, ATTACH);
+    attach(x, &tables().shot20_attach);
     let mut anim = 3;
     if x.u8(0x3) != 0 {
         x.set16(f::TIMER, 0x1e);
@@ -71,9 +67,9 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(0x1d, 0);
             x.add8(0x6, 2);
             let rng = x.random();
-            let anim = x.rom8(IDLE_ANIMS + (rng as u32 & 7)) as u32;
+            let anim = tables().shot20_idle_anims.at8(x.b, rng as u32 & 7) as u32;
             x.anim_start(ANIMS, anim as u16);
-            attach(x, ATTACH);
+            attach(x, &tables().shot20_attach);
             x.anim_step();
         }
         (0, _) => {
@@ -84,7 +80,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(f::ATTACK_ID, 0x28);
                 x.anim_start(ANIMS_STRIKE, 0);
             }
-            attach(x, ATTACH);
+            attach(x, &tables().shot20_attach);
             x.anim_step();
         }
         (2, 0) => {
@@ -103,18 +99,18 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 x.add8(0x6, 0xfe);
             }
-            attach(x, ATTACH);
+            attach(x, &tables().shot20_attach);
             x.anim_step();
         }
         (2, _) => {
             if x.anim_step() {
                 x.add8(0x6, 0xfe);
                 let rng = x.random();
-                let delay = x.rom16(DELAYS + 2 * (rng as u32 & 7));
+                let delay = tables().shot20_delays.at16(x.b, 2 * (rng as u32 & 7));
                 x.set16(f::TIMER, delay);
                 x.anim_start(ANIMS, 2);
             } else {
-                attach(x, ATTACH);
+                attach(x, &tables().shot20_attach);
             }
         }
         _ => {}
@@ -126,12 +122,12 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(0x6, 2);
             x.anim_start(ANIMS_STRIKE, 1);
-            attach(x, ATTACH);
+            attach(x, &tables().shot20_attach);
             x.anim_step();
         }
         2 => {
             if !x.anim_step() {
-                return attach(x, ATTACH);
+                return attach(x, &tables().shot20_attach);
             }
             crate::sound::play(x.b, crate::sound::CMD_311_411, x.o);
             crate::sound::play(x.b, crate::sound::CMD_379, x.o);
@@ -155,7 +151,7 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(0x6, 2);
                 x.anim_start(ANIMS_STRIKE, 3);
             } else {
-                attach(x, ATTACH);
+                attach(x, &tables().shot20_attach);
                 x.anim_step();
             }
         }
@@ -168,7 +164,7 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>) {
                 crate::sound::play(x.b, crate::sound::CMD_37A, x.o);
                 x.anim_start(ANIMS, 3);
             } else {
-                attach(x, ATTACH);
+                attach(x, &tables().shot20_attach);
             }
         }
         _ => {}

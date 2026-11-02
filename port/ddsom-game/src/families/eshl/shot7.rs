@@ -1,7 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16d1d6;
-const OFFSETS: u32 = 0x9ed64;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
@@ -16,8 +16,8 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             let owner = x.linked(f::OWNER);
             copy_position(x, owner);
             x.add16(0x10, 0xffff);
-            let row = OFFSETS + 4 * x.u8(0x3) as u32;
-            let (dx, dy) = (x.rom16(row), x.rom16(row + 2));
+            let row = 4 * x.u8(0x3) as u32;
+            let (dx, dy) = (tables().shot7_offsets.at16(x.b, row), tables().shot7_offsets.at16(x.b, row + 2));
             x.add16(0x8, dx);
             x.add16(0x10, dy);
             x.anim_start(ANIMS, 0);

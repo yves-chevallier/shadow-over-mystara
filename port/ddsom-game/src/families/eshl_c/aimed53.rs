@@ -1,9 +1,8 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x175dc4;
 const LINK: u32 = 0x5c;
-/// For each direction: (animation, orientation).
-const DIRECTIONS: u32 = 0xa4e16;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
@@ -41,10 +40,10 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
     let dir = crate::aids::direction_to(x.b, x.o, obj_of(target));
     x.set8(0x2d, dir);
     x.select_speed(&crate::objects::motion::SPEEDS_B, 0x24);
-    let row = DIRECTIONS + 2 * dir as u32;
-    let flip = x.rom8(row + 1);
+    let row = 2 * dir as u32;
+    let flip = tables().aimed53_directions.at8(x.b, row + 1);
     x.set8(f::FLIP, flip);
-    let anim = x.rom8(row);
+    let anim = tables().aimed53_directions.at8(x.b, row);
     x.anim_start(ANIMS, (anim as u32) as u16);
     x.reinsert();
 }

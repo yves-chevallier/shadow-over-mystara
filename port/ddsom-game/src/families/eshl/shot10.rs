@@ -1,7 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16da84;
-const PLACEMENT: u32 = 0x9f3c8;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
@@ -12,8 +12,8 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(f::BOX_SET, 0x40);
             x.add32(0x10, u32::MAX);
             // Original glitch: the placement row is the low word of D5, left by the previous handler
-            let row = PLACEMENT.wrapping_add(*x.c.d5() as u16 as i16 as i32 as u32);
-            let (z, dx) = (x.rom16(row), x.rom16(row + 2));
+            let row = *x.c.d5() as u16 as i16 as i32 as u32;
+            let (z, dx) = (tables().shot10_placement.at16(x.b, row), tables().shot10_placement.at16(x.b, row + 2));
             x.set16(0xc, z);
             let flip = x.u8(f::FLIP) != 0;
             x.add16(0x8, if flip { dx } else { dx.wrapping_neg() });

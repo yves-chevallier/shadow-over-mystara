@@ -1,15 +1,8 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x17f002;
 const SOURCE: u32 = 0x46;
-/// Rows of 4 words (VX, AX, VZ, VY) for variant 0 (data space).
-const BURST_SPEEDS: u32 = 0xa3e30;
-const BURST_ANIMS: u32 = 0xa3c3a;
-const HOP_VZ: u32 = 0xa3c94;
-/// Mirror of `+0x2f` for the flipped object.
-const MIRROR: u32 = 0xa3d10;
-/// Offsets of variant 1 by `+0x2f`: X, then Z by a read shifted by two bytes.
-const PLACE_OFFSETS: u32 = 0xa3dc2;
 /// Margin of the on-screen restraint.
 const MARGIN: u32 = 0x10;
 
@@ -53,20 +46,20 @@ fn variant0<R: Bench>(x: &mut Cx<'_, R>) {
             copy_flip(x, src);
             x.add16(0xc, 0x50);
             let r = random(x);
-            let row = BURST_SPEEDS + (r & 0x38);
-            let (mut vx, mut ax) = (x.data16(row), x.data16(row + 2));
+            let row = r & 0x38;
+            let (mut vx, mut ax) = (tables().debris45_burst_speeds.at16(x.b, row), tables().debris45_burst_speeds.at16(x.b, row + 2));
             if x.u8(f::FLIP) == 0 {
                 (vx, ax) = (neg(vx), neg(ax));
             }
             x.set16(0x14, vx);
             x.set16(0x16, ax);
-            let vz = x.data16(row + 4);
+            let vz = tables().debris45_burst_speeds.at16(x.b, row + 4);
             x.set16(0x18, vz);
             x.set16(0x1a, 0);
-            let vy = x.data16(row + 6);
+            let vy = tables().debris45_burst_speeds.at16(x.b, row + 6);
             x.set16(0x1c, vy);
             x.set16(0x1e, 0);
-            let anim = x.rom8(BURST_ANIMS + (r & 3));
+            let anim = tables().debris45_burst_anims.at8(x.b, r & 3);
             ai_anim(x, ANIMS, anim as u32);
             x.set8(f::BOX_SET, 7);
             x.set8(f::ATTACK_POWER, 0);
@@ -80,7 +73,7 @@ fn variant0<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set32(0x14, 0);
                 x.set32(0x1c, 0);
                 let r = random(x) & 6;
-                let vz = x.rom16(HOP_VZ + r);
+                let vz = tables().debris45_hop_vz.at16(x.b, r);
                 x.set16(0x18, vz);
                 x.set16(0x1a, 0);
                 ai_anim(x, ANIMS, 0x11);
@@ -109,7 +102,7 @@ fn variant1<R: Bench>(x: &mut Cx<'_, R>) {
             let flip = copy_flip(x, src);
             if flip != 0 {
                 let k = x.u8(0x2f) as u32;
-                let mirrored = x.rom8(MIRROR + k);
+                let mirrored = tables().debris45_mirror.at8(x.b, k);
                 x.set8(0x2f, mirrored);
             }
             let k = x.u8(0x2f);
@@ -159,9 +152,9 @@ fn place<R: Bench>(x: &mut Cx<'_, R>, src: Obj) {
     x.set16(0x10, sy);
     x.set16(0xc, sz.wrapping_add(0x30));
     let k = 2 * (x.u8(0x2f) & 7) as u32;
-    let dx = x.rom16(PLACE_OFFSETS + k);
+    let dx = tables().debris45_place_offsets.at16(x.b, k);
     // the Z row is the same table read with a two-byte offset, indexed by dx
-    let dz = x.rom16((PLACE_OFFSETS + 2).wrapping_add(dx as i16 as i32 as u32));
+    let dz = tables().debris45_place_offsets.at16(x.b, 2u32.wrapping_add(dx as i16 as i32 as u32));
     x.add16(0x8, dx);
     x.add16(0xc, dz);
 }

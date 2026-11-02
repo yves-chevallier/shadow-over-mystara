@@ -1,11 +1,8 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x1700f8;
 const CREATOR: u32 = 0x5c;
-/// Z speed (word) per 32-pixel slice of distance.
-const FALL_SPEEDS: u32 = 0xa3492;
-/// Palette copied (ROM to palette RAM): 8 longs.
-const PALETTE_SRC: u32 = 0x25a6e0;
 const PALETTE_DST: u32 = 0x91c2e0;
 /// Fields of the target (player object): aiming position.
 const TARGET_X: u32 = 0xb0;
@@ -50,7 +47,7 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
         dist = dist.wrapping_neg();
     }
     let band = (1..=11).find(|&i| dist <= 0x20 * i).map_or(0x18, |i| 2 * (i - 1) as u32);
-    let speed = x.rom16(FALL_SPEEDS + band);
+    let speed = tables().shot41_fall_speeds.at16(x.b, band);
     x.set16(0x18, speed);
     copy_palette(x);
     x.set8(0x2a, 1);
@@ -61,7 +58,7 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
 /// Copies 8 longs from the ROM to the palette RAM.
 fn copy_palette<R: Bench>(x: &mut Cx<'_, R>) {
     for i in 0..8 {
-        let v = x.data32(PALETTE_SRC + 4 * i);
+        let v = tables().shot41_palette.at32(x.b, 4 * i);
         wr32(x.b, PALETTE_DST + 4 * i, v);
     }
 }

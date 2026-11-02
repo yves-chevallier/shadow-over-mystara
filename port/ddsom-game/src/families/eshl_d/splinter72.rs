@@ -1,9 +1,8 @@
 use super::*;
+use crate::families::shell::tables::{held16, tables, Read};
 
 const ANIMS: u32 = 0x1718d8;
 const IMPACT_ANIMS: u32 = 0x16d1d6;
-/// Per rank: address of an 18-byte sheet per variant (longs then words, in the clear).
-const ROWS: u32 = 0xa84f4;
 const CREATOR: u32 = 0x5c;
 const RANK: u32 = 0x2f;
 const SFX_THROW: crate::sound::Sound = crate::sound::CMD_32F;
@@ -68,12 +67,12 @@ fn place<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::FLIP, flip);
     x.add16(0x10, 0xffff);
     let rank = x.u8(RANK) as u32;
-    let rows = x.data32(ROWS + 4 * rank);
+    let rows = tables().splinter72_rows.at32(x.b, 4 * rank);
     let variant = x.u8(0x3) as u32;
     let row = rows + 18 * variant;
-    let [dx, dy, dz] = [0, 2, 4].map(|k| x.data16(row + k));
+    let [dx, dy, dz] = [0, 2, 4].map(|k| held16(x.b, row + k));
     for (field, k) in [(0x14, 6), (0x18, 8), (0x18, 10), (0x1a, 12), (0x1c, 14), (0x1e, 16)] {
-        let v = x.data16(row + k);
+        let v = held16(x.b, row + k);
         x.set16(field, v);
     }
     x.add16(0x8, dx);

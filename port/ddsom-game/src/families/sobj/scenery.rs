@@ -1,9 +1,6 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
-/// Variante -> routine d'initialisation (13 routines).
-const INIT_KIND: u32 = 0xdd6a4;
-/// Variant -> follow routine (23 routines).
-const STEP_KIND: u32 = 0xdd8ea;
 const WAIT: u8 = 0;
 const FOLLOW: u8 = 2;
 const GONE: u8 = 4;
@@ -30,7 +27,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 0);
     let variant = x.u8(0x3) as u32;
     x.anim_start(ANIMS, variant as u16);
-    match x.rom8(INIT_KIND + variant) {
+    match tables().sobj_scenery_init_kind.at8(x.b, variant) {
         0 => {}
         1 => {
             let v = x.u16(0x8);
@@ -84,7 +81,7 @@ fn follow<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let variant = x.u8(0x3) as u32;
     let (dx, dy) = camera_delta(x);
-    match x.rom8(STEP_KIND + variant) {
+    match tables().sobj_scenery_step_kind.at8(x.b, variant) {
         0 => cull_beyond(x, 0x60),
         1 => {
             let d = x.a5_u16(ram::CAMERA2_X).wrapping_sub(x.a5_u16(ram::CAMERA_X));

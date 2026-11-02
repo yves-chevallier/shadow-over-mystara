@@ -1,8 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x17b9d6;
-/// Per rank: wait then animation (words, program ROM).
-const RANKS: u32 = 0xa7eb4;
 const RANK: u32 = 0x2f;
 const TIMER: u32 = 0x42;
 const SFX_BOUNCE: crate::sound::Sound = crate::sound::CMD_385_485;
@@ -29,10 +28,10 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0xc, 32);
     bounce(x);
     let rank = x.u8(RANK) as u32;
-    let row = RANKS + 4 * rank;
-    let delay = x.rom16(row);
+    let row = 4 * rank;
+    let delay = tables().bouncer69_ranks.at16(x.b, row);
     x.set16(TIMER, delay);
-    let anim = x.rom16(row + 2);
+    let anim = tables().bouncer69_ranks.at16(x.b, row + 2);
     x.anim_start(ANIMS, (anim as u32) as u16);
 }
 

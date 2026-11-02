@@ -1,8 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16ea18;
-/// Delay before the fall (bytes) per variant (32 entries).
-const DELAYS: u32 = 0xa679e;
 const IMPACT_SOUND: crate::sound::Sound = crate::sound::CMD_34D_44D;
 const TIMER: u32 = 0x42;
 
@@ -40,7 +39,7 @@ fn start<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
     x.set32(0x1c, 0);
     let variant = x.u8(0x3) & 0x1f;
-    let delay = x.rom8(DELAYS + variant as u32);
+    let delay = tables().meteor62_delays.at8(x.b, variant as u32);
     x.set8(TIMER, delay);
     x.anim_start(ANIMS, 0);
 }

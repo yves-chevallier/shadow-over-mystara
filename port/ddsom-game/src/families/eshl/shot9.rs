@@ -1,4 +1,5 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16d39a;
 
@@ -44,7 +45,7 @@ fn bolt<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x18, -0x400i16 as u16);
             x.set16(0x1a, 0);
             // peculiarity of the original: read at a fixed offset of the object (A0 - 0x7f92)
-            let phase = x.data16(x.o.0.wrapping_sub(0x7f92)) as u32;
+            let phase = crate::mem::rd16(x.b, x.o.0.wrapping_sub(0x7f92)) as u32;
             let mut index = (phase >> 2 & 3) + 6;
             if x.u8(f::FLIP) == 0 {
                 index += 0x10;
@@ -92,10 +93,9 @@ fn bolt<R: Bench>(x: &mut Cx<'_, R>) {
 
 // ----- variant 1: breath stuck to an enemy of type 7 -----
 
-const FIRE_FRAMES: u32 = 0x16d676;
-const END_FRAMES: u32 = 0x16d684;
-/// Limit heights (words) of the rise of the breath, by value of `+0x3e`.
-const RISE_LIMITS: u32 = 0x9f14c;
+/// Frame lists of the breath (offsets in `shot9_frames`): while it burns, at its end.
+const FIRE_FRAMES: u32 = 0;
+const END_FRAMES: u32 = 0xe;
 
 /// The creator must be an enemy (class 2) of type 7, variant 0, in state 0x208, itself linked to a player still in
 /// play; otherwise the breath disappears.
@@ -149,7 +149,7 @@ fn breath_body<R: Bench>(x: &mut Cx<'_, R>, enemy: Obj) {
                     x.anim_step();
                     let z = x.u16(0xc) as i16;
                     let k = x.u8(0x3e) as i8;
-                    if z >= 0xa0 || k < 0 || x.rom_i16(RISE_LIMITS + 2 * k as u32) < z {
+                    if z >= 0xa0 || k < 0 || (tables().shot9_rise_limits.at16(x.b, 2 * k as u32) as i16) < z {
                         return;
                     }
                     x.add8(0x6, 2);
@@ -193,9 +193,10 @@ fn follow<R: Bench>(x: &mut Cx<'_, R>, enemy: Obj) {
 fn pick_frame<R: Bench>(x: &mut Cx<'_, R>, set: u32) {
     let n = ((x.u16(0xc) >> 4).min(0xa) as i16 - 4).max(0);
     x.set8(0x2f, n as u8);
-    let frames = set.wrapping_add(x.data16(set + 2 * n as u32) as i16 as i32 as u32);
+    let t = &tables().shot9_frames;
+    let frames = set.wrapping_add(t.at16(x.b, set + 2 * n as u32) as i16 as i32 as u32);
     let entry = frames + 8 * x.u8(0x3e) as u32;
-    let (a, b) = (x.data32(entry), x.data32(entry + 4));
+    let (a, b) = (t.at32(x.b, entry), t.at32(x.b, entry + 4));
     x.set32(0x34, a);
     x.set32(0x38, b);
 }

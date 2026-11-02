@@ -18,7 +18,7 @@ const CODE: &str = include_str!("../code_68k.txt");
 /// Longest table read without an explicit end (bytes).
 const MAX: u32 = 0x400;
 
-fn code_starts() -> Vec<u32> {
+pub(crate) fn code_starts() -> Vec<u32> {
     let mut starts: Vec<u32> = CODE
         .lines()
         .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
@@ -28,11 +28,11 @@ fn code_starts() -> Vec<u32> {
     starts
 }
 
-/// End (excluded) of the table declared by `spec`: its own end, otherwise the next table or code, at most `MAX` bytes
-/// further; rounded down to whole elements.
-fn end_of(spec: &Spec, code: &[u32]) -> u32 {
+/// End (excluded) of the table declared by `spec` among the declarations `specs` of its family: its own end, otherwise
+/// the next table or code, at most `MAX` bytes further; rounded down to whole elements.
+fn end_of(spec: &Spec, specs: &[Spec], code: &[u32]) -> u32 {
     let end = spec.end.unwrap_or_else(|| {
-        let next_table = EffectTables::SPECS.iter().map(|s| s.rom).filter(|&a| a > spec.rom).min();
+        let next_table = specs.iter().map(|s| s.rom).filter(|&a| a > spec.rom).min();
         let next_code = code.iter().copied().find(|&a| a > spec.rom);
         [next_table, next_code, Some(spec.rom + MAX)].into_iter().flatten().min().unwrap()
     });
@@ -40,14 +40,16 @@ fn end_of(spec: &Spec, code: &[u32]) -> u32 {
     spec.rom + (end - spec.rom) / size * size
 }
 
+/// The table declared by `spec` (one of `specs`), read in its space up to its end (`end_of`).
+pub(crate) fn read_table(rom: &Program, spec: &Spec, specs: &[Spec], code: &[u32]) -> Table {
+    let bytes: Vec<u8> =
+        (spec.rom..end_of(spec, specs, code)).map(|a| if spec.program { rom.prog8(a) } else { rom.rd8(a) }).collect();
+    Table::from_bytes(spec, &bytes)
+}
+
 pub fn effects(rom: &Program) -> EffectTables {
     let code = code_starts();
-    EffectTables::build(|spec| {
-        let bytes: Vec<u8> = (spec.rom..end_of(spec, &code))
-            .map(|a| if spec.program { rom.prog8(a) } else { rom.rd8(a) })
-            .collect();
-        Table::from_bytes(spec, &bytes)
-    })
+    EffectTables::build(|spec| read_table(rom, spec, EffectTables::SPECS, &code))
 }
 
 pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {

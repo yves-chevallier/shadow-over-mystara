@@ -197,7 +197,8 @@ pub fn clear_picked_up(b: &mut Cps2Bus) {
     }
 }
 
-/// A player's equipment that can drop when it is hit: (byte of the carried object, hit counter, chance table per hit).
+/// A player's equipment that can drop when it is hit: (byte of the carried object, hit counter, address of its masks
+/// in `wear_chances`).
 struct Door {
     object: u32,
     hits: u32,
@@ -225,7 +226,7 @@ fn falls(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj, p: &Door) -> bool {
     r.a(4, p.chances);
     let i = 2 * n as u32;
     r.d(0, i);
-    let mask = rd16(b, p.chances + i);
+    let mask = super::shell::tables::held16(b, p.chances + i);
     r.d_word(2, mask);
     let bit = crate::rng::random(b) & 0xf;
     r.d_word(0, bit);

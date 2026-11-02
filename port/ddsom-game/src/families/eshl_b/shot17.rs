@@ -1,16 +1,9 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16e1f4;
-const PALETTE_SRC: u32 = 0x25a660;
 const PALETTE_DST: u32 = 0x91c300;
 const PALETTE_TINT: u32 = 0x91c000;
-/// Spawn offset (Z, X) by `+0x42` (4 bytes per row).
-const SPAWN_OFFSETS: u32 = 0xa0670;
-/// `+0x2d` according to the angle (Y) for mode 0 and mode > 0.
-const AIM_TABLE_B: u32 = 0xa07ac;
-const AIM_TABLE_A: u32 = 0xa0892;
-/// Vertical and horizontal speed of mode < 0 (4 bytes per row).
-const DROP_SPEEDS: u32 = 0xa0962;
 const CHARGE: u8 = 0;
 const AIM: u8 = 2;
 const FALL: u8 = 4;
@@ -31,7 +24,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
     for i in 0..8 {
-        let v = x.data32(PALETTE_SRC + 4 * i);
+        let v = tables().shot17_palette.at32(x.b, 4 * i);
         wr32(x.b, PALETTE_DST + 4 * i, v);
     }
     let tint = rd32(x.b, PALETTE_TINT) & 0xf000_f000;
@@ -43,9 +36,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x2b, 0x18);
     x.set8(0x54, 0x3c);
     let row = x.u8(0x42) as u32;
-    let dz = x.rom16(SPAWN_OFFSETS + row);
+    let dz = tables().shot17_spawn_offsets.at16(x.b, row);
     x.add16(0xc, dz);
-    let mut dx = x.rom16(SPAWN_OFFSETS + 2 + row);
+    let mut dx = tables().shot17_spawn_offsets.at16(x.b, 2 + row);
     if x.u8(f::FLIP) != 0 {
         dx = dx.wrapping_neg();
     }
@@ -174,7 +167,7 @@ fn aim_at<R: Bench>(x: &mut Cx<'_, R>, target: Obj) {
     x.set16(0x18, slope.wrapping_neg());
     let angle = crate::aids::direction_to(x.b, x.o, target) & 0x1f;
     let idx = angle.wrapping_sub(8) as u32;
-    let v = x.rom8(AIM_TABLE_B + idx);
+    let v = tables().shot17_aim_b.at8(x.b, idx);
     x.set8(0x2d, v);
     speed_table(x, 0x40);
 }
@@ -193,7 +186,7 @@ fn aim_flat<R: Bench>(x: &mut Cx<'_, R>) {
         let to = (target.u16(x.b, 0x8), 0);
         let de = (x.u16(0x8), x.u16(0xc));
         let angle = crate::aids::direction(x.b, de, to) & 0x1f;
-        let v = x.rom8(AIM_TABLE_A + angle.wrapping_sub(8) as u32);
+        let v = tables().shot17_aim_a.at8(x.b, angle.wrapping_sub(8) as u32);
         x.set8(0x2d, v);
         speed_table(x, 0x44);
         let v = x.u16(0x1c);
@@ -218,7 +211,7 @@ fn aim_drop<R: Bench>(x: &mut Cx<'_, R>) {
             d = d.wrapping_neg();
         }
         let row = if d > 0x50 { 0 } else { 4 };
-        let vz = x.rom16(DROP_SPEEDS + row);
+        let vz = tables().shot17_drop_speeds.at16(x.b, row);
         x.set16(0x18, vz);
         x.set16(0x1a, 0);
         x.set16(0x14, 0);

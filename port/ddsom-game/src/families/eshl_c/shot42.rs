@@ -1,8 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x170222;
-/// Animation of the attack according to `+0x33` of the host (byte table indexed by 7 bits).
-const ANIM_OF_HOST_FRAME: u32 = 0xa3600;
 const HOST: u32 = 0x42;
 const ARMED: u32 = 0x58;
 const TRIGGER: u32 = 0x59;
@@ -79,7 +78,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>, host: Obj) {
         return;
     }
     let frame = host.u8(x.b, 0x33) & 0x7f;
-    let anim = x.rom8(ANIM_OF_HOST_FRAME + frame as u32);
+    let anim = tables().shot42_anims_of_host_frame.at8(x.b, frame as u32);
     ai_anim(x, ANIMS, anim as u32);
 }
 

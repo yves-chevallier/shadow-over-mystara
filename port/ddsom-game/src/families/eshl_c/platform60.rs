@@ -1,4 +1,5 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x1712d4;
 const LINK: u32 = 0x5c;
@@ -9,8 +10,6 @@ const HOME_Z: u32 = 0x4e;
 const LAST_SCROLL: u32 = 0x16;
 const SCROLL: u32 = 0x14;
 const THUD: crate::sound::Sound = crate::sound::CMD_37D_47D;
-/// Starting positions of variant 2 per sub-type (4 bytes per row).
-const START_POSITIONS: u32 = 0xa6046;
 /// Variable `A5+0x51e` (variant 3).
 const SIGNAL: u32 = 0x51e;
 /// Substates (`+5`).
@@ -39,8 +38,8 @@ fn start<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(0x4, 2);
-            let row = START_POSITIONS + 4 * x.u8(0x2f) as u32;
-            let (px, py) = (x.rom16(row), x.rom16(row + 2));
+            let row = 4 * x.u8(0x2f) as u32;
+            let (px, py) = (tables().platform60_start_positions.at16(x.b, row), tables().platform60_start_positions.at16(x.b, row + 2));
             x.set16(0x8, px);
             x.set16(0x10, py);
             x.set16(0xc, 0x110);

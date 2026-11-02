@@ -1,5 +1,7 @@
 //! Common parts of the ESHL class handlers (enemy shots and attacks): fields of an ESHL object, states, placement
-//! helpers and terrain collision helpers.
+//! helpers and terrain collision helpers. Also the tables ([`tables`]) of the ESHL, SOBJ, ITEM and BOX families.
+
+pub mod tables;
 
 use crate::families::cx::Bench;
 use super::cx::Cx;

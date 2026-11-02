@@ -1,4 +1,5 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 // ---------------------------------------------------------------------------------------------
 // Type 1: food and potions (0xdae26)
@@ -8,25 +9,15 @@ use super::*;
 /// sparkle (+0x54) and the pickup index (+0x5d) come from a two-byte table per variant. Only variants 2 to 5 disappear
 /// at the end of the lifetime (0x960 frames, 0x708 after a fall).
 pub const ENTRY: u32 = 0xdae26;
-pub const TABLE_STATES: u32 = 0xdae3c;
-pub const TABLE_SUB_STATES: u32 = 0xdaef6;
-pub const PARAMS: u32 = 0xdaedc;
-pub const EFFECTS: u32 = 0xdafb8;
 pub const ANIMATIONS: u32 = 0x1bee16;
 pub const DURATION_INITIAL: u16 = 0x960;
 pub const DURATION_AFTER_FALL: u16 = 0x708;
-/// Pickup effects (original addresses, read from the `EFFECTS` table).
-pub const FOOD: u32 = 0xdafd0;
-pub const POTION_B: u32 = 0xdb044;
-pub const POTION_A: u32 = 0xdb026;
-pub const WITHOUT_EFFECT: u32 = 0xdb068;
-pub const COUNTER: u32 = 0xdb06a;
 
 pub(super) fn consumable_params<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let base = consumable::PARAMS + (((o.u8(ctx.b, Obj::VARIANT) as u32) * 2) & 0xff);
-    let shimmering = ctx.prog8(base);
+    let base = ((o.u8(ctx.b, Obj::VARIANT) as u32) * 2) & 0xff;
+    let shimmering = tables().item_consumable_params.at8(ctx.b, base);
     o.set_u8(ctx.b, field::SHIMMER, shimmering);
-    let index = ctx.prog8(base + 1);
+    let index = tables().item_consumable_params.at8(ctx.b, base + 1);
     o.set_u8(ctx.b, field::INDEX, index);
 }
 
@@ -35,16 +26,16 @@ pub(super) fn consumable_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     if airborne(ctx, o) {
         state_next(ctx, o, sub::FALL);
         o.set_u8(ctx.b, field::GAME_SHADOWS, SHADOWS);
-        o.set_u16(ctx.b, field::DURATION, consumable::DURATION_INITIAL);
+        o.set_u16(ctx.b, field::DURATION, DURATION_INITIAL);
         consumable_params(ctx, o);
     } else {
         state_next(ctx, o, sub::WAIT);
         o.set_u8(ctx.b, field::GAME_SHADOWS, SHADOWS);
-        o.set_u16(ctx.b, field::DURATION, consumable::DURATION_INITIAL);
+        o.set_u16(ctx.b, field::DURATION, DURATION_INITIAL);
         consumable_params(ctx, o);
         shimmer(ctx, o);
     }
-    animate_and_sort(ctx, consumable::ANIMATIONS, variant);
+    animate_and_sort(ctx, ANIMATIONS, variant);
 }
 
 /// Effect of a food: heals the player; at full health, score event and sound.
@@ -79,34 +70,33 @@ pub(super) fn effect_potion<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, bytes: &[(u32
 
 pub(super) fn consumable_effect<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variant = o.u8(ctx.b, Obj::VARIANT) as u32;
-    let target = ctx.prog32(consumable::EFFECTS + 4 * variant);
-    // the original's registers at the time of the `jsr (A1)` (useful if the variant is outside the table)
-    match target {
-        consumable::FOOD => effect_food(ctx, o),
-        consumable::POTION_B => effect_potion(ctx, o, &[(1, 1), (0x183, 1), (0x184, 0), (0x182, 0)]),
-        consumable::POTION_A => effect_potion(ctx, o, &[(0x184, 1), (0x183, 0), (0x182, 0)]),
-        consumable::WITHOUT_EFFECT => {}
-        consumable::COUNTER => {
+    // the effect routine of the variant (table of routines 0xdafb8: food 0xdafd0 twice, potions 0xdb044 and 0xdb026,
+    // nothing 0xdb068, counter 0xdb06a)
+    match variant {
+        0 | 1 => effect_food(ctx, o),
+        2 => effect_potion(ctx, o, &[(1, 1), (0x183, 1), (0x184, 0), (0x182, 0)]),
+        3 => effect_potion(ctx, o, &[(0x184, 1), (0x183, 0), (0x182, 0)]),
+        4 => {}
+        5 => {
             let n = ctx.ram8(0x45).wrapping_add(1);
             ctx.set_ram8(0x45, n);
             if !(n <= 9) {
                 ctx.set_ram8(0x45, 9);
             }
         }
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(variant),
     }
     mark_pickup(ctx, o);
 }
 
 pub(super) fn consumable_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sub_state = o.u8(ctx.b, field::SUB_STATE);
-    let target = crate::families::effects::target(ctx, consumable::TABLE_SUB_STATES, sub_state as u32);
     match sub_state {
         sub::FALL => {
             let in_flight = ctx.move_xyz().gt();
             if !in_flight {
                 add_u8(ctx, o, field::SUB_STATE, 2);
-                o.set_u16(ctx.b, field::DURATION, consumable::DURATION_AFTER_FALL);
+                o.set_u16(ctx.b, field::DURATION, DURATION_AFTER_FALL);
                 o.set_u32(ctx.b, Obj::Z, 0);
                 in_view(ctx, o);
                 shimmer(ctx, o);
@@ -132,7 +122,7 @@ pub(super) fn consumable_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             add_u8(ctx, o, Obj::STATE, 2);
             consumable_effect(ctx, o);
         }
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(sub_state as u32),
     }
 }
 
@@ -143,11 +133,10 @@ pub(super) fn consumable_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
         return;
     }
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = crate::families::effects::target(ctx, consumable::TABLE_STATES, state as u32);
     match state {
         state::INIT => consumable_init(ctx, o),
         state::ACTIVE => consumable_active(ctx, o),
         state::FREED | state::OUTSIDE_SCREEN => ctx.free(&pools::ITEM),
-        _ => crate::families::effects::outside_table(target),
+        _ => crate::families::effects::bad_index(state as u32),
     }
 }

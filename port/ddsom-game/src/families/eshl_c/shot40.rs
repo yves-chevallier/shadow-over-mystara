@@ -1,10 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16ff94;
-/// Animation drawn at random (16 bytes).
-const RANDOM_ANIMS: u32 = 0xa329e;
-/// Value of `+0x2b` (palette (h)) by `+0x47`.
-const PALETTES: u32 = 0xa31ba;
 const CREATOR: u32 = 0x5c;
 const LIFETIME: u32 = 0x42;
 const PALETTE_COUNTDOWN: u32 = 0x46;
@@ -48,7 +45,7 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
         _ => {}
     }
     let r = random(x) & 0xf;
-    let anim = x.rom8(RANDOM_ANIMS + r);
+    let anim = tables().shot40_random_anims.at8(x.b, r);
     x.anim_start(ANIMS, (anim as u32) as u16);
 }
 
@@ -81,7 +78,8 @@ fn cycle_palette<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x2a, 1);
     let i = x.u8(PALETTE_INDEX).wrapping_add(1) & 7;
     x.set8(PALETTE_INDEX, i);
-    let p = x.rom8(PALETTES + i as u32);
+    // the bytes of the frames of shot 39 (`shot39_frames`) serve as palettes
+    let p = tables().shot39_frames.at8(x.b, i as u32);
     x.set8(0x2b, p);
 }
 

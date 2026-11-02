@@ -1,12 +1,7 @@
 use super::*;
+use crate::families::shell::tables::{tables, Read};
 
 const ANIMS: u32 = 0x16fbf4;
-/// Tables of 16 words of offsets: in X (inside the band / outside the band), in Y (same), delays.
-const X_INSIDE: u32 = 0xa3fd4;
-const X_OUTSIDE: u32 = 0xa3ff4;
-const Y_INSIDE: u32 = 0xa4014;
-const Y_OUTSIDE: u32 = 0xa4034;
-const DELAYS: u32 = 0xa4068;
 const CAMERA_X: u32 = 0x5a6;
 const CAMERA_Y: u32 = 0x5aa;
 const DELAY: u32 = 0x58;
@@ -25,7 +20,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             x.set_bit(0x1, 1, true);
             place(x);
             let r = random(x);
-            let delay = x.rom16(DELAYS + 2 * (r & 0xf));
+            let delay = tables().spawn47_delays.at16(x.b, 2 * (r & 0xf));
             x.set16(DELAY, delay);
             ai_anim(x, ANIMS, 1);
         }
@@ -59,11 +54,11 @@ fn place<R: Bench>(x: &mut Cx<'_, R>) {
     let (lo, hi) = (cam.wrapping_add(0x20), cam.wrapping_add(0x160));
     let px = x.u16(0x8);
     let dx = if s16(lo) >= s16(px) {
-        x.rom16(X_OUTSIDE + idx)
+        tables().spawn47_x_outside.at16(x.b, idx)
     } else if s16(hi) <= s16(px) {
-        neg(x.rom16(X_OUTSIDE + idx))
+        neg(tables().spawn47_x_outside.at16(x.b, idx))
     } else {
-        x.rom16(X_INSIDE + idx)
+        tables().spawn47_x_inside.at16(x.b, idx)
     };
     x.add16(0x8, dx);
     let idx = 2 * (random(x) & 0xf);
@@ -71,11 +66,11 @@ fn place<R: Bench>(x: &mut Cx<'_, R>) {
     let (lo, hi) = (cam.wrapping_add(0x38), cam.wrapping_add(0x68));
     let py = x.u16(0x10);
     let dy = if s16(lo) >= s16(py) {
-        x.rom16(Y_OUTSIDE + idx)
+        tables().spawn47_y_outside.at16(x.b, idx)
     } else if s16(hi) <= s16(py) {
-        neg(x.rom16(Y_OUTSIDE + idx))
+        neg(tables().spawn47_y_outside.at16(x.b, idx))
     } else {
-        x.rom16(Y_INSIDE + idx)
+        tables().spawn47_y_inside.at16(x.b, idx)
     };
     x.add16(0x10, dy);
 }
