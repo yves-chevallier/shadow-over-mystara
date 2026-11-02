@@ -26,15 +26,23 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
 ## Après ces lots
 
 1. **Retirer `m68k::Cpu` du jeu.** Plus de `Corps::Processeur` : la machine de référence garde son 68000, le jeu n'en a plus.
-2. **Le reste de la couverture.**
-   * Boutiques et routes 0x14/0x38 par des bots.
-   * Chemins de F3 (interface joueurs) hors curseur et noms.
-   * Corps des tâches K1, F1, F4, F7, O1 et K2 dans `fuzz_couv`.
-   * Sous-états 8 et 0xa des réactions des boss 15 et 19 (non tranché, voir code-mort.md).
-3. **Petites dettes.**
-   * Les noms et commentaires des bots `long_*` se trompent de personnage. L'ordre réel est 0 combattant, 1 magicien, 2 clerc, 3 voleur, 4 nain, 5 elfe.
-   * `zones_natives.txt` hors du code ne sert plus.
-   * `examples/cessions` et `reste68k` n'ont plus d'objet depuis le retrait du mode hybride.
+2. ~~**Le reste de la couverture.**~~ Fait par le lot « couverture » (`wt-couv2`, [couverture.md](couverture.md),
+   « Votes, boutiques, interface et démarrage ») :
+   * votes de chemin (sorties des scènes 2, 13, 33 et 38, en décimal : les « routes 0x14/0x38 » étaient les scènes 20
+     et 56, sans vote) et boutiques joués par des bots (`long_votes_*`, `long_boutiques_*`, `autobot --wander`) ;
+   * F3 hors curseur et noms : tout joué (`long_credits_*`, `long_boss_4p_frail`, bornes à trois joueurs), sauf du code
+     mort (0x15234) ;
+   * corps des tâches K1, F1, F4, F7, O1, K2 : les chemins atteignables sont joués par des scénarios
+     (`cov_demarrage_boutons`, `long_noms_embleme`), le reste est inatteignable (drapeaux de la ROM, carte, erreurs de
+     RAM, données) : [code-mort.md](code-mort.md), « Lot couverture » ;
+   * boss 15 et 19, sous-états 8 et 0xa : inatteignables, gardés en Rust comme l'original et validés par `fuzz_couv` ;
+   * trou trouvé et corrigé : la résurrection d'un joueur qui rejoint pendant que les entrées sont figées (0x23c7a).
+3. ~~**Petites dettes.**~~ Faites (`wt-couv2`) :
+   * noms et commentaires des bots `long_*` d'après les personnages relevés en RAM (`long_voleur_mortel`,
+     `long_elfe_objets`, `long_nain_57_86`, `long_scene_20`, `long_scene_56`...) ;
+   * `zones_natives.txt` gardé : `extract` l'inclut (`natives.rs`) pour les zones lues dans le code ; ses zones hors du
+     code font double emploi avec `reste.json` aujourd'hui, mais protègent si `code_68k.txt` grandit (docs/sans-rom.md) ;
+   * `examples/reste68k`, `tools/reste68k.sh` et `docs/reste68k.md` retirés (`examples/cessions` l'était déjà).
 4. **Puis :** optimisation, documentation finale, et le bug de saisie du nom. Ce bug existe dans d'autres révisions du jeu, pas dans la nôtre (Euro 960619).
 
 ## Méthode qui marche

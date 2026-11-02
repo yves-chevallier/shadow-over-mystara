@@ -304,3 +304,33 @@ est devenue un `unreachable!` (repli défensif ; l'A6 de l'original y désignera
   (`boss/boss15_scene46` et `boss/boss19_scene32`, 12 000 images, un appel sur 4, 48 essais par appel : environ
   14 300 essais chacun, les deux entrées sont atteintes par des essais sans écart).
 ||||||| 3bec3f5
+
+### Interface des joueurs (F3) : 0x15234-0x1523e après le `bra.w` de 0x15230
+
+* **Ce que fait le code.** `tst.b (0x21,A5) ; beq ; lea (0x44e,A5),A4` : choisir le compteur de pièces commun selon
+  le nombre de monnayeurs.
+* **Pourquoi jamais atteint.** Ces trois instructions suivent le `bra.w 0x1525c` de 0x15230 et aucun saut ni aucune
+  table n'y mène (le listing ne les désassemble même pas) ; le choix du compteur passe par la table 0x1526e indexée
+  par le mode des monnayeurs (`A5+0x1d`). Reste d'une version antérieure.
+* **Décision.** Code mort de l'original, non réécrit (`hud::slot`).
+
+### Corps des tâches K1, K2, F1, F4, F7, O1 : ce que les scénarios n'exécutent toujours pas
+
+Mesure du lot (union des scénarios de la validation complète, docs/couverture-fonctions.md) ; les chemins atteignables
+de F1, F4 et F7 sont désormais joués (`cov_demarrage_boutons`, `long_noms_embleme`) :
+
+* **Drapeaux de mise au point de l'en-tête de la ROM** (octets 0xc4, 0xc5 et 0xc7 de l'espace données, nuls dans cette
+  ROM ; le mot 0xc0, nul aussi, garde l'affichage des verrous du son) : 0x514 (`boot_init`), 0x5b4-0x5c0 et 0x5d0
+  (`irq2_vblank` : attente d'un bit de 0x804021, copie de 0x8040b0), 0x664-0x686 (combinaison de touches lue au
+  démarrage), 0x11bd2-0x11be0 (tâche de démarrage : autres textes d'avertissement). Inatteignables : la ROM ne change
+  pas. `vblank.rs` les omet (commentaire d'en-tête) ; `demarrage.rs` et `modes/boot.rs` lisent l'octet 0xc4 comme
+  l'original.
+* **Registre 0x804030** (`reset`, 0x456-0x48a : lecture de la configuration 0x2dc9a, puis réinitialisation 0x2e8e4
+  sur une combinaison de 0x804020, quand le bit 14 est nul) : la carte émulée rend 0xe021 (bit 14 levé ;
+  `demarrage.rs`, `CARTE`).
+* **Erreurs de RAM** (K2, `ram_test_block`, 0x1940-0x19ae : écran « RAM ERROR » et boucle sans fin) : la RAM émulée
+  ne se trompe jamais.
+* **Données** prises pour du code par `decomp/index.tsv` : 0x980 (fin de l'ordonnanceur), 0x1fa2-0x1fb6 (table après
+  `obj_on_screen`, O1), 0x19aa.
+* **Écran 0x19068** (F4, 0x196ae et la fin de 0x19038) : tâche jamais créée, déjà consignée plus haut (« Tâche de
+  l'écran 0x19068 »).
