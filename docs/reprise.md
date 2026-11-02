@@ -39,7 +39,7 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
      `data/reste.json` (`serde(rename)`), noms de fichiers d'assets et de sauvegarde, format de `touches.cfg` (actions
      `j1.haut`..., touches `Pad1Haut`...), étiquettes de lecteur de `native_zones.txt` (noms d'assets), textes des docs
      générés par `examples/creatures.rs` et `examples/level_maps.rs` (docs/creatures.md, docs/niveaux.md restent en
-     français), renvois aux fichiers de docs/.
+     français), renvois aux fichiers de docs/. Validé 308/308 dans les deux modes (8812560, DDSOM_LONG=1) ; non fusionné.
 
 1. **Retirer `m68k::Cpu` du jeu.** Plus de `Body::Processeur` : la machine de référence garde son 68000, le jeu n'en a plus.
 2. ~~**Le reste de la couverture.**~~ Fait par le lot « couverture » (`wt-couv2`, [couverture.md](couverture.md),
