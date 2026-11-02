@@ -14,14 +14,14 @@
 //! - 89: character who enters from the left, waits for a signal from the scene and leaves on the right.
 
 use crate::families::cx::Bench;
-use super::cx::{handlers, Cx};
+use crate::families::cx::{handlers, Cx};
 use crate::mem::{rd32, wr32, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
 
 /// Shared fields.
-mod f {
+mod fields {
     pub const STATE: u32 = 0x04;
     pub const SUB_STATE: u32 = 0x05;
     pub const VARIANT: u32 = 0x03;
@@ -98,9 +98,9 @@ mod opening {
 }
 
 fn opening<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(f::STATE) {
+    match x.u8(fields::STATE) {
         0 => opening_init(x),
-        2 => match x.u8(f::SUB_STATE) {
+        2 => match x.u8(fields::SUB_STATE) {
             0 => opening_slide(x),
             4 => opening_wait(x),
             8 => {
@@ -108,7 +108,7 @@ fn opening<R: Bench>(x: &mut Cx<'_, R>) {
                 if x.a5_u16(CAMERA_X) as i16 > opening::CAMERA_STOP {
                     return;
                 }
-                x.add8(f::SUB_STATE, 4);
+                x.add8(fields::SUB_STATE, 4);
                 crate::sound::play(x.b, opening::SOUND_SCROLL, x.o);
             }
             12 => {
@@ -118,7 +118,7 @@ fn opening<R: Bench>(x: &mut Cx<'_, R>) {
                 crate::sound::play(x.b, opening::SOUND_ARRIVAL, x.o);
                 let step = x.a5_u8(SCENE_STEP).wrapping_add(4);
                 x.set_a5_u8(SCENE_STEP, step);
-                x.add8(f::STATE, 4);
+                x.add8(fields::STATE, 4);
             }
             _ => {}
         },
@@ -126,7 +126,7 @@ fn opening<R: Bench>(x: &mut Cx<'_, R>) {
             if !x.anim_step() {
                 return;
             }
-            x.add8(f::STATE, 2);
+            x.add8(fields::STATE, 2);
             let step = x.a5_u8(SCENE_STEP).wrapping_add(2);
             x.set_a5_u8(SCENE_STEP, step);
         }
@@ -135,9 +135,9 @@ fn opening<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn opening_init<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(f::STATE, 2);
+    x.add8(fields::STATE, 2);
     x.reinsert_foreground();
-    let v = x.u8(f::VARIANT) as u32;
+    let v = x.u8(fields::VARIANT) as u32;
     let target = x.rom16(opening::TARGETS + 2 * v);
     x.set16(opening::TARGET, target);
     let (px, py) = (x.rom16(opening::STARTS + 4 * v), x.rom16(opening::STARTS + 4 * v + 2));
@@ -168,12 +168,12 @@ fn opening_slide<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.set16(Obj::X, target);
-    if x.u8(f::VARIANT) == 3 {
-        x.add8(f::SUB_STATE, 4);
+    if x.u8(fields::VARIANT) == 3 {
+        x.add8(fields::SUB_STATE, 4);
         x.set16(opening::DELAY, 0x40);
         return opening_wait(x);
     }
-    x.add8(f::STATE, 2);
+    x.add8(fields::STATE, 2);
     clear_scene(x);
     crate::sound::play(x.b, opening::SOUND_ARRIVAL, x.o);
     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, 0x20);
@@ -191,7 +191,7 @@ fn clear_scene<R: Bench>(x: &mut Cx<'_, R>) {
             if !spared && o.u8(x.b, 0x58) != 0 {
                 spared = true;
             } else {
-                o.set_u16(x.b, f::STATE, 0x600);
+                o.set_u16(x.b, fields::STATE, 0x600);
             }
         }
         slot += 0x60;
@@ -203,7 +203,7 @@ fn clear_scene<R: Bench>(x: &mut Cx<'_, R>) {
     for k in 0..18 {
         let o = Obj(A5 + opening::POOL_B + 0x60 * k);
         if o.u8(x.b, 0) != 0 {
-            o.set_u16(x.b, f::STATE, 0x600);
+            o.set_u16(x.b, fields::STATE, 0x600);
         }
     }
 }
@@ -215,7 +215,7 @@ fn opening_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if (n as i16) >= 0 {
         return;
     }
-    x.add8(f::SUB_STATE, 4);
+    x.add8(fields::SUB_STATE, 4);
     let step = x.a5_u8(SCENE_STEP).wrapping_add(4);
     x.set_a5_u8(SCENE_STEP, step);
 }
@@ -239,14 +239,14 @@ fn mirrored<R: Bench>(x: &mut Cx<'_, R>) {
     if x.suspended() {
         return;
     }
-    match x.u8(f::STATE) {
+    match x.u8(fields::STATE) {
         0 => {
-            x.add8(f::STATE, 2);
-            x.set_bit(f::FLAGS, 1, true);
+            x.add8(fields::STATE, 2);
+            x.set_bit(fields::FLAGS, 1, true);
             x.anim_start(mirrored::ANIM_SET, 4);
         }
         2 => mirrored_follow(x),
-        4 => x.add8(f::STATE, 2),
+        4 => x.add8(fields::STATE, 2),
         _ => free(x),
     }
 }
@@ -256,7 +256,7 @@ fn mirrored_follow<R: Bench>(x: &mut Cx<'_, R>) {
     let bearer = x.linked(mirrored::BEARER);
     if (pointer as i16) >= 0 || bearer.u8(x.b, 0) == 0 {
         // porteur disparu
-        return x.add8(f::STATE, 2);
+        return x.add8(fields::STATE, 2);
     }
     let frame = bearer.u8(x.b, mirrored::BEARER_FRAME);
     if (frame as i8) < 0 {
@@ -266,16 +266,16 @@ fn mirrored_follow<R: Bench>(x: &mut Cx<'_, R>) {
         let v = bearer.u16(x.b, off);
         x.set16(off, v);
     }
-    let facing = bearer.u8(x.b, f::FACING);
-    x.set8(f::FACING, facing);
-    if x.u8(f::SUB_STATE) == 0 {
-        x.add8(f::SUB_STATE, 2);
-        x.set_bit(f::FLAGS, 1, false);
-        if x.u8(f::VARIANT) == 0 {
+    let facing = bearer.u8(x.b, fields::FACING);
+    x.set8(fields::FACING, facing);
+    if x.u8(fields::SUB_STATE) == 0 {
+        x.add8(fields::SUB_STATE, 2);
+        x.set_bit(fields::FLAGS, 1, false);
+        if x.u8(fields::VARIANT) == 0 {
             x.anim_start(mirrored::ANIM_SET, 4);
         }
     }
-    if x.u8(f::VARIANT) == 0 {
+    if x.u8(fields::VARIANT) == 0 {
         // silhouette: one pixel in front of and above the carrier
         x.add16(Obj::Y, 1);
         x.add16(Obj::Z, 0xffff);
@@ -295,15 +295,15 @@ fn mirrored_follow<R: Bench>(x: &mut Cx<'_, R>) {
                 return mirrored_hide(x);
             }
             x.anim_start(mirrored::ANIM_SET, (anim as u32) as u16);
-            x.set_bit(f::FLAGS, 1, false);
+            x.set_bit(fields::FLAGS, 1, false);
         }
     }
     x.reinsert();
 }
 
 fn mirrored_hide<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(f::SUB_STATE, 0);
-    x.set_bit(f::FLAGS, 1, true);
+    x.set8(fields::SUB_STATE, 0);
+    x.set_bit(fields::FLAGS, 1, true);
     x.reinsert();
 }
 
@@ -323,9 +323,9 @@ mod crossing {
 }
 
 fn crossing<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(f::STATE) {
+    match x.u8(fields::STATE) {
         0 => {
-            x.add8(f::STATE, 2);
+            x.add8(fields::STATE, 2);
             x.set_a5_u16(FOCUS, x.o.0 as u16);
             at_camera(x, 0x180, 0x50);
             x.set16(Obj::Z, 0);
@@ -337,14 +337,14 @@ fn crossing<R: Bench>(x: &mut Cx<'_, R>) {
             x.reinsert();
         }
         2 => crossing_steps(x),
-        4 => x.add8(f::STATE, 2),
+        4 => x.add8(fields::STATE, 2),
         _ => free(x),
     }
 }
 
 /// The steps (substate, by 4) chain within the same frame when one of them finishes.
 fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
-    let mut step = x.u8(f::SUB_STATE);
+    let mut step = x.u8(fields::SUB_STATE);
     loop {
         match step {
             // arched flight down to the ground
@@ -362,7 +362,7 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
                 if !timer_out(x) {
                     return;
                 }
-                x.add8(f::SUB_STATE, 4);
+                x.add8(fields::SUB_STATE, 4);
                 crate::sound::play(x.b, crossing::SOUND_LAND, x.o);
                 x.anim_start(crossing::ANIM_SET, 3);
                 x.reinsert();
@@ -378,9 +378,9 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
                 if !timer_out(x) {
                     return;
                 }
-                let Some(scenery_obj) = super::creators::scene_set(x.b, crossing::SCENERY_KIND as u8) else { return };
+                let Some(scenery_obj) = crate::families::creators::scene_set(x.b, crossing::SCENERY_KIND as u8) else { return };
                 x.set16(crossing::SCENERY, scenery_obj.0 as u16);
-                x.add8(f::SUB_STATE, 4);
+                x.add8(fields::SUB_STATE, 4);
                 x.set16(crossing::TIMER, 0);
                 x.anim_start(crossing::ANIM_SET, 5);
             }
@@ -395,7 +395,7 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
                 if scenery.u8(x.b, 0x22) == 0 {
                     return;
                 }
-                x.add8(f::SUB_STATE, 4);
+                x.add8(fields::SUB_STATE, 4);
                 x.anim_start(crossing::ANIM_SET, 6);
             }
             20 => {
@@ -404,11 +404,11 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 crate::sound::play(x.b, crossing::SOUND_DONE, x.o);
                 let o = x.o;
-                let launcher = super::effects_creators::launcher(x.b, o);
+                let launcher = crate::families::effects_creators::launcher(x.b, o);
                 if launcher.is_none() {
                     return;
                 }
-                x.add8(f::SUB_STATE, 4);
+                x.add8(fields::SUB_STATE, 4);
                 x.anim_start(crossing::ANIM_SET, 7);
                 return;
             }
@@ -420,7 +420,7 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Goes to the next step: delay, animation `anim`, put back in the actors' list.
 fn next_step<R: Bench>(x: &mut Cx<'_, R>, anim: u32, timer: u16) {
-    x.add8(f::SUB_STATE, 4);
+    x.add8(fields::SUB_STATE, 4);
     x.set16(crossing::TIMER, timer);
     x.anim_start(crossing::ANIM_SET, anim as u16);
     x.reinsert();
@@ -447,10 +447,10 @@ mod passage {
 }
 
 fn passage<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(f::STATE) {
+    match x.u8(fields::STATE) {
         0 => {
-            x.add8(f::STATE, 2);
-            let v = x.u8(f::VARIANT) as u32;
+            x.add8(fields::STATE, 2);
+            let v = x.u8(fields::VARIANT) as u32;
             let (px, py) = (x.rom16(passage::PLACES + 4 * v), x.rom16(passage::PLACES + 4 * v + 2));
             x.set16(Obj::X, px);
             x.set16(Obj::Y, py);
@@ -464,18 +464,18 @@ fn passage<R: Bench>(x: &mut Cx<'_, R>) {
             if focus == 0 {
                 return;
             }
-            let state = Obj(focus as i16 as i32 as u32 & 0xff_ffff).u8(x.b, f::STATE);
+            let state = Obj(focus as i16 as i32 as u32 & 0xff_ffff).u8(x.b, fields::STATE);
             if (state as i8) < 4 {
                 x.anim_step();
                 return;
             }
-            if x.u8(f::VARIANT) != 0 {
+            if x.u8(fields::VARIANT) != 0 {
                 return free(x);
             }
-            x.add8(f::STATE, 2);
+            x.add8(fields::STATE, 2);
             x.anim_start(passage::ANIM_SET, 3);
         }
-        4 if x.u8(f::SUB_STATE) == 0 => passage_open(x),
+        4 if x.u8(fields::SUB_STATE) == 0 => passage_open(x),
         4 => passage_boss(x),
         _ => free(x),
     }
@@ -502,7 +502,7 @@ fn passage_open<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u32(0x49a, 0x266fe0);
     x.set_a5_u32(0x49e, 0x27cec0);
     new_task(x, passage::FADE_PROGRAM, 0x10);
-    x.add8(f::SUB_STATE, 1);
+    x.add8(fields::SUB_STATE, 1);
 }
 
 /// Once the fade is done, creates the boss (type 7) in front of the camera and cedes control to the scene.
@@ -539,9 +539,9 @@ mod launcher {
 }
 
 fn launcher<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(f::STATE) {
+    match x.u8(fields::STATE) {
         0 => {
-            x.add8(f::STATE, 2);
+            x.add8(fields::STATE, 2);
             x.set16(launcher::TIMER, 0x40);
             crate::sound::play(x.b, launcher::SOUND_START, x.o);
             x.set16(Obj::X, 0xa00);
@@ -564,7 +564,7 @@ fn launcher<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     let partner = x.linked(launcher::PARTNER);
-    partner.set_u16(x.b, f::STATE, 0x400);
+    partner.set_u16(x.b, fields::STATE, 0x400);
     for k in 0..4 {
         let p = Obj(PLAYERS + 0x200 * k);
         if p.u8(x.b, 0) == 0 || p.u16(x.b, 0x62) == 0 {
@@ -583,7 +583,7 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
         p.set_u16(x.b, Obj::Z, 0x50);
         let py = p.u16(x.b, Obj::Y).wrapping_sub(0x50);
         p.set_u16(x.b, Obj::Y, py);
-        p.set_u32(x.b, f::STATE, 0x0008_040e);
+        p.set_u32(x.b, fields::STATE, 0x0008_040e);
     }
     for k in 0..33 * 8 {
         let v = rd32(x.b, launcher::PALETTE_RAM + 4 * k);
@@ -598,7 +598,7 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     // Original glitch: the loop counts in D6 (`dbf`), which the allocation rewrites (rank of the slot found
     // from the end of the pool): it stops when the pool is full, or when the last slot has just been taken.
     let last = pools::EFFCT.slot(pools::EFFCT.slots - 1);
-    while let Some(shard) = super::effects_creators::camera_shard(x.b) {
+    while let Some(shard) = crate::families::effects_creators::camera_shard(x.b) {
         if shard == last {
             break;
         }
@@ -625,9 +625,9 @@ fn start_sign_palette<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn start_sign<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(f::STATE) {
+    match x.u8(fields::STATE) {
         0 => {
-            x.add8(f::STATE, 2);
+            x.add8(fields::STATE, 2);
             start_sign_palette(x);
             at_camera_z(x);
             x.anim_start(start_sign::ANIM_SET, 0);
@@ -641,21 +641,21 @@ fn start_sign<R: Bench>(x: &mut Cx<'_, R>) {
             }
             if x.anim_step() && x.a5_u16(0x52) == 0 {
                 // end of the animation: the living, standing players (step ≤ 10) set off again
-                x.set16(f::STATE, 0x602);
+                x.set16(fields::STATE, 0x602);
                 x.set_a5_u8(0x59, 0);
                 for p in living_players(x) {
                     if p.u8(x.b, 6) <= 10 {
-                        p.set_u32(x.b, f::STATE, 0x0200_2c00);
+                        p.set_u32(x.b, fields::STATE, 0x0200_2c00);
                     }
                 }
             }
             x.reinsert();
         }
         _ => {
-            if x.u8(f::SUB_STATE) != 0 {
+            if x.u8(fields::SUB_STATE) != 0 {
                 return free(x);
             }
-            x.set16(f::STATE, 0x200);
+            x.set16(fields::STATE, 0x200);
             start_sign_palette(x);
         }
     }
@@ -691,16 +691,16 @@ fn sound_fade_levels<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn sound_fade<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(f::STATE) {
+    match x.u8(fields::STATE) {
         0 => {
-            x.add8(f::STATE, 2);
+            x.add8(fields::STATE, 2);
             x.set16(sound_fade::STEPS, 0x18);
             x.set16(sound_fade::DELAY, 5);
             x.set16(sound_fade::LEVEL_A, 0xff00);
             x.set16(sound_fade::LEVEL_B, 0xff00);
             sound_fade_levels(x);
         }
-        2 if x.u8(f::SUB_STATE) == 0 => {
+        2 if x.u8(fields::SUB_STATE) == 0 => {
             let n = x.u16(sound_fade::DELAY).wrapping_sub(1);
             x.set16(sound_fade::DELAY, n);
             if (n as i16) > 0 {
@@ -735,10 +735,10 @@ mod walker {
 }
 
 fn walker<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(f::STATE) {
+    match x.u8(fields::STATE) {
         0 => {
-            x.add8(f::STATE, 2);
-            x.set8(f::FACING, 0x20);
+            x.add8(fields::STATE, 2);
+            x.set8(fields::FACING, 0x20);
             x.set8(walker::DELAY, 0x38);
             at_camera(x, 0xffd0, 0x60);
             x.push_terrain();
@@ -746,13 +746,13 @@ fn walker<R: Bench>(x: &mut Cx<'_, R>) {
             x.reinsert();
         }
         2 => {
-            match x.u8(f::SUB_STATE) {
+            match x.u8(fields::SUB_STATE) {
                 // enters walking, four pixels per frame
                 0 => {
                     let n = x.u8(walker::DELAY).wrapping_sub(1);
                     x.set8(walker::DELAY, n);
                     if n == 0 {
-                        x.add8(f::SUB_STATE, 2);
+                        x.add8(fields::SUB_STATE, 2);
                         x.anim_start(walker::ANIM_SET, 1);
                     } else {
                         x.add16(Obj::X, 4);
@@ -762,7 +762,7 @@ fn walker<R: Bench>(x: &mut Cx<'_, R>) {
                 2 => {
                     x.anim_step();
                     if crate::mem::rd8(x.b, walker::SIGNAL) == 0x14 {
-                        x.add8(f::SUB_STATE, 2);
+                        x.add8(fields::SUB_STATE, 2);
                         x.anim_start(walker::ANIM_SET, 0);
                     }
                 }

@@ -9,7 +9,7 @@
 
 use crate::families::cx::Bench;
 use crate::machine::Machine;
-use super::cx::{handlers, Cx};
+use crate::families::cx::{handlers, Cx};
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;

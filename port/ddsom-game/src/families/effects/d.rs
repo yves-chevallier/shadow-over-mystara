@@ -9,7 +9,7 @@
 //!   then counts itself down with the controller; 9: sign placed on the alternate camera.
 
 use crate::families::cx::Bench;
-use super::cx::{handlers, Cx};
+use crate::families::cx::{handlers, Cx};
 use crate::mem::{rd8, wr16, wr32};
 use crate::objects::Obj;
 use crate::objects::pools;
@@ -226,7 +226,7 @@ fn trophy_active<R: Bench>(x: &mut Cx<'_, R>) {
             if pending != 5 {
                 return x.add8(f::SUB_STATE, 2);
             }
-            if let Some(scenery) = super::creators::scene_set(x.b, trophy::SCENERY_KIND as u8) {
+            if let Some(scenery) = crate::families::creators::scene_set(x.b, trophy::SCENERY_KIND as u8) {
                 x.set16(trophy::SCENERY, scenery.0 as u16);
             }
         }

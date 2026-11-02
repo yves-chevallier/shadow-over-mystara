@@ -36,7 +36,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 # Zones of docs/fin.md, section 1 (first match wins; paths relative to ddsom-game/src).
 ZONES = [
-    ("effects", r"families/effects[^/]*\.rs$"),
+    ("effects", r"families/effects[^/]*(/.*)?\.rs$"),
     ("set", r"families/(set[^/]*|scenery)\.rs$"),
     ("eshl_sobj_items", r"families/(eshl[^/]*|sobj|items|items_b|boxes|shell)\.rs$"),
     ("enemies", r"families/(enemy[^/]*(/.*)?|reactions\.rs)$"),
