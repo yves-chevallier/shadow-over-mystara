@@ -7,7 +7,7 @@
 //! natives, désignées par leur adresse dans la table de la ROM.
 //!
 //! Un gestionnaire peut faire céder la main à la tâche (fondu au noir des portes, feu d'artifice) : la boucle est alors
-//! abandonnée, et la tâche la reprendra à l'étape [`Etape::Aiguillage`] (après l'emplacement courant, avec l'objet et
+//! abandonnée, et la tâche la reprendra à l'étape [`Step::Dispatch`] (après l'emplacement courant, avec l'objet et
 //! le compteur notés dans l'étape), puis à la suite de l'appelant de la boucle.
 
 use cps2::Cps2Bus;
@@ -43,7 +43,7 @@ pub const SET: Class = Class { pool: &pools::SET, table: 0x39eac, entry: 0x39e86
 pub const ITEM: Class = Class { pool: &pools::ITEM, table: 0x39f5a, entry: 0x39f34 };
 pub const SOBJ: Class = Class { pool: &pools::SOBJ, table: 0x39fa8, entry: 0x39f82 };
 
-/// Les dix classes, dans l'ordre des boucles d'origine (indice de [`Etape::Aiguillage`]).
+/// Les dix classes, dans l'ordre des boucles d'origine (indice de [`Step::Dispatch`]).
 const CLASSES: [&Class; 10] = [&PSHL, &PEFF, &ENEMY, &BOSS, &ESHL, &EFFCT, &BOX, &SET, &ITEM, &SOBJ];
 
 impl Class {
@@ -60,7 +60,7 @@ impl Class {
     /// objet, D7.w = compteur, D0 = type × 4, A1 = gestionnaire) : le jeu en dépend (un gestionnaire
     /// lit le D0 laissé par le précédent) et un gestionnaire peut modifier A0 et D7.
     ///
-    /// `Flow::Yield` : un gestionnaire a cédé la main (la tâche reprendra à [`Etape::Aiguillage`], puis à la suite que
+    /// `Flow::Yield` : un gestionnaire a cédé la main (la tâche reprendra à [`Step::Dispatch`], puis à la suite que
     /// l'appelant a rangée dans ses appels en cours avant l'appel), ou est revenu plus haut.
     pub fn update(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Flow {
         c.a[0] = self.pool.slot(0).0;
@@ -69,11 +69,11 @@ impl Class {
     }
 
     /// Parcours appelé sans suite (phase 0, écrans hors partie) : aucun gestionnaire n'y cède la main. Sonde
-    /// `DDSOM_POISON=rendu` : les registres hérités de l'appelant (tous sauf A5 et A7) sont inversés avant le parcours,
+    /// `DDSOM_POISON=rendering` : les registres hérités de l'appelant (tous sauf A5 et A7) sont inversés avant le parcours,
     /// pour prouver que les gestionnaires ne relisent rien de l'écran qui les appelle.
     #[track_caller]
-    pub fn update_sans_suite(&self, c: &mut Cpu, b: &mut Cps2Bus) {
-        crate::diag::registres_morts(c, "rendu", crate::diag::REGISTRES_DE_TACHE);
+    pub fn update_no_next(&self, c: &mut Cpu, b: &mut Cps2Bus) {
+        crate::diag::dead_regs(c, "rendu", crate::diag::TASK_REGS);
         assert!(self.update(c, b) == Flow::Done, "dispatch {:x} : un gestionnaire a cédé la main sans suite", self.entry);
     }
 
@@ -91,13 +91,13 @@ impl Class {
                 c.sr &= !SR_X;
                 let address = self.handler(b, kind);
                 c.a[1] = address;
-                let avant = (c.d, c.a, c.sr);
-                let suite = Etape::Aiguillage { classe: index, objet: obj, compteur: c.d[7] as u16 };
-                let appel = crate::taches::table::appeler_attendu(b, suite);
-                if !crate::appeler_attendu(c, b, address, appel) {
+                let before = (c.d, c.a, c.sr);
+                let next = Step::Dispatch { class: index, object: obj, counter: c.d[7] as u16 };
+                let call = crate::tasks::table::call_expected(b, next);
+                if !crate::call_expected(c, b, address, call) {
                     return Flow::Yield;
                 }
-                crate::diag::sonder_sortie(c, &avant, self.entry, address);
+                crate::diag::probe_exit(c, &before, self.entry, address);
             }
             after_current = false;
             c.a[0] = c.a[0].wrapping_add(self.pool.stride);
@@ -110,28 +110,28 @@ impl Class {
     }
 }
 
-/// Ce que la boucle d'aiguillage passe à un gestionnaire converti (`Corps::Gestionnaire`), au lieu des registres de
+/// Ce que la boucle d'aiguillage passe à un gestionnaire converti (`Body::Handler`), au lieu des registres de
 /// l'original.
 #[derive(Clone, Copy, Debug)]
-pub struct Aiguillage {
+pub struct Dispatch {
     /// L'objet traité (A0).
-    pub objet: Obj,
+    pub object: Obj,
     /// Compteur de la boucle (D7.w) : phase des clignotements « une image sur deux ».
-    pub compteur: u16,
+    pub counter: u16,
     /// Restes de registres que les gestionnaires se transmettent.
-    pub restes: Restes,
+    pub leftovers: Leftovers,
 }
 
 /// Restes de registres qu'un gestionnaire laisse et qu'un gestionnaire suivant relit (glitches d'origine). La sonde
-/// `DDSOM_POISON=sortie` (registres changés par chaque gestionnaire, inversés à son retour) les a désignés sur tous les
+/// `DDSOM_POISON=exit` (registres changés par chaque gestionnaire, inversés à son retour) les a désignés sur tous les
 /// scénarios ; les autres registres qu'un gestionnaire laisse ne sont relus par personne. Ils vivent encore dans le
 /// banc du processeur, que d'autres routines (liste des sprites, caméras) écrivent aussi : la boucle les y prend et
 /// les y rend.
 ///
-/// Ils sont un état de la partie, rangé dans la table des tâches (`taches::table::Table::restes`) : voir
-/// [`Restes::depuis_le_banc`] et [`Restes::vers_le_banc`].
+/// Ils sont un état de la partie, rangé dans la table des tâches (`tasks::table::Table::leftovers`) : voir
+/// [`Leftovers::from_bench`] et [`Leftovers::to_bench`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Restes {
+pub struct Leftovers {
     /// D2 : ce que laissent la collision avec le décor (0x33fe4, `terrain::push`), les tests de boîte (0xb5e0,
     /// 0x7f19c, 0x7ef4), la ligne de trésor du butin (0xb780) ; l'étincelle de `flash_and_shake` (0x103ba) en tire sa
     /// vitesse, le rebond de l'éclat de gel (0x4bda8) son réglage, l'objet ITEM 5 (0xdc382) le relit.
@@ -148,66 +148,66 @@ pub struct Restes {
     pub d5: u32,
 }
 
-impl Restes {
+impl Leftovers {
     /// Le code sur le processeur a fini : ses restes (D2-D5 du banc) deviennent ceux de la partie (table des tâches).
-    pub fn depuis_le_banc(c: &Cpu, b: &mut Cps2Bus) {
-        crate::taches::table::table(b).restes = Restes { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] };
+    pub fn from_bench(c: &Cpu, b: &mut Cps2Bus) {
+        crate::tasks::table::table(b).leftovers = Leftovers { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] };
     }
 
     /// Le code sur le processeur reprend : les restes de la partie reviennent dans le banc (D2-D5).
-    pub fn vers_le_banc(c: &mut Cpu, b: &mut Cps2Bus) {
-        let r = crate::taches::table::table(b).restes;
+    pub fn to_bench(c: &mut Cpu, b: &mut Cps2Bus) {
+        let r = crate::tasks::table::table(b).leftovers;
         (c.d[2], c.d[3], c.d[4], c.d[5]) = (r.d2, r.d3, r.d4, r.d5);
     }
 }
 
-impl Aiguillage {
+impl Dispatch {
     /// Les valeurs que l'original trouve dans les registres à l'entrée du gestionnaire.
-    pub fn du_processeur(c: &Cpu) -> Self {
-        Aiguillage { objet: Obj(c.a[0]), compteur: c.d[7] as u16, restes: Restes { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] } }
+    pub fn from_cpu(c: &Cpu) -> Self {
+        Dispatch { object: Obj(c.a[0]), counter: c.d[7] as u16, leftovers: Leftovers { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] } }
     }
 
     /// Rend les restes au processeur (le gestionnaire laisse les autres registres tels quels).
-    pub fn rendre(&self, c: &mut Cpu) {
-        c.d[2] = self.restes.d2;
-        c.d[3] = self.restes.d3;
-        c.d[4] = self.restes.d4;
-        c.d[5] = self.restes.d5;
+    pub fn give_back(&self, c: &mut Cpu) {
+        c.d[2] = self.leftovers.d2;
+        c.d[3] = self.leftovers.d3;
+        c.d[4] = self.leftovers.d4;
+        c.d[5] = self.leftovers.d5;
     }
 }
 
 /// Reprise d'une boucle de dispatch dont un gestionnaire a fait céder la main à la tâche.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Etape {
-    /// Retour du gestionnaire de l'emplacement courant de la classe `CLASSES[classe]` : le parcours continue à
+pub enum Step {
+    /// Retour du gestionnaire de l'emplacement courant de la classe `CLASSES[class]` : le parcours continue à
     /// l'emplacement suivant, puis revient à l'appelant de la boucle. L'original garde l'objet (A0) et le compteur
     /// (D7.w) dans ses registres, que la cession sauve et rend ; ils sont ici dans l'étape, notés à l'appel du
     /// gestionnaire (aucun gestionnaire qui cède ne les change).
-    Aiguillage { classe: u8, objet: Obj, compteur: u16 },
+    Dispatch { class: u8, object: Obj, counter: u16 },
 }
 
-impl Etape {
+impl Step {
     /// Adresse que l'original reprend : celle qui suit le `jsr (A1)` de la boucle.
-    pub const fn adresse(self) -> u32 {
-        let Etape::Aiguillage { classe, .. } = self;
-        CLASSES[classe as usize].entry + HANDLER_RETURN
+    pub const fn address(self) -> u32 {
+        let Step::Dispatch { class, .. } = self;
+        CLASSES[class as usize].entry + HANDLER_RETURN
     }
 
-    pub fn pas(self, x: &mut crate::scene::Ctx) -> Flow {
-        let Etape::Aiguillage { classe, objet, compteur } = self;
+    pub fn step(self, x: &mut crate::scene::Ctx) -> Flow {
+        let Step::Dispatch { class, object, counter } = self;
         // la boucle reprend sur le processeur, avec son objet et son compteur
-        x.c.a[0] = objet.0;
-        set_low_word(&mut x.c.d[7], compteur);
-        CLASSES[classe as usize].sweep(x.c, x.b, true)
+        x.c.a[0] = object.0;
+        set_low_word(&mut x.c.d[7], counter);
+        CLASSES[class as usize].sweep(x.c, x.b, true)
     }
 }
 
 /// L'objet que la boucle d'aiguillage en cours de la tâche courante fait traiter (le plus récent de ses appels en
-/// cours [`Etape::Aiguillage`]) : celui d'un gestionnaire qui a cédé la main et reprend (feu d'artifice).
-pub fn objet_en_cours(b: &mut Cps2Bus) -> Option<Obj> {
-    let cadres = crate::taches::table::table(b).cadres();
-    cadres.iter().filter_map(|cadre| match cadre.suite {
-        crate::taches::table::Suite::Etape(crate::taches::Etape::Aiguillage(Etape::Aiguillage { objet, .. })) => Some(objet),
+/// cours [`Step::Dispatch`]) : celui d'un gestionnaire qui a cédé la main et reprend (feu d'artifice).
+pub fn current_object(b: &mut Cps2Bus) -> Option<Obj> {
+    let frames = crate::tasks::table::table(b).frames();
+    frames.iter().filter_map(|frame| match frame.next {
+        crate::tasks::table::Next::Step(crate::tasks::Step::Dispatch(Step::Dispatch { object, .. })) => Some(object),
         _ => None,
     }).last()
 }
@@ -221,11 +221,11 @@ fn set_low_word(r: &mut u32, v: u16) {
 }
 
 macro_rules! natives {
-    ($($nom:ident, $name:literal, $class:expr;)*) => {$(
-        pub const $nom: Native = Native {
+    ($($ident:ident, $name:literal, $class:expr;)*) => {$(
+        pub const $ident: Native = Native {
             entry: $class.entry,
             name: $name,
-            run: crate::Corps::Processeur(|c, b| {
+            run: crate::Body::Processeur(|c, b| {
                 // appelée par adresse (écrans hors partie) : un gestionnaire n'y cède jamais la main
                 if $class.update(c, b) == Flow::Done {
                     rts(c, b);

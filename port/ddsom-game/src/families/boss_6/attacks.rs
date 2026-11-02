@@ -8,11 +8,11 @@
 //! | 6 | bond sur la cible |
 //! | 8 | vol bas avec un ESHL 0x2a (variante 2) : le tir part en bout de course |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::decide;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Table des incréments de hauteur (longs) du vol bas, indexée par l'image-clé `+0x33` (espace des opcodes).
@@ -20,7 +20,7 @@ const LOW_FLIGHT: u32 = 0x8508c;
 /// Table des incréments de hauteur de 0x8596c.
 const SKIM: u32 = 0x8599a;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => roar(x),
         2 => swoop_a(x),
@@ -31,18 +31,18 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn players_alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn players_alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
-fn resume_chase<R: Banc>(x: &mut Cx<'_, R>) {
+fn resume_chase<R: Bench>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return decide::wait(x);
     }
     decide::chase(x);
 }
 
-fn resume_stand<R: Banc>(x: &mut Cx<'_, R>) {
+fn resume_stand<R: Bench>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return decide::wait(x);
     }
@@ -51,7 +51,7 @@ fn resume_stand<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Battement d'ailes : l'image-clé a son bit 7 levé (posé par le script) : on le retire, on alterne `+0xb3`
 /// et le son suit (0x11a36).
-fn wing_beat<R: Banc>(x: &mut Cx<'_, R>) {
+fn wing_beat<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::KEY_FRAME).pl() {
         return;
     }
@@ -62,8 +62,8 @@ fn wing_beat<R: Banc>(x: &mut Cx<'_, R>) {
     lib::ground_debris(x, flap);
 }
 
-/// `(0xc).l += (mot << 16) >> 8` : la hauteur avance de `v` pixels par image (8.8).
-fn climb<R: Banc>(x: &mut Cx<'_, R>, v: u16) {
+/// `(0xc).l += (word << 16) >> 8` : la hauteur avance de `v` pixels par image (8.8).
+fn climb<R: Bench>(x: &mut Cx<'_, R>, v: u16) {
     let d0 = ((v as i16 as i32) << 8) as u32;
     let z = x.u32(0xc).wrapping_add(d0);
     x.set32(0xc, z);
@@ -71,7 +71,7 @@ fn climb<R: Banc>(x: &mut Cx<'_, R>, v: u16) {
 
 // --- +6 = 0 : rugissement -----------------------------------------------------------------------
 
-fn roar<R: Banc>(x: &mut Cx<'_, R>) {
+fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -92,7 +92,7 @@ fn roar<R: Banc>(x: &mut Cx<'_, R>) {
 // --- tir lié ----------------------------------------------------------------------------------------
 
 /// Crée l'ESHL 0x2a lié au boss (variante `v`) ; faux si le pool est plein.
-fn make_shot<R: Banc>(x: &mut Cx<'_, R>, v: u8) -> bool {
+fn make_shot<R: Bench>(x: &mut Cx<'_, R>, v: u8) -> bool {
     let Some(shot) = x.alloc(&pools::ESHL) else { return false };
     x.set16(CHILD, shot.0 as u16);
     shot.set_u8(x.b, 0, 1);
@@ -107,7 +107,7 @@ fn make_shot<R: Banc>(x: &mut Cx<'_, R>, v: u8) -> bool {
 }
 
 /// 0x84b9c : le boss s'élève (ailes) une fois le tir créé.
-fn take_off<R: Banc>(x: &mut Cx<'_, R>) {
+fn take_off<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set16(0x18, 0x400);
     x.set16(0x1a, 0);
@@ -115,7 +115,7 @@ fn take_off<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x84b6e : création du tir puis envol de la première attaque en piqué.
-fn start_swoop<R: Banc>(x: &mut Cx<'_, R>) {
+fn start_swoop<R: Bench>(x: &mut Cx<'_, R>) {
     if make_shot(x, 1) {
         take_off(x);
     } else {
@@ -125,7 +125,7 @@ fn start_swoop<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 : piqué A -----------------------------------------------------------------------------------
 
-fn swoop_a<R: Banc>(x: &mut Cx<'_, R>) {
+fn swoop_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if !pick_target(x) {
@@ -184,7 +184,7 @@ fn swoop_a<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +7 = 2 des piqués A et B (0x84bb8) : vol jusqu'à la hauteur de l'écran, avec les battements d'ailes.
-fn swoop_flight<R: Banc>(x: &mut Cx<'_, R>) {
+fn swoop_flight<R: Bench>(x: &mut Cx<'_, R>) {
     let ceiling = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0);
     let height = x.u16(0x10).wrapping_add(x.u16(0xc));
     if Fl::sub16(height, ceiling).ge() {
@@ -216,7 +216,7 @@ fn swoop_flight<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : piqué B -----------------------------------------------------------------------------------
 
-fn swoop_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn swoop_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if !pick_target(x) {
@@ -282,7 +282,7 @@ fn swoop_b<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 6 : bond sur la cible ----------------------------------------------------------------------
 
-fn leap<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -361,7 +361,7 @@ fn leap<R: Banc>(x: &mut Cx<'_, R>) {
 // --- +6 = 8 : vol bas avec tir ---------------------------------------------------------------------------
 
 /// 0x8596c : la hauteur avance d'un incrément de la table `SKIM` (signe selon `+0xa8`).
-fn skim_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn skim_step<R: Bench>(x: &mut Cx<'_, R>) {
     let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
     let mut d0 = rom32(x, SKIM + i) as i32;
     if !cmp16(x, COUNT, 0x24).gt() {
@@ -374,7 +374,7 @@ fn skim_step<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn spit<R: Banc>(x: &mut Cx<'_, R>) {
+fn spit<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if !pick_target(x) {

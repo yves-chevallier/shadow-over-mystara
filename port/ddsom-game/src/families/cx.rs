@@ -3,7 +3,7 @@
 //! Un gestionnaire est appelé par la boucle de dispatch de sa classe (`jsr (table + type * 4)`)
 //! avec A0 = l'objet, A5 = 0xFF8000 et D7 = compteur de la boucle ; il rend la main par RTS en
 //! laissant A0 et D7 intacts. `Cx` regroupe le processeur, le bus et l'objet courant. Le moteur d'objets
-//! (animation, mouvement, listes, écran, pools) s'appelle par le trait `objects::Courant` (`x.move_xz()`,
+//! (animation, mouvement, listes, écran, pools) s'appelle par le trait `objects::Current` (`x.move_xz()`,
 //! `x.anim_step()`, `x.reinsert()`...), les services communs par `machine::Machine` (`x.random()`).
 //!
 //! Les sous-routines encore appelées par adresse (`call`) sont exécutées par `crate::call`, qui retrouve leur
@@ -14,9 +14,9 @@ use m68k::decode::Fetch;
 use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
-use crate::dispatch::{Aiguillage, Restes};
+use crate::dispatch::{Dispatch, Leftovers};
 use crate::objects::pools;
-use crate::objects::{Courant, Obj};
+use crate::objects::{Current, Obj};
 use crate::{call, regs, Native};
 
 /// Contexte d'un gestionnaire : l'objet courant (A0) et la machine.
@@ -32,19 +32,19 @@ pub struct Cx<'a, R = &'a mut Cpu> {
     pub o: Obj,
 }
 
-/// Contexte d'un gestionnaire sans registres : ce que la boucle d'aiguillage lui passe (`dispatch::Aiguillage`).
-pub type Gx<'a> = Cx<'a, &'a mut Aiguillage>;
+/// Contexte d'un gestionnaire sans registres : ce que la boucle d'aiguillage lui passe (`dispatch::Dispatch`).
+pub type Gx<'a> = Cx<'a, &'a mut Dispatch>;
 
 impl<'a> Gx<'a> {
     /// Contexte du gestionnaire appelé par la boucle d'aiguillage.
-    pub fn aiguille(b: &'a mut Cps2Bus, a: &'a mut Aiguillage) -> Self {
-        let o = a.objet;
+    pub fn aiguille(b: &'a mut Cps2Bus, a: &'a mut Dispatch) -> Self {
+        let o = a.object;
         Cx { c: a, b, o }
     }
 
     /// Restes de registres que les gestionnaires se transmettent (glitches d'origine).
-    pub fn restes(&mut self) -> &mut Restes {
-        &mut self.c.restes
+    pub fn leftovers(&mut self) -> &mut Leftovers {
+        &mut self.c.leftovers
     }
 }
 
@@ -61,25 +61,25 @@ impl crate::machine::Processeur for Cx<'_> {
 }
 
 /// Banc de registres d'un gestionnaire : ce qui change selon qu'il travaille encore sur le processeur ou non.
-pub trait Banc {
-    /// Remise en liste (0x1ee1a / 0x1ef6c, `premier_plan`) : sur le processeur, l'adaptateur laisse les registres de
+pub trait Bench {
+    /// Remise en liste (0x1ee1a / 0x1ef6c, `foreground`) : sur le processeur, l'adaptateur laisse les registres de
     /// l'original au gestionnaire suivant ; sans registres, le cœur.
-    fn remettre_en_liste(&mut self, b: &mut Cps2Bus, o: Obj, premier_plan: bool);
-    /// Les restes D2 à D5 (voir `dispatch::Restes`) : le registre du processeur, ou le reste de la boucle
+    fn relink(&mut self, b: &mut Cps2Bus, o: Obj, foreground: bool);
+    /// Les restes D2 à D5 (voir `dispatch::Leftovers`) : le registre du processeur, ou le reste de la boucle
     /// d'aiguillage.
     fn d2(&mut self) -> &mut u32;
     fn d3(&mut self) -> &mut u32;
     fn d4(&mut self) -> &mut u32;
     fn d5(&mut self) -> &mut u32;
     /// Compteur de la boucle d'aiguillage (D7.w de l'original) : phase des clignotements « une image sur deux ».
-    fn compteur(&self) -> u16;
+    fn counter(&self) -> u16;
 }
 
-impl Banc for &mut Cpu {
+impl Bench for &mut Cpu {
     #[track_caller]
-    fn remettre_en_liste(&mut self, b: &mut Cps2Bus, o: Obj, premier_plan: bool) {
-        let liste = if premier_plan { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
-        liste.reinsert_68k(self, b, o);
+    fn relink(&mut self, b: &mut Cps2Bus, o: Obj, foreground: bool) {
+        let list = if foreground { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
+        list.reinsert_68k(self, b, o);
     }
     fn d2(&mut self) -> &mut u32 {
         &mut self.d[2]
@@ -93,56 +93,56 @@ impl Banc for &mut Cpu {
     fn d5(&mut self) -> &mut u32 {
         &mut self.d[5]
     }
-    fn compteur(&self) -> u16 {
+    fn counter(&self) -> u16 {
         self.d[7] as u16
     }
 }
 
-impl Banc for &mut Aiguillage {
-    fn remettre_en_liste(&mut self, b: &mut Cps2Bus, o: Obj, premier_plan: bool) {
-        let liste = if premier_plan { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
+impl Bench for &mut Dispatch {
+    fn relink(&mut self, b: &mut Cps2Bus, o: Obj, foreground: bool) {
+        let list = if foreground { crate::objects::lists::FOREGROUND } else { crate::objects::lists::ACTORS };
         // Glitch d'origine : la remise en liste laisse D2 (le lien quitté) au gestionnaire suivant
-        liste.reinsert_restes(b, o, &mut self.restes.d2);
+        list.reinsert_leftovers(b, o, &mut self.leftovers.d2);
     }
     fn d2(&mut self) -> &mut u32 {
-        &mut self.restes.d2
+        &mut self.leftovers.d2
     }
     fn d3(&mut self) -> &mut u32 {
-        &mut self.restes.d3
+        &mut self.leftovers.d3
     }
     fn d4(&mut self) -> &mut u32 {
-        &mut self.restes.d4
+        &mut self.leftovers.d4
     }
     fn d5(&mut self) -> &mut u32 {
-        &mut self.restes.d5
+        &mut self.leftovers.d5
     }
-    fn compteur(&self) -> u16 {
-        self.compteur
+    fn counter(&self) -> u16 {
+        self.counter
     }
 }
 
-impl<R: Banc> Cx<'_, R> {
+impl<R: Bench> Cx<'_, R> {
     /// Compteur de la boucle d'aiguillage (D7.w de l'original).
-    pub fn compteur(&self) -> u16 {
-        self.c.compteur()
+    pub fn counter(&self) -> u16 {
+        self.c.counter()
     }
 
-    /// 0x1ee1a : remet l'objet à sa place dans la liste des acteurs (fin ordinaire d'un gestionnaire ; voir [`Banc`]).
+    /// 0x1ee1a : remet l'objet à sa place dans la liste des acteurs (fin ordinaire d'un gestionnaire ; voir [`Bench`]).
     #[track_caller]
     pub fn reinsert(&mut self) {
-        self.c.remettre_en_liste(self.b, self.o, false);
+        self.c.relink(self.b, self.o, false);
     }
 
-    /// 0x1ef6c : remet l'objet à sa place dans la liste du premier plan (voir [`Banc`]).
+    /// 0x1ef6c : remet l'objet à sa place dans la liste du premier plan (voir [`Bench`]).
     #[track_caller]
     pub fn reinsert_foreground(&mut self) {
-        self.c.remettre_en_liste(self.b, self.o, true);
+        self.c.relink(self.b, self.o, true);
     }
 
-    /// 0xfbb0 : garde l'objet dans l'écran à `marge` pixels près ; vrai s'il a été déplacé.
-    /// Glitch d'origine : le résultat reste dans D5 (0 ou 1), que relit la rangée d'éclats d'une caisse (`Restes::d5`).
-    pub fn keep_on_screen(&mut self, marge: u16) -> bool {
-        let moved = crate::ai::keep_on_screen(self.b, self.o, marge);
+    /// 0xfbb0 : garde l'objet dans l'écran à `margin` pixels près ; vrai s'il a été déplacé.
+    /// Glitch d'origine : le résultat reste dans D5 (0 ou 1), que relit la rangée d'éclats d'une caisse (`Leftovers::d5`).
+    pub fn keep_on_screen(&mut self, margin: u16) -> bool {
+        let moved = crate::ai::keep_on_screen(self.b, self.o, margin);
         *self.c.d5() = moved as u32;
         moved
     }
@@ -153,16 +153,16 @@ impl<R: Banc> Cx<'_, R> {
     }
 
     /// 0x33fe4 : collision avec le décor (`terrain::push`) ; rend le drapeau Z de l'original.
-    /// Glitch d'origine : la recherche du terrain laisse D2 et D3, et un choc D5 = 1 (`Restes`).
+    /// Glitch d'origine : la recherche du terrain laisse D2 et D3, et un choc D5 = 1 (`Leftovers`).
     pub fn push_terrain(&mut self) -> bool {
         let (mut d2, mut d3, mut d5) = (*self.c.d2(), *self.c.d3(), *self.c.d5());
-        let z = crate::terrain::push_restes(self.b, self.o, &mut d2, &mut d3, &mut d5);
+        let z = crate::terrain::push_leftovers(self.b, self.o, &mut d2, &mut d3, &mut d5);
         (*self.c.d2(), *self.c.d3(), *self.c.d5()) = (d2, d3, d5);
         z
     }
 }
 
-/// Sous-routines appelées par adresse (le moteur d'objets, lui, s'appelle par `objects::Courant`).
+/// Sous-routines appelées par adresse (le moteur d'objets, lui, s'appelle par `objects::Current`).
 pub mod sub {
     /// Attribut du terrain sous l'objet (D2) ; `terrain_at` prend (D0, D1) = (x, y).
     pub const TERRAIN_OF_OBJECT: u32 = 0x24a8;
@@ -177,11 +177,11 @@ impl<'a> Cx<'a> {
     }
 
     /// Appelle la fonction convertie `f` sur le même objet, sans registres (les restes passent par le processeur).
-    pub fn sans<T>(&mut self, f: impl FnOnce(&mut Gx) -> T) -> T {
-        let mut a = Aiguillage::du_processeur(self.c);
-        a.objet = self.o;
+    pub fn without<T>(&mut self, f: impl FnOnce(&mut Gx) -> T) -> T {
+        let mut a = Dispatch::from_cpu(self.c);
+        a.object = self.o;
         let r = f(&mut Cx { c: &mut a, b: &mut *self.b, o: self.o });
-        a.rendre(self.c);
+        a.give_back(self.c);
         r
     }
 
@@ -313,7 +313,7 @@ impl<R> Cx<'_, R> {
     /// Fin du gestionnaire : l'objet est libéré (tir détruit).
     pub fn free_eshl(&mut self)
     where
-        Self: Courant,
+        Self: Current,
     {
         self.free(&pools::ESHL);
     }
@@ -321,30 +321,30 @@ impl<R> Cx<'_, R> {
 
 /// Native d'un gestionnaire : contrat de la boucle de dispatch (A0 et D7 conservés).
 pub const fn handler(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
+    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
 }
 
 /// Native d'un gestionnaire converti (`Gx`, sans registres) : ce que passe la boucle d'aiguillage en argument.
-pub const fn handler_sans(entry: u32, name: &'static str, run: fn(&mut Cps2Bus, &mut Aiguillage)) -> Native {
-    Native { entry, name, run: crate::Corps::Gestionnaire(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
+pub const fn handler_sans(entry: u32, name: &'static str, run: fn(&mut Cps2Bus, &mut Dispatch)) -> Native {
+    Native { entry, name, run: crate::Body::Handler(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
 }
 
-/// Déclare la table `NATIVES` d'un fichier de types : `adresse "nom" chemin::du::gestionnaire` (sur `Cx`), ou
-/// `adresse "nom" #[sans] chemin::du::gestionnaire` (sur `Gx`, sans registres).
+/// Déclare la table `NATIVES` d'un fichier de types : `address "name" chemin::du::handler` (sur `Cx`), ou
+/// `address "name" #[without] chemin::du::handler` (sur `Gx`, sans registres).
 macro_rules! handlers {
-    ($( $entry:literal $name:literal $(#[$sans:ident])? $f:path ),* $(,)?) => {
+    ($( $entry:literal $name:literal $(#[$without:ident])? $f:path ),* $(,)?) => {
         pub const NATIVES: &[$crate::Native] = &[ $(
-            $crate::families::cx::handlers!(@une $entry $name $(#[$sans])? $f),
+            $crate::families::cx::handlers!(@one $entry $name $(#[$without])? $f),
         )* ];
     };
-    (@une $entry:literal $name:literal $f:path) => {
+    (@one $entry:literal $name:literal $f:path) => {
         $crate::families::cx::handler($entry, $name, |c, b| {
             let mut x = $crate::families::cx::Cx::new(c, b);
             $f(&mut x);
             x.ret();
         })
     };
-    (@une $entry:literal $name:literal #[sans] $f:path) => {
+    (@one $entry:literal $name:literal #[without] $f:path) => {
         $crate::families::cx::handler_sans($entry, $name, |b, a| {
             $f(&mut $crate::families::cx::Gx::aiguille(b, a));
         })

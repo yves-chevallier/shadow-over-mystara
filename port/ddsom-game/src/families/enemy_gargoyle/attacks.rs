@@ -2,13 +2,13 @@
 //! Sous-état 4, `+6` : 0 et 2 griffe, 4 coup bref, 6 charge latérale, 8 saut en arrière, 10 plongeon,
 //! 12 saisie d'un joueur.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Fin d'un geste : si plus personne n'est en vie la créature se retire, sinon elle repart au hasard.
-fn finish<R: Banc>(x: &mut Cx<'_, R>) {
+fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::players_alive(x) {
         go::wander(x);
     } else {
@@ -17,7 +17,7 @@ fn finish<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Le coup frappe quand la clé d'animation `+0x33` passe : elle est aussitôt remise à zéro.
-fn strike_hit<R: Banc>(x: &mut Cx<'_, R>) {
+fn strike_hit<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         lib::sound(x, 0xebfdc);
@@ -25,7 +25,7 @@ fn strike_hit<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Libère la victime saisie (`+0x54`) : ses drapeaux de saisie retombent.
-fn release_victim<R: Banc>(x: &mut Cx<'_, R>) {
+fn release_victim<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(VICTIM) != 0 {
         let v = x.linked(VICTIM);
         v.set_u8(x.b, 0x7e, 0);
@@ -33,7 +33,7 @@ fn release_victim<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => claw(x),
         2 => claw_b(x),
@@ -48,7 +48,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 0 : griffe ----------------------------------------------------------------------------
 
-fn claw<R: Banc>(x: &mut Cx<'_, R>) {
+fn claw<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -78,7 +78,7 @@ fn claw<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 : griffe lourde ---------------------------------------------------------------------
 
-fn claw_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn claw_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -108,7 +108,7 @@ fn claw_b<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : coup bref --------------------------------------------------------------------------
 
-fn short_blow<R: Banc>(x: &mut Cx<'_, R>) {
+fn short_blow<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -128,7 +128,7 @@ fn short_blow<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 6 : charge latérale --------------------------------------------------------------------
 
-fn sidestep<R: Banc>(x: &mut Cx<'_, R>) {
+fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -183,7 +183,7 @@ fn sidestep<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 8 : saut en arrière --------------------------------------------------------------------
 
-fn jump_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn jump_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -243,7 +243,7 @@ fn jump_back<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 10 : plongeon sur la cible ---------------------------------------------------------------
 
-fn plunge_attack<R: Banc>(x: &mut Cx<'_, R>) {
+fn plunge_attack<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -329,7 +329,7 @@ fn plunge_attack<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 12 : le gargouille fond sur la cible --------------------------------------------------------
 
-fn stoop<R: Banc>(x: &mut Cx<'_, R>) {
+fn stoop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -391,7 +391,7 @@ fn stoop<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x64e00 : vise la cible : angle, vitesse verticale pour y arriver en autant d'images que la course horizontale.
-fn aim_dive<R: Banc>(x: &mut Cx<'_, R>) {
+fn aim_dive<R: Bench>(x: &mut Cx<'_, R>) {
     let target = load_target(x);
     let (tx, tz) = (target.u16(x.b, Obj::X), target.u16(x.b, Obj::Y));
     x.set16(GOAL_X, tx);
@@ -422,7 +422,7 @@ fn aim_dive<R: Banc>(x: &mut Cx<'_, R>) {
     }
     // 0x17ea : hauteur / nombre d'images. Glitch d'origine : la division laisse son reste dans D2 et son compteur
     // dans D3 (restes).
-    let (q, r) = crate::aides::divide(x.u16(Obj::Z) as u32, frames as u32);
+    let (q, r) = crate::aids::divide(x.u16(Obj::Z) as u32, frames as u32);
     *x.c.d2() = r;
     *x.c.d3() = 0xffff;
     let mut d0 = (q.rotate_left(16) as i32 >> 8) as i16;
@@ -439,7 +439,7 @@ fn aim_dive<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x64eee : retombée du plongeon : la créature se pose en glissant dans l'autre sens.
-fn land_from_dive<R: Banc>(x: &mut Cx<'_, R>) {
+fn land_from_dive<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x18);
     x.set16(TIMER2, 0);
@@ -453,7 +453,7 @@ fn land_from_dive<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-états 6, 8, 10 : repos -----------------------------------------------------------------------
 
-pub(super) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return go::wander(x);
     }
@@ -472,7 +472,7 @@ pub(super) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 12 : saisie ------------------------------------------------------------------------------
 
-pub(super) fn grab<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
     if victim.u8(x.b, 0) == 0 {
         return go::strike_10(x);
@@ -537,7 +537,7 @@ pub(super) fn grab<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x650a6 : la victime est relâchée (`+0x6f` levé) et la créature passe en vol circulaire.
-fn dismount<R: Banc>(x: &mut Cx<'_, R>) {
+fn dismount<R: Bench>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
     victim.set_u8(x.b, 0x6f, 1);
     lib::release_player(x, victim);
@@ -545,14 +545,14 @@ fn dismount<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 14 : fin de geste, cible de remplacement.
-pub(super) fn done<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn done<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         regroup(x);
     }
 }
 
 /// 0x653b2 : le combat reprend : cible choisie, palier de PV franchi, nouveau geste.
-pub(crate) fn regroup<R: Banc>(x: &mut Cx<'_, R>) {
+pub(crate) fn regroup<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HIT_FLAGS, 0);
     x.set8(0, 1);
     x.set8(LOOK_PREV, 0xff);

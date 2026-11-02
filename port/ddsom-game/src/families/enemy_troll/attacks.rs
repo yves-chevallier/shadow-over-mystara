@@ -1,13 +1,13 @@
 //! Type 14, sous-états 4, 6 et 8 : les gestes. Le sous-état 4 contient le lancer, les sauts, la charge et le repos,
 //! le 6 les pas en profondeur, sauts et téléportations, le 8 le choix qui suit un geste.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::stance::{approach_start, walk_off};
 use crate::objects::Obj;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match (x.u8(f::SUB), x.u8(f::SUB2)) {
         (4, 0) | (6, 0) => windup(x),
         (4, 2) | (6, 2) => turn_back(x),
@@ -33,20 +33,20 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6cd5c : l'étape suivante lance l'animation 4.
-fn next_and_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn next_and_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     mv(x, 4);
 }
 
 /// 0x6cd64 : étape suivante à la fin de l'animation.
-fn next_when_done<R: Banc>(x: &mut Cx<'_, R>) {
+fn next_when_done<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.add8(f::SUB3, 2);
     }
 }
 
 /// 0x6cd90 : fin de l'animation, geste terminé.
-fn finish<R: Banc>(x: &mut Cx<'_, R>) {
+fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         done_attack(x);
     }
@@ -54,7 +54,7 @@ fn finish<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- geste 0 : provocation, puis geste choisi --------------------------------------------------------
 
-fn windup<R: Banc>(x: &mut Cx<'_, R>) {
+fn windup<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -82,7 +82,7 @@ fn windup<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : demi-tour puis geste 0xc (marche).
-fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -99,13 +99,13 @@ fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
 // --- lancer -------------------------------------------------------------------------------------------
 
 /// 0x6ca46 : lance le geste de lancer (+6 = 4).
-fn throw_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn throw_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::SUB2, 0x400);
     throw(x);
 }
 
 /// +6 = 4 : le Troll lance un objet (tant qu'il lui reste des charges `+0xab`), l'attend, puis s'éloigne.
-fn throw<R: Banc>(x: &mut Cx<'_, R>) {
+fn throw<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 8);
@@ -163,7 +163,7 @@ fn throw<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x6cad2 : le lancer suit son animation ; à la clé, l'objet lancé passe à l'étape suivante ; on attend qu'il soit
 /// parti (état `+4` de l'objet à 4 ou plus).
-fn throw_hold<R: Banc>(x: &mut Cx<'_, R>) {
+fn throw_hold<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     let obj = Obj(x.u32(THROWN));
     if x.u8(f::KEY_FRAME) != 0 {
@@ -177,14 +177,14 @@ fn throw_hold<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6caf2 : fin du lancer.
-fn throw_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn throw_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(AFTER_THROW, 0xb4);
     mv(x, 0);
 }
 
 /// +6 = 10 : au hasard, retour à la marche (0x1c) ou lancer.
-fn maybe_throw<R: Banc>(x: &mut Cx<'_, R>) {
+fn maybe_throw<R: Bench>(x: &mut Cx<'_, R>) {
     if rand_and(x, 1) == 0 {
         return again(x, 0x1c);
     }
@@ -192,7 +192,7 @@ fn maybe_throw<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 14, 16 (et 10 au tirage) : retour debout et reprise de la marche, `kind` = type de tir mémorisé.
-fn again<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
+fn again<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(SHOT_KIND, kind);
     set_state_long(x, STANCE);
     approach_start(x);
@@ -201,7 +201,7 @@ fn again<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
 // --- sauts ---------------------------------------------------------------------------------------------
 
 /// 0x6cdb6 : saut de côté (vitesse horizontale 0x300, élan vers le haut).
-fn jump_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn jump_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set32(Obj::VX, 0x0300_0000);
     let mut shift = 0x20i16;
@@ -218,7 +218,7 @@ fn jump_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6cdea : retombée du saut.
-fn land<R: Banc>(x: &mut Cx<'_, R>) {
+fn land<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if (x.u16(Obj::Z) as i16) >= 0 {
         return;
@@ -229,7 +229,7 @@ fn land<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 6 et 8 (sous-état 4) : saut de côté, puis lancer (6) ou retour à la marche (8).
-fn hop<R: Banc>(x: &mut Cx<'_, R>) {
+fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
@@ -247,7 +247,7 @@ fn hop<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 8 et 10 (sous-état 6) : saut de côté ; `then_throw` (10) : puis lancer.
-fn jump_here<R: Banc>(x: &mut Cx<'_, R>, then_throw: bool) {
+fn jump_here<R: Bench>(x: &mut Cx<'_, R>, then_throw: bool) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
@@ -263,7 +263,7 @@ fn jump_here<R: Banc>(x: &mut Cx<'_, R>, then_throw: bool) {
 }
 
 /// +6 = 12 : charge vers la cible pendant `+0xa2` images.
-fn charge<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(TIMER, 0x40);
@@ -281,7 +281,7 @@ fn charge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 18 : repos. L'original sort du repos dès la deuxième image (le test de fin de minuterie est inversé).
-fn rest<R: Banc>(x: &mut Cx<'_, R>) {
+fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(TIMER, 0x1e);
@@ -298,7 +298,7 @@ fn rest<R: Banc>(x: &mut Cx<'_, R>) {
 // --- sous-état 6 --------------------------------------------------------------------------------------
 
 /// +6 = 6 : pas en profondeur.
-fn depth_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn depth_step<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 => next_when_done(x),
@@ -320,7 +320,7 @@ const TELEPORT_X: u32 = 0x6ceaa;
 const TELEPORT_Y: u32 = 0x6ce9c;
 
 /// +6 = 12 : le Troll réapparaît près de sa cible.
-fn teleport<R: Banc>(x: &mut Cx<'_, R>) {
+fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
@@ -351,7 +351,7 @@ fn teleport<R: Banc>(x: &mut Cx<'_, R>) {
 // --- sous-état 8 --------------------------------------------------------------------------------------
 
 /// +6 = 0 : courte pause debout.
-fn pause<R: Banc>(x: &mut Cx<'_, R>) {
+fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -367,7 +367,7 @@ fn pause<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : saut sur place (sans déplacement horizontal).
-fn jump_in_place<R: Banc>(x: &mut Cx<'_, R>) {
+fn jump_in_place<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
@@ -386,7 +386,7 @@ fn jump_in_place<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 : bond (ou course) vers la cible.
-fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
+fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             if rand_and(x, 1) != 0 {
@@ -429,7 +429,7 @@ fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 6 : rechoisit un geste ; ne change de geste que si le nouveau diffère du précédent ou après un délai.
-fn pick_again<R: Banc>(x: &mut Cx<'_, R>) {
+fn pick_again<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_state_long(x, IDLE);
     let b = if lib::target_in_box(x, -0x20, 0x20, 0xc) {

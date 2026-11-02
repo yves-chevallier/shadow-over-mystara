@@ -1,15 +1,15 @@
 //! Boss 11/12, états actifs hors attaques : arrivée (groupe 0), attente (6), poursuite (2, 8, 10, 12) et les tests qui
 //! déclenchent une attaque ou une manœuvre.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::machine::Machine;
 
 // --- groupe 0 : arrivée --------------------------------------------------------------------------------------
 
 /// 0x8d7b8 : le serpent surgit à droite de l'écran, retombe, rebondit, se met en marche.
-pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch0(x, 0x8d7c6, f::SUB2) {
         0x8d7ce => {
             x.add8(f::SUB2, 2);
@@ -54,7 +54,7 @@ pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8d818 : chute jusqu'au sol.
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(NO_ZONE, 0xff);
     x.move_xz();
     if !tst16(x, 0xc).mi() {
@@ -74,7 +74,7 @@ fn fall<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 6 : sans joueur ----------------------------------------------------------------------------------
 
 /// 0x8d8bc : attend ; un joueur revient (vie > 0) et le compteur `+0xb6` repart.
-pub(super) fn lone<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn lone<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         if lib::target_by_criterion(x, lib::LOWEST_HP).is_some() {
             if tst8(x, 0xb6).gt() {
@@ -96,22 +96,22 @@ pub(super) fn lone<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupes 2, 8, 10, 12 : poursuite --------------------------------------------------------------------------
 
 /// 0x8eb52 : délai de marche selon la difficulté.
-fn walk_delay<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_delay<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b);
     let v = x.rom8(0x8eb5e + level as u32);
     x.set8(0x71, v);
 }
 
 /// 0x8eb7e : nombre de pas tiré.
-fn walk_steps<R: Banc>(x: &mut Cx<'_, R>) {
-    let alea = x.random();
-    let i = alea & 0x1f;
+fn walk_steps<R: Bench>(x: &mut Cx<'_, R>) {
+    let rng = x.random();
+    let i = rng & 0x1f;
     let v = x.rom8(0x8eb90 + i as u32);
     x.set8(0x6b, v);
 }
 
 /// 0x8d902.
-pub(super) fn chase<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return to_wait(x);
     }
@@ -159,7 +159,7 @@ pub(super) fn chase<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8d998 : animation de marche selon l'orientation.
-fn pose<R: Banc>(x: &mut Cx<'_, R>) {
+fn pose<R: Bench>(x: &mut Cx<'_, R>) {
     let w = x.u16(ANIM_KIND);
     if w == 1 {
         if x.anim_step() {
@@ -185,7 +185,7 @@ fn pose<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8da02 : le serpent est hors de l'écran.
-fn off_screen<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn off_screen<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let mut d0 = var::SCROLL_X.get(x.b);
     if var::CAMERA_SELECT.get(x.b) != 0 {
         d0 = var::CAMERA_ALT_X.get(x.b);
@@ -202,7 +202,7 @@ fn off_screen<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8da28 : la cible est derrière le serpent.
-fn turn_needed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn turn_needed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let w = x.u16(f::TARGET);
     if (w as i16) >= 0 {
         return false;
@@ -222,14 +222,14 @@ fn turn_needed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8dafe : un joueur tout près devant.
-fn hit_near<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn hit_near<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     // relu : D2 de la boîte (0xb5e0), dont `roll` (0x8db98) lit l'octet haut (glitch d'origine)
     lib::target_in_box(x, -0x10, 0x20, 0x10)
 }
 
 /// 0x8dae2 : rang de vie (0 à 3 environ) : nombre de fois que les PV maximaux tiennent dans quatre fois les PV.
-/// Rend le rang (D0.w). Glitch d'origine : la somme et le quadruple des PV restent dans D2 et D3 (`dispatch::Restes`).
-pub(super) fn life_rank<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+/// Rend le rang (D0.w). Glitch d'origine : la somme et le quadruple des PV restent dans D2 et D3 (`dispatch::Leftovers`).
+pub(super) fn life_rank<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     let max = x.u16(0x60) as u32;
     let goal = (x.u16(f::HP) as u32) << 2;
     *x.c.d3() = goal;
@@ -246,17 +246,17 @@ pub(super) fn life_rank<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
 }
 
 /// 0x8da56 : tirage selon le rang de vie (table 0x8da88).
-fn near_roll<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn near_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let i = (life_rank(x) & 3) * 4;
     let mask = rom32(x, 0x8da88 + i as u32);
-    let alea = x.random();
-    let r = alea & 1;
+    let rng = x.random();
+    let r = rng & 1;
     setw(x, 0, r);
     if r == 0 {
         return false;
     }
-    let alea = x.random();
-    let b = alea & 0x1f;
+    let rng = x.random();
+    let b = rng & 0x1f;
     setw(x, 0, b);
     if mask >> b & 1 != 0 {
         return true;
@@ -265,11 +265,11 @@ fn near_roll<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8da98 : tirage selon le rang de vie (table 0x8dad2), puis un joueur dans la boîte.
-fn far_roll<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn far_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let i = (life_rank(x) & 3) * 4;
     let mask = rom32(x, 0x8dad2 + i as u32);
-    let alea = x.random();
-    let b = alea & 0x1f;
+    let rng = x.random();
+    let b = rng & 0x1f;
     setw(x, 0, b);
     if mask >> b & 1 != 0 {
         // relu : D2 de la boîte (0xb5e0), dont `roll` (0x8db98) lit l'octet haut (glitch d'origine)
@@ -281,10 +281,10 @@ fn far_roll<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8db2a : tire une attaque dans la table `table` (16 octets), ou renonce.
-fn pick<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
+fn pick<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     if !roll(x) {
-        let alea = x.random();
-        let i = alea & 0xf;
+        let rng = x.random();
+        let i = rng & 0xf;
         setw(x, 0, i);
         let v = x.data8(table + i as u32);
         setb(x, 1, v);
@@ -305,16 +305,16 @@ fn pick<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
 }
 
 /// 0x8db98 : tirage « renoncer » selon la difficulté et le nombre de joueurs ; vrai si le bit tombe.
-fn roll<R: Banc>(x: &mut Cx<'_, R>) -> bool {
-    let alea = x.random();
-    let r = alea & 7;
+fn roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+    let rng = x.random();
+    let r = rng & 7;
     setw(x, 0, r);
     let n = var::PLAYERS_ALIVE.get(x.b).wrapping_sub(1);
     let d1 = (n as u16 & 2).wrapping_mul(4);
     let level = (var::RANK.get(x.b) >> 8) as u8;
     setb(x, 2, level);
     // Glitch d'origine : seul l'octet bas de D2 est posé ; l'octet haut est celui que laisse le test de boîte
-    // (0xb5e0) qui précède, ou le gestionnaire (`dispatch::Restes`).
+    // (0xb5e0) qui précède, ou le gestionnaire (`dispatch::Leftovers`).
     let d2 = (*x.c.d2() as u16) >> 2;
     let d1 = d1.wrapping_add(d2);
     let v = x.rom8(0x8dbc0 + d1 as u32);

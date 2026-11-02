@@ -2,7 +2,7 @@
 //!
 //! Il remplace le programme du Z80 (`dd2.01`) : mêmes écritures dans les registres de la QSound,
 //! dans le même ordre, et mêmes écritures dans la RAM partagée avec le 68000, pour les mêmes
-//! commandes. Le fonctionnement est décrit dans `docs/son.md`.
+//! commandes. Le fonctionnement est décrit dans `docs/sound.md`.
 //!
 //! Organisation :
 //! - [`Driver`] : interruption à 250 Hz, file de commandes, boucle principale (lib.rs) ;

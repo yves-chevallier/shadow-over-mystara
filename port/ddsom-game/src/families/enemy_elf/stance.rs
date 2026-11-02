@@ -1,12 +1,12 @@
 //! Type 12, elfe debout (`+5 = 2`) et au repos (`+5 = 10`). `+6` : 0 marche vers la cible et
 //! décide d'attaquer, 2 demi-tour, 4 attente.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         x.set16(f::STATE, 0x408);
         x.set16(f::SUB2, 0);
@@ -30,7 +30,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x696b0 : l'elfe se met en marche vers sa cible.
-pub(super) fn begin_walk<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.select_speed(&crate::objects::motion::SPEEDS_B, 0x12);
     body(x, 1);
@@ -40,7 +40,7 @@ pub(super) fn begin_walk<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x696a0 : début de la marche en comptant une étape de plus.
-pub(super) fn begin_walk_step<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn begin_walk_step<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(WALK_ANIM, 0xf0);
     x.set8(0x79, 0x1a);
@@ -48,7 +48,7 @@ pub(super) fn begin_walk_step<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x696de : marche ; se retourne, attend ou attaque.
-fn walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     lib::approach_target(x);
     let n = x.u8(AI_WALK).wrapping_sub(1);
     x.set8(AI_WALK, n);
@@ -70,7 +70,7 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x69718 : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
-fn decide<R: Banc>(x: &mut Cx<'_, R>) {
+fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x20, 0x20, 0xc) {
         x.set16(f::STATE, 0x204);
         let n = rand_and(x, 1) * 2 + 4;
@@ -102,18 +102,18 @@ fn decide<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6a6a6 : cible devant, à portée courte.
-pub(super) fn front_box<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(super) fn front_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_attack(x, 0, 0x70, 0x10)
 }
 
 /// 0x6a698 : cible derrière ou loin devant (boîte large).
-pub(super) fn side_box<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(super) fn side_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_attack(x, -0x80, 0x30, 0x10)
 }
 
 /// Boîte de détection puis décisions par masque : de même orientation, les deux (0xa4c2 puis 0xa4b4)
 /// doivent accepter ; sinon seule 0xa4b4.
-fn box_attack<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
+fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     let found = lib::target_in_box(x, d0, d1, d2);
     let ok = found && {
         let target = load_target(x);
@@ -132,7 +132,7 @@ fn box_attack<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
 
 /// 0x6a706 / 0x6a70c : le coup à jouer après l'approche est tiré dans la ligne de la difficulté ; il est rendu (D0.b
 /// de l'original).
-pub(super) fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u8 {
+pub(super) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = (var::RANK.get(x.b) >> 1) << 5;
     let n = rand_and(x, 0x1f);
     let mv = x.data8(table + row as u32 + n);
@@ -143,7 +143,7 @@ pub(super) fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u8 {
 }
 
 /// 0x6a6de : la cible est de l'autre côté de l'orientation de l'elfe.
-pub(super) fn needs_turn_around<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(super) fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -155,7 +155,7 @@ pub(super) fn needs_turn_around<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// `+6 = 2` : demi-tour (animation 2, puis inversion de l'orientation).
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -170,7 +170,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6 = 4` : attente en position de garde.
-fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -185,7 +185,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 10 : repos jusqu'à ce qu'un joueur soit en vie.
-pub(super) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(VULNERABLE, 1);

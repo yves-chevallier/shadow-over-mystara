@@ -9,13 +9,13 @@
 //! | 8 | charge |
 //! | 10 | geste de reprise (animation 6) |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::decide;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => idle(x),
         2 => turn(x),
@@ -27,17 +27,17 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn players_alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn players_alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::players_alive(x)
 }
 
-fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
 // --- +6 = 0 : debout --------------------------------------------------------------------------
 
-fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return decide::wait(x);
     }
@@ -63,11 +63,11 @@ fn idle<R: Banc>(x: &mut Cx<'_, R>) {
 // --- +6 = 2 : demi-tour ------------------------------------------------------------------------
 
 /// Le boss marchait (état mémorisé `0x0202_04xx` ou `06xx`) : il avance pendant le demi-tour.
-fn was_walking<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn was_walking<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.u16(SAVED_STATE) == 0x0202 && matches!(x.u8(SAVED_STATE + 2), 4 | 6)
 }
 
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         if was_walking(x) {
@@ -99,7 +99,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 et 6 : marche -----------------------------------------------------------------------
 
-fn walk<R: Banc>(x: &mut Cx<'_, R>, slow: bool) {
+fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
     if !players_alive(x) {
         return decide::wait(x);
     }
@@ -132,7 +132,7 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>, slow: bool) {
 
 /// 0x97a0a : un pas de marche de plus ; à la fin des pas, la marche s'arrête (`chase_b`) ; tant qu'une
 /// attaque est possible, le boss la déclenche.
-fn keep_walking<R: Banc>(x: &mut Cx<'_, R>) {
+fn keep_walking<R: Bench>(x: &mut Cx<'_, R>) {
     if !sub8(x, WALK_DELAY, 1).pl() {
         if sub8(x, WALK_STEPS, 1).le() {
             return decide::chase_b(x);
@@ -171,7 +171,7 @@ fn keep_walking<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 8 : charge ----------------------------------------------------------------------------
 
-fn dash<R: Banc>(x: &mut Cx<'_, R>) {
+fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -225,7 +225,7 @@ fn dash<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 10 : reprise -------------------------------------------------------------------------------
 
-fn resume<R: Banc>(x: &mut Cx<'_, R>) {
+fn resume<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         x.set8(ANIM_KIND, 5);

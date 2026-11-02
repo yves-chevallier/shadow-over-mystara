@@ -4,8 +4,8 @@
 //! reste, une étape à la fois, jusqu'à ce que sa minuterie (`FF0E78`) atteigne zéro.
 
 use super::{mode, Flow, Sequence};
-use crate::scene::fondu;
-use crate::video::{charger_grille, effacer_couche, Couche, Grille};
+use crate::scene::fading;
+use crate::video::{load_grid, clear_layer, Layer, Grid};
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
@@ -50,8 +50,8 @@ fn fixed_screen(x: &mut Ctx) -> Flow {
     if rd8(x.b, mode::STEP) == 0 {
         wr8(x.b, mode::STEP, 2);
         wr8(x.b, mode::BOOTED, 1);
-        crate::families::petites::remise_ecran_fixe(x.b);
-        crate::kernel::creer_tache(x.b, FIXED_SCREEN_SLOT as u32, FIXED_SCREEN_TASK);
+        crate::families::small::reset_fixed_screen(x.b);
+        crate::kernel::create_task(x.b, FIXED_SCREEN_SLOT as u32, FIXED_SCREEN_TASK);
         return Flow::Done;
     }
     if rd8(x.b, SCREEN_READY) == 0 {
@@ -61,118 +61,118 @@ fn fixed_screen(x: &mut Ctx) -> Flow {
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::STEP, 0);
     wr16(x.b, mode::TIMER, 1);
-    fondu::DELAI.set(x.b, 3);
-    fondu::PAGES.set(x.b, 0xf);
-    x.sous_programme(crate::taches::fondu::descente, Etape::FixedScreenAfterFade)
+    fading::DELAY.set(x.b, 3);
+    fading::PAGES.set(x.b, 0xf);
+    x.subroutine(crate::tasks::fading::descent, Step::FixedScreenAfterFade)
 }
 
 const FIXED_SCREEN_FADED: u32 = 0x1376e;
-crate::etapes! {
+crate::steps! {
     /// Étapes (points de reprise) de la machine à états.
-    pub enum Etape {
+    pub enum Step {
         FixedScreenAfterFade = FIXED_SCREEN_FADED => |x| {
             x.set_v32(var::SCROLL_2, 0);
-            crate::video::vider_objets(x.b);
-            effacer_couche(x.b, Couche::Un);
+            crate::video::clear_objects(x.b);
+            clear_layer(x.b, Layer::One);
             Flow::Done
         },
         LegalScreenSetup = LEGAL_SETUP => |x| {
             wr16(x.b, mode::TIMER, 300);
             let step = rd8(x.b, mode::STEP).wrapping_add(2);
             wr8(x.b, mode::STEP, step);
-            crate::palette::charger_page(x.b, 2, TEXT_PALETTE);
-            effacer_couche(x.b, Couche::Trois);
+            crate::palette::load_palette_page(x.b, 2, TEXT_PALETTE);
+            clear_layer(x.b, Layer::Three);
             x.set_v32(var::CAMERA, 0);
             x.set_v32(var::CAMERA_2, 0);
-            x.wait(1, Etape::LegalScreenTiles)
+            x.wait(1, Step::LegalScreenTiles)
         },
         LegalScreenTiles = LEGAL_TILES => |x| {
             two_tile_blocks(x, 0x1c0);
             x.or16(var::LAYERS, LAYER_BITS);
-            x.wait(1, Etape::LegalScreenSound)
+            x.wait(1, Step::LegalScreenSound)
         },
         LegalScreenSound = LEGAL_SOUND => |x| {
-            crate::sound::jouer_global(x.b, SOUND_SCREEN_A);
-            crate::sound::jouer_global(x.b, SOUND_SCREEN_B);
-            fondu::PAGES.set(x.b, 0xf);
-            crate::taches::fondu::montee(x)
+            crate::sound::play_global(x.b, SOUND_SCREEN_A);
+            crate::sound::play_global(x.b, SOUND_SCREEN_B);
+            fading::PAGES.set(x.b, 0xf);
+            crate::tasks::fading::rise(x)
         },
         LegalScreenFaded = LEGAL_FADED => |x| {
             x.and16(var::LAYERS, !LAYER_BITS);
-            x.wait(1, Etape::LegalScreenCleared)
+            x.wait(1, Step::LegalScreenCleared)
         },
         LegalScreenCleared = LEGAL_CLEARED => |x| {
-            effacer_couche(x.b, Couche::Deux);
+            clear_layer(x.b, Layer::Two);
             x.or16(var::LAYERS, LAYER_BITS);
-            x.wait(1, Etape::LegalScreenPalette)
+            x.wait(1, Step::LegalScreenPalette)
         },
         LegalScreenPalette = LEGAL_PALETTE => |x| {
             wr16(x.b, mode::TIMER, 300);
-            crate::palette::charger_page(x.b, 2, 0);
+            crate::palette::load_palette_page(x.b, 2, 0);
             Flow::Done
         },
         SecondSetup = SECOND_SETUP => |x| {
             wr16(x.b, mode::TIMER, 300);
             let step = rd8(x.b, mode::STEP).wrapping_add(2);
             wr8(x.b, mode::STEP, step);
-            crate::palette::charger_page(x.b, 2, TEXT_PALETTE);
-            effacer_couche(x.b, Couche::Trois);
+            crate::palette::load_palette_page(x.b, 2, TEXT_PALETTE);
+            clear_layer(x.b, Layer::Three);
             x.set_v32(var::CAMERA, 0);
             x.set_v32(var::CAMERA_2, 0);
-            crate::taches::invite::arreter(x.b);
-            x.wait(1, Etape::SecondTiles)
+            crate::tasks::prompt::stop(x.b);
+            x.wait(1, Step::SecondTiles)
         },
         SecondTiles = SECOND_TILES => |x| {
             two_tile_blocks(x, 0x1c2);
             x.or16(var::LAYERS, LAYER_BITS);
-            x.wait(1, Etape::SecondFadeIn)
+            x.wait(1, Step::SecondFadeIn)
         },
         SecondFadeIn = SECOND_FADE_IN => |x| {
-            fondu::PAGES.set(x.b, 0xf);
-            crate::taches::fondu::montee(x)
+            fading::PAGES.set(x.b, 0xf);
+            crate::tasks::fading::rise(x)
         },
         SecondFaded = SECOND_FADED => |x| {
             x.and16(var::LAYERS, !LAYER_BITS);
-            x.wait(1, Etape::SecondCleared)
+            x.wait(1, Step::SecondCleared)
         },
         SecondCleared = SECOND_CLEARED => |x| {
-            effacer_couche(x.b, Couche::Deux);
+            clear_layer(x.b, Layer::Two);
             x.or16(var::LAYERS, LAYER_BITS);
-            x.wait(1, Etape::SecondPalette)
+            x.wait(1, Step::SecondPalette)
         },
         SecondPalette = SECOND_PALETTE => |x| {
             // `jmp 0x1a67e`
-            crate::palette::charger_page(x.b, 2, 0);
+            crate::palette::load_palette_page(x.b, 2, 0);
             Flow::Done
         },
         NoticeTextShown = NOTICE_TEXT_SHOWN => |x| {
             crate::text::print(x.b, NOTICE_TEXT);
             x.or16(var::LAYERS, LAYER_BITS);
-            x.wait(1, Etape::NoticeFadeIn)
+            x.wait(1, Step::NoticeFadeIn)
         },
         NoticeFadeIn = NOTICE_FADE_IN => |x| {
-            fondu::PAGES.set(x.b, 0xf);
+            fading::PAGES.set(x.b, 0xf);
             // `jsr 0x144c` : la suite est le décompte, juste après
-            x.sous_programme(crate::taches::fondu::montee, Etape::NoticeCountdown)
+            x.subroutine(crate::tasks::fading::rise, Step::NoticeCountdown)
         },
         NoticeCountdown = NOTICE_COUNTDOWN => notice_countdown,
         NoticeFaded = NOTICE_FADED => |x| {
             x.and16(var::LAYERS, !LAYER_BITS);
-            x.wait(1, Etape::NoticeCleared)
+            x.wait(1, Step::NoticeCleared)
         },
         NoticeCleared = NOTICE_CLEARED => |x| {
-            effacer_couche(x.b, Couche::Un);
+            clear_layer(x.b, Layer::One);
             x.or16(var::LAYERS, LAYER_BITS);
             x.c.d[0] = 1;
-            crate::taches::attendre_puis_revenir(x)
+            crate::tasks::wait_then_return(x)
         },
     }
 }
 
 /// Deux blocs de tuiles de la couche 2 (`n`, `n + 1`) à la suite, à partir de `TILE_PLANE_3`.
 fn two_tile_blocks(x: &mut Ctx, n: u16) {
-    let fin = charger_grille(x.b, Grille::Couche2, n, TILE_PLANE_3);
-    charger_grille(x.b, Grille::Couche2, n + 1, fin.destination);
+    let end = load_grid(x.b, Grid::Layer2, n, TILE_PLANE_3);
+    load_grid(x.b, Grid::Layer2, n + 1, end.destination);
 }
 
 /// Sous-mode 8 (`0x1377e`) : image à deux blocs de tuiles pendant 300 images, entre deux fondus.
@@ -181,7 +181,7 @@ fn legal_screen(x: &mut Ctx) -> Flow {
         return legal_screen_wait(x);
     }
     x.and16(var::LAYERS, !LAYER_BITS);
-    x.wait(4, Etape::LegalScreenSetup)
+    x.wait(4, Step::LegalScreenSetup)
 }
 
 const LEGAL_SETUP: u32 = 0x13794;
@@ -200,8 +200,8 @@ fn legal_screen_wait(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, mode::SUB).wrapping_add(2);
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::STEP, 0);
-    fondu::PAGES.set(x.b, 0xf);
-    x.sous_programme(crate::taches::fondu::descente, Etape::LegalScreenFaded)
+    fading::PAGES.set(x.b, 0xf);
+    x.subroutine(crate::tasks::fading::descent, Step::LegalScreenFaded)
 }
 
 const LEGAL_FADED: u32 = 0x1381c;
@@ -223,7 +223,7 @@ fn second_legal_screen(x: &mut Ctx) -> Flow {
         return second_legal_wait(x);
     }
     x.and16(var::LAYERS, !LAYER_BITS);
-    x.wait(4, Etape::SecondSetup)
+    x.wait(4, Step::SecondSetup)
 }
 const SECOND_SETUP: u32 = 0x13876;
 const SECOND_TILES: u32 = 0x1389e;
@@ -237,8 +237,8 @@ fn second_legal_wait(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, mode::SUB).wrapping_add(2);
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::STEP, 0);
-    fondu::PAGES.set(x.b, 0xf);
-    x.sous_programme(crate::taches::fondu::descente, Etape::SecondFaded)
+    fading::PAGES.set(x.b, 0xf);
+    x.subroutine(crate::tasks::fading::descent, Step::SecondFaded)
 }
 const SECOND_FADED: u32 = 0x138f8;
 const SECOND_CLEARED: u32 = 0x13906;
@@ -258,7 +258,7 @@ fn notice_screen(x: &mut Ctx) -> Flow {
     let step = rd8(x.b, mode::STEP).wrapping_add(2);
     wr8(x.b, mode::STEP, step);
     x.and16(var::LAYERS, !LAYER_BITS);
-    x.wait(4, Etape::NoticeTextShown)
+    x.wait(4, Step::NoticeTextShown)
 }
 const NOTICE_TEXT_SHOWN: u32 = 0x13942;
 const NOTICE_FADE_IN: u32 = 0x1395a;
@@ -272,8 +272,8 @@ fn notice_countdown(x: &mut Ctx) -> Flow {
     wr16(x.b, mode::TIMER, 300);
     wr8(x.b, mode::SUB, 2);
     wr8(x.b, mode::STEP, 0);
-    fondu::PAGES.set(x.b, 0xf);
-    x.sous_programme(crate::taches::fondu::descente, Etape::NoticeFaded)
+    fading::PAGES.set(x.b, 0xf);
+    x.subroutine(crate::tasks::fading::descent, Step::NoticeFaded)
 }
 const NOTICE_FADED: u32 = 0x1398a;
 const NOTICE_CLEARED: u32 = 0x13998;

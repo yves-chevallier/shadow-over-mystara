@@ -85,7 +85,7 @@ pub fn base_cycles(ins: &Instr) -> u32 {
             if reg(d) { if sz == Size::Long { 6 } else { 4 } } else { (if sz == Size::Long { 12 } else { 8 }) + ea_time(d, sz) }
         }
         Tst(sz, d) => 4 + ea_time(d, sz),
-        Tas(d) => if reg(d) { 4 } else { 10 + ea_time(d, Size::Byte) },
+        Heap(d) => if reg(d) { 4 } else { 10 + ea_time(d, Size::Byte) },
         Ext(..) | Swap(_) | Nop => 4,
         Exg(..) => 6,
         // + 2 par bit (MULU) / transition (MULS), + durée de division : ajoutés à l'exécution

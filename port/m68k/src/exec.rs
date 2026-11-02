@@ -170,7 +170,7 @@ impl Cpu {
             Op::Not(..) => self.op_11_not(bus, ins),
             Op::Clr(..) => self.op_12_clr(bus, ins),
             Op::Tst(..) => self.op_13_tst(bus, ins),
-            Op::Tas(..) => self.op_14_tas(bus, ins),
+            Op::Heap(..) => self.op_14_heap(bus, ins),
             Op::Ext(..) => self.op_15_ext(bus, ins),
             Op::Swap(..) => self.op_16_swap(bus, ins),
             Op::Exg(..) => self.op_17_exg(bus, ins),
@@ -391,8 +391,8 @@ impl Cpu {
     }
     #[inline(always)]
     #[allow(unused_variables, unreachable_code, clippy::needless_return)]
-    pub fn op_14_tas<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
-        let Op::Tas(d) = ins.op else { unreachable!() };
+    pub fn op_14_heap<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
+        let Op::Heap(d) = ins.op else { unreachable!() };
         {
             let dl = self.resolve(d, Size::Byte);
             let v = self.read(bus, dl, Size::Byte);
@@ -1298,7 +1298,7 @@ pub fn op_fn_name(op: &Op) -> &'static str {
         Op::Not(..) => "op_11_not",
         Op::Clr(..) => "op_12_clr",
         Op::Tst(..) => "op_13_tst",
-        Op::Tas(..) => "op_14_tas",
+        Op::Heap(..) => "op_14_tas",
         Op::Ext(..) => "op_15_ext",
         Op::Swap(..) => "op_16_swap",
         Op::Exg(..) => "op_17_exg",

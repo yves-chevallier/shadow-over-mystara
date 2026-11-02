@@ -7,13 +7,13 @@
 //! | type 19, variante 0 (scène 32) | 0 annonce (bulles), 2 bulles puis attente, 4 entrée par la droite, 6 vol vers l'écran, 8 attend la caméra |
 //! | type 19, variante 1 (dragon de Nagpa) | 0 entrée par la droite, 2 vol, 4 attend la caméra |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::fight;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) == 0 {
         return end(x);
     }
@@ -53,7 +53,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x900e2 : fin de l'arrivée : le combat commence sur-le-champ.
-fn end<R: Banc>(x: &mut Cx<'_, R>) {
+fn end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     x.set16(f::SUB2, 0);
     x.set8(0, 1);
@@ -62,7 +62,7 @@ fn end<R: Banc>(x: &mut Cx<'_, R>) {
     fight::run(x);
 }
 
-fn camera<R: Banc>(x: &mut Cx<'_, R>) -> (u16, u16) {
+fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
     if var::CAMERA_SELECT.get(x.b) != 0 {
         (var::CAMERA_ALT_X.get(x.b), var::CAMERA_ALT_Y.get(x.b))
     } else {
@@ -72,14 +72,14 @@ fn camera<R: Banc>(x: &mut Cx<'_, R>) -> (u16, u16) {
 
 // --- type 14 --------------------------------------------------------------------------------------
 
-fn green_wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn green_wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set_bit(0x1, 1, true);
     x.set16(TIMER, 0x80);
     lib::shake_5c(x, 0x7f);
 }
 
-fn green_enter<R: Banc>(x: &mut Cx<'_, R>) {
+fn green_enter<R: Bench>(x: &mut Cx<'_, R>) {
     if sub16(x, TIMER, 1).gt() {
         return;
     }
@@ -89,7 +89,7 @@ fn green_enter<R: Banc>(x: &mut Cx<'_, R>) {
     green_enter_b(x);
 }
 
-fn green_enter_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn green_enter_b<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     let y = x.u16(0x10).wrapping_add(0x30);
     x.set16(0x10, y);
@@ -104,7 +104,7 @@ fn green_enter_b<R: Banc>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xe508a);
 }
 
-fn green_descend<R: Banc>(x: &mut Cx<'_, R>) {
+fn green_descend<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_z();
     if cmp16(x, 0xc, 0x60).ge() {
         x.add8(f::SUB2, 2);
@@ -121,7 +121,7 @@ fn green_descend<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert_foreground();
 }
 
-fn green_land<R: Banc>(x: &mut Cx<'_, R>) {
+fn green_land<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     x.move_xyz();
     if !tst16(x, 0x18).pl() {
@@ -135,12 +135,12 @@ fn green_land<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- type 19, variante 0 -----------------------------------------------------------------------------
 
-/// Lance la tâche de fondu `list` (0x9b6 avec A0 = l'entrée, emplacement 0x10 ; `taches/fondu.rs`).
-fn open_list<R: Banc>(x: &mut Cx<'_, R>, list: u32) {
-    crate::kernel::creer_tache(x.b, 0x10, list);
+/// Lance la tâche de fondu `list` (0x9b6 avec A0 = l'entrée, emplacement 0x10 ; `tasks/fading.rs`).
+fn open_list<R: Bench>(x: &mut Cx<'_, R>, list: u32) {
+    crate::kernel::create_task(x.b, 0x10, list);
 }
 
-fn announce<R: Banc>(x: &mut Cx<'_, R>) {
+fn announce<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set_bit(0x1, 1, true);
     x.set16(TIMER, 0xb4);
@@ -154,7 +154,7 @@ fn announce<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8fe68 : une bulle de plus toutes les 15 à 78 images.
-fn bubble_tick<R: Banc>(x: &mut Cx<'_, R>) {
+fn bubble_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(BUBBLES) as i8) <= 0 {
         return;
     }
@@ -168,7 +168,7 @@ fn bubble_tick<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn bubbles<R: Banc>(x: &mut Cx<'_, R>) {
+fn bubbles<R: Bench>(x: &mut Cx<'_, R>) {
     bubble_tick(x);
     match x.u16(TIMER) as i16 {
         t if t < 0x64 => { crate::families::effects_creators::scenery_10(x.b, x.o); }
@@ -191,7 +191,7 @@ fn bubbles<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Position d'entrée à droite de la caméra, à la profondeur `dy` sous son bord haut.
-fn enter_from_right<R: Banc>(x: &mut Cx<'_, R>, dy: u16) {
+fn enter_from_right<R: Bench>(x: &mut Cx<'_, R>, dy: u16) {
     x.add8(f::SUB2, 2);
     x.set_bit(0x1, 1, false);
     let (cx, cy) = camera(x);
@@ -205,21 +205,21 @@ fn enter_from_right<R: Banc>(x: &mut Cx<'_, R>, dy: u16) {
     x.set16(0x1a, 0);
 }
 
-fn enter<R: Banc>(x: &mut Cx<'_, R>) {
+fn enter<R: Bench>(x: &mut Cx<'_, R>) {
     enter_from_right(x, 0x50);
     rest(x);
     fly(x);
 }
 
 /// Vol d'approche : la retombée est coupée sous l'altitude 0x20.
-fn glide<R: Banc>(x: &mut Cx<'_, R>) {
+fn glide<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xyz();
     if x.u16(0x18) != 0 && (x.u16(0xc) as i16) < 0x20 {
         x.set16(0x18, 0);
     }
 }
 
-fn fly<R: Banc>(x: &mut Cx<'_, R>) {
+fn fly<R: Bench>(x: &mut Cx<'_, R>) {
     crate::families::effects_creators::scenery_10(x.b, x.o);
     glide(x);
     let (cx, _) = camera(x);
@@ -235,11 +235,11 @@ fn fly<R: Banc>(x: &mut Cx<'_, R>) {
     finish_step(x);
 }
 
-fn finish_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn finish_step<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
 }
 
-fn wait_camera<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_camera<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 1);
     step(x);
     if (var::PHASE.get(x.b) as i8) < 0xc {
@@ -250,13 +250,13 @@ fn wait_camera<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- type 19, variante 1 -------------------------------------------------------------------------------
 
-fn pet_enter<R: Banc>(x: &mut Cx<'_, R>) {
+fn pet_enter<R: Bench>(x: &mut Cx<'_, R>) {
     enter_from_right(x, 0x38);
     rest(x);
     pet_fly(x);
 }
 
-fn pet_fly<R: Banc>(x: &mut Cx<'_, R>) {
+fn pet_fly<R: Bench>(x: &mut Cx<'_, R>) {
     glide(x);
     let (cx, _) = camera(x);
     if Fl::sub16(cx.wrapping_add(0x128), x.u16(0x8)).le() {
@@ -270,7 +270,7 @@ fn pet_fly<R: Banc>(x: &mut Cx<'_, R>) {
     finish_step(x);
 }
 
-fn pet_wait_camera<R: Banc>(x: &mut Cx<'_, R>) {
+fn pet_wait_camera<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 1);
     step(x);
     if (var::PHASE.get(x.b) as i8) < 0xc {

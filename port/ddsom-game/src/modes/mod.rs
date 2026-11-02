@@ -5,7 +5,7 @@
 //! pas de 2) ; le tour finit par une cession d'une image à l'ordonnanceur. Un gestionnaire de
 //! sous-mode est lui-même une machine à états (`FF0E72`) qui peut céder la main en son milieu
 //! (attente de fondu, d'une image, d'un chargement) : chaque gestionnaire est découpé aux points de
-//! cession, et la reprise est une étape Rust (`etapes!`, l'adresse que l'original reprend n'étant plus
+//! cession, et la reprise est une étape Rust (`steps!`, l'adresse que l'original reprend n'étant plus
 //! que le nom de l'étape ; voir [`Flow`]).
 
 pub mod attract;
@@ -21,7 +21,7 @@ use cps2::Cps2Bus;
 
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::scene::Ctx;
-use crate::taches::table::Suite;
+use crate::tasks::table::Next;
 use crate::Native;
 
 /// Bloc d'état de la machine à modes (`A0` dans l'original) et ses champs.
@@ -74,17 +74,17 @@ pub enum Flow {
 pub trait Sequence {
     /// Cède `frames` images à l'ordonnanceur ; la tâche reprendra en `resume` (étape Rust, ou adresse qui suit le
     /// `jsr 0xa40` de l'original). La séquence doit rendre `Flow::Yield` aussitôt.
-    fn wait(&mut self, frames: u32, resume: impl Into<Suite>) -> Flow;
+    fn wait(&mut self, frames: u32, resume: impl Into<Next>) -> Flow;
     /// Appel terminal (`jmp`) de la native `n` : elle s'exécute aussitôt, et son `rts` revient à la suite de l'appel en
     /// cours (la séquence rend `Flow::Yield`, la suite ayant déjà été exécutée).
-    fn sauter(&mut self, n: &'static Native) -> Flow;
-    /// Appelle un sous-programme Rust qui peut céder la main (fondu, écran noir : `taches::fondu::descente`,
-    /// `video::ecran_noir::debut`...) : `resume` est rangée dans les appels en cours ; s'il revient sans céder,
+    fn jump(&mut self, n: &'static Native) -> Flow;
+    /// Appelle un sous-programme Rust qui peut céder la main (fondu, écran noir : `tasks::fading::descent`,
+    /// `video::black_screen::start`...) : `resume` est rangée dans les appels en cours ; s'il revient sans céder,
     /// elle s'exécute aussitôt.
-    fn sous_programme(&mut self, sp: fn(&mut Ctx) -> Flow, resume: impl Into<Suite>) -> Flow;
+    fn subroutine(&mut self, sp: fn(&mut Ctx) -> Flow, resume: impl Into<Next>) -> Flow;
     /// Appel `bsr`/`jsr` dont la suite est une native de reprise : rangée dans les appels en cours de la tâche
-    /// (`taches::table::Cadre`), elle reprendra quand l'appelé reviendra.
-    fn push_return(&mut self, suite: impl Into<Suite>);
+    /// (`tasks::table::Frame`), elle reprendra quand l'appelé reviendra.
+    fn push_return(&mut self, next: impl Into<Next>);
     /// L'appelé est revenu sans passer par son `rts` (fonction Rust qui a rendu `Flow::Done`) : l'appel en cours
     /// ouvert par `push_return` est abandonné.
     fn drop_return(&mut self);
@@ -95,30 +95,30 @@ pub trait Sequence {
 
 /// Appel d'un sous-programme natif depuis un pas Rust : sa suite est un appel en cours de la tâche, pas une
 /// adresse empilée.
-fn push(b: &mut Cps2Bus, suite: impl Into<Suite>) {
-    crate::taches::table::appeler(b, suite);
+fn push(b: &mut Cps2Bus, next: impl Into<Next>) {
+    crate::tasks::table::call(b, next);
 }
 
 impl Sequence for Ctx<'_> {
-    fn wait(&mut self, frames: u32, resume: impl Into<Suite>) -> Flow {
-        crate::taches::ceder(self, crate::taches::Attente::Images(frames), resume)
+    fn wait(&mut self, frames: u32, resume: impl Into<Next>) -> Flow {
+        crate::tasks::cede(self, crate::tasks::Wait::Images(frames), resume)
     }
-    fn sauter(&mut self, n: &'static Native) -> Flow {
-        crate::sauter(self.c, self.b, n);
+    fn jump(&mut self, n: &'static Native) -> Flow {
+        crate::jump(self.c, self.b, n);
         Flow::Yield
     }
-    fn push_return(&mut self, suite: impl Into<Suite>) {
-        push(self.b, suite);
+    fn push_return(&mut self, next: impl Into<Next>) {
+        push(self.b, next);
     }
-    fn sous_programme(&mut self, sp: fn(&mut Ctx) -> Flow, resume: impl Into<Suite>) -> Flow {
+    fn subroutine(&mut self, sp: fn(&mut Ctx) -> Flow, resume: impl Into<Next>) -> Flow {
         push(self.b, resume);
         if sp(self) == Flow::Done {
-            crate::taches::revenir(self.c, self.b);
+            crate::tasks::return_to_caller(self.c, self.b);
         }
         Flow::Yield
     }
     fn drop_return(&mut self) {
-        crate::taches::table::depiler_retour(self.c, self.b);
+        crate::tasks::table::pop_return(self.c, self.b);
     }
     fn or16(&mut self, off: u32, v: u16) {
         let w = self.v16(off) | v;
@@ -161,10 +161,10 @@ impl Block for Ctx<'_> {
     }
     fn render(&mut self) {
         let a0 = self.c.a[0];
-        for classe in [&crate::dispatch::SET, &crate::dispatch::EFFCT, &crate::dispatch::SOBJ] {
-            classe.update_sans_suite(self.c, self.b);
+        for class in [&crate::dispatch::SET, &crate::dispatch::EFFCT, &crate::dispatch::SOBJ] {
+            class.update_no_next(self.c, self.b);
         }
-        crate::sprites::construire_68k(self.c, self.b);
+        crate::sprites::build_68k(self.c, self.b);
         self.c.a[0] = a0;
     }
 }
@@ -177,23 +177,23 @@ pub fn c_a5(x: &mut Ctx) {
 // ---------------------------------------------------------------------------------------------
 // La boucle
 
-crate::etapes! {
+crate::steps! {
     /// Étapes de la boucle de la machine à modes (`0x133fe`).
-    pub enum Etape {
+    pub enum Step {
         /// Entrée de la boucle (tâche 0 relancée après une partie, ou fin du démarrage).
-        Entree = at::LOOP => start,
+        Entry = at::LOOP => start,
         /// Le gestionnaire a rendu la main : une image de cession, puis un nouveau tour.
-        ApresGestionnaire = at::AFTER_HANDLER => |x| x.wait(1, Etape::ApresAttente),
+        AfterHandler = at::AFTER_HANDLER => |x| x.wait(1, Step::AfterWait),
         /// Après la cession : un nouveau tour.
-        ApresAttente = at::AFTER_WAIT => turn,
+        AfterWait = at::AFTER_WAIT => turn,
     }
 }
 
-/// Un tour : appelle le gestionnaire du mode, qui revient à [`Etape::ApresGestionnaire`].
+/// Un tour : appelle le gestionnaire du mode, qui revient à [`Step::AfterHandler`].
 fn turn(x: &mut Ctx) -> Flow {
     x.c.a[0] = mode::BASE;
     let m = rd8(x.b, mode::MODE);
-    push(x.b, Etape::ApresGestionnaire);
+    push(x.b, Step::AfterHandler);
     match m {
         0 => init(x),
         2 => dispatch(x),

@@ -189,19 +189,19 @@ fn remove(g: &mut Ctx, p: Player) {
 }
 
 /// 0x35292 : mise à jour des joueurs.
-pub fn mettre_a_jour(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn update_cpu(c: &mut Cpu, b: &mut Cps2Bus) {
     update_all(&mut Ctx::new(c, b));
 }
 
 fn update_players(c: &mut Cpu, b: &mut Cps2Bus) {
-    mettre_a_jour(c, b);
+    update_cpu(c, b);
     rts(c, b);
 }
 
 pub const UPDATE_PLAYERS: Native = Native {
     entry: 0x35292,
     name: "players_update",
-    run: crate::Corps::Processeur(update_players),
+    run: crate::Body::Processeur(update_players),
     touches_sound: false,
     outputs: 0,
 };

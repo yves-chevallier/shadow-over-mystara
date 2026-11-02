@@ -179,7 +179,7 @@ impl Pool {
 
 // ---- adaptation aux registres du 68000 ----
 
-/// Masques des registres que l'original laisse (voir `diag::registres_morts`).
+/// Masques des registres que l'original laisse (voir `diag::dead_regs`).
 pub const REGS_ALLOC: u32 = regs::a(1) | regs::d(6) | regs::CCR;
 pub const REGS_FREE: u32 = regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR;
 
@@ -190,7 +190,7 @@ impl Pool {
     #[track_caller]
     pub fn alloc_68k(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
         let (r, _) = self.alloc_regs(c, b);
-        crate::diag::registres_morts(c, "alloc", REGS_ALLOC);
+        crate::diag::dead_regs(c, "alloc", REGS_ALLOC);
         r
     }
 
@@ -245,7 +245,7 @@ impl Pool {
     #[track_caller]
     pub fn alloc_unchecked_68k(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Obj {
         let (_, a1) = self.alloc_regs(c, b);
-        crate::diag::registres_morts(c, "alloc", REGS_ALLOC);
+        crate::diag::dead_regs(c, "alloc", REGS_ALLOC);
         a1
     }
 
@@ -254,7 +254,7 @@ impl Pool {
     #[track_caller]
     pub fn release_68k(&self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
         self.release_regs(c, b, obj);
-        crate::diag::registres_morts(c, "free", REGS_FREE);
+        crate::diag::dead_regs(c, "free", REGS_FREE);
     }
 
     fn release_regs(&self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
@@ -306,14 +306,14 @@ macro_rules! pool_natives {
         pub const $alloc: Native = Native {
             entry: $pool.alloc_routine,
             name: $alloc_name,
-            run: crate::Corps::Processeur(|c, b| alloc_native(&$pool, c, b)),
+            run: crate::Body::Processeur(|c, b| alloc_native(&$pool, c, b)),
             touches_sound: false,
             outputs: regs::a(1) | regs::d(6) | regs::CCR,
         };
         pub const $free: Native = Native {
             entry: $pool.free_routine,
             name: $free_name,
-            run: crate::Corps::Processeur(|c, b| free_native(&$pool, c, b)),
+            run: crate::Body::Processeur(|c, b| free_native(&$pool, c, b)),
             touches_sound: false,
             outputs: regs::d(0) | regs::d(1) | regs::a(0) | regs::a(4) | regs::CCR,
         };
@@ -336,7 +336,7 @@ macro_rules! init_native {
         pub const $const: Native = Native {
             entry: $entry,
             name: $name,
-            run: crate::Corps::Processeur(|c, b| init_native(&$pools, c, b)),
+            run: crate::Body::Processeur(|c, b| init_native(&$pools, c, b)),
             touches_sound: false,
             outputs: regs::ALL,
         };

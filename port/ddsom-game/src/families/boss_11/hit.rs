@@ -1,12 +1,12 @@
 //! Boss 11/12, état 4 « touché » (0x8e39a). Groupes `+5` : 0 réaction (table de longs 0x8e3dc : six routines selon le code de
 //! coup `+0x49`), 4 étourdi, 2, 6, 8, 10 mort.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::machine::Machine;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
         return;
@@ -20,7 +20,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e8ca : vrai si le jeu est en pause (le serpent reste alors affiché : `+0` = 2).
-fn paused<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn paused<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
         return true;
@@ -29,7 +29,7 @@ fn paused<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8e8de : fin de la réaction, retour à la poursuite.
-fn recover<R: Banc>(x: &mut Cx<'_, R>) {
+fn recover<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(0x86, 0);
     x.set8(0x87, 0);
@@ -40,13 +40,13 @@ fn recover<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Plus de PV : le groupe 6 (mort) prend le relais.
-fn dying<R: Banc>(x: &mut Cx<'_, R>) {
+fn dying<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB, 6);
     x.set16(f::SUB2, 0);
     death(x)
 }
 
-fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     let code = x.u8(REACTION) as u32;
     let routine = rom32(x, 0x8e3dc + code);
     match routine {
@@ -68,7 +68,7 @@ fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e4a2 : recul (codes 0, 0x1c, 0x38, 0x3c, 0x6c, 0x98).
-fn hit_a<R: Banc>(x: &mut Cx<'_, R>) {
+fn hit_a<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         if (x.u16(f::HP) as i16) <= 0 {
             return dying(x);
@@ -121,7 +121,7 @@ fn hit_a<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e574 : recul répété `+0x87` fois (code 0x68).
-fn hit_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn hit_b<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         if !sub8(x, 0x87, 1).eq() {
             x.anim_step();
@@ -147,7 +147,7 @@ fn hit_b<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e5da : projection (codes 4 à 0x94 sans routine propre).
-fn generic<R: Banc>(x: &mut Cx<'_, R>) {
+fn generic<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch0(x, 0x8e5e8, f::SUB2) {
         0x8e5ee => {
             if (x.u16(f::HP) as i16) <= 0 {
@@ -198,7 +198,7 @@ fn generic<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e8fc : relevé après la chute (état 4, groupe 4).
-fn fallen<R: Banc>(x: &mut Cx<'_, R>) {
+fn fallen<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set32(f::STATE, 0x0404_0000);
     x.set8(0x86, 1);
@@ -209,7 +209,7 @@ fn fallen<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e69e : étourdissement (code 0x4c).
-fn stun<R: Banc>(x: &mut Cx<'_, R>) {
+fn stun<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch0(x, 0x8e6ac, f::SUB2) {
         0x8e6b0 => {
             if (x.u16(f::HP) as i16) <= 0 {
@@ -264,7 +264,7 @@ fn stun<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e740 : projection en arc (code 0xa4).
-fn throw<R: Banc>(x: &mut Cx<'_, R>) {
+fn throw<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x8e74e, f::SUB2) {
         0x8e756 => {
             x.set8(0x67, 0);
@@ -276,13 +276,13 @@ fn throw<R: Banc>(x: &mut Cx<'_, R>) {
             x.set8(0x87, 0);
             x.set8(0x86, 0);
             x.set8(0x90, 2);
-            if x.compteur() & 1 != 0 {
+            if x.counter() & 1 != 0 {
                 x.set8(0x90, 1);
             }
             let mut d2 = if x.u8(f::FLIP) != 0 { 0x18 } else { 8 };
-            let alea = x.random();
+            let rng = x.random();
             d2 &= 0xf;
-            let d0 = alea.wrapping_add(d2 as u16) & 0x1f;
+            let d0 = rng.wrapping_add(d2 as u16) & 0x1f;
             x.set8(0x2d, d0 as u8);
             hurt(x, 1)
         }
@@ -309,7 +309,7 @@ fn throw<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn arc_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn arc_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x29) == 0 {
         return;
     }
@@ -318,7 +318,7 @@ fn arc_end<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e7b4 : la tête décrit un arc (vecteurs de la table 0x1c94b6).
-fn arc<R: Banc>(x: &mut Cx<'_, R>) {
+fn arc<R: Bench>(x: &mut Cx<'_, R>) {
     let a4 = 0x1c94b6;
     let z = x.u32(0xc).wrapping_add(0x20000);
     x.set32(0xc, z);
@@ -352,7 +352,7 @@ fn arc<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e922 (`+5` = 4) : au sol, étourdi.
-fn stunned<R: Banc>(x: &mut Cx<'_, R>) {
+fn stunned<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -393,7 +393,7 @@ fn stunned<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e95a : durée de l'étourdissement (`+0xb8`, selon la difficulté), posée à la première image.
-fn wait_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_init<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) != 0 {
         return;
     }
@@ -406,7 +406,7 @@ fn wait_init<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e9d2 : mort (chute, effets, attente de la fin de l'animation).
-fn death<R: Banc>(x: &mut Cx<'_, R>) {
+fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch0(x, 0x8e9e0, f::SUB2) {
         0x8e9e6 => {
             x.add8(f::SUB2, 2);

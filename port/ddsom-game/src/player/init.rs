@@ -66,7 +66,7 @@ pub fn clear_overlays_of(g: &mut Ctx, k: u32) {
 }
 
 /// 0x2d9e : les quatre enregistrements de joueur à zéro.
-pub fn effacer_joueurs(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn clear_all_players(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut g = Ctx::new(c, b);
     for k in 0..PLAYER_COUNT {
         clear_player(&mut g, k);
@@ -74,7 +74,7 @@ pub fn effacer_joueurs(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x2df8 : les huit sous-objets des joueurs à zéro.
-pub fn effacer_sous_objets(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn clear_sub_objects(c: &mut Cpu, b: &mut Cps2Bus) {
     let mut g = Ctx::new(c, b);
     for k in 0..PLAYER_COUNT {
         clear_overlays_of(&mut g, k);
@@ -82,19 +82,19 @@ pub fn effacer_sous_objets(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 fn clear_players(c: &mut Cpu, b: &mut Cps2Bus) {
-    effacer_joueurs(c, b);
+    clear_all_players(c, b);
     rts(c, b);
 }
 
 fn clear_overlays(c: &mut Cpu, b: &mut Cps2Bus) {
-    effacer_sous_objets(c, b);
+    clear_sub_objects(c, b);
     rts(c, b);
 }
 
 pub const CLEAR_PLAYERS: Native = Native {
     entry: 0x2d9e,
     name: "players_clear",
-    run: crate::Corps::Processeur(clear_players),
+    run: crate::Body::Processeur(clear_players),
     touches_sound: false,
     outputs: 0,
 };
@@ -102,7 +102,7 @@ pub const CLEAR_PLAYERS: Native = Native {
 pub const CLEAR_OVERLAYS: Native = Native {
     entry: 0x2df8,
     name: "players_clear_overlays",
-    run: crate::Corps::Processeur(clear_overlays),
+    run: crate::Body::Processeur(clear_overlays),
     touches_sound: false,
     outputs: 0,
 };
@@ -286,7 +286,7 @@ pub fn init_slot(g: &mut Ctx, p: Player, k: u8) {
 }
 
 /// Les entrées 0x2e58, 0x2e6e, 0x2e86, 0x2e9e : construisent le joueur `k` ; D0 et A0-A3 sont gardés (movem).
-pub fn initialiser(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
+pub fn initialize(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
     let (d0, a) = (c.d[0], [c.a[0], c.a[1], c.a[2], c.a[3]]);
     init_slot(&mut Ctx::new(c, b), Player::nth(k), k as u8);
     c.d[0] = d0;
@@ -294,7 +294,7 @@ pub fn initialiser(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
 }
 
 fn init_entry(c: &mut Cpu, b: &mut Cps2Bus, k: u32) {
-    initialiser(c, b, k);
+    initialize(c, b, k);
     rts(c, b);
 }
 
@@ -315,7 +315,7 @@ const fn init_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2
     Native {
         entry,
         name,
-        run: crate::Corps::Processeur(run),
+        run: crate::Body::Processeur(run),
         touches_sound: false,
         outputs: regs::d(0) | regs::a(0) | regs::a(1) | regs::a(2) | regs::a(3),
     }
@@ -343,7 +343,7 @@ pub enum Join {
 /// `0x00040800` entrées figées, `0x00040c00` marche lente globale), puis tous les ennemis et boss reçoivent
 /// un choc (`join_shockwave`).
 /// Les entrées 0x2f46.., 0x3048.., 0x3142.. (une par joueur `k`) : le joueur arrive en cours de partie.
-pub fn rejoindre(c: &mut Cpu, b: &mut Cps2Bus, k: u8, how: Join) {
+pub fn join_player(c: &mut Cpu, b: &mut Cps2Bus, k: u8, how: Join) {
     join(&mut Ctx::new(c, b), k, how);
 }
 
@@ -445,13 +445,13 @@ fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
                 crate::mem::wr16(b, e + 0x62, left);
             }
             let kind = crate::mem::rd8(b, e + 2);
-            let barre = crate::evenements::Popup {
-                entete: (index as u16) << 8 | kind as u16,
+            let bar = crate::events::Popup {
+                header: (index as u16) << 8 | kind as u16,
                 max: crate::mem::rd16(g.b, e + 0x60),
-                valeur: crate::mem::rd16(g.b, e + 0x62),
-                brut: crate::mem::rd8(g.b, e + 0x28) == 2,
+                value: crate::mem::rd16(g.b, e + 0x62),
+                raw: crate::mem::rd8(g.b, e + 0x28) == 2,
             };
-            crate::evenements::creer_popup(g.b, barre);
+            crate::events::create_popup(g.b, bar);
         }
         if ram::SCROLL1_Y.get(g.b) != 0 {
             ram::SCROLL1_Y.set(g.b, 0);
@@ -460,7 +460,7 @@ fn join_shockwave(g: &mut Ctx, p: Player, strength: u8) {
 }
 
 const fn join_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: 0 }
+    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs: 0 }
 }
 
 macro_rules! join_entry {
@@ -503,7 +503,7 @@ fn weapon_stats_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const NATIVES: &[Native] = &[Native {
     entry: 0x3552,
     name: "player_weapon_stats",
-    run: crate::Corps::Processeur(weapon_stats_native),
+    run: crate::Body::Processeur(weapon_stats_native),
     touches_sound: false,
     outputs: regs::d(0) | regs::a(4),
 }];

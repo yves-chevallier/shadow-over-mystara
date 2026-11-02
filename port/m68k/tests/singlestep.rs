@@ -48,7 +48,7 @@ struct State {
 struct Case {
     name: String,
     initial: State,
-    fin: State,
+    end: State,
     address_error: bool,
     cycles: u32,
 }
@@ -104,7 +104,7 @@ fn parse(b: &[u8]) -> Vec<Case> {
         let name = String::from_utf8_lossy(&b[r.p..r.p + len]).into_owned();
         r.p += len;
         let initial = r.state();
-        let fin = r.state();
+        let end = r.state();
         r.u32();
         assert_eq!(r.u32(), 0x456789AB);
         let cycles = r.u32();
@@ -120,7 +120,7 @@ fn parse(b: &[u8]) -> Vec<Case> {
                 }
             }
         }
-        out.push(Case { name, initial, fin, address_error, cycles });
+        out.push(Case { name, initial, end, address_error, cycles });
     }
     out
 }
@@ -168,11 +168,11 @@ fn run(mem: &mut Mem, c: &Case) -> (Vec<String>, u64) {
     got[18] = cpu.pc.wrapping_add(pc_bias);
     let mut errs = Vec::new();
     for k in 0..19 {
-        if got[k] != c.fin.regs[k] {
-            errs.push(format!("{}={:08x} attendu {:08x}", NAMES[k], got[k], c.fin.regs[k]));
+        if got[k] != c.end.regs[k] {
+            errs.push(format!("{}={:08x} attendu {:08x}", NAMES[k], got[k], c.end.regs[k]));
         }
     }
-    for &(a, v) in &c.fin.ram {
+    for &(a, v) in &c.end.ram {
         let g = mem.ram[a as usize];
         if g != v {
             errs.push(format!("ram[{a:06x}]={g:02x} attendu {v:02x}"));

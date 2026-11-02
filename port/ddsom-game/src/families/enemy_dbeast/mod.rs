@@ -1,4 +1,4 @@
-//! Ennemi « Displacer Beast » et ses parties (ENEMY type 19, 0x71e44). Voir `docs/familles/enemy.md`.
+//! Ennemi « Displacer Beast » et ses parties (ENEMY type 19, 0x71e44). Voir `docs/families/enemy.md`.
 //!
 //! Un seul gestionnaire pour quatorze variantes (`+3`) : la bête elle-même et les pièces qui
 //! l'accompagnent (membres, projectiles, ombre...), liées à elle par `+0x42` (parent) et visant un
@@ -17,7 +17,7 @@
 //!
 //! Les pièces ne servent pas d'objets séparés dans l'original : le même code les anime toutes.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -76,7 +76,7 @@ pub(self) mod g {
 }
 
 use g::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Jeux d'animations : mouvements et coups.
 const SET_A: u32 = 0x166fb6;
@@ -91,7 +91,7 @@ const ACTIVE_IDLE: u32 = 0x020a_0000;
 /// État touché, sous-état 8 : la bête est projetée ou s'enfuit.
 const KNOCKED: u32 = 0x0408_0000;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -109,7 +109,7 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x74f66 : numéro d'animation de la série des mouvements (les numéros à partir de 0x4b ne sont pas
 /// décalés).
-fn anim_a<R: Banc>(x: &mut Cx<'_, R>, n: u8) -> u32 {
+fn anim_a<R: Bench>(x: &mut Cx<'_, R>, n: u8) -> u32 {
     let shift = x.u8(ANIM_SHIFT);
     if (n as i8) >= 0x4b {
         return n as u32;
@@ -118,25 +118,25 @@ fn anim_a<R: Banc>(x: &mut Cx<'_, R>, n: u8) -> u32 {
 }
 
 /// 0x74f7e : numéro d'animation de la série des coups, toujours décalé.
-fn anim_b<R: Banc>(x: &mut Cx<'_, R>, n: u8) -> u32 {
+fn anim_b<R: Bench>(x: &mut Cx<'_, R>, n: u8) -> u32 {
     let shift = x.u8(ANIM_SHIFT);
     n.wrapping_add(x.rom8(SHIFT_B + shift as u32)) as u32
 }
 
 /// Joue l'animation `n` de la série des mouvements.
-fn play<R: Banc>(x: &mut Cx<'_, R>, n: u8) {
+fn play<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
     let n = anim_a(x, n);
     x.anim_start(SET_A, n as u16);
 }
 
 /// Joue l'animation `n` de la série des coups.
-fn play_b<R: Banc>(x: &mut Cx<'_, R>, n: u8) {
+fn play_b<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
     let n = anim_b(x, n);
     x.anim_start(SET_B, n as u16);
 }
 
 /// Joue l'animation `n` (série des mouvements) si ce n'est pas déjà celle en cours (`+0xaf`).
-fn play_once<R: Banc>(x: &mut Cx<'_, R>, n: u8) {
+fn play_once<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
     let n = anim_a(x, n);
     if n as u8 != x.u8(LAST_ANIM) {
         x.set8(LAST_ANIM, n as u8);
@@ -145,22 +145,22 @@ fn play_once<R: Banc>(x: &mut Cx<'_, R>, n: u8) {
 }
 
 /// Un pas d'animation (le résultat « fini » est ignoré).
-fn step<R: Banc>(x: &mut Cx<'_, R>) {
+fn step<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
 /// Déplacement selon la table de vitesses (X, Y).
-fn move_xy<R: Banc>(x: &mut Cx<'_, R>) {
+fn move_xy<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
 /// Choisit la table de vitesses `n`.
-fn speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Pose les trois vitesses d'un bond : X, Z, accélération en Z.
-fn set_velocity<R: Banc>(x: &mut Cx<'_, R>, vx: i16, vz: u16, az: i16) {
+fn set_velocity<R: Bench>(x: &mut Cx<'_, R>, vx: i16, vz: u16, az: i16) {
     x.set16(0x14, vx as u16);
     x.set16(0x16, 0);
     x.set16(0x18, vz);
@@ -168,16 +168,16 @@ fn set_velocity<R: Banc>(x: &mut Cx<'_, R>, vx: i16, vz: u16, az: i16) {
 }
 
 /// Le long d'état (`+4..+7`) d'un autre objet.
-fn state_of<R: Banc>(x: &mut Cx<'_, R>, o: Obj) -> u32 {
+fn state_of<R: Bench>(x: &mut Cx<'_, R>, o: Obj) -> u32 {
     o.u32(x.b, f::STATE)
 }
 
-fn set_state_long<R: Banc>(x: &mut Cx<'_, R>, v: u32) {
+fn set_state_long<R: Bench>(x: &mut Cx<'_, R>, v: u32) {
     x.set32(f::STATE, v);
 }
 
 /// Le parent (`+0x42`) ou `None` s'il n'y en a pas.
-fn parent<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
+fn parent<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     if x.u16(PARENT) == 0 {
         return None;
     }
@@ -185,19 +185,19 @@ fn parent<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
 }
 
 /// 0x725c8 : pièce sans parent, elle redevient une bête debout et joue l'animation 8.
-fn orphan<R: Banc>(x: &mut Cx<'_, R>) {
+fn orphan<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, ACTIVE_STANCE);
     play(x, 8);
 }
 
 /// Coordonnées d'écran (caméra) : X en `A5+0x556`, Y en `A5+0x55a`.
-fn camera<R: Banc>(x: &mut Cx<'_, R>) -> (u16, u16) {
+fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
     (var::CAMERA_ALT_X.get(x.b), var::CAMERA_ALT_Y.get(x.b))
 }
 
 /// 0x71ff4 : se place sur le parent, décalé selon le rang de la pièce (X inversé quand la pièce
 /// regarde à gauche).
-fn follow_offset<R: Banc>(x: &mut Cx<'_, R>) {
+fn follow_offset<R: Bench>(x: &mut Cx<'_, R>) {
     const OFFSETS: u32 = 0x7202a;
     let p = x.linked(PARENT);
     let (px, py) = (p.u16(x.b, 0x8), p.u16(x.b, 0x10));
@@ -216,7 +216,7 @@ fn follow_offset<R: Banc>(x: &mut Cx<'_, R>) {
 /// 0x7208c : se place sur le parent (position, orientation, altitude) selon le rang de la pièce.
 /// Sans parent, la pièce redevient une bête debout (et la fonction rend la main à l'appelant, qui
 /// continue).
-fn follow_body<R: Banc>(x: &mut Cx<'_, R>) {
+fn follow_body<R: Bench>(x: &mut Cx<'_, R>) {
     const OFFSETS: u32 = 0x720ee;
     let Some(p) = parent(x) else { return orphan(x) };
     let (px, py, flip) = (p.u16(x.b, 0x8), p.u16(x.b, 0x10), p.u8(x.b, f::FLIP));
@@ -239,12 +239,12 @@ fn follow_body<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x74eac : la bête doit se retourner pour faire face à sa cible.
-fn player_ahead<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn player_ahead<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     needs_turn(x)
 }
 
 /// 0x74efe : la cible est loin, en profondeur et en largeur.
-fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let Some(t) = target(x) else { return false };
     let dy = t.u16(x.b, 0x10).wrapping_sub(x.u16(0x10)).wrapping_add(0x30);
     if dy <= 0x60 {
@@ -255,7 +255,7 @@ fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x74f8e : un joueur est tout près (boîte devant la bête).
-fn player_near<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn player_near<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     for p in 0..4 {
         let player = Obj(0xff85de + 0x200 * p);
         if player.u8(x.b, 0) != 0 && lib::target_in_box(x, 0, 0x60, 0x28) {
@@ -273,7 +273,7 @@ const PROFILE_A: [(u32, u8); 12] =
 const PROFILE_B: [(u32, u8); 12] =
     [(0x68, 2), (0x69, 2), (0x6a, 1), (0x6c, 3), (0x6d, 3), (0x72, 4), (0x73, 4), (0x74, 3), (0x75, 0x20), (0x76, 3), (0x81, 5), (0x80, 6)];
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -313,7 +313,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -342,12 +342,12 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Gel ou pause : une pièce qui attend son parent le suit quand même.
-fn held<R: Banc>(x: &mut Cx<'_, R>) {
+fn held<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 && x.u8(f::SUB2) == 2 {
         follow_body(x);
     }
 }
 
 handlers! {
-    0x71e44 "enemy_19" #[sans] run,
+    0x71e44 "enemy_19" #[without] run,
 }

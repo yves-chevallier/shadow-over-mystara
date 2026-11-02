@@ -1,12 +1,12 @@
 //! Type 11, sous-états 0 et 2 : le Golem debout, piloté par les touches du quatrième joueur (`A5+3`).
 //! `+6` = 0 marche (croix : X, profondeur), bouton 4 : coup, bouton 5 : saut ; `+6` = 2 : saut en arc.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => walk(x),
         2 => arc(x),
@@ -14,7 +14,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     let keys = x.a5_u8(3);
     let mut moved = false;
     if keys & 1 != 0 {
@@ -42,7 +42,7 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>) {
     // Glitch d'origine : les boutons sont relus dans D0, que le pas d'animation (0x1a56) écrase par l'octet `+0x32`
     // quand l'image en cours se termine.
     let mut buttons = keys;
-    // Glitch d'origine : le drapeau « a bougé » reste dans D2 (`Restes`).
+    // Glitch d'origine : le drapeau « a bougé » reste dans D2 (`Leftovers`).
     *x.c.d2() = moved as u32;
     if moved {
         let (ends, state) = (x.u16(ANIM_TIME) == 1, x.u8(ANIM_END));
@@ -60,7 +60,7 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : saut en arc (vitesse verticale 0x800).
-fn arc<R: Banc>(x: &mut Cx<'_, R>) {
+fn arc<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set32(Obj::VX, 0);
         x.add8(f::SUB3, 2);

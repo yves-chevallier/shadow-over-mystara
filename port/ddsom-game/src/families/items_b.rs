@@ -8,12 +8,12 @@
 //! joueur (mode `+0x2f` = 1, délai `+0x59`) qui retombe et attend d'être repris. Déjà portée, elle ne
 //! rapporte qu'un événement de score.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use crate::mem::A5;
 use crate::objects::Obj;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 mod f {
     pub const ACTIVE: u32 = 0x00;
@@ -74,25 +74,25 @@ const SHADOW_SET: u8 = 0x3c;
 const LIFETIME: u16 = 0x4b0;
 
 /// `jmp (table,PC,D0.w)` : D0 = indice, D1.w = mot de la table ; renvoie la cible.
-fn jump<R: Banc>(x: &mut Cx<'_, R>, table: u32, i: u8) -> u32 {
+fn jump<R: Bench>(x: &mut Cx<'_, R>, table: u32, i: u8) -> u32 {
     let w = x.rom16(table + i as u32);
     table.wrapping_add(w as i16 as i32 as u32)
 }
 
-fn run<R: Banc>(x: &mut Cx<'_, R>) {
+fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let state = x.u8(f::STATE);
     let target = jump(x, rom::STATES, state);
     match state {
         0 => init(x),
         2 => active(x),
         4 | 6 => x.free(&pools::ITEM),
-        _ => crate::families::effects::hors_table(target),
+        _ => crate::families::effects::outside_table(target),
     }
 }
 
 /// Recopie la fiche de la variante (le scintillement sauf pour une pièce rejetée) ; A1 = la table, D0 =
 /// le décalage de la ligne.
-fn load_sheet<R: Banc>(x: &mut Cx<'_, R>, sparkle: bool) {
+fn load_sheet<R: Bench>(x: &mut Cx<'_, R>, sparkle: bool) {
     let row = 8 * x.u8(f::VARIANT) as u32;
     let sheet = rom::SHEETS + row;
     let v = x.data8(sheet);
@@ -107,14 +107,14 @@ fn load_sheet<R: Banc>(x: &mut Cx<'_, R>, sparkle: bool) {
     }
 }
 
-fn start_animation<R: Banc>(x: &mut Cx<'_, R>) {
+fn start_animation<R: Bench>(x: &mut Cx<'_, R>) {
     let variant = x.u8(f::VARIANT) as u32;
     x.anim(rom::ANIMATIONS, variant);
     x.reinsert();
 }
 
 /// État 0 : une pièce rejetée attend son délai ; une autre tombe (en l'air) ou attend au sol en scintillant.
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::THROWN) != 0 {
         let delay = x.u8(f::DELAY);
         if delay != 0 {
@@ -141,7 +141,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
     start_animation(x);
 }
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let sub = x.u8(f::SUB);
     let target = jump(x, rom::SUB_STATES, sub);
     match sub {
@@ -160,12 +160,12 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
             }
         }
         6 => thrown(x),
-        _ => crate::families::effects::hors_table(target),
+        _ => crate::families::effects::outside_table(target),
     }
 }
 
 /// Sous-état 0 : chute ; au sol, la pièce est ramenée dans la vue (sauf rejetée) et scintille.
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.move_xyz().gt() {
         x.add8(f::SUB, 2);
         x.set16(f::LIFETIME, LIFETIME);
@@ -181,7 +181,7 @@ fn fall<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Ramène la pièce dans la vue : au plus haut à `caméra.y + 0x20`, entre `caméra.x + 0x18` et `+ 0x168`.
-fn into_view<R: Banc>(x: &mut Cx<'_, R>) {
+fn into_view<R: Bench>(x: &mut Cx<'_, R>) {
     let cam2 = crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0;
     let (cam_x, cam_y) = if cam2 { (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b)) } else { (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b)) };
     let top = cam_y.wrapping_add(0x20);
@@ -202,7 +202,7 @@ fn into_view<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// `0xdb320` : la durée de vie s'écoule ; la pièce clignote pendant ses 0x3c dernières images, puis
 /// disparaît.
-fn age<R: Banc>(x: &mut Cx<'_, R>) {
+fn age<R: Bench>(x: &mut Cx<'_, R>) {
     let left = x.u16(f::LIFETIME).wrapping_sub(1);
     x.set16(f::LIFETIME, left);
     if (left as i16) < 0 {
@@ -210,14 +210,14 @@ fn age<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(f::ACTIVE, 2);
     }
     if left <= 0x3c {
-        let phase = left.wrapping_add(x.compteur()) & 1;
+        let phase = left.wrapping_add(x.counter()) & 1;
         x.set_bit(f::FLAGS, 1, phase == 0);
     }
 }
 
 /// Sous-état 6 : la pièce rejetée attend son délai, puis part en arc depuis le joueur, vers le centre de
 /// l'écran ; retombée, elle attend d'être ramassée.
-fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
+fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         x.move_xz();
         if x.u16(f::Z) as i16 >= 0 {
@@ -254,7 +254,7 @@ fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// `0xdb350` : la pièce ramassée prend sa place sur le joueur (gestionnaire de son emplacement), est notée
 /// dans le tableau des objets de collection, puis annoncée (SET 0xa).
-fn equip<R: Banc>(x: &mut Cx<'_, R>) {
+fn equip<R: Bench>(x: &mut Cx<'_, R>) {
     let player = x.linked(f::OWNER);
     let row = 8 * x.u8(f::VARIANT) as u32;
     let id = x.data8(rom::SHEETS + row + 1);
@@ -270,20 +270,20 @@ fn equip<R: Banc>(x: &mut Cx<'_, R>) {
         5 => replace(x, player, id, 0x165, Some(0x16d), 0x12),
         6 => replace(x, player, id, 0x166, None, 0x19),
         7 => replace(x, player, id, 0x167, None, 0x1f),
-        _ => crate::families::effects::hors_table(handler),
+        _ => crate::families::effects::outside_table(handler),
     }
     let collection = x.u8(f::COLLECTION) as u32;
     crate::mem::wr8(x.b, COLLECTED + collection, 1);
     let announce = x.u8(f::ANNOUNCE);
     if announce != 0 {
         let o = x.o;
-        super::creators::set_a_joueur(x.b, o, announce);
+        super::creators::set_a_player(x.b, o, announce);
     }
 }
 
 /// Une pièce portée à `worn` (compteur de coups `hits`) remplacée par `id` : déjà portée, simple
 /// événement ; sinon l'ancienne (numéro + `shift`) est rejetée. L'emplacement 2 ne rejette pas la pièce 1.
-fn replace<R: Banc>(x: &mut Cx<'_, R>, player: Obj, id: u8, worn: u32, hits: Option<u32>, shift: u8) {
+fn replace<R: Bench>(x: &mut Cx<'_, R>, player: Obj, id: u8, worn: u32, hits: Option<u32>, shift: u8) {
     let old = player.u8(x.b, worn);
     if old == id {
         if let Some(h) = hits {
@@ -295,7 +295,7 @@ fn replace<R: Banc>(x: &mut Cx<'_, R>, player: Obj, id: u8, worn: u32, hits: Opt
     player.set_u8(x.b, worn, id);
     if let Some(h) = hits {
         let previous = player.u8(x.b, h);
-        // Original glitch: the previous hit count stays in D2.b (`dispatch::Restes`)
+        // Original glitch: the previous hit count stays in D2.b (`dispatch::Leftovers`)
         *x.c.d2() = *x.c.d2() & !0xff | previous as u32;
         let v = x.u8(f::HITS);
         player.set_u8(x.b, h, v);
@@ -312,9 +312,9 @@ fn replace<R: Banc>(x: &mut Cx<'_, R>, player: Obj, id: u8, worn: u32, hits: Opt
 
 /// Emplacement 4 : interdit à certains personnages (la pièce elle-même est rejetée) ; sinon comme les
 /// autres, et le second équipement en main suit la nouvelle pièce s'il en dépendait.
-fn slot_4<R: Banc>(x: &mut Cx<'_, R>, player: Obj, id: u8) {
+fn slot_4<R: Bench>(x: &mut Cx<'_, R>, player: Obj, id: u8) {
     let character = player.u8(x.b, p::CHARACTER) as u32;
-    // Original glitch: the character stays in D2 (`dispatch::Restes`)
+    // Original glitch: the character stays in D2 (`dispatch::Leftovers`)
     *x.c.d2() = character;
     let forbidden = x.rom8(rom::SLOT_4_FORBIDDEN + character);
     if forbidden != 0 {
@@ -339,16 +339,16 @@ fn slot_4<R: Banc>(x: &mut Cx<'_, R>, player: Obj, id: u8) {
 }
 
 /// `0xdb500` : la pièce était déjà portée : événement de score du joueur, puis son.
-fn already_worn<R: Banc>(x: &mut Cx<'_, R>) {
+fn already_worn<R: Bench>(x: &mut Cx<'_, R>) {
     let player = x.linked(f::OWNER);
     let number = (player.u8(x.b, p::NUMBER) as u32) << 8;
-    crate::evenements::enfiler_points(x.b, (0x11 + number) as u16);
+    crate::events::enqueue_points(x.b, (0x11 + number) as u16);
     let o = x.o;
     super::effects_creators::pickup(x.b, o, 5);
 }
 
 /// `0xdb672` : crée l'ITEM 2 de variante `variant` rejeté par le joueur (A2), avec le compteur de coups D2.
-fn drop_old<R: Banc>(x: &mut Cx<'_, R>, player: Obj, variant: u8) {
+fn drop_old<R: Bench>(x: &mut Cx<'_, R>, player: Obj, variant: u8) {
     let Some(n) = x.alloc(&pools::ITEM) else { return };
     n.set_u8(x.b, f::ACTIVE, 1);
     n.set_u8(x.b, f::KIND, 2);
@@ -357,7 +357,7 @@ fn drop_old<R: Banc>(x: &mut Cx<'_, R>, player: Obj, variant: u8) {
     n.set_u16(x.b, f::OWNER, player.0 as u16);
     let slot = x.u8(f::SLOT);
     n.set_u8(x.b, f::SLOT, slot);
-    // the hit count is D2.b, whatever the caller left there (`dispatch::Restes`)
+    // the hit count is D2.b, whatever the caller left there (`dispatch::Leftovers`)
     let hits = *x.c.d2() as u8;
     n.set_u8(x.b, f::HITS, hits);
     let px = x.u16(f::X);
@@ -370,5 +370,5 @@ fn drop_old<R: Banc>(x: &mut Cx<'_, R>, player: Obj, variant: u8) {
 }
 
 handlers! {
-    0xdb0c2 "item_piece" #[sans] run,
+    0xdb0c2 "item_piece" #[without] run,
 }

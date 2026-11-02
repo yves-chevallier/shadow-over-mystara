@@ -1,11 +1,11 @@
 //! Objets de décor (classe SET, pool de 32 objets de 0x50 octets, table 0x39eac) : types 0, 1 et
-//! 3 à 14. Les objets SET ne figurent pas dans les listes triées (voir `docs/objets.md`).
+//! 3 à 14. Les objets SET ne figurent pas dans les listes triées (voir `docs/objects.md`).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{Cx, Gx};
 use crate::objects::Obj;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::machine::Machine;
 
 /// Type 8 (0xcc25a), partagé par les tables SET (8), SOBJ (4) et EFFCT (18) : générateur du
@@ -19,7 +19,7 @@ use crate::machine::Machine;
 mod scene_spawner {
     use super::*;
 
-    /// Table (espace programme) des routines de libération, indexée par `(classe - 0xe) * 2` octets.
+    /// Table (espace programme) des routines de libération, indexée par `(class - 0xe) * 2` octets.
     const FREE_BY_CLASS: u32 = 0xcc2b8;
     const WAIT: u8 = 0;
     const SPAWN: u8 = 2;
@@ -27,7 +27,7 @@ mod scene_spawner {
     /// Paramètre du créateur : variante du contrôleur à créer.
     const VARIANT_PARAM: u32 = 0x2f;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             WAIT => x.add8(0x4, 2),
             SPAWN => {
@@ -72,13 +72,13 @@ mod util {
     }
 
     /// Joueur présent dans la partie : emplacement occupé et points de vie non nuls.
-    pub fn alive<R: Banc>(x: &mut Cx<'_, R>, p: Obj) -> bool {
+    pub fn alive<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
         p.u8(x.b, P_ACTIVE) != 0 && p.u16(x.b, P_LIFE) != 0
     }
 
     /// Avance chaque composante (rouge, vert, bleu : un quartet chacune) d'une couleur 4+4+4 bits
     /// d'un cran vers son maximum, et force le quartet de luminosité à 0xf.
-    pub fn brighten<R: Banc>(x: &mut Cx<'_, R>, addr: u32, count: u32) {
+    pub fn brighten<R: Bench>(x: &mut Cx<'_, R>, addr: u32, count: u32) {
         for i in 0..count {
             let a = addr + 2 * i;
             let c = rd16(x.b, a);
@@ -97,7 +97,7 @@ mod util {
 mod inert {
     use super::*;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x40) != 0 {
             return;
         }
@@ -127,7 +127,7 @@ mod level_end {
     const P_WEAPON: u32 = 0x8a;
     const P_WEAPON_OBJ: u32 = 0x86;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -138,7 +138,7 @@ mod level_end {
         }
     }
 
-    fn wait_players<R: Banc>(x: &mut Cx<'_, R>) {
+    fn wait_players<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u8(IN_GAME) == 0 || (x.a5_u16(PROGRESS) as i16) <= PROGRESS_LIMIT {
             return;
         }
@@ -181,7 +181,7 @@ mod fade_white {
 
     const PALETTE_BLOCKS: [(u32, u32); 4] = [(0x91c100, 128), (0x91c720, 32), (0x91c800, 32), (0x91cc00, 32)];
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -218,7 +218,7 @@ mod palette_anim {
     const TICK: u32 = 0x29;
     const STEP: u32 = 0x2a;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -272,7 +272,7 @@ mod scene_trigger {
     const CAMERA_LIMIT: u16 = 0x1c80;
     const PLAYER_MODE_DONE: u8 = 2;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -283,7 +283,7 @@ mod scene_trigger {
         }
     }
 
-    fn trigger<R: Banc>(x: &mut Cx<'_, R>) {
+    fn trigger<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u8(IN_GAME) == 0 || x.a5_u16(CAMERA_X) < CAMERA_LIMIT {
             return;
         }
@@ -310,7 +310,7 @@ mod scene_trigger {
 /// adresse du script (`+0x30`), adresse de la carte de tuiles à modifier en mémoire vidéo
 /// (`+0x34`), mot `+0x38` non nul pour boucler. Le script est une suite de blocs : durée (mot,
 /// négatif = fin), nombre de colonnes, nombre de lignes, puis un long par case. Chaque case de la
-/// carte devient `(attribut & 0xff80) + long` : le code de tuile est remplacé, les bits hauts de
+/// carte devient `(attr & 0xff80) + long` : le code de tuile est remplacé, les bits hauts de
 /// l'attribut (palette, retournements) sont conservés. Les lignes sont espacées de 0x40 octets
 /// (0x20 si `+0x2f` est non nul). En fin de script, l'objet repart de l'état 0 si `+0x38` est non
 /// nul, sinon passe à l'état 4 (libération). Le type 4 s'arrête pendant la pause du jeu et quand
@@ -341,18 +341,18 @@ mod tile_anim {
     const TABLE_6: u32 = 0xcb024;
     const GAME_PAUSED: u32 = 0x3d;
 
-    pub fn run4<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run4<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 || x.u8(0x40) != 0 {
             return;
         }
         run(x, TABLE_4, false);
     }
 
-    pub fn run6<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run6<R: Bench>(x: &mut Cx<'_, R>) {
         run(x, TABLE_6, true);
     }
 
-    fn run<R: Banc>(x: &mut Cx<'_, R>, table: u32, skip_transparent: bool) {
+    fn run<R: Bench>(x: &mut Cx<'_, R>, table: u32, skip_transparent: bool) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -371,7 +371,7 @@ mod tile_anim {
     }
 
     /// Un pas : attend la fin de la durée du bloc courant, puis applique le bloc suivant.
-    fn step<R: Banc>(x: &mut Cx<'_, R>, skip_transparent: bool) {
+    fn step<R: Bench>(x: &mut Cx<'_, R>, skip_transparent: bool) {
         let t = x.u16(TIMER).wrapping_sub(1);
         x.set16(TIMER, t);
         if (t as i16) >= 0 {
@@ -485,7 +485,7 @@ mod wave_leader {
     const E_PARENT: u32 = 0x42;
     const E_ANCHOR: u32 = 0x50;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u8(util::IN_GAME) == 0 {
             return;
         }
@@ -509,7 +509,7 @@ mod wave_leader {
         }
     }
 
-    fn substate<R: Banc>(x: &mut Cx<'_, R>) {
+    fn substate<R: Bench>(x: &mut Cx<'_, R>) {
         let boss = x.linked(BOSS);
         match x.u8(0x5) {
             0 => {
@@ -541,8 +541,8 @@ mod wave_leader {
                 } else if x.u8(WAIT) != 0 {
                     { let w = x.u8(WAIT); x.set8(WAIT, w - 1); }
                 } else if spawn_wave(x).is_some() {
-                    let alea = x.random();
-                    let delay = x.rom8(DELAYS + (alea as u32 & 0xf));
+                    let rng = x.random();
+                    let delay = x.rom8(DELAYS + (rng as u32 & 0xf));
                     x.set8(WAIT, delay);
                 }
             }
@@ -596,13 +596,13 @@ mod wave_leader {
     }
 
     /// Le chef compte un ennemi de moins.
-    fn release_one<R: Banc>(x: &mut Cx<'_, R>, boss: Obj) {
+    fn release_one<R: Bench>(x: &mut Cx<'_, R>, boss: Obj) {
         let n = boss.u16(x.b, BOSS_COUNT).wrapping_sub(1);
         boss.set_u16(x.b, BOSS_COUNT, n);
     }
 
     /// Vague finale : le meneur est de variante 2 et le verdict de vague passe à 0xff.
-    fn final_wave<R: Banc>(x: &mut Cx<'_, R>) {
+    fn final_wave<R: Bench>(x: &mut Cx<'_, R>) {
         if let Some(lead) = spawn_wave(x) {
             lead.set_u8(x.b, 3, FINAL_VARIANT);
             x.add8(0x5, 2);
@@ -614,7 +614,7 @@ mod wave_leader {
     /// `+0x50`, placé à droite de la caméra) et deux ailiers (type 0x13) rattachés à lui.
     /// `None` quand le pool ENEMY a moins de trois places libres. (L'original trie ensuite les
     /// trois adresses par une boucle qui ne modifie rien.)
-    fn spawn_wave<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
+    fn spawn_wave<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
         if (x.a5_u16(ENEMY_FREE) as i16) < ENEMIES_PER_WAVE {
             return None;
         }
@@ -654,8 +654,8 @@ mod wave_leader {
         // côté d'arrivée : tiré au sort la première fois, puis alterné
         let mut side = x.u8(SIDE);
         if (side as i8) < 0 {
-            let alea = x.random();
-            side = ((alea as u32 & 1) << 5) as u8;
+            let rng = x.random();
+            side = ((rng as u32 & 1) << 5) as u8;
             x.set8(SIDE, side ^ 0x20);
         }
         lead.set_u8(x.b, E_SIDE, side);
@@ -669,23 +669,23 @@ mod wave_leader {
 }
 
 /// Fondu au noir des portes (SET 7 [`exit_gate`], SET 29 `set_b::door_b`) : le sous-programme 0x1460 cède la main
-/// pendant ses 16 pas. La porte l'appelle comme un sous-programme de tâche (lot E) : la suite, une [`Etape`] qui
+/// pendant ses 16 pas. La porte l'appelle comme un sous-programme de tâche (lot E) : la suite, une [`Step`] qui
 /// porte la porte (A0), est rangée dans les appels en cours de la tâche ; à la fin du fondu, la tâche y reprend,
-/// puis revient dans la boucle de dispatch (son appel en cours, `dispatch::Etape::Aiguillage`).
-pub mod fondu_de_sortie {
+/// puis revient dans la boucle de dispatch (son appel en cours, `dispatch::Step::Dispatch`).
+pub mod exit_fading {
     use super::super::set_b;
-    use super::{Banc, Cx};
+    use super::{Bench, Cx};
     use crate::mem::A5;
     use crate::modes::{Flow, Sequence};
     use crate::objects::Obj;
 
-    /// Paramètres du fondu de luminosité (`taches::fondu`) : pages (bit k : page k) et délai entre deux pas.
+    /// Paramètres du fondu de luminosité (`tasks::fading`) : pages (bit k : page k) et délai entre deux pas.
     pub(super) const PAGES: u32 = 0x48e;
-    const DELAI: u32 = 0x490;
+    const DELAY: u32 = 0x490;
 
     /// Où la tâche reprend après le fondu (adresse de retour de l'appel de 0x1460 dans l'original).
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    pub enum Etape {
+    pub enum Step {
         /// Porte de sortie (SET 7), changement de zone (0xcb896) : `exit_gate::after_fade`.
         Zone(Obj),
         /// Porte de sortie (SET 7), scène suivante (0xcb9c0) : `exit_gate::next_scene`.
@@ -694,46 +694,46 @@ pub mod fondu_de_sortie {
         Passage(Obj),
     }
 
-    impl Etape {
-        pub const fn adresse(self) -> u32 {
+    impl Step {
+        pub const fn address(self) -> u32 {
             match self {
-                Etape::Zone(_) => 0xcb896,
-                Etape::Scene(_) => 0xcb9c0,
-                Etape::Passage(_) => 0xd8f06,
+                Step::Zone(_) => 0xcb896,
+                Step::Scene(_) => 0xcb9c0,
+                Step::Passage(_) => 0xd8f06,
             }
         }
 
         /// La fin du gestionnaire de la porte, puis son retour (`rts`) dans la boucle de dispatch.
-        pub fn pas(self, s: &mut crate::scene::Ctx) -> Flow {
-            let (Etape::Zone(porte) | Etape::Scene(porte) | Etape::Passage(porte)) = self;
-            let mut x = Cx { c: &mut *s.c, b: &mut *s.b, o: porte };
+        pub fn step(self, s: &mut crate::scene::Ctx) -> Flow {
+            let (Step::Zone(door) | Step::Scene(door) | Step::Passage(door)) = self;
+            let mut x = Cx { c: &mut *s.c, b: &mut *s.b, o: door };
             match self {
-                Etape::Zone(_) => super::exit_gate::after_fade(&mut x),
-                Etape::Scene(_) => super::exit_gate::next_scene(&mut x),
-                Etape::Passage(_) => set_b::door_b::after_fade(&mut x),
+                Step::Zone(_) => super::exit_gate::after_fade(&mut x),
+                Step::Scene(_) => super::exit_gate::next_scene(&mut x),
+                Step::Passage(_) => set_b::door_b::after_fade(&mut x),
             }
             Flow::Done
         }
     }
 
-    /// Full fade to black (`jsr 0x1460`, delay 2, four pages), followed by `suite`. The fade yields: the handler must
+    /// Full fade to black (`jsr 0x1460`, delay 2, four pages), followed by `next`. The fade yields: the handler must
     /// return at once (tail call), and the dispatch loop that called it gives up; the task will resume through the
-    /// fade's steps, then `suite`, then the loop (`dispatch::Etape::Aiguillage`).
-    pub fn fondu_au_noir<R: Banc>(x: &mut Cx<'_, R>, suite: fn(Obj) -> Etape) {
-        x.set_a5_u16(DELAI, 2);
+    /// fade's steps, then `next`, then the loop (`dispatch::Step::Dispatch`).
+    pub fn fade_to_black<R: Bench>(x: &mut Cx<'_, R>, next: fn(Obj) -> Step) {
+        x.set_a5_u16(DELAY, 2);
         x.set_a5_u8(PAGES, 0xf);
         // The fade steps still run on a scene context, which holds a processor: a work bench, A0 = the gate (kept by
-        // the fade's steps for the resumption), D2-D5 = the leftovers (`dispatch::Restes`), passed back afterwards
-        // (an empty fade returns at once and runs `suite` on it).
-        let porte = x.o;
-        let mut banc = m68k::Cpu::default();
-        banc.a[0] = porte.0;
-        banc.a[5] = A5;
-        (banc.d[2], banc.d[3], banc.d[4], banc.d[5]) = (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5());
-        banc.d[7] = x.compteur() as u32;
-        let mut s = crate::scene::Ctx::new(&mut banc, &mut *x.b);
-        s.sous_programme(crate::taches::fondu::descente, suite(porte));
-        (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (banc.d[2], banc.d[3], banc.d[4], banc.d[5]);
+        // the fade's steps for the resumption), D2-D5 = the leftovers (`dispatch::Leftovers`), passed back afterwards
+        // (an empty fade returns at once and runs `next` on it).
+        let door = x.o;
+        let mut bench = m68k::Cpu::default();
+        bench.a[0] = door.0;
+        bench.a[5] = A5;
+        (bench.d[2], bench.d[3], bench.d[4], bench.d[5]) = (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5());
+        bench.d[7] = x.counter() as u32;
+        let mut s = crate::scene::Ctx::new(&mut bench, &mut *x.b);
+        s.subroutine(crate::tasks::fading::descent, next(door));
+        (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (bench.d[2], bench.d[3], bench.d[4], bench.d[5]);
     }
 }
 
@@ -759,7 +759,7 @@ pub mod fondu_de_sortie {
 /// | 3 | fin de partie (`A5+0x42`) |
 ///
 /// Le fondu au noir (0x1460) cède la main pendant 16 images : la tâche reprend aux étapes
-/// [`fondu_de_sortie::Etape::Zone`] (0xcb896) et [`fondu_de_sortie::Etape::Scene`] (0xcb9c0).
+/// [`exit_fading::Step::Zone`] (0xcb896) et [`exit_fading::Step::Scene`] (0xcb9c0).
 mod exit_gate {
     use super::super::set_b;
     use super::*;
@@ -825,7 +825,7 @@ mod exit_gate {
     const PLAYER_STATE_GONE: u16 = 0x402;
     const STATE_DONE: u8 = 2;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         refresh_player_count(x);
         if !gate_active(x.b, x.o) {
             return;
@@ -869,7 +869,7 @@ mod exit_gate {
     const KIND_GAME_OVER: u8 = 3;
 
     /// Tous les joueurs sont prêts (0xcb844) : prime, palette, joueurs morts cachés, puis la sortie.
-    fn change_zone<R: Banc>(x: &mut Cx<'_, R>) {
+    fn change_zone<R: Bench>(x: &mut Cx<'_, R>) {
         let bonus = rd8(x.b, BONUS_TOTAL).wrapping_add(x.u8(BONUS));
         wr8(x.b, BONUS_TOTAL, bonus);
         crate::text::clear_box(x.b, CLEARED_TEXT_BOX);
@@ -883,7 +883,7 @@ mod exit_gate {
         match x.u8(EXIT_KIND) {
             KIND_NEXT_SCENE => {
                 x.set_a5_u8(NEXT_SCENE_FLAG, 1);
-                fondu_de_sortie::fondu_au_noir(x, fondu_de_sortie::Etape::Scene)
+                exit_fading::fade_to_black(x, exit_fading::Step::Scene)
             }
             KIND_GAME_OVER => x.set_a5_u8(GAME_OVER, 1),
             _ => {
@@ -891,13 +891,13 @@ mod exit_gate {
                 if MARKING_VARIANTS.contains(&x.u8(0x3)) {
                     x.set_a5_u8(0x4a, 1);
                 }
-                fondu_de_sortie::fondu_au_noir(x, fondu_de_sortie::Etape::Zone)
+                exit_fading::fade_to_black(x, exit_fading::Step::Zone)
             }
         }
     }
 
     /// Après le fondu d'un changement de zone (0xcb896) : retour d'une zone annexe, ou entrée.
-    pub fn after_fade<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn after_fade<R: Bench>(x: &mut Cx<'_, R>) {
         let scene = x.u8(NEXT_SCENE);
         x.set_a5_u8(SCENE, scene);
         if x.u8(EXIT_KIND) == KIND_RETURN {
@@ -909,7 +909,7 @@ mod exit_gate {
     }
 
     /// Après le fondu de fin de scène (0xcb9c0) : la partie repasse en phase 8 sur la scène `+0x4f`.
-    pub fn next_scene<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn next_scene<R: Bench>(x: &mut Cx<'_, R>) {
         for off in PLAYER_WEAPONS {
             x.set_a5_u32(off, 0);
         }
@@ -938,7 +938,7 @@ mod exit_gate {
     const CAMERA_VARIANT_A: [u32; 4] = [0x400_0000, 0x1fe_0000, 0x200_0000, 0x7b_0000];
 
     /// Mémorise l'état de la scène dans la porte et suspend le monde (0xcbcba).
-    fn save_and_suspend<R: crate::families::cx::Banc>(x: &mut Cx<'_, R>) {
+    fn save_and_suspend<R: crate::families::cx::Bench>(x: &mut Cx<'_, R>) {
         set_b::save_camera(x);
         let v = x.a5_u16(0x52c);
         x.set16(0x22, v);
@@ -970,7 +970,7 @@ mod exit_gate {
         set_b::suspend(x, &PSHL_POOL);
     }
 
-    fn free_player_effects<R: Banc>(x: &mut Cx<'_, R>) {
+    fn free_player_effects<R: Bench>(x: &mut Cx<'_, R>) {
         for i in 0..PEFF_POOL.count {
             let o = Obj(PEFF_POOL.base + i * PEFF_POOL.size);
             if o.u8(x.b, 0) != 0 {
@@ -980,12 +980,12 @@ mod exit_gate {
     }
 
     /// Entrée dans la zone annexe (0xcc0ca) : caméras, script de scène, palettes, joueurs replacés.
-    fn enter_annex<R: Banc>(x: &mut Cx<'_, R>) {
+    fn enter_annex<R: Bench>(x: &mut Cx<'_, R>) {
         crate::families::scenery::restart_scene(x);
     }
 
     /// Retour d'une zone annexe (0xcbeba) : joueurs relâchés, la porte se libère, le monde se réveille.
-    fn leave_annex<R: Banc>(x: &mut Cx<'_, R>) {
+    fn leave_annex<R: Bench>(x: &mut Cx<'_, R>) {
         for p in players() {
             if p.u8(x.b, P_ACTIVE) == 0 {
                 continue;
@@ -1013,7 +1013,7 @@ mod exit_gate {
     }
 
     /// État 4 (0xcba48) : retour de la zone annexe, la scène d'avant est rechargée.
-    fn arrive<R: Banc>(x: &mut Cx<'_, R>) {
+    fn arrive<R: Bench>(x: &mut Cx<'_, R>) {
         crate::families::scenery::resume_scenery_lit(x, crate::families::scenery::Cameras::Return);
         x.set_a5_u16(OWNER_GATE, 0);
         crate::text::clear_box(x.b, CLEARED_TEXT_BOX);
@@ -1024,8 +1024,8 @@ mod exit_gate {
         x.set_a5_u8(NEXT_SCENE_FLAG, v);
         let v = x.u8(0x26);
         x.set_a5_u8(0x58, v);
-        let musique = x.u16(0x1c);
-        crate::sound::jouer_avec(x.b, 0xe17a4, crate::sound::Source { d4: Some(musique as u32), ..Default::default() });
+        let music = x.u16(0x1c);
+        crate::sound::play_with(x.b, 0xe17a4, crate::sound::Source { d4: Some(music as u32), ..Default::default() });
         for p in players() {
             if p.u8(x.b, P_ACTIVE) != 0 {
                 place(x, p);
@@ -1042,7 +1042,7 @@ mod exit_gate {
 
     /// Replace un joueur devant la porte (0xcbb3c) ; un joueur hors de l'état 2 est seulement caché
     /// et posé au sol.
-    fn place<R: Banc>(x: &mut Cx<'_, R>, p: Obj) {
+    fn place<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
         if p.u8(x.b, P_STATE) != 2 {
             let flags = p.u8(x.b, P_FLAGS) | P_HIDDEN;
             p.set_u8(x.b, P_FLAGS, flags);
@@ -1061,7 +1061,7 @@ mod exit_gate {
         p.set_u16(x.b, P_X, gx.wrapping_add(dx));
         p.set_u16(x.b, P_Y, gy.wrapping_add(dy));
         p.set_u16(x.b, P_Z, 0);
-        // Original glitch: the Y offset stays in D2.w (`dispatch::Restes`)
+        // Original glitch: the Y offset stays in D2.w (`dispatch::Leftovers`)
         crate::mem::set_low_word(x.c.d2(), dy);
     }
 
@@ -1125,7 +1125,7 @@ mod exit_gate {
     // --- l'automate ---------------------------------------------------------------------------------
 
     /// Toutes les 32 images : nombre de joueurs vivants dans `A5+0x35`.
-    fn refresh_player_count<R: Banc>(x: &mut Cx<'_, R>) {
+    fn refresh_player_count<R: Bench>(x: &mut Cx<'_, R>) {
         let t = x.u16(PLAYER_COUNT_TIMER).wrapping_sub(1);
         x.set16(PLAYER_COUNT_TIMER, t);
         if (t as i16) >= 0 {
@@ -1136,7 +1136,7 @@ mod exit_gate {
         x.set_a5_u8(IN_GAME, n as u8);
     }
 
-    fn init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         for off in [NEAR_COUNTERS, NEAR_COUNTERS + 1, NEAR_COUNTERS + 2, NEAR_COUNTERS + 3, ARRIVED, TRIGGERED] {
             x.set8(off, 0);
@@ -1155,7 +1155,7 @@ mod exit_gate {
 
     /// État 2 : un joueur reste dans l'emprise assez longtemps (déclenchement), ou arrive à l'état
     /// « prêt » (compté une fois) ; quand tous sont prêts, la zone change.
-    fn watch<R: Banc>(x: &mut Cx<'_, R>) {
+    fn watch<R: Bench>(x: &mut Cx<'_, R>) {
         for (i, p) in players().enumerate() {
             let bit = 1u8 << i;
             let counter = NEAR_COUNTERS + i as u32;
@@ -1186,7 +1186,7 @@ mod exit_gate {
 
     /// Le joueur `p` déclenche la sortie : il passe dans l'état imposé par la zone ; la porte
     /// devient propriétaire de la transition (`A5+0x52`).
-    fn trigger<R: Banc>(x: &mut Cx<'_, R>, p: Obj, bit: u8) {
+    fn trigger<R: Bench>(x: &mut Cx<'_, R>, p: Obj, bit: u8) {
         if p.u8(x.b, P_ACTIVE) == 0 || p.u16(x.b, P_LIFE) == 0 {
             return;
         }
@@ -1332,7 +1332,7 @@ mod palette_script {
     /// Copie les lignes d'un bloc (nombre, puis un indice par ligne) vers la palette de destination
     /// et mémorise la suite du script.
     /// Glitch d'origine : le dernier long copié (avec la luminosité) reste dans D4, que le radeau sans pilote
-    /// (0xad7b0) ajoute à la position des joueurs : c'est un reste de la boucle d'aiguillage (`Restes::d4`).
+    /// (0xad7b0) ajoute à la position des joueurs : c'est un reste de la boucle d'aiguillage (`Leftovers::d4`).
     fn copy_lines(x: &mut Gx, mut script: u32, source: u32, mut dest: u32) {
         let count = rd16(x.b, script).wrapping_sub(1);
         script += 2;
@@ -1348,7 +1348,7 @@ mod palette_script {
             dest += LINE_BYTES;
         }
         x.set32(SCRIPT, script);
-        x.restes().d4 = last;
+        x.leftovers().d4 = last;
     }
 
     fn finish(x: &mut Gx) {
@@ -1396,7 +1396,7 @@ mod dialogue {
     const FRAME_WIDTH: u32 = 0x14;
     const FRAME_FREE_STATE: u32 = 0x6000000;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if crate::mem::rd8(x.b, STOP) == 0 {
             if x.u8(0x4) == 0 {
                 return create(x);
@@ -1416,7 +1416,7 @@ mod dialogue {
         x.free(&pools::SET);
     }
 
-    fn create<R: Banc>(x: &mut Cx<'_, R>) {
+    fn create<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(TIMER, LIFETIME);
         let variant = (x.u8(0x3) << 2) as u32;
@@ -1425,8 +1425,8 @@ mod dialogue {
         let text = x.data32(table + variant);
         let width = x.data16(text);
         x.set16(FRAME, 0);
-        let variante = x.u8(0x2f);
-        if let Ok(frame) = crate::families::creators::sobj_12_pur(x.b, variante) {
+        let variant = x.u8(0x2f);
+        if let Ok(frame) = crate::families::creators::sobj_12_pure(x.b, variant) {
             frame.set_u16(x.b, FRAME_WIDTH, width);
             x.set16(FRAME, frame.0 as u16);
         }
@@ -1545,7 +1545,7 @@ mod name_entry {
     const GRID_COLS: u16 = 11;
     const GRID_ROWS: u16 = 6;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) != 0 {
             return cursor::run(x);
         }
@@ -1562,22 +1562,22 @@ mod name_entry {
     // --- aides communes -------------------------------------------------------------------------
 
     /// Octet haut de l'enregistrement d'un autre objet désigné par un mot.
-    fn at<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> Obj {
+    fn at<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> Obj {
         x.linked(off)
     }
 
-    fn wide<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn wide<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         x.u8(WIDE) != 0
     }
 
     /// 0xca85c : touches maintenues et touches pressées de l'image pour le joueur `player`.
-    fn inputs<R: Banc>(x: &mut Cx<'_, R>, player: u32) -> (u8, u8) {
+    fn inputs<R: Bench>(x: &mut Cx<'_, R>, player: u32) -> (u8, u8) {
         (x.a5_u8(INPUT_HELD + player), x.a5_u8(INPUT_PRESSED + player))
     }
 
     /// 0xca8a0 : adresse dans la carte de tuiles et taille (colonnes, lignes - 1) de la case (`col`,
     /// `row`). Rend (adresse, D0 = taille).
-    fn cell_region<R: Banc>(x: &mut Cx<'_, R>, col: u16, row: u16) -> (u32, u16) {
+    fn cell_region<R: Bench>(x: &mut Cx<'_, R>, col: u16, row: u16) -> (u32, u16) {
         let (row_offsets, cells) = if wide(x) { (WIDE_ROW_OFFSETS, WIDE_CELLS) } else { (NARROW_ROW_OFFSETS, NARROW_CELLS) };
         let row_off = x.rom16(row_offsets.wrapping_add((row.wrapping_mul(2)) as i16 as i32 as u32));
         let index = col.wrapping_mul(4).wrapping_add(row_off);
@@ -1588,7 +1588,7 @@ mod name_entry {
 
     /// 0xca86e : remplit la région `size` (octet haut : lignes - 1, octet bas : colonnes - 1) avec la
     /// tuile `tile`, un mot toutes les 4 octets.
-    fn fill_tiles<R: Banc>(x: &mut Cx<'_, R>, mut a1: u32, size: u16, tile: u16) {
+    fn fill_tiles<R: Bench>(x: &mut Cx<'_, R>, mut a1: u32, size: u16, tile: u16) {
         let cols = size & 0xff;
         for _ in 0..=(size >> 8) as u32 {
             let mut advance = 0;
@@ -1603,7 +1603,7 @@ mod name_entry {
 
     /// 0xca81a : redessine la case (`col`, `row`) : tuile 0x1c, ou une teinte de la table quand elle
     /// est dans la colonne spéciale.
-    fn redraw_cell<R: Banc>(x: &mut Cx<'_, R>, col: u16, row: u16) {
+    fn redraw_cell<R: Bench>(x: &mut Cx<'_, R>, col: u16, row: u16) {
         let (a1, size) = cell_region(x, col, row);
         let mut tile: u16 = 0x1c;
         if !wide(x) {
@@ -1623,7 +1623,7 @@ mod name_entry {
 
         /// 0xc979e : état 0. Remet les enregistrements à zéro et charge quatre palettes (avec la
         /// luminosité de la première couleur de la page).
-        pub fn init<R: Banc>(x: &mut Cx<'_, R>) {
+        pub fn init<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(0x4, 2);
             for off in [0x30, 0x34, 0x38, 0x3c] {
                 x.set32(off, 0);
@@ -1642,7 +1642,7 @@ mod name_entry {
         }
 
         /// États 4 et 6 : libère les curseurs puis le tableau.
-        pub fn release<R: Banc>(x: &mut Cx<'_, R>) {
+        pub fn release<R: Bench>(x: &mut Cx<'_, R>) {
             for i in 0..4 {
                 let slave = at(x, SLAVES + 2 * i);
                 slave.set_u32(x.b, 4, FREE_ON_NEXT);
@@ -1651,7 +1651,7 @@ mod name_entry {
         }
 
         /// 0xc9810 : une image. Compte les curseurs, repère les cases partagées, anime et dessine.
-        pub fn update<R: Banc>(x: &mut Cx<'_, R>) {
+        pub fn update<R: Bench>(x: &mut Cx<'_, R>) {
             count_cursors(x);
             count_finished(x);
             // enregistrements de l'image précédente (cases partagées à ignorer selon le nombre)
@@ -1689,7 +1689,7 @@ mod name_entry {
 
         /// Cases où au moins deux curseurs se superposent : enregistre (colonne, ligne, masque des
         /// joueurs) pour les deux premières, balayage ligne par ligne. Rend leur nombre.
-        fn find_shared_cells<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
+        fn find_shared_cells<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
             let mut found = 0u8;
             let (mut col, mut row) = (0u16, 0u16);
             loop {
@@ -1731,7 +1731,7 @@ mod name_entry {
 
         /// 0xc9912 et suivants : pour chaque case partagée, tient à jour le joueur « en vedette »
         /// (`REC_DIR`) et son temps d'affichage (`REC_TIMER`) en tenant compte de l'image précédente.
-        fn animate_records<R: Banc>(x: &mut Cx<'_, R>) {
+        fn animate_records<R: Bench>(x: &mut Cx<'_, R>) {
             for k in 0..2u32 {
                 let rec = x.o.0 + RECORDS + 8 * k;
                 if rd8(x.b, rec + REC_MASK) == 0 {
@@ -1786,7 +1786,7 @@ mod name_entry {
         }
 
         /// 0xc998a : joueur suivant dans le masque, tour à tour (temps d'affichage 12 images).
-        fn next_player<R: Banc>(x: &mut Cx<'_, R>, rec: u32, mask: u8) {
+        fn next_player<R: Bench>(x: &mut Cx<'_, R>, rec: u32, mask: u8) {
             let mut d = rd8(x.b, rec + REC_DIR);
             loop {
                 d = d.wrapping_add(1) & 3;
@@ -1799,7 +1799,7 @@ mod name_entry {
         }
 
         /// 0xca7ea : la case partagée est-elle dans la colonne spéciale ? (tuile de base 0 sinon 0x18).
-        fn shared_in_special<R: Banc>(x: &mut Cx<'_, R>, col: u16, row: u16) -> bool {
+        fn shared_in_special<R: Bench>(x: &mut Cx<'_, R>, col: u16, row: u16) -> bool {
             if !wide(x) {
                 col == 0xa
             } else {
@@ -1808,7 +1808,7 @@ mod name_entry {
         }
 
         /// 0xca6b0 : nombre de curseurs actifs (`+0x17`) et de ceux qui ont tapé une lettre (`+0x14`).
-        fn count_cursors<R: Banc>(x: &mut Cx<'_, R>) {
+        fn count_cursors<R: Bench>(x: &mut Cx<'_, R>) {
             let (mut active, mut typed) = (0u8, 0u8);
             for i in 0..4 {
                 let slave = at(x, SLAVES + 2 * i);
@@ -1825,13 +1825,13 @@ mod name_entry {
         }
 
         /// 0xca6ea : nombre de curseurs qui ont terminé leur saisie (`+0x16`).
-        fn count_finished<R: Banc>(x: &mut Cx<'_, R>) {
+        fn count_finished<R: Bench>(x: &mut Cx<'_, R>) {
             let n = (0..4).filter(|&i| at(x, SLAVES + 2 * i).u8(x.b, DONE) != 0).count();
             x.set8(COUNT_DONE, n as u8);
         }
 
         /// 0xca78c : dessine les curseurs (leur case, teinte spéciale dans la colonne de commandes).
-        fn draw_cursors<R: Banc>(x: &mut Cx<'_, R>) {
+        fn draw_cursors<R: Bench>(x: &mut Cx<'_, R>) {
             for i in 0..4 {
                 let slave = at(x, SLAVES + 2 * i);
                 if slave.u8(x.b, ACTIVE) == 0 {
@@ -1857,7 +1857,7 @@ mod name_entry {
     mod cursor {
         use super::*;
 
-        pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+        pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             match x.u8(0x4) {
                 0 => init(x),
                 2 => step(x),
@@ -1866,13 +1866,13 @@ mod name_entry {
             }
         }
 
-        fn owner<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
+        fn owner<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
             at(x, OWNER)
         }
 
         /// 0xc9a74 : état 0. Un joueur qui a déjà un nom (tampon non vide) est marqué terminé ; sinon
         /// le curseur se place sur la case de départ de son joueur.
-        fn init<R: Banc>(x: &mut Cx<'_, R>) {
+        fn init<R: Bench>(x: &mut Cx<'_, R>) {
             let player = owner(x);
             x.set8(ACTIVE, 0);
             x.set8(DONE, 0);
@@ -1901,7 +1901,7 @@ mod name_entry {
         }
 
         /// 0xc9b9e : état 2, une image de saisie.
-        fn step<R: Banc>(x: &mut Cx<'_, R>) {
+        fn step<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(TYPED, 0);
             let (c, r) = (x.u16(COL), x.u16(ROW));
             x.set16(PREV_X, c);
@@ -1919,7 +1919,7 @@ mod name_entry {
         }
 
         /// Un déplacement : la grille répète la direction toutes les 6 images, 30 la première fois.
-        fn handle_input<R: Banc>(x: &mut Cx<'_, R>) {
+        fn handle_input<R: Bench>(x: &mut Cx<'_, R>) {
             let player = x.u8(PLAYER) as u32;
             let (held, pressed) = inputs(x, player);
             let mut repeat = 0x1e;
@@ -1955,7 +1955,7 @@ mod name_entry {
         }
 
         /// 0xc9ef8 : déplace le curseur d'une case dans la direction `dir`.
-        fn step_cursor<R: Banc>(x: &mut Cx<'_, R>, dir: u32, repeat: u8) {
+        fn step_cursor<R: Bench>(x: &mut Cx<'_, R>, dir: u32, repeat: u8) {
             x.set8(REPEAT, repeat);
             let (col, row) = (x.u16(COL), x.u16(ROW));
             let slot = (dir * 2 + if wide(x) { 8 } else { 0 }) as u16;
@@ -1963,7 +1963,7 @@ mod name_entry {
         }
 
         /// Routines de déplacement (table 0xc9f26) : `slot` = direction × 2 (+ 8 en grille large).
-        fn move_cursor<R: Banc>(x: &mut Cx<'_, R>, slot: u16, col: u16, row: u16) {
+        fn move_cursor<R: Bench>(x: &mut Cx<'_, R>, slot: u16, col: u16, row: u16) {
             let width = |x: &mut Cx<'_, R>, table: u32, row: u16| x.data16(table.wrapping_add(row.wrapping_mul(2) as i16 as i32 as u32));
             match slot {
                 // vers la droite, grille étroite
@@ -2057,7 +2057,7 @@ mod name_entry {
         }
 
         /// Ramène la colonne dans la largeur de la ligne courante (grille large).
-        fn clamp_wide<R: Banc>(x: &mut Cx<'_, R>) {
+        fn clamp_wide<R: Bench>(x: &mut Cx<'_, R>) {
             let r = x.u16(ROW);
             let w = x.data16(ROW_WIDTH_WIDE.wrapping_add(r.wrapping_mul(2) as i16 as i32 as u32));
             if w < x.u16(COL) {
@@ -2066,7 +2066,7 @@ mod name_entry {
         }
 
         /// 0xc9c1a : bouton 1 — choisit la case courante : commande (colonne spéciale) ou caractère.
-        fn confirm_button<R: Banc>(x: &mut Cx<'_, R>) {
+        fn confirm_button<R: Bench>(x: &mut Cx<'_, R>) {
             let special = if !wide(x) {
                 x.u16(COL) == 0xa
             } else {
@@ -2082,7 +2082,7 @@ mod name_entry {
         }
 
         /// 0xcaaae : caractère de la case courante.
-        fn char_under_cursor<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
+        fn char_under_cursor<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
             let index = x.u16(COL).wrapping_add(x.u16(ROW) << 4);
             let table = if wide(x) { GRID_WIDE } else { GRID_NARROW };
             x.rom8(table.wrapping_add(index as i16 as i32 as u32))
@@ -2090,7 +2090,7 @@ mod name_entry {
 
         /// 0xc9cd8 : commande de la colonne spéciale selon la ligne : 1 valider (0x81), 2 nom par
         /// défaut, 3 effacer, 4 terminer.
-        fn special_command<R: Banc>(x: &mut Cx<'_, R>) {
+        fn special_command<R: Bench>(x: &mut Cx<'_, R>) {
             let n = if !wide(x) { x.u16(ROW) } else { x.u16(COL).wrapping_sub(2) };
             match n {
                 1 => {
@@ -2106,7 +2106,7 @@ mod name_entry {
         }
 
         /// 0xcab86 : ajoute le caractère `ch` ; 0x9f et 0x9d transforment la lettre précédente.
-        fn enter_char<R: Banc>(x: &mut Cx<'_, R>, mut ch: u8, buffer: u32, len: u8) {
+        fn enter_char<R: Bench>(x: &mut Cx<'_, R>, mut ch: u8, buffer: u32, len: u8) {
             if x.u8(NO_NAME) != 0 {
                 return;
             }
@@ -2134,7 +2134,7 @@ mod name_entry {
         }
 
         /// 0xc9c90 : écrit le caractère dans le tampon ; nom plein → curseur sur « valider ».
-        fn store_char<R: Banc>(x: &mut Cx<'_, R>, ch: u8, buffer: u32) {
+        fn store_char<R: Bench>(x: &mut Cx<'_, R>, ch: u8, buffer: u32) {
             let len = x.u8(LENGTH) as u32;
             wr8(x.b, buffer + len, ch);
             x.set8(TYPED, 1);
@@ -2151,7 +2151,7 @@ mod name_entry {
         }
 
         /// 0xc9e6a : efface le dernier caractère (ou tout le tampon après un nom par défaut).
-        fn erase_button<R: Banc>(x: &mut Cx<'_, R>) {
+        fn erase_button<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(LENGTH) == 0 {
                 return;
             }
@@ -2171,7 +2171,7 @@ mod name_entry {
         }
 
         /// 0xc9d16 : charge le nom par défaut du joueur dans le tampon.
-        fn load_default_name<R: Banc>(x: &mut Cx<'_, R>) {
+        fn load_default_name<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(NO_NAME, 0);
             let player = owner(x);
             let mut offset = (player.u8(x.b, 3) as u16) << 3;
@@ -2206,7 +2206,7 @@ mod name_entry {
 
         /// 0xc9eb0 : termine la saisie (nom vide → nom par défaut), contrôle les codes secrets, calcule
         /// le chiffre de contrôle et écrit le résultat dans le joueur.
-        fn finish<R: Banc>(x: &mut Cx<'_, R>) {
+        fn finish<R: Bench>(x: &mut Cx<'_, R>) {
             let n;
             if x.u8(LENGTH) == 0 {
                 load_default_name(x);
@@ -2226,7 +2226,7 @@ mod name_entry {
 
         /// 0xca33c : un tampon de lettres identiques ou entièrement « valider » redevient le nom par
         /// défaut.
-        fn check_repeated_name<R: Banc>(x: &mut Cx<'_, R>) {
+        fn check_repeated_name<R: Bench>(x: &mut Cx<'_, R>) {
             let player = owner(x);
             let b = |x: &mut Cx<'_, R>, i: u32| player.u8(x.b, BUFFER + i);
             let first = b(x, 0);
@@ -2254,7 +2254,7 @@ mod name_entry {
 
         /// 0xca374 : recherche une suite de la table des codes de remise à zéro dans le tampon.
         /// `n` : indicateur N laissé par 0xca524 (le balayage n'a lieu que s'il est levé).
-        fn scan_reset_codes<R: Banc>(x: &mut Cx<'_, R>, n: bool) {
+        fn scan_reset_codes<R: Bench>(x: &mut Cx<'_, R>, n: bool) {
             if !n {
                 return;
             }
@@ -2268,25 +2268,25 @@ mod name_entry {
         /// puis `trailer` octets d'action), comme les routines 0xca384 et 0xca54c : la première lettre
         /// est cherchée plus loin dans le tampon ; un désaccord relit la lettre fautive comme début de
         /// suite sans rembobiner le compteur. Rend l'adresse qui suit les caractères de la suite trouvée.
-        fn find_code<R: Banc>(x: &mut Cx<'_, R>, buffer: u32, table: u32, trailer: u32) -> Option<u32> {
-            enum Step {
+        fn find_code<R: Bench>(x: &mut Cx<'_, R>, buffer: u32, table: u32, trailer: u32) -> Option<u32> {
+            enum Phase {
                 Start,
                 ReadLength,
                 Search,
                 Continue,
                 NextPattern,
             }
-            let (mut step, mut a4, mut a3, mut a1) = (Step::Start, table, table, buffer);
+            let (mut step, mut a4, mut a3, mut a1) = (Phase::Start, table, table, buffer);
             let (mut left, mut remaining, mut first) = (0u16, 5i32, 0u8);
             loop {
                 match step {
-                    Step::Start => {
+                    Phase::Start => {
                         a1 = buffer;
                         remaining = 5;
                         a3 = a4;
-                        step = Step::ReadLength;
+                        step = Phase::ReadLength;
                     }
-                    Step::ReadLength => {
+                    Phase::ReadLength => {
                         let length = x.data8(a4);
                         a4 += 1;
                         if (length as i8) < 0 {
@@ -2295,28 +2295,28 @@ mod name_entry {
                         left = length as u16;
                         first = x.data8(a4);
                         a4 += 1;
-                        step = Step::Search;
+                        step = Phase::Search;
                     }
-                    Step::Search => {
+                    Phase::Search => {
                         let c = rd8(x.b, a1);
                         a1 += 1;
                         if c == first {
-                            step = Step::Continue;
+                            step = Phase::Continue;
                         } else {
                             remaining -= 1;
                             if remaining < 0 {
-                                step = Step::NextPattern;
+                                step = Phase::NextPattern;
                             }
                         }
                     }
-                    Step::Continue => {
+                    Phase::Continue => {
                         left = left.wrapping_sub(1);
                         if left == 0 {
                             return Some(a4);
                         }
                         remaining -= 1;
                         if remaining < 0 {
-                            step = Step::NextPattern;
+                            step = Phase::NextPattern;
                             continue;
                         }
                         let want = x.data8(a4);
@@ -2326,14 +2326,14 @@ mod name_entry {
                         if want != c {
                             a1 -= 1;
                             a4 = a3;
-                            step = Step::ReadLength;
+                            step = Phase::ReadLength;
                         }
                     }
-                    Step::NextPattern => {
+                    Phase::NextPattern => {
                         a4 = a3;
                         let length = x.data8(a4) as u32;
                         a4 += 1 + length + trailer;
-                        step = Step::Start;
+                        step = Phase::Start;
                     }
                 }
             }
@@ -2341,7 +2341,7 @@ mod name_entry {
 
         /// 0xca524 : si le joueur maintient les trois boutons (0x70) plus d'une seconde, cherche un
         /// code spécial et remplace le tampon. Rend l'indicateur N laissé par la routine.
-        fn special_codes<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+        fn special_codes<R: Bench>(x: &mut Cx<'_, R>) -> bool {
             let player = x.u8(PLAYER) as u32;
             let (_, pressed) = inputs(x, player);
             let n_of = |a: u8, b: u8| (a.wrapping_sub(b) as i8) < 0;
@@ -2367,7 +2367,7 @@ mod name_entry {
         }
 
         /// 0xca5fe : chiffre de contrôle du nom en BCD (`+0x2a..+0x2d`, résultat dans `+0x2b`).
-        fn check_digit<R: Banc>(x: &mut Cx<'_, R>) {
+        fn check_digit<R: Bench>(x: &mut Cx<'_, R>) {
             let buffer = owner(x).0 + BUFFER;
             let first = rd8(x.b, buffer) as i8 as i16;
             let d0 = (-first).wrapping_sub(2) as u16;
@@ -2404,14 +2404,14 @@ mod name_entry {
         }
 
         /// Ajoute la valeur BCD (`+0x2c:+0x2d`) à (`+0x2a:+0x2b`) avec retenue (deux ABCD).
-        fn add_bcd<R: Banc>(x: &mut Cx<'_, R>) {
+        fn add_bcd<R: Bench>(x: &mut Cx<'_, R>) {
             let (low, carry) = abcd(x.u8(0x2d), x.u8(0x2b), false);
             x.set8(0x2b, low);
             let (high, _) = abcd(x.u8(0x2c), x.u8(0x2a), carry);
             x.set8(0x2a, high);
         }
 
-        /// ABCD : `dst + src + retenue` en BCD ; rend (résultat, retenue).
+        /// ABCD : `dst + src + carry` en BCD ; rend (résultat, retenue).
         fn abcd(src: u8, dst: u8, carry: bool) -> (u8, bool) {
             let mut r = (src & 0xf) as u16 + (dst & 0xf) as u16 + carry as u16;
             if r > 9 {
@@ -2427,7 +2427,7 @@ mod name_entry {
 
         /// 0xca0f4 : écrit le résultat : indicateur de fin à l'écran, enregistrement du joueur
         /// (nom validé, chiffre de contrôle), le curseur passe à l'état 4.
-        fn commit_name<R: Banc>(x: &mut Cx<'_, R>) {
+        fn commit_name<R: Bench>(x: &mut Cx<'_, R>) {
             let player = owner(x);
             let kind = player.u8(x.b, 2) as u16;
             let mut index = kind.wrapping_mul(2);
@@ -2466,7 +2466,7 @@ mod name_entry {
 
         /// 0xca2f8 : état 6. Si le joueur est encore là et la saisie pas terminée, la termine d'office ;
         /// puis libération.
-        fn finish_and_free<R: Banc>(x: &mut Cx<'_, R>) {
+        fn finish_and_free<R: Bench>(x: &mut Cx<'_, R>) {
             let player = owner(x);
             if player.u8(x.b, 0) != 0 && (player.u8(x.b, 4) as i8) < 4 && x.u8(DONE) == 0 {
                 x.set8(DONE, 1);
@@ -2479,23 +2479,23 @@ mod name_entry {
 
 /// Déclare une native de gestionnaire : adresse, nom, fonction.
 macro_rules! entry {
-    ($entry:literal $name:literal, $(#[$sans:ident])? $f:path) => {
-        super::cx::handlers!(@une $entry $name $(#[$sans])? $f)
+    ($entry:literal $name:literal, $(#[$without:ident])? $f:path) => {
+        super::cx::handlers!(@one $entry $name $(#[$without])? $f)
     };
 }
 
 pub const NATIVES: &[crate::Native] = &[
-    entry!(0xcc25a "set_commun_cc25a", #[sans] scene_spawner::run),
-    entry!(0xba310 "set_0", #[sans] palette_script::run),
-    entry!(0xbc518 "set_1", #[sans] wave_leader::run),
-    entry!(0xc935a "set_4", #[sans] tile_anim::run4),
-    entry!(0xc9780 "set_5", #[sans] name_entry::run),
-    entry!(0xcafec "set_6", #[sans] tile_anim::run6),
-    entry!(0xcb29c "set_7", #[sans] exit_gate::run),
-    entry!(0xcc2c8 "set_9", #[sans] inert::run),
-    entry!(0xcc3c2 "set_10", #[sans] dialogue::run),
-    entry!(0xcdcaa "set_11", #[sans] level_end::run),
-    entry!(0xcdd70 "set_12", #[sans] fade_white::run),
-    entry!(0xcdef6 "set_13", #[sans] palette_anim::run),
-    entry!(0xcdf86 "set_14", #[sans] scene_trigger::run),
+    entry!(0xcc25a "set_commun_cc25a", #[without] scene_spawner::run),
+    entry!(0xba310 "set_0", #[without] palette_script::run),
+    entry!(0xbc518 "set_1", #[without] wave_leader::run),
+    entry!(0xc935a "set_4", #[without] tile_anim::run4),
+    entry!(0xc9780 "set_5", #[without] name_entry::run),
+    entry!(0xcafec "set_6", #[without] tile_anim::run6),
+    entry!(0xcb29c "set_7", #[without] exit_gate::run),
+    entry!(0xcc2c8 "set_9", #[without] inert::run),
+    entry!(0xcc3c2 "set_10", #[without] dialogue::run),
+    entry!(0xcdcaa "set_11", #[without] level_end::run),
+    entry!(0xcdd70 "set_12", #[without] fade_white::run),
+    entry!(0xcdef6 "set_13", #[without] palette_anim::run),
+    entry!(0xcdf86 "set_14", #[without] scene_trigger::run),
 ];

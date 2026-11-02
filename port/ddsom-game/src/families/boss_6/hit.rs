@@ -8,11 +8,11 @@
 //! | 6, 8 | mort : chute, atterrissage, clignotement, libération |
 //! | 10 | reprise |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::decide;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 const REACTIONS: u32 = 0x8527a;
@@ -21,7 +21,7 @@ const STUN_REACTION: u32 = 0x85326;
 /// Seuils de PV par phase (mots).
 const THRESHOLDS: u32 = 0x10de2;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else {
@@ -39,7 +39,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x859d8 : plus de PV ? Passe alors au groupe 6 (mort).
-fn out_of_hp<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn out_of_hp<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if tst16(x, f::HP).gt() {
         return false;
     }
@@ -48,7 +48,7 @@ fn out_of_hp<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::drop_once(x);
         lib::set_68(x);
@@ -64,7 +64,7 @@ fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x85326 : étourdissement : le boss tremble sur place puis repart.
-fn stun<R: Banc>(x: &mut Cx<'_, R>) {
+fn stun<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -100,7 +100,7 @@ fn stun<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -135,7 +135,7 @@ fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
+fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -168,7 +168,7 @@ fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x85490 : le boss est debout ; il continue au corps à corps ou marche.
-pub(crate) fn recovered_tail<R: Banc>(x: &mut Cx<'_, R>) {
+pub(crate) fn recovered_tail<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
     if !pick_target(x) {
@@ -182,7 +182,7 @@ pub(crate) fn recovered_tail<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn down<R: Banc>(x: &mut Cx<'_, R>) {
+fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

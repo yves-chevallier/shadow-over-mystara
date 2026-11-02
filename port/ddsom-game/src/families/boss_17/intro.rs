@@ -8,14 +8,14 @@
 //! | 6 | variante 1 : arrivée par le bas, charge puis atterrissage |
 //! | 8 | variante 2 : comme 6, avec la caméra 2 |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use crate::objects::Obj;
 use super::decide;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => arrival(x),
         2 => entrance(x),
@@ -26,13 +26,13 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn state7<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn state7<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     x.u8(0x7) as u32 / 2
 }
 
 /// Un effet (EFFCT) lié au boss (`+0x42`) : octet actif, type, variante facultative, orientation du boss.
 /// `retry` : insiste tant que le pool est plein.
-fn effect<R: Banc>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8>, flip: bool) -> Option<Obj> {
+fn effect<R: Bench>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8>, flip: bool) -> Option<Obj> {
     let e = if retry { alloc_retry(x, &pools::EFFCT)? } else { x.alloc(&pools::EFFCT)? };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, kind);
@@ -48,7 +48,7 @@ fn effect<R: Banc>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8>
 }
 
 /// Ouvre une bulle de dialogue de type `kind` (0xc8312) ; son adresse va en `+0x42`.
-fn open_message<R: Banc>(x: &mut Cx<'_, R>, kind: u32) {
+fn open_message<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
     for _ in 0..64 {
         if let Some(bulle) = crate::families::creators::scene_set(x.b, kind as u8) {
             x.set16(0x42, bulle.word());
@@ -58,19 +58,19 @@ fn open_message<R: Banc>(x: &mut Cx<'_, R>, kind: u32) {
 }
 
 /// Le dialogue en cours (`+0x42`) est-il terminé (octet `+0x22` non nul) ?
-fn message_done<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn message_done<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let m = x.linked(0x42);
     m.u8(x.b, 0x22) != 0
 }
 
 /// Son `addr` (`jsr`).
-fn fx<R: Banc>(x: &mut Cx<'_, R>, addr: u32) {
+fn fx<R: Bench>(x: &mut Cx<'_, R>, addr: u32) {
     lib::sound(x, addr);
 }
 
 // --- +6 = 0 : arrivée -----------------------------------------------------------------------------
 
-fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
+fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -171,7 +171,7 @@ fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 : entrée par la droite ---------------------------------------------------------------
 
-fn entrance<R: Banc>(x: &mut Cx<'_, R>) {
+fn entrance<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -223,7 +223,7 @@ fn entrance<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : mort, cinématique de fin -------------------------------------------------------------
 
-fn finale<R: Banc>(x: &mut Cx<'_, R>) {
+fn finale<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -419,7 +419,7 @@ fn finale<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +7 = 32 (0x959cc) : la caméra monte de 4 par image jusqu'à 0x1c8, puis le boss lâche un nuage de 4 effets autour d'un effet central.
-fn camera_rise<R: Banc>(x: &mut Cx<'_, R>) {
+fn camera_rise<R: Bench>(x: &mut Cx<'_, R>) {
     if tst16(x, TIMER).gt() && sub16(x, TIMER, 1).gt() {
         return;
     }
@@ -453,7 +453,7 @@ fn camera_rise<R: Banc>(x: &mut Cx<'_, R>) {
 /// Ordonnée de la caméra principale lue en long (16.16).
 const SCROLL_Y_LONG: crate::ram::Long = crate::ram::Long(var::SCROLL_Y.0);
 
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     let first = x.u8(0x7) == 36;
     let rate = if first { 0x12000 } else { 0x11000 };
     let y = SCROLL_Y_LONG.get(x.b).wrapping_sub(rate);
@@ -469,7 +469,7 @@ fn fall<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +7 = 40 (0x95aea) : retombe vers le sol.
-fn land<R: Banc>(x: &mut Cx<'_, R>) {
+fn land<R: Bench>(x: &mut Cx<'_, R>) {
     let y = SCROLL_Y_LONG.get(x.b).wrapping_sub(0x10000);
     SCROLL_Y_LONG.set(x.b, y);
     x.move_xyz();
@@ -485,7 +485,7 @@ fn land<R: Banc>(x: &mut Cx<'_, R>) {
 // --- +6 = 6 et 8 : variantes 1 et 2 ----------------------------------------------------------------
 
 /// `second` : variante 2 (caméra 2 ; sa sortie de premier plan teste la hauteur seule).
-fn variant<R: Banc>(x: &mut Cx<'_, R>, second: bool) {
+fn variant<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     match state7(x) {
         0 => variant_start(x, second),
         1 => {
@@ -565,7 +565,7 @@ fn variant<R: Banc>(x: &mut Cx<'_, R>, second: bool) {
 }
 
 /// Première étape des variantes 1 (0x95bf8) et 2 (0x95dd8) : le boss tombe du haut de l'écran.
-fn variant_start<R: Banc>(x: &mut Cx<'_, R>, second: bool) {
+fn variant_start<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     x.add8(0x7, 2);
     x.set8(0, 2);
     x.set_bit(0x1, 1, false);

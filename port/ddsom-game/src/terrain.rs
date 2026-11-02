@@ -31,7 +31,7 @@ const OBJ_TERRAIN: u32 = 0x29;
 /// Champs d'un type de terrain (entrée de 16 octets, mots).
 mod kind {
     /// 0 : franchissable ; 1 : obstacle plein ; plus : pente.
-    pub const GENRE: u32 = 0;
+    pub const CATEGORY: u32 = 0;
     /// Sous-programme de l'obstacle (0, 4, 8 ou 12).
     pub const ROUTINE: u32 = 2;
     /// Pente : sens (0 ou autre).
@@ -91,7 +91,7 @@ impl Push<'_> {
     /// `tst.w (off,A2)` : vrai si nul.
     fn zero(&mut self, a2: u32, off: u32) -> bool {
         let v = self.field(a2, off);
-        ops::logique(self.c, v as u32, Size::Word);
+        ops::logic(self.c, v as u32, Size::Word);
         v == 0
     }
     /// `moveq #1,D5`.
@@ -115,7 +115,7 @@ impl Push<'_> {
         }
         let enabled = crate::ram::DSW.get(self.b) & ENABLED;
         self.set_d(0, enabled);
-        ops::logique(self.c, enabled as u32, Size::Word);
+        ops::logic(self.c, enabled as u32, Size::Word);
         if enabled == 0 {
             return false;
         }
@@ -126,7 +126,7 @@ impl Push<'_> {
         crate::video::terrain_68k(self.c, &t);
         let number = self.c.d[2] as u8;
         wr8(self.b, a0 + OBJ_TERRAIN, number);
-        ops::logique(self.c, number as u32, Size::Byte);
+        ops::logic(self.c, number as u32, Size::Byte);
         if number == 0 {
             return self.free();
         }
@@ -134,13 +134,13 @@ impl Push<'_> {
         let d2 = self.d(2);
         self.set_d(2, d2 << 4);
         let carry = d2 >> 12 & 1 != 0;
-        ops::logique(self.c, (d2 << 4) as u32, Size::Word);
+        ops::logic(self.c, (d2 << 4) as u32, Size::Word);
         ops::drapeaux(self.c, SR_C | SR_X, if carry { SR_C | SR_X } else { 0 });
         let a2 = self.variant.types.wrapping_add((d2 << 4) as i16 as u32);
         self.c.a[2] = a2;
-        let genre = self.field(a2, kind::GENRE);
-        ops::cmp(self.c, 1, genre as u32, Size::Word);
-        match genre {
+        let category = self.field(a2, kind::CATEGORY);
+        ops::cmp(self.c, 1, category as u32, Size::Word);
+        match category {
             0 => self.free(),
             1 => self.solid(a2),
             _ => {
@@ -157,7 +157,7 @@ impl Push<'_> {
         wr32(self.b, A5 + LAST_X, 0);
         self.c.d[2] = 0;
         wr8(self.b, a0 + OBJ_TERRAIN, 0);
-        ops::logique(self.c, 0, Size::Byte);
+        ops::logic(self.c, 0, Size::Byte);
         false
     }
 
@@ -262,7 +262,7 @@ pub fn push_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj) -> bool {
     c.a[0] = o.0;
     Push { c, b, variant: FIRST }.run();
     let z = c.sr & m68k::SR_Z != 0;
-    crate::diag::registres_morts(c, "terrain", regs::d(0) | regs::d(1) | regs::d(2) | regs::d(5) | regs::a(1) | regs::a(2) | regs::CCR);
+    crate::diag::dead_regs(c, "terrain", regs::d(0) | regs::d(1) | regs::d(2) | regs::d(5) | regs::a(1) | regs::a(2) | regs::CCR);
     z
 }
 
@@ -278,11 +278,11 @@ pub fn push_collides(b: &mut Cps2Bus, o: Obj) -> (bool, bool) {
     (c.sr & m68k::SR_Z != 0, c.d[5] == 1)
 }
 
-/// `push`, avec les restes de l'original que relisent les gestionnaires suivants (`dispatch::Restes`) : D2 et D3
+/// `push`, avec les restes de l'original que relisent les gestionnaires suivants (`dispatch::Leftovers`) : D2 et D3
 /// (case et écart du terrain, glitch d'origine : vitesses de l'étincelle de `flash_and_shake`, réglage du rebond de
 /// l'éclat de gel) et D5 (1 après un choc). Les restes entrent et sortent tels quels quand la routine ne les écrit
 /// pas. Rend le drapeau Z de l'original.
-pub fn push_restes(b: &mut Cps2Bus, o: Obj, d2: &mut u32, d3: &mut u32, d5: &mut u32) -> bool {
+pub fn push_leftovers(b: &mut Cps2Bus, o: Obj, d2: &mut u32, d3: &mut u32, d5: &mut u32) -> bool {
     let mut c = Cpu::default();
     c.a[0] = o.0;
     (c.d[2], c.d[3], c.d[5]) = (*d2, *d3, *d5);
@@ -291,16 +291,16 @@ pub fn push_restes(b: &mut Cps2Bus, o: Obj, d2: &mut u32, d3: &mut u32, d5: &mut
     c.sr & m68k::SR_Z != 0
 }
 
-/// 0x3403c (the second copy of the routine) on object `o`, without registers; `restes` are the D2-D5 leftovers
-/// (`dispatch::Restes`) passed to it and left by it. Returns the original's Z flag.
-pub fn push_second_restes(b: &mut Cps2Bus, o: Obj, restes: [&mut u32; 4]) -> bool {
+/// 0x3403c (the second copy of the routine) on object `o`, without registers; `leftovers` are the D2-D5 leftovers
+/// (`dispatch::Leftovers`) passed to it and left by it. Returns the original's Z flag.
+pub fn push_second_leftovers(b: &mut Cps2Bus, o: Obj, leftovers: [&mut u32; 4]) -> bool {
     let mut c = Cpu::default();
     c.a[0] = o.0;
-    for (k, r) in restes.iter().enumerate() {
+    for (k, r) in leftovers.iter().enumerate() {
         c.d[2 + k] = **r;
     }
     Push { c: &mut c, b, variant: SECOND }.run();
-    for (k, r) in restes.into_iter().enumerate() {
+    for (k, r) in leftovers.into_iter().enumerate() {
         *r = c.d[2 + k];
     }
     c.sr & m68k::SR_Z != 0
@@ -309,7 +309,7 @@ pub fn push_second_restes(b: &mut Cps2Bus, o: Obj, restes: [&mut u32; 4]) -> boo
 pub const SHADOW: Native = Native {
     entry: 0x33fe4,
     name: "terrain_push",
-    run: crate::Corps::Processeur(|c, b| run(FIRST, c, b)),
+    run: crate::Body::Processeur(|c, b| run(FIRST, c, b)),
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -317,7 +317,7 @@ pub const SHADOW: Native = Native {
 pub const SHADOW_SECOND: Native = Native {
     entry: 0x3403c,
     name: "terrain_push_2",
-    run: crate::Corps::Processeur(|c, b| run(SECOND, c, b)),
+    run: crate::Body::Processeur(|c, b| run(SECOND, c, b)),
     touches_sound: false,
     outputs: regs::ALL,
 };

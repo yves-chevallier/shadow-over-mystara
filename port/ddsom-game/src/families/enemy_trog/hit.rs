@@ -1,16 +1,16 @@
 //! Type 2, état touché (`+4 = 4`, 0x5ab72). `+5` : 0 et 6 réaction commune par table (`+0x49`), 2 recul,
 //! 4 chute, 8 saisie par un joueur (le troglodyte s'enfuit).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
 const REACT_FIRST: u32 = 0x5acfc;
 const REACT_SECOND: u32 = 0x5ae8e;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SERIES) == 0 {
         blink_hit(x);
     }
@@ -39,7 +39,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Le clignotement de la série 0 continue pendant l'état touché (0x5ab72).
-fn blink_hit<R: Banc>(x: &mut Cx<'_, R>) {
+fn blink_hit<R: Bench>(x: &mut Cx<'_, R>) {
     let phase = x.u8(BLINK_PHASE) as i8;
     if phase <= 0 {
         return;
@@ -65,7 +65,7 @@ fn blink_hit<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 2 : le troglodyte recule, puis se remet debout.
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -96,7 +96,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 4 : chute, attente couché, relevé.
-fn down<R: Banc>(x: &mut Cx<'_, R>) {
+fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -130,7 +130,7 @@ fn down<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 8 (0x5ac08) : saisi par un joueur, le troglodyte se retourne et s'enfuit.
-pub(super) fn caught<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn caught<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -172,7 +172,7 @@ pub(super) fn caught<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5ac8c : s'enfuit en courant vers le bord de l'écran.
-fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) == 0 {

@@ -8,10 +8,10 @@
 //! | 8 | charge (vers le milieu de l'écran ou la cible) |
 //! | 10 | bond en arrière |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::decide;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Jeux de marche choisis par la marque `+0x33` (0x103e0) : de côté, de face.
 const WALK_SIDEWAYS: u32 = 0x17569c;
@@ -20,7 +20,7 @@ const WALK_FORWARD: u32 = 0x175740;
 // --- groupe 0 : arrivée ------------------------------------------------------------------------
 
 /// 0x81daa : le boss paraît en haut de l'écran, descend, rugit, puis se met en marche.
-pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -66,7 +66,7 @@ pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- groupe 2 : combat -----------------------------------------------------------------------
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => idle(x),
         2 => turn(x),
@@ -78,22 +78,22 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// La cible est-elle hors de la zone `[caméra - 0x50, caméra + 0x1d0]` (0x104a2) ?
-fn off_screen<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn off_screen<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::outside_band(x, -0x50, 0x1d0)
 }
 
 /// Le boss doit-il se retourner vers sa cible (0x1050c) ?
-fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
 /// Avance-t-il dans le sens où il regarde (0x10560) ?
-fn facing_forward<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn facing_forward<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::moving_forward(x)
 }
 
 /// 0x81e7a : debout ; sorti de l'écran il charge, au bout de l'attente il marche, sinon il se tourne vers sa cible.
-fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if !alive(x) {
         return decide::wait(x);
     }
@@ -120,19 +120,19 @@ fn idle<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Animation de marche 2 (de face) ou 3 (de côté).
-fn walk_anim<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let n = if facing_forward(x) { 2 } else { 3 };
     body(x, n);
 }
 
 /// Animation de marche reprise à la même marque dans le jeu du sens de marche.
-fn walk_select<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_select<R: Bench>(x: &mut Cx<'_, R>) {
     let set = if facing_forward(x) { WALK_FORWARD } else { WALK_SIDEWAYS };
     lib::switch_keeping_time(x, set);
 }
 
 /// 0x81ede : demi-tour (animation 1), puis reprise de l'état mémorisé.
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         let side = x.u8(f::FLIP) ^ 0x20;
@@ -158,7 +158,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x81f44 (`slow` = faux) et 0x81f66 : marche vers la cible, `+0x6b` pas espacés de `+0x71` images.
-fn walk<R: Banc>(x: &mut Cx<'_, R>, slow: bool) {
+fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
     if !alive(x) {
         return decide::wait(x);
     }
@@ -188,20 +188,20 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>, slow: bool) {
 }
 
 /// Délai entre deux pas, selon la difficulté (table de la ROM `table`).
-fn set_delay<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
+fn set_delay<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let level = var::RANK.get(x.b);
     let d = x.rom8(table + level as u32);
     x.set8(WALK_DELAY, d);
 }
 
 /// Vise la cible (0xe76c) et prend la table de vitesses 0xd.
-fn aim<R: Banc>(x: &mut Cx<'_, R>) {
+fn aim<R: Bench>(x: &mut Cx<'_, R>) {
     lib::approach_target(x);
     speed(x, 0xd);
 }
 
 /// La marche : un pas toutes les `+0x71` images ; entre deux pas, les boîtes devant le boss décident de la suite.
-fn walking<R: Banc>(x: &mut Cx<'_, R>) {
+fn walking<R: Bench>(x: &mut Cx<'_, R>) {
     if sub8(x, WALK_DELAY, 1).mi() {
         if !sub8(x, WALK_STEPS, 1).gt() {
             return decide::walk_slow(x);
@@ -239,7 +239,7 @@ fn walking<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x83094 / 0x830b2 : la cible est dans la boîte et l'IA (0x1047a) choisit un geste (1 ou 2).
-fn ai_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u16> {
+fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u16> {
     if !lib::target_in_box(x, d0, d1, d2) {
         return None;
     }
@@ -248,12 +248,12 @@ fn ai_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u16> 
 }
 
 /// Boîte large devant le boss (0x7ef4).
-fn target_in_box_7ef4<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
+fn target_in_box_7ef4<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     lib::guard_in_front(x, d0, d1, d2)
 }
 
 /// 0x820b6 : charge en ligne droite jusqu'au point visé, poussière et grondement, puis marche.
-fn charge<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -297,7 +297,7 @@ fn charge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x82128 : la charge avance jusqu'au point visé ; à l'arrivée (marque négative) le boss freine.
-fn charging<R: Banc>(x: &mut Cx<'_, R>) {
+fn charging<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     let key = x.u8(f::KEY_FRAME);
     if key != 0x80 {
@@ -323,7 +323,7 @@ fn charging<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x82196 : freinage (animation 5, 0x14 images, recul de 0x40).
-fn brake<R: Banc>(x: &mut Cx<'_, R>) {
+fn brake<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set16(TIMER, 0x14);
     x.set16(DUST, 0);
@@ -339,7 +339,7 @@ fn brake<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x82202 : bond en arrière (élan, saut, chute, glissade).
-fn hop<R: Banc>(x: &mut Cx<'_, R>) {
+fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -406,7 +406,7 @@ fn hop<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupes 6 à 12 : attente ---------------------------------------------------------------
 
 /// 0x82be2 : sans joueur en vie, le boss se tient debout ; dès qu'un joueur revient (en partie), il marche.
-pub(super) fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return decide::walk(x);
     }

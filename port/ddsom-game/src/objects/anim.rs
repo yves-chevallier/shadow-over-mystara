@@ -159,7 +159,7 @@ pub fn start_by_character(b: &mut Cps2Bus, obj: Obj, sets: &CharacterSets, n: u1
 
 // ---- adaptation aux registres du 68000 ----
 
-/// Registres que laissent les routines d'origine (voir `diag::registres_morts`, étiquette `anim`).
+/// Registres que laissent les routines d'origine (voir `diag::dead_regs`, étiquette `anim`).
 pub const REGS_START: u32 = regs::d(0) | regs::a(4) | regs::CCR;
 pub const REGS_STEP: u32 = regs::d(0) | regs::a(4) | regs::CCR;
 pub const REGS_BY_CHARACTER: u32 = regs::d(5) | regs::d(6) | regs::a(4) | regs::CCR;
@@ -171,7 +171,7 @@ pub fn start_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, set: u32, n: u16) -> u3
     c.d[0] = n as u32;
     c.a[4] = set;
     let end = start_regs(c, b, obj);
-    crate::diag::registres_morts(c, "anim", REGS_START);
+    crate::diag::dead_regs(c, "anim", REGS_START);
     end
 }
 
@@ -181,7 +181,7 @@ pub fn start_entry_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, at: u32) -> u32 {
     let end = start_entry(b, obj, at);
     c.a[4] = end;
     c.flags_logic(end, Size::Long);
-    crate::diag::registres_morts(c, "anim", REGS_START);
+    crate::diag::dead_regs(c, "anim", REGS_START);
     end
 }
 
@@ -189,7 +189,7 @@ pub fn start_entry_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, at: u32) -> u32 {
 #[track_caller]
 pub fn step_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
     let r = step_regs(c, b, obj, long);
-    crate::diag::registres_morts(c, "anim", REGS_STEP);
+    crate::diag::dead_regs(c, "anim", REGS_STEP);
     r
 }
 
@@ -199,7 +199,7 @@ pub fn step_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
 pub fn start_by_character_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, sets: &CharacterSets, n: u16) -> u32 {
     c.d[6] = c.d[6] & 0xffff_0000 | n as u32;
     let end = by_character_regs(c, b, obj, sets);
-    crate::diag::registres_morts(c, "anim", REGS_BY_CHARACTER);
+    crate::diag::dead_regs(c, "anim", REGS_BY_CHARACTER);
     end
 }
 
@@ -282,7 +282,7 @@ macro_rules! anim_native {
         pub const $const: Native = Native {
             entry: $entry,
             name: $name,
-            run: crate::Corps::Processeur(|c, b| {
+            run: crate::Body::Processeur(|c, b| {
                 let obj = Obj(c.a[0]);
                 $run(c, b, obj);
                 rts(c, b);

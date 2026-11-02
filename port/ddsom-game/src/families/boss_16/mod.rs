@@ -1,4 +1,4 @@
-//! Boss de type 16 (0x9325e) : boss de la scène 14 (h). Voir `docs/familles/boss.md`.
+//! Boss de type 16 (0x9325e) : boss de la scène 14 (h). Voir `docs/families/boss.md`.
 //!
 //! Gabarit ancien, comme Ezerhorden (`boss_5`) : `+5` (multiples de 2) et `+6`, `+7` sont posés champ par champ, les
 //! trois jeux d'animations (corps 0x17efe8, attaques 0x17f002, coups reçus 0x17f046) sont choisis par `anim_a`,
@@ -16,7 +16,7 @@
 //! | 12 | `moves` | un joueur saisi (`+0x50`) : morsures, puis relâché |
 //! | état 4 | `hit` | réactions aux coups (routines propres), recul, à terre, mort |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::boss_common::*;
 use super::cx::handlers;
 
@@ -54,7 +54,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 const SET_A: u32 = 0x17efe8;
 const SET_B: u32 = 0x17f002;
@@ -78,7 +78,7 @@ pub(self) mod call {
 // --- animations --------------------------------------------------------------------------------
 
 /// 0x95256 : lance l'animation `n` du jeu `set` (de sorte `kind`) par l'IA, sauf si c'est déjà celle en cours.
-fn play_set<R: Banc>(x: &mut Cx<'_, R>, set: u32, kind: u8, n: u32) {
+fn play_set<R: Bench>(x: &mut Cx<'_, R>, set: u32, kind: u8, n: u32) {
     if x.u8(ANIM_SET) == kind && x.u8(ANIM_N) == n as u8 {
         return;
     }
@@ -88,48 +88,48 @@ fn play_set<R: Banc>(x: &mut Cx<'_, R>, set: u32, kind: u8, n: u32) {
 }
 
 /// 0x95234 : animation `n` du jeu des mouvements.
-pub(self) fn anim_a<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn anim_a<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play_set(x, SET_A, 0, n);
 }
 
 /// 0x95240 : animation `n` du jeu des attaques.
-pub(self) fn anim_b<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn anim_b<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play_set(x, SET_B, 2, n);
 }
 
 /// 0x9524c : animation `n` du jeu des coups reçus.
-pub(self) fn anim_c<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn anim_c<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play_set(x, SET_C, 4, n);
 }
 
 // --- aides --------------------------------------------------------------------------------------
 
 /// 0x95210 : annule les vitesses.
-pub(self) fn stop<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn stop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
 }
 
 /// 0x93420 : plus de cible, attente.
-pub(self) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, state::IDLE);
 }
 
-pub(self) fn next7<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn next7<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
-pub(self) fn next6<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
 
 /// 0x95220 : la caméra en service (son enregistrement ; X en `+8`, Y en `+0xc`).
-pub(self) fn camera_record<R: Banc>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
+pub(self) fn camera_record<R: Bench>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
     crate::objects::Obj(if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe })
 }
 
 /// 0x950b8 : la cible est-elle derrière le boss ? (sans cible, le boss attend et la réponse est oui.)
-pub(self) fn target_behind<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) as i16 >= 0 {
         idle(x);
         return true;
@@ -143,7 +143,7 @@ pub(self) fn target_behind<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9489a : la cible est-elle loin (hors de ±0x20 en profondeur ou ±0xc0 en X) ?
-pub(self) fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) as i16 >= 0 {
         idle(x);
         return true;
@@ -158,10 +158,10 @@ pub(self) fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x94902, 0x9491e, 0x94968 : une cible dans la boîte de portée (et, pour les deux dernières, des coups possibles).
-pub(self) fn close_target<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn close_target<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::target_in_box(x, 0, 0x28, 0x20)
 }
-pub(self) fn edge_target<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
+pub(self) fn edge_target<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
     }
@@ -175,7 +175,7 @@ pub(self) fn edge_target<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) 
 }
 
 /// 0x951dc : pesanteur douce quand l'étape l'a demandée (`+0xa2`) : le boss retombe sur le sol.
-fn gravity<R: Banc>(x: &mut Cx<'_, R>) {
+fn gravity<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(FALLS) == 0 {
         return;
     }
@@ -192,7 +192,7 @@ fn gravity<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x95272 : joueurs devant le boss dans l'état 0x0200_0e00 (qu'il laisse ainsi sans défense) : ils reçoivent `+0x189`.
-fn count_victims<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn count_victims<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     let mut n = 0;
     for k in 0..4u32 {
         let p = crate::objects::Obj(0xff85de + 0x200 * k);
@@ -214,7 +214,7 @@ fn count_victims<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
     n
 }
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -231,7 +231,7 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// 0x93286 : attend la fin de la pause ; les variantes 0 et 1 sont choisies d'après la hauteur de la caméra.
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -281,7 +281,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x933b8 : un groupe par image ; pendant une pause de scène, le boss reste en attente (0x020a0200) tant que des
 /// joueurs sont sous son emprise.
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HIT_BUDGET, 5);
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
@@ -299,7 +299,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x933d0..0x93452 : vrai si le groupe doit tourner cette image (hors pause, ou en attente de pause).
-fn paused_dispatch<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn paused_dispatch<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if var::PAUSE.get(x.b) == 0 {
         x.set8(PAUSE_SEEN, 0);
         return true;
@@ -319,7 +319,7 @@ fn paused_dispatch<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-fn group<R: Banc>(x: &mut Cx<'_, R>) {
+fn group<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB) {
         0 => moves::wake(x),
         2 => moves::fight(x),
@@ -334,7 +334,7 @@ fn group<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x94e24 : choix de la suite d'une attaque : debout si la cible est hors de portée, sinon une nouvelle attaque tirée
 /// dans la table de la difficulté (0x94e7c, une ligne de 32 octets par couple de niveaux).
-pub(self) fn next_attack<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn next_attack<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) as i16 >= 0 {
         return idle(x);
     }
@@ -350,5 +350,5 @@ pub(self) fn next_attack<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x9325e "boss_16" #[sans] run,
+    0x9325e "boss_16" #[without] run,
 }

@@ -1,0 +1,759 @@
+//! Petites routines qui restaient en 68000 et que le Rust appelait encore : créateurs d'objets (tirs,
+//! effets, ennemis, objets système), copies de palettes, quelques variables du jeu.
+//!
+//! Contrat des créateurs : A0 = le créateur ; au retour A1 = l'objet créé, retenue levée si le pool est
+//! plein. Les registres résiduels que l'original laisse (D0, D1, D2, D5, drapeaux) sont reproduits.
+
+use cps2::Cps2Bus;
+use m68k::decode::Size;
+use m68k::Cpu;
+
+use crate::mem::{prog16, prog8, rd16, rd32, rts, set_low_word, wr16, wr32, wr8, A5};
+use crate::objects::Obj;
+use super::cx::{handler_sans, Bench, Cx};
+use crate::objects::Current;
+use crate::{regs, Native};
+use crate::objects::pools;
+use super::effects_creators::leftovers::{Pure, Regs};
+
+
+/// Alloue dans un pool ; `None` (retenue levée) si le pool est plein.
+fn alloc(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool) -> Option<Obj> {
+    pool.alloc_68k(c, b)
+}
+
+/// Drapeaux d'un `move`/`clr` de `v` : N et Z selon la valeur, V et C à zéro.
+fn moved(c: &mut Cpu, v: u32, size: Size) {
+    c.flags_logic(v, size);
+}
+
+/// Crée un objet de `pool` de type `kind`, lié au créateur par le mot `link` (drapeaux de ce `move.w`).
+pub(crate) fn linked_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, pool: &pools::Pool, kind: u8, link: u32) -> Option<Obj> {
+    let o = r.allocated(b, pool)?;
+    o.set_u8(b, Obj::ACTIVE, 1);
+    o.set_u8(b, Obj::KIND, kind);
+    o.set_u16(b, link, creator.word());
+    r.drapeaux(creator.word() as u32, Size::Word);
+    Some(o)
+}
+
+fn linked(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, link: u32) {
+    let me = Obj(c.a[0]);
+    linked_via(c, b, me, pool, kind, link);
+    rts(c, b);
+}
+
+/// 0x4c930 for the player module, still on the processor: player effect 0x10 (revival) linked to `player`, with the
+/// registers the original leaves (A0 = the player, A1, carry, flags).
+pub fn revive_68k(c: &mut Cpu, b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
+    c.a[0] = player.0;
+    linked_via(c, b, player, &pools::PEFF, 0x10, 0x50)
+}
+
+/// 0x4f132 : effet de joueur 0x21 (second temps du séisme des sorts), lié au joueur par `+0x50`.
+pub fn quake_b(b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
+    linked_via(&mut Pure, b, player, &pools::PEFF, 0x21, 0x50)
+}
+
+/// `quake_b` avec les registres de l'original (appelants par adresse : `player/`) : A1, retenue et drapeaux.
+#[track_caller]
+pub fn quake_b_68k(c: &mut Cpu, b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
+    c.a[0] = player.0;
+    let r = linked_via(c, b, player, &pools::PEFF, 0x21, 0x50);
+    crate::diag::dead_regs(c, "effets", CREATED);
+    r
+}
+
+fn peff_16(c: &mut Cpu, b: &mut Cps2Bus) {
+    linked(c, b, &pools::PEFF, 0x10, 0x50);
+}
+fn peff_33(c: &mut Cpu, b: &mut Cps2Bus) {
+    linked(c, b, &pools::PEFF, 0x21, 0x50);
+}
+fn sobj_7(c: &mut Cpu, b: &mut Cps2Bus) {
+    linked(c, b, &pools::SOBJ, 0x7, 0x46);
+}
+fn sobj_10(c: &mut Cpu, b: &mut Cps2Bus) {
+    linked(c, b, &pools::SOBJ, 0xa, 0x46);
+}
+
+/// 0x54700 : tir de type 0x17 qui reprend le mot `+0x50` du créateur.
+pub(crate) fn shot_17(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+    let o = r.allocated(b, &pools::PSHL)?;
+    o.set_u8(b, 0x0, 1);
+    o.set_u8(b, 0x2, 0x17);
+    let v = me.u16(b, 0x50);
+    o.set_u16(b, 0x50, v);
+    r.drapeaux(v as u32, Size::Word);
+    Some(o)
+}
+
+/// 0x54818 (variante laissée telle quelle : `variant` nul), 0x54842 (variante 1) et 0x54872 (variante 2) : tir de type
+/// 0x18 lié au créateur par `+0x5c`, résistances 0x10 ; le tir créé, `None` si le pool PSHL est plein.
+pub(crate) fn shot_18(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+    let shot = r.allocated(b, &pools::PSHL)?;
+    shot.set_u8(b, 0x0, 1);
+    shot.set_u8(b, 0x2, 0x18);
+    if variant != 0 {
+        shot.set_u8(b, 0x3, variant);
+    }
+    shot.set_u8(b, 0x45, 0x10);
+    shot.set_u8(b, 0x46, 0x10);
+    shot.set_u16(b, 0x5c, me.word());
+    Some(shot)
+}
+
+/// Native de `shot_18` : D0 = 1 si le tir est créé.
+/// Glitch d'origine : 0x54872 (`toujours_nul`) rend D0 = 0 même quand le tir est créé.
+fn shot_18_native(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, toujours_nul: bool) {
+    let me = Obj(c.a[0]);
+    let created = shot_18(c, b, me, variant).is_some();
+    c.d[0] = (created && !toujours_nul) as u32;
+    moved(c, c.d[0], Size::Long);
+    rts(c, b);
+}
+
+/// 0x76ec4 : s'il reste plus de deux emplacements ENEMY, crée deux ennemis de type 0x19 (variantes 0 et
+/// 1) liés au créateur ; vrai (D0 = 1) si créés. L'original ne teste pas la retenue des allocations.
+pub(crate) fn enemy_pair_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> bool {
+    enemy_pair_kind_via(r, b, creator, 0x19)
+}
+/// 0x76ec4 (type 0x19) et 0x63ae0 (type 7, `creators`) : deux ennemis de type `kind`, variantes 0 et 1.
+pub(crate) fn enemy_pair_kind_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, kind: u8) -> bool {
+    let created = (rd16(b, A5 + 0x7e62) as i16) > 2;
+    if created {
+        for variant in 0..2 {
+            // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
+            let o = r.alloc_without_test(b, &pools::ENEMY);
+            o.set_u8(b, 0x0, 1);
+            o.set_u8(b, 0x2, kind);
+            o.set_u8(b, 0x3, variant);
+            o.set_u8(b, 0x2f, 0);
+            o.set_u16(b, 0x46, creator.word());
+        }
+    }
+    r.d(0, created as u32);
+    r.drapeaux(created as u32, Size::Long);
+    created
+}
+/// 0x76ec4 sans registres.
+pub fn enemy_pair_created(b: &mut Cps2Bus, creator: Obj) -> bool {
+    enemy_pair_via(&mut Pure, b, creator)
+}
+fn enemy_pair(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    enemy_pair_via(c, b, me);
+    rts(c, b);
+}
+
+/// 0x792f8 et 0x71e3c : `+0x53` reprend `+0x56`.
+fn copy_56_to_53(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    let v = me.u8(b, 0x56);
+    me.set_u8(b, 0x53, v);
+    moved(c, v as u32, Size::Byte);
+    rts(c, b);
+}
+
+/// 0xa66c0 : crée D5 + 1 tirs ESHL de type 0x3e dont la variante décroît de D5 (octet de la table 0xa66e2
+/// indexée par D2) à 0.
+fn eshl_volley(c: &mut Cpu, b: &mut Cps2Bus) {
+    let row = 0xa66e2u32.wrapping_add(c.d[2] as i16 as i32 as u32);
+    c.d[5] = prog8(b, row) as u32;
+    loop {
+        let Some(o) = alloc(c, b, &pools::ESHL) else { break };
+        o.set_u8(b, 0x0, 1);
+        o.set_u8(b, 0x2, 0x3e);
+        o.set_u8(b, 0x3, c.d[5] as u8);
+        moved(c, c.d[5], Size::Byte);
+        let n = (c.d[5] as u16).wrapping_sub(1);
+        set_low_word(&mut c.d[5], n);
+        if n == 0xffff {
+            break;
+        }
+    }
+    rts(c, b);
+}
+
+/// 0xa7234 et 0xa727c : gonflement du rugissement de Boss 15 : un nombre de tirs ESHL de type 0x41 (variante
+/// `variant`) donné par la table (selon `A5+0x7f92`), numérotés de n-1 à 0 par `+0x2f`, liés par `+0x5c`.
+/// D0.w et D1.w de l'original : l'index de la table, le compteur (épuisé : 0xffff, ou le numéro du tir refusé).
+pub(crate) fn roar_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, big: bool) {
+    let (table, variant) = if big { (0xa726c, 0) } else { (0xa72b4, 1) };
+    let i = rd16(b, A5 + 0x7f92) >> 1;
+    r.d_word(0, i);
+    let total = prog8(b, table + i as u32);
+    r.d(1, total as u32);
+    let mut n = (total as u16).wrapping_sub(1);
+    r.d_word(1, n);
+    loop {
+        let Some(o) = r.allocated(b, &pools::ESHL) else { break };
+        o.set_u8(b, 0x0, 1);
+        o.set_u8(b, 0x2, 0x41);
+        o.set_u8(b, 0x3, variant);
+        o.set_u8(b, 0x2f, n as u8);
+        let link = creator.u16(b, 0x5c);
+        o.set_u16(b, 0x5c, link);
+        r.drapeaux(link as u32, Size::Word);
+        n = n.wrapping_sub(1);
+        r.d_word(1, n);
+        if n == 0xffff {
+            break;
+        }
+    }
+}
+/// 0xa7234 (`big`) et 0xa727c sans registres.
+pub fn roar_created(b: &mut Cps2Bus, creator: Obj, big: bool) {
+    roar_via(&mut Pure, b, creator, big)
+}
+fn roar_big(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    roar_via(c, b, me, true);
+    rts(c, b);
+}
+fn roar_small(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    roar_via(c, b, me, false);
+    rts(c, b);
+}
+
+/// 0xa036e : harpie, créature compagne (ESHL 0x10) : copie la variante, la position décalée de ±0x2f en X
+/// et de -0x78 en Z ; la moitié des PV du créateur (`+0x60 / 4`) va dans `+0x58` du créateur.
+fn harpy_companion(c: &mut Cpu, b: &mut Cps2Bus) {
+    let me = Obj(c.a[0]);
+    let _ = harpy_companion_via(c, b, me);
+    rts(c, b);
+}
+
+/// Cœur de 0xa036e : rend le compagnon et le mot de PV/4 que l'original laisse dans D2 (reste relu par la suite),
+/// ou, en cas d'échec, l'A1 que laisse l'allocation.
+pub(crate) fn harpy_companion_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Result<(Obj, u16), Obj> {
+    let o = r.alloc_or_rest(b, &pools::ESHL)?;
+    let flip = me.u8(b, 0x2c) != 0;
+    let v = me.u8(b, 0x3);
+    o.set_u8(b, 0x3, v);
+    o.set_u8(b, 0x0, 1);
+    o.set_u8(b, 0x2, 0x10);
+    o.set_u8(b, 0x2e, 0x3e);
+    o.set_u16(b, 0x50, me.word());
+    let v = me.u8(b, 0x43);
+    o.set_u8(b, 0x43, v);
+    let hp = me.u16(b, 0x60) >> 2;
+    r.d_word(2, hp);
+    me.set_u16(b, 0x58, hp);
+    let v = me.u8(b, 0xa2);
+    o.set_u8(b, 0x56, v);
+    for off in [0x8, 0x10, 0xc] {
+        let v = me.u32(b, off);
+        o.set_u32(b, off, v);
+    }
+    let dx: u16 = if flip { 0x2fu16.wrapping_neg() } else { 0x2f };
+    r.d_word(0, dx);
+    r.d_word(1, 0x78u16.wrapping_neg());
+    let x = o.u16(b, 0x8).wrapping_add(dx);
+    o.set_u16(b, 0x8, x);
+    let z = o.u16(b, 0xc).wrapping_add(0x78u16.wrapping_neg());
+    o.set_u16(b, 0xc, z);
+    let y = o.u32(b, 0x10).wrapping_add(1);
+    o.set_u32(b, 0x10, y);
+    let z = o.u32(b, 0xc).wrapping_sub(1);
+    o.set_u32(b, 0xc, z);
+    let f = me.u8(b, 0x2c);
+    o.set_u8(b, 0x2c, f);
+    r.drapeaux(f as u32, Size::Byte);
+    Ok((o, hp))
+}
+
+/// 0xa0566 : harpie, projectile ESHL 0x11 : D5 va dans `+0x42` du créateur, A2 et le créateur sont les
+/// liens `+0x50` et `+0x56` (longs) ; le créateur remet `+0xa5` à zéro.
+fn harpy_shot(c: &mut Cpu, b: &mut Cps2Bus) {
+    let (me, d5, a2) = (Obj(c.a[0]), c.d[5] as u8, c.a[2]);
+    let _ = harpy_shot_via(c, b, me, d5, a2);
+    rts(c, b);
+}
+
+/// Cœur de 0xa0566 : `d5` = l'octet posé en `+0x42` du créateur, `target` = le long A2 lié en `+0x50`.
+pub(crate) fn harpy_shot_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, d5: u8, target: u32) -> Option<Obj> {
+    let o = r.allocated(b, &pools::ESHL)?;
+    me.set_u8(b, 0x42, d5);
+    let v = me.u8(b, 0x43);
+    o.set_u8(b, 0x43, v);
+    o.set_u32(b, 0x50, target);
+    o.set_u32(b, 0x56, me.0);
+    me.set_u8(b, 0xa5, 0);
+    o.set_u8(b, 0x0, 1);
+    o.set_u8(b, 0x2, 0x11);
+    for off in [0x8, 0x10, 0xc] {
+        let v = me.u32(b, off);
+        o.set_u32(b, off, v);
+    }
+    let v = me.u8(b, 0x2c);
+    o.set_u8(b, 0x2c, v);
+    let v = me.u8(b, 0x3);
+    o.set_u8(b, 0x3, v);
+    r.drapeaux(v as u32, Size::Byte);
+    Some(o)
+}
+
+// ---------------------------------------------------------------------------------------------
+// Variables du jeu, copies de palettes, enchaînements d'initialisations
+// ---------------------------------------------------------------------------------------------
+
+/// `movem.l (addr)+,list` : charge les registres du masque (D0-D7 puis A0-A7) ; renvoie l'adresse suivante.
+fn movem_load(c: &mut Cpu, b: &mut Cps2Bus, mask: u16, mut addr: u32) -> u32 {
+    for bit in (0..16).filter(|bit| mask >> bit & 1 != 0) {
+        let v = rd32(b, addr);
+        if bit < 8 {
+            c.d[bit] = v;
+        } else {
+            c.a[bit - 8] = v;
+        }
+        addr += 4;
+    }
+    addr
+}
+
+/// `movem.l list,(addr)` : range les registres du masque ; renvoie l'adresse suivante.
+fn movem_store(c: &Cpu, b: &mut Cps2Bus, mask: u16, mut addr: u32) -> u32 {
+    for bit in (0..16).filter(|bit| mask >> bit & 1 != 0) {
+        wr32(b, addr, if bit < 8 { c.d[bit] } else { c.a[bit - 8] });
+        addr += 4;
+    }
+    addr
+}
+
+/// D0-D6 et A3.
+const MASK_D0_D6_A3: u16 = 0x087f;
+
+/// 0x10158 : quatre blocs de huit couleurs recopiés dans la palette (GFX RAM) avec le bit de poids fort
+/// de chaque quartet levé (`ori.l #0xF000F000`).
+fn palette_blocks_lit(c: &mut Cpu, b: &mut Cps2Bus) {
+    for (dst, src) in [(0x91c2e0, 0x2538c0), (0x91c300, 0x2538e0), (0x91c360, 0x253900), (0x91c3e0, 0x253920)] {
+        movem_load(c, b, MASK_D0_D6_A3, src);
+        c.a[2] = src;
+        movem_store(c, b, MASK_D0_D6_A3, dst);
+        for k in 0..8 {
+            let at = dst + 4 * k;
+            let v = rd32(b, at) | 0xf000_f000;
+            wr32(b, at, v);
+            moved(c, v, Size::Long);
+        }
+        c.a[1] = dst + 0x20;
+        c.d[6] = 0xffff;
+    }
+    rts(c, b);
+}
+
+/// 0x101da : comme 0x10158 pour la scène 0x69, sans éclaircir : quatre blocs de huit couleurs lus à la suite
+/// en 0x10218 (espace données).
+fn palette_blocks(c: &mut Cpu, b: &mut Cps2Bus) {
+    let mut src = 0x10218;
+    for dst in [0x91c2e0, 0x91c300, 0x91c360, 0x91c3e0] {
+        src = movem_load(c, b, MASK_D0_D6_A3, src);
+        c.a[1] = dst;
+        movem_store(c, b, MASK_D0_D6_A3, dst);
+    }
+    c.a[2] = src;
+    rts(c, b);
+}
+
+/// 0x10158 (`brighten`) and 0x101da for a generic handler: the four blocks of eight colours copied into the palette,
+/// like `palette_blocks_lit` and `palette_blocks`. Original glitch: the last block's `movem.l` leaves its colours 2 to
+/// 5 in D2-D5, read back by the next handlers (`dispatch::Leftovers`).
+pub(crate) fn four_palette_blocks<R: Bench>(x: &mut Cx<'_, R>, brighten: bool) {
+    const DESTINATIONS: [u32; 4] = [0x91c2e0, 0x91c300, 0x91c360, 0x91c3e0];
+    const BRIGHT_SOURCES: [u32; 4] = [0x2538c0, 0x2538e0, 0x253900, 0x253920];
+    const SOURCES_69: u32 = 0x10218;
+    let mut last = 0;
+    for (k, dst) in DESTINATIONS.into_iter().enumerate() {
+        let src = if brighten { BRIGHT_SOURCES[k] } else { SOURCES_69 + 0x20 * k as u32 };
+        for i in 0..8 {
+            let v = rd32(x.b, src + 4 * i);
+            wr32(x.b, dst + 4 * i, if brighten { v | 0xf000_f000 } else { v });
+        }
+        last = src;
+    }
+    *x.c.d2() = rd32(x.b, last + 8);
+    *x.c.d3() = rd32(x.b, last + 12);
+    *x.c.d4() = rd32(x.b, last + 16);
+    *x.c.d5() = rd32(x.b, last + 20);
+}
+
+/// 0x3525c for a generic handler: clears the start of scroll layer 1 (`video::clear_layer1_start`).
+/// Original glitch: the empty cell stays in D2-D5 (`dispatch::Leftovers`).
+pub(crate) fn clear_scroll1_start<R: Bench>(x: &mut Cx<'_, R>) {
+    crate::video::clear_layer1_start(x.b);
+    (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (0x1f_0000, 0x1f_0000, 0x1f_0000, 0x1f_0000);
+}
+
+/// 0x4aed0 : deux effets de type 5, variante 1, indices `+0x2f` 0 et 1, liés au créateur (`+0x50`).
+pub(crate) fn peff_5_pair(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+    for index in [0, 1] {
+        let Some(o) = r.allocated(b, &pools::PEFF) else { break };
+        o.set_u8(b, 0x0, 1);
+        o.set_u8(b, 0x2, 5);
+        o.set_u8(b, 0x3, 1);
+        o.set_u8(b, 0x2f, index);
+        o.set_u16(b, 0x50, me.word());
+        r.drapeaux(me.word() as u32, Size::Word);
+    }
+}
+
+/// 0x53746 : douze pierres (tirs de type 0x11, variantes 0 à 11) réparties autour de la caméra en service,
+/// décalages X, Y en table (0x537ca, espace programme), hauteur 0x100 au-dessus de leur point de chute, délai
+/// `+0x5c` de 0x40 à 0x148 par pas de 0x18 ; orientation et propriétaire du créateur.
+pub(crate) fn pshl_stones(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
+    const OFFSETS: u32 = 0x537ca;
+    const COUNT: u16 = 12;
+    // D3 : variante, D4 : délai, D5 : compteur du `dbf` ; laissés aux gestionnaires suivants (`dispatch::Leftovers`)
+    let (mut variant, mut delay, mut n) = (0u8, 0x40u16, COUNT - 1);
+    r.d(3, 0);
+    r.d_word(4, delay);
+    r.d_word(5, n);
+    loop {
+        let Some(o) = r.allocated(b, &pools::PSHL) else { break };
+        o.set_u8(b, 0x0, 1);
+        o.set_u8(b, 0x2, 0x11);
+        let v = me.u8(b, 0x2c);
+        o.set_u8(b, 0x2c, v);
+        let v = me.u16(b, 0x50);
+        o.set_u16(b, 0x50, v);
+        o.set_u8(b, 0x3, variant);
+        o.set_u16(b, 0x5c, delay);
+        let (cx, cy) = if crate::ram::CAMERA_ALT_ACTIVE.get(b) != 0 { (0x556, 0x55a) } else { (0x506, 0x50a) };
+        let (x, y) = (rd16(b, A5 + cx), rd16(b, A5 + cy));
+        let index = (variant as u16).wrapping_shl(2) as u32;
+        let (dx, dy) = (prog16(b, OFFSETS + index), prog16(b, OFFSETS + 2 + index));
+        let ground = y.wrapping_add(dy);
+        o.set_u16(b, 0x8, x.wrapping_add(dx));
+        o.set_u16(b, 0x10, ground);
+        o.set_u16(b, 0xc, y.wrapping_add(0x100).wrapping_sub(ground));
+        r.d_word(0, ground);
+        r.d_word(1, dx);
+        r.d_word(2, dy);
+        variant = variant.wrapping_add(1);
+        r.d_byte(3, variant);
+        delay = r.addition(0x18, delay as u32, Size::Word) as u16;
+        r.d_word(4, delay);
+        n = n.wrapping_sub(1);
+        r.d_word(5, n);
+        if n == 0xffff {
+            break;
+        }
+    }
+}
+
+/// 0x1a5e8 : douze blocs de huit couleurs (0x25c4c0) recopiés dans la palette 0x91c480. Cœur.
+pub fn palette_twelve_blocks(b: &mut Cps2Bus) {
+    let (dst, src) = (0x91c480, 0x25c4c0);
+    for i in 0..12 * 8 {
+        let v = rd32(b, src + 4 * i);
+        wr32(b, dst + 4 * i, v);
+    }
+}
+
+/// `palette_twelve_blocks` avec les registres de l'original (le dernier bloc dans D1-D6, A1, A2).
+fn palette_blocks_copy(c: &mut Cpu, b: &mut Cps2Bus) {
+    const MASK: u16 = 0x067e; // D1-D6, A1, A2
+    let (mut dst, mut src) = (0x91c480, 0x25c4c0);
+    // `moveq #0xb,D7` : seuls drapeaux posés (ni `movem` ni `dbf` n'en changent)
+    moved(c, 0xb, Size::Long);
+    for _ in 0..12 {
+        src = movem_load(c, b, MASK, src);
+        dst = movem_store(c, b, MASK, dst);
+    }
+    c.a[3] = src;
+    c.a[4] = dst;
+    c.d[7] = 0xffff;
+    rts(c, b);
+}
+
+/// 0x1ad6a : 32 blocs de 32 octets lus à partir de 0x285280 sont rangés tour à tour au même endroit,
+/// FF1190 (l'original n'avance pas sa destination : seul le dernier bloc y reste), puis huit couleurs de
+/// 0x1ad4a vont en FF1390.
+pub(crate) fn palette_page_restore(c: &mut Cpu, b: &mut Cps2Bus) {
+    const MASK: u16 = 0x183f; // D0-D5, A3, A4
+    let mut src = 0x285280;
+    for _ in 0..32 {
+        src = movem_load(c, b, MASK, src);
+        movem_store(c, b, MASK, 0xff1190);
+    }
+    c.a[2] = src;
+    c.d[6] = 0xffff;
+    c.a[2] = movem_load(c, b, MASK_D0_D6_A3, 0x1ad4a);
+    c.a[1] = 0xff1390;
+    movem_store(c, b, MASK_D0_D6_A3, 0xff1390);
+}
+
+/// Natives des éclairs d'écran (couleur 14 de la page 1, `palette::set_flash_color`) : les drapeaux du `move.w`.
+fn flash(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
+    crate::palette::set_flash_color(b, v);
+    moved(c, v as u32, Size::Word);
+    rts(c, b);
+}
+/// Couleurs des éclairs : jaune (0x1ac9a), vert (0x1ac72), bleu (0x1ac7c), fin de l'éclair (0x1ac90).
+pub(crate) const ECLAIR_JAUNE: u16 = 0xfff0;
+pub(crate) const ECLAIR_VERT: u16 = 0xf0f0;
+pub(crate) const ECLAIR_BLEU: u16 = 0xf00f;
+pub(crate) const LIGHTNING_END: u16 = 0xff50;
+fn flash_off(c: &mut Cpu, b: &mut Cps2Bus) {
+    flash(c, b, LIGHTNING_END);
+}
+fn flash_a(c: &mut Cpu, b: &mut Cps2Bus) {
+    flash(c, b, ECLAIR_JAUNE);
+}
+fn flash_b(c: &mut Cpu, b: &mut Cps2Bus) {
+    flash(c, b, ECLAIR_VERT);
+}
+fn flash_c(c: &mut Cpu, b: &mut Cps2Bus) {
+    flash(c, b, ECLAIR_BLEU);
+}
+
+/// Les huit blocs de tuiles du fond 2 (0x26d4 : D0 = bloc, A1 = destination).
+const BACKGROUND_BLOCKS: [(u16, u32); 8] = [
+    (0xce, 0x917000),
+    (0xad, 0x917400),
+    (0xaf, 0x917800),
+    (0xaf, 0x917c00),
+    (0xac, 0x916000),
+    (0xcd, 0x916400),
+    (0xae, 0x916800),
+    (0xae, 0x916c00),
+];
+
+/// 0x2a52 : fond 2 allumé (blocs de tuiles, bit 0 du registre vidéo `A5+0x12`, caméra 2 en mode 0x80).
+pub fn background_2_on(b: &mut Cps2Bus) -> crate::video::GridEnd {
+    let mut end = None;
+    for (block, dst) in BACKGROUND_BLOCKS {
+        end = Some(crate::video::load_grid(b, crate::video::Grid::Layer2, block, dst));
+    }
+    let video = rd16(b, A5 + 0x12) | 1;
+    wr16(b, A5 + 0x12, video);
+    wr16(b, 0x804122, video);
+    wr16(b, 0x804108, 0x9200);
+    wr8(b, A5 + 0x53c, 2);
+    wr16(b, A5 + 0x51e, 0x80);
+    wr8(b, A5 + 0x36, 1);
+    end.expect("huit blocs")
+}
+
+/// `background_2_on`, registres de l'original : D0 et A1 du dernier bloc (0x26d4), drapeaux du dernier `move.b`.
+fn scroll_2_on(c: &mut Cpu, b: &mut Cps2Bus) {
+    let end = background_2_on(b);
+    c.d[0] = 0xffff;
+    c.a[1] = end.destination;
+    c.a[2] = end.indices;
+    moved(c, 1, Size::Byte);
+    rts(c, b);
+}
+
+/// 0x2a36 : fond 1 allumé (caméra en mode 0x18) ; 0x2a42 : `A5+0x548` = D0, fond 1 réglé sur 0x34.
+pub fn background_1_on(b: &mut Cps2Bus) {
+    background_1_in_mode(b, 0x18);
+}
+fn background_1_in_mode(b: &mut Cps2Bus, mode: u16) {
+    wr8(b, A5 + 0x4ff, 0);
+    wr16(b, A5 + 0x51e, mode);
+}
+fn scroll_1_on_with(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
+    background_1_in_mode(b, mode);
+    moved(c, mode as u32, Size::Word);
+    rts(c, b);
+}
+fn scroll_1_on(c: &mut Cpu, b: &mut Cps2Bus) {
+    scroll_1_on_with(c, b, 0x18);
+}
+/// 0x2a42 : `A5+0x548` = `value` (D0.w de l'original), fond 1 réglé sur 0x34.
+pub fn background_1_lit_a(b: &mut Cps2Bus, value: u16) {
+    wr16(b, A5 + 0x548, value);
+    background_1_in_mode(b, 0x34);
+}
+fn scroll_1_on_at_d0(c: &mut Cpu, b: &mut Cps2Bus) {
+    background_1_lit_a(b, c.d[0] as u16);
+    moved(c, 0x34, Size::Word);
+    rts(c, b);
+}
+
+/// 0x133f6 / 0x133f0 : l'indicateur « démarrage fait » (`A5-0x715e`) levé / baissé.
+pub fn startup_done(b: &mut Cps2Bus, done: bool) {
+    wr8(b, A5 - 0x715e, done as u8);
+}
+fn booted_set(c: &mut Cpu, b: &mut Cps2Bus) {
+    startup_done(b, true);
+    moved(c, 1, Size::Byte);
+    rts(c, b);
+}
+fn booted_clear(c: &mut Cpu, b: &mut Cps2Bus) {
+    startup_done(b, false);
+    moved(c, 0, Size::Byte);
+    rts(c, b);
+}
+
+/// 0xdd12c : le verrou d'apparition des objets de ramassage (`A5-0x5ac4`) levé.
+pub(crate) fn item_lock_clear(c: &mut Cpu, b: &mut Cps2Bus) {
+    wr8(b, A5 - 0x5ac4, 0);
+    moved(c, 0, Size::Byte);
+}
+
+/// 0x3baea : `+0x1f0` du joueur, d'après la table 0x3baf8 indexée par le quart du compteur `A5+0x7f92`.
+pub(crate) fn player_table_byte(c: &mut Cpu, b: &mut Cps2Bus, player: Obj) {
+    c.a[0] = player.0;
+    let i = rd16(b, A5 + 0x7f92) >> 2;
+    set_low_word(&mut c.d[0], i);
+    let v = prog8(b, 0x3baf8 + i as u32);
+    wr8(b, player.0 + 0x1f0, v);
+    moved(c, v as u32, Size::Byte);
+}
+
+/// 0x1c44a : les variables de partie `A5+0x2c..0x6b` à zéro.
+pub fn zero_game_variables(b: &mut Cps2Bus) {
+    for k in 0..16 {
+        wr32(b, A5 + 0x2c + 4 * k, 0);
+    }
+}
+fn game_vars_clear(c: &mut Cpu, b: &mut Cps2Bus) {
+    c.d[0] = 0;
+    zero_game_variables(b);
+    c.a[0] = A5 + 0x6c;
+    c.d[6] = 0xffff;
+    moved(c, 0, Size::Long);
+    rts(c, b);
+}
+
+/// 0x180ac : remise à zéro de l'écran fixe : pools SET et EFFCT, sprites, liste triée.
+pub fn reset_fixed_screen(b: &mut Cps2Bus) {
+    wr32(b, A5 - 0x70b0, 0);
+    crate::objects::lists::unlink_all(b);
+    crate::sprites::clear_lists(b);
+    pools::SET.reset(b);
+    pools::EFFCT.reset(b);
+}
+
+/// `reset_fixed_screen` ; A0 = le dernier objet délié (0x1f184).
+fn fixed_screen_reset(c: &mut Cpu, b: &mut Cps2Bus) {
+    wr32(b, A5 - 0x70b0, 0);
+    crate::objects::lists::unlink_all_68k(c, b);
+    crate::sprites::clear_lists(b);
+    pools::SET.reset(b);
+    pools::EFFCT.reset(b);
+    rts(c, b);
+}
+
+// ---------------------------------------------------------------------------------------------
+// Réaction aux coups de deux ennemis (table des réactions communes, `react`)
+// ---------------------------------------------------------------------------------------------
+
+
+/// 0x78ad2, 0x71680 et 0x65236 : l'ennemi touché tremble sur place. Pas 0 : mémorise X (`+0xa`), lance
+/// l'animation 8 du jeu `anim` (avec le type de coup, 0x103d6, si `strike_kind`) et pose le compteur (`+0x90` = 16).
+/// Pas 2 : décale X de ±2 selon la parité du compteur et l'orientation, puis, le compteur épuisé, revient à X
+/// d'origine et à l'état 0x04040200. `_table` : table de sauts d'origine sur `+6`.
+fn shake<R: Bench>(x: &mut Cx<'_, R>, _table: u32, anim: u32, strike_kind: bool) {
+    let step = x.u8(0x6);
+    match step {
+        0 => {
+            x.add8(0x6, 2);
+            x.set8(0x0, 2);
+            let at = x.u16(0x8);
+            x.set16(0xa, at);
+            x.set16(0x84, 0);
+            let v = x.u8(0x56);
+            x.set8(0x53, v);
+            x.set8(0x90, 0x10);
+            if strike_kind {
+                crate::families::enemy_lib::start(x, anim, 8);
+            } else {
+                x.anim_start(anim, 8);
+            }
+        }
+        2 => {
+            let timer = x.u8(0x90);
+            if (timer as i8) <= 0 {
+                let at = x.u16(0xa);
+                x.set16(0x8, at);
+                x.set8(0x0, 1);
+                x.set32(0x4, 0x0404_0200);
+                x.set32(0x58, 0);
+                return;
+            }
+            let timer = timer - 1;
+            x.set8(0x90, timer);
+            let mut d: i16 = 2;
+            if timer & 1 != 0 {
+                d = -d;
+            }
+            if x.u8(0x2c) != 0 {
+                d = -d;
+            }
+            x.add16(0x8, d as u16);
+        }
+        _ => {}
+    }
+}
+/// Réaction propre à un type, de la table des réactions de l'ennemi (code 0x4c : tremblement), désignée par son
+/// adresse d'origine ; `None` si l'adresse n'en est pas une.
+pub(crate) fn own_reaction<R: Bench>(x: &mut Cx<'_, R>, routine: u32) -> Option<()> {
+    match routine {
+        // engin de guerre (type 27)
+        0x78ad2 => shake(x, 0x78ae0, 0x171a94, true),
+        // ogre (type 18)
+        0x71680 => shake(x, 0x7168e, 0x1778a4, true),
+        // gargouille (type 8) ; jamais atteinte par les scénarios (voir docs/code-mort.md)
+        0x65236 => shake(x, 0x65244, 0x162f12, false),
+        _ => return None,
+    }
+    Some(())
+}
+
+const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
+    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs }
+}
+
+const CREATED: u32 = regs::a(1) | regs::CCR;
+
+pub const NATIVES: &[Native] = &[
+    native(0x4c930, "cree_effet_10", peff_16, CREATED),
+    native(0x4f132, "cree_effet_21", peff_33, CREATED),
+    native(0xdf4bc, "cree_sobj_7", sobj_7, CREATED),
+    native(0xdf896, "cree_sobj_10", sobj_10, CREATED),
+    native(0x54700, "cree_tir_17", |c, b| { let me = Obj(c.a[0]); shot_17(c, b, me); rts(c, b) }, CREATED),
+    native(0x54818, "cree_tir_18_a", |c, b| shot_18_native(c, b, 0, false), CREATED | regs::d(0)),
+    native(0x54842, "cree_tir_18", |c, b| shot_18_native(c, b, 1, false), CREATED | regs::d(0)),
+    native(0x54872, "cree_tir_18_c", |c, b| shot_18_native(c, b, 2, true), CREATED | regs::d(0)),
+    native(0x76ec4, "cree_ennemis_19", enemy_pair, CREATED | regs::d(0)),
+    native(0x792f8, "copie_56_53_a", copy_56_to_53, regs::CCR),
+    native(0x71e3c, "copie_56_53_b", copy_56_to_53, regs::CCR),
+    native(0xa66c0, "cree_salve_3e", eshl_volley, CREATED | regs::d(5)),
+    native(0xa7234, "cree_rugissement_grand", roar_big, CREATED | regs::d(0) | regs::d(1)),
+    native(0xa727c, "cree_rugissement_petit", roar_small, CREATED | regs::d(0) | regs::d(1)),
+    native(0xa036e, "cree_compagnon_harpie", harpy_companion, CREATED | regs::d(0) | regs::d(1) | regs::d(2)),
+    native(0xa0566, "cree_tir_harpie", harpy_shot, CREATED),
+    native(0x10158, "palette_quatre_blocs", palette_blocks_lit, regs::ALL),
+    native(0x101da, "palette_quatre_blocs_69", palette_blocks, regs::ALL),
+    native(0x1ac90, "eclair_palette_fin", flash_off, regs::CCR),
+    native(0x4aed0, "cree_effets_5", |c, b| { let me = Obj(c.a[0]); peff_5_pair(c, b, me); rts(c, b) }, CREATED),
+    native(0x1a5e8, "palette_douze_blocs", palette_blocks_copy, regs::ALL),
+    native(0x1ad6a, "palette_page_restitue", |c, b| { palette_page_restore(c, b); rts(c, b) }, regs::ALL),
+    native(0x1ac9a, "eclair_palette_jaune", flash_a, regs::CCR),
+    native(0x1ac72, "eclair_palette_vert", flash_b, regs::CCR),
+    native(0x1ac7c, "eclair_palette_bleu", flash_c, regs::CCR),
+    native(0x2a52, "fond_2_allume", scroll_2_on, regs::d(0) | regs::a(1) | regs::CCR),
+    native(0x2a36, "fond_1_allume", scroll_1_on, regs::CCR),
+    native(0x2a42, "fond_1_allume_d0", scroll_1_on_at_d0, regs::CCR),
+    native(0x133f6, "demarrage_leve", booted_set, regs::CCR),
+    native(0x133f0, "demarrage_baisse", booted_clear, regs::CCR),
+    native(0x1c44a, "variables_partie_a_zero", game_vars_clear, regs::ALL),
+    native(0x180ac, "ecran_fixe_remise", fixed_screen_reset, regs::CCR),
+];
+
+/// Réactions d'ennemis propres à un type (`own_reaction`), à leur adresse d'origine (le jeu les appelle directement
+/// depuis `enemy_common::react`).
+pub const SHAKES: &[Native] = &[
+    handler_sans(0x78ad2, "ennemi_tremble_a", |b, a| run_shake(b, a, 0x78ad2)),
+    handler_sans(0x71680, "ennemi_tremble_b", |b, a| run_shake(b, a, 0x71680)),
+    handler_sans(0x65236, "ennemi_tremble_c", |b, a| run_shake(b, a, 0x65236)),
+];
+
+fn run_shake(b: &mut Cps2Bus, a: &mut crate::dispatch::Dispatch, routine: u32) {
+    own_reaction(&mut crate::families::cx::Gx::aiguille(b, a), routine);
+}

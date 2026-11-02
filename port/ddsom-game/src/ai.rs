@@ -6,7 +6,7 @@
 //! directement ; aucune ne reproduit plus les registres de l'original (preuve : `DDSOM_POISON`, voir
 //! `docs/refactorisation.md`, lot IA).
 //!
-//! Joueurs : 4 enregistrements de 0x200 octets à A5+0x5de (`ram::JOUEURS`) ; un joueur est « ciblable » s'il est
+//! Joueurs : 4 enregistrements de 0x200 octets à A5+0x5de (`ram::PLAYERS`) ; un joueur est « ciblable » s'il est
 //! actif (`+0`), d'état principal < 4 (`+4`), et non masqué (bit 1 de `+1`), avec une règle sur `+0x182`
 //! ([`Rule`]).
 
@@ -15,13 +15,13 @@ use cps2::Cps2Bus;
 use crate::mem::{prog32, prog8, rd16, rd32, rd8};
 use crate::objects::Obj;
 use crate::player::Player;
-use crate::ram::{self, Mot, Octet, JOUEURS, JOUEURS_EN_VIE};
+use crate::ram::{self, Word, Byte, PLAYERS, PLAYERS_ALIVE};
 use crate::rng;
 
 /// Rang (difficulté dynamique 0..31, `objects::rank`) : il indexe les tables de décision et de PV.
-pub const RANG: Mot = Mot::a5(0x7f92);
+pub const RANK: Word = Word::a5(0x7f92);
 /// Niveau de difficulté du réglage (h) : au-delà de 5, les PV initiaux viennent de la seconde moitié de la table.
-const NIVEAU: Octet = Octet::a5(0x48);
+const LEVEL: Byte = Byte::a5(0x48);
 
 /// Champs de l'ennemi lus ou écrits par ces aides.
 pub mod f {
@@ -109,7 +109,7 @@ pub fn target_by(b: &mut Cps2Bus, o: Obj, criterion: Criterion, rule: Rule) -> O
         Criterion::Farthest => 0,
     };
     let mut found = None;
-    for p in JOUEURS.iter() {
+    for p in PLAYERS.iter() {
         if !targetable(b, p, rule) {
             continue;
         }
@@ -154,13 +154,13 @@ pub fn pick_target(b: &mut Cps2Bus, o: Obj, rule: Rule) -> Option<Obj> {
 /// 0x44ee : un joueur ciblable (règle stricte) tiré au hasard devient la cible : trois essais, chacun sur le joueur
 /// qui suit le précédent. Sans joueur en vie, ni tirage ni écriture.
 pub fn random_player(b: &mut Cps2Bus, o: Obj) -> Option<Obj> {
-    if JOUEURS_EN_VIE.get(b) == 0 {
+    if PLAYERS_ALIVE.get(b) == 0 {
         return None;
     }
     let mut k = rng::random(b);
     for _ in 0..3 {
         k = k.wrapping_add(1) & 3;
-        let p = JOUEURS.nth(k as u32);
+        let p = PLAYERS.nth(k as u32);
         if targetable(b, p, Rule::Strict) {
             o.set_u16(b, f::TARGET, p.word());
             return Some(p);
@@ -180,11 +180,11 @@ pub const HP_TABLE_ENEMY: u32 = 0x5c8c;
 /// ligne du nombre de joueurs en vie ; colonne du rang / 2), copiés en `+0x60`, `+0x62` et `+0x64`.
 pub fn initial_hp(b: &mut Cps2Bus, o: Obj, table: u32) {
     let mut index = (o.u8(b, Obj::KIND) as u16) << 8;
-    if NIVEAU.get(b) > 5 {
+    if LEVEL.get(b) > 5 {
         index = index.wrapping_add(0x80);
     }
-    index = index.wrapping_add(((JOUEURS_EN_VIE.get(b).wrapping_sub(1) & 3) as u16) << 5);
-    index = index.wrapping_add((RANG.get(b) >> 1 & 15) * 2);
+    index = index.wrapping_add(((PLAYERS_ALIVE.get(b).wrapping_sub(1) & 3) as u16) << 5);
+    index = index.wrapping_add((RANK.get(b) >> 1 & 15) * 2);
     let hp = rd16(b, table.wrapping_add(index as i16 as u32));
     for field in [f::HP_MAX, f::HP, f::HP_PREV] {
         o.set_u16(b, field, hp);
@@ -205,8 +205,8 @@ pub fn set_immunities(b: &mut Cps2Bus, o: Obj) -> u16 {
 
 /// 0x1059e : rang de PV de `o` (`+0xac`) = (joueurs en vie - 1) × 32 + (rang & 0x1e), sur un octet.
 pub fn hp_rank(b: &mut Cps2Bus, o: Obj) {
-    let players = JOUEURS_EN_VIE.get(b).wrapping_sub(1) << 5;
-    let v = players.wrapping_add(RANG.get(b) as u8 & 0x1e);
+    let players = PLAYERS_ALIVE.get(b).wrapping_sub(1) << 5;
+    let v = players.wrapping_add(RANK.get(b) as u8 & 0x1e);
     o.set_u8(b, f::HP_RANK, v);
 }
 
@@ -222,8 +222,8 @@ const DECISION_TABLE_B: u32 = 0xa516;
 fn decision(b: &mut Cps2Bus, o: Obj, field: u32, table: u32) -> bool {
     let line = (o.u8(b, field) as u16) << 2;
     let masks = rd32(b, table.wrapping_add(line as i16 as u32));
-    let rang = RANG.get(b);
-    let mask = rd32(b, masks.wrapping_add((rang << 2) as i16 as u32));
+    let rank = RANK.get(b);
+    let mask = rd32(b, masks.wrapping_add((rank << 2) as i16 as u32));
     let bit = rng::random(b) & 31;
     mask >> bit & 1 != 0
 }
@@ -245,8 +245,8 @@ const BYTE_TABLES: u32 = 0xac58;
 pub fn pick_byte(b: &mut Cps2Bus, o: Obj) {
     let line = (o.u8(b, f::BYTE_TABLE) as u16) << 2;
     let table = rd32(b, BYTE_TABLES.wrapping_add(line as i16 as u32));
-    let rang = RANG.get(b);
-    let v = rd8(b, table.wrapping_add(rang as i16 as u32));
+    let rank = RANK.get(b);
+    let v = rd8(b, table.wrapping_add(rank as i16 as u32));
     o.set_u8(b, f::BYTE, v);
 }
 
@@ -269,11 +269,11 @@ fn side_of(b: &mut Cps2Bus, o: Obj, other: Obj) -> u8 {
     }
 }
 
-/// 0xb5e0 : la cible de `o` (`+0x50`, au sol) est-elle dans la boîte `boite` devant `o` (0x7f19c sur la cible) ?
-pub fn target_in_front(b: &mut Cps2Bus, o: Obj, boite: crate::ai_aids::Boite) -> crate::ai_aids::DansBoite {
+/// 0xb5e0 : la cible de `o` (`+0x50`, au sol) est-elle dans la boîte `hitbox` devant `o` (0x7f19c sur la cible) ?
+pub fn target_in_front(b: &mut Cps2Bus, o: Obj, hitbox: crate::ai_aids::Hitbox) -> crate::ai_aids::InHitbox {
     match o.u16(b, f::TARGET) {
-        0 => crate::ai_aids::DansBoite::Non,
-        w => crate::ai_aids::box_around(b, o, Obj::from_word(w), boite),
+        0 => crate::ai_aids::InHitbox::Non,
+        w => crate::ai_aids::box_around(b, o, Obj::from_word(w), hitbox),
     }
 }
 
@@ -388,10 +388,10 @@ pub fn keep_in_zone_d5(c: &mut m68k::Cpu, b: &mut Cps2Bus, o: Obj) -> bool {
 // ---------------------------------------------------------------------------------------------
 // Cap (0xf0e8, 0x10574)
 
-/// 0xf0e8 : tourne d'un cran le cap de `o` (`+0x2d`, 0..31) vers le point `vers` (direction de 0x137e), par le
+/// 0xf0e8 : tourne d'un cran le cap de `o` (`+0x2d`, 0..31) vers le point `to` (direction de 0x137e), par le
 /// plus court.
-pub fn turn_toward(b: &mut Cps2Bus, o: Obj, vers: (u16, u16)) {
-    let wanted = crate::aides::direction_from(b, o, vers);
+pub fn turn_toward(b: &mut Cps2Bus, o: Obj, to: (u16, u16)) {
+    let wanted = crate::aids::direction_from(b, o, to);
     let heading = o.u8(b, f::HEADING);
     let diff = wanted.wrapping_sub(heading) & 0x1f;
     if diff == 0 {

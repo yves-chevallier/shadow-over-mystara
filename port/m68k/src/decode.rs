@@ -107,7 +107,7 @@ pub enum Op {
     Not(Size, Ea),
     Clr(Size, Ea),
     Tst(Size, Ea),
-    Tas(Ea),
+    Heap(Ea),
     Ext(Size, u8),
     Swap(u8),
     Exg(u8, u8, u8), // mode (0x08 D-D, 0x09 A-A, 0x11 D-A), rx, ry
@@ -631,7 +631,7 @@ fn decode_4<F: Fetch>(r: &mut Reader<F>, op: u16, mode: u16, reg: u16, rx: u8) -
         0xa => {
             if size_bits == 3 {
                 let ea = r.ea(mode, reg, Size::Byte)?;
-                return if is_data_alt(ea) { Some(Op::Tas(ea)) } else { None };
+                return if is_data_alt(ea) { Some(Op::Heap(ea)) } else { None };
             }
             let size = size2(size_bits)?;
             let ea = r.ea(mode, reg, size)?;

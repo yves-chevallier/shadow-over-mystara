@@ -1,11 +1,11 @@
-//! Doubles graphiques d'ennemis (types ENEMY 22, 23 et 24). Voir `docs/familles/enemy.md`.
+//! Doubles graphiques d'ennemis (types ENEMY 22, 23 et 24). Voir `docs/families/enemy.md`.
 //!
 //! Un double est un ennemi sans logique propre : il recopie son maître (mot `+0xb2`, un ennemi de
 //! type 25 ou 26 qui le crée par paires) et joue l'animation que l'état du maître commande. Deux
 //! jeux de tables de décision, de même charpente : l'état du maître (`+4`) mène à son sous-état
 //! (`+5`), puis à `+6` et au geste en cours `+7`, qui désignent un jeu d'animations de la ROM.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 
@@ -28,7 +28,7 @@ enum Play {
 }
 use Play::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// États du maître (`+4` à `+7`).
 struct Master {
@@ -39,7 +39,7 @@ struct Master {
 }
 
 impl Master {
-    fn read<R: Banc>(x: &mut Cx<'_, R>) -> Master {
+    fn read<R: Bench>(x: &mut Cx<'_, R>) -> Master {
         let m = x.linked(MASTER);
         Master { state: m.u8(x.b, 4), sub: m.u8(x.b, 5), s6: m.u8(x.b, 6), s7: m.u8(x.b, 7) }
     }
@@ -48,7 +48,7 @@ impl Master {
 /// Champ du maître (adresse RAM sur 16 bits).
 const MASTER: u32 = 0xb2;
 
-fn play<R: Banc>(x: &mut Cx<'_, R>, play: Play) {
+fn play<R: Bench>(x: &mut Cx<'_, R>, play: Play) {
     match play {
         Anim(set) => lib::animation_of_master(x, set),
         Hit(set) => lib::animation_of_mark(x, set),
@@ -70,7 +70,7 @@ fn play<R: Banc>(x: &mut Cx<'_, R>, play: Play) {
 /// Jeu d'animations des gestes de la Chimère.
 const GESTURES: u32 = 0x16abd6;
 
-fn restart_or_step<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn restart_or_step<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     if x.u8(0xb6) != 0 {
         x.set8(0xb6, 0);
         lib::start(x, GESTURES, n);
@@ -79,7 +79,7 @@ fn restart_or_step<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
     }
 }
 
-fn restart_or_step_spawn<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn restart_or_step_spawn<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     if x.u8(0xb6) != 0 {
         x.set8(0xb6, 0);
         return lib::start(x, GESTURES, n);
@@ -104,7 +104,7 @@ fn restart_or_step_spawn<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
 /// Perte de PV d'un double qui suit sa propre vie (types 22 et 23) : le gel (`+0x58`) tombe après 20
 /// images ; son ; à 0 PV le double passe en « blessé » (`+0xaf`), le jeu note `dying_code` en `+0x7e`
 /// et crée un effet EFFCT 0x3f de variante `effect_variant`.
-fn hurt<R: Banc>(x: &mut Cx<'_, R>, dying_code: u8, effect_variant: u8) {
+fn hurt<R: Bench>(x: &mut Cx<'_, R>, dying_code: u8, effect_variant: u8) {
     let wait = x.u16(0xb4) as i16;
     if wait > 0 {
         x.set16(0xb4, (wait - 1) as u16);
@@ -134,7 +134,7 @@ fn hurt<R: Banc>(x: &mut Cx<'_, R>, dying_code: u8, effect_variant: u8) {
 
 /// Fin commune : recopie l'état du maître (activité, drapeaux, position décalée de `dy` en
 /// profondeur, orientation, propriétaire) et remet l'objet en liste, sauf s'il vient d'être libéré.
-fn mirror<R: Banc>(x: &mut Cx<'_, R>, dy: u32) {
+fn mirror<R: Bench>(x: &mut Cx<'_, R>, dy: u32) {
     let master = x.linked(MASTER);
     if master.u8(x.b, 0xad) != 0 {
         x.set8(0x38, 0);
@@ -172,7 +172,7 @@ mod manticore {
     /// Jeu neutre (repos) joué quand le maître est dans un état sans geste propre.
     const REST: u32 = 0x16c2da;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -262,7 +262,7 @@ mod spectre {
     /// Jeu de repos (normal, blessé).
     const REST: (u32, u32) = (0x16b7c2, 0x16b822);
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -358,7 +358,7 @@ mod chimera {
     /// Jeu de repos (normal, blessé).
     const REST: (u32, u32) = (0x16ac0c, 0x16ac6c);
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -474,7 +474,7 @@ mod dark_warrior_double {
     const ATTACKED: u16 = 0x400;
     const MASTER_ATTACKED: u16 = 0x406;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -503,7 +503,7 @@ mod dark_warrior_double {
     }
 
     /// Le maître oublie son double, qui crée un effet puis disparaît.
-    fn vanish<R: Banc>(x: &mut Cx<'_, R>) {
+    fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         m.set_u16(x.b, MASTER, 0);
         spawn_effect(x);
@@ -511,7 +511,7 @@ mod dark_warrior_double {
     }
 
     /// 0x77c8a : effet EFFCT 0x32 à la place du double (un pixel plus haut).
-    fn spawn_effect<R: Banc>(x: &mut Cx<'_, R>) {
+    fn spawn_effect<R: Bench>(x: &mut Cx<'_, R>) {
         let Some(e) = x.alloc(&pools::EFFCT) else { return };
         e.set_u8(x.b, 0, 1);
         e.set_u8(x.b, 2, 0x32);
@@ -536,7 +536,7 @@ mod dark_warrior_double {
     // --- recopies du maître ----------------------------------------------------------------------
 
     /// 0x77cdc : recopie du cadre d'animation (`+0x34` long, `+0x38`) du maître.
-    fn copy_frame<R: Banc>(x: &mut Cx<'_, R>) {
+    fn copy_frame<R: Bench>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         let v = m.u32(x.b, 0x34);
         x.set32(0x34, v);
@@ -545,19 +545,19 @@ mod dark_warrior_double {
     }
 
     /// Hauteur du maître (`+0xc`, mot), puis son cadre.
-    fn copy_height<R: Banc>(x: &mut Cx<'_, R>) {
+    fn copy_height<R: Bench>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         let v = m.u16(x.b, 0xc);
         x.set16(0xc, v);
     }
 
-    fn copy_height_frame<R: Banc>(x: &mut Cx<'_, R>) {
+    fn copy_height_frame<R: Bench>(x: &mut Cx<'_, R>) {
         copy_height(x);
         copy_frame(x);
     }
 
     /// Les trois vitesses (X, Z, Y : longs en `+0x14`, `+0x18`, `+0x1c`) du maître.
-    fn copy_speeds<R: Banc>(x: &mut Cx<'_, R>) {
+    fn copy_speeds<R: Bench>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         for off in [0x14, 0x18, 0x1c] {
             let v = m.u32(x.b, off);
@@ -566,7 +566,7 @@ mod dark_warrior_double {
     }
 
     /// Vitesses du maître inversées en X et Y (Z conservée), hauteur et cadre (0x777fa, 0x77a34).
-    fn mirror_speeds<R: Banc>(x: &mut Cx<'_, R>) {
+    fn mirror_speeds<R: Bench>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         let z = m.u32(x.b, 0x18);
         x.set32(0x18, z);
@@ -578,7 +578,7 @@ mod dark_warrior_double {
     }
 
     /// Le maître n'a pas fini son pas d'animation (`+0x33` nul) : le double rejoue le déplacement.
-    fn replay<'a, R: Banc>(x: &mut Cx<'a, R>, mover: fn(&mut Cx<'a, R>)) {
+    fn replay<'a, R: Bench>(x: &mut Cx<'a, R>, mover: fn(&mut Cx<'a, R>)) {
         let m = x.linked(MASTER);
         if m.u8(x.b, 0x33) == 0 {
             mover(x);
@@ -587,7 +587,7 @@ mod dark_warrior_double {
 
     // --- maître actif (+0xb8 = 0 ou 2) -----------------------------------------------------------
 
-    fn follow<R: Banc>(x: &mut Cx<'_, R>) {
+    fn follow<R: Bench>(x: &mut Cx<'_, R>) {
         if !paused(x) {
             let m = x.linked(MASTER);
             match m.u8(x.b, MODE) {
@@ -602,7 +602,7 @@ mod dark_warrior_double {
     }
 
     /// Le maître marche : vitesses inversées, ou déplacement rejoué.
-    fn mode0<R: Banc>(x: &mut Cx<'_, R>) {
+    fn mode0<R: Bench>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         match m.u8(x.b, PHASE) {
             0 | 2 | 4 | 6 => mirror_speeds(x),
@@ -619,7 +619,7 @@ mod dark_warrior_double {
     }
 
     /// 0x77842 : le maître est en vol ou saute ; on recopie ou rejoue selon la phase.
-    fn mode2<R: Banc>(x: &mut Cx<'_, R>) {
+    fn mode2<R: Bench>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         match m.u8(x.b, PHASE) {
             4 | 6 => {
@@ -709,7 +709,7 @@ mod dark_warrior_double {
     }
 
     /// 0x779da : le maître est dans un état spécial ; seules quelques phases déplacent le double.
-    fn mode4<R: Banc>(x: &mut Cx<'_, R>) {
+    fn mode4<R: Bench>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         match m.u8(x.b, PHASE) {
             10 => match m.u8(x.b, STEP) {
@@ -729,9 +729,9 @@ mod dark_warrior_double {
     }
 
     /// 0x77cee : le terrain sous le double renverse-t-il sa vitesse en profondeur ?
-    fn terrain_reverses<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn terrain_reverses<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let t = crate::video::terrain_of(x.b, x.o);
-        let terrain = t.numero & 0x3f;
+        let terrain = t.number & 0x3f;
         *x.c.d2() = *x.c.d2() & !0xffff | terrain as u32;
         if terrain as u8 >= 9 {
             return false;
@@ -742,7 +742,7 @@ mod dark_warrior_double {
 
     // --- maître touché (+0xb8 = 4) ---------------------------------------------------------------
 
-    fn struck<R: Banc>(x: &mut Cx<'_, R>) {
+    fn struck<R: Bench>(x: &mut Cx<'_, R>) {
         x.set16(f::HP, 0x7fff);
         let m = x.linked(MASTER);
         match m.u8(x.b, MODE) {
@@ -797,7 +797,7 @@ mod dark_warrior_double {
     }
 
     /// 0x77ab6 : le double reprend l'état de réaction du maître et rejoue sa routine de réaction.
-    fn replay_reaction<R: Banc>(x: &mut Cx<'_, R>) {
+    fn replay_reaction<R: Bench>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         let sub = m.u16(x.b, PHASE);
         x.set16(f::SUB2, sub);
@@ -811,8 +811,8 @@ mod dark_warrior_double {
 }
 
 handlers! {
-    0x77736 "enemy_26" #[sans] dark_warrior_double::run,
-    0x75f42 "enemy_22" #[sans] chimera::run,
-    0x76592 "enemy_23" #[sans] spectre::run,
-    0x76afc "enemy_24" #[sans] manticore::run,
+    0x77736 "enemy_26" #[without] dark_warrior_double::run,
+    0x75f42 "enemy_22" #[without] chimera::run,
+    0x76592 "enemy_23" #[without] spectre::run,
+    0x76afc "enemy_24" #[without] manticore::run,
 }

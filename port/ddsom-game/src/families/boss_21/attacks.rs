@@ -11,13 +11,13 @@
 //! | 14 | lâcher d'objets autour de la caméra (`+0xb4`) |
 //! | 16 | tourbillon : entrée dans le ralenti |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::decide;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => strike_0(x),
         2 => strike_2(x),
@@ -32,19 +32,19 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Anime l'attaque `n` du jeu des coups et fixe le jeu courant (`+0xa0` et `+0xa1`).
-fn strike_anim<R: Banc>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
+fn strike_anim<R: Bench>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
     strike(x, n);
 }
 
 /// Fin d'une attaque : retour au combat (l'hôte mort et l'absence de joueurs l'emportent).
-fn finish<R: Banc>(x: &mut Cx<'_, R>, to: fn(&mut Cx<'_, R>)) {
+fn finish<R: Bench>(x: &mut Cx<'_, R>, to: fn(&mut Cx<'_, R>)) {
     decide::after_attack(x, to);
 }
 
 /// Consomme l'image-clé `+0x33` ; vrai si elle était levée.
-fn take_key<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn take_key<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(f::KEY_FRAME) == 0 {
         return false;
     }
@@ -53,13 +53,13 @@ fn take_key<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Un effet 0x32 lié au boss avec la variante `v` (poussière, étincelles...), sans insister.
-fn puff<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
+fn puff<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     effect(x, false, 0x32, Some(v), true);
 }
 
 // --- +6 = 0 : coup simple -----------------------------------------------------------------------
 
-fn strike_0<R: Banc>(x: &mut Cx<'_, R>) {
+fn strike_0<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -79,7 +79,7 @@ fn strike_0<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 : coup avec effet ------------------------------------------------------------------
 
-fn strike_2<R: Banc>(x: &mut Cx<'_, R>) {
+fn strike_2<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -100,7 +100,7 @@ fn strike_2<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : bond en avant --------------------------------------------------------------------
 
-fn strike_4<R: Banc>(x: &mut Cx<'_, R>) {
+fn strike_4<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -159,7 +159,7 @@ fn strike_4<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Distance parcourue en X pour atteindre le joueur visé (`+0x50`) à la vitesse courante, convertie en vitesse
 /// verticale de saut : 0x100 + 0xe par pas de vitesse nécessaire.
-fn leap_speed<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn leap_speed<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     let target = x.linked(f::TARGET);
     let mut gap = x.u32(0x8).wrapping_sub(target.u32(x.b, 0x8)) as i32;
     if gap < 0 {
@@ -181,7 +181,7 @@ fn leap_speed<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     v
 }
 
-fn leap<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -243,7 +243,7 @@ fn leap<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 8 et 10 : rayon ------------------------------------------------------------------------
 
-fn beam<R: Banc>(x: &mut Cx<'_, R>) {
+fn beam<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -310,14 +310,14 @@ fn beam<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn beam_end_anim<R: Banc>(x: &mut Cx<'_, R>) {
+fn beam_end_anim<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     strike(x, 8);
 }
 
 // --- +6 = 12 : tir en cinématique ---------------------------------------------------------------
 
-fn cinematic_shot<R: Banc>(x: &mut Cx<'_, R>) {
+fn cinematic_shot<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -394,16 +394,16 @@ fn cinematic_shot<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn step_only<R: Banc>(x: &mut Cx<'_, R>) {
+fn step_only<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
 /// La clé est levée ? (sans la consommer ici : l'original la consomme plus loin).
-fn take_key_keep<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn take_key_keep<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.u8(f::KEY_FRAME) != 0
 }
 
-fn cinematic_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn cinematic_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set_a5_u16(0x51e, 0);
     strike(x, 0xa);
@@ -411,7 +411,7 @@ fn cinematic_end<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 14 : lâcher d'objets --------------------------------------------------------------------
 
-fn summon<R: Banc>(x: &mut Cx<'_, R>) {
+fn summon<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -456,7 +456,7 @@ fn summon<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 16 : tourbillon (entrée dans le ralenti) ------------------------------------------------
 
-fn whirl<R: Banc>(x: &mut Cx<'_, R>) {
+fn whirl<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);

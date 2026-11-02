@@ -3,7 +3,7 @@
 //! Les états sont posés d'un coup comme longs (`+4..+7`) : `0x0202_0400` = actif, groupe 2 (combat), étape 4.
 //! Les tables sont lues dans la ROM (espace des opcodes : adressage relatif au PC).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Obj;
 
@@ -25,18 +25,18 @@ const ATTACK_14: u32 = 0x0204_0e00;
 const ATTACK_16: u32 = 0x0204_1000;
 
 /// 0x9735a : le boss attend (aucun joueur en vie).
-pub(super) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
 /// 0x971f4 : debout, immobile et vulnérable.
-pub(super) fn stand<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set32(f::STATE, STAND);
 }
 
 /// 0x97204 : interrompt l'action en cours (l'état est mémorisé en `+0xa2`).
-pub(super) fn interrupt<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn interrupt<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let state = x.u32(f::STATE);
     x.set32(SAVED_STATE, state);
@@ -44,65 +44,65 @@ pub(super) fn interrupt<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x97218 : marche vers un joueur (tir 0x31).
-pub(super) fn chase<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(SHOT, 0x31);
     x.set32(f::STATE, CHASE);
 }
 
 /// 0x9722e : marche vers un joueur (tir 0x32).
-pub(super) fn chase_b<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn chase_b<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(SHOT, 0x32);
     x.set32(f::STATE, CHASE_B);
 }
 
 /// 0x97288 : charge.
-pub(super) fn dash<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     x.set32(f::STATE, DASH);
 }
 
 /// 0x97296 : attaque 0 (vulnérable).
-pub(super) fn attack_0<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_0<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set32(f::STATE, ATTACK_0);
 }
 
 /// 0x972a6 : attaque 2.
-pub(super) fn attack_2<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_2<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_2);
 }
 
 /// 0x972b4 : attaque 4, invulnérable.
-pub(super) fn attack_4_shielded<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_4_shielded<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     attack_4(x);
 }
 
 /// 0x972ba : attaque 4.
-pub(super) fn attack_4<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_4<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_4);
 }
 
 /// 0x972c8 : attaque 6.
-pub(super) fn attack_6<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_6<R: Bench>(x: &mut Cx<'_, R>) {
     attack(x, ATTACK_6);
 }
 
-fn attack<R: Banc>(x: &mut Cx<'_, R>, state: u32) {
+fn attack<R: Bench>(x: &mut Cx<'_, R>, state: u32) {
     x.set8(VULNERABLE, 0);
     x.set32(f::STATE, state);
 }
 
 /// Le boss est-il dans la fenêtre horizontale de la caméra élargie de `-0x10` à `0x190` (0x104a2) ?
 /// D0 = bords, D1 = largeur ; rend D0 (0 : dedans, 1 : dehors).
-fn off_screen<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn off_screen<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::outside_band(x, -0x10, 0x190)
 }
 
 /// 0x972e0 : attaque 10 si le boss est à l'écran et qu'il lui en reste.
-pub(super) fn attack_10<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_10<R: Bench>(x: &mut Cx<'_, R>) {
     if off_screen(x) || (x.u8(BUDGET_A) as i8) <= 0 {
         return attack_6(x);
     }
@@ -110,7 +110,7 @@ pub(super) fn attack_10<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x97302 : attaque 12.
-pub(super) fn attack_12<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_12<R: Bench>(x: &mut Cx<'_, R>) {
     if off_screen(x) || (x.u8(BUDGET_B) as i8) <= 0 {
         return attack_6(x);
     }
@@ -118,7 +118,7 @@ pub(super) fn attack_12<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x97324 : attaque 14 (lâcher d'objets), tant qu'il en reste à lâcher.
-pub(super) fn attack_14<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_14<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(BUDGET_C) == 0 {
         return attack_6(x);
     }
@@ -129,7 +129,7 @@ pub(super) fn attack_14<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x97340 : attaque 16 (fin du ralenti).
-pub(super) fn attack_16<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attack_16<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(SLOW) as i8) > 0 {
         return chase(x);
     }
@@ -138,7 +138,7 @@ pub(super) fn attack_16<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x97252 : la charge si le boss est dans la bande utile de l'écran, sinon l'attaque 4 quand il regarde du bon côté.
-pub(super) fn dash_or_attack<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn dash_or_attack<R: Bench>(x: &mut Cx<'_, R>) {
     let here = x.u16(0x8);
     let mut edge = camera_x(x).wrapping_add(0x38);
     let mut side = 0x20;
@@ -159,19 +159,19 @@ pub(super) fn dash_or_attack<R: Banc>(x: &mut Cx<'_, R>) {
 // --- états de départ ----------------------------------------------------------------------------
 
 /// 0x97162 : variante 0, arrivée en scène.
-pub(super) fn start_intro<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn start_intro<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(ANIM_KIND, 0x30);
     x.set32(f::STATE, 0x0200_0000);
 }
 
 /// 0x97172 : sortie de la cinématique d'arrivée.
-pub(super) fn start_appear<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn start_appear<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(ANIM_KIND, 0x31);
     x.set32(f::STATE, 0x0200_0200);
 }
 
 /// 0x97182 : mort, début de la cinématique de fin.
-pub(super) fn start_death<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn start_death<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(ANIM_KIND, 0x32);
     x.set8(SLOW, 0);
     x.set8(0, 2);
@@ -191,14 +191,14 @@ pub(super) fn start_death<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x971ce : variante 1.
-pub(super) fn start_variant1<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn start_variant1<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(ANIM_KIND, 0x33);
     x.set_a5_u8(0x66, 1);
     x.set32(f::STATE, 0x0200_0600);
 }
 
 /// 0x971e4 : variante 2.
-pub(super) fn start_variant2<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn start_variant2<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(ANIM_KIND, 0x34);
     x.set32(f::STATE, 0x0200_0800);
 }
@@ -206,58 +206,58 @@ pub(super) fn start_variant2<R: Banc>(x: &mut Cx<'_, R>) {
 // --- tirages ------------------------------------------------------------------------------------
 
 /// Octet de table lu dans la ROM (adressage `(table,PC,Dn)`).
-fn table8<R: Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u8 {
+fn table8<R: Bench>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u8 {
     x.rom8(table + index)
 }
 
-fn table16<R: Banc>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u16 {
+fn table16<R: Bench>(x: &mut Cx<'_, R>, table: u32, index: u32) -> u16 {
     x.rom16(table + index)
 }
 
 /// 0x96ef0 : délai avant le pas suivant, selon la difficulté.
-pub(super) fn walk_delay_fast<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn walk_delay_fast<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x96f08, level);
     x.set8(WALK_DELAY, v);
 }
 
 /// 0x96efc : idem, table des marches lentes.
-pub(super) fn walk_delay_slow<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn walk_delay_slow<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = table8(x, 0x96f28, level);
     x.set8(WALK_DELAY, v);
 }
 
 /// 0x96f48 : nombre de pas d'une marche.
-pub(super) fn walk_steps_fast<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn walk_steps_fast<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     let v = table8(x, 0x96f6c, r);
     x.set8(WALK_STEPS, v);
 }
 
 /// 0x96f5a.
-pub(super) fn walk_steps_slow<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn walk_steps_slow<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     let v = table8(x, 0x96f8c, r);
     x.set8(WALK_STEPS, v);
 }
 
 /// Index de la table de difficulté : `(difficulté & 0x1e) × k + (joueurs - 1)`.
-fn level_index<R: Banc>(x: &mut Cx<'_, R>, k: u32) -> u32 {
+fn level_index<R: Bench>(x: &mut Cx<'_, R>, k: u32) -> u32 {
     let level = (var::RANK.get(x.b) & 0x1e) as u32 * k;
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     level + players.saturating_sub(1)
 }
 
 /// 0x97364 : nombre de coups avant la charge, selon la difficulté et le nombre de joueurs.
-pub(super) fn pick_strike_limit<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn pick_strike_limit<R: Bench>(x: &mut Cx<'_, R>) {
     let i = level_index(x, 2);
     let v = table8(x, 0x97382, i);
     x.set8(STRIKE_LIMIT, v);
 }
 
 /// 0x973c2 : durée du ralenti (mot).
-pub(super) fn pick_slow_time<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn pick_slow_time<R: Bench>(x: &mut Cx<'_, R>) {
     let level = (var::RANK.get(x.b) & 0x1e) as u32 * 4;
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let i = level + 2 * players.saturating_sub(1);
@@ -266,7 +266,7 @@ pub(super) fn pick_slow_time<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x97464 : mode du ralenti (1 ou 2), tiré dans un masque de bits par difficulté et nombre de joueurs.
-pub(super) fn pick_slow_mode<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn pick_slow_mode<R: Bench>(x: &mut Cx<'_, R>) {
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let row = players.saturating_sub(1) << 3;
     let level = ((var::RANK.get(x.b) & 0x18) >> 2) as u32;
@@ -278,14 +278,14 @@ pub(super) fn pick_slow_mode<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x974ea : lâche un nombre d'objets lu dans la table 0x97530 (difficulté, joueurs).
-pub(super) fn spawn_by_level<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn spawn_by_level<R: Bench>(x: &mut Cx<'_, R>) {
     let i = level_index(x, 2);
     let count = table8(x, 0x97530, i) as i8 as i16;
     spawn_ring(x, count);
 }
 
 /// 0x97506 : lâche `count + 1` objets autour de la caméra (0x57c8c) ; `+0xaf` compte ceux qui ont pu naître.
-pub(super) fn spawn_ring<R: Banc>(x: &mut Cx<'_, R>, count: i16) {
+pub(super) fn spawn_ring<R: Bench>(x: &mut Cx<'_, R>, count: i16) {
     let mut d5 = count as u16;
     loop {
         let i = (d5 as u32).wrapping_mul(4) & 0xffff;
@@ -295,7 +295,7 @@ pub(super) fn spawn_ring<R: Banc>(x: &mut Cx<'_, R>, count: i16) {
         let py = dy.wrapping_add(var::CAMERA1_Y.get(x.b));
         // (D0, D1, D2) = (x, 0, y) ; D2 (mot bas) reste
         *x.c.d2() = *x.c.d2() & 0xffff_0000 | py as u32;
-        if crate::families::creators::enemy_1_at_pur(x.b, x.o, (px, 0, py)).is_some() {
+        if crate::families::creators::enemy_1_at_pure(x.b, x.o, (px, 0, py)).is_some() {
             x.add8(SPAWNED, 1);
         }
         if d5 == 0 {
@@ -310,7 +310,7 @@ pub(super) fn spawn_ring<R: Banc>(x: &mut Cx<'_, R>, count: i16) {
 // --- choix d'attaque d'après les boîtes de portée ------------------------------------------------
 
 /// 0x96fac, 0x96fc8 : un joueur est-il dans la boîte `(d0, d1, d2)` ? Rend 0 sinon, ou 1 / 2 : le côté (0x1047a).
-pub(super) fn probe<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u8 {
+pub(super) fn probe<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u8 {
     if !lib::target_in_box(x, d0, d1, d2) {
         return 0;
     }
@@ -318,7 +318,7 @@ pub(super) fn probe<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u8
 }
 
 /// 0x96fe4 : un joueur est tout près devant ; la table 0x96ffa choisit l'entrée de 0x9700a.
-pub(super) fn choose_close<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
     let pick = table8(x, 0x96ffa, r);
     let target = 0x9700a_i32 + table16(x, 0x9700a, pick as u32) as i16 as i32;
@@ -329,7 +329,7 @@ pub(super) fn choose_close<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9700c : un joueur est devant : selon la phase de combat, une charge ou une attaque.
-pub(super) fn choose_front<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
     let phase = x.u8(PHASE) as i8 as i32;
     let entry = x.rom16(0x97026 + (2 * phase) as u32) as i16 as i32;
@@ -348,7 +348,7 @@ pub(super) fn choose_front<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x97078 : un joueur est à mi-distance ; `side` = 1 ou 2 (0x1047a).
-pub(super) fn choose_mid<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn choose_mid<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0xf;
     let pick = table8(x, 0x970aa, r);
     let target = 0x970ba_i32 + table16(x, 0x970ba, pick as u32) as i16 as i32;
@@ -361,7 +361,7 @@ pub(super) fn choose_mid<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x970c0 : un joueur est loin ; `side` = 1 ou 2.
-pub(super) fn choose_far<R: Banc>(x: &mut Cx<'_, R>, side: u8) {
+pub(super) fn choose_far<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
     let r = random(x) & 0xf;
     let entry = (side as u32 - 1) * 2 + 4 * (x.u8(PHASE) as i8 as i32 as u32);
     let which = x.rom16(0x970e4 + entry) as i16 as i32;

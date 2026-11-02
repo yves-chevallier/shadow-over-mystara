@@ -22,7 +22,7 @@ use super::super::walk::{move_x, move_xz, move_z};
 use super::super::{animation, Ctx, Player};
 use crate::objects::Obj;
 use crate::player::ram;
-use crate::player::externes as ext;
+use crate::player::external as ext;
 
 /// Routines d'origine appelées telles quelles : tirs, effets joueur, sons, palettes et effets d'écran.
 
@@ -162,7 +162,7 @@ fn start_lunge(g: &mut Ctx, p: Player) {
     cov!();
     common::set_forward_motion(g, p, 0x400, (-0x38i16) as u16);
     animation::start_plain(g, p, 0xd);
-    g.son(ext::son::STRIKE_LIGHT, p);
+    g.sound(ext::sound::STRIKE_LIGHT, p);
 }
 
 /// Coup de bâton (0x45d88) : un coup, puis, si le bouton reste appuyé et que le coup a porté, une fente.
@@ -275,7 +275,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
             p.set_u8(g, field::MOVE_STATE, 1);
             p.set_u8(g, field::MOVE_KIND, 1);
             animation::start_plain(g, p, 0xc);
-            g.son(ext::son::STRIKE_HEAVY, p);
+            g.sound(ext::sound::STRIKE_HEAVY, p);
             clear_recognizers(g, p);
         }
         2 => common::wait_then_stand(g, p),
@@ -322,7 +322,7 @@ pub fn dash(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, 0x1e8, 8);
                 animation::start(g, p, 0x1d);
-                g.son(ext::son::SLIDE, p);
+                g.sound(ext::sound::SLIDE, p);
             }
         }
         4 => {
@@ -432,7 +432,7 @@ pub fn special(g: &mut Ctx, p: Player) {
 /// Joue des sons de la ROM.
 fn sounds(g: &mut Ctx, p: Player, list: &[u32]) {
     for &sound in list {
-        g.son(sound, p);
+        g.sound(sound, p);
     }
 }
 
@@ -479,7 +479,7 @@ fn sparks(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 crate::families::creators::for_players::sparks_68k(g.c, g.b, p.obj());
-                g.son(0xe84c6, p);
+                g.sound(0xe84c6, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -487,7 +487,7 @@ fn sparks(g: &mut Ctx, p: Player) {
                 let level = p.u8(g, Player::LEVEL) as u32;
                 let gesture = g.prog8(SPARK_GESTURES + level) as u16;
                 animation::start_plain(g, p, 0x36 + gesture);
-                g.son(0xe2f3a, p);
+                g.sound(0xe2f3a, p);
             }
         }
         4 => {
@@ -534,7 +534,7 @@ fn bolt(g: &mut Ctx, p: Player) {
                 g.c.d[0] = 0;
                 crate::families::creators::for_players::bolt_68k(g.c, g.b, p.obj(), 0);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
-                g.son(0xe2a34, p);
+                g.sound(0xe2a34, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -545,7 +545,7 @@ fn bolt(g: &mut Ctx, p: Player) {
         4 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.son(0xe88d0, p);
+                g.sound(0xe88d0, p);
                 if is_cancelled(g, p) {
                     p.set_u8(g, Player::STEP, 0xa);
                     common::cancel_cast(g, p, 0x1d);
@@ -602,7 +602,7 @@ fn frost(g: &mut Ctx, p: Player) {
                 g.c.d[0] = 0;
                 p.set_u16(g, field::TIMER, 0x78);
                 animation::start_plain(g, p, 0x22);
-                g.son(0xe2fba, p);
+                g.sound(0xe2fba, p);
             }
         }
         6 => {
@@ -699,12 +699,12 @@ fn quake(g: &mut Ctx, p: Player) {
                 let duration = by_level(g, p, QUAKE_DURATIONS);
                 p.set_u16(g, field::TIMER, duration);
                 animation::start_plain(g, p, 0x3e);
-                g.son(0xe2ffa, p);
+                g.sound(0xe2ffa, p);
             } else if take_event(g, p) {
                 g.c.d[0] = 0;
                 crate::families::creators::quake_68k(g.c, g.b, p.obj(), true);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
-                g.son(0xe8db4, p);
+                g.sound(0xe8db4, p);
             }
         }
         4 => {
@@ -719,8 +719,8 @@ fn quake(g: &mut Ctx, p: Player) {
                 }
                 g.c.d[0] = 1;
                 crate::families::creators::quake_68k(g.c, g.b, p.obj(), false);
-                crate::families::petites::quake_b_68k(g.c, g.b, p.obj());
-                g.son(0xe8b22, p);
+                crate::families::small::quake_b_68k(g.c, g.b, p.obj());
+                g.sound(0xe8b22, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -784,14 +784,14 @@ fn storm(g: &mut Ctx, p: Player) {
                 g.c.d[0] = 0;
                 crate::families::creators::for_players::bolt_68k(g.c, g.b, p.obj(), 0);
                 crate::placement::load_effect_palette(g.b, if step == 2 { crate::placement::effect_palette::LIGHT } else { crate::placement::effect_palette::NORMAL });
-                g.son(0xe2a74, p);
-                g.son(if step == 2 { 0xe97b4 } else { 0xe974a }, p);
+                g.sound(0xe2a74, p);
+                g.sound(if step == 2 { 0xe97b4 } else { 0xe974a }, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, if step == 2 { 0xc0 } else { 0xb0 });
                 animation::start_plain(g, p, 0x2a);
-                g.son(0xe303a, p);
+                g.sound(0xe303a, p);
             }
         }
         4 | 0xc => {
@@ -846,7 +846,7 @@ fn rain(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0x60);
                 animation::start_plain(g, p, 0x34);
-                g.son(0xe317a, p);
+                g.sound(0xe317a, p);
             }
         }
         4 => {
@@ -859,7 +859,7 @@ fn rain(g: &mut Ctx, p: Player) {
                 }
                 spawn::rain_glow(g, p, 1);
                 spawn::rain(g, p);
-                g.son(0xe948e, p);
+                g.sound(0xe948e, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -891,8 +891,8 @@ fn witch(g: &mut Ctx, p: Player) {
                 p.set_u16(g, 0x1d4, 0);
                 p.set_u16(g, field::TIMER, 0x2c);
                 animation::start_plain(g, p, 0x18);
-                g.son(0xe2a34, p);
-                g.son(0xe960c, p);
+                g.sound(0xe2a34, p);
+                g.sound(0xe960c, p);
                 return;
             }
             if p.u16(g, field::TIMER) == 0x13 && !is_cancelled(g, p) {
@@ -907,8 +907,8 @@ fn witch(g: &mut Ctx, p: Player) {
                 let (timer, anim) = if p.u8(g, 0x1e8) != 0 { (0x80, 0x1a) } else { (0x50, 0x19) };
                 p.set_u16(g, field::TIMER, timer);
                 animation::start_plain(g, p, anim);
-                g.son(0xe31ba, p);
-                g.son(0xe9676, p);
+                g.sound(0xe31ba, p);
+                g.sound(0xe9676, p);
                 return;
             }
             if is_cancelled(g, p) {
@@ -959,13 +959,13 @@ fn curse(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0x30);
                 animation::start_plain(g, p, 0x2a);
-                g.son(0xe31fa, p);
+                g.sound(0xe31fa, p);
             }
         }
         4 => {
             animation::step(g, p);
             if p.u16(g, field::TIMER) == 0x18 {
-                g.son(0xea106, p);
+                g.sound(0xea106, p);
             }
             if countdown(g, p) {
                 let timer = by_level(g, p, CURSE_DURATIONS);
@@ -993,12 +993,12 @@ fn wave(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u16(g, field::TIMER, 0x30);
                 animation::start_plain(g, p, 0x41);
-                g.son(0xe30ba, p);
+                g.sound(0xe30ba, p);
             } else if take_event(g, p) {
                 spawn::wave_bolt(g, p, false);
                 spawn::wave_bolt(g, p, true);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
-                g.son(0xe9240, p);
+                g.sound(0xe9240, p);
             } else {
                 animation::step(g, p);
             }
@@ -1097,8 +1097,8 @@ fn portal(g: &mut Ctx, p: Player) {
             crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
             spawn::portal(g, p, 2);
             animation::start_plain(g, p, 0x30);
-            g.son(0xe91d6, p);
-            g.son(0xe2a34, p);
+            g.sound(0xe91d6, p);
+            g.sound(0xe2a34, p);
         }
         4 => {
             if !is_cancelled(g, p) {
@@ -1108,8 +1108,8 @@ fn portal(g: &mut Ctx, p: Player) {
                     spawn::portal(g, p, 1);
                     { crate::palette::flash(g.b, crate::palette::Flash::E); };
                     foes::strike_foes(g, p, &PORTAL_STRIKE);
-                    g.son(0xe307a, p);
-                    g.son(0xe9176, p);
+                    g.sound(0xe307a, p);
+                    g.sound(0xe9176, p);
                 }
             }
             if countdown(g, p) {
@@ -1156,9 +1156,9 @@ fn summon(g: &mut Ctx, p: Player) {
             } else {
                 p.set_u16(g, field::TIMER, 0x168);
                 spawn::summon(g, p);
-                g.son(0xe9cd4, p);
+                g.sound(0xe9cd4, p);
             }
-            g.son(0xe30fa, p);
+            g.sound(0xe30fa, p);
             animation::start_plain(g, p, 0x15);
         }
         4 => {
@@ -1211,7 +1211,7 @@ fn wall(g: &mut Ctx, p: Player) {
             if take_event(g, p) {
                 spawn::wall_spark(g, p, 0);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
-                g.son(0xe92c6, p);
+                g.sound(0xe92c6, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -1224,8 +1224,8 @@ fn wall(g: &mut Ctx, p: Player) {
                 p.set_u16(g, field::TIMER, 0x40);
                 spawn::wall_spark(g, p, 1);
                 animation::start_plain(g, p, 0x2d);
-                g.son(0xe313a, p);
-                g.son(0xe9330, p);
+                g.sound(0xe313a, p);
+                g.sound(0xe9330, p);
             }
         }
         4 => {
@@ -1262,7 +1262,7 @@ fn drain(g: &mut Ctx, p: Player) {
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
                 spawn::portal(g, p, 2);
                 animation::start_plain(g, p, 0x30);
-                g.son(0xe91d6, p);
+                g.sound(0xe91d6, p);
             }
         }
         4 => {
@@ -1271,7 +1271,7 @@ fn drain(g: &mut Ctx, p: Player) {
                 spawn::portal_glow(g, p);
                 spawn::portal(g, p, 0);
                 spawn::portal_sparks(g, p);
-                g.son(0xe323a, p);
+                g.sound(0xe323a, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -1355,7 +1355,7 @@ fn sacrifice(g: &mut Ctx, p: Player) {
             }
             let bar = (index as u32) << 8 | kind as u32;
             let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, 0x28) as u32);
-            crate::evenements::creer_popup(g.b, crate::evenements::Popup { entete: bar as u16, max: max as u16, valeur: hp as u16, brut: class as u8 == 2 });
+            crate::events::create_popup(g.b, crate::events::Popup { header: bar as u16, max: max as u16, value: hp as u16, raw: class as u8 == 2 });
         }
     }
     for q in Player::all() {

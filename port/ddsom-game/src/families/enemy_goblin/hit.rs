@@ -1,16 +1,16 @@
 //! Type 15, état touché (`+4 = 4`, 0x6e61a). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
 //! 6 seconde table de réactions, 8 saisie par un joueur. Zone et ombre sont toujours testées.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x6e68c;
 const REACT_SECOND: u32 = 0x6e824;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -30,7 +30,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Recul (0x6e738).
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -57,7 +57,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Chute puis relevé (0x6e7a2).
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

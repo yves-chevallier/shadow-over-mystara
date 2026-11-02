@@ -1,11 +1,11 @@
 //! Boss 9, état 4 : coup reçu (`+5` = 0) et engin détruit (`+5` = 2).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::moves::{restart, roll};
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 {
         shaken(x)
     } else {
@@ -16,7 +16,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 0 : coup reçu --------------------------------------------------------------------------
 
 /// 0x8b49c : gel, puis secousse (`+6` = 0 à 4) ; remise en liste.
-fn shaken<R: Banc>(x: &mut Cx<'_, R>) {
+fn shaken<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE);
     if freeze != 0 && (freeze as i8) > 0 {
         x.set8(f::FREEZE, freeze - 1);
@@ -37,7 +37,7 @@ fn shaken<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8b4c2 : le coup : avaries, gel ; plus de PV : détruit ; sinon secousse et recul à l'opposé de l'attaquant.
-fn struck<R: Banc>(x: &mut Cx<'_, R>) {
+fn struck<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xea984);
     damage_bits(x);
     let f = x.u8(0x56);
@@ -68,7 +68,7 @@ fn struck<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8b9ca : secousse de ±`amplitude` (D0 de l'original ; alternée, dans le sens de l'engin).
-fn shake<R: Banc>(x: &mut Cx<'_, R>, amplitude: u16) {
+fn shake<R: Bench>(x: &mut Cx<'_, R>, amplitude: u16) {
     let n = x.u8(SHAKE).wrapping_sub(1);
     x.set8(SHAKE, n);
     let mut d = amplitude;
@@ -82,7 +82,7 @@ fn shake<R: Banc>(x: &mut Cx<'_, R>, amplitude: u16) {
 }
 
 /// 0x8b55e : recul jusqu'à l'arrêt (octet fort de la vitesse nul), puis reprise de l'état mémorisé.
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if every(x, 3) {
         smoke_pair(x, 0, 2);
     }
@@ -111,7 +111,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Le coup est consommé (gel, dérive, coup, état mémorisé).
-fn clear_hit<R: Banc>(x: &mut Cx<'_, R>) {
+fn clear_hit<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::FREEZE, 0);
     x.set16(0x16, 0);
     x.set32(0x58, 0);
@@ -120,7 +120,7 @@ fn clear_hit<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8b628 : détruit : la scène est prévenue (0x900 : boss 9 vaincu), l'équipage saute.
-fn destroyed<R: Banc>(x: &mut Cx<'_, R>) {
+fn destroyed<R: Bench>(x: &mut Cx<'_, R>) {
     damage_bits(x);
     count_crew(x);
     x.add8(f::SUB, 2);
@@ -148,7 +148,7 @@ const A5_DEATH: u32 = 0xff8000 - 0x557c;
 // --- groupe 2 : détruit ------------------------------------------------------------------------------
 
 /// 0x8b67c : l'épave sort de l'écran, revient, l'équipage est éjecté, dialogue, puis chute hors de l'écran.
-fn wreck<R: Banc>(x: &mut Cx<'_, R>) {
+fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u16(0x51e, 0);
     if var::PAUSE.get(x.b) != 0 {
         return;
@@ -275,7 +275,7 @@ fn wreck<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8b6c8 : l'épave part vers le bord (en remplaçant l'équipage tant qu'il en manque).
-fn leaving<R: Banc>(x: &mut Cx<'_, R>) {
+fn leaving<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(CREW_LOST) != 0 {
         x.set8(GAIT, 2);
         count_crew(x);

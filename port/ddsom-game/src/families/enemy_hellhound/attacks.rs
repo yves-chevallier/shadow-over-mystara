@@ -7,24 +7,24 @@
 //! * 10 : promenade tant qu'aucun joueur n'est en vie ;
 //! * 12 : morsure d'un joueur terrassé.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::arrival::stand_when_done;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Table de la ROM : durée et clé de tir des flammes du souffle.
 const FLAME_SCRIPT: u32 = 0x62284;
 
 /// Effet d'une morsure ou d'un coup (0x9eba6 puis 0xebd30) ; la clé d'animation est remise à zéro.
-fn bite_effect<R: Banc>(x: &mut Cx<'_, R>, kind: u32) {
+fn bite_effect<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
     x.set8(f::KEY_FRAME, 0);
-    crate::families::eshl_creators::shot_6(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, kind as u8);
+    crate::families::eshl_creators::shot_6(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o, kind as u8);
     lib::sound(x, 0xebd30);
 }
 
 /// 0x61c88 : prépare l'attente (aspect 0, animation 0).
-fn begin_wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn begin_wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     look(x, 0);
@@ -33,7 +33,7 @@ fn begin_wait<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x61fa0 / 0x61f94 : poursuite en place jusqu'à la fin du compteur `+0x77`, avec demi-tour si la cible change
 /// de côté ; `resume` est l'état à reprendre après le demi-tour.
-fn hold<R: Banc>(x: &mut Cx<'_, R>, resume: u32) {
+fn hold<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
     x.set32(RESUME_STATE, resume);
     let n = x.u8(AI_LUNGE).wrapping_sub(1);
     x.set8(AI_LUNGE, n);
@@ -49,14 +49,14 @@ fn hold<R: Banc>(x: &mut Cx<'_, R>, resume: u32) {
 }
 
 /// 0x61eb0 : fin de l'animation d'un coup → suite (0x63790).
-fn step_then_after<R: Banc>(x: &mut Cx<'_, R>) {
+fn step_then_after<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         after_strike(x);
     }
 }
 
 /// Fin d'animation d'un coup : animation de marche, puis suite (0x63790).
-fn done_then_after<R: Banc>(x: &mut Cx<'_, R>) {
+fn done_then_after<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         mv(x, 0);
         after_strike(x);
@@ -65,7 +65,7 @@ fn done_then_after<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Attend la clé d'animation puis passe à l'étape suivante, sans remettre la clé à zéro (0x61ec0 remet
 /// `+0x33` à zéro, pas 0x6244a).
-fn wait_key_clear<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_key_clear<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         x.add8(f::SUB3, 2);
@@ -75,7 +75,7 @@ fn wait_key_clear<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x61eda : en plein bond, la clé déclenche la morsure ; à terre, poussière et animation d'atterrissage.
-fn bite_land<R: Banc>(x: &mut Cx<'_, R>) {
+fn bite_land<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         let Some(player) = lib::attack_hits_a_player(x, 4) else { return step_then_after(x) };
         x.set32(Obj::Z, 0);
@@ -96,7 +96,7 @@ fn bite_land<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x61f3c : le chien glisse en soufflant de la poussière jusqu'à l'arrêt.
-fn slide<R: Banc>(x: &mut Cx<'_, R>) {
+fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     puff(x, 3, 1, 1, -0x18, -1);
     if x.u8(Obj::VX) == 0 {
         x.add8(f::SUB3, 2);
@@ -107,7 +107,7 @@ fn slide<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Début d'un bond d'attaque : vitesse horizontale `vx` (inversée si l'ennemi regarde à gauche).
-fn begin_jump<R: Banc>(x: &mut Cx<'_, R>, vx: i16, speed_z: u16, anim: u32, set: u32) {
+fn begin_jump<R: Bench>(x: &mut Cx<'_, R>, vx: i16, speed_z: u16, anim: u32, set: u32) {
     x.set16(Obj::VX, vx as u16);
     if x.u8(f::FLIP) != 0 {
         negate(x, Obj::VX);
@@ -120,7 +120,7 @@ fn begin_jump<R: Banc>(x: &mut Cx<'_, R>, vx: i16, speed_z: u16, anim: u32, set:
 
 // --- sous-état 4 ----------------------------------------------------------------------------------------
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => lunge(x),
         2 | 4 => bite(x),
@@ -133,7 +133,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 0 : course, saut éventuel puis morsure.
-fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
+fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -167,7 +167,7 @@ fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 2 et 4 : morsure en place.
-fn bite<R: Banc>(x: &mut Cx<'_, R>) {
+fn bite<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -186,7 +186,7 @@ fn bite<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 6 : coup de patte, avec élan ou en courant (deux variantes tirées au hasard).
-fn paw<R: Banc>(x: &mut Cx<'_, R>) {
+fn paw<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.set8(VULNERABLE, 1);
@@ -234,14 +234,14 @@ fn paw<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Le geste fini, le chien reprend l'approche (état 2, `+6` = 0, étape 2) et revérifie les portées (0x61aa4).
-fn back_on_guard<R: Banc>(x: &mut Cx<'_, R>) {
+fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, 0x0202_0002);
     mv(x, 2);
     stance::reach_boxes(x);
 }
 
 /// `+6` = 8 : bond en avant puis morsure.
-fn jump_bite<R: Banc>(x: &mut Cx<'_, R>) {
+fn jump_bite<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -260,7 +260,7 @@ fn jump_bite<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 10, 12, 14 : coup de patte court.
-fn short_paw<R: Banc>(x: &mut Cx<'_, R>) {
+fn short_paw<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -279,7 +279,7 @@ fn short_paw<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 16 : souffle de feu (animation 8 puis une série de tirs d'après la table).
-fn breath<R: Banc>(x: &mut Cx<'_, R>) {
+fn breath<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => begin_wait(x),
         2 => hold(x, 0x0204_0000),
@@ -297,7 +297,7 @@ fn breath<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6220e : la clé d'animation lance la série de flammes.
-fn flame_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn flame_start<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(TIMER, 1);
         x.set8(SCRIPT, 0);
@@ -309,7 +309,7 @@ fn flame_start<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Décompte de la série de flammes ; à zéro, tire la durée suivante dans la table ; `both` : deux effets par tir
 /// (sous-état 4) au lieu d'un seul (sous-état 6). Rend faux quand la série est finie (0x62266 dans l'original).
-fn flame_tick<R: Banc>(x: &mut Cx<'_, R>, both: bool) -> bool {
+fn flame_tick<R: Bench>(x: &mut Cx<'_, R>, both: bool) -> bool {
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
     if n != 0 {
@@ -327,13 +327,13 @@ fn flame_tick<R: Banc>(x: &mut Cx<'_, R>, both: bool) -> bool {
     if both {
         lib::sound(x, 0xed398);
     }
-    crate::families::eshl_creators::sweeping_8(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
+    crate::families::eshl_creators::sweeping_8(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
     true
 }
 
 // --- sous-état 6 -------------------------------------------------------------------------------------------
 
-pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     // étapes communes : 0 attente, 2 poursuite en place (retour à l'état 6)
     match x.u8(f::SUB3) {
         0 => return begin_wait(x),
@@ -353,7 +353,7 @@ pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x61a8c : le chien se met à l'affût (test aléatoire, puis boîtes de portée ou charge).
-fn ready<R: Banc>(x: &mut Cx<'_, R>) {
+fn ready<R: Bench>(x: &mut Cx<'_, R>) {
     if !lib::maybe_draw_6e(x) {
         stance::reach(x);
     } else {
@@ -362,7 +362,7 @@ fn ready<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x62332 : debout, aspect 0, puis à l'affût.
-fn stand_and_ready<R: Banc>(x: &mut Cx<'_, R>) {
+fn stand_and_ready<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     x.set8(LOOK, 0);
     mv(x, 0);
@@ -370,13 +370,13 @@ fn stand_and_ready<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6231e : l'animation finie, retour debout et à l'affût.
-fn b_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn b_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         stand_and_ready(x);
     }
 }
 
-fn b_charge<R: Banc>(x: &mut Cx<'_, R>) {
+fn b_charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             let r = rand_and(x, 1);
@@ -403,7 +403,7 @@ fn b_charge<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn b_stretch<R: Banc>(x: &mut Cx<'_, R>) {
+fn b_stretch<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
@@ -417,7 +417,7 @@ fn b_stretch<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Saut de côté (0x6239e) : vitesse en profondeur tirée au hasard.
-fn b_hop<R: Banc>(x: &mut Cx<'_, R>) {
+fn b_hop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
@@ -447,7 +447,7 @@ fn b_hop<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 6 : bond en avant, atterrissage, retour à l'affût.
-fn b_lunge<R: Banc>(x: &mut Cx<'_, R>) {
+fn b_lunge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => jump_forward(x),
         6 => wait_key(x),
@@ -458,7 +458,7 @@ fn b_lunge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 8 : bond, atterrissage puis coup de queue.
-fn b_slash<R: Banc>(x: &mut Cx<'_, R>) {
+fn b_slash<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => jump_forward(x),
         6 => wait_key(x),
@@ -475,7 +475,7 @@ fn b_slash<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x62404 : élan du bond (animation 6).
-fn jump_forward<R: Banc>(x: &mut Cx<'_, R>) {
+fn jump_forward<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     look(x, 6);
@@ -489,7 +489,7 @@ fn jump_forward<R: Banc>(x: &mut Cx<'_, R>) {
     mv(x, 6);
 }
 
-fn b_claw<R: Banc>(x: &mut Cx<'_, R>) {
+fn b_claw<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => jump_forward(x),
         6 => wait_key(x),
@@ -504,7 +504,7 @@ fn b_claw<R: Banc>(x: &mut Cx<'_, R>) {
         12 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(f::KEY_FRAME, 0);
-                crate::families::eshl_creators::shot_6(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, 1);
+                crate::families::eshl_creators::shot_6(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o, 1);
             }
             if x.anim_step() {
                 stand_and_ready(x);
@@ -514,7 +514,7 @@ fn b_claw<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn b_flames<R: Banc>(x: &mut Cx<'_, R>) {
+fn b_flames<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => jump_forward(x),
         6 => wait_key(x),
@@ -545,7 +545,7 @@ fn b_flames<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 8 ----------------------------------------------------------------------------------------------
 
-pub(super) fn run_c<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run_c<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 6 => c_wait(x),
         2 => c_leap(x),
@@ -554,7 +554,7 @@ pub(super) fn run_c<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn c_wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn c_wait<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 0xfe);
@@ -583,14 +583,14 @@ fn c_wait<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn c_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn c_begin<R: Bench>(x: &mut Cx<'_, R>) {
     look(x, 0);
     x.set8(VULNERABLE, 1);
     mv(x, 0);
 }
 
 /// `+6` = 2 : bond d'attaque, retombée, retour debout (0x616d8).
-fn c_leap<R: Banc>(x: &mut Cx<'_, R>) {
+fn c_leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => jump_forward(x),
         2 => wait_key(x),
@@ -601,7 +601,7 @@ fn c_leap<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 4 : pas de côté (en courant) ou saut de côté.
-fn c_side<R: Banc>(x: &mut Cx<'_, R>) {
+fn c_side<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.set8(VULNERABLE, 1);
@@ -654,7 +654,7 @@ fn c_side<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 10 : promenade ----------------------------------------------------------------------------
 
-pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -695,7 +695,7 @@ pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 12 : morsure d'un joueur terrassé ------------------------------------------------------------
 
-pub(super) fn grab<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     let which = x.u8(f::SUB2);
     if (x.u16(f::TARGET) as i16) >= 0 {
         return set_state_long(x, STANCE);
@@ -723,7 +723,7 @@ pub(super) fn grab<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6293e : chaque morsure (clé `+0x33`) tire de la vie au joueur ; à la dernière il est libéré.
-fn bite_victim<R: Banc>(x: &mut Cx<'_, R>, which: u8) {
+fn bite_victim<R: Bench>(x: &mut Cx<'_, R>, which: u8) {
     x.anim_step();
     if x.u8(f::KEY_FRAME) == 0 {
         return lib::hold_seized(x);
@@ -761,7 +761,7 @@ fn bite_victim<R: Banc>(x: &mut Cx<'_, R>, which: u8) {
     lib::hold_seized(x);
 }
 
-fn release<R: Banc>(x: &mut Cx<'_, R>) {
+fn release<R: Bench>(x: &mut Cx<'_, R>) {
     let victim = x.linked(f::TARGET);
     victim.set_u8(x.b, 0x6f, 1);
     lib::release_player(x, victim);

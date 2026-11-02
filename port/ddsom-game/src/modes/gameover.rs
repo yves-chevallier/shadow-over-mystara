@@ -27,7 +27,7 @@ const CLEARED: u32 = 0x1c846;
 pub const PHASE_20: Native = Native {
     entry: 0x1c80c,
     name: "gameover_phase_20",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
         if phase_20(&mut x) == Flow::Done {
             rts(x.c, x.b);
@@ -39,31 +39,31 @@ pub const PHASE_20: Native = Native {
 
 /// Phase 20 de la partie (`0x1c80c`) : fin de partie.
 pub fn phase_20(x: &mut Ctx) -> Flow {
-    crate::kernel::tuer_tache(x.b, PLAYER_UI_SLOT as u32);
+    crate::kernel::kill_task(x.b, PLAYER_UI_SLOT as u32);
     wr16(x.b, A5 + 0x490, 1);
     wr8(x.b, A5 + 0x48e, 0xf);
-    x.sous_programme(crate::taches::fondu::descente, Etape::Faded)
+    x.subroutine(crate::tasks::fading::descent, Step::Faded)
 }
 
-crate::etapes! {
+crate::steps! {
     /// Étapes (points de reprise) de la machine à états.
-    pub enum Etape {
+    pub enum Step {
         Faded = FADED => |x| {
             wr16(x.b, CPS_REG_VIDEO_B, VIDEO_ON);
             wr16(x.b, A5 + 0x14, VIDEO_ON);
             wr8(x.b, A5 + 0x53c, 0);
             let flags = rd16(x.b, A5 + 0x12) & !1;
             wr16(x.b, A5 + 0x12, flags);
-            x.sous_programme(crate::video::ecran_noir::debut, Etape::Cleared)
+            x.subroutine(crate::video::black_screen::start, Step::Cleared)
         },
         Cleared = CLEARED => |x| {
-            crate::families::petites::variables_de_partie_a_zero(x.b);
+            crate::families::small::zero_game_variables(x.b);
             wr8(x.b, A5 + 0x30, 1);
             reset_modes(x);
             wr8(x.b, mode::BOOTED, 1);
-            crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
+            crate::sound::service(x.b, crate::sound::Service::GeneralStop);
             x.c.a[0] = MODE_LOOP;
-            crate::taches::recommencer(x)
+            crate::tasks::restart(x)
         },
     }
 }

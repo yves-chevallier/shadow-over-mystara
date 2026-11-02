@@ -111,7 +111,7 @@ pub fn despawn_if_offscreen(b: &mut Cps2Bus, obj: Obj) {
     }
 }
 
-/// Registres que laissent les routines d'origine (voir `diag::registres_morts`, étiquette `cull`).
+/// Registres que laissent les routines d'origine (voir `diag::dead_regs`, étiquette `cull`).
 pub const REGS_DESPAWN: u32 = regs::d(0) | regs::a(1) | regs::CCR;
 pub const REGS_IN_ARENA: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::CCR;
 pub const REGS_VISIBILITY: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::a(2) | regs::CCR;
@@ -120,7 +120,7 @@ pub const REGS_VISIBILITY: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::a(
 #[track_caller]
 pub fn despawn_if_offscreen_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
     cull_offscreen(c, b, obj);
-    crate::diag::registres_morts(c, "cull", REGS_DESPAWN);
+    crate::diag::dead_regs(c, "cull", REGS_DESPAWN);
 }
 
 /// 0x1e1a, registres compris.
@@ -150,7 +150,7 @@ fn cull_offscreen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
 pub const CULL_OFFSCREEN: Native = Native {
     entry: 0x1e1a,
     name: "obj_cull_offscreen",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         cull_offscreen(c, b, Obj(c.a[0]));
         rts(c, b);
     }),
@@ -181,9 +181,9 @@ pub fn in_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
 pub fn beyond_arena(b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
     let cam = camera(b);
     let x = screen_x(b, obj, cam).wrapping_add(margin);
-    let bord_x = 0x180u16.wrapping_add(margin.wrapping_add(margin));
-    if x >= bord_x {
-        return x > bord_x;
+    let edge_x = 0x180u16.wrapping_add(margin.wrapping_add(margin));
+    if x >= edge_x {
+        return x > edge_x;
     }
     let y = obj.u16(b, Obj::Y).wrapping_sub(rd16(b, cam + 0xc)).wrapping_add(ARENA_MARGIN);
     y > 0x100 + 2 * ARENA_MARGIN
@@ -197,7 +197,7 @@ pub fn in_arena_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool
     c.flags_logic(margin as u32, Size::Long);
     in_arena_regs(c, b, obj);
     let inside = c.cond(5 /* cs */);
-    crate::diag::registres_morts(c, "cull", REGS_IN_ARENA);
+    crate::diag::dead_regs(c, "cull", REGS_IN_ARENA);
     inside
 }
 
@@ -227,7 +227,7 @@ fn in_arena_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
 pub const IN_ARENA: Native = Native {
     entry: 0x1e92,
     name: "obj_in_arena",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         in_arena_regs(c, b, Obj(c.a[0]));
         rts(c, b);
     }),
@@ -239,7 +239,7 @@ pub const IN_ARENA: Native = Native {
 pub const IN_ARENA_DEFAULT: Native = Native {
     entry: 0x1e90,
     name: "obj_in_arena_default",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         c.d[0] = ARENA_MARGIN as u32;
         c.flags_logic(ARENA_MARGIN as u32, Size::Long);
         in_arena_regs(c, b, Obj(c.a[0]));
@@ -286,7 +286,7 @@ pub fn update_visibility(b: &mut Cps2Bus, obj: Obj) -> bool {
 #[track_caller]
 pub fn update_visibility_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
     let visible = on_screen(c, b, obj);
-    crate::diag::registres_morts(c, "cull", REGS_VISIBILITY);
+    crate::diag::dead_regs(c, "cull", REGS_VISIBILITY);
     visible
 }
 
@@ -361,7 +361,7 @@ fn on_screen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
 pub const ON_SCREEN: Native = Native {
     entry: 0x1ed2,
     name: "obj_on_screen",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         on_screen(c, b, Obj(c.a[0]));
         rts(c, b);
     }),

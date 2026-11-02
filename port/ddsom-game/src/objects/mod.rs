@@ -3,7 +3,7 @@
 //! Tout ce qui bouge à l'écran (tirs, effets, ennemis, boss, décors animés, objets ramassables...)
 //! est un *objet* : un enregistrement de 0x50 à 0xC0 octets dans l'un des 10 pools de la RAM
 //! (`pools`). Les joueurs ont leur propre enregistrement (0x200 octets) mais partagent les champs
-//! communs ci-dessous. Voir `docs/objets.md` pour le détail des formats.
+//! communs ci-dessous. Voir `docs/objects.md` pour le détail des formats.
 //!
 //! - `Obj` : vue typée sur un objet en RAM (adresse + constantes de champs).
 //! - `pools` : allocation, libération et initialisation des pools.
@@ -12,17 +12,17 @@
 //! - `motion` : vitesses, accélérations, tables de vitesse par index.
 //! - `rank` : compteur de rang (difficulté dynamique).
 //! - `cull` : test de présence à l'écran et inscription dans les files de collision.
-//! - `courant` : le trait `Courant`, ces routines appliquées à l'objet d'un gestionnaire (`x.move_xz()`...).
+//! - `current` : le trait `Current`, ces routines appliquées à l'objet d'un gestionnaire (`x.move_xz()`...).
 
 pub mod anim;
-pub mod courant;
+pub mod current;
 pub mod cull;
 pub mod lists;
 pub mod motion;
 pub mod pools;
 pub mod rank;
 
-pub use courant::Courant;
+pub use current::Current;
 
 use cps2::Cps2Bus;
 

@@ -16,11 +16,11 @@
 //! - 81 : éclat lancé par un personnage (`0xb96c0`) : part de la main du joueur (décalage par geste
 //!   `+0x42`), glisse en arc puis clignote les dernières images.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use crate::objects::Obj;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::machine::Machine;
 
 /// Champs partagés.
@@ -38,12 +38,12 @@ mod rom {
     pub const SOUND_LANDING: u32 = 0xece9e;
 }
 
-fn free<R: Banc>(x: &mut Cx<'_, R>) {
+fn free<R: Bench>(x: &mut Cx<'_, R>) {
     x.free(&pools::EFFCT);
 }
 
 /// Bit 1 de `FLAGS` : objet masqué (clignotement).
-fn set_hidden<R: Banc>(x: &mut Cx<'_, R>, on: bool) {
+fn set_hidden<R: Bench>(x: &mut Cx<'_, R>, on: bool) {
     x.set_bit(f::FLAGS, 1, on);
 }
 
@@ -76,7 +76,7 @@ const THROWS: [Throw; 2] = [
     Throw { vz: 0x500, az: 0xffd8, dx: 0xffc8, vx: 0x280, anims: chunk::ANIMS_1 },
 ];
 
-fn chunk<R: Banc>(x: &mut Cx<'_, R>) {
+fn chunk<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => chunk_init(x),
         2 => chunk_active(x),
@@ -89,7 +89,7 @@ fn chunk<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn chunk_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn chunk_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let variant = x.u8(f::VARIANT);
     let Some(throw) = THROWS.get(variant as usize) else {
@@ -117,7 +117,7 @@ fn chunk_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_start(throw.anims, 0x14);
 }
 
-fn chunk_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn chunk_active<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB_STATE) {
         0 => {
             x.move_xz();
@@ -129,9 +129,9 @@ fn chunk_active<R: Banc>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB_STATE, 2);
             x.set16(Obj::Z, 0);
             x.set16(chunk::TIMER, 0x5a);
-            crate::sound::jouer(x.b, rom::SOUND_LANDING, x.o);
+            crate::sound::play(x.b, rom::SOUND_LANDING, x.o);
             crate::ai_aids::debris_set(x.b, x.o, chunk::DEBRIS_KIND as u16);
-            // Original glitch: the exhausted `dbf` counter stays in D5 (`dispatch::Restes`)
+            // Original glitch: the exhausted `dbf` counter stays in D5 (`dispatch::Leftovers`)
             *x.c.d5() = 0xffff;
             match x.u8(f::VARIANT) {
                 0 => {
@@ -180,7 +180,7 @@ mod shard {
     pub const ANIMS: u32 = 0x19844e;
 }
 
-fn shard<R: Banc>(x: &mut Cx<'_, R>) {
+fn shard<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => shard_init(x),
         2 => {
@@ -197,7 +197,7 @@ fn shard<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn shard_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn shard_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(shard::TIMER, 0x20);
     x.set16(Obj::VX, 0xff80);
@@ -250,11 +250,11 @@ mod rain {
     pub const SHARD_ANIMS: u32 = 0xb4ee4;
 }
 
-fn rng<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn rng<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     x.random()
 }
 
-fn debris_rain<R: Banc>(x: &mut Cx<'_, R>) {
+fn debris_rain<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(rain::LINK) == 0 {
         // plus d'objet suivi : retrait
         return x.set32(f::STATE, 0x0600_0000);
@@ -266,7 +266,7 @@ fn debris_rain<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn rain_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn rain_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     if x.u8(rain::SETTING) == 0 {
         // pluie : en haut à droite de l'écran, une poussière au départ
@@ -302,7 +302,7 @@ fn rain_init<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Vitesses X et Z et animation tirées dans les tables (mots, mots, octets ; `anim_mask` borne le dernier tirage).
-fn rain_launch<R: Banc>(x: &mut Cx<'_, R>, vx_table: u32, vz_table: u32, anims: u32, anim_mask: u16) {
+fn rain_launch<R: Bench>(x: &mut Cx<'_, R>, vx_table: u32, vz_table: u32, anims: u32, anim_mask: u16) {
     let pick = 2 * (rng(x) & 0xf) as u32;
     let vx = x.rom16(vx_table + pick);
     x.set16(Obj::VX, vx);
@@ -315,14 +315,14 @@ fn rain_launch<R: Banc>(x: &mut Cx<'_, R>, vx_table: u32, vz_table: u32, anims: 
 }
 
 /// Décompte de `TIMER` ; vrai quand il passe sous zéro.
-fn rain_countdown<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn rain_countdown<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let t = x.u16(rain::TIMER).wrapping_sub(1);
     x.set16(rain::TIMER, t);
     (t as i16) < 0
 }
 
 /// Fin de vie : retrait une fois le délai écoulé, clignotement trois images sur quatre avant.
-fn rain_fade<R: Banc>(x: &mut Cx<'_, R>) {
+fn rain_fade<R: Bench>(x: &mut Cx<'_, R>) {
     if rain_countdown(x) {
         return x.set8(f::STATE, 6);
     }
@@ -330,7 +330,7 @@ fn rain_fade<R: Banc>(x: &mut Cx<'_, R>) {
     set_hidden(x, t & 3 != 0);
 }
 
-fn rain_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn rain_active<R: Bench>(x: &mut Cx<'_, R>) {
     let link = x.linked(rain::LINK);
     if link.u8(x.b, f::STATE) as i8 >= 4 {
         return free(x);
@@ -388,13 +388,13 @@ mod armour {
 }
 
 /// Fin commune : retenue dans l'écran, ombre, remise en liste.
-fn on_screen<R: Banc>(x: &mut Cx<'_, R>) {
+fn on_screen<R: Bench>(x: &mut Cx<'_, R>) {
     x.keep_in_zone();
     x.push_terrain();
     x.reinsert();
 }
 
-fn armour<R: Banc>(x: &mut Cx<'_, R>) {
+fn armour<R: Bench>(x: &mut Cx<'_, R>) {
     if x.suspended() {
         return;
     }
@@ -414,7 +414,7 @@ fn armour<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// La vie du porteur est-elle passée sous le seuil de la pièce ?
-fn armour_falls<R: Banc>(x: &mut Cx<'_, R>, wearer: Obj) -> bool {
+fn armour_falls<R: Bench>(x: &mut Cx<'_, R>, wearer: Obj) -> bool {
     let quarter = wearer.u16(x.b, armour::FULL_LIFE) >> 2;
     let piece = x.u8(armour::PIECE) as u32;
     let steps = x.rom8(armour::THRESHOLDS + piece) as u16 + 1;
@@ -422,7 +422,7 @@ fn armour_falls<R: Banc>(x: &mut Cx<'_, R>, wearer: Obj) -> bool {
     threshold as i16 > wearer.u16(x.b, armour::LIFE) as i16
 }
 
-fn armour_worn<R: Banc>(x: &mut Cx<'_, R>) {
+fn armour_worn<R: Bench>(x: &mut Cx<'_, R>) {
     let link = x.u16(armour::WEARER);
     let wearer = Obj(link as i16 as i32 as u32 & 0xff_ffff);
     if (link as i16) >= 0 || wearer.u8(x.b, Obj::ACTIVE) == 0 || armour_falls(x, wearer) {
@@ -451,7 +451,7 @@ fn armour_worn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// La pièce tombe : elle se brise en éclats (variante 1) posés sur elle.
-fn armour_break<R: Banc>(x: &mut Cx<'_, R>) {
+fn armour_break<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let mut at = armour::SHARDS + 4 * x.u8(armour::PIECE) as u32;
     let count = x.data8(at);
@@ -480,7 +480,7 @@ fn armour_break<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Allocation d'un effet : l'emplacement, ou `None` si le pool est plein.
-fn armour_shard<R: Banc>(x: &mut Cx<'_, R>) {
+fn armour_shard<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => armour_shard_init(x),
         2 => armour_shard_active(x),
@@ -489,21 +489,21 @@ fn armour_shard<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn armour_shard_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn armour_shard_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(f::SUB_STATE, 0);
-    let fiche = armour::SHARD_LAUNCH + ((x.u8(armour::PIECE) as u16) << 4) as u32;
-    let mut dx = x.data16(fiche);
-    let dy = x.data16(fiche + 2);
+    let sheet = armour::SHARD_LAUNCH + ((x.u8(armour::PIECE) as u16) << 4) as u32;
+    let mut dx = x.data16(sheet);
+    let dy = x.data16(sheet + 2);
     x.add16(Obj::Y, dy);
-    let dz = x.data16(fiche + 4);
+    let dz = x.data16(sheet + 4);
     x.add16(Obj::Z, dz);
-    let mut vx = x.data16(fiche + 6);
+    let mut vx = x.data16(sheet + 6);
     x.set16(Obj::AX, 0);
-    let vy = x.data16(fiche + 8);
+    let vy = x.data16(sheet + 8);
     x.set16(Obj::VY, vy);
     x.set16(Obj::AY, 0);
-    let vz = x.data32(fiche + 10);
+    let vz = x.data32(sheet + 10);
     x.set32(Obj::VZ, vz);
     if x.u8(f::FACING) == 0 {
         dx = dx.wrapping_neg();
@@ -515,7 +515,7 @@ fn armour_shard_init<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Nouveau rebond : vitesse et gravité verticales, délai tiré au hasard avant de s'arrêter.
-fn armour_shard_bounce<R: Banc>(x: &mut Cx<'_, R>) {
+fn armour_shard_bounce<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(armour::ROLLING, 0);
     x.set16(Obj::VZ, 0x380);
     x.set16(Obj::AZ, 0xff80);
@@ -523,7 +523,7 @@ fn armour_shard_bounce<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(armour::BOUNCE_TIMER, r as u8);
 }
 
-fn armour_shard_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn armour_shard_active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(0x3d) != 0 {
         return on_screen(x);
     }
@@ -584,13 +584,13 @@ mod flyer {
 }
 
 /// L'objet suivi, s'il existe et est actif (`0xb5bf0`).
-fn flyer_link<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
+fn flyer_link<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     let p = x.u16(flyer::LINK);
     let o = Obj(p as i16 as i32 as u32 & 0xff_ffff);
     ((p as i16) < 0 && o.u8(x.b, Obj::ACTIVE) != 0).then_some(o)
 }
 
-fn flyer<R: Banc>(x: &mut Cx<'_, R>) {
+fn flyer<R: Bench>(x: &mut Cx<'_, R>) {
     if x.suspended() {
         return;
     }
@@ -621,7 +621,7 @@ fn flyer<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 0 : corps posé sur l'objet suivi par l'objet suivi, clignotant une image sur deux.
-fn flyer_body<R: Banc>(x: &mut Cx<'_, R>) {
+fn flyer_body<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(0x3d) != 0 {
         return x.reinsert();
     }
@@ -651,7 +651,7 @@ fn flyer_body<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Tir ennemi (ESHL 0x2c) de variante `variant`, une image sur quatre (`0xb5d56`, `0xb5d82`).
-fn flyer_shoot<R: Banc>(x: &mut Cx<'_, R>, variant: u8) {
+fn flyer_shoot<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
     if x.a5_u16(0x6e) & 3 != 0 {
         return;
     }
@@ -663,7 +663,7 @@ fn flyer_shoot<R: Banc>(x: &mut Cx<'_, R>, variant: u8) {
     o.set_u16(x.b, flyer::LINK, x.o.0 as u16);
 }
 
-fn flyer_gun_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn flyer_gun_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let Some(link) = flyer_link(x) else { return x.add8(f::STATE, 2) };
     let facing = link.u8(x.b, f::FACING);
@@ -685,7 +685,7 @@ fn flyer_gun_init<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin de la phase : désarmé, l'effet s'en va ; armé, il attend `COUNTDOWN` images.
-fn flyer_wind_down<R: Banc>(x: &mut Cx<'_, R>, keep_while_positive: bool) -> bool {
+fn flyer_wind_down<R: Bench>(x: &mut Cx<'_, R>, keep_while_positive: bool) -> bool {
     if x.u8(flyer::ARMED) as i8 <= 0 {
         x.add8(f::STATE, 2);
         return false;
@@ -700,7 +700,7 @@ fn flyer_wind_down<R: Banc>(x: &mut Cx<'_, R>, keep_while_positive: bool) -> boo
 }
 
 /// Variante 1 : canon qui tourne autour de l'objet suivi tant qu'il est dans la phase 1, et tire.
-fn flyer_gun<R: Banc>(x: &mut Cx<'_, R>) {
+fn flyer_gun<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(0x3d) != 0 {
         return;
     }
@@ -733,7 +733,7 @@ fn flyer_gun<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 2 : balayeur posé au bord de l'écran, sur la profondeur de l'objet suivi (phase 3), qui tire.
-fn flyer_sweeper<R: Banc>(x: &mut Cx<'_, R>) {
+fn flyer_sweeper<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(0x3d) != 0 {
         return x.add8(f::STATE, 2);
     }
@@ -754,7 +754,7 @@ fn flyer_sweeper<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// `0xb5cce` : au bord de l'écran (côté selon l'orientation), à la profondeur de l'objet suivi ; note si
 /// un joueur présent est sur la même ligne (à 8 pixels près).
-fn flyer_sweep<R: Banc>(x: &mut Cx<'_, R>, link: Obj) {
+fn flyer_sweep<R: Bench>(x: &mut Cx<'_, R>, link: Obj) {
     x.set8(flyer::PLAYER_IN_LINE, 0);
     let y = link.u16(x.b, Obj::Y);
     x.set16(Obj::Y, y);
@@ -800,7 +800,7 @@ mod fireworks {
     pub const TIMER: u32 = 0x58;
     pub const DELAY: u32 = 0x5a;
     pub const HOST: u32 = 0x56;
-    pub const DECOR: u32 = 0x42;
+    pub const SCENERY: u32 = 0x42;
     /// Fusées (type 50) : variante, délai et décalage (x, y) de chaque tir (espace programme).
     pub const ROCKET_VARIANTS: u32 = 0xb9628;
     pub const ROCKET_DELAYS: u32 = 0xb9638;
@@ -819,43 +819,43 @@ mod sfx {
     pub const LANDING: u32 = 0xec7ae;
 }
 
-fn fireworks<R: Banc>(x: &mut Cx<'_, R>) {
+fn fireworks<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => fireworks_init(x),
         2 => fireworks_active(x),
         _ => free(x),
     }
-    // la partie attend (`hero_rockets`) : la fin du gestionnaire est l'étape `ApresEtat`
-    if crate::taches::a_cede() {
+    // la partie attend (`hero_rockets`) : la fin du gestionnaire est l'étape `AfterState`
+    if crate::tasks::has_ceded() {
         return;
     }
     fireworks_tail(x);
 }
 
 /// `sub.w #1,(off,A0)` : rend la valeur exacte (sans repli sur 16 bits) que testent les `bgt`/`ble` qui suivent.
-fn countdown<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> i32 {
+fn countdown<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> i32 {
     let v = x.u16(off);
     x.set16(off, v.wrapping_sub(1));
     v as i16 as i32 - 1
 }
 
 /// Fin commune (`0xb8f04`) : l'objet encore actif est remis en liste.
-fn fireworks_tail<R: Banc>(x: &mut Cx<'_, R>) {
+fn fireworks_tail<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::ACTIVE) != 0 {
         x.reinsert();
     }
 }
 
-fn scene_go<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn scene_go<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.a5_u8(fireworks::SCENE_STEP) == fireworks::GO
 }
 
-fn fading<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn fading<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.a5_u8(fireworks::FADING) != 0
 }
 
 /// Pose X et Y (et Z) en coordonnées d'écran.
-fn place<R: Banc>(x: &mut Cx<'_, R>, px: u16, z: Option<u16>, py: u16) {
+fn place<R: Bench>(x: &mut Cx<'_, R>, px: u16, z: Option<u16>, py: u16) {
     x.set16(Obj::X, px);
     if let Some(z) = z {
         x.set16(Obj::Z, z);
@@ -864,7 +864,7 @@ fn place<R: Banc>(x: &mut Cx<'_, R>, px: u16, z: Option<u16>, py: u16) {
 }
 
 /// Un acteur attaché à l'objet `+0x56` : X - `dx`, Z + 0x60, juste devant lui.
-fn follow_host<R: Banc>(x: &mut Cx<'_, R>, dx: u16) {
+fn follow_host<R: Bench>(x: &mut Cx<'_, R>, dx: u16) {
     let host = x.linked(fireworks::HOST);
     let (hx, hz, hy) = (host.u16(x.b, Obj::X), host.u16(x.b, Obj::Z), host.u32(x.b, Obj::Y));
     x.set16(Obj::X, hx);
@@ -875,7 +875,7 @@ fn follow_host<R: Banc>(x: &mut Cx<'_, R>, dx: u16) {
     x.add16(Obj::Y + 2, 0xffff);
 }
 
-fn fireworks_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn fireworks_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     match x.u8(f::VARIANT) {
         0 => {
@@ -929,7 +929,7 @@ fn fireworks_init<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Copies `n` colours from the ROM (data space) into the palette, opaque (`| 0xf000`).
-fn load_colours<R: Banc>(x: &mut Cx<'_, R>, from: u32, to: u32, n: u32) {
+fn load_colours<R: Bench>(x: &mut Cx<'_, R>, from: u32, to: u32, n: u32) {
     for k in 0..n {
         let v = x.data16(from + 2 * k) | 0xf000;
         crate::mem::wr16(x.b, to + 2 * k, v);
@@ -937,8 +937,8 @@ fn load_colours<R: Banc>(x: &mut Cx<'_, R>, from: u32, to: u32, n: u32) {
 }
 
 /// `0xb95b8`: copies 0x400 bytes from `from` to `to` in blocks of eight longs (`movem` through D1-D6, A3, A4).
-/// Original glitch: the last block's longs 1 to 4 stay in D2-D5 (`dispatch::Restes`).
-fn copy_block<R: Banc>(x: &mut Cx<'_, R>, from: u32, to: u32) {
+/// Original glitch: the last block's longs 1 to 4 stay in D2-D5 (`dispatch::Leftovers`).
+fn copy_block<R: Bench>(x: &mut Cx<'_, R>, from: u32, to: u32) {
     let mut last = [0u32; 8];
     for k in 0..0x100 {
         let v = crate::mem::rd32(x.b, from + 4 * k);
@@ -949,11 +949,11 @@ fn copy_block<R: Banc>(x: &mut Cx<'_, R>, from: u32, to: u32) {
 }
 
 /// Lance la tâche de fondu `program` (`0x9b6`, D0.w = 0x10), A0 gardé.
-fn fade_task<R: Banc>(x: &mut Cx<'_, R>, program: u32) {
-    crate::kernel::creer_tache(x.b, 0x10, program);
+fn fade_task<R: Bench>(x: &mut Cx<'_, R>, program: u32) {
+    crate::kernel::create_task(x.b, 0x10, program);
 }
 
-fn fireworks_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn fireworks_active<R: Bench>(x: &mut Cx<'_, R>) {
     let sub = x.u8(f::SUB_STATE);
     match x.u8(f::VARIANT) {
         0 => hero(x, sub),
@@ -978,7 +978,7 @@ fn fireworks_active<R: Banc>(x: &mut Cx<'_, R>) {
                 x.set16(Obj::AX, 0);
                 x.set16(Obj::VZ, 0x340);
                 x.set16(Obj::AZ, 0xfff0);
-                crate::sound::jouer(x.b, sfx::JUMP, x.o);
+                crate::sound::play(x.b, sfx::JUMP, x.o);
                 x.anim_start(0x17788c, 7);
             }
             0 => {
@@ -996,7 +996,7 @@ fn fireworks_active<R: Banc>(x: &mut Cx<'_, R>) {
             0 => {
                 if scene_go(x) {
                     x.add8(f::SUB_STATE, 2);
-                    crate::sound::jouer(x.b, sfx::CHEER, x.o);
+                    crate::sound::play(x.b, sfx::CHEER, x.o);
                 }
                 x.anim_step();
             }
@@ -1035,14 +1035,14 @@ fn fireworks_active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 6 : tombe sur la scène, joue son animation, attend le retour au jeu puis clignote et s'en va.
-fn last_actor<R: Banc>(x: &mut Cx<'_, R>, sub: u8) {
+fn last_actor<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
     match sub {
         0 => {
             let z = x.u16(Obj::Z) as i16 as i32 - 6;
             x.add16(Obj::Z, 0xfffa);
             if z <= 0 {
                 x.add8(f::SUB_STATE, 2);
-                crate::sound::jouer(x.b, sfx::LANDING, x.o);
+                crate::sound::play(x.b, sfx::LANDING, x.o);
                 x.set16(Obj::Z, 0);
                 x.anim_start(fireworks::ANIMS_LAST, 5);
                 return;
@@ -1074,7 +1074,7 @@ fn last_actor<R: Banc>(x: &mut Cx<'_, R>, sub: u8) {
 }
 
 /// Variante 0 : le personnage qui tire le feu d'artifice (neuf étapes).
-fn hero<R: Banc>(x: &mut Cx<'_, R>, sub: u8) {
+fn hero<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
     match sub {
         0 => {
             if !scene_go(x) {
@@ -1115,7 +1115,7 @@ fn hero<R: Banc>(x: &mut Cx<'_, R>, sub: u8) {
             if !fading(x) {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(fireworks::TIMER, 0x14);
-                crate::families::petites::clear_scroll1_start(x);
+                crate::families::small::clear_scroll1_start(x);
             }
             x.anim_step();
         }
@@ -1123,19 +1123,19 @@ fn hero<R: Banc>(x: &mut Cx<'_, R>, sub: u8) {
             if countdown(x, fireworks::DELAY) <= 0 {
                 // le décor 0x55, quitte à attendre une place
                 // Glitch d'origine : un pool SET plein fait recommencer sans fin (le jeu se fige).
-                let decor = loop {
+                let scenery = loop {
                     if let Some(o) = super::creators::scene_set(x.b, 0x55) {
                         break o;
                     }
                 };
-                x.set16(fireworks::DECOR, decor.0 as u16);
+                x.set16(fireworks::SCENERY, scenery.0 as u16);
                 x.add8(f::SUB_STATE, 2);
             }
             x.anim_step();
         }
         10 => {
-            let decor = x.linked(fireworks::DECOR);
-            if decor.u8(x.b, 0x22) != 0 {
+            let scenery = x.linked(fireworks::SCENERY);
+            if scenery.u8(x.b, 0x22) != 0 {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(fireworks::TIMER, 0xa);
             }
@@ -1150,7 +1150,7 @@ fn hero<R: Banc>(x: &mut Cx<'_, R>, sub: u8) {
             x.set16(Obj::VZ, 0x700);
             x.set16(Obj::AZ, 0);
             x.set32(Obj::VX, 0);
-            crate::sound::jouer(x.b, sfx::LIFT_OFF, x.o);
+            crate::sound::play(x.b, sfx::LIFT_OFF, x.o);
             x.anim_start(fireworks::ANIMS_HERO, 6);
         }
         14 => hero_lift_off(x),
@@ -1160,31 +1160,31 @@ fn hero<R: Banc>(x: &mut Cx<'_, R>, sub: u8) {
 
 /// Étape 4 : une fusée à chaque délai écoulé, la dernière avec un son ; puis quatre images d'attente
 /// (la tâche cède la main) et le fondu de retour.
-fn hero_rockets<R: Banc>(x: &mut Cx<'_, R>) {
+fn hero_rockets<R: Bench>(x: &mut Cx<'_, R>) {
     if countdown(x, fireworks::DELAY) > 0 {
         return;
     }
     let t = countdown(x, fireworks::TIMER);
     if t >= 0 {
         if t == 0 {
-            crate::sound::jouer(x.b, sfx::LAST_ROCKET, x.o);
+            crate::sound::play(x.b, sfx::LAST_ROCKET, x.o);
         }
         return rocket(x);
     }
     x.add8(f::SUB_STATE, 2);
     // The whole game waits four frames (`jsr 0xa40` in the middle of the dispatch loop): the task will resume at step
-    // `ApresAttente`, then, on return, at `ApresEtat` (the end of the handler), like the original. The trap runs on a
+    // `AfterWait`, then, on return, at `AfterState` (the end of the handler), like the original. The trap runs on a
     // work bench (D0 = 4; it only leaves D0 and D1, which nobody reads).
-    crate::taches::table::appeler(x.b, Etape::ApresEtat);
-    let mut banc = m68k::Cpu::default();
-    banc.d[0] = 4;
-    crate::kernel::attendre(&mut banc, x.b, Etape::ApresAttente);
-    // the dispatch loop and the pending Rust callers give up (`taches::a_cede`): the task will resume through the
-    // steps, then through the loop's pending call (`dispatch::Etape::Aiguillage`)
+    crate::tasks::table::call(x.b, Step::AfterState);
+    let mut bench = m68k::Cpu::default();
+    bench.d[0] = 4;
+    crate::kernel::wait(&mut bench, x.b, Step::AfterWait);
+    // the dispatch loop and the pending Rust callers give up (`tasks::has_ceded`): the task will resume through the
+    // steps, then through the loop's pending call (`dispatch::Step::Dispatch`)
 }
 
 /// Après l'attente : fondu de retour depuis les palettes sauvées.
-fn fireworks_fade_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn fireworks_fade_back<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u16(fireworks::FADE_MODE, 1);
     x.set_a5_u8(fireworks::FADE_SPEED, 0xf);
     x.set_a5_u8(fireworks::FADING, 1);
@@ -1195,7 +1195,7 @@ fn fireworks_fade_back<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `0xb95e8` : une fusée (type 50) : variante, délai jusqu'à la suivante et place lus pour le tir `TIMER`.
-fn rocket<R: Banc>(x: &mut Cx<'_, R>) {
+fn rocket<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(o) = x.alloc(&pools::EFFCT) else { return };
     o.set_u8(x.b, Obj::ACTIVE, 1);
     o.set_u8(x.b, Obj::KIND, 0x32);
@@ -1212,14 +1212,14 @@ fn rocket<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Étape 14 : s'envole en laissant une traînée (type 50, variante 7) toutes les cinq images, jusqu'en haut
 /// de l'écran : la scène se termine (`A5+0x2c` = 0x10000000).
-fn hero_lift_off<R: Banc>(x: &mut Cx<'_, R>) {
+fn hero_lift_off<R: Bench>(x: &mut Cx<'_, R>) {
     if countdown(x, fireworks::TIMER) <= 0 {
         x.set16(fireworks::TIMER, 5);
         if let Some(o) = x.alloc(&pools::EFFCT) {
             o.set_u8(x.b, Obj::ACTIVE, 1);
             o.set_u8(x.b, Obj::KIND, 0x32);
             o.set_u8(x.b, Obj::VARIANT, 7);
-            o.set_u16(x.b, fireworks::DECOR, x.o.0 as u16);
+            o.set_u16(x.b, fireworks::SCENERY, x.o.0 as u16);
             let facing = x.u8(f::FACING);
             o.set_u8(x.b, f::FACING, facing);
             for off in [Obj::X, Obj::Z, Obj::Y] {
@@ -1247,17 +1247,17 @@ fn hero_lift_off<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-crate::etapes! {
+crate::steps! {
     /// Reprises de la tâche de partie quand le feu d'artifice (type 80) l'a fait attendre (`hero_rockets`) ; le
     /// contexte rendu par le noyau a l'objet dans A0.
-    pub enum Etape {
+    pub enum Step {
         /// Après l'attente de quatre images : fondu de retour.
-        ApresAttente = 0xb91d0 => |x| {
+        AfterWait = 0xb91d0 => |x| {
             fireworks_fade_back(&mut Cx::new(x.c, x.b));
             crate::modes::Flow::Done
         },
         /// Retour du saut par la table des états (`jsr (table,PC)`) : fin du gestionnaire.
-        ApresEtat = 0xb8f04 => |x| {
+        AfterState = 0xb8f04 => |x| {
             fireworks_tail(&mut Cx::new(x.c, x.b));
             crate::modes::Flow::Done
         },
@@ -1265,10 +1265,10 @@ crate::etapes! {
 }
 
 handlers! {
-    0xb8ef6 "effct_feu_artifice" #[sans] fireworks,
-    0xb59ea "effct_machine_volante" #[sans] flyer,
-    0xb5454 "effct_armure" #[sans] armour,
-    0xb4bec "effct_pluie_debris" #[sans] debris_rain,
-    0xb7866 "effct_morceau_ennemi" #[sans] chunk,
-    0xb96dc "effct_eclat_lance" #[sans] shard,
+    0xb8ef6 "effct_feu_artifice" #[without] fireworks,
+    0xb59ea "effct_machine_volante" #[without] flyer,
+    0xb5454 "effct_armure" #[without] armour,
+    0xb4bec "effct_pluie_debris" #[without] debris_rain,
+    0xb7866 "effct_morceau_ennemi" #[without] chunk,
+    0xb96dc "effct_eclat_lance" #[without] shard,
 }

@@ -30,19 +30,19 @@ fn check(rom: &Rom, sessions: impl Iterator<Item = Session>) {
 }
 
 #[test]
-fn musiques_et_effets_de_la_rom() {
+fn rom_music_and_effects() {
     let Some(rom) = rom() else { return };
     check(&rom, (0..40).map(|n| song_session(&rom, n * 29, 500)));
 }
 
 #[test]
-fn suites_aleatoires_de_commandes() {
+fn random_command_sequences() {
     let Some(rom) = rom() else { return };
     check(&rom, (0..25).map(|i| random_session(&rom, 1, i, 600)));
 }
 
 #[test]
-fn pistes_synthetiques() {
+fn synthetic_tracks() {
     let Some(rom) = rom() else { return };
     check(&rom, (0..60).map(|i| synth_short_session(&rom, 1, i, 250)));
 }

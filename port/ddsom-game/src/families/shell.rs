@@ -1,10 +1,10 @@
 //! Éléments communs aux gestionnaires de la classe ESHL (tirs et attaques des ennemis) : champs
 //! d'un objet ESHL, états, aides de placement et de collision avec le terrain.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::Cx;
 use crate::objects::Obj;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Champs propres aux objets ESHL.
 pub mod f {
@@ -30,13 +30,13 @@ pub mod st {
 
 /// Clignotement : l'objet est caché une image sur deux (parité de `+0x5c` ajoutée au compteur de
 /// boucle D7 du dispatch).
-pub fn blink<R: Banc>(x: &mut Cx<'_, R>) {
-    let visible = x.u16(f::TIMER).wrapping_add(x.compteur()) & 1 != 0;
+pub fn blink<R: Bench>(x: &mut Cx<'_, R>) {
+    let visible = x.u16(f::TIMER).wrapping_add(x.counter()) & 1 != 0;
     x.set_bit(0x1, 1, !visible);
 }
 
 /// Copie la position (X, Z, Y : parties entières) du propriétaire dans le tir.
-pub fn copy_position<R: Banc>(x: &mut Cx<'_, R>, owner: Obj) {
+pub fn copy_position<R: Bench>(x: &mut Cx<'_, R>, owner: Obj) {
     for off in [0x8, 0xc, 0x10] {
         let v = owner.u16(x.b, off);
         x.set16(off, v);
@@ -45,7 +45,7 @@ pub fn copy_position<R: Banc>(x: &mut Cx<'_, R>, owner: Obj) {
 
 /// Place le tir devant le propriétaire : sa position, un pixel plus près (profondeur - 1), puis
 /// décalé de `dx` du côté où il regarde et de `dz` en hauteur.
-pub fn place_in_front<R: Banc>(x: &mut Cx<'_, R>, owner: Obj, dx: i16, dz: u16) {
+pub fn place_in_front<R: Bench>(x: &mut Cx<'_, R>, owner: Obj, dx: i16, dz: u16) {
     copy_position(x, owner);
     x.add16(0x10, 0xffff);
     let side = if owner.u8(x.b, f::FLIP) != 0 { dx } else { -dx };
@@ -54,15 +54,15 @@ pub fn place_in_front<R: Banc>(x: &mut Cx<'_, R>, owner: Obj, dx: i16, dz: u16) 
 }
 
 /// Pause du jeu : vrai quand l'objet est suspendu (octet `+0x40`).
-pub fn suspended<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub fn suspended<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.suspended()
 }
 
 /// Terrain sous le tir : vrai quand le tir doit s'arrêter (terrains 5 à 8 sans le bit 6 de
 /// l'attribut).
-pub fn blocked_by_terrain<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub fn blocked_by_terrain<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let t = crate::video::terrain_of(x.b, x.o);
-    let terrain = t.numero as u32;
+    let terrain = t.number as u32;
     (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
 }
 

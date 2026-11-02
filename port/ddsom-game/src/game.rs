@@ -1,11 +1,11 @@
 //! Boucle de partie (W1) : mise à jour du monde (`0x1c86e`), fin d'image (`0x1c4c4`), phase 0
-//! (`0x1c522`, initialisation de la partie) et phase 12 (`0x1c6a0`, le jeu). Voir `docs/boucle.md`.
+//! (`0x1c522`, initialisation de la partie) et phase 12 (`0x1c6a0`, le jeu). Voir `docs/looped.md`.
 //!
 //! La tâche de partie (`0x1c45a`) boucle à l'infini : une image = un appel de la phase courante
 //! (`A5+0x2c`), puis la remise à vide des files de collision, puis une cession (`0xa40`) : voir
-//! `taches/partie.rs`. Un gestionnaire d'objet peut faire céder la main à la tâche au milieu de la mise à jour du
+//! `tasks/game.rs`. Un gestionnaire d'objet peut faire céder la main à la tâche au milieu de la mise à jour du
 //! monde (fondu au noir des portes, feu d'artifice) : les appels en cours de la phase 12 et de la mise à jour du monde
-//! sont alors des étapes ([`Etape`]), où la tâche reprendra.
+//! sont alors des étapes ([`Step`]), où la tâche reprendra.
 
 use cps2::Cps2Bus;
 use m68k::Cpu;
@@ -15,7 +15,7 @@ use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
 use crate::modes::Flow;
 use crate::objects::pools::{self, Queue};
 use crate::objects::Obj;
-use crate::taches::table;
+use crate::tasks::table;
 use crate::{call, Native};
 
 /// Variables de la RAM de travail (offsets depuis A5).
@@ -48,7 +48,7 @@ mod ext {
 
 /// Une étape de la mise à jour du monde.
 #[derive(Clone, Copy)]
-enum Step {
+enum UpdateStep {
     /// Jauge de charge, avec son marqueur (D1).
     Gauge(u32),
     Players,
@@ -57,15 +57,15 @@ enum Step {
     Objs(&'static Class),
     Cameras,
 }
-use Step::{Cameras, Gauge, Objs, PlayerParts, Players};
+use UpdateStep::{Cameras, Gauge, Objs, PlayerParts, Players};
 
 const G_PLAYER: u32 = 0x50_0001;
 const G_ENEMY: u32 = 0x45_0002;
-const G_DECOR: u32 = 0x53_0003;
+const G_SCENERY: u32 = 0x53_0003;
 
 /// Une étape et l'adresse de son appel dans le code d'origine (`jsr`, 6 octets ; le dernier appel de
-/// chaque ordre est un `jmp`). L'adresse de retour d'un appel est celle de l'étape de reprise ([`Etape::Monde`]).
-type Order = &'static [(u32, Step)];
+/// chaque ordre est un `jmp`). L'adresse de retour d'un appel est celle de l'étape de reprise ([`Step::World`]).
+type Order = &'static [(u32, UpdateStep)];
 
 /// Ordre normal (0x1c894) : joueurs et leurs tirs, puis boss, ennemis, tirs ennemis, effets, puis
 /// décors, caisses, objets, caméras, objets système.
@@ -74,7 +74,7 @@ const ORDER_NORMAL: Order = &[
     (0x1c8ac, Objs(&dispatch::PSHL)), (0x1c8b2, Objs(&dispatch::PEFF)),
     (0x1c8be, Gauge(G_ENEMY)), (0x1c8c4, Objs(&dispatch::BOSS)), (0x1c8ca, Objs(&dispatch::ENEMY)),
     (0x1c8d0, Objs(&dispatch::ESHL)), (0x1c8d6, Objs(&dispatch::EFFCT)),
-    (0x1c8e2, Gauge(G_DECOR)), (0x1c8e8, Objs(&dispatch::SET)), (0x1c8ee, Objs(&dispatch::BOX)),
+    (0x1c8e2, Gauge(G_SCENERY)), (0x1c8e8, Objs(&dispatch::SET)), (0x1c8ee, Objs(&dispatch::BOX)),
     (0x1c8f4, Objs(&dispatch::ITEM)), (0x1c8fa, Cameras),
     (0x1c900, Objs(&dispatch::SOBJ)),
 ];
@@ -86,7 +86,7 @@ const ORDER_CINEMATIC: Order = &[
     (0x1c930, Objs(&dispatch::PSHL)), (0x1c936, Objs(&dispatch::PEFF)),
     (0x1c942, Gauge(G_ENEMY)), (0x1c948, Objs(&dispatch::BOSS)), (0x1c94e, Objs(&dispatch::ENEMY)),
     (0x1c954, Objs(&dispatch::ESHL)),
-    (0x1c960, Gauge(G_DECOR)), (0x1c966, Objs(&dispatch::SET)), (0x1c96c, Objs(&dispatch::BOX)),
+    (0x1c960, Gauge(G_SCENERY)), (0x1c966, Objs(&dispatch::SET)), (0x1c96c, Objs(&dispatch::BOX)),
     (0x1c972, Objs(&dispatch::ITEM)), (0x1c978, Cameras),
     (0x1c97e, Objs(&dispatch::SOBJ)),
 ];
@@ -104,7 +104,7 @@ const ORDER_SCENE_8: Order = &[
     (0x1c9c6, Objs(&dispatch::PSHL)), (0x1c9cc, Objs(&dispatch::PEFF)),
     (0x1c9d8, Gauge(G_ENEMY)), (0x1c9de, Objs(&dispatch::BOSS)), (0x1c9e4, Objs(&dispatch::ENEMY)),
     (0x1c9ea, Objs(&dispatch::ESHL)),
-    (0x1c9f6, Gauge(G_DECOR)), (0x1c9fc, Objs(&dispatch::SET)), (0x1ca02, Objs(&dispatch::BOX)),
+    (0x1c9f6, Gauge(G_SCENERY)), (0x1c9fc, Objs(&dispatch::SET)), (0x1ca02, Objs(&dispatch::BOX)),
     (0x1ca08, Objs(&dispatch::ITEM)), (0x1ca0e, Cameras), (0x1ca14, Objs(&dispatch::EFFCT)),
     (0x1ca1a, Objs(&dispatch::SOBJ)),
 ];
@@ -126,17 +126,17 @@ fn world_order(b: &mut Cps2Bus) -> Order {
 }
 
 /// Met à jour tous les objets : joueurs, puis les dix classes dans l'ordre de la scène. `Flow::Yield` : un gestionnaire
-/// d'objet a fait céder la main à la tâche ; elle reprendra à l'étape [`Etape::Monde`], puis à la suite que l'appelant
+/// d'objet a fait céder la main à la tâche ; elle reprendra à l'étape [`Step::World`], puis à la suite que l'appelant
 /// a rangée dans ses appels en cours avant l'appel.
 pub fn update_world(c: &mut Cpu, b: &mut Cps2Bus) -> Flow {
     let order = world_order(b);
-    let ordre = ORDERS.iter().position(|&o| std::ptr::eq(o, order)).expect("ordre de mise à jour") as u8;
-    run_steps(c, b, ordre, 0)
+    let order_index = ORDERS.iter().position(|&o| std::ptr::eq(o, order)).expect("ordre de mise à jour") as u8;
+    run_steps(c, b, order_index, 0)
 }
 
-/// Les étapes `from..` de l'ordre `ORDERS[ordre]`.
-fn run_steps(c: &mut Cpu, b: &mut Cps2Bus, ordre: u8, from: usize) -> Flow {
-    let order = ORDERS[ordre as usize];
+/// Les étapes `from..` de l'ordre `ORDERS[order_index]`.
+fn run_steps(c: &mut Cpu, b: &mut Cps2Bus, order_index: u8, from: usize) -> Flow {
+    let order = ORDERS[order_index as usize];
     for (i, &(_, step)) in order.iter().enumerate().skip(from) {
         match step {
             Gauge(marker) => gauge(c, b, marker),
@@ -147,11 +147,11 @@ fn run_steps(c: &mut Cpu, b: &mut Cps2Bus, ordre: u8, from: usize) -> Flow {
             // dernier appel : un `jmp`, la boucle de dispatch revient directement à l'appelant
             Objs(class) if i + 1 == order.len() => return class.update(c, b),
             Objs(class) => {
-                table::appeler(b, Etape::Monde { ordre, etape: i as u8 });
+                table::call(b, Step::World { order_index, step: i as u8 });
                 if class.update(c, b) == Flow::Yield {
                     return Flow::Yield;
                 }
-                table::depiler_retour(c, b);
+                table::pop_return(c, b);
             }
             // 0x33e20. Glitch d'origine : le D4 de la recopie du décor est relu par un gestionnaire suivant
             // (boss13_dragon, image 7241) ; l'A0 de l'original (la caméra 2) ne l'est pas
@@ -173,7 +173,7 @@ fn gauge(c: &mut Cpu, b: &mut Cps2Bus, marker: u32) {
     // 0xb3e. Original glitch: the hidden gauge leaves D2.w = 0x400 (DSW test), which a handler writes into an
     // object field (DDSOM_POISON=appel_b3e: long_nain_57_86, frame 13398, ram ffd692)
     c.d[1] = marker;
-    crate::video::jauge_68k(c, b);
+    crate::video::gauge_68k(c, b);
 }
 
 /// Les quatre ordres de mise à jour.
@@ -181,27 +181,27 @@ const ORDERS: [Order; 4] = [ORDER_NORMAL, ORDER_CINEMATIC, ORDER_REDUCED, ORDER_
 
 /// Reprises de la boucle de partie quand un gestionnaire d'objet a fait céder la main à la tâche.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Etape {
-    /// Retour de l'aiguillage d'une classe d'objets, étape `etape` de l'ordre `ORDERS[ordre]` : la mise à jour du
+pub enum Step {
+    /// Retour de l'aiguillage d'une classe d'objets, étape `step` de l'ordre `ORDERS[order_index]` : la mise à jour du
     /// monde continue à l'étape suivante, puis revient à son appelant.
-    Monde { ordre: u8, etape: u8 },
+    World { order_index: u8, step: u8 },
     /// Retour de la mise à jour du monde dans la phase 12 (`0x1c702`) : fin de la phase.
-    ApresMonde,
+    AfterWorld,
 }
 
-impl Etape {
+impl Step {
     /// Adresse que l'original reprend : celle qui suit l'appel (`jsr`).
-    pub const fn adresse(self) -> u32 {
+    pub const fn address(self) -> u32 {
         match self {
-            Etape::Monde { ordre, etape } => ORDERS[ordre as usize][etape as usize].0 + JSR,
-            Etape::ApresMonde => WORLD_RETURN,
+            Step::World { order_index, step } => ORDERS[order_index as usize][step as usize].0 + JSR,
+            Step::AfterWorld => WORLD_RETURN,
         }
     }
 
-    pub fn pas(self, x: &mut crate::scene::Ctx) -> Flow {
+    pub fn step(self, x: &mut crate::scene::Ctx) -> Flow {
         match self {
-            Etape::Monde { ordre, etape } => run_steps(x.c, x.b, ordre, etape as usize + 1),
-            Etape::ApresMonde => {
+            Step::World { order_index, step } => run_steps(x.c, x.b, order_index, step as usize + 1),
+            Step::AfterWorld => {
                 phase12_after_world(x.c, x.b);
                 Flow::Done
             }
@@ -214,7 +214,7 @@ impl Etape {
 pub const WORLD_UPDATE: Native = Native {
     entry: 0x1c86e,
     name: "world_update",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         if update_world(c, b) == Flow::Done {
             rts(c, b);
         }
@@ -230,9 +230,9 @@ pub const WORLD_UPDATE: Native = Native {
 const QUEUES: [&Queue; 5] =
     [&pools::QUEUE_PSHL, &pools::QUEUE_ESHL, &pools::QUEUE_ENEMY_BOSS, &pools::QUEUE_BOX, &pools::QUEUE_ITEM];
 
-/// Fin de l'image (`0x1c4c4`), quand la phase revient (étape `taches::partie::Etape::FinImage`) : les files de
+/// Fin de l'image (`0x1c4c4`), quand la phase revient (étape `tasks::game::Step::FrameEnd`) : les files de
 /// collision repartent à vide. Le `rts` qui suit revient au début de la boucle de partie (`0x1c468`).
-pub fn fin_d_image(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn frame_end(c: &mut Cpu, b: &mut Cps2Bus) {
     for queue in QUEUES {
         queue.reset(b);
     }
@@ -284,7 +284,7 @@ fn create_palette_objects(b: &mut Cps2Bus) {
     }
     crate::palette::set_flash_color(b, crate::palette::FLASH_COLOR_WHITE_VALUE);
     // 0x3525c
-    crate::video::effacer_debut_couche1(b);
+    crate::video::clear_layer1_start(b);
     let y = rd16(b, A5 + ram::SCROLL2_Y).wrapping_add(0x100);
     wr16(b, A5 + ram::SCROLL2_Y, y);
 }
@@ -301,10 +301,10 @@ fn clear_text_boxes(b: &mut Cps2Bus) {
 /// Début des étapes 8 et 12 : objets système et décors animés, sprites, puis décompte.
 /// Renvoie vrai quand le décompte est écoulé.
 fn animate(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
-    dispatch::SOBJ.update_sans_suite(c, b);
-    dispatch::SET.update_sans_suite(c, b);
+    dispatch::SOBJ.update_no_next(c, b);
+    dispatch::SET.update_no_next(c, b);
     // 0x1de96
-    crate::sprites::construire_68k(c, b);
+    crate::sprites::build_68k(c, b);
     let left = rd16(b, A5 + ram::TIMER).wrapping_sub(1);
     wr16(b, A5 + ram::TIMER, left);
     (left as i16) < 0
@@ -336,7 +336,7 @@ fn wait_then_fade(c: &mut Cpu, b: &mut Cps2Bus) {
 fn reset_pools_and_leave(c: &mut Cpu, b: &mut Cps2Bus) {
     wr8(b, A5 + ram::STEP, 0);
     // 0x1de7c
-    crate::sprites::vider_listes(b);
+    crate::sprites::clear_lists(b);
     crate::objects::pools::SOBJ.reset(b);
     crate::objects::pools::SET.reset(b);
     leave(c, b);
@@ -348,16 +348,16 @@ fn leave(c: &mut Cpu, b: &mut Cps2Bus) {
     wr8(b, A5 + ram::PHASE, phase);
     wr8(b, CLEARED_B, 0);
     wr8(b, A5 + ram::ACTIVE, 1);
-    crate::objects::rank::charger_preset(b);
+    crate::objects::rank::load_current_preset(b);
     wr8(b, A5 + ram::SCENE, 1);
     wr8(b, A5 + EXIT_CLEARED_BYTES[0], 0);
     wr16(b, A5 + ram::TIMER, 0);
     wr16(b, A5 + ram::TIMER + 2, 0);
     wr8(b, A5 + EXIT_CLEARED_BYTES[1], 0);
-    crate::families::items::effacer_ramasses_68k(c, b);
+    crate::families::items::clear_picked_68k(c, b);
     c.d[0] = c.d[0] & 0xffff_0000 | PLAYER_UI_SLOT;
     c.a[0] = PLAYER_UI_TASK;
-    crate::kernel::creer_tache(b, PLAYER_UI_SLOT as u32, PLAYER_UI_TASK);
+    crate::kernel::create_task(b, PLAYER_UI_SLOT as u32, PLAYER_UI_TASK);
 }
 
 /// Phase 0 : un pas par image. L'étape (`A5+0x2d` : 0, 4, 8, 12, 16) choisit la suite.
@@ -381,7 +381,7 @@ pub fn phase0(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const PHASE_0: Native = Native {
     entry: 0x1c522,
     name: "game_phase0",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         phase0(c, b);
         rts(c, b);
     }),
@@ -471,7 +471,7 @@ fn change_scene(b: &mut Cps2Bus, forward: bool) {
 }
 
 /// Phase 12 : une image de jeu. `Flow::Yield` : un gestionnaire d'objet a fait céder la main à la tâche (elle
-/// reprendra à [`Etape::ApresMonde`] après la mise à jour du monde).
+/// reprendra à [`Step::AfterWorld`] après la mise à jour du monde).
 pub fn phase12(c: &mut Cpu, b: &mut Cps2Bus) -> Flow {
     if rd16(b, A5 + GAME_FRAMES) != 0xffff {
         let frames = rd16(b, A5 + GAME_FRAMES) + 1;
@@ -485,12 +485,12 @@ pub fn phase12(c: &mut Cpu, b: &mut Cps2Bus) -> Flow {
     // Original glitch: the input bytes that the copy leaves in D0-D4 (and its flags) are reread by a handler of the
     // world update, which writes them into an object (DDSOM_POISON=appel_2aec: long_elfe_objets, frame 13133,
     // ram ffd694)
-    crate::inputs::recopier_68k(c, b);
-    table::appeler(b, Etape::ApresMonde);
+    crate::inputs::copy_68k(c, b);
+    table::call(b, Step::AfterWorld);
     if update_world(c, b) == Flow::Yield {
         return Flow::Yield;
     }
-    table::depiler_retour(c, b);
+    table::pop_return(c, b);
     phase12_after_world(c, b);
     Flow::Done
 }
@@ -498,19 +498,19 @@ pub fn phase12(c: &mut Cpu, b: &mut Cps2Bus) -> Flow {
 /// Retour de la mise à jour du monde dans la phase 12 (`jsr 0x1c86e` en 0x1c6fc).
 const WORLD_RETURN: u32 = 0x1c6fc + JSR;
 
-/// Fin de la phase 12, après la mise à jour du monde : [`apres_le_monde`], puis le saut de niveau de débogage.
+/// Fin de la phase 12, après la mise à jour du monde : [`after_world`], puis le saut de niveau de débogage.
 fn phase12_after_world(c: &mut Cpu, b: &mut Cps2Bus) {
-    apres_le_monde(c, b);
+    after_world(c, b);
     debug_scene_skip(b);
 }
 
 /// Après la mise à jour du monde (phase 12 du jeu `0x1c702` et de la démonstration `0x1fa4a`) : sprites, collisions,
 /// pop-ups, script d'apparition, rang, fin de partie ; chacun précédé de sa jauge de charge.
-pub fn apres_le_monde(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn after_world(c: &mut Cpu, b: &mut Cps2Bus) {
     gauge(c, b, 0x54_0000);
     // 0x1de96. Glitch d'origine : D4 (attributs du dernier morceau) relu plus tard (DDSOM_POISON=appel_1de96 :
-    // long_28_scenes, image 10431), voir `sprites::construire`
-    crate::sprites::construire_68k(c, b);
+    // long_28_scenes, image 10431), voir `sprites::build`
+    crate::sprites::build_68k(c, b);
     gauge(c, b, 0x48_0002);
     // 0x260ee
     crate::combat::combat_update(&mut crate::combat::World { c, b, a2: 0 });
@@ -521,7 +521,7 @@ pub fn apres_le_monde(c: &mut Cpu, b: &mut Cps2Bus) {
     // 0x1f27c (registres de l'original : la tâche les garde jusqu'à l'image suivante)
     crate::objects::rank::tick(b);
     // 0x28d8
-    crate::aides::game_over(c, b);
+    crate::aids::game_over(c, b);
 }
 
 /// Saut de niveau de débogage (fin de la phase 12 et de la phase 8, `0x1c74a`) : inactif dans le jeu de
@@ -540,7 +540,7 @@ pub fn debug_scene_skip(b: &mut Cps2Bus) {
 pub const PHASE_12: Native = Native {
     entry: 0x1c6a0,
     name: "game_phase12",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         if phase12(c, b) == Flow::Done {
             rts(c, b);
         }
@@ -558,7 +558,7 @@ mod tests {
 
     /// Chaque classe est mise à jour une seule fois par image, dans tous les ordres complets.
     #[test]
-    fn ordres_complets_sans_doublon() {
+    fn full_orders_without_duplicates() {
         for order in [ORDER_NORMAL, ORDER_CINEMATIC, ORDER_SCENE_8] {
             let mut entries: Vec<u32> =
                 order.iter().filter_map(|(_, s)| if let Objs(class) = s { Some(class.entry) } else { None }).collect();
@@ -571,11 +571,11 @@ mod tests {
     /// Les sites d'appel se suivent : un `jsr` (6 octets), ou un `move.l #,D1` (6 octets) puis le
     /// `jsr` de la jauge.
     #[test]
-    fn sites_croissants() {
+    fn increasing_sites() {
         for order in [ORDER_NORMAL, ORDER_CINEMATIC, ORDER_REDUCED, ORDER_SCENE_8] {
             for w in order.windows(2) {
-                let ecart = w[1].0 - w[0].0;
-                assert!(ecart == JSR || ecart == 2 * JSR && matches!(w[1].1, Gauge(_)), "{:x}", w[1].0);
+                let gap = w[1].0 - w[0].0;
+                assert!(gap == JSR || gap == 2 * JSR && matches!(w[1].1, Gauge(_)), "{:x}", w[1].0);
             }
         }
     }

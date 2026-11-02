@@ -6,9 +6,9 @@
 //! (octets `+4`, `+5`, `+6` de l'objet) ; il rend la main par `rts` en laissant `A0` et `D7` intacts.
 //!
 //! A native routine replaces a whole handler: the logic is written on a generic [`cx::Cx`] (without registers:
-//! `#[sans]`, see `gestionnaire!` and `cx::handlers!`).
+//! `#[without]`, see `handler!` and `cx::handlers!`).
 //!
-//! Voir `docs/familles.md` pour la description de chaque type.
+//! Voir `docs/families.md` pour la description de chaque type.
 
 pub mod boss_common;
 pub mod boss_0;
@@ -32,7 +32,7 @@ pub mod boss_3;
 pub mod boss_9;
 pub mod boxes;
 pub mod creators;
-pub mod petites;
+pub mod small;
 pub mod cx;
 pub mod effects;
 pub mod effects_b;
@@ -76,10 +76,10 @@ pub mod eshl_b;
 pub mod eshl_c;
 pub mod eshl_d;
 pub mod items;
-pub mod joueur;
+pub mod player;
 pub mod set;
 pub mod set_b;
-pub mod set_residu;
+pub mod set_residue;
 pub mod scenery;
 pub mod set_c;
 pub mod shell;
@@ -130,7 +130,7 @@ pub const NATIVES: &[Native] = &[
 
 /// Routines du jeu appelées par les gestionnaires (adresses d'origine).
 pub mod rom {
-    pub const DANS_LA_ZONE: u32 = 0xfbae;
+    pub const IN_ZONE: u32 = 0xfbae;
     pub const OMBRE: u32 = 0x33fe4;
 }
 
@@ -145,25 +145,25 @@ pub(crate) fn pointeur<R>(x: &mut cx::Cx<'_, R>, o: Obj, off: u32) -> Obj {
     Obj(o.u16(x.b, off) as i16 as i32 as u32 & 0xff_ffff)
 }
 
-/// Declares the native routine of a handler: entry address, name, logic (on `cx::Cx`, the processor), or `#[sans]`
+/// Declares the native routine of a handler: entry address, name, logic (on `cx::Cx`, the processor), or `#[without]`
 /// logic (without registers: what the dispatch loop passes).
-macro_rules! gestionnaire {
-    ($const:ident, $entree:expr, $nom:expr, $logique:path) => {
-        pub const $const: crate::Native = crate::families::cx::handler($entree, $nom, |c, b| {
+macro_rules! handler {
+    ($const:ident, $entry:expr, $name:expr, $logic:path) => {
+        pub const $const: crate::Native = crate::families::cx::handler($entry, $name, |c, b| {
             let mut x = crate::families::cx::Cx::new(c, b);
-            $logique(&mut x);
+            $logic(&mut x);
             x.ret();
         });
     };
-    ($const:ident, $entree:expr, $nom:expr, #[sans] $logique:path) => {
-        pub const $const: crate::Native = crate::families::cx::handler_sans($entree, $nom, |b, a| {
-            $logique(&mut crate::families::cx::Gx::aiguille(b, a));
+    ($const:ident, $entry:expr, $name:expr, #[without] $logic:path) => {
+        pub const $const: crate::Native = crate::families::cx::handler_sans($entry, $name, |b, a| {
+            $logic(&mut crate::families::cx::Gx::aiguille(b, a));
         });
     };
 }
-pub(crate) use gestionnaire;
+pub(crate) use handler;
 
-/// Routines natives des familles ESHL, SET et SOBJ (voir `docs/familles-eshl-set-sobj.md`) : un
+/// Routines natives des familles ESHL, SET et SOBJ (voir `docs/families-eshl-set-sobj.md`) : un
 /// gestionnaire par type, écrit sur [`cx::Cx`].
 pub fn natives() -> impl Iterator<Item = &'static Native> {
     [eshl::NATIVES, eshl_b::NATIVES, eshl_c::NATIVES, eshl_d::NATIVES, set::NATIVES, set_b::NATIVES, set_c::NATIVES, sobj::NATIVES, effects_b::NATIVES, effects_c::NATIVES, effects_d::NATIVES, effects_e::NATIVES, effects_f::NATIVES, enemy::NATIVES, enemy_double::NATIVES, enemy_part::NATIVES, enemy_common::NATIVES, enemy_riyakaa::NATIVES, enemy_dbeast::NATIVES, enemy_owlbear::NATIVES, enemy_harpy::NATIVES, enemy_warrior::NATIVES, enemy_skeleton::NATIVES, enemy_elf::NATIVES, enemy_trog::NATIVES, enemy_ghoul::NATIVES, enemy_beetle::NATIVES, enemy_scorpion::NATIVES, enemy_gargoyle::NATIVES, enemy_hellhound::NATIVES, enemy_ogre::NATIVES, enemy_kobold::NATIVES, enemy_goblin::NATIVES, enemy_troll::NATIVES, enemy_gnoll::NATIVES, enemy_bow::NATIVES, enemy_golem::NATIVES, enemy_warmachine::NATIVES, boss_dragon::NATIVES, boss_17::NATIVES, boss_6::NATIVES, boss_10::NATIVES, boss_5::NATIVES, boss_21::NATIVES, boss_19::NATIVES, boss_15::NATIVES, boss_18::NATIVES, boss_4::NATIVES, boss_7::NATIVES, boss_8::NATIVES, boss_11::NATIVES, boss_1::NATIVES, boss_3::NATIVES, boss_9::NATIVES]
@@ -178,12 +178,12 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
         .chain(boss_16::NATIVES)
         .chain(boss_22::NATIVES)
         .chain(creators::NATIVES)
-        .chain(set_residu::NATIVES)
-        .chain(petites::NATIVES)
-        .chain(petites::SHAKES)
+        .chain(set_residue::NATIVES)
+        .chain(small::NATIVES)
+        .chain(small::SHAKES)
         .chain(effects_creators::NATIVES)
         .chain(effects_g::NATIVES)
-        .chain(joueur::natives())
+        .chain(player::natives())
         .chain(reactions::NATIVES)
         .chain([&reactions::PLAYER_HURT_ANIMATION])
 }

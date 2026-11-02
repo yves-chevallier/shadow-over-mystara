@@ -1,5 +1,5 @@
 //! Boss de type 3 (0x7f41a) : la créature volante de la scène 11 (nom de debug « Harpy », h). Voir
-//! `docs/familles/boss.md`.
+//! `docs/families/boss.md`.
 //!
 //! Charpente des boss à IA (`+4` état, `+5` groupe, `+6` et `+7` étapes, états posés en longs). Le boss vole :
 //! la hauteur `+0xc` est sa altitude, il plane, pique sur les joueurs, les saisit et les emporte. Son corps
@@ -18,7 +18,7 @@
 //!
 //! Animations : 0x174776 (corps), 0x1747c4 (attaques), 0x1747f0 (mort).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::boss_common::*;
 use crate::objects::Obj;
 
@@ -60,7 +60,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Jeux d'animations : corps, attaques, mort.
 pub(self) const SET_BODY: u32 = 0x174776;
@@ -71,47 +71,47 @@ pub(self) const SET_DEATH: u32 = 0x1747f0;
 pub(self) const BODY_OWNER: u32 = 0xff8000 - 0x5fb2;
 
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
-pub(self) fn body_anim<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn body_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn attack_anim<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn attack_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_ATTACK, n);
 }
 
 /// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
-pub(self) fn next6<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
-pub(self) fn next7<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn next7<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
 /// `move.w #v,(6,A0)` : étapes `+6` et `+7` d'un coup.
-pub(self) fn set_steps<R: Banc>(x: &mut Cx<'_, R>, v: u16) {
+pub(self) fn set_steps<R: Bench>(x: &mut Cx<'_, R>, v: u16) {
     x.set16(f::SUB2, v);
 }
 
 /// 0x8188e : vitesses et accélérations (`+0x14..+0x1f`) à zéro.
-pub(self) fn stop<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn stop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
 }
 
 /// 0x8189e : enregistrement de la caméra en service (A2 : 0xff84fe, ou 0xff854e si `A5+0x36`).
-pub(self) fn camera<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
+pub(self) fn camera<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
     let a = if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe };
     Obj(a)
 }
 
 /// 0x7f5ae : plus de cible, attente (`+4` = 0x020a0000).
-pub(self) fn idle_alone<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn idle_alone<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 
 /// 0x8173c : la cible est-elle derrière le boss ? Sans cible : attente, et vrai.
-pub(self) fn target_behind<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::TARGET) as i16) >= 0 {
         idle_alone(x);
         return true;
@@ -126,7 +126,7 @@ pub(self) fn target_behind<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x81764 : la cible est-elle loin (plus de 0x20 en profondeur ou 0xc0 en largeur) ? Sans cible : attente, et vrai.
-pub(self) fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         idle_alone(x);
         return true;
@@ -143,7 +143,7 @@ pub(self) fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x81722 : seizièmes de PV restants (0 à 15).
-fn hp_sixteenths<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn hp_sixteenths<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     let mut d1 = x.u16(f::HP) << 4;
     let max = x.u16(0x60);
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | max as u32;
@@ -162,7 +162,7 @@ fn hp_sixteenths<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
 }
 
 /// 0x816f8 : le boss vient-il de changer de palier de PV (`+0xa2`, table 0x81712) ?
-pub(self) fn wound_changed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn wound_changed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let n = hp_sixteenths(x);
     let w = x.rom8(0x81712 + n);
     let changed = w != x.u8(FLYING);
@@ -174,7 +174,7 @@ pub(self) fn wound_changed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 /// Tirage d'une attaque dans une table de 32 octets par niveau de difficulté (lue en données, à partir de `table`) :
 /// `+6` = l'attaque, `+4..+5` = actif / attaques, `+7` = 0.
-fn draw_attack<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
+fn draw_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let level = (var::RANK.get(x.b) >> 1) << 5;
     let at = table.wrapping_add(level as i16 as u32);
     let r = rand_and(x, 0x1f);
@@ -185,7 +185,7 @@ fn draw_attack<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
 }
 
 /// 0x80e1c / 0x80e22 : attaque tirée pour une cible proche (`far` : à distance) ; blessé, la table des blessés.
-pub(self) fn choose_attack<R: Banc>(x: &mut Cx<'_, R>, far: bool) {
+pub(self) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, far: bool) {
     let table = if x.u8(FLYING) != 0 {
         0x81262
     } else if far {
@@ -197,7 +197,7 @@ pub(self) fn choose_attack<R: Banc>(x: &mut Cx<'_, R>, far: bool) {
 }
 
 /// 0x81462 : fin d'une attaque : nouvelle attaque si la cible est tout près, sinon reprise du vol (ou attente).
-pub(self) fn after_attack<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn after_attack<R: Bench>(x: &mut Cx<'_, R>) {
     if !pick_target(x) {
         let s = if x.u8(FLYING) != 0 { 0x0202_0a00 } else { 0x0202_0400 };
         return x.set32(f::STATE, s);
@@ -213,7 +213,7 @@ pub(self) fn after_attack<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0202_0400);
 }
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -236,7 +236,7 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// 0x7f44e : réglages du boss (hors cinématique) ; il s'enregistre comme obstacle.
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -280,7 +280,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 /// 0x7f550 : un groupe par image (hors gel et pause), invulnérabilité décomptée, puis zone, ombre et liste.
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
@@ -306,7 +306,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin d'image ordinaire : retenue dans l'écran (marge `margin`), ombre, remise en liste.
-pub(self) fn end_frame<R: Banc>(x: &mut Cx<'_, R>, margin: u16) {
+pub(self) fn end_frame<R: Bench>(x: &mut Cx<'_, R>, margin: u16) {
     lib::keep_on_screen(x, margin);
     lib::collide_terrain(x);
     x.reinsert();
@@ -315,7 +315,7 @@ pub(self) fn end_frame<R: Banc>(x: &mut Cx<'_, R>, margin: u16) {
 /// 0x81ae0 : riposte d'un coup commun (appelée par les réactions, 0x3e22e) : tirage selon la difficulté, puis
 /// l'attaque 24 (ruée au sol).
 /// Rend le tirage (D0 de l'original, `andi.l #0xf`) et le masque (D1.w) pour le contrat de la native.
-pub(crate) fn counter_reaction<R: Banc>(x: &mut Cx<'_, R>) -> (u32, u16) {
+pub(crate) fn counter_reaction<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u16) {
     let r = random(x) & 0xf;
     let level = (var::RANK.get(x.b) >> 1).wrapping_mul(4);
     // index `(d8,PC,D1.w)` : mot étendu en signe
@@ -335,7 +335,7 @@ pub const NATIVES: &[crate::Native] = &[
     crate::Native {
         entry: 0x81ae0,
         name: "boss_3_riposte",
-        run: crate::Corps::Processeur(|c, b| {
+        run: crate::Body::Processeur(|c, b| {
             let mut x = Cx::new(c, b);
             let (r, mask) = counter_reaction(&mut x);
             // contrat de sortie de l'original : D0 = le tirage, D1.w = le masque

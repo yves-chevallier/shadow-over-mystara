@@ -1,16 +1,16 @@
 //! Type 4, état touché (`+4 = 4`, 0x5ea0c). `+5` : 0 et 6 réaction commune par table (`+0x49`),
 //! 2 recul, 4 chute, 8 mort ou fuite.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::stance::next_move;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
 const REACT_FIRST: u32 = 0x5ea5c;
 const REACT_SECOND: u32 = 0x5ecb8;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     hit_loop_at(x, NO_ZONE, |x| match x.u8(f::SUB) {
         0 => {
             x.set8(CUR_ANIM, 0x7f);
@@ -34,7 +34,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 2 : recul -------------------------------------------------------------------------
 
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -73,7 +73,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 4 : chute -------------------------------------------------------------------------
 
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -110,7 +110,7 @@ fn fall<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 8 : mort ou fuite -----------------------------------------------------------------
 
-fn flee<R: Banc>(x: &mut Cx<'_, R>) {
+fn flee<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set8(NO_ZONE, 1);
@@ -149,7 +149,7 @@ fn flee<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5ede8 : s'enfuit en courant vers le bord de l'écran.
-fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_angle(x, 8, 0x18);
     body(x, 5);

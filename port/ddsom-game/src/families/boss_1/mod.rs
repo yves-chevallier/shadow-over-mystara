@@ -1,5 +1,5 @@
 //! Boss de type 1 (0x7acea) : le fauve bondissant de la scène 27 (nom de debug « Displacer Beast », h). Voir
-//! `docs/familles/boss.md`.
+//! `docs/families/boss.md`.
 //!
 //! Même charpente que la Chimère (`boss_4`) : `+4` état, `+5` groupe, `+6` et `+7` étapes, états posés d'un coup en
 //! longs, bibliothèque d'IA 0x103d6..0x105b6. Le boss se déplace par bonds (une marche est une suite de sauts vers
@@ -18,7 +18,7 @@
 //! Les choix d'attaque (tirages dans les tables de la ROM selon la phase `+0xaa`) et les états qu'ils posent sont
 //! ici (`go`). Animations : 0x172794 (corps), 0x1727d4 (attaques), 0x1727e4 (coups reçus).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -69,7 +69,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Jeux d'animations : corps, attaques, coups reçus.
 pub(self) const SET_BODY: u32 = 0x172794;
@@ -80,69 +80,69 @@ pub(self) const SET_HURT: u32 = 0x1727e4;
 pub(self) const THRESHOLDS: u32 = 0x10be2;
 
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
-pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn attack<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn attack<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_ATTACK, n);
 }
 
 /// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
-pub(self) fn kind<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
+pub(self) fn kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     x.set8(ANIM_KIND, k);
     x.set8(ANIM_LAST, k);
 }
 
 /// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
-pub(self) fn next6<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
-pub(self) fn next7<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn next7<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
 /// Au moins un joueur en vie (0x10474).
-pub(self) fn alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::players_alive(x)
 }
 
 /// Le boss est-il hors de la bande `[caméra + d0, caméra + d1]` (0x104a2) ?
-pub(self) fn outside<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16) -> bool {
+pub(self) fn outside<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16) -> bool {
     lib::outside_band(x, d0, d1 as i16)
 }
 
 /// Le boss doit-il se retourner vers sa cible (0x1050c) ?
-pub(self) fn turn_needed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn turn_needed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
 /// Boîte large devant le boss (0x7ef4).
-pub(self) fn in_wide_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
+pub(self) fn in_wide_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     lib::guard_in_front(x, d0, d1, d2)
 }
 
 /// Bouffée de poussière de sorte `k` (0x1172e).
-pub(self) fn dust<R: Banc>(x: &mut Cx<'_, R>, k: u32) {
+pub(self) fn dust<R: Bench>(x: &mut Cx<'_, R>, k: u32) {
     lib::debris(x, k);
 }
 
 /// `subq.w #1,(off,A0)` : vrai quand le décompte est écoulé (`ble`).
-pub(self) fn expired<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> bool {
+pub(self) fn expired<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     sub16(x, off, 1).le()
 }
 
 /// Cible du boss (`movea.w (0x50,A0),A1`).
-pub(self) fn target_obj<R: Banc>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
+pub(self) fn target_obj<R: Bench>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
     load_target(x)
 }
 
 /// Mot de la table de sauts relative au PC `base` pour l'index `i` : adresse de la routine choisie.
-pub(self) fn jump_target<R: Banc>(x: &mut Cx<'_, R>, base: u32, i: u32) -> u32 {
+pub(self) fn jump_target<R: Bench>(x: &mut Cx<'_, R>, base: u32, i: u32) -> u32 {
     base.wrapping_add(x.rom16(base + i) as i16 as u32)
 }
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -166,7 +166,7 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// 0x7ad2a : réglages du boss ; il attend, en pose, le début de la cinématique d'arrivée.
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -213,7 +213,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 /// 0x7ae16 : un groupe par image (hors gel et pause), puis zone de jeu et ombre une fois arrivé.
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
@@ -235,18 +235,18 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 // --- décisions : états posés d'un coup (0x7c24a..0x7c372) -----------------------------------------
 
 /// Pose le long d'état `+4..+7` et rend le boss vulnérable ou non (`+0x67`).
-fn state<R: Banc>(x: &mut Cx<'_, R>, vulnerable: bool, s: u32) {
+fn state<R: Bench>(x: &mut Cx<'_, R>, vulnerable: bool, s: u32) {
     x.set8(VULNERABLE, vulnerable as u8);
     x.set32(f::STATE, s);
 }
 
 /// 0x7c24a : debout.
-pub(self) fn stand<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, true, 0x0202_0000);
 }
 
 /// 0x7c25a : demi-tour, l'état courant sera repris.
-pub(self) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let s = x.u32(f::STATE);
     x.set32(SAVED_STATE, s);
@@ -254,27 +254,27 @@ pub(self) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c26e et 0x7c27c : marche par bonds (deux tirages du nombre de bonds).
-pub(self) fn walk<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, false, 0x0202_0400);
 }
-pub(self) fn walk_b<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn walk_b<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, false, 0x0202_0600);
 }
 
 /// 0x7c2a2 : grand bond, vers la cible ou (`center`) vers le milieu de l'écran.
-pub(self) fn leap<R: Banc>(x: &mut Cx<'_, R>, center: bool) {
+pub(self) fn leap<R: Bench>(x: &mut Cx<'_, R>, center: bool) {
     x.set8(LEAP_TO_CENTER, center as u8);
     state(x, false, 0x0202_0800);
 }
 
 /// 0x7c28a : grand bond vers la cible après une riposte (invulnérable).
-pub(self) fn leap_guarded<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn leap_guarded<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     leap(x, false);
 }
 
 /// 0x7c2b0 : bond en arrière, sauf hors de l'écran (grand bond).
-fn back_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
     if outside(x, 0x18, 0x168) {
         return leap_guarded(x);
     }
@@ -283,7 +283,7 @@ fn back_step<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c2de : premier coup (une cible saisissable reçoit le coup 4).
-fn strike_a<R: Banc>(x: &mut Cx<'_, R>) {
+fn strike_a<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     let s = if t.u8(x.b, 0x66) != 0 { 0x0204_0400 } else { 0x0204_0000 };
     x.set8(0x57, 0);
@@ -291,7 +291,7 @@ fn strike_a<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c304 : deuxième coup (ou le coup 6 contre une cible saisissable).
-fn strike_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn strike_b<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     let s = if t.u8(x.b, 0x66) != 0 { 0x0204_0600 } else { 0x0204_0200 };
     x.set8(0x57, 0);
@@ -299,18 +299,18 @@ fn strike_b<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c300 : enchaînement (nombre de coups tiré selon la difficulté) qui commence par le deuxième coup.
-fn combo<R: Banc>(x: &mut Cx<'_, R>) {
+fn combo<R: Bench>(x: &mut Cx<'_, R>) {
     combo_count(x);
     strike_b(x);
 }
 
 /// 0x7c34a : saisie.
-fn grab<R: Banc>(x: &mut Cx<'_, R>) {
+fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, false, 0x0204_0800);
 }
 
 /// 0x7c358 : bond en ciseaux avec un double.
-pub(self) fn split_leap<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn split_leap<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 2);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set8(GRAB_TRIES, 0);
@@ -318,12 +318,12 @@ pub(self) fn split_leap<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c372 : plus aucun joueur, attente.
-pub(self) fn idle_alone<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn idle_alone<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 
 /// Exécute la décision dont l'adresse d'origine est `at` (sauts par tables de la ROM).
-pub(self) fn go<R: Banc>(x: &mut Cx<'_, R>, at: u32) {
+pub(self) fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
     match at {
         0x7c24a => stand(x),
         0x7c25a => turn(x),
@@ -356,7 +356,7 @@ pub(self) fn go<R: Banc>(x: &mut Cx<'_, R>, at: u32) {
 }
 
 /// 0x7c0ba : cible dans la boîte large, tirage dans la table 0x7c0d0.
-pub(self) fn from_wide_box<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn from_wide_box<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7c0d0 + r) as u32;
     let at = jump_target(x, 0x7c0e0, i);
@@ -364,7 +364,7 @@ pub(self) fn from_wide_box<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c0e2 : cible tout près ; tirage dans la table de la phase `+0xaa`.
-pub(self) fn from_close<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32 as u32;
     let table = [0x7c11a, 0x7c12a, 0x7c13a][phase as usize % 3];
@@ -374,7 +374,7 @@ pub(self) fn from_close<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c14e et 0x7c1cc : l'IA a choisi le geste `g` (1 ou 2) ; tirage dans la table de la phase.
-fn from_gesture<R: Banc>(x: &mut Cx<'_, R>, g: u32, tables: [u32; 6], jumps: u32) {
+fn from_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32, tables: [u32; 6], jumps: u32) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32;
     let i = (g as i32 - 1 + 2 * phase) as usize;
@@ -384,17 +384,17 @@ fn from_gesture<R: Banc>(x: &mut Cx<'_, R>, g: u32, tables: [u32; 6], jumps: u32
 }
 
 /// 0x7c14e : boîte proche (-0x70).
-pub(self) fn from_near_gesture<R: Banc>(x: &mut Cx<'_, R>, g: u32) {
+pub(self) fn from_near_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     from_gesture(x, g, [0x7c1a8, 0x7c1a8, 0x7c1b8, 0x7c1b8, 0x7c1b8, 0x7c1b8], 0x7c1c8)
 }
 
 /// 0x7c1cc : boîte lointaine (-0xe0).
-pub(self) fn from_far_gesture<R: Banc>(x: &mut Cx<'_, R>, g: u32) {
+pub(self) fn from_far_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     from_gesture(x, g, [0x7c226, 0x7c226, 0x7c226, 0x7c226, 0x7c236, 0x7c236], 0x7c246)
 }
 
 /// 0x7c080 / 0x7c09e : cible dans la boîte et geste choisi par l'IA (0x1047a), ou rien.
-pub(self) fn ai_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u32> {
+pub(self) fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u32> {
     if !lib::target_in_box(x, d0, d1, d2) {
         return None;
     }
@@ -403,7 +403,7 @@ pub(self) fn ai_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Op
 }
 
 /// 0x7c47c : nombre de coups de l'enchaînement, selon la difficulté et le nombre de joueurs.
-fn combo_count<R: Banc>(x: &mut Cx<'_, R>) {
+fn combo_count<R: Bench>(x: &mut Cx<'_, R>) {
     let level = (var::RANK.get(x.b) & 0x1e) * 2;
     let mut players = var::PLAYERS_ALIVE.get(x.b) as u16;
     if players != 0 {
@@ -415,7 +415,7 @@ fn combo_count<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c50c : tentative de bond en ciseaux (sans double en cours) : une chance qui croît à chaque essai.
-pub(self) fn try_split_leap<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn try_split_leap<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(DOUBLE) != 0 {
         return false;
     }
@@ -427,7 +427,7 @@ pub(self) fn try_split_leap<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x7c01c / 0x7c02e : nombre de bonds de la marche, tiré dans la table `table`.
-pub(self) fn draw_steps<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
+pub(self) fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let r = rand_and(x, 0x1f);
     let n = x.rom8(table + r);
     x.set8(WALK_STEPS, n);
@@ -435,7 +435,7 @@ pub(self) fn draw_steps<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
 
 /// 0x7c396 / 0x7c3b0 : point visé près de la cible (décalages tirés dans `table`, `mask` + 1 entrées), du côté
 /// du boss ; l'angle vers ce point (0x137e) devient la direction.
-pub(self) fn aim_near_target<R: Banc>(x: &mut Cx<'_, R>, table: u32, mask: u32) {
+pub(self) fn aim_near_target<R: Bench>(x: &mut Cx<'_, R>, table: u32, mask: u32) {
     let i = rand_and(x, mask) * 4;
     let dx = x.rom16(table + i);
     let dz = x.rom16(table + i + 2);
@@ -455,14 +455,14 @@ pub(self) fn aim_near_target<R: Banc>(x: &mut Cx<'_, R>, table: u32, mask: u32) 
 }
 
 /// 0x137e vers le point `mark` (D1, D2 de l'original) puis `+0x2d` = l'angle.
-pub(self) fn aim_at_mark<R: Banc>(x: &mut Cx<'_, R>, mark: (u16, u16)) {
+pub(self) fn aim_at_mark<R: Bench>(x: &mut Cx<'_, R>, mark: (u16, u16)) {
     let a = lib::aim_from(x, mark);
     x.set8(Obj::SPEED_INDEX, a);
 }
 
 /// 0x7c430 : vitesse verticale du bond selon la distance au point visé : 10 de plus par tranche de la vitesse
 /// horizontale (la plus grande des deux distances, avec la vitesse correspondante).
-pub(self) fn hop_height<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn hop_height<R: Bench>(x: &mut Cx<'_, R>) {
     let abs = |v: u16| if (v as i16) < 0 { v.wrapping_neg() } else { v };
     // `move.w (0x1c,A0),D3` : le mot haut de D3 est celui que laisse la direction 0x137e appelée juste avant par
     // les deux appelants (`moveq #0,D3` puis le pas) : nul
@@ -492,7 +492,7 @@ pub(self) fn hop_height<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c4da : une bouffée (EFFCT 0x32, variante 4) toutes les `n` + 1 images.
-pub(self) fn puff<R: Banc>(x: &mut Cx<'_, R>, n: u8) {
+pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
     x.add8(PUFFS, 1);
     if (n as i8) > x.u8(PUFFS) as i8 {
         return;
@@ -508,7 +508,7 @@ pub(self) fn puff<R: Banc>(x: &mut Cx<'_, R>, n: u8) {
 }
 
 /// 0x7c542 : crée le double (ENEMY 0x1a) du bond en ciseaux, lié au boss par `+0xb0`.
-pub(self) fn spawn_double<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn spawn_double<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(d) = x.alloc(&pools::ENEMY) else {
         x.set16(DOUBLE, 0);
         return;
@@ -529,7 +529,7 @@ pub(self) fn spawn_double<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x7acea "boss_1" #[sans] run,
+    0x7acea "boss_1" #[without] run,
     // retour au combat après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x7bece "boss_1_releve" hit::get_up,
 }

@@ -4,7 +4,7 @@
 //! X (abscisse), Y (profondeur sur le sol, clé de tri) et Z (altitude).
 //!
 //! Deux façons de bouger :
-//! - *balistique* : `vitesse += accélération ; position += vitesse` (`advance`) ;
+//! - *balistique* : `speed += accélération ; position += speed` (`advance`) ;
 //! - *par table* : la vitesse est lue dans la table `Obj::SPEED_TABLE` à l'index `Obj::SPEED_INDEX`
 //!   (deux mots par index : vx puis vy ou vz), on y ajoute l'accélération (`advance_by_table`).
 
@@ -225,7 +225,7 @@ pub(super) fn lsl_word(c: &mut Cpu, v: u16, n: u32) -> u16 {
 
 // ---- adaptation aux registres du 68000 ----
 
-/// Registres que laissent les routines d'origine (voir `diag::registres_morts`, étiquette `motion`).
+/// Registres que laissent les routines d'origine (voir `diag::dead_regs`, étiquette `motion`).
 pub const REGS_BALLISTIC: u32 = regs::d(0) | regs::CCR;
 pub const REGS_BY_TABLE: u32 = regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR;
 pub const REGS_SPEED: u32 = regs::d(0) | regs::a(4) | regs::CCR;
@@ -235,7 +235,7 @@ pub const REGS_SPEED: u32 = regs::d(0) | regs::a(4) | regs::CCR;
 #[track_caller]
 pub fn ballistic_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, axes: Axes) -> LastAdd {
     let last = ballistic_regs(c, b, obj, axes);
-    crate::diag::registres_morts(c, "motion", REGS_BALLISTIC);
+    crate::diag::dead_regs(c, "motion", REGS_BALLISTIC);
     last
 }
 
@@ -243,7 +243,7 @@ pub fn ballistic_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, axes: Axes) -> Last
 #[track_caller]
 pub fn move_by_table_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, second: Axis) -> LastAdd {
     let last = by_table_regs(c, b, obj, second);
-    crate::diag::registres_morts(c, "motion", REGS_BY_TABLE);
+    crate::diag::dead_regs(c, "motion", REGS_BY_TABLE);
     last
 }
 
@@ -252,7 +252,7 @@ pub fn move_by_table_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, second: Axis) -
 pub fn select_speed_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, tables: &SpeedTables, n: u16) {
     c.d[0] = c.d[0] & 0xffff_0000 | n as u32;
     speed_regs(c, b, obj, tables);
-    crate::diag::registres_morts(c, "motion", REGS_SPEED);
+    crate::diag::dead_regs(c, "motion", REGS_SPEED);
 }
 
 /// `suspended` avec les drapeaux de l'original (`tst.b`).
@@ -260,7 +260,7 @@ pub fn select_speed_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, tables: &SpeedTa
 pub fn suspended_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
     let v = obj.u8(b, Obj::HIDDEN);
     c.flags_logic(v as u32, Size::Byte);
-    crate::diag::registres_morts(c, "motion", regs::CCR);
+    crate::diag::dead_regs(c, "motion", regs::CCR);
     v != 0
 }
 
@@ -269,7 +269,7 @@ pub fn suspended_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
 pub fn tick_counters_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
     countdown_flags(c, b, obj);
     tick_counters(b, obj);
-    crate::diag::registres_morts(c, "motion", regs::CCR);
+    crate::diag::dead_regs(c, "motion", regs::CCR);
 }
 
 /// Flags de la dernière addition `add.l D0,(position)`.
@@ -333,7 +333,7 @@ macro_rules! motion_native {
         pub const $const: Native = Native {
             entry: $entry,
             name: $name,
-            run: crate::Corps::Processeur(|c, b| {
+            run: crate::Body::Processeur(|c, b| {
                 let obj = Obj(c.a[0]);
                 $run(c, b, obj);
                 rts(c, b);

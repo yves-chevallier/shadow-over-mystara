@@ -1,16 +1,16 @@
 //! Type 19, état touché (`+4 = 4`, 0x7407a) : réactions aux coups. `+5` : 0 réaction commune par
 //! table (`+0x49`), 2 recul des pièces, 4 chute, 6 deuxième table de réactions, 8 mort ou fuite.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::stance::next_move;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Tables de la réaction commune (indexées par le code de réaction `+0x49`).
 const REACT_PART: u32 = 0x740c0;
 const REACT_BEAST: u32 = 0x742fa;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -46,14 +46,14 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-fn zone_and_shadow<R: Banc>(x: &mut Cx<'_, R>) {
+fn zone_and_shadow<R: Bench>(x: &mut Cx<'_, R>) {
     lib::keep_in_zone(x);
     lib::collide_terrain(x);
 }
 
 // --- sous-état 2 : recul d'une pièce --------------------------------------------------------------
 
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -93,7 +93,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 4 : chute --------------------------------------------------------------------------
 
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -140,7 +140,7 @@ fn fall<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 8 : mort ou fuite ------------------------------------------------------------------
 
-fn flee<R: Banc>(x: &mut Cx<'_, R>) {
+fn flee<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             let wall = var::SCENE.get(x.b);
@@ -180,7 +180,7 @@ fn flee<R: Banc>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB2, 2);
             }
             let t = crate::video::terrain_of(x.b, x.o);
-                let terrain = t.numero as u8;
+                let terrain = t.number as u8;
             x.set8(0x29, terrain);
             x.move_by_table_xy();
             if x.in_arena_default() {
@@ -222,7 +222,7 @@ fn flee<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7444e : s'enfuit en courant vers le bord de l'écran.
-fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(WANT_ANIM, 0x16);
     x.set8(Obj::SPEED_INDEX, 8);
@@ -234,7 +234,7 @@ fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7449e : continue jusqu'à sortir de l'écran, puis disparaît.
-fn leave_screen<R: Banc>(x: &mut Cx<'_, R>) {
+fn leave_screen<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     if x.in_arena_default() {
         return step(x);

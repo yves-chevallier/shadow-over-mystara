@@ -1,11 +1,11 @@
 //! Boss 22, groupe 4 : les attaques (`+6` = 0 à 22). Chacune se termine par `next_attack` (0x9d680).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::moves::step_anim;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let step = x.u8(f::SUB2);
     match (two(x), step) {
         (_, 0 | 6) => shot(x),
@@ -23,7 +23,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9b752 : image-clé de l'animation d'attaque (son 0xebfdc), puis fin quand l'animation est finie.
-fn finish_attack<R: Banc>(x: &mut Cx<'_, R>) {
+fn finish_attack<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         lib::sound(x, 0xebfdc);
         x.set8(f::KEY_FRAME, 0);
@@ -34,7 +34,7 @@ fn finish_attack<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9b712 : tir.
-fn shot<R: Banc>(x: &mut Cx<'_, R>) {
+fn shot<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -50,7 +50,7 @@ fn shot<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9b774 : souffle.
-fn breath<R: Banc>(x: &mut Cx<'_, R>) {
+fn breath<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -68,7 +68,7 @@ fn breath<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9bfb4 : image-clé de la morsure : saisit un joueur à portée (0xfc44, 0xfd64), sinon fin de l'animation.
-fn grab_on_key<R: Banc>(x: &mut Cx<'_, R>) {
+fn grab_on_key<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         if let Some(player) = lib::attack_hits_a_player(x, 5) {
             return lib::seize_player(x, player, 0);
@@ -80,7 +80,7 @@ fn grab_on_key<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9bf80 : morsure.
-fn bite<R: Banc>(x: &mut Cx<'_, R>) {
+fn bite<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -95,7 +95,7 @@ fn bite<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin de la course d'une attaque de la seconde forme : le boss se tourne vers sa cible s'il lui tourne le dos.
-fn facing_wrong<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn facing_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -105,7 +105,7 @@ fn facing_wrong<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9c0ac : attaque de la seconde forme (rugissement qui la déclenche, course, coup).
-fn second_form_strike<R: Banc>(x: &mut Cx<'_, R>) {
+fn second_form_strike<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if second_form(x) {
@@ -218,7 +218,7 @@ fn second_form_strike<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9c29a : le boss reste dans l'écran et la cible est assez proche devant lui (comme au demi-tour du combat).
-fn still_close<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn still_close<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = var::SCROLL_X.get(x.b);
     if x.u8(f::FLIP) != 0 && (cam.wrapping_add(0x160).wrapping_sub(x.u16(0x8)) as i16) < 0 {
         return false;
@@ -232,7 +232,7 @@ fn still_close<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9b7ae : charge (course vers la cible, coup à portée).
-fn charge_strike<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge_strike<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -269,7 +269,7 @@ fn charge_strike<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn charge_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(ANIM_ID, 0xf);
     x.set8(ANIM_LAST, 0xf);
@@ -279,7 +279,7 @@ fn charge_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9bfe0 : piétinement (course vers un joueur proche, puis morsure).
-fn stomp<R: Banc>(x: &mut Cx<'_, R>) {
+fn stomp<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -315,7 +315,7 @@ fn stomp<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn stomp_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn stomp_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(ANIM_ID, 0xd);
     x.set8(ANIM_LAST, 0xd);
@@ -324,7 +324,7 @@ fn stomp_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9c354 : plongeon sur la cible.
-fn dive<R: Banc>(x: &mut Cx<'_, R>) {
+fn dive<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if x.u16(f::TARGET) != 0 {
@@ -360,7 +360,7 @@ fn dive<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn rise_wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn rise_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
         x.set8(VULNERABLE, 0);
@@ -368,7 +368,7 @@ fn rise_wait<R: Banc>(x: &mut Cx<'_, R>) {
     step_anim(x);
 }
 
-fn climb<R: Banc>(x: &mut Cx<'_, R>, up: bool) {
+fn climb<R: Bench>(x: &mut Cx<'_, R>, up: bool) {
     x.move_xz();
     let vz = x.u16(0x18);
     let reached = if up { Fl::sub16(vz, 0x100).gt() } else { Fl::sub16(vz, 0xff00).gt() };
@@ -380,7 +380,7 @@ fn climb<R: Banc>(x: &mut Cx<'_, R>, up: bool) {
 }
 
 /// Retombée du plongeon : son, poussière en ligne ; `down` (0x9c4a2) ajoute cinq éclats et ne rend pas vulnérable.
-fn land<R: Banc>(x: &mut Cx<'_, R>, down: bool) {
+fn land<R: Bench>(x: &mut Cx<'_, R>, down: bool) {
     x.move_xz();
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
@@ -400,7 +400,7 @@ fn land<R: Banc>(x: &mut Cx<'_, R>, down: bool) {
 }
 
 /// 0x9c3ee : saut sur place avec retombée en poussière.
-fn dive_down<R: Banc>(x: &mut Cx<'_, R>) {
+fn dive_down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);

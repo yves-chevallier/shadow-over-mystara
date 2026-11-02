@@ -1,12 +1,12 @@
 //! Type 6, sous-état 2 : debout. `+6` : 0 et 8 approche et choix d'un coup, 2 demi-tour, 4 attente, 6 crachat
 //! de feu (le chien recule en soufflant), 10 saut de côté.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 10 && grabbed(x) {
         return set_state_long(x, HELD);
     }
@@ -25,7 +25,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 0 et 8 : approche -----------------------------------------------------------------------------
 
-fn approach<R: Banc>(x: &mut Cx<'_, R>) {
+fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     let dx = x.u16(Obj::X).wrapping_sub(var::SCROLL_X.get(x.b));
     if dx >= 0x180 {
         // loin de la caméra : se tourne vers la cible puis tire son geste au hasard
@@ -74,13 +74,13 @@ fn approach<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x61a9e : le chien est en garde ; un joueur à portée ? Coup immédiat, sinon pas de marche.
-pub(super) fn reach<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn reach<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(GUARD, 2);
     reach_boxes(x);
 }
 
 /// 0x61aa4 : boîtes de portée successives (coup immédiat, attaque de face, attaque lointaine, annonce, marche).
-pub(super) fn reach_boxes<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn reach_boxes<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x28, 0x28, 0xc) {
         x.set16(f::STATE, 0x0204);
         lib::pick_byte(x);
@@ -107,7 +107,7 @@ pub(super) fn reach_boxes<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Décision d'attaque selon l'orientation relative de la cible (0xa4c2 de même sens, 0xa4b4 sinon).
-fn gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let target = x.linked(f::TARGET);
     let theirs = target.u8(x.b, f::FLIP);
     let same = theirs == x.u8(f::FLIP);
@@ -115,7 +115,7 @@ fn gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x61b3a : un joueur devant, assez près : coup de queue ou geste.
-fn front_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn front_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0x40, 0x40, 0x10) || x.u16(f::TARGET) == 0 || !gate(x) {
         return false;
     }
@@ -131,7 +131,7 @@ fn front_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x61bb4 : un joueur loin devant : geste de la série lointaine.
-fn far_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn far_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0xc0, 0x40, 0x10) || x.u16(f::TARGET) == 0 || !gate(x) {
         return false;
     }
@@ -148,7 +148,7 @@ fn far_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 // --- +6 = 2 : demi-tour ------------------------------------------------------------------------------------
 
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -169,7 +169,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : attente -----------------------------------------------------------------------------------------
 
-fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -191,7 +191,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 6 : crachat ---------------------------------------------------------------------------------------
 
-fn spit<R: Banc>(x: &mut Cx<'_, R>) {
+fn spit<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 0xfe);
@@ -218,7 +218,7 @@ fn spit<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x61d08 : début du crachat : le chien recule en soufflant.
-fn spit_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn spit_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 3);
     x.set8(STRIKE_KIND, 0x2c);
@@ -229,7 +229,7 @@ fn spit_begin<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 10 : saut ---------------------------------------------------------------------------------------------
 
-fn hop<R: Banc>(x: &mut Cx<'_, R>) {
+fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

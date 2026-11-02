@@ -1,13 +1,13 @@
 //! Type 8, sous-état 0 : arrivée. `+6` = 0 : vol d'entrée par un bord, atterrissage, premier combat ;
 //! `+6` = 2 : arrivée posée (crée une ombre, attend un joueur à portée).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => flight(x),
         2 => landed(x),
@@ -16,11 +16,11 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Signe de l'orientation appliqué à `v` : négatif quand l'ennemi regarde à gauche.
-fn signed_by_facing<R: Banc>(x: &mut Cx<'_, R>, v: i16) -> u16 {
+fn signed_by_facing<R: Bench>(x: &mut Cx<'_, R>, v: i16) -> u16 {
     if x.u8(f::FLIP) != 0 { v.wrapping_neg() as u16 } else { v as u16 }
 }
 
-fn flight<R: Banc>(x: &mut Cx<'_, R>) {
+fn flight<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -91,7 +91,7 @@ fn flight<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 2 : l'ombre est créée (EFFCT 0x32), puis la créature attend un joueur dans sa boîte.
-fn landed<R: Banc>(x: &mut Cx<'_, R>) {
+fn landed<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

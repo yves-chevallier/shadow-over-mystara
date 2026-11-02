@@ -1,12 +1,12 @@
 //! Type 15, sous-état 2 (debout : approche, demi-tour, attente, sortie d'écran) et sous-état 10 (promenade tant
 //! qu'aucun joueur n'est en vie).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(NO_ZONE) != 0 || grabbed(x) {
         set_state_long(x, HELD);
         return grab(x);
@@ -24,7 +24,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6de46 : (re)commence la marche vers la cible.
-pub(super) fn approach_start<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn approach_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     set_speed(x, 0x12);
@@ -35,7 +35,7 @@ pub(super) fn approach_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 0 : marche vers le joueur ; choisit un geste dès qu'il est à portée.
-fn approach<R: Banc>(x: &mut Cx<'_, R>) {
+fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set8(SHOT_KIND, 0x1a);
         return approach_start(x);
@@ -84,7 +84,7 @@ fn approach<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : demi-tour.
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -99,7 +99,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 : attente sur place.
-fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -115,7 +115,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// +6 = 6 (et sous-état 4, +6 = 20) : le Goblin quitte l'écran en marchant. L'original rend la main à la boucle
 /// avec une remise en liste (`jmp 0x1ee1a`) à plusieurs endroits : on la rejoue.
-pub(super) fn walk_off<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn walk_off<R: Bench>(x: &mut Cx<'_, R>) {
     let step = x.u8(f::SUB3);
     if step == 2 {
         if x.in_arena_default() {
@@ -156,7 +156,7 @@ pub(super) fn walk_off<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 10 : promenade sur place tant qu'aucun joueur n'est en vie, puis retour debout.
-pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(VULNERABLE, 1);

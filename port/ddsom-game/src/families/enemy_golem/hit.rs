@@ -2,16 +2,16 @@
 //! 6 seconde table de réactions, 8 saisie par un joueur (le Golem sort de l'écran), 10 rien. Zone et ombre sont
 //! toujours testées.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x68542;
 const REACT_SECOND: u32 = 0x68724;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -30,7 +30,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Recul (0x685ea).
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) || !hit_gate(x) {
         return;
     }
@@ -70,7 +70,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Chute puis relevé (0x6869a).
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -107,7 +107,7 @@ fn fall<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Saisi par un joueur : le Golem marche vers le bord de l'écran le plus proche (0x687cc).
-fn grab<R: Banc>(x: &mut Cx<'_, R>) {
+fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }

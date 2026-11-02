@@ -2,15 +2,15 @@
 //! interface, reconstruite depuis les cartes de décor de la ROM. Voir `docs/niveaux.md`.
 //!
 //!   cartes cartes  <roms> <eeprom> <dossier> [scène...]   une image par scène (1 à 82 par défaut)
-//!   cartes planche <dossier> <niveaux.md>                 planche d'aperçu `planche.png` + index Markdown
+//!   cartes planche <dossier> <niveaux.md>                 planche d'aperçu `sheet.png` + index Markdown
 //!   cartes tables  <roms>                                 dimensions des tables de bandes des 115 scènes
 //!
 //! Méthode. Les caméras du jeu (`scroll.rs`) recopient dans leurs couches des colonnes de cases lues dans une
 //! carte de ROM : des *bandes* de 256x256 pixels (indices de blocs 2x2, banques de blocs) que désigne, pour
 //! chaque scène, une table de mots (`0x2ff94 + 4 s` pour le scroll 2, cases de 16 pixels ; `0x32d7c + 4 s` pour
-//! le scroll 3, cases de 32 pixels). L'outil lit ces mêmes tables (voir `Couche::grille`), recompose toutes les
+//! le scroll 3, cases de 32 pixels). L'outil lit ces mêmes tables (voir `Layer::grid`), recompose toutes les
 //! cases de la carte, les dessine avec la palette de la scène relevée dans la machine (jeu réel lancé jusqu'à
-//! la phase de jeu de la scène, `FF8034` forcé comme dans `docs/couverture.md`) et superpose les deux couches
+//! la phase de jeu de la scène, `FF8034` forcé comme dans `docs/coverage.md`) et superpose les deux couches
 //! dans l'ordre que fixe CPS-B. Aucun sprite, aucune interface, pas de scroll 1.
 
 use std::path::Path;
@@ -25,8 +25,8 @@ const TABLES2: u32 = 0x32d7c;
 const TILES: usize = 0x20000 * 64;
 const SCENES: std::ops::RangeInclusive<u32> = 1..=82;
 /// Largeur de l'écran : pas de la superposition des couches à parallaxe.
-const ECRAN: usize = 384;
-const FOND: [u8; 3] = [24, 16, 40];
+const SCREEN: usize = 384;
+const BACKGROUND: [u8; 3] = [24, 16, 40];
 
 // ---------------------------------------------------------------------------------------------
 // Cartes en ROM
@@ -53,26 +53,26 @@ impl Rom<'_> {
 
 /// Une couche de décor : géométrie de sa carte en ROM.
 #[derive(Clone, Copy)]
-struct Couche {
+struct Layer {
     map: u32,
     banks: u32,
     tables: u32,
     /// Adresse du mot de pas de ligne de la première table de bandes.
-    debut: u32,
+    start: u32,
     /// Taille d'une case en pixels (16 ou 32) et nombre de cases par côté de bande.
     case: usize,
     cases: usize,
     /// Décalage de tuile ajouté au code de la carte, base de couleur du matériel.
-    decalage: u16,
-    couleur: u16,
+    offset: u16,
+    colour: u16,
     /// Numéro de bande de remplissage (jamais affichée : la caméra ne va pas jusque-là), laissée vide.
-    vide: u16,
+    empty: u16,
 }
 
-const SCROLL2: Couche = Couche { map: MAP1, banks: BANKS1, tables: TABLES1, debut: 0x318a2, case: 16, cases: 16, decalage: 0x1800, couleur: 0x40, vide: 0xfc };
-const SCROLL3: Couche = Couche { map: MAP2, banks: BANKS2, tables: TABLES2, debut: 0x33564, case: 32, cases: 8, decalage: 0x1f00, couleur: 0x60, vide: 0xfd };
+const SCROLL2: Layer = Layer { map: MAP1, banks: BANKS1, tables: TABLES1, start: 0x318a2, case: 16, cases: 16, offset: 0x1800, colour: 0x40, empty: 0xfc };
+const SCROLL3: Layer = Layer { map: MAP2, banks: BANKS2, tables: TABLES2, start: 0x33564, case: 32, cases: 8, offset: 0x1f00, colour: 0x60, empty: 0xfd };
 
-impl Couche {
+impl Layer {
     /// Case (code de tuile, attribut) à l'adresse `at` de la carte virtuelle (`map_cell` de `scroll.rs`).
     fn case_a(&self, rom: &Rom, at: u32) -> (u16, u16) {
         let off = at.wrapping_sub(self.map);
@@ -87,7 +87,7 @@ impl Couche {
             (bank, index, (off as u16 >> 2 & 8) as u32 + (off & 4))
         };
         let v = rom.rd32(bank.wrapping_add(index << 4).wrapping_add(sub));
-        ((v >> 16) as u16 + self.decalage, v as u16)
+        ((v >> 16) as u16 + self.offset, v as u16)
     }
 
     /// Grille des numéros de bandes de la scène, de haut en bas (vide si les tables sont incohérentes).
@@ -99,49 +99,49 @@ impl Couche {
     /// la lecture part de la première table et cherche, après chaque pointeur, le nombre de lignes négatives
     /// qui amène à un en-tête et à un pointeur suivants cohérents. Dans le scroll 2 le dernier mot de chaque
     /// ligne est une sentinelle (0xfe).
-    fn grille(&self, rom: &Rom, scene: u32) -> Vec<Vec<u16>> {
-        let mut pointeurs: Vec<u32> = (0..115).map(|s| rom.prog32(self.tables + 4 * s)).collect();
-        pointeurs.sort();
-        pointeurs.dedup();
-        let cible = rom.prog32(self.tables + 4 * scene);
-        let valide = |tete: u32, p: u32| {
-            let w = rom.rd16(tete) as u32;
-            (1..=64).contains(&w) && p >= tete + 2 && (p - tete - 2) % (2 * w) == 0
+    fn grid(&self, rom: &Rom, scene: u32) -> Vec<Vec<u16>> {
+        let mut pointers: Vec<u32> = (0..115).map(|s| rom.prog32(self.tables + 4 * s)).collect();
+        pointers.sort();
+        pointers.dedup();
+        let target = rom.prog32(self.tables + 4 * scene);
+        let valid = |head: u32, p: u32| {
+            let w = rom.rd16(head) as u32;
+            (1..=64).contains(&w) && p >= head + 2 && (p - head - 2) % (2 * w) == 0
         };
-        let mut tete = self.debut;
-        for (i, &p) in pointeurs.iter().enumerate() {
-            if !valide(tete, p) {
+        let mut head = self.start;
+        for (i, &p) in pointers.iter().enumerate() {
+            if !valid(head, p) {
                 return Vec::new();
             }
-            let w = rom.rd16(tete) as u32;
-            let apres = (0..=8u32).find(|t| pointeurs.get(i + 1).map_or(*t == 0, |&q| valide(p + 2 * w * (1 + t), q)));
-            let Some(apres) = apres else { return Vec::new() };
-            if p == cible {
+            let w = rom.rd16(head) as u32;
+            let after = (0..=8u32).find(|t| pointers.get(i + 1).map_or(*t == 0, |&q| valid(p + 2 * w * (1 + t), q)));
+            let Some(after) = after else { return Vec::new() };
+            if p == target {
                 let sentinelle = (self.case == 16) as u32;
-                return (0..=(p - tete - 2) / (2 * w) + apres)
-                    .map(|i| (0..w - sentinelle).map(|x| rom.rd16(tete + 2 + 2 * w * i + 2 * x)).collect())
+                return (0..=(p - head - 2) / (2 * w) + after)
+                    .map(|i| (0..w - sentinelle).map(|x| rom.rd16(head + 2 + 2 * w * i + 2 * x)).collect())
                     .collect();
             }
-            tete = p + 2 * w * (1 + apres);
+            head = p + 2 * w * (1 + after);
         }
         Vec::new()
     }
 
     /// Image du décor : les bandes de la grille côte à côte, chaque case dessinée avec la palette `pal`.
-    fn image(&self, rom: &Rom, pal: &[[u8; 3]], grille: &[Vec<u16>]) -> Image {
-        let bande = self.case * self.cases;
-        let mut img = Image::new(grille[0].len() * bande, grille.len() * bande);
-        let colonne = if self.case == 16 { 0x40 } else { 0x20 };
-        for (ky, ligne) in grille.iter().enumerate() {
-            for (kx, &strip) in ligne.iter().enumerate() {
-                if strip == self.vide {
+    fn image(&self, rom: &Rom, pal: &[[u8; 3]], grid: &[Vec<u16>]) -> Image {
+        let band = self.case * self.cases;
+        let mut img = Image::new(grid[0].len() * band, grid.len() * band);
+        let column = if self.case == 16 { 0x40 } else { 0x20 };
+        for (ky, line) in grid.iter().enumerate() {
+            for (kx, &strip) in line.iter().enumerate() {
+                if strip == self.empty {
                     continue;
                 }
                 let base = self.map + (strip as u32) * (self.cases * self.cases * 4) as u32;
                 for cx in 0..self.cases {
                     for cy in 0..self.cases {
-                        let (code, attr) = self.case_a(rom, base + cx as u32 * colonne + cy as u32 * 4);
-                        self.tuile(rom, pal, &mut img, kx * bande + cx * self.case, ky * bande + cy * self.case, code, attr);
+                        let (code, attr) = self.case_a(rom, base + cx as u32 * column + cy as u32 * 4);
+                        self.tile(rom, pal, &mut img, kx * band + cx * self.case, ky * band + cy * self.case, code, attr);
                     }
                 }
             }
@@ -150,30 +150,30 @@ impl Couche {
     }
 
     /// La scène utilise la table par défaut (celle de la scène 1) : sa couche n'est pas tirée d'une carte.
-    fn partagee(&self, rom: &Rom, scene: u32) -> bool {
+    fn shared(&self, rom: &Rom, scene: u32) -> bool {
         rom.prog32(self.tables + 4 * scene) == rom.prog32(self.tables + 4)
     }
 
 
     /// Dessine une tuile (décodage de `cps2-gfx` : un plan par octet, miroirs aux bits 5 et 6 de l'attribut).
-    fn tuile(&self, rom: &Rom, pal: &[[u8; 3]], img: &mut Image, x0: usize, y0: usize, code: u16, attr: u16) {
+    fn tile(&self, rom: &Rom, pal: &[[u8; 3]], img: &mut Image, x0: usize, y0: usize, code: u16, attr: u16) {
         let t = self.case;
         for py in 0..t {
             for px in 0..t {
                 let sx = if attr & 0x20 != 0 { t - 1 - px } else { px };
                 let sy = if attr & 0x40 != 0 { t - 1 - py } else { py };
-                let ligne = if t == 16 {
+                let line = if t == 16 {
                     TILES + code as usize * 128 + sy * 8 + (sx / 8) * 4
                 } else {
                     TILES + (code as usize & 0x3fff) * 512 + sy * 16 + (sx / 8) * 4
                 };
-                if ligne + 4 > rom.gfx.len() {
+                if line + 4 > rom.gfx.len() {
                     continue;
                 }
                 let bit = 7 - sx % 8;
-                let p = (rom.gfx[ligne + 3] >> bit & 1) << 3 | (rom.gfx[ligne + 2] >> bit & 1) << 2 | (rom.gfx[ligne + 1] >> bit & 1) << 1 | (rom.gfx[ligne] >> bit & 1);
+                let p = (rom.gfx[line + 3] >> bit & 1) << 3 | (rom.gfx[line + 2] >> bit & 1) << 2 | (rom.gfx[line + 1] >> bit & 1) << 1 | (rom.gfx[line] >> bit & 1);
                 if p != 15 {
-                    img.set(x0 + px, y0 + py, pal[((attr & 0x1f) + self.couleur) as usize * 16 + p as usize]);
+                    img.set(x0 + px, y0 + py, pal[((attr & 0x1f) + self.colour) as usize * 16 + p as usize]);
                 }
             }
         }
@@ -201,7 +201,7 @@ impl Image {
     }
 
     /// Retire les bords entièrement vides.
-    fn recadrer(self) -> Image {
+    fn reframe(self) -> Image {
         let (mut x0, mut y0, mut x1, mut y1) = (self.w, self.h, 0, 0);
         for y in 0..self.h {
             for x in 0..self.w {
@@ -223,7 +223,7 @@ impl Image {
     fn png(&self, path: &Path) {
         let mut buf = Vec::with_capacity(self.w * self.h * 3);
         for p in &self.px {
-            buf.extend_from_slice(if p[3] == 0 { &FOND } else { &p[..3] });
+            buf.extend_from_slice(if p[3] == 0 { &BACKGROUND } else { &p[..3] });
         }
         write_png(path, self.w, self.h, &buf);
     }
@@ -233,22 +233,22 @@ impl Image {
 /// Superpose les couches (de l'arrière vers l'avant), chacune avec l'ordonnée `u` de sa ligne du bas (les
 /// ordonnées du décor croissent vers le haut ; l'écart entre couches vient des caméras au début de la scène).
 /// Une couche plus étroite que le cadre est à parallaxe : l'écran qui voit la colonne `x` du cadre voit
-/// ses colonnes à partir de `x * (w - 384) / (cadre - 384)` ; l'image est donc assemblée par tranches d'un
+/// ses colonnes à partir de `x * (w - 384) / (frame - 384)` ; l'image est donc assemblée par tranches d'un
 /// écran, chacune telle que le joueur la voit.
-fn composer(couches: &[(&Image, i64)]) -> Image {
-    let w = couches.iter().map(|c| c.0.w).max().unwrap();
-    let bas = couches.iter().map(|c| c.1).min().unwrap();
-    let haut = couches.iter().map(|c| c.1 + c.0.h as i64).max().unwrap();
-    let h = (haut - bas) as usize;
+fn compose(layers: &[(&Image, i64)]) -> Image {
+    let w = layers.iter().map(|c| c.0.w).max().unwrap();
+    let low = layers.iter().map(|c| c.1).min().unwrap();
+    let high = layers.iter().map(|c| c.1 + c.0.h as i64).max().unwrap();
+    let h = (high - low) as usize;
     let mut img = Image::new(w, h);
     let mut x0 = 0;
     while x0 < w {
-        let camera = x0.min(w.saturating_sub(ECRAN));
-        for &(c, u) in couches {
-            let decalage = if c.w >= w || w <= ECRAN { camera } else { camera * c.w.saturating_sub(ECRAN) / (w - ECRAN) };
-            let y0 = (haut - u - c.h as i64) as usize;
-            for x in x0..(x0 + ECRAN).min(w) {
-                let sx = x - camera + decalage;
+        let camera = x0.min(w.saturating_sub(SCREEN));
+        for &(c, u) in layers {
+            let offset = if c.w >= w || w <= SCREEN { camera } else { camera * c.w.saturating_sub(SCREEN) / (w - SCREEN) };
+            let y0 = (high - u - c.h as i64) as usize;
+            for x in x0..(x0 + SCREEN).min(w) {
+                let sx = x - camera + offset;
                 if sx >= c.w {
                     continue;
                 }
@@ -260,9 +260,9 @@ fn composer(couches: &[(&Image, i64)]) -> Image {
                 }
             }
         }
-        x0 += ECRAN;
+        x0 += SCREEN;
     }
-    img.recadrer()
+    img.reframe()
 }
 
 fn write_png(path: &Path, w: usize, h: usize, rgb: &[u8]) {
@@ -295,22 +295,22 @@ fn scene(m: &cps2::Machine) -> u32 {
     (rw(m, 0xff8034) >> 8) as u32
 }
 
-fn poke(m: &mut cps2::Machine, a: u32, v: u32, taille: u8) {
-    ddsom_game::scenario::poke(m, a, v, taille);
+fn poke(m: &mut cps2::Machine, a: u32, v: u32, size: u8) {
+    ddsom_game::scenario::poke(m, a, v, size);
 }
 
 /// Lance le jeu : pièce, Start, personnage choisi, `FF8034` forcé pendant la sélection (scène 1).
-fn demarrer(roms: &Path, eeprom: &Path) -> cps2::Machine {
+fn start_up(roms: &Path, eeprom: &Path) -> cps2::Machine {
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(roms, ee.as_deref()).unwrap();
     ddsom_game::install(&mut m);
     m.set_overclock(16.0);
     m.idle = Some(ddsom_game::idle);
-    let entrees = [(922, "Coin 1", true), (928, "Coin 1", false), (1002, "1 Player Start", true), (1008, "1 Player Start", false), (1442, "P1 Button 1", true), (1448, "P1 Button 1", false)];
+    let inputs = [(922, "Coin 1", true), (928, "Coin 1", false), (1002, "1 Player Start", true), (1008, "1 Player Start", false), (1442, "P1 Button 1", true), (1448, "P1 Button 1", false)];
     for f in 0..2400 {
-        for &(i, nom, bas) in &entrees {
+        for &(i, name, low) in &inputs {
             if i == f {
-                ddsom_game::scenario::set_input(&mut m, nom, bas);
+                ddsom_game::scenario::set_input(&mut m, name, low);
             }
         }
         if f == 2399 {
@@ -322,45 +322,45 @@ fn demarrer(roms: &Path, eeprom: &Path) -> cps2::Machine {
 }
 
 /// Ce que la machine donne d'une scène en jeu : palette et ordre des couches.
-struct Releve {
+struct Reading {
     pal: Vec<[u8; 3]>,
     /// Couches de décor (2, 3) de l'arrière vers l'avant.
-    ordre: Vec<u8>,
+    order: Vec<u8>,
     /// Écart d'ordonnée entre les caméras 1 (scroll 2) et 2 (scroll 3) au début de la scène.
-    ecart_y: i64,
-    en_jeu: bool,
+    gap_y: i64,
+    in_game: bool,
 }
 
 /// Saute dans la scène `n` (partie en cours, joueur invincible), attend la phase de jeu et relève la palette.
-fn entrer(m: &mut cps2::Machine, n: u32) -> Releve {
+fn enter(m: &mut cps2::Machine, n: u32) -> Reading {
     for (a, v) in [(0xff8034, n), (0xff802c, 8), (0xff802d, 0), (0xff802e, 0)] {
         poke(m, a, v, 1);
     }
-    let (mut stable, mut en_jeu) = (0, false);
+    let (mut stable, mut in_game) = (0, false);
     for _ in 0..4000 {
         m.run_frame();
         poke(m, 0xff85de + 0x62, 0x70, 2);
         if phase(m) == 12 && scene(m) == n {
             stable += 1;
             if stable >= 90 {
-                en_jeu = true;
+                in_game = true;
                 break;
             }
         }
     }
     let b = &m.bus;
     let v = cps2_gfx::VideoState { gfxram: &b.gfxram, cps_a: &b.cps_a, cps_b: &b.cps_b, objram: &m.obj_buffer, output: &m.pri_ctrl_buffer, palette_ram: Some(&b.palette) };
-    let commande = b.cps_b[0x26 / 2];
+    let command = b.cps_b[0x26 / 2];
     // couche active : bit de CPS-B (0x04 / 0x08) et bit de commande vidéo CPS-A (4 / 8), comme `cps2-gfx`
-    let active = |l: u8| commande & (1 << l) != 0 && b.cps_a[0x22 / 2] & (1 << l) != 0;
-    let ordre = (0..4).map(|i| (commande >> (6 + 2 * i) & 3) as u8).filter(|&l| (l == 2 || l == 3) && active(l)).collect();
+    let active = |l: u8| command & (1 << l) != 0 && b.cps_a[0x22 / 2] & (1 << l) != 0;
+    let order = (0..4).map(|i| (command >> (6 + 2 * i) & 3) as u8).filter(|&l| (l == 2 || l == 3) && active(l)).collect();
     // positions cibles des caméras (enregistrements `A5 + 0x4fe` et `A5 + 0x54e`, champ `+0x0c`)
     let (y1, y2) = (rw(m, 0xff84fe + 0xc) as i16 as i64, rw(m, 0xff854e + 0xc) as i16 as i64);
-    Releve { pal: cps2_gfx::render::build_palette(&v), ordre, ecart_y: y1 - y2, en_jeu }
+    Reading { pal: cps2_gfx::render::build_palette(&v), order, gap_y: y1 - y2, in_game }
 }
 
 /// Scène qui suit naturellement : on force la phase 16 (sortie de scène) et on lit la scène suivante.
-fn suivante(m: &mut cps2::Machine) -> Option<u32> {
+fn next_scene(m: &mut cps2::Machine) -> Option<u32> {
     let n = scene(m);
     for (a, v) in [(0xff802c, 16), (0xff802d, 0), (0xff802e, 0)] {
         poke(m, a, v, 1);
@@ -375,20 +375,20 @@ fn suivante(m: &mut cps2::Machine) -> Option<u32> {
     None
 }
 
-fn cartes(roms: &Path, eeprom: &Path, sortie: &Path, scenes: &[u32]) {
-    let mut m = demarrer(roms, eeprom);
+fn cards(roms: &Path, eeprom: &Path, exit: &Path, scenes: &[u32]) {
+    let mut m = start_up(roms, eeprom);
     let (gfx, data, prog) = (m.gfx.clone(), m.bus.rom.clone(), m.bus.rom_dec.clone());
     let rom = Rom { data: &data, prog: &prog, gfx: &gfx };
     for d in ["couches", "infos"] {
-        std::fs::create_dir_all(sortie.join(d)).unwrap();
+        std::fs::create_dir_all(exit.join(d)).unwrap();
     }
     let routes = std::env::var("DDSOM_ROUTES").is_ok();
     for &n in scenes {
-        let r = entrer(&mut m, n);
+        let r = enter(&mut m, n);
         if std::env::var("DDSOM_REF").is_ok() {
-            write_png(&sortie.join(format!("ref_{n:02}.png")), 384, 224, &m.render().concat());
+            write_png(&exit.join(format!("ref_{n:02}.png")), 384, 224, &m.render().concat());
         }
-        let (g2, g3) = (SCROLL2.grille(&rom, n), SCROLL3.grille(&rom, n));
+        let (g2, g3) = (SCROLL2.grid(&rom, n), SCROLL3.grid(&rom, n));
         if g2.is_empty() || g3.is_empty() {
             eprintln!("scène {n} : tables de bandes illisibles");
             continue;
@@ -396,26 +396,26 @@ fn cartes(roms: &Path, eeprom: &Path, sortie: &Path, scenes: &[u32]) {
         let (s2, s3) = (SCROLL2.image(&rom, &r.pal, &g2), SCROLL3.image(&rom, &r.pal, &g3));
         // Les scènes dont la table du scroll 3 est celle par défaut (scène 1) n'ont pas de carte pour cette
         // couche : sa mémoire est un reste d'une scène précédente, masqué par le scroll 2 (vérifié par capture).
-        let sans_s3 = n != 1 && SCROLL3.partagee(&rom, n);
-        let ordre: Vec<u8> = r.ordre.iter().copied().filter(|&l| l == 2 || !sans_s3).collect();
-        if ordre.is_empty() {
+        let without_s3 = n != 1 && SCROLL3.shared(&rom, n);
+        let order: Vec<u8> = r.order.iter().copied().filter(|&l| l == 2 || !without_s3).collect();
+        if order.is_empty() {
             eprintln!("scène {n} : aucune couche de décor active");
             continue;
         }
-        let couches: Vec<(&Image, i64)> = ordre.iter().map(|&l| if l == 2 { (&s2, -r.ecart_y) } else { (&s3, 0) }).collect();
-        let img = composer(&couches);
-        img.png(&sortie.join(format!("{n:02}.png")));
-        s2.png(&sortie.join("couches").join(format!("{n:02}_scroll2.png")));
-        if !sans_s3 {
-            s3.png(&sortie.join("couches").join(format!("{n:02}_scroll3.png")));
+        let layers: Vec<(&Image, i64)> = order.iter().map(|&l| if l == 2 { (&s2, -r.gap_y) } else { (&s3, 0) }).collect();
+        let img = compose(&layers);
+        img.png(&exit.join(format!("{n:02}.png")));
+        s2.png(&exit.join("couches").join(format!("{n:02}_scroll2.png")));
+        if !without_s3 {
+            s3.png(&exit.join("couches").join(format!("{n:02}_scroll3.png")));
         }
         // sans DDSOM_ROUTES, la scène suivante déjà relevée est conservée
-        let ancienne = std::fs::read_to_string(sortie.join("infos").join(format!("{n:02}.tsv"))).ok().and_then(|t| t.trim().split('\t').nth(6).and_then(|s| s.parse().ok()));
-        let suite = if routes { suivante(&mut m) } else { ancienne };
-        let ordre: Vec<String> = ordre.iter().map(|l| l.to_string()).collect();
-        let info = format!("{n}\t{}\t{}\t{}x{}\t{}x{}\t{}\t{}\t{}\n", img.w, img.h, s2.w, s2.h, s3.w, s3.h, ordre.join(">"), suite.map_or(String::from("-"), |s| s.to_string()), r.en_jeu as u8);
-        std::fs::write(sortie.join("infos").join(format!("{n:02}.tsv")), info).unwrap();
-        println!("scène {n} : {}x{} (scroll 2 {}x{}, scroll 3 {}x{}, ordre {}) suite {suite:?}{}", img.w, img.h, s2.w, s2.h, s3.w, s3.h, ordre.join(">"), if r.en_jeu { "" } else { " ATTENTION : phase de jeu non atteinte, palette douteuse" });
+        let old = std::fs::read_to_string(exit.join("infos").join(format!("{n:02}.tsv"))).ok().and_then(|t| t.trim().split('\t').nth(6).and_then(|s| s.parse().ok()));
+        let next = if routes { next_scene(&mut m) } else { old };
+        let order: Vec<String> = order.iter().map(|l| l.to_string()).collect();
+        let info = format!("{n}\t{}\t{}\t{}x{}\t{}x{}\t{}\t{}\t{}\n", img.w, img.h, s2.w, s2.h, s3.w, s3.h, order.join(">"), next.map_or(String::from("-"), |s| s.to_string()), r.in_game as u8);
+        std::fs::write(exit.join("infos").join(format!("{n:02}.tsv")), info).unwrap();
+        println!("scène {n} : {}x{} (scroll 2 {}x{}, scroll 3 {}x{}, ordre {}) suite {next:?}{}", img.w, img.h, s2.w, s2.h, s3.w, s3.h, order.join(">"), if r.in_game { "" } else { " ATTENTION : phase de jeu non atteinte, palette douteuse" });
     }
 }
 
@@ -424,24 +424,24 @@ fn cartes(roms: &Path, eeprom: &Path, sortie: &Path, scenes: &[u32]) {
 // ---------------------------------------------------------------------------------------------
 
 /// Chiffres 3x5 pour les numéros de la planche.
-const CHIFFRES: [[u8; 5]; 10] = [[7, 5, 5, 5, 7], [2, 6, 2, 2, 7], [7, 1, 7, 4, 7], [7, 1, 7, 1, 7], [5, 5, 7, 1, 1], [7, 4, 7, 1, 7], [7, 4, 7, 5, 7], [7, 1, 1, 1, 1], [7, 5, 7, 5, 7], [7, 5, 7, 1, 7]];
+const DIGITS: [[u8; 5]; 10] = [[7, 5, 5, 5, 7], [2, 6, 2, 2, 7], [7, 1, 7, 4, 7], [7, 1, 7, 1, 7], [5, 5, 7, 1, 1], [7, 4, 7, 1, 7], [7, 4, 7, 5, 7], [7, 1, 1, 1, 1], [7, 5, 7, 5, 7], [7, 5, 7, 1, 7]];
 
-fn etiquette(rgb: &mut [u8], largeur: usize, x0: usize, y0: usize, n: u32) {
-    let texte = n.to_string();
+fn label(rgb: &mut [u8], width: usize, x0: usize, y0: usize, n: u32) {
+    let text = n.to_string();
     let k = 4;
     // fond sombre sous le numéro
     for y in y0 - 2..y0 + 5 * k + 2 {
-        for x in x0 - 2..x0 + texte.len() * 4 * k + 2 {
-            rgb[(y * largeur + x) * 3..][..3].copy_from_slice(&[0, 0, 0]);
+        for x in x0 - 2..x0 + text.len() * 4 * k + 2 {
+            rgb[(y * width + x) * 3..][..3].copy_from_slice(&[0, 0, 0]);
         }
     }
-    for (i, c) in texte.bytes().enumerate() {
-        for (ry, ligne) in CHIFFRES[(c - b'0') as usize].iter().enumerate() {
+    for (i, c) in text.bytes().enumerate() {
+        for (ry, line) in DIGITS[(c - b'0') as usize].iter().enumerate() {
             for rx in 0..3 {
-                if ligne >> (2 - rx) & 1 != 0 {
+                if line >> (2 - rx) & 1 != 0 {
                     for (dy, dx) in (0..k * k).map(|v| (v / k, v % k)) {
                         let (x, y) = (x0 + (i * 4 + rx) * k + dx, y0 + ry * k + dy);
-                        rgb[(y * largeur + x) * 3..][..3].copy_from_slice(&[255, 255, 255]);
+                        rgb[(y * width + x) * 3..][..3].copy_from_slice(&[255, 255, 255]);
                     }
                 }
             }
@@ -449,26 +449,26 @@ fn etiquette(rgb: &mut [u8], largeur: usize, x0: usize, y0: usize, n: u32) {
     }
 }
 
-fn planche(dossier: &Path, doc: &Path) {
-    const CELLULE: (usize, usize) = (320, 190);
-    const COLONNES: usize = 5;
-    let vues: Vec<u32> = SCENES.filter(|n| dossier.join(format!("{n:02}.png")).exists()).collect();
-    let lignes = vues.len().div_ceil(COLONNES);
-    let (lw, lh) = (COLONNES * (CELLULE.0 + 8) + 8, lines_height(lignes, CELLULE.1));
+fn sheet(dir: &Path, doc: &Path) {
+    const CELL: (usize, usize) = (320, 190);
+    const COLUMNS: usize = 5;
+    let views: Vec<u32> = SCENES.filter(|n| dir.join(format!("{n:02}.png")).exists()).collect();
+    let lines = views.len().div_ceil(COLUMNS);
+    let (lw, lh) = (COLUMNS * (CELL.0 + 8) + 8, lines_height(lines, CELL.1));
     let mut rgb = vec![0u8; lw * lh * 3];
     for p in rgb.chunks_mut(3) {
         p.copy_from_slice(&[12, 10, 20]);
     }
-    for (i, &n) in vues.iter().enumerate() {
-        let (w, h, src) = read_png(&dossier.join(format!("{n:02}.png")));
+    for (i, &n) in views.iter().enumerate() {
+        let (w, h, src) = read_png(&dir.join(format!("{n:02}.png")));
         // réduction par moyenne, à l'échelle qui fait entrer l'image dans la cellule
-        let echelle = (w as f64 / CELLULE.0 as f64).max(h as f64 / CELLULE.1 as f64).max(1.0);
-        let (tw, th) = (((w as f64 / echelle) as usize).max(1), ((h as f64 / echelle) as usize).max(1));
-        let (ox, oy) = (8 + (i % COLONNES) * (CELLULE.0 + 8), 8 + (i / COLONNES) * (CELLULE.1 + 8));
+        let scale = (w as f64 / CELL.0 as f64).max(h as f64 / CELL.1 as f64).max(1.0);
+        let (tw, th) = (((w as f64 / scale) as usize).max(1), ((h as f64 / scale) as usize).max(1));
+        let (ox, oy) = (8 + (i % COLUMNS) * (CELL.0 + 8), 8 + (i / COLUMNS) * (CELL.1 + 8));
         for ty in 0..th {
             for tx in 0..tw {
-                let (x0, x1) = ((tx as f64 * echelle) as usize, (((tx + 1) as f64 * echelle) as usize).clamp(1, w).max((tx as f64 * echelle) as usize + 1).min(w));
-                let (y0, y1) = ((ty as f64 * echelle) as usize, (((ty + 1) as f64 * echelle) as usize).max((ty as f64 * echelle) as usize + 1).min(h));
+                let (x0, x1) = ((tx as f64 * scale) as usize, (((tx + 1) as f64 * scale) as usize).clamp(1, w).max((tx as f64 * scale) as usize + 1).min(w));
+                let (y0, y1) = ((ty as f64 * scale) as usize, (((ty + 1) as f64 * scale) as usize).max((ty as f64 * scale) as usize + 1).min(h));
                 let mut acc = [0u32; 3];
                 for y in y0..y1 {
                     for x in x0..x1 {
@@ -483,18 +483,18 @@ fn planche(dossier: &Path, doc: &Path) {
                 }
             }
         }
-        etiquette(&mut rgb, lw, ox + 4, oy + 4, n);
+        label(&mut rgb, lw, ox + 4, oy + 4, n);
     }
-    write_png(&dossier.join("planche.png"), lw, lh, &rgb);
-    index(dossier, doc, &vues);
-    println!("planche : {} vignettes, {lw}x{lh}", vues.len());
+    write_png(&dir.join("planche.png"), lw, lh, &rgb);
+    index(dir, doc, &views);
+    println!("planche : {} vignettes, {lw}x{lh}", views.len());
 }
 
-fn lines_height(lignes: usize, cellule: usize) -> usize {
-    lignes * (cellule + 8) + 8
+fn lines_height(lines: usize, cell: usize) -> usize {
+    lines * (cell + 8) + 8
 }
 
-/// Boss connus (`docs/couverture.md`, `docs/atlas.md`).
+/// Boss connus (`docs/coverage.md`, `docs/atlas.md`).
 fn boss(n: u32) -> &'static str {
     match n {
         24 => "Manticore",
@@ -506,7 +506,7 @@ fn boss(n: u32) -> &'static str {
     }
 }
 
-fn index(dossier: &Path, doc: &Path, vues: &[u32]) {
+fn index(dir: &Path, doc: &Path, views: &[u32]) {
     let mut md = String::new();
     md += "# Niveaux : images complètes des décors\n\n";
     md += "Une image par scène jouable (1 à 68) et par boutique (69 à 82) : tout le décor de la scène (scroll 2 et\n";
@@ -565,12 +565,12 @@ fn index(dossier: &Path, doc: &Path, vues: &[u32]) {
     md += "## Index\n\n";
     md += "![planche](../assets/niveaux/planche.png)\n\n";
     md += "| Scène | Image | Taille (px) | Scroll 2 | Scroll 3 | Ordre | Scène suivante | Boss |\n|---|---|---|---|---|---|---|---|\n";
-    for &n in vues {
-        let info = std::fs::read_to_string(dossier.join("infos").join(format!("{n:02}.tsv"))).unwrap_or_default();
+    for &n in views {
+        let info = std::fs::read_to_string(dir.join("infos").join(format!("{n:02}.tsv"))).unwrap_or_default();
         let c: Vec<&str> = info.trim().split('\t').collect();
         let get = |i: usize| c.get(i).copied().unwrap_or("?");
-        let nom = if n >= 69 { format!("{n} (boutique)") } else { n.to_string() };
-        md += &format!("| {nom} | [{n:02}.png](../assets/niveaux/{n:02}.png) | {}x{} | {} | {} | {} | {} | {} |\n", get(1), get(2), get(3), get(4), get(5), get(6), boss(n));
+        let name = if n >= 69 { format!("{n} (boutique)") } else { n.to_string() };
+        md += &format!("| {name} | [{n:02}.png](../assets/niveaux/{n:02}.png) | {}x{} | {} | {} | {} | {} | {} |\n", get(1), get(2), get(3), get(4), get(5), get(6), boss(n));
     }
     md += "\nOrdre : couches de l'arrière vers l'avant. « Scène suivante » : scène atteinte en forçant la sortie de\n";
     md += "scène (`-` : non relevée ; la sortie dépend parfois du jeu, voir `docs/scenes.md` §5).\n";
@@ -582,15 +582,15 @@ fn main() {
     match a.get(1).map(String::as_str) {
         Some("cartes") if a.len() >= 5 => {
             let scenes: Vec<u32> = if a.len() > 5 { a[5..].iter().filter_map(|s| s.parse().ok()).collect() } else { SCENES.collect() };
-            cartes(Path::new(&a[2]), Path::new(&a[3]), Path::new(&a[4]), &scenes);
+            cards(Path::new(&a[2]), Path::new(&a[3]), Path::new(&a[4]), &scenes);
         }
-        Some("planche") if a.len() >= 4 => planche(Path::new(&a[2]), Path::new(&a[3])),
+        Some("planche") if a.len() >= 4 => sheet(Path::new(&a[2]), Path::new(&a[3])),
         Some("tables") if a.len() >= 3 => {
             let m = cps2::Machine::load_ddsom(Path::new(&a[2]), None).unwrap();
             let rom = Rom { data: &m.bus.rom, prog: &m.bus.rom_dec, gfx: &m.gfx };
             for n in 0..115 {
-                let dim = |c: &Couche| {
-                    let g = c.grille(&rom, n);
+                let dim = |c: &Layer| {
+                    let g = c.grid(&rom, n);
                     format!("{}x{} bandes", g.first().map_or(0, |l| l.len()), g.len())
                 };
                 println!("scène {n} : scroll 2 {}, scroll 3 {}", dim(&SCROLL2), dim(&SCROLL3));

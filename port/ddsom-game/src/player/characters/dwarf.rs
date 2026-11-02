@@ -20,7 +20,7 @@ use super::super::walk::{move_x, move_xz, move_z};
 use super::super::{animation, Ctx, Player};
 use crate::objects::Obj;
 use crate::player::ram;
-use crate::player::externes as ext;
+use crate::player::external as ext;
 
 /// Routines d'origine appelées telles quelles : effets joueur et sons du nain.
 mod rom {
@@ -108,7 +108,7 @@ fn takeoff(g: &mut Ctx, p: Player) {
     }
     p.set_u8(g, own::JUMP_ROW, row);
     common::launch_jump(g, p, JUMP_SPEEDS, row);
-    g.son(ext::son::JUMP_VOICE, p);
+    g.sound(ext::sound::JUMP_VOICE, p);
 }
 
 /// Pas 2 : montée. Un saut des profils 0..3 se termine ici (retombée au sol) ; un saut en avant passe
@@ -132,7 +132,7 @@ fn rise(g: &mut Ctx, p: Player) {
         p.set_u32(g, Obj::Z, 0);
         let anim = common::by_jump_kind(g, p, 0x16, 0x11, 0xc);
         animation::start(g, p, anim);
-        g.son(ext::son::LANDING, p);
+        g.sound(ext::sound::LANDING, p);
     } else {
         if (p.u16(g, Obj::VZ) as i16) >= 0 {
             return;
@@ -157,7 +157,7 @@ fn descend(g: &mut Ctx, p: Player) {
     next_step(g, p);
     p.set_u32(g, Obj::Z, 0);
     animation::start(g, p, 0x13);
-    g.son(ext::son::LANDING, p);
+    g.sound(ext::sound::LANDING, p);
 }
 
 /// Pas 6 : récupération, puis retour à l'état immobile (et chute de l'arme maudite).
@@ -226,7 +226,7 @@ fn dive(g: &mut Ctx, p: Player) {
         p.set_u16(g, Obj::VX, vx as u16);
     }
     crate::camera_modes::start_shake(g.b, crate::camera_modes::shake::A, 0x10);
-    g.son(rom::SOUND_BOUNCE, p);
+    g.sound(rom::SOUND_BOUNCE, p);
 }
 
 /// Pas 0xa : rebond après la plongée, puis retombée.
@@ -244,7 +244,7 @@ fn bounce(g: &mut Ctx, p: Player) {
     next_step(g, p);
     p.set_u32(g, Obj::Z, 0);
     animation::start(g, p, 0x11);
-    g.son(ext::son::LANDING, p);
+    g.sound(ext::sound::LANDING, p);
 }
 
 /// Pas 0xc : fin du rebond.
@@ -429,7 +429,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
             p.set_u8(g, field::MOVE_STATE, 0);
             let anim = if common::holds_special_weapon(g, p) { 0x26 } else { 0xd };
             animation::start_plain(g, p, anim);
-            g.son(ext::son::STRIKE_HEAVY, p);
+            g.sound(ext::sound::STRIKE_HEAVY, p);
             common::weapon_voice(g, p);
             clear_recognizers(g, p);
         }
@@ -449,7 +449,7 @@ fn charge(g: &mut Ctx, p: Player) {
             p.set_u8(g, field::MOVE_KIND, 1);
             set_forward_motion(g, p, 0xc00, (-0x98i16) as u16);
             animation::start_plain(g, p, 0x14);
-            g.son(ext::son::CHARGE_B, p);
+            g.sound(ext::sound::CHARGE_B, p);
             clear_recognizers(g, p);
         }
         2 => {
@@ -458,7 +458,7 @@ fn charge(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, field::EVENT, 0);
                 spawn::slash(g, p, None);
-                g.son(ext::son::CHARGE_A, p);
+                g.sound(ext::sound::CHARGE_A, p);
             }
         }
         4 => common::charge_slide(g, p, |g, p| {
@@ -482,7 +482,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
             set_forward_motion(g, p, 0x500, (-0x28i16) as u16);
             animation::start_plain(g, p, 0xe);
             common::weapon_voice(g, p);
-            g.son(ext::son::CHARGE_A, p);
+            g.sound(ext::sound::CHARGE_A, p);
             clear_recognizers(g, p);
         }
         2 => {
@@ -540,8 +540,8 @@ fn flip(g: &mut Ctx, p: Player) {
                 p.set_u16(g, Obj::AZ, (-0x40i16) as u16);
                 p.flip(g);
                 animation::start_plain(g, p, 0x17);
-                g.son(ext::son::LEAP_END, p);
-                g.son(ext::son::LEAP, p);
+                g.sound(ext::sound::LEAP_END, p);
+                g.sound(ext::sound::LEAP, p);
             }
         }
         4 => {
@@ -589,7 +589,7 @@ fn spin_drop(g: &mut Ctx, p: Player) {
             p.set_u16(g, Obj::AZ, (-0x60i16) as u16);
             p.flip(g);
             animation::start_plain(g, p, 0x22);
-            g.son(ext::son::SPIN, p);
+            g.sound(ext::sound::SPIN, p);
         }
         2 => {
             move_z(g, p);
@@ -650,8 +650,8 @@ fn long_dash(g: &mut Ctx, p: Player) {
             }
             animation::start_plain(g, p, 0x20);
             spawn::dash(g, p);
-            g.son(ext::son::LEAP, p);
-            g.son(rom::SOUND_DASH, p);
+            g.sound(ext::sound::LEAP, p);
+            g.sound(rom::SOUND_DASH, p);
             clear_recognizers(g, p);
         }
         2 => {

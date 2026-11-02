@@ -9,8 +9,8 @@
 //! | 10 | retour au combat |
 
 use super::*;
-use crate::families::cx::Banc;
-use crate::objects::Courant;
+use crate::families::cx::Bench;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
@@ -18,7 +18,7 @@ const REACTIONS: u32 = 0x7a396;
 /// La seule routine propre au boss (code 0x4c) : tremblement sur place.
 const SHAKE_REACTION: u32 = 0x7a442;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else {
@@ -36,7 +36,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7a374 : premier passage : dégâts (0x10112) et, sans PV, la mort ; puis la routine du code de coup.
-fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::set_68(x);
         x.set8(INVULNERABLE, 0);
@@ -57,7 +57,7 @@ fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7a442 : tremblement sur place (16 images), puis à terre.
-fn shake<R: Banc>(x: &mut Cx<'_, R>) {
+fn shake<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         next6(x);
         x.set8(0, 2);
@@ -90,7 +90,7 @@ fn shake<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7a4ba : recul en glissant, puis riposte (attaque 10, invulnérable).
-fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -124,7 +124,7 @@ fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7a552 : à terre (`+0x84` images hors pause), puis relevé.
-fn down<R: Banc>(x: &mut Cx<'_, R>) {
+fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -154,7 +154,7 @@ fn down<R: Banc>(x: &mut Cx<'_, R>) {
 /// 0x7a5ac : retour au combat (aussi appelé par les réactions communes, table 0x3e000) : franchit le palier de
 /// PV suivant (0x105b6) ; la moitié principale se transforme au deuxième palier ; sinon coup si la cible est
 /// tout près, ou course.
-pub(crate) fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
+pub(crate) fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
     if !pick_target(x) {
@@ -171,7 +171,7 @@ pub(crate) fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x7a5fe : mort. Quand l'autre moitié vit encore, seule une chute (0x19ad6) ; la dernière à tomber prévient la
 /// scène du boss vaincu.
-fn death<R: Banc>(x: &mut Cx<'_, R>) {
+fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set32(f::IMMUNITY, 0xffff_ffff);
@@ -251,7 +251,7 @@ fn death<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7a76e : retour au combat après une attente (`+5` = 10).
-fn resting<R: Banc>(x: &mut Cx<'_, R>) {
+fn resting<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         next7(x);
         return body(x, 0xc);

@@ -1,12 +1,12 @@
 //! Type 3, sous-états 2 (debout : approche, marche), 8 (repos), 10 (attente) et 12 (demi-tour).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::shoot::start_shot;
 use super::*;
 use crate::objects::Obj;
-use crate::objects::Courant;
+use crate::objects::Current;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(EXPIRED) != 0 || grabbed(x) {
         set_state_long(x, HELD);
         return hit::grab(x);
@@ -20,7 +20,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5c17e : premier pas debout : choisit une cible et s'oriente vers elle.
-pub(super) fn stance_begin<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn stance_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     if !pick_target(x) {
         set_state_long(x, IDLE);
@@ -34,13 +34,13 @@ pub(super) fn stance_begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5c2de : début de l'attente.
-fn idle_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn idle_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     mv(x, 0);
 }
 
 /// +6 = 2 : marche vers la cible ; tire ou esquive quand elle est à portée.
-fn advance<R: Banc>(x: &mut Cx<'_, R>) {
+fn advance<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.in_arena_default() {
         x.set8(SHOT_KIND, 5);
         x.add8(f::SUB2, 2);
@@ -77,7 +77,7 @@ fn advance<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5c22c : un joueur à portée de tir ? Alors tir ou esquive selon la boîte qui l'a vu.
-pub(super) fn decide<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     if in_front(x) || on_line(x) {
         // la cible vue par la boîte (A1 de l'original : la cible `+0x50`, non nulle puisque la boîte l'a trouvée) ;
         // D5 dit quelle boîte (0 devant, 2 sur la ligne)
@@ -99,7 +99,7 @@ pub(super) fn decide<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5c27a : si le Bow Gnoll tourne le dos à sa cible, demi-tour (état à reprendre mémorisé en `+0xa0`).
-pub(super) fn check_facing<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn check_facing<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return;
     }
@@ -117,7 +117,7 @@ pub(super) fn check_facing<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 : marche latérale pendant `+0xa4` images, puis retour à l'approche.
-fn strafe<R: Banc>(x: &mut Cx<'_, R>) {
+fn strafe<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
     if (n as i8) < 0 {
@@ -132,7 +132,7 @@ fn strafe<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 8 : repos ------------------------------------------------------------------------------
 
-pub(super) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             set_state_long(x, IDLE);
@@ -150,7 +150,7 @@ pub(super) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 (en X, regarde vers la cible) et 4 (en profondeur) : pas de côté pendant `+0x6b` images.
-fn side_step<R: Banc>(x: &mut Cx<'_, R>, along_x: bool) {
+fn side_step<R: Bench>(x: &mut Cx<'_, R>, along_x: bool) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(AI_WANDER, 0x18);
@@ -181,7 +181,7 @@ fn side_step<R: Banc>(x: &mut Cx<'_, R>, along_x: bool) {
 
 // --- sous-état 10 : attente ---------------------------------------------------------------------------
 
-pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         return idle_begin(x);
     }
@@ -196,7 +196,7 @@ pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 12 : demi-tour -------------------------------------------------------------------------
 
-pub(super) fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

@@ -1,16 +1,16 @@
 //! Type 5, état touché (`+4 = 4`, 0x6089a). `+5` : 0 et 6 réaction commune par table (`+0x49`), 2 recul,
 //! 4 chute, 8 saisie par un joueur (le ghoul s'enfuit).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
 const REACT_FIRST: u32 = 0x6090c;
 const REACT_SECOND: u32 = 0x60abe;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -39,7 +39,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 2 : le ghoul recule (animation 9), puis se remet debout.
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -66,7 +66,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 4 : chute (animation 6), attente couché, relevé.
-fn down<R: Banc>(x: &mut Cx<'_, R>) {
+fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -104,7 +104,7 @@ fn down<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 8 (0x60b6a) : saisi par un joueur, le ghoul se retourne et s'enfuit hors de l'écran.
-fn caught<R: Banc>(x: &mut Cx<'_, R>) {
+fn caught<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -166,7 +166,7 @@ fn caught<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x60bda : le ghoul court (animation 2).
-fn flee_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn flee_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     body(x, 2);
 }

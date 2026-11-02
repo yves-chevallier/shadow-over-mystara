@@ -2,12 +2,12 @@
 //! 6 double coup, 8 bond-coup, 10 glissade, 12 grand bond, 14 et 16 bond avec demi-tour, 18 et 20 garde (série 1).
 //! `+7` est l'étape : les étapes 0 à 4 (selon le coup) sont communes (`ready`, `settle`, `face`).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
         return;
     }
@@ -30,13 +30,13 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 // --- étapes communes ----------------------------------------------------------------------------
 
 /// 0x59b98 : le squelette se prépare (animation de repos).
-pub(super) fn ready<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn ready<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     body(x, 0);
 }
 
 /// 0x59b82 : attend que le délai `+0x77` soit écoulé.
-pub(super) fn settle<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn settle<R: Bench>(x: &mut Cx<'_, R>) {
     let wait = x.u8(COOLDOWN);
     if wait != 0 {
         let n = wait.wrapping_sub(1);
@@ -49,7 +49,7 @@ pub(super) fn settle<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x591d6 : se tourne vers la cible si elle est derrière (`+0xa6` = 2).
-pub(super) fn face<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn face<R: Bench>(x: &mut Cx<'_, R>) {
     let side = x.u8(SIDE) as i8;
     if side < 2 {
         return x.add8(f::SUB3, 2);
@@ -69,7 +69,7 @@ pub(super) fn face<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x59222 : mémorise si la cible est derrière (`+0xa6` = 2, sinon 0) ; vrai si un demi-tour est nécessaire.
-fn needs_turn_around<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let mut side = 0;
     if x.u16(f::TARGET) != 0 {
         let target = load_target(x);
@@ -87,7 +87,7 @@ fn needs_turn_around<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x58370 : fin d'un coup — on attend la fin de l'animation, puis on choisit la suite.
-fn finish<R: Banc>(x: &mut Cx<'_, R>) {
+fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(ANIM_STATE) as i16) >= 0 {
         step(x);
     } else {
@@ -100,7 +100,7 @@ fn finish<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Estoc (`+6` = 0 ou 2) : tire au sort de reprendre l'idée, sinon prépare puis frappe (type `kind`,
 /// force `power`, animation `anim`).
-fn thrust<R: Banc>(x: &mut Cx<'_, R>, kind: u8, power: u8, anim: u32) {
+fn thrust<R: Bench>(x: &mut Cx<'_, R>, kind: u8, power: u8, anim: u32) {
     match x.u8(f::SUB3) {
         0 => {
             let r = random(x) & 0xf;
@@ -125,7 +125,7 @@ fn thrust<R: Banc>(x: &mut Cx<'_, R>, kind: u8, power: u8, anim: u32) {
 }
 
 /// Enchaînement (`+6` = 4) : coup de bouclier, puis, au hasard, un second coup ; la série 1 passe à la garde.
-fn combo<R: Banc>(x: &mut Cx<'_, R>) {
+fn combo<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => face(x),
         2 => ready(x),
@@ -160,7 +160,7 @@ fn combo<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Double coup (`+6` = 6) : un coup au hasard parmi deux animations, puis le suivant.
-fn double_cut<R: Banc>(x: &mut Cx<'_, R>) {
+fn double_cut<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => face(x),
         2 => ready(x),
@@ -202,7 +202,7 @@ pub(super) enum Leap {
     TurningCombo,
 }
 
-fn leap<R: Banc>(x: &mut Cx<'_, R>, kind: Leap) {
+fn leap<R: Bench>(x: &mut Cx<'_, R>, kind: Leap) {
     match x.u8(f::SUB3) {
         0 => ready(x),
         2 => settle(x),
@@ -252,7 +252,7 @@ fn leap<R: Banc>(x: &mut Cx<'_, R>, kind: Leap) {
 }
 
 /// 0x584fe : attend l'image-clé du saut.
-pub(super) fn land_wait<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn land_wait<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
@@ -260,7 +260,7 @@ pub(super) fn land_wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x58512 : montée du bond (déplacement en X et en hauteur).
-pub(super) fn rise<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     step(x);
     if (x.u16(Obj::VZ) as i16) < 0 {
@@ -271,7 +271,7 @@ pub(super) fn rise<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x58536 : descente jusqu'au sol.
-pub(super) fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     step(x);
     if (x.u32(Obj::Z) as i32) <= 0 {
@@ -282,7 +282,7 @@ pub(super) fn fall<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Début du bond : vitesse horizontale selon le type de bond et l'orientation, puis envol.
-fn jump_up<R: Banc>(x: &mut Cx<'_, R>, kind: Leap) {
+fn jump_up<R: Bench>(x: &mut Cx<'_, R>, kind: Leap) {
     match kind {
         Leap::Short => {
             x.set16(Obj::VX, 0x180);
@@ -306,7 +306,7 @@ fn jump_up<R: Banc>(x: &mut Cx<'_, R>, kind: Leap) {
 }
 
 /// Glissade (`+6` = 10) : le squelette fonce vers la cible en déplaçant son animation.
-fn slide<R: Banc>(x: &mut Cx<'_, R>) {
+fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => ready(x),
         2 => settle(x),
@@ -317,14 +317,14 @@ fn slide<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x58582 : lance l'animation 2 en la ramenant à l'image qu'elle avait, mémorise la position.
-fn begin_slide<R: Banc>(x: &mut Cx<'_, R>) {
+fn begin_slide<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x2a);
     restart_slide(x);
 }
 
 /// 0x5858c : animation 2 rejouée jusqu'à retrouver la même image (au plus huit pas).
-pub(super) fn restart_slide<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn restart_slide<R: Bench>(x: &mut Cx<'_, R>) {
     let (count, state) = (x.u16(ANIM_COUNT), x.u16(ANIM_STATE));
     // D2 (mot bas) = l'image cherchée, D3 = compteur de pas : restes relus par la suite (DDSOM_POISON :
     // skeleton_scene13, boss17_scene13).
@@ -347,7 +347,7 @@ pub(super) fn restart_slide<R: Banc>(x: &mut Cx<'_, R>) {
     finish_restart(x);
 }
 
-fn finish_restart<R: Banc>(x: &mut Cx<'_, R>) {
+fn finish_restart<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(MOVE_TABLE, 0x1c7336);
     let angle = if x.u8(f::FLIP) != 0 { 8 + 0x10 } else { 8 };
     x.set8(Obj::SPEED_INDEX, angle);
@@ -355,7 +355,7 @@ fn finish_restart<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(SAVED_POS, pos);
 }
 
-fn slide_move<R: Banc>(x: &mut Cx<'_, R>) {
+fn slide_move<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
         let t = x.u16(TIMER).wrapping_sub(1);

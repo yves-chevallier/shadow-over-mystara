@@ -1,11 +1,11 @@
 //! Type 0, sous-état 2 : debout. `+6` : 0 et 8 approche et choix d'un geste, 2 demi-tour, 4 attente, 6 course.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return set_state_long(x, IDLE);
     }
@@ -26,7 +26,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 0 et 8 : approche -----------------------------------------------------------------------------
 
-fn approach<R: Banc>(x: &mut Cx<'_, R>) {
+fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     if target_far_in_line(x) {
         return set_state_long(x, 0x0202_0600);
     }
@@ -59,13 +59,13 @@ fn approach<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x555d4 : en garde ; un joueur tout près ? Coup immédiat, sinon boîtes de portée, sinon pas de marche.
-pub(super) fn reach<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn reach<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(GUARD, 2);
     reach_boxes(x);
 }
 
 /// 0x555da : boîtes de portée successives.
-pub(super) fn reach_boxes<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn reach_boxes<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x28, 0x18, 4) {
         set_state_long(x, 0x0204_0200);
         return lib::pick_byte(x);
@@ -91,7 +91,7 @@ pub(super) fn reach_boxes<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Décision d'attaque selon l'orientation relative de la cible (0xa4c2 de même sens, 0xa4b4 sinon).
-fn gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let target = x.linked(f::TARGET);
     let theirs = target.u8(x.b, f::FLIP);
     let same = theirs == x.u8(f::FLIP);
@@ -99,7 +99,7 @@ fn gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x5566e : un joueur devant, tout près : coup de la série courte ou nouveau pas.
-fn front_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn front_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0x40, 0x20, 2) || x.u16(f::TARGET) == 0 || !gate(x) {
         return false;
     }
@@ -115,7 +115,7 @@ fn front_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x556e8 : un joueur plus loin devant : geste de la série lointaine.
-fn far_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn far_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0xb0, 0x20, 2) || x.u16(f::TARGET) == 0 || !gate(x) {
         return false;
     }
@@ -132,7 +132,7 @@ fn far_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 // --- +6 = 2 : demi-tour --------------------------------------------------------------------------------------
 
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -153,7 +153,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : attente -----------------------------------------------------------------------------------------
 
-fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -175,7 +175,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 6 : course ------------------------------------------------------------------------------------------
 
-fn run_up<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 0xfe);
@@ -215,7 +215,7 @@ fn run_up<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5583c : début de la course.
-fn run_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 0x16);
     mv(x, 0x16);

@@ -1,12 +1,12 @@
 //! Type 13, sous-état 2 (debout : approche, demi-tour, attente) et sous-état 10 (promenade tant qu'aucun joueur
 //! n'est en vie).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     // la variante 10 est saisie dès qu'elle se met debout
     if x.u8(Obj::VARIANT) == 0xa || grabbed(x) {
         x.set16(f::STATE, 0x0408);
@@ -25,7 +25,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6affa : (re)commence la marche vers la cible.
-pub(super) fn approach_start<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn approach_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(LOOK_PREV, 0xf0);
     x.set8(SHOT_KIND, 0x1a);
@@ -33,7 +33,7 @@ pub(super) fn approach_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6b00a : suite de `approach_start` sans avancer l'étape (appelé directement après un coup).
-pub(super) fn approach_restart<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn approach_restart<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_speed(x, 0x12);
     mv(x, 1);
@@ -43,7 +43,7 @@ pub(super) fn approach_restart<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 0 : marche vers le joueur ; choisit un geste dès qu'il est à portée.
-fn approach<R: Banc>(x: &mut Cx<'_, R>) {
+fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         return approach_start(x);
     }
@@ -99,7 +99,7 @@ fn approach<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : demi-tour.
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -114,7 +114,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 : attente sur place.
-fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -129,7 +129,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 10 : promenade sur place tant qu'aucun joueur n'est en vie, puis retour debout.
-pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(VULNERABLE, 1);

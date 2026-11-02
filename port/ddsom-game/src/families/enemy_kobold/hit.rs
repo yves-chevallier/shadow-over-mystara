@@ -1,16 +1,16 @@
 //! Type 0, état touché (`+4 = 4`, 0x567ca). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
 //! 6 seconde table de réactions, 8 saisie par un joueur (le Kobold s'enfuit).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x56816;
 const REACT_SECOND: u32 = 0x56a0e;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -39,7 +39,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 2 : recul ------------------------------------------------------------------------------------
 
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -75,7 +75,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 4 : chute et relevé --------------------------------------------------------------------------
 
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -109,7 +109,7 @@ fn fall<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 8 : saisie par un joueur ------------------------------------------------------------------------
 
-fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -193,7 +193,7 @@ fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x56b42 : le Kobold court vers le bord de l'écran (animation 0x16).
-fn run_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(LOOK, 0x16);
     set_angle(x);

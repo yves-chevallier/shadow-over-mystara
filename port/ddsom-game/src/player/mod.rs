@@ -2,8 +2,8 @@
 //!
 //! Quatre enregistrements de 0x200 octets à `A5+0x5de` (`PLAYER_BASE`, pas `PLAYER_STRIDE`) ; un joueur
 //! est aussi un objet (`objects::Obj`) : les champs communs (position, vitesses, animation, liens de
-//! liste) sont ceux de `docs/objets.md`, les champs propres aux joueurs sont nommés dans `Player`.
-//! Voir `docs/joueur.md` pour le détail des structures et des états.
+//! liste) sont ceux de `docs/objects.md`, les champs propres aux joueurs sont nommés dans `Player`.
+//! Voir `docs/player.md` pour le détail des structures et des états.
 //!
 //! Organisation (les lettres P1.. sont celles de `docs/atlas.md`) :
 //! - `states` : valeurs de la machine à états (`+4..+7`) ;
@@ -41,7 +41,7 @@ pub mod cinematics;
 pub mod combos;
 pub mod checks;
 pub mod effects;
-pub mod externes;
+pub mod external;
 pub mod hit_reactions;
 pub mod hurt;
 pub mod init;
@@ -174,64 +174,64 @@ pub const PLAYER_COUNT: u32 = 4;
 /// Variables de la RAM de travail lues ou écrites par le code des joueurs (vues typées, `crate::ram`). Les
 /// variables partagées viennent de `crate::ram` ; les noms marqués (h) sont des hypothèses.
 pub mod ram {
-    use crate::ram::{Mot, Octet};
+    use crate::ram::{Word, Byte};
 
     pub use crate::ram::{CAMERA_ALT_ACTIVE as USE_ALT_CAMERA, CAMERA_ALT_X, CAMERA_ALT_Y, CAMERA_X, CAMERA_Y, PHASE, SCENE};
     /// Indicateur de sort en cours (le bit du joueur 1 de la pause, `crate::ram::PAUSE`).
     pub use crate::ram::PAUSE as SPELL_FLAG;
 
     /// Octet 2 des entrées courantes (`FF8000-FF8005`), que l'effet des pas dans l'eau ajoute au compteur d'images.
-    pub const INPUTS_2: Octet = Octet::a5(0x2);
+    pub const INPUTS_2: Byte = Byte::a5(0x2);
     /// Sous-étape de la partie (`FF802E`) : déroulement de l'entrée en scène.
-    pub const SUB_STEP: Octet = Octet::a5(0x2e);
+    pub const SUB_STEP: Byte = Byte::a5(0x2e);
     /// Bit k : le joueur k participe à la partie.
-    pub const PLAYERS_MASK: Octet = Octet::a5(0x31);
+    pub const PLAYERS_MASK: Byte = Byte::a5(0x31);
     /// Nombre de joueurs en vie.
-    pub use crate::ram::JOUEURS_EN_VIE as PLAYERS_ALIVE;
+    pub use crate::ram::PLAYERS_ALIVE as PLAYERS_ALIVE;
     /// Pause du jeu pendant un sort : les joueurs ne vieillissent plus, les collisions sont suspendues.
-    pub const PAUSE: Octet = Octet::a5(0x3d);
+    pub const PAUSE: Byte = Byte::a5(0x3d);
     /// Jeu gelé (cinématique).
-    pub const FROZEN: Octet = Octet::a5(0x42);
+    pub const FROZEN: Byte = Byte::a5(0x42);
     /// Masque d'entrées des joueurs.
-    pub const INPUT_MASK: Octet = Octet::a5(0x43);
+    pub const INPUT_MASK: Byte = Byte::a5(0x43);
     /// Entrées gelées (scénario en cours).
-    pub const INPUT_RAW: Octet = Octet::a5(0x44);
+    pub const INPUT_RAW: Byte = Byte::a5(0x44);
     /// Objet suivi par la caméra (mot : adresse courte).
-    pub const CAMERA_FOCUS: Mot = Mot::a5(0x46);
+    pub const CAMERA_FOCUS: Word = Word::a5(0x46);
     /// Scénario en cours (second drapeau, avec `INPUT_RAW`).
-    pub const SCRIPTED_B: Octet = Octet::a5(0x4e);
+    pub const SCRIPTED_B: Byte = Byte::a5(0x4e);
     /// Valeur copiée depuis l'ennemi tué quand il le prévoit (butin).
-    pub const KILL_FLAG: Octet = Octet::a5(0x4f);
+    pub const KILL_FLAG: Byte = Byte::a5(0x4f);
     /// Compteur des malédictions de l'arme 0xe (h).
-    pub const CURSE_COUNT: Octet = Octet::a5(0x56);
+    pub const CURSE_COUNT: Byte = Byte::a5(0x56);
     /// Mode « ralenti » : tous les joueurs marchent lentement (h).
-    pub const SLOW_MODE: Octet = Octet::a5(0x59);
+    pub const SLOW_MODE: Byte = Byte::a5(0x59);
     /// Ligne choisie par le sort en cours.
-    pub const SPELL_ROW: Octet = Octet::a5(0x5b);
+    pub const SPELL_ROW: Byte = Byte::a5(0x5b);
     /// Fin de scène sans pose de victoire (h).
-    pub const NO_VICTORY: Octet = Octet::a5(0x5c);
+    pub const NO_VICTORY: Byte = Byte::a5(0x5c);
     /// Entrée en scène sans marche (h).
-    pub const NO_WALK_IN: Octet = Octet::a5(0x66);
+    pub const NO_WALK_IN: Byte = Byte::a5(0x66);
     /// Octet bas du compteur d'images du VBLANK (`crate::ram::IMAGES`).
-    pub const VBLANK_FRAMES_LOW: Octet = Octet::a5(0x6d);
+    pub const VBLANK_FRAMES_LOW: Byte = Byte::a5(0x6d);
     /// Octet bas du compteur d'images de la partie (`FF806E`) : parité, clignotements.
-    pub const FRAME_COUNTER: Octet = Octet::a5(0x6f);
+    pub const FRAME_COUNTER: Byte = Byte::a5(0x6f);
     /// Version du jeu (h) : choisit la série des noms prédéfinis du tableau des scores.
-    pub const VERSION: Octet = Octet::a5(0x71);
-    /// Fondu de palette en attente (état de `taches::fondu`) : pages, nombre de pas, délai.
-    pub const FADE_PAGES: Octet = Octet::a5(0x48e);
-    pub const FADE_STEPS: Octet = Octet::a5(0x48f);
-    pub const FADE_DELAY: Mot = Mot::a5(0x490);
+    pub const VERSION: Byte = Byte::a5(0x71);
+    /// Fondu de palette en attente (état de `tasks::fading`) : pages, nombre de pas, délai.
+    pub const FADE_PAGES: Byte = Byte::a5(0x48e);
+    pub const FADE_STEPS: Byte = Byte::a5(0x48f);
+    pub const FADE_DELAY: Word = Word::a5(0x490);
     /// Défilement vertical du plan 1 (`vblank`) : les sorts font trembler l'écran en le basculant.
-    pub use crate::ram::DEFILEMENT_Y_PLAN1 as SCROLL1_Y;
+    pub use crate::ram::SCROLL_Y_PLANE1 as SCROLL1_Y;
     /// Signal d'un boss aux joueurs scénarisés (lancer, atterrissage).
-    pub const BOSS_SIGNAL: Mot = Mot::a5(0x51e);
+    pub const BOSS_SIGNAL: Word = Word::a5(0x51e);
     /// Cinématique en cours (h).
-    pub const CUTSCENE: Octet = Octet::a5(0x53a);
+    pub const CUTSCENE: Byte = Byte::a5(0x53a);
     /// Mot des commutateurs lu au VBLANK (`FF7FD0`).
     pub use crate::ram::DSW;
     /// Mot : compteur du hasard des tables (voir combat).
-    pub const TICK: Mot = Mot::a5(0x7f92);
+    pub const TICK: Word = Word::a5(0x7f92);
 }
 
 /// Contexte d'exécution des routines natives : registres et mémoire du 68000.
@@ -264,9 +264,9 @@ impl<'a> Ctx<'a> {
         crate::effects_aids::shock_68k(self.c, self.b, p.obj(), variant, setting, vx, vy)
     }
 
-    /// Joue le son `son` pour le joueur `p` (panoramique, personnage : `sound::jouer`).
-    pub fn son(&mut self, son: u32, p: Player) {
-        crate::sound::jouer(self.b, son, Obj(p.0));
+    /// Joue le son `sound` pour le joueur `p` (panoramique, personnage : `sound::play`).
+    pub fn sound(&mut self, sound: u32, p: Player) {
+        crate::sound::play(self.b, sound, Obj(p.0));
     }
 
     /// Idem avec le paramètre D6 (numéro d'animation, d'effet...).

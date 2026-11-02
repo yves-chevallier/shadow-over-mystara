@@ -1,6 +1,6 @@
 //! Type 4, arrivée (`+5 = 0`), bête debout (`+5 = 2`) et repos (`+5 = 10`).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 
 /// Tables de la ROM : attaques à choisir par niveau de difficulté (`A5+0x7f92`), 32 octets par niveau.
@@ -12,7 +12,7 @@ const ATTACK_CHANCE: u32 = 0x5f2ea;
 
 // --- sous-état 0 : arrivée ----------------------------------------------------------------------
 
-pub(super) fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         return;
     }
@@ -50,7 +50,7 @@ pub(super) fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5daa6 : marche vers l'avant (animation 2, vitesse 0xb) pendant `0x24` images.
-pub(super) fn walk_begin<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn walk_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(TIMER, 0x24);
     x.set8(VULNERABLE, 1);
@@ -60,7 +60,7 @@ pub(super) fn walk_begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5db66 : fin d'un demi-tour de l'arrivée.
-pub(super) fn turn_end<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn turn_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.set8(0x7, 0);
         let flip = x.u8(f::FLIP) ^ 0x20;
@@ -72,7 +72,7 @@ pub(super) fn turn_end<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5f2c6 : la bête a-t-elle envie d'attaquer ? (un bit tiré dans un masque par niveau de difficulté).
-fn attack_chance<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn attack_chance<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let level = (var::RANK.get(x.b).wrapping_mul(4)) as u32;
     let mask = rom32(x, ATTACK_CHANCE + level);
     let bit = random(x) & 0x1f;
@@ -81,7 +81,7 @@ fn attack_chance<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 // --- sous-état 2 : debout -----------------------------------------------------------------------
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, KNOCKED);
     }
@@ -98,7 +98,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 0 et 8 (0x5dc2c) : marche vers la cible, observe, puis attaque ou change de côté.
-fn pursue<R: Banc>(x: &mut Cx<'_, R>) {
+fn pursue<R: Bench>(x: &mut Cx<'_, R>) {
     if target_far(x) {
         return set_state_long(x, 0x0202_0600);
     }
@@ -129,7 +129,7 @@ fn pursue<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5dcc8 : un test de la cible peut figer la bête un instant ; sinon elle engage.
-pub(super) fn pursue_tail<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn pursue_tail<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::maybe_draw_6e(x) {
         return x.set16(f::SUB2, 0x0400);
     }
@@ -138,7 +138,7 @@ pub(super) fn pursue_tail<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5dce0 : la cible est-elle à portée ? Frappe, saisit, ou continue d'avancer.
-pub(super) fn engage<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn engage<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x28, 0x28, 0x10) {
         x.set16(f::STATE, 0x0204);
         return choose_attack(x, CLOSE_ATTACKS);
@@ -164,7 +164,7 @@ pub(super) fn engage<R: Banc>(x: &mut Cx<'_, R>) {
 /// Un joueur est juste devant (0x5dd7a ou 0x5ddf4) : au hasard une attaque de la table `attacks`
 /// ou un coup court (état `0x02020800`). `mask` : bits du tirage qui choisissent le coup court
 /// (`0xf` : jusqu'à 10 sur 16, `0x2` : une fois sur deux).
-fn reach<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, mask: u16, attacks: u32) -> bool {
+fn reach<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, mask: u16, attacks: u32) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
     }
@@ -186,7 +186,7 @@ fn reach<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, mask: u16, attac
 }
 
 /// 0x5ee94 et 0x5ee9a : tire l'attaque (`+6`) dans la table du niveau de difficulté.
-pub(super) fn choose_attack<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
+pub(super) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
     let r = random(x) & 0x1f;
     let pick = x.data8(table + level + r);
@@ -196,14 +196,14 @@ pub(super) fn choose_attack<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
 }
 
 /// 0x5ee68 : la cible est loin en abscisse.
-fn target_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let Some(t) = target(x) else { return false };
     let dx = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_add(0xa0);
     dx > 0x140
 }
 
 /// +6 = 2 (0x5dbd4) : demi-tour (animation 1 puis 3) puis reprise de l'état mémorisé.
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 1);
@@ -223,7 +223,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 (0x5de68) : attente debout avant de passer à l'attaque.
-fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         return ready(x);
     }
@@ -239,14 +239,14 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +7 = 0 des attaques (0x5de70) : la bête se prépare (animation de repos).
-pub(super) fn ready<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn ready<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 1);
     pose(x, 6, SET_BODY, 0);
 }
 
 /// +6 = 6 (0x5decc) : s'approche de la cible en la regardant.
-fn approach<R: Banc>(x: &mut Cx<'_, R>) {
+fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -282,7 +282,7 @@ fn approach<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5f36a : fin d'un coup ; la bête enchaîne une charge si un joueur est proche, sinon se remet debout.
-pub(super) fn next_move<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn next_move<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(_) = target(x) else { return set_state_long(x, ACTIVE_STANCE) };
     if !lib::target_in_box(x, -0x38, 0x38, 0x20) && !lib::target_in_box(x, -0xb0, 0x40, 0x20) {
         return set_state_long(x, ACTIVE_STANCE);
@@ -298,7 +298,7 @@ pub(super) fn next_move<R: Banc>(x: &mut Cx<'_, R>) {
 // --- sous-état 10 : repos -----------------------------------------------------------------------
 
 /// Repos : attend qu'un joueur soit en vie (`+6` = 0 seulement).
-pub(super) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         match x.u8(0x7) {
             0 => walk_begin(x),

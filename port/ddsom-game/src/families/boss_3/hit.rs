@@ -8,14 +8,14 @@
 //! | 6 | mort : chute, rebond, effondrement |
 //! | 10 | retour au combat |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs, toutes communes).
 const REACTIONS: u32 = 0x80b0a;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 && !tst16(x, f::HP).gt() {
         x.set8(f::SUB, 6);
         x.set8(f::SUB2, 0);
@@ -38,7 +38,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x80ae8 : premier passage : immunités du type ; puis la routine commune du code de coup.
-fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 0xff);
     if x.u8(f::SUB2) == 0 {
         x.set_bit(0x1, 1, false);
@@ -52,7 +52,7 @@ fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x80bb6 : recul en vol (animation 9) jusqu'à l'arrêt ; il se retrouve à terre.
-fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         next6(x);
         x.set8(0x68, 1);
@@ -78,7 +78,7 @@ fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x80c2c : à terre (`+0x84` images hors pause), puis relevé ou riposte.
-fn down<R: Banc>(x: &mut Cx<'_, R>) {
+fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -122,7 +122,7 @@ fn down<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x80d16 : mort : la scène est prévenue (0x300 : boss 3 vaincu), chute, rebond, effondrement.
-fn death<R: Banc>(x: &mut Cx<'_, R>) {
+fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -163,7 +163,7 @@ fn death<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x80da2 : chute jusqu'au sol, puis rebond.
-fn falling<R: Banc>(x: &mut Cx<'_, R>) {
+fn falling<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     x.move_xz();
     if (x.u16(0xc) as i16) >= 0 {

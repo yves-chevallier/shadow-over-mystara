@@ -6,7 +6,7 @@
 //! trait [`Machine`], qui leur donne les services communs une seule fois : le tirage du hasard, les lectures dans
 //! l'espace programme et l'espace données. Les variables de la RAM de travail se lisent par leurs vues typées
 //! (`ram::SCENE.get(x.bus())`, `Obj`, `Player`). Le moteur d'objets (animation, mouvement, listes, écran) est dans
-//! [`crate::objects::Courant`], pour les contextes qui traitent un objet.
+//! [`crate::objects::Current`], pour les contextes qui traitent un objet.
 //!
 //! Le processeur ne sert qu'aux adaptateurs `_68k` (registres de l'original, `docs/guide-refactorisation.md`) ; une
 //! routine convertie n'utilise que `bus()`.

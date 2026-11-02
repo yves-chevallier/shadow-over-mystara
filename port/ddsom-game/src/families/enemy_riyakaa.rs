@@ -1,4 +1,4 @@
-//! Ennemi « Riyakaa » (ENEMY type 16, 0x6f1c0). Voir `docs/familles/enemy.md`.
+//! Ennemi « Riyakaa » (ENEMY type 16, 0x6f1c0). Voir `docs/families/enemy.md`.
 //!
 //! Machine à états à quatre étages : `+4` état principal (0 création, 2 actif, 4 touché, 6 libération),
 //! `+5` sous-état (état actif : 0 arrivée selon la variante `+3`, 2 choix d'une attaque, 4 coups de
@@ -6,10 +6,10 @@
 //! ci-dessous est un sous-état de l'original, nommé d'après son rôle ; l'adresse d'origine est notée
 //! quand elle aide à retrouver le code.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 mod riyakaa {
     use super::*;
@@ -28,7 +28,7 @@ mod riyakaa {
     /// État long « actif, sous-état 0 » : retour à la marche.
     const WALK: u32 = 0x0202_0000;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -48,7 +48,7 @@ mod riyakaa {
         }
     }
 
-    fn init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::STATE, 2);
         x.set8(f::BOX_SET, 0xf);
         lib::initial_hp(x);
@@ -83,32 +83,32 @@ mod riyakaa {
     }
 
     /// Joue l'animation `n` du jeu des mouvements.
-    fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+    fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
         x.anim_start(BODY, n as u16);
     }
 
     /// Joue l'animation `n` du jeu des coups.
-    fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+    fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
         x.anim_start(STRIKE, n as u16);
     }
 
     /// Choisit la table de vitesses `n`.
-    fn speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+    fn speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
         x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
     }
 
     /// Retour à l'état actif, sous-état 0.
-    fn walk<R: Banc>(x: &mut Cx<'_, R>) {
+    fn walk<R: Bench>(x: &mut Cx<'_, R>) {
         x.set32(f::STATE, WALK);
     }
 
-    fn toggle_flip<R: Banc>(x: &mut Cx<'_, R>) {
+    fn toggle_flip<R: Bench>(x: &mut Cx<'_, R>) {
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
     }
 
     /// Décompte un octet et rend sa nouvelle valeur.
-    fn countdown<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> u8 {
+    fn countdown<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> u8 {
         let n = x.u8(off).wrapping_sub(1);
         x.set8(off, n);
         n
@@ -116,7 +116,7 @@ mod riyakaa {
 
     // --- état 2 : actif ------------------------------------------------------------------------
 
-    fn active<R: Banc>(x: &mut Cx<'_, R>) {
+    fn active<R: Bench>(x: &mut Cx<'_, R>) {
         active_loop(x, |x| {
             match x.u8(f::SUB) {
                 0 => return arrive(x),
@@ -133,7 +133,7 @@ mod riyakaa {
 
     /// Sous-état 0 : arrivée selon la variante `+3`. Rend vrai quand l'original abandonne l'image sans
     /// l'achever (variante 8, `+6 = 2` : il dépile l'adresse de retour de la fonction de sous-état).
-    fn arrive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn arrive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         match x.u8(0x3) {
             0 | 4 => charge_in(x),
             2 => rise(x),
@@ -146,7 +146,7 @@ mod riyakaa {
     }
 
     /// Déplacement commun des arrivées : la durée `+0xa2` décomptée, puis retour à la marche.
-    fn fly_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn fly_step<R: Bench>(x: &mut Cx<'_, R>) {
         if countdown(x, 0xa2) == 0 {
             walk(x);
             x.set8(0, 1);
@@ -156,7 +156,7 @@ mod riyakaa {
     }
 
     /// 0x6f2e0 : entre en courant (variantes 0 et 4).
-    fn charge_in<R: Banc>(x: &mut Cx<'_, R>) {
+    fn charge_in<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::SUB2) != 0 {
             return fly_step(x);
         }
@@ -180,7 +180,7 @@ mod riyakaa {
     }
 
     /// 0x6f35e : entre en bondissant (variante 6).
-    fn leap_in<R: Banc>(x: &mut Cx<'_, R>) {
+    fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::SUB2) != 0 {
             return fly_step(x);
         }
@@ -194,7 +194,7 @@ mod riyakaa {
     }
 
     /// 0x6f3aa : début de la chute (jaillit vers le haut puis retombe).
-    fn rise_start<R: Banc>(x: &mut Cx<'_, R>) {
+    fn rise_start<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB2, 2);
         x.set8(0x67, 0);
         x.set8(0xa1, 0xe);
@@ -204,7 +204,7 @@ mod riyakaa {
     }
 
     /// 0x6f3d2 : retombe jusqu'au sol.
-    fn rise_fall<R: Banc>(x: &mut Cx<'_, R>) {
+    fn rise_fall<R: Bench>(x: &mut Cx<'_, R>) {
         x.move_z();
         if (x.u16(0xc) as i16) >= 0 {
             return;
@@ -215,7 +215,7 @@ mod riyakaa {
     }
 
     /// 0x6f3f6 : fin de l'animation d'atterrissage.
-    fn rise_land<R: Banc>(x: &mut Cx<'_, R>) {
+    fn rise_land<R: Bench>(x: &mut Cx<'_, R>) {
         if x.anim_step() {
             walk(x);
             x.set8(0, 1);
@@ -223,7 +223,7 @@ mod riyakaa {
     }
 
     /// Variante 2 : tombe du haut de l'écran.
-    fn rise<R: Banc>(x: &mut Cx<'_, R>) {
+    fn rise<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(f::SUB2) {
             0 => rise_start(x),
             2 => rise_fall(x),
@@ -233,7 +233,7 @@ mod riyakaa {
     }
 
     /// Variante 10 : apparaît après 30 images, puis tombe comme la variante 2.
-    fn hover<R: Banc>(x: &mut Cx<'_, R>) {
+    fn hover<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(f::SUB2) {
             0 => {
                 x.set8(0x90, 0x1e);
@@ -251,7 +251,7 @@ mod riyakaa {
     }
 
     /// Variante 8 : s'approche jusqu'à voir un joueur ; à `+6 = 2` l'original abandonne l'image.
-    fn approach<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn approach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         match x.u8(f::SUB2) {
             0 => {
                 x.add8(f::SUB2, 2);
@@ -286,7 +286,7 @@ mod riyakaa {
     }
 
     /// Sous-état 10 : attend, debout, qu'un joueur soit en vie.
-    fn rest<R: Banc>(x: &mut Cx<'_, R>) {
+    fn rest<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::SUB2) == 0 {
             x.add8(f::SUB2, 2);
             x.set8(0x67, 1);
@@ -303,7 +303,7 @@ mod riyakaa {
 
     // --- sous-état 2 : choix d'une attaque -------------------------------------------------------
 
-    fn decide<R: Banc>(x: &mut Cx<'_, R>) {
+    fn decide<R: Bench>(x: &mut Cx<'_, R>) {
         if grabbed(x) {
             x.set16(f::STATE, 0x0408);
             x.set16(f::SUB2, 0);
@@ -328,7 +328,7 @@ mod riyakaa {
 
     /// 0x6f546 : début de la recherche d'une cible ; l'animation dépend de la présence d'un joueur
     /// tout près.
-    fn look_begin<R: Banc>(x: &mut Cx<'_, R>) {
+    fn look_begin<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x7, 2);
         x.set8(0x79, 6);
         x.set8(0x67, 1);
@@ -348,7 +348,7 @@ mod riyakaa {
     }
 
     /// 0x6f5a6 : suit la cible tant que le geste dure.
-    fn decide_follow<R: Banc>(x: &mut Cx<'_, R>) {
+    fn decide_follow<R: Bench>(x: &mut Cx<'_, R>) {
         lib::approach_target(x);
         let n = countdown(x, 0x71) as i8;
         if n < 0 {
@@ -368,7 +368,7 @@ mod riyakaa {
     }
 
     /// 0x6f5e0 : adversaire tout près (coup), à portée de saut (bond) ou à rejoindre (marche).
-    fn decide_near<R: Banc>(x: &mut Cx<'_, R>) {
+    fn decide_near<R: Bench>(x: &mut Cx<'_, R>) {
         if lib::target_in_box(x, -0x20, 0x20, 8) {
             x.set32(f::STATE, 0x0204_0c00);
             x.set8(0xa3, 6);
@@ -392,7 +392,7 @@ mod riyakaa {
     }
 
     /// 0x6f650 : se retourne vers la cible.
-    fn decide_turn<R: Banc>(x: &mut Cx<'_, R>) {
+    fn decide_turn<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
@@ -407,7 +407,7 @@ mod riyakaa {
     }
 
     /// 0x6f694 : attente debout avant de repartir.
-    fn decide_wait<R: Banc>(x: &mut Cx<'_, R>) {
+    fn decide_wait<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
@@ -425,7 +425,7 @@ mod riyakaa {
 
     // --- sous-état 4 : coups de patte ------------------------------------------------------------
 
-    fn swipe<R: Banc>(x: &mut Cx<'_, R>) {
+    fn swipe<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(f::SUB2) {
             0 | 2 | 4 => swing(x),
             6 => lunge(x),
@@ -438,7 +438,7 @@ mod riyakaa {
 
     /// Pose d'un coup de patte : identifiant d'attaque `id`, animation `anim` des coups, décalage
     /// `shift` du regard (`+0xa0`).
-    fn swing_pose<R: Banc>(x: &mut Cx<'_, R>, id: u8, anim: u32, shift: u8) {
+    fn swing_pose<R: Bench>(x: &mut Cx<'_, R>, id: u8, anim: u32, shift: u8) {
         x.set8(0x44, id);
         x.set8(0xa0, shift);
         x.add8(0x7, 2);
@@ -446,7 +446,7 @@ mod riyakaa {
     }
 
     /// 0x6f6f0 : coup de patte (`+6` = 0 haut, 2 milieu, 4 bas).
-    fn swing<R: Banc>(x: &mut Cx<'_, R>) {
+    fn swing<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) != 0 {
             if !x.anim_step() {
                 return;
@@ -473,7 +473,7 @@ mod riyakaa {
     }
 
     /// 0x6f770 : bond en avant puis réception (`+7` : 0 élan, 2 vol, 4 retombée, 6 rebond).
-    fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
+    fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x7) {
             0 => lunge_start(x),
             2 => {
@@ -507,7 +507,7 @@ mod riyakaa {
     }
 
     /// 0x6f784 : élan du bond (aussi utilisé comme contre-attaque, état touché).
-    fn lunge_start<R: Banc>(x: &mut Cx<'_, R>) {
+    fn lunge_start<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x7, 2);
         x.set8(0xac, 0x1a);
         x.set8(0x45, 8);
@@ -531,7 +531,7 @@ mod riyakaa {
     }
 
     /// 0x6f85e : course en ligne droite (`+6` = 8 : puis coup, 10 : puis marche).
-    fn dash<R: Banc>(x: &mut Cx<'_, R>) {
+    fn dash<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 0);
@@ -558,7 +558,7 @@ mod riyakaa {
     }
 
     /// 0x6f8d6 : attend de savoir où aller (`+0xa3` = sous-état à reprendre).
-    fn wait_target<R: Banc>(x: &mut Cx<'_, R>) {
+    fn wait_target<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
@@ -577,7 +577,7 @@ mod riyakaa {
         wait_target_follow(x);
     }
 
-    fn wait_target_follow<R: Banc>(x: &mut Cx<'_, R>) {
+    fn wait_target_follow<R: Bench>(x: &mut Cx<'_, R>) {
         x.anim_step();
         if (countdown(x, 0x77) as i8) >= 0 {
             return;
@@ -592,7 +592,7 @@ mod riyakaa {
     }
 
     /// 0x6f93e : demi-tour.
-    fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
+    fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
@@ -608,7 +608,7 @@ mod riyakaa {
 
     // --- sous-état 6 : coups spéciaux ------------------------------------------------------------
 
-    fn special<R: Banc>(x: &mut Cx<'_, R>) {
+    fn special<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(f::SUB2) {
             0 | 10 => roar(x),
             2 | 8 => circle(x),
@@ -620,7 +620,7 @@ mod riyakaa {
     }
 
     /// 0x6f990 : cri (si le jeu l'interdit, simple regard).
-    fn roar<R: Banc>(x: &mut Cx<'_, R>) {
+    fn roar<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x7) {
             0 => {
                 x.add8(0x7, 2);
@@ -652,7 +652,7 @@ mod riyakaa {
     }
 
     /// 0x6fa0c : tourne autour de sa cible (`+6` = 2 : course puis fin ; 8 : course puis coup).
-    fn circle<R: Banc>(x: &mut Cx<'_, R>) {
+    fn circle<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x7) {
             0 => {
                 x.add8(0x7, 2);
@@ -695,7 +695,7 @@ mod riyakaa {
     }
 
     /// 0x6faba : saut avec coup (`+6` = 4 : atterrit et finit ; 6 : atterrit et enchaîne un coup).
-    fn jump_strike<R: Banc>(x: &mut Cx<'_, R>) {
+    fn jump_strike<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x7) {
             0 => {
                 x.add8(0x7, 2);
@@ -741,7 +741,7 @@ mod riyakaa {
 
     // --- sous-état 8 : se jette sur un joueur ---------------------------------------------------
 
-    fn chase<R: Banc>(x: &mut Cx<'_, R>) {
+    fn chase<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(f::SUB2) {
             0 => chase_wait(x),
             2 | 4 => chase_run(x),
@@ -751,7 +751,7 @@ mod riyakaa {
     }
 
     /// 0x6fbfc : attente de 16 images.
-    fn chase_wait<R: Banc>(x: &mut Cx<'_, R>) {
+    fn chase_wait<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
@@ -768,7 +768,7 @@ mod riyakaa {
     }
 
     /// 0x6fc44 : court vers sa cible (`+6` = 4 en X, 2 en profondeur).
-    fn chase_run<R: Banc>(x: &mut Cx<'_, R>) {
+    fn chase_run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x7) == 0 {
             x.add8(0x7, 2);
             x.set8(0x67, 1);
@@ -803,7 +803,7 @@ mod riyakaa {
     }
 
     /// 0x6fb78 : saute sur le joueur qu'il vise (trois essais de regard).
-    fn chase_pounce<R: Banc>(x: &mut Cx<'_, R>) {
+    fn chase_pounce<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(0x67, 1);
         let v = x.u8(0xa0);
         x.set8(0xa1, v);
@@ -835,7 +835,7 @@ mod riyakaa {
     // --- aides communes --------------------------------------------------------------------------
 
     /// 0x700fe : retour à la marche ; un joueur proche déclenche le sous-état 10.
-    fn stand_up<R: Banc>(x: &mut Cx<'_, R>) {
+    fn stand_up<R: Bench>(x: &mut Cx<'_, R>) {
         walk(x);
         if lib::maybe_draw_6e(x) {
             x.set8(f::SUB, 0xa);
@@ -843,7 +843,7 @@ mod riyakaa {
     }
 
     /// 0x700ca : prend du recul, puis choisit le prochain geste dans une table (sous-état 8).
-    fn retreat<R: Banc>(x: &mut Cx<'_, R>) {
+    fn retreat<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(0x78, 0xff);
         let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
         let r = random(x) & 0x1f;
@@ -854,7 +854,7 @@ mod riyakaa {
     }
 
     /// 0x70116 : un joueur dans la boîte devant lui et la décision d'attaquer est favorable.
-    fn want_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn want_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let found = lib::target_in_box(x, 0, 0x70, 8);
         if !found {
             return false;
@@ -869,7 +869,7 @@ mod riyakaa {
     }
 
     /// 0x70150 : la cible est-elle derrière lui (il doit se retourner) ?
-    fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         if x.u16(f::OWNER) == 0 {
             return false;
         }
@@ -881,7 +881,7 @@ mod riyakaa {
 
     /// 0x70178 : tire le prochain geste d'attaque dans une table ; si le jeu le permet, repasse en
     /// sous-état 4 avec ce geste.
-    fn choose_attack<R: Banc>(x: &mut Cx<'_, R>) {
+    fn choose_attack<R: Bench>(x: &mut Cx<'_, R>) {
         let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
         let r = random(x) & 0x1f;
         let pick = x.data8(NEXT_ATTACKS + row + r);
@@ -902,7 +902,7 @@ mod riyakaa {
 
     // --- état 4 : touché -------------------------------------------------------------------------
 
-    fn hit<R: Banc>(x: &mut Cx<'_, R>) {
+    fn hit<R: Bench>(x: &mut Cx<'_, R>) {
         hit_loop(x, |x| match x.u8(f::SUB) {
             0 => react(x, REACT_STANDING),
             2 => knockback(x),
@@ -914,7 +914,7 @@ mod riyakaa {
     }
 
     /// 0x6fece : projeté en arrière (vitesse +/- 0x500), puis contre-attaque ou reprend sa marche.
-    fn knockback<R: Banc>(x: &mut Cx<'_, R>) {
+    fn knockback<R: Bench>(x: &mut Cx<'_, R>) {
         if paused(x) {
             return;
         }
@@ -953,7 +953,7 @@ mod riyakaa {
     }
 
     /// 0x6ff90 : relève après le coup (`+6` : 0 animation, 2 attente, 4 fin).
-    fn recover<R: Banc>(x: &mut Cx<'_, R>) {
+    fn recover<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(f::SUB2) {
             0 => {
                 x.add8(f::SUB2, 2);
@@ -991,7 +991,7 @@ mod riyakaa {
     }
 
     /// 0x6fd22 : saisi par un joueur ; le mouvement de fuite dépend de la scène et de l'orientation.
-    fn grab<R: Banc>(x: &mut Cx<'_, R>) {
+    fn grab<R: Bench>(x: &mut Cx<'_, R>) {
         if paused(x) {
             return;
         }
@@ -1009,7 +1009,7 @@ mod riyakaa {
         }
     }
 
-    fn grab_start<R: Banc>(x: &mut Cx<'_, R>) {
+    fn grab_start<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(0xae, 1);
         let flipped = x.u8(f::FLIP) != 0;
         let turn = if var::SCENE.get(x.b) == 4 {
@@ -1030,7 +1030,7 @@ mod riyakaa {
     }
 
     /// 0x6fdc0 : s'enfuit en courant, face au sens de la fuite.
-    fn grab_run<R: Banc>(x: &mut Cx<'_, R>) {
+    fn grab_run<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(0x67, 1);
         x.set8(0x2d, 8);
         if x.u8(f::FLIP) == 0 {
@@ -1041,7 +1041,7 @@ mod riyakaa {
     }
 
     /// 0x6fdf2 : fuit jusqu'à sortir de l'écran, puis disparaît.
-    fn grab_flee<R: Banc>(x: &mut Cx<'_, R>) {
+    fn grab_flee<R: Bench>(x: &mut Cx<'_, R>) {
         x.anim_step();
         x.move_by_table_xy();
         if x.in_arena_default() {
@@ -1053,5 +1053,5 @@ mod riyakaa {
 }
 
 handlers! {
-    0x6f1c0 "enemy_16" #[sans] riyakaa::run,
+    0x6f1c0 "enemy_16" #[without] riyakaa::run,
 }

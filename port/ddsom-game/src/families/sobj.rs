@@ -1,19 +1,19 @@
 //! Objets spéciaux (classe SOBJ, pool de 16 objets de 0x50 octets, table 0x39fa8) : décors défilants
 //! et éléments de scènes (écran-titre, fins, intermèdes), types 0 à 15 sauf le 4 (commun, voir
-//! `set.rs`). Voir `docs/familles/sobj.md`.
+//! `set.rs`). Voir `docs/families/sobj.md`.
 //!
 //! Les objets SOBJ figurent dans les listes triées : `+0x42` choisit la liste du premier plan
 //! (non nul) ou celle des acteurs. Le créateur renseigne `+3` (variante) et souvent `+0x4c` /
 //! `+0x2f` / `+0x14` (paramètres propres au type).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::shell::{suspended, GAME_PAUSED};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::Obj;
 use crate::objects::pools;
-use super::effects_creators::restes::Pur;
-use crate::objects::Courant;
+use super::effects_creators::leftovers::Pure;
+use crate::objects::Current;
 use crate::machine::Machine;
 
 /// Variables de la RAM de travail (A5+) : caméra du jeu et caméra secondaire.
@@ -35,7 +35,7 @@ const ANIMS: u32 = 0x1c03a6;
 
 /// Fin de gestionnaire des objets à liste variable : liste du premier plan si `+0x42` est non nul,
 /// liste des acteurs sinon.
-fn reinsert_by_layer<R: Banc>(x: &mut Cx<'_, R>) {
+fn reinsert_by_layer<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x42) != 0 {
         x.reinsert_foreground();
     } else {
@@ -45,7 +45,7 @@ fn reinsert_by_layer<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Sort de l'écran de plus que `margin` pixels : état 4 (disparition). La marge est dans D2 ; le
 /// test se fait en mots non signés (routine 0xddbfc de l'original).
-fn cull_beyond<R: Banc>(x: &mut Cx<'_, R>, margin: u16) {
+fn cull_beyond<R: Bench>(x: &mut Cx<'_, R>, margin: u16) {
     let mut camera = x.a5_u16(ram::CAMERA_X);
     if x.a5_u8(ram::USE_CAMERA2) != 0 {
         camera = x.a5_u16(ram::CAMERA2_X);
@@ -60,7 +60,7 @@ fn cull_beyond<R: Banc>(x: &mut Cx<'_, R>, margin: u16) {
 }
 
 /// Décalage de la caméra depuis la précédente image (X puis Y), en 16.16.
-fn camera_delta<R: Banc>(x: &mut Cx<'_, R>) -> (u32, u32) {
+fn camera_delta<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u32) {
     (
         x.a5_u32(ram::CAMERA_X).wrapping_sub(x.a5_u32(ram::PREV_CAMERA_X)),
         x.a5_u32(ram::CAMERA_Y).wrapping_sub(x.a5_u32(ram::PREV_CAMERA_Y)),
@@ -71,7 +71,7 @@ fn camera_delta<R: Banc>(x: &mut Cx<'_, R>) -> (u32, u32) {
 const BRIGHT: u32 = 0xf000_f000;
 
 /// Copie `n` longs de la ROM (espace de données) vers la mémoire vidéo ou la RAM.
-fn copy_longs<R: Banc>(x: &mut Cx<'_, R>, from: u32, to: u32, n: u32) {
+fn copy_longs<R: Bench>(x: &mut Cx<'_, R>, from: u32, to: u32, n: u32) {
     for i in 0..n {
         let v = x.data32(from + 4 * i);
         wr32(x.b, to + 4 * i, v);
@@ -79,7 +79,7 @@ fn copy_longs<R: Banc>(x: &mut Cx<'_, R>, from: u32, to: u32, n: u32) {
 }
 
 /// Force des bits dans `n` longs consécutifs.
-fn or_longs<R: Banc>(x: &mut Cx<'_, R>, at: u32, mask: u32, n: u32) {
+fn or_longs<R: Bench>(x: &mut Cx<'_, R>, at: u32, mask: u32, n: u32) {
     for i in 0..n {
         let v = rd32(x.b, at + 4 * i) | mask;
         wr32(x.b, at + 4 * i, v);
@@ -112,7 +112,7 @@ mod scenery {
     /// Fin du script d'animation (octet haut des drapeaux).
     const ANIM_END: u8 = 0xfe;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -125,7 +125,7 @@ mod scenery {
         }
     }
 
-    fn init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x14, 0);
         x.set8(0x42, 0);
@@ -172,14 +172,14 @@ mod scenery {
     }
 
     /// Positionne le décor (X, Y) et le remonte (Z = -0x100), au premier plan.
-    fn place_at<R: Banc>(x: &mut Cx<'_, R>, px: u16, py: u16) {
+    fn place_at<R: Bench>(x: &mut Cx<'_, R>, px: u16, py: u16) {
         x.set16(0x8, px);
         x.set16(0x10, py);
         x.set16(0xc, 0xff00);
         x.set8(0x42, 1);
     }
 
-    fn follow<R: Banc>(x: &mut Cx<'_, R>) {
+    fn follow<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x2f) == 0 {
             x.anim_step();
         }
@@ -304,7 +304,7 @@ mod scenery {
     }
 
     /// Passe à l'état suivant (+`step`) quand l'animation est terminée.
-    fn wait_script_end<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
+    fn wait_script_end<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
         if x.u8(0x32) == ANIM_END {
             x.add8(0x4, step);
         }
@@ -326,7 +326,7 @@ mod fixture {
     /// Variante -> forme du comportement par image (0 : sortie d'écran, 1 : défilement, 2 : suivi).
     const STEP_KIND: u32 = 0xddd16;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -379,7 +379,7 @@ mod flasher {
 
     const BLINKS: u8 = 0x10;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -403,7 +403,7 @@ mod flasher {
         x.reinsert();
     }
 
-    fn restart<R: Banc>(x: &mut Cx<'_, R>) {
+    fn restart<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(0x14, BLINKS);
         let variant = x.u8(0x3) as u32;
         x.anim_start(ANIMS, variant as u16);
@@ -424,7 +424,7 @@ mod tag {
     const OFFSET_Y: u16 = 0x58;
     const HOST: u32 = 0x14;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -458,7 +458,7 @@ mod tag {
 mod ghost {
     use super::*;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x4) == 0 {
             x.add8(0x4, 2);
         }
@@ -484,7 +484,7 @@ mod scene {
     const PALETTE_A: u32 = 0x91c080;
     const PALETTE_B: u32 = 0x91c3e0;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x3) {
             0 => lifecycle(x, v0_init, v0_step),
             1 => lifecycle(x, v1_init, v1_step),
@@ -525,7 +525,7 @@ mod scene {
     }
 
     /// Cycle de vie commun : 0 initialisation, 2 vie, 4 mort, 6 libération.
-    fn lifecycle<R: Banc>(x: &mut Cx<'_, R>, init: fn(&mut Cx<'_, R>), step: fn(&mut Cx<'_, R>)) {
+    fn lifecycle<R: Bench>(x: &mut Cx<'_, R>, init: fn(&mut Cx<'_, R>), step: fn(&mut Cx<'_, R>)) {
         match x.u8(0x4) {
             0 => init(x),
             2 => step(x),
@@ -535,39 +535,39 @@ mod scene {
         }
     }
 
-    fn kill<R: Banc>(x: &mut Cx<'_, R>) {
+    fn kill<R: Bench>(x: &mut Cx<'_, R>) {
         x.set32(0x4, DEAD);
         x.free(&pools::SOBJ);
     }
 
-    fn rom32<R: Banc>(x: &mut Cx<'_, R>, addr: u32) -> u32 {
+    fn rom32<R: Bench>(x: &mut Cx<'_, R>, addr: u32) -> u32 {
         (x.rom16(addr) as u32) << 16 | x.rom16(addr + 2) as u32
     }
 
     /// Le maître de la scène (`+0x4c`).
-    fn master<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
+    fn master<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
         Obj(x.u32(0x4c) & 0xff_ffff)
     }
 
     /// Octet de signal du maître (`+8`).
-    fn signal<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
+    fn signal<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
         let m = master(x);
         m.u8(x.b, 0x8)
     }
 
-    fn send_signal<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
+    fn send_signal<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
         let m = master(x);
         m.set_u8(x.b, 0x8, v);
     }
 
     /// Démarre le script `n` et remet l'objet en place dans la liste des acteurs.
-    fn start<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+    fn start<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
         x.anim_start(ANIMS, n as u16);
         x.reinsert();
     }
 
     /// Crée un objet SOBJ de type 6 (routine 0xddeaa), de variante `variant` ; rien en cas d'échec.
-    fn spawn<R: Banc>(x: &mut Cx<'_, R>, variant: u8) -> Option<Obj> {
+    fn spawn<R: Bench>(x: &mut Cx<'_, R>, variant: u8) -> Option<Obj> {
         let Some(child) = x.alloc(&pools::SOBJ) else { return None };
         child.set_u8(x.b, 0, 1);
         child.set_u8(x.b, 2, 6);
@@ -577,7 +577,7 @@ mod scene {
 
     /// Fait défiler l'écran d'un pixel toutes les 8 images (routine 0xdea4a) en gardant l'objet
     /// immobile à l'écran.
-    fn scroll_creep<R: Banc>(x: &mut Cx<'_, R>) {
+    fn scroll_creep<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x6f) & 7 != 0 {
             return;
         }
@@ -596,15 +596,15 @@ mod scene {
     /// une table à 8 octets par valeur de `+0x2f`), flip aléatoire si l'indicateur est négatif.
     const V0_ENTRIES: u32 = 0xddf6c;
 
-    fn random_flip<R: Banc>(x: &mut Cx<'_, R>) {
+    fn random_flip<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(0x2c, 0);
-        let alea = x.random();
-        if alea as u32 & 1 != 0 {
+        let rng = x.random();
+        if rng as u32 & 1 != 0 {
             x.set8(0x2c, 0x20);
         }
     }
 
-    fn v0_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v0_init<R: Bench>(x: &mut Cx<'_, R>) {
         if (signal(x) as i8) < 0 {
             return x.free(&pools::SOBJ);
         }
@@ -621,7 +621,7 @@ mod scene {
         x.reinsert();
     }
 
-    fn v0_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v0_step<R: Bench>(x: &mut Cx<'_, R>) {
         x.anim_step();
         if signal(x) as i8 >= 0 {
             return;
@@ -630,16 +630,16 @@ mod scene {
     }
 
     /// Variante 1 : lumière qui grandit lentement jusqu'au signal du maître.
-    fn v1_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v1_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x8, 0x30_0000);
         x.set32(0xc, 0xd0_0000);
         x.set32(0x10, 0);
         start(x, 0xee);
-        crate::sound::jouer(x.b, 0xea662, x.o);
+        crate::sound::play(x.b, 0xea662, x.o);
     }
 
-    fn v1_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v1_step<R: Bench>(x: &mut Cx<'_, R>) {
         if signal(x) != 0 {
             return kill(x);
         }
@@ -648,7 +648,7 @@ mod scene {
     }
 
     /// Variante 2 : décor qui défile, trois temps (`+5`) rythmés par le signal du maître.
-    fn v2_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v2_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x8, 0x100);
         x.set16(0xc, 0xc0);
@@ -657,7 +657,7 @@ mod scene {
         start(x, 0xef);
     }
 
-    fn v2_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v2_step<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 if signal(x) != 0 {
@@ -683,7 +683,7 @@ mod scene {
     /// 0xde1e8 si `A5+0x38`), un toutes les 30 images, jusqu'à la fin de son script.
     const V3_LISTS: u32 = 0xde1e0;
 
-    fn v3_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v3_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x8, 0x60);
         x.set16(0xc, 0xc0);
@@ -695,10 +695,10 @@ mod scene {
         }
         x.set16(0x48, 0);
         start(x, 0xf1);
-        crate::sound::jouer(x.b, 0xea6a2, x.o);
+        crate::sound::play(x.b, 0xea6a2, x.o);
     }
 
-    fn v3_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v3_step<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(0x48) != 0 {
             let child = x.linked(0x48);
             if child.u8(x.b, 0x22) == 0 {
@@ -731,7 +731,7 @@ mod scene {
     }
 
     /// Variante 4 : monte vers le haut de l'écran (Z - 1,25 par image) et s'arrête à Z = 0x20.
-    fn v4_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v4_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0x4000);
         x.set16(0x8, 5);
@@ -739,7 +739,7 @@ mod scene {
         start(x, 0xf5);
     }
 
-    fn v4_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v4_step<R: Bench>(x: &mut Cx<'_, R>) {
         x.add32(0xc, 0u32.wrapping_sub(0x14000));
         if x.u16(0xc) as i16 > 0x20 {
             return;
@@ -752,7 +752,7 @@ mod scene {
     /// plus ; décalages X puis Z en table 0xde386).
     const V5_OFFSETS: u32 = 0xde386;
 
-    fn v5_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v5_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0x8000);
         x.set16(0x8, 0x78);
@@ -760,7 +760,7 @@ mod scene {
         start(x, 0xf6);
     }
 
-    fn v5_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v5_step<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 x.add32(0xc, 0x10000);
@@ -792,7 +792,7 @@ mod scene {
         }
     }
 
-    fn v5_spawn<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v5_spawn<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u8(0x43).wrapping_sub(1);
         x.set8(0x43, n);
         if n != 0 || x.u8(0x42) == 2 {
@@ -822,7 +822,7 @@ mod scene {
     /// X, arrêt), attend le signal 2 puis remonte de 0x290.
     const V6_TABLE: u32 = 0xde3ee;
 
-    fn v6_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v6_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0xf000);
         x.set32(0xc, 0x300_0000);
@@ -838,7 +838,7 @@ mod scene {
         x.reinsert();
     }
 
-    fn v6_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v6_step<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 x.add16(0xc, 2);
@@ -872,7 +872,7 @@ mod scene {
     const V7_SCRIPTS: u32 = 0xde4d2;
     const V7_PALETTES: u32 = 0x292240;
 
-    fn v7_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v7_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x42, 6);
         let mut off = 4 * x.u8(0x2f) as u32;
@@ -890,7 +890,7 @@ mod scene {
         crate::palette::no_brightness(x.b);
     }
 
-    fn v7_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v7_step<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) == 0 {
             if rd8(x.b, PALETTE_B) & 0xf0 == 0xf0 {
                 x.set16(0x42, 0xb4);
@@ -925,7 +925,7 @@ mod scene {
     /// 0xff0eaa (A5-0x7156).
     const SCENE_DONE_FLAG: u32 = 0xff_0eaa;
 
-    fn v8_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v8_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.a5_u16(ram::CAMERA_X);
         x.set16(0x8, v);
@@ -937,7 +937,7 @@ mod scene {
         start(x, 0x112);
     }
 
-    fn v8_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v8_step<R: Bench>(x: &mut Cx<'_, R>) {
         x.add16(0xc, 8);
         let below = x.u16(0xc).wrapping_add(x.u16(0x10)).wrapping_sub(x.a5_u16(ram::CAMERA_Y));
         if below < 0x1c8 {
@@ -951,7 +951,7 @@ mod scene {
     }
 
     /// Variante 9 : texte animé sur la caméra secondaire ; signale sa fin au maître.
-    fn v9_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v9_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.a5_u16(ram::CAMERA2_X);
         x.set16(0x8, v);
@@ -960,10 +960,10 @@ mod scene {
         x.set32(0x10, 0);
         x.add16(0xc, 0xf0);
         start(x, 0x113);
-        crate::sound::jouer(x.b, 0xea2e8, x.o);
+        crate::sound::play(x.b, 0xea2e8, x.o);
     }
 
-    fn v9_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v9_step<R: Bench>(x: &mut Cx<'_, R>) {
         if x.anim_step() || (signal(x) as i8) < 0 {
             return x.set8(0x4, 6);
         }
@@ -976,16 +976,16 @@ mod scene {
 
     /// Variante 10 : plaque qui descend en deux temps (Z 0x88 puis 0xa0), attend le signal 2,
     /// remonte à Z 0x80 et attend la fin.
-    fn v10_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v10_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x8, 0x98_0000);
         x.set32(0xc, 0x70_0000);
         x.set32(0x10, 0);
         start(x, 0x114);
-        crate::sound::jouer(x.b, 0xea77e, x.o);
+        crate::sound::play(x.b, 0xea77e, x.o);
     }
 
-    fn v10_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v10_step<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x5) {
             0 => {
                 x.add32(0xc, 0x4000);
@@ -1018,7 +1018,7 @@ mod scene {
                     return;
                 }
                 x.add8(0x5, 2);
-                crate::sound::jouer(x.b, 0xea87e, x.o);
+                crate::sound::play(x.b, 0xea87e, x.o);
             }
             8 => {
                 x.add32(0xc, 0u32.wrapping_sub(0x4000));
@@ -1039,7 +1039,7 @@ mod scene {
     }
 
     /// Variante 11 : sprite fixe sur la caméra principale.
-    fn v11_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v11_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0x8000);
         let y = x.a5_u16(ram::CAMERA_Y);
@@ -1047,12 +1047,12 @@ mod scene {
         x.add16(0xc, 0xc0);
         x.set16(0x8, 0x30);
         start(x, 0x115);
-        crate::sound::jouer(x.b, 0xea7fe, x.o);
+        crate::sound::play(x.b, 0xea7fe, x.o);
     }
 
     /// Variante 12 : sprite qui traverse l'écran (1 pixel par image vers la droite, ou vers la
     /// gauche si `+0x2f`) et fait reculer la caméra.
-    fn v12_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v12_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x2c, 0);
         x.set32(0x8, 0xf0_0000);
@@ -1071,7 +1071,7 @@ mod scene {
         x.reinsert();
     }
 
-    fn v12_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v12_step<R: Bench>(x: &mut Cx<'_, R>) {
         let d = (((x.u16(0x14) as u32) << 16) as i32 >> 8) as u32;
         x.add32(0x8, d);
         let screen = x.u16(0x8).wrapping_sub(x.a5_u16(ram::CAMERA_X));
@@ -1091,7 +1091,7 @@ mod scene {
     /// 0xdea84), sur un fond de palette 0x91c340 (8 couleurs identiques).
     const V13_SCRIPTS: u32 = 0xdea84;
 
-    fn v13_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v13_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.a5_u16(ram::CAMERA_X);
         x.set16(0x8, v);
@@ -1114,7 +1114,7 @@ mod scene {
     /// dont on prend la variante si le bit 15 est levé) ; table à 8 octets en 0xdef1e.
     const V14_TABLE: u32 = 0xdef1e;
 
-    fn v14_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v14_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let mut which = x.u16(0x46);
         if (which as i16) < 0 {
@@ -1133,7 +1133,7 @@ mod scene {
         x.reinsert();
     }
 
-    fn v14_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v14_step<R: Bench>(x: &mut Cx<'_, R>) {
         if (signal(x) as i8) < 0 {
             x.add8(0x4, 2);
         }
@@ -1145,7 +1145,7 @@ mod scene {
     const V15_PALETTES: u32 = 0x28f960;
     const V15_POSITIONS: u32 = 0xdf01a;
 
-    fn v15_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v15_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
         x.set32(0x10, 0);
@@ -1162,14 +1162,14 @@ mod scene {
 
     /// Variante 16 : sprite flippé au hasard, qui vit tant que le maître n'a pas fini et que son
     /// animation n'est pas terminée.
-    fn v16_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v16_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         random_flip(x);
         start(x, 0x1a2);
-        crate::sound::jouer(x.b, 0xea7be, x.o);
+        crate::sound::play(x.b, 0xea7be, x.o);
     }
 
-    fn v16_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v16_step<R: Bench>(x: &mut Cx<'_, R>) {
         if signal(x) as i8 >= 0 && !x.anim_step() {
             return;
         }
@@ -1178,7 +1178,7 @@ mod scene {
 
     /// Variante 17 : bulle qui sort du bas de l'écran (deux positions selon `+0x2f`) ; en fin
     /// d'animation, rend le bit (`+0x2f` modulo 8) de `+0x30` au propriétaire `+0x46`.
-    fn v17_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v17_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set32(0x10, 0x4000);
         x.set16(0xc, 0x1c0);
@@ -1190,10 +1190,10 @@ mod scene {
         // `move.w #0x1a3,D0w ; add.b (0x2f,A0),D0b` : l'addition ne déborde pas sur l'octet haut
         let n = 0x100 | (0xa3 + x.u8(0x2f) as u32) & 0xff;
         start(x, n);
-        crate::sound::jouer(x.b, 0xea83e, x.o);
+        crate::sound::play(x.b, 0xea83e, x.o);
     }
 
-    fn v17_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v17_step<R: Bench>(x: &mut Cx<'_, R>) {
         if !x.anim_step() {
             return;
         }
@@ -1205,7 +1205,7 @@ mod scene {
     }
 
     /// Variante 18 : sprite posé sur la caméra secondaire.
-    fn v18_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v18_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.a5_u16(ram::CAMERA2_X);
         x.set16(0x8, v);
@@ -1225,7 +1225,7 @@ mod scene {
     const V19_PALETTES: u32 = 0x28f340 + 0x60;
     const V19_POSITIONS: u32 = 0xdf234;
 
-    fn v19_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v19_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.u8(0x2f) as u32;
         let line = x.rom8(V19_LINES + 2 * v) as u32;
@@ -1239,7 +1239,7 @@ mod scene {
     }
 
     /// Place la pastille d'après la table, relativement à la caméra courante.
-    fn v19_place<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v19_place<R: Bench>(x: &mut Cx<'_, R>) {
         let v = x.u8(0x2f) as u32;
         let px = x.rom16(V19_POSITIONS + 4 * v);
         x.set16(0x8, px);
@@ -1255,7 +1255,7 @@ mod scene {
         x.add16(0xc, cy);
     }
 
-    fn v19_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v19_step<R: Bench>(x: &mut Cx<'_, R>) {
         v19_place(x);
         let owner = x.linked(0x46);
         if owner.u16(x.b, 0x32) != 0 {
@@ -1270,7 +1270,7 @@ mod scene {
     const V20_X: u32 = 0xdf2a8;
     const V20_FALL: u32 = 0xdf2ea;
 
-    fn v20_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v20_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         let v = x.a5_u16(ram::CAMERA_Y);
         x.set16(0xc, v);
@@ -1278,14 +1278,14 @@ mod scene {
         x.set16(0x8, v);
         x.add16(0xc, 0x110);
         x.set16(0x10, 0x10);
-        let alea = x.random();
-        let k = alea as u32 & 7;
+        let rng = x.random();
+        let k = rng as u32 & 7;
         let dx = x.rom16(V20_X + 2 * k);
         x.add16(0x8, dx);
         x.set32(0x14, 0);
         x.set16(0x18, 0);
-        let alea = x.random();
-        let k = alea as u32 & 3;
+        let rng = x.random();
+        let k = rng as u32 & 3;
         let az = x.rom16(V20_FALL + 4 * k);
         x.set16(0x1a, az);
         let anim = x.rom16(V20_FALL + 4 * k + 2) as u32;
@@ -1293,7 +1293,7 @@ mod scene {
         x.reinsert();
     }
 
-    fn v20_step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v20_step<R: Bench>(x: &mut Cx<'_, R>) {
         if (signal(x) as i8) < 0 {
             return kill(x);
         }
@@ -1301,7 +1301,7 @@ mod scene {
     }
 
     /// Chute : sort (état mort) quand le bas du sprite repasse au-dessus du bord haut de l'écran.
-    fn v20_fall<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v20_fall<R: Bench>(x: &mut Cx<'_, R>) {
         x.move_xz();
         let below = x.u16(0xc).wrapping_add(x.u16(0x10));
         if (below as i16) <= x.a5_u16(ram::CAMERA_Y) as i16 {
@@ -1314,7 +1314,7 @@ mod scene {
     const V21_PALETTE_SELECT: u32 = 0xdf332;
     const V21_POSITIONS: u32 = 0xdf396;
 
-    fn v21_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v21_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set8(0x5, 0);
         x.set32(0x10, 0);
@@ -1332,7 +1332,7 @@ mod scene {
     /// `A5+0x36`), dont la couleur de la palette 0x91c180 reprend la luminosité de la couleur 0.
     const V23_PALETTE: u32 = 0x28f4c0;
 
-    fn v23_init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v23_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         copy_longs(x, V23_PALETTE, 0x91c180, 8);
         let top = rd32(x.b, 0x91c000) & BRIGHT;
@@ -1346,12 +1346,12 @@ mod scene {
         x.reinsert();
     }
 
-    fn v23_follow_and_insert<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v23_follow_and_insert<R: Bench>(x: &mut Cx<'_, R>) {
         v23_follow(x);
         x.reinsert();
     }
 
-    fn v23_follow<R: Banc>(x: &mut Cx<'_, R>) {
+    fn v23_follow<R: Bench>(x: &mut Cx<'_, R>) {
         let camera = if x.a5_u8(ram::USE_CAMERA2) != 0 { 0x54e } else { 0x4fe };
         x.set16(0x42, (0xff_8000u32 + camera) as u16);
         let cam = x.linked(0x42);
@@ -1394,7 +1394,7 @@ mod hint {
     const ADVICE_FRAMES: u8 = 0x50;
     const LEAVE_SOUND: u32 = 0xea49a;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(0x46);
         if owner.u8(x.b, 0x43) == 0 && rd8(x.b, HINT_INHIBIT) != 0 {
             x.set32(0x4, 0);
@@ -1408,7 +1408,7 @@ mod hint {
         }
     }
 
-    fn start<R: Banc>(x: &mut Cx<'_, R>) {
+    fn start<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return;
         }
@@ -1420,14 +1420,14 @@ mod hint {
     }
 
     /// Palette de la bulle, luminosité maximale ; l'objet devient visible (`+0x2a`, `+0x2b`).
-    fn load_palette<R: Banc>(x: &mut Cx<'_, R>) {
+    fn load_palette<R: Bench>(x: &mut Cx<'_, R>) {
         copy_longs(x, PALETTE, PALETTE_DST, 8);
         or_longs(x, PALETTE_DST, BRIGHT, 8);
         x.set8(0x2a, 1);
         x.set8(0x2b, 0x1c);
     }
 
-    fn step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn step<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u8(GAME_PAUSED) != 0 {
             return;
         }
@@ -1440,9 +1440,9 @@ mod hint {
         }
         let owner = x.linked(0x46);
         if owner.u8(x.b, 0x42) & 2 != 0 {
-            crate::sound::jouer(x.b, LEAVE_SOUND, x.o);
+            crate::sound::play(x.b, LEAVE_SOUND, x.o);
             // 0xdf896: SOBJ 0xa linked through `+0x46`
-            crate::families::petites::linked_par(&mut Pur, x.b, x.o, &pools::SOBJ, 0xa, 0x46);
+            crate::families::small::linked_via(&mut Pure, x.b, x.o, &pools::SOBJ, 0xa, 0x46);
             let owner = x.linked(0x46);
             let v = owner.u8(x.b, 0x42) & !2;
             owner.set_u8(x.b, 0x42, v);
@@ -1458,7 +1458,7 @@ mod hint {
 
     /// Sous-état 0 : le conseil reste affiché `+0x16` images, puis passe au suivant (sous-état 2)
     /// ou, après le dernier, rend la main à l'objet lié.
-    fn countdown<R: Banc>(x: &mut Cx<'_, R>) {
+    fn countdown<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(0x46) == 0 {
             return x.set16(0x4, LEAVE_6_2);
         }
@@ -1483,7 +1483,7 @@ mod hint {
         follow(x);
     }
 
-    fn next_advice<R: Banc>(x: &mut Cx<'_, R>) {
+    fn next_advice<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x5, 0u8.wrapping_sub(2));
         x.set8(0x16, ADVICE_FRAMES);
         let n = x.u16(0x14).wrapping_add(1);
@@ -1493,7 +1493,7 @@ mod hint {
     }
 
     /// La bulle suit la caméra (X + 0xb0, Z + 0xcf) et avance son animation.
-    fn follow<R: Banc>(x: &mut Cx<'_, R>) {
+    fn follow<R: Bench>(x: &mut Cx<'_, R>) {
         let v = x.a5_u16(ram::CAMERA_X).wrapping_add(0xb0);
         x.set16(0x8, v);
         let v = x.a5_u16(ram::CAMERA_Y).wrapping_add(0xcf);
@@ -1502,7 +1502,7 @@ mod hint {
         x.anim_step();
     }
 
-    fn leave<R: Banc>(x: &mut Cx<'_, R>) {
+    fn leave<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x5) != 0 {
             return x.free(&pools::SOBJ);
         }
@@ -1516,7 +1516,7 @@ mod hint {
 mod marker {
     use super::*;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1529,7 +1529,7 @@ mod marker {
         }
     }
 
-    fn track<R: Banc>(x: &mut Cx<'_, R>) {
+    fn track<R: Bench>(x: &mut Cx<'_, R>) {
         let target = x.linked(0x14);
         for off in [0x8, 0xc, 0x10] {
             let v = target.u16(x.b, off);
@@ -1559,7 +1559,7 @@ mod frame {
     /// Mot de la RAM (A5+0x46) : joueur suivi.
     const TRACKED: u32 = 0x46;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x42) != 0 {
             x.set32(0x4, 0x0600_0000);
         }
@@ -1599,7 +1599,7 @@ mod frame {
 
     /// Position : avec `+0x2f`, ne reste que si le joueur suivi est dans la zone de profondeur
     /// 0x170..0x260 ; sinon, caméra + décalage de la table.
-    fn place<R: Banc>(x: &mut Cx<'_, R>) {
+    fn place<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x2f) != 0 {
             let who = x.a5_u16(TRACKED);
             let ok = who != 0 && {
@@ -1633,7 +1633,7 @@ mod arrow {
     const BLINK_FRAMES: u16 = 0x14;
     const BLINKS: u8 = 0xa;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x42) != 0 {
             x.set32(0x4, 0x0600_0000);
         }
@@ -1648,12 +1648,12 @@ mod arrow {
         }
     }
 
-    fn advice_of_owner<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+    fn advice_of_owner<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
         let owner = x.linked(0x46);
         owner.u16(x.b, 0x14)
     }
 
-    fn start<R: Banc>(x: &mut Cx<'_, R>) {
+    fn start<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(0x46) == 0 {
             return;
         }
@@ -1670,7 +1670,7 @@ mod arrow {
         x.reinsert();
     }
 
-    fn place<R: Banc>(x: &mut Cx<'_, R>, dz: u16) {
+    fn place<R: Bench>(x: &mut Cx<'_, R>, dz: u16) {
         let v = x.a5_u16(ram::CAMERA_X).wrapping_add(0x58);
         x.set16(0x8, v);
         let v = x.a5_u16(ram::CAMERA_Y).wrapping_add(dz);
@@ -1679,17 +1679,17 @@ mod arrow {
     }
 
     /// Quatre événements consécutifs (codes +0x100 par joueur).
-    fn announce<R: Banc>(x: &mut Cx<'_, R>) {
+    fn announce<R: Bench>(x: &mut Cx<'_, R>) {
         let advice = advice_of_owner(x);
         let i = advice.wrapping_sub(0x118).wrapping_mul(2);
         let code = x.rom16(EVENT_BY_ADVICE.wrapping_add(i as i16 as i32 as u32));
         // un événement par joueur (octet haut : 0 à 3)
-        for joueur in 0..4u16 {
-            crate::evenements::enfiler_points(x.b, code.wrapping_add(joueur << 8));
+        for player in 0..4u16 {
+            crate::events::enqueue_points(x.b, code.wrapping_add(player << 8));
         }
     }
 
-    fn pick_anim<R: Banc>(x: &mut Cx<'_, R>) {
+    fn pick_anim<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(0x46) == 0 {
             return;
         }
@@ -1699,7 +1699,7 @@ mod arrow {
         x.anim_start(ANIMS, anim as u16);
     }
 
-    fn step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn step<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u16(0x16).wrapping_sub(1);
         x.set16(0x16, n);
         if (n as i16) < 0 {
@@ -1721,13 +1721,13 @@ mod arrow {
 // ---------------------------------------------------------------------------------------------
 
 /// Adresse (mot) de la structure de caméra dans la RAM : A5+0x4fe, ou A5+0x54e si `A5+0x36`.
-fn camera_record<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn camera_record<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     let record = if x.a5_u8(ram::USE_CAMERA2) != 0 { 0x54e } else { 0x4fe };
     (0xff_8000u32 + record) as u16
 }
 
 /// Place l'objet à la position de la structure de caméra `+0x42`, décalée de (`+0x14`, `+0x18`).
-fn stick_to_camera<R: Banc>(x: &mut Cx<'_, R>) {
+fn stick_to_camera<R: Bench>(x: &mut Cx<'_, R>) {
     let camera = x.linked(0x42);
     let v = camera.u16(x.b, 0x8).wrapping_add(x.u16(0x14));
     x.set16(0x8, v);
@@ -1747,7 +1747,7 @@ mod badge {
     const BADGE_VARIANT: u8 = 1;
     const SOUND: u32 = 0xea428;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) == 0 {
             parent(x)
         } else {
@@ -1756,7 +1756,7 @@ mod badge {
     }
 
     /// Crée un objet SOBJ de type 11 de variante `variant` et de paramètre `param` (`+0x2c`).
-    fn spawn<R: Banc>(x: &mut Cx<'_, R>, variant: u8, param: u8) -> Option<Obj> {
+    fn spawn<R: Bench>(x: &mut Cx<'_, R>, variant: u8, param: u8) -> Option<Obj> {
         let Some(o) = x.alloc(&pools::SOBJ) else { return None };
         o.set_u8(x.b, 0, 1);
         o.set_u8(x.b, 2, 0xb);
@@ -1765,7 +1765,7 @@ mod badge {
         Some(o)
     }
 
-    fn parent<R: Banc>(x: &mut Cx<'_, R>) {
+    fn parent<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1835,12 +1835,12 @@ mod badge {
         }
     }
 
-    fn back_to_idle<R: Banc>(x: &mut Cx<'_, R>) {
+    fn back_to_idle<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x5, 2);
         x.anim_start(ANIMS, 0x15c);
     }
 
-    fn child<R: Banc>(x: &mut Cx<'_, R>) {
+    fn child<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1874,7 +1874,7 @@ mod badge {
                 x.set8(0x49, counter);
                 if counter != 0 {
                     x.set_bit(0x1, 1, false);
-                    return crate::sound::jouer(x.b, SOUND, x.o);
+                    return crate::sound::play(x.b, SOUND, x.o);
                 }
                 x.set_bit(0x1, 1, true);
                 let n = x.u8(0x48).wrapping_sub(1);
@@ -1899,7 +1899,7 @@ mod badge {
 mod hud_dot {
     use super::*;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -1933,7 +1933,7 @@ mod panel {
     const PALETTE_DST: u32 = 0x91c3c0;
     const SLIDE_ANIMS: u32 = 0x1c40c6;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x4) == 0 {
             x.add8(0x4, 2);
             copy_longs(x, PALETTE, PALETTE_DST, 8);
@@ -1990,7 +1990,7 @@ mod stage_title {
     /// `A5+0x70` : jeu à deux joueurs (h), décale le titre.
     const ALT: u32 = 0x70;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x48f) != 0 {
             return;
         }
@@ -2007,12 +2007,12 @@ mod stage_title {
         }
     }
 
-    fn fade_to<R: Banc>(x: &mut Cx<'_, R>, step: u16) {
+    fn fade_to<R: Bench>(x: &mut Cx<'_, R>, step: u16) {
         let from = FADE + ((step as u32) << 5 & 0xffff);
         copy_longs(x, from, PALETTE_DST, 8);
     }
 
-    fn start<R: Banc>(x: &mut Cx<'_, R>) {
+    fn start<R: Bench>(x: &mut Cx<'_, R>) {
         if x.a5_u8(0x30) == 0 {
             return x.free(&pools::SOBJ);
         }
@@ -2036,7 +2036,7 @@ mod stage_title {
         place(x);
     }
 
-    fn start_2b<R: Banc>(x: &mut Cx<'_, R>) {
+    fn start_2b<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(0x4, 2);
         x.set16(0x14, DURATION);
         x.set16(0x18, STEP_FRAMES);
@@ -2048,7 +2048,7 @@ mod stage_title {
     }
 
     /// Titre à (X caméra + 0x44, Z caméra + 0xa8) ; un peu plus à gauche à deux joueurs.
-    fn place<R: Banc>(x: &mut Cx<'_, R>) {
+    fn place<R: Bench>(x: &mut Cx<'_, R>) {
         let camera = Obj(0xff_0000 | camera_record(x) as u32);
         let v = camera.u16(x.b, 0x8);
         x.set16(0x8, v);
@@ -2062,7 +2062,7 @@ mod stage_title {
         x.add16(0xc, 0xa8);
     }
 
-    fn step<R: Banc>(x: &mut Cx<'_, R>) {
+    fn step<R: Bench>(x: &mut Cx<'_, R>) {
         let stage = x.a5_u8(0x34);
         if stage == STAGE_7 && x.u8(0x5) == 0 {
             return step_stage_7(x);
@@ -2080,7 +2080,7 @@ mod stage_title {
 
     /// Un pas du fondu : toutes les 4 images, palette suivante ; à l'étape 0 le compteur reste
     /// bloqué à 0xffff.
-    fn tick_fade<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn tick_fade<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let n = x.u16(0x18).wrapping_sub(1);
         x.set16(0x18, n);
         if n != 0 {
@@ -2099,7 +2099,7 @@ mod stage_title {
     }
 
     /// Décompte de la durée du titre ; à zéro il passe à l'état 4. Remise en place dans la liste.
-    fn finish_tick<R: Banc>(x: &mut Cx<'_, R>) {
+    fn finish_tick<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u16(0x14).wrapping_sub(1);
         x.set16(0x14, n);
         if n == 0 {
@@ -2109,7 +2109,7 @@ mod stage_title {
     }
 
     /// Niveau 0x2b : comme le fondu normal mais sans avancer l'animation.
-    fn step_stage_2b<R: Banc>(x: &mut Cx<'_, R>) {
+    fn step_stage_2b<R: Bench>(x: &mut Cx<'_, R>) {
         tick_fade(x);
         place(x);
         finish_tick(x);
@@ -2117,7 +2117,7 @@ mod stage_title {
 
     /// Niveau 7, sous-état 0 : le fondu dure jusqu'à l'étape négative, où la palette finale
     /// (0x292120) est posée et le sous-état passe à 2.
-    fn step_stage_7<R: Banc>(x: &mut Cx<'_, R>) {
+    fn step_stage_7<R: Bench>(x: &mut Cx<'_, R>) {
         place(x);
         let n = x.u16(0x18).wrapping_sub(1);
         x.set16(0x18, n);
@@ -2157,7 +2157,7 @@ mod target {
     const FLAG_B: u32 = 0xff_2ac1;
     const VARIANT_A: u8 = 0x25;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
             0 => {
                 x.add8(0x4, 2);
@@ -2194,22 +2194,22 @@ mod target {
         }
     }
 
-    fn cam2_dx<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+    fn cam2_dx<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
         x.a5_u16(ram::CAMERA2_X).wrapping_sub(x.a5_u16(ram::CAMERA_X))
     }
 
-    fn cam2_dy<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+    fn cam2_dy<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
         x.a5_u16(ram::CAMERA2_Y).wrapping_sub(x.a5_u16(ram::CAMERA_Y))
     }
 
-    fn follow_camera2<R: Banc>(x: &mut Cx<'_, R>) {
+    fn follow_camera2<R: Bench>(x: &mut Cx<'_, R>) {
         let v = x.u16(0xa).wrapping_sub(cam2_dx(x));
         x.set16(0x8, v);
     }
 
     /// Le joueur `p` est-il dans le rectangle ? Si oui, `+0x15` = 1 ; une attaque en cours
     /// (`+0x58` > 0) compte un coup.
-    fn probe<R: Banc>(x: &mut Cx<'_, R>, p: Obj) {
+    fn probe<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
         let dx = x.u16(0x8).wrapping_sub(p.u16(x.b, 0x8)).wrapping_add(x.u16(0x16));
         if dx > x.u16(0x18) {
             return;
@@ -2236,14 +2236,14 @@ mod target {
         }
     }
 
-    fn hit<R: Banc>(x: &mut Cx<'_, R>, p: Obj) {
+    fn hit<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
         p.set_u8(x.b, 0x58, 0xff);
         let n = x.u8(0x14) + 1;
         x.set8(0x14, n);
         if n < HITS_TO_BREAK {
             return;
         }
-        crate::sound::jouer(x.b, SOUND, x.o);
+        crate::sound::play(x.b, SOUND, x.o);
         let flag = if x.u8(0x3) == VARIANT_A { FLAG_A } else { FLAG_B };
         wr8(x.b, flag, 1);
         x.add8(0x4, 2);
@@ -2251,19 +2251,19 @@ mod target {
 }
 
 handlers! {
-    0xdd61e "sobj_00" #[sans] scenery::run,
-    0xddc28 "sobj_01" #[sans] fixture::run,
-    0xdddb2 "sobj_02" #[sans] flasher::run,
-    0xdde18 "sobj_03" #[sans] tag::run,
-    0xdde8c "sobj_05" #[sans] ghost::run,
-    0xddec4 "sobj_06" #[sans] scene::run,
-    0xdf4d4 "sobj_07" #[sans] hint::run,
-    0xdf6b0 "sobj_08" #[sans] marker::run,
-    0xdf774 "sobj_09" #[sans] frame::run,
-    0xdf8ae "sobj_10" #[sans] arrow::run,
-    0xdfa68 "sobj_11" #[sans] badge::run,
-    0xdfca0 "sobj_12" #[sans] hud_dot::run,
-    0xdfd44 "sobj_13" #[sans] panel::run,
-    0xdfe3c "sobj_14" #[sans] stage_title::run,
-    0xe0258 "sobj_15" #[sans] target::run,
+    0xdd61e "sobj_00" #[without] scenery::run,
+    0xddc28 "sobj_01" #[without] fixture::run,
+    0xdddb2 "sobj_02" #[without] flasher::run,
+    0xdde18 "sobj_03" #[without] tag::run,
+    0xdde8c "sobj_05" #[without] ghost::run,
+    0xddec4 "sobj_06" #[without] scene::run,
+    0xdf4d4 "sobj_07" #[without] hint::run,
+    0xdf6b0 "sobj_08" #[without] marker::run,
+    0xdf774 "sobj_09" #[without] frame::run,
+    0xdf8ae "sobj_10" #[without] arrow::run,
+    0xdfa68 "sobj_11" #[without] badge::run,
+    0xdfca0 "sobj_12" #[without] hud_dot::run,
+    0xdfd44 "sobj_13" #[without] panel::run,
+    0xdfe3c "sobj_14" #[without] stage_title::run,
+    0xe0258 "sobj_15" #[without] target::run,
 }

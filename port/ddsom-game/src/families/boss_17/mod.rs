@@ -1,5 +1,5 @@
 //! Boss de type 17 (0x952b4), scènes 13 et 44 (h : « Tel'Arin » dans les noms de debug de l'atlas). Voir
-//! `docs/familles/boss.md`.
+//! `docs/families/boss.md`.
 //!
 //! Combattant à trois variantes (`+3`) : 0 est le boss de la scène 13 (arrivée en scène, combat, mort et
 //! cinématique de fin), 1 et 2 des apparitions annexes (scène 44). Charpente des ennemis (`+4` état, `+5`
@@ -16,7 +16,7 @@
 //! Animations : 0x18076e (mouvements), 0x1807a2 (coups), 0x1807c0 (recul). `+0xa0` est le jeu courant
 //! (0x30 à 0x34 : séquences spéciales, sans ombre ni test de zone) et `+0xa1` l'animation en cours.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -72,7 +72,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Jeux d'animations.
 pub(self) const SET_BODY: u32 = 0x18076e;
@@ -80,15 +80,15 @@ pub(self) const SET_STRIKE: u32 = 0x1807a2;
 pub(self) const SET_HURT: u32 = 0x1807c0;
 
 /// Lance l'animation `n` du jeu des mouvements / des coups par l'IA (`0x103d6`).
-pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_STRIKE, n);
 }
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -132,7 +132,7 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -174,7 +174,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = tst8(x, f::FREEZE);
     if freeze.gt() {
         sub8(x, f::FREEZE, 1);
@@ -194,7 +194,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+5` = 6, 8, 10 (0x96958) : attend que des joueurs reviennent.
-fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) as i8 > 0 {
         return decide::chase(x);
     }
@@ -212,7 +212,7 @@ fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x952b4 "boss_17" #[sans] run,
+    0x952b4 "boss_17" #[without] run,
     // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x96ce0 "boss_17_releve" hit::recovered_tail,
 }

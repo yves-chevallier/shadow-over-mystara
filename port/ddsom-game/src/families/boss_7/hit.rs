@@ -1,13 +1,13 @@
 //! Boss 7, état 4 « touché » (0x86baa). Groupes `+5` : 0 réaction (routine commune des ennemis choisie par le code de coup
 //! `+0x49` dans la table de longs 0x86c3a), 2 projeté, 4 chute, 6 mort, 8 et 10 retour au combat.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::aids;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::machine::Machine;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HIT_ACK, 0);
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
@@ -24,16 +24,16 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-fn step<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
+fn step<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch(x, table, f::SUB2)
 }
 
-fn paused<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn paused<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PAUSE.get(x.b) != 0
 }
 
 /// 0x86be6 : le coup est traité par la routine commune ; sans PV le boss meurt.
-fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set_bit(0x1, 1, false);
     }
@@ -56,7 +56,7 @@ fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x86ce6 : le boss est projeté en arrière, rebondit, puis se relève ou riposte.
-fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
+fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -97,8 +97,8 @@ fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
             let mask = rom32(x, 0x86dd6 + ((n as u16) << 2) as u32);
             // D5 = le masque (reste)
             *x.c.d5() = mask;
-            let alea = x.random();
-            let i = alea & 0x1f;
+            let rng = x.random();
+            let i = rng & 0x1f;
             setw(x, 0, i);
             if mask >> i & 1 == 0 {
                 x.set8(0, 1);
@@ -124,7 +124,7 @@ fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x86e10 : chute, attente au sol, relevé (en s'écartant si un joueur est trop près).
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x86e1c) {
         0x86e26 => {
             x.add8(f::SUB2, 2);
@@ -177,7 +177,7 @@ fn fall<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x86ed8 : mort (projection, atterrissage dans la poussière, fin de scène).
-fn death<R: Banc>(x: &mut Cx<'_, R>) {
+fn death<R: Bench>(x: &mut Cx<'_, R>) {
     // `move.w (tbl,PC,D0w),D0w ; jmp (tbl,PC,D0w)` : ici le décalage remplace D0 (D1 n'est pas touché)
     let i = x.u8(f::SUB2) as u32;
     let off = x.rom16(0x86ee6 + i);

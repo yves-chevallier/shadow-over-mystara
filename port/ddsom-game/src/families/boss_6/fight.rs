@@ -9,18 +9,18 @@
 //! | 8 | charge (vers la caméra, ou vers la position mémorisée de la cible si `+0xb2`) |
 //! | 10 | tir en bond : crée un ESHL 0x2a, saute et le lâche |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::decide;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Jeux d'animations de marche (0x103e0) : le premier si le boss ne regarde pas dans le sens où il avance.
 const WALK_SIDEWAYS: u32 = 0x177992;
 const WALK_FORWARD: u32 = 0x177a36;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => idle(x),
         2 => turn(x),
@@ -32,36 +32,36 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn players_alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn players_alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
-fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
-fn facing_forward<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn facing_forward<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::moving_forward(x)
 }
 
 /// Le boss est-il hors de la fenêtre `[caméra - 0x50, caméra + 0x1d0]` (0x104a2) ?
-fn off_screen<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn off_screen<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::outside_band(x, -0x50, 0x1d0)
 }
 
-fn walk_anim<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let n = if facing_forward(x) { 2 } else { 3 };
     body(x, n);
 }
 
-fn walk_select<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_select<R: Bench>(x: &mut Cx<'_, R>) {
     let set = if facing_forward(x) { WALK_FORWARD } else { WALK_SIDEWAYS };
     lib::switch_keeping_time(x, set);
 }
 
 // --- +6 = 0 -----------------------------------------------------------------------------------
 
-fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return decide::wait(x);
     }
@@ -89,7 +89,7 @@ fn idle<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 -----------------------------------------------------------------------------------
 
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         let side = x.u8(f::FLIP) ^ 0x20;
@@ -116,7 +116,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4, 6 : marche --------------------------------------------------------------------------
 
-fn walk<R: Banc>(x: &mut Cx<'_, R>, slow: bool) {
+fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
     if !players_alive(x) {
         return decide::wait(x);
     }
@@ -149,7 +149,7 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>, slow: bool) {
     }
 }
 
-fn keep_walking<R: Banc>(x: &mut Cx<'_, R>) {
+fn keep_walking<R: Bench>(x: &mut Cx<'_, R>) {
     if sub8(x, WALK_DELAY, 1).mi() {
         if sub8(x, WALK_STEPS, 1).le() {
             return decide::chase_b(x);
@@ -193,7 +193,7 @@ fn keep_walking<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 8 : charge ----------------------------------------------------------------------------
 
-fn charge<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -262,7 +262,7 @@ fn charge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x84930 : le boss est arrivé : il freine.
-fn charge_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set16(TIMER, 0x14);
     x.set16(COUNT, 0);
@@ -279,7 +279,7 @@ fn charge_end<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 10 : tir en bond ------------------------------------------------------------------------
 
-fn shoot<R: Banc>(x: &mut Cx<'_, R>) {
+fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -349,12 +349,12 @@ fn shoot<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn step_only<R: Banc>(x: &mut Cx<'_, R>) {
+fn step_only<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
 /// 0x84ad0 : fin du tir : retour à la marche.
-fn resume<R: Banc>(x: &mut Cx<'_, R>) {
+fn resume<R: Bench>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return decide::wait(x);
     }

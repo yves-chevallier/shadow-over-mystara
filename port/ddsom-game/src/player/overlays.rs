@@ -329,7 +329,7 @@ pub fn update(g: &mut Ctx) {
 }
 
 /// 0x392e4 : mise à jour des armes et boucliers des joueurs.
-pub fn mettre_a_jour(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn update_cpu(c: &mut Cpu, b: &mut Cps2Bus) {
     update(&mut Ctx::new(c, b));
 }
 
@@ -341,7 +341,7 @@ fn update_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const UPDATE: Native = Native {
     entry: 0x392e4,
     name: "player_overlays_update",
-    run: crate::Corps::Processeur(update_native),
+    run: crate::Body::Processeur(update_native),
     touches_sound: false,
     outputs: 0,
 };

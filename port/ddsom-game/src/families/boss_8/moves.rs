@@ -1,23 +1,23 @@
 //! Boss 8, groupes 6 et 8 : esquives (disparition et réapparition, pas de côté, bond, repli), lancées par `aids::after_attack`
 //! et les coups encaissés. Le groupe 6 tire deux variantes de l'étape 2 selon `+6`, le groupe 8 en a cinq.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::aids;
 use super::attacks::{leap_rest, leap_start};
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
-fn key<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
+fn key<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
 }
 
-fn step<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
+fn step<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch(x, table, f::SUB3)
 }
 
 /// 0x89030 : le boss s'efface (début commun des esquives).
-fn fade_out<R: Banc>(x: &mut Cx<'_, R>) {
+fn fade_out<R: Bench>(x: &mut Cx<'_, R>) {
     addq8(x, f::SUB3, 2);
     x.set8(PHASE_TIMER, 0x10);
     key(x, 0x12);
@@ -26,7 +26,7 @@ fn fade_out<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8909a : le boss reparaît quand le décompte est écoulé.
-fn fade_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn fade_in<R: Bench>(x: &mut Cx<'_, R>) {
     if sub16(x, TIMER, 1).mi() {
         addq8(x, f::SUB3, 2);
         x.set_bit(0x1, 1, false);
@@ -35,21 +35,21 @@ fn fade_in<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin des esquives : joue l'animation, puis passe à `state`.
-fn finish<R: Banc>(x: &mut Cx<'_, R>, state: u32) {
+fn finish<R: Bench>(x: &mut Cx<'_, R>, state: u32) {
     if x.anim_step() {
         x.set32(f::STATE, state);
     }
 }
 
 /// Réapparition : le boss est invisible (`bset 1`) 8 images, animation 5.
-fn reappear<R: Banc>(x: &mut Cx<'_, R>) {
+fn reappear<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, true);
     x.set16(TIMER, 8);
     body(x, 5);
 }
 
 /// 0x88f36 (`+5` = 6).
-pub(super) fn group6<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn group6<R: Bench>(x: &mut Cx<'_, R>) {
     let table = if dispatch(x, 0x88f44, f::SUB2) == 0x88f4c { 0x88f5a } else { 0x88f70 };
     match step(x, table) {
         0x89030 => fade_out(x),
@@ -78,7 +78,7 @@ pub(super) fn group6<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x88f78 (`+5` = 8).
-pub(super) fn group8<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn group8<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x88f86, f::SUB2) {
         0x88f90 => rest(x),
         0x8901a => match step(x, 0x89028) {
@@ -136,7 +136,7 @@ pub(super) fn group8<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x88f90 (`+6` = 0 du groupe 8) : attente debout, puis retour au combat.
-fn rest<R: Banc>(x: &mut Cx<'_, R>) {
+fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x88f9e, f::SUB3) {
         0x88fe2 => {
             if sub16(x, TIMER, 1).mi() {

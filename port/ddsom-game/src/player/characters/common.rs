@@ -21,7 +21,7 @@ use super::super::{animation, ram, Ctx, Player};
 use crate::mem::{wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::machine::Machine;
-use crate::player::externes as ext;
+use crate::player::external as ext;
 
 /// Octets de l'enregistrement joueur propres aux actions des personnages.
 pub mod field {
@@ -130,14 +130,14 @@ pub fn step_keeping_regs(g: &mut Ctx, p: Player, d0: u8) -> bool {
 pub fn weapon_voice(g: &mut Ctx, p: Player) {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_A) as u32;
-    crate::sound::jouer_avec(g.b, rom::WEAPON_VOICE, crate::sound::Source { objet: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
+    crate::sound::play_with(g.b, rom::WEAPON_VOICE, crate::sound::Source { object: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
 }
 
 /// Joue la voix de l'arme tenue à la main gauche (D4 = `WEAPON_B`, magicien).
 pub fn weapon_voice_b(g: &mut Ctx, p: Player) {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_B) as u32;
-    crate::sound::jouer_avec(g.b, rom::WEAPON_VOICE, crate::sound::Source { objet: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
+    crate::sound::play_with(g.b, rom::WEAPON_VOICE, crate::sound::Source { object: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
 }
 
 /// Démarre l'animation `n`, puis joue la voix de l'arme de la main gauche (`WEAPON_B`, magicien).
@@ -493,7 +493,7 @@ pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
     }
     let spark = g.c.a[1];
     wr16(g.b, spark + 0x0c, height);
-    g.son(rom::SPARK_SOUND, p);
+    g.sound(rom::SPARK_SOUND, p);
 }
 
 // ---- soins (clerc, potion de soin du combattant) -----------------------------------------------
@@ -675,7 +675,7 @@ fn jump_takeoff(g: &mut Ctx, p: Player, kit: &JumpKit) {
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
-    g.son(ext::son::JUMP_VOICE, p);
+    g.sound(ext::sound::JUMP_VOICE, p);
     let kind = p.u8(g, 0x67);
     launch_jump(g, p, kit.speeds, kind);
 }
@@ -740,7 +740,7 @@ pub fn land(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     let anim = by_jump_kind(g, p, 0x18, 0x13, 0xe);
     animation::start(g, p, anim);
-    g.son(ext::son::LANDING, p);
+    g.sound(ext::sound::LANDING, p);
 }
 
 /// Pas 8 : récupération, puis retour à l'état immobile.
@@ -791,7 +791,7 @@ pub fn dash(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, 0x1e8, 8);
                 animation::start(g, p, 0x1d);
-                g.son(ext::son::SLIDE, p);
+                g.sound(ext::sound::SLIDE, p);
             }
         }
         4 => {

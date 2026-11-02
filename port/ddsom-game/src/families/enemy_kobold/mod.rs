@@ -1,4 +1,4 @@
-//! Ennemi « Kobold » (ENEMY type 0, 0x54914). Voir `docs/familles/enemy.md`.
+//! Ennemi « Kobold » (ENEMY type 0, 0x54914). Voir `docs/families/enemy.md`.
 //!
 //! Le plus gros des ennemis : quatorze variantes d'arrivée (`+3`), quatre profils d'IA (`+0x2f`) et une vingtaine de
 //! gestes. Charpente des types 1 et 6 (squelette, chien) avec ses propres tables.
@@ -14,7 +14,7 @@
 //!
 //! Animations 0x15d4ae (mouvements) et 0x15d4ec (coups) ; `+0xa2/+0xa3` aspect courant et précédent.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -48,7 +48,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 pub(self) const SET_MOVE: u32 = 0x15d4ae;
 pub(self) const SET_STRIKE: u32 = 0x15d4ec;
@@ -56,7 +56,7 @@ pub(self) const STANCE: u32 = 0x0202_0000;
 pub(self) const HELD: u32 = 0x0408_0000;
 pub(self) const IDLE: u32 = 0x020a_0000;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -72,32 +72,32 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
-pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
 /// L'aspect voulu : `+0xa2` et son double `+0xa3`.
-pub(self) fn look<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
+pub(self) fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
-pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Direction de marche : 8 (regarde à gauche) ou 0x18.
-pub(self) fn set_angle<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn set_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Étape commune : attend la clé d'animation `+0x33` (0x54fae).
-pub(self) fn wait_key<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 0);
@@ -106,7 +106,7 @@ pub(self) fn wait_key<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// L'animation finie, le Kobold se met debout, tourné vers sa cible (0x54e9a).
-pub(self) fn stand_when_done<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn stand_when_done<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.anim_step() {
         return;
     }
@@ -115,7 +115,7 @@ pub(self) fn stand_when_done<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Un coup de poussière (0xb10c8) toutes les `mask + 1` images (le compteur `A5+0x6e` est masqué en place).
-pub(self) fn puff<R: Banc>(x: &mut Cx<'_, R>, mask: u16, d1: u16, d2: i16, d3: i16) {
+pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d1: u16, d2: i16, d3: i16) {
     let v = x.a5_u16(0x6e) & mask;
     x.set_a5_u16(0x6e, v);
     if v == 0 {
@@ -124,7 +124,7 @@ pub(self) fn puff<R: Banc>(x: &mut Cx<'_, R>, mask: u16, d1: u16, d2: i16, d3: i
 }
 
 /// 0x57b9c : l'ennemi doit se retourner pour faire face à sa cible (faux sans cible ni aspect mémorisé).
-pub(self) fn must_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -136,7 +136,7 @@ pub(self) fn must_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x57bee : la cible est à plus de 0x30 de profondeur et à plus de 0xa0 en X.
-pub(self) fn target_far_in_line<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -151,7 +151,7 @@ pub(self) fn target_far_in_line<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x57c34 : force du coup (`+0x45`) d'après le type de coup `+0x44` et le profil `+0x2f` (table 0x57c52).
-pub(self) fn set_power<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn set_power<R: Bench>(x: &mut Cx<'_, R>) {
     let kind = x.u8(STRIKE_KIND).wrapping_mul(4) as u32;
     let group = x.u8(GROUP) as u32;
     let p = x.data8(0x57c52 + kind + group);
@@ -159,7 +159,7 @@ pub(self) fn set_power<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x57c66 : l'ennemi est dans la moitié droite de l'écran (à 0xc0 de la caméra).
-pub(self) fn on_right_half<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn on_right_half<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
     let d1 = cam.wrapping_add(0xc0).wrapping_sub(x.u16(Obj::X));
     let right = (d1 as i16) <= 0;
@@ -168,7 +168,7 @@ pub(self) fn on_right_half<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x56c70 / 0x56c78 : choisit le coup suivant (`+6`) dans la ligne de la difficulté du profil `+0x2f` ;
 /// `bias` = 0x14 pour la série lointaine.
-pub(self) fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, bias: u8) {
+pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
     let profile = x.u8(GROUP).wrapping_mul(4) as u32;
     let table = if bias == 0 { 0x56d04 } else { 0x56d14 };
     let list = x.data32(table + profile);
@@ -185,7 +185,7 @@ pub(self) fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, bias: u8) {
 
 /// 0x57924 : fin d'un geste : le variant 0 se remet debout ; les autres, si la cible est dans une boîte de portée,
 /// enchaînent un coup de la série `0x5799c`.
-pub(self) fn after_strike<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::VARIANT) == 0 || x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
     }
@@ -203,7 +203,7 @@ pub(self) fn after_strike<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -262,7 +262,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -289,5 +289,5 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x54914 "enemy_0" #[sans] run,
+    0x54914 "enemy_0" #[without] run,
 }

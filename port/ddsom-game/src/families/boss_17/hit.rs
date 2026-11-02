@@ -8,11 +8,11 @@
 //! | 6, 8 | mort : chute, envol, fin (`+6` = 0 à 10) |
 //! | 10 | fin de relevé (reprend le milieu de `+5` = 4) |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::decide;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
@@ -23,7 +23,7 @@ const STUN_REACTION: u32 = 0x96ab8;
 const THRESHOLDS_A: u32 = 0x10ee2;
 const THRESHOLDS_B: u32 = 0x110e2;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else {
@@ -40,7 +40,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x975cc : plus de PV ? Passe alors au groupe 6 (mort) et rend vrai.
-fn out_of_hp<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn out_of_hp<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if tst16(x, f::HP).gt() {
         return false;
     }
@@ -49,7 +49,7 @@ fn out_of_hp<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         if x.u8(SLOW) != 0 {
             let mut add = x.u8(STUN);
@@ -77,7 +77,7 @@ fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x96ab8 : étourdissement : le boss tremble sur place puis repart.
-fn stun<R: Banc>(x: &mut Cx<'_, R>) {
+fn stun<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -116,7 +116,7 @@ fn stun<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 2 : recul -----------------------------------------------------------------------------
 
-fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -157,7 +157,7 @@ fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 4 : relevé ----------------------------------------------------------------------------
 
-fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
+fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -225,17 +225,17 @@ fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn body_hurt<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn body_hurt<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     body(x, n);
 }
 
 /// 0x96ee6 : fin de relevé (sans compter le coup).
-fn back_on_feet<R: Banc>(x: &mut Cx<'_, R>) {
+fn back_on_feet<R: Bench>(x: &mut Cx<'_, R>) {
     recovered_tail(x);
 }
 
 /// 0x96ce0 : le boss est debout ; choisit sa suite d'après sa phase.
-pub(crate) fn recovered_tail<R: Banc>(x: &mut Cx<'_, R>) {
+pub(crate) fn recovered_tail<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
     if !pick_target(x) {
@@ -278,7 +278,7 @@ pub(crate) fn recovered_tail<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 6, 8 : mort ---------------------------------------------------------------------------
 
-fn down<R: Banc>(x: &mut Cx<'_, R>) {
+fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             if x.u8(Obj::VARIANT) == 0 {

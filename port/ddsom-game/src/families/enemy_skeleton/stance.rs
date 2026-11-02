@@ -1,11 +1,11 @@
 //! Type 1, squelette debout (`+5 = 2`). `+6` : 0 et 6 début de l'idée (cible, regard), 2 marche,
 //! 4 demi-tour. Une idée qui dure (`+7 != 0`) marche vers la cible et décide d'attaquer.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
         return;
     }
@@ -50,7 +50,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x580ae : l'idée commence, le squelette se tourne vers sa cible.
-fn begin_idle<R: Banc>(x: &mut Cx<'_, R>) {
+fn begin_idle<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     x.set8(AI_SHOT, 0xb);
@@ -61,7 +61,7 @@ fn begin_idle<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6 = 2` : attend la fin de l'animation en marchant, puis tire l'idée suivante.
-fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         if x.u8(f::KEY_FRAME) != 0xff {
             move_xy(x);
@@ -84,7 +84,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6 = 4` : demi-tour (animation 1 puis inversion de l'orientation).
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         if x.u16(ANIM_STATE) != 0xff {
             move_xy(x);
@@ -105,7 +105,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x58126 : marche vers la cible ; décide de se retourner, d'attendre ou d'attaquer.
-fn walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     lib::walk_point_reached(x);
     let (y, z) = (x.u16(WALK_ARGS_Y), x.u16(WALK_ARGS_Z));
     lib::turn_toward(x, y, z);
@@ -135,7 +135,7 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x58194 : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
-fn attack_choice<R: Banc>(x: &mut Cx<'_, R>) {
+fn attack_choice<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SERIES) != 0 && lib::target_in_box(x, -0x20, 0x20, 0xc) {
         set_state_long(x, DASH);
         return x.set16(COUNTER, 0);
@@ -157,7 +157,7 @@ fn attack_choice<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x59254 : cible devant ; l'attaque est lancée si la décision par masque le veut.
-fn front_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn front_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let side = lib::target_in_front(x, -8, 0x68, 8);
     if !side.found() {
         return false;
@@ -171,7 +171,7 @@ fn front_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x592a4 : cible plus loin (boîte large) ; même décision, attaque de loin.
-fn far_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn far_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let side = lib::target_in_front(x, -0xa0, 0x30, 8);
     if !side.found() {
         return false;
@@ -185,7 +185,7 @@ fn far_attack<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Décision par masque (0xa4c2 si cible et squelette regardent du même côté, 0xa4b4 sinon).
-fn decision<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn decision<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }

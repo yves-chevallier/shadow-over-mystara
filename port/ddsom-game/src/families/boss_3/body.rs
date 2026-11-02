@@ -10,7 +10,7 @@ use m68k::decode::Size;
 use m68k::Cpu;
 
 use super::*;
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use crate::mem::{rd16, rts};
 
 /// Une forme : tranches (octets, relatives au PC) et lignes (hauteur, demi-profondeur, poussée ; données).
@@ -85,7 +85,7 @@ fn shove_side(b: &mut Cps2Bus, me: Obj, other: Obj) -> bool {
 
 /// 0x818b2 (`shape` = 1) et 0x819b0 (2) : le boss pousse chaque joueur présent, sauf l'elfe (classe 5) dans son
 /// état 0x1a.
-pub(super) fn push_players<R: Banc>(x: &mut Cx<'_, R>, shape: u8) {
+pub(super) fn push_players<R: Bench>(x: &mut Cx<'_, R>, shape: u8) {
     x.set8(BODY_SHAPE, shape);
     for k in 0..4u32 {
         let p = Obj(0xff85de + 0x200 * k);
@@ -125,7 +125,7 @@ fn native(c: &mut Cpu, b: &mut Cps2Bus, f: fn(&mut Cps2Bus, Obj, Obj) -> bool) {
 pub const SHOVE_FRONT: crate::Native = crate::Native {
     entry: 0x818e6,
     name: "boss_3_pousse_devant",
-    run: crate::Corps::Processeur(|c, b| native(c, b, shove_front)),
+    run: crate::Body::Processeur(|c, b| native(c, b, shove_front)),
     touches_sound: false,
     outputs: crate::regs::d(0) | crate::regs::CCR,
 };
@@ -133,7 +133,7 @@ pub const SHOVE_FRONT: crate::Native = crate::Native {
 pub const SHOVE_SIDE: crate::Native = crate::Native {
     entry: 0x819e2,
     name: "boss_3_pousse_cote",
-    run: crate::Corps::Processeur(|c, b| native(c, b, shove_side)),
+    run: crate::Body::Processeur(|c, b| native(c, b, shove_side)),
     touches_sound: false,
     outputs: crate::regs::d(0) | crate::regs::CCR,
 };

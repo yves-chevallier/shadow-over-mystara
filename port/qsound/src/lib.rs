@@ -60,7 +60,7 @@ impl Default for Fir {
 }
 
 /// Somme des produits (arithmétique modulo 2^32, comme le DSP).
-fn produit_scalaire(a: &[i16], b: &[i16]) -> i32 {
+fn dot_product(a: &[i16], b: &[i16]) -> i32 {
     a.iter().zip(b).fold(0i32, |s, (&x, &y)| s.wrapping_add(x as i32 * y as i32))
 }
 
@@ -73,13 +73,13 @@ impl Fir {
         // Les m premiers coefficients lisent le tampon à partir de delay_pos en le parcourant circulairement,
         // le dernier lit l'entrée. delay_pos revient à sa valeur, reçoit l'entrée puis avance.
         let (m, p) = (m as usize, self.delay_pos as usize);
-        let ligne = &self.delay_line[..m];
+        let line = &self.delay_line[..m];
         let taps = &self.taps[..m];
-        let mut somme = produit_scalaire(&taps[..m - p], &ligne[p..]).wrapping_add(produit_scalaire(&taps[m - p..], &ligne[..p]));
-        somme = somme.wrapping_add(self.taps[m] as i32 * input as i32);
+        let mut sum = dot_product(&taps[..m - p], &line[p..]).wrapping_add(dot_product(&taps[m - p..], &line[..p]));
+        sum = sum.wrapping_add(self.taps[m] as i32 * input as i32);
         self.delay_line[p] = input;
         self.delay_pos = if p + 1 >= m { 0 } else { p as i32 + 1 };
-        0i32.wrapping_sub(somme << 2)
+        0i32.wrapping_sub(sum << 2)
     }
 
     /// Version d'origine, pour les états anormaux (filtre non initialisé).

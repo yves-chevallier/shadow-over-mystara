@@ -1,4 +1,4 @@
-//! Boss de type 8 (0x87fc0), scène 64 : le deuxième guerrier noir (« DarkWarrior 2 »). Voir `docs/familles/boss.md`.
+//! Boss de type 8 (0x87fc0), scène 64 : le deuxième guerrier noir (« DarkWarrior 2 »). Voir `docs/families/boss.md`.
 //!
 //! Même charpente que les boss 17, 18 et 21 (`+4` état, `+5` groupe, `+6` et `+7` étapes, états posés d'un coup en
 //! longs, tirages dans des tables de la ROM) mais ses réactions aux coups sont les routines communes des ennemis
@@ -15,7 +15,7 @@
 //!
 //! Animations : 0x1790f6 (mouvements), 0x179116 (coups).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::mem::A5;
@@ -56,7 +56,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::machine::Machine;
 
 pub(self) const SET_BODY: u32 = 0x1790f6;
@@ -64,16 +64,16 @@ pub(self) const SET_STRIKE: u32 = 0x179116;
 
 pub(self) const WAIT: u32 = 0x020a_0000;
 
-pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
 /// Les restes D2 à D5 (relus par les gestionnaires suivants) ; D0, D1 et D6 ne sont relus par personne.
-fn reste<'a, R: Banc>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32> {
+fn remainder<'a, R: Bench>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32> {
     match n {
         2 => Some(x.c.d2()),
         3 => Some(x.c.d3()),
@@ -84,28 +84,28 @@ fn reste<'a, R: Banc>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32> {
 }
 
 /// Mot de poids faible d'un registre de données (`move.w`, `andi.w`...), gardé s'il est un reste.
-pub(self) fn setw<R: Banc>(x: &mut Cx<'_, R>, n: usize, v: u16) {
-    if let Some(r) = reste(x, n) {
+pub(self) fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
+    if let Some(r) = remainder(x, n) {
         *r = *r & 0xffff_0000 | v as u32;
     }
 }
 
 /// Octet de poids faible d'un registre de données, gardé s'il est un reste.
-pub(self) fn setb<R: Banc>(x: &mut Cx<'_, R>, n: usize, v: u8) {
-    if let Some(r) = reste(x, n) {
+pub(self) fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
+    if let Some(r) = remainder(x, n) {
         *r = *r & !0xff | v as u32;
     }
 }
 
 /// Saut par table relative (`move.w (tbl,PC,D0w),D1w ; jmp (tbl,PC,D1w)`) indexée par l'octet `idx` de l'objet :
 /// rend l'adresse d'arrivée.
-pub(self) fn dispatch<R: Banc>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
+pub(self) fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
     let off = x.rom16(table + i);
     table.wrapping_add(off as i16 as i32 as u32)
 }
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -151,7 +151,7 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -187,7 +187,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
     // points de vie « affaiblis » (seuil du ralenti) selon le nombre de joueurs
     let hp = x.u16(0x60);
     let (mut d1, d2) = (hp >> 1, hp >> 2);
-    // D2.w (le quart) reste dans le registre (`dispatch::Restes`)
+    // D2.w (le quart) reste dans le registre (`dispatch::Leftovers`)
     setw(x, 2, d2);
     let players = var::PLAYERS_ALIVE.get(x.b);
     if Fl::sub8(players, 1).gt() {
@@ -210,7 +210,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         lib::pick_target(x);
     }
@@ -255,13 +255,13 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-fn idle_reset<R: Banc>(x: &mut Cx<'_, R>) {
+fn idle_reset<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(IDLE_WAIT, 0x3c);
     x.set16(IDLE_TIME, 0x12c);
 }
 
 /// Trop longtemps sans combattre : le boss se redresse et attaque (état 2, groupe 4, étape tirée dans 0x88294).
-fn idle_attack<R: Banc>(x: &mut Cx<'_, R>) {
+fn idle_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(0x1, 1, false);
     x.set16(HITS, 0);
     x.set8(0x86, 0);
@@ -269,12 +269,12 @@ fn idle_attack<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(PHASE_TIMER, 0xa);
     x.set32(f::STATE, 0x0204_0000);
-    let alea = x.random();
-    let i = alea as u32 & 0xf;
+    let rng = x.random();
+    let i = rng as u32 & 0xf;
     let step = x.rom8(0x88294 + i);
     x.set8(f::SUB2, step);
 }
 
 handlers! {
-    0x87fc0 "boss_8" #[sans] run,
+    0x87fc0 "boss_8" #[without] run,
 }

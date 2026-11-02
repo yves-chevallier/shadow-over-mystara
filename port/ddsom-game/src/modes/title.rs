@@ -4,14 +4,14 @@
 //! une étape prépare des objets système (variantes de SOBJ, SET), attend qu'ils aient fini (champs du
 //! bloc d'état que les objets modifient par le pointeur `+0x4c` de l'objet) et passe à la suivante.
 //! Les attentes dans une étape (pool d'objets plein, fondu en cours) cèdent une image à
-//! l'ordonnanceur et reprennent à une étape Rust (`etapes!`).
+//! l'ordonnanceur et reprennent à une étape Rust (`steps!`).
 
 use super::{mode, Block, Flow, Sequence};
-use crate::scene::fondu;
-use crate::effects_aids::decor_6;
-use crate::families::creators::set_15_pur;
-use crate::palette::{charger_ensemble, charger_page};
-use crate::video::{charger_grille, effacer_couche, Couche, Grille};
+use crate::scene::fading;
+use crate::effects_aids::scenery_6;
+use crate::families::creators::set_15_pure;
+use crate::palette::{load_palette_set, load_palette_page};
+use crate::video::{load_grid, clear_layer, Layer, Grid};
 use crate::mem::{rd16, rd8, rd32, wr16, wr32, wr8};
 use crate::scene::Ctx;
 use crate::Native;
@@ -93,36 +93,36 @@ fn reset_objects(x: &mut Ctx) {
 /// Listes triées défaites (0x1f184) et listes de sprites vidées (0x1de7c).
 fn unlink_and_clear_lists(x: &mut Ctx) {
     crate::objects::lists::unlink_all(x.b);
-    crate::sprites::vider_listes(x.b);
+    crate::sprites::clear_lists(x.b);
 }
 
 /// Crée la tâche de fondu `entry` (emplacement 0x10), A0 gardé.
 fn start_fade_task(x: &mut Ctx, entry: u32) {
-    crate::kernel::creer_tache(x.b, 0x10, entry);
+    crate::kernel::create_task(x.b, 0x10, entry);
 }
 
 /// Réglages de fondu communs (délai, pages).
 fn fade_setup(x: &mut Ctx, delay: u16, pages: u8) {
-    fondu::DELAI.set(x.b, delay);
-    fondu::PAGES.set(x.b, pages);
+    fading::DELAY.set(x.b, delay);
+    fading::PAGES.set(x.b, pages);
 }
 
 /// Charge la palette de titre sur toutes les pages (début d'écran).
 fn load_title_palette(x: &mut Ctx) {
-    charger_page(x.b, 2, TITLE_PALETTE);
-    charger_page(x.b, 3, TITLE_PALETTE);
+    load_palette_page(x.b, 2, TITLE_PALETTE);
+    load_palette_page(x.b, 3, TITLE_PALETTE);
 }
 
 /// Copie deux blocs de tuiles de plan 1 puis deux de plan 2 (images du titre).
 fn load_title_tiles(x: &mut Ctx, a: u16, b: u16) {
-    two_blocks(x, Grille::Couche2, a, GFX_PLANE_1);
-    two_blocks(x, Grille::Couche3, b, GFX_TABLE_B);
+    two_blocks(x, Grid::Layer2, a, GFX_PLANE_1);
+    two_blocks(x, Grid::Layer3, b, GFX_TABLE_B);
 }
 
 /// Deux blocs de tuiles (`n`, `n + 1`) à la suite l'un de l'autre à partir de `destination` ; rend la fin.
-fn two_blocks(x: &mut Ctx, grille: Grille, n: u16, destination: u32) -> u32 {
-    let fin = charger_grille(x.b, grille, n, destination);
-    charger_grille(x.b, grille, n + 1, fin.destination).destination
+fn two_blocks(x: &mut Ctx, grid: Grid, n: u16, destination: u32) -> u32 {
+    let end = load_grid(x.b, grid, n, destination);
+    load_grid(x.b, grid, n + 1, end.destination).destination
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -154,26 +154,26 @@ fn title_step(x: &mut Ctx, step: u8) -> Flow {
 /// Étape 0 : remet tout à zéro, charge la palette et les images, affiche le fond.
 fn t00_reset(x: &mut Ctx) -> Flow {
     reset_objects(x);
-    crate::video::ecran_noir(x.b);
+    crate::video::black_screen(x.b);
     x.set_v16(var::LAYERS, 0x12c0);
-    x.wait(4, Etape::T00Load)
+    x.wait(4, Step::T00Load)
 }
 const T00_LOAD: u32 = 0xfa2fe;
-crate::etapes! {
+crate::steps! {
     /// Étapes (points de reprise) de la machine à états.
-    pub enum Etape {
+    pub enum Step {
         T00Load = T00_LOAD => |x| {
             x.set_v16(var::CAMERA_Y, 0x300);
             for off in [var::CAMERA_X, var::SCROLL_1_X, var::SCROLL_2_Y, var::CAMERA_2_X, var::CAMERA_2_Y] {
                 x.set_v16(off, 0);
             }
             load_title_palette(x);
-            charger_page(x.b, 1, 2);
-            charger_ensemble(x.b, 1);
+            load_palette_page(x.b, 1, 2);
+            load_palette_set(x.b, 1);
             load_title_tiles(x, 138, 403);
             x.render();
             x.or16(var::LAYERS, LAYER_BITS);
-            x.wait(1, Etape::T00Fade)
+            x.wait(1, Step::T00Fade)
         },
         T00Fade = T00_FADE => |x| {
             x.set_m8(f::TIMER, 30);
@@ -181,9 +181,9 @@ crate::etapes! {
             x.set_m8(0xd, 6);
             x.set_m8(f::CUE, 0);
             x.next_step();
-            crate::sound::jouer_global(x.b, ext::SOUND_E0EBC);
+            crate::sound::play_global(x.b, ext::SOUND_E0EBC);
             fade_setup(x, 3, FADE_PAGES_ALL);
-            crate::taches::fondu::montee(x)
+            crate::tasks::fading::rise(x)
         },
         T06Object = T06_OBJECT => t06_object,
         T06Retry = T06_RETRY => t06_object,
@@ -197,8 +197,8 @@ crate::etapes! {
         },
         T0aRetry = T0A_RETRY => |x| {
             // `bra 0xfa4e8` : retente sans reposer le drapeau
-            let Ok(set) = set_15_pur(x.b, 1) else {
-                return x.wait(1, Etape::T0aRetry);
+            let Ok(set) = set_15_pure(x.b, 1) else {
+                return x.wait(1, Step::T0aRetry);
             };
             wr32(x.b, set.0 + 0x4c, mode::BASE);
             x.next_step();
@@ -218,28 +218,28 @@ crate::etapes! {
             let mut tile = 480u16;
             let mut destination = GFX_PLANE_1;
             for _ in 0..4 {
-                destination = two_blocks(x, Grille::Couche2, tile, destination) + 0x800;
+                destination = two_blocks(x, Grid::Layer2, tile, destination) + 0x800;
                 tile += 2;
             }
             x.render();
             x.set_v16(var::LAYERS, 0x09ce);
-            x.wait(1, Etape::T12Fade)
+            x.wait(1, Step::T12Fade)
         },
         T12Fade = T12_FADE => |x| {
             fade_setup(x, 3, FADE_PAGES_ALL);
-            start_fade_task(x, crate::scene::fondu::MONTEE);
+            start_fade_task(x, crate::scene::fading::RISE);
             x.next_step();
             x.set_m16(f::SPEED, 0xb00);
             x.set_m16(f::ACCEL, 0xffe0);
             x.set_m16(f::TIMER, 60);
             // Glitch d'origine : la retenue n'est pas testée ; un échec garde l'A1 de l'allocation
-            let set = set_15_pur(x.b, 0).unwrap_or_else(|a1| a1);
+            let set = set_15_pure(x.b, 0).unwrap_or_else(|a1| a1);
             x.set_m16(f::OBJECT, set.0 as u16);
             Flow::Done
         },
         T18Retry = T18_RETRY => t18_object,
         T18Loop = T18_LOOP => |x| {
-            x.push_return(Etape::T18After);
+            x.push_return(Step::T18After);
             t18_sub(x)
         },
         T18After = T18_AFTER => |x| {
@@ -247,7 +247,7 @@ crate::etapes! {
             let link = x.m16(f::DONE);
             let o = link as i16 as i32 as u32 & 0xff_ffff;
             if rd8(x.b, o) != 0 {
-                return x.wait(1, Etape::T18Loop);
+                return x.wait(1, Step::T18Loop);
             }
             x.next_step();
             x.set_m16(f::TIMER, 60);
@@ -260,33 +260,33 @@ crate::etapes! {
         T1aRetry = T1A_RETRY => t1a_object,
         T1cText = T1C_TEXT => |x| {
             x.render();
-            crate::taches::invite::lancer(x.b);
+            crate::tasks::prompt::launch(x.b);
             x.set_m16(f::TIMER, 300);
             crate::text::print(x.b, 0xfacc4);
             let region = x.v16(var::REGION);
             let index = region.wrapping_add(region) as i16 as i32 as u32;
-            let texte = rd32(x.b, 0xfad92u32.wrapping_add(index));
-            crate::text::print(x.b, texte);
+            let text = rd32(x.b, 0xfad92u32.wrapping_add(index));
+            crate::text::print(x.b, text);
             Flow::Done
         },
-        T1eWait = T1E_FADED => |x| leave_wait(x, Etape::T1eWait, Etape::T1eCleared, false),
+        T1eWait = T1E_FADED => |x| leave_wait(x, Step::T1eWait, Step::T1eCleared, false),
         T1eCleared = T1E_CLEARED => |x| {
-            crate::taches::invite::arreter(x.b);
-            effacer_couche(x.b, Couche::Un);
-            effacer_couche(x.b, Couche::Deux);
+            crate::tasks::prompt::stop(x.b);
+            clear_layer(x.b, Layer::One);
+            clear_layer(x.b, Layer::Two);
             x.or16(var::LAYERS, LAYER_BITS);
-            x.wait(1, Etape::T1eDone)
+            x.wait(1, Step::T1eDone)
         },
         T1eDone = T1E_DONE => |x| {
             x.set_m16(f::TIMER, 300);
             // `jmp 0x1a60a`
-            charger_page(x.b, 1, 1);
+            load_palette_page(x.b, 1, 1);
             Flow::Done
         },
         S02Load = S02_LOAD => |x| {
             x.set_v8(var::SCREEN_TYPE, 1);
             load_title_palette(x);
-            charger_ensemble(x.b, 1);
+            load_palette_set(x.b, 1);
             fade_setup(x, 3, 13);
             crate::palette::full_brightness(x.b);
             x.or16(var::VIDEO_FLAGS, 1);
@@ -296,8 +296,8 @@ crate::etapes! {
             x.set_v16(var::CPS_COPY, 0x9200);
             x.set_v16(var::GAUGE_SKIP, 0);
             clear_sprite_area(x);
-            two_blocks(x, Grille::Couche2, 454, GFX_PLANE_2);
-            two_blocks(x, Grille::Couche3, 368, GFX_TABLE_B);
+            two_blocks(x, Grid::Layer2, 454, GFX_PLANE_2);
+            two_blocks(x, Grid::Layer3, 368, GFX_TABLE_B);
             s02_object(x)
         },
         S02Retry = S02_RETRY => |x| {
@@ -307,31 +307,31 @@ crate::etapes! {
             x.or16(var::LAYERS, LAYER_BITS);
             x.next_step();
             x.set_v16(var::SCROLL_2_Y, 0);
-            let _ = set_15_pur(x.b, 2);
-            x.wait(1, Etape::S02Palette)
+            let _ = set_15_pure(x.b, 2);
+            x.wait(1, Step::S02Palette)
         },
         S02Palette = S02_PALETTE => |x| {
-            crate::palette::charger_page_de_la_scene(x.b, 1);
-            fondu::PAGES.set(x.b, 2);
+            crate::palette::load_scene_page(x.b, 1);
+            fading::PAGES.set(x.b, 2);
             crate::palette::full_brightness(x.b);
             Flow::Done
         },
         S04Retry = S04_RETRY => s04_object,
         S04Show = S04_SHOW => |x| {
             x.render();
-            two_blocks(x, Grille::Blocs4x4, 7, GFX_PLANE_1_START);
+            two_blocks(x, Grid::Blocks4x4, 7, GFX_PLANE_1_START);
             Flow::Done
         },
-        S08Wait = S08_WAIT => |x| leave_wait(x, Etape::S08Wait, Etape::S08Cleared, true),
+        S08Wait = S08_WAIT => |x| leave_wait(x, Step::S08Wait, Step::S08Cleared, true),
         S08Cleared = S08_CLEARED => |x| {
-            for couche in [Couche::Un, Couche::Deux, Couche::Trois] {
-                effacer_couche(x.b, couche);
+            for layer in [Layer::One, Layer::Two, Layer::Three] {
+                clear_layer(x.b, layer);
             }
             x.set_v16(var::GAUGE_SKIP, 0);
             clear_sprite_area(x);
-            charger_page(x.b, 1, 1);
+            load_palette_page(x.b, 1, 1);
             x.or16(var::LAYERS, LAYER_BITS);
-            x.wait(1, Etape::S08Done)
+            x.wait(1, Step::S08Done)
         },
         S08Done = S08_DONE => |x| {
             x.set_m16(f::TIMER, 300);
@@ -349,7 +349,7 @@ fn t02_cue(x: &mut Ctx) -> Flow {
     if left != 0 {
         return Flow::Done;
     }
-    let Ok(Obj(obj)) = decor_6(x.b, 6) else {
+    let Ok(Obj(obj)) = scenery_6(x.b, 6) else {
         x.next_step();
         return Flow::Done;
     };
@@ -376,7 +376,7 @@ fn t04_fade_out(x: &mut Ctx) -> Flow {
     }
     x.next_step();
     fade_setup(x, 3, FADE_PAGES_ALL);
-    crate::taches::fondu::descente(x)
+    crate::tasks::fading::descent(x)
 }
 
 /// Étape 6 : fond d'écran suivant ; crée l'objet de variante 7 (attend si le pool est plein).
@@ -385,12 +385,12 @@ fn t06_start(x: &mut Ctx) -> Flow {
     x.set_m8(f::CUE, 1);
     x.render();
     x.and16(var::LAYERS, !LAYER_BITS);
-    x.wait(4, Etape::T06Object)
+    x.wait(4, Step::T06Object)
 }
 const T06_OBJECT: u32 = 0xfa472;
 fn t06_object(x: &mut Ctx) -> Flow {
-    let Ok(Obj(o)) = decor_6(x.b, 7) else {
-        return x.wait(1, Etape::T06Retry);
+    let Ok(Obj(o)) = scenery_6(x.b, 7) else {
+        return x.wait(1, Step::T06Retry);
     };
     x.set_m8(f::DONE, 1);
     wr32(x.b, o + 0x4c, mode::BASE);
@@ -406,9 +406,9 @@ fn t08_wait_flash(x: &mut Ctx) -> Flow {
     if x.m8(f::DONE) != 0 {
         return Flow::Done;
     }
-    fondu::PAGES.set(x.b, FADE_PAGES_ALL);
+    fading::PAGES.set(x.b, FADE_PAGES_ALL);
     crate::palette::full_brightness(x.b);
-    x.wait(4, Etape::T08Next)
+    x.wait(4, Step::T08Next)
 }
 const T08_NEXT: u32 = 0xfa4bc;
 
@@ -424,8 +424,8 @@ fn t0a_wait(x: &mut Ctx) -> Flow {
 }
 fn t0a_object(x: &mut Ctx) -> Flow {
     x.set_m8(f::DONE, 1);
-    let Ok(Obj(set)) = set_15_pur(x.b, 1) else {
-        return x.wait(1, Etape::T0aRetry);
+    let Ok(Obj(set)) = set_15_pure(x.b, 1) else {
+        return x.wait(1, Step::T0aRetry);
     };
     wr32(x.b, set + 0x4c, mode::BASE);
     x.next_step();
@@ -441,14 +441,14 @@ fn t0c_fade_task(x: &mut Ctx) -> Flow {
     }
     x.next_step();
     fade_setup(x, 3, FADE_PAGES_ALL);
-    start_fade_task(x, crate::scene::fondu::DESCENTE);
+    start_fade_task(x, crate::scene::fading::DESCENT);
     Flow::Done
 }
 
 /// Étape 14 : attend la fin du fondu (`A5+0x48f` nul).
 fn t0e_wait_fade(x: &mut Ctx) -> Flow {
     x.render();
-    if fondu::PAS.get(x.b) != 0 {
+    if fading::STEP.get(x.b) != 0 {
         return Flow::Done;
     }
     x.next_step();
@@ -461,12 +461,12 @@ fn t10_start(x: &mut Ctx) -> Flow {
     x.set_m8(f::CUE, 0xff);
     x.render();
     x.and16(var::LAYERS, !LAYER_BITS);
-    x.wait(4, Etape::T10Object)
+    x.wait(4, Step::T10Object)
 }
 const T10_OBJECT: u32 = 0xfa56e;
 fn t10_object(x: &mut Ctx) -> Flow {
-    let Ok(Obj(o)) = decor_6(x.b, 7) else {
-        return x.wait(1, Etape::T10Retry);
+    let Ok(Obj(o)) = scenery_6(x.b, 7) else {
+        return x.wait(1, Step::T10Retry);
     };
     x.set_m8(f::DONE, 1);
     wr32(x.b, o + 0x4c, mode::BASE);
@@ -482,9 +482,9 @@ fn t12_wait(x: &mut Ctx) -> Flow {
     if x.m8(f::DONE) != 0 {
         return Flow::Done;
     }
-    fondu::PAGES.set(x.b, FADE_PAGES_ALL);
+    fading::PAGES.set(x.b, FADE_PAGES_ALL);
     crate::palette::full_brightness(x.b);
-    x.wait(4, Etape::T12Scenery)
+    x.wait(4, Step::T12Scenery)
 }
 const T12_SCENERY: u32 = 0xfa5ba;
 const T12_FADE: u32 = 0xfa620;
@@ -541,18 +541,18 @@ fn t18_palette(x: &mut Ctx) -> Flow {
         }
         src += 32;
     }
-    fondu::PAGES.set(x.b, 1);
+    fading::PAGES.set(x.b, 1);
     crate::palette::full_brightness(x.b);
     t18_object(x)
 }
 fn t18_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Etape::T18Retry) };
+    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Step::T18Retry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 4);
     wr8(x.b, o + 3, 0x34);
     x.set_m16(f::DONE, o as u16);
     x.set_m16(f::TIMER, 80);
-    x.wait(1, Etape::T18Loop)
+    x.wait(1, Step::T18Loop)
 }
 /// Palette du logo : quatre blocs consécutifs de 32 octets dans la ROM.
 const LOGO_PALETTE: u32 = 0x2538c0;
@@ -571,7 +571,7 @@ fn t18_sub(x: &mut Ctx) -> Flow {
     t18_text_object(x)
 }
 fn t18_text_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { return x.wait(1, Etape::T18SubRetry) };
+    let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { return x.wait(1, Step::T18SubRetry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 0xf0);
@@ -583,7 +583,7 @@ fn t18_text_object(x: &mut Ctx) -> Flow {
     wr32(x.b, target + 4, 0x0600_0000);
     x.set_v16(var::SCROLL_2_Y, 0);
     x.set_v16(var::LAYERS, 0x12ce);
-    crate::sound::jouer_global(x.b, ext::OBJECT_LAUNCH);
+    crate::sound::play_global(x.b, ext::OBJECT_LAUNCH);
     Flow::Done
 }
 const T18_SUB_RETRY: u32 = 0xfa77c;
@@ -597,12 +597,12 @@ fn t1a_wait(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     x.next_step();
-    two_blocks(x, Grille::Blocs4x4, 7, GFX_PLANE_1_START);
-    crate::sound::jouer_global(x.b, ext::SOUND_E185C);
+    two_blocks(x, Grid::Blocks4x4, 7, GFX_PLANE_1_START);
+    crate::sound::play_global(x.b, ext::SOUND_E185C);
     t1a_object(x)
 }
 fn t1a_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Etape::T1aRetry) };
+    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Step::T1aRetry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 0x42);
@@ -627,35 +627,35 @@ fn t1c_wait_logo(x: &mut Ctx) -> Flow {
 pub fn title_text(x: &mut Ctx) -> Flow {
     // trois variantes (0xe6, 0xe5, 0xe4, octet bas en premier) placées d'après la caméra en service et la table
     // des décalages 0xfa8bc
-    const DECALAGES: u32 = 0xfa8bc;
+    const OFFSETS: u32 = 0xfa8bc;
     let camera = crate::mem::A5 + if x.v8(var::SCREEN_TYPE) != 0 { 0x54e } else { 0x4fe };
-    let mut variantes = 0x00e4_e5e6u32;
+    let mut variants = 0x00e4_e5e6u32;
     for k in 0..3 {
         let Some(Obj(o)) = pools::SOBJ.alloc(x.b) else { break };
         wr8(x.b, o, 1);
         wr8(x.b, o + 2, 0);
-        wr8(x.b, o + 3, variantes as u8);
-        variantes >>= 8;
+        wr8(x.b, o + 3, variants as u8);
+        variants >>= 8;
         let (px, py) = (rd16(x.b, camera + 8), rd16(x.b, camera + 12));
-        let (dx, dy) = (rd16(x.b, DECALAGES + 4 * k), rd16(x.b, DECALAGES + 4 * k + 2));
+        let (dx, dy) = (rd16(x.b, OFFSETS + 4 * k), rd16(x.b, OFFSETS + 4 * k + 2));
         wr16(x.b, o + 8, px.wrapping_add(dx));
         wr16(x.b, o + 12, py.wrapping_add(dy));
         wr32(x.b, o + 0x10, 0);
     }
-    x.wait(1, Etape::T1cText)
+    x.wait(1, Step::T1cText)
 }
 const T1C_TEXT: u32 = 0xfa88e;
 
 /// Étape 30 : après 300 images, fondu au noir (tâche), vide tout et passe au sous-mode suivant.
 fn t1e_end(x: &mut Ctx) -> Flow {
     x.render();
-    leave_screen(x, Etape::T1eWait)
+    leave_screen(x, Step::T1eWait)
 }
 const T1E_FADED: u32 = 0xfa90e;
 
 /// Fin d'écran commune aux deux titres : minuterie de 300 images, sous-mode suivant, fondu
 /// au noir par la tâche, puis nettoyage en trois temps.
-fn leave_screen(x: &mut Ctx, loop_resume: Etape) -> Flow {
+fn leave_screen(x: &mut Ctx, loop_resume: Step) -> Flow {
     let left = x.m16(f::TIMER).wrapping_sub(1);
     x.set_m16(f::TIMER, left);
     if left != 0 {
@@ -664,17 +664,17 @@ fn leave_screen(x: &mut Ctx, loop_resume: Etape) -> Flow {
     let s = rd8(x.b, mode::SUB).wrapping_add(2);
     wr8(x.b, mode::SUB, s);
     wr8(x.b, mode::BASE + f::STEP, 0);
-    fondu::PAS.set(x.b, 1);
-    fondu::DELAI.set(x.b, 4);
-    fondu::PAGES.set(x.b, FADE_PAGES_ALL);
-    start_fade_task(x, crate::scene::fondu::DESCENTE);
+    fading::STEP.set(x.b, 1);
+    fading::DELAY.set(x.b, 4);
+    fading::PAGES.set(x.b, FADE_PAGES_ALL);
+    start_fade_task(x, crate::scene::fading::DESCENT);
     x.wait(1, loop_resume)
 }
 
 /// Attente de la fin du fondu (`A5+0x48f`), puis effacement et cession de 16 images.
-fn leave_wait(x: &mut Ctx, loop_resume: Etape, cleared: Etape, second_title: bool) -> Flow {
+fn leave_wait(x: &mut Ctx, loop_resume: Step, cleared: Step, second_title: bool) -> Flow {
     x.render();
-    if fondu::PAS.get(x.b) != 0 {
+    if fading::STEP.get(x.b) != 0 {
         return x.wait(1, loop_resume);
     }
     // l'original libère les pools dans un ordre différent selon l'écran
@@ -684,7 +684,7 @@ fn leave_wait(x: &mut Ctx, loop_resume: Etape, cleared: Etape, second_title: boo
         pool.reset(x.b);
     }
     unlink_and_clear_lists(x);
-    crate::video::vider_objets(x.b);
+    crate::video::clear_objects(x.b);
     if second_title {
         x.set_v8(var::SCREEN_TYPE, 0);
         x.and16(var::VIDEO_FLAGS, !1);
@@ -701,7 +701,7 @@ const T1E_DONE: u32 = 0xfa96e;
 fn second_title_step(x: &mut Ctx, step: u8) -> Flow {
     match step {
         0 => {
-            crate::taches::invite::arreter(x.b);
+            crate::tasks::prompt::stop(x.b);
             x.next_step();
             reset_objects(x);
             Flow::Done
@@ -711,7 +711,7 @@ fn second_title_step(x: &mut Ctx, step: u8) -> Flow {
         6 => s06_wait_logo(x),
         8 => {
             x.render();
-            leave_screen(x, Etape::S08Wait)
+            leave_screen(x, Step::S08Wait)
         }
         // la table 0xfaf00 a cinq entrées, toutes réécrites (code-mort.md, lot « sortie du Cpu »)
         _ => unreachable!("second titre : étape {step:#x} hors de la table 0xfaf00"),
@@ -724,18 +724,18 @@ fn s02_setup(x: &mut Ctx) -> Flow {
     for off in [var::CAMERA_X, var::CAMERA_Y, var::CAMERA_2_X, var::CAMERA_2_Y] {
         x.set_v32(off, 0);
     }
-    x.wait(4, Etape::S02Load)
+    x.wait(4, Step::S02Load)
 }
 const S02_LOAD: u32 = 0xfaf5c;
 fn s02_object(x: &mut Ctx) -> Flow {
-    let Ok(Obj(o)) = decor_6(x.b, 9) else {
-        return x.wait(1, Etape::S02Retry);
+    let Ok(Obj(o)) = scenery_6(x.b, 9) else {
+        return x.wait(1, Step::S02Retry);
     };
     x.set_m8(f::CUE, 0);
     wr32(x.b, o + 0x4c, mode::BASE);
     x.set_m16(f::DONE, o as u16);
     x.render();
-    x.wait(2, Etape::S02Show)
+    x.wait(2, Step::S02Show)
 }
 const S02_RETRY: u32 = 0xfaff8;
 const S02_SHOW: u32 = 0xfb012;
@@ -758,13 +758,13 @@ fn s04_wait_object(x: &mut Ctx) -> Flow {
     s04_object(x)
 }
 fn s04_object(x: &mut Ctx) -> Flow {
-    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Etape::S04Retry) };
+    let Some(Obj(o)) = pools::SET.alloc(x.b) else { return x.wait(1, Step::S04Retry) };
     wr8(x.b, o, 1);
     wr8(x.b, o + 2, 0);
     wr8(x.b, o + 3, 0x44);
     wr8(x.b, o + 0x2f, 3);
     x.set_m16(f::OBJECT, o as u16);
-    x.wait(1, Etape::S04Show)
+    x.wait(1, Step::S04Show)
 }
 const S04_RETRY: u32 = 0xfb064;
 const S04_SHOW: u32 = 0xfb088;

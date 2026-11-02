@@ -1,4 +1,4 @@
-//! Ennemi « Troglodyte » (ENEMY type 2, 0x59baa). Voir `docs/familles/enemy.md`.
+//! Ennemi « Troglodyte » (ENEMY type 2, 0x59baa). Voir `docs/families/enemy.md`.
 //!
 //! Charpente commune : `+4` état (0 création, 2 actif, 4 touché, 6 libération), `+5` groupe de
 //! comportements, `+6` et `+7` étapes. En état actif :
@@ -16,7 +16,7 @@
 //! Animations : 0x15faa0 (mouvements) et 0x15fabe (coups). La série 0 (`+0x2f`) clignote après un
 //! coup encaissé : `flicker` (compteurs `+0xa5..+0xa8`, `+0xaa`, `+0xae`).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -59,7 +59,7 @@ pub(self) mod g {
 }
 
 use g::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Jeux d'animations : mouvements et coups.
 const SET_BODY: u32 = 0x15faa0;
@@ -78,7 +78,7 @@ const BLINK_TIMES: u32 = 0x5b96c;
 /// Vitesses de marche par série (2 mots par série).
 const WALK_SPEEDS: u32 = 0x5af64;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -94,49 +94,49 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- aides ------------------------------------------------------------------------------------
 
-fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
 /// Direction de marche selon l'orientation : `flipped` si `+0x2c` est non nul, `otherwise` sinon.
-fn set_angle<R: Banc>(x: &mut Cx<'_, R>, flipped: u8, otherwise: u8) {
+fn set_angle<R: Bench>(x: &mut Cx<'_, R>, flipped: u8, otherwise: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { otherwise };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
-fn move_xy<R: Banc>(x: &mut Cx<'_, R>) {
+fn move_xy<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
 /// Ligne de 32 octets de la difficulté dans `table` (`A5+0x7f92`).
-fn difficulty_row<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn difficulty_row<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     (((var::RANK.get(x.b) >> 1) << 5) as u32) & 0xffff
 }
 
 /// Octet tiré au hasard dans la ligne de la difficulté de `table` (A4 = ligne, D0 = indice).
-fn pick_byte<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u8 {
+fn pick_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = difficulty_row(x);
     let n = rand_and(x, 0x1f);
     x.data8(table + row + n)
 }
 
 /// 0x5af4e : choisit la table de vitesses selon la série (`idx` : 0, 2 ou 4).
-fn walk_speed<R: Banc>(x: &mut Cx<'_, R>, idx: u32) {
+fn walk_speed<R: Bench>(x: &mut Cx<'_, R>, idx: u32) {
     let series = x.u8(SERIES) as u32;
     let n = x.data16(WALK_SPEEDS + ((series << 2) & 0xff) + idx);
     x.select_speed(&crate::objects::motion::SPEEDS_B, n);
 }
 
 /// Un joueur dans la boîte ? Les deux décisions par masque (0xa4c2, 0xa4b4) doivent accepter.
-fn box_attack<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
+fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     let ok = lib::target_in_box(x, d0, d1, d2) && {
         load_target(x);
         lib::decision_b(x)
@@ -147,17 +147,17 @@ fn box_attack<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
 }
 
 /// 0x5afa0 : cible devant, à portée courte.
-fn front_box<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn front_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_attack(x, 0, 0x70, 8)
 }
 
 /// 0x5af90 : cible derrière ou loin devant.
-fn side_box<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn side_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_attack(x, -0xb5, 0x35, 0x15)
 }
 
 /// 0x5afda : la cible est de l'autre côté de l'orientation.
-fn needs_turn_around<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -169,7 +169,7 @@ fn needs_turn_around<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x5af78 : retour debout ; si la décision 0x79ce le veut, au repos.
-fn back_to_stance<R: Banc>(x: &mut Cx<'_, R>) {
+fn back_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
@@ -177,7 +177,7 @@ fn back_to_stance<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin des coups : le suivant est tiré dans la ligne de la difficulté (0x5bb74).
-fn end_attack<R: Banc>(x: &mut Cx<'_, R>) {
+fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_KIND, 0xff);
     let row = difficulty_row(x);
     let n = rand_and(x, 0x1f);
@@ -188,7 +188,7 @@ fn end_attack<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Le clignotement est lancé s'il ne l'est pas déjà (série 0, phase positive).
-fn blink_if_running<R: Banc>(x: &mut Cx<'_, R>) {
+fn blink_if_running<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SERIES) == 0 && (x.u8(BLINK_PHASE) as i8) > 0 {
         x.set8(BLINK_ON, 1);
         x.set16(BLINK_COUNT, 0xc);
@@ -198,7 +198,7 @@ fn blink_if_running<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -232,7 +232,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     let dispatch = if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -267,7 +267,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Clignotement de la série 0 (0x59d02) : `+0xa5` est la phase (0xff : au repos, décompte `+0xae` ; 0 : lance le
 /// clignotement ; positive : alterne la visibilité `+1` bit 1).
-fn flicker<R: Banc>(x: &mut Cx<'_, R>) {
+fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
     let phase = x.u8(BLINK_PHASE) as i8;
     if phase == 0 {
         x.add8(BLINK_PHASE, 1);
@@ -302,7 +302,7 @@ fn flicker<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5b940 : durée d'invisibilité tirée au hasard.
-fn pick_blink_delay<R: Banc>(x: &mut Cx<'_, R>) {
+fn pick_blink_delay<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(BLINK_WAIT, 1);
     let mut d2 = var::RANK.get(x.b);
     d2 = d2 & 0xff00 | (d2 as u8 >> 1) as u16;
@@ -315,7 +315,7 @@ fn pick_blink_delay<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 0 : arrivée selon la variante `+3` (0 marche, 1 chute, 2 bond, 3 et 4 saut, 5 réveil).
-fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
+fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => {
             if x.u8(f::SUB2) != 0 {
@@ -428,7 +428,7 @@ fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x59f38 : l'animation d'arrivée finie, le troglodyte se met debout.
-fn end_arrival<R: Banc>(x: &mut Cx<'_, R>) {
+fn end_arrival<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         x.set8(LOOK_PREV, 0xe0);
         set_state_long(x, STANCE);
@@ -437,7 +437,7 @@ fn end_arrival<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5a010 : aspect de repos et animation 0xe.
-fn rest_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn rest_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set8(LOOK_PREV, 1);
     body(x, 0xe);
@@ -445,10 +445,10 @@ fn rest_begin<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 6 : libération ------------------------------------------------------------------------
 
-fn dead<R: Banc>(x: &mut Cx<'_, R>) {
+fn dead<R: Bench>(x: &mut Cx<'_, R>) {
     free(x);
 }
 
 handlers! {
-    0x59baa "enemy_2" #[sans] run,
+    0x59baa "enemy_2" #[without] run,
 }

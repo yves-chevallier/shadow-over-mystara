@@ -1,18 +1,18 @@
 //! Type 19, déplacements de la bête : charges et bonds (`+5 = 8`, 0x73c92), entrée en scène
 //! (`+5 = 10`, 0x73efe) et sortie (`+5 = 12`, 0x73f98).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::parts::{bound_land, bound_wait, bound_y_land, bound_y_wait, finish_to_stance};
 use super::stance::engage;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 // --- sous-état 8 : charges et bonds -------------------------------------------------------------
 
 /// Reprise après un demi-tour : état actif, sous-état 8 (charge), `+7 = 4`.
 const RESUME_CHARGE: u32 = 0x0208_0004;
 
-pub(super) fn charge<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 6 => stand(x),
         2 => leap_to_player(x),
@@ -22,7 +22,7 @@ pub(super) fn charge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Repos debout pendant 16 images avant de repartir (0x73ca6).
-fn stand<R: Banc>(x: &mut Cx<'_, R>) {
+fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -51,7 +51,7 @@ fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn stand_pose<R: Banc>(x: &mut Cx<'_, R>) {
+fn stand_pose<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(WANT_ANIM, 0);
     x.set8(CUR_ANIM, 0);
     x.set8(VULNERABLE, 1);
@@ -59,7 +59,7 @@ fn stand_pose<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x73d3c : bond vers un joueur, de face (marche) ou par-dessus.
-pub(super) fn jump_toward<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn jump_toward<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     if random(x) & 1 == 0 {
         x.add8(0x7, 4);
@@ -81,7 +81,7 @@ pub(super) fn jump_toward<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x73402 : le bond se déroule ; à la fin du délai la bête se remet en garde.
-pub(super) fn jump_wait<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn jump_wait<R: Bench>(x: &mut Cx<'_, R>) {
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);
     if (t as i8) >= 0 {
@@ -92,14 +92,14 @@ pub(super) fn jump_wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7343a : fin du bond.
-pub(super) fn jump_end<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn jump_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         back_on_guard(x);
     }
 }
 
 /// La bête retombe en garde et teste aussitôt la portée de sa cible (0x72c96).
-fn back_on_guard<R: Banc>(x: &mut Cx<'_, R>) {
+fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, 0x0202_0002);
     x.set8(WANT_ANIM, 0xc);
     play(x, 8);
@@ -107,7 +107,7 @@ fn back_on_guard<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 (0x73d26) : bond vers un joueur, de face.
-fn leap_to_player<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_to_player<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => jump_toward(x),
         2 => {
@@ -127,7 +127,7 @@ fn leap_to_player<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 (0x73e08) : bond vers un joueur par-dessus, en profondeur.
-fn leap_over_player<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_over_player<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.set8(VULNERABLE, 1);
@@ -175,7 +175,7 @@ fn leap_over_player<R: Banc>(x: &mut Cx<'_, R>) {
 // --- sous-état 10 : entrée en scène -------------------------------------------------------------
 
 /// La bête tombe du haut de l'écran, se relève, puis attend qu'un joueur soit vivant.
-pub(super) fn enter<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn enter<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -216,7 +216,7 @@ pub(super) fn enter<R: Banc>(x: &mut Cx<'_, R>) {
 // --- sous-état 12 : sortie ----------------------------------------------------------------------
 
 /// Une pièce quitte la scène : animation de sortie, puis bond vers le haut jusqu'à disparaître.
-pub(super) fn leave<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

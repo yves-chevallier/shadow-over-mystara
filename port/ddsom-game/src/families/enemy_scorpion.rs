@@ -1,4 +1,4 @@
-//! Ennemi « GiantScorpion » (ENEMY type 10, 0x6681c). Voir `docs/familles/enemy.md`.
+//! Ennemi « GiantScorpion » (ENEMY type 10, 0x6681c). Voir `docs/families/enemy.md`.
 //!
 //! Variantes `+3` : 0 debout, 1 et 4 tombent d'en haut, 2 et 3 entrent en volant par un bord, 5 est le nid qui
 //! engendre des scorpions (liste `+0x2f`) et attend d'être visible. Les valeurs `+6` d'arrivée (2, 4, 6, 8)
@@ -15,7 +15,7 @@
 //! L'état touché a son propre recul (pas de table de réaction commune). Animations 0x163da8 (mouvements),
 //! 0x163db8 (charge) et 0x163dba (touché).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -40,7 +40,7 @@ mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Tables de la ROM (le suffixe dit l'espace de lecture : opcodes pour les `(table,PC,Dn)`, données sinon).
 const SPAWN_LISTS: u32 = 0x669d6;
@@ -60,7 +60,7 @@ const REACH: u32 = 0x0208_0000;
 const HELD: u32 = 0x0404_0000;
 const DEAD: u32 = 0x0600_0000;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -75,12 +75,12 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-fn anim_play<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn anim_play<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(ANIMS, n as u16);
 }
 
 /// Hauteur de départ d'une chute : l'objet apparaît au-dessus de l'écran.
-fn drop_from_above<R: Banc>(x: &mut Cx<'_, R>) {
+fn drop_from_above<R: Bench>(x: &mut Cx<'_, R>) {
     let cam = var::SCROLL_Y.get(x.b).wrapping_add(0x100);
     let depth = x.u16(Obj::Y);
     x.set16(Obj::Z, cam.wrapping_sub(depth));
@@ -89,12 +89,12 @@ fn drop_from_above<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Abscisse de la caméra selon le mode (`A5+0x36` : second écran).
-fn camera_x<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn camera_x<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) }
 }
 
 /// 0x67808 : avance en X et en profondeur selon les vitesses (virgule fixe 8.8).
-fn advance<R: Banc>(x: &mut Cx<'_, R>) {
+fn advance<R: Bench>(x: &mut Cx<'_, R>) {
     for (pos, speed) in [(Obj::X, Obj::VX), (Obj::Y, Obj::VY)] {
         let d = ((x.u16(speed) as u32) << 16) as i32 >> 8;
         x.add32(pos, d as u32);
@@ -102,7 +102,7 @@ fn advance<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6771a : choisit le geste (`+0xa6`) dans la ligne de la difficulté.
-fn pick_move<R: Banc>(x: &mut Cx<'_, R>) {
+fn pick_move<R: Bench>(x: &mut Cx<'_, R>) {
     let row = ((var::RANK.get(x.b) >> 2) << 4) as u32;
     let r = rand_and(x, 0xf);
     let v = x.data8(MOVE_PICK + row + r);
@@ -110,27 +110,27 @@ fn pick_move<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x677e8 : durée du geste (`+0xa2`) selon le rang `d0` et le geste.
-fn set_timer<R: Banc>(x: &mut Cx<'_, R>, d0: u32) {
+fn set_timer<R: Bench>(x: &mut Cx<'_, R>, d0: u32) {
     let idx = ((d0 << 2) & !0xff) | (((d0 << 2) as u8).wrapping_add(x.u8(MOVE)) as u32);
     let t = x.rom8(TIMER_ROW + idx);
     x.set8(TIMER, t);
 }
 
 /// 0x677de : durée tirée au hasard (rang 0 à 3).
-fn random_timer<R: Banc>(x: &mut Cx<'_, R>) {
+fn random_timer<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 3);
     set_timer(x, r);
 }
 
 /// 0x670d2 : table de vitesses du geste.
-fn speed_row<R: Banc>(x: &mut Cx<'_, R>) {
+fn speed_row<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = x.u8(MOVE) as u32;
     let d0 = x.rom8(SPEED_ROW + idx);
     x.select_speed(&crate::objects::motion::SPEEDS_B, (d0 as u32) as u16);
 }
 
 /// Choix du coup suivant dans la ligne de la difficulté : tire `+6` = 2 + octet de la table.
-fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
+fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     x.add8(f::SUB2, 2);
     let row = ((var::RANK.get(x.b) >> 2) << 4) as u32;
     let r = rand_and(x, 0xf);
@@ -141,7 +141,7 @@ fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -214,7 +214,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(FROZEN, 1);
@@ -237,7 +237,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 0 : l'arrivée dépend de `+6` (posé à la création selon la variante).
-fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
+fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         2 => land(x, |x| {
             x.add8(f::SUB, 2);
@@ -260,7 +260,7 @@ fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Chute : tant que l'altitude est positive ; à l'atterrissage `done` change de sous-état.
-fn land<'a, R: Banc>(x: &mut Cx<'a, R>, done: impl FnOnce(&mut Cx<'a, R>)) {
+fn land<'a, R: Bench>(x: &mut Cx<'a, R>, done: impl FnOnce(&mut Cx<'a, R>)) {
     x.move_xz();
     if (x.u16(Obj::Z) as i16) > 0 {
         return;
@@ -270,7 +270,7 @@ fn land<'a, R: Banc>(x: &mut Cx<'a, R>, done: impl FnOnce(&mut Cx<'a, R>)) {
 }
 
 /// Variante 2 : entrée en vol (animation 6), atterrissage (animation 7), reprise de la marche.
-fn fly_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn fly_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 | 4 => {
             x.anim_step();
@@ -297,7 +297,7 @@ fn fly_in<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 2 : debout. `+6` = 0 libre, 2 enfant d'un parent (`+0x5c`), 4 enfant libre.
-fn stance<R: Banc>(x: &mut Cx<'_, R>) {
+fn stance<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => free_stance(x),
         2 => {
@@ -312,7 +312,7 @@ fn stance<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn free_stance<R: Banc>(x: &mut Cx<'_, R>) {
+fn free_stance<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
@@ -326,7 +326,7 @@ fn free_stance<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x674ca : tire le prochain sous-état d'attaque dans la ligne de la difficulté.
-fn choose_attack<R: Banc>(x: &mut Cx<'_, R>) {
+fn choose_attack<R: Bench>(x: &mut Cx<'_, R>) {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let r = rand_and(x, 0x1f);
     let v = x.data8(ATTACK_TABLE + row + r);
@@ -337,7 +337,7 @@ fn choose_attack<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Marche : aller (animation 1), demi-tour (4), retour.
-fn walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -383,7 +383,7 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>) {
 // --- sous-états 4 et 10 : coups ----------------------------------------------------------------
 
 /// Sous-état 4 : `+6` = 0 tirage, 2 et 4 déplacements d'attaque, 6 demi-tour puis charge.
-fn melee<R: Banc>(x: &mut Cx<'_, R>) {
+fn melee<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         pick_attack(x, ATTACK_PICK_A);
     }
@@ -414,7 +414,7 @@ fn melee<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 10 : même tirage avec une autre table ; `+6` = 2, 4, 6 déplacements, 8 pause.
-fn melee_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn melee_b<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         pick_attack(x, ATTACK_PICK_B);
     }
@@ -457,13 +457,13 @@ fn melee_b<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Direction de marche d'un geste : 8 ou 0x18 selon l'orientation ; `forward` pour avancer vers le côté regardé.
-fn face<R: Banc>(x: &mut Cx<'_, R>, forward: bool) {
+fn face<R: Bench>(x: &mut Cx<'_, R>, forward: bool) {
     let flipped = x.u8(f::FLIP) != 0;
     x.set8(Obj::SPEED_INDEX, if flipped == forward { 8 } else { 0x18 });
 }
 
 /// 0x66f00 : vitesse et animation du geste, puis suite commune.
-fn attack_move<R: Banc>(x: &mut Cx<'_, R>) {
+fn attack_move<R: Bench>(x: &mut Cx<'_, R>) {
     speed_row(x);
     let n = 1 + x.u8(MOVE) as u32;
     anim_play(x, n);
@@ -471,7 +471,7 @@ fn attack_move<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x66f1c : avance, décompte et fin du geste.
-fn attack_tail<R: Banc>(x: &mut Cx<'_, R>) {
+fn attack_tail<R: Bench>(x: &mut Cx<'_, R>) {
     advance(x);
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
@@ -482,7 +482,7 @@ fn attack_tail<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 4, `+6` = 6 : se tourne vers la cible, puis lance le geste.
-fn turn_and_charge<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn_and_charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => face_target(x),
         2 => wait_turn(x),
@@ -497,7 +497,7 @@ fn turn_and_charge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x67052 : angle vers la cible ; s'il est du côté regardé, animation 4 et attente, sinon étape 4.
-fn face_target<R: Banc>(x: &mut Cx<'_, R>) {
+fn face_target<R: Bench>(x: &mut Cx<'_, R>) {
     let target = load_target(x);
     let angle = lib::aim_to(x, target);
     x.set8(Obj::SPEED_INDEX, angle);
@@ -511,7 +511,7 @@ fn face_target<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x67088 : à la fin de l'animation de virage, l'orientation s'inverse.
-fn wait_turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_turn<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(ANIM_FLAGS) as i16) < 0 {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
@@ -522,7 +522,7 @@ fn wait_turn<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 6 : attente ---------------------------------------------------------------------
 
-fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         let r = rand_and(x, 0xf);
@@ -541,7 +541,7 @@ fn idle<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 8 : coup spécial ---------------------------------------------------------------
 
-fn charge<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => face_target(x),
         2 => wait_turn(x),
@@ -572,7 +572,7 @@ fn charge<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 4 : touché ----------------------------------------------------------------------------
 
-fn hit<R: Banc>(x: &mut Cx<'_, R>) {
+fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -587,7 +587,7 @@ fn hit<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-fn knock_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn knock_back<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     let freeze = x.u8(0x56);
     x.set8(f::FREEZE, freeze);
@@ -606,7 +606,7 @@ fn knock_back<R: Banc>(x: &mut Cx<'_, R>) {
     zone_and_terrain(x);
 }
 
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.move_xz();
@@ -640,7 +640,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 4 : saisi par un joueur, le scorpion court vers le bord de l'écran le plus proche.
-fn grabbed_flight<R: Banc>(x: &mut Cx<'_, R>) {
+fn grabbed_flight<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -685,12 +685,12 @@ fn grabbed_flight<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x673e4 : le scorpion court (animation 2) pendant 0xff images au plus.
-fn run_off<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_off<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set8(EXIT_TIMER, 0xff);
     anim_play(x, 2);
 }
 
 handlers! {
-    0x6681c "enemy_10" #[sans] run,
+    0x6681c "enemy_10" #[without] run,
 }

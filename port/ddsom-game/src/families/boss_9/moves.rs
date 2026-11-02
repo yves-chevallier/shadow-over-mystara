@@ -1,14 +1,14 @@
 //! Boss 9, état actif : entrée en scène (`+5` = 0), départ (2), passages et arrêts (4), attente (6).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 // --- groupe 0 : entrée en scène --------------------------------------------------------------------
 
 /// 0x8a96a : l'équipage monte, dialogue, l'engin traverse l'écran puis revient en marche arrière.
-pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         2 => board(x),
         4 => {
@@ -109,18 +109,18 @@ pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Abscisse de la caméra du plan de l'engin.
-fn x_cam<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn x_cam<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     x.a5_u16(CAM_X)
 }
 
 /// L'engin roule (0x1d78) et ses roues tournent (0x1a56).
-pub(super) fn roll<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn roll<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_x();
     anim(x);
 }
 
 /// 0x8a992 : l'équipage monte (quatre servants ENEMY 0x13, variante 2 : `+0xbc` = 5 à 2), s'il y a la place.
-fn board<R: Banc>(x: &mut Cx<'_, R>) {
+fn board<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.a5_u16(ENEMY_FREE) as i16) < 4 {
         return;
     }
@@ -147,7 +147,7 @@ fn board<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 2 : départ ---------------------------------------------------------------------------
 
 /// 0x8abc2 : panache de fumée (SET 2, variante 0xe), puis départ du premier passage.
-pub(super) fn start<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn start<R: Bench>(x: &mut Cx<'_, R>) {
     if let Some(s) = x.alloc(&pools::SET) {
         s.set_u8(x.b, 0, 1);
         s.set_u8(x.b, 3, 0xe);
@@ -157,7 +157,7 @@ pub(super) fn start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8abdc : (re)départ : premier passage (`+5` = 4).
-pub(super) fn restart<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn restart<R: Bench>(x: &mut Cx<'_, R>) {
     lib::set_immunities(x);
     x.set8(0, 1);
     x.add8(f::SUB, 2);
@@ -174,7 +174,7 @@ pub(super) fn restart<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 4 : passages et arrêts ------------------------------------------------------------
 
 /// 0x8ac14 : fumée de l'avarie (une fois) ; sans servants, l'engin attend leur remplacement ; sinon l'étape `+6`.
-pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SMOKE_DONE) == 0 && sub16(x, SMOKE_DELAY, 1).mi() {
         x.set8(SMOKE_DONE, 1);
         if let Some(s) = x.alloc(&pools::SET) {
@@ -208,7 +208,7 @@ pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8acaa : un passage d'un bord à l'autre (après `+0x6e` images d'attente).
-fn pass<R: Banc>(x: &mut Cx<'_, R>) {
+fn pass<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         if sub8(x, WAIT, 1).pl() {
             return;
@@ -258,14 +258,14 @@ fn pass<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Au bord : demi-tour, et l'équipage perdu est remplacé.
-fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     let side = x.u8(f::FLIP) ^ 0x20;
     x.set8(f::FLIP, side);
     refill_crew(x, false);
 }
 
 /// 0x8adfc : roule jusqu'à l'abscisse d'arrêt, attend `+0xbe` images, puis s'arrête pour tirer selon la cible.
-fn approach<R: Banc>(x: &mut Cx<'_, R>) {
+fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -321,7 +321,7 @@ fn approach<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8aed8 / 0x8af4c : arrêt de tir selon la portée de la cible ; hors de portée, nouveau passage.
-fn choose_halt<R: Banc>(x: &mut Cx<'_, R>) {
+fn choose_halt<R: Bench>(x: &mut Cx<'_, R>) {
     match target_range(x) {
         0 => draw_halt(x, 0xe),
         2 => steps(x, 0, 2),
@@ -330,7 +330,7 @@ fn choose_halt<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8c952 : avarie de tir (bit 0 de `+0xa8`) : l'arrêt est sauté ; vrai.
-fn cannon_broken<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn cannon_broken<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.bit(DAMAGE, 0) {
         steps(x, 2, 4);
         return true;
@@ -339,7 +339,7 @@ fn cannon_broken<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8c960 : avarie de bombardement (bits 3 ou 4) ; vrai.
-fn bombard_broken<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn bombard_broken<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.bit(DAMAGE, 3) || x.bit(DAMAGE, 4) {
         steps(x, 2, 4);
         return true;
@@ -348,7 +348,7 @@ fn bombard_broken<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8af74 : arrêt, ordre de tir aux parties (bit 0 de `+0xa9`).
-fn fire_order<R: Banc>(x: &mut Cx<'_, R>) {
+fn fire_order<R: Bench>(x: &mut Cx<'_, R>) {
     if cannon_broken(x) {
         return;
     }
@@ -359,7 +359,7 @@ fn fire_order<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8af94 : attend la fin du tir, puis repart.
-fn fire_wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn fire_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.bit(ORDERS, 0) {
         if crew_gone(x) {
             return;
@@ -370,7 +370,7 @@ fn fire_wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8af62 / 0x8b3bc : tir.
-fn fire<R: Banc>(x: &mut Cx<'_, R>) {
+fn fire<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         fire_order(x)
     } else {
@@ -379,7 +379,7 @@ fn fire<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Monte et descend en profondeur (`+0x1c`) entre 0x40 et 0x70 pendant que l'équipage tient.
-fn sway<R: Banc>(x: &mut Cx<'_, R>) {
+fn sway<R: Bench>(x: &mut Cx<'_, R>) {
     count_crew(x);
     if x.u8(CREW_COUNT) != 0 {
         let z = x.u16(0x10) as i16;
@@ -397,7 +397,7 @@ fn sway<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8afd6 : tir en se déplaçant en profondeur.
-fn bob<R: Banc>(x: &mut Cx<'_, R>) {
+fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if cannon_broken(x) {
@@ -437,7 +437,7 @@ fn bob<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8b100 : vers la profondeur de la cible (`+0x1c`), et nombre de bombardements.
-fn aim_lane<R: Banc>(x: &mut Cx<'_, R>) {
+fn aim_lane<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x14, 0);
     x.set16(0x16, 0);
     x.set8(COUNT, 0);
@@ -453,7 +453,7 @@ fn aim_lane<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8b13e : ordre de bombardement (bits 3 et 4 de `+0xa9`).
-fn bomb_order<R: Banc>(x: &mut Cx<'_, R>) {
+fn bomb_order<R: Bench>(x: &mut Cx<'_, R>) {
     if bombard_broken(x) {
         return;
     }
@@ -466,7 +466,7 @@ fn bomb_order<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8b0ea : bombardements répétés en se déplaçant en profondeur.
-fn bomb<R: Banc>(x: &mut Cx<'_, R>) {
+fn bomb<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => aim_lane(x),
         2 => bomb_order(x),
@@ -490,7 +490,7 @@ fn bomb<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8b226 / 0x8b454 : bombardement puis tir.
-fn bomb_then_fire<R: Banc>(x: &mut Cx<'_, R>) {
+fn bomb_then_fire<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => bomb_order(x),
         2 => {
@@ -505,7 +505,7 @@ fn bomb_then_fire<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8b328 / 0x8b33a : arrêt de `ticks` images.
-fn halt<R: Banc>(x: &mut Cx<'_, R>, ticks: u16) {
+fn halt<R: Bench>(x: &mut Cx<'_, R>, ticks: u16) {
     if x.u8(0x7) == 0 {
         next7(x);
         x.set16(TIMER, ticks);
@@ -522,7 +522,7 @@ fn halt<R: Banc>(x: &mut Cx<'_, R>, ticks: u16) {
 }
 
 /// 0x8b3ce : tirs répétés (`+0xb9` salves).
-fn volley<R: Banc>(x: &mut Cx<'_, R>) {
+fn volley<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -544,7 +544,7 @@ fn volley<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 6 : attente --------------------------------------------------------------------------
 
 /// 0x8b46a : un joueur revient : départ.
-pub(super) fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(GAIT, 2);
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return anim(x);

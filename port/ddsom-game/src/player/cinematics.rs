@@ -15,7 +15,7 @@ use crate::mem::{rd16, rd32, wr32, A5};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
 use crate::machine::Machine;
-use crate::player::externes as ext;
+use crate::player::external as ext;
 
 type Handler = fn(&mut Ctx, Player);
 
@@ -144,7 +144,7 @@ fn rank(g: &mut Ctx, p: Player) -> u32 {
 fn victory_pose(g: &mut Ctx, p: Player) {
     let anim = if p.u8(g, 0x18a) != 0 { 36 } else { 35 };
     animation::start(g, p, anim);
-    g.son(ext::son::FANFARE, p);
+    g.sound(ext::sound::FANFARE, p);
 }
 
 /// Pas suivant et pose de victoire.
@@ -596,7 +596,7 @@ const END_247B2: Steps = &[
         let anim = if p.u8(g, 0x18a) != 0 { 36 } else { 35 };
         animation::start(g, p, anim);
         reset_speed_class(g, p);
-        g.son(ext::son::FANFARE, p);
+        g.sound(ext::sound::FANFARE, p);
     }),
     (0x2480c, |g, p| {
         if scene_step(g) == 12 {
@@ -932,7 +932,7 @@ fn anim_0(g: &mut Ctx, p: Player) {
     animation::start(g, p, 0);
 }
 
-/// Mot de la table `table` pour le rang du joueur (index `2 × rang`, octet).
+/// Mot de la table `table` pour le rang du joueur (index `2 × rank`, octet).
 fn per_rank16(g: &mut Ctx, p: Player, table: u32) -> u16 {
     let index = (p.u8(g, RANK).wrapping_mul(2)) as u32;
     g.prog16(table + index)
@@ -1046,8 +1046,8 @@ const INTRO_24FE2: Steps = &[
         p.set_u8(g, ARMED, 1);
         animation::start(g, p, 51);
         if p.u8(g, RANK) == 0 {
-            g.son(0xeaa58, p);
-            g.son(0xe0c5c, p);
+            g.sound(0xeaa58, p);
+            g.sound(0xe0c5c, p);
         }
     }),
     (0x2509a, |g, p| {

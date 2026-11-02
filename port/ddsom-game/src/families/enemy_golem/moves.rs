@@ -1,13 +1,13 @@
 //! Type 11, sous-états 6 (gestes de repli : bonds, accroupi, sortie d'écran) et 8 (attente, bond latéral).
 //! Chacun commence par le drapeau de coup `+0x8f` (`hit_gate`).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::attacks::squat_begin;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run_c<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run_c<R: Bench>(x: &mut Cx<'_, R>) {
     if !hit_gate(x) {
         return;
     }
@@ -31,7 +31,7 @@ pub(super) fn run_c<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x68080 : minuterie `+0xa2` puis debout.
-fn countdown_stance<R: Banc>(x: &mut Cx<'_, R>) {
+fn countdown_stance<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u16(TIMER).wrapping_sub(1);
     x.set16(TIMER, n);
     if n == 0 {
@@ -40,7 +40,7 @@ fn countdown_stance<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x680ee : attend la clé d'animation.
-fn wait_key<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if x.u8(f::KEY_FRAME) == 0 {
         return;
@@ -49,7 +49,7 @@ fn wait_key<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x68146 : attend la fin de l'animation, puis debout.
-fn end_stance<R: Banc>(x: &mut Cx<'_, R>) {
+fn end_stance<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if (x.u16(ANIM_END) as i16) < 0 {
         set_state_long(x, STANCE);
@@ -57,7 +57,7 @@ fn end_stance<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : bond en arrière (vitesses latérales ±0x200).
-fn back_hop<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
+fn back_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
         2 => wait(x),
@@ -102,7 +102,7 @@ fn back_hop<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
 }
 
 /// +6 = 4 : bond en avant (vitesse ±0x200).
-fn forward_hop<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
+fn forward_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
         2 => wait(x),
@@ -149,7 +149,7 @@ fn forward_hop<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
 }
 
 /// +6 = 6 : bond avec coup de poing en l'air.
-fn punch_hop<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
+fn punch_hop<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
         2 => wait(x),
@@ -201,7 +201,7 @@ fn punch_hop<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
 }
 
 /// +6 = 8 : accroupi (tirage ou profil), puis retour debout.
-fn squat_again<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
+fn squat_again<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => next_anim(x),
         2 => wait(x),
@@ -232,7 +232,7 @@ fn squat_again<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
 }
 
 /// +6 = 10 : sortie d'écran à pied (vitesse −0x230 vers le bord le plus proche), puis disparition.
-fn leave<R: Banc>(x: &mut Cx<'_, R>) {
+fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.set16(Obj::VX, -0x230i16 as u16);
         x.set8(f::FLIP, 0);
@@ -258,7 +258,7 @@ fn leave<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 8 --------------------------------------------------------------------------------------
 
-pub(super) fn run_d<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run_d<R: Bench>(x: &mut Cx<'_, R>) {
     if !hit_gate(x) {
         return;
     }
@@ -302,7 +302,7 @@ pub(super) fn run_d<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 : pas latéral en profondeur ou bond latéral (au hasard).
-fn sidestep<R: Banc>(x: &mut Cx<'_, R>, step: u8) {
+fn sidestep<R: Bench>(x: &mut Cx<'_, R>, step: u8) {
     match step {
         0 => {
             x.add8(f::SUB3, 2);

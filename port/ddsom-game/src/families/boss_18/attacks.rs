@@ -13,12 +13,12 @@
 //! | 18 | pluie de 16 tirs ESHL 0x23 |
 //! | 20 | tirs successifs ESHL 0x24 (nombre tiré d'une table) |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::decide;
 use super::*;
 use crate::objects::pools;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => strike_0(x),
         2 => sidestep(x),
@@ -35,26 +35,26 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn strike_anim<R: Banc>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
+fn strike_anim<R: Bench>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
     strike(x, n);
 }
 
 /// Fin d'attaque : l'absence de joueurs l'emporte ; sinon `to`.
-fn finish<'a, R: Banc>(x: &mut Cx<'a, R>, to: fn(&mut Cx<'a, R>)) {
+fn finish<'a, R: Bench>(x: &mut Cx<'a, R>, to: fn(&mut Cx<'a, R>)) {
     if !lib::players_alive(x) {
         return decide::wait(x);
     }
     to(x);
 }
 
-fn step_only<R: Banc>(x: &mut Cx<'_, R>) {
+fn step_only<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
 /// Consomme le bit 0 de l'image-clé `+0x33`.
-fn key_bit0<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn key_bit0<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(f::KEY_FRAME) & 1 == 0 {
         return false;
     }
@@ -64,13 +64,13 @@ fn key_bit0<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Fin d'un tir : l'état de la scène est rendu (`A5+0x43`), puis `to`.
-fn end_shot<'a, R: Banc>(x: &mut Cx<'a, R>, to: fn(&mut Cx<'a, R>)) {
+fn end_shot<'a, R: Bench>(x: &mut Cx<'a, R>, to: fn(&mut Cx<'a, R>)) {
     set_abs8(x, 0xff8043, 0xff);
     finish(x, to);
 }
 
 /// Un pas de l'animation, plus un dernier effet par image-clé (0xe5e2a).
-fn step_with_spark<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn step_with_spark<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::step(x) {
         if key_bit0(x) {
             lib::sound(x, 0xe5e2a);
@@ -82,7 +82,7 @@ fn step_with_spark<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 // --- +6 = 0 : coup simple -----------------------------------------------------------------------
 
-fn strike_0<R: Banc>(x: &mut Cx<'_, R>) {
+fn strike_0<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -100,7 +100,7 @@ fn strike_0<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 : pas de côté -----------------------------------------------------------------------
 
-fn sidestep<R: Banc>(x: &mut Cx<'_, R>) {
+fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -153,7 +153,7 @@ fn sidestep<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : geste ------------------------------------------------------------------------------
 
-fn gesture<R: Banc>(x: &mut Cx<'_, R>) {
+fn gesture<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -193,7 +193,7 @@ fn gesture<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 6 : poursuite magique ------------------------------------------------------------------
 
-fn chase_spell<R: Banc>(x: &mut Cx<'_, R>) {
+fn chase_spell<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -243,14 +243,14 @@ fn chase_spell<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn end_chase<R: Banc>(x: &mut Cx<'_, R>) {
+fn end_chase<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AIM_ON, 0);
     finish(x, decide::chase);
 }
 
 // --- +6 = 8 : bond en arrière --------------------------------------------------------------------
 
-fn hop_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -301,7 +301,7 @@ fn hop_back<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 10 : boule (ESHL 0x20) ----------------------------------------------------------------
 
-fn ball<R: Banc>(x: &mut Cx<'_, R>) {
+fn ball<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -360,7 +360,7 @@ fn ball<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 12 : rayon (ESHL 0x21) ----------------------------------------------------------------
 
-fn beam<R: Banc>(x: &mut Cx<'_, R>) {
+fn beam<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -434,7 +434,7 @@ fn beam<R: Banc>(x: &mut Cx<'_, R>) {
 // --- +6 = 14 : onde de choc ----------------------------------------------------------------------
 
 /// 0x9931a : un nuage (effet 0x32, variante 15) derrière le Lich.
-fn dust<R: Banc>(x: &mut Cx<'_, R>) {
+fn dust<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(e) = x.alloc(&pools::EFFCT) else { return };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, 0x32);
@@ -457,7 +457,7 @@ fn dust<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9921c : à la troisième pulsation, les joueurs au sol qui ne sont pas déjà à terre sont renversés.
-fn topple_all<R: Banc>(x: &mut Cx<'_, R>) {
+fn topple_all<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(COUNT) != 3 {
         return;
     }
@@ -475,7 +475,7 @@ fn topple_all<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x99274 : lâche des projectiles autour de la caméra (0x5f764) tant qu'aucun n'est en jeu.
-fn spawn_blast<R: Banc>(x: &mut Cx<'_, R>) {
+fn spawn_blast<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(SPAWNED) as i8) > 0 {
         return;
     }
@@ -492,7 +492,7 @@ fn spawn_blast<R: Banc>(x: &mut Cx<'_, R>) {
         let py = dy.wrapping_add(var::CAMERA1_Y.get(x.b));
         // (D0, D1, D2) = (x, 0, y) ; D2 (mot bas) reste
         *x.c.d2() = *x.c.d2() & 0xffff_0000 | py as u32;
-        if crate::families::creators::enemy_5_at_pur(x.b, x.o, (px, 0, py)).is_some() {
+        if crate::families::creators::enemy_5_at_pure(x.b, x.o, (px, 0, py)).is_some() {
             x.add8(SPAWNED, 1);
         }
         if d5 == 0 {
@@ -504,7 +504,7 @@ fn spawn_blast<R: Banc>(x: &mut Cx<'_, R>) {
     *x.c.d5() = *x.c.d5() & 0xffff_0000 | 0xffff;
 }
 
-fn shockwave<R: Banc>(x: &mut Cx<'_, R>) {
+fn shockwave<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -578,7 +578,7 @@ fn shockwave<R: Banc>(x: &mut Cx<'_, R>) {
 // --- +6 = 16 : téléportation ----------------------------------------------------------------------
 
 /// 0x99184 : réapparition dans l'un des neuf points autour de la caméra, selon la position du Lich.
-fn place_after_teleport<R: Banc>(x: &mut Cx<'_, R>) {
+fn place_after_teleport<R: Bench>(x: &mut Cx<'_, R>) {
     let cam = var::CAMERA1_X.get(x.b).wrapping_add(0xc0);
     let here = x.u16(0x8);
     let mut d5 = 0u32;
@@ -605,7 +605,7 @@ fn place_after_teleport<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(0xc, 0);
 }
 
-fn teleport<R: Banc>(x: &mut Cx<'_, R>) {
+fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -650,7 +650,7 @@ fn teleport<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 18 : pluie d'effets ----------------------------------------------------------------------
 
-fn rain<R: Banc>(x: &mut Cx<'_, R>) {
+fn rain<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -708,7 +708,7 @@ fn rain<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 20 : tirs successifs ----------------------------------------------------------------------
 
-fn volley<R: Banc>(x: &mut Cx<'_, R>) {
+fn volley<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -764,4 +764,4 @@ fn volley<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 use crate::objects::Obj;
-use crate::objects::Courant;
+use crate::objects::Current;

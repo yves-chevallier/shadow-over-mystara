@@ -305,7 +305,7 @@ pub fn op_expr(op: &Op) -> String {
         Not(z, a) => format!("Op::Not({}, {})", size(z), ea(a)),
         Clr(z, a) => format!("Op::Clr({}, {})", size(z), ea(a)),
         Tst(z, a) => format!("Op::Tst({}, {})", size(z), ea(a)),
-        Tas(a) => format!("Op::Tas({})", ea(a)),
+        Heap(a) => format!("Op::Tas({})", ea(a)),
         Ext(z, r) => format!("Op::Ext({}, {r})", size(z)),
         Swap(r) => format!("Op::Swap({r})"),
         Exg(m, x, y) => format!("Op::Exg({m}, {x}, {y})"),

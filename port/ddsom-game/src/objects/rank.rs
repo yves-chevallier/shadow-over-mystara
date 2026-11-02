@@ -59,7 +59,7 @@ pub fn load_preset(b: &mut Cps2Bus, row: u8) {
 }
 
 /// 0x1f238 : les réglages de la ligne `A5+0x2a`, puis `reset`.
-pub fn charger_preset(b: &mut Cps2Bus) {
+pub fn load_current_preset(b: &mut Cps2Bus) {
     let row = rd8(b, A5 + PRESET_ROW);
     load_preset(b, row);
     reset(b);
@@ -122,42 +122,42 @@ pub fn lower(b: &mut Cps2Bus) {
 
 // ---- adaptation aux registres du 68000 ----
 
-/// Registres que laissent les routines d'origine (voir `diag::registres_morts`, étiquette `rank`).
+/// Registres que laissent les routines d'origine (voir `diag::dead_regs`, étiquette `rank`).
 pub const REGS_RANK: u32 = regs::d(0) | regs::d(1) | regs::a(0) | regs::a(1) | regs::a(4) | regs::CCR;
 
 /// `reset` avec les registres de l'original (A0 = structure).
 #[track_caller]
 pub fn reset_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     reset_regs(c, b);
-    crate::diag::registres_morts(c, "rank", REGS_RANK);
+    crate::diag::dead_regs(c, "rank", REGS_RANK);
 }
 
 /// `load_preset` de la ligne `A5+0x2a` puis `reset`, avec les registres de l'original.
 #[track_caller]
 pub fn load_preset_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     load_preset_regs(c, b);
-    crate::diag::registres_morts(c, "rank", REGS_RANK);
+    crate::diag::dead_regs(c, "rank", REGS_RANK);
 }
 
 /// `tick` avec les registres de l'original (D0 = rang, A0 = structure).
 #[track_caller]
 pub fn tick_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     tick_regs(c, b);
-    crate::diag::registres_morts(c, "rank", REGS_RANK);
+    crate::diag::dead_regs(c, "rank", REGS_RANK);
 }
 
 /// `raise` avec les registres de l'original (D0 = rang).
 #[track_caller]
 pub fn raise_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     raise_regs(c, b);
-    crate::diag::registres_morts(c, "rank", REGS_RANK);
+    crate::diag::dead_regs(c, "rank", REGS_RANK);
 }
 
 /// `lower` avec les registres de l'original (D0 = rang, D1 = baisse, A1 = table des baisses).
 #[track_caller]
 pub fn lower_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     lower_regs(c, b);
-    crate::diag::registres_morts(c, "rank", REGS_RANK);
+    crate::diag::dead_regs(c, "rank", REGS_RANK);
 }
 
 /// 0x1f258 : `reset`. Laisse A0 = structure.
@@ -276,7 +276,7 @@ fn lower_regs(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const RANK_RESET: Native = Native {
     entry: 0x1f258,
     name: "rank_reset",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         reset_regs(c, b);
         rts(c, b);
     }),
@@ -287,7 +287,7 @@ pub const RANK_RESET: Native = Native {
 pub const RANK_LOAD_PRESET: Native = Native {
     entry: 0x1f1b8,
     name: "rank_load_preset",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         load_preset_regs(c, b);
         rts(c, b);
     }),
@@ -298,7 +298,7 @@ pub const RANK_LOAD_PRESET: Native = Native {
 pub const RANK_RAISE: Native = Native {
     entry: 0x1f2c0,
     name: "rank_raise",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         raise_regs(c, b);
         rts(c, b);
     }),
@@ -309,7 +309,7 @@ pub const RANK_RAISE: Native = Native {
 pub const RANK_LOWER: Native = Native {
     entry: 0x1f300,
     name: "rank_lower",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         lower_regs(c, b);
         rts(c, b);
     }),
@@ -320,7 +320,7 @@ pub const RANK_LOWER: Native = Native {
 pub const RANK_TICK: Native = Native {
     entry: 0x1f27c,
     name: "rank_tick",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         tick_regs(c, b);
         rts(c, b);
     }),

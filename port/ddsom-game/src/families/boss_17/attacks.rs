@@ -11,14 +11,14 @@
 //! | 14 | cri qui lâche des objets autour de la caméra |
 //! | 16 | cri final, mode ralenti |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::decide;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => strike_0(x),
         2 => strike_2(x),
@@ -32,16 +32,16 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn players_alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn players_alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
-fn state7<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
+fn state7<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     x.u8(0x7)
 }
 
 /// Fin d'une attaque : retour au combat si l'animation est finie.
-fn finish<R: Banc>(x: &mut Cx<'_, R>, to: fn(&mut Cx<'_, R>)) {
+fn finish<R: Bench>(x: &mut Cx<'_, R>, to: fn(&mut Cx<'_, R>)) {
     if lib::step(x) {
         if !players_alive(x) {
             return decide::wait(x);
@@ -50,14 +50,14 @@ fn finish<R: Banc>(x: &mut Cx<'_, R>, to: fn(&mut Cx<'_, R>)) {
     }
 }
 
-fn strike_anim<R: Banc>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
+fn strike_anim<R: Bench>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
     lib::start(x, SET_STRIKE, n);
 }
 
 /// Poussière : un EFFCT 0x32 de variante `v` lié au boss, sans insister (0x2318).
-fn puff<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
+fn puff<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     if let Some(e) = x.alloc(&pools::EFFCT) {
         e.set_u8(x.b, 0, 1);
         e.set_u8(x.b, 2, 0x32);
@@ -69,7 +69,7 @@ fn puff<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
 }
 
 /// 0x97580 : poussière à intervalle régulier pendant le ralenti.
-pub(super) fn slow_tick<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn slow_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SLOW) == 0 {
         return;
     }
@@ -83,19 +83,19 @@ pub(super) fn slow_tick<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x975a2 : poussière sauf pendant le ralenti.
-pub(super) fn dust_unless_slow<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn dust_unless_slow<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SLOW) == 0 {
         puff(x, 4);
     }
 }
 
-fn spark<R: Banc>(x: &mut Cx<'_, R>) {
+fn spark<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xe580a);
 }
 
 // --- +6 = 0 -----------------------------------------------------------------------------------
 
-fn strike_0<R: Banc>(x: &mut Cx<'_, R>) {
+fn strike_0<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -119,7 +119,7 @@ fn strike_0<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 -----------------------------------------------------------------------------------
 
-fn strike_2<R: Banc>(x: &mut Cx<'_, R>) {
+fn strike_2<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -145,7 +145,7 @@ fn strike_2<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : coup double avec élan ---------------------------------------------------------------
 
-fn strike_4<R: Banc>(x: &mut Cx<'_, R>) {
+fn strike_4<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -195,7 +195,7 @@ fn strike_4<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 6 : bond ------------------------------------------------------------------------------
 
-fn leap<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -270,7 +270,7 @@ fn leap<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 8, 10 : lancer -------------------------------------------------------------------------
 
-fn throw<R: Banc>(x: &mut Cx<'_, R>) {
+fn throw<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -342,14 +342,14 @@ fn throw<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x96614 : le tir a disparu (ou n'a pas pu naître) : fin du geste.
-fn throw_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn throw_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     lib::start(x, SET_STRIKE, 8);
 }
 
 // --- +6 = 12 : souffle ----------------------------------------------------------------------------
 
-fn breath<R: Banc>(x: &mut Cx<'_, R>) {
+fn breath<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -429,12 +429,12 @@ fn breath<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn step_only<R: Banc>(x: &mut Cx<'_, R>) {
+fn step_only<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
 /// 0x9676c.
-fn breath_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn breath_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set_a5_u16(0x51e, 0);
     lib::start(x, SET_STRIKE, 0xa);
@@ -442,7 +442,7 @@ fn breath_end<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 14 : cri ---------------------------------------------------------------------------------
 
-fn roar<R: Banc>(x: &mut Cx<'_, R>) {
+fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);
@@ -486,7 +486,7 @@ fn roar<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 16 : cri final ---------------------------------------------------------------------------
 
-fn final_roar<R: Banc>(x: &mut Cx<'_, R>) {
+fn final_roar<R: Bench>(x: &mut Cx<'_, R>) {
     match state7(x) {
         0 => {
             x.add8(0x7, 2);

@@ -8,7 +8,7 @@
 //! 0xff2072 (nom du joueur, puis message) que le moteur de texte affiche ensuite. L'état 2 recompose
 //! la suite du message page par page (`+0x10` : délai entre deux pages).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::mem::{rd8, wr16, wr32, wr8};
 
@@ -32,7 +32,7 @@ const BOX_TOP: u32 = 0x5cc;
 const LANGUAGE: u32 = 0x73;
 const MESSAGE_PAGE: u32 = 0x72;
 
-pub fn status_window<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn status_window<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -53,13 +53,13 @@ pub fn status_window<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn next_state<R: Banc>(x: &mut Cx<'_, R>) {
+fn next_state<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x4, 2);
 }
 
 /// État 0 : calcule le palier du joueur, crée l'objet de fenêtre, dessine le cadre et affiche le
 /// premier message.
-fn open<R: Banc>(x: &mut Cx<'_, R>) {
+fn open<R: Bench>(x: &mut Cx<'_, R>) {
     let player = adr(x.u16(0x34));
     let half = rd8(x.b, player + 3) >> 1;
     x.set8(0x37, half);
@@ -77,8 +77,8 @@ fn open<R: Banc>(x: &mut Cx<'_, R>) {
     let frame = x.rom8(FRAME_BY_LEVEL + (base & 0xff00 | low as u16) as i16 as i32 as u32);
     x.set_a5_u16(BOX_TOP, 0xb8u16.wrapping_sub(0x18 * frame as u16));
     // 0xddeaa: scenery 6 of variant 0xd, which keeps the frame
-    if let Ok(decor) = crate::effects_aids::decor_6(x.b, 0xd) {
-        decor.set_u8(x.b, 0x2f, frame);
+    if let Ok(scenery) = crate::effects_aids::scenery_6(x.b, 0xd) {
+        scenery.set_u8(x.b, 0x2f, frame);
     }
     draw_frame(x, frame);
     pick_message(x, player);
@@ -91,7 +91,7 @@ fn adr(v: u16) -> u32 {
 
 /// Cadre de la fenêtre n° `frame` (0xce7fc) : enregistrement de 8 octets (adresse de GFX RAM, largeur)
 /// dans la table 0xce7e4 ; un bord haut, deux colonnes latérales (42 lignes de 0x80 octets) et un fond.
-fn draw_frame<R: Banc>(x: &mut Cx<'_, R>, frame: u8) {
+fn draw_frame<R: Bench>(x: &mut Cx<'_, R>, frame: u8) {
     let entry = FRAMES + 8 * frame as u32;
     let origin = (x.rom16(entry) as u32) << 16 | x.rom16(entry + 2) as u32;
     let width = x.rom16(entry + 4);
@@ -121,7 +121,7 @@ fn draw_frame<R: Banc>(x: &mut Cx<'_, R>, frame: u8) {
 }
 
 /// Choisit le message (0xceaba) : table d'enregistrements par personnage, rang de la page, palier.
-fn pick_message<R: Banc>(x: &mut Cx<'_, R>, player: u32) {
+fn pick_message<R: Bench>(x: &mut Cx<'_, R>, player: u32) {
     let half = x.u8(0x37) as u32;
     let tables = {
         let at = MESSAGE_TABLES + 4 * half;
@@ -145,7 +145,7 @@ fn pick_message<R: Banc>(x: &mut Cx<'_, R>, player: u32) {
 
 /// 0xceb20 : prend le maximum, octet par octet, de neuf valeurs de la ROM et des statistiques
 /// `+0x151..` du joueur (sauf si l'enregistrement commence par un octet négatif). Rend la suite.
-fn merge_statistics<R: Banc>(x: &mut Cx<'_, R>, player: u32, at: u32) -> u32 {
+fn merge_statistics<R: Bench>(x: &mut Cx<'_, R>, player: u32, at: u32) -> u32 {
     let skip = x.data8(at) as i8 <= -1;
     if !skip {
         for i in 0..9 {
@@ -162,7 +162,7 @@ fn merge_statistics<R: Banc>(x: &mut Cx<'_, R>, player: u32, at: u32) -> u32 {
 /// 0xceb6c : change une pièce d'équipement du joueur. L'enregistrement donne (nouvelle valeur,
 /// ancienne valeur) pour `+0x10d` ou, sinon, pour la case de `+0x140..` qui porte l'ancienne valeur ;
 /// puis 0x3552 recalcule les caractéristiques du joueur.
-fn equip<R: Banc>(x: &mut Cx<'_, R>, player: u32, at: u32) {
+fn equip<R: Bench>(x: &mut Cx<'_, R>, player: u32, at: u32) {
     if x.data8(at) as i8 <= -1 {
         return;
     }
@@ -184,13 +184,13 @@ fn equip<R: Banc>(x: &mut Cx<'_, R>, player: u32, at: u32) {
     }
     // 0x3552: the player's weapon power is recomputed (the player context still holds a processor, whose output
     // registers, D0 and A4, are not read)
-    let mut banc = m68k::Cpu::default();
-    crate::player::init::init_weapon_stats(&mut crate::player::Ctx::new(&mut banc, x.b), crate::player::Player(player));
+    let mut bench = m68k::Cpu::default();
+    crate::player::init::init_weapon_stats(&mut crate::player::Ctx::new(&mut bench, x.b), crate::player::Player(player));
 }
 
 /// Palette de la fenêtre et en-tête du texte (0xce88a) : recopie trois blocs de palette, fixe le
 /// tampon de texte et y compose le nom du joueur. Rend le nombre de caractères écrits.
-fn compose_header<R: Banc>(x: &mut Cx<'_, R>, player: u32) -> u16 {
+fn compose_header<R: Bench>(x: &mut Cx<'_, R>, player: u32) -> u16 {
     for (from, to, blocks) in PALETTE_SOURCES {
         for i in 0..8 * blocks {
             let v = x.data32(from + 4 * i);
@@ -206,7 +206,7 @@ fn compose_header<R: Banc>(x: &mut Cx<'_, R>, player: u32) -> u16 {
 
 /// Nom du joueur (0xce8de) : codes de glyphes de l'enregistrement `+0x118` du joueur, six au plus ;
 /// un code >= 0xf9 renvoie à une liste de la table 0xce9a4. Rend (fin du tampon, nombre de glyphes).
-fn write_name<R: Banc>(x: &mut Cx<'_, R>, player: u32, buffer: u32) -> (u32, u16) {
+fn write_name<R: Bench>(x: &mut Cx<'_, R>, player: u32, buffer: u32) -> (u32, u16) {
     let japanese = x.a5_u8(LANGUAGE) == 2;
     let mut src = player + 0x118;
     let mut out = buffer;
@@ -273,7 +273,7 @@ fn write_name<R: Banc>(x: &mut Cx<'_, R>, player: u32, buffer: u32) -> (u32, u16
 
 /// Composition de la suite du message (0xce9ea) : recopie dans le tampon (`+0xc`) les caractères de la
 /// source (`+8`) jusqu'à une marque de fin de page ; `count` = glyphes déjà écrits sur la ligne.
-fn compose_message<R: Banc>(x: &mut Cx<'_, R>, mut count: u16) {
+fn compose_message<R: Bench>(x: &mut Cx<'_, R>, mut count: u16) {
     let mut src = x.u32(0x8);
     let mut out = x.u32(0xc);
     if x.a5_u8(LANGUAGE) == 2 {
@@ -359,6 +359,6 @@ fn compose_message<R: Banc>(x: &mut Cx<'_, R>, mut count: u16) {
     }
 }
 
-fn next_substate<R: Banc>(x: &mut Cx<'_, R>) {
+fn next_substate<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x5, 2);
 }

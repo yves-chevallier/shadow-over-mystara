@@ -111,7 +111,7 @@ impl Z80 {
     pub fn set_bc(&mut self, v: u16) {
         [self.b, self.c] = v.to_be_bytes();
     }
-    pub fn set_de(&mut self, v: u16) {
+    pub fn set_of(&mut self, v: u16) {
         [self.d, self.e] = v.to_be_bytes();
     }
     pub fn set_hl(&mut self, v: u16) {
@@ -217,7 +217,7 @@ impl Z80 {
     fn set_rp(&mut self, p: u8, x: Idx, v: u16) {
         match p {
             0 => self.set_bc(v),
-            1 => self.set_de(v),
+            1 => self.set_of(v),
             2 => self.set_idx(x, v),
             _ => self.sp = v,
         }
@@ -715,7 +715,7 @@ impl Z80 {
                             1 => {
                                 let t = (self.bc(), self.de(), self.hl());
                                 self.set_bc(self.bc_);
-                                self.set_de(self.de_);
+                                self.set_of(self.de_);
                                 self.set_hl(self.hl_);
                                 (self.bc_, self.de_, self.hl_) = t;
                             }
@@ -766,7 +766,7 @@ impl Z80 {
                     }
                     5 => {
                         let t = self.de();
-                        self.set_de(self.hl());
+                        self.set_of(self.hl());
                         self.set_hl(t);
                     }
                     6 => {
@@ -1028,7 +1028,7 @@ impl Z80 {
                 let v = bus.read(self.hl());
                 bus.write(self.de(), v);
                 self.set_hl(step(self.hl()));
-                self.set_de(step(self.de()));
+                self.set_of(step(self.de()));
                 let bc = self.bc().wrapping_sub(1);
                 self.set_bc(bc);
                 let n = v.wrapping_add(self.a);

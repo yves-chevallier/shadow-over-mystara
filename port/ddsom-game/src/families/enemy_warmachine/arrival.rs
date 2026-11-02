@@ -1,12 +1,12 @@
 //! Type 27, sous-état 0 : arrivée. `+6` = 0 la machine entre en roulant par le bord de l'écran, 2 et 4 elle attend
 //! (boîte de portée du joueur) avant de se mettre debout.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => roll_in(x),
         2 => wait_a(x),
@@ -16,7 +16,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x77e70 : roule depuis le bord, fait trembler le sol, puis passe au tir A.
-fn roll_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn roll_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -67,7 +67,7 @@ fn roll_in<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x77f48 : début du bond d'arrivée (poussée verticale ±0x20, animation 9).
-pub(super) fn leap_begin<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn leap_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x1e);
     x.set16(TIMER2, 0);
@@ -79,7 +79,7 @@ pub(super) fn leap_begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x77f7e / 0x78470 / 0x78670 : bond : étincelle toutes les 4 images, minuterie `+0xa6`, puis animation 0xa.
-pub(super) fn hop_loop<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn hop_loop<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u16(TIMER2).wrapping_sub(1);
     x.set16(TIMER2, n);
     if (n as i16) <= 0 {
@@ -98,7 +98,7 @@ pub(super) fn hop_loop<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x77fc4 : attend qu'un joueur soit dans la boîte (−0x40, 0x40, 0x40).
-fn wait_a<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -119,7 +119,7 @@ fn wait_a<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x78040 : même attente avec la boîte (−0x20, 0x20, 0x40).
-fn wait_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -140,7 +140,7 @@ fn wait_b<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x78004 / 0x78080 : choisit une cible ; dès qu'elle est dans la boîte, étape suivante (animation 3).
-fn wait_for_player<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) {
+fn wait_for_player<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) {
     pick_target(x);
     if !lib::target_in_box(x, d0, d1, d2) {
         return;

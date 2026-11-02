@@ -1,8 +1,8 @@
 //! Boss 1, état actif : arrivée (`+5` = 0), combat (2), attaques (4), attente (6 à 10), saisie (12).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 // --- groupe 0 : arrivée ------------------------------------------------------------------------
@@ -12,7 +12,7 @@ const CROSSING_SPEEDS: u32 = 0x7af94;
 const CROSSING_ANIMS: u32 = 0x7afb4;
 
 /// 0x7ae5a : le boss traverse l'écran en huit sauts (en cinématique), disparaît, puis tombe du haut de l'écran.
-pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -120,7 +120,7 @@ pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7aeda : la traversée, maintenue dans l'écran ; un saut par la table des vitesses à chaque bord touché.
-fn crossing<R: Banc>(x: &mut Cx<'_, R>) {
+fn crossing<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     let mut bumped = false;
     let cam_x = var::CAMERA1_X.get(x.b);
@@ -170,7 +170,7 @@ fn crossing<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- groupe 2 : combat -------------------------------------------------------------------------
 
-pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => idle(x),
         2 => turning(x),
@@ -182,14 +182,14 @@ pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Animation de repos : 4, ou 5 si la cible est à terre (`+0x66`).
-fn rest_anim<R: Banc>(x: &mut Cx<'_, R>) {
+fn rest_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     let n = if t.u8(x.b, 0x66) != 0 { 5 } else { 4 };
     body(x, n);
 }
 
 /// 0x7b150 : debout ; sorti de l'écran il bondit, au bout de l'attente il marche, cible proche : attaque.
-fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if !alive(x) {
         return idle_alone(x);
     }
@@ -216,7 +216,7 @@ fn idle<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7b1d0 : demi-tour (animation 6), puis reprise de l'état mémorisé.
-fn turning<R: Banc>(x: &mut Cx<'_, R>) {
+fn turning<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         next7(x);
         x.set8(ANIM_KIND, 1);
@@ -241,7 +241,7 @@ fn turning<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7b236 et 0x7b422 : marche par bonds vers des points tirés près de la cible.
-fn hop_walk<R: Banc>(x: &mut Cx<'_, R>, second: bool) {
+fn hop_walk<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
     match x.u8(0x7) {
         0 => {
             if second {
@@ -306,13 +306,13 @@ fn hop_walk<R: Banc>(x: &mut Cx<'_, R>, second: bool) {
 }
 
 /// Animation `k` du bond, à partir de la première animation du sens (`+0xb4`).
-fn hop_anim<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
+fn hop_anim<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     let n = k.wrapping_add(x.u8(HOP_ANIM));
     body(x, n as u32);
 }
 
 /// 0x7b268 : un bond vers un point près de la cible, sauf s'il faut d'abord se retourner.
-fn hop<R: Banc>(x: &mut Cx<'_, R>) {
+fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xbb, 0);
     if turn_needed(x) {
         return turn(x);
@@ -331,7 +331,7 @@ fn hop<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7b38e : entre deux bonds ; les boîtes devant le boss décident d'une attaque.
-fn between_hops<R: Banc>(x: &mut Cx<'_, R>) {
+fn between_hops<R: Bench>(x: &mut Cx<'_, R>) {
     if !alive(x) {
         return idle_alone(x);
     }
@@ -366,7 +366,7 @@ fn between_hops<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7b45c : grand bond vers la cible ou le milieu de l'écran, puis attaque si on lui a riposté.
-fn leap_attack<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_attack<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             let (mx, mz);
@@ -464,7 +464,7 @@ fn leap_attack<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7b5fe : bond en arrière, glissade, puis riposte si la cible est devant.
-fn backing<R: Banc>(x: &mut Cx<'_, R>) {
+fn backing<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -540,7 +540,7 @@ fn backing<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- groupe 4 : attaques -----------------------------------------------------------------------
 
-pub(super) fn attacks<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attacks<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         k @ 0..=6 => strike(x, k / 2),
         8 => grab_attempt(x),
@@ -549,7 +549,7 @@ pub(super) fn attacks<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7b764 à 0x7b86a : coup `k` (0 à 3) : cri (0xe3da6), animation `k`, bouffées aux images-clés.
-fn strike<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     if x.u8(0x7) == 0 {
         next7(x);
         lib::sound(x, 0xe3da6);
@@ -587,7 +587,7 @@ fn strike<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
 }
 
 /// 0x7b89e : saisie : une cible à portée de l'image-clé est attrapée (0xfd64).
-fn grab_attempt<R: Banc>(x: &mut Cx<'_, R>) {
+fn grab_attempt<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -620,7 +620,7 @@ fn grab_attempt<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7b91c : bond en ciseaux : un double (ENEMY 0x1a) saute de l'autre côté.
-fn split<R: Banc>(x: &mut Cx<'_, R>) {
+fn split<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -682,7 +682,7 @@ fn split<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupes 6 à 10 : attente --------------------------------------------------------------------
 
 /// 0x7ba18 : tant qu'aucun joueur n'est en vie, le boss reste en pose.
-pub(super) fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return walk(x);
     }
@@ -700,7 +700,7 @@ pub(super) fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
 const BITE_DELAYS: u32 = 0x7bb3e;
 
 /// 0x7ba50 : le joueur saisi (`+0x50`) est tenu (0xfda2) et mordu (4 PV) jusqu'au relâchement.
-pub(super) fn holding<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     if t.u8(x.b, 0) == 0 || t.u8(x.b, 0x188) == 0 {
         return stand(x);
@@ -756,7 +756,7 @@ pub(super) fn holding<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7bb1c : relâche le joueur (0xfd8c) et rejoue l'animation 7.
-fn release<R: Banc>(x: &mut Cx<'_, R>) {
+fn release<R: Bench>(x: &mut Cx<'_, R>) {
     let t = target_obj(x);
     t.set_u8(x.b, 0x6f, 1);
     lib::release_player(x, t);

@@ -1,4 +1,4 @@
-//! Ennemi « Gargoyle » (ENEMY type 8, 0x63fb0). Voir `docs/familles/enemy.md`.
+//! Ennemi « Gargoyle » (ENEMY type 8, 0x63fb0). Voir `docs/families/enemy.md`.
 //!
 //! Créature volante qui se pose pour attaquer (variantes `+3` = 0 à 2 : arrivée au ras du sol, en vol ou au sol).
 //! Elle s'appuie sur la bibliothèque commune `enemy_lib` (jeux d'animation avec type de coup `+0x44`).
@@ -15,7 +15,7 @@
 //! `+0x50` est la cible (joueur), `+0x54` l'éventuelle victime saisie. Animations 0x162ebc (vol), 0x162eee (coups),
 //! 0x163014 et 0x163098 (vol contre ou avec l'orientation).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use super::enemy_lib as lib;
@@ -53,7 +53,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 pub(self) const SET_FLY: u32 = 0x162ebc;
 pub(self) const SET_STRIKE: u32 = 0x162eee;
@@ -61,7 +61,7 @@ pub(self) const SET_STRIKE: u32 = 0x162eee;
 pub(self) const SET_FLY_AGAINST: u32 = 0x163014;
 pub(self) const SET_FLY_ALONG: u32 = 0x163098;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -83,46 +83,46 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-pub(self) fn play<R: Banc>(x: &mut Cx<'_, R>, set: u32, n: u32) {
+pub(self) fn play<R: Bench>(x: &mut Cx<'_, R>, set: u32, n: u32) {
     lib::start(x, set, n);
 }
 
-pub(self) fn fly<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn fly<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play(x, SET_FLY, n);
 }
 
-pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play(x, SET_STRIKE, n);
 }
 
-pub(self) fn look<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
+pub(self) fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
 /// Table de vitesses `n` (0x1b64) pour l'angle `+0x2d`.
-pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Éclat de décor (0x1172e) au point d'impact `d5`.
-pub(self) fn spark<R: Banc>(x: &mut Cx<'_, R>, d5: u32) {
+pub(self) fn spark<R: Bench>(x: &mut Cx<'_, R>, d5: u32) {
     lib::debris(x, d5);
 }
 
-pub(self) fn camera_x<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+pub(self) fn camera_x<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_X.get(x.b) } else { var::CAMERA1_X.get(x.b) }
 }
 
 /// Décompte d'une minuterie mot `+off` : vrai tant qu'elle reste positive.
-pub(self) fn count_down<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> bool {
+pub(self) fn count_down<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     let n = x.u16(off).wrapping_sub(1);
     x.set16(off, n);
     (n as i16) > 0
 }
 
 /// 0x65a9e : se tourne vers la cible.
-pub(self) fn face_target<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn face_target<R: Bench>(x: &mut Cx<'_, R>) {
     let target = x.linked(f::TARGET);
     let d1 = target.u16(x.b, Obj::X);
     let flip = if (d1 as i16) < (x.u16(Obj::X) as i16) { 0 } else { 0x20 };
@@ -130,7 +130,7 @@ pub(self) fn face_target<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x65a30 : ondulation verticale en vol selon la clé d'animation (table de longs `0x65a5a`).
-pub(self) fn bob<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
     let mut d = rom32(x, 0x65a5a + idx) as i32;
     if (x.u16(TIMER2) as i16) <= 0x24 {
@@ -143,7 +143,7 @@ pub(self) fn bob<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x65a72 : montée progressive (table de longs `0x65a86`).
-pub(self) fn rise<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
     let d = rom32(x, 0x65a86 + idx);
     x.add32(Obj::Z, d);
@@ -155,34 +155,34 @@ pub(self) mod go {
     use super::*;
 
     /// Sous-état 2 (déplacements) : `+6` = 2, saisie de l'état courant pour y revenir.
-    pub fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         let s = x.u32(f::STATE);
         x.set32(SAVED_STATE, s);
         set_state_long(x, 0x0202_0200);
     }
-    pub fn wander<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn wander<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         x.set8(STRIKE_KIND_NEXT, 0x3b);
         set_state_long(x, 0x0202_0400);
     }
-    pub fn wander_far<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn wander_far<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         x.set8(STRIKE_KIND_NEXT, 0x3c);
         set_state_long(x, 0x0202_0600);
     }
-    pub fn dive<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn dive<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         x.set8(SIDE_TURN, 0);
         set_state_long(x, 0x0202_0800);
     }
-    pub fn circle<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn circle<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(INVULNERABLE, 1);
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0202_0a00);
     }
     /// Sous-état 4 (coups), `+6` = 0 ; `grab` : la créature a déjà saisi sa victime.
-    pub fn strike_0<R: Banc>(x: &mut Cx<'_, R>, grab: bool) {
+    pub fn strike_0<R: Bench>(x: &mut Cx<'_, R>, grab: bool) {
         if grab {
             x.set8(HIT_FLAGS, 0);
         }
@@ -190,7 +190,7 @@ pub(self) mod go {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0000);
     }
-    pub fn strike_2<R: Banc>(x: &mut Cx<'_, R>, grab: bool) {
+    pub fn strike_2<R: Bench>(x: &mut Cx<'_, R>, grab: bool) {
         if grab {
             x.set8(HIT_FLAGS, 0);
         }
@@ -198,41 +198,41 @@ pub(self) mod go {
         x.set8(VULNERABLE, 1);
         set_state_long(x, 0x0204_0200);
     }
-    pub fn strike_4<R: Banc>(x: &mut Cx<'_, R>, grab: bool) {
+    pub fn strike_4<R: Bench>(x: &mut Cx<'_, R>, grab: bool) {
         x.set8(GRABBED_ONCE, grab as u8);
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0400);
     }
-    pub fn strike_6<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn strike_6<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0600);
     }
-    pub fn strike_8<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn strike_8<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(INVULNERABLE, 1);
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0800);
     }
-    pub fn strike_10<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn strike_10<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0a00);
     }
-    pub fn strike_12<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn strike_12<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(VULNERABLE, 0);
         set_state_long(x, 0x0204_0c00);
     }
     /// Plus de joueur en vie : la créature se retire (sous-état 10).
-    pub fn retire<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn retire<R: Bench>(x: &mut Cx<'_, R>) {
         set_state_long(x, 0x020a_0000);
     }
     /// Saisie par un joueur : état touché 8.
-    pub fn held<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn held<R: Bench>(x: &mut Cx<'_, R>) {
         set_state_long(x, 0x0408_0000);
     }
 }
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(0xab, 2);
     x.set8(f::BOX_SET, 0x14);
@@ -283,7 +283,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::FREEZE) as i8 > 0 {
         x.add8(f::FREEZE, 0xff);
     } else if !paused(x) {
@@ -306,7 +306,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x65ab6 : décompte de la période de repos (`+0xb4`) ; à zéro, le drapeau `+0x58` retombe.
-pub(self) fn cooldown<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn cooldown<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(COOLDOWN) as i16) <= 0 {
         return;
     }
@@ -316,7 +316,7 @@ pub(self) fn cooldown<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x63fb0 "enemy_8" #[sans] run,
+    0x63fb0 "enemy_8" #[without] run,
     // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x653b2 "enemy_8_releve" attacks::regroup,
 }

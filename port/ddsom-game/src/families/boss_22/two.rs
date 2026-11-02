@@ -1,14 +1,14 @@
 //! Ce que le boss de type 2 (0x7c5a8) a en propre : création (il fait naître le type 22 et, plus tard, la scène de
 //! fin), arrivée par un grand bond, et deux attaques (bond-écrasement `+6` = 10, rotation et rugissement `+6` = 12).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::moves::step_anim;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// 0x7c5b8 : quand le compte à rebours `+0xbc` est écoulé, crée le contrôleur de scène SET 2 (variante 0x3e), une fois.
-pub(super) fn spawn_scene_controller<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn spawn_scene_controller<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0xa4) != 0 || !sub16(x, SPOT_TIMER, 1).mi() {
         return;
     }
@@ -20,7 +20,7 @@ pub(super) fn spawn_scene_controller<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c600 : création. Selon le nombre de joueurs et la difficulté, un boss de type 22 lui est lié (`+0xac`).
-pub(super) fn init<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
     lib::clear_popup(x);
@@ -69,14 +69,14 @@ pub(super) fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.set8(0x9a, 0xff);
     }
     x.add8(f::STATE, 2);
-    // `jmp 0x1a32` : les registres qu'il laisse au gestionnaire suivant ne sont relus par personne (sonde `sortie`)
+    // `jmp 0x1a32` : les registres qu'il laisse au gestionnaire suivant ne sont relus par personne (sonde `exit`)
     x.anim_start(TWO_KIT.set_a, 0);
 }
 
 // --- groupe 0 : arrivée -----------------------------------------------------------------------------
 
 /// 0x7c814 : le boss arrive par un grand bond depuis la droite, retombe en poussière et passe en combat.
-pub(super) fn arrive<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn arrive<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -124,7 +124,7 @@ pub(super) fn arrive<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7d0bc : attend l'image-clé de l'animation de saut.
-pub(super) fn rise_wait<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn rise_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
         x.set8(VULNERABLE, 0);
@@ -133,7 +133,7 @@ pub(super) fn rise_wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7d0d2 (montée) et 0x7d0f2 (descente) : la vitesse verticale franchit ±0x100.
-pub(super) fn climb<R: Banc>(x: &mut Cx<'_, R>, up: bool) {
+pub(super) fn climb<R: Bench>(x: &mut Cx<'_, R>, up: bool) {
     x.move_xz();
     let vz = x.u16(0x18);
     let reached = if up { Fl::sub16(vz, 0x100).gt() } else { Fl::sub16(vz, 0xff00).gt() };
@@ -145,7 +145,7 @@ pub(super) fn climb<R: Banc>(x: &mut Cx<'_, R>, up: bool) {
 }
 
 /// 0x7d112 : retombée du saut (son, poussière en ligne, vulnérable).
-pub(super) fn land<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn land<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
@@ -164,7 +164,7 @@ pub(super) fn land<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x7f10a : vitesses du bond selon la distance à la caméra (quatre lignes de 8 octets en 0x7f14c : X, hauteur,
 /// gravité, profondeur).
-fn jump_speeds<R: Banc>(x: &mut Cx<'_, R>) {
+fn jump_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     let d = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
     let row = if Fl::sub16(d, 0x60).le() {
         0
@@ -183,7 +183,7 @@ fn jump_speeds<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x7d05c : bond-écrasement. Étapes `+7` : 0 saut, 2 à 8 bond (comme à l'arrivée), 10 réception et coup, 12 demi-tour,
 /// 14 coup double, 16 course, 18 course vers un point, 20 virage, 22 à 30 fin.
-pub(super) fn slam<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn slam<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             jump_speeds(x);
@@ -347,7 +347,7 @@ pub(super) fn slam<R: Banc>(x: &mut Cx<'_, R>) {
 // --- attaque 12 : rotation et rugissement ------------------------------------------------------------------
 
 /// Point visé sur le bord de l'écran, du côté où le boss regarde (`+0xb0`, `+0xb2`).
-fn edge_spot<R: Banc>(x: &mut Cx<'_, R>) {
+fn edge_spot<R: Bench>(x: &mut Cx<'_, R>) {
     let off = if x.u8(f::FLIP) != 0 { 0x160 } else { 0x20 };
     let sx = var::SCROLL_X.get(x.b).wrapping_add(off);
     x.set16(SPOT_X, sx);
@@ -356,7 +356,7 @@ fn edge_spot<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7d4a0 : le boss tourne autour d'un point du bord de l'écran, se retourne, rugit (effets, cinématique) puis reprend.
-pub(super) fn spin_roar<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn spin_roar<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -427,7 +427,7 @@ pub(super) fn spin_roar<R: Banc>(x: &mut Cx<'_, R>) {
             if x.u8(f::KEY_FRAME) == 2 {
                 x.set8(f::KEY_FRAME, 0);
                 eshl_wave_1e(x);
-                crate::palette::set_flash_color(x.b, crate::families::petites::ECLAIR_JAUNE);
+                crate::palette::set_flash_color(x.b, crate::families::small::ECLAIR_JAUNE);
                 x.set8(0xb9, 4);
             }
             x.set_a5_u16(0x4ba, 0);

@@ -2,16 +2,16 @@
 //! 2 recul, 4 chute et relevé, 6 seconde table de réactions, 8 saisie par un joueur. Zone et ombre sont toujours
 //! testées ; il n'y a ni pause du hook ni octet `+0` à remettre à 1.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x6bb4c;
 const REACT_SECOND: u32 = 0x6bd3a;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -30,7 +30,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6bb20 : la hache tombe (le Gnoll la lâche à la première image), puis réaction par la table.
-fn first_reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn first_reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set_bit(1, 1, false);
     }
@@ -42,7 +42,7 @@ fn first_reaction<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Recul (0x6bbf8).
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -69,7 +69,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Chute puis relevé (0x6bc64). Les animations dépendent de `+0xbf` (arme).
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

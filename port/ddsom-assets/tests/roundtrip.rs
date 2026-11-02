@@ -56,7 +56,7 @@ fn check(what: &str, put: impl FnOnce(&mut Program)) {
 }
 
 #[test]
-fn graphismes_sans_perte() {
+fn graphics_lossless() {
     if !available() {
         return;
     }
@@ -70,7 +70,7 @@ fn graphismes_sans_perte() {
 }
 
 #[test]
-fn palettes_sans_perte() {
+fn palettes_lossless() {
     if !available() {
         return;
     }
@@ -80,7 +80,7 @@ fn palettes_sans_perte() {
 }
 
 #[test]
-fn sons_sans_perte() {
+fn sounds_lossless() {
     if !available() {
         return;
     }
@@ -110,7 +110,7 @@ fn sons_sans_perte() {
 }
 
 #[test]
-fn images_de_sprites_sans_perte() {
+fn sprite_frames_lossless() {
     if !has("sprites/frames.json") {
         return;
     }
@@ -143,7 +143,7 @@ fn images_de_sprites_sans_perte() {
 }
 
 #[test]
-fn animations_sans_perte() {
+fn animations_lossless() {
     if !has("sprites/anims.json") || !has("sprites/frames.json") {
         return;
     }
@@ -157,7 +157,7 @@ fn animations_sans_perte() {
 }
 
 #[test]
-fn decors_sans_perte() {
+fn scenery_lossless() {
     if !has("levels.json") {
         return;
     }
@@ -176,14 +176,14 @@ fn decors_sans_perte() {
             next = t.rom + 2 + 2 * (t.rows.len() * t.width()) as u32;
         }
         assert_eq!(next, l.banks_rom, "{} : fin des tables", l.name);
-        // cases : même lecture que les caméras du jeu (`map_cell` de scroll.rs, `case_a` de cartes.rs)
+        // cases : même lecture que les caméras du jeu (`map_cell` de scroll.rs, `case_a` de cards.rs)
         let rd16 = |a: u32| u16::from_be_bytes(at(a, 2).try_into().unwrap());
         let n = l.strip_cases();
-        let colonne = if l.case == 16 { 0x40 } else { 0x20 };
+        let column = if l.case == 16 { 0x40 } else { 0x20 };
         for strip in 0..l.strips.len() {
             for cx in 0..n {
                 for cy in 0..n {
-                    let off = (strip * n * n * 4 + cx * colonne + cy * 4) as u32;
+                    let off = (strip * n * n * 4 + cx * column + cy * 4) as u32;
                     let c = off >> 2;
                     let (bank, index, sub) = if l.case == 16 {
                         let bank = be32(&rom, l.banks_rom + (off >> 16 & 0xc));
@@ -202,7 +202,7 @@ fn decors_sans_perte() {
 }
 
 #[test]
-fn scroll1_sans_perte() {
+fn scroll1_lossless() {
     if !has("levels.json") {
         return;
     }
@@ -244,7 +244,7 @@ fn scroll1_sans_perte() {
 }
 
 #[test]
-fn terrain_sans_perte() {
+fn terrain_lossless() {
     if !has("terrain.json") {
         return;
     }
@@ -272,7 +272,7 @@ fn terrain_sans_perte() {
 }
 
 #[test]
-fn palettes_des_scenes_sans_perte() {
+fn scene_palettes_lossless() {
     if !has("scene_palettes.json") {
         return;
     }
@@ -288,7 +288,7 @@ fn palettes_des_scenes_sans_perte() {
 }
 
 #[test]
-fn tables_des_objets_sans_perte() {
+fn object_tables_lossless() {
     if !has("sprites/tables.json") || !has("sprites/frames.json") {
         return;
     }
@@ -335,7 +335,7 @@ fn tables_des_objets_sans_perte() {
 }
 
 #[test]
-fn textes_sans_perte() {
+fn texts_lossless() {
     if !has("texts.json") {
         return;
     }
@@ -370,7 +370,7 @@ fn textes_sans_perte() {
 }
 
 #[test]
-fn musique_sans_perte() {
+fn music_lossless() {
     if !has("sound/music.json") {
         return;
     }
@@ -440,7 +440,7 @@ fn musique_sans_perte() {
 }
 
 #[test]
-fn apparitions_sans_perte() {
+fn spawns_lossless() {
     if !has("data/spawns.json") {
         return;
     }
@@ -507,7 +507,7 @@ fn check_data(rel: &str) {
 }
 
 #[test]
-fn joueurs_sans_perte() {
+fn players_lossless() {
     check_data("data/players.json");
     if !has("data/players.json") {
         return;
@@ -521,12 +521,12 @@ fn joueurs_sans_perte() {
 }
 
 #[test]
-fn combat_sans_perte() {
+fn combat_lossless() {
     check_data("data/combat.json");
 }
 
 #[test]
-fn ennemis_sans_perte() {
+fn enemies_lossless() {
     check_data("data/enemies.json");
     if !has("data/enemies.json") {
         return;
@@ -540,38 +540,38 @@ fn ennemis_sans_perte() {
 }
 
 #[test]
-fn caisses_sans_perte() {
+fn crates_lossless() {
     check_data("data/boxes.json");
 }
 
 #[test]
-fn scenes_sans_perte() {
+fn scenes_lossless() {
     check_data("data/scenes.json");
 }
 
 #[test]
-fn divers_sans_perte() {
+fn misc_lossless() {
     check_data("data/misc.json");
 }
 
 #[test]
-fn dialogues_sans_perte() {
+fn dialogues_lossless() {
     check_data("data/dialogs.json");
 }
 
 #[test]
-fn restes_sans_perte() {
+fn leftovers_lossless() {
     check_data("data/rest.json");
 }
 
 #[test]
-fn natives_sans_perte() {
+fn natives_lossless() {
     check_data("data/natives.json");
 }
 
 /// Tables du DSP QSound : les mots de `qsound_dsp.json` sont ceux de `dl-1425.bin`.
 #[test]
-fn dsp_sans_perte() {
+fn dsp_lossless() {
     if !has("sound/qsound_dsp.json") {
         return;
     }
@@ -586,7 +586,7 @@ fn dsp_sans_perte() {
 
 /// Région du Z80 reconstruite : chaque octet écrit vaut celui des ROMs `dd2.01`/`dd2.02`, sans conflit.
 #[test]
-fn region_audio_sans_perte() {
+fn audio_region_lossless() {
     if !has("sound/music.json") {
         return;
     }

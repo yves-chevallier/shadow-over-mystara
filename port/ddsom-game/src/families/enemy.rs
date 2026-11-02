@@ -1,16 +1,16 @@
-//! Gestionnaires des types d'ennemis de la classe ENEMY (C02). Voir `docs/familles/enemy.md`.
+//! Gestionnaires des types d'ennemis de la classe ENEMY (C02). Voir `docs/families/enemy.md`.
 //!
 //! Même cadre que les familles ESHL / SET / SOBJ (`cx.rs`) : un type est un `mod` avec une fonction
 //! `run`, des constantes nommées pour ses tables et ses jeux d'animation, et un commentaire de rôle.
 //! Les noms de rôle sont des hypothèses (h) tirées du comportement et des noms de debug du jeu.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::mem::{wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 // ---------------------------------------------------------------------------------------------
 // Type 20 (0x74fc0) : « ManScorpion » (h), ennemi composite greffé sur un ennemi de type 19
@@ -47,7 +47,7 @@ mod man_scorpion {
         pub const HIT_FREEZE: u32 = 0x56;
     }
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(f::STATE) {
             st::INIT => init(x),
             st::ACTIVE => active(x),
@@ -59,7 +59,7 @@ mod man_scorpion {
 
     // --- création ------------------------------------------------------------------------------
 
-    fn init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.set32(f::IMMUNITY, 0xffff_ffff);
         x.set8(0x7e, 0xb);
         let r = random(x);
@@ -89,7 +89,7 @@ mod man_scorpion {
     }
 
     /// Crée les parties ; `flame_kind` est la variante des flammes ; la variante 1 crée aussi les bras.
-    fn spawn<R: Banc>(x: &mut Cx<'_, R>, flame_kind: u8, with_arms: bool) {
+    fn spawn<R: Bench>(x: &mut Cx<'_, R>, flame_kind: u8, with_arms: bool) {
         spawn_limbs(x);
         spawn_shadow(x);
         spawn_flames(x, flame_kind);
@@ -119,7 +119,7 @@ mod man_scorpion {
     }
 
     /// Deux halos (ESHL type 11, variantes 1 puis 0) rangés en `+0xa4`, `+0xa6`.
-    fn spawn_limbs<R: Banc>(x: &mut Cx<'_, R>) {
+    fn spawn_limbs<R: Bench>(x: &mut Cx<'_, R>) {
         let mut at = x.o.0 + p::LIMBS;
         for d5 in [1u8, 0] {
             let o = alloc(x, &pools::ESHL);
@@ -133,7 +133,7 @@ mod man_scorpion {
         }
     }
 
-    fn spawn_shadow<R: Banc>(x: &mut Cx<'_, R>) {
+    fn spawn_shadow<R: Bench>(x: &mut Cx<'_, R>) {
         let o = alloc(x, &pools::EFFCT);
         let active = x.u8(0);
         o.set_u8(x.b, 0, active);
@@ -143,7 +143,7 @@ mod man_scorpion {
     }
 
     /// Deux flammes (ITEM type 6, orientation 0x20 puis 0) rangées en `+0xa8`, `+0xaa`.
-    fn spawn_flames<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
+    fn spawn_flames<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
         let mut at = x.o.0 + p::FLAMES;
         for d5 in [1u8, 0] {
             let o = alloc(x, &pools::ITEM);
@@ -162,7 +162,7 @@ mod man_scorpion {
 
     // --- état 2 : vol --------------------------------------------------------------------------
 
-    fn active<R: Banc>(x: &mut Cx<'_, R>) {
+    fn active<R: Bench>(x: &mut Cx<'_, R>) {
         check_arms(x);
         if !paused(x) {
             match (x.u8(0x3), x.u8(f::SUB)) {
@@ -188,14 +188,14 @@ mod man_scorpion {
     }
 
     /// Plus de bras : sous-état 2, puis tentative de passage à l'état « mort en cours ».
-    fn stop_flight<R: Banc>(x: &mut Cx<'_, R>) {
+    fn stop_flight<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB, 2);
         detach_from_host(x);
         take_from_parent(x);
     }
 
     /// Le coup de grâce n'est possible que tant que le parent a des coups en réserve (`+0x32`).
-    fn take_from_parent<R: Banc>(x: &mut Cx<'_, R>) {
+    fn take_from_parent<R: Bench>(x: &mut Cx<'_, R>) {
         let parent = x.linked(f::OWNER);
         let left = parent.u8(x.b, 0x32);
         if left == 0 {
@@ -207,7 +207,7 @@ mod man_scorpion {
     }
 
     /// Étincelles : tous les 8 pas, tous les 16 s'il n'y a qu'un bras.
-    fn sparkles<R: Banc>(x: &mut Cx<'_, R>) {
+    fn sparkles<R: Bench>(x: &mut Cx<'_, R>) {
         let mask = x.u8(p::ARMS_MASK);
         let one_arm = (mask & 1 != 0) != (mask & 2 != 0);
         let step = if one_arm { 0xf } else { 7 };
@@ -219,7 +219,7 @@ mod man_scorpion {
     }
 
     /// Vol vers le bord gauche : mort (état 6) une fois sorti de l'écran.
-    fn fly_left<R: Banc>(x: &mut Cx<'_, R>) {
+    fn fly_left<R: Bench>(x: &mut Cx<'_, R>) {
         sparkles(x);
         x.move_x();
         let edge = var::SCROLL_X.get(x.b).wrapping_sub(0x50) as i16;
@@ -230,7 +230,7 @@ mod man_scorpion {
     }
 
     /// Vol vers le bord droit ; à l'arrivée, lâche les bras et rend la main au parent.
-    fn fly_right<R: Banc>(x: &mut Cx<'_, R>) {
+    fn fly_right<R: Bench>(x: &mut Cx<'_, R>) {
         sparkles(x);
         x.move_x();
         let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
@@ -253,7 +253,7 @@ mod man_scorpion {
 
     /// Un bras dont l'état est >= 4 est détaché ; sans plus de bras, le parent est libéré de son
     /// attente (`+0x24`). Laisse D0 = 0 comme l'original.
-    fn check_arms<R: Banc>(x: &mut Cx<'_, R>) {
+    fn check_arms<R: Bench>(x: &mut Cx<'_, R>) {
         let mut left = x.u8(p::ARMS_MASK);
         if left != 0 {
             if left & 1 != 0 {
@@ -284,7 +284,7 @@ mod man_scorpion {
 
     // --- état 4 : touché -----------------------------------------------------------------------
 
-    fn hit<R: Banc>(x: &mut Cx<'_, R>) {
+    fn hit<R: Bench>(x: &mut Cx<'_, R>) {
         check_arms(x);
         let freeze = x.u8(f::FREEZE) as i8;
         if freeze > 0 {
@@ -315,14 +315,14 @@ mod man_scorpion {
     }
 
     /// Copie le gel (`+0x58` long, `+0x53`) sur une partie.
-    fn share_freeze<R: Banc>(x: &mut Cx<'_, R>, o: Obj) {
+    fn share_freeze<R: Bench>(x: &mut Cx<'_, R>, o: Obj) {
         let (l, g) = (x.u32(0x58), x.u8(f::FREEZE));
         o.set_u32(x.b, 0x58, l);
         o.set_u8(x.b, f::FREEZE, g);
     }
 
     /// Début d'un coup : gèle les parties, démarre le recul (15 images) et l'effet `0xab7d8`.
-    fn react<R: Banc>(x: &mut Cx<'_, R>) {
+    fn react<R: Bench>(x: &mut Cx<'_, R>) {
         let freeze = x.u8(p::HIT_FREEZE);
         x.set8(f::FREEZE, freeze);
         x.set8(p::DELAY, 0xf);
@@ -342,7 +342,7 @@ mod man_scorpion {
     }
 
     /// Recul de 15 images (2 pixels, sens alterné), puis retour à l'état 2.
-    fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+    fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
         let left = x.u8(p::DELAY);
         if left != 0 {
             let left = left - 1;
@@ -369,7 +369,7 @@ mod man_scorpion {
 
     /// Sous-état 2 : mort en plusieurs temps (`+6` : 0 lance la mort d'une variante 0, 6 celle
     /// d'une autre variante ; 2 et 8 attendent ; 4 et 10 finissent).
-    fn dying<R: Banc>(x: &mut Cx<'_, R>) {
+    fn dying<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(f::SUB2) {
             0 => death_start(x),
             2 | 8 => wait(x),
@@ -380,7 +380,7 @@ mod man_scorpion {
         }
     }
 
-    fn death_start<R: Banc>(x: &mut Cx<'_, R>) {
+    fn death_start<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB2, 2);
         react(x);
         if x.u8(0x3) == 0 {
@@ -410,7 +410,7 @@ mod man_scorpion {
         x.reinsert();
     }
 
-    fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+    fn wait<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u8(p::DELAY).wrapping_sub(1);
         x.set8(p::DELAY, n);
         if n == 0 {
@@ -420,7 +420,7 @@ mod man_scorpion {
         x.reinsert();
     }
 
-    fn death_end<R: Banc>(x: &mut Cx<'_, R>) {
+    fn death_end<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u8(p::DELAY).wrapping_sub(1);
         x.set8(p::DELAY, n);
         if n != 0 {
@@ -435,7 +435,7 @@ mod man_scorpion {
         free(x);
     }
 
-    fn death_start_b<R: Banc>(x: &mut Cx<'_, R>) {
+    fn death_start_b<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB2, 2);
         lib::sound(x, 0xeb4ba);
         let parent = x.linked(f::OWNER);
@@ -456,7 +456,7 @@ mod man_scorpion {
         x.reinsert();
     }
 
-    fn death_end_b<R: Banc>(x: &mut Cx<'_, R>) {
+    fn death_end_b<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u8(p::DELAY).wrapping_sub(1);
         x.set8(p::DELAY, n);
         if n != 0 {
@@ -469,7 +469,7 @@ mod man_scorpion {
     }
 
     /// Clignote pendant l'attente (caché quand `(+0xa2) & 3 != 0`), puis remet l'objet en liste.
-    fn blink<R: Banc>(x: &mut Cx<'_, R>) {
+    fn blink<R: Bench>(x: &mut Cx<'_, R>) {
         let hidden = x.u8(p::DELAY) & 3 != 0;
         x.set_bit(0x1, 1, hidden);
         x.reinsert();
@@ -478,7 +478,7 @@ mod man_scorpion {
     // --- état 6 : libération -------------------------------------------------------------------
 
     /// Libère les parties ; la variante 0 rend aussi ses compteurs au parent et à l'hôte.
-    fn die<R: Banc>(x: &mut Cx<'_, R>) {
+    fn die<R: Bench>(x: &mut Cx<'_, R>) {
         let first = x.u8(0x3) == 0;
         let mut host = None;
         if first {
@@ -529,7 +529,7 @@ mod nagpa {
     /// Octet de visibilité : bit 1 pour la variante 0, bit 0 pour la variante 1.
     const VISIBLE_FLAGS: u32 = 0xff8000 - 0x5f9c;
 
-    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(f::STATE) {
             st::INIT => init(x),
             st::ACTIVE => active(x),
@@ -538,7 +538,7 @@ mod nagpa {
         }
     }
 
-    fn init<R: Banc>(x: &mut Cx<'_, R>) {
+    fn init<R: Bench>(x: &mut Cx<'_, R>) {
         let variant = x.u8(0x3);
         if variant > 1 {
             return;
@@ -550,7 +550,7 @@ mod nagpa {
         x.anim_start(ANIMS, (variant as u32) as u16);
     }
 
-    fn active<R: Banc>(x: &mut Cx<'_, R>) {
+    fn active<R: Bench>(x: &mut Cx<'_, R>) {
         if paused(x) {
             return;
         }
@@ -565,7 +565,7 @@ mod nagpa {
     }
 
     /// Is a living player within range? (D0 = 1 if so in the original)
-    fn player_near<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+    fn player_near<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         let range: u16 = if x.u8(0x3) == 0 { 0x30 } else { 0x50 };
         for i in 0..4u32 {
             let player = A5 + 0x5de + 0x200 * i;
@@ -578,14 +578,14 @@ mod nagpa {
         false
     }
 
-    fn mark_visible<R: Banc>(x: &mut Cx<'_, R>, on: bool) {
+    fn mark_visible<R: Bench>(x: &mut Cx<'_, R>, on: bool) {
         let bit = x.u8(0x3) != 0;
         let v = x.data8(VISIBLE_FLAGS);
         let mask = if bit { 1 } else { 2 };
         wr8(x.b, VISIBLE_FLAGS, if on { v | mask } else { v & !mask });
     }
 
-    fn wait_for_player<R: Banc>(x: &mut Cx<'_, R>) {
+    fn wait_for_player<R: Bench>(x: &mut Cx<'_, R>) {
         if !player_near(x) {
             return;
         }
@@ -596,13 +596,13 @@ mod nagpa {
         x.set8(0x86, 1);
     }
 
-    fn appear<R: Banc>(x: &mut Cx<'_, R>) {
+    fn appear<R: Bench>(x: &mut Cx<'_, R>) {
         if x.anim_step() {
             x.add8(f::SUB, 2);
         }
     }
 
-    fn stay<R: Banc>(x: &mut Cx<'_, R>) {
+    fn stay<R: Bench>(x: &mut Cx<'_, R>) {
         if player_near(x) {
             return;
         }
@@ -613,7 +613,7 @@ mod nagpa {
         x.anim_start(ANIMS, n as u16);
     }
 
-    fn disappear<R: Banc>(x: &mut Cx<'_, R>) {
+    fn disappear<R: Bench>(x: &mut Cx<'_, R>) {
         if !x.anim_step() {
             return;
         }
@@ -626,6 +626,6 @@ mod nagpa {
 }
 
 handlers! {
-    0x74fc0 "enemy_20" #[sans] man_scorpion::run,
-    0x79300 "enemy_28" #[sans] nagpa::run,
+    0x74fc0 "enemy_20" #[without] man_scorpion::run,
+    0x79300 "enemy_28" #[without] nagpa::run,
 }

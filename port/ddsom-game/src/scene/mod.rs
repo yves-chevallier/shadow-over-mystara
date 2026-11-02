@@ -75,30 +75,30 @@ pub const fn scratch(offset16: u16) -> u32 {
     A5 - 0x1_0000 + offset16 as u32
 }
 
-/// Le fondu de luminosité que conduisent les tâches de fondu (`taches/fondu.rs`) : pages concernées, pas restants,
+/// Le fondu de luminosité que conduisent les tâches de fondu (`tasks/fading.rs`) : pages concernées, pas restants,
 /// délai entre deux pas ; et les entrées de ces tâches, que les écrans créent dans l'emplacement 0x10.
-pub mod fondu {
-    use crate::ram::{Mot, Octet};
+pub mod fading {
+    use crate::ram::{Word, Byte};
 
     /// Pages concernées (bit k : page k).
-    pub const PAGES: Octet = Octet::a5(0x48e);
+    pub const PAGES: Byte = Byte::a5(0x48e);
     /// Pas restants (nul : le fondu est fini).
-    pub const PAS: Octet = Octet::a5(0x48f);
+    pub const STEP: Byte = Byte::a5(0x48f);
     /// Délai entre deux pas (images).
-    pub const DELAI: Mot = Mot::a5(0x490);
+    pub const DELAY: Word = Word::a5(0x490);
 
     /// Tâches : montée et descente complètes, descente et montée du nombre de pas de l'état, fondu vers le blanc,
     /// fondu par composante depuis le blanc vers les palettes.
-    pub const MONTEE: u32 = 0x14ba;
-    pub const DESCENTE: u32 = 0x14d0;
-    pub const DESCENTE_PAS: u32 = 0x14de;
-    pub const MONTEE_PAS: u32 = 0x14c8;
-    pub const VERS_LE_BLANC: u32 = 0x1ccf8;
-    pub const DEPUIS_LE_BLANC: u32 = 0x1ced4;
+    pub const RISE: u32 = 0x14ba;
+    pub const DESCENT: u32 = 0x14d0;
+    pub const DESCENT_STEP: u32 = 0x14de;
+    pub const RISE_STEP: u32 = 0x14c8;
+    pub const TO_WHITE: u32 = 0x1ccf8;
+    pub const FROM_WHITE: u32 = 0x1ced4;
 
-    /// Crée la tâche de fondu `entree` dans l'emplacement 0x10 (`jsr 0x9b6`).
-    pub fn lancer(b: &mut cps2::Cps2Bus, entree: u32) {
-        crate::kernel::creer_tache(b, 0x10, entree);
+    /// Crée la tâche de fondu `entry` dans l'emplacement 0x10 (`jsr 0x9b6`).
+    pub fn launch(b: &mut cps2::Cps2Bus, entry: u32) {
+        crate::kernel::create_task(b, 0x10, entry);
     }
 }
 
@@ -191,27 +191,27 @@ impl<'a> Ctx<'a> {
     /// gestionnaire n'y cède la main (l'appel par adresse de l'original ne l'admettait pas).
     #[track_caller]
     pub fn world(&mut self) {
-        // sonde `rendu` (voir `dispatch::Class::update_sans_suite`)
-        crate::diag::registres_morts(self.c, "rendu", crate::diag::REGISTRES_DE_TACHE);
+        // sonde `rendering` (voir `dispatch::Class::update_no_next`)
+        crate::diag::dead_regs(self.c, "rendu", crate::diag::TASK_REGS);
         let flow = crate::game::update_world(self.c, self.b);
         assert!(flow == crate::modes::Flow::Done, "séquence de scène : un gestionnaire a cédé la main pendant la mise à jour du monde");
-        crate::sprites::construire_68k(self.c, self.b);
+        crate::sprites::build_68k(self.c, self.b);
     }
 
     /// Objet système « carton » de début de scène (SOBJ de type 14, 0xdfe26).
     pub fn title_card(&mut self) {
-        let _ = crate::families::creators::sobj_14_pur(self.b);
+        let _ = crate::families::creators::sobj_14_pure(self.b);
     }
 
-    /// Objet système de type 6, de variante `variante` (0xddeaa).
-    pub fn sobj_6(&mut self, variante: u8) {
-        let _ = crate::effects_aids::decor_6(self.b, variante);
+    /// Objet système de type 6, de variante `variant` (0xddeaa).
+    pub fn sobj_6(&mut self, variant: u8) {
+        let _ = crate::effects_aids::scenery_6(self.b, variant);
     }
 
     /// Copie des entrées vers les joueurs (0x2aec). Glitch d'origine : D0-D4 qu'elle laisse sont relus par des
-    /// gestionnaires de la mise à jour du monde (`inputs::recopier_68k`).
+    /// gestionnaires de la mise à jour du monde (`inputs::copy_68k`).
     pub fn inputs(&mut self) {
-        crate::inputs::recopier_68k(self.c, self.b);
+        crate::inputs::copy_68k(self.c, self.b);
     }
 
     // --- minuteries ------------------------------------------------------------------------------
@@ -227,20 +227,20 @@ impl<'a> Ctx<'a> {
 
     /// Écran noir puis fondu d'ouverture : délai 2, toutes les pages, tâche de fondu.
     pub fn fade_in(&mut self) {
-        fondu::DELAI.set(self.b, 2);
-        fondu::PAGES.set(self.b, 15);
+        fading::DELAY.set(self.b, 2);
+        fading::PAGES.set(self.b, 15);
         crate::palette::no_brightness(self.b);
-        self.start_fade_task(crate::scene::fondu::MONTEE);
+        self.start_fade_task(crate::scene::fading::RISE);
     }
     /// Variante : fondu à un niveau par pas (`A5+0x48f` = 1), sans passer par le noir.
     pub fn fade_in_stepped(&mut self) {
-        fondu::DELAI.set(self.b, 2);
-        fondu::PAGES.set(self.b, 15);
-        fondu::PAS.set(self.b, 1);
-        self.start_fade_task(crate::scene::fondu::DEPUIS_LE_BLANC);
+        fading::DELAY.set(self.b, 2);
+        fading::PAGES.set(self.b, 15);
+        fading::STEP.set(self.b, 1);
+        self.start_fade_task(crate::scene::fading::FROM_WHITE);
     }
     fn start_fade_task(&mut self, entry: u32) {
-        crate::kernel::creer_tache(self.b, 0x10, entry);
+        crate::kernel::create_task(self.b, 0x10, entry);
     }
 
     /// Crée un objet (allocateur `alloc`) actif, de type `kind` ; l'original écrit sans tester la retenue.
@@ -254,7 +254,7 @@ impl<'a> Ctx<'a> {
     /// Ouvre le message `n` (0xc8312) et mémorise (sur 16 bits) l'adresse de l'objet dans `slot`. Glitch d'origine :
     /// l'échec n'est pas testé, l'A1 laissé par l'allocation est mémorisé.
     pub fn message(&mut self, n: u8, slot: u32) {
-        let o = crate::families::creators::scene_set_ou_reste(self.b, n);
+        let o = crate::families::creators::scene_set_or_rest(self.b, n);
         self.store_obj(slot, o);
     }
     /// Message terminé (octet `+0x22` non nul) ?

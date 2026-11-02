@@ -1,11 +1,11 @@
 //! Type 5, ghoul debout (`+5 = 2`) et en patrouille (`+5 = 10`). `+6` : 0 et 6 marche vers la cible et
 //! décide d'attaquer, 2 demi-tour, 4 attente.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
         return;
     }
@@ -30,7 +30,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// L'aspect voulu `v` ; l'animation `anim` n'est lancée (et rendu vrai) que si l'aspect change.
-fn set_look<R: Banc>(x: &mut Cx<'_, R>, v: u8, anim: u32) -> bool {
+fn set_look<R: Bench>(x: &mut Cx<'_, R>, v: u8, anim: u32) -> bool {
     x.set8(LOOK, v);
     if v == x.u8(LOOK_PREV) {
         return false;
@@ -41,7 +41,7 @@ fn set_look<R: Banc>(x: &mut Cx<'_, R>, v: u8, anim: u32) -> bool {
 }
 
 /// 0x5fcec : le ghoul se met en marche vers sa cible.
-pub(super) fn begin_walk<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn begin_walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
     set_look(x, 0, 2);
@@ -52,7 +52,7 @@ pub(super) fn begin_walk<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5fd3e : marche ; se retourne, attend ou attaque.
-fn walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set8(AI_SHOT, 0);
         lib::walk_near_point(x);
@@ -80,7 +80,7 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5fd96 : un joueur à portée ? Si oui, attaque ; sinon avance d'un pas d'animation.
-fn decide<R: Banc>(x: &mut Cx<'_, R>) {
+fn decide<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x20, 0x20, 8) {
         x.set16(f::STATE, 0x204);
         return pick_attack(x, CLOSE_ATTACKS, 0);
@@ -99,7 +99,7 @@ fn decide<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 2 : demi-tour (animation 1, puis inversion de l'orientation).
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
@@ -115,7 +115,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 4 : attente.
-fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -132,7 +132,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 10 : patrouille tant qu'aucun joueur n'est en vie.
-pub(super) fn patrol<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn patrol<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

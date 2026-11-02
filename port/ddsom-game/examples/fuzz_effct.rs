@@ -12,7 +12,7 @@
 //!
 //! Variables : `FUZZ_CREATEURS=b4bcc,b96c0` (créateurs essayés depuis des registres tirés au hasard),
 //! `FUZZ_VARIANTES=0,2,5` (variantes tirées ; par défaut 0 à 15), `FUZZ_TOURS=n` (trajectoires par
-//! variante, 24), `FUZZ_PAS=n` (pas par trajectoire, 60), `FUZZ_GRAINE=n`, `FUZZ_PLAGE=début-fin` (plage du
+//! variante, 24), `FUZZ_PAS=n` (pas par trajectoire, 60), `FUZZ_GRAINE=n`, `FUZZ_PLAGE=début-end` (plage du
 //! code d'origine dont on relève la couverture ; par défaut de l'entrée à l'entrée suivante de la table).
 
 use std::collections::BTreeSet;
@@ -25,8 +25,8 @@ use m68k::Cpu;
 use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use ddsom_game::objects::pools::{EFFCT, ENEMY};
 
-struct Alea(u64);
-impl Alea {
+struct Rng(u64);
+impl Rng {
     fn next(&mut self) -> u32 {
         self.0 ^= self.0 << 13;
         self.0 ^= self.0 >> 7;
@@ -36,25 +36,25 @@ impl Alea {
     fn pick<T: Copy>(&mut self, v: &[T]) -> T {
         v[self.next() as usize % v.len()]
     }
-    fn une_sur(&mut self, n: u32) -> bool {
+    fn one_in(&mut self, n: u32) -> bool {
         self.next() % n == 0
     }
 }
 
-const JOUEURS: u32 = 0xff85de;
+const PLAYERS: u32 = 0xff85de;
 
-/// Instructions atteignables depuis `entree` dans `plage` (branchements, `bsr` locaux, tables de sauts dont la
+/// Instructions atteignables depuis `entry` dans `range` (branchements, `bsr` locaux, tables de sauts dont la
 /// fin est le début du premier code qu'elles désignent).
-fn atteignables(b: &mut Cps2Bus, entree: u32, plage: std::ops::Range<u32>) -> BTreeSet<u32> {
-    let mut vus = BTreeSet::new();
-    let mut todo = vec![entree];
-    let dedans = |t: u32| plage.contains(&t) && t % 2 == 0;
-    while let Some(depart) = todo.pop() {
-        let mut pc = depart;
-        while dedans(pc) && !vus.contains(&pc) {
+fn reachable(b: &mut Cps2Bus, entry: u32, range: std::ops::Range<u32>) -> BTreeSet<u32> {
+    let mut seen = BTreeSet::new();
+    let mut todo = vec![entry];
+    let inside = |t: u32| range.contains(&t) && t % 2 == 0;
+    while let Some(start) = todo.pop() {
+        let mut pc = start;
+        while inside(pc) && !seen.contains(&pc) {
             let ins = m68k::decode(b, pc);
-            vus.insert(pc);
-            let suite = pc + ins.len.max(2);
+            seen.insert(pc);
+            let next = pc + ins.len.max(2);
             let mut continue_ = true;
             match ins.op {
                 Op::Bra(t) => {
@@ -67,12 +67,12 @@ fn atteignables(b: &mut Cps2Bus, entree: u32, plage: std::ops::Range<u32>) -> BT
                     match ea {
                         Ea::AbsL(t) | Ea::AbsW(t) | Ea::PcDisp(t) => todo.push(t),
                         Ea::PcIdx(base, _) => {
-                            let mut fin = plage.end;
+                            let mut end = range.end;
                             let mut at = base;
-                            while at < fin && at < base + 0x200 {
+                            while at < end && at < base + 0x200 {
                                 let t = (base as i32 + b.fetch16(at) as i16 as i32) as u32;
-                                if dedans(t) && t > at {
-                                    fin = fin.min(t);
+                                if inside(t) && t > at {
+                                    end = end.min(t);
                                     todo.push(t);
                                 }
                                 at += 2;
@@ -89,18 +89,18 @@ fn atteignables(b: &mut Cps2Bus, entree: u32, plage: std::ops::Range<u32>) -> BT
             if !continue_ {
                 break;
             }
-            pc = suite;
+            pc = next;
         }
     }
-    vus
+    seen
 }
 
-/// Exécute le code d'origine seul sur une copie et rend les adresses exécutées dans `plage`.
-fn couverture(c: &Cpu, b: &Cps2Bus, entree: u32, plage: &std::ops::Range<u32>, vus: &mut BTreeSet<u32>) -> Option<(Cpu, Cps2Bus)> {
+/// Exécute le code d'origine seul sur une copie et rend les adresses exécutées dans `range`.
+fn coverage(c: &Cpu, b: &Cps2Bus, entry: u32, range: &std::ops::Range<u32>, seen: &mut BTreeSet<u32>) -> Option<(Cpu, Cps2Bus)> {
     let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let (mut c, mut b) = (c.clone(), b.clone());
         let sp = c.a[7];
-        c.pc = entree;
+        c.pc = entry;
         c.a[7] = c.a[7].wrapping_sub(4);
         wr32(&mut b, c.a[7], 0xfffe);
         let mut local = Vec::new();
@@ -108,16 +108,16 @@ fn couverture(c: &Cpu, b: &Cps2Bus, entree: u32, plage: &std::ops::Range<u32>, v
             if c.pc == 0xfffe && c.a[7] == sp {
                 return (local, Some((c, b)));
             }
-            if plage.contains(&c.pc) {
+            if range.contains(&c.pc) {
                 local.push(c.pc);
             }
             c.step(&mut b);
         }
         (local, None)
     }));
-    let (l, fin) = r.ok()?;
-    vus.extend(l);
-    fin
+    let (l, end) = r.ok()?;
+    seen.extend(l);
+    end
 }
 
 /// Comparaison faite ici (`FUZZ_PROPRE=1`, sans le mode contrôle) : A0, D7, RAM hors pile et hors table des tâches
@@ -134,34 +134,34 @@ fn compare(orig: &(Cpu, Cps2Bus), c: &Cpu, b: &Cps2Bus) -> Vec<String> {
     }
     let sp = co.a[7] & 0xff_ffff;
     // pile privée des wrappers son (pointeur en FF2A1A), comme `mem::diff_bus`
-    let prive = ((bo.ram[0x2a1a / 2] as u32) << 16 | bo.ram[0x2a1c / 2] as u32) & 0xff_ffff;
+    let private = ((bo.ram[0x2a1a / 2] as u32) << 16 | bo.ram[0x2a1c / 2] as u32) & 0xff_ffff;
     for i in 0..bo.ram.len() {
         let a = 0xff0000 + 2 * i as u32;
-        let mort = (sp.saturating_sub(0x400)..sp).contains(&a) || (prive.saturating_sub(0x400)..prive).contains(&a) || a < 0xff0400;
-        if bo.ram[i] != b.ram[i] && !mort && d.len() < 8 {
+        let dead = (sp.saturating_sub(0x400)..sp).contains(&a) || (private.saturating_sub(0x400)..private).contains(&a) || a < 0xff0400;
+        if bo.ram[i] != b.ram[i] && !dead && d.len() < 8 {
             d.push(format!("ram[{a:06x}]={:04x} au lieu de {:04x}", b.ram[i], bo.ram[i]));
         }
     }
-    for (nom, x, y) in [("gfxram", &b.gfxram, &bo.gfxram), ("palette", &b.palette, &bo.palette), ("objram0", &b.objram[0], &bo.objram[0])] {
+    for (name, x, y) in [("gfxram", &b.gfxram, &bo.gfxram), ("palette", &b.palette, &bo.palette), ("objram0", &b.objram[0], &bo.objram[0])] {
         if let Some(i) = x.iter().zip(y.iter()).position(|(p, q)| p != q) {
-            d.push(format!("{nom}[{i:x}]={:04x} au lieu de {:04x}", x[i], y[i]));
+            d.push(format!("{name}[{i:x}]={:04x} au lieu de {:04x}", x[i], y[i]));
         }
     }
     d
 }
 
 /// Sous-états (`+5`) de l'état actif que la table de l'original prévoit (au-delà, il saute dans des données).
-fn sous_etats(t: u32, v: u32) -> &'static [u8] {
+fn sub_states(t: u32, v: u32) -> &'static [u8] {
     match (t, v) {
         (80, 0) => &[0, 2, 4, 6, 8, 10, 12, 14, 16],
         (80, 1) => &[0, 2, 4],
         (80, 6) => &[0, 2, 4, 6],
         (80, _) => &[0, 2],
-        _ => sous_etats_type(t),
+        _ => type_sub_states(t),
     }
 }
 
-fn sous_etats_type(t: u32) -> &'static [u8] {
+fn type_sub_states(t: u32) -> &'static [u8] {
     match t {
         63 | 43 => &[0, 2, 4],
         46 | 48 | 70 => &[0, 2],
@@ -171,63 +171,63 @@ fn sous_etats_type(t: u32) -> &'static [u8] {
 }
 
 /// Réglages propres à un type, après la création générique de l'objet.
-fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
-    let joueur = JOUEURS + 0x200 * (alea.next() % 4);
+fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
+    let player = PLAYERS + 0x200 * (rng.next() % 4);
     match t {
         // feu d'artifice : étape de la scène, fondu, hôte (+0x56), décor (+0x42), délais
         80 => {
-            wr8(b, A5 + 0x2e, alea.pick(&[0, 0x12, 0x12, 0xc]));
-            wr8(b, A5 + 0x48f, alea.pick(&[0, 1]));
+            wr8(b, A5 + 0x2e, rng.pick(&[0, 0x12, 0x12, 0xc]));
+            wr8(b, A5 + 0x48f, rng.pick(&[0, 1]));
             wr16(b, obj + 0x56, owner as u16);
-            wr16(b, obj + 0x42, alea.pick(&[owner as u16, JOUEURS as u16]));
-            wr8(b, owner + 0x22, alea.pick(&[0, 1]));
-            wr16(b, obj + 0x58, (alea.next() % 18) as u16);
-            wr16(b, obj + 0x5a, (alea.next() % 4) as u16);
-            wr8(b, obj + 0x33, alea.pick(&[0, 0, 1]));
-            wr16(b, obj + 0xc, (alea.next() % 0x40) as u16);
-            if alea.une_sur(3) {
+            wr16(b, obj + 0x42, rng.pick(&[owner as u16, PLAYERS as u16]));
+            wr8(b, owner + 0x22, rng.pick(&[0, 1]));
+            wr16(b, obj + 0x58, (rng.next() % 18) as u16);
+            wr16(b, obj + 0x5a, (rng.next() % 4) as u16);
+            wr8(b, obj + 0x33, rng.pick(&[0, 0, 1]));
+            wr16(b, obj + 0xc, (rng.next() % 0x40) as u16);
+            if rng.one_in(3) {
                 // presque en haut de l'écran
-                let haut = rd16(b, A5 + 0x5aa).wrapping_add(0x100).wrapping_sub(rd16(b, obj + 0x10));
-                wr16(b, obj + 0xc, haut.wrapping_sub((alea.next() % 8) as u16));
+                let high = rd16(b, A5 + 0x5aa).wrapping_add(0x100).wrapping_sub(rd16(b, obj + 0x10));
+                wr16(b, obj + 0xc, high.wrapping_sub((rng.next() % 8) as u16));
             }
         }
         // effets liés à un joueur : le propriétaire est un joueur
         81 => {
-            wr16(b, obj + 0x50, joueur as u16);
+            wr16(b, obj + 0x50, player as u16);
             for off in [0x8u32, 0xc, 0x10] {
-                let w = rd16(b, joueur + off);
+                let w = rd16(b, player + off);
                 wr16(b, obj + off, w);
             }
-            wr16(b, joueur + 0x42, (alea.next() % 6) as u16);
+            wr16(b, player + 0x42, (rng.next() % 6) as u16);
         }
         // créateur en +0x42
         63 => wr16(b, obj + 0x42, owner as u16),
         // porteur (ENEMY) en +0x46, pièce 0 à 2 ; vie autour des seuils ; coups reçus
         46 => {
-            let porteur = if alea.une_sur(8) { obj } else { owner };
+            let porteur = if rng.one_in(8) { obj } else { owner };
             wr16(b, obj + 0x46, porteur as u16);
-            wr8(b, obj + 0x2f, (alea.next() % 3) as u8);
+            wr8(b, obj + 0x2f, (rng.next() % 3) as u8);
             wr16(b, porteur + 0x60, 0x100);
-            wr16(b, porteur + 0x62, (alea.next() % 0x140) as u16);
-            wr8(b, porteur + 0x33, alea.pick(&[0, 0, 1, 2, 0x81, 5]));
-            wr8(b, obj + 0x5c, (alea.next() % 4) as u8);
+            wr16(b, porteur + 0x62, (rng.next() % 0x140) as u16);
+            wr8(b, porteur + 0x33, rng.pick(&[0, 0, 1, 2, 0x81, 5]));
+            wr8(b, obj + 0x5c, (rng.next() % 4) as u8);
         }
         // porteur en +0x46 (lui-même suivant un objet), phase +0xa4 ; armement, décompte, angle
         48 => {
-            wr16(b, obj + 0x46, if alea.une_sur(10) { 0 } else { owner as u16 });
-            let autre = JOUEURS + 0x200 * (alea.next() % 4);
-            wr16(b, owner + 0x46, alea.pick(&[0, owner as u16, autre as u16]));
-            wr8(b, owner + 0xa4, alea.pick(&[0, 1, 1, 3, 3, 2]));
-            wr8(b, obj + 0x42, alea.pick(&[0, 1, 0x80]));
-            wr8(b, obj + 0x43, alea.pick(&[0, 1, 2, 0x20]));
-            wr16(b, obj + 0x5c, alea.next() as u16);
+            wr16(b, obj + 0x46, if rng.one_in(10) { 0 } else { owner as u16 });
+            let other = PLAYERS + 0x200 * (rng.next() % 4);
+            wr16(b, owner + 0x46, rng.pick(&[0, owner as u16, other as u16]));
+            wr8(b, owner + 0xa4, rng.pick(&[0, 1, 1, 3, 3, 2]));
+            wr8(b, obj + 0x42, rng.pick(&[0, 1, 0x80]));
+            wr8(b, obj + 0x43, rng.pick(&[0, 1, 2, 0x20]));
+            wr16(b, obj + 0x5c, rng.next() as u16);
             wr32(b, obj + 0x4c, 0x1ca4b6);
-            wr8(b, owner + 0x2c, alea.pick(&[0, 0x20]));
-            wr8(b, A5 + 0x36, alea.pick(&[0, 0, 1]));
+            wr8(b, owner + 0x2c, rng.pick(&[0, 0x20]));
+            wr8(b, A5 + 0x36, rng.pick(&[0, 0, 1]));
         }
         // bulle d'action : porteur (+0x50) joueur dont l'action (+0x3d) est dans la table (0 à 32), objet porté
         4 => {
-            let j = JOUEURS + 0x200 * (alea.next() % 4);
+            let j = PLAYERS + 0x200 * (rng.next() % 4);
             wr16(b, obj + 0x50, j as u16);
             // actions prévues par les tables de chaque variante (0 : 0 à 32 ; 2 : 0 à 18 ; 1, 5, 6 : 0 à 4)
             let actions: &[u8] = match rd8(b, obj + 3) {
@@ -236,155 +236,155 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
                 1 => &[0, 2, 4],
                 _ => &[0, 1, 2],
             };
-            wr8(b, j + 0x3d, alea.pick(actions));
-            wr8(b, owner + 0x3d, alea.pick(actions));
-            wr16(b, obj + 0x54, alea.pick(&[owner as u16, j as u16]));
+            wr8(b, j + 0x3d, rng.pick(actions));
+            wr8(b, owner + 0x3d, rng.pick(actions));
+            wr16(b, obj + 0x54, rng.pick(&[owner as u16, j as u16]));
             for off in [0x10du32, 0x10e] {
-                wr8(b, j + off, (alea.next() % 6) as u8);
+                wr8(b, j + off, (rng.next() % 6) as u8);
             }
-            wr8(b, j + 0x77, alea.pick(&[0, 1]));
-            wr8(b, j + 3, 2 * (1 + alea.next() % 6) as u8);
+            wr8(b, j + 0x77, rng.pick(&[0, 1]));
+            wr8(b, j + 3, 2 * (1 + rng.next() % 6) as u8);
         }
         // boutiques : acheteurs (liste A5-0x555c) dans la zone, prêts à acheter (+0x58), joueur (+0x50) avec de
         // l'or, une vie, un inventaire ; comptoir de scène : vente en cours, vendeur (+0x1a)
         22 | 70 => {
             for k in 0..4u32 {
-                let acheteur = JOUEURS + 0x200 * k;
-                wr16(b, 0xff2aa4 + 2 * k, if alea.une_sur(3) { 0 } else { acheteur as u16 });
-                wr8(b, acheteur + 0x58, alea.pick(&[0, 1, 1, 0x80]));
-                wr16(b, acheteur + 0x50, acheteur as u16);
+                let buyer = PLAYERS + 0x200 * k;
+                wr16(b, 0xff2aa4 + 2 * k, if rng.one_in(3) { 0 } else { buyer as u16 });
+                wr8(b, buyer + 0x58, rng.pick(&[0, 1, 1, 0x80]));
+                wr16(b, buyer + 0x50, buyer as u16);
                 let x0 = rd16(b, obj + 8);
-                wr16(b, acheteur + 8, x0.wrapping_add((alea.next() % 0x40) as u16).wrapping_sub(0x20));
+                wr16(b, buyer + 8, x0.wrapping_add((rng.next() % 0x40) as u16).wrapping_sub(0x20));
                 let y0 = rd16(b, obj + 0x10);
-                wr16(b, acheteur + 0x10, y0.wrapping_sub((alea.next() % 0x40) as u16));
-                wr16(b, acheteur + 0xc, 0);
-                wr32(b, acheteur + 0x114, alea.pick(&[0, 0x10, 0x100, 0x9999, 0x0099_9999]));
-                wr8(b, acheteur + 0x167, alea.pick(&[0, 9]));
-                wr16(b, acheteur + 0x60, 0x80);
-                wr16(b, acheteur + 0x62, alea.pick(&[0x10, 0x70, 0x80]));
-                wr8(b, acheteur + 3, 2 * (1 + alea.next() % 6) as u8);
+                wr16(b, buyer + 0x10, y0.wrapping_sub((rng.next() % 0x40) as u16));
+                wr16(b, buyer + 0xc, 0);
+                wr32(b, buyer + 0x114, rng.pick(&[0, 0x10, 0x100, 0x9999, 0x0099_9999]));
+                wr8(b, buyer + 0x167, rng.pick(&[0, 9]));
+                wr16(b, buyer + 0x60, 0x80);
+                wr16(b, buyer + 0x62, rng.pick(&[0x10, 0x70, 0x80]));
+                wr8(b, buyer + 3, 2 * (1 + rng.next() % 6) as u8);
                 for slot in 0..6u32 {
-                    wr8(b, acheteur + 0x140 + slot, alea.pick(&[0x56, 0x56, 1, 2, 0x23]));
-                    wr8(b, acheteur + 0x148 + slot, alea.pick(&[0, 1, 9]));
+                    wr8(b, buyer + 0x140 + slot, rng.pick(&[0x56, 0x56, 1, 2, 0x23]));
+                    wr8(b, buyer + 0x148 + slot, rng.pick(&[0, 1, 9]));
                 }
             }
-            wr8(b, obj + 0x18, alea.pick(&[0, 1, 2]));
+            wr8(b, obj + 0x18, rng.pick(&[0, 1, 2]));
             // zone et prix d'un étal déjà ouvert (la naissance les remplace)
             for (off, v) in [(0x14u32, 0x40u16), (0x16, 0x40), (0x54, 0xfff0), (0x56, 0x1c), (0x52, 0x100)] {
                 wr16(b, obj + off, v);
             }
-            wr16(b, obj + 0x58, alea.pick(&[0x0102, 0x0523, 0x0001]));
-            wr8(b, A5 + 0x35, (alea.next() % 6) as u8);
-            wr16(b, 0xff2abe, alea.pick(&[0, 0, obj as u16, owner as u16]));
+            wr16(b, obj + 0x58, rng.pick(&[0x0102, 0x0523, 0x0001]));
+            wr8(b, A5 + 0x35, (rng.next() % 6) as u8);
+            wr16(b, 0xff2abe, rng.pick(&[0, 0, obj as u16, owner as u16]));
             wr16(b, obj + 0x1a, owner as u16);
-            wr16(b, owner + 0x32, alea.pick(&[0, 1, 5]));
-            wr8(b, obj + 6, alea.pick(&[0, 2, 4]));
-            if alea.une_sur(2) {
+            wr16(b, owner + 0x32, rng.pick(&[0, 1, 5]));
+            wr8(b, obj + 6, rng.pick(&[0, 2, 4]));
+            if rng.one_in(2) {
                 // l'objet est posé à l'écran, devant la zone des acheteurs du comptoir de scène
                 let (cx, cy) = (rd16(b, A5 + 0x506), rd16(b, A5 + 0x50a));
                 for k in 0..4u32 {
-                    let acheteur = JOUEURS + 0x200 * k;
-                    wr16(b, acheteur + 8, cx.wrapping_add(0xa8 + (alea.next() % 0x58) as u16));
-                    wr16(b, acheteur + 0x10, cy.wrapping_add(0x48 + (alea.next() % 0x14) as u16));
+                    let buyer = PLAYERS + 0x200 * k;
+                    wr16(b, buyer + 8, cx.wrapping_add(0xa8 + (rng.next() % 0x58) as u16));
+                    wr16(b, buyer + 0x10, cy.wrapping_add(0x48 + (rng.next() % 0x14) as u16));
                 }
             }
         }
         // sorts d'un magicien : six modes
         44 => {
-            wr8(b, obj + 0x2f, (alea.next() % 6) as u8);
+            wr8(b, obj + 0x2f, (rng.next() % 6) as u8);
             wr16(b, obj + 0x5c, owner as u16);
         }
         // vote : réglage (scrutin) restreint
         23 => {
-            wr8(b, obj + 0x2f, alea.pick(&[0, 1, 2]));
+            wr8(b, obj + 0x2f, rng.pick(&[0, 1, 2]));
             // texte du choix gagnant (pointeur `+0x30`, longueur `+0x34`) dans le tampon du scrutin
-            wr32(b, obj + 0x30, 0xff2072 + 2 * (alea.next() % 0x20));
-            wr16(b, obj + 0x34, (alea.next() % 8) as u16);
+            wr32(b, obj + 0x30, 0xff2072 + 2 * (rng.next() % 0x20));
+            wr16(b, obj + 0x34, (rng.next() % 8) as u16);
         }
         // maillon de chaîne : précédent (+0x5c), tête (+0x46) dont l'octet +0x58 annonce la fin ou la rupture,
         // porteur de la tête (+0x54), rang
         12 => {
-            let tete = JOUEURS + 0x200 * (alea.next() % 4);
+            let head = PLAYERS + 0x200 * (rng.next() % 4);
             wr16(b, obj + 0x5c, owner as u16);
-            wr16(b, obj + 0x46, tete as u16);
-            wr8(b, tete + 0x58, alea.pick(&[0, 0x80, 0xfe, 0xfe]));
-            wr16(b, tete + 0x54, owner as u16);
-            wr8(b, obj + 0x2f, (alea.next() % 4) as u8);
-            wr8(b, owner + 0x28, alea.pick(&[2, 2, 4]));
+            wr16(b, obj + 0x46, head as u16);
+            wr8(b, head + 0x58, rng.pick(&[0, 0x80, 0xfe, 0xfe]));
+            wr16(b, head + 0x54, owner as u16);
+            wr8(b, obj + 0x2f, (rng.next() % 4) as u8);
+            wr8(b, owner + 0x28, rng.pick(&[2, 2, 4]));
         }
         // effets de scène : objet suivi (+0x46, parfois aucun), réglage
         42 => {
-            wr16(b, obj + 0x46, if alea.une_sur(8) { 0 } else { owner as u16 });
-            wr8(b, obj + 0x2f, (alea.next() % 8) as u8);
-            wr8(b, owner + 0x2c, alea.pick(&[0, 0x20]));
+            wr16(b, obj + 0x46, if rng.one_in(8) { 0 } else { owner as u16 });
+            wr8(b, obj + 0x2f, (rng.next() % 8) as u8);
+            wr8(b, owner + 0x2c, rng.pick(&[0, 0x20]));
         }
         // effets d'un coup : attaquant en +0x5c dans l'état 0x204 et une étape de la table (+6), réglage
         40 => {
             wr16(b, obj + 0x5c, owner as u16);
-            wr16(b, owner + 4, alea.pick(&[0x204, 0x204, 0x202]));
-            wr8(b, owner + 6, alea.pick(&[0x38, 0x3a, 0x3c, 0x10]));
-            wr8(b, owner + 7, (alea.next() % 6) as u8);
-            wr8(b, owner + 3, (alea.next() % 8) as u8);
-            wr8(b, owner + 0x2c, alea.pick(&[0, 0x20]));
-            let reglages: &[u8] = if rd8(b, obj + 3) == 0 { &[0, 1] } else { &[0, 1, 2, 3] };
-            wr8(b, obj + 0x2f, alea.pick(reglages));
-            wr8(b, A5 + 0x36, alea.pick(&[0, 0, 1]));
+            wr16(b, owner + 4, rng.pick(&[0x204, 0x204, 0x202]));
+            wr8(b, owner + 6, rng.pick(&[0x38, 0x3a, 0x3c, 0x10]));
+            wr8(b, owner + 7, (rng.next() % 6) as u8);
+            wr8(b, owner + 3, (rng.next() % 8) as u8);
+            wr8(b, owner + 0x2c, rng.pick(&[0, 0x20]));
+            let settings: &[u8] = if rd8(b, obj + 3) == 0 { &[0, 1] } else { &[0, 1, 2, 3] };
+            wr8(b, obj + 0x2f, rng.pick(settings));
+            wr8(b, A5 + 0x36, rng.pick(&[0, 0, 1]));
         }
         // effets d'attaque : attaquant en +0x5c (action +0x49, étape +6, type, classe), réglage
         11 => {
             wr16(b, obj + 0x5c, owner as u16);
-            wr8(b, owner + 0x49, alea.pick(&[0x70, 0x90, 0x94, 0xa8, 0xa8, 0x10]));
-            wr8(b, owner + 4, alea.pick(&[2, 4, 4, 6]));
-            wr8(b, owner + 6, (alea.next() % 9) as u8);
-            wr8(b, owner + 2, (alea.next() % 0x20) as u8);
-            wr8(b, owner + 0x2c, alea.pick(&[0, 0x20]));
-            wr8(b, owner + 0x28, alea.pick(&[2, 2, 4]));
-            wr8(b, A5 + 0x6f, alea.next() as u8);
+            wr8(b, owner + 0x49, rng.pick(&[0x70, 0x90, 0x94, 0xa8, 0xa8, 0x10]));
+            wr8(b, owner + 4, rng.pick(&[2, 4, 4, 6]));
+            wr8(b, owner + 6, (rng.next() % 9) as u8);
+            wr8(b, owner + 2, (rng.next() % 0x20) as u8);
+            wr8(b, owner + 0x2c, rng.pick(&[0, 0x20]));
+            wr8(b, owner + 0x28, rng.pick(&[2, 2, 4]));
+            wr8(b, A5 + 0x6f, rng.next() as u8);
             let modes: &[u8] = match rd8(b, obj + 3) {
                 8 | 9 => &[0, 0, 1, 2, 3, 4],
                 _ => &[0, 1],
             };
-            wr8(b, obj + 0x2f, alea.pick(modes));
+            wr8(b, obj + 0x2f, rng.pick(modes));
             let action = rd8(b, owner + 0x49);
-            wr8(b, obj + 0x42, alea.pick(&[0x70, 0x94, action]));
-            wr8(b, obj + 0x5, alea.pick(&[0, 0, 2]));
+            wr8(b, obj + 0x42, rng.pick(&[0x70, 0x94, action]));
+            wr8(b, obj + 0x5, rng.pick(&[0, 0, 2]));
         }
         // objet suivi en +0x5c (parfois aucun), réglage 0 ou 1
         43 => {
-            wr16(b, obj + 0x5c, if alea.une_sur(10) { 0 } else { owner as u16 });
-            wr8(b, obj + 0x2f, alea.pick(&[0, 0, 1]));
-            wr16(b, obj + 0x42, (alea.next() % 0x28) as u16);
+            wr16(b, obj + 0x5c, if rng.one_in(10) { 0 } else { owner as u16 });
+            wr8(b, obj + 0x2f, rng.pick(&[0, 0, 1]));
+            wr16(b, obj + 0x42, (rng.next() % 0x28) as u16);
         }
         _ => {}
     }
 }
 
 /// Perturbation à chaque pas (propriétaire, joueurs, scène).
-fn perturbe(b: &mut Cps2Bus, obj: u32, owner: u32, alea: &mut Alea) {
-    if alea.une_sur(4) {
-        wr8(b, owner + 4, alea.pick(&[0, 2, 4, 6]));
-        wr8(b, owner + 0x3d, 2 * (alea.next() % 3) as u8);
+fn perturbs(b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
+    if rng.one_in(4) {
+        wr8(b, owner + 4, rng.pick(&[0, 2, 4, 6]));
+        wr8(b, owner + 0x3d, 2 * (rng.next() % 3) as u8);
     }
-    if alea.une_sur(6) {
-        wr8(b, obj + 0x33, alea.pick(&[0, 1]));
+    if rng.one_in(6) {
+        wr8(b, obj + 0x33, rng.pick(&[0, 1]));
     }
-    if alea.une_sur(8) {
-        let j = JOUEURS + 0x200 * (alea.next() % 4);
-        wr8(b, j, alea.pick(&[0, 1, 1, 2]));
-        wr16(b, j + 0x62, alea.pick(&[0, 0x10, 0x40]));
+    if rng.one_in(8) {
+        let j = PLAYERS + 0x200 * (rng.next() % 4);
+        wr8(b, j, rng.pick(&[0, 1, 1, 2]));
+        wr16(b, j + 0x62, rng.pick(&[0, 0x10, 0x40]));
         let (x, y) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
-        wr16(b, j + 8, x.wrapping_add((alea.next() % 0x40) as u16).wrapping_sub(0x20));
-        wr16(b, j + 0x10, y.wrapping_add((alea.next() % 0x20) as u16).wrapping_sub(0x10));
+        wr16(b, j + 8, x.wrapping_add((rng.next() % 0x40) as u16).wrapping_sub(0x20));
+        wr16(b, j + 0x10, y.wrapping_add((rng.next() % 0x20) as u16).wrapping_sub(0x10));
     }
     // étape de la scène et fondu (feu d'artifice)
-    if alea.une_sur(10) {
-        wr8(b, A5 + 0x2e, alea.pick(&[0, 0x12, 0xc]));
-        wr8(b, A5 + 0x48f, alea.pick(&[0, 1]));
+    if rng.one_in(10) {
+        wr8(b, A5 + 0x2e, rng.pick(&[0, 0x12, 0xc]));
+        wr8(b, A5 + 0x48f, rng.pick(&[0, 1]));
     }
     // compteur d'images
-    wr16(b, A5 + 0x6e, alea.next() as u16);
+    wr16(b, A5 + 0x6e, rng.next() as u16);
     // jeu en pause (rare)
-    wr8(b, A5 + 0x3d, alea.une_sur(20) as u8);
+    wr8(b, A5 + 0x3d, rng.one_in(20) as u8);
 }
 
 fn main() {
@@ -393,32 +393,32 @@ fn main() {
 
 fn principal() {
     let a: Vec<String> = std::env::args().collect();
-    let (Some(roms), Some(eeprom), Some(scenario), Some(chauffe), Some(types)) = (a.get(1), a.get(2), a.get(3), a.get(4), a.get(5)) else {
+    let (Some(roms), Some(eeprom), Some(scenario), Some(warmup), Some(types)) = (a.get(1), a.get(2), a.get(3), a.get(4), a.get(5)) else {
         eprintln!("usage : fuzz_effct <roms> <eeprom> <scénario> <images de chauffe> <types>");
         std::process::exit(2);
     };
     let env = |k: &str, d: u32| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
-    let variantes: Vec<u32> = std::env::var("FUZZ_VARIANTES")
+    let variants: Vec<u32> = std::env::var("FUZZ_VARIANTES")
         .map(|v| v.split(',').map(|x| x.parse().unwrap()).collect())
         .unwrap_or_else(|_| (0..16).collect());
     let tours = env("FUZZ_TOURS", 24);
-    let pas = env("FUZZ_PAS", 60);
+    let step = env("FUZZ_PAS", 60);
     let types: Vec<u32> = types.split(',').filter(|x| !x.is_empty()).map(|x| x.parse().unwrap()).collect();
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     m.set_overclock(16.0);
     ddsom_game::install(&mut m);
     let script = ddsom_game::scenario::Scenario::load(Path::new(scenario)).expect("scénario");
-    for f in 0..chauffe.parse::<usize>().unwrap() {
+    for f in 0..warmup.parse::<usize>().unwrap() {
         script.apply(f, &mut m);
         m.run_frame();
     }
-    let propre = std::env::var("FUZZ_PROPRE").is_ok();
-    let mut ecarts_propres = 0u64;
-    ddsom_game::set_check(!propre);
+    let clean = std::env::var("FUZZ_PROPRE").is_ok();
+    let mut clean_gaps = 0u64;
+    ddsom_game::set_check(!clean);
     std::panic::set_hook(Box::new(|_| {}));
     let (c0, b0) = (m.cpu.clone(), m.bus.clone());
-    let mut alea = Alea(0x9e37_79b9_7f4a_7c15 ^ (env("FUZZ_GRAINE", 1) as u64).wrapping_mul(0x1000_0000_01b3));
+    let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ (env("FUZZ_GRAINE", 1) as u64).wrapping_mul(0x1000_0000_01b3));
     let mut table = Vec::new();
     {
         let mut b = b0.clone();
@@ -426,75 +426,75 @@ fn principal() {
             table.push((b.fetch16(0x39ce0 + 4 * k) as u32) << 16 | b.fetch16(0x39ce2 + 4 * k) as u32);
         }
     }
-    let mut appels = 0u64;
+    let mut calls = 0u64;
     let mut abandons = 0u64;
     // créateurs (FUZZ_CREATEURS=adresse,...) : appelés depuis des registres tirés au hasard, A0 sur un
     // joueur, un ennemi ou un effet, A1 dans la RAM de travail ; le pool EFFCT plus ou moins rempli
-    let createurs: Vec<u32> = std::env::var("FUZZ_CREATEURS")
+    let creators: Vec<u32> = std::env::var("FUZZ_CREATEURS")
         .map(|v| v.split(',').map(|x| u32::from_str_radix(x, 16).unwrap()).collect())
         .unwrap_or_default();
-    for &entree in &createurs {
+    for &entry in &creators {
         for _ in 0..tours * 50 {
             let (mut c, mut b) = (c0.clone(), b0.clone());
             b.irq_horizon = u64::MAX;
             for r in 0..8 {
-                c.d[r] = if alea.une_sur(2) { alea.next() & 0xff } else { alea.next() << 8 | alea.next() & 0xff };
+                c.d[r] = if rng.one_in(2) { rng.next() & 0xff } else { rng.next() << 8 | rng.next() & 0xff };
             }
-            c.d[0] = alea.next() & 0xf;
-            c.d[1] = alea.next() & 0xf;
-            let (e, n) = (EFFCT.slot(alea.next() % EFFCT.slots).0, ENEMY.slot(alea.next() % ENEMY.slots).0);
-            c.a[0] = alea.pick(&[JOUEURS, JOUEURS + 0x200, e, n]);
-            c.a[1] = 0xff_9000 + 2 * (alea.next() % 0x800);
-            c.a[2] = alea.next();
+            c.d[0] = rng.next() & 0xf;
+            c.d[1] = rng.next() & 0xf;
+            let (e, n) = (EFFCT.slot(rng.next() % EFFCT.slots).0, ENEMY.slot(rng.next() % ENEMY.slots).0);
+            c.a[0] = rng.pick(&[PLAYERS, PLAYERS + 0x200, e, n]);
+            c.a[1] = 0xff_9000 + 2 * (rng.next() % 0x800);
+            c.a[2] = rng.next();
             c.a[5] = A5;
-            wr16(&mut b, A5 + EFFCT.free, alea.pick(&[0, 1, 2, 5, 19]));
-            appels += 1;
-            let orig = couverture(&c, &b, entree, &(0..0), &mut BTreeSet::new());
-            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree))).is_err() {
+            wr16(&mut b, A5 + EFFCT.free, rng.pick(&[0, 1, 2, 5, 19]));
+            calls += 1;
+            let orig = coverage(&c, &b, entry, &(0..0), &mut BTreeSet::new());
+            if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entry))).is_err() {
                 abandons += 1;
                 continue;
             }
-            if let (true, Some(orig)) = (propre, orig) {
+            if let (true, Some(orig)) = (clean, orig) {
                 let d = compare(&orig, &c, &b);
                 if !d.is_empty() {
-                    ecarts_propres += 1;
-                    if ecarts_propres <= 5 {
-                        println!("  écart {entree:06x} : {}", d.join(", "));
+                    clean_gaps += 1;
+                    if clean_gaps <= 5 {
+                        println!("  écart {entry:06x} : {}", d.join(", "));
                     }
                 }
             }
         }
     }
     for &t in &types {
-        let entree = table[t as usize];
-        let plage = match std::env::var("FUZZ_PLAGE") {
+        let entry = table[t as usize];
+        let range = match std::env::var("FUZZ_PLAGE") {
             Ok(p) => {
                 let (d, f) = p.split_once('-').unwrap();
                 u32::from_str_radix(d, 16).unwrap()..u32::from_str_radix(f, 16).unwrap()
             }
-            Err(_) => entree..table.iter().copied().filter(|&e| e > entree).min().unwrap_or(entree + 0x400),
+            Err(_) => entry..table.iter().copied().filter(|&e| e > entry).min().unwrap_or(entry + 0x400),
         };
-        let mut vus = BTreeSet::new();
-        let mut ecarts_type = 0u64;
-        for &v in &variantes {
+        let mut seen = BTreeSet::new();
+        let mut gap_types = 0u64;
+        for &v in &variants {
             for tour in 0..tours {
                 let (mut c, mut b) = (c0.clone(), b0.clone());
                 b.irq_horizon = u64::MAX;
-                let mut proprietaires: Vec<u32> = ENEMY.iter().filter(|o| rd8(&mut b, o.0) != 0).map(|o| o.0).collect();
-                proprietaires.extend((0..4).map(|j| JOUEURS + 0x200 * j));
-                let obj = EFFCT.slot(alea.next() % EFFCT.slots).0;
+                let mut owners: Vec<u32> = ENEMY.iter().filter(|o| rd8(&mut b, o.0) != 0).map(|o| o.0).collect();
+                owners.extend((0..4).map(|j| PLAYERS + 0x200 * j));
+                let obj = EFFCT.slot(rng.next() % EFFCT.slots).0;
                 for off in (0..EFFCT.stride).step_by(2) {
                     wr16(&mut b, obj + off, 0);
                 }
-                let owner = alea.pick(&proprietaires);
-                let naissance = tour % 2 == 0;
+                let owner = rng.pick(&owners);
+                let birth = tour % 2 == 0;
                 wr8(&mut b, obj, 1);
                 wr8(&mut b, obj + 2, t as u8);
                 wr8(&mut b, obj + 3, v as u8);
                 // de temps en temps, l'état de libération (4) ou celui que pose le retrait hors écran (6)
-                let etat = if naissance { 0 } else if tour % 8 == 3 { 4 } else if tour % 8 == 7 { 6 } else { 2 };
-                wr8(&mut b, obj + 4, etat);
-                wr8(&mut b, obj + 5, if naissance { 0 } else { alea.pick(sous_etats(t, v)) });
+                let state = if birth { 0 } else if tour % 8 == 3 { 4 } else if tour % 8 == 7 { 6 } else { 2 };
+                wr8(&mut b, obj + 4, state);
+                wr8(&mut b, obj + 5, if birth { 0 } else { rng.pick(sub_states(t, v)) });
                 wr8(&mut b, obj + 0x28, EFFCT.class);
                 for off in [0x46u32, 0x50, 0x54, 0x5a, 0x5c, 0x1e] {
                     wr16(&mut b, obj + off, owner as u16);
@@ -504,44 +504,44 @@ fn principal() {
                     wr16(&mut b, obj + off, w);
                 }
                 for off in [0x2fu32, 0x30, 0x31, 0x42, 0x43, 0x58, 0x59] {
-                    if alea.une_sur(2) {
-                        wr8(&mut b, obj + off, alea.pick(&[0, 1, 2, 3, 4, 8]));
+                    if rng.one_in(2) {
+                        wr8(&mut b, obj + off, rng.pick(&[0, 1, 2, 3, 4, 8]));
                     }
                 }
-                wr8(&mut b, obj + 0x2c, alea.pick(&[0, 0x20]));
+                wr8(&mut b, obj + 0x2c, rng.pick(&[0, 0x20]));
                 wr16(&mut b, A5 + EFFCT.free, (EFFCT.slots / 2) as u16);
-                prepare(t, &mut b, obj, owner, &mut alea);
-                for k in 0..pas {
+                prepare(t, &mut b, obj, owner, &mut rng);
+                for k in 0..step {
                     if rd8(&mut b, obj) == 0 || rd8(&mut b, obj + 2) != t as u8 {
                         break;
                     }
                     if k > 0 {
-                        perturbe(&mut b, obj, owner, &mut alea);
+                        perturbs(&mut b, obj, owner, &mut rng);
                     }
                     c.a[0] = obj;
                     c.a[5] = A5;
                     c.d[7] = k;
                     c.d[0] = 4 * t;
-                    c.a[1] = entree;
+                    c.a[1] = entry;
                     if std::env::var_os("FUZZ_DEBUG").is_some() {
                         let o: Vec<String> = (0..0x60).step_by(2).map(|i| format!("{:04x}", rd16(&mut b, obj + i))).collect();
                         println!("pas {k} : {}", o.join(" "));
                     }
-                    let etat_avant = format!("{:02x}/{:02x}/{:02x}", rd8(&mut b, obj + 4), rd8(&mut b, obj + 5), rd8(&mut b, obj + 6));
-                    let orig = couverture(&c, &b, entree, &plage, &mut vus);
-                    appels += 1;
-                    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entree)));
+                    let state_before = format!("{:02x}/{:02x}/{:02x}", rd8(&mut b, obj + 4), rd8(&mut b, obj + 5), rd8(&mut b, obj + 6));
+                    let orig = coverage(&c, &b, entry, &range, &mut seen);
+                    calls += 1;
+                    let r = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| ddsom_game::call(&mut c, &mut b, entry)));
                     if r.is_err() {
                         abandons += 1;
                         break;
                     }
-                    if let (true, Some(orig)) = (propre, orig) {
+                    if let (true, Some(orig)) = (clean, orig) {
                         let d = compare(&orig, &c, &b);
                         if !d.is_empty() {
-                            ecarts_propres += 1;
-                            ecarts_type += 1;
-                            if ecarts_type <= 3 {
-                                println!("  écart type {t} variante {v} pas {k} état {etat_avant} : {}", d.join(", "));
+                            clean_gaps += 1;
+                            gap_types += 1;
+                            if gap_types <= 3 {
+                                println!("  écart type {t} variante {v} pas {k} état {state_before} : {}", d.join(", "));
                             }
                             // on repart de l'état de l'original
                             (c, b) = orig;
@@ -551,35 +551,35 @@ fn principal() {
             }
         }
         let mut b = b0.clone();
-        let tout = atteignables(&mut b, entree, plage.clone());
-        let manque: Vec<u32> = tout.difference(&vus).copied().collect();
-        let mut plages: Vec<(u32, u32)> = Vec::new();
-        for &p in &manque {
-            match plages.last_mut() {
+        let all = reachable(&mut b, entry, range.clone());
+        let missing: Vec<u32> = all.difference(&seen).copied().collect();
+        let mut ranges: Vec<(u32, u32)> = Vec::new();
+        for &p in &missing {
+            match ranges.last_mut() {
                 Some(r) if p - r.1 <= 0x10 => r.1 = p,
-                _ => plages.push((p, p)),
+                _ => ranges.push((p, p)),
             }
         }
         println!(
-            "TYPE {t} {entree:06x} : {ecarts_type} écarts, {} instructions atteignables, {} exécutées par l'original, non vues : {}",
-            tout.len(),
-            tout.intersection(&vus).count(),
-            plages.iter().map(|(a, b)| format!("{a:06x}-{b:06x}")).collect::<Vec<_>>().join(" ")
+            "TYPE {t} {entry:06x} : {gap_types} écarts, {} instructions atteignables, {} exécutées par l'original, non vues : {}",
+            all.len(),
+            all.intersection(&seen).count(),
+            ranges.iter().map(|(a, b)| format!("{a:06x}-{b:06x}")).collect::<Vec<_>>().join(" ")
         );
     }
-    let mut ecarts = ecarts_propres;
-    if propre {
-        println!("  comparaison propre : {ecarts_propres} écarts");
+    let mut gaps = clean_gaps;
+    if clean {
+        println!("  comparaison propre : {clean_gaps} écarts");
     }
-    for (nom, st) in ddsom_game::report() {
+    for (name, st) in ddsom_game::report() {
         if st.calls == 0 {
             continue;
         }
-        ecarts += st.mismatches;
-        if st.mismatches > 0 || nom.starts_with("effct") || nom.starts_with("cree") || nom.starts_with("bloc") {
-            println!("  {nom:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
+        gaps += st.mismatches;
+        if st.mismatches > 0 || name.starts_with("effct") || name.starts_with("cree") || name.starts_with("bloc") {
+            println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
         }
     }
-    println!("{appels} appels, {abandons} trajectoires abandonnées");
-    println!("{}", if ecarts == 0 { "FUZZ VALIDE : aucun écart" } else { "FUZZ ÉCHEC" });
+    println!("{calls} appels, {abandons} trajectoires abandonnées");
+    println!("{}", if gaps == 0 { "FUZZ VALIDE : aucun écart" } else { "FUZZ ÉCHEC" });
 }

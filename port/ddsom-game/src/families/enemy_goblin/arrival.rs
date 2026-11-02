@@ -1,12 +1,12 @@
 //! Type 15, sous-état 0 : arrivée selon la variante `+3` (valeurs paires). 0 marche d'entrée, 2 chute depuis le haut,
 //! 4 chute déjà amorcée, 6 course depuis le bord de l'écran suivie de séries de coups.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => walk_in(x),
         2 => drop_in(x, true),
@@ -17,7 +17,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 0 : marche vers l'écran pendant `+0xa2` images.
-fn walk_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_in<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         x.move_by_table_xy();
         x.anim_step();
@@ -38,7 +38,7 @@ fn walk_in<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Variantes 2 et 4 : saut depuis le haut. `gravity` : la variante 2 attend l'atterrissage (`+0xc`) avant de se
 /// relever, la variante 4 se relève tout de suite.
-fn drop_in<R: Banc>(x: &mut Cx<'_, R>, gravity: bool) {
+fn drop_in<R: Bench>(x: &mut Cx<'_, R>, gravity: bool) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(Obj::VZ, 0);
@@ -73,7 +73,7 @@ fn drop_in<R: Banc>(x: &mut Cx<'_, R>, gravity: bool) {
 
 /// Variante 6 : le Goblin entre en courant par le bord (position posée d'après la caméra), puis frappe en série
 /// jusqu'à être saisi.
-fn run_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -105,7 +105,7 @@ fn run_in<R: Banc>(x: &mut Cx<'_, R>) {
             if !x.anim_step() {
                 if x.u8(f::KEY_FRAME) != 0 {
                     x.set8(f::KEY_FRAME, 0);
-                    crate::families::eshl_creators::shot_0(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
+                    crate::families::eshl_creators::shot_0(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
                 }
                 return;
             }

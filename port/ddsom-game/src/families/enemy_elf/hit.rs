@@ -1,16 +1,16 @@
 //! Type 12, état touché (`+4 = 4`, 0x6a160). `+5` : 0 et 6 réaction commune par table (`+0x49`), 2 recul,
 //! 4 chute, 8 saisie par un joueur (l'elfe disparaît).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Tables de la réaction commune, indexées par le code de réaction `+0x49`.
 const REACT_FIRST: u32 = 0x6a206;
 const REACT_SECOND: u32 = 0x6a3a0;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -34,7 +34,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 2 : l'elfe recule (animation 7), puis se remet debout.
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -61,7 +61,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 4 : chute (animation 6), attente couché, relevé.
-fn down<R: Banc>(x: &mut Cx<'_, R>) {
+fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -98,7 +98,7 @@ fn down<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 8 (0x6a198) : saisi par un joueur ; l'animation 4 terminée, l'elfe disparaît.
-pub(super) fn caught<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn caught<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }

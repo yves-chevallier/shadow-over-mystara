@@ -11,9 +11,9 @@
 //! Les sondes de portée rendent vrai quand le dragon doit réagir ; plusieurs ont des particularités de l'original
 //! (résultat toujours faux, retour avec l'état « attente » écrit) reproduites telles quelles.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Table des octets de seuils des ripostes spéciales (0x901e0), indexée par le quart de PV restant.
 const SPECIAL_LEVELS: u32 = 0x901e0;
@@ -21,7 +21,7 @@ const SPECIAL_LEVELS: u32 = 0x901e0;
 const PICK_A: u32 = 0x91096;
 const PICK_B: u32 = 0x9110c;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => walk(x, 0x20),
         2 => turning(x),
@@ -37,7 +37,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- marche ---------------------------------------------------------------------------------------
 
-fn walk<R: Banc>(x: &mut Cx<'_, R>, shot: u8) {
+fn walk<R: Bench>(x: &mut Cx<'_, R>, shot: u8) {
     x.set8(SHOT, shot);
     x.set8(HOVER, 1);
     if x.u8(0x7) == 0 {
@@ -77,7 +77,7 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>, shot: u8) {
 }
 
 /// 0x901c2 : une riposte spéciale est-elle due ? Les PV restants (en quarts de `+0x60`) la déclenchent.
-fn special_due<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn special_due<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let d1 = x.u16(0x60) as u32;
     let d3 = (x.u16(0x62) as u32) << 2;
     let (mut d0, mut d2) = (-1i32, 0u32);
@@ -99,7 +99,7 @@ fn special_due<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x91024 : le dragon tourne-t-il le dos à sa cible ? (sans cible : attend, et rend vrai comme l'original).
-fn facing_away<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn facing_away<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::TARGET) as i16) >= 0 {
         wait(x);
         return true;
@@ -113,7 +113,7 @@ fn facing_away<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9130c : un joueur est tout près derrière (boîte 0x7f0c) : le dragon réagit (0xac3a).
-fn probe_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn probe_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::guard_in_front_strict(x, -0x60, 0x60, 0x10) {
         return false;
     }
@@ -123,7 +123,7 @@ fn probe_far<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x91348, 0x91390 : joueur dans la boîte `(d0, d1, d2)` et tirage favorable (0xa4c2 si la cible regarde du même
 /// côté que le dragon, 0xa4b4 sinon). Sans cible, le dragon attend et la sonde rend vrai comme l'original.
-fn probe_target<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, no_target: impl Fn(u16) -> bool) -> bool {
+fn probe_target<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, no_target: impl Fn(u16) -> bool) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
     }
@@ -136,16 +136,16 @@ fn probe_target<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, no_target
     lib::decision(x, same_side)
 }
 
-fn probe_front<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn probe_front<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     probe_target(x, -0x50, 0x80, 0x10, |t| (t as i16) >= 0)
 }
 
-fn probe_back<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn probe_back<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     probe_target(x, -0xc0, 0x30, 0x10, |t| t == 0)
 }
 
 /// 0x91050 : choisit une attaque (`+6` = 0 à 10) dans la table.
-fn pick_attack_a<R: Banc>(x: &mut Cx<'_, R>) {
+fn pick_attack_a<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     let which = x.data8(PICK_A + r);
     x.set8(f::SUB2, which);
@@ -155,7 +155,7 @@ fn pick_attack_a<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 : demi-tour -----------------------------------------------------------------------------
 
-fn turning<R: Banc>(x: &mut Cx<'_, R>) {
+fn turning<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(ANIM_SET) != 1 {
         return stand(x);
     }
@@ -169,7 +169,7 @@ fn turning<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : immobile -------------------------------------------------------------------------------
 
-fn hold<R: Banc>(x: &mut Cx<'_, R>) {
+fn hold<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 1);
@@ -187,7 +187,7 @@ fn hold<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 6 : approche ---------------------------------------------------------------------------------
 
-fn close_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn close_in<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         x.set16(TIMER, 0x28);
@@ -210,7 +210,7 @@ fn close_in<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x910b6 : un joueur est à portée de souffle ? Le tirage (table par niveau) est fait, puis l'original écrase
 /// le résultat par l'état « debout » : seule la consommation du tirage reste.
-pub(super) fn pick_attack_b<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn pick_attack_b<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(f::TARGET) as i16) >= 0 {
         return wait(x);
     }

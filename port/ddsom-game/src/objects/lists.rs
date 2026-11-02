@@ -314,13 +314,13 @@ impl Reinsert<'_> {
     fn load(&mut self, d: usize, base: u32, off: u32) -> u16 {
         let v = rd16(self.b, base.wrapping_add(off));
         set_low_word(&mut self.c.d[d], v);
-        ops::logique(self.c, v as u32, Size::Word);
+        ops::logic(self.c, v as u32, Size::Word);
         v
     }
     /// `move.w src,(off,An)` : écrit et fixe les drapeaux.
     fn store(&mut self, base: u32, off: u32, v: u16) {
         wr16(self.b, base.wrapping_add(off), v);
-        ops::logique(self.c, v as u32, Size::Word);
+        ops::logic(self.c, v as u32, Size::Word);
     }
     /// `cmp.l (Y,An),Dn` : drapeaux ; renvoie la profondeur du voisin.
     fn compare_depth(&mut self, d: usize, an: u32) -> u32 {
@@ -443,15 +443,15 @@ impl Reinsert<'_> {
     }
 }
 
-/// Registres que laisse la réinsertion d'origine (voir `diag::registres_morts`, étiquette `lists`).
+/// Registres que laisse la réinsertion d'origine (voir `diag::dead_regs`, étiquette `lists`).
 pub const REGS_REINSERT: u32 =
     regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::a(2) | regs::a(3) | regs::a(4) | regs::CCR;
 
 impl SortedList {
-    /// `reinsert`, avec le reste D2 de l'original (`dispatch::Restes`) : quand l'objet est déplacé, le mot bas de D2
+    /// `reinsert`, avec le reste D2 de l'original (`dispatch::Leftovers`) : quand l'objet est déplacé, le mot bas de D2
     /// reçoit le lien qu'il quitte (`move.w (behind,A0),D2`). Glitch d'origine : un gestionnaire suivant le relit (le
     /// rebond de l'éclat de gel, 0x4bda8). D2 entre et ressort tel quel sinon.
-    pub fn reinsert_restes(self, b: &mut Cps2Bus, obj: Obj, d2: &mut u32) {
+    pub fn reinsert_leftovers(self, b: &mut Cps2Bus, obj: Obj, d2: &mut u32) {
         let mut c = Cpu::default();
         c.d[2] = *d2;
         Reinsert { c: &mut c, b, obj, list: self }.run();
@@ -462,7 +462,7 @@ impl SortedList {
     #[track_caller]
     pub fn reinsert_68k(self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
         Reinsert { c, b, obj, list: self }.run();
-        crate::diag::registres_morts(c, "lists", REGS_REINSERT);
+        crate::diag::dead_regs(c, "lists", REGS_REINSERT);
     }
 }
 
@@ -470,7 +470,7 @@ impl SortedList {
 #[track_caller]
 pub fn unlink_all_68k(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
     let last = unlink_all_regs(c, b);
-    crate::diag::registres_morts(c, "lists", regs::a(0));
+    crate::diag::dead_regs(c, "lists", regs::a(0));
     last
 }
 
@@ -504,7 +504,7 @@ fn unlink_all_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const REINSERT_ACTORS: Native = Native {
     entry: 0x1ee1a,
     name: "list_reinsert_actors",
-    run: crate::Corps::Processeur(|c, b| reinsert_native(ACTORS, c, b)),
+    run: crate::Body::Processeur(|c, b| reinsert_native(ACTORS, c, b)),
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -512,7 +512,7 @@ pub const REINSERT_ACTORS: Native = Native {
 pub const REINSERT_FOREGROUND: Native = Native {
     entry: 0x1ef6c,
     name: "list_reinsert_foreground",
-    run: crate::Corps::Processeur(|c, b| reinsert_native(FOREGROUND, c, b)),
+    run: crate::Body::Processeur(|c, b| reinsert_native(FOREGROUND, c, b)),
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -520,7 +520,7 @@ pub const REINSERT_FOREGROUND: Native = Native {
 pub const UNLINK: Native = Native {
     entry: 0x1f0be,
     name: "list_unlink",
-    run: crate::Corps::Processeur(unlink_native),
+    run: crate::Body::Processeur(unlink_native),
     touches_sound: false,
     outputs: regs::a(0),
 };
@@ -528,7 +528,7 @@ pub const UNLINK: Native = Native {
 pub const UNLINK_ALL: Native = Native {
     entry: 0x1f184,
     name: "list_unlink_all",
-    run: crate::Corps::Processeur(unlink_all_native),
+    run: crate::Body::Processeur(unlink_all_native),
     touches_sound: false,
     outputs: regs::a(0),
 };

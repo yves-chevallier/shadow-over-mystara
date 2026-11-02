@@ -45,7 +45,7 @@ impl FixedMap {
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Kind {
     /// 0 franchissable, 1 obstacle plein, 2 et plus pente.
-    pub genre: u16,
+    pub category: u16,
     /// Sous-programme (0, 4, 8, 12) : bord en dessous, au-dessus, à droite, à gauche.
     pub routine: u16,
     /// Pente : sens (0 ou 1).
@@ -62,11 +62,11 @@ pub struct Kind {
 
 impl Kind {
     pub fn words(&self) -> [u16; 8] {
-        [self.genre, self.routine, self.flip, self.shift, self.edge, self.stop, self.unused[0], self.unused[1]]
+        [self.category, self.routine, self.flip, self.shift, self.edge, self.stop, self.unused[0], self.unused[1]]
     }
 
     pub fn from_words(w: [u16; 8]) -> Self {
-        Kind { genre: w[0], routine: w[1], flip: w[2], shift: w[3], edge: w[4], stop: w[5], unused: [w[6], w[7]] }
+        Kind { category: w[0], routine: w[1], flip: w[2], shift: w[3], edge: w[4], stop: w[5], unused: [w[6], w[7]] }
     }
 }
 

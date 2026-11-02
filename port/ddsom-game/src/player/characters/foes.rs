@@ -142,9 +142,9 @@ pub fn strike_foes(g: &mut Ctx, p: Player, s: &Strike) {
             }
             let bar = (index as u32) << 8 | o.u8(g.b, Obj::KIND) as u32;
             let (max, hp, class) = (o.u16(g.b, 0x60) as u32, o.u16(g.b, 0x62) as u32, o.u8(g.b, 0x28) as u32);
-            crate::evenements::creer_popup(g.b, crate::evenements::Popup { entete: bar as u16, max: max as u16, valeur: hp as u16, brut: class as u8 == 2 });
+            crate::events::create_popup(g.b, crate::events::Popup { header: bar as u16, max: max as u16, value: hp as u16, raw: class as u8 == 2 });
             if let Some(sound) = s.sound {
-                g.son(sound, p);
+                g.sound(sound, p);
             }
         }
     }

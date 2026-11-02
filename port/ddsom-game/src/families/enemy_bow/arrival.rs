@@ -1,13 +1,13 @@
 //! Type 3, sous-état 0 : arrivée selon la variante `+3` (valeurs paires). 0 et 2 marche d'entrée (de plus en plus
 //! vite), 4 chute depuis le haut, 6 apparition sur place (saisie à la première image), 8 course.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::stance::stance_begin;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => walk_in(x, 0x40, 0xd),
         2 => walk_in(x, 0x20, 0x17),
@@ -19,7 +19,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin d'une marche d'entrée : à la fin de la minuterie `+0xa4`, debout et premier choix (0x5c17e).
-fn end_of_walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn end_of_walk<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
     if n == 0 {
@@ -33,7 +33,7 @@ fn end_of_walk<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Variantes 0 (0x5ca68) et 2 (0x5c9ca) : marche `timer` images à la vitesse `speed`. Aussi appelée par le sous-état 4
 /// quand le Bow Gnoll sort de l'écran (variante 2).
-pub(super) fn walk_in<R: Banc>(x: &mut Cx<'_, R>, timer: u8, speed: u32) {
+pub(super) fn walk_in<R: Bench>(x: &mut Cx<'_, R>, timer: u8, speed: u32) {
     if x.u8(f::SUB2) != 0 {
         return end_of_walk(x);
     }
@@ -45,7 +45,7 @@ pub(super) fn walk_in<R: Banc>(x: &mut Cx<'_, R>, timer: u8, speed: u32) {
 }
 
 /// Variante 4 : chute depuis le haut (`+0x18` = −4 ajouté à la hauteur à chaque image).
-fn fall_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall_in<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set16(Obj::VZ, -4i16 as u16);
@@ -63,7 +63,7 @@ fn fall_in<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 6 : apparition sur place, attend un joueur dans la boîte (0, 0x80, 0x20).
-fn appear<R: Banc>(x: &mut Cx<'_, R>) {
+fn appear<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         set_state_long(x, HELD);
         return;
@@ -96,7 +96,7 @@ fn appear<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 8 : course d'entrée.
-fn run_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_in<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(TIMER, 0x20);

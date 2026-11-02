@@ -6,11 +6,11 @@
 //! | 2 | entrée en combat : tombe du haut de l'écran (`+7` = 0 à 4) |
 
 use super::decide;
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => arrival(x),
         2 => entrance(x),
@@ -18,7 +18,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
+fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -105,7 +105,7 @@ fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn entrance<R: Banc>(x: &mut Cx<'_, R>) {
+fn entrance<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);

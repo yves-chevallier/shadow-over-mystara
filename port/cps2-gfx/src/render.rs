@@ -71,8 +71,8 @@ fn gfx_base(reg: u16, boundary: usize) -> usize {
     (base & 0x3ffff) / 2
 }
 
-/// `ECLATE[b]` : les 8 bits de `b` rangés un par octet, le bit de poids fort dans l'octet 0 (pixel 0).
-const ECLATE: [u64; 256] = {
+/// `BURST[b]` : les 8 bits de `b` rangés un par octet, le bit de poids fort dans l'octet 0 (pixel 0).
+const BURST: [u64; 256] = {
     let mut t = [0u64; 256];
     let mut b = 0;
     while b < 256 {
@@ -90,7 +90,7 @@ const ECLATE: [u64; 256] = {
 #[inline]
 fn pixels8(gfx: &[u8], row: usize) -> [u8; 8] {
     let r = &gfx[row..row + 4];
-    (ECLATE[r[0] as usize] | ECLATE[r[1] as usize] << 1 | ECLATE[r[2] as usize] << 2 | ECLATE[r[3] as usize] << 3)
+    (BURST[r[0] as usize] | BURST[r[1] as usize] << 1 | BURST[r[2] as usize] << 2 | BURST[r[3] as usize] << 3)
         .to_le_bytes()
 }
 
@@ -136,19 +136,19 @@ impl Layer {
             let pen_base = ((attr & 0x1f) + self.color_base) * 16;
             let flip = attr & 0x20 != 0;
             // ligne de pixels de la tuile, dans l'ordre de l'écran ; un groupe hors de la région graphique reste transparent
-            let mut ligne = [15u8; 32];
+            let mut line = [15u8; 32];
             for g in 0..t / 8 {
                 let r = row + g * 4 * (t > 8) as usize;
                 if r + 4 <= gfx.len() {
-                    ligne[g * 8..g * 8 + 8].copy_from_slice(&pixels8(gfx, r));
+                    line[g * 8..g * 8 + 8].copy_from_slice(&pixels8(gfx, r));
                 }
             }
             if flip {
-                ligne[..t].reverse();
+                line[..t].reverse();
             }
             let u = tx % t;
             let dest = x..x + n;
-            for ((&p, pen), pr) in ligne[u..u + n].iter().zip(&mut pens[dest.clone()]).zip(&mut prio[dest]) {
+            for ((&p, pen), pr) in line[u..u + n].iter().zip(&mut pens[dest.clone()]).zip(&mut prio[dest]) {
                 if p != 15 {
                     *pen = pen_base + p as u16;
                     *pr |= pbit;
@@ -238,8 +238,8 @@ pub fn render(v: &VideoState, gfx: &[u8]) -> Vec<[u8; 3]> {
             }
             let ty = ((by + sy).rem_euclid(size as i32)) as usize;
             let tx0 = ((VIS_X0 + scrollx).rem_euclid(size as i32)) as usize;
-            let ligne = y * W..(y + 1) * W;
-            layer.draw_row(v, gfx, tx0, ty, pbit, &mut pens[ligne.clone()], &mut prio[ligne]);
+            let line = y * W..(y + 1) * W;
+            layer.draw_row(v, gfx, tx0, ty, pbit, &mut pens[line.clone()], &mut prio[line]);
         }
     }
 

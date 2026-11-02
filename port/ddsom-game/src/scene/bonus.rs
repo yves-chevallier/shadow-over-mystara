@@ -6,14 +6,14 @@
 //! effet (`+0x42` : secondes restantes), fondu, retour des caméras. Le jeu lui-même est dans les objets.
 
 use super::screen::{self, copy_page};
-use super::fondu;
+use super::fading;
 use super::{Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::mem::{prog16, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
 use crate::Native;
-use crate::families::effects_creators::{ecran_de_fin, ou_reste};
+use crate::families::effects_creators::{end_screen, or_rest};
 use crate::objects::{pools, Obj};
-use crate::video::{charger_grille, effacer_couche, Couche, Grille};
+use crate::video::{load_grid, clear_layer, Layer, Grid};
 
 /// Variables de l'écran de bonus (sous A5).
 mod v {
@@ -86,17 +86,17 @@ pub fn dispatch(x: &mut Ctx, _table: u32) -> u8 {
 
 /// Fondu au noir ou depuis le noir (délai 4, toutes les pages, 15 pas) ; la routine cède la main et revient en
 /// `resume`.
-pub fn fade(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, resume: impl Into<crate::taches::table::Suite>) -> Flow {
-    fondu::PAS.set(x.b, 15);
-    fondu::DELAI.set(x.b, 4);
-    fondu::PAGES.set(x.b, 15);
-    x.sous_programme(routine, resume)
+pub fn fade(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, resume: impl Into<crate::tasks::table::Next>) -> Flow {
+    fading::STEP.set(x.b, 15);
+    fading::DELAY.set(x.b, 4);
+    fading::PAGES.set(x.b, 15);
+    x.subroutine(routine, resume)
 }
 
 /// `movem.l A0,-(SP) ; jsr 0x1de96 ; movem.l (SP)+,A0` : la liste de sprites, A0 gardé.
 pub fn sprites_keep_a0(x: &mut Ctx) {
     let a0 = x.c.a[0];
-    crate::sprites::construire_68k(x.c, x.b);
+    crate::sprites::build_68k(x.c, x.b);
     x.c.a[0] = a0;
 }
 
@@ -125,7 +125,7 @@ pub fn run(x: &mut Ctx) -> Flow {
         12 => {
             x.or16(0x14, 12);
             sprites_keep_a0(x);
-            x.wait(1, Etape::LastFrame)
+            x.wait(1, Step::LastFrame)
         }
         _ => Flow::Done,
     }
@@ -157,12 +157,12 @@ fn start(x: &mut Ctx) -> Flow {
         wr8(x.b, A5 - 0x55c8, s);
         return Flow::Done;
     }
-    fade(x, crate::taches::fondu::descente, Etape::FadedOut)
+    fade(x, crate::tasks::fading::descent, Step::FadedOut)
 }
 
-crate::etapes! {
+crate::steps! {
     /// Étapes (points de reprise) de la machine à états.
-    pub enum Etape {
+    pub enum Step {
         /// Les caméras sont mises de côté et placées sur le décor du bonus.
         FadedOut = at::FADED_OUT => |x| {
             next_sub_step(x);
@@ -188,9 +188,9 @@ crate::etapes! {
             for (from, to) in PAGES {
                 copy_page(x.b, from, to);
             }
-            crate::palette::charger_page(x.b, 2, 85);
-            crate::palette::charger_page(x.b, 3, 85);
-            crate::palette::charger_ensemble(x.b, 2);
+            crate::palette::load_palette_page(x.b, 2, 85);
+            crate::palette::load_palette_page(x.b, 3, 85);
+            crate::palette::load_palette_set(x.b, 2);
             Flow::Done
         },
         /// Le titre du bonus (objet SET type 0, variante 69).
@@ -210,21 +210,21 @@ crate::etapes! {
             let counter = rd16(x.b, v::COUNTER) as i16 as i32 as u32 & 0xff_ffff;
             wr32(x.b, counter + 4, 0x0600_0000);
             let a0 = x.c.a[0];
-            crate::dispatch::EFFCT.update_sans_suite(x.c, x.b);
-            crate::sprites::construire_68k(x.c, x.b);
+            crate::dispatch::EFFCT.update_no_next(x.c, x.b);
+            crate::sprites::build_68k(x.c, x.b);
             x.c.a[0] = a0;
             if x.v8(a5::SCENE) != 1 {
                 x.set_v8(0x3c, 0xff);
-                effacer_couche(x.b, Couche::Deux);
-                effacer_couche(x.b, Couche::Trois);
-                crate::video::vider_objets(x.b);
+                clear_layer(x.b, Layer::Two);
+                clear_layer(x.b, Layer::Three);
+                crate::video::clear_objects(x.b);
                 leave(x);
                 return Flow::Done;
             }
             x.set_v8(0x3c, 1);
             wr16(x.b, v::SECONDS, 4);
             x.and16(0x14, 0xfff3);
-            x.wait(4, Etape::Scene1Waited)
+            x.wait(4, Step::Scene1Waited)
         },
         Scene1Waited = at::SCENE_1_WAITED => |x| {
             for (to, from) in PAGES {
@@ -233,7 +233,7 @@ crate::etapes! {
             Flow::Done
         },
         /// Dernière image : fondu depuis le noir, puis l'état suivant de la séquence.
-        LastFrame = at::LAST_FRAME => |x| fade(x, crate::taches::fondu::montee, Etape::FadedIn),
+        LastFrame = at::LAST_FRAME => |x| fade(x, crate::tasks::fading::rise, Step::FadedIn),
         FadedIn = at::FADED_IN => |x| {
             leave(x);
             Flow::Done
@@ -266,32 +266,32 @@ fn set_up(x: &mut Ctx) -> Flow {
     // Glitch d'origine : l'effet du compte à rebours reçoit en `+0x2f` l'octet bas de D1 tel que le laisse
     // l'effacement de la zone de texte (D1.w = 0xffff), ou, dans la scène 1, l'aiguillage (le déplacement de la
     // sous-étape 2 dans sa table)
-    let reglage = if x.v8(a5::SCENE) != 1 {
+    let setting = if x.v8(a5::SCENE) != 1 {
         x.set_v8(0x42, 2);
         crate::objects::lists::unlink_all(x.b);
-        crate::sprites::vider_listes(x.b);
+        crate::sprites::clear_lists(x.b);
         for pool in crate::objects::pools::POOLS {
             pool.reset(x.b);
         }
-        effacer_couche(x.b, Couche::Deux);
-        effacer_couche(x.b, Couche::Trois);
+        clear_layer(x.b, Layer::Two);
+        clear_layer(x.b, Layer::Three);
         screen::clear_text(x.b);
         0xff
     } else {
         prog16(x.b, rom::DISPATCH + 2) as u8
     };
     // Glitch d'origine : les échecs d'allocation ne sont pas testés (l'A1 laissé reçoit les écritures)
-    let cree = ecran_de_fin(x.b, 3, reglage);
-    let counter = ou_reste(x.b, cree).0;
+    let created = end_screen(x.b, 3, setting);
+    let counter = or_rest(x.b, created).0;
     wr16(x.b, v::COUNTER, counter as u16);
     wr8(x.b, counter + 0x42, 20);
     for k in 0..4u8 {
-        let cree = ecran_de_fin(x.b, 8, 3 - k);
-        let o = ou_reste(x.b, cree);
+        let created = end_screen(x.b, 8, 3 - k);
+        let o = or_rest(x.b, created);
         wr8(x.b, o.0 + 0x2f, k);
     }
-    crate::sound::jouer_global(x.b, sub::MUSIC);
-    x.wait(4, Etape::SetUp)
+    crate::sound::play_global(x.b, sub::MUSIC);
+    x.wait(4, Step::SetUp)
 }
 
 /// Pages de palettes du bonus : la page 0x91c400 passe en 0x910000, et ainsi de suite.
@@ -307,7 +307,7 @@ fn objects(x: &mut Ctx) -> Flow {
     // Glitch d'origine : les échecs d'allocation ne sont pas testés (l'A1 laissé est rangé)
     let mut objs = [0u16; 5];
     for o in objs.iter_mut() {
-        *o = crate::families::creators::set_5_pur(x.b).unwrap_or_else(|a1| a1).0 as u16;
+        *o = crate::families::creators::set_5_pure(x.b).unwrap_or_else(|a1| a1).0 as u16;
     }
     // tri à bulles de l'original sur les adresses étendues en signe (cmpa.w)
     objs.sort_by_key(|&w| w as i16 as i32 as u32);
@@ -339,13 +339,13 @@ fn objects(x: &mut Ctx) -> Flow {
     x.set_v16(0x14, 0x12ce);
     let f = x.v8(0x13) & !1;
     x.set_v8(0x13, f);
-    for (grille, n, destination) in [(Grille::Couche2, 0x205, 0x917000), (Grille::Couche3, 0x172, 0x919800)] {
-        let fin = charger_grille(x.b, grille, n, destination);
-        charger_grille(x.b, grille, n + 1, fin.destination);
+    for (grid, n, destination) in [(Grid::Layer2, 0x205, 0x917000), (Grid::Layer3, 0x172, 0x919800)] {
+        let end = load_grid(x.b, grid, n, destination);
+        load_grid(x.b, grid, n + 1, end.destination);
     }
     x.set_v8(0x3c, 2);
-    crate::palette::charger_page(x.b, 1, 1);
-    fade(x, crate::taches::fondu::montee, Etape::Started)
+    crate::palette::load_palette_page(x.b, 1, 1);
+    fade(x, crate::tasks::fading::rise, Step::Started)
 }
 
 /// 0xf67fa : le décor du bonus, rectangle de cases lu dans la ROM (largeur, hauteur, puis les cases par colonnes).
@@ -416,14 +416,14 @@ fn end(x: &mut Ctx) -> Flow {
     if !tick16(x, v::SECONDS) {
         return Flow::Done;
     }
-    fade(x, crate::taches::fondu::descente, Etape::Ended)
+    fade(x, crate::tasks::fading::descent, Step::Ended)
 }
 
 /// Entrée d'origine (séquences restées en 68000).
 pub const BONUS: Native = Native {
     entry: 0xf5938,
     name: "scene_bonus",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);

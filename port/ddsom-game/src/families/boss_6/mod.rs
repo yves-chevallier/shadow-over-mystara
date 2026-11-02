@@ -1,4 +1,4 @@
-//! Boss de type 6 (0x8430e), scène 24 : la Manticore (h). Voir `docs/familles/boss.md`.
+//! Boss de type 6 (0x8430e), scène 24 : la Manticore (h). Voir `docs/families/boss.md`.
 //!
 //! Même gabarit que le boss 17 (`boss_17`) : `+4` état (0 création, 2 actif, 4 touché, 6 libération), `+5`
 //! groupe, `+6` et `+7` étapes ; les changements d'état se posent d'un coup (long `+4..+7`).
@@ -15,7 +15,7 @@
 //! Animations : 0x177874 (sol), 0x17788c (vol), 0x1778a4 (recul). Les variantes `+3` non nulles sont des
 //! parties liées à l'hôte `+0x46` : elles meurent avec lui (`guard`).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -49,21 +49,21 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 pub(self) const SET_BODY: u32 = 0x177874;
 pub(self) const SET_FLY: u32 = 0x17788c;
 pub(self) const SET_HURT: u32 = 0x1778a4;
 
-pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn fly<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn fly<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_FLY, n);
 }
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -84,7 +84,7 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x859b2 : une partie liée (variante non nulle) tombe avec son hôte (`+0x46`).
-fn guard<R: Banc>(x: &mut Cx<'_, R>) {
+fn guard<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::VARIANT) == 0 || x.u16(f::STATE) == 0x0406 {
         return;
     }
@@ -96,7 +96,7 @@ fn guard<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 2);
 }
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -127,7 +127,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
     body(x, 0);
 }
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
@@ -144,7 +144,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+5` = 6 à 12 (0x851d6) : attend que des joueurs reviennent.
-fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) as i8 > 0 {
         return decide::chase(x);
     }
@@ -162,14 +162,14 @@ fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+5` = 14 (0x8520e) : reprise (le seul état de `+6` est la fin de relevé).
-fn recovered<R: Banc>(x: &mut Cx<'_, R>) {
+fn recovered<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         hit::recovered_tail(x);
     }
 }
 
 handlers! {
-    0x8430e "boss_6" #[sans] run,
+    0x8430e "boss_6" #[without] run,
     // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x85490 "boss_6_releve" hit::recovered_tail,
 }

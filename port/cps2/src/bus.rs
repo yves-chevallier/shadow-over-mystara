@@ -126,13 +126,13 @@ impl Cps2Bus {
     fn latch_palette(&mut self) {
         let base = ((self.cps_a[0x0a / 2] as usize * 256) & !0x3ff) & 0x3ffff;
         let n = self.gfxram.len();
-        let debut = base / 2 % n;
+        let start = base / 2 % n;
         // copie en deux tranches si la palette déborde de la fin de la GFX RAM (adressage circulaire)
         let len = self.palette.len();
-        let premiere = len.min(n - debut);
-        self.palette[..premiere].copy_from_slice(&self.gfxram[debut..debut + premiere]);
-        for i in premiere..len {
-            self.palette[i] = self.gfxram[(debut + i) % n];
+        let first = len.min(n - start);
+        self.palette[..first].copy_from_slice(&self.gfxram[start..start + first]);
+        for i in first..len {
+            self.palette[i] = self.gfxram[(start + i) % n];
         }
     }
 
@@ -296,7 +296,7 @@ impl m68k::Bus for Cps2Bus {
 pub mod rom_trace {
     use std::cell::RefCell;
 
-    /// Nombre de lectures de chaque mot de 0x000000 à 0x3fffff : `[données, programme]`.
+    /// Nombre de lectures de chaque mot de 0x000000 à 0x3fffff : `[données, program]`.
     pub struct Reads(pub [Vec<u32>; 2]);
 
     thread_local! {
@@ -307,7 +307,7 @@ pub mod rom_trace {
         static HOOK: std::cell::Cell<Option<fn(bool, u32)>> = const { std::cell::Cell::new(None) };
     }
 
-    /// `hook(programme, adresse)` est appelé à la première lecture de chaque mot (pour en chercher l'origine).
+    /// `hook(program, address)` est appelé à la première lecture de chaque mot (pour en chercher l'origine).
     pub fn set_hook(hook: fn(bool, u32)) {
         HOOK.set(Some(hook));
     }

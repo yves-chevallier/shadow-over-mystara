@@ -1,12 +1,12 @@
 //! Type 6, sous-état 0 : arrivée. `+6` = 0 hurlement puis course, 2 demi-tour de l'arrivée, 4 et 6 bond d'entrée,
 //! 8 chute d'en haut, 10 apparition.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => howl(x),
         2 => turn_in(x),
@@ -18,7 +18,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin du geste d'arrivée : l'animation finie, le chien se met debout (0x616d8).
-pub(super) fn stand_when_done<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn stand_when_done<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.anim_step() {
         return;
     }
@@ -30,7 +30,7 @@ pub(super) fn stand_when_done<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 0 -----------------------------------------------------------------------------------------
 
-fn howl<R: Banc>(x: &mut Cx<'_, R>) {
+fn howl<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -57,7 +57,7 @@ fn howl<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 : demi-tour ---------------------------------------------------------------------------------
 
-fn turn_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn_in<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
@@ -113,18 +113,18 @@ fn turn_in<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Angle de la course d'arrivée : 0x18 vers la droite, 8 vers la gauche (0x6174c).
-fn set_angle_run<R: Banc>(x: &mut Cx<'_, R>) {
+fn set_angle_run<R: Bench>(x: &mut Cx<'_, R>) {
     set_angle_facing(x, 0x18, 8);
 }
 
-pub(super) fn set_angle_facing<R: Banc>(x: &mut Cx<'_, R>, forward: u8, flipped: u8) {
+pub(super) fn set_angle_facing<R: Bench>(x: &mut Cx<'_, R>, forward: u8, flipped: u8) {
     let angle = if x.u8(f::FLIP) != 0 { flipped } else { forward };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 // --- +6 = 4 et 6 : bond d'entrée -----------------------------------------------------------------------
 
-fn leap_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -149,7 +149,7 @@ fn leap_in<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 8 : chute d'en haut -----------------------------------------------------------------------------
 
-fn drop_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn drop_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -177,7 +177,7 @@ fn drop_in<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 10 : apparition ----------------------------------------------------------------------------------
 
-fn appear<R: Banc>(x: &mut Cx<'_, R>) {
+fn appear<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

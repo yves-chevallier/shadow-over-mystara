@@ -1,12 +1,12 @@
 //! Éléments communs aux gestionnaires de la classe ENEMY (ennemis, pool de 22 × 0xC0 octets) :
 //! champs, états, allocation de sous-objets, mort, aides de rang et de pause.
-//! Voir `docs/familles/enemy.md`.
+//! Voir `docs/families/enemy.md`.
 //!
 //! Tous les ennemis ont la même charpente : l'octet `+4` est l'état principal (0 création, 2 actif,
 //! 4 touché, 6 mort), `+5` et `+6` des sous-états ; les valeurs sont des octets pairs qui indexent
 //! des tables de sauts. L'état « mort » libère l'emplacement (`0x21f4`).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use m68k::SR_C;
 
 use super::cx::Cx;
@@ -14,32 +14,32 @@ use super::cx::Cx;
 pub use super::enemy_lib as lib;
 use crate::objects::Obj;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::machine::Machine;
 
 /// Variables de la RAM de travail lues par les ennemis et les boss (`ram.rs` pour celles de tout le jeu).
 pub mod var {
-    use crate::ram::{Mot, Octet};
-    pub use crate::ram::{CAMERA_ALT_ACTIVE as CAMERA_SELECT, CAMERA_ALT_X, CAMERA_ALT_Y, PARTIE as GAME_ON, PHASE, SCENE};
+    use crate::ram::{Word, Byte};
+    pub use crate::ram::{CAMERA_ALT_ACTIVE as CAMERA_SELECT, CAMERA_ALT_X, CAMERA_ALT_Y, GAME as GAME_ON, PHASE, SCENE};
     /// Caméra principale : position (mot ; `SCROLL_Y` se lit aussi en long avec la fraction).
     pub use crate::ram::{CAMERA_X as SCROLL_X, CAMERA_Y as SCROLL_Y};
     /// Objet suivi par la caméra (mot, adresse RAM ; 0 = aucun) : le « meneur » que certains boss accompagnent.
-    pub const LEADER: Mot = Mot::a5(0x46);
+    pub const LEADER: Word = Word::a5(0x46);
     /// Octet non nul : tout est figé (le gestionnaire du boss ne fait rien).
-    pub const FROZEN: Octet = Octet::a5(0x4e);
+    pub const FROZEN: Byte = Byte::a5(0x4e);
     /// Nombre de joueurs en vie (`ram::DIFFICULTE` désigne le même octet : à vérifier).
-    pub const PLAYERS_ALIVE: Octet = Octet::a5(0x35);
+    pub const PLAYERS_ALIVE: Byte = Byte::a5(0x35);
     /// Octet à 1 pendant une cinématique (jeu en pause, entrées coupées).
-    pub const PAUSE: Octet = Octet::a5(0x3d);
+    pub const PAUSE: Byte = Byte::a5(0x3d);
     /// Niveau de la scène pour les boss (0 rien, 3 toujours ; `boss_common::hp_threshold`).
-    pub const SCENE_LEVEL: Octet = Octet::a5(0x5a);
+    pub const SCENE_LEVEL: Byte = Byte::a5(0x5a);
     /// Position (X, Y) des deux caméras de jeu (objets à `A5+0x59e`, `A5+0x5a6`) (h).
-    pub const CAMERA1_X: Mot = Mot::a5(0x5a6);
-    pub const CAMERA1_Y: Mot = Mot::a5(0x5aa);
-    pub const CAMERA2_X: Mot = Mot::a5(0x5ae);
-    pub const CAMERA2_Y: Mot = Mot::a5(0x5b2);
+    pub const CAMERA1_X: Word = Word::a5(0x5a6);
+    pub const CAMERA1_Y: Word = Word::a5(0x5aa);
+    pub const CAMERA2_X: Word = Word::a5(0x5ae);
+    pub const CAMERA2_Y: Word = Word::a5(0x5b2);
     /// Rang (difficulté dynamique, `objects::rank`), 0 à 31 : indexe les tables de décision des ennemis.
-    pub const RANK: Mot = Mot::a5(0x7f92);
+    pub const RANK: Word = Word::a5(0x7f92);
 }
 
 /// Champs des objets ENEMY.
@@ -92,13 +92,13 @@ pub mod rom {
 
 /// Alloue un objet du pool `alloc` (adresse d'une routine d'allocation) et rend son adresse (`A1`).
 /// L'original n'examine pas la retenue : il écrit à travers `A1` même si le pool est plein.
-pub fn alloc<R: Banc>(x: &mut Cx<'_, R>, pool: &pools::Pool) -> Obj {
+pub fn alloc<R: Bench>(x: &mut Cx<'_, R>, pool: &pools::Pool) -> Obj {
     x.alloc_unchecked(pool)
 }
 
 /// Alloue un tir ESHL actif de type `kind`, avec la variante `variant`, lié à l'objet courant par le mot `link`
 /// (`None` si le pool est plein). Les créateurs ci-dessous sont les petites routines 0x9ddee..0xa6824 de l'original.
-fn spawn_eshl<R: Banc>(x: &mut Cx<'_, R>, kind: u8, variant: u8, link: u32) -> Option<Obj> {
+fn spawn_eshl<R: Bench>(x: &mut Cx<'_, R>, kind: u8, variant: u8, link: u32) -> Option<Obj> {
     let Some(o) = x.alloc(&pools::ESHL) else { return None };
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, 2, kind);
@@ -108,7 +108,7 @@ fn spawn_eshl<R: Banc>(x: &mut Cx<'_, R>, kind: u8, variant: u8, link: u32) -> O
 }
 
 /// Alloue un EFFCT actif de type `kind`, variante `variant`, lié à l'objet courant par le mot `link`.
-fn spawn_effct<R: Banc>(x: &mut Cx<'_, R>, kind: u8, variant: u8, link: u32) -> Option<Obj> {
+fn spawn_effct<R: Bench>(x: &mut Cx<'_, R>, kind: u8, variant: u8, link: u32) -> Option<Obj> {
     let Some(o) = x.alloc(&pools::EFFCT) else { return None };
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, 2, kind);
@@ -118,32 +118,32 @@ fn spawn_effct<R: Banc>(x: &mut Cx<'_, R>, kind: u8, variant: u8, link: u32) -> 
 }
 
 /// 0x9eca4 : un éclat (ESHL 7) de variante `variant`, propriétaire `+0x50`.
-pub fn eshl_debris<R: Banc>(x: &mut Cx<'_, R>, variant: u8) {
+pub fn eshl_debris<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
     spawn_eshl(x, 7, variant, 0x50);
 }
 
 /// 0xa1d54 : un ESHL 0x1d de variante `variant`, lié par `+0x5c`.
-pub fn eshl_sweep_1d<R: Banc>(x: &mut Cx<'_, R>, variant: u8) {
+pub fn eshl_sweep_1d<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
     spawn_eshl(x, 0x1d, variant, 0x5c);
 }
 
 /// 0xa2048 : un ESHL 0x1e, propriétaire `+0x50`.
-pub fn eshl_wave_1e<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn eshl_wave_1e<R: Bench>(x: &mut Cx<'_, R>) {
     spawn_eshl(x, 0x1e, 0, 0x50);
 }
 
 /// 0xa219e : un ESHL 0x1f, lié par `+0x5c`.
-pub fn eshl_wave_1f<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn eshl_wave_1f<R: Bench>(x: &mut Cx<'_, R>) {
     spawn_eshl(x, 0x1f, 0, 0x5c);
 }
 
 /// 0xb64b0 : un EFFCT 0x33 lié par `+0x5c`.
-pub fn effct_33<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn effct_33<R: Bench>(x: &mut Cx<'_, R>) {
     spawn_effct(x, 0x33, 0, 0x5c);
 }
 
 /// 0xb53f4 : trois EFFCT 0x2e (`+0x2f` = 2, 1, 0) liés par `+0x46` ; le premier refus du pool arrête la série.
-pub fn effct_trio_2e<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn effct_trio_2e<R: Bench>(x: &mut Cx<'_, R>) {
     for index in [2, 1, 0] {
         let Some(e) = spawn_effct(x, 0x2e, 0, f::HOST) else { return };
         e.set_u8(x.b, 0x2f, index);
@@ -152,7 +152,7 @@ pub fn effct_trio_2e<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x667f4 : un ennemi de type 10, variante 4, lié par `+0x5c`, en (`px`, `py`) (explosions de l'arrivée du boss 2,
 /// SET 17).
-pub fn enemy_blast_at<R: Banc>(x: &mut Cx<'_, R>, px: u16, py: u16) {
+pub fn enemy_blast_at<R: Bench>(x: &mut Cx<'_, R>, px: u16, py: u16) {
     let Some(o) = x.alloc(&pools::ENEMY) else { return };
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, 2, 0xa);
@@ -163,14 +163,14 @@ pub fn enemy_blast_at<R: Banc>(x: &mut Cx<'_, R>, px: u16, py: u16) {
 }
 
 /// 0x9ddee : un tir ESHL 1 de variante `variant`, indice `+0x2f` = 1, propriétaire `+0x50`.
-pub fn eshl_thrown_by_beast<R: Banc>(x: &mut Cx<'_, R>, variant: u8) {
+pub fn eshl_thrown_by_beast<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
     if let Some(o) = spawn_eshl(x, 1, variant, 0x50) {
         o.set_u8(x.b, 0x2f, 1);
     }
 }
 
 /// 0xa2f96 : seize tirs ESHL 0x27 (variantes 15 à 0) liés par `+0x5c`.
-pub fn eshl_burst_27<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn eshl_burst_27<R: Bench>(x: &mut Cx<'_, R>) {
     for variant in (0..16).rev() {
         if spawn_eshl(x, 0x27, variant, 0x5c).is_none() {
             return;
@@ -179,7 +179,7 @@ pub fn eshl_burst_27<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0xa6824 : deux tirs ESHL 0x3f (orientation 0 puis 0x20) liés par `+0x5c`.
-pub fn eshl_pair_3f<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn eshl_pair_3f<R: Bench>(x: &mut Cx<'_, R>) {
     for flip in [0, 0x20] {
         let Some(o) = spawn_eshl(x, 0x3f, 0, 0x5c) else { return };
         o.set_u8(x.b, f::FLIP, flip);
@@ -188,7 +188,7 @@ pub fn eshl_pair_3f<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0xa460a, 0xa464e, 0xa4676 : un tir ESHL 0x34 de variante 2, 1 ou 0 lié par `+0x46` (la variante 1 copie
 /// l'orientation du créateur).
-pub fn eshl_shot_34<R: Banc>(x: &mut Cx<'_, R>, variant: u8) {
+pub fn eshl_shot_34<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
     let flip = x.u8(f::FLIP);
     if let Some(o) = spawn_eshl(x, 0x34, variant, f::HOST) {
         o.set_u8(x.b, 0x2f, 0);
@@ -204,32 +204,32 @@ pub fn alloc_failed(x: &Cx) -> bool {
 }
 
 /// Libère l'ennemi courant (état « mort » traité).
-pub fn free<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn free<R: Bench>(x: &mut Cx<'_, R>) {
     x.free(&pools::ENEMY);
 }
 
 /// Tirage pseudo-aléatoire du jeu (un mot).
-pub fn random<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+pub fn random<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     x.random() as u32
 }
 
 /// Jeu en pause (`A5+0x3d` non nul).
-pub fn paused<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub fn paused<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.a5_u8(rom::PAUSE_FLAG) != 0
 }
 
 /// Le gestionnaire est suspendu (hook de pause `0x29ea`, Z = non suspendu).
-pub fn suspended<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub fn suspended<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.suspended()
 }
 
 /// Objet désigné par un mot de 16 bits de l'objet courant (`movea.w (off,A0),A1`).
-pub fn link<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> Obj {
+pub fn link<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> Obj {
     x.linked(off)
 }
 
 /// Écrit le long d'état (`+4..+7`) d'un autre objet.
-pub fn set_state<R: Banc>(x: &mut Cx<'_, R>, o: Obj, state: u32) {
+pub fn set_state<R: Bench>(x: &mut Cx<'_, R>, o: Obj, state: u32) {
     o.set_u32(x.b, f::STATE, state);
 }
 
@@ -237,7 +237,7 @@ pub fn set_state<R: Banc>(x: &mut Cx<'_, R>, o: Obj, state: u32) {
 /// et rien d'autre ne bouge ; sinon, hors pause, `sub` exécute le sous-état (il rend vrai pour
 /// abandonner l'image sans la suite, comme l'original qui dépile son adresse de retour). La suite
 /// teste la zone et la collision avec le décor dès que le sous-état n'est plus 0, puis remet l'objet en liste.
-pub fn active_loop<'a, R: Banc>(x: &mut Cx<'a, R>, sub: impl FnOnce(&mut Cx<'a, R>) -> bool) {
+pub fn active_loop<'a, R: Bench>(x: &mut Cx<'a, R>, sub: impl FnOnce(&mut Cx<'a, R>) -> bool) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -252,12 +252,12 @@ pub fn active_loop<'a, R: Banc>(x: &mut Cx<'a, R>, sub: impl FnOnce(&mut Cx<'a, 
 }
 
 /// Boucle commune de l'état « touché » : même gel ; la zone n'est testée que si `+0xae` est nul.
-pub fn hit_loop<'a, R: Banc>(x: &mut Cx<'a, R>, sub: impl FnOnce(&mut Cx<'a, R>)) {
+pub fn hit_loop<'a, R: Bench>(x: &mut Cx<'a, R>, sub: impl FnOnce(&mut Cx<'a, R>)) {
     hit_loop_at(x, 0xae, sub)
 }
 
 /// `hit_loop` avec l'octet « pas de test de zone » à un autre décalage (`+0xa5` pour le type 4).
-pub fn hit_loop_at<'a, R: Banc>(x: &mut Cx<'a, R>, no_zone: u32, sub: impl FnOnce(&mut Cx<'a, R>)) {
+pub fn hit_loop_at<'a, R: Bench>(x: &mut Cx<'a, R>, no_zone: u32, sub: impl FnOnce(&mut Cx<'a, R>)) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -272,28 +272,28 @@ pub fn hit_loop_at<'a, R: Banc>(x: &mut Cx<'a, R>, no_zone: u32, sub: impl FnOnc
 }
 
 /// Long lu dans une table du programme (adressage relatif au PC, espace des opcodes).
-pub fn rom32<R: Banc>(x: &mut Cx<'_, R>, addr: u32) -> u32 {
+pub fn rom32<R: Bench>(x: &mut Cx<'_, R>, addr: u32) -> u32 {
     (x.rom16(addr) as u32) << 16 | x.rom16(addr + 2) as u32
 }
 
 /// La routine de réaction que désigne le code de coup `+0x49` dans `table` (longs, indexés par le code).
-pub fn reaction_routine<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
+pub fn reaction_routine<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     let code = x.u8(0x49) as u32;
     rom32(x, table + code)
 }
 
 /// Réaction à un coup : la routine commune, choisie dans `table` (longs, indexés par le code de
 /// réaction `+0x49`) par la collision, joue l'animation de recul, de chute ou de mort. Les routines sont appelées par
-/// `jsr (A1)` avec D0 = le code : la routine lue reste l'index des tables Rust (`reactions`, `petites::own_reaction`).
-pub fn react<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
+/// `jsr (A1)` avec D0 = le code : la routine lue reste l'index des tables Rust (`reactions`, `small::own_reaction`).
+pub fn react<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let routine = reaction_routine(x, table);
     run_reaction(x, routine);
 }
 
 /// Exécute la routine de réaction `routine` (commune, ou propre au type).
-pub fn run_reaction<R: Banc>(x: &mut Cx<'_, R>, routine: u32) {
+pub fn run_reaction<R: Bench>(x: &mut Cx<'_, R>, routine: u32) {
     if !super::reactions::run_common(x, routine) {
-        super::petites::own_reaction(x, routine)
+        super::small::own_reaction(x, routine)
             .unwrap_or_else(|| unreachable!("réaction {routine:#x} : ni commune ni propre au type"));
     }
 }
@@ -304,19 +304,19 @@ pub fn set_dw(x: &mut Cx, n: usize, v: u16) {
 }
 
 /// `add.b #v,(off,An)` sur un autre objet (modulo 2^8).
-pub fn add8<R: Banc>(x: &mut Cx<'_, R>, o: Obj, off: u32, v: u8) {
+pub fn add8<R: Bench>(x: &mut Cx<'_, R>, o: Obj, off: u32, v: u8) {
     let n = o.u8(x.b, off).wrapping_add(v);
     o.set_u8(x.b, off, n);
 }
 
 /// `add.w #v,(off,An)` sur un autre objet (modulo 2^16).
-pub fn add16<R: Banc>(x: &mut Cx<'_, R>, o: Obj, off: u32, v: u16) {
+pub fn add16<R: Bench>(x: &mut Cx<'_, R>, o: Obj, off: u32, v: u16) {
     let n = o.u16(x.b, off).wrapping_add(v);
     o.set_u16(x.b, off, n);
 }
 
 /// Démarre le script `n` du jeu d'animations `set` (`movea.l set,A4 ; moveq n,D0 ; jsr 0x1a32`).
-pub fn anim<R: Banc>(x: &mut Cx<'_, R>, set: u32, n: u32) {
+pub fn anim<R: Bench>(x: &mut Cx<'_, R>, set: u32, n: u32) {
     x.anim_start(set, n as u16);
 }
 
@@ -324,50 +324,50 @@ pub fn anim<R: Banc>(x: &mut Cx<'_, R>, set: u32, n: u32) {
 
 /// Fin commune des sous-états actifs : test de zone (0xfbae) puis collision avec le décor (0x33fe4). Vrai si
 /// l'objet a été ramené dans l'écran ou repoussé par le décor (le D5 de l'original, que le squelette relit).
-pub fn zone_and_terrain<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub fn zone_and_terrain<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::keep_in_zone(x);
     lib::collide_terrain(x);
-    // le D5 de l'original (`dispatch::Restes::d5`) : 1 si la zone a déplacé l'objet (`moveq`) ou si le décor l'a
+    // le D5 de l'original (`dispatch::Leftovers::d5`) : 1 si la zone a déplacé l'objet (`moveq`) ou si le décor l'a
     // repoussé
     *x.c.d5() != 0
 }
 
 /// `neg.w (off,A0)`.
-pub fn negate<R: Banc>(x: &mut Cx<'_, R>, off: u32) {
+pub fn negate<R: Bench>(x: &mut Cx<'_, R>, off: u32) {
     let v = x.u16(off).wrapping_neg();
     x.set16(off, v);
 }
 
 /// `movea.w (0x50,A0),A1` : la cible (adresse étendue en signe). L'original la garde dans A1, que relisent ensuite le
 /// scarabée et le scorpion (`aim_to`) : ils prennent la valeur rendue.
-pub fn load_target<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
+pub fn load_target<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
     x.linked(f::TARGET)
 }
 
 /// Tirage `rand & mask` (`andi.w #mask,D0w`).
-pub fn rand_and<R: Banc>(x: &mut Cx<'_, R>, mask: u32) -> u32 {
+pub fn rand_and<R: Bench>(x: &mut Cx<'_, R>, mask: u32) -> u32 {
     random(x) & mask
 }
 
 /// Écrit le long d'état de l'objet courant (`move.l #v,(4,A0)`).
-pub fn set_state_long<R: Banc>(x: &mut Cx<'_, R>, v: u32) {
+pub fn set_state_long<R: Bench>(x: &mut Cx<'_, R>, v: u32) {
     x.set32(f::STATE, v);
 }
 
 // --- aides d'IA communes ------------------------------------------------------------------------
 
 /// Choisit un joueur comme cible (0x424e) ; faux si aucun n'est vivant.
-pub fn pick_target<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub fn pick_target<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::pick_target(x).is_some()
 }
 
 /// L'ennemi est saisi par un joueur (0x2810).
-pub fn grabbed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
-    !crate::aides::grabbed(x.b, x.o).z()
+pub fn grabbed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+    !crate::aids::grabbed(x.b, x.o).z()
 }
 
 /// La cible de l'ennemi (joueur désigné par `+0x50`), ou `None` s'il n'en a pas.
-pub fn target<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
+pub fn target<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     if x.u16(f::TARGET) == 0 {
         return None;
     }
@@ -376,7 +376,7 @@ pub fn target<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
 
 /// L'ennemi ne regarde pas vers sa cible (0x74eac, 0x5f710) : faux sans animation en cours
 /// (`+0xa2` nul) ou sans cible.
-pub fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(0xa2) == 0 {
         return false;
     }
@@ -391,7 +391,7 @@ pub fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 /// 0x67452 : cherche le joueur le plus proche dans une boîte devant l'ennemi (décalage `d0`, demi-largeur
 /// `d1`, demi-profondeur `d2`) et le range en `+0x50` ; faux si aucun. La boîte suit l'orientation de l'ennemi.
 /// D5 garde, comme l'original, le dernier écart calculé.
-pub fn find_player<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
+pub fn find_player<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     x.set16(f::TARGET, 0);
     let d0 = if x.u8(f::FLIP) != 0 { d0.wrapping_neg() } else { d0 } as u16;
     let mut best = 0xffffu16;
@@ -417,15 +417,15 @@ pub fn find_player<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> boo
             x.set16(f::TARGET, p as u16);
         }
     }
-    // Glitch d'origine : D5.w garde le dernier écart (`dispatch::Restes::d5`)
+    // Glitch d'origine : D5.w garde le dernier écart (`dispatch::Leftovers::d5`)
     *x.c.d5() = *x.c.d5() & !0xffff | d5 as u32;
     x.u16(f::TARGET) != 0
 }
 
 /// Crée les objets d'une liste de la ROM : `lists` (pointeurs, espace des opcodes) donne la liste `index`, dont
-/// chaque entrée est `routine d'allocation (octet), type, variante, +0x2f, X, hauteur, profondeur` ; le créateur
+/// chaque entrée est `routine d'allocation (byte), type, variant, +0x2f, X, height, depth` ; le créateur
 /// est rangé en `+0x5c` de chaque objet. Les allocations qui échouent sautent leur entrée.
-pub fn spawn_list<R: Banc>(x: &mut Cx<'_, R>, lists: u32, allocs: u32, index: u32) {
+pub fn spawn_list<R: Bench>(x: &mut Cx<'_, R>, lists: u32, allocs: u32, index: u32) {
     let mut at = rom32(x, lists + 4 * index);
     let count = x.data16(at);
     at += 2;
@@ -451,7 +451,7 @@ pub fn spawn_list<R: Banc>(x: &mut Cx<'_, R>, lists: u32, allocs: u32, index: u3
 
 /// 0x27ee : l'ennemi se détache de son hôte (`HOST`) : si l'hôte est actif et compte encore des parties
 /// (`+0x2a`), le compte diminue et le lien est effacé.
-pub fn detach_from_host<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn detach_from_host<R: Bench>(x: &mut Cx<'_, R>) {
     const PARTS: u32 = 0x2a;
     let host = x.u16(f::HOST);
     if host != 0 {
@@ -467,7 +467,7 @@ pub fn detach_from_host<R: Banc>(x: &mut Cx<'_, R>) {
 pub const NATIVES: &[crate::Native] = &[crate::Native {
     entry: 0x27ee,
     name: "ennemi_detacher_hote",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         // D0.w et A1 : le lien et l'hôte, comme l'original
         let host = crate::mem::rd16(b, c.a[0] + f::HOST);
         c.d[0] = c.d[0] & 0xffff_0000 | host as u32;

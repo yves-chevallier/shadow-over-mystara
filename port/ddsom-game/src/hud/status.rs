@@ -227,13 +227,13 @@ pub fn countdown(x: &mut Ctx) -> Flow {
         for off in [over::ACTIVE, over::STATE, over::PLAYERS_FREE] {
             wr8(x.b, record + off, 0);
         }
-        crate::sound::jouer_global(x.b, over::MUSIC_STOP);
+        crate::sound::play_global(x.b, over::MUSIC_STOP);
         return Flow::Done;
     }
     match rd8(x.b, record + over::STATE) {
         over::START => {
             if x.v8(var::CONTINUE_ALLOWED) != 0 {
-                crate::sound::jouer_global(x.b, over::MUSIC_START);
+                crate::sound::play_global(x.b, over::MUSIC_START);
                 wr8(x.b, record + over::ACTIVE, 1);
                 let state = rd8(x.b, record + over::STATE);
                 wr8(x.b, record + over::STATE, state + 2);
@@ -279,7 +279,7 @@ fn wait_game_over(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     x.set_v8(var::PHASE, over::PHASE_GAME_OVER);
-    crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
-    crate::families::petites::demarrage_fait(x.b, true);
+    crate::sound::service(x.b, crate::sound::Service::GeneralStop);
+    crate::families::small::startup_done(x.b, true);
     Flow::Done
 }

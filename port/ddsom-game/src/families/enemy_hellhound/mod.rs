@@ -1,4 +1,4 @@
-//! Ennemi « Hellhound » (ENEMY type 6, 0x61364). Voir `docs/familles/enemy.md`.
+//! Ennemi « Hellhound » (ENEMY type 6, 0x61364). Voir `docs/families/enemy.md`.
 //!
 //! Chien de l'enfer à huit variantes d'arrivée (`+3`) et deux jeux de paramètres d'IA (`+0x2f`). Charpente de
 //! `active_loop` ; animations 0x162126 (mouvements) et 0x162148 (coups).
@@ -13,7 +13,7 @@
 //! | 12 | `attacks` | saisie d'un joueur |
 //! | état 4 | `hit` | réactions aux coups, recul, chute, saisie par un joueur |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -47,12 +47,12 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 pub(self) const SET_MOVE: u32 = 0x162126;
 pub(self) const SET_STRIKE: u32 = 0x162148;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -68,32 +68,32 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
-pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
 /// L'aspect voulu : `+0xa1` et son double `+0xa2`.
-pub(self) fn look<R: Banc>(x: &mut Cx<'_, R>, v: u8) {
+pub(self) fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
-pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Direction de marche : 8 (regarde à gauche) ou 0x18.
-pub(self) fn set_angle<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn set_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Étape commune des gestes : attend la clé d'animation `+0x33` puis passe à l'étape suivante (0x6244a).
-pub(self) fn wait_key<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 0);
@@ -102,7 +102,7 @@ pub(self) fn wait_key<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Retombée d'un saut (0x62460) : le geste se termine par une poussière et l'animation 0xc.
-pub(self) fn land<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn land<R: Bench>(x: &mut Cx<'_, R>) {
     if x.move_xz().gt() {
         x.anim_step();
         return;
@@ -111,7 +111,7 @@ pub(self) fn land<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x62478 : poussière, retour au sol, étape suivante.
-pub(self) fn land_dust<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn land_dust<R: Bench>(x: &mut Cx<'_, R>) {
     dust(x);
     lib::sound(x, 0xec820);
     x.set32(Obj::Z, 0);
@@ -122,14 +122,14 @@ pub(self) fn land_dust<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x63a50 : quatre nuages de poussière autour de l'ennemi.
-pub(self) fn dust<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn dust<R: Bench>(x: &mut Cx<'_, R>) {
     for d2 in [-0x1c, -8, 8, 0x1c] {
         lib::shock(x, 0, 0, d2 as u16, 4);
     }
 }
 
 /// Un pas de fumée toutes les `mask + 1` images (`A5+0x6e` est le compteur d'images, que l'original masque en place).
-pub(self) fn puff<R: Banc>(x: &mut Cx<'_, R>, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
+pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
     let v = x.a5_u16(0x6e) & mask;
     x.set_a5_u16(0x6e, v);
     if v == 0 {
@@ -138,7 +138,7 @@ pub(self) fn puff<R: Banc>(x: &mut Cx<'_, R>, mask: u16, d0: u32, d1: u32, d2: i
 }
 
 /// 0x639fe : l'ennemi doit se retourner pour faire face à sa cible (faux sans cible ni aspect mémorisé).
-pub(self) fn must_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -150,7 +150,7 @@ pub(self) fn must_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x63a98 : la cible est dans la même rangée (profondeur à 0x30 près) mais loin en X (plus de 0xf0).
-pub(self) fn target_far_in_line<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -166,7 +166,7 @@ pub(self) fn target_far_in_line<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x62f1e / 0x62f26 : choisit le coup suivant (`+6`) dans la ligne de la difficulté du profil `+0x2f` ;
 /// `bias` = 8 pour la série lointaine.
-pub(self) fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, bias: u8) {
+pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
     let profile = x.u8(GROUP) as u32;
     let list = x.data32(0x62f80 + bias as u32 + 4 * profile);
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
@@ -181,7 +181,7 @@ pub(self) fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, bias: u8) {
 }
 
 /// 0x63790 : fin d'un geste : si la cible est dans une boîte de portée, un coup de la série `0x637fe` suit ; sinon debout.
-pub(self) fn after_strike<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
     }
@@ -203,7 +203,7 @@ pub(self) const IDLE: u32 = 0x020a_0000;
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -252,7 +252,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     active_loop(x, |x| {
         match x.u8(f::SUB) {
             0 => arrival::run(x),
@@ -269,5 +269,5 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x61364 "enemy_6" #[sans] run,
+    0x61364 "enemy_6" #[without] run,
 }

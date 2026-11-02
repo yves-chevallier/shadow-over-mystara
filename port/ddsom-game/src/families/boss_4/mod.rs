@@ -1,5 +1,5 @@
 //! Boss de type 4 (0x81b3a) : la Chimère (scènes 104 et 105, et dans `cov_2p_c`, `cov_tour4_c3`). Voir
-//! `docs/familles/boss.md`.
+//! `docs/families/boss.md`.
 //!
 //! Charpente des boss à IA (`+4` état, `+5` groupe, `+6` et `+7` étapes, états posés d'un coup en longs,
 //! bibliothèque d'IA 0x103d6..0x105b6). Le corps est accompagné de trois doubles graphiques (ENEMY 22, 23, 24 de
@@ -18,7 +18,7 @@
 //! Les choix d'attaque (tirages dans les tables de la ROM selon la phase `+0xaa`) et les états qu'ils posent sont
 //! dans `decide`. Animations : 0x17557e (corps), 0x175596 (vol et attaques), 0x1755ae (coups reçus).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -68,7 +68,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Jeux d'animations : corps, vol et attaques, coups reçus.
 pub(self) const SET_BODY: u32 = 0x17557e;
@@ -76,23 +76,23 @@ pub(self) const SET_AIR: u32 = 0x175596;
 pub(self) const SET_HURT: u32 = 0x1755ae;
 
 /// Lance l'animation `n` d'un jeu par l'IA (0x103d6).
-pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn air<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn air<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_AIR, n);
 }
 
 /// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
-pub(self) fn kind<R: Banc>(x: &mut Cx<'_, R>, k: u8) {
+pub(self) fn kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     x.set8(ANIM_KIND, k);
     x.set8(ANIM_LAST, k);
 }
 
 /// Mot de poids faible d'un registre de données : seuls D2 à D5 sont gardés (restes relus par les gestionnaires
 /// suivants) ; D0, D1 et D6 ne sont relus par personne.
-pub(self) fn setw<R: Banc>(x: &mut Cx<'_, R>, n: usize, v: u16) {
+pub(self) fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
     let r = match n {
         2 => x.c.d2(),
         3 => x.c.d3(),
@@ -104,28 +104,28 @@ pub(self) fn setw<R: Banc>(x: &mut Cx<'_, R>, n: usize, v: u16) {
 }
 
 /// `subq.w #1,(off,A0)` : vrai quand le décompte est écoulé (`ble`).
-pub(self) fn expired<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> bool {
+pub(self) fn expired<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     sub16(x, off, 1).le()
 }
 
 /// Au moins un joueur en vie (0x10474).
-pub(self) fn alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::players_alive(x)
 }
 
 /// Le double `off` (`movea.w (off,A0),A1`).
-pub(self) fn double<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> Obj {
+pub(self) fn double<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> Obj {
     x.linked(off)
 }
 
 /// Demande au premier double de rejouer son geste (`+0xb6` du double).
-pub(self) fn cue_double<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn cue_double<R: Bench>(x: &mut Cx<'_, R>) {
     let d = double(x, DOUBLE_A);
     d.set_u8(x.b, 0xb6, 1);
 }
 
 /// Toutes les 4 images, une bouffée de poussière (0x1172e, sorte 3).
-pub(self) fn dust_tick<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn dust_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if !sub16(x, DUST, 1).gt() {
         x.set16(DUST, 4);
         lib::debris(x, 3);
@@ -133,7 +133,7 @@ pub(self) fn dust_tick<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Image-clé marquée (bit 7 de `+0x33`) : un battement d'ailes, de côté alterné.
-pub(self) fn flap<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn flap<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(f::KEY_FRAME) as i8) < 0 {
         let k = x.u8(f::KEY_FRAME) & 0x7f;
         x.set8(f::KEY_FRAME, k);
@@ -144,12 +144,12 @@ pub(self) fn flap<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `moveq #0,D0 ; move.w (off,A0),D0 ; swap D0 ; asr.l #8,D0` : vitesse (mot) en long à 8 bits de fraction.
-pub(self) fn speed_long<R: Banc>(x: &mut Cx<'_, R>, off: u32) -> u32 {
+pub(self) fn speed_long<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> u32 {
     let v = ((x.u16(off) as i16 as i32) << 8) as u32;
     v
 }
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -171,7 +171,7 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// 0x81b74 : réglages du boss, création des trois doubles ; en partie, il entre par le haut de l'écran.
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -230,7 +230,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Crée un double ENEMY de type `kind` (le pool est attendu tant qu'il est plein) et le lie au boss (`link`).
 /// `life` : (retrait, minimum, jeu de boîtes) pour un double qui a ses propres PV.
-fn spawn_double<R: Banc>(x: &mut Cx<'_, R>, kind: u8, life: Option<(u16, u16, u8)>, link: u32) {
+fn spawn_double<R: Bench>(x: &mut Cx<'_, R>, kind: u8, life: Option<(u16, u16, u8)>, link: u32) {
     let Some(d) = alloc_retry(x, &pools::ENEMY) else { return };
     d.set_u8(x.b, 0, 1);
     d.set_u8(x.b, 2, kind);
@@ -258,7 +258,7 @@ fn spawn_double<R: Banc>(x: &mut Cx<'_, R>, kind: u8, life: Option<(u16, u16, u8
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 /// 0x81d6e : un groupe par image (hors gel et pause), puis zone de jeu et ombre.
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
@@ -275,7 +275,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x81b3a "boss_4" #[sans] run,
+    0x81b3a "boss_4" #[without] run,
     // retour au combat après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x82ea0 "boss_4_releve" hit::resume,
 }

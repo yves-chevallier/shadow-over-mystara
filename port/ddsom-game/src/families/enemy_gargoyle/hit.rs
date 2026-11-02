@@ -2,16 +2,16 @@
 //! 4 chute et relevé, 6 mort en plusieurs temps, 8 chute d'une créature qui en saisissait une autre,
 //! 10 reprise du combat.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Réactions communes aux coups, indexées par le code `+0x49`.
 const REACTIONS: u32 = 0x6518a;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -33,14 +33,14 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin des sous-états 2 et 4 : l'état est mémorisé et la période de repos décomptée.
-fn tail<R: Banc>(x: &mut Cx<'_, R>) {
+fn tail<R: Bench>(x: &mut Cx<'_, R>) {
     let s = x.u32(f::STATE);
     x.set32(STATE_SAVED, s);
     cooldown(x);
 }
 
 /// 0x65ac8 : plus de PV → mort (sous-état 6, état 2 le temps de la chute) ; vrai si l'ennemi meurt.
-fn death_check<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn death_check<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
     }
@@ -51,7 +51,7 @@ fn death_check<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 // --- sous-état 0 : réaction -----------------------------------------------------------------------
 
-fn first<R: Banc>(x: &mut Cx<'_, R>) {
+fn first<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         let mut dismissed = true;
         if x.u8(HIT_FLAGS) & 1 != 0 {
@@ -78,7 +78,7 @@ fn first<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x65168 : la créature n'est plus tenue : elle reprend l'état mémorisé avec une courte période de repos.
-fn resume<R: Banc>(x: &mut Cx<'_, R>) {
+fn resume<R: Bench>(x: &mut Cx<'_, R>) {
     let code = x.u8(HIT_CODE_SAVED);
     x.set8(0x49, code);
     let s = x.u32(STATE_SAVED);
@@ -92,7 +92,7 @@ fn resume<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 2 : recul ----------------------------------------------------------------------------
 
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -129,7 +129,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 4 : chute et relevé --------------------------------------------------------------------
 
-fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
+fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -161,7 +161,7 @@ fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 6 : mort ------------------------------------------------------------------------------
 
-fn dying<R: Banc>(x: &mut Cx<'_, R>) {
+fn dying<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -247,7 +247,7 @@ fn dying<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 8 : chute d'une créature en vol -------------------------------------------------------
 
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

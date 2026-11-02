@@ -18,7 +18,7 @@ use crate::objects::pools::{self, Pool};
 use crate::objects::Obj;
 use crate::player::{Player, PLAYER_BASE, PLAYER_COUNT, PLAYER_STRIDE};
 use crate::scroll::{cam, CAMERA_1, CAMERA_2};
-use crate::video::Grille;
+use crate::video::Grid;
 use crate::{regs, Native};
 
 /// Contexte d'un script de caméra : le bus et la caméra que le script modifie.
@@ -427,7 +427,7 @@ const BACKDROP_BLOCKS_A: [(u16, u32); 8] = [
 
 fn load_backdrops(x: &mut Cam, blocks: &[(u16, u32)]) {
     for &(index, dest) in blocks {
-        crate::video::charger_grille(x.b, Grille::Couche2, index, dest);
+        crate::video::load_grid(x.b, Grid::Layer2, index, dest);
     }
 }
 
@@ -1375,7 +1375,7 @@ fn run_mode_2(x: &mut Cam, mode: u16) {
 }
 
 /// 0x32898 : un pas de la caméra 2 initialisée : script du mode, puis recopie du décor.
-fn step_2(b: &mut Cps2Bus) -> crate::scroll::RestesD4 {
+fn step_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     let mut x = Cam { b, o: Obj(A5 + CAMERA_2) };
     x.set8(f::SHAKING, 0);
     let m = x.u16(cam::MODE);
@@ -1434,7 +1434,7 @@ fn background_blocks_1(stage: u8) -> Option<Vec<(u16, u32)>> {
 
 /// 0x2ede0 : la caméra 1 (A5+0x4fe) est initialisée au premier appel d'une scène, puis mise à jour à chaque image.
 /// Rend le D4 que laisse la recopie du décor.
-pub fn update_camera_1(b: &mut Cps2Bus) -> crate::scroll::RestesD4 {
+pub fn update_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     if rd8(b, A5 + CAMERA_1) != 0 {
         step(b)
     } else {
@@ -1451,7 +1451,7 @@ fn camera1_update(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn init_camera_1(b: &mut Cps2Bus) -> crate::scroll::RestesD4 {
+fn init_camera_1(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     let mut x = Cam { b, o: Obj(A5 + CAMERA_1) };
     x.set16(0, 0x0200);
     let stage = rd8(x.b, A5 + STAGE);
@@ -1461,8 +1461,8 @@ fn init_camera_1(b: &mut Cps2Bus) -> crate::scroll::RestesD4 {
     let output = x.data16(tables::OUTPUT + by_stage);
     wr16(x.b, OUTPUT_PORT, output);
     wr16(x.b, A5 + 0x14, 0);
-    let couches = x.data16(tables::LAYERS + by_stage);
-    crate::video::activer_couches(x.b, couches);
+    let layers = x.data16(tables::LAYERS + by_stage);
+    crate::video::turn_layers_on(x.b, layers);
     let hold = x.data8(tables::HOLD_MIN + stage as u32);
     x.set8(cam::HOLD_MIN, hold);
     x.set16(cam::MODE, 0);
@@ -1509,20 +1509,20 @@ fn load_scroll3_table(x: &mut Cam, table: u32, count: u32) {
     for i in 0..count {
         let n = x.data16(table + 4 * i);
         let destination = 0x918000u32.wrapping_add(x.data16(table + 4 * i + 2) as i16 as i32 as u32);
-        crate::video::charger_grille(x.b, Grille::Couche3, n, destination);
+        crate::video::load_grid(x.b, Grid::Layer3, n, destination);
     }
 }
 
 /// Charge des blocs consécutifs d'indices `first..` aux adresses `slots`.
 fn load_scroll3_blocks(x: &mut Cam, first: u32, slots: [u32; 8]) {
     for (i, slot) in slots.into_iter().enumerate() {
-        crate::video::charger_grille(x.b, Grille::Couche3, (first + i as u32) as u16, slot);
+        crate::video::load_grid(x.b, Grid::Layer3, (first + i as u32) as u16, slot);
     }
 }
 
 /// 0x32108 : la caméra 2 (A5+0x54e) est initialisée au premier appel d'une scène, puis mise à jour à chaque image.
 /// Rend le D4 que laisse la recopie du décor.
-pub fn update_camera_2(b: &mut Cps2Bus) -> crate::scroll::RestesD4 {
+pub fn update_camera_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     if rd8(b, A5 + CAMERA_2) != 0 {
         step_2(b)
     } else {
@@ -1539,7 +1539,7 @@ fn camera2_update(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-fn init_camera_2(b: &mut Cps2Bus) -> crate::scroll::RestesD4 {
+fn init_camera_2(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     let mut x = Cam { b, o: Obj(A5 + CAMERA_2) };
     x.set16(0, 0x0200);
     x.set16(cam::MODE, 0);
@@ -1560,7 +1560,7 @@ fn init_camera_2(b: &mut Cps2Bus) -> crate::scroll::RestesD4 {
         18 => load_scroll3_table(&mut x, 0x32314, 8),
         8 | 41 => {
             for i in 0..8 {
-                crate::video::charger_grille(x.b, Grille::Couche3, 53, 0x91b800 + 0x100 * i);
+                crate::video::load_grid(x.b, Grid::Layer3, 53, 0x91b800 + 0x100 * i);
             }
         }
         54 => load_scroll3_blocks(&mut x, 16, BACKDROP_SLOTS_2),
@@ -1577,7 +1577,7 @@ fn init_camera_2(b: &mut Cps2Bus) -> crate::scroll::RestesD4 {
 
 /// 0x2f80c : un pas de la caméra 1 initialisée : script du mode, puis butées de la cible et recopie du
 /// décor (`scroll`).
-fn step(b: &mut Cps2Bus) -> crate::scroll::RestesD4 {
+fn step(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     let mut x = Cam { b, o: Obj(A5 + CAMERA_1) };
     x.set8(f::SHAKING, 0);
     let m = x.u16(cam::MODE);
@@ -1589,7 +1589,7 @@ pub const CAMERA1_UPDATE: Native = camera(0x2ede0, "camera1_mise_a_jour", camera
 pub const CAMERA2_UPDATE: Native = camera(0x32108, "camera2_mise_a_jour", camera2_update);
 
 const fn camera(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Corps::Processeur(run), touches_sound: false, outputs: regs::a(0) }
+    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs: regs::a(0) }
 }
 
 /// Modes de secousse de la caméra (`cam::MODE`) et leurs entrées d'origine.

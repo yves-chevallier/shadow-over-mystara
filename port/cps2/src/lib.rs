@@ -92,12 +92,12 @@ pub struct Machine {
     pub patches: Vec<Patch>,
     /// Remplace l'exécution du 68000 (exécuteur, interpréteur, `idle`, correctifs) : appelée une fois par ligne, elle
     /// fait le travail du processeur jusqu'au cycle donné ; le Z80 suit, comme d'ordinaire. `cpu` n'est alors qu'un
-    /// banc de registres (jeu sans 68000, `ddsom_game::install_sans_68k`).
+    /// banc de registres (jeu sans 68000, `ddsom_game::install_no_68k`).
     pub line_work: Option<LineWork>,
     /// `run_frame` rend l'image (vrai par défaut). Faux : l'image n'est pas calculée et `run_frame` rend un vecteur vide.
     /// Le rendu ne lit que l'état (aucun effet) ; les outils qui ne regardent pas l'image (`validate`, `bench`)
     /// l'éteignent : c'est l'essentiel du temps d'une image du jeu sans 68000.
-    pub rendu: bool,
+    pub rendering: bool,
     pub cpu: Cpu,
     pub bus: Cps2Bus,
     pub sound: sound::Sound,
@@ -127,30 +127,30 @@ pub fn load_program(romdir: &Path) -> io::Result<(Vec<u16>, Vec<u16>)> {
     Ok((rom, dec))
 }
 
-/// Contenu des puces de ddsom, tel que la machine le range : depuis les ROMs (`Contenus::depuis_roms`) ou reconstruit
-/// depuis les ressources extraites (`ddsom_assets::rebuild::contenus`, jeu sans ROM).
+/// Contenu des puces de ddsom, tel que la machine le range : depuis les ROMs (`Contents::from_roms`) ou reconstruit
+/// depuis les ressources extraites (`ddsom_assets::rebuild::contents`, jeu sans ROM).
 #[derive(Clone)]
-pub struct Contenus {
+pub struct Contents {
     /// Programme 68000, vue données (mots grand-boutistes, 0x200000 mots).
-    pub programme: Vec<u16>,
+    pub program: Vec<u16>,
     /// Programme 68000, vue espace programme déchiffrée (opcodes et lectures relatives au PC).
-    pub programme_dechiffre: Vec<u16>,
+    pub decrypted_program: Vec<u16>,
     /// Région graphique (`cps2_gfx::rom::load_gfx`).
-    pub graphismes: Vec<u8>,
+    pub graphics: Vec<u8>,
     /// Région du Z80 (0x50000 : 0-7FFF fixe, banques à partir de 0x10000).
     pub audio: Vec<u8>,
     /// Programme du DSP QSound (`dl-1425.bin`, au moins 0x2000 octets : seules ses tables servent).
     pub dsp: Vec<u8>,
     /// ROM d'échantillons QSound (4 Mo).
-    pub echantillons: Vec<u8>,
+    pub samples: Vec<u8>,
 }
 
-impl Contenus {
+impl Contents {
     /// Lit les ROMs (ddsom.zip et dl-1425.bin). `gfx` et `samples`, s'ils sont donnés, remplacent les ROMs graphiques
     /// (`dd2.13m`...) et d'échantillons (`dd2.11m`, `dd2.12m`), qui ne sont alors pas lues.
-    pub fn depuis_roms(romdir: &Path, gfx: Option<Vec<u8>>, samples: Option<Vec<u8>>) -> io::Result<Self> {
-        let (programme, programme_dechiffre) = load_program(romdir)?;
-        let graphismes = match gfx {
+    pub fn from_roms(romdir: &Path, gfx: Option<Vec<u8>>, samples: Option<Vec<u8>>) -> io::Result<Self> {
+        let (program, decrypted_program) = load_program(romdir)?;
+        let graphics = match gfx {
             Some(g) => g,
             None => cps2_gfx::rom::load_gfx(romdir, cps2_gfx::rom::DDSOM_GFX, cps2_gfx::rom::DDSOM_GFX_SIZE)?,
         };
@@ -162,7 +162,7 @@ impl Contenus {
         let d2 = std::fs::read(romdir.join("dd2.02"))?;
         audio[0x28000..0x48000].copy_from_slice(&d2);
         // échantillons QSound : ROM_LOAD16_WORD_SWAP
-        let echantillons = match samples {
+        let samples = match samples {
             Some(s) => s,
             None => {
                 let mut samples = Vec::with_capacity(0x400000);
@@ -174,7 +174,7 @@ impl Contenus {
             }
         };
         let dsp = std::fs::read(romdir.join("dl-1425.bin"))?;
-        Ok(Contenus { programme, programme_dechiffre, graphismes, audio, dsp, echantillons })
+        Ok(Contents { program, decrypted_program, graphics, audio, dsp, samples })
     }
 }
 
@@ -193,13 +193,13 @@ impl Machine {
         gfx: Option<Vec<u8>>,
         samples: Option<Vec<u8>>,
     ) -> io::Result<Self> {
-        Ok(Self::ddsom(Contenus::depuis_roms(romdir, gfx, samples)?, eeprom))
+        Ok(Self::ddsom(Contents::from_roms(romdir, gfx, samples)?, eeprom))
     }
 
     /// Machine ddsom faite de ces contenus de puces (aucun fichier lu).
-    pub fn ddsom(contenus: Contenus, eeprom: Option<&[u8]>) -> Self {
-        let Contenus { programme: rom, programme_dechiffre: rom_dec, graphismes: gfx, audio: zrom, dsp, echantillons: samples } =
-            contenus;
+    pub fn ddsom(contents: Contents, eeprom: Option<&[u8]>) -> Self {
+        let Contents { program: rom, decrypted_program: rom_dec, graphics: gfx, audio: zrom, dsp, samples: samples } =
+            contents;
         let snd = sound::Sound::new(zrom, qsound::QSound::new(&dsp, samples));
         let ee = match eeprom {
             Some(b) => Eeprom93c46::from_bytes(b),
@@ -214,7 +214,7 @@ impl Machine {
             step_cap: None,
             patches: Vec::new(),
             line_work: None,
-            rendu: true,
+            rendering: true,
             cpu: Cpu::new(),
             bus: Cps2Bus::new(rom, rom_dec, ee),
             sound: snd,
@@ -315,7 +315,7 @@ impl Machine {
             self.bus.irq_horizon = if raster { (self.cycle_debt + self.line_cycles) as u64 } else { frame_end };
             self.run_line();
         }
-        let image = if self.rendu { self.render() } else { Vec::new() };
+        let image = if self.rendering { self.render() } else { Vec::new() };
         let bank = self.bus.objram_bank as usize & 1;
         self.obj_buffer.copy_from_slice(&self.bus.objram[bank]);
         self.pri_ctrl_buffer = self.bus.output;

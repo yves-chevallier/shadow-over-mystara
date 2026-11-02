@@ -1,4 +1,4 @@
-//! Boss de type 10 (0x8ca4a), scènes 65 et 66 : Nagpa (h). Voir `docs/familles/boss.md`.
+//! Boss de type 10 (0x8ca4a), scènes 65 et 66 : Nagpa (h). Voir `docs/families/boss.md`.
 //!
 //! Même gabarit que les boss 17 et 6 (états `+4`, groupes `+5`, étapes `+6` / `+7`, états posés en longs), en
 //! plus court : il apparaît (cinématique d'ouverture : il crée un ennemi de type 18 et un boss de type 19, variante 1),
@@ -14,7 +14,7 @@
 //!
 //! Animations : 0x17b14e (mouvements), 0x17b162 (tirs), 0x17b166 (recul, mort).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::boss_common::*;
 use super::cx::handlers;
 
@@ -37,7 +37,7 @@ mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 const SET_BODY: u32 = 0x17b14e;
 const SET_SHOT: u32 = 0x17b162;
@@ -54,7 +54,7 @@ const SHOOT_NEAR: u32 = 0x0204_0000;
 const REACTIONS: u32 = 0x8d176;
 const STUN_REACTION: u32 = 0x8d294;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -72,25 +72,25 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn players_alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn players_alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
-fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
-fn zone_and_shadow<R: Banc>(x: &mut Cx<'_, R>) {
+fn zone_and_shadow<R: Bench>(x: &mut Cx<'_, R>) {
     lib::keep_in_zone(x);
     lib::collide_terrain(x);
 }
 
 /// 0x8d526 : choisit l'étape suivante du combat (`+6` = 0, 4 ou 6) d'après une table de 32 octets.
-fn next_action<R: Banc>(x: &mut Cx<'_, R>) {
+fn next_action<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     x.set32(f::STATE, FIGHT);
     let step = x.rom8(0x8d540 + r);
@@ -98,22 +98,22 @@ fn next_action<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8d560 : interrompt l'action (état mémorisé).
-fn interrupt<R: Banc>(x: &mut Cx<'_, R>) {
+fn interrupt<R: Bench>(x: &mut Cx<'_, R>) {
     let s = x.u32(f::STATE);
     x.set32(SAVED_STATE, s);
     x.set32(f::STATE, INTERRUPTED);
 }
 
-fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
-fn facing_forward<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn facing_forward<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::moving_forward(x)
 }
 
 /// Un joueur est-il dans la boîte ? 0 sinon (0x8d4ee, 0x8d50a).
-fn probe<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
+fn probe<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
     }
@@ -122,7 +122,7 @@ fn probe<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
 
 // --- état 0 : création ------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::clear_popup(x);
     lib::empty_popups(x);
     lib::clear_all_popups(x);
@@ -158,7 +158,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
         return zone_and_shadow(x);
@@ -180,7 +180,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 0 : ouverture -------------------------------------------------------------------------
 
-fn intro<R: Banc>(x: &mut Cx<'_, R>) {
+fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             if x.a5_u8(0x2e) != 6 {
@@ -236,7 +236,7 @@ fn intro<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 2 : combat -----------------------------------------------------------------------------
 
-fn fight<R: Banc>(x: &mut Cx<'_, R>) {
+fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => idle(x),
         2 => turn(x),
@@ -246,7 +246,7 @@ fn fight<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return x.set32(f::STATE, WAIT);
     }
@@ -269,7 +269,7 @@ fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         x.set8(ANIM_KIND, 1);
@@ -285,7 +285,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     next_action(x);
 }
 
-fn walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return wait(x);
     }
@@ -316,13 +316,13 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Choisit l'animation de marche par l'image-clé (0x103e0) ; `mirror` : le test de sens est inversé.
-fn select_walk<R: Banc>(x: &mut Cx<'_, R>, mirror: bool) {
+fn select_walk<R: Bench>(x: &mut Cx<'_, R>, mirror: bool) {
     let z = lib::moving_forward(x);
     let set = if z != mirror { WALK_A } else { WALK_B };
     lib::switch_keeping_time(x, set);
 }
 
-fn keep_walking<R: Banc>(x: &mut Cx<'_, R>) {
+fn keep_walking<R: Bench>(x: &mut Cx<'_, R>) {
     if sub8(x, WALK_DELAY, 1).mi() {
         if !sub8(x, WALK_STEPS, 1).pl() {
             return next_action(x);
@@ -348,20 +348,20 @@ fn keep_walking<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-fn walk_delay<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_delay<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x8d47c + level);
     x.set8(WALK_DELAY, v);
 }
 
-fn walk_steps<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_steps<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 0x1f;
     let v = x.rom8(0x8d4ce + r);
     x.set8(WALK_STEPS, v);
 }
 
 /// +6 = 6 : saut sur la cible.
-fn jump<R: Banc>(x: &mut Cx<'_, R>) {
+fn jump<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -428,7 +428,7 @@ fn jump<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 4 : tir ---------------------------------------------------------------------------------
 
-fn shoot<R: Banc>(x: &mut Cx<'_, R>) {
+fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => match x.u8(0x7) {
             0 => {
@@ -449,13 +449,13 @@ fn shoot<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8d0a0 : fin du tir.
-fn shot_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn shot_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set_a5_u16(0x51e, 0);
     x.anim_start(SET_SHOT, 0);
 }
 
-fn cinematic_shot<R: Banc>(x: &mut Cx<'_, R>) {
+fn cinematic_shot<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -532,7 +532,7 @@ fn cinematic_shot<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 6 : attente -------------------------------------------------------------------------
 
-fn wait_state<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_state<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(WAIT_BLINK, 0xfa);
@@ -554,7 +554,7 @@ fn wait_state<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 4 : touché --------------------------------------------------------------------------------
 
-fn hit<R: Banc>(x: &mut Cx<'_, R>) {
+fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else {
@@ -570,7 +570,7 @@ fn hit<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8d57a : plus de PV ? Passe alors au groupe 6 (mort).
-fn out_of_hp<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn out_of_hp<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if tst16(x, f::HP).gt() {
         return false;
     }
@@ -579,7 +579,7 @@ fn out_of_hp<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x2b, 0x18);
     if x.u8(f::SUB2) == 0 {
         let flags = x.a5_u8(0x43) | 0x80;
@@ -595,7 +595,7 @@ fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8d294 : étourdissement.
-fn stun<R: Banc>(x: &mut Cx<'_, R>) {
+fn stun<R: Bench>(x: &mut Cx<'_, R>) {
     sub16(x, HITS, 1);
     match x.u8(f::SUB2) {
         0 => {
@@ -641,7 +641,7 @@ fn stun<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
+fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -671,7 +671,7 @@ fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn down<R: Banc>(x: &mut Cx<'_, R>) {
+fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -738,5 +738,5 @@ fn down<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x8ca4a "boss_10" #[sans] run,
+    0x8ca4a "boss_10" #[without] run,
 }

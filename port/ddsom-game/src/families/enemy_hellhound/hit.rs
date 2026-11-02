@@ -1,16 +1,16 @@
 //! Type 6, état touché (`+4 = 4`, 0x62a54). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
 //! 6 seconde table de réactions, 8 saisie par un joueur (le chien s'enfuit hors de l'écran).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Tables de réactions communes aux coups, indexées par le code `+0x49`.
 const REACT_FIRST: u32 = 0x62aa2;
 const REACT_SECOND: u32 = 0x62d76;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     hit_loop_at(x, NO_ZONE, |x| {
         match x.u8(f::SUB) {
             0 => {
@@ -28,7 +28,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 2 : recul ------------------------------------------------------------------------------------
 
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -64,7 +64,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 4 : chute et relevé --------------------------------------------------------------------------
 
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -148,7 +148,7 @@ fn fall<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 8 : saisie par un joueur ------------------------------------------------------------------------
 
-fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -192,7 +192,7 @@ fn run_away<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x62ec0 : le chien court vers le bord de l'écran.
-fn run_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_angle(x);
     mv(x, 3);

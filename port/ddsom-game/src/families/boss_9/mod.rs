@@ -1,5 +1,5 @@
 //! Boss de type 9 (0x8a75c) : l'engin de guerre roulant de la scène 2 (h), avec son équipage. Voir
-//! `docs/familles/boss.md`.
+//! `docs/families/boss.md`.
 //!
 //! L'engin roule d'un bord à l'autre de l'écran (plan de la caméra `A5+0x556`) ; ses parties (ESHL 0xd et 0xe) et
 //! son équipage (ENEMY 0x13 : un conducteur `+0xac` et quatre servants `+0xae..+0xb4`) sont des objets à part. Il
@@ -18,8 +18,8 @@
 //!
 //! Animations : 0x17a276.
 
-use crate::families::cx::Banc;
-use crate::objects::Courant;
+use crate::families::cx::Bench;
+use crate::objects::Current;
 use super::boss_common::*;
 use crate::objects::Obj;
 
@@ -89,62 +89,62 @@ pub(self) const HARD: u32 = 0x70;
 
 
 /// Un pas d'animation (0x1a56).
-pub(self) fn anim<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn anim<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
 /// Étape suivante (`addq.b #2,(+6)` ou `(+7)`).
-pub(self) fn next6<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
-pub(self) fn next7<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn next7<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
-pub(self) fn steps<R: Banc>(x: &mut Cx<'_, R>, s6: u8, s7: u8) {
+pub(self) fn steps<R: Bench>(x: &mut Cx<'_, R>, s6: u8, s7: u8) {
     x.set8(f::SUB2, s6);
     x.set8(0x7, s7);
 }
 
 /// `bchg.b #1,(0xd,A0)` : l'engin cahote.
-pub(self) fn jolt<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn jolt<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.u8(0xd) ^ 2;
     x.set8(0xd, v);
 }
 
 /// Une image sur `mask` + 1 (`+0x42`), vrai.
-pub(self) fn every<R: Banc>(x: &mut Cx<'_, R>, mask: u8) -> bool {
+pub(self) fn every<R: Bench>(x: &mut Cx<'_, R>, mask: u8) -> bool {
     let n = x.u8(PUFFS).wrapping_add(1) & mask;
     x.set8(PUFFS, n);
     n == 0
 }
 
 /// Deux fumées (0xb10c8) : sorte `kind`, décalage `dx`.
-pub(self) fn smoke_pair<R: Banc>(x: &mut Cx<'_, R>, kind: u32, dx: u16) {
+pub(self) fn smoke_pair<R: Bench>(x: &mut Cx<'_, R>, kind: u32, dx: u16) {
     for (dy, dz) in [(0x30, 0x28), (0x28, 8)] {
         lib::shock(x, kind, dx, dy, dz);
     }
 }
 
 /// 0x8ca22 : fumée de l'engin qui roule.
-pub(self) fn smoke<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn smoke<R: Bench>(x: &mut Cx<'_, R>) {
     smoke_pair(x, 1, 0x100)
 }
 
 /// Une fumée toutes les `mask` + 1 images.
-pub(self) fn smoke_every<R: Banc>(x: &mut Cx<'_, R>, mask: u8) {
+pub(self) fn smoke_every<R: Bench>(x: &mut Cx<'_, R>, mask: u8) {
     if every(x, mask) {
         smoke(x);
     }
 }
 
 /// Fumée plus serrée quand l'équipage est réduit (plus de deux servants : une image sur 4, sinon sur 8).
-pub(self) fn crew_smoke<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn crew_smoke<R: Bench>(x: &mut Cx<'_, R>) {
     let mask = if (x.u8(CREW_COUNT) as i8) > 8 { 3 } else { 7 };
     smoke_every(x, mask);
 }
 
 /// L'engin est-il sorti par le bord vers lequel il roule (`+0x2c` : 0 vers la gauche) ?
-pub(self) fn past_edge<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn past_edge<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = x.a5_u16(CAM_X);
     if x.u8(f::FLIP) == 0 {
         left_of(x, 0x80, cam)
@@ -153,20 +153,20 @@ pub(self) fn past_edge<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     }
 }
 
-/// `x + d - bord` négatif (`sub.w ; bge`) : l'engin est à gauche du bord.
-pub(self) fn left_of<R: Banc>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
+/// `x + d - edge` négatif (`sub.w ; bge`) : l'engin est à gauche du bord.
+pub(self) fn left_of<R: Bench>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
     let a = x.u16(0x8).wrapping_add(d);
     Fl::sub16(a, edge).lt()
 }
 
-/// `x - d - bord` positif (`sub.w ; ble`) : l'engin est à droite du bord.
-pub(self) fn right_of<R: Banc>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
+/// `x - d - edge` positif (`sub.w ; ble`) : l'engin est à droite du bord.
+pub(self) fn right_of<R: Bench>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
     let a = x.u16(0x8).wrapping_sub(d);
     Fl::sub16(a, edge).gt()
 }
 
 /// Plus de servants assez longtemps (`+0xbf` négatif) : l'engin clignote, et repart d'un passage.
-pub(self) fn crew_gone<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn crew_gone<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u8(LIVES) as i8) >= 0 {
         return false;
     }
@@ -179,7 +179,7 @@ pub(self) fn crew_gone<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Fin d'un arrêt : clignotement si l'équipage est perdu, sinon nouveau passage (`+6` = 2, `+7` = 4).
-pub(self) fn stop_over<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn stop_over<R: Bench>(x: &mut Cx<'_, R>) {
     if !crew_gone(x) {
         steps(x, 2, 4);
     }
@@ -187,18 +187,18 @@ pub(self) fn stop_over<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- tables par difficulté (données de la ROM) ----------------------------------------------------
 
-fn difficulty<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn difficulty<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     var::RANK.get(x.b) as u32
 }
 
 /// Octet de la table à une entrée par difficulté.
-fn per_level<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u8 {
+fn per_level<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let d = difficulty(x);
     x.data8(table + d)
 }
 
 /// Octet tiré (`mask`) dans la table de la difficulté, dont l'adresse est dans la table de longs `lists`.
-fn draw<R: Banc>(x: &mut Cx<'_, R>, lists: u32, mask: u32) -> u8 {
+fn draw<R: Bench>(x: &mut Cx<'_, R>, lists: u32, mask: u32) -> u8 {
     let d = difficulty(x);
     let at = x.data32(lists + 4 * d);
     let r = rand_and(x, mask);
@@ -206,43 +206,43 @@ fn draw<R: Banc>(x: &mut Cx<'_, R>, lists: u32, mask: u32) -> u8 {
 }
 
 /// 0x8c9ee : équipage perdu avant clignotement.
-pub(self) fn reset_lives<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn reset_lives<R: Bench>(x: &mut Cx<'_, R>) {
     let n = per_level(x, 0x8ca02).wrapping_sub(1);
     x.set8(LIVES, n);
 }
 
 /// 0x8c9ba : attente avant le tir.
-pub(self) fn reset_count<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn reset_count<R: Bench>(x: &mut Cx<'_, R>) {
     let n = per_level(x, 0x8c9ce).wrapping_add(5);
     x.set8(COUNT, n);
 }
 
 /// 0x8c420 : ruées autorisées.
-pub(self) fn reset_dashes<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn reset_dashes<R: Bench>(x: &mut Cx<'_, R>) {
     let n = per_level(x, 0x8c430);
     x.set8(DASHES, n);
 }
 
 /// 0x8beca : passages avant un arrêt.
-pub(self) fn draw_passes<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn draw_passes<R: Bench>(x: &mut Cx<'_, R>) {
     let n = draw(x, 0x8bef0, 0x1f).wrapping_sub(1);
     x.set8(PASSES, n);
 }
 
 /// 0x8c450 : bombardements.
-pub(self) fn draw_bombs<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn draw_bombs<R: Bench>(x: &mut Cx<'_, R>) {
     let n = draw(x, 0x8c476, 0xf).wrapping_sub(1);
     x.set8(BOMBS, n);
 }
 
 /// 0x8c576 : arrêts.
-pub(self) fn draw_stops<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn draw_stops<R: Bench>(x: &mut Cx<'_, R>) {
     let n = draw(x, 0x8c598, 0xf);
     x.set8(STOPS, n);
 }
 
 /// 0x8bc0c : attente avant de repartir, selon le nombre de joueurs, la difficulté et l'équipage.
-pub(self) fn reset_wait<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn reset_wait<R: Bench>(x: &mut Cx<'_, R>) {
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let list = x.data32(0x8bc3e + 4 * players);
     let d = difficulty(x);
@@ -254,7 +254,7 @@ pub(self) fn reset_wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8bcd2 : abscisse de l'arrêt, tirée devant l'engin.
-pub(self) fn draw_stop_x<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn draw_stop_x<R: Bench>(x: &mut Cx<'_, R>) {
     let d = difficulty(x);
     let list = (x.rom16(0x8bd08 + 4 * d) as u32) << 16 | x.rom16(0x8bd08 + 4 * d + 2) as u32;
     let r = rand_and(x, 0x1f);
@@ -265,7 +265,7 @@ pub(self) fn draw_stop_x<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8be88 : profondeur du passage selon celle de la cible (trois voies).
-pub(self) fn pick_lane<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn pick_lane<R: Bench>(x: &mut Cx<'_, R>) {
     let lane: u32 = if x.u16(f::TARGET) == 0 {
         1
     } else {
@@ -284,7 +284,7 @@ pub(self) fn pick_lane<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8c988 : nouvelle cible (0x424e ou 0x44ee, au hasard).
-pub(self) fn retarget<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn retarget<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let k = x.data8(0x8c9aa + r);
     if k == 0 {
@@ -295,7 +295,7 @@ pub(self) fn retarget<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8bff0 : compte les servants actifs (état 0x0200) : bits en `+0xb6`, nombre × 4 en `+0xb7` ; aucun : `+0xaa` = 4.
-pub(self) fn count_crew<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn count_crew<R: Bench>(x: &mut Cx<'_, R>) {
     let (mut bits, mut count) = (0u8, 0u8);
     for k in 0..4u32 {
         let link = x.u16(CREW + 2 * k);
@@ -316,7 +316,7 @@ pub(self) fn count_crew<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8c026 : vitesse de roulement selon l'équipage (table rapide en mode dur), allure des roues.
-pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>) {
     let hard = x.a5_u16(HARD) != 0;
     let mut top = if hard { 0x800u16 } else { 0x680 };
     if x.u8(f::FLIP) == 0 {
@@ -341,7 +341,7 @@ pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8c1a0 : ruée (équipage au complet, tirage par joueurs et difficulté) : pleine vitesse ; vrai si lancée.
-pub(self) fn try_dash<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn try_dash<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(CREW_COUNT) != 0x10 || x.u8(DASHES) == 0 {
         return false;
     }
@@ -365,7 +365,7 @@ pub(self) fn try_dash<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8c124 / 0x8c132 : remplace les servants perdus (ENEMY 0x13, variante 2 sans aucun servant, 1 sinon).
-pub(self) fn refill_crew<R: Banc>(x: &mut Cx<'_, R>, all: bool) {
+pub(self) fn refill_crew<R: Bench>(x: &mut Cx<'_, R>, all: bool) {
     if all {
         if x.u8(CREW_COUNT) == 0x10 {
             return;
@@ -396,7 +396,7 @@ pub(self) fn refill_crew<R: Banc>(x: &mut Cx<'_, R>, all: bool) {
 }
 
 /// 0x8c8d2 : une cible au sol devant l'engin ? 1 tout près, 0 à portée de tir, 2 sinon.
-pub(self) fn target_range<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
+pub(self) fn target_range<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     let r = if x.u16(f::TARGET) == 0 {
         2
     } else {
@@ -415,7 +415,7 @@ pub(self) fn target_range<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
 }
 
 /// 0x8c698 / 0x8c6a0 : arrêt de tir tiré par difficulté (`base` : 2 cible proche, 0xe cible à portée).
-pub(self) fn draw_halt<R: Banc>(x: &mut Cx<'_, R>, base: u8) {
+pub(self) fn draw_halt<R: Bench>(x: &mut Cx<'_, R>, base: u8) {
     *x.c.d2() = base as u32;
     let level = (var::RANK.get(x.b) >> 1) << 5;
     let at = 0x8c6d2u32.wrapping_add(level as i16 as u32);
@@ -427,7 +427,7 @@ pub(self) fn draw_halt<R: Banc>(x: &mut Cx<'_, R>, base: u8) {
 }
 
 /// 0x8b9ea : avaries par paliers de huitièmes de PV (bits de `+0xa8`, cumulés).
-pub(self) fn damage_bits<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn damage_bits<R: Bench>(x: &mut Cx<'_, R>) {
     let q = x.u16(0x60) >> 3;
     let hp = x.u16(f::HP) as i16;
     let mut stage = 7u8;
@@ -446,7 +446,7 @@ pub(self) fn damage_bits<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(DAMAGE, v);
 }
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -458,7 +458,7 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// 0x8a772 : hors cinématique, et dès qu'il y a la place (10 ESHL, 5 ENEMY) : parties, conducteur, position.
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -527,7 +527,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 /// 0x8a8c0 : gel, clignotement, un groupe par image, ombre ; sans cible ni joueur : attente.
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE);
     if freeze != 0 && (freeze as i8) > 0 {
         x.set8(f::FREEZE, freeze - 1);
@@ -561,7 +561,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x8a75c "boss_9" #[sans] run,
+    0x8a75c "boss_9" #[without] run,
 }
 
 use super::cx::handlers;

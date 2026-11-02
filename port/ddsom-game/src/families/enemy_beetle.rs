@@ -1,4 +1,4 @@
-//! Ennemi « GiantBeetle » (ENEMY type 9, 0x65ae8). Voir `docs/familles/enemy.md`.
+//! Ennemi « GiantBeetle » (ENEMY type 9, 0x65ae8). Voir `docs/families/enemy.md`.
 //!
 //! Insecte qui défile sur le côté de l'écran (variantes `+3` = 0 à 4). La variante 4 est le nid : elle
 //! engendre des pièces (ESHL 0x38) d'après une liste de la ROM puis attend d'être visible. Le groupe de
@@ -14,7 +14,7 @@
 //! État 4 (touché) : recul, chute puis mort clignotante.
 //! Animations 0x163a86 (mouvements) et 0x163a9e (touché).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -44,7 +44,7 @@ mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Tables de la ROM : vitesses par difficulté (pointeurs), temporisations, sens de virage.
 const SPEEDS_WALK: u32 = 0x66700;
@@ -68,7 +68,7 @@ const POUNCE: u32 = 0x0206_0000;
 const AFTER_POUNCE: u32 = 0x0204_0200;
 const DEAD: u32 = 0x0600_0000;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -83,18 +83,18 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-fn anim_play<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn anim_play<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(ANIMS, n as u16);
 }
 
 /// 0x6662e : position de la caméra, X dans le mot bas de D6, Y dans le mot haut.
-fn camera<R: Banc>(x: &mut Cx<'_, R>) -> (u16, u16) {
+fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
     let (cx, cy) = if var::CAMERA_SELECT.get(x.b) != 0 { (var::CAMERA_ALT_X.get(x.b), var::CAMERA_ALT_Y.get(x.b)) } else { (var::SCROLL_X.get(x.b), var::SCROLL_Y.get(x.b)) };
     (cx, cy)
 }
 
 /// 0x666de : adopte une table de vitesses (paires de mots par angle `+0x2d`).
-fn speeds<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
+fn speeds<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     x.set32(SPEEDS, table);
     let off = (x.u8(Obj::SPEED_INDEX) as u32) << 2;
     let (vx, vy) = (x.data16(table + off), x.data16(table + off + 2));
@@ -105,21 +105,21 @@ fn speeds<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
 }
 
 /// 0x666d2 : table de vitesses choisie par la difficulté (`A5+0x7f92` & 0x1c).
-fn speeds_by_level<R: Banc>(x: &mut Cx<'_, R>, list: u32) {
+fn speeds_by_level<R: Bench>(x: &mut Cx<'_, R>, list: u32) {
     let level = (var::RANK.get(x.b) & 0x1c) as u32;
     let table = x.data32(list + level);
     speeds(x, table);
 }
 
 /// 0x666a2 : cadence de virage (octets `+0xa2/+0xa3`) selon la difficulté.
-fn turn_timer<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
+fn turn_timer<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let off = ((var::RANK.get(x.b) & 0x10) >> 3) as u32;
     let v = x.data16(table + off);
     x.set16(TURN_PERIOD, v);
 }
 
 /// 0x6664c / 0x6664e : vitesse `+0x1e` lue dans la table selon la difficulté, `base` = décalage de ligne.
-fn set_speed_y<R: Banc>(x: &mut Cx<'_, R>, base: u16) {
+fn set_speed_y<R: Bench>(x: &mut Cx<'_, R>, base: u16) {
     let off = ((var::RANK.get(x.b) & 0x18) >> 2).wrapping_add(base);
     let v = x.data16(SPEED_Y_ROW + off as u32);
     x.set16(Obj::AY, v);
@@ -127,7 +127,7 @@ fn set_speed_y<R: Banc>(x: &mut Cx<'_, R>, base: u16) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set16(f::SUB2, 0);
     x.set8(f::BOX_SET, 0x15);
@@ -148,7 +148,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x65b6c : l'insecte part dans le sens que dicte la parité de `+0x2f`.
-fn start_walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn start_walk<R: Bench>(x: &mut Cx<'_, R>) {
     let (px, pz) = (x.u16(Obj::X), x.u16(Obj::Y));
     x.set16(SAVED_X, px);
     x.set16(SAVED_DEPTH, pz);
@@ -165,7 +165,7 @@ fn start_walk<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x65bb4 : reprise de la marche après un bond, selon l'orientation et la parité de `+0x2f`.
-fn resume_walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn resume_walk<R: Bench>(x: &mut Cx<'_, R>) {
     let (px, pz) = (x.u16(Obj::X), x.u16(Obj::Y));
     x.set16(SAVED_X, px);
     x.set16(SAVED_DEPTH, pz);
@@ -178,7 +178,7 @@ fn resume_walk<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 2 : entre par le bord droit (ou gauche pour les groupes impairs) de l'écran.
-fn enter_from_edge<R: Banc>(x: &mut Cx<'_, R>) {
+fn enter_from_edge<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB, 4);
     let (cx, _) = camera(x);
     let mut offset = 0x190u16;
@@ -198,7 +198,7 @@ fn enter_from_edge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 4 : le nid engendre ses pièces (liste `+0x42`) puis dort jusqu'à être visible.
-fn nest<R: Banc>(x: &mut Cx<'_, R>) {
+fn nest<R: Bench>(x: &mut Cx<'_, R>) {
     start_walk(x);
     x.set8(f::SUB, 8);
     let list = x.u8(0x42) as u32;
@@ -210,7 +210,7 @@ fn nest<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if !paused(x) {
         let freeze = x.u8(f::FREEZE) as i8;
         if freeze > 0 {
@@ -229,7 +229,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-états 0 et 2 : marche avec demi-tours ; sort de l'écran quand il en est trop loin.
-fn march<R: Banc>(x: &mut Cx<'_, R>) {
+fn march<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
@@ -252,7 +252,7 @@ fn march<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x66740 : avance dans la table de vitesses ; toutes les `+0xa2` images tourne d'un cran vers l'angle voulu
 /// et enchaîne l'animation de virage.
-fn steer<R: Banc>(x: &mut Cx<'_, R>) {
+fn steer<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     let n = x.u8(TURN_TIMER).wrapping_sub(1);
     x.set8(TURN_TIMER, n);
@@ -283,7 +283,7 @@ fn steer<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x661ce : un joueur devant l'insecte, dans le sol 0xc de l'état 2 : tirage qui le déclenche en bond.
-fn bite_check<R: Banc>(x: &mut Cx<'_, R>) {
+fn bite_check<R: Bench>(x: &mut Cx<'_, R>) {
     if !find_player(x, -0x20, 0x20, 8) {
         return x.set8(BITING, 0);
     }
@@ -305,7 +305,7 @@ fn bite_check<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 4 : trajectoires -----------------------------------------------------------------
 
-fn routes<R: Banc>(x: &mut Cx<'_, R>) {
+fn routes<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         return turn_back(x);
     }
@@ -319,7 +319,7 @@ fn routes<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x65ea8 : début de traversée.
-fn cross_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn cross_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     speeds_by_level(x, SPEEDS_FLY);
     turn_timer(x, TIMER_A);
@@ -327,7 +327,7 @@ fn cross_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Groupes 0 et 1 : traversée, arrêt de la marche puis virage, sortie.
-fn cross<R: Banc>(x: &mut Cx<'_, R>) {
+fn cross<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => cross_start(x),
         2 => {
@@ -351,7 +351,7 @@ fn cross<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x65f18 : virage jusqu'à l'angle de sortie, `side` = la parité qui oriente le virage.
-fn cross_turn<R: Banc>(x: &mut Cx<'_, R>, side: u8) {
+fn cross_turn<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
     if side & 1 != 0 {
     }
     steer(x);
@@ -364,7 +364,7 @@ fn cross_turn<R: Banc>(x: &mut Cx<'_, R>, side: u8) {
 }
 
 /// 0x65f5c : sortie par le bord ; l'insecte est retiré quand il l'a passé.
-fn leave<R: Banc>(x: &mut Cx<'_, R>) {
+fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xy();
     let (cx, _) = camera(x);
     let d5 = x.u16(Obj::X).wrapping_sub(cx);
@@ -377,7 +377,7 @@ fn leave<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Groupes 2 et 3 : dérive latérale constante (`+0xb4`) jusqu'à la sortie de l'écran.
-fn drift<R: Banc>(x: &mut Cx<'_, R>) {
+fn drift<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -429,14 +429,14 @@ fn drift<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x660bc : abscisse d'arrêt (`+0xb6`) lue dans la table selon le rang d'arrêt.
-fn set_stop<R: Banc>(x: &mut Cx<'_, R>, rank: u8) {
+fn set_stop<R: Bench>(x: &mut Cx<'_, R>, rank: u8) {
     let base = STOP_XS + if x.u8(GROUP) & 1 != 0 { 6 } else { 0 };
     let v = x.data16(base + rank as u32);
     x.set16(STOP_X, v);
 }
 
 /// 0x660aa : début d'un vol arrêté.
-fn halt_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn halt_start<R: Bench>(x: &mut Cx<'_, R>) {
     cross_start(x);
     x.set8(STOP_STEP, 0);
     speeds_by_level(x, SPEEDS_FLY);
@@ -445,7 +445,7 @@ fn halt_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x660e2 : vol jusqu'à l'abscisse d'arrêt ; devant un joueur, s'arrête de rang en rang puis charge.
-fn halt_run<R: Banc>(x: &mut Cx<'_, R>) {
+fn halt_run<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xy();
     let (cx, _) = camera(x);
     let d5 = x.u16(Obj::X).wrapping_sub(cx);
@@ -490,7 +490,7 @@ fn halt_run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Groupes 4 et 5.
-fn halt_at<R: Banc>(x: &mut Cx<'_, R>) {
+fn halt_at<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => halt_start(x),
         2 => halt_run(x),
@@ -501,7 +501,7 @@ fn halt_at<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Groupes 6 et 7 : comme 4 et 5, avec la morsure surveillée à chaque étape.
-fn halt_and_bite<R: Banc>(x: &mut Cx<'_, R>) {
+fn halt_and_bite<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             halt_start(x);
@@ -524,7 +524,7 @@ fn halt_and_bite<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x65efe : virage de côté (le sens vient de `+0xa4` et de la parité de `+0x2f`).
-fn side_turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn side_turn<R: Bench>(x: &mut Cx<'_, R>) {
     let mut d0 = x.u8(SIDE);
     let group = x.u8(GROUP);
     if group & 1 != 0 {
@@ -534,7 +534,7 @@ fn side_turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 4 avec `+6` non nul (0x6628a) : se tourne vers un joueur puis remonte vers le haut.
-fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.set8(f::SUB3, 4);
@@ -605,7 +605,7 @@ fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 6 : bond -------------------------------------------------------------------------
 
-fn pounce<R: Banc>(x: &mut Cx<'_, R>) {
+fn pounce<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -644,7 +644,7 @@ fn pounce<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 8 : dormant ; réveillé (sous-état 0) quand il est à moins de 0x1c0 pixels de la caméra.
-fn dormant<R: Banc>(x: &mut Cx<'_, R>) {
+fn dormant<R: Bench>(x: &mut Cx<'_, R>) {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
     let d0 = x.u16(Obj::X).wrapping_sub(cam).wrapping_add(0x20);
     if d0 <= 0x1c0 {
@@ -654,7 +654,7 @@ fn dormant<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 4 : touché ----------------------------------------------------------------------------
 
-fn hit<R: Banc>(x: &mut Cx<'_, R>) {
+fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -670,7 +670,7 @@ fn hit<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 0 : un coup de code 0x5c secoue l'insecte quelques images (`+6` = 0, 2) avant le recul.
-fn react_first<R: Banc>(x: &mut Cx<'_, R>) {
+fn react_first<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(HIT_CODE) != 0x5c {
         return knock_back(x);
     }
@@ -700,14 +700,14 @@ fn react_first<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x664b4 : durée de la secousse tirée au hasard.
-fn shake_timer<R: Banc>(x: &mut Cx<'_, R>) {
+fn shake_timer<R: Bench>(x: &mut Cx<'_, R>) {
     let r = random(x) & 3;
     let t = x.rom8(SHAKE_TIMES + r);
     x.set8(0xa2, t);
 }
 
 /// 0x664f8 : recul, la face opposée au coup.
-fn knock_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn knock_back<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     x.set8(f::SUB2, 0);
     let freeze = x.u8(FREEZE_AT_HIT);
@@ -727,7 +727,7 @@ fn knock_back<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 2 : retombée puis clignotement jusqu'à la mort.
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.move_xz();
@@ -759,7 +759,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 4 : saisi par un joueur, l'insecte se débat puis quitte l'écran.
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -779,10 +779,10 @@ fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
-fn free<R: Banc>(x: &mut Cx<'_, R>) {
+fn free<R: Bench>(x: &mut Cx<'_, R>) {
     x.free(&pools::ENEMY);
 }
 
 handlers! {
-    0x65ae8 "enemy_9" #[sans] run,
+    0x65ae8 "enemy_9" #[without] run,
 }

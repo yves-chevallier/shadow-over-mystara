@@ -2,10 +2,10 @@
 //! 10 double coup, 12 disparition et chute sur la cible, 14 élan, 16 à 20 chute de plus haut, 22 et 24 retour à
 //! la marche. `+5 = 6` : coups d'après-bond. `+5 = 8` : coups de repli. `+7` est l'étape.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::stance::{begin_walk, begin_walk_step, front_box, needs_turn_around, pick_attack, side_box};
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Positions d'arrivée (décalages en X puis en profondeur) après un saut vers la cible, tirées par 0x69eee.
@@ -14,7 +14,7 @@ const JUMP_DY: u32 = 0x69f42;
 
 // --- sous-état 4 --------------------------------------------------------------------------------
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => approach(x),
         2 => turn_around(x),
@@ -43,27 +43,27 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 // --- étapes communes ----------------------------------------------------------------------------
 
 /// 0x69de8 / 0x69a3a : s'accroupit.
-fn crouch_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn crouch_step<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     crouch(x);
 }
 
 /// 0x69df0 : attend la fin de l'animation.
-fn wait_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_step<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         x.add8(f::SUB3, 2);
     }
 }
 
 /// 0x69e1c : fin de l'animation, retour debout.
-fn finish_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn finish_back<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         back_to_stance(x);
     }
 }
 
 /// 0x69e4e : retombe jusqu'au sol, puis animation de réception.
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if (x.u16(Obj::Z) as i16) <= 0 {
         x.add8(f::SUB3, 2);
@@ -73,7 +73,7 @@ fn fall<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x698ac : fin de l'animation, puis le coup suivant.
-fn finish<R: Banc>(x: &mut Cx<'_, R>) {
+fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         end_attack(x);
     }
@@ -82,7 +82,7 @@ fn finish<R: Banc>(x: &mut Cx<'_, R>) {
 // --- coups ---------------------------------------------------------------------------------------
 
 /// `+6` = 0 : annonce du coup, animation de marche `+0xa6`, puis passage au coup prévu `+0xa5`.
-fn approach<R: Banc>(x: &mut Cx<'_, R>) {
+fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -110,7 +110,7 @@ fn approach<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 2 : demi-tour puis retour à l'approche (`+6 = 0x0c`).
-fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -127,7 +127,7 @@ fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Coup simple (`+6` = 4 : type 0x1b, animation 0 ; `+6` = 6 : type 0x1c, animation 2).
 /// Il peut aussi être annulé au profit d'une reprise de la marche.
-fn cut<R: Banc>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
+fn cut<R: Bench>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
     match x.u8(f::SUB3) {
         0 => {
             let r = rand_and(x, 0xf);
@@ -147,7 +147,7 @@ fn cut<R: Banc>(x: &mut Cx<'_, R>, kind: u8, anim: u32) {
 }
 
 /// Triple coup (`+6` = 8) : trois fois le coup bas ou haut, tiré au sort.
-fn triple<R: Banc>(x: &mut Cx<'_, R>) {
+fn triple<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -184,7 +184,7 @@ fn triple<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Double coup (`+6` = 10) : deux animations, tirées au sort pour la première.
-fn double<R: Banc>(x: &mut Cx<'_, R>) {
+fn double<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -228,7 +228,7 @@ enum Drop {
 }
 
 /// L'elfe s'accroupit, disparaît, réapparaît au-dessus de la cible et la frappe en retombant.
-fn drop_strike<R: Banc>(x: &mut Cx<'_, R>, kind: Drop) {
+fn drop_strike<R: Bench>(x: &mut Cx<'_, R>, kind: Drop) {
     match x.u8(f::SUB3) {
         0 => crouch_step(x),
         2 => {
@@ -318,12 +318,12 @@ fn drop_strike<R: Banc>(x: &mut Cx<'_, R>, kind: Drop) {
 }
 
 /// Élan (`+6` = 14) : saute puis retombe devant la cible.
-fn dash<R: Banc>(x: &mut Cx<'_, R>) {
+fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     jump_group(x, 0)
 }
 
 /// Étapes communes des groupes de sauts : 0 s'accroupit, 2 attend, `jump` selon le groupe, puis réception.
-fn jump_group<R: Banc>(x: &mut Cx<'_, R>, _g: u8) {
+fn jump_group<R: Bench>(x: &mut Cx<'_, R>, _g: u8) {
     match x.u8(f::SUB3) {
         0 => crouch_step(x),
         2 | 6 => wait_step(x),
@@ -338,7 +338,7 @@ fn jump_group<R: Banc>(x: &mut Cx<'_, R>, _g: u8) {
 
 // --- sous-état 6 : coups d'après-bond -------------------------------------------------------------
 
-pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => approach(x),
         2 => turn_around(x),
@@ -352,7 +352,7 @@ pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 6 : petit saut de côté (en profondeur).
-fn hover_group<R: Banc>(x: &mut Cx<'_, R>) {
+fn hover_group<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => crouch_step(x),
         2 => wait_step(x),
@@ -372,7 +372,7 @@ fn hover_group<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 10 : bond avec coup à l'atterrissage.
-fn landing_group<R: Banc>(x: &mut Cx<'_, R>) {
+fn landing_group<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => crouch_step(x),
         2 | 6 => wait_step(x),
@@ -408,7 +408,7 @@ fn landing_group<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 12 : saute près de la cible, à un endroit tiré au hasard autour d'elle.
-fn random_jump_group<R: Banc>(x: &mut Cx<'_, R>) {
+fn random_jump_group<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => crouch_step(x),
         2 | 6 => wait_step(x),
@@ -438,7 +438,7 @@ fn random_jump_group<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 8 : coups de repli -----------------------------------------------------------------
 
-pub(super) fn run_fallback<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run_fallback<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             if x.u8(f::SUB3) != 0 {
@@ -463,7 +463,7 @@ pub(super) fn run_fallback<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 2 : disparaît et réapparaît à 0x30 pixels devant l'elfe.
-fn backstep_group<R: Banc>(x: &mut Cx<'_, R>) {
+fn backstep_group<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => crouch_step(x),
         2 => {
@@ -512,7 +512,7 @@ fn backstep_group<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 4 : saute vers la cible ou marche vers elle.
-fn forward_group<R: Banc>(x: &mut Cx<'_, R>) {
+fn forward_group<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             if rand_and(x, 1) != 0 {
@@ -559,7 +559,7 @@ fn forward_group<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+6` = 6 : choisit le prochain coup selon ce que la cible fait à portée.
-fn idle_choice<R: Banc>(x: &mut Cx<'_, R>) {
+fn idle_choice<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_state_long(x, IDLE);
     let choice = if lib::target_in_box(x, -0x20, 0x20, 0xc) {
@@ -578,7 +578,7 @@ fn idle_choice<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x69fbc : mémorise l'action choisie ; la répète tant qu'elle ne change pas (compte à rebours `+0xa4`).
-fn post_choice<R: Banc>(x: &mut Cx<'_, R>, choice: u8) {
+fn post_choice<R: Bench>(x: &mut Cx<'_, R>, choice: u8) {
     if choice != x.u8(WALK_ANIM) {
         x.set8(WALK_ANIM, choice);
         x.set8(WALK_ANIM_TIMER, 2);

@@ -1,6 +1,6 @@
 //! Variantes 8 à 24 du type SET 15 (voir `set_c_finale.rs`). Les noms de rôle sont des hypothèses.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::mem::{rd16, rd32, rd8, wr32, A5};
 use crate::objects::pools;
@@ -16,12 +16,12 @@ fn players() -> impl Iterator<Item = u32> {
 }
 
 /// Joueur en jeu : actif et état principal (octet `+4`) inférieur à 4.
-fn present<R: Banc>(x: &mut Cx<'_, R>, p: u32) -> bool {
+fn present<R: Bench>(x: &mut Cx<'_, R>, p: u32) -> bool {
     rd8(x.b, p) != 0 && (rd8(x.b, p + 4) as i8) < 4
 }
 
 /// Libère l'objet au passage suivant : `+4 = 6` et les trois octets suivants à zéro.
-fn retire<R: Banc>(x: &mut Cx<'_, R>) {
+fn retire<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x4, 0x0600_0000);
 }
 
@@ -31,23 +31,23 @@ fn adr16(v: u16) -> u32 {
 }
 
 /// Crée un SET de type 15 (variante `variant`) : routine 0xce00a. Rend l'objet ou `None`.
-fn spawn_finale<R: Banc>(x: &mut Cx<'_, R>, variant: u32) -> Option<Obj> {
-    crate::families::creators::set_15_pur(x.b, variant as u8).ok()
+fn spawn_finale<R: Bench>(x: &mut Cx<'_, R>, variant: u32) -> Option<Obj> {
+    crate::families::creators::set_15_pure(x.b, variant as u8).ok()
 }
 
 /// Crée un SOBJ de type 6 (routine 0xddeaa), variante `variant`.
-fn spawn_sobj<R: Banc>(x: &mut Cx<'_, R>, variant: u32) -> Option<Obj> {
-    crate::effects_aids::decor_6(x.b, variant as u8).ok()
+fn spawn_sobj<R: Bench>(x: &mut Cx<'_, R>, variant: u32) -> Option<Obj> {
+    crate::effects_aids::scenery_6(x.b, variant as u8).ok()
 }
 
 /// Crée un effet (type 0x1f de 0xb1a7a) : variante, valeur de `+0x2f`.
-fn spawn_effct<R: Banc>(x: &mut Cx<'_, R>, variant: u32, extra: u32) -> Option<Obj> {
+fn spawn_effct<R: Bench>(x: &mut Cx<'_, R>, variant: u32, extra: u32) -> Option<Obj> {
     crate::families::effects_creators::countdown(x.b, variant as u8, extra as u8)
 }
 
 /// Secousse à quatre composantes (0xce24c) : caméra du fond et du second plan, avec recopie des
 /// positions « précédentes ». `table` : enregistrements de 8 octets, un par pas de `+0x18` & 3.
-fn shake4<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
+fn shake4<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let at = table + 8 * (x.u8(0x18) & 3) as u32;
     x.add8(0x18, 1);
     for (i, var) in [a5::CAM_X, a5::CAM_Y, a5::BG_X, a5::BG_Y].into_iter().enumerate() {
@@ -58,14 +58,14 @@ fn shake4<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     copy_cameras(x);
 }
 
-fn copy_cameras<R: Banc>(x: &mut Cx<'_, R>) {
+fn copy_cameras<R: Bench>(x: &mut Cx<'_, R>) {
     for (from, to) in [(a5::CAM_X, a5::CAM_X_PREV), (a5::CAM_Y, a5::CAM_Y_PREV), (a5::BG_X, a5::BG_X_PREV), (a5::BG_Y, a5::BG_Y_PREV)] {
         let v = x.a5_u16(from);
         x.set_a5_u16(to, v);
     }
 }
 
-fn mask_tasks<R: Banc>(x: &mut Cx<'_, R>, keep: u16) {
+fn mask_tasks<R: Bench>(x: &mut Cx<'_, R>, keep: u16) {
     let v = x.a5_u16(TASK_FLAGS) & keep;
     x.set_a5_u16(TASK_FLAGS, v);
 }
@@ -74,7 +74,7 @@ fn mask_tasks<R: Banc>(x: &mut Cx<'_, R>, keep: u16) {
 
 /// Prépare la liste (joueur, réserve) : `+0x30 + 4 i` = adresse du joueur, `+0x32 + 4 i` = PV rendus
 /// d'office ; le pas de base dépend du score `A5+0x38`, majoré (variante 23) du `+0x64` du joueur.
-fn refill_setup<R: Banc>(x: &mut Cx<'_, R>, with_player_bonus: bool) {
+fn refill_setup<R: Bench>(x: &mut Cx<'_, R>, with_player_bonus: bool) {
     let score = x.a5_u16(0x38) as i16;
     let mut step: u16 = 0x14;
     for (limit, add) in [(0x100, 8), (0x130, 4), (0x200, 8), (0x230, 8)] {
@@ -99,7 +99,7 @@ fn refill_setup<R: Banc>(x: &mut Cx<'_, R>, with_player_bonus: bool) {
 /// Un tour de remplissage : chaque joueur dont les PV (`+0x62`) sont sous le maximum (`+0x60`) en
 /// gagne un tant que sa réserve est non vide, puis jusqu'à 1,25 fois la moitié du maximum. Vrai
 /// si un joueur a reçu un PV.
-fn refill_step<R: Banc>(x: &mut Cx<'_, R>, variant_b: bool) -> bool {
+fn refill_step<R: Bench>(x: &mut Cx<'_, R>, variant_b: bool) -> bool {
     let mut slot = 0x30;
     let mut gave = 0u8;
     let count = (x.a5_u8(0x35) as u16).wrapping_sub(1) as u32 + 1;
@@ -128,7 +128,7 @@ fn refill_step<R: Banc>(x: &mut Cx<'_, R>, variant_b: bool) -> bool {
 }
 
 /// Variante 8 (0xcf3a8) : fin de niveau, les PV remontent.
-pub fn hp_refill_a<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn hp_refill_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -144,7 +144,7 @@ pub fn hp_refill_a<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variante 23 (0xd0932) : idem avec le bonus propre à chaque joueur.
-pub fn hp_refill_b<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn hp_refill_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -189,7 +189,7 @@ fn free_character(taken: &mut u32) -> Option<u32> {
 }
 
 /// Masque des personnages présents (variante `+3` de chaque joueur en jeu).
-fn characters_present<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn characters_present<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     let mut mask = 0;
     for p in players() {
         if present(x, p) {
@@ -201,7 +201,7 @@ fn characters_present<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
 
 /// Variante 9 (0xcf476) : lance six effets (un par joueur, puis par personnage absent), prévient le
 /// chef d'orchestre (`+8 = 1`), attend la fin, puis lui rend la main (`+8 = 0xff`).
-pub fn spawn_player_effects<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn spawn_player_effects<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -223,7 +223,7 @@ pub fn spawn_player_effects<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn player_effects<R: Banc>(x: &mut Cx<'_, R>) {
+fn player_effects<R: Bench>(x: &mut Cx<'_, R>) {
     let mut taken = characters_present(x);
     let mut a6 = PLAYERS;
     for d1 in (0..=5u32).rev() {
@@ -244,7 +244,7 @@ fn player_effects<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Premier temps : après le délai `+0x42`, crée l'écran de bonus (type 15 variante 0x17).
-fn handover_step<R: Banc>(x: &mut Cx<'_, R>, mark: u8) {
+fn handover_step<R: Bench>(x: &mut Cx<'_, R>, mark: u8) {
     x.add16(0x42, 0xffff);
     if x.u16(0x42) != 0 {
         return;
@@ -258,7 +258,7 @@ fn handover_step<R: Banc>(x: &mut Cx<'_, R>, mark: u8) {
     x.set_a5_u8(0x33, 1);
 }
 
-fn handover_step2<R: Banc>(x: &mut Cx<'_, R>) {
+fn handover_step2<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(0x31) as i8) >= 0 {
         return;
     }
@@ -267,7 +267,7 @@ fn handover_step2<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(0x42, 1);
 }
 
-fn handover_step3<R: Banc>(x: &mut Cx<'_, R>) {
+fn handover_step3<R: Bench>(x: &mut Cx<'_, R>) {
     x.add16(0x42, 0xffff);
     if x.u16(0x42) != 0 {
         return;
@@ -280,7 +280,7 @@ fn handover_step3<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Variante 11 (0xcf6e8) : comme 9 pour l'état 0 ; ensuite elle attend que le chef d'orchestre
 /// passe à 2 avant de lancer l'écran de bonus (`+0x42 = 1`).
-pub fn handover_effects<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn handover_effects<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => spawn_player_effects(x),
         2 => match x.u8(0x5) {
@@ -303,7 +303,7 @@ pub fn handover_effects<R: Banc>(x: &mut Cx<'_, R>) {
 /// Variante 10 (0xcf5e6) : secousse (table 0xd0b30) jusqu'à la fin du fondu (`A5+0x48f`), puis le fond
 /// accélère en défilement horizontal (`+0x14`, `+0x16`) jusqu'à ce que la vitesse tombe sous 0x100,
 /// et enfin met le chef d'orchestre à 2. `+5` : 0 secousse, 2 attente du chef, 4 défilement.
-pub fn shaking_intro<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn shaking_intro<R: Bench>(x: &mut Cx<'_, R>) {
     const SHAKE: u32 = 0xd0b30;
     const SCROLL_SHAKE: u32 = 0xd0b50;
     if x.u8(0x4) == 0 {
@@ -363,7 +363,7 @@ pub fn shaking_intro<R: Banc>(x: &mut Cx<'_, R>) {
 /// Variante 12 (0xcf782) : crée six objets SOBJ (type 6, variante 0xe), un par joueur puis par
 /// personnage absent (comme la variante 9), puis un dernier (variante 0, `+0x2f = 0xb`) à (0x108, 0x100,
 /// -0x80). L'objet passe ensuite à l'état 6.
-pub fn spawn_player_markers<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn spawn_player_markers<R: Bench>(x: &mut Cx<'_, R>) {
     if !matches!(x.u8(0x4), 0 | 2) {
         return;
     }
@@ -400,7 +400,7 @@ pub fn spawn_player_markers<R: Banc>(x: &mut Cx<'_, R>) {
 /// Variante 13 (0xcf8a0) : prépare la palette (0x91c280, avec 0xf000f000), puis, tant que le chef
 /// d'orchestre ne passe pas à un `+8` négatif, lance de temps à autre un objet SOBJ de variante 0x10
 /// (position tirée dans la table 0xcf974) et, une fois, un écran de bonus (type 15 variante 0xf).
-pub fn fireworks<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn fireworks<R: Bench>(x: &mut Cx<'_, R>) {
     const PALETTE_ROM: u32 = 0x253280;
     const PALETTE: u32 = 0x91c280;
     const POSITIONS: u32 = 0xcf974;
@@ -448,7 +448,7 @@ pub fn fireworks<R: Banc>(x: &mut Cx<'_, R>) {
 /// Variante 14 (0xcf994) : crée des éclairs (SOBJ variante 0x11, numéro 0 à 4 tiré sans répétition
 /// parmi les bits libres de `+0x30`) tant que le second plan (`A5+0x55a`) n'est pas revenu à zéro ;
 /// l'appel sonore 0xea83e retentit de temps à autre.
-pub fn lightning<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn lightning<R: Bench>(x: &mut Cx<'_, R>) {
     const ORDER: u32 = 0xcfa3c;
     const SOUND: u32 = 0xea83e;
     match x.u8(0x4) {
@@ -460,7 +460,7 @@ pub fn lightning<R: Banc>(x: &mut Cx<'_, R>) {
         _ => return,
     }
     if rng(x) & 7 == 0 {
-        crate::sound::jouer(x.b, SOUND, x.o);
+        crate::sound::play(x.b, SOUND, x.o);
     }
     if x.a5_u16(a5::BG_Y) == 0 {
         return next_state(x);
@@ -492,7 +492,7 @@ pub fn lightning<R: Banc>(x: &mut Cx<'_, R>) {
 // --- variante 15 : secousse légère -----------------------------------------------------------------------------------
 
 /// Variante 15 (0xcfa4c) : secoue le fond (table 0xd0b70) tant que le chef d'orchestre a `+8 >= 0`.
-pub fn quake_light<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn quake_light<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -513,7 +513,7 @@ pub fn quake_light<R: Banc>(x: &mut Cx<'_, R>) {
 /// images et pris dans un ordre aléatoire parmi 16 numéros (masque `+0x20`) ; `+0x22` compte les
 /// effets lancés, `+0x23` ceux encore vivants. Quand tout est parti, passe à l'état 4 et avance
 /// `A5+0x2d`.
-pub fn ranking_start<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn ranking_start<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -580,7 +580,7 @@ pub fn ranking_start<R: Banc>(x: &mut Cx<'_, R>) {
 /// Variante 17 (0xcfb76) : fondu des trois lignes de palette 0x91c1e0, 0x91c300, 0x91c400 : `+5` = 0
 /// éclaircit 15 fois (+0x1000 sur deux mots de chaque ligne toutes les 4 images), 2 attend `+0x42`,
 /// 4 assombrit de la même façon puis met `+0x32 = 1` à l'objet `+0x46`.
-pub fn palette_fade<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn palette_fade<R: Bench>(x: &mut Cx<'_, R>) {
     const LINES: [u32; 3] = [0x91c1e0, 0x91c300, 0x91c400];
     if x.u8(0x4) == 0 {
         next_state(x);
@@ -642,7 +642,7 @@ pub fn palette_fade<R: Banc>(x: &mut Cx<'_, R>) {
 /// Variante 18 (0xcfc56) : choisit, joueur après joueur, un bonus parmi des candidats (tests de la
 /// table 0xcff10, selon le personnage et le tour), affiche la récompense (création d'un SET par
 /// 0xc8312), anime la palette du joueur et recommence jusqu'à avoir servi tous les joueurs (`+0x25`).
-pub fn bonus_selection<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn bonus_selection<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
@@ -663,7 +663,7 @@ pub fn bonus_selection<R: Banc>(x: &mut Cx<'_, R>) {
 
 const REWARD_PALETTE_ROM: u32 = 0xcfdd2;
 
-fn bonus_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn bonus_step<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x5) {
         0 => {
             let Some(o) = crate::families::creators::scene_set(x.b, 0x94) else { return };
@@ -722,7 +722,7 @@ fn bonus_step<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fait varier huit longs de la palette du joueur courant (`+0x26`) toutes les 4 images, 8 fois.
-fn palette_pulse<R: Banc>(x: &mut Cx<'_, R>, delta: u32) {
+fn palette_pulse<R: Bench>(x: &mut Cx<'_, R>, delta: u32) {
     x.add8(0x2a, 0xff);
     if x.u8(0x2a) != 0 {
         return;
@@ -745,7 +745,7 @@ fn palette_pulse<R: Banc>(x: &mut Cx<'_, R>, delta: u32) {
 
 /// Un candidat est écarté (vrai) selon le test que la table 0xcff10 associe au couple (personnage,
 /// rang) : les listes d'objets déjà possédés, la place dans l'inventaire (+0x18a, +0x114...).
-fn reward_blocked<R: Banc>(x: &mut Cx<'_, R>, player: u32, rank: u32) -> bool {
+fn reward_blocked<R: Bench>(x: &mut Cx<'_, R>, player: u32, rank: u32) -> bool {
     const TESTS: u32 = 0xcff10;
     let character = (rd8(x.b, player + 3) & !1) as u32;
     let index = (character << 2) + 2 * rank;
@@ -787,7 +787,7 @@ fn reward_blocked<R: Banc>(x: &mut Cx<'_, R>, player: u32, rank: u32) -> bool {
     }
 }
 
-fn choose_reward<R: Banc>(x: &mut Cx<'_, R>) {
+fn choose_reward<R: Bench>(x: &mut Cx<'_, R>) {
     const REWARD_IDS: u32 = 0xcfe98;
     const REWARD_ICONS: u32 = 0xcfec8;
     let player = adr16(x.u16(0x26));
@@ -835,7 +835,7 @@ fn choose_reward<R: Banc>(x: &mut Cx<'_, R>) {
 /// Variante 19 (0xd004a) : l'objet porte un nombre en BCD dans `+0x4c` (4 chiffres de 4 bits en
 /// octets 0x100, 0x1000, 0x10000, 0x100000) ; chaque image retire une unité du chiffre de poids
 /// faible non nul et lance l'événement 0x19ae6 (son/score) pour ce chiffre ; à zéro, se libère.
-pub fn countdown_digits<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn countdown_digits<R: Bench>(x: &mut Cx<'_, R>) {
     let mut value = x.u32(0x4c);
     if value == 0 {
         return x.free(&pools::SET);
@@ -851,8 +851,8 @@ pub fn countdown_digits<R: Banc>(x: &mut Cx<'_, R>) {
     };
     value = value.wrapping_sub(sub);
     x.set32(0x4c, value);
-    let evenement = event | (x.u8(0x2f) as u32) << 8;
-    crate::evenements::enfiler_points(x.b, evenement as u16);
+    let event_word = event | (x.u8(0x2f) as u32) << 8;
+    crate::events::enqueue_points(x.b, event_word as u16);
 }
 
 // --- variante 20 : défilement des crédits ---------------------------------------------------------------------------------
@@ -860,14 +860,14 @@ pub fn countdown_digits<R: Banc>(x: &mut Cx<'_, R>) {
 /// Variante 20 (0xd00c2) : texte défilant (h : crédits) écrit ligne par ligne dans la tilemap
 /// 0x910000 à partir du texte en ROM 0xd01de : un octet par case (0xfe : fin, 0xff n : attribut n,
 /// 0x2f : fin de page). Le fond (`A5+0x4ba`) défile de 0x4000/65536 pixel par image.
-pub fn credits_scroll<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn credits_scroll<R: Bench>(x: &mut Cx<'_, R>) {
     const TEXT: u32 = 0xd01de;
     if x.u8(0x4) == 6 {
         return x.free(&pools::SET);
     }
     if x.u8(0x4) == 0 {
         next_state(x);
-        crate::video::effacer_couche(x.b, crate::video::Couche::Un);
+        crate::video::clear_layer(x.b, crate::video::Layer::One);
         x.set_a5_u8(0x48e, 2);
         crate::palette::full_brightness(x.b);
         x.set32(0x20, 0);
@@ -936,7 +936,7 @@ pub fn credits_scroll<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Variante 21 (0xd06e6) : fait scintiller une couleur de la palette (0x91cfb2 prend 0xf00 de temps
 /// à autre) et lance un objet SOBJ de variante 0x14 ; se retire quand le chef d'orchestre a `+8 < 0`.
-pub fn flicker<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
     const COLOR: u32 = 0x91cfb2;
     const REFERENCE: u32 = 0x91cc00;
     match x.u8(0x4) {
@@ -974,7 +974,7 @@ pub fn flicker<R: Banc>(x: &mut Cx<'_, R>) {
 /// `+0x22` = joueurs restants) ; pour chacun crée un SOBJ de variante 0x15 qui affiche son nom
 /// (liste de tuiles à `+0x118` du joueur, écrite par 0xb230e sur un fond de 0x912000), attend 0x78
 /// images, retire l'objet et passe au suivant. Termine par 0xca8 et 0xcc8.
-pub fn name_entry<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn name_entry<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x4) == 0 {
         next_state(x);
         x.set16(0x20, PLAYERS as u16);
@@ -990,8 +990,8 @@ pub fn name_entry<R: Banc>(x: &mut Cx<'_, R>) {
                     next_state(x);
                     let v = x.a5_u8(0x2d).wrapping_add(2);
                     x.set_a5_u8(0x2d, v);
-                    crate::video::effacer_couche(x.b, crate::video::Couche::Un);
-                    return crate::video::effacer_couche(x.b, crate::video::Couche::Deux);
+                    crate::video::clear_layer(x.b, crate::video::Layer::One);
+                    return crate::video::clear_layer(x.b, crate::video::Layer::Two);
                 }
                 x.add8(0x22, 0xff);
                 if rd8(x.b, a1) != 0 && (rd8(x.b, a1 + 4) as i8) < 4 {
@@ -1006,7 +1006,7 @@ pub fn name_entry<R: Banc>(x: &mut Cx<'_, R>) {
         2 => {
             let player = adr16(x.u16(0x20));
             let Some(o) = spawn_sobj(x, 0x15) else { return };
-            crate::video::effacer_couche(x.b, crate::video::Couche::Un);
+            crate::video::clear_layer(x.b, crate::video::Layer::One);
             next_substate(x);
             x.set16(0x24, o.0 as u16);
             let character = rd8(x.b, player + 3);
@@ -1055,7 +1055,7 @@ pub fn name_entry<R: Banc>(x: &mut Cx<'_, R>) {
 /// Écrit le nom (sous-routine 0xd0870) : liste d'indices de tuiles à `list` (fin 0xff ; au-delà de
 /// 0xf8, a pattern of six consecutive tiles from a table), each tile drawn by 0xb230e at `at` (which moves on) with
 /// attribute `attr`.
-fn write_name<R: Banc>(x: &mut Cx<'_, R>, list: u32, mut at: u32, attr: u16) {
+fn write_name<R: Bench>(x: &mut Cx<'_, R>, list: u32, mut at: u32, attr: u16) {
     const TILES: u32 = 0xb2920;
     const PATTERNS: u32 = 0xb2a24;
     let mut p = list;
@@ -1085,13 +1085,13 @@ fn write_name<R: Banc>(x: &mut Cx<'_, R>, list: u32, mut at: u32, attr: u16) {
 /// Variante 24 (0xd0a0c) : prépare le fond des résultats (blocs 4x4 à 0x91ba00, copie de la palette
 /// 0x91cc00 dans l'objet, fond à 0x200), puis fait clignoter la palette et lance de temps à autre un
 /// SOBJ (variante 0x16) lié à l'objet. L'état 4 éteint le clignotement.
-pub fn results_panel<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn results_panel<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x4) {
         0 => {
             next_state(x);
             x.set_a5_u16(0x56e, 4);
-            let fin = load_blocks(x, rom::LOAD_SMALL, 0x91ba00, 8);
-            load_blocks(x, rom::LOAD_SMALL, fin, 8);
+            let end = load_blocks(x, rom::LOAD_SMALL, 0x91ba00, 8);
+            load_blocks(x, rom::LOAD_SMALL, end, 8);
             for i in 0..8 {
                 let v = rd32(x.b, 0x91cc00 + 4 * i);
                 x.set32(0x30 + 4 * i as u32, v);
@@ -1118,12 +1118,12 @@ pub fn results_panel<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn fade_flag<R: Banc>(x: &mut Cx<'_, R>) {
+fn fade_flag<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x20, 0xff);
     mask_tasks(x, 0xfff7);
 }
 
-fn results_tick<R: Banc>(x: &mut Cx<'_, R>) {
+fn results_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x20) != 0 {
         return fade_flag(x);
     }

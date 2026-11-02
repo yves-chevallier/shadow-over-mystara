@@ -8,10 +8,10 @@
 //! | 4, 6 | marche vers un joueur (4 : pas rapides, 6 : lents) |
 //! | 8, 10 | charge |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::decide;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Jeux d'animations de marche, choisis par la marque `+0x33` (0x103e0) : le premier quand le boss ne regarde pas
@@ -19,7 +19,7 @@ use crate::objects::Obj;
 const WALK_SIDEWAYS: u32 = 0x180a46;
 const WALK_FORWARD: u32 = 0x180aea;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => idle(x),
         2 => turn(x),
@@ -30,35 +30,35 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn players_alive<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn players_alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PLAYERS_ALIVE.get(x.b) != 0
 }
 
 /// Le boss doit-il se retourner vers sa cible (0x1050c, Z levé = non) ?
-fn needs_turn<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
 /// Le boss regarde-t-il dans le sens où il avance (0x10560, Z levé = oui) ?
-fn facing_forward<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn facing_forward<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::moving_forward(x)
 }
 
 /// Animation de marche d'après le sens (2 ou 3).
-fn walk_anim<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let n = if facing_forward(x) { 2 } else { 3 };
     body(x, n);
 }
 
 /// Animation de marche choisie par la marque `+0x33` dans le jeu du sens de marche.
-fn walk_select<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_select<R: Bench>(x: &mut Cx<'_, R>) {
     let set = if facing_forward(x) { WALK_FORWARD } else { WALK_SIDEWAYS };
     lib::switch_keeping_time(x, set);
 }
 
 // --- +6 = 0 : debout --------------------------------------------------------------------------
 
-fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if !players_alive(x) {
         return decide::wait(x);
     }
@@ -83,7 +83,7 @@ fn idle<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 : demi-tour ----------------------------------------------------------------------
 
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         let side = x.u8(f::FLIP) ^ 0x20;
@@ -110,7 +110,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 et 6 : marche -----------------------------------------------------------------------
 
-fn walk<R: Banc>(x: &mut Cx<'_, R>, slow: bool) {
+fn walk<R: Bench>(x: &mut Cx<'_, R>, slow: bool) {
     if !players_alive(x) {
         return decide::wait(x);
     }
@@ -145,7 +145,7 @@ fn walk<R: Banc>(x: &mut Cx<'_, R>, slow: bool) {
 
 /// 0x95ff8 : un pas de marche de plus ; à la fin des pas, la marche s'arrête (`chase_b`) ; tant qu'une
 /// attaque est possible, le boss la déclenche.
-fn keep_walking<R: Banc>(x: &mut Cx<'_, R>) {
+fn keep_walking<R: Bench>(x: &mut Cx<'_, R>) {
     if sub8(x, WALK_DELAY, 1).mi() {
         if sub8(x, WALK_STEPS, 1).le() {
             return decide::chase_b(x);
@@ -181,7 +181,7 @@ fn keep_walking<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 8 et 10 : charge ----------------------------------------------------------------------
 
-fn dash<R: Banc>(x: &mut Cx<'_, R>) {
+fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);

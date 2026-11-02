@@ -1,4 +1,4 @@
-//! Ennemi « Bow Gnoll » (ENEMY type 3, 0x5bda6). Voir `docs/familles/enemy.md`.
+//! Ennemi « Bow Gnoll » (ENEMY type 3, 0x5bda6). Voir `docs/families/enemy.md`.
 //!
 //! Un archer : il marche vers sa cible, tire (`+0x44` = 0xa, `+0x45` = 4 pour la flèche, le tir lui-même est créé
 //! par la clé d'animation avec 0x9dbd6), recule, esquive et saute. Un Bow Gnoll créé par un autre objet (`+0x42`)
@@ -15,7 +15,7 @@
 //! Animations 0x16032c (mouvements) et 0x160350 (tirs). Le Bow Gnoll n'a pas de test « joueur en vie » : l'attente
 //! (`+5` = 10) revient au sous-état 2 quand le compte `+0x6e` est écoulé.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -55,7 +55,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 pub(self) const SET_MOVE: u32 = 0x16032c;
 pub(self) const SET_SHOT: u32 = 0x160350;
@@ -63,7 +63,7 @@ pub(self) const STANCE: u32 = 0x0202_0000;
 pub(self) const HELD: u32 = 0x0408_0000;
 pub(self) const IDLE: u32 = 0x020a_0000;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -87,33 +87,33 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// Démarre l'animation `n` du jeu des mouvements.
-pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
 /// Démarre l'animation `n` du jeu des tirs.
-pub(self) fn shot<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn shot<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_SHOT, n as u16);
 }
 
-pub(self) fn set_speed<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// 0x5ce22 : direction de marche selon l'orientation (0xc à gauche, 4 à droite).
-pub(self) fn face_angle<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn face_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 4 } else { 0xc };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Direction de marche : 8 (regarde à gauche) ou 0x18.
-pub(self) fn walk_angle<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn walk_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Octet tiré au hasard dans la rangée de difficulté de `table` (rangées de 32 octets).
-pub(self) fn row_byte<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u8 {
+pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
     let r = rand_and(x, 0x1f);
@@ -127,7 +127,7 @@ pub(self) const SECOND_ACTIONS: u32 = 0x5d67a;
 pub(self) const FOLLOW_TABLE: u32 = 0x5ce72;
 
 /// 0x5cdc6 : tirage au hasard (dix chances sur seize) qui décide d'un tir ; D0 = 0 ou 1.
-pub(self) fn shoot_roll<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn shoot_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let r = rand_and(x, 0xf);
     let mask = x.rom16(0x5cde0);
     let hit = (mask >> r) & 1 != 0;
@@ -135,29 +135,29 @@ pub(self) fn shoot_roll<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Boîtes de portée (0xb5e0) ; D5 est posé comme dans l'original.
-fn range_box<R: Banc>(x: &mut Cx<'_, R>, d5: u32, d0: i16, d1: u16, d2: u16) -> bool {
+fn range_box<R: Bench>(x: &mut Cx<'_, R>, d5: u32, d0: i16, d1: u16, d2: u16) -> bool {
     *x.c.d5() = d5; // relu : D5 relu par la suite (comme pour in_front)
     lib::target_in_box(x, d0, d1, d2)
 }
 
 /// 0x5ce14 : joueur tout près (assez pour un tir à bout portant).
-pub(self) fn point_blank<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn point_blank<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     range_box(x, 2, -0x28, 0x28, 0xc)
 }
 
 /// 0x5cdf6 : joueur devant, à courte distance.
-pub(self) fn in_front<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn in_front<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     *x.c.d5() = 0; // relu : D5 relu par la suite (DDSOM_POISON : covb_long3p_02)
     lib::target_in_box(x, -0xd0, 0x60, 0x18)
 }
 
 /// 0x5ce06 : joueur près, sur la même ligne.
-pub(self) fn on_line<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn on_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     range_box(x, 2, 0, 0x38, 0x10)
 }
 
 /// 0x5ce36 : fin d'un tir, choix du geste de repli (sous-état 8) ; saisi si `+0xa7`.
-pub(self) fn follow_up<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     if x.u8(EXPIRED) != 0 {
         set_state_long(x, HELD);
@@ -171,7 +171,7 @@ pub(self) fn follow_up<R: Banc>(x: &mut Cx<'_, R>) {
 // --- état 0 : création --------------------------------------------------------------------------
 
 /// Faux si le jeu est en pause (rien n'est fait) ; sinon le corps de l'état actif suit dans la même image.
-fn init<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if paused(x) {
         return false;
     }
@@ -210,7 +210,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -244,5 +244,5 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x5bda6 "enemy_3" #[sans] run,
+    0x5bda6 "enemy_3" #[without] run,
 }

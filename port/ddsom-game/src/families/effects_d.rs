@@ -8,12 +8,12 @@
 //! - 1 : trophée du tableau de fin, qui attend le signal de son contrôleur, s'anime après un délai tiré
 //!   au hasard puis se décompte auprès du contrôleur ; 9 : enseigne posée sur la caméra alternative.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use crate::mem::{rd8, wr16, wr32};
 use crate::objects::Obj;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::machine::Machine;
 
 mod f {
@@ -34,28 +34,28 @@ mod f {
 
 const ANIM_SET: u32 = 0x1c03a6;
 
-fn free<R: Banc>(x: &mut Cx<'_, R>) {
+fn free<R: Bench>(x: &mut Cx<'_, R>) {
     x.free(&pools::EFFCT);
 }
 
-fn random<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn random<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     x.random() as u32
 }
 
 /// État 4 (`0xb2916`) : passe à 6 et libère ; état 6 : libère.
-fn finish<R: Banc>(x: &mut Cx<'_, R>) {
+fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::STATE) == 4 {
         x.add8(f::STATE, 2);
     }
     free(x)
 }
 
-fn sequence_step<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
+fn sequence_step<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     let seq = x.u32(f::SEQUENCE);
     rd8(x.b, seq + 8)
 }
 
-fn countdown_screen<R: Banc>(x: &mut Cx<'_, R>) {
+fn countdown_screen<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.u8(f::VARIANT);
     match (v, x.u8(f::STATE)) {
         (_, 4 | 6) => finish(x),
@@ -89,7 +89,7 @@ fn countdown_screen<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin depuis l'état actif (`0xb2916` : `addq.b #2` puis libération).
-fn finish_from_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn finish_from_active<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     free(x)
 }
@@ -102,7 +102,7 @@ fn finish_from_active<R: Banc>(x: &mut Cx<'_, R>) {
 const COIN_SPEEDS: u32 = 0xb1b76;
 const COIN_ANIMS: u32 = 0xb1b66;
 
-fn coin_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn coin_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let source = x.linked(0x42);
     let (sx, sz) = (source.u16(x.b, Obj::X), source.u16(x.b, Obj::Z));
@@ -127,7 +127,7 @@ fn coin_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-fn coin_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn coin_active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB_STATE) == 2 {
         if sequence_step(x) == 2 {
             x.add8(f::SUB_STATE, 2);
@@ -174,7 +174,7 @@ mod trophy {
     pub const SCENERY_KIND: u32 = 0x1d;
 }
 
-fn trophy_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn trophy_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let source = x.u16(trophy::SOURCE);
     let rank = if (source as i16) < 0 { x.linked(trophy::SOURCE).u8(x.b, f::VARIANT) as u16 } else { source };
@@ -197,7 +197,7 @@ fn trophy_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-fn trophy_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn trophy_active<R: Bench>(x: &mut Cx<'_, R>) {
     let controller = x.linked(trophy::CONTROLLER);
     match x.u8(f::SUB_STATE) {
         0 => {
@@ -226,8 +226,8 @@ fn trophy_active<R: Banc>(x: &mut Cx<'_, R>) {
             if pending != 5 {
                 return x.add8(f::SUB_STATE, 2);
             }
-            if let Some(decor) = super::creators::scene_set(x.b, trophy::SCENERY_KIND as u8) {
-                x.set16(trophy::SCENERY, decor.0 as u16);
+            if let Some(scenery) = super::creators::scene_set(x.b, trophy::SCENERY_KIND as u8) {
+                x.set16(trophy::SCENERY, scenery.0 as u16);
             }
         }
         6 => {
@@ -253,7 +253,7 @@ fn trophy_active<R: Banc>(x: &mut Cx<'_, R>) {
 /// Hauteurs par valeur `+0x42` (mots, espace programme).
 const SIGN_HEIGHTS: u32 = 0xb2908;
 
-fn sign_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn sign_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let (cy, cx) = (crate::ram::CAMERA_ALT_Y.get(x.b), crate::ram::CAMERA_ALT_X.get(x.b));
     x.set16(Obj::Z, cy);
@@ -276,19 +276,19 @@ const REWARD_ANIMS: u32 = 0xb1c9a;
 const REWARD_SET: u32 = 0x190ba8;
 
 /// 0xb24b6 : animation de base du mode + `n`.
-fn reward_anim<R: Banc>(x: &mut Cx<'_, R>, n: u16) {
+fn reward_anim<R: Bench>(x: &mut Cx<'_, R>, n: u16) {
     let mode = x.u8(f::MODE) as u32;
     let base = x.data16(REWARD_ANIMS + 2 * mode);
     x.anim_start(REWARD_SET, (base.wrapping_add(n) as u32) as u16);
 }
 
-fn reward_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn reward_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     reward_anim(x, 2);
     x.reinsert();
 }
 
-fn reward_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn reward_active<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if x.u8(f::SUB_STATE) != 0 || sequence_step(x) != 2 {
         return;
@@ -300,7 +300,7 @@ fn reward_active<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(f::VARIANT, mode);
     x.set8(0x02, kind);
     // the variant is kept in D0.b during the sound, then put back
-    crate::sound::jouer(x.b, 0xe24d8, x.o);
+    crate::sound::play(x.b, 0xe24d8, x.o);
     x.set8(f::VARIANT, variant);
     x.set8(0x02, 31);
     x.add8(f::SUB_STATE, 2);
@@ -310,19 +310,19 @@ fn reward_active<R: Banc>(x: &mut Cx<'_, R>) {
 // variantes 3, 4, 6, 8 : rang, plaque, compteurs, lignes des joueurs
 // ---------------------------------------------------------------------------------------------
 
-fn at_camera<R: Banc>(x: &mut Cx<'_, R>, cx: u32, cy: u32) {
+fn at_camera<R: Bench>(x: &mut Cx<'_, R>, cx: u32, cy: u32) {
     let (px, pz) = (x.a5_u16(cx), x.a5_u16(cy));
     x.set16(Obj::X, px);
     x.set16(Obj::Z, pz);
     x.set32(Obj::Y, 0);
 }
 
-fn rank_anim<R: Banc>(x: &mut Cx<'_, R>, value: u8) {
+fn rank_anim<R: Bench>(x: &mut Cx<'_, R>, value: u8) {
     x.anim_start(ANIM_SET, (0xe3u16.wrapping_sub(value as u16) as u32) as u16);
     x.reinsert();
 }
 
-fn rank_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn rank_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     at_camera(x, 0x506, 0x50a);
     x.add16(Obj::X, 0x13c);
@@ -332,7 +332,7 @@ fn rank_init<R: Banc>(x: &mut Cx<'_, R>) {
     rank_anim(x, value);
 }
 
-fn rank_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn rank_active<R: Bench>(x: &mut Cx<'_, R>) {
     let value = x.u8(f::VALUE);
     if value != x.u8(f::SHOWN) {
         x.set8(f::SHOWN, value);
@@ -340,7 +340,7 @@ fn rank_active<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn plate_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn plate_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let cam = crate::ram::CAMERA_ALT_X.get(x.b);
     x.set16(Obj::X, cam);
@@ -381,7 +381,7 @@ fn to_bcd(value: u16) -> u16 {
 
 /// 0xb230e : bloc de 2 × 2 tuiles (`tile`, `tile + 0x10` ; rangée suivante `tile + 1`...), puis la rangée
 /// d'après. Renvoie la tuile suivante (`tile + 2`) et la nouvelle adresse.
-fn draw_block<R: Banc>(x: &mut Cx<'_, R>, at: &mut u32, tile: u16, attr: u16) -> u16 {
+fn draw_block<R: Bench>(x: &mut Cx<'_, R>, at: &mut u32, tile: u16, attr: u16) -> u16 {
     let mut t = tile;
     for _ in 0..2 {
         wr16(x.b, *at, t);
@@ -395,7 +395,7 @@ fn draw_block<R: Banc>(x: &mut Cx<'_, R>, at: &mut u32, tile: u16, attr: u16) ->
 }
 
 /// 0xb22d0 : nombre BCD de trois chiffres en gros chiffres (zéros de tête effacés).
-fn draw_big_number<R: Banc>(x: &mut Cx<'_, R>, mut at: u32, bcd: u16) {
+fn draw_big_number<R: Bench>(x: &mut Cx<'_, R>, mut at: u32, bcd: u16) {
     let mut shown = false;
     for i in 0..4 {
         let digit = bcd.rotate_left(4 * (i + 1)) & 0xf;
@@ -413,7 +413,7 @@ fn draw_big_number<R: Banc>(x: &mut Cx<'_, R>, mut at: u32, bcd: u16) {
     }
 }
 
-fn counters_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn counters_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let cam = crate::ram::CAMERA_ALT_X.get(x.b);
     x.set16(Obj::X, cam);
@@ -429,7 +429,7 @@ fn counters_init<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn counters_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn counters_active<R: Bench>(x: &mut Cx<'_, R>) {
     let gap = x.u16(Obj::Z).wrapping_sub(crate::ram::CAMERA_ALT_Y.get(x.b));
     if (gap as i16) < 0x100 {
         return;
@@ -442,7 +442,7 @@ fn counters_active<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn player_line_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn player_line_init<R: Bench>(x: &mut Cx<'_, R>) {
     let mode = x.u8(f::MODE) as u32;
     let player = Obj(0xff85de + 0x200 * mode);
     let present = player.is_active(x.b)
@@ -492,7 +492,7 @@ mod line {
     pub const SPECIAL_TITLES: u32 = 0xb2a24;
 }
 
-fn line_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn line_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let (cam_x, cam_y) = (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b));
     x.set16(Obj::Z, cam_y);
@@ -509,7 +509,7 @@ fn line_init<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// La ligne (montante) atteint le haut de la caméra : elle se dessine une fois dans le fond 2.
-fn line_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn line_active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB_STATE) != 0 || (x.u16(Obj::Z) as i16) < (crate::ram::CAMERA_ALT_Y.get(x.b) as i16) {
         return;
     }
@@ -536,12 +536,12 @@ struct LineDraw {
 }
 
 impl LineDraw {
-    fn class<R: Banc>(&self, x: &mut Cx<'_, R>) -> u8 {
+    fn class<R: Bench>(&self, x: &mut Cx<'_, R>) -> u8 {
         rd8(x.b, self.record + 0xc)
     }
 
     /// 0xb222e : paire de tuiles `tile`, `tile + 0x10`, puis rangée suivante.
-    fn pair<R: Banc>(&self, x: &mut Cx<'_, R>, at: &mut u32, tile: u16) {
+    fn pair<R: Bench>(&self, x: &mut Cx<'_, R>, at: &mut u32, tile: u16) {
         wr16(x.b, *at, tile);
         wr16(x.b, *at + 2, self.attr);
         wr16(x.b, *at + 4, tile.wrapping_add(0x10));
@@ -550,7 +550,7 @@ impl LineDraw {
     }
 
     /// 0xb2212 : petit chiffre (zéros de tête effacés tant que `shown` est faux).
-    fn digit<R: Banc>(&mut self, x: &mut Cx<'_, R>, at: &mut u32, digit: u16) {
+    fn digit<R: Bench>(&mut self, x: &mut Cx<'_, R>, at: &mut u32, digit: u16) {
         let digit = digit & 0xf;
         if digit == 0 && !self.shown {
             *at += 0x80;
@@ -562,7 +562,7 @@ impl LineDraw {
     }
 
     /// 0xb20d2 : chaîne de tuiles (une par octet) terminée par 0x40, une colonne par caractère.
-    fn text<R: Banc>(&self, x: &mut Cx<'_, R>, at: &mut u32, mut s: u32) {
+    fn text<R: Bench>(&self, x: &mut Cx<'_, R>, at: &mut u32, mut s: u32) {
         loop {
             let c = x.data8(s);
             s += 1;
@@ -576,7 +576,7 @@ impl LineDraw {
     }
 
     /// 0xb1ff8 : portrait (palette recopiée, puis 4 colonnes de 2 tuiles).
-    fn portrait<R: Banc>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
+    fn portrait<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let class = self.class(x) as u32;
         let mode = x.u8(f::MODE) as u32;
         let src = line::PORTRAITS + (class << 5);
@@ -594,7 +594,7 @@ impl LineDraw {
     }
 
     /// 0xb21d8 : numéro du joueur (petit chiffre) et une tuile fixe.
-    fn number<R: Banc>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
+    fn number<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let mode = x.u8(f::MODE);
         self.attr = x.rom8(line::NUMBER_ATTRS + mode as u32) as u16;
         self.shown = true;
@@ -603,7 +603,7 @@ impl LineDraw {
     }
 
     /// 0xb2078 : niveau du joueur (deux chiffres) après deux tuiles fixes.
-    fn level<R: Banc>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
+    fn level<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         for tile in [0x4c, 0x5f] {
             wr16(x.b, at, tile);
             wr16(x.b, at + 2, self.attr);
@@ -618,7 +618,7 @@ impl LineDraw {
     }
 
     /// 0xb20b8 : nom du personnage.
-    fn name<R: Banc>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
+    fn name<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let mode = x.u8(f::MODE) as u32;
         self.attr = x.rom8(line::NAME_ATTRS + mode) as u16;
         let pair = (self.class(x) & !1) as u32;
@@ -628,7 +628,7 @@ impl LineDraw {
     }
 
     /// 0xb219e : trois tuiles fixes, le score (huit chiffres BCD), puis le texte qui suit.
-    fn score<R: Banc>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
+    fn score<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         for tile in [0x1f6, 0x219, 0x211] {
             self.pair(x, &mut at, tile);
         }
@@ -644,7 +644,7 @@ impl LineDraw {
 
     /// 0xb212c : titre en gros caractères ; 0xff : titre par défaut du personnage recopié dans la fiche ;
     /// 0xf9 à 0xfe : titre spécial de six caractères consécutifs.
-    fn title<R: Banc>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
+    fn title<R: Bench>(&mut self, x: &mut Cx<'_, R>, mut at: u32) {
         let mut p = self.record;
         if rd8(x.b, p) == 0xff {
             let mut k = (self.class(x) as u32) << 3;
@@ -693,7 +693,7 @@ mod walker {
     pub const RUN_SPEEDS: u32 = 0x1c7eb6;
 }
 
-fn walker_init<R: Banc>(x: &mut Cx<'_, R>) {
+fn walker_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     let place = walker::PLACES + 12 * x.u8(f::VALUE) as u32;
     for (k, off) in [Obj::X, Obj::Z, Obj::Y, walker::TARGET_X, walker::TARGET_Y].into_iter().enumerate() {
@@ -711,7 +711,7 @@ fn walker_init<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(f::FACING, if left { 0x20 } else { 0 });
 }
 
-fn walker_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn walker_active<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB_STATE) {
         0 => walker_wait(x),
         2 => walker_walk(x),
@@ -723,7 +723,7 @@ fn walker_active<R: Banc>(x: &mut Cx<'_, R>) {
     x.reinsert();
 }
 
-fn walker_facing_target<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
+fn walker_facing_target<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     if (x.u16(Obj::X) as i16) > (x.u16(walker::TARGET_X) as i16) {
         0
     } else {
@@ -732,7 +732,7 @@ fn walker_facing_target<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
 }
 
 /// 0xb27aa : demi-tour, puis retour au sous-état courant.
-fn walker_start_turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn walker_start_turn<R: Bench>(x: &mut Cx<'_, R>) {
     let sub = x.u8(f::SUB_STATE);
     x.set8(f::SUB_STEP, sub);
     x.set8(f::STEP, 0);
@@ -740,7 +740,7 @@ fn walker_start_turn<R: Banc>(x: &mut Cx<'_, R>) {
     walker_turn(x);
 }
 
-fn walker_wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn walker_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::STEP) == 0 {
         if x.u8(f::FACING) != 0 {
             return walker_start_turn(x);
@@ -755,19 +755,19 @@ fn walker_wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Un pas vers la cible (direction 0x137e, table de vitesses courante).
-fn walker_move<R: Banc>(x: &mut Cx<'_, R>) {
+fn walker_move<R: Bench>(x: &mut Cx<'_, R>) {
     let (tx, ty) = (x.u16(walker::TARGET_X), x.u16(walker::TARGET_Y));
-    let direction = crate::aides::direction_from(x.b, x.o, (tx, ty));
+    let direction = crate::aids::direction_from(x.b, x.o, (tx, ty));
     x.set8(Obj::SPEED_INDEX, direction);
     x.move_by_table_xy();
 }
 
 /// La cible est atteinte à 8 près sur l'axe `off`.
-fn walker_near<R: Banc>(x: &mut Cx<'_, R>, off: u32, target: u32) -> bool {
+fn walker_near<R: Bench>(x: &mut Cx<'_, R>, off: u32, target: u32) -> bool {
     x.u16(off).wrapping_sub(x.u16(target)).wrapping_add(8) <= 0x10
 }
 
-fn walker_walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn walker_walk<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::STEP) == 0 {
         if walker_facing_target(x) != x.u8(f::FACING) {
             return walker_start_turn(x);
@@ -785,7 +785,7 @@ fn walker_walk<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn walker_jump<R: Banc>(x: &mut Cx<'_, R>) {
+fn walker_jump<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STEP) {
         0 => {
             x.add8(f::STEP, 2);
@@ -833,7 +833,7 @@ fn walker_jump<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn walker_turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn walker_turn<R: Bench>(x: &mut Cx<'_, R>) {
     let late = (x.u8(f::MODE) as i8) >= 0xa;
     if x.u8(f::STEP) == 0 {
         x.add8(f::STEP, 2);
@@ -856,7 +856,7 @@ fn walker_turn<R: Banc>(x: &mut Cx<'_, R>) {
     reward_anim(x, 2);
 }
 
-fn walker_run<R: Banc>(x: &mut Cx<'_, R>) {
+fn walker_run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STEP) {
         0 => {
             x.add8(f::STEP, 2);
@@ -910,5 +910,5 @@ fn walker_run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xb1a98 "effct_decompte" #[sans] countdown_screen,
+    0xb1a98 "effct_decompte" #[without] countdown_screen,
 }

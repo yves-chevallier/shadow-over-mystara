@@ -1,13 +1,13 @@
 //! Type 3, sous-états 4 (tirs, `+6` = 0 premier geste choisi dans la rangée de difficulté, 2 second geste, 4 fuite
 //! d'arrivée) et 6 (pas de côté et sauts).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::stance::stance_begin;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.in_arena(8) {
         // hors de l'écran : il revient par l'arrivée de la variante 2
         set_state_long(x, 0x0200_0000);
@@ -27,14 +27,14 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5c8aa : le demi-tour du sous-état 12.
-fn turn_to_resume<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn_to_resume<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     mv(x, 3);
 }
 
 // --- premier geste ------------------------------------------------------------------------------------
 
-fn first<R: Banc>(x: &mut Cx<'_, R>) {
+fn first<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             let action = row_byte(x, FIRST_ACTIONS);
@@ -94,7 +94,7 @@ fn first<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5c37a : au tirage, un tir sur place, sinon rapprochement (type de tir 4).
-fn shoot_or_approach<R: Banc>(x: &mut Cx<'_, R>) {
+fn shoot_or_approach<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 2);
     if shoot_roll(x) {
         return aim_again(x);
@@ -104,7 +104,7 @@ fn shoot_or_approach<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5c44e : un tir sur place : nombre de tirs tiré dans la rangée, puis animation de tir.
-fn aim_again<R: Banc>(x: &mut Cx<'_, R>) {
+fn aim_again<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     let n = row_byte(x, SHOT_REPEATS);
     x.set8(REPEAT, n);
@@ -112,13 +112,13 @@ fn aim_again<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5c472 : l'animation de tir (0 ou 5 selon le profil `+0x2f`).
-fn reload_shot<R: Banc>(x: &mut Cx<'_, R>) {
+fn reload_shot<R: Bench>(x: &mut Cx<'_, R>) {
     let anim = if x.u8(GROUP) != 0 { 5 } else { 0 };
     shot(x, anim);
 }
 
 /// 0x5c418 : s'oriente vers la cible vivante, ou se met en attente si elle est tombée.
-fn approach_target<R: Banc>(x: &mut Cx<'_, R>) {
+fn approach_target<R: Bench>(x: &mut Cx<'_, R>) {
     let target = load_target(x);
     if target.u8(x.b, 0) == 0 {
         set_state_long(x, IDLE);
@@ -131,11 +131,11 @@ fn approach_target<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +7 = 4 : la flèche part à la clé d'animation ; à la fin de l'animation, un tir de moins.
-fn fire_loop<R: Banc>(x: &mut Cx<'_, R>) {
+fn fire_loop<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.anim_step() {
         if x.u8(f::KEY_FRAME) != 0 {
             x.set8(f::KEY_FRAME, 0);
-            crate::families::eshl_creators::shot_0(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
+            crate::families::eshl_creators::shot_0(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
         }
         return;
     }
@@ -148,7 +148,7 @@ fn fire_loop<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +7 = 6 : pas de côté vers la profondeur de la cible, puis nouvelle visée.
-fn side_walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn side_walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Obj::SPEED_INDEX, 0);
     let target = load_target(x);
     let mine = x.u16(Obj::Y);
@@ -180,7 +180,7 @@ fn side_walk<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- second geste (+6 = 2) ----------------------------------------------------------------------------
 
-fn second<R: Banc>(x: &mut Cx<'_, R>) {
+fn second<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             let action = row_byte(x, SECOND_ACTIONS);
@@ -249,7 +249,7 @@ fn second<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Vitesses d'un saut : vers le haut 0x200, en avant 0x280 (inversé si l'orientation est non nulle).
-fn jump_speeds<R: Banc>(x: &mut Cx<'_, R>) {
+fn jump_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(Obj::VZ, 0x200);
     x.set16(Obj::VX, 0x280);
     x.set16(Obj::AX, 0);
@@ -259,7 +259,7 @@ fn jump_speeds<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5c5f6 : élan latéral (vitesse 0xb, animation 2) pendant `0x23` images.
-fn dash_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn dash_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(TIMER, 0x23);
     x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) != 0 {
@@ -271,7 +271,7 @@ fn dash_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5c59e : un tir à bout portant (flèche de type 0xa, force 4).
-pub(super) fn start_shot<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn start_shot<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set8(AI_SHOT, 3);
     x.set8(STRIKE_KIND, 0xa);
@@ -282,7 +282,7 @@ pub(super) fn start_shot<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 6 --------------------------------------------------------------------------------------
 
-pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => crouch(x),
         2 | 8 => sidestep(x),
@@ -292,7 +292,7 @@ pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5c6e6… : fin d'un geste du sous-état 6 : debout, et au tirage, attente.
-fn done_gesture<R: Banc>(x: &mut Cx<'_, R>) {
+fn done_gesture<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
@@ -302,7 +302,7 @@ fn done_gesture<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 0 : se baisse (animation 1 ou 0xb au hasard).
-fn crouch<R: Banc>(x: &mut Cx<'_, R>) {
+fn crouch<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         let anim = if rand_and(x, 1) != 0 { 1 } else { 0xb };
@@ -314,7 +314,7 @@ fn crouch<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 et 8 : pas de côté pendant `+0x6b` images.
-fn sidestep<R: Banc>(x: &mut Cx<'_, R>) {
+fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -354,7 +354,7 @@ fn sidestep<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 et 6 : saut avec élan (vitesse 0x280), retombée, puis tir (6).
-fn leap<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

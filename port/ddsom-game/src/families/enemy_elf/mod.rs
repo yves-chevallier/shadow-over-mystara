@@ -1,4 +1,4 @@
-//! Ennemi « Shadow Elf » (ENEMY type 12, 0x69384). Voir `docs/familles/enemy.md`.
+//! Ennemi « Shadow Elf » (ENEMY type 12, 0x69384). Voir `docs/families/enemy.md`.
 //!
 //! Elfe sombre qui frappe à l'épée, disparaît et retombe sur sa cible. Charpente commune : `+4` état
 //! (0 création, 2 actif, 4 touché, 6 libération), `+5` groupe de comportements, `+6` et `+7` étapes.
@@ -17,7 +17,7 @@
 //! Animations : 0x164174 (mouvements) et 0x164184 (coups). L'état actif exécute toujours, hors gel, le
 //! test de proximité 0x81aa4, le test de zone, l'ombre et la remise en liste.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -51,7 +51,7 @@ pub(self) mod g {
 }
 
 use g::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Jeux d'animations : mouvements et coups.
 const SET_BODY: u32 = 0x164174;
@@ -64,7 +64,7 @@ const FALLBACK_MOVES: u32 = 0x6a480;
 const CLOSE_ATTACKS: u32 = 0x6a73c;
 const FAR_ATTACKS: u32 = 0x6a93c;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -82,49 +82,49 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- aides ------------------------------------------------------------------------------------
 
-fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
-fn move_xy<R: Banc>(x: &mut Cx<'_, R>) {
+fn move_xy<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
 /// 0x69528 : saut — effet 0xecfe4 et animation 3.
-fn launch<R: Banc>(x: &mut Cx<'_, R>) {
+fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xecfe4);
     body(x, 3);
 }
 
 /// 0x6954a : accroupi (animation 4).
-fn crouch<R: Banc>(x: &mut Cx<'_, R>) {
+fn crouch<R: Bench>(x: &mut Cx<'_, R>) {
     body(x, 4);
 }
 
 /// 0x6953c : attend la fin de l'animation, puis passe au `+6` suivant.
-fn wait_anim<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_anim<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         x.add8(f::SUB2, 2);
     }
 }
 
 /// 0x6957c : l'animation finie, retour debout.
-fn end_to_stance<R: Banc>(x: &mut Cx<'_, R>) {
+fn end_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         set_state_long(x, STANCE);
     }
 }
 
 /// 0x6a680 : retour debout ; si la décision 0x79ce le veut, au repos.
-fn back_to_stance<R: Banc>(x: &mut Cx<'_, R>) {
+fn back_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
@@ -132,7 +132,7 @@ fn back_to_stance<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6a452 : fin d'un coup — le suivant est tiré dans la ligne de la difficulté (32 octets).
-fn end_attack<R: Banc>(x: &mut Cx<'_, R>) {
+fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_KIND, 0xff);
     let row = (var::RANK.get(x.b) >> 1) << 5;
     let n = rand_and(x, 0x1f);
@@ -144,7 +144,7 @@ fn end_attack<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -172,7 +172,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -194,7 +194,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Sous-état 0 : arrivée selon la variante `+3` (octet pair, indice de table : 0 marche, 2 chute, 4 bond,
 /// 6 chute lente).
-fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
+fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => {
             if x.u8(f::SUB2) != 0 {
@@ -277,7 +277,7 @@ fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x69558 : descente (déplacement en hauteur) puis réception.
-fn land<R: Banc>(x: &mut Cx<'_, R>) {
+fn land<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_z();
     if (x.u16(Obj::Z) as i16) > 0 {
         return;
@@ -288,5 +288,5 @@ fn land<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x69384 "enemy_12" #[sans] run,
+    0x69384 "enemy_12" #[without] run,
 }

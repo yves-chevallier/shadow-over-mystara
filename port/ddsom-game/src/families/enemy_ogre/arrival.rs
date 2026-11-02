@@ -1,12 +1,12 @@
 //! Type 18, sous-état 0 : arrivée. `+6` = 0 chute d'entrée par le bord droit, 2 apparition au sol (variante 0),
 //! 4 attente d'un joueur dans la boîte (variante 1), 6 apparition cachée jusqu'à l'arrivée d'un joueur (variante 2).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => fall_in(x),
         2 => walk_in(x),
@@ -17,7 +17,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Début commun d'une arrivée : plus invulnérable, immunités remises.
-fn begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set_bit(1, 1, false);
     x.set8(INVULNERABLE, 0);
@@ -26,7 +26,7 @@ fn begin<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 0 : chute d'entrée ----------------------------------------------------------------------------
 
-fn fall_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             begin(x);
@@ -113,7 +113,7 @@ fn fall_in<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 : apparition au sol ---------------------------------------------------------------------------
 
-fn walk_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             begin(x);
@@ -151,7 +151,7 @@ fn walk_in<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x70770 : la clé 3 de l'animation fait trembler le sol.
-fn thump<R: Banc>(x: &mut Cx<'_, R>) {
+fn thump<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 3 {
         return;
     }
@@ -162,7 +162,7 @@ fn thump<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x70794 : début de la course (animation 5).
-fn begin_dash<R: Banc>(x: &mut Cx<'_, R>) {
+fn begin_dash<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set16(TIMER, 0x14);
     x.set16(TIMER2, 0);
@@ -175,7 +175,7 @@ fn begin_dash<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x707d2 : la course, puis le premier geste.
-fn dash<R: Banc>(x: &mut Cx<'_, R>) {
+fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     if !count_down(x, TIMER2) {
         x.set16(TIMER2, 4);
         spark(x, 3);
@@ -193,7 +193,7 @@ fn dash<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : attente d'un joueur ------------------------------------------------------------------------
 
-fn wait_for_player<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_for_player<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             begin(x);
@@ -215,7 +215,7 @@ fn wait_for_player<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x75c36 : fin d'attente, décompte de `+0xa0` puis retour au sous-état d'avant (`+0xb1`).
-fn waiting_out<R: Banc>(x: &mut Cx<'_, R>) {
+fn waiting_out<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(LOOK).wrapping_sub(1);
     x.set8(LOOK, n);
     if (n as i8) >= 0 {
@@ -237,7 +237,7 @@ fn waiting_out<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 6 : apparition cachée -----------------------------------------------------------------------------
 
-fn hidden<R: Banc>(x: &mut Cx<'_, R>) {
+fn hidden<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

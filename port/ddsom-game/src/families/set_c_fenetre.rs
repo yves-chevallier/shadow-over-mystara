@@ -14,8 +14,8 @@
 //! Le texte composé est une suite d'octets : caractère (> 15), commande (≤ 15) suivie de son argument,
 //! 0xfe + argument, 0xff + nombre de caractères écrits depuis le précédent 0xff + argument, 0xfd fin.
 
-use crate::families::cx::Banc;
-use crate::objects::Courant;
+use crate::families::cx::Bench;
+use crate::objects::Current;
 use crate::families::cx::Cx;
 use crate::mem::{prog32, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::{pools, Obj};
@@ -121,7 +121,7 @@ const BLANK: u32 = 0x0020_0000;
 const FLIP: u32 = 0x20;
 const ROW_STRIDE: u32 = 0x80;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => start(x),
         2 => match x.u8(f::SUB) {
@@ -136,7 +136,7 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0xc8368 : charge la fenêtre de la variante et pose sa palette.
-fn start<R: Banc>(x: &mut Cx<'_, R>) {
+fn start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(f::TICK_RELOAD, 3);
     let table = if x.a5_u16(ram::LANGUAGE) == 4 { WINDOWS_LANG4 } else { WINDOWS_OTHER };
@@ -161,7 +161,7 @@ fn start<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0xc83ea : écran assombri, la palette prend la luminosité de la couleur de référence. Rend
 /// l'adresse qui suit la palette traitée (registre A1 de l'original).
-fn dim_palette<R: Banc>(x: &mut Cx<'_, R>, palette: u32) -> u32 {
+fn dim_palette<R: Bench>(x: &mut Cx<'_, R>, palette: u32) -> u32 {
     if x.a5_u8(ram::DIM_ON) == 0 || x.a5_u8(ram::DIM) & 1 == 0 {
         return palette;
     }
@@ -175,7 +175,7 @@ fn dim_palette<R: Banc>(x: &mut Cx<'_, R>, palette: u32) -> u32 {
 }
 
 /// Seize couleurs (`movem.l` de 8 longs).
-fn copy_palette<R: Banc>(x: &mut Cx<'_, R>, src: u32, dst: u32) {
+fn copy_palette<R: Bench>(x: &mut Cx<'_, R>, src: u32, dst: u32) {
     for i in 0..8 {
         let v = rd32(x.b, src + 4 * i);
         wr32(x.b, dst + 4 * i, v);
@@ -183,12 +183,12 @@ fn copy_palette<R: Banc>(x: &mut Cx<'_, R>, src: u32, dst: u32) {
 }
 
 /// 0xc8a82 : seconde palette.
-fn copy_palette_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn copy_palette_b<R: Bench>(x: &mut Cx<'_, R>) {
     copy_palette(x, PALETTE_SRC_B, PALETTE_B);
 }
 
 /// Fenêtre sans cadre : affichage direct (sous-état `sub`).
-fn frameless<R: Banc>(x: &mut Cx<'_, R>, sub: u8) {
+fn frameless<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
     x.set8(f::SUB, sub);
     x.set8(f::ROWS, 0);
     x.set8(f::ROWS_LEFT, 0);
@@ -208,7 +208,7 @@ struct Loaded {
 /// 0xc8430 : charge l'enregistrement `desc` ; certains styles le remplacent par un autre (choisi
 /// selon les joueurs, le nombre de joueurs...). Rend les registres de l'original que la fermeture
 /// relit (voir `Loaded`).
-fn load<R: Banc>(x: &mut Cx<'_, R>, mut desc: u32) -> Loaded {
+fn load<R: Bench>(x: &mut Cx<'_, R>, mut desc: u32) -> Loaded {
     let mut regs = Loaded { a1: 0, d6: None, a6: None };
     let done = |regs: Loaded, a1: u32| Loaded { a1, ..regs };
     loop {
@@ -334,7 +334,7 @@ fn load<R: Banc>(x: &mut Cx<'_, R>, mut desc: u32) -> Loaded {
 
 /// Premier joueur (dans l'ordre des emplacements) présent, dont l'état `+4` est inférieur à 4 (ou
 /// différent de 4 si `not_four`), et dont la classe (`+3 >> 1`) satisfait `class`.
-fn find_player<R: Banc>(x: &mut Cx<'_, R>, class: impl Fn(u8) -> bool, not_four: bool) -> Option<Obj> {
+fn find_player<R: Bench>(x: &mut Cx<'_, R>, class: impl Fn(u8) -> bool, not_four: bool) -> Option<Obj> {
     (0..4).map(|k| Obj(A5 + ram::PLAYERS + k * PLAYER_SIZE)).find(|&p| {
         let state = p.u8(x.b, 4);
         p.u8(x.b, 0) != 0 && (if not_four { state != 4 } else { (state as i8) < 4 }) && class(p.u8(x.b, 3) >> 1)
@@ -343,12 +343,12 @@ fn find_player<R: Banc>(x: &mut Cx<'_, R>, class: impl Fn(u8) -> bool, not_four:
 
 // ---- cadre ----------------------------------------------------------------------------------------
 
-fn big<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn big<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.u8(f::BIG) != 0
 }
 
 /// Écrit `count` tuiles d'une ligne, de colonne en colonne, la tuile changeant de `step` à chaque fois.
-fn strip<R: Banc>(x: &mut Cx<'_, R>, at: &mut u32, tile: &mut u32, step: u32, count: u32) {
+fn strip<R: Bench>(x: &mut Cx<'_, R>, at: &mut u32, tile: &mut u32, step: u32, count: u32) {
     for _ in 0..count {
         wr32(x.b, *at, *tile);
         *tile = tile.wrapping_add(step);
@@ -357,7 +357,7 @@ fn strip<R: Banc>(x: &mut Cx<'_, R>, at: &mut u32, tile: &mut u32, step: u32, co
 }
 
 /// Une ligne symétrique : `width + 1` tuiles montantes, puis les mêmes retournées, en descendant.
-fn mirrored<R: Banc>(x: &mut Cx<'_, R>, mut at: u32, mut tile: u32) {
+fn mirrored<R: Bench>(x: &mut Cx<'_, R>, mut at: u32, mut tile: u32) {
     let n = x.u8(f::WIDTH) as u32 + 1;
     strip(x, &mut at, &mut tile, 0x1_0000, n);
     tile = (tile | FLIP).wrapping_sub(0x1_0000);
@@ -365,7 +365,7 @@ fn mirrored<R: Banc>(x: &mut Cx<'_, R>, mut at: u32, mut tile: u32) {
 }
 
 /// 0xc90ce : bord haut (deux lignes).
-fn draw_top<R: Banc>(x: &mut Cx<'_, R>, at: u32) {
+fn draw_top<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
     let (mut a, mut b) = if big(x) { (0x0434_000f, 0x0444_000f) } else { (0x0400_000f, 0x0410_000f) };
     let n = x.u8(f::WIDTH) as u32 + 1;
     let mut at = at;
@@ -385,7 +385,7 @@ fn draw_top<R: Banc>(x: &mut Cx<'_, R>, at: u32) {
 }
 
 /// 0xc9128 : ligne du milieu (bords gauche et droit, fond).
-fn draw_middle<R: Banc>(x: &mut Cx<'_, R>, at: u32) {
+fn draw_middle<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
     let edge = if big(x) { 0x0432_000f } else { 0x0430_000f };
     wr32(x.b, at, edge);
     let inner = (x.u8(f::WIDTH) as u16 * 2).wrapping_sub(1) as u32 + 1;
@@ -398,13 +398,13 @@ fn draw_middle<R: Banc>(x: &mut Cx<'_, R>, at: u32) {
 }
 
 /// 0xc9164 : bord bas.
-fn draw_bottom<R: Banc>(x: &mut Cx<'_, R>, at: u32) {
+fn draw_bottom<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
     let tile = if big(x) { 0x0454_000f } else { 0x0420_000f };
     mirrored(x, at, tile);
 }
 
 /// 0xc91a8 : efface une ligne.
-fn clear_row<R: Banc>(x: &mut Cx<'_, R>, mut at: u32) {
+fn clear_row<R: Bench>(x: &mut Cx<'_, R>, mut at: u32) {
     let n = x.u8(f::WIDTH) as u32 * 2 + 2;
     for _ in 0..n {
         wr32(x.b, at, BLANK);
@@ -414,7 +414,7 @@ fn clear_row<R: Banc>(x: &mut Cx<'_, R>, mut at: u32) {
 
 /// 0xc9036 : efface trois lignes à partir de `at`, sur la largeur `width` (registre D6 : rien si son
 /// octet est négatif, son mot donne la largeur).
-fn clear_window<R: Banc>(x: &mut Cx<'_, R>, mut at: u32, width: u32) {
+fn clear_window<R: Bench>(x: &mut Cx<'_, R>, mut at: u32, width: u32) {
     if (width as u8 as i8) < 0 {
         return;
     }
@@ -427,7 +427,7 @@ fn clear_window<R: Banc>(x: &mut Cx<'_, R>, mut at: u32, width: u32) {
 }
 
 /// Délai entre deux lignes ; vrai quand il est écoulé (il est alors rechargé).
-fn tick<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn tick<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let t = x.u8(f::TICK);
     x.set8(f::TICK, t.wrapping_sub(1));
     // `subq.b #1 ; bgt` : strictement positif après décrément, débordement compris
@@ -442,7 +442,7 @@ fn tick<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 // ---- vie de la fenêtre --------------------------------------------------------------------------
 
 /// 0xc870c : bord haut et première ligne.
-fn open_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn open_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     let reload = x.u8(f::TICK_RELOAD);
     x.set8(f::TICK, reload);
@@ -454,7 +454,7 @@ fn open_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0xc872a : une ligne de plus à chaque délai ; à la fin, le texte.
-fn opening<R: Banc>(x: &mut Cx<'_, R>) {
+fn opening<R: Bench>(x: &mut Cx<'_, R>) {
     if !tick(x) {
         return;
     }
@@ -471,12 +471,12 @@ fn opening<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Entrée du moteur de texte de la fenêtre (adresse sur 16 bits).
-fn slot<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn slot<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     x.u16(f::SLOT_PTR) as i16 as i32 as u32
 }
 
 /// 0xc875a : cadre ouvert ; confie le texte au moteur de texte, composé selon le style.
-fn show_text<R: Banc>(x: &mut Cx<'_, R>) {
+fn show_text<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     let rows = x.u8(f::ROWS);
     x.set8(f::ROWS_LEFT, rows);
@@ -499,7 +499,7 @@ fn show_text<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0xc8f76 : affichage pendant la durée (un bouton l'écourte), puis efface le texte.
-fn shown<R: Banc>(x: &mut Cx<'_, R>) {
+fn shown<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::DURATION) == 0xffff {
         return;
     }
@@ -520,7 +520,7 @@ fn shown<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0xc9068 : boutons nouvellement pressés (quartet haut) des joueurs en jeu concernés.
-fn buttons<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
+fn buttons<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     let filter = if x.u8(0x3) == 0x8b {
         x.u8(f::PLAYER_ALT)
     } else {
@@ -541,7 +541,7 @@ fn buttons<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
 }
 
 /// 0xc8fb0 : efface une ligne à chaque délai ; à la fin, fenêtre suivante ou disparition.
-fn closing<R: Banc>(x: &mut Cx<'_, R>) {
+fn closing<R: Bench>(x: &mut Cx<'_, R>) {
     if !tick(x) {
         return;
     }
@@ -558,7 +558,7 @@ fn closing<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0xc8fe0 : efface le bord haut, sauf si la fenêtre suivante a la même place et la même largeur.
-fn closed<R: Banc>(x: &mut Cx<'_, R>) {
+fn closed<R: Bench>(x: &mut Cx<'_, R>) {
     let top = x.u32(f::TILES).wrapping_sub(8);
     let width = x.u8(f::WIDTH);
     if (x.u8(f::CHAIN) as i8) < 0 {
@@ -576,7 +576,7 @@ fn closed<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0xc9056 : libération.
-fn free<R: Banc>(x: &mut Cx<'_, R>) {
+fn free<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.a5_u8(ram::WINDOWS).wrapping_sub(1);
     x.set_a5_u8(ram::WINDOWS, n);
     x.set8(f::CLOSED, 0);
@@ -652,7 +652,7 @@ enum Glyph {
 /// Façon de reconnaître un nom par défaut au premier octet du nom.
 #[derive(Clone, Copy)]
 enum Defaults {
-    /// 0xf9 à 0xfe : nom par défaut n° `-octet - 3`.
+    /// 0xf9 à 0xfe : nom par défaut n° `-byte - 3`.
     High,
     /// ≥ 130 : nom par défaut selon l'octet (136, 144, 130, 160, autre).
     Codes,
@@ -660,7 +660,7 @@ enum Defaults {
 
 /// Nom de 6 caractères codés (0x51 = premier glyphe, 0xff fin) en `src`, ou nom par défaut, écrit
 /// avec les glyphes de la table 0xc9216.
-fn name<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, defaults: Defaults, glyph: Glyph) {
+fn name<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, defaults: Defaults, glyph: Glyph) {
     let first = rd8(x.b, src);
     let default = match defaults {
         Defaults::High if first.wrapping_add(1) >= 250 => Some(first.wrapping_neg().wrapping_sub(3).wrapping_mul(4)),
@@ -705,7 +705,7 @@ fn name<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, defaults: Defaul
 }
 
 /// Copie d'un texte jusqu'à 0xfd : `special(c, src)` traite d'abord un octet (vrai s'il l'a fait).
-fn copy_until_end<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, special: &mut dyn FnMut(&mut Cx<'_, R>, &mut Text, u8, &mut u32) -> bool) -> u32 {
+fn copy_until_end<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, special: &mut dyn FnMut(&mut Cx<'_, R>, &mut Text, u8, &mut u32) -> bool) -> u32 {
     loop {
         let c = rd8(x.b, src);
         src += 1;
@@ -725,17 +725,17 @@ fn copy_until_end<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, specia
 }
 
 /// 0xc87de : le texte tel quel.
-fn copy_text<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text) {
+fn copy_text<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text) {
     let src = x.u32(f::TEXT);
     copy_until_end(x, t, src, &mut |_, _, _, _| false);
 }
 
 /// Code 7 suivi de `arg` : insertion (nom...) à la place.
-fn is_insert<R: Banc>(x: &mut Cx<'_, R>, c: u8, src: u32, arg: u8) -> bool {
+fn is_insert<R: Bench>(x: &mut Cx<'_, R>, c: u8, src: u32, arg: u8) -> bool {
     c == 7 && rd8(x.b, src) == arg
 }
 
-fn compose<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot: u32) {
+fn compose<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot: u32) {
     match style {
         1 | 5 | 9 | 11 | 14 | 19 | 20 | 22 => copy_text(x, t),
         // 0xc8816 : titre de classe et nom de chaque joueur présent
@@ -882,7 +882,7 @@ fn compose<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot: u32) {
 }
 
 /// 0xc8844 : titre de la classe du joueur, son nom encadré, et le compte.
-fn title_and_name<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, p: Obj) {
+fn title_and_name<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, p: Obj) {
     let class = (p.u8(x.b, 3) >> 1).wrapping_mul(4);
     let mut src = rd32(x.b, CLASS_TITLES + class as u32);
     loop {
@@ -908,14 +908,14 @@ fn title_and_name<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, p: Obj) {
 }
 
 /// 0xc88e8 : nom précédé de la commande 0xfe 0x18.
-fn prefixed_name<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, src: u32) {
+fn prefixed_name<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, src: u32) {
     t.byte(x, 0xfe);
     t.byte(x, 0x18);
     name(x, t, src, Defaults::High, Glyph::Twice);
 }
 
 /// Crée un objet dans `pool` : actif, type `kind`, variante `variant`.
-fn spawn<R: Banc>(x: &mut Cx<'_, R>, pool: &pools::Pool, kind: u8, variant: u8) -> Option<Obj> {
+fn spawn<R: Bench>(x: &mut Cx<'_, R>, pool: &pools::Pool, kind: u8, variant: u8) -> Option<Obj> {
     let o = pool.alloc(x.b)?;
     o.set_u8(x.b, Obj::ACTIVE, 1);
     o.set_u8(x.b, Obj::KIND, kind);
@@ -925,7 +925,7 @@ fn spawn<R: Banc>(x: &mut Cx<'_, R>, pool: &pools::Pool, kind: u8, variant: u8) 
 
 /// 0xc8a9c : un effet EFFCT 23 (réglé par `PARAM`) lié à la fenêtre, qui la fermera ; texte tel quel.
 /// Sans place, on réessaie à l'image suivante.
-fn linked_effect<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text) {
+fn linked_effect<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text) {
     let setting = x.u8(f::PARAM);
     let Some(o) = spawn(x, &pools::EFFCT, 23, 0) else {
         return x.add8(f::SUB, 0xfe);
@@ -938,7 +938,7 @@ fn linked_effect<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text) {
 
 /// 0xc8b08 : texte en mots ; 0x7001 et 0x7002 insèrent la liste de mots désignée par l'entrée du
 /// moteur de texte selon le nombre de joueurs ; un mot négatif est une commande 0xfe/0xff.
-fn words<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, slot: u32) {
+fn words<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, slot: u32) {
     let mut src = x.u32(f::TEXT);
     let mut list = slot;
     loop {
@@ -971,7 +971,7 @@ fn words<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, slot: u32) {
 /// 0xc8d22 : texte qui parle de l'objet lié (`LINKED`) : code 7 suivi de 6 à 9 (nom, objet
 /// d'équipement) ; à la fin, un SET 15 (variante 17) lié, réglé par `PARAM`. Sans place, on
 /// recommence à l'image suivante.
-fn linked_message<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text) {
+fn linked_message<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text) {
     let src = x.u32(f::TEXT);
     copy_until_end(x, t, src, &mut |x, t, c, src| {
         if c != 7 || (rd8(x.b, *src) as i8) < 6 {
@@ -1002,7 +1002,7 @@ fn linked_message<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text) {
 
 /// 0xc8d88 : message de la première pièce d'équipement du joueur `p` reconnue dans les listes de sa
 /// classe (deux emplacements d'arme, puis six objets).
-fn equipment_message<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, p: Obj) {
+fn equipment_message<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, p: Obj) {
     let (main, items) = EQUIP_LISTS[(p.u8(x.b, 3) >> 1 != 0) as usize];
     let candidates = [(main, p.u8(x.b, EQUIP_A)), (main, p.u8(x.b, EQUIP_B))]
         .into_iter()
@@ -1015,7 +1015,7 @@ fn equipment_message<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, p: Obj) {
 }
 
 /// 0xc8e24 : rang de `item` dans la liste d'octets `list` (terminée par un octet négatif).
-fn find_in_list<R: Banc>(x: &mut Cx<'_, R>, list: u32, item: u8) -> Option<u32> {
+fn find_in_list<R: Bench>(x: &mut Cx<'_, R>, list: u32, item: u8) -> Option<u32> {
     (0..).map_while(|i| {
         let c = rd8(x.b, list + i);
         ((c as i8) >= 0).then_some((i, c))
@@ -1025,7 +1025,7 @@ fn find_in_list<R: Banc>(x: &mut Cx<'_, R>, list: u32, item: u8) -> Option<u32> 
 }
 
 /// 0xc8e5c : message n° `i` (deux tables selon la langue), jusqu'à 0xfd non compris.
-fn message<R: Banc>(x: &mut Cx<'_, R>, t: &mut Text, i: u32) {
+fn message<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, i: u32) {
     let table = if x.a5_u16(ram::LANGUAGE) == 4 { MESSAGES_LANG4 } else { MESSAGES_OTHER };
     let mut src = prog32(x.b, table + 4 * i);
     loop {

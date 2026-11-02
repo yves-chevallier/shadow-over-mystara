@@ -298,7 +298,7 @@ pub(super) fn shot_stagger(w: &mut World, shot: Obj, e: Obj) -> bool {
         e.set_u8(w.b, f::STAGGER_DELAY, 0xb4);
     }
     w.spark(Spark::Linked, shot, e, 1);
-    crate::sound::jouer(w.b, 0xe745a, shot);
+    crate::sound::play(w.b, 0xe745a, shot);
     true
 }
 
@@ -386,7 +386,7 @@ pub(super) fn shot_spark(w: &mut World, shot: Obj, e: Obj, owner: Obj) -> bool {
     let fl = shot.u8(w.b, f::FLIP) ^ 0x20;
     e.set_u8(w.b, f::REACTION_FLIP, fl);
     w.spark(Spark::Linked, shot, e, 1);
-    crate::sound::jouer(w.b, 0xe7376, shot);
+    crate::sound::play(w.b, 0xe7376, shot);
     true
 }
 

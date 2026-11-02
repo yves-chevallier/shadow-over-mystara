@@ -1,13 +1,13 @@
 //! Boss 8, état 4 « touché » (0x89292). Groupes `+5` : 0 réaction (routine commune des ennemis choisie par le code de coup
 //! `+0x49` dans la table de longs 0x89330), 2 projeté, 4 chute, 6 mort, 8 et 10 retour au combat.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::aids;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::machine::Machine;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HIT_ACK, 0);
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
@@ -24,16 +24,16 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-fn step<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
+fn step<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch(x, table, f::SUB2)
 }
 
-fn paused<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn paused<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PAUSE.get(x.b) != 0
 }
 
 /// 0x892ce : le coup est traité par la routine commune ; sans PV le boss meurt.
-fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set_bit(0x1, 1, false);
     }
@@ -58,7 +58,7 @@ fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x893dc : le boss est projeté en arrière, rebondit, puis se relève ou riposte.
-fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
+fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -96,12 +96,12 @@ fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
             x.set32(0x58, 0);
             x.set32(0x14, 0);
             let n = var::PLAYERS_ALIVE.get(x.b) as u32;
-            // D5 = l'index (reste relu par les gestionnaires suivants, `dispatch::Restes`)
+            // D5 = l'index (reste relu par les gestionnaires suivants, `dispatch::Leftovers`)
             let i = ((n as u16) << 2) as u32;
             *x.c.d5() = i;
             let mask = rom32(x, 0x894cc + i);
-            let alea = x.random();
-            let i = alea & 0x1f;
+            let rng = x.random();
+            let i = rng & 0x1f;
             if mask >> i & 1 == 0 {
                 x.set8(0, 1);
                 x.set32(f::STATE, 0x0202_0000);
@@ -122,7 +122,7 @@ fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x894f4 : chute, attente au sol, relevé.
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x89500) {
         0x8950a => {
             x.add8(f::SUB2, 2);
@@ -176,7 +176,7 @@ fn fall<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x895c2 : mort (chute, effets, attente, clignotement, libération).
-fn death<R: Banc>(x: &mut Cx<'_, R>) {
+fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x895d0, f::SUB2) {
         0x895da => {
             x.add8(f::SUB2, 2);

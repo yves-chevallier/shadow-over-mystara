@@ -1,19 +1,19 @@
 //! Type 4, charges vers un joueur (sous-état `+5 = 8`, 0x5e7ea).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::stance::engage;
 use super::*;
 use crate::objects::Obj;
 
 /// Retour en garde, puis test de la portée de la cible (0x5e980).
-fn back_on_guard<R: Banc>(x: &mut Cx<'_, R>) {
+fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, ACTIVE_ENGAGE);
     body(x, 2);
     speed(x, 0xb);
     engage(x);
 }
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => stand(x),
         2 => dash_x(x),
@@ -24,7 +24,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Attend un instant debout (`+0xa0` images), puis la bête repart.
-fn stand<R: Banc>(x: &mut Cx<'_, R>) {
+fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -45,7 +45,7 @@ fn stand<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Course vers la cible : `timer` images, direction `angle`, animation `want`/`n`, vitesse `speed_n`.
-fn dash_begin<R: Banc>(x: &mut Cx<'_, R>, angle: u8, timer: u8, want: u8, n: u32, speed_n: u32) {
+fn dash_begin<R: Bench>(x: &mut Cx<'_, R>, angle: u8, timer: u8, want: u8, n: u32, speed_n: u32) {
     x.add8(0x7, 2);
     x.set8(Obj::SPEED_INDEX, angle);
     x.set8(TIMER, timer);
@@ -55,7 +55,7 @@ fn dash_begin<R: Banc>(x: &mut Cx<'_, R>, angle: u8, timer: u8, want: u8, n: u32
 }
 
 /// La course dure tant que `+0xa0` ne tombe pas à zéro ; ensuite la bête se remet debout.
-fn dash_run<'a, R: Banc>(x: &mut Cx<'a, R>, advance: fn(&mut Cx<'a, R>)) {
+fn dash_run<'a, R: Bench>(x: &mut Cx<'a, R>, advance: fn(&mut Cx<'a, R>)) {
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);
     if t == 0 {
@@ -66,7 +66,7 @@ fn dash_run<'a, R: Banc>(x: &mut Cx<'a, R>, advance: fn(&mut Cx<'a, R>)) {
 }
 
 /// +6 = 2 (0x5e85c) : course horizontale vers le côté de la cible.
-fn dash_x<R: Banc>(x: &mut Cx<'_, R>) {
+fn dash_x<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             let right = target_dx(x).is_some_and(|dx| dx >= 0);
@@ -78,7 +78,7 @@ fn dash_x<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 (0x5e8ee) : course en profondeur vers la cible, par la table de vitesses puis balistique.
-fn dash_y<R: Banc>(x: &mut Cx<'_, R>) {
+fn dash_y<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             let below = target_dy(x).is_some_and(|dy| dy >= 0);

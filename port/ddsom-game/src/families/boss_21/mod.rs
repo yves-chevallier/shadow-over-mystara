@@ -1,4 +1,4 @@
-//! Boss de type 21 (0x9947a), scène 44. Voir `docs/familles/boss.md`.
+//! Boss de type 21 (0x9947a), scène 44. Voir `docs/families/boss.md`.
 //!
 //! Cousin du boss 17 (`boss_17`) : même charpente (`+4` état, `+5` groupe, `+6` et `+7` étapes, états posés d'un
 //! coup en longs), mêmes bibliothèques d'IA, même ralenti (`+0xbb`) ; les tables de la ROM, les attaques et
@@ -15,7 +15,7 @@
 //! Animations : 0x1836ec (mouvements), 0x18371c (coups), 0x18373a (recul). `+0xa0` est le jeu courant
 //! (0x30 et 0x31 : séquences sans ombre ni test de zone) et `+0xa1` l'animation en cours.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -72,7 +72,7 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Jeux d'animations.
 pub(self) const SET_BODY: u32 = 0x1836ec;
@@ -80,15 +80,15 @@ pub(self) const SET_STRIKE: u32 = 0x18371c;
 pub(self) const SET_HURT: u32 = 0x18373a;
 
 /// Lance l'animation `n` du jeu des mouvements / des coups par l'IA (`0x103d6`).
-pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_STRIKE, n);
 }
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -132,7 +132,7 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     pick_target(x);
     x.set8(PHASES, 4);
@@ -163,7 +163,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = tst8(x, f::FREEZE);
     if freeze.gt() {
         sub8(x, f::FREEZE, 1);
@@ -183,7 +183,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+5` = 6, 8, 10 (0x9a36a) : attend que des joueurs reviennent.
-fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) as i8 > 0 {
         return decide::chase(x);
     }
@@ -204,7 +204,7 @@ fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Un effet (EFFCT) lié au boss (`+0x42`) : octet actif, type, variante, orientation du boss.
 /// `retry` : insiste tant que le pool est plein.
-pub(self) fn effect<R: Banc>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8>, flip: bool) -> Option<Obj> {
+pub(self) fn effect<R: Bench>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8>, flip: bool) -> Option<Obj> {
     let e = if retry { alloc_retry(x, &pools::EFFCT)? } else { x.alloc(&pools::EFFCT)? };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, kind);
@@ -220,19 +220,19 @@ pub(self) fn effect<R: Banc>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: 
 }
 
 /// 0x9ae52 : un nuage de poussière (effet 0x32, variante 4).
-pub(self) fn dust<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn dust<R: Bench>(x: &mut Cx<'_, R>) {
     effect(x, false, 0x32, Some(4), true);
 }
 
 /// 0x9ae4c : idem, sauf pendant le ralenti.
-pub(self) fn dust_unless_slow<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn dust_unless_slow<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SLOW) == 0 {
         dust(x);
     }
 }
 
 /// 0x9ae2a : pas du ralenti : la poussière tombe tous les 11 pas (mode 1) ou 7 pas (mode 2).
-pub(self) fn slow_tick<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn slow_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SLOW) == 0 {
         return;
     }
@@ -246,7 +246,7 @@ pub(self) fn slow_tick<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x9947a "boss_21" #[sans] run,
+    0x9947a "boss_21" #[without] run,
     // relevé après une réaction commune (table 0x3e000 de `reactions.rs`)
     0x9a6d4 "boss_21_releve" hit::recovered,
 }

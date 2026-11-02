@@ -26,7 +26,7 @@ pub fn start_stand(g: &mut Ctx, p: Player) {
     animation::start(g, p, anim);
 }
 
-/// Entrées par adresse de `to_stand` (0x35614, appelée par `aides.rs`) et `start_stand` (0x35620). Les
+/// Entrées par adresse de `to_stand` (0x35614, appelée par `aids.rs`) et `start_stand` (0x35620). Les
 /// registres que laissait l'animation (D5, D6, A4) ne sont relus par personne (`DDSOM_POISON=anim`).
 fn stand_native(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, reset: bool) {
     let p = Player(c.a[0]);
@@ -42,7 +42,7 @@ fn stand_native(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, reset: bool) {
 pub const TO_STAND: crate::Native = crate::Native {
     entry: 0x35614,
     name: "player_to_stand",
-    run: crate::Corps::Processeur(|c, b| stand_native(c, b, true)),
+    run: crate::Body::Processeur(|c, b| stand_native(c, b, true)),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };
@@ -50,7 +50,7 @@ pub const TO_STAND: crate::Native = crate::Native {
 pub const START_STAND: crate::Native = crate::Native {
     entry: 0x35620,
     name: "player_start_stand",
-    run: crate::Corps::Processeur(|c, b| stand_native(c, b, false)),
+    run: crate::Body::Processeur(|c, b| stand_native(c, b, false)),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };

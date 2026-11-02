@@ -7,13 +7,13 @@
 //! - 75 : bouton de menu, une machine à sept sous-états ;
 //! - 79 : clignotement d'un objet ramassé, détecté par les joueurs voisins.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use crate::machine::Machine;
 use super::cx::{handlers, Cx};
 use crate::mem::{rd16, rd8, wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Valeurs de l'octet d'état `+4` (le suivant se calcule par `+2`).
 mod state {
@@ -65,11 +65,11 @@ fn players() -> impl Iterator<Item = u32> {
 }
 
 /// Créateur de l'objet.
-fn owner<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
+fn owner<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
     x.linked(f::OWNER)
 }
 
-fn free<R: Banc>(x: &mut Cx<'_, R>) {
+fn free<R: Bench>(x: &mut Cx<'_, R>) {
     x.free(&pools::EFFCT);
 }
 
@@ -78,7 +78,7 @@ fn free<R: Banc>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 /// 0xb8dc2 : crée le clignotement (type 79) sur la position de l'objet, un cran plus haut.
-fn spawn_blink<R: Banc>(x: &mut Cx<'_, R>) {
+fn spawn_blink<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(blink) = x.alloc(&pools::EFFCT) else { return };
     wr8(x.b, blink.0, 1);
     wr8(x.b, blink.0 + 2, 79);
@@ -92,7 +92,7 @@ fn spawn_blink<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0xa532e : crée le tir d'éclat de ramassage (ESHL de type 55) à l'endroit où le détecteur est touché.
-fn spawn_pickup_flash<R: Banc>(x: &mut Cx<'_, R>) {
+fn spawn_pickup_flash<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(Obj(flash)) = x.alloc(&pools::ESHL) else { return };
     wr8(x.b, flash, 1);
     wr8(x.b, flash + 2, 55);
@@ -105,7 +105,7 @@ fn spawn_pickup_flash<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Un joueur marche sur le détecteur : à 6 pixels en profondeur et 8 en x près.
-fn player_on_detector<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn player_on_detector<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let (depth, across) = (x.u16(Obj::Y), x.u16(Obj::X));
     players().any(|player| {
         rd8(x.b, player) != 0
@@ -114,7 +114,7 @@ fn player_on_detector<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     })
 }
 
-fn pickup_detector<R: Banc>(x: &mut Cx<'_, R>) {
+fn pickup_detector<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);
@@ -136,7 +136,7 @@ fn pickup_detector<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn pickup_waiting<R: Banc>(x: &mut Cx<'_, R>) {
+fn pickup_waiting<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x40) != 0 || x.a5_u8(PAUSED) != 0 {
         return;
     }
@@ -152,13 +152,13 @@ fn pickup_waiting<R: Banc>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 /// Clignotement : caché une image sur deux selon la parité du compteur d'images de partie.
-fn blink_by_frame<R: Banc>(x: &mut Cx<'_, R>) {
+fn blink_by_frame<R: Bench>(x: &mut Cx<'_, R>) {
     let hidden = x.a5_u16(0x6e) & 1 == 0;
     let flags = x.u8(f::FLAGS);
     x.set8(f::FLAGS, if hidden { flags | 2 } else { flags & !2 });
 }
 
-fn victory_screen<R: Banc>(x: &mut Cx<'_, R>) {
+fn victory_screen<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);
@@ -167,7 +167,7 @@ fn victory_screen<R: Banc>(x: &mut Cx<'_, R>) {
             x.set16(Obj::Y, cy);
             x.set16(Obj::Z, 0x80);
             x.set16(0x18, 0xf000);
-            crate::sound::jouer(x.b, rom::SOUND_0ED11C, x.o);
+            crate::sound::play(x.b, rom::SOUND_0ED11C, x.o);
             x.anim_start(anims::INTERFACE, 0);
         }
         state::ACTIVE => victory_active(x),
@@ -178,7 +178,7 @@ fn victory_screen<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn victory_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn victory_active<R: Bench>(x: &mut Cx<'_, R>) {
     let creator = owner(x);
     match x.u8(f::SUB_STATE) {
         0 => {
@@ -196,7 +196,7 @@ fn victory_active<R: Banc>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB_STATE, 2);
             blink_by_frame(x);
-            crate::sound::jouer(x.b, rom::SOUND_0ED056, x.o);
+            crate::sound::play(x.b, rom::SOUND_0ED056, x.o);
             x.anim_start(anims::INTERFACE, 1);
         }
         4 => {
@@ -206,7 +206,7 @@ fn victory_active<R: Banc>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB_STATE, 2);
-            crate::sound::jouer(x.b, rom::SOUND_0ED90A, x.o);
+            crate::sound::play(x.b, rom::SOUND_0ED90A, x.o);
             x.anim_start(anims::INTERFACE, 2);
         }
         6 => {
@@ -223,7 +223,7 @@ fn victory_active<R: Banc>(x: &mut Cx<'_, R>) {
 // Type 74 : bulle à côté du créateur
 // ---------------------------------------------------------------------------------------------
 
-fn bubble<R: Banc>(x: &mut Cx<'_, R>) {
+fn bubble<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::OWNER) == 0 {
         return x.set32(f::STATE, 0x0600_0000);
     }
@@ -296,7 +296,7 @@ const MENU_STEP: u32 = 0xff2a38;
 /// Variable `A5+0x2e` : étape de la sélection.
 const SELECT_STEP: u32 = 0x2e;
 
-fn menu_button<R: Banc>(x: &mut Cx<'_, R>) {
+fn menu_button<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);
@@ -318,11 +318,11 @@ fn menu_button<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn menu_step<R: Banc>(x: &mut Cx<'_, R>) -> u8 {
+fn menu_step<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     crate::mem::rd8(x.b, MENU_STEP)
 }
 
-fn menu_button_active<R: Banc>(x: &mut Cx<'_, R>) {
+fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::VARIANT) != 0 {
         x.anim_step();
         return;
@@ -342,7 +342,7 @@ fn menu_button_active<R: Banc>(x: &mut Cx<'_, R>) {
         2 => {
             if x.anim_step() {
                 advance(x, 5);
-                crate::sound::jouer(x.b, rom::SOUND_0ECF10, x.o);
+                crate::sound::play(x.b, rom::SOUND_0ECF10, x.o);
             } else if x.u8(0x33) != 0 {
                 x.set8(0x33, 0);
                 // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
@@ -364,7 +364,7 @@ fn menu_button_active<R: Banc>(x: &mut Cx<'_, R>) {
                 let flags = x.u8(f::FLAGS) & !2;
                 x.set8(f::FLAGS, flags);
                 x.anim_start(anims::MENU, 6);
-                crate::sound::jouer(x.b, rom::SOUND_0ECF10, x.o);
+                crate::sound::play(x.b, rom::SOUND_0ECF10, x.o);
             }
         }
         8 => {
@@ -375,7 +375,7 @@ fn menu_button_active<R: Banc>(x: &mut Cx<'_, R>) {
         10 => {
             if menu_step(x) == 28 {
                 advance(x, 5);
-                crate::sound::jouer(x.b, rom::SOUND_0ECF10, x.o);
+                crate::sound::play(x.b, rom::SOUND_0ECF10, x.o);
             } else {
                 x.anim_step();
             }
@@ -394,7 +394,7 @@ fn menu_button_active<R: Banc>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 /// Un joueur vivant, de classe 5, est à portée (32 en profondeur, 96 en x).
-fn class_5_player_near<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn class_5_player_near<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let (depth, across) = (x.u16(Obj::Y), x.u16(Obj::X));
     players().any(|player| {
         rd8(x.b, player) != 0
@@ -405,7 +405,7 @@ fn class_5_player_near<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     })
 }
 
-fn blinking<R: Banc>(x: &mut Cx<'_, R>) {
+fn blinking<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         state::INIT => {
             x.add8(f::STATE, 2);
@@ -457,9 +457,9 @@ fn blinking<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xb841c "effct_detecteur" #[sans] pickup_detector,
-    0xb84c6 "effct_victoire" #[sans] victory_screen,
-    0xb85fa "effct_bulle_createur" #[sans] bubble,
-    0xb871a "effct_bouton" #[sans] menu_button,
-    0xb8df2 "effct_clignotement" #[sans] blinking,
+    0xb841c "effct_detecteur" #[without] pickup_detector,
+    0xb84c6 "effct_victoire" #[without] victory_screen,
+    0xb85fa "effct_bulle_createur" #[without] bubble,
+    0xb871a "effct_bouton" #[without] menu_button,
+    0xb8df2 "effct_clignotement" #[without] blinking,
 }

@@ -1,4 +1,4 @@
-//! Ennemi « Mud Golem » (ENEMY type 11, 0x67854). Voir `docs/familles/enemy.md`.
+//! Ennemi « Mud Golem » (ENEMY type 11, 0x67854). Voir `docs/families/enemy.md`.
 //!
 //! Un colosse lent dont le code est un amas de gestes : coups de poing (animations 0x15eef4), sauts, bonds
 //! latéraux, marche. Quand il se tient debout (`+5` = 0 ou 2), il est piloté par les touches du quatrième joueur
@@ -15,8 +15,8 @@
 //! Animations 0x15eed8 (mouvements) et 0x15eef4 (coups). Beaucoup de gestes partagent trois étapes communes :
 //! `next_anim` (0x6935c), `wait` (0x69346, attente de `+0x77` images) et `turn` (0x6899a, demi-tour).
 
-use crate::families::cx::Banc;
-use crate::objects::Courant;
+use crate::families::cx::Bench;
+use crate::objects::Current;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -49,7 +49,7 @@ pub(self) const SET_MOVE: u32 = 0x15eed8;
 pub(self) const SET_STRIKE: u32 = 0x15eef4;
 pub(self) const STANCE: u32 = 0x0202_0000;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -65,29 +65,29 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// Démarre l'animation `n` du jeu des mouvements.
-pub(self) fn mv<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
 /// Démarre l'animation `n` du jeu des coups.
-pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
 /// Fixe le type de coup et sa force.
-pub(self) fn set_strike<R: Banc>(x: &mut Cx<'_, R>, kind: u8, power: u8) {
+pub(self) fn set_strike<R: Bench>(x: &mut Cx<'_, R>, kind: u8, power: u8) {
     x.set8(STRIKE_KIND, kind);
     x.set8(STRIKE_POWER, power);
 }
 
 /// 0x6935c : étape suivante, animation 0.
-pub(self) fn next_anim<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn next_anim<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     mv(x, 0);
 }
 
 /// 0x69346 : attend `+0x77` images (compte à rebours), puis étape suivante.
-pub(self) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(AI_WAIT);
     if n != 0 {
         let m = n.wrapping_sub(1);
@@ -100,7 +100,7 @@ pub(self) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6899a : demi-tour selon `+0xa6` (0 ou 1 : rien, 2 : animation 1 puis 3 : attend la fin et se retourne).
-pub(self) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     let side = x.u8(SIDE) as i8;
     if side < 2 {
         return x.add8(f::SUB3, 2);
@@ -119,7 +119,7 @@ pub(self) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x689e6 : mémorise dans `+0xa6` si la cible est derrière (2) ou devant (0) ; vrai si derrière.
-pub(self) fn target_behind<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let mut d1 = 0u32;
     if x.u16(f::TARGET) != 0 {
         let target = load_target(x);
@@ -137,7 +137,7 @@ pub(self) fn target_behind<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x68910 : drapeau de coup reçu `+0x8f` : rend vrai quand l'état doit continuer normalement.
-pub(self) fn hit_gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+pub(self) fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let v = x.u8(HIT_FLAG);
     if v == 0 {
         return true;
@@ -177,7 +177,7 @@ pub(self) fn hit_gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Octet tiré au hasard dans la rangée de difficulté de `table`.
-pub(self) fn row_byte<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u8 {
+pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
     let r = rand_and(x, 0x1f);
@@ -185,7 +185,7 @@ pub(self) fn row_byte<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u8 {
 }
 
 /// 0x690ce : choisit le geste suivant (`+5` = 8) d'après la distance de la cible, ou se remet debout.
-pub(self) fn choose<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn choose<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     if x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
@@ -207,7 +207,7 @@ pub(self) fn choose<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x67ea4 : relance l'animation 2 en reprenant le temps et le drapeau de fin de l'animation précédente
 /// (au plus huit images d'avance), marque le coup et mémorise la position.
-pub(self) fn restart_walk<R: Banc>(x: &mut Cx<'_, R>) {
+pub(self) fn restart_walk<R: Bench>(x: &mut Cx<'_, R>) {
     let time = x.u16(ANIM_TIME);
     let end = x.u16(ANIM_END);
     mv(x, 2);
@@ -236,7 +236,7 @@ pub(self) fn restart_walk<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     lib::initial_hp(x);
     let (bx, by) = if var::CAMERA_SELECT.get(x.b) != 0 { (0x556, 0x55a) } else { (0x506, 0x50a) };
@@ -253,7 +253,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -271,5 +271,5 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x67854 "enemy_11" #[sans] run,
+    0x67854 "enemy_11" #[without] run,
 }

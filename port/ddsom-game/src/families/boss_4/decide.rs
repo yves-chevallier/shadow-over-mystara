@@ -4,17 +4,17 @@
 //! lit dans une table d'octets de la ROM (choisie selon la phase `+0xaa` et, pour les deux boîtes de l'IA, le geste
 //! 1 ou 2 rendu par 0x1047a) un indice dans une table de sauts vers l'un des états ci-dessous.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 
 /// 0x8328e : combat, debout.
-pub(super) fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set32(f::STATE, 0x0202_0000);
 }
 
 /// 0x8329e : demi-tour, puis reprise de l'état en cours.
-pub(super) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let s = x.u32(f::STATE);
     x.set32(SAVED_STATE, s);
@@ -22,57 +22,57 @@ pub(super) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x832b2 : marche vers la cible, pas rapides (tir 0x38).
-pub(super) fn walk<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(SHOT, 0x38);
     x.set32(f::STATE, 0x0202_0400);
 }
 
 /// 0x832c8 : marche lente (tir 0x39).
-pub(super) fn walk_slow<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn walk_slow<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     x.set8(SHOT, 0x39);
     x.set32(f::STATE, 0x0202_0600);
 }
 
 /// 0x832de / 0x832f0 : charge vers le milieu de l'écran, ou vers la cible.
-pub(super) fn charge<R: Banc>(x: &mut Cx<'_, R>, at_target: bool) {
+pub(super) fn charge<R: Bench>(x: &mut Cx<'_, R>, at_target: bool) {
     x.set8(VULNERABLE, 0);
     x.set8(CHARGE_AT_TARGET, at_target as u8);
     x.set32(f::STATE, 0x0202_0800);
 }
 
 /// 0x83304 : bond en arrière.
-fn hop<R: Banc>(x: &mut Cx<'_, R>) {
+fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     x.set32(f::STATE, 0x0202_0a00);
 }
 
 /// Attaque `n` (`+6` = 2n du groupe 4), vulnérable ou non.
-fn attack<R: Banc>(x: &mut Cx<'_, R>, n: u8, vulnerable: bool) {
+fn attack<R: Bench>(x: &mut Cx<'_, R>, n: u8, vulnerable: bool) {
     x.set8(VULNERABLE, vulnerable as u8);
     x.set32(f::STATE, 0x0204_0000 | (n as u32 * 2) << 8);
 }
 
 /// 0x8333e : traversée de l'écran en vol (attaque 3), invulnérable.
-pub(super) fn swoop<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn swoop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     attack(x, 3, false);
 }
 
 /// Le premier double est-il occupé (`+0xaf`) ? Les souffles cèdent alors la place à une autre attaque.
-fn double_busy<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn double_busy<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let d = double(x, DOUBLE_A);
     d.u8(x.b, 0xaf) != 0
 }
 
 /// 0x833ac : attente d'un joueur.
-pub(super) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 
 /// Pose l'état de la routine `target` d'une table de sauts de décision.
-fn enter<R: Banc>(x: &mut Cx<'_, R>, target: u32) {
+fn enter<R: Bench>(x: &mut Cx<'_, R>, target: u32) {
     match target {
         0x8328e => idle(x),
         0x832c8 => walk_slow(x),
@@ -110,31 +110,31 @@ fn enter<R: Banc>(x: &mut Cx<'_, R>, target: u32) {
 }
 
 /// `move.w (tbl,PC,Dn),Dn ; jmp (tbl,PC,Dn)` : adresse d'arrivée pour l'indice `i` (mot de `D0` mis à jour).
-fn jump<R: Banc>(x: &mut Cx<'_, R>, table: u32, i: u16) -> u32 {
+fn jump<R: Bench>(x: &mut Cx<'_, R>, table: u32, i: u16) -> u32 {
     let off = x.rom16(table + i as u32);
     table.wrapping_add(off as i16 as i32 as u32)
 }
 
 /// Tire `r` (0 à 15), lit l'indice de saut dans `bytes`, puis entre dans l'état désigné par la table `jumps`.
-fn roll<R: Banc>(x: &mut Cx<'_, R>, r: u32, bytes: u32, jumps: u32) {
+fn roll<R: Bench>(x: &mut Cx<'_, R>, r: u32, bytes: u32, jumps: u32) {
     let k = x.rom8(bytes + r);
     let t = jump(x, jumps, k as u16);
     enter(x, t)
 }
 
 /// Phase `+0xaa` (octet étendu en mot).
-fn phase<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn phase<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     x.u8(PHASE) as i8 as i16 as u16
 }
 
 /// 0x830ce : la cible est dans la boîte large (0x7ef4) : table 0x830e4 (un seul choix, le bond en arrière).
-pub(super) fn from_wide_box<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn from_wide_box<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     roll(x, r, 0x830e4, 0x830f4);
 }
 
 /// 0x830f6 : la cible est tout près (0xb5e0) : selon la phase, tables 0x8312e, 0x8313e, 0x8314e.
-pub(super) fn from_close<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let p = phase(x).wrapping_add(phase(x));
     setw(x, 1, p);
@@ -144,7 +144,7 @@ pub(super) fn from_close<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x83164 (boîte proche, `near`) et 0x831f6 (boîte lointaine) : selon la phase et le geste `gesture` (1 ou 2) de
 /// l'IA.
-pub(super) fn from_ai<R: Banc>(x: &mut Cx<'_, R>, gesture: u16, near: bool) {
+pub(super) fn from_ai<R: Bench>(x: &mut Cx<'_, R>, gesture: u16, near: bool) {
     setw(x, 2, gesture);
     let r = rand_and(x, 0xf);
     let p = phase(x);

@@ -1,24 +1,24 @@
 //! Boss 11/12, groupe 4 : les huit attaques (`+6` = 0 à 14), étapes `+7` = 0, 2, 4...
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::behave::life_rank;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::machine::Machine;
 
-fn step<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
+fn step<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch0(x, table, f::SUB3)
 }
 
-fn cam_x<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn cam_x<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) }
 }
 
-fn cam_y<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
+fn cam_y<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_Y.get(x.b) } else { var::SCROLL_Y.get(x.b) }
 }
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match dispatch0(x, 0x8dbde, f::SUB2) {
         0x8dbee => strike(x),
         0x8dc44 => spit(x),
@@ -32,7 +32,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8dc30 : coup de queue (le effet dépend du type).
-fn sting<R: Banc>(x: &mut Cx<'_, R>) {
+fn sting<R: Bench>(x: &mut Cx<'_, R>) {
     if is_12(x) {
         lib::sound(x, 0xe4de6)
     } else {
@@ -41,7 +41,7 @@ fn sting<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8dbee (`+6` = 0) : un coup.
-fn strike<R: Banc>(x: &mut Cx<'_, R>) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>) {
     set44(x, 1);
     if step(x, 0x8dc02) == 0x8dc06 {
         x.add8(f::SUB3, 2);
@@ -59,7 +59,7 @@ fn strike<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8dc44 (`+6` = 2) : crachat (types 11 et 12 : projectiles différents).
-fn spit<R: Banc>(x: &mut Cx<'_, R>) {
+fn spit<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x8dc52) {
         0x8dc5c => {
             x.add8(f::SUB3, 2);
@@ -86,18 +86,18 @@ fn spit<R: Banc>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.set8(f::KEY_FRAME, 0);
-            let alea = x.random();
+            let rng = x.random();
             if is_12(x) {
-                let r = alea & 3;
+                let r = rng & 3;
                 setw(x, 0, r);
                 if r == 0 {
-                    return crate::families::eshl_creators::fragments_45(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
+                    return crate::families::eshl_creators::fragments_45(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
                 }
-                return crate::families::eshl_creators::boss11_shards(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
+                return crate::families::eshl_creators::boss11_shards(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
             }
-            let r = alea & 7;
+            let r = rng & 7;
             setw(x, 0, r);
-            crate::families::eshl_creators::fragments_42(&mut crate::families::effects_creators::restes::Pur, x.b, x.o, r)
+            crate::families::eshl_creators::fragments_42(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o, r)
         }
         0x8dcec => {
             if x.anim_step() {
@@ -116,7 +116,7 @@ fn spit<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Orientation vers la caméra : D1b = 0 ou 0x20, D2w = ±vitesse (la tête saute vers le centre de l'écran).
-fn jump_side<R: Banc>(x: &mut Cx<'_, R>, speed: i16, z: u16, rise: u16) {
+fn jump_side<R: Bench>(x: &mut Cx<'_, R>, speed: i16, z: u16, rise: u16) {
     stop(x);
     let mut d0 = cam_x(x);
     let mut side = 0;
@@ -134,7 +134,7 @@ fn jump_side<R: Banc>(x: &mut Cx<'_, R>, speed: i16, z: u16, rise: u16) {
 }
 
 /// Atterrissage d'un bond : la hauteur redevient nulle, le serpent s'immobilise (bruit et poussière).
-fn landing<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn landing<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step();
     sync(x);
     x.move_xz();
@@ -150,7 +150,7 @@ fn landing<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8dd1c (`+6` = 4) : bond sur l'adversaire.
-fn leap<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xb2, 1);
     match step(x, 0x8dd30) {
         0x8dd36 => {
@@ -171,7 +171,7 @@ fn leap<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e2ea (`+6` = 14) : bond plus long (vitesse -0x100).
-fn leap_c<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_c<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xb2, 1);
     match step(x, 0x8e2fe) {
         0x8e304 => {
@@ -192,7 +192,7 @@ fn leap_c<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8ddcc (`+6` = 6) : élan puis chute.
-fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
+fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x8ddda) {
         0x8dde0 => {
             x.add8(f::SUB3, 2);
@@ -233,7 +233,7 @@ fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8de64 (`+6` = 8) : charge sur un joueur (cap pris dans la table de 0x1376).
-fn charge<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xb2, 1);
     let mut t = step(x, 0x8de78);
     if t == 0x8de82 {
@@ -300,7 +300,7 @@ fn charge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8df38 : fin de la charge, freinage.
-fn charge_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     let a = asr_w(x.u16(0x14), 2);
     x.set16(0x14, a);
@@ -311,7 +311,7 @@ fn charge_end<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8df70 : choisit une cible (0x1376 donne le cap) ; faux sans joueur.
-fn aim_target<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn aim_target<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let Some(target) = lib::target_by_criterion(x, lib::LOWEST_HP) else {
         return false;
     };
@@ -321,11 +321,11 @@ fn aim_target<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8df8e : durée de la charge (`+0xb0`, table 0x8dfcc selon le rang de vie) puis `pause_tick`.
-fn seg_choice<R: Banc>(x: &mut Cx<'_, R>) {
+fn seg_choice<R: Bench>(x: &mut Cx<'_, R>) {
     let i = life_rank(x) & 0x30;
     let a4 = 0x8dfcc + i as u32;
-    let alea = x.random();
-    let r = alea & 0xf;
+    let rng = x.random();
+    let r = rng & 0xf;
     setw(x, 0, r);
     let v = x.data8(a4 + r as u32);
     x.set8(0xb0, v);
@@ -333,15 +333,15 @@ fn seg_choice<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8dfaa : pas entre deux visées (`+0xb1`, table 0x8dfbc).
-fn pause_tick<R: Banc>(x: &mut Cx<'_, R>) {
-    let alea = x.random();
-    let r = alea & 0xf;
+fn pause_tick<R: Bench>(x: &mut Cx<'_, R>) {
+    let rng = x.random();
+    let r = rng & 0xf;
     let v = x.rom8(0x8dfbc + r as u32);
     x.set8(0xb1, v);
 }
 
 /// 0x8e00c (`+6` = 10) : approche en suivant un tracé (table 0x8e0f8).
-fn approach<R: Banc>(x: &mut Cx<'_, R>) {
+fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xb2, 1);
     match step(x, 0x8e020) {
         0x8e026 => {
@@ -377,12 +377,12 @@ fn approach<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8e0a2 : tracé tiré selon la distance à la caméra (trois tables identiques dans la ROM).
-fn route_start<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn route_start<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let d1 = cam_x(x);
     let d0 = x.u16(0x8).wrapping_sub(d1);
     setw(x, 0, d0);
-    let alea = x.random();
-    let r = alea & 0xf;
+    let rng = x.random();
+    let r = rng & 0xf;
     setw(x, 0, r);
     let v = x.data8(0x8e1e8 + r as u32);
     setb(x, 0, v);
@@ -393,7 +393,7 @@ fn route_start<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8e0e8 : point suivant du tracé ; vrai s'il reste du chemin (la durée du pas va en `+0xb0`).
-fn route_step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn route_step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let route = x.u8(0xb4) as u32;
     let off = x.rom16(0x8e0f8 + route);
     let a1 = 0x8e0f8u32.wrapping_add(off as i16 as i32 as u32);
@@ -408,7 +408,7 @@ fn route_step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { A5 + 0x54e } else { A5 + 0x4fe };
     let d1 = rd16(x.b, cam + 8).wrapping_add(x.data16(a1));
     let d2 = rd16(x.b, cam + 0xc).wrapping_add(x.data16(a1 + 2));
-    // D2.w, D3.w et D4.w : restes pour les gestionnaires suivants (`dispatch::Restes`)
+    // D2.w, D3.w et D4.w : restes pour les gestionnaires suivants (`dispatch::Leftovers`)
     setw(x, 2, d2);
     let (px, py) = (x.u16(0x8), x.u16(0x10));
     setw(x, 3, px);
@@ -491,7 +491,7 @@ fn route_step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8e20a (`+6` = 12, type 12 seulement) : crachat de projectile à tête chercheuse.
-fn spit_c<R: Banc>(x: &mut Cx<'_, R>) {
+fn spit_c<R: Bench>(x: &mut Cx<'_, R>) {
     match step(x, 0x8e218) {
         0x8e222 => {
             if !is_12(x) {

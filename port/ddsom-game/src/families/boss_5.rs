@@ -1,4 +1,4 @@
-//! Boss de type 5 (0x8341c), scène 58 : Ezerhorden (h). Voir `docs/familles/boss.md`.
+//! Boss de type 5 (0x8341c), scène 58 : Ezerhorden (h). Voir `docs/families/boss.md`.
 //!
 //! Gabarit ancien, sans cinématique : l'état `+4` (0 création, 2 actif, 4 touché, 6 libération) et le groupe
 //! `+5` (multiples de 4) sont posés champ par champ, `+6` est l'étape. `0x83e3e` (`next_action`) choisit le
@@ -16,7 +16,7 @@
 //!
 //! Animations : 0x175da6 (corps), 0x175dc4 (attaques), 0x175e0c (chute, mort).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::boss_common::*;
 use super::cx::handlers;
 use crate::objects::Obj;
@@ -40,7 +40,7 @@ mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Le gestionnaire (0x8341c), que la boucle d'aiguillage laisse dans A1.
 const HANDLER: u32 = 0x8341c;
@@ -52,7 +52,7 @@ const SET_FALL: u32 = 0x175e0c;
 const SPIN_VECTORS: u32 = 0x1c94b6;
 
 /// Entrée : le jeu ne passe pas par le hook de pause.
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -64,26 +64,26 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// 0x83dfe, 0x83e12, 0x83e28 : démarre le script `n` d'un des trois jeux d'animations.
-fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 0);
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn attack_anim<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn attack_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 1);
     x.anim_start(SET_ATTACK, n as u16);
 }
 
-fn fall_anim<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn fall_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.set8(ANIM_N, n as u8);
     x.set8(ANIM_SET, 2);
     x.anim_start(SET_FALL, n as u16);
 }
 
 /// 0x83dde : fige-la un cran d'animation demandé par `+0x91` (bit 7 = demande).
-fn take_frame_request<R: Banc>(x: &mut Cx<'_, R>) {
+fn take_frame_request<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.u8(DEATH_FLAG);
     if v & 0x80 == 0 {
         return;
@@ -94,17 +94,17 @@ fn take_frame_request<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Index dans les tables de difficulté : `(difficulté & 0xfc) / 2` (mots).
-fn level_index<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
+fn level_index<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     (var::RANK.get(x.b) as u32 & 0xfc) >> 1
 }
 
-fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
 // --- état 0 : création, état 2 : actif ------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(BLINK, 0);
     x.set8(0x67, 0);
@@ -128,7 +128,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Boucle de l'état actif (0x8349c) ; l'état touché la rappelle pour reprendre le combat.
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -168,18 +168,18 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 0 : arrivée -------------------------------------------------------------------------
 
-fn intro<R: Banc>(x: &mut Cx<'_, R>) {
+fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 4);
             x.set16(COUNT, 0x100);
-            super::petites::fond_1_allume_a(x.b, 0x100);
+            super::small::background_1_lit_a(x.b, 0x100);
             crate::palette::flash(x.b, crate::palette::Flash::F);
             x.set_a5_u16(0x490, 0x10);
             x.set_a5_u8(0x48e, 0xf);
             x.set_a5_u8(0x48f, 8);
             // 0x9b6 avec A0 = 0x14de, D0.w = 0x10 : tâche de fondu (descente du nombre de pas de `A5+0x48f`)
-            crate::scene::fondu::lancer(x.b, crate::scene::fondu::DESCENTE_PAS);
+            crate::scene::fading::launch(x.b, crate::scene::fading::DESCENT_STEP);
             intro_wait_scene(x);
         }
         4 => intro_wait_scene(x),
@@ -208,7 +208,7 @@ fn intro<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn intro_wait_scene<R: Banc>(x: &mut Cx<'_, R>) {
+fn intro_wait_scene<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(0x2e) != 4 {
         return;
     }
@@ -219,7 +219,7 @@ fn intro_wait_scene<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 4 : marche lente ------------------------------------------------------------------------
 
-fn stroll<R: Banc>(x: &mut Cx<'_, R>) {
+fn stroll<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 4);
@@ -236,7 +236,7 @@ fn stroll<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn stroll_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn stroll_step<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     let n = x.u16(COUNT).wrapping_sub(1);
     x.set16(COUNT, n);
@@ -248,7 +248,7 @@ fn stroll_step<R: Banc>(x: &mut Cx<'_, R>) {
 // --- +5 = 8 et 0x14 : déplacement ---------------------------------------------------------------
 
 /// `table` : vitesses (mots) par niveau de difficulté.
-fn dash<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
+fn dash<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 4);
@@ -272,7 +272,7 @@ fn dash<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     }
 }
 
-fn dash_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn dash_step<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xy();
     x.anim_step();
     if sub8(x, STEPS, 1).mi() {
@@ -282,7 +282,7 @@ fn dash_step<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 0xc : saisie --------------------------------------------------------------------------
 
-fn seize<R: Banc>(x: &mut Cx<'_, R>) {
+fn seize<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(IN_ATTACK, 1);
     match x.u8(f::SUB2) {
         0 => grab_begin(x),
@@ -301,7 +301,7 @@ fn seize<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn grab_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn grab_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 4);
     x.set16(COUNT, 0x80);
     x.set8(BITING, 1);
@@ -311,7 +311,7 @@ fn grab_begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Le joueur saisi (`+0x50`) perd des PV tant que dure la prise.
-fn grab_hold<R: Banc>(x: &mut Cx<'_, R>) {
+fn grab_hold<R: Bench>(x: &mut Cx<'_, R>) {
     let target = x.u16(f::TARGET);
     if target == 0 {
         return grab_release(x);
@@ -360,7 +360,7 @@ fn grab_hold<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Le joueur n'a plus de PV : il est relâché mourant (1 PV).
-fn grab_kill<R: Banc>(x: &mut Cx<'_, R>) {
+fn grab_kill<R: Bench>(x: &mut Cx<'_, R>) {
     let p = x.linked(f::TARGET);
     p.set_u16(x.b, f::HP, 1);
     p.set_u32(x.b, f::STATE, 0x0204_3400);
@@ -370,13 +370,13 @@ fn grab_kill<R: Banc>(x: &mut Cx<'_, R>) {
     grab_release(x);
 }
 
-fn grab_release<R: Banc>(x: &mut Cx<'_, R>) {
+fn grab_release<R: Bench>(x: &mut Cx<'_, R>) {
     attack_anim(x, 2);
     x.add8(f::SUB2, 4);
     grab_end(x);
 }
 
-fn grab_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn grab_end<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         next_action(x);
     }
@@ -384,7 +384,7 @@ fn grab_end<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 0x10 : attaque simple ---------------------------------------------------------------
 
-fn simple_attack<R: Banc>(x: &mut Cx<'_, R>) {
+fn simple_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(IN_ATTACK, 1);
     match x.u8(f::SUB2) {
         0 => {
@@ -399,7 +399,7 @@ fn simple_attack<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn end_of_script<R: Banc>(x: &mut Cx<'_, R>) {
+fn end_of_script<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         next_action(x);
     }
@@ -407,7 +407,7 @@ fn end_of_script<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 0x18 : poursuite --------------------------------------------------------------------
 
-fn chase<R: Banc>(x: &mut Cx<'_, R>) {
+fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(IN_ATTACK, 1);
     match x.u8(f::SUB2) {
         0 => {
@@ -429,7 +429,7 @@ fn chase<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn chase_turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn chase_turn<R: Bench>(x: &mut Cx<'_, R>) {
     if !step(x) {
         return;
     }
@@ -443,7 +443,7 @@ fn chase_turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Tourne d'un cran vers la cible, avance, saisit un joueur à portée.
-fn chase_follow<R: Banc>(x: &mut Cx<'_, R>) {
+fn chase_follow<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     let criterion = x.u8(STEPS);
     let Some(target) = lib::target_by_criterion(x, criterion) else {
@@ -479,7 +479,7 @@ fn chase_follow<R: Banc>(x: &mut Cx<'_, R>) {
     chase_stop(x);
 }
 
-fn chase_stop<R: Banc>(x: &mut Cx<'_, R>) {
+fn chase_stop<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 4);
     attack_anim(x, 2);
     end_of_script(x);
@@ -489,7 +489,7 @@ fn chase_stop<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Groupe `+5` et angle d'après la position de la cible : lignes de la table 0x83f4e (2 octets par entrée :
 /// angle et groupe, durée et demi-tour).
-fn next_action<R: Banc>(x: &mut Cx<'_, R>) {
+fn next_action<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(BITING, 0);
     x.set8(IN_ATTACK, 0);
     let Some(target) = lib::target_by_criterion(x, lib::NEAREST) else {
@@ -544,7 +544,7 @@ fn next_action<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 4 : touché --------------------------------------------------------------------------------
 
-fn hit<R: Banc>(x: &mut Cx<'_, R>) {
+fn hit<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -561,7 +561,7 @@ fn hit<R: Banc>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
 }
 
-fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(REACTION) == 0xa8 {
         return tumble(x);
     }
@@ -592,7 +592,7 @@ fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Attend la fin du recul, puis reprend le combat (ou saute à la poursuite).
-fn recover<R: Banc>(x: &mut Cx<'_, R>) {
+fn recover<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::FREEZE) != 0 {
         sub8(x, f::FREEZE, 1);
         return;
@@ -611,7 +611,7 @@ fn recover<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+0x49` = 0xa8 : le coup projette le boss, qui retombe en tourbillon (`+6` = 0 à 0x10).
-fn tumble<R: Banc>(x: &mut Cx<'_, R>) {
+fn tumble<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -620,7 +620,7 @@ fn tumble<R: Banc>(x: &mut Cx<'_, R>) {
             x.set32(0x14, 0);
             x.set32(0x18, 0);
             x.set32(0x1c, 0);
-            x.set8(SPIN_DELAY, if x.compteur() & 1 != 0 { 1 } else { 2 });
+            x.set8(SPIN_DELAY, if x.counter() & 1 != 0 { 1 } else { 2 });
             let a = (random(x) as u16 + 8) & 0x1f;
             x.set8(Obj::SPEED_INDEX, a as u8);
             fall_anim(x, 0);
@@ -696,7 +696,7 @@ fn tumble<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Pas du tourbillon (0x83da8) : déplacement par la table de vecteurs de l'angle `+0x2d`.
-fn spin<R: Banc>(x: &mut Cx<'_, R>) {
+fn spin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add32(0xc, 0x20000);
     if (x.u16(0xc) as i16) >= 0x40 {
         x.set32(0xc, 0x0040_0000);
@@ -722,7 +722,7 @@ fn spin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// État 6 de `+5` : la mort (séquence en deux temps puis libération).
-fn dying<R: Banc>(x: &mut Cx<'_, R>) {
+fn dying<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(IN_ATTACK, 2);
     match x.u8(f::SUB2) {
         0 => {
@@ -749,7 +749,7 @@ fn dying<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn dying_burst<R: Banc>(x: &mut Cx<'_, R>) {
+fn dying_burst<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u16(COUNT).wrapping_sub(1);
     x.set16(COUNT, n);
     if n & 0x8000 != 0 {
@@ -763,5 +763,5 @@ fn dying_burst<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x8341c "boss_5" #[sans] run,
+    0x8341c "boss_5" #[without] run,
 }

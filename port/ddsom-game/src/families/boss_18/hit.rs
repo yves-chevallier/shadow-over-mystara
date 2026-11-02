@@ -5,10 +5,10 @@
 //! le code, animation 0), `hit_d`, `hit_e`, `hit_f`, `hit_g` (projections, animation 1), `hit_h` (soulevé, bouffées d'effets),
 //! `hit_i` (rebonds jusqu'à la mort).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::decide;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Table des routines de réaction (mots relatifs à 0x986d6, indexés par `+0x49 / 2`).
@@ -17,7 +17,7 @@ const REACTIONS: u32 = 0x986d6;
 const THROW: u32 = 0x993ac;
 const DRIFT: u32 = 0x993ec;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else {
@@ -34,7 +34,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x99362 : plus de PV ? Passe alors au groupe 6 (mort) et rend vrai.
-fn dead<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn dead<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
     }
@@ -43,7 +43,7 @@ fn dead<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set8(INVULNERABLE, 0);
         set_abs8(x, 0xff8043, 0xff);
@@ -69,7 +69,7 @@ fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
 // --- aides ------------------------------------------------------------------------------------------------
 
 /// 0x99414 : orientation du boss opposée au coup (`+0x4a`) ; vitesses inversées si elle est non nulle.
-fn face_away<R: Banc>(x: &mut Cx<'_, R>) {
+fn face_away<R: Bench>(x: &mut Cx<'_, R>) {
     let side = x.u8(0x4a) ^ 0x20;
     x.set8(f::FLIP, side);
     if side != 0 {
@@ -80,13 +80,13 @@ fn face_away<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9940c : le gel après le coup (`+0x53`) reprend la valeur d'étourdissement.
-fn freeze_by_stun<R: Banc>(x: &mut Cx<'_, R>) {
+fn freeze_by_stun<R: Bench>(x: &mut Cx<'_, R>) {
     let stun = x.u8(STUN);
     x.set8(f::FREEZE, stun);
 }
 
 /// 0x9937a : vitesses de projection de la ligne `row` des tables.
-fn throw_speeds<R: Banc>(x: &mut Cx<'_, R>, row: u32) {
+fn throw_speeds<R: Bench>(x: &mut Cx<'_, R>, row: u32) {
     let i = row.wrapping_mul(2) & 0xffff;
     for (off, table) in [(0x14u32, THROW), (0x16, THROW + 2), (0x18, THROW + 4), (0x1a, THROW + 6)] {
         let v = x.rom16(table + i);
@@ -98,7 +98,7 @@ fn throw_speeds<R: Banc>(x: &mut Cx<'_, R>, row: u32) {
     x.set16(0x1e, 0);
 }
 
-fn begin_throw<R: Banc>(x: &mut Cx<'_, R>) {
+fn begin_throw<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     face_away(x);
     freeze_by_stun(x);
@@ -107,7 +107,7 @@ fn begin_throw<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- hit_a, hit_b : recul sur place --------------------------------------------------------------------------
 
-fn hit_a<R: Banc>(x: &mut Cx<'_, R>, anim: u32) {
+fn hit_a<R: Bench>(x: &mut Cx<'_, R>, anim: u32) {
     if x.u8(f::SUB2) != 0 {
         return slide_back(x);
     }
@@ -124,7 +124,7 @@ fn hit_a<R: Banc>(x: &mut Cx<'_, R>, anim: u32) {
 }
 
 /// 0x98786 : tremble puis glisse jusqu'à l'arrêt.
-fn slide_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn slide_back<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SHAKE) != 0 {
         let mut d: i16 = 2;
         sub8(x, SHAKE, 1);
@@ -145,7 +145,7 @@ fn slide_back<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- hit_c : projection selon le code ---------------------------------------------------------------------------
 
-fn hit_c<R: Banc>(x: &mut Cx<'_, R>) {
+fn hit_c<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             if dead(x) {
@@ -162,7 +162,7 @@ fn hit_c<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Étapes communes des projections (`+6` = 2, 4, 6) : montée, retombée, glissade.
-fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
+fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         2 => {
             x.move_xyz();
@@ -191,7 +191,7 @@ fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
             }
             x.move_xy();
             let t = crate::video::terrain_of(x.b, x.o);
-                if t.numero != 0 {
+                if t.number != 0 {
                 return decide::back_on_feet(x);
             }
             x.anim_step();
@@ -204,7 +204,7 @@ fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// `anim` : animation du jeu de réactions ; `base` : retrait du code pour la ligne de vitesses ; `slow_rise` : divise la vitesse
 /// verticale par 4 ; `grounded` : le boss passe à l'état 2 pendant la projection.
-fn hit_d<R: Banc>(x: &mut Cx<'_, R>, anim: u32, base: u32, slow_rise: bool, grounded: bool) {
+fn hit_d<R: Bench>(x: &mut Cx<'_, R>, anim: u32, base: u32, slow_rise: bool, grounded: bool) {
     if x.u8(f::SUB2) != 0 {
         return thrown(x);
     }
@@ -226,7 +226,7 @@ fn hit_d<R: Banc>(x: &mut Cx<'_, R>, anim: u32, base: u32, slow_rise: bool, grou
 
 // --- hit_h : soulevé --------------------------------------------------------------------------------------------------
 
-fn hit_h<R: Banc>(x: &mut Cx<'_, R>) {
+fn hit_h<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -271,7 +271,7 @@ fn hit_h<R: Banc>(x: &mut Cx<'_, R>) {
 /// Durées (mots) des rebonds successifs (0x98ab8, un par valeur de `+0xa6`).
 const BOUNCE_TIMES: u32 = 0x98ab8;
 
-fn hit_i<R: Banc>(x: &mut Cx<'_, R>) {
+fn hit_i<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.anim_start(SET_HURT, 2);
@@ -307,7 +307,7 @@ fn hit_i<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x98a68 : prépare un rebond : élan horizontal de 0x800 vers le côté regardé, hauteur selon l'altitude de la caméra.
-fn bounce_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn bounce_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB2, 2);
     let (mut vx, mut vz) = (0x800i16, -0x40i16);
     if x.u8(f::FLIP) == 0 {
@@ -332,7 +332,7 @@ fn bounce_start<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 2 : recul (poursuite magique avortée) ------------------------------------------------------------------
 
-fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -370,13 +370,13 @@ fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn step_only<R: Banc>(x: &mut Cx<'_, R>) {
+fn step_only<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
 // --- mort -------------------------------------------------------------------------------------------------------------
 
-fn death<R: Banc>(x: &mut Cx<'_, R>) {
+fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -428,7 +428,7 @@ fn death<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +5 = 10 : relevé -------------------------------------------------------------------------------------------------
 
-fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
+fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(0x7, 2);
         return body(x, 6);

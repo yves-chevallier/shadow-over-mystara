@@ -1,13 +1,13 @@
 //! Type 15, sous-états 4, 6 et 8 : les gestes. Le sous-état 4 contient les séries de coups, la charge et le repos,
 //! le 6 les pas de côté, sauts et téléportations, le 8 le choix qui suit une série.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::stance::{approach_start, walk_off};
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match (x.u8(f::SUB), x.u8(f::SUB2)) {
         (4, 0) | (6, 0) => windup(x),
         (4, 2) | (6, 2) => turn_back(x),
@@ -33,20 +33,20 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6e228 : l'étape suivante lance l'animation 4.
-fn next_and_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn next_and_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     mv(x, 4);
 }
 
 /// 0x6e230 : étape suivante à la fin de l'animation.
-fn next_when_done<R: Banc>(x: &mut Cx<'_, R>) {
+fn next_when_done<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.add8(f::SUB3, 2);
     }
 }
 
 /// Étape commune « s'accroupit » (0x6e27e, 0x6e32a, 0x6e502) : fin d'animation, esquive invulnérable `ticks` images.
-fn crouch<R: Banc>(x: &mut Cx<'_, R>, ticks: u8) {
+fn crouch<R: Bench>(x: &mut Cx<'_, R>, ticks: u8) {
     if !x.anim_step() {
         return;
     }
@@ -57,7 +57,7 @@ fn crouch<R: Banc>(x: &mut Cx<'_, R>, ticks: u8) {
 }
 
 /// Étape commune « se déplace de `dist` » (0x6e100, 0x6e34a, 0x6e522) : après l'accroupi, saute de côté.
-fn shift<R: Banc>(x: &mut Cx<'_, R>, dist: i16) {
+fn shift<R: Bench>(x: &mut Cx<'_, R>, dist: i16) {
     let n = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, n);
     if n != 0 {
@@ -72,20 +72,20 @@ fn shift<R: Banc>(x: &mut Cx<'_, R>, dist: i16) {
 }
 
 /// Étape commune « tire un coup » (0x6e086, 0x6e3a4) : en cours, la clé d'animation déclenche l'effet.
-fn swing_key<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn swing_key<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.anim_step() {
         return true;
     }
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
-        crate::families::eshl_creators::shot_0(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
+        crate::families::eshl_creators::shot_0(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
     }
     false
 }
 
 // --- geste 0 : provocation, puis geste choisi --------------------------------------------------------
 
-fn windup<R: Banc>(x: &mut Cx<'_, R>) {
+fn windup<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -113,7 +113,7 @@ fn windup<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : demi-tour puis geste 0xc (marche).
-fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -130,13 +130,13 @@ fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
 // --- séries de coups ----------------------------------------------------------------------------------
 
 /// 0x6e048 : lance la série (+6 = 4).
-fn series_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn series_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::SUB2, 0x400);
     series(x);
 }
 
 /// +6 = 4 : série de coups de la durée tirée dans la rangée de difficulté, puis geste de repli.
-fn series<R: Banc>(x: &mut Cx<'_, R>) {
+fn series<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         let t = row_byte(x, SERIES_TABLE);
@@ -155,7 +155,7 @@ fn series<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 10 : au hasard, retour à la marche (0x1c) ou série.
-fn maybe_series<R: Banc>(x: &mut Cx<'_, R>) {
+fn maybe_series<R: Bench>(x: &mut Cx<'_, R>) {
     if rand_and(x, 1) == 0 {
         return again(x, 0x1c);
     }
@@ -163,14 +163,14 @@ fn maybe_series<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 14, 16 (et 10 au tirage) : retour debout et reprise de la marche, `kind` = type de tir mémorisé.
-fn again<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
+fn again<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(SHOT_KIND, kind);
     set_state_long(x, STANCE);
     approach_start(x);
 }
 
 /// +6 = 6 et 8 : pas de côté invulnérable, puis série (6) ou retour à la marche (8).
-fn side_hop<R: Banc>(x: &mut Cx<'_, R>) {
+fn side_hop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 8 => next_when_done(x),
@@ -193,7 +193,7 @@ fn side_hop<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 12 : charge vers la cible pendant `+0xa2` images.
-fn charge<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(TIMER, 0x40);
@@ -212,7 +212,7 @@ fn charge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 18 : repos. L'original sort du repos dès la deuxième image (le test de fin de minuterie est inversé).
-fn rest<R: Banc>(x: &mut Cx<'_, R>) {
+fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(TIMER, 0x1e);
@@ -229,7 +229,7 @@ fn rest<R: Banc>(x: &mut Cx<'_, R>) {
 // --- sous-état 6 --------------------------------------------------------------------------------------
 
 /// +6 = 6 : pas en profondeur.
-fn depth_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn depth_step<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 => next_when_done(x),
@@ -251,7 +251,7 @@ fn depth_step<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 8 : esquive sur place.
-fn dodge<R: Banc>(x: &mut Cx<'_, R>) {
+fn dodge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 => crouch(x, 0xa),
@@ -275,7 +275,7 @@ fn dodge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 10 : esquive avec saut de côté, puis série de coups terminée par le retour debout.
-fn dodge_then_series<R: Banc>(x: &mut Cx<'_, R>) {
+fn dodge_then_series<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 => crouch(x, 0xa),
@@ -308,7 +308,7 @@ const TELEPORT_X: u32 = 0x6e44c;
 const TELEPORT_Y: u32 = 0x6e43e;
 
 /// +6 = 12 : le Goblin réapparaît près de sa cible.
-fn teleport<R: Banc>(x: &mut Cx<'_, R>) {
+fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 | 6 => next_when_done(x),
@@ -343,7 +343,7 @@ fn teleport<R: Banc>(x: &mut Cx<'_, R>) {
 // --- sous-état 8 --------------------------------------------------------------------------------------
 
 /// +6 = 0 : courte pause debout.
-fn pause<R: Banc>(x: &mut Cx<'_, R>) {
+fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 1);
@@ -359,7 +359,7 @@ fn pause<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : pas en arrière.
-fn back_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => next_and_start(x),
         2 => crouch(x, 0xa),
@@ -374,7 +374,7 @@ fn back_step<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 : bond (ou course) vers la cible.
-fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
+fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             if rand_and(x, 1) != 0 {
@@ -429,7 +429,7 @@ fn lunge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 6 : rechoisit un geste ; ne change de geste que si le nouveau diffère du précédent ou après un délai.
-fn pick_again<R: Banc>(x: &mut Cx<'_, R>) {
+fn pick_again<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     set_state_long(x, IDLE);
     let table = if near_box(x) {

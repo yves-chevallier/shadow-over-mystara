@@ -62,15 +62,15 @@ use shots::*;
 /// `player::ram`).
 mod ram {
     use crate::mem::A5;
-    use crate::ram::{Mot, Octet};
+    use crate::ram::{Word, Byte};
 
     pub use crate::player::ram::{
         FROZEN, INPUT_RAW as SCRIPTED_A, KILL_FLAG, PAUSE, PLAYERS_ALIVE, SCRIPTED_B, TICK, DSW,
     };
     /// Difficulté (> 5 : attaques ennemies renforcées).
-    pub const DIFFICULTY: Octet = Octet::a5(0x48);
+    pub const DIFFICULTY: Byte = Byte::a5(0x48);
     /// Réglage de dégâts du jeu (0, 2, 4, 6 : table de barème d'attaque ennemie).
-    pub const DAMAGE_SETTING: Mot = Mot::a5(0x70);
+    pub const DAMAGE_SETTING: Word = Word::a5(0x70);
     /// Entrées courantes (un octet par joueur) et celles de l'image précédente (`FF8000`, `FF8006`).
     pub const INPUTS: u32 = A5;
     pub const INPUTS_PREV: u32 = A5 + 6;
@@ -241,9 +241,9 @@ impl World<'_> {
         self.c.a[2] = self.a2;
         let saved = [self.c.a[1], self.c.a[2], self.c.a[3], self.c.a[4]];
         match spark {
-            Spark::Linked => crate::effects_aids::spark_par(self.c, self.b, a0, a1.0, variant),
+            Spark::Linked => crate::effects_aids::spark_by(self.c, self.b, a0, a1.0, variant),
             Spark::Between { owner_first } => {
-                crate::effects_aids::spark_between_par(self.c, self.b, a0, a1.0, variant, owner_first)
+                crate::effects_aids::spark_between_by(self.c, self.b, a0, a1.0, variant, owner_first)
             }
         };
         [self.c.a[1], self.c.a[2], self.c.a[3], self.c.a[4]] = saved;
@@ -470,7 +470,7 @@ fn scan(w: &mut World, list: List, counter: u32, mut body: impl FnMut(&mut World
 
 /// Les 4 enregistrements joueur.
 fn players() -> impl Iterator<Item = Obj> {
-    crate::ram::JOUEURS.iter()
+    crate::ram::PLAYERS.iter()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -577,7 +577,7 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
     }
     w.set_bit(p, f::HIT_MARK, 0);
     // un même coup (ATTACK_ID) ne touche qu'une fois chaque victime : la victime retient le
-    // dernier coup reçu de chaque joueur (octet `HIT_MARK + n° du joueur`)
+    // dernier coup reçu de chaque joueur (octet `HIT_MARK + n° du player`)
     let id = p.u8(w.b, f::ATTACK_ID);
     let slot = e.0 + f::HIT_MARK + p.u8(w.b, f::KIND) as u32;
     if rd8(w.b, slot) == id {
@@ -690,13 +690,13 @@ fn show_enemy_hp(w: &mut World, attacker: Obj, e: Obj) {
     cov::hit("show_enemy_hp");
     let key = ((attacker.u8(w.b, f::KIND) as u32) << 8) + e.u8(w.b, f::KIND) as u32;
     let (hp_max, hp, class) = (e.u16(w.b, f::HP_MAX), e.u16(w.b, f::HP), e.u8(w.b, f::CLASS));
-    let barre = crate::evenements::Popup { entete: key as u16, max: hp_max, valeur: hp, brut: class == 2 };
+    let bar = crate::events::Popup { header: key as u16, max: hp_max, value: hp, raw: class == 2 };
     // Glitch d'origine : 0x19dce laisse A2 sur la file des pop-ups (sauf s'ils sont inhibés), et A2 est la boîte
     // d'attaque du joueur pour les ennemis suivants de `player_hits_enemies`
-    if !crate::evenements::popups_inhibes(w.b) {
-        w.a2 = crate::evenements::ENTREES_POPUPS;
+    if !crate::events::popups_inhibited(w.b) {
+        w.a2 = crate::events::POPUP_INPUTS_ADDR;
     }
-    crate::evenements::creer_popup(w.b, barre);
+    crate::events::create_popup(w.b, bar);
 }
 
 /// Fin de 0x2630e (0x264e4) : la victime passe en réaction "touchée", l'étincelle est créée et le
@@ -719,8 +719,8 @@ fn enemy_reacts_to_hit(w: &mut World, p: Obj, e: Obj) {
     }
     set_low8(&mut w.c.d[4], d4);
     let target = if p.u8(w.b, f::ATTACK_KIND) <= 1 { 0xe662a } else { 0xe823a };
-    let source = crate::sound::Source { objet: Some(p), a1: Some(e.0), d4: Some(w.c.d[4]) };
-    crate::sound::jouer_avec(w.b, target, source);
+    let source = crate::sound::Source { object: Some(p), a1: Some(e.0), d4: Some(w.c.d[4]) };
+    crate::sound::play_with(w.b, target, source);
 }
 
 /// 0x26562 : compte les coups spéciaux enchaînés (octet `+0x9c` de la victime) hors classe 4.
@@ -741,7 +741,7 @@ fn count_combo(w: &mut World, p: Obj, e: Obj) {
 // Routines natives
 
 /// 0x260ee : les collisions de l'image.
-pub fn mettre_a_jour(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn update_cpu(c: &mut Cpu, b: &mut Cps2Bus) {
     combat_update(&mut World { c, b, a2: 0 });
 }
 
@@ -753,7 +753,7 @@ fn combat_update_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const COMBAT_UPDATE: Native = Native {
     entry: 0x260ee,
     name: "combat_update",
-    run: crate::Corps::Processeur(combat_update_native),
+    run: crate::Body::Processeur(combat_update_native),
     touches_sound: false,
     outputs: 0,
 };

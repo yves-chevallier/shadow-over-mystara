@@ -1,26 +1,26 @@
 //! Boss 22, états actifs de déplacement : arrivée (`+5` = 0), combat (2), courses et sauts (6 et 8), pause (10), joueur
 //! saisi (12), transformation (14).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Animation du corps `n` pour l'animation `id`, avec les réglages sonores `(0x27, 5)` et une vitesse `speed`.
-fn body_pose<R: Banc>(x: &mut Cx<'_, R>, id: u8, n: u32, speed_n: u32) {
+fn body_pose<R: Bench>(x: &mut Cx<'_, R>, id: u8, n: u32, speed_n: u32) {
     sounds(x, 0x27, 5);
     pose(x, Set::A, id, n);
     speed(x, speed_n);
 }
 
 /// 0x1a56 : un pas d'animation (la retenue, fin du script, n'est pas utilisée).
-pub(super) fn step_anim<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn step_anim<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
 // --- groupe 0 : arrivée ------------------------------------------------------------------------
 
 /// 0x9b066 : attend (`+0xbc` images), puis tombe du haut de l'écran.
-pub(super) fn arrive<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn arrive<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if sub16(x, SPOT_TIMER, 1).pl() {
@@ -71,7 +71,7 @@ pub(super) fn arrive<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 2 : combat ------------------------------------------------------------------------
 
 /// 0x9b14e.
-pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HIT_TICK, 0);
     if !two(x) {
         x.set8(0xad, 0);
@@ -89,7 +89,7 @@ pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Une cible au hasard (424e ou 44ee) d'après un tirage ; le résultat n'est pas utilisé.
-fn pick_some_target<R: Banc>(x: &mut Cx<'_, R>) {
+fn pick_some_target<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     if 0xffc0u32 >> r & 1 != 0 {
         lib::pick_target(x);
@@ -99,7 +99,7 @@ fn pick_some_target<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9b180 : debout ; la marche tire sa durée dans `+0x6b`, `+0x71`, puis une attaque est choisie selon la portée.
-fn stand<R: Banc>(x: &mut Cx<'_, R>) {
+fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     if target_far(x) {
         return x.set32(f::STATE, state::LEAP);
     }
@@ -151,7 +151,7 @@ fn stand<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9b3fe : demi-tour.
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -191,7 +191,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9b45c : le demi-tour continue tant que le boss est dans l'écran et que la cible est assez proche devant lui.
-fn turn_not_needed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn turn_not_needed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = var::SCROLL_X.get(x.b);
     if x.u8(f::FLIP) != 0 && (cam.wrapping_add(0x160).wrapping_sub(x.u16(0x8)) as i16) < 0 {
         return false;
@@ -205,7 +205,7 @@ fn turn_not_needed<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9b51a : élan ; avec une chance sur huit, le boss se laisse tomber (état touché).
-fn dash<R: Banc>(x: &mut Cx<'_, R>) {
+fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) != 0 {
         if sub8(x, IDLE_COUNT, 1).mi() {
             return x.set32(f::STATE, state::STAND);
@@ -241,7 +241,7 @@ fn dash<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9b5e6 : bond vers la cible, qui se retourne si besoin.
-fn leap<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -277,7 +277,7 @@ fn leap<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn leap_pose<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_pose<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
     body_pose(x, 3, 4, 0x1f);
 }
@@ -285,7 +285,7 @@ fn leap_pose<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupes 6 et 8 : course vers un point de l'écran -------------------------------------------
 
 /// 0x9c506 : course vers le point choisi (`+6` = 0), pause (2), bond (4 et 6).
-pub(super) fn run_to_spot<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run_to_spot<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => spot_run(x),
         2 => spot_pause(x),
@@ -296,7 +296,7 @@ pub(super) fn run_to_spot<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9c90c : même chose après une attaque ; `+6` = 0 est une courte attente.
-pub(super) fn run_to_spot_after_attack<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run_to_spot_after_attack<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => spot_wait(x),
         2 => spot_pause(x),
@@ -308,7 +308,7 @@ pub(super) fn run_to_spot_after_attack<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9c586.
-fn spot_run<R: Banc>(x: &mut Cx<'_, R>) {
+fn spot_run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -345,7 +345,7 @@ fn spot_run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9c69c : marche courte vers l'avant puis retour au combat.
-fn spot_pause<R: Banc>(x: &mut Cx<'_, R>) {
+fn spot_pause<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -368,7 +368,7 @@ fn spot_pause<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9c924 : courte attente avant la course (`+0xa0` images), puis retour au combat ou demi-tour.
-fn spot_wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn spot_wait<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 | 4 => {
             if x.u8(0x7) == 0 {
@@ -402,7 +402,7 @@ fn spot_wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Étape commune des bonds : attend l'image-clé, monte, redescend, retombe.
-fn leap_rise_wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_rise_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         next7(x);
         x.set8(VULNERABLE, 0);
@@ -410,7 +410,7 @@ fn leap_rise_wait<R: Banc>(x: &mut Cx<'_, R>) {
     step_anim(x);
 }
 
-fn leap_climb<'a, R: Banc>(x: &mut Cx<'a, R>, f_move: fn(&mut Cx<'a, R>), up: bool) {
+fn leap_climb<'a, R: Bench>(x: &mut Cx<'a, R>, f_move: fn(&mut Cx<'a, R>), up: bool) {
     f_move(x);
     let vz = x.u16(0x18);
     let reached = if up { Fl::sub16(vz, 0x100).gt() } else { Fl::sub16(vz, 0xff00).gt() };
@@ -421,7 +421,7 @@ fn leap_climb<'a, R: Banc>(x: &mut Cx<'a, R>, f_move: fn(&mut Cx<'a, R>), up: bo
     step_anim(x);
 }
 
-fn leap_land<'a, R: Banc>(x: &mut Cx<'a, R>, f_move: fn(&mut Cx<'a, R>)) {
+fn leap_land<'a, R: Bench>(x: &mut Cx<'a, R>, f_move: fn(&mut Cx<'a, R>)) {
     f_move(x);
     if (x.u32(0xc) as i32) > 0 {
         return step_anim(x);
@@ -436,7 +436,7 @@ fn leap_land<'a, R: Banc>(x: &mut Cx<'a, R>, f_move: fn(&mut Cx<'a, R>)) {
     start(x, Set::A, 6);
 }
 
-fn leap_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         x.set8(VULNERABLE, 1);
         x.set32(f::STATE, state::STAND);
@@ -444,7 +444,7 @@ fn leap_end<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9c74a : grand bond vers l'avant (vitesse horizontale).
-fn spot_leap_a<R: Banc>(x: &mut Cx<'_, R>) {
+fn spot_leap_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -470,7 +470,7 @@ fn spot_leap_a<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9c7d2 : grand bond de côté (vitesse en profondeur tirée au hasard).
-fn spot_leap_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn spot_leap_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -501,7 +501,7 @@ fn spot_leap_b<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 10 : pause ----------------------------------------------------------------------------
 
 /// 0x9ca0a : sans joueur en vie, le boss attend (animation de repos de sa forme) ; sinon il reprend.
-pub(super) fn paused<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn paused<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         if second_form(x) {
             return x.set32(f::STATE, 0x0204_1000);
@@ -534,7 +534,7 @@ pub(super) fn paused<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 12 : joueur saisi ---------------------------------------------------------------------
 
 /// 0x9cade.
-pub(super) fn holding<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         return;
     }
@@ -592,7 +592,7 @@ pub(super) fn holding<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn release_prey<R: Banc>(x: &mut Cx<'_, R>) {
+fn release_prey<R: Bench>(x: &mut Cx<'_, R>) {
     let prey = x.linked(f::TARGET);
     prey.set_u8(x.b, 0x6f, 1);
     lib::release_player(x, prey);
@@ -602,7 +602,7 @@ fn release_prey<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0xffda : tirage dont les chances (un bit par résultat, mot de la table 0xfff4 choisi par la difficulté) décident si la
 /// transformation s'enchaîne sur une riposte.
-fn flee_roll<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn flee_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let row = (((var::RANK.get(x.b) >> 3) << 1)) as u32;
     let chances = x.rom16(0xfff4 + row);
     let r = rand_and(x, 0xf);
@@ -610,7 +610,7 @@ fn flee_roll<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9cbe8.
-pub(super) fn transform<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn transform<R: Bench>(x: &mut Cx<'_, R>) {
     if second_form(x) {
         return x.set32(f::STATE, 0x0404_0200);
     }
@@ -681,7 +681,7 @@ pub(super) fn transform<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn leap_transform<R: Banc>(x: &mut Cx<'_, R>, up: bool) {
+fn leap_transform<R: Bench>(x: &mut Cx<'_, R>, up: bool) {
     x.move_xz();
     let vz = x.u16(0x18);
     let reached = if up { Fl::sub16(vz, 0x100).gt() } else { Fl::sub16(vz, 0xff00).gt() };

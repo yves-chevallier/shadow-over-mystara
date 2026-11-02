@@ -22,7 +22,7 @@ fn read_png(p: &Path) -> Vec<[u8; 3]> {
 }
 
 #[test]
-fn rendu_identique_a_mame() {
+fn render_identical_to_mame() {
     let romdir = root().join("rom");
     let snaps = root().join("testdata/vsnap");
     if !romdir.join("dd2.13m").exists() || !snaps.exists() {

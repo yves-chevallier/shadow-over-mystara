@@ -14,7 +14,7 @@ use super::{animation, ram, Ctx, Player};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::{pools, Obj};
 use crate::machine::Machine;
-use crate::player::externes as ext;
+use crate::player::external as ext;
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
@@ -136,7 +136,7 @@ fn run_steer(g: &mut Ctx, p: Player) -> bool {
     } else {
         start_skid(g, p, 6, 56, 27);
     }
-    g.son(ext::son::SLIDE, p);
+    g.sound(ext::sound::SLIDE, p);
     true
 }
 
@@ -780,7 +780,7 @@ pub fn curse_drop(g: &mut Ctx, p: Player) {
         next_step(g, p);
         p.set_u8(g, RARE_TIMER, 0xc0);
         animation::start(g, p, 0x23);
-        g.son(ext::son::FANFARE, p);
+        g.sound(ext::sound::FANFARE, p);
         return;
     }
     animation::step(g, p);
@@ -879,7 +879,7 @@ macro_rules! rare_native {
         pub const $name: crate::Native = crate::Native {
             entry: $entry,
             name: $label,
-            run: crate::Corps::Processeur(|c, b| {
+            run: crate::Body::Processeur(|c, b| {
                 let p = Player(c.a[0]);
                 $f(&mut Ctx::new(c, b), p);
                 crate::mem::rts(c, b)
@@ -961,7 +961,7 @@ pub fn fall_in(g: &mut Ctx, p: Player) {
             next_step(g, p);
             p.set_u32(g, Obj::Z, 0);
             animation::start(g, p, 14);
-            g.son(ext::son::LANDING, p);
+            g.sound(ext::sound::LANDING, p);
         }
         6 => {
             if animation::step(g, p) {
@@ -1014,7 +1014,7 @@ pub fn push(g: &mut Ctx, p: Player) {
     }
     if p.u8(g, field::ANIM_EVENT) != 0 {
         p.set_u8(g, field::ANIM_EVENT, 0);
-        g.son(rom::PUSH_SOUND, p);
+        g.sound(rom::PUSH_SOUND, p);
     }
 }
 
@@ -1066,7 +1066,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 p.set_u16(g, Obj::VX, (-0x200i16) as u16);
             }
             animation::start(g, p, 31);
-            g.son(ext::son::JUMP_VOICE, p);
+            g.sound(ext::sound::JUMP_VOICE, p);
         }
         2 => {
             animation::step(g, p);
@@ -1076,7 +1076,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u32(g, Obj::Z, 0);
                 animation::start(g, p, 14);
-                g.son(ext::son::LANDING, p);
+                g.sound(ext::sound::LANDING, p);
             }
         }
         4 => {
@@ -1129,7 +1129,7 @@ pub fn hop_back(g: &mut Ctx, p: Player) {
                 p.set_u32(g, Obj::VX, pair);
             }
             let (x, y) = (p.u16(g, Obj::X).wrapping_add(shift), p.u16(g, Obj::Y));
-            if crate::video::terrain(g.b, x, y).numero & 63 == 0 {
+            if crate::video::terrain(g.b, x, y).number & 63 == 0 {
                 p.set_u16(g, Obj::X, x);
             }
             super::walk::clamp_to_screen(g.b, p);
@@ -1156,7 +1156,7 @@ pub fn hop_back(g: &mut Ctx, p: Player) {
 pub const LEAP: crate::Native = crate::Native {
     entry: 0x35a78,
     name: "leap_attack",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         let p = Player(c.a[0]);
         leap_attack(&mut Ctx::new(c, b), p);
         crate::mem::rts(c, b)
@@ -1168,7 +1168,7 @@ pub const LEAP: crate::Native = crate::Native {
 pub const HOP_BACK: crate::Native = crate::Native {
     entry: 0x35b96,
     name: "magic_user_hop_back",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         let p = Player(c.a[0]);
         hop_back(&mut Ctx::new(c, b), p);
         crate::mem::rts(c, b)

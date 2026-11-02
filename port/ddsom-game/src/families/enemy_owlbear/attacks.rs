@@ -3,10 +3,10 @@
 //! Chaque coup commence par la préparation (`+7 = 0`) et le suivi du regard (`+7 = 2`), puis ses
 //! étapes propres. La fin du coup appelle `next_move`, qui enchaîne une charge ou remet la bête debout.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::stance::{next_move, pursue_tail, ready, walk_begin};
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Série de répétitions d'un coup, tirée dans une table par niveau de difficulté (0x5f5fa).
@@ -15,7 +15,7 @@ const SERIES_TABLE: u32 = 0x5f5fa;
 const RESUME_STRIKES: u32 = 0x0204_0000;
 const RESUME_LEAPS: u32 = 0x0206_0000;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => swipe(x),
         2 => swipe_walk(x),
@@ -31,7 +31,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             set_state_long(x, ACTIVE_ENGAGE);
@@ -59,7 +59,7 @@ pub(super) fn run_b<R: Banc>(x: &mut Cx<'_, R>) {
 // --- étapes communes ----------------------------------------------------------------------------
 
 /// Préparation (`+7 = 0`), suivi du regard (`+7 = 2`), puis `later(étape)`.
-fn chain<'a, R: Banc>(x: &mut Cx<'a, R>, resume: u32, later: impl FnOnce(&mut Cx<'a, R>, u8)) {
+fn chain<'a, R: Bench>(x: &mut Cx<'a, R>, resume: u32, later: impl FnOnce(&mut Cx<'a, R>, u8)) {
     match x.u8(0x7) {
         0 => ready(x),
         2 => track(x, resume),
@@ -68,7 +68,7 @@ fn chain<'a, R: Banc>(x: &mut Cx<'a, R>, resume: u32, later: impl FnOnce(&mut Cx
 }
 
 /// 0x5e0ba / 0x5e624 : suit la cible du regard pendant `+0x77` images.
-fn track<R: Banc>(x: &mut Cx<'_, R>, resume: u32) {
+fn track<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
     let n = x.u8(AI_KICK).wrapping_sub(1);
     x.set8(AI_KICK, n);
     if (n as i8) < 0 {
@@ -82,20 +82,20 @@ fn track<R: Banc>(x: &mut Cx<'_, R>, resume: u32) {
 }
 
 /// Joue l'animation `n` des coups sauf si la série de répétitions est finie.
-fn strike_play<R: Banc>(x: &mut Cx<'_, R>, want: u8, n: u32) {
+fn strike_play<R: Bench>(x: &mut Cx<'_, R>, want: u8, n: u32) {
     if !matches!(replay(x, want), Replay::End) {
         strike(x, n);
     }
 }
 
 /// Un temps d'attente avant de continuer (`+0xa0` images), puis étape suivante.
-fn pause<R: Banc>(x: &mut Cx<'_, R>, frames: u8) {
+fn pause<R: Bench>(x: &mut Cx<'_, R>, frames: u8) {
     x.add8(0x7, 2);
     x.set8(TIMER, frames);
 }
 
 /// Attend la fin du délai en avançant (0x5e17e, 0x5e2ea).
-fn walk_on<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_on<R: Bench>(x: &mut Cx<'_, R>) {
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);
     if t != 0 {
@@ -107,7 +107,7 @@ fn walk_on<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin d'un coup : l'animation finie, le coup suivant.
-fn finish<R: Banc>(x: &mut Cx<'_, R>) {
+fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         next_move(x);
     }
@@ -116,7 +116,7 @@ fn finish<R: Banc>(x: &mut Cx<'_, R>) {
 // --- coup de patte (+6 = 0) ----------------------------------------------------------------------
 
 /// Début d'un coup de patte (0x5e0e0).
-fn swipe_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn swipe_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(VULNERABLE, 0);
     x.set8(STRIKE_KIND, 0xe);
@@ -126,7 +126,7 @@ fn swipe_begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5f5d8 : tire le nombre de coups de la série dans la table du niveau de difficulté.
-fn roll_series<R: Banc>(x: &mut Cx<'_, R>) {
+fn roll_series<R: Bench>(x: &mut Cx<'_, R>) {
     let level = (var::RANK.get(x.b) >> 1 << 4) as u32;
     let r = random(x) & 0xf;
     let n = x.data8(SERIES_TABLE + level + r);
@@ -134,7 +134,7 @@ fn roll_series<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin d'un coup de patte (0x5e132) : coup suivant, ou un coup de plus tant que la série dure.
-fn swipe_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn swipe_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         let n = x.u8(SERIES).wrapping_sub(1);
         x.set8(SERIES, n);
@@ -145,7 +145,7 @@ fn swipe_end<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn swipe<R: Banc>(x: &mut Cx<'_, R>) {
+fn swipe<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => swipe_begin(x),
         6 => swipe_end(x),
@@ -154,7 +154,7 @@ fn swipe<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 (0x5e158) : avance, puis coup de patte.
-fn swipe_walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn swipe_walk<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => walk_begin(x),
         6 => pause(x, 0x15),
@@ -168,13 +168,13 @@ fn swipe_walk<R: Banc>(x: &mut Cx<'_, R>) {
 // --- bonds (+6 = 4, 6, 12, 14) -------------------------------------------------------------------
 
 /// Début d'un bond (0x5e1b2 / 0x5e1b8 / 0x5e1bc) : vitesse en X `vx` déjà posée par l'appelant.
-pub(super) fn leap_begin<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn leap_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     leap_body(x);
 }
 
 /// Suite du début d'un bond, l'étape étant déjà avancée.
-fn leap_body<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_body<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(STRIKE_KIND, 0xf);
     x.set8(STRIKE_POWER, 8);
     x.set8(VULNERABLE, 1);
@@ -188,13 +188,13 @@ fn leap_body<R: Banc>(x: &mut Cx<'_, R>) {
     strike_play(x, 0xc, 1);
 }
 
-fn leap_at<R: Banc>(x: &mut Cx<'_, R>, vx: i16) {
+fn leap_at<R: Bench>(x: &mut Cx<'_, R>, vx: i16) {
     x.set16(0x14, vx as u16);
     leap_begin(x);
 }
 
 /// 0x5e222 : attend l'image-clé du saut.
-fn leap_wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 0);
@@ -203,7 +203,7 @@ fn leap_wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin d'un saut avec choc au sol (0x5e238) : poussière et recul.
-fn leap_land<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_land<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.move_xz().gt() {
         lib::sound(x, 0xecb26);
         lib::sound(x, 0xecdba);
@@ -218,12 +218,12 @@ fn leap_land<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Poussière de réception : 0xb10c8 avec ses quatre paramètres.
-fn dust<R: Banc>(x: &mut Cx<'_, R>, d2: i16) {
+fn dust<R: Bench>(x: &mut Cx<'_, R>, d2: i16) {
     lib::shock(x, 1, 1, d2 as u16, 0xffff);
 }
 
 /// Glissade du recul (0x5e27a) : poussière tous les quatre pas, puis arrêt.
-fn slide<R: Banc>(x: &mut Cx<'_, R>) {
+fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     let low = x.a5_u16(0x6e) & 3;
     x.set_a5_u16(0x6e, low);
     if low == 0 {
@@ -238,11 +238,11 @@ fn slide<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin d'un coup à terre (0x5e2ae).
-fn leap_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_end<R: Bench>(x: &mut Cx<'_, R>) {
     finish(x);
 }
 
-fn leap<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => leap_at(x, -0x200),
         6 => leap_wait(x),
@@ -254,7 +254,7 @@ fn leap<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 6 (0x5e2be) : élan à pied puis bond.
-fn run_leap<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_leap<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => walk_begin(x),
         6 => pause(x, 9),
@@ -269,7 +269,7 @@ fn run_leap<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 12 (0x5e3e8) : grand bond.
-fn leap_far<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_far<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => {
             x.add8(0x7, 2);
@@ -285,7 +285,7 @@ fn leap_far<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 14 (0x5e410) : saut en hauteur, deux retombées.
-fn leap_high<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_high<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => {
             x.add8(0x7, 2);
@@ -326,7 +326,7 @@ fn leap_high<R: Banc>(x: &mut Cx<'_, R>) {
 // --- courses (+6 = 8, 10, 16, 18) ------------------------------------------------------------------
 
 /// 0x5e318 : prend son élan en courant vers le côté voulu.
-fn run_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set8(TIMER, 0x42);
     x.set8(VULNERABLE, 1);
@@ -336,14 +336,14 @@ fn run_begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Revient en garde et teste la portée de la cible (0x5e36a et semblables).
-fn back_on_guard<R: Banc>(x: &mut Cx<'_, R>) {
+fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, ACTIVE_ENGAGE);
     body(x, 2);
     speed(x, 0xb);
     super::stance::engage(x);
 }
 
-fn run_wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_wait<R: Bench>(x: &mut Cx<'_, R>) {
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);
     if t == 0 {
@@ -354,7 +354,7 @@ fn run_wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 8 (0x5e304) : course.
-fn charge<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => run_begin(x),
         6 => run_wait(x),
@@ -363,7 +363,7 @@ fn charge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 10 (0x5e3a0) : course puis cri.
-fn charge_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge_b<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => run_begin(x),
         6 => {
@@ -384,7 +384,7 @@ fn charge_b<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 16 et 18 : arrêt sur place puis cri.
-fn rush_gen<'a, R: Banc>(x: &mut Cx<'a, R>, last: impl FnOnce(&mut Cx<'a, R>)) {
+fn rush_gen<'a, R: Bench>(x: &mut Cx<'a, R>, last: impl FnOnce(&mut Cx<'a, R>)) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => walk_begin(x),
         6 => pause(x, 0x1f),
@@ -407,11 +407,11 @@ fn rush_gen<'a, R: Banc>(x: &mut Cx<'a, R>, last: impl FnOnce(&mut Cx<'a, R>)) {
     });
 }
 
-fn rush<R: Banc>(x: &mut Cx<'_, R>) {
+fn rush<R: Bench>(x: &mut Cx<'_, R>) {
     rush_gen(x, back_on_guard);
 }
 
-fn rush_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn rush_b<R: Bench>(x: &mut Cx<'_, R>) {
     rush_gen(x, |x| {
         let t = x.u8(TIMER).wrapping_sub(1);
         x.set8(TIMER, t);
@@ -426,7 +426,7 @@ fn rush_b<R: Banc>(x: &mut Cx<'_, R>) {
 // --- seconde série (sous-état 6) ----------------------------------------------------------------
 
 /// 0x5e64a : petit bond en avant.
-fn hop_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn hop_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     let vx = if x.u8(f::FLIP) != 0 { -0x200 } else { 0x200 };
     x.set16(0x14, vx as u16);
@@ -440,7 +440,7 @@ fn hop_begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5e690 : attend l'image-clé du petit bond.
-fn hop_wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn hop_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(0x7, 2);
     }
@@ -448,7 +448,7 @@ fn hop_wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5e6da : glissade après le petit bond ; elle dure tant que la vitesse en X reste positive.
-fn hop_slide<R: Banc>(x: &mut Cx<'_, R>) {
+fn hop_slide<R: Bench>(x: &mut Cx<'_, R>) {
     let low = x.a5_u16(0x6e) & 3;
     x.set_a5_u16(0x6e, low);
     if low == 0 {
@@ -463,7 +463,7 @@ fn hop_slide<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5e6a2 : retombée du petit bond, toujours suivie de la glissade.
-fn hop_land<R: Banc>(x: &mut Cx<'_, R>) {
+fn hop_land<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     lib::sound(x, 0xecb26);
     lib::sound(x, 0xecdba);
@@ -476,7 +476,7 @@ fn hop_land<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5e70e : fin du petit bond, retour en garde.
-fn hop_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn hop_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         set_state_long(x, ACTIVE_ENGAGE);
         body(x, 2);
@@ -486,7 +486,7 @@ fn hop_end<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5e750 : course vers le côté de la cible.
-fn run_toward_begin<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_toward_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     let right = match target_dx(x) {
         Some(dx) => dx >= 0,
@@ -500,7 +500,7 @@ fn run_toward_begin<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x5e7b4 : la course dure `+0xa0` images, puis retour en garde et reprise de la poursuite.
-fn run_toward<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_toward<R: Bench>(x: &mut Cx<'_, R>) {
     let t = x.u8(TIMER).wrapping_sub(1);
     x.set8(TIMER, t);
     if t == 0 {

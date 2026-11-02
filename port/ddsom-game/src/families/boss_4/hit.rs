@@ -9,9 +9,9 @@
 //! | 10 | retour au combat |
 
 use super::decide;
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Table des routines de réaction, indexée par le code de coup `+0x49` (longs).
 const REACTIONS: u32 = 0x82c8a;
@@ -20,7 +20,7 @@ const SHAKE_REACTION: u32 = 0x82d36;
 /// Seuils de PV par phase (mots, 128 octets par ligne).
 const THRESHOLDS: u32 = 0x10ce2;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else {
@@ -37,7 +37,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x82c68 : premier passage : dégâts (0x10112) et, sans PV, la mort ; puis la routine du code de coup.
-fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         lib::set_68(x);
         x.set8(INVULNERABLE, 0);
@@ -58,7 +58,7 @@ fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x82d36 : tremblement sur place (16 images, ±2 pixels), puis retour au recul (état 4, groupe 4, étape 2).
-fn shake<R: Banc>(x: &mut Cx<'_, R>) {
+fn shake<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(0, 2);
@@ -91,7 +91,7 @@ fn shake<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x82dae : recul (0x14 images en arrière, puis 0x14 sur place), puis la traversée en vol.
-fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -125,7 +125,7 @@ fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x82e40 : à terre (`+0x84` images hors pause), puis relevé.
-fn down<R: Banc>(x: &mut Cx<'_, R>) {
+fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -153,7 +153,7 @@ fn down<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x82ea0 : retour au combat (aussi appelé par les réactions communes, table 0x3e000) : franchit le palier de
 /// PV, puis traversée en vol si un joueur est tout près, sinon la marche.
-pub(crate) fn resume<R: Banc>(x: &mut Cx<'_, R>) {
+pub(crate) fn resume<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(ANIM_LAST, 0xff);
     if var::GAME_ON.get(x.b) == 0 || !pick_target(x) {
@@ -169,7 +169,7 @@ pub(crate) fn resume<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x82ee2 : mort. Projeté en l'air vers le milieu de l'écran, le boss retombe dans la poussière ; la fin de scène
 /// est lancée au premier passage.
-fn death<R: Banc>(x: &mut Cx<'_, R>) {
+fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

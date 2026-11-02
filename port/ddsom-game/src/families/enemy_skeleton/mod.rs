@@ -1,4 +1,4 @@
-//! Ennemi « Skeleton » (ENEMY type 1, 0x57cc4). Voir `docs/familles/enemy.md`.
+//! Ennemi « Skeleton » (ENEMY type 1, 0x57cc4). Voir `docs/families/enemy.md`.
 //!
 //! Squelette à épée (série `+0x2f` = 0) ou squelette armé (série 1). Charpente commune : `+4` état
 //! (0 création, 2 actif, 4 touché, 6 libération), `+5` groupe de comportements, `+6` et `+7`
@@ -16,7 +16,7 @@
 //!
 //! Animations : 0x15eed8 (mouvements) et 0x15eef4 (coups).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
@@ -68,7 +68,7 @@ pub(self) mod g {
 }
 
 use g::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 /// Jeux d'animations : mouvements et coups.
 const SET_BODY: u32 = 0x15eed8;
@@ -85,7 +85,7 @@ const CLOSE_ATTACKS: u32 = 0x5932a;
 const FAR_ATTACKS: u32 = 0x5952a;
 const NEXT_MOVES: u32 = 0x59982;
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -101,24 +101,24 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- aides ------------------------------------------------------------------------------------
 
-fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
-fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
-fn move_xy<R: Banc>(x: &mut Cx<'_, R>) {
+fn move_xy<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
 /// Fin des coups : étape suivante tirée dans la table par difficulté, ou retour debout.
-fn end_attack<R: Banc>(x: &mut Cx<'_, R>) {
+fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_KIND, 0xff);
     if x.u16(f::TARGET) != 0 {
         load_target(x);
@@ -136,7 +136,7 @@ fn end_attack<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Choisit le coup `+6` dans la ligne de la difficulté (32 octets) de `table`, et pose `+4/+5` à `state`.
-fn pick_move<R: Banc>(x: &mut Cx<'_, R>, table: u32, state: u16) {
+fn pick_move<R: Bench>(x: &mut Cx<'_, R>, table: u32, state: u16) {
     let row = (var::RANK.get(x.b) >> 1) << 5;
     let n = rand_and(x, 0x1f);
     let mv = x.data8(table + row as u32 + n);
@@ -147,7 +147,7 @@ fn pick_move<R: Banc>(x: &mut Cx<'_, R>, table: u32, state: u16) {
 
 /// Réaction aux drapeaux de coup `+0x8f` (0x59146) : vrai si elle a pris la main (l'adresse de reprise que
 /// l'original passait en A6 n'est relue par personne).
-fn special_hit<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let flag = x.u8(SPECIAL_HIT);
     match flag {
         1 => {
@@ -185,7 +185,7 @@ fn special_hit<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -268,7 +268,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -287,7 +287,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 0 : arrivée (`+6` : 0 et 2 attente de l'animation, 4 chute, 6 clignotement).
-fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
+fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 2 => {
             step(x);
@@ -326,7 +326,7 @@ fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Arrivée clignotante (`+6 = 6`) : trois séries de clignotements puis l'état debout.
-fn blink<R: Banc>(x: &mut Cx<'_, R>) {
+fn blink<R: Bench>(x: &mut Cx<'_, R>) {
     let d1 = match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -334,7 +334,7 @@ fn blink<R: Banc>(x: &mut Cx<'_, R>) {
             x.set8(0xac, 1);
             x.set8(VULNERABLE, 1);
             x.set16(0x42, 0x703);
-            let d7 = x.compteur() as u8;
+            let d7 = x.counter() as u8;
             x.set8(TIMER, d7);
             return;
         }
@@ -365,7 +365,7 @@ fn blink<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 6 : libération ------------------------------------------------------------------------
 
-fn dead<R: Banc>(x: &mut Cx<'_, R>) {
+fn dead<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0xac) != 0 {
         let parent = x.linked(0xaa);
         let n = parent.u8(x.b, 0xaf).wrapping_sub(1);
@@ -375,5 +375,5 @@ fn dead<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x57cc4 "enemy_1" #[sans] run,
+    0x57cc4 "enemy_1" #[without] run,
 }

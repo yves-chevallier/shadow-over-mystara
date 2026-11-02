@@ -1,11 +1,11 @@
 //! Type 27, sous-état 2 : la machine roule vers le joueur. `+6` = 0 attente, 2 demi-tour, 4 et 6 marche (avec ou
 //! sans délai de charge), 8 charge.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::arrival::hop_loop;
 use super::decide::*;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Tables de délais (octets) lues par `charge_delay` et `wander_delay`.
@@ -14,7 +14,7 @@ const CHARGE_B: u32 = 0x78eac;
 const WANDER_A: u32 = 0x78ef0;
 const WANDER_B: u32 = 0x78f10;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => wait(x),
         2 => turn(x),
@@ -26,7 +26,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Début commun des gestes 0 à 6 : saisi ou plus aucun joueur → états de repli (vrai si l'on en est sorti).
-fn gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if grabbed(x) {
         go::held(x);
         return true;
@@ -39,7 +39,7 @@ fn gate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x780d4 : attente.
-fn wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if gate(x) {
         return;
     }
@@ -68,7 +68,7 @@ fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x79f6 : fixe le délai d'attente `+0x6e` d'après la difficulté et rend la main (D0 = 1).
-fn pick_wait<R: Banc>(x: &mut Cx<'_, R>) {
+fn pick_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.in_arena(0) {
         x.set8(AI_WAIT, 1);
         return;
@@ -81,7 +81,7 @@ fn pick_wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x78142 : demi-tour.
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
@@ -106,19 +106,19 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x78244 : animation de marche (6 si la vitesse suit l'orientation, 7 sinon).
-fn walk_anim<R: Banc>(x: &mut Cx<'_, R>) {
+fn walk_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let n = if lib::moving_forward(x) { 6 } else { 7 };
     mv(x, n);
 }
 
 /// 0x7831e : bascule dans l'animation de vol de même clé, selon le sens de la marche.
-fn fly_anim<R: Banc>(x: &mut Cx<'_, R>) {
+fn fly_anim<R: Bench>(x: &mut Cx<'_, R>) {
     let set = if lib::moving_forward(x) { SET_FLY_B } else { SET_FLY_A };
     lib::switch_keeping_time(x, set);
 }
 
 /// +6 = 4 (`first`) et 6 : marche vers le joueur ; chaque variante tire son délai et son aspect (2 ou 3).
-fn march<R: Banc>(x: &mut Cx<'_, R>, first: bool) {
+fn march<R: Bench>(x: &mut Cx<'_, R>, first: bool) {
     if gate(x) {
         return;
     }
@@ -153,7 +153,7 @@ fn march<R: Banc>(x: &mut Cx<'_, R>, first: bool) {
 }
 
 /// 0x7827c : marche : délai de charge, puis décisions de tir.
-fn march_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn march_step<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(AI_CHARGE).wrapping_sub(1);
     x.set8(AI_CHARGE, n);
     if (n as i8) < 0 {
@@ -197,7 +197,7 @@ fn march_step<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 8 : charge vers le joueur (ou vers `+0xbc` si `+0xb2`), puis bond.
-fn charge<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);

@@ -10,13 +10,13 @@
 //! | 10 | geste du premier double (deux signaux) |
 //! | 12 | souffle au sol (jets ESHL 0x32 variante 1) |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::decide;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => roar(x),
         2 => dive(x),
@@ -29,7 +29,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin commune : s'il reste un joueur, le boss reprend la marche.
-fn back_to_walk<R: Banc>(x: &mut Cx<'_, R>) {
+fn back_to_walk<R: Bench>(x: &mut Cx<'_, R>) {
     if alive(x) {
         decide::walk(x)
     } else {
@@ -38,7 +38,7 @@ fn back_to_walk<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8232e (`+6` = 0) : cri.
-fn roar<R: Banc>(x: &mut Cx<'_, R>) {
+fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         lib::sound(x, 0xe3f76);
@@ -51,7 +51,7 @@ fn roar<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x823a6 : départ de l'envol (animation de vol 1, vitesse verticale 0x400).
-fn take_off<R: Banc>(x: &mut Cx<'_, R>) {
+fn take_off<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set16(0x18, 0x400);
     x.set16(0x1a, 0);
@@ -60,7 +60,7 @@ fn take_off<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x823c2 : montée jusqu'au-dessus de l'écran, au rythme des battements d'ailes ; puis le boss disparaît
 /// (invulnérable) 0x28 images.
-fn climb<R: Banc>(x: &mut Cx<'_, R>) {
+fn climb<R: Bench>(x: &mut Cx<'_, R>) {
     let top = var::CAMERA1_Y.get(x.b).wrapping_add(0xf0);
     let h = x.u16(0x10).wrapping_add(x.u16(0xc));
     setw(x, 0, top);
@@ -91,7 +91,7 @@ fn climb<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8237a (`+6` = 2) : envol, puis piqué à la verticale de la cible.
-fn dive<R: Banc>(x: &mut Cx<'_, R>) {
+fn dive<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if !pick_target(x) {
@@ -156,7 +156,7 @@ fn dive<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x82546 (`+6` = 4) : envol, puis traversée de l'écran au ras du sol à hauteur de la cible.
-fn swoop<R: Banc>(x: &mut Cx<'_, R>) {
+fn swoop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if !pick_target(x) {
@@ -218,7 +218,7 @@ fn swoop<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Atterrissage : secousse de `shake` images, poussière, animation de vol `n`.
-fn landing<R: Banc>(x: &mut Cx<'_, R>, shake: u16, n: u32) {
+fn landing<R: Bench>(x: &mut Cx<'_, R>, shake: u16, n: u32) {
     lib::shake_54(x, shake);
     lib::sound(x, 0xec976);
     lib::sound(x, 0xecdba);
@@ -226,7 +226,7 @@ fn landing<R: Banc>(x: &mut Cx<'_, R>, shake: u16, n: u32) {
 }
 
 /// 0x82660 (`+6` = 6) : bond par-dessus la cible ; l'élan vertical dépend de la distance à parcourir.
-fn leap<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -309,7 +309,7 @@ fn leap<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Les étapes en vol : un pas d'animation, l'oscillation (0x833b6), le vent des ailes, un battement.
-fn hover<R: Banc>(x: &mut Cx<'_, R>) {
+fn hover<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
     bob(x);
     lib::push_players(x);
@@ -318,7 +318,7 @@ fn hover<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x827c6 (`+6` = 8) : envol à faible hauteur, souffle en éventail (jets ESHL 0x32 tant que le premier double
 /// garde la gueule ouverte), puis descente.
-fn breath_in_flight<R: Banc>(x: &mut Cx<'_, R>) {
+fn breath_in_flight<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             kind(x, 0x14);
@@ -402,7 +402,7 @@ fn breath_in_flight<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Un jet du souffle (ESHL 0x32, variante `variant`) : son angle suit la table `angles` (16 crans, retournés
 /// quand le boss regarde à gauche). Faux si le pool est plein.
-fn breath_shot<R: Banc>(x: &mut Cx<'_, R>, angles: u32, variant: Option<u8>) -> bool {
+fn breath_shot<R: Bench>(x: &mut Cx<'_, R>, angles: u32, variant: Option<u8>) -> bool {
     let Some(s) = x.alloc(&pools::ESHL) else { return false };
     s.set_u8(x.b, 0, 1);
     s.set_u8(x.b, 2, 0x32);
@@ -424,7 +424,7 @@ fn breath_shot<R: Banc>(x: &mut Cx<'_, R>, angles: u32, variant: Option<u8>) -> 
 }
 
 /// Attente de `+0xa6` images, puis étape suivante avec la minuterie `next` (et un signal au premier double).
-fn timed<R: Banc>(x: &mut Cx<'_, R>, next: Option<u16>, cue: bool) {
+fn timed<R: Bench>(x: &mut Cx<'_, R>, next: Option<u16>, cue: bool) {
     if expired(x, TIMER) {
         x.add8(0x7, 2);
         if let Some(t) = next {
@@ -438,7 +438,7 @@ fn timed<R: Banc>(x: &mut Cx<'_, R>, next: Option<u16>, cue: bool) {
 }
 
 /// Dernière étape commune : attente, puis la marche.
-fn last<R: Banc>(x: &mut Cx<'_, R>) {
+fn last<R: Bench>(x: &mut Cx<'_, R>) {
     if !expired(x, TIMER) {
         lib::step(x);
         return;
@@ -447,7 +447,7 @@ fn last<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x82a0c (`+6` = 10) : deux signaux au premier double, puis attente.
-fn double_gesture<R: Banc>(x: &mut Cx<'_, R>) {
+fn double_gesture<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -463,7 +463,7 @@ fn double_gesture<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x82ab6 (`+6` = 12) : souffle au sol, jets ESHL 0x32 variante 1 toutes les 3 images pendant 0x64 images.
-fn breath<R: Banc>(x: &mut Cx<'_, R>) {
+fn breath<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);

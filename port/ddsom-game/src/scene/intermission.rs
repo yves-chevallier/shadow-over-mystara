@@ -160,7 +160,7 @@ fn scroll_out(x: &mut Ctx) {
             } else {
                 x.next_sub();
                 x.set_v16(CAMERA_X, 2408);
-                crate::families::effects_creators::type_53_pur(x.b);
+                crate::families::effects_creators::type_53_pure(x.b);
             }
         }
         6 => {} // 0xb66e4 passe lui-même à la sous-étape 8
@@ -178,7 +178,7 @@ fn scroll_out(x: &mut Ctx) {
 pub const PHASE_24: Native = Native {
     entry: 0x21c2a,
     name: "scene_phase_24",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         phase_24(c, b);
         rts(c, b);
     }),

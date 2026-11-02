@@ -1,4 +1,4 @@
-//! Boss de type 18 (0x975ec), scène 26 : le Lich (h). Voir `docs/familles/boss.md`.
+//! Boss de type 18 (0x975ec), scène 26 : le Lich (h). Voir `docs/families/boss.md`.
 //!
 //! De la famille des boss 17 et 21 (charpente des ennemis `+4` état, `+5` groupe, `+6` et `+7` étapes, états posés d'un coup
 //! en longs, tirages à deux niveaux dans les tables de la ROM) ; sa particularité est l'état touché : la plupart des
@@ -14,7 +14,7 @@
 //!
 //! Animations : 0x181ae0 (mouvements), 0x181af2 (coups), 0x181b10 (réactions).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::boss_common::*;
 use super::cx::handlers;
 
@@ -59,21 +59,21 @@ pub(self) mod g {
 }
 use g::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 pub(self) const SET_BODY: u32 = 0x181ae0;
 pub(self) const SET_STRIKE: u32 = 0x181af2;
 pub(self) const SET_HURT: u32 = 0x181b10;
 
-pub(self) fn body<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u32) {
+pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_STRIKE, n);
 }
 
-pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -97,7 +97,7 @@ pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init<R: Banc>(x: &mut Cx<'_, R>) {
+fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set_a5_u8(0x50, 1);
     x.set_a5_u32(0x38, 0x0459_5900);
@@ -149,7 +149,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active<R: Banc>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {
@@ -165,7 +165,7 @@ fn active<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+5` = 6, 8, 10 (0x98640) : attend que des joueurs reviennent.
-fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) != 0 && (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return decide::chase(x);
     }
@@ -183,5 +183,5 @@ fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x975ec "boss_18" #[sans] run,
+    0x975ec "boss_18" #[without] run,
 }

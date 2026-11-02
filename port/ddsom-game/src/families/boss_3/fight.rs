@@ -1,14 +1,14 @@
 //! Boss 3, état actif hors attaques : arrivée (`+5` = 0), combat (2), ronde (6), envol (8), attente (10), joueur
 //! emporté (12), riposte (14).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
 // --- groupe 0 : arrivée ------------------------------------------------------------------------
 
 /// 0x7f5b8 : la variante 0 descend du haut de l'écran (en cinématique) ; les autres combattent tout de suite.
-pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x3) != 0 {
         return enter_fight(x);
     }
@@ -68,13 +68,13 @@ pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7f67a : encore hors de l'écran : retenue, remise dans la liste du premier plan.
-fn hidden<R: Banc>(x: &mut Cx<'_, R>) {
+fn hidden<R: Bench>(x: &mut Cx<'_, R>) {
     lib::keep_on_screen(x, 0x50);
     x.reinsert_foreground();
 }
 
 /// 0x7f6a8 : descente jusqu'au sol, puis cri.
-fn descend<R: Banc>(x: &mut Cx<'_, R>) {
+fn descend<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) == 0 {
         lib::step(x);
         x.move_z();
@@ -91,7 +91,7 @@ fn descend<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7f712 : immunités du type, puis le combat commence dans la même image (approche).
-fn enter_fight<R: Banc>(x: &mut Cx<'_, R>) {
+fn enter_fight<R: Bench>(x: &mut Cx<'_, R>) {
     lib::set_immunities(x);
     x.set32(f::STATE, 0x0202_0400);
     run(x);
@@ -100,7 +100,7 @@ fn enter_fight<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 2 : combat -------------------------------------------------------------------------
 
 /// 0x7f720 : une étape du combat ; sans joueur en vie, attente (ou montée si le palier de PV change).
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => hover(x),
         2 => turn(x),
@@ -121,7 +121,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7f75e : vol stationnaire au sol ; en l'air ou blessé, il remonte.
-fn hover<R: Banc>(x: &mut Cx<'_, R>) {
+fn hover<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(0xc) as i16) > 0 || wound_changed(x) {
         x.set8(INVULNERABLE, 1);
         return set_steps(x, 0x0a00);
@@ -143,7 +143,7 @@ fn hover<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7f7ca : demi-tour (en vol : `+0xa6` images au plus), puis approche.
-fn turn<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         next7(x);
         let side = x.u8(f::FLIP) ^ 0x20;
@@ -167,7 +167,7 @@ fn turn<R: Banc>(x: &mut Cx<'_, R>) {
 /// Toutes les `+0x71` images, nouvelle cible (0xa470, puis 0x424e ou 0x44ee au hasard) ; au bout de `+0x6b`
 /// choix, le compte des pas (0x788c, 0x79ce) peut renvoyer au vol stationnaire. Faux s'il n'y a plus de cible
 /// (attente), ou si l'étape a changé.
-fn retarget<R: Banc>(x: &mut Cx<'_, R>, hover_steps: u16) -> Option<bool> {
+fn retarget<R: Bench>(x: &mut Cx<'_, R>, hover_steps: u16) -> Option<bool> {
     if sub8(x, WALK_DELAY, 1).pl() {
         return Some(true);
     }
@@ -192,7 +192,7 @@ fn retarget<R: Banc>(x: &mut Cx<'_, R>, hover_steps: u16) -> Option<bool> {
 }
 
 /// 0x7f842 : approche de la cible au sol ; selon les boîtes devant lui, il attaque.
-fn approach<R: Banc>(x: &mut Cx<'_, R>) {
+fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     if wound_changed(x) {
         return set_steps(x, 0x0a00);
     }
@@ -237,7 +237,7 @@ fn approach<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x7f984 / 0x7f9fe : cible dans la boîte (et du bon côté : 0xa4c2 si elle regarde comme le boss, 0xa4b4 sinon) :
 /// ronde (6 chances sur 16) ou attaque. Vrai si l'étape a changé.
-fn lunge_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, far: bool) -> bool {
+fn lunge_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, far: bool) -> bool {
     if !lib::target_in_box(x, d0, d1, 0x10) {
         return false;
     }
@@ -263,7 +263,7 @@ fn lunge_box<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, far: bool) -> bool {
 }
 
 /// 0x7fa78 : en vol bas (`+0xa2`), approche à hauteur 0x30 ; toute cible dans une boîte déclenche une attaque.
-fn patrol<R: Banc>(x: &mut Cx<'_, R>) {
+fn patrol<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 0);
     if wound_changed(x) {
         return set_steps(x, 0x0e00);
@@ -302,7 +302,7 @@ fn patrol<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7fb94 : tient l'altitude `+0x6e` images, puis se pose.
-fn hold_high<R: Banc>(x: &mut Cx<'_, R>) {
+fn hold_high<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 0);
     if wound_changed(x) {
         return set_steps(x, 0x0e00);
@@ -318,7 +318,7 @@ fn hold_high<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7fbca : monte jusqu'à l'altitude 0x30.
-fn climb<R: Banc>(x: &mut Cx<'_, R>) {
+fn climb<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 0);
     if x.u8(0x7) == 0 {
         next7(x);
@@ -339,7 +339,7 @@ fn climb<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7fc34 : descend jusqu'au sol, puis vol stationnaire.
-fn land<R: Banc>(x: &mut Cx<'_, R>) {
+fn land<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 0);
     if x.u8(0x7) == 0 {
         next7(x);
@@ -356,7 +356,7 @@ fn land<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7fc6e : vol en ligne droite (`+0xa6` images) vers sa cible, puis approche.
-fn sweep<R: Banc>(x: &mut Cx<'_, R>) {
+fn sweep<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HOVER, 0);
     if x.u8(0x7) == 0 {
         next7(x);
@@ -385,7 +385,7 @@ fn sweep<R: Banc>(x: &mut Cx<'_, R>) {
 const ROUND_POINTS: u32 = 0x81876;
 
 /// 0x806b4 : ronde (`+6` = 0, 2), saut d'envol (4) ; sans joueur en vie, attente.
-pub(super) fn round<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn round<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 2 => circling(x),
         4 => take_off(x),
@@ -401,7 +401,7 @@ pub(super) fn round<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x81810 : point de passage opposé au quart de l'écran où se trouve le boss ; Z = sens nul.
-fn pick_round_point<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn pick_round_point<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = camera(x);
     let dx = x.u16(0x8).wrapping_sub(cam.u16(x.b, 0x8)) as i16;
     let dz = x.u16(0x10).wrapping_sub(cam.u16(x.b, 0xc)) as i16;
@@ -423,7 +423,7 @@ fn pick_round_point<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x806ea : vole vers le point de passage en tournant ; à l'arrivée (ou une cible loin devant) : approche.
-fn circling<R: Banc>(x: &mut Cx<'_, R>) {
+fn circling<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         next7(x);
         x.set16(TIMER, 6);
@@ -456,7 +456,7 @@ fn circling<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x807aa : saut d'envol (vers l'avant), retombée, puis approche.
-fn take_off<R: Banc>(x: &mut Cx<'_, R>) {
+fn take_off<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     match x.u8(0x7) {
         0 => {
@@ -488,7 +488,7 @@ fn take_off<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x80844 : envol : debout un moment (`+0xa6`), puis approche ; ou saut (`+6` = 2), ou ronde (4).
-pub(super) fn rise<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => match x.u8(0x7) {
             0 => {
@@ -522,7 +522,7 @@ pub(super) fn rise<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 10 : attente --------------------------------------------------------------------------
 
 /// 0x808d4 : un joueur revient : vol bas ou approche ; sinon le boss reste en pose (au sol ou en l'air).
-pub(super) fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 && pick_target(x) {
         let s = if x.u8(FLYING) != 0 { 0x0202_0a00 } else { 0x0202_0400 };
         return x.set32(f::STATE, s);
@@ -543,8 +543,8 @@ pub(super) fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 12 : un joueur emporté --------------------------------------------------------------
 
 /// 0x80948 : le joueur saisi (0xfd64) est emporté en l'air puis lâché de haut (0xfd8c).
-pub(super) fn carrying<R: Banc>(x: &mut Cx<'_, R>) {
-    fn held<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
+pub(super) fn carrying<R: Bench>(x: &mut Cx<'_, R>) {
+    fn held<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let t = x.u16(f::TARGET);
         if (t as i16) >= 0 {
             return None;
@@ -612,7 +612,7 @@ pub(super) fn carrying<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupe 14 : riposte ----------------------------------------------------------------------------
 
 /// 0x80a5c : riposte tirée selon la difficulté (0xffda) : attaque 16 (ruée en piqué) ou 20 (rase-mottes).
-pub(super) fn counter<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn counter<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x86, 0);
     let s = if !lib::roll_ffda(x) { 0x0204_1000 } else { 0x0204_1400 };
     x.set8(0, 1);

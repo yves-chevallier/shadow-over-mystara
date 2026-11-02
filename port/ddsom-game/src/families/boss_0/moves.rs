@@ -1,15 +1,15 @@
 //! Boss 0, état actif : entrées en scène (`+5` = 0), combat (2), attaques (4), attente (6 à 10).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 // --- aides communes -----------------------------------------------------------------------------
 
 /// Suite d'un coup, d'une course ou d'une attente : un nouveau départ si un joueur vit, sinon l'attente.
-fn restart_or_idle<R: Banc>(x: &mut Cx<'_, R>) {
+fn restart_or_idle<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::players_alive(x) {
         run_start(x)
     } else {
@@ -18,7 +18,7 @@ fn restart_or_idle<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin d'une animation de coup (0x79e88) : la course reprend quand elle est terminée.
-fn end_of_strike<R: Banc>(x: &mut Cx<'_, R>) {
+fn end_of_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::step(x) {
         restart_or_idle(x);
     }
@@ -26,7 +26,7 @@ fn end_of_strike<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Le boss est-il arrivé à la position qu'il vise ? `limit` : abscisse visée (sinon la caméra décalée de 0xa0
 /// vers la droite, 0xe0 vers la gauche). Il faut avoir atteint ou dépassé la limite dans le sens du mouvement.
-fn reached<R: Banc>(x: &mut Cx<'_, R>, limit: Option<u16>) -> bool {
+fn reached<R: Bench>(x: &mut Cx<'_, R>, limit: Option<u16>) -> bool {
     let moving_left = x.u16(0x14) as i16 >= 0;
     let bound = match limit {
         Some(l) => l,
@@ -41,7 +41,7 @@ fn reached<R: Banc>(x: &mut Cx<'_, R>, limit: Option<u16>) -> bool {
 }
 
 /// Pas de course vers l'avant à vitesse horizontale `+0x14` : animation, déplacement, poussière à la mi-pas.
-fn gallop_step<R: Banc>(x: &mut Cx<'_, R>) {
+fn gallop_step<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     x.move_x();
     if x.u8(f::KEY_FRAME) == 2 {
@@ -53,7 +53,7 @@ fn gallop_step<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Fin de la course d'entrée : lance la glissade (vitesse `v` en `+0x16`, orientée selon le sens).
-fn start_slide<R: Banc>(x: &mut Cx<'_, R>, v: u16, extra: bool) {
+fn start_slide<R: Bench>(x: &mut Cx<'_, R>, v: u16, extra: bool) {
     next7(x);
     x.set16(TIMER, 0x1e);
     x.set16(TIMER2, 0);
@@ -68,7 +68,7 @@ fn start_slide<R: Banc>(x: &mut Cx<'_, R>, v: u16, extra: bool) {
 }
 
 /// Glissade (0x79750) : une bouffée de poussière toutes les 4 images, puis la fin de la glissade.
-fn slide<R: Banc>(x: &mut Cx<'_, R>) {
+fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     if !sub16(x, TIMER2, 1).gt() {
         x.set16(TIMER2, 4);
         lib::debris(x, 0);
@@ -83,7 +83,7 @@ fn slide<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// La cible (`+0x50`) devient la position visée (`+0xbc`) ; D0 = angle de la charge.
-fn mark_target<R: Banc>(x: &mut Cx<'_, R>) {
+fn mark_target<R: Bench>(x: &mut Cx<'_, R>) {
     let t = x.linked(f::TARGET);
     let tx = t.u16(x.b, 0x8);
     x.set16(MARK_X, tx);
@@ -91,7 +91,7 @@ fn mark_target<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- groupe 0 : entrées en scène --------------------------------------------------------------------
 
-pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => arrival(x),
         2 => transformation(x),
@@ -101,7 +101,7 @@ pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7964c : la moitié principale arrive en courant depuis un bord de l'écran.
-fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
+fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -140,7 +140,7 @@ fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x797ae : la transformation (PV à la moitié) : la moitié principale se redresse, crée la seconde et attend
 /// qu'elle ait fini son entrée.
-fn transformation<R: Banc>(x: &mut Cx<'_, R>) {
+fn transformation<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -203,7 +203,7 @@ fn transformation<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x7ac7a : place la seconde moitié au bord de l'écran, du côté où la moitié principale regarde : à
 /// `caméra + 0x1c0` (ou `caméra - 0x40` si elle regarde à gauche), en hauteur selon le rang de la caméra.
-fn place_partner<R: Banc>(x: &mut Cx<'_, R>, partner: crate::objects::Obj) {
+fn place_partner<R: Bench>(x: &mut Cx<'_, R>, partner: crate::objects::Obj) {
     let side = if x.u8(f::FLIP) != 0 { (-0x40i16) as u16 } else { 0x1c0 };
     let px = camera_x(x).wrapping_add(side);
     partner.set_u16(x.b, 0x8, px);
@@ -213,7 +213,7 @@ fn place_partner<R: Banc>(x: &mut Cx<'_, R>, partner: crate::objects::Obj) {
 }
 
 /// 0x798ac : la seconde moitié entre en courant, glisse, puis attend la fin de la cinématique de son hôte.
-fn partner_arrival<R: Banc>(x: &mut Cx<'_, R>) {
+fn partner_arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -266,7 +266,7 @@ fn partner_arrival<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- groupe 2 : combat -------------------------------------------------------------------------
 
-pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn fight<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(3) == 0 && x.u8(TRANSFORMED) == 0 && Fl::sub16(x.u16(0x60) >> 1, x.u16(f::HP)).gt() {
         return transform(x);
     }
@@ -281,7 +281,7 @@ pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x79a70 : debout, attend un temps tiré puis repart.
-fn idle<R: Banc>(x: &mut Cx<'_, R>) {
+fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if !lib::players_alive(x) {
         return idle_alone(x);
     }
@@ -308,7 +308,7 @@ fn idle<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x79ad4 : demi-tour, puis l'état mémorisé est repris.
-fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
+fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         next7(x);
         let side = x.u8(f::FLIP) ^ 0x20;
@@ -334,19 +334,19 @@ fn turn_around<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x79bb8 : animation de course vers l'avant (6) ou vers l'arrière (7) selon le sens de la cible.
-fn run_animation<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_animation<R: Bench>(x: &mut Cx<'_, R>) {
     let n = if lib::moving_forward(x) { 6 } else { 7 };
     body(x, n);
 }
 
 /// 0x79c92 : choisit, dans la table de l'animation de course, l'entrée du geste en cours.
-fn select_run<R: Banc>(x: &mut Cx<'_, R>) {
+fn select_run<R: Bench>(x: &mut Cx<'_, R>) {
     let set = if lib::moving_forward(x) { SET_RUN_BACK } else { SET_RUN_FORWARD };
     lib::switch_keeping_time(x, set);
 }
 
 /// 0x79b3a (kind 2) et 0x79b5c (kind 3) : course ; elle commence par tirer le nombre de pas et leur délai.
-fn run_phase<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
+fn run_phase<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     if !lib::players_alive(x) {
         return idle_alone(x);
     }
@@ -378,7 +378,7 @@ fn run_phase<R: Banc>(x: &mut Cx<'_, R>, kind: u8) {
 
 /// 0x79bf0 : un pas de course ; tous les `+0x71` images la cible est reconsidérée et les attaques possibles sont
 /// essayées dans l'ordre des portées.
-fn keep_running<R: Banc>(x: &mut Cx<'_, R>) {
+fn keep_running<R: Bench>(x: &mut Cx<'_, R>) {
     if sub8(x, WALK_DELAY, 1).mi() {
         if sub8(x, WALK_STEPS, 1).le() {
             return run_end(x);
@@ -416,7 +416,7 @@ fn keep_running<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x79cac : charge vers la caméra ou vers la position mémorisée de la cible.
-fn charge_phase<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge_phase<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -464,7 +464,7 @@ fn charge_phase<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- groupe 4 : attaques -------------------------------------------------------------------------
 
-pub(super) fn attacks<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn attacks<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => simple_strike(x, 0x10, 0),
         2 => simple_strike(x, 0x11, 1),
@@ -478,7 +478,7 @@ pub(super) fn attacks<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x79e5a, 0x79ea0 et 0x79ece : un coup d'une animation (`n` du jeu des attaques).
-fn simple_strike<R: Banc>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
+fn simple_strike<R: Bench>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -491,7 +491,7 @@ fn simple_strike<R: Banc>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
 }
 
 /// 0x79efc : bond sur la cible suivi d'un coup.
-fn leap_strike<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_strike<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -524,7 +524,7 @@ fn leap_strike<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7a034 : grand saut en arc vers la cible, retombée et rugissement.
-fn arc_jump<R: Banc>(x: &mut Cx<'_, R>) {
+fn arc_jump<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -594,7 +594,7 @@ fn arc_jump<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7a166 : trois coups enchaînés (nombre tiré dans la table 0x7a1ca d'après la difficulté et le nombre de joueurs).
-fn triple_strike<R: Banc>(x: &mut Cx<'_, R>) {
+fn triple_strike<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -641,7 +641,7 @@ fn triple_strike<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7a248 : crache un projectile (ESHL 0x43) devant lui.
-fn spit<R: Banc>(x: &mut Cx<'_, R>) {
+fn spit<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -688,7 +688,7 @@ fn spit<R: Banc>(x: &mut Cx<'_, R>) {
 // --- groupes 6 à 10 : attente --------------------------------------------------------------------
 
 /// 0x7a30c : tant qu'aucun joueur n'est en vie, le boss attend en pose ; dès qu'un joueur revient, il repart.
-pub(super) fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
     if (var::PLAYERS_ALIVE.get(x.b) as i8) > 0 {
         return run_start(x);
     }

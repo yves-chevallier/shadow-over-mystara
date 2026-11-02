@@ -9,11 +9,11 @@
 //! | 8, 10 | retour au combat |
 
 use super::*;
-use crate::families::cx::Banc;
-use crate::objects::Courant;
+use crate::families::cx::Bench;
+use crate::objects::Current;
 
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(HIT_TICK) == 0 {
         x.set_a5_u16(0x51e, 0);
         x.set_a5_u8(0x43, 0xff);
@@ -43,7 +43,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9ce28 : dégâts (0x10112) ; sans PV la mort, sinon la routine commune du code de coup.
-fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if !second_form(x) {
         x.set8(SECOND_FX, 0);
     }
@@ -61,12 +61,12 @@ fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Une poussière (0xb10c8) sans le compteur de huit : le type 2 en lâche une quand il est repoussé vers la droite.
-fn rubble_once<R: Banc>(x: &mut Cx<'_, R>) {
+fn rubble_once<R: Bench>(x: &mut Cx<'_, R>) {
     lib::shock(x, 0, 0x201, 0x20, 0x20);
 }
 
 /// 0x9cf12 : recul en glissant, puis retour au combat ou riposte.
-fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -129,7 +129,7 @@ fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9d026 : à terre (`+0x84` images hors pause), puis relevé.
-fn down<R: Banc>(x: &mut Cx<'_, R>) {
+fn down<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             next6(x);
@@ -171,7 +171,7 @@ fn down<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// 0x9d0d6 : mort. Si l'hôte a rendu l'âme avant ou en même temps, seule une chute (0x19ad6) ; sinon la scène est
 /// prévenue : boss vaincu (type 2).
-fn death<R: Banc>(x: &mut Cx<'_, R>) {
+fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             lib::sound(x, 0xe3b6c);

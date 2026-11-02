@@ -67,7 +67,7 @@ mod entry {
 /// The routines called by the `call` entries of the scene scripts (all those of the ROM's scripts: table 0xf2f62),
 /// with their argument (the D0.w of the entry); the registers are left like the original routines leave them.
 fn script_routine(c: &mut Cpu, b: &mut Cps2Bus, routine: u32, arg: u16) {
-    use crate::families::{effects_creators, petites, set_b, set_residu::camera};
+    use crate::families::{effects_creators, small, set_b, set_residue::camera};
     match routine {
         0x2a24 => camera::set_limit_x(c, b, arg),
         0x2a2a => camera::set_position_y(c, b, arg),
@@ -76,7 +76,7 @@ fn script_routine(c: &mut Cpu, b: &mut Cps2Bus, routine: u32, arg: u16) {
             effects_creators::set_list_d0_68k(c, b, arg);
         }
         0xd40e8 => set_b::spawn_bumpers(c, b),
-        0xdd12c => petites::item_lock_clear(c, b),
+        0xdd12c => small::item_lock_clear(c, b),
         r => unreachable!("scene script routine {r:#x}: the ROM's scripts only call 0x2a24, 0x2a2a, 0x2a30, 0xa8ae8, 0xd40e8, 0xdd12c"),
     }
 }
@@ -205,7 +205,7 @@ pub const RESET_ENTRY: u32 = 0xf2e56;
 pub const SPAWN_SCRIPT: Native = Native {
     entry: SPAWN_ENTRY,
     name: "scene_script",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         step(c, b);
         rts(c, b);
     }),
@@ -217,7 +217,7 @@ pub const SPAWN_SCRIPT: Native = Native {
 pub const SCRIPT_RESET: Native = Native {
     entry: RESET_ENTRY,
     name: "scene_script_reset",
-    run: crate::Corps::Memoire(reset),
+    run: crate::Body::Memory(reset),
     touches_sound: false,
     outputs: 0,
 };

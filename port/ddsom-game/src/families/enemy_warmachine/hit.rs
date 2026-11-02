@@ -2,16 +2,16 @@
 //! 2 recul, 4 chute et relevé (avec palier de PV), 6 mort en cinq temps, 8 fuite hors de l'écran, 10 assommé. Zone et
 //! ombre sont testées sauf en fuite (`+5` = 8).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Table de réactions communes aux coups, indexée par le code `+0x49`.
 const REACT: u32 = 0x78a26;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(f::FREEZE) as i8) > 0 {
         let n = x.u8(f::FREEZE).wrapping_sub(1);
         x.set8(f::FREEZE, n);
@@ -33,7 +33,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x792e0 : PV épuisés : passe en mort (`+5` = 6) ; vrai dans ce cas.
-fn dying<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn dying<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
     }
@@ -42,7 +42,7 @@ fn dying<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-fn first<R: Banc>(x: &mut Cx<'_, R>) {
+fn first<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set8(FLAG, 0);
         if dying(x) {
@@ -53,7 +53,7 @@ fn first<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x78b4a : recul vers l'arrière.
-fn hop_back<R: Banc>(x: &mut Cx<'_, R>) {
+fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -93,7 +93,7 @@ fn hop_back<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x78be2 : chute puis relevé.
-fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
+fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -127,7 +127,7 @@ fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x78c3c : relevé : choisit une cible, franchit un palier de PV, puis tir ou bond d'attaque.
-pub(crate) fn recover<R: Banc>(x: &mut Cx<'_, R>) {
+pub(crate) fn recover<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(LOOK_PREV, 0xff);
     if !pick_target(x) {
@@ -142,7 +142,7 @@ pub(crate) fn recover<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x78c84 : mort en cinq temps : éjection, vol, retombée, tremblement, disparition.
-fn death<R: Banc>(x: &mut Cx<'_, R>) {
+fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -206,7 +206,7 @@ fn death<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x78d92 : saisie : la machine s'enfuit hors de l'écran puis disparaît.
-fn run_off<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_off<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -238,7 +238,7 @@ fn run_off<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x78e34 : assommé : animation 0xc, puis tir.
-fn stunned<R: Banc>(x: &mut Cx<'_, R>) {
+fn stunned<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB3, 2);
         return mv(x, 0xc);

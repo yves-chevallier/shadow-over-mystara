@@ -1,13 +1,13 @@
 //! Type 0, sous-état 0 : arrivée. `+6` : 0 et 2 hurlement, 4 bond d'entrée, 6 et 8 saut périlleux (variantes 12 et 13),
 //! 10 chute d'en haut, 12 apparition, 14 course d'arrivée, 16 et 20 réveil, 18 course vers le joueur.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use crate::families::eshl_creators;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => howl(x),
         2 => growl(x),
@@ -25,7 +25,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Le joueur à portée : le geste est tiré au hasard entre deux animations (`a` si le tirage est pair, `b` sinon).
-fn pick_anim<R: Banc>(x: &mut Cx<'_, R>, a: u8, b: u8) {
+fn pick_anim<R: Bench>(x: &mut Cx<'_, R>, a: u8, b: u8) {
     let r = rand_and(x, 1);
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);
@@ -35,7 +35,7 @@ fn pick_anim<R: Banc>(x: &mut Cx<'_, R>, a: u8, b: u8) {
 }
 
 /// Attend un joueur dans la boîte devant l'ennemi, anime l'attente ; vrai quand il est là.
-fn player_ahead<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn player_ahead<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !pick_target(x) {
         return false;
     }
@@ -44,7 +44,7 @@ fn player_ahead<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// +6 = 0 : hurlement, puis démarche vers la cible (animations 4 ou 3).
-fn howl<R: Banc>(x: &mut Cx<'_, R>) {
+fn howl<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
@@ -65,7 +65,7 @@ fn howl<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 2 : comme 0 sans le hurlement ; animations 2 ou 1.
-fn growl<R: Banc>(x: &mut Cx<'_, R>) {
+fn growl<R: Bench>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
@@ -81,7 +81,7 @@ fn growl<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 4 : bond d'entrée.
-fn leap_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -115,7 +115,7 @@ fn leap_in<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// +6 = 6 et 8 : saut périlleux, la clé d'animation déclenche l'effet (0xeb92e ou 0xeb9a0) ; `d3` : variante
 /// qui l'accompagne, `vx2` la vitesse de côté.
-fn somersault<R: Banc>(x: &mut Cx<'_, R>, variant: u8, vx2: i16, anim: u32) {
+fn somersault<R: Bench>(x: &mut Cx<'_, R>, variant: u8, vx2: i16, anim: u32) {
     match x.u8(f::SUB3) {
         0 => {
             x.set16(Obj::VY, vx2 as u16);
@@ -158,7 +158,7 @@ fn somersault<R: Banc>(x: &mut Cx<'_, R>, variant: u8, vx2: i16, anim: u32) {
 }
 
 /// +6 = 10 : chute d'en haut.
-fn drop_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn drop_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -185,7 +185,7 @@ fn drop_in<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 12 : apparition.
-fn appear<R: Banc>(x: &mut Cx<'_, R>) {
+fn appear<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -211,7 +211,7 @@ fn appear<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 14 : course d'arrivée (0x1e images).
-fn run_in<R: Banc>(x: &mut Cx<'_, R>) {
+fn run_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -235,7 +235,7 @@ fn run_in<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 16 : attente d'un nombre d'images (`+0x42`) puis démarche.
-fn wake<R: Banc>(x: &mut Cx<'_, R>) {
+fn wake<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -259,7 +259,7 @@ fn wake<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 18 : course vers le joueur sur une durée tirée au hasard, puis grande attaque.
-fn dash<R: Banc>(x: &mut Cx<'_, R>) {
+fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -295,7 +295,7 @@ fn dash<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +6 = 20 : comme 18, avec un autre effet et une reprise différente.
-fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
+fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -332,7 +332,7 @@ fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
 
 /// Clé d'animation : effet `effect` ; en fin de script, le Kobold reprend sa marche un pas en avant (`−0x20`
 /// à droite, `+0x20` à gauche).
-fn landing_hit<R: Banc>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
+fn landing_hit<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         throw(x.b, x.o);

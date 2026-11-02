@@ -11,14 +11,14 @@
 //! | 12 | monte, rugit (0xa7234 / 0xa727c), descend |
 //! | 14 | plonge sur un joueur et le saisit |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::mem::rd16;
 use crate::objects::Obj;
 use cps2::Cps2Bus;
-use crate::objects::Courant;
+use crate::objects::Current;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => attack_0(x),
         2 => attack_2(x),
@@ -37,7 +37,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 // --- étapes communes ----------------------------------------------------------------------------------------
 
 /// 0x91cce : début de montée.
-fn rise_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn rise_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set32(0x14, 0);
     x.set32(0x1c, 0);
@@ -47,7 +47,7 @@ fn rise_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x91cec : monte jusqu'à l'altitude 0x300.
-fn rise_up<R: Banc>(x: &mut Cx<'_, R>) {
+fn rise_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_z();
     if (x.u16(0xc) as i16) < 0x300 {
         return;
@@ -57,7 +57,7 @@ fn rise_up<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x91d08, 0x91d6e : attend la fin du minuteur.
-fn pause<R: Banc>(x: &mut Cx<'_, R>) {
+fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     if sub16(x, TIMER, 1).gt() {
         return;
     }
@@ -66,7 +66,7 @@ fn pause<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x91d30 : début de descente.
-fn fall_start<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
     x.set32(0x14, 0);
     x.set32(0x1c, 0);
@@ -76,7 +76,7 @@ fn fall_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x91d4e : descend jusqu'à l'altitude 0x20, puis attend 0x20 images.
-fn fall_down<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall_down<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_z();
     if (x.u16(0xc) as i16) > 0x20 {
         return;
@@ -88,7 +88,7 @@ fn fall_down<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Le joueur visé (`+0x50`) s'il existe, sinon le dragon attend (0x91748).
-fn target<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
+fn target<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     if x.u16(f::TARGET) == 0 {
         wait(x);
         return None;
@@ -102,7 +102,7 @@ fn target<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
 }
 
 /// Rejoint par quarts l'altitude 0x40 et la profondeur du joueur visé ; passe à l'étape suivante à l'arrivée.
-fn reach_player<R: Banc>(x: &mut Cx<'_, R>) {
+fn reach_player<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(p) = target(x) else { return };
     let y = p.u16(x.b, 0x10) as i16;
     if fight_close(x, y) {
@@ -110,13 +110,13 @@ fn reach_player<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn fight_close<R: Banc>(x: &mut Cx<'_, R>, y: i16) -> bool {
+fn fight_close<R: Bench>(x: &mut Cx<'_, R>, y: i16) -> bool {
     super::fight::close_in_zy(x, 0x40, y)
 }
 
 // --- +6 = 0 -----------------------------------------------------------------------------------------------
 
-fn attack_0<R: Banc>(x: &mut Cx<'_, R>) {
+fn attack_0<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(SHIELD, 2);
     match x.u8(0x7) {
         0 => reach_player(x),
@@ -166,7 +166,7 @@ fn attack_0<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x91e16 : descend de 8 par image jusqu'à l'altitude 0x20.
-fn settle<R: Banc>(x: &mut Cx<'_, R>) {
+fn settle<R: Bench>(x: &mut Cx<'_, R>) {
     let z = x.u16(0xc).wrapping_sub(8);
     x.set16(0xc, z);
     if (z as i16) > 0x20 {
@@ -178,7 +178,7 @@ fn settle<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x91e62 : bat des ailes : l'altitude et la profondeur oscillent.
-fn flap<R: Banc>(x: &mut Cx<'_, R>) {
+fn flap<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     if !sub16(x, TIMER, 1).gt() {
         x.add8(0x7, 2);
@@ -198,7 +198,7 @@ fn flap<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 2 : souffle en travers de l'écran ----------------------------------------------------------------------
 
-fn attack_2<R: Banc>(x: &mut Cx<'_, R>) {
+fn attack_2<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(SHIELD, 2);
     match x.u8(0x7) {
         0 => rise_start(x),
@@ -235,7 +235,7 @@ fn attack_2<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x91f36 : pousse les joueurs de 2 pixels du côté où le dragon entre pendant que le minuteur décompte.
-fn push_side<R: Banc>(x: &mut Cx<'_, R>) {
+fn push_side<R: Bench>(x: &mut Cx<'_, R>) {
     let d: i16 = if x.u8(f::FLIP) != 0 { -2 } else { 2 };
     for k in 0..4u32 {
         let p = Obj(0xff85de + 0x200 * k);
@@ -255,7 +255,7 @@ fn push_side<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x91f6c : rejoint la position d'attaque (0x138 ou 0x48 devant la caméra).
-fn align<R: Banc>(x: &mut Cx<'_, R>) {
+fn align<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     let edge: u16 = if x.u8(f::FLIP) != 0 { 0x48 } else { 0x138 };
     let d = edge.wrapping_add(var::SCROLL_X.get(x.b)).wrapping_sub(x.u16(0x8)) as i16;
@@ -274,7 +274,7 @@ fn align<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x91fa6 : souffle : la profondeur suit la table de vecteurs pointée par `+0x4c` (posée par le script d'animation).
-fn sweep<R: Banc>(x: &mut Cx<'_, R>) {
+fn sweep<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     let table = x.u32(0x4c);
     if table != 0 {
@@ -313,7 +313,7 @@ fn sweep<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x92036 : fin du souffle, puis lance le vol de sortie.
-fn sweep_end<R: Banc>(x: &mut Cx<'_, R>) {
+fn sweep_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     if !step(x) {
         return;
@@ -331,7 +331,7 @@ fn sweep_end<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x92066 : s'éloigne jusqu'à sortir de l'écran, puis se replace en haut à droite.
-fn leave<R: Banc>(x: &mut Cx<'_, R>) {
+fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     x.move_x();
     let d = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b)) as i16;
@@ -350,7 +350,7 @@ fn leave<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : plongeon ------------------------------------------------------------------------------------------
 
-fn attack_4<R: Banc>(x: &mut Cx<'_, R>) {
+fn attack_4<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(SHIELD, 2);
     match x.u8(0x7) {
         0 => rise_start(x),
@@ -376,7 +376,7 @@ fn attack_4<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x92180 : place le dragon au-dessus de l'écran, selon son type.
-fn dive_position<R: Banc>(x: &mut Cx<'_, R>) {
+fn dive_position<R: Bench>(x: &mut Cx<'_, R>) {
     let big = x.u8(TYPE) == TYPE_BIG;
     let px = var::SCROLL_X.get(x.b).wrapping_add(if big { 0x96 } else { 0xc0 });
     x.set16(0x8, px);
@@ -385,7 +385,7 @@ fn dive_position<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(0xc, z);
 }
 
-fn dive_a<R: Banc>(x: &mut Cx<'_, R>) {
+fn dive_a<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     x.set8(FOREGROUND, 1);
     dive_position(x);
@@ -403,7 +403,7 @@ fn dive_a<R: Banc>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xe54dc);
 }
 
-fn dive_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn dive_b<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x42, 1);
     x.set8(FOREGROUND, 1);
     x.set_a5_u8(0x48e, 4);
@@ -420,7 +420,7 @@ fn dive_b<R: Banc>(x: &mut Cx<'_, R>) {
 // --- +6 = 6 et 16 : coup de griffe --------------------------------------------------------------------------
 
 /// `boxes` : boîtes de coups (`+0xa2`) ; `dx` : déplacement par image du coup (6 à droite, -6 à gauche).
-fn claw<R: Banc>(x: &mut Cx<'_, R>, boxes: u8, dx: i16) {
+fn claw<R: Bench>(x: &mut Cx<'_, R>, boxes: u8, dx: i16) {
     match x.u8(0x7) {
         0 => reach_player(x),
         2 => {
@@ -442,7 +442,7 @@ fn claw<R: Banc>(x: &mut Cx<'_, R>, boxes: u8, dx: i16) {
     }
 }
 
-fn claw_sweep<R: Banc>(x: &mut Cx<'_, R>, boxes: u8, dx: i16) {
+fn claw_sweep<R: Bench>(x: &mut Cx<'_, R>, boxes: u8, dx: i16) {
     x.set8(HURT_BOX, boxes);
     x.add16(0x8, dx as u16);
     if sub16(x, TIMER, 1).gt() {
@@ -454,7 +454,7 @@ fn claw_sweep<R: Banc>(x: &mut Cx<'_, R>, boxes: u8, dx: i16) {
 
 // --- +6 = 8, 10, 18 : pose -----------------------------------------------------------------------------------
 
-fn pose<R: Banc>(x: &mut Cx<'_, R>, boxes: u8) {
+fn pose<R: Bench>(x: &mut Cx<'_, R>, boxes: u8) {
     x.set8(HURT_BOX, boxes);
     match x.u8(0x7) {
         0 => {
@@ -474,7 +474,7 @@ fn pose<R: Banc>(x: &mut Cx<'_, R>, boxes: u8) {
 
 // --- +6 = 12 : rugissement -----------------------------------------------------------------------------------------
 
-fn attack_12<R: Banc>(x: &mut Cx<'_, R>) {
+fn attack_12<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => rise_start(x),
         2 => rise_up(x),
@@ -484,7 +484,7 @@ fn attack_12<R: Banc>(x: &mut Cx<'_, R>) {
             lib::shake_5c(x, 0x10);
             // 0xa7234 (grand) ou 0xa727c (petit)
             let big = x.u8(TYPE) == TYPE_BIG;
-            super::super::petites::roar_cree(x.b, x.o, big);
+            super::super::small::roar_created(x.b, x.o, big);
         }
         6 => {
             if sub16(x, TIMER, 1).gt() {
@@ -502,7 +502,7 @@ fn attack_12<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 14 : plongeon sur un joueur ---------------------------------------------------------------------------
 
-fn attack_14<R: Banc>(x: &mut Cx<'_, R>) {
+fn attack_14<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
@@ -562,14 +562,14 @@ fn attack_14<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9249e : un joueur à portée (0xfc44) est saisi ; rend vrai.
-fn try_seize<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn try_seize<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let Some(player) = lib::attack_hits_a_player(x, 7) else { return false };
     lib::seize_player(x, player, 0);
     true
 }
 
 /// 0x931ea : se rapproche du joueur visé de 2 pixels par image en X et en Y (sans le dépasser).
-fn follow<R: Banc>(x: &mut Cx<'_, R>) {
+fn follow<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return;
     }
@@ -589,7 +589,7 @@ fn follow<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x930e2 : repousse les joueurs trop proches (moins de 0x10 pixels en X + Y) le long de l'axe dragon-joueur.
-fn push_players<R: Banc>(x: &mut Cx<'_, R>) {
+fn push_players<R: Bench>(x: &mut Cx<'_, R>) {
     for k in 0..4u32 {
         let p = Obj(0xff85de + 0x200 * k);
         if p.u8(x.b, 0) == 0 {
@@ -604,14 +604,14 @@ fn push_players<R: Banc>(x: &mut Cx<'_, R>) {
             continue;
         }
         // 0x1386 : direction du joueur (D3, D4) vers le dragon (D1, D2). Glitch d'origine : les registres de travail
-        // de 0x1386 (D2, D3, D4 : écart en Z, pas, unité) restent aux gestionnaires suivants (`dispatch::Restes`).
+        // de 0x1386 (D2, D3, D4 : écart en Z, pas, unité) restent aux gestionnaires suivants (`dispatch::Leftovers`).
         let (bx, bz) = (x.u16(0x8) as u32, x.u16(0x10) as u32);
         let (px, pz) = (p.u16(x.b, 0x8) as u32, p.u16(x.b, 0x10) as u32);
-        let r = crate::aides::calcul(x.b, bx, bz, px, pz);
+        let r = crate::aids::compute(x.b, bx, bz, px, pz);
         *x.c.d2() = r.d2;
         *x.c.d3() = r.d3;
         // `add.l #0x8000,D4` (retenue dans le mot haut), puis l'unité dans D4.w
-        *x.c.d4() = pz.wrapping_add(0x8000) & 0xffff_0000 | r.unite as u32;
+        *x.c.d4() = pz.wrapping_add(0x8000) & 0xffff_0000 | r.unit as u32;
         step_toward(x.b, p, r.direction);
     }
 }
@@ -634,8 +634,8 @@ fn step_toward(b: &mut Cps2Bus, o: Obj, direction: u8) -> (u32, u32) {
 
 /// 0x930a4 (called by an EFFCT, 0xb482e, `effects_c::spark_active`): the current object steps toward `other` while it is
 /// more than 0x10 pixels away (X + Y), by 0x1386 and 0x93158. Original glitch: 0x1386 leaves its work registers (D2,
-/// D3, D4) to the next handlers (`dispatch::Restes`); the X written to D1.w keeps a null high word (the caller's D1).
-pub(crate) fn approach_toward<R: Banc>(x: &mut Cx<'_, R>, other: Obj) {
+/// D3, D4) to the next handlers (`dispatch::Leftovers`); the X written to D1.w keeps a null high word (the caller's D1).
+pub(crate) fn approach_toward<R: Bench>(x: &mut Cx<'_, R>, other: Obj) {
     let me = x.o;
     let dx = (me.u16(x.b, 0x8).wrapping_sub(other.u16(x.b, 0x8)) as i16).wrapping_abs() as u16;
     let dy = (me.u16(x.b, 0x10).wrapping_sub(other.u16(x.b, 0x10)) as i16).wrapping_abs() as u16;
@@ -647,11 +647,11 @@ pub(crate) fn approach_toward<R: Banc>(x: &mut Cx<'_, R>, other: Obj) {
     let d2 = low(*x.c.d2(), other.u16(x.b, 0x10));
     let d3 = low(*x.c.d3(), me.u16(x.b, 0x8));
     let d4 = low(*x.c.d4(), me.u16(x.b, 0x10));
-    let r = crate::aides::calcul(x.b, d1, d2, d3, d4);
+    let r = crate::aids::compute(x.b, d1, d2, d3, d4);
     *x.c.d2() = r.d2;
     *x.c.d3() = r.d3;
     // `add.l #0x8000,D4` (carry into the high word), then the unit in D4.w
-    *x.c.d4() = d4.wrapping_add(0x8000) & 0xffff_0000 | r.unite as u32;
+    *x.c.d4() = d4.wrapping_add(0x8000) & 0xffff_0000 | r.unit as u32;
     step_toward(x.b, me, r.direction);
 }
 

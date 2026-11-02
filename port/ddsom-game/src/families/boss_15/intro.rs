@@ -7,11 +7,11 @@
 //! | 2 | attend, puis commence à descendre |
 //! | 4 | descend jusqu'à l'altitude 0x40 |
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
-use crate::objects::Courant;
+use crate::objects::Current;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => place(x),
         2 => wait_then_fall(x),
@@ -20,12 +20,12 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     }
 }
 
-fn at_camera<R: Banc>(x: &mut Cx<'_, R>) {
+fn at_camera<R: Bench>(x: &mut Cx<'_, R>) {
     let cx = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
     x.set16(0x8, cx);
 }
 
-fn place<R: Banc>(x: &mut Cx<'_, R>) {
+fn place<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     at_camera(x);
     x.set16(0x10, 0x1a0);
@@ -39,7 +39,7 @@ fn place<R: Banc>(x: &mut Cx<'_, R>) {
     rest(x);
 }
 
-fn wait_then_fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn wait_then_fall<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(TIMER) as i16) > 0 {
         let t = x.u16(TIMER) - 1;
         x.set16(TIMER, t);
@@ -55,7 +55,7 @@ fn wait_then_fall<R: Banc>(x: &mut Cx<'_, R>) {
     fall(x);
 }
 
-fn fall<R: Banc>(x: &mut Cx<'_, R>) {
+fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     at_camera(x);
     x.move_z();
     if (x.u16(0xc) as i16) < 0x40 {

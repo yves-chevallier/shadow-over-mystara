@@ -1,0 +1,611 @@
+//! Tirs des joueurs (classe PSHL, pool de 18 objets de 0x60 octets, table 0x39908), première série :
+//! types 0 à 5. Voir `docs/families/player.md`.
+//!
+//! Les tirs naissent d'un créateur (`player/spawn.rs`) qui fixe leur genre, leur propriétaire (`+0x50`),
+//! leurs boîtes (`+0x2e`), la puissance (`+0x45`, `+0x46`) et la vitesse ; le gestionnaire les fait vivre.
+
+use crate::families::cx::Bench;
+use crate::families::cx::{handlers, Cx};
+use super::pshell::*;
+use crate::mem::{rd16, wr16};
+use crate::objects::pools;
+use crate::objects::Current;
+
+const SFX_HIT_WALL: u32 = 0xe7376;
+const SFX_LAND: u32 = 0xe73e8;
+
+fn signed(v: u16, negate: bool) -> u16 {
+    if negate { v.wrapping_neg() } else { v }
+}
+
+/// Le tir est arrêté par le terrain : terrains 5 à 8 sans le bit 6 de l'attribut (D2).
+fn stopped_by_terrain<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+    // Glitch d'origine : les restes de 0x24a8 (D3 = index de la case) sont relus par un gestionnaire suivant (lot C :
+    // `boss11_scene42_mort`, image 4447)
+    let t = crate::video::terrain_of(x.b, x.o);
+    leftovers_terrain(x, &t);
+    let terrain = t.number as u32;
+    (terrain & 0x3f).wrapping_sub(5) as u16 <= 3 && terrain & 0x40 == 0
+}
+
+/// Clignotement final : l'objet est caché une image sur deux (parité du compteur `+0x50`).
+fn blink_by_timer<R: Bench>(x: &mut Cx<'_, R>) {
+    x.set_bit(0x1, 1, true);
+    let t = x.u8(0x50);
+    if t & 1 != 0 {
+        x.set_bit(0x1, 1, false);
+    }
+}
+
+/// Type 0 (0x51c64) : marqueur de coup suivant son porteur (`+0x5c`).
+mod marker {
+    use super::*;
+
+    const ANIMS: u32 = 0x15ad38;
+
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
+        match x.state(0x51c72) {
+            0 => {
+                x.add8(0x4, 2);
+                let carrier = x.linked(0x5c);
+                x.set8(f::BOX_SET, 6);
+                let kind = carrier.u8(x.b, 0x2) as u32;
+                x.copy_pos(carrier);
+                x.anim(ANIMS, kind);
+                x.set32(0x34, 0);
+                x.reinsert();
+            }
+            2 => {
+                let carrier = x.linked(0x5c);
+                for off in [0x8, 0x10] {
+                    let v = carrier.u16(x.b, off);
+                    x.set16(off, v);
+                }
+                let id = carrier.u8(x.b, 0x49);
+                if id != x.u8(0x42) {
+                    return x.free_pshl();
+                }
+                let z = carrier.u16(x.b, 0xc);
+                x.set16(0xc, z);
+                if x.u8(0x5) == 0 {
+                    if (z as i16) > 0 {
+                        x.add8(0x5, 2);
+                    }
+                    x.reinsert();
+                } else if z == 0 {
+                    x.free_pshl();
+                } else {
+                    x.reinsert();
+                }
+            }
+            _ => x.free_pshl(),
+        }
+    }
+}
+
+/// Types 1 et 9 (0x51da6) : tir d'objet lancé (kind 1 : jeu 0x15ae8a, kind 9 : jeu 0x15c552) qui vole
+/// en ligne droite, rebondit sur l'impact, retombe puis clignote.
+mod thrown {
+    use super::*;
+
+    const OFFSETS: u32 = 0x51e16;
+    const ANIMS_A: u32 = 0x15ae8a;
+    const ANIMS_B: u32 = 0x15c552;
+    const SFX_START: u32 = 0xeb84a;
+
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
+        match x.state(0x51db4) {
+            0 => {
+                x.add8(0x4, 2);
+                x.set8(f::BOX_SET, 6);
+                let owner = x.linked(f::OWNER);
+                for off in [0x8, 0xc] {
+                    let v = owner.u16(x.b, off);
+                    x.set16(off, v);
+                }
+                let y = owner.u32(x.b, 0x10).wrapping_sub(1);
+                x.set32(0x10, y);
+                let row = (owner.u8(x.b, 0x3) as u32) << 2 & 0xffff;
+                let dx = x.data16(OFFSETS + row);
+                let dz = x.data16(OFFSETS + row + 2);
+                *x.c.d2() = dz as u32;
+                let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
+                x.add16(0x8, dx);
+                x.add16(0xc, dz);
+                pose(x);
+                crate::sound::play(x.b, SFX_START, x.o);
+                x.reinsert();
+            }
+            2 => {
+                if x.u8(f::HIT_FLAGS) & 2 != 0 {
+                    crate::sound::play(x.b, SFX_HIT_WALL, x.o);
+                    return x.free_pshl();
+                }
+                if !stopped_by_terrain(x) {
+                    x.move_xz();
+                    return x.cull_offscreen();
+                }
+                x.add8(0x4, 2);
+                x.set8(0x0, 2);
+                x.set8(0x50, 2);
+                x.set16(0x18, 0x300);
+                x.set16(0x1a, -0x30i16 as u16);
+                x.set16(0x14, 0x100);
+                if x.u8(0x2d) == 2 {
+                    x.set16(0x14, 0x100u16.wrapping_neg());
+                }
+                pose(x);
+                crate::sound::play(x.b, SFX_LAND, x.o);
+            }
+            4 => {
+                if x.u8(0x5) == 0 {
+                    x.add8(0x50, 0xff);
+                    if x.u8(0x50) == 0 {
+                        x.set8(0x50, 2);
+                        let step: u8 = if (x.u16(0x14) as i16) < 0 { 0xff } else { 1 };
+                        let angle = x.u8(0x2d).wrapping_add(step);
+                        x.set8(0x2d, angle);
+                        x.anim(ANIMS_A, (angle & 7) as u32);
+                    }
+                    x.move_xz();
+                    if (x.u16(0xc) as i16) >= 0 {
+                        return;
+                    }
+                    x.add8(0x5, 2);
+                    x.set8(0x50, 0x3c);
+                    x.set8(0x2d, 2);
+                    if (x.u16(0x14) as i16) < 0 {
+                        x.set8(0x2d, 6);
+                    }
+                    pose(x);
+                } else {
+                    x.add8(0x50, 0xff);
+                    if x.u8(0x50) == 0 {
+                        x.add8(0x4, 2);
+                    }
+                    blink_by_timer(x);
+                }
+            }
+            _ => x.free_pshl(),
+        }
+    }
+
+    /// Animation d'après l'angle `+0x2d` (`0x51f48`).
+    fn pose<R: Bench>(x: &mut Cx<'_, R>) {
+        let angle = (x.u8(0x2d) & 7) as u32;
+        let set = if x.u8(0x2) == 1 { ANIMS_A } else { ANIMS_B };
+        x.anim_start(set, angle as u16);
+    }
+}
+
+/// Types 2, 10 et 11 (0x5204e) : tir lancé en ligne droite (kinds 2, 0xa, 0xb : jeux 0x15af1c,
+/// 0x15c5e4, 0x15c62a), qui s'écrase au sol, s'élève un peu puis clignote.
+mod flung {
+    use super::*;
+
+    const OFFSETS: u32 = 0x520f6;
+    const SFX_START: u32 = 0xeb7d8;
+
+    fn set<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
+        match x.u8(0x2) {
+            2 => 0x15af1c,
+            0xa => 0x15c5e4,
+            _ => 0x15c62a,
+        }
+    }
+
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
+        match x.state(0x5205c) {
+            0 => {
+                x.add8(0x4, 2);
+                x.set8(f::BOX_SET, 6);
+                let owner = x.linked(f::OWNER);
+                for off in [0x8, 0xc] {
+                    let v = owner.u16(x.b, off);
+                    x.set16(off, v);
+                }
+                let y = owner.u32(x.b, 0x10).wrapping_sub(1);
+                x.set32(0x10, y);
+                let mut row = (owner.u8(x.b, 0x3) >> 1) as u32;
+                if row == 2 && x.u16(0xc) != 0 {
+                    row += 4;
+                }
+                let row = row << 2;
+                let dx = x.data16(OFFSETS + row);
+                let dz = x.data16(OFFSETS + row + 2);
+                *x.c.d2() = dz as u32;
+                let dx = signed(dx, owner.u8(x.b, f::FLIP) == 0);
+                x.add16(0x8, dx);
+                x.add16(0xc, dz);
+                let a = set(x);
+                x.anim(a, 0);
+                crate::sound::play(x.b, SFX_START, x.o);
+                x.reinsert();
+            }
+            2 => {
+                if x.u8(f::HIT_FLAGS) & 2 != 0 {
+                    crate::sound::play(x.b, SFX_HIT_WALL, x.o);
+                    return x.free_pshl();
+                }
+                if !stopped_by_terrain(x) {
+                    x.anim_step();
+                    x.move_x();
+                    return x.cull_offscreen();
+                }
+                x.add8(0x4, 2);
+                x.set8(0x0, 2);
+                x.set8(0x50, 4);
+                let a = set(x);
+                x.anim(a, 1);
+                crate::sound::play(x.b, SFX_LAND, x.o);
+            }
+            4 => {
+                match x.u8(0x5) {
+                    0 => {
+                        x.anim_step();
+                        x.add8(0x50, 0xff);
+                        if x.u8(0x50) == 0 {
+                            x.add8(0x5, 2);
+                            x.set16(0x18, 0);
+                            x.set16(0x1a, -0x20i16 as u16);
+                        }
+                    }
+                    2 => {
+                        x.move_z();
+                        if (x.u16(0xc) as i16) < 0 {
+                            x.add8(0x5, 2);
+                            x.set8(0x50, 0x3c);
+                        }
+                    }
+                    _ => {
+                        x.add8(0x50, 0xff);
+                        if x.u8(0x50) == 0 {
+                            x.add8(0x4, 2);
+                        }
+                        blink_by_timer(x);
+                    }
+                }
+            }
+            _ => x.free_pshl(),
+        }
+    }
+}
+
+/// Type 3 (0x52234) : tir à vitesse longue (le long `+0x14` = 0x1800000), qui retombe, puis s'arrête et
+/// se consume (30 + 80 images).
+mod arc {
+    use super::*;
+
+    const OFFSETS: u32 = 0x522c0;
+    const ANIMS: u32 = 0x15af62;
+    const SFX_BURST: u32 = 0xeb3d6;
+    const SFX_MID: u32 = 0xeb280;
+
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
+        match x.state(0x52242) {
+            0 => {
+                x.add8(0x4, 2);
+                let owner = x.linked(f::OWNER);
+                let flip = owner.u8(x.b, f::FLIP);
+                x.set8(f::FLIP, flip);
+                x.copy_pos(owner);
+                x.add16(0x10, 0xffff);
+                x.set32(0x14, 0x180_0000);
+                x.set16(0x18, 0x300);
+                x.set16(0x1a, -0x38i16 as u16);
+                let row = (owner.u8(x.b, 0x3) as u32) << 2 & 0xffff;
+                let dx = x.data16(OFFSETS + row);
+                let dz = x.data16(OFFSETS + row + 2);
+                *x.c.d2() = dz as u32;
+                let mut dx = dx;
+                if x.u8(f::FLIP) == 0 {
+                    dx = dx.wrapping_neg();
+                    let vx = x.u16(0x14);
+                    x.set16(0x14, vx.wrapping_neg());
+                }
+                x.add16(0x8, dx);
+                x.add16(0xc, dz);
+                x.anim(ANIMS, 0);
+                x.reinsert();
+                active(x);
+            }
+            2 => active(x),
+            _ => x.free_pshl(),
+        }
+    }
+
+    fn active<R: Bench>(x: &mut Cx<'_, R>) {
+        match x.u8(0x5) {
+            0 => {
+                x.move_xz();
+                if (x.u16(0xc) as i16) >= 0 {
+                    return;
+                }
+                x.add8(0x5, 2);
+                x.set32(0xc, 0);
+                x.set16(0x5c, 0x50);
+                x.anim(ANIMS, 1);
+                crate::sound::play(x.b, SFX_BURST, x.o);
+            }
+            2 => {
+                if x.u16(0x5c) == 0x48 {
+                    crate::sound::play(x.b, SFX_MID, x.o);
+                }
+                x.add16(0x5c, 0xffff);
+                if x.u16(0x5c) == 0 {
+                    x.add8(0x5, 2);
+                    x.set16(0x5c, 0x50);
+                    x.anim(ANIMS, 2);
+                }
+                x.anim_step();
+            }
+            _ => {
+                x.anim_step();
+                x.add16(0x5c, 0xffff);
+                if x.u16(0x5c) == 0 {
+                    x.add8(0x4, 2);
+                }
+                x.set_bit(0x1, 1, true);
+                let t = x.u16(0x5c);
+                if t & 1 != 0 {
+                    x.set_bit(0x1, 1, false);
+                }
+            }
+        }
+    }
+}
+
+/// Type 4 (0x523c4) : projectile qui rebondit sur le terrain (hache, `+0x5c` rebonds) puis se
+/// consume en clignotant (`+0x5d` : 0x20 images).
+mod bouncer {
+    use super::*;
+
+    const OFFSETS: u32 = 0x52464;
+    const ANIMS: u32 = 0x15b0a2;
+    const SFX_START: u32 = 0xeb8bc;
+
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
+        match x.state(0x523d2) {
+            0 => {
+                x.add8(0x4, 2);
+                x.set8(0x57, 0);
+                x.set8(0x5e, 0);
+                x.set8(0x5c, 2);
+                x.set8(f::BOX_SET, 6);
+                let owner = x.linked(f::OWNER);
+                let flip = owner.u8(x.b, f::FLIP);
+                x.set8(f::FLIP, flip);
+                x.copy_pos(owner);
+                x.add16(0x10, 0xffff);
+                x.set32(0x14, 0x200_0000);
+                x.set16(0x18, 0x800);
+                x.set16(0x1a, -0x60i16 as u16);
+                let row = (owner.u8(x.b, 0x3) as u32) << 2 & 0xffff;
+                let dx = x.data16(OFFSETS + row);
+                let dz = x.data16(OFFSETS + row + 2);
+                *x.c.d2() = dz as u32;
+                let mut dx = dx;
+                if x.u8(f::FLIP) == 0 {
+                    dx = dx.wrapping_neg();
+                    let vx = x.u16(0x14);
+                    x.set16(0x14, vx.wrapping_neg());
+                }
+                x.add16(0x8, dx);
+                x.add16(0xc, dz);
+                x.anim(ANIMS, 0);
+                x.reinsert();
+                active(x);
+            }
+            2 => active(x),
+            _ => x.free_pshl(),
+        }
+    }
+
+    fn active<R: Bench>(x: &mut Cx<'_, R>) {
+        if x.u8(0x5) != 0 {
+            return burn(x);
+        }
+        x.set8(0x0, 1);
+        if x.u8(0x5e) != 0 {
+            x.add8(0x5e, 0xff);
+            x.set8(0x0, 2);
+        }
+        x.anim_step();
+        x.move_xz();
+        let hit = x.u8(0x57) & 2 != 0;
+        let mut bounce = hit;
+        if !hit {
+            let terrain = crate::video::terrain_of(x.b, x.o).number as u32;
+            let ground = (terrain & 0x3f).wrapping_sub(5) as u16 <= 3;
+            if !ground || terrain & 0x40 != 0 {
+                if (x.u16(0xc) as i16) > 0 {
+                    return finish(x);
+                }
+                x.set16(0xc, 0);
+                bounce = true;
+            } else {
+                // contre un mur : demi-tour
+                let flip = x.u8(f::FLIP) ^ 0x20;
+                x.set8(f::FLIP, flip);
+                let vx = x.u16(0x14);
+                x.set16(0x14, vx.wrapping_neg());
+            }
+        }
+        let _ = bounce;
+        x.set16(0x18, 0x600);
+        x.set16(0x1a, -0x40i16 as u16);
+        x.set8(0x0, 2);
+        x.set8(0x5e, 8);
+        x.set8(0x57, 0);
+        x.add8(0x5c, 0xff);
+        if x.u8(0x5c) == 0 {
+            x.set8(0x5, 2);
+            x.set8(0x0, 2);
+            x.set8(0x5d, 0x20);
+        }
+        finish(x);
+    }
+
+    fn finish<R: Bench>(x: &mut Cx<'_, R>) {
+        if x.u8(0x33) != 0 {
+            x.set8(0x33, 0);
+            crate::sound::play(x.b, SFX_START, x.o);
+        }
+    }
+
+    /// Fin de vie : clignote 0x20 images, retombe puis disparaît.
+    fn burn<R: Bench>(x: &mut Cx<'_, R>) {
+        x.add8(0x5d, 0xff);
+        if x.u8(0x5d) == 0 {
+            return x.free_pshl();
+        }
+        x.set_bit(0x1, 1, true);
+        let t = x.u8(0x5d);
+        if t & 1 != 0 {
+            x.set_bit(0x1, 1, false);
+        }
+        if (x.u16(0xc) as i16) > 0 {
+            x.move_xz();
+            return;
+        }
+        x.anim(ANIMS, 1);
+    }
+}
+
+/// Type 5 (0x5265a) : explosion en gerbe (variante 0 : projectile qui part en arc et éclate ; variante 1 :
+/// flamme posée par l'éclatement, décalée selon son rang `+0x2f`).
+mod burst {
+    use super::*;
+
+    const ANIMS: u32 = 0x15b13c;
+    const SHOT_COUNTS: u32 = 0x5263c;
+    const OFFSET_TABLES: u32 = 0x52732;
+    const SFX_RIGHT: u32 = 0xe89a4;
+    const SFX_LEFT: u32 = 0xe8a2e;
+    const SFX_FLAME: u32 = 0xe8ab8;
+    /// Compteur des flammes en vie (`A5-0x5fbc`, adresse absolue).
+    const FLAMES: u32 = 0xff2044;
+
+    pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
+        let child = x.u8(0x3) != 0;
+        match x.state(0x52668) {
+            0 if !child => {
+                x.add8(0x4, 2);
+                x.set16(0x14, 0x500);
+                x.set16(0x16, 0x40);
+                x.set16(0x18, -0x500i16 as u16);
+                x.set16(0x1a, 0);
+                if x.u8(f::FLIP) == 0 {
+                    let v = x.u32(0x14).wrapping_neg();
+                    x.set32(0x14, v);
+                }
+                x.anim(ANIMS, 0);
+                if (x.u16(0x14) as i16) < 0 {
+                    crate::sound::play(x.b, SFX_LEFT, x.o);
+                } else {
+                    crate::sound::play(x.b, SFX_RIGHT, x.o);
+                }
+            }
+            0 => flame_init(x),
+            2 if !child => {
+                x.move_xz();
+                x.anim_step();
+                if (x.u16(0xc) as i16) < 0 {
+                    x.add8(0x4, 2);
+                    spawn_flames(x);
+                }
+                x.cull_offscreen();
+                x.reinsert();
+            }
+            2 => {
+                if x.u8(0x5e) != 0 {
+                    x.add8(0x5e, 0xff);
+                    if x.u8(0x5e) == 0 {
+                        x.set_a5_u16(0x4ba, 0);
+                    } else if x.u8(0x5e) == 2 {
+                        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
+                    }
+                }
+                if x.anim_step() {
+                    x.add8(0x4, 2);
+                }
+            }
+            _ => x.free_pshl(),
+        }
+    }
+
+    fn flame_init<R: Bench>(x: &mut Cx<'_, R>) {
+        x.add8(0x5c, 0xff);
+        if x.u8(0x5c) != 0 {
+            return;
+        }
+        x.add8(0x4, 2);
+        x.set8(f::BOX_SET, 6);
+        let count = rd16(x.b, FLAMES) as u32;
+        let table = x.data32(OFFSET_TABLES + (count << 2 & 0xffff));
+        let k = (x.u8(0x2f) as u32) << 2 & 0xffff;
+        let dx = x.data16(table + k);
+        let dy = x.data16(table + k + 2);
+        let dx = signed(dx, x.u8(f::FLIP) != 0);
+        *x.c.d2() = dy as u32;
+        x.add16(0x8, dx);
+        x.add16(0x10, dy);
+        x.set8(0x5e, 4);
+        x.set_a5_u16(0x4ba, 0x100);
+        crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
+        crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x20);
+        x.anim(ANIMS, 1);
+        crate::sound::play(x.b, SFX_FLAME, x.o);
+        x.reinsert();
+    }
+
+    /// `0x525ce` : crée les flammes (variante 1), une de plus tous les 4 pas de retard.
+    fn spawn_flames<R: Bench>(x: &mut Cx<'_, R>) {
+        wr16(x.b, FLAMES, 0);
+        let owner = x.linked(f::OWNER);
+        let player = owner.u8(x.b, 0x10c) as u32;
+        let n = x.rom8(SHOT_COUNTS + player).wrapping_sub(1);
+        let (mut rank, mut delay) = (0u8, 1u8);
+        let mut remaining = n as u16;
+        *x.c.d5() = n as u32;
+        loop {
+            let Some(o) = x.alloc(&pools::PSHL) else { break };
+            o.set_u8(x.b, 0, 1);
+            o.set_u8(x.b, 2, 5);
+            o.set_u8(x.b, 3, 1);
+            let flip = x.u8(f::FLIP);
+            o.set_u8(x.b, f::FLIP, flip);
+            let owner_word = x.u16(f::OWNER);
+            o.set_u16(x.b, f::OWNER, owner_word);
+            let (p1, p2) = (x.u8(0x45), x.u8(0x46));
+            o.set_u8(x.b, 0x45, p1);
+            o.set_u8(x.b, 0x46, p2);
+            let (px, py) = (x.u16(0x8), x.u16(0x10));
+            o.set_u16(x.b, 0x8, px);
+            o.set_u16(x.b, 0x10, py);
+            o.set_u32(x.b, 0xc, 0);
+            o.set_u8(x.b, 0x2f, rank);
+            o.set_u8(x.b, 0x5c, delay);
+            rank = rank.wrapping_add(1);
+            delay = delay.wrapping_add(4);
+            let count = rd16(x.b, FLAMES).wrapping_add(1);
+            wr16(x.b, FLAMES, count);
+            let done = remaining == 0;
+            remaining = remaining.wrapping_sub(1);
+            if done {
+                break;
+            }
+        }
+        *x.c.d3() = rank as u32;
+        *x.c.d4() = delay as u32;
+    }
+}
+
+handlers! {
+    0x51c64 "pshl_0" #[without] marker::run,
+    0x51da6 "pshl_1" #[without] thrown::run,
+    0x5204e "pshl_2" #[without] flung::run,
+    0x52234 "pshl_3" #[without] arc::run,
+    0x523c4 "pshl_4" #[without] bouncer::run,
+    0x5265a "pshl_5" #[without] burst::run,
+}

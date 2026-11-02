@@ -8,7 +8,7 @@
 use super::bonus::dispatch;
 use super::screen;
 use super::Ctx;
-use crate::video::{effacer_couche, Couche};
+use crate::video::{clear_layer, Layer};
 use crate::mem::{rd8, wr16, wr8};
 use crate::modes::{Flow, Sequence};
 use crate::Native;
@@ -47,7 +47,7 @@ pub fn run(x: &mut Ctx) -> Flow {
             x.set_v8(0x5f, 0);
             x.set_v16(0x490, 3);
             x.set_v8(0x48e, 15);
-            x.sous_programme(crate::taches::fondu::descente, Etape::Faded)
+            x.subroutine(crate::tasks::fading::descent, Step::Faded)
         }
         2 => {
             palettes(x);
@@ -58,9 +58,9 @@ pub fn run(x: &mut Ctx) -> Flow {
     }
 }
 
-crate::etapes! {
+crate::steps! {
     /// Étapes (points de reprise) de la machine à états.
-    pub enum Etape {
+    pub enum Step {
         Faded = at::FADED => |x| {
             x.set_v8(0x48e, 15);
             crate::palette::no_brightness(x.b);
@@ -70,27 +70,27 @@ crate::etapes! {
                     x.set_v16(off, v);
                 }
                 let (a0, a6) = (x.c.a[0], x.c.a[6]);
-                crate::sprites::construire_68k(x.c, x.b);
+                crate::sprites::build_68k(x.c, x.b);
                 (x.c.a[0], x.c.a[6]) = (a0, a6);
-                return x.wait(1, Etape::Finale1);
+                return x.wait(1, Step::Finale1);
             }
             for off in [0x602, 0x802, 0xa02, 0xc02] {
                 x.set_v32(off, 0);
             }
             // Glitch d'origine : l'A0 que laisse le déliement des listes (le dernier objet délié) traverse la cession
             crate::objects::lists::unlink_all_68k(x.c, x.b);
-            crate::sprites::vider_listes(x.b);
-            crate::video::vider_objets(x.b);
+            crate::sprites::clear_lists(x.b);
+            crate::video::clear_objects(x.b);
             x.set_v16(0x14, 0x12c0 & 0xfff1);
-            x.wait(1, Etape::Cleared)
+            x.wait(1, Step::Cleared)
         },
         /// Couches effacées, défilements et caméras remis à zéro.
         Cleared = at::CLEARED => |x| {
             wr16(x.b, 0x400004, 0x1355);
-            effacer_couche(x.b, Couche::Un);
+            clear_layer(x.b, Layer::One);
             x.set_v8(0x3c, 1);
-            effacer_couche(x.b, Couche::Deux);
-            effacer_couche(x.b, Couche::Trois);
+            clear_layer(x.b, Layer::Two);
+            clear_layer(x.b, Layer::Three);
             let f = x.v8(0x13) & !1;
             x.set_v8(0x13, f);
             screen::clear_920000(x.b);
@@ -110,7 +110,7 @@ crate::etapes! {
         },
         Finale1 = at::FINALE_1 => |x| {
             x.set_v16(0x14, 0x12c0 & 0xfff1);
-            x.wait(1, Etape::Finale2)
+            x.wait(1, Step::Finale2)
         },
         Finale2 = at::FINALE_2 => |x| {
             x.set_v8(0x3c, 1);
@@ -125,12 +125,12 @@ fn palettes(x: &mut Ctx) {
     let at = PALETTES + 4 * table_scene(x);
     let set = rd8(x.b, at);
     if (set as i8) >= 0 {
-        crate::palette::charger_ensemble(x.b, set as u16);
+        crate::palette::load_palette_set(x.b, set as u16);
     }
     // pages 1, 2 et 3 (0x1a60a, 0x1a67e, 0x1a8b2)
     for page in 1..=3 {
         let n = rd8(x.b, at + page as u32);
-        crate::palette::charger_page(x.b, page, n as u16);
+        crate::palette::load_palette_page(x.b, page, n as u16);
     }
     crate::hud::forget_displayed(x.b);
     x.set_v8(0x48e, 12);
@@ -146,7 +146,7 @@ fn script(x: &mut Ctx) -> Flow {
 pub const BLACKOUT: Native = Native {
     entry: 0xf7ecc,
     name: "scene_blackout",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);

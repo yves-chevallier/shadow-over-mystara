@@ -8,7 +8,7 @@
 //! fin d'un fondu en cédant la main à l'ordonnanceur.
 
 use super::tiles::{self, Number, COLUMN, LAYER};
-use super::fondu;
+use super::fading;
 use super::Ctx;
 use crate::mem::{prog16, prog32, prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::modes::{Flow, Sequence};
@@ -193,22 +193,22 @@ pub fn run(x: &mut Ctx) -> Flow {
 fn start(x: &mut Ctx) -> Flow {
     next_sub_step(x);
     x.set_v8(a5::HOLD, 1);
-    crate::sound::jouer_global(x.b, sub::MUSIC);
-    fondu::PAS.set(x.b, 8);
+    crate::sound::play_global(x.b, sub::MUSIC);
+    fading::STEP.set(x.b, 8);
     // 0xf68c8 : la tâche de fondu (A0 gardé)
-    fondu::DELAI.set(x.b, 1);
-    fondu::PAGES.set(x.b, 13);
-    crate::kernel::creer_tache(x.b, 16, fondu::DESCENTE_PAS);
-    x.push_return(Etape::AfterFade);
-    x.wait(1, Etape::FadeWait)
+    fading::DELAY.set(x.b, 1);
+    fading::PAGES.set(x.b, 13);
+    crate::kernel::create_task(x.b, 16, fading::DESCENT_STEP);
+    x.push_return(Step::AfterFade);
+    x.wait(1, Step::FadeWait)
 }
 
-crate::etapes! {
+crate::steps! {
     /// Étapes (points de reprise) de la machine à états.
-    pub enum Etape {
+    pub enum Step {
         FadeWait = FADE_WAIT => |x| {
-            if fondu::PAGES.get(x.b) != 0 {
-                return x.wait(1, Etape::FadeWait);
+            if fading::PAGES.get(x.b) != 0 {
+                return x.wait(1, Step::FadeWait);
             }
             Flow::Done
         },
@@ -507,7 +507,7 @@ fn announce(x: &mut Ctx, first: u16) -> Flow {
         set_timer(x, 20);
         sign(x, first);
         // 0xce00a : objet SET de type 15, variante 19
-        let Ok(Obj(o)) = crate::families::creators::set_15_pur(x.b, 19) else {
+        let Ok(Obj(o)) = crate::families::creators::set_15_pure(x.b, 19) else {
             return Flow::Done;
         };
         let prime = rd32(x.b, v::PRIME);
@@ -555,7 +555,7 @@ fn payout(x: &mut Ctx) -> Flow {
         let (rest, amount) = pay_digit(rd32(x.b, left));
         wr32(x.b, left, rest);
         let character = rd8(x.b, p + p::CHARACTER);
-        crate::evenements::enfiler_points(x.b, ((character as u32) << 8 | amount) as u16);
+        crate::events::enqueue_points(x.b, ((character as u32) << 8 | amount) as u16);
         let mut i = 2 * character as u32;
         if x.v8(a5::LAYOUT) & 1 != 0 {
             i += 8;
@@ -585,7 +585,7 @@ fn pay_digit(v: u32) -> (u32, u32) {
 pub const TALLY: Native = Native {
     entry: 0xf590e,
     name: "scene_tally",
-    run: crate::Corps::Processeur(|c, b| {
+    run: crate::Body::Processeur(|c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);

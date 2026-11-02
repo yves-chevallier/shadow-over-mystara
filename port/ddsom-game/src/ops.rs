@@ -38,30 +38,30 @@ pub mod cc {
 }
 
 /// MOVE / TST / AND / OR... : N et Z selon la valeur, V et C à zéro, X conservé.
-pub fn logique(c: &mut Cpu, v: u32, size: Size) {
+pub fn logic(c: &mut Cpu, v: u32, size: Size) {
     c.flags_logic(v, size);
 }
 
 /// Pose les drapeaux N, Z, V, C, X d'un coup (masque `SR_N | ...`).
-pub fn drapeaux(c: &mut Cpu, masque: u16, valeurs: u16) {
-    c.sr = c.sr & !masque | valeurs & masque;
+pub fn drapeaux(c: &mut Cpu, mask: u16, values: u16) {
+    c.sr = c.sr & !mask | values & mask;
 }
 
 /// Tous les drapeaux de condition (X N Z V C).
-pub const TOUS: u16 = SR_X | SR_N | SR_Z | SR_V | SR_C;
+pub const ALL: u16 = SR_X | SR_N | SR_Z | SR_V | SR_C;
 
 /// ABCD d'un octet : `dst + src + X` en décimal codé binaire. Retourne le résultat et la retenue
 /// (qui est aussi X). Algorithme du 68000 réel (valable aussi pour des quartets invalides).
 pub fn abcd(src: u8, dst: u8, x: bool) -> (u8, bool) {
     let (sv, dv, x) = (src as u32, dst as u32, x as u32);
-    let somme = sv + dv + x;
-    let mut ajuste = 0;
+    let sum = sv + dv + x;
+    let mut adjust = 0;
     if (sv & 0x0f) + (dv & 0x0f) + x > 9 {
-        ajuste |= 0x06;
+        adjust |= 0x06;
     }
-    let retenue = somme > 0x99;
-    if retenue {
-        ajuste |= 0x60;
+    let carry = sum > 0x99;
+    if carry {
+        adjust |= 0x60;
     }
-    ((somme + ajuste) as u8, retenue)
+    ((sum + adjust) as u8, carry)
 }

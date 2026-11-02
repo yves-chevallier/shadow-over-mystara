@@ -1,16 +1,16 @@
 //! Type 18, état touché (`+4 = 4`, 0x7157e). `+5` : 0 réaction par table (`+0x49`), 2 recul, 4 chute et relevé,
 //! 6 mort en plusieurs temps, 8 fuite (saisi par un joueur), 10 reprise du combat.
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Table de réactions communes aux coups, indexée par le code `+0x49`.
 const REACTIONS: u32 = 0x715d4;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::FREEZE) as i8 > 0 {
         x.add8(f::FREEZE, 0xff);
         zone_and_terrain(x);
@@ -31,7 +31,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x71e24 : plus de PV → mort (sous-état 6, état 2 le temps de la chute) ; vrai si l'ogre meurt.
-fn death_check<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn death_check<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::HP) as i16) > 0 {
         return false;
     }
@@ -40,7 +40,7 @@ fn death_check<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-fn first<R: Banc>(x: &mut Cx<'_, R>) {
+fn first<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set8(INVULNERABLE, 0);
         if death_check(x) {
@@ -52,7 +52,7 @@ fn first<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 2 : recul ----------------------------------------------------------------------------------
 
-fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
+fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.set16(TIMER, 0x14);
@@ -88,7 +88,7 @@ fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 4 : chute et relevé ---------------------------------------------------------------------------
 
-fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
+fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -120,7 +120,7 @@ fn get_up<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x717ea : le combat reprend : cible choisie, palier de PV franchi, nouveau geste.
-pub(crate) fn regroup<R: Banc>(x: &mut Cx<'_, R>) {
+pub(crate) fn regroup<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(LOOK_PREV, 0xff);
     if !pick_target(x) {
@@ -143,7 +143,7 @@ pub(crate) fn regroup<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 6 : mort --------------------------------------------------------------------------------------
 
-fn dying<R: Banc>(x: &mut Cx<'_, R>) {
+fn dying<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -205,7 +205,7 @@ fn dying<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 8 : fuite --------------------------------------------------------------------------------------
 
-fn flee<R: Banc>(x: &mut Cx<'_, R>) {
+fn flee<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

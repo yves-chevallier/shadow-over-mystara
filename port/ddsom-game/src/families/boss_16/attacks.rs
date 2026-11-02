@@ -1,11 +1,11 @@
 //! Boss 16, groupe 4 : les huit attaques (`+6` = 0 à 14). Chacune finit par `next_attack` (0x94e24).
 
-use crate::families::cx::Banc;
+use crate::families::cx::Bench;
 use super::*;
 use crate::objects::pools;
-use crate::objects::Courant;
+use crate::objects::Current;
 
-pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
+pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => crawl_leap(x),
         2 => charge(x),
@@ -22,7 +22,7 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0xb59a6 / 0xb59c8 : un EFFCT 0x30 (variante 1 ou 2) lié au boss (`+0x46`).
-fn spawn_trail<R: Banc>(x: &mut Cx<'_, R>, variant: u8) {
+fn spawn_trail<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
     if let Some(e) = x.alloc(&pools::EFFCT) {
         e.set_u8(x.b, 0, 1);
         e.set_u8(x.b, 2, 0x30);
@@ -33,7 +33,7 @@ fn spawn_trail<R: Banc>(x: &mut Cx<'_, R>, variant: u8) {
 }
 
 /// 0xa3b4a / 0xa3b66 : un ESHL 0x2d (variante 0 ou, avec `index` en `+0x2f`, 1) lié au boss (`+0x46`).
-fn spawn_flame<R: Banc>(x: &mut Cx<'_, R>, variant: u8, index: u8) {
+fn spawn_flame<R: Bench>(x: &mut Cx<'_, R>, variant: u8, index: u8) {
     if let Some(s) = x.alloc(&pools::ESHL) {
         s.set_u8(x.b, 0, 1);
         s.set_u8(x.b, 2, 0x2d);
@@ -46,7 +46,7 @@ fn spawn_flame<R: Banc>(x: &mut Cx<'_, R>, variant: u8, index: u8) {
 }
 
 /// 0x93950 : cherche un joueur à saisir (0xfc44) et le saisit (0xfd64) ; vrai s'il est saisi.
-fn try_grab<R: Banc>(x: &mut Cx<'_, R>) -> bool {
+fn try_grab<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let Some(player) = lib::attack_hits_a_player(x, 2) else {
         return false;
     };
@@ -55,7 +55,7 @@ fn try_grab<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x93884 : le boss se baisse en tremblant, bondit sur le joueur et tente de le saisir pendant le saut.
-fn crawl_leap<R: Banc>(x: &mut Cx<'_, R>) {
+fn crawl_leap<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -87,7 +87,7 @@ fn crawl_leap<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x938ce : décollage vers l'avant, puis la suite du vol dans la même image.
-fn launch<R: Banc>(x: &mut Cx<'_, R>) {
+fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     next7(x);
     x.set8(TIMER, 3);
     stop(x);
@@ -100,7 +100,7 @@ fn launch<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x938fe : en vol ; après trois images le boss essaie de saisir un joueur, et à l'atterrissage il freine.
-fn in_flight<R: Banc>(x: &mut Cx<'_, R>) {
+fn in_flight<R: Bench>(x: &mut Cx<'_, R>) {
     if tst8(x, TIMER).gt() {
         sub8(x, TIMER, 1);
     } else if try_grab(x) {
@@ -119,7 +119,7 @@ fn in_flight<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9396a : charge à toute vitesse, tremble puis repart en arrière.
-fn charge<R: Banc>(x: &mut Cx<'_, R>) {
+fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -167,7 +167,7 @@ fn charge<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x93a26 : crache une flamme (ESHL 0x2d variante 0 ; les EFFCT 0x30 l'accompagnent).
-fn tail_flame<R: Banc>(x: &mut Cx<'_, R>) {
+fn tail_flame<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -202,7 +202,7 @@ fn tail_flame<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x93a9a : souffle long (variante 1 de la flamme tous les seize images).
-fn sweep_a<R: Banc>(x: &mut Cx<'_, R>) {
+fn sweep_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -237,7 +237,7 @@ fn sweep_a<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x93b0c et 0x93b80 : souffle de feu qui laisse une traînée (EFFCT 0x30 variante 2).
-fn sweep_b<R: Banc>(x: &mut Cx<'_, R>) {
+fn sweep_b<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -272,7 +272,7 @@ fn sweep_b<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x93bf4 : rugissement (ESHL 0x2d variante 1 à l'image-clé).
-fn roar<R: Banc>(x: &mut Cx<'_, R>) {
+fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -305,7 +305,7 @@ fn roar<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x93c60 : deux sauts successifs, le second plus long.
-fn double_jump<R: Banc>(x: &mut Cx<'_, R>) {
+fn double_jump<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
