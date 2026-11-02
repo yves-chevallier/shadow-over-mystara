@@ -161,7 +161,7 @@ fn bubble_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if !sub8(x, BUBBLE_TICK, 1).gt() {
         x.set_a5_u16(0x4be, 6);
         crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
-        let r = (random(x) & 0x3f) as u8 + 0xf;
+        let r = ((x.random() as u32) & 0x3f) as u8 + 0xf;
         x.set8(BUBBLE_TICK, r);
         sub8(x, BUBBLES, 1);
         lib::sound(x, crate::sound::CMD_5F);

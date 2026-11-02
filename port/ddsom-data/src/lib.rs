@@ -52,15 +52,18 @@ pub struct GameData {
     pub anims: Anims,
     pub speeds: Speeds,
     pub effects: EffectTables,
+    /// Tables of the enemies (`families/enemy*` and `reactions` of the game; docs/fin.md, L8).
+    pub enemies: DataFile,
 }
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 4] = [
+    pub const FILES: [&'static str; 5] = [
         "sprites/frames.json",
         "sprites/anims.json",
         "data/speeds.json",
         "data/effects.json",
+        "data/enemies.json",
     ];
 
     /// Loads the game data from an assets folder (written by `extract`).
@@ -70,6 +73,7 @@ impl GameData {
             anims: Anims::load(&dir.join(Self::FILES[1]))?,
             speeds: Speeds::load(&dir.join(Self::FILES[2]))?,
             effects: EffectTables::load(&dir.join(Self::FILES[3]))?,
+            enemies: DataFile::load(&dir.join(Self::FILES[4]))?,
         })
     }
 }

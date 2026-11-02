@@ -17,7 +17,10 @@ use super::cx::Cx;
 use super::enemy_lib as lib;
 use super::enemy_common::var;
 use super::enemy_common::detach_from_host;
-use crate::mem::{rd16, rd32, rd8};
+use super::enemy_common::tables::{self, Table};
+use super::effects::records::Effect;
+use crate::objects::Obj;
+use crate::player::Player;
 use crate::Native;
 use crate::objects::pools;
 use crate::objects::Current;
@@ -35,85 +38,29 @@ use spins::*;
 use steps::*;
 use throws::*;
 
-/// Fields of the hit objects.
-mod f {
-    pub const ACTIVE: u32 = 0;
-    pub const DISPLAY: u32 = 1;
-    pub const KIND: u32 = 2;
-    pub const STATE: u32 = 4;
-    pub const SUB: u32 = 5;
-    pub const STEP: u32 = 6;
-    pub const SUB_STEP: u32 = 7;
-    pub const X: u32 = 8;
-    pub const X_SAVED: u32 = 0xa;
-    pub const HEIGHT: u32 = 0xc;
-    pub const Y: u32 = 0x10;
-    pub const VX: u32 = 0x14;
-    pub const VY: u32 = 0x16;
-    pub const VZ: u32 = 0x18;
-    pub const GRAVITY: u32 = 0x1a;
-    pub const VX2: u32 = 0x1c;
-    pub const VY2: u32 = 0x1e;
-    pub const CLASS: u32 = 0x28;
-    /// Contact with an obstacle during movement.
-    pub const BLOCKED: u32 = 0x29;
-    pub const LINKED: u32 = 0x2a;
-    pub const LINK: u32 = 0x2b;
-    pub const FLIP: u32 = 0x2c;
-    pub const ANGLE: u32 = 0x2d;
-    /// End of the animation (word; byte `+0x33`: animation event).
-    pub const ANIM_END: u32 = 0x32;
-    pub const ANIM_EVENT: u32 = 0x33;
-    pub const REACTION: u32 = 0x49;
-    pub const ATTACKER_FLIP: u32 = 0x4a;
-    pub const OWNER: u32 = 0x50;
-    pub const FREEZE: u32 = 0x53;
-    pub const STUN: u32 = 0x56;
-    pub const HP: u32 = 0x62;
-    pub const RECOVER: u32 = 0x84;
-    pub const DOWNED: u32 = 0x86;
-    pub const GRABBED: u32 = 0x87;
-    pub const RESUME_STATE: u32 = 0x8a;
-    pub const COUNTER: u32 = 0x90;
-    pub const PENDING: u32 = 0x91;
-}
+/// Fields of the hit objects (enemies and bosses).
+use super::enemy_common::Enemy as E;
 
 /// Classes (byte `+0x28`).
 const ENEMY: u8 = 2;
 const BOSS: u8 = 4;
 
-/// ROM tables.
-pub(crate) mod rom {
-    /// Animation sets per type (longs read as data; high word zero: own routine, offset).
-    pub const ANIM_SETS: u32 = 0x3de58;
-    /// Animation variant by `+0xbf` (bytes, PC-relative).
-    pub const ANIM_VARIANTS: u32 = 0x3e28a;
-    /// Hit and death sounds per type (PC-relative longs), get-up routine per type.
-    pub const HIT_SOUNDS: u32 = 0x3e2ac;
-    pub const DEATH_SOUNDS: u32 = 0x3e3a4;
-    pub const GET_UP: u32 = 0x3e000;
-    /// Types that do not stay on the ground when grabbed (PC-relative bytes).
-    pub const NO_GRAB_DOWN: u32 = 0x3e1ee;
-    /// Predefined throws: counter (bytes), speeds (4 words per entry).
-    pub const LAUNCH_COUNTERS: u32 = 0x3bdec;
-    pub const LAUNCH_SPEEDS: u32 = 0x3bdcc;
-    /// Empty routine (`rts`) of the per-type tables.
-    pub const NOTHING: [u32; 2] = [0x3e2aa, 0x3bb9a];
-}
+/// Empty routine (`rts`) of the per-type tables: no sound, no get-up (routine addresses, keys of the tables).
+const NOTHING: [u32; 2] = [0x3e2aa, 0x3bb9a];
 
 // ---------------------------------------------------------------------------------------------
 // Helpers
 
 fn next<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(f::STEP, 2);
+    x.add8(E::STEP, 2);
 }
 fn next_sub<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(f::SUB_STEP, 2);
+    x.add8(E::SUB_STEP, 2);
 }
 /// Next step, sub-step at zero.
 fn next_clear<R: Bench>(x: &mut Cx<'_, R>) {
     next(x);
-    x.set8(f::SUB_STEP, 0);
+    x.set8(E::SUB_STEP, 0);
 }
 fn neg16<R: Bench>(x: &mut Cx<'_, R>, off: u32) {
     let v = x.u16(off).wrapping_neg();
@@ -124,24 +71,24 @@ fn neg32<R: Bench>(x: &mut Cx<'_, R>, off: u32) {
     x.set32(off, v);
 }
 fn flipped<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    x.u8(f::FLIP) != 0
+    x.u8(E::FLIP) != 0
 }
 fn dead<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    (x.u16(f::HP) as i16) <= 0
+    (x.u16(E::HP) as i16) <= 0
 }
 fn paused<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     var::PAUSE.get(x.b) != 0
 }
 /// Death: substate 6 (+ `+0` = 2).
 fn mark_dead<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(f::SUB, 6);
-    x.set8(f::ACTIVE, 2);
+    x.set8(E::SUB, 6);
+    x.set8(E::ACTIVE, 2);
 }
 fn speeds<R: Bench>(x: &mut Cx<'_, R>, vx: u16, vy: u16, vz: u16, gravity: u16) {
-    x.set16(f::VX, vx);
-    x.set16(f::VY, vy);
-    x.set16(f::VZ, vz);
-    x.set16(f::GRAVITY, gravity);
+    x.set16(E::VX, vx);
+    x.set16(E::AX, vy);
+    x.set16(E::VZ, vz);
+    x.set16(E::GRAVITY, gravity);
 }
 fn anim_step<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
@@ -158,65 +105,61 @@ fn move_xyz<R: Bench>(x: &mut Cx<'_, R>) {
 fn landed<R: Bench>(x: &mut Cx<'_, R>) {
     lib::landing_by_kind(x);
 }
-fn random<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
-    x.random() as u32
-}
 /// Effect `0xabec8` with given variant and setting; false if the pool refused it.
 fn effect<R: Bench>(x: &mut Cx<'_, R>, variant: u32, setting: u32) -> bool {
     lib::attack_effect(x, variant, setting)
 }
 /// Index into the per-type tables: type, plus 32 outside the ENEMY class.
 fn type_index<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
-    let base = if x.u8(f::CLASS) == ENEMY { 0 } else { 32 };
-    (base + x.u8(f::KIND) as u32) & 0xff
+    let base = if x.u8(E::CLASS) == ENEMY { 0 } else { 32 };
+    (base + x.u8(E::KIND) as u32) & 0xff
 }
 
 /// 0x3de26: the freeze after the hit takes the stun duration.
 fn stun<R: Bench>(x: &mut Cx<'_, R>) {
-    let s = x.u8(f::STUN);
-    x.set8(f::FREEZE, s);
+    let s = x.u8(E::STUN);
+    x.set8(E::FREEZE, s);
 }
 
 /// 0x3de2e: animation `n` of the type's set (types 13, 19, 34 and 54 add a variant `+0xbf`).
 fn anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    let i = 4 * type_index(x);
-    let entry = rd32(x.b, rom::ANIM_SETS + i);
+    let i = type_index(x);
+    let entry = tables::anim_sets().nth32(x.b, i);
     let (set, n) = if entry >> 16 != 0 {
         (entry, n as u16)
     } else {
-        // own routine: `bsr 0x3e27e ; movea.l #game,A4 ; jmp 0x1a32` (0x3e27e adds the variant to the low byte)
-        let routine = rom::ANIM_SETS + (entry & 0xffff);
-        let v = x.u8(0xbf) as u32;
-        let add = x.rom8(rom::ANIM_VARIANTS + v);
+        // own routine: `bsr 0x3e27e ; movea.l #game,A4 ; jmp 0x1a32` (0x3e27e adds the variant to the low byte); its
+        // set is in `anim_set_routines`
+        let v = x.u8(E::ANIM_VARIANT) as u32;
+        let add = tables::anim_variants().at8(x.b, v);
         let n = n as u16 & !0xff | (n as u8).wrapping_add(add) as u16;
-        ((x.rom16(routine + 6) as u32) << 16 | x.rom16(routine + 8) as u32, n)
+        (tables::anim_set_routine(i).at32(x.b, 0), n)
     };
     x.anim_start(set, n);
 }
 
 /// Routine from a per-type table (PC-relative longs, `jsr (A1)` with D0 = the index); `None` for empty entries
 /// (`rts`).
-fn per_type<R: Bench>(x: &mut Cx<'_, R>, table: u32, index: u32) -> Option<u32> {
-    let i = 4 * index;
-    let routine = (x.rom16(table + i) as u32) << 16 | x.rom16(table + i + 2) as u32;
-    (!rom::NOTHING.contains(&routine)).then_some(routine)
+fn per_type<R: Bench>(x: &mut Cx<'_, R>, table: &Table, index: u32) -> Option<u32> {
+    let routine = table.nth32(x.b, index);
+    (!NOTHING.contains(&routine)).then_some(routine)
 }
 /// 0x3e28e and 0x3e388: hit sound, death sound (per-type sound tables: the routine read is the sound).
 fn hit_sound<R: Bench>(x: &mut Cx<'_, R>) {
     let i = type_index(x);
-    if let Some(sound) = per_type(x, rom::HIT_SOUNDS, i) {
+    if let Some(sound) = per_type(x, tables::hit_sounds(), i) {
         lib::sound(x, crate::sound::Sound::at(sound));
     }
 }
 fn death_sound<R: Bench>(x: &mut Cx<'_, R>) {
     let i = type_index(x);
-    if let Some(sound) = per_type(x, rom::DEATH_SOUNDS, i) {
+    if let Some(sound) = per_type(x, tables::death_sounds(), i) {
         lib::sound(x, crate::sound::Sound::at(sound));
     }
 }
 /// 0x3e000: type-specific get-up (per-type table; the address read designates its family's handler).
 fn get_up_by_kind<R: Bench>(x: &mut Cx<'_, R>, index: u32) {
-    let Some(routine) = per_type(x, rom::GET_UP, index) else { return };
+    let Some(routine) = per_type(x, tables::get_up_routines(), index) else { return };
     match routine {
         0x653b2 => super::enemy_gargoyle::attacks::regroup(x),
         0x717ea => super::enemy_ogre::hit::regroup(x),
@@ -242,62 +185,62 @@ fn hurt<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x3e130: the object turns toward the aggressor; the X and depth speeds follow the orientation.
 fn face_attacker<R: Bench>(x: &mut Cx<'_, R>) {
-    let flip = x.u8(f::ATTACKER_FLIP) ^ 0x20;
+    let flip = x.u8(E::ATTACKER_FLIP) ^ 0x20;
     // leftover: the orientation in the low byte of D2 (`dispatch::Leftovers::d2`, speed of the spark of
     // `flash_and_shake`)
     *x.c.d2() = *x.c.d2() & !0xff | flip as u32;
-    x.set8(f::FLIP, flip);
+    x.set8(E::FLIP, flip);
     if flip != 0 {
-        neg16(x, f::VX);
-        neg16(x, f::VY);
+        neg16(x, E::VX);
+        neg16(x, E::AX);
     }
 }
 /// 0x3e148: the speeds follow the current orientation.
 fn orient_speeds<R: Bench>(x: &mut Cx<'_, R>) {
     if flipped(x) {
-        neg16(x, f::VX);
-        neg16(x, f::VY);
+        neg16(x, E::VX);
+        neg16(x, E::AX);
     }
 }
 
 /// 0x3e25e: a pending link (`+0x91`, bit 7) becomes effective (`+0x2b`, `+0x2a` raised).
 fn apply_pending<R: Bench>(x: &mut Cx<'_, R>) {
-    let p = x.u8(f::PENDING);
+    let p = x.u8(E::PENDING_PALETTE);
     if (p as i8) >= 0 {
         return;
     }
-    x.set8(f::LINK, p & 0x7f);
-    x.set8(f::LINKED, 1);
-    x.set8(f::PENDING, 0);
+    x.set8(E::PALETTE, p & 0x7f);
+    x.set8(E::OWN_PALETTE, 1);
+    x.set8(E::PENDING_PALETTE, 0);
 }
 /// Variant that always clears `+0x91`.
 fn take_pending<R: Bench>(x: &mut Cx<'_, R>) {
-    let p = x.u8(f::PENDING);
+    let p = x.u8(E::PENDING_PALETTE);
     if (p as i8) < 0 {
-        x.set8(f::LINK, p & 0x7f);
-        x.set8(f::LINKED, 1);
+        x.set8(E::PALETTE, p & 0x7f);
+        x.set8(E::OWN_PALETTE, 1);
     }
-    x.set8(f::PENDING, 0);
+    x.set8(E::PENDING_PALETTE, 0);
 }
 /// Inverse: the effective link goes back to pending (`+0x2b` | 0x80 in `+0x91`).
 fn defer_link<R: Bench>(x: &mut Cx<'_, R>) {
-    if (x.u8(f::PENDING) as i8) < 0 || x.u8(f::LINKED) == 0 {
+    if (x.u8(E::PENDING_PALETTE) as i8) < 0 || x.u8(E::OWN_PALETTE) == 0 {
         return;
     }
-    let l = x.u8(f::LINK) | 0x80;
-    x.set8(f::PENDING, l);
-    x.set8(f::LINKED, 0);
+    let l = x.u8(E::PALETTE) | 0x80;
+    x.set8(E::PENDING_PALETTE, l);
+    x.set8(E::OWN_PALETTE, 0);
 }
 
 /// 0x3bda2: predefined throw `n` (counter and four speeds from the ROM).
 fn launch<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.set8(f::DOWNED, 0);
+    x.set8(E::DOWNED, 0);
     next(x);
-    let c = x.rom8(rom::LAUNCH_COUNTERS + n);
-    x.set8(f::COUNTER, c);
-    let at = rom::LAUNCH_SPEEDS + 8 * n;
-    for (k, off) in [f::VX, f::VY, f::VZ, f::GRAVITY].into_iter().enumerate() {
-        let v = x.rom16(at + 2 * k as u32);
+    let c = tables::launch_counters().at8(x.b, n);
+    x.set8(E::COUNTER, c);
+    let speeds = tables::launch_speeds();
+    for (k, off) in [E::VX, E::AX, E::VZ, E::GRAVITY].into_iter().enumerate() {
+        let v = speeds.at16(x.b, 8 * n + 2 * k as u32);
         x.set16(off, v);
     }
 }
@@ -305,13 +248,13 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 /// Shaking in place: X oscillates by ±2 according to the counter parity and the orientation.
 fn shake<R: Bench>(x: &mut Cx<'_, R>, amount: u16) {
     let mut d = amount;
-    if x.u8(f::COUNTER) & 1 != 0 {
+    if x.u8(E::COUNTER) & 1 != 0 {
         d = d.wrapping_neg();
     }
     if flipped(x) {
         d = d.wrapping_neg();
     }
-    x.add16(f::X, d);
+    x.add16(E::X, d);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -321,7 +264,7 @@ fn shake<R: Bench>(x: &mut Cx<'_, R>, amount: u16) {
 /// `+6` = 2 × i runs the i-th function of the list; false for a step outside the table (or odd).
 macro_rules! step {
     ($x:ident; $($f:path),+ $(,)?) => {{
-        let s = $x.u8(f::STEP);
+        let s = $x.u8(E::STEP);
         s & 1 == 0 && step!(@ $x, s, 0u8; $($f),+)
     }};
     (@ $x:ident, $s:ident, $i:expr; $f:path $(, $remainder:path)*) => {
@@ -458,43 +401,35 @@ fn run_table<R: Bench>(x: &mut Cx<'_, R>, entry: u32) -> Option<bool> {
     })
 }
 
-/// Routines without a jump table at the head.
-const RECOIL: u32 = 0x3bb9c;
-const RECOIL_1: u32 = 0x3bf76;
-const HELD: u32 = 0x3c63a;
-const DISINTEGRATE: u32 = 0x3c828;
-const GROUNDED_GRAB: u32 = 0x3d350;
-const BURNT: u32 = 0x3d86e;
-
-/// Runs the original reaction routine `entry`; false if the step is outside its table (see `native_run`).
+/// Runs the original reaction routine `entry`; false if the step is outside its table (see `native_run`). The routines
+/// without a jump table at their head come first.
 fn run_entry_flag<R: Bench>(x: &mut Cx<'_, R>, entry: u32) -> bool {
     match entry {
-        RECOIL => {
+        0x3bb9c /* recoil */ => {
             recoil(x);
             true
         }
-        RECOIL_1 => {
+        0x3bf76 /* recoil, animation 1 */ => {
             recoil_1(x);
             true
         }
-        HELD => {
-            let n = x.u16(f::RECOVER).wrapping_sub(1);
-            x.set16(f::RECOVER, n);
+        0x3c63a /* held */ => {
+            let n = x.u16(E::RECOVER).wrapping_sub(1);
+            x.set16(E::RECOVER, n);
             step!(x; held_start, held_shake, held_end, death) // table 0x3c64c
         }
-        DISINTEGRATE => disintegrate(x),
-        GROUNDED_GRAB => grounded_grab(x),
+        0x3c828 /* disintegration */ => disintegrate(x),
+        0x3d350 /* grab on the ground */ => grounded_grab(x),
         // `move.b 6(A0),D0` without `moveq`: the index is the low word of D0, whose high byte is zero (D0 = the
-        // reaction
-        // code, one byte, set by the caller: `enemy_common::react`, the bosses' own tables)
-        BURNT => step!(x; burnt, burnt_fall, anim_step, burnt_wait), // table 0x3d87a
+        // reaction code, one byte, set by the caller: `enemy_common::react`, the bosses' own tables)
+        0x3d86e /* burn */ => step!(x; burnt, burnt_fall, anim_step, burnt_wait), // table 0x3d87a
         _ => run_table(x, entry).unwrap_or(false),
     }
 }
 
 /// Jump to another reaction routine (`bra`) from a step.
 fn run_entry<R: Bench>(x: &mut Cx<'_, R>, entry: u32) {
-    let step = x.u8(f::STEP);
+    let step = x.u8(E::STEP);
     assert!(run_entry_flag(x, entry), "reaction {entry:#x}: step {step:#x} outside the original table");
 }
 
@@ -525,7 +460,7 @@ pub fn run_common<R: Bench>(x: &mut Cx<'_, R>, entry: u32) -> bool {
     if !NATIVES.iter().any(|n| n.entry == entry) {
         return false;
     }
-    let step = x.u8(f::STEP);
+    let step = x.u8(E::STEP);
     assert!(run_entry_flag(x, entry), "reaction {entry:#x}: step {step:#x} outside the original table");
     true
 }

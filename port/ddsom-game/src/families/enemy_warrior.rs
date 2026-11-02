@@ -426,10 +426,10 @@ fn sparks<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     e.set_u16(x.b, 0xc, 0);
-    let dy = (random(x) & 7) as u16;
+    let dy = ((x.random() as u32) & 7) as u16;
     let ny = e.u16(x.b, 0x10).wrapping_add(dy.wrapping_sub(3));
     e.set_u16(x.b, 0x10, ny);
-    let dx = (random(x) & 0xf) as u16;
+    let dx = ((x.random() as u32) & 0xf) as u16;
     let nx = e.u16(x.b, 0x8).wrapping_add(dx.wrapping_sub(7));
     e.set_u16(x.b, 0x8, nx);
 }

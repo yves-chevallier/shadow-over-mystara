@@ -197,7 +197,7 @@ fn attack_2<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(0x7, 2);
             x.set8(0x42, 1);
             x.set_a5_u16(0x51e, 4);
-            let r = random(x) as u8 & 0x20;
+            let r = (x.random() as u32) as u8 & 0x20;
             x.set8(f::FLIP, r);
             let d1: i16 = if r != 0 { -0xe0 } else { 0x260 };
             let px = var::SCROLL_X.get(x.b).wrapping_add(d1 as u16);

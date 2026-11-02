@@ -39,7 +39,7 @@ ZONES = [
     ("effects", r"families/effects[^/]*(/.*)?\.rs$"),
     ("set", r"families/(set[^/]*|scenery)\.rs$"),
     ("eshl_sobj_items", r"families/(eshl[^/]*|sobj|items|items_b|boxes|shell)\.rs$"),
-    ("enemies", r"families/(enemy[^/]*(/.*)?|reactions\.rs)$"),
+    ("enemies", r"families/(enemy[^/]*(/.*)?|reactions(\.rs|/.*))$"),
     ("bosses", r"families/boss[^/]*(/.*)?$"),
     ("players", r"^(player/|families/player/|combat/|combat\.rs$)"),
     ("screens", r"^(modes/|hud/|service/|scene/|credits[^/]*\.rs$|text\.rs$|popups\.rs$)"),

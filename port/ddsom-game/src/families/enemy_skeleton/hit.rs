@@ -75,7 +75,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
         let posture = if x.u8(SERIES) != 0 { 8 } else { 3 };
         x.set8(POSTURE, posture);
         let counter = x.u8(COUNTER) as i8;
-        if counter != 0 && (counter > 0 || random(x) & 1 != 0) {
+        if counter != 0 && (counter > 0 || (x.random() as u32) & 1 != 0) {
             // counter-attack: attack `+0xa9` of the attack series
             x.set16(f::STATE, 0x204);
             let mv = x.u8(COUNTER_MOVE);

@@ -61,7 +61,7 @@ fn stand_pose<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x73d3c: leap toward a player, head-on (walk) or over.
 pub(super) fn jump_toward<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 1);
-    if random(x) & 1 == 0 {
+    if (x.random() as u32) & 1 == 0 {
         x.add8(0x7, 4);
         let vx = if x.u8(f::FLIP) != 0 { -0x180 } else { 0x180 };
         set_velocity(x, vx, 0x3c0, -0x38);
@@ -131,7 +131,7 @@ fn leap_over_player<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.set8(VULNERABLE, 1);
-            if random(x) & 1 == 0 {
+            if (x.random() as u32) & 1 == 0 {
                 x.set8(0x7, 4);
                 let mut vy = -0x80i16;
                 if let Some(t) = target(x) {

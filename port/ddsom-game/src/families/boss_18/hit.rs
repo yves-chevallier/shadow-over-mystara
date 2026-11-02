@@ -92,7 +92,7 @@ fn throw_speeds<R: Bench>(x: &mut Cx<'_, R>, row: u32) {
         let v = x.rom16(table + i);
         x.set16(off, v);
     }
-    let r = (random(x) & 0xf) * 2;
+    let r = ((x.random() as u32) & 0xf) * 2;
     let v = x.rom16(DRIFT + r);
     x.set16(0x1c, v);
     x.set16(0x1e, 0);

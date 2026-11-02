@@ -121,7 +121,7 @@ fn reach_gen<R: Bench>(x: &mut Cx<'_, R>, d0: i16, close: bool) -> bool {
     if !lib::decision(x, same_side) {
         return false;
     }
-    let r = random(x) as u16;
+    let r = (x.random() as u32) as u16;
     let mask = if close { 0xf } else { 0x2 };
     let take_a = if close { (0xffc0u16 >> (r & mask)) & 1 != 0 } else { r & mask != 0 };
     if take_a {
@@ -243,7 +243,7 @@ fn choose_attack_a<R: Bench>(x: &mut Cx<'_, R>, close: bool) {
     let profile = x.u8(PROFILE).wrapping_shl(2) as u32;
     let table = x.data32(PICK_TABLE + profile);
     let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
-    let r = random(x) & 0x1f;
+    let r = (x.random() as u32) & 0x1f;
     let pick = x.data8(table.wrapping_add(level).wrapping_add(r));
     x.set8(f::SUB2, pick.wrapping_add(base));
     x.set16(f::STATE, 0x0204);
@@ -264,7 +264,7 @@ pub(super) fn next_move<R: Bench>(x: &mut Cx<'_, R>) {
         return set_state_long(x, ACTIVE_STANCE);
     }
     let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
-    let r = random(x) & 0x1f;
+    let r = (x.random() as u32) & 0x1f;
     let pick = x.data8(CLOSE_TABLE + level + r);
     x.set8(f::SUB2, pick);
     x.set16(f::STATE, 0x0208);

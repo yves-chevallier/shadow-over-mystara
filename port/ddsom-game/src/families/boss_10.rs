@@ -91,7 +91,7 @@ fn zone_and_shadow<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x8d526: picks the next combat step (`+6` = 0, 4 or 6) from a 32-byte table.
 fn next_action<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0x1f;
+    let r = (x.random() as u32) & 0x1f;
     x.set32(f::STATE, FIGHT);
     let step = x.rom8(0x8d540 + r);
     x.set8(f::SUB2, step);
@@ -355,7 +355,7 @@ fn walk_delay<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn walk_steps<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0x1f;
+    let r = (x.random() as u32) & 0x1f;
     let v = x.rom8(0x8d4ce + r);
     x.set8(WALK_STEPS, v);
 }
@@ -370,10 +370,10 @@ fn jump<R: Bench>(x: &mut Cx<'_, R>) {
             let py = var::SCROLL_Y.get(x.b);
             x.set16(JUMP_X, px);
             x.set16(JUMP_Y, py);
-            let down = ((random(x) & 3) << 4) as u16 + 0x30;
+            let down = (((x.random() as u32) & 3) << 4) as u16 + 0x30;
             let y = x.u16(JUMP_Y).wrapping_add(down);
             x.set16(JUMP_Y, y);
-            let across = ((random(x) & 7) << 4) as u16;
+            let across = (((x.random() as u32) & 7) << 4) as u16;
             let xx = x.u16(JUMP_X).wrapping_add(across);
             x.set16(JUMP_X, xx);
             *x.c.d2() = *x.c.d2() & 0xffff_0000 | 0xc0;
@@ -403,7 +403,7 @@ fn jump<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(0x8, jx);
                 x.set16(0x10, jy);
                 x.set8(f::FLIP, 0);
-                if random(x) & 1 != 0 {
+                if (x.random() as u32) & 1 != 0 {
                     x.set8(f::FLIP, 0x20);
                 }
                 body(x, 8);

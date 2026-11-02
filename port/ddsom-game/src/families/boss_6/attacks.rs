@@ -363,7 +363,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x8596c: the height advances by one increment of the `SKIM` table (sign according to `+0xa8`).
 fn skim_step<R: Bench>(x: &mut Cx<'_, R>) {
     let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
-    let mut d0 = rom32(x, SKIM + i) as i32;
+    let mut d0 = x.prog32(SKIM + i) as i32;
     if !cmp16(x, COUNT, 0x24).gt() {
         d0 = d0.wrapping_neg();
     }
@@ -394,7 +394,7 @@ fn spit<R: Bench>(x: &mut Cx<'_, R>) {
             let low = Fl::sub16(x.u16(0xc), 0x20).lt();
             if low || x.u8(f::KEY_FRAME) != 4 {
                 let i = (x.u8(f::KEY_FRAME) as u32) * 4;
-                let inc = rom32(x, LOW_FLIGHT + i);
+                let inc = x.prog32(LOW_FLIGHT + i);
                 let z = x.u32(0xc).wrapping_add(inc);
                 x.set32(0xc, z);
                 lib::step(x);

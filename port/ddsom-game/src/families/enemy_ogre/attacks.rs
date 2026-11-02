@@ -375,7 +375,7 @@ fn arm_swing<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(TIMER2, 0x48);
             } else {
                 let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
-                let d = rom32(x, RISE + idx);
+                let d = x.prog32(RISE + idx);
                 x.add32(Obj::Z, d);
             }
             lib::step(x);

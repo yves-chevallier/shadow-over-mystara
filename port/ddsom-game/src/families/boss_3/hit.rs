@@ -48,7 +48,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     // of
     // the group dispatch, or from the index returned by 0xfe5a (at most (32 + type) × 4 < 0x100): it is zero.
     let code = x.u8(0x49) as u32;
-    let routine = rom32(x, REACTIONS + code);
+    let routine = x.prog32(REACTIONS + code);
     run_reaction(x, routine);
 }
 

@@ -75,7 +75,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     let code = x.u8(REACTION) as u32;
-    let routine = rom32(x, REACTIONS + code);
+    let routine = x.prog32(REACTIONS + code);
     match routine {
         0x90b26 => knock(x),
         0x90a4c => lie_down(x),

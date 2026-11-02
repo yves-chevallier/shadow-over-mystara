@@ -48,7 +48,7 @@ fn dying<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     let code = x.u8(REACTION) as u32;
-    let routine = rom32(x, 0x8e3dc + code);
+    let routine = x.prog32(0x8e3dc + code);
     match routine {
         0x8e488 => {
             if var::PAUSE.get(x.b) != 0 {

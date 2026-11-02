@@ -129,13 +129,13 @@ pub(super) fn walk_delay_slow<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 pub(super) fn walk_steps_fast<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0x1f;
+    let r = (x.random() as u32) & 0x1f;
     let v = x.rom8(0x85678 + r);
     x.set8(WALK_STEPS, v);
 }
 
 pub(super) fn walk_steps_slow<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0x1f;
+    let r = (x.random() as u32) & 0x1f;
     let v = x.rom8(0x85698 + r);
     x.set8(WALK_STEPS, v);
 }
@@ -150,7 +150,7 @@ pub(super) fn probe<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u
 
 /// 0x856f2: a player is very close ahead.
 pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let pick = x.rom8(0x85708 + r);
     let t = target(x, 0x85718, pick as u32);
     apply(x, t);
@@ -158,7 +158,7 @@ pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x8571a: a player is ahead; the table depends on the phase.
 pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let phase = x.u8(PHASE) as i8 as i32;
     let routine = target(x, 0x85734, (2 * phase) as u32);
     let table = match routine {
@@ -174,7 +174,7 @@ pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x85788: a player is at mid-distance (side `side`).
 pub(super) fn choose_mid<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let index = (side as u32 - 1) * 2 + 4 * (x.u8(PHASE) as i8 as i32 as u32);
     // the six routines read the same byte table
     let _ = target(x, 0x857ac, index);
@@ -185,7 +185,7 @@ pub(super) fn choose_mid<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
 
 /// 0x857f6: a player is far (side `side`).
 pub(super) fn choose_far<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let index = (side as u32 - 1) * 2 + 4 * (x.u8(PHASE) as i8 as i32 as u32);
     let routine = target(x, 0x8581a, index);
     // six routines: the first two read 0x85850, the next two 0x85860, the last two 0x85870

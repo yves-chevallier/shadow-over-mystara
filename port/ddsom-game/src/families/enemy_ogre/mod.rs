@@ -155,7 +155,7 @@ fn nobody_left<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// 0x71d98: vertical undulation in flight according to the animation key (table of longs `0x71dc6`).
 fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = ((x.u8(f::KEY_FRAME) & 0x7f) as u32) << 2;
-    let mut d = rom32(x, 0x71dc6 + idx) as i32;
+    let mut d = x.prog32(0x71dc6 + idx) as i32;
     if (x.u16(TIMER2) as i16) <= 0x24 {
         d = d.wrapping_neg();
     }

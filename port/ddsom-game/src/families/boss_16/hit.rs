@@ -56,7 +56,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
         lib::drop_once(x);
     }
     let code = x.u8(0x49) as u32;
-    match rom32(x, REACTIONS + code) {
+    match x.prog32(REACTIONS + code) {
         KNOCKBACK => knockback(x, false),
         KNOCKBACK_HARD => knockback(x, true),
         BURST => burst(x),
@@ -292,7 +292,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x94638: death; the sequence depends on the hit code.
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     let code = x.u8(0x49) as u32;
-    if rom32(x, DEATHS + code) == DEATH_HEAVY {
+    if x.prog32(DEATHS + code) == DEATH_HEAVY {
         death_heavy(x);
     } else {
         death_normal(x);

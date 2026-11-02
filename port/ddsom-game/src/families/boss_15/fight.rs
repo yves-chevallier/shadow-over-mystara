@@ -113,8 +113,8 @@ fn far_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         return false;
     }
     let q = quarter(x);
-    let mask = rom32(x, FAR_MASKS + (((q as u16) << 2) as u32));
-    let bit = random(x) & 0x1f;
+    let mask = x.prog32(FAR_MASKS + (((q as u16) << 2) as u32));
+    let bit = (x.random() as u32) & 0x1f;
     if mask >> bit & 1 == 0 {
         return false;
     }
@@ -145,7 +145,7 @@ fn special_due<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     set_abs8(x, 0xff8043, 0x7f);
     x.set8(SHIELD, 8);
     x.set32(f::STATE, ATTACK_4);
-    let r = random(x) & 3;
+    let r = (x.random() as u32) & 3;
     let which = x.rom8(SPECIAL_MOVES + r);
     x.set8(f::SUB2, which);
     true
@@ -154,14 +154,14 @@ fn special_due<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// 0x919cc..0x91a16: chooses an attack from row `row` of the tables; a negative byte refers to the patience row
 /// (0x91a18), which can also refer to a random choice (`wander`).
 fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, row: usize) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let b = x.data8(PICKS[row] + r) as i8;
     if b >= 0 {
         x.set32(f::STATE, 0x0204_0000);
         x.set8(f::SUB2, b as u8);
         return;
     }
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let c = x.rom8(COOLDOWNS + r) as i8;
     if c < 0 {
         return wander(x);

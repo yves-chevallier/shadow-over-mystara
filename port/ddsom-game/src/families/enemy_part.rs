@@ -179,7 +179,7 @@ mod tentacle {
     /// Starts the rest animation and draws the wait duration (`+0x30`).
     fn idle_anim<R: Bench>(x: &mut Cx<'_, R>) {
         start(x, BODY, 2);
-        let r = random(x) & 0xe;
+        let r = (x.random() as u32) & 0xe;
         let delay = x.rom16(IDLE_DELAYS + r);
         x.set16(0x30, delay);
     }

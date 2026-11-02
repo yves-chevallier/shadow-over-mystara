@@ -132,7 +132,7 @@ fn face_target<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x65a30: vertical undulation in flight according to the animation key (table of longs `0x65a5a`).
 fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
-    let mut d = rom32(x, 0x65a5a + idx) as i32;
+    let mut d = x.prog32(0x65a5a + idx) as i32;
     if (x.u16(TIMER2) as i16) <= 0x24 {
         d = d.wrapping_neg();
     }
@@ -145,7 +145,7 @@ fn bob<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x65a72: progressive climb (table of longs `0x65a86`).
 fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
-    let d = rom32(x, 0x65a86 + idx);
+    let d = x.prog32(0x65a86 + idx);
     x.add32(Obj::Z, d);
 }
 
