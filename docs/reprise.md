@@ -120,7 +120,7 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    Pour L8b : voir « Pour L8b » dans fin.md (une ligne par table dans `extract/src/enemies.rs`, lecture par
    `enemy_common::tables`, champs communs d'`Enemy`).
    **Lot L8b (familles d'ennemis)** fait (branche `wt-l8b-ennemis`, [fin.md](fin.md) « Résultat L8b ») :
-   `enemy_riyakaa/` et `enemy_double/` découpés, 159 tables des familles dans `data/enemies.json`
+   `enemy_riyakaa/` et `enemy_double/` découpés, 161 tables des familles dans `data/enemies.json`
    (`extract/src/enemies.rs`, `families`), un `record!` par famille, `Enemy` complété (paramètres d'IA) : zone
    `enemies` à 0 accesseur ROM, 0 décalage littéral, 0 `A5 + littéral`, 0 constante d'adresse ROM, plus gros
    fichier 793 lignes. **Réextraire les assets** (`data/enemies.json`).

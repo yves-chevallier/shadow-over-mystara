@@ -306,6 +306,9 @@ fn families(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     s.push(prog("warrior/bob", 0x7759e, "i8", &[], 64));
     upto(s, "warrior/script_offsets", 0x77626, true, "i16", 0x10);
     upto(s, "warrior/scripts", 0x77626, false, "u8", 0x200);
+    // ---- riyakaa (type 16): its fallback moves are those of the bow gnolls (`bow/follow_moves`) ----
+    rank(s, "riyakaa/next_attacks", 0x701dc);
+    s.push(data("riyakaa/counter_masks", 0x6ff70, "x32", &[], 8));
     // ---- doubles (types 22 to 26) ----
     s.push(prog("double/reversing_terrains", 0x77d08, "u8", &[], 9));
 }

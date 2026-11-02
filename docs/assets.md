@@ -650,7 +650,7 @@ Tables ajoutées par le lot L8a (`extract/src/enemies.rs`, lues par `families/en
 | `beetle_nest/…`, `scorpion/…` | `0x65c78`, `0x669d6` (prog, listes en données) | | `enemy_common::spawn_list` : `lists` (adresses des listes), `allocs` (routine d'allocation), puis chaque liste `k.count` (mot n) et `k` (n + 1 entrées `u8*4 u16*3` : routine, type, variante, groupe `+0x2f`, X, hauteur, profondeur) |
 
 Tables des familles ajoutées par le lot L8b (`extract/src/enemies.rs`, fonction `families`, une ligne par table ;
-159 tables nommées `<famille>/<table>`, lues par `enemy_common::tables::table`) :
+161 tables nommées `<famille>/<table>`, lues par `enemy_common::tables::table`) :
 
 | Forme | Exemples | Sens |
 |---|---|---|

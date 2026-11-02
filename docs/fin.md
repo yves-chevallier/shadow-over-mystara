@@ -835,7 +835,7 @@ libre.
     `decide` : sous-état 2 et aides des décisions ; `attacks` : sous-états 4, 6, 8 ; `hit`) et `enemy_double.rs`
     (818) en `enemy_double/` (`mod` : socle commun, `beasts` : types 22 à 24, `dark_warrior` : type 26).
     `examples/names` identique. 308/308 VALID (mode par défaut).
-  * (b) Données : 159 tables des familles ajoutées à `data/enemies.json` par `extract/src/enemies.rs`
+  * (b) Données : 161 tables des familles ajoutées à `data/enemies.json` par `extract/src/enemies.rs`
     (`families`, une ligne par table, nommée `<famille>/<table>` : `goblin/near_moves`, `trog/blink_delays`,
     `warmachine/wide_jumps`...). Les tables par rang (16 lignes de 32 octets, `RANK / 2`) passent par `rank(...)` ;
     une table dont la fin n'est pas connue du code par `upto(...)` (jusqu'à la table suivante du fichier ou au
