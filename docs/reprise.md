@@ -77,7 +77,7 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
      **réextraire ses assets** (`extract <roms> <assets> music`).
    * Le pilote lit ses données par accesseurs nommés (`ddsom_sound::Rom`) ; elles restent rangées à leurs adresses
      d'origine (voir [sans-rom.md](sans-rom.md) « Ce qui manque »).
-5. **Suite :** optimisation (base : `examples/bench`, refactorisation.md « Performance »), documentation finale, et le bug de saisie du nom. Ce bug existe dans d'autres révisions du jeu, pas dans la nôtre (Euro 960619).
+5. **Suite :** optimisation (base : `examples/bench`, refactorisation.md « Performance »), documentation finale, et le bug de saisie du nom. Ce bug existe dans d'autres révisions du jeu, pas dans la nôtre (Euro 960619). Plan détaillé : [fin.md](fin.md).
 
 ## Méthode qui marche
 
