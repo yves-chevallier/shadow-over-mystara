@@ -383,3 +383,17 @@ Hypothèse : cas impossible en jeu (repli de l'original sans sens). Devenu un `u
   combinaisons) : le Rust ne le connaît pas. L'ancienne version Rust écrivait à l'A1 du banc, qui n'était pas non plus
   celui de l'original. L'écriture est omise (le son est joué comme dans l'original). À reprendre si un scénario
   atteint ce cas (objet utilisé dans la scène 41).
+
+### Pas de réactions jamais joués, réécrits (`player/hurt.rs`)
+
+En rendant les replis par adresse `unreachable!`, `fuzz_couv` (cible `players_update`, états perturbés) est tombé sur
+des pas des tables de réactions qui n'avaient ni fonction Rust ni native : le jeu sans 68000 s'y arrêtait déjà
+(main compris), sans qu'aucun des 308 scénarios n'y passe. Relevé statique des tables de pas (`cpup_tables`) :
+pas 0 des réactions 0x3a578, 0x3a890, 0x3a9da, 0x3a9f8 (0x3a59a, 0x3a5a4, 0x3a296, 0x3aa16) et pas 8 de 0x3a9f8
+(0x3aa5e) ; pas 0xa de 0x3af44 (glissade jusqu'à l'arrêt, 0x3aff8) ; réactions entières 0x3b570 (étoiles, perte de
+16 PV, 0x3b592/0x3b5b2/0x3b656), 0x3b72c (agenouillé sous six étoiles, 0x3b740-0x3b7aa), 0x3b7ba (0x3b7ca, 0x3b7e2) ;
+au sol, 0x3b8a6 (0x3aa2e, 0x3aa5e) et 0x3b8c4 (0x3b8d6, 0x3b8e0). **Trou réel** : un joueur au pas lent tué par un
+coup (`hurt_slow`, réaction 0x14) passe par 0x3b8a6 → 0x3aa2e, qui arrêtait le jeu. Tous transcrits de l'original
+(glitch écrit en clair : réglage des étoiles de 0x3b7ca = D1.b, l'offset du pas) et validés par `fuzz_couv`
+(`nom:players_update`, 10 scénarios, ~59 000 essais : plus aucune panique ni écart plausible ; avant : 163 paniques).
+Les entrées au-delà de la fin des tables (0x3b880, 0x3b8a2, 0x3ba0e : milieu d'instruction) ne sont pas des pas.

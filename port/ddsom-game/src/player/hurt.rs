@@ -51,6 +51,79 @@ const HURT_ANIMATIONS: u32 = 0x3bb52;
 
 /// Rewritten reactions and steps: original address -> Rust routine.
 const HANDLERS: &[(u32, Handler)] = &[
+    (0x3a296, |g, p| {
+        p.set_u8(g, Player::SLOW, 0);
+        hurt_animation(g, p, 0xe);
+        launch_common(g, p);
+    }),
+    (0x3a59a, |g, p| launch_high(g, p, 6)),
+    (0x3a5a4, |g, p| launch_high(g, p, 0xa)),
+    (0x3aa16, |g, p| {
+        if is_dead(g, p) {
+            p.set_u16(g, Player::MAIN, 0x0400);
+            p.set_u8(g, Player::ACTIVE, 2);
+            g.sound(rom::DEATH_EFFECT, p);
+        }
+        launch_slow(g, p);
+    }),
+    (0x3aa2e, launch_slow),
+    (0x3aa5e, |g, p| {
+        if animation::step(g, p) {
+            next_step(g, p);
+            p.set_u8(g, Player::TIMER_6F, 0x14);
+            p.set_u16(g, Obj::VX, 0x440);
+            p.set_u16(g, Obj::AX, (-0x40i16) as u16);
+            if p.faces_left(g) {
+                let v = p.u32(g, Obj::VX).wrapping_neg();
+                p.set_u32(g, Obj::VX, v);
+            }
+            hurt_animation(g, p, 0xf);
+        }
+    }),
+    (0x3aff8, slide_to_rest),
+    (0x3b592, stars_start),
+    (0x3b5b2, stars_shake),
+    (0x3b656, stars_end),
+    (0x3b740, kneel_start),
+    (0x3b766, kneel_stars),
+    (0x3b78a, kneel_fall),
+    (0x3b7a4, |g, p| {
+        animation::step(g, p);
+    }),
+    (0x3b7aa, |g, p| {
+        animation::step(g, p);
+        let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+        p.set_u8(g, Player::TIMER_6F, left);
+        if left == 0 {
+            recover(g, p);
+        }
+    }),
+    (0x3b7ca, |g, p| {
+        next_step(g, p);
+        // Original glitch: the setting of the stars is D1.b, the offset of the step left by the dispatch
+        let setting = g.jumped.offset as u8;
+        crate::families::effects_creators::for_players::blow(&mut g.leftovers, g.b, p.obj(), 1, setting);
+        p.set_u8(g, Player::TIMER_6F, 0x50);
+        hurt_animation(g, p, 0x11);
+    }),
+    (0x3b7e2, |g, p| {
+        animation::step(g, p);
+        let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+        p.set_u8(g, Player::TIMER_6F, left);
+        if left == 0 {
+            recover(g, p);
+        }
+    }),
+    (0x3b8d6, |g, p| {
+        next_step(g, p);
+        hurt_animation(g, p, 0x1d);
+    }),
+    (0x3b8e0, |g, p| {
+        if animation::step(g, p) {
+            next_step(g, p);
+            p.set_u8(g, Player::TIMER_6F, 0x14);
+        }
+    }),
     (0x3a136, reaction_0),
     (0x3a79e, reaction_10),
     (0x3a4c6, |g, p| jump(g, p, steps::R6)),
@@ -597,6 +670,169 @@ fn launch_a(g: &mut Ctx, p: Player) {
     cov!();
     hurt_animation(g, p, 0xa);
     launch_common(g, p);
+}
+
+// ---- steps reached by no scenario (reactions 0x3a578, 0x3a890, 0x3a9da, 0x3a9f8, 0x3af44, 0x3b570, 0x3b72c, 0x3b7ba,
+// on the ground 0x3b8a6 and 0x3b8c4): transcribed from the original, validated by `fuzz_couv` (players_update) ----
+
+/// 0x3a59a, 0x3a5a4: high throw (vx 0x280, vz 0x500) with animation `anim`; with no HP, to the ground.
+fn launch_high(g: &mut Ctx, p: Player, anim: u16) {
+    cov!();
+    hurt_animation(g, p, anim);
+    next_step(g, p);
+    set_launch(g, p, 0x280, 0x500);
+    face_attacker(g, p);
+    knock_down_if_dead(g, p);
+}
+
+/// 0x3aa2e: the slow walk ends, throw (vx 0x200, vz 0x480), animation 0xe.
+fn launch_slow(g: &mut Ctx, p: Player) {
+    cov!();
+    p.set_u8(g, Player::SLOW, 0);
+    hurt_animation(g, p, 0xe);
+    next_step(g, p);
+    set_launch(g, p, 0x200, 0x480);
+    face_attacker(g, p);
+}
+
+/// 0x3aff8: slide on the ground (dust every other frame), stopped by an obstacle; at rest, next step and 10 frames.
+fn slide_to_rest(g: &mut Ctx, p: Player) {
+    cov!();
+    move_x(g, p);
+    if p.u16(g, Obj::VX) != 0 && ram::FRAME_COUNTER.get(g.b) & 1 != 0 {
+        shock_dust(g, p);
+    }
+    stop_at_wall(g, p);
+    if p.u8(g, Obj::VX) == 0 {
+        next_step(g, p);
+        p.set_u8(g, Player::TIMER_6F, 0xa);
+    }
+}
+
+/// 0x3b592: stars (0xb378a, variant 0, setting 0), 20 frames of shaking (animation 0).
+fn stars_start(g: &mut Ctx, p: Player) {
+    cov!();
+    crate::families::effects_creators::for_players::blow(&mut g.leftovers, g.b, p.obj(), 0, 0);
+    next_step(g, p);
+    p.set_u8(g, Player::TIMER_6F, 0x14);
+    p.set_u8(g, Player::HITSTOP, 1);
+    hurt_animation(g, p, 0);
+}
+
+/// 0x3b5b2: the player shakes one pixel left and right; at the end of the count they lose 16 HP and are thrown
+/// (dead: to the ground), or, without altitude and still alive, slide backward (vx 0x280, deceleration 0x50).
+fn stars_shake(g: &mut Ctx, p: Player) {
+    cov!();
+    if p.u8(g, Player::TIMER_6F) == 0 {
+        return stars_end(g, p);
+    }
+    let left = p.u8(g, Player::TIMER_6F).wrapping_sub(1);
+    p.set_u8(g, Player::TIMER_6F, left);
+    if (left as i8) > 0 {
+        let mut dx: u16 = 1;
+        if left & 1 != 0 {
+            dx = dx.wrapping_neg();
+        }
+        if p.faces_left(g) {
+            dx = dx.wrapping_neg();
+        }
+        let x = p.u16(g, Obj::X).wrapping_add(dx);
+        p.set_u16(g, Obj::X, x);
+        return;
+    }
+    next_step(g, p);
+    let hp = p.u16(g, Player::HP).wrapping_sub(0x10);
+    p.set_u16(g, Player::HP, hp);
+    if (hp as i16) <= 0 {
+        p.set_u16(g, Player::HP, 0);
+        g.sound(rom::DEATH_EFFECT, p);
+        let alive = ram::PLAYERS_ALIVE.get(g.b).wrapping_sub(1);
+        ram::PLAYERS_ALIVE.set(g.b, alive);
+        p.set_u8(g, Player::ACTIVE, 2);
+        p.set_u16(g, Player::MAIN, 0x0400);
+        return stars_thrown(g, p);
+    }
+    if (p.u16(g, Obj::Z) as i16) > 0 {
+        return stars_thrown(g, p);
+    }
+    p.set_u16(g, Obj::VX, 0x280);
+    p.set_u16(g, Obj::AX, (-0x50i16) as u16);
+    reverse_if_facing_left(g, p);
+}
+
+/// 0x3b5e8: throw (vx 0x200, vz 0x480), animation 0x16 or 0x17 every other frame.
+fn stars_thrown(g: &mut Ctx, p: Player) {
+    cov!();
+    next_step(g, p);
+    p.set_u8(g, Player::HITSTOP, 1);
+    p.set_u16(g, Obj::VX, 0x200);
+    p.set_u16(g, Obj::AX, 0);
+    p.set_u16(g, Obj::VZ, 0x480);
+    p.set_u16(g, Obj::AZ, (-0x40i16) as u16);
+    p.set_u32(g, Obj::VY, 0);
+    let anim = if ram::FRAME_COUNTER.get(g.b) & 1 != 0 { 0x17 } else { 0x16 };
+    hurt_animation(g, p, anim);
+    reverse_if_facing_left(g, p);
+}
+
+/// 0x3b656: end of the animation: back to the standing state; otherwise the slide goes on while there is speed.
+fn stars_end(g: &mut Ctx, p: Player) {
+    cov!();
+    if animation::step(g, p) {
+        return recover(g, p);
+    }
+    if p.u8(g, Obj::VX) != 0 {
+        move_x(g, p);
+    }
+}
+
+/// 0x3b952: the horizontal speed (and acceleration) reversed for a player facing left.
+fn reverse_if_facing_left(g: &mut Ctx, p: Player) {
+    cov!();
+    if p.faces_left(g) {
+        let v = p.u32(g, Obj::VX).wrapping_neg();
+        p.set_u32(g, Obj::VX, v);
+    }
+}
+
+/// 0x3b740: 240 frames; airborne, the player falls straight down (animation 3), on the ground they kneel at once.
+fn kneel_start(g: &mut Ctx, p: Player) {
+    cov!();
+    next_step(g, p);
+    p.set_u8(g, Player::TIMER_6F, 0xf0);
+    if p.u16(g, Obj::Z) == 0 {
+        return kneel_stars(g, p);
+    }
+    p.set_u32(g, Obj::VX, 0);
+    p.set_u16(g, Obj::VZ, 0);
+    p.set_u16(g, Obj::AZ, (-0x40i16) as u16);
+    hurt_animation(g, p, 3);
+}
+
+/// 0x3b766: kneeling (animation 0x11) under stars: up to six (0xb378a, variant 2, settings 5 down to 0); a full pool
+/// skips a step.
+fn kneel_stars(g: &mut Ctx, p: Player) {
+    cov!();
+    next_step(g, p);
+    hurt_animation(g, p, 0x11);
+    for setting in (0..=5).rev() {
+        if crate::families::effects_creators::for_players::blow(&mut g.leftovers, g.b, p.obj(), 2, setting).is_none() {
+            next_step(g, p);
+            return;
+        }
+    }
+}
+
+/// 0x3b78a: falling straight down; on the ground, kneeling (`kneel_stars`).
+fn kneel_fall(g: &mut Ctx, p: Player) {
+    cov!();
+    animation::step(g, p);
+    move_xz(g, p);
+    if (p.u16(g, Obj::Z) as i16) > 0 {
+        return;
+    }
+    p.set_u16(g, Obj::Z, 0);
+    kneel_stars(g, p);
 }
 
 /// 0x3a2b4: throw (vx 0x180, vz 0x400).
