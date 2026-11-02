@@ -10,7 +10,7 @@ use crate::objects::Obj;
 fn ready_after_anim<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
         set_state_long(x, STANCE);
-        x.set8(LOOK, 0);
+        x.set8(Kobold::LOOK, 0);
         mv(x, 0);
         ready(x);
     }
@@ -51,16 +51,16 @@ fn b_roar<R: Bench>(x: &mut Cx<'_, R>) {
             let r = rand_and(x, 1);
             if r != 0 {
                 set_state_long(x, 0x0202_0002);
-                x.set8(LOOK, 0xc);
+                x.set8(Kobold::LOOK, 0xc);
                 mv(x, 0xc);
                 return ready(x);
             }
             x.add8(f::SUB3, 4);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 7);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Kobold::LOOK, 7);
             let r = rand_and(x, 0x1f);
             let n = x.data8(0x55de6 + r);
-            x.set8(REPEAT, n);
+            x.set8(Kobold::REPEAT, n);
             mv(x, 7);
         }
         6 => ready_after_anim(x),
@@ -73,8 +73,8 @@ fn b_stretch<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 0xf);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Kobold::LOOK, 0xf);
             mv(x, 0xf);
         }
         6 => ready_after_anim(x),
@@ -92,7 +92,7 @@ fn b_somersault<R: Bench>(x: &mut Cx<'_, R>) {
             if r != 0 {
                 x.set16(Obj::VY, -0x100i16 as u16);
             }
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 6);
             x.set16(Obj::AY, 0);
             x.set16(Obj::VZ, 0x400);
@@ -110,7 +110,7 @@ fn b_somersault<R: Bench>(x: &mut Cx<'_, R>) {
 fn attacks_wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
     }
     x.anim_step();
 }
@@ -124,7 +124,7 @@ fn land_yz<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::ACTIVE, 1);
     x.set32(Obj::Z, 0);
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     look(x, 0x18);
     mv(x, 0x18);
 }
@@ -134,7 +134,7 @@ fn b_hop<R: Bench>(x: &mut Cx<'_, R>, vx: i16, vz: u16, strike_anim: bool) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 0x1c);
             x.set16(Obj::VX, vx as u16);
             if x.u8(f::FLIP) != 0 {
@@ -169,7 +169,7 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set32(Obj::Z, 0);
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     look(x, 0x18);
     mv(x, 0x18);
 }
@@ -183,8 +183,8 @@ fn b_hop_strike<R: Bench>(x: &mut Cx<'_, R>) {
         10 => {
             if x.anim_step() {
                 x.add8(f::SUB3, 2);
-                x.set8(STRIKE_POWER, 5);
-                x.set8(LOOK, 0x28);
+                x.set8(Enemy::STRIKE_POWER, 5);
+                x.set8(Kobold::LOOK, 0x28);
                 strike(x, 0);
             }
         }
@@ -212,19 +212,19 @@ fn c_wait<R: Bench>(x: &mut Cx<'_, R>) {
         }
         0 => {
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x10);
+            x.set16(Kobold::TIMER, 0x10);
             c_begin(x);
         }
         2 => {
-            let n = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, n);
+            let n = x.u16(Kobold::TIMER).wrapping_sub(1);
+            x.set16(Kobold::TIMER, n);
             if (n as i16) < 0 {
                 return set_state_long(x, STANCE);
             }
             if must_turn(x) {
-                x.set32(RESUME_STATE, 0x0208_0004);
+                x.set32(Kobold::RESUME_STATE, 0x0208_0004);
                 let sub2 = x.u8(f::SUB2);
-                x.set8(RESUME_SUB2, sub2);
+                x.set8(Kobold::RESUME_SUB2, sub2);
                 return set_state_long(x, 0x0202_0200);
             }
             x.anim_step();
@@ -235,7 +235,7 @@ fn c_wait<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn c_begin<R: Bench>(x: &mut Cx<'_, R>) {
     look(x, 0);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     mv(x, 0);
 }
 
@@ -244,8 +244,8 @@ fn c_paw<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => paw_begin(x),
         2 => {
-            let n = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, n);
+            let n = x.u16(Kobold::TIMER).wrapping_sub(1);
+            x.set16(Kobold::TIMER, n);
             if (n as i16) >= 0 {
                 x.move_by_table_xy();
                 x.anim_step();
@@ -264,7 +264,7 @@ fn c_paw<R: Bench>(x: &mut Cx<'_, R>) {
 fn c_side<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             let r = rand_and(x, 1);
             let target = x.u16(f::TARGET) != 0;
             let mut above = false;
@@ -287,13 +287,13 @@ fn c_side<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             x.set8(Obj::SPEED_INDEX, if above { 0x10 } else { 0 });
             look(x, 0xc);
-            x.set16(TIMER, 0x24);
+            x.set16(Kobold::TIMER, 0x24);
             mv(x, 0xc);
             set_speed(x, 0xb);
         }
         2 => {
-            let n = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, n);
+            let n = x.u16(Kobold::TIMER).wrapping_sub(1);
+            x.set16(Kobold::TIMER, n);
             if (n as i16) < 0 {
                 return set_state_long(x, STANCE);
             }
@@ -312,7 +312,7 @@ fn c_side<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         set_state_long(x, STANCE);
-        x.set8(LOOK, 0x7f);
+        x.set8(Kobold::LOOK, 0x7f);
         pick_target(x);
         return;
     }

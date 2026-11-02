@@ -14,6 +14,8 @@
 //! | state 4 | `hit` | reactions, death in five stages, flight |
 
 use crate::families::cx::Bench;
+use crate::objects::Obj;
+use crate::record::record;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -25,29 +27,34 @@ mod decide;
 pub(crate) mod hit;
 mod stance;
 
-mod g {
-    pub const GROUP: u32 = 0x2f;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const AI_WANDER: u32 = 0x6b;
-    pub const AI_WAIT: u32 = 0x6e;
-    pub const AI_CHARGE: u32 = 0x71;
-    pub const AI_SHOT: u32 = 0x78;
-    pub const SHOT_KIND: u32 = 0x79;
-    /// Current and previous look.
-    pub const LOOK: u32 = 0xa0;
-    pub const LOOK_PREV: u32 = 0xa1;
-    /// State to resume after a turn-around (long).
-    pub const RESUME_STATE: u32 = 0xa2;
-    pub const TIMER: u32 = 0xa6;
-    pub const TIMER2: u32 = 0xa8;
-    pub const PHASE: u32 = 0xaa;
-    pub const FLAG: u32 = 0xad;
-    pub const COUNT: u32 = 0xae;
-    /// Non-zero: the charge aims at position `GOAL_X` instead of the edge of the screen.
-    pub const AIMED: u32 = 0xb2;
-    pub const GOAL_X: u32 = 0xbc;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct WarMachine(pub Obj);
+
+impl WarMachine {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl WarMachine {
+        /// Current and previous look.
+        look, set_look, LOOK: u8 @ 0xa0;
+        look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa1;
+        /// State to resume after a turn-around (long).
+        resume_state, set_resume_state, RESUME_STATE: u32 @ 0xa2;
+        timer, set_timer, TIMER: u16 @ 0xa6;
+        timer2, set_timer2, TIMER2: u16 @ 0xa8;
+        phase, set_phase, PHASE: u8 @ 0xaa;
+        flag, set_flag, FLAG: u8 @ 0xad;
+        count, set_count, COUNT: u8 @ 0xae;
+        /// Non-zero: the charge aims at position `WarMachine::GOAL_X` instead of the edge of the screen.
+        aimed, set_aimed, AIMED: u8 @ 0xb2;
+        goal_x, set_goal_x, GOAL_X: u16 @ 0xbc;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
@@ -68,7 +75,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         st::DEAD => x.free(&pools::ENEMY),
         _ => {}
     }
-    if x.u8(FLAG) != 0 {
+    if x.u8(WarMachine::FLAG) != 0 {
         x.set8(Enemy::FRAME_TAG, 0);
     }
     if x.u8(Enemy::ACTIVE) != 0 {
@@ -90,8 +97,8 @@ fn weapon<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 
 /// Look (`+0xa0`) and its twin (`+0xa1`).
 fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
-    x.set8(LOOK, v);
-    x.set8(LOOK_PREV, v);
+    x.set8(WarMachine::LOOK, v);
+    x.set8(WarMachine::LOOK_PREV, v);
 }
 
 fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
@@ -126,48 +133,48 @@ mod go {
     use super::*;
 
     pub fn arrive<R: Bench>(x: &mut Cx<'_, R>, s6: u32) {
-        x.set8(FLAG, 1);
+        x.set8(WarMachine::FLAG, 1);
         set_state_long(x, 0x0200_0000 | s6 << 8);
     }
     /// 0x791d0.
     pub fn stand<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         set_state_long(x, 0x0202_0000);
     }
     /// 0x791e0: turn-around (state to resume saved).
     pub fn turn<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
         let state = x.u32(f::STATE);
-        x.set32(RESUME_STATE, state);
+        x.set32(WarMachine::RESUME_STATE, state);
         set_state_long(x, 0x0202_0200);
     }
     /// 0x791f4: shot A (shot type 0x34, or 0x36 depending on the profile).
     pub fn fire_a<R: Bench>(x: &mut Cx<'_, R>) {
-        let kind = if x.u8(GROUP) != 0 { 0x36 } else { 0x34 };
-        x.set8(SHOT_KIND, kind);
-        x.set8(VULNERABLE, 1);
+        let kind = if x.u8(Enemy::GROUP) != 0 { 0x36 } else { 0x34 };
+        x.set8(Enemy::AI_POINT_SET, kind);
+        x.set8(Enemy::VULNERABLE, 1);
         set_state_long(x, 0x0202_0400);
     }
     /// 0x79216: shot B (0x35 or 0x37).
     pub fn fire_b<R: Bench>(x: &mut Cx<'_, R>) {
-        let kind = if x.u8(GROUP) != 0 { 0x37 } else { 0x35 };
-        x.set8(SHOT_KIND, kind);
-        x.set8(VULNERABLE, 1);
+        let kind = if x.u8(Enemy::GROUP) != 0 { 0x37 } else { 0x35 };
+        x.set8(Enemy::AI_POINT_SET, kind);
+        x.set8(Enemy::VULNERABLE, 1);
         set_state_long(x, 0x0202_0600);
     }
     /// 0x79238 (`aimed` = 0) and 0x7924a (`aimed` = 1): charge.
     pub fn charge<R: Bench>(x: &mut Cx<'_, R>, aimed: u8) {
-        x.set8(VULNERABLE, 0);
-        x.set8(AIMED, aimed);
+        x.set8(Enemy::VULNERABLE, 0);
+        x.set8(WarMachine::AIMED, aimed);
         set_state_long(x, 0x0202_0800);
     }
     /// 0x7925e to 0x792be: move of substate 4 (`s6` = 0, 2, 4, 6, 8, 0xa, 0xc); `flag`: sets `+0xad` (stubs 0x79288 and
     /// 0x792aa).
     pub fn attack<R: Bench>(x: &mut Cx<'_, R>, s6: u32, flag: bool) {
         if flag {
-            x.set8(FLAG, 1);
+            x.set8(WarMachine::FLAG, 1);
         }
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0204_0000 | s6 << 8);
     }
     /// 0x792cc.
@@ -201,13 +208,13 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         (Enemy::AI_WAIT_MASKS, 6),
         (Enemy::AI_WAIT_ROW, 1),
         (Enemy::AI_BOX_CHANCE, 7),
-        (AI_SHOT, 0xff),
+        (Enemy::AI_SHOT, 0xff),
         (Enemy::AI_ROW_8E, 3),
         (Enemy::AI_68, 0xb),
         (Enemy::AI_69, 1),
-        (VULNERABLE, 0),
-        (LOOK, 0),
-        (LOOK_PREV, 0xff),
+        (Enemy::VULNERABLE, 0),
+        (WarMachine::LOOK, 0),
+        (WarMachine::LOOK_PREV, 0xff),
         (Enemy::EVENT_KIND, 0xc),
         (Enemy::EVENT_LOW, 0),
         (Enemy::LOOT_ROW, 0x1e),

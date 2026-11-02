@@ -7,7 +7,7 @@ use crate::objects::Obj;
 use crate::objects::Current;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(EXPIRED) != 0 || grabbed(x) {
+    if x.u8(Bow::EXPIRED) != 0 || grabbed(x) {
         set_state_long(x, HELD);
         return hit::grab(x);
     }
@@ -27,7 +27,7 @@ pub(super) fn stance_begin<R: Bench>(x: &mut Cx<'_, R>) {
         return idle_begin(x);
     }
     lib::draw_6b(x);
-    x.set8(SHOT_KIND, 3);
+    x.set8(Enemy::AI_POINT_SET, 3);
     lib::approach_target(x);
     set_speed(x, 0xd);
     mv(x, 2);
@@ -42,19 +42,19 @@ fn idle_begin<R: Bench>(x: &mut Cx<'_, R>) {
 /// +6 = 2: walks toward the target; shoots or dodges when it is in range.
 fn advance<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.in_arena_default() {
-        x.set8(SHOT_KIND, 5);
+        x.set8(Enemy::AI_POINT_SET, 5);
         x.add8(f::SUB2, 2);
-        x.set8(TIMER, 0x20);
+        x.set8(Bow::TIMER, 0x20);
         return strafe(x);
     }
-    let n = x.u8(AI_CHARGE).wrapping_sub(1);
-    x.set8(AI_CHARGE, n);
+    let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+    x.set8(Enemy::AI_STANCE, n);
     if (n as i8) < 0 {
         let mut waiting = true;
         if pick_target(x) {
             lib::draw_stance(x);
-            let m = x.u8(AI_WANDER).wrapping_sub(1);
-            x.set8(AI_WANDER, m);
+            let m = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+            x.set8(Enemy::AI_WANDER, m);
             if (m as i8) >= 0 {
                 waiting = false;
             }
@@ -108,19 +108,19 @@ pub(super) fn check_facing<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     let state = x.u32(f::STATE);
-    x.set32(RESUME_STATE, state);
-    x.set8(RESUME_SUB2, 0);
+    x.set32(Bow::RESUME_STATE, state);
+    x.set8(Bow::RESUME_SUB2, 0);
     x.set8(f::SUB, 0xc);
     x.set16(f::SUB2, 0);
 }
 
 /// +6 = 4: lateral walk for `+0xa4` frames, then back to the approach.
 fn strafe<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Bow::TIMER).wrapping_sub(1);
+    x.set8(Bow::TIMER, n);
     if (n as i8) < 0 {
         x.set8(f::SUB2, 2);
-        x.set8(SHOT_KIND, 3);
+        x.set8(Enemy::AI_POINT_SET, 3);
         return advance(x);
     }
     lib::approach_target(x);
@@ -134,7 +134,7 @@ pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             set_state_long(x, IDLE);
-            x.set8(AI_WAIT, 0x1e);
+            x.set8(Enemy::AI_WAIT, 0x1e);
             idle_begin(x);
         }
         2 => side_step(x, true),
@@ -151,7 +151,7 @@ pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
 fn side_step<R: Bench>(x: &mut Cx<'_, R>, along_x: bool) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(AI_WANDER, 0x18);
+        x.set8(Enemy::AI_WANDER, 0x18);
         let target = load_target(x);
         if along_x {
             x.set8(Obj::SPEED_INDEX, 0x18);
@@ -168,8 +168,8 @@ fn side_step<R: Bench>(x: &mut Cx<'_, R>, along_x: bool) {
         }
         return mv(x, 2);
     }
-    let n = x.u8(AI_WANDER).wrapping_sub(1);
-    x.set8(AI_WANDER, n);
+    let n = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+    x.set8(Enemy::AI_WANDER, n);
     if (n as i8) < 0 {
         set_state_long(x, STANCE);
     }
@@ -183,8 +183,8 @@ pub(super) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         return idle_begin(x);
     }
-    let n = x.u8(AI_WAIT).wrapping_sub(1);
-    x.set8(AI_WAIT, n);
+    let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, n);
     if (n as i8) < 0 {
         x.set8(f::SUB, 2);
         x.set16(f::SUB2, 0);
@@ -205,7 +205,7 @@ pub(super) fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB2, 2);
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
-                let state = x.u32(RESUME_STATE);
+                let state = x.u32(Bow::RESUME_STATE);
                 x.set32(f::STATE, state);
                 mv(x, 0);
             }

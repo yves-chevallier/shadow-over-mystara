@@ -19,7 +19,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     }
     match x.u8(f::SUB) {
         0 => {
-            x.set8(CUR_ANIM, 0x7f);
+            x.set8(DisplacerBeast::CUR_ANIM, 0x7f);
             react(x, REACT_PART.0);
             zone_and_shadow(x);
         }
@@ -58,9 +58,9 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(WANT_ANIM, 0x1e);
-            let want = x.u8(WANT_ANIM);
-            x.set8(CUR_ANIM, want);
+            x.set8(DisplacerBeast::WANT_ANIM, 0x1e);
+            let want = x.u8(DisplacerBeast::WANT_ANIM);
+            x.set8(DisplacerBeast::CUR_ANIM, want);
             lib::sound(x, crate::sound::CMD_350_450);
             x.set16(Enemy::VX, 0x300);
             x.set16(Enemy::AX, (-0x28i16) as u16);
@@ -118,7 +118,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(f::SUB2, 2);
-                x.set8(VULNERABLE, 0);
+                x.set8(Enemy::VULNERABLE, 0);
             }
             step(x);
         }
@@ -130,7 +130,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(Enemy::ACTIVE, 1);
                 x.set32(Enemy::VX_LONG, 0);
                 x.set32(Enemy::VZ_LONG, 0);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 set_state_long(x, ACTIVE_STANCE);
                 play(x, 0);
             }
@@ -153,9 +153,9 @@ fn flee<R: Bench>(x: &mut Cx<'_, R>) {
             };
             if turn_back {
                 x.add8(f::SUB2, 2);
-                x.set8(VULNERABLE, 1);
-                x.set8(WANT_ANIM, 5);
-                x.set8(CUR_ANIM, 5);
+                x.set8(Enemy::VULNERABLE, 1);
+                x.set8(DisplacerBeast::WANT_ANIM, 5);
+                x.set8(DisplacerBeast::CUR_ANIM, 5);
                 play(x, 5);
             } else {
                 x.add8(f::SUB2, 4);
@@ -192,9 +192,9 @@ fn flee<R: Bench>(x: &mut Cx<'_, R>) {
         }
         8 => {
             x.add8(f::SUB2, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(WANT_ANIM, 6);
-            x.set8(CUR_ANIM, 6);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(DisplacerBeast::WANT_ANIM, 6);
+            x.set8(DisplacerBeast::CUR_ANIM, 6);
             let vx = if x.u8(f::FLIP) != 0 { 0x480 } else { -0x480 };
             set_velocity(x, vx, 0x4c0, -0x38);
             play(x, 6);
@@ -202,7 +202,7 @@ fn flee<R: Bench>(x: &mut Cx<'_, R>) {
         10 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(f::SUB2, 2);
-                x.set8(VULNERABLE, 0);
+                x.set8(Enemy::VULNERABLE, 0);
             }
             step(x);
         }
@@ -212,9 +212,9 @@ fn flee<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set32(Obj::Z, 0);
             x.add8(f::SUB2, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(WANT_ANIM, 0x18);
-            x.set8(CUR_ANIM, 0x18);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(DisplacerBeast::WANT_ANIM, 0x18);
+            x.set8(DisplacerBeast::CUR_ANIM, 0x18);
             play(x, 0xf);
         }
         14 => leave_screen(x),
@@ -224,8 +224,8 @@ fn flee<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x7444e: runs away toward the edge of the screen.
 fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
-    x.set8(WANT_ANIM, 0x16);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(DisplacerBeast::WANT_ANIM, 0x16);
     x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) == 0 {
         x.set8(Obj::SPEED_INDEX, 0x18);
@@ -241,7 +241,7 @@ fn leave_screen<R: Bench>(x: &mut Cx<'_, R>) {
         return step(x);
     }
     set_state_long(x, 0x0600_0000);
-    if x.u8(PARENT) != 0 {
+    if x.u8(DisplacerBeast::PARENT) != 0 {
         var::FROZEN.set(x.b, 1);
     }
     detach_from_host(x);

@@ -43,7 +43,7 @@ fn death_check<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 fn first<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
-        x.set8(INVULNERABLE, 0);
+        x.set8(Ogre::INVULNERABLE, 0);
         if death_check(x) {
             return dying(x);
         }
@@ -56,7 +56,7 @@ fn first<R: Bench>(x: &mut Cx<'_, R>) {
 fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
-            x.set16(TIMER, 0x14);
+            x.set16(Ogre::TIMER, 0x14);
             let (angle, vy) = if x.u8(f::FLIP) != 0 { (0x18, 0x20i16) } else { (8, -0x20) };
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(Obj::AX, vy as u16);
@@ -66,16 +66,16 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
             play(x, SET_A.0, 9);
         }
         2 => {
-            if !count_down(x, TIMER) {
+            if !count_down(x, Ogre::TIMER) {
                 x.add8(f::SUB2, 2);
-                x.set16(TIMER, 0x14);
+                x.set16(Ogre::TIMER, 0x14);
                 x.set16(Obj::AX, 0);
             }
             x.move_x();
             lib::step(x);
         }
         4 => {
-            if count_down(x, TIMER) {
+            if count_down(x, Ogre::TIMER) {
                 x.move_x();
                 lib::step(x);
             } else {
@@ -94,7 +94,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB2, 2);
             lib::behaviour_by_kind(x);
-            x.set8(LOOK_PREV, 0xff);
+            x.set8(Ogre::LOOK_PREV, 0xff);
             x.anim_start(SET_A.0, 0xa);
         }
         2 => {
@@ -107,8 +107,8 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(NO_GRAB, 0);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Enemy::DOWNED, 0);
             x.set8(Enemy::REACTION, 0);
         }
         4 => {
@@ -123,7 +123,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x717ea: the fight resumes: target chosen, HP threshold crossed, new move.
 pub(crate) fn regroup<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::ACTIVE, 1);
-    x.set8(LOOK_PREV, 0xff);
+    x.set8(Ogre::LOOK_PREV, 0xff);
     if !pick_target(x) {
         return go::retire(x);
     }
@@ -183,17 +183,17 @@ fn dying<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             if x.anim_step() {
                 x.add8(f::SUB2, 2);
-                x.set16(TIMER, 0x1e);
+                x.set16(Ogre::TIMER, 0x1e);
             }
         }
         6 => {
-            if !count_down(x, TIMER) {
+            if !count_down(x, Ogre::TIMER) {
                 x.add8(f::SUB2, 2);
-                x.set16(TIMER, 0x3c);
+                x.set16(Ogre::TIMER, 0x3c);
             }
         }
         8 => {
-            if !count_down(x, TIMER) {
+            if !count_down(x, Ogre::TIMER) {
                 x.free(&pools::ENEMY);
             } else {
                 let v = x.u8(Enemy::DISPLAY) ^ 2;

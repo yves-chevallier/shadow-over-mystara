@@ -35,8 +35,8 @@ fn first_reaction<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set_bit(Enemy::DISPLAY, 1, false);
     }
-    if x.u8(WEAPON) != 0 {
-        x.set8(WEAPON, 0);
+    if x.u8(Gnoll::WEAPON) != 0 {
+        x.set8(Gnoll::WEAPON, 0);
         lib::eshl_16(x, 0);
     }
     react(x, REACT_FIRST.0);
@@ -74,7 +74,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            let anim = 6 + x.u8(ARMED) as u32;
+            let anim = 6 + x.u8(Gnoll::ARMED) as u32;
             mv(x, anim);
         }
         2 => {
@@ -91,7 +91,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             x.set8(f::SUB3, 0);
             x.set8(Enemy::ACTIVE, 2);
-            let anim = 6 + x.u8(ARMED) as u32;
+            let anim = 6 + x.u8(Gnoll::ARMED) as u32;
             mv(x, anim);
         }
         4 => {
@@ -104,8 +104,8 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 x.set8(Enemy::DOWNED, 0);
                 x.set8(Enemy::ACTIVE, 1);
-                x.set8(VULNERABLE, 1);
-                if x.u8(ARMED) != 0 && x.u8(Obj::VARIANT) != 0xa {
+                x.set8(Enemy::VULNERABLE, 1);
+                if x.u8(Gnoll::ARMED) != 0 && x.u8(Obj::VARIANT) != 0xa {
                     x.add8(f::SUB3, 2);
                     return mv(x, 9);
                 }

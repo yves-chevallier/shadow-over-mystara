@@ -26,7 +26,7 @@ fn bite_effect<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
 /// 0x61c88: prepares the wait (look 0, animation 0).
 fn begin_wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     look(x, 0);
     mv(x, 0);
 }
@@ -34,15 +34,15 @@ fn begin_wait<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x61fa0 / 0x61f94: pursuit in place until counter `+0x77` ends, with a turn-around if the target changes side;
 /// `resume` is the state to resume after the turn-around.
 fn hold<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
-    x.set32(RESUME_STATE, resume);
-    let n = x.u8(AI_LUNGE).wrapping_sub(1);
-    x.set8(AI_LUNGE, n);
+    x.set32(Hellhound::RESUME_STATE, resume);
+    let n = x.u8(Enemy::AI_BYTE).wrapping_sub(1);
+    x.set8(Enemy::AI_BYTE, n);
     if (n as i8) < 0 {
         return x.add8(f::SUB3, 2);
     }
     if must_turn(x) {
         let sub2 = x.u8(f::SUB2);
-        x.set8(RESUME_SUB2, sub2);
+        x.set8(Hellhound::RESUME_SUB2, sub2);
         set_state_long(x, 0x0202_0200);
     }
     x.anim_step();
@@ -69,7 +69,7 @@ fn wait_key_clear<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
     }
     x.anim_step();
 }
@@ -88,7 +88,7 @@ fn bite_land<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Obj::Z, 0);
     x.add8(f::SUB3, 2);
     x.set16(Obj::ANIM_TIMER, 1);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     mv(x, 0xc);
     let vy = if x.u8(f::FLIP) != 0 { -0x1c } else { 0x1c };
     x.set16(Obj::AX, vy as u16);
@@ -144,8 +144,8 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
                 strike(x, 0);
             } else {
                 x.add8(f::SUB3, 4);
-                x.set8(VULNERABLE, 1);
-                x.set8(LOOK, 8);
+                x.set8(Enemy::VULNERABLE, 1);
+                x.set8(Hellhound::LOOK, 8);
                 begin_jump(x, -0x280, 0x4c0, 7, SET_STRIKE.0);
             }
         }
@@ -189,12 +189,12 @@ fn bite<R: Bench>(x: &mut Cx<'_, R>) {
 fn paw<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             let r = rand_and(x, 1);
             if r == 0 {
                 x.add8(f::SUB3, 4);
                 look(x, 0xff);
-                x.set8(STRIKE_KIND, 0x2b);
+                x.set8(Enemy::STRIKE_KIND, 0x2b);
                 return begin_jump(x, 0x180, 0x3c0, 5, SET_MOVE.0);
             }
             x.add8(f::SUB3, 2);
@@ -208,13 +208,13 @@ fn paw<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set8(Obj::SPEED_INDEX, angle);
             look(x, 0x1d);
-            x.set8(TIMER, 0x40);
+            x.set8(Hellhound::TIMER, 0x40);
             mv(x, 0xa);
             set_speed(x, 0xd);
         }
         2 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Hellhound::TIMER).wrapping_sub(1);
+            x.set8(Hellhound::TIMER, n);
             if (n as i8) >= 0 {
                 x.move_by_table_xy();
                 x.anim_step();
@@ -247,8 +247,8 @@ fn jump_bite<R: Bench>(x: &mut Cx<'_, R>) {
         2 => hold(x, 0x0204_0000),
         4 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 8);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Hellhound::LOOK, 8);
             begin_jump(x, -0x380, 0x4c0, 7, SET_STRIKE.0);
         }
         6 => wait_key_clear(x),
@@ -299,8 +299,8 @@ fn breath<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x6220e: the animation key starts the series of flames.
 fn flame_start<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
-        x.set8(TIMER, 1);
-        x.set8(SCRIPT, 0);
+        x.set8(Hellhound::TIMER, 1);
+        x.set8(Hellhound::SCRIPT, 0);
         x.add8(f::SUB3, 2);
     } else {
         x.anim_step();
@@ -310,18 +310,18 @@ fn flame_start<R: Bench>(x: &mut Cx<'_, R>) {
 /// Countdown of the series of flames; at zero, draws the next duration from the table; `both`: two effects per shot
 /// (substate 4) instead of just one (substate 6). Returns false when the series is over (0x62266 in the original).
 fn flame_tick<R: Bench>(x: &mut Cx<'_, R>, both: bool) -> bool {
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Hellhound::TIMER).wrapping_sub(1);
+    x.set8(Hellhound::TIMER, n);
     if n != 0 {
         return true;
     }
-    let idx = 2 * x.u8(SCRIPT) as u32;
+    let idx = 2 * x.u8(Hellhound::SCRIPT) as u32;
     let t = x.data8(FLAME_SCRIPT + idx);
-    x.set8(TIMER, t);
+    x.set8(Hellhound::TIMER, t);
     let v = x.data8(FLAME_SCRIPT + idx + 1);
     x.set8(0x43, v);
-    x.add8(SCRIPT, 1);
-    if (x.u8(SCRIPT) as i8) > 0xc {
+    x.add8(Hellhound::SCRIPT, 1);
+    if (x.u8(Hellhound::SCRIPT) as i8) > 0xc {
         return false;
     }
     if both {
@@ -364,7 +364,7 @@ fn ready<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x62332: standing, look 0, then lying in wait.
 fn stand_and_ready<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
-    x.set8(LOOK, 0);
+    x.set8(Hellhound::LOOK, 0);
     mv(x, 0);
     ready(x);
 }
@@ -382,19 +382,19 @@ fn b_charge<R: Bench>(x: &mut Cx<'_, R>) {
             let r = rand_and(x, 1);
             if r != 0 {
                 set_state_long(x, 0x0202_0002);
-                x.set8(LOOK, 2);
+                x.set8(Hellhound::LOOK, 2);
                 mv(x, 2);
                 return ready(x);
             }
             x.add8(f::SUB3, 2);
-            x.set8(TIMER, 0x2a);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 0xa);
+            x.set8(Hellhound::TIMER, 0x2a);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Hellhound::LOOK, 0xa);
             mv(x, 0xa);
         }
         6 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Hellhound::TIMER).wrapping_sub(1);
+            x.set8(Hellhound::TIMER, n);
             if n == 0 {
                 stand_and_ready(x);
             }
@@ -407,8 +407,8 @@ fn b_stretch<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 0xb);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Hellhound::LOOK, 0xb);
             mv(x, 0xb);
         }
         6 => b_end(x),
@@ -426,7 +426,7 @@ fn b_hop<R: Bench>(x: &mut Cx<'_, R>) {
             if r != 0 {
                 x.set16(Obj::VY, -0x100i16 as u16);
             }
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 5);
             x.set16(Obj::AY, 0);
             x.set16(Obj::VZ, 0x400);
@@ -477,7 +477,7 @@ fn b_slash<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x62404: run-up of the leap (animation 6).
 fn jump_forward<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     look(x, 6);
     x.set16(Obj::VX, 0x300);
     if x.u8(f::FLIP) != 0 {
@@ -497,7 +497,7 @@ fn b_claw<R: Bench>(x: &mut Cx<'_, R>) {
         10 => {
             if x.anim_step() {
                 x.add8(f::SUB3, 2);
-                x.set8(STRIKE_POWER, 5);
+                x.set8(Enemy::STRIKE_POWER, 5);
                 strike(x, 9);
             }
         }
@@ -522,7 +522,7 @@ fn b_flames<R: Bench>(x: &mut Cx<'_, R>) {
         10 => {
             if x.anim_step() {
                 x.add8(f::SUB3, 2);
-                x.set8(STRIKE_POWER, 5);
+                x.set8(Enemy::STRIKE_POWER, 5);
                 strike(x, 8);
             }
         }
@@ -562,19 +562,19 @@ fn c_wait<R: Bench>(x: &mut Cx<'_, R>) {
         }
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(TIMER, 0x10);
+            x.set8(Hellhound::TIMER, 0x10);
             c_begin(x);
         }
         2 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Hellhound::TIMER).wrapping_sub(1);
+            x.set8(Hellhound::TIMER, n);
             if (n as i8) < 0 {
                 return set_state_long(x, STANCE);
             }
             if must_turn(x) {
-                x.set32(RESUME_STATE, 0x0208_0004);
+                x.set32(Hellhound::RESUME_STATE, 0x0208_0004);
                 let sub2 = x.u8(f::SUB2);
-                x.set8(RESUME_SUB2, sub2);
+                x.set8(Hellhound::RESUME_SUB2, sub2);
                 return set_state_long(x, 0x0202_0200);
             }
             x.anim_step();
@@ -585,7 +585,7 @@ fn c_wait<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn c_begin<R: Bench>(x: &mut Cx<'_, R>) {
     look(x, 0);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     mv(x, 0);
 }
 
@@ -604,7 +604,7 @@ fn c_leap<R: Bench>(x: &mut Cx<'_, R>) {
 fn c_side<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             let r = rand_and(x, 1);
             let mut above = false;
             if x.u16(f::TARGET) != 0 {
@@ -626,13 +626,13 @@ fn c_side<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             x.set8(Obj::SPEED_INDEX, if above { 0x10 } else { 0 });
             look(x, 0xc);
-            x.set8(TIMER, 0x24);
+            x.set8(Hellhound::TIMER, 0x24);
             mv(x, 2);
             set_speed(x, 0x11);
         }
         2 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Hellhound::TIMER).wrapping_sub(1);
+            x.set8(Hellhound::TIMER, n);
             if (n as i8) < 0 {
                 return set_state_long(x, STANCE);
             }
@@ -713,7 +713,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
                 return lib::release_player(x, victim);
             }
             x.set16(Obj::Z, 0);
-            x.set8(BITES, 8);
+            x.set8(Hellhound::BITES, 8);
             strike(x, if which == 0 { 1 } else { 2 });
             lib::hold_seized(x);
         }
@@ -729,8 +729,8 @@ fn bite_victim<R: Bench>(x: &mut Cx<'_, R>, which: u8) {
         return lib::hold_seized(x);
     }
     x.set8(f::KEY_FRAME, 0);
-    let n = x.u8(BITES).wrapping_sub(1);
-    x.set8(BITES, n);
+    let n = x.u8(Hellhound::BITES).wrapping_sub(1);
+    x.set8(Hellhound::BITES, n);
     if (n as i8) <= 0 {
         return release(x);
     }

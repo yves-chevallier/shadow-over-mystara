@@ -16,6 +16,7 @@
 //! Animations 0x1649d0 (movements, `+0xa6` added to the taunt animation) and 0x1649e8 (attacks).
 
 use crate::families::cx::Bench;
+use crate::record::record;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -26,28 +27,31 @@ mod attacks;
 mod hit;
 mod stance;
 
-mod g {
-    pub const STRIKE_KIND: u32 = 0x44;
-    pub const STRIKE_POWER: u32 = 0x45;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const AI_WANDER: u32 = 0x6b;
-    pub const AI_WAIT: u32 = 0x6e;
-    pub const AI_CHARGE: u32 = 0x71;
-    pub const AI_LUNGE: u32 = 0x77;
-    pub const AI_SHOT: u32 = 0x78;
-    pub const SHOT_KIND: u32 = 0x79;
-    pub const LOOK_PREV: u32 = 0xa1;
-    /// Timer (byte) of a gesture.
-    pub const TIMER: u32 = 0xa2;
-    pub const COOLDOWN: u32 = 0xa4;
-    /// Chosen move (value of `+6` to resume).
-    pub const CHOSEN: u32 = 0xa5;
-    /// The weapon is in hand (the taunt and the get-up use animation +1).
-    pub const WEAPON: u32 = 0xa6;
-    /// Same flag, used by the hit state (fall animations).
-    pub const ARMED: u32 = 0xbf;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Gnoll(pub Obj);
+
+impl Gnoll {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Gnoll {
+        look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa1;
+        /// Timer (byte) of a gesture.
+        timer, set_timer, TIMER: u8 @ 0xa2;
+        cooldown, set_cooldown, COOLDOWN: u8 @ 0xa4;
+        /// Chosen move (value of `+6` to resume).
+        chosen, set_chosen, CHOSEN: u8 @ 0xa5;
+        /// The weapon is in hand (the taunt and the get-up use animation +1).
+        weapon, set_weapon, WEAPON: u8 @ 0xa6;
+        /// Same flag, used by the hit state (fall animations).
+        armed, set_armed, ARMED: u8 @ 0xbf;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
@@ -90,8 +94,8 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 
 /// Starts attack `n`: attack type `kind` and strength `power`.
 fn strike_with<R: Bench>(x: &mut Cx<'_, R>, n: u32, kind: u8, power: u8) {
-    x.set8(STRIKE_KIND, kind);
-    x.set8(STRIKE_POWER, power);
+    x.set8(Enemy::STRIKE_KIND, kind);
+    x.set8(Enemy::STRIKE_POWER, power);
     strike(x, n);
 }
 
@@ -161,13 +165,13 @@ fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: &str) -> u8 {
     let b = rank_byte(x, table);
     x.set8(f::SUB, 4);
     x.set16(f::SUB2, 0);
-    x.set8(CHOSEN, b);
+    x.set8(Gnoll::CHOSEN, b);
     b
 }
 
 /// 0x6bdec: after a series, chooses the fallback move (substate 8).
 fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(AI_SHOT, 0xff);
+    x.set8(Enemy::AI_SHOT, 0xff);
     let b = rank_byte(x, FOLLOW_TABLE);
     x.set8(f::SUB, 8);
     x.set8(f::SUB2, b);
@@ -212,10 +216,10 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         (Enemy::AI_BOX_CHANCE, 3),
         (Enemy::AI_BOX_ANIM, 0x38),
         (Enemy::AI_BYTE_ROW, 3),
-        (TIMER, 0x20),
-        (LOOK_PREV, 0),
-        (COOLDOWN, 2),
-        (VULNERABLE, 1),
+        (Gnoll::TIMER, 0x20),
+        (Gnoll::LOOK_PREV, 0),
+        (Gnoll::COOLDOWN, 2),
+        (Enemy::VULNERABLE, 1),
         (Enemy::AI_ROW_8E, 0),
         (Enemy::EVENT_LOW, 0),
         (Enemy::EVENT_KIND, 0xe),
@@ -223,9 +227,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         x.set8(off, v);
     }
     x.set32(Enemy::RESUME_STATE, 0);
-    x.set8(WEAPON, 0);
-    x.set8(ARMED, 0);
-    x.set8(AI_SHOT, 0xff);
+    x.set8(Gnoll::WEAPON, 0);
+    x.set8(Gnoll::ARMED, 0);
+    x.set8(Enemy::AI_SHOT, 0xff);
     x.set8(Enemy::LOOT_ROW, 0xd);
     x.set8(Enemy::LOOT, 0xb);
     true

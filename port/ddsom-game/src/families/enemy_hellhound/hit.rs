@@ -12,10 +12,10 @@ const REACT_FIRST: RomAddr = RomAddr(0x62aa2);
 const REACT_SECOND: RomAddr = RomAddr(0x62d76);
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    hit_loop_at(x, NO_ZONE, |x| {
+    hit_loop_at(x, Hellhound::NO_ZONE, |x| {
         match x.u8(f::SUB) {
             0 => {
-                x.set8(LOOK_PREV, 0x7f);
+                x.set8(Hellhound::LOOK_PREV, 0x7f);
                 react(x, REACT_FIRST.0);
             }
             2 => recoil(x),
@@ -93,7 +93,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
             if !lib::target_in_box(x, 0, 0x40, 8) {
                 x.set8(Enemy::DOWNED, 0);
                 x.set8(Enemy::ACTIVE, 1);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 set_state_long(x, STANCE);
                 return mv(x, 0);
             }
@@ -118,7 +118,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
         6 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(f::SUB2, 2);
-                x.set8(VULNERABLE, 0);
+                x.set8(Enemy::VULNERABLE, 0);
             }
             x.anim_step();
         }
@@ -130,7 +130,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(Obj::Z, 0);
             dust(x);
             x.add8(f::SUB2, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 0xc);
             mv(x, 0xc);
         }
@@ -138,7 +138,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
             if x.anim_step() {
                 x.set8(Enemy::ACTIVE, 1);
                 x.set8(Enemy::DOWNED, 0);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 set_state_long(x, STANCE);
                 mv(x, 0);
             }
@@ -155,7 +155,7 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
     }
     match x.u8(f::SUB2) {
         0 => {
-            x.set8(NO_ZONE, 1);
+            x.set8(Hellhound::NO_ZONE, 1);
             let to_right = if var::SCENE.get(x.b) == 4 {
                 x.u8(f::FLIP) == 0
             } else {
@@ -167,7 +167,7 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
                 return run_begin(x);
             }
             x.add8(f::SUB2, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 0x7f);
             mv(x, 4);
         }
@@ -194,7 +194,7 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x62ec0: the dog runs toward the edge of the screen.
 fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     set_angle(x);
     mv(x, 3);
     set_speed(x, 0x25);

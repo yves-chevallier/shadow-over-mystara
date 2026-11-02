@@ -17,6 +17,7 @@
 //! The parts are not separate objects in the original: the same code animates them all.
 
 use crate::families::cx::Bench;
+use crate::record::record;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -30,52 +31,48 @@ mod parts;
 mod stance;
 
 /// Fields specific to this type (the common fields are in `enemy_common::f`).
-mod g {
-    /// AI profile (0 or 1, difficulty of the beast).
-    pub const PROFILE: u32 = 0x2f;
-    /// Display priority.
-    pub const LAYER: u32 = 0x3b;
-    /// Parent (word, RAM address) and target (word, player).
-    pub const PARENT: u32 = 0x42;
-    pub const TARGET: u32 = 0x50;
-    /// Damage of the current attack: `+0x44` type, `+0x45` strength.
-    pub const STRIKE_KIND: u32 = 0x44;
-    pub const STRIKE_POWER: u32 = 0x45;
-    /// Vulnerable (1) or invulnerable (0) during the move.
-    pub const VULNERABLE: u32 = 0x67;
-    /// AI parameters set at creation.
-    pub const AI_STEP: u32 = 0x6b;
-    pub const AI_REPEAT: u32 = 0x6e;
-    pub const AI_TURN: u32 = 0x71;
-    pub const AI_KICK: u32 = 0x77;
-    pub const AI_SHOT: u32 = 0x79;
-    /// Exit countdown of the entrance.
-    pub const ENTRY_TIMER: u32 = 0x90;
-    /// Timer of the current step (byte or word).
-    pub const TIMER: u32 = 0xa0;
-    /// Wanted animation / current animation (so as not to restart the same one).
-    pub const WANT_ANIM: u32 = 0xa5;
-    pub const CUR_ANIM: u32 = 0xa2;
-    /// The move is over (set by the beast for its parts).
-    pub const DONE: u32 = 0xa3;
-    /// Step to resume after a turn-around: `+0xa4` = `+6`, `+0xa6` = `+4..+7`.
-    pub const RESUME_SUB2: u32 = 0xa4;
-    pub const RESUME_STATE: u32 = 0xa6;
-    /// Number of repetitions of an attack (`+0xab`, `+0xae`) and move counter (`+0xb5`).
-    pub const REPEAT: u32 = 0xab;
-    pub const REPEAT_LEFT: u32 = 0xae;
-    pub const SHOTS: u32 = 0xb5;
-    /// Aimed point (X, Y) for a part rejoining its parent.
-    pub const AIM_X: u32 = 0xb0;
-    pub const AIM_Y: u32 = 0xb2;
-    /// Rank of the part in the beast (−1: not a part) and offset of the animation series.
-    pub const PART: u32 = 0xbc;
-    pub const ANIM_SHIFT: u32 = 0xbf;
-    /// Animation started last (so as not to restart it).
-    pub const LAST_ANIM: u32 = 0xaf;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct DisplacerBeast(pub Obj);
+
+impl DisplacerBeast {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
 
-use g::*;
+record! {
+    impl DisplacerBeast {
+        /// Display priority.
+        layer, set_layer, LAYER: u8 @ 0x3b;
+        /// Parent (word, RAM address) and target (word, player).
+        parent, set_parent, PARENT: u8 @ 0x42;
+        /// Timer of the current step (byte or word).
+        timer, set_timer, TIMER: u8 @ 0xa0;
+        cur_anim, set_cur_anim, CUR_ANIM: u8 @ 0xa2;
+        /// The move is over (set by the beast for its parts).
+        done, set_done, DONE: u8 @ 0xa3;
+        /// Step to resume after a turn-around: `+0xa4` = `+6`, `+0xa6` = `+4..+7`.
+        resume_sub2, set_resume_sub2, RESUME_SUB2: u8 @ 0xa4;
+        /// Wanted animation / current animation (so as not to restart the same one).
+        want_anim, set_want_anim, WANT_ANIM: u8 @ 0xa5;
+        resume_state, set_resume_state, RESUME_STATE: u32 @ 0xa6;
+        /// Number of repetitions of an attack (`+0xab`, `+0xae`) and move counter (`+0xb5`).
+        repeat, set_repeat, REPEAT: u8 @ 0xab;
+        repeat_left, set_repeat_left, REPEAT_LEFT: u8 @ 0xae;
+        /// Animation started last (so as not to restart it).
+        last_anim, set_last_anim, LAST_ANIM: u8 @ 0xaf;
+        /// Aimed point (X, Y) for a part rejoining its parent.
+        aim_x, set_aim_x, AIM_X: u16 @ 0xb0;
+        aim_y, set_aim_y, AIM_Y: u16 @ 0xb2;
+        shots, set_shots, SHOTS: u8 @ 0xb5;
+        /// Rank of the part in the beast (−1: not a part) and offset of the animation series.
+        part, set_part, PART: u8 @ 0xbc;
+        anim_shift, set_anim_shift, ANIM_SHIFT: u8 @ 0xbf;
+    }
+}
+
 use crate::objects::Current;
 
 /// Animation sets: movements and attacks.
@@ -109,7 +106,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x74f66: animation number of the movement series (numbers from 0x4b on are not shifted).
 fn anim_a<R: Bench>(x: &mut Cx<'_, R>, n: u8) -> u32 {
-    let shift = x.u8(ANIM_SHIFT);
+    let shift = x.u8(DisplacerBeast::ANIM_SHIFT);
     if (n as i8) >= 0x4b {
         return n as u32;
     }
@@ -118,7 +115,7 @@ fn anim_a<R: Bench>(x: &mut Cx<'_, R>, n: u8) -> u32 {
 
 /// 0x74f7e: animation number of the attack series, always shifted.
 fn anim_b<R: Bench>(x: &mut Cx<'_, R>, n: u8) -> u32 {
-    let shift = x.u8(ANIM_SHIFT);
+    let shift = x.u8(DisplacerBeast::ANIM_SHIFT);
     n.wrapping_add(x.rom8(SHIFT_B + shift as u32)) as u32
 }
 
@@ -137,8 +134,8 @@ fn play_b<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
 /// Plays animation `n` (movement series) if it is not already the current one (`+0xaf`).
 fn play_once<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
     let n = anim_a(x, n);
-    if n as u8 != x.u8(LAST_ANIM) {
-        x.set8(LAST_ANIM, n as u8);
+    if n as u8 != x.u8(DisplacerBeast::LAST_ANIM) {
+        x.set8(DisplacerBeast::LAST_ANIM, n as u8);
         x.anim_start(SET_A.0, n as u16);
     }
 }
@@ -177,10 +174,10 @@ fn set_state_long<R: Bench>(x: &mut Cx<'_, R>, v: u32) {
 
 /// The parent (`+0x42`) or `None` if there is none.
 fn parent<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
-    if x.u16(PARENT) == 0 {
+    if x.u16(DisplacerBeast::PARENT) == 0 {
         return None;
     }
-    Some(x.linked(PARENT))
+    Some(x.linked(DisplacerBeast::PARENT))
 }
 
 /// 0x725c8: part without a parent, it becomes a standing beast again and plays animation 8.
@@ -198,11 +195,11 @@ fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
 /// left).
 fn follow_offset<R: Bench>(x: &mut Cx<'_, R>) {
     const OFFSETS: u32 = 0x7202a;
-    let p = x.linked(PARENT);
+    let p = x.linked(DisplacerBeast::PARENT);
     let (px, py) = (p.u16(x.b, Obj::X), p.u16(x.b, Obj::Y));
     x.set16(Obj::X, px);
     x.set16(Obj::Y, py);
-    let row = (x.u8(PART).wrapping_mul(4)) as u32;
+    let row = (x.u8(DisplacerBeast::PART).wrapping_mul(4)) as u32;
     let mut dx = x.rom16(OFFSETS + row);
     let dy = x.rom16(OFFSETS + row + 2);
     if x.u8(f::FLIP) != 0 {
@@ -222,7 +219,7 @@ fn follow_body<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(Obj::Y, py);
     x.set8(f::FLIP, flip);
     x.set32(Obj::Z, 0);
-    let row = (x.u8(PART).wrapping_mul(8)) as u32;
+    let row = (x.u8(DisplacerBeast::PART).wrapping_mul(8)) as u32;
     let mut dx = x.rom16(OFFSETS + row);
     let dy = x.rom16(OFFSETS + row + 2);
     let dz = x.rom16(OFFSETS + row + 4);
@@ -284,13 +281,13 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::EVENT_LOW, 0);
     x.set8(Enemy::AI_ROW_8E, 0);
     x.set8(Enemy::AI_SHOT, 0xff);
-    let profile = match x.u8(PROFILE) {
+    let profile = match x.u8(Enemy::GROUP) {
         0 | 1 => {
             // random offset of this beast's animation series
             let r = (x.random() as u32) as u8 & 0xf;
             let shift = x.rom8(SHIFT_PICK + r as u32);
-            x.set8(ANIM_SHIFT, shift);
-            if x.u8(PROFILE) == 0 { PROFILE_A } else { PROFILE_B }
+            x.set8(DisplacerBeast::ANIM_SHIFT, shift);
+            if x.u8(Enemy::GROUP) == 0 { PROFILE_A } else { PROFILE_B }
         }
         _ => return,
     };
@@ -299,7 +296,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
     pick_target(x);
     if (x.u8(Obj::VARIANT) as i8) > 3 {
-        if x.u16(TARGET) == 0 {
+        if x.u16(Enemy::TARGET) == 0 {
             set_state_long(x, ACTIVE_IDLE);
             return;
         }

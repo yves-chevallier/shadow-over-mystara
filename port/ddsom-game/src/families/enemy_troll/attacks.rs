@@ -57,18 +57,18 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
 fn windup<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         lib::pick_byte(x);
-        if x.u8(AI_LUNGE) == 0 {
+        if x.u8(Enemy::AI_BYTE) == 0 {
             x.set8(f::SUB3, 0);
-            let chosen = x.u8(CHOSEN);
+            let chosen = x.u8(Troll::CHOSEN);
             x.set8(f::SUB2, chosen);
         }
         return mv(x, 0);
     }
     x.anim_step();
-    let n = x.u8(AI_LUNGE).wrapping_sub(1);
-    x.set8(AI_LUNGE, n);
+    let n = x.u8(Enemy::AI_BYTE).wrapping_sub(1);
+    x.set8(Enemy::AI_BYTE, n);
     if (n as i8) >= 0 {
         return;
     }
@@ -76,7 +76,7 @@ fn windup<R: Bench>(x: &mut Cx<'_, R>) {
     if faces_wrong(x) {
         x.add8(f::SUB2, 2);
     } else {
-        let chosen = x.u8(CHOSEN);
+        let chosen = x.u8(Troll::CHOSEN);
         x.set8(f::SUB2, chosen);
     }
 }
@@ -85,7 +85,7 @@ fn windup<R: Bench>(x: &mut Cx<'_, R>) {
 fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         return mv(x, 2);
     }
     if x.anim_step() {
@@ -109,11 +109,11 @@ fn throw<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 8);
-            x.set8(TIMER, 0x30);
-            if (x.u8(AMMO) as i8) > 0 {
+            x.set8(Troll::TIMER, 0x30);
+            if (x.u8(Troll::AMMO) as i8) > 0 {
                 if let Some(obj) = lib::eshl_0a(x) {
-                    x.set32(THROWN, obj.0);
-                    x.add8(AMMO, 0xf0);
+                    x.set32(Troll::THROWN, obj.0);
+                    x.add8(Troll::AMMO, 0xf0);
                     x.add8(f::SUB3, 0xfa);
                 }
             }
@@ -121,20 +121,20 @@ fn throw<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 | 8 => {
             if x.u8(f::SUB3) == 8 {
-                x.add8(NO_ZONE, 1);
+                x.add8(Troll::NO_ZONE, 1);
             }
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Troll::TIMER).wrapping_sub(1);
+            x.set8(Troll::TIMER, n);
             if (n as i8) >= 0 {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set8(TIMER, 0x60);
+            x.set8(Troll::TIMER, 0x60);
             throw_anim(x, 4);
         }
         10 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Troll::TIMER).wrapping_sub(1);
+            x.set8(Troll::TIMER, n);
             if n == 0 {
                 return throw_end(x);
             }
@@ -143,16 +143,16 @@ fn throw<R: Bench>(x: &mut Cx<'_, R>) {
         4 => throw_hold(x),
         6 => {
             x.anim_step();
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Troll::TIMER).wrapping_sub(1);
+            x.set8(Troll::TIMER, n);
             if n != 0 {
                 follow_up(x);
             }
         }
         12 => {
             x.anim_step();
-            let n = x.u8(AFTER_THROW).wrapping_sub(1);
-            x.set8(AFTER_THROW, n);
+            let n = x.u8(Troll::AFTER_THROW).wrapping_sub(1);
+            x.set8(Troll::AFTER_THROW, n);
             if (n as i8) < 0 {
                 set_state_long(x, 0x0202_0600);
             }
@@ -165,7 +165,7 @@ fn throw<R: Bench>(x: &mut Cx<'_, R>) {
 /// has gone (object state `+4` at 4 or more).
 fn throw_hold<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
-    let obj = Obj(x.u32(THROWN));
+    let obj = Obj(x.u32(Troll::THROWN));
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         add8(x, obj, 5, 2);
@@ -179,7 +179,7 @@ fn throw_hold<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x6caf2: end of the throw.
 fn throw_end<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set16(AFTER_THROW, 0xb4);
+    x.set16(Troll::AFTER_THROW, 0xb4);
     mv(x, 0);
 }
 
@@ -193,7 +193,7 @@ fn maybe_throw<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 14, 16 (and 10 on a draw): back to standing and resume walking, `kind` = saved shot type.
 fn again<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
-    x.set8(SHOT_KIND, kind);
+    x.set8(Enemy::AI_POINT_SET, kind);
     set_state_long(x, STANCE);
     approach_start(x);
 }
@@ -266,15 +266,15 @@ fn jump_here<R: Bench>(x: &mut Cx<'_, R>, then_throw: bool) {
 fn charge<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(TIMER, 0x40);
+        x.set8(Troll::TIMER, 0x40);
         let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
         x.set8(Obj::SPEED_INDEX, angle);
         set_speed(x, 0x12);
         return mv(x, 1);
     }
     x.anim_step();
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Troll::TIMER).wrapping_sub(1);
+    x.set8(Troll::TIMER, n);
     if (n as i8) < 0 {
         x.set16(f::SUB2, 0x400);
     }
@@ -284,12 +284,12 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
 fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(TIMER, 0x1e);
+        x.set8(Troll::TIMER, 0x1e);
         return mv(x, 0);
     }
     x.anim_step();
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Troll::TIMER).wrapping_sub(1);
+    x.set8(Troll::TIMER, n);
     if n != 0 {
         follow_up(x);
     }
@@ -354,12 +354,12 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
 fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
-        x.set8(TIMER, 0x10);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(Troll::TIMER, 0x10);
         return mv(x, 0);
     }
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Troll::TIMER).wrapping_sub(1);
+    x.set8(Troll::TIMER, n);
     if (n as i8) < 0 {
         set_state_long(x, STANCE);
     }
@@ -393,7 +393,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
                 return next_and_start(x);
             }
             x.add8(f::SUB3, 0xc);
-            x.set8(TIMER, 0x10);
+            x.set8(Troll::TIMER, 0x10);
             set_speed(x, 0xd);
             x.set8(Obj::SPEED_INDEX, 0);
             let target = load_target(x);
@@ -416,8 +416,8 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
         8 => land(x),
         10 => finish(x),
         12 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Troll::TIMER).wrapping_sub(1);
+            x.set8(Troll::TIMER, n);
             if (n as i8) < 0 {
                 set_state_long(x, STANCE);
             }
@@ -430,13 +430,13 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 6: chooses a move again; changes move only if the new one differs from the previous one or after a delay.
 fn pick_again<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     set_state_long(x, IDLE);
     let b = if lib::target_in_box(x, -0x20, 0x20, 0xc) {
         set_state_long(x, 0x0204_0000);
         rand_and(x, 2);
         x.set16(f::SUB2, 0);
-        x.u8(CHOSEN)
+        x.u8(Troll::CHOSEN)
     } else if near_box(x) {
         pick_attack(x, NEAR_TABLE)
     } else if far_box(x) {
@@ -444,14 +444,14 @@ fn pick_again<R: Bench>(x: &mut Cx<'_, R>) {
     } else {
         return;
     };
-    if b != x.u8(LOOK_PREV) {
-        x.set8(LOOK_PREV, b);
-        x.set8(COOLDOWN, 2);
+    if b != x.u8(Troll::LOOK_PREV) {
+        x.set8(Troll::LOOK_PREV, b);
+        x.set8(Troll::COOLDOWN, 2);
         return;
     }
-    let n = x.u8(COOLDOWN).wrapping_sub(1);
-    x.set8(COOLDOWN, n);
+    let n = x.u8(Troll::COOLDOWN).wrapping_sub(1);
+    x.set8(Troll::COOLDOWN, n);
     if (n as i8) < 0 {
-        x.set8(COOLDOWN, 2);
+        x.set8(Troll::COOLDOWN, 2);
     }
 }

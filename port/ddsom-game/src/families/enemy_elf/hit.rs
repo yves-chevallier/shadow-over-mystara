@@ -90,7 +90,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             if step(x) {
                 x.set8(Enemy::DOWNED, 0);
                 x.set8(Enemy::ACTIVE, 1);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 set_state_long(x, STANCE);
             }
         }

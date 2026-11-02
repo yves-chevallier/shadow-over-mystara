@@ -59,7 +59,7 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x70eca: creates the arm (type 0x2a, variant `variant`) linked to the ogre; false if the allocation fails.
 fn throw_arm<R: Bench>(x: &mut Cx<'_, R>, variant: Option<u8>) -> bool {
     let Some(arm) = x.alloc(&pools::ESHL) else { return false };
-    x.set16(ARM, arm.0 as u16);
+    x.set16(Ogre::ARM, arm.0 as u16);
     arm.set_u8(x.b, Enemy::ACTIVE, 1);
     arm.set_u8(x.b, Enemy::KIND, 0x2a);
     if let Some(v) = variant {
@@ -114,7 +114,7 @@ fn fly_up_b<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => fly_loop(x),
         4 => {
-            if !count_down(x, TIMER) {
+            if !count_down(x, Ogre::TIMER) {
                 x.add8(f::SUB3, 2);
                 x.set_bit(Enemy::DISPLAY, 1, false);
                 let t = x.linked(f::TARGET);
@@ -134,7 +134,7 @@ fn fly_up_b<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(Obj::AX, 0);
                 x.set16(Obj::AZ, 0);
                 lib::sound(x, crate::sound::CMD_30C_40C);
-                x.set8(INVULNERABLE, 0);
+                x.set8(Ogre::INVULNERABLE, 0);
                 act(x, 5);
             }
         }
@@ -144,8 +144,8 @@ fn fly_up_b<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x1e);
-            x.set16(TIMER2, 0);
+            x.set16(Ogre::TIMER, 0x1e);
+            x.set16(Ogre::TIMER2, 0);
             x.set16(Obj::Z, 0);
             let vy = if x.u8(f::FLIP) != 0 { -0x38i16 } else { 0x38 };
             x.set16(Obj::AX, vy as u16);
@@ -155,11 +155,11 @@ fn fly_up_b<R: Bench>(x: &mut Cx<'_, R>) {
             act(x, 6);
         }
         8 => {
-            if !count_down(x, TIMER2) {
-                x.set16(TIMER2, 4);
+            if !count_down(x, Ogre::TIMER2) {
+                x.set16(Ogre::TIMER2, 4);
                 spark(x, 3);
             }
-            if count_down(x, TIMER) {
+            if count_down(x, Ogre::TIMER) {
                 x.move_x();
                 lib::step(x);
             } else {
@@ -177,8 +177,8 @@ fn fly_common<R: Bench>(x: &mut Cx<'_, R>) {
         4 => fly_down_from_above(x),
         6 => land_heavily(x),
         8 => {
-            if (x.u16(TIMER) as i16) > 0 {
-                x.add16(TIMER, 0xffff);
+            if (x.u16(Ogre::TIMER) as i16) > 0 {
+                x.add16(Ogre::TIMER, 0xffff);
                 return;
             }
             if x.anim_step() {
@@ -195,10 +195,10 @@ fn fly_loop<R: Bench>(x: &mut Cx<'_, R>) {
     let here = x.u16(Obj::Y).wrapping_add(x.u16(Obj::Z));
     if (here as i16) >= (top as i16) {
         x.add8(f::SUB3, 2);
-        x.set16(TIMER, 0x28);
-        x.set8(INVULNERABLE, 1);
+        x.set16(Ogre::TIMER, 0x28);
+        x.set8(Ogre::INVULNERABLE, 1);
         x.set_bit(Enemy::DISPLAY, 1, true);
-        let arm = x.linked(ARM);
+        let arm = x.linked(Ogre::ARM);
         arm.set_u8(x.b, 0x58, 1);
         return;
     }
@@ -225,11 +225,11 @@ fn fly_loop<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x70fd6: the ogre disappears off the top, then reappears above the player and dives.
 fn fly_down_from_above<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = x.u16(TIMER).wrapping_sub(1);
-    x.set16(TIMER, n);
+    let n = x.u16(Ogre::TIMER).wrapping_sub(1);
+    x.set16(Ogre::TIMER, n);
     if (n as i16) <= 0 {
         x.add8(f::SUB3, 2);
-        x.set8(INVULNERABLE, 0);
+        x.set8(Ogre::INVULNERABLE, 0);
         return act(x, 2);
     }
     if n != 0xa {
@@ -256,7 +256,7 @@ fn land_heavily<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.add8(f::SUB3, 2);
-    x.set16(TIMER, 0x1e);
+    x.set16(Ogre::TIMER, 0x1e);
     x.set16(Obj::Z, 0);
     lib::shake_58(x, 0x1e);
     spark(x, 5);
@@ -325,9 +325,9 @@ fn crash<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB3, 2);
             x.set16(Obj::Z, 0);
-            x.set16(TIMER, 0x14);
-            x.set16(TIMER2, 0);
-            x.set8(INVULNERABLE, 0);
+            x.set16(Ogre::TIMER, 0x14);
+            x.set16(Ogre::TIMER2, 0);
+            x.set8(Ogre::INVULNERABLE, 0);
             let vy = if x.u8(f::FLIP) != 0 { -0x5ci16 } else { 0x5c };
             x.set16(Obj::AX, vy as u16);
             lib::shake_54(x, 0x14);
@@ -336,11 +336,11 @@ fn crash<R: Bench>(x: &mut Cx<'_, R>) {
             act(x, 0xa);
         }
         8 => {
-            if !count_down(x, TIMER2) {
-                x.set16(TIMER2, 4);
+            if !count_down(x, Ogre::TIMER2) {
+                x.set16(Ogre::TIMER2, 4);
                 spark(x, 3);
             }
-            if count_down(x, TIMER) {
+            if count_down(x, Ogre::TIMER) {
                 x.move_x();
                 lib::step(x);
             } else {
@@ -370,9 +370,9 @@ fn arm_swing<R: Bench>(x: &mut Cx<'_, R>) {
             flash_key(x);
             if (x.u16(Obj::Z) as i16) >= 0x20 && x.u8(f::KEY_FRAME) == 4 {
                 x.add8(f::SUB3, 2);
-                x.set8(INVULNERABLE, 0);
-                x.set16(TIMER, 0xa);
-                x.set16(TIMER2, 0x48);
+                x.set8(Ogre::INVULNERABLE, 0);
+                x.set16(Ogre::TIMER, 0xa);
+                x.set16(Ogre::TIMER2, 0x48);
             } else {
                 let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
                 let d = x.prog32(RISE + idx);
@@ -385,9 +385,9 @@ fn arm_swing<R: Bench>(x: &mut Cx<'_, R>) {
             bob(x);
             lib::push_players(x);
             flash_key(x);
-            if !count_down(x, TIMER) {
+            if !count_down(x, Ogre::TIMER) {
                 x.add8(f::SUB3, 2);
-                let arm = x.linked(ARM);
+                let arm = x.linked(Ogre::ARM);
                 arm.set_u8(x.b, 0x58, 1);
             }
         }
@@ -396,9 +396,9 @@ fn arm_swing<R: Bench>(x: &mut Cx<'_, R>) {
             bob(x);
             lib::push_players(x);
             flash_key(x);
-            if x.u8(ANIM_FLAGS) != 0 {
+            if x.u8(Enemy::ANIM_END_BYTE) != 0 {
                 x.add8(f::SUB3, 2);
-                let arm = x.linked(ARM);
+                let arm = x.linked(Ogre::ARM);
                 arm.set_u8(x.b, 0x59, 1);
             }
         }
@@ -407,7 +407,7 @@ fn arm_swing<R: Bench>(x: &mut Cx<'_, R>) {
             lib::step(x);
             bob(x);
             lib::push_players(x);
-            let arm = x.linked(ARM);
+            let arm = x.linked(Ogre::ARM);
             if arm.u8(x.b, Enemy::ACTIVE) == 0 || (arm.u8(x.b, 0x5a) != 0 && x.u8(f::KEY_FRAME) == 4) {
                 x.add8(f::SUB3, 2);
             }
@@ -422,11 +422,11 @@ fn arm_swing<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB3, 2);
             x.set16(Obj::Z, 0);
-            x.set16(TIMER, 0x10);
+            x.set16(Ogre::TIMER, 0x10);
             mv(x, 0);
         }
         12 => {
-            if count_down(x, TIMER) {
+            if count_down(x, Ogre::TIMER) {
                 lib::step(x);
             } else {
                 end_with(x, false);
@@ -445,7 +445,7 @@ pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(LOOK_PREV, 0xff);
+            x.set8(Ogre::LOOK_PREV, 0xff);
             mv(x, 0);
         }
         2 => {

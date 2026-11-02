@@ -39,25 +39,25 @@ fn switch_flight_set<R: Bench>(x: &mut Cx<'_, R>) {
 fn charge_a<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x719f6 + level);
-    x.set8(CHARGE, v);
+    x.set8(Enemy::AI_STANCE, v);
 }
 
 fn charge_b<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(0x71a16 + level);
-    x.set8(CHARGE, v);
+    x.set8(Enemy::AI_STANCE, v);
 }
 
 fn wander_a<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
     let v = x.rom8(0x71a5a + r);
-    x.set8(WANDER, v);
+    x.set8(Enemy::AI_WANDER, v);
 }
 
 fn wander_b<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
     let v = x.rom8(0x71a7a + r);
-    x.set8(WANDER, v);
+    x.set8(Enemy::AI_WANDER, v);
 }
 
 // --- +6 = 0 : poursuite lente ---------------------------------------------------------------------
@@ -69,9 +69,9 @@ fn pursue<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         lib::draw_6e(x);
-        x.set8(LOOK, 0);
-        if x.u8(LOOK_PREV) != 0 {
-            x.set8(LOOK_PREV, 0);
+        x.set8(Ogre::LOOK, 0);
+        if x.u8(Ogre::LOOK_PREV) != 0 {
+            x.set8(Ogre::LOOK_PREV, 0);
             mv(x, 0);
         }
         return;
@@ -79,8 +79,8 @@ fn pursue<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::outside_band(x, -0x50, 0x1d0) {
         return go::dive(x);
     }
-    let n = x.u8(TURNS).wrapping_sub(1);
-    x.set8(TURNS, n);
+    let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, n);
     if (n as i8) <= 0 {
         return go::wander(x);
     }
@@ -97,7 +97,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
-        x.set8(LOOK, 1);
+        x.set8(Ogre::LOOK, 1);
         return mv(x, 1);
     }
     if !lib::step(x) {
@@ -106,11 +106,11 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if interrupted(x) {
         return;
     }
-    let saved = x.u32(SAVED_STATE);
+    let saved = x.u32(Ogre::SAVED_STATE);
     x.set32(f::STATE, saved);
-    let prev = x.u8(LOOK_PREV);
+    let prev = x.u8(Ogre::LOOK_PREV);
     if prev == 2 || prev == 3 {
-        x.set8(LOOK, prev);
+        x.set8(Ogre::LOOK, prev);
         return fly_forward_or_back(x);
     }
     mv(x, 0);
@@ -126,11 +126,11 @@ fn glide<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
         if second {
             wander_b(x);
             charge_b(x);
-            x.set8(LOOK, 3);
+            x.set8(Ogre::LOOK, 3);
         } else {
             wander_a(x);
             charge_a(x);
-            x.set8(LOOK, 2);
+            x.set8(Ogre::LOOK, 2);
         }
         return begin_glide(x);
     }
@@ -146,9 +146,9 @@ fn begin_glide<R: Bench>(x: &mut Cx<'_, R>) {
     }
     lib::approach_target(x);
     set_speed(x, 0xd);
-    let prev = x.u8(LOOK_PREV);
-    let look = x.u8(LOOK);
-    x.set8(LOOK_PREV, look);
+    let prev = x.u8(Ogre::LOOK_PREV);
+    let look = x.u8(Ogre::LOOK);
+    x.set8(Ogre::LOOK_PREV, look);
     if prev == 2 || prev == 3 {
         switch_flight_set(x);
     } else {
@@ -157,17 +157,17 @@ fn begin_glide<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn glide_step<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = x.u8(CHARGE).wrapping_sub(1);
-    x.set8(CHARGE, n);
+    let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+    x.set8(Enemy::AI_STANCE, n);
     if (n as i8) < 0 {
-        let w = x.u8(WANDER).wrapping_sub(1);
-        x.set8(WANDER, w);
+        let w = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+        x.set8(Enemy::AI_WANDER, w);
         if (w as i8) <= 0 {
             return go::wander_far(x);
         }
         lib::approach_target(x);
         set_speed(x, 0xd);
-        if x.u8(LOOK) == 3 {
+        if x.u8(Ogre::LOOK) == 3 {
             charge_b(x);
         } else {
             charge_a(x);
@@ -177,7 +177,7 @@ fn glide_step<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::outside_band(x, -0x50, 0x1d0) {
         return go::dive(x);
     }
-    if x.u8(LOOK) == 3 {
+    if x.u8(Ogre::LOOK) == 3 {
         let g = near_box(x, 0x71a9a);
         if g != 0 {
             return pick_b(x, g);
@@ -237,14 +237,14 @@ fn pick_a2<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x71d62: attack 6 without lifting the invulnerability.
 fn strike_6_quiet<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 0);
+    x.set8(Enemy::VULNERABLE, 0);
     set_state_long(x, 0x0204_0600);
 }
 
 /// 0x71b4a: move of the series in front, by threshold `+0xaa` (tables 0x71ba4, 0x71bb4, 0x71bc4).
 fn pick_b<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     let r = rand_and(x, 0xf);
-    let phase = x.u8(PHASE).min(2) as usize;
+    let phase = x.u8(Ogre::PHASE).min(2) as usize;
     // decision 1 (target in front): one table per threshold; decision 2: always the first
     let table = if gate == 1 { [0x71ba4u32, 0x71bb4, 0x71bc4][phase] } else { 0x71ba4 };
     let v = x.rom8(table + r);
@@ -258,7 +258,7 @@ fn pick_b<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
 /// 0x71bd8: move of the series behind.
 fn pick_c<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
-    let phase = x.u8(PHASE).min(2) as usize;
+    let phase = x.u8(Ogre::PHASE).min(2) as usize;
     let table = [0x71c32u32, 0x71c42, 0x71c52][phase];
     let v = x.rom8(table + r);
     match v {
@@ -267,7 +267,7 @@ fn pick_c<R: Bench>(x: &mut Cx<'_, R>) {
         4 => go::strike_4(x),
         6 => strike_6_quiet(x),
         8 => {
-            x.set8(VULNERABLE, 0);
+            x.set8(Enemy::VULNERABLE, 0);
             set_state_long(x, 0x0204_0800);
         }
         _ => {}
@@ -282,10 +282,10 @@ fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             x.set16(Obj::AX, 0);
             let mut angle = 0x18;
-            if x.u8(SIDE_TURN) != 0 {
+            if x.u8(Ogre::SIDE_TURN) != 0 {
                 let target = load_target(x);
                 let px = target.u16(x.b, Obj::X);
-                x.set16(GOAL_X, px);
+                x.set16(Ogre::GOAL_X, px);
                 if x.u8(f::FLIP) != 0 {
                     angle = 8;
                 }
@@ -308,11 +308,11 @@ fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
                 x.move_x();
                 let leftward = (x.u16(Obj::VX) as i16) < 0;
                 let (mut d0, mut d1);
-                if x.u8(SIDE_TURN) == 0 {
+                if x.u8(Ogre::SIDE_TURN) == 0 {
                     d0 = camera_x(x).wrapping_add(if leftward { 0xf0 } else { 0x90 });
                     d1 = x.u16(Obj::X);
                 } else {
-                    d0 = x.u16(GOAL_X);
+                    d0 = x.u16(Ogre::GOAL_X);
                     d1 = x.u16(Obj::X);
                 }
                 if leftward {
@@ -330,11 +330,11 @@ fn plunge<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         4 => {
-            if !count_down(x, TIMER2) {
-                x.set16(TIMER2, 4);
+            if !count_down(x, Ogre::TIMER2) {
+                x.set16(Ogre::TIMER2, 4);
                 spark(x, 3);
             }
-            if count_down(x, TIMER) {
+            if count_down(x, Ogre::TIMER) {
                 x.move_x();
                 return;
             }
@@ -353,8 +353,8 @@ fn act_a<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 /// 0x70c6c: start of the dive run.
 fn plunge_dash<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set16(TIMER, 0x14);
-    x.set16(TIMER2, 0);
+    x.set16(Ogre::TIMER, 0x14);
+    x.set16(Ogre::TIMER2, 0);
     let vy = if x.u8(f::FLIP) != 0 { -0x40i16 } else { 0x40 };
     x.set16(Obj::AX, vy as u16);
     lib::shake_54(x, 0x14);
@@ -379,7 +379,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB3, 2);
             let Some(arm) = x.alloc(&pools::ESHL) else { return end_leap(x) };
-            x.set16(ARM, arm.0 as u16);
+            x.set16(Ogre::ARM, arm.0 as u16);
             arm.set_u8(x.b, Enemy::ACTIVE, 1);
             arm.set_u8(x.b, Enemy::KIND, 0x2a);
             arm.set_u16(x.b, f::CREATOR, x.o.0 as u16);
@@ -410,22 +410,22 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x14);
-            x.set16(TIMER2, 0);
+            x.set16(Ogre::TIMER, 0x14);
+            x.set16(Ogre::TIMER2, 0);
             x.set16(Obj::Z, 0);
             let vy = if x.u8(f::FLIP) != 0 { 0x40i16 } else { -0x40 };
             x.set16(Obj::AX, vy as u16);
             x.move_x();
-            let arm = x.linked(ARM);
+            let arm = x.linked(Ogre::ARM);
             arm.set_u8(x.b, 0x58, 1);
             mv(x, 7);
         }
         8 => {
-            if !count_down(x, TIMER2) {
-                x.set16(TIMER2, 4);
+            if !count_down(x, Ogre::TIMER2) {
+                x.set16(Ogre::TIMER2, 4);
                 spark(x, 3);
             }
-            if count_down(x, TIMER) {
+            if count_down(x, Ogre::TIMER) {
                 x.move_x();
                 lib::step(x);
             } else {

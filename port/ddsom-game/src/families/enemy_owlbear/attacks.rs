@@ -69,14 +69,14 @@ fn chain<'a, R: Bench>(x: &mut Cx<'a, R>, resume: u32, later: impl FnOnce(&mut C
 
 /// 0x5e0ba / 0x5e624: follows the target with its gaze for `+0x77` frames.
 fn track<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
-    let n = x.u8(AI_KICK).wrapping_sub(1);
-    x.set8(AI_KICK, n);
+    let n = x.u8(Enemy::AI_BYTE).wrapping_sub(1);
+    x.set8(Enemy::AI_BYTE, n);
     if (n as i8) < 0 {
         return x.add8(Enemy::SUB_STEP, 2);
     }
-    x.set32(RESUME_STATE, resume);
+    x.set32(Owlbear::RESUME_STATE, resume);
     let sub2 = x.u8(f::SUB2);
-    x.set8(RESUME_STEP, sub2);
+    x.set8(Owlbear::RESUME_STEP, sub2);
     turn_if_behind(x);
     step(x);
 }
@@ -91,13 +91,13 @@ fn strike_play<R: Bench>(x: &mut Cx<'_, R>, want: u8, n: u32) {
 /// A wait before continuing (`+0xa0` frames), then next step.
 fn pause<R: Bench>(x: &mut Cx<'_, R>, frames: u8) {
     x.add8(Enemy::SUB_STEP, 2);
-    x.set8(TIMER, frames);
+    x.set8(Owlbear::TIMER, frames);
 }
 
 /// Waits for the end of the delay while advancing (0x5e17e, 0x5e2ea).
 fn walk_on<R: Bench>(x: &mut Cx<'_, R>) {
-    let t = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, t);
+    let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+    x.set8(Owlbear::TIMER, t);
     if t != 0 {
         step(x);
         move_xy(x);
@@ -118,9 +118,9 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
 /// Start of a paw strike (0x5e0e0).
 fn swipe_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(Enemy::SUB_STEP, 2);
-    x.set8(VULNERABLE, 0);
-    x.set8(STRIKE_KIND, 0xe);
-    x.set8(STRIKE_POWER, 5);
+    x.set8(Enemy::VULNERABLE, 0);
+    x.set8(Enemy::STRIKE_KIND, 0xe);
+    x.set8(Enemy::STRIKE_POWER, 5);
     roll_series(x);
     strike_play(x, 0xa, 0);
 }
@@ -130,14 +130,14 @@ fn roll_series<R: Bench>(x: &mut Cx<'_, R>) {
     let level = (var::RANK.get(x.b) >> 1 << 4) as u32;
     let r = (x.random() as u32) & 0xf;
     let n = x.data8(SERIES_TABLE + level + r);
-    x.set8(SERIES, n);
+    x.set8(Owlbear::SERIES, n);
 }
 
 /// End of a paw strike (0x5e132): next attack, or one more attack as long as the series lasts.
 fn swipe_end<R: Bench>(x: &mut Cx<'_, R>) {
     if x.anim_step() {
-        let n = x.u8(SERIES).wrapping_sub(1);
-        x.set8(SERIES, n);
+        let n = x.u8(Owlbear::SERIES).wrapping_sub(1);
+        x.set8(Owlbear::SERIES, n);
         if n == 0 {
             return next_move(x);
         }
@@ -175,9 +175,9 @@ pub(super) fn leap_begin<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Continuation of the start of a leap, the step having already advanced.
 fn leap_body<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(STRIKE_KIND, 0xf);
-    x.set8(STRIKE_POWER, 8);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::STRIKE_KIND, 0xf);
+    x.set8(Enemy::STRIKE_POWER, 8);
+    x.set8(Enemy::VULNERABLE, 1);
     if x.u8(f::FLIP) != 0 {
         let vx = x.u16(Enemy::VX).wrapping_neg();
         x.set16(Enemy::VX, vx);
@@ -197,7 +197,7 @@ fn leap_at<R: Bench>(x: &mut Cx<'_, R>, vx: i16) {
 fn leap_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(Enemy::SUB_STEP, 2);
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
     }
     step(x);
 }
@@ -210,7 +210,7 @@ fn leap_land<R: Bench>(x: &mut Cx<'_, R>) {
         x.set32(Obj::Z, 0);
         x.add8(Enemy::SUB_STEP, 2);
         x.set16(Obj::ANIM_TIMER, 1);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         let v = if x.u8(f::FLIP) != 0 { -0x1c } else { 0x1c };
         x.set16(Enemy::AX, v as u16);
     }
@@ -289,10 +289,10 @@ fn leap_high<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => {
             x.add8(Enemy::SUB_STEP, 2);
-            x.set8(STRIKE_KIND, 0x10);
-            x.set8(STRIKE_POWER, 0xa);
+            x.set8(Enemy::STRIKE_KIND, 0x10);
+            x.set8(Enemy::STRIKE_POWER, 0xa);
             x.set16(Enemy::VX, (-0x400i16) as u16);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             if x.u8(f::FLIP) != 0 {
                 let vx = x.u16(Enemy::VX).wrapping_neg();
                 x.set16(Enemy::VX, vx);
@@ -310,7 +310,7 @@ fn leap_high<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set32(Obj::Z, 0);
                 x.add8(Enemy::SUB_STEP, 2);
                 x.set16(Obj::ANIM_TIMER, 1);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 x.set16(Enemy::VZ, 0x200);
                 x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
             }
@@ -328,8 +328,8 @@ fn leap_high<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5e318: takes a run-up running toward the wanted side.
 fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(Enemy::SUB_STEP, 2);
-    x.set8(TIMER, 0x42);
-    x.set8(VULNERABLE, 1);
+    x.set8(Owlbear::TIMER, 0x42);
+    x.set8(Enemy::VULNERABLE, 1);
     set_angle(x, 0x18, 8);
     pose(x, 0x16, SET_BODY.0, 4);
     speed(x, 8);
@@ -344,8 +344,8 @@ fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn run_wait<R: Bench>(x: &mut Cx<'_, R>) {
-    let t = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, t);
+    let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+    x.set8(Owlbear::TIMER, t);
     if t == 0 {
         return back_on_guard(x);
     }
@@ -367,12 +367,12 @@ fn charge_b<R: Bench>(x: &mut Cx<'_, R>) {
     chain(x, RESUME_STRIKES, |x, n| match n {
         4 => run_begin(x),
         6 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+            x.set8(Owlbear::TIMER, t);
             if t == 0 {
                 x.add8(Enemy::SUB_STEP, 2);
-                x.set8(WANT_ANIM, 0x1c);
-                x.set8(CUR_ANIM, 0x1c);
+                x.set8(Owlbear::WANT_ANIM, 0x1c);
+                x.set8(Owlbear::CUR_ANIM, 0x1c);
                 return body(x, 0xc);
             }
             step(x);
@@ -389,14 +389,14 @@ fn rush_gen<'a, R: Bench>(x: &mut Cx<'a, R>, last: impl FnOnce(&mut Cx<'a, R>)) 
         4 => walk_begin(x),
         6 => pause(x, 0x1f),
         8 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+            x.set8(Owlbear::TIMER, t);
             if t == 0 {
                 x.add8(Enemy::SUB_STEP, 2);
-                x.set8(TIMER, 0x1e);
-                x.set8(VULNERABLE, 1);
-                x.set8(WANT_ANIM, 6);
-                x.set8(CUR_ANIM, 6);
+                x.set8(Owlbear::TIMER, 0x1e);
+                x.set8(Enemy::VULNERABLE, 1);
+                x.set8(Owlbear::WANT_ANIM, 6);
+                x.set8(Owlbear::CUR_ANIM, 6);
                 return body(x, 0);
             }
             step(x);
@@ -413,8 +413,8 @@ fn rush<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn rush_b<R: Bench>(x: &mut Cx<'_, R>) {
     rush_gen(x, |x| {
-        let t = x.u8(TIMER).wrapping_sub(1);
-        x.set8(TIMER, t);
+        let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+        x.set8(Owlbear::TIMER, t);
         if t == 0 {
             next_move(x);
         } else {
@@ -430,9 +430,9 @@ fn hop_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(Enemy::SUB_STEP, 2);
     let vx = if x.u8(f::FLIP) != 0 { -0x200 } else { 0x200 };
     x.set16(Enemy::VX, vx as u16);
-    x.set8(VULNERABLE, 1);
-    x.set8(WANT_ANIM, 0x1a);
-    x.set8(CUR_ANIM, 0x1a);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Owlbear::WANT_ANIM, 0x1a);
+    x.set8(Owlbear::CUR_ANIM, 0x1a);
     x.set16(Enemy::AX, 0);
     x.set16(Enemy::VZ, 0x200);
     x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
@@ -493,16 +493,16 @@ fn run_toward_begin<R: Bench>(x: &mut Cx<'_, R>) {
         None => false,
     };
     x.set8(Obj::SPEED_INDEX, if right { 8 } else { 0x18 });
-    x.set8(TIMER, 0x42);
-    x.set8(VULNERABLE, 1);
+    x.set8(Owlbear::TIMER, 0x42);
+    x.set8(Enemy::VULNERABLE, 1);
     pose(x, 0x16, SET_BODY.0, 4);
     speed(x, 8);
 }
 
 /// 0x5e7b4: the run lasts `+0xa0` frames, then back on guard and the pursuit resumes.
 fn run_toward<R: Bench>(x: &mut Cx<'_, R>) {
-    let t = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, t);
+    let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+    x.set8(Owlbear::TIMER, t);
     if t == 0 {
         set_state_long(x, ACTIVE_ENGAGE);
         body(x, 2);

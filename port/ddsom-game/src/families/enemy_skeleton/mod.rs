@@ -16,6 +16,7 @@
 //! Animations: 0x15eed8 (movements) and 0x15eef4 (attacks).
 
 use crate::families::cx::Bench;
+use crate::record::record;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -27,47 +28,37 @@ mod leaps;
 mod stance;
 
 /// Fields specific to this type (the common fields are in `enemy_common::f`).
-mod g {
-    /// Series: 0 skeleton, 1 armed skeleton.
-    pub const SERIES: u32 = 0x2f;
-    /// Frame counter of the animation (word) and its current value.
-    pub const ANIM_COUNT: u32 = 0x30;
-    pub const ANIM_STATE: u32 = 0x32;
-    /// Damage of the current attack: type and strength.
-    pub const STRIKE_KIND: u32 = 0x44;
-    pub const STRIKE_POWER: u32 = 0x45;
-    /// Movement speed table (long).
-    pub const MOVE_TABLE: u32 = 0x4c;
-    /// Vulnerable (1) or not.
-    pub const VULNERABLE: u32 = 0x67;
-    /// AI posture: 9 = on guard (counter-attack to a hit).
-    pub const POSTURE: u32 = 0x68;
-    /// AI counters: delay before a new choice, before a wait, turn-arounds.
-    pub const AI_CHOICE: u32 = 0x6b;
-    pub const AI_WAIT: u32 = 0x6e;
-    pub const AI_WALK: u32 = 0x71;
-    /// Remaining wait before the next step of an attack.
-    pub const COOLDOWN: u32 = 0x77;
-    pub const AI_KIND: u32 = 0x78;
-    pub const AI_SHOT: u32 = 0x79;
-    /// Walking box sets.
-    pub const WALK_ARGS_Y: u32 = 0x7a;
-    pub const WALK_ARGS_Z: u32 = 0x7c;
-    /// Timer (word) and saved position.
-    pub const TIMER: u32 = 0xa2;
-    pub const SAVED_POS: u32 = 0xa4;
-    /// Side where the target is (0 in front, 2 behind), set by the detection.
-    pub const SIDE: u32 = 0xa6;
-    /// "Grabbed" flag: the enemy goes into a fall.
-    pub const CAUGHT: u32 = 0xa7;
-    /// Counter-attack: flag (`+0xa8`, 0xff = at random) and attack to play (`+0xa9`).
-    pub const COUNTER: u32 = 0xa8;
-    pub const COUNTER_MOVE: u32 = 0xa9;
-    /// Special reaction flags (1 fall, 2 recoil, 3 throw).
-    pub const SPECIAL_HIT: u32 = 0x8f;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Skeleton(pub Obj);
+
+impl Skeleton {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
 
-use g::*;
+record! {
+    impl Skeleton {
+        /// Walking box sets.
+        walk_args_y, set_walk_args_y, WALK_ARGS_Y: u16 @ 0x7a;
+        walk_args_z, set_walk_args_z, WALK_ARGS_Z: u16 @ 0x7c;
+        /// Special reaction flags (1 fall, 2 recoil, 3 throw).
+        special_hit, set_special_hit, SPECIAL_HIT: u8 @ 0x8f;
+        /// Timer (word) and saved position.
+        timer, set_timer, TIMER: u16 @ 0xa2;
+        saved_pos, set_saved_pos, SAVED_POS: u16 @ 0xa4;
+        /// Side where the target is (0 in front, 2 behind), set by the detection.
+        side, set_side, SIDE: u8 @ 0xa6;
+        /// "Grabbed" flag: the enemy goes into a fall.
+        caught, set_caught, CAUGHT: u8 @ 0xa7;
+        /// Counter-attack: flag (`+0xa8`, 0xff = at random) and attack to play (`+0xa9`).
+        counter, set_counter, COUNTER: u16 @ 0xa8;
+        counter_move, set_counter_move, COUNTER_MOVE: u8 @ 0xa9;
+    }
+}
+
 use crate::objects::Current;
 
 /// Animation sets: movements and attacks.
@@ -119,7 +110,7 @@ fn move_xy<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// End of the attacks: next step drawn from the table by difficulty, or back to standing.
 fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(AI_KIND, 0xff);
+    x.set8(Enemy::AI_SHOT, 0xff);
     if x.u16(f::TARGET) != 0 {
         load_target(x);
         let side = match lib::target_in_front(x, -8, 0x68, 8) {
@@ -127,7 +118,7 @@ fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
             near => near,
         };
         if side.found() {
-            x.set8(SIDE, side as u8);
+            x.set8(Skeleton::SIDE, side as u8);
             pick_move(x, NEXT_MOVES, 0x208);
             return;
         }
@@ -148,16 +139,16 @@ fn pick_move<R: Bench>(x: &mut Cx<'_, R>, table: u32, state: u16) {
 /// Reaction to hit flags `+0x8f` (0x59146): true if it took over (the resume address that the original passed in A6 is
 /// read by nobody).
 fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let flag = x.u8(SPECIAL_HIT);
+    let flag = x.u8(Skeleton::SPECIAL_HIT);
     match flag {
         1 => {
             if x.u16(Obj::Z) != 0 {
                 return false;
             }
-            x.set8(SPECIAL_HIT, 0);
+            x.set8(Skeleton::SPECIAL_HIT, 0);
             x.set8(Enemy::REACTION, 0x58);
             if x.u32(f::STATE) == 0x0404_0200 {
-                x.set16(ANIM_STATE, 0xffff);
+                x.set16(Enemy::ANIM_END, 0xffff);
                 set_state_long(x, 0x0406_0200);
             } else {
                 set_state_long(x, 0x0400_0000);
@@ -166,7 +157,7 @@ fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         }
         2 => {
             set_state_long(x, 0x0400_0000);
-            x.set8(SPECIAL_HIT, 0);
+            x.set8(Skeleton::SPECIAL_HIT, 0);
             let code = if x.u16(Obj::Z) == 0 { 0xc } else { 0x38 };
             x.set8(Enemy::REACTION, code);
             true
@@ -175,7 +166,7 @@ fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
             if x.u16(Obj::Z) != 0 || x.u8(Enemy::DOWNED) != 0 {
                 return false;
             }
-            x.set8(SPECIAL_HIT, 0);
+            x.set8(Skeleton::SPECIAL_HIT, 0);
             set_state_long(x, KNOCKED);
             true
         }
@@ -202,24 +193,24 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     for (off, v) in [(Enemy::AI_STANCE_ROW, 0), (Enemy::EVENT_KIND, 0x44), (Enemy::EVENT_LOW, 0), (Enemy::AI_WANDER_ROW, 2), (Enemy::AI_WAIT_MASKS, 3), (Enemy::AI_BOX_CHANCE, 3), (Enemy::AI_BYTE_ROW, 3), (Enemy::AI_69, 2), (Enemy::AI_SHOT, 0xff)] {
         x.set8(off, v);
     }
-    x.set16(COUNTER, 0);
+    x.set16(Skeleton::COUNTER, 0);
     x.set8(Enemy::AI_ROW_8E, 0);
     x.set8(Enemy::LOOT, 0);
     x.set8(Enemy::LOOT_ROW, 0);
     x.set32(Enemy::RESUME_STATE, 0);
-    x.set8(CAUGHT, 0);
+    x.set8(Skeleton::CAUGHT, 0);
     x.set8(0xac, 0);
     x.set8(0x83, 1);
     x.set32(f::IMMUNITY, 0x1001);
     lib::set_immunities(x);
-    let series = x.u8(SERIES) as u32;
+    let series = x.u8(Enemy::GROUP) as u32;
     if series != 0 {
         x.set8(Enemy::OWN_PALETTE, 1);
         x.set8(Enemy::PALETTE, 0x1a);
     }
     // four bytes per series: 0x6d, 0x72, 0x73, 0x68
     let row = 0x57de6 + 4 * series;
-    for (i, off) in [0x6d, 0x72, 0x73, POSTURE].into_iter().enumerate() {
+    for (i, off) in [0x6d, 0x72, 0x73, Enemy::AI_68].into_iter().enumerate() {
         let v = x.data8(row + i as u32);
         x.set8(off, v);
     }
@@ -291,12 +282,12 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 | 2 => {
             step(x);
-            if (x.u16(ANIM_STATE) as i16) >= 0 {
+            if (x.u16(Enemy::ANIM_END) as i16) >= 0 {
                 return;
             }
             x.set8(f::SUB, 2);
             x.set16(f::SUB2, 0);
-            if x.u8(SERIES) != 0 {
+            if x.u8(Enemy::GROUP) != 0 {
                 x.set8(Enemy::PENDING_PALETTE, 0);
                 x.set8(Enemy::OWN_PALETTE, 1);
                 body(x, 0);
@@ -310,10 +301,10 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 x.add8(f::SUB3, 2);
                 x.set32(Obj::Z, 0);
-                x.set16(ANIM_COUNT, 1);
+                x.set16(Obj::ANIM_TIMER, 1);
             } else {
                 step(x);
-                if (x.u16(ANIM_STATE) as i16) >= 0 {
+                if (x.u16(Enemy::ANIM_END) as i16) >= 0 {
                     return;
                 }
                 x.set8(f::SUB, 2);
@@ -332,10 +323,10 @@ fn blink<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             x.set8(Enemy::ACTIVE, 2);
             x.set8(0xac, 1);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             x.set16(Enemy::CREATOR, 0x703);
             let d7 = x.counter() as u8;
-            x.set8(TIMER, d7);
+            x.set8(Skeleton::TIMER, d7);
             return;
         }
         2 => 0x307,
@@ -348,8 +339,8 @@ fn blink<R: Bench>(x: &mut Cx<'_, R>) {
         _ => return,
     };
     x.set_bit(Enemy::DISPLAY, 1, true);
-    let t = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, t);
+    let t = x.u8(Skeleton::TIMER).wrapping_sub(1);
+    x.set8(Skeleton::TIMER, t);
     if t & x.u8(0x42) != 0 {
         return;
     }

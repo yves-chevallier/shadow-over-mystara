@@ -32,22 +32,22 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
-        x.set8(LOOK, 0xc);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(Kobold::LOOK, 0xc);
         mv(x, 0xc);
         set_speed(x, 0xb);
         return lib::draw_stance(x);
     }
-    let n = x.u8(AI_CHARGE).wrapping_sub(1);
-    x.set8(AI_CHARGE, n);
+    let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+    x.set8(Enemy::AI_STANCE, n);
     if (n as i8) < 0 {
         lib::draw_stance(x);
         pick_target(x);
         let kind = if x.u8(f::SUB2) == 0 { 0xe } else { 0xf };
-        x.set8(SHOT_KIND, kind);
+        x.set8(Enemy::AI_POINT_SET, kind);
         lib::approach_target(x);
-        let w = x.u8(AI_WANDER).wrapping_sub(1);
-        x.set8(AI_WANDER, w);
+        let w = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+        x.set8(Enemy::AI_WANDER, w);
         if w == 0 {
             lib::draw_6b(x);
             if lib::maybe_draw_6e(x) {
@@ -60,7 +60,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x555d4: on guard; a player very close? Immediate attack, otherwise range boxes, otherwise walking step.
 pub(super) fn reach<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(GUARD, 2);
+    x.set8(Kobold::GUARD, 2);
     reach_boxes(x);
 }
 
@@ -84,8 +84,8 @@ pub(super) fn reach_boxes<R: Bench>(x: &mut Cx<'_, R>) {
     let target = x.linked(f::TARGET);
     let side = if (x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X)) as i16) < 0 { 0x20 } else { 0 };
     if side != x.u8(f::FLIP) {
-        x.set32(RESUME_STATE, STANCE);
-        x.set8(RESUME_SUB2, 0);
+        x.set32(Kobold::RESUME_STATE, STANCE);
+        x.set8(Kobold::RESUME_SUB2, 0);
         set_state_long(x, 0x0202_0200);
     }
 }
@@ -135,16 +135,16 @@ fn far_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         look(x, 5);
         return mv(x, 5);
     }
     if !x.anim_step() {
         return;
     }
-    let s = x.u32(RESUME_STATE);
+    let s = x.u32(Kobold::RESUME_STATE);
     x.set32(f::STATE, s);
-    let sub2 = x.u8(RESUME_SUB2);
+    let sub2 = x.u8(Kobold::RESUME_SUB2);
     x.set8(f::SUB2, sub2);
     let flip = x.u8(f::FLIP) ^ 0x20;
     x.set8(f::FLIP, flip);
@@ -156,18 +156,18 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
-        x.set8(LOOK, 0);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(Kobold::LOOK, 0);
         return mv(x, 0);
     }
-    let n = x.u8(AI_WAIT).wrapping_sub(1);
-    x.set8(AI_WAIT, n);
+    let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, n);
     if (n as i8) < 0 {
         return set_state_long(x, STANCE);
     }
     if must_turn(x) {
-        x.set32(RESUME_STATE, STANCE);
-        x.set8(RESUME_SUB2, 4);
+        x.set32(Kobold::RESUME_STATE, STANCE);
+        x.set8(Kobold::RESUME_SUB2, 4);
         set_state_long(x, 0x0202_0200);
     }
     x.anim_step();
@@ -183,28 +183,28 @@ fn run_up<R: Bench>(x: &mut Cx<'_, R>) {
         }
         0 => {
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x28);
+            x.set16(Kobold::TIMER, 0x28);
             lib::draw_stance(x);
             run_begin(x);
         }
         2 => {
-            let n = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, n);
+            let n = x.u16(Kobold::TIMER).wrapping_sub(1);
+            x.set16(Kobold::TIMER, n);
             if (n as i16) < 0 {
                 return set_state_long(x, STANCE);
             }
-            let n = x.u8(AI_CHARGE).wrapping_sub(1);
-            x.set8(AI_CHARGE, n);
+            let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+            x.set8(Enemy::AI_STANCE, n);
             if (n as i8) < 0 {
                 lib::draw_stance(x);
                 pick_target(x);
-                x.set8(SHOT_KIND, 0xe);
+                x.set8(Enemy::AI_POINT_SET, 0xe);
                 lib::approach_target(x);
             }
             if must_turn(x) {
-                x.set32(RESUME_STATE, 0x0202_0004);
+                x.set32(Kobold::RESUME_STATE, 0x0202_0004);
                 let sub2 = x.u8(f::SUB2);
-                x.set8(RESUME_SUB2, sub2);
+                x.set8(Kobold::RESUME_SUB2, sub2);
                 set_state_long(x, 0x0202_0200);
             }
             x.anim_step();
@@ -216,8 +216,8 @@ fn run_up<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x5583c: start of the run.
 fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
-    x.set8(LOOK, 0x16);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Kobold::LOOK, 0x16);
     mv(x, 0x16);
     set_speed(x, 0x17);
 }

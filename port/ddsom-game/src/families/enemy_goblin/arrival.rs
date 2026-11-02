@@ -21,15 +21,15 @@ fn walk_in<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         x.move_by_table_xy();
         x.anim_step();
-        let n = x.u8(TIMER).wrapping_sub(1);
-        x.set8(TIMER, n);
+        let n = x.u8(Goblin::TIMER).wrapping_sub(1);
+        x.set8(Goblin::TIMER, n);
         if (n as i8) < 0 {
             set_state_long(x, STANCE);
         }
         return;
     }
     x.add8(f::SUB2, 2);
-    x.set8(TIMER, 0x14);
+    x.set8(Goblin::TIMER, 0x14);
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
     set_speed(x, 0x12);
@@ -76,8 +76,8 @@ fn run_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(TIMER, 0x28);
-            x.set8(NO_ZONE, 1);
+            x.set8(Goblin::TIMER, 0x28);
+            x.set8(Goblin::NO_ZONE, 1);
             let (angle, shift) = if x.u8(f::FLIP) != 0 { (8, -0x20i16) } else { (0x18, 0x1a0) };
             x.set8(Obj::SPEED_INDEX, angle);
             let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
@@ -90,14 +90,14 @@ fn run_in<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(f::KEY_FRAME) == 0 {
                 x.move_by_table_xy();
             }
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Goblin::TIMER).wrapping_sub(1);
+            x.set8(Goblin::TIMER, n);
             if n != 0 {
                 return;
             }
             x.add8(f::SUB2, 2);
             let t = rank_byte(x, SERIES_TABLE);
-            x.set8(TIMER, t);
+            x.set8(Goblin::TIMER, t);
             strike(x, 0);
         }
         4 => {
@@ -108,8 +108,8 @@ fn run_in<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 return;
             }
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Goblin::TIMER).wrapping_sub(1);
+            x.set8(Goblin::TIMER, n);
             if n != 0 {
                 return strike(x, 0);
             }

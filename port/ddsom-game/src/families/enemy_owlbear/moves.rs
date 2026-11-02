@@ -28,13 +28,13 @@ fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Enemy::SUB_STEP) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
-            x.set8(TIMER, 0x1e);
-            x.set8(VULNERABLE, 1);
+            x.set8(Owlbear::TIMER, 0x1e);
+            x.set8(Enemy::VULNERABLE, 1);
             pose(x, 6, SET_BODY.0, 0);
         }
         2 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+            x.set8(Owlbear::TIMER, t);
             if t == 0 {
                 set_state_long(x, ACTIVE_STANCE);
             }
@@ -48,16 +48,16 @@ fn stand<R: Bench>(x: &mut Cx<'_, R>) {
 fn dash_begin<R: Bench>(x: &mut Cx<'_, R>, angle: u8, timer: u8, want: u8, n: u32, speed_n: u32) {
     x.add8(Enemy::SUB_STEP, 2);
     x.set8(Obj::SPEED_INDEX, angle);
-    x.set8(TIMER, timer);
-    x.set8(VULNERABLE, 1);
+    x.set8(Owlbear::TIMER, timer);
+    x.set8(Enemy::VULNERABLE, 1);
     pose(x, want, SET_BODY.0, n);
     speed(x, speed_n);
 }
 
 /// The run lasts as long as `+0xa0` does not drop to zero; then the beast gets back on its feet.
 fn dash_run<'a, R: Bench>(x: &mut Cx<'a, R>, advance: fn(&mut Cx<'a, R>)) {
-    let t = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, t);
+    let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+    x.set8(Owlbear::TIMER, t);
     if t == 0 {
         return set_state_long(x, ACTIVE_STANCE);
     }

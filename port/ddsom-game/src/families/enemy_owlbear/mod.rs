@@ -17,6 +17,7 @@
 //! (the same one is not restarted).
 
 use crate::families::cx::Bench;
+use crate::record::record;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -28,36 +29,37 @@ mod moves;
 mod stance;
 
 /// Fields specific to this type (the common fields are in `enemy_common::f`).
-mod g {
-    /// Damage of the current attack: `+0x44` type, `+0x45` strength.
-    pub const STRIKE_KIND: u32 = 0x44;
-    pub const STRIKE_POWER: u32 = 0x45;
-    /// Vulnerable (1) or not (0) during the move.
-    pub const VULNERABLE: u32 = 0x67;
-    /// AI parameters set at creation.
-    pub const AI_STEP: u32 = 0x6b;
-    pub const AI_REPEAT: u32 = 0x6e;
-    pub const AI_TURN: u32 = 0x71;
-    pub const AI_KICK: u32 = 0x77;
-    pub const AI_SHOT: u32 = 0x79;
-    /// Delay before the first attack (high byte of word `+0xaa`).
-    pub const DELAY: u32 = 0xaa;
-    /// Timer of the current step.
-    pub const TIMER: u32 = 0xa0;
-    /// Wanted animation and current animation.
-    pub const WANT_ANIM: u32 = 0xa1;
-    pub const CUR_ANIM: u32 = 0xa2;
-    /// Long state (`+0xa6`) and step (`+0xa4`) to resume after a turn-around.
-    pub const RESUME_STATE: u32 = 0xa6;
-    pub const RESUME_STEP: u32 = 0xa4;
-    /// Non-zero byte: the hit state does not test the play zone.
-    pub const NO_ZONE: u32 = 0xa5;
-    /// Repetitions of an attack: `+0xac` (series), `+0xad` (same animation).
-    pub const SERIES: u32 = 0xac;
-    pub const REPEAT_LEFT: u32 = 0xad;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Owlbear(pub Obj);
+
+impl Owlbear {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
 
-use g::*;
+record! {
+    impl Owlbear {
+        /// Timer of the current step.
+        timer, set_timer, TIMER: u8 @ 0xa0;
+        /// Wanted animation and current animation.
+        want_anim, set_want_anim, WANT_ANIM: u8 @ 0xa1;
+        cur_anim, set_cur_anim, CUR_ANIM: u8 @ 0xa2;
+        resume_step, set_resume_step, RESUME_STEP: u8 @ 0xa4;
+        /// Non-zero byte: the hit state does not test the play zone.
+        no_zone, set_no_zone, NO_ZONE: u8 @ 0xa5;
+        /// Long state (`+0xa6`) and step (`+0xa4`) to resume after a turn-around.
+        resume_state, set_resume_state, RESUME_STATE: u32 @ 0xa6;
+        /// Delay before the first attack (high byte of word `+0xaa`).
+        delay, set_delay, DELAY: u8 @ 0xaa;
+        /// Repetitions of an attack: `+0xac` (series), `+0xad` (same animation).
+        series, set_series, SERIES: u8 @ 0xac;
+        repeat_left, set_repeat_left, REPEAT_LEFT: u8 @ 0xad;
+    }
+}
+
 use crate::objects::Current;
 
 /// Animation sets: movements and attacks.
@@ -88,9 +90,9 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Sets the wanted animation `want`; starts script `n` of set `set` if it is not already the current one.
 fn pose<R: Bench>(x: &mut Cx<'_, R>, want: u8, set: u32, n: u32) {
-    x.set8(WANT_ANIM, want);
-    if want != x.u8(CUR_ANIM) {
-        x.set8(CUR_ANIM, want);
+    x.set8(Owlbear::WANT_ANIM, want);
+    if want != x.u8(Owlbear::CUR_ANIM) {
+        x.set8(Owlbear::CUR_ANIM, want);
         x.anim_start(set, n as u16);
     }
 }
@@ -105,13 +107,13 @@ enum Replay {
 /// Like `pose`, for a repeated attack: if the animation is already running, one repetition fewer (`+0xad`), and at zero
 /// the beast gets back on its feet.
 fn replay<R: Bench>(x: &mut Cx<'_, R>, want: u8) -> Replay {
-    x.set8(WANT_ANIM, want);
-    if want != x.u8(CUR_ANIM) {
-        x.set8(CUR_ANIM, want);
+    x.set8(Owlbear::WANT_ANIM, want);
+    if want != x.u8(Owlbear::CUR_ANIM) {
+        x.set8(Owlbear::CUR_ANIM, want);
         return Replay::New;
     }
-    let left = x.u8(REPEAT_LEFT).wrapping_sub(1);
-    x.set8(REPEAT_LEFT, left);
+    let left = x.u8(Owlbear::REPEAT_LEFT).wrapping_sub(1);
+    x.set8(Owlbear::REPEAT_LEFT, left);
     if left == 0 {
         set_state_long(x, ACTIVE_STANCE);
         return Replay::End;
@@ -194,32 +196,32 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::EVENT_KIND, 0xd);
     x.set8(Enemy::EVENT_LOW, 0);
     x.set8(Enemy::AI_ROW_8E, 0);
-    x.set16(DELAY, 0x258);
+    x.set16(Owlbear::DELAY, 0x258);
     pick_target(x);
     lib::draw_stance(x);
     lib::draw_6b(x);
     match x.u8(Obj::VARIANT) {
         0 => {
             set_state_long(x, ACTIVE_STANCE);
-            x.set8(WANT_ANIM, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Owlbear::WANT_ANIM, 2);
+            x.set8(Enemy::VULNERABLE, 1);
             body(x, 2);
         }
         1 => {
             set_state_long(x, 0x0200_0000);
-            x.set8(TIMER, 0x29);
-            x.set8(VULNERABLE, 1);
-            x.set8(WANT_ANIM, 2);
+            x.set8(Owlbear::TIMER, 0x29);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Owlbear::WANT_ANIM, 2);
             // the original does not save the launched animation here
-            if x.u8(WANT_ANIM) != x.u8(CUR_ANIM) {
+            if x.u8(Owlbear::WANT_ANIM) != x.u8(Owlbear::CUR_ANIM) {
                 body(x, 2);
             }
         }
         2 => {
             x.set16(Enemy::VX, (-0x500i16) as u16);
             set_state_long(x, 0x0204_0404);
-            x.set8(WANT_ANIM, 0xc);
-            x.set8(VULNERABLE, 0);
+            x.set8(Owlbear::WANT_ANIM, 0xc);
+            x.set8(Enemy::VULNERABLE, 0);
             strike(x, 1);
             attacks::leap_begin(x);
         }

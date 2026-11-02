@@ -28,9 +28,9 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn pick_anim<R: Bench>(x: &mut Cx<'_, R>, a: u8, b: u8) {
     let r = rand_and(x, 1);
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     let n = if r == 0 { a } else { b };
-    x.set8(LOOK, n);
+    x.set8(Kobold::LOOK, n);
     mv(x, n as u32);
 }
 
@@ -85,7 +85,7 @@ fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 6);
             x.set16(Obj::VX, -0x3c0i16 as u16);
             if x.u8(f::FLIP) != 0 {
@@ -104,7 +104,7 @@ fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set32(Obj::Z, 0);
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 0x18);
             mv(x, 0x18);
         }
@@ -120,7 +120,7 @@ fn somersault<R: Bench>(x: &mut Cx<'_, R>, variant: u8, vx2: i16, anim: u32) {
         0 => {
             x.set16(Obj::VY, vx2 as u16);
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, anim as u8);
             x.set16(Obj::AY, 0);
             x.set16(Obj::VZ, 0x500);
@@ -136,7 +136,7 @@ fn somersault<R: Bench>(x: &mut Cx<'_, R>, variant: u8, vx2: i16, anim: u32) {
                     lib::sound(x, crate::sound::CMD_36F_46F);
                 }
                 x.add8(f::SUB3, 2);
-                x.set8(VULNERABLE, 0);
+                x.set8(Enemy::VULNERABLE, 0);
             }
             x.anim_step();
         }
@@ -148,7 +148,7 @@ fn somersault<R: Bench>(x: &mut Cx<'_, R>, variant: u8, vx2: i16, anim: u32) {
             x.set8(Enemy::ACTIVE, 1);
             x.set32(Obj::Z, 0);
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 0x18);
             mv(x, 0x18);
         }
@@ -162,8 +162,8 @@ fn drop_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 0x19);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Kobold::LOOK, 0x19);
             x.set16(Obj::VZ, -0x300i16 as u16);
             x.set16(Obj::AZ, -0x10i16 as u16);
             let h = var::SCROLL_Y.get(x.b).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
@@ -189,17 +189,17 @@ fn appear<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 0x1a);
-            x.set16(TIMER_W, 0x400);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Kobold::LOOK, 0x1a);
+            x.set16(Kobold::TIMER_W, 0x400);
             mv(x, 0x1a);
         }
         2 => {
-            let n = x.u8(TIMER_W).wrapping_sub(1);
-            x.set8(TIMER_W, n);
+            let n = x.u8(Kobold::TIMER_W).wrapping_sub(1);
+            x.set8(Kobold::TIMER_W, n);
             if n == 0 {
                 x.add8(f::SUB3, 2);
-                x.set8(LOOK, 0x1b);
+                x.set8(Kobold::LOOK, 0x1b);
                 mv(x, 0x1b);
             } else {
                 x.anim_step();
@@ -215,15 +215,15 @@ fn run_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x1e);
-            x.set8(VULNERABLE, 1);
+            x.set16(Kobold::TIMER, 0x1e);
+            x.set8(Enemy::VULNERABLE, 1);
             set_angle(x);
             mv(x, 0x16);
             set_speed(x, 0x17);
         }
         2 => {
-            let n = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, n);
+            let n = x.u16(Kobold::TIMER).wrapping_sub(1);
+            x.set16(Kobold::TIMER, n);
             if (n as i16) < 0 {
                 set_state_long(x, STANCE);
             }
@@ -241,12 +241,12 @@ fn wake<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             look(x, 0x17);
             let t = x.u16(Enemy::CREATOR);
-            x.set16(TIMER, t);
+            x.set16(Kobold::TIMER, t);
             mv(x, 0x17);
         }
         2 => {
-            let n = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, n);
+            let n = x.u16(Kobold::TIMER).wrapping_sub(1);
+            x.set16(Kobold::TIMER, n);
             if (n as i16) >= 0 {
                 return;
             }
@@ -265,14 +265,14 @@ fn dash<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             let r = rand_and(x, 0xf);
             let t = x.rom16(0x553b4 + 2 * r);
-            x.set16(TIMER, t);
+            x.set16(Kobold::TIMER, t);
             set_angle(x);
             mv(x, 0xc);
             set_speed(x, 0x17);
         }
         2 => {
-            let n = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, n);
+            let n = x.u16(Kobold::TIMER).wrapping_sub(1);
+            x.set16(Kobold::TIMER, n);
             if (n as i16) >= 0 {
                 x.anim_step();
                 x.move_by_table_xy();
@@ -301,14 +301,14 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             let r = rand_and(x, 0xf);
             let t = x.rom16(0x553b4 + 2 * r);
-            x.set16(TIMER, t);
+            x.set16(Kobold::TIMER, t);
             set_angle(x);
             mv(x, 0xc);
             set_speed(x, 0x17);
         }
         2 => {
-            let n = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, n);
+            let n = x.u16(Kobold::TIMER).wrapping_sub(1);
+            x.set16(Kobold::TIMER, n);
             if (n as i16) >= 0 {
                 x.anim_step();
                 x.move_by_table_xy();

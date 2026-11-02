@@ -25,7 +25,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
             _ => {}
         }
     }
-    if x.u8(NO_ZONE) == 0 {
+    if x.u8(Bow::NO_ZONE) == 0 {
         zone_and_terrain(x);
     }
     x.reinsert();
@@ -76,7 +76,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     }
     match x.u8(f::SUB2) {
         0 => {
-            x.set8(NO_ZONE, 1);
+            x.set8(Bow::NO_ZONE, 1);
             let flipped = x.u8(f::FLIP) != 0;
             // `turn`: turns first (animation 3); otherwise leaves right away
             let turn = if var::SCENE.get(x.b) == 4 {
@@ -90,7 +90,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
             };
             if turn {
                 x.add8(f::SUB2, 2);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 return mv(x, 3);
             }
             x.add8(f::SUB2, 4);
@@ -111,7 +111,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
             if x.in_arena_default() {
                 return;
             }
-            if (x.u8(TIMED) as i8) < 0 && x.u16(f::HOST) != 0 {
+            if (x.u8(Bow::TIMED) as i8) < 0 && x.u16(f::HOST) != 0 {
                 let host = x.linked(f::HOST);
                 host.set_u8(x.b, Obj::SPEED_INDEX, 1);
             }
@@ -124,7 +124,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x5cb70: runs off toward the edge (animation 2, speed 0x21).
 fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     walk_angle(x);
     mv(x, 2);
     x.select_speed(&crate::objects::motion::SPEEDS_B, 0x21);

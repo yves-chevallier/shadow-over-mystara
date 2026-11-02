@@ -15,6 +15,7 @@
 //! Animations 0x15d4ae (movements) and 0x15d4ec (attacks); `+0xa2/+0xa3` current and previous look.
 
 use crate::families::cx::Bench;
+use crate::record::record;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -26,28 +27,30 @@ mod hit;
 mod moves;
 mod stance;
 
-mod g {
-    pub const GROUP: u32 = 0x2f;
-    pub const STRIKE_KIND: u32 = 0x44;
-    pub const STRIKE_POWER: u32 = 0x45;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const AI_WAIT: u32 = 0x6e;
-    pub const AI_CHARGE: u32 = 0x71;
-    pub const AI_WANDER: u32 = 0x6b;
-    pub const AI_LUNGE: u32 = 0x77;
-    pub const AI_SHOT: u32 = 0x78;
-    pub const SHOT_KIND: u32 = 0x79;
-    /// Timer (word) of a gesture.
-    pub const TIMER: u32 = 0xa0;
-    pub const LOOK: u32 = 0xa2;
-    pub const LOOK_PREV: u32 = 0xa3;
-    pub const RESUME_SUB2: u32 = 0xa5;
-    pub const RESUME_STATE: u32 = 0xa6;
-    pub const TIMER_W: u32 = 0xaa;
-    pub const REPEAT: u32 = 0xac;
-    pub const GUARD: u32 = 0xad;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Kobold(pub Obj);
+
+impl Kobold {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Kobold {
+        /// Timer (word) of a gesture.
+        timer, set_timer, TIMER: u16 @ 0xa0;
+        look, set_look, LOOK: u8 @ 0xa2;
+        look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa3;
+        resume_sub2, set_resume_sub2, RESUME_SUB2: u8 @ 0xa5;
+        resume_state, set_resume_state, RESUME_STATE: u32 @ 0xa6;
+        timer_w, set_timer_w, TIMER_W: u8 @ 0xaa;
+        repeat, set_repeat, REPEAT: u8 @ 0xac;
+        guard, set_guard, GUARD: u8 @ 0xad;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
@@ -83,8 +86,8 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 
 /// The wanted look: `+0xa2` and its twin `+0xa3`.
 fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
-    x.set8(LOOK, v);
-    x.set8(LOOK_PREV, v);
+    x.set8(Kobold::LOOK, v);
+    x.set8(Kobold::LOOK_PREV, v);
 }
 
 fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
@@ -101,7 +104,7 @@ fn set_angle<R: Bench>(x: &mut Cx<'_, R>) {
 fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
     }
     x.anim_step();
 }
@@ -126,7 +129,7 @@ fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d1: u16, d2: i16, d3: i16) {
 
 /// 0x57b9c: the enemy must turn around to face its target (false without a target or a saved look).
 fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
+    if x.u8(Kobold::LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
         return false;
     }
     let target = x.linked(f::TARGET);
@@ -151,10 +154,10 @@ fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x57c34: strength of the attack (`+0x45`) from the attack type `+0x44` and profile `+0x2f` (table 0x57c52).
 fn set_power<R: Bench>(x: &mut Cx<'_, R>) {
-    let kind = x.u8(STRIKE_KIND).wrapping_mul(4) as u32;
-    let group = x.u8(GROUP) as u32;
+    let kind = x.u8(Enemy::STRIKE_KIND).wrapping_mul(4) as u32;
+    let group = x.u8(Enemy::GROUP) as u32;
     let p = x.data8(0x57c52 + kind + group);
-    x.set8(STRIKE_POWER, p);
+    x.set8(Enemy::STRIKE_POWER, p);
 }
 
 /// 0x57c66: the enemy is in the right half of the screen (0xc0 from the camera).
@@ -167,7 +170,7 @@ fn on_right_half<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// 0x56c70 / 0x56c78: chooses the next attack (`+6`) from the difficulty row of profile `+0x2f`; `bias` = 0x14 for the
 /// far series.
 fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
-    let profile = x.u8(GROUP).wrapping_mul(4) as u32;
+    let profile = x.u8(Enemy::GROUP).wrapping_mul(4) as u32;
     let table = if bias == 0 { 0x56d04 } else { 0x56d14 };
     let list = x.data32(table + profile);
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
@@ -217,7 +220,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
     lib::set_immunities(x);
     // profils d'IA : 68 69 6a 6c 6d 72 73 74 75 76 81 80
-    let params: [u8; 12] = match x.u8(GROUP) {
+    let params: [u8; 12] = match x.u8(Enemy::GROUP) {
         0 => [1, 1, 1, 1, 1, 1, 1, 1, 0x14, 1, 0, 1],
         1 => [2, 2, 1, 2, 2, 2, 2, 2, 0x18, 2, 1, 2],
         2 => [2, 2, 1, 2, 3, 3, 3, 2, 0x1c, 3, 2, 3],
@@ -254,7 +257,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(Enemy::ACTIVE, 2);
     }
     look(x, look_v);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     mv(x, anim);
 }
 

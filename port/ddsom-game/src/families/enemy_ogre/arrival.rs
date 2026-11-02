@@ -20,7 +20,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     x.set_bit(Enemy::DISPLAY, 1, false);
-    x.set8(INVULNERABLE, 0);
+    x.set8(Ogre::INVULNERABLE, 0);
     lib::set_immunities(x);
 }
 
@@ -66,28 +66,28 @@ fn fall_in<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB3, 2);
             x.set16(Obj::Z, 0);
-            x.set16(TIMER, 0x12);
-            x.set16(TIMER2, 0);
+            x.set16(Ogre::TIMER, 0x12);
+            x.set16(Ogre::TIMER2, 0);
             x.set16(Obj::AX, 0x30);
             lib::shake_58(x, 0x1e);
             lib::sound(x, crate::sound::CMD_328_428_B);
             act(x, 0xa);
         }
         8 => {
-            if !count_down(x, TIMER2) {
-                x.set16(TIMER2, 4);
+            if !count_down(x, Ogre::TIMER2) {
+                x.set16(Ogre::TIMER2, 4);
                 spark(x, 3);
             }
-            if count_down(x, TIMER) {
+            if count_down(x, Ogre::TIMER) {
                 x.move_x();
                 lib::step(x);
             } else {
                 x.add8(f::SUB3, 2);
-                x.set16(TIMER, 0x14);
+                x.set16(Ogre::TIMER, 0x14);
             }
         }
         10 => {
-            if count_down(x, TIMER) {
+            if count_down(x, Ogre::TIMER) {
                 return;
             }
             x.add8(f::SUB3, 2);
@@ -164,8 +164,8 @@ fn thump<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x70794: start of the run (animation 5).
 fn begin_dash<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set16(TIMER, 0x14);
-    x.set16(TIMER2, 0);
+    x.set16(Ogre::TIMER, 0x14);
+    x.set16(Ogre::TIMER2, 0);
     let vy = if x.u8(f::FLIP) != 0 { -0x40i16 } else { 0x40 };
     x.set16(Obj::AX, vy as u16);
     lib::shake_54(x, 0x14);
@@ -176,11 +176,11 @@ fn begin_dash<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x707d2: the run, then the first move.
 fn dash<R: Bench>(x: &mut Cx<'_, R>) {
-    if !count_down(x, TIMER2) {
-        x.set16(TIMER2, 4);
+    if !count_down(x, Ogre::TIMER2) {
+        x.set16(Ogre::TIMER2, 4);
         spark(x, 3);
     }
-    if count_down(x, TIMER) {
+    if count_down(x, Ogre::TIMER) {
         x.move_x();
         return;
     }
@@ -216,8 +216,8 @@ fn wait_for_player<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x75c36: end of wait, countdown of `+0xa0` then back to the previous substate (`+0xb1`).
 fn waiting_out<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = x.u8(LOOK).wrapping_sub(1);
-    x.set8(LOOK, n);
+    let n = x.u8(Ogre::LOOK).wrapping_sub(1);
+    x.set8(Ogre::LOOK, n);
     if (n as i8) >= 0 {
         return;
     }
@@ -241,9 +241,9 @@ fn hidden<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(NO_GRAB, 1);
+            x.set8(Enemy::DOWNED, 1);
             x.set_bit(Enemy::DISPLAY, 1, false);
-            x.set8(INVULNERABLE, 0);
+            x.set8(Ogre::INVULNERABLE, 0);
             lib::set_immunities(x);
             look(x, 0x33);
             mv(x, 0xa);
@@ -251,7 +251,7 @@ fn hidden<R: Bench>(x: &mut Cx<'_, R>) {
         2 => {
             if lib::target_in_box(x, -0x20, 0x60, 0x20) {
                 x.add8(f::SUB3, 2);
-                x.set8(NO_GRAB, 0);
+                x.set8(Enemy::DOWNED, 0);
             }
         }
         4 => {

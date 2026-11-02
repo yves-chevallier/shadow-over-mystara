@@ -16,6 +16,7 @@
 //! goes back to substate 2 when count `+0x6e` has elapsed.
 
 use crate::families::cx::Bench;
+use crate::record::record;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -27,34 +28,36 @@ mod shoot;
 mod spawned;
 mod stance;
 
-mod g {
-    pub const GROUP: u32 = 0x2f;
-    /// Non-zero: created by another object, shoots in place (`spawned`).
-    pub const SPAWNED: u32 = 0x42;
-    /// Non-zero: lifetime limited by `LIFETIME`.
-    pub const TIMED: u32 = 0x43;
-    pub const STRIKE_KIND: u32 = 0x44;
-    pub const STRIKE_POWER: u32 = 0x45;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const AI_WANDER: u32 = 0x6b;
-    pub const AI_WAIT: u32 = 0x6e;
-    pub const AI_CHARGE: u32 = 0x71;
-    pub const AI_SHOT: u32 = 0x78;
-    pub const SHOT_KIND: u32 = 0x79;
-    pub const FLAGS: u32 = 0x8a;
-    /// State to resume after a turn-around (long).
-    pub const RESUME_STATE: u32 = 0xa0;
-    pub const RESUME_SUB2: u32 = 0xa2;
-    pub const TIMER: u32 = 0xa4;
-    pub const REPEAT: u32 = 0xa5;
-    pub const SAVED_STEP: u32 = 0xa6;
-    /// Non-zero: the Bow Gnoll is grabbed (lifetime elapsed or created to be grabbed).
-    pub const EXPIRED: u32 = 0xa7;
-    pub const LIFETIME: u32 = 0xa8;
-    /// Non-zero: the hit state draws neither zone nor shadow.
-    pub const NO_ZONE: u32 = 0xac;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Bow(pub Obj);
+
+impl Bow {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Bow {
+        /// Non-zero: created by another object, shoots in place (`spawned`).
+        spawned, set_spawned, SPAWNED: u8 @ 0x42;
+        /// Non-zero: lifetime limited by `Bow::LIFETIME`.
+        timed, set_timed, TIMED: u8 @ 0x43;
+        /// State to resume after a turn-around (long).
+        resume_state, set_resume_state, RESUME_STATE: u32 @ 0xa0;
+        resume_sub2, set_resume_sub2, RESUME_SUB2: u16 @ 0xa2;
+        timer, set_timer, TIMER: u8 @ 0xa4;
+        repeat, set_repeat, REPEAT: u8 @ 0xa5;
+        saved_step, set_saved_step, SAVED_STEP: u8 @ 0xa6;
+        /// Non-zero: the Bow Gnoll is grabbed (lifetime elapsed or created to be grabbed).
+        expired, set_expired, EXPIRED: u8 @ 0xa7;
+        lifetime, set_lifetime, LIFETIME: u16 @ 0xa8;
+        /// Non-zero: the hit state draws neither zone nor shadow.
+        no_zone, set_no_zone, NO_ZONE: u8 @ 0xac;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
@@ -150,8 +153,8 @@ fn on_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x5ce36: end of a shot, choice of the fallback move (substate 8); grabbed if `+0xa7`.
 fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(AI_SHOT, 0xff);
-    if x.u8(EXPIRED) != 0 {
+    x.set8(Enemy::AI_SHOT, 0xff);
+    if x.u8(Bow::EXPIRED) != 0 {
         set_state_long(x, HELD);
     }
     let b = rank_byte(x, FOLLOW_TABLE);
@@ -172,7 +175,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::initial_hp(x);
     for (off, v) in [
         (Enemy::LOOT_ROW, 8),
-        (VULNERABLE, 0),
+        (Enemy::VULNERABLE, 0),
         (Enemy::AI_STANCE_ROW, 0),
         (Enemy::AI_68, 2),
         (Enemy::AI_69, 2),
@@ -183,18 +186,18 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         (Enemy::AI_DECISION_B, 2),
         (Enemy::AI_BOX_CHANCE, 2),
         (Enemy::AI_BYTE_ROW, 3),
-        (AI_SHOT, 0xff),
+        (Enemy::AI_SHOT, 0xff),
         (Enemy::AI_BOX_ANIM, 0),
     ] {
         x.set8(off, v);
     }
     lib::set_immunities(x);
-    x.set32(FLAGS, 0);
+    x.set32(Enemy::RESUME_STATE, 0);
     x.set8(Enemy::EVENT_LOW, 0);
     x.set8(Enemy::EVENT_KIND, 0xc);
     x.set8(Enemy::LOOT, 7);
-    if x.u8(TIMED) != 0 {
-        x.set16(LIFETIME, 0x80);
+    if x.u8(Bow::TIMED) != 0 {
+        x.set16(Bow::LIFETIME, 0x80);
     }
     face_angle(x);
     true
@@ -207,15 +210,15 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else if !paused(x) {
-        if x.u8(TIMED) != 0 {
-            let n = x.u16(LIFETIME).wrapping_sub(1);
-            x.set16(LIFETIME, n);
+        if x.u8(Bow::TIMED) != 0 {
+            let n = x.u16(Bow::LIFETIME).wrapping_sub(1);
+            x.set16(Bow::LIFETIME, n);
             if (n as i16) < 0 {
-                x.set16(LIFETIME, 0xffff);
-                x.set8(EXPIRED, 1);
+                x.set16(Bow::LIFETIME, 0xffff);
+                x.set8(Bow::EXPIRED, 1);
             }
         }
-        if x.u8(SPAWNED) != 0 {
+        if x.u8(Bow::SPAWNED) != 0 {
             return spawned::run(x);
         }
         match x.u8(f::SUB) {

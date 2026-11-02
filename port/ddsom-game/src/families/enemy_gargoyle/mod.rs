@@ -16,6 +16,7 @@
 //! (attacks), 0x163014 and 0x163098 (flight against or with the orientation).
 
 use crate::families::cx::Bench;
+use crate::record::record;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -27,32 +28,37 @@ pub(crate) mod attacks;
 mod hit;
 mod stance;
 
-mod g {
-    pub const ANIM_FLAGS: u32 = 0x32;
-    pub const VICTIM: u32 = 0x54;
-    pub const HIT_FLAGS: u32 = 0x57;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const STRIKE_KIND_NEXT: u32 = 0x79;
-    pub const WANDER: u32 = 0x6b;
-    pub const TURNS: u32 = 0x6e;
-    pub const CHARGE: u32 = 0x71;
-    pub const NO_GRAB: u32 = 0x86;
-    pub const LOOK: u32 = 0xa0;
-    pub const LOOK_PREV: u32 = 0xa1;
-    pub const SAVED_STATE: u32 = 0xa2;
-    pub const TIMER: u32 = 0xa6;
-    pub const TIMER2: u32 = 0xa8;
-    pub const PHASE: u32 = 0xaa;
-    pub const INVULNERABLE: u32 = 0xad;
-    pub const GRABBED_ONCE: u32 = 0xaf;
-    pub const SIDE_TURN: u32 = 0xb2;
-    pub const COOLDOWN: u32 = 0xb4;
-    pub const HIT_CODE_SAVED: u32 = 0xb7;
-    pub const STATE_SAVED: u32 = 0xb8;
-    pub const GOAL_X: u32 = 0xbc;
-    pub const GOAL_DEPTH: u32 = 0xbe;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Gargoyle(pub Obj);
+
+impl Gargoyle {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Gargoyle {
+        victim, set_victim, VICTIM: u8 @ 0x54;
+        hit_flags, set_hit_flags, HIT_FLAGS: u8 @ 0x57;
+        look, set_look, LOOK: u8 @ 0xa0;
+        look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa1;
+        saved_state, set_saved_state, SAVED_STATE: u32 @ 0xa2;
+        timer, set_timer, TIMER: u16 @ 0xa6;
+        timer2, set_timer2, TIMER2: u16 @ 0xa8;
+        phase, set_phase, PHASE: u8 @ 0xaa;
+        invulnerable, set_invulnerable, INVULNERABLE: u8 @ 0xad;
+        grabbed_once, set_grabbed_once, GRABBED_ONCE: u8 @ 0xaf;
+        side_turn, set_side_turn, SIDE_TURN: u8 @ 0xb2;
+        cooldown, set_cooldown, COOLDOWN: u16 @ 0xb4;
+        hit_code_saved, set_hit_code_saved, HIT_CODE_SAVED: u8 @ 0xb7;
+        state_saved, set_state_saved, STATE_SAVED: u32 @ 0xb8;
+        goal_x, set_goal_x, GOAL_X: u16 @ 0xbc;
+        goal_depth, set_goal_depth, GOAL_DEPTH: u16 @ 0xbe;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
@@ -74,7 +80,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         st::DEAD => x.free(&pools::ENEMY),
         _ => {}
     }
-    if x.u8(INVULNERABLE) != 0 {
+    if x.u8(Gargoyle::INVULNERABLE) != 0 {
         x.set8(Enemy::FRAME_TAG, 0);
     }
     if x.u8(Enemy::ACTIVE) != 0 {
@@ -97,8 +103,8 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
-    x.set8(LOOK, v);
-    x.set8(LOOK_PREV, v);
+    x.set8(Gargoyle::LOOK, v);
+    x.set8(Gargoyle::LOOK_PREV, v);
 }
 
 /// Speed table `n` (0x1b64) for angle `+0x2d`.
@@ -134,12 +140,12 @@ fn face_target<R: Bench>(x: &mut Cx<'_, R>) {
 fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
     let mut d = x.prog32(0x65a5a + idx) as i32;
-    if (x.u16(TIMER2) as i16) <= 0x24 {
+    if (x.u16(Gargoyle::TIMER2) as i16) <= 0x24 {
         d = d.wrapping_neg();
     }
     x.add32(Obj::Z, d as u32);
-    if !count_down(x, TIMER2) {
-        x.set16(TIMER2, 0x28);
+    if !count_down(x, Gargoyle::TIMER2) {
+        x.set16(Gargoyle::TIMER2, 0x28);
     }
 }
 
@@ -157,68 +163,68 @@ mod go {
 
     /// Substate 2 (movements): `+6` = 2, saves the current state in order to come back to it.
     pub fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
         let s = x.u32(f::STATE);
-        x.set32(SAVED_STATE, s);
+        x.set32(Gargoyle::SAVED_STATE, s);
         set_state_long(x, 0x0202_0200);
     }
     pub fn wander<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
-        x.set8(STRIKE_KIND_NEXT, 0x3b);
+        x.set8(Enemy::VULNERABLE, 0);
+        x.set8(Enemy::AI_POINT_SET, 0x3b);
         set_state_long(x, 0x0202_0400);
     }
     pub fn wander_far<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
-        x.set8(STRIKE_KIND_NEXT, 0x3c);
+        x.set8(Enemy::VULNERABLE, 0);
+        x.set8(Enemy::AI_POINT_SET, 0x3c);
         set_state_long(x, 0x0202_0600);
     }
     pub fn dive<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
-        x.set8(SIDE_TURN, 0);
+        x.set8(Enemy::VULNERABLE, 0);
+        x.set8(Gargoyle::SIDE_TURN, 0);
         set_state_long(x, 0x0202_0800);
     }
     pub fn circle<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(INVULNERABLE, 1);
-        x.set8(VULNERABLE, 0);
+        x.set8(Gargoyle::INVULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0202_0a00);
     }
     /// Substate 4 (attacks), `+6` = 0; `grab`: the creature has already grabbed its victim.
     pub fn strike_0<R: Bench>(x: &mut Cx<'_, R>, grab: bool) {
         if grab {
-            x.set8(HIT_FLAGS, 0);
+            x.set8(Gargoyle::HIT_FLAGS, 0);
         }
-        x.set8(GRABBED_ONCE, grab as u8);
-        x.set8(VULNERABLE, 0);
+        x.set8(Gargoyle::GRABBED_ONCE, grab as u8);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0204_0000);
     }
     pub fn strike_2<R: Bench>(x: &mut Cx<'_, R>, grab: bool) {
         if grab {
-            x.set8(HIT_FLAGS, 0);
+            x.set8(Gargoyle::HIT_FLAGS, 0);
         }
-        x.set8(GRABBED_ONCE, grab as u8);
-        x.set8(VULNERABLE, 1);
+        x.set8(Gargoyle::GRABBED_ONCE, grab as u8);
+        x.set8(Enemy::VULNERABLE, 1);
         set_state_long(x, 0x0204_0200);
     }
     pub fn strike_4<R: Bench>(x: &mut Cx<'_, R>, grab: bool) {
-        x.set8(GRABBED_ONCE, grab as u8);
-        x.set8(VULNERABLE, 0);
+        x.set8(Gargoyle::GRABBED_ONCE, grab as u8);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0204_0400);
     }
     pub fn strike_6<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0204_0600);
     }
     pub fn strike_8<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(INVULNERABLE, 1);
-        x.set8(VULNERABLE, 0);
+        x.set8(Gargoyle::INVULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0204_0800);
     }
     pub fn strike_10<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0204_0a00);
     }
     pub fn strike_12<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0204_0c00);
     }
     /// No player alive any more: the creature withdraws (substate 10).
@@ -256,9 +262,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         (Enemy::AI_ROW_8E, 3),
         (Enemy::AI_68, 8),
         (Enemy::AI_69, 1),
-        (VULNERABLE, 0),
-        (LOOK, 0),
-        (LOOK_PREV, 0xff),
+        (Enemy::VULNERABLE, 0),
+        (Gargoyle::LOOK, 0),
+        (Gargoyle::LOOK_PREV, 0xff),
         (Enemy::EVENT_KIND, 0x11),
         (Enemy::EVENT_LOW, 0),
         (Enemy::LOOT_ROW, 0x11),
@@ -270,11 +276,11 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     fly(x, 0);
     match x.u8(Obj::VARIANT) {
         0 => {
-            x.set8(INVULNERABLE, 1);
+            x.set8(Gargoyle::INVULNERABLE, 1);
             set_state_long(x, 0x0200_0000);
         }
         1 => {
-            x.set8(INVULNERABLE, 1);
+            x.set8(Gargoyle::INVULNERABLE, 1);
             set_state_long(x, 0x0200_0200);
         }
         2 => set_state_long(x, 0x0200_0400),
@@ -302,16 +308,16 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
         zone_and_terrain(x);
     }
     let s = x.u32(f::STATE);
-    x.set32(STATE_SAVED, s);
+    x.set32(Gargoyle::STATE_SAVED, s);
     cooldown(x);
 }
 
 /// 0x65ab6: countdown of the rest period (`+0xb4`); at zero, flag `+0x58` drops.
 fn cooldown<R: Bench>(x: &mut Cx<'_, R>) {
-    if (x.u16(COOLDOWN) as i16) <= 0 {
+    if (x.u16(Gargoyle::COOLDOWN) as i16) <= 0 {
         return;
     }
-    if !count_down(x, COOLDOWN) {
+    if !count_down(x, Gargoyle::COOLDOWN) {
         x.set8(0x58, 0);
     }
 }

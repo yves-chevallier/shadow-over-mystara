@@ -36,7 +36,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
         }
         (4, 24) => {
             set_state_long(x, STANCE);
-            x.set8(SHOT_KIND, 0x1c);
+            x.set8(Enemy::AI_POINT_SET, 0x1c);
             approach_restart(x);
         }
         (6, 4) => done_attack(x),
@@ -83,19 +83,19 @@ fn finish_follow<R: Bench>(x: &mut Cx<'_, R>) {
 fn windup<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         lib::pick_byte(x);
-        if x.u8(AI_LUNGE) == 0 {
+        if x.u8(Enemy::AI_BYTE) == 0 {
             x.set8(f::SUB3, 0);
-            let chosen = x.u8(CHOSEN);
+            let chosen = x.u8(Gnoll::CHOSEN);
             x.set8(f::SUB2, chosen);
         }
-        let weapon = x.u8(WEAPON) as u32;
+        let weapon = x.u8(Gnoll::WEAPON) as u32;
         return mv(x, weapon);
     }
     x.anim_step();
-    let n = x.u8(AI_LUNGE).wrapping_sub(1);
-    x.set8(AI_LUNGE, n);
+    let n = x.u8(Enemy::AI_BYTE).wrapping_sub(1);
+    x.set8(Enemy::AI_BYTE, n);
     if (n as i8) >= 0 {
         return;
     }
@@ -103,7 +103,7 @@ fn windup<R: Bench>(x: &mut Cx<'_, R>) {
     if faces_wrong(x) {
         x.add8(f::SUB2, 2);
     } else {
-        let chosen = x.u8(CHOSEN);
+        let chosen = x.u8(Gnoll::CHOSEN);
         x.set8(f::SUB2, chosen);
     }
 }
@@ -112,14 +112,14 @@ fn windup<R: Bench>(x: &mut Cx<'_, R>) {
 fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         return mv(x, 2);
     }
     if x.anim_step() {
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
         x.set16(f::SUB2, 0xc00);
-        let weapon = x.u8(WEAPON) as u32;
+        let weapon = x.u8(Gnoll::WEAPON) as u32;
         mv(x, weapon);
     }
 }
@@ -137,7 +137,7 @@ fn swing<R: Bench>(x: &mut Cx<'_, R>, anim: u32, kind: u8) {
     let r = rand_and(x, 0xf);
     // `btst D0,D1` with D1 = 0xffc0: draws from 6 to 15 give up the strike
     if (0xffc0u32 >> r) & 1 != 0 {
-        x.set8(SHOT_KIND, 0x1b);
+        x.set8(Enemy::AI_POINT_SET, 0x1b);
         set_state_long(x, STANCE);
         return approach_restart(x);
     }
@@ -150,9 +150,9 @@ fn combo_a<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(AI_SHOT, 3);
+            x.set8(Enemy::AI_SHOT, 3);
             let r = rand_and(x, 1);
-            x.set8(TIMER, r as u8);
+            x.set8(Gnoll::TIMER, r as u8);
             strike_with(x, 0, 0x1b, 5);
         }
         2 => {
@@ -165,8 +165,8 @@ fn combo_a<R: Bench>(x: &mut Cx<'_, R>) {
             if !x.anim_step() {
                 return;
             }
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Gnoll::TIMER).wrapping_sub(1);
+            x.set8(Gnoll::TIMER, n);
             if (n as i8) < 0 {
                 return follow_up(x);
             }
@@ -180,8 +180,8 @@ fn combo_a<R: Bench>(x: &mut Cx<'_, R>) {
 fn combo_b<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(AI_SHOT, 3);
-        x.set8(TIMER, 1);
+        x.set8(Enemy::AI_SHOT, 3);
+        x.set8(Gnoll::TIMER, 1);
         if rand_and(x, 1) != 0 {
             strike_with(x, 2, 0x1c, 5);
         } else {
@@ -192,8 +192,8 @@ fn combo_b<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.anim_step() {
         return;
     }
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Gnoll::TIMER).wrapping_sub(1);
+    x.set8(Gnoll::TIMER, n);
     if (n as i8) < 0 {
         return follow_up(x);
     }
@@ -246,12 +246,12 @@ fn leap_on_target<R: Bench>(x: &mut Cx<'_, R>, kind: Leap) {
                 x.add8(f::SUB3, 2);
                 x.set_bit(Enemy::DISPLAY, 1, true);
                 x.set8(0x3b, 0);
-                x.set8(TIMER, 0x1e);
+                x.set8(Gnoll::TIMER, 0x1e);
             }
         }
         4 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Gnoll::TIMER).wrapping_sub(1);
+            x.set8(Gnoll::TIMER, n);
             if n != 0 {
                 return;
             }
@@ -276,8 +276,8 @@ fn leap_on_target<R: Bench>(x: &mut Cx<'_, R>, kind: Leap) {
         10 => finish_follow(x),
         12 if kind == Leap::HighThenStrike => {
             x.add8(f::SUB3, 2);
-            x.set8(STRIKE_KIND, 0x1b);
-            x.set8(STRIKE_POWER, 5);
+            x.set8(Enemy::STRIKE_KIND, 0x1b);
+            x.set8(Enemy::STRIKE_POWER, 5);
             let anim = if rand_and(x, 1) != 0 { 2 } else { 0 };
             strike(x, anim);
         }
@@ -344,8 +344,8 @@ fn jump_up<R: Bench>(x: &mut Cx<'_, R>) {
         }
         8 => {
             x.add8(f::SUB3, 2);
-            x.set8(STRIKE_KIND, 0x1d);
-            x.set8(STRIKE_POWER, 5);
+            x.set8(Enemy::STRIKE_KIND, 0x1d);
+            x.set8(Enemy::STRIKE_POWER, 5);
             x.set16(Obj::VZ, 0);
             x.set16(Obj::AX, 0);
             x.set16(Obj::AZ, -0x40i16 as u16);
@@ -401,12 +401,12 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
 fn pause<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
-        x.set8(TIMER, 0x10);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(Gnoll::TIMER, 0x10);
         return mv(x, 0);
     }
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Gnoll::TIMER).wrapping_sub(1);
+    x.set8(Gnoll::TIMER, n);
     if (n as i8) < 0 {
         set_state_long(x, STANCE);
     }
@@ -420,14 +420,14 @@ fn back_step<R: Bench>(x: &mut Cx<'_, R>) {
         2 => {
             if x.anim_step() {
                 x.add8(f::SUB3, 2);
-                x.set8(TIMER, 0x1e);
+                x.set8(Gnoll::TIMER, 0x1e);
                 x.set_bit(Enemy::DISPLAY, 1, true);
                 x.set8(0x3b, 0);
             }
         }
         4 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Gnoll::TIMER).wrapping_sub(1);
+            x.set8(Gnoll::TIMER, n);
             if n != 0 {
                 return;
             }
@@ -464,7 +464,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
                 return next_and_start(x);
             }
             x.add8(f::SUB3, 0xc);
-            x.set8(TIMER, 0x10);
+            x.set8(Gnoll::TIMER, 0x10);
             set_speed(x, 0xd);
             x.set8(Obj::SPEED_INDEX, 0);
             let target = load_target(x);
@@ -487,8 +487,8 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
         8 => land(x),
         10 => finish(x),
         12 => {
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Gnoll::TIMER).wrapping_sub(1);
+            x.set8(Gnoll::TIMER, n);
             if (n as i8) < 0 {
                 set_state_long(x, STANCE);
             }
@@ -501,13 +501,13 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// +6 = 6: chooses a move again; changes move only if the new one differs from the previous one or after a delay.
 fn pick_again<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     set_state_long(x, IDLE);
     let b = if lib::target_in_box(x, -0x20, 0x20, 0xc) {
         set_state_long(x, 0x0204_0000);
         rand_and(x, 2);
         x.set16(f::SUB2, 0);
-        x.u8(CHOSEN)
+        x.u8(Gnoll::CHOSEN)
     } else if near_box(x) {
         pick_attack(x, NEAR_TABLE)
     } else if far_box(x) {
@@ -515,14 +515,14 @@ fn pick_again<R: Bench>(x: &mut Cx<'_, R>) {
     } else {
         return;
     };
-    if b != x.u8(LOOK_PREV) {
-        x.set8(LOOK_PREV, b);
-        x.set8(COOLDOWN, 2);
+    if b != x.u8(Gnoll::LOOK_PREV) {
+        x.set8(Gnoll::LOOK_PREV, b);
+        x.set8(Gnoll::COOLDOWN, 2);
         return;
     }
-    let n = x.u8(COOLDOWN).wrapping_sub(1);
-    x.set8(COOLDOWN, n);
+    let n = x.u8(Gnoll::COOLDOWN).wrapping_sub(1);
+    x.set8(Gnoll::COOLDOWN, n);
     if (n as i8) < 0 {
-        x.set8(COOLDOWN, 2);
+        x.set8(Gnoll::COOLDOWN, 2);
     }
 }

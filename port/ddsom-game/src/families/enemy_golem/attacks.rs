@@ -177,7 +177,7 @@ fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
     if (x.u16(Obj::VZ) as i16) < 0 {
         x.add8(f::SUB3, 2);
-        x.set16(Golem::ANIM_TIME, 1);
+        x.set16(Obj::ANIM_TIMER, 1);
         x.set8(f::KEY_FRAME, 0);
     }
 }
@@ -190,7 +190,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.set32(Obj::Z, 0);
-    x.set16(Golem::ANIM_TIME, 1);
+    x.set16(Obj::ANIM_TIMER, 1);
     x.add8(f::SUB3, 2);
 }
 
@@ -277,7 +277,7 @@ fn squat_step<R: Bench>(x: &mut Cx<'_, R>) {
                     return;
                 }
                 x.add8(f::SUB3, 2);
-                x.set16(Golem::ANIM_TIME, 1);
+                x.set16(Obj::ANIM_TIMER, 1);
                 let group = x.u8(Enemy::GROUP) as i8 as i32 as u32;
                 let v = x.rom8(0x682e8u32.wrapping_add(group));
                 x.set8(Enemy::AI_68, v);

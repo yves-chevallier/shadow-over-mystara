@@ -16,8 +16,8 @@ pub(super) fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         return;
     }
-    let left = x.u8(DELAY).wrapping_sub(1);
-    x.set8(DELAY, left);
+    let left = x.u8(Owlbear::DELAY).wrapping_sub(1);
+    x.set8(Owlbear::DELAY, left);
     if left == 0 && attack_chance(x) {
         return set_state_long(x, ACTIVE_STANCE);
     }
@@ -27,13 +27,13 @@ pub(super) fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
             if !pick_target(x) {
                 return;
             }
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+            x.set8(Owlbear::TIMER, t);
             if t == 0 {
                 x.add8(Enemy::SUB_STEP, 2);
-                x.set8(VULNERABLE, 1);
-                x.set8(WANT_ANIM, 0);
-                x.set8(CUR_ANIM, 0);
+                x.set8(Enemy::VULNERABLE, 1);
+                x.set8(Owlbear::WANT_ANIM, 0);
+                x.set8(Owlbear::CUR_ANIM, 0);
                 return body(x, 1);
             }
             if lib::target_in_box(x, 0, 0x80, 0x20) {
@@ -52,8 +52,8 @@ pub(super) fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5daa6: walks forward (animation 2, speed 0xb) for `0x24` frames.
 pub(super) fn walk_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(Enemy::SUB_STEP, 2);
-    x.set8(TIMER, 0x24);
-    x.set8(VULNERABLE, 1);
+    x.set8(Owlbear::TIMER, 0x24);
+    x.set8(Enemy::VULNERABLE, 1);
     set_angle(x, 8, 0x18);
     pose(x, 2, SET_BODY.0, 2);
     speed(x, 0xb);
@@ -65,8 +65,8 @@ pub(super) fn turn_end<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(Enemy::SUB_STEP, 0);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
-        x.set8(VULNERABLE, 1);
-        x.set8(TIMER, 0);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(Owlbear::TIMER, 0);
         body(x, 3);
     }
 }
@@ -104,27 +104,27 @@ fn pursue<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if x.u8(Enemy::SUB_STEP) == 0 {
         x.add8(Enemy::SUB_STEP, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         pose(x, 2, SET_BODY.0, 2);
         speed(x, 0xb);
         return lib::draw_stance(x);
     }
-    let t = x.u8(AI_TURN).wrapping_sub(1);
-    x.set8(AI_TURN, t);
+    let t = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+    x.set8(Enemy::AI_STANCE, t);
     if (t as i8) < 0 {
         lib::draw_stance(x);
         pick_target(x);
         let shot = if x.u8(f::SUB2) == 0 { 0 } else { 1 };
-        x.set8(AI_SHOT, shot);
+        x.set8(Enemy::AI_POINT_SET, shot);
         lib::approach_target(x);
-        let n = x.u8(AI_STEP).wrapping_sub(1);
-        x.set8(AI_STEP, n);
+        let n = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+        x.set8(Enemy::AI_WANDER, n);
         if n == 0 {
             lib::draw_6b(x);
             return pursue_tail(x);
         }
     }
-    x.set8(REPEAT_LEFT, 1);
+    x.set8(Owlbear::REPEAT_LEFT, 1);
     engage(x);
 }
 
@@ -133,7 +133,7 @@ pub(super) fn pursue_tail<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::maybe_draw_6e(x) {
         return x.set16(f::SUB2, 0x0400);
     }
-    x.set8(REPEAT_LEFT, 1);
+    x.set8(Owlbear::REPEAT_LEFT, 1);
     engage(x);
 }
 
@@ -155,8 +155,8 @@ pub(super) fn engage<R: Bench>(x: &mut Cx<'_, R>) {
     // the offset (beast - target) is negative when the target is on the right: the beast must look right
     let want = if dx > 0 { 0x20 } else { 0 };
     if want != x.u8(f::FLIP) {
-        x.set32(g::RESUME_STATE, ACTIVE_STANCE);
-        x.set8(RESUME_STEP, 0);
+        x.set32(Owlbear::RESUME_STATE, ACTIVE_STANCE);
+        x.set8(Owlbear::RESUME_STEP, 0);
         set_state_long(x, ACTIVE_TURN);
     }
 }
@@ -206,15 +206,15 @@ fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Enemy::SUB_STEP) == 0 {
         x.add8(Enemy::SUB_STEP, 2);
-        x.set8(VULNERABLE, 1);
-        x.set8(WANT_ANIM, 0);
-        x.set8(CUR_ANIM, 0);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(Owlbear::WANT_ANIM, 0);
+        x.set8(Owlbear::CUR_ANIM, 0);
         return body(x, 1);
     }
     if x.anim_step() {
-        let resume = x.u32(RESUME_STATE);
+        let resume = x.u32(Owlbear::RESUME_STATE);
         x.set32(f::STATE, resume);
-        let step = x.u8(RESUME_STEP);
+        let step = x.u8(Owlbear::RESUME_STEP);
         x.set8(f::SUB2, step);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
@@ -227,13 +227,13 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Enemy::SUB_STEP) == 0 {
         return ready(x);
     }
-    let n = x.u8(AI_REPEAT).wrapping_sub(1);
-    x.set8(AI_REPEAT, n);
+    let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, n);
     if (n as i8) < 0 {
         return set_state_long(x, ACTIVE_STANCE);
     }
-    x.set32(RESUME_STATE, ACTIVE_STANCE);
-    x.set8(RESUME_STEP, 4);
+    x.set32(Owlbear::RESUME_STATE, ACTIVE_STANCE);
+    x.set8(Owlbear::RESUME_STEP, 4);
     turn_if_behind(x);
     step(x);
 }
@@ -241,7 +241,7 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
 /// +7 = 0 of the attacks (0x5de70): the beast gets ready (rest animation).
 pub(super) fn ready<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(Enemy::SUB_STEP, 2);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     pose(x, 6, SET_BODY.0, 0);
 }
 
@@ -250,29 +250,29 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Enemy::SUB_STEP) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
-            x.set8(TIMER, 0x28);
+            x.set8(Owlbear::TIMER, 0x28);
             lib::draw_stance(x);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             pose(x, 4, SET_BODY.0, 5);
             speed(x, 0x1a);
         }
         2 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+            x.set8(Owlbear::TIMER, t);
             if (t as i8) < 0 {
                 return set_state_long(x, ACTIVE_STANCE);
             }
-            let n = x.u8(AI_TURN).wrapping_sub(1);
-            x.set8(AI_TURN, n);
+            let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+            x.set8(Enemy::AI_STANCE, n);
             if (n as i8) < 0 {
                 lib::draw_stance(x);
                 pick_target(x);
-                x.set8(AI_SHOT, 0);
+                x.set8(Enemy::AI_POINT_SET, 0);
                 lib::approach_target(x);
             }
-            x.set32(RESUME_STATE, ACTIVE_STANCE);
+            x.set32(Owlbear::RESUME_STATE, ACTIVE_STANCE);
             let sub2 = x.u8(f::SUB2);
-            x.set8(RESUME_STEP, sub2);
+            x.set8(Owlbear::RESUME_STEP, sub2);
             turn_if_behind(x);
             step(x);
             move_xy(x);
@@ -303,16 +303,16 @@ pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(Enemy::SUB_STEP) {
             0 => walk_begin(x),
             2 => {
-                let t = x.u8(TIMER).wrapping_sub(1);
-                x.set8(TIMER, t);
+                let t = x.u8(Owlbear::TIMER).wrapping_sub(1);
+                x.set8(Owlbear::TIMER, t);
                 if t != 0 {
                     step(x);
                     move_xy(x);
                 } else {
                     x.add8(Enemy::SUB_STEP, 2);
-                    x.set8(VULNERABLE, 1);
-                    x.set8(WANT_ANIM, 0);
-                    x.set8(CUR_ANIM, 0);
+                    x.set8(Enemy::VULNERABLE, 1);
+                    x.set8(Owlbear::WANT_ANIM, 0);
+                    x.set8(Owlbear::CUR_ANIM, 0);
                     body(x, 1);
                 }
             }

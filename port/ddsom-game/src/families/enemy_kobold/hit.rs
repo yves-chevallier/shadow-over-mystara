@@ -21,7 +21,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
         }
         match x.u8(f::SUB) {
             0 => {
-                x.set8(LOOK_PREV, 0x7f);
+                x.set8(Kobold::LOOK_PREV, 0x7f);
                 react(x, REACT_FIRST.0);
                 zone_and_terrain(x);
             }
@@ -98,7 +98,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             if var::PAUSE.get(x.b) == 0 && x.anim_step() {
                 x.set8(Enemy::ACTIVE, 1);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 set_state_long(x, STANCE);
                 mv(x, 0);
             }
@@ -122,7 +122,7 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
             let turn = if right { !flipped } else { flipped };
             if turn {
                 x.add8(f::SUB2, 2);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 look(x, 5);
                 mv(x, 5);
             } else {
@@ -160,7 +160,7 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
         }
         8 => {
             x.add8(f::SUB2, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 6);
             x.set16(Obj::VX, -0x380i16 as u16);
             if x.u8(f::FLIP) != 0 {
@@ -174,7 +174,7 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
         10 => {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.add8(f::SUB2, 2);
-                x.set8(VULNERABLE, 0);
+                x.set8(Enemy::VULNERABLE, 0);
             }
             x.anim_step();
         }
@@ -185,7 +185,7 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set32(Obj::Z, 0);
             x.add8(f::SUB2, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 0x18);
             mv(x, 0x18);
         }
@@ -195,8 +195,8 @@ fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x56b42: the Kobold runs toward the edge of the screen (animation 0x16).
 fn run_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
-    x.set8(LOOK, 0x16);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Kobold::LOOK, 0x16);
     set_angle(x);
     mv(x, 0x16);
     set_speed(x, 0x21);

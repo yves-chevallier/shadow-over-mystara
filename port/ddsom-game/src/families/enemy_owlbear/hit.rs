@@ -12,9 +12,9 @@ const REACT_FIRST: RomAddr = RomAddr(0x5ea5c);
 const REACT_SECOND: RomAddr = RomAddr(0x5ecb8);
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    hit_loop_at(x, NO_ZONE, |x| match x.u8(f::SUB) {
+    hit_loop_at(x, Owlbear::NO_ZONE, |x| match x.u8(f::SUB) {
         0 => {
-            x.set8(CUR_ANIM, 0x7f);
+            x.set8(Owlbear::CUR_ANIM, 0x7f);
             react(x, REACT_FIRST.0);
         }
         2 => {
@@ -39,8 +39,8 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(WANT_ANIM, 8);
-            x.set8(CUR_ANIM, 8);
+            x.set8(Owlbear::WANT_ANIM, 8);
+            x.set8(Owlbear::CUR_ANIM, 8);
             let flip = x.u8(Enemy::ATTACKER_FLIP) ^ 0x20;
             x.set8(f::FLIP, flip);
             let flipped = flip != 0;
@@ -100,7 +100,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
             }
             if x.anim_step() {
                 x.set8(Enemy::ACTIVE, 1);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 set_state_long(x, ACTIVE_STANCE);
                 body(x, 0);
             }
@@ -114,7 +114,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
 fn flee<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
-            x.set8(NO_ZONE, 1);
+            x.set8(Owlbear::NO_ZONE, 1);
             let flipped = x.u8(f::FLIP) != 0;
             let run_now = if !lib::in_right_half(x) { !flipped } else { flipped };
             if run_now {
@@ -122,9 +122,9 @@ fn flee<R: Bench>(x: &mut Cx<'_, R>) {
                 run_away(x);
             } else {
                 x.add8(f::SUB2, 2);
-                x.set8(VULNERABLE, 1);
-                x.set8(WANT_ANIM, 0x7f);
-                x.set8(CUR_ANIM, 0x7f);
+                x.set8(Enemy::VULNERABLE, 1);
+                x.set8(Owlbear::WANT_ANIM, 0x7f);
+                x.set8(Owlbear::CUR_ANIM, 0x7f);
                 body(x, 1);
             }
         }
@@ -151,7 +151,7 @@ fn flee<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x5ede8: runs away toward the edge of the screen.
 fn run_away<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     set_angle(x, 8, 0x18);
     body(x, 5);
     speed(x, 0x1a);

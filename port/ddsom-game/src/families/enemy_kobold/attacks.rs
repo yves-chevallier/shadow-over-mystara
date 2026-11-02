@@ -40,23 +40,23 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x557bc: prepares the wait.
 pub(super) fn begin_wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
-    x.set8(LOOK, 0);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Kobold::LOOK, 0);
     mv(x, 0);
 }
 
 /// 0x5590e / 0x55902: pursuit in place until counter `+0x77` ends, with a turn-around if the target changes side;
 /// `resume` is the state to resume after the turn-around.
 pub(super) fn hold<R: Bench>(x: &mut Cx<'_, R>, resume: u32) {
-    x.set32(RESUME_STATE, resume);
-    let n = x.u8(AI_LUNGE).wrapping_sub(1);
-    x.set8(AI_LUNGE, n);
+    x.set32(Kobold::RESUME_STATE, resume);
+    let n = x.u8(Enemy::AI_BYTE).wrapping_sub(1);
+    x.set8(Enemy::AI_BYTE, n);
     if (n as i8) < 0 {
         return x.add8(f::SUB3, 2);
     }
     if must_turn(x) {
         let sub2 = x.u8(f::SUB2);
-        x.set8(RESUME_SUB2, sub2);
+        x.set8(Kobold::RESUME_SUB2, sub2);
         set_state_long(x, 0x0202_0200);
     }
     x.anim_step();
@@ -93,24 +93,24 @@ fn key_effect<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::
 /// Start of an attack: look `look` is set; if it already was, `+0xad` counts down and brings it back to standing at
 /// zero; otherwise attack animation `anim` starts.
 fn strike_look<R: Bench>(x: &mut Cx<'_, R>, look: u8, anim: u32) {
-    x.set8(LOOK, look);
-    if x.u8(LOOK) == x.u8(LOOK_PREV) {
-        let g = x.u8(GUARD).wrapping_sub(1);
-        x.set8(GUARD, g);
+    x.set8(Kobold::LOOK, look);
+    if x.u8(Kobold::LOOK) == x.u8(Kobold::LOOK_PREV) {
+        let g = x.u8(Kobold::GUARD).wrapping_sub(1);
+        x.set8(Kobold::GUARD, g);
         if g == 0 {
             return set_state_long(x, STANCE);
         }
     }
-    x.set8(LOOK_PREV, look);
+    x.set8(Kobold::LOOK_PREV, look);
     strike(x, anim);
 }
 
 /// 0x5596a : coup de massue.
 fn club_begin<R: Bench>(x: &mut Cx<'_, R>, look: u8, kind: u8, anim: u32) {
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 0);
-    x.set8(LOOK, look);
-    x.set8(STRIKE_KIND, kind);
+    x.set8(Enemy::VULNERABLE, 0);
+    x.set8(Kobold::LOOK, look);
+    x.set8(Enemy::STRIKE_KIND, kind);
     set_power(x);
     strike_look(x, look, anim);
 }
@@ -122,7 +122,7 @@ fn club<R: Bench>(x: &mut Cx<'_, R>) {
         4 => club_begin(x, 0x2d, 0, 5),
         6 => {
             if x.anim_step() {
-                x.set8(AI_SHOT, 0xff);
+                x.set8(Enemy::AI_SHOT, 0xff);
                 end_strike(x);
             }
         }
@@ -142,18 +142,18 @@ fn thrust<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x14);
-            x.set8(STRIKE_KIND, 3);
+            x.set16(Kobold::TIMER, 0x14);
+            x.set8(Enemy::STRIKE_KIND, 3);
             set_power(x);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 0x16);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Kobold::LOOK, 0x16);
             set_angle(x);
             mv(x, 0x16);
             set_speed(x, 0x17);
         }
         6 => {
-            let n = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, n);
+            let n = x.u16(Kobold::TIMER).wrapping_sub(1);
+            x.set16(Kobold::TIMER, n);
             if (n as i16) >= 0 {
                 x.anim_step();
                 x.move_by_table_xy();
@@ -185,11 +185,11 @@ fn thrust<R: Bench>(x: &mut Cx<'_, R>) {
 fn combo<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
-            if x.u8(GROUP) != 1 {
-                x.set8(AI_SHOT, 2);
+            if x.u8(Enemy::GROUP) != 1 {
+                x.set8(Enemy::AI_SHOT, 2);
             }
             let r = rand_and(x, 1);
-            x.set8(REPEAT, 2 + r as u8);
+            x.set8(Kobold::REPEAT, 2 + r as u8);
             club_begin(x, 0x2d, 0, 5);
         }
         6 => {
@@ -198,12 +198,12 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
             }
             mv(x, 0);
             shift_back(x);
-            let n = x.u8(REPEAT).wrapping_sub(1);
-            x.set8(REPEAT, n);
+            let n = x.u8(Kobold::REPEAT).wrapping_sub(1);
+            x.set8(Kobold::REPEAT, n);
             if n == 0 {
                 return after_strike(x);
             }
-            x.set8(AI_SHOT, 0xff);
+            x.set8(Enemy::AI_SHOT, 0xff);
             strike(x, 5);
         }
         _ => {}
@@ -215,33 +215,33 @@ fn double_hit<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 0);
-            x.set8(STRIKE_POWER, 5);
-            if x.u8(GROUP) != 1 {
-                x.set8(AI_SHOT, 2);
+            x.set8(Enemy::VULNERABLE, 0);
+            x.set8(Enemy::STRIKE_POWER, 5);
+            if x.u8(Enemy::GROUP) != 1 {
+                x.set8(Enemy::AI_SHOT, 2);
             }
-            x.set8(LOOK, 0x2a);
+            x.set8(Kobold::LOOK, 0x2a);
             strike(x, 2);
             let r = rand_and(x, 1);
             if r != 0 {
                 x.add8(f::SUB3, 2);
-                x.set8(LOOK, 0x2b);
+                x.set8(Kobold::LOOK, 0x2b);
                 strike(x, 3);
             }
-            if x.u8(LOOK) == x.u8(LOOK_PREV) {
-                let g = x.u8(GUARD).wrapping_sub(1);
-                x.set8(GUARD, g);
+            if x.u8(Kobold::LOOK) == x.u8(Kobold::LOOK_PREV) {
+                let g = x.u8(Kobold::GUARD).wrapping_sub(1);
+                x.set8(Kobold::GUARD, g);
                 if g == 0 {
                     return set_state_long(x, STANCE);
                 }
             }
-            let l = x.u8(LOOK);
-            x.set8(LOOK_PREV, l);
+            let l = x.u8(Kobold::LOOK);
+            x.set8(Kobold::LOOK_PREV, l);
         }
         6 => step_then_after(x),
         8 => {
             if x.anim_step() {
-                x.set8(AI_SHOT, 0xff);
+                x.set8(Enemy::AI_SHOT, 0xff);
                 end_strike(x);
             }
         }
@@ -254,26 +254,26 @@ fn double_hit<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x55c68 : bond d'attaque, vitesse horizontale `vx`.
 fn jump_begin<R: Bench>(x: &mut Cx<'_, R>, vx: i16, kind: u8) {
     x.set16(Obj::VX, vx as u16);
-    x.set8(STRIKE_KIND, kind);
+    x.set8(Enemy::STRIKE_KIND, kind);
     set_power(x);
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
-    x.set8(LOOK, 0x2f);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Kobold::LOOK, 0x2f);
     if x.u8(f::FLIP) != 0 {
         negate(x, Obj::VX);
     }
     x.set16(Obj::AX, 0);
     x.set16(Obj::VZ, 0x6c0);
     x.set16(Obj::AZ, -0x38i16 as u16);
-    if x.u8(LOOK) == x.u8(LOOK_PREV) {
-        let g = x.u8(GUARD).wrapping_sub(1);
-        x.set8(GUARD, g);
+    if x.u8(Kobold::LOOK) == x.u8(Kobold::LOOK_PREV) {
+        let g = x.u8(Kobold::GUARD).wrapping_sub(1);
+        x.set8(Kobold::GUARD, g);
         if g == 0 {
             return set_state_long(x, STANCE);
         }
     }
-    let l = x.u8(LOOK);
-    x.set8(LOOK_PREV, l);
+    let l = x.u8(Kobold::LOOK);
+    x.set8(Kobold::LOOK_PREV, l);
     strike(x, 7);
 }
 
@@ -301,7 +301,7 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set32(Obj::Z, 0);
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     look(x, 0x18);
     mv(x, 0x18);
 }
@@ -329,7 +329,7 @@ fn strike_then_jump<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x565d2: paw strike with a run-up or while running (two variants drawn at random).
 pub(super) fn paw_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     let r = rand_and(x, 1);
     if r == 0 {
         x.add8(f::SUB3, 4);
@@ -354,7 +354,7 @@ pub(super) fn paw_begin<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set8(Obj::SPEED_INDEX, angle);
     look(x, 0x1d);
-    x.set16(TIMER, 0x24);
+    x.set16(Kobold::TIMER, 0x24);
     mv(x, 0x1d);
     set_speed(x, 0xd);
 }
@@ -376,8 +376,8 @@ fn paw<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x55ce2: run of the paw strike.
 fn paw_run<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = x.u16(TIMER).wrapping_sub(1);
-    x.set16(TIMER, n);
+    let n = x.u16(Kobold::TIMER).wrapping_sub(1);
+    x.set16(Kobold::TIMER, n);
     if (n as i16) >= 0 {
         x.move_by_table_xy();
         x.anim_step();
@@ -390,7 +390,7 @@ fn paw_run<R: Bench>(x: &mut Cx<'_, R>) {
 /// (0x555da).
 pub(super) fn back_on_guard<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, 0x0202_0002);
-    x.set8(LOOK, 0xc);
+    x.set8(Kobold::LOOK, 0xc);
     mv(x, 0xc);
     stance::reach_boxes(x);
 }
@@ -401,20 +401,20 @@ fn breath<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(LOOK, 7);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(Kobold::LOOK, 7);
             let r = rand_and(x, 0x1f);
             let n = x.data8(0x55de6 + r);
-            x.set8(REPEAT, n);
-            if x.u8(LOOK) == x.u8(LOOK_PREV) {
-                let g = x.u8(GUARD).wrapping_sub(1);
-                x.set8(GUARD, g);
+            x.set8(Kobold::REPEAT, n);
+            if x.u8(Kobold::LOOK) == x.u8(Kobold::LOOK_PREV) {
+                let g = x.u8(Kobold::GUARD).wrapping_sub(1);
+                x.set8(Kobold::GUARD, g);
                 if g == 0 {
                     return set_state_long(x, STANCE);
                 }
             }
-            let l = x.u8(LOOK);
-            x.set8(LOOK_PREV, l);
+            let l = x.u8(Kobold::LOOK);
+            x.set8(Kobold::LOOK_PREV, l);
             mv(x, 7);
         }
         6 => breath_tick(x),
@@ -435,8 +435,8 @@ pub(super) fn breath_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.anim_step() {
         return;
     }
-    let n = x.u8(REPEAT).wrapping_sub(1);
-    x.set8(REPEAT, n);
+    let n = x.u8(Kobold::REPEAT).wrapping_sub(1);
+    x.set8(Kobold::REPEAT, n);
     if n == 0 {
         return after_strike(x);
     }
@@ -449,7 +449,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             mv(x, 5);
         }
         6 => {
@@ -457,11 +457,11 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set8(LOOK, 8);
-            x.set16(TIMER, 0x3c);
-            if x.u8(LOOK) == x.u8(LOOK_PREV) {
-                let g = x.u8(GUARD).wrapping_sub(1);
-                x.set8(GUARD, g);
+            x.set8(Kobold::LOOK, 8);
+            x.set16(Kobold::TIMER, 0x3c);
+            if x.u8(Kobold::LOOK) == x.u8(Kobold::LOOK_PREV) {
+                let g = x.u8(Kobold::GUARD).wrapping_sub(1);
+                x.set8(Kobold::GUARD, g);
                 if g == 0 {
                     return set_state_long(x, STANCE);
                 }
@@ -469,8 +469,8 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
             mv(x, 8);
         }
         8 => {
-            let n = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, n);
+            let n = x.u16(Kobold::TIMER).wrapping_sub(1);
+            x.set16(Kobold::TIMER, n);
             if (n as i16) >= 0 {
                 x.anim_step();
                 return;
@@ -498,7 +498,7 @@ fn dash_turn<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             let target = x.u16(f::TARGET) != 0;
             let mut angle = 8;
             if target {
@@ -516,14 +516,14 @@ fn dash_turn<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             let flip = x.u8(f::FLIP) ^ 0x20;
             x.set8(f::FLIP, flip);
-            x.set8(LOOK, 0x16);
-            x.set16(TIMER, 0x2a);
+            x.set8(Kobold::LOOK, 0x16);
+            x.set16(Kobold::TIMER, 0x2a);
             mv(x, 0x16);
             set_speed(x, 0x17);
         }
         8 => {
-            let n = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, n);
+            let n = x.u16(Kobold::TIMER).wrapping_sub(1);
+            x.set16(Kobold::TIMER, n);
             if (n as i16) >= 0 {
                 x.anim_step();
                 x.move_by_table_xy();
@@ -548,8 +548,8 @@ fn dash_turn<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5603a: strike with countdown (look 0x2e, animation 6).
 fn series_strike<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set8(LOOK, 0x2e);
-    x.set8(VULNERABLE, 1);
+    x.set8(Kobold::LOOK, 0x2e);
+    x.set8(Enemy::VULNERABLE, 1);
     strike_look(x, 0x2e, 6);
 }
 
@@ -568,13 +568,13 @@ fn series_a<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x560d2: prologue of the series: `+0x78`, number of strikes.
 fn series_prologue<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(GROUP) != 1 {
-        x.set8(AI_SHOT, 3);
+    if x.u8(Enemy::GROUP) != 1 {
+        x.set8(Enemy::AI_SHOT, 3);
     }
-    x.set8(REPEAT, 1);
+    x.set8(Kobold::REPEAT, 1);
     let r = rand_and(x, 1);
     if r != 0 {
-        x.set8(REPEAT, 2);
+        x.set8(Kobold::REPEAT, 2);
     }
     series_strike(x);
 }
@@ -585,7 +585,7 @@ fn series_b<R: Bench>(x: &mut Cx<'_, R>) {
         6 => {
             key_effect(x, eshl_creators::throw_2);
             if x.anim_step() {
-                x.set8(AI_SHOT, 0xff);
+                x.set8(Enemy::AI_SHOT, 0xff);
                 end_strike(x);
             }
         }
@@ -596,15 +596,15 @@ fn series_b<R: Bench>(x: &mut Cx<'_, R>) {
 fn series_c<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
-            x.set8(REPEAT, 1);
+            x.set8(Kobold::REPEAT, 1);
             series_strike(x);
         }
         6 => {
             key_effect(x, eshl_creators::throw_1);
             if x.anim_step() {
                 strike(x, 6);
-                let n = x.u8(REPEAT).wrapping_sub(1);
-                x.set8(REPEAT, n);
+                let n = x.u8(Kobold::REPEAT).wrapping_sub(1);
+                x.set8(Kobold::REPEAT, n);
                 if n == 0 {
                     mv(x, 0);
                 }
@@ -623,8 +623,8 @@ fn series_d<R: Bench>(x: &mut Cx<'_, R>) {
             key_effect(x, eshl_creators::throw_2);
             if x.anim_step() {
                 strike(x, 6);
-                let n = x.u8(REPEAT).wrapping_sub(1);
-                x.set8(REPEAT, n);
+                let n = x.u8(Kobold::REPEAT).wrapping_sub(1);
+                x.set8(Kobold::REPEAT, n);
                 if n == 0 {
                     mv(x, 0);
                 }
@@ -642,8 +642,8 @@ fn short_paw<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         4 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
-            x.set16(TIMER, 0xe);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set16(Kobold::TIMER, 0xe);
             mv(x, 0xc);
             set_speed(x, 0xb);
         }

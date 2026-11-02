@@ -41,7 +41,7 @@ pub(super) fn point_blank<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x78fca: shot at a target hit by the box (−0x10, 0x10, 8); three identical blocks according to `+0xaa`.
 pub(super) fn pick_by_phase<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
-    let phase = x.u8(PHASE) as i8 as i32 as u32;
+    let phase = x.u8(WarMachine::PHASE) as i8 as i32 as u32;
     let block = table_target(x, 0x78fe4, phase.wrapping_mul(2));
     // 0x78fea, 0x78ff0 and 0x78ff6 read the same table
     let _ = block;
@@ -52,7 +52,7 @@ pub(super) fn pick_by_phase<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x79014: decision after the shot box (0x78f30); `gate` = result of `ai_gate` (1 or 2).
 pub(super) fn near_decision<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
-    let bytes = if x.u8(GROUP) == 0 {
+    let bytes = if x.u8(Enemy::GROUP) == 0 {
         0x7907e
     } else if gate as u8 == 1 {
         0x7908e
@@ -66,9 +66,9 @@ pub(super) fn near_decision<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
 pub(super) fn wide_decision<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     let r = rand_and(x, 0xf);
     let d2 = (gate.wrapping_sub(1) as u16).wrapping_mul(2);
-    let d1 = (x.u8(PHASE) as i8 as i16 as u16).wrapping_mul(4);
+    let d1 = (x.u8(WarMachine::PHASE) as i8 as i16 as u16).wrapping_mul(4);
     let index = d2.wrapping_add(d1) as u32;
-    let words = if x.u8(GROUP) == 0 { 0x790e6 } else { 0x790f2 };
+    let words = if x.u8(Enemy::GROUP) == 0 { 0x790e6 } else { 0x790f2 };
     let block = table_target(x, words, index);
     let bytes = match block {
         0x790fe | 0x79106 | 0x7910e | 0x79116 => 0x79158,
@@ -98,7 +98,7 @@ pub(super) fn gate_wide<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
     if lo >= at || hi <= at {
         return 0;
     }
-    let (half_w, half_d) = if x.u8(GROUP) != 0 { (0x60, 8) } else { (0x40, 0xc) };
+    let (half_w, half_d) = if x.u8(Enemy::GROUP) != 0 { (0x60, 8) } else { (0x40, 0xc) };
     if !lib::target_in_box(x, -0xe0, half_w, half_d) {
         return 0;
     }
@@ -109,12 +109,12 @@ pub(super) fn gate_wide<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
 pub(super) fn charge_delay<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let level = var::RANK.get(x.b) as u32;
     let v = x.rom8(table + level);
-    x.set8(AI_CHARGE, v);
+    x.set8(Enemy::AI_STANCE, v);
 }
 
 /// 0x78ecc / 0x78ede: walk delay `+0x6b` drawn from a row.
 pub(super) fn wander_delay<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let r = rand_and(x, 0x1f);
     let v = x.rom8(table + r);
-    x.set8(AI_WANDER, v);
+    x.set8(Enemy::AI_WANDER, v);
 }

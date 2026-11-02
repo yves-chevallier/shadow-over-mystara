@@ -8,7 +8,7 @@ use crate::objects::Current;
 use crate::objects::Obj;
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(NO_ZONE) != 0 {
+    if x.u8(Bow::NO_ZONE) != 0 {
         return set_state_long(x, HELD);
     }
     match x.u8(f::SUB) {
@@ -25,14 +25,14 @@ fn begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::HP, 1);
     x.set16(Enemy::HP_LAST, 1);
     set_speed(x, 0x18);
-    x.set8(TIMER, 0x10);
+    x.set8(Bow::TIMER, 0x10);
     walk_angle(x);
     mv(x, 2);
 }
 
 /// 0x5bf40 : tire en place.
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(EXPIRED) != 0 || grabbed(x) {
+    if x.u8(Bow::EXPIRED) != 0 || grabbed(x) {
         x.set16(f::STATE, 0x0408);
         x.set16(f::SUB2, 0);
         return hit::grab(x);
@@ -49,8 +49,8 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
     x.anim_step();
-    let n = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, n);
+    let n = x.u8(Bow::TIMER).wrapping_sub(1);
+    x.set8(Bow::TIMER, n);
     if (n as i8) < 0 {
         x.add8(f::SUB2, 4);
     }
@@ -74,7 +74,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB3, 2);
                 3
             } else {
-                x.set8(EXPIRED, 1);
+                x.set8(Bow::EXPIRED, 1);
                 set_speed(x, 0x21);
                 2
             };
@@ -87,7 +87,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
             if x.in_arena_default() {
                 return;
             }
-            if (x.u8(TIMED) as i8) < 0 && x.u16(f::HOST) != 0 {
+            if (x.u8(Bow::TIMED) as i8) < 0 && x.u16(f::HOST) != 0 {
                 let host = x.linked(f::HOST);
                 host.set_u8(x.b, Obj::SPEED_INDEX, 1);
             }
@@ -96,7 +96,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
         }
         4 => {
             if x.anim_step() {
-                x.set8(EXPIRED, 1);
+                x.set8(Bow::EXPIRED, 1);
                 x.set8(f::SUB3, 0);
                 let flip = x.u8(f::FLIP) ^ 0x20;
                 x.set8(f::FLIP, flip);
@@ -112,13 +112,13 @@ fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         let n = rank_byte(x, SHOT_REPEATS);
-        x.set8(REPEAT, n);
+        x.set8(Bow::REPEAT, n);
         shoot_anim(x);
         return x.reinsert();
     }
     if x.anim_step() {
-        let n = x.u8(REPEAT).wrapping_sub(1);
-        x.set8(REPEAT, n);
+        let n = x.u8(Bow::REPEAT).wrapping_sub(1);
+        x.set8(Bow::REPEAT, n);
         if n != 0 {
             shoot_anim(x);
             return x.reinsert();
@@ -135,6 +135,6 @@ fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x5c04a: shot animation (0 or 5 according to profile `+0x2f`).
 fn shoot_anim<R: Bench>(x: &mut Cx<'_, R>) {
-    let anim = if x.u8(GROUP) != 0 { 5 } else { 0 };
+    let anim = if x.u8(Enemy::GROUP) != 0 { 5 } else { 0 };
     shot(x, anim);
 }

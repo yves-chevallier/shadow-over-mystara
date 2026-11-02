@@ -9,7 +9,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if special_hit(x) {
         return;
     }
-    if grabbed(x) || x.u8(CAUGHT) != 0 {
+    if grabbed(x) || x.u8(Skeleton::CAUGHT) != 0 {
         return set_state_long(x, KNOCKED);
     }
     match x.u8(f::SUB2) {
@@ -28,10 +28,10 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
                 walk(x);
             } else {
                 x.add8(f::SUB3, 2);
-                x.set8(VULNERABLE, 1);
-                x.set8(AI_SHOT, 0xc);
+                x.set8(Enemy::VULNERABLE, 1);
+                x.set8(Enemy::AI_POINT_SET, 0xc);
                 body(x, 0);
-                x.set32(MOVE_TABLE, 0x1c74b6);
+                x.set32(Obj::SPEED_TABLE, 0x1c74b6);
                 pick_target(x);
                 lib::draw_stance(x);
                 lib::choose_near_walk_point(x);
@@ -52,10 +52,10 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x580ae: the idea begins, the skeleton turns toward its target.
 fn begin_idle<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set8(VULNERABLE, 1);
-    x.set8(AI_SHOT, 0xb);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Enemy::AI_POINT_SET, 0xb);
     body(x, 0);
-    x.set32(MOVE_TABLE, 0x1c74b6);
+    x.set32(Obj::SPEED_TABLE, 0x1c74b6);
     lib::draw_stance(x);
     lib::draw_6b(x);
 }
@@ -70,8 +70,8 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
         }
         x.add8(f::SUB3, 2);
     }
-    let t = x.u8(AI_WAIT).wrapping_sub(1);
-    x.set8(AI_WAIT, t);
+    let t = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, t);
     if t != 0 {
         return;
     }
@@ -86,7 +86,7 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
 /// `+6 = 4`: turn-around (animation 1 then orientation inversion).
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
-        if x.u16(ANIM_STATE) != 0xff {
+        if x.u16(Enemy::ANIM_END) != 0xff {
             move_xy(x);
             step(x);
             return;
@@ -94,7 +94,7 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB3, 2);
         return body(x, 1);
     }
-    if (x.u8(ANIM_STATE) as i8) < 0 {
+    if (x.u8(Enemy::ANIM_END) as i8) < 0 {
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
         set_state_long(x, AFTER_TURN);
@@ -107,10 +107,10 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x58126: walks toward the target; decides to turn around, wait or attack.
 fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     lib::walk_point_reached(x);
-    let (y, z) = (x.u16(WALK_ARGS_Y), x.u16(WALK_ARGS_Z));
+    let (y, z) = (x.u16(Skeleton::WALK_ARGS_Y), x.u16(Skeleton::WALK_ARGS_Z));
     lib::turn_toward(x, y, z);
-    let n = x.u8(AI_WALK).wrapping_sub(1);
-    x.set8(AI_WALK, n);
+    let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+    x.set8(Enemy::AI_STANCE, n);
     if (n as i8) <= 0 {
         lib::draw_stance(x);
         if x.u16(f::TARGET) == 0 {
@@ -123,8 +123,8 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
             return x.set16(f::SUB2, 0x400);
         }
     }
-    let n = x.u8(AI_CHOICE).wrapping_sub(1);
-    x.set8(AI_CHOICE, n);
+    let n = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+    x.set8(Enemy::AI_WANDER, n);
     if (n as i8) <= 0 {
         lib::draw_6b(x);
         if lib::maybe_draw_6e(x) {
@@ -136,13 +136,13 @@ fn walk<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x58194: a player in range? If so, attacks; otherwise advances by one animation step.
 fn attack_choice<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(SERIES) != 0 && lib::target_in_box(x, -0x20, 0x20, 0xc) {
+    if x.u8(Enemy::GROUP) != 0 && lib::target_in_box(x, -0x20, 0x20, 0xc) {
         set_state_long(x, DASH);
-        return x.set16(COUNTER, 0);
+        return x.set16(Skeleton::COUNTER, 0);
     }
     let side = lib::target_in_front(x, -0x20, 0x20, 0x10);
     if side.found() {
-        x.set8(SIDE, side as u8);
+        x.set8(Skeleton::SIDE, side as u8);
         x.set16(f::STATE, 0x204);
         lib::pick_byte(x);
         return pick_move(x, CLOSE_ATTACKS, 0x204);
@@ -162,7 +162,7 @@ fn front_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !side.found() {
         return false;
     }
-    x.set8(SIDE, side as u8);
+    x.set8(Skeleton::SIDE, side as u8);
     if !decision(x) {
         return false;
     }
@@ -176,7 +176,7 @@ fn far_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !side.found() {
         return false;
     }
-    x.set8(SIDE, side as u8);
+    x.set8(Skeleton::SIDE, side as u8);
     if !decision(x) {
         return false;
     }

@@ -16,7 +16,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
         return set_state_long(x, KNOCKED);
     }
     // a part whose parent is hit is hit too
-    if (x.u8(PART) as i8) >= 0 {
+    if (x.u8(DisplacerBeast::PART) as i8) >= 0 {
         if let Some(p) = parent(x) {
             if state_of(x, p) == 0x0402_0000 {
                 return set_state_long(x, KNOCKED);
@@ -43,33 +43,33 @@ fn pursue<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if x.u8(Enemy::SUB_STEP) == 0 {
         x.add8(Enemy::SUB_STEP, 2);
-        x.set8(VULNERABLE, 1);
-        x.set8(WANT_ANIM, 0xc);
-        if x.u8(WANT_ANIM) != x.u8(CUR_ANIM) {
-            let want = x.u8(WANT_ANIM);
-            x.set8(CUR_ANIM, want);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(DisplacerBeast::WANT_ANIM, 0xc);
+        if x.u8(DisplacerBeast::WANT_ANIM) != x.u8(DisplacerBeast::CUR_ANIM) {
+            let want = x.u8(DisplacerBeast::WANT_ANIM);
+            x.set8(DisplacerBeast::CUR_ANIM, want);
             play(x, 8);
         }
         speed(x, 0x11);
         lib::draw_stance(x);
         return;
     }
-    let t = x.u8(AI_TURN).wrapping_sub(1);
-    x.set8(AI_TURN, t);
+    let t = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+    x.set8(Enemy::AI_STANCE, t);
     if (t as i8) < 0 {
         lib::draw_stance(x);
         pick_target(x);
         let shot = if x.u8(f::SUB2) == 0 { 0xe } else { 0xf };
-        x.set8(AI_SHOT, shot);
+        x.set8(Enemy::AI_POINT_SET, shot);
         lib::approach_target(x);
-        let n = x.u8(AI_STEP).wrapping_sub(1);
-        x.set8(AI_STEP, n);
+        let n = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+        x.set8(Enemy::AI_WANDER, n);
         if n == 0 {
             lib::draw_6b(x);
             return pursue_tail(x);
         }
     }
-    x.set8(REPEAT_LEFT, 2);
+    x.set8(DisplacerBeast::REPEAT_LEFT, 2);
     engage(x);
 }
 
@@ -78,7 +78,7 @@ pub(super) fn pursue_tail<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::maybe_draw_6e(x) {
         return x.set16(f::SUB2, 0x0400);
     }
-    x.set8(REPEAT_LEFT, 2);
+    x.set8(DisplacerBeast::REPEAT_LEFT, 2);
     engage(x);
 }
 
@@ -105,8 +105,8 @@ fn face_resume<R: Bench>(x: &mut Cx<'_, R>) {
     let dx = x.u16(Obj::X).wrapping_sub(t.u16(x.b, Obj::X)) as i16;
     let want = if dx >= 0 { 0 } else { 0x20 };
     if want != x.u8(f::FLIP) {
-        x.set32(RESUME_STATE, ACTIVE_STANCE);
-        x.set8(RESUME_SUB2, 0);
+        x.set32(DisplacerBeast::RESUME_STATE, ACTIVE_STANCE);
+        x.set8(DisplacerBeast::RESUME_SUB2, 0);
         set_state_long(x, 0x0202_0200);
     }
 }
@@ -148,18 +148,18 @@ fn reach_back<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Enemy::SUB_STEP) == 0 {
         x.add8(Enemy::SUB_STEP, 2);
-        x.set8(VULNERABLE, 1);
-        x.set8(WANT_ANIM, 5);
-        let want = x.u8(WANT_ANIM);
-        x.set8(CUR_ANIM, want);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(DisplacerBeast::WANT_ANIM, 5);
+        let want = x.u8(DisplacerBeast::WANT_ANIM);
+        x.set8(DisplacerBeast::CUR_ANIM, want);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
         return play(x, 5);
     }
     if x.anim_step() {
-        let resume = x.u32(RESUME_STATE);
+        let resume = x.u32(DisplacerBeast::RESUME_STATE);
         x.set32(f::STATE, resume);
-        let sub2 = x.u8(RESUME_SUB2);
+        let sub2 = x.u8(DisplacerBeast::RESUME_SUB2);
         x.set8(f::SUB2, sub2);
         play(x, 0);
     }
@@ -170,14 +170,14 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Enemy::SUB_STEP) == 0 {
         return super::attacks::ready(x);
     }
-    let n = x.u8(AI_REPEAT).wrapping_sub(1);
-    x.set8(AI_REPEAT, n);
+    let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, n);
     if (n as i8) < 0 {
         return set_state_long(x, ACTIVE_STANCE);
     }
     if player_ahead(x) {
-        x.set32(RESUME_STATE, ACTIVE_STANCE);
-        x.set8(RESUME_SUB2, 4);
+        x.set32(DisplacerBeast::RESUME_STATE, ACTIVE_STANCE);
+        x.set8(DisplacerBeast::RESUME_SUB2, 4);
         set_state_long(x, 0x0202_0200);
     }
     step(x);
@@ -188,7 +188,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Enemy::SUB_STEP) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
-            x.set8(TIMER, 0x28);
+            x.set8(DisplacerBeast::TIMER, 0x28);
             lib::draw_stance(x);
             approach_walk(x);
         }
@@ -198,23 +198,23 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
             approach_walk(x);
         }
         2 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(DisplacerBeast::TIMER).wrapping_sub(1);
+            x.set8(DisplacerBeast::TIMER, t);
             if (t as i8) < 0 {
                 return set_state_long(x, ACTIVE_STANCE);
             }
-            let n = x.u8(AI_TURN).wrapping_sub(1);
-            x.set8(AI_TURN, n);
+            let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+            x.set8(Enemy::AI_STANCE, n);
             if (n as i8) < 0 {
                 lib::draw_stance(x);
                 pick_target(x);
-                x.set8(AI_SHOT, 0xe);
+                x.set8(Enemy::AI_POINT_SET, 0xe);
                 lib::approach_target(x);
             }
             if player_ahead(x) {
-                x.set32(RESUME_STATE, 0x0202_0004);
+                x.set32(DisplacerBeast::RESUME_STATE, 0x0202_0004);
                 let sub2 = x.u8(f::SUB2);
-                x.set8(RESUME_SUB2, sub2);
+                x.set8(DisplacerBeast::RESUME_SUB2, sub2);
                 set_state_long(x, 0x0202_0200);
             }
             step(x);
@@ -225,11 +225,11 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn approach_walk<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
-    x.set8(WANT_ANIM, 0x16);
-    if x.u8(WANT_ANIM) != x.u8(CUR_ANIM) {
-        let want = x.u8(WANT_ANIM);
-        x.set8(CUR_ANIM, want);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(DisplacerBeast::WANT_ANIM, 0x16);
+    if x.u8(DisplacerBeast::WANT_ANIM) != x.u8(DisplacerBeast::CUR_ANIM) {
+        let want = x.u8(DisplacerBeast::WANT_ANIM);
+        x.set8(DisplacerBeast::CUR_ANIM, want);
         play(x, 0xd);
     }
     speed(x, 0x17);
@@ -240,7 +240,7 @@ fn approach_walk<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x745a4 (`close`) / 0x745ac: draws an attack from the table of the profile and of the difficulty level.
 fn choose_attack_a<R: Bench>(x: &mut Cx<'_, R>, close: bool) {
     let base = if close { 0 } else { 0x14 };
-    let profile = x.u8(PROFILE).wrapping_shl(2) as u32;
+    let profile = x.u8(Enemy::GROUP).wrapping_shl(2) as u32;
     let table = x.data32(PICK_TABLE + profile);
     let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
     let r = (x.random() as u32) & 0x1f;

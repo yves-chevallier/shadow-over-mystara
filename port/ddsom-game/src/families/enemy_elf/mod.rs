@@ -17,6 +17,7 @@
 //! proximity test 0x81aa4, the zone test, the shadow and the re-queuing.
 
 use crate::families::cx::Bench;
+use crate::record::record;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -27,30 +28,30 @@ mod hit;
 mod stance;
 
 /// Fields specific to this type (the common fields are in `enemy_common::f`).
-mod g {
-    /// Damage of the current attack: type and strength.
-    pub const STRIKE_KIND: u32 = 0x44;
-    pub const STRIKE_POWER: u32 = 0x45;
-    /// Vulnerable (1) or not.
-    pub const VULNERABLE: u32 = 0x67;
-    /// AI counters: remaining attacks, delay before a new choice, wait, walk.
-    pub const AI_CHOICE: u32 = 0x6b;
-    pub const AI_WAIT: u32 = 0x6e;
-    pub const AI_WALK: u32 = 0x71;
-    pub const AI_KIND: u32 = 0x78;
-    /// Repetition counter of an attack and timer.
-    pub const REPEAT: u32 = 0xa2;
-    /// Last AI direction (walking animation) and its countdown.
-    pub const WALK_ANIM: u32 = 0xa1;
-    pub const WALK_ANIM_TIMER: u32 = 0xa4;
-    /// Attack planned after the approach and movement animation of that attack.
-    pub const NEXT_ATTACK: u32 = 0xa5;
-    pub const APPROACH_ANIM: u32 = 0xa6;
-    /// Remaining wait before the next step.
-    pub const COOLDOWN: u32 = 0x77;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Elf(pub Obj);
+
+impl Elf {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
 
-use g::*;
+record! {
+    impl Elf {
+        /// Last AI direction (walking animation) and its countdown.
+        walk_anim, set_walk_anim, WALK_ANIM: u8 @ 0xa1;
+        /// Repetition counter of an attack and timer.
+        repeat, set_repeat, REPEAT: u8 @ 0xa2;
+        walk_anim_timer, set_walk_anim_timer, WALK_ANIM_TIMER: u8 @ 0xa4;
+        /// Attack planned after the approach and movement animation of that attack.
+        next_attack, set_next_attack, NEXT_ATTACK: u8 @ 0xa5;
+        approach_anim, set_approach_anim, APPROACH_ANIM: u8 @ 0xa6;
+    }
+}
+
 use crate::objects::Current;
 
 /// Animation sets: movements and attacks.
@@ -133,7 +134,7 @@ fn back_to_stance<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x6a452: end of an attack — the next one is drawn from the difficulty row (32 bytes).
 fn end_attack<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(AI_KIND, 0xff);
+    x.set8(Enemy::AI_SHOT, 0xff);
     let mv = rank_byte(x, FALLBACK_MOVES);
     x.set8(f::SUB, 8);
     x.set8(f::SUB2, mv);
@@ -150,18 +151,18 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::BOX_SET, 0x18);
     lib::initial_hp(x);
     lib::set_immunities(x);
-    for (off, v) in [(Enemy::AI_68, 4), (Enemy::AI_69, 1), (Enemy::AI_STANCE_ROW, 0), (Enemy::AI_WANDER_ROW, 1), (Enemy::AI_WAIT_MASKS, 3), (Enemy::AI_WAIT_ROW, 3), (Enemy::AI_DECISION_A, 3), (Enemy::AI_DECISION_B, 2), (Enemy::AI_BOX_CHANCE, 3), (Enemy::AI_BOX_ANIM, 0x38), (Enemy::AI_BYTE_ROW, 3), (REPEAT, 0x20), (WALK_ANIM, 0), (WALK_ANIM_TIMER, 2)] {
+    for (off, v) in [(Enemy::AI_68, 4), (Enemy::AI_69, 1), (Enemy::AI_STANCE_ROW, 0), (Enemy::AI_WANDER_ROW, 1), (Enemy::AI_WAIT_MASKS, 3), (Enemy::AI_WAIT_ROW, 3), (Enemy::AI_DECISION_A, 3), (Enemy::AI_DECISION_B, 2), (Enemy::AI_BOX_CHANCE, 3), (Enemy::AI_BOX_ANIM, 0x38), (Enemy::AI_BYTE_ROW, 3), (Elf::REPEAT, 0x20), (Elf::WALK_ANIM, 0), (Elf::WALK_ANIM_TIMER, 2)] {
         x.set8(off, v);
     }
     if var::GAME_ON.get(x.b) != 0 {
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
     }
     for (off, v) in [(Enemy::AI_ROW_8E, 0), (Enemy::EVENT_LOW, 0), (Enemy::EVENT_KIND, 0xe)] {
         x.set8(off, v);
     }
     x.set32(Enemy::RESUME_STATE, 0);
-    x.set8(APPROACH_ANIM, 0);
-    x.set8(AI_KIND, 0xff);
+    x.set8(Elf::APPROACH_ANIM, 0);
+    x.set8(Enemy::AI_SHOT, 0xff);
     x.set8(Enemy::LOOT_ROW, 0xc);
     x.set8(Enemy::LOOT, 0xb);
     // creation chains directly into the active state
@@ -197,15 +198,15 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(f::SUB2) != 0 {
                 move_xy(x);
                 step(x);
-                let t = x.u8(REPEAT).wrapping_sub(1);
-                x.set8(REPEAT, t);
+                let t = x.u8(Elf::REPEAT).wrapping_sub(1);
+                x.set8(Elf::REPEAT, t);
                 if (t as i8) < 0 {
                     set_state_long(x, STANCE);
                 }
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set8(REPEAT, 0x14);
+            x.set8(Elf::REPEAT, 0x14);
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             x.set8(Obj::SPEED_INDEX, angle);
             x.select_speed(&crate::objects::motion::SPEEDS_B, 0x12);

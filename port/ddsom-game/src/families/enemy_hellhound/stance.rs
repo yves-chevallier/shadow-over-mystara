@@ -47,22 +47,22 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
-        x.set8(LOOK, 0xc);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(Hellhound::LOOK, 0xc);
         mv(x, 2);
         set_speed(x, 0x11);
         return lib::draw_stance(x);
     }
-    let n = x.u8(AI_CHARGE).wrapping_sub(1);
-    x.set8(AI_CHARGE, n);
+    let n = x.u8(Enemy::AI_STANCE).wrapping_sub(1);
+    x.set8(Enemy::AI_STANCE, n);
     if (n as i8) < 0 {
         lib::draw_stance(x);
         pick_target(x);
         let kind = if x.u8(f::SUB2) == 0 { 0x11 } else { 0x12 };
-        x.set8(SHOT_KIND, kind);
+        x.set8(Enemy::AI_POINT_SET, kind);
         lib::approach_target(x);
-        let w = x.u8(AI_WANDER).wrapping_sub(1);
-        x.set8(AI_WANDER, w);
+        let w = x.u8(Enemy::AI_WANDER).wrapping_sub(1);
+        x.set8(Enemy::AI_WANDER, w);
         if w == 0 {
             lib::draw_6b(x);
             if lib::maybe_draw_6e(x) {
@@ -75,7 +75,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x61a9e: the dog is on guard; a player in range? Immediate attack, otherwise walking step.
 pub(super) fn reach<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(GUARD, 2);
+    x.set8(Hellhound::GUARD, 2);
     reach_boxes(x);
 }
 
@@ -100,8 +100,8 @@ pub(super) fn reach_boxes<R: Bench>(x: &mut Cx<'_, R>) {
     let target = x.linked(f::TARGET);
     let side = if (x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X)) as i16) < 0 { 0x20 } else { 0 };
     if side != x.u8(f::FLIP) {
-        x.set32(RESUME_STATE, STANCE);
-        x.set8(RESUME_SUB2, 0);
+        x.set32(Hellhound::RESUME_STATE, STANCE);
+        x.set8(Hellhound::RESUME_SUB2, 0);
         set_state_long(x, 0x0202_0200);
     }
 }
@@ -151,16 +151,16 @@ fn far_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         look(x, 4);
         return mv(x, 4);
     }
     if !x.anim_step() {
         return;
     }
-    let s = x.u32(RESUME_STATE);
+    let s = x.u32(Hellhound::RESUME_STATE);
     x.set32(f::STATE, s);
-    let sub2 = x.u8(RESUME_SUB2);
+    let sub2 = x.u8(Hellhound::RESUME_SUB2);
     x.set8(f::SUB2, sub2);
     let flip = x.u8(f::FLIP) ^ 0x20;
     x.set8(f::FLIP, flip);
@@ -172,18 +172,18 @@ fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         look(x, 0);
         return mv(x, 0);
     }
-    let n = x.u8(AI_WAIT).wrapping_sub(1);
-    x.set8(AI_WAIT, n);
+    let n = x.u8(Enemy::AI_WAIT).wrapping_sub(1);
+    x.set8(Enemy::AI_WAIT, n);
     if (n as i8) < 0 {
         return set_state_long(x, STANCE);
     }
     if must_turn(x) {
-        x.set32(RESUME_STATE, STANCE);
-        x.set8(RESUME_SUB2, 4);
+        x.set32(Hellhound::RESUME_STATE, STANCE);
+        x.set8(Hellhound::RESUME_SUB2, 4);
         set_state_long(x, 0x0202_0200);
     }
     x.anim_step();
@@ -199,13 +199,13 @@ fn spit<R: Bench>(x: &mut Cx<'_, R>) {
         }
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(TIMER, 0x34);
+            x.set8(Hellhound::TIMER, 0x34);
             spit_begin(x);
         }
         2 => {
             puff(x, 7, 0, 0x101, 0x20, 4);
-            let n = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, n);
+            let n = x.u8(Hellhound::TIMER).wrapping_sub(1);
+            x.set8(Hellhound::TIMER, n);
             if (n as i8) < 0 {
                 set_state_long(x, STANCE);
             } else {
@@ -219,9 +219,9 @@ fn spit<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x61d08: start of the spit: the dog backs off while breathing.
 fn spit_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(VULNERABLE, 1);
-    x.set8(LOOK, 3);
-    x.set8(STRIKE_KIND, 0x2c);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(Hellhound::LOOK, 3);
+    x.set8(Enemy::STRIKE_KIND, 0x2c);
     arrival::set_angle_facing(x, 0x18, 8);
     mv(x, 3);
     set_speed(x, 0x25);
@@ -233,9 +233,9 @@ fn hop<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 6);
-            x.set8(STRIKE_KIND, 0x2b);
+            x.set8(Enemy::STRIKE_KIND, 0x2b);
             x.set16(Obj::VX, -0x380i16 as u16);
             if x.u8(f::FLIP) != 0 {
                 negate(x, Obj::VX);

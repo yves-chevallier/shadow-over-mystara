@@ -16,6 +16,7 @@
 //! Substates 2, 4, 6 and 8 begin with the reaction to hit flags `+0x8f` (0x60c88).
 
 use crate::families::cx::Bench;
+use crate::record::record;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -26,24 +27,30 @@ mod hit;
 mod moves;
 mod stance;
 
-mod g {
-    pub const STRIKE_KIND: u32 = 0x44;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const AI_CHOICE: u32 = 0x6b;
-    pub const AI_WAIT: u32 = 0x6e;
-    pub const AI_WALK: u32 = 0x71;
-    pub const AI_SHOT: u32 = 0x79;
-    pub const SPECIAL_HIT: u32 = 0x8f;
-    /// Current and previous look.
-    pub const LOOK: u32 = 0xa0;
-    pub const LOOK_PREV: u32 = 0xa1;
-    /// Timer of a step.
-    pub const TIMER: u32 = 0xa2;
-    /// Saved position (flight).
-    pub const SAVED_X: u32 = 0xa8;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Ghoul(pub Obj);
+
+impl Ghoul {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
 
-use g::*;
+record! {
+    impl Ghoul {
+        special_hit, set_special_hit, SPECIAL_HIT: u8 @ 0x8f;
+        /// Current and previous look.
+        look, set_look, LOOK: u8 @ 0xa0;
+        look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa1;
+        /// Timer of a step.
+        timer, set_timer, TIMER: u8 @ 0xa2;
+        /// Saved position (flight).
+        saved_x, set_saved_x, SAVED_X: u16 @ 0xa8;
+    }
+}
+
 use crate::objects::Current;
 
 const SET_BODY: RomAddr = RomAddr(0x16191c);
@@ -88,10 +95,10 @@ fn move_xy<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_by_table_xy();
 }
 
-/// The wanted look (`LOOK` and `LOOK_PREV` identical).
+/// The wanted look (`Ghoul::LOOK` and `Ghoul::LOOK_PREV` identical).
 fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
-    x.set8(LOOK, v);
-    x.set8(LOOK_PREV, v);
+    x.set8(Ghoul::LOOK, v);
+    x.set8(Ghoul::LOOK_PREV, v);
 }
 
 /// Walking direction according to the orientation: `flipped` if `+0x2c` is non-zero, `otherwise` if not.
@@ -163,13 +170,13 @@ fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, table: u32
 
 /// Reaction to hit flags `+0x8f` (0x60c88): true if it took over.
 fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let flag = x.u8(SPECIAL_HIT);
+    let flag = x.u8(Ghoul::SPECIAL_HIT);
     match flag {
         1 => {
             if x.u16(Obj::Z) != 0 {
                 return false;
             }
-            x.set8(SPECIAL_HIT, 0);
+            x.set8(Ghoul::SPECIAL_HIT, 0);
             set_state_long(x, 0x0400_0000);
             x.set8(Enemy::REACTION, 0x58);
             hit::run(x);
@@ -177,7 +184,7 @@ fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         }
         2 => {
             set_state_long(x, 0x0400_0000);
-            x.set8(SPECIAL_HIT, 0);
+            x.set8(Ghoul::SPECIAL_HIT, 0);
             let code = if x.u16(Obj::Z) == 0 { 0xc } else { 0x38 };
             x.set8(Enemy::REACTION, code);
             hit::run(x);
@@ -187,7 +194,7 @@ fn special_hit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
             if x.u16(Obj::Z) != 0 || x.u8(Enemy::DOWNED) != 0 {
                 return false;
             }
-            x.set8(SPECIAL_HIT, 0);
+            x.set8(Ghoul::SPECIAL_HIT, 0);
             set_state_long(x, KNOCKED);
             moves::run_b(x);
             true
@@ -219,9 +226,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         (Enemy::AI_BOX_CHANCE, 3),
         (Enemy::AI_BOX_ANIM, 4),
         (Enemy::AI_BYTE_ROW, 3),
-        (TIMER, 0x20),
-        (LOOK, 6),
-        (VULNERABLE, 1),
+        (Ghoul::TIMER, 0x20),
+        (Ghoul::LOOK, 6),
+        (Enemy::VULNERABLE, 1),
         (Enemy::AI_ROW_8E, 0),
         (Enemy::LOOT, 8),
         (Enemy::LOOT_ROW, 9),
@@ -259,8 +266,8 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Obj::VARIANT) {
         0 => {
             if x.u8(f::SUB2) != 0 {
-                let t = x.u8(TIMER).wrapping_sub(1);
-                x.set8(TIMER, t);
+                let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+                x.set8(Ghoul::TIMER, t);
                 if t == 0 {
                     set_state_long(x, STANCE);
                     x.set8(Enemy::ACTIVE, 1);
@@ -270,9 +277,9 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB2, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             look(x, 0xff);
-            x.set8(TIMER, 0x18);
+            x.set8(Ghoul::TIMER, 0x18);
             set_angle(x, 8, 0x18);
             set_speed(x, 0xd);
             body(x, 2);
@@ -280,14 +287,14 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
         1 => match x.u8(f::SUB2) {
             0 => {
                 x.add8(f::SUB2, 2);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 look(x, 0xff);
-                x.set8(TIMER, 4);
+                x.set8(Ghoul::TIMER, 4);
                 body(x, 3);
             }
             2 => {
-                let t = x.u8(TIMER).wrapping_sub(1);
-                x.set8(TIMER, t);
+                let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+                x.set8(Ghoul::TIMER, t);
                 if t != 0 {
                     return;
                 }
@@ -315,7 +322,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
         2 => match x.u8(f::SUB2) {
             0 => {
                 x.add8(f::SUB2, 2);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 look(x, 0xff);
                 x.set16(Obj::VZ, -0x300i16 as u16);
                 x.set16(Obj::AZ, -0x80i16 as u16);
@@ -342,7 +349,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
             match x.u8(f::SUB2) {
                 0 => {
                     x.add8(f::SUB2, 2);
-                    x.set8(VULNERABLE, 1);
+                    x.set8(Enemy::VULNERABLE, 1);
                     look(x, 0xff);
                     body(x, 5);
                 }
@@ -368,7 +375,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             if x.u8(f::SUB2) == 0 {
                 x.add8(f::SUB2, 2);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 look(x, 0xff);
                 body(x, 8);
             } else if step(x) {
@@ -383,11 +390,11 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(Enemy::LOOT, 0);
                 x.set8(Enemy::LOOT_ROW, 0);
                 x.set8(0xa6, 1);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 look(x, 0xff);
                 x.set16(Enemy::CREATOR, 0x703);
                 let d7 = x.counter() as u8;
-                x.set8(TIMER, d7);
+                x.set8(Ghoul::TIMER, d7);
                 body(x, 0);
             }
             2 => blink(x, 0x307),
@@ -413,8 +420,8 @@ fn end_arrival<R: Bench>(x: &mut Cx<'_, R>) {
 /// Arrival blinking (0x5fbbe), `next`: value of word `+0x42` when a series is over.
 fn blink<R: Bench>(x: &mut Cx<'_, R>, next: u16) {
     x.set_bit(Enemy::DISPLAY, 1, true);
-    let t = x.u8(TIMER).wrapping_sub(1);
-    x.set8(TIMER, t);
+    let t = x.u8(Ghoul::TIMER).wrapping_sub(1);
+    x.set8(Ghoul::TIMER, t);
     if t & x.u8(0x42) != 0 {
         return;
     }

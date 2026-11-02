@@ -16,6 +16,7 @@
 //! the body of the active state (the same frame).
 
 use crate::families::cx::Bench;
+use crate::record::record;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -26,30 +27,35 @@ mod attacks;
 mod hit;
 mod stance;
 
-mod g {
-    pub const VULNERABLE: u32 = 0x67;
-    pub const AI_WANDER: u32 = 0x6b;
-    pub const AI_WAIT: u32 = 0x6e;
-    pub const AI_CHARGE: u32 = 0x71;
-    pub const AI_LUNGE: u32 = 0x77;
-    pub const AI_SHOT: u32 = 0x78;
-    pub const SHOT_KIND: u32 = 0x79;
-    pub const LOOK_PREV: u32 = 0xa1;
-    /// Timer (byte) of a gesture.
-    pub const TIMER: u32 = 0xa2;
-    pub const COOLDOWN: u32 = 0xa4;
-    /// Chosen move (value of `+6` to resume).
-    pub const CHOSEN: u32 = 0xaa;
-    /// Non-zero: no zone test (arrival by the run-in).
-    pub const NO_ZONE: u32 = 0xae;
-    /// Remaining throw charges (byte, in steps of 0x10).
-    pub const AMMO: u32 = 0xab;
-    /// Thrown object (full address).
-    pub const THROWN: u32 = 0xa6;
-    /// Countdown (high part) of the wait after the throw.
-    pub const AFTER_THROW: u32 = 0xac;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Troll(pub Obj);
+
+impl Troll {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Troll {
+        look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa1;
+        /// Timer (byte) of a gesture.
+        timer, set_timer, TIMER: u8 @ 0xa2;
+        cooldown, set_cooldown, COOLDOWN: u8 @ 0xa4;
+        /// Thrown object (full address).
+        thrown, set_thrown, THROWN: u32 @ 0xa6;
+        /// Chosen move (value of `+6` to resume).
+        chosen, set_chosen, CHOSEN: u8 @ 0xaa;
+        /// Remaining throw charges (byte, in steps of 0x10).
+        ammo, set_ammo, AMMO: u8 @ 0xab;
+        /// Countdown (high part) of the wait after the throw.
+        after_throw, set_after_throw, AFTER_THROW: u8 @ 0xac;
+        /// Non-zero: no zone test (arrival by the run-in).
+        no_zone, set_no_zone, NO_ZONE: u8 @ 0xae;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
@@ -152,13 +158,13 @@ fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: &str) -> u8 {
     let b = rank_byte(x, table);
     x.set8(f::SUB, 4);
     x.set16(f::SUB2, 0);
-    x.set8(CHOSEN, b);
+    x.set8(Troll::CHOSEN, b);
     b
 }
 
 /// 0x6e8d6: after a series, chooses the fallback move (substate 8).
 fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(AI_SHOT, 0xff);
+    x.set8(Enemy::AI_SHOT, 0xff);
     let b = rank_byte(x, FOLLOW_TABLE);
     x.set8(f::SUB, 8);
     x.set8(f::SUB2, b);
@@ -209,10 +215,10 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         (Enemy::AI_BOX_CHANCE, 3),
         (Enemy::AI_BOX_ANIM, 0x38),
         (Enemy::AI_BYTE_ROW, 3),
-        (TIMER, 0x20),
-        (LOOK_PREV, 0),
-        (COOLDOWN, 2),
-        (VULNERABLE, 1),
+        (Troll::TIMER, 0x20),
+        (Troll::LOOK_PREV, 0),
+        (Troll::COOLDOWN, 2),
+        (Enemy::VULNERABLE, 1),
         (Enemy::AI_ROW_8E, 0),
         (Enemy::EVENT_LOW, 0),
         (Enemy::EVENT_KIND, 0xe),
@@ -220,11 +226,11 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         x.set8(off, v);
     }
     x.set32(Enemy::RESUME_STATE, 0);
-    x.set8(AI_SHOT, 0xff);
+    x.set8(Enemy::AI_SHOT, 0xff);
     x.set8(Enemy::LOOT_ROW, 0xf);
     x.set8(Enemy::LOOT, 0xc);
     x.set8(0xab, 0x20);
-    x.set8(NO_ZONE, 0);
+    x.set8(Troll::NO_ZONE, 0);
     true
 }
 

@@ -15,7 +15,7 @@ pub(super) fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Enemy::ACTIVE, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
             x.set8(f::SUB, 0);
-            x.set8(ENTRY_TIMER, 0);
+            x.set8(Enemy::COUNTER, 0);
             set_hp(x);
             x.set16(f::SUB2, 0);
             follow_offset(x);
@@ -28,10 +28,10 @@ pub(super) fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
             follow_body(x);
             x.set32(f::IMMUNITY, 0x0021_8000);
             let mut n = 0x14;
-            if x.u8(PART) == 6 {
+            if x.u8(DisplacerBeast::PART) == 6 {
                 x.set32(f::IMMUNITY, 0xffff_ffff);
                 x.set8(Enemy::ACTIVE, 2);
-                x.set8(SHOTS, 7);
+                x.set8(DisplacerBeast::SHOTS, 7);
                 n = 0x4b;
             }
             play(x, n);
@@ -43,7 +43,7 @@ pub(super) fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Enemy::SUB_STEP, 0);
             set_hp(x);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            let rank = (x.u8(PART) as u16) << 3;
+            let rank = (x.u8(DisplacerBeast::PART) as u16) << 3;
             let flip = p.u8(x.b, f::FLIP) != 0;
             let (cam_x, cam_y) = camera(x);
             let px = if flip { 0xfff0u16.wrapping_sub(rank) } else { 0x190 + rank };
@@ -53,16 +53,16 @@ pub(super) fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
         }
         3 => {
             set_state_long(x, ACTIVE_STANCE);
-            x.set8(WANT_ANIM, 0xc);
-            x.set8(CUR_ANIM, 0xc);
-            x.set8(VULNERABLE, 1);
+            x.set8(DisplacerBeast::WANT_ANIM, 0xc);
+            x.set8(DisplacerBeast::CUR_ANIM, 0xc);
+            x.set8(Enemy::VULNERABLE, 1);
             let Some(p) = parent(x) else { return orphan(x) };
             let flip = p.u8(x.b, f::FLIP);
             x.set8(f::FLIP, flip);
             let (cam_x, cam_y) = camera(x);
             let px = if flip != 0 { 0xfff0u16 } else { 0x190 };
             x.set16(Obj::X, px.wrapping_add(cam_x));
-            let py = if x.u8(PART) == 7 { 0x30 } else { 0x60 };
+            let py = if x.u8(DisplacerBeast::PART) == 7 { 0x30 } else { 0x60 };
             x.set16(Obj::Y, cam_y.wrapping_add(py));
             play(x, 8);
         }
@@ -91,7 +91,7 @@ fn set_hp<R: Bench>(x: &mut Cx<'_, R>) {
 /// Released part that immediately plays an animation (variants 4 to 7).
 fn lone<R: Bench>(x: &mut Cx<'_, R>, state: u32, anim: u8) {
     set_state_long(x, state);
-    x.set8(PART, 0xff);
+    x.set8(DisplacerBeast::PART, 0xff);
     x.set16(Obj::Z, 0);
     play(x, anim);
 }
@@ -99,7 +99,7 @@ fn lone<R: Bench>(x: &mut Cx<'_, R>, state: u32, anim: u8) {
 /// Released part without a starting animation (variants 8 to 13); `active`: it is active.
 fn detached<R: Bench>(x: &mut Cx<'_, R>, state: u32, active: bool) {
     set_state_long(x, state);
-    x.set8(PART, 0xff);
+    x.set8(DisplacerBeast::PART, 0xff);
     if active {
         x.set8(Enemy::ACTIVE, 2);
     }
@@ -135,17 +135,17 @@ fn attached<R: Bench>(x: &mut Cx<'_, R>) {
         let d = x.u16(Obj::X).wrapping_sub(cam) as i16;
         if d <= 0x140 {
             x.add8(Enemy::SUB_STEP, 2);
-            let p = x.linked(PARENT);
+            let p = x.linked(DisplacerBeast::PARENT);
             if p.u8(x.b, Obj::VARIANT) != 1 {
                 x.set8(Enemy::ACTIVE, 1);
                 x.set32(f::IMMUNITY, 0);
             }
         }
     }
-    if x.u8(ENTRY_TIMER) != 0 {
+    if x.u8(Enemy::COUNTER) != 0 {
         x.add8(f::SUB, 2);
         x.set16(f::SUB2, 0);
-        x.set8(WANT_ANIM, 0xff);
+        x.set8(DisplacerBeast::WANT_ANIM, 0xff);
         x.set8(Enemy::ACTIVE, 1);
         x.set16(f::IMMUNITY, 0);
         return;
@@ -159,9 +159,9 @@ fn attached<R: Bench>(x: &mut Cx<'_, R>) {
 fn arm<R: Bench>(x: &mut Cx<'_, R>) {
     const BY_PARENT_STATE: u32 = 0x724c8;
     follow_body(x);
-    if x.u8(DONE) == 0 {
+    if x.u8(DisplacerBeast::DONE) == 0 {
         let mut n = 0x4b;
-        if x.u8(PART) != 6 {
+        if x.u8(DisplacerBeast::PART) != 6 {
             let Some(p) = parent(x) else { return orphan(x) };
             let idx = p.u8(x.b, 0xa1) as u32;
             n = x.rom8(BY_PARENT_STATE + idx);
@@ -171,22 +171,22 @@ fn arm<R: Bench>(x: &mut Cx<'_, R>) {
         }
         play_once(x, n);
     }
-    if x.u8(PART) == 6 {
-        let t = x.u8(TIMER).wrapping_sub(1);
-        x.set8(TIMER, t);
+    if x.u8(DisplacerBeast::PART) == 6 {
+        let t = x.u8(DisplacerBeast::TIMER).wrapping_sub(1);
+        x.set8(DisplacerBeast::TIMER, t);
         if (t as i8) < 0 {
-            x.set8(TIMER, 0);
+            x.set8(DisplacerBeast::TIMER, 0);
             if player_near(x) {
-                x.set8(DONE, 1);
+                x.set8(DisplacerBeast::DONE, 1);
                 play_once(x, 0x4e);
                 if (var::PLAYERS_ALIVE.get(x.b) as i8) > 1 && x.u8(f::KEY_FRAME) != 0 {
                     x.set8(f::KEY_FRAME, 0);
-                    let variant = x.u8(SHOTS);
+                    let variant = x.u8(DisplacerBeast::SHOTS);
                     eshl_thrown_by_beast(x, variant);
-                    let s = x.u8(SHOTS).wrapping_sub(1);
-                    x.set8(SHOTS, s);
+                    let s = x.u8(DisplacerBeast::SHOTS).wrapping_sub(1);
+                    x.set8(DisplacerBeast::SHOTS, s);
                     if (s as i8) < 0 {
-                        x.set8(TIMER, 0x28);
+                        x.set8(DisplacerBeast::TIMER, 0x28);
                         arm_rest(x);
                     }
                 }
@@ -196,16 +196,16 @@ fn arm<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     step(x);
-    let p = x.linked(PARENT);
+    let p = x.linked(DisplacerBeast::PARENT);
     if (p.u32(x.b, f::STATE) as i32) >= 0x0402_0c00 {
-        x.set8(LAYER, 3);
+        x.set8(DisplacerBeast::LAYER, 3);
     }
 }
 
 /// 0x725a0: the arm rests.
 fn arm_rest<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(DONE, 0);
-    x.set8(SHOTS, 7);
+    x.set8(DisplacerBeast::DONE, 0);
+    x.set8(DisplacerBeast::SHOTS, 7);
 }
 
 /// Heads for the part's rally point (0x721a2); true when it is there.
@@ -219,7 +219,7 @@ fn rally<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     };
     let flip = p.u8(x.b, f::FLIP);
     x.set8(f::FLIP, flip);
-    let row = (x.u8(PART).wrapping_mul(4)) as u32;
+    let row = (x.u8(DisplacerBeast::PART).wrapping_mul(4)) as u32;
     let mut dx = x.rom16(OFFSETS + row);
     let dy = x.rom16(OFFSETS + row + 2);
     if flip != 0 {
@@ -227,8 +227,8 @@ fn rally<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     }
     let ax = dx.wrapping_add(p.u16(x.b, Obj::X));
     let ay = dy.wrapping_add(p.u16(x.b, Obj::Y));
-    x.set16(AIM_X, ax);
-    x.set16(AIM_Y, ay);
+    x.set16(DisplacerBeast::AIM_X, ax);
+    x.set16(DisplacerBeast::AIM_Y, ay);
     // D2 (low word) = aimed Y, left as a leftover (the original leaves the computation of 0x137e there, which
     // `aim_from` does not return).
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | ay as u32;
@@ -236,7 +236,7 @@ fn rally<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.set8(Obj::SPEED_INDEX, angle);
     move_xy(x);
     let near = |a: u16, b: u16| a.wrapping_sub(b).wrapping_add(8) <= 0x10;
-    near(x.u16(AIM_X), x.u16(Obj::X)) && near(x.u16(AIM_Y), x.u16(Obj::Y))
+    near(x.u16(DisplacerBeast::AIM_X), x.u16(Obj::X)) && near(x.u16(DisplacerBeast::AIM_Y), x.u16(Obj::Y))
 }
 
 /// +6 = 4 (0x725e2): the part gets up, waits, then rejoins its parent.
@@ -245,14 +245,14 @@ fn reach<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
             x.set8(Enemy::ACTIVE, 2);
-            x.set8(TIMER, 0x28);
+            x.set8(DisplacerBeast::TIMER, 0x28);
             play(x, 0xd);
             speed(x, 0x17);
             step(x);
         }
         2 => {
-            let t = x.u8(TIMER).wrapping_sub(1);
-            x.set8(TIMER, t);
+            let t = x.u8(DisplacerBeast::TIMER).wrapping_sub(1);
+            x.set8(DisplacerBeast::TIMER, t);
             if (t as i8) < 0 {
                 x.add8(Enemy::SUB_STEP, 2);
             }
@@ -293,7 +293,7 @@ fn spit<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(Enemy::SUB_STEP, 2);
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             play(x, 3);
         }
         2 => finish_to_stance(x),
@@ -323,7 +323,7 @@ fn spit_once<R: Bench>(x: &mut Cx<'_, R>) {
             return;
         }
         x.add8(Enemy::SUB_STEP, 2);
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         set_state_long(x, ACTIVE_STANCE);
         play(x, 0);
     }
@@ -333,7 +333,7 @@ fn spit_once<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn bound_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(Enemy::SUB_STEP, 2);
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
     }
     step(x);
 }
@@ -345,9 +345,9 @@ pub(super) fn bound_land<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set32(Obj::Z, 0);
     x.add8(Enemy::SUB_STEP, 2);
-    x.set8(VULNERABLE, 1);
-    x.set8(WANT_ANIM, 0x18);
-    x.set8(CUR_ANIM, 0x18);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(DisplacerBeast::WANT_ANIM, 0x18);
+    x.set8(DisplacerBeast::CUR_ANIM, 0x18);
     play(x, 0xf);
 }
 
@@ -356,9 +356,9 @@ fn bound<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Enemy::SUB_STEP) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(WANT_ANIM, 6);
-            x.set8(CUR_ANIM, 6);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(DisplacerBeast::WANT_ANIM, 6);
+            x.set8(DisplacerBeast::CUR_ANIM, 6);
             let vx = if x.u8(f::FLIP) != 0 { 0x3c0 } else { -0x3c0 };
             set_velocity(x, vx, 0x4c0, -0x38);
             play(x, 6);
@@ -374,9 +374,9 @@ fn bound<R: Bench>(x: &mut Cx<'_, R>) {
 fn bound_y_start<R: Bench>(x: &mut Cx<'_, R>, vy: i16, anim_marker: u8, anim: u8) {
     x.set16(Enemy::VY, vy as u16);
     x.add8(Enemy::SUB_STEP, 2);
-    x.set8(VULNERABLE, 1);
-    x.set8(WANT_ANIM, anim_marker);
-    x.set8(CUR_ANIM, anim_marker);
+    x.set8(Enemy::VULNERABLE, 1);
+    x.set8(DisplacerBeast::WANT_ANIM, anim_marker);
+    x.set8(DisplacerBeast::CUR_ANIM, anim_marker);
     x.set16(Enemy::AY, 0);
     x.set16(Enemy::VZ, 0x500);
     x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
@@ -388,7 +388,7 @@ pub(super) fn bound_y_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         lib::sound(x, crate::sound::CMD_36F_46F);
         x.add8(Enemy::SUB_STEP, 2);
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
     }
     step(x);
 }
@@ -399,10 +399,10 @@ pub(super) fn bound_y_land<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set32(Obj::Z, 0);
     x.add8(Enemy::SUB_STEP, 2);
-    x.set8(VULNERABLE, 1);
+    x.set8(Enemy::VULNERABLE, 1);
     x.set8(Enemy::ACTIVE, 1);
-    x.set8(WANT_ANIM, 0x18);
-    x.set8(CUR_ANIM, 0x18);
+    x.set8(DisplacerBeast::WANT_ANIM, 0x18);
+    x.set8(DisplacerBeast::CUR_ANIM, 0x18);
     play(x, 0xf);
 }
 
@@ -413,9 +413,9 @@ fn bound_x<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Enemy::VY, 0x140);
             x.add8(Enemy::SUB_STEP, 2);
             x.set8(Enemy::ACTIVE, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(WANT_ANIM, 0xd);
-            x.set8(CUR_ANIM, 0xd);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(DisplacerBeast::WANT_ANIM, 0xd);
+            x.set8(DisplacerBeast::CUR_ANIM, 0xd);
             x.set16(Enemy::AY, 0);
             x.set16(Enemy::VZ, 0x500);
             x.set16(Enemy::GRAVITY, (-0x38i16) as u16);
@@ -444,8 +444,8 @@ fn drop_in<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Enemy::SUB_STEP) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
-            x.set8(VULNERABLE, 1);
-            x.set8(WANT_ANIM, 0x19);
+            x.set8(Enemy::VULNERABLE, 1);
+            x.set8(DisplacerBeast::WANT_ANIM, 0x19);
             x.set16(Enemy::VZ, (-0x300i16) as u16);
             x.set16(Enemy::GRAVITY, (-0x10i16) as u16);
             let h = var::SCROLL_Y.get(x.b).wrapping_add(0x100).wrapping_sub(x.u16(Obj::Y));
@@ -468,7 +468,7 @@ fn drop_in<R: Bench>(x: &mut Cx<'_, R>) {
 /// Forward slide with the speed from the table (0x729bc / 0x72a2a).
 fn slide_start<R: Bench>(x: &mut Cx<'_, R>, anim: u8, delay: u16) {
     x.add8(Enemy::SUB_STEP, 2);
-    x.set16(TIMER, delay);
+    x.set16(DisplacerBeast::TIMER, delay);
     x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) == 0 {
         x.set8(Obj::SPEED_INDEX, 0x18);
@@ -481,12 +481,12 @@ fn slide_start<R: Bench>(x: &mut Cx<'_, R>, anim: u8, delay: u16) {
 fn slide<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Enemy::SUB_STEP) {
         0 => {
-            x.set8(VULNERABLE, 1);
+            x.set8(Enemy::VULNERABLE, 1);
             slide_start(x, 0xd, 0x1e);
         }
         2 => {
-            let t = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, t);
+            let t = x.u16(DisplacerBeast::TIMER).wrapping_sub(1);
+            x.set16(DisplacerBeast::TIMER, t);
             if (t as i16) < 0 {
                 set_state_long(x, ACTIVE_STANCE);
             }
@@ -507,8 +507,8 @@ fn sneak_gen<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::o
             slide_start(x, 8, delay);
         }
         2 => {
-            let t = x.u16(TIMER).wrapping_sub(1);
-            x.set16(TIMER, t);
+            let t = x.u16(DisplacerBeast::TIMER).wrapping_sub(1);
+            x.set16(DisplacerBeast::TIMER, t);
             if (t as i16) >= 0 {
                 step(x);
                 return move_xy(x);

@@ -19,13 +19,13 @@ fn pick_jump_move<R: Bench>(x: &mut Cx<'_, R>) {
 // --- substate 4 --------------------------------------------------------------------------------
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(BLINK_PHASE) != 0 && (x.u8(BLINK_PHASE) as i8) > 0 {
-        let n = x.u16(BLINK_COUNT).wrapping_sub(1);
-        x.set16(BLINK_COUNT, n);
+    if x.u8(Trog::BLINK_PHASE) != 0 && (x.u8(Trog::BLINK_PHASE) as i8) > 0 {
+        let n = x.u16(Trog::BLINK_COUNT).wrapping_sub(1);
+        x.set16(Trog::BLINK_COUNT, n);
         if (n as i16) < 0 {
-            x.set8(BLINK_ON, 0);
-            x.set8(BLINK_WAIT, 0);
-            x.set8(BLINK_PHASE, 0xff);
+            x.set8(Trog::BLINK_ON, 0);
+            x.set8(Trog::BLINK_WAIT, 0);
+            x.set8(Trog::BLINK_PHASE, 0xff);
             x.set_bit(Enemy::DISPLAY, 1, false);
         }
     }
@@ -48,8 +48,8 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn combo<R: Bench>(x: &mut Cx<'_, R>, id: u8) {
     if x.u8(f::SUB3) != 0 {
         if step(x) {
-            let n = x.u8(REPEAT).wrapping_sub(1);
-            x.set8(REPEAT, n);
+            let n = x.u8(Trog::REPEAT).wrapping_sub(1);
+            x.set8(Trog::REPEAT, n);
             if (n as i8) < 0 {
                 return end_attack(x);
             }
@@ -58,29 +58,29 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>, id: u8) {
         return;
     }
     x.add8(f::SUB3, 2);
-    let look = x.u8(LOOK);
-    x.set8(LOOK_PREV, look);
-    x.set8(REPEAT, 0);
+    let look = x.u8(Trog::LOOK);
+    x.set8(Trog::LOOK_PREV, look);
+    x.set8(Trog::REPEAT, 0);
     let mut d3 = 0;
-    x.set8(LOOK, 0xff);
+    x.set8(Trog::LOOK, 0xff);
     let mut anim = id as u32;
     match id {
         2 => {}
         0 => {
-            x.set8(LOOK, 0xfe);
+            x.set8(Trog::LOOK, 0xfe);
         }
         _ => {
-            x.set8(AI_KIND, 3);
-            x.set8(LOOK, 0xfd);
+            x.set8(Enemy::AI_SHOT, 3);
+            x.set8(Trog::LOOK, 0xfd);
             d3 = 2;
             let r = rand_and(x, 1);
             d3 += r;
             anim = r;
         }
     }
-    x.set8(STRIKE_KIND, 0x15);
-    x.set8(REPEAT, d3 as u8);
-    x.set8(STRIKE_POWER, 5);
+    x.set8(Enemy::STRIKE_KIND, 0x15);
+    x.set8(Trog::REPEAT, d3 as u8);
+    x.set8(Enemy::STRIKE_POWER, 5);
     strike(x, anim);
 }
 
@@ -88,22 +88,22 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>, id: u8) {
 fn double<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(AI_KIND, 3);
-        x.set8(REPEAT, 1);
+        x.set8(Enemy::AI_SHOT, 3);
+        x.set8(Trog::REPEAT, 1);
         let r = rand_and(x, 1);
-        x.add8(REPEAT, r as u8);
-        x.set8(STRIKE_KIND, 0x15);
-        x.set8(STRIKE_POWER, 5);
+        x.add8(Trog::REPEAT, r as u8);
+        x.set8(Enemy::STRIKE_KIND, 0x15);
+        x.set8(Enemy::STRIKE_POWER, 5);
         return strike(x, 0);
     }
     if step(x) {
-        let n = x.u8(REPEAT).wrapping_sub(1);
-        x.set8(REPEAT, n);
+        let n = x.u8(Trog::REPEAT).wrapping_sub(1);
+        x.set8(Trog::REPEAT, n);
         if (n as i8) < 0 {
             return end_attack(x);
         }
-        x.set8(STRIKE_KIND, 0x16);
-        x.set8(STRIKE_POWER, 5);
+        x.set8(Enemy::STRIKE_KIND, 0x16);
+        x.set8(Enemy::STRIKE_POWER, 5);
         strike(x, 1);
     }
 }
@@ -119,23 +119,23 @@ fn leap_strike<R: Bench>(x: &mut Cx<'_, R>, id: u8) {
                 set_state_long(x, IDLE);
                 return rest_begin(x);
             }
-            let look = x.u8(LOOK);
-            x.set8(LOOK_PREV, look);
-            x.set8(LOOK, 0xf0);
+            let look = x.u8(Trog::LOOK);
+            x.set8(Trog::LOOK_PREV, look);
+            x.set8(Trog::LOOK, 0xf0);
             x.set16(Obj::VZ, 0x680);
             x.set16(Obj::AZ, -0x38i16 as u16);
             x.set16(Obj::AX, 0);
             let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X));
             x.set16(Obj::VX, dx << 2);
-            x.set8(STRIKE_KIND, 0x17);
+            x.set8(Enemy::STRIKE_KIND, 0x17);
             let mut away = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
             if (away as i16) < 0 {
                 away = away.wrapping_neg();
             }
             if away > 0x70 {
-                x.set8(STRIKE_KIND, 0x18);
+                x.set8(Enemy::STRIKE_KIND, 0x18);
             }
-            x.set8(STRIKE_POWER, 5);
+            x.set8(Enemy::STRIKE_POWER, 5);
             strike(x, 2);
         }
         2 => land_with(x),
@@ -147,8 +147,8 @@ fn leap_strike<R: Bench>(x: &mut Cx<'_, R>, id: u8) {
                 return end_attack(x);
             }
             let r = rand_and(x, 2);
-            let look = x.u8(LOOK);
-            x.set8(LOOK_PREV, look);
+            let look = x.u8(Trog::LOOK);
+            x.set8(Trog::LOOK_PREV, look);
             x.set8(f::SUB2, r as u8);
             x.set8(f::SUB3, 0);
         }
@@ -170,16 +170,16 @@ fn land_with<R: Bench>(x: &mut Cx<'_, R>) {
 fn stab<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(AI_KIND, 2);
+        x.set8(Enemy::AI_SHOT, 2);
         let row = difficulty_row(x);
         let n = rand_and(x, 0x1f);
         let v = x.data8(REPEATS_TABLE + row + n);
-        x.set8(REPEAT, v);
+        x.set8(Trog::REPEAT, v);
         return stab_begin(x);
     }
     if step(x) {
-        let n = x.u8(REPEAT).wrapping_sub(1);
-        x.set8(REPEAT, n);
+        let n = x.u8(Trog::REPEAT).wrapping_sub(1);
+        x.set8(Trog::REPEAT, n);
         if (n as i8) >= 0 {
             return stab_begin(x);
         }
@@ -188,8 +188,8 @@ fn stab<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn stab_begin<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(STRIKE_KIND, 0x1a);
-    x.set8(STRIKE_POWER, 5);
+    x.set8(Enemy::STRIKE_KIND, 0x1a);
+    x.set8(Enemy::STRIKE_POWER, 5);
     strike(x, 5);
 }
 
@@ -198,15 +198,15 @@ fn throw<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         if crate::families::eshl_creators::four_3(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o) {
-            x.set8(REPEAT, 6);
+            x.set8(Trog::REPEAT, 6);
             return body(x, 8);
         }
         set_state_long(x, IDLE);
         return rest_begin(x);
     }
     if step(x) {
-        let n = x.u8(REPEAT).wrapping_sub(1);
-        x.set8(REPEAT, n);
+        let n = x.u8(Trog::REPEAT).wrapping_sub(1);
+        x.set8(Trog::REPEAT, n);
         if (n as i8) >= 0 {
             body(x, 8);
         } else {
@@ -223,8 +223,8 @@ fn dash<R: Bench>(x: &mut Cx<'_, R>) {
                 return long_jump(x);
             }
             x.add8(f::SUB3, 4);
-            x.set8(LOOK_PREV, 0);
-            x.set8(REPEAT, 0x20);
+            x.set8(Trog::LOOK_PREV, 0);
+            x.set8(Trog::REPEAT, 0x20);
             walk_speed(x, 4);
             set_angle(x, 0x18, 8);
             body(x, 2);
@@ -233,8 +233,8 @@ fn dash<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             move_xy(x);
             step(x);
-            let n = x.u8(REPEAT).wrapping_sub(1);
-            x.set8(REPEAT, n);
+            let n = x.u8(Trog::REPEAT).wrapping_sub(1);
+            x.set8(Trog::REPEAT, n);
             if (n as i8) < 0 {
                 set_state_long(x, STANCE);
             }
@@ -252,7 +252,7 @@ fn dash<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5a5a4: big sideways leap.
 fn long_jump<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 6);
-    x.set8(LOOK_PREV, 0xcc);
+    x.set8(Trog::LOOK_PREV, 0xcc);
     x.set16(Obj::AZ, -0x38i16 as u16);
     x.set16(Obj::VZ, 0x250);
     x.set16(Obj::VX, 0x300);
@@ -270,7 +270,7 @@ fn long_jump<R: Bench>(x: &mut Cx<'_, R>) {
 fn special<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(AI_KIND, 2);
+        x.set8(Enemy::AI_SHOT, 2);
         return strike(x, 3);
     }
     if step(x) {
@@ -286,26 +286,26 @@ fn special<R: Bench>(x: &mut Cx<'_, R>) {
 fn approach<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(LOOK_PREV, 1);
+        x.set8(Trog::LOOK_PREV, 1);
         lib::pick_byte(x);
-        if x.u8(COOLDOWN) == 0 {
+        if x.u8(Enemy::AI_BYTE) == 0 {
             x.set8(f::SUB3, 0);
-            let next = x.u8(RESUME);
+            let next = x.u8(Trog::RESUME);
             x.set8(f::SUB2, next);
         } else {
-            x.set8(LOOK_PREV, 1);
+            x.set8(Trog::LOOK_PREV, 1);
         }
         return body(x, 0);
     }
     step(x);
-    let n = x.u8(COOLDOWN).wrapping_sub(1);
-    x.set8(COOLDOWN, n);
+    let n = x.u8(Enemy::AI_BYTE).wrapping_sub(1);
+    x.set8(Enemy::AI_BYTE, n);
     if (n as i8) < 0 {
         x.set8(f::SUB3, 0);
         if needs_turn_around(x) {
             x.add8(f::SUB2, 2);
         } else {
-            let next = x.u8(RESUME);
+            let next = x.u8(Trog::RESUME);
             x.set8(f::SUB2, next);
         }
     }
@@ -315,13 +315,13 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
 fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(LOOK_PREV, 0xe);
+        x.set8(Trog::LOOK_PREV, 0xe);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
         return body(x, 1);
     }
     if step(x) {
-        let next = x.u8(RESUME);
+        let next = x.u8(Trog::RESUME);
         x.set8(f::SUB2, next);
         x.set8(f::SUB3, 0);
     }
@@ -331,13 +331,13 @@ fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
 fn long_gesture<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(REPEAT, 6);
-        x.set8(LOOK_PREV, 0xee);
+        x.set8(Trog::REPEAT, 6);
+        x.set8(Trog::LOOK_PREV, 0xee);
         return body(x, 8);
     }
     if step(x) {
-        let n = x.u8(REPEAT).wrapping_sub(1);
-        x.set8(REPEAT, n);
+        let n = x.u8(Trog::REPEAT).wrapping_sub(1);
+        x.set8(Trog::REPEAT, n);
         if (n as i8) >= 0 {
             body(x, 8);
         } else {
@@ -366,8 +366,8 @@ pub(super) fn run_b<R: Bench>(x: &mut Cx<'_, R>) {
 fn hold<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(LOOK_PREV, 0xee);
-        x.set8(VULNERABLE, 1);
+        x.set8(Trog::LOOK_PREV, 0xee);
+        x.set8(Enemy::VULNERABLE, 1);
         return body(x, 8);
     }
     if step(x) {
@@ -379,15 +379,15 @@ fn hold<R: Bench>(x: &mut Cx<'_, R>) {
 fn guard<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(POSTURE, 9);
-        x.set8(LOOK, 0xdf);
-        x.set8(REPEAT, 0x3c);
+        x.set8(Enemy::AI_68, 9);
+        x.set8(Trog::LOOK, 0xdf);
+        x.set8(Trog::REPEAT, 0x3c);
         return body(x, 0xd);
     }
-    let n = x.u8(REPEAT).wrapping_sub(1);
-    x.set8(REPEAT, n);
+    let n = x.u8(Trog::REPEAT).wrapping_sub(1);
+    x.set8(Trog::REPEAT, n);
     if n == 0 {
-        x.set8(POSTURE, 4);
+        x.set8(Enemy::AI_68, 4);
         back_to_stance(x);
     }
 }
@@ -396,7 +396,7 @@ fn guard<R: Bench>(x: &mut Cx<'_, R>) {
 fn side_hop<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
-        x.set8(LOOK_PREV, 0xb1);
+        x.set8(Trog::LOOK_PREV, 0xb1);
         x.set16(Obj::VZ, 0x600);
         x.set16(Obj::AZ, -0x38i16 as u16);
         x.set16(Obj::AY, 0);
@@ -438,7 +438,7 @@ fn forward_hop<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5a8c8.
 pub(super) fn forward_hop_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set8(LOOK_PREV, 0xb0);
+    x.set8(Trog::LOOK_PREV, 0xb0);
     x.set8(Obj::SPEED_INDEX, 8);
     if x.u8(f::FLIP) != 0 {
         x.add8(Obj::SPEED_INDEX, 0x10);
@@ -472,7 +472,7 @@ fn hop_strike<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5a934.
 pub(super) fn hop_strike_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set8(LOOK_PREV, 0xb2);
+    x.set8(Trog::LOOK_PREV, 0xb2);
     x.set16(Obj::VZ, 0x680);
     x.set16(Obj::AZ, -0x38i16 as u16);
     x.set16(Obj::AX, 0);
@@ -480,8 +480,8 @@ pub(super) fn hop_strike_begin<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::FLIP) != 0 {
         negate(x, Obj::VX);
     }
-    x.set8(STRIKE_KIND, 0x16);
-    x.set8(STRIKE_POWER, 5);
+    x.set8(Enemy::STRIKE_KIND, 0x16);
+    x.set8(Enemy::STRIKE_POWER, 5);
     strike(x, 6);
 }
 
@@ -492,22 +492,22 @@ pub(super) fn run_fallback<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             if x.u8(f::SUB3) == 0 {
                 x.add8(f::SUB3, 2);
-                x.set8(VULNERABLE, 1);
-                x.set8(REPEAT, 0x10);
-                x.set8(LOOK_PREV, 1);
-                x.set8(LOOK, 1);
+                x.set8(Enemy::VULNERABLE, 1);
+                x.set8(Trog::REPEAT, 0x10);
+                x.set8(Trog::LOOK_PREV, 1);
+                x.set8(Trog::LOOK, 1);
                 return body(x, 0);
             }
             step(x);
-            let n = x.u8(REPEAT).wrapping_sub(1);
-            x.set8(REPEAT, n);
+            let n = x.u8(Trog::REPEAT).wrapping_sub(1);
+            x.set8(Trog::REPEAT, n);
             if (n as i8) < 0 {
                 set_state_long(x, STANCE);
             }
         }
         2 => {
             x.set8(f::SUB, 6);
-            if x.u8(SERIES) == 0 {
+            if x.u8(Enemy::GROUP) == 0 {
                 x.set8(f::SUB2, 6);
                 forward_hop_begin(x);
             } else {
@@ -526,7 +526,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             if rand_and(x, 1) == 0 {
-                x.set8(REPEAT, 0x10);
+                x.set8(Trog::REPEAT, 0x10);
                 x.set8(Obj::SPEED_INDEX, 0);
                 if x.u8(f::FLIP) == 0 {
                     x.set8(Obj::SPEED_INDEX, 0x10);
@@ -556,8 +556,8 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
         2 => {
             move_xy(x);
             step(x);
-            let n = x.u8(REPEAT).wrapping_sub(1);
-            x.set8(REPEAT, n);
+            let n = x.u8(Trog::REPEAT).wrapping_sub(1);
+            x.set8(Trog::REPEAT, n);
             if (n as i8) < 0 {
                 set_state_long(x, STANCE);
             }
@@ -565,7 +565,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             x.move_yz();
             if step(x) && (x.u16(Obj::Z) as i16) < 0 {
-                x.set8(LOOK_PREV, 0xe0);
+                x.set8(Trog::LOOK_PREV, 0xe0);
                 x.set16(Obj::Z, 0);
                 set_state_long(x, STANCE);
             }
@@ -581,11 +581,11 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// `+6` = 6: chooses the next attack according to the target.
 fn choose<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(LOOK_PREV, 1);
+    x.set8(Trog::LOOK_PREV, 1);
     body(x, 0);
     if lib::target_in_box(x, -0x20, 0x20, 8) {
         set_state_long(x, 0x0204_1600);
-        return x.set8(RESUME, 6);
+        return x.set8(Trog::RESUME, 6);
     }
     if front_box(x) {
         return super::stance::pick_attack_close(x);

@@ -16,6 +16,7 @@
 //! Animations 0x177874 and 0x17788c (movements and attacks), 0x1778a4 (death).
 
 use crate::families::cx::Bench;
+use crate::record::record;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
@@ -27,28 +28,33 @@ mod attacks;
 pub(crate) mod hit;
 mod stance;
 
-mod g {
-    pub const ANIM_FLAGS: u32 = 0x32;
-    pub const ARM_OF: u32 = 0x46;
-    pub const VULNERABLE: u32 = 0x67;
-    pub const WANDER: u32 = 0x6b;
-    pub const TURNS: u32 = 0x6e;
-    pub const CHARGE: u32 = 0x71;
-    pub const STRIKE_KIND_NEXT: u32 = 0x79;
-    pub const NO_GRAB: u32 = 0x86;
-    pub const LOOK: u32 = 0xa0;
-    pub const LOOK_PREV: u32 = 0xa1;
-    pub const SAVED_STATE: u32 = 0xa2;
-    pub const TIMER: u32 = 0xa6;
-    pub const TIMER2: u32 = 0xa8;
-    pub const PHASE: u32 = 0xaa;
-    pub const INVULNERABLE: u32 = 0xad;
-    pub const ARM: u32 = 0xb0;
-    pub const SIDE_TURN: u32 = 0xb2;
-    pub const FLASH: u32 = 0xb3;
-    pub const GOAL_X: u32 = 0xbc;
+/// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
+/// marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Ogre(pub Obj);
+
+impl Ogre {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
 }
-use g::*;
+
+record! {
+    impl Ogre {
+        arm_of, set_arm_of, ARM_OF: u8 @ 0x46;
+        look, set_look, LOOK: u8 @ 0xa0;
+        look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa1;
+        saved_state, set_saved_state, SAVED_STATE: u32 @ 0xa2;
+        timer, set_timer, TIMER: u16 @ 0xa6;
+        timer2, set_timer2, TIMER2: u16 @ 0xa8;
+        phase, set_phase, PHASE: u8 @ 0xaa;
+        invulnerable, set_invulnerable, INVULNERABLE: u8 @ 0xad;
+        arm, set_arm, ARM: u8 @ 0xb0;
+        side_turn, set_side_turn, SIDE_TURN: u8 @ 0xb2;
+        flash, set_flash, FLASH: u8 @ 0xb3;
+        goal_x, set_goal_x, GOAL_X: u16 @ 0xbc;
+    }
+}
 use crate::objects::pools;
 use crate::objects::Current;
 
@@ -71,7 +77,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         st::DEAD => x.free(&pools::ENEMY),
         _ => {}
     }
-    if x.u8(INVULNERABLE) != 0 {
+    if x.u8(Ogre::INVULNERABLE) != 0 {
         x.set8(Enemy::FRAME_TAG, 0);
     }
     if x.u8(Enemy::ACTIVE) != 0 {
@@ -84,7 +90,7 @@ fn arm_dies_with_ogre<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(Obj::VARIANT) as i8) >= 0 || x.u16(f::STATE) == 0x0406 {
         return;
     }
-    let owner = x.linked(ARM_OF);
+    let owner = x.linked(Ogre::ARM_OF);
     if (owner.u16(x.b, f::HP) as i16) > 0 {
         return;
     }
@@ -107,8 +113,8 @@ fn act<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
-    x.set8(LOOK, v);
-    x.set8(LOOK_PREV, v);
+    x.set8(Ogre::LOOK, v);
+    x.set8(Ogre::LOOK_PREV, v);
 }
 
 fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
@@ -157,12 +163,12 @@ fn nobody_left<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = ((x.u8(f::KEY_FRAME) & 0x7f) as u32) << 2;
     let mut d = x.prog32(0x71dc6 + idx) as i32;
-    if (x.u16(TIMER2) as i16) <= 0x24 {
+    if (x.u16(Ogre::TIMER2) as i16) <= 0x24 {
         d = d.wrapping_neg();
     }
     x.add32(Obj::Z, d as u32);
-    if !count_down(x, TIMER2) {
-        x.set16(TIMER2, 0x48);
+    if !count_down(x, Ogre::TIMER2) {
+        x.set16(Ogre::TIMER2, 0x48);
     }
 }
 
@@ -171,8 +177,8 @@ fn flash_key<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(f::KEY_FRAME) as i8) < 0 {
         let k = x.u8(f::KEY_FRAME) & 0x7f;
         x.set8(f::KEY_FRAME, k);
-        let f = x.u8(FLASH) ^ 1;
-        x.set8(FLASH, f);
+        let f = x.u8(Ogre::FLASH) ^ 1;
+        x.set8(Ogre::FLASH, f);
         lib::ground_debris(x, f);
     }
 }
@@ -184,60 +190,60 @@ mod go {
 
     /// 0x71cac : debout.
     pub fn stand<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         set_state_long(x, 0x0202_0000);
     }
     /// 0x71cbc: turn-around, saving the current state.
     pub fn turn_around<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
         let s = x.u32(f::STATE);
-        x.set32(SAVED_STATE, s);
+        x.set32(Ogre::SAVED_STATE, s);
         set_state_long(x, 0x0202_0200);
     }
     pub fn wander<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 1);
-        x.set8(STRIKE_KIND_NEXT, 0x2c);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(Enemy::AI_POINT_SET, 0x2c);
         set_state_long(x, 0x0202_0400);
     }
     pub fn wander_far<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 1);
-        x.set8(STRIKE_KIND_NEXT, 0x2d);
+        x.set8(Enemy::VULNERABLE, 1);
+        x.set8(Enemy::AI_POINT_SET, 0x2d);
         set_state_long(x, 0x0202_0600);
     }
     pub fn dive<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
-        x.set8(SIDE_TURN, 0);
+        x.set8(Enemy::VULNERABLE, 0);
+        x.set8(Ogre::SIDE_TURN, 0);
         set_state_long(x, 0x0202_0800);
     }
     pub fn dive_side<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
-        x.set8(SIDE_TURN, 1);
+        x.set8(Enemy::VULNERABLE, 0);
+        x.set8(Ogre::SIDE_TURN, 1);
         set_state_long(x, 0x0202_0800);
     }
     pub fn leap<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0202_0a00);
     }
     pub fn strike_0<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 1);
         set_state_long(x, 0x0204_0000);
     }
     pub fn strike_2<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0204_0200);
     }
     pub fn strike_4<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(VULNERABLE, 0);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0204_0400);
     }
     pub fn strike_6<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(INVULNERABLE, 1);
-        x.set8(VULNERABLE, 0);
+        x.set8(Ogre::INVULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0204_0600);
     }
     pub fn strike_8<R: Bench>(x: &mut Cx<'_, R>) {
-        x.set8(INVULNERABLE, 1);
-        x.set8(VULNERABLE, 0);
+        x.set8(Ogre::INVULNERABLE, 1);
+        x.set8(Enemy::VULNERABLE, 0);
         set_state_long(x, 0x0204_0800);
     }
     pub fn retire<R: Bench>(x: &mut Cx<'_, R>) {
@@ -283,9 +289,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         (Enemy::AI_ROW_8E, 3),
         (Enemy::AI_68, 8),
         (Enemy::AI_69, 1),
-        (VULNERABLE, 0),
-        (LOOK, 0),
-        (LOOK_PREV, 0xff),
+        (Enemy::VULNERABLE, 0),
+        (Ogre::LOOK, 0),
+        (Ogre::LOOK_PREV, 0xff),
         (Enemy::EVENT_KIND, 0x17),
         (Enemy::EVENT_LOW, 0),
         (Enemy::LOOT_ROW, 0x21),
@@ -295,7 +301,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     }
     pick_target(x);
     mv(x, 0);
-    x.set8(INVULNERABLE, 1);
+    x.set8(Ogre::INVULNERABLE, 1);
     let state = match x.u8(Obj::VARIANT) as i8 {
         v if v < 0 => 0x0200_0000,
         0 => 0x0200_0200,

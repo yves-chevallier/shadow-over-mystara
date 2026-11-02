@@ -86,7 +86,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
             if x.anim_step() {
                 x.set8(Enemy::DOWNED, 0);
                 x.set8(Enemy::ACTIVE, 1);
-                x.set8(VULNERABLE, 1);
+                x.set8(Enemy::VULNERABLE, 1);
                 set_state_long(x, STANCE);
             }
         }

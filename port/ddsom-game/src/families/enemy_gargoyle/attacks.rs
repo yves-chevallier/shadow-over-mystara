@@ -25,8 +25,8 @@ fn strike_hit<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Releases the grabbed victim (`+0x54`): its grab flags drop back.
 fn release_victim<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u16(VICTIM) != 0 {
-        let v = x.linked(VICTIM);
+    if x.u16(Gargoyle::VICTIM) != 0 {
+        let v = x.linked(Gargoyle::VICTIM);
         v.set_u8(x.b, Enemy::EVENT_KIND, 0);
         v.set_u8(x.b, Enemy::FREEZE, 0);
     }
@@ -58,7 +58,7 @@ fn claw<R: Bench>(x: &mut Cx<'_, R>) {
             if !lib::step(x) {
                 return strike_hit(x);
             }
-            let grab = lib::players_alive(x) && x.u8(GRABBED_ONCE) != 0 && x.u8(HIT_FLAGS) & 4 != 0;
+            let grab = lib::players_alive(x) && x.u8(Gargoyle::GRABBED_ONCE) != 0 && x.u8(Gargoyle::HIT_FLAGS) & 4 != 0;
             if grab {
                 release_victim(x);
                 return go::strike_2(x, true);
@@ -88,7 +88,7 @@ fn claw_b<R: Bench>(x: &mut Cx<'_, R>) {
             if !lib::step(x) {
                 return strike_hit(x);
             }
-            let grab = lib::players_alive(x) && x.u8(GRABBED_ONCE) != 0 && x.u8(HIT_FLAGS) & 4 != 0;
+            let grab = lib::players_alive(x) && x.u8(Gargoyle::GRABBED_ONCE) != 0 && x.u8(Gargoyle::HIT_FLAGS) & 4 != 0;
             if grab {
                 release_victim(x);
                 return go::strike_4(x, true);
@@ -112,7 +112,7 @@ fn short_blow<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB3, 2);
             look(x, 0x12);
-            let n = if x.u8(GRABBED_ONCE) != 0 { 5 } else { 4 };
+            let n = if x.u8(Gargoyle::GRABBED_ONCE) != 0 { 5 } else { 4 };
             strike(x, n);
         }
         2 => {
@@ -136,12 +136,12 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => {
             lib::step(x);
-            if x.u8(ANIM_FLAGS) == 0 {
+            if x.u8(Enemy::ANIM_END_BYTE) == 0 {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x1a);
-            x.set16(TIMER2, 0);
+            x.set16(Gargoyle::TIMER, 0x1a);
+            x.set16(Gargoyle::TIMER2, 0);
             let (angle, vy) = if x.u8(f::FLIP) != 0 { (8, -0x38i16) } else { (0x18, 0x38) };
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(Obj::AX, vy as u16);
@@ -149,25 +149,25 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
             lib::sound(x, crate::sound::CMD_363_363);
         }
         4 => {
-            if !count_down(x, TIMER2) {
-                x.set16(TIMER2, 4);
+            if !count_down(x, Gargoyle::TIMER2) {
+                x.set16(Gargoyle::TIMER2, 4);
                 spark(x, 8);
             }
             x.move_x();
-            if count_down(x, TIMER) {
+            if count_down(x, Gargoyle::TIMER) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x14);
+            x.set16(Gargoyle::TIMER, 0x14);
             x.set16(Obj::AX, 0);
             strike(x, 7);
         }
         6 => {
-            if !count_down(x, TIMER2) {
-                x.set16(TIMER2, 6);
+            if !count_down(x, Gargoyle::TIMER2) {
+                x.set16(Gargoyle::TIMER2, 6);
                 spark(x, 8);
             }
-            if count_down(x, TIMER) {
+            if count_down(x, Gargoyle::TIMER) {
                 x.move_x();
                 lib::step(x);
             } else if lib::players_alive(x) {
@@ -216,7 +216,7 @@ fn jump_back<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set8(INVULNERABLE, 0);
+            x.set8(Gargoyle::INVULNERABLE, 0);
             x.set16(Obj::AX, 0);
             x.set16(Obj::AZ, -0x20i16 as u16);
             strike(x, 0xa);
@@ -305,17 +305,17 @@ fn plunge_attack<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB3, 2);
-            x.set16(TIMER, 0x14);
-            x.set16(TIMER2, 0);
+            x.set16(Gargoyle::TIMER, 0x14);
+            x.set16(Gargoyle::TIMER2, 0);
             x.set16(Obj::Z, 0);
             fly(x, 6);
         }
         8 => {
-            if !count_down(x, TIMER2) {
-                x.set16(TIMER2, 4);
+            if !count_down(x, Gargoyle::TIMER2) {
+                x.set16(Gargoyle::TIMER2, 4);
                 spark(x, 8);
             }
-            if count_down(x, TIMER) {
+            if count_down(x, Gargoyle::TIMER) {
                 x.move_x();
                 lib::step(x);
             } else {
@@ -338,7 +338,7 @@ fn stoop<R: Bench>(x: &mut Cx<'_, R>) {
         2 => {
             if (x.u16(Obj::Z) as i16) >= 0x34 && x.u8(f::KEY_FRAME) == 4 {
                 x.add8(f::SUB3, 2);
-                x.set16(TIMER, 2);
+                x.set16(Gargoyle::TIMER, 2);
             } else {
                 rise(x);
             }
@@ -347,7 +347,7 @@ fn stoop<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             bob(x);
             face_target(x);
-            if count_down(x, TIMER) {
+            if count_down(x, Gargoyle::TIMER) {
                 lib::step(x);
             } else {
                 x.add8(f::SUB3, 2);
@@ -359,11 +359,11 @@ fn stoop<R: Bench>(x: &mut Cx<'_, R>) {
             if (x.u16(Obj::Z) as i16) <= 0 {
                 return land_from_dive(x);
             }
-            if (x.u16(TIMER) as i16) > 0 {
-                let n = x.u16(TIMER).wrapping_sub(1);
-                x.set16(TIMER, n);
+            if (x.u16(Gargoyle::TIMER) as i16) > 0 {
+                let n = x.u16(Gargoyle::TIMER).wrapping_sub(1);
+                x.set16(Gargoyle::TIMER, n);
                 if (n as i16) <= 0 {
-                    x.set16(TIMER, 0);
+                    x.set16(Gargoyle::TIMER, 0);
                     x.set16(Obj::VZ, 0);
                     x.set16(Obj::AZ, -0x30i16 as u16);
                 }
@@ -372,12 +372,12 @@ fn stoop<R: Bench>(x: &mut Cx<'_, R>) {
             lib::seize_player(x, player, 0);
         }
         8 => {
-            if !count_down(x, TIMER2) {
-                x.set16(TIMER2, 5);
+            if !count_down(x, Gargoyle::TIMER2) {
+                x.set16(Gargoyle::TIMER2, 5);
                 spark(x, 8);
             }
             lib::step(x);
-            if count_down(x, TIMER) {
+            if count_down(x, Gargoyle::TIMER) {
                 x.move_xy();
             } else if lib::players_alive(x) {
                 go::wander(x);
@@ -393,14 +393,14 @@ fn stoop<R: Bench>(x: &mut Cx<'_, R>) {
 fn aim_dive<R: Bench>(x: &mut Cx<'_, R>) {
     let target = load_target(x);
     let (tx, tz) = (target.u16(x.b, Obj::X), target.u16(x.b, Obj::Y));
-    x.set16(GOAL_X, tx);
-    x.set16(GOAL_DEPTH, tz);
+    x.set16(Gargoyle::GOAL_X, tx);
+    x.set16(Gargoyle::GOAL_DEPTH, tz);
     let angle = lib::aim_from(x, (tx, tz));
     x.set8(Obj::SPEED_INDEX, angle);
     set_speed(x, 0x35);
     let abs = |v: u16| (v as i16).unsigned_abs();
-    let mut dist = abs(x.u16(GOAL_X).wrapping_sub(x.u16(Obj::X))) as i32;
-    let dz = abs(x.u16(GOAL_DEPTH).wrapping_sub(x.u16(Obj::Y))) as i32;
+    let mut dist = abs(x.u16(Gargoyle::GOAL_X).wrapping_sub(x.u16(Obj::X))) as i32;
+    let dz = abs(x.u16(Gargoyle::GOAL_DEPTH).wrapping_sub(x.u16(Obj::Y))) as i32;
     let mut speed = abs(x.u16(Obj::VX)) as i32;
     let speed2 = abs(x.u16(Obj::VY)) as i32;
     if (dist as i16) < (dz as i16) {
@@ -433,15 +433,15 @@ fn aim_dive<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(Obj::AZ, 0);
     x.set16(Obj::AY, 0);
     lib::sound(x, crate::sound::CMD_373_473);
-    x.set16(TIMER, 0x5a);
+    x.set16(Gargoyle::TIMER, 0x5a);
     strike(x, 0xe);
 }
 
 /// 0x64eee: landing of the dive: the creature settles, sliding in the other direction.
 fn land_from_dive<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set16(TIMER, 0x18);
-    x.set16(TIMER2, 0);
+    x.set16(Gargoyle::TIMER, 0x18);
+    x.set16(Gargoyle::TIMER2, 0);
     x.set16(Obj::Z, 0);
     let vx = (x.u16(Obj::VX) as i16).wrapping_neg() >> 5;
     let vy = (x.u16(Obj::VY) as i16).wrapping_neg() >> 5;
@@ -459,7 +459,7 @@ pub(super) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
-            x.set8(LOOK_PREV, 0xff);
+            x.set8(Gargoyle::LOOK_PREV, 0xff);
             fly(x, 0);
         }
         2 => {
@@ -490,22 +490,22 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(Obj::Y, pz.wrapping_sub(1));
             let shift = if x.u8(f::FLIP) != 0 { -0x1bi16 } else { 0x1b };
             x.add16(Obj::X, shift as u16);
-            x.set16(TIMER, 0xe);
+            x.set16(Gargoyle::TIMER, 0xe);
             strike(x, 0xf);
         }
         2 => {
-            if count_down(x, TIMER) {
+            if count_down(x, Gargoyle::TIMER) {
                 lib::step(x);
                 return;
             }
             x.add8(f::SUB3, 2);
-            let n = if (x.u8(PHASE) as i8) < 2 { 0x10 } else { 0x11 };
+            let n = if (x.u8(Gargoyle::PHASE) as i8) < 2 { 0x10 } else { 0x11 };
             strike(x, n);
-            x.set16(TIMER, 6);
-            x.set16(TIMER2, 0);
+            x.set16(Gargoyle::TIMER, 6);
+            x.set16(Gargoyle::TIMER2, 0);
         }
         4 => {
-            if count_down(x, TIMER2) {
+            if count_down(x, Gargoyle::TIMER2) {
                 lib::step(x);
                 return;
             }
@@ -523,12 +523,12 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
                 victim.set_u16(x.b, f::HP, 1);
                 return dismount(x);
             }
-            if !count_down(x, TIMER) {
+            if !count_down(x, Gargoyle::TIMER) {
                 return dismount(x);
             }
-            let rank = x.u8(PHASE) as i8 as i16 as u16;
+            let rank = x.u8(Gargoyle::PHASE) as i8 as i16 as u16;
             let t = x.rom16(0x650ba + 2 * rank as u32);
-            x.set16(TIMER2, t);
+            x.set16(Gargoyle::TIMER2, t);
             lib::step(x);
         }
         _ => {}
@@ -552,9 +552,9 @@ pub(super) fn done<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x653b2: the fight resumes: target chosen, HP threshold crossed, new move.
 pub(crate) fn regroup<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(HIT_FLAGS, 0);
+    x.set8(Gargoyle::HIT_FLAGS, 0);
     x.set8(Enemy::ACTIVE, 1);
-    x.set8(LOOK_PREV, 0xff);
+    x.set8(Gargoyle::LOOK_PREV, 0xff);
     if !pick_target(x) {
         return go::retire(x);
     }

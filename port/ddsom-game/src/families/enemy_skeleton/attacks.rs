@@ -37,10 +37,10 @@ pub(super) fn ready<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x59b82: waits for delay `+0x77` to elapse.
 pub(super) fn settle<R: Bench>(x: &mut Cx<'_, R>) {
-    let wait = x.u8(COOLDOWN);
+    let wait = x.u8(Enemy::AI_BYTE);
     if wait != 0 {
         let n = wait.wrapping_sub(1);
-        x.set8(COOLDOWN, n);
+        x.set8(Enemy::AI_BYTE, n);
         if (n as i8) > 0 {
             return;
         }
@@ -50,15 +50,15 @@ pub(super) fn settle<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x591d6: turns toward the target if it is behind (`+0xa6` = 2).
 pub(super) fn face<R: Bench>(x: &mut Cx<'_, R>) {
-    let side = x.u8(SIDE) as i8;
+    let side = x.u8(Skeleton::SIDE) as i8;
     if side < 2 {
         return x.add8(f::SUB3, 2);
     }
     if side == 2 {
-        x.set8(SIDE, 3);
+        x.set8(Skeleton::SIDE, 3);
         return body(x, 1);
     }
-    if (x.u8(ANIM_STATE) as i8) < 0 {
+    if (x.u8(Enemy::ANIM_END) as i8) < 0 {
         x.add8(f::SUB3, 2);
         let flip = x.u8(f::FLIP) ^ 0x20;
         x.set8(f::FLIP, flip);
@@ -82,16 +82,16 @@ fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
             }
         }
     }
-    x.set8(SIDE, side);
+    x.set8(Skeleton::SIDE, side);
     side != 0
 }
 
 /// 0x58370: end of an attack — waits for the end of the animation, then chooses what follows.
 fn finish<R: Bench>(x: &mut Cx<'_, R>) {
-    if (x.u16(ANIM_STATE) as i16) >= 0 {
+    if (x.u16(Enemy::ANIM_END) as i16) >= 0 {
         step(x);
     } else {
-        x.set8(AI_KIND, 0xff);
+        x.set8(Enemy::AI_SHOT, 0xff);
         end_attack(x);
     }
 }
@@ -115,8 +115,8 @@ fn thrust<R: Bench>(x: &mut Cx<'_, R>, kind: u8, power: u8, anim: u32) {
         6 => face(x),
         8 => {
             x.add8(f::SUB3, 2);
-            x.set8(STRIKE_KIND, kind);
-            x.set8(STRIKE_POWER, power);
+            x.set8(Enemy::STRIKE_KIND, kind);
+            x.set8(Enemy::STRIKE_POWER, power);
             strike(x, anim);
         }
         10 => finish(x),
@@ -131,13 +131,13 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
         2 => ready(x),
         4 => settle(x),
         6 => {
-            if x.u8(SERIES) != 0 {
+            if x.u8(Enemy::GROUP) != 0 {
                 x.set16(f::SUB2, 0x1200);
                 return super::leaps::guard(x);
             }
-            x.set8(STRIKE_KIND, 5);
-            x.set8(AI_KIND, 3);
-            x.set8(STRIKE_POWER, 4);
+            x.set8(Enemy::STRIKE_KIND, 5);
+            x.set8(Enemy::AI_SHOT, 3);
+            x.set8(Enemy::STRIKE_POWER, 4);
             let state = x.u32(f::STATE);
             x.set32(Enemy::RESUME_STATE, state);
             x.add8(f::SUB3, 2);
@@ -169,12 +169,12 @@ fn double_cut<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB3, 2);
             let state = x.u32(f::STATE);
             x.set32(Enemy::RESUME_STATE, state);
-            x.set8(STRIKE_KIND, 5);
-            x.set8(STRIKE_POWER, 2);
-            x.set8(AI_KIND, 3);
+            x.set8(Enemy::STRIKE_KIND, 5);
+            x.set8(Enemy::STRIKE_POWER, 2);
+            x.set8(Enemy::AI_SHOT, 3);
             let n = rand_and(x, 1);
-            let kind = x.u8(STRIKE_KIND).wrapping_add(n as u8);
-            x.set8(STRIKE_KIND, kind);
+            let kind = x.u8(Enemy::STRIKE_KIND).wrapping_add(n as u8);
+            x.set8(Enemy::STRIKE_KIND, kind);
             strike(x, n);
         }
         8 => {
@@ -213,13 +213,13 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>, kind: Leap) {
         12 => match kind {
             Leap::Short | Leap::Long => {
                 step(x);
-                if (x.u8(ANIM_STATE) as i8) < 0 {
+                if (x.u8(Enemy::ANIM_END) as i8) < 0 {
                     end_attack(x);
                 }
             }
             Leap::Turning | Leap::TurningCombo => {
                 step(x);
-                if (x.u8(ANIM_STATE) as i8) < 0 {
+                if (x.u8(Enemy::ANIM_END) as i8) < 0 {
                     x.add8(f::SUB3, 2);
                     if !needs_turn_around(x) {
                         x.add8(f::SUB3, 2);
@@ -265,7 +265,7 @@ pub(super) fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     if (x.u16(Obj::VZ) as i16) < 0 {
         x.add8(f::SUB3, 2);
-        x.set16(ANIM_COUNT, 1);
+        x.set16(Obj::ANIM_TIMER, 1);
         x.set8(f::KEY_FRAME, 0);
     }
 }
@@ -276,7 +276,7 @@ pub(super) fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     if (x.u32(Obj::Z) as i32) <= 0 {
         x.set32(Obj::Z, 0);
-        x.set16(ANIM_COUNT, 1);
+        x.set16(Obj::ANIM_TIMER, 1);
         x.add8(f::SUB3, 2);
     }
 }
@@ -286,15 +286,15 @@ fn jump_up<R: Bench>(x: &mut Cx<'_, R>, kind: Leap) {
     match kind {
         Leap::Short => {
             x.set16(Obj::VX, 0x180);
-            x.set8(STRIKE_KIND, 7);
+            x.set8(Enemy::STRIKE_KIND, 7);
         }
         Leap::Long => {
-            x.set8(STRIKE_KIND, 8);
+            x.set8(Enemy::STRIKE_KIND, 8);
             x.set16(Obj::VX, 0x480);
         }
         Leap::Turning | Leap::TurningCombo => x.set16(Obj::VX, 0x480),
     }
-    x.set8(STRIKE_POWER, 5);
+    x.set8(Enemy::STRIKE_POWER, 5);
     if x.u8(f::FLIP) == 0 {
         negate(x, Obj::VX);
     }
@@ -319,24 +319,24 @@ fn slide<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x58582: starts animation 2 bringing it back to the frame it had, saves the position.
 fn begin_slide<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
-    x.set16(TIMER, 0x2a);
+    x.set16(Skeleton::TIMER, 0x2a);
     restart_slide(x);
 }
 
 /// 0x5858c: animation 2 replayed until the same frame is found again (at most eight steps).
 pub(super) fn restart_slide<R: Bench>(x: &mut Cx<'_, R>) {
-    let (count, state) = (x.u16(ANIM_COUNT), x.u16(ANIM_STATE));
+    let (count, state) = (x.u16(Obj::ANIM_TIMER), x.u16(Enemy::ANIM_END));
     // D2 (low word) = the sought frame, D3 = step counter: leftovers re-read afterwards (DDSOM_POISON:
     // skeleton_scene13, boss17_scene13).
     *x.c.d2() = *x.c.d2() & 0xffff_0000 | state as u32;
     x.anim_start(SET_BODY.0, 2);
     *x.c.d3() = 7;
     loop {
-        if x.u16(ANIM_STATE) == state {
-            x.set16(ANIM_COUNT, count);
+        if x.u16(Enemy::ANIM_END) == state {
+            x.set16(Obj::ANIM_TIMER, count);
             break;
         }
-        x.set16(ANIM_STATE, 1);
+        x.set16(Enemy::ANIM_END, 1);
         step(x);
         let n = (*x.c.d3() as u16).wrapping_sub(1);
         *x.c.d3() = *x.c.d3() & 0xffff_0000 | n as u32;
@@ -348,24 +348,24 @@ pub(super) fn restart_slide<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn finish_restart<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set32(MOVE_TABLE, 0x1c7336);
+    x.set32(Obj::SPEED_TABLE, 0x1c7336);
     let angle = if x.u8(f::FLIP) != 0 { 8 + 0x10 } else { 8 };
     x.set8(Obj::SPEED_INDEX, angle);
     let pos = x.u16(Obj::X);
-    x.set16(SAVED_POS, pos);
+    x.set16(Skeleton::SAVED_POS, pos);
 }
 
 fn slide_move<R: Bench>(x: &mut Cx<'_, R>) {
     step(x);
     if (x.u8(f::KEY_FRAME) as i8) >= 0 {
-        let t = x.u16(TIMER).wrapping_sub(1);
-        x.set16(TIMER, t);
+        let t = x.u16(Skeleton::TIMER).wrapping_sub(1);
+        x.set16(Skeleton::TIMER, t);
         if t == 0 {
             return end_attack(x);
         }
         move_xy(x);
     }
-    let d = x.u16(SAVED_POS).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x40);
+    let d = x.u16(Skeleton::SAVED_POS).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x40);
     if d >= 0x80 {
         end_attack(x);
     }
