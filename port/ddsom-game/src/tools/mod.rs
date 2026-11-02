@@ -812,11 +812,13 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
             s.first = Some(diffs.join(", "));
         }
         s.last = Some(diffs.join(", "));
-        // the original state is kept so as not to propagate the difference (with the tools only: the game keeps its own
-        // state, its task table and the call in progress are not in the copy's RAM)
-        if !by_frame {
-            *c = c2;
-            *b = b2;
+        // the original state is kept so as not to propagate the difference; on the game machine, with the task table of
+        // the native (calls in progress, leftovers), which the copy does not maintain
+        let table = if by_frame { b.ext.take() } else { None };
+        *c = c2;
+        *b = b2;
+        if by_frame {
+            b.ext = table;
         }
     }
 }
