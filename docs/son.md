@@ -356,7 +356,8 @@ QSound, octets de la RAM partagée). Critères (`SoundStreams` dans `examples/va
   `sound_fuzz` / `FUZZ_STATE`), puis reprend. Toute autre différence fait échouer `validate`.
 
 La ligne `sound: N driver writes identical (largest delay k frames…); M in the global order; S suspensions (Z80 late),
-the longest L frames` de `validate` donne les comptes. Témoins : une donnée QSound altérée côté jeu (bot30k, image
+the longest L frames` de `validate` donne les comptes. Validation complète (2026-11-02, `DDSOM_LONG=1`) : 308 VALIDE
+sur 308 en mode par défaut et avec `DDSOM_ASSETS` (assets réextraits), retard maximal 1 image, 2 suspensions. Témoins : une donnée QSound altérée côté jeu (bot30k, image
 3 001, Z80 à jour) fait échouer `validate` à cette image ; l'octet ADPCM manquant des assets (ci-dessous) aussi.
 `DDSOM_SON_Z80=1` (diagnostic) remet le Z80 dans la machine A.
 
@@ -422,12 +423,12 @@ la tranche de ligne), et un tic du séquenceur 4 000 à 70 000 cycles (mesure `s
 référence). Pendant ce retard le compteur de tics monte ; si une commande arrive avant que le Z80 ait commencé le tic
 en attente, sa boucle principale (commande, puis ADPCM, puis tic) traite la commande d'abord, alors que le pilote
 Rust, sans durée, a déjà fait ce tic. Les voies que la commande démarre commencent alors un tic (4 ms) plus tard qu'avec
-le Z80, jusqu'à leur fin. Constaté sur 5 des 308 scénarios de la validation complète (`boss0_poke`,
-`boss0_poke_mort`, `covb_long_59`, `long_28_scenes`, `long_scene_20` ; avec la machine de référence surcadencée de
-`validate` seulement : `sound_machine` au rythme de la borne ne le voit pas sur `boss0_poke`). Dans trois cas les
-valeurs par registre restent identiques ; dans deux (`covb_long_59`, `long_scene_20`), le décalage change des
-valeurs (registre de banque partagé avec la voie voisine, volume), et les deux pilotes retrouvent le même état
-137 images plus tard au plus.
+le Z80, jusqu'à leur fin. Sur la validation complète (308 scénarios, 78 millions d'écritures comparées en mode par
+défaut), l'ordre global diffère dans 10 scénarios (par exemple `boss0_poke`, `long_28_scenes` ; seulement avec la
+machine de référence surcadencée de `validate` : `sound_machine` au rythme de la borne ne le voit pas sur
+`boss0_poke`). Dans 8 d'entre eux les valeurs par registre restent identiques ; dans 2 (`covb_long_59`,
+`long_scene_20`), le décalage change des valeurs (registre de banque partagé avec la voie voisine, volume) : la
+comparaison y est suspendue, et les deux pilotes retrouvent le même état 137 images plus tard au plus.
 
 Reproduire cet ordre exigerait de modéliser la durée d'exécution du Z80 (multiplications par décalages dont la durée
 dépend des opérandes, attentes de D007 rythmées par les tranches de ligne de la machine émulée) ; une estimation

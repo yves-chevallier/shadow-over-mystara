@@ -70,8 +70,9 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
      activée par `ddsom-game/tools`) ; `cargo tree -p ddsom -e normal` ne contient plus `z80`. `DDSOM_SON_RUST` retiré.
    * `validate` compare désormais le son : chaque registre QSound et octet de RAM partagée doit recevoir les mêmes
      valeurs du pilote Rust (machine du jeu) et du Z80 (référence), à 4 images près ; la comparaison est suspendue
-     quand le Z80 en retard de plusieurs périodes réordonne une commande et un tic (écart connu, 5 scénarios sur
-     308), jusqu'à ce que les deux pilotes aient le même état.
+     quand le Z80 en retard de plusieurs périodes réordonne une commande et un tic (écart connu : ordre différent
+     dans 10 scénarios sur 308, valeurs différentes dans 2), jusqu'à ce que les deux pilotes aient le même état.
+   * Validé 308/308 dans les deux modes (`DDSOM_LONG=1`, assets réextraits), non fusionné.
    * Écart corrigé : la définition des deux sons ADPCM perdait un octet dans `music.json` (son faux sans ROM) :
      **réextraire ses assets** (`extract <roms> <assets> music`).
    * Le pilote lit ses données par accesseurs nommés (`ddsom_sound::Rom`) ; elles restent rangées à leurs adresses
