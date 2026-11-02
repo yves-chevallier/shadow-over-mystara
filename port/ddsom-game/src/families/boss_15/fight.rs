@@ -20,7 +20,7 @@ const FAR_MASKS: u32 = 0x91998;
 /// Gestes déclenchés par la riposte spéciale (`+6` de l'attaque 4).
 const SPECIAL_MOVES: u32 = 0x91ab0;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => watch(x),
         2 => jump(x),
@@ -34,7 +34,7 @@ pub(super) fn run(x: &mut Cx) {
 
 // --- +6 = 0 : surveille ---------------------------------------------------------------------------------
 
-fn watch(x: &mut Cx) {
+fn watch<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(HURT_BOX, 0);
     x.set8(SHOT, 0x20);
     if x.u8(0x7) == 0 {
@@ -81,7 +81,7 @@ fn far_from_center<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Un joueur est-il dans la boîte `(d0, d1, d2)` devant le dragon ?
-fn probe(x: &mut Cx, d0: i16, d1: u16, d2: u16) -> bool {
+fn probe<R: Banc>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     lib::target_in_box(x, d0, d1, d2)
 }
 
@@ -103,7 +103,7 @@ fn quarter<R: Banc>(x: &mut Cx<'_, R>) -> u32 {
 
 /// 0x91950 : le dragon est à son altitude de garde (0x40), sa patience est épuisée et un tirage favorable (un bit du
 /// long de PV 0x91998) l'autorise à viser un joueur éloigné (0x43ae).
-fn far_roll(x: &mut Cx) -> bool {
+fn far_roll<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(0xc) != 0x40 {
         return false;
     }
@@ -117,13 +117,12 @@ fn far_roll(x: &mut Cx) -> bool {
     if mask >> bit & 1 == 0 {
         return false;
     }
-    x.c.d[0] = 2;
     lib::pick_target_any(x)
 }
 
 /// 0x91a68 : une riposte spéciale est-elle due ? Les PV passent sous `SPECIALS` quarts de `+0x60` : le dragon lance
 /// l'attaque 4 (geste tiré dans 0x91ab0).
-fn special_due(x: &mut Cx) -> bool {
+fn special_due<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     let left = x.u8(SPECIALS);
     if left == 0 {
         return false;
@@ -153,7 +152,7 @@ fn special_due(x: &mut Cx) -> bool {
 
 /// 0x919cc..0x91a16 : choisit une attaque dans la ligne `row` des tables ; un octet négatif renvoie à la ligne de
 /// patience (0x91a18), qui peut aussi renvoyer au hasard (`wander`).
-fn pick_attack(x: &mut Cx, row: usize) {
+fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, row: usize) {
     let r = random(x) & 0xf;
     let b = x.data8(PICKS[row] + r) as i8;
     if b >= 0 {
@@ -170,7 +169,7 @@ fn pick_attack(x: &mut Cx, row: usize) {
 }
 
 /// 0x91ad8 : se tient au centre de la zone (caméra + 0xc0), à la profondeur d'un joueur (ou de la caméra) et à l'altitude 0x40.
-pub(super) fn steer(x: &mut Cx) {
+pub(super) fn steer<R: Banc>(x: &mut Cx<'_, R>) {
     let target_x = var::SCROLL_X.get(x.b).wrapping_add(0xc0);
     let d = target_x.wrapping_sub(x.u16(0x8)) as i16;
     if d != 0 {
@@ -196,7 +195,7 @@ pub(super) fn steer(x: &mut Cx) {
 
 // --- +6 = 2 : bond ---------------------------------------------------------------------------------------
 
-fn jump(x: &mut Cx) {
+fn jump<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
         jump_speeds(x);
@@ -244,7 +243,7 @@ fn jump_speeds<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- +6 = 4 : rejoint le joueur visé -------------------------------------------------------------------
 
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     let t = x.u16(TIMER).wrapping_sub(1);
     x.set16(TIMER, t);
     if t & 0x8000 != 0 {

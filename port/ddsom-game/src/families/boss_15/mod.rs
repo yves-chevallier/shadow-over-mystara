@@ -70,7 +70,7 @@ const CHASE: u32 = 0x0202_0400;
 pub(self) const WAIT: u32 = 0x020a_0000;
 pub(self) const ATTACK_4: u32 = 0x0204_0400;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -85,7 +85,7 @@ pub fn run(x: &mut Cx) {
 // --- animations ----------------------------------------------------------------------------------
 
 /// Lance l'animation `n` du jeu `set` (0, 2 ou 4) du type, sauf si elle joue déjà (0x93182, 0x9319c, 0x931b6).
-pub(self) fn set_anim(x: &mut Cx, set: u8, n: u32) {
+pub(self) fn set_anim<R: Banc>(x: &mut Cx<'_, R>, set: u8, n: u32) {
     let small = x.u8(TYPE) == TYPE_SMALL;
     let base = match (set, small) {
         (0, false) => 0x17e03a,
@@ -95,21 +95,15 @@ pub(self) fn set_anim(x: &mut Cx, set: u8, n: u32) {
         (_, false) => 0x17e096,
         (_, true) => 0x1829ba,
     };
-    x.c.a[4] = base;
-    x.c.d[0] = n;
-    // l'original charge le numéro du jeu dans D1b avant de comparer (certains appelants le relisent)
-    x.c.d[1] = x.c.d[1] & !0xff | set as u32; // relu : D1 relu par la suite (DDSOM_POISON, boss15_scene46)
     if set == x.u8(ANIM_SET) && n as u8 == x.u8(ANIM_N) {
         return;
     }
     x.set8(ANIM_SET, set);
     x.set8(ANIM_N, n as u8);
-    let set = x.c.a[4];
-    let n = x.c.d[0] as u16;
-    x.anim_start(set, n);
+    x.anim_start(base, n as u16);
 }
 
-pub(self) fn rest(x: &mut Cx) {
+pub(self) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
     set_anim(x, 0, 0);
 }
 
@@ -120,7 +114,7 @@ pub(self) fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 // --- changements d'état ---------------------------------------------------------------------------
 
 /// 0x92ff4 : debout, au repos.
-pub(self) fn stand(x: &mut Cx) {
+pub(self) fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     set_abs8(x, 0xff8043, 0xff);
     x.set8(HURT_BOX, 0);
     x.set32(f::STATE, STAND);
@@ -128,7 +122,7 @@ pub(self) fn stand(x: &mut Cx) {
 }
 
 /// 0x9301e : repos ou marche, au hasard (le petit dragon : seulement le demi-tour).
-pub(self) fn wander(x: &mut Cx) {
+pub(self) fn wander<R: Banc>(x: &mut Cx<'_, R>) {
     let mut r = random(x) as u16 & 3;
     if x.u8(TYPE) != TYPE_BIG {
         r &= 1;
@@ -150,12 +144,11 @@ pub(self) fn wait<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
-    x.call(0x76ec4);
-    if zero(x) {
+    if !super::petites::enemy_pair_cree(x.b, x.o) {
         return;
     }
     x.add8(f::STATE, 2);
@@ -203,7 +196,7 @@ fn init(x: &mut Cx) {
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 /// Boucle de l'état actif (0x91684) ; l'état touché la rappelle pour reprendre le combat.
-pub(self) fn active(x: &mut Cx) {
+pub(self) fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(FOREGROUND) != 0 {
         x.set8(FOREGROUND, 0);
         x.unlink();
@@ -249,7 +242,7 @@ pub(self) fn active(x: &mut Cx) {
 }
 
 /// 0x9171e : fin de l'image : le premier plan reçoit le dragon quand `+0x43` est levé.
-pub(self) fn finish(x: &mut Cx) {
+pub(self) fn finish<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0xb6, 0);
     if x.u8(FOREGROUND) != 0 {
         x.unlink();
@@ -292,7 +285,7 @@ pub(self) fn hover<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// `+5` = 6, 8, 10 (0x927fa) : attend qu'un joueur revienne.
-fn idle(x: &mut Cx) {
+fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, STAND);
         return;
@@ -307,7 +300,7 @@ fn idle(x: &mut Cx) {
 }
 
 /// `+5` = 12 (0x9282c) : prise d'un joueur : il perd des PV puis est relâché.
-fn grab(x: &mut Cx) {
+fn grab<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u16(f::TARGET) as i16) >= 0 {
         return stand(x);
     }
@@ -344,7 +337,7 @@ fn grab(x: &mut Cx) {
     }
 }
 
-fn grab_step(x: &mut Cx) {
+fn grab_step<R: Banc>(x: &mut Cx<'_, R>) {
     if !step_anim(x) {
         return lib::hold_seized(x);
     }
@@ -366,7 +359,7 @@ fn grab_step(x: &mut Cx) {
     lib::hold_seized(x);
 }
 
-fn release(x: &mut Cx) {
+fn release<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x45, 1);
     let player = x.linked(f::TARGET);
     lib::release_player(x, player);
@@ -380,7 +373,7 @@ fn step_anim<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 handlers! {
-    0x91530 "boss_15" run,
+    0x91530 "boss_15" #[sans] run,
 }
 
 /// Routine du boss appelée par un effet (0xb482e) : rapprochement d'un objet vers un autre.

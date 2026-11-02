@@ -745,24 +745,14 @@ fn quake_native(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x63ae0 : s'il reste plus de deux places d'ennemis (`A5+0x7e62`), deux ennemis de type 7 (variantes 0
 /// et 1) liés au créateur par `+0x46` ; D0 = 1, sinon 0 (l'allocation n'est pas vérifiée).
 fn enemy_7_pair(c: &mut Cpu, b: &mut Cps2Bus) {
-    let me = c.a[0];
-    if rd16(b, A5 + 0x7e62) as i16 <= 2 {
-        c.d[0] = 0;
-        moved(c, 0, Size::Long);
-        return rts(c, b);
-    }
-    for variant in [0, 1] {
-        // Glitch d'origine : l'échec de l'allocation n'est pas testé (voir `Pool::alloc_unchecked`).
-        let o = pools::ENEMY.alloc_unchecked_68k(c, b);
-        o.set_u8(b, 0x0, 1);
-        o.set_u8(b, 0x2, 7);
-        o.set_u8(b, 0x3, variant);
-        o.set_u8(b, 0x2f, 0);
-        o.set_u16(b, 0x46, me as u16);
-    }
-    c.d[0] = 1;
-    moved(c, 1, Size::Long);
+    let me = Obj(c.a[0]);
+    super::petites::paire_d_ennemis_par(c, b, me, 7);
     rts(c, b);
+}
+
+/// 0x63ae0 sans registres : vrai si les deux ennemis de type 7 sont créés.
+pub fn enemy_7_pair_cree(b: &mut Cps2Bus, createur: Obj) -> bool {
+    super::petites::paire_d_ennemis_par(&mut Pur, b, createur, 7)
 }
 
 /// Ennemi de type `kind` (variante 5) placé en (D0, D1, D2) = (x, z, y), lié au créateur par `link` ;

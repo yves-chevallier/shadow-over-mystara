@@ -13,7 +13,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::objects::Obj;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if var::GAME_ON.get(x.b) == 0 {
         return end(x);
     }
@@ -53,7 +53,7 @@ pub(super) fn run(x: &mut Cx) {
 }
 
 /// 0x900e2 : fin de l'arrivée : le combat commence sur-le-champ.
-fn end(x: &mut Cx) {
+fn end<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     x.set16(f::SUB2, 0);
     x.set8(0, 1);
@@ -79,7 +79,7 @@ fn green_wait<R: Banc>(x: &mut Cx<'_, R>) {
     lib::shake_5c(x, 0x7f);
 }
 
-fn green_enter(x: &mut Cx) {
+fn green_enter<R: Banc>(x: &mut Cx<'_, R>) {
     if sub16(x, TIMER, 1).gt() {
         return;
     }
@@ -89,7 +89,7 @@ fn green_enter(x: &mut Cx) {
     green_enter_b(x);
 }
 
-fn green_enter_b(x: &mut Cx) {
+fn green_enter_b<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     let y = x.u16(0x10).wrapping_add(0x30);
     x.set16(0x10, y);
@@ -136,15 +136,11 @@ fn green_land<R: Banc>(x: &mut Cx<'_, R>) {
 // --- type 19, variante 0 -----------------------------------------------------------------------------
 
 /// Lance la tâche de fondu `list` (0x9b6 avec A0 = l'entrée, emplacement 0x10 ; `taches/fondu.rs`).
-fn open_list(x: &mut Cx, list: u32) {
-    let me = x.o.0;
-    x.c.a[0] = list;
-    set_dw(x, 0, 0x10);
-    crate::call(x.c, x.b, 0x9b6);
-    x.c.a[0] = me;
+fn open_list<R: Banc>(x: &mut Cx<'_, R>, list: u32) {
+    crate::kernel::creer_tache(x.b, 0x10, list);
 }
 
-fn announce(x: &mut Cx) {
+fn announce<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set_bit(0x1, 1, true);
     x.set16(TIMER, 0xb4);
@@ -158,7 +154,7 @@ fn announce(x: &mut Cx) {
 }
 
 /// 0x8fe68 : une bulle de plus toutes les 15 à 78 images.
-fn bubble_tick(x: &mut Cx) {
+fn bubble_tick<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u8(BUBBLES) as i8) <= 0 {
         return;
     }
@@ -172,7 +168,7 @@ fn bubble_tick(x: &mut Cx) {
     }
 }
 
-fn bubbles(x: &mut Cx) {
+fn bubbles<R: Banc>(x: &mut Cx<'_, R>) {
     bubble_tick(x);
     match x.u16(TIMER) as i16 {
         t if t < 0x64 => { crate::families::effects_creators::scenery_10(x.b, x.o); }
@@ -209,7 +205,7 @@ fn enter_from_right<R: Banc>(x: &mut Cx<'_, R>, dy: u16) {
     x.set16(0x1a, 0);
 }
 
-fn enter(x: &mut Cx) {
+fn enter<R: Banc>(x: &mut Cx<'_, R>) {
     enter_from_right(x, 0x50);
     rest(x);
     fly(x);
@@ -254,7 +250,7 @@ fn wait_camera<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- type 19, variante 1 -------------------------------------------------------------------------------
 
-fn pet_enter(x: &mut Cx) {
+fn pet_enter<R: Banc>(x: &mut Cx<'_, R>) {
     enter_from_right(x, 0x38);
     rest(x);
     pet_fly(x);

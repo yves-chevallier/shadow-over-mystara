@@ -77,7 +77,7 @@ pub(self) const ATTACK_10: u32 = 0x0204_0a00;
 const DEAD_HOST: u32 = 0x0406_0000;
 pub(self) const FREE: u32 = 0x0600_0000;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -93,7 +93,7 @@ pub fn run(x: &mut Cx) {
 // --- animations ----------------------------------------------------------------------------------
 
 /// Lance l'animation `n` du jeu `set` (0, 2 ou 4) du type, sauf si elle joue déjà (0x914c6, 0x914e0, 0x914fa).
-pub(self) fn set_anim(x: &mut Cx, set: u8, n: u32) {
+pub(self) fn set_anim<R: Banc>(x: &mut Cx<'_, R>, set: u8, n: u32) {
     let black = x.u8(TYPE) == TYPE_BLACK;
     let base = match (set, black) {
         (0, false) => 0x17dbb0,
@@ -103,21 +103,16 @@ pub(self) fn set_anim(x: &mut Cx, set: u8, n: u32) {
         (_, false) => 0x17dbd2,
         (_, true) => 0x1824f6,
     };
-    x.c.a[4] = base;
-    x.c.d[0] = n;
-    // l'original charge le numéro du jeu dans D1b avant de comparer (certains appelants le relisent)
     if set == x.u8(ANIM_SET) && n as u8 == x.u8(ANIM_N) {
         return;
     }
     x.set8(ANIM_SET, set);
     x.set8(ANIM_N, n as u8);
-    let set = x.c.a[4];
-    let n = x.c.d[0] as u16;
-    x.anim_start(set, n);
+    x.anim_start(base, n as u16);
 }
 
 /// Animation de repos (jeu 0).
-pub(self) fn rest(x: &mut Cx) {
+pub(self) fn rest<R: Banc>(x: &mut Cx<'_, R>) {
     set_anim(x, 0, 0);
 }
 
@@ -128,19 +123,19 @@ fn step<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 // --- changements d'état ---------------------------------------------------------------------------
 
 /// 0x913da : debout, au repos.
-pub(self) fn stand(x: &mut Cx) {
+pub(self) fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, STAND);
     rest(x);
 }
 
 /// 0x913e8 : marche vers un joueur.
-pub(self) fn chase(x: &mut Cx) {
+pub(self) fn chase<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, CHASE);
     rest(x);
 }
 
 /// 0x913f6 : demi-tour.
-pub(self) fn turn(x: &mut Cx) {
+pub(self) fn turn<R: Banc>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, TURN);
     let side = x.u8(f::FLIP) ^ 0x20;
     x.set8(f::FLIP, side);
@@ -165,12 +160,11 @@ pub(self) fn host_gone<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
-    x.call(0x63ae0);
-    if zero(x) {
+    if !super::creators::enemy_7_pair_cree(x.b, x.o) {
         return;
     }
     x.add8(f::STATE, 2);
@@ -225,7 +219,7 @@ fn init(x: &mut Cx) {
 // --- état 2 : actif -----------------------------------------------------------------------------
 
 /// Boucle de l'état actif (0x8fc42) ; l'état touché la rappelle pour reprendre le combat.
-pub(self) fn active(x: &mut Cx) {
+pub(self) fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) == 0 {
         if tst8(x, f::FREEZE).gt() {
             sub8(x, f::FREEZE, 1);
@@ -274,7 +268,7 @@ pub(self) fn active(x: &mut Cx) {
 }
 
 /// `+5` = 10 (0x908bc) : attend qu'un joueur revienne.
-fn idle(x: &mut Cx) {
+fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         x.set32(f::STATE, STAND);
         return;
@@ -341,5 +335,5 @@ fn hover<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x8fae4 "boss_19" run,
+    0x8fae4 "boss_19" #[sans] run,
 }

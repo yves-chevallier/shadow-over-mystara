@@ -15,7 +15,7 @@ const REACTIONS: u32 = 0x909a0;
 /// Décalages du tremblement (mots relatifs à 0x90ada).
 const SHAKE_JUMPS: u32 = 0x90ada;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     let alive = (x.u16(f::HP) as i16) > 0;
     if alive && x.u8(f::SUB) == 0 && x.u32(SAVED_STATE) & 0xffff_ff00 == ATTACK_4 && var::PAUSE.get(x.b) == 0 {
         // touché pendant le souffle : le dragon le reprend
@@ -40,7 +40,7 @@ pub(super) fn run(x: &mut Cx) {
     dispatch(x);
 }
 
-fn dispatch(x: &mut Cx) {
+fn dispatch<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB) {
         0 | 4 => reaction(x),
         2 => pushed_back(x),
@@ -54,26 +54,24 @@ fn dispatch(x: &mut Cx) {
     tail(x);
 }
 
-fn tail(x: &mut Cx) {
+fn tail<R: Banc>(x: &mut Cx<'_, R>) {
     lib::collide_terrain(x);
     x.reinsert();
 }
 
 /// 0x9097c : réaction au coup : la routine de la table, d'après le code du coup.
-fn reaction(x: &mut Cx) {
-    // Glitch d'origine : l'index de la table est le mot bas de D0 dont seul l'octet bas est posé (le code du coup).
-    // Après 0x10112 (et 0xb648), l'octet haut est nul ; sans eux, c'est celui du D0 hérité.
-    let high = if x.u8(f::SUB2) == 0 {
+fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
+    // L'original indexe la table par D0.w dont seul l'octet bas est posé (le code du coup). L'octet haut est nul :
+    // l'aiguillage des groupes (0x90948) fait `moveq #0,D0 ; move.b (5,A0),D0b`, et 0x10112 (et 0xb648) le laissent
+    // nul.
+    if x.u8(f::SUB2) == 0 {
         lib::set_68(x);
         if var::SCENE.get(x.b) == 0x20 {
             lib::drop_once(x);
         }
-        0
-    } else {
-        x.c.d[0] & 0xff00
-    };
-    let index = (high | x.u8(REACTION) as u32) as u16 as i16 as i32;
-    let routine = rom32(x, (REACTIONS as i32 + index) as u32);
+    }
+    let code = x.u8(REACTION) as u32;
+    let routine = rom32(x, REACTIONS + code);
     match routine {
         0x90b26 => knock(x),
         0x90a4c => lie_down(x),
@@ -85,7 +83,7 @@ fn reaction(x: &mut Cx) {
 
 // --- 0x90b26 : coup ordinaire ----------------------------------------------------------------------
 
-fn knock(x: &mut Cx) {
+fn knock<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             if (x.u16(f::HP) as i16) <= 0 {
@@ -123,7 +121,7 @@ fn knock(x: &mut Cx) {
 }
 
 /// 0x90c8c : la riposte est due (le compte `+0xac` est épuisé) : le dragon attaque (attaque 10) au lieu de reculer.
-fn retaliate(x: &mut Cx) -> bool {
+fn retaliate<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if sub8(x, RETALIATE, 1).gt() {
         return false;
     }
@@ -135,7 +133,7 @@ fn retaliate(x: &mut Cx) -> bool {
     true
 }
 
-fn knock_slide(x: &mut Cx) {
+fn knock_slide<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         x.set8(0, 2);
         return;
@@ -166,7 +164,7 @@ fn knock_slide(x: &mut Cx) {
 }
 
 /// 0x90c6c : fin de la réaction : debout.
-fn recover(x: &mut Cx) {
+fn recover<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(0x87, 0);
     x.set8(REACTION, 0);
@@ -176,7 +174,7 @@ fn recover(x: &mut Cx) {
 
 // --- 0x90a4c : couché (code 0x68) ------------------------------------------------------------------------
 
-fn lie_down(x: &mut Cx) {
+fn lie_down<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(HURT_BOX, 5);
     if x.u8(f::SUB2) != 0 {
         if sub8(x, 0x87, 1).eq() {
@@ -198,7 +196,7 @@ fn lie_down(x: &mut Cx) {
 
 // --- 0x90c34 : chancelant (code 0x80) ----------------------------------------------------------------------
 
-fn stagger(x: &mut Cx) {
+fn stagger<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(HURT_BOX, 5);
     match x.u8(f::SUB2) {
         0 => {
@@ -211,7 +209,7 @@ fn stagger(x: &mut Cx) {
     }
 }
 
-fn stagger_wait(x: &mut Cx) {
+fn stagger_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -222,7 +220,7 @@ fn stagger_wait(x: &mut Cx) {
 
 // --- 0x90a96 : tremblement puis mort (code 0xa8) ---------------------------------------------------------------
 
-fn shake(x: &mut Cx) {
+fn shake<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         let z = x.u16(0xc);
@@ -272,7 +270,7 @@ fn shake_z<R: Banc>(x: &mut Cx<'_, R>, d0: i16) {
 
 // --- +5 = 2 : recul par un gros coup (0x90cb8) --------------------------------------------------------------------
 
-fn pushed_back(x: &mut Cx) {
+fn pushed_back<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
@@ -310,7 +308,7 @@ fn pushed_back(x: &mut Cx) {
 // --- mort -----------------------------------------------------------------------------------------------------------
 
 /// 0x90dca : séquence de mort, propre à chaque type et variante.
-fn death(x: &mut Cx) {
+fn death<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(HURT_BOX, 0);
     if x.u8(TYPE) == TYPE_GREEN {
         return death_green(x);
@@ -369,7 +367,7 @@ fn set_abs16<R: Banc>(x: &mut Cx<'_, R>, addr: u32, v: u16) {
 }
 
 /// Début de la chute des dragons non verts : gel d'invulnérabilité, descente de 0x200.
-fn fall_start(x: &mut Cx) {
+fn fall_start<R: Banc>(x: &mut Cx<'_, R>) {
     let stun = x.u8(STUN);
     x.set8(f::FREEZE, stun);
     x.set32(0x14, 0);
@@ -392,7 +390,7 @@ fn release<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Dragon vert : même chute avec ses étapes propres.
-fn death_green(x: &mut Cx) {
+fn death_green<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -446,7 +444,7 @@ fn fall_end_green<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Dragon de Nagpa : disparaît en clignotant (0x90fa8).
-fn death_pet(x: &mut Cx) {
+fn death_pet<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);

@@ -11,7 +11,7 @@ use crate::families::cx::Banc;
 use super::*;
 use crate::objects::Courant;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => place(x),
         2 => wait_then_fall(x),
@@ -25,7 +25,7 @@ fn at_camera<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(0x8, cx);
 }
 
-fn place(x: &mut Cx) {
+fn place<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     at_camera(x);
     x.set16(0x10, 0x1a0);
@@ -39,7 +39,7 @@ fn place(x: &mut Cx) {
     rest(x);
 }
 
-fn wait_then_fall(x: &mut Cx) {
+fn wait_then_fall<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.u16(TIMER) as i16) > 0 {
         let t = x.u16(TIMER) - 1;
         x.set16(TIMER, t);
@@ -55,7 +55,7 @@ fn wait_then_fall(x: &mut Cx) {
     fall(x);
 }
 
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     at_camera(x);
     x.move_z();
     if (x.u16(0xc) as i16) < 0x40 {
@@ -70,7 +70,8 @@ fn fall(x: &mut Cx) {
     x.set8(0, 1);
     lib::set_immunities(x);
     rest(x);
-    x.call(0xb3fb0);
+    // 0xb3fb0 : le réglage est D1.b, que `set_anim` (0x93182) vient de poser au numéro du jeu d'animations (0)
+    crate::families::effects_creators::scenery_5(x.b, x.o, 0);
     // l'arrivée finie, le combat commence dans la même image
     super::fight::run(x);
 }
