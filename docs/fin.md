@@ -63,7 +63,7 @@ Les zones ci-dessous correspondent aux périmètres des lots de la section 3.
 | Effets après L5 (`families/effects/`, `effects_creators/`) | 33 | 13 908 | 0 | 0 | 0 | 311 | 0 | 0 | `effects/d.rs` (881) |
 | SET (`families/set*.rs`, `scenery.rs`) | 10 | 9 911 | 247 | 1 108 | 182 | 346 | 22 | 184 | `set_b.rs` (3 628) |
 | ESHL, SOBJ, objets, caisses | 10 | 15 808 | 274 | 2 378 | 71 | 51 | 91 | 424 | `eshl_c.rs` (3 300), `eshl_b.rs` (3 054) |
-| ESHL, SOBJ, objets, caisses après L7 (`eshl*/`, `sobj/`, `items/`, `boxes/`, `shell/`) | 113 | 16 553 | 0 | 0 | 0 | 39 | 0 | 0 | `boxes/chest.rs` (649) |
+| ESHL, SOBJ, objets, caisses après L7 (`eshl*/`, `sobj/`, `items/`, `boxes/`, `shell/`) | 113 | 16 543 | 0 | 0 | 0 | 39 | 0 | 0 | `boxes/chest.rs` (649) |
 | Ennemis (`families/enemy*`, `reactions.rs`) | 94 | 32 564 | 170 | 1 302 | 18 | 25 | 1 | 205 | `reactions.rs` (2 223) |
 | Ennemis après L8a (façades `enemy_common/`, `enemy_lib`, `enemy`, `reactions/` : 12 fichiers) | 102 | 32 859 | 135 (façades 0) | 1 132 (façades 0) | 14 (façades 0) | 8 | 0 | 180 (façades 0) | `enemy_riyakaa.rs` (1 051) |
 | Boss (`families/boss*`) | 83 | 30 835 | 207 | 3 182 | 171 | 146 | 0 | 114 | `boss_11/` (2 419 en 5 fichiers) |
@@ -714,7 +714,7 @@ libre.
     de travail : `shell/vars.rs` (46 `Byte`/`Word`/`Long`), sinon `crate::ram` ; `shell::camera` choisit la caméra
     du joueur (`A5+0x36`). Jeux d'animation, tables de vitesses et entrées de scripts en `RomAddr` ; entrées des
     `handler!` en littéraux. Les modules des types sont `pub mod` (accesseurs des vues sans avertissement).
-  * Mesures (`measure_end.py`, zone `eshl_sobj_items`) : 10 → 113 fichiers, 15 766 → 16 553 lignes, accesseurs ROM
+  * Mesures (`measure_end.py`, zone `eshl_sobj_items`) : 10 → 113 fichiers, 15 766 → 16 543 lignes, accesseurs ROM
     274 → 0, décalages littéraux 2 426 → 0, `A5 + littéral` 70 → 0, constantes d'adresses ROM 361 → 0,
     `rd*`/`wr*` 51 → 39, plus gros fichier 3 289 → 649 lignes.
   * Validation : 308/308 VALID après (a) et après (b) (mode par défaut) ; final, après fusion de main (71846a8,
