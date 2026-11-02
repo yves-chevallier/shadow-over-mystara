@@ -73,12 +73,6 @@ mod var {
     pub const MAIN_LINK: u32 = A5 - 0x6604;
 }
 
-/// Sounds and fade tasks of the screen.
-mod ext {
-    pub const SOUND_E10D8: u32 = 0xe10d8;
-    pub const SOUND_E109C: u32 = 0xe109c;
-}
-
 /// ROM tables: variant bytes per character (code), announcements, cursor moves (data). The
 /// initialisation routines of the four players (0x1d0f6) are those of `player::init::initialize`.
 mod table {
@@ -171,7 +165,7 @@ fn step_0(x: &mut Ctx) -> Flow {
         wr32(x.b, var::CHOICES + off, 0xffff_ffff);
     }
     crate::hud::forget_displayed(x.b);
-    crate::sound::play_global(x.b, ext::SOUND_E10D8);
+    crate::sound::play_global(x.b, crate::sound::CMD_02);
     wr16(x.b, var::COUNTDOWN, 0x203c);
     wr16(x.b, var::COUNTDOWN, COUNTDOWN_START);
     objects_0(x)
@@ -632,7 +626,7 @@ fn step_8(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, var::STEP).wrapping_add(2);
     wr8(x.b, var::STEP, s);
     crate::sound::service(x.b, crate::sound::Service::Ff06 { lock: 0xff, line: 4 });
-    crate::sound::play_global(x.b, ext::SOUND_E109C);
+    crate::sound::play_global(x.b, crate::sound::CMD_2A);
     two_blocks(x, Grid::Layer2, 0x208, 0x917000);
     two_blocks(x, Grid::Layer3, 0x14a, 0x91b800);
     let mut count = 0u8;

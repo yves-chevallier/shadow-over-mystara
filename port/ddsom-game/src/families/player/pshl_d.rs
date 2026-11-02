@@ -31,7 +31,7 @@ mod chain {
     const LINKS: u32 = 0xff204c;
     const SPEEDS: u32 = 0x1c89b6;
     const ANIMS: u32 = 0x15cdb6;
-    const SFX_END: u32 = 0xe859a;
+    const SFX_END: crate::sound::Sound = crate::sound::CMD_162_262;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x53ea2) {
@@ -381,7 +381,7 @@ mod knife {
     use super::*;
 
     const ANIMS: u32 = 0x15d0b0;
-    const SFX_HIT: u32 = 0xeba12;
+    const SFX_HIT: crate::sound::Sound = crate::sound::CMD_12F_22F;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x5445e) {

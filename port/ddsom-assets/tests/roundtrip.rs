@@ -158,6 +158,18 @@ fn animations_lossless() {
 }
 
 #[test]
+fn speeds_lossless() {
+    if !has("data/speeds.json") {
+        return;
+    }
+    let speeds = ddsom_assets::Speeds::load(&assets().join("data/speeds.json")).unwrap();
+    check("speeds", |p| p.put_speeds(&speeds));
+    for w in speeds.tables.windows(2) {
+        assert_eq!(w[0].end(), w[1].rom, "speed table {:#x}: the tables follow each other", w[1].rom);
+    }
+}
+
+#[test]
 fn scenery_lossless() {
     if !has("levels.json") {
         return;

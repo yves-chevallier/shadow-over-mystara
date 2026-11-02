@@ -95,7 +95,7 @@ mod rom {
 
 /// Game subroutines.
 mod sub {
-    pub const MUSIC: u32 = 0xe1150;
+    pub const MUSIC: crate::sound::Sound = crate::sound::CMD_04;
 }
 
 /// The banner is drawn off-screen (rows 8 and 9 of the first page of the layer, 0x910000), then copied.

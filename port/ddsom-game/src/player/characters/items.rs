@@ -23,7 +23,7 @@ use super::super::{animation, Ctx, Player};
 /// effect creators are in `spawn`).
 pub mod rom {
     /// Sound of a used item.
-    pub const SOUND_ITEM: u32 = 0xe2430;
+    pub const SOUND_ITEM: crate::sound::Sound = crate::sound::ITEM;
     /// End of the auras after the red magic.
     pub const SPELL_RESET_AURA: u32 = 0x37882;
 }

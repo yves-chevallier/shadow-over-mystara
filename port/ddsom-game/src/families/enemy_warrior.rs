@@ -356,7 +356,7 @@ fn swing_step<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB, 2);
-            lib::sound(x, 0xede08);
+            lib::sound(x, crate::sound::CMD_380);
             x.set16(0x1c, 0);
             x.set16(0x1e, 0);
             x.set16(0x18, (-0x180i16) as u16);
@@ -480,7 +480,7 @@ fn rise_step<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(OFFSET_X, 0);
             x.set32(0xb6, 0);
             x.set32(OFFSET_Y, 0);
-            lib::sound(x, 0xe56a6);
+            lib::sound(x, crate::sound::CMD_38C_48C);
             x.set16(SCRIPT_LEFT, 0);
             body(x, 6);
         }
@@ -504,7 +504,7 @@ fn rise_step<R: Bench>(x: &mut Cx<'_, R>) {
                 return finale(x);
             }
             crate::families::eshl_creators::single_40(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
-            lib::sound(x, 0xe4cfe);
+            lib::sound(x, crate::sound::CMD_385_485);
             rise_script_two(x);
         }
         6 => rise_script_two(x),

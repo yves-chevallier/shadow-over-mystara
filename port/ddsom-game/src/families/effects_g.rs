@@ -35,7 +35,7 @@ mod f {
 /// Routines d'origine.
 mod rom {
     /// Sound of the impact on the ground.
-    pub const SOUND_LANDING: u32 = 0xece9e;
+    pub const SOUND_LANDING: crate::sound::Sound = crate::sound::CMD_363_363;
 }
 
 fn free<R: Bench>(x: &mut Cx<'_, R>) {
@@ -813,11 +813,11 @@ mod fireworks {
 
 /// Scene sounds.
 mod sfx {
-    pub const LAST_ROCKET: u32 = 0xe49ae;
-    pub const LIFT_OFF: u32 = 0xe580a;
-    pub const JUMP: u32 = 0xe3da6;
-    pub const CHEER: u32 = 0xe4e5a;
-    pub const LANDING: u32 = 0xec7ae;
+    pub const LAST_ROCKET: crate::sound::Sound = crate::sound::CMD_5C;
+    pub const LIFT_OFF: crate::sound::Sound = crate::sound::CMD_80_80;
+    pub const JUMP: crate::sound::Sound = crate::sound::CMD_30C_40C;
+    pub const CHEER: crate::sound::Sound = crate::sound::CMD_311_411;
+    pub const LANDING: crate::sound::Sound = crate::sound::CMD_35E_45E;
 }
 
 fn fireworks<R: Bench>(x: &mut Cx<'_, R>) {

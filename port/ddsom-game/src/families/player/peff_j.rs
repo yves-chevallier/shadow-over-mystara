@@ -68,7 +68,7 @@ mod swap {
     const ANIMS: u32 = 0x1bc6b0;
     const OFFSETS_A: u32 = 0x4fdd4;
     const OFFSETS_B: u32 = 0x4fdec;
-    const SFX: u32 = 0xe7c20;
+    const SFX: crate::sound::Sound = crate::sound::VOICE_BY_D4;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4fd58) {

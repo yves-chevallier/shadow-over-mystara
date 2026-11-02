@@ -31,8 +31,8 @@ const FIXED_SCREEN_SLOT: u32 = 0xf0;
 /// Palette of the text screens and its two tile blocks ("copyright" screen).
 const TEXT_PALETTE: u16 = 0x53;
 const TILE_PLANE_3: u32 = 0x917000;
-const SOUND_SCREEN_A: u32 = 0xe0be2;
-const SOUND_SCREEN_B: u32 = 0xe0c16;
+const SOUND_SCREEN_A: crate::sound::Sound = crate::sound::CMD_3A;
+const SOUND_SCREEN_B: crate::sound::Sound = crate::sound::CMD_3B;
 
 /// Screen of sub-mode `sub`, if it is rewritten.
 pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {

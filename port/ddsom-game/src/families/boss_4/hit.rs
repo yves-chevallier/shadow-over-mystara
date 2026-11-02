@@ -183,8 +183,8 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             crate::mem::wr8(x.b, a5.wrapping_sub(0x557a), points);
             lib::flash_and_shake(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
-            lib::sound(x, 0xe3b6c);
-            lib::sound(x, 0xe411e);
+            lib::sound(x, crate::sound::CMD_FF);
+            lib::sound(x, crate::sound::CMD_30E);
             lib::drop_rewards(x);
             x.set8(0, 2);
             x.set16(0x16, 0);
@@ -206,7 +206,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             x.set16(0xc, 0);
             lib::debris(x, 5);
-            lib::sound(x, 0xec9e8);
+            lib::sound(x, crate::sound::CMD_35D);
             x.anim_start(SET_BODY, 0xb);
         }
         4 => {

@@ -38,15 +38,7 @@ mod f {
     pub const TIMER_B: u32 = 0x42;
 }
 
-/// Original routines used.
-mod rom {
-    pub const SOUND_0ED11C: u32 = 0xed11c;
-    pub const SOUND_0ED056: u32 = 0xed056;
-    pub const SOUND_0ED90A: u32 = 0xed90a;
-    pub const SOUND_0ECF10: u32 = 0xecf10;
-}
-
-/// Jeux d'animations.
+/// Animation sets.
 mod anims {
     pub const INTERFACE: u32 = 0x19431a;
     pub const MENU: u32 = 0x196baa;
@@ -167,7 +159,7 @@ fn victory_screen<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::Y, cy);
             x.set16(Obj::Z, 0x80);
             x.set16(0x18, 0xf000);
-            crate::sound::play(x.b, rom::SOUND_0ED11C, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_333, x.o);
             x.anim_start(anims::INTERFACE, 0);
         }
         state::ACTIVE => victory_active(x),
@@ -196,7 +188,7 @@ fn victory_active<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB_STATE, 2);
             blink_by_frame(x);
-            crate::sound::play(x.b, rom::SOUND_0ED056, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_332, x.o);
             x.anim_start(anims::INTERFACE, 1);
         }
         4 => {
@@ -206,7 +198,7 @@ fn victory_active<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB_STATE, 2);
-            crate::sound::play(x.b, rom::SOUND_0ED90A, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_337, x.o);
             x.anim_start(anims::INTERFACE, 2);
         }
         6 => {
@@ -342,7 +334,7 @@ fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
         2 => {
             if x.anim_step() {
                 advance(x, 5);
-                crate::sound::play(x.b, rom::SOUND_0ECF10, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_331, x.o);
             } else if x.u8(0x33) != 0 {
                 x.set8(0x33, 0);
                 // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
@@ -364,7 +356,7 @@ fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
                 let flags = x.u8(f::FLAGS) & !2;
                 x.set8(f::FLAGS, flags);
                 x.anim_start(anims::MENU, 6);
-                crate::sound::play(x.b, rom::SOUND_0ECF10, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_331, x.o);
             }
         }
         8 => {
@@ -375,7 +367,7 @@ fn menu_button_active<R: Bench>(x: &mut Cx<'_, R>) {
         10 => {
             if menu_step(x) == 28 {
                 advance(x, 5);
-                crate::sound::play(x.b, rom::SOUND_0ECF10, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_331, x.o);
             } else {
                 x.anim_step();
             }

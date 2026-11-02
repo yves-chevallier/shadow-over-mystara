@@ -29,10 +29,6 @@ mod f {
     pub const FACING: u32 = 0x2c;
 }
 
-/// Routines d'origine.
-mod rom {
-}
-
 /// Camera (x, depth) and secondary camera.
 const CAMERA_X: u32 = 0x506;
 const CAMERA_Y: u32 = 0x50a;
@@ -95,8 +91,8 @@ mod opening {
     /// Pools emptied on arrival: 32 objects at `A5+0x62de` (except those marked `+0x58`), 18 at `A5+0x10de`.
     pub const POOL_A: u32 = 0x62de;
     pub const POOL_B: u32 = 0x10de;
-    pub const SOUND_ARRIVAL: u32 = 0xeaa98;
-    pub const SOUND_SCROLL: u32 = 0xedc66;
+    pub const SOUND_ARRIVAL: crate::sound::Sound = crate::sound::CMD_91;
+    pub const SOUND_SCROLL: crate::sound::Sound = crate::sound::CMD_9E;
     /// Variant 3 waits for the camera to be back at this abscissa.
     pub const CAMERA_STOP: i16 = 0x5cc;
 }
@@ -321,9 +317,9 @@ mod crossing {
     /// Scenery created (pointer) and its scene scenery number.
     pub const SCENERY: u32 = 0x5c;
     pub const SCENERY_KIND: u32 = 0x83;
-    pub const SOUND_LAND: u32 = 0xe3a2e;
-    pub const SOUND_WAIT: u32 = 0xe3a98;
-    pub const SOUND_DONE: u32 = 0xe3b02;
+    pub const SOUND_LAND: crate::sound::Sound = crate::sound::CMD_2FF;
+    pub const SOUND_WAIT: crate::sound::Sound = crate::sound::CMD_2FE;
+    pub const SOUND_DONE: crate::sound::Sound = crate::sound::CMD_2FD;
 }
 
 fn crossing<R: Bench>(x: &mut Cx<'_, R>) {
@@ -534,8 +530,8 @@ mod launcher {
     pub const TIMER: u32 = 0x42;
     /// Object notified at departure (set to state 4).
     pub const PARTNER: u32 = 0x5c;
-    pub const SOUND_START: u32 = 0xed474;
-    pub const SOUND_LAUNCH: u32 = 0xedcd0;
+    pub const SOUND_START: crate::sound::Sound = crate::sound::CMD_32E;
+    pub const SOUND_LAUNCH: crate::sound::Sound = crate::sound::CMD_9F;
     /// Palette save (0x91c000, 33 × 32 bytes) for the fade.
     pub const PALETTE_RAM: u32 = 0x91c000;
     pub const PALETTE_COPY: u32 = 0xff1190;

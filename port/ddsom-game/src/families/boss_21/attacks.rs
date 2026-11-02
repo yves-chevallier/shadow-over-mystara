@@ -70,7 +70,7 @@ fn strike_0<R: Bench>(x: &mut Cx<'_, R>) {
                 return finish(x, decide::chase);
             }
             if take_key(x) {
-                lib::sound(x, 0xe580a);
+                lib::sound(x, crate::sound::CMD_80_80);
             }
         }
         _ => {}
@@ -91,7 +91,7 @@ fn strike_2<R: Bench>(x: &mut Cx<'_, R>) {
             }
             if take_key(x) {
                 puff(x, 0);
-                lib::sound(x, 0xe580a);
+                lib::sound(x, crate::sound::CMD_80_80);
             }
         }
         _ => {}
@@ -122,7 +122,7 @@ fn strike_4<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set16(0x14, vx as u16);
             x.set16(0x16, vz as u16);
-            lib::sound(x, 0xecdba);
+            lib::sound(x, crate::sound::CMD_329_429);
             x.move_x();
         }
         4 => {
@@ -136,7 +136,7 @@ fn strike_4<R: Bench>(x: &mut Cx<'_, R>) {
             lib::step(x);
             if take_key(x) {
                 puff(x, 1);
-                lib::sound(x, 0xe587e);
+                lib::sound(x, crate::sound::CMD_81_81);
             }
         }
         6 => {
@@ -229,7 +229,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             lib::step(x);
             if take_key(x) {
                 puff(x, 2);
-                lib::sound(x, 0xe587e);
+                lib::sound(x, crate::sound::CMD_81_81);
             }
         }
         8 => {
@@ -289,7 +289,7 @@ fn beam<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(TIMER, 0xa);
                 let shot = x.linked(CHILD);
                 shot.set_u8(x.b, 0x58, 1);
-                lib::sound(x, 0xe59da);
+                lib::sound(x, crate::sound::CMD_84_84);
             }
             lib::step(x);
         }
@@ -363,7 +363,7 @@ fn cinematic_shot<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(TIMER, 0x5a);
             let shot = x.linked(CHILD);
             shot.set_u8(x.b, 0x58, 1);
-            lib::sound(x, 0xe5a4e);
+            lib::sound(x, crate::sound::CMD_85_85);
             step_only(x);
         }
         6 => {
@@ -434,7 +434,7 @@ fn summon<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(0x7, 2);
             x.set8(INVULNERABLE, 0);
             decide::spawn_by_level(x);
-            lib::sound(x, 0xe5ac2);
+            lib::sound(x, crate::sound::CMD_86_86);
             x.set16(TIMER, 0x3c);
             step_only(x);
         }

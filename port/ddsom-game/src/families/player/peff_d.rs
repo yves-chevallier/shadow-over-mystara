@@ -36,7 +36,7 @@ mod beam {
 
     const ANIMS: u32 = 0x1b5ab8;
     const OFFSETS: u32 = 0x4b2dc;
-    const SFX: u32 = 0xe8d4a;
+    const SFX: crate::sound::Sound = crate::sound::CMD_170;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;

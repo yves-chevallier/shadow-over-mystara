@@ -310,7 +310,7 @@ fn announce<R: Bench>(x: &mut Cx<'_, R>) {
     lib::drop_rewards(x);
     lib::flash_and_shake(x);
     crate::sound::service(x.b, crate::sound::Service::Ff05);
-    lib::sound(x, 0xe3b6c);
+    lib::sound(x, crate::sound::CMD_FF);
 }
 
 /// 0x946fc: ordinary death sequence (animations 0xb, 0xc).
@@ -345,7 +345,7 @@ fn death_sequence<R: Bench>(x: &mut Cx<'_, R>, first: u32, second: u32) {
             x.set16(0xc, 0);
             next6(x);
             anim_a(x, second);
-            lib::sound(x, 0xeca52);
+            lib::sound(x, crate::sound::CMD_FE);
         }
         4 => {
             if !lib::step(x) {

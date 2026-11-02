@@ -51,10 +51,8 @@ mod var {
 
 /// Sounds and fade tasks of the titles.
 mod ext {
-    pub const SOUND_E0EBC: u32 = 0xe0ebc;
-    pub const SOUND_E185C: u32 = 0xe185c;
     /// End of the title text: continues in the original (SOBJ object that moves on to the next step).
-    pub const OBJECT_LAUNCH: u32 = 0xea288;
+    pub const OBJECT_LAUNCH: crate::sound::Sound = crate::sound::CMD_1FE;
 }
 
 const LAYER_BITS: u16 = 0xe;
@@ -181,7 +179,7 @@ crate::steps! {
             x.set_m8(0xd, 6);
             x.set_m8(f::CUE, 0);
             x.next_step();
-            crate::sound::play_global(x.b, ext::SOUND_E0EBC);
+            crate::sound::play_global(x.b, crate::sound::CMD_06);
             fade_setup(x, 3, FADE_PAGES_ALL);
             crate::tasks::fading::rise(x)
         },
@@ -598,7 +596,7 @@ fn t1a_wait(x: &mut Ctx) -> Flow {
     }
     x.next_step();
     two_blocks(x, Grid::Blocks4x4, 7, GFX_PLANE_1_START);
-    crate::sound::play_global(x.b, ext::SOUND_E185C);
+    crate::sound::play_global(x.b, crate::sound::CMD_1FF);
     t1a_object(x)
 }
 fn t1a_object(x: &mut Ctx) -> Flow {

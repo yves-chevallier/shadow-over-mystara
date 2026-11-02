@@ -86,7 +86,7 @@ const DEBOUNCE_MIN: u8 = 2;
 const CREDITS_MAX: u8 = 9;
 
 /// Coin insertion sound (sound wrapper).
-const COIN_NOISE: u32 = 0xe18f8;
+const COIN_NOISE: crate::sound::Sound = crate::sound::CMD_4F;
 
 /// One coin slot line: record index and mask in `IN2`.
 #[derive(Clone, Copy)]

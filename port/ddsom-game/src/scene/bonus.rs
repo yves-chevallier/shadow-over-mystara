@@ -50,7 +50,7 @@ mod rom {
     pub const BACKDROP_ALT: u32 = 0x3f6c08;
 }
 mod sub {
-    pub const MUSIC: u32 = 0xe1114;
+    pub const MUSIC: crate::sound::Sound = crate::sound::CMD_03;
 }
 
 /// Resumes (original addresses following a yield).

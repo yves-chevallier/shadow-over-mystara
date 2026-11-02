@@ -142,10 +142,10 @@ use crate::objects::Current;
         /// Per carrier class: table of offsets (X, Z) of the carried crate, per pose.
         pub const TAKEN: u32 = 0xda398;
         // subroutines not rewritten, or native
-        pub const SOUND_HIT: u32 = 0xeb59e;
-        pub const SOUND_BROKEN: u32 = 0xeb610;
-        pub const SOUND_LANDS: u32 = 0xeb52c;
-        pub const SOUND_SET_DOWN: u32 = 0xeb766;
+        pub const SOUND_HIT: crate::sound::Sound = crate::sound::CMD_139_239;
+        pub const SOUND_BROKEN: crate::sound::Sound = crate::sound::CMD_146_246;
+        pub const SOUND_LANDS: crate::sound::Sound = crate::sound::CMD_13F_23F;
+        pub const SOUND_SET_DOWN: crate::sound::Sound = crate::sound::CMD_149_249;
     }
 
     /// Crates broken in the scene (byte, `A5-0x5b21`).
@@ -773,7 +773,7 @@ mod barrier {
     pub const ANIMATIONS_0: u32 = 0x1bed06;
     pub const ANIMATIONS_1: u32 = 0x1712d4;
     pub const POSITIONS: u32 = 0xda72c;
-    pub const SOUND: u32 = 0xeae86;
+    pub const SOUND: crate::sound::Sound = crate::sound::CMD_37C_47C;
     pub const HITTER: u32 = 0x6c;
     pub const SET_CREATED: u32 = 0x7c;
 }

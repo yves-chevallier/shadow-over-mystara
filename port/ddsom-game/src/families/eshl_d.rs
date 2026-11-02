@@ -34,8 +34,8 @@ mod flame64 {
     const TIMER: u32 = 0x42;
     const SOUND_COUNT: u32 = 0x46;
     const LAST_GENERATION: u8 = 4;
-    const SFX_FLAME: u32 = 0xed548;
-    const SFX_LAND: u32 = 0xed4de;
+    const SFX_FLAME: crate::sound::Sound = crate::sound::CMD_330;
+    const SFX_LAND: crate::sound::Sound = crate::sound::CMD_32F;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
@@ -215,7 +215,7 @@ mod rocks65 {
     /// Corner of the screen (player 1, or player 2 if `A5+0x36`).
     const SCREEN: u32 = 0x4fe;
     const SCREEN_P2: u32 = 0x54e;
-    const SFX: [u32; 2] = [0xeafdc, 0xed548];
+    const SFX: [crate::sound::Sound; 2] = [crate::sound::CMD_34D_44D, crate::sound::CMD_330];
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if suspended(x) {
@@ -310,7 +310,7 @@ mod shard66 {
     const CARRIER: u32 = 0x46;
     const TIMER: u32 = 0x42;
     const RANK: u32 = 0x2f;
-    const SFX_LAND: u32 = 0xe4de6;
+    const SFX_LAND: crate::sound::Sound = crate::sound::CMD_387_487;
     /// States `+4.w` of the carrier in which the burst stays held.
     const HELD_STATE: u16 = 0x204;
 
@@ -620,7 +620,7 @@ mod stone68 {
     const RANK: u32 = 0x2f;
     const TIMER: u32 = 0x42;
     const SPEED_TABLE: u32 = 31;
-    const SFX_RELEASE: u32 = 0xe4de6;
+    const SFX_RELEASE: crate::sound::Sound = crate::sound::CMD_387_487;
     const SCREEN_TOP: u32 = 0x50a;
     const SCREEN_TOP_P2: u32 = 0x55a;
     const RELEASE_STATE: u32 = 0x0204_0200;
@@ -731,7 +731,7 @@ mod bouncer69 {
     const RANKS: u32 = 0xa7eb4;
     const RANK: u32 = 0x2f;
     const TIMER: u32 = 0x42;
-    const SFX_BOUNCE: u32 = 0xe4cfe;
+    const SFX_BOUNCE: crate::sound::Sound = crate::sound::CMD_385_485;
     const CAMERA_X: u32 = 0x506;
     const CAMERA2_X: u32 = 0x556;
 
@@ -891,7 +891,7 @@ mod ball71 {
     const RELEASE: u32 = 0x58;
     const HIT: u32 = 0x33;
     const SPEED_TABLE: u32 = 33;
-    const SFX_THROW: u32 = 0xed4de;
+    const SFX_THROW: crate::sound::Sound = crate::sound::CMD_32F;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if suspended(x) {
@@ -997,8 +997,8 @@ mod splinter72 {
     const ROWS: u32 = 0xa84f4;
     const CREATOR: u32 = 0x5c;
     const RANK: u32 = 0x2f;
-    const SFX_THROW: u32 = 0xed4de;
-    const SFX_LAND: u32 = 0xed548;
+    const SFX_THROW: crate::sound::Sound = crate::sound::CMD_32F;
+    const SFX_LAND: crate::sound::Sound = crate::sound::CMD_330;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u16(CREATOR) == 0 {

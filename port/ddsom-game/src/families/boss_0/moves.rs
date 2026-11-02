@@ -48,7 +48,7 @@ fn gallop_step<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(f::KEY_FRAME, 0);
         lib::debris(x, 1);
         lib::shake_54(x, 0x10);
-        lib::sound(x, 0xe3d32);
+        lib::sound(x, crate::sound::CMD_376_476);
     }
 }
 
@@ -60,10 +60,10 @@ fn start_slide<R: Bench>(x: &mut Cx<'_, R>, v: u16, extra: bool) {
     let v = if x.u8(f::FLIP) != 0 { v.wrapping_neg() } else { v };
     x.set16(0x16, v);
     if extra {
-        lib::sound(x, 0xe13b0);
+        lib::sound(x, crate::sound::CMD_22);
     }
-    lib::sound(x, 0xe3d32);
-    lib::sound(x, 0xecdba);
+    lib::sound(x, crate::sound::CMD_376_476);
+    lib::sound(x, crate::sound::CMD_329_429);
     body(x, 9);
 }
 
@@ -114,7 +114,7 @@ fn arrival<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x21);
-            lib::sound(x, 0xe3d32);
+            lib::sound(x, crate::sound::CMD_376_476);
             anim_kind(x, 0x30);
             entry(x, 3);
         }
@@ -145,7 +145,7 @@ fn transformation<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             next7(x);
             x.set16(TIMER, 0x3c);
-            lib::sound(x, 0xe3cbe);
+            lib::sound(x, crate::sound::CMD_30B_40B);
             anim_kind(x, 0x31);
             body(x, 0xe);
         }
@@ -180,7 +180,7 @@ fn transformation<R: Bench>(x: &mut Cx<'_, R>) {
             if partner.u32(x.b, f::STATE) == 0x0200_040a {
                 next7(x);
                 x.set16(TIMER, 0x5a);
-                lib::sound(x, 0xe3bd6);
+                lib::sound(x, crate::sound::CMD_309_409);
                 body(x, 0x10);
             } else {
                 x.anim_step();
@@ -221,7 +221,7 @@ fn partner_arrival<R: Bench>(x: &mut Cx<'_, R>) {
             let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x21);
-            lib::sound(x, 0xe3d32);
+            lib::sound(x, crate::sound::CMD_376_476);
             anim_kind(x, 0x32);
             entry(x, 3);
         }
@@ -243,7 +243,7 @@ fn partner_arrival<R: Bench>(x: &mut Cx<'_, R>) {
             if expired(x, TIMER) {
                 next7(x);
                 x.set16(TIMER, 0x5a);
-                lib::sound(x, 0xe3bd6);
+                lib::sound(x, crate::sound::CMD_309_409);
                 body(x, 0xd);
             } else {
                 x.anim_step();
@@ -438,7 +438,7 @@ fn charge_phase<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x21);
             lib::debris(x, 1);
-            lib::sound(x, 0xe3d32);
+            lib::sound(x, crate::sound::CMD_376_476);
             anim_kind(x, 4);
             body(x, 8);
         }
@@ -501,7 +501,7 @@ fn leap_strike<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Obj::SPEED_INDEX, angle as u8);
             speed(x, 0x2b);
             lib::debris(x, 1);
-            lib::sound(x, 0xe3d32);
+            lib::sound(x, crate::sound::CMD_376_476);
             anim_kind(x, 0x13);
             entry(x, 3);
         }
@@ -582,7 +582,7 @@ fn arc_jump<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(TIMER, 0x14);
                 lib::shake_58(x, 0x14);
                 lib::debris(x, 2);
-                lib::sound(x, 0xecb98);
+                lib::sound(x, crate::sound::CMD_327_427_C);
                 entry(x, 7);
             }
         }

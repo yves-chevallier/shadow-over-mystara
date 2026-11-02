@@ -404,7 +404,7 @@ libre.
 
 ### Série 0 (un agent, API communes)
 
-**L0. Mesure et point de départ** (petit)
+**L0. Mesure et point de départ** (petit) — **fait** (branche `wt-serie0`)
 * Périmètre : `tools/measure_end.py` (nouveau) et `docs/fin.md`.
 * Travail :
   * le script reproduit le tableau de la section 1 par périmètre ;
@@ -413,8 +413,23 @@ libre.
 * Lancer `rom_reads` sur les 308 scénarios et ranger le résultat par lecteur : c'est la mesure de référence des
   étapes (b).
 * Fin : le script versionné redonne les chiffres de la section 1 à ±2 %.
+* Résultat :
+  * `tools/measure_end.py` (zones de la section 1, tailles des crates, graphe des modules et composantes fortement
+    connexes, `--graph`, `--json`, `--rev REV`, `--compare A B`). Sur 9a69409, il redonne la section 1 à ±2 % pour
+    les fichiers, lignes, accesseurs ROM (1 700), constantes d'adresses (2 398), `rd*`/`wr*` (4 203), fichiers de
+    plus de 1 500 lignes (14), graphe (286 arêtes, composante de 37). Écarts connus : décalages littéraux 11 742
+    (+4 %, tous dans `players` : 2 912 contre 2 545, définition plus large des accesseurs), `A5 + littéral` 854 (la
+    somme des lignes du tableau donne 857 : le total « ~785 » était faux), sons par adresse 300 (appels dont
+    l'argument est un littéral ou une constante `u32` du fichier ; 316 appels `sound::play*` en tout).
+  * Mesure de référence par lecteur : `rom_reads` avec `DDSOM_READERS=1` (premier appelant de chaque mot lu,
+    hors accesseurs génériques) sur les 308 scénarios, rangée par `tools/rom_readers.py report` (5b55ead) :
+    914 567 mots lus (1,83 Mo). Par zone : moteur 772 327 (`sprites.rs` 394 571, `objects/anim.rs` 156 070,
+    `scroll.rs` 102 399, `palette.rs` 68 765, `video.rs` 38 356), SET 59 695, écrans 37 827, joueurs 25 619,
+    ESHL/SOBJ/objets 4 928, effets 4 726, boss 4 649, ennemis 4 495, communs des familles 297.
+    `tools/rom_readers.py zones <fichier> <sorties>` donne les zones lues par un fichier : c'est la liste de
+    départ de chaque étape (b).
 
-**L1. Socle des données typées et des vues typées** (moyen)
+**L1. Socle des données typées et des vues typées** (moyen) — **fait** (branche `wt-serie0`, voir « Résultat »)
 * Périmètre :
   * `ddsom-data/` (nouvelle crate : loaders repris de `ddsom-assets/src/{lib,sprites,levels,tables,data,texts,terrain,scene_palettes,spawns}.rs`) ;
   * `extract/src/lib.rs` (`extract::to_data(roms) -> GameData` en mémoire) ;
@@ -437,8 +452,45 @@ libre.
   * `extract` dépend de `m68k`, pour la découverte du code. Il ne faut pas lier `extract` à `ddsom` : `to_data` reste
     dans une fonctionnalité utilisée par `validate` et le mode avec ROMs. Sinon, le mode ROM passe par une extraction
     dans un dossier temporaire.
+* Résultat :
+  * crate `ddsom-data` : `GameData { frames, anims, speeds }`, `GameData::load(assets)`, `RomAddr`, `data()` (un
+    `OnceLock` ; `install` puis `data()`), `pointers::Pointers` (tableaux d'adresses du code). Les loaders de
+    `ddsom-assets` (sprites, levels, tables, data, texts, terrain, scene_palettes, spawns, json) y sont déplacés ;
+    `ddsom-assets` les réexporte et garde `music` (lot L3), `rebuild`, `remainder`, les cellules et les palettes.
+    **Pour les lots de données suivants** : une ligne par famille dans `GameData` et `GameData::FILES`, le
+    chargement dans `ddsom-data/src/<famille>.rs`, l'extraction dans `extract/src/<famille>.rs` appelée par
+    `extract::to_data_from`, l'écriture dans `rebuild` et un test `<famille>_lossless`.
+  * `extract` est une bibliothèque (plus le programme) : `to_data(roms)`, `to_data_from(&Program)`. Son 68000 (pour
+    `reste.json`) est derrière la fonctionnalité `full` du programme : `ddsom` lie `extract` sans `m68k` ni `z80`
+    (`cargo tree -p ddsom -e normal`). `ddsom` installe `GameData::load(assets)` ou `extract::to_data(roms)` ;
+    les outils (`install_no_68k`, `install_reference`) extraient les données du programme de la machine si aucune
+    n'est installée. Test `extract/tests/to_data.rs` : les données extraites des ROMs égalent celles des assets.
+  * Lecteurs : `objects/anim.rs` (entrées, sauts, jeux, jeux par personnage), `objects/motion.rs` (tables et
+    tableaux de vitesses) et `sprites.rs` (images) lisent `data()`. Ce que les tables ne décrivent pas passe par le
+    **résidu** (`ddsom-game/src/data.rs`, `Missing { table, key }.read16/read32/prog32`) : lu sur le bus, compté
+    par clé manquante, fatal avec `DDSOM_STRICT=1`, imprimé par `validate` (ligne `residue:`) et résumé par
+    `tools/residue.py`.
+  * Nouvelles données : `data/speeds.json` (120 tables jointives `0x1c4836-0x1ca2b6`, deux tableaux de 44 et 76
+    tables ; 58 zones retirées de `native_zones.txt`), `character_sets` d'`anims.json` (trois tableaux de 12
+    jeux), `extra` de `frames.json` (38 images hors table), et les jeux et entrées que seul le code désigne
+    (`port/extract/code_sprites.txt`, mesuré par `tools/residue.py --sprites`).
+  * `record!` (`ddsom-game/src/record.rs`) : `getter, setter, OFFSET: type @ décalage;` produit la constante de
+    décalage (pour le code qui passe encore des décalages) et les accesseurs typés. Les champs communs d'`Obj` sont
+    déclarés ainsi (`obj.anim_timer(b)`, `obj.set_frame(b, v)`, `Link` pour `PREV`/`NEXT`) ; `anim.rs` et `motion.rs`
+    les emploient. Sans la crate `paste` (pas de dépendance hors ligne), les trois noms sont écrits.
+  * Mesures : `anim.rs`, `motion.rs` et `sprites.rs` n'ont plus d'accesseur ROM (`measure_end.py`, zone `engine` :
+    1 232 → 1 218 `rd*`/`wr*`, les lectures du résidu étant regroupées dans `data.rs`). Résidu sur les 308
+    scénarios (`tools/residue.py`, identique dans les deux modes) : 16 146 lectures pour 19 clés, toutes des
+    lectures d'origine hors des tables (glitchs) : 6 pointeurs d'image invalides (`0x32003200`, `0xb200b30`...),
+    9 entrées et 3 jeux de script incohérents autour de `0x1af22c-0x1bf902` (leurs images ne sont pas des images),
+    et la table de vitesses 0 d'un objet sans table. Avant la mesure du code (`code_sprites.txt`) : 205 clés.
+    Aucune image ni entrée connue n'est plus lue par adresse. `bench` bot30k 12 000 images : même empreinte
+    `a65ecd8aa6e38d4f` que main, sans les outils, avec ROMs comme avec assets.
+  * Validation : 308/308 VALID en mode par défaut et avec `DDSOM_ASSETS` (assets réextraits par la branche),
+    `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1` ; tests `ddsom-assets` (dont `speeds_lossless`), `extract`
+    (`to_data`) ; `cargo clippy` sans avertissement (avec et sans `tools`).
 
-**L2. Sons nommés** (petit, mécanique, transverse)
+**L2. Sons nommés** (petit, mécanique, transverse) — **fait** (branche `wt-serie0`, voir « Résultat »)
 * Périmètre :
   * `sound.rs` et `sound_table.rs` ;
   * les 317 sites `sound::play*` (39 fichiers) et les appels de son des boss ;
@@ -451,6 +503,20 @@ libre.
   * `play(b, Sound, o)` sans adresse ;
   * l'adresse de l'enveloppe reste un champ de la constante, pour les outils et les natives des outils.
 * Fin : `grep -E 'sound::play[a-z_]*\([^,]+, *0x'` ne trouve rien ; 308/308 dans les deux modes.
+* Résultat :
+  * `sound::Sound` (entrée de l'enveloppe et façon de composer la commande : enveloppe, aiguillage, son par version,
+    son muet). Les 504 enveloppes sont des constantes nommées d'après leur commande, générées par
+    `tools/gen_sound_wrappers.py` (qui redonne `sound_table.rs` à l'identique) : `CMD_3A`, `CMD_1C_1D` (deux voix),
+    `CMD_A0_BY_CHARACTER`, `CMD_B9_BY_PLAYER`, doublons `_B`, `_C`... Les 21 autres sont nommées à la main dans
+    `sound.rs` (`SCENE_MUSIC`, `SCENE_MUSIC_OR_STOP`, `WEAPON_VOICE`, `LANDING_EFFECT`, `PRAYER`, `STORM`, `MOON`,
+    `SILENT`...). [son.md](son.md) ne nomme pas les sons un à un : les noms de sens restent les alias locaux des
+    familles (`SFX_LAND`, `DEATH_EFFECT`...), désormais de type `Sound` ; les alias qui n'étaient qu'une adresse
+    (`E7376`, `SOUND_0ECF10`...) sont remplacés par la constante.
+  * `play(b, Sound, o)`, `play_global`, `play_with`, `Ctx::sound`, `enemy_lib::sound` prennent un `Sound` ; un son
+    désigné par une table de la ROM se lit `Sound::at(entrée)` (12 sites). Plus de recherche par adresse pour un son
+    nommé ; les natives des outils gardent l'entrée (`Sound::entry`).
+  * Mesure (`measure_end.py`, colonne `sound`) : 300 sons par adresse → 0 ; le `grep` de fin ne trouve rien.
+  * Validation : avec L1 (mêmes validations).
 
 ### Vague 1 (trois agents)
 

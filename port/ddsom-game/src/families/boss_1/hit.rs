@@ -177,7 +177,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             next6(x);
             x.set16(0xc, 0);
             dust(x, 6);
-            lib::sound(x, 0xec820);
+            lib::sound(x, crate::sound::CMD_35F_45F);
             body(x, 0x1d);
         }
         _ => {
@@ -227,8 +227,8 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             set_abs8(x, A5_DEATH + 2, score);
             lib::flash_and_shake(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
-            lib::sound(x, 0xe3b6c);
-            lib::sound(x, 0xe3e8e);
+            lib::sound(x, crate::sound::CMD_FF);
+            lib::sound(x, crate::sound::CMD_30E_40E);
             lib::drop_rewards(x);
             x.set8(0, 2);
             x.set16(0x16, 0);
@@ -251,7 +251,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             next6(x);
             x.set16(0xc, 0);
             dust(x, 6);
-            lib::sound(x, 0xec9e8);
+            lib::sound(x, crate::sound::CMD_35D);
             x.anim_start(SET_BODY, 0x1f);
         }
         4 => {

@@ -177,7 +177,7 @@ fn tail_flame<R: Bench>(x: &mut Cx<'_, R>) {
             spawn_trail(x, 1);
             x.set8(0xa4, 1);
             anim_b(x, 0xb);
-            lib::sound(x, 0xed836);
+            lib::sound(x, crate::sound::CMD_33F);
         }
         4 => {
             x.set8(0xa4, 1);
@@ -214,7 +214,7 @@ fn sweep_a<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             if x.a5_u16(0x6e) & 0xf == 0 {
                 spawn_flame(x, 0, 0);
-                lib::sound(x, 0xed7cc);
+                lib::sound(x, crate::sound::CMD_33E);
             }
             if !lib::step(x) {
                 return;
@@ -247,7 +247,7 @@ fn sweep_b<R: Bench>(x: &mut Cx<'_, R>) {
             spawn_trail(x, 2);
             x.set8(0xa4, 3);
             anim_b(x, 0x15);
-            lib::sound(x, 0xed8a0);
+            lib::sound(x, crate::sound::CMD_340);
         }
         4 => {
             x.set8(0xa4, 3);
@@ -288,7 +288,7 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(0x3e, 0);
             let index = key & 0x7f;
             spawn_flame(x, 1, index);
-            lib::sound(x, 0xed762);
+            lib::sound(x, crate::sound::CMD_33D);
         }
         4 => {
             if x.anim_step() {

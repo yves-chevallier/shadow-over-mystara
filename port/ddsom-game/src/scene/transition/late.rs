@@ -6,11 +6,11 @@ use crate::scene::fading;
 use crate::scene::tiles;
 
 mod ext {
-    pub const MUSIC_B: u32 = 0xe1564;
-    pub const MUSIC_F: u32 = 0xe15dc;
-    pub const MUSIC_G: u32 = 0xe161c;
-    pub const MUSIC_H: u32 = 0xe1658;
-    pub const MUSIC_FINALE: u32 = 0xe5480;
+    pub const MUSIC_B: crate::sound::Sound = crate::sound::CMD_16;
+    pub const MUSIC_F: crate::sound::Sound = crate::sound::CMD_2E;
+    pub const MUSIC_G: crate::sound::Sound = crate::sound::CMD_31;
+    pub const MUSIC_H: crate::sound::Sound = crate::sound::CMD_1FC;
+    pub const MUSIC_FINALE: crate::sound::Sound = crate::sound::CMD_31A;
 }
 
 /// Palette page 0x91c400 and its backup.

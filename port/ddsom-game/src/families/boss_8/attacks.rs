@@ -68,7 +68,7 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(f::KEY_FRAME) != 0 {
                 addq8(x, f::SUB3, 2);
                 x.set8(f::KEY_FRAME, 0);
-                lib::sound(x, 0xe42c6);
+                lib::sound(x, crate::sound::CMD_342_342);
             }
             x.anim_step();
         }
@@ -119,7 +119,7 @@ fn volley_start<R: Bench>(x: &mut Cx<'_, R>, kind: u8, extra: bool) {
 /// First shot of a volley: sounds, effect, then one shot per living player.
 fn volley_fire<'a, R: Bench>(x: &mut Cx<'a, R>, pick: fn(&mut Cx<'a, R>)) {
     lib::shake_58(x, 0x30);
-    lib::sound(x, 0xedd2c);
+    lib::sound(x, crate::sound::CMD_345);
     addq8(x, f::SUB3, 2);
     x.set16(TIMER, 0x32);
     let n = var::PLAYERS_ALIVE.get(x.b);
@@ -200,7 +200,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             }
             addq8(x, f::SUB3, 2);
             x.set8(f::KEY_FRAME, 0);
-            lib::sound(x, 0xecdba);
+            lib::sound(x, crate::sound::CMD_329_429);
             let (mut d0, mut d1) = (-0x800i16, 0x20i16);
             if x.u8(f::FLIP) != 0 {
                 d0 = d0.wrapping_neg();
@@ -305,7 +305,7 @@ pub(super) fn leap_rest<R: Bench>(x: &mut Cx<'_, R>, t: u32) {
                 return;
             }
             lib::shake_58(x, 0x14);
-            lib::sound(x, 0xecb98);
+            lib::sound(x, crate::sound::CMD_327_427_C);
             aids::burst_small(x);
             x.set32(0xc, 0);
             addq8(x, f::SUB3, 2);
@@ -336,7 +336,7 @@ fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
             addq8(x, f::SUB3, 2);
             x.set8(PHASE_TIMER, 0x10);
             key(x, 0x12);
-            lib::sound(x, 0xecf7a);
+            lib::sound(x, crate::sound::CMD_349);
             body(x, 4);
         }
         0x88dc6 => {
@@ -352,7 +352,7 @@ fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
             if timer_done(x) {
                 addq8(x, f::SUB3, 2);
                 x.set_bit(0x1, 1, false);
-                lib::sound(x, 0xecf7a);
+                lib::sound(x, crate::sound::CMD_349);
             }
         }
         _ => finish(x),

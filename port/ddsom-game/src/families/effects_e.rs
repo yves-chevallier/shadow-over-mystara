@@ -177,8 +177,8 @@ mod gate {
         [(0x4a9e, 32, 0x50), (0x549e, 38, 0x60), (0x795e, 16, 0x50), (0x3a1e, 3, 0xc0), (0x3c5e, 38, 0x60), (0x179e, 48, 0x60)];
     /// X offset of the players, per character, on return (words, program space).
     pub const RETURN_OFFSETS: u32 = 0xae3b4;
-    pub const MUSIC_OF_SCENE: u32 = 0xe0d8c;
-    pub const PLAY_MUSIC: u32 = 0xe17a4;
+    pub const MUSIC_OF_SCENE: crate::sound::Sound = crate::sound::SCENE_MUSIC_OR_STOP;
+    pub const PLAY_MUSIC: crate::sound::Sound = crate::sound::FROM_D4;
 }
 
 fn gate<R: Bench>(x: &mut Cx<'_, R>) {
@@ -436,7 +436,7 @@ fn gate_open<R: Bench>(x: &mut Cx<'_, R>) {
 mod attack_fx {
     /// Variant 0: spots around the attacker (offset word per attacker type, then eight (dx, dz)).
     pub const FLASH_PLACES: u32 = 0xabfbe;
-    pub const SOUND_FLASH: u32 = 0xe9ef4;
+    pub const SOUND_FLASH: crate::sound::Sound = crate::sound::CMD_18F;
     /// Variant 2: offsets (dx, dz) and animation per attacker type (program space).
     pub const MARK_PLACES: u32 = 0xac6ea;
     pub const MARK_ANIMS: u32 = 0xac6ca;

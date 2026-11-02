@@ -72,7 +72,7 @@ pub(crate) const ENQUEUE_DIRECT: Native = Native {
 /// Native of a wrapper or a dispatcher (calls by address): the core, with what it reads from the registers;
 /// all registers are returned intact, the flags are those of the last `move.l` of the private stack pointer.
 fn native_sound_in(c: &mut Cpu, b: &mut Cps2Bus, sound: u32) {
-    play_with(b, sound, Source { object: Some(Obj(c.a[0])), a1: Some(c.a[1]), d4: Some(c.d[4]) });
+    play_with(b, Sound::at(sound), Source { object: Some(Obj(c.a[0])), a1: Some(c.a[1]), d4: Some(c.d[4]) });
     let top = rd32(b, a5(ram::PRIVATE_STACK));
     c.flags_logic(top, Size::Long);
     rts(c, b);
@@ -82,12 +82,10 @@ fn native_sound_in(c: &mut Cpu, b: &mut Cps2Bus, sound: u32) {
 pub(crate) fn native_wrappers() -> &'static [Native] {
     static LIST: OnceLock<Vec<Native>> = OnceLock::new();
     LIST.get_or_init(|| {
-        let wrappers = table::WRAPPERS.iter().map(|w| (w.entry, "sound_wrapper"));
-        let dispatches = DISPATCHES.iter().map(|&(entry, _)| (entry, "sound_dispatch"));
-        let versions = BY_VERSION.iter().map(|&(entry, ..)| (entry, "sound_by_version"));
-        wrappers
-            .chain(dispatches)
-            .chain(versions)
+        WRAPPERS
+            .iter()
+            .chain(OTHERS.iter().filter(|s| s.entry != SILENT.entry))
+            .map(|s| (s.entry, s.kind_name()))
             .map(|(entry, name)| Native {
                 entry,
                 name,
@@ -150,7 +148,7 @@ pub(crate) const INIT_PRIVATE_STACK: Native = Native {
 
 /// 0xec238: empty sound (a plain `rts`), target of the dispatcher 0xec200 for objects without sound.
 pub(crate) const NONE: Native = Native {
-    entry: NO_SOUND,
+    entry: SILENT.entry,
     name: "sound_none",
     run: crate::Body::WithCpu(rts),
     touches_sound: false,

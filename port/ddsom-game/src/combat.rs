@@ -701,7 +701,7 @@ fn enemy_reacts_to_hit(w: &mut World, p: Obj, e: Obj) {
         d4 = p.u8(w.b, f::WEAPON_10E);
     }
     set_low8(&mut w.leftovers.d4, d4);
-    let target = if p.u8(w.b, f::ATTACK_KIND) <= 1 { 0xe662a } else { 0xe823a };
+    let target = if p.u8(w.b, f::ATTACK_KIND) <= 1 { crate::sound::HIT_BY_CATEGORY } else { crate::sound::HIT_BY_VARIANT };
     let source = crate::sound::Source { object: Some(p), a1: Some(e.0), d4: Some(w.leftovers.d4) };
     crate::sound::play_with(w.b, target, source);
 }

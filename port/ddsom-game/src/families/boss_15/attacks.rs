@@ -111,7 +111,7 @@ fn attack_0<R: Bench>(x: &mut Cx<'_, R>) {
         0 => reach_player(x),
         2 => {
             x.add8(0x7, 2);
-            lib::sound(x, 0xe571a);
+            lib::sound(x, crate::sound::CMD_38D);
             x.set16(TIMER, 0xa0);
             set_anim(x, 0, 2);
         }
@@ -138,9 +138,9 @@ fn attack_0<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set8(0x33, 0);
             x.add8(0x7, 2);
-            lib::sound(x, 0xe571a);
+            lib::sound(x, crate::sound::CMD_38D);
             eshl_shot_34(x, 0);
-            lib::sound(x, 0xe54dc);
+            lib::sound(x, crate::sound::CMD_317);
             x.set16(TIMER, 0x100);
             flap(x);
         }
@@ -207,7 +207,7 @@ fn attack_2<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x10, py);
             x.set16(TIMER, 0x40);
             set_anim(x, 2, 0x13);
-            lib::sound(x, 0xe571a);
+            lib::sound(x, crate::sound::CMD_38D);
             push_side(x);
         }
         8 => push_side(x),
@@ -296,7 +296,7 @@ fn sweep<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set8(0x33, 0);
     eshl_shot_34(x, 1);
-    lib::sound(x, 0xe54dc);
+    lib::sound(x, crate::sound::CMD_317);
     x.set8(0x2d, 0);
     x.select_speed(&crate::objects::motion::SPEEDS_A, 0x18);
 }
@@ -389,7 +389,7 @@ fn dive_a<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set8(0x33, 0);
     eshl_shot_34(x, 2);
-    lib::sound(x, 0xe54dc);
+    lib::sound(x, crate::sound::CMD_317);
 }
 
 fn dive_b<R: Bench>(x: &mut Cx<'_, R>) {

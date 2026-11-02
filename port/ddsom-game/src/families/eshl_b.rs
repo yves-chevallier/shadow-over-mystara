@@ -13,16 +13,6 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-/// Sounds (wrappers of the 0xe0836-0xee080 area) and other effect routines.
-mod sfx {
-    pub const E4752: u32 = 0xe4752;
-    pub const E4E5A: u32 = 0xe4e5a;
-    pub const E4FB6: u32 = 0xe4fb6;
-    pub const E5020: u32 = 0xe5020;
-    pub const E7376: u32 = 0xe7376;
-    pub const ED686: u32 = 0xed686;
-}
-
 /// Long "to release" state (`+4 = 6`, `+5..+7` = 0).
 const DEAD: u32 = 0x0600_0000;
 
@@ -124,7 +114,7 @@ mod shot15 {
                 x.set8(0x5d, 0);
                 x.set8(f::ATTACK_POWER, 0xc);
                 x.set8(f::ATTACK_ID, 0x11);
-                crate::sound::play(x.b, sfx::E4752, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_32B, x.o);
                 let owner_state = owner.u32(x.b, 0x4);
                 if owner_state == 0x0202_0004 {
                     x.set32(0x4, 0x0202_0000);
@@ -672,7 +662,7 @@ mod shot17 {
         }
         x.set32(0xc, 0);
         x.anim_start(ANIMS, 2);
-        crate::sound::play(x.b, sfx::ED686, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_36E, x.o);
     }
 
     /// Fall of mode > 0: movement in X, Y and Z.
@@ -686,7 +676,7 @@ mod shot17 {
         x.set8(0x2a, 0);
         x.set32(0xc, 0);
         x.anim_start(ANIMS, 2);
-        crate::sound::play(x.b, sfx::ED686, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_36E, x.o);
     }
 }
 
@@ -726,7 +716,7 @@ mod shot18 {
     fn fly<R: Bench>(x: &mut Cx<'_, R>) {
         let hit = x.u8(f::HIT_FLAGS);
         if hit & 0x08 != 0 {
-            crate::sound::play(x.b, sfx::E7376, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_122_222, x.o);
             return x.free_eshl();
         }
         if hit & 0x20 != 0 {
@@ -929,7 +919,7 @@ mod shot20 {
         let owner = x.linked(f::OWNER);
         let armed = owner.u8(x.b, ARMED) & !1;
         owner.set_u8(x.b, ARMED, armed);
-        crate::sound::play(x.b, sfx::E5020, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_37A, x.o);
         x.anim_start(ANIMS, 3);
     }
 
@@ -959,7 +949,7 @@ mod shot20 {
                 let owner = x.linked(f::OWNER);
                 if (owner.u32(x.b, 0x4) as i32) >= 0x0200_0600 && x.u8(0x33) != 0 {
                     x.set8(0x33, 0);
-                    crate::sound::play(x.b, sfx::E4E5A, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_311_411, x.o);
                 }
                 if x.anim_step() {
                     if x.u16(f::OWNER) == 0 {
@@ -1001,8 +991,8 @@ mod shot20 {
                 if !x.anim_step() {
                     return attach(x, ATTACH);
                 }
-                crate::sound::play(x.b, sfx::E4E5A, x.o);
-                crate::sound::play(x.b, sfx::E4FB6, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_311_411, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_379, x.o);
                 x.add8(0x6, 2);
                 // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
                 let blow = x.alloc_unchecked(&pools::ESHL);
@@ -1033,7 +1023,7 @@ mod shot20 {
                     let owner = x.linked(f::OWNER);
                     let armed = owner.u8(x.b, ARMED) & !1;
                     owner.set_u8(x.b, ARMED, armed);
-                    crate::sound::play(x.b, sfx::E5020, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_37A, x.o);
                     x.anim_start(ANIMS, 3);
                 } else {
                     attach(x, ATTACH);
@@ -1065,7 +1055,7 @@ mod shot21 {
             0 => init(x),
             2 => active(x),
             _ => {
-                crate::sound::play(x.b, sfx::E5020, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_37A, x.o);
                 x.free_eshl()
             }
         }
@@ -1082,7 +1072,7 @@ mod shot21 {
         x.set8(0x42, 0x4f);
         x.set8(0x1e, 0);
         x.anim_start(ANIMS, 2);
-        crate::sound::play(x.b, sfx::E4FB6, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_379, x.o);
     }
 
     fn burn<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1413,7 +1403,7 @@ mod shot25 {
     use super::*;
 
     const ANIMS: u32 = 0x16ea18;
-    const IMPACT_EFFECT: u32 = 0xeafdc;
+    const IMPACT_EFFECT: crate::sound::Sound = crate::sound::CMD_34D_44D;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {
@@ -1491,7 +1481,7 @@ mod shot26 {
     const ANIMS: u32 = 0x16ea90;
     const HEIGHTS: u32 = 0xa1968;
     const SPEED_TABLES: u32 = 0xa1972;
-    const LAND_SOUND: u32 = 0xeb1a4;
+    const LAND_SOUND: crate::sound::Sound = crate::sound::CMD_8D;
     const FLY: u8 = 0;
     const GROUND: u8 = 2;
     const BLINK: u8 = 4;
@@ -1592,8 +1582,8 @@ mod shot27 {
     use super::*;
 
     const ANIMS: u32 = 0x16ec24;
-    const SOUND_END: u32 = 0xed90a;
-    const SOUND_ROW: u32 = 0xed40a;
+    const SOUND_END: crate::sound::Sound = crate::sound::CMD_337;
+    const SOUND_ROW: crate::sound::Sound = crate::sound::CMD_32D;
     const ROW_AT: u16 = 0x50;
     const RISE: u8 = 0;
     const FADE: u8 = 2;
@@ -1826,8 +1816,8 @@ mod shot29 {
 
     const ANIMS: u32 = 0x16eec2;
     const ATTACH_SHIFT: u32 = 0xa1fac;
-    const SOUND_START: u32 = 0xed40a;
-    const SOUND_END: u32 = 0xed90a;
+    const SOUND_START: crate::sound::Sound = crate::sound::CMD_32D;
+    const SOUND_END: crate::sound::Sound = crate::sound::CMD_337;
     const SOURCE_ARMED: u32 = 0xaf;
     const WAIT: u8 = 0;
     const HOLD: u8 = 2;
@@ -1992,8 +1982,8 @@ mod shot30 {
     use super::*;
 
     const ANIMS: u32 = 0x16f174;
-    const SOUND_START: u32 = 0xed474;
-    const SOUND_END: u32 = 0xed90a;
+    const SOUND_START: crate::sound::Sound = crate::sound::CMD_32E;
+    const SOUND_END: crate::sound::Sound = crate::sound::CMD_337;
     const OWNER_ARMED: u32 = 0xaf;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -2085,8 +2075,8 @@ mod shot31 {
     use super::*;
 
     const ANIMS: u32 = 0x16f504;
-    const SOUND_SPAWN: u32 = 0xedaa6;
-    const SOUND_HIT: u32 = 0xedb18;
+    const SOUND_SPAWN: crate::sound::Sound = crate::sound::CMD_334_434;
+    const SOUND_HIT: crate::sound::Sound = crate::sound::CMD_138;
     const SEARCH: u8 = 0;
     const HUNT: u8 = 2;
 
@@ -2207,8 +2197,8 @@ mod shot32 {
     use super::*;
 
     const ANIMS: u32 = 0x16f58c;
-    const SOUND_FLYING: u32 = 0xed4de;
-    const SOUND_LANDING: u32 = 0xed548;
+    const SOUND_FLYING: crate::sound::Sound = crate::sound::CMD_32F;
+    const SOUND_LANDING: crate::sound::Sound = crate::sound::CMD_330;
     const SCREEN_LEFT: u32 = 0x5a6;
     const FLY: u8 = 0;
     const FALL: u8 = 2;
@@ -2315,8 +2305,8 @@ mod shot33 {
     use super::*;
 
     const ANIMS: u32 = 0x16f8ea;
-    const SOUND_FIRE: u32 = 0xed474;
-    const SOUND_END: u32 = 0xed90a;
+    const SOUND_FIRE: crate::sound::Sound = crate::sound::CMD_32E;
+    const SOUND_END: crate::sound::Sound = crate::sound::CMD_337;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if suspended(x) {
@@ -2610,7 +2600,7 @@ mod shot36 {
     const SPEEDS: u32 = 0xa2aa4;
     const X_OFFSETS: u32 = 0xa2b0a;
     const Y_OFFSETS: u32 = 0xa2b2a;
-    const SOUND_LAND: u32 = 0xed548;
+    const SOUND_LAND: crate::sound::Sound = crate::sound::CMD_330;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         guarded(x, state)
@@ -2913,7 +2903,7 @@ mod shot39 {
     const DIRECTIONS: u32 = 0xa3148;
     const START_ANIMS: u32 = 0xa3158;
     const FRAMES: u32 = 0xa31ba;
-    const SOUND_IMPACT: u32 = 0xecb98;
+    const SOUND_IMPACT: crate::sound::Sound = crate::sound::CMD_327_427_C;
     const FLY: u8 = 0;
     const SETTLE: u8 = 2;
     const BURN: u8 = 4;

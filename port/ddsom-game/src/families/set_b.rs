@@ -311,10 +311,6 @@ mod boss_intro {
     const STEP: u32 = 0x42;
     const BLAST: u32 = 0x46;
     /// Sound routines (D0 = number).
-    const EDA26: u32 = 0xeda26;
-    const EDA66: u32 = 0xeda66;
-    const ED94A: u32 = 0xed94a;
-    const ED9BC: u32 = 0xed9bc;
     /// Offset tables (16 words each) of the explosion in X and in Y.
     const BLAST_DX: u32 = 0xd4910;
     const BLAST_DY: u32 = 0xd4930;
@@ -355,7 +351,7 @@ mod boss_intro {
             }
             2 => {
                 if camera_x(x) >= 0x100 {
-                    crate::sound::play(x.b, EDA26, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_9A_B, x.o);
                     x.add8(0x5, 2);
                     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x1e);
                 }
@@ -381,14 +377,14 @@ mod boss_intro {
             10 => {
                 if countdown(x) {
                     x.add8(0x5, 2);
-                    crate::sound::play(x.b, EDA66, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_9B_B, x.o);
                 }
             }
             12 => {
                 if camera_x(x) >= 0x200 {
                     next(x, 0x32);
                     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 0x32);
-                    crate::sound::play(x.b, EDA26, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_9A_B, x.o);
                 }
             }
             14 => {
@@ -402,14 +398,14 @@ mod boss_intro {
             18 => {
                 if countdown(x) {
                     x.add8(0x5, 2);
-                    crate::sound::play(x.b, EDA66, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_9B_B, x.o);
                 }
             }
             20 => {
                 if camera_x(x) >= 0x2b0 {
                     next(x, 0x28);
                     crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, 0x50);
-                    crate::sound::play(x.b, EDA26, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_9A_B, x.o);
                 }
             }
             22 => spawn_boss(x),
@@ -417,7 +413,7 @@ mod boss_intro {
                 let n = x.u8(BLAST).wrapping_sub(1);
                 x.set8(BLAST, n);
                 if n == 0 {
-                    crate::sound::play(x.b, EDA66, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_9B_B, x.o);
                 }
                 let n = x.u8(STEP).wrapping_sub(1);
                 x.set8(STEP, n);
@@ -435,12 +431,12 @@ mod boss_intro {
         show_message(x, 7);
     }
 
-    /// Step 16: every 20 frames a hit of ED94A; when `+0x42` is a multiple of 4 a random explosion; at 0, end.
+    /// Step 16: every 20 frames a hit of crate::sound::CMD_351_451; when `+0x42` is a multiple of 4 a random explosion; at 0, end.
     fn explosions<R: Bench>(x: &mut Cx<'_, R>) {
         let n = x.u8(BLAST).wrapping_sub(1);
         x.set8(BLAST, n);
         if (n as i8) < 0 {
-            crate::sound::play(x.b, ED94A, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_351_451, x.o);
             x.set8(BLAST, 0x14);
         }
         if x.u8(STEP) & 3 == 0 {
@@ -474,7 +470,7 @@ mod boss_intro {
         for n in (0..=0x1d).rev() {
             crate::families::effects_creators::debris_rain(x.b, x.o, n, 0);
         }
-        crate::sound::play(x.b, ED9BC, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_9C, x.o);
         x.set_a5_u8(0x48e, 0xf);
         crate::palette::full_brightness(x.b);
         let Some(boss) = x.alloc(&pools::BOSS) else { return };
@@ -2267,8 +2263,8 @@ mod zone_end {
                 x.add8(0x4, 2);
                 x.set_a5_u16(SCROLL_LOCK, 0);
                 eshl_creators::linked_34(&mut Pure, x.b, x.o, 3);
-                crate::sound::play(x.b, 0xe55a2, x.o);
-                crate::sound::play(x.b, 0xe13b0, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_1FA, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_22, x.o);
             }
             _ => {}
         }
@@ -2375,7 +2371,7 @@ pub(super) mod door_b {
         crate::families::scenery::resume_scenery(x, crate::families::scenery::Cameras::Start);
         x.set_a5_u8(0x48e, 0xf);
         crate::palette::full_brightness(x.b);
-        crate::sound::play(x.b, 0xe0c5c, x.o);
+        crate::sound::play(x.b, crate::sound::SCENE_MUSIC, x.o);
         x.set_a5_u16(GATE_LOCK, 0);
         reset_players_after_exit(x);
         crate::families::scenery::place_players(x);
@@ -2403,7 +2399,7 @@ pub(super) mod door_b {
         x.set_a5_u8(0x43, 0xf);
         restore_camera(x);
         let music = x.u16(0x1c);
-        crate::sound::play_with(x.b, 0xe17a4, crate::sound::Source { d4: Some(music as u32), ..Default::default() });
+        crate::sound::play_with(x.b, crate::sound::FROM_D4, crate::sound::Source { d4: Some(music as u32), ..Default::default() });
         for p in players() {
             if p.u8(x.b, pl::ACTIVE) != 0 {
                 place(x, p);
@@ -2488,8 +2484,8 @@ mod game_over {
 mod level_clock {
     use super::*;
 
-    const ON: u32 = 0xeda26;
-    const OFF: u32 = 0xeda66;
+    const ON: crate::sound::Sound = crate::sound::CMD_9A_B;
+    const OFF: crate::sound::Sound = crate::sound::CMD_9B_B;
     const TIME: u32 = 0x42;
     const CUE: u32 = 0x1a;
     const TICK: u32 = 0x1c;

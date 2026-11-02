@@ -29,7 +29,7 @@ mod shower {
     const OFFSETS_C: u32 = 0x4deac;
     const SPEEDS_A: u32 = 0x4df52;
     const SPEEDS_B: u32 = 0x4dfc4;
-    const SFX: u32 = 0xe8530;
+    const SFX: crate::sound::Sound = crate::sound::CMD_161;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;

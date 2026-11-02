@@ -394,7 +394,7 @@ pub fn flash_and_shake<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x3e480: landing sound specific to the object's type (ROM table per type: each entry is a sound, or an `rts`).
 pub fn landing_by_kind<R: Bench>(x: &mut Cx<'_, R>) {
     if let Some((sound_id, _)) = ai_aids::landing_routine(x.b, x.o) {
-        sound(x, sound_id);
+        sound(x, crate::sound::Sound::at(sound_id));
     }
 }
 
@@ -440,9 +440,9 @@ pub fn choose_near_walk_point<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- sounds -------------------------------------------------------------------------------------------
 
-/// Plays the sound `wrapper` (small original routine of the table `sound_table.rs`) for the object.
-pub fn sound<R: Bench>(x: &mut Cx<'_, R>, wrapper: u32) {
-    crate::sound::play(x.b, wrapper, x.o);
+/// Plays the sound `sound` for the object.
+pub fn sound<R: Bench>(x: &mut Cx<'_, R>, sound: crate::sound::Sound) {
+    crate::sound::play(x.b, sound, x.o);
 }
 
 // --- object creators and services of other modules -----------------------------------------------------

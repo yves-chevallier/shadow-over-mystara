@@ -15,8 +15,8 @@ use crate::objects::Current;
 
 /// Merchant message to display (word, A5 - 0x554e) and the two shop sounds (D0 unused: the message is read from RAM).
 const MESSAGE: u32 = A5 - 0x554e;
-const SOUND_OK: u32 = 0xea57e;
-const SOUND_MESSAGE: u32 = 0xea5f0;
+const SOUND_OK: crate::sound::Sound = crate::sound::CMD_135_235;
+const SOUND_MESSAGE: crate::sound::Sound = crate::sound::CMD_136_236;
 /// List of the four customers (address words, 0 = absent).
 const CUSTOMERS: u32 = 0xff2aa4;
 

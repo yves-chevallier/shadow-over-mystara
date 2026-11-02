@@ -22,7 +22,7 @@ mod orbit {
     const POWER_B: u32 = 0x528e8;
     const ANIMS: u32 = 0x15b346;
     const SPEEDS: u32 = 0x1c89b6;
-    const SFX: u32 = 0xe64ce;
+    const SFX: crate::sound::Sound = crate::sound::CMD_33A_43A;
     const TURN_STEPS: u32 = 0x52aae;
     const TARGET_ANGLES: u32 = 0x52a76;
     const TURN_TABLE: u32 = 0x52b32;

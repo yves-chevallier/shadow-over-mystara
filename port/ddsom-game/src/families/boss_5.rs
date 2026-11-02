@@ -330,7 +330,7 @@ fn grab_hold<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     if x.u8(f::KEY_FRAME) != 0 {
-        lib::sound(x, 0xe425c);
+        lib::sound(x, crate::sound::CMD_382);
     }
     if p.u8(x.b, 0) == 0 {
         return grab_release(x);
@@ -390,7 +390,7 @@ fn simple_attack<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB2, 4);
             x.set8(FRAME_KIND, 0x4b);
-            lib::sound(x, 0xe425c);
+            lib::sound(x, crate::sound::CMD_382);
             attack_anim(x, 0);
             end_of_script(x);
         }
@@ -413,7 +413,7 @@ fn chase<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB2, 4);
             x.set8(BLINK, 0x14);
-            lib::sound(x, 0xe425c);
+            lib::sound(x, crate::sound::CMD_382);
             x.select_speed(&crate::objects::motion::SPEEDS_B, 0x13);
             x.set8(Obj::SPEED_INDEX, 0x18);
             if x.u8(f::FLIP) != 0 {
@@ -641,7 +641,7 @@ fn tumble<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x18, 0x600);
             x.set16(0x1a, (-0x80i16) as u16);
             fall_anim(x, 0);
-            lib::sound(x, 0xebbda);
+            lib::sound(x, crate::sound::CMD_31E_41E_B);
             lib::attack_effect(x, 8, 0);
         }
         6 | 0xa => {
@@ -733,7 +733,7 @@ fn dying<R: Bench>(x: &mut Cx<'_, R>) {
             crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
             lib::drop_rewards(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
-            lib::sound(x, 0xe3b6c);
+            lib::sound(x, crate::sound::CMD_FF);
             let kind = x.u8(0x2);
             set_abs8(x, 0xff2a84, kind);
             set_abs8(x, 0xff2a85, 0);

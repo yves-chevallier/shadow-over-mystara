@@ -207,7 +207,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(off, v);
     }
     body(x, 4);
-    lib::sound(x, 0xe1370);
+    lib::sound(x, crate::sound::CMD_21);
 }
 
 // --- state 2: active -----------------------------------------------------------------------------

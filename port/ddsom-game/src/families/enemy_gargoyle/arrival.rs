@@ -38,7 +38,7 @@ fn flight<R: Bench>(x: &mut Cx<'_, R>) {
             look(x, 0x30);
             x.set8(INVULNERABLE, 0);
             lib::set_immunities(x);
-            lib::sound(x, 0xe3776);
+            lib::sound(x, crate::sound::CMD_373_473);
             fly(x, 5);
         }
         2 => {

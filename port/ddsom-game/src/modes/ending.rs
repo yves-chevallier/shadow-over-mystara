@@ -49,11 +49,6 @@ mod var {
     pub const COUNTER: u32 = A5 - 0x5b8e;
 }
 
-mod ext {
-    pub const SOUND_E1528: u32 = 0xe1528;
-    pub const SOUND_E16F0: u32 = 0xe16f0;
-}
-
 mod at {
     pub const RETURN: u32 = 0xfb2a4;
 }
@@ -99,7 +94,7 @@ crate::steps! {
             Flow::Done
         },
         S04Fade = S04_FADE => |x| {
-            crate::sound::play_global(x.b, ext::SOUND_E1528);
+            crate::sound::play_global(x.b, crate::sound::CMD_2C);
             fade_settings(x, 3, 4);
             x.subroutine(crate::tasks::fading::rise, Step::S04Timer)
         },
@@ -193,7 +188,7 @@ crate::steps! {
             wr32(x.b, A5 + 0x49a, 0x269120);
             wr32(x.b, A5 + 0x49e, 0x27e600);
             crate::kernel::create_task(x.b, 0x10, crate::scene::fading::FROM_WHITE);
-            crate::sound::play_global(x.b, ext::SOUND_E16F0);
+            crate::sound::play_global(x.b, crate::sound::CMD_33);
             fading::STEP.set(x.b, 1);
             s1c_wait_fade(x)
         },

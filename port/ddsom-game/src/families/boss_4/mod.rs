@@ -217,7 +217,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     spawn_double(x, 0x18, None, DOUBLE_C);
     if var::GAME_ON.get(x.b) != 0 {
         body(x, 0);
-        lib::sound(x, 0xe1330);
+        lib::sound(x, crate::sound::CMD_20);
     } else {
         x.set8(0, 1);
         x.set_bit(0x1, 1, false);

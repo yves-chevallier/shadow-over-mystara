@@ -32,7 +32,7 @@ fn roll_in<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set8(Obj::SPEED_INDEX, angle);
             set_speed(x, 0x21);
-            lib::sound(x, 0xe3d32);
+            lib::sound(x, crate::sound::CMD_376_476);
             look(x, 0x30);
             weapon(x, 3);
         }
@@ -43,7 +43,7 @@ fn roll_in<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(f::KEY_FRAME, 0);
                 spark(x, 1);
                 lib::shake_54(x, 0x10);
-                lib::sound(x, 0xe3d32);
+                lib::sound(x, crate::sound::CMD_376_476);
             }
             let cam = camera_x(x);
             let reach = if (x.u16(Obj::VX) as i16) < 0 { 0xe0 } else { 0xa0 };
@@ -73,8 +73,8 @@ pub(super) fn leap_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(TIMER2, 0);
     let v: i16 = if x.u8(f::FLIP) != 0 { -0x20 } else { 0x20 };
     x.set16(Obj::AX, v as u16);
-    lib::sound(x, 0xe3d32);
-    lib::sound(x, 0xecdba);
+    lib::sound(x, crate::sound::CMD_376_476);
+    lib::sound(x, crate::sound::CMD_329_429);
     mv(x, 9);
 }
 

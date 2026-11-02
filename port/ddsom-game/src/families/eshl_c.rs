@@ -13,17 +13,6 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-/// Common subroutines of the enemy AI.
-mod rt {
-}
-
-/// Sounds (area 0xe0836-0xee080).
-mod sfx {
-    pub const ED186: u32 = 0xed186;
-    pub const ED90A: u32 = 0xed90a;
-    pub const ED32E: u32 = 0xed32e;
-}
-
 /// Word (16-bit RAM address) seen as an object: sign extension, like `movea.w`.
 fn obj_of(word: u16) -> Obj {
     Obj(word as i16 as i32 as u32 & 0xff_ffff)
@@ -117,7 +106,7 @@ mod shot40 {
             return;
         }
         x.add8(0x4, 2);
-        crate::sound::play(x.b, sfx::ED186, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_346, x.o);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_POWER, 5);
         x.set8(f::ATTACK_ID, 0x1e);
@@ -155,7 +144,7 @@ mod shot40 {
             x.set16(LIFETIME, t);
             if s16(t) < 0 {
                 x.add8(0x4, 2);
-                crate::sound::play(x.b, sfx::ED90A, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_337, x.o);
             }
         }
         flicker(x);
@@ -219,7 +208,7 @@ mod shot41 {
             return;
         }
         x.add8(0x4, 2);
-        crate::sound::play(x.b, sfx::ED32E, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_354, x.o);
         x.set8(f::BOX_SET, 7);
         x.set8(f::ATTACK_POWER, 5);
         x.set8(f::ATTACK_ID, 0x1f);
@@ -1067,7 +1056,7 @@ mod strike49 {
 
     const ANIMS: u32 = 0x170468;
     const HOST: u32 = 0x42;
-    const SOUND: u32 = 0xed398;
+    const SOUND: crate::sound::Sound = crate::sound::CMD_35B_45B;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if suspended(x) {
@@ -1138,7 +1127,7 @@ mod bullet50 {
 
     const ANIMS: u32 = 0x170468;
     const HOST: u32 = 0x42;
-    const SOUND: u32 = 0xed398;
+    const SOUND: crate::sound::Sound = crate::sound::CMD_35B_45B;
     /// Duration of the animation phases (bytes).
     const PHASE_LENGTHS: u32 = 0xa44aa;
     const PHASE: u32 = 0x5a;
@@ -1430,7 +1419,7 @@ mod finale52 {
     /// First player (`A5+0x5de`) and step.
     const PLAYERS: u32 = 0x5de;
     const PLAYER_SIZE: u32 = 0x200;
-    const SCREEN_END_FX: u32 = 0xe55fe;
+    const SCREEN_END_FX: crate::sound::Sound = crate::sound::CMD_1F9;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if suspended(x) {
@@ -1983,7 +1972,7 @@ mod burst54 {
     const ANIMS: u32 = 0x1706f6;
     const LINK: u32 = 0x5c;
     const TIMER: u32 = 0x42;
-    const SOUND: u32 = 0xe4560;
+    const SOUND: crate::sound::Sound = crate::sound::CMD_366;
     /// Rows of 9 words: DX, DZ, DY, VX, AX, VZ, AZ, VY, AY.
     const ROWS: u32 = 0xa4fe6;
     /// Rows of 10 words: the same, then the animation.
@@ -2074,7 +2063,7 @@ mod fall55 {
     use super::*;
 
     const ANIMS: u32 = 0x170c3e;
-    const SOUND: u32 = 0xeb0c0;
+    const SOUND: crate::sound::Sound = crate::sound::CMD_37B_47B;
     const X_START: u32 = 0x58;
     const Y_START: u32 = 0x5a;
     const TIMER: u32 = 0x56;
@@ -2174,7 +2163,7 @@ mod pickup56 {
     const INIT_ANIMS: [u32; 6] = [2, 4, 5, 5, 4, 7];
     /// Delays (16 words) drawn at random for variants 6 and 7.
     const DELAYS: u32 = 0xa55b2;
-    const PICKUP_SOUND: u32 = 0xeb132;
+    const PICKUP_SOUND: crate::sound::Sound = crate::sound::CMD_36E_46E;
     const COUNTDOWN: u32 = 0x56;
     /// Variable `A5+0x6f`: blinking phase; `A5+0x33`: blinking suspended.
     const BLINK_PHASE: u32 = 0x6f;
@@ -2565,9 +2554,9 @@ mod ring59 {
     const OFFSETS: u32 = 0xa5db2;
     /// Value of `+0x2b` (palette (h)) by `+0x47`.
     const PALETTES: u32 = 0xa5f30;
-    const FX_START_0: u32 = 0xe4422;
-    const FX_START_1: u32 = 0xe44f6;
-    const FX_END: u32 = 0xe448c;
+    const FX_START_0: crate::sound::Sound = crate::sound::CMD_389;
+    const FX_START_1: crate::sound::Sound = crate::sound::CMD_38B;
+    const FX_END: crate::sound::Sound = crate::sound::CMD_38A;
     const PALETTE_COUNTDOWN: u32 = 0x46;
     const PALETTE_INDEX: u32 = 0x47;
 
@@ -2710,7 +2699,7 @@ mod platform60 {
     /// Last vertical scroll (word), and its new reading.
     const LAST_SCROLL: u32 = 0x16;
     const SCROLL: u32 = 0x14;
-    const THUD: u32 = 0xeb04e;
+    const THUD: crate::sound::Sound = crate::sound::CMD_37D_47D;
     /// Starting positions of variant 2 per sub-type (4 bytes per row).
     const START_POSITIONS: u32 = 0xa6046;
     /// Variable `A5+0x51e` (variant 3).
@@ -2970,7 +2959,7 @@ mod meteor62 {
     const ANIMS: u32 = 0x16ea18;
     /// Delay before the fall (bytes) per variant (32 entries).
     const DELAYS: u32 = 0xa679e;
-    const IMPACT_SOUND: u32 = 0xeafdc;
+    const IMPACT_SOUND: crate::sound::Sound = crate::sound::CMD_34D_44D;
     const TIMER: u32 = 0x42;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {

@@ -28,26 +28,26 @@ use crate::player::external as ext;
 /// Identifiers (original addresses) of the routines reached: player effects, sounds and palettes of the cleric.
 mod rom {
     /// Sounds of the strikes.
-    pub const SOUND_STRIKE_B: u32 = 0xe8156;
+    pub const SOUND_STRIKE_B: crate::sound::Sound = crate::sound::CMD_14D_24D;
     /// Sounds of the spinning jump.
-    pub const SOUND_LEAP_LAND: u32 = 0xe2760;
-    pub const SOUND_SPIN: u32 = 0xe81c8;
+    pub const SOUND_LEAP_LAND: crate::sound::Sound = crate::sound::CMD_CC_BY_PLAYER;
+    pub const SOUND_SPIN: crate::sound::Sound = crate::sound::CMD_14C_24C;
     /// Prayers: player effects (PEFF pool) created at the gesture, with their sounds.
-    pub const PRAYER_EVENT_SOUND: u32 = 0xe2aba;
-    pub const PRAYER_AURA_SOUND: u32 = 0xe96e0;
-    pub const PRAYER_AURA_B_SOUND: u32 = 0xe9030;
-    pub const PRAYER_STORM_SOUND: u32 = 0xe2afa;
-    pub const PRAYER_SWARM_START_SOUND: u32 = 0xe2bba;
-    pub const SOUND_PRAYER: u32 = 0xe2c7a;
-    pub const PRAYER_BANISH_SOUND: u32 = 0xe9e34;
-    pub const PRAYER_BANISH_START_SOUND: u32 = 0xe2cba;
-    pub const PRAYER_HOLY_SOUND: u32 = 0xe2cfa;
-    pub const PRAYER_BLESS_SOUND: u32 = 0xe8e1e;
-    pub const PRAYER_BLESS_SOUND_AREA: u32 = 0xe285c;
-    pub const PRAYER_BLESS_SOUND_SELF: u32 = 0xe2b3a;
-    pub const PRAYER_PROTECT_SOUND: u32 = 0xe2c3a;
-    pub const PRAYER_HEAL_SOUND_SELF_A: u32 = 0xe2b7a;
-    pub const PRAYER_HEAL_SOUND_SELF_B: u32 = 0xe2bfa;
+    pub const PRAYER_EVENT_SOUND: crate::sound::Sound = crate::sound::CMD_50;
+    pub const PRAYER_AURA_SOUND: crate::sound::Sound = crate::sound::CMD_17F;
+    pub const PRAYER_AURA_B_SOUND: crate::sound::Sound = crate::sound::CMD_18D;
+    pub const PRAYER_STORM_SOUND: crate::sound::Sound = crate::sound::CMD_51;
+    pub const PRAYER_SWARM_START_SOUND: crate::sound::Sound = crate::sound::CMD_54;
+    pub const SOUND_PRAYER: crate::sound::Sound = crate::sound::CMD_57;
+    pub const PRAYER_BANISH_SOUND: crate::sound::Sound = crate::sound::CMD_17A_C;
+    pub const PRAYER_BANISH_START_SOUND: crate::sound::Sound = crate::sound::CMD_58;
+    pub const PRAYER_HOLY_SOUND: crate::sound::Sound = crate::sound::CMD_59;
+    pub const PRAYER_BLESS_SOUND: crate::sound::Sound = crate::sound::CMD_171;
+    pub const PRAYER_BLESS_SOUND_AREA: crate::sound::Sound = crate::sound::PRAYER;
+    pub const PRAYER_BLESS_SOUND_SELF: crate::sound::Sound = crate::sound::CMD_52;
+    pub const PRAYER_PROTECT_SOUND: crate::sound::Sound = crate::sound::CMD_56;
+    pub const PRAYER_HEAL_SOUND_SELF_A: crate::sound::Sound = crate::sound::CMD_53;
+    pub const PRAYER_HEAL_SOUND_SELF_B: crate::sound::Sound = crate::sound::CMD_55;
 }
 
 /// Cleric table (ROM data): jump speeds (four words per jump type).
@@ -423,7 +423,7 @@ fn turn_undead(g: &mut Ctx, p: Player) {
                 (g.leftovers.d2, g.leftovers.d3, g.leftovers.d4, g.leftovers.d5) = (longs[2], longs[3], longs[4], longs[5]);
                 crate::palette::set_flash_color(g.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
                 crate::families::creators::for_players::effect_2f(&mut g.leftovers, g.b);
-                g.sound(0xe27da, p);
+                g.sound(crate::sound::BY_KIND, p);
             }
             animation::step(g, p);
         }

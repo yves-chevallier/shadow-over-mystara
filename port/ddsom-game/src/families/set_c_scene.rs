@@ -95,8 +95,8 @@ const CURTAIN_TABLE: u32 = 0xbcea4;
 const CURTAIN_PALETTE: u32 = 0xbcfc6;
 
 // Engine routines called.
-const PREPARE_EFFECTS: u32 = 0xebe86;
-const FADE_OUT: u32 = 0xe0c5c;
+const PREPARE_EFFECTS: crate::sound::Sound = crate::sound::CMD_322_422;
+const FADE_OUT: crate::sound::Sound = crate::sound::SCENE_MUSIC;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x40) != 0 || x.a5_u8(a5::DIFFICULTY) == 0 {

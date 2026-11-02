@@ -193,13 +193,13 @@ fn per_type<R: Bench>(x: &mut Cx<'_, R>, table: u32, index: u32) -> Option<u32> 
 fn hit_sound<R: Bench>(x: &mut Cx<'_, R>) {
     let i = type_index(x);
     if let Some(sound) = per_type(x, rom::HIT_SOUNDS, i) {
-        lib::sound(x, sound);
+        lib::sound(x, crate::sound::Sound::at(sound));
     }
 }
 fn death_sound<R: Bench>(x: &mut Cx<'_, R>) {
     let i = type_index(x);
     if let Some(sound) = per_type(x, rom::DEATH_SOUNDS, i) {
-        lib::sound(x, sound);
+        lib::sound(x, crate::sound::Sound::at(sound));
     }
 }
 /// 0x3e000: type-specific get-up (per-type table; the address read designates its family's handler).
@@ -980,7 +980,7 @@ fn disintegrate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         x.set8(0x81, 0);
         x.set8(0x80, 0);
         anim(x, 12);
-        let sound = if x.u8(f::KIND) == 1 { 0xeb448 } else { 0xe35a6 };
+        let sound = if x.u8(f::KIND) == 1 { crate::sound::CMD_304_404 } else { crate::sound::CMD_370_470 };
         lib::sound(x, sound);
         return true;
     }
@@ -1265,7 +1265,7 @@ fn floored<R: Bench>(x: &mut Cx<'_, R>, stars: bool) {
         defer_link(x);
     }
     anim(x, 17);
-    lib::sound(x, 0xebbda);
+    lib::sound(x, crate::sound::CMD_31E_41E_B);
     if stars {
         effect(x, 8, 0);
     }
@@ -1327,7 +1327,7 @@ fn floored_9<R: Bench>(x: &mut Cx<'_, R>) {
     speeds(x, 0x200, 0, 0x400, -128i16 as u16);
     orient_speeds(x);
     anim(x, 17);
-    lib::sound(x, 0xebbda);
+    lib::sound(x, crate::sound::CMD_31E_41E_B);
     effect(x, 9, 0);
 }
 
@@ -1640,7 +1640,7 @@ fn petrified<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::HEIGHT) as i16 <= 0 {
         next(x);
         x.set8(f::COUNTER, 40);
-        return lib::sound(x, 0xebc4c);
+        return lib::sound(x, crate::sound::CMD_31F_41F);
     }
     x.set16(f::VZ, 0);
     x.set16(f::GRAVITY, -64i16 as u16);
@@ -1718,7 +1718,7 @@ fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x3d882: burned (0xe909a), animation D0 left as is, six stars (0xabec8(4)).
 fn burnt<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x67, 0);
-    lib::sound(x, 0xe909a);
+    lib::sound(x, crate::sound::CMD_176_276);
     apply_pending(x);
     next(x);
     x.set8(f::ACTIVE, 1);
@@ -1890,7 +1890,7 @@ fn spin_drop<R: Bench>(x: &mut Cx<'_, R>) {
     orient_speeds(x);
     defer_link(x);
     anim(x, 17);
-    lib::sound(x, 0xebbda);
+    lib::sound(x, crate::sound::CMD_31E_41E_B);
 }
 /// 0x3dada: variant: animation 17 and stars 0xabec8(8).
 fn spin_drop_stars<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1903,7 +1903,7 @@ fn spin_drop_stars<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::GRAVITY, -128i16 as u16);
     orient_speeds(x);
     anim(x, 17);
-    lib::sound(x, 0xebbda);
+    lib::sound(x, crate::sound::CMD_31E_41E_B);
     effect(x, 8, 0);
 }
 /// 0x3dbb4: animation; fall to the ground, then wait for the counter to end.

@@ -41,7 +41,7 @@ mod meteors {
 
     const ANIMS: u32 = 0x1bc790;
     const PALETTE: u32 = 0x25a780;
-    const SFX: u32 = 0xe9be4;
+    const SFX: crate::sound::Sound = crate::sound::CMD_191;
     const KIND: u8 = 0x28;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -142,7 +142,7 @@ mod lamp {
     const OFFSETS_Z: u32 = 0x51996;
     const PALETTE_A: u32 = 0x25b200;
     const PALETTE_B: u32 = 0x25a780;
-    const SFX: u32 = 0xea09c;
+    const SFX: crate::sound::Sound = crate::sound::CMD_195;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x518c2) {

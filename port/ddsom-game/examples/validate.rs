@@ -274,6 +274,7 @@ fn main() {
     ddsom_game::refuse_hybrid();
     let mut ma = match std::env::var_os("DDSOM_ASSETS") {
         Some(dir) => {
+            ddsom_data::install(ddsom_data::GameData::load(Path::new(&dir)).expect("game data"));
             let contents = ddsom_assets::rebuild::contents(Path::new(&dir)).expect("assets");
             cps2::Machine::ddsom(contents, ee.as_deref())
         }
@@ -429,6 +430,12 @@ fn main() {
     }
     let (is_empty, capped) = ddsom_game::no68k::summary();
     println!("without 68000: {is_empty} frames ended on a busy wait, {capped} stopped by the native ceiling");
+    let residue = ddsom_game::data::residue();
+    println!(
+        "residue: {} reads of the program ROM outside the typed tables{}",
+        residue.iter().map(|r| r.1).sum::<u64>(),
+        residue.iter().map(|(m, n)| format!(", {} {:#x} ×{n}", m.table, m.key)).collect::<String>()
+    );
     if let Some(m) = &stop {
         println!("STOP {m}");
     }

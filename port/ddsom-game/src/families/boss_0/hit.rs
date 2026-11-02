@@ -100,7 +100,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
             speed(x, 0x17);
             anim_kind(x, 0x20);
             next6(x);
-            lib::sound(x, 0xec5e6);
+            lib::sound(x, crate::sound::CMD_34F_44F);
             body(x, 0xb);
         }
         2 => {
@@ -197,7 +197,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set_a5_u8(0x4f, 0xff);
                 lib::flash_and_shake(x);
                 crate::sound::service(x.b, crate::sound::Service::Ff05);
-                lib::sound(x, 0xe3b6c);
+                lib::sound(x, crate::sound::CMD_FF);
             } else {
                 lib::object_event(x);
             }
@@ -205,7 +205,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(0, 2);
             let freeze = x.u8(0x56);
             x.set8(f::FREEZE, freeze);
-            lib::sound(x, 0xe3cbe);
+            lib::sound(x, crate::sound::CMD_30B_40B);
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);
@@ -235,9 +235,9 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0xc, 0);
             lib::debris(x, 5);
             if x.u8(0x93) != 0 {
-                lib::sound(x, 0xec9e8);
+                lib::sound(x, crate::sound::CMD_35D);
             } else {
-                lib::sound(x, 0xec904);
+                lib::sound(x, crate::sound::CMD_327_427_B);
             }
             lib::step(x);
         }

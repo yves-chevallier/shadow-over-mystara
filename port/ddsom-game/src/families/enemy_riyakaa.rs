@@ -917,7 +917,7 @@ mod riyakaa {
             x.set8(f::FREEZE, 4);
             x.set16(0x14, 0x500);
             x.set16(0x16, 0xffc8);
-            lib::sound(x, 0xec6ca);
+            lib::sound(x, crate::sound::CMD_127_227_B);
             let side = x.u8(0x4a) ^ 0x20;
             x.set8(0x4a, side);
             if side != 0 {

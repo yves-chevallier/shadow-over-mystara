@@ -75,7 +75,7 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            lib::sound(x, 0xe3da6);
+            lib::sound(x, crate::sound::CMD_30C_40C);
             x.set8(ANIM_KIND, 0x10);
             x.set8(ANIM_LAST, 0x10);
             fly(x, 0);
@@ -167,7 +167,7 @@ fn swoop_a<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0xc, 0);
             lib::shake_58(x, 0x1e);
             lib::debris(x, 5);
-            lib::sound(x, 0xecc0a);
+            lib::sound(x, crate::sound::CMD_328_428_B);
             fly(x, 3);
         }
         8 => {
@@ -222,7 +222,7 @@ fn swoop_b<R: Bench>(x: &mut Cx<'_, R>) {
             if !pick_target(x) {
                 return decide::wait(x);
             }
-            lib::sound(x, 0xe3da6);
+            lib::sound(x, crate::sound::CMD_30C_40C);
             x.set8(ANIM_KIND, 0x12);
             x.set8(ANIM_LAST, 0x12);
             start_swoop(x);
@@ -245,7 +245,7 @@ fn swoop_b<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x18, (-0x680i16) as u16);
             x.set16(0x16, 0);
             x.set16(0x1a, 0);
-            lib::sound(x, 0xe3da6);
+            lib::sound(x, crate::sound::CMD_30C_40C);
             x.set8(INVULNERABLE, 0);
             fly(x, 5);
         }
@@ -261,8 +261,8 @@ fn swoop_b<R: Bench>(x: &mut Cx<'_, R>) {
             let vz: i16 = if x.u8(f::FLIP) != 0 { -0x38 } else { 0x38 };
             x.set16(0x16, vz as u16);
             lib::shake_54(x, 0x1e);
-            lib::sound(x, 0xec976);
-            lib::sound(x, 0xecdba);
+            lib::sound(x, crate::sound::CMD_328_428);
+            lib::sound(x, crate::sound::CMD_329_429);
             fly(x, 6);
         }
         8 => {
@@ -303,7 +303,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set16(0x18, vz);
             x.set16(0x1a, (-0x38i16) as u16);
-            lib::sound(x, 0xe3da6);
+            lib::sound(x, crate::sound::CMD_30C_40C);
             x.set8(ANIM_KIND, 0x13);
             x.set8(ANIM_LAST, 0x13);
             fly(x, 7);
@@ -339,8 +339,8 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             let vz: i16 = if x.u8(f::FLIP) == 0 { 0x5c } else { -0x5c };
             x.set16(0x16, vz as u16);
             lib::shake_54(x, 0x14);
-            lib::sound(x, 0xec976);
-            lib::sound(x, 0xecdba);
+            lib::sound(x, crate::sound::CMD_328_428);
+            lib::sound(x, crate::sound::CMD_329_429);
             fly(x, 0xa);
         }
         8 => {

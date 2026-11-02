@@ -160,7 +160,7 @@ crate::steps! {
             }
             let index = rd8(x.b, rom::MUSIC_INDEX + shop as u32) as u32;
             let music = rd32(x.b, rom::MUSIC + index);
-            crate::sound::play_global(x.b, music);
+            crate::sound::play_global(x.b, crate::sound::Sound::at(music));
             set_b16(x, f::STATE, 0x200);
             set_b8(x, f::SHOPPERS, 0);
             set_b8(x, f::TALKING, 0);
@@ -277,7 +277,7 @@ fn welcome(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     let sound = rd32(x.b, rom::WELCOME + 4 * index as u32);
-    crate::sound::play_global(x.b, sound);
+    crate::sound::play_global(x.b, crate::sound::Sound::at(sound));
     Flow::Done
 }
 

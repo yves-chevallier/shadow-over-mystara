@@ -7,6 +7,8 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::json::{hex, hex_opt, hex_vec};
+use crate::pointers::Pointers;
+use crate::RomAddr;
 
 /// Piece of a frame: `[dx, dy, code, attributes]`. The top-left corner of the piece is at (dx, dy)
 /// pixels from the object's anchor point (y towards the bottom of the screen: negative dy = above); when mirrored
@@ -58,12 +60,16 @@ impl Frame {
 }
 
 /// All the frames, in the order of the ROM table (frame number = index).
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct Frames {
     /// ROM table of frame addresses (one long per frame).
     #[serde(with = "hex")]
     pub table: u32,
     pub frames: Vec<Frame>,
+    /// Frames outside the table, that only the code designates (by increasing address): their numbers follow those
+    /// of the table.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub extra: Vec<Frame>,
 }
 
 impl Frames {
@@ -74,6 +80,18 @@ impl Frames {
     /// Number of the frame whose header is at ROM address `rom`.
     pub fn by_rom(&self, rom: u32) -> Option<usize> {
         self.frames.binary_search_by_key(&rom, |f| f.rom).ok()
+    }
+
+    /// The frame whose header is at `rom` (the value an object keeps at `+0x34`), in the table or outside.
+    pub fn at(&self, rom: RomAddr) -> Option<&Frame> {
+        let extra = || self.extra.binary_search_by_key(&rom.0, |f| f.rom).ok().map(|i| &self.extra[i]);
+        self.by_rom(rom.0).map(|i| &self.frames[i]).or_else(extra)
+    }
+
+    /// Frame number `n` (numbers past the table designate the frames outside it).
+    pub fn number(&self, n: u32) -> &Frame {
+        let n = n as usize;
+        self.frames.get(n).unwrap_or_else(|| &self.extra[n - self.frames.len()])
     }
 }
 
@@ -129,13 +147,29 @@ pub struct Entry {
 }
 
 impl Entry {
+    /// Size of an entry, without the jump address that may follow it.
+    pub fn size(long: bool) -> u32 {
+        if long {
+            24
+        } else {
+            16
+        }
+    }
+
     /// Address of the next entry in ROM order.
     pub fn end(&self) -> u32 {
-        self.rom + if self.long { 24 } else { 16 } + if self.next.is_some() { 4 } else { 0 }
+        self.rom + Self::size(self.long) + if self.next.is_some() { 4 } else { 0 }
+    }
+
+    /// The longs the object receives after the duration and the flags: frame address, then the frame data
+    /// (`FRAME_DATA_A`...: 2 longs, 4 for a long entry).
+    pub fn longs(&self, frames: &Frames) -> impl Iterator<Item = u32> + '_ {
+        let frame = frames.number(self.frame).rom;
+        std::iter::once(frame).chain(self.data.chunks(4).map(|c| u32::from_be_bytes([c[0], c[1], c[2], c[3]])))
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct Anims {
     /// Tables of the sprite viewer (provenance of the families): names, set lists, variants.
     #[serde(with = "hex")]
@@ -148,6 +182,9 @@ pub struct Anims {
     pub sets: Vec<AnimSet>,
     /// All known entries, by increasing address.
     pub entries: Vec<Entry>,
+    /// Animation sets of the characters, one per variant (routines 0x2c16, 0x2c88 and 0x2cf0; program space).
+    #[serde(default)]
+    pub character_sets: Vec<Pointers>,
 }
 
 impl Anims {
@@ -160,6 +197,30 @@ impl Anims {
     }
 
     pub fn set(&self, rom: u32) -> Option<&AnimSet> {
-        self.sets.iter().find(|s| s.rom == rom)
+        self.sets.binary_search_by_key(&rom, |s| s.rom).ok().map(|i| &self.sets[i])
+    }
+
+    /// The entry at `at`, if it has the size the reader expects (long: 24 bytes).
+    pub fn entry_at(&self, at: RomAddr, long: bool) -> Option<&Entry> {
+        self.entry(at.0).filter(|e| e.long == long)
+    }
+
+    /// Jump target stored at `at`, right after an entry whose flags make it jump.
+    pub fn jump_at(&self, at: RomAddr) -> Option<RomAddr> {
+        [false, true]
+            .into_iter()
+            .find_map(|long| self.entry_at(at.offset(-(Entry::size(long) as i32)), long)?.next)
+            .map(RomAddr)
+    }
+
+    /// Offset word at byte `offset` of the set at `set` (the offset of script `offset / 2`).
+    pub fn script_offset(&self, set: RomAddr, offset: i32) -> Option<i16> {
+        let i = usize::try_from(offset).ok().filter(|o| o % 2 == 0)? / 2;
+        self.set(set.0)?.scripts.get(i).copied()
+    }
+
+    /// Array of character sets stored at `rom`.
+    pub fn character_sets(&self, rom: RomAddr) -> Option<&Pointers> {
+        self.character_sets.iter().find(|p| p.rom == rom.0)
     }
 }

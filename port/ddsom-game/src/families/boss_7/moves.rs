@@ -17,7 +17,7 @@ fn fade_out<R: Bench>(x: &mut Cx<'_, R>) {
     addq8(x, f::SUB3, 2);
     x.set8(0, 2);
     key(x, 0x12);
-    lib::sound(x, 0xecf7a);
+    lib::sound(x, crate::sound::CMD_349);
     body(x, 4);
 }
 
@@ -27,7 +27,7 @@ fn fade_in<R: Bench>(x: &mut Cx<'_, R>) {
         addq8(x, f::SUB3, 2);
         x.set_bit(0x1, 1, false);
         x.set8(0, 1);
-        lib::sound(x, 0xecf7a);
+        lib::sound(x, crate::sound::CMD_349);
     }
 }
 

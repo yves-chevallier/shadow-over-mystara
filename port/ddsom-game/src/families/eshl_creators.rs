@@ -457,7 +457,7 @@ pub(crate) fn four_1c(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
         o.set_u16(b, f::LINK, link);
         r.d_word(5, 2u16.wrapping_sub(k));
     }
-    crate::sound::play(b, 0xebef8, me);
+    crate::sound::play(b, crate::sound::CMD_13D_23D, me);
 }
 
 /// 0xa31c2: three objects of type 0x28.
@@ -540,7 +540,7 @@ pub(crate) fn single_18(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
         o.set_u16(b, f::LINK, link);
         r.flags(link as u32, Size::Word);
     }
-    crate::sound::play(b, 0xebe14, me);
+    crate::sound::play(b, crate::sound::CMD_34B_44B, me);
 }
 
 /// 0xa1a40: an object of type 0x1b; the creator keeps `kind` in `+0x56`, the object takes its `+0x5c` and its target

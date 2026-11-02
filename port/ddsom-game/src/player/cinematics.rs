@@ -1046,8 +1046,8 @@ const INTRO_24FE2: Steps = &[
         p.set_u8(g, ARMED, 1);
         animation::start(g, p, 51);
         if p.u8(g, RANK) == 0 {
-            g.sound(0xeaa58, p);
-            g.sound(0xe0c5c, p);
+            g.sound(crate::sound::CMD_90, p);
+            g.sound(crate::sound::SCENE_MUSIC, p);
         }
     }),
     (0x2509a, |g, p| {

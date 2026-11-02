@@ -38,7 +38,7 @@ fn shaken<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x8b4c2: the hit: damage, freeze; out of HP: destroyed; otherwise shake and knockback away from the attacker.
 fn struck<R: Bench>(x: &mut Cx<'_, R>) {
-    lib::sound(x, 0xea984);
+    lib::sound(x, crate::sound::CMD_94);
     damage_bits(x);
     let f = x.u8(0x56);
     x.set8(f::FREEZE, f);
@@ -165,7 +165,7 @@ fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(0x14, (-0x500i16) as u16);
                 x.set8(f::FLIP, 0);
                 x.set8(0x2d, 0x18);
-                lib::sound(x, 0xe4626);
+                lib::sound(x, crate::sound::CMD_92_B);
             }
             roll(x);
         }
@@ -178,8 +178,8 @@ fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
                 if (x.a5_u16(ENEMY_FREE) as i16) >= 4 {
                     next6(x);
                     refill_crew(x, true);
-                    lib::sound(x, 0xea984);
-                    lib::sound(x, 0xe1330);
+                    lib::sound(x, crate::sound::CMD_94);
+                    lib::sound(x, crate::sound::CMD_20);
                 }
             }
             roll(x);
@@ -193,7 +193,7 @@ fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x14, 0x800);
             x.set16(0x16, 0);
             x.set8(GAIT, 1);
-            lib::sound(x, 0xe4682);
+            lib::sound(x, crate::sound::CMD_92_C);
         }
         12 => {
             jolt(x);
@@ -248,7 +248,7 @@ fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
                     x.set16(0x18, (-0x600i16) as u16);
                     x.set16(0x1a, (-0x10i16) as u16);
                     x.set8(GAIT, 2);
-                    lib::sound(x, 0xea9ee);
+                    lib::sound(x, crate::sound::CMD_95);
                     for off in [DRIVER, CREW, CREW + 2, CREW + 4, CREW + 6] {
                         if x.u16(off) != 0 {
                             let m = x.linked(off);
@@ -292,10 +292,10 @@ fn leaving<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::FLIP) == 0 {
         next6(x);
         negate(x, 0x14);
-        lib::sound(x, 0xe4626);
+        lib::sound(x, crate::sound::CMD_92_B);
     } else {
-        lib::sound(x, 0xe45ca);
-        lib::sound(x, 0xea8be);
+        lib::sound(x, crate::sound::CMD_92);
+        lib::sound(x, crate::sound::CMD_92_D);
     }
     roll(x)
 }

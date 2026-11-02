@@ -124,8 +124,8 @@ mod cure {
     const OFFSETS_SPARK: u32 = 0x4ade0;
     const SPARK_VZ: u32 = 0x4adc8;
     const SPARK_TIMES: u32 = 0x4add8;
-    const SFX_PRAYER: u32 = 0xe8f5c;
-    const SFX_PRAYER_B: u32 = 0xe8fc6;
+    const SFX_PRAYER: crate::sound::Sound = crate::sound::CMD_174;
+    const SFX_PRAYER_B: crate::sound::Sound = crate::sound::CMD_175;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x4abb8) {
@@ -277,10 +277,10 @@ mod holy {
     const SHAKE_TABLE: u32 = 0x4b172;
     const SCRIPT_BY_PLAYER: u32 = 0x4b0b2;
     const SCRIPTS: u32 = 0x4b0da;
-    const SFX_START: u32 = 0xe9f5e;
-    const SFX_BURST_A: u32 = 0xe9fc8;
-    const SFX_BURST_B: u32 = 0xe996c;
-    const SFX_END: u32 = 0xea032;
+    const SFX_START: crate::sound::Sound = crate::sound::CMD_192;
+    const SFX_BURST_A: crate::sound::Sound = crate::sound::CMD_193;
+    const SFX_BURST_B: crate::sound::Sound = crate::sound::CMD_188;
+    const SFX_END: crate::sound::Sound = crate::sound::CMD_194;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;

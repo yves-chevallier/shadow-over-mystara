@@ -119,10 +119,10 @@ fn hurt<R: Bench>(x: &mut Cx<'_, R>, dying_code: u8, effect_variant: u8) {
     x.set16(0x64, hp as u16);
     x.set16(0xb4, 0x14);
     if hp > 0 {
-        return lib::sound(x, 0xe40b4);
+        return lib::sound(x, crate::sound::CMD_359);
     }
     x.set8(0xaf, 1);
-    lib::sound(x, 0xe4188);
+    lib::sound(x, crate::sound::CMD_35A);
     x.set8(0x7e, dying_code);
     lib::object_event(x);
     let Some(e) = x.alloc(&pools::EFFCT) else { return };

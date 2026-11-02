@@ -7,8 +7,9 @@
 //!
 //! Variables: `DDSOM_MASQUE=n` shifts the scenario numbers of the mask by n bits (to merge several
 //! runs); `DDSOM_COUVERT=file` (written by `couverture_rom`): for each word read outside the covered
-//! zones, the output adds a line `s d|p address file:line;...`: the first three callers in
-//! `ddsom-game/src` of the first read.
+//! zones, the output adds a line `s d|p address file:line;...`: the first callers in
+//! `ddsom-game/src` of the first read. `DDSOM_READERS=1`: the same line for every word read (reference measure of
+//! the data batches, docs/fin.md: `tools/rom_readers.py` sorts the words by reader).
 //!
 //! Each scenario is replayed on the machine without 68000 (natives only: every read counts; a stop for lack of a
 //! native ends the scenario at that frame, reported on the error output). The output gives, for each zone whose words are all read by the same scenarios:
@@ -21,16 +22,18 @@ use std::path::Path;
 
 thread_local! {
     static COVERED: std::cell::RefCell<Vec<u8>> = const { std::cell::RefCell::new(Vec::new()) };
+    static ALL_READERS: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static ORIGINALS: std::cell::RefCell<std::collections::BTreeMap<(bool, u32), String>> = const { std::cell::RefCell::new(std::collections::BTreeMap::new()) };
 }
 
 /// Called at the first read of a word: if the resources do not cover it, records who read it.
 fn original(program: bool, address: u32) {
-    let covered = COVERED.with(|c| {
-        let c = c.borrow();
-        c.is_empty() || c[program as usize * 0x200000 + (address >> 1) as usize] != 0
-    });
-    if covered {
+    let covered = !ALL_READERS.get()
+        && COVERED.with(|c| {
+            let c = c.borrow();
+            c.is_empty() || c[program as usize * 0x200000 + (address >> 1) as usize] != 0
+        });
+    if covered || ORIGINALS.with(|o| o.borrow().contains_key(&(program, address))) {
         return;
     }
     let trace = std::backtrace::Backtrace::force_capture().to_string();
@@ -60,6 +63,10 @@ fn main() {
     let base: usize = std::env::var("DDSOM_MASQUE").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     if let Some(f) = std::env::var_os("DDSOM_COUVERT") {
         COVERED.with(|c| *c.borrow_mut() = std::fs::read(f).expect("coverage file"));
+        cps2::bus::rom_trace::set_hook(original);
+    }
+    if std::env::var_os("DDSOM_READERS").is_some() {
+        ALL_READERS.set(true);
         cps2::bus::rom_trace::set_hook(original);
     }
     ddsom_game::refuse_hybrid();

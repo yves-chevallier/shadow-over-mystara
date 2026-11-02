@@ -65,8 +65,18 @@ fn main() {
         (None, Some(romdir)) => cps2::Contents::from_roms(romdir, None, None),
         (None, None) => unreachable!(),
     };
+    // the game data: from the assets folder, or extracted from the ROMs
+    let game_data = match (&assets, &romdir) {
+        (Some(dir), _) => ddsom_data::GameData::load(dir),
+        (None, Some(romdir)) => extract::to_data(romdir),
+        (None, None) => unreachable!(),
+    };
+    let contents = contents.and_then(|c| Ok((c, game_data?)));
     let contents = match contents {
-        Ok(c) => c,
+        Ok((c, game_data)) => {
+            ddsom_data::install(game_data);
+            c
+        }
         Err(e) => {
             match (&assets, &romdir) {
                 (Some(dir), None) => eprintln!("Cannot load the assets from {}: {e}", dir.display()),

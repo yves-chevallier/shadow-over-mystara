@@ -11,8 +11,8 @@ use crate::mem::{rd16, wr16};
 use crate::objects::pools;
 use crate::objects::Current;
 
-const SFX_HIT_WALL: u32 = 0xe7376;
-const SFX_LAND: u32 = 0xe73e8;
+const SFX_HIT_WALL: crate::sound::Sound = crate::sound::CMD_122_222;
+const SFX_LAND: crate::sound::Sound = crate::sound::CMD_123_223;
 
 fn signed(v: u16, negate: bool) -> u16 {
     if negate { v.wrapping_neg() } else { v }
@@ -91,7 +91,7 @@ mod thrown {
     const OFFSETS: u32 = 0x51e16;
     const ANIMS_A: u32 = 0x15ae8a;
     const ANIMS_B: u32 = 0x15c552;
-    const SFX_START: u32 = 0xeb84a;
+    const SFX_START: crate::sound::Sound = crate::sound::CMD_11C_21C;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x51db4) {
@@ -184,7 +184,7 @@ mod flung {
     use super::*;
 
     const OFFSETS: u32 = 0x520f6;
-    const SFX_START: u32 = 0xeb7d8;
+    const SFX_START: crate::sound::Sound = crate::sound::CMD_11B_21B;
 
     fn set<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
         match x.u8(0x2) {
@@ -278,8 +278,8 @@ mod arc {
 
     const OFFSETS: u32 = 0x522c0;
     const ANIMS: u32 = 0x15af62;
-    const SFX_BURST: u32 = 0xeb3d6;
-    const SFX_MID: u32 = 0xeb280;
+    const SFX_BURST: crate::sound::Sound = crate::sound::CMD_125_225;
+    const SFX_MID: crate::sound::Sound = crate::sound::CMD_12E_22E;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x52242) {
@@ -362,7 +362,7 @@ mod bouncer {
 
     const OFFSETS: u32 = 0x52464;
     const ANIMS: u32 = 0x15b0a2;
-    const SFX_START: u32 = 0xeb8bc;
+    const SFX_START: crate::sound::Sound = crate::sound::CMD_11D_21D;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x523d2) {
@@ -480,9 +480,9 @@ mod burst {
     const ANIMS: u32 = 0x15b13c;
     const SHOT_COUNTS: u32 = 0x5263c;
     const OFFSET_TABLES: u32 = 0x52732;
-    const SFX_RIGHT: u32 = 0xe89a4;
-    const SFX_LEFT: u32 = 0xe8a2e;
-    const SFX_FLAME: u32 = 0xe8ab8;
+    const SFX_RIGHT: crate::sound::Sound = crate::sound::CMD_168_B;
+    const SFX_LEFT: crate::sound::Sound = crate::sound::CMD_168_C;
+    const SFX_FLAME: crate::sound::Sound = crate::sound::CMD_169;
     /// Counter of the flames alive (`A5-0x5fbc`, absolute address).
     const FLAMES: u32 = 0xff2044;
 

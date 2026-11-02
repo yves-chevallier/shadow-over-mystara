@@ -277,7 +277,7 @@ pub fn run_scene_exit(b: &mut Cps2Bus, scene: Obj) {
 fn scene_routine(b: &mut Cps2Bus, scene: Obj, routine: u32) {
     match routine {
         0xd99f8 => {}
-        0xe0c5c | 0xe0d8c => crate::sound::play(b, routine, scene),
+        0xe0c5c | 0xe0d8c => crate::sound::play(b, crate::sound::Sound::at(routine), scene),
         r => unreachable!("scene routine {r:#x}: tables 0xd978c and 0xd982e only hold 0xd99f8, 0xe0d8c and 0xe0c5c"),
     }
 }

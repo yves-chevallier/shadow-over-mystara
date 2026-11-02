@@ -49,7 +49,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => {
             x.add8(f::SUB2, 2);
-            lib::sound(x, 0xecdba);
+            lib::sound(x, crate::sound::CMD_329_429);
         }
         4 => {
             let low = x.a5_u16(0x6e) & 3;

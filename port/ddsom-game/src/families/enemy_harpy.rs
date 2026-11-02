@@ -405,7 +405,7 @@ fn attack_start<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(SHOT, shot.0);
             let n = x.u8(KIND) as u32;
             x.anim_start(SET_ATTACK, n as u16);
-            return lib::sound(x, 0xed5b2);
+            return lib::sound(x, crate::sound::CMD_36C);
         }
     }
     set_state_long(x, 0x0204_0000);
@@ -434,7 +434,7 @@ fn attack_wait<R: Bench>(x: &mut Cx<'_, R>) {
         let shot = Obj(x.u32(SHOT) & 0xff_ffff);
         shot.set_u8(x.b, 0x55, 1);
         x.set8(TIMER_A, 0x1e);
-        lib::sound(x, 0xed61c);
+        lib::sound(x, crate::sound::CMD_36D);
     }
 }
 

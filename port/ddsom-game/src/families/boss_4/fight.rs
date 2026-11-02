@@ -34,7 +34,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             let h = cy.wrapping_add(0xe0).wrapping_sub(x.u16(0x10));
             setw(x, 0, h);
             x.set16(0xc, h);
-            lib::sound(x, 0xe3f76);
+            lib::sound(x, crate::sound::CMD_30C);
             air(x, 1);
         }
         2 => {
@@ -316,7 +316,7 @@ fn charging<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     if x.u8(f::KEY_FRAME) == 0x84 {
-        lib::sound(x, 0xecdba);
+        lib::sound(x, crate::sound::CMD_329_429);
         lib::debris(x, 4);
         lib::shake_54(x, 0xa);
     }
@@ -333,8 +333,8 @@ fn brake<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set16(0x16, d as u16);
     lib::shake_54(x, 0x14);
-    lib::sound(x, 0xec976);
-    lib::sound(x, 0xecdba);
+    lib::sound(x, crate::sound::CMD_328_428);
+    lib::sound(x, crate::sound::CMD_329_429);
     body(x, 5);
 }
 

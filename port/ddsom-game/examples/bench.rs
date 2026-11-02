@@ -23,10 +23,12 @@ fn main() {
     ddsom_game::refuse_hybrid();
     let mut m = match std::env::var_os("DDSOM_ASSETS") {
         Some(dir) => {
+            ddsom_data::install(ddsom_data::GameData::load(Path::new(&dir)).expect("game data"));
             let contents = ddsom_assets::rebuild::contents(Path::new(&dir)).expect("assets");
             cps2::Machine::ddsom(contents, ee.as_deref())
         }
         None => {
+            ddsom_data::install(extract::to_data(Path::new(roms)).expect("game data"));
             let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
             m.set_overclock(16.0);
             m

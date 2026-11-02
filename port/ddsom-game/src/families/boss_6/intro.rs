@@ -45,7 +45,7 @@ fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     x.move_xz();
     if cmp16(x, 0x18, 0x100).le() {
         x.add8(f::SUB2, 2);
-        lib::sound(x, 0xe13f0);
+        lib::sound(x, crate::sound::CMD_23);
         fly(x, 8);
     }
 }
@@ -71,7 +71,7 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(COUNT, 0);
     x.set16(0x16, 0x48);
     lib::shake_58(x, 0x1e);
-    lib::sound(x, 0xecc0a);
+    lib::sound(x, crate::sound::CMD_328_428_B);
     fly(x, 0xa);
 }
 
@@ -94,7 +94,7 @@ fn roar_wait<R: Bench>(x: &mut Cx<'_, R>) {
 fn settle<R: Bench>(x: &mut Cx<'_, R>) {
     if sub16(x, TIMER, 1).le() {
         x.add8(f::SUB2, 2);
-        lib::sound(x, 0xe3da6);
+        lib::sound(x, crate::sound::CMD_30C_40C);
         body(x, 8);
     }
 }

@@ -19,7 +19,7 @@ use crate::player::external as ext;
 /// Identifiers (original addresses) of the routines reached (sounds).
 mod rom {
     /// Push sound.
-    pub const PUSH_SOUND: u32 = 0xeae14;
+    pub const PUSH_SOUND: crate::sound::Sound = crate::sound::CMD_14B_24B;
     /// Rare pose 0x26: sound, flash, creation of a SET object of the scene (0xc8312) of this variant.
     pub const SCENE_SET_VARIANT: u8 = 0x29;
 }
@@ -1061,7 +1061,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 p.set_u16(g, Obj::VX, (-0x200i16) as u16);
             }
             animation::start(g, p, 31);
-            g.sound(ext::sound::JUMP_VOICE, p);
+            g.sound(crate::sound::JUMP_VOICE, p);
         }
         2 => {
             animation::step(g, p);

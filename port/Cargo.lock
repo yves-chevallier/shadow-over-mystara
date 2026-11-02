@@ -82,8 +82,10 @@ version = "0.1.0"
 dependencies = [
  "cps2",
  "ddsom-assets",
+ "ddsom-data",
  "ddsom-game",
  "ddsom-rc",
+ "extract",
  "libloading",
  "minifb",
  "qsound",
@@ -95,9 +97,18 @@ version = "0.1.0"
 dependencies = [
  "cps2",
  "cps2-gfx",
+ "ddsom-data",
  "ddsom-game",
  "ddsom-sound",
  "png",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "ddsom-data"
+version = "0.1.0"
+dependencies = [
  "serde",
  "serde_json",
 ]
@@ -109,7 +120,9 @@ dependencies = [
  "cps2",
  "cps2-gfx",
  "ddsom-assets",
+ "ddsom-data",
  "ddsom-rc",
+ "extract",
  "m68k",
  "png",
 ]
@@ -167,6 +180,7 @@ dependencies = [
  "cps2",
  "cps2-gfx",
  "ddsom-assets",
+ "ddsom-data",
  "ddsom-sound",
  "m68k",
  "png",

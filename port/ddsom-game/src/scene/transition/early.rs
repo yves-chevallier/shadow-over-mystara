@@ -6,11 +6,11 @@ use crate::scene::fading;
 /// Engine routines specific to these scripts.
 mod ext {
     /// Music and ambient sounds of the interludes.
-    pub const MUSIC_A: u32 = 0xe14b0;
-    pub const MUSIC_B: u32 = 0xe1564;
-    pub const MUSIC_C: u32 = 0xe14ec;
-    pub const MUSIC_D: u32 = 0xe1528;
-    pub const MUSIC_E: u32 = 0xe15a0;
+    pub const MUSIC_A: crate::sound::Sound = crate::sound::CMD_2B;
+    pub const MUSIC_B: crate::sound::Sound = crate::sound::CMD_16;
+    pub const MUSIC_C: crate::sound::Sound = crate::sound::CMD_19;
+    pub const MUSIC_D: crate::sound::Sound = crate::sound::CMD_2C;
+    pub const MUSIC_E: crate::sound::Sound = crate::sound::CMD_2F;
 }
 
 // ---------------------------------------------------------------------------------------------

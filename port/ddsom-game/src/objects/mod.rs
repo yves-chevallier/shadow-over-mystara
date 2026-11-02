@@ -27,6 +27,7 @@ pub use current::Current;
 use cps2::Cps2Bus;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::record::{record, Value};
 use crate::Native;
 
 /// All the native routines of the object model.
@@ -111,6 +112,15 @@ pub mod ram {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Link(pub u16);
 
+impl Value for Link {
+    fn read(b: &mut Cps2Bus, a: u32) -> Self {
+        Link(rd16(b, a))
+    }
+    fn write(self, b: &mut Cps2Bus, a: u32) {
+        wr16(b, a, self.0)
+    }
+}
+
 impl Link {
     pub const NONE: Link = Link(0);
 
@@ -137,59 +147,63 @@ impl Link {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Obj(pub u32);
 
-impl Obj {
-    /// Non-zero byte: the pool slot is occupied.
-    pub const ACTIVE: u32 = 0x00;
-    /// Bit 0: visible this frame; bit 1: hidden (not drawn, out of collisions).
-    pub const FLAGS: u32 = 0x01;
-    /// Type: index of the handler in the table of its class.
-    pub const KIND: u32 = 0x02;
-    /// Variant (meaning specific to each type; character for the animation tables).
-    pub const VARIANT: u32 = 0x03;
-    /// State bytes of the handler's automaton: main state, sub-states.
-    pub const STATE: u32 = 0x04;
-    /// Abscissa (16.16, pixels).
-    pub const X: u32 = 0x08;
-    /// Altitude (16.16): added to `Y` for the screen height.
-    pub const Z: u32 = 0x0c;
-    /// Depth on the ground (16.16): sort key of the display lists.
-    pub const Y: u32 = 0x10;
-    /// Non-zero byte: hidden or suspended object (tested by `motion::pause_hook`).
-    pub const HIDDEN: u32 = 0x40;
-    /// Speed and acceleration in X, Z, Y (8.8 pixels/frame).
-    pub const VX: u32 = 0x14;
-    pub const AX: u32 = 0x16;
-    pub const VZ: u32 = 0x18;
-    pub const AZ: u32 = 0x1a;
-    pub const VY: u32 = 0x1c;
-    pub const AY: u32 = 0x1e;
-    /// Animation script: address of the next entry (long).
-    pub const ANIM_NEXT: u32 = 0x20;
-    /// Links of the sorted list: previous (toward the head), next (toward the tail). Words.
-    pub const PREV: u32 = 0x24;
-    pub const NEXT: u32 = 0x26;
-    /// Class code (= original pool: see `pools::Pool::class`).
-    pub const CLASS: u32 = 0x28;
-    /// Index into the speed table (`SPEED_TABLE`).
-    pub const SPEED_INDEX: u32 = 0x2d;
-    /// Current animation entry: remaining duration (frames), flags (high byte: 0 continue,
-    /// 0xFE end, other jump), sprite frame, then two longs of data per frame.
-    pub const ANIM_TIMER: u32 = 0x30;
-    pub const ANIM_FLAGS: u32 = 0x32;
-    pub const FRAME: u32 = 0x34;
-    pub const FRAME_DATA_A: u32 = 0x38;
-    pub const FRAME_DATA_B: u32 = 0x3c;
-    /// Two additional longs of data for the long animation entries.
-    pub const FRAME_DATA_C: u32 = 0x40;
-    pub const FRAME_DATA_D: u32 = 0x44;
-    /// Byte reset to zero by `motion::tick_counters` when it is negative.
-    pub const COUNTER_53: u32 = 0x53;
-    /// Countdown (frames): at zero, `COUNTDOWN_FLAG` is cleared.
-    pub const COUNTDOWN: u32 = 0x89;
-    pub const COUNTDOWN_FLAG: u32 = 0x88;
-    /// Current speed table (ROM address of an array of (vx, vy) 8.8 indexed by `SPEED_INDEX`).
-    pub const SPEED_TABLE: u32 = 0x4c;
+record! {
+    impl Obj {
+        /// Non-zero byte: the pool slot is occupied.
+        active, set_active, ACTIVE: u8 @ 0x00;
+        /// Bit 0: visible this frame; bit 1: hidden (not drawn, out of collisions).
+        flags, set_flags, FLAGS: u8 @ 0x01;
+        /// Type: index of the handler in the table of its class.
+        kind, set_kind, KIND: u8 @ 0x02;
+        /// Variant (meaning specific to each type; character for the animation tables).
+        variant, set_variant, VARIANT: u8 @ 0x03;
+        /// State bytes of the handler's automaton: main state, sub-states.
+        state, set_state, STATE: u8 @ 0x04;
+        /// Abscissa (16.16, pixels).
+        x, set_x, X: u32 @ 0x08;
+        /// Altitude (16.16): added to `Y` for the screen height.
+        z, set_z, Z: u32 @ 0x0c;
+        /// Depth on the ground (16.16): sort key of the display lists.
+        y, set_y, Y: u32 @ 0x10;
+        /// Non-zero byte: hidden or suspended object (tested by `motion::pause_hook`).
+        hidden, set_hidden, HIDDEN: u8 @ 0x40;
+        /// Speed and acceleration in X, Z, Y (8.8 pixels/frame).
+        vx, set_vx, VX: u16 @ 0x14;
+        ax, set_ax, AX: u16 @ 0x16;
+        vz, set_vz, VZ: u16 @ 0x18;
+        az, set_az, AZ: u16 @ 0x1a;
+        vy, set_vy, VY: u16 @ 0x1c;
+        ay, set_ay, AY: u16 @ 0x1e;
+        /// Animation script: address of the next entry (long).
+        anim_next, set_anim_next, ANIM_NEXT: u32 @ 0x20;
+        /// Links of the sorted list: previous (toward the head), next (toward the tail). Words.
+        prev, set_prev, PREV: Link @ 0x24;
+        next, set_next, NEXT: Link @ 0x26;
+        /// Class code (= original pool: see `pools::Pool::class`).
+        class, set_class, CLASS: u8 @ 0x28;
+        /// Index into the speed table (`SPEED_TABLE`).
+        speed_index, set_speed_index, SPEED_INDEX: u8 @ 0x2d;
+        /// Current animation entry: remaining duration (frames), flags (high byte: 0 continue,
+        /// 0xFE end, other jump), sprite frame, then two longs of data per frame.
+        anim_timer, set_anim_timer, ANIM_TIMER: u16 @ 0x30;
+        anim_flags, set_anim_flags, ANIM_FLAGS: u16 @ 0x32;
+        frame, set_frame, FRAME: u32 @ 0x34;
+        frame_data_a, set_frame_data_a, FRAME_DATA_A: u32 @ 0x38;
+        frame_data_b, set_frame_data_b, FRAME_DATA_B: u32 @ 0x3c;
+        /// Two additional longs of data for the long animation entries.
+        frame_data_c, set_frame_data_c, FRAME_DATA_C: u32 @ 0x40;
+        frame_data_d, set_frame_data_d, FRAME_DATA_D: u32 @ 0x44;
+        /// Byte reset to zero by `motion::tick_counters` when it is negative.
+        counter_53, set_counter_53, COUNTER_53: u8 @ 0x53;
+        /// Countdown (frames): at zero, `COUNTDOWN_FLAG` is cleared.
+        countdown, set_countdown, COUNTDOWN: u8 @ 0x89;
+        countdown_flag, set_countdown_flag, COUNTDOWN_FLAG: u8 @ 0x88;
+        /// Current speed table (ROM address of an array of (vx, vy) 8.8 indexed by `SPEED_INDEX`).
+        speed_table, set_speed_table, SPEED_TABLE: u32 @ 0x4c;
+    }
+}
 
+impl Obj {
     pub fn at(self, off: u32) -> u32 {
         self.0.wrapping_add(off)
     }
@@ -239,16 +253,4 @@ impl Obj {
         self.u32(b, Self::Y) as i32
     }
 
-    pub fn prev(self, b: &mut Cps2Bus) -> Link {
-        Link(self.u16(b, Self::PREV))
-    }
-    pub fn next(self, b: &mut Cps2Bus) -> Link {
-        Link(self.u16(b, Self::NEXT))
-    }
-    pub fn set_prev(self, b: &mut Cps2Bus, l: Link) {
-        self.set_u16(b, Self::PREV, l.0)
-    }
-    pub fn set_next(self, b: &mut Cps2Bus, l: Link) {
-        self.set_u16(b, Self::NEXT, l.0)
-    }
 }

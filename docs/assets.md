@@ -165,6 +165,10 @@ d'un morceau est `bank << 16 | (code & !0xf) + ((code + bx) & 0xf) + 16 by` (san
 
 Aperçu : `cargo run --release -p ddsom-assets --example frame -- ../assets <numéro> <palette> sortie.png`.
 
+`extra` : les images hors de la table que seul le code désigne (décors, ombres, scènes : 38, par adresse
+croissante), même format ; leurs numéros suivent ceux de la table (`Frames::number`). Leur liste vient de la
+mesure (`port/extract/code_sprites.txt`, lignes `frame`, voir plus bas).
+
 ## Scripts d'animation : `sprites/anims.json`
 
 Format d'une entrée et pas d'animation : `objects/anim.rs` et [objets.md](objets.md) §5.
@@ -196,6 +200,34 @@ Format d'une entrée et pas d'animation : `objects/anim.rs` et [objets.md](objet
   ou par des jeux absents du visualiseur (268 adresses de jeux dans le code).
 * Ensemble : 19 230 images sur 21 887 sont employées par une entrée ; toutes les images relevées en jeu
   par `examples/creatures.rs` (1 451) le sont.
+* Jeux, scripts et entrées que seul le code désigne : `port/extract/code_sprites.txt` (lignes `set` et `entry`),
+  complété par `tools/residue.py --sprites` à partir des lectures du résidu d'une validation complète (le fichier
+  ne fait que grandir). Un jeu du code va jusqu'à son premier script (il peut chevaucher le jeu suivant :
+  `0x163a86` lit le jeu `0x163a9c`), décalages sans script compris ; une entrée du code est extraite même si
+  son script finit sur une entrée non plausible.
+* `character_sets` : les trois tableaux de jeux par variante de personnage, dans le code (espace programme,
+  `0x2c58`, `0x2cc0`, `0x2d28`, 12 jeux chacun), lus par 0x2c16, 0x2c88 et 0x2cf0 (`objects/anim.rs`).
+
+Le jeu lit ces données typées (`ddsom_data::Anims` : `entry_at`, `jump_at`, `script_offset`,
+`character_sets`) ; une adresse qu'elles ne connaissent pas est lue dans le résidu (`ddsom-game/src/data.rs`,
+compté, fatal avec `DDSOM_STRICT=1`).
+
+## Vitesses : `data/speeds.json`
+
+Tables de vitesses des objets (déplacement par table, `objects/motion.rs`, [objets.md](objets.md)) : par indice,
+la vitesse en X puis en Y (ou Z), en 8.8 pixels par image. L'objet garde l'adresse de sa table (`+0x4c`) et
+son indice (`+0x4e`) ; l'original lit `table + 4 × indice`, au-delà de la fin d'une table s'il le faut : le jeu
+lit donc par adresse à travers les tables (`Speeds::at`).
+
+```json
+{"arrays":[{"rom":"0x1ab4","targets":["0x1c4836", ...44...]},{"rom":"0x1b84","targets":[...76...]}],
+ "tables":[{"rom":"0x1c4836","speeds":[[0,256],[49,250], ...]}, ...]}
+```
+
+* `arrays` : les tableaux de tables de 0x1a94 (44) et 0x1b64 (76), dans le code (espace programme).
+* `tables` : les tables, jointives de `0x1c4836` à `0x1ca2b6` ; chacune commence à une adresse que désigne un
+  tableau ou le code (objets de SET `0x1c65b6`, marche et course des marcheurs `0x1c75b6`, `0x1c7eb6`) et
+  va jusqu'à la suivante.
 
 ## Cartes des décors : `levels.json`
 

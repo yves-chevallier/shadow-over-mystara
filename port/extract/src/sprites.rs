@@ -6,8 +6,9 @@ use std::io;
 use std::ops::Range;
 use std::path::Path;
 
-use ddsom_assets::json;
-use ddsom_assets::sprites::{AnimSet, Anims, Entry, Family, Frame, Frames, Piece};
+use ddsom_data::json;
+use ddsom_data::pointers::Pointers;
+use ddsom_data::sprites::{AnimSet, Anims, Entry, Family, Frame, Frames, Piece};
 
 use crate::rom::Program;
 
@@ -24,6 +25,15 @@ const VIEWER_FAMILIES: u32 = 0xf0532;
 const VIEWER_VARIANTS: u32 = 0xf06c4;
 /// Families with long entries (the twelve `plNN`, test `cmpi.w #0x16` at 0xefa76).
 const LONG_FAMILIES: usize = 12;
+/// Arrays of animation sets per character variant, in the code (program space): read by the routines 0x2c16, 0x2c88
+/// and 0x2cf0 (`objects/anim.rs` of the game).
+const CHARACTER_SETS: [u32; 3] = [0x2c58, 0x2cc0, 0x2d28];
+/// Character variants (one set each in the arrays above).
+const CHARACTERS: u32 = 12;
+/// Frames, animation sets and entries that only the code designates (measured: `tools/residue.py --sprites`).
+const CODE_SPRITES: &str = include_str!("../code_sprites.txt");
+/// Largest number of pieces of a frame outside the table (beyond, the address is not a frame).
+const MAX_PIECES: usize = 512;
 /// Region of the animation scripts, walked for the entries that no known set reaches.
 const SCRIPTS: Range<u32> = 0x120000..0x1d0000;
 
@@ -35,6 +45,18 @@ pub fn extract(roms: &Path, dir: &Path) -> io::Result<()> {
     json::save(&dir.join("frames.json"), &frames, 2)?;
     json::save(&dir.join("anims.json"), &anims, 2)?;
     Ok(())
+}
+
+/// Addresses of `code_sprites.txt` of the kind `kind` (`frame`, `set` or `entry`).
+fn code_sprites(kind: &str) -> Vec<u32> {
+    CODE_SPRITES
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.trim().is_empty())
+        .filter_map(|l| {
+            let (k, a) = l.split_once(' ').expect("code_sprites.txt: kind address");
+            (k == kind).then(|| u32::from_str_radix(a.trim(), 16).expect("code_sprites.txt: address"))
+        })
+        .collect()
 }
 
 fn bad(msg: String) -> io::Error {
@@ -56,7 +78,7 @@ fn frame_at(rom: &Program, at: u32) -> (Frame, u32) {
     (Frame { rom: at, cost, attr, bank, mode, offsets, pieces }, at + 10 + step * n)
 }
 
-fn frames(rom: &Program) -> io::Result<Frames> {
+pub fn frames(rom: &Program) -> io::Result<Frames> {
     let mut frames = Vec::new();
     let mut at = FRAMES.start;
     while at < FRAMES.end {
@@ -91,7 +113,15 @@ fn frames(rom: &Program) -> io::Result<Frames> {
     if end != OFFSETS.end {
         return Err(bad(format!("offset tables: end at {end:#x}")));
     }
-    Ok(Frames { table: FRAME_TABLE, frames })
+    let known: HashSet<u32> = frames.iter().map(|f| f.rom).collect();
+    let mut extra: Vec<Frame> = code_sprites("frame")
+        .into_iter()
+        .filter(|&at| at + 10 <= rom.len() && !known.contains(&at))
+        .map(|at| frame_at(rom, at).0)
+        .filter(|f| !f.pieces.is_empty() && f.pieces.len() <= MAX_PIECES && f.offsets + 4 * f.pieces.len() as u32 <= rom.len())
+        .collect();
+    extra.sort_by_key(|f| f.rom);
+    Ok(Frames { table: FRAME_TABLE, frames, extra })
 }
 
 struct Scan<'a> {
@@ -155,11 +185,11 @@ impl Scan<'_> {
     }
 }
 
-fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
+pub fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
     let mut scan = Scan {
         rom,
-        starts: frames.frames.iter().map(|f| f.rom).collect(),
-        frame_of: frames.frames.iter().enumerate().map(|(i, f)| (f.rom, i as u32)).collect(),
+        starts: frames.frames.iter().chain(&frames.extra).map(|f| f.rom).collect(),
+        frame_of: frames.frames.iter().chain(&frames.extra).enumerate().map(|(i, f)| (f.rom, i as u32)).collect(),
         entries: BTreeMap::new(),
     };
 
@@ -188,6 +218,16 @@ fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
             kinds.insert(s, f.long);
         }
     }
+    // the sets that only the code designates: long if a character array designates them
+    let character_sets: Vec<Pointers> = CHARACTER_SETS
+        .iter()
+        .map(|&at| Pointers { rom: at, targets: (0..CHARACTERS).map(|v| rom.prog32(at + 4 * v)).collect() })
+        .collect();
+    let code_sets = code_sprites("set");
+    for &s in &code_sets {
+        let long = character_sets.iter().any(|p| p.targets.contains(&s));
+        kinds.entry(s).or_insert(long);
+    }
     let starts: Vec<u32> = kinds.keys().copied().collect();
     let mut sets = Vec::new();
     let (mut broken, mut holes) = (0, 0);
@@ -195,7 +235,14 @@ fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
         let mut bound = starts.iter().copied().find(|&x| x > s).unwrap_or(u32::MAX);
         let mut scripts = Vec::new();
         let mut valid = 0;
-        while s + 2 * (scripts.len() as u32) < bound && !scan.plausible(s + 2 * scripts.len() as u32) {
+        // a set of the code goes up to its first script (it may overlap the next set), through what looks like an
+        // entry
+        let code = code_sets.contains(&s);
+        let first = s.wrapping_add(rom.rd16(s) as i16 as i32 as u32);
+        if code && first > s {
+            bound = first;
+        }
+        while s + 2 * (scripts.len() as u32) < bound && (code || !scan.plausible(s + 2 * scripts.len() as u32)) {
             let off = rom.rd16(s + 2 * scripts.len() as u32) as i16;
             scripts.push(off);
             let t = s.wrapping_add(off as i32 as u32);
@@ -210,6 +257,9 @@ fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
     // relative to another set)
         if !scripts.first().is_some_and(|&o| scan.plausible(s.wrapping_add(o as i32 as u32))) {
             valid = 0;
+        }
+        if code {
+            valid = scripts.len();
         }
         scripts.truncate(valid);
         for &off in &scripts {
@@ -236,14 +286,16 @@ fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
         covered.extend((e.rom..e.end()).step_by(2));
     }
     let (mut orphans, mut unreadable) = (0, 0);
-    let mut a = SCRIPTS.start;
-    while a < SCRIPTS.end {
+    // the entries that only the code designates, then the region of the scripts
+    let code_entries = code_sprites("entry");
+    for a in code_entries.iter().copied().chain((SCRIPTS.start..SCRIPTS.end).step_by(2)) {
         if covered.contains(&a) || !scan.plausible(a) {
-            a += 2;
             continue;
         }
-        let short = scan.chain(a, false, true, true);
-        let long = scan.chain(a, true, true, true);
+        // an entry the code designates is one, even if its script ends on an entry that is not plausible
+        let strict = !code_entries.contains(&a);
+        let short = scan.chain(a, false, true, strict);
+        let long = scan.chain(a, true, true, strict);
         let followed = |c: &Option<Vec<Entry>>| c.as_ref().is_some_and(|c| c.last().is_some_and(|e| scan.plausible(e.end())));
         let pick = match (&short, &long) {
             (Some(_), Some(_)) if !followed(&short) && followed(&long) => long,
@@ -260,7 +312,6 @@ fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
             }
             None => unreadable += 1,
         }
-        a += 2;
     }
 
     let entries: Vec<Entry> = scan.entries.into_values().collect();
@@ -279,5 +330,13 @@ fn anims(rom: &Program, frames: &Frames) -> io::Result<Anims> {
         unreadable,
         overlaps
     );
-    Ok(Anims { names_rom: VIEWER_NAMES, families_rom: VIEWER_FAMILIES, variants_rom: VIEWER_VARIANTS, families, sets, entries })
+    Ok(Anims {
+        names_rom: VIEWER_NAMES,
+        families_rom: VIEWER_FAMILIES,
+        variants_rom: VIEWER_VARIANTS,
+        families,
+        sets,
+        entries,
+        character_sets,
+    })
 }

@@ -119,7 +119,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(ANIM_KIND, 0x20);
             x.set8(ANIM_LAST, 0x20);
             x.add8(f::SUB2, 2);
-            lib::sound(x, 0xec73c);
+            lib::sound(x, crate::sound::CMD_126_226_B);
             body(x, 0xb);
         }
         2 => {
@@ -255,7 +255,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             lib::object_event(x);
             x.set8(0, 2);
             x.set8(SLOW, 0);
-            lib::sound(x, 0xe5966);
+            lib::sound(x, crate::sound::CMD_83_83);
             lib::drop_rewards(x);
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);

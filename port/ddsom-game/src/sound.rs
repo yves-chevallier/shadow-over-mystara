@@ -213,15 +213,81 @@ pub const MEMO: u8 = 4;
 /// Enqueues without testing the sound permission (0xe0848 instead of 0xe0836).
 pub const DIRECT: u8 = 8;
 
-/// Description of an "sfx" entry point: the command is D1, its parameters D2 and D3.
+/// A sound of the game, as the code designates it: the way its original wrapper composes the command. The entry of
+/// that wrapper stays its identity (the ROM tables that designate sounds store it, and the tools find the natives by
+/// it).
 #[derive(Clone, Copy, Debug)]
-pub struct Wrapper {
+pub struct Sound {
     pub entry: u32,
-    pub cmd: Cmd,
-    pub d2: u32,
-    pub d3: u32,
-    pub opts: u8,
+    kind: Kind,
 }
+
+#[derive(Clone, Copy, Debug)]
+enum Kind {
+    Wrapper(Wrapper),
+    /// Chooses another sound from a table (see [`Dispatch`]).
+    Dispatch(Dispatch),
+    /// Tests the alternate-palette version, then plays the sound at `normal` or at `alternate`.
+    ByVersion { normal: u32, alternate: u32 },
+    /// The sound of the objects without sound (a bare `rts`).
+    Silent,
+}
+
+impl Sound {
+    pub(crate) const fn wrapper(entry: u32, cmd: Cmd, d2: u32, d3: u32, opts: u8) -> Sound {
+        Sound { entry, kind: Kind::Wrapper(Wrapper { cmd, d2, d3, opts }) }
+    }
+
+    const fn dispatch(entry: u32, d: Dispatch) -> Sound {
+        Sound { entry, kind: Kind::Dispatch(d) }
+    }
+
+    const fn by_version(entry: u32, normal: u32, alternate: u32) -> Sound {
+        Sound { entry, kind: Kind::ByVersion { normal, alternate } }
+    }
+
+    /// The sound whose original wrapper starts at `entry`, for the sounds that a ROM table (or a dispatcher)
+    /// designates by address.
+    pub fn at(entry: u32) -> Sound {
+        if let Ok(i) = table::WRAPPERS.binary_search_by_key(&entry, |w| w.entry) {
+            return table::WRAPPERS[i];
+        }
+        OTHERS.iter().find(|s| s.entry == entry).copied().unwrap_or_else(|| panic!("{entry:x}: no sound starts here"))
+    }
+
+    /// Name of the native of the tools that plays this sound for the original code.
+    #[cfg(feature = "tools")]
+    pub(crate) fn kind_name(self) -> &'static str {
+        match self.kind {
+            Kind::Wrapper(_) => "sound_wrapper",
+            Kind::Dispatch(_) => "sound_dispatch",
+            Kind::ByVersion { .. } => "sound_by_version",
+            Kind::Silent => "sound_none",
+        }
+    }
+
+    /// Does the sound read its object (A0)? The targets of the dispatchers by D4 or A1 are only known at run time:
+    /// presumed to read it.
+    fn reads_object(self) -> bool {
+        match self.kind {
+            Kind::Wrapper(w) => w.opts & PAN != 0 || matches!(w.cmd, Cmd::ByObject(_) | Cmd::ByByte2(_)),
+            Kind::Dispatch(d) => !matches!(d, Dispatch::Music { .. }),
+            Kind::ByVersion { normal, alternate } => Sound::at(normal).reads_object() || Sound::at(alternate).reads_object(),
+            Kind::Silent => false,
+        }
+    }
+}
+
+/// How a wrapper composes its command: D1 is the command, D2 and D3 its parameters.
+#[derive(Clone, Copy, Debug)]
+struct Wrapper {
+    cmd: Cmd,
+    d2: u32,
+    d3: u32,
+    opts: u8,
+}
+
+pub use table::*;
 
 /// What a sound reads from its caller: the registers the original consults, and nothing else (see the header,
 /// "ghost save"). A sound that reads an absent value stops (panic): the caller must provide it.
@@ -247,52 +313,30 @@ impl Source {
     }
 }
 
-/// Plays sound `sound` (entry of an `sfx_*` wrapper or of a dispatcher, its identifier) for object `object` (A0 of
-/// the original). The few sounds that also read D4 or A1 go through [`play_with`].
-pub fn play(b: &mut Cps2Bus, sound: u32, object: Obj) {
+/// Plays sound `sound` for object `object` (A0 of the original). The few sounds that also read D4 or A1 go through
+/// [`play_with`].
+pub fn play(b: &mut Cps2Bus, sound: Sound, object: Obj) {
     play_with(b, sound, Source { object: Some(object), ..Source::default() });
 }
 
 /// Plays a sound that reads nothing from its caller (no pan, player or variant: music, interface
 /// noises), for callers without an object.
-pub fn play_global(b: &mut Cps2Bus, sound: u32) {
-    debug_assert!(!reads_object(sound), "sound {sound:x}: reads its object, use jouer");
+pub fn play_global(b: &mut Cps2Bus, sound: Sound) {
+    debug_assert!(!sound.reads_object(), "sound {:x}: reads its object, use `play`", sound.entry);
     play_with(b, sound, Source::default());
 }
 
 /// Plays sound `sound` with everything it may read (see [`Source`]).
-pub fn play_with(b: &mut Cps2Bus, sound: u32, source: Source) {
-    if let Ok(i) = table::WRAPPERS.binary_search_by_key(&sound, |w| w.entry) {
-        play_wrapper(b, &table::WRAPPERS[i], source);
-    } else if let Some(&(_, kind)) = DISPATCHES.iter().find(|(e, _)| *e == sound) {
-        dispatch(b, kind, source);
-    } else if let Some(&(_, normal, alternate)) = BY_VERSION.iter().find(|(e, ..)| *e == sound) {
-        let target = if version_alternative(b) { alternate } else { normal };
-        play_with(b, target, source);
-    } else if sound == NO_SOUND {
-        // objects without sound
-    } else {
-        panic!("sound {sound:x}: neither wrapper nor dispatcher")
+pub fn play_with(b: &mut Cps2Bus, sound: Sound, source: Source) {
+    match sound.kind {
+        Kind::Wrapper(w) => play_wrapper(b, &w, source),
+        Kind::Dispatch(d) => dispatch(b, d, source),
+        Kind::ByVersion { normal, alternate } => {
+            let target = if version_alternative(b) { alternate } else { normal };
+            play_with(b, Sound::at(target), source);
+        }
+        Kind::Silent => {}
     }
-}
-
-/// 0xec238: the sound of the objects without sound (a bare `rts`).
-pub(crate) const NO_SOUND: u32 = 0xec238;
-
-/// Does the sound read its object (A0)? The targets of the dispatchers by D4 or A1 are only known at run time:
-/// presumed to read it.
-fn reads_object(sound: u32) -> bool {
-    if let Ok(i) = table::WRAPPERS.binary_search_by_key(&sound, |w| w.entry) {
-        let w = &table::WRAPPERS[i];
-        return w.opts & PAN != 0 || matches!(w.cmd, Cmd::ByObject(_) | Cmd::ByByte2(_));
-    }
-    if let Some(&(_, kind)) = DISPATCHES.iter().find(|(e, _)| *e == sound) {
-        return !matches!(kind, Dispatch::Music { .. });
-    }
-    if let Some(&(_, normal, alternate)) = BY_VERSION.iter().find(|(e, ..)| *e == sound) {
-        return reads_object(normal) || reads_object(alternate);
-    }
-    sound != NO_SOUND
 }
 
 /// Pan (0-0x2f -> byte of the ROM table) of an object: screen position of the object relative to
@@ -399,24 +443,53 @@ pub(crate) enum Dispatch {
     Music { table: u32, strict: bool },
 }
 
-pub(crate) const DISPATCHES: &[(u32, Dispatch)] = {
-    use Dispatch::*;
-    &[
-        (0xe0c5c, Music { table: 0xe0ca6, strict: true }),
-        (0xe0d8c, Music { table: 0xe0dd6, strict: false }),
-        (0xe662a, ByVariantAndCategory(0xe666c)),
-        (0xe6910, ByD4(0xe694a)),
-        (0xe7622, ByVariant(0xe765c)),
-        (0xe774c, ByVariant(0xe7786)),
-        (0xe78e8, ByVariant(0xe7922)),
-        (0xe7a12, ByVariant(0xe7a4c)),
-        (0xe7c20, ByD4(0xe7c5a)),
-        (0xe7e10, ByD4(0xe7e4a)),
-        (0xe823a, ByVariantLong(0xe8274)),
-        (0xec046, ByA1(0xec080)),
-        (0xec200, ByA1(0xec23a)),
-    ]
-};
+// The dispatchers.
+/// Scene music (plays a positive command).
+pub const SCENE_MUSIC: Sound = Sound::dispatch(0xe0c5c, Dispatch::Music { table: 0xe0ca6, strict: true });
+/// Scene music, or its stop (plays a command zero or positive, always noted in the memo).
+pub const SCENE_MUSIC_OR_STOP: Sound = Sound::dispatch(0xe0d8c, Dispatch::Music { table: 0xe0dd6, strict: false });
+/// Noise of a hit, by the variant and the category of the object.
+pub const HIT_BY_CATEGORY: Sound = Sound::dispatch(0xe662a, Dispatch::ByVariantAndCategory(0xe666c));
+/// Chosen by D4 (no caller in the game).
+pub const BY_D4: Sound = Sound::dispatch(0xe6910, Dispatch::ByD4(0xe694a));
+/// Character voices and noises, by variant.
+pub const JUMP_VOICE: Sound = Sound::dispatch(0xe7622, Dispatch::ByVariant(0xe765c));
+pub const LANDING_VOICE: Sound = Sound::dispatch(0xe774c, Dispatch::ByVariant(0xe7786));
+pub const SLIDE_VOICE: Sound = Sound::dispatch(0xe78e8, Dispatch::ByVariant(0xe7922));
+pub const LANDING_EFFECT: Sound = Sound::dispatch(0xe7a12, Dispatch::ByVariant(0xe7a4c));
+/// Voices chosen by D4.
+pub const VOICE_BY_D4: Sound = Sound::dispatch(0xe7c20, Dispatch::ByD4(0xe7c5a));
+pub const WEAPON_VOICE: Sound = Sound::dispatch(0xe7e10, Dispatch::ByD4(0xe7e4a));
+/// Noise of a hit, by the variant of the object.
+pub const HIT_BY_VARIANT: Sound = Sound::dispatch(0xe823a, Dispatch::ByVariantLong(0xe8274));
+/// Noises of a contact, by the object in A1: an enemy (0xec046) or another object (0xec200) (h).
+pub const CONTACT_ENEMY: Sound = Sound::dispatch(0xec046, Dispatch::ByA1(0xec080));
+pub const CONTACT_OBJECT: Sound = Sound::dispatch(0xec200, Dispatch::ByA1(0xec23a));
+
+// The sounds of the alternate-palette version (`A5+0x70` non-zero): `normal` or, in this version, `alternate`.
+/// Character noises.
+pub const GET_UP_B: Sound = Sound::by_version(0xe2240, 0xe2248, 0xe2390);
+pub const GET_UP_A: Sound = Sound::by_version(0xe22e8, 0xe22f0, 0xe2390);
+/// Noise per object.
+pub const ITEM: Sound = Sound::by_version(0xe2430, 0xe2438, 0xe24d8);
+/// Noise per kind.
+pub const BY_KIND: Sound = Sound::by_version(0xe27da, 0xe27e2, 0xe28a4);
+/// Sound 0xd5 or 0xd6, cleric's prayer.
+pub const PRAYER: Sound = Sound::by_version(0xe285c, 0xe2864, 0xe28a4);
+/// Sound 0xf7 or 0xf6, magician's storm.
+pub const STORM: Sound = Sound::by_version(0xe2a74, 0xe2a7a, 0xe2a34);
+/// Sound 0xea or 0xe6, elf's moon (hole found by the bot `longue_d`).
+pub const MOON: Sound = Sound::by_version(0xe296c, 0xe2974, 0xe29f4);
+
+/// 0xec238: the sound of the objects without sound (a bare `rts`).
+pub const SILENT: Sound = Sound { entry: 0xec238, kind: Kind::Silent };
+
+/// The sounds that are not wrappers: dispatchers, sounds by version and the silent sound.
+pub const OTHERS: [Sound; 21] = [
+    SCENE_MUSIC, SCENE_MUSIC_OR_STOP, HIT_BY_CATEGORY, BY_D4, JUMP_VOICE, LANDING_VOICE, SLIDE_VOICE, LANDING_EFFECT,
+    VOICE_BY_D4, WEAPON_VOICE, HIT_BY_VARIANT, CONTACT_ENEMY, CONTACT_OBJECT, GET_UP_B, GET_UP_A, ITEM, BY_KIND,
+    PRAYER, STORM, MOON, SILENT,
+];
 
 /// Long of the program space (tables read PC-relative).
 fn program_read32(b: &mut Cps2Bus, address: u32) -> u32 {
@@ -484,7 +557,7 @@ fn dispatch(b: &mut Cps2Bus, kind: Dispatch, source: Source) {
             return;
         }
     };
-    play_with(b, target, source);
+    play_with(b, Sound::at(target), source);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -595,21 +668,6 @@ fn has_delay(b: &mut Cps2Bus, command: u16, lock: u8, line: u16) -> Command {
     let high = rd16(b, line + 2) as u32;
     Command { d1: high << 16 | command as u32, d2: 0, d3: 0 }
 }
-
-/// Entries that test the alternate-palette version (`A5+0x70` non-zero) before calling the wrapper
-/// `normal` or, in this version, the wrapper `alternate`: 0xe2240 / 0xe22e8 (character noise),
-/// 0xe2430 (noise per object), 0xe27da (noise per kind), 0xe285c (sound 0xd5 or 0xd6, cleric's prayer), 0xe2a74 (sound
-/// 0xf7 or 0xf6, magician's storm), 0xe296c (sound 0xea or 0xe6, elf's moon: hole found by the bot
-/// `longue_d`).
-pub(crate) const BY_VERSION: [(u32, u32, u32); 7] = [
-    (0xe2240, 0xe2248, 0xe2390),
-    (0xe22e8, 0xe22f0, 0xe2390),
-    (0xe2430, 0xe2438, 0xe24d8),
-    (0xe27da, 0xe27e2, 0xe28a4),
-    (0xe285c, 0xe2864, 0xe28a4),
-    (0xe2a74, 0xe2a7a, 0xe2a34),
-    (0xe296c, 0xe2974, 0xe29f4),
-];
 
 /// Alternate-palette version (`A5+0x70` non-zero).
 fn version_alternative(b: &mut Cps2Bus) -> bool {

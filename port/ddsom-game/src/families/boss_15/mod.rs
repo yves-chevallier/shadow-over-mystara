@@ -363,7 +363,7 @@ fn grab_step<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let hp = p.u16(x.b, f::HP).wrapping_sub(1);
     p.set_u16(x.b, f::HP, hp);
-    lib::sound(x, 0xedd96);
+    lib::sound(x, crate::sound::CMD_341_441);
     lib::hold_seized(x);
 }
 

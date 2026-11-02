@@ -229,7 +229,7 @@ fn dash<R: Bench>(x: &mut Cx<'_, R>) {
             } else {
                 x.add8(0x7, 2);
                 x.set16(0xc, 0);
-                lib::sound(x, 0xecc7c);
+                lib::sound(x, crate::sound::CMD_362);
                 body(x, 0xa);
             }
         }
