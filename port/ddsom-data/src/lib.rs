@@ -64,11 +64,19 @@ pub struct GameData {
     pub set: DataFile,
     /// Dialog windows, bubbles and their texts, in the three languages (SET 3, 10, 15 and 24).
     pub dialogs: DataFile,
+    /// Tables of the scene sequences (entry, exit, tally, shop, bonus...: `scene/` of the game).
+    pub scenes: DataFile,
+    /// Demonstration scripts and recorded inputs, viewer names, credits text (`modes/demo` of the game).
+    pub misc: DataFile,
+    /// Texts of the character layer, descriptor tables, balloon names, `@`-terminated names.
+    pub texts: Texts,
+    /// The other tables of the screens: interface panels, mode screens, service menu, credits (docs/fin.md, L11).
+    pub screens: DataFile,
 }
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 9] = [
+    pub const FILES: [&'static str; 13] = [
         "sprites/frames.json",
         "sprites/anims.json",
         "data/speeds.json",
@@ -78,6 +86,10 @@ impl GameData {
         "sprites/tables.json",
         "data/set.json",
         "data/dialogs.json",
+        "data/scenes.json",
+        "data/misc.json",
+        "texts.json",
+        "data/screens.json",
     ];
 
     /// Loads the game data from an assets folder (written by `extract`).
@@ -92,6 +104,10 @@ impl GameData {
             sprite_tables: SpriteTables::load(&dir.join(Self::FILES[6]))?,
             set: DataFile::load(&dir.join(Self::FILES[7]))?,
             dialogs: DataFile::load(&dir.join(Self::FILES[8]))?,
+            scenes: DataFile::load(&dir.join(Self::FILES[9]))?,
+            misc: DataFile::load(&dir.join(Self::FILES[10]))?,
+            texts: Texts::load(&dir.join(Self::FILES[11]))?,
+            screens: DataFile::load(&dir.join(Self::FILES[12]))?,
         })
     }
 }

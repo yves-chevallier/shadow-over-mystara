@@ -42,4 +42,8 @@ fn rom_and_assets_give_the_same_data() {
     }
     assert!(a.len() == b.len(), "SET tables differ in number");
     assert!(tables(&from_roms.dialogs) == tables(&from_assets.dialogs), "dialogs differ");
+    assert!(tables(&from_roms.scenes) == tables(&from_assets.scenes), "scene tables differ");
+    assert!(tables(&from_roms.misc) == tables(&from_assets.misc), "misc tables differ");
+    assert!(tables(&from_roms.screens) == tables(&from_assets.screens), "screen tables differ");
+    assert!(from_roms.texts == from_assets.texts, "texts differ");
 }

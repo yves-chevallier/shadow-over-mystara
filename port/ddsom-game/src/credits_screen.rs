@@ -13,37 +13,40 @@
 
 use cps2::Cps2Bus;
 
-use crate::credits::write_digit;
-use crate::mem::{prog16, rd32, rd8, set_low_byte, wr8, A5};
+use crate::credits::{ram, write_digit, CoinSlot};
+use crate::hw::video::TEXT;
+use crate::mem::set_low_byte;
+use crate::screens::tables::Rom;
 use crate::text;
 
-/// ROM tables: text pointers by credit (one table per variant), and erased area.
+/// ROM tables: text pointers by credit (one table per variant, `texts.json`), offsets of the digits
+/// (`data/screens.json`), and erased area.
 mod table {
-    pub const TEXT_ONE: u32 = 0x1ae10;
-    pub const TEXT_ONE_EMPTY: u32 = 0x1ae80;
-    pub const TEXT_TWO_COINS: u32 = 0x1aea4;
-    pub const PLAYER_TEXT: [[u32; 2]; 3] = [[0x1aecc, 0x1af18], [0x1af24, 0x1af70], [0x1af7c, 0x1afc8]];
-    pub const DIGIT_TEXT: [u32; 2] = [0x1ad98, 0x1ade8];
-    pub const TALL_TEXT: u32 = 0x1adc0;
-    /// Offsets (in 0x912000) of each player's digits.
-    pub const DIGIT_OFFSETS: u32 = 0x14740;
-    pub const DIGIT_OFFSETS_TWO_COINS: u32 = 0x14764;
-    pub const TALL_OFFSETS: u32 = 0x1489a;
-    pub const RECT: u32 = 0x14e54;
+    use crate::screens::tables::Rom;
+
+    pub const TEXT_ONE: Rom = Rom::at(0x1ae10);
+    pub const TEXT_ONE_EMPTY: Rom = Rom::at(0x1ae80);
+    pub const TEXT_TWO_COINS: Rom = Rom::at(0x1aea4);
+    pub const PLAYER_TEXT: [[Rom; 2]; 3] = [
+        [Rom::at(0x1aecc), Rom::at(0x1af18)],
+        [Rom::at(0x1af24), Rom::at(0x1af70)],
+        [Rom::at(0x1af7c), Rom::at(0x1afc8)],
+    ];
+    pub const DIGIT_TEXT: [Rom; 2] = [Rom::at(0x1ad98), Rom::at(0x1ade8)];
+    pub const TALL_TEXT: Rom = Rom::at(0x1adc0);
+    /// Offsets (in the character layer) of each player's digits.
+    pub const DIGIT_OFFSETS: Rom = Rom::at(0x14740);
+    pub const DIGIT_OFFSETS_TWO_COINS: Rom = Rom::at(0x14764);
+    pub const TALL_OFFSETS: Rom = Rom::at(0x1489a);
+    pub const RECT: Rom = Rom::at(0x14e54);
 }
 
 /// First coin slot (`A5+0x44e`).
-pub const FIRST_COIN_SLOT: u32 = A5 + 0x44e;
-
-const CHARACTERS: u32 = 0x912000;
-
-fn v8(b: &mut Cps2Bus, off: u32) -> u8 {
-    rd8(b, A5 + off)
-}
+pub const FIRST_COIN_SLOT: CoinSlot = CoinSlot::nth(0);
 
 /// Text pointer `table[index]` (A4 of the original).
-fn text_at(b: &mut Cps2Bus, table: u32, index: u32) -> u32 {
-    rd32(b, table + (index & 0xffff))
+fn text_at(b: &mut Cps2Bus, table: Rom, index: u32) -> u32 {
+    table.long(b, index & 0xffff)
 }
 
 /// Writes a digit (attribute 1) through `0x14e46`; returns the cell that follows.
@@ -68,15 +71,15 @@ fn modulo(value: u8, by: u8) -> u8 {
 
 /// 0x14c1e: erases the credit text rectangle.
 pub fn clear_credit_text(b: &mut Cps2Bus) {
-    text::clear_box(b, table::RECT);
+    text::clear_box(b, table::RECT.addr());
 }
 
 /// Index (in bytes) of the credit text of coin slot `m`: 4 bytes per whole credit, plus a fraction of coins
 /// when the credit is at one coin.
-fn credit_index(b: &mut Cps2Bus, m: u32) -> u32 {
-    let (coins, credits, per_credit) = (rd8(b, m + 1), rd8(b, m + 2), v8(b, 0x1e));
+fn credit_index(b: &mut Cps2Bus, m: CoinSlot) -> u32 {
+    let (coins, credits, per_credit) = (m.coins(b), m.credits(b), ram::COINS_PER_CREDIT.get(b));
     let mut d0: u32;
-    if rd8(b, m + 9) != 0 {
+    if m.two_coins(b) != 0 {
         d0 = (credits as u32) << 2 & 0xffff;
         if d0 as u8 > 8 {
             set_low_byte(&mut d0, 8);
@@ -103,10 +106,10 @@ fn credit_index(b: &mut Cps2Bus, m: u32) -> u32 {
 }
 
 /// `0x14b74`: credit text of coin slot `m` at column `col` (D5), row 0xd (D6).
-fn count_text(b: &mut Cps2Bus, m: u32, col: u8) {
+fn count_text(b: &mut Cps2Bus, m: CoinSlot, col: u8) {
     let index = credit_index(b, m);
-    let two_coins = (rd8(b, m + 9) != 0) as usize;
-    let variant = match v8(b, 0x21) {
+    let two_coins = (m.two_coins(b) != 0) as usize;
+    let variant = match ram::COIN_SLOTS.get(b) {
         3 => 2,
         2 => 1,
         _ => 0,
@@ -119,32 +122,32 @@ fn count_text(b: &mut Cps2Bus, m: u32, col: u8) {
 // 0x148be: credit text
 
 /// `0x148be`: credit text, from the first coin slot `m`.
-pub fn credit_text(b: &mut Cps2Bus, m: u32) {
-    if v8(b, 0x22) != 0 {
+pub fn credit_text(b: &mut Cps2Bus, m: CoinSlot) {
+    if ram::SEPARATE_MODE.get(b) != 0 {
         return credit_text_separate(b);
     }
-    let two_coins = rd8(b, m + 9) != 0;
+    let two_coins = m.two_coins(b) != 0;
     if two_coins {
         // two-coin credit: the text follows the number of credits, capped according to the sharing
-        let limit = match v8(b, 0x20) {
+        let limit = match ram::SHARED_MODE.get(b) {
             0 => 4,
             1 => 6,
             _ => 8,
         };
-        let d0 = (rd8(b, m + 2) as i8).min(limit);
+        let d0 = (m.credits(b) as i8).min(limit);
         let index = (d0 as u8 as u32) << 2;
-        if index as u8 == rd8(b, m + 0xb) {
+        if index as u8 == m.shown_text(b) {
             return;
         }
-        wr8(b, m + 0xb, index as u8);
+        m.set_shown_text(b, index as u8);
         clear_credit_text(b);
-        let index = rd8(b, m + 0xb) as u32;
+        let index = m.shown_text(b) as u32;
         let t = text_at(b, table::TEXT_TWO_COINS, index);
         text::print_tall(b, t);
         return;
     }
-    let credits = rd8(b, m + 2);
-    let shared = v8(b, 0x20);
+    let credits = m.credits(b);
+    let shared = ram::SHARED_MODE.get(b);
     // 4 bytes per whole credit up to 3 (depending on the sharing), then the fraction of coins
     let mut d0 = 0u8;
     let mut fraction = true;
@@ -165,20 +168,20 @@ pub fn credit_text(b: &mut Cps2Bus, m: u32) {
     if fraction {
         d0 = fraction_index(b, m, d0);
     }
-    wr8(b, m + 0xb, d0);
+    m.set_shown_text(b, d0);
     clear_credit_text(b);
-    let table = if rd8(b, m + 2) != 0 { table::TEXT_ONE } else { table::TEXT_ONE_EMPTY };
-    let index = rd8(b, m + 0xb) as u32;
+    let table = if m.credits(b) != 0 { table::TEXT_ONE } else { table::TEXT_ONE_EMPTY };
+    let index = m.shown_text(b) as u32;
     let t = text_at(b, table, index);
     text::print_tall(b, t);
 }
 
 /// Intermediate text (0x14912): `d0` plus 4 bytes per coin missing for the next credit.
-fn fraction_index(b: &mut Cps2Bus, m: u32, d0: u8) -> u8 {
+fn fraction_index(b: &mut Cps2Bus, m: CoinSlot, d0: u8) -> u8 {
     let mut d1 = 0u8;
-    let coins = rd8(b, m + 1);
+    let coins = m.coins(b);
     if coins != 0 {
-        let mut left = v8(b, 0x1e).wrapping_sub(coins);
+        let mut left = ram::COINS_PER_CREDIT.get(b).wrapping_sub(coins);
         loop {
             d1 = d1.wrapping_add(4);
             left = left.wrapping_sub(1);
@@ -193,19 +196,19 @@ fn fraction_index(b: &mut Cps2Bus, m: u32, d0: u8) -> u8 {
 /// Separate counters (0x149aa): one text per player, at the columns of each configuration.
 fn credit_text_separate(b: &mut Cps2Bus) {
     clear_credit_text(b);
-    const P1: u32 = 0x44e;
-    const P2: u32 = 0x45e;
-    const P3: u32 = 0x46e;
-    const P4: u32 = 0x47e;
+    const P1: CoinSlot = CoinSlot::nth(0);
+    const P2: CoinSlot = CoinSlot::nth(1);
+    const P3: CoinSlot = CoinSlot::nth(2);
+    const P4: CoinSlot = CoinSlot::nth(3);
     // (coin slot, column); the original also passes a row (D4: 0, 4, 8, 0xc) that the text does not read
-    let layout: &[(u32, u8)] = if v8(b, 0x21) == 3 {
+    let layout: &[(CoinSlot, u8)] = if ram::COIN_SLOTS.get(b) == 3 {
         &[(P1, 1), (P2, 0xd), (P3, 0x19), (P4, 0x25)]
-    } else if v8(b, 0x21) == 2 {
+    } else if ram::COIN_SLOTS.get(b) == 2 {
         &[(P1, 1), (P2, 0x11), (P3, 0x21)]
-    } else if v8(b, 0x20) == 1 {
+    } else if ram::SHARED_MODE.get(b) == 1 {
         &[(P1, 1), (P1, 0x11), (P2, 0x21)]
-    } else if v8(b, 0x20) == 2 {
-        if v8(b, 0x21) == 1 {
+    } else if ram::SHARED_MODE.get(b) == 2 {
+        if ram::COIN_SLOTS.get(b) == 1 {
             &[(P1, 0xa), (P2, 0x18)]
         } else {
             &[(P1, 1), (P1, 0xd), (P2, 0x19), (P2, 0x25)]
@@ -214,7 +217,7 @@ fn credit_text_separate(b: &mut Cps2Bus) {
         &[(P1, 0xa), (P2, 0x18)]
     };
     for &(coin_slot, col) in layout {
-        count_text(b, A5 + coin_slot, col);
+        count_text(b, coin_slot, col);
     }
 }
 
@@ -223,7 +226,7 @@ fn credit_text_separate(b: &mut Cps2Bus) {
 
 /// Variant of the player array: 0 for one coin slot, 2 for two, 5 for three and four.
 fn rank(b: &mut Cps2Bus) -> u8 {
-    match v8(b, 0x21) {
+    match ram::COIN_SLOTS.get(b) {
         1 => 0,
         2 => 2,
         _ => 5,
@@ -232,56 +235,56 @@ fn rank(b: &mut Cps2Bus) -> u8 {
 
 /// Cell of the character layer at a signed offset (word) from its start.
 fn case(offset: u32) -> u32 {
-    CHARACTERS.wrapping_add(offset as u16 as i16 as i32 as u32)
+    TEXT.at(offset as u16 as i16 as i32 as u32).0
 }
 
 /// `0x14652`: credit and coin digits, from the first coin slot `m`.
-pub fn digits(b: &mut Cps2Bus, m: u32) {
-    let tall = v8(b, 0x456) != 0;
-    if v8(b, 0x21) == 0 || v8(b, 0x22) == 0 {
+pub fn digits(b: &mut Cps2Bus, m: CoinSlot) {
+    let tall = ram::BIG_DIGITS.get(b) != 0;
+    if ram::COIN_SLOTS.get(b) == 0 || ram::SEPARATE_MODE.get(b) == 0 {
         return if tall { digits_tall_single(b) } else { digits_single(b, m) };
     }
-    let mut a2 = A5 + 0x44e;
-    for player in 0..=v8(b, 0x21) as u32 {
+    let mut a2 = FIRST_COIN_SLOT;
+    for player in 0..=ram::COIN_SLOTS.get(b) as u32 {
         let index = (rank(b) as u32 + player) << 2;
         if tall {
             let t = text_at(b, table::TALL_TEXT, index);
             text::print_over(b, t);
-            let offset = rd32(b, table::TALL_OFFSETS + index);
-            let credits = rd8(b, a2 + 2);
+            let offset = table::TALL_OFFSETS.long(b, index);
+            let credits = a2.credits(b);
             let mut at = digit(b, case(offset), credits);
             at = at.wrapping_sub(0x7e);
-            if v8(b, 0x21) != 3 {
+            if ram::COIN_SLOTS.get(b) != 3 {
                 at = at.wrapping_add(0x17c);
             }
-            let coins = modulo(rd8(b, a2 + 1), v8(b, 0x1e));
+            let coins = modulo(a2.coins(b), ram::COINS_PER_CREDIT.get(b));
             at = digit(b, at, coins);
             at = at.wrapping_add(0xfe);
-            let per = v8(b, 0x1e);
+            let per = ram::COINS_PER_CREDIT.get(b);
             digit(b, at, per);
         } else {
-            let two_coins = rd8(b, m + 9) != 0;
+            let two_coins = m.two_coins(b) != 0;
             let t = text_at(b, table::DIGIT_TEXT[two_coins as usize], index);
             text::print(b, t);
             // the offset table is read PC-relative (decrypted program)
-            let mut offset = prog16(b, table::DIGIT_OFFSETS + index + 2) as u32;
-            if rd8(b, m + 9) != 0 {
-                offset = rd32(b, table::DIGIT_OFFSETS_TWO_COINS + index);
+            let mut offset = table::DIGIT_OFFSETS.pc_word(b, index + 2) as u32;
+            if m.two_coins(b) != 0 {
+                offset = table::DIGIT_OFFSETS_TWO_COINS.long(b, index);
             }
-            let credits = rd8(b, a2 + 2);
+            let credits = a2.credits(b);
             digit(b, case(offset), credits);
         }
-        a2 += 0x10;
+        a2 = CoinSlot(a2.0 + 0x10);
     }
 }
 
 /// A single array (0x14700): credits of one coin slot.
-fn digits_single(b: &mut Cps2Bus, m: u32) {
-    let two_coins = rd8(b, m + 9) != 0;
+fn digits_single(b: &mut Cps2Bus, m: CoinSlot) {
+    let two_coins = m.two_coins(b) != 0;
     let t = text_at(b, table::DIGIT_TEXT[two_coins as usize], 0x24);
     text::print(b, t);
-    let at = if rd8(b, m + 9) != 0 { 0x912df4 } else { 0x912e74 };
-    let credits = v8(b, 0x450);
+    let at = if m.two_coins(b) != 0 { TEXT.at(0xdf4).0 } else { TEXT.at(0xe74).0 };
+    let credits = FIRST_COIN_SLOT.credits(b);
     digit(b, at, credits);
 }
 
@@ -289,12 +292,12 @@ fn digits_single(b: &mut Cps2Bus, m: u32) {
 fn digits_tall_single(b: &mut Cps2Bus) {
     let t = text_at(b, table::TALL_TEXT, 0x24);
     text::print_over(b, t);
-    let credits = v8(b, 0x450);
-    let mut at = digit(b, 0x912cf4, credits);
+    let credits = FIRST_COIN_SLOT.credits(b);
+    let mut at = digit(b, TEXT.at(0xcf4).0, credits);
     at = at.wrapping_add(0xfe);
-    let coins = modulo(v8(b, 0x44f), v8(b, 0x1e));
+    let coins = modulo(FIRST_COIN_SLOT.coins(b), ram::COINS_PER_CREDIT.get(b));
     at = digit(b, at, coins);
     at = at.wrapping_add(0xfe);
-    let per = v8(b, 0x1e);
+    let per = ram::COINS_PER_CREDIT.get(b);
     digit(b, at, per);
 }

@@ -141,7 +141,7 @@ impl NameGroup {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Texts {
     pub texts: Vec<TextDesc>,
     pub tables: Vec<TextTable>,
@@ -152,6 +152,28 @@ pub struct Texts {
 impl Texts {
     pub fn load(path: &Path) -> io::Result<Self> {
         crate::json::load(path)
+    }
+
+    /// The bytes of the texts as the ROM stores them: (address, program space, bytes) per descriptor, descriptor
+    /// table, balloon name table and string block, name table and name block.
+    pub fn regions(&self) -> Vec<(u32, bool, Vec<u8>)> {
+        let mut out: Vec<(u32, bool, Vec<u8>)> = self.texts.iter().map(|d| (d.rom, false, d.bytes())).collect();
+        for t in &self.tables {
+            let bytes = t
+                .entries
+                .iter()
+                .flat_map(|&e| if t.offsets { e.wrapping_sub(t.rom).to_be_bytes()[2..].to_vec() } else { e.to_be_bytes().to_vec() })
+                .collect();
+            out.push((t.rom, t.program, bytes));
+        }
+        let p = &self.popups;
+        out.push((p.table, true, p.offsets.iter().flat_map(|o| o.to_be_bytes()).collect()));
+        out.push((p.strings_rom, false, p.strings.iter().flat_map(|s| decode(s).into_iter().chain(*b"/")).collect()));
+        for g in &self.names {
+            out.push((g.table, g.program, g.entries.iter().flat_map(|e| e.to_be_bytes()).collect()));
+            out.push((g.rom, false, g.names.iter().flat_map(|n| decode(n).into_iter().chain(*b"@")).collect()));
+        }
+        out
     }
 
     pub fn by_rom(&self, rom: u32) -> Option<&TextDesc> {
