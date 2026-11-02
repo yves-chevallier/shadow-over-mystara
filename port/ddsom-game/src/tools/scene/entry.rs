@@ -1,24 +1,15 @@
 //! Tools: the natives of `crate::scene::entry` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
 use crate::scene::entry::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::scene::fading;
-use crate::scene::{player, scratch, script, var, Ctx, PLAYERS, PLAYER_STRIDE};
-use crate::families::effects_creators as creators;
-use crate::game;
-use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
-use crate::objects::Obj;
-use crate::objects::pools;
+use crate::Native;
+use crate::scene::{PLAYERS, PLAYER_STRIDE};
 
 /// 0x20de6 called by the original code (respawn of a player, `families/creators.rs`): `place_players`, with
 /// the original's registers (D6 = -1, A1 after the last player).
-pub const PLACE_PLAYERS: Native = Native {
+pub(crate) const PLACE_PLAYERS: Native = Native {
     entry: 0x20de6,
     name: "scene_place_players",
     run: crate::Body::WithCpu(|c, b| {
@@ -31,7 +22,7 @@ pub const PLACE_PLAYERS: Native = Native {
     outputs: crate::regs::ALL,
 };
 
-pub const PHASE_8: Native = Native {
+pub(crate) const PHASE_8: Native = Native {
     entry: 0x20c38,
     name: "scene_phase_8",
     run: crate::Body::WithCpu(|c, b| {

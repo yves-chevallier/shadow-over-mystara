@@ -3,25 +3,25 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::objects::pools::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
+use crate::{regs, Native};
 use crate::objects::lists;
 use crate::objects::Obj;
-use crate::mem::{rd16, wr16, wr32, wr8, A5};
+use crate::mem::{wr16, wr8, A5};
 
 macro_rules! pool_natives {
     ($pool:ident, $alloc:ident, $alloc_name:expr, $free:ident, $free_name:expr) => {
-        pub const $alloc: Native = Native {
+        pub(crate) const $alloc: Native = Native {
             entry: $pool.alloc_routine,
             name: $alloc_name,
             run: crate::Body::WithCpu(|c, b| alloc_native(&$pool, c, b)),
             touches_sound: false,
             outputs: regs::a(1) | regs::d(6) | regs::CCR,
         };
-        pub const $free: Native = Native {
+        pub(crate) const $free: Native = Native {
             entry: $pool.free_routine,
             name: $free_name,
             run: crate::Body::WithCpu(|c, b| free_native(&$pool, c, b)),
@@ -33,7 +33,7 @@ macro_rules! pool_natives {
 
 macro_rules! init_native {
     ($const:ident, $entry:expr, $name:expr, $pools:expr) => {
-        pub const $const: Native = Native {
+        pub(crate) const $const: Native = Native {
             entry: $entry,
             name: $name,
             run: crate::Body::WithCpu(|c, b| init_native(&$pools, c, b)),
@@ -72,14 +72,12 @@ fn init_native(pools: &[&Pool], c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const REGS_FREE: u32 = regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR;
-
 impl Pool {
     /// Like `alloc`, and leaves the original's registers: A1 = slot found (on failure: the first
     /// slot if the counter is zero, the end of the pool if no slot is free), D6 = loop counter,
     /// carry = failure. For the callers not yet freed from registers (`docs/guide-refactorisation.md`).
     #[track_caller]
-    pub fn alloc_68k(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
+    pub(crate) fn alloc_68k(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
         let (r, _) = self.alloc_regs(c, b);
         crate::tools::diag::dead_regs(c, "alloc", REGS_ALLOC);
         r
@@ -117,18 +115,10 @@ impl Pool {
 
     /// `alloc_unchecked` with the original's registers (see `alloc_68k`).
     #[track_caller]
-    pub fn alloc_unchecked_68k(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Obj {
+    pub(crate) fn alloc_unchecked_68k(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Obj {
         let (_, a1) = self.alloc_regs(c, b);
         crate::tools::diag::dead_regs(c, "alloc", REGS_ALLOC);
         a1
-    }
-
-    /// Like `release`, and leaves the original's registers: D0 = 0, D1.w = -1, A4 = end of the slot,
-    /// flags of `tst.l D0`. A0 (the object) is not touched.
-    #[track_caller]
-    pub fn release_68k(&self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
-        self.release_regs(c, b, obj);
-        crate::tools::diag::dead_regs(c, "free", REGS_FREE);
     }
 
     fn release_regs(&self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
@@ -147,7 +137,7 @@ impl Pool {
 }
 
 /// Masks of the registers that the original leaves (see `diag::dead_regs`).
-pub const REGS_ALLOC: u32 = regs::a(1) | regs::d(6) | regs::CCR;
+pub(crate) const REGS_ALLOC: u32 = regs::a(1) | regs::d(6) | regs::CCR;
 
 pool_natives!(PSHL, ALLOC_PSHL, "pool_alloc_pshl", FREE_PSHL, "pool_free_pshl");
 pool_natives!(PEFF, ALLOC_PEFF, "pool_alloc_peff", FREE_PEFF, "pool_free_peff");

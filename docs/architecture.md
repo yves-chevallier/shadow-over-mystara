@@ -75,7 +75,7 @@ C'est l'approche des projets N64Recomp / XenonRecomp, adaptée au 68000.
 ### Fonctionnement du code recompilé
 
 - `recomp::discover` : descente récursive depuis les vecteurs + `ddsom-rc/entries.txt` (adresses
-  apprises à l'exécution : `MISSES_OUT=fichier` avec l'exemple `compare` de ddsom-rc).
+  apprises à l'exécution : `MISSES_OUT=fichier` avec l'exemple `rc_compare` de ddsom-rc).
 - Chaque instruction devient `c.op_*(bus, &I)` avec `I` constante : même code que l'interpréteur,
   spécialisé par LLVM. Le bloc rend la main dès que l'échéance de la ligne est atteinte, ce qui
   garde les interruptions au même cycle qu'avec l'interpréteur.

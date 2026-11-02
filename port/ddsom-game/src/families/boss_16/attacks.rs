@@ -2,6 +2,7 @@
 
 use crate::families::cx::Bench;
 use super::*;
+use crate::families::effects_creators::{self, leftovers::Pure};
 use crate::objects::pools;
 use crate::objects::Current;
 
@@ -23,13 +24,7 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0xb59a6 / 0xb59c8: an EFFCT 0x30 (variant 1 or 2) linked to the boss (`+0x46`).
 fn spawn_trail<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
-    if let Some(e) = x.alloc(&pools::EFFCT) {
-        e.set_u8(x.b, 0, 1);
-        e.set_u8(x.b, 2, 0x30);
-        e.set_u8(x.b, 3, variant);
-        e.set_u8(x.b, 0x2f, 0);
-        e.set_u16(x.b, f::HOST, x.o.0 as u16);
-    }
+    effects_creators::type_48(&mut Pure, x.b, x.o, variant);
 }
 
 /// 0xa3b4a / 0xa3b66: an ESHL 0x2d (variant 0 or, with `index` in `+0x2f`, 1) linked to the boss (`+0x46`).

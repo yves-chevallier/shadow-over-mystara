@@ -23,7 +23,7 @@ mod attacks;
 mod hit;
 mod stance;
 
-pub(self) mod g {
+mod g {
     pub const GROUP: u32 = 0x2f;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
@@ -49,8 +49,8 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-pub(self) const SET_MOVE: u32 = 0x162126;
-pub(self) const SET_STRIKE: u32 = 0x162148;
+const SET_MOVE: u32 = 0x162126;
+const SET_STRIKE: u32 = 0x162148;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -68,32 +68,32 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
-pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
 /// The wanted look: `+0xa1` and its twin `+0xa2`.
-pub(self) fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
+fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
-pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Walking direction: 8 (looks left) or 0x18.
-pub(self) fn set_angle<R: Bench>(x: &mut Cx<'_, R>) {
+fn set_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Common step of the moves: waits for animation key `+0x33` then moves on to the next step (0x6244a).
-pub(self) fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
+fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 0);
@@ -102,7 +102,7 @@ pub(self) fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Landing of a jump (0x62460): the move ends with dust and animation 0xc.
-pub(self) fn land<R: Bench>(x: &mut Cx<'_, R>) {
+fn land<R: Bench>(x: &mut Cx<'_, R>) {
     if x.move_xz().gt() {
         x.anim_step();
         return;
@@ -111,7 +111,7 @@ pub(self) fn land<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x62478: dust, back to the ground, next step.
-pub(self) fn land_dust<R: Bench>(x: &mut Cx<'_, R>) {
+fn land_dust<R: Bench>(x: &mut Cx<'_, R>) {
     dust(x);
     lib::sound(x, 0xec820);
     x.set32(Obj::Z, 0);
@@ -122,14 +122,14 @@ pub(self) fn land_dust<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x63a50: four dust clouds around the enemy.
-pub(self) fn dust<R: Bench>(x: &mut Cx<'_, R>) {
+fn dust<R: Bench>(x: &mut Cx<'_, R>) {
     for d2 in [-0x1c, -8, 8, 0x1c] {
         lib::shock(x, 0, 0, d2 as u16, 4);
     }
 }
 
 /// One smoke step every `mask + 1` frames (`A5+0x6e` is the frame counter, which the original masks in place).
-pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
+fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d0: u32, d1: u32, d2: i16, d3: i16) {
     let v = x.a5_u16(0x6e) & mask;
     x.set_a5_u16(0x6e, v);
     if v == 0 {
@@ -138,7 +138,7 @@ pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d0: u32, d1: u32, d2: 
 }
 
 /// 0x639fe: the enemy must turn around to face its target (false without a target or a saved look).
-pub(self) fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -150,7 +150,7 @@ pub(self) fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x63a98: the target is in the same row (depth within 0x30) but far in X (more than 0xf0).
-pub(self) fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -166,7 +166,7 @@ pub(self) fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x62f1e / 0x62f26: chooses the next attack (`+6`) from the difficulty row of profile `+0x2f`; `bias` = 8 for the far
 /// series.
-pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
+fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
     let profile = x.u8(GROUP) as u32;
     let list = x.data32(0x62f80 + bias as u32 + 4 * profile);
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
@@ -181,7 +181,7 @@ pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
 }
 
 /// 0x63790: end of a move: if the target is in a range box, an attack of series `0x637fe` follows; otherwise standing.
-pub(self) fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
+fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
     }
@@ -197,9 +197,9 @@ pub(self) fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::SUB3, 0);
 }
 
-pub(self) const STANCE: u32 = 0x0202_0000;
-pub(self) const HELD: u32 = 0x0408_0000;
-pub(self) const IDLE: u32 = 0x020a_0000;
+const STANCE: u32 = 0x0202_0000;
+const HELD: u32 = 0x0408_0000;
+const IDLE: u32 = 0x020a_0000;
 
 // --- state 0: creation --------------------------------------------------------------------------
 

@@ -202,12 +202,9 @@ pub(crate) mod kind {
     pub const SCENERY: u8 = 42;
     pub const DEBRIS_RAIN: u8 = 43;
     pub const SPELL: u8 = 44;
-    #[cfg_attr(not(feature = "tools"), allow(dead_code))] // read by the tools
     pub const TYPE_46: u8 = 46;
     pub const BEACON: u8 = 47;
-    #[cfg_attr(not(feature = "tools"), allow(dead_code))] // read by the tools
     pub const TYPE_48: u8 = 48;
-    #[cfg_attr(not(feature = "tools"), allow(dead_code))] // read by the tools
     pub const PROJECTILE: u8 = 51;
     pub const SHIMMER: u8 = 52;
     pub const TYPE_53: u8 = 53;
@@ -759,7 +756,6 @@ pub(crate) fn debris_rain_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, 
 }
 
 /// 0xb53f4: three effects 46 (settings 2, 1, 0) linked by `+0x46`.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // no Rust caller: the original code calls it (native for the tools)
 pub(crate) fn type_46_trio(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     let mut last = None;
     for setting in [2u8, 1, 0] {
@@ -773,7 +769,6 @@ pub(crate) fn type_46_trio(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> 
 }
 
 /// 0xb59a6, 0xb59c8: effect 48 of variant `variant`, linked by `+0x46`.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // no Rust caller: the original code calls it (native for the tools)
 pub(crate) fn type_48(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
     let o = spawn(r, b, kind::TYPE_48)?;
     o.set_u8(b, Obj::VARIANT, variant);

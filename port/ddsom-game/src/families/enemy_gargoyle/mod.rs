@@ -26,7 +26,7 @@ pub(crate) mod attacks;
 mod hit;
 mod stance;
 
-pub(self) mod g {
+mod g {
     pub const ANIM_FLAGS: u32 = 0x32;
     pub const VICTIM: u32 = 0x54;
     pub const HIT_FLAGS: u32 = 0x57;
@@ -55,11 +55,11 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-pub(self) const SET_FLY: u32 = 0x162ebc;
-pub(self) const SET_STRIKE: u32 = 0x162eee;
+const SET_FLY: u32 = 0x162ebc;
+const SET_STRIKE: u32 = 0x162eee;
 /// Flight sets depending on whether or not the speed follows the orientation (`lib::moving_forward`).
-pub(self) const SET_FLY_AGAINST: u32 = 0x163014;
-pub(self) const SET_FLY_ALONG: u32 = 0x163098;
+const SET_FLY_AGAINST: u32 = 0x163014;
+const SET_FLY_ALONG: u32 = 0x163098;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -83,46 +83,46 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-pub(self) fn play<R: Bench>(x: &mut Cx<'_, R>, set: u32, n: u32) {
+fn play<R: Bench>(x: &mut Cx<'_, R>, set: u32, n: u32) {
     lib::start(x, set, n);
 }
 
-pub(self) fn fly<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn fly<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play(x, SET_FLY, n);
 }
 
-pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play(x, SET_STRIKE, n);
 }
 
-pub(self) fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
+fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
 /// Speed table `n` (0x1b64) for angle `+0x2d`.
-pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Scenery chip (0x1172e) at impact point `d5`.
-pub(self) fn spark<R: Bench>(x: &mut Cx<'_, R>, d5: u32) {
+fn spark<R: Bench>(x: &mut Cx<'_, R>, d5: u32) {
     lib::debris(x, d5);
 }
 
-pub(self) fn camera_x<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
+fn camera_x<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_X.get(x.b) } else { var::CAMERA1_X.get(x.b) }
 }
 
 /// Countdown of a word timer `+off`: true as long as it stays positive.
-pub(self) fn count_down<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
+fn count_down<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     let n = x.u16(off).wrapping_sub(1);
     x.set16(off, n);
     (n as i16) > 0
 }
 
 /// 0x65a9e: turns toward the target.
-pub(self) fn face_target<R: Bench>(x: &mut Cx<'_, R>) {
+fn face_target<R: Bench>(x: &mut Cx<'_, R>) {
     let target = x.linked(f::TARGET);
     let d1 = target.u16(x.b, Obj::X);
     let flip = if (d1 as i16) < (x.u16(Obj::X) as i16) { 0 } else { 0x20 };
@@ -130,7 +130,7 @@ pub(self) fn face_target<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x65a30: vertical undulation in flight according to the animation key (table of longs `0x65a5a`).
-pub(self) fn bob<R: Bench>(x: &mut Cx<'_, R>) {
+fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
     let mut d = rom32(x, 0x65a5a + idx) as i32;
     if (x.u16(TIMER2) as i16) <= 0x24 {
@@ -143,7 +143,7 @@ pub(self) fn bob<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x65a72: progressive climb (table of longs `0x65a86`).
-pub(self) fn rise<R: Bench>(x: &mut Cx<'_, R>) {
+fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
     let d = rom32(x, 0x65a86 + idx);
     x.add32(Obj::Z, d);
@@ -151,7 +151,7 @@ pub(self) fn rise<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- state transitions: the next move ----------------------------------------------------------
 
-pub(self) mod go {
+mod go {
     use super::*;
 
     /// Substate 2 (movements): `+6` = 2, saves the current state in order to come back to it.
@@ -306,7 +306,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x65ab6: countdown of the rest period (`+0xb4`); at zero, flag `+0x58` drops.
-pub(self) fn cooldown<R: Bench>(x: &mut Cx<'_, R>) {
+fn cooldown<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u16(COOLDOWN) as i16) <= 0 {
         return;
     }

@@ -25,7 +25,7 @@ mod control;
 mod hit;
 mod moves;
 
-pub(self) mod g {
+mod g {
     pub const GROUP: u32 = 0x2f;
     /// Time (word) of the current animation.
     pub const ANIM_TIME: u32 = 0x30;
@@ -44,9 +44,9 @@ pub(self) mod g {
 use g::*;
 use crate::objects::pools;
 
-pub(self) const SET_MOVE: u32 = 0x15eed8;
-pub(self) const SET_STRIKE: u32 = 0x15eef4;
-pub(self) const STANCE: u32 = 0x0202_0000;
+const SET_MOVE: u32 = 0x15eed8;
+const SET_STRIKE: u32 = 0x15eef4;
+const STANCE: u32 = 0x0202_0000;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -64,29 +64,29 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// Starts animation `n` of the movement set.
-pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
 /// Starts animation `n` of the attack set.
-pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
 /// Sets the attack type and its strength.
-pub(self) fn set_strike<R: Bench>(x: &mut Cx<'_, R>, kind: u8, power: u8) {
+fn set_strike<R: Bench>(x: &mut Cx<'_, R>, kind: u8, power: u8) {
     x.set8(STRIKE_KIND, kind);
     x.set8(STRIKE_POWER, power);
 }
 
 /// 0x6935c: next step, animation 0.
-pub(self) fn next_anim<R: Bench>(x: &mut Cx<'_, R>) {
+fn next_anim<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB3, 2);
     mv(x, 0);
 }
 
 /// 0x69346: waits `+0x77` frames (countdown), then next step.
-pub(self) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     let n = x.u8(AI_WAIT);
     if n != 0 {
         let m = n.wrapping_sub(1);
@@ -100,7 +100,7 @@ pub(self) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x6899a: turn-around according to `+0xa6` (0 or 1: nothing, 2: animation 1 then 3: waits for the end and turns
 /// around).
-pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     let side = x.u8(SIDE) as i8;
     if side < 2 {
         return x.add8(f::SUB3, 2);
@@ -119,7 +119,7 @@ pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x689e6: saves in `+0xa6` whether the target is behind (2) or in front (0); true if behind.
-pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let mut d1 = 0u32;
     if x.u16(f::TARGET) != 0 {
         let target = load_target(x);
@@ -137,7 +137,7 @@ pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x68910: received hit flag `+0x8f`: returns true when the state must continue normally.
-pub(self) fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let v = x.u8(HIT_FLAG);
     if v == 0 {
         return true;
@@ -177,7 +177,7 @@ pub(self) fn hit_gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// Byte drawn at random from the difficulty row of `table`.
-pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
+fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
     let r = rand_and(x, 0x1f);
@@ -185,7 +185,7 @@ pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
 }
 
 /// 0x690ce: chooses the next move (`+5` = 8) according to the distance of the target, or gets back on its feet.
-pub(self) fn choose<R: Bench>(x: &mut Cx<'_, R>) {
+fn choose<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     if x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
@@ -207,7 +207,7 @@ pub(self) fn choose<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x67ea4: restarts animation 2 taking over the time and the end flag of the previous animation (at most eight frames
 /// ahead), marks the strike and saves the position.
-pub(self) fn restart_walk<R: Bench>(x: &mut Cx<'_, R>) {
+fn restart_walk<R: Bench>(x: &mut Cx<'_, R>) {
     let time = x.u16(ANIM_TIME);
     let end = x.u16(ANIM_END);
     mv(x, 2);

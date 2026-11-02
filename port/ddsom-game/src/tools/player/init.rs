@@ -2,15 +2,12 @@
 //! of the original).
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::player::init::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::machine::Machine;
-use crate::player::{ram, Ctx, Player, PLAYER_COUNT, PLAYER_STRIDE};
-use crate::mem::{wr32, A5};
+use crate::{regs, Native};
+use crate::player::{Ctx, Player};
 
 /// 0x3552 for the tools (the game calls `init_weapon_stats`): registers left like the original (A4 = character
 /// table, D0 = last weapon number read, doubled if it is in the table).
@@ -25,7 +22,7 @@ fn weapon_stats_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const NATIVES: &[Native] = &[Native {
+pub(crate) const NATIVES: &[Native] = &[Native {
     entry: 0x3552,
     name: "player_weapon_stats",
     run: crate::Body::WithCpu(weapon_stats_native),

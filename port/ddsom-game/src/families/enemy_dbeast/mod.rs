@@ -29,7 +29,7 @@ mod parts;
 mod stance;
 
 /// Fields specific to this type (the common fields are in `enemy_common::f`).
-pub(self) mod g {
+mod g {
     /// AI profile (0 or 1, difficulty of the beast).
     pub const PROFILE: u32 = 0x2f;
     /// Display priority.

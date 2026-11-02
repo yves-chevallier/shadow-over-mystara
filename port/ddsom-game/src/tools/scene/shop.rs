@@ -1,20 +1,13 @@
 //! Tools: the natives of `crate::scene::shop` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
 use crate::scene::shop::*;
-use crate::tools::frames::*;
-use crate::{regs, Body, Native};
+use crate::Native;
 use crate::scene::Ctx;
-use crate::video::{clear_layer, Layer};
-use crate::mem::{prog32, prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
-use crate::modes::{Flow, Sequence};
-use crate::objects::{pools, Obj};
+use crate::modes::Flow;
 
-pub const SHOP: Native = Native {
+pub(crate) const SHOP: Native = Native {
     entry: 0xf792e,
     name: "scene_shop",
     run: crate::Body::WithCpu(|c, b| {

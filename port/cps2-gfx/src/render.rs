@@ -7,22 +7,27 @@ pub const SCREEN_H: usize = 224;
 const VIS_X0: i32 = 64;
 const VIS_Y0: i32 = 16;
 
+/// Word index of the register at byte offset `byte`.
+const fn word(byte: usize) -> usize {
+    byte / 2
+}
+
 // CPS-A (word index)
-const A_SCROLL_BASE: [usize; 3] = [0x02 / 2, 0x04 / 2, 0x06 / 2];
-const A_OTHER_BASE: usize = 0x08 / 2;
-const A_PALETTE_BASE: usize = 0x0a / 2;
-const A_SCROLLX: [usize; 3] = [0x0c / 2, 0x10 / 2, 0x14 / 2];
-const A_SCROLLY: [usize; 3] = [0x0e / 2, 0x12 / 2, 0x16 / 2];
-const A_ROWSCROLL_OFFS: usize = 0x20 / 2;
-const A_VIDEOCONTROL: usize = 0x22 / 2;
+const A_SCROLL_BASE: [usize; 3] = [word(0x02), word(0x04), word(0x06)];
+const A_OTHER_BASE: usize = word(0x08);
+const A_PALETTE_BASE: usize = word(0x0a);
+const A_SCROLLX: [usize; 3] = [word(0x0c), word(0x10), word(0x14)];
+const A_SCROLLY: [usize; 3] = [word(0x0e), word(0x12), word(0x16)];
+const A_ROWSCROLL_OFFS: usize = word(0x20);
+const A_VIDEOCONTROL: usize = word(0x22);
 // CPS-B, CPS_B_21_DEF configuration (common to CPS2 games)
-const B_LAYER_CONTROL: usize = 0x26 / 2;
-const B_PALETTE_CONTROL: usize = 0x30 / 2;
+const B_LAYER_CONTROL: usize = word(0x26);
+const B_PALETTE_CONTROL: usize = word(0x30);
 const LAYER_ENABLE_MASK: [u16; 3] = [0x02, 0x04, 0x08];
 // CPS2 object output (0x400000)
-const OUT_PRI: usize = 0x04 / 2;
-const OUT_XOFFS: usize = 0x08 / 2;
-const OUT_YOFFS: usize = 0x0a / 2;
+const OUT_PRI: usize = word(0x04);
+const OUT_XOFFS: usize = word(0x08);
+const OUT_YOFFS: usize = word(0x0a);
 
 /// Base of the scenery tiles in the gfx region (mapper_cps2: bank 1, 0x20000 units of 64 bytes).
 const SCROLL_TILE_BASE: usize = 0x20000 * 64;

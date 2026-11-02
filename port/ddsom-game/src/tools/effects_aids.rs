@@ -3,13 +3,12 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::effects_aids::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::families::effects_creators::leftovers::{Pure, Regs};
-use crate::mem::{rd16, rd32, rd8, wr16, wr8, A5};
+use crate::{regs, Native};
+use crate::mem::{rd16, rd8, wr16, A5};
 use crate::objects::{pools, Obj};
 
 macro_rules! leaf {
@@ -19,16 +18,6 @@ macro_rules! leaf {
             rts(c, b);
         }, $outputs)
     };
-}
-
-/// `shock` with the registers of the original (callers by address: `player/`): A0 = the creator; A1, D1.w (high byte
-/// of the setting), carry and flags as in the original.
-#[track_caller]
-pub fn shock_68k(c: &mut Cpu, b: &mut Cps2Bus, creator: Obj, variant: u8, setting: u16, vx: u16, vy: u16) -> Option<Obj> {
-    c.a[0] = creator.0;
-    let r = shock_by(c, b, creator, variant, setting, vx, vy);
-    crate::tools::diag::dead_regs(c, "effects", regs::a(1) | regs::d(1) | regs::CCR);
-    r
 }
 
 fn shock_native(c: &mut Cpu, b: &mut Cps2Bus) {

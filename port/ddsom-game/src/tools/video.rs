@@ -2,13 +2,12 @@
 //! of the original).
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::video::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{rd16, rd32, rd8, set_low_byte, wr16, wr32, wr8, A5};
+use crate::{regs, Native};
+use crate::mem::{rd16, set_low_byte, wr16};
 
 /// 0xb40: called at each wait (0xa40); sets D1 then draws the gauge (0xb46).
 fn gauge_with_value(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -18,7 +17,7 @@ fn gauge_with_value(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// `update_gauge` (D1 = marker) with the registers of the original: D2 and the flags of the last computation, A0
 /// after the last write (the world update leaves them to the next handler).
-pub fn gauge_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn gauge_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     let flags_clear = !(m68k::SR_N | m68k::SR_Z | m68k::SR_V | m68k::SR_C);
     if !update_gauge(b, c.d[1]) {
         c.d[2] = c.d[2] & 0xffff_0000 | 0x400;
@@ -64,13 +63,13 @@ fn disable_layers(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// `clear_layer1_start` with the registers of the original: the cell in D0-D5, A2 and A3, D6 = -1 and A1 at the end
 /// of the zone.
-pub fn clear_layer1_start_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn clear_layer1_start_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     clear_layer1_start(b);
     leftovers_clear_layer1_start(c);
 }
 
 /// The registers that 0x3525c leaves.
-pub fn leftovers_clear_layer1_start(c: &mut Cpu) {
+pub(crate) fn leftovers_clear_layer1_start(c: &mut Cpu) {
     const SIZE: u32 = SCROLL1_START;
     for n in 0..6 {
         c.d[n] = 0x1f_0000;
@@ -107,7 +106,7 @@ fn terrain_of_object(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// `load_grid` (D0 = number, A1 = destination) with the registers of the original: D0 = 0xffff, A1 and A2 at the end
 /// of the grid.
-pub fn load_grid_68k(c: &mut Cpu, b: &mut Cps2Bus, grid: Grid) {
+pub(crate) fn load_grid_68k(c: &mut Cpu, b: &mut Cps2Bus, grid: Grid) {
     let end = load_grid(b, grid, c.d[0] as u16, c.a[1]);
     c.d[0] = 0xffff;
     c.a[1] = end.destination;
@@ -119,11 +118,11 @@ fn load_blocks(c: &mut Cpu, b: &mut Cps2Bus, grid: Grid) {
     rts(c, b);
 }
 
-pub const LOAD_BLOCKS_4X4: Native = fixed(0x260c, "video_blocks_4x4", |c, b| load_blocks(c, b, Grid::Blocks4x4), LOAD_OUT);
+pub(crate) const LOAD_BLOCKS_4X4: Native = fixed(0x260c, "video_blocks_4x4", |c, b| load_blocks(c, b, Grid::Blocks4x4), LOAD_OUT);
 
-pub const LOAD_BLOCKS_SCROLL2: Native = fixed(0x26d4, "video_blocks_scroll2", |c, b| load_blocks(c, b, Grid::Layer2), LOAD_OUT);
+pub(crate) const LOAD_BLOCKS_SCROLL2: Native = fixed(0x26d4, "video_blocks_scroll2", |c, b| load_blocks(c, b, Grid::Layer2), LOAD_OUT);
 
-pub const LOAD_BLOCKS_SMALL: Native = fixed(0x2766, "video_blocks_small", |c, b| load_blocks(c, b, Grid::Layer3), LOAD_OUT);
+pub(crate) const LOAD_BLOCKS_SMALL: Native = fixed(0x2766, "video_blocks_small", |c, b| load_blocks(c, b, Grid::Layer3), LOAD_OUT);
 
 /// 0x255a: D0 (0 to 99, saturated) as two decimal digits: tens in A1, units one column further.
 /// Returns D0 = units, D1 = tens, A1 = units cell + 2.
@@ -153,30 +152,30 @@ fn hex_digits(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const GAUGE_NATIVE: Native = fixed(0xb46, "video_gauge", gauge, regs::d(2) | regs::a(0) | regs::CCR);
+pub(crate) const GAUGE_NATIVE: Native = fixed(0xb46, "video_gauge", gauge, regs::d(2) | regs::a(0) | regs::CCR);
 
 /// 0xb3e: `bra.b 0xb46`, called by the world update (D1 = class marker).
-pub const GAUGE_THUNK_NATIVE: Native = fixed(0xb3e, "video_gauge_b3e", gauge, regs::d(2) | regs::a(0) | regs::CCR);
+pub(crate) const GAUGE_THUNK_NATIVE: Native = fixed(0xb3e, "video_gauge_b3e", gauge, regs::d(2) | regs::a(0) | regs::CCR);
 
-pub const GAUGE_VALUE_NATIVE: Native = fixed(0xb40, "video_gauge_d1", gauge_with_value, regs::d(1) | regs::d(2) | regs::a(0) | regs::CCR);
+pub(crate) const GAUGE_VALUE_NATIVE: Native = fixed(0xb40, "video_gauge_d1", gauge_with_value, regs::d(1) | regs::d(2) | regs::a(0) | regs::CCR);
 
-pub const LOCK: Native = fixed(0xb96, "video_lock", lock, regs::d(1));
+pub(crate) const LOCK: Native = fixed(0xb96, "video_lock", lock, regs::d(1));
 
-pub const UNLOCK: Native = fixed(0xbac, "video_deverrou", unlock, regs::d(0) | regs::d(1));
+pub(crate) const UNLOCK: Native = fixed(0xbac, "video_deverrou", unlock, regs::d(0) | regs::d(1));
 
-pub const ENABLE_LAYERS: Native = fixed(0xbc6, "video_layers_on", enable_layers, 0);
+pub(crate) const ENABLE_LAYERS: Native = fixed(0xbc6, "video_layers_on", enable_layers, 0);
 
-pub const DISABLE_LAYERS: Native = fixed(0xbfc, "video_layers_off", disable_layers, regs::d(0));
+pub(crate) const DISABLE_LAYERS: Native = fixed(0xbfc, "video_layers_off", disable_layers, regs::d(0));
 
-pub const CLEAR_SCROLL1_START: Native = fixed(0x3525c, "video_clear_start_scroll1", clear_scroll1_start, regs::ALL);
+pub(crate) const CLEAR_SCROLL1_START: Native = fixed(0x3525c, "video_clear_start_scroll1", clear_scroll1_start, regs::ALL);
 
-pub const TERRAIN: Native = fixed(0x24b0, "video_terrain", terrain_native, TERRAIN_OUT);
+pub(crate) const TERRAIN: Native = fixed(0x24b0, "video_terrain", terrain_native, TERRAIN_OUT);
 
-pub const TERRAIN_OF_OBJECT: Native = fixed(0x24a8, "video_terrain_object", terrain_of_object, TERRAIN_OUT);
+pub(crate) const TERRAIN_OF_OBJECT: Native = fixed(0x24a8, "video_terrain_object", terrain_of_object, TERRAIN_OUT);
 
-pub const DECIMAL_DIGITS: Native = fixed(0x255a, "video_digits_decimal", decimal_digits, regs::d(0) | regs::d(1) | regs::a(1) | regs::CCR);
+pub(crate) const DECIMAL_DIGITS: Native = fixed(0x255a, "video_digits_decimal", decimal_digits, regs::d(0) | regs::d(1) | regs::a(1) | regs::CCR);
 
-pub const HEX_DIGITS: Native = fixed(
+pub(crate) const HEX_DIGITS: Native = fixed(
     0x25e8,
     "video_digits_hex",
     hex_digits,

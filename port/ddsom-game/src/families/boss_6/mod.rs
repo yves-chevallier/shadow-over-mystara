@@ -26,7 +26,7 @@ mod fight;
 pub(crate) mod hit;
 mod intro;
 
-pub(self) mod g {
+mod g {
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
     pub const WALK_STEPS: u32 = 0x6b;
@@ -51,15 +51,15 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-pub(self) const SET_BODY: u32 = 0x177874;
-pub(self) const SET_FLY: u32 = 0x17788c;
-pub(self) const SET_HURT: u32 = 0x1778a4;
+const SET_BODY: u32 = 0x177874;
+const SET_FLY: u32 = 0x17788c;
+const SET_HURT: u32 = 0x1778a4;
 
-pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn fly<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn fly<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_FLY, n);
 }
 

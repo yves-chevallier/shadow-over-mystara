@@ -2,22 +2,12 @@
 //! of the original).
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::families::cx::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
-use crate::dispatch::{Dispatch, Leftovers};
-use crate::objects::pools;
-use crate::objects::{Current, Obj};
-
-impl crate::tools::WithCpu for Cx<'_, &mut Cpu> {
-    fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus) {
-        (&mut *self.c, &mut *self.b)
-    }
-}
+use crate::mem::A5;
+use crate::objects::Obj;
 
 impl Bench for &mut Cpu {
     #[track_caller]
@@ -49,15 +39,6 @@ impl<'a> Cx<'a, &'a mut Cpu> {
         Cx { c, b, o }
     }
 
-    /// Calls the converted function `f` on the same object, without registers (the leftovers go through the processor).
-    pub fn without<T>(&mut self, f: impl FnOnce(&mut Gx) -> T) -> T {
-        let mut a = Dispatch::from_cpu(self.c);
-        a.object = self.o;
-        let r = f(&mut Cx { c: &mut a, b: &mut *self.b, o: self.o });
-        a.give_back(self.c);
-        r
-    }
-
     // --- subroutines ---------------------------------------------------------------------------
 
     /// JSR `addr` with A0 = the object and A5 = base of the work RAM.
@@ -69,12 +50,7 @@ impl<'a> Cx<'a, &'a mut Cpu> {
     }
 
     /// RTS.
-    pub fn ret(self) {
+    pub(crate) fn ret(self) {
         rts(self.c, self.b);
     }
-}
-
-/// Native of a handler: contract of the dispatch loop (A0 and D7 preserved).
-pub const fn handler(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
 }

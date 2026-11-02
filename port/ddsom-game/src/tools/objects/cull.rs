@@ -3,15 +3,14 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::objects::cull::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
+use crate::{regs, Native};
 use crate::tools::objects::motion::{cmp, lsl_word};
-use crate::objects::pools::{QUEUE_BOX, QUEUE_ENEMY_BOSS, QUEUE_ESHL, QUEUE_ITEM, QUEUE_PSHL};
 use crate::objects::Obj;
-use crate::mem::{rd16, rd8, set_low_byte, wr16, A5};
+use crate::mem::{rd16, set_low_byte};
 
 fn dw(c: &Cpu, n: usize) -> u16 {
     c.d[n] as u16
@@ -57,13 +56,6 @@ fn load_screen_height(c: &mut Cpu, b: &mut Cps2Bus, n: usize, obj: Obj, cam: u32
     sub_w(c, n, rd16(b, cam + 0xc));
 }
 
-/// `despawn_if_offscreen` with the original's registers (A1 = camera, D0 = last test).
-#[track_caller]
-pub fn despawn_if_offscreen_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
-    cull_offscreen(c, b, obj);
-    crate::tools::diag::dead_regs(c, "cull", REGS_DESPAWN);
-}
-
 /// 0x1e1a, registers included.
 fn cull_offscreen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
     let cam = camera(b);
@@ -88,7 +80,7 @@ fn cull_offscreen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
     }
 }
 
-pub const CULL_OFFSCREEN: Native = Native {
+pub(crate) const CULL_OFFSCREEN: Native = Native {
     entry: 0x1e1a,
     name: "obj_cull_offscreen",
     run: crate::Body::WithCpu(|c, b| {
@@ -98,18 +90,6 @@ pub const CULL_OFFSCREEN: Native = Native {
     touches_sound: false,
     outputs: regs::ALL,
 };
-
-/// `in_arena` with the original's registers: D0 = margin (long), then D0-D2 and A1 (camera) of the computations,
-/// carry = inside.
-#[track_caller]
-pub fn in_arena_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, margin: u16) -> bool {
-    c.d[0] = margin as u32;
-    c.flags_logic(margin as u32, Size::Long);
-    in_arena_regs(c, b, obj);
-    let inside = c.cond(5 /* cs */);
-    crate::tools::diag::dead_regs(c, "cull", REGS_IN_ARENA);
-    inside
-}
 
 /// 0x1e92, registers included: margin in D0.w.
 fn in_arena_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
@@ -134,7 +114,7 @@ fn in_arena_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
     }
 }
 
-pub const IN_ARENA: Native = Native {
+pub(crate) const IN_ARENA: Native = Native {
     entry: 0x1e92,
     name: "obj_in_arena",
     run: crate::Body::WithCpu(|c, b| {
@@ -146,7 +126,7 @@ pub const IN_ARENA: Native = Native {
 };
 
 /// 0x1e90: `in_arena` with the default margin 0x3e.
-pub const IN_ARENA_DEFAULT: Native = Native {
+pub(crate) const IN_ARENA_DEFAULT: Native = Native {
     entry: 0x1e90,
     name: "obj_in_arena_default",
     run: crate::Body::WithCpu(|c, b| {
@@ -158,15 +138,6 @@ pub const IN_ARENA_DEFAULT: Native = Native {
     touches_sound: false,
     outputs: regs::ALL,
 };
-
-/// `update_visibility` with the original's registers: D0 = 0 off screen or hidden, 1 without candidate queue,
-/// otherwise class × 2; D1, D2, A1, A2 of the computations.
-#[track_caller]
-pub fn update_visibility_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
-    let visible = on_screen(c, b, obj);
-    crate::tools::diag::dead_regs(c, "cull", REGS_VISIBILITY);
-    visible
-}
 
 /// 0x1ed2, registers included; true if the object is visible.
 fn on_screen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
@@ -236,7 +207,7 @@ fn on_screen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
     shown
 }
 
-pub const ON_SCREEN: Native = Native {
+pub(crate) const ON_SCREEN: Native = Native {
     entry: 0x1ed2,
     name: "obj_on_screen",
     run: crate::Body::WithCpu(|c, b| {

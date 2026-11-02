@@ -3,12 +3,11 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::families::set_residue::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{prog32, prog8, rd16, rd8, wr16, wr32, wr8, A5};
+use crate::{regs, Native};
 use crate::objects::Obj;
 
 /// 0xd5f12: clears three columns of the tile buffer (44 rows each) for the scene exit.
@@ -37,7 +36,7 @@ const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus),
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 
-pub const NATIVES: &[Native] = &[
+pub(crate) const NATIVES: &[Native] = &[
     native(0xd5f12, "set_clears_columns", erase_columns, regs::ALL),
     native(0xce668, "set_two_grids", load_two_grids, regs::ALL),
     native(0xd98b8, "set_wave_start", |c, b| { begin_wave(b, Obj(c.a[0])); rts(c, b) }, regs::ALL),

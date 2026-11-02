@@ -27,7 +27,7 @@ pub(crate) mod hit;
 mod intro;
 
 /// Fields specific to this type.
-pub(self) mod g {
+mod g {
     /// Stun value (and copy into `+0x53`: freeze after a hit).
     pub const STUN: u32 = 0x56;
     /// Vulnerable (1) or not (0).
@@ -75,16 +75,16 @@ use crate::objects::pools;
 use crate::objects::Current;
 
 /// Jeux d'animations.
-pub(self) const SET_BODY: u32 = 0x1836ec;
-pub(self) const SET_STRIKE: u32 = 0x18371c;
-pub(self) const SET_HURT: u32 = 0x18373a;
+const SET_BODY: u32 = 0x1836ec;
+const SET_STRIKE: u32 = 0x18371c;
+const SET_HURT: u32 = 0x18373a;
 
 /// Starts animation `n` of the movements / hits set via the AI (`0x103d6`).
-pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_STRIKE, n);
 }
 
@@ -204,7 +204,7 @@ fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// An effect (EFFCT) linked to the boss (`+0x42`): active byte, type, variant, orientation of the boss.
 /// `retry`: insists as long as the pool is full.
-pub(self) fn effect<R: Bench>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8>, flip: bool) -> Option<Obj> {
+fn effect<R: Bench>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8>, flip: bool) -> Option<Obj> {
     let e = if retry { alloc_retry(x, &pools::EFFCT)? } else { x.alloc(&pools::EFFCT)? };
     e.set_u8(x.b, 0, 1);
     e.set_u8(x.b, 2, kind);
@@ -220,19 +220,19 @@ pub(self) fn effect<R: Bench>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant:
 }
 
 /// 0x9ae52: a dust cloud (effect 0x32, variant 4).
-pub(self) fn dust<R: Bench>(x: &mut Cx<'_, R>) {
+fn dust<R: Bench>(x: &mut Cx<'_, R>) {
     effect(x, false, 0x32, Some(4), true);
 }
 
 /// 0x9ae4c: same, except during the slow motion.
-pub(self) fn dust_unless_slow<R: Bench>(x: &mut Cx<'_, R>) {
+fn dust_unless_slow<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SLOW) == 0 {
         dust(x);
     }
 }
 
 /// 0x9ae2a: slow-motion step: the dust falls every 11 steps (mode 1) or 7 steps (mode 2).
-pub(self) fn slow_tick<R: Bench>(x: &mut Cx<'_, R>) {
+fn slow_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(SLOW) == 0 {
         return;
     }

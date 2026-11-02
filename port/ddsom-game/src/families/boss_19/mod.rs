@@ -28,7 +28,7 @@ mod fight;
 mod hit;
 mod intro;
 
-pub(self) mod g {
+mod g {
     pub const TYPE: u32 = 0x2;
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
@@ -64,18 +64,18 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-pub(self) const TYPE_GREEN: u8 = 0xe;
-pub(self) const TYPE_BLACK: u8 = 0x13;
+const TYPE_GREEN: u8 = 0xe;
+const TYPE_BLACK: u8 = 0x13;
 
 /// States set in one go (`+4..+7`).
-pub(self) const STAND: u32 = 0x0202_0000;
+const STAND: u32 = 0x0202_0000;
 const CHASE: u32 = 0x0202_0400;
 const TURN: u32 = 0x0202_0200;
-pub(self) const WAIT: u32 = 0x020a_0000;
-pub(self) const ATTACK_4: u32 = 0x0204_0400;
-pub(self) const ATTACK_10: u32 = 0x0204_0a00;
+const WAIT: u32 = 0x020a_0000;
+const ATTACK_4: u32 = 0x0204_0400;
+const ATTACK_10: u32 = 0x0204_0a00;
 const DEAD_HOST: u32 = 0x0406_0000;
-pub(self) const FREE: u32 = 0x0600_0000;
+const FREE: u32 = 0x0600_0000;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -94,7 +94,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Starts animation `n` of set `set` (0, 2 or 4) of the type, unless it is already playing (0x914c6, 0x914e0,
 /// 0x914fa).
-pub(self) fn set_anim<R: Bench>(x: &mut Cx<'_, R>, set: u8, n: u32) {
+fn set_anim<R: Bench>(x: &mut Cx<'_, R>, set: u8, n: u32) {
     let black = x.u8(TYPE) == TYPE_BLACK;
     let base = match (set, black) {
         (0, false) => 0x17dbb0,
@@ -113,7 +113,7 @@ pub(self) fn set_anim<R: Bench>(x: &mut Cx<'_, R>, set: u8, n: u32) {
 }
 
 /// Animation de repos (jeu 0).
-pub(self) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
+fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     set_anim(x, 0, 0);
 }
 
@@ -124,19 +124,19 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 // --- state changes ---------------------------------------------------------------------------
 
 /// 0x913da: standing, at rest.
-pub(self) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
+fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, STAND);
     rest(x);
 }
 
 /// 0x913e8: walk toward a player.
-pub(self) fn chase<R: Bench>(x: &mut Cx<'_, R>) {
+fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, CHASE);
     rest(x);
 }
 
 /// 0x913f6 : demi-tour.
-pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, TURN);
     let side = x.u8(f::FLIP) ^ 0x20;
     x.set8(f::FLIP, side);
@@ -144,18 +144,18 @@ pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9140a: attack 4 (breath), invulnerable for a moment.
-pub(self) fn attack_4<R: Bench>(x: &mut Cx<'_, R>) {
+fn attack_4<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, ATTACK_4);
     x.set8(SHIELD, 8);
 }
 
 /// 0x8fcf0: waits for a player.
-pub(self) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
 /// 0x9141a: no host left: the boss disappears.
-pub(self) fn host_gone<R: Bench>(x: &mut Cx<'_, R>) {
+fn host_gone<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, DEAD_HOST);
 }
 
@@ -220,7 +220,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
 // --- state 2: active -----------------------------------------------------------------------------
 
 /// Active state loop (0x8fc42); the hit state calls it again to resume the combat.
-pub(self) fn active<R: Bench>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) == 0 {
         if tst8(x, f::FREEZE).gt() {
             sub8(x, f::FREEZE, 1);

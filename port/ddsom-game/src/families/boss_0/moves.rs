@@ -540,13 +540,15 @@ fn arc_jump<R: Bench>(x: &mut Cx<'_, R>) {
             let per_frame = ((x.u16(0x14) as i16 as i32) << 8).wrapping_abs();
             let mut lift: u16 = 0x400;
             // the vertical speed grows by 10 per flight duration (in frames) of the horizontal gap
-            while per_frame != 0 {
-                let f = Fl::sub32(gap as u32, per_frame as u32);
-                gap = gap.wrapping_sub(per_frame);
-                if f.le() {
-                    break;
+            if per_frame != 0 {
+                loop {
+                    let f = Fl::sub32(gap as u32, per_frame as u32);
+                    gap = gap.wrapping_sub(per_frame);
+                    if f.le() {
+                        break;
+                    }
+                    lift = lift.wrapping_add(10);
                 }
-                lift = lift.wrapping_add(10);
             }
             x.set16(0x18, lift);
             x.set16(0x1a, (-0x28i16) as u16);

@@ -209,7 +209,7 @@ impl Machine {
 
     /// ddsom machine built from these chip contents (no file read).
     pub fn ddsom(contents: Contents, eeprom: Option<&[u8]>) -> Self {
-        let Contents { program: rom, decrypted_program: rom_dec, graphics: gfx, audio: zrom, dsp, samples: samples } =
+        let Contents { program: rom, decrypted_program: rom_dec, graphics: gfx, audio: zrom, dsp, samples } =
             contents;
         let snd = sound::Sound::new(zrom, qsound::QSound::new(&dsp, samples));
         let ee = match eeprom {

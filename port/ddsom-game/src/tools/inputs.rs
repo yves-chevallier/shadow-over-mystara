@@ -7,8 +7,8 @@ use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
 use crate::inputs::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{rd16, rd8, set_low_byte, wr16, wr8, A5};
+use crate::Native;
+use crate::mem::{rd8, set_low_byte};
 
 fn set_nz_byte(c: &mut Cpu, v: u8) {
     c.flags_logic(v as u32, Size::Byte);
@@ -30,7 +30,7 @@ fn read_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const READ_INPUTS: Native = Native {
+pub(crate) const READ_INPUTS: Native = Native {
     entry: 0x080c,
     name: "read_inputs",
     run: crate::Body::WithCpu(read_inputs),
@@ -39,7 +39,7 @@ pub const READ_INPUTS: Native = Native {
 };
 
 /// `copy` with the registers of the original.
-pub fn copy_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn copy_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     match copy(b) {
         // final clr.b
         InputCopy::Frozen => c.sr = (c.sr & !(SR_N | SR_V | SR_C)) | SR_Z,
@@ -59,7 +59,7 @@ fn copy_inputs_to_players(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const COPY_INPUTS_TO_PLAYERS: Native = Native {
+pub(crate) const COPY_INPUTS_TO_PLAYERS: Native = Native {
     entry: 0x2aec,
     name: "copy_inputs_to_players",
     run: crate::Body::WithCpu(copy_inputs_to_players),
@@ -81,7 +81,7 @@ fn get_player_input(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const GET_PLAYER_INPUT: Native = Native {
+pub(crate) const GET_PLAYER_INPUT: Native = Native {
     entry: 0x2bfe,
     name: "get_player_input",
     run: crate::Body::WithCpu(get_player_input),
@@ -96,7 +96,7 @@ fn clear_player_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const CLEAR_PLAYER_INPUTS: Native = Native {
+pub(crate) const CLEAR_PLAYER_INPUTS: Native = Native {
     entry: 0x2bdc,
     name: "clear_player_inputs",
     run: crate::Body::WithCpu(clear_player_inputs),

@@ -26,7 +26,7 @@ mod leaps;
 mod stance;
 
 /// Fields specific to this type (the common fields are in `enemy_common::f`).
-pub(self) mod g {
+mod g {
     /// Series: 0 skeleton, 1 armed skeleton.
     pub const SERIES: u32 = 0x2f;
     /// Frame counter of the animation (word) and its current value.

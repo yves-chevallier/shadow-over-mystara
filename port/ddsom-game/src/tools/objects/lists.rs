@@ -2,19 +2,16 @@
 //! of the original).
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::objects::lists::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::objects::{Link, Obj};
-use crate::mem::{rd16, rd32, set_low_word, wr16, A5};
-use crate::ops;
+use crate::{regs, Native};
+use crate::objects::Obj;
 
 /// `unlink_all` with the original's register: A0 = last object removed (unchanged if the lists are empty).
 #[track_caller]
-pub fn unlink_all_68k(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
+pub(crate) fn unlink_all_68k(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Obj> {
     let last = unlink_all_regs(c, b);
     crate::tools::diag::dead_regs(c, "lists", regs::a(0));
     last
@@ -47,7 +44,7 @@ fn unlink_all_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const REINSERT_ACTORS: Native = Native {
+pub(crate) const REINSERT_ACTORS: Native = Native {
     entry: 0x1ee1a,
     name: "list_reinsert_actors",
     run: crate::Body::WithCpu(|c, b| reinsert_native(ACTORS, c, b)),
@@ -55,7 +52,7 @@ pub const REINSERT_ACTORS: Native = Native {
     outputs: regs::ALL,
 };
 
-pub const REINSERT_FOREGROUND: Native = Native {
+pub(crate) const REINSERT_FOREGROUND: Native = Native {
     entry: 0x1ef6c,
     name: "list_reinsert_foreground",
     run: crate::Body::WithCpu(|c, b| reinsert_native(FOREGROUND, c, b)),
@@ -63,7 +60,7 @@ pub const REINSERT_FOREGROUND: Native = Native {
     outputs: regs::ALL,
 };
 
-pub const UNLINK: Native = Native {
+pub(crate) const UNLINK: Native = Native {
     entry: 0x1f0be,
     name: "list_unlink",
     run: crate::Body::WithCpu(unlink_native),
@@ -71,7 +68,7 @@ pub const UNLINK: Native = Native {
     outputs: regs::a(0),
 };
 
-pub const UNLINK_ALL: Native = Native {
+pub(crate) const UNLINK_ALL: Native = Native {
     entry: 0x1f184,
     name: "list_unlink_all",
     run: crate::Body::WithCpu(unlink_all_native),
@@ -80,13 +77,13 @@ pub const UNLINK_ALL: Native = Native {
 };
 
 /// Registers left by the original reinsertion (see `diag::dead_regs`, label `lists`).
-pub const REGS_REINSERT: u32 =
+pub(crate) const REGS_REINSERT: u32 =
     regs::d(0) | regs::d(1) | regs::d(2) | regs::a(1) | regs::a(2) | regs::a(3) | regs::a(4) | regs::CCR;
 
 impl SortedList {
     /// `reinsert` with the original's registers, depending on the path followed (see `Reinsert`).
     #[track_caller]
-    pub fn reinsert_68k(self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
+    pub(crate) fn reinsert_68k(self, c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
         Reinsert { c, b, obj, list: self }.run();
         crate::tools::diag::dead_regs(c, "lists", REGS_REINSERT);
     }

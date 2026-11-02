@@ -63,55 +63,55 @@ use crate::objects::pools;
 use crate::objects::Current;
 
 /// Jeux d'animations : corps, attaques, mort.
-pub(self) const SET_BODY: u32 = 0x174776;
-pub(self) const SET_ATTACK: u32 = 0x1747c4;
-pub(self) const SET_DEATH: u32 = 0x1747f0;
+const SET_BODY: u32 = 0x174776;
+const SET_ATTACK: u32 = 0x1747c4;
+const SET_DEATH: u32 = 0x1747f0;
 
 /// Boss registered as an obstacle for the other objects (word, address; see `boss_common`).
-pub(self) const BODY_OWNER: u32 = 0xff8000 - 0x5fb2;
+const BODY_OWNER: u32 = 0xff8000 - 0x5fb2;
 
 /// Starts animation `n` of a set via the AI (0x103d6).
-pub(self) fn body_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn body_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn attack_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn attack_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_ATTACK, n);
 }
 
 /// Next step (`addq.b #2,(+6)` or `(+7)`).
-pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
+fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
-pub(self) fn next7<R: Bench>(x: &mut Cx<'_, R>) {
+fn next7<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
 /// `move.w #v,(6,A0)`: steps `+6` and `+7` in one go.
-pub(self) fn set_steps<R: Bench>(x: &mut Cx<'_, R>, v: u16) {
+fn set_steps<R: Bench>(x: &mut Cx<'_, R>, v: u16) {
     x.set16(f::SUB2, v);
 }
 
 /// 0x8188e: speeds and accelerations (`+0x14..+0x1f`) to zero.
-pub(self) fn stop<R: Bench>(x: &mut Cx<'_, R>) {
+fn stop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
 }
 
 /// 0x8189e: record of the camera in use (A2: 0xff84fe, or 0xff854e if `A5+0x36`).
-pub(self) fn camera<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
+fn camera<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
     let a = if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe };
     Obj(a)
 }
 
 /// 0x7f5ae: no target left, wait (`+4` = 0x020a0000).
-pub(self) fn idle_alone<R: Bench>(x: &mut Cx<'_, R>) {
+fn idle_alone<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 
 /// 0x8173c: is the target behind the boss? With no target: wait, and true.
-pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u16(f::TARGET) as i16) >= 0 {
         idle_alone(x);
         return true;
@@ -126,7 +126,7 @@ pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x81764: is the target far (more than 0x20 in depth or 0xc0 in width)? With no target: wait, and true.
-pub(self) fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         idle_alone(x);
         return true;
@@ -162,7 +162,7 @@ fn hp_sixteenths<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
 }
 
 /// 0x816f8: has the boss just changed HP threshold (`+0xa2`, table 0x81712)?
-pub(self) fn wound_changed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn wound_changed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let n = hp_sixteenths(x);
     let w = x.rom8(0x81712 + n);
     let changed = w != x.u8(FLYING);
@@ -185,7 +185,7 @@ fn draw_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
 }
 
 /// 0x80e1c / 0x80e22: attack drawn for a nearby target (`far`: at a distance); when wounded, the wounded table.
-pub(self) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, far: bool) {
+fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, far: bool) {
     let table = if x.u8(FLYING) != 0 {
         0x81262
     } else if far {
@@ -197,7 +197,7 @@ pub(self) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>, far: bool) {
 }
 
 /// 0x81462: end of an attack: new attack if the target is very close, otherwise resumption of the flight (or wait).
-pub(self) fn after_attack<R: Bench>(x: &mut Cx<'_, R>) {
+fn after_attack<R: Bench>(x: &mut Cx<'_, R>) {
     if !pick_target(x) {
         let s = if x.u8(FLYING) != 0 { 0x0202_0a00 } else { 0x0202_0400 };
         return x.set32(f::STATE, s);
@@ -306,7 +306,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Ordinary end of frame: held within the screen (margin `margin`), shadow, put back in the list.
-pub(self) fn end_frame<R: Bench>(x: &mut Cx<'_, R>, margin: u16) {
+fn end_frame<R: Bench>(x: &mut Cx<'_, R>, margin: u16) {
     lib::keep_on_screen(x, margin);
     lib::collide_terrain(x);
     x.reinsert();

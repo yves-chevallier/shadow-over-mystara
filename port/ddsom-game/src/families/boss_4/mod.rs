@@ -29,7 +29,7 @@ mod fight;
 pub(crate) mod hit;
 
 /// Fields specific to this type.
-pub(self) mod g {
+mod g {
     /// Walk steps remaining (`+0x6b`), countdown before the next step (`+0x71`), standing wait (`+0x6e`).
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
@@ -71,28 +71,28 @@ use crate::objects::pools;
 use crate::objects::Current;
 
 /// Animation sets: body, flight and attacks, hits received.
-pub(self) const SET_BODY: u32 = 0x17557e;
-pub(self) const SET_AIR: u32 = 0x175596;
-pub(self) const SET_HURT: u32 = 0x1755ae;
+const SET_BODY: u32 = 0x17557e;
+const SET_AIR: u32 = 0x175596;
+const SET_HURT: u32 = 0x1755ae;
 
 /// Starts animation `n` of a set via the AI (0x103d6).
-pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn air<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn air<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_AIR, n);
 }
 
 /// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
-pub(self) fn kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
+fn kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     x.set8(ANIM_KIND, k);
     x.set8(ANIM_LAST, k);
 }
 
 /// Low-order word of a data register: only D2 to D5 are kept (leftovers re-read by the following handlers);
 /// D0, D1 and D6 are re-read by no one.
-pub(self) fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
+fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
     let r = match n {
         2 => x.c.d2(),
         3 => x.c.d3(),
@@ -104,28 +104,28 @@ pub(self) fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
 }
 
 /// `subq.w #1,(off,A0)`: true when the countdown has elapsed (`ble`).
-pub(self) fn expired<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
+fn expired<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     sub16(x, off, 1).le()
 }
 
 /// At least one player alive (0x10474).
-pub(self) fn alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::players_alive(x)
 }
 
 /// The double `off` (`movea.w (off,A0),A1`).
-pub(self) fn double<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> Obj {
+fn double<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> Obj {
     x.linked(off)
 }
 
 /// Asks the first double to replay its gesture (`+0xb6` of the double).
-pub(self) fn cue_double<R: Bench>(x: &mut Cx<'_, R>) {
+fn cue_double<R: Bench>(x: &mut Cx<'_, R>) {
     let d = double(x, DOUBLE_A);
     d.set_u8(x.b, 0xb6, 1);
 }
 
 /// Every 4 frames, a puff of dust (0x1172e, kind 3).
-pub(self) fn dust_tick<R: Bench>(x: &mut Cx<'_, R>) {
+fn dust_tick<R: Bench>(x: &mut Cx<'_, R>) {
     if !sub16(x, DUST, 1).gt() {
         x.set16(DUST, 4);
         lib::debris(x, 3);
@@ -133,7 +133,7 @@ pub(self) fn dust_tick<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Marked key frame (bit 7 of `+0x33`): a wing beat, on alternating sides.
-pub(self) fn flap<R: Bench>(x: &mut Cx<'_, R>) {
+fn flap<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(f::KEY_FRAME) as i8) < 0 {
         let k = x.u8(f::KEY_FRAME) & 0x7f;
         x.set8(f::KEY_FRAME, k);
@@ -144,7 +144,7 @@ pub(self) fn flap<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// `moveq #0,D0 ; move.w (off,A0),D0 ; swap D0 ; asr.l #8,D0`: speed (word) as a long with 8 fractional bits.
-pub(self) fn speed_long<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> u32 {
+fn speed_long<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> u32 {
     let v = ((x.u16(off) as i16 as i32) << 8) as u32;
     v
 }

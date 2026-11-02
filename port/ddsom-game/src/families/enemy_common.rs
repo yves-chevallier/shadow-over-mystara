@@ -7,6 +7,8 @@
 use crate::families::cx::Bench;
 
 use super::cx::Cx;
+use super::effects_creators::{self, leftovers::Pure};
+use super::eshl_creators;
 /// Common library of enemies and bosses (`lib::draw_stance(x)`...).
 pub use super::enemy_lib as lib;
 use crate::objects::Obj;
@@ -104,16 +106,6 @@ fn spawn_eshl<R: Bench>(x: &mut Cx<'_, R>, kind: u8, variant: u8, link: u32) -> 
     Some(o)
 }
 
-/// Allocates an active EFFCT of type `kind`, variant `variant`, linked to the current object by the word `link`.
-fn spawn_effct<R: Bench>(x: &mut Cx<'_, R>, kind: u8, variant: u8, link: u32) -> Option<Obj> {
-    let Some(o) = x.alloc(&pools::EFFCT) else { return None };
-    o.set_u8(x.b, 0, 1);
-    o.set_u8(x.b, 2, kind);
-    o.set_u8(x.b, 3, variant);
-    o.set_u16(x.b, link, x.o.0 as u16);
-    Some(o)
-}
-
 /// 0x9eca4: a burst (ESHL 7) of variant `variant`, owner `+0x50`.
 pub fn eshl_debris<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
     spawn_eshl(x, 7, variant, 0x50);
@@ -136,15 +128,12 @@ pub fn eshl_wave_1f<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0xb64b0: an EFFCT 0x33 linked by `+0x5c`.
 pub fn effct_33<R: Bench>(x: &mut Cx<'_, R>) {
-    spawn_effct(x, 0x33, 0, 0x5c);
+    effects_creators::linked_via(&mut Pure, x.b, x.o, effects_creators::kind::PROJECTILE, None);
 }
 
 /// 0xb53f4: three EFFCT 0x2e (`+0x2f` = 2, 1, 0) linked by `+0x46`; the first pool refusal stops the series.
 pub fn effct_trio_2e<R: Bench>(x: &mut Cx<'_, R>) {
-    for index in [2, 1, 0] {
-        let Some(e) = spawn_effct(x, 0x2e, 0, f::HOST) else { return };
-        e.set_u8(x.b, 0x2f, index);
-    }
+    effects_creators::type_46_trio(&mut Pure, x.b, x.o);
 }
 
 /// 0x667f4: an enemy of type 10, variant 4, linked by `+0x5c`, at (`px`, `py`) (explosions of the arrival of boss 2,
@@ -161,26 +150,17 @@ pub fn enemy_blast_at<R: Bench>(x: &mut Cx<'_, R>, px: u16, py: u16) {
 
 /// 0x9ddee: an ESHL 1 shot of variant `variant`, index `+0x2f` = 1, owner `+0x50`.
 pub fn eshl_thrown_by_beast<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
-    if let Some(o) = spawn_eshl(x, 1, variant, 0x50) {
-        o.set_u8(x.b, 0x2f, 1);
-    }
+    eshl_creators::single_1(&mut Pure, x.b, x.o, variant);
 }
 
 /// 0xa2f96: sixteen ESHL 0x27 shots (variants 15 down to 0) linked by `+0x5c`.
 pub fn eshl_burst_27<R: Bench>(x: &mut Cx<'_, R>) {
-    for variant in (0..16).rev() {
-        if spawn_eshl(x, 0x27, variant, 0x5c).is_none() {
-            return;
-        }
-    }
+    eshl_creators::ring_27(&mut Pure, x.b, x.o);
 }
 
 /// 0xa6824: two ESHL 0x3f shots (orientation 0 then 0x20) linked by `+0x5c`.
 pub fn eshl_pair_3f<R: Bench>(x: &mut Cx<'_, R>) {
-    for flip in [0, 0x20] {
-        let Some(o) = spawn_eshl(x, 0x3f, 0, 0x5c) else { return };
-        o.set_u8(x.b, f::FLIP, flip);
-    }
+    eshl_creators::pair_3f(&mut Pure, x.b, x.o);
 }
 
 /// 0xa460a, 0xa464e, 0xa4676: an ESHL 0x34 shot of variant 2, 1 or 0 linked by `+0x46` (variant 1 copies the creator's

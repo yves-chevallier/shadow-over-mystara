@@ -28,7 +28,7 @@ mod behave;
 mod chain;
 mod hit;
 
-pub(self) mod g {
+mod g {
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const ANIM_KIND: u32 = 0xa0;
@@ -59,31 +59,31 @@ fn remainder<'a, R: Bench>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32
 }
 
 /// `move.b #v,Dn`: the low-order byte of a data register (kept if it is a leftover).
-pub(self) fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
+fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
     if let Some(r) = remainder(x, n) {
         *r = *r & !0xff | v as u32;
     }
 }
 
 /// `move.w #v,Dn`: the low-order word of a data register (kept if it is a leftover).
-pub(self) fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
+fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
     if let Some(r) = remainder(x, n) {
         *r = *r & 0xffff_0000 | v as u32;
     }
 }
 
 /// `asr.w #k,Dn`.
-pub(self) fn asr_w(v: u16, k: u32) -> u16 {
+fn asr_w(v: u16, k: u32) -> u16 {
     ((v as i16) >> k) as u16
 }
 
 /// Types 12 and 11 are distinguished by byte `+2`.
-pub(self) fn is_12<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn is_12<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.u8(2) == 0xc
 }
 
 /// `move.b (0x3e,A0),(0xaa,A0)`.
-pub(self) fn sync<R: Bench>(x: &mut Cx<'_, R>) {
+fn sync<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.u8(FRAME_SRC);
     x.set8(FRAME, v);
 }
@@ -91,7 +91,7 @@ pub(self) fn sync<R: Bench>(x: &mut Cx<'_, R>) {
 // --- animations (0x8f508, 0x8f530, 0x8f558) ------------------------------------------------------------------
 
 /// Starts script `n` (already in D0) of set `kind` (0, 2 or 4: D1b) for the type, unless it is already running.
-pub(self) fn play<R: Bench>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
+fn play<R: Bench>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
     let t12 = is_12(x);
     let table = match (kind, t12) {
         (0, true) => 0x17b9c2,
@@ -110,17 +110,17 @@ pub(self) fn play<R: Bench>(x: &mut Cx<'_, R>, kind: u8, n: u32) {
 }
 
 /// 0x8f508.
-pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play(x, 0, n)
 }
 
 /// 0x8f530.
-pub(self) fn act<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn act<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play(x, 2, n)
 }
 
 /// 0x8f558.
-pub(self) fn hurt<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn hurt<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play(x, 4, n)
 }
 
@@ -135,20 +135,20 @@ fn set44<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 // --- state changes (0x8eac8...) ---------------------------------------------------------------------------
 
 /// 0x8eac8: no target left, wait (state 2, group 6).
-pub(self) fn to_wait<R: Bench>(x: &mut Cx<'_, R>) {
+fn to_wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0206_0000);
     body(x, 0)
 }
 
 /// 0x8ead6: return to the pursuit.
-pub(self) fn to_chase<R: Bench>(x: &mut Cx<'_, R>) {
+fn to_chase<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0202_0000);
     x.set8(0x79, 0x3f);
     body(x, 0)
 }
 
 /// 0x8eaea : demi-tour.
-pub(self) fn to_turn<R: Bench>(x: &mut Cx<'_, R>) {
+fn to_turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0202_0000);
     let flip = x.u8(f::FLIP) ^ 0x20;
     x.set8(f::FLIP, flip);
@@ -156,30 +156,30 @@ pub(self) fn to_turn<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8eafe: attack 2 (group 4, step 4).
-pub(self) fn to_attack_2<R: Bench>(x: &mut Cx<'_, R>) {
+fn to_attack_2<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0204_0400);
     body(x, 8)
 }
 
 /// 0x8eb0c.
-pub(self) fn to_attack_3<R: Bench>(x: &mut Cx<'_, R>) {
+fn to_attack_3<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0204_0600);
     body(x, 0)
 }
 
 /// 0x8eb1a.
-pub(self) fn to_attack_7<R: Bench>(x: &mut Cx<'_, R>) {
+fn to_attack_7<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0204_0e00);
     body(x, 0)
 }
 
 /// 0x8d592: a ring is missing, the snake dies (state 4, group 6).
-pub(self) fn lost<R: Bench>(x: &mut Cx<'_, R>) {
+fn lost<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x0406_0000);
 }
 
 /// 0x8ebd0 : vitesses nulles.
-pub(self) fn stop<R: Bench>(x: &mut Cx<'_, R>) {
+fn stop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
@@ -333,7 +333,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// `moveq 0,D0 ; move.b (idx,A0),D0b ; move.w (table,PC,D0w),D1w ; jsr (table,PC,D1w)`: arrival address.
-pub(self) fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
+fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
     let off = x.rom16(table + i);
     setw(x, 1, off);
@@ -341,7 +341,7 @@ pub(self) fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 
 }
 
 /// Variant that stores the offset in D0 (`move.w (table,PC,D0w),D0w ; jmp (table,PC,D0w)`).
-pub(self) fn dispatch0<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
+fn dispatch0<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
     let off = x.rom16(table + i);
     table.wrapping_add(off as i16 as i32 as u32)

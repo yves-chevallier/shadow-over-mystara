@@ -26,7 +26,7 @@ mod fight;
 mod hit;
 mod moves;
 
-pub(self) mod g {
+mod g {
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
@@ -59,16 +59,16 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-pub(self) const SET_BODY: u32 = 0x1790f6;
-pub(self) const SET_STRIKE: u32 = 0x179116;
+const SET_BODY: u32 = 0x1790f6;
+const SET_STRIKE: u32 = 0x179116;
 
-pub(self) const WAIT: u32 = 0x020a_0000;
+const WAIT: u32 = 0x020a_0000;
 
-pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
@@ -84,14 +84,14 @@ fn remainder<'a, R: Bench>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32
 }
 
 /// Low-order word of a data register (`move.w`, `andi.w`...), kept if it is a leftover.
-pub(self) fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
+fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
     if let Some(r) = remainder(x, n) {
         *r = *r & 0xffff_0000 | v as u32;
     }
 }
 
 /// Low-order byte of a data register, kept if it is a leftover.
-pub(self) fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
+fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
     if let Some(r) = remainder(x, n) {
         *r = *r & !0xff | v as u32;
     }
@@ -99,7 +99,7 @@ pub(self) fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
 
 /// Jump through a relative table (`move.w (tbl,PC,D0w),D1w ; jmp (tbl,PC,D1w)`) indexed by the object's byte `idx`:
 /// returns the arrival address.
-pub(self) fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
+fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
     let off = x.rom16(table + i);
     table.wrapping_add(off as i16 as i32 as u32)

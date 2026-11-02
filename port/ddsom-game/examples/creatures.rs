@@ -188,7 +188,7 @@ fn render(m: &cps2::Machine, entries: &[[u16; 4]]) -> Option<Sprite> {
     output[2] = 0; // no layer priority
     let (cps_a, mut cps_b) = ([0u16; 32], [0u16; 32]);
     cps_b[0x30 / 2] = 0x3f; // the six palette pages
-    let mut shot = |bg: u16| {
+    let shot = |bg: u16| {
         let mut pal = m.bus.palette.clone();
         pal[0xbff] = bg;
         let v = cps2_gfx::VideoState { gfxram: &[], cps_a: &cps_a, cps_b: &cps_b, objram: &obj, output: &output, palette_ram: Some(&pal) };

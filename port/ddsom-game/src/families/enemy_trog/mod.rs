@@ -26,7 +26,7 @@ mod hit;
 mod stance;
 
 /// Fields specific to this type (the common fields are in `enemy_common::f`).
-pub(self) mod g {
+mod g {
     /// Series: 0 troglodyte (blinks), 1 armed variant.
     pub const SERIES: u32 = 0x2f;
     pub const STRIKE_KIND: u32 = 0x44;

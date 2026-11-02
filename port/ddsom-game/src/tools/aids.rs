@@ -3,13 +3,12 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::aids::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{prog8, rd16, rd32, rd8, wr16, wr32, wr8, A5};
-use crate::ops;
+use crate::{regs, Native};
+use crate::mem::{rd16, rd8};
 
 /// Native of 0x1386: work registers as the original leaves them (D1 to D4 and D6), D0 = the direction.
 fn direction_native(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -44,7 +43,7 @@ fn direction_to_object(c: &mut Cpu, b: &mut Cps2Bus) {
     direction_from_object(c, b);
 }
 
-pub const DIRECTION_FROM_OBJECT: Native = Native {
+pub(crate) const DIRECTION_FROM_OBJECT: Native = Native {
     entry: 0x137e,
     name: "direction_object",
     run: crate::Body::WithCpu(direction_from_object),
@@ -52,7 +51,7 @@ pub const DIRECTION_FROM_OBJECT: Native = Native {
     outputs: regs::d(0) | regs::CCR,
 };
 
-pub const DIRECTION_TO_OBJECT: Native = Native {
+pub(crate) const DIRECTION_TO_OBJECT: Native = Native {
     entry: 0x1376,
     name: "direction_to_object",
     run: crate::Body::WithCpu(direction_to_object),
@@ -60,7 +59,7 @@ pub const DIRECTION_TO_OBJECT: Native = Native {
     outputs: regs::d(0) | regs::CCR,
 };
 
-pub const DIRECTION: Native = Native {
+pub(crate) const DIRECTION: Native = Native {
     entry: 0x1386,
     name: "direction",
     run: crate::Body::WithCpu(direction_native),
@@ -85,7 +84,7 @@ fn grabbed_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const GRABBED: Native = Native {
+pub(crate) const GRABBED: Native = Native {
     entry: 0x2810,
     name: "object_seized",
     run: crate::Body::WithCpu(grabbed_native),
@@ -98,7 +97,7 @@ fn game_over_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const GAME_OVER: Native = Native {
+pub(crate) const GAME_OVER: Native = Native {
     entry: 0x28d8,
     name: "game_over_check",
     run: crate::Body::WithCpu(game_over_native),
@@ -115,7 +114,7 @@ fn divide_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const DIVIDE: Native = Native {
+pub(crate) const DIVIDE: Native = Native {
     entry: 0x17ea,
     name: "division",
     run: crate::Body::WithCpu(divide_native),

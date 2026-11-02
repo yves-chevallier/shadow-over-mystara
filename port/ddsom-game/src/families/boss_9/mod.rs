@@ -27,7 +27,7 @@ mod hit;
 mod moves;
 
 /// Fields specific to this type.
-pub(self) mod g {
+mod g {
     /// Counter of the smoke puffs (`+0x42`: logical AND with a mask).
     pub const PUFFS: u32 = 0x42;
     /// Blinking after the loss of the crew: duration, in progress.
@@ -76,74 +76,74 @@ use g::*;
 use crate::objects::pools;
 
 /// Jeu d'animations.
-pub(self) const SET: u32 = 0x17a276;
+const SET: u32 = 0x17a276;
 
 /// Camera of the vehicle's plane (X, Y: `A5+0x556`, `A5+0x55a`).
-pub(self) const CAM_X: u32 = 0x556;
-pub(self) const CAM_Y: u32 = 0x55a;
+const CAM_X: u32 = 0x556;
+const CAM_Y: u32 = 0x55a;
 /// Free slots of the ENEMY and ESHL pools (words).
-pub(self) const ENEMY_FREE: u32 = 0x7e62;
-pub(self) const ESHL_FREE: u32 = 0x7e64;
+const ENEMY_FREE: u32 = 0x7e62;
+const ESHL_FREE: u32 = 0x7e64;
 /// "Hard" mode (non-zero word): speeds from the fast table.
-pub(self) const HARD: u32 = 0x70;
+const HARD: u32 = 0x70;
 
 /// One animation step (0x1a56).
-pub(self) fn anim<R: Bench>(x: &mut Cx<'_, R>) {
+fn anim<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
 }
 
 /// Next step (`addq.b #2,(+6)` or `(+7)`).
-pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
+fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
-pub(self) fn next7<R: Bench>(x: &mut Cx<'_, R>) {
+fn next7<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
-pub(self) fn steps<R: Bench>(x: &mut Cx<'_, R>, s6: u8, s7: u8) {
+fn steps<R: Bench>(x: &mut Cx<'_, R>, s6: u8, s7: u8) {
     x.set8(f::SUB2, s6);
     x.set8(0x7, s7);
 }
 
 /// `bchg.b #1,(0xd,A0)` : l'engin cahote.
-pub(self) fn jolt<R: Bench>(x: &mut Cx<'_, R>) {
+fn jolt<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.u8(0xd) ^ 2;
     x.set8(0xd, v);
 }
 
 /// One frame in `mask` + 1 (`+0x42`), true.
-pub(self) fn every<R: Bench>(x: &mut Cx<'_, R>, mask: u8) -> bool {
+fn every<R: Bench>(x: &mut Cx<'_, R>, mask: u8) -> bool {
     let n = x.u8(PUFFS).wrapping_add(1) & mask;
     x.set8(PUFFS, n);
     n == 0
 }
 
 /// Two smoke puffs (0xb10c8): kind `kind`, offset `dx`.
-pub(self) fn smoke_pair<R: Bench>(x: &mut Cx<'_, R>, kind: u32, dx: u16) {
+fn smoke_pair<R: Bench>(x: &mut Cx<'_, R>, kind: u32, dx: u16) {
     for (dy, dz) in [(0x30, 0x28), (0x28, 8)] {
         lib::shock(x, kind, dx, dy, dz);
     }
 }
 
 /// 0x8ca22: smoke of the rolling vehicle.
-pub(self) fn smoke<R: Bench>(x: &mut Cx<'_, R>) {
+fn smoke<R: Bench>(x: &mut Cx<'_, R>) {
     smoke_pair(x, 1, 0x100)
 }
 
 /// A smoke puff every `mask` + 1 frames.
-pub(self) fn smoke_every<R: Bench>(x: &mut Cx<'_, R>, mask: u8) {
+fn smoke_every<R: Bench>(x: &mut Cx<'_, R>, mask: u8) {
     if every(x, mask) {
         smoke(x);
     }
 }
 
 /// Tighter smoke when the crew is reduced (more than two gunners: one frame in 4, otherwise in 8).
-pub(self) fn crew_smoke<R: Bench>(x: &mut Cx<'_, R>) {
+fn crew_smoke<R: Bench>(x: &mut Cx<'_, R>) {
     let mask = if (x.u8(CREW_COUNT) as i8) > 8 { 3 } else { 7 };
     smoke_every(x, mask);
 }
 
 /// Has the vehicle left through the edge it is rolling toward (`+0x2c`: 0 toward the left)?
-pub(self) fn past_edge<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn past_edge<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = x.a5_u16(CAM_X);
     if x.u8(f::FLIP) == 0 {
         left_of(x, 0x80, cam)
@@ -153,19 +153,19 @@ pub(self) fn past_edge<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// `x + d - edge` negative (`sub.w ; bge`): the vehicle is to the left of the edge.
-pub(self) fn left_of<R: Bench>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
+fn left_of<R: Bench>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
     let a = x.u16(0x8).wrapping_add(d);
     Fl::sub16(a, edge).lt()
 }
 
 /// `x - d - edge` positive (`sub.w ; ble`): the vehicle is to the right of the edge.
-pub(self) fn right_of<R: Bench>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
+fn right_of<R: Bench>(x: &mut Cx<'_, R>, d: u16, edge: u16) -> bool {
     let a = x.u16(0x8).wrapping_sub(d);
     Fl::sub16(a, edge).gt()
 }
 
 /// No gunners for long enough (`+0xbf` negative): the vehicle blinks, and sets off on a pass.
-pub(self) fn crew_gone<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn crew_gone<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u8(LIVES) as i8) >= 0 {
         return false;
     }
@@ -178,7 +178,7 @@ pub(self) fn crew_gone<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// End of a stop: blinking if the crew is lost, otherwise a new pass (`+6` = 2, `+7` = 4).
-pub(self) fn stop_over<R: Bench>(x: &mut Cx<'_, R>) {
+fn stop_over<R: Bench>(x: &mut Cx<'_, R>) {
     if !crew_gone(x) {
         steps(x, 2, 4);
     }
@@ -205,43 +205,43 @@ fn draw<R: Bench>(x: &mut Cx<'_, R>, lists: u32, mask: u32) -> u8 {
 }
 
 /// 0x8c9ee: crew lost before blinking.
-pub(self) fn reset_lives<R: Bench>(x: &mut Cx<'_, R>) {
+fn reset_lives<R: Bench>(x: &mut Cx<'_, R>) {
     let n = per_level(x, 0x8ca02).wrapping_sub(1);
     x.set8(LIVES, n);
 }
 
 /// 0x8c9ba: wait before the shot.
-pub(self) fn reset_count<R: Bench>(x: &mut Cx<'_, R>) {
+fn reset_count<R: Bench>(x: &mut Cx<'_, R>) {
     let n = per_level(x, 0x8c9ce).wrapping_add(5);
     x.set8(COUNT, n);
 }
 
 /// 0x8c420: rushes allowed.
-pub(self) fn reset_dashes<R: Bench>(x: &mut Cx<'_, R>) {
+fn reset_dashes<R: Bench>(x: &mut Cx<'_, R>) {
     let n = per_level(x, 0x8c430);
     x.set8(DASHES, n);
 }
 
 /// 0x8beca: passes before a stop.
-pub(self) fn draw_passes<R: Bench>(x: &mut Cx<'_, R>) {
+fn draw_passes<R: Bench>(x: &mut Cx<'_, R>) {
     let n = draw(x, 0x8bef0, 0x1f).wrapping_sub(1);
     x.set8(PASSES, n);
 }
 
 /// 0x8c450 : bombardements.
-pub(self) fn draw_bombs<R: Bench>(x: &mut Cx<'_, R>) {
+fn draw_bombs<R: Bench>(x: &mut Cx<'_, R>) {
     let n = draw(x, 0x8c476, 0xf).wrapping_sub(1);
     x.set8(BOMBS, n);
 }
 
 /// 0x8c576: stops.
-pub(self) fn draw_stops<R: Bench>(x: &mut Cx<'_, R>) {
+fn draw_stops<R: Bench>(x: &mut Cx<'_, R>) {
     let n = draw(x, 0x8c598, 0xf);
     x.set8(STOPS, n);
 }
 
 /// 0x8bc0c: wait before setting off again, according to the number of players, the difficulty and the crew.
-pub(self) fn reset_wait<R: Bench>(x: &mut Cx<'_, R>) {
+fn reset_wait<R: Bench>(x: &mut Cx<'_, R>) {
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let list = x.data32(0x8bc3e + 4 * players);
     let d = difficulty(x);
@@ -253,7 +253,7 @@ pub(self) fn reset_wait<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8bcd2: X position of the stop, drawn in front of the vehicle.
-pub(self) fn draw_stop_x<R: Bench>(x: &mut Cx<'_, R>) {
+fn draw_stop_x<R: Bench>(x: &mut Cx<'_, R>) {
     let d = difficulty(x);
     let list = (x.rom16(0x8bd08 + 4 * d) as u32) << 16 | x.rom16(0x8bd08 + 4 * d + 2) as u32;
     let r = rand_and(x, 0x1f);
@@ -264,7 +264,7 @@ pub(self) fn draw_stop_x<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8be88: depth of the pass according to that of the target (three lanes).
-pub(self) fn pick_lane<R: Bench>(x: &mut Cx<'_, R>) {
+fn pick_lane<R: Bench>(x: &mut Cx<'_, R>) {
     let lane: u32 = if x.u16(f::TARGET) == 0 {
         1
     } else {
@@ -283,7 +283,7 @@ pub(self) fn pick_lane<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8c988: new target (0x424e or 0x44ee, at random).
-pub(self) fn retarget<R: Bench>(x: &mut Cx<'_, R>) {
+fn retarget<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let k = x.data8(0x8c9aa + r);
     if k == 0 {
@@ -294,7 +294,7 @@ pub(self) fn retarget<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8bff0: counts the active gunners (state 0x0200): bits in `+0xb6`, number × 4 in `+0xb7`; none: `+0xaa` = 4.
-pub(self) fn count_crew<R: Bench>(x: &mut Cx<'_, R>) {
+fn count_crew<R: Bench>(x: &mut Cx<'_, R>) {
     let (mut bits, mut count) = (0u8, 0u8);
     for k in 0..4u32 {
         let link = x.u16(CREW + 2 * k);
@@ -315,7 +315,7 @@ pub(self) fn count_crew<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8c026: rolling speed according to the crew (fast table in hard mode), wheel pace.
-pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>) {
+fn set_speed<R: Bench>(x: &mut Cx<'_, R>) {
     let hard = x.a5_u16(HARD) != 0;
     let mut top = if hard { 0x800u16 } else { 0x680 };
     if x.u8(f::FLIP) == 0 {
@@ -340,7 +340,7 @@ pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8c1a0: rush (full crew, draw by players and difficulty): full speed; true if launched.
-pub(self) fn try_dash<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn try_dash<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(CREW_COUNT) != 0x10 || x.u8(DASHES) == 0 {
         return false;
     }
@@ -364,7 +364,7 @@ pub(self) fn try_dash<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x8c124 / 0x8c132: replaces the lost gunners (ENEMY 0x13, variant 2 with no gunner at all, 1 otherwise).
-pub(self) fn refill_crew<R: Bench>(x: &mut Cx<'_, R>, all: bool) {
+fn refill_crew<R: Bench>(x: &mut Cx<'_, R>, all: bool) {
     if all {
         if x.u8(CREW_COUNT) == 0x10 {
             return;
@@ -395,7 +395,7 @@ pub(self) fn refill_crew<R: Bench>(x: &mut Cx<'_, R>, all: bool) {
 }
 
 /// 0x8c8d2: a target on the ground in front of the vehicle? 1 very close, 0 within firing range, 2 otherwise.
-pub(self) fn target_range<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
+fn target_range<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     let r = if x.u16(f::TARGET) == 0 {
         2
     } else {
@@ -414,7 +414,7 @@ pub(self) fn target_range<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
 }
 
 /// 0x8c698 / 0x8c6a0: firing stop drawn by difficulty (`base`: 2 close target, 0xe target in range).
-pub(self) fn draw_halt<R: Bench>(x: &mut Cx<'_, R>, base: u8) {
+fn draw_halt<R: Bench>(x: &mut Cx<'_, R>, base: u8) {
     *x.c.d2() = base as u32;
     let level = (var::RANK.get(x.b) >> 1) << 5;
     let at = 0x8c6d2u32.wrapping_add(level as i16 as u32);
@@ -426,7 +426,7 @@ pub(self) fn draw_halt<R: Bench>(x: &mut Cx<'_, R>, base: u8) {
 }
 
 /// 0x8b9ea: damage by eighths of HP (bits of `+0xa8`, cumulative).
-pub(self) fn damage_bits<R: Bench>(x: &mut Cx<'_, R>) {
+fn damage_bits<R: Bench>(x: &mut Cx<'_, R>) {
     let q = x.u16(0x60) >> 3;
     let hp = x.u16(f::HP) as i16;
     let mut stage = 7u8;

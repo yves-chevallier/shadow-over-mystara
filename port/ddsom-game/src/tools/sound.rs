@@ -3,13 +3,13 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::{Cpu, SR_C};
 
 use crate::sound::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
+use crate::{regs, Native};
 use std::sync::OnceLock;
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::mem::rd32;
 use crate::objects::Obj;
 
 /// Reproduces D0, A1 and the flags left by 0xe0848.
@@ -45,7 +45,7 @@ fn enqueue_if_sound(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-pub const ENQUEUE_IF_SOUND: Native = Native {
+pub(crate) const ENQUEUE_IF_SOUND: Native = Native {
     entry: 0xe0836,
     name: "sound_enqueue",
     run: crate::Body::WithCpu(enqueue_if_sound),
@@ -53,7 +53,7 @@ pub const ENQUEUE_IF_SOUND: Native = Native {
     outputs: regs::d(0) | regs::a(1) | regs::CCR,
 };
 
-pub const ENQUEUE_DIRECT: Native = Native {
+pub(crate) const ENQUEUE_DIRECT: Native = Native {
     entry: 0xe0848,
     name: "sound_enqueue_direct",
     run: crate::Body::WithCpu(enqueue_direct),
@@ -71,7 +71,7 @@ fn native_sound_in(c: &mut Cpu, b: &mut Cps2Bus, sound: u32) {
 }
 
 /// The native routines of each described wrapper and of the dispatchers (built once, then kept).
-pub fn native_wrappers() -> &'static [Native] {
+pub(crate) fn native_wrappers() -> &'static [Native] {
     static LIST: OnceLock<Vec<Native>> = OnceLock::new();
     LIST.get_or_init(|| {
         let wrappers = table::WRAPPERS.iter().map(|w| (w.entry, "sound_wrapper"));
@@ -131,7 +131,7 @@ fn init_private_stack(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const INIT_PRIVATE_STACK: Native = Native {
+pub(crate) const INIT_PRIVATE_STACK: Native = Native {
     entry: 0xee044,
     name: "sound_init_stack",
     run: crate::Body::WithCpu(init_private_stack),
@@ -140,7 +140,7 @@ pub const INIT_PRIVATE_STACK: Native = Native {
 };
 
 /// 0xec238: empty sound (a plain `rts`), target of the dispatcher 0xec200 for objects without sound.
-pub const NONE: Native = Native {
+pub(crate) const NONE: Native = Native {
     entry: NO_SOUND,
     name: "sound_none",
     run: crate::Body::WithCpu(rts),
@@ -148,18 +148,18 @@ pub const NONE: Native = Native {
     outputs: regs::ALL,
 };
 
-pub const SERVICE_FF00: Native = service_native(0xe0882, "sound_service_ff00", false);
+pub(crate) const SERVICE_FF00: Native = service_native(0xe0882, "sound_service_ff00", false);
 
-pub const SERVICE_FF05: Native = service_native(0xe0a10, "sound_service_ff05", false);
+pub(crate) const SERVICE_FF05: Native = service_native(0xe0a10, "sound_service_ff05", false);
 
-pub const SERVICE_FF06_D1: Native = service_native(0xe0a2e, "sound_service_ff06", true);
+pub(crate) const SERVICE_FF06_D1: Native = service_native(0xe0a2e, "sound_service_ff06", true);
 
-pub const SERVICE_FF06: Native = service_native(0xe0a40, "sound_service_ff06", true);
+pub(crate) const SERVICE_FF06: Native = service_native(0xe0a40, "sound_service_ff06", true);
 
-pub const SERVICE_FF07_D1: Native = service_native(0xe0a70, "sound_service_ff07", true);
+pub(crate) const SERVICE_FF07_D1: Native = service_native(0xe0a70, "sound_service_ff07", true);
 
-pub const SERVICE_FF07: Native = service_native(0xe0a82, "sound_service_ff07", true);
+pub(crate) const SERVICE_FF07: Native = service_native(0xe0a82, "sound_service_ff07", true);
 
-pub const SERVICE_FF08: Native = service_native(0xe0ad8, "sound_service_ff08", false);
+pub(crate) const SERVICE_FF08: Native = service_native(0xe0ad8, "sound_service_ff08", false);
 
-pub const SERVICE_FF09: Native = service_native(0xe0af8, "sound_service_ff09", false);
+pub(crate) const SERVICE_FF09: Native = service_native(0xe0af8, "sound_service_ff09", false);

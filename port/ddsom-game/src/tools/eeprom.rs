@@ -3,12 +3,12 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::{Cpu, SR_X};
 
 use crate::eeprom::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::{regs, Native};
+use crate::mem::rd8;
 
 macro_rules! native_counter {
     ($fn:ident, $k:expr) => {
@@ -21,7 +21,7 @@ macro_rules! native_counter {
 
 macro_rules! native {
     ($ident:ident, $entry:expr, $name:expr, $run:expr, $exits:expr) => {
-        pub const $ident: Native = Native {
+        pub(crate) const $ident: Native = Native {
             entry: $entry,
             name: $name,
             run: crate::Body::WithCpu($run),
@@ -143,7 +143,7 @@ fn stat_duration(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const STAT_CHARACTER: Native = Native {
+pub(crate) const STAT_CHARACTER: Native = Native {
     entry: 0x2e630,
     name: "accounting_stat_character",
     run: crate::Body::WithCpu(stat_character),
@@ -151,7 +151,7 @@ pub const STAT_CHARACTER: Native = Native {
     outputs: regs::CCR,
 };
 
-pub const STAT_DURATION: Native = Native {
+pub(crate) const STAT_DURATION: Native = Native {
     entry: 0x2e696,
     name: "accounting_stat_duration",
     run: crate::Body::WithCpu(stat_duration),
@@ -159,7 +159,7 @@ pub const STAT_DURATION: Native = Native {
     outputs: regs::CCR,
 };
 
-pub const COUNT_GAMES_ACC: Native = Native {
+pub(crate) const COUNT_GAMES_ACC: Native = Native {
     entry: 0x2e4ec,
     name: "accounting_games",
     run: crate::Body::WithCpu(count_games_acc),
@@ -167,7 +167,7 @@ pub const COUNT_GAMES_ACC: Native = Native {
     outputs: regs::CCR,
 };
 
-pub const ACCOUNTING_INIT: Native = Native {
+pub(crate) const ACCOUNTING_INIT: Native = Native {
     entry: 0x2dc9a,
     name: "accounting_init",
     run: crate::Body::WithCpu(accounting_init),

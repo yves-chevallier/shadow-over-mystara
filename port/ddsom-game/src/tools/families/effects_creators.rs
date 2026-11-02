@@ -3,16 +3,15 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::families::effects_creators::*;
-use crate::families::effects_creators::leftovers::{leftover, Regs};
+use crate::families::effects_creators::leftovers::Regs;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{prog16, prog32, rd16, rd32, rd8, set_low_word, wr16, wr32, A5};
-use crate::objects::pools::{self, Pool};
+use crate::{regs, Native};
+use crate::mem::set_low_word;
+use crate::objects::pools::Pool;
 use crate::objects::Obj;
-use crate::families::effects_creators::leftovers::Pure;
 use crate::regs::d as D;
 use crate::mem::set_low_byte;
 
@@ -29,25 +28,6 @@ macro_rules! creators {
             }, $out),
         )* ];
     };
-}
-
-/// `blow` with the original's registers (callers by address: `player/`): A0 = the creator, D0.b = variant, D1.b =
-/// setting; A1, carry and flags like the original.
-#[track_caller]
-pub fn blow_68k(c: &mut Cpu, b: &mut Cps2Bus, creator: Obj, variant: u8, setting: u8) -> Option<Obj> {
-    c.a[0] = creator.0;
-    let r = attached_via(c, b, kind::BLOW, creator, variant, setting);
-    crate::tools::diag::dead_regs(c, "effects", CREATED);
-    r
-}
-
-/// `halo` with the original's registers (callers by address: `player/`): A1, carry and flags.
-#[track_caller]
-pub fn halo_68k(c: &mut Cpu, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
-    c.a[0] = creator.0;
-    let r = halo_via(c, b, creator);
-    crate::tools::diag::dead_regs(c, "effects", CREATED);
-    r
 }
 
 /// 0xa8a42: scene camera in mode 0x60 (`A5+0x51e`), `A5+0x4ff` cleared.
@@ -148,14 +128,6 @@ creators! {
     0xb230e "block_tiles" |c, b, me| tile_block_native(c, b), regs::d(0) | regs::a(1);
     0xa836c "create_shot_hit" |c, b, me| { let s = c.d[4] as u8; eshl_slash_via(c, b, me, s) }, CREATED;
     0xa817c "create_shot_column" |c, b, me| eshl_rise_via(c, b, me), CREATED | D(0);
-}
-
-/// Registers that the original leaves at this place and that nothing seems to reread: written like it, then
-/// poisoned with `DDSOM_POISON=leftovers` to prove it before removing the write.
-#[track_caller]
-#[allow(dead_code)] // proof tool: used during a conversion, removed along with the writes proven dead
-pub(crate) fn leftovers(c: &mut Cpu, mask: u32) {
-    crate::tools::diag::dead_regs(c, "leftovers", mask);
 }
 
 /// The original's registers.

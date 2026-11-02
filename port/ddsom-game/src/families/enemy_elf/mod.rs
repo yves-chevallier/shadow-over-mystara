@@ -26,7 +26,7 @@ mod hit;
 mod stance;
 
 /// Fields specific to this type (the common fields are in `enemy_common::f`).
-pub(self) mod g {
+mod g {
     /// Damage of the current attack: type and strength.
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;

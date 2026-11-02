@@ -28,7 +28,7 @@ pub(crate) mod hit;
 mod intro;
 
 /// Fields specific to this type.
-pub(self) mod g {
+mod g {
     /// Stun value (and copy into `+0x53`: freeze after a hit).
     pub const STUN: u32 = 0x56;
     /// Vulnerable (1) or not (0).
@@ -75,16 +75,16 @@ use crate::objects::pools;
 use crate::objects::Current;
 
 /// Jeux d'animations.
-pub(self) const SET_BODY: u32 = 0x18076e;
-pub(self) const SET_STRIKE: u32 = 0x1807a2;
-pub(self) const SET_HURT: u32 = 0x1807c0;
+const SET_BODY: u32 = 0x18076e;
+const SET_STRIKE: u32 = 0x1807a2;
+const SET_HURT: u32 = 0x1807c0;
 
 /// Starts animation `n` of the movements / hits set via the AI (`0x103d6`).
-pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_STRIKE, n);
 }
 

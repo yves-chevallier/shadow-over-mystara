@@ -26,7 +26,7 @@ mod attacks;
 pub(crate) mod hit;
 mod stance;
 
-pub(self) mod g {
+mod g {
     pub const ANIM_FLAGS: u32 = 0x32;
     pub const ARM_OF: u32 = 0x46;
     pub const VULNERABLE: u32 = 0x67;
@@ -51,11 +51,11 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-pub(self) const SET_A: u32 = 0x177874;
-pub(self) const SET_B: u32 = 0x17788c;
-pub(self) const SET_DEATH: u32 = 0x1778a4;
-pub(self) const SET_FLY_AGAINST: u32 = 0x177992;
-pub(self) const SET_FLY_ALONG: u32 = 0x177a36;
+const SET_A: u32 = 0x177874;
+const SET_B: u32 = 0x17788c;
+const SET_DEATH: u32 = 0x1778a4;
+const SET_FLY_AGAINST: u32 = 0x177992;
+const SET_FLY_ALONG: u32 = 0x177a36;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -93,49 +93,49 @@ fn arm_dies_with_ogre<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-pub(self) fn play<R: Bench>(x: &mut Cx<'_, R>, set: u32, n: u32) {
+fn play<R: Bench>(x: &mut Cx<'_, R>, set: u32, n: u32) {
     lib::start(x, set, n);
 }
 
-pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play(x, SET_A, n);
 }
 
-pub(self) fn act<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn act<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play(x, SET_B, n);
 }
 
-pub(self) fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
+fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
-pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
-pub(self) fn spark<R: Bench>(x: &mut Cx<'_, R>, d5: u32) {
+fn spark<R: Bench>(x: &mut Cx<'_, R>, d5: u32) {
     lib::debris(x, d5);
 }
 
-pub(self) fn camera_x<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
+fn camera_x<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA2_X.get(x.b) } else { var::CAMERA1_X.get(x.b) }
 }
 
-pub(self) fn count_down<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
+fn count_down<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     let n = x.u16(off).wrapping_sub(1);
     x.set16(off, n);
     (n as i16) > 0
 }
 
 /// Orientation to the right (0x18) or the left (8) according to `flip`.
-pub(self) fn angle_by_flip<R: Bench>(x: &mut Cx<'_, R>) {
+fn angle_by_flip<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// The ogre can be grabbed by a player (not the negative variants): it then abandons the move.
-pub(self) fn held_by_player<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn held_by_player<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if (x.u8(Obj::VARIANT) as i8) < 0 || !grabbed(x) {
         return false;
     }
@@ -144,7 +144,7 @@ pub(self) fn held_by_player<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// No player alive any more: retreat; true if the state has changed.
-pub(self) fn nobody_left<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn nobody_left<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if lib::players_alive(x) {
         return false;
     }
@@ -153,7 +153,7 @@ pub(self) fn nobody_left<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x71d98: vertical undulation in flight according to the animation key (table of longs `0x71dc6`).
-pub(self) fn bob<R: Bench>(x: &mut Cx<'_, R>) {
+fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = ((x.u8(f::KEY_FRAME) & 0x7f) as u32) << 2;
     let mut d = rom32(x, 0x71dc6 + idx) as i32;
     if (x.u16(TIMER2) as i16) <= 0x24 {
@@ -166,7 +166,7 @@ pub(self) fn bob<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Spark of the animation key: bit 7 of `+0x33` → effect 0x11a36, alternated by `+0xb3`.
-pub(self) fn flash_key<R: Bench>(x: &mut Cx<'_, R>) {
+fn flash_key<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(f::KEY_FRAME) as i8) < 0 {
         let k = x.u8(f::KEY_FRAME) & 0x7f;
         x.set8(f::KEY_FRAME, k);
@@ -178,7 +178,7 @@ pub(self) fn flash_key<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- state transitions: the next move ----------------------------------------------------------
 
-pub(self) mod go {
+mod go {
     use super::*;
 
     /// 0x71cac : debout.

@@ -27,7 +27,7 @@ pub(crate) mod hit;
 mod moves;
 
 /// Fields specific to this type.
-pub(self) mod g {
+mod g {
     /// Leaps remaining in the walk, standing wait.
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
@@ -72,73 +72,73 @@ use crate::objects::pools;
 use crate::objects::Current;
 
 /// Animation sets: body, attacks, hits received.
-pub(self) const SET_BODY: u32 = 0x172794;
-pub(self) const SET_ATTACK: u32 = 0x1727d4;
-pub(self) const SET_HURT: u32 = 0x1727e4;
+const SET_BODY: u32 = 0x172794;
+const SET_ATTACK: u32 = 0x1727d4;
+const SET_HURT: u32 = 0x1727e4;
 
 /// HP thresholds of the phases (0x105b6).
-pub(self) const THRESHOLDS: u32 = 0x10be2;
+const THRESHOLDS: u32 = 0x10be2;
 
 /// Starts animation `n` of a set via the AI (0x103d6).
-pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn attack<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn attack<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_ATTACK, n);
 }
 
 /// `moveq #k,D0 ; move.b D0,(0xa0) ; move.b D0,(0xa1)` : sorte d'animation `k`.
-pub(self) fn kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
+fn kind<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     x.set8(ANIM_KIND, k);
     x.set8(ANIM_LAST, k);
 }
 
 /// Next step (`addq.b #2,(+6)` or `(+7)`).
-pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
+fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
-pub(self) fn next7<R: Bench>(x: &mut Cx<'_, R>) {
+fn next7<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
 /// At least one player alive (0x10474).
-pub(self) fn alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn alive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::players_alive(x)
 }
 
 /// Is the boss outside the band `[camera + d0, camera + d1]` (0x104a2)?
-pub(self) fn outside<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16) -> bool {
+fn outside<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16) -> bool {
     lib::outside_band(x, d0, d1 as i16)
 }
 
 /// Must the boss turn around toward its target (0x1050c)?
-pub(self) fn turn_needed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn turn_needed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     !lib::facing_target(x)
 }
 
 /// Wide box in front of the boss (0x7ef4).
-pub(self) fn in_wide_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
+fn in_wide_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     lib::guard_in_front(x, d0, d1, d2)
 }
 
 /// Puff of dust of kind `k` (0x1172e).
-pub(self) fn dust<R: Bench>(x: &mut Cx<'_, R>, k: u32) {
+fn dust<R: Bench>(x: &mut Cx<'_, R>, k: u32) {
     lib::debris(x, k);
 }
 
 /// `subq.w #1,(off,A0)`: true when the countdown has elapsed (`ble`).
-pub(self) fn expired<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
+fn expired<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
     sub16(x, off, 1).le()
 }
 
 /// The boss's target (`movea.w (0x50,A0),A1`).
-pub(self) fn target_obj<R: Bench>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
+fn target_obj<R: Bench>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
     load_target(x)
 }
 
 /// Word of the PC-relative jump table `base` for index `i`: address of the chosen routine.
-pub(self) fn jump_target<R: Bench>(x: &mut Cx<'_, R>, base: u32, i: u32) -> u32 {
+fn jump_target<R: Bench>(x: &mut Cx<'_, R>, base: u32, i: u32) -> u32 {
     base.wrapping_add(x.rom16(base + i) as i16 as u32)
 }
 
@@ -241,12 +241,12 @@ fn state<R: Bench>(x: &mut Cx<'_, R>, vulnerable: bool, s: u32) {
 }
 
 /// 0x7c24a : debout.
-pub(self) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
+fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, true, 0x0202_0000);
 }
 
 /// 0x7c25a: about-face, the current state will be resumed.
-pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let s = x.u32(f::STATE);
     x.set32(SAVED_STATE, s);
@@ -254,21 +254,21 @@ pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c26e and 0x7c27c: walk by leaps (two draws of the number of leaps).
-pub(self) fn walk<R: Bench>(x: &mut Cx<'_, R>) {
+fn walk<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, false, 0x0202_0400);
 }
-pub(self) fn walk_b<R: Bench>(x: &mut Cx<'_, R>) {
+fn walk_b<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, false, 0x0202_0600);
 }
 
 /// 0x7c2a2: big leap, toward the target or (`center`) toward the middle of the screen.
-pub(self) fn leap<R: Bench>(x: &mut Cx<'_, R>, center: bool) {
+fn leap<R: Bench>(x: &mut Cx<'_, R>, center: bool) {
     x.set8(LEAP_TO_CENTER, center as u8);
     state(x, false, 0x0202_0800);
 }
 
 /// 0x7c28a: big leap toward the target after a counterattack (invulnerable).
-pub(self) fn leap_guarded<R: Bench>(x: &mut Cx<'_, R>) {
+fn leap_guarded<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(INVULNERABLE, 1);
     leap(x, false);
 }
@@ -310,7 +310,7 @@ fn grab<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c358: scissor leap with a double.
-pub(self) fn split_leap<R: Bench>(x: &mut Cx<'_, R>) {
+fn split_leap<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 2);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set8(GRAB_TRIES, 0);
@@ -318,12 +318,12 @@ pub(self) fn split_leap<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c372: no player left, wait.
-pub(self) fn idle_alone<R: Bench>(x: &mut Cx<'_, R>) {
+fn idle_alone<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 
 /// Runs the decision whose original address is `at` (jumps through ROM tables).
-pub(self) fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
+fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
     match at {
         0x7c24a => stand(x),
         0x7c25a => turn(x),
@@ -356,7 +356,7 @@ pub(self) fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
 }
 
 /// 0x7c0ba: target in the wide box, draw in table 0x7c0d0.
-pub(self) fn from_wide_box<R: Bench>(x: &mut Cx<'_, R>) {
+fn from_wide_box<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7c0d0 + r) as u32;
     let at = jump_target(x, 0x7c0e0, i);
@@ -364,7 +364,7 @@ pub(self) fn from_wide_box<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c0e2: target very close; draw in the table of phase `+0xaa`.
-pub(self) fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
+fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32 as u32;
     let table = [0x7c11a, 0x7c12a, 0x7c13a][phase as usize % 3];
@@ -384,17 +384,17 @@ fn from_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32, tables: [u32; 6], jumps: u3
 }
 
 /// 0x7c14e: near box (-0x70).
-pub(self) fn from_near_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
+fn from_near_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     from_gesture(x, g, [0x7c1a8, 0x7c1a8, 0x7c1b8, 0x7c1b8, 0x7c1b8, 0x7c1b8], 0x7c1c8)
 }
 
 /// 0x7c1cc: far box (-0xe0).
-pub(self) fn from_far_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
+fn from_far_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     from_gesture(x, g, [0x7c226, 0x7c226, 0x7c226, 0x7c226, 0x7c236, 0x7c236], 0x7c246)
 }
 
 /// 0x7c080 / 0x7c09e: target in the box and gesture chosen by the AI (0x1047a), or nothing.
-pub(self) fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u32> {
+fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u32> {
     if !lib::target_in_box(x, d0, d1, d2) {
         return None;
     }
@@ -415,7 +415,7 @@ fn combo_count<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c50c: scissor leap attempt (with no double in progress): a chance that grows with each try.
-pub(self) fn try_split_leap<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn try_split_leap<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(DOUBLE) != 0 {
         return false;
     }
@@ -427,7 +427,7 @@ pub(self) fn try_split_leap<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x7c01c / 0x7c02e: number of leaps in the walk, drawn from table `table`.
-pub(self) fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
+fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let r = rand_and(x, 0x1f);
     let n = x.rom8(table + r);
     x.set8(WALK_STEPS, n);
@@ -435,7 +435,7 @@ pub(self) fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
 
 /// 0x7c396 / 0x7c3b0: aimed point near the target (offsets drawn from `table`, `mask` + 1 entries), on the
 /// boss's side; the angle toward that point (0x137e) becomes the direction.
-pub(self) fn aim_near_target<R: Bench>(x: &mut Cx<'_, R>, table: u32, mask: u32) {
+fn aim_near_target<R: Bench>(x: &mut Cx<'_, R>, table: u32, mask: u32) {
     let i = rand_and(x, mask) * 4;
     let dx = x.rom16(table + i);
     let dz = x.rom16(table + i + 2);
@@ -455,14 +455,14 @@ pub(self) fn aim_near_target<R: Bench>(x: &mut Cx<'_, R>, table: u32, mask: u32)
 }
 
 /// 0x137e toward point `mark` (D1, D2 of the original) then `+0x2d` = the angle.
-pub(self) fn aim_at_mark<R: Bench>(x: &mut Cx<'_, R>, mark: (u16, u16)) {
+fn aim_at_mark<R: Bench>(x: &mut Cx<'_, R>, mark: (u16, u16)) {
     let a = lib::aim_from(x, mark);
     x.set8(Obj::SPEED_INDEX, a);
 }
 
 /// 0x7c430: vertical speed of the leap according to the distance to the aimed point: 10 more per slice of the
 /// horizontal speed (the larger of the two distances, with the corresponding speed).
-pub(self) fn hop_height<R: Bench>(x: &mut Cx<'_, R>) {
+fn hop_height<R: Bench>(x: &mut Cx<'_, R>) {
     let abs = |v: u16| if (v as i16) < 0 { v.wrapping_neg() } else { v };
     // `move.w (0x1c,A0),D3`: the high word of D3 is the one left by the direction 0x137e called just before by
     // both callers (`moveq #0,D3` then the step): zero
@@ -492,7 +492,7 @@ pub(self) fn hop_height<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7c4da: a puff (EFFCT 0x32, variant 4) every `n` + 1 frames.
-pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
+fn puff<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
     x.add8(PUFFS, 1);
     if (n as i8) > x.u8(PUFFS) as i8 {
         return;
@@ -508,7 +508,7 @@ pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, n: u8) {
 }
 
 /// 0x7c542: creates the double (ENEMY 0x1a) of the scissor leap, linked to the boss by `+0xb0`.
-pub(self) fn spawn_double<R: Bench>(x: &mut Cx<'_, R>) {
+fn spawn_double<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(d) = x.alloc(&pools::ENEMY) else {
         x.set16(DOUBLE, 0);
         return;

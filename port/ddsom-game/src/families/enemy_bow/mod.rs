@@ -26,7 +26,7 @@ mod shoot;
 mod spawned;
 mod stance;
 
-pub(self) mod g {
+mod g {
     pub const GROUP: u32 = 0x2f;
     /// Non-zero: created by another object, shoots in place (`spawned`).
     pub const SPAWNED: u32 = 0x42;
@@ -57,11 +57,11 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-pub(self) const SET_MOVE: u32 = 0x16032c;
-pub(self) const SET_SHOT: u32 = 0x160350;
-pub(self) const STANCE: u32 = 0x0202_0000;
-pub(self) const HELD: u32 = 0x0408_0000;
-pub(self) const IDLE: u32 = 0x020a_0000;
+const SET_MOVE: u32 = 0x16032c;
+const SET_SHOT: u32 = 0x160350;
+const STANCE: u32 = 0x0202_0000;
+const HELD: u32 = 0x0408_0000;
+const IDLE: u32 = 0x020a_0000;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -87,33 +87,33 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// Starts animation `n` of the movement set.
-pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
 /// Starts animation `n` of the shot set.
-pub(self) fn shot<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn shot<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_SHOT, n as u16);
 }
 
-pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// 0x5ce22: walking direction according to orientation (0xc left, 4 right).
-pub(self) fn face_angle<R: Bench>(x: &mut Cx<'_, R>) {
+fn face_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 4 } else { 0xc };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Walking direction: 8 (looks left) or 0x18.
-pub(self) fn walk_angle<R: Bench>(x: &mut Cx<'_, R>) {
+fn walk_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Byte drawn at random from the difficulty row of `table` (rows of 32 bytes).
-pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
+fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
     let r = rand_and(x, 0x1f);
@@ -121,13 +121,13 @@ pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
 }
 
 /// Difficulty row tables: first moves, number of shots, second moves, follow-up.
-pub(self) const FIRST_ACTIONS: u32 = 0x5d47a;
-pub(self) const SHOT_REPEATS: u32 = 0x5d07a;
-pub(self) const SECOND_ACTIONS: u32 = 0x5d67a;
-pub(self) const FOLLOW_TABLE: u32 = 0x5ce72;
+const FIRST_ACTIONS: u32 = 0x5d47a;
+const SHOT_REPEATS: u32 = 0x5d07a;
+const SECOND_ACTIONS: u32 = 0x5d67a;
+const FOLLOW_TABLE: u32 = 0x5ce72;
 
 /// 0x5cdc6: random draw (ten chances out of sixteen) that decides on a shot; D0 = 0 or 1.
-pub(self) fn shoot_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn shoot_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let r = rand_and(x, 0xf);
     let mask = x.rom16(0x5cde0);
     let hit = (mask >> r) & 1 != 0;
@@ -141,23 +141,23 @@ fn range_box<R: Bench>(x: &mut Cx<'_, R>, d5: u32, d0: i16, d1: u16, d2: u16) ->
 }
 
 /// 0x5ce14: player very close (close enough for a point-blank shot).
-pub(self) fn point_blank<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn point_blank<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     range_box(x, 2, -0x28, 0x28, 0xc)
 }
 
 /// 0x5cdf6: player in front, at short distance.
-pub(self) fn in_front<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn in_front<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     *x.c.d5() = 0; // re-read: D5 re-read afterwards (DDSOM_POISON: covb_long3p_02)
     lib::target_in_box(x, -0xd0, 0x60, 0x18)
 }
 
 /// 0x5ce06: player close, on the same line.
-pub(self) fn on_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn on_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     range_box(x, 2, 0, 0x38, 0x10)
 }
 
 /// 0x5ce36: end of a shot, choice of the fallback move (substate 8); grabbed if `+0xa7`.
-pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
+fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     if x.u8(EXPIRED) != 0 {
         set_state_long(x, HELD);

@@ -2,18 +2,16 @@
 //! of the original).
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::kernel::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{rd16, rd8, wr8};
-use crate::tasks::table::{slot, table, State, Resume, Next, SLOTS};
+use crate::Native;
+use crate::tasks::table::{slot, table};
 
 macro_rules! native {
     ($ident:ident, $entry:expr, $body:expr) => {
-        pub const $ident: Native = Native {
+        pub(crate) const $ident: Native = Native {
             entry: $entry,
             name: stringify!($ident),
             run: crate::Body::WithCpu($body),

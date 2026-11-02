@@ -467,13 +467,11 @@ pub(crate) fn ring_28(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
 }
 
 /// 0xa2f96: sixteen objects of type 0x27.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // no Rust caller: the original code calls it (native for the tools)
 pub(crate) fn ring_27(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
     ring(r, b, me, 0x27, 16, f::LINK);
 }
 
 /// 0xa6824: two objects of type 0x3f linked to the creator, turned right then left (variant 0).
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // no Rust caller: the original code calls it (native for the tools)
 pub(crate) fn pair_3f(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
     for flip in [0, 0x20] {
         let Some(o) = spawn(r, b, 0x3f) else { break };
@@ -493,7 +491,6 @@ pub(crate) fn single_29(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<O
 }
 
 /// 0x9ddee: a type 1 shot (`+0x2f` = 1) of variant `variant`, linked to the creator by `+0x50`.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // no Rust caller: the original code calls it (native for the tools)
 pub(crate) fn single_1(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
     let o = spawn(r, b, 1)?;
     o.set_u8(b, f::INDEX, 1);

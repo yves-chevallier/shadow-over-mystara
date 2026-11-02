@@ -25,7 +25,7 @@ mod attacks;
 mod hit;
 mod stance;
 
-pub(self) mod g {
+mod g {
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
     pub const VULNERABLE: u32 = 0x67;
@@ -50,10 +50,10 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-pub(self) const SET_MOVE: u32 = 0x1649d0;
-pub(self) const SET_STRIKE: u32 = 0x1649e8;
-pub(self) const STANCE: u32 = 0x0202_0000;
-pub(self) const IDLE: u32 = 0x020a_0000;
+const SET_MOVE: u32 = 0x1649d0;
+const SET_STRIKE: u32 = 0x1649e8;
+const STANCE: u32 = 0x0202_0000;
+const IDLE: u32 = 0x020a_0000;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -78,34 +78,34 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// Starts animation `n` of the movement set.
-pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
 /// Starts animation `n` of the attack set.
-pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
 /// Starts attack `n`: attack type `kind` and strength `power`.
-pub(self) fn strike_with<R: Bench>(x: &mut Cx<'_, R>, n: u32, kind: u8, power: u8) {
+fn strike_with<R: Bench>(x: &mut Cx<'_, R>, n: u32, kind: u8, power: u8) {
     x.set8(STRIKE_KIND, kind);
     x.set8(STRIKE_POWER, power);
     strike(x, n);
 }
 
-pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// 0x6ad12: sound then animation 4.
-pub(self) fn wind_up<R: Bench>(x: &mut Cx<'_, R>) {
+fn wind_up<R: Bench>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xecfe4);
     mv(x, 4);
 }
 
 /// Byte drawn at random from the difficulty row of `table` (rows of 32 bytes).
-pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
+fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
     let r = rand_and(x, 0x1f);
@@ -113,7 +113,7 @@ pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
 }
 
 /// 0x6c01a: end of a move; standing, and if the draw says so, wait (`+5 = 10`).
-pub(self) fn done_attack<R: Bench>(x: &mut Cx<'_, R>) {
+fn done_attack<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
@@ -140,17 +140,17 @@ fn box_check<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
 }
 
 /// 0x6c040: player very close.
-pub(self) fn near_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn near_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_check(x, 0, 0x70, 0x10)
 }
 
 /// 0x6c032: player at a short distance, in front.
-pub(self) fn far_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn far_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_check(x, -0x80, 0x30, 0x10)
 }
 
 /// 0x6c078: the Gnoll has its back to its target.
-pub(self) fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -161,13 +161,13 @@ pub(self) fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     wrong
 }
 
-pub(self) const NEAR_TABLE: u32 = 0x6c0d6;
-pub(self) const FAR_TABLE: u32 = 0x6c2d6;
+const NEAR_TABLE: u32 = 0x6c0d6;
+const FAR_TABLE: u32 = 0x6c2d6;
 /// Rows of moves that follow a series (substate 8).
-pub(self) const FOLLOW_TABLE: u32 = 0x6be1a;
+const FOLLOW_TABLE: u32 = 0x6be1a;
 
 /// 0x6c0a6 (near series) / 0x6c0a0 (far series): chooses the move (`+5 = 4`, `+6 = 0`).
-pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
+fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let b = row_byte(x, table);
     x.set8(f::SUB, 4);
     x.set16(f::SUB2, 0);
@@ -176,7 +176,7 @@ pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
 }
 
 /// 0x6bdec: after a series, chooses the fallback move (substate 8).
-pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
+fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     let b = row_byte(x, FOLLOW_TABLE);
     x.set8(f::SUB, 8);
@@ -185,7 +185,7 @@ pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6baf2: the Gnoll is grabbed by a player: drop animation, then it disappears.
-pub(self) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
+fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }

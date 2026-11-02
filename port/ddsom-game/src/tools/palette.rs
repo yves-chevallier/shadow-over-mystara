@@ -3,17 +3,17 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::palette::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{rd16, rd32, rd8, wr16, wr32};
+use crate::{regs, Native};
+use crate::mem::{rd16, rd32, rd8, wr32};
 use crate::video::hw;
 
 macro_rules! page_native {
     ($name:ident, $ident:literal, $k:literal, $entry:expr) => {
-        pub const $name: Native = native(
+        pub(crate) const $name: Native = native(
             $entry,
             $ident,
             |c, b| page_run(c, b, $k, $entry),
@@ -87,11 +87,11 @@ fn stage_run(c: &mut Cpu, b: &mut Cps2Bus, entry: u32) {
     rts(c, b);
 }
 
-pub const STAGE_FREE: Native = native(0x1a366, "palette_scene_d0", |c, b| stage_run(c, b, 0x1a366));
+pub(crate) const STAGE_FREE: Native = native(0x1a366, "palette_scene_d0", |c, b| stage_run(c, b, 0x1a366));
 
-pub const STAGE_PAGE0: Native = native(0x1a360, "palette_scene", |c, b| stage_run(c, b, 0x1a360));
+pub(crate) const STAGE_PAGE0: Native = native(0x1a360, "palette_scene", |c, b| stage_run(c, b, 0x1a360));
 
-pub const STAGE_SCROLL1: Native = native(0x1a350, "palette_scene_scroll1", |c, b| stage_run(c, b, 0x1a350));
+pub(crate) const STAGE_SCROLL1: Native = native(0x1a350, "palette_scene_scroll1", |c, b| stage_run(c, b, 0x1a350));
 
 fn set_run(c: &mut Cpu, b: &mut Cps2Bus) {
     let source = load_set(b, c.d[0]);
@@ -195,7 +195,7 @@ fn fill_page_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const APPROACH_PAGE: Native = native(
+pub(crate) const APPROACH_PAGE: Native = native(
     0x1cfc8,
     "palette_approach_page",
     |c, b| {
@@ -204,7 +204,7 @@ pub const APPROACH_PAGE: Native = native(
     },
 );
 
-pub const APPROACH_CONSTANT: Native = native(
+pub(crate) const APPROACH_CONSTANT: Native = native(
     0x1d042,
     "palette_approach_colour",
     |c, b| {
@@ -213,7 +213,7 @@ pub const APPROACH_CONSTANT: Native = native(
     },
 );
 
-pub const BRIGHTEN_PAGE: Native = native(
+pub(crate) const BRIGHTEN_PAGE: Native = native(
     0x1d00e,
     "palette_eclaircit_page",
     |c, b| {
@@ -259,21 +259,21 @@ const fn flash_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::ALL }
 }
 
-pub const FLASH_GRAY: Native = flash_native(0x1ab56, "palette_lightning_grey", |c, b| flash_native_run(c, b, Flash::Gray));
+pub(crate) const FLASH_GRAY: Native = flash_native(0x1ab56, "palette_lightning_grey", |c, b| flash_native_run(c, b, Flash::Gray));
 
-pub const FLASH_A: Native = flash_native(0x1aaa0, "palette_lightning_a", |c, b| flash_native_run(c, b, Flash::A));
+pub(crate) const FLASH_A: Native = flash_native(0x1aaa0, "palette_lightning_a", |c, b| flash_native_run(c, b, Flash::A));
 
-pub const FLASH_B: Native = flash_native(0x1aaba, "palette_lightning_b", |c, b| flash_native_run(c, b, Flash::B));
+pub(crate) const FLASH_B: Native = flash_native(0x1aaba, "palette_lightning_b", |c, b| flash_native_run(c, b, Flash::B));
 
-pub const FLASH_C: Native = flash_native(0x1aad4, "palette_lightning_c", |c, b| flash_native_run(c, b, Flash::C));
+pub(crate) const FLASH_C: Native = flash_native(0x1aad4, "palette_lightning_c", |c, b| flash_native_run(c, b, Flash::C));
 
-pub const FLASH_D: Native = flash_native(0x1aaee, "palette_lightning_d", |c, b| flash_native_run(c, b, Flash::D));
+pub(crate) const FLASH_D: Native = flash_native(0x1aaee, "palette_lightning_d", |c, b| flash_native_run(c, b, Flash::D));
 
-pub const FLASH_E: Native = flash_native(0x1ab08, "palette_lightning_e", |c, b| flash_native_run(c, b, Flash::E));
+pub(crate) const FLASH_E: Native = flash_native(0x1ab08, "palette_lightning_e", |c, b| flash_native_run(c, b, Flash::E));
 
-pub const FLASH_F: Native = flash_native(0x1ab22, "palette_lightning_f", |c, b| flash_native_run(c, b, Flash::F));
+pub(crate) const FLASH_F: Native = flash_native(0x1ab22, "palette_lightning_f", |c, b| flash_native_run(c, b, Flash::F));
 
-pub const FLASH_G: Native = flash_native(0x1ab3c, "palette_lightning_g", |c, b| flash_native_run(c, b, Flash::G));
+pub(crate) const FLASH_G: Native = flash_native(0x1ab3c, "palette_lightning_g", |c, b| flash_native_run(c, b, Flash::G));
 
 /// The natives leave the flags of the `move.w`.
 fn flash_color_native_run(c: &mut Cpu, b: &mut Cps2Bus, color: u16) {
@@ -286,13 +286,13 @@ const fn flash_color_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &m
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::CCR }
 }
 
-pub const FLASH_COLOR_ON: Native =
+pub(crate) const FLASH_COLOR_ON: Native =
     flash_color_native(0x1ac68, "palette_lightning_colour", |c, b| flash_color_native_run(c, b, FLASH_COLOR_RED));
 
-pub const FLASH_COLOR_WHITE: Native =
+pub(crate) const FLASH_COLOR_WHITE: Native =
     flash_color_native(0x1ac86, "palette_lightning_white", |c, b| flash_color_native_run(c, b, FLASH_COLOR_WHITE_VALUE));
 
-pub const FLASH_COLOR_WHITE_B: Native =
+pub(crate) const FLASH_COLOR_WHITE_B: Native =
     flash_color_native(0x35288, "palette_lightning_white_b", |c, b| flash_color_native_run(c, b, FLASH_COLOR_WHITE_VALUE));
 
 /// Copies `longs` × 8 longs from `from` to `to` by `movem.l` of eight registers (D0-D5, A3, A4 keep the
@@ -333,33 +333,33 @@ fn character_palette_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const SAVE_PAGE1: Native = Native { entry: 0x1ad2a, name: "palette_saved_page1", run: crate::Body::WithCpu(save_page1), touches_sound: false, outputs: regs::ALL };
+pub(crate) const SAVE_PAGE1: Native = Native { entry: 0x1ad2a, name: "palette_saved_page1", run: crate::Body::WithCpu(save_page1), touches_sound: false, outputs: regs::ALL };
 
-pub const CHARACTER_PALETTE: Native = Native { entry: 0x37882, name: "palette_character", run: crate::Body::WithCpu(character_palette_native), touches_sound: false, outputs: regs::ALL };
+pub(crate) const CHARACTER_PALETTE: Native = Native { entry: 0x37882, name: "palette_character", run: crate::Body::WithCpu(character_palette_native), touches_sound: false, outputs: regs::ALL };
 
-pub const FULL_BRIGHTNESS: Native = native(0x1686, "palette_full_brightness", full_brightness_native);
+pub(crate) const FULL_BRIGHTNESS: Native = native(0x1686, "palette_full_brightness", full_brightness_native);
 
-pub const NO_BRIGHTNESS: Native = native(0x168c, "palette_no_brightness", no_brightness_native);
+pub(crate) const NO_BRIGHTNESS: Native = native(0x168c, "palette_no_brightness", no_brightness_native);
 
-pub const OR_BRIGHTNESS: Native = native(0x168e, "palette_or_brightness", or_brightness_native);
+pub(crate) const OR_BRIGHTNESS: Native = native(0x168e, "palette_or_brightness", or_brightness_native);
 
-pub const SET_BRIGHTNESS: Native = native(0x173c, "palette_set_brightness", set_brightness_native);
+pub(crate) const SET_BRIGHTNESS: Native = native(0x173c, "palette_set_brightness", set_brightness_native);
 
-pub const LOAD_SET: Native = native(0x1a3d4, "palette_set", set_run);
+pub(crate) const LOAD_SET: Native = native(0x1a3d4, "palette_set", set_run);
 
-pub const LOAD_ALL: Native = native(0x1a296, "palette_chargement_scene", load_all);
+pub(crate) const LOAD_ALL: Native = native(0x1a296, "palette_chargement_scene", load_all);
 
-pub const FADE_TO_PALETTES: Native = native(0x1cd7c, "palette_fade_to_palettes", fade_to_palettes);
+pub(crate) const FADE_TO_PALETTES: Native = native(0x1cd7c, "palette_fade_to_palettes", fade_to_palettes);
 
-pub const FADE_TO_COLORS: Native = native(0x1cdd6, "palette_fade_to_colours", fade_to_colors);
+pub(crate) const FADE_TO_COLORS: Native = native(0x1cdd6, "palette_fade_to_colours", fade_to_colors);
 
-pub const FADE_TO_WHITE: Native = native(0x1cd32, "palette_fade_to_white", fade_to_white);
+pub(crate) const FADE_TO_WHITE: Native = native(0x1cd32, "palette_fade_to_white", fade_to_white);
 
-pub const FILL_PAGE: Native = native(0x1cfb8, "palette_page_unie", fill_page_native);
+pub(crate) const FILL_PAGE: Native = native(0x1cfb8, "palette_page_unie", fill_page_native);
 
-pub const FLASH_RESTORE: Native = flash_native(0x1abe0, "palette_lightning_restore", restore_flash_native);
+pub(crate) const FLASH_RESTORE: Native = flash_native(0x1abe0, "palette_lightning_restore", restore_flash_native);
 
-pub const FLASH_SAVE: Native = flash_native(0x1ac24, "palette_lightning_reserve", save_flash_native);
+pub(crate) const FLASH_SAVE: Native = flash_native(0x1ac24, "palette_lightning_reserve", save_flash_native);
 
 page_native!(PAGE1_STAGE, "palette_page1", 0, 0x1a608);
 

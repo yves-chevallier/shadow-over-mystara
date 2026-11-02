@@ -3,11 +3,11 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::objects::anim::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
+use crate::{regs, Native};
 use crate::tools::objects::motion::{cmp, lsl_word};
 use crate::objects::motion::prog32;
 use crate::objects::Obj;
@@ -15,7 +15,7 @@ use crate::mem::{rd16, rd32, rd8, set_low_byte, set_low_word};
 
 macro_rules! anim_native {
     ($const:ident, $entry:expr, $name:expr, $run:expr) => {
-        pub const $const: Native = Native {
+        pub(crate) const $const: Native = Native {
             entry: $entry,
             name: $name,
             run: crate::Body::WithCpu(|c, b| {
@@ -27,45 +27,6 @@ macro_rules! anim_native {
             outputs: regs::ALL,
         };
     };
-}
-
-/// `start` with the original's registers: D0 = `n` then the script offset (low word), A4 = end of
-/// the entry, flags of the last `move.l` (X: carry of the index doubling).
-#[track_caller]
-pub fn start_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, set: u32, n: u16) -> u32 {
-    c.d[0] = n as u32;
-    c.a[4] = set;
-    let end = start_regs(c, b, obj);
-    crate::tools::diag::dead_regs(c, "anim", REGS_START);
-    end
-}
-
-/// `start_entry` with the original's registers: A4 = end of the entry, flags of the `move.l`.
-#[track_caller]
-pub fn start_entry_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, at: u32) -> u32 {
-    let end = start_entry(b, obj, at);
-    c.a[4] = end;
-    c.flags_logic(end, Size::Long);
-    crate::tools::diag::dead_regs(c, "anim", REGS_START);
-    end
-}
-
-/// `step` with the original's registers: A4 = next entry, D0.b = flags, carry = end of script.
-#[track_caller]
-pub fn step_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, long: bool) -> Step {
-    let r = step_regs(c, b, obj, long);
-    crate::tools::diag::dead_regs(c, "anim", REGS_STEP);
-    r
-}
-
-/// `start_by_character` with the original's registers (D5 = variant × 4, D6 = script offset, A4 = end
-/// of the entry).
-#[track_caller]
-pub fn start_by_character_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, sets: &CharacterSets, n: u16) -> u32 {
-    c.d[6] = c.d[6] & 0xffff_0000 | n as u32;
-    let end = by_character_regs(c, b, obj, sets);
-    crate::tools::diag::dead_regs(c, "anim", REGS_BY_CHARACTER);
-    end
 }
 
 /// 0x1a32: starts script `D0` of the animation set A4 for the object. Leaves A4 after the entry.

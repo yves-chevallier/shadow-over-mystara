@@ -26,7 +26,7 @@ mod fight;
 mod hit;
 mod moves;
 
-pub(self) mod g {
+mod g {
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
@@ -63,19 +63,19 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
 
-pub(self) const SET_BODY: u32 = 0x17809c;
-pub(self) const SET_STRIKE: u32 = 0x1780ba;
+const SET_BODY: u32 = 0x17809c;
+const SET_STRIKE: u32 = 0x1780ba;
 
 /// "Waiting for a player" state (group 10).
-pub(self) const WAIT: u32 = 0x020a_0000;
+const WAIT: u32 = 0x020a_0000;
 /// Combat state (group 2, walk).
-pub(self) const FIGHT: u32 = 0x0202_0000;
+const FIGHT: u32 = 0x0202_0000;
 
-pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_BODY, n as u16);
 }
 
-pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
@@ -91,14 +91,14 @@ fn remainder<'a, R: Bench>(x: &'a mut Cx<'_, R>, n: usize) -> Option<&'a mut u32
 }
 
 /// Low-order word of a data register (kept if it is a leftover).
-pub(self) fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
+fn setw<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u16) {
     if let Some(r) = remainder(x, n) {
         *r = *r & 0xffff_0000 | v as u32;
     }
 }
 
 /// Low-order byte of a data register (kept if it is a leftover).
-pub(self) fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
+fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
     if let Some(r) = remainder(x, n) {
         *r = *r & !0xff | v as u32;
     }
@@ -106,20 +106,20 @@ pub(self) fn setb<R: Bench>(x: &mut Cx<'_, R>, n: usize, v: u8) {
 
 /// Jump through a relative table (`move.w (tbl,PC,D0w),D1w ; jmp (tbl,PC,D1w)`) indexed by the object's byte `idx`:
 /// returns the arrival address. D0 receives the byte (after a `moveq 0,D0`), D1w the offset.
-pub(self) fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
+fn dispatch<R: Bench>(x: &mut Cx<'_, R>, table: u32, idx: u32) -> u32 {
     let i = x.u8(idx) as u32;
     let off = x.rom16(table + i);
     table.wrapping_add(off as i16 as i32 as u32)
 }
 
 /// Animation key `kind` (`+0xa2`, copied to `+0xa3`).
-pub(self) fn key<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
+fn key<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     x.set8(ANIM_KIND, kind);
     x.set8(ANIM_LAST, kind);
 }
 
 /// Countdown of `+0xa0`: true when it has elapsed (gone below zero).
-pub(self) fn timer_done<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn timer_done<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     sub16(x, TIMER, 1).mi()
 }
 

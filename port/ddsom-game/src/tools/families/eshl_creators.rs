@@ -1,16 +1,11 @@
 //! Tools: the natives of `crate::families::eshl_creators` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::families::eshl_creators::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::families::effects_creators::leftovers::Regs;
-use crate::mem::{prog16, prog8, rd16, wr16, wr32, wr8, A5};
-use crate::objects::pools;
+use crate::{regs, Native};
 use crate::objects::Obj;
 
 /// Natives of the creators (remaining calls by address): A0 = the creator, parameters in the registers; the function on
@@ -40,7 +35,7 @@ fn d1w(c: &Cpu) -> u16 {
     c.d[1] as u16
 }
 
-pub const NATIVES: &[Native] = &[
+pub(crate) const NATIVES: &[Native] = &[
     native!(0xa7b0a, "eshl_shards_44", |c, b, me| boss11_shards(c, b, me), CREATED | regs::d(0) | regs::d(1) | regs::d(2)),
     native!(0xa7570, "eshl_fragments_42", |c, b, me| { let v = d0w(c); fragments_42(c, b, me, v) }, CREATED | regs::d(1)),
     native!(0xa7da2, "eshl_fragments_45", |c, b, me| fragments_45(c, b, me), CREATED | regs::d(0) | regs::d(1) | regs::d(2)),

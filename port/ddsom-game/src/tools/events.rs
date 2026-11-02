@@ -3,17 +3,16 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::{Cpu, SR_X};
 
 use crate::events::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{rd16, rd32, rd8, set_low_byte, wr16, wr32, wr8};
-use crate::ops;
+use crate::{regs, Native};
+use crate::mem::{rd16, rd8, set_low_byte};
 
 macro_rules! native {
     ($ident:ident, $entry:expr, $name:expr, $run:expr) => {
-        pub const $ident: Native = Native {
+        pub(crate) const $ident: Native = Native {
             entry: $entry,
             name: $name,
             run: crate::Body::WithCpu($run),

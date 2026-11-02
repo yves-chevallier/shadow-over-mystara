@@ -3,12 +3,11 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::{Cpu, SR_X};
 
 use crate::rng::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::ram::RNG_SEED;
+use crate::{regs, Native};
 
 /// `random` with the registers of the original (native): D0.w = new state (D0 high intact), N and Z of the word, X =
 /// carry of the byte addition.
@@ -21,15 +20,7 @@ fn random_regs(c: &mut Cpu, b: &mut Cps2Bus) -> u16 {
     state
 }
 
-/// `seed` with the flags of the original (`move.w`: N and Z of the seed).
-#[track_caller]
-pub fn seed_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    seed(b);
-    c.flags_logic(DEFAULT_SEED as u32, Size::Word);
-    crate::tools::diag::dead_regs(c, "random", regs::CCR);
-}
-
-pub const SEED: Native = Native {
+pub(crate) const SEED: Native = Native {
     entry: 0x19a80,
     name: "rng_seed",
     run: crate::Body::WithCpu(|c, b| {
@@ -41,7 +32,7 @@ pub const SEED: Native = Native {
     outputs: regs::CCR,
 };
 
-pub const NEXT: Native = Native {
+pub(crate) const NEXT: Native = Native {
     entry: 0x19a88,
     name: "rng_next",
     run: crate::Body::WithCpu(|c, b| {

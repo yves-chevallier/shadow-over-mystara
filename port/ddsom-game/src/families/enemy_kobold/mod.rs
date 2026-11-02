@@ -25,7 +25,7 @@ mod hit;
 mod moves;
 mod stance;
 
-pub(self) mod g {
+mod g {
     pub const GROUP: u32 = 0x2f;
     pub const STRIKE_KIND: u32 = 0x44;
     pub const STRIKE_POWER: u32 = 0x45;
@@ -50,11 +50,11 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-pub(self) const SET_MOVE: u32 = 0x15d4ae;
-pub(self) const SET_STRIKE: u32 = 0x15d4ec;
-pub(self) const STANCE: u32 = 0x0202_0000;
-pub(self) const HELD: u32 = 0x0408_0000;
-pub(self) const IDLE: u32 = 0x020a_0000;
+const SET_MOVE: u32 = 0x15d4ae;
+const SET_STRIKE: u32 = 0x15d4ec;
+const STANCE: u32 = 0x0202_0000;
+const HELD: u32 = 0x0408_0000;
+const IDLE: u32 = 0x020a_0000;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -72,32 +72,32 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 // --- aides --------------------------------------------------------------------------------------
 
-pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
-pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_STRIKE, n as u16);
 }
 
 /// The wanted look: `+0xa2` and its twin `+0xa3`.
-pub(self) fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
+fn look<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     x.set8(LOOK, v);
     x.set8(LOOK_PREV, v);
 }
 
-pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Walking direction: 8 (looks left) or 0x18.
-pub(self) fn set_angle<R: Bench>(x: &mut Cx<'_, R>) {
+fn set_angle<R: Bench>(x: &mut Cx<'_, R>) {
     let angle = if x.u8(f::FLIP) != 0 { 8 } else { 0x18 };
     x.set8(Obj::SPEED_INDEX, angle);
 }
 
 /// Common step: waits for animation key `+0x33` (0x54fae).
-pub(self) fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
+fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.add8(f::SUB3, 2);
         x.set8(VULNERABLE, 0);
@@ -106,7 +106,7 @@ pub(self) fn wait_key<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Once the animation is over, the Kobold stands up, facing its target (0x54e9a).
-pub(self) fn stand_when_done<R: Bench>(x: &mut Cx<'_, R>) {
+fn stand_when_done<R: Bench>(x: &mut Cx<'_, R>) {
     if !x.anim_step() {
         return;
     }
@@ -115,7 +115,7 @@ pub(self) fn stand_when_done<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// A puff of dust (0xb10c8) every `mask + 1` frames (counter `A5+0x6e` is masked in place).
-pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d1: u16, d2: i16, d3: i16) {
+fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d1: u16, d2: i16, d3: i16) {
     let v = x.a5_u16(0x6e) & mask;
     x.set_a5_u16(0x6e, v);
     if v == 0 {
@@ -124,7 +124,7 @@ pub(self) fn puff<R: Bench>(x: &mut Cx<'_, R>, mask: u16, d1: u16, d2: i16, d3: 
 }
 
 /// 0x57b9c: the enemy must turn around to face its target (false without a target or a saved look).
-pub(self) fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(LOOK_PREV) == 0 || x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -136,7 +136,7 @@ pub(self) fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x57bee: the target is more than 0x30 away in depth and more than 0xa0 in X.
-pub(self) fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -151,7 +151,7 @@ pub(self) fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x57c34: strength of the attack (`+0x45`) from the attack type `+0x44` and profile `+0x2f` (table 0x57c52).
-pub(self) fn set_power<R: Bench>(x: &mut Cx<'_, R>) {
+fn set_power<R: Bench>(x: &mut Cx<'_, R>) {
     let kind = x.u8(STRIKE_KIND).wrapping_mul(4) as u32;
     let group = x.u8(GROUP) as u32;
     let p = x.data8(0x57c52 + kind + group);
@@ -159,7 +159,7 @@ pub(self) fn set_power<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x57c66: the enemy is in the right half of the screen (0xc0 from the camera).
-pub(self) fn on_right_half<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn on_right_half<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
     let d1 = cam.wrapping_add(0xc0).wrapping_sub(x.u16(Obj::X));
     let right = (d1 as i16) <= 0;
@@ -168,7 +168,7 @@ pub(self) fn on_right_half<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x56c70 / 0x56c78: chooses the next attack (`+6`) from the difficulty row of profile `+0x2f`; `bias` = 0x14 for the
 /// far series.
-pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
+fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
     let profile = x.u8(GROUP).wrapping_mul(4) as u32;
     let table = if bias == 0 { 0x56d04 } else { 0x56d14 };
     let list = x.data32(table + profile);
@@ -185,7 +185,7 @@ pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, bias: u8) {
 
 /// 0x57924: end of a move: variant 0 gets back on its feet; the others, if the target is in a range box, chain an
 /// attack of series `0x5799c`.
-pub(self) fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
+fn after_strike<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Obj::VARIANT) == 0 || x.u16(f::TARGET) == 0 {
         return set_state_long(x, STANCE);
     }

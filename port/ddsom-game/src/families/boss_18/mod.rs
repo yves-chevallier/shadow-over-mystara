@@ -24,7 +24,7 @@ mod fight;
 mod hit;
 mod intro;
 
-pub(self) mod g {
+mod g {
     pub const REACTION: u32 = 0x49;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
@@ -61,15 +61,15 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-pub(self) const SET_BODY: u32 = 0x181ae0;
-pub(self) const SET_STRIKE: u32 = 0x181af2;
-pub(self) const SET_HURT: u32 = 0x181b10;
+const SET_BODY: u32 = 0x181ae0;
+const SET_STRIKE: u32 = 0x181af2;
+const SET_HURT: u32 = 0x181b10;
 
-pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
-pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_STRIKE, n);
 }
 

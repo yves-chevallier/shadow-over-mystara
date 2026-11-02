@@ -12,42 +12,37 @@
 //!
 //! Each native lasts [`NATIVE_DURATION`] cycles on the processor.
 
-// The adapters keep the imports of the game modules they come from (cleaned up as the tools shrink).
-#![allow(unused_imports)]
-
-pub mod ai;
-pub mod ai_aids;
-pub mod aids;
-pub mod camera_modes;
-pub mod combat;
+pub(crate) mod aids;
+pub(crate) mod camera_modes;
+pub(crate) mod combat;
 pub mod credits;
 pub mod credits_task;
-pub mod diag;
-pub mod dispatch;
-pub mod eeprom;
+pub(crate) mod diag;
+pub(crate) mod dispatch;
+pub(crate) mod eeprom;
 pub mod effects_aids;
-pub mod events;
+pub(crate) mod events;
 pub mod families;
 pub mod frames;
 pub mod hud;
-pub mod inputs;
+pub(crate) mod inputs;
 pub mod kernel;
-pub mod modes;
-pub mod objects;
-pub mod ops;
-pub mod palette;
-pub mod placement;
-pub mod player;
-pub mod popups;
-pub mod rng;
-pub mod scene;
-pub mod scroll;
-pub mod service;
-pub mod sound;
-pub mod sprites;
-pub mod terrain;
-pub mod text;
-pub mod video;
+pub(crate) mod modes;
+pub(crate) mod objects;
+pub(crate) mod ops;
+pub(crate) mod palette;
+pub(crate) mod placement;
+pub(crate) mod player;
+pub(crate) mod popups;
+pub(crate) mod rng;
+pub(crate) mod scene;
+pub(crate) mod scroll;
+pub(crate) mod service;
+pub(crate) mod sound;
+pub(crate) mod sprites;
+pub(crate) mod terrain;
+pub(crate) mod text;
+pub(crate) mod video;
 
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -56,11 +51,10 @@ use std::sync::{Mutex, OnceLock};
 use cps2::Cps2Bus;
 use m68k::Cpu;
 
-use crate::machine::Machine;
 use crate::{lookup, mem, no68k, regs, tasks, Body, Native};
 
 /// Duration of a native run by the processor (68000 cycles), the same for all.
-pub const NATIVE_DURATION: u64 = 100;
+pub(crate) const NATIVE_DURATION: u64 = 100;
 
 impl Native {
     /// Runs the routine from the processor, return (`rts`) included.
@@ -99,7 +93,7 @@ impl Native {
 
 /// The natives for the original code (arguments and results in its registers), at the original addresses: the tools
 /// only (`crate::all_natives` adds them to those of the game).
-pub fn natives() -> impl Iterator<Item = &'static Native> {
+pub(crate) fn natives() -> impl Iterator<Item = &'static Native> {
     use crate::tools;
     static LIST: OnceLock<Vec<&'static Native>> = OnceLock::new();
     LIST.get_or_init(|| {
@@ -823,12 +817,6 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
-/// Context that also holds the processor: the `_68k` adapters (registers of the original) go through it.
-pub trait WithCpu: Machine {
-    /// The processor and the bus, borrowed together (the `_68k` adapters need both).
-    fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus);
-}
-
 /// Stack of the copy that runs the original handler (`check_handler`): in the supervisor stack, which the game no longer
 /// uses (`tasks::table::kernel_ram`); the words below it are not compared.
 const CHECK_STACK: u32 = 0xff_0e60;
@@ -842,7 +830,7 @@ const CHECK_STEPS: u32 = 1_000_000;
 /// object, D7.w = the counter, D2-D5 = the leftovers, A5); the memory that the two leave is compared (counted in
 /// `report()`). The game keeps the state of the Rust handler. A handler whose original cedes control (it reaches
 /// the kernel, 0x900-0xb70) or whose Rust version ceded is not compared (`skipped`).
-pub fn check_handler(
+pub(crate) fn check_handler(
     n: &'static Native,
     handler: fn(&mut Cps2Bus, &mut crate::dispatch::Dispatch),
     b: &mut Cps2Bus,

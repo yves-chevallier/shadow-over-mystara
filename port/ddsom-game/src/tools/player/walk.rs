@@ -2,17 +2,12 @@
 //! of the original).
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::player::walk::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::player::{ram, Ctx, Player};
-use crate::mem::{rd16, wr16, wr8};
-use crate::objects::motion::{advance, AXIS_X, AXIS_Y, AXIS_Z};
-use crate::objects::Obj;
-use crate::machine::Machine;
+use crate::{regs, Native};
+use crate::player::Player;
 
 /// 68000 entry (0x35c0): D0 = 1 if the abscissa was corrected, A1 = camera.
 fn clamp_native(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -22,7 +17,7 @@ fn clamp_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const CLAMP: Native = Native {
+pub(crate) const CLAMP: Native = Native {
     entry: 0x35c0,
     name: "player_clamp_to_screen",
     run: crate::Body::WithCpu(clamp_native),

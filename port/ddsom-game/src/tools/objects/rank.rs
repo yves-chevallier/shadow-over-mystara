@@ -3,48 +3,13 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::objects::rank::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
+use crate::{regs, Native};
 use crate::tools::objects::motion::{cmp, lsl_word};
-use crate::mem::{rd16, rd32, rd8, set_low_byte, set_low_word, wr16, wr32, A5};
-
-/// `reset` with the original's registers (A0 = structure).
-#[track_caller]
-pub fn reset_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    reset_regs(c, b);
-    crate::tools::diag::dead_regs(c, "rank", REGS_RANK);
-}
-
-/// `load_preset` of row `A5+0x2a` then `reset`, with the original's registers.
-#[track_caller]
-pub fn load_preset_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    load_preset_regs(c, b);
-    crate::tools::diag::dead_regs(c, "rank", REGS_RANK);
-}
-
-/// `tick` with the original's registers (D0 = rank, A0 = structure).
-#[track_caller]
-pub fn tick_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    tick_regs(c, b);
-    crate::tools::diag::dead_regs(c, "rank", REGS_RANK);
-}
-
-/// `raise` with the original's registers (D0 = rank).
-#[track_caller]
-pub fn raise_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    raise_regs(c, b);
-    crate::tools::diag::dead_regs(c, "rank", REGS_RANK);
-}
-
-/// `lower` with the original's registers (D0 = rank, D1 = drop, A1 = drop table).
-#[track_caller]
-pub fn lower_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    lower_regs(c, b);
-    crate::tools::diag::dead_regs(c, "rank", REGS_RANK);
-}
+use crate::mem::{rd8, set_low_byte, set_low_word, A5};
 
 /// 0x1f258: `reset`. Leaves A0 = structure.
 fn reset_regs(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -159,7 +124,7 @@ fn lower_regs(c: &mut Cpu, b: &mut Cps2Bus) {
     c.flags_logic(d0 as u32, Size::Word);
 }
 
-pub const RANK_RESET: Native = Native {
+pub(crate) const RANK_RESET: Native = Native {
     entry: 0x1f258,
     name: "rank_reset",
     run: crate::Body::WithCpu(|c, b| {
@@ -170,7 +135,7 @@ pub const RANK_RESET: Native = Native {
     outputs: regs::ALL,
 };
 
-pub const RANK_LOAD_PRESET: Native = Native {
+pub(crate) const RANK_LOAD_PRESET: Native = Native {
     entry: 0x1f1b8,
     name: "rank_load_preset",
     run: crate::Body::WithCpu(|c, b| {
@@ -181,7 +146,7 @@ pub const RANK_LOAD_PRESET: Native = Native {
     outputs: regs::ALL,
 };
 
-pub const RANK_RAISE: Native = Native {
+pub(crate) const RANK_RAISE: Native = Native {
     entry: 0x1f2c0,
     name: "rank_raise",
     run: crate::Body::WithCpu(|c, b| {
@@ -192,7 +157,7 @@ pub const RANK_RAISE: Native = Native {
     outputs: regs::ALL,
 };
 
-pub const RANK_LOWER: Native = Native {
+pub(crate) const RANK_LOWER: Native = Native {
     entry: 0x1f300,
     name: "rank_lower",
     run: crate::Body::WithCpu(|c, b| {
@@ -203,7 +168,7 @@ pub const RANK_LOWER: Native = Native {
     outputs: regs::ALL,
 };
 
-pub const RANK_TICK: Native = Native {
+pub(crate) const RANK_TICK: Native = Native {
     entry: 0x1f27c,
     name: "rank_tick",
     run: crate::Body::WithCpu(|c, b| {

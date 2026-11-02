@@ -1,21 +1,13 @@
 //! Tools: the natives of `crate::scene::blackout` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
 use crate::scene::blackout::*;
-use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::scene::bonus::dispatch;
-use crate::scene::screen;
+use crate::Native;
 use crate::scene::Ctx;
-use crate::video::{clear_layer, Layer};
-use crate::mem::{rd8, wr16, wr8};
-use crate::modes::{Flow, Sequence};
+use crate::modes::Flow;
 
-pub const BLACKOUT: Native = Native {
+pub(crate) const BLACKOUT: Native = Native {
     entry: 0xf7ecc,
     name: "scene_blackout",
     run: crate::Body::WithCpu(|c, b| {

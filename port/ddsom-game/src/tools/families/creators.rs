@@ -3,15 +3,14 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::families::creators::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{prog32, prog8, rd16, rd8, wr16, wr8, A5};
+use crate::{regs, Native};
+use crate::mem::{prog32, prog8, rd8, wr8, A5};
 use crate::objects::Obj;
 use crate::objects::pools;
-use crate::families::effects_creators::leftovers::{Pure, Regs};
 
 /// Allocates in a pool; `None` (carry set) if the pool is full.
 fn alloc(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool) -> Option<Obj> {

@@ -2,13 +2,12 @@
 //! of the original).
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::placement::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{prog16, rd16, rd32, rd8, set_low_word, wr16, wr32, A5};
+use crate::{regs, Native};
+use crate::mem::set_low_word;
 use crate::objects::Obj;
 
 /// Native of 0x3668 (calls by address): leaves the registers of the original (D0, D1: height and depth
@@ -42,7 +41,7 @@ const fn palette(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: REGS_EFFECT_PALETTE }
 }
 
-pub const NATIVES: &[Native] = &[
+pub(crate) const NATIVES: &[Native] = &[
     Native {
         entry: 0x3668,
         name: "player_placed_on_ground",

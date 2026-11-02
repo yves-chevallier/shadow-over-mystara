@@ -2,7 +2,7 @@
 //! (the original code that calls them may read them on return), and the processor as an [`Alu`].
 
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::{Cpu, SR_C, SR_X, SR_Z};
 
 use crate::ops::Alu;
 
@@ -51,47 +51,36 @@ impl Alu for Cpu {
 }
 
 /// CMP / CMPI: flags of `dst - src`; X is preserved.
-pub fn cmp(c: &mut Cpu, src: u32, dst: u32, size: Size) {
+pub(crate) fn cmp(c: &mut Cpu, src: u32, dst: u32, size: Size) {
     let x = c.sr & SR_X;
     c.addsub(true, src, dst, false, size, false);
     c.sr = c.sr & !SR_X | x;
 }
 
 /// ADD / ADDQ: result and flags (X included).
-pub fn add(c: &mut Cpu, src: u32, dst: u32, size: Size) -> u32 {
+pub(crate) fn add(c: &mut Cpu, src: u32, dst: u32, size: Size) -> u32 {
     c.addsub(false, src, dst, false, size, false)
 }
 
 /// SUB / SUBQ / SUBI: `dst - src`, result and flags (X included).
-pub fn sub(c: &mut Cpu, src: u32, dst: u32, size: Size) -> u32 {
+pub(crate) fn sub(c: &mut Cpu, src: u32, dst: u32, size: Size) -> u32 {
     c.addsub(true, src, dst, false, size, false)
 }
 
 /// Condition codes of `Cpu::cond` (Bcc / Scc).
-pub mod cc {
-    pub const HI: u8 = 2;
-    pub const LS: u8 = 3;
-    pub const CC: u8 = 4;
-    pub const CS: u8 = 5;
-    pub const NE: u8 = 6;
-    pub const EQ: u8 = 7;
-    pub const PL: u8 = 10;
-    pub const MI: u8 = 11;
-    pub const GE: u8 = 12;
-    pub const LT: u8 = 13;
-    pub const GT: u8 = 14;
-    pub const LE: u8 = 15;
+pub(crate) mod cc {
+    pub(crate) const PL: u8 = 10;
+    pub(crate) const GE: u8 = 12;
+    pub(crate) const GT: u8 = 14;
+    pub(crate) const LE: u8 = 15;
 }
 
 /// MOVE / TST / AND / OR...: N and Z from the value, V and C cleared, X preserved.
-pub fn logic(c: &mut Cpu, v: u32, size: Size) {
+pub(crate) fn logic(c: &mut Cpu, v: u32, size: Size) {
     c.flags_logic(v, size);
 }
 
 /// Sets the N, Z, V, C, X flags at once (mask `SR_N | ...`).
-pub fn flags(c: &mut Cpu, mask: u16, values: u16) {
+pub(crate) fn flags(c: &mut Cpu, mask: u16, values: u16) {
     c.sr = c.sr & !mask | values & mask;
 }
-
-/// All condition flags (X N Z V C).
-pub const ALL: u16 = SR_X | SR_N | SR_Z | SR_V | SR_C;

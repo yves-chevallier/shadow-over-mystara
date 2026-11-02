@@ -1,16 +1,9 @@
 //! Tools: the natives of `crate::hud` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
 use crate::hud::*;
-use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::hud::slot::forget_displayed;
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
-use crate::modes::Flow;
+use crate::Native;
 use crate::scene::Ctx;
 
 /// Original subroutines rewritten inside the task body, presented as natives for the

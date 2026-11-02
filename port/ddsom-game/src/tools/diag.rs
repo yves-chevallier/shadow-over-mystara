@@ -1,20 +1,16 @@
 //! Tools: the natives of `crate::diag` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::diag::*;
-use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use std::sync::OnceLock;
+use crate::regs;
 
 /// Probe of a call by address (`crate::call`): with the label `call_<address in hex>` (or `call`) in `DDSOM_POISON`, the
 /// registers and flags that the called routine changed (compared to `before`) are inverted on return, at site
 /// `site`. If validation stays VALID, nothing that follows rereads what the routine leaves: the call can become that
 /// of a core without registers.
-pub fn probe_call(c: &mut Cpu, address: u32, before: &([u32; 8], [u32; 8], u16), site: &std::panic::Location) {
+pub(crate) fn probe_call(c: &mut Cpu, address: u32, before: &([u32; 8], [u32; 8], u16), site: &std::panic::Location) {
     if labels().is_empty() {
         return;
     }
@@ -52,10 +48,6 @@ fn invert_changes(c: &mut Cpu, before: &([u32; 8], [u32; 8], u16), guard: u32, l
     invert(d, &mut a[..7], sr, mask);
 }
 
-/// Registers of a task that a step can inherit: D0-D7, A0-A4, A6 and the flags (A5 is reset by each step,
-/// A7 is the stack).
-pub const TASK_REGS: u32 = 0xff | 0x1f00 | 0x4000 | regs::CCR | X;
-
 /// Inverts N, Z, V, C (`regs::CCR`) and X (`X`) according to the mask.
 fn invert_flags(sr: &mut u16, mask: u32) {
     if mask & regs::CCR != 0 {
@@ -82,7 +74,7 @@ fn invert(d: &mut [u32; 8], a: &mut [u32], sr: &mut u16, mask: u32) {
 /// Registers that the adapter `label` writes like the original and which we want to prove dead
 /// (`crate::regs` mask: `regs::a(1) | regs::d(6) | regs::CCR`...). With `DDSOM_POISON`, they are inverted.
 #[track_caller]
-pub fn dead_regs(c: &mut Cpu, label: &str, mask: u32) {
+pub(crate) fn dead_regs(c: &mut Cpu, label: &str, mask: u32) {
     if labels().is_empty() {
         return;
     }

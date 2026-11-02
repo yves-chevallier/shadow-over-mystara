@@ -38,12 +38,6 @@ const RAM: u32 = 0x66_0000;
 const ZONES: &[(u32, u32)] =
     &[(0x1140, 32), (0x1020, 4), (0x1028, 4), (0x1030, 4), (0x1038, 4), (0x1040, 4), (0x1048, 4), (0x1200, 48), (0x1260, 8), (0x1270, 2)];
 
-fn write_long(b: &mut Cps2Bus, a: u32, v: u32) {
-    for i in 0..4 {
-        wr8(b, a + 1 + 2 * i, (v >> (24 - 8 * i)) as u8);
-    }
-}
-
 /// A plausible state of the extra RAM for region `r`.
 fn state(b: &mut Cps2Bus, a: &mut Rng, r: u32) {
     let values: [u32; 12] = [0, 1, 5, 999_998, 999_999, 1_000_000, 0x127a_3980, 0x127a_3981, 0x4f_5880, 0x4f_5881, 0xffff_ffff, 0x1234_5678];

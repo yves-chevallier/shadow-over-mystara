@@ -3,17 +3,16 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::{Cpu, SR_C, SR_N, SR_X, SR_Z};
 
 use crate::objects::motion::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
+use crate::{regs, Native};
 use crate::objects::Obj;
-use crate::mem::rd16;
 
 macro_rules! motion_native {
     ($const:ident, $entry:expr, $name:expr, $run:expr) => {
-        pub const $const: Native = Native {
+        pub(crate) const $const: Native = Native {
             entry: $entry,
             name: $name,
             run: crate::Body::WithCpu(|c, b| {
@@ -51,48 +50,6 @@ pub(crate) fn lsl_word(c: &mut Cpu, v: u16, n: u32) -> u16 {
     }
     c.sr = (c.sr & !0x1f) | f;
     r
-}
-
-/// `ballistic` with the original's registers: D0 = displacement of the last axis, flags of its last
-/// addition.
-#[track_caller]
-pub fn ballistic_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, axes: Axes) -> LastAdd {
-    let last = ballistic_regs(c, b, obj, axes);
-    crate::tools::diag::dead_regs(c, "motion", REGS_BALLISTIC);
-    last
-}
-
-/// `move_by_table` with the original's registers: D0 = index × 4, D1 = displacement of the second axis, A4 = table.
-#[track_caller]
-pub fn move_by_table_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, second: Axis) -> LastAdd {
-    let last = by_table_regs(c, b, obj, second);
-    crate::tools::diag::dead_regs(c, "motion", REGS_BY_TABLE);
-    last
-}
-
-/// `select_speed` with the original's registers: D0 = index × 4, A4 = table, flags of `VY`.
-#[track_caller]
-pub fn select_speed_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj, tables: &SpeedTables, n: u16) {
-    c.d[0] = c.d[0] & 0xffff_0000 | n as u32;
-    speed_regs(c, b, obj, tables);
-    crate::tools::diag::dead_regs(c, "motion", REGS_SPEED);
-}
-
-/// `suspended` with the original's flags (`tst.b`).
-#[track_caller]
-pub fn suspended_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
-    let v = obj.u8(b, Obj::HIDDEN);
-    c.flags_logic(v as u32, Size::Byte);
-    crate::tools::diag::dead_regs(c, "motion", regs::CCR);
-    v != 0
-}
-
-/// `tick_counters` with the original's flags.
-#[track_caller]
-pub fn tick_counters_68k(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
-    countdown_flags(c, b, obj);
-    tick_counters(b, obj);
-    crate::tools::diag::dead_regs(c, "motion", regs::CCR);
 }
 
 /// Flags of the last addition `add.l D0,(position)`.

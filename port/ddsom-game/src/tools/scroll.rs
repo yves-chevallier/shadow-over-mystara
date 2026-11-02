@@ -3,14 +3,13 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
+use m68k::Cpu;
 
 use crate::scroll::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::Native;
+use crate::mem::{rd8, A5};
 use crate::objects::Obj;
-use crate::video::hw;
 
 /// `move_object` with the flags of the addition (`add.l`).
 fn move_object_68k(c: &mut Cpu, b: &mut Cps2Bus, field: u32, d: i32) {
@@ -37,28 +36,28 @@ const fn leaf(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: crate::regs::CCR }
 }
 
-pub const PARALLAX_QUARTER: Native = Native {
+pub(crate) const PARALLAX_QUARTER: Native = Native {
     ..leaf(0x33178, "scenery_parallax_quarter", |c, b| {
         parallax_68k(c, b, QUARTER);
         rts(c, b)
     })
 };
 
-pub const PARALLAX_THREE_QUARTERS: Native = Native {
+pub(crate) const PARALLAX_THREE_QUARTERS: Native = Native {
     ..leaf(0x33196, "scenery_parallax_three_quarters", |c, b| {
         parallax_68k(c, b, THREE_QUARTERS);
         rts(c, b)
     })
 };
 
-pub const CREEP_6: Native = Native {
+pub(crate) const CREEP_6: Native = Native {
     ..leaf(0x331e8, "scenery_advance_6", |c, b| {
         creep_68k(c, b, 6);
         rts(c, b)
     })
 };
 
-pub const CREEP_3: Native = Native {
+pub(crate) const CREEP_3: Native = Native {
     ..leaf(0x3326c, "scenery_advance_3", |c, b| {
         creep_68k(c, b, 3);
         rts(c, b)
@@ -70,7 +69,7 @@ pub const CREEP_3: Native = Native {
 /// instruction by instruction: the routines that follow reread D2, D4-D6 and the flags.
 fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
     use crate::mem::{rd16, rd8, set_low_word, wr16, A5};
-    use crate::tools::ops::{self, cc};
+    use crate::tools::ops::cc;
     c.d[6] = 0; // maximum depth of the players
     c.d[5] = u32::MAX; // minimum
     for (k, &record) in PLAYER_RECORD.iter().enumerate() {
@@ -153,7 +152,7 @@ fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const FOLLOW_PLAYERS_Y: Native = Native {
+pub(crate) const FOLLOW_PLAYERS_Y: Native = Native {
     entry: 0x31616,
     name: "camera_follows_players_y",
     run: crate::Body::WithCpu(follow_players_y),
@@ -162,7 +161,7 @@ pub const FOLLOW_PLAYERS_Y: Native = Native {
 };
 
 /// `update_cameras` with the registers of the original: D4 of the scenery copies, A0 = camera 2.
-pub fn update_cameras_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn update_cameras_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     for (v, m) in update_cameras(b).into_iter().flatten() {
         c.d[4] = c.d[4] & !m | v;
     }
@@ -186,7 +185,7 @@ fn reset_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const RESET_CAMERAS: Native = Native {
+pub(crate) const RESET_CAMERAS: Native = Native {
     entry: 0x33aa6,
     name: "cameras_start",
     run: crate::Body::WithCpu(reset_cameras),
@@ -204,7 +203,7 @@ fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const RETURN_CAMERAS: Native = Native {
+pub(crate) const RETURN_CAMERAS: Native = Native {
     entry: 0x33b24,
     name: "cameras_return",
     run: crate::Body::WithCpu(return_cameras),
@@ -213,7 +212,7 @@ pub const RETURN_CAMERAS: Native = Native {
     outputs: 0,
 };
 
-pub const UPDATE_CAMERAS: Native = Native {
+pub(crate) const UPDATE_CAMERAS: Native = Native {
     entry: 0x33e20,
     name: "cameras_update",
     run: crate::Body::WithCpu(update_cameras_native),

@@ -468,15 +468,11 @@ fn route_step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
             }
             d2 = d2.wrapping_add(0x10);
         }
-        d1l = d3;
-        d0 = d0.rotate_left(16);
-        let w = asr_w(d0 as u16, 4);
-        d0 = d0 & 0xffff_0000 | w as u32;
+        // the units: high words (`swap`) of the remainder and of the speed
+        let w = asr_w((d0 >> 16) as u16, 4);
         if w != 0 {
-            d1l = d1l.rotate_left(16);
-            let mut d1w = d1l as u16;
+            let mut d1w = (d3 >> 16) as u16;
             loop {
-                d3 = d3 & 0xffff_0000 | d1w as u32;
                 let r = Fl::sub16(d1w, w);
                 d1w = d1w.wrapping_sub(w);
                 if r.mi() {

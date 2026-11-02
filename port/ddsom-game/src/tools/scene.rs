@@ -1,9 +1,9 @@
 //! Tools: the natives of `crate::scene` for the original code.
 
-pub mod blackout;
-pub mod bonus;
-pub mod characters;
-pub mod entry;
-pub mod exit;
-pub mod shop;
-pub mod tally;
+pub(crate) mod blackout;
+pub(crate) mod bonus;
+pub(crate) mod characters;
+pub(crate) mod entry;
+pub(crate) mod exit;
+pub(crate) mod shop;
+pub(crate) mod tally;

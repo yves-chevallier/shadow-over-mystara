@@ -26,7 +26,7 @@ mod fight;
 mod hit;
 mod intro;
 
-pub(self) mod g {
+mod g {
     pub const TYPE: u32 = 0x2;
     pub const STUN: u32 = 0x56;
     pub const VULNERABLE: u32 = 0x67;
@@ -61,14 +61,14 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-pub(self) const TYPE_BIG: u8 = 0xf;
-pub(self) const TYPE_SMALL: u8 = 0x14;
+const TYPE_BIG: u8 = 0xf;
+const TYPE_SMALL: u8 = 0x14;
 
-pub(self) const STAND: u32 = 0x0202_0000;
+const STAND: u32 = 0x0202_0000;
 const TURN: u32 = 0x0202_0200;
 const CHASE: u32 = 0x0202_0400;
-pub(self) const WAIT: u32 = 0x020a_0000;
-pub(self) const ATTACK_4: u32 = 0x0204_0400;
+const WAIT: u32 = 0x020a_0000;
+const ATTACK_4: u32 = 0x0204_0400;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -86,7 +86,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Starts animation `n` of set `set` (0, 2 or 4) of the type, unless it is already playing (0x93182, 0x9319c,
 /// 0x931b6).
-pub(self) fn set_anim<R: Bench>(x: &mut Cx<'_, R>, set: u8, n: u32) {
+fn set_anim<R: Bench>(x: &mut Cx<'_, R>, set: u8, n: u32) {
     let small = x.u8(TYPE) == TYPE_SMALL;
     let base = match (set, small) {
         (0, false) => 0x17e03a,
@@ -104,18 +104,18 @@ pub(self) fn set_anim<R: Bench>(x: &mut Cx<'_, R>, set: u8, n: u32) {
     x.anim_start(base, n as u16);
 }
 
-pub(self) fn rest<R: Bench>(x: &mut Cx<'_, R>) {
+fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     set_anim(x, 0, 0);
 }
 
-pub(self) fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.anim_step()
 }
 
 // --- state changes ---------------------------------------------------------------------------
 
 /// 0x92ff4: standing, at rest.
-pub(self) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
+fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     set_abs8(x, 0xff8043, 0xff);
     x.set8(HURT_BOX, 0);
     x.set32(f::STATE, STAND);
@@ -123,14 +123,14 @@ pub(self) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9300c: walks towards a player (only through sub-state 0xa of state 4, never set: docs/code-mort.md).
-pub(self) fn chase<R: Bench>(x: &mut Cx<'_, R>) {
+fn chase<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(HURT_BOX, 0);
     x.set32(f::STATE, CHASE);
     rest(x);
 }
 
 /// 0x9301e: rest or walk, at random (the small dragon: only the about-face).
-pub(self) fn wander<R: Bench>(x: &mut Cx<'_, R>) {
+fn wander<R: Bench>(x: &mut Cx<'_, R>) {
     let mut r = random(x) as u16 & 3;
     if x.u8(TYPE) != TYPE_BIG {
         r &= 1;
@@ -146,7 +146,7 @@ pub(self) fn wander<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x91748: waits for a player.
-pub(self) fn wait<R: Bench>(x: &mut Cx<'_, R>) {
+fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, WAIT);
 }
 
@@ -204,7 +204,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
 // --- state 2: active -----------------------------------------------------------------------------
 
 /// Active state loop (0x91684); the hit state calls it again to resume the combat.
-pub(self) fn active<R: Bench>(x: &mut Cx<'_, R>) {
+fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(FOREGROUND) != 0 {
         x.set8(FOREGROUND, 0);
         x.unlink();
@@ -250,7 +250,7 @@ pub(self) fn active<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9171e: end of the frame: the foreground receives the dragon when `+0x43` is raised.
-pub(self) fn finish<R: Bench>(x: &mut Cx<'_, R>) {
+fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0xb6, 0);
     if x.u8(FOREGROUND) != 0 {
         x.unlink();
@@ -261,14 +261,14 @@ pub(self) fn finish<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// The saved positions take over the dragon's place at the start of the frame (a hit does not move it).
-pub(self) fn restore_position<R: Bench>(x: &mut Cx<'_, R>) {
+fn restore_position<R: Bench>(x: &mut Cx<'_, R>) {
     let (px, pz, py) = (x.u16(KEPT_X), x.u16(KEPT_Z), x.u16(KEPT_Y));
     x.set16(0x8, px);
     x.set16(0xc, pz);
     x.set16(0x10, py);
 }
 
-pub(self) fn keep_position<R: Bench>(x: &mut Cx<'_, R>) {
+fn keep_position<R: Bench>(x: &mut Cx<'_, R>) {
     let (px, pz, py) = (x.u16(0x8), x.u16(0xc), x.u16(0x10));
     x.set16(KEPT_X, px);
     x.set16(KEPT_Z, pz);
@@ -276,7 +276,7 @@ pub(self) fn keep_position<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x93066: vertical sway, when `+0xa4` is raised: the altitude follows a sine table (0x1c67b6).
-pub(self) fn hover<R: Bench>(x: &mut Cx<'_, R>) {
+fn hover<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 {
         return;
     }

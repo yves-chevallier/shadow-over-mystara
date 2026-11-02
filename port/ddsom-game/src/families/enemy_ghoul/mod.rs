@@ -25,7 +25,7 @@ mod hit;
 mod moves;
 mod stance;
 
-pub(self) mod g {
+mod g {
     pub const STRIKE_KIND: u32 = 0x44;
     pub const VULNERABLE: u32 = 0x67;
     pub const AI_CHOICE: u32 = 0x6b;

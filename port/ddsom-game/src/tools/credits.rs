@@ -1,14 +1,9 @@
 //! Tools: the natives of `crate::credits` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
 use crate::credits::*;
-use crate::tools::frames::*;
-use crate::{regs, Body, Native};
-use crate::mem::{rd16, rd8, wr8, A5};
+use crate::Native;
 
 /// Original subroutine rewritten in the body of the credits task, presented as a native for the differential
 /// fuzz (`examples/fuzz_couv`); the game does not call it by its address.

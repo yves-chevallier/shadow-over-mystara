@@ -26,7 +26,7 @@ mod hit;
 mod moves;
 
 /// Fields specific to this type.
-pub(self) mod g {
+mod g {
     /// Player proximity level (0 to 7) during the wake-up.
     pub const NEAR: u32 = 0x2f;
     pub const NEAR_MAX: u32 = 0x30;
@@ -62,7 +62,7 @@ const SET_B: u32 = 0x17f002;
 const SET_C: u32 = 0x17f046;
 
 /// States set in one go (`+4..+7`).
-pub(self) mod state {
+mod state {
     pub const STAND: u32 = 0x0202_0000;
     pub const TURN: u32 = 0x0202_0200;
     pub const WALK: u32 = 0x0202_0400;
@@ -73,7 +73,7 @@ pub(self) mod state {
 }
 
 /// Engine routines called by this boss.
-pub(self) mod call {
+mod call {
 }
 
 // --- animations --------------------------------------------------------------------------------
@@ -89,48 +89,48 @@ fn play_set<R: Bench>(x: &mut Cx<'_, R>, set: u32, kind: u8, n: u32) {
 }
 
 /// 0x95234: animation `n` of the movement set.
-pub(self) fn anim_a<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn anim_a<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play_set(x, SET_A, 0, n);
 }
 
 /// 0x95240: animation `n` of the attack set.
-pub(self) fn anim_b<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn anim_b<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play_set(x, SET_B, 2, n);
 }
 
 /// 0x9524c: animation `n` of the hits-received set.
-pub(self) fn anim_c<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn anim_c<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     play_set(x, SET_C, 4, n);
 }
 
 // --- aides --------------------------------------------------------------------------------------
 
 /// 0x95210: cancels the speeds.
-pub(self) fn stop<R: Bench>(x: &mut Cx<'_, R>) {
+fn stop<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);
 }
 
 /// 0x93420: no target left, wait.
-pub(self) fn idle<R: Bench>(x: &mut Cx<'_, R>) {
+fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, state::IDLE);
 }
 
-pub(self) fn next7<R: Bench>(x: &mut Cx<'_, R>) {
+fn next7<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
-pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
+fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
 
 /// 0x95220: the camera in use (its record; X at `+8`, Y at `+0xc`).
-pub(self) fn camera_record<R: Bench>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
+fn camera_record<R: Bench>(x: &mut Cx<'_, R>) -> crate::objects::Obj {
     crate::objects::Obj(if var::CAMERA_SELECT.get(x.b) != 0 { 0xff854e } else { 0xff84fe })
 }
 
 /// 0x950b8: is the target behind the boss? (with no target, the boss waits and the answer is yes.)
-pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) as i16 >= 0 {
         idle(x);
         return true;
@@ -144,7 +144,7 @@ pub(self) fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9489a: is the target far (outside ±0x20 in depth or ±0xc0 in X)?
-pub(self) fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) as i16 >= 0 {
         idle(x);
         return true;
@@ -159,10 +159,10 @@ pub(self) fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x94902, 0x9491e, 0x94968: a target in the range box (and, for the last two, possible hits).
-pub(self) fn close_target<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn close_target<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     lib::target_in_box(x, 0, 0x28, 0x20)
 }
-pub(self) fn edge_target<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
+fn edge_target<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     if !lib::target_in_box(x, d0, d1, d2) {
         return false;
     }
@@ -335,7 +335,7 @@ fn group<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x94e24: choice of what follows an attack: standing if the target is out of range, otherwise a new attack drawn
 /// from the difficulty table (0x94e7c, one 32-byte row per pair of levels).
-pub(self) fn next_attack<R: Bench>(x: &mut Cx<'_, R>) {
+fn next_attack<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) as i16 >= 0 {
         return idle(x);
     }

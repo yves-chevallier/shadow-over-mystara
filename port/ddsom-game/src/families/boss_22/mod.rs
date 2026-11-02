@@ -27,7 +27,7 @@ mod moves;
 mod two;
 
 /// Fields specific to this type.
-pub(self) mod g {
+mod g {
     pub const VULNERABLE: u32 = 0x67;
     pub const WALK_STEPS: u32 = 0x6b;
     pub const IDLE_COUNT: u32 = 0x6e;
@@ -66,14 +66,14 @@ use crate::objects::Current;
 
 /// Animation sets of a boss.
 #[derive(Clone, Copy)]
-pub(self) enum Set {
+enum Set {
     A,
     B,
 }
 
 /// What distinguishes the type 2 boss from the type 22 one: the code is that of a single family, copied with other
 /// animation sets and other ROM tables.
-pub(self) struct Kit {
+struct Kit {
     set_a: u32,
     set_b: u32,
     /// Attack tables (32 bytes per pair of levels): short range, long range, end of attack.
@@ -117,35 +117,35 @@ const PART_KIT: Kit = Kit {
 };
 
 /// Is the boss type 2 (and not type 22)?
-pub(self) fn two<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn two<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.u8(2) == 2
 }
 
-pub(self) fn kit<R: Bench>(x: &mut Cx<'_, R>) -> &'static Kit {
+fn kit<R: Bench>(x: &mut Cx<'_, R>) -> &'static Kit {
     if two(x) { &TWO_KIT } else { &PART_KIT }
 }
 
 /// Starts animation `n` of set `set` (0x1a32).
-pub(self) fn start<R: Bench>(x: &mut Cx<'_, R>, set: Set, n: u32) {
+fn start<R: Bench>(x: &mut Cx<'_, R>, set: Set, n: u32) {
     let k = kit(x);
     x.anim_start(if matches!(set, Set::A) { k.set_a } else { k.set_b }, n as u16);
 }
 
 /// States set in one go (`+4..+7`).
-pub(self) mod state {
+mod state {
     pub const STAND: u32 = 0x0202_0000;
     pub const TURN: u32 = 0x0202_0200;
     pub const LEAP: u32 = 0x0202_0600;
     pub const IDLE: u32 = 0x020a_0000;
 }
 
-pub(self) mod call {
+mod call {
 }
 
 // --- animations --------------------------------------------------------------------------------
 
 /// Animation number `id` (+0xa2); starts animation `n` of set `set` if it is not the last one started (+0xa3).
-pub(self) fn pose<R: Bench>(x: &mut Cx<'_, R>, set: Set, id: u8, n: u32) {
+fn pose<R: Bench>(x: &mut Cx<'_, R>, set: Set, id: u8, n: u32) {
     x.set8(ANIM_ID, id);
     if x.u8(ANIM_ID) != x.u8(ANIM_LAST) {
         let id = x.u8(ANIM_ID);
@@ -155,25 +155,25 @@ pub(self) fn pose<R: Bench>(x: &mut Cx<'_, R>, set: Set, id: u8, n: u32) {
 }
 
 /// Sound settings `+0x44` and `+0x45` set along with the animation.
-pub(self) fn sounds<R: Bench>(x: &mut Cx<'_, R>, a: u8, b: u8) {
+fn sounds<R: Bench>(x: &mut Cx<'_, R>, a: u8, b: u8) {
     x.set8(0x44, a);
     x.set8(0x45, b);
 }
 
 /// Animation of the body or of the attacks depending on whether it is in its second form.
-pub(self) fn second_form<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn second_form<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.u8(SECOND) != 0
 }
 
-pub(self) fn next7<R: Bench>(x: &mut Cx<'_, R>) {
+fn next7<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
-pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
+fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
 
 /// A dust puff / explosion `D0 .. D3` (0xb10c8) every eight calls (`+0xb7`).
-pub(self) fn rubble<R: Bench>(x: &mut Cx<'_, R>, d0: u32, d1: u32, d2: u32, d3: u32) {
+fn rubble<R: Bench>(x: &mut Cx<'_, R>, d0: u32, d1: u32, d2: u32, d3: u32) {
     x.add8(EFFECT_COUNT, 1);
     let n = x.u8(EFFECT_COUNT) & 7;
     x.set8(EFFECT_COUNT, n);
@@ -184,7 +184,7 @@ pub(self) fn rubble<R: Bench>(x: &mut Cx<'_, R>, d0: u32, d1: u32, d2: u32, d3: 
 }
 
 /// 0x9d8e0: is the target on the wrong side (the boss is not facing it)?
-pub(self) fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -195,7 +195,7 @@ pub(self) fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9d928: is the target far in both depth and X?
-pub(self) fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -229,17 +229,17 @@ fn hunt_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16, table: u32) 
     true
 }
 
-pub(self) fn hunt_close<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn hunt_close<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let table = kit(x).close;
     hunt_box(x, -0x40, 0x40, 8, table)
 }
-pub(self) fn hunt_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn hunt_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let table = kit(x).far;
     hunt_box(x, -0xd0, 0x50, 0x50, table)
 }
 
 /// 0x9d24e and 0x9d254: attack drawn from the difficulty row of `table` (32 bytes per pair of levels).
-pub(self) fn attack_from_table<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
+fn attack_from_table<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let row = ((var::RANK.get(x.b) >> 1) as u32) << 5;
     let r = rand_and(x, 0x1f);
     let step = x.data8(table + row + r);
@@ -249,7 +249,7 @@ pub(self) fn attack_from_table<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
 }
 
 /// 0x9d680 (0x7ee1e for type 2): end of an attack: standing, or a new attack if a player is very close.
-pub(self) fn next_attack<R: Bench>(x: &mut Cx<'_, R>) {
+fn next_attack<R: Bench>(x: &mut Cx<'_, R>) {
     for k in 0..4u32 {
         let p = crate::objects::Obj(0xff85de + 0x200 * k);
         if p.u8(x.b, 0) == 0 {
@@ -274,7 +274,7 @@ pub(self) fn next_attack<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9d9d0: a player very close (box ±0x28 in X, ±8 in depth) at ground height?
-pub(self) fn player_within_reach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn player_within_reach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     for k in 0..4u32 {
         let p = crate::objects::Obj(0xff85de + 0x200 * k);
         if p.u8(x.b, 0) == 0 {
@@ -288,7 +288,7 @@ pub(self) fn player_within_reach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x9da00: is `p` in the boss's box (offset `d0`, half-width `d1`, half-depth `d2`), on the ground?
-pub(self) fn reach<R: Bench>(x: &mut Cx<'_, R>, p: crate::objects::Obj, d0: i16, d1: u16, d2: u16) -> bool {
+fn reach<R: Bench>(x: &mut Cx<'_, R>, p: crate::objects::Obj, d0: i16, d1: u16, d2: u16) -> bool {
     if p.u16(x.b, 0xc) != 0 {
         return false;
     }
@@ -306,7 +306,7 @@ pub(self) fn reach<R: Bench>(x: &mut Cx<'_, R>, p: crate::objects::Obj, d0: i16,
 
 /// 0x9da5c: chooses the arrival point of the run (`+0xb0`, `+0xb2`), the angle and the rotation direction, from the
 /// boss's position on the screen (table 0x9dabe: X, Z, angle, direction).
-pub(self) fn choose_spot<R: Bench>(x: &mut Cx<'_, R>) {
+fn choose_spot<R: Bench>(x: &mut Cx<'_, R>) {
     let dx = x.u16(0x8).wrapping_sub(var::SCROLL_X.get(x.b));
     let dz = x.u16(0x10).wrapping_sub(var::SCROLL_Y.get(x.b));
     let row = if (dx as i16) > 0xc0 {
@@ -328,14 +328,14 @@ pub(self) fn choose_spot<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x9db72: five dust puffs in a line under the boss as it lands.
-pub(self) fn dust_line<R: Bench>(x: &mut Cx<'_, R>) {
+fn dust_line<R: Bench>(x: &mut Cx<'_, R>) {
     for dz in [-0x30i16, -0x18, 0, 0x18, 0x30] {
         lib::shock(x, 1, 0, dz as u16, 4);
     }
 }
 
 /// 0x7f328 and 0x7f3a0: dust puffs in a line, toward the right (the boss faces left) or toward the left.
-pub(self) fn dust_trail<R: Bench>(x: &mut Cx<'_, R>, right: bool) {
+fn dust_trail<R: Bench>(x: &mut Cx<'_, R>, right: bool) {
     const RIGHT: [i16; 6] = [-0x10, 8, 0x20, 0x38, 0x50, 0x68];
     const LEFT: [i16; 6] = [-0x68, -0x58, -0x38, -0x20, -0x8, 0x10];
     for dz in if right { RIGHT } else { LEFT } {
@@ -344,7 +344,7 @@ pub(self) fn dust_trail<R: Bench>(x: &mut Cx<'_, R>, right: bool) {
 }
 
 /// Five calls of 0x9eca4 (bursts), D5 = 4 to 0 like the original's `dbf` loop.
-pub(self) fn scatter<R: Bench>(x: &mut Cx<'_, R>) {
+fn scatter<R: Bench>(x: &mut Cx<'_, R>) {
     for i in (0..5u32).rev() {
         *x.c.d5() = i;
         eshl_debris(x, i as u8);

@@ -25,7 +25,7 @@ mod attacks;
 mod hit;
 mod stance;
 
-pub(self) mod g {
+mod g {
     pub const VULNERABLE: u32 = 0x67;
     pub const AI_WANDER: u32 = 0x6b;
     pub const AI_WAIT: u32 = 0x6e;
@@ -52,12 +52,12 @@ use g::*;
 use crate::objects::pools;
 use crate::objects::Current;
 
-pub(self) const SET_MOVE: u32 = 0x16570e;
-pub(self) const SET_THROW: u32 = 0x16571c;
-pub(self) const SET_HURT: u32 = 0x165726;
-pub(self) const STANCE: u32 = 0x0202_0000;
-pub(self) const HELD: u32 = 0x0408_0000;
-pub(self) const IDLE: u32 = 0x020a_0000;
+const SET_MOVE: u32 = 0x16570e;
+const SET_THROW: u32 = 0x16571c;
+const SET_HURT: u32 = 0x165726;
+const STANCE: u32 = 0x0202_0000;
+const HELD: u32 = 0x0408_0000;
+const IDLE: u32 = 0x020a_0000;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
@@ -82,21 +82,21 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 // --- aides --------------------------------------------------------------------------------------
 
 /// Starts animation `n` of the movement set.
-pub(self) fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn mv<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_MOVE, n as u16);
 }
 
 /// Starts animation `n` of the throw set.
-pub(self) fn throw_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn throw_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.anim_start(SET_THROW, n as u16);
 }
 
-pub(self) fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn set_speed<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.select_speed(&crate::objects::motion::SPEEDS_B, n as u16);
 }
 
 /// Byte drawn at random from the difficulty row of `table` (rows of 32 bytes).
-pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
+fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let at = table.wrapping_add(row as u16 as i16 as i32 as u32);
     let r = rand_and(x, 0x1f);
@@ -104,7 +104,7 @@ pub(self) fn row_byte<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
 }
 
 /// 0x6eb04: end of a move; standing, and if the draw says so, wait (`+5 = 10`).
-pub(self) fn done_attack<R: Bench>(x: &mut Cx<'_, R>) {
+fn done_attack<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, STANCE);
     if lib::maybe_draw_6e(x) {
         x.set8(f::SUB, 0xa);
@@ -131,17 +131,17 @@ fn box_check<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
 }
 
 /// 0x6eb2a: player very close.
-pub(self) fn near_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn near_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_check(x, 0, 0x70, 0x10)
 }
 
 /// 0x6eb1c: player at a short distance, in front.
-pub(self) fn far_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn far_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     box_check(x, -0xd0, 0x60, 0x10)
 }
 
 /// 0x6eb62: the Troll has its back to its target.
-pub(self) fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
+fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u16(f::TARGET) == 0 {
         return false;
     }
@@ -152,13 +152,13 @@ pub(self) fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     wrong
 }
 
-pub(self) const NEAR_TABLE: u32 = 0x6d620;
-pub(self) const FAR_TABLE: u32 = 0x6d820;
+const NEAR_TABLE: u32 = 0x6d620;
+const FAR_TABLE: u32 = 0x6d820;
 /// Rows of moves that follow a series (substate 8).
-pub(self) const FOLLOW_TABLE: u32 = 0x6d364;
+const FOLLOW_TABLE: u32 = 0x6d364;
 
 /// 0x6eb8a (far series) / 0x6eb90 (near series): chooses the move (`+5 = 4`, `+6 = 0`).
-pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
+fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
     let b = row_byte(x, table);
     x.set8(f::SUB, 4);
     x.set16(f::SUB2, 0);
@@ -167,7 +167,7 @@ pub(self) fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u8 {
 }
 
 /// 0x6e8d6: after a series, chooses the fallback move (substate 8).
-pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
+fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(AI_SHOT, 0xff);
     let b = row_byte(x, FOLLOW_TABLE);
     x.set8(f::SUB, 8);
@@ -176,7 +176,7 @@ pub(self) fn follow_up<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6d08c: the Troll is grabbed by a player: it runs away walking off the screen, then disappears.
-pub(self) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
+fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }

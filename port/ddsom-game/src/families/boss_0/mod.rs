@@ -25,7 +25,7 @@ pub(crate) mod hit;
 mod moves;
 
 /// Fields specific to this type.
-pub(self) mod g {
+mod g {
     pub const VULNERABLE: u32 = 0x67;
     /// Number of run steps, delay between two steps, standing wait.
     pub const WALK_STEPS: u32 = 0x6b;
@@ -67,31 +67,31 @@ use crate::objects::pools;
 use crate::objects::Current;
 
 /// Animation sets: body, stage entrances and attacks, hits received.
-pub(self) const SET_BODY: u32 = 0x171a52;
-pub(self) const SET_ENTRY: u32 = 0x171a7e;
-pub(self) const SET_HURT: u32 = 0x171a94;
+const SET_BODY: u32 = 0x171a52;
+const SET_ENTRY: u32 = 0x171a7e;
+const SET_HURT: u32 = 0x171a94;
 /// Walk sets by direction (0x103e0).
-pub(self) const SET_RUN_FORWARD: u32 = 0x171b76;
-pub(self) const SET_RUN_BACK: u32 = 0x171c1a;
+const SET_RUN_FORWARD: u32 = 0x171b76;
+const SET_RUN_BACK: u32 = 0x171c1a;
 
 /// HP thresholds of the phases (0x105b6).
-pub(self) const THRESHOLDS: u32 = 0x10ae2;
+const THRESHOLDS: u32 = 0x10ae2;
 
 /// Starts animation `n` of the body set via the AI (0x103d6).
-pub(self) fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn body<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_BODY, n);
 }
 
 /// Starts animation `n` of the stage entrances set.
-pub(self) fn entry<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
+fn entry<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     lib::start(x, SET_ENTRY, n);
 }
 
 /// Next step (`addq.b #2,(+6)` or `(+7)`).
-pub(self) fn next6<R: Bench>(x: &mut Cx<'_, R>) {
+fn next6<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
 }
-pub(self) fn next7<R: Bench>(x: &mut Cx<'_, R>) {
+fn next7<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(0x7, 2);
 }
 
@@ -217,12 +217,12 @@ fn state<R: Bench>(x: &mut Cx<'_, R>, vulnerable: bool, s: u32) {
 }
 
 /// 0x7ab74 : debout.
-pub(self) fn stand<R: Bench>(x: &mut Cx<'_, R>) {
+fn stand<R: Bench>(x: &mut Cx<'_, R>) {
     state(x, true, 0x0202_0000);
 }
 
 /// 0x7ab84: about-face, the current state will be resumed.
-pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
+fn turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(VULNERABLE, 0);
     let s = x.u32(f::STATE);
     x.set32(SAVED_STATE, s);
@@ -230,27 +230,27 @@ pub(self) fn turn<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7ab98: start of the run (run animation depending on the role: 0x34 or, second half, 0x36).
-pub(self) fn run_start<R: Bench>(x: &mut Cx<'_, R>) {
+fn run_start<R: Bench>(x: &mut Cx<'_, R>) {
     let kind = if x.u8(3) == 0 { 0x34 } else { 0x36 };
     x.set8(0x79, kind);
     state(x, true, 0x0202_0400);
 }
 
 /// 0x7abba: end of the run (0x35 or 0x37).
-pub(self) fn run_end<R: Bench>(x: &mut Cx<'_, R>) {
+fn run_end<R: Bench>(x: &mut Cx<'_, R>) {
     let kind = if x.u8(3) == 0 { 0x35 } else { 0x37 };
     x.set8(0x79, kind);
     state(x, true, 0x0202_0600);
 }
 
 /// 0x7abdc and 0x7abee: charge, toward the camera (`aimed` false) or toward the saved target.
-pub(self) fn charge<R: Bench>(x: &mut Cx<'_, R>, aimed: bool) {
+fn charge<R: Bench>(x: &mut Cx<'_, R>, aimed: bool) {
     x.set8(CHARGE_AIMED, aimed as u8);
     state(x, false, 0x0202_0800);
 }
 
 /// 0x7ac02, 0x7ac10, 0x7ac1e, 0x7ac32, 0x7ac40, 0x7ac4e, 0x7ac62: attack `n` (`+6` = 0 to 12).
-pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32, shielded: bool) {
+fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32, shielded: bool) {
     if shielded {
         x.set8(INVULNERABLE, 1);
     }
@@ -258,12 +258,12 @@ pub(self) fn strike<R: Bench>(x: &mut Cx<'_, R>, n: u32, shielded: bool) {
 }
 
 /// 0x7ac70: no player left, wait.
-pub(self) fn idle_alone<R: Bench>(x: &mut Cx<'_, R>) {
+fn idle_alone<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::STATE, 0x020a_0000);
 }
 
 /// 0x7aaf4: the transformation (HP at half): the main half starts the cutscene.
-pub(self) fn transform<R: Bench>(x: &mut Cx<'_, R>) {
+fn transform<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(ANIM_KIND, 0x31);
     x.set32(f::IMMUNITY, 0xffff_ffff);
     x.set8(0x93, 0);
@@ -283,7 +283,7 @@ pub(self) fn transform<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// Runs the decision whose original address is `at` (jumps through ROM tables).
-pub(self) fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
+fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
     match at {
         0x7ac02 => strike(x, 0, false),
         0x7ac10 => strike(x, 2, false),
@@ -300,7 +300,7 @@ pub(self) fn go<R: Bench>(x: &mut Cx<'_, R>, at: u32) {
 }
 
 /// 0x7a8d2: target at short range: draw in table 0x7a8e8.
-pub(self) fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
+fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7a8e8 + r) as u32;
     let at = jump_target(x, 0x7a8f8, i);
@@ -308,7 +308,7 @@ pub(self) fn from_close<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x7a8fa: target ahead (run box); the three routines of phase `+0xaa` read the same table 0x7a932.
-pub(self) fn from_front<R: Bench>(x: &mut Cx<'_, R>) {
+fn from_front<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let i = x.rom8(0x7a932 + r) as u32;
     let at = jump_target(x, 0x7a942, i);
@@ -317,7 +317,7 @@ pub(self) fn from_front<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x7a944: the AI chose gesture `g` (1 or 2) for the near box; draw in tables 0x7a9ae (main), 0x7a9be (second
 /// half, gesture 1) or 0x7a9ce.
-pub(self) fn from_near_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
+fn from_near_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     let r = rand_and(x, 0xf);
     let table = if x.u8(3) == 0 {
         0x7a9ae
@@ -332,7 +332,7 @@ pub(self) fn from_near_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
 }
 
 /// 0x7a9e4: the AI chose gesture `g` (1 or 2) for the far box: table selection according to the phase.
-pub(self) fn from_far_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
+fn from_far_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(PHASE) as i8 as i32 as u32;
     let index = g.wrapping_sub(1).wrapping_mul(2).wrapping_add(phase.wrapping_mul(4));
@@ -352,7 +352,7 @@ pub(self) fn from_far_gesture<R: Bench>(x: &mut Cx<'_, R>, g: u32) {
 }
 
 /// 0x7a7a4 and 0x7a7b0: delay between two run steps, depending on difficulty.
-pub(self) fn walk_delay<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
+fn walk_delay<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     let level = var::RANK.get(x.b) as u32;
     let table = if kind == 3 { 0x7a7dc } else { 0x7a7bc };
     let d = x.rom8(table + level);
@@ -360,7 +360,7 @@ pub(self) fn walk_delay<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
 }
 
 /// 0x7a7fc and 0x7a80e: number of run steps, drawn from the direction table.
-pub(self) fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
+fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     let r = rand_and(x, 0x1f);
     let table = if kind == 3 { 0x7a840 } else { 0x7a820 };
     let n = x.rom8(table + r);
@@ -368,13 +368,13 @@ pub(self) fn draw_steps<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
 }
 
 /// 0x7a860: target ahead (narrow box) and gesture chosen by the AI.
-pub(self) fn close_gesture<R: Bench>(x: &mut Cx<'_, R>) -> Option<u32> {
+fn close_gesture<R: Bench>(x: &mut Cx<'_, R>) -> Option<u32> {
     ai_box(x, -0x50, 0x30, 5)
 }
 
 /// 0x7a87e: if the boss is on screen, target in a deep box (narrower for the second half) and gesture chosen by
 /// the AI.
-pub(self) fn far_gesture<R: Bench>(x: &mut Cx<'_, R>) -> Option<u32> {
+fn far_gesture<R: Bench>(x: &mut Cx<'_, R>) -> Option<u32> {
     let cam = camera_x(x);
     let px = x.u16(0x8);
     if Fl::sub16(cam.wrapping_sub(0x10), px).ge() || Fl::sub16(cam.wrapping_add(0x190), px).le() {

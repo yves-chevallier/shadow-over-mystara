@@ -87,9 +87,6 @@ pub(crate) mod rom {
     pub const LAUNCH_SPEEDS: u32 = 0x3bdcc;
     /// Empty routine (`rts`) of the per-type tables.
     pub const NOTHING: [u32; 2] = [0x3e2aa, 0x3bb9a];
-    /// Player reaction animations (longs per character, data).
-    #[cfg_attr(not(feature = "tools"), allow(dead_code))] // read by the tools
-    pub const PLAYER_HURT: u32 = 0x3bb52;
 }
 
 // ---------------------------------------------------------------------------------------------

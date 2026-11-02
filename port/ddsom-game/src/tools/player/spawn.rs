@@ -1,24 +1,16 @@
 //! Tools: the natives of `crate::player::spawn` for the original code that calls them (arguments and results in the registers
 //! of the original).
 
-use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::{Cpu, SR_C, SR_N, SR_V, SR_X, SR_Z};
 
 use crate::player::spawn::*;
 use crate::tools::frames::*;
-use crate::{regs, Body, Native};
+use crate::Native;
 use crate::player::{Ctx, Player};
-use crate::mem::{rd16, rd8, wr16, wr8, A5};
-use crate::objects::Obj;
-use crate::objects::pools;
-use crate::player::ram;
-use crate::machine::Machine;
 
 /// Declares the native of a creator at its original address; `$body` reads its parameters in `$d` and `$a`.
 macro_rules! creator {
     ($name:ident, $entry:expr, $label:expr, |$d:ident, $a:ident, $g:ident, $p:ident| $body:expr) => {
-        pub const $name: Native = Native {
+        pub(crate) const $name: Native = Native {
             entry: $entry,
             name: $label,
             run: crate::Body::WithCpu(|c, b| run(c, b, |$d, $a, $g, $p| { let _ = ($d, $a); $body })),

@@ -1,7 +1,7 @@
 //! Variant of cps2/examples/compare.rs running the recompiled code (RC=0 for the interpreter only).
 //! Compares the work RAM (FF0000-FFFFFF) frame by frame with a MAME dump
 //! (mame/scenario.lua, RAMDUMP="1 N file": 64 KB per frame starting at frame 1).
-//! cargo run --release -p cps2 --example compare -- <roms> <eeprom> <ram_mame.bin> [frames]
+//! cargo run --release -p ddsom-rc --example rc_compare -- <roms> <eeprom> <ram_mame.bin> [frames]
 
 use std::path::Path;
 
