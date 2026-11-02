@@ -19,8 +19,8 @@ target/release/ddsom --assets <assets>
 
 `ddsom --assets <assets>` sans dossier de ROMs donné joue ainsi sans ROM.
 Aucun fichier ROM n'est ouvert : la machine est faite par `ddsom_assets::rebuild::contents` puis
-`cps2::Machine::ddsom` (la machine ordinaire passe par `cps2::Contents::from_roms`). Le son passe toujours par le
-pilote Rust (`Sound::use_rust_driver`). Avec un dossier de ROMs donné, `--assets` ne prend que les
+`cps2::Machine::ddsom` (la machine ordinaire passe par `cps2::Contents::from_roms`). Le son passe par le pilote Rust,
+comme toujours dans le jeu (avec ou sans ROM : `ddsom` n'a pas de Z80, [son.md](son.md) § 13). Avec un dossier de ROMs donné, `--assets` ne prend que les
 graphismes et les échantillons dans les assets (le programme vient des ROMs).
 
 Le dossier d'assets est local (dérivé des ROMs de l'utilisateur), jamais versionné.
@@ -43,10 +43,14 @@ d'`extract`, supprimer `assets\` puis relancer `play.bat`.
 | Graphismes (`rebuild::gfx_region`) | `gfx/cells_NN.png` | rien |
 | Échantillons (`rebuild::qsound_samples`) | `sound/music.json` et `sounds/NNN.wav` (et la suite de chaque échantillon, `sample_tails`) | les octets qu'aucune voix ne lit |
 
-**Le Z80.** Son programme n'est plus nécessaire : le pilote Rust (`DDSOM_SON_RUST=1`, `m.sound.use_rust_driver()`)
-le remplace écriture par écriture ([son.md](son.md)) et ne lit dans la région du Z80 que des données, toutes dans
-`music.json`. Contrôle : `sans_rom` compare aussi les échantillons audio produits (pilote Rust sur la région des ROMs
-contre pilote Rust sur la région reconstruite, DSP complet contre DSP réduit à ses tables) : identiques.
+**Le Z80.** Son programme n'est plus nécessaire : le pilote Rust, seul pilote du jeu, le remplace écriture par
+écriture ([son.md](son.md)) et ne lit dans la région du Z80 que des données, toutes dans `music.json`, par des
+accesseurs nommés (`ddsom_sound::Rom` : tables, en-tête, instruments, échantillons, octets des définitions et des
+pistes). Contrôles : `sans_rom` compare aussi les échantillons audio produits (pilote Rust sur la région des ROMs
+contre pilote Rust sur la région reconstruite, DSP complet contre DSP réduit à ses tables) ; le test
+`music_driver_identical` joue chaque son de la table sur les deux régions ; `validate` avec `DDSOM_ASSETS` compare les
+écritures du pilote du jeu à celles du Z80 de la référence. Ce dernier contrôle a trouvé le seul écart : l'octet bas
+du numéro d'échantillon des deux sons ADPCM manquait à `music.json` (corrigé le 2026-11-02 : réextraire `music`).
 
 ## Ce que le jeu sans 68000 lit dans la région programme
 
@@ -186,6 +190,11 @@ aujourd'hui, couvrent les octets qui deviendraient du code si `code_68k.txt` gra
   `rom_reads` (avec `DDSOM_COUVERT`) sur ce scénario et d'ajouter la zone. Ranger aussi le code dans les assets
   supprimerait ce dernier risque (au prix de 486 Ko de plus, le programme entier).
 * **Les trous du mode sans 68000** (natives manquantes : arrêt avec diagnostic) sont les mêmes avec ou sans ROM.
-* L'émulation du DSP QSound lit ses tables comme le DSP (adresses du programme d'origine) ; les tables du pilote son
-  aussi (adresses linéaires de la région du Z80). Les ranger en tableaux Rust nommés est l'étape suivante, quand ces
-  deux crates ne serviront plus à comparer avec l'original.
+* L'émulation du DSP QSound lit ses tables comme le DSP (adresses du programme d'origine). Le pilote son lit les
+  siennes par des accesseurs nommés (`ddsom_sound::Rom`), mais toujours rangées à leurs adresses d'origine dans une
+  région reconstruite depuis `music.json` : l'état du pilote garde ces adresses (pointeurs de lecture des pistes,
+  bancs d'instruments, définitions), comme la RAM du Z80 que `Driver::ram_image` reproduit pour les outils, et
+  l'original lit au-delà d'une table (une durée à la fois pointée et en triolet lit les décalages d'octave qui
+  suivent la table des durées). Le pilote ne lit aucun octet hors des rubriques de `music.json`. Mesure par `sound_reads`
+  ([son.md](son.md) « Lectures du pilote »). Ranger les données en tableaux Rust indexés (et non en région)
+  demandera de remplacer ces adresses dans l'état du pilote et de garder les débordements utiles.

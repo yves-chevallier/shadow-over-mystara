@@ -41,11 +41,13 @@ C'est l'approche des projets N64Recomp / XenonRecomp, adaptée au 68000.
 * **Le jeu** : `ddsom` (application) et `ddsom-game` compilé sans la fonctionnalité `tools`
   (`default-features = false`). Il n'a ni 68000 ni banc de registres : `cps2::Machine` sans sa fonctionnalité `m68k`
   n'a plus de `Cpu`, et la boucle d'image du jeu (`ddsom_game::no68k::line`) fait tout le travail du processeur sur le
-  seul bus. `cargo tree -p ddsom -e normal` ne contient ni `m68k`, ni `ddsom-rc`, ni `recomp` (le `z80` reste pour le
-  pilote son émulé, choisi quand on a les ROMs). `ddsom --features original` rajoute le code d'origine pour les
+  seul bus. `cargo tree -p ddsom -e normal` ne contient ni `m68k`, ni `ddsom-rc`, ni `recomp`, ni `z80` : le son du jeu est
+  toujours le pilote Rust (`ddsom-sound`), avec ou sans ROM ; le Z80 émulé est derrière la fonctionnalité `z80` de
+  `cps2` (machine de référence et outils, activée par `tools`). `ddsom --features original` rajoute le code d'origine pour les
   diagnostics `DDSOM_ORIGINE=1` / `DDSOM_INTERP=1`.
 * **Les outils** (exemples de `ddsom-game` : `validate`, `fuzz_*`, couverture, traces) : fonctionnalité `tools`, active
-  par défaut pour le crate et ses exemples. Elle ajoute le module `ddsom_game::tools` : machine de référence (code
+  par défaut pour le crate et ses exemples. Elle active le 68000 et le Z80 émulés de `cps2` (fonctionnalités `m68k`
+  et `z80`) et ajoute le module `ddsom_game::tools` : machine de référence (code
   d'origine recompilé, `install_reference`), natives à l'adresse d'origine pour le code d'origine (arguments et
   résultats dans ses registres : `Body::WithCpu`/`CpuIn`, sous-modules calqués sur ceux du jeu), exécution des natives
   par le processeur (`Native::execute`, `call`, `run`), `DDSOM_CHECK` et les sondes de registres.
@@ -122,7 +124,8 @@ morceau réécrit est exécuté en parallèle de l'original et comparé.
    (`cargo test -p ddsom-assets`, voir [assets.md](assets.md)). Le jeu sans 68000 se joue avec les seuls assets, sans
    aucune ROM ([sans-rom.md](sans-rom.md)). À venir : quelques tables encore
    rangées avec le code (inventaire dans assets.md) et la sémantique des commandes du moteur de texte.
-4. **Son** : séquenceur réécrit à partir du pilote Z80 (fait : crate `ddsom-sound`, voir [son.md](son.md)), mixeur QSound en Rust pur (à faire).
+4. **Son** : séquenceur réécrit à partir du pilote Z80 (fait : crate `ddsom-sound`, seul pilote du jeu depuis 2026-11,
+   comparé au Z80 par `validate` sur tous les scénarios, voir [son.md](son.md)), mixeur QSound en Rust pur (à faire).
 5. **Critère final** : sur des scénarios d'entrées enregistrés, le moteur autonome produit les mêmes
    images (au pixel près) et les mêmes commandes son que l'original émulé.
 
