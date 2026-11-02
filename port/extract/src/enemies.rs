@@ -298,6 +298,16 @@ fn families(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     s.push(prog("scorpion/retreat_ranks", 0x677ce, "u8", &[], 16));
     s.push(prog("scorpion/strike_times", 0x670dc, "u8", &[], 4));
     upto(s, "scorpion/move_speeds", 0x670e0, true, "u8", 0x10);
+    // ---- harpy (type 21) ----
+    upto(s, "harpy/variants", 0x756e6, false, "x16 u8*4 i16", 0x80);
+    upto(s, "harpy/depth_offsets", 0x757d2, false, "i16", 0x80);
+    upto(s, "harpy/hit_anims", 0x75e84, true, "u8", 0x10);
+    // ---- dark warrior's arms (type 25) ----
+    s.push(prog("warrior/bob", 0x7759e, "i8", &[], 64));
+    upto(s, "warrior/script_offsets", 0x77626, true, "i16", 0x10);
+    upto(s, "warrior/scripts", 0x77626, false, "u8", 0x200);
+    // ---- doubles (types 22 to 26) ----
+    s.push(prog("double/reversing_terrains", 0x77d08, "u8", &[], 9));
 }
 
 /// A table of `count` addresses of tables by difficulty level (data space), and the tables it points to, named

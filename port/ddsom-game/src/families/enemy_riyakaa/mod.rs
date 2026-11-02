@@ -9,6 +9,7 @@ use crate::families::cx::Bench;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::record::record;
 use crate::objects::Obj;
 use crate::objects::Current;
 
@@ -20,6 +21,38 @@ use attacks::*;
 use decide::*;
 use hit::*;
 
+/// Fields of the Riyakaa beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is marked
+/// (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Riyakaa(pub Obj);
+
+impl Riyakaa {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
+}
+
+record! {
+    impl Riyakaa {
+        /// Shift of the gaze for the strike to come (0xf0 high, 0xf2 middle, 0xf4 low, 0xf6 leap) (h).
+        gaze, set_gaze, GAZE: u8 @ 0xa0;
+        /// Pose of the current gesture, also the previous gaze (h).
+        pose, set_pose, POSE: u8 @ 0xa1;
+        /// Countdown of the current gesture; extra strikes of a series.
+        timer, set_timer, TIMER: u8 @ 0xa2;
+        /// Step (`+6`) to resume after the wait for a target.
+        resume_step, set_resume_step, RESUME_STEP: u8 @ 0xa3;
+        /// State long taken at the end of a dash.
+        next_state, set_next_state, NEXT_STATE: u32 @ 0xa8;
+        /// Tries of a pounce with the same gaze (three: the Riyakaa looks again).
+        pounce_tries, set_pounce_tries, POUNCE_TRIES: u8 @ 0xac;
+        /// Set when the search began far from the target: the walk animation starts with the next attack (h).
+        walk_pending, set_walk_pending, WALK_PENDING: u8 @ 0xad;
+        /// Set when a player grabs the Riyakaa; not read by the family (h).
+        grabbed, set_grabbed, GRABBED: u8 @ 0xae;
+    }
+}
+
 /// Animation sets of the body and of the hits.
 const BODY: RomAddr = RomAddr(0x1665d6);
 const STRIKE: RomAddr = RomAddr(0x1665f8);
@@ -27,10 +60,11 @@ const STRIKE: RomAddr = RomAddr(0x1665f8);
 const REACT_STANDING: RomAddr = RomAddr(0x6fe22);
 const REACT_ACTING: RomAddr = RomAddr(0x70018);
 /// Bytes for choosing the next gesture, 32 per difficulty level (`A5+0x7f92` / 2), 5-bit draw.
-const NEXT_MOVES: u32 = 0x5ce72;
-const NEXT_ATTACKS: u32 = 0x701dc;
+/// (The first is the table `follow_moves` of the bow gnolls.)
+const NEXT_MOVES: &str = "bow/follow_moves";
+const NEXT_ATTACKS: &str = "riyakaa/next_attacks";
 /// Decision masks of the counter-attack (one long per difficulty level).
-const MASKS: u32 = 0x6ff70;
+const MASKS: &str = "riyakaa/counter_masks";
 /// Long state "active, substate 0": return to walking.
 const WALK: u32 = 0x0202_0000;
 
@@ -72,8 +106,8 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         (Enemy::AI_BOX_CHANCE, 2),
         (Enemy::AI_BOX_ANIM, 0),
         (Enemy::AI_BYTE_ROW, 3),
-        (0xa2, 0x20),
-        (0xa1, 2),
+        (Riyakaa::TIMER, 0x20),
+        (Riyakaa::POSE, 2),
         (Enemy::VULNERABLE, 1),
         (Enemy::AI_ROW_8E, 0),
         (Enemy::EVENT_LOW, 0),
@@ -82,7 +116,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(off, v);
     }
     x.set32(Enemy::RESUME_STATE, 0);
-    x.set8(0xad, 0);
+    x.set8(Riyakaa::WALK_PENDING, 0);
     x.set8(Enemy::AI_POINT_SET, 6);
     x.set8(Enemy::LOOT, 6);
     x.set8(Enemy::LOOT_ROW, 7);
@@ -153,7 +187,7 @@ fn arrive<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// Movement common to the arrivals: the duration `+0xa2` counted down, then return to walking.
 fn fly_step<R: Bench>(x: &mut Cx<'_, R>) {
-    if countdown(x, 0xa2) == 0 {
+    if countdown(x, Riyakaa::TIMER) == 0 {
         walk(x);
         x.set8(Enemy::ACTIVE, 1);
     }
@@ -168,17 +202,17 @@ fn charge_in<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.add8(f::SUB2, 2);
     x.set8(Enemy::VULNERABLE, 1);
-    x.set16(0xa0, 0);
-    x.set8(0xa2, 0x18);
+    x.set16(Riyakaa::GAZE, 0);
+    x.set8(Riyakaa::TIMER, 0x18);
     x.set8(Enemy::HEADING, 0x18);
     if x.u8(f::FLIP) != 0 {
         x.set8(Enemy::HEADING, 8);
     }
-    x.set16(0xa0, 0x202);
+    x.set16(Riyakaa::GAZE, 0x202);
     speed(x, 0x17);
     let mut n = 3;
     if x.u8(Enemy::VARIANT) == 0 {
-        x.set16(0xa0, 0);
+        x.set16(Riyakaa::GAZE, 0);
         speed(x, 0xd);
         n = 2;
     }
@@ -192,8 +226,8 @@ fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.add8(f::SUB2, 2);
     x.set8(Enemy::VULNERABLE, 1);
-    x.set8(0xa2, 0x20);
-    x.set8(0xa1, 0xd);
+    x.set8(Riyakaa::TIMER, 0x20);
+    x.set8(Riyakaa::POSE, 0xd);
     x.set8(Enemy::HEADING, 0x10);
     speed(x, 0xd);
     body(x, 6);
@@ -203,7 +237,7 @@ fn leap_in<R: Bench>(x: &mut Cx<'_, R>) {
 fn rise_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     x.set8(Enemy::VULNERABLE, 0);
-    x.set8(0xa1, 0xe);
+    x.set8(Riyakaa::POSE, 0xe);
     x.set16(Enemy::VZ, 0xfd00);
     x.set16(Enemy::GRAVITY, 0xff80);
     body(x, 0xb);
@@ -246,7 +280,7 @@ fn hover<R: Bench>(x: &mut Cx<'_, R>) {
             rise_start(x);
         }
         2 => {
-            if countdown(x, 0x90) == 0 {
+            if countdown(x, Enemy::COUNTER) == 0 {
                 x.add8(f::SUB2, 2);
             }
         }
@@ -262,7 +296,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         0 => {
             x.add8(f::SUB2, 2);
             x.set8(Enemy::VULNERABLE, 0);
-            x.set8(0xa1, 0xb);
+            x.set8(Riyakaa::POSE, 0xb);
             body(x, 0xd);
         }
         2 => {
@@ -275,7 +309,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         4 => {
             x.add8(f::SUB2, 2);
             x.set8(Enemy::VULNERABLE, 1);
-            x.set8(0xa1, 0xc);
+            x.set8(Riyakaa::POSE, 0xc);
             body(x, 0xa);
         }
         6 => {
@@ -294,7 +328,7 @@ fn rest<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         x.set8(Enemy::VULNERABLE, 1);
-        x.set8(0xa1, 1);
+        x.set8(Riyakaa::POSE, 1);
         return body(x, 0);
     }
     if var::PLAYERS_ALIVE.get(x.b) == 0 {

@@ -243,7 +243,7 @@ fn choose_attack_a<R: Bench>(x: &mut Cx<'_, R>, close: bool) {
     let profile = x.u8(Enemy::GROUP).wrapping_shl(2) as u32;
     let table = tables::table(PICK_TABLE).at32(x.b, profile);
     let level = rank_row(x);
-    let r = (x.random() as u32) & 0x1f;
+    let r = rand_and(x, 0x1f);
     let pick = tables::held8(x.b, table.wrapping_add(level).wrapping_add(r));
     x.set8(f::SUB2, pick.wrapping_add(base));
     x.set16(f::STATE, 0x0204);

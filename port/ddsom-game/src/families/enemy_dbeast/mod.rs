@@ -267,9 +267,9 @@ fn player_near<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// AI parameters per profile (`+0x2f`): (field, value).
 const PROFILE_A: [(u32, u8); 12] =
-    [(0x68, 2), (0x69, 2), (0x6a, 1), (0x6c, 2), (0x6d, 2), (0x72, 2), (0x73, 2), (0x74, 2), (0x75, 0x18), (0x76, 2), (0x81, 4), (0x80, 5)];
+    [(Enemy::AI_68, 2), (Enemy::AI_69, 2), (Enemy::AI_WANDER_ROW, 1), (Enemy::AI_WAIT_MASKS, 2), (Enemy::AI_WAIT_ROW, 2), (Enemy::AI_DECISION_A, 2), (Enemy::AI_DECISION_B, 2), (Enemy::AI_BOX_CHANCE, 2), (Enemy::AI_BOX_ANIM, 0x18), (Enemy::AI_BYTE_ROW, 2), (Enemy::LOOT, 4), (Enemy::LOOT_ROW, 5)];
 const PROFILE_B: [(u32, u8); 12] =
-    [(0x68, 2), (0x69, 2), (0x6a, 1), (0x6c, 3), (0x6d, 3), (0x72, 4), (0x73, 4), (0x74, 3), (0x75, 0x20), (0x76, 3), (0x81, 5), (0x80, 6)];
+    [(Enemy::AI_68, 2), (Enemy::AI_69, 2), (Enemy::AI_WANDER_ROW, 1), (Enemy::AI_WAIT_MASKS, 3), (Enemy::AI_WAIT_ROW, 3), (Enemy::AI_DECISION_A, 4), (Enemy::AI_DECISION_B, 4), (Enemy::AI_BOX_CHANCE, 3), (Enemy::AI_BOX_ANIM, 0x20), (Enemy::AI_BYTE_ROW, 3), (Enemy::LOOT, 5), (Enemy::LOOT_ROW, 6)];
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {

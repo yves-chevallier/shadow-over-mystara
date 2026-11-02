@@ -75,7 +75,7 @@ pub(super) fn turn_end<R: Bench>(x: &mut Cx<'_, R>) {
 fn attack_chance<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let level = (var::RANK.get(x.b).wrapping_mul(4)) as u32;
     let mask = tables::table(ATTACK_CHANCE).at32(x.b, level);
-    let bit = (x.random() as u32) & 0x1f;
+    let bit = rand_and(x, 0x1f);
     mask >> bit & 1 != 0
 }
 

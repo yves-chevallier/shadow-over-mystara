@@ -21,9 +21,11 @@ use crate::objects::Obj;
 const SET_BODY: RomAddr = RomAddr(0x17e03a);
 const SET_STRIKE: RomAddr = RomAddr(0x17e048);
 /// Table of vertical undulations (signed bytes, read in the opcode space).
-const BOB_TABLE: u32 = 0x7759e;
-/// Movement scenarios: table of words (offsets) followed by bytes (dx, dz) per frame.
-const SCRIPTS: u32 = 0x77626;
+const BOB_TABLE: &str = "warrior/bob";
+/// Movement scenarios: words (offset of each scenario, opcode space), then per scenario a count (word) and bytes
+/// (dx, dz) per frame (data space, the same table read relative to its start).
+const SCRIPT_OFFSETS: &str = "warrior/script_offsets";
+const SCRIPTS: &str = "warrior/scripts";
 
 /// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
 /// marked (h).
@@ -38,6 +40,8 @@ impl Warrior {
 
 record! {
     impl Warrior {
+        /// On the host: non-zero while it is visible (its arms show themselves then) (h).
+        host_visible, set_host_visible, HOST_VISIBLE: u8 @ 0x42;
         anim_set, set_anim_set, ANIM_SET: u8 @ 0xa0;
         anim_num, set_anim_num, ANIM_NUM: u8 @ 0xa1;
         host_state, set_host_state, HOST_STATE: u8 @ 0xa2;
@@ -189,7 +193,7 @@ fn hit_power<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
 fn end_part<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_bit(Enemy::DISPLAY, 1, false);
     let h = host(x);
-    if h.u8(x.b, 0x42) != 0 {
+    if h.u8(x.b, Warrior::HOST_VISIBLE) != 0 {
         x.set_bit(Enemy::DISPLAY, 1, true);
     }
     x.reinsert();
@@ -278,24 +282,24 @@ fn converge<R: Bench>(x: &mut Cx<'_, R>, targets: [i16; 3]) -> bool {
 /// 0x775de: one step of movement scenario `n`; true when it is finished. The first frame reads
 /// the first pair of bytes; the following ones resume at the end (index = remaining counter).
 fn script_step<R: Bench>(x: &mut Cx<'_, R>, n: u32) -> bool {
-    let offset = x.rom16(SCRIPTS + 2 * n) as i16 as i32 as u32;
-    let a2 = SCRIPTS.wrapping_add(offset);
+    let a2 = tables::table(SCRIPT_OFFSETS).at16(x.b, 2 * n) as i16 as i32 as u32;
+    let scripts = tables::table(SCRIPTS);
     let cur = x.u16(Warrior::SCRIPT_LEFT);
     if (cur as i16) < 0 {
         x.set16(Warrior::SCRIPT_LEFT, 0xffff);
         return true;
     }
     if cur == 0 {
-        let count = x.data16(a2.wrapping_sub(2));
+        let count = scripts.at16(x.b, a2.wrapping_sub(2));
         x.set16(Warrior::SCRIPT_LEFT, count);
     }
     let idx = cur.wrapping_mul(2) as u32;
-    let mut dx = x.data8(a2.wrapping_add(idx)) as i8 as i16;
+    let mut dx = scripts.at8(x.b, a2.wrapping_add(idx)) as i8 as i16;
     if x.u8(f::FLIP) != 0 {
         dx = -dx;
     }
     x.set16(Warrior::OFFSET_X, dx as u16);
-    let dz = x.data8(a2.wrapping_add(idx).wrapping_add(1)) as i8 as i16;
+    let dz = scripts.at8(x.b, a2.wrapping_add(idx).wrapping_add(1)) as i8 as i16;
     x.set16(Warrior::OFFSET_Z, dz as u16);
     let left = x.u16(Warrior::SCRIPT_LEFT).wrapping_sub(1);
     x.set16(Warrior::SCRIPT_LEFT, left);
@@ -334,7 +338,7 @@ fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let phase = x.u8(Warrior::BOB_PHASE).wrapping_add(1);
     x.set8(Warrior::BOB_PHASE, phase);
     let i = (phase as u16 >> 2 & 0x3f) as u32;
-    let d = x.rom8(BOB_TABLE + i) as i8 as i16 as u16;
+    let d = tables::table(BOB_TABLE).at8(x.b, i) as i8 as i16 as u16;
     x.add16(Obj::Y, d);
 }
 
@@ -393,9 +397,12 @@ fn swing_step<R: Bench>(x: &mut Cx<'_, R>) {
             if vx < 0 || off <= -0x10 {
                 return;
             }
-            for o in [0x16, 0x1c, 0x1e, 0x18, 0x1a] {
-                x.set16(o, 0);
-            }
+            let e = Enemy(x.o);
+            e.set_ax(x.b, 0);
+            e.set_vy(x.b, 0);
+            e.set_ay(x.b, 0);
+            e.set_vz(x.b, 0);
+            e.set_gravity(x.b, 0);
             x.add8(f::SUB, 2);
         }
         4 => {
@@ -437,10 +444,10 @@ fn sparks<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     e.set_u16(x.b, Obj::Z, 0);
-    let dy = ((x.random() as u32) & 7) as u16;
+    let dy = (rand_and(x, 7)) as u16;
     let ny = e.u16(x.b, Obj::Y).wrapping_add(dy.wrapping_sub(3));
     e.set_u16(x.b, Obj::Y, ny);
-    let dx = ((x.random() as u32) & 0xf) as u16;
+    let dx = (rand_and(x, 0xf)) as u16;
     let nx = e.u16(x.b, Obj::X).wrapping_add(dx.wrapping_sub(7));
     e.set_u16(x.b, Obj::X, nx);
 }
@@ -489,7 +496,7 @@ fn rise_step<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB, 2);
             x.set32(Warrior::OFFSET_X, 0);
-            x.set32(0xb6, 0);
+            x.set32(Warrior::OFFSET_Z, 0); // with the high word of `OFFSET_Y`
             x.set32(Warrior::OFFSET_Y, 0);
             lib::sound(x, crate::sound::CMD_38C_48C);
             x.set16(Warrior::SCRIPT_LEFT, 0);
@@ -500,7 +507,7 @@ fn rise_step<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB, 2);
-            x.set16(0xa6, 0x50);
+            x.set16(Warrior::HOST_BUSY, 0x50);
             strike(x, 0x25);
             crate::families::effects_creators::scenery_7(x.b, x.o);
         }

@@ -103,7 +103,7 @@ fn front_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0x40, 0x20, 2) || x.u16(f::TARGET) == 0 || !gate(x) {
         return false;
     }
-    let r = (x.random() as u32) & 0xf;
+    let r = rand_and(x, 0xf);
     if (0xffc0u32 >> r) & 1 != 0 {
         set_state_long(x, 0x0202_0800);
     } else {

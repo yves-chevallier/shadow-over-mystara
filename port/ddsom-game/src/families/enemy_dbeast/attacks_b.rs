@@ -36,7 +36,7 @@ fn end_and_pursue<R: Bench>(x: &mut Cx<'_, R>) {
 fn hop_or_pounce<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => {
-            if (x.random() as u32) & 1 != 0 {
+            if rand_and(x, 1) != 0 {
                 set_state_long(x, 0x0202_0002);
                 x.set8(DisplacerBeast::WANT_ANIM, 0xc);
                 play(x, 8);
@@ -73,7 +73,7 @@ fn side_leap<R: Bench>(x: &mut Cx<'_, R>) {
     phased(x, RESUME_ATTACK_B, |x, n| match n {
         4 => {
             x.add8(Enemy::SUB_STEP, 2);
-            let vy = if (x.random() as u32) & 1 != 0 { -0x100i16 } else { 0x100 };
+            let vy = if rand_and(x, 1) != 0 { -0x100i16 } else { 0x100 };
             x.set16(Enemy::VY, vy as u16);
             x.set8(Enemy::VULNERABLE, 1);
             x.set8(DisplacerBeast::WANT_ANIM, 6);

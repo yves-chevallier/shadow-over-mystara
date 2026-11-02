@@ -9,6 +9,7 @@ use crate::families::cx::Bench;
 use crate::data::RomAddr;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
+use crate::record::record;
 use crate::objects::Obj;
 
 /// Animation to start: nothing, via `0x10428` (set chosen from the master's `+0x33`, then
@@ -52,8 +53,41 @@ impl Master {
     }
 }
 
+/// Fields of the doubles beyond the common ones of `Enemy` (`record!`), and the fields of their master (an enemy of
+/// type 25 or 26) that they read. A meaning guessed from the code alone is marked (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct Double(pub Obj);
+
+impl Double {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
+}
+
+record! {
+    impl Double {
+        /// On the master: non-zero while its doubles hide their frame tag (h).
+        master_blank, set_master_blank, MASTER_BLANK: u8 @ 0xad;
+        /// Types 22 and 23: set when the double has no HP left (it plays its "wounded" set).
+        wounded, set_wounded, WOUNDED: u8 @ 0xaf;
+        /// Type 26: its master (word, RAM address); on the master, its double.
+        replay_master, set_replay_master, REPLAY_MASTER: u16 @ 0xb0;
+        /// Types 22 to 24: the master (word, RAM address).
+        master, set_master, MASTER: u16 @ 0xb2;
+        /// Types 22 and 23: frames before the hit lock drops (word).
+        hurt_wait, set_hurt_wait, HURT_WAIT: u16 @ 0xb4;
+        /// Non-zero: the next gesture restarts its animation (lowered when it does).
+        restart, set_restart, RESTART: u8 @ 0xb6;
+        /// On the master of a type 26: group, mode, phase and step of its move, which the double replays.
+        master_group, set_master_group, MASTER_GROUP: u8 @ 0xb8;
+        master_mode, set_master_mode, MASTER_MODE: u8 @ 0xb9;
+        master_phase, set_master_phase, MASTER_PHASE: u8 @ 0xba;
+        master_step, set_master_step, MASTER_STEP: u8 @ 0xbb;
+    }
+}
+
 /// Master field (16-bit RAM address).
-const MASTER: u32 = 0xb2;
+const MASTER: u32 = Double::MASTER;
 
 fn play<R: Bench>(x: &mut Cx<'_, R>, play: Play) {
     match play {
@@ -78,8 +112,8 @@ fn play<R: Bench>(x: &mut Cx<'_, R>, play: Play) {
 const GESTURES: RomAddr = RomAddr(0x16abd6);
 
 fn restart_or_step<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    if x.u8(0xb6) != 0 {
-        x.set8(0xb6, 0);
+    if x.u8(Double::RESTART) != 0 {
+        x.set8(Double::RESTART, 0);
         lib::start(x, GESTURES.0, n);
     } else {
         lib::step(x);
@@ -87,8 +121,8 @@ fn restart_or_step<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 }
 
 fn restart_or_step_spawn<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    if x.u8(0xb6) != 0 {
-        x.set8(0xb6, 0);
+    if x.u8(Double::RESTART) != 0 {
+        x.set8(Double::RESTART, 0);
         return lib::start(x, GESTURES.0, n);
     }
     lib::step(x);
@@ -112,9 +146,9 @@ fn restart_or_step_spawn<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 /// frames; sound; at 0 HP the double becomes "wounded" (`+0xaf`), the game records `dying_code` in `+0x7e`
 /// and creates an EFFCT 0x3f effect of variant `effect_variant`.
 fn hurt<R: Bench>(x: &mut Cx<'_, R>, dying_code: u8, effect_variant: u8) {
-    let wait = x.u16(0xb4) as i16;
+    let wait = x.u16(Double::HURT_WAIT) as i16;
     if wait > 0 {
-        x.set16(0xb4, (wait - 1) as u16);
+        x.set16(Double::HURT_WAIT, (wait - 1) as u16);
         if wait - 1 <= 0 {
             x.set32(Enemy::HIT_LOCK, 0);
         }
@@ -124,11 +158,11 @@ fn hurt<R: Bench>(x: &mut Cx<'_, R>, dying_code: u8, effect_variant: u8) {
         return;
     }
     x.set16(Enemy::HP_LAST, hp as u16);
-    x.set16(0xb4, 0x14);
+    x.set16(Double::HURT_WAIT, 0x14);
     if hp > 0 {
         return lib::sound(x, crate::sound::CMD_359);
     }
-    x.set8(0xaf, 1);
+    x.set8(Double::WOUNDED, 1);
     lib::sound(x, crate::sound::CMD_35A);
     x.set8(Enemy::EVENT_KIND, dying_code);
     lib::object_event(x);
@@ -143,7 +177,7 @@ fn hurt<R: Bench>(x: &mut Cx<'_, R>, dying_code: u8, effect_variant: u8) {
 /// depth, orientation, owner) and re-lists the object, unless it was just released.
 fn mirror<R: Bench>(x: &mut Cx<'_, R>, dy: u32) {
     let master = x.linked(MASTER);
-    if master.u8(x.b, 0xad) != 0 {
+    if master.u8(x.b, Double::MASTER_BLANK) != 0 {
         x.set8(Enemy::FRAME_TAG, 0);
     }
     if x.u8(Enemy::ACTIVE) == 0 {
@@ -159,8 +193,9 @@ fn mirror<R: Bench>(x: &mut Cx<'_, R>, dy: u32) {
     x.set16(Obj::Z, v);
     let v = master.u32(x.b, Obj::Y).wrapping_add(dy);
     x.set32(Obj::Y, v);
-    let v = master.u16(x.b, 0x2c);
-    x.set16(0x2c, v);
+    // orientation and heading
+    let v = master.u16(x.b, Enemy::FLIP);
+    x.set16(Enemy::FLIP, v);
     let v = master.u16(x.b, f::OWNER);
     x.set16(f::OWNER, v);
     x.reinsert();

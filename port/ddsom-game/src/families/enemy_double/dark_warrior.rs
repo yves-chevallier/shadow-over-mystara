@@ -16,16 +16,16 @@ use crate::data::RomAddr;
 pub(super) mod dark_warrior_double {
     use super::*;
 
-    const MASTER: u32 = 0xb0;
+    const MASTER: u32 = Double::REPLAY_MASTER;
     /// Group, mode, phase and step of the master.
-    const GROUP: u32 = 0xb8;
-    const MODE: u32 = 0xb9;
-    const PHASE: u32 = 0xba;
-    const STEP: u32 = 0xbb;
+    const GROUP: u32 = Double::MASTER_GROUP;
+    const MODE: u32 = Double::MASTER_MODE;
+    const PHASE: u32 = Double::MASTER_PHASE;
+    const STEP: u32 = Double::MASTER_STEP;
     /// Table of hit reaction addresses (master's code `+0x49`).
     const REACTIONS: RomAddr = RomAddr(0x77aec);
     /// Terrain under the object that reverses the depth speed (bytes per terrain 0..8).
-    const REVERSING_TERRAIN: u32 = 0x77d08;
+    const REVERSING_TERRAIN: &str = "double/reversing_terrains";
     const ATTACKED: u16 = 0x400;
     const MASTER_ATTACKED: u16 = 0x406;
 
@@ -53,7 +53,7 @@ pub(super) mod dark_warrior_double {
         x.set8(f::FLIP, v);
         let v = m.u16(x.b, Enemy::HOLDER);
         x.set16(Enemy::HOLDER, v);
-        x.set8(0x3f, 4);
+        x.set8(Enemy::PRIORITY, 4);
         x.reinsert();
     }
 
@@ -72,7 +72,7 @@ pub(super) mod dark_warrior_double {
         e.set_u8(x.b, Enemy::KIND, 0x32);
         e.set_u8(x.b, Enemy::VARIANT, 7);
         e.set_u16(x.b, f::CREATOR, x.o.0 as u16);
-        for off in [0x8, 0xc, 0x10] {
+        for off in [Obj::X, Obj::Z, Obj::Y] {
             let v = x.u16(off);
             e.set_u16(x.b, off, v);
         }
@@ -81,10 +81,10 @@ pub(super) mod dark_warrior_double {
         e.set_u8(x.b, f::FLIP, v);
         let v = x.u32(Obj::FRAME);
         e.set_u32(x.b, Obj::FRAME, v);
-        let v = x.u8(0x3c);
-        e.set_u8(x.b, 0x3c, v);
-        let v = x.u8(0x3f);
-        e.set_u8(x.b, 0x3f, v);
+        let v = x.u8(Enemy::BOUNDS);
+        e.set_u8(x.b, Enemy::BOUNDS, v);
+        let v = x.u8(Enemy::PRIORITY);
+        e.set_u8(x.b, Enemy::PRIORITY, v);
         e.set_u16(x.b, Obj::ANIM_TIMER, 0x28);
     }
 
@@ -291,7 +291,7 @@ pub(super) mod dark_warrior_double {
         if terrain as u8 >= 9 {
             return false;
         }
-        let b = x.rom8(REVERSING_TERRAIN + terrain as u32);
+        let b = tables::table(REVERSING_TERRAIN).at8(x.b, terrain as u32);
         b != 0
     }
 
@@ -359,7 +359,7 @@ pub(super) mod dark_warrior_double {
         copy_speeds(x);
         copy_height(x);
         let code = m.u8(x.b, Enemy::REACTION) as u32;
-        let routine = x.prog32(REACTIONS.0 + code);
+        let routine = tables::reactions(REACTIONS.0).at32(x.b, code);
         run_reaction(x, routine);
         x.set8(Enemy::GROUND_MARK, 0);
     }

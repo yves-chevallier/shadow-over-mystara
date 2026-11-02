@@ -20,10 +20,10 @@ const SET_FLY: RomAddr = RomAddr(0x16a10c);
 const SET_ATTACK: RomAddr = RomAddr(0x16a116);
 const SET_HIT: RomAddr = RomAddr(0x16a132);
 /// Rows of eight bytes per variant (orientation, durations, X offset) and Y offsets according to `+0x42`.
-const VARIANT_ROWS: u32 = 0x756e6;
-const OFFSETS_Y: u32 = 0x757d2;
+const VARIANT_ROWS: &str = "harpy/variants";
+const OFFSETS_Y: &str = "harpy/depth_offsets";
 /// Hit reaction animation, according to the attack series `+0x2f`.
-const HIT_ANIM: u32 = 0x75e84;
+const HIT_ANIM: &str = "harpy/hit_anims";
 
 /// Fields of the family beyond the common ones of `Enemy` (`record!`). A meaning guessed from the code alone is
 /// marked (h).
@@ -40,16 +40,37 @@ record! {
     impl Harpy {
         param, set_param, PARAM: u8 @ 0x42;
         kind, set_kind, KIND: u8 @ 0x43;
+        /// Set on the companion when the harpy is hit (h).
+        companion_hit, set_companion_hit, COMPANION_HIT: u8 @ 0x5a;
         timer_a, set_timer_a, TIMER_A: u8 @ 0xa0;
         timer_b, set_timer_b, TIMER_B: u8 @ 0xa1;
         step, set_step, STEP: u8 @ 0xa2;
         passes, set_passes, PASSES: u8 @ 0xa3;
+        /// Rounds of flight left before a new attack (h).
+        wait_rounds, set_wait_rounds, WAIT_ROUNDS: u8 @ 0xa4;
         shot_done, set_shot_done, SHOT_DONE: u8 @ 0xa5;
         shot, set_shot, SHOT: u32 @ 0xa6;
         companion, set_companion, COMPANION: u16 @ 0xaa;
         exit_limit, set_exit_limit, EXIT_LIMIT: u16 @ 0xae;
         turn_z, set_turn_z, TURN_Z: u16 @ 0xb0;
         resume, set_resume, RESUME: u8 @ 0xb1;
+    }
+}
+
+/// The projectile that a harpy holds until it throws it (object `Harpy::SHOT`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct HarpyShot(pub Obj);
+
+impl HarpyShot {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
+}
+
+record! {
+    impl HarpyShot {
+        /// Set by the harpy at the key frame of its throw: the projectile leaves (h).
+        release, set_release, RELEASE: u8 @ 0x55;
     }
 }
 use crate::objects::Current;
@@ -147,20 +168,21 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Enemy::RESUME_STATE, 0);
     x.set8(Harpy::PASSES, 2);
     // variant row: orientation, durations `+0xa0..+0xa3`, X offset
-    let row = VARIANT_ROWS + x.u8(Obj::VARIANT).wrapping_shl(3) as u32;
-    let flip = x.data16(row);
+    let rows = tables::table(VARIANT_ROWS);
+    let row = x.u8(Obj::VARIANT).wrapping_shl(3) as u32;
+    let flip = rows.at16(x.b, row);
     x.set16(f::FLIP, flip);
-    let timers = x.data32(row + 2);
+    let timers = rows.at32(x.b, row + 2);
     x.set32(Harpy::TIMER_A, timers);
-    let dx = x.data16(row + 6);
+    let dx = rows.at16(x.b, row + 6);
     x.add16(Obj::X, dx);
     let mut d4 = x.u16(Obj::Z) as u32;
     if x.u8(Harpy::KIND) != 0 {
         d4 = d4 & !0xff | x.u8(Harpy::PARAM) as u32;
-        let a2 = OFFSETS_Y.wrapping_add(d4 as u16 as i16 as i32 as u32);
-        let dy = x.data16(a2);
+        let off = d4 as u16 as i16 as i32 as u32;
+        let dy = tables::table(OFFSETS_Y).at16(x.b, off);
         x.add16(Obj::Y, dy);
-        d4 = d4 & !0xffff | x.data16(a2 + 2) as u32;
+        d4 = d4 & !0xffff | tables::table(OFFSETS_Y).at16(x.b, off.wrapping_add(2)) as u32;
     }
     let d4 = d4 as u16;
     let variant = x.u8(Obj::VARIANT);
@@ -445,7 +467,7 @@ fn attack_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         let shot = Obj(x.u32(Harpy::SHOT) & 0xff_ffff);
-        shot.set_u8(x.b, 0x55, 1);
+        shot.set_u8(x.b, HarpyShot::RELEASE, 1);
         x.set8(Harpy::TIMER_A, 0x1e);
         lib::sound(x, crate::sound::CMD_36D);
     }
@@ -459,13 +481,13 @@ fn attack_return<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     set_state_long(x, 0x0202_0000);
-    if (x.random() as u32) & 1 != 0 {
-        let n = x.u8(0xa4).wrapping_sub(1);
-        x.set8(0xa4, n);
+    if rand_and(x, 1) != 0 {
+        let n = x.u8(Harpy::WAIT_ROUNDS).wrapping_sub(1);
+        x.set8(Harpy::WAIT_ROUNDS, n);
         if (n as i8) >= 0 {
             return;
         }
-        x.set8(0xa4, 2);
+        x.set8(Harpy::WAIT_ROUNDS, 2);
     }
     set_state_long(x, 0x0200_0000);
     let resume = x.u8(Harpy::RESUME);
@@ -549,7 +571,7 @@ fn hit<R: Bench>(x: &mut Cx<'_, R>) {
 /// Fall animation of the attack series (`+0x2f`).
 fn hit_anim<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     let series = x.u8(Enemy::GROUP) as u32;
-    x.rom8(HIT_ANIM + series)
+    tables::table(HIT_ANIM).at8(x.b, series)
 }
 
 fn hit_recoil<R: Bench>(x: &mut Cx<'_, R>) {
@@ -557,7 +579,7 @@ fn hit_recoil<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::SUB2, 2);
             let c = x.linked(Harpy::COMPANION);
-            c.set_u8(x.b, 0x5a, 1);
+            c.set_u8(x.b, Harpy::COMPANION_HIT, 1);
             x.set8(f::FREEZE, 1);
             x.anim_start(SET_HIT.0, 0xf);
         }
@@ -590,7 +612,7 @@ fn hit_recoil<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn hit_fall<R: Bench>(x: &mut Cx<'_, R>) {
     let c = x.linked(Harpy::COMPANION);
-    c.set_u8(x.b, 0x5a, 1);
+    c.set_u8(x.b, Harpy::COMPANION_HIT, 1);
     let kind = x.u8(Harpy::KIND) != 0;
     if kind && x.u8(f::SUB2) != 0 {
         if x.u8(Enemy::DISPLAY) & 2 == 0 {

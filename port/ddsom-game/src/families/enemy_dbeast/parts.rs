@@ -83,9 +83,10 @@ pub(super) fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Hit points of the parts (1): they die on the first hit.
 fn set_hp<R: Bench>(x: &mut Cx<'_, R>) {
-    for off in [Enemy::HP_MAX, f::HP, Enemy::HP_LAST] {
-        x.set16(off, 1);
-    }
+    let e = Enemy(x.o);
+    e.set_hp_max(x.b, 1);
+    e.set_hp(x.b, 1);
+    e.set_hp_last(x.b, 1);
 }
 
 /// Released part that immediately plays an animation (variants 4 to 7).
@@ -499,7 +500,7 @@ fn slide<R: Bench>(x: &mut Cx<'_, R>) {
 fn sneak_gen<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
     match x.u8(Enemy::SUB_STEP) {
         0 => {
-            let r = (x.random() as u32) & 0xf;
+            let r = rand_and(x, 0xf);
             let delay = tables::table("dbeast/crawl_delays").at16(x.b, 2 * r);
             slide_start(x, 8, delay);
         }

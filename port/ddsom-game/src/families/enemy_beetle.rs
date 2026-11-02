@@ -303,7 +303,7 @@ fn bite_check<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Beetle::BITING) == 0 {
         let player = x.linked(f::TARGET);
         if player.u16(x.b, Enemy::STATE_WORD) == 0x200 && player.u8(x.b, Enemy::STEP) == 0xc {
-            let roll = (x.random() as u32) & 0x1f;
+            let roll = rand_and(x, 0x1f);
             let row = ((var::RANK.get(x.b) >> 1) as u32) << 2;
             let odds = tables::table(BITE_ODDS).at32(x.b, row);
             if odds >> roll & 1 != 0 {
@@ -706,7 +706,7 @@ fn react_first<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x664b4: randomly drawn duration of the shake.
 fn shake_timer<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = (x.random() as u32) & 3;
+    let r = rand_and(x, 3);
     let t = tables::table(SHAKE_TIMES).at8(x.b, r);
     x.set8(Beetle::SHAKE_TIMER, t);
 }

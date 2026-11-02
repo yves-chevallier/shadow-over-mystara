@@ -220,9 +220,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(f::IMMUNITY, 0);
     lib::set_immunities(x);
     let params: [(u32, u8); 10] = if x.u8(Enemy::GROUP) == 0 {
-        [(0x68, 2), (0x69, 2), (0x6a, 0), (0x6c, 3), (0x6d, 2), (0x72, 4), (0x73, 3), (0x74, 3), (0x75, 0x24), (0x76, 4)]
+        [(Enemy::AI_68, 2), (Enemy::AI_69, 2), (Enemy::AI_WANDER_ROW, 0), (Enemy::AI_WAIT_MASKS, 3), (Enemy::AI_WAIT_ROW, 2), (Enemy::AI_DECISION_A, 4), (Enemy::AI_DECISION_B, 3), (Enemy::AI_BOX_CHANCE, 3), (Enemy::AI_BOX_ANIM, 0x24), (Enemy::AI_BYTE_ROW, 4)]
     } else {
-        [(0x68, 2), (0x69, 2), (0x6a, 0), (0x6c, 4), (0x6d, 2), (0x72, 5), (0x73, 4), (0x74, 2), (0x75, 0x28), (0x76, 6)]
+        [(Enemy::AI_68, 2), (Enemy::AI_69, 2), (Enemy::AI_WANDER_ROW, 0), (Enemy::AI_WAIT_MASKS, 4), (Enemy::AI_WAIT_ROW, 2), (Enemy::AI_DECISION_A, 5), (Enemy::AI_DECISION_B, 4), (Enemy::AI_BOX_CHANCE, 2), (Enemy::AI_BOX_ANIM, 0x28), (Enemy::AI_BYTE_ROW, 6)]
     };
     for (off, v) in params {
         x.set8(off, v);

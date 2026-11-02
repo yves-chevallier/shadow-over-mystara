@@ -203,7 +203,7 @@ mod tentacle {
     /// Starts the rest animation and draws the wait duration (`+0x30`).
     fn idle_anim<R: Bench>(x: &mut Cx<'_, R>) {
         start(x, BODY, 2);
-        let r = (x.random() as u32) & 0xe;
+        let r = rand_and(x, 0xe);
         let delay = tables::table(IDLE_DELAYS).at16(x.b, r);
         x.set16(Obj::ANIM_TIMER, delay);
     }
@@ -371,9 +371,10 @@ mod tentacle {
     fn hit<R: Bench>(x: &mut Cx<'_, R>) {
         follow(x);
         if x.u16(Enemy::HP_MAX) != x.u16(f::HP) {
-            for off in [Enemy::HP_MAX, f::HP, Enemy::HP_LAST] {
-                x.set16(off, 0x7fff);
-            }
+            let e = Enemy(x.o);
+            e.set_hp_max(x.b, 0x7fff);
+            e.set_hp(x.b, 0x7fff);
+            e.set_hp_last(x.b, 0x7fff);
         }
         x.set32(f::STATE, 0x0200_0000);
         finish(x);

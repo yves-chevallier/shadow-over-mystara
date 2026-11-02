@@ -110,11 +110,11 @@ pub(super) mod spectre {
         if suspended(x) {
             return;
         }
-        if x.u8(0xaf) == 0 {
+        if x.u8(Double::WOUNDED) == 0 {
             hurt(x, 0x25, 1);
         }
         let m = Master::read(x);
-        let injured = x.u8(0xaf) != 0;
+        let injured = x.u8(Double::WOUNDED) != 0;
         let choice = match m.state {
             0 | 2 if !paused(x) => choose_active(m.sub, m.s6, m.s7 as i8, injured),
             4 => choose_hit(m.sub, m.s6 as i8, injured),
@@ -206,11 +206,11 @@ pub(super) mod chimera {
         if suspended(x) {
             return;
         }
-        if x.u8(0xaf) == 0 {
+        if x.u8(Double::WOUNDED) == 0 {
             hurt(x, 0x21, 0);
         }
         let m = Master::read(x);
-        let injured = x.u8(0xaf) != 0;
+        let injured = x.u8(Double::WOUNDED) != 0;
         let choice = match m.state {
             0 | 2 if !paused(x) => choose_active(m.sub, m.s6, m.s7 as i8, injured),
             4 => choose_hit(m.sub, m.s6 as i8, injured),

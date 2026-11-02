@@ -174,7 +174,7 @@ fn turn_if_behind<R: Bench>(x: &mut Cx<'_, R>) {
 // --- state 0: creation --------------------------------------------------------------------------
 
 const AI_PARAMS: [(u32, u8); 14] =
-    [(0x68, 2), (0x69, 2), (0x70, 0), (0x6a, 2), (0x6c, 2), (0x6d, 2), (0x72, 4), (0x73, 3), (0x74, 2), (0x75, 4), (0x76, 3), (0x78, 0xff), (0x81, 9), (0x80, 0xa)];
+    [(Enemy::AI_68, 2), (Enemy::AI_69, 2), (Enemy::AI_STANCE_ROW, 0), (Enemy::AI_WANDER_ROW, 2), (Enemy::AI_WAIT_MASKS, 2), (Enemy::AI_WAIT_ROW, 2), (Enemy::AI_DECISION_A, 4), (Enemy::AI_DECISION_B, 3), (Enemy::AI_BOX_CHANCE, 2), (Enemy::AI_BOX_ANIM, 4), (Enemy::AI_BYTE_ROW, 3), (Enemy::AI_SHOT, 0xff), (Enemy::LOOT, 9), (Enemy::LOOT_ROW, 0xa)];
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if paused(x) {

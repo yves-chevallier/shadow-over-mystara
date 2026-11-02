@@ -45,8 +45,8 @@ pub(super) fn knockback<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::ACTIVE, 1);
     x.set32(Enemy::HIT_LOCK, 0);
     let level = ((var::RANK.get(x.b) >> 2) << 2) as u32;
-    let mask = x.data32(MASKS + level);
-    let bit = (x.random() as u32) & 0x1f;
+    let mask = tables::table(MASKS).at32(x.b, level);
+    let bit = rand_and(x, 0x1f);
     if mask >> bit & 1 != 0 {
         x.set32(f::STATE, 0x0204_0600);
         lunge_start(x);
@@ -87,7 +87,7 @@ pub(super) fn recover<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(Enemy::ACTIVE, 1);
                 x.set8(Enemy::VULNERABLE, 1);
                 x.set32(f::STATE, WALK);
-                x.set8(0xa0, 0xc0);
+                x.set8(Riyakaa::GAZE, 0xc0);
             }
         }
         _ => {}
@@ -114,7 +114,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 pub(super) fn grab_start<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(0xae, 1);
+    x.set8(Riyakaa::GRABBED, 1);
     let flipped = x.u8(f::FLIP) != 0;
     let turn = if var::SCENE.get(x.b) == 4 {
         flipped
@@ -124,8 +124,8 @@ pub(super) fn grab_start<R: Bench>(x: &mut Cx<'_, R>) {
     if turn {
         x.add8(f::SUB2, 2);
         x.set8(Enemy::VULNERABLE, 1);
-        x.set8(0xa0, 0x7f);
-        x.set8(0xa1, 0x7f);
+        x.set8(Riyakaa::GAZE, 0x7f);
+        x.set8(Riyakaa::POSE, 0x7f);
         body(x, 4);
     } else {
         x.add8(f::SUB2, 4);

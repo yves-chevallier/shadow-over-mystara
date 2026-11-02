@@ -36,12 +36,12 @@ pub(super) fn look_begin<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::VULNERABLE, 1);
     let (mut d4, mut d5, mut d6) = (0xd, 0, 2);
     if !lib::target_in_box(x, 0, 0xa0, 0x20) {
-        x.set8(0xad, 1);
+        x.set8(Riyakaa::WALK_PENDING, 1);
         d4 = 0x17;
         d6 = 3;
         d5 = 2;
     }
-    x.set8(0xa1, d5);
+    x.set8(Riyakaa::POSE, d5);
     x.anim_start(BODY.0, d6);
     x.select_speed(&crate::objects::motion::SPEEDS_B, d4);
     lib::pick_target(x);
@@ -52,13 +52,13 @@ pub(super) fn look_begin<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x6f5a6: follows the target as long as the gesture lasts.
 pub(super) fn decide_follow<R: Bench>(x: &mut Cx<'_, R>) {
     lib::approach_target(x);
-    let n = countdown(x, 0x71) as i8;
+    let n = countdown(x, Enemy::AI_STANCE) as i8;
     if n < 0 {
         lib::draw_stance(x);
         if lib::pick_target(x).is_none() {
             return;
         }
-        if countdown(x, 0x6b) == 0 {
+        if countdown(x, Enemy::AI_WANDER) == 0 {
             lib::draw_6b(x);
             if lib::maybe_draw_6e(x) {
                 x.set16(f::SUB2, 0x400);
@@ -73,7 +73,7 @@ pub(super) fn decide_follow<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn decide_near<R: Bench>(x: &mut Cx<'_, R>) {
     if lib::target_in_box(x, -0x20, 0x20, 8) {
         x.set32(f::STATE, 0x0204_0c00);
-        x.set8(0xa3, 6);
+        x.set8(Riyakaa::RESUME_STEP, 6);
         return;
     }
     if want_attack(x) {
@@ -81,7 +81,7 @@ pub(super) fn decide_near<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if lib::guard_in_front_strict(x, -0x38, 0x38, 8) {
         let v = x.u8(f::SUB2);
-        x.set8(0xa3, v);
+        x.set8(Riyakaa::RESUME_STEP, v);
         x.set16(f::SUB2, 0xc00);
         return lib::pick_byte(x);
     }
@@ -113,13 +113,13 @@ pub(super) fn decide_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Enemy::SUB_STEP) == 0 {
         x.add8(Enemy::SUB_STEP, 2);
         x.set8(Enemy::VULNERABLE, 1);
-        x.set8(0xa0, 1);
-        if x.u8(0xa1) != 1 {
-            x.set8(0xa1, 1);
+        x.set8(Riyakaa::GAZE, 1);
+        if x.u8(Riyakaa::POSE) != 1 {
+            x.set8(Riyakaa::POSE, 1);
             return body(x, 0);
         }
     }
-    if (countdown(x, 0x6e) as i8) < 0 {
+    if (countdown(x, Enemy::AI_WAIT) as i8) < 0 {
         x.set16(f::SUB2, 0);
     }
     x.anim_step();
@@ -138,10 +138,8 @@ pub(super) fn stand_up<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x700ca: steps back, then chooses the next gesture in a table (substate 8).
 pub(super) fn retreat<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::AI_SHOT, 0xff);
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    let r = (x.random() as u32) & 0x1f;
+    let v = rank_byte(x, NEXT_MOVES);
     x.set8(f::SUB, 8);
-    let v = x.data8(NEXT_MOVES + row + r);
     x.set8(f::SUB2, v);
     x.set8(Enemy::SUB_STEP, 0);
 }
@@ -175,20 +173,18 @@ pub(super) fn needs_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// 0x70178: draws the next attack gesture in a table; if the game allows it, goes back to substate 4 with this
 /// gesture.
 pub(super) fn choose_attack<R: Bench>(x: &mut Cx<'_, R>) {
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    let r = (x.random() as u32) & 0x1f;
-    let pick = x.data8(NEXT_ATTACKS + row + r);
+    let pick = rank_byte(x, NEXT_ATTACKS);
     if pick > 4 {
         return;
     }
     if !lib::chance_10_16(x) {
         x.set8(f::SUB, 4);
-        x.set8(0xa3, pick);
+        x.set8(Riyakaa::RESUME_STEP, pick);
         x.set8(Enemy::SUB_STEP, 0);
         x.set8(f::SUB2, 0xc);
-    } else if x.u8(0xad) != 0 {
+    } else if x.u8(Riyakaa::WALK_PENDING) != 0 {
         speed(x, 0xd);
-        x.set8(0xad, 0);
+        x.set8(Riyakaa::WALK_PENDING, 0);
         body(x, 2);
     }
 }

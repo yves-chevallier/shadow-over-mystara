@@ -114,8 +114,12 @@ record! {
         frame_tag, set_frame_tag, FRAME_TAG: u8 @ 0x38;
         /// Mark of the shadow on the ground (`sprites`: `GROUND_MARK`), cleared at the end of some attacks.
         ground_mark, set_ground_mark, GROUND_MARK: u8 @ 0x3b;
+        /// Bounds of the current frame (`sprites`: `BOUNDS`).
+        bounds, set_bounds, BOUNDS: u8 @ 0x3c;
         /// Strike key of the animation entry (copied to `STRIKE_KIND` by `enemy_lib`).
         strike_key, set_strike_key, STRIKE_KEY: u8 @ 0x3e;
+        /// Display priority (`sprites`: `PRIORITY`).
+        priority, set_priority, PRIORITY: u8 @ 0x3f;
         /// Creator of a sub-object (word, RAM address).
         creator, set_creator, CREATOR: u16 @ 0x42;
         /// Blinking arrival: mask of the frames shown and number of blinks left (the word `CREATOR`, set to 0x703).

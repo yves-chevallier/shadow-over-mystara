@@ -324,7 +324,7 @@ fn dodge<R: Bench>(x: &mut Cx<'_, R>) {
                 }
             }
             x.set8(Obj::SPEED_INDEX, angle);
-            if (x.random() as u32) & 1 != 0 {
+            if rand_and(x, 1) != 0 {
                 x.set8(f::SUB3, 4);
                 x.set16(Obj::VY, 0x300);
                 if angle != 0 {

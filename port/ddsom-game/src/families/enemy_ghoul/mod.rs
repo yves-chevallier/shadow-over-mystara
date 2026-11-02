@@ -50,6 +50,8 @@ record! {
         spawner, set_spawner, SPAWNER: u16 @ 0xa4;
         /// Non-zero: spawned by an object (`SPAWNER`), told of its death.
         spawned, set_spawned, SPAWNED: u8 @ 0xa6;
+        /// Second byte cleared with `SPAWNED` at the creation; not read (h).
+        spawned_low, set_spawned_low, SPAWNED_LOW: u8 @ 0xa7;
         /// Saved position (flight).
         saved_x, set_saved_x, SAVED_X: u16 @ 0xa8;
     }
@@ -225,9 +227,9 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         (Enemy::AI_ROW_8E, 0),
         (Enemy::LOOT, 8),
         (Enemy::LOOT_ROW, 9),
-        (0xa6, 0),
-        (0xa7, 0),
-        (0x83, 1),
+        (Ghoul::SPAWNED, 0),
+        (Ghoul::SPAWNED_LOW, 0),
+        (Enemy::WEAK_TO_C, 1),
         (Enemy::EVENT_LOW, 0x44),
         (Enemy::AI_SHOT, 0xff),
     ] {

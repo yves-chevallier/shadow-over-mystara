@@ -149,7 +149,7 @@ fn walk_angle<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn random_bit<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    (x.random() as u32) & 1 != 0
+    rand_and(x, 1) != 0
 }
 
 // --- the attacks ----------------------------------------------------------------------------------
@@ -338,7 +338,7 @@ fn pounce<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Draws the number of jumps in place (table `pounce_counts`).
 pub(super) fn roll_pounces<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = (x.random() as u32) & 0x1f;
+    let r = rand_and(x, 0x1f);
     let count = tables::table("dbeast/pounce_counts").at8(x.b, r);
     x.set8(DisplacerBeast::REPEAT, count);
 }
@@ -358,7 +358,7 @@ fn pounce_start<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn pounce_repeat<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
-        let r = (x.random() as u32) & 0xf;
+        let r = rand_and(x, 0xf);
         let sound = tables::table("dbeast/pounce_cries").at8(x.b, r);
         if sound != 0 {
             lib::sound(x, crate::sound::CMD_31B_41B);

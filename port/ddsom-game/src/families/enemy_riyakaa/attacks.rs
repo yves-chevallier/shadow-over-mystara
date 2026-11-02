@@ -21,7 +21,7 @@ pub(super) fn swipe<R: Bench>(x: &mut Cx<'_, R>) {
 /// Setting up a paw strike: attack identifier `id`, strike animation `anim`, gaze shift `shift` (`+0xa0`).
 pub(super) fn swing_pose<R: Bench>(x: &mut Cx<'_, R>, id: u8, anim: u32, shift: u8) {
     x.set8(Enemy::STRIKE_KIND, id);
-    x.set8(0xa0, shift);
+    x.set8(Riyakaa::GAZE, shift);
     x.add8(Enemy::SUB_STEP, 2);
     x.anim_start(STRIKE.0, anim as u16);
 }
@@ -32,22 +32,22 @@ pub(super) fn swing<R: Bench>(x: &mut Cx<'_, R>) {
         if !x.anim_step() {
             return;
         }
-        if (countdown(x, 0xa2) as i8) < 0 {
+        if (countdown(x, Riyakaa::TIMER) as i8) < 0 {
             return retreat(x);
         }
         x.add8(f::SUB2, 0xfe);
         return swing_pose(x, 0xb, 1, 0xf0);
     }
     x.set8(Enemy::VULNERABLE, 0);
-    x.set8(0xa2, 0);
+    x.set8(Riyakaa::TIMER, 0);
     x.set8(Enemy::STRIKE_POWER, 5);
-    let v = x.u8(0xa0);
-    x.set8(0xa1, v);
+    let v = x.u8(Riyakaa::GAZE);
+    x.set8(Riyakaa::POSE, v);
     match x.u8(f::SUB2) {
         2 => swing_pose(x, 0xc, 0, 0xf2),
         0 => swing_pose(x, 0xb, 1, 0xf0),
         _ => {
-            x.add8(0xa2, 1);
+            x.add8(Riyakaa::TIMER, 1);
             swing_pose(x, 0xc, 0, 0xf4);
         }
     }
@@ -90,13 +90,13 @@ pub(super) fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x6f784: run-up of the leap (also used as a counter-attack, hit state).
 pub(super) fn lunge_start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(Enemy::SUB_STEP, 2);
-    x.set8(0xac, 0x1a);
+    x.set8(Riyakaa::POUNCE_TRIES, 0x1a);
     x.set8(Enemy::STRIKE_POWER, 8);
     x.set8(Enemy::AI_SHOT, 2);
     x.set8(Enemy::VULNERABLE, 0);
-    let v = x.u8(0xa0);
-    x.set8(0xa1, v);
-    x.set8(0xa0, 0xf6);
+    let v = x.u8(Riyakaa::GAZE);
+    x.set8(Riyakaa::POSE, v);
+    x.set8(Riyakaa::GAZE, 0xf6);
     x.set16(Enemy::VX, 0);
     x.set16(Enemy::VY, 0);
     x.set16(Enemy::AY, 0);
@@ -116,13 +116,13 @@ pub(super) fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Enemy::SUB_STEP) == 0 {
         x.add8(Enemy::SUB_STEP, 2);
         x.set8(Enemy::VULNERABLE, 0);
-        x.set8(0xa1, 0);
-        x.set32(0xa8, 0x0204_0200);
+        x.set8(Riyakaa::POSE, 0);
+        x.set32(Riyakaa::NEXT_STATE, 0x0204_0200);
         if x.u8(f::SUB2) != 8 {
-            x.set32(0xa8, WALK);
+            x.set32(Riyakaa::NEXT_STATE, WALK);
         }
-        x.set8(0xa0, 0);
-        x.set8(0xa2, 0x20);
+        x.set8(Riyakaa::GAZE, 0);
+        x.set8(Riyakaa::TIMER, 0x20);
         x.set8(Enemy::HEADING, 8);
         if x.u8(f::FLIP) != 0 {
             x.set8(Enemy::HEADING, 0x18);
@@ -132,8 +132,8 @@ pub(super) fn dash<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.move_by_table_xy();
     x.anim_step();
-    if (countdown(x, 0xa2) as i8) < 0 {
-        let s = x.u32(0xa8);
+    if (countdown(x, Riyakaa::TIMER) as i8) < 0 {
+        let s = x.u32(Riyakaa::NEXT_STATE);
         x.set32(f::STATE, s);
     }
 }
@@ -146,10 +146,10 @@ pub(super) fn wait_target<R: Bench>(x: &mut Cx<'_, R>) {
         lib::pick_byte(x);
         if x.u8(Enemy::AI_BYTE) == 0 {
             x.set8(Enemy::SUB_STEP, 0);
-            let v = x.u8(0xa3);
+            let v = x.u8(Riyakaa::RESUME_STEP);
             x.set8(f::SUB2, v);
-        } else if x.u8(0xa1) != 1 {
-            x.set8(0xa1, 1);
+        } else if x.u8(Riyakaa::POSE) != 1 {
+            x.set8(Riyakaa::POSE, 1);
         } else {
             return wait_target_follow(x);
         }
@@ -160,14 +160,14 @@ pub(super) fn wait_target<R: Bench>(x: &mut Cx<'_, R>) {
 
 pub(super) fn wait_target_follow<R: Bench>(x: &mut Cx<'_, R>) {
     x.anim_step();
-    if (countdown(x, 0x77) as i8) >= 0 {
+    if (countdown(x, Enemy::AI_BYTE) as i8) >= 0 {
         return;
     }
     x.set8(Enemy::SUB_STEP, 0);
     if needs_turn(x) {
         x.add8(f::SUB2, 2);
     } else {
-        let v = x.u8(0xa3);
+        let v = x.u8(Riyakaa::RESUME_STEP);
         x.set8(f::SUB2, v);
     }
 }
@@ -205,13 +205,13 @@ pub(super) fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(Enemy::SUB_STEP) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
-            x.set8(0xa1, 0x1e);
+            x.set8(Riyakaa::POSE, 0x1e);
             x.set8(Enemy::VULNERABLE, 1);
             if lib::chance_10_16(x) {
                 return body(x, 1);
             }
             x.add8(Enemy::SUB_STEP, 2);
-            x.set8(0xa2, 0x21);
+            x.set8(Riyakaa::TIMER, 0x21);
             body(x, 0xe);
         }
         2 => {
@@ -220,7 +220,7 @@ pub(super) fn roar<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         4 => {
-            if (countdown(x, 0xa2) as i8) < 0 {
+            if (countdown(x, Riyakaa::TIMER) as i8) < 0 {
                 return stand_up(x);
             }
             x.anim_step();
@@ -240,21 +240,21 @@ pub(super) fn circle<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Enemy::VULNERABLE, 1);
             x.set8(Enemy::AI_WANDER, 0x18);
             x.set8(Enemy::HEADING, 0);
-            if (x.random() as u32) & 1 != 0 {
+            if rand_and(x, 1) != 0 {
                 x.add8(Enemy::HEADING, 0x10);
             }
             speed(x, 0xd);
-            x.set8(0xa1, 0);
+            x.set8(Riyakaa::POSE, 0);
             body(x, 2);
         }
         2 => {
             x.move_by_table_xy();
             x.anim_step();
-            if (countdown(x, 0x6b) as i8) >= 0 {
+            if (countdown(x, Enemy::AI_WANDER) as i8) >= 0 {
                 return;
             }
             if x.u8(f::SUB2) == 8 {
-                x.set8(0xa1, 0x1d);
+                x.set8(Riyakaa::POSE, 0x1d);
                 x.add8(Enemy::SUB_STEP, 2);
             } else {
                 stand_up(x);
@@ -281,7 +281,7 @@ pub(super) fn jump_strike<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(Enemy::SUB_STEP, 2);
             x.set8(Enemy::VULNERABLE, 1);
-            x.set8(0xa1, 0x15);
+            x.set8(Riyakaa::POSE, 0x15);
             x.set16(Enemy::GRAVITY, 0xffc8);
             x.set16(Enemy::VZ, 0x200);
             x.set16(Enemy::VX, 0x400);
@@ -336,13 +336,13 @@ pub(super) fn chase_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(Enemy::SUB_STEP) == 0 {
         x.add8(Enemy::SUB_STEP, 2);
         x.set8(Enemy::VULNERABLE, 1);
-        x.set8(0xa2, 0x10);
-        x.set8(0xa1, 1);
-        x.set8(0xa0, 1);
+        x.set8(Riyakaa::TIMER, 0x10);
+        x.set8(Riyakaa::POSE, 1);
+        x.set8(Riyakaa::GAZE, 1);
         x.add8(Enemy::SUB_STEP, 2);
         return body(x, 0);
     }
-    if countdown(x, 0xa2) == 0 {
+    if countdown(x, Riyakaa::TIMER) == 0 {
         walk(x);
     }
     x.anim_step();
@@ -354,29 +354,29 @@ pub(super) fn chase_run<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(Enemy::SUB_STEP, 2);
         x.set8(Enemy::VULNERABLE, 1);
         let target = x.linked(f::OWNER);
-        x.set8(0xa1, 0);
+        x.set8(Riyakaa::POSE, 0);
         if x.u8(f::SUB2) == 4 {
-            x.set8(0xa2, 0x18);
+            x.set8(Riyakaa::TIMER, 0x18);
             let d = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
             x.set8(Enemy::HEADING, 8);
             if (d as i16) < 0 {
                 x.set8(Enemy::HEADING, 0x18);
             }
         } else {
-            x.set8(0xa2, 0x10);
+            x.set8(Riyakaa::TIMER, 0x10);
             let d = x.u16(Obj::Y).wrapping_sub(target.u16(x.b, Obj::Y));
             x.set8(Enemy::HEADING, 0x10);
             if (d as i16) < 0 {
                 x.set8(Enemy::HEADING, 0);
             }
         }
-        x.set8(0xa0, 0);
+        x.set8(Riyakaa::GAZE, 0);
         x.set8(Enemy::VULNERABLE, 1);
-        x.set8(0xa1, 0);
+        x.set8(Riyakaa::POSE, 0);
         speed(x, 0xd);
         body(x, 2);
     }
-    if countdown(x, 0xa2) == 0 {
+    if countdown(x, Riyakaa::TIMER) == 0 {
         walk(x);
     }
     x.move_by_table_xy();
@@ -386,27 +386,27 @@ pub(super) fn chase_run<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x6fb78: jumps on the player it aims at (three gaze tries).
 pub(super) fn chase_pounce<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(Enemy::VULNERABLE, 1);
-    let v = x.u8(0xa0);
-    x.set8(0xa1, v);
+    let v = x.u8(Riyakaa::GAZE);
+    x.set8(Riyakaa::POSE, v);
     let shift = if lib::target_in_box(x, -0x28, 0x28, 0xc) {
         x.set32(f::STATE, 0x0204_0c00);
-        x.set8(0xa3, 6);
+        x.set8(Riyakaa::RESUME_STEP, 6);
         0xf6u8
     } else {
         if !want_attack(x) {
             walk(x);
-            x.set8(0xac, 0);
+            x.set8(Riyakaa::POUNCE_TRIES, 0);
             return look_begin(x);
         }
         choose_attack(x);
-        x.u8(0xa3).wrapping_add(0xf0)
+        x.u8(Riyakaa::RESUME_STEP).wrapping_add(0xf0)
     };
-    x.set8(0xa0, shift);
-    if shift != x.u8(0xa1) {
-        x.set8(0xac, 0xff);
+    x.set8(Riyakaa::GAZE, shift);
+    if shift != x.u8(Riyakaa::POSE) {
+        x.set8(Riyakaa::POUNCE_TRIES, 0xff);
     }
-    x.add8(0xac, 1);
-    if x.u8(0xac) == 3 {
+    x.add8(Riyakaa::POUNCE_TRIES, 1);
+    if x.u8(Riyakaa::POUNCE_TRIES) == 3 {
         walk(x);
         look_begin(x);
     }
