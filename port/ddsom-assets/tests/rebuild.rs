@@ -83,7 +83,7 @@ fn rebuilt_samples() {
     if !available() {
         return;
     }
-    let img = rebuild::qsound_samples(&assets()).unwrap();
+    let img = ddsom_assets::samples::bank(&assets()).unwrap();
     let mut pcm = Vec::new();
     for name in ["dd2.11m", "dd2.12m"] {
         pcm.extend(std::fs::read(roms().join(name)).unwrap().as_chunks::<2>().0.iter().flat_map(|w| [w[1], w[0]]));

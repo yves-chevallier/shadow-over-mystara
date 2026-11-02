@@ -4,6 +4,7 @@
 pub mod music;
 pub mod rebuild;
 pub mod remainder;
+pub mod samples;
 
 pub use ddsom_data::{data, json, levels, pointers, scene_palettes, spawns, speeds, sprites, tables, terrain, texts};
 pub use ddsom_data::{DataFile, Levels, ScenePalettes, Spawns, Speeds, SpriteTables, Terrain, Texts};
@@ -12,6 +13,8 @@ pub use music::Music;
 
 use std::io;
 use std::path::Path;
+
+use cps2::TileAtlas;
 
 /// All 16x16 graphic cells: one color index (0..15) per pixel.
 pub struct Cells {
@@ -52,6 +55,16 @@ impl Cells {
     pub fn pixel(&self, c: usize, x: usize, y: usize) -> u8 {
         self.pixels[(c * Self::SIZE + y) * Self::SIZE + x]
     }
+
+    /// The cells as the renderer reads them (same layout: no conversion).
+    pub fn into_atlas(self) -> TileAtlas {
+        TileAtlas::from_pens(self.pixels)
+    }
+}
+
+/// The graphics of `gfx/cells_NN.png`, decoded into the renderer's tile atlas.
+pub fn tile_atlas(dir: &Path) -> io::Result<TileAtlas> {
+    Ok(Cells::load(dir)?.into_atlas())
 }
 
 /// Palette library: 16 colors per palette in the hardware 0xLRGB format.

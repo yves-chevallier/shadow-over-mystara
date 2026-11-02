@@ -35,7 +35,7 @@ const BACKGROUND: [u8; 3] = [24, 16, 40];
 struct Rom<'a> {
     data: &'a [u16],
     prog: &'a [u16],
-    gfx: &'a [u8],
+    gfx: &'a cps2::TileAtlas,
 }
 
 impl Rom<'_> {
@@ -155,23 +155,23 @@ impl Layer {
     }
 
 
-    /// Draws a tile (`cps2-gfx` decoding: one plane per byte, mirrors at bits 5 and 6 of the attribute).
+    /// Draws a tile (`cps2-gfx` addressing: hardware row offset, twice that in the atlas; mirrors at bits 5 and 6
+    /// of the attribute).
     fn tile(&self, rom: &Rom, pal: &[[u8; 3]], img: &mut Image, x0: usize, y0: usize, code: u16, attr: u16) {
         let t = self.case;
+        let pens = rom.gfx.pens();
         for py in 0..t {
             for px in 0..t {
                 let sx = if attr & 0x20 != 0 { t - 1 - px } else { px };
                 let sy = if attr & 0x40 != 0 { t - 1 - py } else { py };
                 let line = if t == 16 {
-                    TILES + code as usize * 128 + sy * 8 + (sx / 8) * 4
+                    TILES + code as usize * 128 + sy * 8
                 } else {
-                    TILES + (code as usize & 0x3fff) * 512 + sy * 16 + (sx / 8) * 4
+                    TILES + (code as usize & 0x3fff) * 512 + sy * 16
                 };
-                if line + 4 > rom.gfx.len() {
+                let Some(&p) = pens.get(2 * line + sx) else {
                     continue;
-                }
-                let bit = 7 - sx % 8;
-                let p = (rom.gfx[line + 3] >> bit & 1) << 3 | (rom.gfx[line + 2] >> bit & 1) << 2 | (rom.gfx[line + 1] >> bit & 1) << 1 | (rom.gfx[line] >> bit & 1);
+                };
                 if p != 15 {
                     img.set(x0 + px, y0 + py, pal[((attr & 0x1f) + self.colour) as usize * 16 + p as usize]);
                 }
@@ -356,7 +356,7 @@ fn enter(m: &mut cps2::Machine, n: u32) -> Reading {
     let order = (0..4).map(|i| (command >> (6 + 2 * i) & 3) as u8).filter(|&l| (l == 2 || l == 3) && active(l)).collect();
     // target positions of the cameras (records `A5 + 0x4fe` and `A5 + 0x54e`, field `+0x0c`)
     let (y1, y2) = (rw(m, 0xff84fe + 0xc) as i16 as i64, rw(m, 0xff854e + 0xc) as i16 as i64);
-    Reading { pal: cps2_gfx::render::build_palette(&v), order, gap_y: y1 - y2, in_game }
+    Reading { pal: cps2_gfx::render::build_palette(&v).to_vec(), order, gap_y: y1 - y2, in_game }
 }
 
 /// Scene that naturally follows: phase 16 (scene exit) is forced and the next scene is read.
