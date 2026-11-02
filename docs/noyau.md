@@ -267,7 +267,7 @@ recompilé. C'est **le jeu** (décision D1, [refactorisation.md](refactorisation
 **Mode hybride : retiré** (lot « noyau final »). `DDSOM_HYBRIDE=1` choisissait les natives avec le code d'origine
 recompilé pour le reste ; depuis que les tâches sont des machines à états lancées par un ordonnanceur Rust et que leurs
 appels en cours ne sont plus sur la pile 68000, le code d'origine ne peut plus prendre la suite d'une native au milieu
-d'une tâche. `install` installe le jeu sans 68000, et `DDSOM_HYBRIDE=1` arrête `validate`, `bench`, `lectures_rom` et
+d'une tâche. `install` installe le jeu sans 68000, et `DDSOM_HYBRIDE=1` arrête `validate`, `bench`, `rom_reads` et
 l'application avec un message (`ddsom_game::refuse_hybrid`). `DDSOM_CHECK` et `DDSOM_ADOPT_REGS` (l'original exécuté sur
 une copie, à chaque native) marchent sans lui ; `examples/cessions` et `reste68k`, qui mesuraient le 68000 restant du
 mode hybride, sont retirés (historique git).

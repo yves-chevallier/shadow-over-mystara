@@ -150,7 +150,7 @@ fn cull_offscreen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
 pub const CULL_OFFSCREEN: Native = Native {
     entry: 0x1e1a,
     name: "obj_cull_offscreen",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         cull_offscreen(c, b, Obj(c.a[0]));
         rts(c, b);
     }),
@@ -227,7 +227,7 @@ fn in_arena_regs(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) {
 pub const IN_ARENA: Native = Native {
     entry: 0x1e92,
     name: "obj_in_arena",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         in_arena_regs(c, b, Obj(c.a[0]));
         rts(c, b);
     }),
@@ -239,7 +239,7 @@ pub const IN_ARENA: Native = Native {
 pub const IN_ARENA_DEFAULT: Native = Native {
     entry: 0x1e90,
     name: "obj_in_arena_default",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         c.d[0] = ARENA_MARGIN as u32;
         c.flags_logic(ARENA_MARGIN as u32, Size::Long);
         in_arena_regs(c, b, Obj(c.a[0]));
@@ -361,7 +361,7 @@ fn on_screen(c: &mut Cpu, b: &mut Cps2Bus, obj: Obj) -> bool {
 pub const ON_SCREEN: Native = Native {
     entry: 0x1ed2,
     name: "obj_on_screen",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         on_screen(c, b, Obj(c.a[0]));
         rts(c, b);
     }),

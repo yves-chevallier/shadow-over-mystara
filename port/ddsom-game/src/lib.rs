@@ -83,8 +83,8 @@ pub struct Native {
 pub enum Body {
     /// On the processor: reads registers of the original or leaves some to its callers (contract of a call by
     /// address), and ends with its `rts`.
-    Processeur(fn(&mut Cpu, &mut Cps2Bus)),
-    /// Like `Processeur`, for a body shared by several entries: it receives the address of its own.
+    WithCpu(fn(&mut Cpu, &mut Cps2Bus)),
+    /// Like `WithCpu`, for a body shared by several entries: it receives the address of its own.
     CpuIn(fn(&mut Cpu, &mut Cps2Bus, u32)),
     /// Without registers (the target form: memory only); the return (`rts`) is done for it.
     Memory(fn(&mut Cps2Bus)),
@@ -97,7 +97,7 @@ impl Native {
     /// Runs the routine, return (`rts`) included.
     pub fn execute(&self, c: &mut Cpu, b: &mut Cps2Bus) {
         match self.run {
-            Body::Processeur(f) => f(c, b),
+            Body::WithCpu(f) => f(c, b),
             Body::CpuIn(f) => f(c, b, self.entry),
             Body::Memory(f) => {
                 f(b);
@@ -204,7 +204,7 @@ pub const NATIVES: &[Native] = &[
     config::VALIDATE,
     config::VARIABLES,
     config::INIT,
-    popups::ANIMER,
+    popups::ANIMATE,
     eeprom::FULL_COINS_NATIVE,
     eeprom::FULL_STARTS_NATIVE,
 ];
@@ -576,7 +576,7 @@ pub fn install(m: &mut cps2::Machine) {
 /// `DDSOM_HYBRIDE=1` asked for the hybrid mode, removed (see [`install`]): stop with a message.
 pub fn refuse_hybrid() {
     if std::env::var("DDSOM_HYBRIDE").is_ok_and(|v| v == "1") {
-        eprintln!("DDSOM_HYBRIDE=1: the hybrid mode is removed (docs/refactorisation.md, batch « noyau final »); the game is the game without a 68000.");
+        eprintln!("DDSOM_HYBRIDE=1: the hybrid mode is removed (docs/refactorisation.md, batch 'final kernel'); the game is the game without a 68000.");
         std::process::exit(2);
     }
 }

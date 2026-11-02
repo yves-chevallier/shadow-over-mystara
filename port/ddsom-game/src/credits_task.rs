@@ -587,8 +587,8 @@ fn join(x: &mut Ctx, d: GameStart) -> Flow {
 pub const TEST_NATIVES: &[crate::Native] = &[crate::Native {
     // 0x13c2c: credits state (startup, resumption, rallying of the four slots)
     entry: 0x13c2c,
-    name: "credits_etat",
-    run: crate::Body::Processeur(|c, b| {
+    name: "credits_state",
+    run: crate::Body::WithCpu(|c, b| {
         if let Flow::Yield = credits(&mut Ctx::new(c, b)) {
             panic!("credits_etat: cedes control (outside the fuzz frame)");
         }

@@ -1,5 +1,5 @@
 //! Player effects (PEFF), sixth series: types 15 (weapon trail), 16 (item bubble), 18 (rain of stones) and 19
-//! (lightning). See `docs/families/player.md`.
+//! (lightning). See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

@@ -1,5 +1,5 @@
 //! Player effects (class PEFF, pool of 48 objects of 0x60 bytes, table 0x39992), first series.
-//! See `docs/families/player.md`.
+//! See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

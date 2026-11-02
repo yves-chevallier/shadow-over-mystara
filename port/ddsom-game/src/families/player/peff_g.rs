@@ -1,5 +1,5 @@
 //! Player effects (PEFF), seventh series: types 21 to 23 (hit spark, end-of-prayer smoke, prayer glow). See
-//! `docs/families/player.md`.
+//! `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

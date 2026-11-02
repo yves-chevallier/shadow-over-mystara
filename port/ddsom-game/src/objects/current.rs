@@ -17,7 +17,7 @@ use super::lists::{self, ACTORS, FOREGROUND};
 use super::motion::{self, LastAdd, SpeedTables, AXIS_Y, AXIS_Z};
 use super::pools::Pool;
 use super::Obj;
-use crate::machine::{Machine, Processeur};
+use crate::machine::{Machine, WithCpu};
 
 
 
@@ -173,7 +173,7 @@ pub trait Current: Machine {
     #[track_caller]
     fn reinsert(&mut self)
     where
-        Self: Processeur,
+        Self: WithCpu,
     {
         let o = self.obj();
         let (c, b) = self.machine();
@@ -184,7 +184,7 @@ pub trait Current: Machine {
     #[track_caller]
     fn reinsert_foreground(&mut self)
     where
-        Self: Processeur,
+        Self: WithCpu,
     {
         let o = self.obj();
         let (c, b) = self.machine();

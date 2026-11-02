@@ -336,30 +336,30 @@ fn clear_scroll3(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn fixed(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 
-pub const GAUGE_NATIVE: Native = fixed(0xb46, "video_jauge", gauge, regs::d(2) | regs::a(0) | regs::CCR);
+pub const GAUGE_NATIVE: Native = fixed(0xb46, "video_gauge", gauge, regs::d(2) | regs::a(0) | regs::CCR);
 /// 0xb3e: `bra.b 0xb46`, called by the world update (D1 = class marker).
-pub const GAUGE_THUNK_NATIVE: Native = fixed(0xb3e, "video_jauge_b3e", gauge, regs::d(2) | regs::a(0) | regs::CCR);
-pub const GAUGE_VALUE_NATIVE: Native = fixed(0xb40, "video_jauge_d1", gauge_with_value, regs::d(1) | regs::d(2) | regs::a(0) | regs::CCR);
-pub const LOCK: Native = fixed(0xb96, "video_verrou", lock, regs::d(1));
+pub const GAUGE_THUNK_NATIVE: Native = fixed(0xb3e, "video_gauge_b3e", gauge, regs::d(2) | regs::a(0) | regs::CCR);
+pub const GAUGE_VALUE_NATIVE: Native = fixed(0xb40, "video_gauge_d1", gauge_with_value, regs::d(1) | regs::d(2) | regs::a(0) | regs::CCR);
+pub const LOCK: Native = fixed(0xb96, "video_lock", lock, regs::d(1));
 pub const UNLOCK: Native = fixed(0xbac, "video_deverrou", unlock, regs::d(0) | regs::d(1));
-pub const ENABLE_LAYERS: Native = fixed(0xbc6, "video_couches_on", enable_layers, 0);
-pub const DISABLE_LAYERS: Native = fixed(0xbfc, "video_couches_off", disable_layers, regs::d(0));
+pub const ENABLE_LAYERS: Native = fixed(0xbc6, "video_layers_on", enable_layers, 0);
+pub const DISABLE_LAYERS: Native = fixed(0xbfc, "video_layers_off", disable_layers, regs::d(0));
 pub const BLANK_SCREEN: Native = Native {
     entry: 0xc0c,
-    name: "video_ecran_noir",
-    run: crate::Body::Processeur(blank_screen),
+    name: "video_black_screen",
+    run: crate::Body::WithCpu(blank_screen),
     touches_sound: false,
     outputs: regs::d(0) | regs::d(1),
 };
 pub const CLEAR_OBJECTS: Native =
-    Native { entry: 0xc58, name: "video_effacer_objets", run: crate::Body::Memory(clear_objects), touches_sound: false, outputs: 0 };
-pub const CLEAR_SCROLL1: Native = fixed(0xca8, "video_effacer_scroll1", clear_scroll1, regs::d(0) | regs::d(1));
-pub const CLEAR_SCROLL1_START: Native = fixed(0x3525c, "video_effacer_debut_scroll1", clear_scroll1_start, regs::ALL);
-pub const CLEAR_SCROLL2: Native = fixed(0xcc8, "video_effacer_scroll2", clear_scroll2, regs::d(0) | regs::d(1));
-pub const CLEAR_SCROLL3: Native = fixed(0xce8, "video_effacer_scroll3", clear_scroll3, regs::d(0) | regs::d(1));
+    Native { entry: 0xc58, name: "video_clear_objects", run: crate::Body::Memory(clear_objects), touches_sound: false, outputs: 0 };
+pub const CLEAR_SCROLL1: Native = fixed(0xca8, "video_clear_scroll1", clear_scroll1, regs::d(0) | regs::d(1));
+pub const CLEAR_SCROLL1_START: Native = fixed(0x3525c, "video_clear_start_scroll1", clear_scroll1_start, regs::ALL);
+pub const CLEAR_SCROLL2: Native = fixed(0xcc8, "video_clear_scroll2", clear_scroll2, regs::d(0) | regs::d(1));
+pub const CLEAR_SCROLL3: Native = fixed(0xce8, "video_clear_scroll3", clear_scroll3, regs::d(0) | regs::d(1));
 
 
 // ---------------------------------------------------------------------------------------------
@@ -463,7 +463,7 @@ fn terrain_of_object(c: &mut Cpu, b: &mut Cps2Bus) {
 const TERRAIN_OUT: u32 = regs::d(0) | regs::d(1) | regs::d(2) | regs::d(3) | regs::d(4) | regs::a(1) | regs::CCR;
 
 pub const TERRAIN: Native = fixed(0x24b0, "video_terrain", terrain_native, TERRAIN_OUT);
-pub const TERRAIN_OF_OBJECT: Native = fixed(0x24a8, "video_terrain_objet", terrain_of_object, TERRAIN_OUT);
+pub const TERRAIN_OF_OBJECT: Native = fixed(0x24a8, "video_terrain_object", terrain_of_object, TERRAIN_OUT);
 
 // ---------------------------------------------------------------------------------------------
 // V2: tile block loaders
@@ -623,9 +623,9 @@ fn load_blocks(c: &mut Cpu, b: &mut Cps2Bus, grid: Grid) {
 
 const LOAD_OUT: u32 = regs::d(0) | regs::a(1) | regs::a(2);
 
-pub const LOAD_BLOCKS_4X4: Native = fixed(0x260c, "video_blocs_4x4", |c, b| load_blocks(c, b, Grid::Blocks4x4), LOAD_OUT);
-pub const LOAD_BLOCKS_SCROLL2: Native = fixed(0x26d4, "video_blocs_scroll2", |c, b| load_blocks(c, b, Grid::Layer2), LOAD_OUT);
-pub const LOAD_BLOCKS_SMALL: Native = fixed(0x2766, "video_blocs_petits", |c, b| load_blocks(c, b, Grid::Layer3), LOAD_OUT);
+pub const LOAD_BLOCKS_4X4: Native = fixed(0x260c, "video_blocks_4x4", |c, b| load_blocks(c, b, Grid::Blocks4x4), LOAD_OUT);
+pub const LOAD_BLOCKS_SCROLL2: Native = fixed(0x26d4, "video_blocks_scroll2", |c, b| load_blocks(c, b, Grid::Layer2), LOAD_OUT);
+pub const LOAD_BLOCKS_SMALL: Native = fixed(0x2766, "video_blocks_small", |c, b| load_blocks(c, b, Grid::Layer3), LOAD_OUT);
 
 // ---------------------------------------------------------------------------------------------
 // V2: digits in the character layer
@@ -669,10 +669,10 @@ fn hex_digits(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const DECIMAL_DIGITS: Native = fixed(0x255a, "video_chiffres_decimaux", decimal_digits, regs::d(0) | regs::d(1) | regs::a(1) | regs::CCR);
+pub const DECIMAL_DIGITS: Native = fixed(0x255a, "video_digits_decimal", decimal_digits, regs::d(0) | regs::d(1) | regs::a(1) | regs::CCR);
 pub const HEX_DIGITS: Native = fixed(
     0x25e8,
-    "video_chiffres_hexa",
+    "video_digits_hex",
     hex_digits,
     regs::a(1) | regs::CCR,
 );
@@ -692,7 +692,7 @@ pub fn copy_fixed_screens(b: &mut Cps2Bus) {
 
 pub const COPY_FIXED_SCREENS: Native = Native {
     entry: 0x19038,
-    name: "video_copie_ecrans_fixes",
+    name: "video_copy_fixed_screens",
     run: crate::Body::Memory(copy_fixed_screens),
     touches_sound: false,
     outputs: 0,

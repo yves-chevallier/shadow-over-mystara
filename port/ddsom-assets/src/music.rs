@@ -1,7 +1,7 @@
 //! Music and effects of the sound driver (Z80): sound table, tracks, instruments, samples and driver
 //! tables. Format: `assets/sound/music.json`, see docs/assets.md and docs/son.md.
 //!
-//! « Linear » driver addresses (`ddsom_sound::Rom`): offset in `dd2.01`, then `dd2.02` following it.
+//! "Linear" driver addresses (`ddsom_sound::Rom`): offset in `dd2.01`, then `dd2.02` following it.
 //!
 //! A track is written as a sequence of space-separated tokens, one per instruction:
 //! * note (byte >= 0x20): `duration:note`, duration 1 to 7 (bits 7-5), note 0 to 31 (bits 4-0, 0 = rest);

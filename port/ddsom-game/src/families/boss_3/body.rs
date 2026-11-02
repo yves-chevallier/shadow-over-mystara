@@ -3,7 +3,7 @@
 //! boss). A table per shape gives, per 16-pixel distance slice, the maximum height, the half-depth and the push.
 //!
 //! The players are pushed by the boss itself (`push_players`); the other objects call 0x81aa4
-//! (`boss_common`), which calls these shapes through `pousser`.
+//! (`boss_common`), which calls these shapes through `push`.
 
 use cps2::Cps2Bus;
 use m68k::decode::Size;
@@ -106,7 +106,7 @@ pub(super) fn push_players<R: Bench>(x: &mut Cx<'_, R>, shape: u8) {
 
 /// Body shape `routine` (0x818e6 front, 0x819e2 sideways) applied to object `other` by boss `me`; true if
 /// the object was pushed (for 0x81aa4 of `boss_common`).
-pub fn pousser(b: &mut Cps2Bus, me: Obj, other: Obj, routine: u32) -> bool {
+pub fn push(b: &mut Cps2Bus, me: Obj, other: Obj, routine: u32) -> bool {
     match routine {
         0x818e6 => shove_front(b, me, other),
         0x819e2 => shove_side(b, me, other),
@@ -125,16 +125,16 @@ fn native(c: &mut Cpu, b: &mut Cps2Bus, f: fn(&mut Cps2Bus, Obj, Obj) -> bool) {
 
 pub const SHOVE_FRONT: crate::Native = crate::Native {
     entry: 0x818e6,
-    name: "boss_3_pousse_devant",
-    run: crate::Body::Processeur(|c, b| native(c, b, shove_front)),
+    name: "boss_3_pushes_front",
+    run: crate::Body::WithCpu(|c, b| native(c, b, shove_front)),
     touches_sound: false,
     outputs: crate::regs::d(0) | crate::regs::CCR,
 };
 
 pub const SHOVE_SIDE: crate::Native = crate::Native {
     entry: 0x819e2,
-    name: "boss_3_pousse_cote",
-    run: crate::Body::Processeur(|c, b| native(c, b, shove_side)),
+    name: "boss_3_pushes_side",
+    run: crate::Body::WithCpu(|c, b| native(c, b, shove_side)),
     touches_sound: false,
     outputs: crate::regs::d(0) | crate::regs::CCR,
 };

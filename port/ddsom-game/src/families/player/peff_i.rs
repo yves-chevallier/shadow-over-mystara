@@ -1,5 +1,5 @@
 //! Player effects (PEFF), ninth series: types 30 (storm), 31 (whirlwind) and 32 (lightning target). See
-//! `docs/families/player.md`.
+//! `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

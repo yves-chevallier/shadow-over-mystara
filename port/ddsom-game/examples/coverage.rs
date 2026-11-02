@@ -1,5 +1,5 @@
 //! Coverage of the native routines: how many times each native entry point is reached over a
-//! scenario (one « address name calls » per line, including zero calls).
+//! scenario (one "address name calls" per line, including zero calls).
 //!   coverage <roms> <eeprom> <scenario> <frames> [index.tsv]
 //! With the function index (decomp/index.tsv): original code only, calls of each function.
 //! Used to flag the routines not exercised (hence not validated) by the scenarios.

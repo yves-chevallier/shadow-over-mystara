@@ -86,9 +86,9 @@ mod bumper {
     const BOXES_NEAR2: u32 = 0x11c23a;
     const BOX_SET: u8 = 0x42;
     /// Subfields of the contact box (`+0x38`) and of the presence boxes (`+0x39`, `+0x3a`).
-    const HIT_SEL: u32 = 0x38;
-    const NEAR_SEL: u32 = 0x39;
-    const NEAR2_SEL: u32 = 0x3a;
+    const HIT_SELECTOR: u32 = 0x38;
+    const NEAR_SELECTOR: u32 = 0x39;
+    const NEAR2_SELECTOR: u32 = 0x3a;
     /// States of the launched player.
     const AIRBORNE: u32 = 0x0200_2400;
     const AIRBORNE_BACK: u32 = 0x0200_2402;
@@ -160,7 +160,7 @@ mod bumper {
             if p.u8(x.b, pl::ACTIVE) == 0 || p.u16(x.b, pl::HEALTH) == 0 {
                 continue;
             }
-            if !within(x, p, BOXES_NEAR, NEAR_SEL) && !within(x, p, BOXES_NEAR2, NEAR2_SEL) {
+            if !within(x, p, BOXES_NEAR, NEAR_SELECTOR) && !within(x, p, BOXES_NEAR2, NEAR2_SELECTOR) {
                 return;
             }
         }
@@ -171,11 +171,11 @@ mod bumper {
         }
     }
 
-    /// Address of the box of row `sel` of the set `+0x2e` of the table `table`.
-    fn box_of<R: Bench>(x: &mut Cx<'_, R>, table: u32, sel: u32) -> u32 {
+    /// Address of the box of row `selector` of the set `+0x2e` of the table `table`.
+    fn box_of<R: Bench>(x: &mut Cx<'_, R>, table: u32, selector: u32) -> u32 {
         let set = x.u8(0x2e) as u32;
         let boxes = x.data32(table + 4 * set);
-        boxes.wrapping_add(8 * x.u8(sel) as u32)
+        boxes.wrapping_add(8 * x.u8(selector) as u32)
     }
 
     /// Test of an axis: the corrected distance is in the interval (unsigned comparison).
@@ -188,8 +188,8 @@ mod bumper {
     }
 
     /// The player is in a presence box (box offset by two offset bytes).
-    fn within<R: Bench>(x: &mut Cx<'_, R>, p: Obj, table: u32, sel: u32) -> bool {
-        let b = box_of(x, table, sel);
+    fn within<R: Bench>(x: &mut Cx<'_, R>, p: Obj, table: u32, selector: u32) -> bool {
+        let b = box_of(x, table, selector);
         let dx = p.u16(x.b, pl::X).wrapping_sub(x.u16(0x8));
         let shift_x = x.data8(b) as i8;
         let half_x = x.data8(b + 1);
@@ -204,7 +204,7 @@ mod bumper {
 
     /// The player is in the contact box and in a state that allows it.
     fn keys<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
-        let b = box_of(x, BOXES_HIT, HIT_SEL);
+        let b = box_of(x, BOXES_HIT, HIT_SELECTOR);
         if p.u8(x.b, 5) != 0 || p.u8(x.b, 0x8a) != 0 {
             return false;
         }

@@ -1,5 +1,5 @@
 //! Game data tables (players, combat, enemies, crates, scenes): `assets/data/*.json`
-//! (`ddsom_assets::data`, docs/assets.md « Tables de données »).
+//! (`ddsom_assets::data`, docs/assets.md "data tables").
 //!
 //! Each table is described by a `Spec` (name, address, space, format, row count). Sizes
 //! come from the gap between tables when they follow one another (regions), otherwise from the code that reads them.

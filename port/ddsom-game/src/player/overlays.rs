@@ -341,7 +341,7 @@ fn update_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const UPDATE: Native = Native {
     entry: 0x392e4,
     name: "player_overlays_update",
-    run: crate::Body::Processeur(update_native),
+    run: crate::Body::WithCpu(update_native),
     touches_sound: false,
     outputs: 0,
 };

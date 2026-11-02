@@ -1,4 +1,4 @@
-//! Scheduler tasks written in Rust (see `docs/noyau.md`, « Tâches Rust »).
+//! Scheduler tasks written in Rust (see `docs/noyau.md`, "Rust tasks").
 //!
 //! A Rust task is a state machine whose each *step* runs between two cessions of control. Each resume
 //! point is a stage ([`Step`], one `enum` per module: `steps!`) whose original address (the one following

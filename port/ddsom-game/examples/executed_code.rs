@@ -1,6 +1,6 @@
 //! Bytes of 68000 instructions executed by the reference machine (recompiled original code, overclocked 68000,
 //! like machine B of `validate`): the measurement of the code that separates, in the program region, code from data
-//! (`port/extract/code_68k.txt`, docs/sans-rom.md « Couverture complète des données »).
+//! (`port/extract/code_68k.txt`, docs/sans-rom.md "full data coverage").
 //!
 //!   executed_code <roms> <eeprom> <output.txt> <scenario>:<frames> ...
 //!
@@ -104,5 +104,5 @@ fn main() {
             _ => {}
         }
     }
-    std::fs::write(&a[3], out).expect("sortie");
+    std::fs::write(&a[3], out).expect("output");
 }

@@ -1,5 +1,5 @@
 //! Player effects (PEFF), eleventh series: types 40 (meteors) and 45 (indicators of the selection screen).
-//! See `docs/families/player.md`.
+//! See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

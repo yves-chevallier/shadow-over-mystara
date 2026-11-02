@@ -157,7 +157,7 @@ of the SETs, player sub-objects (weapon and shield), aura palettes, task stacks,
 The rest of the program region: `natives.json`, the measured zones that the native routines read;
 `reste.json`, everything no other file describes, except the executed 68000 code (ranges listed in
 `code`), as blocks of hexadecimal bytes. With them, the rebuilt program region equals the ROM outside code
-(docs/sans-rom.md « Couverture complète des données »).
+(docs/sans-rom.md 'full data coverage').
 
 ## data/spawns.json
 

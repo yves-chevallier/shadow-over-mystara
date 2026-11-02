@@ -4,7 +4,7 @@ port/extract/native_zones.txt (docs/sans-rom.md).
 
   tools/native_zones.py <covered.bin> <reads.txt>... > port/extract/native_zones.txt
 
-<covered.bin>: `couverture_rom <assets> --octets <covered.bin> --sans data/natives.json` (word-by-word coverage
+<covered.bin>: `rom_coverage <assets> --bytes <covered.bin> --without data/natives.json` (word-by-word coverage
 of the other asset files); <reads.txt>: outputs of `lectures_rom` in no-68000 mode (the default,
 DDSOM_COUVERT=<covered.bin>). Uncovered read zones less than GAP bytes apart are merged; each one
 is attributed to the Rust file that reads most of its words (first caller outside the generic mem.rs accesses).

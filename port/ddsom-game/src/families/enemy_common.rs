@@ -464,8 +464,8 @@ pub fn detach_from_host<R: Bench>(x: &mut Cx<'_, R>) {
 
 pub const NATIVES: &[crate::Native] = &[crate::Native {
     entry: 0x27ee,
-    name: "ennemi_detacher_hote",
-    run: crate::Body::Processeur(|c, b| {
+    name: "enemy_detach_host",
+    run: crate::Body::WithCpu(|c, b| {
         // D0.w and A1: the link and the host, like the original
         let host = crate::mem::rd16(b, c.a[0] + f::HOST);
         c.d[0] = c.d[0] & 0xffff_0000 | host as u32;

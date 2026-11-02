@@ -1,5 +1,5 @@
 //! Player effects (PEFF), tenth series: types 35 to 39, 46 and 47 (effects of the leap, the swap, the slide, the
-//! dwarf's attack, shards of the monsters hit, rain of the selection screen). See `docs/families/player.md`.
+//! dwarf's attack, shards of the monsters hit, rain of the selection screen). See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

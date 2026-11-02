@@ -2,8 +2,8 @@
 //!
 //! Four records of 0x200 bytes at `A5+0x5de` (`PLAYER_BASE`, stride `PLAYER_STRIDE`); a player
 //! is also an object (`objects::Obj`): the common fields (position, speeds, animation, list
-//! links) are those of `docs/objects.md`, the player-specific fields are named in `Player`.
-//! See `docs/player.md` for the details of the structures and states.
+//! links) are those of `docs/objets.md`, the player-specific fields are named in `Player`.
+//! See `docs/joueur.md` for the details of the structures and states.
 //!
 //! Organization (the letters P1.. are those of `docs/atlas.md`):
 //! - `states`: values of the state machine (`+4..+7`);

@@ -49,8 +49,8 @@ fn rebuilt_program() {
     assert!(p.data.covered_len() > 0x200000, "{}", p.data.covered_len());
 }
 
-/// With `data/remainder.json`, the program region is complete: the only missing bytes (in both spaces)
-/// are 68000 code declared by that file (docs/sans-rom.md « Couverture complète des données »).
+/// With `data/reste.json`, the program region is complete: the only missing bytes (in both spaces)
+/// are 68000 code declared by that file (docs/sans-rom.md "full data coverage").
 #[test]
 fn full_program_outside_code() {
     if !available() {

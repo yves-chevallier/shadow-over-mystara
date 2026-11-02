@@ -59,7 +59,7 @@ si bien que la validation globale n'est pas affectée.
 
    ```
    export DDSOM_ROMS=... DDSOM_EEPROM=...
-   fuzz familles <roms> <eeprom> scenarios/bot30k.txt 3000 300
+   fuzz families <roms> <eeprom> scenarios/bot30k.txt 3000 300
    ```
 
    Après 3000 images de chauffe, pour chaque gestionnaire, des trajectoires de 60 appels : un objet
@@ -170,7 +170,7 @@ Outils :
   gestionnaire des six tables est exécuté depuis la même mémoire en changeant un seul registre de reste
   (D1-D6, A2-A4, mot haut de D0) ; si la mémoire finale change (piles ignorées), le gestionnaire lit ce
   registre. `DDSOM_RESTES_SITE=1` donne l'instruction qui le lit et le chemin parcouru ;
-* `restes_statique <roms>` : analyse statique grossière (registre lu avant écrit, suit branchements et
+* `static_leftovers <roms>` : analyse statique grossière (registre lu avant écrit, suit branchements et
   tables) ; bruyante (tables de données décodées en code), à n'utiliser que pour orienter ;
 * lecture du code des natives : `grep "c\.d\[[1-6]\]\|c\.a\[[2-4]\]"` donne les endroits où le Rust lit lui-même un
   registre hérité.

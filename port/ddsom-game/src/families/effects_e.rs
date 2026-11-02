@@ -997,7 +997,7 @@ fn attack_fx_sparks<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xabeea "effct_attaque" #[without] attack_fx,
+    0xabeea "effct_attack" #[without] attack_fx,
     0xad63e "effct_radeau" #[without] raft,
     0xad866 "effct_passage" #[without] gate,
 }

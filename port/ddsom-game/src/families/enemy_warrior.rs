@@ -419,8 +419,8 @@ fn swing_step<R: Bench>(x: &mut Cx<'_, R>) {
 /// there.
 fn sparks<R: Bench>(x: &mut Cx<'_, R>) {
     let e = match lib::shock(x, 3, 0, 0, 0) {
-        lib::Choc::Created(o) | lib::Choc::Refuse(o) => o,
-        lib::Choc::Aucun => host(x),
+        lib::Impact::Created(o) | lib::Impact::Refuse(o) => o,
+        lib::Impact::Nothing => host(x),
     };
     if e.word() == 0 {
         return;

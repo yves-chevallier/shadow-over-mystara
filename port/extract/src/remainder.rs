@@ -1,5 +1,5 @@
-//! The rest of the program region: `data/remainder.json` (`ddsom_assets::remainder`, docs/sans-rom.md « Couverture
-//! complète des données »).
+//! The rest of the program region: `data/reste.json` (`ddsom_assets::remainder`, docs/sans-rom.md "full data
+//! coverage" section).
 //!
 //! Every byte of the program region that the other files do not describe is stored there, except 68000 code:
 //! the bytes of the instructions that the reference machine executes over all the scenarios (`code_68k.txt`, measured

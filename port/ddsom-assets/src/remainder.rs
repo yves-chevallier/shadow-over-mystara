@@ -1,11 +1,11 @@
-//! The remainder of the program region (`data/remainder.json`): all the bytes that the other files do not describe,
+//! The remainder of the program region (`data/reste.json`): all the bytes that the other files do not describe,
 //! except the 68000 code.
 //!
 //! The game without the 68000 no longer runs the original code: everything else in the program region is data that a
 //! native routine may read. Rather than extracting only the zones that a measurement saw being read (`data/natives.json`),
 //! this file stores everything that is not code, which makes the program region complete by construction. The
 //! excluded code is the code the reference machine executes on all scenarios (`port/extract/code_68k.txt`,
-//! docs/sans-rom.md « Couverture complète des données »); code that is never executed is therefore stored here too, like
+//! docs/sans-rom.md "full data coverage"); code that is never executed is therefore stored here too, like
 //! tables stored inside the code and data that a call jumps over.
 //!
 //! * `data`: blocks of the data space (68000 reads), `start` then the bytes in hexadecimal, 32 per
@@ -63,7 +63,7 @@ impl Block {
         let mut out = Vec::new();
         for l in &self.bytes {
             if l.len() % 2 != 0 {
-                return Err(format!("block {:#x}: odd line « {l} »", self.start));
+                return Err(format!("block {:#x}: odd line '{l}'", self.start));
             }
             for i in (0..l.len()).step_by(2) {
                 out.push(u8::from_str_radix(&l[i..i + 2], 16).map_err(|e| format!("block {:#x}: {e}", self.start))?);
@@ -110,10 +110,10 @@ impl Remainder {
         self.code
             .iter()
             .map(|p| {
-                let (a, b) = p.split_once('-').ok_or_else(|| format!("unreadable code range « {p} »"))?;
+                let (a, b) = p.split_once('-').ok_or_else(|| format!("unreadable code range '{p}'"))?;
                 match (json::hex::parse(a), json::hex::parse(b)) {
                     (Some(a), Some(b)) if a < b => Ok((a, b)),
-                    _ => Err(format!("unreadable code range « {p} »")),
+                    _ => Err(format!("unreadable code range '{p}'")),
                 }
             })
             .collect()

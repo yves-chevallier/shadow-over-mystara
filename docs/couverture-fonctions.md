@@ -13,7 +13,7 @@ figure dans [code-mort.md](code-mort.md).
 **Pourquoi.** Le jeu sans 68000 n'exécute que du Rust : chaque fonction de cette liste est réécrite (en native ou
 dans le corps d'une autre), mais aucun scénario ne l'a comparée au code d'origine. Un écart y passerait inaperçu,
 y compris en jouant depuis les ROMs. Ce sont les cibles des fuzz différentiels par routine (sur le modèle de
-`fuzz_porte`, `fuzz_familles`) et des scénarios ciblés.
+`fuzz_door`, `fuzz_families`) et des scénarios ciblés.
 
 **Limite.** Couverture par fonction : une fonction exécutée peut avoir des branches jamais prises (la couverture par
 instruction est ventilée plus bas, « Branches des fonctions exécutées »). Les tailles d'`index.tsv` incluent parfois
@@ -90,8 +90,8 @@ atteint par un autre chemin). Une ligne par fonction, avec l'adresse et le côt�
 | `0x8ec02` | C04 |  | 302 | 46 | 7 |
 | `0x1ec4e` | V4 |  | 44 | 41 | 1 |
 | `0xca524` | C10 |  | 45 | 39 | 1 |
-| `0x143da` | C1 | credits_lire_monnayeurs M | 86 | 38 | 2 |
-| `0xe2430` | S1 | son_selon_version E | 35 | 33 | 1 |
+| `0x143da` | C1 | credits_read_coin_slots M | 86 | 38 | 2 |
+| `0xe2430` | S1 | sound_by_version E | 35 | 33 | 1 |
 | `0xedf80` | S1 |  | 35 | 32 | 1 |
 | `0x376ee` | P4 |  | 33 | 28 | 2 |
 | `0x46044` | P5 |  | 82 | 28 | 4 |
@@ -113,12 +113,12 @@ atteint par un autre chemin). Une ligne par fonction, avec l'adresse et le côt�
 | `0x1c86e` | W1 | world_update P | 74 | 19 | 1 |
 | `0x47390` | P5 |  | 85 | 19 | 9 |
 | `0x639fe` | C02 |  | 23 | 19 | 1 |
-| `0x87048` | C04 | boss_seuil_pv P | 23 | 19 | 1 |
+| `0x87048` | C04 | boss_hp_threshold P | 23 | 19 | 1 |
 | `0x87b86` | C04 |  | 23 | 19 | 1 |
 | `0x89788` | C04 |  | 23 | 19 | 1 |
 | `0x8a2c6` | C04 |  | 23 | 19 | 1 |
-| `0xe296c` | S1 | son_selon_version E | 21 | 19 | 1 |
-| `0xe2a74` | S1 | son_selon_version E | 21 | 19 | 1 |
+| `0xe296c` | S1 | sound_by_version E | 21 | 19 | 1 |
+| `0xe2a74` | S1 | sound_by_version E | 21 | 19 | 1 |
 | `0x03f28` | X2 |  | 24 | 18 | 1 |
 | `0x1422e` | C1 |  | 24 | 18 | 1 |
 | `0x14652` | C1 |  | 123 | 18 | 4 |
@@ -191,15 +191,15 @@ atteint par un autre chemin). Une ligne par fonction, avec l'adresse et le côt�
 * `0x011bc` FUN_000011bc (4 o)
 * `0x012a0` FUN_000012a0 (30 o)
 * `0x012c4` FUN_000012c4 (50 o)
-* `0x0255a` FUN_0000255a (44 o) : native `video_chiffres_decimaux P`
-* `0x025e8` FUN_000025e8 (36 o) : native `video_chiffres_hexa P`
+* `0x0255a` FUN_0000255a (44 o) : native `video_digits_decimal P`
+* `0x025e8` FUN_000025e8 (36 o) : native `video_digits_hex P`
 
 ### E1 : Aides d'IA (cible, portées, décisions aléatoires) (5 sur 69)
 
 * `0x07024` FUN_00007024 (10 o)
 * `0x0ad7c` FUN_0000ad7c (52 o) : code-mort.md
 * `0x0ffda` FUN_0000ffda (26 o) : code-mort.md
-* `0x101da` FUN_000101da (62 o) : native `palette_quatre_blocs_69 P`
+* `0x101da` FUN_000101da (62 o) : native `palette_four_blocks_69 P`
 * `0x10298` FUN_00010298 (34 o) : code-mort.md
 
 ### F4 : Exécuteur d'écrans fixes (logos) (1 sur 5)
@@ -267,14 +267,14 @@ atteint par un autre chemin). Une ligne par fonction, avec l'adresse et le côt�
 
 * `0x2da4a` FUN_0002da4a (70 o)
 * `0x2da90` FUN_0002da90 (58 o)
-* `0x2daf4` FUN_0002daf4 (42 o) : native `compta_departs P`
+* `0x2daf4` FUN_0002daf4 (42 o) : native `accounting_starts P`
 * `0x2dca6` FUN_0002dca6 (80 o)
 * `0x2dcd2` FUN_0002dcd2 (36 o)
 * `0x2dd14` FUN_0002dd14 (32 o)
 * `0x2de2a` FUN_0002de2a (66 o)
 * `0x2e082` FUN_0002e082 (66 o)
 * `0x2e204` FUN_0002e204 (88 o)
-* `0x2e49a` FUN_0002e49a (66 o) : native `compta_complete_departs P`
+* `0x2e49a` FUN_0002e49a (66 o) : native `accounting_complete_starts P`
 * `0x2e4dc` FUN_0002e4dc (16 o)
 * `0x2e620` FUN_0002e620 (16 o)
 * `0x2e77c` FUN_0002e77c (26 o)
@@ -292,7 +292,7 @@ atteint par un autre chemin). Une ligne par fonction, avec l'adresse et le côt�
 
 ### B1 : Scrolling / caméras par scène (1 sur 42)
 
-* `0x33196` FUN_00033196 (36 o) : native `decor_parallaxe_trois_quarts P`
+* `0x33196` FUN_00033196 (36 o) : native `scenery_parallax_three_quarters P`
 
 ### P4 : Noyau joueur (états, 26 actions génériques) (1 sur 59)
 
@@ -351,7 +351,7 @@ atteint par un autre chemin). Une ligne par fonction, avec l'adresse et le côt�
 * `0x80cb0` FUN_00080cb0 (18 o)
 * `0x81810` FUN_00081810 (102 o)
 * `0x818b2` FUN_000818b2 (52 o)
-* `0x818e6` FUN_000818e6 (48 o) : native `boss_3_pousse_devant P`, code-mort.md
+* `0x818e6` FUN_000818e6 (48 o) : native `boss_3_pushes_front P`, code-mort.md
 * `0x81916` FUN_00081916 (58 o)
 * `0x83414` FUN_00083414 (8 o)
 * `0x83dde` FUN_00083dde (32 o)
@@ -401,12 +401,12 @@ atteint par un autre chemin). Une ligne par fonction, avec l'adresse et le côt�
 
 * `0xaa8d6` FUN_000aa8d6 (18 o)
 * `0xaadba` FUN_000aadba (112 o)
-* `0xb3e4e` FUN_000b3e4e (56 o) : native `cree_cris P`
-* `0xb4f1c` FUN_000b4f1c (40 o) : native `cree_sorts_c P`
+* `0xb3e4e` FUN_000b3e4e (56 o) : native `create_cries P`
+* `0xb4f1c` FUN_000b4f1c (40 o) : native `create_spells_c P`
 * `0xb8d80` FUN_000b8d80 (66 o)
-* `0xb96c0` FUN_000b96c0 (28 o) : native `cree_eclat_lance P`
-* `0xb97a2` FUN_000b97a2 (24 o) : native `cree_eclat_pose P`
-* `0xb97ba` FUN_000b97ba (30 o) : native `cree_eclat_pose_b P`
+* `0xb96c0` FUN_000b96c0 (28 o) : native `create_shard_thrown P`
+* `0xb97a2` FUN_000b97a2 (24 o) : native `create_shard_placed P`
+* `0xb97ba` FUN_000b97ba (30 o) : native `create_shard_placed_b P`
 
 ### C10 : SET : décors/animations de palette (14 sur 131)
 
@@ -432,21 +432,21 @@ atteint par un autre chemin). Une ligne par fonction, avec l'adresse et le côt�
 ### S1 : Son : wrappers de commandes + FIFO (16 sur 410)
 
 * `0xe089e` FUN_000e089e (22 o)
-* `0xe19f8` FUN_000e19f8 (14 o) : native `son_wrapper E`
-* `0xe4188` FUN_000e4188 (106 o) : native `son_wrapper E`
-* `0xe46de` FUN_000e46de (112 o) : native `son_wrapper E`
-* `0xe4752` FUN_000e4752 (106 o) : native `son_wrapper E`
-* `0xe47bc` FUN_000e47bc (112 o) : native `son_wrapper E`
-* `0xe55a2` FUN_000e55a2 (92 o) : native `son_wrapper E`
-* `0xe55fe` FUN_000e55fe (52 o) : native `son_wrapper E`
-* `0xe5632` FUN_000e5632 (112 o) : native `son_wrapper E`
-* `0xe8676` FUN_000e8676 (14 o) : native `son_wrapper E`
-* `0xe8ef2` FUN_000e8ef2 (44 o) : native `son_wrapper E`
-* `0xea166` FUN_000ea166 (106 o) : native `son_wrapper E`
-* `0xea50c` FUN_000ea50c (110 o) : native `son_wrapper E`
-* `0xeab50` FUN_000eab50 (92 o) : native `son_wrapper E`
-* `0xeae86` FUN_000eae86 (110 o) : native `son_wrapper E`
-* `0xebc4c` FUN_000ebc4c (110 o) : native `son_wrapper E`
+* `0xe19f8` FUN_000e19f8 (14 o) : native `sound_wrapper E`
+* `0xe4188` FUN_000e4188 (106 o) : native `sound_wrapper E`
+* `0xe46de` FUN_000e46de (112 o) : native `sound_wrapper E`
+* `0xe4752` FUN_000e4752 (106 o) : native `sound_wrapper E`
+* `0xe47bc` FUN_000e47bc (112 o) : native `sound_wrapper E`
+* `0xe55a2` FUN_000e55a2 (92 o) : native `sound_wrapper E`
+* `0xe55fe` FUN_000e55fe (52 o) : native `sound_wrapper E`
+* `0xe5632` FUN_000e5632 (112 o) : native `sound_wrapper E`
+* `0xe8676` FUN_000e8676 (14 o) : native `sound_wrapper E`
+* `0xe8ef2` FUN_000e8ef2 (44 o) : native `sound_wrapper E`
+* `0xea166` FUN_000ea166 (106 o) : native `sound_wrapper E`
+* `0xea50c` FUN_000ea50c (110 o) : native `sound_wrapper E`
+* `0xeab50` FUN_000eab50 (92 o) : native `sound_wrapper E`
+* `0xeae86` FUN_000eae86 (110 o) : native `sound_wrapper E`
+* `0xebc4c` FUN_000ebc4c (110 o) : native `sound_wrapper E`
 
 ### M3 : « Secret Test » (debug) et Block Test (29 sur 29)
 

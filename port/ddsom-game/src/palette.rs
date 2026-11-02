@@ -73,7 +73,7 @@ fn set_brightness_native(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs: 0 }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: 0 }
 }
 
 pub const FULL_BRIGHTNESS: Native = native(0x1686, "palette_full_brightness", full_brightness_native);
@@ -341,7 +341,7 @@ pub fn load_palette_set(b: &mut Cps2Bus, n: u16) {
     load_set(b, n as u32);
 }
 
-pub const LOAD_SET: Native = native(0x1a3d4, "palette_ensemble", set_run);
+pub const LOAD_SET: Native = native(0x1a3d4, "palette_set", set_run);
 
 /// Pages 1 to 3: code table (address per scene), "current scene" entry, "given D0" entry.
 const PAGE_TABLES: [(u32, u32, u32); 3] = [(0x1a62c, 0x1a608, 0x1a60a), (0x1a6a0, 0x1a678, 0x1a67e), (0x1a8d4, 0x1a8ac, 0x1a8b2)];
@@ -653,14 +653,14 @@ fn white_pages(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const FADE_TO_PALETTES: Native = native(0x1cd7c, "palette_fondu_vers_palettes", fade_to_palettes);
-pub const FADE_TO_COLORS: Native = native(0x1cdd6, "palette_fondu_vers_couleurs", fade_to_colors);
-pub const FADE_TO_WHITE: Native = native(0x1cd32, "palette_fondu_vers_blanc", fade_to_white);
+pub const FADE_TO_PALETTES: Native = native(0x1cd7c, "palette_fade_to_palettes", fade_to_palettes);
+pub const FADE_TO_COLORS: Native = native(0x1cdd6, "palette_fade_to_colours", fade_to_colors);
+pub const FADE_TO_WHITE: Native = native(0x1cd32, "palette_fade_to_white", fade_to_white);
 pub const WHITE_PAGES: Native = native(0x1cf3c, "palette_pages_blanches", white_pages);
 pub const FILL_PAGE: Native = native(0x1cfb8, "palette_page_unie", fill_page_native);
 pub const APPROACH_PAGE: Native = native(
     0x1cfc8,
-    "palette_approche_page",
+    "palette_approach_page",
     |c, b| {
         approach_page(b, c.a[0], c.a[1]);
         rts(c, b);
@@ -668,7 +668,7 @@ pub const APPROACH_PAGE: Native = native(
 );
 pub const APPROACH_CONSTANT: Native = native(
     0x1d042,
-    "palette_approche_couleur",
+    "palette_approach_colour",
     |c, b| {
         approach_constant(b, c.a[0], c.d[1] as u16);
         rts(c, b);
@@ -819,19 +819,19 @@ fn flash_native_run(c: &mut Cpu, b: &mut Cps2Bus, tint: Flash) {
 }
 
 const fn flash_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs: regs::ALL }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::ALL }
 }
 
-pub const FLASH_GRAY: Native = flash_native(0x1ab56, "palette_eclair_gris", |c, b| flash_native_run(c, b, Flash::Gray));
-pub const FLASH_A: Native = flash_native(0x1aaa0, "palette_eclair_a", |c, b| flash_native_run(c, b, Flash::A));
-pub const FLASH_B: Native = flash_native(0x1aaba, "palette_eclair_b", |c, b| flash_native_run(c, b, Flash::B));
-pub const FLASH_C: Native = flash_native(0x1aad4, "palette_eclair_c", |c, b| flash_native_run(c, b, Flash::C));
-pub const FLASH_D: Native = flash_native(0x1aaee, "palette_eclair_d", |c, b| flash_native_run(c, b, Flash::D));
-pub const FLASH_E: Native = flash_native(0x1ab08, "palette_eclair_e", |c, b| flash_native_run(c, b, Flash::E));
-pub const FLASH_F: Native = flash_native(0x1ab22, "palette_eclair_f", |c, b| flash_native_run(c, b, Flash::F));
-pub const FLASH_G: Native = flash_native(0x1ab3c, "palette_eclair_g", |c, b| flash_native_run(c, b, Flash::G));
-pub const FLASH_RESTORE: Native = flash_native(0x1abe0, "palette_eclair_remet", restore_flash_native);
-pub const FLASH_SAVE: Native = flash_native(0x1ac24, "palette_eclair_reserve", save_flash_native);
+pub const FLASH_GRAY: Native = flash_native(0x1ab56, "palette_lightning_grey", |c, b| flash_native_run(c, b, Flash::Gray));
+pub const FLASH_A: Native = flash_native(0x1aaa0, "palette_lightning_a", |c, b| flash_native_run(c, b, Flash::A));
+pub const FLASH_B: Native = flash_native(0x1aaba, "palette_lightning_b", |c, b| flash_native_run(c, b, Flash::B));
+pub const FLASH_C: Native = flash_native(0x1aad4, "palette_lightning_c", |c, b| flash_native_run(c, b, Flash::C));
+pub const FLASH_D: Native = flash_native(0x1aaee, "palette_lightning_d", |c, b| flash_native_run(c, b, Flash::D));
+pub const FLASH_E: Native = flash_native(0x1ab08, "palette_lightning_e", |c, b| flash_native_run(c, b, Flash::E));
+pub const FLASH_F: Native = flash_native(0x1ab22, "palette_lightning_f", |c, b| flash_native_run(c, b, Flash::F));
+pub const FLASH_G: Native = flash_native(0x1ab3c, "palette_lightning_g", |c, b| flash_native_run(c, b, Flash::G));
+pub const FLASH_RESTORE: Native = flash_native(0x1abe0, "palette_lightning_restore", restore_flash_native);
+pub const FLASH_SAVE: Native = flash_native(0x1ac24, "palette_lightning_reserve", save_flash_native);
 
 /// Colour of the screen flash (colour 14 of page 1 of the interface, `0x91c41c`): 0x1ac68 sets it to
 /// 0xff00 (`FLASH_COLOR_ON`), 0x1ac86 and 0x35288 to 0xffff (white).
@@ -851,15 +851,15 @@ pub const FLASH_COLOR_RED: u16 = 0xff00;
 pub const FLASH_COLOR_WHITE_VALUE: u16 = 0xffff;
 
 const fn flash_color_native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs: regs::CCR }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::CCR }
 }
 
 pub const FLASH_COLOR_ON: Native =
-    flash_color_native(0x1ac68, "palette_eclair_couleur", |c, b| flash_color_native_run(c, b, FLASH_COLOR_RED));
+    flash_color_native(0x1ac68, "palette_lightning_colour", |c, b| flash_color_native_run(c, b, FLASH_COLOR_RED));
 pub const FLASH_COLOR_WHITE: Native =
-    flash_color_native(0x1ac86, "palette_eclair_blanc", |c, b| flash_color_native_run(c, b, FLASH_COLOR_WHITE_VALUE));
+    flash_color_native(0x1ac86, "palette_lightning_white", |c, b| flash_color_native_run(c, b, FLASH_COLOR_WHITE_VALUE));
 pub const FLASH_COLOR_WHITE_B: Native =
-    flash_color_native(0x35288, "palette_eclair_blanc_b", |c, b| flash_color_native_run(c, b, FLASH_COLOR_WHITE_VALUE));
+    flash_color_native(0x35288, "palette_lightning_white_b", |c, b| flash_color_native_run(c, b, FLASH_COLOR_WHITE_VALUE));
 
 /// Copies `longs` × 8 longs from `from` to `to` by `movem.l` of eight registers (D0-D5, A3, A4 keep the
 /// last block); returns the end addresses.
@@ -913,8 +913,8 @@ fn character_palette_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-pub const SAVE_PAGE1: Native = Native { entry: 0x1ad2a, name: "palette_sauve_page1", run: crate::Body::Processeur(save_page1), touches_sound: false, outputs: regs::ALL };
-pub const CHARACTER_PALETTE: Native = Native { entry: 0x37882, name: "palette_personnage", run: crate::Body::Processeur(character_palette_native), touches_sound: false, outputs: regs::ALL };
+pub const SAVE_PAGE1: Native = Native { entry: 0x1ad2a, name: "palette_saved_page1", run: crate::Body::WithCpu(save_page1), touches_sound: false, outputs: regs::ALL };
+pub const CHARACTER_PALETTE: Native = Native { entry: 0x37882, name: "palette_character", run: crate::Body::WithCpu(character_palette_native), touches_sound: false, outputs: regs::ALL };
 
 /// Native routines of this module (the brightness settings are declared in `lib.rs`).
 pub const NATIVES: &[Native] = &[

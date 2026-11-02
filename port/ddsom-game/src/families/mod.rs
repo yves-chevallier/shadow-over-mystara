@@ -7,7 +7,7 @@
 //! A native routine replaces a whole handler: the logic is written on a generic [`cx::Cx`] (without registers:
 //! `#[without]`, see `handler!` and `cx::handlers!`).
 //!
-//! See `docs/families.md` for the description of each type.
+//! See `docs/familles.md` for the description of each type.
 
 pub mod boss_common;
 pub mod boss_0;
@@ -130,17 +130,17 @@ pub const NATIVES: &[Native] = &[
 /// Game routines called by the handlers (original addresses).
 pub mod rom {
     pub const IN_ZONE: u32 = 0xfbae;
-    pub const OMBRE: u32 = 0x33fe4;
+    pub const SHADOW: u32 = 0x33fe4;
 }
 
 /// `addq.b #n,(off,A0)`: adds `n` to a byte of the object (modulo 256).
-pub(crate) fn ajoute_u8<R>(x: &mut cx::Cx<'_, R>, o: Obj, off: u32, n: u8) {
+pub(crate) fn add_u8<R>(x: &mut cx::Cx<'_, R>, o: Obj, off: u32, n: u8) {
     let v = o.u8(x.b, off).wrapping_add(n);
     o.set_u8(x.b, off, v);
 }
 
 /// Object designated by a sign-extended 16-bit RAM pointer (`movea.w (off,A0),An`).
-pub(crate) fn pointeur<R>(x: &mut cx::Cx<'_, R>, o: Obj, off: u32) -> Obj {
+pub(crate) fn pointer<R>(x: &mut cx::Cx<'_, R>, o: Obj, off: u32) -> Obj {
     Obj(o.u16(x.b, off) as i16 as i32 as u32 & 0xff_ffff)
 }
 
@@ -155,8 +155,8 @@ macro_rules! handler {
         });
     };
     ($const:ident, $entry:expr, $name:expr, #[without] $logic:path) => {
-        pub const $const: crate::Native = crate::families::cx::handler_sans($entry, $name, |b, a| {
-            $logic(&mut crate::families::cx::Gx::aiguille(b, a));
+        pub const $const: crate::Native = crate::families::cx::handler_without($entry, $name, |b, a| {
+            $logic(&mut crate::families::cx::Gx::dispatch(b, a));
         });
     };
 }
@@ -170,8 +170,8 @@ pub fn natives() -> impl Iterator<Item = &'static Native> {
         .flatten()
         .chain(items_b::NATIVES)
         .chain(eshl_creators::NATIVES)
-        .chain(boxes::caisse::NATIVES)
-        .chain(boxes::pousse::NATIVES)
+        .chain(boxes::chest::NATIVES)
+        .chain(boxes::pushes::NATIVES)
         .chain(boss_common::NATIVES)
         .chain(boss_0::NATIVES)
         .chain(boss_16::NATIVES)

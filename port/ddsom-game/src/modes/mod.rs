@@ -197,7 +197,7 @@ fn turn(x: &mut Ctx) -> Flow {
     match m {
         0 => init(x),
         2 => dispatch(x),
-        // two table entries only; `init` alone writes the mode (code-mort.md, batch « sortie du Cpu »)
+        // two table entries only; `init` alone writes the mode (code-mort.md, batch "CPU removal")
         _ => unreachable!("mode {m:#x}: outside table 0x13424 (modes 0 and 2)"),
     }
 }
@@ -221,7 +221,7 @@ fn dispatch(x: &mut Ctx) -> Flow {
     let sub = rd8(x.b, mode::SUB);
     match attract::screen(x, sub).or_else(|| title::screen(x, sub)).or_else(|| ranking::screen(x, sub)).or_else(|| demo::screen(x, sub)) {
         Some(flow) => flow,
-        // the eleven entries of the table (0 to 0x14) are rewritten (code-mort.md, batch « sortie du Cpu »)
+        // the eleven entries of the table (0 to 0x14) are rewritten (code-mort.md, batch "CPU removal")
         None => unreachable!("sub-mode {sub:#x}: outside table 0x1345c"),
     }
 }

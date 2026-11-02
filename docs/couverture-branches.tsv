@@ -3,7 +3,7 @@ K1	00350	reset		57	46	11	454:suite
 K1	00492	boot_init		31	28	3	510:suite
 K1	00574	irq2_vblank		51	47	4	5b4:suite 5ce:suite
 K1	0065e	FUN_0000065e		12	3	9	664:suite
-K1	0068c	FUN_0000068c	son_envoyer_z80 P	33	33	0	
+K1	0068c	FUN_0000068c	sound_send_z80 P	33	33	0	
 K1	00722	FUN_00000722		49	49	0	
 K1	0080c	read_inputs	read_inputs P	56	56	0	
 K1	00902	FUN_00000902		9	9	0	
@@ -15,20 +15,20 @@ K1	00a40	FUN_00000a40	ATTENDRE P	5	5	0
 K1	00a86	FUN_00000a86	CEDER P	4	4	0	
 K1	00ae4	FUN_00000ae4	RECOMMENCER_TACHE P	5	5	0	
 K1	00af6	FUN_00000af6	MASQUER P	2	2	0	
-K1	00b3e	thunk_FUN_00000b46	video_jauge_b3e P	1	1	0	
-V1	00b40	FUN_00000b40	video_jauge_d1 P	1	1	0	
-V1	00b46	FUN_00000b46	video_jauge P	8	4	4	b4e:suite
+K1	00b3e	thunk_FUN_00000b46	video_gauge_b3e P	1	1	0	
+V1	00b40	FUN_00000b40	video_gauge_d1 P	1	1	0	
+V1	00b46	FUN_00000b46	video_gauge P	8	4	4	b4e:suite
 V1	00b64	FUN_00000b64	ATTENDRE_UNE_IMAGE P	2	2	0	
-V1	00b96	FUN_00000b96	video_verrou P	6	6	0	
+V1	00b96	FUN_00000b96	video_lock P	6	6	0	
 V1	00bac	FUN_00000bac	video_deverrou P	8	8	0	
-V1	00bc6	FUN_00000bc6	video_couches_on P	9	9	0	
-V1	00bfc	FUN_00000bfc	video_couches_off P	4	4	0	
-V1	00c0c	FUN_00000c0c	video_ecran_noir P	10	10	0	
+V1	00bc6	FUN_00000bc6	video_layers_on P	9	9	0	
+V1	00bfc	FUN_00000bfc	video_layers_off P	4	4	0	
+V1	00c0c	FUN_00000c0c	video_black_screen P	10	10	0	
 V1	00c32	FUN_00000c32		10	10	0	
-V1	00c58	FUN_00000c58	video_effacer_objets M	14	14	0	
-V1	00ca8	FUN_00000ca8	video_effacer_scroll1 P	7	7	0	
-V1	00cc8	FUN_00000cc8	video_effacer_scroll2 P	7	7	0	
-V1	00ce8	FUN_00000ce8	video_effacer_scroll3 P	13	13	0	
+V1	00c58	FUN_00000c58	video_clear_objects M	14	14	0	
+V1	00ca8	FUN_00000ca8	video_clear_scroll1 P	7	7	0	
+V1	00cc8	FUN_00000cc8	video_clear_scroll2 P	7	7	0	
+V1	00ce8	FUN_00000ce8	video_clear_scroll3 P	13	13	0	
 V2	00d32	FUN_00000d32	text_erase P	4	4	0	
 V2	00d5e	FUN_00000d5e	text_print P	42	40	2	d9a:suite
 V2	00dca	FUN_00000dca	text_print_over P	42	40	2	e06:suite
@@ -36,8 +36,8 @@ V2	00f4a	FUN_00000f4a	text_clear_blocks P	55	47	8	f68:suite f80:suite f96:suite 
 V2	01136	FUN_00001136	text_print_tall P	40	35	5	116c:suite 1182:suite 119c:suite
 V2	01234	FUN_00001234	text_print_tall_at P	12	12	0	
 V2	01324	FUN_00001324	text_clear_box P	30	29	1	1340:suite
-V2	01376	FUN_00001376	direction_vers_objet P	2	2	0	
-V2	0137e	FUN_0000137e	direction_objet P	2	2	0	
+V2	01376	FUN_00001376	direction_to_object P	2	2	0	
+V2	0137e	FUN_0000137e	direction_object P	2	2	0	
 V2	01386	FUN_00001386	direction P	44	44	0	
 V2	0144c	FUN_0000144c		3	3	0	
 V3	01460	FUN_00001460		3	3	0	
@@ -108,21 +108,21 @@ O2	0245c	FUN_0000245c		2	2	0
 O2	0246c	FUN_0000246c		2	2	0	
 O2	02474	FUN_00002474		12	12	0	
 O2	0248e	FUN_0000248e		5	5	0	
-V2	024a8	FUN_000024a8	video_terrain_objet P	2	2	0	
+V2	024a8	FUN_000024a8	video_terrain_object P	2	2	0	
 V2	024b0	FUN_000024b0	video_terrain P	53	53	0	
-V2	0260c	FUN_0000260c	video_blocs_4x4 P	71	71	0	
-V2	026d4	FUN_000026d4	video_blocs_scroll2 P	44	44	0	
-V2	02766	FUN_00002766	video_blocs_petits P	43	43	0	
-V2	027ee	FUN_000027ee	ennemi_detacher_hote P	10	10	0	
-V2	02810	FUN_00002810	objet_saisi P	7	7	0	
+V2	0260c	FUN_0000260c	video_blocks_4x4 P	71	71	0	
+V2	026d4	FUN_000026d4	video_blocks_scroll2 P	44	44	0	
+V2	02766	FUN_00002766	video_blocks_small P	43	43	0	
+V2	027ee	FUN_000027ee	enemy_detach_host P	10	10	0	
+V2	02810	FUN_00002810	object_seized P	7	7	0	
 V2	02824	FUN_00002824		13	13	0	
 V2	02860	FUN_00002860		13	13	0	
 V2	0289c	FUN_0000289c		13	13	0	
-V2	028d8	FUN_000028d8	fin_de_partie P	65	65	0	
+V2	028d8	FUN_000028d8	game_over_check P	65	65	0	
 V2	029ea	FUN_000029ea	obj_pause_hook P	2	2	0	
-V2	02a36	FUN_00002a36	fond_1_allume P	3	3	0	
-V2	02a42	FUN_00002a42	fond_1_allume_d0 P	4	4	0	
-V2	02a52	FUN_00002a52	fond_2_allume P	31	31	0	
+V2	02a36	FUN_00002a36	background_1_lit P	3	3	0	
+V2	02a42	FUN_00002a42	background_1_lit_d0 P	4	4	0	
+V2	02a52	FUN_00002a52	background_2_lit P	31	31	0	
 K3	02aec	copy_inputs_to_players	copy_inputs_to_players P	61	61	0	
 K3	02bdc	FUN_00002bdc	clear_player_inputs P	9	9	0	
 K3	02bfe	get_player_input	get_player_input P	7	7	0	
@@ -156,16 +156,16 @@ P1	035e8	FUN_000035e8		6	6	0
 X2	03600	FUN_00003600		6	6	0	
 X2	03618	FUN_00003618		7	7	0	
 X2	03636	FUN_00003636		10	10	0	
-X2	03668	FUN_00003668	joueur_place_au_sol P	49	49	0	
+X2	03668	FUN_00003668	player_placed_on_ground P	49	49	0	
 X2	0371a	FUN_0000371a		28	28	0	
 X2	03776	FUN_00003776		12	12	0	
 X2	03796	FUN_00003796		79	79	0	
 X2	0388a	FUN_0000388a		45	44	1	38d2:suite
-X2	03af8	FUN_00003af8	palette_effet_20 P	2	2	0	
-X2	03afe	FUN_00003afe	palette_effet_0 P	2	2	0	
-X2	03b04	FUN_00003b04	palette_effet_360 P	2	2	0	
-X2	03b0c	FUN_00003b0c	palette_effet_380 P	2	2	0	
-X2	03b14	FUN_00003b14	palette_effet_3a0 P	2	2	0	
+X2	03af8	FUN_00003af8	palette_effect_20 P	2	2	0	
+X2	03afe	FUN_00003afe	palette_effect_0 P	2	2	0	
+X2	03b04	FUN_00003b04	palette_effect_360 P	2	2	0	
+X2	03b0c	FUN_00003b0c	palette_effect_380 P	2	2	0	
+X2	03b14	FUN_00003b14	palette_effect_3a0 P	2	2	0	
 X2	03b1c	FUN_00003b1c		6	6	0	
 X2	03b36	FUN_00003b36		7	7	0	
 X2	03bbe	FUN_00003bbe		13	13	0	
@@ -213,7 +213,7 @@ E1	0fe34	FUN_0000fe34		12	12	0
 E1	0fe5a	FUN_0000fe5a		9	9	0	
 E1	0ff54	FUN_0000ff54		19	19	0	
 E1	0fffc	FUN_0000fffc		4	4	0	
-E1	10158	FUN_00010158	palette_quatre_blocs P	29	29	0	
+E1	10158	FUN_00010158	palette_four_blocks P	29	29	0	
 E1	103ba	FUN_000103ba		6	6	0	
 E1	103d6	FUN_000103d6		2	2	0	
 E1	103e0	FUN_000103e0		12	12	0	
@@ -238,8 +238,8 @@ E1	1172e	FUN_0001172e		25	25	0
 E1	11a36	FUN_00011a36		29	29	0	
 F1	11b16	task0_main		86	82	4	11bd0:suite
 F1	133dc	FUN_000133dc		6	6	0	
-F1	133f0	FUN_000133f0	demarrage_baisse P	2	2	0	
-F1	133f6	FUN_000133f6	demarrage_leve P	2	2	0	
+F1	133f0	FUN_000133f0	boot_lowered P	2	2	0	
+F1	133f6	FUN_000133f6	boot_raised P	2	2	0	
 F1	133fe	FUN_000133fe		10	10	0	
 C1	13c2c	FUN_00013c2c		258	204	54	13e82:suite 13f10:cible
 C1	140b4	FUN_000140b4		63	63	0	
@@ -250,7 +250,7 @@ C1	14300	FUN_00014300		17	17	0
 C1	14322	FUN_00014322		8	8	0	
 C1	1436e	FUN_0001436e		13	13	0	
 C1	143a6	FUN_000143a6		12	12	0	
-C1	143da	FUN_000143da	credits_lire_monnayeurs M	86	48	38	14404:suite 14512:cible
+C1	143da	FUN_000143da	credits_read_coin_slots M	86	48	38	14404:suite 14512:cible
 C1	14546	FUN_00014546		34	7	27	14546:suite 14564:suite
 C1	145cc	FUN_000145cc		34	31	3	145d8:suite 1462a:suite
 C1	14652	FUN_00014652		123	105	18	1465e:cible 14666:cible 1478c:cible 14794:cible
@@ -307,24 +307,24 @@ F3	17aee	FUN_00017aee		11	11	0
 F3	17b14	FUN_00017b14		8	8	0	
 F3	17b40	FUN_00017b40		36	36	0	
 F3	18082	FUN_00018082		13	13	0	
-F3	180ac	FUN_000180ac	ecran_fixe_remise P	5	5	0	
+F3	180ac	FUN_000180ac	fixed_screen_reset P	5	5	0	
 F3	180c8	FUN_000180c8		106	89	17	1815c:cible 181a2:suite 18202:suite
 F4	18a0e	FUN_00018a0e		12	12	0	
 F4	18a3e	FUN_00018a3e		90	90	0	
 F4	18b8e	FUN_00018b8e		117	117	0	
-F4	19038	FUN_00019038	video_copie_ecrans_fixes M	9	9	0	
+F4	19038	FUN_00019038	video_copy_fixed_screens M	9	9	0	
 U1	19a80	FUN_00019a80	rng_seed P	2	2	0	
 U1	19a88	FUN_00019a88	rng_next P	8	8	0	
-U1	19aa2	FUN_00019aa2	evt_vider_points P	8	8	0	
-U1	19abc	FUN_00019abc	evt_vider_compteur P	8	8	0	
-U1	19ad6	FUN_00019ad6	evt_evenement_objet P	5	5	0	
-U1	19ae6	FUN_00019ae6	evt_enfiler_points P	10	10	0	
-U1	19b08	FUN_00019b08	evt_enfiler_compteur P	10	10	0	
-U1	19b2a	FUN_00019b2a	evt_crediter_points P	8	8	0	
-U1	19b9c	FUN_00019b9c	evt_crediter_compteur P	8	8	0	
-U1	19db4	FUN_00019db4	evt_vider_popups P	8	8	0	
-U1	19dce	FUN_00019dce	evt_creer_popup P	18	17	1	19dea:suite
-U1	19e10	FUN_00019e10	evt_effacer_popup P	6	6	0	
+U1	19aa2	FUN_00019aa2	evt_clear_points P	8	8	0	
+U1	19abc	FUN_00019abc	evt_clear_counter P	8	8	0	
+U1	19ad6	FUN_00019ad6	evt_event_object P	5	5	0	
+U1	19ae6	FUN_00019ae6	evt_enqueue_points P	10	10	0	
+U1	19b08	FUN_00019b08	evt_enqueue_counter P	10	10	0	
+U1	19b2a	FUN_00019b2a	evt_credit_points P	8	8	0	
+U1	19b9c	FUN_00019b9c	evt_credit_counter P	8	8	0	
+U1	19db4	FUN_00019db4	evt_clear_popups P	8	8	0	
+U1	19dce	FUN_00019dce	evt_create_popup P	18	17	1	19dea:suite
+U1	19e10	FUN_00019e10	evt_clear_popup P	6	6	0	
 U1	19e20	FUN_00019e20	popups_animer P	34	34	0	
 U1	19eb0	FUN_00019eb0		15	15	0	
 U1	19ee0	FUN_00019ee0		9	9	0	
@@ -335,46 +335,46 @@ V3	1a296	FUN_0001a296	palette_chargement_scene P	30	30	0
 V3	1a350	FUN_0001a350	palette_scene_scroll1 P	4	4	0	
 V3	1a360	FUN_0001a360	palette_scene P	2	2	0	
 V3	1a366	FUN_0001a366	palette_scene_d0 P	30	30	0	
-V3	1a3d4	FUN_0001a3d4	palette_ensemble P	12	12	0	
-V3	1a5e8	FUN_0001a5e8	palette_douze_blocs P	8	8	0	
+V3	1a3d4	FUN_0001a3d4	palette_set P	12	12	0	
+V3	1a5e8	FUN_0001a5e8	palette_twelve_blocks P	8	8	0	
 V3	1a608	FUN_0001a608	palette_page1 P	1	1	0	
 V3	1a60a	FUN_0001a60a	palette_page1_d0 P	9	9	0	
 V3	1a678	FUN_0001a678	palette_page2 P	2	2	0	
 V3	1a67e	FUN_0001a67e	palette_page2_d0 P	9	9	0	
 V3	1a8ac	FUN_0001a8ac	palette_page3 P	2	2	0	
 V3	1a8b2	FUN_0001a8b2	palette_page3_d0 P	9	9	0	
-U2	1aaa0	FUN_0001aaa0	palette_eclair_a P	6	6	0	
-U2	1aaba	FUN_0001aaba	palette_eclair_b P	6	6	0	
-U2	1aad4	FUN_0001aad4	palette_eclair_c P	6	6	0	
-U2	1aaee	FUN_0001aaee	palette_eclair_d P	6	6	0	
-U2	1ab08	FUN_0001ab08	palette_eclair_e P	6	6	0	
-U2	1ab22	FUN_0001ab22	palette_eclair_f P	6	6	0	
-U2	1ab3c	FUN_0001ab3c	palette_eclair_g P	6	6	0	
-U2	1ab56	FUN_0001ab56	palette_eclair_gris P	52	52	0	
-U2	1abe0	FUN_0001abe0	palette_eclair_remet P	24	24	0	
-U2	1ac24	FUN_0001ac24	palette_eclair_reserve P	24	24	0	
-U2	1ac68	FUN_0001ac68	palette_eclair_couleur P	2	2	0	
-U2	1ac72	FUN_0001ac72	eclair_palette_vert P	2	2	0	
-U2	1ac7c	FUN_0001ac7c	eclair_palette_bleu P	2	2	0	
-U2	1ac86	FUN_0001ac86	palette_eclair_blanc P	2	2	0	
-U2	1ac90	FUN_0001ac90	eclair_palette_fin P	2	2	0	
-U2	1ac9a	FUN_0001ac9a	eclair_palette_jaune P	2	2	0	
-U2	1ad2a	FUN_0001ad2a	palette_sauve_page1 P	8	8	0	
-W1	1c44a	FUN_0001c44a	variables_partie_a_zero P	6	6	0	
+U2	1aaa0	FUN_0001aaa0	palette_lightning_a P	6	6	0	
+U2	1aaba	FUN_0001aaba	palette_lightning_b P	6	6	0	
+U2	1aad4	FUN_0001aad4	palette_lightning_c P	6	6	0	
+U2	1aaee	FUN_0001aaee	palette_lightning_d P	6	6	0	
+U2	1ab08	FUN_0001ab08	palette_lightning_e P	6	6	0	
+U2	1ab22	FUN_0001ab22	palette_lightning_f P	6	6	0	
+U2	1ab3c	FUN_0001ab3c	palette_lightning_g P	6	6	0	
+U2	1ab56	FUN_0001ab56	palette_lightning_grey P	52	52	0	
+U2	1abe0	FUN_0001abe0	palette_lightning_restore P	24	24	0	
+U2	1ac24	FUN_0001ac24	palette_lightning_reserve P	24	24	0	
+U2	1ac68	FUN_0001ac68	palette_lightning_colour P	2	2	0	
+U2	1ac72	FUN_0001ac72	lightning_palette_green P	2	2	0	
+U2	1ac7c	FUN_0001ac7c	lightning_palette_blue P	2	2	0	
+U2	1ac86	FUN_0001ac86	palette_lightning_white P	2	2	0	
+U2	1ac90	FUN_0001ac90	lightning_palette_end P	2	2	0	
+U2	1ac9a	FUN_0001ac9a	lightning_palette_yellow P	2	2	0	
+U2	1ad2a	FUN_0001ad2a	palette_saved_page1 P	8	8	0	
+W1	1c44a	FUN_0001c44a	zero_game_variables P	6	6	0	
 W1	1c86e	FUN_0001c86e	world_update P	74	55	19	1c890:cible
 V3	1ccc2	FUN_0001ccc2		13	13	0	
-V3	1cd32	FUN_0001cd32	palette_fondu_vers_blanc P	17	17	0	
-V3	1cd7c	FUN_0001cd7c	palette_fondu_vers_palettes P	21	21	0	
-V3	1cdd6	FUN_0001cdd6	palette_fondu_vers_couleurs P	21	15	6	1cddc:suite 1cdf2:suite
+V3	1cd32	FUN_0001cd32	palette_fade_to_white P	17	17	0	
+V3	1cd7c	FUN_0001cd7c	palette_fade_to_palettes P	21	21	0	
+V3	1cdd6	FUN_0001cdd6	palette_fade_to_colours P	21	15	6	1cddc:suite 1cdf2:suite
 V3	1ce30	FUN_0001ce30		13	13	0	
 V3	1ce9e	FUN_0001ce9e		13	13	0	
 V3	1ced4	FUN_0001ced4		18	18	0	
 V3	1cf24	FUN_0001cf24		10	10	0	
 V3	1cf3c	FUN_0001cf3c	palette_pages_blanches P	26	26	0	
 V3	1cfb8	FUN_0001cfb8	palette_page_unie P	5	5	0	
-V3	1cfc8	FUN_0001cfc8	palette_approche_page P	26	26	0	
+V3	1cfc8	FUN_0001cfc8	palette_approach_page P	26	26	0	
 V3	1d00e	FUN_0001d00e	palette_eclaircit_page P	20	20	0	
-V3	1d042	FUN_0001d042	palette_approche_couleur P	26	26	0	
+V3	1d042	FUN_0001d042	palette_approach_colour P	26	26	0	
 W1	1d4fc	FUN_0001d4fc		2	2	0	
 F5	1d584	charsel_cursor		76	74	2	1d5f0:suite 1d5f8:suite
 F5	1d686	caseD_20		21	19	2	1d6ac:suite
@@ -384,7 +384,7 @@ F5	1d760	FUN_0001d760		16	16	0
 F5	1d794	FUN_0001d794		14	14	0	
 F5	1d7c0	FUN_0001d7c0		16	16	0	
 F5	1d802	FUN_0001d802		9	9	0	
-V4	1de7c	FUN_0001de7c	sprites_vide_les_listes M	7	7	0	
+V4	1de7c	FUN_0001de7c	sprites_clear_lists M	7	7	0	
 V4	1de96	FUN_0001de96	build_sprite_list P	27	27	0	
 V4	1df14	FUN_0001df14		12	12	0	
 V4	1df3e	FUN_0001df3e		78	78	0	
@@ -421,9 +421,9 @@ F6	20028	caseD_f5		5	5	0
 F6	20034	FUN_00020034		6	6	0	
 F6	20044	FUN_00020044		15	15	0	
 F6	20926	FUN_00020926		5	5	0	
-F6	20de6	FUN_00020de6	scene_place_joueurs P	34	34	0	
+F6	20de6	FUN_00020de6	scene_place_players P	34	34	0	
 W2	23454	FUN_00023454		12	12	0	
-P3	25260	FUN_00025260	joueur_scripte_place P	11	11	0	
+P3	25260	FUN_00025260	player_scripted_place P	11	11	0	
 P3	25b20	FUN_00025b20		8	8	0	
 P3	260ee	FUN_000260ee	combat_update P	22	22	0	
 X1	26150	FUN_00026150		47	47	0	
@@ -465,7 +465,7 @@ X1	283d4	FUN_000283d4		65	65	0
 X1	284d2	FUN_000284d2		38	38	0	
 X1	2853a	FUN_0002853a		30	30	0	
 X1	285b0	FUN_000285b0		11	11	0	
-B1	2ede0	FUN_0002ede0	camera1_mise_a_jour P	153	151	2	
+B1	2ede0	FUN_0002ede0	camera1_update P	153	151	2	
 B1	2fdfc	FUN_0002fdfc		17	17	0	
 B1	2fe30	FUN_0002fe30		15	15	0	
 B1	2fe5c	FUN_0002fe5c		5	5	0	
@@ -483,8 +483,8 @@ B1	309e0	FUN_000309e0		152	132	20
 B1	30fc8	FUN_00030fc8		14	14	0	
 B1	31018	FUN_00031018		28	28	0	
 B1	3147c	FUN_0003147c		43	43	0	
-B1	31616	FUN_00031616	camera_suit_joueurs_y P	62	62	0	
-B1	32108	FUN_00032108	camera2_mise_a_jour P	162	159	3	
+B1	31616	FUN_00031616	camera_follows_players_y P	62	62	0	
+B1	32108	FUN_00032108	camera2_update P	162	159	3	
 B1	32c2a	FUN_00032c2a		17	17	0	
 B1	32c5e	FUN_00032c5e		15	15	0	
 B1	32c8a	FUN_00032c8a		4	4	0	
@@ -495,19 +495,19 @@ B1	32d22	FUN_00032d22		8	8	0
 B1	32d3c	FUN_00032d3c		7	7	0	
 B1	32d54	FUN_00032d54		15	15	0	
 B1	33062	caseD_f7		9	9	0	
-B1	33178	FUN_00033178	decor_parallaxe_quart P	9	9	0	
+B1	33178	FUN_00033178	scenery_parallax_quarter P	9	9	0	
 B1	331ba	FUN_000331ba		4	4	0	
-B1	331e8	FUN_000331e8	decor_avance_6 P	3	3	0	
-B1	3326c	FUN_0003326c	decor_avance_3 P	3	3	0	
+B1	331e8	FUN_000331e8	scenery_advance_6 P	3	3	0	
+B1	3326c	FUN_0003326c	scenery_advance_3 P	3	3	0	
 B1	33290	FUN_00033290		10	10	0	
 B1	332c0	FUN_000332c0		5	5	0	
-B1	33aa6	FUN_00033aa6	cameras_depart P	31	31	0	
-B1	33b24	FUN_00033b24	cameras_retour P	41	41	0	
-B1	33e20	FUN_00033e20	cameras_mise_a_jour P	6	6	0	
+B1	33aa6	FUN_00033aa6	cameras_start P	31	31	0	
+B1	33b24	FUN_00033b24	cameras_return P	41	41	0	
+B1	33e20	FUN_00033e20	cameras_update P	6	6	0	
 B1	33fe4	FUN_00033fe4	terrain_push P	23	23	0	33ffc:cible
 B1	3403c	FUN_0003403c	terrain_push_2 P	22	22	0	34044:cible
-P4	3525c	FUN_0003525c	video_effacer_debut_scroll1 P	14	14	0	
-P4	35288	FUN_00035288	palette_eclair_blanc_b P	2	2	0	
+P4	3525c	FUN_0003525c	video_clear_start_scroll1 P	14	14	0	
+P4	35288	FUN_00035288	palette_lightning_white_b P	2	2	0	
 P4	35292	FUN_00035292	players_update P	17	17	0	
 P4	352c4	FUN_000352c4		4	4	0	
 P4	35614	FUN_00035614	player_to_stand P	2	2	0	
@@ -541,7 +541,7 @@ P4	377a6	FUN_000377a6		8	3	5	377ac:suite
 P4	377cc	FUN_000377cc		11	11	0	
 P4	377f4	FUN_000377f4		18	18	0	
 P4	3782e	FUN_0003782e		25	25	0	
-P4	37882	FUN_00037882	palette_personnage P	11	11	0	
+P4	37882	FUN_00037882	palette_character P	11	11	0	
 P4	39242	FUN_00039242		9	9	0	
 P4	39260	player_walk_speed		17	17	0	
 P4	3929e	FUN_0003929e		6	6	0	
@@ -573,7 +573,7 @@ P4	3b91c	FUN_0003b91c		7	7	0
 P4	3b93c	FUN_0003b93c		7	7	0	
 P4	3b952	FUN_0003b952		5	5	0	
 P4	3b960	FUN_0003b960		3	3	0	
-P4	3baea	FUN_0003baea	octet_table_joueur P	4	4	0	
+P4	3baea	FUN_0003baea	byte_table_player P	4	4	0	
 O3	3bb16	FUN_0003bb16	player_hurt_animation P	17	17	0	
 O3	3bb84	FUN_0003bb84		1	1	0	
 O3	3bb9c	FUN_0003bb9c	enemy_reaction P	40	40	0	
@@ -682,13 +682,13 @@ C12	4ab48	FUN_0004ab48	spawn_cure P	7	7	0
 C12	4ab64	FUN_0004ab64	spawn_potion P	7	7	0	
 C12	4ab82	FUN_0004ab82		9	9	0	
 C12	4aeb2	FUN_0004aeb2	spawn_holy_light P	7	7	0	
-C12	4aed0	FUN_0004aed0	cree_effets_5 P	15	15	0	
+C12	4aed0	FUN_0004aed0	create_effects_5 P	15	15	0	
 C12	4b196	FUN_0004b196	spawn_beam_cast P	8	8	0	
-C12	4b340	FUN_0004b340	cree_effets_7 P	27	27	0	
-C12	4b518	FUN_0004b518	cree_effet_8 P	6	6	0	
+C12	4b340	FUN_0004b340	create_effects_7 P	27	27	0	
+C12	4b518	FUN_0004b518	create_effect_8 P	6	6	0	
 C12	4b5ac	FUN_0004b5ac	spawn_beam P	26	26	0	
-C12	4b7a0	FUN_0004b7a0	cree_eclair P	9	9	0	
-C12	4b8d0	FUN_0004b8d0	cree_effet_b P	7	7	0	
+C12	4b7a0	FUN_0004b7a0	create_lightning P	9	9	0	
+C12	4b8d0	FUN_0004b8d0	create_effect_b P	7	7	0	
 C12	4bae6	FUN_0004bae6		5	5	0	
 C12	4bb1a	FUN_0004bb1a		18	18	0	
 C12	4bb68	FUN_0004bb68	spawn_ice_columns P	15	15	0	
@@ -704,7 +704,7 @@ C12	4c4a0	FUN_0004c4a0		59	53	6	4c518:suite 4c52a:suite 4c560:suite
 C12	4c58e	FUN_0004c58e	spawn_weapon_trail P	13	13	0	
 C12	4c63c	FUN_0004c63c		13	3	10	4c642:suite
 C12	4c674	FUN_0004c674		28	27	1	4c6bc:suite
-C12	4c930	FUN_0004c930	cree_effet_10 P	6	6	0	
+C12	4c930	FUN_0004c930	create_effect_10 P	6	6	0	
 C12	4cb16	FUN_0004cb16		15	15	0	
 C12	4cb50	FUN_0004cb50		24	22	2	4cb7c:suite
 C12	4cbb2	FUN_0004cbb2		41	36	5	4cc1c:suite
@@ -713,7 +713,7 @@ C12	4cc9a	FUN_0004cc9a		5	5	0
 C12	4ccac	FUN_0004ccac	spawn_summon P	7	7	0	
 C12	4cd8e	FUN_0004cd8e	spawn_flare P	13	13	0	
 C12	4cdd0	FUN_0004cdd0	spawn_lightning P	12	12	0	
-C12	4cfbc	FUN_0004cfbc	cree_effets_13 P	11	11	0	
+C12	4cfbc	FUN_0004cfbc	create_effects_13 P	11	11	0	
 C12	4cfee	FUN_0004cfee	spawn_portal_sparks P	11	11	0	
 C12	4d020	FUN_0004d020	spawn_storm_spell P	6	6	0	
 C12	4d038	FUN_0004d038		11	11	0	
@@ -723,7 +723,7 @@ C12	4d3c6	FUN_0004d3c6	spawn_portal P	7	7	0
 C12	4d660	FUN_0004d660	spawn_rain_glow P	8	8	0	
 C12	4d7ac	FUN_0004d7ac		54	34	20	4d820:suite
 C12	4dc8c	FUN_0004dc8c		4	4	0	
-C12	4dc9a	FUN_0004dc9a	cree_etincelles P	14	14	0	
+C12	4dc9a	FUN_0004dc9a	create_sparks P	14	14	0	
 C12	4dcda	FUN_0004dcda	spawn_shower P	9	9	0	
 C12	4dfe2	FUN_0004dfe2	spawn_wave_bolt P	21	21	0	
 C12	4e1b8	FUN_0004e1b8		92	81	11	4e28a:suite 4e298:suite 4e2a6:suite 4e2dc:suite
@@ -735,7 +735,7 @@ C12	4ec36	FUN_0004ec36		11	11	0
 C12	4ec66	FUN_0004ec66	spawn_storm P	7	7	0	
 C12	4ef1a	FUN_0004ef1a		52	52	0	
 C12	4f004	FUN_0004f004	spawn_lightning_target P	10	8	2	4f00a:cible
-C12	4f132	FUN_0004f132	cree_effet_21 P	6	6	0	
+C12	4f132	FUN_0004f132	create_effect_21 P	6	6	0	
 C12	4f272	FUN_0004f272	spawn_swarm P	12	12	0	
 C12	4f388	FUN_0004f388		25	25	0	
 C12	4f874	FUN_0004f874		16	13	3	4f898:suite
@@ -767,12 +767,12 @@ C12	50ad0	FUN_00050ad0		15	15	0
 C12	50b02	FUN_00050b02		14	14	0	
 C12	50b2a	FUN_00050b2a		20	20	0	
 C12	50b62	FUN_00050b62		14	14	0	
-C12	517ba	FUN_000517ba	effet_joueur_44 P	9	8	1	517c0:cible
+C12	517ba	FUN_000517ba	effect_player_44 P	9	8	1	517c0:cible
 C12	51872	FUN_00051872	spawn_portal_glow P	13	13	0	
 C12	519b0	FUN_000519b0		5	5	0	
 C12	51aa4	FUN_00051aa4	spawn_storm_cloud P	11	11	0	
-C12	51bb6	FUN_00051bb6	cree_effet_2f P	5	5	0	
-C12	51c06	FUN_00051c06	cree_tir_arme P	22	22	0	
+C12	51bb6	FUN_00051bb6	create_effect_2f P	5	5	0	
+C12	51c06	FUN_00051c06	create_shot_weapon P	22	22	0	
 C06	51d02	FUN_00051d02	spawn_thrown_a P	18	16	2	51d08:cible
 C06	51d54	FUN_00051d54	spawn_thrown_b P	18	16	2	51d5a:cible
 C06	51f48	FUN_00051f48		7	7	0	
@@ -808,10 +808,10 @@ C06	54274	FUN_00054274	spawn_rain P	38	38	0
 C06	54426	FUN_00054426	spawn_knife P	10	8	2	5442c:cible
 C06	54522	FUN_00054522	spawn_fireball P	6	6	0	
 C06	5453c	FUN_0005453c		8	8	0	
-C06	54700	FUN_00054700	cree_tir_17 P	6	6	0	
-C06	54818	FUN_00054818	cree_tir_18_a P	11	9	2	5481e:cible
-C06	54842	FUN_00054842	cree_tir_18 P	12	10	2	54848:cible
-C06	54872	FUN_00054872	cree_tir_18_c P	11	11	0	
+C06	54700	FUN_00054700	create_shot_17 P	6	6	0	
+C06	54818	FUN_00054818	create_shot_18_a P	11	9	2	5481e:cible
+C06	54842	FUN_00054842	create_shot_18 P	12	10	2	54848:cible
+C06	54872	FUN_00054872	create_shot_18_c P	11	11	0	
 C02	54da8	FUN_00054da8		1	1	0	
 C02	5566e	FUN_0005566e		30	30	0	
 C02	556e8	FUN_000556e8		28	28	0	
@@ -822,7 +822,7 @@ C02	57b9c	FUN_00057b9c		23	23	0
 C02	57bee	FUN_00057bee		24	24	0	
 C02	57c34	FUN_00057c34		9	9	0	
 C02	57c66	FUN_00057c66		12	12	0	
-C02	57c8c	FUN_00057c8c	cree_ennemi_1 P	13	13	0	
+C02	57c8c	FUN_00057c8c	create_enemy_1 P	13	13	0	
 C02	57f06	FUN_00057f06		1	1	0	
 C02	5858c	FUN_0005858c		20	20	0	
 C02	59146	FUN_00059146		7	7	0	
@@ -858,7 +858,7 @@ C02	5ee9a	FUN_0005ee9a		11	11	0
 C02	5f36a	FUN_0005f36a		26	26	0	
 C02	5f5d8	FUN_0005f5d8		9	9	0	
 C02	5f710	FUN_0005f710		21	21	0	
-C02	5f764	FUN_0005f764	cree_ennemi_5 P	11	11	0	
+C02	5f764	FUN_0005f764	create_enemy_5 P	11	11	0	
 C02	5fdf8	FUN_0005fdf8		14	14	0	
 C02	5fe22	FUN_0005fe22		20	20	0	
 C02	5fe70	FUN_0005fe70		20	20	0	
@@ -876,7 +876,7 @@ C02	63790	FUN_00063790		26	26	0
 C02	639fe	FUN_000639fe		23	4	19	63a04:suite
 C02	63a50	FUN_00063a50		20	20	0	
 C02	63a98	FUN_00063a98		24	24	0	
-C02	63ae0	FUN_00063ae0	cree_ennemis_7 P	18	16	2	63ae6:cible
+C02	63ae0	FUN_00063ae0	create_enemies_7 P	18	16	2	63ae6:cible
 C02	63c64	FUN_00063c64		7	7	0	
 C02	63e6e	FUN_00063e6e		12	12	0	
 C02	63ed2	FUN_00063ed2		27	27	0	
@@ -942,7 +942,7 @@ C02	71d5c	FUN_00071d5c		4	4	0
 C02	71dde	FUN_00071dde		10	10	0	
 C02	71e04	FUN_00071e04		7	6	1	71e08:suite
 C02	71e24	FUN_00071e24		8	4	4	71e28:suite
-C02	71e3c	FUN_00071e3c	copie_56_53_b P	2	2	0	
+C02	71e3c	FUN_00071e3c	copy_56_53_b P	2	2	0	
 C02	71ff4	FUN_00071ff4		15	14	1	7201a:suite
 C02	7208c	FUN_0007208c		28	28	0	
 C02	721a2	FUN_000721a2		34	34	0	
@@ -966,7 +966,7 @@ C02	755e4	FUN_000755e4		6	6	0
 C02	755fc	FUN_000755fc		10	10	0	
 C02	75620	FUN_00075620		14	14	0	
 C02	75652	FUN_00075652		26	26	0	
-C02	76ec4	FUN_00076ec4	cree_ennemis_19 P	18	16	2	76eca:cible
+C02	76ec4	FUN_00076ec4	create_enemies_19 P	18	16	2	76eca:cible
 C02	77032	FUN_00077032		46	25	21	77038:suite 77068:suite 77078:suite
 C02	7746a	thunk_FUN_000021f4		1	1	0	
 C02	774a8	FUN_000774a8		15	15	0	
@@ -990,7 +990,7 @@ C02	78f4e	FUN_00078f4e		24	19	5	78f56:suite 78f82:suite 78f96:suite
 C02	791f4	FUN_000791f4		7	6	1	791fe:suite
 C02	792aa	FUN_000792aa		4	4	0	
 C02	792e0	FUN_000792e0		8	8	0	
-C02	792f8	FUN_000792f8	copie_56_53_a P	2	2	0	
+C02	792f8	FUN_000792f8	copy_56_53_a P	2	2	0	
 C04	7946e	FUN_0007946e		18	16	2	7949a:cible
 C04	7a7a4	FUN_0007a7a4		3	3	0	
 C04	7a7b0	FUN_0007a7b0		3	3	0	
@@ -1049,7 +1049,7 @@ C04	81764	FUN_00081764		24	14	10	81786:suite
 C04	8188e	FUN_0008188e		5	5	0	
 C04	8189e	FUN_0008189e		5	5	0	
 C04	819b0	FUN_000819b0		15	13	2	819ca:suite
-C04	819e2	FUN_000819e2	boss_3_pousse_cote P	15	15	0	
+C04	819e2	FUN_000819e2	boss_3_pushes_side P	15	15	0	
 C04	81a0a	FUN_00081a0a		22	22	0	
 C04	81aa4	FUN_00081aa4	boss_repousse P	18	18	0	
 C04	81ae0	FUN_00081ae0	boss_3_riposte P	14	14	0	
@@ -1087,7 +1087,7 @@ C04	85fc4	FUN_00085fc4		30	30	0
 C04	8603e	FUN_0008603e		30	30	0	
 C04	86fee	FUN_00086fee		17	17	0	
 C04	87020	FUN_00087020		14	14	0	
-C04	87048	FUN_00087048	boss_seuil_pv P	23	4	19	8704e:suite
+C04	87048	FUN_00087048	boss_hp_threshold P	23	4	19	8704e:suite
 C04	870a2	FUN_000870a2		5	5	0	
 C04	870b4	FUN_000870b4		25	25	0	
 C04	87926	FUN_00087926		24	24	0	
@@ -1257,7 +1257,7 @@ C04	96f5a	FUN_00096f5a		4	4	0
 C04	96fac	FUN_00096fac		7	7	0	
 C04	96fc8	FUN_00096fc8		7	7	0	
 C04	971f4	FUN_000971f4		3	3	0	
-C04	97218	FUN_00097218	boss_etat_0202 P	4	4	0	
+C04	97218	FUN_00097218	boss_state_0202 P	4	4	0	
 C04	97324	FUN_00097324		11	11	0	
 C04	97364	FUN_00097364		10	10	0	
 C04	973c2	FUN_000973c2		12	12	0	
@@ -1312,31 +1312,31 @@ C04	9d680	FUN_0009d680		24	20	4	9d688:cible 9d69e:suite
 C04	9d928	FUN_0009d928		24	22	2	9d962:suite
 C04	9db28	FUN_0009db28		18	18	0	
 C04	9db72	FUN_0009db72		25	25	0	
-C04	9dbd6	FUN_0009dbd6	eshl_tir_0 P	9	9	0	
-C08	9dda8	FUN_0009dda8	eshl_lance_1 P	16	16	0	
-C08	9ddee	FUN_0009ddee	eshl_tir_1 P	8	8	0	
+C04	9dbd6	FUN_0009dbd6	eshl_shot_0 P	9	9	0	
+C08	9dda8	FUN_0009dda8	eshl_thrown_1 P	16	16	0	
+C08	9ddee	FUN_0009ddee	eshl_shot_1 P	8	8	0	
 C08	9df8a	FUN_0009df8a		19	19	0	
-C08	9e062	FUN_0009e062	eshl_lance_2 P	16	16	0	
-C08	9e194	FUN_0009e194	eshl_quatre_3 P	9	9	0	
+C08	9e062	FUN_0009e062	eshl_thrown_2 P	16	16	0	
+C08	9e194	FUN_0009e194	eshl_four_3 P	9	9	0	
 C08	9e22e	FUN_0009e22e		19	19	0	
 C08	9e2a0	FUN_0009e2a0	eshl_dessus_4 P	12	12	0	
-C08	9e426	FUN_0009e426	eshl_douze_5 P	16	14	2	9e42c:cible
+C08	9e426	FUN_0009e426	eshl_twelve_5 P	16	14	2	9e42c:cible
 C08	9e4dc	FUN_0009e4dc		33	33	0	
 C08	9e5f2	FUN_0009e5f2		44	44	0	9e654:cible
-C08	9eba6	FUN_0009eba6	eshl_tir_6 P	9	9	0	
+C08	9eba6	FUN_0009eba6	eshl_shot_6 P	9	9	0	
 C08	9eca4	FUN_0009eca4		7	7	0	
 C08	9ed2e	FUN_0009ed2e		14	14	0	
 C08	9ed78	FUN_0009ed78	eshl_balaye_8 P	29	29	0	
-C08	9eede	FUN_0009eede	eshl_paire_9 P	17	15	2	9eee4:cible 9ef02:cible
-C08	9ef20	FUN_0009ef20	cree_tir_9 P	10	10	0	
+C08	9eede	FUN_0009eede	eshl_pair_9 P	17	15	2	9eee4:cible 9ef02:cible
+C08	9ef20	FUN_0009ef20	create_shot_9 P	10	10	0	
 C08	9f18e	FUN_0009f18e		14	14	0	
 C08	9f1c8	FUN_0009f1c8		18	16	2	9f1d2:suite 9f1d8:suite
 C08	9f2f2	FUN_0009f2f2		24	22	2	
 C08	9f4f8	FUN_0009f4f8		12	12	0	
 C08	9f712	FUN_0009f712		28	28	0	9f716:cible
 C08	9fcd8	FUN_0009fcd8		32	32	0	
-C08	a036e	FUN_000a036e	cree_compagnon_harpie P	26	26	0	
-C08	a0566	FUN_000a0566	cree_tir_harpie P	15	15	0	
+C08	a036e	FUN_000a036e	create_companion_harpy P	26	26	0	
+C08	a0566	FUN_000a0566	create_shot_harpy P	15	15	0	
 C08	a0f22	FUN_000a0f22		30	28	2	a0f26:cible
 C08	a10d6	FUN_000a10d6		28	28	0	a10da:cible
 C08	a1360	caseD_0	eshl_lie_18 P	6	6	0	
@@ -1357,11 +1357,11 @@ C08	a2d22	FUN_000a2d22		11	11	0
 C08	a2e40	FUN_000a2e40		10	10	0	
 C08	a2e74	FUN_000a2e74		5	5	0	
 C08	a2e8e	FUN_000a2e8e		22	21	1	a2e96:suite
-C08	a2f96	FUN_000a2f96	eshl_anneau_27 P	9	9	0	
+C08	a2f96	FUN_000a2f96	eshl_ring_27 P	9	9	0	
 C08	a30f2	FUN_000a30f2		17	17	0	
 C08	a3168	FUN_000a3168		10	10	0	
 C08	a318e	FUN_000a318e		10	10	0	
-C08	a31c2	FUN_000a31c2	eshl_anneau_28 P	9	9	0	
+C08	a31c2	FUN_000a31c2	eshl_ring_28 P	9	9	0	
 C08	a32fa	FUN_000a32fa		10	10	0	
 C08	a3320	FUN_000a3320		10	10	0	
 C08	a3354	FUN_000a3354	eshl_lie_29 P	6	6	0	
@@ -1394,16 +1394,16 @@ C08	a4cf2	FUN_000a4cf2		14	14	0
 C08	a4d18	FUN_000a4d18		16	10	6	a4d28:cible a4d30:suite
 C08	a4d50	FUN_000a4d50		5	5	0	
 C08	a4d6a	FUN_000a4d6a		6	6	0	
-C08	a4e84	FUN_000a4e84	eshl_serie_36 P	10	10	0	
+C08	a4e84	FUN_000a4e84	eshl_series_36 P	10	10	0	
 C08	a5308	FUN_000a5308		10	10	0	
 C08	a559e	FUN_000a559e		5	5	0	
 C08	a5c7c	FUN_000a5c7c	eshl_lie_3b P	7	7	0	
-C08	a5c9a	FUN_000a5c9a	eshl_serie_3b P	10	10	0	
+C08	a5c9a	FUN_000a5c9a	eshl_series_3b P	10	10	0	
 C08	a5f04	FUN_000a5f04		10	10	0	
 C08	a5f38	FUN_000a5f38	eshl_lie_3c P	12	10	2	
 C08	a6370	FUN_000a6370		20	20	0	
-C08	a66c0	FUN_000a66c0	cree_salve_3e P	9	9	0	
-C08	a6824	FUN_000a6824	eshl_paire_3f P	15	15	0	
+C08	a66c0	FUN_000a66c0	create_volley_3e P	9	9	0	
+C08	a6824	FUN_000a6824	eshl_pair_3f P	15	15	0	
 C08	a6a58	FUN_000a6a58		39	39	0	
 C08	a6aea	FUN_000a6aea		10	10	0	
 C08	a6c22	FUN_000a6c22		16	16	0	
@@ -1417,27 +1417,27 @@ C08	a71c2	FUN_000a71c2		18	18	0
 C08	a731c	FUN_000a731c		33	32	1	a7324:suite
 C08	a7438	FUN_000a7438		33	32	1	a7440:suite
 C08	a7570	FUN_000a7570	eshl_fragments_42 P	16	16	0	a757e:cible
-C08	a7b0a	FUN_000a7b0a	eshl_eclats_44 P	21	21	0	
+C08	a7b0a	FUN_000a7b0a	eshl_shards_44 P	21	21	0	
 C08	a7da2	FUN_000a7da2	eshl_fragments_45 P	33	33	0	
-C0e	a817c	FUN_000a817c	cree_tir_colonne P	17	15	2	a8182:cible
-C0e	a836c	FUN_000a836c	cree_tir_coup P	8	8	0	
+C0e	a817c	FUN_000a817c	create_shot_column P	17	15	2	a8182:cible
+C0e	a836c	FUN_000a836c	create_shot_hit P	8	8	0	
 C0e	a8a42	FUN_000a8a42	camera_mode_60 P	3	3	0	
-C0e	a8ae8	FUN_000a8ae8	cree_liste_decors_d0 P	5	5	0	
-C0e	a8af8	FUN_000a8af8	cree_liste_decors P	14	14	0	
-C0e	aa96c	FUN_000aa96c	effet_etincelle P	21	21	0	
+C0e	a8ae8	FUN_000a8ae8	create_scenery_list_d0 P	5	5	0	
+C0e	a8af8	FUN_000a8af8	create_scenery_list P	14	14	0	
+C0e	aa96c	FUN_000aa96c	effect_spark P	21	21	0	
 C0e	aa9c0	FUN_000aa9c0		18	2	16	
-C0e	aaa04	FUN_000aaa04	effet_etincelle_entre P	15	15	0	
-C0e	aaa40	FUN_000aaa40	cree_etincelle_en P	17	17	0	
-C0e	aaa84	FUN_000aaa84	effet_etincelle_entre_b P	15	15	0	
+C0e	aaa04	FUN_000aaa04	effect_spark_between P	15	15	0	
+C0e	aaa40	FUN_000aaa40	create_spark_at P	17	17	0	
+C0e	aaa84	FUN_000aaa84	effect_spark_between_b P	15	15	0	
 C0e	aabf4	FUN_000aabf4		34	26	8	aabfc:cible aac0e:suite
 C0e	aacfe	FUN_000aacfe		6	6	0	
 C0e	ab2b4	FUN_000ab2b4		5	5	0	
-C0e	ab708	FUN_000ab708	cree_halo P	7	7	0	
-C0e	ab7d8	FUN_000ab7d8	cree_gerbe_debris P	8	8	0	
-C0e	aba16	FUN_000aba16	cree_eclat_unique P	11	11	0	
-C0e	abb70	FUN_000abb70	cree_trainees P	36	36	0	
+C0e	ab708	FUN_000ab708	create_halo P	7	7	0	
+C0e	ab7d8	FUN_000ab7d8	create_sheaf_debris P	8	8	0	
+C0e	aba16	FUN_000aba16	create_shard_single P	11	11	0	
+C0e	abb70	FUN_000abb70	create_trails P	36	36	0	
 C0e	abea4	FUN_000abea4		12	12	0	
-C0e	abec8	FUN_000abec8	cree_effet_attaque P	8	8	0	
+C0e	abec8	FUN_000abec8	create_effect_attack P	8	8	0	
 C0e	ad60a	FUN_000ad60a		10	10	0	
 C0e	ad7fe	FUN_000ad7fe		6	4	2	ad804:cible
 C0e	ad818	FUN_000ad818		6	4	2	ad81e:cible
@@ -1447,37 +1447,37 @@ C0e	ae298	FUN_000ae298		57	57	0
 C0e	ae37c	FUN_000ae37c		3	3	0	
 C0e	ae388	FUN_000ae388		11	11	0	
 C0e	ae3bc	FUN_000ae3bc		13	13	0	
-C0e	ae3ec	FUN_000ae3ec	cree_scintillement P	13	13	0	
+C0e	ae3ec	FUN_000ae3ec	create_shimmer P	13	13	0	
 C0e	ae700	FUN_000ae700		11	11	0	
 C0e	ae738	FUN_000ae738		5	5	0	
 C0e	ae748	FUN_000ae748		5	5	0	
 C0e	ae75e	FUN_000ae75e		5	5	0	
-C0e	ae776	FUN_000ae776	cree_interface P	5	5	0	
+C0e	ae776	FUN_000ae776	create_interface P	5	5	0	
 C0e	ae9f2	FUN_000ae9f2		15	15	0	
 C0e	aeb02	FUN_000aeb02		1	1	0	
 C0e	aeb08	FUN_000aeb08		28	28	0	
 C0e	af2c0	FUN_000af2c0		14	14	0	
 C0e	af302	FUN_000af302		14	14	0	
-C0e	af346	FUN_000af346	cree_bandeau P	6	6	0	
+C0e	af346	FUN_000af346	create_banner P	6	6	0	
 C0e	afad0	FUN_000afad0		5	5	0	
-C0e	afe02	FUN_000afe02	cree_vote P	7	7	0	
+C0e	afe02	FUN_000afe02	create_vote P	7	7	0	
 C0e	b0102	FUN_000b0102		61	52	9	b0126:suite b015c:suite b0180:suite b01c6:suite
 C0e	b0390	FUN_000b0390		11	11	0	
 C0e	b03c6	FUN_000b03c6		30	30	0	
 C0e	b0990	FUN_000b0990		21	21	0	
 C0e	b0a7c	FUN_000b0a7c		12	12	0	
 C0e	b1052	FUN_000b1052		30	28	2	b1056:suite
-C0e	b10c8	FUN_000b10c8	effet_choc P	18	18	0	
-C0e	b12c0	FUN_000b12c0	cree_ramassage P	9	9	0	
-C0e	b1352	FUN_000b1352	cree_etincelle_posee P	7	7	0	
+C0e	b10c8	FUN_000b10c8	effect_shock P	18	18	0	
+C0e	b12c0	FUN_000b12c0	create_pickup P	9	9	0	
+C0e	b1352	FUN_000b1352	create_spark_placed P	7	7	0	
 C0e	b13fa	FUN_000b13fa		7	7	0	
-C0e	b141a	FUN_000b141a	cree_impact P	9	9	0	
+C0e	b141a	FUN_000b141a	create_impact P	9	9	0	
 C0e	b14dc	FUN_000b14dc		27	27	0	
 C0e	b15c8	FUN_000b15c8		12	12	0	
 C0e	b15fe	FUN_000b15fe		23	23	0	
-C0e	b1764	FUN_000b1764	cree_banc P	17	17	0	
-C0e	b17ba	FUN_000b17ba	cree_nageurs P	20	20	0	
-C0e	b1a7a	FUN_000b1a7a	cree_ecran_fin P	7	7	0	
+C0e	b1764	FUN_000b1764	create_bench P	17	17	0	
+C0e	b17ba	FUN_000b17ba	create_swimmers P	20	20	0	
+C0e	b1a7a	FUN_000b1a7a	create_end_screen P	7	7	0	
 C0e	b1ff8	FUN_000b1ff8		17	17	0	
 C0e	b202c	FUN_000b202c		28	28	0	
 C0e	b2078	FUN_000b2078		21	21	0	
@@ -1492,26 +1492,26 @@ C0e	b2212	FUN_000b2212		9	9	0
 C0e	b222e	FUN_000b222e		7	7	0	
 C0e	b22d0	FUN_000b22d0		14	14	0	
 C0e	b22f2	FUN_000b22f2		9	9	0	
-C0e	b230e	FUN_000b230e	bloc_tuiles P	14	14	0	
+C0e	b230e	FUN_000b230e	block_tiles P	14	14	0	
 C0e	b2348	FUN_000b2348		13	11	2	b234e:suite
 C0e	b2392	FUN_000b2392		11	11	0	
 C0e	b24b6	FUN_000b24b6		8	8	0	
 C0e	b2ca4	FUN_000b2ca4		10	9	1	b2cbe:suite
-C0e	b2ef6	FUN_000b2ef6	cree_silhouette_reflet P	18	18	0	b2f06:cible b2f24:cible
+C0e	b2ef6	FUN_000b2ef6	create_silhouette_reflection P	18	18	0	b2f06:cible b2f24:cible
 C0e	b3036	FUN_000b3036		5	5	0	
 C0e	b3556	FUN_000b3556		7	7	0	
 C0e	b3734	FUN_000b3734		13	13	0	
-C0e	b378a	FUN_000b378a	cree_coup P	8	8	0	
-C0e	b3c14	FUN_000b3c14	cree_lance P	10	10	0	
-C0e	b3df6	FUN_000b3df6	cree_decor_0 P	19	19	0	
-C0e	b3ec6	FUN_000b3ec6	cree_cris_b P	14	14	0	
-C0e	b3f40	FUN_000b3f40	cree_decor_3 P	10	10	0	
-C0e	b3f6a	FUN_000b3f6a	cree_decor_4 P	17	17	0	
-C0e	b3fb0	FUN_000b3fb0	cree_decor_5 P	8	8	0	
-C0e	b3fd4	FUN_000b3fd4	cree_decor_6 P	10	10	0	
-C0e	b4002	FUN_000b4002	cree_decor_7 P	9	9	0	
-C0e	b4026	FUN_000b4026	cree_decor_8 P	10	10	0	
-C0e	b4088	FUN_000b4088	cree_decor_10 P	11	11	0	
+C0e	b378a	FUN_000b378a	create_hit P	8	8	0	
+C0e	b3c14	FUN_000b3c14	create_thrown P	10	10	0	
+C0e	b3df6	FUN_000b3df6	create_scenery_0 P	19	19	0	
+C0e	b3ec6	FUN_000b3ec6	create_cries_b P	14	14	0	
+C0e	b3f40	FUN_000b3f40	create_scenery_3 P	10	10	0	
+C0e	b3f6a	FUN_000b3f6a	create_scenery_4 P	17	17	0	
+C0e	b3fb0	FUN_000b3fb0	create_scenery_5 P	8	8	0	
+C0e	b3fd4	FUN_000b3fd4	create_scenery_6 P	10	10	0	
+C0e	b4002	FUN_000b4002	create_scenery_7 P	9	9	0	
+C0e	b4026	FUN_000b4026	create_scenery_8 P	10	10	0	
+C0e	b4088	FUN_000b4088	create_scenery_10 P	11	11	0	
 C0e	b40ba	FUN_000b40ba		15	14	1	b40f2:suite
 C0e	b41bc	FUN_000b41bc		23	23	0	
 C0e	b436a	FUN_000b436a		14	14	0	
@@ -1524,24 +1524,24 @@ C0e	b47e8	FUN_000b47e8		12	12	0
 C0e	b4934	FUN_000b4934		25	25	0	
 C0e	b4af6	FUN_000b4af6		25	25	0	
 C0e	b4bb2	FUN_000b4bb2		5	5	0	
-C0e	b4bcc	FUN_000b4bcc	cree_pluie_debris P	8	8	0	
+C0e	b4bcc	FUN_000b4bcc	create_rain_debris P	8	8	0	
 C0e	b4d3e	FUN_000b4d3e		13	13	0	
 C0e	b4d9a	FUN_000b4d9a		16	16	0	
 C0e	b4e44	FUN_000b4e44		17	17	0	
-C0e	b4ef4	FUN_000b4ef4	cree_sorts P	10	10	0	
-C0e	b4f44	FUN_000b4f44	cree_sort P	7	7	0	
-C0e	b4f60	FUN_000b4f60	cree_sorts_b P	10	10	0	
+C0e	b4ef4	FUN_000b4ef4	create_spells P	10	10	0	
+C0e	b4f44	FUN_000b4f44	create_spell P	7	7	0	
+C0e	b4f60	FUN_000b4f60	create_spells_b P	10	10	0	
 C0e	b5206	FUN_000b5206		7	7	0	
 C0e	b5228	FUN_000b5228		7	7	0	
 C0e	b524a	FUN_000b524a		20	19	1	b524e:cible b5288:suite
 C0e	b52b0	FUN_000b52b0		23	22	1	b52b4:cible b52f0:suite
-C0e	b53f4	FUN_000b53f4	cree_type_46 P	23	23	0	b53fa:cible b541a:cible b543a:cible
+C0e	b53f4	FUN_000b53f4	create_type_46 P	23	23	0	b53fa:cible b541a:cible b543a:cible
 C0e	b54e8	FUN_000b54e8		14	14	0	
 C0e	b56c2	FUN_000b56c2		7	7	0	
 C0e	b5706	FUN_000b5706		5	5	0	
-C0e	b5730	FUN_000b5730	cree_repere P	10	10	0	
-C0e	b59a6	FUN_000b59a6	cree_type_48 P	9	9	0	
-C0e	b59c8	FUN_000b59c8	cree_type_48_b P	8	8	0	
+C0e	b5730	FUN_000b5730	create_marker P	10	10	0	
+C0e	b59a6	FUN_000b59a6	create_type_48 P	9	9	0	
+C0e	b59c8	FUN_000b59c8	create_type_48_b P	8	8	0	
 C0e	b5bf0	FUN_000b5bf0		9	9	0	
 C0e	b5c04	FUN_000b5c04		6	6	0	
 C0e	b5c14	FUN_000b5c14		6	6	0	
@@ -1554,35 +1554,35 @@ C0e	b5d56	FUN_000b5d56		11	11	0
 C0e	b5d82	FUN_000b5d82		11	11	0	
 C0e	b5f66	FUN_000b5f66		8	8	0	
 C0e	b5f8e	FUN_000b5f8e		8	8	0	
-C0e	b64b0	FUN_000b64b0	cree_projectile P	6	6	0	
-C0e	b6596	FUN_000b6596	cree_scintillement_perso P	15	15	0	
-C0e	b66e4	FUN_000b66e4	cree_type_53 P	5	5	0	
-C0e	b68b0	FUN_000b68b0	cree_types_54 P	15	15	0	
-C0e	b6a5c	FUN_000b6a5c	cree_lanceur P	6	6	0	
-C0e	b6ba8	FUN_000b6ba8	cree_type_57 P	8	8	0	
-C0e	b6c42	FUN_000b6c42	cree_eclat_camera P	9	9	0	
+C0e	b64b0	FUN_000b64b0	create_projectile P	6	6	0	
+C0e	b6596	FUN_000b6596	create_shimmer_character P	15	15	0	
+C0e	b66e4	FUN_000b66e4	create_type_53 P	5	5	0	
+C0e	b68b0	FUN_000b68b0	create_types_54 P	15	15	0	
+C0e	b6a5c	FUN_000b6a5c	create_launcher P	6	6	0	
+C0e	b6ba8	FUN_000b6ba8	create_type_57 P	8	8	0	
+C0e	b6c42	FUN_000b6c42	create_shard_camera P	9	9	0	
 C0e	b74ea	FUN_000b74ea		6	6	0	
 C0e	b7506	FUN_000b7506		5	5	0	
 C0e	b7792	FUN_000b7792		6	6	0	
-C0e	b7dec	FUN_000b7dec	cree_colonnes P	17	17	0	
-C0e	b7f14	FUN_000b7f14	cree_type_68 P	5	5	0	
+C0e	b7dec	FUN_000b7dec	create_columns P	17	17	0	
+C0e	b7f14	FUN_000b7f14	create_type_68 P	5	5	0	
 C0e	b7ffc	FUN_000b7ffc		10	10	0	
-C0e	b84ae	FUN_000b84ae	cree_ecran_victoire P	6	6	0	
-C0e	b85e2	FUN_000b85e2	cree_bulle_createur P	6	6	0	
-C0e	b8956	FUN_000b8956	cree_minuteur P	6	6	0	
-C0e	b8a0a	FUN_000b8a0a	cree_fondu_sonore P	5	5	0	
-C0e	b9942	FUN_000b9942	cree_pluie P	5	5	0	
-C0e	b9aa0	FUN_000b9aa0	cree_finale P	6	6	0	
-C0e	b9c6a	FUN_000b9c6a	cree_flammeche P	7	7	0	
-C0e	b9c88	FUN_000b9c88	cree_flammeche_b P	7	7	0	
-C0e	b9eba	FUN_000b9eba	effct_joueur_dans_la_boite P	14	14	0	
-C0e	b9ee6	FUN_000b9ee6	effct_dans_la_boite P	25	25	0	
+C0e	b84ae	FUN_000b84ae	create_victory_screen P	6	6	0	
+C0e	b85e2	FUN_000b85e2	create_bubble_creator P	6	6	0	
+C0e	b8956	FUN_000b8956	create_timer P	6	6	0	
+C0e	b8a0a	FUN_000b8a0a	create_sound_fade P	5	5	0	
+C0e	b9942	FUN_000b9942	create_rain P	5	5	0	
+C0e	b9aa0	FUN_000b9aa0	create_final P	6	6	0	
+C0e	b9c6a	FUN_000b9c6a	create_ember P	7	7	0	
+C0e	b9c88	FUN_000b9c88	create_ember_b P	7	7	0	
+C0e	b9eba	FUN_000b9eba	effct_player_in_box P	14	14	0	
+C0e	b9ee6	FUN_000b9ee6	effct_in_box P	25	25	0	
 C0e	ba00a	FUN_000ba00a		10	10	0	
 C0e	ba03c	FUN_000ba03c		21	21	0	
-C0e	ba094	FUN_000ba094	effct_fils_finis P	10	10	0	
-C0e	ba18a	FUN_000ba18a	cree_derive P	7	7	0	
+C0e	ba094	FUN_000ba094	effct_children_done P	10	10	0	
+C0e	ba18a	FUN_000ba18a	create_drift P	7	7	0	
 C10	bc6fa	FUN_000bc6fa		68	64	4	bc700:cible bc726:suite
-C10	c8312	FUN_000c8312	cree_set_scene P	15	15	0	
+C10	c8312	FUN_000c8312	create_set_scene P	15	15	0	
 C10	c8430	FUN_000c8430		272	142	130	c84d6:suite c8568:cible
 C10	c8a82	FUN_000c8a82		6	6	0	
 C10	c8cda	FUN_000c8cda		11	11	0	
@@ -1593,7 +1593,7 @@ C10	c9128	FUN_000c9128		17	17	0
 C10	c9164	FUN_000c9164		13	13	0	
 C10	c919a	FUN_000c919a		5	5	0	
 C10	c91a8	FUN_000c91a8		9	9	0	
-C10	c9760	FUN_000c9760	cree_set_5 P	7	7	0	
+C10	c9760	FUN_000c9760	create_set_5 P	7	7	0	
 C10	c9bec	FUN_000c9bec		68	64	4	c9cc0:suite c9cdc:suite
 C10	c9c90	FUN_000c9c90		15	13	2	c9cc0:suite
 C10	c9d16	FUN_000c9d16		39	37	2	c9d96:suite
@@ -1620,13 +1620,13 @@ C10	cbb3c	FUN_000cbb3c		22	2	20	cbb42:suite
 C10	cbc24	FUN_000cbc24		38	38	0	
 C10	cbcba	FUN_000cbcba		118	111	7	cbe4c:suite cbe6a:suite cbe88:suite cbea4:suite
 C10	cc0ca	FUN_000cc0ca	scene_repart P	45	43	2	cc142:suite
-C10	cc18e	FUN_000cc18e	decompte_joueurs_vivants P	15	15	0	
+C10	cc18e	FUN_000cc18e	count_living_players P	15	15	0	
 C10	cc1c2	FUN_000cc1c2		15	13	2	cc1e4:suite
 C10	cc200	FUN_000cc200		21	7	14	cc206:cible
-C10	cc352	FUN_000cc352	cree_set_a P	14	14	0	
-C10	cc38e	FUN_000cc38e	cree_set_a_joueur P	13	13	0	
-C10	cdedc	FUN_000cdedc	cree_set_13 P	6	6	0	
-C10	ce00a	FUN_000ce00a	cree_set_15 P	6	6	0	
+C10	cc352	FUN_000cc352	create_set_a P	14	14	0	
+C10	cc38e	FUN_000cc38e	create_set_a_player P	13	13	0	
+C10	cdedc	FUN_000cdedc	create_set_13 P	6	6	0	
+C10	ce00a	FUN_000ce00a	create_set_15 P	6	6	0	
 C10	ce0e2	thunk_FUN_00002210		1	1	0	
 C10	ce126	FUN_000ce126		4	4	0	
 C10	ce200	FUN_000ce200		11	11	0	
@@ -1634,7 +1634,7 @@ C10	ce22a	FUN_000ce22a		10	10	0
 C10	ce24c	FUN_000ce24c		17	17	0	
 C10	ce4a2	FUN_000ce4a2		18	18	0	
 C10	ce60a	FUN_000ce60a		19	19	0	
-C10	ce668	FUN_000ce668	set_deux_grilles P	8	8	0	
+C10	ce668	FUN_000ce668	set_two_grids P	8	8	0	
 C10	ce7fc	FUN_000ce7fc		27	27	0	
 C10	ce872	FUN_000ce872		4	4	0	
 C10	ce87c	FUN_000ce87c		5	5	0	
@@ -1643,7 +1643,7 @@ C10	ce8de	FUN_000ce8de		63	54	9	ce94e:suite
 C10	ce9ea	FUN_000ce9ea		61	61	0	
 C10	ceaba	FUN_000ceaba		30	30	0	
 C10	ceb20	FUN_000ceb20		13	13	0	
-C10	ceb46	FUN_000ceb46	fiche_bonus P	13	13	0	
+C10	ceb46	FUN_000ceb46	sheet_bonus P	13	13	0	
 C10	ceb6c	FUN_000ceb6c		25	17	8	ceb82:cible ceb8a:suite
 C10	cf182	FUN_000cf182		17	17	0	
 C10	cfbf2	FUN_000cfbf2		9	9	0	
@@ -1658,11 +1658,11 @@ C10	d48d2	FUN_000d48d2		2	2	0
 C10	d48de	FUN_000d48de		13	13	0	
 C10	d4c12	caseD_25		22	22	0	
 C10	d5ef8	FUN_000d5ef8		6	6	0	
-C10	d5f12	FUN_000d5f12	set_efface_colonnes P	6	6	0	
+C10	d5f12	FUN_000d5f12	set_clears_columns P	6	6	0	
 C10	d5f30	FUN_000d5f30		10	10	0	
 C10	d603a	FUN_000d603a		7	7	0	
 C10	d6054	FUN_000d6054		13	12	1	d605c:suite
-C10	d6182	FUN_000d6182	colonne_vide P	7	7	0	
+C10	d6182	FUN_000d6182	empty_column P	7	7	0	
 C10	d6194	FUN_000d6194		11	11	0	
 C10	d61c4	FUN_000d61c4		31	31	0	
 C10	d6930	FUN_000d6930		7	7	0	
@@ -1694,452 +1694,452 @@ C10	d9078	FUN_000d9078		16	16	0
 C10	d90b0	FUN_000d90b0		67	59	8	d914e:suite d916c:suite d918a:suite d91a8:suite
 C10	d9386	FUN_000d9386		34	32	2	d9404:suite
 C10	d95fe	FUN_000d95fe		10	10	0	
-C10	d9778	FUN_000d9778	musique_variante P	7	7	0	
-C10	d981a	FUN_000d981a	fin_de_scene_variante P	7	7	0	
-C10	d98b8	FUN_000d98b8	set_vague_debut P	7	7	0	
-C10	d995a	FUN_000d995a	set_vague_fin P	7	7	0	
+C10	d9778	FUN_000d9778	music_variant P	7	7	0	
+C10	d981a	FUN_000d981a	scene_end_variant P	7	7	0	
+C10	d98b8	FUN_000d98b8	set_wave_start P	7	7	0	
+C10	d995a	FUN_000d995a	set_wave_end P	7	7	0	
 C0a	d9cea	FUN_000d9cea		21	21	0	
 C0a	da04e	FUN_000da04e		9	8	1	da052:cible
 C0a	da082	FUN_000da082		24	24	0	
 C0a	da0e6	FUN_000da0e6		23	23	0	
 C0a	da152	FUN_000da152		65	65	0	
 C0a	da6f4	FUN_000da6f4		16	16	0	
-C0a	dabba	FUN_000dabba	item_efface_ramasses P	6	6	0	
+C0a	dabba	FUN_000dabba	item_clear_picked P	6	6	0	
 C0c	dad8e	caseD_1		9	9	0	
-C0c	db6c0	FUN_000db6c0	item_chute_equipement P	70	70	0	
+C0c	db6c0	FUN_000db6c0	item_fall_equipment P	70	70	0	
 C0c	dba96	FUN_000dba96		16	10	6	dbaa0:suite dbab0:suite dbac0:suite dbace:suite
 C0c	dbad8	FUN_000dbad8		119	108	11	dbaf6:suite dbbb6:suite dbbd2:suite dbc1c:cible
 C0c	dc0aa	FUN_000dc0aa		90	78	12	dc0e4:cible dc102:cible dc10a:cible dc112:cible dc118:suite
 C0c	dc28a	FUN_000dc28a		16	16	0	
-C0c	dc5fe	FUN_000dc5fe	cree_item_scene P	9	9	0	
+C0c	dc5fe	FUN_000dc5fe	create_item_scene P	9	9	0	
 C0c	dc6e8	FUN_000dc6e8		13	13	0	
 C0c	dcb9a	caseD_ba		8	8	0	
 C0c	dcdae	FUN_000dcdae		11	11	0	
 C0c	dcddc	FUN_000dcddc		39	38	1	dce1c:suite
 C0c	dd0da	FUN_000dd0da		21	15	6	dd0ee:suite dd118:suite
-C0c	dd12c	FUN_000dd12c	verrou_item_baisse P	2	2	0	
+C0c	dd12c	FUN_000dd12c	lock_item_lowered P	2	2	0	
 C0c	dd470	FUN_000dd470		83	83	0	
 C14	ddbfc	FUN_000ddbfc		13	13	0	
-C14	ddeaa	FUN_000ddeaa	decor_type_6 P	6	6	0	
+C14	ddeaa	FUN_000ddeaa	scenery_type_6 P	6	6	0	
 C14	dea4a	FUN_000dea4a		14	14	0	
 C14	df1f8	FUN_000df1f8		16	14	2	df21e:suite
-C14	df4bc	FUN_000df4bc	cree_sobj_7 P	6	6	0	
+C14	df4bc	FUN_000df4bc	create_sobj_7 P	6	6	0	
 C14	df65a	FUN_000df65a		10	10	0	
-C14	df688	FUN_000df688	cree_sobj_8 P	9	9	0	
+C14	df688	FUN_000df688	create_sobj_8 P	9	9	0	
 C14	df70c	FUN_000df70c		16	16	0	
 C14	df7f2	FUN_000df7f2		6	6	0	
 C14	df818	caseD_74		24	22	2	df824:cible df832:cible df840:cible
-C14	df896	FUN_000df896	cree_sobj_10 P	6	6	0	
+C14	df896	FUN_000df896	create_sobj_10 P	6	6	0	
 C14	df988	FUN_000df988		9	9	0	
 C14	df9ea	FUN_000df9ea		10	10	0	
-C14	dfa4a	caseD_c	decor_type_11 P	7	7	0	
+C14	dfa4a	caseD_c	scenery_type_11 P	7	7	0	
 C14	dfc40	FUN_000dfc40		8	8	0	
 C14	dfc62	FUN_000dfc62		6	6	0	
-C14	dfc78	FUN_000dfc78	cree_sobj_12 P	8	8	0	
+C14	dfc78	FUN_000dfc78	create_sobj_12 P	8	8	0	
 C14	dfcf6	FUN_000dfcf6		8	8	0	
 C14	dfd18	FUN_000dfd18		6	6	0	
-C14	dfe26	FUN_000dfe26	cree_sobj_14 P	5	5	0	
+C14	dfe26	FUN_000dfe26	create_sobj_14 P	5	5	0	
 C14	dfed0	FUN_000dfed0		13	13	0	
 C14	e012c	FUN_000e012c		4	4	0	
-C14	e03c6	FUN_000e03c6	invite_stop M	7	7	0	
-C14	e03e4	FUN_000e03e4	invite_start M	6	6	0	
-C1	e0538	FUN_000e0538	demo_enregistreur_depart P	15	15	0	
-C1	e05d6	FUN_000e05d6	demo_enregistreur_arret M	6	6	0	
+C14	e03c6	FUN_000e03c6	prompt_stop M	7	7	0	
+C14	e03e4	FUN_000e03e4	prompt_start M	6	6	0	
+C1	e0538	FUN_000e0538	demo_recorder_start P	15	15	0	
+C1	e05d6	FUN_000e05d6	demo_recorder_stop M	6	6	0	
 C1	e05ec	FUN_000e05ec		97	28	69	e05f0:cible e05f8:suite e0604:cible e070e:suite e0728:cible
-S1	e0836	FUN_000e0836	son_enfiler P	6	6	0	e0846:cible
-S1	e0848	FUN_000e0848	son_enfiler_direct P	18	16	2	e0858:cible
-S1	e0882	FUN_000e0882	son_service_ff00 E	10	10	0	
-S1	e0a10	FUN_000e0a10	son_service_ff05 E	10	10	0	
-S1	e0a2e	FUN_000e0a2e	son_service_ff06 E	6	6	0	
-S1	e0a40	FUN_000e0a40	son_service_ff06 E	15	15	0	
-S1	e0a70	FUN_000e0a70	son_service_ff07 E	6	6	0	
-S1	e0a82	FUN_000e0a82	son_service_ff07 E	15	15	0	
-S1	e0be2	FUN_000e0be2	son_wrapper E	15	15	0	
-S1	e0c16	FUN_000e0c16	son_wrapper E	22	22	0	
-S1	e0c5c	caseD_2	son_aiguillage E	22	22	0	
-S1	e0d8c	caseD_1	son_aiguillage E	22	22	0	
-S1	e0ebc	FUN_000e0ebc	son_wrapper E	17	17	0	
-S1	e0ef8	FUN_000e0ef8	son_wrapper E	17	17	0	
-S1	e0f34	FUN_000e0f34	son_wrapper E	17	17	0	
-S1	e0f70	FUN_000e0f70	son_wrapper E	17	17	0	
-S1	e0fac	FUN_000e0fac	son_wrapper E	17	17	0	
-S1	e0fe8	FUN_000e0fe8	son_wrapper E	17	17	0	
-S1	e1024	FUN_000e1024	son_wrapper E	17	17	0	
-S1	e1060	FUN_000e1060	son_wrapper E	17	17	0	
-S1	e109c	FUN_000e109c	son_wrapper E	17	17	0	
-S1	e10d8	FUN_000e10d8	son_wrapper E	17	17	0	
-S1	e1114	FUN_000e1114	son_wrapper E	17	17	0	
-S1	e1150	FUN_000e1150	son_wrapper E	17	17	0	
-S1	e1330	FUN_000e1330	son_wrapper E	18	18	0	
-S1	e1370	FUN_000e1370	son_wrapper E	18	18	0	
-S1	e13b0	FUN_000e13b0	son_wrapper E	18	18	0	
-S1	e13f0	FUN_000e13f0	son_wrapper E	18	18	0	
-S1	e1430	caseD_f9	son_wrapper E	18	18	0	
-S1	e1470	FUN_000e1470	son_wrapper E	18	18	0	
-S1	e14b0	FUN_000e14b0	son_wrapper E	17	17	0	
-S1	e14ec	FUN_000e14ec	son_wrapper E	17	17	0	
-S1	e1528	FUN_000e1528	son_wrapper E	17	17	0	
-S1	e1564	FUN_000e1564	son_wrapper E	17	17	0	
-S1	e15a0	FUN_000e15a0	son_wrapper E	17	17	0	
-S1	e15dc	FUN_000e15dc	son_wrapper E	18	18	0	
-S1	e161c	FUN_000e161c	son_wrapper E	17	17	0	
-S1	e1658	FUN_000e1658	son_wrapper E	29	29	0	
-S1	e16f0	FUN_000e16f0	son_wrapper E	17	17	0	
-S1	e172c	FUN_000e172c	son_wrapper E	17	17	0	
-S1	e1768	FUN_000e1768	son_wrapper E	17	17	0	
-S1	e17a4	FUN_000e17a4	son_wrapper E	18	18	0	
-S1	e181c	FUN_000e181c	son_wrapper E	19	19	0	
-S1	e185c	FUN_000e185c	son_wrapper E	29	29	0	
-S1	e18b8	FUN_000e18b8	son_wrapper E	19	19	0	
-S1	e18f8	FUN_000e18f8	son_wrapper E	19	19	0	
-S1	e1938	FUN_000e1938	son_wrapper E	29	29	0	
-S1	e1998	FUN_000e1998	son_wrapper E	29	29	0	
-S1	e1a58	FUN_000e1a58	son_wrapper E	29	29	0	
-S1	e1ab8	FUN_000e1ab8	son_wrapper E	32	31	1	e1adc:suite
-S1	e1b8c	FUN_000e1b8c	son_wrapper E	32	30	2	e1bb0:suite e1bb8:suite
-S1	e1bf6	FUN_000e1bf6	son_wrapper E	32	30	2	e1c1a:suite e1c22:suite
-S1	e1d60	FUN_000e1d60	son_wrapper E	19	19	0	
-S1	e1de0	FUN_000e1de0	son_wrapper E	33	31	2	e1e16:suite e1e1e:suite
-S1	e1e80	FUN_000e1e80	son_wrapper E	33	31	2	e1eb6:suite e1ebe:suite
-S1	e1f20	FUN_000e1f20	son_wrapper E	33	31	2	e1f56:suite e1f5e:suite
-S1	e1fc0	caseD_bf	son_wrapper E	33	31	2	e1ff6:suite e1ffe:suite
-S1	e2060	FUN_000e2060	son_wrapper E	33	31	2	e2096:suite e209e:suite
-S1	e2100	FUN_000e2100	son_wrapper E	33	31	2	e2136:suite e213e:suite
-S1	e21a0	FUN_000e21a0	son_wrapper E	33	31	2	e21d6:suite e21de:suite
-S1	e2240	caseD_c0	son_selon_version E	35	32	3	e2276:suite e227e:suite e2286:suite
-S1	e22e8	FUN_000e22e8	son_selon_version E	55	51	4	e231e:suite e2326:suite e232e:suite e23c6:suite e23ce:suite
-S1	e2430	FUN_000e2430	son_selon_version E	35	2	33	e2434:suite
-S1	e24d8	FUN_000e24d8	son_wrapper E	33	31	2	e250e:suite e2516:suite
-S1	e2578	FUN_000e2578	son_wrapper E	35	33	2	e25b0:suite e25b8:suite
-S1	e25f2	FUN_000e25f2	son_wrapper E	35	32	3	e2622:suite e262a:suite e2632:suite
-S1	e266c	FUN_000e266c	son_wrapper E	35	33	2	e26a4:suite e26ac:suite
-S1	e2760	FUN_000e2760	son_wrapper E	35	33	2	e2798:suite e27a0:suite
-S1	e27da	FUN_000e27da	son_selon_version E	37	34	3	e2812:suite e281a:suite e2822:suite
-S1	e285c	FUN_000e285c	son_selon_version E	40	40	0	
-S1	e28e4	FUN_000e28e4	son_wrapper E	19	19	0	
-S1	e296c	FUN_000e296c	son_selon_version E	21	2	19	e2970:suite
-S1	e2a34	FUN_000e2a34	son_wrapper E	19	19	0	
-S1	e2a74	FUN_000e2a74	son_selon_version E	21	2	19	e2a78:suite
-S1	e2aba	FUN_000e2aba	son_wrapper E	19	19	0	
-S1	e2afa	FUN_000e2afa	son_wrapper E	19	19	0	
-S1	e2b3a	FUN_000e2b3a	son_wrapper E	19	19	0	
-S1	e2b7a	FUN_000e2b7a	son_wrapper E	19	19	0	
-S1	e2bba	FUN_000e2bba	son_wrapper E	19	19	0	
-S1	e2bfa	FUN_000e2bfa	son_wrapper E	19	19	0	
-S1	e2c3a	FUN_000e2c3a	son_wrapper E	19	19	0	
-S1	e2c7a	FUN_000e2c7a	son_wrapper E	19	19	0	
-S1	e2cba	FUN_000e2cba	son_wrapper E	19	19	0	
-S1	e2cfa	FUN_000e2cfa	son_wrapper E	19	19	0	
-S1	e2d3a	FUN_000e2d3a	son_wrapper E	19	19	0	
-S1	e2d7a	FUN_000e2d7a	son_wrapper E	19	19	0	
-S1	e2dba	FUN_000e2dba	son_wrapper E	19	19	0	
-S1	e2dfa	FUN_000e2dfa	son_wrapper E	19	19	0	
-S1	e2e3a	FUN_000e2e3a	son_wrapper E	19	19	0	
-S1	e2e7a	FUN_000e2e7a	son_wrapper E	19	19	0	
-S1	e2eba	FUN_000e2eba	son_wrapper E	19	19	0	
-S1	e2efa	FUN_000e2efa	son_wrapper E	19	19	0	
-S1	e2f3a	FUN_000e2f3a	son_wrapper E	19	19	0	
-S1	e2f7a	FUN_000e2f7a	son_wrapper E	19	19	0	
-S1	e2fba	FUN_000e2fba	son_wrapper E	19	19	0	
-S1	e2ffa	FUN_000e2ffa	son_wrapper E	19	19	0	
-S1	e303a	FUN_000e303a	son_wrapper E	19	19	0	
-S1	e307a	FUN_000e307a	son_wrapper E	19	19	0	
-S1	e30ba	FUN_000e30ba	son_wrapper E	19	19	0	
-S1	e30fa	FUN_000e30fa	son_wrapper E	19	19	0	
-S1	e313a	FUN_000e313a	son_wrapper E	19	19	0	
-S1	e317a	FUN_000e317a	son_wrapper E	19	19	0	
-S1	e31ba	FUN_000e31ba	son_wrapper E	19	19	0	
-S1	e31fa	FUN_000e31fa	son_wrapper E	19	19	0	
-S1	e323a	FUN_000e323a	son_wrapper E	19	19	0	
-S1	e327a	FUN_000e327a	son_wrapper E	33	32	1	e32b8:suite
-S1	e32ee	caseD_0	son_wrapper E	33	33	0	
-S1	e3362	caseD_0	son_wrapper E	33	33	0	
-S1	e35a6	FUN_000e35a6	son_wrapper E	33	30	3	e35d4:suite e35dc:suite e35e4:suite
-S1	e361a	FUN_000e361a	son_wrapper E	33	32	1	e3658:suite
-S1	e3776	FUN_000e3776	son_wrapper E	33	32	1	e37a4:suite
-S1	e385e	caseD_8	son_wrapper E	33	30	3	e388c:suite e3894:suite e389c:suite
-S1	e38d2	FUN_000e38d2	son_wrapper E	33	33	0	
-S1	e3a2e	FUN_000e3a2e	son_wrapper E	32	29	3	e3a52:suite e3a5a:suite e3a62:suite
-S1	e3a98	FUN_000e3a98	son_wrapper E	32	29	3	e3abc:suite e3ac4:suite e3acc:suite
-S1	e3b02	FUN_000e3b02	son_wrapper E	32	29	3	e3b26:suite e3b2e:suite e3b36:suite
-S1	e3b6c	FUN_000e3b6c	son_wrapper E	32	31	1	e3b98:suite
-S1	e3bd6	FUN_000e3bd6	son_wrapper E	33	31	2	e3c0c:suite e3c14:suite
-S1	e3cbe	caseD_20	son_wrapper E	33	31	2	e3cf4:suite e3cfc:suite
-S1	e3d32	FUN_000e3d32	son_wrapper E	33	33	0	
-S1	e3da6	FUN_000e3da6	son_wrapper E	33	32	1	e3dd4:suite
-S1	e3e8e	FUN_000e3e8e	son_wrapper E	33	31	2	e3ebc:suite e3ec4:suite
-S1	e3f02	FUN_000e3f02	son_wrapper E	33	31	2	e3f30:suite e3f38:suite
-S1	e3f76	FUN_000e3f76	son_wrapper E	32	31	1	e3f9a:suite
-S1	e40b4	FUN_000e40b4	son_wrapper E	32	29	3	e40d8:suite e40e0:suite e40e8:suite
-S1	e411e	FUN_000e411e	son_wrapper E	32	29	3	e4142:suite e414a:suite e4152:suite
-S1	e425c	FUN_000e425c	son_wrapper E	32	30	2	e4280:suite e4290:suite
-S1	e42c6	FUN_000e42c6	son_wrapper E	33	30	3	e42f4:suite e42fc:suite e4304:suite
-S1	e43ae	caseD_27	son_wrapper E	33	30	3	e43dc:suite e43e4:suite e43ec:suite
-S1	e4422	FUN_000e4422	son_wrapper E	32	30	2	e4446:suite e4456:suite
-S1	e448c	FUN_000e448c	son_wrapper E	32	29	3	e44b0:suite e44b8:suite e44c0:suite
-S1	e44f6	FUN_000e44f6	son_wrapper E	32	30	2	e451a:suite e452a:suite
-S1	e4560	FUN_000e4560	son_wrapper E	32	30	2	e4584:suite e4594:suite
-S1	e45ca	FUN_000e45ca	son_wrapper E	29	29	0	
-S1	e4626	FUN_000e4626	son_wrapper E	29	29	0	
-S1	e4682	FUN_000e4682	son_wrapper E	29	29	0	
-S1	e4830	FUN_000e4830	son_wrapper E	19	19	0	
-S1	e48da	FUN_000e48da	son_wrapper E	32	29	3	e48fe:suite e4906:suite e490e:suite
-S1	e4944	caseD_2a	son_wrapper E	32	29	3	e4968:suite e4970:suite e4978:suite
-S1	e49ae	FUN_000e49ae	son_wrapper E	32	29	3	e49d2:suite e49da:suite e49e2:suite
-S1	e4a18	caseD_be	son_wrapper E	32	29	3	e4a3c:suite e4a44:suite e4a4c:suite
-S1	e4a82	FUN_000e4a82	son_wrapper E	32	29	3	e4aa6:suite e4aae:suite e4ab6:suite
-S1	e4b4c	FUN_000e4b4c	son_wrapper E	32	29	3	e4b70:suite e4b78:suite e4b80:suite
-S1	e4bb6	FUN_000e4bb6	son_wrapper E	32	29	3	e4bda:suite e4be2:suite e4bea:suite
-S1	e4c20	FUN_000e4c20	son_wrapper E	32	29	3	e4c44:suite e4c4c:suite e4c54:suite
-S1	e4cfe	FUN_000e4cfe	son_wrapper E	33	32	1	e4d2c:suite
-S1	e4d72	FUN_000e4d72	son_wrapper E	33	30	3	e4da0:suite e4da8:suite e4db0:suite
-S1	e4de6	FUN_000e4de6	son_wrapper E	33	30	3	e4e14:suite e4e1c:suite e4e24:suite
-S1	e4e5a	FUN_000e4e5a	son_wrapper E	33	32	1	e4e88:suite
-S1	e4f42	FUN_000e4f42	son_wrapper E	33	31	2	e4f70:suite e4f78:suite
-S1	e4fb6	FUN_000e4fb6	son_wrapper E	32	31	1	e4fda:suite
-S1	e5020	FUN_000e5020	son_wrapper E	32	30	2	e5044:suite e5054:suite
-S1	e508a	FUN_000e508a	son_wrapper E	33	30	3	e50b8:suite e50c0:suite e50c8:suite
-S1	e50fe	FUN_000e50fe	son_wrapper E	33	30	3	e512c:suite e5134:suite e513c:suite
-S1	e51e6	FUN_000e51e6	son_wrapper E	33	31	2	e5214:suite e521c:suite
-S1	e525a	FUN_000e525a	son_wrapper E	33	31	2	e5288:suite e5290:suite
-S1	e5416	FUN_000e5416	son_wrapper E	32	29	3	e543a:suite e5442:suite e544a:suite
-S1	e5480	FUN_000e5480	son_wrapper E	29	29	0	
-S1	e54dc	FUN_000e54dc	son_wrapper E	29	29	0	
-S1	e56a6	FUN_000e56a6	son_wrapper E	33	31	2	e56d4:suite e56e4:suite
-S1	e571a	FUN_000e571a	son_wrapper E	29	29	0	
-S1	e5776	FUN_000e5776	son_wrapper E	29	29	0	
-S1	e57d6	FUN_000e57d6	son_wrapper E	15	15	0	
-S1	e580a	FUN_000e580a	son_wrapper E	33	32	1	e5838:suite
-S1	e587e	FUN_000e587e	son_wrapper E	33	30	3	e58ac:suite e58b4:suite e58bc:suite
-S1	e5966	caseD_31	son_wrapper E	33	30	3	e5994:suite e599c:suite e59a4:suite
-S1	e59da	FUN_000e59da	son_wrapper E	33	32	1	e5a08:suite
-S1	e5a4e	FUN_000e5a4e	son_wrapper E	33	31	2	e5a7c:suite e5a84:suite
-S1	e5ac2	FUN_000e5ac2	son_wrapper E	33	30	3	e5af0:suite e5af8:suite e5b00:suite
-S1	e5baa	FUN_000e5baa	son_wrapper E	33	30	3	e5bd8:suite e5be0:suite e5be8:suite
-S1	e5c1e	FUN_000e5c1e	son_wrapper E	29	29	0	
-S1	e5c7a	FUN_000e5c7a	son_wrapper E	29	29	0	
-S1	e5cd6	FUN_000e5cd6	son_wrapper E	29	29	0	
-S1	e5d36	FUN_000e5d36	son_wrapper E	33	30	3	e5d64:suite e5d6c:suite e5d74:suite
-S1	e5daa	FUN_000e5daa	son_wrapper E	19	19	0	
-S1	e5dea	FUN_000e5dea	son_wrapper E	19	19	0	
-S1	e5e2a	FUN_000e5e2a	son_wrapper E	33	30	3	e5e58:suite e5e60:suite e5e68:suite
-S1	e5e9e	FUN_000e5e9e	son_wrapper E	33	30	3	e5ecc:suite e5ed4:suite e5edc:suite
-S1	e5f86	FUN_000e5f86	son_wrapper E	34	31	3	e5fb4:suite e5fbc:suite e5fc4:suite
-S1	e5ffa	FUN_000e5ffa	son_wrapper E	34	31	3	e6028:suite e6030:suite e6038:suite
-S1	e606e	FUN_000e606e	son_wrapper E	34	31	3	e609c:suite e60a4:suite e60ac:suite
-S1	e60e2	FUN_000e60e2	son_wrapper E	34	31	3	e6110:suite e6118:suite e6120:suite
-S1	e6156	FUN_000e6156	son_wrapper E	34	31	3	e6184:suite e618c:suite e6194:suite
-S1	e61ca	FUN_000e61ca	son_wrapper E	21	21	0	
-S1	e637c	FUN_000e637c	son_wrapper E	32	29	3	e63a0:suite e63a8:suite e63b0:suite
-S1	e64ce	FUN_000e64ce	son_wrapper E	34	34	0	
-S1	e662a	FUN_000e662a	son_aiguillage E	20	20	0	
-S1	e6a8e	FUN_000e6a8e	son_wrapper E	33	30	3	e6aba:suite e6ac2:suite e6aca:suite
-S1	e6e90	FUN_000e6e90	son_wrapper E	33	30	3	e6ebc:suite e6ec4:suite e6ecc:suite
-S1	e6fe6	FUN_000e6fe6	son_wrapper E	33	30	3	e7012:suite e701a:suite e7022:suite
-S1	e713c	FUN_000e713c	son_wrapper E	33	30	3	e7168:suite e7170:suite e7178:suite
-S1	e7304	FUN_000e7304	son_wrapper E	33	31	2	e7338:suite e7340:suite
-S1	e7376	FUN_000e7376	son_wrapper E	33	33	0	
-S1	e73e8	FUN_000e73e8	son_wrapper E	33	32	1	e7414:suite
-S1	e745a	FUN_000e745a	son_wrapper E	33	33	0	
-S1	e75b0	FUN_000e75b0	son_wrapper E	33	31	2	e75e4:suite e75ec:suite
-S1	e7622	FUN_000e7622	son_aiguillage E	17	17	0	
-S1	e7668	FUN_000e7668	son_wrapper E	33	31	2	e769c:suite e76a4:suite
-S1	e774c	FUN_000e774c	son_aiguillage E	17	17	0	
-S1	e78e8	FUN_000e78e8	son_aiguillage E	17	17	0	
-S1	e792e	FUN_000e792e	son_wrapper E	33	31	2	e7962:suite e796a:suite
-S1	e7a12	FUN_000e7a12	son_aiguillage E	17	17	0	
-S1	e7b3c	FUN_000e7b3c	son_wrapper E	33	30	3	e7b68:suite e7b70:suite e7b78:suite
-S1	e7c20	FUN_000e7c20	son_aiguillage E	19	19	0	
-S1	e7e10	FUN_000e7e10	son_aiguillage E	19	19	0	
-S1	e7eaa	FUN_000e7eaa	son_wrapper E	33	31	2	e7ede:suite e7ee6:suite
-S1	e8156	FUN_000e8156	son_wrapper E	33	30	3	e8182:suite e818a:suite e8192:suite
-S1	e81c8	FUN_000e81c8	son_wrapper E	33	30	3	e81f4:suite e81fc:suite e8204:suite
-S1	e823a	FUN_000e823a	son_aiguillage E	18	18	0	
-S1	e828c	FUN_000e828c	son_wrapper E	33	31	2	e82c0:suite e82c8:suite
-S1	e82fe	FUN_000e82fe	son_wrapper E	33	31	2	e8332:suite e833a:suite
-S1	e8370	FUN_000e8370	son_wrapper E	33	30	3	e839c:suite e83a4:suite e83ac:suite
-S1	e83e2	FUN_000e83e2	son_wrapper E	33	32	1	e8416:suite
-S1	e8454	FUN_000e8454	son_wrapper E	33	31	2	e8488:suite e8490:suite
-S1	e84c6	FUN_000e84c6	son_wrapper E	32	30	2	e84f2:suite e84fa:suite
-S1	e8530	FUN_000e8530	son_wrapper E	32	30	2	e855c:suite e8564:suite
-S1	e859a	FUN_000e859a	son_wrapper E	33	33	0	
-S1	e860c	FUN_000e860c	son_wrapper E	32	30	2	e8638:suite e8640:suite
-S1	e86e0	FUN_000e86e0	son_wrapper E	42	41	1	e872c:suite
-S1	e876a	FUN_000e876a	son_wrapper E	42	41	1	e87be:suite
-S1	e87f4	FUN_000e87f4	son_wrapper E	33	32	1	e8830:suite
-S1	e88d0	FUN_000e88d0	son_wrapper E	32	30	2	e88fc:suite e8904:suite
-S1	e893a	FUN_000e893a	son_wrapper E	32	30	2	e8966:suite e896e:suite
-S1	e89a4	FUN_000e89a4	son_wrapper E	42	40	2	e89f0:suite e89f8:suite
-S1	e8a2e	FUN_000e8a2e	son_wrapper E	42	40	2	e8a7a:suite e8a82:suite
-S1	e8ab8	FUN_000e8ab8	son_wrapper E	32	32	0	
-S1	e8b22	FUN_000e8b22	son_wrapper E	39	37	2	e8b5a:suite e8b62:suite
-S1	e8ba2	FUN_000e8ba2	son_wrapper E	32	31	1	e8bce:suite
-S1	e8ce0	FUN_000e8ce0	son_wrapper E	32	30	2	e8d0c:suite e8d14:suite
-S1	e8d4a	FUN_000e8d4a	son_wrapper E	32	32	0	
-S1	e8db4	FUN_000e8db4	son_wrapper E	32	30	2	e8de0:suite e8de8:suite
-S1	e8e1e	FUN_000e8e1e	son_wrapper E	32	30	2	e8e4a:suite e8e52:suite
-S1	e8e88	FUN_000e8e88	son_wrapper E	32	30	2	e8eb4:suite e8ebc:suite
-S1	e8f5c	FUN_000e8f5c	son_wrapper E	32	30	2	e8f88:suite e8f90:suite
-S1	e8fc6	FUN_000e8fc6	son_wrapper E	32	30	2	e8ff2:suite e8ffa:suite
-S1	e9030	FUN_000e9030	son_wrapper E	32	30	2	e905c:suite e9064:suite
-S1	e909a	FUN_000e909a	son_wrapper E	33	33	0	
-S1	e910c	FUN_000e910c	son_wrapper E	32	30	2	e9138:suite e9140:suite
-S1	e9176	FUN_000e9176	son_wrapper E	29	29	0	
-S1	e91d6	FUN_000e91d6	son_wrapper E	32	30	2	e9202:suite e920a:suite
-S1	e9240	FUN_000e9240	son_wrapper E	42	40	2	e9288:suite e9290:suite
-S1	e92c6	FUN_000e92c6	son_wrapper E	32	30	2	e92f2:suite e92fa:suite
-S1	e9330	FUN_000e9330	son_wrapper E	42	40	2	e937c:suite e9384:suite
-S1	e93ba	FUN_000e93ba	son_wrapper E	32	30	2	e93e6:suite e93ee:suite
-S1	e9424	FUN_000e9424	son_wrapper E	32	30	2	e9450:suite e9458:suite
-S1	e948e	FUN_000e948e	son_wrapper E	32	30	2	e94ba:suite e94c2:suite
-S1	e960c	FUN_000e960c	son_wrapper E	32	30	2	e9638:suite e9640:suite
-S1	e9676	FUN_000e9676	son_wrapper E	32	30	2	e96a2:suite e96aa:suite
-S1	e96e0	FUN_000e96e0	son_wrapper E	32	30	2	e970c:suite e9714:suite
-S1	e974a	FUN_000e974a	son_wrapper E	32	30	2	e9776:suite e977e:suite
-S1	e97b4	FUN_000e97b4	son_wrapper E	32	29	3	e97d8:suite e97e0:suite e97e8:suite
-S1	e981e	FUN_000e981e	son_wrapper E	32	30	2	e984a:suite e9852:suite
-S1	e9888	FUN_000e9888	son_wrapper E	33	33	0	
-S1	e98fa	FUN_000e98fa	son_wrapper E	33	30	3	e9926:suite e992e:suite e9936:suite
-S1	e996c	FUN_000e996c	son_wrapper E	29	29	0	
-S1	e99c8	FUN_000e99c8	son_wrapper E	32	30	2	e99f4:suite e99fc:suite
-S1	e9a32	FUN_000e9a32	son_wrapper E	26	26	0	
-S1	e9a88	FUN_000e9a88	son_wrapper E	29	29	0	
-S1	e9be4	FUN_000e9be4	son_wrapper E	32	31	1	e9c18:suite
-S1	e9cd4	FUN_000e9cd4	son_wrapper E	32	30	2	e9d00:suite e9d08:suite
-S1	e9d3e	FUN_000e9d3e	son_wrapper E	32	32	0	
-S1	e9da8	FUN_000e9da8	son_wrapper E	43	43	0	
-S1	e9e34	FUN_000e9e34	son_wrapper E	32	30	2	e9e60:suite e9e68:suite
-S1	e9e9e	FUN_000e9e9e	son_wrapper E	26	26	0	
-S1	e9ef4	FUN_000e9ef4	son_wrapper E	32	31	1	e9f28:suite
-S1	e9f5e	FUN_000e9f5e	son_wrapper E	32	30	2	e9f8a:suite e9f92:suite
-S1	e9fc8	FUN_000e9fc8	son_wrapper E	32	30	2	e9ff4:suite e9ffc:suite
-S1	ea032	FUN_000ea032	son_wrapper E	32	30	2	ea05e:suite ea066:suite
-S1	ea09c	FUN_000ea09c	son_wrapper E	32	30	2	ea0c8:suite ea0d0:suite
-S1	ea106	FUN_000ea106	son_wrapper E	29	29	0	
-S1	ea1d0	FUN_000ea1d0	son_wrapper E	29	29	0	
-S1	ea22c	FUN_000ea22c	son_wrapper E	29	29	0	
-S1	ea288	FUN_000ea288	son_wrapper E	29	29	0	
-S1	ea2e8	FUN_000ea2e8	son_wrapper E	29	29	0	
-S1	ea344	FUN_000ea344	son_wrapper E	33	30	3	ea370:suite ea378:suite ea380:suite
-S1	ea3b6	FUN_000ea3b6	son_wrapper E	33	30	3	ea3e2:suite ea3ea:suite ea3f2:suite
-S1	ea428	FUN_000ea428	son_wrapper E	33	31	2	ea45c:suite ea464:suite
-S1	ea49a	FUN_000ea49a	son_wrapper E	33	31	2	ea4c6:suite ea4d6:suite
-S1	ea57e	FUN_000ea57e	son_wrapper E	33	30	3	ea5aa:suite ea5b2:suite ea5ba:suite
-S1	ea5f0	FUN_000ea5f0	son_wrapper E	33	30	3	ea61c:suite ea624:suite ea62c:suite
-S1	ea662	FUN_000ea662	son_wrapper E	19	19	0	
-S1	ea6a2	FUN_000ea6a2	son_wrapper E	19	19	0	
-S1	ea6e2	FUN_000ea6e2	son_wrapper E	19	19	0	
-S1	ea722	FUN_000ea722	son_wrapper E	29	29	0	
-S1	ea77e	FUN_000ea77e	son_wrapper E	19	19	0	
-S1	ea7be	FUN_000ea7be	son_wrapper E	19	19	0	
-S1	ea7fe	FUN_000ea7fe	son_wrapper E	19	19	0	
-S1	ea83e	FUN_000ea83e	son_wrapper E	19	19	0	
-S1	ea87e	FUN_000ea87e	son_wrapper E	19	19	0	
-S1	ea8be	FUN_000ea8be	son_wrapper E	29	29	0	
-S1	ea91a	FUN_000ea91a	son_wrapper E	32	30	2	ea946:suite ea94e:suite
-S1	ea984	FUN_000ea984	son_wrapper E	32	31	1	ea9b8:suite
-S1	ea9ee	FUN_000ea9ee	son_wrapper E	32	30	2	eaa1a:suite eaa22:suite
-S1	eaa58	FUN_000eaa58	son_wrapper E	19	19	0	
-S1	eaa98	FUN_000eaa98	son_wrapper E	29	29	0	
-S1	eaaf4	FUN_000eaaf4	son_wrapper E	29	29	0	
-S1	ead04	FUN_000ead04	son_wrapper E	29	29	0	
-S1	eae14	FUN_000eae14	son_wrapper E	33	30	3	eae40:suite eae48:suite eae50:suite
-S1	eaf6a	FUN_000eaf6a	son_wrapper E	33	30	3	eaf96:suite eaf9e:suite eafa6:suite
-S1	eafdc	FUN_000eafdc	son_wrapper E	33	32	1	eb008:suite
-S1	eb04e	FUN_000eb04e	son_wrapper E	33	32	1	eb07a:suite
-S1	eb0c0	FUN_000eb0c0	son_wrapper E	33	31	2	eb0ec:suite eb0f4:suite
-S1	eb132	FUN_000eb132	son_wrapper E	33	30	3	eb15e:suite eb166:suite eb16e:suite
-S1	eb1a4	FUN_000eb1a4	son_wrapper E	32	32	0	
-S1	eb280	FUN_000eb280	son_wrapper E	33	33	0	
-S1	eb2f2	FUN_000eb2f2	son_wrapper E	33	32	1	eb32e:suite
-S1	eb364	FUN_000eb364	son_wrapper E	33	33	0	
-S1	eb3d6	FUN_000eb3d6	son_wrapper E	33	33	0	
-S1	eb448	FUN_000eb448	son_wrapper E	33	30	3	eb474:suite eb47c:suite eb484:suite
-S1	eb4ba	FUN_000eb4ba	son_wrapper E	33	32	1	eb4e6:suite
-S1	eb52c	FUN_000eb52c	son_wrapper E	33	31	2	eb560:suite eb568:suite
-S1	eb59e	FUN_000eb59e	son_wrapper E	33	32	1	eb5d2:suite
-S1	eb610	FUN_000eb610	son_wrapper E	33	31	2	eb644:suite eb64c:suite
-S1	eb766	FUN_000eb766	son_wrapper E	33	31	2	eb79a:suite eb7a2:suite
-S1	eb7d8	FUN_000eb7d8	son_wrapper E	33	33	0	
-S1	eb84a	FUN_000eb84a	son_wrapper E	33	33	0	
-S1	eb8bc	FUN_000eb8bc	son_wrapper E	33	33	0	
-S1	eb92e	FUN_000eb92e	son_wrapper E	33	30	3	eb95a:suite eb962:suite eb96a:suite
-S1	eb9a0	FUN_000eb9a0	son_wrapper E	33	33	0	
-S1	eba12	FUN_000eba12	son_wrapper E	33	33	0	
-S1	ebaf6	FUN_000ebaf6	son_wrapper E	33	31	2	ebb2a:suite ebb32:suite
-S1	ebbda	FUN_000ebbda	son_wrapper E	33	33	0	
-S1	ebcbe	FUN_000ebcbe	son_wrapper E	33	32	1	ebcf2:suite
-S1	ebd30	FUN_000ebd30	son_wrapper E	33	33	0	
-S1	ebe14	FUN_000ebe14	son_wrapper E	33	30	3	ebe40:suite ebe48:suite ebe50:suite
-S1	ebe86	FUN_000ebe86	son_wrapper E	33	33	0	
-S1	ebef8	FUN_000ebef8	son_wrapper E	33	31	2	ebf2c:suite ebf34:suite
-S1	ebf6a	FUN_000ebf6a	son_wrapper E	33	32	1	ebf9e:suite
-S1	ebfdc	FUN_000ebfdc	son_wrapper E	32	31	1	ec010:suite
-S1	ec046	FUN_000ec046	son_aiguillage E	18	18	0	
-S1	ec200	FUN_000ec200	son_aiguillage E	18	18	0	
-S1	ec502	FUN_000ec502	son_wrapper E	33	31	2	ec536:suite ec53e:suite
-S1	ec5e6	FUN_000ec5e6	son_wrapper E	33	33	0	
-S1	ec658	FUN_000ec658	son_wrapper E	33	33	0	
-S1	ec6ca	FUN_000ec6ca	son_wrapper E	33	31	2	ec6f6:suite ec6fe:suite
-S1	ec73c	FUN_000ec73c	son_wrapper E	33	30	3	ec768:suite ec770:suite ec778:suite
-S1	ec7ae	caseD_0	son_wrapper E	33	33	0	
-S1	ec820	caseD_2	son_wrapper E	33	33	0	
-S1	ec892	caseD_4	son_wrapper E	33	33	0	
-S1	ec904	caseD_20	son_wrapper E	33	33	0	
-S1	ec976	caseD_12	son_wrapper E	33	32	1	ec9a2:suite
-S1	ec9e8	FUN_000ec9e8	son_wrapper E	32	31	1	eca14:suite
-S1	eca52	FUN_000eca52	son_wrapper E	32	29	3	eca76:suite eca7e:suite eca86:suite
-S1	ecabc	FUN_000ecabc	son_wrapper E	32	30	2	ecae8:suite ecaf0:suite
-S1	ecb26	FUN_000ecb26	son_wrapper E	33	33	0	
-S1	ecb98	FUN_000ecb98	son_wrapper E	33	32	1	ecbcc:suite
-S1	ecc0a	FUN_000ecc0a	son_wrapper E	33	31	2	ecc36:suite ecc3e:suite
-S1	ecc7c	FUN_000ecc7c	son_wrapper E	32	30	2	ecca0:suite eccb0:suite
-S1	ecce6	FUN_000ecce6	son_wrapper E	32	30	2	ecd0a:suite ecd12:suite
-S1	ecd50	FUN_000ecd50	son_wrapper E	32	30	2	ecd74:suite ecd7c:suite
-S1	ecdba	FUN_000ecdba	son_wrapper E	33	33	0	
-S1	ece2c	FUN_000ece2c	son_wrapper E	33	30	3	ece58:suite ece60:suite ece68:suite
-S1	ece9e	FUN_000ece9e	son_wrapper E	33	32	1	ececa:suite
-S1	ecf10	FUN_000ecf10	son_wrapper E	32	31	1	ecf34:suite
-S1	ecf7a	FUN_000ecf7a	son_wrapper E	32	29	3	ecf9e:suite ecfa6:suite ecfae:suite
-S1	ecfe4	FUN_000ecfe4	son_wrapper E	33	33	0	
-S1	ed056	FUN_000ed056	son_wrapper E	32	29	3	ed07a:suite ed082:suite ed08a:suite
-S1	ed0c0	FUN_000ed0c0	son_wrapper E	29	29	0	
-S1	ed11c	FUN_000ed11c	son_wrapper E	32	29	3	ed140:suite ed148:suite ed150:suite
-S1	ed186	FUN_000ed186	son_wrapper E	32	30	2	ed1aa:suite ed1ba:suite
-S1	ed1f0	FUN_000ed1f0	son_wrapper E	32	29	3	ed214:suite ed21c:suite ed224:suite
-S1	ed25a	FUN_000ed25a	son_wrapper E	32	29	3	ed27e:suite ed286:suite ed28e:suite
-S1	ed2c4	FUN_000ed2c4	son_wrapper E	32	29	3	ed2e8:suite ed2f0:suite ed2f8:suite
-S1	ed32e	FUN_000ed32e	son_wrapper E	32	30	2	ed352:suite ed362:suite
-S1	ed398	FUN_000ed398	son_wrapper E	33	33	0	
-S1	ed40a	FUN_000ed40a	son_wrapper E	32	29	3	ed42e:suite ed436:suite ed43e:suite
-S1	ed474	FUN_000ed474	son_wrapper E	32	30	2	ed498:suite ed4a8:suite
-S1	ed4de	FUN_000ed4de	son_wrapper E	32	30	2	ed502:suite ed512:suite
-S1	ed548	FUN_000ed548	son_wrapper E	32	30	2	ed56c:suite ed57c:suite
-S1	ed5b2	FUN_000ed5b2	son_wrapper E	32	31	1	ed5e6:suite
-S1	ed61c	FUN_000ed61c	son_wrapper E	32	31	1	ed650:suite
-S1	ed686	FUN_000ed686	son_wrapper E	32	31	1	ed6b2:suite
-S1	ed762	FUN_000ed762	son_wrapper E	32	29	3	ed786:suite ed78e:suite ed796:suite
-S1	ed7cc	FUN_000ed7cc	son_wrapper E	32	29	3	ed7f0:suite ed7f8:suite ed800:suite
-S1	ed836	FUN_000ed836	son_wrapper E	32	29	3	ed85a:suite ed862:suite ed86a:suite
-S1	ed8a0	FUN_000ed8a0	son_wrapper E	32	29	3	ed8c4:suite ed8cc:suite ed8d4:suite
-S1	ed90a	FUN_000ed90a	son_wrapper E	19	19	0	
-S1	ed94a	FUN_000ed94a	son_wrapper E	33	31	2	ed976:suite ed986:suite
-S1	ed9bc	FUN_000ed9bc	son_wrapper E	32	30	2	ed9e0:suite ed9f0:suite
-S1	eda26	FUN_000eda26	son_wrapper E	19	19	0	
-S1	eda66	FUN_000eda66	son_wrapper E	19	19	0	
-S1	edaa6	FUN_000edaa6	son_wrapper E	33	30	3	edad2:suite edada:suite edae2:suite
-S1	edb18	FUN_000edb18	son_wrapper E	32	29	3	edb3c:suite edb44:suite edb4c:suite
-S1	edb82	FUN_000edb82	son_wrapper E	33	31	2	edbb6:suite edbbe:suite
-S1	edbf4	FUN_000edbf4	son_wrapper E	33	31	2	edc28:suite edc30:suite
-S1	edc66	FUN_000edc66	son_wrapper E	32	29	3	edc8a:suite edc92:suite edc9a:suite
-S1	edcd0	FUN_000edcd0	son_wrapper E	29	29	0	
-S1	edd2c	FUN_000edd2c	son_wrapper E	32	29	3	edd50:suite edd58:suite edd60:suite
-S1	edd96	FUN_000edd96	son_wrapper E	33	31	2	eddca:suite eddd2:suite
-S1	ede08	FUN_000ede08	son_wrapper E	32	31	1	ede2c:suite
+S1	e0836	FUN_000e0836	sound_enqueue P	6	6	0	e0846:cible
+S1	e0848	FUN_000e0848	sound_enqueue_direct P	18	16	2	e0858:cible
+S1	e0882	FUN_000e0882	sound_service_ff00 E	10	10	0	
+S1	e0a10	FUN_000e0a10	sound_service_ff05 E	10	10	0	
+S1	e0a2e	FUN_000e0a2e	sound_service_ff06 E	6	6	0	
+S1	e0a40	FUN_000e0a40	sound_service_ff06 E	15	15	0	
+S1	e0a70	FUN_000e0a70	sound_service_ff07 E	6	6	0	
+S1	e0a82	FUN_000e0a82	sound_service_ff07 E	15	15	0	
+S1	e0be2	FUN_000e0be2	sound_wrapper E	15	15	0	
+S1	e0c16	FUN_000e0c16	sound_wrapper E	22	22	0	
+S1	e0c5c	caseD_2	sound_dispatch E	22	22	0	
+S1	e0d8c	caseD_1	sound_dispatch E	22	22	0	
+S1	e0ebc	FUN_000e0ebc	sound_wrapper E	17	17	0	
+S1	e0ef8	FUN_000e0ef8	sound_wrapper E	17	17	0	
+S1	e0f34	FUN_000e0f34	sound_wrapper E	17	17	0	
+S1	e0f70	FUN_000e0f70	sound_wrapper E	17	17	0	
+S1	e0fac	FUN_000e0fac	sound_wrapper E	17	17	0	
+S1	e0fe8	FUN_000e0fe8	sound_wrapper E	17	17	0	
+S1	e1024	FUN_000e1024	sound_wrapper E	17	17	0	
+S1	e1060	FUN_000e1060	sound_wrapper E	17	17	0	
+S1	e109c	FUN_000e109c	sound_wrapper E	17	17	0	
+S1	e10d8	FUN_000e10d8	sound_wrapper E	17	17	0	
+S1	e1114	FUN_000e1114	sound_wrapper E	17	17	0	
+S1	e1150	FUN_000e1150	sound_wrapper E	17	17	0	
+S1	e1330	FUN_000e1330	sound_wrapper E	18	18	0	
+S1	e1370	FUN_000e1370	sound_wrapper E	18	18	0	
+S1	e13b0	FUN_000e13b0	sound_wrapper E	18	18	0	
+S1	e13f0	FUN_000e13f0	sound_wrapper E	18	18	0	
+S1	e1430	caseD_f9	sound_wrapper E	18	18	0	
+S1	e1470	FUN_000e1470	sound_wrapper E	18	18	0	
+S1	e14b0	FUN_000e14b0	sound_wrapper E	17	17	0	
+S1	e14ec	FUN_000e14ec	sound_wrapper E	17	17	0	
+S1	e1528	FUN_000e1528	sound_wrapper E	17	17	0	
+S1	e1564	FUN_000e1564	sound_wrapper E	17	17	0	
+S1	e15a0	FUN_000e15a0	sound_wrapper E	17	17	0	
+S1	e15dc	FUN_000e15dc	sound_wrapper E	18	18	0	
+S1	e161c	FUN_000e161c	sound_wrapper E	17	17	0	
+S1	e1658	FUN_000e1658	sound_wrapper E	29	29	0	
+S1	e16f0	FUN_000e16f0	sound_wrapper E	17	17	0	
+S1	e172c	FUN_000e172c	sound_wrapper E	17	17	0	
+S1	e1768	FUN_000e1768	sound_wrapper E	17	17	0	
+S1	e17a4	FUN_000e17a4	sound_wrapper E	18	18	0	
+S1	e181c	FUN_000e181c	sound_wrapper E	19	19	0	
+S1	e185c	FUN_000e185c	sound_wrapper E	29	29	0	
+S1	e18b8	FUN_000e18b8	sound_wrapper E	19	19	0	
+S1	e18f8	FUN_000e18f8	sound_wrapper E	19	19	0	
+S1	e1938	FUN_000e1938	sound_wrapper E	29	29	0	
+S1	e1998	FUN_000e1998	sound_wrapper E	29	29	0	
+S1	e1a58	FUN_000e1a58	sound_wrapper E	29	29	0	
+S1	e1ab8	FUN_000e1ab8	sound_wrapper E	32	31	1	e1adc:suite
+S1	e1b8c	FUN_000e1b8c	sound_wrapper E	32	30	2	e1bb0:suite e1bb8:suite
+S1	e1bf6	FUN_000e1bf6	sound_wrapper E	32	30	2	e1c1a:suite e1c22:suite
+S1	e1d60	FUN_000e1d60	sound_wrapper E	19	19	0	
+S1	e1de0	FUN_000e1de0	sound_wrapper E	33	31	2	e1e16:suite e1e1e:suite
+S1	e1e80	FUN_000e1e80	sound_wrapper E	33	31	2	e1eb6:suite e1ebe:suite
+S1	e1f20	FUN_000e1f20	sound_wrapper E	33	31	2	e1f56:suite e1f5e:suite
+S1	e1fc0	caseD_bf	sound_wrapper E	33	31	2	e1ff6:suite e1ffe:suite
+S1	e2060	FUN_000e2060	sound_wrapper E	33	31	2	e2096:suite e209e:suite
+S1	e2100	FUN_000e2100	sound_wrapper E	33	31	2	e2136:suite e213e:suite
+S1	e21a0	FUN_000e21a0	sound_wrapper E	33	31	2	e21d6:suite e21de:suite
+S1	e2240	caseD_c0	sound_by_version E	35	32	3	e2276:suite e227e:suite e2286:suite
+S1	e22e8	FUN_000e22e8	sound_by_version E	55	51	4	e231e:suite e2326:suite e232e:suite e23c6:suite e23ce:suite
+S1	e2430	FUN_000e2430	sound_by_version E	35	2	33	e2434:suite
+S1	e24d8	FUN_000e24d8	sound_wrapper E	33	31	2	e250e:suite e2516:suite
+S1	e2578	FUN_000e2578	sound_wrapper E	35	33	2	e25b0:suite e25b8:suite
+S1	e25f2	FUN_000e25f2	sound_wrapper E	35	32	3	e2622:suite e262a:suite e2632:suite
+S1	e266c	FUN_000e266c	sound_wrapper E	35	33	2	e26a4:suite e26ac:suite
+S1	e2760	FUN_000e2760	sound_wrapper E	35	33	2	e2798:suite e27a0:suite
+S1	e27da	FUN_000e27da	sound_by_version E	37	34	3	e2812:suite e281a:suite e2822:suite
+S1	e285c	FUN_000e285c	sound_by_version E	40	40	0	
+S1	e28e4	FUN_000e28e4	sound_wrapper E	19	19	0	
+S1	e296c	FUN_000e296c	sound_by_version E	21	2	19	e2970:suite
+S1	e2a34	FUN_000e2a34	sound_wrapper E	19	19	0	
+S1	e2a74	FUN_000e2a74	sound_by_version E	21	2	19	e2a78:suite
+S1	e2aba	FUN_000e2aba	sound_wrapper E	19	19	0	
+S1	e2afa	FUN_000e2afa	sound_wrapper E	19	19	0	
+S1	e2b3a	FUN_000e2b3a	sound_wrapper E	19	19	0	
+S1	e2b7a	FUN_000e2b7a	sound_wrapper E	19	19	0	
+S1	e2bba	FUN_000e2bba	sound_wrapper E	19	19	0	
+S1	e2bfa	FUN_000e2bfa	sound_wrapper E	19	19	0	
+S1	e2c3a	FUN_000e2c3a	sound_wrapper E	19	19	0	
+S1	e2c7a	FUN_000e2c7a	sound_wrapper E	19	19	0	
+S1	e2cba	FUN_000e2cba	sound_wrapper E	19	19	0	
+S1	e2cfa	FUN_000e2cfa	sound_wrapper E	19	19	0	
+S1	e2d3a	FUN_000e2d3a	sound_wrapper E	19	19	0	
+S1	e2d7a	FUN_000e2d7a	sound_wrapper E	19	19	0	
+S1	e2dba	FUN_000e2dba	sound_wrapper E	19	19	0	
+S1	e2dfa	FUN_000e2dfa	sound_wrapper E	19	19	0	
+S1	e2e3a	FUN_000e2e3a	sound_wrapper E	19	19	0	
+S1	e2e7a	FUN_000e2e7a	sound_wrapper E	19	19	0	
+S1	e2eba	FUN_000e2eba	sound_wrapper E	19	19	0	
+S1	e2efa	FUN_000e2efa	sound_wrapper E	19	19	0	
+S1	e2f3a	FUN_000e2f3a	sound_wrapper E	19	19	0	
+S1	e2f7a	FUN_000e2f7a	sound_wrapper E	19	19	0	
+S1	e2fba	FUN_000e2fba	sound_wrapper E	19	19	0	
+S1	e2ffa	FUN_000e2ffa	sound_wrapper E	19	19	0	
+S1	e303a	FUN_000e303a	sound_wrapper E	19	19	0	
+S1	e307a	FUN_000e307a	sound_wrapper E	19	19	0	
+S1	e30ba	FUN_000e30ba	sound_wrapper E	19	19	0	
+S1	e30fa	FUN_000e30fa	sound_wrapper E	19	19	0	
+S1	e313a	FUN_000e313a	sound_wrapper E	19	19	0	
+S1	e317a	FUN_000e317a	sound_wrapper E	19	19	0	
+S1	e31ba	FUN_000e31ba	sound_wrapper E	19	19	0	
+S1	e31fa	FUN_000e31fa	sound_wrapper E	19	19	0	
+S1	e323a	FUN_000e323a	sound_wrapper E	19	19	0	
+S1	e327a	FUN_000e327a	sound_wrapper E	33	32	1	e32b8:suite
+S1	e32ee	caseD_0	sound_wrapper E	33	33	0	
+S1	e3362	caseD_0	sound_wrapper E	33	33	0	
+S1	e35a6	FUN_000e35a6	sound_wrapper E	33	30	3	e35d4:suite e35dc:suite e35e4:suite
+S1	e361a	FUN_000e361a	sound_wrapper E	33	32	1	e3658:suite
+S1	e3776	FUN_000e3776	sound_wrapper E	33	32	1	e37a4:suite
+S1	e385e	caseD_8	sound_wrapper E	33	30	3	e388c:suite e3894:suite e389c:suite
+S1	e38d2	FUN_000e38d2	sound_wrapper E	33	33	0	
+S1	e3a2e	FUN_000e3a2e	sound_wrapper E	32	29	3	e3a52:suite e3a5a:suite e3a62:suite
+S1	e3a98	FUN_000e3a98	sound_wrapper E	32	29	3	e3abc:suite e3ac4:suite e3acc:suite
+S1	e3b02	FUN_000e3b02	sound_wrapper E	32	29	3	e3b26:suite e3b2e:suite e3b36:suite
+S1	e3b6c	FUN_000e3b6c	sound_wrapper E	32	31	1	e3b98:suite
+S1	e3bd6	FUN_000e3bd6	sound_wrapper E	33	31	2	e3c0c:suite e3c14:suite
+S1	e3cbe	caseD_20	sound_wrapper E	33	31	2	e3cf4:suite e3cfc:suite
+S1	e3d32	FUN_000e3d32	sound_wrapper E	33	33	0	
+S1	e3da6	FUN_000e3da6	sound_wrapper E	33	32	1	e3dd4:suite
+S1	e3e8e	FUN_000e3e8e	sound_wrapper E	33	31	2	e3ebc:suite e3ec4:suite
+S1	e3f02	FUN_000e3f02	sound_wrapper E	33	31	2	e3f30:suite e3f38:suite
+S1	e3f76	FUN_000e3f76	sound_wrapper E	32	31	1	e3f9a:suite
+S1	e40b4	FUN_000e40b4	sound_wrapper E	32	29	3	e40d8:suite e40e0:suite e40e8:suite
+S1	e411e	FUN_000e411e	sound_wrapper E	32	29	3	e4142:suite e414a:suite e4152:suite
+S1	e425c	FUN_000e425c	sound_wrapper E	32	30	2	e4280:suite e4290:suite
+S1	e42c6	FUN_000e42c6	sound_wrapper E	33	30	3	e42f4:suite e42fc:suite e4304:suite
+S1	e43ae	caseD_27	sound_wrapper E	33	30	3	e43dc:suite e43e4:suite e43ec:suite
+S1	e4422	FUN_000e4422	sound_wrapper E	32	30	2	e4446:suite e4456:suite
+S1	e448c	FUN_000e448c	sound_wrapper E	32	29	3	e44b0:suite e44b8:suite e44c0:suite
+S1	e44f6	FUN_000e44f6	sound_wrapper E	32	30	2	e451a:suite e452a:suite
+S1	e4560	FUN_000e4560	sound_wrapper E	32	30	2	e4584:suite e4594:suite
+S1	e45ca	FUN_000e45ca	sound_wrapper E	29	29	0	
+S1	e4626	FUN_000e4626	sound_wrapper E	29	29	0	
+S1	e4682	FUN_000e4682	sound_wrapper E	29	29	0	
+S1	e4830	FUN_000e4830	sound_wrapper E	19	19	0	
+S1	e48da	FUN_000e48da	sound_wrapper E	32	29	3	e48fe:suite e4906:suite e490e:suite
+S1	e4944	caseD_2a	sound_wrapper E	32	29	3	e4968:suite e4970:suite e4978:suite
+S1	e49ae	FUN_000e49ae	sound_wrapper E	32	29	3	e49d2:suite e49da:suite e49e2:suite
+S1	e4a18	caseD_be	sound_wrapper E	32	29	3	e4a3c:suite e4a44:suite e4a4c:suite
+S1	e4a82	FUN_000e4a82	sound_wrapper E	32	29	3	e4aa6:suite e4aae:suite e4ab6:suite
+S1	e4b4c	FUN_000e4b4c	sound_wrapper E	32	29	3	e4b70:suite e4b78:suite e4b80:suite
+S1	e4bb6	FUN_000e4bb6	sound_wrapper E	32	29	3	e4bda:suite e4be2:suite e4bea:suite
+S1	e4c20	FUN_000e4c20	sound_wrapper E	32	29	3	e4c44:suite e4c4c:suite e4c54:suite
+S1	e4cfe	FUN_000e4cfe	sound_wrapper E	33	32	1	e4d2c:suite
+S1	e4d72	FUN_000e4d72	sound_wrapper E	33	30	3	e4da0:suite e4da8:suite e4db0:suite
+S1	e4de6	FUN_000e4de6	sound_wrapper E	33	30	3	e4e14:suite e4e1c:suite e4e24:suite
+S1	e4e5a	FUN_000e4e5a	sound_wrapper E	33	32	1	e4e88:suite
+S1	e4f42	FUN_000e4f42	sound_wrapper E	33	31	2	e4f70:suite e4f78:suite
+S1	e4fb6	FUN_000e4fb6	sound_wrapper E	32	31	1	e4fda:suite
+S1	e5020	FUN_000e5020	sound_wrapper E	32	30	2	e5044:suite e5054:suite
+S1	e508a	FUN_000e508a	sound_wrapper E	33	30	3	e50b8:suite e50c0:suite e50c8:suite
+S1	e50fe	FUN_000e50fe	sound_wrapper E	33	30	3	e512c:suite e5134:suite e513c:suite
+S1	e51e6	FUN_000e51e6	sound_wrapper E	33	31	2	e5214:suite e521c:suite
+S1	e525a	FUN_000e525a	sound_wrapper E	33	31	2	e5288:suite e5290:suite
+S1	e5416	FUN_000e5416	sound_wrapper E	32	29	3	e543a:suite e5442:suite e544a:suite
+S1	e5480	FUN_000e5480	sound_wrapper E	29	29	0	
+S1	e54dc	FUN_000e54dc	sound_wrapper E	29	29	0	
+S1	e56a6	FUN_000e56a6	sound_wrapper E	33	31	2	e56d4:suite e56e4:suite
+S1	e571a	FUN_000e571a	sound_wrapper E	29	29	0	
+S1	e5776	FUN_000e5776	sound_wrapper E	29	29	0	
+S1	e57d6	FUN_000e57d6	sound_wrapper E	15	15	0	
+S1	e580a	FUN_000e580a	sound_wrapper E	33	32	1	e5838:suite
+S1	e587e	FUN_000e587e	sound_wrapper E	33	30	3	e58ac:suite e58b4:suite e58bc:suite
+S1	e5966	caseD_31	sound_wrapper E	33	30	3	e5994:suite e599c:suite e59a4:suite
+S1	e59da	FUN_000e59da	sound_wrapper E	33	32	1	e5a08:suite
+S1	e5a4e	FUN_000e5a4e	sound_wrapper E	33	31	2	e5a7c:suite e5a84:suite
+S1	e5ac2	FUN_000e5ac2	sound_wrapper E	33	30	3	e5af0:suite e5af8:suite e5b00:suite
+S1	e5baa	FUN_000e5baa	sound_wrapper E	33	30	3	e5bd8:suite e5be0:suite e5be8:suite
+S1	e5c1e	FUN_000e5c1e	sound_wrapper E	29	29	0	
+S1	e5c7a	FUN_000e5c7a	sound_wrapper E	29	29	0	
+S1	e5cd6	FUN_000e5cd6	sound_wrapper E	29	29	0	
+S1	e5d36	FUN_000e5d36	sound_wrapper E	33	30	3	e5d64:suite e5d6c:suite e5d74:suite
+S1	e5daa	FUN_000e5daa	sound_wrapper E	19	19	0	
+S1	e5dea	FUN_000e5dea	sound_wrapper E	19	19	0	
+S1	e5e2a	FUN_000e5e2a	sound_wrapper E	33	30	3	e5e58:suite e5e60:suite e5e68:suite
+S1	e5e9e	FUN_000e5e9e	sound_wrapper E	33	30	3	e5ecc:suite e5ed4:suite e5edc:suite
+S1	e5f86	FUN_000e5f86	sound_wrapper E	34	31	3	e5fb4:suite e5fbc:suite e5fc4:suite
+S1	e5ffa	FUN_000e5ffa	sound_wrapper E	34	31	3	e6028:suite e6030:suite e6038:suite
+S1	e606e	FUN_000e606e	sound_wrapper E	34	31	3	e609c:suite e60a4:suite e60ac:suite
+S1	e60e2	FUN_000e60e2	sound_wrapper E	34	31	3	e6110:suite e6118:suite e6120:suite
+S1	e6156	FUN_000e6156	sound_wrapper E	34	31	3	e6184:suite e618c:suite e6194:suite
+S1	e61ca	FUN_000e61ca	sound_wrapper E	21	21	0	
+S1	e637c	FUN_000e637c	sound_wrapper E	32	29	3	e63a0:suite e63a8:suite e63b0:suite
+S1	e64ce	FUN_000e64ce	sound_wrapper E	34	34	0	
+S1	e662a	FUN_000e662a	sound_dispatch E	20	20	0	
+S1	e6a8e	FUN_000e6a8e	sound_wrapper E	33	30	3	e6aba:suite e6ac2:suite e6aca:suite
+S1	e6e90	FUN_000e6e90	sound_wrapper E	33	30	3	e6ebc:suite e6ec4:suite e6ecc:suite
+S1	e6fe6	FUN_000e6fe6	sound_wrapper E	33	30	3	e7012:suite e701a:suite e7022:suite
+S1	e713c	FUN_000e713c	sound_wrapper E	33	30	3	e7168:suite e7170:suite e7178:suite
+S1	e7304	FUN_000e7304	sound_wrapper E	33	31	2	e7338:suite e7340:suite
+S1	e7376	FUN_000e7376	sound_wrapper E	33	33	0	
+S1	e73e8	FUN_000e73e8	sound_wrapper E	33	32	1	e7414:suite
+S1	e745a	FUN_000e745a	sound_wrapper E	33	33	0	
+S1	e75b0	FUN_000e75b0	sound_wrapper E	33	31	2	e75e4:suite e75ec:suite
+S1	e7622	FUN_000e7622	sound_dispatch E	17	17	0	
+S1	e7668	FUN_000e7668	sound_wrapper E	33	31	2	e769c:suite e76a4:suite
+S1	e774c	FUN_000e774c	sound_dispatch E	17	17	0	
+S1	e78e8	FUN_000e78e8	sound_dispatch E	17	17	0	
+S1	e792e	FUN_000e792e	sound_wrapper E	33	31	2	e7962:suite e796a:suite
+S1	e7a12	FUN_000e7a12	sound_dispatch E	17	17	0	
+S1	e7b3c	FUN_000e7b3c	sound_wrapper E	33	30	3	e7b68:suite e7b70:suite e7b78:suite
+S1	e7c20	FUN_000e7c20	sound_dispatch E	19	19	0	
+S1	e7e10	FUN_000e7e10	sound_dispatch E	19	19	0	
+S1	e7eaa	FUN_000e7eaa	sound_wrapper E	33	31	2	e7ede:suite e7ee6:suite
+S1	e8156	FUN_000e8156	sound_wrapper E	33	30	3	e8182:suite e818a:suite e8192:suite
+S1	e81c8	FUN_000e81c8	sound_wrapper E	33	30	3	e81f4:suite e81fc:suite e8204:suite
+S1	e823a	FUN_000e823a	sound_dispatch E	18	18	0	
+S1	e828c	FUN_000e828c	sound_wrapper E	33	31	2	e82c0:suite e82c8:suite
+S1	e82fe	FUN_000e82fe	sound_wrapper E	33	31	2	e8332:suite e833a:suite
+S1	e8370	FUN_000e8370	sound_wrapper E	33	30	3	e839c:suite e83a4:suite e83ac:suite
+S1	e83e2	FUN_000e83e2	sound_wrapper E	33	32	1	e8416:suite
+S1	e8454	FUN_000e8454	sound_wrapper E	33	31	2	e8488:suite e8490:suite
+S1	e84c6	FUN_000e84c6	sound_wrapper E	32	30	2	e84f2:suite e84fa:suite
+S1	e8530	FUN_000e8530	sound_wrapper E	32	30	2	e855c:suite e8564:suite
+S1	e859a	FUN_000e859a	sound_wrapper E	33	33	0	
+S1	e860c	FUN_000e860c	sound_wrapper E	32	30	2	e8638:suite e8640:suite
+S1	e86e0	FUN_000e86e0	sound_wrapper E	42	41	1	e872c:suite
+S1	e876a	FUN_000e876a	sound_wrapper E	42	41	1	e87be:suite
+S1	e87f4	FUN_000e87f4	sound_wrapper E	33	32	1	e8830:suite
+S1	e88d0	FUN_000e88d0	sound_wrapper E	32	30	2	e88fc:suite e8904:suite
+S1	e893a	FUN_000e893a	sound_wrapper E	32	30	2	e8966:suite e896e:suite
+S1	e89a4	FUN_000e89a4	sound_wrapper E	42	40	2	e89f0:suite e89f8:suite
+S1	e8a2e	FUN_000e8a2e	sound_wrapper E	42	40	2	e8a7a:suite e8a82:suite
+S1	e8ab8	FUN_000e8ab8	sound_wrapper E	32	32	0	
+S1	e8b22	FUN_000e8b22	sound_wrapper E	39	37	2	e8b5a:suite e8b62:suite
+S1	e8ba2	FUN_000e8ba2	sound_wrapper E	32	31	1	e8bce:suite
+S1	e8ce0	FUN_000e8ce0	sound_wrapper E	32	30	2	e8d0c:suite e8d14:suite
+S1	e8d4a	FUN_000e8d4a	sound_wrapper E	32	32	0	
+S1	e8db4	FUN_000e8db4	sound_wrapper E	32	30	2	e8de0:suite e8de8:suite
+S1	e8e1e	FUN_000e8e1e	sound_wrapper E	32	30	2	e8e4a:suite e8e52:suite
+S1	e8e88	FUN_000e8e88	sound_wrapper E	32	30	2	e8eb4:suite e8ebc:suite
+S1	e8f5c	FUN_000e8f5c	sound_wrapper E	32	30	2	e8f88:suite e8f90:suite
+S1	e8fc6	FUN_000e8fc6	sound_wrapper E	32	30	2	e8ff2:suite e8ffa:suite
+S1	e9030	FUN_000e9030	sound_wrapper E	32	30	2	e905c:suite e9064:suite
+S1	e909a	FUN_000e909a	sound_wrapper E	33	33	0	
+S1	e910c	FUN_000e910c	sound_wrapper E	32	30	2	e9138:suite e9140:suite
+S1	e9176	FUN_000e9176	sound_wrapper E	29	29	0	
+S1	e91d6	FUN_000e91d6	sound_wrapper E	32	30	2	e9202:suite e920a:suite
+S1	e9240	FUN_000e9240	sound_wrapper E	42	40	2	e9288:suite e9290:suite
+S1	e92c6	FUN_000e92c6	sound_wrapper E	32	30	2	e92f2:suite e92fa:suite
+S1	e9330	FUN_000e9330	sound_wrapper E	42	40	2	e937c:suite e9384:suite
+S1	e93ba	FUN_000e93ba	sound_wrapper E	32	30	2	e93e6:suite e93ee:suite
+S1	e9424	FUN_000e9424	sound_wrapper E	32	30	2	e9450:suite e9458:suite
+S1	e948e	FUN_000e948e	sound_wrapper E	32	30	2	e94ba:suite e94c2:suite
+S1	e960c	FUN_000e960c	sound_wrapper E	32	30	2	e9638:suite e9640:suite
+S1	e9676	FUN_000e9676	sound_wrapper E	32	30	2	e96a2:suite e96aa:suite
+S1	e96e0	FUN_000e96e0	sound_wrapper E	32	30	2	e970c:suite e9714:suite
+S1	e974a	FUN_000e974a	sound_wrapper E	32	30	2	e9776:suite e977e:suite
+S1	e97b4	FUN_000e97b4	sound_wrapper E	32	29	3	e97d8:suite e97e0:suite e97e8:suite
+S1	e981e	FUN_000e981e	sound_wrapper E	32	30	2	e984a:suite e9852:suite
+S1	e9888	FUN_000e9888	sound_wrapper E	33	33	0	
+S1	e98fa	FUN_000e98fa	sound_wrapper E	33	30	3	e9926:suite e992e:suite e9936:suite
+S1	e996c	FUN_000e996c	sound_wrapper E	29	29	0	
+S1	e99c8	FUN_000e99c8	sound_wrapper E	32	30	2	e99f4:suite e99fc:suite
+S1	e9a32	FUN_000e9a32	sound_wrapper E	26	26	0	
+S1	e9a88	FUN_000e9a88	sound_wrapper E	29	29	0	
+S1	e9be4	FUN_000e9be4	sound_wrapper E	32	31	1	e9c18:suite
+S1	e9cd4	FUN_000e9cd4	sound_wrapper E	32	30	2	e9d00:suite e9d08:suite
+S1	e9d3e	FUN_000e9d3e	sound_wrapper E	32	32	0	
+S1	e9da8	FUN_000e9da8	sound_wrapper E	43	43	0	
+S1	e9e34	FUN_000e9e34	sound_wrapper E	32	30	2	e9e60:suite e9e68:suite
+S1	e9e9e	FUN_000e9e9e	sound_wrapper E	26	26	0	
+S1	e9ef4	FUN_000e9ef4	sound_wrapper E	32	31	1	e9f28:suite
+S1	e9f5e	FUN_000e9f5e	sound_wrapper E	32	30	2	e9f8a:suite e9f92:suite
+S1	e9fc8	FUN_000e9fc8	sound_wrapper E	32	30	2	e9ff4:suite e9ffc:suite
+S1	ea032	FUN_000ea032	sound_wrapper E	32	30	2	ea05e:suite ea066:suite
+S1	ea09c	FUN_000ea09c	sound_wrapper E	32	30	2	ea0c8:suite ea0d0:suite
+S1	ea106	FUN_000ea106	sound_wrapper E	29	29	0	
+S1	ea1d0	FUN_000ea1d0	sound_wrapper E	29	29	0	
+S1	ea22c	FUN_000ea22c	sound_wrapper E	29	29	0	
+S1	ea288	FUN_000ea288	sound_wrapper E	29	29	0	
+S1	ea2e8	FUN_000ea2e8	sound_wrapper E	29	29	0	
+S1	ea344	FUN_000ea344	sound_wrapper E	33	30	3	ea370:suite ea378:suite ea380:suite
+S1	ea3b6	FUN_000ea3b6	sound_wrapper E	33	30	3	ea3e2:suite ea3ea:suite ea3f2:suite
+S1	ea428	FUN_000ea428	sound_wrapper E	33	31	2	ea45c:suite ea464:suite
+S1	ea49a	FUN_000ea49a	sound_wrapper E	33	31	2	ea4c6:suite ea4d6:suite
+S1	ea57e	FUN_000ea57e	sound_wrapper E	33	30	3	ea5aa:suite ea5b2:suite ea5ba:suite
+S1	ea5f0	FUN_000ea5f0	sound_wrapper E	33	30	3	ea61c:suite ea624:suite ea62c:suite
+S1	ea662	FUN_000ea662	sound_wrapper E	19	19	0	
+S1	ea6a2	FUN_000ea6a2	sound_wrapper E	19	19	0	
+S1	ea6e2	FUN_000ea6e2	sound_wrapper E	19	19	0	
+S1	ea722	FUN_000ea722	sound_wrapper E	29	29	0	
+S1	ea77e	FUN_000ea77e	sound_wrapper E	19	19	0	
+S1	ea7be	FUN_000ea7be	sound_wrapper E	19	19	0	
+S1	ea7fe	FUN_000ea7fe	sound_wrapper E	19	19	0	
+S1	ea83e	FUN_000ea83e	sound_wrapper E	19	19	0	
+S1	ea87e	FUN_000ea87e	sound_wrapper E	19	19	0	
+S1	ea8be	FUN_000ea8be	sound_wrapper E	29	29	0	
+S1	ea91a	FUN_000ea91a	sound_wrapper E	32	30	2	ea946:suite ea94e:suite
+S1	ea984	FUN_000ea984	sound_wrapper E	32	31	1	ea9b8:suite
+S1	ea9ee	FUN_000ea9ee	sound_wrapper E	32	30	2	eaa1a:suite eaa22:suite
+S1	eaa58	FUN_000eaa58	sound_wrapper E	19	19	0	
+S1	eaa98	FUN_000eaa98	sound_wrapper E	29	29	0	
+S1	eaaf4	FUN_000eaaf4	sound_wrapper E	29	29	0	
+S1	ead04	FUN_000ead04	sound_wrapper E	29	29	0	
+S1	eae14	FUN_000eae14	sound_wrapper E	33	30	3	eae40:suite eae48:suite eae50:suite
+S1	eaf6a	FUN_000eaf6a	sound_wrapper E	33	30	3	eaf96:suite eaf9e:suite eafa6:suite
+S1	eafdc	FUN_000eafdc	sound_wrapper E	33	32	1	eb008:suite
+S1	eb04e	FUN_000eb04e	sound_wrapper E	33	32	1	eb07a:suite
+S1	eb0c0	FUN_000eb0c0	sound_wrapper E	33	31	2	eb0ec:suite eb0f4:suite
+S1	eb132	FUN_000eb132	sound_wrapper E	33	30	3	eb15e:suite eb166:suite eb16e:suite
+S1	eb1a4	FUN_000eb1a4	sound_wrapper E	32	32	0	
+S1	eb280	FUN_000eb280	sound_wrapper E	33	33	0	
+S1	eb2f2	FUN_000eb2f2	sound_wrapper E	33	32	1	eb32e:suite
+S1	eb364	FUN_000eb364	sound_wrapper E	33	33	0	
+S1	eb3d6	FUN_000eb3d6	sound_wrapper E	33	33	0	
+S1	eb448	FUN_000eb448	sound_wrapper E	33	30	3	eb474:suite eb47c:suite eb484:suite
+S1	eb4ba	FUN_000eb4ba	sound_wrapper E	33	32	1	eb4e6:suite
+S1	eb52c	FUN_000eb52c	sound_wrapper E	33	31	2	eb560:suite eb568:suite
+S1	eb59e	FUN_000eb59e	sound_wrapper E	33	32	1	eb5d2:suite
+S1	eb610	FUN_000eb610	sound_wrapper E	33	31	2	eb644:suite eb64c:suite
+S1	eb766	FUN_000eb766	sound_wrapper E	33	31	2	eb79a:suite eb7a2:suite
+S1	eb7d8	FUN_000eb7d8	sound_wrapper E	33	33	0	
+S1	eb84a	FUN_000eb84a	sound_wrapper E	33	33	0	
+S1	eb8bc	FUN_000eb8bc	sound_wrapper E	33	33	0	
+S1	eb92e	FUN_000eb92e	sound_wrapper E	33	30	3	eb95a:suite eb962:suite eb96a:suite
+S1	eb9a0	FUN_000eb9a0	sound_wrapper E	33	33	0	
+S1	eba12	FUN_000eba12	sound_wrapper E	33	33	0	
+S1	ebaf6	FUN_000ebaf6	sound_wrapper E	33	31	2	ebb2a:suite ebb32:suite
+S1	ebbda	FUN_000ebbda	sound_wrapper E	33	33	0	
+S1	ebcbe	FUN_000ebcbe	sound_wrapper E	33	32	1	ebcf2:suite
+S1	ebd30	FUN_000ebd30	sound_wrapper E	33	33	0	
+S1	ebe14	FUN_000ebe14	sound_wrapper E	33	30	3	ebe40:suite ebe48:suite ebe50:suite
+S1	ebe86	FUN_000ebe86	sound_wrapper E	33	33	0	
+S1	ebef8	FUN_000ebef8	sound_wrapper E	33	31	2	ebf2c:suite ebf34:suite
+S1	ebf6a	FUN_000ebf6a	sound_wrapper E	33	32	1	ebf9e:suite
+S1	ebfdc	FUN_000ebfdc	sound_wrapper E	32	31	1	ec010:suite
+S1	ec046	FUN_000ec046	sound_dispatch E	18	18	0	
+S1	ec200	FUN_000ec200	sound_dispatch E	18	18	0	
+S1	ec502	FUN_000ec502	sound_wrapper E	33	31	2	ec536:suite ec53e:suite
+S1	ec5e6	FUN_000ec5e6	sound_wrapper E	33	33	0	
+S1	ec658	FUN_000ec658	sound_wrapper E	33	33	0	
+S1	ec6ca	FUN_000ec6ca	sound_wrapper E	33	31	2	ec6f6:suite ec6fe:suite
+S1	ec73c	FUN_000ec73c	sound_wrapper E	33	30	3	ec768:suite ec770:suite ec778:suite
+S1	ec7ae	caseD_0	sound_wrapper E	33	33	0	
+S1	ec820	caseD_2	sound_wrapper E	33	33	0	
+S1	ec892	caseD_4	sound_wrapper E	33	33	0	
+S1	ec904	caseD_20	sound_wrapper E	33	33	0	
+S1	ec976	caseD_12	sound_wrapper E	33	32	1	ec9a2:suite
+S1	ec9e8	FUN_000ec9e8	sound_wrapper E	32	31	1	eca14:suite
+S1	eca52	FUN_000eca52	sound_wrapper E	32	29	3	eca76:suite eca7e:suite eca86:suite
+S1	ecabc	FUN_000ecabc	sound_wrapper E	32	30	2	ecae8:suite ecaf0:suite
+S1	ecb26	FUN_000ecb26	sound_wrapper E	33	33	0	
+S1	ecb98	FUN_000ecb98	sound_wrapper E	33	32	1	ecbcc:suite
+S1	ecc0a	FUN_000ecc0a	sound_wrapper E	33	31	2	ecc36:suite ecc3e:suite
+S1	ecc7c	FUN_000ecc7c	sound_wrapper E	32	30	2	ecca0:suite eccb0:suite
+S1	ecce6	FUN_000ecce6	sound_wrapper E	32	30	2	ecd0a:suite ecd12:suite
+S1	ecd50	FUN_000ecd50	sound_wrapper E	32	30	2	ecd74:suite ecd7c:suite
+S1	ecdba	FUN_000ecdba	sound_wrapper E	33	33	0	
+S1	ece2c	FUN_000ece2c	sound_wrapper E	33	30	3	ece58:suite ece60:suite ece68:suite
+S1	ece9e	FUN_000ece9e	sound_wrapper E	33	32	1	ececa:suite
+S1	ecf10	FUN_000ecf10	sound_wrapper E	32	31	1	ecf34:suite
+S1	ecf7a	FUN_000ecf7a	sound_wrapper E	32	29	3	ecf9e:suite ecfa6:suite ecfae:suite
+S1	ecfe4	FUN_000ecfe4	sound_wrapper E	33	33	0	
+S1	ed056	FUN_000ed056	sound_wrapper E	32	29	3	ed07a:suite ed082:suite ed08a:suite
+S1	ed0c0	FUN_000ed0c0	sound_wrapper E	29	29	0	
+S1	ed11c	FUN_000ed11c	sound_wrapper E	32	29	3	ed140:suite ed148:suite ed150:suite
+S1	ed186	FUN_000ed186	sound_wrapper E	32	30	2	ed1aa:suite ed1ba:suite
+S1	ed1f0	FUN_000ed1f0	sound_wrapper E	32	29	3	ed214:suite ed21c:suite ed224:suite
+S1	ed25a	FUN_000ed25a	sound_wrapper E	32	29	3	ed27e:suite ed286:suite ed28e:suite
+S1	ed2c4	FUN_000ed2c4	sound_wrapper E	32	29	3	ed2e8:suite ed2f0:suite ed2f8:suite
+S1	ed32e	FUN_000ed32e	sound_wrapper E	32	30	2	ed352:suite ed362:suite
+S1	ed398	FUN_000ed398	sound_wrapper E	33	33	0	
+S1	ed40a	FUN_000ed40a	sound_wrapper E	32	29	3	ed42e:suite ed436:suite ed43e:suite
+S1	ed474	FUN_000ed474	sound_wrapper E	32	30	2	ed498:suite ed4a8:suite
+S1	ed4de	FUN_000ed4de	sound_wrapper E	32	30	2	ed502:suite ed512:suite
+S1	ed548	FUN_000ed548	sound_wrapper E	32	30	2	ed56c:suite ed57c:suite
+S1	ed5b2	FUN_000ed5b2	sound_wrapper E	32	31	1	ed5e6:suite
+S1	ed61c	FUN_000ed61c	sound_wrapper E	32	31	1	ed650:suite
+S1	ed686	FUN_000ed686	sound_wrapper E	32	31	1	ed6b2:suite
+S1	ed762	FUN_000ed762	sound_wrapper E	32	29	3	ed786:suite ed78e:suite ed796:suite
+S1	ed7cc	FUN_000ed7cc	sound_wrapper E	32	29	3	ed7f0:suite ed7f8:suite ed800:suite
+S1	ed836	FUN_000ed836	sound_wrapper E	32	29	3	ed85a:suite ed862:suite ed86a:suite
+S1	ed8a0	FUN_000ed8a0	sound_wrapper E	32	29	3	ed8c4:suite ed8cc:suite ed8d4:suite
+S1	ed90a	FUN_000ed90a	sound_wrapper E	19	19	0	
+S1	ed94a	FUN_000ed94a	sound_wrapper E	33	31	2	ed976:suite ed986:suite
+S1	ed9bc	FUN_000ed9bc	sound_wrapper E	32	30	2	ed9e0:suite ed9f0:suite
+S1	eda26	FUN_000eda26	sound_wrapper E	19	19	0	
+S1	eda66	FUN_000eda66	sound_wrapper E	19	19	0	
+S1	edaa6	FUN_000edaa6	sound_wrapper E	33	30	3	edad2:suite edada:suite edae2:suite
+S1	edb18	FUN_000edb18	sound_wrapper E	32	29	3	edb3c:suite edb44:suite edb4c:suite
+S1	edb82	FUN_000edb82	sound_wrapper E	33	31	2	edbb6:suite edbbe:suite
+S1	edbf4	FUN_000edbf4	sound_wrapper E	33	31	2	edc28:suite edc30:suite
+S1	edc66	FUN_000edc66	sound_wrapper E	32	29	3	edc8a:suite edc92:suite edc9a:suite
+S1	edcd0	FUN_000edcd0	sound_wrapper E	29	29	0	
+S1	edd2c	FUN_000edd2c	sound_wrapper E	32	29	3	edd50:suite edd58:suite edd60:suite
+S1	edd96	FUN_000edd96	sound_wrapper E	33	31	2	eddca:suite eddd2:suite
+S1	ede08	FUN_000ede08	sound_wrapper E	32	31	1	ede2c:suite
 S1	edee4	FUN_000edee4		5	5	0	
 S1	edef2	FUN_000edef2		7	7	0	
 S1	edf80	FUN_000edf80		35	3	32	edf86:suite
-S1	ee044	FUN_000ee044	son_init_pile P	3	3	0	
+S1	ee044	FUN_000ee044	sound_init_stack P	3	3	0	
 P6	f157c	FUN_000f157c		244	244	0	f164e:cible
 P6	f186e	FUN_000f186e		5	5	0	
 P6	f187c	FUN_000f187c		3	3	0	

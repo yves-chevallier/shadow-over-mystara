@@ -1298,7 +1298,7 @@ pub fn op_fn_name(op: &Op) -> &'static str {
         Op::Not(..) => "op_11_not",
         Op::Clr(..) => "op_12_clr",
         Op::Tst(..) => "op_13_tst",
-        Op::Heap(..) => "op_14_tas",
+        Op::Heap(..) => "op_14_heap",
         Op::Ext(..) => "op_15_ext",
         Op::Swap(..) => "op_16_swap",
         Op::Exg(..) => "op_17_exg",

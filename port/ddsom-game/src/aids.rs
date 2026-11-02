@@ -145,16 +145,16 @@ fn direction_to_object(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub const DIRECTION_FROM_OBJECT: Native = Native {
     entry: 0x137e,
-    name: "direction_objet",
-    run: crate::Body::Processeur(direction_from_object),
+    name: "direction_object",
+    run: crate::Body::WithCpu(direction_from_object),
     touches_sound: false,
     outputs: regs::d(0) | regs::CCR,
 };
 
 pub const DIRECTION_TO_OBJECT: Native = Native {
     entry: 0x1376,
-    name: "direction_vers_objet",
-    run: crate::Body::Processeur(direction_to_object),
+    name: "direction_to_object",
+    run: crate::Body::WithCpu(direction_to_object),
     touches_sound: false,
     outputs: regs::d(0) | regs::CCR,
 };
@@ -162,7 +162,7 @@ pub const DIRECTION_TO_OBJECT: Native = Native {
 pub const DIRECTION: Native = Native {
     entry: 0x1386,
     name: "direction",
-    run: crate::Body::Processeur(direction_native),
+    run: crate::Body::WithCpu(direction_native),
     touches_sound: false,
     outputs: regs::d(0) | regs::CCR,
 };
@@ -225,8 +225,8 @@ fn grabbed_native(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub const GRABBED: Native = Native {
     entry: 0x2810,
-    name: "objet_saisi",
-    run: crate::Body::Processeur(grabbed_native),
+    name: "object_seized",
+    run: crate::Body::WithCpu(grabbed_native),
     touches_sound: false,
     outputs: regs::d(0) | regs::a(1) | regs::CCR,
 };
@@ -324,8 +324,8 @@ fn game_over_native(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub const GAME_OVER: Native = Native {
     entry: 0x28d8,
-    name: "fin_de_partie",
-    run: crate::Body::Processeur(game_over_native),
+    name: "game_over_check",
+    run: crate::Body::WithCpu(game_over_native),
     touches_sound: false,
     outputs: 0,
 };
@@ -359,7 +359,7 @@ fn divide_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const DIVIDE: Native = Native {
     entry: 0x17ea,
     name: "division",
-    run: crate::Body::Processeur(divide_native),
+    run: crate::Body::WithCpu(divide_native),
     touches_sound: false,
     outputs: regs::d(0) | regs::d(2) | regs::d(3),
 };

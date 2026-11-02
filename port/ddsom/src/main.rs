@@ -15,7 +15,7 @@
 //! rebindable in touches.cfg (`keys.rs`), Xbox gamepads included under Windows (`gamepad.rs`).
 //! The EEPROM (settings, counters) is kept in nvram/ddsom.eeprom.
 //! F5 saves the game to sauvegardes/rapide.txt, F9 resumes it (`save.rs`: input replay).
-//! `DDSOM_ENREGISTRE=game.txt` likewise writes the game on exit: `validate <roms> partie.txt.eeprom
+//! `DDSOM_ENREGISTRE=partie.txt` likewise writes the game on exit: `validate <roms> partie.txt.eeprom
 //! partie.txt <frames>` replays it.
 
 mod audio;
@@ -34,7 +34,7 @@ const FRAME_HZ: f64 = 8_000_000.0 / 512.0 / 262.0;
 fn main() {
     let (romdir, assets) = arguments(std::env::args().skip(1).collect());
     let nvram = PathBuf::from("nvram/ddsom.eeprom");
-    let mut keys = keys::Keys::charge("touches.cfg".as_ref());
+    let mut keys = keys::Keys::load("touches.cfg".as_ref());
     let eeprom = std::fs::read(&nvram).ok();
     // the game: without the 68000, Rust routines only (it stops on an address that has none). Diagnostics:
     // DDSOM_ORIGINE=1: original code at arcade speed; DDSOM_INTERP=1: everything interpreted. (The hybrid mode,
@@ -122,7 +122,7 @@ fn main() {
         }
         if t.load {
             let start = Instant::now();
-            match save::Game::charge(SAVE.as_ref(), |ee| machine(Some(ee))) {
+            match save::Game::load(SAVE.as_ref(), |ee| machine(Some(ee))) {
                 Ok((new, p)) => {
                     eprintln!("Game resumed at frame {} ({:.1} s).", p.images(), start.elapsed().as_secs_f64());
                     (m, game) = (new, p);
@@ -212,8 +212,8 @@ fn screen_size() -> Option<(usize, usize)> {
     // SAFETY: signature matches <winuser.h>; the library stays loaded during the calls.
     unsafe {
         let lib = libloading::Library::new("user32.dll").ok()?;
-        let metrique = *lib.get::<GetSystemMetricsFn>(b"GetSystemMetrics").ok()?;
-        let (l, h) = (metrique(0), metrique(1)); // SM_CXSCREEN, SM_CYSCREEN
+        let metric = *lib.get::<GetSystemMetricsFn>(b"GetSystemMetrics").ok()?;
+        let (l, h) = (metric(0), metric(1)); // SM_CXSCREEN, SM_CYSCREEN
         (l > 0 && h > 0).then(|| (l as usize, h as usize))
     }
 }

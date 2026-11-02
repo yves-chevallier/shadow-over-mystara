@@ -395,7 +395,7 @@ impl Program {
         }
     }
 
-    /// The remainder of the program region (`data/remainder.json`): its blocks, then the program space outside the
+    /// The remainder of the program region (`data/reste.json`): its blocks, then the program space outside the
     /// encrypted zone, copied from the data space (it is equal to it).
     pub fn put_rest(&mut self, r: &Remainder) -> Result<(), String> {
         for b in &r.data {

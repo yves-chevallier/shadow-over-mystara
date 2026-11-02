@@ -1,4 +1,4 @@
-//! Refactoring checks (`docs/guide-refactorisation.md`, « Registres morts »).
+//! Refactoring checks (`docs/guide-refactorisation.md`, "dead registers").
 //!
 //! A routine converted to an ordinary Rust function stops writing the registers that the original left (A1 of an
 //! allocation, D0/D1/A4 of a release, flags...). Before dropping them, one must know that nobody

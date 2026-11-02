@@ -37,7 +37,7 @@ pub(crate) mod leftovers {
         /// Allocation whose failure returns the A1 that the original leaves (see `Pool::alloc_or_leftover`).
         fn alloc_or_rest(&mut self, b: &mut Cps2Bus, pool: &Pool) -> Result<Obj, Obj>;
         /// Flags of a `move`/`tst`/`and` of `v`.
-        fn drapeaux(&mut self, _v: u32, _size: Size) {}
+        fn flags(&mut self, _v: u32, _size: Size) {}
         /// X flag alone (last bit shifted out, which the following instructions keep).
         fn x(&mut self, _bit: bool) {}
         /// `cmp`: flags of `dst - src` (X kept).
@@ -47,7 +47,7 @@ pub(crate) mod leftovers {
             mask(dst.wrapping_add(src), size)
         }
         /// `sub`: `dst - src`, result and flags.
-        fn soustraction(&mut self, src: u32, dst: u32, size: Size) -> u32 {
+        fn subtract(&mut self, src: u32, dst: u32, size: Size) -> u32 {
             mask(dst.wrapping_sub(src), size)
         }
         fn d(&mut self, _n: usize, _v: u32) {}
@@ -104,7 +104,7 @@ pub(crate) mod leftovers {
             let a1 = pool.alloc_unchecked_68k(self, b);
             if self.sr & m68k::SR_C != 0 { Err(a1) } else { Ok(a1) }
         }
-        fn drapeaux(&mut self, v: u32, size: Size) {
+        fn flags(&mut self, v: u32, size: Size) {
             self.flags_logic(v, size);
         }
         fn comparison(&mut self, src: u32, dst: u32, size: Size) {
@@ -116,7 +116,7 @@ pub(crate) mod leftovers {
         fn addition(&mut self, src: u32, dst: u32, size: Size) -> u32 {
             crate::ops::add(self, src, dst, size)
         }
-        fn soustraction(&mut self, src: u32, dst: u32, size: Size) -> u32 {
+        fn subtract(&mut self, src: u32, dst: u32, size: Size) -> u32 {
             crate::ops::sub(self, src, dst, size)
         }
         fn d(&mut self, n: usize, v: u32) {
@@ -255,24 +255,24 @@ mod link {
 }
 /// Setting specific to the type.
 const SETTING: u32 = 0x2f;
-const RETOURNE: u32 = 0x2c;
+const TURNED: u32 = 0x2c;
 
 /// Link `off` of `o` to `target` (`move.w An,(off,A1)`), with the flags of the `move`.
 fn link(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj, off: u32, target: u32) {
     o.set_u16(b, off, target as u16);
-    r.drapeaux(target & 0xffff, Size::Word);
+    r.flags(target & 0xffff, Size::Word);
 }
 
 /// `move.b v,(off,A1)` with its flags.
 fn put8(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj, off: u32, v: u8) {
     o.set_u8(b, off, v);
-    r.drapeaux(v as u32, Size::Byte);
+    r.flags(v as u32, Size::Byte);
 }
 
 /// `move.w v,(off,A1)` with its flags.
 fn put16(r: &mut impl Regs, b: &mut Cps2Bus, o: Obj, off: u32, v: u16) {
     o.set_u16(b, off, v);
-    r.drapeaux(v as u32, Size::Word);
+    r.flags(v as u32, Size::Word);
 }
 
 /// Allocates an object and sets its activity and type (`move.b #1,(A1)`, `move.b #type,(2,A1)`).
@@ -305,7 +305,7 @@ fn copy_position(b: &mut Cps2Bus, to: Obj, from: Obj) {
 fn and_d0(r: &mut impl Regs, v: u16, mask: u16) -> u16 {
     let v = v & mask;
     r.d_word(0, v);
-    r.drapeaux(v as u32, Size::Word);
+    r.flags(v as u32, Size::Word);
     v
 }
 
@@ -428,7 +428,7 @@ pub fn pickup(b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
 }
 pub(crate) fn pickup_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
     let owner = creator.u16(b, link::OWNER);
-    r.drapeaux(owner as u32, Size::Word);
+    r.flags(owner as u32, Size::Word);
     if (owner as i16) >= 0 {
         return None;
     }
@@ -467,10 +467,10 @@ fn timer(r: &mut impl Regs, b: &mut Cps2Bus, variant: u8) -> Option<Obj> {
 /// 0xba18a: drifting dust (type 90), oriented like the creator, linked by the long `+0x46`.
 fn drift_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::DRIFT)?;
-    let facing = creator.u8(b, RETOURNE);
-    o.set_u8(b, RETOURNE, facing);
+    let facing = creator.u8(b, TURNED);
+    o.set_u8(b, TURNED, facing);
     o.set_u32(b, link::SCENERY, creator.0);
-    r.drapeaux(creator.0, Size::Long);
+    r.flags(creator.0, Size::Long);
     Some(o)
 }
 
@@ -562,7 +562,7 @@ pub fn twinkle(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
 }
 pub(crate) fn twinkle_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     let variant = creator.u8(b, link::SECOND);
-    r.drapeaux(variant as u32, Size::Byte);
+    r.flags(variant as u32, Size::Byte);
     if variant == 0 {
         return None;
     }
@@ -602,15 +602,15 @@ fn beacon_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     let v = creator.u8(b, Obj::VARIANT);
     o.set_u8(b, Obj::VARIANT, v);
     copy_position(b, o, creator);
-    r.drapeaux(creator.u16(b, Obj::Y) as u32, Size::Word);
+    r.flags(creator.u16(b, Obj::Y) as u32, Size::Word);
     Some(o)
 }
 
 /// 0xb3c14: thrown object (type 41) from the creator, 24 pixels higher, same orientation.
 fn toss_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::TOSS)?;
-    let facing = creator.u8(b, RETOURNE);
-    o.set_u8(b, RETOURNE, facing);
+    let facing = creator.u8(b, TURNED);
+    o.set_u8(b, TURNED, facing);
     copy_position(b, o, creator);
     let z = r.addition(0x18, o.u16(b, Obj::Z) as u32, Size::Word);
     o.set_u16(b, Obj::Z, z as u16);
@@ -624,13 +624,13 @@ pub fn flash(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
 }
 pub(crate) fn flash_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::FLASH)?;
-    let facing = creator.u8(b, RETOURNE);
-    o.set_u8(b, RETOURNE, facing);
+    let facing = creator.u8(b, TURNED);
+    o.set_u8(b, TURNED, facing);
     for off in [Obj::X, Obj::Z, Obj::Y] {
         let v = rd32(b, creator.0 + off);
         wr32(b, o.0 + off, v);
     }
-    let y = r.soustraction(1, o.u32(b, Obj::Y), Size::Long);
+    let y = r.subtract(1, o.u32(b, Obj::Y), Size::Long);
     o.set_u32(b, Obj::Y, y);
     let setting = creator.u8(b, SETTING);
     put8(r, b, o, SETTING, setting);
@@ -641,14 +641,14 @@ pub(crate) fn flash_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Opt
 fn spark_at_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, other: u32, variant: u8, (x, z, y): (u16, u16, u16)) -> Option<Obj> {
     let o = spawn(r, b, kind::SPARK)?;
     o.set_u8(b, Obj::VARIANT, variant);
-    let facing = creator.u8(b, RETOURNE) ^ 0x20;
-    o.set_u8(b, RETOURNE, facing);
+    let facing = creator.u8(b, TURNED) ^ 0x20;
+    o.set_u8(b, TURNED, facing);
     o.set_u16(b, link::OWNER, other as u16);
     o.set_u16(b, link::SECOND, creator.word());
     o.set_u16(b, Obj::X, x);
     o.set_u16(b, Obj::Z, z);
     o.set_u16(b, Obj::Y, y);
-    r.drapeaux(y as u32, Size::Word);
+    r.flags(y as u32, Size::Word);
     Some(o)
 }
 
@@ -668,7 +668,7 @@ fn scenery_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8, se
 
 /// `dbf Dn` loop from `last` down to 0: `body(r, b, n)` at each turn; the counter (low word of `Dn`) goes to the
 /// processor after each turn. Stops at the first `None` (pool full); returns the last object created.
-fn repete<R: Regs>(
+fn repeats<R: Regs>(
     r: &mut R,
     b: &mut Cps2Bus,
     dn: usize,
@@ -689,7 +689,7 @@ fn repete<R: Regs>(
 /// Several scenery effects: D1 counts from `last` down to 0, setting = D1 or zero.
 fn scenery_burst_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8, last: u16, setting_counter: bool) -> Option<Obj> {
     r.d(1, last as u32);
-    repete(r, b, 1, last, |r, b, n| scenery_via(r, b, creator, variant, Some(if setting_counter { n as u8 } else { 0 })))
+    repeats(r, b, 1, last, |r, b, n| scenery_via(r, b, creator, variant, Some(if setting_counter { n as u8 } else { 0 })))
 }
 
 /// 0xb3df6: two brief bursts (variant 0, settings 0 and 1) placed on the creator (x and depth).
@@ -751,7 +751,7 @@ fn spell_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, setting: u8) -> O
 /// 0xb4ef4 / 0xb4f60 / 0xb4f1c: six spell effects (variants 5 down to 0) of setting `setting`.
 fn spell_ring_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, setting: u8) -> Option<Obj> {
     r.d(1, 5);
-    repete(r, b, 1, 5, |r, b, n| {
+    repeats(r, b, 1, 5, |r, b, n| {
         let o = spawn(r, b, kind::SPELL)?;
         o.set_u8(b, Obj::VARIANT, n as u8);
         o.set_u8(b, SETTING, setting);
@@ -769,7 +769,7 @@ fn shouts_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8, tab
     let n = rd8(b, at);
     r.d(1, n as u32);
     at += 1;
-    repete(r, b, 1, n as u16, |r, b, _| {
+    repeats(r, b, 1, n as u16, |r, b, _| {
         r.a(2, at);
         let o = spawn(r, b, kind::SCENERY)?;
         o.set_u8(b, Obj::VARIANT, variant);
@@ -851,9 +851,9 @@ fn fish_school(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
     r.d(4, 0);
     r.d(5, 2);
     let mut k: u16 = 0;
-    repete(r, b, 5, 2, |r, b, _| {
+    repeats(r, b, 5, 2, |r, b, _| {
         let o = spawn(r, b, kind::FISH)?;
-        o.set_u8(b, RETOURNE, 0x20);
+        o.set_u8(b, TURNED, 0x20);
         fish_at_camera(b, o);
         o.set_u16(b, Obj::Z, 0xffc0);
         let x = o.u16(b, Obj::X).wrapping_sub(0x20);
@@ -875,7 +875,7 @@ fn fish_swimmers(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
     r.d(4, 0);
     r.d(5, 3);
     let mut k: u16 = 0;
-    repete(r, b, 5, 3, |r, b, n| {
+    repeats(r, b, 5, 3, |r, b, n| {
         let o = spawn(r, b, kind::FISH)?;
         o.set_u8(b, Obj::VARIANT, 1);
         fish_at_camera(b, o);
@@ -888,10 +888,10 @@ fn fish_swimmers(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
         o.set_u16(b, Obj::Y, y as u16);
         let odd = n as u8 & 1;
         r.d_byte(2, odd);
-        r.drapeaux(odd as u32, Size::Byte);
+        r.flags(odd as u32, Size::Byte);
         if odd != 0 {
-            let f = o.u8(b, RETOURNE) ^ 0x20;
-            put8(r, b, o, RETOURNE, f);
+            let f = o.u8(b, TURNED) ^ 0x20;
+            put8(r, b, o, TURNED, f);
         }
         k += 4;
         r.d_word(4, k);
@@ -912,14 +912,14 @@ pub(crate) fn pillars_via(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
         r.a(2, p.0);
         if p.u8(b, Obj::ACTIVE) != 0 && p.u16(b, 0x62) != 0 {
             r.d(5, 3);
-            last = Some(repete(r, b, 5, 3, |r, b, n| {
+            last = Some(repeats(r, b, 5, 3, |r, b, n| {
                 let o = spawn(r, b, kind::PILLAR)?;
                 o.set_u8(b, Obj::VARIANT, n as u8);
                 link(r, b, o, link::OWNER, p.0);
                 Some(o)
             })?);
         } else {
-            r.drapeaux(0, Size::Byte);
+            r.flags(0, Size::Byte);
         }
         r.a(2, p.0 + PLAYER_STRIDE);
         r.d_word(6, 2u16.wrapping_sub(k));
@@ -956,12 +956,12 @@ fn trails(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
     r.d_byte(4, living);
     r.a(4, SEATS);
     let n = 5u8.wrapping_sub(living) as u16;
-    repete(r, b, 5, n, |r, b, _| {
+    repeats(r, b, 5, n, |r, b, _| {
         // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
         let o = r.alloc_without_test(b, &pools::EFFCT);
         o.set_u8(b, Obj::ACTIVE, 1);
         o.set_u8(b, Obj::KIND, kind::TRAIL);
-        o.set_u8(b, RETOURNE, 0x20);
+        o.set_u8(b, TURNED, 0x20);
         o.set_u8(b, 0x2a, 2);
         o.set_u8(b, 0x52, rank);
         rank = rank.wrapping_add(1);
@@ -974,7 +974,7 @@ fn trails(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
         r.a(4, seat);
         o.set_u8(b, Obj::VARIANT, place);
         wr16(b, seat, 0x101);
-        r.drapeaux(0x101, Size::Word);
+        r.flags(0x101, Size::Word);
         Some(o)
     })
 }
@@ -1009,7 +1009,7 @@ pub(crate) fn set_list_via(r: &mut impl Regs, b: &mut Cps2Bus, list: u8) -> Opti
         at += 1;
         r.a(4, at);
         r.d_byte(0, kind);
-        r.drapeaux(kind as u32, Size::Byte);
+        r.flags(kind as u32, Size::Byte);
         if (kind as i8) < 0 {
             return last;
         }
@@ -1044,22 +1044,22 @@ fn eshl_slash_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, setting: u8)
 fn eshl_rise_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     let Some(o) = spawn_in(r, b, &pools::ESHL, kind::ESHL_RISE) else {
         r.d(0, 0);
-        r.drapeaux(0, Size::Long);
+        r.flags(0, Size::Long);
         return None;
     };
     o.set_u8(b, Obj::VARIANT, 0);
     o.set_u8(b, SETTING, 0);
     o.set_u16(b, link::SCENERY, creator.word());
-    let facing = creator.u8(b, RETOURNE);
-    o.set_u8(b, RETOURNE, facing);
+    let facing = creator.u8(b, TURNED);
+    o.set_u8(b, TURNED, facing);
     copy_position(b, o, creator);
     // `addi.w`, `subi.w`: their X remains after `moveq`
     let z = r.addition(0x80, o.u16(b, Obj::Z) as u32, Size::Word);
     o.set_u16(b, Obj::Z, z as u16);
-    let y = r.soustraction(1, o.u16(b, Obj::Y) as u32, Size::Word);
+    let y = r.subtract(1, o.u16(b, Obj::Y) as u32, Size::Word);
     o.set_u16(b, Obj::Y, y as u16);
     r.d(0, 1);
-    r.drapeaux(1, Size::Long);
+    r.flags(1, Size::Long);
     Some(o)
 }
 
@@ -1067,7 +1067,7 @@ fn eshl_rise_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj
 // Natives: the original's registers (A0 = the creator, D0/D1... = parameters)
 
 const fn creator(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 
 /// Declares the natives: `address "name" |c, b, me| body, exits;` (`me` = A0, the creator); each native ends with an
@@ -1284,7 +1284,7 @@ pub fn type_68_pure(b: &mut Cps2Bus) -> Option<Obj> {
 }
 
 /// 0xb8956: scene timer (type 76) of variant `variant`.
-pub fn minuteur(b: &mut Cps2Bus, variant: u8) -> Option<Obj> {
+pub fn countdown_timer(b: &mut Cps2Bus, variant: u8) -> Option<Obj> {
     timer(&mut Pure, b, variant)
 }
 
@@ -1326,68 +1326,68 @@ pub fn camera_in_mode_60(b: &mut Cps2Bus) {
 use regs::d as D;
 
 creators! {
-    0xae776 "cree_interface" |c, b, me| interface(c, b), CREATED;
-    0xaf346 "cree_bandeau" |c, b, me| { let v = d0b(c); strip(c, b, v) }, CREATED;
-    0xb1a7a "cree_ecran_fin" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); with_setting_via(c, b, kind::COUNTDOWN, v, s) }, CREATED;
-    0xafe02 "cree_vote" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); with_setting_via(c, b, kind::VOTE, v, s) }, CREATED;
-    0xab7d8 "cree_gerbe_debris" |c, b, me| { let v = d0b(c); debris_via(c, b, me, v) }, CREATED;
-    0xabec8 "cree_effet_attaque" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); attached_via(c, b, kind::ATTACK, me, v, s) }, CREATED;
-    0xb378a "cree_coup" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); attached_via(c, b, kind::BLOW, me, v, s) }, CREATED;
-    0xab708 "cree_halo" |c, b, me| halo_via(c, b, me), CREATED;
-    0xb1352 "cree_etincelle_posee" |c, b, me| { let v = d0b(c); posed_spark_via(c, b, me, v) }, CREATED;
-    0xb141a "cree_impact" |c, b, me| { let (vx, ax) = (c.d[2] as u16, c.d[3] as u16); impact(c, b, me, vx, ax) }, CREATED;
-    0xb12c0 "cree_ramassage" |c, b, me| { let v = d0b(c); pickup_via(c, b, me, v) }, CREATED;
-    0xb9c6a "cree_flammeche" |c, b, me| linked_via(c, b, me, kind::WISP, Some(0)), CREATED;
-    0xb9c88 "cree_flammeche_b" |c, b, me| linked_via(c, b, me, kind::WISP, Some(1)), CREATED;
-    0xb9aa0 "cree_finale" |c, b, me| linked_via(c, b, me, kind::FINALE, None), CREATED;
-    0xb84ae "cree_ecran_victoire" |c, b, me| linked_via(c, b, me, kind::VICTORY, None), CREATED;
-    0xb85e2 "cree_bulle_createur" |c, b, me| linked_via(c, b, me, kind::BUBBLE, None), CREATED;
-    0xb9942 "cree_pluie" |c, b, me| spawn(c, b, kind::RAIN), CREATED;
-    0xb7f14 "cree_type_68" |c, b, me| spawn(c, b, kind::TYPE_68), CREATED;
-    0xb8956 "cree_minuteur" |c, b, me| { let v = d1b(c); timer(c, b, v) }, CREATED;
-    0xba18a "cree_derive" |c, b, me| drift_via(c, b, me), CREATED;
-    0xb66e4 "cree_type_53" |c, b, me| type_53(c, b), CREATED;
-    0xb6a5c "cree_lanceur" |c, b, me| launcher_via(c, b, me), CREATED;
-    0xb6c42 "cree_eclat_camera" |c, b, me| camera_shard_via(c, b), CREATED;
-    0xb2ef6 "cree_silhouette_reflet" |c, b, me| mirrored_pair_via(c, b, me), CREATED;
-    0xb6ba8 "cree_type_57" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); type_57(c, b, me, v, s) }, CREATED;
-    0xb8a0a "cree_fondu_sonore" |c, b, me| spawn(c, b, kind::SOUND_FADE), CREATED;
-    0xb68b0 "cree_types_54" |c, b, me| type_54_trio(c, b), CREATED;
-    0xae3ec "cree_scintillement" |c, b, me| twinkle_via(c, b, me), CREATED;
-    0xb6596 "cree_scintillement_perso" |c, b, me| shimmer_via(c, b, me), CREATED | D(0);
-    0xb5730 "cree_repere" |c, b, me| beacon_via(c, b, me), CREATED;
-    0xb3c14 "cree_lance" |c, b, me| toss_via(c, b, me), CREATED;
-    0xaba16 "cree_eclat_unique" |c, b, me| flash_via(c, b, me), CREATED;
-    0xaaa40 "cree_etincelle_en" |c, b, me| spark_at_native(c, b, me), regs::CCR;
-    0xb3df6 "cree_decor_0" |c, b, me| scenery_0_pair_via(c, b, me), CREATED;
-    0xb3f40 "cree_decor_3" |c, b, me| scenery_burst_via(c, b, me, 3, 6, true), CREATED | D(1);
-    0xb3f6a "cree_decor_4" |c, b, me| scenery_4_via(c, b, me), CREATED | D(0) | D(1);
-    0xb3fb0 "cree_decor_5" |c, b, me| { let s = d1b(c); scenery_via(c, b, me, 5, Some(s)) }, CREATED;
-    0xb3fd4 "cree_decor_6" |c, b, me| scenery_by_chance_via(c, b, me, 0xf, 6, None), CREATED | D(0);
-    0xb4002 "cree_decor_7" |c, b, me| scenery_via(c, b, me, 7, Some(0)), CREATED;
-    0xb4026 "cree_decor_8" |c, b, me| scenery_burst_via(c, b, me, 8, 9, false), CREATED | D(1);
-    0xb4088 "cree_decor_10" |c, b, me| scenery_by_chance_via(c, b, me, 3, 10, Some(0)), CREATED | D(0);
-    0xb4f44 "cree_sort" |c, b, me| { let s = d1b(c); spell_via(c, b, me, s) }, CREATED;
-    0xb4ef4 "cree_sorts" |c, b, me| spell_ring_via(c, b, me, 0), CREATED | D(1);
-    0xb4f60 "cree_sorts_b" |c, b, me| spell_ring_via(c, b, me, 2), CREATED | D(1);
-    0xb1764 "cree_banc" |c, b, me| fish_school(c, b), CREATED | D(0) | D(4) | D(5);
-    0xb17ba "cree_nageurs" |c, b, me| fish_swimmers(c, b), CREATED | D(0) | D(1) | D(2) | D(4) | D(5);
-    0xb7dec "cree_colonnes" |c, b, me| pillars_via(c, b), CREATED | D(5) | D(6) | regs::a(2);
-    0xabb70 "cree_trainees" |c, b, me| trails(c, b), CREATED | D(0) | D(4) | D(5) | D(6) | regs::a(2) | regs::a(4);
+    0xae776 "create_interface" |c, b, me| interface(c, b), CREATED;
+    0xaf346 "create_banner" |c, b, me| { let v = d0b(c); strip(c, b, v) }, CREATED;
+    0xb1a7a "create_end_screen" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); with_setting_via(c, b, kind::COUNTDOWN, v, s) }, CREATED;
+    0xafe02 "create_vote" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); with_setting_via(c, b, kind::VOTE, v, s) }, CREATED;
+    0xab7d8 "create_sheaf_debris" |c, b, me| { let v = d0b(c); debris_via(c, b, me, v) }, CREATED;
+    0xabec8 "create_effect_attack" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); attached_via(c, b, kind::ATTACK, me, v, s) }, CREATED;
+    0xb378a "create_hit" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); attached_via(c, b, kind::BLOW, me, v, s) }, CREATED;
+    0xab708 "create_halo" |c, b, me| halo_via(c, b, me), CREATED;
+    0xb1352 "create_spark_placed" |c, b, me| { let v = d0b(c); posed_spark_via(c, b, me, v) }, CREATED;
+    0xb141a "create_impact" |c, b, me| { let (vx, ax) = (c.d[2] as u16, c.d[3] as u16); impact(c, b, me, vx, ax) }, CREATED;
+    0xb12c0 "create_pickup" |c, b, me| { let v = d0b(c); pickup_via(c, b, me, v) }, CREATED;
+    0xb9c6a "create_ember" |c, b, me| linked_via(c, b, me, kind::WISP, Some(0)), CREATED;
+    0xb9c88 "create_ember_b" |c, b, me| linked_via(c, b, me, kind::WISP, Some(1)), CREATED;
+    0xb9aa0 "create_final" |c, b, me| linked_via(c, b, me, kind::FINALE, None), CREATED;
+    0xb84ae "create_victory_screen" |c, b, me| linked_via(c, b, me, kind::VICTORY, None), CREATED;
+    0xb85e2 "create_bubble_creator" |c, b, me| linked_via(c, b, me, kind::BUBBLE, None), CREATED;
+    0xb9942 "create_rain" |c, b, me| spawn(c, b, kind::RAIN), CREATED;
+    0xb7f14 "create_type_68" |c, b, me| spawn(c, b, kind::TYPE_68), CREATED;
+    0xb8956 "create_timer" |c, b, me| { let v = d1b(c); timer(c, b, v) }, CREATED;
+    0xba18a "create_drift" |c, b, me| drift_via(c, b, me), CREATED;
+    0xb66e4 "create_type_53" |c, b, me| type_53(c, b), CREATED;
+    0xb6a5c "create_launcher" |c, b, me| launcher_via(c, b, me), CREATED;
+    0xb6c42 "create_shard_camera" |c, b, me| camera_shard_via(c, b), CREATED;
+    0xb2ef6 "create_silhouette_reflection" |c, b, me| mirrored_pair_via(c, b, me), CREATED;
+    0xb6ba8 "create_type_57" |c, b, me| { let (v, s) = (d0b(c), d1b(c)); type_57(c, b, me, v, s) }, CREATED;
+    0xb8a0a "create_sound_fade" |c, b, me| spawn(c, b, kind::SOUND_FADE), CREATED;
+    0xb68b0 "create_types_54" |c, b, me| type_54_trio(c, b), CREATED;
+    0xae3ec "create_shimmer" |c, b, me| twinkle_via(c, b, me), CREATED;
+    0xb6596 "create_shimmer_character" |c, b, me| shimmer_via(c, b, me), CREATED | D(0);
+    0xb5730 "create_marker" |c, b, me| beacon_via(c, b, me), CREATED;
+    0xb3c14 "create_thrown" |c, b, me| toss_via(c, b, me), CREATED;
+    0xaba16 "create_shard_single" |c, b, me| flash_via(c, b, me), CREATED;
+    0xaaa40 "create_spark_at" |c, b, me| spark_at_native(c, b, me), regs::CCR;
+    0xb3df6 "create_scenery_0" |c, b, me| scenery_0_pair_via(c, b, me), CREATED;
+    0xb3f40 "create_scenery_3" |c, b, me| scenery_burst_via(c, b, me, 3, 6, true), CREATED | D(1);
+    0xb3f6a "create_scenery_4" |c, b, me| scenery_4_via(c, b, me), CREATED | D(0) | D(1);
+    0xb3fb0 "create_scenery_5" |c, b, me| { let s = d1b(c); scenery_via(c, b, me, 5, Some(s)) }, CREATED;
+    0xb3fd4 "create_scenery_6" |c, b, me| scenery_by_chance_via(c, b, me, 0xf, 6, None), CREATED | D(0);
+    0xb4002 "create_scenery_7" |c, b, me| scenery_via(c, b, me, 7, Some(0)), CREATED;
+    0xb4026 "create_scenery_8" |c, b, me| scenery_burst_via(c, b, me, 8, 9, false), CREATED | D(1);
+    0xb4088 "create_scenery_10" |c, b, me| scenery_by_chance_via(c, b, me, 3, 10, Some(0)), CREATED | D(0);
+    0xb4f44 "create_spell" |c, b, me| { let s = d1b(c); spell_via(c, b, me, s) }, CREATED;
+    0xb4ef4 "create_spells" |c, b, me| spell_ring_via(c, b, me, 0), CREATED | D(1);
+    0xb4f60 "create_spells_b" |c, b, me| spell_ring_via(c, b, me, 2), CREATED | D(1);
+    0xb1764 "create_bench" |c, b, me| fish_school(c, b), CREATED | D(0) | D(4) | D(5);
+    0xb17ba "create_swimmers" |c, b, me| fish_swimmers(c, b), CREATED | D(0) | D(1) | D(2) | D(4) | D(5);
+    0xb7dec "create_columns" |c, b, me| pillars_via(c, b), CREATED | D(5) | D(6) | regs::a(2);
+    0xabb70 "create_trails" |c, b, me| trails(c, b), CREATED | D(0) | D(4) | D(5) | D(6) | regs::a(2) | regs::a(4);
     0xa8a42 "camera_mode_60" |c, b, me| camera_mode_60(c, b), regs::CCR;
-    0xa8af8 "cree_liste_decors" |c, b, me| { let v = d1b(c); set_list_via(c, b, v) }, CREATED | D(0) | D(1) | regs::a(4);
-    0xb3e4e "cree_cris" |c, b, me| shouts_via(c, b, me, 1, 0xb3e86), CREATED | D(0) | D(1) | regs::a(2);
-    0xb3ec6 "cree_cris_b" |c, b, me| shouts_via(c, b, me, 2, 0xb3f00), CREATED | D(0) | D(1) | regs::a(2);
-    0xb4bcc "cree_pluie_debris" |c, b, me| { let (v, s) = (d1b(c), c.d[2] as u8); debris_rain_via(c, b, me, v, s) }, CREATED;
-    0xb4f1c "cree_sorts_c" |c, b, me| spell_ring_via(c, b, me, 4), CREATED | D(1);
-    0xb53f4 "cree_type_46" |c, b, me| type_46_trio(c, b, me), CREATED;
-    0xb59a6 "cree_type_48" |c, b, me| type_48(c, b, me, 1), CREATED;
-    0xb59c8 "cree_type_48_b" |c, b, me| type_48(c, b, me, 2), CREATED;
-    0xb64b0 "cree_projectile" |c, b, me| linked_via(c, b, me, kind::PROJECTILE, None), CREATED;
-    0xb96c0 "cree_eclat_lance" |c, b, me| { let v = d1b(c); thrown_shard(c, b, me, v) }, CREATED;
-    0xb97a2 "cree_eclat_pose" |c, b, me| linked_via(c, b, me, kind::POSED_FLASH, None), CREATED;
-    0xb97ba "cree_eclat_pose_b" |c, b, me| linked_via(c, b, me, kind::POSED_FLASH, Some(1)), CREATED;
-    0xb230e "bloc_tuiles" |c, b, me| tile_block_native(c, b), regs::d(0) | regs::a(1);
-    0xa836c "cree_tir_coup" |c, b, me| { let s = c.d[4] as u8; eshl_slash_via(c, b, me, s) }, CREATED;
-    0xa817c "cree_tir_colonne" |c, b, me| eshl_rise_via(c, b, me), CREATED | D(0);
+    0xa8af8 "create_scenery_list" |c, b, me| { let v = d1b(c); set_list_via(c, b, v) }, CREATED | D(0) | D(1) | regs::a(4);
+    0xb3e4e "create_cries" |c, b, me| shouts_via(c, b, me, 1, 0xb3e86), CREATED | D(0) | D(1) | regs::a(2);
+    0xb3ec6 "create_cries_b" |c, b, me| shouts_via(c, b, me, 2, 0xb3f00), CREATED | D(0) | D(1) | regs::a(2);
+    0xb4bcc "create_rain_debris" |c, b, me| { let (v, s) = (d1b(c), c.d[2] as u8); debris_rain_via(c, b, me, v, s) }, CREATED;
+    0xb4f1c "create_spells_c" |c, b, me| spell_ring_via(c, b, me, 4), CREATED | D(1);
+    0xb53f4 "create_type_46" |c, b, me| type_46_trio(c, b, me), CREATED;
+    0xb59a6 "create_type_48" |c, b, me| type_48(c, b, me, 1), CREATED;
+    0xb59c8 "create_type_48_b" |c, b, me| type_48(c, b, me, 2), CREATED;
+    0xb64b0 "create_projectile" |c, b, me| linked_via(c, b, me, kind::PROJECTILE, None), CREATED;
+    0xb96c0 "create_shard_thrown" |c, b, me| { let v = d1b(c); thrown_shard(c, b, me, v) }, CREATED;
+    0xb97a2 "create_shard_placed" |c, b, me| linked_via(c, b, me, kind::POSED_FLASH, None), CREATED;
+    0xb97ba "create_shard_placed_b" |c, b, me| linked_via(c, b, me, kind::POSED_FLASH, Some(1)), CREATED;
+    0xb230e "block_tiles" |c, b, me| tile_block_native(c, b), regs::d(0) | regs::a(1);
+    0xa836c "create_shot_hit" |c, b, me| { let s = c.d[4] as u8; eshl_slash_via(c, b, me, s) }, CREATED;
+    0xa817c "create_shot_column" |c, b, me| eshl_rise_via(c, b, me), CREATED | D(0);
 }

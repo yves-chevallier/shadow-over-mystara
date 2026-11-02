@@ -50,8 +50,8 @@ fn effect<R: Bench>(x: &mut Cx<'_, R>, retry: bool, kind: u8, variant: Option<u8
 /// Opens a dialogue bubble of type `kind` (0xc8312); its address goes to `+0x42`.
 fn open_message<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
     for _ in 0..64 {
-        if let Some(bulle) = crate::families::creators::scene_set(x.b, kind as u8) {
-            x.set16(0x42, bulle.word());
+        if let Some(bubble) = crate::families::creators::scene_set(x.b, kind as u8) {
+            x.set16(0x42, bubble.word());
             return;
         }
     }

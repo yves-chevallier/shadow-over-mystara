@@ -505,7 +505,7 @@ fn unlink_all_native(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const REINSERT_ACTORS: Native = Native {
     entry: 0x1ee1a,
     name: "list_reinsert_actors",
-    run: crate::Body::Processeur(|c, b| reinsert_native(ACTORS, c, b)),
+    run: crate::Body::WithCpu(|c, b| reinsert_native(ACTORS, c, b)),
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -513,7 +513,7 @@ pub const REINSERT_ACTORS: Native = Native {
 pub const REINSERT_FOREGROUND: Native = Native {
     entry: 0x1ef6c,
     name: "list_reinsert_foreground",
-    run: crate::Body::Processeur(|c, b| reinsert_native(FOREGROUND, c, b)),
+    run: crate::Body::WithCpu(|c, b| reinsert_native(FOREGROUND, c, b)),
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -521,7 +521,7 @@ pub const REINSERT_FOREGROUND: Native = Native {
 pub const UNLINK: Native = Native {
     entry: 0x1f0be,
     name: "list_unlink",
-    run: crate::Body::Processeur(unlink_native),
+    run: crate::Body::WithCpu(unlink_native),
     touches_sound: false,
     outputs: regs::a(0),
 };
@@ -529,7 +529,7 @@ pub const UNLINK: Native = Native {
 pub const UNLINK_ALL: Native = Native {
     entry: 0x1f184,
     name: "list_unlink_all",
-    run: crate::Body::Processeur(unlink_all_native),
+    run: crate::Body::WithCpu(unlink_all_native),
     touches_sound: false,
     outputs: regs::a(0),
 };

@@ -54,12 +54,12 @@ pub trait Machine {
 }
 
 /// Context that also holds the processor: the `_68k` adapters (registers of the original) go through it.
-pub trait Processeur: Machine {
+pub trait WithCpu: Machine {
     /// The processor and the bus, borrowed together (the `_68k` adapters need both).
     fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus);
 }
 
-/// Implements `Machine` and `Processeur` for a context that has the fields `c` and `b`.
+/// Implements `Machine` and `WithCpu` for a context that has the fields `c` and `b`.
 macro_rules! machine {
     ($($t:ty),* $(,)?) => {
         $(impl Machine for $t {
@@ -67,7 +67,7 @@ macro_rules! machine {
                 &mut *self.b
             }
         }
-        impl Processeur for $t {
+        impl WithCpu for $t {
             fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus) {
                 (&mut *self.c, &mut *self.b)
             }

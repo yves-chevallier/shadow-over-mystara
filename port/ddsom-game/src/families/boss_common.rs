@@ -236,7 +236,7 @@ pub fn push_out_of_boss<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     }
     let off = prog16(x.b, BODY_SHAPES + 2 * shape as u32);
     let routine = BODY_SHAPES.wrapping_add(off as i16 as u32);
-    super::boss_3::body::pousser(x.b, boss, x.o, routine)
+    super::boss_3::body::push(x.b, boss, x.o, routine)
 }
 
 /// `push_out_of_boss` with the original's registers: D0 = 1 / 0 (flags of `tst.l`), A0 intact, A1 = A6 =
@@ -303,7 +303,7 @@ macro_rules! native {
         Native {
             entry: $entry,
             name: $name,
-            run: crate::Body::Processeur(|c, b| {
+            run: crate::Body::WithCpu(|c, b| {
                 $f(&mut Cx::new(c, b));
                 rts(c, b);
             }),
@@ -316,5 +316,5 @@ macro_rules! native {
 pub const NATIVES: &[Native] = &[
     native!(0x81aa4, "boss_repousse", regs::d(0) | regs::a(0) | regs::a(1) | regs::a(6) | regs::CCR, push_out_of_boss_68k),
     native!(0x833b6, "boss_oscillation", regs::d(0), bob),
-    native!(0x87048, "boss_seuil_pv", regs::d(0) | regs::d(1), hp_threshold),
+    native!(0x87048, "boss_hp_threshold", regs::d(0) | regs::d(1), hp_threshold),
 ];

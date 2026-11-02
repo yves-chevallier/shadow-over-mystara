@@ -196,7 +196,7 @@ fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox: Hitbox) ->
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum InHitbox {
     /// Outside the box, or in the air (D0 = 0).
-    Non,
+    No,
     /// In the box, facing (D0 = 1).
     Face,
     /// In the box, from behind (D0 = 2).
@@ -210,7 +210,7 @@ pub fn box_around(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox) -> InHit
 
 fn box_reach(b: &mut Cps2Bus, me: u32, other: u32, hitbox: Hitbox, r: &mut Leftovers) -> InHitbox {
     if rd16(b, other + 0x0c) != 0 || !in_hitbox(b, me, other, hitbox, r) {
-        return InHitbox::Non;
+        return InHitbox::No;
     }
     let facing = rd8(b, me + f::FACING);
     let gap = rd16(b, me + f::X).wrapping_sub(rd16(b, other + f::X));
@@ -263,7 +263,7 @@ impl HitboxLeftovers {
 pub fn target_in_front_leftovers(b: &mut Cps2Bus, o: Obj, hitbox: Hitbox) -> (InHitbox, HitboxLeftovers) {
     let pointer = rd16(b, o.0 + f::TARGET);
     let mut leftovers = Leftovers::default();
-    let found = if pointer == 0 { InHitbox::Non } else { box_reach(b, o.0, object(pointer), hitbox, &mut leftovers) };
+    let found = if pointer == 0 { InHitbox::No } else { box_reach(b, o.0, object(pointer), hitbox, &mut leftovers) };
     (found, HitboxLeftovers { leftovers, mask: None })
 }
 
@@ -287,7 +287,7 @@ pub fn target_in_front_68k(c: &mut Cpu, b: &mut Cps2Bus, o: Obj, hitbox: Hitbox)
     let pointer = rd16(b, o.0 + f::TARGET);
     let mut leftovers = Leftovers::default();
     let found = if pointer == 0 {
-        InHitbox::Non
+        InHitbox::No
     } else {
         c.a[1] = object(pointer);
         box_reach(b, o.0, object(pointer), hitbox, &mut leftovers)

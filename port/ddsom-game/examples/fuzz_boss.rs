@@ -1502,7 +1502,7 @@ fn perturb(b: &mut Bus, rng: &mut Rng, obj: u32, leader: u32) {
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
-    let [_, roms, eeprom, scenario, warmup, tours] = &a[..] else {
+    let [_, roms, eeprom, scenario, warmup, rounds] = &a[..] else {
         eprintln!("usage: fuzz_boss <roms> <eeprom> <scenario> <warm-up frames> <rounds>");
         std::process::exit(2);
     };
@@ -1535,7 +1535,7 @@ fn main() {
     }
     let (c0, b0) = (m.cpu.clone(), m.bus.clone());
     let (mut tests, mut shown) = (0, 0);
-    for _ in 0..tours.parse::<u32>().unwrap() {
+    for _ in 0..rounds.parse::<u32>().unwrap() {
         for &(entry, kind) in &inputs {
             let (mut c, mut b) = (c0.clone(), b0.clone());
             b.irq_horizon = u64::MAX;

@@ -1,5 +1,5 @@
 //! Player shots (PSHL), third series: types 12 to 17 (objects thrown by the wizards and the cleric: jar, arrows, bursts
-//! of flame). See `docs/families/player.md`.
+//! of flame). See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

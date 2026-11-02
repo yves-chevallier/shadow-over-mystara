@@ -622,7 +622,7 @@ const HEAP: u32 = 0xff_005a;
 const HEAP_BOTTOM: u32 = 0xff_01a6;
 
 /// Slot of the main task (game, mode machine), which the freeze task counts down itself.
-const PRINCIPALE: usize = 0;
+const MAIN: usize = 0;
 
 /// The two states of the main task differ only by one frame counted down by the freeze task (fast forward).
 /// When the game works to the end of the frame (fast forward of a loaded scene), the frame end falls at a
@@ -668,7 +668,7 @@ pub fn gaps(t: &Table, ram: &[u16], all: bool) -> Vec<String> {
             }
         };
         let count = byte(r + field::COUNT);
-        if !(k == PRINCIPALE && one_gap_countdown((e.state, e.count), (state, count))) {
+        if !(k == MAIN && one_gap_countdown((e.state, e.count), (state, count))) {
             gap("state", normal(e.state.byte()) as u32, normal(state) as u32);
             gap("count", e.count as u32, count as u32);
         }

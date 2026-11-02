@@ -2,7 +2,7 @@
 //! `original`) up to the given frame; if a frame executes more than 20 million blocks, prints
 //! the most frequent PCs and stops.
 //!
-//! stuck <roms> <eeprom> <scenario> <frame> [origine|reecrit] [deux]
+//! stuck <roms> <eeprom> <scenario> <frame> [original|rewritten] [two]
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -37,7 +37,7 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
-    let original = a.get(5).is_some_and(|s| s == "origine");
+    let original = a.get(5).is_some_and(|s| s == "original");
     if original {
         ddsom_game::install_reference(&mut m);
     } else {
@@ -51,8 +51,8 @@ fn main() {
     m.executor = Some(count);
     let s = ddsom_game::scenario::Scenario::load(std::path::Path::new(&a[3])).unwrap();
     let n: usize = a[4].parse().unwrap();
-    // `deux`: a second machine (original code) runs in the same process, as in validate
-    let mut other = a.get(6).is_some_and(|s| s == "deux").then(|| {
+    // `two`: a second machine (original code) runs in the same process, as in validate
+    let mut other = a.get(6).is_some_and(|s| s == "two").then(|| {
         let mut m2 = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
         m2.set_overclock(16.0);
         ddsom_game::install_reference(&mut m2);

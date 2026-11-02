@@ -423,7 +423,7 @@ fn end(x: &mut Ctx) -> Flow {
 pub const BONUS: Native = Native {
     entry: 0xf5938,
     name: "scene_bonus",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);

@@ -9,7 +9,7 @@
 //! rebuilds the Object RAM entries of that object alone (same decoding as `sprites.rs`: pieces,
 //! mirror, forced palette, attached objects), renders them with the machine's current palette on a
 //! transparent background and stores the cropped sample in `<cache>/<family>_<type>_<variant>/`.
-//! `build` picks the base pose of each type (first frame in active state, « walk » sub-state),
+//! `build` picks the base pose of each type (first frame in active state, "walk" sub-state),
 //! writes the PNGs (1:1 and x2), the summary sheet and the Markdown index.
 //!
 //! The images derive from the ROMs: they stay local (`assets/` folder, ignored by git).
@@ -737,7 +737,7 @@ la suite de cadres distincts du même objet pour la bande d'animation.
 ## Limites
 
 * Seules les créatures rencontrées dans les scénarios sont présentes ; une créature n'apparaît que dans les scènes
-  atteintes par ces parcours (colonne « Scènes »).
+  atteintes par ces parcours (colonne 'scenes').
 * Un objet constitué de plusieurs objets (corps et membres séparés, boss à parties) n'est rendu que par son objet
   principal et ses objets rattachés.
 * La palette est celle de la scène : une créature peut changer de teinte d'une scène à l'autre ; les images montrent

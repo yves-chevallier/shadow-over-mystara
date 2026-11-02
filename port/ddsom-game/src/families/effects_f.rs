@@ -408,8 +408,8 @@ fn crossing_steps<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 crate::sound::play(x.b, crossing::SOUND_DONE, x.o);
                 let o = x.o;
-                let lanceur = super::effects_creators::launcher(x.b, o);
-                if lanceur.is_none() {
+                let launcher = super::effects_creators::launcher(x.b, o);
+                if launcher.is_none() {
                     return;
                 }
                 x.add8(f::SUB_STATE, 4);
@@ -602,8 +602,8 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>) {
     // Original glitch: the loop counts in D6 (`dbf`), which the allocation rewrites (rank of the slot found
     // from the end of the pool): it stops when the pool is full, or when the last slot has just been taken.
     let last = pools::EFFCT.slot(pools::EFFCT.slots - 1);
-    while let Some(eclat) = super::effects_creators::camera_shard(x.b) {
-        if eclat == last {
+    while let Some(shard) = super::effects_creators::camera_shard(x.b) {
+        if shard == last {
             break;
         }
     }
@@ -787,12 +787,12 @@ fn walker<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xa8594 "effct_ouverture" #[without] opening,
-    0xb2f40 "effct_silhouette_reflet" #[without] mirrored,
+    0xa8594 "effct_opening" #[without] opening,
+    0xb2f40 "effct_silhouette_reflection" #[without] mirrored,
     0xb66f8 "effct_traversee" #[without] crossing,
     0xb68f4 "effct_passage" #[without] passage,
-    0xb6a74 "effct_lanceur" #[without] launcher,
-    0xb7f28 "effct_enseigne_depart" #[without] start_sign,
-    0xb896e "effct_fondu_sonore" #[without] sound_fade,
+    0xb6a74 "effct_launcher" #[without] launcher,
+    0xb7f28 "effct_sign_start" #[without] start_sign,
+    0xb896e "effct_sound_fade" #[without] sound_fade,
     0xba0b0 "effct_passant" #[without] walker,
 }

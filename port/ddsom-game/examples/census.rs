@@ -8,7 +8,7 @@
 //! Classes: PSHL PEFF ESHL SET SOBJ ITEM BOX (all by default). `DDSOM_ENTREE=address`: a single
 //! handler; `DDSOM_ETATS=1`: half of the trajectories start from drawn `+4..+7` states. A trajectory creates a fresh object
 //! (state 0, variant 0, or drawn among the first `DDSOM_VARIANTES`) then calls the handler up to 120 times, perturbing the inputs it reads; every other one
-//! also draws scene variables (game, transition, game mode; marked « drawn »).
+//! also draws scene variables (game, transition, game mode; marked "drawn").
 //! Output: one line per entry, then the 68000 ranges executed per entry.
 
 use std::cell::RefCell;
@@ -130,7 +130,7 @@ fn main() {
 
 fn principal() {
     let a: Vec<String> = std::env::args().collect();
-    let [_, roms, eeprom, scenario, warmup, tours, ..] = &a[..] else {
+    let [_, roms, eeprom, scenario, warmup, rounds, ..] = &a[..] else {
         eprintln!("usage: census <roms> <eeprom> <scenario> <warm-up> <trajectories> [CLASS,...]");
         std::process::exit(2);
     };
@@ -154,7 +154,7 @@ fn principal() {
     if std::env::var_os("DDSOM_PANIQUES").is_none() {
         std::panic::set_hook(Box::new(|_| {}));
     }
-    let tours: u32 = tours.parse().unwrap();
+    let rounds: u32 = rounds.parse().unwrap();
     let mut rng = Rng(0x1234_5678_9abc_def1);
     let (c0, b0) = (m.cpu.clone(), m.bus.clone());
     let mut b = b0.clone();
@@ -177,7 +177,7 @@ fn principal() {
                 eprintln!("{name} {kind} {entry:06x}");
             }
             let summary = summaries.entry(entry).or_default();
-            for t in 0..tours {
+            for t in 0..rounds {
                 let tires = t % 2 == 1;
                 trajectory(&c0, &b0, pool, kind as u8, entry, tires, &mut rng, summary);
             }

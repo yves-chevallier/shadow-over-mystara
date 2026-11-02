@@ -27,7 +27,7 @@ const CLEARED: u32 = 0x1c846;
 pub const PHASE_20: Native = Native {
     entry: 0x1c80c,
     name: "gameover_phase_20",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         let mut x = Ctx::new(c, b);
         if phase_20(&mut x) == Flow::Done {
             rts(x.c, x.b);

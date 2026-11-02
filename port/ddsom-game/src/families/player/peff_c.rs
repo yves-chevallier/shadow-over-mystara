@@ -1,5 +1,5 @@
 //! Player effects (PEFF), third series: types 2 to 5 (hold aura, hit, healing, light).
-//! See `docs/families/player.md`.
+//! See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

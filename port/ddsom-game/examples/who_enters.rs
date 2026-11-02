@@ -1,6 +1,6 @@
 //! Who enters a 68000 code range: for each entry (instruction of the range preceded by a
 //! 68000 instruction outside the range, or by a native routine), the frame, the address and the last
-//! 68000 instruction executed before (« native » if a native ran in between).
+//! 68000 instruction executed before ("native" if a native ran in between).
 //!
 //!   who_enters <roms> <eeprom> <scenario> <frames> <start> <end> [max]
 

@@ -171,5 +171,5 @@ fn recovered<R: Bench>(x: &mut Cx<'_, R>) {
 handlers! {
     0x8430e "boss_6" #[without] run,
     // getting up after a common reaction (table 0x3e000 of `reactions.rs`)
-    0x85490 "boss_6_releve" hit::recovered_tail,
+    0x85490 "boss_6_getup" hit::recovered_tail,
 }

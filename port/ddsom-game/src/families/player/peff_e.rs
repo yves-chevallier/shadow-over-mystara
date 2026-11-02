@@ -1,5 +1,5 @@
 //! Player effects (PEFF), fifth series: types 12 (freeze), 13 (blessing) and 14 (reflect).
-//! See `docs/families/player.md`.
+//! See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

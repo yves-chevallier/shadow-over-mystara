@@ -687,7 +687,7 @@ impl Step {
 pub const PHASE_16: Native = Native {
     entry: 0xf3142,
     name: "scene_phase_16",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         if !phase_16(c, b) {
             rts(c, b);
         }

@@ -113,7 +113,7 @@ fn main() {
             m.cpu.sr,
             m.bus.qram[0xffd],
             m.bus.qram[0xfff],
-            if m.bus.z80_running { "actif" } else { "au reset" },
+            if m.bus.z80_running { "running" } else { "in reset" },
             m.bus.irq_vblank
         );
     }

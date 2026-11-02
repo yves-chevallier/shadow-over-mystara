@@ -1,4 +1,4 @@
-//! Palette fades (V3): one step per cession, until the end of the count (see `docs/video.md`, « Fondus »).
+//! Palette fades (V3): one step per cession, until the end of the count (see `docs/video.md`, "fades").
 //!
 //! Two families, each in two forms: a *task* (created by `0x9b6`, it ends with `0x9f8` at the
 //! end of the fade) and a *subroutine* (called by `jsr` from a sequence, it returns when the fade is finished;

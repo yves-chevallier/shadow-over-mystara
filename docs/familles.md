@@ -310,12 +310,12 @@ tirés au hasard.
 Lots précédents :
 
 - `tools/validate_all.sh 30000` : les huit scénarios sont `VALIDE`, 0 écart pour toutes les routines de
-  famille (durées exactes comprises) : `item_tresor` 1 248 appels, `item_conso` 16 180, `item_inventaire`
-  21 775, `item_bonus` 50 180, `item_scene` 10 387, `box_caisse` 22 216, `effct_interface` 52 540,
-  `effct_trainee` 32 080, `effct_poussiere` 19 162, `effct_decompte` 11 418, `effct_bulle` 4 453 (17 appels
-  du chemin hors contrat passent par le code d'origine), `effct_scintillement` 4 944, `effct_aura` 4 663,
-  `effct_nuage` 1 849, `effct_bandeau` 1 794, `effct_impact` 572, `effct_halo` 450, `effct_eclat` 257,
-  `effct_debris` 164, `effct_supprime` 9.
+  famille (durées exactes comprises) : `item_treasure` 1 248 appels, `item_consumable` 16 180, `item_inventory`
+  21 775, `item_bonus` 50 180, `item_scene` 10 387, `box_crate` 22 216, `effct_interface` 52 540,
+  `effct_trail` 32 080, `effct_dust` 19 162, `effct_countdown` 11 418, `effct_bubble` 4 453 (17 appels
+  du chemin hors contrat passent par le code d'origine), `effct_shimmer` 4 944, `effct_aura` 4 663,
+  `effct_cloud` 1 849, `effct_banner` 1 794, `effct_impact` 572, `effct_halo` 450, `effct_shard` 257,
+  `effct_debris` 164, `effct_removed` 9.
 - `examples/families` (contrôle appel par appel, 30 000 images, huit scénarios) : 0 écart.
 - `examples/fuzz_families` (huit scénarios, 8 000 images, 38 types forcés, 750 000 essais sur la dernière
   série, plusieurs centaines de milliers d'autres lors de la mise au point) : 3 écarts, tous sur ITEM 1 avec
@@ -368,7 +368,7 @@ type 1, PSHL 10 et 11 celui du 2, SET 33 celui du 3, SOBJ 4 et EFFCT 18 celui du
 | SOBJ (0x14) | 0x39fa8 | 16 | 16 (dont 0xcc25a) | 16 | aucun |
 
 Chaque entrée a donc sa native. Mesuré sur `bot30k` (variante 0) et `cov_4p_a` (variantes 0 à 2), 20
-trajectoires par type ; `fuzz families`, `fuzz_joueur`, `fuzz_familles`, `fuzz_set_a`, `fuzz_eshl_c` valident
+trajectoires par type ; `fuzz families`, `fuzz_player_shots`, `fuzz_families`, `fuzz_set_a`, `fuzz_eshl_c` valident
 les natives elles-mêmes (sections précédentes, `docs/families-eshl-set-sobj.md`, `docs/families/joueur.md`).
 
 ### Sous-tables (états `+4`, `+5`, `+6`/`+7`, variantes `+3`)
@@ -384,11 +384,11 @@ un état légitime oublié.
 
 | Entrée | Rôle | Validation |
 |---|---|---|
-| SET 7 0xcb29c (états 2 et 4) + reprises 0xcb896, 0xcb9c0 | porte de sortie : changement de zone (prime, joueurs morts cachés), quatre genres de sortie (zone annexe, retour, scène suivante, fin de partie), fondu 0x1460 qui cède (appelé en Rust comme un sous-programme de tâche, la tâche reprend aux étapes `set::exit_fading::Step`), sauvegarde/suspension du monde, retour de zone (état 4) | `cov_mortal_late` (scène suivante), `cov/cov_porte_annexe` (nouveau : entrée puis retour), `fuzz_porte` (jusqu'à la première cession du fondu, puis fondu fini sans attendre et étape de reprise ; 3000 essais dont 728 avec fondu ; `DDSOM_PORTE=29` : porte de passage SET 29, 649 avec fondu), `fuzz families` |
-| 0x33b24 | caméras au retour d'une zone annexe (portes 7, 27, 29) | `fuzz small`, `fuzz_porte`, `cov_porte_annexe` |
-| PEFF 42 0x50b9c | article en vitrine de la boutique : zone de vente, message, vente (stock, bourse BCD, inventaire, refus) | `fuzz boutique` |
-| 0x514ac / 0x514cc | interprète des dialogues du marchand appelé par le comptoir PEFF 43 (12 commandes ; fonctions Rust appelées directement, plus de native) | `fuzz boutique` (scripts tirés, par le comptoir 0x51076) |
-| 0x4aed0, 0x53746, 0xa2b4a, 0xa462c | créateurs (PEFF 5, pierres PSHL 0x11, ESHL 0x25, ESHL 0x34 variante 3) | `fuzz small`, `fuzz_joueur` |
+| SET 7 0xcb29c (états 2 et 4) + reprises 0xcb896, 0xcb9c0 | porte de sortie : changement de zone (prime, joueurs morts cachés), quatre genres de sortie (zone annexe, retour, scène suivante, fin de partie), fondu 0x1460 qui cède (appelé en Rust comme un sous-programme de tâche, la tâche reprend aux étapes `set::exit_fading::Step`), sauvegarde/suspension du monde, retour de zone (état 4) | `cov_mortal_late` (scène suivante), `cov/cov_porte_annexe` (nouveau : entrée puis retour), `fuzz_door` (jusqu'à la première cession du fondu, puis fondu fini sans attendre et étape de reprise ; 3000 essais dont 728 avec fondu ; `DDSOM_PORTE=29` : porte de passage SET 29, 649 avec fondu), `fuzz families` |
+| 0x33b24 | caméras au retour d'une zone annexe (portes 7, 27, 29) | `fuzz small`, `fuzz_door`, `cov_porte_annexe` |
+| PEFF 42 0x50b9c | article en vitrine de la boutique : zone de vente, message, vente (stock, bourse BCD, inventaire, refus) | `fuzz shop` |
+| 0x514ac / 0x514cc | interprète des dialogues du marchand appelé par le comptoir PEFF 43 (12 commandes ; fonctions Rust appelées directement, plus de native) | `fuzz shop` (scripts tirés, par le comptoir 0x51076) |
+| 0x4aed0, 0x53746, 0xa2b4a, 0xa462c | créateurs (PEFF 5, pierres PSHL 0x11, ESHL 0x25, ESHL 0x34 variante 3) | `fuzz small`, `fuzz_player_shots` |
 | 0x101da, 0x1ac90, 0xb230e | palette de la scène 0x69, fin d'éclair, deux paires de cases de tuiles | `fuzz small` |
 | reprises de 0x1c86e (51 adresses de retour d'étape) et 0x1c702 | fin de la mise à jour du monde et de la phase 12 quand un gestionnaire a cédé | `scene_67`, `cov_mortal_late`, `cov_porte_annexe` |
 
@@ -404,4 +404,4 @@ Hors de ce périmètre (créateurs d'objets des familles EFFCT et ENEMY, réécr
 
 Dans EFFCT, `effects.rs` (nuage, type 26) appelait la remise en liste 0x1ee1a par `jsr_origine` (code recompilé exécuté
 directement, que l'inventaire ne voyait pas) : elle passe maintenant par la native (`Ctx::reinsert`, qui rend les
-registres comme l'original), validée par `fuzz_familles ... EFFCT:26` (134 880 essais, aucun écart).
+registres comme l'original), validée par `fuzz_families ... EFFCT:26` (134 880 essais, aucun écart).

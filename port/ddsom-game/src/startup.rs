@@ -137,7 +137,7 @@ mod var {
     /// bits, forced bits (including bit 3, Z80 running; `docs/feuilles.md`, `docs/video.md`).
     pub const PORT_COMMANDS: [(u32, u8); 3] = [(0x16, 0xf), (0x17, 8), (0x18, 8)];
     pub const REGION: u32 = 0x70;
-    /// Bit 14 of `io::CARD` zero (meaning unknown; also tested by the game task, `docs/looped.md` §1).
+    /// Bit 14 of `io::CARD` zero (meaning unknown; also tested by the game task, `docs/boucle.md` §1).
     pub const SPECIAL_CARD: u32 = 0x82;
     pub const EXIT: u32 = 0x5bc;
     pub const DSW: u32 = 0x7fd0;

@@ -1,5 +1,5 @@
 //! Player effects (PEFF), thirteenth series: type 34 (the familiar of the cleric's prayer,
-//! `player/spawn.rs::swarm`). See `docs/families/player.md`.
+//! `player/spawn.rs::swarm`). See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

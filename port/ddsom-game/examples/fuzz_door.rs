@@ -30,7 +30,7 @@ const PASSAGE: u32 = 0xd8dce;
 const FADING: u32 = 0x1460;
 /// Yield wrapper (`jsr 0xa40`) called by each step of the fade.
 const CESSION: u32 = 0xa40;
-const SENTINELLE: u32 = 0xfffe;
+const SENTINEL: u32 = 0xfffe;
 /// Task table FF0064 and stacks: specific to each machine.
 const IGNORED: std::ops::Range<u32> = 0xff_0000..0xff_0e66;
 
@@ -52,7 +52,7 @@ impl Rng {
 /// `without_cession`, each `jsr 0xa40` returns immediately (the fade runs without waiting).
 fn original(c: &mut Cpu, b: &mut Cps2Bus, stop: u32, without_cession: bool) -> Option<bool> {
     for _ in 0..2_000_000 {
-        if c.pc == SENTINELLE {
+        if c.pc == SENTINEL {
             return Some(false);
         }
         if c.pc == stop {
@@ -78,7 +78,7 @@ fn resume(c: &mut Cpu, b: &mut Cps2Bus) -> Option<ddsom_game::tasks::Step> {
 
 fn calls(c: &mut Cpu, b: &mut Cps2Bus, address: u32) {
     c.a[7] = c.a[7].wrapping_sub(4);
-    wr32(b, c.a[7], SENTINELLE);
+    wr32(b, c.a[7], SENTINEL);
     c.pc = address;
 }
 
@@ -165,9 +165,9 @@ fn principal() {
             for j in 0..4u32 {
                 let p = 0xff_85de + 0x200 * j;
                 wr8(&mut b, p, rng.among(&[0, 1, 1, 2]));
-                for (field, door_field, portee) in [(8u32, 8u32, 0x30u32), (0x10, 0x10, 0x20)] {
-                    let gap = (rng.next() % (4 * portee)) as u16;
-                    let v = ddsom_game::mem::rd16(&mut b, door + door_field).wrapping_add(gap).wrapping_sub(2 * portee as u16);
+                for (field, door_field, range_) in [(8u32, 8u32, 0x30u32), (0x10, 0x10, 0x20)] {
+                    let gap = (rng.next() % (4 * range_)) as u16;
+                    let v = ddsom_game::mem::rd16(&mut b, door + door_field).wrapping_add(gap).wrapping_sub(2 * range_ as u16);
                     wr16(&mut b, p + field, v);
                 }
             }
@@ -249,14 +249,14 @@ fn principal() {
             for _ in 0..64 {
                 let Some(e) = step else { break };
                 ddsom_game::tasks::resume_step(e, &mut c, &mut b);
-                if c.pc == SENTINELLE {
+                if c.pc == SENTINEL {
                     return true;
                 }
                 step = resume(&mut c, &mut b);
             }
             false
         }));
-        if r.ok() != Some(true) || original(&mut c2, &mut b2, SENTINELLE, true) != Some(false) {
+        if r.ok() != Some(true) || original(&mut c2, &mut b2, SENTINEL, true) != Some(false) {
             println!("trial {test}: resumption interrupted");
             seen_gaps += 1;
             continue;

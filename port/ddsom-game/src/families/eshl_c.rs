@@ -2886,7 +2886,7 @@ mod platform60 {
                 continue;
             }
             let hitbox = crate::ai_aids::Hitbox { offset: 0, half_width: 0x28, half_depth: 8 };
-            if crate::ai_aids::box_around(x.b, x.o, p, hitbox) != crate::ai_aids::InHitbox::Non {
+            if crate::ai_aids::box_around(x.b, x.o, p, hitbox) != crate::ai_aids::InHitbox::No {
                 return true;
             }
         }

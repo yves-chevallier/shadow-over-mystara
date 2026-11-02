@@ -134,7 +134,7 @@ fn read_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const READ_INPUTS: Native = Native {
     entry: 0x080c,
     name: "read_inputs",
-    run: crate::Body::Processeur(read_inputs),
+    run: crate::Body::WithCpu(read_inputs),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };
@@ -207,7 +207,7 @@ fn copy_inputs_to_players(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const COPY_INPUTS_TO_PLAYERS: Native = Native {
     entry: 0x2aec,
     name: "copy_inputs_to_players",
-    run: crate::Body::Processeur(copy_inputs_to_players),
+    run: crate::Body::WithCpu(copy_inputs_to_players),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };
@@ -242,7 +242,7 @@ fn get_player_input(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const GET_PLAYER_INPUT: Native = Native {
     entry: 0x2bfe,
     name: "get_player_input",
-    run: crate::Body::Processeur(get_player_input),
+    run: crate::Body::WithCpu(get_player_input),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };
@@ -266,7 +266,7 @@ fn clear_player_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const CLEAR_PLAYER_INPUTS: Native = Native {
     entry: 0x2bdc,
     name: "clear_player_inputs",
-    run: crate::Body::Processeur(clear_player_inputs),
+    run: crate::Body::WithCpu(clear_player_inputs),
     touches_sound: false,
     outputs: crate::regs::CCR,
 };

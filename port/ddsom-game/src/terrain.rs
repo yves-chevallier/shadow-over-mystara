@@ -135,7 +135,7 @@ impl Push<'_> {
         self.set_d(2, d2 << 4);
         let carry = d2 >> 12 & 1 != 0;
         ops::logic(self.c, (d2 << 4) as u32, Size::Word);
-        ops::drapeaux(self.c, SR_C | SR_X, if carry { SR_C | SR_X } else { 0 });
+        ops::flags(self.c, SR_C | SR_X, if carry { SR_C | SR_X } else { 0 });
         let a2 = self.variant.types.wrapping_add((d2 << 4) as i16 as u32);
         self.c.a[2] = a2;
         let category = self.field(a2, kind::CATEGORY);
@@ -309,7 +309,7 @@ pub fn push_second_leftovers(b: &mut Cps2Bus, o: Obj, leftovers: [&mut u32; 4]) 
 pub const SHADOW: Native = Native {
     entry: 0x33fe4,
     name: "terrain_push",
-    run: crate::Body::Processeur(|c, b| run(FIRST, c, b)),
+    run: crate::Body::WithCpu(|c, b| run(FIRST, c, b)),
     touches_sound: false,
     outputs: regs::ALL,
 };
@@ -317,7 +317,7 @@ pub const SHADOW: Native = Native {
 pub const SHADOW_SECOND: Native = Native {
     entry: 0x3403c,
     name: "terrain_push_2",
-    run: crate::Body::Processeur(|c, b| run(SECOND, c, b)),
+    run: crate::Body::WithCpu(|c, b| run(SECOND, c, b)),
     touches_sound: false,
     outputs: regs::ALL,
 };

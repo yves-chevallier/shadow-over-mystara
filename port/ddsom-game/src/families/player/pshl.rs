@@ -1,5 +1,5 @@
 //! Player shots (class PSHL, pool of 18 objects of 0x60 bytes, table 0x39908), first series: types 0 to 5. See
-//! `docs/families/player.md`.
+//! `docs/families/joueur.md`.
 //!
 //! The shots are born from a creator (`player/spawn.rs`) that sets their kind, their owner (`+0x50`), their boxes
 //! (`+0x2e`), the power (`+0x45`, `+0x46`) and the speed; the handler makes them live.

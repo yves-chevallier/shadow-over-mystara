@@ -1457,8 +1457,8 @@ mod shot25 {
             x.add16(0x10, dy);
         }
         x.anim_start(ANIMS, 0);
-        if let Some(ombre) = crate::families::small::shot_18(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o, 0) {
-            x.set16(0x5a, low16(ombre));
+        if let Some(shadow) = crate::families::small::shot_18(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o, 0) {
+            x.set16(0x5a, low16(shadow));
         }
         x.reinsert();
     }
@@ -1553,8 +1553,8 @@ mod shot26 {
         x.set16(0x58, 0x80);
         x.anim_start(ANIMS, 1);
         crate::sound::play(x.b, LAND_SOUND, x.o);
-        if let Some(ombre) = crate::families::small::shot_18(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o, 1) {
-            x.set16(0x5a, low16(ombre));
+        if let Some(shadow) = crate::families::small::shot_18(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o, 1) {
+            x.set16(0x5a, low16(shadow));
         }
     }
 
@@ -2762,10 +2762,10 @@ mod shot37 {
                     x.set8(0x42, 0x19);
                     *x.c.d2() &= 0xffff_0000;
                     *x.c.d3() &= 0xffff_0000;
-                    let choc = crate::effects_aids::shock(x.b, x.o, 0, 0x201, 0, 0);
+                    let impact = crate::effects_aids::shock(x.b, x.o, 0, 0x201, 0, 0);
                     // Original glitch: the debris variant is the D1.b that the shock (0xb10c8) leaves: the high byte
                     // of its setting, or the low byte when the shock is not created (scene 41, pool full).
-                    let variant = if choc.is_some() { 2 } else { 1 };
+                    let variant = if impact.is_some() { 2 } else { 1 };
                     for _ in 0..2 {
                         *x.c.d2() = 1;
                         crate::families::effects_creators::debris_rain(x.b, x.o, variant, 1);

@@ -1,5 +1,5 @@
 //! Shop: the second counter (PEFF 42, 0x50b9c) and the merchant's dialogue interpreter (0x514ac / 0x514cc) that PEFF
-//! counter 43 (`peff.rs`) starts. See `docs/families/player.md`.
+//! counter 43 (`peff.rs`) starts. See `docs/families/joueur.md`.
 //!
 //! The customer is object A2 read from the list of the four players (`0xff2aa4`); its positive `+0x58` means "it is
 //! addressing the merchant" (reset to -1 as soon as it is served), its `+0x50` designates the player's record: BCD

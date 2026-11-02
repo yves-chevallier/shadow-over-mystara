@@ -146,7 +146,7 @@ fn script(x: &mut Ctx) -> Flow {
 pub const BLACKOUT: Native = Native {
     entry: 0xf7ecc,
     name: "scene_blackout",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);

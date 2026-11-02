@@ -217,7 +217,7 @@ fn main() {
             if !diffs.is_empty() {
                 gaps += 1;
                 if std::env::var_os("FUZZ_DUMP").is_some() && examples.is_empty() {
-                    for (name, bus) in [("avant", &before), ("rust", &b), ("origine", &b2)] {
+                    for (name, bus) in [("before", &before), ("rust", &b), ("original", &b2)] {
                         for k in 0..3usize {
                             let i = (0x1020 + 0x1000 * k) / 2;
                             let sig = (0x1140 + 0x1000 * k) / 2;

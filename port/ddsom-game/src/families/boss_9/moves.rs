@@ -18,8 +18,8 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(TIMER, 0xa);
             x.set16(0x14, 0);
             x.set16(0x16, 0);
-            let Some(bulle) = crate::families::creators::scene_set(x.b, 5) else { return };
-            x.set16(MESSAGE, bulle.word());
+            let Some(bubble) = crate::families::creators::scene_set(x.b, 5) else { return };
+            x.set16(MESSAGE, bubble.word());
             next6(x);
         }
         6 => {

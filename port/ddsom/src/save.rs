@@ -42,12 +42,12 @@ impl Game {
 
     /// Replays `file` on a fresh machine (`machine` builds it from the starting EEPROM) up to the saved
     /// frame.
-    pub fn charge(file: &Path, machine: impl FnOnce(&[u8]) -> Machine) -> io::Result<(Machine, Game)> {
+    pub fn load(file: &Path, machine: impl FnOnce(&[u8]) -> Machine) -> io::Result<(Machine, Game)> {
         let eeprom = std::fs::read(eeprom_of(file))?;
         let text = std::fs::read_to_string(file)?;
         let end = text.lines().rev().find_map(|l| l.strip_suffix(" quit")?.trim().parse::<usize>().ok());
         let Some(end) = end else {
-            return Err(io::Error::new(io::ErrorKind::InvalidData, "final line « N quit » missing"));
+            return Err(io::Error::new(io::ErrorKind::InvalidData, "final line 'N quit' missing"));
         };
         let scenario = Scenario::load(file)?;
         let mut m = machine(&eeprom);

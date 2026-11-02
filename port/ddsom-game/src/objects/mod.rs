@@ -3,7 +3,7 @@
 //! Everything that moves on screen (shots, effects, enemies, bosses, animated scenery, pickable items...)
 //! is an *object*: a record of 0x50 to 0xC0 bytes in one of the 10 RAM pools
 //! (`pools`). Players have their own record (0x200 bytes) but share the
-//! common fields below. See `docs/objects.md` for the details of the formats.
+//! common fields below. See `docs/objets.md` for the details of the formats.
 //!
 //! - `Obj`: typed view of an object in RAM (address + field constants).
 //! - `pools`: allocation, release and initialization of the pools.

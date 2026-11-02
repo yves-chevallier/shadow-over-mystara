@@ -146,7 +146,7 @@ fn title_step(x: &mut Ctx, step: u8) -> Flow {
         0x1a => t1a_wait(x),
         0x1c => t1c_wait_logo(x),
         0x1e => t1e_end(x),
-        // table 0xfa2a4 has sixteen entries, all rewritten (code-mort.md, batch « sortie du Cpu »)
+        // table 0xfa2a4 has sixteen entries, all rewritten (code-mort.md, batch "CPU removal")
         _ => unreachable!("title: step {step:#x} outside table 0xfa2a4"),
     }
 }
@@ -713,7 +713,7 @@ fn second_title_step(x: &mut Ctx, step: u8) -> Flow {
             x.render();
             leave_screen(x, Step::S08Wait)
         }
-        // table 0xfaf00 has five entries, all rewritten (code-mort.md, batch « sortie du Cpu »)
+        // table 0xfaf00 has five entries, all rewritten (code-mort.md, batch "CPU removal")
         _ => unreachable!("second title: step {step:#x} outside table 0xfaf00"),
     }
 }

@@ -184,7 +184,7 @@ fn next(b: &mut Cps2Bus, current: u32) -> u8 {
 
 /// 0x19e20: one step of the pop-up state machine. Returns the queue read index if it was read (the D0.b of the
 /// original). Core.
-pub fn animer(b: &mut Cps2Bus) -> Option<u8> {
+pub fn animate_obj(b: &mut Cps2Bus) -> Option<u8> {
     let current = A5.wrapping_add(CURRENT);
     let duration = rd16(b, current + DURATION);
     if duration != 0 {
@@ -206,12 +206,12 @@ pub fn animer(b: &mut Cps2Bus) -> Option<u8> {
     Some(next(b, current))
 }
 
-/// `animer` with the registers of the original: A0 = the current pop-up, A2 = the queue, D0 = the index read.
-/// `animer` with the registers of the original (A0 = the current pop-up, A2 = the queue, D0 = the index read).
-pub fn animer_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+/// `animate_obj` with the registers of the original: A0 = the current pop-up, A2 = the queue, D0 = the index read.
+/// `animate_obj` with the registers of the original (A0 = the current pop-up, A2 = the queue, D0 = the index read).
+pub fn animate_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[0] = A5.wrapping_add(CURRENT);
     c.a[2] = A5 + INPUTS;
-    if let Some(index) = animer(b) {
+    if let Some(index) = animate_obj(b) {
         c.d[0] = index as u32;
     }
 }
@@ -230,11 +230,11 @@ pub fn clear_all(b: &mut Cps2Bus) -> u32 {
     table
 }
 
-pub const ANIMER: Native = Native {
+pub const ANIMATE: Native = Native {
     entry: 0x19e20,
     name: "popups_animer",
-    run: crate::Body::Processeur(|c, b| {
-        animer_68k(c, b);
+    run: crate::Body::WithCpu(|c, b| {
+        animate_68k(c, b);
         rts(c, b);
     }),
     touches_sound: false,

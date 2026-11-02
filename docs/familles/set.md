@@ -98,7 +98,7 @@ difficile à produire par perturbation aléatoire).
 
 ```
 export DDSOM_ROMS=/home/ycr/som/rom DDSOM_EEPROM=/home/ycr/som/testdata/eeprom_ddsom.bin
-fuzz familles <roms> <eeprom> scenarios/bot30k.txt 3000 <tours>
+fuzz families <roms> <eeprom> scenarios/bot30k.txt 3000 <tours>
 ```
 
 Le fuzz a été enrichi de manière additive (`examples/fuzz.rs`) : `DDSOM_SCENE=1` perturbe les variables de scène (A5),

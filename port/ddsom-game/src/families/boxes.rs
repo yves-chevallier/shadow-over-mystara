@@ -1,10 +1,10 @@
 //! BOX family (class 0xA): destructible crates, barrels and chests. Dispatch `0x39e50`, type table
-//! `0x39e76` (4 types). 21 slots of 0x80 bytes. See `docs/families.md`.
+//! `0x39e76` (4 types). 21 slots of 0x80 bytes. See `docs/familles.md`.
 
 use crate::objects::pools;
 use crate::objects::Obj;
 
-use super::{ajoute_u8, handler, pointeur};
+use super::{add_u8, handler, pointer};
 use super::cx::{Bench, Cx};
 use crate::objects::Current;
 use crate::machine::Machine;
@@ -13,7 +13,7 @@ use crate::machine::Machine;
 mod state {
     pub const INIT: u8 = 0;
     pub const ACTIVE: u8 = 2;
-    pub const LIBERE: u8 = 4;
+    pub const FREED: u8 = 4;
     pub const OUTSIDE_SCREEN: u8 = 6;
 }
 
@@ -23,7 +23,7 @@ mod field {
     pub const MODE: u32 = 0x2f;
     pub const GAME_SHADOWS: u32 = 0x2e;
     /// Hit received, set by the players' code.
-    pub const COUP_B: u32 = 0x6e;
+    pub const HIT_B: u32 = 0x6e;
 }
 
 mod rom {
@@ -41,7 +41,7 @@ const SHADOWS: u8 = 0x35;
 /// when a player opens it, consuming a key if it is locked. A player can also lift the
 /// crate (substate 4: it follows their hands), throw it (6: flight, bounce off the screen edge,
 /// breaks on landing) or drop it (8: fall).
-pub mod caisse {
+pub mod chest {
 use crate::families::cx::Bench;
 use crate::objects::Current;
     use crate::families::cx::{handlers, Cx};
@@ -52,12 +52,12 @@ use crate::objects::Current;
 
     /// Substates `+5` of the active state.
     mod sub {
-        pub const INTACTE: u8 = 0;
-        pub const OUVERTE: u8 = 2;
-        pub const PORTEE: u8 = 4;
-        pub const LANCEE: u8 = 6;
-        pub const LACHEE: u8 = 8;
-        pub const TOUCHEE: u8 = 0x0a;
+        pub const INTACT: u8 = 0;
+        pub const OPEN: u8 = 2;
+        pub const RANGE: u8 = 4;
+        pub const LAUNCHED: u8 = 6;
+        pub const DROPPED: u8 = 8;
+        pub const STRUCK: u8 = 0x0a;
     }
 
     mod f {
@@ -75,10 +75,10 @@ use crate::objects::Current;
         pub const VZ: u32 = 0x18;
         pub const AZ: u32 = 0x1a;
         pub const VY: u32 = 0x1c;
-        pub const RETOURNE: u32 = 0x2c;
+        pub const TURNED: u32 = 0x2c;
         pub const GAME_SHADOWS: u32 = 0x2e;
         /// Hit received, second mark set by the players' code.
-        pub const COUP: u32 = 0x33;
+        pub const HIT: u32 = 0x33;
         /// Non-zero: in the air (no shadow on the ground).
         pub const IN_FLIGHT: u32 = 0x3a;
         pub const HIDDEN: u32 = 0x40;
@@ -91,35 +91,35 @@ use crate::objects::Current;
         pub const LOCK: u32 = 0x61;
         /// Loot: in the center, by player class (`+0x63..`), bonus (`+0x69`), on the left (`+0x6a`).
         pub const LOOT_HIGH: u32 = 0x62;
-        pub const BUTIN_CLASSES: u32 = 0x63;
-        pub const BUTIN_BONUS: u32 = 0x69;
+        pub const LOOT_CLASSES: u32 = 0x63;
+        pub const LOOT_BONUS: u32 = 0x69;
         pub const LOOT_LEFT: u32 = 0x6a;
         /// Possible special effect (`+0x6b`), "effect played" mark (`+0x7d`).
         pub const SPECIAL: u32 = 0x6b;
         /// Player who struck, opened or carries the crate (16-bit RAM pointer).
         pub const PLAYER: u32 = 0x6c;
-        pub const COUP_B: u32 = 0x6e;
+        pub const HIT_B: u32 = 0x6e;
         pub const DELAY: u32 = 0x6f;
         /// Chest opened by a class 3 player: a second hit drops the bonus loot.
-        pub const SECOND_COUP: u32 = 0x70;
+        pub const SECOND_HIT: u32 = 0x70;
         /// Non-zero: the thrown crate ignores the terrain.
         pub const WITHOUT_SCENERY: u32 = 0x71;
         pub const EFFECT_CREATED: u32 = 0x76;
         /// Non-zero: the opened chest can still be struck.
-        pub const FRAPPABLE: u32 = 0x77;
+        pub const HITTABLE: u32 = 0x77;
         pub const ORIGINAL_X: u32 = 0x78;
         pub const ORIGINAL_Y: u32 = 0x7a;
-        pub const BUTIN_LACHE: u32 = 0x7c;
+        pub const LOOT_DROPPED: u32 = 0x7c;
         pub const SPECIAL_PLAYED: u32 = 0x7d;
-        pub const BONUS_LACHE: u32 = 0x7e;
+        pub const BONUS_DROPPED: u32 = 0x7e;
         /// The thrown chest bounced off the terrain.
-        pub const REBOND: u32 = 0x7f;
+        pub const BOUNCE: u32 = 0x7f;
     }
 
     /// Fields of the linked player.
     mod j {
         pub const CLASS: u32 = 0x03;
-        pub const RETOURNE: u32 = 0x2c;
+        pub const TURNED: u32 = 0x2c;
         /// Pose of the carrying player (0: no longer carrying).
         pub const POSE: u32 = 0x46;
     }
@@ -128,19 +128,19 @@ use crate::objects::Current;
     mod rom {
         pub const STATES: u32 = 0xd9a10;
         pub const SUB_STATES: u32 = 0xd9a6a;
-        pub const TOUCHEE: u32 = 0xd9abc;
-        pub const OUVERTE: u32 = 0xd9b94;
-        pub const LANCEE: u32 = 0xd9d64;
-        pub const LACHEE: u32 = 0xd9f82;
+        pub const STRUCK: u32 = 0xd9abc;
+        pub const OPEN: u32 = 0xd9b94;
+        pub const LAUNCHED: u32 = 0xd9d64;
+        pub const DROPPED: u32 = 0xd9f82;
         pub const ANIMATIONS: u32 = 0x1bebc2;
         /// Per kind: address of its 0x2a-byte sheet (characteristics, random loot).
         pub const SHEETS: u32 = 0x1051ae;
         /// Per loot number: (type, variant) of the created ITEM (read PC-relative).
-        pub const BUTINS: u32 = 0xda28a;
+        pub const LOOTS: u32 = 0xda28a;
         /// Special effects (routine addresses), by value of `SPECIAL`.
-        pub const SPECIAUX: u32 = 0xda06a;
+        pub const SPECIALS: u32 = 0xda06a;
         /// Per carrier class: table of offsets (X, Z) of the carried crate, per pose.
-        pub const PRISES: u32 = 0xda398;
+        pub const TAKEN: u32 = 0xda398;
         // subroutines not rewritten, or native
         pub const SOUND_HIT: u32 = 0xeb59e;
         pub const SOUND_BROKEN: u32 = 0xeb610;
@@ -149,9 +149,9 @@ use crate::objects::Current;
     }
 
     /// Crates broken in the scene (byte, `A5-0x5b21`).
-    const CASSEES: u32 = A5 - 0x5b21;
+    const BROKEN: u32 = A5 - 0x5b21;
     /// Players' keys (byte, `A5+0x45`).
-    const CLES: u32 = A5 + 0x45;
+    const KEYS: u32 = A5 + 0x45;
     const SHADOWS: u8 = 0x35;
     const DURATION_BLINK: u8 = 0x1e;
 
@@ -182,15 +182,15 @@ use crate::objects::Current;
     }
 
     fn count_broken<R: Bench>(x: &mut Cx<'_, R>) {
-        let n = crate::mem::rd8(x.b, CASSEES).wrapping_add(1);
-        crate::mem::wr8(x.b, CASSEES, n);
+        let n = crate::mem::rd8(x.b, BROKEN).wrapping_add(1);
+        crate::mem::wr8(x.b, BROKEN, n);
     }
 
     /// `0xda082`: copies the kind's sheet (10 bytes) and draws two random loots.
     fn charge_sheet<R: Bench>(x: &mut Cx<'_, R>) {
         let variant = x.u8(f::VARIANT) as u32;
         let sheet = x.data32(rom::SHEETS + 4 * variant);
-        let fields = [f::KIND, f::LOCK, f::LOOT_HIGH, f::BUTIN_BONUS, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68];
+        let fields = [f::KIND, f::LOCK, f::LOOT_HIGH, f::LOOT_BONUS, 0x63, 0x64, 0x65, 0x66, 0x67, 0x68];
         for (i, off) in fields.into_iter().enumerate() {
             let v = x.data8(sheet + i as u32);
             x.set8(off, v);
@@ -206,8 +206,8 @@ use crate::objects::Current;
 
     fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::STATE, 2);
-        x.set8(f::SECOND_COUP, 0);
-        x.set8(f::COUP_B, 0);
+        x.set8(f::SECOND_HIT, 0);
+        x.set8(f::HIT_B, 0);
         x.set8(f::GAME_SHADOWS, SHADOWS);
         let px = x.u16(f::X);
         x.set16(f::ORIGINAL_X, px);
@@ -226,43 +226,43 @@ use crate::objects::Current;
         let sub_state = x.u8(f::SUB_STATE);
         let target = jump(x, rom::SUB_STATES, sub_state);
         match sub_state {
-            sub::INTACTE => intacte(x),
-            sub::OUVERTE => {
+            sub::INTACT => intact(x),
+            sub::OPEN => {
                 let n = x.u8(f::SUB_SUB_STATE);
-                let target = jump(x, rom::OUVERTE, n);
+                let target = jump(x, rom::OPEN, n);
                 match n {
                     0 => opening(x),
                     2 => open_wait(x),
-                    4 => clignote(x),
+                    4 => blinks(x),
                     _ => crate::families::effects::outside_table(target),
                 }
             }
-            sub::PORTEE => {
-                x.set8(f::REBOND, 0);
-                suit_porteur(x);
+            sub::RANGE => {
+                x.set8(f::BOUNCE, 0);
+                follow_carrier(x);
             }
-            sub::LANCEE => lancee(x),
-            sub::LACHEE => {
+            sub::LAUNCHED => launched(x),
+            sub::DROPPED => {
                 let n = x.u8(f::SUB_SUB_STATE);
-                let target = jump(x, rom::LACHEE, n);
+                let target = jump(x, rom::DROPPED, n);
                 match n {
                     0 => {
                         x.add8(f::SUB_SUB_STATE, 2);
                         x.set16(f::VZ, 0xff00);
                         x.set16(f::AZ, 0xffe0);
                     }
-                    2 => lachee_chute(x),
-                    4 => lachee_casse(x),
-                    6 => clignote(x),
+                    2 => dropped_fall(x),
+                    4 => dropped_broken(x),
+                    6 => blinks(x),
                     _ => crate::families::effects::outside_table(target),
                 }
             }
-            sub::TOUCHEE => {
+            sub::STRUCK => {
                 let n = x.u8(f::SUB_SUB_STATE);
-                let target = jump(x, rom::TOUCHEE, n);
+                let target = jump(x, rom::STRUCK, n);
                 match n {
-                    0 => casse(x),
-                    2 => clignote(x),
+                    0 => broken(x),
+                    2 => blinks(x),
                     4 => tremble(x),
                     _ => crate::families::effects::outside_table(target),
                 }
@@ -272,10 +272,10 @@ use crate::objects::Current;
         x.reinsert();
     }
 
-    /// Intact: a hit (`COUP_B`) makes it go to the "hit" state; a chest immediately starts
+    /// Intact: a hit (`HIT_B`) makes it go to the "hit" state; a chest immediately starts
     /// trembler.
-    fn intacte<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(f::COUP_B) == 0 {
+    fn intact<R: Bench>(x: &mut Cx<'_, R>) {
+        if x.u8(f::HIT_B) == 0 {
             return;
         }
         x.set32(f::STATE, 0x020a_0000);
@@ -294,7 +294,7 @@ use crate::objects::Current;
         }
         x.set8(f::SPECIAL_PLAYED, 1);
         let i = 4 * x.u8(f::SPECIAL) as u32;
-        let effect = x.rom32(rom::SPECIAUX + i);
+        let effect = x.rom32(rom::SPECIALS + i);
         // ESHL creators designated by the original table
         use crate::families::eshl_creators as eshl;
         let r = &mut crate::families::effects_creators::leftovers::Pure;
@@ -316,15 +316,15 @@ use crate::objects::Current;
         }
     }
 
-    /// Creates the ITEM `butin` (type and variant read from `BUTINS`) above the crate, thrown with
+    /// Creates the ITEM `loot` (type and variant read from `LOOTS`) above the crate, thrown with
     /// speeds `(vx, vy)`. `None` if the ITEM pool is full.
-    fn created_loot<R: Bench>(x: &mut Cx<'_, R>, butin: u8, vx: u16, vy: u16) -> Option<Obj> {
+    fn created_loot<R: Bench>(x: &mut Cx<'_, R>, loot: u8, vx: u16, vy: u16) -> Option<Obj> {
         let n = x.alloc(&pools::ITEM)?;
-        let rank = 2 * butin as u32;
+        let rank = 2 * loot as u32;
         n.set_u8(x.b, f::ACTIVE, 1);
-        let kind = x.data8(rom::BUTINS + rank);
+        let kind = x.data8(rom::LOOTS + rank);
         n.set_u8(x.b, 0x2, kind);
-        let variant = x.data8(rom::BUTINS + rank + 1);
+        let variant = x.data8(rom::LOOTS + rank + 1);
         n.set_u8(x.b, f::VARIANT, variant);
         for off in [f::X, f::Z, f::Y] {
             let v = x.u16(off);
@@ -343,17 +343,17 @@ use crate::objects::Current;
 
     /// `0xda152`: the broken crate drops its loot (only once): one object in the center, one depending on the
     /// class of the player who struck (thrown to the right) and one drawn at random (thrown to the left).
-    fn lache_butin<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(f::BUTIN_LACHE) != 0 {
+    fn dropped_loot<R: Bench>(x: &mut Cx<'_, R>) {
+        if x.u8(f::LOOT_DROPPED) != 0 {
             return;
         }
-        x.set8(f::BUTIN_LACHE, 1);
+        x.set8(f::LOOT_DROPPED, 1);
         let high = x.u8(f::LOOT_HIGH);
         if high != 0 && created_loot(x, high, 0, 0).is_none() {
             return;
         }
         let class = class(x) as u32;
-        let right = x.u8(f::BUTIN_CLASSES + class);
+        let right = x.u8(f::LOOT_CLASSES + class);
         if right != 0 && created_loot(x, right, 0x140, 0x40).is_none() {
             return;
         }
@@ -364,19 +364,19 @@ use crate::objects::Current;
     }
 
     /// `0xda0e6`: the bonus loot, only once.
-    fn lache_bonus<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(f::BONUS_LACHE) != 0 {
+    fn dropped_bonus<R: Bench>(x: &mut Cx<'_, R>) {
+        if x.u8(f::BONUS_DROPPED) != 0 {
             return;
         }
-        x.set8(f::BONUS_LACHE, 1);
-        let bonus = x.u8(f::BUTIN_BONUS);
+        x.set8(f::BONUS_DROPPED, 1);
+        let bonus = x.u8(f::LOOT_BONUS);
         if bonus != 0 {
             created_loot(x, bonus, 0, 0);
         }
     }
 
     /// Final blinking: `DELAY` countdown, the crate blinks; at zero, next state.
-    fn clignote<R: Bench>(x: &mut Cx<'_, R>) {
+    fn blinks<R: Bench>(x: &mut Cx<'_, R>) {
         let remainder = x.u8(f::DELAY).wrapping_sub(1);
         x.set8(f::DELAY, remainder);
         if remainder == 0 {
@@ -387,16 +387,16 @@ use crate::objects::Current;
 
     /// Hit, sub-substate 0: the crate plays its breaking animation and drops its loot; a chest
     /// redevient intact.
-    fn casse<R: Bench>(x: &mut Cx<'_, R>) {
+    fn broken<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::KIND) >= 3 {
             x.set32(f::STATE, 0x0200_0000);
-            x.set8(f::COUP_B, 0);
+            x.set8(f::HIT_B, 0);
             x.set8(f::ACTIVE, 1);
             return;
         }
-        if x.u8(f::COUP) != 0 {
-            x.set8(f::COUP, 0);
-            lache_butin(x);
+        if x.u8(f::HIT) != 0 {
+            x.set8(f::HIT, 0);
+            dropped_loot(x);
             crate::sound::play(x.b, rom::SOUND_HIT, x.o);
             if x.u8(f::SPECIAL) != 0 {
                 effect_special(x, 0);
@@ -417,7 +417,7 @@ use crate::objects::Current;
         x.set8(f::DELAY, remainder);
         if remainder == 0 {
             x.set32(f::STATE, 0x0200_0000);
-            x.set8(f::COUP_B, 0);
+            x.set8(f::HIT_B, 0);
             x.set8(f::ACTIVE, 1);
             let ox = x.u16(f::ORIGINAL_X);
             x.set16(f::X, ox);
@@ -438,33 +438,33 @@ use crate::objects::Current;
     /// butin au premier coup.
     fn opening<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::LOCK) != 0 && class(x) != 5 {
-            let cles = crate::mem::rd8(x.b, CLES);
-            if cles == 0 {
+            let keys = crate::mem::rd8(x.b, KEYS);
+            if keys == 0 {
                 x.set32(f::STATE, 0x0200_0000);
                 x.set8(f::ACTIVE, 1);
-                etincelle_posee(x, 6);
+                spark_placed(x, 6);
                 return;
             }
-            crate::mem::wr8(x.b, CLES, cles - 1);
+            crate::mem::wr8(x.b, KEYS, keys - 1);
             x.set8(f::LOCK, 0);
         }
         let special = x.u8(f::SPECIAL);
         if special != 0 {
             if x.u8(f::EFFECT_CREATED) == 0 {
-                if etincelle_posee(x, special).is_some() {
+                if spark_placed(x, special).is_some() {
                     x.set8(f::EFFECT_CREATED, 1);
                 }
             }
-            if x.u8(f::FRAPPABLE) == 0 {
+            if x.u8(f::HITTABLE) == 0 {
                 return;
             }
         }
-        if x.u8(f::COUP) != 0 {
-            x.set8(f::COUP, 0);
+        if x.u8(f::HIT) != 0 {
+            x.set8(f::HIT, 0);
             if x.u8(f::SPECIAL) != 0 {
                 effect_special(x, 1);
             }
-            lache_butin(x);
+            dropped_loot(x);
             crate::sound::play(x.b, rom::SOUND_HIT, x.o);
         }
         if !x.anim_step() {
@@ -475,9 +475,9 @@ use crate::objects::Current;
         count_broken(x);
         if class(x) == 3 {
             x.set8(f::ACTIVE, 1);
-            x.set8(f::SECOND_COUP, 1);
+            x.set8(f::SECOND_HIT, 1);
             x.set8(f::DELAY, 0xff);
-            x.set8(f::COUP_B, 0);
+            x.set8(f::HIT_B, 0);
         }
     }
 
@@ -491,15 +491,15 @@ use crate::objects::Current;
             x.set8(f::ACTIVE, 2);
             x.set8(f::DELAY, DURATION_BLINK);
         }
-        if x.u8(f::SECOND_COUP) == 0 || x.u8(f::COUP_B) == 0 {
+        if x.u8(f::SECOND_HIT) == 0 || x.u8(f::HIT_B) == 0 {
             return;
         }
         if class(x) == 3 {
-            lache_bonus(x);
+            dropped_bonus(x);
         }
         if x.u8(f::KIND) < 3 {
             x.add8(f::STATE, 2);
-            eclats(x);
+            shards(x);
         } else {
             x.set8(f::SUB_SUB_STATE, 4);
             x.set8(f::ACTIVE, 2);
@@ -508,52 +508,52 @@ use crate::objects::Current;
     }
 
     /// `moveq #2,D0 ; moveq #0,D1 ; jsr 0xab7d8`: spray of sparks from the crate.
-    fn eclats<R: Bench>(x: &mut Cx<'_, R>) {
+    fn shards<R: Bench>(x: &mut Cx<'_, R>) {
         effects_creators::debris(x.b, x.o, 2);
     }
 
     /// `0xb1352`: spark placed on the crate; `None` if the pool is full.
-    fn etincelle_posee<R: Bench>(x: &mut Cx<'_, R>, variant: u8) -> Option<Obj> {
+    fn spark_placed<R: Bench>(x: &mut Cx<'_, R>, variant: u8) -> Option<Obj> {
         effects_creators::posed_spark(x.b, x.o, variant)
     }
 
     /// `0xd9cea`: the carried crate follows the player's hands (offset per class and pose, flipped
     /// with them); nothing if the player no longer carries.
-    fn suit_porteur<R: Bench>(x: &mut Cx<'_, R>) {
+    fn follow_carrier<R: Bench>(x: &mut Cx<'_, R>) {
         let player = x.linked(f::PLAYER);
         let class = player.u8(x.b, j::CLASS) as u32;
-        let prises = x.data32(rom::PRISES + 4 * class);
+        let taken = x.data32(rom::TAKEN + 4 * class);
         let pose = player.u8(x.b, j::POSE);
         if pose == 0 {
             return;
         }
         let i = (4 * ((4 * class & 0xff00) | pose as u32)) & 0xffff;
-        let mut dx = x.data16(prises + i);
-        let dz = x.data16(prises + i + 2);
-        let retourne = player.u8(x.b, j::RETOURNE);
-        if retourne != 0 {
+        let mut dx = x.data16(taken + i);
+        let dz = x.data16(taken + i + 2);
+        let turned = player.u8(x.b, j::TURNED);
+        if turned != 0 {
             dx = dx.wrapping_neg();
         }
-        x.set8(f::RETOURNE, retourne);
+        x.set8(f::TURNED, turned);
         x.copy_pos(player);
         x.add16(f::X, dx);
         x.add16(f::Z, dz);
     }
 
     /// Thrown (`0xd9d38`): waits `WAIT_FLIGHT`, then flies (sub-substates) and realigns itself with the terrain.
-    fn lancee<R: Bench>(x: &mut Cx<'_, R>) {
+    fn launched<R: Bench>(x: &mut Cx<'_, R>) {
         let wait_kind = x.u8(f::WAIT_FLIGHT);
         if wait_kind != 0 {
             x.set8(f::WAIT_FLIGHT, wait_kind.wrapping_sub(1) & 7);
             return;
         }
         let n = x.u8(f::SUB_SUB_STATE);
-        let target = jump(x, rom::LANCEE, n);
+        let target = jump(x, rom::LAUNCHED, n);
         match n {
             0 => launched_start(x),
             2 => launched_flight(x),
-            4 => lancee_retombe(x),
-            6 => clignote(x),
+            4 => launched_lands(x),
+            6 => blinks(x),
             _ => crate::families::effects::outside_table(target),
         }
         x.push_terrain();
@@ -565,7 +565,7 @@ use crate::objects::Current;
     fn launched_start<R: Bench>(x: &mut Cx<'_, R>) {
         let player = x.linked(f::PLAYER);
         if player.u8(x.b, j::POSE) != 0 {
-            return suit_porteur(x);
+            return follow_carrier(x);
         }
         x.add8(f::SUB_SUB_STATE, 2);
         x.set8(f::ACTIVE, 1);
@@ -574,7 +574,7 @@ use crate::objects::Current;
         x.set16(f::AZ, 0xffc8);
         x.set16(f::AX, 0);
         x.set16(f::VZ, 0);
-        if player.u8(x.b, j::RETOURNE) == 0 {
+        if player.u8(x.b, j::TURNED) == 0 {
             x.set16(f::VX, 0xfc80);
         }
         launched_flight(x);
@@ -602,23 +602,23 @@ use crate::objects::Current;
                 return;
             }
             x.add8(f::STATE, 2);
-            if x.u8(f::SECOND_COUP) != 0 && class(x) == 3 {
-                lache_bonus(x);
+            if x.u8(f::SECOND_HIT) != 0 && class(x) == 3 {
+                dropped_bonus(x);
             } else {
-                lache_butin(x);
+                dropped_loot(x);
             }
-            eclats(x);
+            shards(x);
             crate::sound::play(x.b, rom::SOUND_LANDS, x.o);
             return count_broken(x);
         }
-        let rebondit = x.u8(f::REBOND) == 0 && (x.u8(f::WITHOUT_SCENERY) != 0 || obstacle(x));
-        let pose = if rebondit {
-            x.set8(f::REBOND, 1);
+        let bounces = x.u8(f::BOUNCE) == 0 && (x.u8(f::WITHOUT_SCENERY) != 0 || obstacle(x));
+        let pose = if bounces {
+            x.set8(f::BOUNCE, 1);
             x.set8(f::WITHOUT_SCENERY, 0);
             let vx = x.u16(f::VX).wrapping_neg();
             x.set16(f::VX, vx);
-            let r = x.u8(f::RETOURNE) ^ 0x20;
-            x.set8(f::RETOURNE, r);
+            let r = x.u8(f::TURNED) ^ 0x20;
+            x.set8(f::TURNED, r);
             advance(x) <= 0
         } else {
             advance(x) < 0
@@ -629,12 +629,12 @@ use crate::objects::Current;
             x.set8(f::WITHOUT_SCENERY, 0);
             x.set16(f::Z, 0);
             x.set8(f::IN_FLIGHT, 0);
-            x.set8(f::REBOND, 0);
+            x.set8(f::BOUNCE, 0);
             x.set16(f::VX, 0x200);
             x.set16(f::AX, 0);
             x.set16(f::VZ, 0x300);
             x.set16(f::AZ, 0xffc8);
-            if x.u8(f::RETOURNE) == 0 {
+            if x.u8(f::TURNED) == 0 {
                 x.set16(f::VX, 0xfe00);
             }
         }
@@ -643,19 +643,19 @@ use crate::objects::Current;
 
     /// Thrown, 4: the chest falls back after its bounce; once placed, it becomes intact again (or, opened by
     /// class 3, waits for its blinking while dropping the bonus).
-    fn lancee_retombe<R: Bench>(x: &mut Cx<'_, R>) {
+    fn launched_lands<R: Bench>(x: &mut Cx<'_, R>) {
         if advance(x) >= 0 {
             return stays_on_screen(x);
         }
-        if x.u8(f::SECOND_COUP) != 0 && class(x) == 3 {
+        if x.u8(f::SECOND_HIT) != 0 && class(x) == 3 {
             x.add8(f::SUB_SUB_STATE, 2);
             x.set8(f::ACTIVE, 2);
             x.set8(f::DELAY, DURATION_BLINK);
-            return lache_bonus(x);
+            return dropped_bonus(x);
         }
         x.set32(f::STATE, 0x0200_0000);
         x.set16(f::Z, 0);
-        x.set8(f::COUP_B, 0);
+        x.set8(f::HIT_B, 0);
         stays_on_screen(x);
     }
 
@@ -681,7 +681,7 @@ use crate::objects::Current;
     }
 
     /// Dropped, 2: fall; on the ground, a chest with no special effect becomes intact again, otherwise the crate waits.
-    fn lachee_chute<R: Bench>(x: &mut Cx<'_, R>) {
+    fn dropped_fall<R: Bench>(x: &mut Cx<'_, R>) {
         x.move_z();
         if x.u16(f::Z) as i16 >= 0 {
             return;
@@ -693,7 +693,7 @@ use crate::objects::Current;
         }
         x.set32(f::STATE, 0x0200_0000);
         x.set8(f::ACTIVE, 1);
-        x.set8(f::COUP_B, 0);
+        x.set8(f::HIT_B, 0);
         let px = x.u16(f::X);
         x.set16(f::ORIGINAL_X, px);
         let py = x.u16(f::Y);
@@ -702,10 +702,10 @@ use crate::objects::Current;
     }
 
     /// Dropped, 4: on the first hit, loot and special effect; end of animation: blinking.
-    fn lachee_casse<R: Bench>(x: &mut Cx<'_, R>) {
-        if x.u8(f::COUP) != 0 {
-            x.set8(f::COUP, 0);
-            lache_butin(x);
+    fn dropped_broken<R: Bench>(x: &mut Cx<'_, R>) {
+        if x.u8(f::HIT) != 0 {
+            x.set8(f::HIT, 0);
+            dropped_loot(x);
             crate::sound::play(x.b, rom::SOUND_HIT, x.o);
             count_broken(x);
             if x.u8(f::SPECIAL) != 0 {
@@ -720,7 +720,7 @@ use crate::objects::Current;
     }
 
     handlers! {
-        0xd99fa "box_caisse" #[without] run,
+        0xd99fa "box_crate" #[without] run,
     }
 }
 
@@ -745,14 +745,14 @@ fn box_2<R: Bench>(ctx: &mut Cx<'_, R>) {
     let target = super::effects::target(ctx, scenery::TABLE_STATES, state as u32);
     match state {
         state::INIT => {
-            ajoute_u8(ctx, o, Obj::STATE, 2);
+            add_u8(ctx, o, Obj::STATE, 2);
             o.set_u8(ctx.b, Obj::ACTIVE, 2);
             o.set_u8(ctx.b, field::GAME_SHADOWS, SHADOWS);
             ctx.anim_start(rom::ANIMATIONS, scenery::ANIMATION);
             ctx.reinsert();
         }
         state::ACTIVE => ctx.reinsert(),
-        state::LIBERE | state::OUTSIDE_SCREEN => ctx.free(&pools::BOX),
+        state::FREED | state::OUTSIDE_SCREEN => ctx.free(&pools::BOX),
         _ => crate::families::effects::outside_table(target),
     }
 }
@@ -765,49 +765,49 @@ fn box_2<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// 1, two-phase mechanism whose animation changes the state of the striking object (`+0x6c`);
 /// variant 3 like 0 at initialization. The object disappears when the camera has passed it by 0x200.
 /// Not exercised.
-mod barriere {
+mod barrier {
     pub const ENTRY: u32 = 0xda578;
     pub const STATES: u32 = 0xda58e;
     pub const INITS: u32 = 0xda5a6;
-    pub const ACTIFS: u32 = 0xda5f4;
+    pub const ACTIVE_COUNT: u32 = 0xda5f4;
     pub const SUB_STATES_0: u32 = 0xda624;
     pub const SUB_STATES_1: u32 = 0xda65e;
     pub const ANIMATIONS_0: u32 = 0x1bed06;
     pub const ANIMATIONS_1: u32 = 0x1712d4;
     pub const POSITIONS: u32 = 0xda72c;
     pub const SOUND: u32 = 0xeae86;
-    pub const FRAPPEUR: u32 = 0x6c;
+    pub const HITTER: u32 = 0x6c;
     pub const SET_CREATED: u32 = 0x7c;
 }
 
 /// `0xda6f4`: creates the barrier's SET object and attaches it.
 fn barrier_created_set<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let Some(new) = super::creators::scene_set(ctx.b, 0x8b) else { return };
-    let frappeur = pointeur(ctx, o, barriere::FRAPPEUR);
+    let hitter = pointer(ctx, o, barrier::HITTER);
     let mode = (o.u8(ctx.b, field::MODE) as u32) << 3;
-    let class = ((frappeur.u8(ctx.b, 3) & 0xf) >> 1) as u32;
-    let position = ctx.prog8(barriere::POSITIONS + ((mode + class) & 0xffff));
+    let class = ((hitter.u8(ctx.b, 3) & 0xf) >> 1) as u32;
+    let position = ctx.prog8(barrier::POSITIONS + ((mode + class) & 0xffff));
     new.set_u8(ctx.b, 0x42, position);
-    let character = frappeur.u8(ctx.b, 2);
+    let character = hitter.u8(ctx.b, 2);
     new.set_u8(ctx.b, 0x43, character);
-    o.set_u16(ctx.b, barriere::SET_CREATED, new.0 as u16);
+    o.set_u16(ctx.b, barrier::SET_CREATED, new.0 as u16);
 }
 
-fn barriere_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+fn barrier_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    let target = super::effects::target(ctx, barriere::INITS, 2 * variant as u32);
+    let target = super::effects::target(ctx, barrier::INITS, 2 * variant as u32);
     match variant {
         0 | 3 => {
-            ajoute_u8(ctx, o, Obj::STATE, 2);
+            add_u8(ctx, o, Obj::STATE, 2);
             o.set_u8(ctx.b, field::GAME_SHADOWS, SHADOWS);
             o.set_u32(ctx.b, 0x78, 0);
-            ctx.anim_start(barriere::ANIMATIONS_0, 0);
+            ctx.anim_start(barrier::ANIMATIONS_0, 0);
         }
         1 => {
-            ajoute_u8(ctx, o, Obj::STATE, 2);
+            add_u8(ctx, o, Obj::STATE, 2);
             o.set_u8(ctx.b, field::GAME_SHADOWS, SHADOWS);
             super::eshl_creators::single_3c(&mut crate::families::effects_creators::leftovers::Pure, ctx.b, o);
-            ctx.anim_start(barriere::ANIMATIONS_1, 4);
+            ctx.anim_start(barrier::ANIMATIONS_1, 4);
         }
         _ => crate::families::effects::outside_table(target),
     }
@@ -817,22 +817,22 @@ fn barriere_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 /// when it leaves the screen.
 fn barrier_active_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sub_state = o.u8(ctx.b, field::SUB_STATE);
-    let target = super::effects::target(ctx, barriere::SUB_STATES_0, sub_state as u32);
+    let target = super::effects::target(ctx, barrier::SUB_STATES_0, sub_state as u32);
     match sub_state {
         0 => {
-            let coup = o.u8(ctx.b, field::COUP_B);
-            if !(coup == 0) {
-                ajoute_u8(ctx, o, field::SUB_STATE, 2);
+            let hit = o.u8(ctx.b, field::HIT_B);
+            if !(hit == 0) {
+                add_u8(ctx, o, field::SUB_STATE, 2);
                 barrier_created_set(ctx, o);
             }
             ctx.reinsert();
         }
         2 => {
-            let set = pointeur(ctx, o, barriere::SET_CREATED);
+            let set = pointer(ctx, o, barrier::SET_CREATED);
             let finished = set.u8(ctx.b, 0x22) != 0;
             if finished {
                 o.set_u8(ctx.b, field::SUB_STATE, 0);
-                o.set_u8(ctx.b, field::COUP_B, 0);
+                o.set_u8(ctx.b, field::HIT_B, 0);
             }
         }
         _ => crate::families::effects::outside_table(target),
@@ -840,24 +840,24 @@ fn barrier_active_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let (cam_x, _) = ctx.camera();
     let gap = cam_x.wrapping_sub(o.u16(ctx.b, Obj::X));
     if !((gap as i16) < 0x200) {
-        ajoute_u8(ctx, o, Obj::STATE, 2);
+        add_u8(ctx, o, Obj::STATE, 2);
     }
 }
 
 fn barrier_active_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sub_state = o.u8(ctx.b, field::SUB_STATE);
-    let target = super::effects::target(ctx, barriere::SUB_STATES_1, sub_state as u32);
+    let target = super::effects::target(ctx, barrier::SUB_STATES_1, sub_state as u32);
     match sub_state {
         0 | 4 => {
-            let coup = o.u8(ctx.b, field::COUP_B);
-            if coup == 0 {
+            let hit = o.u8(ctx.b, field::HIT_B);
+            if hit == 0 {
                 return ctx.reinsert();
             }
-            ajoute_u8(ctx, o, field::SUB_STATE, 2);
-            let frappeur = pointeur(ctx, o, barriere::FRAPPEUR);
-            frappeur.set_u32(ctx.b, Obj::STATE, 0x0200_3000);
+            add_u8(ctx, o, field::SUB_STATE, 2);
+            let hitter = pointer(ctx, o, barrier::HITTER);
+            hitter.set_u32(ctx.b, Obj::STATE, 0x0200_3000);
             let animation = if sub_state == 0 { 5 } else { 6 };
-            ctx.anim_start(barriere::ANIMATIONS_1, animation);
+            ctx.anim_start(barrier::ANIMATIONS_1, animation);
         }
         2 | 6 => {
             let end = ctx.anim_step();
@@ -865,12 +865,12 @@ fn barrier_active_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 return;
             }
             if sub_state == 2 {
-                ajoute_u8(ctx, o, field::SUB_STATE, 2);
+                add_u8(ctx, o, field::SUB_STATE, 2);
             } else {
-                ajoute_u8(ctx, o, field::SUB_STATE, 0xfa);
+                add_u8(ctx, o, field::SUB_STATE, 0xfa);
             }
-            o.set_u8(ctx.b, field::COUP_B, 0);
-            crate::sound::play(ctx.b, barriere::SOUND, ctx.obj());
+            o.set_u8(ctx.b, field::HIT_B, 0);
+            crate::sound::play(ctx.b, barrier::SOUND, ctx.obj());
         }
         _ => crate::families::effects::outside_table(target),
     }
@@ -883,25 +883,25 @@ fn barrier_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
         return;
     }
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = super::effects::target(ctx, barriere::STATES, state as u32);
+    let target = super::effects::target(ctx, barrier::STATES, state as u32);
     match state {
-        state::INIT => barriere_init(ctx, o),
+        state::INIT => barrier_init(ctx, o),
         state::ACTIVE => {
             let variant = o.u8(ctx.b, Obj::VARIANT);
-            let target = super::effects::target(ctx, barriere::ACTIFS, 2 * variant as u32);
+            let target = super::effects::target(ctx, barrier::ACTIVE_COUNT, 2 * variant as u32);
             match variant {
                 0 => barrier_active_0(ctx, o),
                 1 => barrier_active_1(ctx, o),
                 _ => crate::families::effects::outside_table(target),
             }
         }
-        state::LIBERE | state::OUTSIDE_SCREEN => ctx.free(&pools::BOX),
+        state::FREED | state::OUTSIDE_SCREEN => ctx.free(&pools::BOX),
         _ => crate::families::effects::outside_table(target),
     }
 }
 
-handler!(BOX_1, barriere::ENTRY, "box_barriere", #[without] barrier_handler);
-handler!(BOX_2, scenery::ENTRY, "box_decor", #[without] box_2);
+handler!(BOX_1, barrier::ENTRY, "box_barrier", #[without] barrier_handler);
+handler!(BOX_2, scenery::ENTRY, "box_scenery", #[without] box_2);
 
 // ---------------------------------------------------------------------------------------------
 // Type 3 : bloc poussable (0xda7f2)
@@ -910,7 +910,7 @@ handler!(BOX_2, scenery::ENTRY, "box_decor", #[without] box_2);
 /// in X between two bounds, accompanied by a SET (type 7, variant 0xc); out of the bounds, it stops (substate
 /// 2) and notifies its SET. Variant 1: slides in height (`+0x10`) and realigns itself with the terrain at each step.
 /// The pushing player is placed back against the block (offset per character and direction).
-pub mod pousse {
+pub mod pushes {
 use crate::families::cx::Bench;
 use crate::objects::Current;
     use crate::families::cx::{handlers, Cx};
@@ -933,9 +933,9 @@ use crate::objects::Current;
         /// Bounds of variant 0 (minimum X excluded, maximum X).
         pub const X_MIN: u32 = 0x60;
         pub const X_MAX: u32 = 0x62;
-        pub const ARRETE: u32 = 0x64;
+        pub const STOPS: u32 = 0x64;
         pub const MOBILE: u32 = 0x65;
-        pub const POUSSE: u32 = 0x66;
+        pub const PUSHES: u32 = 0x66;
         /// Character of the pushing player × 2.
         pub const CHARACTER: u32 = 0x68;
         /// Pushing player (word, 0 = none).
@@ -949,7 +949,7 @@ use crate::objects::Current;
         pub const CHARACTER: u32 = 0x3;
         pub const DIRECTION: u32 = 0x7;
         /// Bit 4 of `+0x6e`: step of two pixels; `+0x33` non-zero: one more pixel.
-        pub const ELAN: u32 = 0x6e;
+        pub const MOMENTUM: u32 = 0x6e;
         pub const FORCE: u32 = 0x33;
     }
     /// Push directions (`+7` of the player).
@@ -1012,14 +1012,14 @@ use crate::objects::Current;
     }
 
     /// The pushing player (A1), if still pushing; otherwise the block forgets them.
-    fn pousseur<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
+    fn pusher<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
         if x.u16(f::PLAYER) == 0 {
             return None;
         }
         let player = x.linked(f::PLAYER);
         let states = player.u32(x.b, j::STATES) & 0xffff_ff00;
         if states != j::PUSHING {
-            x.set8(f::POUSSE, 0);
+            x.set8(f::PUSHES, 0);
             x.set16(f::PLAYER, 0);
             return None;
         }
@@ -1043,22 +1043,22 @@ use crate::objects::Current;
         let px = x.u16(0x8);
         if px > x.u16(f::X_MAX) || px <= x.u16(f::X_MIN) {
             x.add8(0x5, 2);
-            x.set8(f::ARRETE, 1);
+            x.set8(f::STOPS, 1);
             let set = x.linked(f::SET);
             set.set_u8(x.b, 0x2f, 0);
             return;
         }
-        let Some(player) = pousseur(x) else { return };
-        let (signe, table) = match player.u8(x.b, j::DIRECTION) {
+        let Some(player) = pusher(x) else { return };
+        let (sign, table) = match player.u8(x.b, j::DIRECTION) {
             dir::LEFT => (-1i16, AGAINST_LEFT_0),
             dir::RIGHT => (1, AGAINST_RIGHT_0),
             _ => return,
         };
-        if player.u8(x.b, j::ELAN) & 0x10 != 0 {
-            x.add16(0x8, (2 * signe) as u16);
+        if player.u8(x.b, j::MOMENTUM) & 0x10 != 0 {
+            x.add16(0x8, (2 * sign) as u16);
         }
         if player.u8(x.b, j::FORCE) != 0 {
-            x.add16(0x8, signe as u16);
+            x.add16(0x8, sign as u16);
         }
         realign_player(x, 0x8, table);
     }
@@ -1077,9 +1077,9 @@ use crate::objects::Current;
 
     /// Variant 1: sliding in height (directions 2 and 4) or in X (6 and 8).
     fn active_1<R: Bench>(x: &mut Cx<'_, R>) {
-        let Some(player) = pousseur(x) else { return };
+        let Some(player) = pusher(x) else { return };
         let direction = player.u8(x.b, j::DIRECTION);
-        let (axe, signe, table) = match direction {
+        let (axe, sign, table) = match direction {
             dir::HIGH => (0x10, 1i16, AGAINST_HIGH),
             dir::LOW => (0x10, -1, AGAINST_LOW),
             dir::LEFT => (0x8, -1, AGAINST_LEFT_1),
@@ -1087,17 +1087,17 @@ use crate::objects::Current;
             _ => return,
         };
         let horizontal = axe == 0x8;
-        let step_long = if horizontal { 2 * signe } else { signe };
-        if player.u8(x.b, j::ELAN) & 0x10 != 0 {
+        let step_long = if horizontal { 2 * sign } else { sign };
+        if player.u8(x.b, j::MOMENTUM) & 0x10 != 0 {
             step(x, axe, step_long);
         }
         // the player is read again after each call
         let player = x.linked(f::PLAYER);
         if player.u8(x.b, j::FORCE) != 0 {
             if horizontal {
-                x.add16(axe, signe as u16);
+                x.add16(axe, sign as u16);
             } else {
-                step(x, axe, signe);
+                step(x, axe, sign);
             }
         }
         if horizontal {
@@ -1107,6 +1107,6 @@ use crate::objects::Current;
     }
 
     handlers! {
-        0xda7f2 "box_pousse" #[without] run,
+        0xda7f2 "box_pushes" #[without] run,
     }
 }

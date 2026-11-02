@@ -1,5 +1,5 @@
 //! Player effects (PEFF), eighth series: types 25 to 29 (downpour, wizard's lightning, ring, moon, prayer aura). See
-//! `docs/families/player.md`.
+//! `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -341,9 +341,9 @@ mod ring {
                 x.set8(0x5e, 1);
                 let owner = x.linked(f::OWNER);
                 if owner.u8(x.b, 0x15e) == 0x16 {
-                    crate::palette::set_flash_color(x.b, crate::families::small::ECLAIR_JAUNE);
+                    crate::palette::set_flash_color(x.b, crate::families::small::LIGHTNING_YELLOW);
                 } else {
-                    crate::palette::set_flash_color(x.b, crate::families::small::ECLAIR_VERT);
+                    crate::palette::set_flash_color(x.b, crate::families::small::LIGHTNING_GREEN);
                 }
             }
             4 if child => {

@@ -44,12 +44,12 @@ fn main() {
         script.apply(f, &mut asset);
         let (a, b) = (rom.run_frame(), asset.run_frame());
         if a != b {
-            println!("DIFFÉRENT: frame {f} (graphics)");
+            println!("DIFFERENT: frame {f} (graphics)");
             std::process::exit(1);
         }
         let (sa, sb): (Vec<_>, Vec<_>) = (rom.sound.audio.drain(..).collect(), asset.sound.audio.drain(..).collect());
         if sa != sb {
-            println!("DIFFÉRENT: frame {f} (samples)");
+            println!("DIFFERENT: frame {f} (samples)");
             std::process::exit(1);
         }
         audio += sa.len();

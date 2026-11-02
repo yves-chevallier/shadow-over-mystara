@@ -20,7 +20,7 @@ macro_rules! action_native {
         pub const $name: crate::Native = crate::Native {
             entry: $entry,
             name: $label,
-            run: crate::Body::Processeur(|c, b| {
+            run: crate::Body::WithCpu(|c, b| {
                 let p = $crate::player::Player(c.a[0]);
                 $f(&mut $crate::player::Ctx::new(c, b), p);
                 $crate::mem::rts(c, b)

@@ -1,5 +1,5 @@
 //! Game data tables: `assets/data/players.json`, `combat.json`, `enemies.json`, `boxes.json`,
-//! `scenes.json`. See docs/assets.md (« Tables de données ») for the meaning of each table.
+//! `scenes.json`. See docs/assets.md ("data tables") for the meaning of each table.
 //!
 //! A table is a sequence of rows of the same format, stored as-is in ROM (big-endian):
 //! `format` gives the type of each column, `fields` (optional) their name. A single-column table
@@ -298,7 +298,7 @@ fn plain_char(c: u32) -> Option<char> {
     (c.is_ascii_graphic() && c != '{' && c != '}').then_some(c)
 }
 
-/// « high » or « tiles » text -> string (see `TextBlock`).
+/// "high" or "tiles" text -> string (see `TextBlock`).
 pub fn encode_units(units: &[u16], tiles: bool) -> String {
     let (space, base) = if tiles { (0x1800, 0x1880) } else { (0x80, 0x80) };
     let mut s = String::new();

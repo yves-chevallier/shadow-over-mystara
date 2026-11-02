@@ -1,6 +1,6 @@
-//! Check of the program region rebuilt from the assets (docs/sans-rom.md « Couverture complète des
-//! données »): every rebuilt byte equals the ROM, in both spaces, and the only missing bytes are the 68000
-//! code that `data/remainder.json` declares (`code`). Lists the missing ranges and their total.
+//! Check of the program region rebuilt from the assets (docs/sans-rom.md "full data coverage"
+//! section): every rebuilt byte equals the ROM, in both spaces, and the only missing bytes are the 68000
+//! code that `data/reste.json` declares (`code`). Lists the missing ranges and their total.
 //!
 //!   full_program <assets> <roms> [--liste]
 //!

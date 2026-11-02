@@ -72,7 +72,7 @@ fn principal() {
     let env = |k: &str, d: u32| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);
     let n_variants = env("RECENS_VARIANTES", 16);
     let step = env("RECENS_PAS", 40);
-    let tours = env("RECENS_TOURS", 8);
+    let rounds = env("RECENS_TOURS", 8);
     let wanted: Option<Vec<u32>> = a.get(5).map(|s| s.split(',').map(|x| x.parse().unwrap()).collect());
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
@@ -105,7 +105,7 @@ fn principal() {
         let mut zone: BTreeMap<u32, BTreeSet<u32>> = BTreeMap::new();
         let mut panics = 0;
         for v in 0..n_variants {
-            for tour in 0..tours {
+            for tour in 0..rounds {
                 for s5 in [0u8, 2, 4, 6, 8, 0xa, 0xc, 0xe] {
                     let (mut c, mut b) = (c0.clone(), b0.clone());
                     b.irq_horizon = u64::MAX;
@@ -173,7 +173,7 @@ fn principal() {
                         let sites = SITES.with(|s| std::mem::take(&mut *s.borrow_mut()));
                         let pcs = PCS.with(|p| std::mem::take(&mut *p.borrow_mut()));
                         // suspicious call: the original went off the rails (exception, odd address, budget exhausted)
-                        let suspect = r.is_err() || sites.iter().any(|(f, a)| f.starts_with("demarrage") || a & 1 != 0);
+                        let suspect = r.is_err() || sites.iter().any(|(f, a)| f.starts_with("boot_") || a & 1 != 0);
                         for (site, routine) in sites {
                             let site = if suspect { format!("? {site}") } else { site };
                             let e = reading.entry((v, site, routine)).or_insert((0, format!("start {start} step {k} state {state}")));

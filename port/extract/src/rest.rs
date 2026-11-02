@@ -1,5 +1,5 @@
 //! Tables read by the game in Rust (`ddsom-game`) that the other files do not cover: `data/rest.json`.
-//! Measurement and list of the remaining zones: docs/assets.md « Lectures de la ROM programme par le Rust ».
+//! Measurement and list of the remaining zones: docs/assets.md "program ROM reads by the Rust code".
 //!
 //! * tile-cell animation scripts of the type 4 and 6 SETs (`families/set.rs`, `tile_anim`);
 //! * palette animation scripts of the type 0 SETs (`families/set.rs`, `palette_script`);

@@ -56,7 +56,7 @@ fn main() {
     };
     let img = render(&v, &gfx);
 
-    let f = std::fs::File::create(&a[3]).expect("sortie");
+    let f = std::fs::File::create(&a[3]).expect("output");
     let mut enc = png::Encoder::new(f, SCREEN_W as u32, SCREEN_H as u32);
     enc.set_color(png::ColorType::Rgb);
     enc.set_depth(png::BitDepth::Eight);

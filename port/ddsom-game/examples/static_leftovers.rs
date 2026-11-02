@@ -1,4 +1,4 @@
-//! Static analysis of the « leftover readers »: for each handler of the object tables, looks for
+//! Static analysis of the "leftover readers": for each handler of the object tables, looks for
 //! the registers D1-D6 and A2-A4 read before being written, on at least one path of the original code.
 //! The dispatch loop only sets A0, A5, D7, D0 (type × 4) and A1 (handler address): the other
 //! registers are those the previous handler left behind.
@@ -124,7 +124,7 @@ fn main() {
             }
             let range_end = all.iter().copied().find(|&e| e > entry).unwrap_or(hi);
             let inside = |t: u32| (entry..range_end).contains(&t) && t % 2 == 0;
-            // minimal « definitely written » state per address, fixed point
+            // minimal "definitely written" state per address, fixed point
             let mut state: BTreeMap<u32, u16> = BTreeMap::new();
             let mut todo = vec![(entry, initial)];
             let mut reads: BTreeMap<(u32, u32), String> = BTreeMap::new();

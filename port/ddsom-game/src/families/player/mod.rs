@@ -1,4 +1,4 @@
-//! Player shots (PSHL) and effects (PEFF): one handler per type, see `docs/families/player.md`.
+//! Player shots (PSHL) and effects (PEFF): one handler per type, see `docs/families/joueur.md`.
 
 use crate::Native;
 

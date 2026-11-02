@@ -200,8 +200,8 @@ fn wait_stop<R: Bench>(x: &mut Cx<'_, R>) {
         x.set_a5_u8(0x3c, 1);
         x.set_a5_u8(0x33, 1);
         freeze_players(x, true);
-        if let Some(bulle) = crate::families::creators::scene_set(x.b, 0xe) {
-            x.set16(MESSAGE, bulle.word());
+        if let Some(bubble) = crate::families::creators::scene_set(x.b, 0xe) {
+            x.set16(MESSAGE, bubble.word());
             x.add8(f::SUB2, 2);
             lib::sound(x, 0xe0d8c);
             x.set8(TALKING, 1);

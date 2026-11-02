@@ -1,11 +1,11 @@
-//! Zones of the program ROM read by the Rust code (output of `lectures_rom` of ddsom-game) that the
+//! Zones of the program ROM read by the Rust code (output of `rom_reads` of ddsom-game) that the
 //! resources do not rebuild.
 //!
 //!   rom_coverage <assets> <reads.txt> [gap]
-//!   rom_coverage <assets> --octets <file> [--sans <asset file>]
+//!   rom_coverage <assets> --bytes <file> [--without <asset file>]
 //!
 //! The second form writes the coverage word by word (one byte per word, data then program, 1 = covered)
-//! for `DDSOM_COUVERT` of `lectures_rom`; `--sans data/natives.json` writes it without that file (for
+//! for `DDSOM_COUVERT` of `rom_reads`; `--without data/natives.json` writes it without that file (for
 //! `tools/native_zones.py`, which regenerates it).
 //!
 //! Prints, per space (data `d`, program `p`), the total read, the covered share, then the read zones that are not
@@ -18,7 +18,7 @@ use ddsom_assets::rebuild::Program;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
-    if (a.len() == 4 || a.len() == 6 && a[4] == "--sans") && a[2] == "--octets" {
+    if (a.len() == 4 || a.len() == 6 && a[4] == "--without") && a[2] == "--bytes" {
         let without = a.get(5).cloned().unwrap_or_default();
         let p = Program::load_files(Path::new(&a[1]), &|f| f != without).expect("resources");
         let mut out = Vec::new();

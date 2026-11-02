@@ -50,7 +50,7 @@ contre pilote Rust sur la région reconstruite, DSP complet contre DSP réduit �
 
 ## Ce que le jeu sans 68000 lit dans la région programme
 
-**Mesure.** `lectures_rom` (fonctionnalité `rom-trace`, [assets.md](assets.md) « Lectures de la ROM programme par le
+**Mesure.** `rom_reads` (fonctionnalité `rom-trace`, [assets.md](assets.md) « Lectures de la ROM programme par le
 Rust ») tourne sans 68000. Toute lecture du bus dans 0x000000-0x3fffff y est comptée (il n'y
 a plus d'instruction 68000 à exclure), en espace données (`rd8`/`rd16`/`rd32`, `data16`...) et programme
 (`prog16`, `rom16` des familles, `Ctx::prog16`...). Lancement sur **tous les scénarios** (269, autant d'images que
@@ -59,7 +59,7 @@ leur validation : la ligne `quit` d'un scénario ne l'arrête pas, le jeu contin
 ```sh
 cd port
 CARGO_TARGET_DIR=target/trace cargo build --release -p ddsom-game --example rom_reads --features rom-trace
-target/release/examples/rom_coverage <assets> --octets couvert.bin --sans data/natives.json
+target/release/examples/rom_coverage <assets> --bytes couvert.bin --without data/natives.json
 DDSOM_COUVERT=couvert.bin target/trace/release/examples/rom_reads <roms> <eeprom> lectures.txt \
     ../scenarios/bot30k.txt:30000 ...
 ../tools/native_zones.py couvert.bin lectures*.txt > extract/native_zones.txt   # puis extract ... data
@@ -101,7 +101,7 @@ programme qui n'est pas du code 68000 est de la donnée, et il y est rangé s'il
 **Le code exclu est le code exécuté.** `port/extract/code_68k.txt` (versionné : des adresses, pas d'octets de la
 ROM) liste les plages d'octets des instructions que la machine de référence (code d'origine recompilé, 68000
 surcadencé, comme la machine B de `validate`) exécute sur les 272 scénarios de la validation complète
-(`tools/code_68k.sh`, exemple `code_execute` de ddsom-game : têtes des blocs recompilés exécutés, étendues jusqu'à
+(`tools/code_68k.sh`, exemple `executed_code` de ddsom-game : têtes des blocs recompilés exécutés, étendues jusqu'à
 l'instruction qui termine le bloc de base, plus les instructions interprétées ; environ un quart d'heure avec 12
 tâches). En cas de doute un octet va du côté des données : le code jamais exécuté (la découverte statique de
 `recomp` trouve 141 504 octets de code de plus, et manque 25 868 octets exécutés : elle n'est pas sûre), les tables
@@ -183,7 +183,7 @@ aujourd'hui, couvrent les octets qui deviendraient du code si `code_68k.txt` gra
   la table des boutiques enchaînées (0xf7d72, 20 octets suivis de code) lue avec un numéro de boutique hors
   bornes (234, après un saut de scène du bot) prend un octet du code (0xf7e5c), comme l'original ; zone ajoutée à
   la main à `native_zones.txt`. La validation avec `DDSOM_ASSETS` montre ces cas ; il suffit alors de relancer
-  `lectures_rom` (avec `DDSOM_COUVERT`) sur ce scénario et d'ajouter la zone. Ranger aussi le code dans les assets
+  `rom_reads` (avec `DDSOM_COUVERT`) sur ce scénario et d'ajouter la zone. Ranger aussi le code dans les assets
   supprimerait ce dernier risque (au prix de 486 Ko de plus, le programme entier).
 * **Les trous du mode sans 68000** (natives manquantes : arrêt avec diagnostic) sont les mêmes avec ou sans ROM.
 * L'émulation du DSP QSound lit ses tables comme le DSP (adresses du programme d'origine) ; les tables du pilote son

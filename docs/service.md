@@ -123,7 +123,7 @@ La validation compare donc le test Rust à l'exécution du code d'origine.
 
 Quand `A5+0x82` est non nul (le reset le pose si le bit 14 du port 0x804030 est nul : jamais sur la machine émulée, où
 il vaut 0xe021 ; un `poke8 ff8082 1` le simule), le jeu tient une comptabilité plus fine dans une RAM de 16 Ko en 0x660000,
-**en trois exemplaires** par zone (0x661xxx, 0x662xxx, 0x663xxx). Tout est en Rust, validé par `fuzz_carte_dev` (voir §6) :
+**en trois exemplaires** par zone (0x661xxx, 0x662xxx, 0x663xxx). Tout est en Rust, validé par `fuzz_dev_card` (voir §6) :
 
 | Original | Rust (`dev_card`) | Rôle |
 |---|---|---|
@@ -152,7 +152,7 @@ mot, adresses impaires). La zone `0x1240` (un vote complet, `0x2e2b0`) n'a aucun
 | `covs_carte_dev_partie.txt` | `cov_mortal_c1` avec la carte de développement dès l'image 790 : pièces, départs, parties payantes, personnage choisi, durée de partie, temps de jeu à la seconde |
 | `covs_carte_dev_gratuit.txt` | `cov_credits_gratuit` avec la carte de développement : parties gratuites (`0x2e59a`), pièces, départs |
 
-**Fuzz différentiel** (`examples/fuzz_dev_card.rs`, `fuzz_carte_dev <roms> <eeprom> [tests [seed]]`). Les scénarios ne
+**Fuzz différentiel** (`examples/fuzz_dev_card.rs`, `fuzz_dev_card <roms> <eeprom> [tests [seed]]`). Les scénarios ne
 peuvent pas poser la RAM supplémentaire (`poke` n'écrit que 0xff0000-0xffffff) ni déclencher le reset avec la carte : le
 fuzz tire des états de la RAM 0x660000 (zones valides, exemplaires corrompus, compteurs près de leurs bornes, RAM vierge ou
 aléatoire, signature d'une des régions 0 à 6) et compare, pour `0x2dc9a`, `0x2e8e4`, `0x2e540`, `0x2e448`, `0x2e49a`,

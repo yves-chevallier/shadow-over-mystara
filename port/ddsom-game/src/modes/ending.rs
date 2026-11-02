@@ -63,7 +63,7 @@ const FADE_ALL: u8 = 0xf;
 pub const PHASE_28: Native = Native {
     entry: 0xfb292,
     name: "ending_phase_28",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         let mut x = Ctx::new(c, b);
         if phase_28(&mut x) == Flow::Done {
             rts(x.c, x.b);
@@ -537,7 +537,7 @@ fn tile_blocks(x: &mut Ctx, destination: u32, first: u16, second: u16, grid: Gri
 }
 
 // ---------------------------------------------------------------------------------------------
-// États
+// States
 
 /// State 0: clears everything, copies the players' rewards, then falls into state 2.
 fn s00_reset(x: &mut Ctx) -> Flow {
@@ -582,7 +582,7 @@ fn s02_clear(x: &mut Ctx) -> Flow {
 }
 const S02_CLEARED: u32 = 0xfb78c;
 
-/// État 4 : image de fond, fondu d'ouverture.
+/// State 4: background picture, opening fade.
 fn s04_picture(x: &mut Ctx) -> Flow {
     next_step(x);
     tile_blocks(x, 0x917000, 0x222, 0x223, Grid::Layer2);
@@ -862,7 +862,7 @@ fn credits_objects_b(x: &mut Ctx) {
         fp += 0x200;
     }
 }
-/// `0xfbe6e` : deux objets (variante 18).
+/// `0xfbe6e`: two objects (variant 18).
 fn credits_objects_c(x: &mut Ctx) {
     for k in 0..2 {
         let Ok(Obj(o)) = scenery_6(x.b, 18) else { return };

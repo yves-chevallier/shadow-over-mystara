@@ -432,7 +432,7 @@ par scène `FF8034`) et fait combattre le bot, joueur invincible. **Un seul pass
 de scène (`--plan a:n,b:m`) provoque la « tempête de pas » (voir `couverture.md`). `validate_all.sh` les valide à
 12 000 images. Le fuzz du lot est `examples/fuzz_enemy/lot3.rs` (états `(+4,+5,+6,+7)` valides par type, décrits par
 des lignes `"s4 s5 s6,.. max7"`, champs tolérés) branché dans `fuzz_enemy.rs` : `DDSOM_ENTREE=<adresse du gestionnaire>
-DDSOM_VARIANTES=1 fuzz_enemy familles <roms> <eeprom> <scénario> 3500 <tours>`. Outils ajoutés : `pctrace`
+DDSOM_VARIANTES=1 fuzz_enemy families <roms> <eeprom> <scénario> 3500 <tours>`. Outils ajoutés : `pctrace`
 (`PCTRACE_SEUL`, `PCTRACE_IMAGES`), `DDSOM_TRACE_ORIG=<name de la native>` dans `lib.rs` (trace du code d'origine pour
 les écarts d'une native en mode contrôle).
 Pièges rencontrés : **0xfbae n'est pas un `rts`** (test de zone, natif `ai::IN_ZONE`, remet D5 à 0 ; l'index du pseudo-C le donne pour

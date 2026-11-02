@@ -62,7 +62,7 @@ mod exit {
                 return;
             };
             let name = CString::new("ddsom").unwrap();
-            let stream = CString::new("jeu").unwrap();
+            let stream = CString::new("game").unwrap();
             let spec = SampleSpec { format: 3, rate, channels: 2 };
             let mut err = 0;
             let s = new(std::ptr::null(), name.as_ptr(), 1, std::ptr::null(), stream.as_ptr(), &spec,

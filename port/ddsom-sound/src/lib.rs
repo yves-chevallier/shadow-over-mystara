@@ -2,7 +2,7 @@
 //!
 //! It replaces the Z80 program (`dd2.01`): same writes to the QSound registers, in the same
 //! order, and same writes to the RAM shared with the 68000, for the same commands. How it works
-//! is described in `docs/sound.md`.
+//! is described in `docs/son.md`.
 //!
 //! Layout:
 //! - [`Driver`] : 250 Hz interrupt, command queue, main loop (lib.rs);

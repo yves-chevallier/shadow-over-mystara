@@ -223,16 +223,16 @@ fn enqueue_if_sound(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub const ENQUEUE_IF_SOUND: Native = Native {
     entry: 0xe0836,
-    name: "son_enfiler",
-    run: crate::Body::Processeur(enqueue_if_sound),
+    name: "sound_enqueue",
+    run: crate::Body::WithCpu(enqueue_if_sound),
     touches_sound: false,
     outputs: regs::d(0) | regs::a(1) | regs::CCR,
 };
 
 pub const ENQUEUE_DIRECT: Native = Native {
     entry: 0xe0848,
-    name: "son_enfiler_direct",
-    run: crate::Body::Processeur(enqueue_direct),
+    name: "sound_enqueue_direct",
+    run: crate::Body::WithCpu(enqueue_direct),
     touches_sound: false,
     outputs: regs::d(0) | regs::a(1) | regs::CCR,
 };
@@ -446,9 +446,9 @@ fn native_sound_in(c: &mut Cpu, b: &mut Cps2Bus, sound: u32) {
 pub fn native_wrappers() -> &'static [Native] {
     static LIST: OnceLock<Vec<Native>> = OnceLock::new();
     LIST.get_or_init(|| {
-        let wrappers = table::WRAPPERS.iter().map(|w| (w.entry, "son_wrapper"));
-        let dispatches = DISPATCHES.iter().map(|&(entry, _)| (entry, "son_aiguillage"));
-        let versions = BY_VERSION.iter().map(|&(entry, ..)| (entry, "son_selon_version"));
+        let wrappers = table::WRAPPERS.iter().map(|w| (w.entry, "sound_wrapper"));
+        let dispatches = DISPATCHES.iter().map(|&(entry, _)| (entry, "sound_dispatch"));
+        let versions = BY_VERSION.iter().map(|&(entry, ..)| (entry, "sound_by_version"));
         wrappers
             .chain(dispatches)
             .chain(versions)
@@ -606,7 +606,7 @@ pub fn send(b: &mut Cps2Bus) -> Option<u32> {
     }
     // the original ends with a JMP to the display of the locks
     if shown_locks(b) {
-        // Original dead code: debug screen, see `show_locks` (docs/code-mort.md, batch « sortie du Cpu »)
+        // Original dead code: debug screen, see `show_locks` (docs/code-mort.md, batch "CPU removal")
         unreachable!("display of the Z80 locks: the program word 0xc0 is zero in this version");
     }
     sent
@@ -632,8 +632,8 @@ fn send_to_z80(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub const SEND_TO_Z80: Native = Native {
     entry: 0x68c,
-    name: "son_envoyer_z80",
-    run: crate::Body::Processeur(send_to_z80),
+    name: "sound_send_z80",
+    run: crate::Body::WithCpu(send_to_z80),
     touches_sound: true,
     outputs: 0, // VBLANK saved all the registers
 };
@@ -722,14 +722,14 @@ const fn service_native(entry: u32, name: &'static str, touches_sound: bool) -> 
     Native { entry, name, run: crate::Body::CpuIn(|c, b, entry| service_native_run(c, b, service_in(entry, c))), touches_sound, outputs: regs::CCR }
 }
 
-pub const SERVICE_FF00: Native = service_native(0xe0882, "son_service_ff00", false);
-pub const SERVICE_FF05: Native = service_native(0xe0a10, "son_service_ff05", false);
-pub const SERVICE_FF06_D1: Native = service_native(0xe0a2e, "son_service_ff06", true);
-pub const SERVICE_FF06: Native = service_native(0xe0a40, "son_service_ff06", true);
-pub const SERVICE_FF07_D1: Native = service_native(0xe0a70, "son_service_ff07", true);
-pub const SERVICE_FF07: Native = service_native(0xe0a82, "son_service_ff07", true);
-pub const SERVICE_FF08: Native = service_native(0xe0ad8, "son_service_ff08", false);
-pub const SERVICE_FF09: Native = service_native(0xe0af8, "son_service_ff09", false);
+pub const SERVICE_FF00: Native = service_native(0xe0882, "sound_service_ff00", false);
+pub const SERVICE_FF05: Native = service_native(0xe0a10, "sound_service_ff05", false);
+pub const SERVICE_FF06_D1: Native = service_native(0xe0a2e, "sound_service_ff06", true);
+pub const SERVICE_FF06: Native = service_native(0xe0a40, "sound_service_ff06", true);
+pub const SERVICE_FF07_D1: Native = service_native(0xe0a70, "sound_service_ff07", true);
+pub const SERVICE_FF07: Native = service_native(0xe0a82, "sound_service_ff07", true);
+pub const SERVICE_FF08: Native = service_native(0xe0ad8, "sound_service_ff08", false);
+pub const SERVICE_FF09: Native = service_native(0xe0af8, "sound_service_ff09", false);
 
 /// Entries that test the alternate-palette version (`A5+0x70` non-zero) before calling the wrapper
 /// `normal` or, in this version, the wrapper `alternate`: 0xe2240 / 0xe22e8 (character noise),
@@ -768,8 +768,8 @@ fn init_private_stack(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub const INIT_PRIVATE_STACK: Native = Native {
     entry: 0xee044,
-    name: "son_init_pile",
-    run: crate::Body::Processeur(init_private_stack),
+    name: "sound_init_stack",
+    run: crate::Body::WithCpu(init_private_stack),
     touches_sound: false,
     outputs: regs::a(0) | regs::CCR,
 };
@@ -777,8 +777,8 @@ pub const INIT_PRIVATE_STACK: Native = Native {
 /// 0xec238: empty sound (a plain `rts`), target of the dispatcher 0xec200 for objects without sound.
 pub const NONE: Native = Native {
     entry: 0xec238,
-    name: "son_aucun",
-    run: crate::Body::Processeur(rts),
+    name: "sound_none",
+    run: crate::Body::WithCpu(rts),
     touches_sound: false,
     outputs: regs::ALL,
 };

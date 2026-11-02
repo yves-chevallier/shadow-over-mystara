@@ -325,7 +325,7 @@ fn credit_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Credit) {
     // last cmpi.w #-1: equality; X: carry of the `addq.b #2` on the read index of the last iteration
     ops::cmp(c, EMPTY as u32, EMPTY as u32, Size::Word);
     if let Some(d) = last {
-        ops::drapeaux(c, SR_X, if d.index as u16 + 2 > 0xff { SR_X } else { 0 });
+        ops::flags(c, SR_X, if d.index as u16 + 2 > 0xff { SR_X } else { 0 });
     }
     rts(c, b);
 }
@@ -417,20 +417,20 @@ macro_rules! native {
         pub const $ident: Native = Native {
             entry: $entry,
             name: $name,
-            run: crate::Body::Processeur($run),
+            run: crate::Body::WithCpu($run),
             touches_sound: false,
             outputs: regs::ALL,
         };
     };
 }
 
-native!(CLEAR_POINTS, 0x19aa2, "evt_vider_points", |c, b| clear_ring_68k(c, b, &POINTS));
-native!(CLEAR_COUNTER, 0x19abc, "evt_vider_compteur", |c, b| clear_ring_68k(c, b, &COUNTER));
-native!(CLEAR_POPUPS, 0x19db4, "evt_vider_popups", clear_popups_68k);
-native!(CLEAR_POPUP, 0x19e10, "evt_effacer_popup", clear_popup_68k);
-native!(ENQUEUE_POINTS, 0x19ae6, "evt_enfiler_points", enqueue_points_68k);
-native!(ENQUEUE_COUNTER, 0x19b08, "evt_enfiler_compteur", enqueue_counter_68k);
-native!(OBJECT_EVENT, 0x19ad6, "evt_evenement_objet", object_event_68k);
-native!(CREATE_POPUP, 0x19dce, "evt_creer_popup", create_popup_68k);
-native!(CREDIT_POINTS_NATIVE, 0x19b2a, "evt_crediter_points", |c, b| credit_68k(c, b, &CREDIT_POINTS));
-native!(CREDIT_COUNTER_NATIVE, 0x19b9c, "evt_crediter_compteur", |c, b| credit_68k(c, b, &CREDIT_COUNTER));
+native!(CLEAR_POINTS, 0x19aa2, "evt_clear_points", |c, b| clear_ring_68k(c, b, &POINTS));
+native!(CLEAR_COUNTER, 0x19abc, "evt_clear_counter", |c, b| clear_ring_68k(c, b, &COUNTER));
+native!(CLEAR_POPUPS, 0x19db4, "evt_clear_popups", clear_popups_68k);
+native!(CLEAR_POPUP, 0x19e10, "evt_clear_popup", clear_popup_68k);
+native!(ENQUEUE_POINTS, 0x19ae6, "evt_enqueue_points", enqueue_points_68k);
+native!(ENQUEUE_COUNTER, 0x19b08, "evt_enqueue_counter", enqueue_counter_68k);
+native!(OBJECT_EVENT, 0x19ad6, "evt_event_object", object_event_68k);
+native!(CREATE_POPUP, 0x19dce, "evt_create_popup", create_popup_68k);
+native!(CREDIT_POINTS_NATIVE, 0x19b2a, "evt_credit_points", |c, b| credit_68k(c, b, &CREDIT_POINTS));
+native!(CREDIT_COUNTER_NATIVE, 0x19b9c, "evt_credit_counter", |c, b| credit_68k(c, b, &CREDIT_COUNTER));

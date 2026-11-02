@@ -86,14 +86,14 @@ regard (0 ou 0x20 ; copié du joueur), `+0x2e` jeu de boîtes de collision, `+0x
 | 35–39 | 0x4fc1a … 0x4ffd0 | `peff_j.rs` | bond, échange, glissade, éclat du coup, éclats d'un monstre touché | 36 : scénarios ; autres : fuzz |
 | 40 | 0x50148 | `peff_k.rs` | météores (palette de l'écran recopiée par `movem`) | fuzz |
 | 41 | 0x50348 | `peff_n.rs` | gardien invoqué (palette recopiée par `movem`) | fuzz |
-| 43 | 0x51076 | `peff.rs` | comptoir de boutique : deux zones (par scène, tables 0x51306 / 0x51376) guettent les quatre joueurs ; un joueur dans une zone avec `+0x58` positif lance le dialogue de la zone (scripts `+0x1c` / `+0x58`) ; l'objet suit le défilement à demi-vitesse | scénarios (états 0 et 2) ; interprète du dialogue : `fuzz boutique` |
+| 43 | 0x51076 | `peff.rs` | comptoir de boutique : deux zones (par scène, tables 0x51306 / 0x51376) guettent les quatre joueurs ; un joueur dans une zone avec `+0x58` positif lance le dialogue de la zone (scripts `+0x1c` / `+0x58`) ; l'objet suit le défilement à demi-vitesse | scénarios (états 0 et 2) ; interprète du dialogue : `fuzz shop` |
 | 44 | 0x517dc | `peff.rs` | pastille posée sur la caméra secondaire | scénarios |
 | 45 | 0x518b4 | `peff_k.rs` | voyant de l'écran de choix (effets de palette) | fuzz |
 | 46, 47 | 0x51ad6, 0x51bcc | `peff_j.rs` | pluie de pièces et minuterie de l'écran de gain | fuzz |
 
 PEFF 42 (0x50b9c, article en vitrine de la boutique : zone de vente, message, vente contre la bourse BCD) et
 l'interprète des dialogues de PEFF 43 (0x514ac / 0x514cc, table de 0x514ec : messages, menu, vente, apprentissage,
-dons d'objets) sont dans `peff_shop.rs`, validés par `fuzz boutique` à travers le comptoir 0x51076 (aucun
+dons d'objets) sont dans `peff_shop.rs`, validés par `fuzz shop` à travers le comptoir 0x51076 (aucun
 scénario n'atteint un client `+0x58` positif). PEFF 43 les appelle directement (`peff_shop::talk_a`/`talk_b`,
 plus de native) avec A1 = case de la liste des joueurs, A2 = le client, D6 = compteur de boucle, que l'interprète
 laisse intacts (ses appels de son les recopiaient dans la pile privée du son ; plus depuis le lot S,
@@ -108,7 +108,7 @@ A1 = l'objet créé, retenue levée si le pool est plein (ou, pour 0x51c06, si l
 * `tools/validate_all.sh 30000`, `DDSOM_COV=1` pour les scénarios `cov/` : voir `docs/couverture.md`.
 * `examples/fuzz_player_shots.rs` : chaque gestionnaire est appelé en mode contrôle depuis des états fabriqués (joueur
   propriétaire aux champs variés, parent et frères factices, compteurs de scène) pendant `DDSOM_PAS` images ;
-  `fuzz_joueur <roms> <eeprom> <scénario> <warmup> <tours> [PSHL|PEFF]`, `DDSOM_ENTREE=<address>` pour un seul
+  `fuzz_player_shots <roms> <eeprom> <scénario> <warmup> <tours> [PSHL|PEFF]`, `DDSOM_ENTREE=<address>` pour un seul
   gestionnaire, `DDSOM_ETATS=1` pour tirer aussi des états quelconques (beaucoup sortent des tables de l'original).
 * Les écarts du fuzz sur PEFF 30 (variante 1) viennent de parents fabriqués à pointeur absurde (0x1, 0x3) : bruit du
   fuzz, non retenu.

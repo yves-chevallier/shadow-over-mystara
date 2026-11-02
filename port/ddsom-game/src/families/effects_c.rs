@@ -1,5 +1,5 @@
 //! EFFCT family (continued): scene types still exercised by the scenarios, rewritten on [`Cx`]
-//! (type table `0x39ce0`). See `docs/families.md` §4.
+//! (type table `0x39ce0`). See `docs/familles.md` §4.
 //!
 //! - 3: screen element fixed to the camera;
 //! - 10: diagonal slabs that sink under the players;
@@ -2039,7 +2039,7 @@ fn shard_rain<R: Bench>(x: &mut Cx<'_, R>) {
         0 if v == 0 => {
             x.add8(f::STATE, 2);
             x.set16(shards::TIMER, 0xe6);
-            crate::palette::set_flash_color(x.b, crate::families::small::ECLAIR_BLEU);
+            crate::palette::set_flash_color(x.b, crate::families::small::LIGHTNING_BLUE);
         }
         0 => {
             // Original glitch: A1 is the handler's address (0xb997c), left by the dispatch loop:
@@ -3260,7 +3260,7 @@ fn ballot_timer<R: Bench>(x: &mut Cx<'_, R>) {
         // Original dead code: state 4 (0xb0374), which no step leads to; the original clears word `+0x54` there
         // of the object designated by the A6 that the previous code leaves, restores the palette and releases the
         // object (see
-        // docs/code-mort.md, « Minuteur du vote : état 4 »)
+        // docs/code-mort.md, "vote timer, state 4")
         4 => unreachable!("vote timer (effct_vote 0xafe20, variant 2): no step leads to state 4 (0xb0374)"),
         // state 6 (set by the off-screen removal): release (0xb02e8)
         6 => free(x),
@@ -5120,44 +5120,44 @@ fn courier<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0xaa8e8 "effct_ecran_fixe" #[without] screen_piece,
+    0xaa8e8 "effct_fixed_screen" #[without] screen_piece,
     0xabccc "effct_dalle" #[without] floor_tile,
     0xad476 "effct_maillon" #[without] chain_link,
     0xae52a "effct_double" #[without] double,
     0xaed4c "effct_bourse" #[without] purse,
-    0xaf3f2 "effct_boutique" #[without] shop,
+    0xaf3f2 "effct_shop" #[without] shop,
     0xafe20 "effct_vote" #[without] vote,
     0xb1818 "effct_poisson" #[without] fish,
     0xb2dea "effct_plateau" #[without] ferry,
     0xb3050 "effct_flotteur" #[without] floater,
-    0xb33ba "effct_titre" #[without] title_card,
-    0xb3454 "effct_resultat" #[without] result_card,
+    0xb33ba "effct_title" #[without] title_card,
+    0xb3454 "effct_result" #[without] result_card,
     0xb3570 "effct_projete" #[without] lob,
-    0xb37ac "effct_coup" #[without] blow,
-    0xb3c48 "effct_lance" #[without] toss,
-    0xb40f8 "effct_decor" #[without] scenery,
-    0xb4f88 "effct_sort" #[without] spell,
-    0xb5764 "effct_repere" #[without] beacon,
-    0xb5dbe "effct_accessoire_porte" #[without] prop,
+    0xb37ac "effct_hit" #[without] blow,
+    0xb3c48 "effct_thrown" #[without] toss,
+    0xb40f8 "effct_scenery" #[without] scenery,
+    0xb4f88 "effct_spell" #[without] spell,
+    0xb5764 "effct_marker" #[without] beacon,
+    0xb5dbe "effct_accessory_carried" #[without] prop,
     0xb5fb6 "effct_attache" #[without] attached,
     0xb6d48 "effct_machine" #[without] machine,
     0xb6ef2 "effct_surgissant" #[without] riser,
     0xb7248 "effct_double_b" #[without] double2,
     0xb751e "effct_nageur" #[without] swimmer,
-    0xb7a14 "effct_eclat_tombant" #[without] spark_fall,
+    0xb7a14 "effct_shard_falling" #[without] spark_fall,
     0xb7ac8 "effct_messager" #[without] courier,
-    0xb7c40 "effct_lettres" #[without] big_letters,
-    0xb7e26 "effct_colonne" #[without] pillar,
+    0xb7c40 "effct_letters" #[without] big_letters,
+    0xb7e26 "effct_column" #[without] pillar,
     0xb802a "effct_silhouette" #[without] pacer,
     0xb80bc "effct_comptoir" #[without] counter,
     0xb88a8 "effct_minuteur" #[without] scene_timer,
-    0xb97d8 "effct_eclat_pose" #[without] spark,
-    0xb997c "effct_pluie" #[without] shard_rain,
+    0xb97d8 "effct_shard_placed" #[without] spark,
+    0xb997c "effct_rain" #[without] shard_rain,
     0xb9aba "effct_finale" #[without] finale_trigger,
-    0xb9bbc "effct_piece_fin" #[without] ending_piece,
-    0xb9ca6 "effct_flammeche" #[without] ending_wisp,
+    0xb9bbc "effct_end_piece" #[without] ending_piece,
+    0xb9ca6 "effct_ember" #[without] ending_wisp,
     0xb9db8 "effct_interrupteur" #[without] barrier_switch,
-    0xb9f36 "effct_barriere" #[without] barrier,
-    0xba1aa "effct_poussiere_haute" #[without] drift_dust,
-    0xba244 "effct_ecran_fixe_b" #[without] screen_piece_b,
+    0xb9f36 "effct_barrier" #[without] barrier,
+    0xba1aa "effct_dust_high" #[without] drift_dust,
+    0xba244 "effct_fixed_screen_b" #[without] screen_piece_b,
 }

@@ -121,7 +121,7 @@ fn two_blocks(x: &mut Ctx, grid: Grid, n: u16, destination: u32) {
 pub const PHASE_4: Native = Native {
     entry: 0x1ca20,
     name: "select_phase_4",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         let mut x = Ctx::new(c, b);
         if phase_4(&mut x) == Flow::Done {
             rts(x.c, x.b);
@@ -593,7 +593,7 @@ fn freeze(x: &mut Ctx) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Étape 4 : courte attente
+// Step 4: short wait
 
 fn step_4(x: &mut Ctx) -> Flow {
     render(x, &[&dispatch::EFFCT]);
@@ -692,7 +692,7 @@ fn any_button(x: &mut Ctx) -> bool {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Étapes 10, 12, 14
+// Steps 10, 12, 14
 
 fn step_a(x: &mut Ctx) -> Flow {
     render(x, &[&dispatch::EFFCT, &dispatch::SOBJ]);

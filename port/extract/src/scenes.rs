@@ -123,7 +123,7 @@ pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>) {
     regions.push(region("counters", 0x51176, 0x513e6));
     regions.push(region("camera1", 0x2ef22, 0x2f576));
     regions.push(region("camera2", 0x32484, 0x3281c));
-    // ---- tally.rs: banner tile lists (« STAGE CLEAR », scene names) ----
+    // ---- tally.rs: banner tile lists ("STAGE CLEAR", scene names) ----
     let mut at = 0xf6fec;
     let names: Vec<u32> = (0..22).map(|i| rom.prog32(0xf6ed2 + 4 * i)).collect();
     while at < 0xf71fa {

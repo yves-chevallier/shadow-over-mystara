@@ -7,7 +7,7 @@
 //! `DDSOM_ASSETS=<dir>`: machine built from the assets only.
 //! Only `Machine::run_frame` is measured (game, Z80 or sound driver, QSound), without rendering the frame
 //! (`DDSOM_RENDU=1`: with it), nor the application's audio and video output.
-//! Basis of the optimisation phase: docs/refactorisation.md, « Performance ».
+//! Basis of the optimisation phase: docs/refactorisation.md, "Performance".
 
 use std::path::Path;
 

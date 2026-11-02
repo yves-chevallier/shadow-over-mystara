@@ -1,5 +1,5 @@
-//! The game without a 68000: natives only and the kernel's frame loop (see `docs/noyau.md`, « Vers une boucle sans
-//! 68000 »).
+//! The game without a 68000: natives only and the kernel's frame loop (see `docs/noyau.md`, "towards a loop
+//! without 68000").
 //!
 //! The machine's `Cpu` is now only a register bench (D0-D7, A0-A7, SR) and a stack. The processor is at a
 //! *point* (`kernel::Point`, stored in the task table): a startup step, a scheduler point

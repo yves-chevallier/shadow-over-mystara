@@ -1,5 +1,5 @@
 //! Player shots (PSHL), fourth series: types 19 to 24 (chain lightning, projectiles of the elf and the wizard: arrow,
-//! knife, fireball). See `docs/families/player.md`.
+//! knife, fireball). See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

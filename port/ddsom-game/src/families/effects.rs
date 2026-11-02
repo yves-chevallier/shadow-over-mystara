@@ -3,12 +3,12 @@
 //!
 //! All the handlers share the same framework: the state byte `+4` chooses, through a table of relative words, the
 //! initialization (0), the active state (2) or the release (4). The types ported here are those that the scenarios
-//! exercise; the others stay in original code. See `docs/families.md`.
+//! exercise; the others stay in original code. See `docs/familles.md`.
 
 use crate::objects::pools;
 use crate::objects::Obj;
 
-use super::{ajoute_u8, handler, pointeur};
+use super::{add_u8, handler, pointer};
 use super::cx::{Bench, Cx};
 use crate::objects::Current;
 use crate::machine::Machine;
@@ -17,10 +17,10 @@ use crate::machine::Machine;
 mod state {
     pub const INIT: u8 = 0;
     pub const ACTIVE: u8 = 2;
-    pub const LIBERE: u8 = 4;
-    /// Set by the parent object that destroys its effects (or by the effect itself, `accessoire_suit`): release,
+    pub const FREED: u8 = 4;
+    /// Set by the parent object that destroys its effects (or by the effect itself, `accessory_follow`): release,
     /// without the work of state 4 (`jmp 0x2218`).
-    pub const DETRUIT: u8 = 6;
+    pub const DESTROYED: u8 = 6;
 }
 
 /// Shared fields.
@@ -84,8 +84,8 @@ fn three_states<R: Bench>(
     match state {
         state::INIT => init(ctx, o),
         state::ACTIVE => active(ctx, o),
-        state::LIBERE => ctx.free(&pools::EFFCT),
-        state::DETRUIT => ctx.free(&pools::EFFCT),
+        state::FREED => ctx.free(&pools::EFFCT),
+        state::DESTROYED => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -109,15 +109,15 @@ mod halo {
 }
 
 fn halo_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+    add_u8(ctx, o, Obj::STATE, 2);
     o.set_u8(ctx.b, halo::DURATION, 0x28);
-    let player = pointeur(ctx, o, field::OWNER);
+    let player = pointer(ctx, o, field::OWNER);
     copy_position(ctx, o, player);
     let rank = ((o.u8(ctx.b, Obj::VARIANT) >> 1) as u32) << 2;
     let mut dx = ctx.prog16(halo::OFFSETS + rank);
     let dz = ctx.prog16(halo::OFFSETS + 2 + rank);
-    let retourne = player.u8(ctx.b, field::FLIP) != 0;
-    if !retourne {
+    let turned = player.u8(ctx.b, field::FLIP) != 0;
+    if !turned {
         dx = dx.wrapping_neg();
     }
     shifted_u16(ctx, o, Obj::X, dx);
@@ -137,7 +137,7 @@ fn halo_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let remainder = o.u8(ctx.b, halo::DURATION).wrapping_sub(1);
     o.set_u8(ctx.b, halo::DURATION, remainder);
     if !(remainder != 0) {
-        ajoute_u8(ctx, o, Obj::STATE, 2);
+        add_u8(ctx, o, Obj::STATE, 2);
     }
     ctx.reinsert();
 }
@@ -160,7 +160,7 @@ mod banner {
 }
 
 fn banner_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+    add_u8(ctx, o, Obj::STATE, 2);
     o.set_u32(ctx.b, Obj::X, 0);
     o.set_u32(ctx.b, Obj::Y, 0);
     o.set_u16(ctx.b, Obj::Z, 0xc8);
@@ -204,8 +204,8 @@ fn banner<R: Bench>(ctx: &mut Cx<'_, R>) {
     match state {
         state::INIT => banner_init(ctx, o),
         state::ACTIVE => banner_active(ctx, o),
-        state::LIBERE => banner_end(ctx, o),
-        state::DETRUIT => ctx.free(&pools::EFFCT),
+        state::FREED => banner_end(ctx, o),
+        state::DESTROYED => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -223,19 +223,19 @@ mod aura {
 
 /// `0xb2ca4`: position of the owner, one sixteenth of a pixel in front, offset by 0x10 pixels.
 fn aura_follow<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> Obj {
-    let player = pointeur(ctx, o, field::OWNER);
+    let player = pointer(ctx, o, field::OWNER);
     let x = player.u32(ctx.b, Obj::X);
     o.set_u32(ctx.b, Obj::X, x);
     let y = player.u32(ctx.b, Obj::Y).wrapping_sub(1);
     o.set_u32(ctx.b, Obj::Y, y);
-    let retourne = o.u8(ctx.b, field::FLIP) != 0;
-    let offset: u16 = if !retourne { 0xfff0 } else { 0x10 };
+    let turned = o.u8(ctx.b, field::FLIP) != 0;
+    let offset: u16 = if !turned { 0xfff0 } else { 0x10 };
     shifted_u16(ctx, o, Obj::X, offset);
     player
 }
 
 fn aura_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+    add_u8(ctx, o, Obj::STATE, 2);
     let player = aura_follow(ctx, o);
     let z = player.u32(ctx.b, Obj::Z);
     o.set_u32(ctx.b, Obj::Z, z);
@@ -260,27 +260,27 @@ fn aura<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// follows the object, 0x10 pixels higher, as long as it is active (state 2). As long as no player has passed nearby
 /// (±0x20 in depth, ±0x60 in abscissa) it stays visible; then it blinks in periods of 0x30 frames, eight times, then
 /// disappears.
-mod scintillement {
+mod shimmering {
     pub const ENTRY: u32 = 0xae428;
     pub const TABLE: u32 = 0xae436;
     pub const ANIMATIONS: u32 = 0x18fd48;
     pub const REPETITIONS: u32 = 0x57;
     pub const DELAY: u32 = 0x58;
-    pub const BASCULE: u32 = 0x5a;
-    pub const DECLENCHE: u32 = 0x5b;
-    pub const PORTEUR: u32 = 0x5c;
+    pub const TOGGLE: u32 = 0x5a;
+    pub const TRIGGERS: u32 = 0x5b;
+    pub const CARRIER: u32 = 0x5c;
 }
 
-fn scintillement_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+fn shimmering_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
     let flags = o.u8(ctx.b, Obj::FLAGS);
     o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
-    o.set_u8(ctx.b, scintillement::REPETITIONS, 8);
+    o.set_u8(ctx.b, shimmering::REPETITIONS, 8);
     let rng = ctx.random();
     let draw = rng & 0x1f;
-    o.set_u16(ctx.b, scintillement::DELAY, draw);
+    o.set_u16(ctx.b, shimmering::DELAY, draw);
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    ctx.anim_start(scintillement::ANIMATIONS, variant as u16);
+    ctx.anim_start(shimmering::ANIMATIONS, variant as u16);
     ctx.reinsert();
 }
 
@@ -294,7 +294,7 @@ fn shimmer_player_near<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             if !(dy > 0x40) {
                 let dx = o.u16(ctx.b, Obj::X).wrapping_sub(player.u16(ctx.b, Obj::X)).wrapping_add(0x60);
                 if !(dx > 0xc0) {
-                    o.set_u8(ctx.b, scintillement::DECLENCHE, 1);
+                    o.set_u8(ctx.b, shimmering::TRIGGERS, 1);
                     return;
                 }
             }
@@ -303,30 +303,30 @@ fn shimmer_player_near<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 fn shimmer_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let porteur = pointeur(ctx, o, scintillement::PORTEUR);
-    copy_position(ctx, o, porteur);
+    let carrier = pointer(ctx, o, shimmering::CARRIER);
+    copy_position(ctx, o, carrier);
     shifted_u16(ctx, o, Obj::Z, 0x10);
-    let state_carrier = porteur.u8(ctx.b, Obj::STATE);
+    let state_carrier = carrier.u8(ctx.b, Obj::STATE);
     if !(state_carrier == 2) {
-        ajoute_u8(ctx, o, Obj::STATE, 2);
+        add_u8(ctx, o, Obj::STATE, 2);
     }
-    let declenche = o.u8(ctx.b, scintillement::DECLENCHE);
-    if !(declenche != 0) {
+    let triggers = o.u8(ctx.b, shimmering::TRIGGERS);
+    if !(triggers != 0) {
         // not triggered yet: watching for the players (and cede control without sorting)
         return shimmer_player_near(ctx, o);
     }
-    let remainder = o.u16(ctx.b, scintillement::DELAY).wrapping_sub(1);
-    o.set_u16(ctx.b, scintillement::DELAY, remainder);
+    let remainder = o.u16(ctx.b, shimmering::DELAY).wrapping_sub(1);
+    o.set_u16(ctx.b, shimmering::DELAY, remainder);
     if !(remainder != 0) {
-        o.set_u16(ctx.b, scintillement::DELAY, 0x30);
-        let bascule = o.u8(ctx.b, scintillement::BASCULE) ^ 1;
-        o.set_u8(ctx.b, scintillement::BASCULE, bascule);
+        o.set_u16(ctx.b, shimmering::DELAY, 0x30);
+        let toggle = o.u8(ctx.b, shimmering::TOGGLE) ^ 1;
+        o.set_u8(ctx.b, shimmering::TOGGLE, toggle);
         let flags = o.u8(ctx.b, Obj::FLAGS);
         o.set_u8(ctx.b, Obj::FLAGS, flags & !2);
-        if !(bascule != 0) {
+        if !(toggle != 0) {
             o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
-            let remainder = o.u8(ctx.b, scintillement::REPETITIONS).wrapping_sub(1);
-            o.set_u8(ctx.b, scintillement::REPETITIONS, remainder);
+            let remainder = o.u8(ctx.b, shimmering::REPETITIONS).wrapping_sub(1);
+            o.set_u8(ctx.b, shimmering::REPETITIONS, remainder);
             if !(remainder != 0) {
                 o.set_u32(ctx.b, Obj::STATE, 0x0400_0000);
             }
@@ -335,8 +335,8 @@ fn shimmer_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     ctx.reinsert();
 }
 
-fn scintillement<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, scintillement::TABLE, scintillement_init, shimmer_active)
+fn shimmering<R: Bench>(ctx: &mut Cx<'_, R>) {
+    three_states(ctx, shimmering::TABLE, shimmering_init, shimmer_active)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -345,7 +345,7 @@ fn scintillement<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 9: object born at a screen position drawn from a table (according to `+0x52`), advances in `X` (speed 0x200),
 /// waits 0x120 frames (animation `variant + 0xc`) then plays its exit animation for 0x200 frames, advancing during the
 /// last 0x50, before disappearing.
-mod trainee {
+mod trail {
     pub const ENTRY: u32 = 0xabbee;
     pub const TABLE: u32 = 0xabbfc;
     pub const POSITIONS: u32 = 0xabc54;
@@ -354,33 +354,33 @@ mod trainee {
     pub const POSITION: u32 = 0x52;
 }
 
-fn trainee_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
-    o.set_u16(ctx.b, trainee::DELAY, 0x120);
+fn trail_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
+    o.set_u16(ctx.b, trail::DELAY, 0x120);
     o.set_u32(ctx.b, Obj::VX, 0x0200_0000);
-    let rank = (o.u8(ctx.b, trainee::POSITION) as u32) << 2;
-    let x = ctx.prog16(trainee::POSITIONS + rank);
+    let rank = (o.u8(ctx.b, trail::POSITION) as u32) << 2;
+    let x = ctx.prog16(trail::POSITIONS + rank);
     o.set_u16(ctx.b, Obj::X, x);
-    let y = ctx.prog16(trainee::POSITIONS + rank + 2);
+    let y = ctx.prog16(trail::POSITIONS + rank + 2);
     o.set_u16(ctx.b, Obj::Y, y);
     o.set_u16(ctx.b, Obj::Z, 0);
     let (cam_x, cam_y) = (crate::ram::CAMERA_X.get(ctx.b), crate::ram::CAMERA_Y.get(ctx.b));
     shifted_u16(ctx, o, Obj::X, cam_x);
     shifted_u16(ctx, o, Obj::Y, cam_y);
     let animation = o.u8(ctx.b, Obj::VARIANT).wrapping_add(0xc);
-    ctx.anim_start(trainee::ANIMATIONS, animation as u16);
+    ctx.anim_start(trail::ANIMATIONS, animation as u16);
 }
 
 fn trail_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sub_state = o.u8(ctx.b, field::SUB_STATE);
     if !(sub_state != 0) {
-        let remainder = o.u16(ctx.b, trainee::DELAY).wrapping_sub(1);
-        o.set_u16(ctx.b, trainee::DELAY, remainder);
+        let remainder = o.u16(ctx.b, trail::DELAY).wrapping_sub(1);
+        o.set_u16(ctx.b, trail::DELAY, remainder);
         if !(remainder != 0) {
-            ajoute_u8(ctx, o, field::SUB_STATE, 2);
-            o.set_u16(ctx.b, trainee::DELAY, 0x200);
+            add_u8(ctx, o, field::SUB_STATE, 2);
+            o.set_u16(ctx.b, trail::DELAY, 0x200);
             let variant = o.u8(ctx.b, Obj::VARIANT);
-            ctx.anim_start(trainee::ANIMATIONS, variant as u16);
+            ctx.anim_start(trail::ANIMATIONS, variant as u16);
             return;
         }
         if remainder > 0x50 {
@@ -390,17 +390,17 @@ fn trail_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         ctx.move_x();
         return ctx.reinsert();
     }
-    let remainder = o.u16(ctx.b, trainee::DELAY).wrapping_sub(1);
-    o.set_u16(ctx.b, trainee::DELAY, remainder);
+    let remainder = o.u16(ctx.b, trail::DELAY).wrapping_sub(1);
+    o.set_u16(ctx.b, trail::DELAY, remainder);
     if !(remainder != 0) {
-        ajoute_u8(ctx, o, Obj::STATE, 2);
+        add_u8(ctx, o, Obj::STATE, 2);
     }
     ctx.anim_step();
     ctx.reinsert();
 }
 
-fn trainee<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, trainee::TABLE, trainee_init, trail_active)
+fn trail<R: Bench>(ctx: &mut Cx<'_, R>) {
+    three_states(ctx, trail::TABLE, trail_init, trail_active)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -409,7 +409,7 @@ fn trainee<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 33: burst thrown from a screen position (variant 0 to 3, speeds drawn from a table), drawn in the foreground.
 /// It falls back; on touching the ground, the non-zero variants disappear, variant 0 (outside pause) creates two enemy
 /// shots (ESHL 0x17, modes 0 and 1) before disappearing.
-mod eclat {
+mod shard {
     pub const ENTRY: u32 = 0xb2cca;
     pub const TABLE: u32 = 0xb2cd8;
     pub const POSITIONS: u32 = 0xb2d72;
@@ -419,16 +419,16 @@ mod eclat {
     pub const CREATE_SHOT_A: u32 = 0xeab50;
 }
 
-fn eclat_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+fn shard_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
     let rng = ctx.random();
     let draw = rng & 0x3f;
-    o.set_u16(ctx.b, eclat::OFFSET, draw);
+    o.set_u16(ctx.b, shard::OFFSET, draw);
     let flip = o.u8(ctx.b, field::FLIP) ^ 0x20;
     o.set_u8(ctx.b, field::FLIP, flip);
     let rank = (o.u8(ctx.b, Obj::VARIANT) as u32) << 2;
-    let dx = ctx.prog16(eclat::POSITIONS + rank);
-    let dz = ctx.prog16(eclat::POSITIONS + rank + 2);
+    let dx = ctx.prog16(shard::POSITIONS + rank);
+    let dz = ctx.prog16(shard::POSITIONS + rank + 2);
     o.set_u16(ctx.b, Obj::Y, 0x40);
     let (x, z) = (crate::ram::CAMERA_ALT_X.get(ctx.b), crate::ram::CAMERA_ALT_Y.get(ctx.b));
     o.set_u16(ctx.b, Obj::X, x);
@@ -437,39 +437,39 @@ fn eclat_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     shifted_u16(ctx, o, Obj::Z, dz);
     let rank = rank << 1;
     for (i, off) in [Obj::VX, Obj::VZ, Obj::AZ].into_iter().enumerate() {
-        let v = ctx.prog16(eclat::SPEEDS + rank + 2 * i as u32);
+        let v = ctx.prog16(shard::SPEEDS + rank + 2 * i as u32);
         o.set_u16(ctx.b, off, v);
     }
     let az = o.u16(ctx.b, Obj::AZ).wrapping_neg();
     o.set_u16(ctx.b, Obj::AZ, az);
-    ctx.anim_start(eclat::ANIMATIONS, 0);
+    ctx.anim_start(shard::ANIMATIONS, 0);
     ctx.reinsert_foreground();
 }
 
 /// Landing (`0xb2d92`): disappearance, or two shots for variant 0.
-fn eclat_atterrit<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+fn shard_lands<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variant = o.u8(ctx.b, Obj::VARIANT);
     if !(variant != 0) {
         let pause = ctx.ram8(0x42) != 0;
         if !pause {
-            crate::sound::play(ctx.b, eclat::CREATE_SHOT_A, ctx.obj());
-            let tir = ctx.alloc(&pools::ESHL);
-            if tir.is_none() {
+            crate::sound::play(ctx.b, shard::CREATE_SHOT_A, ctx.obj());
+            let shot = ctx.alloc(&pools::ESHL);
+            if shot.is_none() {
                 return;
             }
-            let tir = tir.unwrap();
-            tir.set_u8(ctx.b, Obj::ACTIVE, 1);
-            tir.set_u8(ctx.b, Obj::KIND, 0x17);
-            tir.set_u8(ctx.b, field::MODE, 0);
+            let shot = shot.unwrap();
+            shot.set_u8(ctx.b, Obj::ACTIVE, 1);
+            shot.set_u8(ctx.b, Obj::KIND, 0x17);
+            shot.set_u8(ctx.b, field::MODE, 0);
             super::effects_creators::set_list(ctx.b, 3);
-            let tir = ctx.alloc(&pools::ESHL);
-            if tir.is_none() {
+            let shot = ctx.alloc(&pools::ESHL);
+            if shot.is_none() {
                 return;
             }
-            let tir = tir.unwrap();
-            tir.set_u8(ctx.b, Obj::ACTIVE, 1);
-            tir.set_u8(ctx.b, Obj::KIND, 0x17);
-            tir.set_u8(ctx.b, field::MODE, 1);
+            let shot = shot.unwrap();
+            shot.set_u8(ctx.b, Obj::ACTIVE, 1);
+            shot.set_u8(ctx.b, Obj::KIND, 0x17);
+            shot.set_u8(ctx.b, field::MODE, 1);
         }
     }
     ctx.free(&pools::EFFCT);
@@ -481,18 +481,18 @@ fn shard_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     if in_flight {
         return;
     }
-    eclat_atterrit(ctx, o)
+    shard_lands(ctx, o)
 }
 
-fn eclat<R: Bench>(ctx: &mut Cx<'_, R>) {
+fn shard<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, eclat::TABLE, state as u32);
+    let target = target(ctx, shard::TABLE, state as u32);
     match state {
-        state::INIT => eclat_init(ctx, o),
+        state::INIT => shard_init(ctx, o),
         state::ACTIVE => shard_active(ctx, o),
-        state::LIBERE => eclat_atterrit(ctx, o),
-        state::DETRUIT => ctx.free(&pools::EFFCT),
+        state::FREED => shard_lands(ctx, o),
+        state::DESTROYED => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -502,21 +502,21 @@ fn eclat<R: Bench>(ctx: &mut Cx<'_, R>) {
 
 /// Type 25: bursts thrown at birth (speed `+0x14` / `+0x1c`, scattered at random according to the mode `+0x2f`,
 /// oriented according to `+0x2c`), then drifting horizontally while blinking until the end of their animation.
-mod poussiere {
+mod dust {
     pub const ENTRY: u32 = 0xb111a;
     pub const TABLE: u32 = 0xb1128;
     pub const ANIMATIONS: u32 = 0x1901ba;
     /// Direction of the drift (`+0x2d`) and on which axis the jump is made (`+0x43`).
-    pub const SENS: u32 = 0x2d;
+    pub const DIRECTION: u32 = 0x2d;
     pub const ON_Z: u32 = 0x43;
 }
 
-fn poussiere_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+fn dust_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
     let mut dx = o.u16(ctx.b, Obj::VX);
     let mut dy = o.u16(ctx.b, Obj::VY);
-    let retourne = o.u8(ctx.b, field::FLIP) != 0;
-    if retourne {
+    let turned = o.u8(ctx.b, field::FLIP) != 0;
+    if turned {
         dx = dx.wrapping_neg();
     }
     let mode = o.u8(ctx.b, field::MODE);
@@ -531,28 +531,28 @@ fn poussiere_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         dy = dy.wrapping_add(rng & mask);
     }
     shifted_u16(ctx, o, Obj::X, dx);
-    let on_z = o.u8(ctx.b, poussiere::ON_Z);
+    let on_z = o.u8(ctx.b, dust::ON_Z);
     if !(on_z == 0) {
         shifted_u16(ctx, o, Obj::Z, dy);
     } else {
         shifted_u16(ctx, o, Obj::Y, dy);
     }
     o.set_u16(ctx.b, Obj::VX, 0);
-    let sens = o.u8(ctx.b, poussiere::SENS);
-    if !(sens == 0) {
+    let flip = o.u8(ctx.b, dust::DIRECTION);
+    if !(flip == 0) {
         let mut v: u16 = 0x180;
-        let retourne = o.u8(ctx.b, field::FLIP) != 0;
-        if retourne {
+        let turned = o.u8(ctx.b, field::FLIP) != 0;
+        if turned {
             v = v.wrapping_neg();
         }
-        let sens = o.u8(ctx.b, poussiere::SENS);
-        if !(sens == 1) {
+        let flip = o.u8(ctx.b, dust::DIRECTION);
+        if !(flip == 1) {
             v = v.wrapping_neg();
         }
         o.set_u16(ctx.b, Obj::VX, v);
     }
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    ctx.anim_start(poussiere::ANIMATIONS, variant as u16);
+    ctx.anim_start(dust::ANIMATIONS, variant as u16);
     ctx.reinsert();
 }
 
@@ -569,8 +569,8 @@ fn dust_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     ctx.reinsert();
 }
 
-fn poussiere<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, poussiere::TABLE, poussiere_init, dust_active)
+fn dust<R: Bench>(ctx: &mut Cx<'_, R>) {
+    three_states(ctx, dust::TABLE, dust_init, dust_active)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -578,7 +578,7 @@ fn poussiere<R: Bench>(ctx: &mut Cx<'_, R>) {
 
 /// Type 26: cloud born at the right of the screen (random height), waits a random delay (`+0x5c`, 0 to 63 frames) then
 /// crosses the screen to the left (speed according to the variant) up to 0x40 pixels beyond the edge.
-mod nuage {
+mod cloud {
     pub const ENTRY: u32 = 0xb11f4;
     pub const TABLE: u32 = 0xb1202;
     pub const SPEEDS: u32 = 0xb126a;
@@ -587,11 +587,11 @@ mod nuage {
     pub const DELAY: u32 = 0x5c;
 }
 
-fn nuage_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+fn cloud_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
     let rng = ctx.random();
     let draw = rng & 0x3f;
-    o.set_u16(ctx.b, nuage::DELAY, draw);
+    o.set_u16(ctx.b, cloud::DELAY, draw);
     let rng = ctx.random();
     let draw = rng & 0x3f;
     o.set_u16(ctx.b, Obj::Y, draw);
@@ -600,19 +600,19 @@ fn nuage_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let cam = crate::ram::CAMERA_ALT_X.get(ctx.b);
     o.set_u16(ctx.b, Obj::X, cam.wrapping_add(0x1c0));
     let variant = o.u8(ctx.b, Obj::VARIANT) as u32;
-    let speed = ctx.prog16(nuage::SPEEDS + 2 * variant);
+    let speed = ctx.prog16(cloud::SPEEDS + 2 * variant);
     o.set_u16(ctx.b, Obj::VX, speed);
-    let animation = ctx.prog8(nuage::ANIMATIONS_NUMBER + variant);
-    ctx.anim_start(nuage::ANIMATIONS, animation as u16);
+    let animation = ctx.prog8(cloud::ANIMATIONS_NUMBER + variant);
+    ctx.anim_start(cloud::ANIMATIONS, animation as u16);
 }
 
 fn cloud_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sub_state = o.u8(ctx.b, field::SUB_STATE);
     if !(sub_state != 0) {
-        let remainder = o.u16(ctx.b, nuage::DELAY).wrapping_sub(1);
-        o.set_u16(ctx.b, nuage::DELAY, remainder);
+        let remainder = o.u16(ctx.b, cloud::DELAY).wrapping_sub(1);
+        o.set_u16(ctx.b, cloud::DELAY, remainder);
         if !(remainder as i16 >= 0) {
-            ajoute_u8(ctx, o, field::SUB_STATE, 2);
+            add_u8(ctx, o, field::SUB_STATE, 2);
         }
         return;
     }
@@ -625,15 +625,15 @@ fn cloud_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let d0 = (vx << 16) as i32 >> 8;
     let x = o.u32(ctx.b, Obj::X).wrapping_sub(d0 as u32);
     o.set_u32(ctx.b, Obj::X, x);
-    let limite = crate::ram::CAMERA_ALT_X.get(ctx.b).wrapping_sub(0x40);
+    let limit = crate::ram::CAMERA_ALT_X.get(ctx.b).wrapping_sub(0x40);
     let xw = o.u16(ctx.b, Obj::X);
-    if !((limite as i16) < xw as i16) {
-        ajoute_u8(ctx, o, Obj::STATE, 2);
+    if !((limit as i16) < xw as i16) {
+        add_u8(ctx, o, Obj::STATE, 2);
     }
 }
 
-fn nuage<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, nuage::TABLE, nuage_init, cloud_active)
+fn cloud<R: Bench>(ctx: &mut Cx<'_, R>) {
+    three_states(ctx, cloud::TABLE, cloud_init, cloud_active)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -666,10 +666,10 @@ mod interface {
     pub const OFFSETS_1: u32 = 0xae93c;
     /// Variant 2: animations and offsets per player.
     pub const ANIMATIONS_2: u32 = 0xae9e6;
-    pub const FORMES_2: u32 = 0xae9c2;
+    pub const SHAPES_2: u32 = 0xae9c2;
     pub const OFFSETS_2: u32 = 0xae9ce;
     pub const OFFSETS_4: u32 = 0xaec8e;
-    pub const PORTEUR: u32 = 0x1e;
+    pub const CARRIER: u32 = 0x1e;
     pub const PLAYER: u32 = 0x1a;
     pub const CHARACTER: u32 = 0x42;
     // subroutines not rewritten
@@ -703,7 +703,7 @@ fn interface_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             if ready == 0 {
                 return;
             }
-            ajoute_u8(ctx, o, Obj::STATE, 2);
+            add_u8(ctx, o, Obj::STATE, 2);
             for i in 0..8 {
                 crate::mem::wr32(ctx.b, interface::PALETTE_0 + 4 * i, 0xffff_ffff);
             }
@@ -718,7 +718,7 @@ fn interface_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let target = target(ctx, interface::STATES_1, state as u32);
     match state {
         state::INIT => {
-            ajoute_u8(ctx, o, Obj::STATE, 2);
+            add_u8(ctx, o, Obj::STATE, 2);
             place_on_camera(ctx, o);
             let number = o.u8(ctx.b, field::MODE) as u32;
             for _ in 0..number {
@@ -730,10 +730,10 @@ fn interface_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             ctx.anim_start(ANIMATIONS_INTERFACE, 0x8e + number as u16);
         }
         state::ACTIVE => {
-            let porteur = pointeur(ctx, o, interface::PORTEUR);
-            let porteur_absent = porteur.u8(ctx.b, 0x1c) == 0;
-            let player = pointeur(ctx, o, interface::PLAYER);
-            if porteur_absent || {
+            let carrier = pointer(ctx, o, interface::CARRIER);
+            let carrier_absent = carrier.u8(ctx.b, 0x1c) == 0;
+            let player = pointer(ctx, o, interface::PLAYER);
+            if carrier_absent || {
                 let absent = player.u8(ctx.b, Obj::ACTIVE) == 0;
                 absent
             } {
@@ -745,8 +745,8 @@ fn interface_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             place_on_camera(ctx, o);
             let character = player.u8(ctx.b, 3) & 0x7e;
             let mut change = false;
-            let connu = o.u8(ctx.b, interface::CHARACTER);
-            if !(character == connu) {
+            let known = o.u8(ctx.b, interface::CHARACTER);
+            if !(character == known) {
                 o.set_u8(ctx.b, interface::CHARACTER, character);
                 change = true;
             }
@@ -758,16 +758,16 @@ fn interface_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             if change {
                 crate::sound::play(ctx.b, interface::CHANGE_CHARACTER, ctx.obj());
             }
-            let rehausse = o.u8(ctx.b, 0x16) != 0;
-            if rehausse {
+            let raise = o.u8(ctx.b, 0x16) != 0;
+            if raise {
                 o.set_u16(ctx.b, 0x12, 1);
                 shifted_u16(ctx, o, Obj::Z, 0x10);
             }
             ctx.anim_step();
             ctx.reinsert();
         }
-        state::LIBERE => ctx.free(&pools::EFFCT),
-        state::DETRUIT => ctx.free(&pools::EFFCT),
+        state::FREED => ctx.free(&pools::EFFCT),
+        state::DESTROYED => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -798,14 +798,14 @@ fn interface_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let target = target(ctx, interface::STATES_2, state as u32);
     match state {
         state::INIT => {
-            ajoute_u8(ctx, o, Obj::STATE, 2);
+            add_u8(ctx, o, Obj::STATE, 2);
             place_on_camera(ctx, o);
             o.set_u16(ctx.b, Obj::VX, 0);
             o.set_u16(ctx.b, Obj::VY, 0);
             o.set_u8(ctx.b, 0x2a, 0);
             o.set_u8(ctx.b, 0x2b, 7);
             let number = (o.u8(ctx.b, field::MODE) as u32) << 1;
-            let shape = ctx.prog16(interface::FORMES_2 + number);
+            let shape = ctx.prog16(interface::SHAPES_2 + number);
             o.set_u16(ctx.b, 0x12, shape);
             let dx = ctx.prog16(interface::OFFSETS_2 + 2 * number);
             let dz = ctx.prog16(interface::OFFSETS_2 + 2 * number + 2);
@@ -817,8 +817,8 @@ fn interface_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             if game_finished(ctx) {
                 return ctx.free(&pools::EFFCT);
             }
-            let porteur = pointeur(ctx, o, interface::PORTEUR);
-            let absent = porteur.u8(ctx.b, 0x1c) == 0;
+            let carrier = pointer(ctx, o, interface::CARRIER);
+            let absent = carrier.u8(ctx.b, 0x1c) == 0;
             if absent {
                 return ctx.reinsert();
             }
@@ -827,13 +827,13 @@ fn interface_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 return ctx.reinsert();
             }
             let number = o.u8(ctx.b, field::MODE) as u32;
-            let word = porteur.u16(ctx.b, 8 + 2 * number);
+            let word = carrier.u16(ctx.b, 8 + 2 * number);
             let mut d1: u8 = 0;
             if !(word == 0xffff) {
                 d1 = 1;
             }
-            let connu = o.u8(ctx.b, 0x14);
-            if !(d1 == connu) {
+            let known = o.u8(ctx.b, 0x14);
+            if !(d1 == known) {
                 o.set_u8(ctx.b, 0x14, d1);
                 // 0xae9f2
                 let offset = if d1 == 0 { 0 } else { 0x400 };
@@ -842,12 +842,12 @@ fn interface_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 interface_2_animation(ctx, o, d1 as u16);
             }
             let bits = 3u16 << ((number << 1) & 0x1f);
-            let value = porteur.u16(ctx.b, 0x14) & bits;
+            let value = carrier.u16(ctx.b, 0x14) & bits;
             let old = o.u16(ctx.b, 0x1c);
             if !(value == old) {
                 o.set_u16(ctx.b, 0x1c, value);
-                let clignote = o.u8(ctx.b, 0x15) != 0;
-                if !clignote {
+                let blinks = o.u8(ctx.b, 0x15) != 0;
+                if !blinks {
                     o.set_u8(ctx.b, 0x15, 0xc);
                     crate::sound::play(ctx.b, interface::SOUND_GAUGE, ctx.obj());
                 }
@@ -856,16 +856,16 @@ fn interface_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             if remainder == 0 {
                 return ctx.reinsert();
             }
-            let drapeaux = o.u8(ctx.b, 0x2a);
-            o.set_u8(ctx.b, 0x2a, drapeaux & !1);
+            let flags = o.u8(ctx.b, 0x2a);
+            o.set_u8(ctx.b, 0x2a, flags & !1);
             let remainder = remainder.wrapping_sub(1);
             o.set_u8(ctx.b, 0x15, remainder);
             if !(remainder == 0) {
                 if remainder & 2 == 0 {
                     return ctx.reinsert();
                 }
-                let drapeaux = o.u8(ctx.b, 0x2a);
-                o.set_u8(ctx.b, 0x2a, drapeaux | 1);
+                let flags = o.u8(ctx.b, 0x2a);
+                o.set_u8(ctx.b, 0x2a, flags | 1);
                 return ctx.reinsert();
             }
             let value = o.u16(ctx.b, 0x1c);
@@ -876,12 +876,12 @@ fn interface_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             if value >> (bit + 1) & 1 == 0 {
                 return ctx.reinsert();
             }
-            ajoute_u8(ctx, o, field::SUB_STATE, 2);
+            add_u8(ctx, o, field::SUB_STATE, 2);
             copy_palette(ctx, o, 0x800);
             ctx.reinsert();
         }
-        state::LIBERE => ctx.free(&pools::EFFCT),
-        state::DETRUIT => ctx.free(&pools::EFFCT),
+        state::FREED => ctx.free(&pools::EFFCT),
+        state::DESTROYED => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -902,7 +902,7 @@ fn interface_3<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let target = target(ctx, interface::STATES_3, state as u32);
     match state {
         state::INIT => {
-            ajoute_u8(ctx, o, Obj::STATE, 2);
+            add_u8(ctx, o, Obj::STATE, 2);
             place_on_camera(ctx, o);
             shifted_u16(ctx, o, Obj::X, 0x10);
             shifted_u16(ctx, o, Obj::Z, 0xd8);
@@ -932,7 +932,7 @@ fn interface_4<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let target = target(ctx, interface::STATES_4, state as u32);
     match state {
         state::INIT => {
-            ajoute_u8(ctx, o, Obj::STATE, 2);
+            add_u8(ctx, o, Obj::STATE, 2);
             place_on_camera(ctx, o);
             let rank = (o.u8(ctx.b, field::MODE) as u32) << 3;
             let dx = ctx.prog16(interface::OFFSETS_4 + rank);
@@ -951,7 +951,7 @@ fn interface_4<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             }
             ctx.reinsert();
         }
-        state::LIBERE | state::DETRUIT => ctx.free(&pools::EFFCT),
+        state::FREED | state::DESTROYED => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -981,8 +981,8 @@ mod impact {
     pub const ENTRY: u32 = 0xb1440;
     pub const TABLE: u32 = 0xb144e;
     pub const ANIMATIONS: u32 = 0x1908d6;
-    pub const HASARD_A: u32 = 0xb14a2;
-    pub const HASARD_B: u32 = 0xb14b2;
+    pub const RANDOM_A: u32 = 0xb14a2;
+    pub const RANDOM_B: u32 = 0xb14b2;
     /// Flags per enemy / boss type (two bytes: forbidden, flag).
     pub const ENEMIES: u32 = 0xb1544;
     pub const BOSS: u32 = 0xb1586;
@@ -999,12 +999,12 @@ fn impact_abandon<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 /// `0xb14dc`: reads the target's flag from the tables, or gives up.
-fn impact_drapeau<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+fn impact_flag<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let pointer_target = o.u16(ctx.b, impact::TARGET);
     if pointer_target == 0 {
         return impact_abandon(ctx, o);
     }
-    let target = pointeur(ctx, o, impact::TARGET);
+    let target = pointer(ctx, o, impact::TARGET);
     let word = target.u16(ctx.b, 4);
     if word == 0x402 {
         return impact_abandon(ctx, o);
@@ -1012,31 +1012,31 @@ fn impact_drapeau<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let class = target.u8(ctx.b, Obj::CLASS);
     let rank = (target.u8(ctx.b, Obj::KIND) as u32) * 2;
     if !(class != 2) {
-        let interdit = ctx.prog8(impact::ENEMIES + rank);
-        if interdit != 0 {
+        let forbidden = ctx.prog8(impact::ENEMIES + rank);
+        if forbidden != 0 {
             return impact_abandon(ctx, o);
         }
-        let drapeau = ctx.prog8(impact::ENEMIES + rank + 1);
-        return o.set_u8(ctx.b, impact::VARIANT_RANDOM, drapeau);
+        let flag = ctx.prog8(impact::ENEMIES + rank + 1);
+        return o.set_u8(ctx.b, impact::VARIANT_RANDOM, flag);
     }
     if class != 4 {
         return impact_abandon(ctx, o);
     }
-    let interdit = ctx.prog8(impact::BOSS + rank);
-    if interdit != 0 {
+    let forbidden = ctx.prog8(impact::BOSS + rank);
+    if forbidden != 0 {
         return impact_abandon(ctx, o);
     }
-    let drapeau = ctx.prog8(impact::BOSS + rank + 1);
-    o.set_u8(ctx.b, impact::VARIANT_RANDOM, drapeau);
+    let flag = ctx.prog8(impact::BOSS + rank + 1);
+    o.set_u8(ctx.b, impact::VARIANT_RANDOM, flag);
 }
 
 /// `0xb15c8` (non-zero variant): position of the target offset by `(+0x14, +0x16)`.
-fn impact_position_decalee<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+fn impact_position_shifted<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let pointer_target = o.u16(ctx.b, impact::TARGET);
     if pointer_target == 0 {
         return;
     }
-    let target = pointeur(ctx, o, impact::TARGET);
+    let target = pointer(ctx, o, impact::TARGET);
     for off in [Obj::X, Obj::Z, Obj::Y] {
         let v = target.u32(ctx.b, off);
         o.set_u32(ctx.b, off, v);
@@ -1054,7 +1054,7 @@ fn impact_position_table<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     if pointer_target == 0 {
         return;
     }
-    let target = pointeur(ctx, o, impact::TARGET);
+    let target = pointer(ctx, o, impact::TARGET);
     for off in [Obj::X, Obj::Y, Obj::Z] {
         let v = target.u32(ctx.b, off);
         o.set_u32(ctx.b, off, v);
@@ -1066,8 +1066,8 @@ fn impact_position_table<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let rank = ((target.u8(ctx.b, Obj::KIND) << 2) as u32) & 0xff;
     let mut dx = ctx.data16(table + rank);
     let dz = ctx.data16(table + rank + 2);
-    let retourne = target.u8(ctx.b, field::FLIP) != 0;
-    if retourne {
+    let turned = target.u8(ctx.b, field::FLIP) != 0;
+    if turned {
         dx = dx.wrapping_neg();
     }
     shifted_u16(ctx, o, Obj::X, dx);
@@ -1075,19 +1075,19 @@ fn impact_position_table<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 fn impact_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+    add_u8(ctx, o, Obj::STATE, 2);
     let variant = o.u8(ctx.b, Obj::VARIANT);
     if !(variant == 0) {
-        impact_position_decalee(ctx, o);
+        impact_position_shifted(ctx, o);
         o.set_u8(ctx.b, impact::VARIANT_RANDOM, 0);
     } else {
         impact_position_table(ctx, o);
     }
-    impact_drapeau(ctx, o);
+    impact_flag(ctx, o);
     let rng = ctx.random();
     let draw = rng & 0xf;
-    let drapeau = o.u8(ctx.b, impact::VARIANT_RANDOM);
-    let table = if drapeau == 0 { impact::HASARD_A } else { impact::HASARD_B };
+    let flag = o.u8(ctx.b, impact::VARIANT_RANDOM);
+    let table = if flag == 0 { impact::RANDOM_A } else { impact::RANDOM_B };
     let animation = ctx.prog8(table + draw as u32);
     ctx.anim_start(impact::ANIMATIONS, animation as u16);
 }
@@ -1095,7 +1095,7 @@ fn impact_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 fn impact_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let end = ctx.anim_step();
     if end {
-        ajoute_u8(ctx, o, Obj::STATE, 2);
+        add_u8(ctx, o, Obj::STATE, 2);
     }
     ctx.reinsert();
 }
@@ -1107,7 +1107,7 @@ fn impact_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     match state {
         state::INIT => impact_init(ctx, o),
         state::ACTIVE => impact_active(ctx, o),
-        state::LIBERE | 6 => ctx.free(&pools::EFFCT),
+        state::FREED | 6 => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -1123,11 +1123,11 @@ mod debris {
     pub const ENTRY: u32 = 0xab7fa;
     pub const TABLE: u32 = 0xab808;
     /// Number of siblings per variant (program space); ROM sheets (data).
-    pub const NOMBRES: u32 = 0xab95e;
+    pub const NUMBERS: u32 = 0xab95e;
     pub const SHEETS: u32 = 0xab8a2;
     pub const ANIMATIONS: u32 = 0x18e664;
-    pub const ENFANT: u32 = 0x42;
-    pub const CLIGNOTEMENT: u32 = 0x53;
+    pub const CHILD: u32 = 0x42;
+    pub const BLINK: u32 = 0x53;
 }
 
 /// `0xab7d8`: creates a debris (type 6, variant `variant`) attached to the current object.
@@ -1138,16 +1138,16 @@ fn created_debris<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, variant: u8) -> Option<
     n.set_u8(ctx.b, Obj::ACTIVE, 1);
     n.set_u8(ctx.b, Obj::KIND, 6);
     n.set_u8(ctx.b, Obj::VARIANT, variant);
-    n.set_u8(ctx.b, debris::ENFANT, 0);
+    n.set_u8(ctx.b, debris::CHILD, 0);
     n.set_u16(ctx.b, field::OWNER, o.0 as u16);
     Some(n)
 }
 
 /// First debris: creates its siblings, then goes to the common initialization.
 fn debris_parent<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    o.set_u8(ctx.b, debris::ENFANT, 1);
+    o.set_u8(ctx.b, debris::CHILD, 1);
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    let count = ctx.prog8(debris::NOMBRES + variant as u32);
+    let count = ctx.prog8(debris::NUMBERS + variant as u32);
     o.set_u8(ctx.b, field::MODE, count.wrapping_add(1));
     let owner = o.u16(ctx.b, field::OWNER);
     for remaining in (0..=count as u16).rev() {
@@ -1155,24 +1155,24 @@ fn debris_parent<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             break;
         };
         sibling.set_u16(ctx.b, field::OWNER, owner);
-        sibling.set_u8(ctx.b, debris::ENFANT, 1);
+        sibling.set_u8(ctx.b, debris::CHILD, 1);
         sibling.set_u8(ctx.b, field::MODE, remaining as u8);
     }
     debris_init(ctx, o);
 }
 
 fn debris_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let enfant = o.u8(ctx.b, debris::ENFANT);
-    if enfant == 0 {
+    let child = o.u8(ctx.b, debris::CHILD);
+    if child == 0 {
         return debris_parent(ctx, o);
     }
-    ajoute_u8(ctx, o, Obj::STATE, 2);
-    let owner = pointeur(ctx, o, field::OWNER);
+    add_u8(ctx, o, Obj::STATE, 2);
+    let owner = pointer(ctx, o, field::OWNER);
     for off in [Obj::X, Obj::Z, Obj::Y] {
         let v = owner.u32(ctx.b, off);
         o.set_u32(ctx.b, off, v);
     }
-    o.set_u8(ctx.b, debris::CLIGNOTEMENT, 0);
+    o.set_u8(ctx.b, debris::BLINK, 0);
     o.set_u16(ctx.b, 0x16, 0);
     let variant = o.u8(ctx.b, Obj::VARIANT) as u32;
     let offset = ctx.data16(debris::SHEETS + 2 * variant) as i16 as i32 as u32;
@@ -1188,14 +1188,14 @@ fn debris_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let (mut dx, dz, dy) = (ctx.data16(sheet + 8), ctx.data16(sheet + 10), ctx.data16(sheet + 12));
     sheet += 14;
     let _ = sheet;
-    let retourne = owner.u8(ctx.b, field::FLIP) != 0;
-    if retourne {
+    let turned = owner.u8(ctx.b, field::FLIP) != 0;
+    if turned {
         let flip = o.u8(ctx.b, field::FLIP) ^ 0x20;
         o.set_u8(ctx.b, field::FLIP, flip);
         let vx = o.u16(ctx.b, Obj::VX).wrapping_neg();
         o.set_u16(ctx.b, Obj::VX, vx);
         dx = dx.wrapping_neg();
-        o.set_u8(ctx.b, debris::CLIGNOTEMENT, 1);
+        o.set_u8(ctx.b, debris::BLINK, 1);
     }
     shifted_u16(ctx, o, Obj::X, dx);
     shifted_u16(ctx, o, Obj::Z, dz);
@@ -1208,20 +1208,20 @@ fn debris_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     ctx.anim_step();
     let flags = o.u8(ctx.b, Obj::FLAGS);
     o.set_u8(ctx.b, Obj::FLAGS, flags & !2);
-    let clignote = o.u8(ctx.b, debris::CLIGNOTEMENT) ^ 1;
-    o.set_u8(ctx.b, debris::CLIGNOTEMENT, clignote);
-    if !(clignote == 0) {
+    let blinks = o.u8(ctx.b, debris::BLINK) ^ 1;
+    o.set_u8(ctx.b, debris::BLINK, blinks);
+    if !(blinks == 0) {
         let flags = o.u8(ctx.b, Obj::FLAGS);
         o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
     }
     let z = o.u16(ctx.b, Obj::Z);
     if !(z as i16 > 0) {
         o.set_u32(ctx.b, Obj::Z, 0);
-        o.set_u8(ctx.b, debris::CLIGNOTEMENT, 6);
-        ajoute_u8(ctx, o, Obj::STATE, 2);
+        o.set_u8(ctx.b, debris::BLINK, 6);
+        add_u8(ctx, o, Obj::STATE, 2);
         let variant = o.u8(ctx.b, Obj::VARIANT);
         if !(variant == 0) {
-            ajoute_u8(ctx, o, debris::CLIGNOTEMENT, 0xff);
+            add_u8(ctx, o, debris::BLINK, 0xff);
         }
     }
     ctx.reinsert();
@@ -1230,8 +1230,8 @@ fn debris_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 fn debris_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let flags = o.u8(ctx.b, Obj::FLAGS);
     o.set_u8(ctx.b, Obj::FLAGS, flags & !2);
-    let remainder = o.u8(ctx.b, debris::CLIGNOTEMENT).wrapping_sub(1);
-    o.set_u8(ctx.b, debris::CLIGNOTEMENT, remainder);
+    let remainder = o.u8(ctx.b, debris::BLINK).wrapping_sub(1);
+    o.set_u8(ctx.b, debris::BLINK, remainder);
     if remainder == 0 {
         return ctx.free(&pools::EFFCT);
     }
@@ -1249,7 +1249,7 @@ fn debris_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     match state {
         state::INIT => debris_init(ctx, o),
         state::ACTIVE => debris_active(ctx, o),
-        state::LIBERE => debris_end(ctx, o),
+        state::FREED => debris_end(ctx, o),
         6 => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
@@ -1260,7 +1260,7 @@ fn debris_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 
 /// Type 1: unused table slot in this version of the game: the handler frees the object immediately (`bra` to `jmp
 /// 0x2218`).
-fn supprime<R: Bench>(ctx: &mut Cx<'_, R>) {
+fn removed<R: Bench>(ctx: &mut Cx<'_, R>) {
     ctx.free(&pools::EFFCT);
 }
 
@@ -1269,17 +1269,17 @@ fn supprime<R: Bench>(ctx: &mut Cx<'_, R>) {
 
 /// Type 7: plays the animation (drawn according to the mode `+0x2f`); at the end of the animation it rises by two units
 /// in depth then blinks for 0x1e frames before disappearing. Not exercised.
-mod eclat_unique {
+mod shard_single {
     pub const ENTRY: u32 = 0xaba4e;
     pub const TABLE: u32 = 0xaba5c;
     pub const ANIMATIONS_MODE: u32 = 0xaba84;
     pub const COUNT: u32 = 0x53;
 }
 
-fn eclat_unique_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+fn shard_single_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
     let mode = o.u8(ctx.b, field::MODE) as u32;
-    let animation = ctx.prog8(eclat_unique::ANIMATIONS_MODE + mode);
+    let animation = ctx.prog8(shard_single::ANIMATIONS_MODE + mode);
     ctx.anim_start(0x1bf8fe, animation as u16);
     ctx.reinsert();
 }
@@ -1287,17 +1287,17 @@ fn eclat_unique_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 fn shard_single_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let end = o.u8(ctx.b, 0x32);
     if !(end == 0) {
-        ajoute_u8(ctx, o, Obj::STATE, 2);
-        o.set_u8(ctx.b, eclat_unique::COUNT, 0x1e);
+        add_u8(ctx, o, Obj::STATE, 2);
+        o.set_u8(ctx.b, shard_single::COUNT, 0x1e);
         let y = o.u32(ctx.b, Obj::Y).wrapping_add(2);
         o.set_u32(ctx.b, Obj::Y, y);
     }
     ctx.anim_step();
 }
 
-fn eclat_unique_clignote<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let remainder = o.u8(ctx.b, eclat_unique::COUNT).wrapping_sub(1);
-    o.set_u8(ctx.b, eclat_unique::COUNT, remainder);
+fn shard_single_blinks<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    let remainder = o.u8(ctx.b, shard_single::COUNT).wrapping_sub(1);
+    o.set_u8(ctx.b, shard_single::COUNT, remainder);
     if remainder == 0 {
         return ctx.free(&pools::EFFCT);
     }
@@ -1308,12 +1308,12 @@ fn eclat_unique_clignote<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 fn shard_single_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, eclat_unique::TABLE, state as u32);
+    let target = target(ctx, shard_single::TABLE, state as u32);
     match state {
-        state::INIT => eclat_unique_init(ctx, o),
+        state::INIT => shard_single_init(ctx, o),
         state::ACTIVE => shard_single_active(ctx, o),
-        state::LIBERE => eclat_unique_clignote(ctx, o),
-        state::DETRUIT => ctx.free(&pools::EFFCT),
+        state::FREED => shard_single_blinks(ctx, o),
+        state::DESTROYED => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -1323,15 +1323,15 @@ fn shard_single_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 
 /// Type 19: object that enters from the left of the screen (x = -0x80, y = 0x150), waits 0x70 frames advancing two
 /// pixels per frame, then slows down (acceleration -0x10) until it goes back. Not exercised.
-mod balayage {
+mod sweep {
     pub const ENTRY: u32 = 0xaecce;
     pub const TABLE: u32 = 0xaecdc;
     pub const DELAY: u32 = 0x54;
 }
 
-fn balayage_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
-    o.set_u8(ctx.b, balayage::DELAY, 0x70);
+fn sweep_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
+    o.set_u8(ctx.b, sweep::DELAY, 0x70);
     o.set_u16(ctx.b, Obj::X, 0xff80);
     o.set_u16(ctx.b, Obj::Y, 0x150);
     o.set_u16(ctx.b, Obj::VX, 0x200);
@@ -1342,15 +1342,15 @@ fn balayage_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 fn sweep_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sub_state = o.u8(ctx.b, field::SUB_STATE);
     if !(sub_state != 0) {
-        let delay = o.u8(ctx.b, balayage::DELAY);
+        let delay = o.u8(ctx.b, sweep::DELAY);
         if delay != 0 {
-            o.set_u8(ctx.b, balayage::DELAY, delay - 1);
+            o.set_u8(ctx.b, sweep::DELAY, delay - 1);
             shifted_u16(ctx, o, Obj::X, 2);
         } else {
             ctx.move_x();
             let vx = o.u16(ctx.b, Obj::VX);
             if !(vx as i16 >= 0) {
-                ajoute_u8(ctx, o, field::SUB_STATE, 1);
+                add_u8(ctx, o, field::SUB_STATE, 1);
             }
         }
     }
@@ -1359,7 +1359,7 @@ fn sweep_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 fn sweep_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, balayage::TABLE, balayage_init, sweep_active)
+    three_states(ctx, sweep::TABLE, sweep_init, sweep_active)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1367,39 +1367,39 @@ fn sweep_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 
 /// Type 27: effect placed on the owner object (`+0x50`, created by `0xb12c0`: pickup) that rises by 0x8000 (half a
 /// pixel) per frame for 0x1c frames. Not exercised.
-mod fumee {
+mod smoke {
     pub const ENTRY: u32 = 0xb12e6;
     pub const TABLE: u32 = 0xb12f4;
     pub const ANIMATIONS: u32 = 0x19046c;
     pub const DURATION: u32 = 0x57;
 }
 
-fn fumee_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
-    o.set_u8(ctx.b, fumee::DURATION, 0x1c);
-    let owner = pointeur(ctx, o, field::OWNER);
+fn smoke_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
+    o.set_u8(ctx.b, smoke::DURATION, 0x1c);
+    let owner = pointer(ctx, o, field::OWNER);
     let x = owner.u16(ctx.b, Obj::X);
     o.set_u16(ctx.b, Obj::X, x);
     let y = owner.u16(ctx.b, Obj::Y).wrapping_sub(1);
     o.set_u16(ctx.b, Obj::Y, y);
     o.set_u16(ctx.b, Obj::Z, 0x10);
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    ctx.anim_start(fumee::ANIMATIONS, variant as u16);
+    ctx.anim_start(smoke::ANIMATIONS, variant as u16);
     ctx.reinsert();
 }
 
 fn smoke_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let remainder = o.u8(ctx.b, fumee::DURATION).wrapping_sub(1);
-    o.set_u8(ctx.b, fumee::DURATION, remainder);
+    let remainder = o.u8(ctx.b, smoke::DURATION).wrapping_sub(1);
+    o.set_u8(ctx.b, smoke::DURATION, remainder);
     if !(remainder != 0) {
-        ajoute_u8(ctx, o, Obj::STATE, 2);
+        add_u8(ctx, o, Obj::STATE, 2);
     }
     let z = o.u32(ctx.b, Obj::Z).wrapping_add(0x8000);
     o.set_u32(ctx.b, Obj::Z, z);
 }
 
 fn smoke_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, fumee::TABLE, fumee_init, smoke_active)
+    three_states(ctx, smoke::TABLE, smoke_init, smoke_active)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -1407,24 +1407,24 @@ fn smoke_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 
 /// Type 28: spark stuck to an object (`+0x5c`), 0x20 above it; the animation depends on the variant and on `A5+0x70`.
 /// At the end of the animation, it notifies its object (`+0x77` ← 1, except variant 6) then disappears. Not exercised.
-mod etincelle {
+mod spark {
     pub const ENTRY: u32 = 0xb136e;
     pub const TABLE: u32 = 0xb137c;
     pub const ANIMATIONS: u32 = 0x190534;
-    pub const PORTEUR: u32 = 0x5c;
+    pub const CARRIER: u32 = 0x5c;
 }
 
-fn etincelle_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
-    let porteur = pointeur(ctx, o, etincelle::PORTEUR);
-    copy_position(ctx, o, porteur);
+fn spark_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
+    let carrier = pointer(ctx, o, spark::CARRIER);
+    copy_position(ctx, o, carrier);
     let y = o.u16(ctx.b, Obj::Y).wrapping_sub(1);
     o.set_u16(ctx.b, Obj::Y, y);
     shifted_u16(ctx, o, Obj::Z, 0x20);
     let variant = o.u8(ctx.b, Obj::VARIANT) as u16;
     let word = ctx.ram16(0x70);
     let animation = variant.wrapping_add((word & 0xf) >> 1 << 3);
-    ctx.anim_start(etincelle::ANIMATIONS, animation);
+    ctx.anim_start(spark::ANIMATIONS, animation);
     ctx.reinsert();
 }
 
@@ -1433,23 +1433,23 @@ fn spark_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     if !end {
         return;
     }
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+    add_u8(ctx, o, Obj::STATE, 2);
     let variant = o.u8(ctx.b, Obj::VARIANT);
     if variant == 6 {
         return;
     }
-    let porteur = pointeur(ctx, o, etincelle::PORTEUR);
-    porteur.set_u8(ctx.b, 0x77, 1);
+    let carrier = pointer(ctx, o, spark::CARRIER);
+    carrier.set_u8(ctx.b, 0x77, 1);
 }
 
 fn spark_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, etincelle::TABLE, state as u32);
+    let target = target(ctx, spark::TABLE, state as u32);
     match state {
-        state::INIT => etincelle_init(ctx, o),
+        state::INIT => spark_init(ctx, o),
         state::ACTIVE => spark_active(ctx, o),
-        state::LIBERE => ajoute_u8(ctx, o, Obj::STATE, 2),
+        state::FREED => add_u8(ctx, o, Obj::STATE, 2),
         6 => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
@@ -1467,8 +1467,8 @@ mod mark {
 }
 
 fn mark_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
-    let owner = pointeur(ctx, o, field::OWNER);
+    add_u8(ctx, o, Obj::STATE, 2);
+    let owner = pointer(ctx, o, field::OWNER);
     for off in [Obj::X, Obj::Z] {
         let v = owner.u16(ctx.b, off);
         o.set_u16(ctx.b, off, v);
@@ -1482,7 +1482,7 @@ fn mark_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 fn mark_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let owner = pointeur(ctx, o, field::OWNER);
+    let owner = pointer(ctx, o, field::OWNER);
     let state = owner.u16(ctx.b, 4);
     if state != 0x204 {
         return ctx.free(&pools::EFFCT);
@@ -1501,8 +1501,8 @@ fn mark_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     match state {
         state::INIT => mark_init(ctx, o),
         state::ACTIVE => mark_active(ctx, o),
-        state::LIBERE => ctx.free(&pools::EFFCT),
-        state::DETRUIT => ctx.free(&pools::EFFCT),
+        state::FREED => ctx.free(&pools::EFFCT),
+        state::DESTROYED => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -1513,34 +1513,34 @@ fn mark_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 62: takes the variant and mode of the object it follows (`+0x5c`), places itself 0x48 to the left of it and
 /// waits for it to be hit (`+0x33` non-zero); it then explodes into nine EFFCT 0x40 objects (and a tenth described by
 /// the mode) then disappears. Not exercised.
-mod gerbe {
+mod sheaf {
     pub const ENTRY: u32 = 0xb77ac;
     pub const TABLE: u32 = 0xb77ba;
     pub const ANIMATIONS: u32 = 0x197a5c;
-    pub const PORTEUR: u32 = 0x5c;
+    pub const CARRIER: u32 = 0x5c;
 }
 
-fn gerbe_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
-    let porteur = pointeur(ctx, o, gerbe::PORTEUR);
-    let variant = porteur.u8(ctx.b, Obj::VARIANT);
+fn sheaf_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
+    let carrier = pointer(ctx, o, sheaf::CARRIER);
+    let variant = carrier.u8(ctx.b, Obj::VARIANT);
     o.set_u8(ctx.b, Obj::VARIANT, variant);
-    let mode = porteur.u8(ctx.b, field::MODE);
+    let mode = carrier.u8(ctx.b, field::MODE);
     o.set_u8(ctx.b, field::MODE, mode);
     for off in [Obj::X, Obj::Y] {
-        let v = porteur.u16(ctx.b, off);
+        let v = carrier.u16(ctx.b, off);
         o.set_u16(ctx.b, off, v);
     }
     let x = o.u16(ctx.b, Obj::X).wrapping_sub(0x48);
     o.set_u16(ctx.b, Obj::X, x);
     o.set_u16(ctx.b, Obj::Z, 0x40);
-    ctx.anim_start(gerbe::ANIMATIONS, 0);
+    ctx.anim_start(sheaf::ANIMATIONS, 0);
     o.set_u8(ctx.b, 0x3b, 0);
     ctx.reinsert();
 }
 
 /// `0xb7810`: the explosion.
-fn gerbe_explose<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+fn sheaf_explodes<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let mut last = None;
     for _ in 0..9 {
         let new = ctx.alloc(&pools::EFFCT);
@@ -1576,19 +1576,19 @@ fn gerbe_explose<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 fn sheaf_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, gerbe::TABLE, state as u32);
+    let target = target(ctx, sheaf::TABLE, state as u32);
     match state {
-        state::INIT => gerbe_init(ctx, o),
+        state::INIT => sheaf_init(ctx, o),
         state::ACTIVE => {
-            let porteur = pointeur(ctx, o, gerbe::PORTEUR);
-            let key = porteur.u8(ctx.b, 0x33);
+            let carrier = pointer(ctx, o, sheaf::CARRIER);
+            let key = carrier.u8(ctx.b, 0x33);
             if key == 0 {
                 return;
             }
-            gerbe_explose(ctx, o);
+            sheaf_explodes(ctx, o);
         }
-        state::LIBERE => gerbe_explose(ctx, o),
-        state::DETRUIT => ctx.free(&pools::EFFCT),
+        state::FREED => sheaf_explodes(ctx, o),
+        state::DESTROYED => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -1598,7 +1598,7 @@ fn sheaf_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 
 /// Type 56: burst thrown into the air from its position (random scatter of ±128 in X and ±32 in depth, speeds drawn
 /// from two tables, animation 0x164 to 0x167); disappears when it falls back below the ground. Not exercised.
-mod eclats_debris {
+mod shards_debris {
     pub const ENTRY: u32 = 0xb6c6e;
     pub const TABLE: u32 = 0xb6c7c;
     pub const SPEEDS_X: u32 = 0xb6d18;
@@ -1611,8 +1611,8 @@ fn draw<R: Bench>(ctx: &mut Cx<'_, R>, mask: u16) -> u16 {
     rng & mask
 }
 
-fn eclats_debris_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+fn shards_debris_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
     o.set_u16(ctx.b, 0x42, 0x40);
     o.set_u8(ctx.b, 0x2a, 1);
     o.set_u8(ctx.b, 0x2b, 0x1d);
@@ -1625,10 +1625,10 @@ fn eclats_debris_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u16(ctx.b, Obj::VZ, 0x400);
     o.set_u16(ctx.b, Obj::AZ, 0xffc0);
     let r = draw(ctx, 0x1c) as u32;
-    let vx = ctx.prog16(eclats_debris::SPEEDS_X + r);
+    let vx = ctx.prog16(shards_debris::SPEEDS_X + r);
     o.set_u16(ctx.b, Obj::VX, vx);
     let r = draw(ctx, 0x1c) as u32;
-    let vy = ctx.prog16(eclats_debris::SPEEDS_Y + r);
+    let vy = ctx.prog16(shards_debris::SPEEDS_Y + r);
     o.set_u16(ctx.b, Obj::VY, vy);
     let animation = draw(ctx, 3).wrapping_add(0x164);
     ctx.anim_start(ANIMATIONS_INTERFACE, animation);
@@ -1636,8 +1636,8 @@ fn eclats_debris_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 fn shards_debris_active<R: Bench>(ctx: &mut Cx<'_, R>, _o: Obj) {
-    let positif = ctx.move_xyz().pl(); // bpl
-    if positif {
+    let positive = ctx.move_xyz().pl(); // bpl
+    if positive {
         return;
     }
     ctx.free(&pools::EFFCT);
@@ -1650,12 +1650,12 @@ fn shards_debris_end<R: Bench>(ctx: &mut Cx<'_, R>, _o: Obj) {
 fn shards_debris_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, eclats_debris::TABLE, state as u32);
+    let target = target(ctx, shards_debris::TABLE, state as u32);
     match state {
-        state::INIT => eclats_debris_init(ctx, o),
+        state::INIT => shards_debris_init(ctx, o),
         state::ACTIVE => shards_debris_active(ctx, o),
-        state::LIBERE => shards_debris_end(ctx, o),
-        state::DETRUIT => ctx.free(&pools::EFFCT),
+        state::FREED => shards_debris_end(ctx, o),
+        state::DESTROYED => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -1675,12 +1675,12 @@ mod projectile {
 }
 
 fn projectile_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+    add_u8(ctx, o, Obj::STATE, 2);
     let pointer_target = o.u16(ctx.b, projectile::TARGET);
     if pointer_target == 0 {
         return;
     }
-    let target = pointeur(ctx, o, projectile::TARGET);
+    let target = pointer(ctx, o, projectile::TARGET);
     for off in [Obj::X, Obj::Y, Obj::Z] {
         let v = target.u32(ctx.b, off);
         o.set_u32(ctx.b, off, v);
@@ -1712,7 +1712,7 @@ fn projectile_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         0 => {
             let in_flight = ctx.move_xz().gt();
             if !in_flight {
-                ajoute_u8(ctx, o, field::SUB_STATE, 2);
+                add_u8(ctx, o, field::SUB_STATE, 2);
                 o.set_u16(ctx.b, Obj::Z, 0);
             }
             ctx.anim_step();
@@ -1734,7 +1734,7 @@ fn projectile_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     match state {
         state::INIT => projectile_init(ctx, o),
         state::ACTIVE => projectile_active(ctx, o),
-        state::LIBERE | 6 => ctx.free(&pools::EFFCT),
+        state::FREED | 6 => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -1750,13 +1750,13 @@ mod shimmer_class {
     pub const ANIMATIONS: u32 = 0x1bc77c;
     pub const REPETITIONS: u32 = 0x57;
     pub const DELAY: u32 = 0x58;
-    pub const BASCULE: u32 = 0x5a;
-    pub const DECLENCHE: u32 = 0x5b;
-    pub const PORTEUR: u32 = 0x5c;
+    pub const TOGGLE: u32 = 0x5a;
+    pub const TRIGGERS: u32 = 0x5b;
+    pub const CARRIER: u32 = 0x5c;
 }
 
 fn shimmer_class_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+    add_u8(ctx, o, Obj::STATE, 2);
     let flags = o.u8(ctx.b, Obj::FLAGS);
     o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
     o.set_u8(ctx.b, shimmer_class::REPETITIONS, 8);
@@ -1780,7 +1780,7 @@ fn shimmer_class_player<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                     if !(dy > 0x40) {
                         let dx = o.u16(ctx.b, Obj::X).wrapping_sub(player.u16(ctx.b, Obj::X)).wrapping_add(0x60);
                         if !(dx > 0xc0) {
-                            o.set_u8(ctx.b, shimmer_class::DECLENCHE, 1);
+                            o.set_u8(ctx.b, shimmer_class::TRIGGERS, 1);
                             return;
                         }
                     }
@@ -1791,16 +1791,16 @@ fn shimmer_class_player<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 fn shimmer_class_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let porteur = pointeur(ctx, o, shimmer_class::PORTEUR);
-    let state_carrier = porteur.u16(ctx.b, 4);
+    let carrier = pointer(ctx, o, shimmer_class::CARRIER);
+    let state_carrier = carrier.u16(ctx.b, 4);
     if !(state_carrier == 0x200) {
-        ajoute_u8(ctx, o, Obj::STATE, 2);
+        add_u8(ctx, o, Obj::STATE, 2);
     }
-    let declenche = o.u8(ctx.b, shimmer_class::DECLENCHE);
-    if !(declenche != 0) {
+    let triggers = o.u8(ctx.b, shimmer_class::TRIGGERS);
+    if !(triggers != 0) {
         return shimmer_class_player(ctx, o);
     }
-    let cache = porteur.u8(ctx.b, Obj::HIDDEN);
+    let cache = carrier.u8(ctx.b, Obj::HIDDEN);
     if !(cache == 0) {
         let flags = o.u8(ctx.b, Obj::FLAGS);
         o.set_u8(ctx.b, Obj::FLAGS, flags | 2);
@@ -1812,11 +1812,11 @@ fn shimmer_class_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         return;
     }
     o.set_u16(ctx.b, shimmer_class::DELAY, 0x30);
-    let bascule = o.u8(ctx.b, shimmer_class::BASCULE) ^ 1;
-    o.set_u8(ctx.b, shimmer_class::BASCULE, bascule);
+    let toggle = o.u8(ctx.b, shimmer_class::TOGGLE) ^ 1;
+    o.set_u8(ctx.b, shimmer_class::TOGGLE, toggle);
     let flags = o.u8(ctx.b, Obj::FLAGS);
     o.set_u8(ctx.b, Obj::FLAGS, flags & !2);
-    if bascule != 0 {
+    if toggle != 0 {
         return;
     }
     let flags = o.u8(ctx.b, Obj::FLAGS);
@@ -1838,7 +1838,7 @@ fn shimmer_class_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 
 /// Type 24: accessory stuck to its owner (`+0x50`) at an offset (dx, dy, dz) read according to the variant; active only
 /// when the scene is not frozen (`A5+0x3d`). If the owner has disappeared it goes to state 6. Not exercised.
-mod accessoire {
+mod accessory {
     pub const ENTRY: u32 = 0xb0ff2;
     pub const TABLE: u32 = 0xb1000;
     pub const OFFSETS: u32 = 0xb10c0;
@@ -1847,13 +1847,13 @@ mod accessoire {
 }
 
 /// `0xb1052`: sticks the object back to the owner.
-fn accessoire_suit<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+fn accessory_follow<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let pointer_owner = o.u16(ctx.b, field::OWNER);
     if !(pointer_owner != 0) {
         o.set_u32(ctx.b, Obj::STATE, 0x0600_0000);
         return;
     }
-    let owner = pointeur(ctx, o, field::OWNER);
+    let owner = pointer(ctx, o, field::OWNER);
     for off in [Obj::X, Obj::Y, Obj::Z] {
         let v = owner.u32(ctx.b, off);
         o.set_u32(ctx.b, off, v);
@@ -1862,16 +1862,16 @@ fn accessoire_suit<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u8(ctx.b, field::FLIP, flip);
     let variant = o.u8(ctx.b, Obj::VARIANT);
     let rank = (variant << 3) as u32; // one-byte offset, like the original
-    let mut dx = ctx.prog16(accessoire::OFFSETS + rank);
-    let dy = ctx.prog16(accessoire::OFFSETS + rank + 2);
-    let dprofondeur = ctx.prog16(accessoire::OFFSETS + rank + 4) as i16 as i32;
-    let dz = ctx.prog16(accessoire::OFFSETS + rank + 6);
+    let mut dx = ctx.prog16(accessory::OFFSETS + rank);
+    let dy = ctx.prog16(accessory::OFFSETS + rank + 2);
+    let ddepth = ctx.prog16(accessory::OFFSETS + rank + 4) as i16 as i32;
+    let dz = ctx.prog16(accessory::OFFSETS + rank + 6);
     if !(flip == 0) {
         dx = dx.wrapping_neg();
     }
     shifted_u16(ctx, o, Obj::X, dx);
     shifted_u16(ctx, o, Obj::Y, dy);
-    let y = o.u32(ctx.b, Obj::Y).wrapping_add(dprofondeur as u32);
+    let y = o.u32(ctx.b, Obj::Y).wrapping_add(ddepth as u32);
     o.set_u32(ctx.b, Obj::Y, y);
     shifted_u16(ctx, o, Obj::Z, dz);
 }
@@ -1879,33 +1879,33 @@ fn accessoire_suit<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 fn accessory_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, accessoire::TABLE, state as u32);
+    let target = target(ctx, accessory::TABLE, state as u32);
     match state {
         state::INIT => {
-            let figee = ctx.ram8(0x3d) != 0;
-            if figee {
+            let frozen = ctx.ram8(0x3d) != 0;
+            if frozen {
                 return;
             }
-            ajoute_u8(ctx, o, Obj::STATE, 2);
-            o.set_u8(ctx.b, accessoire::END_ANIMATION, 0);
-            accessoire_suit(ctx, o);
-            ctx.anim_start(accessoire::ANIMATIONS, 3);
+            add_u8(ctx, o, Obj::STATE, 2);
+            o.set_u8(ctx.b, accessory::END_ANIMATION, 0);
+            accessory_follow(ctx, o);
+            ctx.anim_start(accessory::ANIMATIONS, 3);
         }
         state::ACTIVE => {
-            let figee = ctx.ram8(0x3d) != 0;
-            if figee {
+            let frozen = ctx.ram8(0x3d) != 0;
+            if frozen {
                 return;
             }
-            let end = o.u8(ctx.b, accessoire::END_ANIMATION);
+            let end = o.u8(ctx.b, accessory::END_ANIMATION);
             if !(end == 0) {
-                ajoute_u8(ctx, o, Obj::STATE, 2);
+                add_u8(ctx, o, Obj::STATE, 2);
             }
-            accessoire_suit(ctx, o);
+            accessory_follow(ctx, o);
             ctx.anim_step();
             ctx.reinsert();
         }
-        state::LIBERE => ctx.free(&pools::EFFCT),
-        state::DETRUIT => ctx.free(&pools::EFFCT),
+        state::FREED => ctx.free(&pools::EFFCT),
+        state::DESTROYED => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -1916,7 +1916,7 @@ fn accessory_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 45: object placed in the scenery that waits for the main player (`A5+0x46`) to pass over it: it then gives an
 /// event to each present player (`0x19b08`, offset per player) then disappears; it also disappears if it stays behind
 /// the camera. Not exercised.
-mod declencheur {
+mod trigger {
     pub const ENTRY: u32 = 0xb5340;
     pub const TABLE: u32 = 0xb534e;
     pub const ANIMATIONS: u32 = 0x1bf5c2;
@@ -1927,9 +1927,9 @@ mod declencheur {
 
 /// `0xb53b0`: trigger.
 fn trigger_effect<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    crate::sound::play(ctx.b, declencheur::EFFECT, ctx.obj());
+    crate::sound::play(ctx.b, trigger::EFFECT, ctx.obj());
     let level = ctx.ram8(0x35) as u32;
-    let mut offset = ctx.prog8(declencheur::OFFSETS + level) as u16;
+    let mut offset = ctx.prog8(trigger::OFFSETS + level) as u16;
     for i in 0..4u32 {
         let player = Obj(PLAYERS + i * STEP_PLAYER);
         let absent = player.u8(ctx.b, Obj::ACTIVE) == 0;
@@ -1943,12 +1943,12 @@ fn trigger_effect<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 fn trigger_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let limite = crate::ram::CAMERA_X.get(ctx.b).wrapping_sub(0x60);
+    let limit = crate::ram::CAMERA_X.get(ctx.b).wrapping_sub(0x60);
     let x = o.u16(ctx.b, Obj::X);
-    if limite as i16 > x as i16 {
+    if limit as i16 > x as i16 {
         return ctx.free(&pools::EFFCT);
     }
-    let principal = Obj(ctx.ram16(declencheur::PRINCIPAL) as i16 as i32 as u32 & 0xff_ffff);
+    let principal = Obj(ctx.ram16(trigger::PRINCIPAL) as i16 as i32 as u32 & 0xff_ffff);
     let dx = principal.u16(ctx.b, Obj::X).wrapping_sub(x).wrapping_add(0x44);
     if dx > 0x74 {
         return;
@@ -1960,22 +1960,22 @@ fn trigger_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     trigger_effect(ctx, o);
 }
 
-fn declencheur_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+fn trigger_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    ctx.anim_start(declencheur::ANIMATIONS, variant as u16);
+    ctx.anim_start(trigger::ANIMATIONS, variant as u16);
     ctx.reinsert();
 }
 
 fn trigger_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, declencheur::TABLE, state as u32);
+    let target = target(ctx, trigger::TABLE, state as u32);
     match state {
-        state::INIT => declencheur_init(ctx, o),
+        state::INIT => trigger_init(ctx, o),
         state::ACTIVE => trigger_active(ctx, o),
-        state::LIBERE => trigger_effect(ctx, o),
-        state::DETRUIT => ctx.free(&pools::EFFCT),
+        state::FREED => trigger_effect(ctx, o),
+        state::DESTROYED => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
@@ -1994,7 +1994,7 @@ fn trigger_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 ///
 /// State 2 animates the bubble (variant 3: makes it blink and sticks it back to its carrier); state 4 frees; a table
 /// code equal to `0x29` spawns a bubble of variant 3.
-mod bulle {
+mod bubble {
     pub const ENTRY: u32 = 0xaaac0;
     pub const STATES: u32 = 0xaaace;
     pub const VARIANTS: u32 = 0xaaaee;
@@ -2007,7 +2007,7 @@ mod bulle {
     pub const ACTIONS_6: u32 = 0xaab9c;
     // animation tables (data)
     pub const TABLE_77: u32 = 0xab4de;
-    pub const TABLE_COUP: u32 = 0xab4f6;
+    pub const TABLE_HIT: u32 = 0xab4f6;
     pub const TABLE_CHARACTER: u32 = 0xab4f0;
     pub const TABLE_OBJECT_A: u32 = 0xab4e4;
     pub const TABLE_OBJECT_B: u32 = 0xab4ea;
@@ -2019,30 +2019,30 @@ mod bulle {
     pub const OWNER: u32 = 0x50;
     pub const DOOR: u32 = 0x54;
     pub const END_ANIMATION: u32 = 0x43;
-    pub const COUP: u32 = 0x33;
-    pub const MINUTEUR: u32 = 0x42;
+    pub const HIT: u32 = 0x33;
+    pub const COUNTDOWN_TIMER: u32 = 0x42;
     pub const PALETTE_GAUGE: u32 = 0x91c41c;
 }
 
 /// `0xaac00`: displays animation `number` of the bubble set, then sorts the object.
-fn bulle_affiche<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, number: u8) {
+fn bubble_shown<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, number: u8) {
     if !(number != 0x2b) {
         o.set_u16(ctx.b, 0x2a, 0x115);
     }
-    ctx.anim_start(bulle::ANIMATIONS, number as u16);
+    ctx.anim_start(bubble::ANIMATIONS, number as u16);
     ctx.reinsert();
 }
 
 /// `0xab26a`: a `0x29` code spawns a bubble of variant 3 (or, if the carrier is a BOX, plays animation 4).
 fn bubble_created_next<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let door = pointeur(ctx, o, bulle::DOOR);
+    let door = pointer(ctx, o, bubble::DOOR);
     let class = door.u8(ctx.b, Obj::CLASS);
     if !(class != 0xa) {
-        return bulle_affiche(ctx, o, 4);
+        return bubble_shown(ctx, o, 4);
     }
     o.set_u32(ctx.b, Obj::STATE, 0);
     o.set_u8(ctx.b, Obj::VARIANT, 3);
-    o.set_u8(ctx.b, bulle::END_ANIMATION, 0);
+    o.set_u8(ctx.b, bubble::END_ANIMATION, 0);
     let new = ctx.alloc(&pools::EFFCT);
     if new.is_none() {
         return;
@@ -2050,20 +2050,20 @@ fn bubble_created_next<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let n = new.unwrap();
     n.set_u8(ctx.b, Obj::ACTIVE, 1);
     n.set_u8(ctx.b, Obj::KIND, 4);
-    let p = o.u16(ctx.b, bulle::DOOR);
-    n.set_u16(ctx.b, bulle::DOOR, p);
+    let p = o.u16(ctx.b, bubble::DOOR);
+    n.set_u16(ctx.b, bubble::DOOR, p);
     n.set_u8(ctx.b, Obj::VARIANT, 3);
-    n.set_u8(ctx.b, bulle::END_ANIMATION, 1);
+    n.set_u8(ctx.b, bubble::END_ANIMATION, 1);
 }
 
 /// `0xaabf4`: reads the animation code in the table `table` (data) at index `index`; code `0x29` creates the
 /// continuation, the others are displayed.
-fn bulle_lit<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, table: u32, index: u16) {
+fn bubble_reads<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, table: u32, index: u16) {
     let code = ctx.data8(table + index as u32);
     if code == 0x29 {
         return bubble_created_next(ctx, o);
     }
-    bulle_affiche(ctx, o, code);
+    bubble_shown(ctx, o, code);
 }
 
 /// The original jumps into another routine's epilogue (`movem.l (SP)+,{A1-A4} ; rts`, 0xaa9fe): the next four return
@@ -2080,7 +2080,7 @@ fn foreign_epilogue<R>(ctx: &mut Cx<'_, R>) {
 /// `0xaace8`: common continuation. For character 1 the original jumps into the epilogue of another routine (`movem.l
 /// (SP)+,{A1-A4} ; rts`): the effect is reproduced on the stack.
 fn bubble_next<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let owner = pointeur(ctx, o, bulle::OWNER);
+    let owner = pointer(ctx, o, bubble::OWNER);
     let character = (owner.u8(ctx.b, 3) >> 1).wrapping_sub(1);
     if character == 0 {
         return foreign_epilogue(ctx);
@@ -2095,13 +2095,13 @@ fn create_impact<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         n.set_u8(ctx.b, Obj::ACTIVE, 1);
         n.set_u8(ctx.b, Obj::KIND, 0x1d);
         n.set_u8(ctx.b, Obj::VARIANT, 0);
-        let door = o.u16(ctx.b, bulle::DOOR);
+        let door = o.u16(ctx.b, bubble::DOOR);
         n.set_u16(ctx.b, 0x5c, door);
     }
 }
 
 /// `0xaacfe`: about one time out of sixteen, draws at random whether to continue (`0x5555`: even bits).
-fn bulle_hasard<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+fn bubble_random<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let rng = ctx.random();
     let draw = rng & 0xf;
     if 0x5555u16 >> draw & 1 != 0 {
@@ -2115,16 +2115,16 @@ fn bubble_0_common<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj, d0: u8) {
     let mark = player.u8(ctx.b, 0x77);
     if !(mark == 0) {
         player.set_u8(ctx.b, 0x77, 0);
-        bulle_lit(ctx, o, bulle::TABLE_77, class as u16);
-        return bulle_hasard(ctx, o);
+        bubble_reads(ctx, o, bubble::TABLE_77, class as u16);
+        return bubble_random(ctx, o);
     }
     let index = ((d0 as u16) << 3).wrapping_add(class as u16);
-    bulle_lit(ctx, o, bulle::TABLE_COUP, index);
-    bulle_hasard(ctx, o);
+    bubble_reads(ctx, o, bubble::TABLE_HIT, index);
+    bubble_random(ctx, o);
 }
 
 /// `0xaabac`: animation according to `+0x10d` (or `+0x10e` for character 4).
-fn bulle_0_action_10d<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj) {
+fn bubble_0_action_10d<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj) {
     let mut d0 = player.u8(ctx.b, 0x10d);
     let class = player.u8(ctx.b, 3) >> 1;
     if !(class != 4) {
@@ -2134,81 +2134,81 @@ fn bulle_0_action_10d<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj) {
 }
 
 /// Tables of variant 0: the player's action `0x3d` leads to one of the ten routines.
-fn bulle_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let player = pointeur(ctx, o, bulle::OWNER);
+fn bubble_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    let player = pointer(ctx, o, bubble::OWNER);
     let action = player.u8(ctx.b, 0x3d);
-    let target = target(ctx, bulle::ACTIONS_0, action as u32);
+    let target = target(ctx, bubble::ACTIONS_0, action as u32);
     let byte = |ctx: &mut Cx<'_, R>, off: u32| player.u8(ctx.b, off) as u16;
     let class = player.u8(ctx.b, 3) >> 1;
     match action {
-        0 => bulle_0_action_10d(ctx, o, player),
+        0 => bubble_0_action_10d(ctx, o, player),
         2 => {
             let d0 = player.u8(ctx.b, 0x10e);
             bubble_0_common(ctx, o, player, d0);
         }
         4 => {
             let index = byte(ctx, 0x10d);
-            bulle_lit(ctx, o, bulle::TABLE_10D_A, index);
+            bubble_reads(ctx, o, bubble::TABLE_10D_A, index);
         }
         6 => {
             let index = byte(ctx, 0x10e);
-            bulle_lit(ctx, o, bulle::TABLE_10D_A, index);
+            bubble_reads(ctx, o, bubble::TABLE_10D_A, index);
         }
         8 => {
             let index = byte(ctx, 0x10d);
-            bulle_lit(ctx, o, bulle::TABLE_10D_C, index);
+            bubble_reads(ctx, o, bubble::TABLE_10D_C, index);
         }
         10 => {
             let index = byte(ctx, 0x10e);
-            bulle_lit(ctx, o, bulle::TABLE_10D_C, index);
+            bubble_reads(ctx, o, bubble::TABLE_10D_C, index);
         }
         12 => {
             let mut index = byte(ctx, 0x10d);
             if !(class != 4) {
                 index = byte(ctx, 0x10e);
             }
-            bulle_lit(ctx, o, bulle::TABLE_10D_B, index);
+            bubble_reads(ctx, o, bubble::TABLE_10D_B, index);
         }
-        14 => bulle_lit(ctx, o, bulle::TABLE_CHARACTER, class as u16),
+        14 => bubble_reads(ctx, o, bubble::TABLE_CHARACTER, class as u16),
         16 => {
-            let door = pointeur(ctx, o, bulle::DOOR);
+            let door = pointer(ctx, o, bubble::DOOR);
             let is_box = door.u8(ctx.b, Obj::CLASS) == 0xa;
             if is_box {
-                return bulle_0_action_10d(ctx, o, player);
+                return bubble_0_action_10d(ctx, o, player);
             }
             let gauge_inactive = ctx.ram16(0x4be) != 0;
             if !gauge_inactive {
-                crate::mem::wr16(ctx.b, bulle::PALETTE_GAUGE, 0xf0ff);
+                crate::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xf0ff);
             }
-            bulle_lit(ctx, o, bulle::TABLE_OBJECT_A, class as u16);
+            bubble_reads(ctx, o, bubble::TABLE_OBJECT_A, class as u16);
             bubble_next(ctx, o);
         }
         // 0xaacba (actions 18 and 20 share the same code)
         18 | 20 => {
-            let door = pointeur(ctx, o, bulle::DOOR);
+            let door = pointer(ctx, o, bubble::DOOR);
             let is_box = door.u8(ctx.b, Obj::CLASS) == 0xa;
             if is_box {
-                return bulle_0_action_10d(ctx, o, player);
+                return bubble_0_action_10d(ctx, o, player);
             }
             let gauge_inactive = ctx.ram16(0x4be) != 0;
             if !gauge_inactive {
-                crate::mem::wr16(ctx.b, bulle::PALETTE_GAUGE, 0xf0ff);
+                crate::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xf0ff);
             }
-            bulle_lit(ctx, o, bulle::TABLE_OBJECT_B, class as u16);
+            bubble_reads(ctx, o, bubble::TABLE_OBJECT_B, class as u16);
             bubble_next(ctx, o);
         }
         // 0xaac82
-        22 => bulle_affiche(ctx, o, 0x23),
+        22 => bubble_shown(ctx, o, 0x23),
         // 0xaad12: the player's gauge (`+0x77`) has just been filled
         24 | 26 | 28 | 30 | 32 => {
             let gauge = player.u8(ctx.b, 0x77) != 0;
             if gauge {
                 player.set_u8(ctx.b, 0x77, 0);
                 o.set_u8(ctx.b, field::MODE, 1);
-                crate::mem::wr16(ctx.b, bulle::PALETTE_GAUGE, 0xff00);
-                return bulle_affiche(ctx, o, 0x24);
+                crate::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xff00);
+                return bubble_shown(ctx, o, 0x24);
             }
-            bulle_affiche(ctx, o, 0x10);
+            bubble_shown(ctx, o, 0x10);
         }
         _ => outside_table(target),
     }
@@ -2216,8 +2216,8 @@ fn bulle_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 /// Variants 1, 2, 5 and 6: the action `0x3d` of the carried object (`+0x54`; player for variant 1) chooses a fixed
 /// animation.
-fn bubble_by_action<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, offset_pointeur: u32, doubler: bool, table: u32, count: u32) {
-    let source = pointeur(ctx, o, offset_pointeur);
+fn bubble_by_action<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, offset_pointer: u32, doubler: bool, table: u32, count: u32) {
+    let source = pointer(ctx, o, offset_pointer);
     let action = source.u8(ctx.b, 0x3d) as u32;
     let index = if doubler { action * 2 } else { action };
     let target = target(ctx, table, index);
@@ -2226,17 +2226,17 @@ fn bubble_by_action<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, offset_pointeur: u32,
         outside_table(target);
     }
     let code = match (table, index / if doubler { 2 } else { 1 }) {
-        (bulle::ACTIONS_1, _) => 0x10,
+        (bubble::ACTIONS_1, _) => 0x10,
         (_, 0) => 0x25,
         (_, 1) => 0x26,
         _ => 0x27,
     };
-    bulle_affiche(ctx, o, code);
+    bubble_shown(ctx, o, code);
 }
 
 /// Variant 3 (`0xaadba`): sticks the bubble back to its carrier.
-fn bulle_3_recolle<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let door = pointeur(ctx, o, bulle::DOOR);
+fn bubble_3_reattach<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    let door = pointer(ctx, o, bubble::DOOR);
     let mut d0: u8 = 0;
     let class = door.u8(ctx.b, Obj::CLASS);
     if !(class == 2) {
@@ -2251,8 +2251,8 @@ fn bulle_3_recolle<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
     let y = door.u32(ctx.b, Obj::Y).wrapping_sub(1);
     o.set_u32(ctx.b, Obj::Y, y);
-    let next = (o.u8(ctx.b, bulle::END_ANIMATION) & 1) as u16;
-    let base = bulle::OFFSETS_3 + (((d0 as u16) << 4).wrapping_add(next << 3)) as u32;
+    let next = (o.u8(ctx.b, bubble::END_ANIMATION) & 1) as u16;
+    let base = bubble::OFFSETS_3 + (((d0 as u16) << 4).wrapping_add(next << 3)) as u32;
     let index = ((door.u8(ctx.b, 0x86) as u32) << 2) & 0xffff;
     let mut dx = ctx.data16(base + index);
     let dz = ctx.data16(base + index + 2);
@@ -2263,28 +2263,28 @@ fn bulle_3_recolle<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     shifted_u16(ctx, o, Obj::X, dx);
 }
 
-fn bulle_3_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let end = o.u8(ctx.b, bulle::END_ANIMATION);
+fn bubble_3_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    let end = o.u8(ctx.b, bubble::END_ANIMATION);
     let number = if end == 0 { 0x29 } else { 0x2a };
-    ctx.anim_start(bulle::ANIMATIONS, number);
-    o.set_u8(ctx.b, bulle::MINUTEUR, 0x1e);
-    bulle_3_recolle(ctx, o);
+    ctx.anim_start(bubble::ANIMATIONS, number);
+    o.set_u8(ctx.b, bubble::COUNTDOWN_TIMER, 0x1e);
+    bubble_3_reattach(ctx, o);
 }
 
-fn bulle_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
+fn bubble_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
+    add_u8(ctx, o, Obj::STATE, 2);
     o.set_u8(ctx.b, field::MODE, 0);
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    let target = target(ctx, bulle::VARIANTS, 2 * variant as u32);
+    let target = target(ctx, bubble::VARIANTS, 2 * variant as u32);
     match variant {
-        0 => bulle_0(ctx, o),
-        1 => bubble_by_action(ctx, o, bulle::OWNER, false, bulle::ACTIONS_1, 6),
-        2 => bubble_by_action(ctx, o, bulle::DOOR, true, bulle::ACTIONS_2, 20),
-        3 => bulle_3_init(ctx, o),
-        4 => bulle_affiche(ctx, o, 0x23),
-        5 => bubble_by_action(ctx, o, bulle::DOOR, true, bulle::ACTIONS_5, 6),
-        6 => bubble_by_action(ctx, o, bulle::DOOR, true, bulle::ACTIONS_6, 6),
-        7 => bulle_affiche(ctx, o, 4),
+        0 => bubble_0(ctx, o),
+        1 => bubble_by_action(ctx, o, bubble::OWNER, false, bubble::ACTIONS_1, 6),
+        2 => bubble_by_action(ctx, o, bubble::DOOR, true, bubble::ACTIONS_2, 20),
+        3 => bubble_3_init(ctx, o),
+        4 => bubble_shown(ctx, o, 0x23),
+        5 => bubble_by_action(ctx, o, bubble::DOOR, true, bubble::ACTIONS_5, 6),
+        6 => bubble_by_action(ctx, o, bubble::DOOR, true, bubble::ACTIONS_6, 6),
+        7 => bubble_shown(ctx, o, 4),
         _ => outside_table(target),
     }
 }
@@ -2292,27 +2292,27 @@ fn bulle_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 fn bubble_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variant = o.u8(ctx.b, Obj::VARIANT);
     if variant == 3 {
-        // variant 3: blinks, sticks back, and goes to the next state after `MINUTEUR` frames
+        // variant 3: blinks, sticks back, and goes to the next state after `COUNTDOWN_TIMER` frames
         let flags = o.u8(ctx.b, Obj::FLAGS);
         o.set_u8(ctx.b, Obj::FLAGS, flags ^ 2);
         ctx.anim_step();
-        bulle_3_recolle(ctx, o);
-        let remainder = o.u8(ctx.b, bulle::MINUTEUR).wrapping_sub(1);
-        o.set_u8(ctx.b, bulle::MINUTEUR, remainder);
+        bubble_3_reattach(ctx, o);
+        let remainder = o.u8(ctx.b, bubble::COUNTDOWN_TIMER).wrapping_sub(1);
+        o.set_u8(ctx.b, bubble::COUNTDOWN_TIMER, remainder);
         if !(remainder != 0) {
-            ajoute_u8(ctx, o, Obj::STATE, 2);
+            add_u8(ctx, o, Obj::STATE, 2);
         }
         return ctx.reinsert();
     }
     let end = ctx.anim_step();
     if end {
-        ajoute_u8(ctx, o, Obj::STATE, 2);
+        add_u8(ctx, o, Obj::STATE, 2);
         return;
     }
     // the background scroll gauge follows the press of the button linked to the hit (`+0x33`)
     let mut value = 0u16;
-    let coup = o.u8(ctx.b, bulle::COUP);
-    if !(coup == 0) {
+    let hit = o.u8(ctx.b, bubble::HIT);
+    if !(hit == 0) {
         let gauge = ctx.ram16(0x4be) != 0;
         if !gauge {
             let blocked = ctx.ram8(0x4f) != 0;
@@ -2328,11 +2328,11 @@ fn bubble_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 /// Release (`0xab24c`): gives back the gauge palette if the bubble modified it.
 fn bubble_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let modifiee = o.u8(ctx.b, field::MODE);
-    if !(modifiee == 0) {
+    let modified = o.u8(ctx.b, field::MODE);
+    if !(modified == 0) {
         let gauge = ctx.ram16(0x4be) != 0;
         if !gauge {
-            crate::mem::wr16(ctx.b, bulle::PALETTE_GAUGE, 0xffff);
+            crate::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xffff);
         }
     }
     ctx.free(&pools::EFFCT);
@@ -2341,22 +2341,22 @@ fn bubble_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 fn bubble_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, bulle::STATES, state as u32);
+    let target = target(ctx, bubble::STATES, state as u32);
     match state {
-        state::INIT => bulle_init(ctx, o),
+        state::INIT => bubble_init(ctx, o),
         state::ACTIVE => bubble_active(ctx, o),
-        state::LIBERE => bubble_end(ctx, o),
+        state::FREED => bubble_end(ctx, o),
         6 => ctx.free(&pools::EFFCT),
         _ => outside_table(target),
     }
 }
 
-handler!(EFFCT_4, bulle::ENTRY, "effct_bulle", #[without] bubble_handler);
-handler!(EFFCT_24, accessoire::ENTRY, "effct_accessoire", #[without] accessory_handler);
-handler!(EFFCT_45, declencheur::ENTRY, "effct_declencheur", #[without] trigger_handler);
+handler!(EFFCT_4, bubble::ENTRY, "effct_bubble", #[without] bubble_handler);
+handler!(EFFCT_24, accessory::ENTRY, "effct_accessory", #[without] accessory_handler);
+handler!(EFFCT_45, trigger::ENTRY, "effct_trigger", #[without] trigger_handler);
 handler!(EFFCT_51, projectile::ENTRY, "effct_projectile", #[without] projectile_handler);
-handler!(EFFCT_52, shimmer_class::ENTRY, "effct_scintille_classe", #[without] shimmer_class_handler);
-handler!(EFFCT_56, eclats_debris::ENTRY, "effct_eclats_debris", #[without] shards_debris_handler);
+handler!(EFFCT_52, shimmer_class::ENTRY, "effct_shimmer_class", #[without] shimmer_class_handler);
+handler!(EFFCT_56, shards_debris::ENTRY, "effct_shards_debris", #[without] shards_debris_handler);
 // ---------------------------------------------------------------------------------------------
 // Type 8: trace on an object (0xababa)
 
@@ -2367,14 +2367,14 @@ mod trace {
     pub const TABLE: u32 = 0xabac8;
     pub const ANIMATIONS_TYPE: u32 = 0xabb26;
     pub const ANIMATIONS: u32 = 0x18e872;
-    pub const PORTEUR: u32 = 0x5c;
+    pub const CARRIER: u32 = 0x5c;
 }
 
 fn trace_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ajoute_u8(ctx, o, Obj::STATE, 2);
-    let porteur = pointeur(ctx, o, trace::PORTEUR);
+    add_u8(ctx, o, Obj::STATE, 2);
+    let carrier = pointer(ctx, o, trace::CARRIER);
     for off in [Obj::X, Obj::Z, Obj::Y] {
-        let v = porteur.u32(ctx.b, off);
+        let v = carrier.u32(ctx.b, off);
         o.set_u32(ctx.b, off, v);
     }
     let variant = o.u8(ctx.b, Obj::VARIANT);
@@ -2382,11 +2382,11 @@ fn trace_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let y = o.u32(ctx.b, Obj::Y).wrapping_add(offset);
     o.set_u32(ctx.b, Obj::Y, y);
     let mut d0: u8 = 0;
-    let class = porteur.u8(ctx.b, Obj::CLASS);
+    let class = carrier.u8(ctx.b, Obj::CLASS);
     if !(class != 4) {
         d0 = 0x20;
     }
-    d0 = d0.wrapping_add(porteur.u8(ctx.b, Obj::KIND));
+    d0 = d0.wrapping_add(carrier.u8(ctx.b, Obj::KIND));
     let animation = ctx.prog8(trace::ANIMATIONS_TYPE + d0 as u32).wrapping_add(variant);
     ctx.anim_start(trace::ANIMATIONS, animation as u16);
     ctx.reinsert();
@@ -2404,21 +2404,21 @@ fn trace_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 }
 
 handler!(EFFCT_8, trace::ENTRY, "effct_trace", #[without] trace_handler);
-handler!(EFFCT_28, etincelle::ENTRY, "effct_etincelle", #[without] spark_handler);
-handler!(EFFCT_57, mark::ENTRY, "effct_marque", #[without] mark_handler);
-handler!(EFFCT_62, gerbe::ENTRY, "effct_gerbe", #[without] sheaf_handler);
-handler!(EFFCT_7, eclat_unique::ENTRY, "effct_eclat_unique", #[without] shard_single_handler);
-handler!(EFFCT_19, balayage::ENTRY, "effct_balayage", #[without] sweep_handler);
-handler!(EFFCT_27, fumee::ENTRY, "effct_fumee", #[without] smoke_handler);
-handler!(EFFCT_1, 0xa8758, "effct_supprime", #[without] supprime);
+handler!(EFFCT_28, spark::ENTRY, "effct_spark", #[without] spark_handler);
+handler!(EFFCT_57, mark::ENTRY, "effct_mark", #[without] mark_handler);
+handler!(EFFCT_62, sheaf::ENTRY, "effct_sheaf", #[without] sheaf_handler);
+handler!(EFFCT_7, shard_single::ENTRY, "effct_shard_single", #[without] shard_single_handler);
+handler!(EFFCT_19, sweep::ENTRY, "effct_sweep", #[without] sweep_handler);
+handler!(EFFCT_27, smoke::ENTRY, "effct_smoke", #[without] smoke_handler);
+handler!(EFFCT_1, 0xa8758, "effct_removed", #[without] removed);
 handler!(EFFCT_6, debris::ENTRY, "effct_debris", #[without] debris_handler);
 handler!(EFFCT_29, impact::ENTRY, "effct_impact", #[without] impact_handler);
 handler!(EFFCT_17, interface::ENTRY, "effct_interface", #[without] interface_handler);
 handler!(EFFCT_5, halo::ENTRY, "effct_halo", #[without] halo);
-handler!(EFFCT_9, trainee::ENTRY, "effct_trainee", #[without] trainee);
-handler!(EFFCT_15, scintillement::ENTRY, "effct_scintillement", #[without] scintillement);
-handler!(EFFCT_21, banner::ENTRY, "effct_bandeau", #[without] banner);
-handler!(EFFCT_25, poussiere::ENTRY, "effct_poussiere", #[without] poussiere);
-handler!(EFFCT_26, nuage::ENTRY, "effct_nuage", #[without] nuage);
+handler!(EFFCT_9, trail::ENTRY, "effct_trail", #[without] trail);
+handler!(EFFCT_15, shimmering::ENTRY, "effct_shimmer", #[without] shimmering);
+handler!(EFFCT_21, banner::ENTRY, "effct_banner", #[without] banner);
+handler!(EFFCT_25, dust::ENTRY, "effct_dust", #[without] dust);
+handler!(EFFCT_26, cloud::ENTRY, "effct_cloud", #[without] cloud);
 handler!(EFFCT_32, aura::ENTRY, "effct_aura", #[without] aura);
-handler!(EFFCT_33, eclat::ENTRY, "effct_eclat", #[without] eclat);
+handler!(EFFCT_33, shard::ENTRY, "effct_shard", #[without] shard);

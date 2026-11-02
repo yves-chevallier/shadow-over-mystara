@@ -231,9 +231,9 @@ fn wreck<R: Bench>(x: &mut Cx<'_, R>) {
             } else {
                 crate::families::effects_creators::spawn_kind(x.b, crate::families::effects_creators::kind::SOUND_FADE);
                 x.set16(TIMER, 0xc0);
-                if let Some(bulle) = crate::families::creators::scene_set(x.b, 8) {
+                if let Some(bubble) = crate::families::creators::scene_set(x.b, 8) {
                     next6(x);
-                    x.set16(MESSAGE, bulle.word());
+                    x.set16(MESSAGE, bubble.word());
                 }
             }
         }

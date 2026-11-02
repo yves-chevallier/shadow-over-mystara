@@ -1,5 +1,5 @@
 //! Game loop (W1): world update (`0x1c86e`), end of frame (`0x1c4c4`), phase 0
-//! (`0x1c522`, game initialisation) and phase 12 (`0x1c6a0`, the game). See `docs/looped.md`.
+//! (`0x1c522`, game initialisation) and phase 12 (`0x1c6a0`, the game). See `docs/boucle.md`.
 //!
 //! The game task (`0x1c45a`) loops forever: one frame = one call of the current phase
 //! (`A5+0x2c`), then the clearing of the collision queues, then a cession (`0xa40`): see
@@ -213,7 +213,7 @@ impl Step {
 pub const WORLD_UPDATE: Native = Native {
     entry: 0x1c86e,
     name: "world_update",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         if update_world(c, b) == Flow::Done {
             rts(c, b);
         }
@@ -380,7 +380,7 @@ pub fn phase0(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const PHASE_0: Native = Native {
     entry: 0x1c522,
     name: "game_phase0",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         phase0(c, b);
         rts(c, b);
     }),
@@ -515,7 +515,7 @@ pub fn after_world(c: &mut Cpu, b: &mut Cps2Bus) {
     crate::combat::combat_update(&mut crate::combat::World { c, b, a2: 0 });
     gauge(c, b, 0x4f_001e);
     // 0x19e20: pop-ups; 0xf2e5c: spawn script reader
-    crate::popups::animer(b);
+    crate::popups::animate_obj(b);
     crate::scene::script::step(c, b);
     // 0x1f27c (registers of the original: the task keeps them until the next frame)
     crate::objects::rank::tick(b);
@@ -539,7 +539,7 @@ pub fn debug_scene_skip(b: &mut Cps2Bus) {
 pub const PHASE_12: Native = Native {
     entry: 0x1c6a0,
     name: "game_phase12",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         if phase12(c, b) == Flow::Done {
             rts(c, b);
         }

@@ -401,7 +401,7 @@ fn portraits(x: &mut Ctx) -> Flow {
 pub const SHOP: Native = Native {
     entry: 0xf792e,
     name: "scene_shop",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         let mut x = Ctx::new(c, b);
         if run(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);

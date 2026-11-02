@@ -1,5 +1,5 @@
 //! Player effects (PEFF), fifteenth series: type 24 (the interface's pile of gold that takes back the player's items in
-//! exchange for points). See `docs/families/player.md`.
+//! exchange for points). See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

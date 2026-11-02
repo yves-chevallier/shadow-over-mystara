@@ -57,7 +57,7 @@ pub(crate) fn shock_by(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8,
     r.d_word(1, high);
     fx.set_u8(b, 0x2f, high as u8);
     fx.set_u16(b, 0x42, 0);
-    r.drapeaux(0, Size::Word);
+    r.flags(0, Size::Word);
     Some(fx)
 }
 
@@ -110,7 +110,7 @@ pub(crate) fn spark_between_by(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, othe
     fx.set_u16(b, 0x50, first as u16);
     fx.set_u16(b, 0x54, second as u16);
     let d1 = set(r, b, me, fx, other);
-    r.drapeaux(d1 as u32, Size::Word);
+    r.flags(d1 as u32, Size::Word);
     Some(fx)
 }
 
@@ -284,7 +284,7 @@ fn place_scripted_player(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn aid(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 
 macro_rules! leaf {
@@ -297,13 +297,13 @@ macro_rules! leaf {
 }
 
 pub const NATIVES: &[Native] = &[
-    leaf!(0xddeaa, "decor_type_6", spawn_scenery_6, regs::a(1) | regs::CCR),
-    leaf!(0xdfa4a, "decor_type_11", spawn_scenery_11, regs::a(1) | regs::CCR),
-    leaf!(0x517ba, "effet_joueur_44", spawn_player_effect_44, regs::a(1) | regs::a(4) | regs::CCR),
-    leaf!(0xcc18e, "decompte_joueurs_vivants", count_living_players, regs::d(0)),
-    leaf!(0x25260, "joueur_scripte_place", place_scripted_player, regs::a(1)),
-    aid(0xb10c8, "effet_choc", shock_native, regs::a(1) | regs::d(1) | regs::CCR),
-    aid(0xaa96c, "effet_etincelle", |c, b| spark_native(c, b, None), regs::a(1) | regs::a(2) | regs::a(3) | regs::a(4)),
-    aid(0xaaa04, "effet_etincelle_entre", |c, b| spark_native(c, b, Some(true)), regs::ALL),
-    aid(0xaaa84, "effet_etincelle_entre_b", |c, b| spark_native(c, b, Some(false)), regs::ALL),
+    leaf!(0xddeaa, "scenery_type_6", spawn_scenery_6, regs::a(1) | regs::CCR),
+    leaf!(0xdfa4a, "scenery_type_11", spawn_scenery_11, regs::a(1) | regs::CCR),
+    leaf!(0x517ba, "effect_player_44", spawn_player_effect_44, regs::a(1) | regs::a(4) | regs::CCR),
+    leaf!(0xcc18e, "count_living_players", count_living_players, regs::d(0)),
+    leaf!(0x25260, "player_scripted_place", place_scripted_player, regs::a(1)),
+    aid(0xb10c8, "effect_shock", shock_native, regs::a(1) | regs::d(1) | regs::CCR),
+    aid(0xaa96c, "effect_spark", |c, b| spark_native(c, b, None), regs::a(1) | regs::a(2) | regs::a(3) | regs::a(4)),
+    aid(0xaaa04, "effect_spark_between", |c, b| spark_native(c, b, Some(true)), regs::ALL),
+    aid(0xaaa84, "effect_spark_between_b", |c, b| spark_native(c, b, Some(false)), regs::ALL),
 ];

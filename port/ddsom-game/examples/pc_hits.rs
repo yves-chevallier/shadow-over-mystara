@@ -1,5 +1,5 @@
 //! Number of passes per frame at the given PC (for example 1c86e, the world update: one per frame in normal time,
-//! about a hundred in the « step storm », see docs/couverture.md). Natives disabled by `DDSOM_SANS=` (empty: all),
+//! about a hundred in the "step storm", see docs/couverture.md). Natives disabled by `DDSOM_SANS=` (empty: all),
 //! otherwise the PC is seen only if it is executed outside a native.
 //!
 //! pc_hits <roms> <eeprom> <scenario> <start frame> <end frame> <pc hex>

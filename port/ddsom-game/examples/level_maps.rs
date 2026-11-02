@@ -2,7 +2,7 @@
 //! interface, rebuilt from the ROM's scenery maps. See `docs/niveaux.md`.
 //!
 //!   level_maps cartes  <roms> <eeprom> <folder> [scene...]   one image per scene (1 to 82 by default)
-//!   level_maps planche <folder> <niveaux.md>                 overview sheet `sheet.png` + Markdown index
+//!   level_maps planche <folder> <niveaux.md>                 overview sheet `planche.png` + Markdown index
 //!   level_maps tables  <roms>                                dimensions of the strip tables of the 115 scenes
 //!
 //! Method. The game's cameras (`scroll.rs`) copy into their layers columns of cells read from a
@@ -10,7 +10,7 @@
 //! each scene, by a table of words (`0x2ff94 + 4 s` for scroll 2, 16-pixel cells; `0x32d7c + 4 s` for
 //! scroll 3, 32-pixel cells). The tool reads these same tables (see `Layer::grid`), recomposes all the
 //! cells of the map, draws them with the scene's palette taken from the machine (real game run up to
-//! the scene's game phase, `FF8034` forced as in `docs/coverage.md`) and superimposes the two layers
+//! the scene's game phase, `FF8034` forced as in `docs/couverture.md`) and superimposes the two layers
 //! in the order set by CPS-B. No sprite, no interface, no scroll 1.
 
 use std::path::Path;
@@ -117,9 +117,9 @@ impl Layer {
             let after = (0..=8u32).find(|t| pointers.get(i + 1).map_or(*t == 0, |&q| valid(p + 2 * w * (1 + t), q)));
             let Some(after) = after else { return Vec::new() };
             if p == target {
-                let sentinelle = (self.case == 16) as u32;
+                let sentinel = (self.case == 16) as u32;
                 return (0..=(p - head - 2) / (2 * w) + after)
-                    .map(|i| (0..w - sentinelle).map(|x| rom.rd16(head + 2 + 2 * w * i + 2 * x)).collect())
+                    .map(|i| (0..w - sentinel).map(|x| rom.rd16(head + 2 + 2 * w * i + 2 * x)).collect())
                     .collect();
             }
             head = p + 2 * w * (1 + after);
@@ -494,7 +494,7 @@ fn lines_height(lines: usize, cell: usize) -> usize {
     lines * (cell + 8) + 8
 }
 
-/// Boss connus (`docs/coverage.md`, `docs/atlas.md`).
+/// Boss connus (`docs/couverture.md`, `docs/atlas.md`).
 fn boss(n: u32) -> &'static str {
     match n {
         24 => "Manticore",
@@ -572,7 +572,7 @@ fn index(dir: &Path, doc: &Path, views: &[u32]) {
         let name = if n >= 69 { format!("{n} (boutique)") } else { n.to_string() };
         md += &format!("| {name} | [{n:02}.png](../assets/niveaux/{n:02}.png) | {}x{} | {} | {} | {} | {} | {} |\n", get(1), get(2), get(3), get(4), get(5), get(6), boss(n));
     }
-    md += "\nOrdre : couches de l'arrière vers l'avant. « Scène suivante » : scène atteinte en forçant la sortie de\n";
+    md += "\nOrdre : couches de l'arrière vers l'avant. 'next scene' : scène atteinte en forçant la sortie de\n";
     md += "scène (`-` : non relevée ; la sortie dépend parfois du jeu, voir `docs/scenes.md` §5).\n";
     std::fs::write(doc, md).unwrap();
 }

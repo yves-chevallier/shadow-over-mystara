@@ -43,7 +43,7 @@ pub fn logic(c: &mut Cpu, v: u32, size: Size) {
 }
 
 /// Sets the N, Z, V, C, X flags at once (mask `SR_N | ...`).
-pub fn drapeaux(c: &mut Cpu, mask: u16, values: u16) {
+pub fn flags(c: &mut Cpu, mask: u16, values: u16) {
     c.sr = c.sr & !mask | values & mask;
 }
 

@@ -287,7 +287,7 @@ pub fn lock_counters(b: &mut Cps2Bus) {
 
 pub const READ_COIN_SLOTS: Native = Native {
     entry: 0x143da,
-    name: "credits_lire_monnayeurs",
+    name: "credits_read_coin_slots",
     run: crate::Body::Memory(read_coin_slots),
     touches_sound: false,
     outputs: 0,
@@ -310,8 +310,8 @@ pub fn write_digit(b: &mut Cps2Bus, case: u32, value: u8, attr: u16) -> u32 {
 pub const TEST_NATIVES: &[Native] = &[Native {
     // 0x1422e: start button of a coin slot (A0 coin slot, D1.b byte of IN2+1)
     entry: 0x1422e,
-    name: "credits_depart_ligne",
-    run: crate::Body::Processeur(|c, b| {
+    name: "credits_start_line",
+    run: crate::Body::WithCpu(|c, b| {
         let (a0, service) = (c.a[0], c.d[1] as u8);
         line_start(b, a0, service);
         crate::mem::rts(c, b);

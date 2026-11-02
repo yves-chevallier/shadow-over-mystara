@@ -1,4 +1,4 @@
-//! Configurable keys: `keys.cfg` (created with the default keys if missing) maps each
+//! Configurable keys: `touches.cfg` (created with the default keys if missing) maps each
 //! action to a list of minifb key names (`Left`, `LeftCtrl`, `A`, `Key1`, `NumPad0`...) or gamepad
 //! buttons (`Pad1A`, `Pad1Haut`... : `gamepad.rs`).
 //! Letters and digits follow the keyboard layout (on AZERTY, `Key1` needs Shift);
@@ -81,7 +81,7 @@ pub struct State {
 
 impl Keys {
     /// Reads `file` (lines `action = keys...`, `#` comment); writes it with the defaults if missing.
-    pub fn charge(file: &Path) -> Self {
+    pub fn load(file: &Path) -> Self {
         let mut actions: Vec<(Port, Vec<String>)> =
             ACTIONS.iter().map(|&(_, port, keys)| (port, names(keys))).collect();
         match std::fs::read_to_string(file) {
@@ -95,12 +95,12 @@ impl Keys {
                         continue;
                     }
                     let Some((name, keys)) = line.split_once('=') else {
-                        eprintln!("{}:{}: « action = keys » expected", file.display(), n + 1);
+                        eprintln!("{}:{}: 'action = keys' expected", file.display(), n + 1);
                         continue;
                     };
                     match ACTIONS.iter().position(|a| a.0 == name.trim()) {
                         Some(i) => actions[i].1 = names(keys),
-                        None => eprintln!("{}:{}: unknown action « {} »", file.display(), n + 1, name.trim()),
+                        None => eprintln!("{}:{}: unknown action '{}'", file.display(), n + 1, name.trim()),
                     }
                 }
             }

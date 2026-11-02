@@ -1,5 +1,5 @@
 //! Player effects (PEFF), fourth series: types 6 to 10 (beams: magic shot, impact, breath).
-//! See `docs/families/player.md`.
+//! See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

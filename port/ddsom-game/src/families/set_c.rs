@@ -8,11 +8,11 @@ use super::cx::handlers;
 mod scene;
 #[path = "set_c_finale.rs"]
 mod finale;
-#[path = "set_c_fenetre.rs"]
+#[path = "set_c_window.rs"]
 mod window;
 
 handlers! {
     0xbc814 "set_scene_bc814" #[without] scene::run,
-    0xc8352 "set_fenetre_c8352" #[without] window::run,
-    0xce024 "set_ecrans_ce024" #[without] finale::run,
+    0xc8352 "set_window_c8352" #[without] window::run,
+    0xce024 "set_screens_ce024" #[without] finale::run,
 }

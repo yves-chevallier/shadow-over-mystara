@@ -2,7 +2,7 @@
 //!
 //! On each pass of the scheduler it does what VBLANK does for sleeping tasks, but
 //! only for the main task (slot 0), and only when a present player presses a button
-//! during a game: the game then chains its steps without waiting for the frame (see `docs/looped.md` §1). In all
+//! during a game: the game then chains its steps without waiting for the frame (see `docs/boucle.md` §1). In all
 //! other cases it cedes control doing nothing (`Wait::Ready`): this is the busy wait that occupies the
 //! overclocked processor ([`idle_wait`] recognizes it).
 //!

@@ -331,11 +331,11 @@ pub(crate) fn counter_reaction<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u16) {
 
 /// Natives: handler, counterattack and body shapes (called by 0x81aa4 of `boss_common`).
 pub const NATIVES: &[crate::Native] = &[
-    super::cx::handler_sans(0x7f41a, "boss_3", |b, a| run(&mut super::cx::Gx::aiguille(b, a))),
+    super::cx::handler_without(0x7f41a, "boss_3", |b, a| run(&mut super::cx::Gx::dispatch(b, a))),
     crate::Native {
         entry: 0x81ae0,
         name: "boss_3_riposte",
-        run: crate::Body::Processeur(|c, b| {
+        run: crate::Body::WithCpu(|c, b| {
             let mut x = Cx::new(c, b);
             let (r, mask) = counter_reaction(&mut x);
             // original's output contract: D0 = the draw, D1.w = the mask

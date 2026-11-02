@@ -1,4 +1,4 @@
-//! Game task (`0x1c45a`): the game loop, one step per frame (see `docs/looped.md` §1).
+//! Game task (`0x1c45a`): the game loop, one step per frame (see `docs/boucle.md` §1).
 //!
 //! Created at the first start (`credits_task.rs`) in slot 0, it loops endlessly:
 //! frame counter, service every 60 frames (`0x2e540`), cession of one frame, then a game step
@@ -192,7 +192,7 @@ fn run_handler(x: &mut Ctx, phase: u8) -> Flow {
             Flow::Done
         }
         28 => crate::modes::ending::phase_28(x),
-        // the table has eight entries (code-mort.md, lot « sortie du Cpu »)
+        // the table has eight entries (code-mort.md, lot "CPU removal")
         _ => unreachable!("phase {phase:#x}: outside the table 0x1c502"),
     }
 }

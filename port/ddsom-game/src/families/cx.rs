@@ -36,7 +36,7 @@ pub type Gx<'a> = Cx<'a, &'a mut Dispatch>;
 
 impl<'a> Gx<'a> {
     /// Context of the handler called by the dispatch loop.
-    pub fn aiguille(b: &'a mut Cps2Bus, a: &'a mut Dispatch) -> Self {
+    pub fn dispatch(b: &'a mut Cps2Bus, a: &'a mut Dispatch) -> Self {
         let o = a.object;
         Cx { c: a, b, o }
     }
@@ -53,7 +53,7 @@ impl<R> crate::machine::Machine for Cx<'_, R> {
     }
 }
 
-impl crate::machine::Processeur for Cx<'_> {
+impl crate::machine::WithCpu for Cx<'_> {
     fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus) {
         (&mut *self.c, &mut *self.b)
     }
@@ -320,11 +320,11 @@ impl<R> Cx<'_, R> {
 
 /// Native of a handler: contract of the dispatch loop (A0 and D7 preserved).
 pub const fn handler(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
 }
 
 /// Native of a converted handler (`Gx`, without registers): what the dispatch loop passes as argument.
-pub const fn handler_sans(entry: u32, name: &'static str, run: fn(&mut Cps2Bus, &mut Dispatch)) -> Native {
+pub const fn handler_without(entry: u32, name: &'static str, run: fn(&mut Cps2Bus, &mut Dispatch)) -> Native {
     Native { entry, name, run: crate::Body::Handler(run), touches_sound: false, outputs: regs::a(0) | regs::d(7) }
 }
 
@@ -344,8 +344,8 @@ macro_rules! handlers {
         })
     };
     (@one $entry:literal $name:literal #[without] $f:path) => {
-        $crate::families::cx::handler_sans($entry, $name, |b, a| {
-            $f(&mut $crate::families::cx::Gx::aiguille(b, a));
+        $crate::families::cx::handler_without($entry, $name, |b, a| {
+            $f(&mut $crate::families::cx::Gx::dispatch(b, a));
         })
     };
 }

@@ -400,7 +400,7 @@ fn music_lossless() {
     for b in &m.code {
         assert!(b.rom >= end, "block {:#x}: overlap", b.rom);
         let bytes = b.bytes().unwrap_or_else(|| panic!("block {:#x}: unreadable token", b.rom));
-        assert_eq!(at(b.rom, bytes.len()), bytes, "bloc {:#x}", b.rom);
+        assert_eq!(at(b.rom, bytes.len()), bytes, "block {:#x}", b.rom);
         let mut a = b.rom;
         for t in b.ops.split(' ') {
             starts.insert(a);

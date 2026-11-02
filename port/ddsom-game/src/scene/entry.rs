@@ -199,8 +199,8 @@ pub(crate) fn place_players_leftovers(b: &mut Cps2Bus) -> PlacementLeftovers {
 /// the original's registers (D6 = -1, A1 after the last player).
 pub const PLACE_PLAYERS: Native = Native {
     entry: 0x20de6,
-    name: "scene_place_joueurs",
-    run: crate::Body::Processeur(|c, b| {
+    name: "scene_place_players",
+    run: crate::Body::WithCpu(|c, b| {
         let r = place_players_leftovers(b);
         (c.d[0], c.d[1], c.d[2], c.d[6]) = (r.d0, r.d1, r.rank as u32, 0xffff);
         (c.a[1], c.a[2], c.a[3]) = (PLAYERS + 4 * PLAYER_STRIDE, r.positions, r.states);
@@ -276,7 +276,7 @@ pub fn phase_8(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const PHASE_8: Native = Native {
     entry: 0x20c38,
     name: "scene_phase_8",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         phase_8(c, b);
         rts(c, b);
     }),
@@ -523,7 +523,7 @@ fn scene_8(x: &mut Ctx) {
             effect.set_u16(x.b, Obj::Y, camera_y.wrapping_add(0x50));
             x.set_v16(0x46, effect.0 as u16);
             crate::sound::service(x.b, crate::sound::Service::GeneralStop);
-            creators::minuteur(x.b, 1);
+            creators::countdown_timer(x.b, 1);
         }
         2 => {
             if x.tick(TIMER) {

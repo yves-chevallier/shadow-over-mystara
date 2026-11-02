@@ -32,7 +32,7 @@ mod state {
     /// Screen finished: the mode machine moves on to the next one.
     pub const FINISHED: u32 = BASE + 3;
     /// Timer (signed word).
-    pub const MINUTERIE: u32 = BASE + 0x10;
+    pub const TIMER_LIGHT: u32 = BASE + 0x10;
 }
 
 /// Table rows: ranks 5 to 10 (from `LOW_RANKS` downward in memory), ranks 2 to 4, best score.
@@ -249,7 +249,7 @@ fn scenery(x: &mut Ctx) -> Flow {
     crate::video::clear_layer(x.b, crate::video::Layer::One);
     let step = rd8(x.b, state::STEP).wrapping_add(2);
     wr8(x.b, state::STEP, step);
-    wr16(x.b, state::MINUTERIE, 0x40);
+    wr16(x.b, state::TIMER_LIGHT, 0x40);
     x.set_v8(var::TERRAIN_VIEW, 0);
     x.set_v16(var::CAMERA_X, 0);
     x.set_v16(var::CAMERA_Y, 0x10);
@@ -297,21 +297,21 @@ fn scenery(x: &mut Ctx) -> Flow {
 }
 
 /// Screen timer: counted down; true when it goes below zero.
-fn minuterie(x: &mut Ctx) -> bool {
-    let remainder = rd16(x.b, state::MINUTERIE).wrapping_sub(1);
-    wr16(x.b, state::MINUTERIE, remainder);
+fn timer_light(x: &mut Ctx) -> bool {
+    let remainder = rd16(x.b, state::TIMER_LIGHT).wrapping_sub(1);
+    wr16(x.b, state::TIMER_LIGHT, remainder);
     (remainder as i16) < 0
 }
 
-fn next_sub_step(x: &mut Ctx, minuterie: u16) {
+fn next_sub_step(x: &mut Ctx, timer_light: u16) {
     let s = rd8(x.b, state::SUB_STEP).wrapping_add(2);
     wr8(x.b, state::SUB_STEP, s);
-    wr16(x.b, state::MINUTERIE, minuterie);
+    wr16(x.b, state::TIMER_LIGHT, timer_light);
 }
 
 /// Sub-stage 0 (`0x18544`): after 0x40 frames, ranks 1 to 4 and the title; then the scroll begins.
 fn first_ranks(x: &mut Ctx) -> Flow {
-    if !minuterie(x) {
+    if !timer_light(x) {
         return Flow::Done;
     }
     next_sub_step(x, 0xe0);
@@ -378,7 +378,7 @@ fn best_score(x: &mut Ctx) {
 fn rise(x: &mut Ctx) -> Flow {
     let y = x.v16(var::SCROLL_2).wrapping_add(1);
     x.set_v16(var::SCROLL_2, y);
-    if minuterie(x) {
+    if timer_light(x) {
         next_sub_step(x, 0x90);
     }
     Flow::Done
@@ -387,7 +387,7 @@ fn rise(x: &mut Ctx) -> Flow {
 /// Sub-stage 4 (`0x189f8`): after 0x90 frames, the screen is finished and the task ends (`jmp 0x9f8` from
 /// the stage: the return to the loop stays on the stack).
 fn end(x: &mut Ctx) -> Flow {
-    if !minuterie(x) {
+    if !timer_light(x) {
         return Flow::Done;
     }
     let finished = rd8(x.b, state::FINISHED).wrapping_add(1);
@@ -406,7 +406,7 @@ fn tour(x: &mut Ctx) -> Flow {
         (2, 2) => rise(x),
         (2, 4) => end(x),
         // the tables 0x18386 (two stages) and 0x1853c (three sub-stages) are rewritten; `end` ends the task
-        // (code-mort.md, lot « sortie du Cpu »)
+        // (code-mort.md, lot "CPU removal")
         (e, s) => unreachable!("score table: stage {e:#x}, sub-stage {s:#x} outside the tables"),
     }
 }

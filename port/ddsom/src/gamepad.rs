@@ -1,5 +1,5 @@
 //! XInput (Xbox) gamepads under Windows: `xinput1_4.dll` loaded at run time. Each held button gives a
-//! name usable in `keys.cfg`: `Pad1A`, `Pad1B`, `Pad1X`, `Pad1Y`, `Pad1LB`, `Pad1RB`, `Pad1Start`,
+//! name usable in `touches.cfg`: `Pad1A`, `Pad1B`, `Pad1X`, `Pad1Y`, `Pad1LB`, `Pad1RB`, `Pad1Start`,
 //! `Pad1Back`, `Pad1Haut`/`Bas`/`Gauche`/`Droite` (d-pad or left stick); `Pad2...` for the second.
 //! Elsewhere (Linux, WSL), no gamepad.
 

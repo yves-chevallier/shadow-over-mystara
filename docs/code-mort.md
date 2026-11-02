@@ -344,7 +344,7 @@ Trois feuilles de l'effet « barrière » (EFFCT 0xb9f36) transcrites instructio
 lève `+0x30`), « tous les fils ont-ils fini » (0xba094, drapeau Z). Elles ne servaient qu'au code d'origine de la
 barrière, désormais réécrite dans `effects_c` (`barrier`, `in_box`, interrupteurs) : plus aucun appel par adresse
 ne les atteint (recherche de 0xb9ee6, 0xb9eba, 0xba094 dans `src/` ; seul `examples/fuzz_world.rs` les citait).
-Doublon : supprimées, avec leurs entrées de `fuzz_monde`.
+Doublon : supprimées, avec leurs entrées de `fuzz_world`.
 
 ### Guide de scène sans joueur vivant (ITEM 6, variante 1, 0xdcddc ; `items::guide_target`)
 

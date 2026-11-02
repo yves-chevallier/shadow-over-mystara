@@ -142,7 +142,7 @@ fn main() {
     }
     let (roms, eeprom, scenario) = (&a[1], &a[2], &a[3]);
     let warmup: u32 = a[4].parse().unwrap();
-    let tours: u32 = a[5].parse().unwrap();
+    let rounds: u32 = a[5].parse().unwrap();
     let choice = a.get(6).map(String::as_str).unwrap_or("");
     let filter = std::env::var("DDSOM_ENTREE").ok().and_then(|v| u32::from_str_radix(&v, 16).ok());
     let ee = std::fs::read(eeprom).ok();
@@ -176,7 +176,7 @@ fn main() {
     }
     let (c0, b0) = (m.cpu.clone(), m.bus.clone());
     let (mut tests, mut shown) = (0u64, 0);
-    for _ in 0..tours {
+    for _ in 0..rounds {
         for &(entry, pool, kind) in &inputs {
             let (mut c, mut b) = (c0.clone(), b0.clone());
             b.irq_horizon = u64::MAX;

@@ -95,7 +95,7 @@ impl Table {
 pub const RNG_SEED: Word = Word::a5(0x1a);
 /// Cabinet type: number of players (h); selects the interface layout.
 pub const CABINET: Byte = Byte::a5(0x20);
-/// Game phase (step of 2: 8 scene entry, 0xc game, 0x10 exit, 0x14 end of game; `docs/looped.md`)
+/// Game phase (step of 2: 8 scene entry, 0xc game, 0x10 exit, 0x14 end of game; `docs/boucle.md`)
 /// and its step.
 pub const PHASE: Byte = Byte::a5(0x2c);
 pub const STEP: Byte = Byte::a5(0x2d);

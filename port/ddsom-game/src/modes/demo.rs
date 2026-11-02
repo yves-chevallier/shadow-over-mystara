@@ -143,7 +143,7 @@ fn interpreter_a(x: &mut Ctx) -> Flow {
         }
         6 => presentation_step(x),
         // step 4 (0x1fb20, end of scene): never written, the loop leads there directly (`scene_end_a`); beyond:
-        // outside table 0x1f340 (code-mort.md, batch « sortie du Cpu »)
+        // outside table 0x1f340 (code-mort.md, batch "CPU removal")
         _ => unreachable!("demo A: step {step:#x} never produced"),
     }
 }
@@ -377,7 +377,7 @@ fn run_phase(x: &mut Ctx, phases: u32, loop_top: Step, after: Step) -> Flow {
     // object creator (`scene::entry`: finale, effects 0x13)
     x.c.a[0] = prog32(x, phases + phase);
     // the two tables only have phases 8 (scene entry) and 12 (the game); the other entries are null
-    // (code-mort.md, batch « sortie du Cpu »)
+    // (code-mort.md, batch "CPU removal")
     match phase {
         8 => {
             crate::scene::entry::phase_8(x.c, x.b);
@@ -523,7 +523,7 @@ fn presentation_step(x: &mut Ctx) -> Flow {
         2 => p2_show(x),
         4 => p4_end(x),
         6 => p6_text(x),
-        // table 0x1fc72 has four entries, all rewritten (code-mort.md, batch « sortie du Cpu »)
+        // table 0x1fc72 has four entries, all rewritten (code-mort.md, batch "CPU removal")
         _ => unreachable!("presentation: sub-step {substep:#x} outside table 0x1fc72"),
     }
 }
@@ -939,8 +939,8 @@ pub fn stop_recorder(b: &mut Cps2Bus) {
 
 pub const RECORDER_RESET: Native = Native {
     entry: 0xe0538,
-    name: "demo_enregistreur_depart",
-    run: crate::Body::Processeur(|c, b| {
+    name: "demo_recorder_start",
+    run: crate::Body::WithCpu(|c, b| {
         let leftovers = reset_recorder_by(b);
         if let Some(dsw) = leftovers.settings {
             c.d[5] = c.d[5] & 0xffff_0000 | dsw as u32;
@@ -956,7 +956,7 @@ pub const RECORDER_RESET: Native = Native {
 
 pub const RECORDER_STOP: Native = Native {
     entry: 0xe05d6,
-    name: "demo_enregistreur_arret",
+    name: "demo_recorder_stop",
     run: crate::Body::Memory(stop_recorder),
     touches_sound: false,
     outputs: 0,
@@ -992,7 +992,7 @@ fn record_inputs(x: &mut Ctx) {
 pub const DEMO_PHASE_12: Native = Native {
     entry: 0x1fa38,
     name: "demo_phase_12",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         let mut x = Ctx::new(c, b);
         if demo_phase_12(&mut x) == Flow::Done {
             crate::mem::rts(x.c, x.b);

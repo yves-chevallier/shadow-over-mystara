@@ -10,7 +10,7 @@ use m68k::Cpu;
 
 use crate::mem::{prog16, prog8, rd16, rd32, rts, set_low_word, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
-use super::cx::{handler_sans, Bench, Cx};
+use super::cx::{handler_without, Bench, Cx};
 use crate::objects::Current;
 use crate::{regs, Native};
 use crate::objects::pools;
@@ -33,7 +33,7 @@ pub(crate) fn linked_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, pool:
     o.set_u8(b, Obj::ACTIVE, 1);
     o.set_u8(b, Obj::KIND, kind);
     o.set_u16(b, link, creator.word());
-    r.drapeaux(creator.word() as u32, Size::Word);
+    r.flags(creator.word() as u32, Size::Word);
     Some(o)
 }
 
@@ -84,7 +84,7 @@ pub(crate) fn shot_17(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj
     o.set_u8(b, 0x2, 0x17);
     let v = me.u16(b, 0x50);
     o.set_u16(b, 0x50, v);
-    r.drapeaux(v as u32, Size::Word);
+    r.flags(v as u32, Size::Word);
     Some(o)
 }
 
@@ -104,11 +104,11 @@ pub(crate) fn shot_18(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) 
 }
 
 /// Native of `shot_18`: D0 = 1 if the shot is created.
-/// Original glitch: 0x54872 (`toujours_nul`) returns D0 = 0 even when the shot is created.
-fn shot_18_native(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, toujours_nul: bool) {
+/// Original glitch: 0x54872 (`always_zero`) returns D0 = 0 even when the shot is created.
+fn shot_18_native(c: &mut Cpu, b: &mut Cps2Bus, variant: u8, always_zero: bool) {
     let me = Obj(c.a[0]);
     let created = shot_18(c, b, me, variant).is_some();
-    c.d[0] = (created && !toujours_nul) as u32;
+    c.d[0] = (created && !always_zero) as u32;
     moved(c, c.d[0], Size::Long);
     rts(c, b);
 }
@@ -133,7 +133,7 @@ pub(crate) fn enemy_pair_kind_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: O
         }
     }
     r.d(0, created as u32);
-    r.drapeaux(created as u32, Size::Long);
+    r.flags(created as u32, Size::Long);
     created
 }
 /// 0x76ec4 with no registers.
@@ -194,7 +194,7 @@ pub(crate) fn roar_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, big: bo
         o.set_u8(b, 0x2f, n as u8);
         let link = creator.u16(b, 0x5c);
         o.set_u16(b, 0x5c, link);
-        r.drapeaux(link as u32, Size::Word);
+        r.flags(link as u32, Size::Word);
         n = n.wrapping_sub(1);
         r.d_word(1, n);
         if n == 0xffff {
@@ -260,7 +260,7 @@ pub(crate) fn harpy_companion_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -
     o.set_u32(b, 0xc, z);
     let f = me.u8(b, 0x2c);
     o.set_u8(b, 0x2c, f);
-    r.drapeaux(f as u32, Size::Byte);
+    r.flags(f as u32, Size::Byte);
     Ok((o, hp))
 }
 
@@ -291,7 +291,7 @@ pub(crate) fn harpy_shot_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, d5: u8
     o.set_u8(b, 0x2c, v);
     let v = me.u8(b, 0x3);
     o.set_u8(b, 0x3, v);
-    r.drapeaux(v as u32, Size::Byte);
+    r.flags(v as u32, Size::Byte);
     Some(o)
 }
 
@@ -395,7 +395,7 @@ pub(crate) fn peff_5_pair(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
         o.set_u8(b, 0x3, 1);
         o.set_u8(b, 0x2f, index);
         o.set_u16(b, 0x50, me.word());
-        r.drapeaux(me.word() as u32, Size::Word);
+        r.flags(me.word() as u32, Size::Word);
     }
 }
 
@@ -492,21 +492,21 @@ fn flash(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
     rts(c, b);
 }
 /// Flash colors: yellow (0x1ac9a), green (0x1ac72), blue (0x1ac7c), end of the flash (0x1ac90).
-pub(crate) const ECLAIR_JAUNE: u16 = 0xfff0;
-pub(crate) const ECLAIR_VERT: u16 = 0xf0f0;
-pub(crate) const ECLAIR_BLEU: u16 = 0xf00f;
+pub(crate) const LIGHTNING_YELLOW: u16 = 0xfff0;
+pub(crate) const LIGHTNING_GREEN: u16 = 0xf0f0;
+pub(crate) const LIGHTNING_BLUE: u16 = 0xf00f;
 pub(crate) const LIGHTNING_END: u16 = 0xff50;
 fn flash_off(c: &mut Cpu, b: &mut Cps2Bus) {
     flash(c, b, LIGHTNING_END);
 }
 fn flash_a(c: &mut Cpu, b: &mut Cps2Bus) {
-    flash(c, b, ECLAIR_JAUNE);
+    flash(c, b, LIGHTNING_YELLOW);
 }
 fn flash_b(c: &mut Cpu, b: &mut Cps2Bus) {
-    flash(c, b, ECLAIR_VERT);
+    flash(c, b, LIGHTNING_GREEN);
 }
 fn flash_c(c: &mut Cpu, b: &mut Cps2Bus) {
-    flash(c, b, ECLAIR_BLEU);
+    flash(c, b, LIGHTNING_BLUE);
 }
 
 /// The eight tile blocks of background 2 (0x26d4: D0 = block, A1 = destination).
@@ -707,54 +707,54 @@ pub(crate) fn own_reaction<R: Bench>(x: &mut Cx<'_, R>, routine: u32) -> Option<
 }
 
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 
 const CREATED: u32 = regs::a(1) | regs::CCR;
 
 pub const NATIVES: &[Native] = &[
-    native(0x4c930, "cree_effet_10", peff_16, CREATED),
-    native(0x4f132, "cree_effet_21", peff_33, CREATED),
-    native(0xdf4bc, "cree_sobj_7", sobj_7, CREATED),
-    native(0xdf896, "cree_sobj_10", sobj_10, CREATED),
-    native(0x54700, "cree_tir_17", |c, b| { let me = Obj(c.a[0]); shot_17(c, b, me); rts(c, b) }, CREATED),
-    native(0x54818, "cree_tir_18_a", |c, b| shot_18_native(c, b, 0, false), CREATED | regs::d(0)),
-    native(0x54842, "cree_tir_18", |c, b| shot_18_native(c, b, 1, false), CREATED | regs::d(0)),
-    native(0x54872, "cree_tir_18_c", |c, b| shot_18_native(c, b, 2, true), CREATED | regs::d(0)),
-    native(0x76ec4, "cree_ennemis_19", enemy_pair, CREATED | regs::d(0)),
-    native(0x792f8, "copie_56_53_a", copy_56_to_53, regs::CCR),
-    native(0x71e3c, "copie_56_53_b", copy_56_to_53, regs::CCR),
-    native(0xa66c0, "cree_salve_3e", eshl_volley, CREATED | regs::d(5)),
-    native(0xa7234, "cree_rugissement_grand", roar_big, CREATED | regs::d(0) | regs::d(1)),
-    native(0xa727c, "cree_rugissement_petit", roar_small, CREATED | regs::d(0) | regs::d(1)),
-    native(0xa036e, "cree_compagnon_harpie", harpy_companion, CREATED | regs::d(0) | regs::d(1) | regs::d(2)),
-    native(0xa0566, "cree_tir_harpie", harpy_shot, CREATED),
-    native(0x10158, "palette_quatre_blocs", palette_blocks_lit, regs::ALL),
-    native(0x101da, "palette_quatre_blocs_69", palette_blocks, regs::ALL),
-    native(0x1ac90, "eclair_palette_fin", flash_off, regs::CCR),
-    native(0x4aed0, "cree_effets_5", |c, b| { let me = Obj(c.a[0]); peff_5_pair(c, b, me); rts(c, b) }, CREATED),
-    native(0x1a5e8, "palette_douze_blocs", palette_blocks_copy, regs::ALL),
+    native(0x4c930, "create_effect_10", peff_16, CREATED),
+    native(0x4f132, "create_effect_21", peff_33, CREATED),
+    native(0xdf4bc, "create_sobj_7", sobj_7, CREATED),
+    native(0xdf896, "create_sobj_10", sobj_10, CREATED),
+    native(0x54700, "create_shot_17", |c, b| { let me = Obj(c.a[0]); shot_17(c, b, me); rts(c, b) }, CREATED),
+    native(0x54818, "create_shot_18_a", |c, b| shot_18_native(c, b, 0, false), CREATED | regs::d(0)),
+    native(0x54842, "create_shot_18", |c, b| shot_18_native(c, b, 1, false), CREATED | regs::d(0)),
+    native(0x54872, "create_shot_18_c", |c, b| shot_18_native(c, b, 2, true), CREATED | regs::d(0)),
+    native(0x76ec4, "create_enemies_19", enemy_pair, CREATED | regs::d(0)),
+    native(0x792f8, "copy_56_53_a", copy_56_to_53, regs::CCR),
+    native(0x71e3c, "copy_56_53_b", copy_56_to_53, regs::CCR),
+    native(0xa66c0, "create_volley_3e", eshl_volley, CREATED | regs::d(5)),
+    native(0xa7234, "create_roar_big", roar_big, CREATED | regs::d(0) | regs::d(1)),
+    native(0xa727c, "create_roar_small", roar_small, CREATED | regs::d(0) | regs::d(1)),
+    native(0xa036e, "create_companion_harpy", harpy_companion, CREATED | regs::d(0) | regs::d(1) | regs::d(2)),
+    native(0xa0566, "create_shot_harpy", harpy_shot, CREATED),
+    native(0x10158, "palette_four_blocks", palette_blocks_lit, regs::ALL),
+    native(0x101da, "palette_four_blocks_69", palette_blocks, regs::ALL),
+    native(0x1ac90, "lightning_palette_end", flash_off, regs::CCR),
+    native(0x4aed0, "create_effects_5", |c, b| { let me = Obj(c.a[0]); peff_5_pair(c, b, me); rts(c, b) }, CREATED),
+    native(0x1a5e8, "palette_twelve_blocks", palette_blocks_copy, regs::ALL),
     native(0x1ad6a, "palette_page_restitue", |c, b| { palette_page_restore(c, b); rts(c, b) }, regs::ALL),
-    native(0x1ac9a, "eclair_palette_jaune", flash_a, regs::CCR),
-    native(0x1ac72, "eclair_palette_vert", flash_b, regs::CCR),
-    native(0x1ac7c, "eclair_palette_bleu", flash_c, regs::CCR),
-    native(0x2a52, "fond_2_allume", scroll_2_on, regs::d(0) | regs::a(1) | regs::CCR),
-    native(0x2a36, "fond_1_allume", scroll_1_on, regs::CCR),
-    native(0x2a42, "fond_1_allume_d0", scroll_1_on_at_d0, regs::CCR),
-    native(0x133f6, "demarrage_leve", booted_set, regs::CCR),
-    native(0x133f0, "demarrage_baisse", booted_clear, regs::CCR),
-    native(0x1c44a, "variables_partie_a_zero", game_vars_clear, regs::ALL),
-    native(0x180ac, "ecran_fixe_remise", fixed_screen_reset, regs::CCR),
+    native(0x1ac9a, "lightning_palette_yellow", flash_a, regs::CCR),
+    native(0x1ac72, "lightning_palette_green", flash_b, regs::CCR),
+    native(0x1ac7c, "lightning_palette_blue", flash_c, regs::CCR),
+    native(0x2a52, "background_2_lit", scroll_2_on, regs::d(0) | regs::a(1) | regs::CCR),
+    native(0x2a36, "background_1_lit", scroll_1_on, regs::CCR),
+    native(0x2a42, "background_1_lit_d0", scroll_1_on_at_d0, regs::CCR),
+    native(0x133f6, "boot_raised", booted_set, regs::CCR),
+    native(0x133f0, "boot_lowered", booted_clear, regs::CCR),
+    native(0x1c44a, "zero_game_variables", game_vars_clear, regs::ALL),
+    native(0x180ac, "fixed_screen_reset", fixed_screen_reset, regs::CCR),
 ];
 
 /// Enemy reactions specific to a type (`own_reaction`), at their original address (the game calls them directly
 /// depuis `enemy_common::react`).
 pub const SHAKES: &[Native] = &[
-    handler_sans(0x78ad2, "ennemi_tremble_a", |b, a| run_shake(b, a, 0x78ad2)),
-    handler_sans(0x71680, "ennemi_tremble_b", |b, a| run_shake(b, a, 0x71680)),
-    handler_sans(0x65236, "ennemi_tremble_c", |b, a| run_shake(b, a, 0x65236)),
+    handler_without(0x78ad2, "enemy_shake_a", |b, a| run_shake(b, a, 0x78ad2)),
+    handler_without(0x71680, "enemy_shake_b", |b, a| run_shake(b, a, 0x71680)),
+    handler_without(0x65236, "enemy_shake_c", |b, a| run_shake(b, a, 0x65236)),
 ];
 
 fn run_shake(b: &mut Cps2Bus, a: &mut crate::dispatch::Dispatch, routine: u32) {
-    own_reaction(&mut crate::families::cx::Gx::aiguille(b, a), routine);
+    own_reaction(&mut crate::families::cx::Gx::dispatch(b, a), routine);
 }

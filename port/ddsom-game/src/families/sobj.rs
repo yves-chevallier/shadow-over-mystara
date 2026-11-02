@@ -279,8 +279,8 @@ mod scenery {
                 }
             }
             20 => {
-                let lim = x.a5_u16(ram::CAMERA_X).wrapping_sub(0x40) as i16;
-                if lim > x.u16(0x8) as i16 {
+                let limit = x.a5_u16(ram::CAMERA_X).wrapping_sub(0x40) as i16;
+                if limit > x.u16(0x8) as i16 {
                     x.add8(0x4, 2);
                 }
             }

@@ -427,7 +427,7 @@ pub(super) fn spin_roar<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(f::KEY_FRAME) == 2 {
                 x.set8(f::KEY_FRAME, 0);
                 eshl_wave_1e(x);
-                crate::palette::set_flash_color(x.b, crate::families::small::ECLAIR_JAUNE);
+                crate::palette::set_flash_color(x.b, crate::families::small::LIGHTNING_YELLOW);
                 x.set8(0xb9, 4);
             }
             x.set_a5_u16(0x4ba, 0);

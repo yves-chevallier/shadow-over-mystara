@@ -1,4 +1,4 @@
-//! Player effects (PEFF), second series: types 11, 20, 33. See `docs/families/player.md`.
+//! Player effects (PEFF), second series: types 11, 20, 33. See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};
@@ -277,7 +277,7 @@ mod witch {
         x.add16(0xc, 0x60);
         x.add16(0x10, 1);
         x.anim_start(ANIMS, 0);
-        crate::palette::set_flash_color(x.b, crate::families::small::ECLAIR_BLEU);
+        crate::palette::set_flash_color(x.b, crate::families::small::LIGHTNING_BLUE);
         x.reinsert();
     }
 

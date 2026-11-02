@@ -9,7 +9,7 @@
 //! At every frame: the displayed frame, the work RAM, the GFX RAM, the object RAM, the palette, the shared RAM
 //! and the audio samples must be identical. A stop of the game without 68000 (address without native) on both
 //! machines at the same frame ends the scenario without counting it as a failure (a hole of the no-68000 mode, not of the
-//! resources). Output: « IDENTICAL » or the first difference, per scenario.
+//! resources). Output: "IDENTICAL" or the first difference, per scenario.
 
 use std::path::Path;
 

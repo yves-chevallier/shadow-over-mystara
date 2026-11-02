@@ -1,5 +1,5 @@
 //! Scenery objects (SET class, pool of 32 objects of 0x50 bytes, table 0x39eac): types 0, 1 and
-//! 3 to 14. SET objects do not appear in the sorted lists (see `docs/objects.md`).
+//! 3 to 14. SET objects do not appear in the sorted lists (see `docs/objets.md`).
 
 use crate::families::cx::Bench;
 use super::cx::{Cx, Gx};
@@ -2485,7 +2485,7 @@ macro_rules! entry {
 }
 
 pub const NATIVES: &[crate::Native] = &[
-    entry!(0xcc25a "set_commun_cc25a", #[without] scene_spawner::run),
+    entry!(0xcc25a "set_common_cc25a", #[without] scene_spawner::run),
     entry!(0xba310 "set_0", #[without] palette_script::run),
     entry!(0xbc518 "set_1", #[without] wave_leader::run),
     entry!(0xc935a "set_4", #[without] tile_anim::run4),

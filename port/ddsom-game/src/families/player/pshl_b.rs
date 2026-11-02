@@ -1,5 +1,5 @@
 //! Player shots (PSHL), second series: types 7 (frozen ground) and 8 (the thief's shadows).
-//! See `docs/families/player.md`.
+//! See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

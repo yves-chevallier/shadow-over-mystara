@@ -1504,7 +1504,7 @@ pub fn hurt(g: &mut Ctx, p: Player) {
     cov!();
     if p.u8(g, Player::STEP) == 0 {
         g.sound(rom::BEFORE_HURT_A, p);
-        crate::families::items::chute_equipement_68k(g.c, g.b, crate::objects::Obj(p.0));
+        crate::families::items::fall_equipment_68k(g.c, g.b, crate::objects::Obj(p.0));
         if p.u8(g, Player::SLOW_8A) != 0 {
             p.set_u8(g, Player::SLOW_8A, 0);
             let held = p.u32(g, Player::LINK);

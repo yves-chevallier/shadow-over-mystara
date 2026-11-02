@@ -713,29 +713,29 @@ fn creep_68k(c: &mut Cpu, b: &mut Cps2Bus, pixels: u16) {
 }
 
 const fn leaf(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs: crate::regs::CCR }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: crate::regs::CCR }
 }
 
 pub const PARALLAX_QUARTER: Native = Native {
-    ..leaf(0x33178, "decor_parallaxe_quart", |c, b| {
+    ..leaf(0x33178, "scenery_parallax_quarter", |c, b| {
         parallax_68k(c, b, QUARTER);
         rts(c, b)
     })
 };
 pub const PARALLAX_THREE_QUARTERS: Native = Native {
-    ..leaf(0x33196, "decor_parallaxe_trois_quarts", |c, b| {
+    ..leaf(0x33196, "scenery_parallax_three_quarters", |c, b| {
         parallax_68k(c, b, THREE_QUARTERS);
         rts(c, b)
     })
 };
 pub const CREEP_6: Native = Native {
-    ..leaf(0x331e8, "decor_avance_6", |c, b| {
+    ..leaf(0x331e8, "scenery_advance_6", |c, b| {
         creep_68k(c, b, 6);
         rts(c, b)
     })
 };
 pub const CREEP_3: Native = Native {
-    ..leaf(0x3326c, "decor_avance_3", |c, b| {
+    ..leaf(0x3326c, "scenery_advance_3", |c, b| {
         creep_68k(c, b, 3);
         rts(c, b)
     })
@@ -848,8 +848,8 @@ fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub const FOLLOW_PLAYERS_Y: Native = Native {
     entry: 0x31616,
-    name: "camera_suit_joueurs_y",
-    run: crate::Body::Processeur(follow_players_y),
+    name: "camera_follows_players_y",
+    run: crate::Body::WithCpu(follow_players_y),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };
@@ -921,8 +921,8 @@ fn reset_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub const RESET_CAMERAS: Native = Native {
     entry: 0x33aa6,
-    name: "cameras_depart",
-    run: crate::Body::Processeur(reset_cameras),
+    name: "cameras_start",
+    run: crate::Body::WithCpu(reset_cameras),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };
@@ -982,8 +982,8 @@ fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub const RETURN_CAMERAS: Native = Native {
     entry: 0x33b24,
-    name: "cameras_retour",
-    run: crate::Body::Processeur(return_cameras),
+    name: "cameras_return",
+    run: crate::Body::WithCpu(return_cameras),
     touches_sound: false,
     // called by the doors (natives), which reread no register
     outputs: 0,
@@ -991,8 +991,8 @@ pub const RETURN_CAMERAS: Native = Native {
 
 pub const UPDATE_CAMERAS: Native = Native {
     entry: 0x33e20,
-    name: "cameras_mise_a_jour",
-    run: crate::Body::Processeur(update_cameras_native),
+    name: "cameras_update",
+    run: crate::Body::WithCpu(update_cameras_native),
     touches_sound: false,
     outputs: crate::regs::ALL,
 };

@@ -510,24 +510,24 @@ macro_rules! native {
         pub const $ident: Native = Native {
             entry: $entry,
             name: $name,
-            run: crate::Body::Processeur($run),
+            run: crate::Body::WithCpu($run),
             touches_sound: false,
             outputs: $exits,
         };
     };
 }
 
-native!(READ, 0x2d846, "eeprom_lire", native_read, 0);
-native!(WRITE, 0x2d90e, "eeprom_ecrire", native_write, regs::d(0) | regs::CCR);
-native!(WRITE_VERIFY, 0x2d8aa, "eeprom_ecrire_verifier", native_write_verify, regs::d(0) | regs::CCR);
-native!(READ_VERIFY, 0x2d808, "eeprom_lire_verifier", native_read_verify, regs::d(0) | regs::CCR);
-native!(COUNT_COINS, 0x2daca, "compta_pieces", count_coins, regs::d(0));
-native!(COUNT_STARTS, 0x2daf4, "compta_departs", count_starts, regs::d(0));
-native!(COUNT_CONTINUES, 0x2db1e, "compta_continues", count_continues, regs::d(0));
-native!(COUNT_GAMES, 0x2db4e, "compta_parties", count_games, regs::d(0));
-native!(VBLANK_ACCOUNTING, 0x2dcf6, "compta_vblank", vblank_accounting, regs::d(0));
-native!(FULL_COINS_NATIVE, 0x2e448, "compta_complete_pieces", native_count_coins, regs::CCR);
-native!(FULL_STARTS_NATIVE, 0x2e49a, "compta_complete_departs", native_count_starts, regs::CCR);
+native!(READ, 0x2d846, "eeprom_read", native_read, 0);
+native!(WRITE, 0x2d90e, "eeprom_write", native_write, regs::d(0) | regs::CCR);
+native!(WRITE_VERIFY, 0x2d8aa, "eeprom_write_verify", native_write_verify, regs::d(0) | regs::CCR);
+native!(READ_VERIFY, 0x2d808, "eeprom_read_verify", native_read_verify, regs::d(0) | regs::CCR);
+native!(COUNT_COINS, 0x2daca, "accounting_coins", count_coins, regs::d(0));
+native!(COUNT_STARTS, 0x2daf4, "accounting_starts", count_starts, regs::d(0));
+native!(COUNT_CONTINUES, 0x2db1e, "accounting_continues", count_continues, regs::d(0));
+native!(COUNT_GAMES, 0x2db4e, "accounting_games", count_games, regs::d(0));
+native!(VBLANK_ACCOUNTING, 0x2dcf6, "accounting_vblank", vblank_accounting, regs::d(0));
+native!(FULL_COINS_NATIVE, 0x2e448, "accounting_complete_coins", native_count_coins, regs::CCR);
+native!(FULL_STARTS_NATIVE, 0x2e49a, "accounting_complete_starts", native_count_starts, regs::CCR);
 
 // ---------------------------------------------------------------------------------------------
 // Free games and development card RAM
@@ -625,32 +625,32 @@ fn stat_duration(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub const STAT_CHARACTER: Native = Native {
     entry: 0x2e630,
-    name: "compta_stat_personnage",
-    run: crate::Body::Processeur(stat_character),
+    name: "accounting_stat_character",
+    run: crate::Body::WithCpu(stat_character),
     touches_sound: false,
     outputs: regs::CCR,
 };
 
 pub const STAT_DURATION: Native = Native {
     entry: 0x2e696,
-    name: "compta_stat_duree",
-    run: crate::Body::Processeur(stat_duration),
+    name: "accounting_stat_duration",
+    run: crate::Body::WithCpu(stat_duration),
     touches_sound: false,
     outputs: regs::CCR,
 };
 
 pub const COUNT_GAMES_ACC: Native = Native {
     entry: 0x2e4ec,
-    name: "compta_parties",
-    run: crate::Body::Processeur(count_games_acc),
+    name: "accounting_games",
+    run: crate::Body::WithCpu(count_games_acc),
     touches_sound: false,
     outputs: regs::CCR,
 };
 
 pub const ACCOUNTING_INIT: Native = Native {
     entry: 0x2dc9a,
-    name: "compta_init",
-    run: crate::Body::Processeur(accounting_init),
+    name: "accounting_init",
+    run: crate::Body::WithCpu(accounting_init),
     touches_sound: false,
     outputs: regs::CCR,
 };

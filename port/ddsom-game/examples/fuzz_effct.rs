@@ -204,12 +204,12 @@ fn prepare(t: u32, b: &mut Cps2Bus, obj: u32, owner: u32, rng: &mut Rng) {
         63 => wr16(b, obj + 0x42, owner as u16),
         // carrier (ENEMY) at +0x46, piece 0 to 2; life around the thresholds; hits received
         46 => {
-            let porteur = if rng.one_in(8) { obj } else { owner };
-            wr16(b, obj + 0x46, porteur as u16);
+            let carrier = if rng.one_in(8) { obj } else { owner };
+            wr16(b, obj + 0x46, carrier as u16);
             wr8(b, obj + 0x2f, (rng.next() % 3) as u8);
-            wr16(b, porteur + 0x60, 0x100);
-            wr16(b, porteur + 0x62, (rng.next() % 0x140) as u16);
-            wr8(b, porteur + 0x33, rng.pick(&[0, 0, 1, 2, 0x81, 5]));
+            wr16(b, carrier + 0x60, 0x100);
+            wr16(b, carrier + 0x62, (rng.next() % 0x140) as u16);
+            wr8(b, carrier + 0x33, rng.pick(&[0, 0, 1, 2, 0x81, 5]));
             wr8(b, obj + 0x5c, (rng.next() % 4) as u8);
         }
         // carrier at +0x46 (itself following an object), phase +0xa4; arming, countdown, angle
@@ -401,7 +401,7 @@ fn principal() {
     let variants: Vec<u32> = std::env::var("FUZZ_VARIANTES")
         .map(|v| v.split(',').map(|x| x.parse().unwrap()).collect())
         .unwrap_or_else(|_| (0..16).collect());
-    let tours = env("FUZZ_TOURS", 24);
+    let rounds = env("FUZZ_TOURS", 24);
     let step = env("FUZZ_PAS", 60);
     let types: Vec<u32> = types.split(',').filter(|x| !x.is_empty()).map(|x| x.parse().unwrap()).collect();
     let ee = std::fs::read(eeprom).ok();
@@ -434,7 +434,7 @@ fn principal() {
         .map(|v| v.split(',').map(|x| u32::from_str_radix(x, 16).unwrap()).collect())
         .unwrap_or_default();
     for &entry in &creators {
-        for _ in 0..tours * 50 {
+        for _ in 0..rounds * 50 {
             let (mut c, mut b) = (c0.clone(), b0.clone());
             b.irq_horizon = u64::MAX;
             for r in 0..8 {
@@ -477,7 +477,7 @@ fn principal() {
         let mut seen = BTreeSet::new();
         let mut gap_types = 0u64;
         for &v in &variants {
-            for tour in 0..tours {
+            for tour in 0..rounds {
                 let (mut c, mut b) = (c0.clone(), b0.clone());
                 b.irq_horizon = u64::MAX;
                 let mut owners: Vec<u32> = ENEMY.iter().filter(|o| rd8(&mut b, o.0) != 0).map(|o| o.0).collect();
@@ -576,7 +576,7 @@ fn principal() {
             continue;
         }
         gaps += st.mismatches;
-        if st.mismatches > 0 || name.starts_with("effct") || name.starts_with("cree") || name.starts_with("bloc") {
+        if st.mismatches > 0 || name.starts_with("effct") || name.starts_with("create") || name.starts_with("block") {
             println!("  {name:28} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
         }
     }

@@ -205,7 +205,7 @@ pub const RESET_ENTRY: u32 = 0xf2e56;
 pub const SPAWN_SCRIPT: Native = Native {
     entry: SPAWN_ENTRY,
     name: "scene_script",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         step(c, b);
         rts(c, b);
     }),

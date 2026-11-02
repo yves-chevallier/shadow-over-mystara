@@ -1,5 +1,5 @@
 //! Player shots (PSHL), fifth series: types 6 (ray whirlwind) and 18 (cleric's burst).
-//! See `docs/families/player.md`.
+//! See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

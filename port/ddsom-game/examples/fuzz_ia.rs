@@ -372,8 +372,8 @@ fn case() -> Vec<Case> {
         Case { entry: 0xe2f6, name: "drop_treasure", inputs: none, core: |c, b, o| { let (d2, d5) = ai_aids::drop_treasure(b, o); d2 as u32 | (d5.unwrap_or(c.d[5]) & 0xffff) << 16 }, read: |c| c.d[2] as u16 as u32 | (c.d[5] & 0xffff) << 16 },
         Case { entry: 0x57c66, name: "in_right_half", inputs: none, core: |_, b, o| ddsom_game::families::creators::in_right_half(b, o) as u32, read: d0 },
         Case { entry: 0x5cdc6, name: "chance_10_16", inputs: none, core: |_, b, _| ddsom_game::families::creators::chance_10_16(b) as u32, read: d0 },
-        Case { entry: 0x19eb0, name: "popups_effacer_tout", inputs: none, core: |_, b, _| { ddsom_game::popups::clear_all(b); 0 }, read: nothing },
-        Case { entry: 0x19e20, name: "popups_animer", inputs: none, core: |_, b, _| { ddsom_game::popups::animer(b); 0 }, read: nothing },
+        Case { entry: 0x19eb0, name: "popups_clear_all", inputs: none, core: |_, b, _| { ddsom_game::popups::clear_all(b); 0 }, read: nothing },
+        Case { entry: 0x19e20, name: "popups_animer", inputs: none, core: |_, b, _| { ddsom_game::popups::animate_obj(b); 0 }, read: nothing },
         Case { entry: 0xd5f30, name: "set_14", inputs: none, core: |_, b, o| { ddsom_game::families::creators::set_14(b, o); 0 }, read: nothing },
         Case { entry: 0xd6952, name: "set_15_b", inputs: none, core: |_, b, o| { ddsom_game::families::creators::set_15_b(b, o); 0 }, read: nothing },
         Case { entry: 0xd5ef8, name: "attach_life_bar", inputs: none, core: |_, b, o| { ddsom_game::families::set_residue::attach_life_bar(b, o); 0 }, read: nothing },
@@ -413,7 +413,7 @@ fn main() {
     }
     let (roms, eeprom, scenario) = (&a[1], &a[2], &a[3]);
     let warmup: u32 = a[4].parse().unwrap();
-    let tours: u32 = a[5].parse().unwrap();
+    let rounds: u32 = a[5].parse().unwrap();
     let filter: Vec<u32> = a[6..].iter().map(|e| u32::from_str_radix(e.trim_start_matches("0x"), 16).unwrap()).collect();
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
@@ -439,7 +439,7 @@ fn main() {
             continue;
         }
         let (mut gaps, mut first, mut skipped) = (0, None, 0);
-        for _ in 0..tours {
+        for _ in 0..rounds {
             let (mut c, mut b) = (c0.clone(), b0.clone());
             let o = rng.among(&objects);
             perturbs(&mut c, &mut b, &mut rng, o);
@@ -470,7 +470,7 @@ fn main() {
                 first.get_or_insert(msg);
             }
         }
-        println!("{:06x} {:24} {:6} rounds {:6} mismatches {:4} skipped {}", case.entry, case.name, tours, gaps, skipped, first.as_deref().unwrap_or(""));
+        println!("{:06x} {:24} {:6} rounds {:6} mismatches {:4} skipped {}", case.entry, case.name, rounds, gaps, skipped, first.as_deref().unwrap_or(""));
         bad += gaps;
     }
     println!("{}", if bad == 0 { "FUZZ OK" } else { "FUZZ MISMATCHES" });

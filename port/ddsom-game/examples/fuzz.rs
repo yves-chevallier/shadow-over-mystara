@@ -5,7 +5,7 @@
 //!
 //!   fuzz <group> <roms> <eeprom> <scenario> <warm-up frames> <rounds>
 //!
-//! Groups: son (0x68c, 0xe0836-0xee000), u1 (RNG and event queues 0x19a80-0x1a000),
+//! Groups: sound (0x68c, 0xe0836-0xee000), u1 (RNG and event queues 0x19a80-0x1a000),
 //! c1 (coin slots 0x13c00-0x14e50), m2 (EEPROM and configuration 0x2d300-0x2ede0),
 //! video (video primitives, palettes and fades: natives `video_*` and `palette_*`),
 //! camera (scenery copy by cameras 1 and 2, 0x2f81c 0x2f86e 0x328a8, and parallax scenery 0x33178...),
@@ -203,7 +203,7 @@ static ENTRY: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0
 
 /// Palette color: brightness often at the limits, components arbitrary or close to 0 / 0xf.
 fn colour(rng: &mut Rng) -> u16 {
-    let lum = match rng.next() % 4 {
+    let luma = match rng.next() % 4 {
         0 => 0,
         1 => 0xf000,
         _ => (rng.next() as u16 & 0xf) << 12,
@@ -213,7 +213,7 @@ fn colour(rng: &mut Rng) -> u16 {
         1 => 0xf,
         _ => (a.next() & 0xf) as u16,
     };
-    lum | compo(rng) << 8 | compo(rng) << 4 | compo(rng)
+    luma | compo(rng) << 8 | compo(rng) << 4 | compo(rng)
 }
 
 /// Video primitives, palettes and fades: arbitrary palettes, fade state, scene and cameras.
@@ -304,11 +304,11 @@ fn rng_camera(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     }
     let cam = if entry == 0x328a8 { A5 + 0x54e } else { A5 + 0x4fe };
     let step: i32 = if entry == 0x328a8 { 0x20 } else { 0x10 };
-    let gap = |a: &mut Rng, portee: i32| -> i32 {
+    let gap = |a: &mut Rng, range_: i32| -> i32 {
         match a.next() % 4 {
             0 => 0,
             1 => (a.next() as i32 % (2 * step)) - step,
-            _ => (a.next() as i32 % (2 * portee)) - portee,
+            _ => (a.next() as i32 % (2 * range_)) - range_,
         }
     };
     // positions that stay inside the scenery map (beyond it the ROM has no more table: meaningless reads)
@@ -597,7 +597,7 @@ fn leftovers(c: &Cpu, b: &Bus, entry: u32, rng: &mut Rng) -> ([bool; 10], Option
     (res, Some((cr, br)))
 }
 
-fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, filter: Option<u32>) {
+fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, filter: Option<u32>) {
     use ddsom_game::mem::{rd16, rd8};
     use ddsom_game::objects::pools::{Pool, BOX, EFFCT, ENEMY, ESHL, ITEM, SET, SOBJ};
     use m68k::decode::Fetch;
@@ -644,7 +644,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
     // coverage of the handlers' original code (DDSOM_COUVERTURE=file: writes the addresses seen)
     let coverage = std::env::var("DDSOM_COUVERTURE").is_ok();
     let mut seen: std::collections::BTreeSet<u32> = Default::default();
-    for _ in 0..tours {
+    for _ in 0..rounds {
         for &(entry, pool, kind) in &inputs {
             let (mut c, mut b) = (c0.clone(), b0.clone());
             b.irq_horizon = u64::MAX;
@@ -843,7 +843,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, tours: u32, f
         let native_name = ddsom_game::all_natives().find(|n| n.entry == *entry).map_or("?", |n| n.name);
         let list: Vec<String> =
             regs.iter().enumerate().filter(|(_, &n)| n > 0).map(|(i, n)| format!("{}:{n}", LEFTOVER_NAMES[i])).collect();
-        println!("RESTES {entry:06x} {native_name} {calls} appels : {}", if list.is_empty() { "aucun".into() } else { list.join(" ") });
+        println!("LEFTOVERS {entry:06x} {native_name} {calls} calls: {}", if list.is_empty() { "none".into() } else { list.join(" ") });
     }
     if std::env::var("DDSOM_CHECK_ALL").is_ok() {
         for (name, st) in ddsom_game::report() {
@@ -1020,24 +1020,24 @@ fn rng_shop(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
-    let [_, group, roms, eeprom, scenario, warmup, tours] = &a[..] else {
+    let [_, group, roms, eeprom, scenario, warmup, rounds] = &a[..] else {
         eprintln!("usage: fuzz <group> <roms> <eeprom> <scenario> <warm-up frames> <rounds>");
         std::process::exit(2);
     };
-    if group == "familles" {
-        families(roms, eeprom, scenario, warmup.parse().unwrap(), tours.parse().unwrap(), std::env::var("DDSOM_ENTREE").ok().and_then(|v| u32::from_str_radix(&v, 16).ok()));
+    if group == "families" {
+        families(roms, eeprom, scenario, warmup.parse().unwrap(), rounds.parse().unwrap(), std::env::var("DDSOM_ENTREE").ok().and_then(|v| u32::from_str_radix(&v, 16).ok()));
         return;
     }
     let (rng_state, range): (fn(&mut Cpu, &mut Bus, &mut Rng), std::ops::Range<u32>) = match group.as_str() {
-        "son" => (rng_sound, 0x68c..0xee000),
+        "sound" => (rng_sound, 0x68c..0xee000),
         "u1" => (rng_u1, 0x19a80..0x1a000),
         "c1" => (rng_c1, 0x13c00..0x14e50),
         "m2" => (rng_m2, 0x2d300..0x2ede0),
         "video" => (rng_video, 0xb40..0x1d100),
         "camera" => (rng_camera, 0x2f000..0x33400),
-        "petites" => (rng_small_effects, 0x0..0x100000),
-        "boutique" => (rng_shop, 0x50b9c..0x514d0),
-        "createurs" => (rng_creators, 0x0..0x100000),
+        "small" => (rng_small_effects, 0x0..0x100000),
+        "shop" => (rng_shop, 0x50b9c..0x514d0),
+        "creators" => (rng_creators, 0x0..0x100000),
         _ => {
             eprintln!("groupe inconnu : {group}");
             std::process::exit(2);
@@ -1056,19 +1056,19 @@ fn main() {
     // the sound dispatches choose their target in a table according to a register or the object: drawn at
     // random, these selectors leave the tables (out of contract); they are validated by the scenarios
     let inputs: Vec<u32> = ddsom_game::all_natives()
-        .filter(|n| n.name != "son_aiguillage")
+        .filter(|n| n.name != "sound_dispatch")
         .map(|n| n.entry)
-        .filter(|e| range.contains(e) && (*group != "son" || *e == 0x68c || *e >= 0xe0836))
-        .filter(|e| *group != "petites" || SMALL.contains(e))
-        .filter(|e| *group != "createurs" || creator_entries().contains(e))
-        .filter(|e| *group != "boutique" || matches!(*e, 0x50b9c | 0x51076))
+        .filter(|e| range.contains(e) && (*group != "sound" || *e == 0x68c || *e >= 0xe0836))
+        .filter(|e| *group != "small" || SMALL.contains(e))
+        .filter(|e| *group != "creators" || creator_entries().contains(e))
+        .filter(|e| *group != "shop" || matches!(*e, 0x50b9c | 0x51076))
         .filter(|e| *group != "camera" || matches!(*e, 0x2f81c | 0x2f86e | 0x328a8 | 0x33178 | 0x33196 | 0x331e8 | 0x3326c))
         .filter(|e| *group != "video" || matches!(*e, 0xb40 | 0xb46 | 0xb96 | 0xbac | 0xbc6 | 0xbfc | 0xc58 | 0xca8 | 0xcc8 | 0xce8 | 0x158e | 0x15c8 | 0x1602 | 0x164e | 0x1a296 | 0x1a350 | 0x1a360 | 0x1a366 | 0x1a3d4 | 0x1a608 | 0x1a60a | 0x1a678 | 0x1a67e | 0x1a8ac | 0x1a8b2 | 0x1cd32 | 0x1cd7c | 0x1cdd6 | 0x1cf3c | 0x1cfb8 | 0x1cfc8 | 0x1d00e | 0x1d042 | 0x24a8 | 0x24b0 | 0x255a | 0x25e8 | 0x260c | 0x26d4 | 0x2766))
         .collect();
     let (c, b) = (&mut m.cpu, &mut m.bus);
     b.irq_horizon = u64::MAX;
     let mut shown = 0;
-    for _ in 0..tours.parse::<u32>().unwrap() {
+    for _ in 0..rounds.parse::<u32>().unwrap() {
         for &entry in &inputs {
             ENTRY.store(entry, std::sync::atomic::Ordering::Relaxed);
             rng_state(c, b, &mut rng);

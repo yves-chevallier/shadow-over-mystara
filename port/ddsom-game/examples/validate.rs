@@ -2,7 +2,7 @@
 //!
 //! Two machines replay the same inputs:
 //!   A: the game, without 68000 (natives only, kernel frame loop, `ddsom_game::install_no_68k`); an
-//!       address without a native stops it (« FAILED: stop without 68000 »);
+//!       address without a native stops it ("FAILED: stop without 68000");
 //!   B: original code alone, overclocked 68000 (it always finishes its work within the frame: it is then
 //!       deterministic frame by frame).
 //! At every frame, the game state (work RAM outside stacks, GFX RAM, sprite table, palette)
@@ -96,7 +96,7 @@ fn main() {
     let t0 = std::time::Instant::now();
     let mut failure = None;
     let mut stop: Option<String> = None;
-    let lent: Option<u128> = std::env::var("DDSOM_LENT").ok().and_then(|v| v.parse().ok());
+    let slow: Option<u128> = std::env::var("DDSOM_LENT").ok().and_then(|v| v.parse().ok());
     // DDSOM_CHECK_FRAME=n: check of all registers of each native call during frame n
     // DDSOM_DIFF_MAX=n: number of differing RAM words printed (10 by default)
     let diff_max: usize = std::env::var("DDSOM_DIFF_MAX").ok().and_then(|v| v.parse().ok()).unwrap_or(10);
@@ -124,10 +124,10 @@ fn main() {
         mb.run_frame();
         let tb = t.elapsed() - ta;
         // DDSOM_LENT=ms: reports frames longer than ms milliseconds (per machine)
-        if lent.is_some() && (f + 1) % 1000 == 0 {
+        if slow.is_some() && (f + 1) % 1000 == 0 {
             println!("frame {}: {:.1?}", f + 1, t0.elapsed());
         }
-        if let Some(threshold) = lent {
+        if let Some(threshold) = slow {
             if ta.as_millis() > threshold || tb.as_millis() > threshold {
                 println!("frame {} slow: rewritten {:.0?}, original {:.0?}", f + 1, ta, tb);
             }

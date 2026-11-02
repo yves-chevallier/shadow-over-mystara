@@ -226,7 +226,7 @@ macro_rules! natives {
         pub const $ident: Native = Native {
             entry: $class.entry,
             name: $name,
-            run: crate::Body::Processeur(|c, b| {
+            run: crate::Body::WithCpu(|c, b| {
                 // called by address (screens outside the game): a handler never cedes control there
                 if $class.update(c, b) == Flow::Done {
                     rts(c, b);

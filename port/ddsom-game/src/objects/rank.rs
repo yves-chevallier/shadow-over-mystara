@@ -276,7 +276,7 @@ fn lower_regs(c: &mut Cpu, b: &mut Cps2Bus) {
 pub const RANK_RESET: Native = Native {
     entry: 0x1f258,
     name: "rank_reset",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         reset_regs(c, b);
         rts(c, b);
     }),
@@ -287,7 +287,7 @@ pub const RANK_RESET: Native = Native {
 pub const RANK_LOAD_PRESET: Native = Native {
     entry: 0x1f1b8,
     name: "rank_load_preset",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         load_preset_regs(c, b);
         rts(c, b);
     }),
@@ -298,7 +298,7 @@ pub const RANK_LOAD_PRESET: Native = Native {
 pub const RANK_RAISE: Native = Native {
     entry: 0x1f2c0,
     name: "rank_raise",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         raise_regs(c, b);
         rts(c, b);
     }),
@@ -309,7 +309,7 @@ pub const RANK_RAISE: Native = Native {
 pub const RANK_LOWER: Native = Native {
     entry: 0x1f300,
     name: "rank_lower",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         lower_regs(c, b);
         rts(c, b);
     }),
@@ -320,7 +320,7 @@ pub const RANK_LOWER: Native = Native {
 pub const RANK_TICK: Native = Native {
     entry: 0x1f27c,
     name: "rank_tick",
-    run: crate::Body::Processeur(|c, b| {
+    run: crate::Body::WithCpu(|c, b| {
         tick_regs(c, b);
         rts(c, b);
     }),

@@ -282,7 +282,7 @@ macro_rules! anim_native {
         pub const $const: Native = Native {
             entry: $entry,
             name: $name,
-            run: crate::Body::Processeur(|c, b| {
+            run: crate::Body::WithCpu(|c, b| {
                 let obj = Obj(c.a[0]);
                 $run(c, b, obj);
                 rts(c, b);

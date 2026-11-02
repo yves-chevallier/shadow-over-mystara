@@ -1,5 +1,5 @@
 //! Player effects (PEFF), fourteenth series: type 41 (the guardian summoned by the wall magic, created by
-//! `player/spawn.rs::wall_target`). See `docs/families/player.md`.
+//! `player/spawn.rs::wall_target`). See `docs/families/joueur.md`.
 
 use crate::families::cx::Bench;
 use crate::families::cx::{handlers, Cx};

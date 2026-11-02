@@ -305,24 +305,24 @@ fn variables(c: &mut Cpu, b: &mut Cps2Bus) {
 
 pub const VARIANT: Native = Native {
     entry: 0x2d648,
-    name: "config_variante",
-    run: crate::Body::Processeur(variant),
+    name: "config_variant",
+    run: crate::Body::WithCpu(variant),
     touches_sound: false,
     outputs: regs::d(0) | regs::a(6) | regs::CCR,
 };
 
 pub const DEFAULTS: Native = Native {
     entry: 0x2d7aa,
-    name: "config_defauts",
-    run: crate::Body::Processeur(load_defaults),
+    name: "config_defaults",
+    run: crate::Body::WithCpu(load_defaults),
     touches_sound: false,
     outputs: 0,
 };
 
 pub const VALIDATE: Native = Native {
     entry: 0x2d662,
-    name: "config_valider",
-    run: crate::Body::Processeur(native_validate),
+    name: "config_validate",
+    run: crate::Body::WithCpu(native_validate),
     touches_sound: false,
     outputs: 0,
 };
@@ -330,7 +330,7 @@ pub const VALIDATE: Native = Native {
 pub const VARIABLES: Native = Native {
     entry: 0x2d358,
     name: "config_variables",
-    run: crate::Body::Processeur(load_variables),
+    run: crate::Body::WithCpu(load_variables),
     touches_sound: false,
     outputs: regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR,
 };
@@ -356,11 +356,11 @@ fn signature_ok(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     c.d[7] = SIGNATURE_LEN - 1;
     for _ in 0..SIGNATURE_LEN {
         let expected = rd8(b, c.a[6]);
-        let lu = rd8(b, c.a[1]);
+        let read_byte = rd8(b, c.a[1]);
         c.d[0] = c.d[0] & !0xff | expected as u32;
         c.a[6] += 1;
         c.a[1] += 1;
-        if expected != lu {
+        if expected != read_byte {
             return false;
         }
         let remainder = (c.d[7] as u16).wrapping_sub(1);
@@ -374,8 +374,8 @@ fn signature_ok(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
 /// for good).
 pub fn initialize(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     crate::eeprom::all_eeprom(b);
-    let lu = crate::eeprom::read_verify(b);
-    let valid = lu && {
+    let read_byte = crate::eeprom::read_verify(b);
+    let valid = read_byte && {
         // D0 of 0x2d648 (block displacement), like the original before its loop
         let index = crate::mem::rd16(b, a5(c, ram::VARIANT));
         set_word(&mut c.d[0], crate::mem::prog16(b, TABLE_VARIANTS.wrapping_add(index as i16 as u32)));
@@ -415,7 +415,7 @@ fn error(b: &mut Cps2Bus) {
 pub const INIT: Native = Native {
     entry: 0x2d30a,
     name: "config_init",
-    run: crate::Body::Processeur(init),
+    run: crate::Body::WithCpu(init),
     touches_sound: false,
     outputs: regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR,
 };

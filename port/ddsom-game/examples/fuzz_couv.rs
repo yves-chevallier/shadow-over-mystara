@@ -1,5 +1,5 @@
 //! Coverage-guided differential fuzz: validates against the original the paths of native routines that the
-//! scenarios do not exercise (docs/couverture-fonctions.md, « Validation par fuzz »).
+//! scenarios do not exercise (docs/couverture-fonctions.md, "fuzz validation").
 //!
 //! The scenario plays the game with the original code alone (`validate`'s reference machine). At calls to a
 //! targeted native routine, the real state is kept as a base; copies of it are perturbed and then run by the
@@ -240,7 +240,7 @@ struct State {
     rng: Rng,
     domains: Domains,
     // try the never-called entries from the state of a neighbor (`FUZZ_SUBSTITUTS`)
-    substituts: bool,
+    substitutes: bool,
     // targeted zones (`FUZZ_FOCUS=F3,C1`): only the bases that go through them are fuzzed
     focus: Vec<(u32, u32)>,
     period: u64,
@@ -848,13 +848,13 @@ fn fuzzer(entry: u32, c: &Cpu, b: &Cps2Bus) {
         }
         e.targets.get_mut(&entry).unwrap().points += 1;
         fuzz_from(e, entry, c, b, false);
-        if !e.substituts {
+        if !e.substitutes {
             return;
         }
         // an entry of the same zone (or a handler of the same pool) never called, from this state
         let here = &e.targets[&entry];
         let (zone, pool) = (here.zone.clone(), here.handler.map(|g| g.0));
-        let mut candidats: Vec<u32> = e
+        let mut candidates: Vec<u32> = e
             .targets
             .iter()
             .filter(|(_, y)| y.summary.calls == 0 && y.substitutions < e.points_max)
@@ -865,11 +865,11 @@ fn fuzzer(entry: u32, c: &Cpu, b: &Cps2Bus) {
             })
             .map(|(&a, _)| a)
             .collect();
-        if candidats.is_empty() {
+        if candidates.is_empty() {
             return;
         }
-        candidats.sort();
-        let y = candidats[e.over(candidats.len() as u64) as usize];
+        candidates.sort();
+        let y = candidates[e.over(candidates.len() as u64) as usize];
         let mut c2 = c.clone();
         let mut b2 = b.clone();
         c2.pc = y;
@@ -1096,7 +1096,7 @@ fn main() {
             identical_seen: vec![0; 0x10000],
             boundary: front,
             domains: HashMap::new(),
-            substituts: std::env::var_os("FUZZ_SUBSTITUTS").is_some(),
+            substitutes: std::env::var_os("FUZZ_SUBSTITUTS").is_some(),
             focus: std::env::var("FUZZ_FOCUS")
                 .map(|v| zs.iter().filter(|z| v.split(',').any(|f| f == z.2)).map(|z| (z.0, z.1)).collect())
                 .unwrap_or_default(),
@@ -1119,8 +1119,8 @@ fn main() {
         m.run_frame();
     }
     let e = STATE.with(|x| x.borrow_mut().take().unwrap());
-    std::fs::write(&a[6], &e.seen).expect("sortie");
-    std::fs::write(format!("{}.identiques", a[6]), &e.identical_seen).expect("sortie");
+    std::fs::write(&a[6], &e.seen).expect("output");
+    std::fs::write(format!("{}.identiques", a[6]), &e.identical_seen).expect("output");
     let mut total = 0;
     let mut sort: Vec<&Target> = e.targets.values().filter(|c| c.summary.tests > 0 || c.summary.gaps + c.summary.panics > 0).collect();
     sort.sort_by_key(|c| c.n.entry);

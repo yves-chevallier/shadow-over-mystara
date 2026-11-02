@@ -273,7 +273,7 @@ fn side_of(b: &mut Cps2Bus, o: Obj, other: Obj) -> u8 {
 /// target)?
 pub fn target_in_front(b: &mut Cps2Bus, o: Obj, hitbox: crate::ai_aids::Hitbox) -> crate::ai_aids::InHitbox {
     match o.u16(b, f::TARGET) {
-        0 => crate::ai_aids::InHitbox::Non,
+        0 => crate::ai_aids::InHitbox::No,
         w => crate::ai_aids::box_around(b, o, Obj::from_word(w), hitbox),
     }
 }

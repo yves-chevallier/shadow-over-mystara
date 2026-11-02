@@ -665,7 +665,7 @@ pub fn clear_lists(b: &mut Cps2Bus) {
 
 pub const RESET_LISTS: Native = Native {
     entry: 0x1de7c,
-    name: "sprites_vide_les_listes",
+    name: "sprites_clear_lists",
     run: crate::Body::Memory(clear_lists),
     touches_sound: false,
     outputs: 0,
@@ -674,7 +674,7 @@ pub const RESET_LISTS: Native = Native {
 pub const BUILD_SPRITE_LIST: Native = Native {
     entry: 0x1de96,
     name: "build_sprite_list",
-    run: crate::Body::Processeur(build_sprite_list),
+    run: crate::Body::WithCpu(build_sprite_list),
     touches_sound: false,
     outputs: 0,
 };

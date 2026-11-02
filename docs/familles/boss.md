@@ -213,7 +213,7 @@ ciel, puis combat dans la même image), `fight.rs` (surveillance et tirage d'att
 riposte spéciale, bond), `attacks.rs` (dix attaques sur des étapes communes de montée, descente et pause), `hit.rs`.
 Particularités : `0xb3fb0` relit `D1b` laissé par `set_anim` (numéro du jeu d'animations) ; `0xfd8c` relâche le joueur désigné par
 `A1`, chargé au début de la prise ; l'étape 4 de l'arrivée enchaîne sur le groupe 2 sans rendre la main. Couverture : fuzz 1 303
-instructions sur 1 369, VALIDE (les natives `ai_pick_target_any` et `son_enfiler_direct` désactivées : leurs écarts connus de durée et de
+instructions sur 1 369, VALIDE (les natives `ai_pick_target_any` et `sound_enqueue_direct` désactivées : leurs écarts connus de durée et de
 drapeau X ne viennent pas du boss).
 
 ### Type 18 (0x975ec) : Lich (h), scène 26 — `boss_18/`
@@ -226,7 +226,7 @@ magique. Animations 0x181ae0 (mouvements), 0x181af2 (coups), 0x181b10 (réaction
 (quatre temps minutés avec sons), `fight.rs` (attente, demi-tour qui continue d'avancer, marche, charge, reprise), `decide.rs`,
 `attacks.rs` (onze attaques : coup, pas de côté, geste à suite tirée, poursuite magique, bond arrière, boule ESHL 0x20, rayon ESHL
 0x21, onde de choc qui renverse les joueurs, téléportation, pluie de 16 tirs 0x23, salve de tirs 0x24), `hit.rs`.
-Couverture : fuzz 1 538 instructions sur 1 642 (VALIDE, natives `ai_pick_target_any` et `son_enfiler` désactivées : écarts connus
+Couverture : fuzz 1 538 instructions sur 1 642 (VALIDE, natives `ai_pick_target_any` et `sound_enqueue` désactivées : écarts connus
 de durée et de drapeau X). Le scénario `boss18_scene26` (tronqué à l'image 10 900 par `gen_boss.py`) est VALIDE sur 12 000 images
 (7 125 appels) ; le bot tue le Lich à l'image 10 541, la mort et la fin de scène sont donc exercées.
 
@@ -478,8 +478,8 @@ caméra (+0xc0), 0x180 étant écrasé ; `subq.b #1,(0xa0)` agit sur l'octet hau
   l'objet a été déplacé, A0 intact, A1 = A6 = l'objet. Appelée chaque image par les ennemis (elfe, gnoll...).
 * `0x833b6` (`boss_oscillation`) : oscillation verticale (`+0xc` += long de la table 0x833e4 par `+0x33 & 0x7f`,
   négatif quand le compte à rebours `+0xa8` est sous 36 ; période 72).
-* `0x87048` (`boss_seuil_pv`) : selon `A5+0x5a` (0 : rien, 3 : toujours) et la forme `+0xad` (2 ou 3), pose `+0x43`
+* `0x87048` (`boss_hp_threshold`) : selon `A5+0x5a` (0 : rien, 3 : toujours) et la forme `+0xad` (2 ou 3), pose `+0x43`
   ou, si la moitié des PV `+0x62` dépasse 72, retient ce seuil en `+0xb6` et pose `+0x42`.
 
 Validées par les scénarios (`boss_repousse` dans presque tous les scénarios d'ennemis, `boss_oscillation` dans
-`enemy/trog_scene104`, `boss_seuil_pv` dans les scénarios de boss) ; les deux formes du corps sont exercées par le fuzz du boss 3.
+`enemy/trog_scene104`, `boss_hp_threshold` dans les scénarios de boss) ; les deux formes du corps sont exercées par le fuzz du boss 3.

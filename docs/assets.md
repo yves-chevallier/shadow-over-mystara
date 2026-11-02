@@ -775,7 +775,7 @@ non couverts, les trois premiers appelants dans `ddsom-game/src`.
 cd port
 CARGO_TARGET_DIR=/tmp/cible cargo build --release -p ddsom-game --example rom_reads --features rom-trace
 cargo build --release -p ddsom-assets --examples
-target/release/examples/rom_coverage <assets> --octets /tmp/couvert.bin          # couverture mot par mot
+target/release/examples/rom_coverage <assets> --bytes /tmp/couvert.bin          # couverture mot par mot
 DDSOM_COUVERT=/tmp/couvert.bin /tmp/cible/release/examples/rom_reads <roms> <eeprom> lectures.txt \
     ../scenarios/bot30k.txt:12000 ...                                              # machine hybride, natives Rust
 target/release/examples/rom_coverage <assets> lectures.txt [écart-hexa]          # zones non couvertes
@@ -841,7 +841,7 @@ code des gestionnaires : décalages vers des routines (des adresses de code : el
 Rust) et quelques tables de données (vitesses des coquilles, positions, tables de décision des chefs 17 et 21).
 Les lectures de `sound.rs` en espace programme (0xe0ca8-0xede06) sont des octets de code des wrappers de son lus pour les évaluer ; elles disparaîtront avec eux.
 
-**Sans 68000** ([sans-rom.md](sans-rom.md)) : `lectures_rom` tourne sans 68000 par défaut ; plus aucune lecture de
+**Sans 68000** ([sans-rom.md](sans-rom.md)) : `rom_reads` tourne sans 68000 par défaut ; plus aucune lecture de
 code pour des durées (supprimées au lot 0a), et les zones lues non couvertes, mesurées sur les 269 scénarios, sont dans `data/natives.json`
 (brutes, par lecteur) : le jeu sans 68000 tourne avec les seuls assets.
 

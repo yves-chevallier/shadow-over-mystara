@@ -214,7 +214,7 @@ impl InBox {
 impl From<ai_aids::InHitbox> for InBox {
     fn from(d: ai_aids::InHitbox) -> InBox {
         match d {
-            ai_aids::InHitbox::Non => InBox::No,
+            ai_aids::InHitbox::No => InBox::No,
             ai_aids::InHitbox::Face => InBox::Ahead,
             ai_aids::InHitbox::Back => InBox::Behind,
         }
@@ -484,24 +484,24 @@ pub fn clear_all_popups<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// What the 0xb10c8 shock returns: the created effect, or what the original leaves in A1 and the carry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Choc {
+pub enum Impact {
     Created(Obj),
     /// Pool full (carry set): A1 = the slot left by the allocation (`Pool::alloc_or_leftover`).
     Refuse(Obj),
     /// Scene 41: no effect, neither A1 nor carry (the final `cmp.b` leaves the carry at zero).
-    Aucun,
+    Nothing,
 }
 
 /// 0xb10c8: shock effect at the object's position: variant, setting (`+0x2d`, `+0x2f`), speeds `+0x14`, `+0x1c`.
-pub fn shock<R: Bench>(x: &mut Cx<'_, R>, variant: u32, setting: u16, vx: u16, vy: u16) -> Choc {
+pub fn shock<R: Bench>(x: &mut Cx<'_, R>, variant: u32, setting: u16, vx: u16, vy: u16) -> Impact {
     if let Some(o) = crate::effects_aids::shock(x.b, x.o, variant as u8, setting, vx, vy) {
-        return Choc::Created(o);
+        return Impact::Created(o);
     }
     if crate::ram::SCENE.get(x.b) == 41 {
-        return Choc::Aucun;
+        return Impact::Nothing;
     }
     // the allocation failed: redoing it changes nothing, and returns the A1 left
-    Choc::Refuse(crate::objects::pools::EFFCT.alloc_or_leftover(x.b).unwrap_err())
+    Impact::Refuse(crate::objects::pools::EFFCT.alloc_or_leftover(x.b).unwrap_err())
 }
 
 /// 0xabec8: attack effect (EFFCT 11) linked by `+0x5c`, of given variant and setting; false if the pool refused it (the

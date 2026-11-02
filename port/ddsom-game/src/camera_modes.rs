@@ -1585,11 +1585,11 @@ fn step(b: &mut Cps2Bus) -> crate::scroll::D4Leftovers {
     crate::scroll::after_mode(x.b)
 }
 
-pub const CAMERA1_UPDATE: Native = camera(0x2ede0, "camera1_mise_a_jour", camera1_update);
-pub const CAMERA2_UPDATE: Native = camera(0x32108, "camera2_mise_a_jour", camera2_update);
+pub const CAMERA1_UPDATE: Native = camera(0x2ede0, "camera1_update", camera1_update);
+pub const CAMERA2_UPDATE: Native = camera(0x32108, "camera2_update", camera2_update);
 
 const fn camera(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs: regs::a(0) }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: regs::a(0) }
 }
 
 /// Camera shake modes (`cam::MODE`) and their original entries.

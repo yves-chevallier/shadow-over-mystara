@@ -172,12 +172,12 @@ pub(crate) mod camera {
 }
 
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 
 pub const NATIVES: &[Native] = &[
-    native(0xd5f12, "set_efface_colonnes", erase_columns, regs::ALL),
-    native(0xce668, "set_deux_grilles", load_two_grids, regs::ALL),
-    native(0xd98b8, "set_vague_debut", |c, b| { wave_start(c, b); rts(c, b) }, regs::ALL),
-    native(0xd995a, "set_vague_fin", |c, b| { wave_end(c, b); rts(c, b) }, regs::ALL),
+    native(0xd5f12, "set_clears_columns", erase_columns, regs::ALL),
+    native(0xce668, "set_two_grids", load_two_grids, regs::ALL),
+    native(0xd98b8, "set_wave_start", |c, b| { wave_start(c, b); rts(c, b) }, regs::ALL),
+    native(0xd995a, "set_wave_end", |c, b| { wave_end(c, b); rts(c, b) }, regs::ALL),
 ];

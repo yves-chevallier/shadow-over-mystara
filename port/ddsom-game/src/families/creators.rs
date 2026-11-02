@@ -58,7 +58,7 @@ pub(crate) fn weapon_shot(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option
     shot.set_u16(b, 0x5c, word(me));
     let power = me.u8(b, 0x49);
     shot.set_u8(b, 0x42, power);
-    r.drapeaux(power as u32, Size::Byte);
+    r.flags(power as u32, Size::Byte);
     Some(shot)
 }
 
@@ -75,7 +75,7 @@ fn link_effect(r: &mut impl Regs, b: &mut Cps2Bus, fx: Obj, player: Obj) {
     let step = player.u8(b, 0x7);
     fx.set_u8(b, 0x5d, step);
     fx.set_u16(b, 0x50, player.word());
-    r.drapeaux(player.word() as u32, Size::Word);
+    r.flags(player.word() as u32, Size::Word);
 }
 
 /// 0x4b7a0: lightning of the spell (PEFF 10, variant `variant`, rank `+3` of the player in `+0x2f`).
@@ -135,7 +135,7 @@ pub(crate) fn enemy_shot_9_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> O
     let phase = rd16(b, A5 + 0x6e) & 3;
     r.d_word(0, phase);
     if phase != 0 {
-        r.drapeaux(phase as u32, Size::Word);
+        r.flags(phase as u32, Size::Word);
         return None;
     }
     let shot = r.allocated(b, &pools::ESHL)?;
@@ -143,7 +143,7 @@ pub(crate) fn enemy_shot_9_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> O
     shot.set_u8(b, 0x2, 9);
     shot.set_u8(b, 0x3, 0);
     wr16(b, shot.0 + 0x50, me.word());
-    r.drapeaux(me.word() as u32, Size::Word);
+    r.flags(me.word() as u32, Size::Word);
     Some(shot)
 }
 
@@ -240,7 +240,7 @@ pub(crate) fn scene_set_via(r: &mut impl Regs, b: &mut Cps2Bus, variant: u8) -> 
     r.d(0, scene);
     let kind = prog8(b, 0xc834c + scene);
     set.set_u8(b, Obj::KIND, kind);
-    r.drapeaux(scene, Size::Byte);
+    r.flags(scene, Size::Byte);
     Some(set)
 }
 
@@ -281,7 +281,7 @@ pub(crate) fn set_a_via(r: &mut impl Regs, b: &mut Cps2Bus, variant: u8, class: 
     set.set_u8(b, Obj::VARIANT, variant);
     let v = class(b);
     set.set_u8(b, 0x2f, v);
-    r.drapeaux(v as u32, Size::Byte);
+    r.flags(v as u32, Size::Byte);
     Some(set)
 }
 
@@ -450,10 +450,10 @@ pub(crate) fn sobj_8_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Op
     o.set_u8(b, Obj::KIND, 8);
     o.set_u16(b, 0x14, creator.word());
     let linked = creator.u16(b, 0x14);
-    r.drapeaux(linked as u32, Size::Word);
+    r.flags(linked as u32, Size::Word);
     if linked != 0 {
         o.set_u8(b, Obj::VARIANT, 1);
-        r.drapeaux(1, Size::Byte);
+        r.flags(1, Size::Byte);
     }
     Some(o)
 }
@@ -468,7 +468,7 @@ pub fn set_14(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
 
 fn set_14_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     let game = crate::ram::GAME.get(b);
-    r.drapeaux(game as u32, Size::Byte);
+    r.flags(game as u32, Size::Byte);
     if game == 0 {
         return None;
     }
@@ -478,7 +478,7 @@ fn set_14_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     set.set_u16(b, 0x20, creator.word());
     set.set_u8(b, Obj::VARIANT, 0);
     wr16(b, LIFE_BAR_SET, set.word());
-    r.drapeaux(set.word() as u32, Size::Word);
+    r.flags(set.word() as u32, Size::Word);
     Some(set)
 }
 
@@ -499,7 +499,7 @@ fn set_15_b_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj>
     r.d(0, 2 * kind);
     let v = crate::mem::prog16(b, SET_15_PARAMS + 2 * kind);
     set.set_u16(b, 0x42, v);
-    r.drapeaux(v as u32, Size::Word);
+    r.flags(v as u32, Size::Word);
     Some(set)
 }
 
@@ -773,7 +773,7 @@ pub(crate) fn quake_via<R: Regs>(r: &mut R, b: &mut Cps2Bus, player: Obj, pair: 
         }
         fx.set_u8(b, 0x5d, step);
         fx.set_u16(b, 0x50, player.word());
-        r.drapeaux(player.word() as u32, Size::Word);
+        r.flags(player.word() as u32, Size::Word);
         Some(fx)
     };
     if pair {
@@ -873,39 +873,39 @@ fn boss_state_0202(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs }
 }
 
 const CREATED: u32 = regs::a(1) | regs::CCR;
 
 pub const NATIVES: &[Native] = &[
-    native(0x51c06, "cree_tir_arme", |c, b| { let me = Obj(c.a[0]); weapon_shot(c, b, me); rts(c, b) }, regs::d(0) | regs::d(1) | CREATED),
-    native(0x4b7a0, "cree_eclair", |c, b| { let (me, v) = (Obj(c.a[0]), c.d[0] as u8); bolt_via(c, b, me, v); rts(c, b) }, CREATED),
-    native(0x4dc9a, "cree_etincelles", |c, b| { let me = Obj(c.a[0]); sparks_via(c, b, me); rts(c, b) }, CREATED),
-    native(0x9ef20, "cree_tir_9", enemy_shot_9, regs::d(0) | CREATED),
-    native(0xcdedc, "cree_set_13", set_13, CREATED),
-    native(0xc8312, "cree_set_scene", scene_set_native, regs::d(0) | CREATED),
-    native(0xd981a, "fin_de_scene_variante", scene_exit, regs::d(0) | regs::a(1)),
-    native(0xcc352, "cree_set_a", set_a_creator, CREATED),
-    native(0xdc5fe, "cree_item_scene", scene_item, CREATED),
-    native(0xd9778, "musique_variante", scene_music, regs::d(0) | regs::a(1)),
-    native(0xd99f8, "scene_rien", nothing, regs::ALL),
-    native(0xce00a, "cree_set_15", set_15, CREATED),
+    native(0x51c06, "create_shot_weapon", |c, b| { let me = Obj(c.a[0]); weapon_shot(c, b, me); rts(c, b) }, regs::d(0) | regs::d(1) | CREATED),
+    native(0x4b7a0, "create_lightning", |c, b| { let (me, v) = (Obj(c.a[0]), c.d[0] as u8); bolt_via(c, b, me, v); rts(c, b) }, CREATED),
+    native(0x4dc9a, "create_sparks", |c, b| { let me = Obj(c.a[0]); sparks_via(c, b, me); rts(c, b) }, CREATED),
+    native(0x9ef20, "create_shot_9", enemy_shot_9, regs::d(0) | CREATED),
+    native(0xcdedc, "create_set_13", set_13, CREATED),
+    native(0xc8312, "create_set_scene", scene_set_native, regs::d(0) | CREATED),
+    native(0xd981a, "scene_end_variant", scene_exit, regs::d(0) | regs::a(1)),
+    native(0xcc352, "create_set_a", set_a_creator, CREATED),
+    native(0xdc5fe, "create_item_scene", scene_item, CREATED),
+    native(0xd9778, "music_variant", scene_music, regs::d(0) | regs::a(1)),
+    native(0xd99f8, "scene_nothing", nothing, regs::ALL),
+    native(0xce00a, "create_set_15", set_15, CREATED),
     native(0xcc0ca, "scene_repart", |c, b| { restart_scene(c, b); rts(c, b) }, regs::a(0) | regs::d(7)),
-    native(0x4b8d0, "cree_effet_b", peff_b, CREATED),
-    native(0x4b518, "cree_effet_8", peff_8, CREATED),
-    native(0x51bb6, "cree_effet_2f", peff_2f, CREATED),
-    native(0x4cfbc, "cree_effets_13", peff_13_x4, CREATED | regs::d(5)),
-    native(0x4b340, "cree_effets_7", quake_native, CREATED),
-    native(0x63ae0, "cree_ennemis_7", enemy_7_pair, CREATED | regs::d(0)),
-    native(0x5f764, "cree_ennemi_5", enemy_5_at, CREATED),
-    native(0x57c8c, "cree_ennemi_1", enemy_1_at, CREATED),
-    native(0x97218, "boss_etat_0202", boss_state_0202, regs::CCR),
-    native(0xc9760, "cree_set_5", set_5, CREATED),
-    native(0xd6182, "colonne_vide", blank_column, regs::a(1) | regs::d(0) | regs::d(4)),
-    native(0xceb46, "fiche_bonus", bonus_sheet, regs::a(1) | regs::a(4) | regs::d(0) | regs::d(1)),
-    native(0xdfe26, "cree_sobj_14", sobj_14, CREATED),
-    native(0xdfc78, "cree_sobj_12", sobj_12, CREATED),
-    native(0xdf688, "cree_sobj_8", |c, b| { let me = Obj(c.a[0]); sobj_8_via(c, b, me); rts(c, b) }, CREATED),
-    native(0xcc38e, "cree_set_a_joueur", set_a_player_native, CREATED | regs::a(4)),
+    native(0x4b8d0, "create_effect_b", peff_b, CREATED),
+    native(0x4b518, "create_effect_8", peff_8, CREATED),
+    native(0x51bb6, "create_effect_2f", peff_2f, CREATED),
+    native(0x4cfbc, "create_effects_13", peff_13_x4, CREATED | regs::d(5)),
+    native(0x4b340, "create_effects_7", quake_native, CREATED),
+    native(0x63ae0, "create_enemies_7", enemy_7_pair, CREATED | regs::d(0)),
+    native(0x5f764, "create_enemy_5", enemy_5_at, CREATED),
+    native(0x57c8c, "create_enemy_1", enemy_1_at, CREATED),
+    native(0x97218, "boss_state_0202", boss_state_0202, regs::CCR),
+    native(0xc9760, "create_set_5", set_5, CREATED),
+    native(0xd6182, "empty_column", blank_column, regs::a(1) | regs::d(0) | regs::d(4)),
+    native(0xceb46, "sheet_bonus", bonus_sheet, regs::a(1) | regs::a(4) | regs::d(0) | regs::d(1)),
+    native(0xdfe26, "create_sobj_14", sobj_14, CREATED),
+    native(0xdfc78, "create_sobj_12", sobj_12, CREATED),
+    native(0xdf688, "create_sobj_8", |c, b| { let me = Obj(c.a[0]); sobj_8_via(c, b, me); rts(c, b) }, CREATED),
+    native(0xcc38e, "create_set_a_player", set_a_player_native, CREATED | regs::a(4)),
 ];

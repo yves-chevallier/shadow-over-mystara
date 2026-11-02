@@ -1,7 +1,7 @@
 # SET 2 (contrôleur de scène), SET 3 (fenêtre de texte) et SET 15 (écrans de fin de niveau)
 
 Code : `port/ddsom-game/src/families/set_c.rs` (table `handlers!`), `set_c_scene.rs` (type 2),
-`set_c_fenetre.rs` (type 3), `set_c_finale.rs`, `set_c_finale_b.rs`, `set_c_finale_c.rs` (type 15). Les tables restent dans la ROM
+`set_c_window.rs` (type 3), `set_c_finale.rs`, `set_c_finale_b.rs`, `set_c_finale_c.rs` (type 15). Les tables restent dans la ROM
 et sont lues à l'exécution ; les rôles marqués (h) sont des hypothèses.
 
 Ces « 48 Ko » et « 25 Ko » sont en grande partie des **données** : le type 2 n'a que 2,6 Ko de code

@@ -108,14 +108,14 @@ pub fn launch(b: &mut cps2::Cps2Bus) {
 
 pub const STOP: Native = Native {
     entry: 0xe03c6,
-    name: "invite_stop",
+    name: "prompt_stop",
     run: crate::Body::Memory(stop),
     touches_sound: false,
     outputs: 0,
 };
 pub const START: Native = Native {
     entry: 0xe03e4,
-    name: "invite_start",
+    name: "prompt_start",
     run: crate::Body::Memory(launch),
     touches_sound: false,
     outputs: 0,

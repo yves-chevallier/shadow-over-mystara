@@ -139,7 +139,7 @@ fn main() {
     }
     let (roms, eeprom, scenario) = (&a[1], &a[2], &a[3]);
     let warmup: u32 = a[4].parse().unwrap();
-    let tours: u32 = a[5].parse().unwrap();
+    let rounds: u32 = a[5].parse().unwrap();
     let filter = a.get(6).cloned().unwrap_or_default();
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
@@ -162,9 +162,9 @@ fn main() {
         (0x1ef6c, "list_reinsert_foreground", |c, b, a| list(c, b, a, 0x5c2, 0x5c4, 2)),
         (0x33fe4, "terrain_push", rng_terrain),
         (0x3403c, "terrain_push_2", rng_terrain),
-        (0x31616, "camera_suit_joueurs_y", rng_camera_y),
+        (0x31616, "camera_follows_players_y", rng_camera_y),
     ];
-    for _ in 0..tours {
+    for _ in 0..rounds {
         for &(entry, name, prep) in &routines {
             if !name.starts_with(&filter) {
                 continue;

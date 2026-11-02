@@ -214,5 +214,5 @@ fn wait_for_players<R: Bench>(x: &mut Cx<'_, R>) {
 handlers! {
     0x952b4 "boss_17" #[without] run,
     // getting up after a common reaction (table 0x3e000 of `reactions.rs`)
-    0x96ce0 "boss_17_releve" hit::recovered_tail,
+    0x96ce0 "boss_17_getup" hit::recovered_tail,
 }

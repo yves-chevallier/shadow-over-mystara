@@ -77,7 +77,7 @@ fn fragments(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, variant: u8,
             }
             let v = flip.unwrap_or_else(|| me.u8(b, f::FLIP));
             o.set_u8(b, f::FLIP, v);
-            r.drapeaux(v as u32, Size::Byte);
+            r.flags(v as u32, Size::Byte);
         }
         i = i.wrapping_sub(1);
         if i == 0xffff {
@@ -128,7 +128,7 @@ fn series(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, last: u8, index
         o.set_u8(b, f::VARIANT, n as u8);
         o.set_u8(b, f::INDEX, index);
         o.set_u16(b, f::LINK, me.word());
-        r.drapeaux(me.word() as u32, Size::Word);
+        r.flags(me.word() as u32, Size::Word);
         n = n.wrapping_sub(1);
         r.d_word(5, n);
         if n == 0xffff {
@@ -155,7 +155,7 @@ fn linked(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, variant: Option
     }
     o.set_u8(b, f::INDEX, index);
     o.set_u16(b, f::LINK, me.word());
-    r.drapeaux(me.word() as u32, Size::Word);
+    r.flags(me.word() as u32, Size::Word);
     Some(o)
 }
 
@@ -176,7 +176,7 @@ fn copy_flip(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, a1: Obj) {
     let flip = me.u8(b, f::FLIP);
     r.d_byte(0, flip);
     wr8(b, a1.0 + f::FLIP, flip);
-    r.drapeaux(flip as u32, Size::Byte);
+    r.flags(flip as u32, Size::Byte);
 }
 
 /// Shot launched in front of the creator (types 1 and 2): `+0x2a` = 2, angle 8 (0x18 and speed reversed if it faces
@@ -280,7 +280,7 @@ pub(crate) fn shot_6(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -
     r.d_byte(0, flip);
     o.set_u8(b, f::FLIP, flip);
     o.set_u16(b, f::OWNER, me.word());
-    r.drapeaux(me.word() as u32, Size::Word);
+    r.flags(me.word() as u32, Size::Word);
     Some(o)
 }
 
@@ -293,7 +293,7 @@ fn ring(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, count: u16, link:
         let Some(o) = spawn(r, b, kind) else { return false };
         o.set_u8(b, f::VARIANT, n as u8);
         o.set_u16(b, link, me.word());
-        r.drapeaux(me.word() as u32, Size::Word);
+        r.flags(me.word() as u32, Size::Word);
         n = n.wrapping_sub(1);
         r.d_word(1, n);
         if n == 0xffff {
@@ -321,7 +321,7 @@ pub(crate) fn above_4(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj
     wr16(b, me.0 + 0x12, 0x8000);
     let flip = me.u8(b, f::FLIP);
     o.set_u8(b, f::FLIP, flip);
-    r.drapeaux(flip as u32, Size::Byte);
+    r.flags(flip as u32, Size::Byte);
     Some(o)
 }
 
@@ -335,7 +335,7 @@ pub(crate) fn pair_9(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj>
     second.set_u8(b, f::VARIANT, 2);
     second.set_u16(b, f::PARENT, first.word());
     r.d(0, 1);
-    r.drapeaux(1, Size::Long);
+    r.flags(1, Size::Long);
     Some(second)
 }
 
@@ -348,7 +348,7 @@ pub(crate) fn shot_0(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj>
     o.set_u8(b, f::VARIANT, v);
     let flip = me.u8(b, f::FLIP);
     o.set_u8(b, f::FLIP, flip);
-    r.drapeaux(flip as u32, Size::Byte);
+    r.flags(flip as u32, Size::Byte);
     Some(o)
 }
 
@@ -359,7 +359,7 @@ pub(crate) fn twelve_5(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, count: u16) 
     let limit = rd16(b, LIMIT_TWELVE);
     if (count as i16) >= limit as i16 {
         r.d(0, 0);
-        r.drapeaux(0, Size::Long);
+        r.flags(0, Size::Long);
         return false;
     }
     r.d_byte(1, 11);
@@ -375,7 +375,7 @@ pub(crate) fn twelve_5(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, count: u16) 
         r.d_word(1, 10u16.wrapping_sub(i));
     }
     r.d(0, 1);
-    r.drapeaux(1, Size::Long);
+    r.flags(1, Size::Long);
     true
 }
 
@@ -401,7 +401,7 @@ fn row(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, mut count: u16, mu
         r.d_word(4, n4);
         let link = me.u16(b, f::LINK);
         o.set_u16(b, f::LINK, link);
-        r.drapeaux(link as u32, Size::Word);
+        r.flags(link as u32, Size::Word);
         count = count.wrapping_sub(1);
         r.d_word(5, count);
         if count == 0xffff {
@@ -480,7 +480,7 @@ pub(crate) fn pair_3f(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
         o.set_u16(b, f::LINK, me.word());
         o.set_u8(b, f::FLIP, flip);
         o.set_u8(b, f::VARIANT, 0);
-        r.drapeaux(0, Size::Byte);
+        r.flags(0, Size::Byte);
     }
 }
 
@@ -488,7 +488,7 @@ pub(crate) fn pair_3f(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
 pub(crate) fn single_29(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
     let o = spawn(r, b, 0x29)?;
     o.set_u16(b, f::LINK, me.word());
-    r.drapeaux(me.word() as u32, Size::Word);
+    r.flags(me.word() as u32, Size::Word);
     Some(o)
 }
 
@@ -498,7 +498,7 @@ pub(crate) fn single_1(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8)
     o.set_u8(b, f::INDEX, 1);
     o.set_u8(b, f::VARIANT, variant);
     o.set_u16(b, f::OWNER, me.word());
-    r.drapeaux(me.word() as u32, Size::Word);
+    r.flags(me.word() as u32, Size::Word);
     Some(o)
 }
 
@@ -513,7 +513,7 @@ pub(crate) fn linked_34(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8
         o.set_u8(b, f::FLIP, flip);
     }
     o.set_u16(b, f::PARENT, me.word());
-    r.drapeaux(me.word() as u32, Size::Word);
+    r.flags(me.word() as u32, Size::Word);
     Some(o)
 }
 
@@ -524,7 +524,7 @@ pub(crate) fn single_3c(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<O
     let v = me.u8(b, f::INDEX);
     o.set_u8(b, f::INDEX, v);
     o.set_u16(b, f::LINK, me.word());
-    r.drapeaux(me.word() as u32, Size::Word);
+    r.flags(me.word() as u32, Size::Word);
     Some(o)
 }
 
@@ -532,7 +532,7 @@ pub(crate) fn single_3c(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<O
 pub(crate) fn single_25(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
     let o = spawn(r, b, 0x25)?;
     o.set_u16(b, f::LINK, me.word());
-    r.drapeaux(me.word() as u32, Size::Word);
+    r.flags(me.word() as u32, Size::Word);
     Some(o)
 }
 
@@ -541,7 +541,7 @@ pub(crate) fn single_18(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
     if let Some(o) = spawn(r, b, 0x18) {
         let link = me.u16(b, f::LINK);
         o.set_u16(b, f::LINK, link);
-        r.drapeaux(link as u32, Size::Word);
+        r.flags(link as u32, Size::Word);
     }
     crate::sound::play(b, 0xebe14, me);
 }
@@ -555,7 +555,7 @@ pub(crate) fn single_1b(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u16) 
     o.set_u16(b, f::LINK, link);
     let target = me.u16(b, 0x6c);
     o.set_u16(b, f::OWNER, target);
-    r.drapeaux(target as u32, Size::Word);
+    r.flags(target as u32, Size::Word);
     Some(o)
 }
 
@@ -571,7 +571,7 @@ pub(crate) fn chasers(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8, 
     for n in (0..3u16).rev() {
         let Some(o) = spawn(r, b, 0x33) else {
             r.d(0, 0);
-            r.drapeaux(0, Size::Long);
+            r.flags(0, Size::Long);
             return None;
         };
         last = Some(o);
@@ -590,11 +590,11 @@ pub(crate) fn chasers(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8, 
         r.d_word(4, d4);
         o.set_u16(b, f::OWNER, target.word());
         o.set_u16(b, f::LINK, me.word());
-        r.drapeaux(me.word() as u32, Size::Word);
+        r.flags(me.word() as u32, Size::Word);
         r.d_word(5, n.wrapping_sub(1));
     }
     r.d(0, 1);
-    r.drapeaux(1, Size::Long);
+    r.flags(1, Size::Long);
     last
 }
 
@@ -605,7 +605,7 @@ macro_rules! native {
         Native {
             entry: $entry,
             name: $name,
-            run: crate::Body::Processeur(|$c, $b| {
+            run: crate::Body::WithCpu(|$c, $b| {
                 let $me = Obj($c.a[0]);
                 $body;
                 rts($c, $b)
@@ -627,30 +627,30 @@ fn d1w(c: &Cpu) -> u16 {
 }
 
 pub const NATIVES: &[Native] = &[
-    native!(0xa7b0a, "eshl_eclats_44", |c, b, me| boss11_shards(c, b, me), CREATED | regs::d(0) | regs::d(1) | regs::d(2)),
+    native!(0xa7b0a, "eshl_shards_44", |c, b, me| boss11_shards(c, b, me), CREATED | regs::d(0) | regs::d(1) | regs::d(2)),
     native!(0xa7570, "eshl_fragments_42", |c, b, me| { let v = d0w(c); fragments_42(c, b, me, v) }, CREATED | regs::d(1)),
     native!(0xa7da2, "eshl_fragments_45", |c, b, me| fragments_45(c, b, me), CREATED | regs::d(0) | regs::d(1) | regs::d(2)),
-    native!(0xa4e84, "eshl_serie_36", |c, b, me| { let i = c.d[4] as u8; series_36(c, b, me, i) }, CREATED | regs::d(5)),
-    native!(0xa5c9a, "eshl_serie_3b", |c, b, me| series_3b(c, b, me), CREATED | regs::d(5)),
+    native!(0xa4e84, "eshl_series_36", |c, b, me| { let i = c.d[4] as u8; series_36(c, b, me, i) }, CREATED | regs::d(5)),
+    native!(0xa5c9a, "eshl_series_3b", |c, b, me| series_3b(c, b, me), CREATED | regs::d(5)),
     native!(0xa5c7c, "eshl_lie_3b", |c, b, me| single_3b(c, b, me), CREATED),
     native!(0xa6e6a, "eshl_lie_40", |c, b, me| single_40(c, b, me), CREATED),
-    native!(0x9dda8, "eshl_lance_1", |c, b, me| thrown_1(c, b, me), CREATED | regs::d(0)),
-    native!(0x9e062, "eshl_lance_2", |c, b, me| thrown_2(c, b, me), CREATED | regs::d(0)),
+    native!(0x9dda8, "eshl_thrown_1", |c, b, me| thrown_1(c, b, me), CREATED | regs::d(0)),
+    native!(0x9e062, "eshl_thrown_2", |c, b, me| thrown_2(c, b, me), CREATED | regs::d(0)),
     native!(0x9ed78, "eshl_balaye_8", |c, b, me| sweeping_8(c, b, me), CREATED | regs::d(0)),
-    native!(0x9eba6, "eshl_tir_6", |c, b, me| { let v = c.d[0] as u8; shot_6(c, b, me, v) }, CREATED | regs::d(0)),
-    native!(0x9e194, "eshl_quatre_3", |c, b, me| four_3(c, b, me), CREATED | regs::d(1)),
+    native!(0x9eba6, "eshl_shot_6", |c, b, me| { let v = c.d[0] as u8; shot_6(c, b, me, v) }, CREATED | regs::d(0)),
+    native!(0x9e194, "eshl_four_3", |c, b, me| four_3(c, b, me), CREATED | regs::d(1)),
     native!(0x9e2a0, "eshl_dessus_4", |c, b, me| above_4(c, b, me), CREATED),
-    native!(0x9eede, "eshl_paire_9", |c, b, me| pair_9(c, b, me), CREATED | regs::d(0) | regs::a(2)),
-    native!(0x9dbd6, "eshl_tir_0", |c, b, me| shot_0(c, b, me), CREATED),
-    native!(0x9e426, "eshl_douze_5", |c, b, me| { let n = d0w(c); twelve_5(c, b, me, n) }, CREATED | regs::d(0) | regs::d(1) | regs::d(2)),
+    native!(0x9eede, "eshl_pair_9", |c, b, me| pair_9(c, b, me), CREATED | regs::d(0) | regs::a(2)),
+    native!(0x9dbd6, "eshl_shot_0", |c, b, me| shot_0(c, b, me), CREATED),
+    native!(0x9e426, "eshl_twelve_5", |c, b, me| { let n = d0w(c); twelve_5(c, b, me, n) }, CREATED | regs::d(0) | regs::d(1) | regs::d(2)),
     native!(0xa1670, "eshl_rangee_19", |c, b, me| row_19(c, b, me), CREATED | regs::d(0) | regs::d(3) | regs::d(4) | regs::d(5)),
     native!(0xa17d0, "eshl_rangee_1a", |c, b, me| { let (s, d5) = (d1w(c), c.d[5] as u16); row_1a(c, b, me, s, d5) }, CREATED | regs::d(0) | regs::d(1) | regs::d(3) | regs::d(4) | regs::d(5) | regs::a(2)),
-    native!(0xa1c6a, "eshl_quatre_1c", |c, b, me| four_1c(c, b, me), 0),
-    native!(0xa31c2, "eshl_anneau_28", |c, b, me| ring_28(c, b, me), CREATED | regs::d(1)),
-    native!(0xa2f96, "eshl_anneau_27", |c, b, me| ring_27(c, b, me), CREATED | regs::d(1)),
-    native!(0xa6824, "eshl_paire_3f", |c, b, me| pair_3f(c, b, me), CREATED),
+    native!(0xa1c6a, "eshl_four_1c", |c, b, me| four_1c(c, b, me), 0),
+    native!(0xa31c2, "eshl_ring_28", |c, b, me| ring_28(c, b, me), CREATED | regs::d(1)),
+    native!(0xa2f96, "eshl_ring_27", |c, b, me| ring_27(c, b, me), CREATED | regs::d(1)),
+    native!(0xa6824, "eshl_pair_3f", |c, b, me| pair_3f(c, b, me), CREATED),
     native!(0xa3354, "eshl_lie_29", |c, b, me| single_29(c, b, me), CREATED),
-    native!(0x9ddee, "eshl_tir_1", |c, b, me| { let v = c.d[1] as u8; single_1(c, b, me, v) }, CREATED),
+    native!(0x9ddee, "eshl_shot_1", |c, b, me| { let v = c.d[1] as u8; single_1(c, b, me, v) }, CREATED),
     native!(0xa460a, "eshl_lie_34_2", |c, b, me| linked_34(c, b, me, 2), CREATED),
     native!(0xa464e, "eshl_lie_34_1", |c, b, me| linked_34(c, b, me, 1), CREATED),
     native!(0xa4676, "eshl_lie_34_0", |c, b, me| linked_34(c, b, me, 0), CREATED),

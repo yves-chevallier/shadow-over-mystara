@@ -85,7 +85,7 @@ const Y_2: Plan = Plan { wanted: 0x50a, copy: 0x5aa, register: cps_a::PLAN2_Y };
 const Y_3: Plan = Plan { wanted: 0x55a, copy: 0x5b2, register: cps_a::PLAN3_Y };
 
 const NEW_FRAME: u32 = 0xff0164;
-/// Byte reset to zero by VBLANK, reread by the game loop (fast forward, `docs/looped.md` §1).
+/// Byte reset to zero by VBLANK, reread by the game loop (fast forward, `docs/boucle.md` §1).
 const FAST_FORWARD: u32 = A5 - 0x660e;
 
 fn a5(off: u32) -> u32 {
@@ -176,7 +176,7 @@ fn wake_tasks(b: &mut Cps2Bus) {
 /// Accepted difference: PC and SR are no longer written to the current stack (stack of the interrupted task,
 /// FF01A6-FF0DA5, or of the supervisor, below FF0E66). `validate` ignores these words
 /// (`tasks::table::kernel_ram`), and the game does not reread them
-/// (proof: docs/refactorisation.md, batch "sortie du Cpu", part 4).
+/// (proof: docs/refactorisation.md, batch "CPU removal", part 4).
 pub fn interruption(b: &mut Cps2Bus, level: u8) {
     m68k::Bus::irq_ack(b, level);
     vblank(b);

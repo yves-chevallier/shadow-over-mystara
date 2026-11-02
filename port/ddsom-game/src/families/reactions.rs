@@ -1628,7 +1628,7 @@ fn zapped_burn<R: Bench>(x: &mut Cx<'_, R>) {
     }
     // Original glitch: in scene 41, 0xb10c8 cedes control with no effect or carry, and the rest writes into the A1
     // left over, the reaction routine itself (ROM): the writes are lost.
-    let lib::Choc::Created(o) = lib::shock(x, 7, 0x200, 0, 0xffff) else { return };
+    let lib::Impact::Created(o) = lib::shock(x, 7, 0x200, 0, 0xffff) else { return };
     o.set_u8(x.b, 0x43, 1);
     let h = o.u16(x.b, 0xc).wrapping_add(16);
     o.set_u16(x.b, 0xc, h);
@@ -2219,7 +2219,7 @@ macro_rules! reaction_natives {
         &[$(Native {
             entry: $entry,
             name: "enemy_reaction",
-            run: crate::Body::Processeur(|c, b| native_run(c, b, $entry)),
+            run: crate::Body::WithCpu(|c, b| native_run(c, b, $entry)),
             touches_sound: false,
             outputs: 0,
         }),*]
@@ -2239,7 +2239,7 @@ pub const NATIVES: &[Native] = reaction_natives![
 pub const PLAYER_HURT_ANIMATION: Native = Native {
     entry: 0x3bb16,
     name: "player_hurt_animation",
-    run: crate::Body::Processeur(player_hurt_animation),
+    run: crate::Body::WithCpu(player_hurt_animation),
     touches_sound: false,
     outputs: 0,
 };

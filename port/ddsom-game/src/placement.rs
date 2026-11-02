@@ -145,20 +145,20 @@ fn effect_palette_native(c: &mut Cpu, b: &mut Cps2Bus, offset: u16) {
 }
 
 const fn palette(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -> Native {
-    Native { entry, name, run: crate::Body::Processeur(run), touches_sound: false, outputs: REGS_EFFECT_PALETTE }
+    Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: REGS_EFFECT_PALETTE }
 }
 
 pub const NATIVES: &[Native] = &[
     Native {
         entry: 0x3668,
-        name: "joueur_place_au_sol",
-        run: crate::Body::Processeur(place_on_free_ground_native),
+        name: "player_placed_on_ground",
+        run: crate::Body::WithCpu(place_on_free_ground_native),
         touches_sound: false,
         outputs: regs::d(0) | regs::d(1) | regs::d(2) | regs::d(5) | regs::d(6),
     },
-    palette(0x3af8, "palette_effet_20", |c, b| effect_palette_native(c, b, effect_palette::LIGHT)),
-    palette(0x3afe, "palette_effet_0", |c, b| effect_palette_native(c, b, effect_palette::NORMAL)),
-    palette(0x3b04, "palette_effet_360", |c, b| effect_palette_native(c, b, effect_palette::P360)),
-    palette(0x3b0c, "palette_effet_380", |c, b| effect_palette_native(c, b, effect_palette::P380)),
-    palette(0x3b14, "palette_effet_3a0", |c, b| effect_palette_native(c, b, effect_palette::RED)),
+    palette(0x3af8, "palette_effect_20", |c, b| effect_palette_native(c, b, effect_palette::LIGHT)),
+    palette(0x3afe, "palette_effect_0", |c, b| effect_palette_native(c, b, effect_palette::NORMAL)),
+    palette(0x3b04, "palette_effect_360", |c, b| effect_palette_native(c, b, effect_palette::P360)),
+    palette(0x3b0c, "palette_effect_380", |c, b| effect_palette_native(c, b, effect_palette::P380)),
+    palette(0x3b14, "palette_effect_3a0", |c, b| effect_palette_native(c, b, effect_palette::RED)),
 ];
