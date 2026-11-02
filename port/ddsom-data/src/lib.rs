@@ -60,11 +60,15 @@ pub struct GameData {
     pub objects: ObjectTables,
     /// Object tables tied to the sprites: collision and visibility boxes, ground marks, frame lists, ESHL 5 shot.
     pub sprite_tables: SpriteTables,
+    /// Tables of the SET objects (`families/set*` of the game; docs/fin.md, L6).
+    pub set: DataFile,
+    /// Dialog windows, bubbles and their texts, in the three languages (SET 3, 10, 15 and 24).
+    pub dialogs: DataFile,
 }
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 7] = [
+    pub const FILES: [&'static str; 9] = [
         "sprites/frames.json",
         "sprites/anims.json",
         "data/speeds.json",
@@ -72,6 +76,8 @@ impl GameData {
         "data/enemies.json",
         "data/objects.json",
         "sprites/tables.json",
+        "data/set.json",
+        "data/dialogs.json",
     ];
 
     /// Loads the game data from an assets folder (written by `extract`).
@@ -84,6 +90,8 @@ impl GameData {
             enemies: DataFile::load(&dir.join(Self::FILES[4]))?,
             objects: ObjectTables::load(&dir.join(Self::FILES[5]))?,
             sprite_tables: SpriteTables::load(&dir.join(Self::FILES[6]))?,
+            set: DataFile::load(&dir.join(Self::FILES[7]))?,
+            dialogs: DataFile::load(&dir.join(Self::FILES[8]))?,
         })
     }
 }

@@ -4,8 +4,9 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{prog32, prog8, rd16, rd8, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
+use crate::families::set::tables as set_tables;
 
 /// Tile buffer of layer 3: the columns of 44 longwords cleared by 0xd5f12.
 const COLUMNS: [u32; 3] = [0x91_215c, 0x91_2160, 0x91_2164];
@@ -53,7 +54,7 @@ pub fn two_grids(b: &mut Cps2Bus, character: u16) {
     let table = GRIDS.wrapping_add(character.wrapping_mul(4) as u32);
     let mut destination = 0x91_7000;
     for k in 0..2 {
-        let n = rd16(b, table + 2 * k); // read through (A4)+: data space
+        let n = set_tables::word(b, table + 2 * k); // read through (A4)+: data space
         destination = crate::video::load_grid(b, crate::video::Grid::Layer2, n, destination).destination;
     }
 }
@@ -62,9 +63,9 @@ pub fn two_grids(b: &mut Cps2Bus, character: u16) {
 /// music (0xe0c5c, 0xe0d8c), with no registers.
 fn variant_sound(b: &mut Cps2Bus, me: Obj, kinds: u32, routines: u32) {
     const NOTHING: u32 = 0xd99f8;
-    let variant = me.u8(b, 3) as u32;
-    let index = (prog8(b, kinds + variant) as u16).wrapping_mul(4);
-    match prog32(b, routines + index as u32) {
+    let variant = me.u8(b, Obj::VARIANT) as u32;
+    let index = (set_tables::pc_byte(b, kinds + variant) as u16).wrapping_mul(4);
+    match set_tables::pc_long(b, routines + index as u32) {
         NOTHING => {}
         sound @ (0xe0c5c | 0xe0d8c) => crate::sound::play(b, crate::sound::Sound::at(sound), me),
         r => unreachable!("wave routine {r:#x}: tables 0xd98cc and 0xd996e only have 0xd99f8, 0xe0c5c, 0xe0d8c"),

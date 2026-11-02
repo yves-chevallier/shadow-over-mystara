@@ -4,11 +4,11 @@
 
 use super::cx::handlers;
 
-#[path = "set_c_scene.rs"]
+/// Typed views of the SET C objects.
+pub mod fields;
+
 mod scene;
-#[path = "set_c_finale.rs"]
 mod finale;
-#[path = "set_c_window.rs"]
 mod window;
 
 handlers! {

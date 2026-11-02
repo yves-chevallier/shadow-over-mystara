@@ -25,6 +25,12 @@ Point de départ pour la prochaine session. L'historique détaillé des lots est
   de tuiles, banque d'échantillons `ddsom_assets::samples::bank`, boucle des voix et filtres QSound vectorisés ;
   `bench` bot30k ~15 500 images/s sans rendu, ~3 300 avec ; `render_check` identique. Voir [fin.md](fin.md) (L4).
 
+* **L6, SET** (branche `wt-l6-set`, 2026-11-02) : SET découpés par type (`families/set/`, `set_b/`, `set_c/`),
+  tables dans le nouveau `data/set.json` et `data/dialogs.json` chargés dans `GameData` (**réextraire `data`**),
+  vues `record!` (`*/fields.rs`), variables A5 dans `set/vars.rs` ; accesseurs ROM, décalages littéraux et
+  `A5 + littéral` à 0 dans la zone set. Validé 308/308 dans les deux modes après fusion de main 334316e ; non
+  fusionné. Voir [fin.md](fin.md) (L6, « Résultat »).
+
 Aucune branche ouverte : `wt-pile` (partie 4) et `wt-locales` (partie 5, étapes 1-2 et 11 familles d'ennemis) sont fusionnés dans main (edd4e00), 296/296 VALIDE dans les deux modes.
 
 Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 5 » de refactorisation.md) :

@@ -53,6 +53,7 @@ fn main() {
             speeds::extract(roms, &out.join("data/speeds.json"))?;
             effects::extract(roms, &out.join("data/effects.json"))?;
             objects::extract(roms, &out.join("data/objects.json"))?;
+            set::extract(roms, &out.join("data/set.json"))?;
             data::extract(roms, &out.join("data"))?;
         }
         if wanted("data") {
