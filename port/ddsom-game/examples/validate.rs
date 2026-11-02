@@ -12,14 +12,19 @@
 //!
 //! The hybrid mode (`DDSOM_HYBRIDE=1`) is removed.
 //!
+//! Sound: machine A has the game's sound driver (Rust, `ddsom-sound`), machine B the original Z80 program. Their
+//! writes (QSound registers, shared RAM) must form the same sequence (`SoundStreams`), and the shared RAM must be
+//! identical at every frame (except the pan report byte, compared in the sequence).
+//!
 //! `DDSOM_ASSETS=<dir>`: machine A is built from the extracted resources alone
-//! (`ddsom_assets::rebuild::contents`, no ROM read: game without ROM, docs/sans-rom.md), with the Rust sound driver;
-//! machine B keeps the ROMs and the Z80.
+//! (`ddsom_assets::rebuild::contents`, no ROM read: game without ROM, docs/sans-rom.md); machine B keeps the ROMs.
 //!
 //! validate <roms> <eeprom> <scenario> <frames>
 
+use std::collections::VecDeque;
 use std::path::Path;
 
+use cps2::sound::Output;
 use ddsom_game::tasks::table::{gaps, read, kernel_ram};
 
 /// 68000 frequency, as a multiple of the arcade's.
@@ -54,6 +59,67 @@ const GHOST_SAVE: std::ops::Range<usize> = 0x297e..0x2a1a;
 /// in work RAM or in GFX RAM; everything else is compared. In practice only frames 1 and 2 (GFX RAM) have one.
 const STARTUP: usize = 5;
 
+/// Shared RAM byte where the sound driver reports the pan of the last voice set (docs/son.md): the original Z80 often
+/// finishes a sequencer tick after the next interrupt, so the byte may change one frame later or earlier than with the
+/// Rust driver, which does the whole tick at once. Its writes are compared in the sequence instead.
+const PAN_REPORT: usize = 0x005;
+
+/// Mailbox flag of the shared RAM: acknowledged (0xFF) by the interrupt routine, whose writes the original
+/// interleaves with those of the main loop depending on the Z80's execution time. Left out of the sequence; the byte
+/// itself is compared at every frame with the rest of the shared RAM.
+const MAILBOX_FLAG: u16 = 0x00f;
+
+/// Frames a driver write may wait for its counterpart from the other driver: the Z80 lags behind the Rust driver by
+/// the time it takes to write a tick (at most one frame measured, `bot30k`).
+const SOUND_MAX_LAG: usize = 4;
+
+/// The writes of the two sound drivers (game: Rust driver; reference: Z80), as one sequence each: they must be equal,
+/// write by write, up to a delay of `SOUND_MAX_LAG` frames.
+#[derive(Default)]
+struct SoundStreams {
+    game: VecDeque<(usize, Output)>,
+    reference: VecDeque<(usize, Output)>,
+    compared: u64,
+    max_lag: usize,
+}
+
+impl SoundStreams {
+    /// Adds the writes of frame `frame` and compares what both sides have; an error describes the first mismatch.
+    fn push(&mut self, frame: usize, game: Vec<Output>, reference: Vec<Output>) -> Result<(), String> {
+        let kept = |w: &Output| !matches!(w, Output::Shared { offset: MAILBOX_FLAG, .. });
+        self.game.extend(game.into_iter().filter(kept).map(|w| (frame, w)));
+        self.reference.extend(reference.into_iter().filter(kept).map(|w| (frame, w)));
+        while let (Some(&(fa, a)), Some(&(fb, b))) = (self.game.front(), self.reference.front()) {
+            if a != b {
+                let near = |q: &VecDeque<(usize, Output)>| q.iter().take(4).map(|(f, w)| format!("{w:x?}@{}", f + 1)).collect::<Vec<_>>().join(" ");
+                return Err(format!(
+                    "sound write #{}: {a:x?} (frame {}) instead of {b:x?} (frame {}); next game {}; next reference {}",
+                    self.compared,
+                    fa + 1,
+                    fb + 1,
+                    near(&self.game),
+                    near(&self.reference)
+                ));
+            }
+            self.max_lag = self.max_lag.max(fa.abs_diff(fb));
+            self.game.pop_front();
+            self.reference.pop_front();
+            self.compared += 1;
+        }
+        if let Some(&(f, w)) = self.game.front().or(self.reference.front()) {
+            let side = if self.game.is_empty() { "reference" } else { "game" };
+            if frame - f > SOUND_MAX_LAG {
+                return Err(format!(
+                    "sound write #{} of the {side} ({w:x?}, frame {}) without counterpart after {SOUND_MAX_LAG} frames",
+                    self.compared,
+                    f + 1
+                ));
+            }
+        }
+        Ok(())
+    }
+}
+
 fn first_diff(a: &[u16], b: &[u16]) -> Option<usize> {
     a.iter().zip(b).position(|(x, y)| x != y)
 }
@@ -74,13 +140,16 @@ fn main() {
     let mut ma = match std::env::var_os("DDSOM_ASSETS") {
         Some(dir) => {
             let contents = ddsom_assets::rebuild::contents(Path::new(&dir)).expect("assets");
-            let mut m = cps2::Machine::ddsom(contents, ee.as_deref());
-            m.sound.use_rust_driver();
-            m
+            cps2::Machine::ddsom(contents, ee.as_deref())
         }
         None => load(),
     };
     let mut mb = load();
+    // the game's sound driver against the original Z80
+    ma.sound.use_rust_driver();
+    ma.sound.output = Some(Vec::new());
+    mb.sound.output = Some(Vec::new());
+    let mut sound = SoundStreams::default();
     ddsom_game::install_no_68k(&mut ma);
     ddsom_game::install_reference(&mut mb);
     // the frame is not compared (only the state): no rendering, it was the bulk of a frame's time
@@ -155,6 +224,13 @@ fn main() {
         if let Some(i) = first_diff(&ma.bus.palette, &mb.bus.palette) {
             what.push(format!("palette, mot {i}"));
         }
+        if let Some(i) = (0..ma.bus.qram.len()).find(|&i| i != PAN_REPORT && ma.bus.qram[i] != mb.bus.qram[i]) {
+            what.push(format!("shared RAM {i:03x}: {:02x} instead of {:02x}", ma.bus.qram[i], mb.bus.qram[i]));
+        }
+        let writes = |m: &mut cps2::Machine| std::mem::take(m.sound.output.as_mut().unwrap());
+        if let Err(e) = sound.push(f, writes(&mut ma), writes(&mut mb)) {
+            what.push(e);
+        }
         // differential test of the task table (DDSOM_TACHES_TOUT=1: SR and saved registers too)
         if let Some(t) = read(&ma.bus) {
             what.extend(gaps(t, &mb.bus.ram, all_tasks).into_iter().take(10));
@@ -169,6 +245,13 @@ fn main() {
         }
     }
     println!("{frames} frames in {:.1?}", t0.elapsed());
+    println!(
+        "sound: {} driver writes identical (largest delay {} frames, {} game and {} reference writes pending)",
+        sound.compared,
+        sound.max_lag,
+        sound.game.len(),
+        sound.reference.len()
+    );
     let report = ddsom_game::report();
     for (name, st) in &report {
         let errors = if check {

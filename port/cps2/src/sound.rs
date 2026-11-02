@@ -1,16 +1,16 @@
-//! CPS2 sound subsystem: Z80 at 8 MHz + QSound (MAME's qsound_sub_map).
+//! CPS2 sound subsystem: sound driver + QSound (MAME's qsound_sub_map).
 //!
-//! Z80: 0000-7FFF ROM, 8000-BFFF ROM bank, C000-CFFF RAM shared with the 68000,
-//! D000-D002 QSound writes, D003 bank, D007 QSound status, F000-FFFF RAM.
+//! The game's sound driver is the Rust driver of the `ddsom-sound` crate: it receives one interrupt per 250 Hz
+//! period, reads and writes the shared RAM and writes to the QSound exactly like the original Z80 program, without
+//! the 68000 seeing any difference.
 //!
-//! Option: the Z80 program can be replaced by the Rust driver of the `ddsom-sound` crate
-//! (`Sound::use_rust_driver`). It receives one interrupt per 250 Hz period, reads and writes the
-//! shared RAM and writes to the QSound exactly like the Z80, without the 68000 seeing any
-//! difference.
+//! With the `z80` feature (reference machine and tools), the original Z80 program can run instead, on an emulated
+//! Z80 at 8 MHz; it is then the default until `Sound::use_rust_driver`. Z80 map: 0000-7FFF ROM, 8000-BFFF ROM bank,
+//! C000-CFFF RAM shared with the 68000, D000-D002 QSound writes, D003 bank, D007 QSound status, F000-FFFF RAM.
 
 use qsound::QSound;
 
-/// Z80 : 8 MHz.
+/// Sound CPU clock (Z80): 8 MHz.
 pub const Z80_HZ: f64 = 8_000_000.0;
 /// Periodic interrupt: 8 MHz / 32000 = 250 Hz (irq0_line_hold).
 pub const Z80_IRQ_PERIOD: u64 = 32_000;
@@ -29,16 +29,37 @@ pub enum Event {
     Port(u8, u8),
 }
 
+/// Write made by the sound driver (Rust or Z80), in program order: what `validate` compares between the game and the
+/// reference machine (`Sound::output`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Output {
+    /// QSound register `reg` written with `data`.
+    Qsound { reg: u8, data: u16 },
+    /// Shared RAM byte (offset 0-0xFFF) written by the driver.
+    Shared { offset: u16, value: u8 },
+}
+
 pub struct Sound {
     /// Event log, if enabled.
     pub trace: Option<Vec<Event>>,
+    /// Writes of the driver (QSound registers, shared RAM), if enabled.
+    pub output: Option<Vec<Output>>,
     /// Callback before each Z80 instruction (coverage), if enabled.
+    #[cfg(feature = "z80")]
     pub pc_hook: Option<Box<dyn FnMut(&z80::Z80)>>,
+    #[cfg(feature = "z80")]
     pub z80: z80::Z80,
     /// audiocpu region (0x50000): 0-7FFF fixed, 0x4000 banks from 0x10000.
     pub rom: Vec<u8>,
+    #[cfg(feature = "z80")]
     pub bank: usize,
-    pub ram: Vec<u8>, // F000-FFFF
+    /// Z80 RAM (F000-FFFF).
+    #[cfg(feature = "z80")]
+    pub ram: Vec<u8>,
+    #[cfg(feature = "z80")]
+    data_latch: u16,
+    /// Sound clock (8 MHz periods elapsed), the Z80's when it runs.
+    pub cycles: u64,
     pub qsound: QSound,
     /// The 68000 holds the Z80 in reset (bit 3 of 804041 at 0).
     pub in_reset: bool,
@@ -54,22 +75,35 @@ pub struct Sound {
 }
 
 /// Z80 bus view: the shared RAM belongs to the 68000 bus.
+#[cfg(feature = "z80")]
 pub struct Z80Bus<'a> {
     pub s: &'a mut Sound,
     pub qram: &'a mut [u8],
 }
 
 impl Sound {
+    /// The sound of the machine: the Rust driver, or with the `z80` feature the original Z80 program (until
+    /// `use_rust_driver`).
     pub fn new(rom: Vec<u8>, qsound: QSound) -> Self {
-        let mut z80 = z80::Z80::new();
-        z80.reset();
-        Sound {
+        let mut sound = Sound {
             trace: None,
+            output: None,
+            #[cfg(feature = "z80")]
             pc_hook: None,
-            z80,
+            #[cfg(feature = "z80")]
+            z80: {
+                let mut z80 = z80::Z80::new();
+                z80.reset();
+                z80
+            },
             rom,
+            #[cfg(feature = "z80")]
             bank: 0,
+            #[cfg(feature = "z80")]
             ram: vec![0; 0x1000],
+            #[cfg(feature = "z80")]
+            data_latch: 0,
+            cycles: 0,
             qsound,
             in_reset: false,
             next_irq: Z80_IRQ_PERIOD,
@@ -78,10 +112,15 @@ impl Sound {
             audio: Vec::new(),
             sample_acc: 0.0,
             irq_acked: false,
+        };
+        if !cfg!(feature = "z80") {
+            sound.use_rust_driver();
         }
+        sound
     }
 
     pub fn set_reset(&mut self, asserted: bool) {
+        #[cfg(feature = "z80")]
         if asserted && !self.in_reset {
             self.z80.reset();
         }
@@ -91,8 +130,12 @@ impl Sound {
         self.in_reset = asserted;
     }
 
-    /// Replaces the Z80 program with the Rust driver. To be called before the first frame.
+    /// Replaces the Z80 program with the Rust driver (always the case without the `z80` feature). To be called before
+    /// the first frame.
     pub fn use_rust_driver(&mut self) {
+        if self.driver.is_some() {
+            return;
+        }
         self.driver = Some(ddsom_sound::Driver::new(ddsom_sound::Rom::from_region(self.rom.clone())));
         self.driver_restart = true;
     }
@@ -105,7 +148,7 @@ impl Sound {
             self.driver_restart = false;
             driver.reset(qram, &mut writes);
         }
-        self.z80.cycles = self.z80.cycles.max(target);
+        self.cycles = self.cycles.max(target);
         // An interrupt that falls exactly at the end of the slice is taken by the Z80 at the
         // start of the next one, that is after the 68000 writes on the next line.
         while self.next_irq < target {
@@ -119,32 +162,55 @@ impl Sound {
             }
         }
         for w in writes {
-            if let ddsom_sound::Write::Qsound { reg, data } = w {
-                self.qsound.write(0, (data >> 8) as u8);
-                self.qsound.write(1, data as u8);
-                self.qsound.write(2, reg);
+            match w {
+                ddsom_sound::Write::Qsound { reg, data } => {
+                    self.qsound.write(0, (data >> 8) as u8);
+                    self.qsound.write(1, data as u8);
+                    self.qsound.write(2, reg);
+                    if let Some(o) = self.output.as_mut() {
+                        o.push(Output::Qsound { reg, data });
+                    }
+                }
+                ddsom_sound::Write::Shared { offset, value } => {
+                    if let Some(o) = self.output.as_mut() {
+                        o.push(Output::Shared { offset, value });
+                    }
+                }
             }
         }
     }
 
-    /// Runs the Z80 up to absolute cycle `target`, then produces the QSound samples
+    /// Runs the sound driver up to absolute cycle `target`, then produces the QSound samples
     /// corresponding to `seconds` of machine time.
     pub fn run(&mut self, qram: &mut [u8], target: u64, seconds: f64) {
         if self.in_reset {
             // clock stopped on the program side, but time passes
-            if self.z80.cycles < target {
-                self.z80.cycles = target;
-            }
+            self.cycles = self.cycles.max(target);
             while self.next_irq <= target {
                 self.next_irq += Z80_IRQ_PERIOD;
             }
         }
         if self.driver.is_some() {
             self.run_driver(qram, target);
+        } else {
+            #[cfg(feature = "z80")]
+            self.run_z80(qram, target);
         }
+        self.sample_acc += seconds * qsound::SAMPLE_RATE;
+        while self.sample_acc >= 1.0 {
+            self.sample_acc -= 1.0;
+            self.qsound.update_sample();
+            self.audio.push(self.qsound.out);
+        }
+    }
+
+    /// The original Z80 program up to absolute cycle `target`.
+    #[cfg(feature = "z80")]
+    fn run_z80(&mut self, qram: &mut [u8], target: u64) {
+        self.z80.cycles = self.z80.cycles.max(self.cycles);
         // the Z80 is taken out of Sound for the duration of the run (the bus borrows Sound)
         let mut cpu = std::mem::take(&mut self.z80);
-        while self.driver.is_none() && cpu.cycles < target {
+        while cpu.cycles < target {
             if cpu.cycles >= self.next_irq {
                 cpu.irq_line = true;
                 self.next_irq += Z80_IRQ_PERIOD;
@@ -159,16 +225,12 @@ impl Sound {
                 self.irq_acked = false;
             }
         }
+        self.cycles = cpu.cycles;
         self.z80 = cpu;
-        self.sample_acc += seconds * qsound::SAMPLE_RATE;
-        while self.sample_acc >= 1.0 {
-            self.sample_acc -= 1.0;
-            self.qsound.update_sample();
-            self.audio.push(self.qsound.out);
-        }
     }
 }
 
+#[cfg(feature = "z80")]
 impl z80::Bus for Z80Bus<'_> {
     fn read(&mut self, a: u16) -> u8 {
         match a {
@@ -199,8 +261,24 @@ impl z80::Bus for Z80Bus<'_> {
                 if let Some(t) = self.s.trace.as_mut() {
                     t.push(Event::Write(a - 0xc000, v));
                 }
+                if let Some(o) = self.s.output.as_mut() {
+                    o.push(Output::Shared { offset: a - 0xc000, value: v });
+                }
             }
-            0xd000..=0xd002 => self.s.qsound.write((a - 0xd000) as u8, v),
+            0xd000 => {
+                self.s.data_latch = self.s.data_latch & 0xff | u16::from(v) << 8;
+                self.s.qsound.write(0, v);
+            }
+            0xd001 => {
+                self.s.data_latch = self.s.data_latch & 0xff00 | u16::from(v);
+                self.s.qsound.write(1, v);
+            }
+            0xd002 => {
+                self.s.qsound.write(2, v);
+                if let Some(o) = self.s.output.as_mut() {
+                    o.push(Output::Qsound { reg: v, data: self.s.data_latch });
+                }
+            }
             0xd003 => {
                 let bank = (v & 0x0f) as usize;
                 self.s.bank = if 0x10000 + bank * 0x4000 >= self.s.rom.len() { 0 } else { bank };

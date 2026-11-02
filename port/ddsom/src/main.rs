@@ -85,11 +85,9 @@ fn main() {
             #[cfg(feature = "original")]
             ddsom_rc::install(&mut m);
         }
-        // sound driver rewritten in Rust in place of the Z80 program: DDSOM_SON_RUST=1, and always without ROMs (the
-        // Z80 region rebuilt from the assets has only the driver's data, not its program)
-        if std::env::var_os("DDSOM_SON_RUST").is_some() || romdir.is_none() {
-            m.sound.use_rust_driver();
-        }
+        // the sound driver rewritten in Rust, never the Z80 program (with or without ROMs; the Z80 region rebuilt from
+        // the assets has only the driver's data). Already the case unless cargo unified the `z80` feature of `cps2`.
+        m.sound.use_rust_driver();
         m
     };
     let mut m = machine(eeprom.as_deref());
