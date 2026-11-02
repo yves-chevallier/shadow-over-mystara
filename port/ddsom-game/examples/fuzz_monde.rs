@@ -1,6 +1,6 @@
-//! Fuzz des routines « monde » réécrites avec leurs registres exacts : listes triées (0x1ee1a,
-//! 0x1ef6c), collision avec le décor (0x33fe4, 0x3403c), suivi vertical des joueurs (0x31616), aides
-//! des effets (0xb9eba, 0xb9ee6, 0xba094). Les aides d'IA n'ont plus de native : `fuzz_ia` compare leurs cœurs.
+//! Fuzz of the "world" routines rewritten with their exact registers: sorted lists (0x1ee1a, 0x1ef6c), collision
+//! with the scenery (0x33fe4, 0x3403c), vertical follow of the players (0x31616). The AI aids and the barrier aids no
+//! longer have natives: `fuzz_ia` compares the AI cores.
 //!
 //! Chaque routine est appelée en mode contrôle (l'original s'exécute à côté sur une copie ; mémoire,
 //! tous les registres et les drapeaux sont comparés) depuis des états tirés au sort : listes d'objets

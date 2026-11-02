@@ -505,7 +505,7 @@ fn revive_frozen(g: &mut Ctx, p: Player) {
     cinematics::place_by_focus(g, p, tables::FROZEN_OFFSETS);
     let y = p.u16(g, Obj::Y).wrapping_sub(1);
     p.set_u16(g, Obj::Y, y);
-    g.rom(rom::REVIVE_SETUP, p);
+    crate::families::petites::revive_68k(g.c, g.b, p.obj());
     animation::start(g, p, 0x23);
     g.son(ext::son::FANFARE, p);
     restore_palette(g, p);
