@@ -260,6 +260,44 @@ fn families(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     s.push(prog("warmachine/wide_blocks_1", 0x790f2, "i16", &[], 6));
     s.push(prog("warmachine/wide_picks", 0x79158, "u8*16", &[], 4));
     upto(s, "warmachine/wide_jumps", 0x79198, true, "i16", 0x20);
+    // ---- displacer beast (type 19) and its parts ----
+    lists(rom, s, "dbeast/attack_lists", 0x7462e, 2);
+    rank(s, "dbeast/close_moves", 0x74cac);
+    s.push(prog("dbeast/shift_picks", 0x74f56, "u8", &[], 16));
+    upto(s, "dbeast/shifts_a", 0x74f7a, true, "u8", 0x10);
+    upto(s, "dbeast/shifts_b", 0x74f8a, true, "u8", 0x10);
+    upto(s, "dbeast/follow_offsets", 0x7202a, true, "i16*2", 0x40);
+    upto(s, "dbeast/body_offsets", 0x720ee, true, "i16*4", 0x80);
+    upto(s, "dbeast/rally_offsets", 0x72224, true, "i16*2", 0x40);
+    upto(s, "dbeast/arm_anims", 0x724c8, true, "u8", 0x10);
+    s.push(prog("dbeast/crawl_delays", 0x72a6e, "u16", &[], 16));
+    s.push(data("dbeast/pounce_counts", 0x73516, "u8", &[], 32));
+    s.push(prog("dbeast/pounce_cries", 0x73584, "u8", &[], 16));
+    // ---- parts of the composite enemies (type 7) ----
+    upto(s, "part/offsets", 0x63f34, true, "i16*4", 0x80);
+    upto(s, "part/sub_for_host", 0x63fa8, false, "u8", 0x20);
+    upto(s, "part/idle_delays", 0x63c7e, true, "u16", 0x20);
+    // ---- giant beetle (type 9): speed tables by difficulty (addresses in `data/speeds.json`) ----
+    s.push(data("beetle/walk_speeds", 0x66700, "addr", &[], 8));
+    s.push(data("beetle/fly_speeds", 0x66720, "addr", &[], 8));
+    s.push(data("beetle/turn_rates_a", 0x666b4, "u8*2", &[], 2));
+    s.push(data("beetle/turn_rates_b", 0x666b8, "u8*2", &[], 2));
+    s.push(prog("beetle/turn_deltas", 0x66750, "i8", &[], 4));
+    s.push(data("beetle/turn_targets", 0x667d4, "u8*2", &[], 16));
+    upto(s, "beetle/stop_xs", 0x660d6, false, "u16", 0x20);
+    s.push(data("beetle/depth_accels", 0x66666, "i16", &[], 32));
+    s.push(prog("beetle/bite_odds", 0x6623a, "x32", &[], 16));
+    s.push(prog("beetle/shake_times", 0x664c6, "u8", &[], 4));
+    // ---- giant scorpion (type 10) ----
+    s.push(data("scorpion/attacks_a", 0x66e48, "u8*16", &[], 8));
+    s.push(data("scorpion/attacks_b", 0x67146, "u8*16", &[], 8));
+    s.push(data("scorpion/moves", 0x6773c, "u8*16", &[], 8));
+    rank(s, "scorpion/attack_states", 0x674fa);
+    s.push(data("scorpion/idle_times", 0x66fbe, "u8", &[], 16));
+    s.push(prog("scorpion/move_times", 0x677f8, "u8*4", &[], 4));
+    s.push(prog("scorpion/retreat_ranks", 0x677ce, "u8", &[], 16));
+    s.push(prog("scorpion/strike_times", 0x670dc, "u8", &[], 4));
+    upto(s, "scorpion/move_speeds", 0x670e0, true, "u8", 0x10);
 }
 
 /// A table of `count` addresses of tables by difficulty level (data space), and the tables it points to, named

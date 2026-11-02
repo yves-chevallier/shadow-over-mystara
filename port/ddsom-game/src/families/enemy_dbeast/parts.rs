@@ -83,7 +83,7 @@ pub(super) fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Hit points of the parts (1): they die on the first hit.
 fn set_hp<R: Bench>(x: &mut Cx<'_, R>) {
-    for off in [0x60, f::HP, 0x64] {
+    for off in [Enemy::HP_MAX, f::HP, Enemy::HP_LAST] {
         x.set16(off, 1);
     }
 }
@@ -157,14 +157,13 @@ fn attached<R: Bench>(x: &mut Cx<'_, R>) {
 /// +6 = 2 (0x724cc): arm of the beast: follows the parent, plays the animation of its state and strikes a nearby
 /// player.
 fn arm<R: Bench>(x: &mut Cx<'_, R>) {
-    const BY_PARENT_STATE: u32 = 0x724c8;
     follow_body(x);
     if x.u8(DisplacerBeast::DONE) == 0 {
         let mut n = 0x4b;
         if x.u8(DisplacerBeast::PART) != 6 {
             let Some(p) = parent(x) else { return orphan(x) };
-            let idx = p.u8(x.b, 0xa1) as u32;
-            n = x.rom8(BY_PARENT_STATE + idx);
+            let idx = p.u8(x.b, DisplacerBeast::ARM_STATE) as u32;
+            n = tables::table("dbeast/arm_anims").at8(x.b, idx);
             if (p.u32(x.b, f::STATE) as i32) <= 0x0200_0600 {
                 n = 0;
             }
@@ -212,7 +211,6 @@ fn arm_rest<R: Bench>(x: &mut Cx<'_, R>) {
 /// Original glitch: without a parent, the part becomes an orphan (jump to 0x725c8) and the caller tests the Z flag left
 /// by the animation start (0x1a32: `move.l A4,(0x20,A0)`, non-null pointer): "arrived".
 fn rally<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    const OFFSETS: u32 = 0x72224;
     let Some(p) = parent(x) else {
         orphan(x);
         return true;
@@ -220,8 +218,8 @@ fn rally<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let flip = p.u8(x.b, f::FLIP);
     x.set8(f::FLIP, flip);
     let row = (x.u8(DisplacerBeast::PART).wrapping_mul(4)) as u32;
-    let mut dx = x.rom16(OFFSETS + row);
-    let dy = x.rom16(OFFSETS + row + 2);
+    let mut dx = tables::table("dbeast/rally_offsets").at16(x.b, row);
+    let dy = tables::table("dbeast/rally_offsets").at16(x.b, row + 2);
     if flip != 0 {
         dx = dx.wrapping_neg();
     }
@@ -260,11 +258,11 @@ fn reach<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {
             if rally(x) {
                 let Some(p) = parent(x) else { return orphan(x) };
-                let n = p.u8(x.b, 0xaa).wrapping_sub(1);
-                p.set_u8(x.b, 0xaa, n);
+                let n = p.u8(x.b, DisplacerBeast::RALLYING).wrapping_sub(1);
+                p.set_u8(x.b, DisplacerBeast::RALLYING, n);
                 x.set32(f::IMMUNITY, 0x0021_8000);
                 if n == 0xff {
-                    p.set_u8(x.b, 0xaa, 0);
+                    p.set_u8(x.b, DisplacerBeast::RALLYING, 0);
                 }
                 if (p.u32(x.b, f::STATE) as i32) < 0x0402_0000 {
                     x.set8(Enemy::ACTIVE, 1);
@@ -499,11 +497,10 @@ fn slide<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Crawl: random duration, then the beast springs up and strikes (+6 = 20 and 22, 0x72a16 / 0x72b16).
 fn sneak_gen<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::objects::Obj)) {
-    const DELAYS: u32 = 0x72a6e;
     match x.u8(Enemy::SUB_STEP) {
         0 => {
             let r = (x.random() as u32) & 0xf;
-            let delay = x.rom16(DELAYS + 2 * r);
+            let delay = tables::table("dbeast/crawl_delays").at16(x.b, 2 * r);
             slide_start(x, 8, delay);
         }
         2 => {

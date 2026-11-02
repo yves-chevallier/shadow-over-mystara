@@ -50,16 +50,17 @@ record! {
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// ROM tables (the suffix tells the read space: opcodes for the `(table,PC,Dn)`, data otherwise).
-const ATTACK_PICK_A: u32 = 0x66e48;
-const ATTACK_PICK_B: u32 = 0x67146;
-const MOVE_PICK: u32 = 0x6773c;
-const IDLE_TIMES: u32 = 0x66fbe;
-const ATTACK_TABLE: u32 = 0x674fa;
-const TIMER_ROW: u32 = 0x677f8;
-const RETREAT_ROW: u32 = 0x677ce;
-const STRIKE_TIMER: u32 = 0x670dc;
-const SPEED_ROW: u32 = 0x670e0;
+/// Tables of `data/enemies.json`: draws by difficulty (rows of 16 bytes per four ranks, or of 32 bytes per two), gesture
+/// durations and speeds.
+const ATTACK_PICK_A: &str = "scorpion/attacks_a";
+const ATTACK_PICK_B: &str = "scorpion/attacks_b";
+const MOVE_PICK: &str = "scorpion/moves";
+const IDLE_TIMES: &str = "scorpion/idle_times";
+const ATTACK_TABLE: &str = "scorpion/attack_states";
+const TIMER_ROW: &str = "scorpion/move_times";
+const RETREAT_ROW: &str = "scorpion/retreat_ranks";
+const STRIKE_TIMER: &str = "scorpion/strike_times";
+const SPEED_ROW: &str = "scorpion/move_speeds";
 
 const STANCE: u32 = 0x0202_0000;
 const REACH: u32 = 0x0208_0000;
@@ -111,14 +112,14 @@ fn advance<R: Bench>(x: &mut Cx<'_, R>) {
 fn pick_move<R: Bench>(x: &mut Cx<'_, R>) {
     let row = ((var::RANK.get(x.b) >> 2) << 4) as u32;
     let r = rand_and(x, 0xf);
-    let v = x.data8(MOVE_PICK + row + r);
+    let v = tables::table(MOVE_PICK).at8(x.b, row + r);
     x.set8(Scorpion::MOVE, v);
 }
 
 /// 0x677e8: duration of the gesture (`+0xa2`) according to the rank `d0` and the gesture.
 fn set_timer<R: Bench>(x: &mut Cx<'_, R>, d0: u32) {
     let idx = ((d0 << 2) & !0xff) | (((d0 << 2) as u8).wrapping_add(x.u8(Scorpion::MOVE)) as u32);
-    let t = x.rom8(TIMER_ROW + idx);
+    let t = tables::table(TIMER_ROW).at8(x.b, idx);
     x.set8(Scorpion::TIMER, t);
 }
 
@@ -131,16 +132,16 @@ fn random_timer<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x670d2: speed table of the gesture.
 fn speed_row<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = x.u8(Scorpion::MOVE) as u32;
-    let d0 = x.rom8(SPEED_ROW + idx);
+    let d0 = tables::table(SPEED_ROW).at8(x.b, idx);
     x.select_speed(&crate::objects::motion::SPEEDS_B, (d0 as u32) as u16);
 }
 
 /// Choice of the next hit in the difficulty row: draws `+6` = 2 + byte of the table.
-fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
+fn pick_attack<R: Bench>(x: &mut Cx<'_, R>, table: &str) {
     x.add8(f::SUB2, 2);
     let row = ((var::RANK.get(x.b) >> 2) << 4) as u32;
     let r = rand_and(x, 0xf);
-    let v = x.data8(table + row + r);
+    let v = tables::table(table).at8(x.b, row + r);
     x.add8(f::SUB2, v);
     pick_move(x);
 }
@@ -333,9 +334,7 @@ fn free_stance<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x674ca: draws the next attack substate in the difficulty row.
 fn choose_attack<R: Bench>(x: &mut Cx<'_, R>) {
-    let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-    let r = rand_and(x, 0x1f);
-    let v = x.data8(ATTACK_TABLE + row + r);
+    let v = rank_byte(x, ATTACK_TABLE);
     x.set8(f::SUB, v);
     x.add8(f::SUB, 2);
     x.set8(f::STATE, 2);
@@ -409,7 +408,7 @@ fn melee<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB3, 2);
             let r = rand_and(x, 0xf);
-            let d0 = x.rom8(RETREAT_ROW + r) as u32;
+            let d0 = tables::table(RETREAT_ROW).at8(x.b, r) as u32;
             set_timer(x, d0);
             face(x, false);
             attack_move(x);
@@ -532,7 +531,7 @@ fn idle<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         let r = rand_and(x, 0xf);
-        let t = x.data8(IDLE_TIMES + r);
+        let t = tables::table(IDLE_TIMES).at8(x.b, r);
         x.set8(Enemy::AI_WAIT, t);
         return anim_play(x, 0);
     }
@@ -559,7 +558,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             x.anim_start(ANIMS_STRIKE.0, 0);
             x.set8(Scorpion::FROZEN, 0);
             let m = x.u8(Scorpion::MOVE) as u32;
-            let t = x.rom8(STRIKE_TIMER + m);
+            let t = tables::table(STRIKE_TIMER).at8(x.b, m);
             x.set8(Scorpion::TIMER, t);
             speed_row(x);
         }

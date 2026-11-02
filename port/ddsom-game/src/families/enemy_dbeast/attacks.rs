@@ -336,11 +336,10 @@ fn pounce<R: Bench>(x: &mut Cx<'_, R>) {
     });
 }
 
-/// Draws the number of jumps in place (ROM table at 0x73516).
+/// Draws the number of jumps in place (table `pounce_counts`).
 pub(super) fn roll_pounces<R: Bench>(x: &mut Cx<'_, R>) {
-    const COUNTS: u32 = 0x73516;
     let r = (x.random() as u32) & 0x1f;
-    let count = x.data8(COUNTS + r);
+    let count = tables::table("dbeast/pounce_counts").at8(x.b, r);
     x.set8(DisplacerBeast::REPEAT, count);
 }
 
@@ -357,11 +356,10 @@ fn pounce_start<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x73536: a jump in place is over; at random a cry accompanies the key frame.
 pub(super) fn pounce_repeat<R: Bench>(x: &mut Cx<'_, R>) {
-    const SOUNDS: u32 = 0x73584;
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
         let r = (x.random() as u32) & 0xf;
-        let sound = x.rom8(SOUNDS + r);
+        let sound = tables::table("dbeast/pounce_cries").at8(x.b, r);
         if sound != 0 {
             lib::sound(x, crate::sound::CMD_31B_41B);
         }

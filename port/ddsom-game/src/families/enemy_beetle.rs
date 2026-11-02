@@ -39,13 +39,20 @@ impl Beetle {
 record! {
     impl Beetle {
         turn_period, set_turn_period, TURN_PERIOD: u8 @ 0xa2;
+        /// Hit state: countdown of the shake (the byte of `TURN_PERIOD`).
+        shake_timer, set_shake_timer, SHAKE_TIMER: u8 @ 0xa2;
         turn_timer, set_turn_timer, TURN_TIMER: u8 @ 0xa3;
         side, set_side, SIDE: u8 @ 0xa4;
+        /// Cleared at the creation and at the end of a pounce; not read by the family (h).
+        pounced, set_pounced, POUNCED: u8 @ 0xa5;
         turn_step, set_turn_step, TURN_STEP: u8 @ 0xa6;
         stop_step, set_stop_step, STOP_STEP: u8 @ 0xa7;
         /// Saved position (X and depth) and turn rate.
         saved_x, set_saved_x, SAVED_X: u16 @ 0xa8;
         saved_depth, set_saved_depth, SAVED_DEPTH: u16 @ 0xac;
+        /// Position (X, depth) of the player aimed at by a turn back.
+        aim_x, set_aim_x, AIM_X: u16 @ 0xb0;
+        aim_depth, set_aim_depth, AIM_DEPTH: u16 @ 0xb2;
         drift, set_drift, DRIFT: u16 @ 0xb4;
         stop_x, set_stop_x, STOP_X: u16 @ 0xb6;
         biting, set_biting, BITING: u8 @ 0xb8;
@@ -54,18 +61,20 @@ record! {
 use crate::objects::pools;
 use crate::objects::Current;
 
-/// ROM tables: speeds per difficulty (pointers), timings, turn directions.
-const SPEEDS_WALK: u32 = 0x66700;
-const SPEEDS_FLY: u32 = 0x66720;
-const SPEEDS_DRIFT: u32 = 0x1c9036;
-const TIMER_A: u32 = 0x666b4;
-const TIMER_B: u32 = 0x666b8;
-const TURN_DELTA: u32 = 0x66750;
-const TURN_TARGETS: u32 = 0x667d4;
-const STOP_XS: u32 = 0x660d6;
-const SPEED_Y_ROW: u32 = 0x66666;
-const BITE_ODDS: u32 = 0x6623a;
-const SHAKE_TIMES: u32 = 0x664c6;
+/// Tables of `data/enemies.json`: speed tables per difficulty (addresses), turn rates, turn directions...
+const SPEEDS_WALK: &str = "beetle/walk_speeds";
+const SPEEDS_FLY: &str = "beetle/fly_speeds";
+/// Speed table of the drift (`data/speeds.json`).
+const SPEEDS_DRIFT: RomAddr = RomAddr(0x1c9036);
+const TIMER_A: &str = "beetle/turn_rates_a";
+const TIMER_B: &str = "beetle/turn_rates_b";
+const TURN_DELTA: &str = "beetle/turn_deltas";
+/// Per turn step and side: angle (low 4 bits) that ends the step, animation of the next step.
+const TURN_TARGETS: &str = "beetle/turn_targets";
+const STOP_XS: &str = "beetle/stop_xs";
+const SPEED_Y_ROW: &str = "beetle/depth_accels";
+const BITE_ODDS: &str = "beetle/bite_odds";
+const SHAKE_TIMES: &str = "beetle/shake_times";
 
 const STANCE: u32 = 0x0200_0000;
 const HELD: u32 = 0x0404_0000;
@@ -102,7 +111,7 @@ fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
 fn speeds<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     x.set32(Obj::SPEED_TABLE, table);
     let off = (x.u8(Obj::SPEED_INDEX) as u32) << 2;
-    let (vx, vy) = (x.data16(table + off), x.data16(table + off + 2));
+    let (vx, vy) = (tables::speed16(x.b, table + off), tables::speed16(x.b, table + off + 2));
     x.set16(Obj::VX, vx);
     x.set16(Obj::VY, vy);
     x.set16(Obj::AX, 0);
@@ -110,23 +119,23 @@ fn speeds<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
 }
 
 /// 0x666d2: speed table chosen by the difficulty (`A5+0x7f92` & 0x1c).
-fn speeds_by_level<R: Bench>(x: &mut Cx<'_, R>, list: u32) {
+fn speeds_by_level<R: Bench>(x: &mut Cx<'_, R>, list: &str) {
     let level = (var::RANK.get(x.b) & 0x1c) as u32;
-    let table = x.data32(list + level);
+    let table = tables::table(list).at32(x.b, level);
     speeds(x, table);
 }
 
 /// 0x666a2: turn rate (bytes `+0xa2/+0xa3`) according to the difficulty.
-fn turn_timer<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
+fn turn_timer<R: Bench>(x: &mut Cx<'_, R>, table: &str) {
     let off = ((var::RANK.get(x.b) & 0x10) >> 3) as u32;
-    let v = x.data16(table + off);
+    let v = tables::table(table).at16(x.b, off);
     x.set16(Beetle::TURN_PERIOD, v);
 }
 
 /// 0x6664c / 0x6664e: speed `+0x1e` read from the table according to the difficulty, `base` = row offset.
 fn set_speed_y<R: Bench>(x: &mut Cx<'_, R>, base: u16) {
     let off = ((var::RANK.get(x.b) & 0x18) >> 2).wrapping_add(base);
-    let v = x.data16(SPEED_Y_ROW + off as u32);
+    let v = tables::table(SPEED_Y_ROW).at16(x.b, off as u32);
     x.set16(Obj::AY, v);
 }
 
@@ -142,7 +151,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(off, v);
     }
     x.set16(Obj::Z, 0x36);
-    x.set8(0xa5, 0);
+    x.set8(Beetle::POUNCED, 0);
     x.set8(Beetle::BITING, 0);
     match x.u8(Obj::VARIANT) {
         0 | 1 | 3 => start_walk(x),
@@ -267,12 +276,11 @@ fn steer<R: Bench>(x: &mut Cx<'_, R>) {
     let period = x.u8(Beetle::TURN_PERIOD);
     x.set8(Beetle::TURN_TIMER, period);
     let idx = ((x.u8(Beetle::TURN_STEP) & 8) >> 3).wrapping_add(x.u8(Beetle::SIDE) >> 3) as u32;
-    let delta = x.rom8(TURN_DELTA + idx);
+    let delta = tables::table(TURN_DELTA).at8(x.b, idx);
     let angle = x.u8(Obj::SPEED_INDEX).wrapping_add(delta) & 0x1f;
     x.set8(Obj::SPEED_INDEX, angle);
     let key = x.u8(Beetle::TURN_STEP).wrapping_add(x.u8(Beetle::SIDE)) as u32;
-    let entry = TURN_TARGETS + key;
-    if angle & 0xf != x.data8(entry) {
+    if angle & 0xf != tables::table(TURN_TARGETS).at8(x.b, key) {
         return;
     }
     if x.u8(Beetle::TURN_STEP) & 6 == 6 {
@@ -283,7 +291,7 @@ fn steer<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let step = x.u8(Beetle::TURN_STEP).wrapping_add(2) & 0xf;
     x.set8(Beetle::TURN_STEP, step);
-    let n = x.data8(entry + 1);
+    let n = tables::table(TURN_TARGETS).at8(x.b, key + 1);
     anim_play(x, n as u32);
 }
 
@@ -297,7 +305,7 @@ fn bite_check<R: Bench>(x: &mut Cx<'_, R>) {
         if player.u16(x.b, Enemy::STATE_WORD) == 0x200 && player.u8(x.b, Enemy::STEP) == 0xc {
             let roll = (x.random() as u32) & 0x1f;
             let row = ((var::RANK.get(x.b) >> 1) as u32) << 2;
-            let odds = x.prog32(BITE_ODDS + row);
+            let odds = tables::table(BITE_ODDS).at32(x.b, row);
             if odds >> roll & 1 != 0 {
                 let state = x.u32(f::STATE);
                 x.set32(Enemy::RESUME_STATE, state);
@@ -388,7 +396,7 @@ fn drift<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(Obj::SPEED_INDEX, 8);
                 d6 = 1;
             }
-            speeds(x, SPEEDS_DRIFT);
+            speeds(x, SPEEDS_DRIFT.0);
             x.set16(Beetle::TURN_PERIOD, 0x101);
             x.set16(Obj::VX, 0x300);
             if x.u8(Obj::SPEED_INDEX) != 8 {
@@ -431,8 +439,8 @@ fn drift<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x660bc: stop abscissa (`+0xb6`) read from the table according to the stop rank.
 fn set_stop<R: Bench>(x: &mut Cx<'_, R>, rank: u8) {
-    let base = STOP_XS + if x.u8(Enemy::GROUP) & 1 != 0 { 6 } else { 0 };
-    let v = x.data16(base + rank as u32);
+    let base = if x.u8(Enemy::GROUP) & 1 != 0 { 6 } else { 0 };
+    let v = tables::table(STOP_XS).at16(x.b, base + rank as u32);
     x.set16(Beetle::STOP_X, v);
 }
 
@@ -537,8 +545,8 @@ fn turn_back<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(f::SUB3, 4);
             let player = load_target(x);
             let (px, pz) = (player.u16(x.b, Obj::X), player.u16(x.b, Obj::Y));
-            x.set16(0xb0, px);
-            x.set16(0xb2, pz);
+            x.set16(Beetle::AIM_X, px);
+            x.set16(Beetle::AIM_DEPTH, pz);
             let angle = lib::aim_to(x, player);
             x.set8(Obj::SPEED_INDEX, angle);
             if angle & 0xf != 0 {
@@ -633,7 +641,7 @@ fn pounce<R: Bench>(x: &mut Cx<'_, R>) {
                 x.anim_step();
                 return;
             }
-            x.set8(0xa5, 0);
+            x.set8(Beetle::POUNCED, 0);
             set_state_long(x, AFTER_POUNCE);
         }
         _ => {}
@@ -680,15 +688,15 @@ fn react_first<R: Bench>(x: &mut Cx<'_, R>) {
             if var::PAUSE.get(x.b) == 0 {
                 x.add8(f::SUB2, 2);
             }
-            let n = x.u8(0xa2).wrapping_sub(1);
-            x.set8(0xa2, n);
+            let n = x.u8(Beetle::SHAKE_TIMER).wrapping_sub(1);
+            x.set8(Beetle::SHAKE_TIMER, n);
             if n != 0 {
                 return;
             }
             if lib::attack_effect(x, 0, 0) {
                 shake_timer(x);
             } else {
-                x.set8(0xa2, 1);
+                x.set8(Beetle::SHAKE_TIMER, 1);
             }
         }
         4 => knock_back(x),
@@ -699,8 +707,8 @@ fn react_first<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x664b4: randomly drawn duration of the shake.
 fn shake_timer<R: Bench>(x: &mut Cx<'_, R>) {
     let r = (x.random() as u32) & 3;
-    let t = x.rom8(SHAKE_TIMES + r);
-    x.set8(0xa2, t);
+    let t = tables::table(SHAKE_TIMES).at8(x.b, r);
+    x.set8(Beetle::SHAKE_TIMER, t);
 }
 
 /// 0x664f8: recoil, facing away from the hit.
@@ -735,15 +743,15 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
             if (x.u16(Obj::Z) as i16) <= 0 {
                 x.add8(f::SUB2, 2);
                 x.set32(Obj::Z, 0);
-                x.set8(0xa2, 0x28);
+                x.set8(Beetle::SHAKE_TIMER, 0x28);
                 x.set16(Obj::ANIM_TIMER, 1);
                 detach_from_host(x);
             }
             x.anim_step();
         }
         2 => {
-            let n = x.u8(0xa2).wrapping_sub(1);
-            x.set8(0xa2, n);
+            let n = x.u8(Beetle::SHAKE_TIMER).wrapping_sub(1);
+            x.set8(Beetle::SHAKE_TIMER, n);
             if n == 0 {
                 set_state_long(x, DEAD);
                 return lib::object_event(x);

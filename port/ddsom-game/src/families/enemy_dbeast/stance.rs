@@ -7,9 +7,9 @@ use crate::objects::Current;
 
 /// Choice of an attack from a ROM table: `+4 = 0x0204` (attack) and `+6` drawn from the table of the difficulty level
 /// (`A5+0x7f92`).
-const PICK_TABLE: u32 = 0x7462e;
+const PICK_TABLE: &str = "dbeast/attack_lists";
 /// Contact attacks (0x74c3e): draw per difficulty level.
-const CLOSE_TABLE: u32 = 0x74cac;
+const CLOSE_TABLE: &str = "dbeast/close_moves";
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if matches!(x.u8(Obj::VARIANT), 0xc | 0xd) || grabbed(x) {
@@ -241,10 +241,10 @@ fn approach_walk<R: Bench>(x: &mut Cx<'_, R>) {
 fn choose_attack_a<R: Bench>(x: &mut Cx<'_, R>, close: bool) {
     let base = if close { 0 } else { 0x14 };
     let profile = x.u8(Enemy::GROUP).wrapping_shl(2) as u32;
-    let table = x.data32(PICK_TABLE + profile);
-    let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
+    let table = tables::table(PICK_TABLE).at32(x.b, profile);
+    let level = rank_row(x);
     let r = (x.random() as u32) & 0x1f;
-    let pick = x.data8(table.wrapping_add(level).wrapping_add(r));
+    let pick = tables::held8(x.b, table.wrapping_add(level).wrapping_add(r));
     x.set8(f::SUB2, pick.wrapping_add(base));
     x.set16(f::STATE, 0x0204);
     x.set8(Enemy::SUB_STEP, 0);
@@ -263,9 +263,7 @@ pub(super) fn next_move<R: Bench>(x: &mut Cx<'_, R>) {
     if !lib::target_in_box(x, -0x30, 0x30, 8) && !lib::target_in_box(x, -0xd0, 0x70, 8) {
         return set_state_long(x, ACTIVE_STANCE);
     }
-    let level = (var::RANK.get(x.b) >> 1 << 5) as u32;
-    let r = (x.random() as u32) & 0x1f;
-    let pick = x.data8(CLOSE_TABLE + level + r);
+    let pick = rank_byte(x, CLOSE_TABLE);
     x.set8(f::SUB2, pick);
     x.set16(f::STATE, 0x0208);
     x.set8(Enemy::SUB_STEP, 0);

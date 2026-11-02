@@ -48,6 +48,8 @@ record! {
         layer, set_layer, LAYER: u8 @ 0x3b;
         /// Timer of the current step (byte or word).
         timer, set_timer, TIMER: u8 @ 0xa0;
+        /// On the beast: pose that its arms play (index of `arm_anims`) (h).
+        arm_state, set_arm_state, ARM_STATE: u8 @ 0xa1;
         cur_anim, set_cur_anim, CUR_ANIM: u8 @ 0xa2;
         /// The move is over (set by the beast for its parts).
         done, set_done, DONE: u8 @ 0xa3;
@@ -56,6 +58,8 @@ record! {
         /// Wanted animation / current animation (so as not to restart the same one).
         want_anim, set_want_anim, WANT_ANIM: u8 @ 0xa5;
         resume_state, set_resume_state, RESUME_STATE: u32 @ 0xa6;
+        /// On the beast: parts still heading for their rally point (h).
+        rallying, set_rallying, RALLYING: u8 @ 0xaa;
         /// Number of repetitions of an attack (`+0xab`, `+0xae`) and move counter (`+0xb5`).
         repeat, set_repeat, REPEAT: u8 @ 0xab;
         repeat_left, set_repeat_left, REPEAT_LEFT: u8 @ 0xae;
@@ -77,9 +81,9 @@ use crate::objects::Current;
 const SET_A: RomAddr = RomAddr(0x166fb6);
 const SET_B: RomAddr = RomAddr(0x167054);
 /// Animation-number offsets per series (`+0xbf`), ROM tables.
-const SHIFT_A: u32 = 0x74f7a;
-const SHIFT_B: u32 = 0x74f8a;
-const SHIFT_PICK: u32 = 0x74f56;
+const SHIFT_A: &str = "dbeast/shifts_a";
+const SHIFT_B: &str = "dbeast/shifts_b";
+const SHIFT_PICK: &str = "dbeast/shift_picks";
 /// Long states (`+4..+7`).
 const ACTIVE_STANCE: u32 = 0x0202_0000;
 const ACTIVE_IDLE: u32 = 0x020a_0000;
@@ -108,13 +112,13 @@ fn anim_a<R: Bench>(x: &mut Cx<'_, R>, n: u8) -> u32 {
     if (n as i8) >= 0x4b {
         return n as u32;
     }
-    n.wrapping_add(x.rom8(SHIFT_A + shift as u32)) as u32
+    n.wrapping_add(tables::table(SHIFT_A).at8(x.b, shift as u32)) as u32
 }
 
 /// 0x74f7e: animation number of the attack series, always shifted.
 fn anim_b<R: Bench>(x: &mut Cx<'_, R>, n: u8) -> u32 {
     let shift = x.u8(DisplacerBeast::ANIM_SHIFT);
-    n.wrapping_add(x.rom8(SHIFT_B + shift as u32)) as u32
+    n.wrapping_add(tables::table(SHIFT_B).at8(x.b, shift as u32)) as u32
 }
 
 /// Plays animation `n` of the movement series.
@@ -192,14 +196,14 @@ fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
 /// 0x71ff4: places itself on the parent, offset according to the rank of the part (X inverted when the part looks
 /// left).
 fn follow_offset<R: Bench>(x: &mut Cx<'_, R>) {
-    const OFFSETS: u32 = 0x7202a;
+    const OFFSETS: &str = "dbeast/follow_offsets";
     let p = x.linked(Enemy::CREATOR);
     let (px, py) = (p.u16(x.b, Obj::X), p.u16(x.b, Obj::Y));
     x.set16(Obj::X, px);
     x.set16(Obj::Y, py);
     let row = (x.u8(DisplacerBeast::PART).wrapping_mul(4)) as u32;
-    let mut dx = x.rom16(OFFSETS + row);
-    let dy = x.rom16(OFFSETS + row + 2);
+    let mut dx = tables::table(OFFSETS).at16(x.b, row);
+    let dy = tables::table(OFFSETS).at16(x.b, row + 2);
     if x.u8(f::FLIP) != 0 {
         dx = dx.wrapping_neg();
     }
@@ -210,7 +214,7 @@ fn follow_offset<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x7208c: places itself on the parent (position, orientation, altitude) according to the rank of the part. Without a
 /// parent, the part becomes a standing beast again (and the function returns control to the caller, which continues).
 fn follow_body<R: Bench>(x: &mut Cx<'_, R>) {
-    const OFFSETS: u32 = 0x720ee;
+    const OFFSETS: &str = "dbeast/body_offsets";
     let Some(p) = parent(x) else { return orphan(x) };
     let (px, py, flip) = (p.u16(x.b, Obj::X), p.u16(x.b, Obj::Y), p.u8(x.b, f::FLIP));
     x.set16(Obj::X, px);
@@ -218,10 +222,11 @@ fn follow_body<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::FLIP, flip);
     x.set32(Obj::Z, 0);
     let row = (x.u8(DisplacerBeast::PART).wrapping_mul(8)) as u32;
-    let mut dx = x.rom16(OFFSETS + row);
-    let dy = x.rom16(OFFSETS + row + 2);
-    let dz = x.rom16(OFFSETS + row + 4);
-    let fraction = x.rom16(OFFSETS + row + 6) as i16 as i32 as u32;
+    let t = tables::table(OFFSETS);
+    let mut dx = t.at16(x.b, row);
+    let dy = t.at16(x.b, row + 2);
+    let dz = t.at16(x.b, row + 4);
+    let fraction = t.at16(x.b, row + 6) as i16 as i32 as u32;
     if flip != 0 {
         dx = dx.wrapping_neg();
     }
@@ -283,7 +288,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         0 | 1 => {
             // random offset of this beast's animation series
             let r = (x.random() as u32) as u8 & 0xf;
-            let shift = x.rom8(SHIFT_PICK + r as u32);
+            let shift = tables::table(SHIFT_PICK).at8(x.b, r as u32);
             x.set8(DisplacerBeast::ANIM_SHIFT, shift);
             if x.u8(Enemy::GROUP) == 0 { PROFILE_A } else { PROFILE_B }
         }
