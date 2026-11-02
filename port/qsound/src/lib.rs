@@ -296,10 +296,33 @@ impl DspTables {
     }
 }
 
+/// Gains of a pan: left dry, left wet, right dry, right wet.
+type PanGains = [i32; 4];
+
+/// The memory the voices play from: signed 8-bit PCM at the address `bank << 16 | address` written in the voice
+/// registers. Padded with zeros to a power of two, so that an address is masked, never out of bounds (the hardware
+/// reads zeros past the end).
+struct SampleBank {
+    bytes: Box<[u8]>,
+}
+
+impl SampleBank {
+    fn new(mut bytes: Vec<u8>) -> Self {
+        bytes.resize(bytes.len().next_power_of_two(), 0);
+        SampleBank { bytes: bytes.into() }
+    }
+
+    /// Sample at (bank, address), as the high byte of a 16-bit value.
+    #[inline]
+    fn read(&self, bank: u16, address: u16) -> i16 {
+        let a = ((bank & 0x7fff) as usize) << 16 | address as usize;
+        ((self.bytes[a & (self.bytes.len() - 1)] as u16) << 8) as i16
+    }
+}
+
 pub struct QSound {
     dsp: DspTables,
-    samples: Vec<u8>,
-    sample_mask: usize,
+    samples: SampleBank,
     regs: [Option<Reg>; 256],
     data_latch: u16,
     /// Last stereo sample produced.
@@ -307,6 +330,8 @@ pub struct QSound {
     voice: [Voice; 16],
     adpcm: [Adpcm; 3],
     voice_pan: [u16; 19],
+    /// Gains of each voice's pan (`pan_gains`), read once when the pan is written.
+    voice_gains: [PanGains; 19],
     voice_output: [i16; 19],
     echo: Echo,
     filter: [Fir; 2],
@@ -324,19 +349,18 @@ pub struct QSound {
 
 impl QSound {
     /// `dsp_rom`: dl-1425.bin, or its tables alone (the first 0x2000 bytes, little-endian words).
-    /// `samples`: sample ROM (size a power of 2).
+    /// `samples`: sample memory (the sample ROMs, or the bank built from the WAV files).
     pub fn new(dsp_rom: &[u8], samples: Vec<u8>) -> Self {
-        let sample_mask = samples.len().next_power_of_two() - 1;
         let mut q = QSound {
             dsp: DspTables::from_program(dsp_rom),
-            samples,
-            sample_mask,
+            samples: SampleBank::new(samples),
             regs: register_map(),
             data_latch: 0,
             out: [0; 2],
             voice: [Voice::default(); 16],
             adpcm: [Adpcm::default(); 3],
             voice_pan: [0; 19],
+            voice_gains: [PanGains::default(); 19],
             voice_output: [0; 19],
             echo: Echo::default(),
             filter: [Fir::default(); 2],
@@ -362,9 +386,19 @@ impl QSound {
     }
 
     fn read_sample(&self, bank: u16, address: u16) -> i16 {
-        let a = (((bank & 0x7fff) as usize) << 16 | address as usize) & self.sample_mask;
-        let b = *self.samples.get(a).unwrap_or(&0);
-        ((b as u16) << 8) as i16
+        self.samples.read(bank, address)
+    }
+
+    /// Pan of voice `i`, and its gains.
+    fn set_pan(&mut self, i: usize, pan: u16) {
+        self.voice_pan[i] = pan;
+        self.voice_gains[i] = self.pan_gains(pan);
+    }
+
+    /// Gains of a pan register value, in the order of `PanGains`.
+    fn pan_gains(&self, pan: u16) -> PanGains {
+        let gain = |ch: u16, path: u16| i32::from(self.dsp.pan_gain(pan.wrapping_add(ch * PAN_TABLE_CH_OFFSET).wrapping_add(path)));
+        [gain(0, PAN_TABLE_DRY), gain(0, PAN_TABLE_WET), gain(1, PAN_TABLE_DRY), gain(1, PAN_TABLE_WET)]
     }
 
     /// Z80 write at D000-D002.
@@ -397,7 +431,7 @@ impl QSound {
                 Reg::VoiceEnd(i) => self.voice[i].end_addr = s,
                 Reg::VoiceVolume(i) => self.voice[i].volume = s,
                 Reg::VoiceEcho(i) => self.voice[i].echo = s,
-                Reg::Pan(i) => self.voice_pan[i] = d,
+                Reg::Pan(i) => self.set_pan(i, d),
                 Reg::AdpcmStart(i) => self.adpcm[i].start_addr = d,
                 Reg::AdpcmEnd(i) => self.adpcm[i].end_addr = d,
                 Reg::AdpcmBank(i) => self.adpcm[i].bank = d,
@@ -445,7 +479,9 @@ impl QSound {
         self.wet = [Delay::default(); 2];
         self.dry = [Delay::default(); 2];
         self.echo = Echo::default();
-        self.voice_pan = [DATA_PAN_TAB + 0x10; 19];
+        for i in 0..19 {
+            self.set_pan(i, DATA_PAN_TAB + 0x10);
+        }
         self.voice_output = [0; 19];
         for v in self.voice.iter_mut() {
             v.bank = 0x8000;
@@ -511,20 +547,27 @@ impl QSound {
         self.next_state = STATE_NORMAL2;
     }
 
-    fn voice_update(&mut self, i: usize, echo_out: &mut i32) -> i16 {
-        let v = self.voice[i];
-        // muted voice: null output without reading the sample (the phase advances anyway)
-        let output = if v.volume == 0 { 0 } else { ((v.volume as i32 * self.read_sample(v.bank, v.addr as u16) as i32) >> 14) as i16 };
-        *echo_out = echo_out.wrapping_add(((output as i32) * v.echo as i32) << 2);
-        let mut new_phase = (v.rate as i32).wrapping_add(((v.addr as i32) << 12) | (v.phase >> 4) as i32);
-        if (new_phase >> 12) >= v.end_addr as i32 {
-            new_phase = new_phase.wrapping_sub((v.loop_len as i32) << 12);
+    /// The 16 PCM voices for one sample: their outputs go to `voice_output[..16]`; returns the echo input.
+    fn update_voices(&mut self) -> i32 {
+        let mut echo_in = 0i32;
+        for (v, out) in self.voice.iter_mut().zip(&mut self.voice_output[..16]) {
+            // muted voice: null output without reading the sample (the phase advances anyway)
+            let output = if v.volume == 0 {
+                0
+            } else {
+                ((v.volume as i32 * self.samples.read(v.bank, v.addr as u16) as i32) >> 14) as i16
+            };
+            echo_in = echo_in.wrapping_add(((output as i32) * v.echo as i32) << 2);
+            let mut new_phase = (v.rate as i32).wrapping_add(((v.addr as i32) << 12) | (v.phase >> 4) as i32);
+            if (new_phase >> 12) >= v.end_addr as i32 {
+                new_phase = new_phase.wrapping_sub((v.loop_len as i32) << 12);
+            }
+            new_phase = new_phase.clamp(-0x8000000, 0x7ffffff);
+            v.addr = (new_phase >> 12) as i16;
+            v.phase = ((new_phase << 4) & 0xffff) as u16;
+            *out = output;
         }
-        new_phase = new_phase.clamp(-0x8000000, 0x7ffffff);
-        let vm = &mut self.voice[i];
-        vm.addr = (new_phase >> 12) as i16;
-        vm.phase = ((new_phase << 4) & 0xffff) as u16;
-        output
+        echo_in
     }
 
     fn adpcm_update(&mut self, i: usize, mut curr_sample: i16, nibble: i32) -> i16 {
@@ -569,28 +612,22 @@ impl QSound {
         let base = if self.state == STATE_NORMAL2 { DELAY_BASE_OFFSET2 } else { DELAY_BASE_OFFSET };
         self.echo.length = (self.echo.end_pos.wrapping_sub(base) as i16).clamp(0, 1024);
 
-        let mut echo_input = 0i32;
-        for i in 0..16 {
-            self.voice_output[i] = self.voice_update(i, &mut echo_input);
-        }
+        let echo_input = self.update_voices();
         let av = (self.state_counter % 3) as usize;
         let prev = self.voice_output[16 + av];
         self.voice_output[16 + av] = self.adpcm_update(av, prev, self.state_counter / 3);
 
         let echo_output = self.echo.apply(echo_input) as i32;
 
-        for ch in 0..2 {
-            let mut wet: i32 = if ch == 1 { echo_output << 14 } else { 0 };
-            let mut dry: i32 = if ch == 0 { echo_output << 14 } else { 0 };
-            for i in 0..19 {
-                let pan = self.voice_pan[i].wrapping_add(ch as u16 * PAN_TABLE_CH_OFFSET);
-                let vo = self.voice_output[i] as i32;
-                if vo == 0 {
-                    continue; // contribution nulle
-                }
-                dry = dry.wrapping_sub(vo * i32::from(self.dsp.pan_gain(pan.wrapping_add(PAN_TABLE_DRY))));
-                wet = wet.wrapping_sub(vo * i32::from(self.dsp.pan_gain(pan.wrapping_add(PAN_TABLE_WET))));
+        // the 19 voices through their pans (sums modulo 2^32: their order does not matter)
+        let mut mix: PanGains = [echo_output << 14, 0, 0, echo_output << 14];
+        for (&vo, gains) in self.voice_output.iter().zip(&self.voice_gains) {
+            for (m, &g) in mix.iter_mut().zip(gains) {
+                *m = m.wrapping_sub(vo as i32 * g);
             }
+        }
+        for ch in 0..2 {
+            let (mut dry, mut wet) = (mix[2 * ch], mix[2 * ch + 1]);
             dry = dry.clamp(-0x1fffffff, 0x1fffffff) << 2;
             wet = wet.clamp(-0x1fffffff, 0x1fffffff) << 2;
             wet = self.filter[ch].apply((wet >> 16) as i16);
