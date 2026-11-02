@@ -13,6 +13,7 @@
 //! Check mode (`set_check(true)`): each call also runs the original routine on a copy
 //! of the state and compares the two; the differences are counted in `report()`.
 
+pub mod bench;
 pub mod camera_modes;
 pub mod config;
 pub mod credits;
@@ -97,8 +98,14 @@ impl Native {
     /// Runs the routine, return (`rts`) included.
     pub fn execute(&self, c: &mut Cpu, b: &mut Cps2Bus) {
         match self.run {
-            Body::WithCpu(f) => f(c, b),
-            Body::CpuIn(f) => f(c, b, self.entry),
+            Body::WithCpu(f) => {
+                f(c, b);
+                tasks::apply_tools_return(c, b);
+            }
+            Body::CpuIn(f) => {
+                f(c, b, self.entry);
+                tasks::apply_tools_return(c, b);
+            }
             Body::Memory(f) => {
                 f(b);
                 mem::rts(c, b);
@@ -199,7 +206,6 @@ pub const NATIVES: &[Native] = &[
     eeprom::ACCOUNTING_INIT,
     eeprom::STAT_CHARACTER,
     eeprom::STAT_DURATION,
-    config::VARIANT,
     config::DEFAULTS,
     config::VALIDATE,
     config::VARIABLES,
@@ -289,7 +295,7 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
     if no68k::active() {
         // the game: the native runs immediately; its `rts` returns to an expected call of the task (no PC, no 68000
         // stack)
-        let n = no68k::native(c, b, addr);
+        let n = no68k::native(b, addr);
         let frame = tasks::table::open_call(b);
         execute(n, c, b, 0);
         if tasks::has_ceded() || !tasks::table::call_returned(b, frame) {
@@ -312,20 +318,6 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
     diag::probe_call(c, addr, &before, site);
 }
 
-/// Terminal call (`jmp`) of native `n` from a Rust function: it runs immediately (with the diagnostics of
-/// `DDSOM_CHECK`...), and its `rts` returns to the continuation of the task's current call. Replaces setting the PC
-/// (jump from one native to another).
-pub fn jump(c: &mut Cpu, b: &mut Cps2Bus, n: &'static Native) {
-    execute(n, c, b, 0);
-}
-
-/// Like [`jump`], to the native set at `address` (handler designated by a ROM table).
-#[track_caller]
-pub fn jump_to(c: &mut Cpu, b: &mut Cps2Bus, address: u32) {
-    let n = lookup(address).unwrap_or_else(|| panic!("jump to {address:06x} ({}): no native", std::panic::Location::caller()));
-    execute(n, c, b, 0);
-}
-
 /// Switch point of the scheduler: a task that cedes control (0xa40, 0xa86) or ends goes through it.
 const TASK_SWITCH: u32 = 0x984;
 
@@ -336,34 +328,6 @@ fn one_step(c: &mut Cpu, b: &mut Cps2Bus) {
     } else if run(c.pc, c, b, u64::MAX).is_none() {
         c.step(b);
     }
-}
-
-/// Calls the native `address` (handler designated by a ROM table) for a Rust function that continues
-/// after it: the expected call `frame` was opened by `tasks::table::call_expected`, with the task's continuation if
-/// the native cedes. The natives chain (jumps) until the return. Returns true if the native returned; false if the
-/// task ceded control, or if the callee popped the call to return higher (foreign epilogue of the bubbles): the
-/// Rust function then gives up, and the task will continue through the continuations of the pending calls.
-pub fn call_expected(c: &mut Cpu, b: &mut Cps2Bus, address: u32, frame: tasks::table::Call) -> bool {
-    if no68k::active() {
-        let n = no68k::native(c, b, address);
-        execute(n, c, b, 0);
-    } else if let Some(n) = lookup(address) {
-        execute(n, c, b, 0);
-    } else {
-        // tools: original code, until the return to a pushed sentinel address
-        const RETURN: u32 = 0x00_fffe;
-        let sp = c.a[7];
-        c.a[7] = sp.wrapping_sub(4);
-        mem::wr32(b, c.a[7], RETURN);
-        c.pc = address;
-        while !(c.pc == RETURN && c.a[7] == sp) && tasks::table::pending(b, frame) && !tasks::has_ceded() {
-            one_step(c, b);
-        }
-        if c.pc == RETURN && c.a[7] == sp {
-            tasks::table::give_back_expected(b, frame);
-        }
-    }
-    tasks::table::returned(b, frame)
 }
 
 /// 68000 trace (`examples/who_enters`, `recensement`, `fuzz_porte`): function called with the address of each 68000

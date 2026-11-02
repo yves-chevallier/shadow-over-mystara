@@ -64,16 +64,19 @@ mod at {
     pub const FADED_IN: u32 = 0xf6488;
 }
 
+/// The scene-exit block (A0 of the original throughout the state).
+const BLOCK: u32 = super::screen::blocks::EXIT;
+
 fn sub_step(x: &mut Ctx) -> u8 {
-    rd8(x.b, x.c.a[0] + 3)
+    rd8(x.b, BLOCK + 3)
 }
 fn next_sub_step(x: &mut Ctx) {
     let s = sub_step(x).wrapping_add(2);
-    wr8(x.b, x.c.a[0] + 3, s);
+    wr8(x.b, BLOCK + 3, s);
 }
 /// End of the state: next state of the sequence (`+2` += 4), sub-state 0.
 fn leave(x: &mut Ctx) {
-    let a0 = x.c.a[0];
+    let a0 = BLOCK;
     let s = rd8(x.b, a0 + 2).wrapping_add(4);
     wr8(x.b, a0 + 2, s);
     wr8(x.b, a0 + 3, 0);
@@ -95,9 +98,7 @@ pub fn fade(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, resume: impl Into<crate:
 
 /// `movem.l A0,-(SP) ; jsr 0x1de96 ; movem.l (SP)+,A0`: the sprite list, A0 preserved.
 pub fn sprites_keep_a0(x: &mut Ctx) {
-    let a0 = x.c.a[0];
-    crate::sprites::build_68k(x.c, x.b);
-    x.c.a[0] = a0;
+    crate::sprites::build_in_game(x.b);
 }
 
 /// A state of 0xf5938.
@@ -209,10 +210,8 @@ crate::steps! {
             screen::clear_bonus_frame(x.b);
             let counter = rd16(x.b, v::COUNTER) as i16 as i32 as u32 & 0xff_ffff;
             wr32(x.b, counter + 4, 0x0600_0000);
-            let a0 = x.c.a[0];
-            crate::dispatch::EFFCT.update_no_next(x.c, x.b);
-            crate::sprites::build_68k(x.c, x.b);
-            x.c.a[0] = a0;
+            crate::dispatch::EFFCT.update_no_next(x.b);
+            crate::sprites::build_in_game(x.b);
             if x.v8(a5::SCENE) != 1 {
                 x.set_v8(0x3c, 0xff);
                 clear_layer(x.b, Layer::Two);
@@ -424,9 +423,9 @@ pub const BONUS: Native = Native {
     entry: 0xf5938,
     name: "scene_bonus",
     run: crate::Body::WithCpu(|c, b| {
-        let mut x = Ctx::new(c, b);
-        if run(&mut x) == Flow::Done {
-            crate::mem::rts(x.c, x.b);
+        // entry for the original code (tools): returns only if the state did not cede control
+        if run(&mut Ctx::new(b)) == Flow::Done {
+            crate::mem::rts(c, b);
         }
     }),
     touches_sound: false,

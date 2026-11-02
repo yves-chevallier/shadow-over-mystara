@@ -565,7 +565,7 @@ fn t18_sub(x: &mut Ctx) -> Flow {
     let left = x.m16(f::TIMER).wrapping_sub(1);
     x.set_m16(f::TIMER, left);
     if left != 0 {
-        crate::mem::rts(x.c, x.b);
+        crate::tasks::return_to_caller(x.b);
         return Flow::Yield;
     }
     t18_text_object(x)

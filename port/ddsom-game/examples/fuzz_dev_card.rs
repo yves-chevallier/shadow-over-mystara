@@ -149,7 +149,7 @@ fn main() {
     let case: Vec<(&str, u32, Rust)> = vec![
         ("startup 0x2dc9a", 0x2dc9a, natives(0x2dc9a)),
         ("reset 0x2e8e4", 0x2e8e4, Box::new(|c, b| {
-            ddsom_game::eeprom::reset_card(c, b);
+            ddsom_game::eeprom::reset_card(b);
             ddsom_game::mem::rts(c, b);
         })),
         ("game time 0x2e540", 0x2e540, Box::new(|c, b| {

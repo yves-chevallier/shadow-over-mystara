@@ -208,6 +208,16 @@ pub fn build_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
+/// `build` in the game. Original glitch: the D4 that the list leaves (attributes of the last piece) is reread later
+/// (`DDSOM_POISON=call_1de96`: long_28_scenes, frame 10431): it is the leftover D4 of the game
+/// (`dispatch::Leftovers`). A4 and A6 are reread by nobody.
+pub fn build_in_game(b: &mut Cps2Bus) {
+    let d4 = crate::tasks::table::table(b).leftovers.d4;
+    if let Some(r) = build(b, d4) {
+        crate::tasks::table::table(b).leftovers.d4 = r.d4;
+    }
+}
+
 fn build_sprite_list(c: &mut Cpu, b: &mut Cps2Bus) {
     build_68k(c, b);
     rts(c, b);

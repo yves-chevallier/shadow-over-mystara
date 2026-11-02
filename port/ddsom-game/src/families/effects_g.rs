@@ -17,7 +17,7 @@
 //!   `+0x42`), glides in an arc then blinks for the last frames.
 
 use crate::families::cx::Bench;
-use super::cx::{handlers, Cx};
+use super::cx::{handlers, Cx, Gx};
 use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
@@ -1174,12 +1174,10 @@ fn hero_rockets<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.add8(f::SUB_STATE, 2);
     // The whole game waits four frames (`jsr 0xa40` in the middle of the dispatch loop): the task will resume at step
-    // `AfterWait`, then, on return, at `AfterState` (the end of the handler), like the original. The trap runs on a
-    // work bench (D0 = 4; it only leaves D0 and D1, which nobody reads).
+    // `AfterWait`, then, on return, at `AfterState` (the end of the handler), like the original (the trap leaves D0 and
+    // D1, which nobody reads).
     crate::tasks::table::call(x.b, Step::AfterState);
-    let mut bench = m68k::Cpu::default();
-    bench.d[0] = 4;
-    crate::kernel::wait(&mut bench, x.b, Step::AfterWait);
+    crate::kernel::wait(x.b, 4, Step::AfterWait);
     // the dispatch loop and the pending Rust callers give up (`tasks::has_ceded`): the task will resume through the
     // steps, then through the loop's pending call (`dispatch::Step::Dispatch`)
 }
@@ -1254,12 +1252,12 @@ crate::steps! {
     pub enum Step {
         /// After the four-frame wait: fade back.
         AfterWait = 0xb91d0 => |x| {
-            fireworks_fade_back(&mut Cx::new(x.c, x.b));
+            crate::dispatch::resume_handler(x.b, None, |b, a| fireworks_fade_back(&mut Gx::dispatch(b, a)));
             crate::modes::Flow::Done
         },
         /// Return from the jump through the state table (`jsr (table,PC)`): end of the handler.
         AfterState = 0xb8f04 => |x| {
-            fireworks_tail(&mut Cx::new(x.c, x.b));
+            crate::dispatch::resume_handler(x.b, None, |b, a| fireworks_tail(&mut Gx::dispatch(b, a)));
             crate::modes::Flow::Done
         },
     }

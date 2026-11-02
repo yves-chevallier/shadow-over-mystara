@@ -282,6 +282,10 @@ pub struct Table {
     pub stacks: Vec<u32>,
     /// Where the processor is (boot or scheduler point, or task in progress).
     pub point: crate::kernel::Point,
+    /// Slot that the scheduler examines (`kernel::Point::Exam`; the original's A0 = its record, D0.w = slots left).
+    pub exam: usize,
+    /// Interrupt mask (level of the original's SR): see `kernel::interrupt_mask`.
+    pub interrupt_mask: u8,
     /// During the VBLANK interrupt (`Point::Interruption`): the point where the processor will return.
     pub interrupted: Option<crate::kernel::Point>,
     /// Number of the next expected call, and last expected call returned (see [`call_expected`]).
@@ -292,11 +296,11 @@ pub struct Table {
     /// none is in progress at a cession (they are therefore in no task).
     pub calls: Vec<OutsideFrame>,
     /// Leftover registers that the object handlers pass to each other (`dispatch::Leftovers`): a game state.
-    /// The code still on the processor (unconverted handlers, sprite list, cameras...) holds them in the
-    /// bench (D2-D5): they pass from the bench to the table on entering a converted handler, and return to the bench
-    /// on its
-    /// exit (`Native::execute`).
+    /// The code still on the processor finds them in its register bench (D2-D5, `bench::on_bench`).
     pub leftovers: crate::dispatch::Leftovers,
+    /// The A0 that a shared state of the scene exit leaves to the dispatch of its sequence (original glitch:
+    /// `scene::exit::set_dispatch_a0`).
+    pub scene_exit_a0: u32,
 }
 
 /// A call in progress outside the frames of a task.
@@ -460,11 +464,6 @@ pub fn call_expected(b: &mut Cps2Bus, next: impl Into<Next>) -> Call {
     Call(id)
 }
 
-/// The expected call is still in progress (its frame is in the call stack of the current task).
-pub fn pending(b: &Cps2Bus, call: Call) -> bool {
-    read(b).is_some_and(|t| t.slots[t.current].frames.iter().any(|k| k.expected == Some(call.0)))
-}
-
 /// Has the expected call returned? If not (the task ceded, or a callee popped the call to return higher), the
 /// Rust function that was waiting for it abandons: its frame, if still there, will execute its continuation when the
 /// callee returns.
@@ -476,15 +475,6 @@ pub fn returned(b: &mut Cps2Bus, call: Call) -> bool {
     }
     t.frames().leave(call.0);
     false
-}
-
-/// Tools: the expected call `call`, made to original code, returned through the 68000 stack (sentinel return
-/// address): its frame, the most recent of the current task, is closed as by the `rts` of a native.
-pub fn give_back_expected(b: &mut Cps2Bus, call: Call) {
-    let t = table(b);
-    let frame = t.frames().pop();
-    assert!(frame.is_some_and(|k| k.expected == Some(call.0)), "expected call {call:?}: it is not the last frame ({frame:x?})");
-    t.returned = Some(call.0);
 }
 
 impl Table {
@@ -571,7 +561,16 @@ pub fn close_calls(b: &mut Cps2Bus, depth: Option<usize>) {
 /// whether it
 /// is expected or not (the Rust function that was waiting for it sees that it did not return). A cession cannot
 /// take place in a call by address.
-pub fn pop_return(c: &mut Cpu, b: &mut Cps2Bus) -> Next {
+pub fn pop_return(b: &mut Cps2Bus) -> Next {
+    match table_if(b).and_then(Table::pop_most_recent) {
+        Some(Err(frame)) => frame.next,
+        Some(Ok(OutsideFrame::ByAddress)) => panic!("cession or abandon of the call in progress inside a call by address"),
+        Some(Ok(OutsideFrame::By68000)) | None => panic!("cession or abandon without a call in progress"),
+    }
+}
+
+/// [`pop_return`] for a native called by the original code (tools): its return address may be on the 68000 stack.
+pub fn pop_return_68k(c: &mut Cpu, b: &mut Cps2Bus) -> Next {
     match table_if(b).and_then(Table::pop_most_recent) {
         Some(Err(frame)) => frame.next,
         Some(Ok(OutsideFrame::ByAddress)) => panic!("cession or abandon of the call in progress inside a call by address"),

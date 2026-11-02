@@ -371,8 +371,7 @@ fn exit(x: &mut Ctx) -> Flow {
         x.set_v32(off, 0);
     }
     x.set_v16(var::ACTIVE, 0);
-    x.c.a[0] = BOOT_TASK;
-    crate::tasks::restart(x)
+    crate::tasks::restart(x, BOOT_TASK)
 }
 
 /// `0x29a48`: held 1P start and fire 1: return to the menu.

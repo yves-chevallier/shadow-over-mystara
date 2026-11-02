@@ -10,10 +10,9 @@
 //! Each frame then calls the input copy, the world update and the sprites.
 
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use super::{scratch, var, Ctx};
-use crate::mem::{rts, wr32};
+use crate::mem::wr32;
 use crate::Native;
 use crate::objects::pools;
 
@@ -39,8 +38,8 @@ const GAME_PHASE: u32 = 0x0c00_0000;
 const STEP_BOSS_INTRO: u8 = 0;
 const STEP_SCROLL: u8 = 2;
 
-pub fn phase_24(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut x = Ctx::new(c, b);
+pub fn phase_24(b: &mut Cps2Bus) {
+    let mut x = Ctx::new(b);
     match x.v8(var::STEP) {
         STEP_BOSS_INTRO => boss_intro(&mut x),
         STEP_SCROLL => scroll_out(&mut x),
@@ -178,10 +177,7 @@ fn scroll_out(x: &mut Ctx) {
 pub const PHASE_24: Native = Native {
     entry: 0x21c2a,
     name: "scene_phase_24",
-    run: crate::Body::WithCpu(|c, b| {
-        phase_24(c, b);
-        rts(c, b);
-    }),
+    run: crate::Body::Memory(phase_24),
     touches_sound: false,
     outputs: 0,
 };

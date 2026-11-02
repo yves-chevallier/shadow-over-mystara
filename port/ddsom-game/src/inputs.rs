@@ -199,6 +199,19 @@ pub fn copy_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     }
 }
 
+/// `copy` in the game (phase 12, demo, scene sequences). Original glitch: the input bytes that the copy leaves in
+/// D2-D4 are reread by a handler of the world update, which writes them into an object (`DDSOM_POISON=call_2aec`:
+/// long_elfe_objets, frame 13133, ram ffd694): they are leftovers of the game (`dispatch::Leftovers`). D0, D1 and the
+/// flags are reread by nobody.
+pub fn copy_in_game(b: &mut Cps2Bus) {
+    if let InputCopy::Masked { mask, d } = copy(b) {
+        let leftovers = &mut crate::tasks::table::table(b).leftovers;
+        set_low_byte(&mut leftovers.d2, d[2]);
+        set_low_byte(&mut leftovers.d3, d[3]);
+        set_low_byte(&mut leftovers.d4, mask);
+    }
+}
+
 fn copy_inputs_to_players(c: &mut Cpu, b: &mut Cps2Bus) {
     copy_68k(c, b);
     rts(c, b);

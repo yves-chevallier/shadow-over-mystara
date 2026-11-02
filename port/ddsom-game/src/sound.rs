@@ -91,7 +91,6 @@ mod z80 {
 /// 0x618001... is written in hexadecimal (0x29d78, two digits) at an address of the text layer.
 const DEBUG_FLAG: u32 = 0xc0;
 const DEBUG_DISPLAY: u32 = 0x7fc6;
-const HEX_BYTE: u32 = 0x29d78;
 /// (address of the text layer if it changes, lock read), in display order.
 const LATCH_DISPLAY: [(Option<u32>, u32); 11] = [
     (Some(0x9135cc), 0x618001),
@@ -107,25 +106,28 @@ const LATCH_DISPLAY: [(Option<u32>, u32); 11] = [
     (None, 0x618019),
 ];
 
-fn show_locks(c: &mut Cpu, b: &mut Cps2Bus) {
-    let flag = rd16(b, DEBUG_FLAG);
-    c.flags_logic(flag as u32, Size::Word);
-    if flag == 0 {
-        return;
-    }
-    let shown = rd16(b, a5(DEBUG_DISPLAY));
-    c.flags_logic(shown as u32, Size::Word);
-    if shown == 0 {
-        return;
-    }
-    c.d[1] = 2;
-    for (at, latch) in LATCH_DISPLAY {
-        if let Some(at) = at {
-            c.a[1] = at;
+/// Original dead code (debug screen, docs/code-mort.md): the locks of the Z80 in hexadecimal, attribute 2. The
+/// cursor (A1 of the original) moves on after each byte, unless the table gives a new address.
+fn show_locks(b: &mut Cps2Bus) {
+    let mut at = 0;
+    for (address, latch) in LATCH_DISPLAY {
+        if let Some(address) = address {
+            at = address;
         }
-        c.d[0] = c.d[0] & !0xff | rd8(b, latch) as u32;
-        crate::call(c, b, HEX_BYTE);
+        let value = rd8(b, latch);
+        at = hex_byte(b, at, value, 2);
     }
+}
+
+/// `0x29d78`: byte `value` as two hexadecimal digits (tile = the digit) of attribute `attribute`, from cell `at` of
+/// the text layer, one column per digit; returns the cell that follows.
+fn hex_byte(b: &mut Cps2Bus, mut at: u32, value: u8, attribute: u16) -> u32 {
+    for digit in [value >> 4, value & 0xf] {
+        crate::mem::wr16(b, at, digit as u16);
+        crate::mem::wr16(b, at + 2, attribute);
+        at += 0x80;
+    }
+    at
 }
 
 /// Address `A5 + off` (A5 is always `mem::A5`; negative offsets are written modulo 2^32).
@@ -606,8 +608,8 @@ pub fn send(b: &mut Cps2Bus) -> Option<u32> {
     }
     // the original ends with a JMP to the display of the locks
     if shown_locks(b) {
-        // Original dead code: debug screen, see `show_locks` (docs/code-mort.md, batch "CPU removal")
-        unreachable!("display of the Z80 locks: the program word 0xc0 is zero in this version");
+        // Original dead code: debug screen (docs/code-mort.md): the program word 0xc0 is zero in this version
+        show_locks(b);
     }
     sent
 }
@@ -617,25 +619,17 @@ fn shown_locks(b: &mut Cps2Bus) -> bool {
     rd16(b, DEBUG_FLAG) != 0 && rd16(b, a5(DEBUG_DISPLAY)) != 0
 }
 
-/// `send` with the registers of the original (D0: read head, D0 high = -1 if silence; A4 after the entry
-/// transmitted; flags of the lock display test).
-fn send_to_z80(c: &mut Cpu, b: &mut Cps2Bus) {
-    let silence = rd8(b, a5(ram::SILENCE)) != 0;
-    if let Some(entry) = send(b) {
-        c.a[4] = entry + 12;
-    }
-    let read = rd16(b, a5(ram::READ_HEAD));
-    c.d[0] = if silence { 0xffff_0000 } else { 0 } | read as u32;
-    show_locks(c, b);
-    rts(c, b);
+/// 0x68c (the registers it leaves, D0 = read head and A4 after the entry transmitted, are those that VBLANK saved).
+fn send_to_z80(b: &mut Cps2Bus) {
+    send(b);
 }
 
 pub const SEND_TO_Z80: Native = Native {
     entry: 0x68c,
     name: "sound_send_z80",
-    run: crate::Body::WithCpu(send_to_z80),
+    run: crate::Body::Memory(send_to_z80),
     touches_sound: true,
-    outputs: 0, // VBLANK saved all the registers
+    outputs: 0,
 };
 
 // ---------------------------------------------------------------------------------------------

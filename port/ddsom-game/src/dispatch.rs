@@ -11,7 +11,6 @@
 //! the counter noted in the step), then at the continuation of the loop's caller.
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
 use m68k::Cpu;
 
 use crate::mem::rts;
@@ -19,9 +18,6 @@ use crate::modes::Flow;
 use crate::objects::pools::{self, Pool};
 use crate::objects::Obj;
 use crate::Native;
-
-/// X flag of the status register.
-const SR_X: u16 = 0x10;
 
 /// A class of objects: its pool and its handler table.
 pub struct Class {
@@ -56,58 +52,74 @@ impl Class {
     /// slot is read when the loop reaches it: an object created by a handler in
     /// a later slot is processed in the same frame.
     ///
-    /// The registers pass from one handler to the next as in the original loop (A0 =
-    /// object, D7.w = counter, D0 = type × 4, A1 = handler): the game depends on it (a handler
-    /// reads the D0 left by the previous one) and a handler can modify A0 and D7.
+    /// The handlers are functions without registers (`Body::Handler`): they receive the object (A0 of the original),
+    /// the loop counter (D7.w) and the leftovers that they pass to each other (`Leftovers`, a game state kept in
+    /// the task table). What the original loop puts in D0 (type × 4) and A1 (the handler) is reread by none of them.
     ///
     /// `Flow::Yield`: a handler ceded control (the task will resume at [`Step::Dispatch`], then at the continuation
     /// that the caller stored in its pending calls before the call), or returned higher up.
-    pub fn update(&self, c: &mut Cpu, b: &mut Cps2Bus) -> Flow {
-        c.a[0] = self.pool.slot(0).0;
-        set_low_word(&mut c.d[7], (self.pool.slots - 1) as u16);
-        self.sweep(c, b, false)
+    pub fn update(&self, b: &mut Cps2Bus) -> Flow {
+        self.sweep(b, self.pool.slot(0), (self.pool.slots - 1) as u16, false, &mut None)
     }
 
-    /// Walk called without continuation (phase 0, screens outside the game): no handler cedes control there. Probe
-    /// `DDSOM_POISON=handback`: the registers inherited from the caller (all but A5 and A7) are inverted before the
-    /// walk, to prove that the handlers do not reread anything from the screen that calls them.
+    /// Walk called without continuation (phase 0, screens outside the game): no handler cedes control there.
     #[track_caller]
-    pub fn update_no_next(&self, c: &mut Cpu, b: &mut Cps2Bus) {
-        crate::diag::dead_regs(c, "handback", crate::diag::TASK_REGS);
-        assert!(self.update(c, b) == Flow::Done, "dispatch {:x}: a handler ceded control without continuation", self.entry);
+    pub fn update_no_next(&self, b: &mut Cps2Bus) {
+        self.update_last_kind(b);
     }
 
-    /// Walk of the slots from A0 / D7. `after_current`: resumes just after the
-    /// `jsr (A1)` of the handler of the current slot, which must not be called again.
-    fn sweep(&self, c: &mut Cpu, b: &mut Cps2Bus, mut after_current: bool) -> Flow {
+    /// [`update_no_next`](Self::update_no_next), which returns the type of the last object whose handler was called:
+    /// the original loop leaves type × 4 in D0 (`lsl.w #2`), which a caller rereads (original glitch: the end credits,
+    /// `modes::ending`).
+    #[track_caller]
+    pub fn update_last_kind(&self, b: &mut Cps2Bus) -> Option<u8> {
+        let mut last = None;
+        let flow = self.sweep(b, self.pool.slot(0), (self.pool.slots - 1) as u16, false, &mut last);
+        assert!(flow == Flow::Done, "dispatch {:x}: a handler ceded control without continuation", self.entry);
+        last
+    }
+
+    /// Walk of the slots from `object`, `counter` slots left after it (D7.w of the original). `after_current`: resumes
+    /// just after the `jsr (A1)` of the handler of the current slot, which must not be called again.
+    fn sweep(&self, b: &mut Cps2Bus, mut object: Obj, mut counter: u16, mut after_current: bool, last_kind: &mut Option<u8>) -> Flow {
         let index = CLASSES.iter().position(|k| k.entry == self.entry).expect("object class") as u8;
         loop {
-            let obj = Obj(c.a[0]);
-            if !after_current && obj.is_active(b) {
-                let kind = obj.u8(b, Obj::KIND);
-                c.d[0] = ((kind as u16) << 2) as u32;
-                // flags of the `lsl.w #2,D0` preceding the jump: N and Z of the result, V, C and X zero
-                c.flags_logic(c.d[0], Size::Word);
-                c.sr &= !SR_X;
+            if !after_current && object.is_active(b) {
+                let kind = object.u8(b, Obj::KIND);
+                *last_kind = Some(kind);
                 let address = self.handler(b, kind);
-                c.a[1] = address;
-                let before = (c.d, c.a, c.sr);
-                let next = Step::Dispatch { class: index, object: obj, counter: c.d[7] as u16 };
+                let next = Step::Dispatch { class: index, object, counter };
                 let call = crate::tasks::table::call_expected(b, next);
-                if !crate::call_expected(c, b, address, call) {
+                run_handler(b, address, object, counter);
+                if !crate::tasks::table::returned(b, call) {
                     return Flow::Yield;
                 }
-                crate::diag::probe_exit(c, &before, self.entry, address);
             }
             after_current = false;
-            c.a[0] = c.a[0].wrapping_add(self.pool.stride);
-            let counter = (c.d[7] as u16).wrapping_sub(1);
-            set_low_word(&mut c.d[7], counter);
+            object = Obj(object.0.wrapping_add(self.pool.stride));
+            counter = counter.wrapping_sub(1);
             if counter == 0xffff {
                 return Flow::Done;
             }
         }
     }
+}
+
+/// Calls the handler at `address` (an entry of a ROM table) for `object`, then returns to the loop (its `rts`: the
+/// expected call of the loop is closed, unless the handler ceded control).
+fn run_handler(b: &mut Cps2Bus, address: u32, object: Obj, counter: u16) {
+    let native = if crate::no68k::active() {
+        crate::no68k::native(b, address)
+    } else {
+        crate::lookup(address).unwrap_or_else(|| panic!("handler {address:06x}: no native"))
+    };
+    let crate::Body::Handler(handler) = native.run else {
+        panic!("handler {address:06x} ({}): not a handler without registers", native.name)
+    };
+    let mut a = Dispatch { object, counter, leftovers: crate::tasks::table::table(b).leftovers };
+    handler(b, &mut a);
+    crate::tasks::table::table(b).leftovers = a.leftovers;
+    crate::tasks::return_to_caller(b);
 }
 
 /// What the dispatch loop passes to a converted handler (`Body::Handler`), instead of the registers of the
@@ -124,12 +136,12 @@ pub struct Dispatch {
 
 /// Leftover registers that a handler leaves and that a following handler rereads (original glitches). The probe
 /// `DDSOM_POISON=exit` (registers changed by each handler, inverted on its return) pointed to them in all
-/// scenarios; the other registers that a handler leaves are reread by nobody. They still live in the
-/// processor's register bench, which other routines (sprite list, cameras) also write: the loop takes them from there
-/// and puts them back.
+/// scenarios; the other registers that a handler leaves are reread by nobody. Other routines also write them (sprite
+/// list, cameras, input copy, gauge: `sprites::build_in_game`...).
 ///
-/// They are a game state, stored in the task table (`tasks::table::Table::leftovers`): see
-/// [`Leftovers::from_bench`] and [`Leftovers::to_bench`].
+/// They are a game state, stored in the task table (`tasks::table::Table::leftovers`); the code still on the
+/// processor finds them in its register bench (`bench::on_bench`, [`Leftovers::to_bench`] and
+/// [`Leftovers::from_bench`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Leftovers {
     /// D2: what is left by the collision with the terrain (0x33fe4, `terrain::push`), the box tests (0xb5e0,
@@ -196,10 +208,7 @@ impl Step {
 
     pub fn step(self, x: &mut crate::scene::Ctx) -> Flow {
         let Step::Dispatch { class, object, counter } = self;
-        // the loop resumes on the processor, with its object and its counter
-        x.c.a[0] = object.0;
-        set_low_word(&mut x.c.d[7], counter);
-        CLASSES[class as usize].sweep(x.c, x.b, true)
+        CLASSES[class as usize].sweep(x.b, object, counter, true, &mut None)
     }
 }
 
@@ -213,13 +222,32 @@ pub fn current_object(b: &mut Cps2Bus) -> Option<Obj> {
     }).last()
 }
 
+/// The pending dispatch loop call of the current task (the most recent [`Step::Dispatch`]): the object being processed
+/// and the loop counter.
+fn current_call(b: &mut Cps2Bus) -> Option<(Obj, u16)> {
+    let frames = crate::tasks::table::table(b).frames();
+    frames.iter().filter_map(|frame| match frame.next {
+        crate::tasks::table::Next::Step(crate::tasks::Step::Dispatch(Step::Dispatch { object, counter, .. })) => {
+            Some((object, counter))
+        }
+        _ => None,
+    }).last()
+}
+
+/// A handler that ceded control resumes (fireworks, SET doors: steps of the task): `f` runs on what the dispatch loop
+/// passes, the object being `object` (or that of the pending loop), the counter that of the pending loop, the
+/// leftovers those of the game (the original keeps them in the registers, which the cession saves and restores).
+pub fn resume_handler(b: &mut Cps2Bus, object: Option<Obj>, f: impl FnOnce(&mut Cps2Bus, &mut Dispatch)) {
+    let (current, counter) = current_call(b).expect("a handler resumes outside a dispatch loop");
+    let leftovers = crate::tasks::table::table(b).leftovers;
+    let mut a = Dispatch { object: object.unwrap_or(current), counter, leftovers };
+    f(b, &mut a);
+    crate::tasks::table::table(b).leftovers = a.leftovers;
+}
+
 /// Offset of the return address of the `jsr (A1)` that calls the handler, in each of the ten
 /// original loops (`entry + 0x1a`).
 const HANDLER_RETURN: u32 = 0x1c;
-
-fn set_low_word(r: &mut u32, v: u16) {
-    *r = *r & 0xffff_0000 | v as u32;
-}
 
 macro_rules! natives {
     ($($ident:ident, $name:literal, $class:expr;)*) => {$(
@@ -227,8 +255,12 @@ macro_rules! natives {
             entry: $class.entry,
             name: $name,
             run: crate::Body::WithCpu(|c, b| {
-                // called by address (screens outside the game): a handler never cedes control there
-                if $class.update(c, b) == Flow::Done {
+                // called by address (tools): a handler never cedes control there; the leftovers pass from the
+                // bench to the game and back
+                Leftovers::from_bench(c, b);
+                let flow = $class.update(b);
+                Leftovers::to_bench(c, b);
+                if flow == Flow::Done {
                     rts(c, b);
                 }
             }),

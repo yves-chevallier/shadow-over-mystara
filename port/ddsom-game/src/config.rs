@@ -24,11 +24,9 @@
 //! otherwise the settings read are validated; then the game variables are derived from them.
 
 use cps2::Cps2Bus;
-use m68k::decode::Size;
-use m68k::Cpu;
 
-use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8};
-use crate::{regs, Native};
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::Native;
 
 mod ram {
     /// Game variant (region), in bytes (index ×2 in the block table).
@@ -55,27 +53,13 @@ const TABLE_PIECES: u32 = 0x2d38c;
 const TABLE_CREDIT_A: u32 = 0x2d40e;
 const TABLE_CREDIT_B: u32 = 0x2d426;
 
-fn a5(c: &Cpu, off: u32) -> u32 {
-    c.a[5].wrapping_add(off)
-}
-
-fn set_word(r: &mut u32, v: u16) {
-    *r = *r & 0xffff_0000 | v as u32;
+fn a5(off: u32) -> u32 {
+    crate::mem::A5.wrapping_add(off)
 }
 
 // ---------------------------------------------------------------------------------------------
-// 0x2d648: default value block of the variant
-
-/// Returns D0 = displacement read from the table, A6 = default value block (blocks of 0x30 bytes:
-/// values 0x00-0x11, signature 0x20-0x2f).
-fn variant(c: &mut Cpu, b: &mut Cps2Bus) {
-    let index = rd16(b, a5(c, ram::VARIANT));
-    let displacement = crate::mem::prog16(b, TABLE_VARIANTS.wrapping_add(index as i16 as u32));
-    set_word(&mut c.d[0], displacement);
-    c.flags_logic(displacement as u32, Size::Word);
-    c.a[6] = TABLE_VARIANTS.wrapping_add(displacement as i16 as u32);
-    rts(c, b);
-}
+// 0x2d648: default value block of the variant (the original returns it in A6, its displacement in D0: the Rust
+// callers take the block)
 
 /// Default value block of the current variant.
 fn block_defaults(b: &mut Cps2Bus) -> u32 {
@@ -98,18 +82,12 @@ pub fn is_factory(x: &mut crate::scene::Ctx) -> bool {
 // ---------------------------------------------------------------------------------------------
 // 0x2d7aa: default values
 
-/// Copies the variant's default block into two copies (copy and backup), then
-/// clears the rest of the copy (the bookkeeping counters).
-fn load_defaults(c: &mut Cpu, b: &mut Cps2Bus) {
-    defaults(c, b);
-    rts(c, b);
-}
-
-fn defaults(c: &mut Cpu, b: &mut Cps2Bus) {
-    let index = rd16(b, a5(c, ram::VARIANT));
-    let displacement = crate::mem::prog16(b, TABLE_VARIANTS.wrapping_add(index as i16 as u32));
-    let block = TABLE_VARIANTS.wrapping_add(displacement as i16 as u32);
-    let mut destination = a5(c, ram::CONFIG);
+/// Copies the variant's default block into two copies (copy and backup), then clears the rest of the copy (the
+/// bookkeeping counters). The registers that the original leaves (A1 and A6 at the end of the zone, D0 = 0, D7 =
+/// 0xFFFF) are reread by nobody.
+fn defaults(b: &mut Cps2Bus) {
+    let block = block_defaults(b);
+    let mut destination = a5(ram::CONFIG);
     for _ in 0..2 {
         for i in 0..24 {
             let word = rd16(b, block + 2 * i);
@@ -120,12 +98,6 @@ fn defaults(c: &mut Cpu, b: &mut Cps2Bus) {
     for i in 0..16 {
         wr16(b, destination + 2 * i, 0);
     }
-    // leftovers of the original: A1 and A6 at the end of the zone, D0 = 0, D7 = 0xFFFF, flags of the last move
-    c.a[1] = destination + 32;
-    c.a[6] = block + 48;
-    c.d[0] = 0;
-    c.d[7] = 0xffff;
-    c.flags_logic(0, Size::Word);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -141,14 +113,11 @@ fn repair(b: &mut Cps2Bus, copy: u32, defaults: u32, i: u32) {
 /// Checks each setting of the RAM copy against its limits; replaces the invalid values with
 /// those of the variant's default block. The order of the tests and its quirks are those of the original: for example,
 /// byte 4 is only examined if byte 3 was invalid.
-fn validate(b: &mut Cps2Bus, c: &mut Cpu) {
-    let copy = a5(c, ram::CONFIG);
+pub fn validate(b: &mut Cps2Bus) {
+    let copy = a5(ram::CONFIG);
     // the original starts with 0x2d648: A6 = default block of the variant
-    let variant = rd16(b, a5(c, ram::VARIANT));
-    let displacement = crate::mem::prog16(b, TABLE_VARIANTS.wrapping_add(variant as i16 as u32));
-    set_word(&mut c.d[0], displacement);
-    let defaults = TABLE_VARIANTS.wrapping_add(displacement as i16 as u32);
-    c.a[6] = defaults;
+    let variant = rd16(b, a5(ram::VARIANT));
+    let defaults = block_defaults(b);
 
     // byte 0: at most 9 (variants 4 and 10) or 18; the value 17 is tolerated for 4 and 10
     let mut cabinet = 9;
@@ -226,114 +195,68 @@ fn validate(b: &mut Cps2Bus, c: &mut Cpu) {
     }
 }
 
-/// 0x2d662 called from Rust.
-pub fn validate_copy(c: &mut Cpu, b: &mut Cps2Bus) {
-    validate(b, c);
-}
-
-fn native_validate(c: &mut Cpu, b: &mut Cps2Bus) {
-    validate(b, c);
-    rts(c, b);
-}
-
 // ---------------------------------------------------------------------------------------------
 // 0x2d358: from the RAM copy to the game variables
 
 /// Copies the settings from the RAM copy to the game variables and derives the coin
-/// settings from them (`A5+0x1e..0x22`). Leaves D0, D1, A4 and the flags like the original.
-fn load_variables(c: &mut Cpu, b: &mut Cps2Bus) {
-    variables(c, b);
-    rts(c, b);
-}
-
-fn variables(c: &mut Cpu, b: &mut Cps2Bus) {
-    let a4 = a5(c, ram::CONFIG);
-    c.a[4] = a4;
+/// settings from them (`A5+0x1e..0x22`). The registers that the original leaves (D0 = twice the credit mode, D1 =
+/// the credit mode, A4 = the copy, flags of the last counter) are reread by nobody.
+fn variables(b: &mut Cps2Bus) {
+    let a4 = a5(ram::CONFIG);
     for k in [0x23, 0x25, 0x24] {
-        wr8(b, a5(c, k), 0);
+        wr8(b, a5(k), 0);
     }
     let mode = rd8(b, a4);
-    wr8(b, a5(c, ram::COIN_MODE), mode);
+    wr8(b, a5(ram::COIN_MODE), mode);
     // coins per credit: table, or 0x0101 for modes 17 (free start) and 18 (free play)
     let (pieces, common) = match mode {
         18 => {
-            wr8(b, a5(c, 0x25), 1);
+            wr8(b, a5(0x25), 1);
             (0x0101, false)
         }
         17 => {
-            wr8(b, a5(c, 0x23), 1);
-            wr8(b, a5(c, 0x24), 1);
+            wr8(b, a5(0x23), 1);
+            wr8(b, a5(0x24), 1);
             (0x0101, true)
         }
         _ => (crate::mem::prog16(b, TABLE_PIECES + 2 * mode as u32), false),
     };
-    wr16(b, a5(c, ram::PIECES), pieces);
+    wr16(b, a5(ram::PIECES), pieces);
     if !common {
         let o2 = rd8(b, a4 + 2);
-        wr8(b, a5(c, 0x23), o2);
+        wr8(b, a5(0x23), o2);
     }
     for (byte, k) in [(3, 0x26), (4, 0x27), (5, 0x28)] {
         let o = rd8(b, a4 + byte);
-        wr8(b, a5(c, k), o);
+        wr8(b, a5(k), o);
     }
     let credit = rd8(b, a4 + 1);
-    wr8(b, a5(c, ram::MODE_CREDIT), credit);
+    wr8(b, a5(ram::MODE_CREDIT), credit);
     let double = 2 * credit as u32;
     let a = crate::mem::prog8(b, TABLE_CREDIT_A + double);
     let a2 = crate::mem::prog8(b, TABLE_CREDIT_A + 1 + double);
     let b3 = crate::mem::prog8(b, TABLE_CREDIT_B + credit as u32);
-    wr8(b, a5(c, 0x21), a);
-    wr8(b, a5(c, 0x22), a2);
-    wr8(b, a5(c, 0x20), b3);
+    wr8(b, a5(0x21), a);
+    wr8(b, a5(0x22), a2);
+    wr8(b, a5(0x20), b3);
     for (byte, k) in [(6, 0x29), (7, 0x73), (8, 0x84), (9, 0x85), (16, 0x2a), (17, 0x2b)] {
         let o = rd8(b, a4 + byte);
-        wr8(b, a5(c, k), o);
+        wr8(b, a5(k), o);
     }
-    wr8(b, a5(c, 0x72), 0);
-    let last = {
-        let mut last = 0;
-        for (place, variable) in ram::COUNTERS {
-            last = rd32(b, a4 + place);
-            wr32(b, a5(c, variable), last);
-        }
-        last
-    };
-    c.d[0] = double;
-    c.d[1] = credit as u32;
-    c.flags_logic(last, Size::Long);
+    wr8(b, a5(0x72), 0);
+    for (place, variable) in ram::COUNTERS {
+        let counter = rd32(b, a4 + place);
+        wr32(b, a5(variable), counter);
+    }
 }
 
-pub const VARIANT: Native = Native {
-    entry: 0x2d648,
-    name: "config_variant",
-    run: crate::Body::WithCpu(variant),
-    touches_sound: false,
-    outputs: regs::d(0) | regs::a(6) | regs::CCR,
-};
+const fn memory(entry: u32, name: &'static str, run: fn(&mut Cps2Bus)) -> Native {
+    Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
+}
 
-pub const DEFAULTS: Native = Native {
-    entry: 0x2d7aa,
-    name: "config_defaults",
-    run: crate::Body::WithCpu(load_defaults),
-    touches_sound: false,
-    outputs: 0,
-};
-
-pub const VALIDATE: Native = Native {
-    entry: 0x2d662,
-    name: "config_validate",
-    run: crate::Body::WithCpu(native_validate),
-    touches_sound: false,
-    outputs: 0,
-};
-
-pub const VARIABLES: Native = Native {
-    entry: 0x2d358,
-    name: "config_variables",
-    run: crate::Body::WithCpu(load_variables),
-    touches_sound: false,
-    outputs: regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR,
-};
+pub const DEFAULTS: Native = memory(0x2d7aa, "config_defaults", defaults);
+pub const VALIDATE: Native = memory(0x2d662, "config_validate", validate);
+pub const VARIABLES: Native = memory(0x2d358, "config_variables", variables);
 
 // ---------------------------------------------------------------------------------------------
 // 0x2d30a: initialisation
@@ -347,59 +270,36 @@ const MESSAGE_ERROR: u32 = 0x2d7fc;
 const CASE_ERROR: u32 = 0x912938;
 pub const BLOCKED: u32 = 0x2d7fa;
 
-/// Compares the signature of the RAM copy with that of the variant, like the original's loop (registers
-/// included: D0 last byte expected, D7 counter, A1 and A6 after the last byte examined).
-fn signature_ok(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
+/// Does the signature of the RAM copy match that of the variant? (The registers of the original's loop are reread
+/// by nobody.)
+fn signature_ok(b: &mut Cps2Bus) -> bool {
     let block = block_defaults(b);
-    c.a[6] = block + SIGNATURE;
-    c.a[1] = a5(c, ram::CONFIG) + SIGNATURE;
-    c.d[7] = SIGNATURE_LEN - 1;
-    for _ in 0..SIGNATURE_LEN {
-        let expected = rd8(b, c.a[6]);
-        let read_byte = rd8(b, c.a[1]);
-        c.d[0] = c.d[0] & !0xff | expected as u32;
-        c.a[6] += 1;
-        c.a[1] += 1;
-        if expected != read_byte {
-            return false;
-        }
-        let remainder = (c.d[7] as u16).wrapping_sub(1);
-        set_word(&mut c.d[7], remainder);
-    }
-    true
+    let copy = a5(ram::CONFIG);
+    (0..SIGNATURE_LEN).all(|k| rd8(b, block + SIGNATURE + k) == rd8(b, copy + SIGNATURE + k))
 }
 
 /// 0x2d30a: EEPROM read, default settings if needed, game variables. Returns false if writing the
 /// default settings failed: the game is then blocked on "EEPROM ERROR" (the task ceded control
 /// for good).
-pub fn initialize(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
+pub fn initialize(b: &mut Cps2Bus) -> bool {
     crate::eeprom::all_eeprom(b);
-    let read_byte = crate::eeprom::read_verify(b);
-    let valid = read_byte && {
-        // D0 of 0x2d648 (block displacement), like the original before its loop
-        let index = crate::mem::rd16(b, a5(c, ram::VARIANT));
-        set_word(&mut c.d[0], crate::mem::prog16(b, TABLE_VARIANTS.wrapping_add(index as i16 as u32)));
-        signature_ok(c, b)
-    };
+    let valid = crate::eeprom::read_verify(b) && signature_ok(b);
     if valid {
-        validate(b, c);
-        c.a[1] = a5(c, ram::CONFIG);
+        validate(b);
     } else {
-        defaults(c, b);
+        defaults(b);
         crate::eeprom::all_eeprom(b);
         if !crate::eeprom::write_verify(b) {
             error(b);
             return false;
         }
     }
-    variables(c, b);
+    variables(b);
     true
 }
 
-fn init(c: &mut Cpu, b: &mut Cps2Bus) {
-    if initialize(c, b) {
-        rts(c, b);
-    }
+fn init(b: &mut Cps2Bus) {
+    initialize(b);
 }
 
 /// 0x2d7d2: "EEPROM ERROR" and blocking (never seen: the emulated EEPROM does not refuse the write).
@@ -412,13 +312,9 @@ fn error(b: &mut Cps2Bus) {
     crate::kernel::block(b, BLOCKED);
 }
 
-pub const INIT: Native = Native {
-    entry: 0x2d30a,
-    name: "config_init",
-    run: crate::Body::WithCpu(init),
-    touches_sound: false,
-    outputs: regs::d(0) | regs::d(1) | regs::a(4) | regs::CCR,
-};
+/// Native of 0x2d30a (startup calls it by address). After "EEPROM ERROR", the task is blocked (`kernel::block`):
+/// the return is then that of no call.
+pub const INIT: Native = memory(0x2d30a, "config_init", init);
 
 // ---------------------------------------------------------------------------------------------
 // TEST menu, 7. CONFIGURATION: factory settings and saving
@@ -435,11 +331,11 @@ pub fn reset_factory(x: &mut crate::scene::Ctx) {
 /// 0x2d47c: the game variables into the two copies of the RAM copy (with the variant's
 /// signature), written to the EEPROM, then reread into the variables (0x2d358). False if the write failed:
 /// "EEPROM ERROR" is displayed and the PC is set on the original's endless loop.
-pub fn save(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
+pub fn save(b: &mut Cps2Bus) -> bool {
     let block = block_defaults(b);
-    for copy in [a5(c, ram::CONFIG), a5(c, ram::CONFIG) + FALLBACK] {
+    for copy in [a5(ram::CONFIG), a5(ram::CONFIG) + FALLBACK] {
         for (byte, variable) in SETTINGS {
-            let v = rd8(b, a5(c, variable));
+            let v = rd8(b, a5(variable));
             crate::mem::wr8(b, copy + byte, v);
         }
         for k in 0..SIGNATURE_LEN {
@@ -448,12 +344,12 @@ pub fn save(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
         }
     }
     // the two copies: 0x30 words
-    crate::mem::wr16(b, a5(c, ram::WORDS), 0x2f);
-    crate::mem::wr16(b, a5(c, ram::START), 0);
+    crate::mem::wr16(b, a5(ram::WORDS), 0x2f);
+    crate::mem::wr16(b, a5(ram::START), 0);
     if !crate::eeprom::write_verify(b) {
         error(b);
         return false;
     }
-    variables(c, b);
+    variables(b);
     true
 }

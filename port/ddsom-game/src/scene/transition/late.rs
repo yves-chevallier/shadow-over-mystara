@@ -276,7 +276,7 @@ crate::steps! {
             fading::PAGES.set(x.b, ALL_PAGES);
             crate::palette::full_brightness(x.b);
             x.set_v8(0x42, 1);
-            let a0 = x.c.a[0];
+            let a0 = crate::scene::screen::blocks::EXIT;
             let step = rd8(x.b, a0 + 2).wrapping_add(4);
             wr8(x.b, a0 + 2, step);
             for (off, v) in [(a5::CAM1_X, 96), (a5::CAM1_Y, 296), (a5::CAM2_X, 64), (a5::CAM2_Y, 1552)] {

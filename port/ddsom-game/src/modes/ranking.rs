@@ -49,7 +49,6 @@ pub fn screen(x: &mut Ctx, sub: u8) -> Option<Flow> {
 }
 
 fn post_game(x: &mut Ctx) -> Flow {
-    x.c.a[0] = STATE;
     let step = rd8(x.b, STATE + f::STEP);
     x.push_return(Step::Return);
     match step {
@@ -66,10 +65,7 @@ fn post_game(x: &mut Ctx) -> Flow {
 crate::steps! {
     /// Steps (resume points) of the state machine.
     pub enum Step {
-        Return = RETURN => |x| {
-            x.c.a[0] = super::mode::BASE;
-            Flow::Done
-        },
+        Return = RETURN => |_| Flow::Done,
         S0Video = S0_VIDEO => |x| {
             wr16(x.b, CPS_REG_4, 0x1355);
             wr16(x.b, VIDEO, 0x24c0);
@@ -157,10 +153,9 @@ fn reset_objects(x: &mut Ctx) {
 /// One render: PEFF, EFFCT, sprites (`0xfc91c`).
 fn render(x: &mut Ctx) {
     for class in [&crate::dispatch::PEFF, &crate::dispatch::EFFCT] {
-        class.update_no_next(x.c, x.b);
+        class.update_no_next(x.b);
     }
-    crate::sprites::build_68k(x.c, x.b);
-    x.c.a[0] = STATE;
+    crate::sprites::build_in_game(x.b);
 }
 
 /// Scroll speed and pressed buttons (D0 and D1.b of the original).
@@ -193,7 +188,6 @@ fn s0_prepare(x: &mut Ctx) -> Flow {
     wr16(x.b, STATE + f::TIMER, 300);
     crate::sound::play_global(x.b, SOUND_E172C);
     reset_objects(x);
-    x.c.a[0] = STATE;
     x.wait(1, Step::S0Video)
 }
 const S0_VIDEO: u32 = 0xfc5cc;

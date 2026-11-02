@@ -1,11 +1,11 @@
 //! The game without a 68000: natives only and the kernel's frame loop (see `docs/noyau.md`, "towards a loop
 //! without 68000").
 //!
-//! The machine's `Cpu` is now only a register bench (D0-D7, A0-A7, SR) and a stack. The processor is at a
+//! The game does not use the machine's `Cpu` (only its cycle counter, for the machine's schedule): the code still on
+//! the processor runs on a fresh register bench (`bench`). The processor is at a
 //! *point* (`kernel::Point`, stored in the task table): a startup step, a scheduler point
 //! (Rust state machine, `kernel`), a task, or the held game step. A task is launched by calling the step of its
-//! stage (`tasks::execute`); as long as it continues by a jump from one native to another (`Sequence::jump_to`, return
-//! to an address), the native set at the PC runs ([`step`]). A native always runs in full, even when
+//! stage (`tasks::execute`). A native always runs in full, even when
 //! it would overflow onto the next interrupt: none is replaced by its original. An address without a native
 //! stops the game dead with a diagnostic ([`STOP`]) instead of running original code.
 //!
@@ -43,7 +43,6 @@ use cps2::{Cps2Bus, StepCap};
 use m68k::Cpu;
 
 use crate::kernel::Point;
-use crate::mem::rd32;
 use crate::tasks::table::{read, table};
 use crate::Native;
 
@@ -80,7 +79,7 @@ pub fn summary() -> (u64, u64) {
 }
 
 /// State of the machine at the start of a scheduler walk (`0x932`): memory that the natives write, task
-/// table, registers. If it comes back identical from one walk to the next, the tasks are spinning (a ready task
+/// table. If it comes back identical from one walk to the next, the tasks are spinning (a ready task
 /// waits for an event that only VBLANK will bring, like the end of a fade): nothing will change before
 /// the interrupt, the frame is finished. The original, for its part, spins until the interrupt.
 #[derive(PartialEq)]
@@ -93,11 +92,10 @@ struct Snapshot {
     qram: Vec<u8>,
     regs: ([u16; 6], [u16; 32], [u16; 32], u16, u16),
     table: Option<crate::tasks::table::Table>,
-    cpu: ([u32; 8], [u32; 8], u16, u32),
 }
 
 impl Snapshot {
-    fn take(c: &Cpu, b: &Cps2Bus) -> Self {
+    fn take(b: &Cps2Bus) -> Self {
         let mut ram = b.ram.clone();
         // the RAM of the original stacks does not count (changed at each point by the `stack` probe)
         ram[STACKS.0 / 2..STACKS.1 / 2].fill(0);
@@ -110,7 +108,6 @@ impl Snapshot {
             qram: b.qram.clone(),
             regs: (b.output, b.cps_a, b.cps_b, b.objram_bank, b.eeprom_out),
             table: read(b).cloned(),
-            cpu: (c.d, c.a, c.sr, c.other_sp),
         }
     }
 }
@@ -139,7 +136,7 @@ thread_local! {
 /// its value: the count of the frame's steps is kept here ([`game_step`]).
 pub fn line(c: &mut Cpu, b: &mut Cps2Bus, end: u64, cap: Option<&mut StepCap>) {
     if b.irq_raster {
-        stop(c, b, "raster interrupt (level 4): never armed by the game".into());
+        stop(b, "raster interrupt (level 4): never armed by the game".into());
     }
     IMAGE.with(|i| {
         let mut i = i.borrow_mut();
@@ -157,29 +154,29 @@ pub fn line(c: &mut Cpu, b: &mut Cps2Bus, end: u64, cap: Option<&mut StepCap>) {
             poison_stacks(b);
         }
         let level = b.irq_level();
-        if point != Point::Interruption && level > (c.sr >> 8 & 7) as u8 {
+        if point != Point::Interruption && level > crate::kernel::interrupt_mask(b) {
             crate::kernel::interrupt(b, point);
             continue;
         }
         // (a masked interrupt waits for the scheduler to reopen its window)
-        if level == 0 && (at_rest(b, point) || frame_done(c, b, point)) {
+        if level == 0 && (at_rest(b, point) || frame_done(b, point)) {
             break;
         }
         let next = match point {
             Point::Reset | Point::ReleaseZ80 | Point::Handshake | Point::BootInit | Point::Launch => {
                 // `None`: it is waiting for its beam position
-                let Some(next) = crate::startup::execute(c, b, point) else { break };
+                let Some(next) = crate::startup::execute(b, point) else { break };
                 next
             }
             Point::Start | Point::Walk | Point::Exam | Point::NextTask | Point::Return => {
-                crate::kernel::execute(c, b, point)
+                crate::kernel::execute(b, point)
             }
             Point::Interruption => {
                 crate::vblank::interruption(b, level);
                 crate::kernel::interrupt_end(b)
             }
             // a task no longer continues by a jump to a native: each step cedes, ends or blocks
-            Point::Task => stop(c, b, "the task handed control back without ceding".into()),
+            Point::Task => stop(b, "the task handed control back without ceding".into()),
             // the original's endless loop: the frame is finished
             Point::Blocked(_) => break,
             Point::StepKept { d4 } => {
@@ -187,12 +184,12 @@ pub fn line(c: &mut Cpu, b: &mut Cps2Bus, end: u64, cap: Option<&mut StepCap>) {
                     break;
                 }
                 table(b).point = Point::Task;
-                crate::tasks::execute(crate::tasks::game::Step::Frame { d4 }.into(), c, b);
+                crate::tasks::execute(crate::tasks::game::Step::Frame { d4 }.into(), b);
                 crate::kernel::point(b)
             }
         };
         if next == Point::Task {
-            stop(c, b, "the task handed control back without ceding".into());
+            stop(b, "the task handed control back without ceding".into());
         }
         table(b).point = next;
     }
@@ -250,7 +247,7 @@ fn cap_reached() -> bool {
 
 /// The frame has nothing left to do before the interrupt: active wait recognised at the start of a walk of the
 /// scheduler (same [`Snapshot`] as at the previous walk), or point cap reached.
-fn frame_done(c: &Cpu, b: &Cps2Bus, point: Point) -> bool {
+fn frame_done(b: &Cps2Bus, point: Point) -> bool {
     IMAGE.with(|i| {
         let mut i = i.borrow_mut();
         if i.finished {
@@ -263,7 +260,7 @@ fn frame_done(c: &Cpu, b: &Cps2Bus, point: Point) -> bool {
         } else if point == Point::Walk {
             i.walk += 1;
             if i.walk >= ORDINARY_WALKS {
-                let now = Snapshot::take(c, b);
+                let now = Snapshot::take(b);
                 if i.snapshot.as_ref() == Some(&now) {
                     IDLE_FRAMES.fetch_add(1, Ordering::Relaxed);
                     i.finished = true;
@@ -278,9 +275,9 @@ fn frame_done(c: &Cpu, b: &Cps2Bus, point: Point) -> bool {
 
 /// The native at address `address` (call by address, handler of a ROM table), or a game stop if there is
 /// none. It is noted for diagnosing a stop (`DDSOM_SANS_TRACE=frame`: each native of the frame).
-pub(crate) fn native(c: &Cpu, b: &mut Cps2Bus, address: u32) -> &'static Native {
+pub(crate) fn native(b: &mut Cps2Bus, address: u32) -> &'static Native {
     let Some(n) = crate::lookup(address) else {
-        stop(c, b, format!("no native at {address:06x}"));
+        stop(b, format!("no native at {address:06x}"));
     };
     LAST.with(|d| {
         let mut d = d.borrow_mut();
@@ -290,7 +287,7 @@ pub(crate) fn native(c: &Cpu, b: &mut Cps2Bus, address: u32) -> &'static Native 
         d.push_back(n);
     });
     if trace(b) {
-        eprintln!("{}:{} {:06x} {} sr={:04x} sp={:x}", b.frame, b.scanline, address, n.name, c.sr, c.a[7]);
+        eprintln!("{}:{} {:06x} {} mask={}", b.frame, b.scanline, address, n.name, crate::kernel::interrupt_mask(b));
     }
     n
 }
@@ -305,8 +302,8 @@ fn trace(b: &Cps2Bus) -> bool {
 pub const STOP: &str = "without 68000: ";
 
 /// Stops dead (panic, message starting with [`STOP`]): cause, frame and line, current task and its pending calls
-/// (frames), top of the 68000 stack, last natives run, Rust call of original code in progress.
-fn stop(c: &Cpu, b: &mut Cps2Bus, cause: String) -> ! {
+/// (frames), interrupt mask, last natives run, Rust call of original code in progress.
+fn stop(b: &mut Cps2Bus, cause: String) -> ! {
     let mut m = format!("{cause} (frame {}, line {})", b.frame, b.scanline);
     if let Some(t) = read(b) {
         m += &format!(" ; point {:?}", t.point);
@@ -315,8 +312,7 @@ fn stop(c: &Cpu, b: &mut Cps2Bus, cause: String) -> ! {
         let frames: Vec<String> = e.frames.iter().map(|k| format!("{:x?}@{}", k.next, k.calls)).collect();
         m += &format!(" ; task {k} ({:?}, {:?}) ; frames [{}]", e.task, e.state, frames.join(" "));
     }
-    let stack: Vec<String> = (0..6).map(|i| format!("{:x}", rd32(b, c.a[7].wrapping_add(4 * i)))).collect();
-    m += &format!(" ; SR {:04x}, stack {:x}: {}", c.sr, c.a[7], stack.join(" "));
+    m += &format!(" ; interrupt mask {}", crate::kernel::interrupt_mask(b));
     let last = LAST.with(|d| d.borrow().iter().map(|n| format!("{}@{:x}", n.name, n.entry)).collect::<Vec<_>>());
     m += &format!(" ; last natives: {}", last.join(" "));
     if let Some((site, routine)) = crate::call_site() {

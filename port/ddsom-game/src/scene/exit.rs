@@ -95,9 +95,23 @@ pub struct Ex<'a> {
     entry: u32,
     /// Where the original dispatch resumes after the state (`jsr (A1)`), empty for sequence 0.
     dispatch_return: Option<Next>,
-    /// The world update done in the state left A0 on an object: the original dispatch then compares
-    /// byte `+2` of that object (not the sequence state) with the final state.
-    a0_clobbered: bool,
+    /// The state left A0 elsewhere than on the block (`set_dispatch_a0`, world update): the original dispatch then
+    /// compares byte `+2` of what A0 designates (not the sequence state) with the final state.
+    a0: Option<u32>,
+}
+
+/// Original glitch: the dispatch of a scene-exit sequence compares byte `+2` of the block designated by A0 with the
+/// final state, at the end of a shared state or on the return of a cession (`Step::DispatchTail`). The dispatch puts
+/// A0 on the block, and A0 survives the cessions; the black screen moves it (the last object unlinked from the lists,
+/// 0xf7f12), the shop puts it back on the block. The value is kept in the task table across the cessions.
+pub fn set_dispatch_a0(b: &mut Cps2Bus, a0: u32) {
+    crate::tasks::table::table(b).scene_exit_a0 = a0;
+}
+
+/// The A0 that the world update leaves (end of the last dispatch loop: the one past the last SOBJ slot).
+fn a0_after_world() -> u32 {
+    let pool = &crate::objects::pools::SOBJ;
+    pool.slot(0).0.wrapping_add(pool.stride * pool.slots as u32)
 }
 
 impl<'a> Ex<'a> {
@@ -129,12 +143,11 @@ impl<'a> Ex<'a> {
         left == 0
     }
 
-    /// Starts the fade task `entry` (delay `delay`); A0 goes back to the block.
+    /// Starts the fade task `entry` (delay `delay`).
     fn fade(&mut self, delay: u16, entry: u32) {
         fading::DELAY.set(self.x.b, delay);
         fading::PAGES.set(self.x.b, 15);
         crate::kernel::create_task(self.x.b, 0x10, entry);
-        self.x.c.a[0] = BASE;
     }
 
     /// Opens message `n` (0xc8312); its (16-bit) address goes to `+0x12`. Original glitch: the failure is not
@@ -171,11 +184,10 @@ impl<'a> Ex<'a> {
                 wr8(self.x.b, p + off, 0);
             }
         }
-        // registers left by the original loop (re-read by the handlers of the next frame)
-        self.x.c.a[1] = PLAYERS + 4 * PLAYER_STRIDE;
-        self.x.c.d[6] = 0xffff;
+        // Original glitch: the rank count left in D5 is re-read by the handlers of the next frame (leftover D5 of the
+        // game); A1 and D6 of the loop by nobody
         if rank {
-            self.x.c.d[5] = n as u32;
+            crate::tasks::table::table(self.x.b).leftovers.d5 = n as u32;
         }
     }
     /// Start of the exit: the pause is lifted, the buttons released, the players walk out.
@@ -216,17 +228,16 @@ impl<'a> Ex<'a> {
     }
     /// Cedes control to the scheduler for `frames` frames; resumption happens at `resume` (otherwise after
     /// the caller).
-    fn wait_frames(&mut self, frames: u32, resume: Option<Step>) {
-        self.x.c.d[0] = frames;
+    fn wait_frames(&mut self, frames: u8, resume: Option<Step>) {
         if let Some(back) = self.dispatch_return {
             self.x.push_return(back);
         }
         // `jsr 0xa40` (or `jmp 0xa40` without its own resume: the task will resume after the current call)
         let resume_point = match resume {
             Some(resume) => resume.into(),
-            None => crate::tasks::table::pop_return(self.x.c, self.x.b),
+            None => crate::tasks::table::pop_return(self.x.b),
         };
-        crate::kernel::wait(self.x.c, self.x.b, resume_point);
+        crate::kernel::wait(self.x.b, frames, resume_point);
         self.handed_off = true;
     }
 }
@@ -380,9 +391,10 @@ const WALK: St = St::WalkWait { timer: None };
 // ---------------------------------------------------------------------------------------------
 // Running a frame
 
-pub fn phase_16(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
-    let mut ex = Ex { x: Ctx::new(c, b), handed_off: false, entry: 0, dispatch_return: None, a0_clobbered: false };
-    ex.x.c.a[0] = BASE;
+pub fn phase_16(b: &mut Cps2Bus) -> bool {
+    // the original dispatch works with A0 on the block
+    set_dispatch_a0(b, BASE);
+    let mut ex = Ex { x: Ctx::new(b), handed_off: false, entry: 0, dispatch_return: None, a0: None };
     match ex.b8(blk::STATE) {
         0 => init(&mut ex),
         2 => run_sequence(&mut ex),
@@ -444,21 +456,21 @@ fn run_shared(ex: &mut Ex, shared: Shared) {
         Shared::Blackout => super::blackout::run,
     };
     let Some(back) = ex.dispatch_return else { ex.outside_table() };
-    ex.x.c.a[0] = BASE;
+    set_dispatch_a0(ex.x.b, BASE);
     ex.x.push_return(back);
     if run(&mut ex.x) == Flow::Yield {
         ex.handed_off = true;
         return;
     }
     ex.x.drop_return();
-    ex.a0_clobbered = true;
+    ex.a0 = Some(crate::tasks::table::table(ex.x.b).scene_exit_a0);
 }
 
 /// A state jumps to the start of the original dispatch (`bra entry`) after changing step: the state of the
 /// new step runs in the same frame, called like the dispatch (A0 on the block).
 fn redispatch(ex: &mut Ex, sequence: &Sequence) {
     let step = ex.b8(blk::STEP);
-    ex.x.c.a[0] = BASE;
+    ex.a0 = None;
     match sequence.states.get(step as usize / 4) {
         None => ex.outside_table(),
         Some(&St::Shared(shared)) => run_shared(ex, shared),
@@ -468,7 +480,10 @@ fn redispatch(ex: &mut Ex, sequence: &Sequence) {
 
 /// End of frame: except at the final state, world update.
 fn finish_frame(ex: &mut Ex, sequence: &Sequence) {
-    let step = if ex.a0_clobbered { rd8(ex.x.b, ex.x.c.a[0].wrapping_add(blk::STEP)) } else { ex.b8(blk::STEP) };
+    let step = match ex.a0 {
+        Some(a0) => rd8(ex.x.b, a0.wrapping_add(blk::STEP)),
+        None => ex.b8(blk::STEP),
+    };
     if step == sequence.last {
         return;
     }
@@ -484,19 +499,17 @@ fn run_update(ex: &mut Ex, update: Update) {
     }
     match update {
         Update::Reduced => {
-            // `rendering` probe (see `dispatch::Class::update_no_next`)
-            crate::diag::dead_regs(ex.x.c, "handback", crate::diag::TASK_REGS);
-            crate::player::update::update_cpu(ex.x.c, ex.x.b);
-            crate::player::overlays::update_cpu(ex.x.c, ex.x.b);
+            crate::game::update_players(ex.x.b);
+            crate::game::update_player_parts(ex.x.b);
             for class in CLASSES {
-                class.update_no_next(ex.x.c, ex.x.b);
+                class.update_no_next(ex.x.b);
             }
-            crate::sprites::build_68k(ex.x.c, ex.x.b);
+            crate::sprites::build_in_game(ex.x.b);
         }
         _ => {
             ex.x.world();
             if update == Update::Full {
-                crate::combat::update_cpu(ex.x.c, ex.x.b);
+                crate::bench::on_bench(ex.x.b, crate::combat::update_cpu);
             }
         }
     }
@@ -561,7 +574,9 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
             }
             _ => {}
         }
-        ex.a0_clobbered = leave.wait_fade != WaitFade::Nothing;
+        if leave.wait_fade != WaitFade::Nothing {
+            ex.a0 = Some(a0_after_world());
+        }
         return;
     }
     ex.x.set_v8(0x42, 0);
@@ -610,7 +625,7 @@ fn do_leave(ex: &mut Ex, leave: &Leave) {
         Tail::Twice => Some(Step::Twice),
         Tail::Jump => None,
     };
-    ex.wait_frames(leave.frames, resume);
+    ex.wait_frames(leave.frames as u8, resume);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -675,8 +690,7 @@ impl Step {
             Step::Command | Step::TwiceEnd => crate::sound::service(x.b, crate::sound::Service::GeneralStop),
             Step::Twice => {
                 crate::video::black_screen(x.b);
-                x.c.d[0] = 2;
-                crate::kernel::wait(x.c, x.b, Step::TwiceEnd);
+                crate::kernel::wait(x.b, 2, Step::TwiceEnd);
                 return crate::modes::Flow::Yield;
             }
         }
@@ -688,7 +702,7 @@ pub const PHASE_16: Native = Native {
     entry: 0xf3142,
     name: "scene_phase_16",
     run: crate::Body::WithCpu(|c, b| {
-        if !phase_16(c, b) {
+        if !phase_16(b) {
             rts(c, b);
         }
     }),
@@ -700,7 +714,8 @@ pub const PHASE_16: Native = Native {
 /// update), where the resumes after a yield return. A0 is the one the state left.
 fn dispatch_tail(x: &mut Ctx, index: u8) {
     let sequence = if index == 27 { &SEQ_27 } else { sequence(index).expect("rewritten sequence") };
-    let mut ex = Ex { x: Ctx::new(x.c, x.b), handed_off: false, entry: 0, dispatch_return: None, a0_clobbered: true };
+    let a0 = crate::tasks::table::table(x.b).scene_exit_a0;
+    let mut ex = Ex { x: Ctx::new(x.b), handed_off: false, entry: 0, dispatch_return: None, a0: Some(a0) };
     finish_frame(&mut ex, sequence);
 }
 

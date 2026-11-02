@@ -341,14 +341,14 @@ fn test_pattern_word(b: &mut Cps2Bus, pattern: u16) -> bool {
 }
 
 /// 0x2da4a: reads the EEPROM into the RAM copy, tests it with four patterns, then rewrites the copy to it
-/// (validated by `config::validate_copy`). False if a pattern was not reread.
-pub fn tester(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
+/// (validated by `config::validate`). False if a pattern was not reread.
+pub fn tester(b: &mut Cps2Bus) -> bool {
     all_eeprom(b);
     read_verify(b);
     if !PATTERNS.iter().all(|&m| test_pattern_word(b, m)) {
         return false;
     }
-    crate::config::validate_copy(c, b);
+    crate::config::validate(b);
     all_eeprom(b);
     write_verify(b);
     true
@@ -601,8 +601,8 @@ fn accounting_init(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x2e8e4 (reset with the reset buttons held): reset of the extra RAM to zero.
-pub fn reset_card(c: &mut Cpu, b: &mut Cps2Bus) {
-    if has_dev_card(c, b) {
+pub fn reset_card(b: &mut Cps2Bus) {
+    if rd8(b, a5(ram::NO_ACCOUNTING)) != 0 {
         dev_card::reset(b);
     }
 }

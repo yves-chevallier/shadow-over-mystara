@@ -11,7 +11,7 @@
 
 use super::table::{record, table, State, Resume, Table, SLOTS};
 use super::{cede, Wait};
-use crate::mem::{set_low_byte, set_low_word, A5};
+use crate::mem::A5;
 use crate::modes::Flow;
 use crate::scene::Ctx;
 
@@ -49,7 +49,6 @@ crate::steps! {
 /// One step: the effect of the pass, then the cession.
 fn step(x: &mut Ctx) -> Flow {
     let normal = x.v16(var::DSW) & NORMAL;
-    set_low_word(&mut x.c.d[0], normal);
     let resume = if normal == 0 {
         wake_all(x);
         Step::AfterCession
@@ -67,23 +66,18 @@ fn wake_all(x: &mut Ctx) {
     for slot in 0..SLOTS {
         tasks.count_down(slot);
     }
-    x.c.a[0] = record(SLOTS);
-    set_low_word(&mut x.c.d[0], 0xffff);
 }
 
 /// `0xee0fc`: if a present player presses a button, the main task loses one wait frame. Returns
 /// the stage that follows the cession.
 fn fast_forward(x: &mut Ctx) -> Step {
-    x.c.d[0] = 0;
+    let mut seen = 0;
     for (player, present) in var::PRESENT.into_iter().enumerate() {
         if x.v8(present) != 0 {
-            let pressed = x.v8(var::BUTTONS + player as u32) & BUTTON_MASK;
-            set_low_byte(&mut x.c.d[1], pressed);
-            let seen = x.c.d[0] as u8 | pressed;
-            set_low_byte(&mut x.c.d[0], seen);
+            seen |= x.v8(var::BUTTONS + player as u32) & BUTTON_MASK;
         }
     }
-    if x.c.d[0] as u8 == 0 {
+    if seen == 0 {
         return Step::AfterCession;
     }
     table(x.b).count_down(MAIN);

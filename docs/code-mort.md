@@ -215,8 +215,9 @@ Jamais atteints (`docs/service.md` §7).
 
 **Affichage des verrous du Z80 (fin de 0x68c, appel de 0x29d78).** Écran de débogage : chaque octet des verrous
 0x618001... en hexadécimal dans la couche de texte, seulement si le mot 0xc0 du programme (nul dans cette version) et
-`A5+0x7fc6` sont non nuls ; 0x29d78 n'a pas de native. Le cœur `sound::send` (VBLANK) s'arrête sur `unreachable!` ;
-la native de 0x68c garde sa transcription (`show_locks`). Nature : mode de mise au point.
+`A5+0x7fc6` sont non nuls ; 0x29d78 n'a pas de native. Nature : mode de mise au point. Depuis la partie 7 de la
+sortie du Cpu, le comportement est gardé compilé et sans registres : `sound::send` appelle `show_locks`, qui écrit
+chaque octet par `hex_byte` (transcription de 0x29d78, attribut 2), au lieu de l'`unreachable!` d'avant.
 
 ## Lot fuzz : branches non jouées, validées ou écartées par fuzz différentiel
 
@@ -303,7 +304,6 @@ est devenue un `unreachable!` (repli défensif ; l'A6 de l'original y désignera
   au lieu du `_ => {}` qui ignorait aussi 0xa ; au-delà de la table, `unreachable!`. Validées par `fuzz_couv`
   (`boss/boss15_scene46` et `boss/boss19_scene32`, 12 000 images, un appel sur 4, 48 essais par appel : environ
   14 300 essais chacun, les deux entrées sont atteintes par des essais sans écart).
-||||||| 3bec3f5
 
 ### Interface des joueurs (F3) : 0x15234-0x1523e après le `bra.w` de 0x15230
 
@@ -353,4 +353,22 @@ Doublon : supprimées, avec leurs entrées de `fuzz_world`.
 guide 1, c'est l'A2 laissé par les gestionnaires précédents de la boucle (aucun n'est tenu sans registres). Le
 guide 1 naît du script de la scène, joueurs présents ; aucun scénario ne le voit naître sans joueur vivant.
 Hypothèse : cas impossible en jeu (repli de l'original sans sens). Devenu un `unreachable!`.
-||||||| a00e694
+
+## Lot « sortie du Cpu », partie 7 (noyau et écrans, wt-cpu-core)
+
+Le jeu n'a plus de banc de registres : les registres que l'original laisse et que seul un code non joué relirait
+sont désormais des valeurs fixées, à noter ici.
+
+* **Retenue X de l'horloge de partie (phase 12, 0x1c6a0).** Le premier `sbcd` du décompte de l'horloge prend comme
+  retenue le drapeau X laissé par le code précédent : nul après l'addition du compteur d'images de partie
+  (`A5+0x54`), sinon (compteur bloqué à 0xFFFF, après 18 minutes de partie) celui de la dernière instruction
+  arithmétique exécutée, que les boucles d'aiguillage laissent nul (`lsl.w #2`). Aucun scénario n'atteint 0xFFFF
+  images (les bots longs durent au plus 90 000 images, dont bien moins en partie continue). `game::phase12` prend la
+  retenue nulle. Nature : effet de bord de l'original, sans conséquence visible sauf cas limite.
+* **Octet haut de la statistique du personnage choisi (0x2e630, `modes::select`).** La routine reçoit D0.w dont
+  seul l'octet bas est le choix ; l'octet haut est un reste des appels précédents. Elle n'agit que sur la carte de
+  développement (`A5+NO_ACCOUNTING` non nul), jamais présente (bit 14 du port 0x804030 toujours à 1). L'octet haut
+  est pris nul.
+* **Natives retirées.** `config_variant` (0x2d648 : rend le bloc de valeurs par défaut en A6 et son déplacement en
+  D0) : aucun appelant par adresse, les cœurs Rust prennent le bloc (`config::block_defaults`).
+

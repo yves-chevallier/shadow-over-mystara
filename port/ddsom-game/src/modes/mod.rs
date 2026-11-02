@@ -75,13 +75,10 @@ pub trait Sequence {
     /// Yields `frames` frames to the scheduler; the task will resume at `resume` (Rust step, or the address
     /// following the original's `jsr 0xa40`). The sequence must return `Flow::Yield` immediately.
     fn wait(&mut self, frames: u32, resume: impl Into<Next>) -> Flow;
-    /// Terminal call (`jmp`) of native `n`: it runs at once, and its `rts` returns to what follows the current
-    /// call (the sequence returns `Flow::Yield`, the continuation having already been executed).
-    fn jump(&mut self, n: &'static Native) -> Flow;
     /// Calls a Rust subroutine that may cede control (fade, black screen: `tasks::fading::descent`,
     /// `video::black_screen::start`...): `resume` is stored in the current calls; if it returns without yielding,
     /// it runs at once.
-    fn subroutine(&mut self, sp: fn(&mut Ctx) -> Flow, resume: impl Into<Next>) -> Flow;
+    fn subroutine(&mut self, sp: impl FnOnce(&mut Ctx) -> Flow, resume: impl Into<Next>) -> Flow;
     /// `bsr`/`jsr` call whose continuation is a resume native: stored in the task's current calls
     /// (`tasks::table::Frame`), it will resume when the callee returns.
     fn push_return(&mut self, next: impl Into<Next>);
@@ -103,22 +100,18 @@ impl Sequence for Ctx<'_> {
     fn wait(&mut self, frames: u32, resume: impl Into<Next>) -> Flow {
         crate::tasks::cede(self, crate::tasks::Wait::Images(frames), resume)
     }
-    fn jump(&mut self, n: &'static Native) -> Flow {
-        crate::jump(self.c, self.b, n);
-        Flow::Yield
-    }
     fn push_return(&mut self, next: impl Into<Next>) {
         push(self.b, next);
     }
-    fn subroutine(&mut self, sp: fn(&mut Ctx) -> Flow, resume: impl Into<Next>) -> Flow {
+    fn subroutine(&mut self, sp: impl FnOnce(&mut Ctx) -> Flow, resume: impl Into<Next>) -> Flow {
         push(self.b, resume);
         if sp(self) == Flow::Done {
-            crate::tasks::return_to_caller(self.c, self.b);
+            crate::tasks::return_to_caller(self.b);
         }
         Flow::Yield
     }
     fn drop_return(&mut self) {
-        crate::tasks::table::pop_return(self.c, self.b);
+        crate::tasks::table::pop_return(self.b);
     }
     fn or16(&mut self, off: u32, v: u16) {
         let w = self.v16(off) | v;
@@ -160,18 +153,11 @@ impl Block for Ctx<'_> {
         self.set_m8(2, s);
     }
     fn render(&mut self) {
-        let a0 = self.c.a[0];
         for class in [&crate::dispatch::SET, &crate::dispatch::EFFCT, &crate::dispatch::SOBJ] {
-            class.update_no_next(self.c, self.b);
+            class.update_no_next(self.b);
         }
-        crate::sprites::build_68k(self.c, self.b);
-        self.c.a[0] = a0;
+        crate::sprites::build_in_game(self.b);
     }
-}
-
-/// A5 is always in place in the original code.
-pub fn c_a5(x: &mut Ctx) {
-    x.c.a[5] = A5;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -191,7 +177,6 @@ crate::steps! {
 
 /// One turn: calls the mode handler, which returns to [`Step::AfterHandler`].
 fn turn(x: &mut Ctx) -> Flow {
-    x.c.a[0] = mode::BASE;
     let m = rd8(x.b, mode::MODE);
     push(x.b, Step::AfterHandler);
     match m {

@@ -18,9 +18,8 @@
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
-use m68k::Cpu;
 
-use crate::mem::{rd16, rd32, rd8, rts, set_low_byte, set_low_word, wr32, wr8, A5};
+use crate::mem::{rd16, rd32, rd8, wr32, wr8, A5};
 use crate::objects::{pools, Obj};
 use crate::scene::var;
 use crate::Native;
@@ -31,8 +30,6 @@ const CURSOR: u32 = A5 - 0x55d0;
 /// Script table (one long per scene, as data) and per-class allocators (words, program space).
 const SCRIPTS: u32 = 0xf2f62;
 const ALLOCATORS: u32 = 0xf2f38;
-/// State branch table (words, program space).
-const STATE_JUMPS: u32 = 0xf2e70;
 /// Game rank (low byte of word `A5+0x7f92`).
 const RANK: u32 = 0x7f93;
 
@@ -65,10 +62,11 @@ mod entry {
 }
 
 /// The routines called by the `call` entries of the scene scripts (all those of the ROM's scripts: table 0xf2f62),
-/// with their argument (the D0.w of the entry); the registers are left like the original routines leave them.
-fn script_routine(c: &mut Cpu, b: &mut Cps2Bus, routine: u32, arg: u16) {
+/// with their argument (the D0.w of the entry). They are still on the processor (`families/`): the registers they
+/// leave are reread by nobody but the leftovers D2-D5.
+fn script_routine(b: &mut Cps2Bus, routine: u32, arg: u16) {
     use crate::families::{effects_creators, small, set_b, set_residue::camera};
-    match routine {
+    crate::bench::on_bench(b, |c, b| match routine {
         0x2a24 => camera::set_limit_x(c, b, arg),
         0x2a2a => camera::set_position_y(c, b, arg),
         0x2a30 => camera::set_mode(c, b, arg as u8),
@@ -78,22 +76,20 @@ fn script_routine(c: &mut Cpu, b: &mut Cps2Bus, routine: u32, arg: u16) {
         0xd40e8 => set_b::spawn_bumpers(c, b),
         0xdd12c => small::item_lock_clear(c, b),
         r => unreachable!("scene script routine {r:#x}: the ROM's scripts only call 0x2a24, 0x2a2a, 0x2a30, 0xa8ae8, 0xd40e8, 0xdd12c"),
-    }
+    })
 }
 
-/// One reader step (one frame).
-pub fn step(c: &mut Cpu, b: &mut Cps2Bus) {
+/// One reader step (one frame). The registers of the original loop (D0, D1, D6, A1, A4, A6) are reread by nobody.
+pub fn step(b: &mut Cps2Bus) {
     if rd8(b, A5 + var::PLAYERS) == 0 {
         return;
     }
     let state = rd8(b, STATE);
-    c.d[0] = state as u32;
-    set_low_word(&mut c.d[1], b.fetch16(STATE_JUMPS + state as u32));
     let mut cursor = match state {
         state::LOAD => {
             wr8(b, STATE, state::READ);
-            c.d[0] = (rd8(b, A5 + var::SCENE) as u32 * 4) & 0xffff;
-            let script = rd32(b, SCRIPTS + c.d[0]);
+            let scene = rd8(b, A5 + var::SCENE) as u32;
+            let script = rd32(b, SCRIPTS + scene * 4);
             wr32(b, CURSOR, script);
             script
         }
@@ -105,11 +101,8 @@ pub fn step(c: &mut Cpu, b: &mut Cps2Bus) {
         _ => return,
     };
     let camera = A5 + if rd8(b, A5 + var::USE_ALT_CAMERA) != 0 { var::ALT_CAMERA } else { var::CAMERA };
-    c.a[4] = camera;
     loop {
-        c.a[6] = cursor;
         let trigger = rd16(b, cursor + entry::TRIGGER_X);
-        set_low_word(&mut c.d[6], trigger);
         if trigger == END {
             wr8(b, STATE, state::ENDING);
             return;
@@ -119,13 +112,13 @@ pub fn step(c: &mut Cpu, b: &mut Cps2Bus) {
             return;
         }
         if rd16(b, cursor + entry::OFFSET_X) == CALL_MARK {
-            c.a[1] = rd32(b, cursor + 4);
-            set_low_word(&mut c.d[0], rd16(b, cursor + 8));
-            script_routine(c, b, c.a[1], c.d[0] as u16);
+            let routine = rd32(b, cursor + 4);
+            let arg = rd16(b, cursor + 8);
+            script_routine(b, routine, arg);
             cursor += CALL_ENTRY_SIZE;
             continue;
         }
-        if spawn(c, b, cursor) == Spawn::PoolFull {
+        if spawn(b, cursor) == Spawn::PoolFull {
             wr32(b, CURSOR, cursor);
             return;
         }
@@ -142,24 +135,18 @@ enum Spawn {
 }
 
 /// A spawn entry.
-fn spawn(c: &mut Cpu, b: &mut Cps2Bus, e: u32) -> Spawn {
-    let max_rank = rd8(b, e + entry::MAX_RANK);
-    set_low_byte(&mut c.d[6], max_rank);
-    if max_rank > rd8(b, A5 + RANK) {
+fn spawn(b: &mut Cps2Bus, e: u32) -> Spawn {
+    if rd8(b, e + entry::MAX_RANK) > rd8(b, A5 + RANK) {
         return Spawn::Done;
     }
-    let min_players = rd8(b, e + entry::MIN_PLAYERS);
-    set_low_byte(&mut c.d[6], min_players);
-    if min_players > rd8(b, A5 + var::PLAYERS) {
+    if rd8(b, e + entry::MIN_PLAYERS) > rd8(b, A5 + var::PLAYERS) {
         return Spawn::Done;
     }
     let class = rd8(b, e + entry::CLASS) as i8 as i16 as u16;
-    set_low_word(&mut c.d[6], class);
     let Some(o) = pool_of_class(b, class).alloc(b) else {
         return Spawn::PoolFull;
     };
     let offset = rd16(b, e + entry::OFFSET_X);
-    set_low_word(&mut c.d[0], offset);
     let bytes = [
         (0x2c, rd8(b, e + entry::FIELD_2C)),
         (Obj::KIND, rd8(b, e + entry::KIND)),
@@ -205,10 +192,7 @@ pub const RESET_ENTRY: u32 = 0xf2e56;
 pub const SPAWN_SCRIPT: Native = Native {
     entry: SPAWN_ENTRY,
     name: "scene_script",
-    run: crate::Body::WithCpu(|c, b| {
-        step(c, b);
-        rts(c, b);
-    }),
+    run: crate::Body::Memory(step),
     touches_sound: false,
     outputs: 0,
 };

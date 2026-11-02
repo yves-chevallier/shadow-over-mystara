@@ -53,7 +53,7 @@ pub fn wr32(b: &mut Cps2Bus, a: u32, v: u32) {
 /// Returns to the caller (RTS): to the continuation of the task's current call if it was made by a Rust step (a Rust
 /// step runs immediately), otherwise to the popped return address (see `tasks::table::Frame`).
 pub fn rts(c: &mut m68k::Cpu, b: &mut Cps2Bus) {
-    crate::tasks::return_to_caller(c, b);
+    crate::tasks::return_to_caller_68k(c, b);
 }
 
 /// Replaces the low byte of a data register (move.b to Dn).

@@ -48,7 +48,7 @@ crate::steps! {
             }
             wr8(x.b, A5 + 0x48e, 0xf);
             crate::palette::full_brightness(x.b);
-            if !crate::config::initialize(x.c, x.b) {
+            if !crate::config::initialize(x.b) {
                 return Flow::Yield;
             }
             crate::credits::initialize(x.b);
@@ -56,14 +56,14 @@ crate::steps! {
             crate::events::clear_counter(x.b);
             crate::events::clear_popups(x.b);
             crate::sound::clear_private_stack(x.b);
-            crate::player::init::clear_all_players(x.c, x.b);
-            crate::player::init::clear_sub_objects(x.c, x.b);
+            crate::bench::on_bench(x.b, crate::player::init::clear_all_players);
+            crate::bench::on_bench(x.b, crate::player::init::clear_sub_objects);
             clear_mode_state(x);
             crate::rng::seed(x.b);
             default_high_scores(x);
             crate::video::copy_fixed_screens(x.b);
             crate::families::items::clear_picked_up(x.b);
-            crate::tasks::game::clear_variables(x.c, x.b);
+            crate::tasks::game::clear_variables(x.b);
             wr8(x.b, A5 - 0x713c, 0);
             wr16(x.b, CPS_REG_VIDEO, 0xe);
             wr16(x.b, A5 + 0x12, 0xe);
@@ -98,7 +98,7 @@ crate::steps! {
                 wr16(x.b, A5 + 0x7fc6, 1);
             }
             crate::eeprom::initialize_accounting(x.b);
-            if !crate::config::initialize(x.c, x.b) {
+            if !crate::config::initialize(x.b) {
                 return Flow::Yield;
             }
             crate::kernel::create_task(x.b, SLOT_CREDITS, task::CREDITS);

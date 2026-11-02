@@ -96,7 +96,6 @@ fn add_b8(x: &mut Ctx, off: u32, v: u8) {
 
 /// A state of 0xf792e. A6 designates the block throughout the state, as in the original.
 pub fn run(x: &mut Ctx) -> Flow {
-    x.c.a[6] = BLOCK;
     let s = b8(x, f::STATE);
     match s {
         0 => open(x),
@@ -200,14 +199,13 @@ crate::steps! {
             crate::palette::load_all_palettes(x.b);
             x.set_v8(0x48e, 15);
             crate::palette::no_brightness(x.b);
-            // 0x33aa6 (D7 and A0 kept): cameras at start and updated (D4 re-read: `update_cameras_68k`)
+            // 0x33aa6 (D7 and A0 kept): cameras at start and updated (D4 re-read: `update_cameras_in_game`)
             crate::scroll::cameras_start(x.b);
-            crate::scroll::update_cameras_68k(x.c, x.b);
-            x.c.a[0] = EXIT_BLOCK;
+            crate::scroll::update_cameras_in_game(x.b);
             x.set_v16(0x14, 0);
             crate::video::turn_layers_on(x.b, 0x12c0);
             super::script::reset(x.b);
-            super::script::step(x.c, x.b);
+            super::script::step(x.b);
             Flow::Done
         },
         LeaveFaded = at::LEAVE_FADED => |x| {
@@ -234,7 +232,7 @@ crate::steps! {
                 x.set_v8(0x34, back);
             }
             // the scene exit dispatch re-reads byte `+2` of the block designated by A0 (the block, kept by the yield)
-            x.c.a[0] = EXIT_BLOCK;
+            super::exit::set_dispatch_a0(x.b, EXIT_BLOCK);
             Flow::Done
         },
         ChainFaded = at::CHAIN_FADED => |x| {
@@ -402,9 +400,9 @@ pub const SHOP: Native = Native {
     entry: 0xf792e,
     name: "scene_shop",
     run: crate::Body::WithCpu(|c, b| {
-        let mut x = Ctx::new(c, b);
-        if run(&mut x) == Flow::Done {
-            crate::mem::rts(x.c, x.b);
+        // entry for the original code (tools): returns only if the state did not cede control
+        if run(&mut Ctx::new(b)) == Flow::Done {
+            crate::mem::rts(c, b);
         }
     }),
     touches_sound: false,

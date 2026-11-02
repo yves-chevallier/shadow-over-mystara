@@ -64,9 +64,9 @@ pub const PHASE_28: Native = Native {
     entry: 0xfb292,
     name: "ending_phase_28",
     run: crate::Body::WithCpu(|c, b| {
-        let mut x = Ctx::new(c, b);
-        if phase_28(&mut x) == Flow::Done {
-            rts(x.c, x.b);
+        // entry for the original code (tools): returns only if the phase did not cede control
+        if phase_28(&mut Ctx::new(b)) == Flow::Done {
+            rts(c, b);
         }
     }),
     touches_sound: false,
@@ -74,7 +74,6 @@ pub const PHASE_28: Native = Native {
 };
 /// Phase 28 of the game (`0xfb292`): the ending credits. The state returns to [`Step::Return`].
 pub fn phase_28(x: &mut Ctx) -> Flow {
-    x.c.a[0] = BLOCK;
     let step = rd8(x.b, var::STEP);
     x.push_return(Step::Return);
     state(x, step)
@@ -83,10 +82,7 @@ pub fn phase_28(x: &mut Ctx) -> Flow {
 crate::steps! {
     /// Steps (resume points) of the state machine.
     pub enum Step {
-        Return = at::RETURN => |x| {
-            x.c.a[0] = BLOCK;
-            Flow::Done
-        },
+        Return = at::RETURN => |_| Flow::Done,
         S00Video = S00_VIDEO => |x| {
             wr16(x.b, var::CPS_REG_4, 0x1355);
             for v in [var::SCROLL_1, var::SCROLL_2, var::CAMERA, var::CAMERA_Y] {
@@ -211,7 +207,6 @@ crate::steps! {
             crate::kernel::create_task(x.b, 0x10, crate::scene::fading::FROM_WHITE);
             crate::sound::play_global(x.b, ext::SOUND_E16F0);
             fading::STEP.set(x.b, 1);
-            x.c.a[0] = BLOCK;
             s1c_wait_fade(x)
         },
         S1cFadeLoop = S1C_FADE_LOOP => |x| {
@@ -248,7 +243,6 @@ crate::steps! {
             Flow::Done
         },
         S28Loop = S28_LOOP => |x| {
-            x.c.a[0] = BLOCK;
             render_scroll(x);
             if fading::STEP.get(x.b) != 0 {
                 return s28_loop(x);
@@ -419,7 +413,7 @@ crate::steps! {
                 let score = bcd_add(rd32(x.b, p + 0x110), reward);
                 wr32(x.b, p + 0x110, if score as i32 > 0x0999_9999 { 0x0999_9999 } else { score });
             }
-            crate::player::update::update_cpu(x.c, x.b);
+            crate::bench::on_bench(x.b, crate::player::update::update_cpu);
             wr8(x.b, var::PHASE, 20);
             crate::sound::service(x.b, crate::sound::Service::GeneralStop);
             // `jmp 0x133f6`: the scored startup done, then the return to the caller
@@ -470,24 +464,28 @@ fn next_step(x: &mut Ctx) {
 
 /// `0xfc4ea`: terrain (SET, SOBJ) and sprites; A0 is preserved.
 fn render(x: &mut Ctx) {
-    let a0 = x.c.a[0];
-    crate::dispatch::SET.update_no_next(x.c, x.b);
-    crate::dispatch::SOBJ.update_no_next(x.c, x.b);
-    crate::sprites::build_68k(x.c, x.b);
-    x.c.a[0] = a0;
+    crate::dispatch::SET.update_no_next(x.b);
+    crate::dispatch::SOBJ.update_no_next(x.b);
+    crate::sprites::build_in_game(x.b);
 }
 
 /// `0xfc506`: like `render`, with the effects and the cameras (whose D4 is re-read by handlers: see
-/// `scroll::update_cameras_68k`).
+/// `scroll::update_cameras_in_game`).
 fn render_scroll(x: &mut Ctx) -> Flow {
-    let a0 = x.c.a[0];
-    crate::dispatch::SET.update_no_next(x.c, x.b);
-    crate::dispatch::EFFCT.update_no_next(x.c, x.b);
-    crate::scroll::update_cameras_68k(x.c, x.b);
-    crate::dispatch::SOBJ.update_no_next(x.c, x.b);
-    crate::sprites::build_68k(x.c, x.b);
-    x.c.a[0] = a0;
+    render_scroll_d0(x, 0);
     Flow::Done
+}
+
+/// [`render_scroll`] called with D0 = `d0`: returns the D0 that it leaves (type × 4 of the last object whose handler
+/// was called, `dispatch::Class::update_last_kind`; otherwise `d0`).
+fn render_scroll_d0(x: &mut Ctx, d0: u32) -> u32 {
+    let mut kinds = [None; 3];
+    kinds[0] = crate::dispatch::SET.update_last_kind(x.b);
+    kinds[1] = crate::dispatch::EFFCT.update_last_kind(x.b);
+    crate::scroll::update_cameras_in_game(x.b);
+    kinds[2] = crate::dispatch::SOBJ.update_last_kind(x.b);
+    crate::sprites::build_in_game(x.b);
+    kinds.into_iter().flatten().last().map_or(d0, |kind| ((kind as u16) << 2) as u32)
 }
 
 /// Cleared layers (0xca8, 0xcc8, 0xce8).
@@ -901,10 +899,9 @@ fn s1e_object(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     // `moveq 1,D0 ; bsr 0xfc506 ; jsr 0xa40`. Original glitch: the yield lasts D0 frames, as the render leaves it
-    // (the last object handler called)
-    x.c.d[0] = 1;
-    render_scroll(x);
-    crate::tasks::wait(x, Step::S1eRetry)
+    // (type × 4 of the last object whose handler was called)
+    let d0 = render_scroll_d0(x, 1);
+    crate::tasks::wait(x, d0 as u8, Step::S1eRetry)
 }
 const S1E_RETRY: u32 = 0xfbf26;
 

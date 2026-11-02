@@ -163,8 +163,7 @@ crate::steps! {
         NoticeCleared = NOTICE_CLEARED => |x| {
             clear_layer(x.b, Layer::One);
             x.or16(var::LAYERS, LAYER_BITS);
-            x.c.d[0] = 1;
-            crate::tasks::wait_then_return(x)
+            crate::tasks::wait_then_return(x, 1)
         },
     }
 }

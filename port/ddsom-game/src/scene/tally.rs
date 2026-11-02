@@ -107,10 +107,10 @@ const AFTER_FADE: u32 = 0xf596e;
 
 /// Current sub-state (byte `+3` of the block designated by A0).
 fn sub_step(x: &mut Ctx) -> u8 {
-    rd8(x.b, x.c.a[0] + 3)
+    rd8(x.b, super::screen::blocks::EXIT + 3)
 }
 fn set_sub_step(x: &mut Ctx, s: u8) {
-    wr8(x.b, x.c.a[0] + 3, s)
+    wr8(x.b, super::screen::blocks::EXIT + 3, s)
 }
 fn next_sub_step(x: &mut Ctx) {
     let s = sub_step(x).wrapping_add(2);
@@ -586,9 +586,9 @@ pub const TALLY: Native = Native {
     entry: 0xf590e,
     name: "scene_tally",
     run: crate::Body::WithCpu(|c, b| {
-        let mut x = Ctx::new(c, b);
-        if run(&mut x) == Flow::Done {
-            crate::mem::rts(x.c, x.b);
+        // entry for the original code (tools): returns only if the state did not cede control
+        if run(&mut Ctx::new(b)) == Flow::Done {
+            crate::mem::rts(c, b);
         }
     }),
     touches_sound: false,

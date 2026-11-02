@@ -873,6 +873,16 @@ pub fn update_cameras_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     c.a[0] = A5 + CAMERA_2;
 }
 
+/// `update_cameras` in the game. Original glitch: the D4 of the scenery copies is reread by a following handler
+/// (boss13_dragon, frame 7241): it is the leftover D4 of the game (`dispatch::Leftovers`); A0 (camera 2) is reread by
+/// nobody.
+pub fn update_cameras_in_game(b: &mut Cps2Bus) {
+    for (v, m) in update_cameras(b).into_iter().flatten() {
+        let leftovers = &mut crate::tasks::table::table(b).leftovers;
+        leftovers.d4 = leftovers.d4 & !m | v;
+    }
+}
+
 /// Native of 0x33e20.
 fn update_cameras_native(c: &mut Cpu, b: &mut Cps2Bus) {
     update_cameras_68k(c, b);

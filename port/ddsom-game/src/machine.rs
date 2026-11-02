@@ -77,6 +77,11 @@ macro_rules! machine {
 
 machine!(
     crate::player::Ctx<'_>,
-    crate::scene::Ctx<'_>,
     crate::combat::World<'_>,
 );
+
+impl Machine for crate::scene::Ctx<'_> {
+    fn bus(&mut self) -> &mut Cps2Bus {
+        &mut *self.b
+    }
+}

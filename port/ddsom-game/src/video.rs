@@ -102,6 +102,17 @@ fn gauge(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// `update_gauge` called by the world update (class marker `marker`, D1 of the original). Original glitch: the D2.w
+/// that 0xb46 leaves (0x400 of its DSW test when the gauge is hidden, always in this game; 0xFFFF when it is drawn) is
+/// reread by a following handler, which writes it into an object field (`DDSOM_POISON=call_b3e`: long_nain_57_86,
+/// frame 13398, ram ffd692): it is the leftover D2 of the game (`dispatch::Leftovers`). A0 and the flags are reread by
+/// nobody.
+pub fn gauge_in_world(b: &mut Cps2Bus, marker: u32) {
+    let drawn = update_gauge(b, marker);
+    let leftovers = &mut crate::tasks::table::table(b).leftovers;
+    leftovers.d2 = if drawn { leftovers.d2 | 0xffff } else { leftovers.d2 & 0xffff_0000 | 0x400 };
+}
+
 /// 0xb96: locks the coin counters of bits `bits` (in addition to the forced bits). Returns the forced bits (D1.b).
 pub fn lock_counters(b: &mut Cps2Bus, bits: u8) -> u8 {
     let forced = rd8(b, A5 + ram::LOCKOUT_FORCED);
@@ -197,30 +208,11 @@ fn clear_screen(b: &mut Cps2Bus) {
     }
 }
 
-/// `switch_layers_off`, D0.w = !0x12ce (the mask of 0xbfc).
-fn blank_layers(c: &mut Cpu, b: &mut Cps2Bus) {
-    switch_layers_off(b);
-    set_low_word(&mut c.d[0], !0x12ce);
-}
-
-/// `clear_screen`, D0.w = 0x1f00 and D1 = 0 as after `0xce8`.
-fn blank_planes(c: &mut Cpu, b: &mut Cps2Bus) {
-    clear_screen(b);
-    set_low_word(&mut c.d[0], 0x1f00);
-    c.d[1] = 0;
-}
-
-/// 0xc0c: black screen in one go (layers off, objects and layers cleared). The processor receives D0.w = 0x1f00 and
-/// D1 = 0.
+/// 0xc0c: black screen in one go (layers off, objects and layers cleared). The registers that the original leaves
+/// (D0.w = 0x1f00, D1 = 0) are reread by nobody.
 pub fn black_screen(b: &mut Cps2Bus) {
     switch_layers_off(b);
     clear_screen(b);
-}
-
-fn blank_screen(c: &mut Cpu, b: &mut Cps2Bus) {
-    blank_layers(c, b);
-    blank_planes(c, b);
-    rts(c, b);
 }
 
 /// 0xc32: black screen in three frames (subroutine that cedes, `0xb64`, before and after the clearing): a
@@ -233,7 +225,7 @@ pub mod black_screen {
 
     /// Layers off, then one frame.
     pub fn start(x: &mut Ctx) -> Flow {
-        super::blank_layers(x.c, x.b);
+        super::switch_layers_off(x.b);
         one_frame(x, Step::Clear)
     }
 
@@ -242,7 +234,7 @@ pub mod black_screen {
         pub enum Step {
             /// Objects and layers cleared, then one frame.
             Clear = 0xc42 => |x| {
-                super::blank_planes(x.c, x.b);
+                super::clear_screen(x.b);
                 one_frame(x, Step::End)
             },
             /// Return to the caller.
@@ -278,23 +270,15 @@ impl Layer {
     }
 }
 
-/// 0xca8, 0xcc8, 0xce8: fills the layer with its empty tile. The processor receives D0.w = the tile and D1 = 0 (A0
-/// and A1 are restored).
+/// 0xca8, 0xcc8, 0xce8: fills the layer with its empty tile. The registers that the original leaves (D0.w = the
+/// tile, D1 = 0; A0 and A1 are restored) are reread by nobody.
 pub fn clear_layer(b: &mut Cps2Bus, layer: Layer) {
     let (from, to, tile) = layer.zone();
     fill_layer(b, from, to, tile);
 }
 
-/// Common body of the three fills: D0 = tile, D1 = 0.
-fn fill_run(c: &mut Cpu, b: &mut Cps2Bus, layer: Layer) {
-    clear_layer(b, layer);
-    set_low_word(&mut c.d[0], layer.zone().2);
-    c.d[1] = 0;
-    rts(c, b);
-}
-
-fn clear_scroll1(c: &mut Cpu, b: &mut Cps2Bus) {
-    fill_run(c, b, Layer::One);
+fn clear_scroll1(b: &mut Cps2Bus) {
+    clear_layer(b, Layer::One);
 }
 /// Bytes cleared by 0x3525c.
 const SCROLL1_START: u32 = 0x2000;
@@ -328,11 +312,15 @@ fn clear_scroll1_start(c: &mut Cpu, b: &mut Cps2Bus) {
     clear_layer1_start_68k(c, b);
     rts(c, b);
 }
-fn clear_scroll2(c: &mut Cpu, b: &mut Cps2Bus) {
-    fill_run(c, b, Layer::Two);
+fn clear_scroll2(b: &mut Cps2Bus) {
+    clear_layer(b, Layer::Two);
 }
-fn clear_scroll3(c: &mut Cpu, b: &mut Cps2Bus) {
-    fill_run(c, b, Layer::Three);
+fn clear_scroll3(b: &mut Cps2Bus) {
+    clear_layer(b, Layer::Three);
+}
+
+const fn memory(entry: u32, name: &'static str, run: fn(&mut Cps2Bus)) -> Native {
+    Native { entry, name, run: crate::Body::Memory(run), touches_sound: false, outputs: 0 }
 }
 
 const fn fixed(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus), outputs: u32) -> Native {
@@ -347,19 +335,12 @@ pub const LOCK: Native = fixed(0xb96, "video_lock", lock, regs::d(1));
 pub const UNLOCK: Native = fixed(0xbac, "video_deverrou", unlock, regs::d(0) | regs::d(1));
 pub const ENABLE_LAYERS: Native = fixed(0xbc6, "video_layers_on", enable_layers, 0);
 pub const DISABLE_LAYERS: Native = fixed(0xbfc, "video_layers_off", disable_layers, regs::d(0));
-pub const BLANK_SCREEN: Native = Native {
-    entry: 0xc0c,
-    name: "video_black_screen",
-    run: crate::Body::WithCpu(blank_screen),
-    touches_sound: false,
-    outputs: regs::d(0) | regs::d(1),
-};
-pub const CLEAR_OBJECTS: Native =
-    Native { entry: 0xc58, name: "video_clear_objects", run: crate::Body::Memory(clear_objects), touches_sound: false, outputs: 0 };
-pub const CLEAR_SCROLL1: Native = fixed(0xca8, "video_clear_scroll1", clear_scroll1, regs::d(0) | regs::d(1));
+pub const BLANK_SCREEN: Native = memory(0xc0c, "video_black_screen", black_screen);
+pub const CLEAR_OBJECTS: Native = memory(0xc58, "video_clear_objects", clear_objects);
+pub const CLEAR_SCROLL1: Native = memory(0xca8, "video_clear_scroll1", clear_scroll1);
 pub const CLEAR_SCROLL1_START: Native = fixed(0x3525c, "video_clear_start_scroll1", clear_scroll1_start, regs::ALL);
-pub const CLEAR_SCROLL2: Native = fixed(0xcc8, "video_clear_scroll2", clear_scroll2, regs::d(0) | regs::d(1));
-pub const CLEAR_SCROLL3: Native = fixed(0xce8, "video_clear_scroll3", clear_scroll3, regs::d(0) | regs::d(1));
+pub const CLEAR_SCROLL2: Native = memory(0xcc8, "video_clear_scroll2", clear_scroll2);
+pub const CLEAR_SCROLL3: Native = memory(0xce8, "video_clear_scroll3", clear_scroll3);
 
 
 // ---------------------------------------------------------------------------------------------

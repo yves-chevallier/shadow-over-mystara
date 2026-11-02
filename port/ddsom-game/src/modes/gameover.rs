@@ -28,9 +28,9 @@ pub const PHASE_20: Native = Native {
     entry: 0x1c80c,
     name: "gameover_phase_20",
     run: crate::Body::WithCpu(|c, b| {
-        let mut x = Ctx::new(c, b);
-        if phase_20(&mut x) == Flow::Done {
-            rts(x.c, x.b);
+        // entry for the original code (tools): returns only if the phase did not cede control
+        if phase_20(&mut Ctx::new(b)) == Flow::Done {
+            rts(c, b);
         }
     }),
     touches_sound: false,
@@ -62,8 +62,7 @@ crate::steps! {
             reset_modes(x);
             wr8(x.b, mode::BOOTED, 1);
             crate::sound::service(x.b, crate::sound::Service::GeneralStop);
-            x.c.a[0] = MODE_LOOP;
-            crate::tasks::restart(x)
+            crate::tasks::restart(x, MODE_LOOP)
         },
     }
 }

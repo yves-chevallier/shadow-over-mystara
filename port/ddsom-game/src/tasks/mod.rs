@@ -41,49 +41,38 @@ pub enum Wait {
 pub fn cede(x: &mut Ctx, wait_kind: Wait, resume: impl Into<Next>) -> Flow {
     let resume = resume.into();
     match wait_kind {
-        Wait::Images(n) => {
-            x.c.d[0] = n;
-            crate::kernel::wait(x.c, x.b, resume);
-        }
-        Wait::Ready => crate::kernel::cede_ready(x.c, x.b, resume),
+        Wait::Images(n) => crate::kernel::wait(x.b, n as u8, resume),
+        Wait::Ready => crate::kernel::cede_ready(x.b, resume),
     }
     Flow::Yield
 }
 
-/// `jsr 0xb64`: cedes one frame (D0.w = 1, the high word of D0 is kept); the task will resume at `resume`.
+/// `jsr 0xb64`: cedes one frame; the task will resume at `resume`.
 pub fn one_frame(x: &mut Ctx, resume: impl Into<Next>) -> Flow {
-    crate::mem::set_low_word(&mut x.c.d[0], 1);
-    crate::kernel::wait(x.c, x.b, resume);
+    wait(x, 1, resume)
+}
+
+/// `jsr 0xa40`: cedes `frames` frames (D0.b of the original); the task will resume at `resume`.
+pub fn wait(x: &mut Ctx, frames: u8, resume: impl Into<Next>) -> Flow {
+    crate::kernel::wait(x.b, frames, resume);
     Flow::Yield
 }
 
-/// `jsr 0xa40`: cedes D0.b frames (D0 as is); the task will resume at `resume`.
-pub fn wait(x: &mut Ctx, resume: impl Into<Next>) -> Flow {
-    crate::kernel::wait(x.c, x.b, resume);
-    Flow::Yield
+/// `jmp 0xa40`: cedes `frames` frames; the task will resume at the continuation of the caller (the call in progress).
+pub fn wait_then_return(x: &mut Ctx, frames: u8) -> Flow {
+    let next = table::pop_return(x.b);
+    wait(x, frames, next)
 }
 
-/// `jmp 0xa40`: cedes D0.b frames; the task will resume at the continuation of the caller (the call in progress).
-pub fn wait_then_return(x: &mut Ctx) -> Flow {
-    let next = table::pop_return(x.c, x.b);
-    wait(x, next)
-}
-
-/// `jmp 0x9b6`: creates task D0 (offset) at entry A0, then returns to the caller.
-pub fn create_then_return(x: &mut Ctx) -> Flow {
-    crate::kernel::create_task(x.b, x.c.d[0], x.c.a[0]);
-    Flow::Done
-}
-
-/// `jmp 0xae4`: the current task restarts from zero at entry A0.
-pub fn restart(x: &mut Ctx) -> Flow {
-    crate::kernel::restart(x.c, x.b);
+/// `jmp 0xae4`: the current task restarts from zero at `entry` (A0 of the original).
+pub fn restart(x: &mut Ctx, entry: u32) -> Flow {
+    crate::kernel::restart(x.b, entry);
     Flow::Yield
 }
 
 /// `jsr 0x9f8`: the current task ends.
 pub fn finish(x: &mut Ctx) -> Flow {
-    crate::kernel::finish(x.c, x.b);
+    crate::kernel::finish(x.b);
     Flow::Yield
 }
 
@@ -180,66 +169,66 @@ task_steps! {
 
 /// Executes stage `step` of the current task; if it finishes (`Flow::Done`, subroutine return), the continuation of
 /// the call in progress ([`return_to_caller`]).
-pub fn execute(step: Step, c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut x = Ctx::new(c, b);
-    crate::modes::c_a5(&mut x);
+pub fn execute(step: Step, b: &mut Cps2Bus) {
+    let mut x = Ctx::new(b);
     if step.step(&mut x) == Flow::Done {
-        crate::diag::probe_return(x.c, &step);
-        return_to_caller(x.c, x.b);
+        return_to_caller(x.b);
     }
 }
 
 /// Resume of a task that ceded control: stage `step`. The original gives the task back the registers saved at
-/// the cession; only a few are re-read (probe `DDSOM_POISON=resume`), and they are named: fields of the stages that
-/// re-read them (object and counter of the dispatch loop, D4 of the game step, A0 of the caller of a fade), which their
-/// step puts back in the bench, or A0 that the stages of certain tasks always find again ([`resume_a0`]).
-pub fn resume_step(step: Step, c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(a0) = resume_a0(step, b) {
-        c.a[0] = a0;
-    }
-    execute(step, c, b);
-}
-
-/// The A0 that a resumed stage finds and re-reads, when it depends only on it:
-/// * the scene-exit sequences (dispatch, shared states, transitions) work on the scene-exit block,
-///   which the dispatch puts in A0 and which the cessions keep;
-/// * the handler that makes the game wait (fireworks) finds its object: that of the dispatch loop
-///   in progress (`dispatch::current_object`).
-fn resume_a0(step: Step, b: &mut Cps2Bus) -> Option<u32> {
-    match step {
-        Step::Exit(_)
-        | Step::Bonus(_)
-        | Step::Tally(_)
-        | Step::Characters(_)
-        | Step::Transition(_)
-        | Step::TransitionEarly(_)
-        | Step::TransitionLate(_) => Some(crate::scene::screen::blocks::EXIT),
-        Step::Firework(_) => {
-            let object = crate::dispatch::current_object(b).expect("fireworks resume outside a dispatch loop");
-            Some(object.0)
-        }
-        _ => None,
-    }
+/// the cession; none is re-read any more (probe `DDSOM_POISON=resume`, before their removal): what was re-read is
+/// named, in the fields of the stages (object and counter of the dispatch loop, D4 of the game step, A0 of the caller
+/// of a fade...).
+pub fn resume_step(step: Step, b: &mut Cps2Bus) {
+    execute(step, b);
 }
 
 /// Return from a subroutine (`rts`): the continuation of the call in progress, Rust stage executed immediately;
-/// nothing if a
-/// Rust function was waiting for this return (`table::call_expected`, `crate::call`), or if the task has already
-/// ceded control (the
-/// Rust code following a cession only returns: see [`has_ceded`]).
-pub fn return_to_caller(c: &mut Cpu, b: &mut Cps2Bus) {
+/// nothing if a Rust function was waiting for this return (`table::call_expected`, `crate::call`), or if the task has
+/// already ceded control (the Rust code following a cession only returns: see [`has_ceded`]). In the tools (natives
+/// called by the original code), a return to the original code: noted, the processor jumps there at the end of the
+/// native ([`return_to_caller_68k`], `Native::execute`).
+pub fn return_to_caller(b: &mut Cps2Bus) {
     if has_ceded() {
         return;
     }
     match table::ret(b) {
         table::Return::Render => {}
-        table::Return::Next(Next::Step(e)) => execute(e, c, b),
+        table::Return::Next(Next::Step(e)) => execute(e, b),
         // a frame whose continuation is an address: tools (natives called by a diagnostic tool)
-        table::Return::Next(Next::Address(a)) => c.pc = a,
+        table::Return::Next(Next::Address(a)) => TOOLS_RETURN.with(|r| r.set(Some(ToolsReturn::Address(a)))),
         // game: each return is that of a call in progress (stage, expected call, call by address)
         table::Return::Stack68000 if crate::no68k::active() => panic!("return without a call in progress"),
-        // tools (natives called by the original code): the popped return address
-        table::Return::Stack68000 => c.pc = table::pop_68000(c, b),
+        table::Return::Stack68000 => TOOLS_RETURN.with(|r| r.set(Some(ToolsReturn::Stack))),
+    }
+}
+
+/// Tools: where the original code resumes after a native that returned to it.
+#[derive(Clone, Copy)]
+enum ToolsReturn {
+    Address(u32),
+    /// The return address popped from the 68000 stack.
+    Stack,
+}
+
+thread_local! {
+    static TOOLS_RETURN: std::cell::Cell<Option<ToolsReturn>> = const { std::cell::Cell::new(None) };
+}
+
+/// `rts` of a native on the processor: [`return_to_caller`], then, in the tools, the PC of the original code that
+/// resumes.
+pub fn return_to_caller_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    return_to_caller(b);
+    apply_tools_return(c, b);
+}
+
+/// Tools: a native returned to the original code ([`return_to_caller`]): its PC.
+pub fn apply_tools_return(c: &mut Cpu, b: &mut Cps2Bus) {
+    match TOOLS_RETURN.with(|r| r.take()) {
+        None => {}
+        Some(ToolsReturn::Address(a)) => c.pc = a,
+        Some(ToolsReturn::Stack) => c.pc = table::pop_68000(c, b),
     }
 }
 

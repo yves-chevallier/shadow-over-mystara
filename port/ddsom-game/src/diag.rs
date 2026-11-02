@@ -118,22 +118,6 @@ pub fn probe_call(c: &mut Cpu, address: u32, before: &([u32; 8], [u32; 8], u16),
     invert_changes(c, before, !chosen, &label, &site);
 }
 
-/// Probe of the exit of an object handler (dispatch loop, `dispatch.rs`): with the label `exit` in
-/// `DDSOM_POISON`, the registers and flags that the handler changed (except A0 and D7, which the loop rereads) are
-/// inverted on its return. The site is `<looped> <handler>` in hexadecimal (`39f82 a17d0`): `exit@a17d0` targets
-/// a handler, `exit@39e86` a class. If validation stays VALID, no following handler nor anything after it
-/// rereads what the handler leaves: it can become a Rust function without output registers.
-pub fn probe_exit(c: &mut Cpu, before: &([u32; 8], [u32; 8], u16), looped: u32, handler: u32) {
-    if labels().is_empty() {
-        return;
-    }
-    let site = format!("{looped:x} {handler:x}");
-    let Some(chosen) = selection(&["exit"], &site) else {
-        return;
-    };
-    invert_changes(c, before, !chosen | regs::a(0) | regs::d(7), "exit", &site);
-}
-
 /// Inverts the registers and flags changed since `before`, except those of `guard`.
 fn invert_changes(c: &mut Cpu, before: &([u32; 8], [u32; 8], u16), guard: u32, label: &str, site: &str) {
     let mut mask = 0;
@@ -189,25 +173,6 @@ fn invert(d: &mut [u32; 8], a: &mut [u32], sr: &mut u16, mask: u32) {
     invert_flags(sr, mask);
 }
 
-/// Probe of the return of a step (`tasks::execute`, step that returns `Flow::Done`): with the label `ret`
-/// (`ret@<pattern>`, pattern searched in the step name), all the registers of the task (D0-D7, A0-A4, A6,
-/// flags) are inverted before the rest of the current call. VALID: nothing that follows rereads what the step (or what
-/// preceded the call) leaves in the registers.
-pub fn probe_return(c: &mut Cpu, step: &dyn std::fmt::Debug) {
-    if labels().is_empty() {
-        return;
-    }
-    let site = format!("{step:?}");
-    let Some(chosen) = guards("return", &site) else {
-        return;
-    };
-    if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
-        eprintln!("POISON return {site}");
-    }
-    let (d, a, sr) = (&mut c.d, &mut c.a, &mut c.sr);
-    invert(d, &mut a[..7], sr, TASK_REGS & chosen);
-}
-
 /// Registers that the adapter `label` writes like the original and which we want to prove dead
 /// (`crate::regs` mask: `regs::a(1) | regs::d(6) | regs::CCR`...). With `DDSOM_POISON`, they are inverted.
 #[track_caller]
@@ -238,24 +203,3 @@ pub fn dead_regs(c: &mut Cpu, label: &str, mask: u32) {
     invert_flags(&mut c.sr, mask);
 }
 
-/// Probe of the registers that a task finds when the scheduler launches it (`kernel::launch`): with the label
-/// `label` (`resume`: registers returned by the context of a task that yielded; `new`: registers inherited by
-/// a new task) in `DDSOM_POISON`, the chosen registers (all, or `resume.d3`...), except those of `guard`, are
-/// inverted. The site is the step launched (`Dispatch(3)`...). If validation stays VALID, the task does not reread
-/// these registers: the context does not need to keep them.
-pub fn probe_launch(c: &mut Cpu, label: &str, step: &dyn std::fmt::Debug, guard: u32) {
-    if labels().is_empty() {
-        return;
-    }
-    // without spaces or commas: the site stays a single word of a `DDSOM_POISON` list (`tools/bisect_poison.py`)
-    let site: String = format!("{step:?}").chars().filter(|c| *c != ' ').map(|c| if c == ',' { ';' } else { c }).collect();
-    let Some(chosen) = guards(label, &site) else {
-        return;
-    };
-    let mask = TASK_REGS & chosen & !guard;
-    if std::env::var_os("DDSOM_POISON_TRACE").is_some() {
-        eprintln!("POISON {label} {site} mask={mask:05x}");
-    }
-    let (d, a, sr) = (&mut c.d, &mut c.a, &mut c.sr);
-    invert(d, &mut a[..7], sr, mask);
-}

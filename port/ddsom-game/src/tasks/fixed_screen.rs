@@ -397,7 +397,6 @@ fn end(x: &mut Ctx) -> Flow {
 
 /// One turn of the loop: the stage, the objects, the sprites, a cession frame.
 fn tour(x: &mut Ctx) -> Flow {
-    x.c.a[0] = state::BASE;
     let step = rd8(x.b, state::STEP);
     x.push_return(Step::AfterStep);
     match (step, rd8(x.b, state::SUB_STEP)) {
@@ -413,9 +412,8 @@ fn tour(x: &mut Ctx) -> Flow {
 
 /// `0x1836e`: return from the stage.
 fn after_step(x: &mut Ctx) -> Flow {
-    x.c.a[0] = state::BASE;
-    crate::dispatch::EFFCT.update_no_next(x.c, x.b);
-    crate::dispatch::SET.update_no_next(x.c, x.b);
-    crate::sprites::build_68k(x.c, x.b);
+    crate::dispatch::EFFCT.update_no_next(x.b);
+    crate::dispatch::SET.update_no_next(x.b);
+    crate::sprites::build_in_game(x.b);
     super::one_frame(x, Step::Resume)
 }

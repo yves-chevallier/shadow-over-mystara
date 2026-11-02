@@ -4,7 +4,6 @@
 //! each frame, the menu state handler (`service::handler`), followed by a wait frame. The
 //! exit (9. EXIT) replaces the task with the boot task.
 
-use crate::mem::set_low_word;
 use crate::modes::{Flow, Sequence};
 use crate::scene::Ctx;
 use crate::service::{self, MENU, MENU_LONGS};
@@ -29,7 +28,6 @@ fn entry(x: &mut Ctx) -> Flow {
     for k in 0..MENU_LONGS {
         crate::mem::wr32(x.b, MENU + 4 * k, 0);
     }
-    set_low_word(&mut x.c.d[0], KILLED_SLOT);
     crate::kernel::kill_task(x.b, KILLED_SLOT as u32);
     turn(x)
 }

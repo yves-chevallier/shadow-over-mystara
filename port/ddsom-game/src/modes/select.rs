@@ -107,9 +107,9 @@ fn player(k: u32) -> u32 {
 /// Dispatch of the objects of the given classes, then the sprite list (`jsr 0x39cba`... `jsr 0x1de96`).
 fn render(x: &mut Ctx, classes: &[&dispatch::Class]) {
     for class in classes {
-        class.update_no_next(x.c, x.b);
+        class.update_no_next(x.b);
     }
-    crate::sprites::build_68k(x.c, x.b);
+    crate::sprites::build_in_game(x.b);
 }
 
 /// Two tile blocks (`n`, `n + 1`) one after the other from `destination`.
@@ -122,9 +122,9 @@ pub const PHASE_4: Native = Native {
     entry: 0x1ca20,
     name: "select_phase_4",
     run: crate::Body::WithCpu(|c, b| {
-        let mut x = Ctx::new(c, b);
-        if phase_4(&mut x) == Flow::Done {
-            rts(x.c, x.b);
+        // entry for the original code (tools): returns only if the phase did not cede control
+        if phase_4(&mut Ctx::new(b)) == Flow::Done {
+            rts(c, b);
         }
     }),
     touches_sound: false,
@@ -261,10 +261,10 @@ crate::steps! {
         },
         FadeLoop = FADE_LOOP => fade_wait,
         Step6Faded = STEP_6_FADED => |x| {
-            dispatch::EFFCT.update_no_next(x.c, x.b);
+            dispatch::EFFCT.update_no_next(x.b);
             crate::objects::pools::EFFCT.reset(x.b);
             crate::sprites::clear_lists(x.b);
-            crate::sprites::build_68k(x.c, x.b);
+            crate::sprites::build_in_game(x.b);
             let v = rd16(x.b, var::VIDEO) & !0xe;
             wr16(x.b, var::VIDEO, v);
             x.wait(1, Step::Step6Clear)
@@ -296,8 +296,7 @@ crate::steps! {
         Step8Show = STEP_8_SHOW => |x| {
             let v = rd16(x.b, var::VIDEO) | 0xe;
             wr16(x.b, var::VIDEO, v);
-            x.c.d[0] = 1;
-            crate::tasks::wait_then_return(x)
+            crate::tasks::wait_then_return(x, 1)
         },
         StepEFaded = STEP_E_FADED => |x| {
             crate::objects::pools::SET.reset(x.b);
@@ -496,10 +495,10 @@ fn cursor(x: &mut Ctx, a0: u32) {
         }
         other |= 1 << (d3 & 31);
         wr16(x.b, var::WORD_9A0E, other as u16);
-        // 0x2e630: character stat (development card only). Original glitch: it receives
-        // D0.w, of which only the low byte is the choice; the high byte is left over from previous calls
-        let d0 = (x.c.d[0] as u16 & 0xff00) | (d3 & 0xff) as u16;
-        crate::eeprom::stat_chosen_character(x.b, d0);
+        // 0x2e630: character stat (development card only). Original glitch: it receives D0.w, of which only the low
+        // byte is the choice; the high byte is left over from previous calls: taken as zero (the development card is
+        // never there, code-mort.md)
+        crate::eeprom::stat_chosen_character(x.b, (d3 & 0xff) as u16);
         d3 |= 0x80;
         wr8(x.b, var::LOCKED_FLAG, 1);
     }
@@ -625,7 +624,7 @@ fn step_6(x: &mut Ctx) -> Flow {
         // player of that number (0x2e58, 0x2e6e, 0x2e86, 0x2e9e)
         let kind = rd8(x.b, p + 2) as u32;
         assert!(kind < 4, "selection: player {kind} outside table 0x1d0f6");
-        crate::player::init::initialize(x.c, x.b, kind);
+        crate::bench::on_bench(x.b, |c, b| crate::player::init::initialize(c, b, kind));
         if (rd8(x.b, p + 3) & 0x7f) >> 1 == 5 {
             wr8(x.b, p + 0x162, 1);
             wr8(x.b, p + 0x16b, 5);
@@ -771,9 +770,8 @@ fn step_e(x: &mut Ctx) -> Flow {
     wr8(x.b, var::STEP, 0);
     wr16(x.b, var::SUB, 0);
     fading::DELAY.set(x.b, 1);
-    x.c.d[0] = 8;
     fading::PAGES.set(x.b, 0xf);
-    x.subroutine(crate::tasks::fading::descent_d0, Step::StepEFaded)
+    x.subroutine(|x| crate::tasks::fading::descent_steps(x, 8), Step::StepEFaded)
 }
 const STEP_E_FADED: u32 = 0x1d498;
 const STEP_E_HIDE: u32 = 0x1d4b8;

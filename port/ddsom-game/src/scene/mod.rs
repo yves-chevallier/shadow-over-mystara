@@ -29,7 +29,6 @@ pub mod transition;
 
 use cps2::Cps2Bus;
 use m68k::decode::Fetch;
-use m68k::Cpu;
 
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::{pools, Obj};
@@ -105,13 +104,16 @@ pub mod fading {
 
 /// Context of a scene sequence: the machine, and named accesses to work RAM.
 pub struct Ctx<'a> {
-    pub c: &'a mut Cpu,
     pub b: &'a mut Cps2Bus,
+    /// Scene entry (phase 8): the address of the phase handler, which the original keeps in A0 (`jsr (A0)` of the
+    /// game loop and of the demo) and which the opening sequences reread as an object (original glitch: see
+    /// `entry::phase_8`); 0 elsewhere.
+    pub phase_handler: u32,
 }
 
 impl<'a> Ctx<'a> {
-    pub fn new(c: &'a mut Cpu, b: &'a mut Cps2Bus) -> Self {
-        Ctx { c, b }
+    pub fn new(b: &'a mut Cps2Bus) -> Self {
+        Ctx { b, phase_handler: 0 }
     }
 
     // --- work RAM variables ---------------------------------------------------------
@@ -191,11 +193,9 @@ impl<'a> Ctx<'a> {
     /// handler yields here (the original's call by address did not allow it).
     #[track_caller]
     pub fn world(&mut self) {
-        // probe `rendering` (see `dispatch::Class::update_no_next`)
-        crate::diag::dead_regs(self.c, "handback", crate::diag::TASK_REGS);
-        let flow = crate::game::update_world(self.c, self.b);
+        let flow = crate::game::update_world(self.b);
         assert!(flow == crate::modes::Flow::Done, "scene sequence: a handler ceded control during the world update");
-        crate::sprites::build_68k(self.c, self.b);
+        crate::sprites::build_in_game(self.b);
     }
 
     /// System object "card" at scene start (SOBJ of type 14, 0xdfe26).
@@ -208,10 +208,10 @@ impl<'a> Ctx<'a> {
         let _ = crate::effects_aids::scenery_6(self.b, variant);
     }
 
-    /// Copy of the inputs to the players (0x2aec). Original glitch: the D0-D4 it leaves are re-read by
-    /// handlers of the world update (`inputs::copy_68k`).
+    /// Copy of the inputs to the players (0x2aec). Original glitch: the D2-D4 it leaves are re-read by
+    /// handlers of the world update (`inputs::copy_in_game`).
     pub fn inputs(&mut self) {
-        crate::inputs::copy_68k(self.c, self.b);
+        crate::inputs::copy_in_game(self.b);
     }
 
     // --- timers ------------------------------------------------------------------------------
@@ -273,21 +273,14 @@ impl<'a> Ctx<'a> {
 
     // --- players ---------------------------------------------------------------------------------
 
-    /// Are all the players in the game and alive in state `state` (byte `+6`)? Leaves A1 and D6
-    /// like the original loop (A1 on the blocking player, or past the last; D6 = remainder).
+    /// Are all the players in the game and alive in state `state` (byte `+6`)? (The A1 and D6 of the original loop
+    /// are reread by nobody.)
     pub fn players_in_state(&mut self, state: u8) -> bool {
-        for k in 0..4u32 {
+        (0..4u32).all(|k| {
             let p = PLAYERS + k * PLAYER_STRIDE;
             let alive = rd8(self.b, p + player::ACTIVE) != 0 && rd16(self.b, p + player::HEALTH) != 0;
-            if alive && rd8(self.b, p + player::STATE) != state {
-                self.c.a[1] = p;
-                self.c.d[6] = 3 - k;
-                return false;
-            }
-        }
-        self.c.a[1] = PLAYERS + 4 * PLAYER_STRIDE;
-        self.c.d[6] = 0xffff;
-        true
+            !alive || rd8(self.b, p + player::STATE) == state
+        })
     }
 }
 

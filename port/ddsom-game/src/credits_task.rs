@@ -23,7 +23,7 @@
 use crate::credits_screen::{self, FIRST_COIN_SLOT};
 use crate::scene::fading;
 use crate::modes::{Flow, Sequence};
-use crate::mem::{rd16, rd8, set_low_word, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, rd8, wr16, wr32, wr8, A5};
 use crate::objects::{pools, Obj};
 use crate::scene::Ctx;
 use crate::tasks;
@@ -166,9 +166,8 @@ pub enum Step {
     AfterFadeClear,
     /// Start of a player in "continue" mode, after the screen is cleared.
     StartAfterClear(GameStart),
-    /// Lock pulse after its first cession; `d0` is the D0 that the original keeps on the stack
-    /// (`move.l D0,-(SP)`).
-    PulseAfterWait { d0: u32 },
+    /// Lock pulse after its first cession.
+    PulseAfterWait,
     /// Return of the pulse of coin slot `k - 1`: that of coin slot `k` (1 to 3).
     Lock(usize),
 }
@@ -187,7 +186,7 @@ impl Step {
             Step::AfterFade => at::AFTER_FADE,
             Step::AfterFadeClear => at::AFTER_FADE_CLEAR,
             Step::StartAfterClear(_) => at::START_AFTER_CLEAR,
-            Step::PulseAfterWait { .. } => at::PULSE_AFTER_WAIT,
+            Step::PulseAfterWait => at::PULSE_AFTER_WAIT,
             Step::Lock(k) => at::LOCKOUT[k - 1],
         }
     }
@@ -203,7 +202,7 @@ impl Step {
             Step::AfterFade => x.subroutine(crate::video::black_screen::start, Step::AfterFadeClear),
             Step::AfterFadeClear => after_fade_clear(x),
             Step::StartAfterClear(d) => start_after_clear(x, d),
-            Step::PulseAfterWait { d0 } => pulse_after_wait(x, d0),
+            Step::PulseAfterWait => pulse_after_wait(x),
             Step::Lock(k) => lockouts(x, k),
         }
     }
@@ -297,8 +296,8 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
     set16(x, var::FLAGS, flags);
     set8(x, var::CLEAR_FLAG, 0);
     set8(x, var::SCREEN_FLAG, 1);
-    crate::tasks::game::clear_variables(x.c, x.b);
-    crate::player::init::clear_all_players(x.c, x.b);
+    crate::tasks::game::clear_variables(x.b);
+    crate::bench::on_bench(x.b, crate::player::init::clear_all_players);
     crate::sprites::clear_lists(x.b);
     wr16(x.b, OUTPUT_4, OUTPUT_ON);
     video_on(x);
@@ -314,7 +313,7 @@ fn after_init_clear(x: &mut Ctx) -> Flow {
         wr16(x.b, o + 8, px);
         wr16(x.b, o + 0xc, pz);
     }
-    crate::dispatch::SOBJ.update_no_next(x.c, x.b);
+    crate::dispatch::SOBJ.update_no_next(x.b);
     // two grids of each kind, the second following the first
     let end = load_grid(x.b, Grid::Blocks4x4, 5, 0x912000);
     load_grid(x.b, Grid::Blocks4x4, 6, end.destination);
@@ -342,7 +341,7 @@ fn display(x: &mut Ctx) -> Flow {
     crate::text::print(x.b, TEXT_CREDITS);
     let text = language_text(x);
     crate::text::print(x.b, text);
-    crate::sprites::build_68k(x.c, x.b);
+    crate::sprites::build_in_game(x.b);
     starts(x)
 }
 
@@ -366,38 +365,33 @@ fn lockouts(x: &mut Ctx, k: usize) -> Flow {
     if k > 0 && v8(x, var::COIN_COUNT) as usize == k - 1 {
         return Flow::Done;
     }
-    x.c.a[0] = a5(COINS[k]);
     if k < 3 {
         x.push_return(Step::Lock(k + 1));
     }
-    pulse(x)
+    pulse(x, a5(COINS[k]))
 }
 
-/// `0x143a6`: if coin slot A0 has a counted coin (`+3`), counts it down, locks the coin
+/// Coin counter bit locked and unlocked by a pulse (D0.w = 1 of the original, kept during the cession).
+const PULSE_BITS: u8 = 1;
+/// Frames of each half of a pulse (D0.w = 0x10).
+const PULSE_FRAMES: u8 = 0x10;
+
+/// `0x143a6`: if coin slot `slot` (A0 of the original) has a counted coin (`+3`), counts it down, locks the coin
 /// counter for 16 frames then unlocks it and waits another 16 frames.
-fn pulse(x: &mut Ctx) -> Flow {
-    set_low_word(&mut x.c.d[0], 1);
-    let counter = rd8(x.b, x.c.a[0] + 3);
+fn pulse(x: &mut Ctx, slot: u32) -> Flow {
+    let counter = rd8(x.b, slot + 3);
     if counter == 0 {
         return Flow::Done;
     }
-    wr8(x.b, x.c.a[0] + 3, counter - 1);
-    // D0 is kept during the cession (`move.l D0,-(SP)` of the original): in the resumption step
-    let d0 = x.c.d[0];
-    crate::video::lock_counters(x.b, d0 as u8);
-    set_low_word(&mut x.c.d[0], 0x10);
-    crate::kernel::wait(x.c, x.b, Step::PulseAfterWait { d0 });
-    Flow::Yield
+    wr8(x.b, slot + 3, counter - 1);
+    crate::video::lock_counters(x.b, PULSE_BITS);
+    crate::tasks::wait(x, PULSE_FRAMES, Step::PulseAfterWait)
 }
 
 /// `0x143c8`: unlocks, then the second wait (`jmp 0xa40`): the task will resume at the continuation of the caller.
-fn pulse_after_wait(x: &mut Ctx, d0: u32) -> Flow {
-    x.c.d[0] = d0;
-    crate::video::unlock_counters(x.b, d0 as u8);
-    set_low_word(&mut x.c.d[0], 0x10);
-    let next = crate::tasks::table::pop_return(x.c, x.b);
-    crate::kernel::wait(x.c, x.b, next);
-    Flow::Yield
+fn pulse_after_wait(x: &mut Ctx) -> Flow {
+    crate::video::unlock_counters(x.b, PULSE_BITS);
+    crate::tasks::wait_then_return(x, PULSE_FRAMES)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -558,8 +552,8 @@ fn start_after_clear(x: &mut Ctx, d: GameStart) -> Flow {
     video_on(x);
     let flags = rd16(x.b, a5(var::FLAGS)) & !1;
     set16(x, var::FLAGS, flags);
-    crate::tasks::game::clear_variables(x.c, x.b);
-    crate::player::init::clear_all_players(x.c, x.b);
+    crate::tasks::game::clear_variables(x.b);
+    crate::bench::on_bench(x.b, crate::player::init::clear_all_players);
     set8(x, var::SCROLL_MODE, 0);
     crate::sprites::clear_lists(x.b);
     join(x, d)
@@ -572,7 +566,7 @@ fn join(x: &mut Ctx, d: GameStart) -> Flow {
     crate::sound::service(x.b, crate::sound::Service::Ff07 { lock: 0, line: 4 });
     let credits = rd8(x.b, d.coin_slot + 2).wrapping_sub(d.cost);
     wr8(x.b, d.coin_slot + 2, credits);
-    crate::tasks::game::clear_variables(x.c, x.b);
+    crate::tasks::game::clear_variables(x.b);
     wr8(x.b, d.record, 1);
     wr8(x.b, d.record + 2, d.player);
     let started = rd8(x.b, a5(var::STARTED)) | 1 << (d.player & 7);
@@ -589,7 +583,7 @@ pub const TEST_NATIVES: &[crate::Native] = &[crate::Native {
     entry: 0x13c2c,
     name: "credits_state",
     run: crate::Body::WithCpu(|c, b| {
-        if let Flow::Yield = credits(&mut Ctx::new(c, b)) {
+        if let Flow::Yield = credits(&mut Ctx::new(b)) {
             panic!("credits_etat: cedes control (outside the fuzz frame)");
         }
         crate::mem::rts(c, b);

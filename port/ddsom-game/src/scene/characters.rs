@@ -256,8 +256,7 @@ fn player_done(x: &mut Ctx) -> Flow {
     let left = rd8(x.b, v::LEFT).wrapping_sub(1);
     wr8(x.b, v::LEFT, left);
     reset_objects(x);
-    crate::sprites::build_68k(x.c, x.b);
-    x.c.a[0] = BLOCK;
+    crate::sprites::build_in_game(x.b);
     crate::video::clear_objects(x.b);
     x.set_v16(0x14, 0x12c0);
     x.wait(1, Step::NextWaited)
@@ -268,17 +267,16 @@ fn end(x: &mut Ctx) -> Flow {
     skip(x);
     x.set_v8(0x33, 0);
     x.set_v8(0x3c, 1);
-    x.c.d[0] = 1;
-    crate::tasks::wait_then_return(x)
+    crate::tasks::wait_then_return(x, 1)
 }
 
 pub const CHARACTERS: Native = Native {
     entry: 0xf6492,
     name: "scene_characters",
     run: crate::Body::WithCpu(|c, b| {
-        let mut x = Ctx::new(c, b);
-        if run(&mut x) == Flow::Done {
-            crate::mem::rts(x.c, x.b);
+        // entry for the original code (tools): returns only if the state did not cede control
+        if run(&mut Ctx::new(b)) == Flow::Done {
+            crate::mem::rts(c, b);
         }
     }),
     touches_sound: false,

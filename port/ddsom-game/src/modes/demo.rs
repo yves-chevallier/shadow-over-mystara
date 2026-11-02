@@ -150,10 +150,7 @@ fn interpreter_a(x: &mut Ctx) -> Flow {
 crate::steps! {
     /// Steps (resume points) of the state machine.
     pub enum Step {
-        ReturnA = at::RETURN_A => |x| {
-            x.c.a[0] = mode::BASE;
-            Flow::Done
-        },
+        ReturnA = at::RETURN_A => |_| Flow::Done,
         LoopA = at::LOOP_A => loop_a,
         AfterYieldA = at::AFTER_YIELD_A => after_yield_a,
         SceneEndClearA = SCENE_END_CLEAR_A => |x| scene_end_clear(x, Step::SceneEndNextA),
@@ -181,10 +178,7 @@ crate::steps! {
             clear_layers(x, &[Layer::One, Layer::Two, Layer::Three]);
             next_operation(x)
         },
-        ReturnB = at::RETURN_B => |x| {
-            x.c.a[0] = mode::BASE;
-            Flow::Done
-        },
+        ReturnB = at::RETURN_B => |_| Flow::Done,
         LoopB = at::LOOP_B => loop_b,
         AfterYieldB = at::AFTER_YIELD_B => after_yield_b,
         SceneNextClearB = SCENE_NEXT_CLEAR_B => |x| scene_end_clear(x, Step::SceneNextNextB),
@@ -225,7 +219,7 @@ fn clear_layers(x: &mut Ctx, layers: &[Layer]) {
 
 /// Players cleared (0x2d9e) and pools reset (0x2062).
 fn clear_players_and_pools(x: &mut Ctx) {
-    crate::player::init::clear_all_players(x.c, x.b);
+    crate::bench::on_bench(x.b, crate::player::init::clear_all_players);
     for pool in pools::POOLS {
         pool.reset(x.b);
     }
@@ -254,7 +248,6 @@ fn start_a(x: &mut Ctx) -> Flow {
 
 /// `0x1f376`: reads the next script operation.
 fn next_operation(x: &mut Ctx) -> Flow {
-    x.c.a[0] = mode::BASE;
     wr8(x.b, mode::BASE + 3, 0);
     let script = rd32(x.b, mode::BASE + f::SCRIPT);
     let op = rd8(x.b, script);
@@ -301,7 +294,7 @@ fn scene_start(x: &mut Ctx, mut a1: u32) -> Flow {
             wr8(x.b, a0 + 0x15d, variant);
             // the routine of table 0x1f8a8 (indexed by the counter, counting down) is the player's initialisation
             // of that number (0x2e58...: `player::init`), D6/A0/A1 kept around the call (`movem.l`)
-            crate::player::init::initialize(x.c, x.b, 3 - d6);
+            crate::bench::on_bench(x.b, |c, b| crate::player::init::initialize(c, b, 3 - d6));
             apply_record(x, a0, a1);
         }
         a1 += 6;
@@ -354,7 +347,6 @@ fn loop_a(x: &mut Ctx) -> Flow {
 }
 
 fn after_yield_a(x: &mut Ctx) -> Flow {
-    x.c.a[0] = mode::BASE;
     if rd8(x.b, var::PHASE) == 0xc {
         let left = rd16(x.b, mode::BASE + f::TIMER).wrapping_sub(1);
         wr16(x.b, mode::BASE + f::TIMER, left);
@@ -375,12 +367,12 @@ fn run_phase(x: &mut Ctx, phases: u32, loop_top: Step, after: Step) -> Flow {
     let phase = rd8(x.b, var::PHASE) as u32;
     // Original glitch: A0 stays the phase handler address (`jsr (A0)`); scene entry re-reads it as
     // object creator (`scene::entry`: finale, effects 0x13)
-    x.c.a[0] = prog32(x, phases + phase);
+    let handler = prog32(x, phases + phase);
     // the two tables only have phases 8 (scene entry) and 12 (the game); the other entries are null
     // (code-mort.md, batch "CPU removal")
     match phase {
         8 => {
-            crate::scene::entry::phase_8(x.c, x.b);
+            crate::scene::entry::phase_8(x.b, handler);
             Flow::Done
         }
         12 => demo_phase_12(x),
@@ -512,8 +504,7 @@ fn presentation(x: &mut Ctx, mut a1: u32) -> Flow {
     crate::palette::load_palette_page(x.b, 3, 84);
     fading::PAGES.set(x.b, 12);
     crate::palette::full_brightness(x.b);
-    x.c.d[0] = 1;
-    crate::tasks::wait_then_return(x)
+    crate::tasks::wait_then_return(x, 1)
 }
 
 fn presentation_step(x: &mut Ctx) -> Flow {
@@ -530,9 +521,9 @@ fn presentation_step(x: &mut Ctx) -> Flow {
 
 /// `0x1fc68`: common end of each sub-state: terrain (SET, SOBJ) and sprites (`jmp 0x1de96`).
 fn p_render(x: &mut Ctx) -> Flow {
-    crate::dispatch::SET.update_no_next(x.c, x.b);
-    crate::dispatch::SOBJ.update_no_next(x.c, x.b);
-    crate::sprites::build_68k(x.c, x.b);
+    crate::dispatch::SET.update_no_next(x.b);
+    crate::dispatch::SOBJ.update_no_next(x.b);
+    crate::sprites::build_in_game(x.b);
     Flow::Done
 }
 
@@ -733,7 +724,6 @@ fn interpreter_b(x: &mut Ctx) -> Flow {
 
 /// `0x20960`: next operation: end of script (negative byte) or scene.
 fn next_operation_b(x: &mut Ctx) -> Flow {
-    x.c.a[0] = mode::BASE;
     wr8(x.b, mode::BASE + 3, 0);
     let script = rd32(x.b, mode::BASE + f::SCRIPT);
     let op = rd8(x.b, script);
@@ -756,7 +746,6 @@ fn loop_b(x: &mut Ctx) -> Flow {
 }
 
 fn after_yield_b(x: &mut Ctx) -> Flow {
-    x.c.a[0] = mode::BASE;
     if rd8(x.b, var::SCENE) == 0x6f || rd8(x.b, var::PHASE) == 0xc {
         let timer = rd16(x.b, mode::BASE + f::TIMER);
         if timer == 0 {
@@ -993,9 +982,9 @@ pub const DEMO_PHASE_12: Native = Native {
     entry: 0x1fa38,
     name: "demo_phase_12",
     run: crate::Body::WithCpu(|c, b| {
-        let mut x = Ctx::new(c, b);
-        if demo_phase_12(&mut x) == Flow::Done {
-            crate::mem::rts(x.c, x.b);
+        // entry for the original code (tools): returns only if the state did not cede control
+        if demo_phase_12(&mut Ctx::new(b)) == Flow::Done {
+            crate::mem::rts(c, b);
         }
     }),
     touches_sound: false,
@@ -1005,11 +994,11 @@ pub const DEMO_PHASE_12: Native = Native {
 /// `0x1fa38`: AI inputs, then the world update (an object handler may make the task cede control there; it
 /// will resume at [`Step::AfterWorld`]).
 fn demo_phase_12(x: &mut Ctx) -> Flow {
-    // Original glitch: D0-D4 of the input copy (0x2aec) are re-read by handlers (see game.rs)
-    crate::inputs::copy_68k(x.c, x.b);
+    // Original glitch: D2-D4 of the input copy (0x2aec) are re-read by handlers (see game.rs)
+    crate::inputs::copy_in_game(x.b);
     demo_inputs(x);
     x.push_return(Step::AfterWorld);
-    if crate::game::update_world(x.c, x.b) == Flow::Yield {
+    if crate::game::update_world(x.b) == Flow::Yield {
         return Flow::Yield;
     }
     x.drop_return();
@@ -1019,7 +1008,7 @@ fn demo_phase_12(x: &mut Ctx) -> Flow {
 /// `0x1fa4a`: like game phase 12 (`game::after_world`); the original ends with `jmp 0x28d8` (the end of
 /// the game, then its `rts`).
 fn demo_after_world(x: &mut Ctx) -> Flow {
-    crate::game::after_world(x.c, x.b);
+    crate::game::after_world(x.b);
     Flow::Done
 }
 

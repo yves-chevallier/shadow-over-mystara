@@ -14,11 +14,12 @@
 //!   16 steps, `A5-0x65ec` raised during the fade, registers saved on entry (`movem`, kept in the stage) and
 //!   restored at the end.
 //!
-//! The subroutines are functions ([`rise`], [`descent`], [`descent_d0`], [`to_white`],
+//! The subroutines are functions ([`rise`], [`descent`], [`descent_steps`], [`to_white`],
 //! [`to_colours`], [`to_palettes`]) that the steps call directly (the SET doors too:
 //! `families::set::exit_fading`).
 
-use crate::mem::{rd16, rd8, set_low_word, wr32, wr8, A5};
+use crate::dispatch::Leftovers;
+use crate::mem::{rd16, rd8, wr32, wr8, A5};
 use crate::modes::Flow;
 use crate::palette::{brightness_step, component_step, white_out, Target};
 use crate::scene::Ctx;
@@ -58,20 +59,10 @@ pub enum Step {
     BrightnessTask { fading: Brightness, step: Option<u8> },
     /// Start of a per-component fade task (`whiten`: task `0x1ced4` first whitens the pages).
     ComponentTask { fading: Component, whiten: bool },
-    /// Next step of a brightness fade; `a0`: A0 of the subroutine's caller, which the fade does not touch
-    /// (the original keeps it in its registers, which the cession saves and restores) and which the caller re-reads
-    /// on return (block
-    /// of the shared state of the scene-exit sequences, object of a SET door...).
-    Brightness { fading: Brightness, a0: u32 },
-    /// Next step of a per-component fade; `regs`: D0-D7/A0-A6 saved on entry.
-    Component { fading: Component, regs: Regs },
-}
-
-/// Registers saved by `movem.l D0-D7/A0-A6,-(SP)`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Regs {
-    d: [u32; 8],
-    a: [u32; 7],
+    /// Next step of a brightness fade.
+    Brightness { fading: Brightness },
+    /// Next step of a per-component fade; `saved`: the leftovers D2-D5 saved on entry.
+    Component { fading: Component, saved: Leftovers },
 }
 
 /// The fade tasks, by entry.
@@ -109,26 +100,21 @@ impl Step {
         match self {
             Step::BrightnessTask { fading, step } => fading.task_start(x, step),
             Step::ComponentTask { fading, whiten } => fading.start(x, whiten),
-            Step::Brightness { fading, a0 } => {
-                x.c.a[0] = a0;
-                fading.step(x)
-            }
-            Step::Component { fading, regs } => fading.step(x, regs),
+            Step::Brightness { fading } => fading.step(x),
+            Step::Component { fading, saved } => fading.step(x, saved),
         }
     }
 }
 
-/// Cedes `delay` frames (D0.w, the high word of D0 is kept); what follows is stage `resume`.
+/// Cedes `delay` frames (D0.w of the original; the trap takes its low byte); what follows is stage `resume`.
 fn wait(x: &mut Ctx, delay: u16, resume: Step) -> Flow {
-    set_low_word(&mut x.c.d[0], delay);
-    crate::kernel::wait(x.c, x.b, resume);
-    Flow::Yield
+    super::wait(x, delay as u8, resume)
 }
 
 // ---------------------------------------------------------------------------------------------
 // Brightness
 
-/// A brightness fade: direction (D1), form (subroutine or task), pages (complete or partial).
+/// A brightness fade: direction (D1 of the original), form (subroutine or task), pages (complete or partial).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Brightness {
     delta: u32,
@@ -149,25 +135,21 @@ impl Brightness {
     /// Start of a task: `step` = imposed number of steps (otherwise that of the state). It only starts if the
     /// pages, the delay and the number of steps are non-zero.
     fn task_start(self, x: &mut Ctx, step: Option<u8>) -> Flow {
-        x.c.d[1] = self.delta;
         if let Some(n) = step {
             wr8(x.b, state::STEP, n);
         }
-        x.c.a[4] = state::BASE;
         if rd8(x.b, state::PAGES) == 0 || rd16(x.b, state::DELAY) == 0 || rd8(x.b, state::STEP) == 0 {
             return self.end(x);
         }
         self.first_step(x)
     }
 
-    /// Start of a subroutine: D0.b = number of steps; it only starts if some pages are checked.
-    fn subroutine_start(self, x: &mut Ctx) -> Flow {
-        x.c.d[1] = self.delta;
-        x.c.a[4] = state::BASE;
+    /// Start of a subroutine of `steps` steps (D0.b of the original); it only starts if some pages are checked.
+    fn subroutine_start(self, x: &mut Ctx, steps: u8) -> Flow {
         if rd8(x.b, state::PAGES) == 0 {
             return self.end(x);
         }
-        wr8(x.b, state::STEP, x.c.d[0] as u8);
+        wr8(x.b, state::STEP, steps);
         self.first_step(x)
     }
 
@@ -188,8 +170,7 @@ impl Brightness {
             return self.end(x);
         }
         let delay = rd16(x.b, state::DELAY);
-        let a0 = x.c.a[0];
-        wait(x, delay, Step::Brightness { fading: self, a0 })
+        wait(x, delay, Step::Brightness { fading: self })
     }
 
     /// End: no more pages; the subroutine returns to its caller, the task ends.
@@ -210,10 +191,9 @@ const fn task(delta: u32, partial: bool) -> Brightness {
     Brightness { delta, task: true, partial }
 }
 
-/// Complete fade of a subroutine: D0.b = 16 steps.
+/// Complete fade of a subroutine: 16 steps.
 fn full(x: &mut Ctx, delta: u32) -> Flow {
-    crate::mem::set_low_byte(&mut x.c.d[0], STEP_FULL);
-    subroutine(delta).subroutine_start(x)
+    subroutine(delta).subroutine_start(x, STEP_FULL)
 }
 
 /// `0x144c`: complete fade from black (subroutine: the caller's continuation waits for the end).
@@ -226,9 +206,9 @@ pub fn descent(x: &mut Ctx) -> Flow {
     full(x, DESCEND)
 }
 
-/// `0x146c`: fade to black of D0.b steps.
-pub fn descent_d0(x: &mut Ctx) -> Flow {
-    subroutine(DESCEND).subroutine_start(x)
+/// `0x146c`: fade to black of `steps` steps (D0.b of the original).
+pub fn descent_steps(x: &mut Ctx, steps: u8) -> Flow {
+    subroutine(DESCEND).subroutine_start(x, steps)
 }
 
 // tasks: 0x14ba / 0x14d0 complete fade, 0x14c8 / 0x14de number of steps of the state, 0x1536 / 0x153e partial (see
@@ -261,30 +241,29 @@ fn component(entry: u32) -> Component {
 
 impl Component {
     /// Entry: registers saved, 16 steps (task `0x1ced4` first whitens the pages, its other entry
-    /// `0x1cf12` does not: `whiten`).
+    /// `0x1cf12` does not: `whiten`). Of the registers that the original saves (`movem.l D0-D7/A0-A6,-(SP)`) and
+    /// restores at the end, only the leftovers D2-D5 are reread after.
     fn start(self, x: &mut Ctx, whiten: bool) -> Flow {
-        let mut regs = Regs { d: x.c.d, a: [0; 7] };
-        regs.a.copy_from_slice(&x.c.a[..7]);
+        let saved = super::table::table(x.b).leftovers;
         if whiten {
             white_out(x.b);
         }
         wr8(x.b, state::STEP, STEP_FULL);
         wr8(x.b, CURRENT_COMPONENT, 1);
-        self.step(x, regs)
+        self.step(x, saved)
     }
 
-    fn step(self, x: &mut Ctx, regs: Regs) -> Flow {
+    fn step(self, x: &mut Ctx, saved: Leftovers) -> Flow {
         component_step(x.b, self.target);
         let remainder = rd8(x.b, state::STEP).wrapping_sub(1);
         wr8(x.b, state::STEP, remainder);
         if remainder != 0 {
             let delay = rd16(x.b, state::DELAY);
-            return wait(x, delay, Step::Component { fading: self, regs });
+            return wait(x, delay, Step::Component { fading: self, saved });
         }
         wr8(x.b, state::PAGES, 0);
         wr8(x.b, CURRENT_COMPONENT, 0);
-        x.c.d = regs.d;
-        x.c.a[..7].copy_from_slice(&regs.a);
+        super::table::table(x.b).leftovers = saved;
         if self.task {
             super::finish(x)
         } else {

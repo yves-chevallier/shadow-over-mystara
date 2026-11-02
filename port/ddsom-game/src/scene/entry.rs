@@ -13,7 +13,6 @@
 
 use cps2::Cps2Bus;
 use super::fading;
-use m68k::Cpu;
 
 use super::{player, scratch, script, var, Ctx, PLAYERS, PLAYER_STRIDE};
 use crate::families::effects_creators as creators;
@@ -102,9 +101,9 @@ fn init_scene(x: &mut Ctx) {
     x.set_v8(0x49, pb);
     crate::modes::demo::reset_recorder(x.b);
     crate::sprites::clear_lists(x.b);
-    // 0x33aa6: cameras at start, then their update (D4 of which is re-read: `scroll::update_cameras_68k`)
+    // 0x33aa6: cameras at start, then their update (D4 of which is re-read: `scroll::update_cameras_in_game`)
     crate::scroll::cameras_start(x.b);
-    crate::scroll::update_cameras_68k(x.c, x.b);
+    crate::scroll::update_cameras_in_game(x.b);
     script::reset(x.b);
     for pool in crate::objects::pools::POOLS {
         pool.reset(x.b);
@@ -258,15 +257,18 @@ fn sequence(scene: u8) -> Sequence {
     }
 }
 
-/// Phase 8: one frame.
-pub fn phase_8(c: &mut Cpu, b: &mut Cps2Bus) {
-    let mut x = Ctx::new(c, b);
+/// Phase 8: one frame. `handler`: the address of the phase handler, which the original leaves in A0 (`jsr (A0)`
+/// of the game loop, table 0x1c502, or of the demo) and which two opening sequences reread as an object (original
+/// glitch: effects 0x13 of the lightning, finale object).
+pub fn phase_8(b: &mut Cps2Bus, handler: u32) {
+    let mut x = Ctx::new(b);
+    x.phase_handler = handler;
     match x.v8(var::STEP) {
         STEP_INIT => init_scene(&mut x),
         STEP_SEQUENCE => {
             let scene = x.v8(var::SCENE);
             sequence(scene)(&mut x);
-            script::step(x.c, x.b);
+            script::step(x.b);
             game::debug_scene_skip(x.b);
         }
         _ => {}
@@ -277,7 +279,8 @@ pub const PHASE_8: Native = Native {
     entry: 0x20c38,
     name: "scene_phase_8",
     run: crate::Body::WithCpu(|c, b| {
-        phase_8(c, b);
+        // called by the original code (tools): A0 = the phase handler
+        phase_8(b, c.a[0]);
         rts(c, b);
     }),
     touches_sound: false,
@@ -1079,8 +1082,9 @@ fn boss_gate(x: &mut Ctx, opening: Opening, spawn_at: u16, boss: u8, wait: u16) 
                 match opening {
                     Opening::Lightning => {
                         crate::palette::flash(x.b, crate::palette::Flash::Gray);
-                        // Original glitch: the effects are linked to the object A0 left by the game loop
-                        crate::families::creators::effects_13(x.b, Obj(x.c.a[0]));
+                        // Original glitch: the effects are linked to the "object" A0 left by the game loop (the
+                        // address of the phase handler)
+                        crate::families::creators::effects_13(x.b, Obj(x.phase_handler));
                     }
                     Opening::Rain => {
                         crate::palette::flash(x.b, crate::palette::Flash::B);
@@ -1467,10 +1471,10 @@ mod tests {
     }
 }
 
-/// 0xb9aa0: finale object (type 74). Original glitch: it is linked to the object A0 left by the game loop,
-/// and the failure of the allocation is not tested (the A1 left is stored).
+/// 0xb9aa0: finale object (type 74). Original glitch: it is linked to the "object" A0 left by the game loop (the
+/// address of the phase handler), and the failure of the allocation is not tested (the A1 left is stored).
 fn finale(x: &mut Ctx) -> Obj {
-    let creator = Obj(x.c.a[0]);
+    let creator = Obj(x.phase_handler);
     let o = creators::finale(x.b, creator);
     creators::or_rest(x.b, o)
 }

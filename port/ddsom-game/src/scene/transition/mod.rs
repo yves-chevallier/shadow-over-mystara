@@ -164,7 +164,7 @@ fn finish(x: &mut Ctx, next_scene: u8) -> Flow {
 
 /// The scene exit moves to its next state (`+2` of the block designated by A0), script reset, one frame yielded.
 fn end(x: &mut Ctx) -> Flow {
-    let a0 = x.c.a[0];
+    let a0 = crate::scene::screen::blocks::EXIT;
     let step = rd8(x.b, a0 + 2).wrapping_add(4);
     wr8(x.b, a0 + 2, step);
     set8(x, var::STATE, 0);
@@ -174,14 +174,13 @@ fn end(x: &mut Ctx) -> Flow {
 }
 
 /// Cedes `n` frames (`moveq #n,D0 ; jsr/jmp 0xa40`).
-fn yield_frames(x: &mut Ctx, n: u32, ret: Ret) -> Flow {
-    x.c.d[0] = n;
-    goto(x, crate::tasks::wait_then_return, ret)
+fn yield_frames(x: &mut Ctx, n: u8, ret: Ret) -> Flow {
+    goto(x, |x| crate::tasks::wait_then_return(x, n), ret)
 }
 
 /// Jumps to a subroutine that yields (`bsr`, or `bra` which returns to the caller of the script), storing the
 /// continuation if applicable.
-fn goto(x: &mut Ctx, routine: fn(&mut Ctx) -> Flow, ret: Ret) -> Flow {
+fn goto(x: &mut Ctx, routine: impl FnOnce(&mut Ctx) -> Flow, ret: Ret) -> Flow {
     if let At(r) = ret {
         x.push_return(r);
     }
@@ -201,7 +200,7 @@ crate::steps! {
     pub enum Step {
         FadeInAfterFrame = 0xfa110 => |x| fade(x, ALL_PAGES, crate::tasks::fading::rise, Caller),
         SpritesAfterFrame = 0xfa1ca => |x| {
-            crate::sprites::build_68k(x.c, x.b);
+            crate::sprites::build_in_game(x.b);
             Flow::Done
         },
     }
@@ -256,12 +255,8 @@ fn sprites_next_frame(x: &mut Ctx, ret: impl Into<Next>) -> Flow {
 
 /// 0xfa1e2: world update (A0 and A6 kept).
 fn world(x: &mut Ctx) {
-    let (a0, a6) = (x.c.a[0], x.c.a[6]);
-    // sonde `rendering` (voir `dispatch::Class::update_no_next`)
-    crate::diag::dead_regs(x.c, "handback", crate::diag::TASK_REGS);
-    let flow = crate::game::update_world(x.c, x.b);
+    let flow = crate::game::update_world(x.b);
     assert!(flow == Flow::Done, "transition script: a handler yielded control during the world update");
-    (x.c.a[0], x.c.a[6]) = (a0, a6);
 }
 
 /// 0xf7fdc: object pools cleared (A0 kept).

@@ -902,6 +902,48 @@ et les créateurs ne passent plus par le banc de registres du `Cpu`.
 Mesure (`tools/measure_refactor.py`, avant 1ead669 / après) : `families` regs 2 079 / 1 841, adr 301 / 97, drap 83 / 64 ;
 total regs 3 686 / 3 455, adr 749 / 545. Natives : 82 `Body::Handler`.
 
+## 19. Lot « sortie du Cpu », partie 7 : noyau et écrans (wt-cpu-core)
+
+Périmètre : noyau (`kernel`, `no68k`, `startup`), `tasks/`, `scene/`, `modes/`, `hud/`, `service/`, `credits*`,
+`dispatch`, `game`, `config`, et les services `palette`, `video`, `sound` côté jeu. But : que le jeu ne passe plus par
+le banc de registres du `Cpu` dans ce périmètre (le type reste, pour la machine de référence, les outils et le code
+encore sur le processeur des autres périmètres).
+
+* **Contexte des étapes sans processeur.** `scene::Ctx` n'a plus que le bus (`Ctx { b, phase_handler }`) : toutes les
+  étapes des tâches, des écrans et des séquences de scène s'exécutent sans registres ; `tasks::execute(step, b)`,
+  `tasks::return_to_caller(b)`, `table::pop_return(b)` (les variantes `_68k` ne servent plus qu'aux natives appelées
+  par le code d'origine dans les outils : le retour vers le code d'origine est noté et appliqué par `Native::execute`).
+* **Noyau sans registres.** L'ordonnanceur ne tient plus A0/D0/D1 : le créneau examiné est `Table::exam` ; le SR devient
+  le masque d'interruption de la table (`kernel::interrupt_mask`, 7 à la mise sous tension, 6 pendant l'examen d'un
+  créneau, 0 dans une tâche ; `trap #12` le change). `kernel::wait(b, images, reprise)`, `cede_ready`, `finish`,
+  `restart(b, entrée)` sans registres ; les enveloppes 0x9b6... restent des natives (arguments en registres) pour les
+  appels par adresse et les outils. `no68k::line` n'utilise plus le `Cpu` de la machine (sauf son compteur de
+  cycles) ; le démarrage appelle directement les effacements (0xc58, 0xca8, 0xcc8, 0xce8), `config::initialize`
+  (0x2d30a) et `kernel::create_task` (0x9b6).
+* **Boucle d'aiguillage sans registres.** `dispatch::Class::update(b)` appelle chaque gestionnaire (`Body::Handler`,
+  tous depuis la partie 5) avec l'objet, le compteur et les restes de la partie ; D0 (type × 4) et A1 (le
+  gestionnaire) ne sont plus posés. Un gestionnaire qui a cédé reprend par `dispatch::resume_handler` (portes SET 7 et
+  29, feu d'artifice : plus de `Cpu` temporaire). `update_last_kind` rend le type du dernier objet traité (glitch du
+  générique de fin, ci-dessous).
+* **Restes nommés.** `dispatch::Leftovers` (table des tâches) est l'état unique des restes D2-D5 : la jauge
+  (`video::gauge_in_world`, D2.w = 0x400), la liste des sprites (`sprites::build_in_game`, D4), les caméras
+  (`scroll::update_cameras_in_game`, D4), la copie des entrées (`inputs::copy_in_game`, octets bas de D2-D4), le rang
+  d'arrivée de la sortie de scène (D5), les fondus par composante (restes sauvés et rendus comme le `movem`).
+* **Pont vers le code encore sur le processeur** (`bench::on_bench`) : mise à jour et initialisation des joueurs
+  (`player/`), résolution des coups (`combat`), fin de partie (`aids::game_over`), routines des scripts de scène
+  (`families/`) reçoivent un banc neuf (A5, A7 sur le haut de la pile du superviseur, restes D2-D5 en entrée et en
+  sortie ; rien d'autre ne passe d'un appel à l'autre ; sonde `DDSOM_POISON=bench`). Il disparaîtra avec ces modules.
+* **Glitches d'origine écrits en clair.** A0 du gestionnaire de phase (`jsr (A0)`) relu comme objet par l'entrée de
+  scène (éclair 0x13, objet de la finale) : `Ctx::phase_handler`, passé par la boucle de partie et la démo ; A0 relu par
+  l'aiguillage d'une séquence de sortie de scène en fin d'état partagé : `Table::scene_exit_a0` (le bloc, ou le dernier
+  objet délié par l'écran noir, qui survit à la cession), et l'A0 que laisse la mise à jour du monde (au-delà du
+  dernier créneau SOBJ) ; durée de la cession du générique (0xfbf00) = D0 laissé par le rendu (type × 4 du dernier objet
+  traité). Approximations sur des chemins jamais joués : code-mort.md (« partie 7 »).
+* **Natives.** Sans registres (`Body::Memory`) : effacements de couches, écran noir, 0x1cf3c, `config_*`, envoi au Z80
+  (0x68c ; l'affichage des verrous du Z80, code de mise au point, est gardé compilé : `sound::show_locks`,
+  `hex_byte` = 0x29d78), phase 24, mise à jour du monde, phases 0 et 12, lecteur de script. Retirée : `config_variant`.
+  Supprimés : `crate::jump`, `jump_to`, `call_expected`, sondes `exit`, `return`, `new`/`resume`.
+
 ## Avancement
 
 | Étape | Commit | Validation |

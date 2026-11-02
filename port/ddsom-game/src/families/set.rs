@@ -675,7 +675,6 @@ mod wave_leader {
 pub mod exit_fading {
     use super::super::set_b;
     use super::{Bench, Cx};
-    use crate::mem::A5;
     use crate::modes::{Flow, Sequence};
     use crate::objects::Obj;
 
@@ -706,12 +705,14 @@ pub mod exit_fading {
         /// The end of the door's handler, then its return (`rts`) into the dispatch loop.
         pub fn step(self, s: &mut crate::scene::Ctx) -> Flow {
             let (Step::Zone(door) | Step::Scene(door) | Step::Passage(door)) = self;
-            let mut x = Cx { c: &mut *s.c, b: &mut *s.b, o: door };
-            match self {
-                Step::Zone(_) => super::exit_gate::after_fade(&mut x),
-                Step::Scene(_) => super::exit_gate::next_scene(&mut x),
-                Step::Passage(_) => set_b::door_b::after_fade(&mut x),
-            }
+            crate::dispatch::resume_handler(s.b, Some(door), |b, a| {
+                let mut x = Cx { c: a, b, o: door };
+                match self {
+                    Step::Zone(_) => super::exit_gate::after_fade(&mut x),
+                    Step::Scene(_) => super::exit_gate::next_scene(&mut x),
+                    Step::Passage(_) => set_b::door_b::after_fade(&mut x),
+                }
+            });
             Flow::Done
         }
     }
@@ -722,18 +723,16 @@ pub mod exit_fading {
     pub fn fade_to_black<R: Bench>(x: &mut Cx<'_, R>, next: fn(Obj) -> Step) {
         x.set_a5_u16(DELAY, 2);
         x.set_a5_u8(PAGES, 0xf);
-        // The fade steps still run on a scene context, which holds a processor: a work bench, A0 = the gate (kept by
-        // the fade's steps for the resumption), D2-D5 = the leftovers (`dispatch::Leftovers`), passed back afterwards
-        // (an empty fade returns at once and runs `next` on it).
+        // The fade runs as a subroutine of the task (`Sequence::subroutine`); the leftovers (`dispatch::Leftovers`)
+        // go to the game's state for it, and come back (an empty fade returns at once and runs `next`, which resumes
+        // the door through `dispatch::resume_handler`).
         let door = x.o;
-        let mut bench = m68k::Cpu::default();
-        bench.a[0] = door.0;
-        bench.a[5] = A5;
-        (bench.d[2], bench.d[3], bench.d[4], bench.d[5]) = (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5());
-        bench.d[7] = x.counter() as u32;
-        let mut s = crate::scene::Ctx::new(&mut bench, &mut *x.b);
+        let leftovers = crate::dispatch::Leftovers { d2: *x.c.d2(), d3: *x.c.d3(), d4: *x.c.d4(), d5: *x.c.d5() };
+        crate::tasks::table::table(x.b).leftovers = leftovers;
+        let mut s = crate::scene::Ctx::new(&mut *x.b);
         s.subroutine(crate::tasks::fading::descent, next(door));
-        (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (bench.d[2], bench.d[3], bench.d[4], bench.d[5]);
+        let l = crate::tasks::table::table(x.b).leftovers;
+        (*x.c.d2(), *x.c.d3(), *x.c.d4(), *x.c.d5()) = (l.d2, l.d3, l.d4, l.d5);
     }
 }
 

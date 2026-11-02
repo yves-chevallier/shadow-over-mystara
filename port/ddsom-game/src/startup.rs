@@ -26,11 +26,10 @@
 //! the duration of the test again. `validate` tolerates the word under test in frames 1 to 5 (`docs/noyau.md`).
 
 use cps2::{Cps2Bus, LINES, VBLANK_LINE};
-use m68k::Cpu;
 
-use crate::mem::{rd16, rd32, rd8, set_low_word, wr16, wr32, wr8, A5};
-use crate::call;
+use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::kernel::Point;
+use crate::video::Layer;
 use crate::tasks::table::{table, Table};
 
 /// Beam position: lines elapsed since power-on (a frame starts at vblank).
@@ -50,26 +49,21 @@ const BOOT_INIT: u64 = beam(5, 173);
 /// Executes startup point `point`; returns the next one, or `None` when it waits for its time (beam position,
 /// Z80 handshake): it will retry at the next line, having changed nothing. After `boot_init`
 /// (`move #0x2000,SR`), the pending interrupt is taken before the launch.
-pub fn execute(c: &mut Cpu, b: &mut Cps2Bus, point: Point) -> Option<Point> {
+pub fn execute(b: &mut Cps2Bus, point: Point) -> Option<Point> {
     match point {
-        Point::Reset => Some(reset(c, b)),
+        Point::Reset => Some(reset(b)),
         Point::ReleaseZ80 => release_z80(b),
-        Point::Handshake => handshake(c, b),
-        Point::BootInit => boot_init(c, b),
-        Point::Launch => Some(launch(c, b)),
+        Point::Handshake => handshake(b),
+        Point::BootInit => boot_init(b),
+        Point::Launch => Some(launch(b)),
         _ => unreachable!("point {point:?}: not a startup point"),
     }
 }
 
-/// Original subroutines and return addresses of their `jsr`.
+/// Original subroutines.
 mod ext {
-    pub const CLEAR_OBJECTS: (u32, u32) = (0xc58, 0x436);
-    pub const CLEAR_PLANE_1: (u32, u32) = (0xca8, 0x43c);
-    pub const CLEAR_PLANE_2: (u32, u32) = (0xcc8, 0x442);
-    pub const CLEAR_PLANE_3: (u32, u32) = (0xce8, 0x448);
-    pub const CONFIG: (u32, u32) = (0x2dc9a, 0x468);
-    pub const SETTINGS: (u32, u32) = (0x2d30a, 0x500);
-    pub const CREATE_TASK: (u32, u32) = (0x9b6, 0x530);
+    /// Development card configuration (0x2dc9a, `eeprom::dev_card`).
+    pub const CONFIG: u32 = 0x2dc9a;
     pub const STARTUP_TASK: u32 = 0x11b16;
 }
 
@@ -116,16 +110,11 @@ mod rom {
     pub const PALETTE: u32 = 0x19f0;
     /// Stacks of the 16 tasks (16 longs, pushed below FF01A6: the stack heap).
     pub const STACKS: u32 = 0x534;
-    /// "RAM ERROR !!" text of the last block tested (left in A2).
-    pub const TEXT_ERROR: u32 = 0x19e0;
 }
 
 const GFX_TEST: u32 = 0x910000;
 const GFX_FILLED: u32 = 0x914000;
 const START_PALETTE: u32 = 0x91c400;
-const RAM_START: u32 = 0xff0000;
-/// Bottom of the original's task stack heap (pointer at FF005A, stacks pushed below FF01A6).
-const STACKS_END: u32 = A5 - 0x7e5a;
 /// Flag set when button 1 of player 1 is pressed at startup (development cards).
 const BUTTON_AT_STARTUP: u32 = A5 - 0x55e2;
 
@@ -147,14 +136,8 @@ fn a5(off: u32) -> u32 {
     A5.wrapping_add(off)
 }
 
-/// `jsr` of a startup routine (the original return address is no longer pushed: the startup stack is reread by
-/// nobody).
-fn jsr(c: &mut Cpu, b: &mut Cps2Bus, (routine, _ret): (u32, u32)) {
-    call(c, b, routine);
-}
-
 /// 0x350: reset, then the effects of the RAM test (0x182a) up to the release of the Z80.
-fn reset(c: &mut Cpu, b: &mut Cps2Bus) -> Point {
+fn reset(b: &mut Cps2Bus) -> Point {
     wr16(b, io::UNKNOWN, 0);
     for (port, v) in io::EXITS[..2].iter().copied() {
         wr16(b, port, v);
@@ -164,9 +147,9 @@ fn reset(c: &mut Cpu, b: &mut Cps2Bus) -> Point {
         wr16(b, port, v);
     }
     wr16(b, io::COMMANDS, io::Z80_IN_RESET);
-    c.a[5] = A5;
     b.ram.fill(0);
     *table(b) = Table::default();
+    crate::kernel::set_interrupt_mask(b, crate::kernel::MASK_ALL);
     let region = rd16(b, rom::REGION);
     wr16(b, a5(var::REGION), region);
     wr16(b, io::VIDEO, 0xe);
@@ -182,16 +165,19 @@ fn reset(c: &mut Cpu, b: &mut Cps2Bus) -> Point {
     for reg in [0x0c, 0x10, 0x14] {
         wr32(b, io::CPS_A + reg, 0);
     }
-    for routine in [ext::CLEAR_OBJECTS, ext::CLEAR_PLANE_1, ext::CLEAR_PLANE_2, ext::CLEAR_PLANE_3] {
-        jsr(c, b, routine);
+    // 0xc58, 0xca8, 0xcc8, 0xce8
+    crate::video::clear_objects(b);
+    for layer in [Layer::One, Layer::Two, Layer::Three] {
+        crate::video::clear_layer(b, layer);
     }
     wr8(b, a5(var::SPECIAL_CARD), 0);
     if rd16(b, io::CARD) & 0x4000 == 0 {
         wr8(b, a5(var::SPECIAL_CARD), 1);
-        jsr(c, b, ext::CONFIG);
+        // never: bit 14 of the port is always set on this board (code-mort.md)
+        crate::bench::on_bench(b, |c, b| crate::call(c, b, ext::CONFIG));
         // button combination 0x3304 (active low) of IN2 pressed at startup
         if !rd16(b, io::TEST) & 0x3304 == 0x3304 {
-            crate::eeprom::reset_card(c, b);
+            crate::eeprom::reset_card(b);
         }
     }
     // 0x182a: starting palette, then empty cells in the first quarter of the tested GFX RAM
@@ -220,45 +206,24 @@ fn release_z80(b: &mut Cps2Bus) -> Option<Point> {
 }
 
 /// 0x18e2: waits for the Z80 handshake, then leaves the shared RAM as its test does.
-fn handshake(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Point> {
+fn handshake(b: &mut Cps2Bus) -> Option<Point> {
     if b.qram[shared::Z80_HANDSHAKE] != shared::Z80_READY {
         return None;
     }
     for a in (shared::START..shared::END).step_by(2) {
         wr8(b, a, if a < shared::HITBOX { 0xff } else { 0x55 });
     }
-    test_regs(c, b);
     Some(Point::BootInit)
 }
 
-/// Registers that the RAM test leaves to `boot_init` (and, through it, to the settings 0x2d30a): the longs of the
-/// palette loaded by `movem` at 0x1834, then what the test loops put there.
-fn test_regs(c: &mut Cpu, b: &mut Cps2Bus) {
-    let palette: [u32; 8] = std::array::from_fn(|i| rd32(b, rom::PALETTE + 4 * i as u32));
-    c.d[..7].copy_from_slice(&palette[..7]);
-    set_low_word(&mut c.d[0], 0x5555); // last pattern of the shared RAM test
-    c.d[1] = 0;
-    let last_word = rd16(b, RAM_START + 0xfffc); // value of the last RAM word tested
-    set_low_word(&mut c.d[2], last_word);
-    c.d[3] = 0xff;
-    c.d[7] = 0xffff;
-    c.a[0] = shared::END - 6;
-    c.a[1] = shared::END - 6;
-    c.a[2] = rom::TEXT_ERROR;
-    c.a[3] = shared::START - 1;
-    c.a[4] = 0;
-    c.a[6] = 0x492; // `boot_init`, return address of the test (`lea`)
-}
-
 /// 0x492: at the original's time, Z80 mailbox, stack heap, settings, then interrupts.
-fn boot_init(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Point> {
+fn boot_init(b: &mut Cps2Bus) -> Option<Point> {
     if position(b) < BOOT_INIT {
         return None;
     }
     wr8(b, shared::HITBOX, 0x88);
     wr8(b, shared::STEREO, 0xff);
     wr8(b, shared::HANDSHAKE, 0xff);
-    c.a[5] = A5;
     wr16(b, io::COMMANDS, io::Z80_RUNNING);
     for (off, v) in var::PORT_COMMANDS {
         wr8(b, a5(off), v);
@@ -268,22 +233,22 @@ fn boot_init(c: &mut Cpu, b: &mut Cps2Bus) -> Option<Point> {
     // the Rust task table; A1 keeps the top of the original's.
     let stacks = (0..16).map(|i| rd32(b, rom::STACKS + 4 * i)).collect();
     table(b).stacks = stacks;
-    set_low_word(&mut c.d[0], 0xffff);
-    c.a[0] = rom::STACKS + 0x40;
-    c.a[1] = STACKS_END - 0x40;
-    jsr(c, b, ext::SETTINGS);
-    c.set_sr(0x2000);
+    // 0x2d30a (the registers that the RAM test and the stack heap leave it are read by nobody)
+    if !crate::config::initialize(b) {
+        // "EEPROM ERROR": endless loop, interrupts still masked
+        return Some(Point::Blocked(crate::config::BLOCKED));
+    }
+    crate::kernel::set_interrupt_mask(b, 0);
     Some(Point::Launch)
 }
 
 /// 0x50a: creates the startup task (slot 0) and hands control to the scheduler.
-fn launch(c: &mut Cpu, b: &mut Cps2Bus) -> Point {
+fn launch(b: &mut Cps2Bus) -> Point {
     if rd8(b, rom::DEVELOPMENT) != 0 {
         let pressed = rd8(b, io::BUTTONS) & 0x10 == 0;
         wr8(b, BUTTON_AT_STARTUP, if pressed { 0xff } else { 0 });
     }
-    c.a[0] = ext::STARTUP_TASK;
-    set_low_word(&mut c.d[0], 0);
-    jsr(c, b, ext::CREATE_TASK);
+    // 0x9b6, slot 0
+    crate::kernel::create_task(b, 0, ext::STARTUP_TASK);
     Point::Start
 }

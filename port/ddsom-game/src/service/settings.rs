@@ -380,7 +380,7 @@ fn menu(x: &mut Ctx) -> Flow {
                 crate::video::clear_layer(x.b, crate::video::Layer::One);
                 print(x, text::SAVING);
                 layers_on(x);
-                if !config::save(x.c, x.b) {
+                if !config::save(x.b) {
                     return Flow::Yield;
                 }
                 return back_to_menu(x);

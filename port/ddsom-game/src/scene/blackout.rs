@@ -28,7 +28,7 @@ mod at {
 }
 
 fn next_sub_step(x: &mut Ctx) {
-    let a0 = x.c.a[0];
+    let a0 = super::screen::blocks::EXIT;
     let s = rd8(x.b, a0 + 3).wrapping_add(2);
     wr8(x.b, a0 + 3, s);
 }
@@ -69,16 +69,17 @@ crate::steps! {
                 for (off, v) in [(0x506, 0), (0x50a, 0x200), (0x51e, 4), (0x556, 0), (0x55a, 0x500), (0x56e, 4)] {
                     x.set_v16(off, v);
                 }
-                let (a0, a6) = (x.c.a[0], x.c.a[6]);
-                crate::sprites::build_68k(x.c, x.b);
-                (x.c.a[0], x.c.a[6]) = (a0, a6);
+                crate::sprites::build_in_game(x.b);
                 return x.wait(1, Step::Finale1);
             }
             for off in [0x602, 0x802, 0xa02, 0xc02] {
                 x.set_v32(off, 0);
             }
-            // Original glitch: the A0 left by the list unlinking (the last unlinked object) survives the yield
-            crate::objects::lists::unlink_all_68k(x.c, x.b);
+            // Original glitch: the A0 left by the list unlinking (the last unlinked object, `movea.w`) survives the
+            // yield, and the scene exit dispatch rereads byte `+2` of it at the end of the state
+            if let Some(last) = crate::objects::lists::unlink_all(x.b) {
+                super::exit::set_dispatch_a0(x.b, last.0 | 0xff00_0000);
+            }
             crate::sprites::clear_lists(x.b);
             crate::video::clear_objects(x.b);
             x.set_v16(0x14, 0x12c0 & 0xfff1);
@@ -147,9 +148,9 @@ pub const BLACKOUT: Native = Native {
     entry: 0xf7ecc,
     name: "scene_blackout",
     run: crate::Body::WithCpu(|c, b| {
-        let mut x = Ctx::new(c, b);
-        if run(&mut x) == Flow::Done {
-            crate::mem::rts(x.c, x.b);
+        // entry for the original code (tools): returns only if the state did not cede control
+        if run(&mut Ctx::new(b)) == Flow::Done {
+            crate::mem::rts(c, b);
         }
     }),
     touches_sound: false,

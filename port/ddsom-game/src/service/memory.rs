@@ -174,7 +174,7 @@ fn check(x: &mut Ctx) -> bool {
     }
     wr8(x.b, Z80_FLAG, 0x88);
     label(x, cell::EEPROM, TESTING, 0);
-    let ok = crate::eeprom::tester(x.c, x.b);
+    let ok = crate::eeprom::tester(x.b);
     if !verdict(x, cell::EEPROM, ok) {
         return false;
     }

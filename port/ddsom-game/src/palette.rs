@@ -645,18 +645,12 @@ fn fill_page_native(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// 0x1cf3c: checked pages all white.
-fn white_pages(c: &mut Cpu, b: &mut Cps2Bus) {
-    for (_, page) in flagged_pages(b, c.a[5]) {
-        fill_page(b, page, [u32::MAX; 8]);
-    }
-    rts(c, b);
-}
 
 pub const FADE_TO_PALETTES: Native = native(0x1cd7c, "palette_fade_to_palettes", fade_to_palettes);
 pub const FADE_TO_COLORS: Native = native(0x1cdd6, "palette_fade_to_colours", fade_to_colors);
 pub const FADE_TO_WHITE: Native = native(0x1cd32, "palette_fade_to_white", fade_to_white);
-pub const WHITE_PAGES: Native = native(0x1cf3c, "palette_pages_blanches", white_pages);
+pub const WHITE_PAGES: Native =
+    Native { entry: 0x1cf3c, name: "palette_white_pages", run: crate::Body::Memory(white_out), touches_sound: false, outputs: 0 };
 pub const FILL_PAGE: Native = native(0x1cfb8, "palette_page_unie", fill_page_native);
 pub const APPROACH_PAGE: Native = native(
     0x1cfc8,

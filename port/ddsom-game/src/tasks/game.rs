@@ -53,11 +53,11 @@ impl Step {
             Step::Entry => entry(x),
             Step::Tour => turn(x),
             Step::Frame { d4 } => {
-                x.c.d[4] = d4;
+                super::table::table(x.b).leftovers.d4 = d4;
                 step(x)
             }
             Step::FrameEnd => {
-                crate::game::frame_end(x.c, x.b);
+                crate::game::frame_end(x.b);
                 Flow::Done
             }
         }
@@ -99,20 +99,12 @@ fn push(x: &mut Ctx, next: impl Into<super::table::Next>) {
     super::table::call(x.b, next);
 }
 
-/// N and Z flags of a loaded byte (`move.b`), V and C at zero.
-fn flags(x: &mut Ctx, value: u8) {
-    x.c.sr = (x.c.sr & !0x0f) | (value == 0) as u16 * 4 | (value >> 7) as u16 * 8;
-}
-
-/// `0x1c44a`: the game variables `A5+0x2c..0x6b` (phase, stage...) to zero; registers of the original
-/// loop (D0 = 0, D6.w = -1, A0 = end of the area).
-pub fn clear_variables(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+/// `0x1c44a`: the game variables `A5+0x2c..0x6b` (phase, stage...) to zero (the registers of the original loop,
+/// D0 = 0, D6.w = -1, A0 = end of the area, are reread by nobody).
+pub fn clear_variables(b: &mut cps2::Cps2Bus) {
     for i in 0..16 {
         wr32(b, A5 + var::PHASE + 4 * i, 0);
     }
-    c.d[0] = 0;
-    c.d[6] |= 0xffff;
-    c.a[0] = A5 + var::PHASE + 0x40;
 }
 
 /// `0x1c45a`: phase and stage to zero.
@@ -146,7 +138,7 @@ fn wait(x: &mut Ctx) -> Flow {
         return step(x);
     }
     wr8(x.b, FREE_STEPS, 0);
-    let d4 = x.c.d[4];
+    let d4 = super::table::table(x.b).leftovers.d4;
     cede(x, Wait::Images(1), Step::Frame { d4 })
 }
 
@@ -154,16 +146,14 @@ fn wait(x: &mut Ctx) -> Flow {
 /// the frame end, which returns to the start of the turn.
 fn step(x: &mut Ctx) -> Flow {
     if !crate::no68k::game_step() {
-        crate::kernel::keep_step(x.b, x.c.d[4]);
+        let d4 = super::table::table(x.b).leftovers.d4;
+        crate::kernel::keep_step(x.b, d4);
         return Flow::Yield;
     }
     wr8(x.b, STEPPED, 0xff);
     push(x, Step::Tour);
+    // the original jumps through its table `0x1c502` (handler in A0, phase in D0: reread by nobody)
     let phase = x.v8(var::PHASE);
-    x.c.d[0] = phase as u32;
-    flags(x, phase);
-    let handler = (x.prog16(PHASES + phase as u32) as u32) << 16 | x.prog16(PHASES + phase as u32 + 2) as u32;
-    x.c.a[0] = handler;
     push(x, Step::FrameEnd);
     run_handler(x, phase)
 }
@@ -173,22 +163,24 @@ fn step(x: &mut Ctx) -> Flow {
 fn run_handler(x: &mut Ctx, phase: u8) -> Flow {
     match phase {
         0 => {
-            crate::game::phase0(x.c, x.b);
+            crate::game::phase0(x.b);
             Flow::Done
         }
         4 => crate::modes::select::phase_4(x),
         8 => {
-            crate::scene::entry::phase_8(x.c, x.b);
+            // A0 = the handler (table 0x1c502), reread by the scene entry (original glitch)
+            let handler = (x.prog16(PHASES + 8) as u32) << 16 | x.prog16(PHASES + 10) as u32;
+            crate::scene::entry::phase_8(x.b, handler);
             Flow::Done
         }
-        12 => crate::game::phase12(x.c, x.b),
-        16 => match crate::scene::exit::phase_16(x.c, x.b) {
+        12 => crate::game::phase12(x.b),
+        16 => match crate::scene::exit::phase_16(x.b) {
             true => Flow::Yield,
             false => Flow::Done,
         },
         20 => crate::modes::gameover::phase_20(x),
         24 => {
-            crate::scene::intermission::phase_24(x.c, x.b);
+            crate::scene::intermission::phase_24(x.b);
             Flow::Done
         }
         28 => crate::modes::ending::phase_28(x),
