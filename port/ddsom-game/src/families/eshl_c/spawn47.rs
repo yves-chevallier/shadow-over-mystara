@@ -19,7 +19,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Shot::ATTACK_POWER, 0x1e);
             x.set_bit(Obj::FLAGS, 1, true);
             place(x);
-            let r = random(x);
+            let r = x.random() as u32;
             let delay = tables().spawn47_delays.at16(x.b, 2 * (r & 0xf));
             x.set16(DELAY, delay);
             ai_anim(x, ANIMS.0, 1);
@@ -49,7 +49,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Offsets the position at random: brings it back toward the screen if it is too far from it.
 fn place<R: Bench>(x: &mut Cx<'_, R>) {
-    let idx = 2 * (random(x) & 0xf);
+    let idx = 2 * (x.random() as u32 & 0xf);
     let cam = vars::CAMERA1_X.get(x.b);
     let (lo, hi) = (cam.wrapping_add(0x20), cam.wrapping_add(0x160));
     let px = x.u16(Obj::X);
@@ -61,7 +61,7 @@ fn place<R: Bench>(x: &mut Cx<'_, R>) {
         tables().spawn47_x_inside.at16(x.b, idx)
     };
     x.add16(Obj::X, dx);
-    let idx = 2 * (random(x) & 0xf);
+    let idx = 2 * (x.random() as u32 & 0xf);
     let cam = vars::CAMERA1_Y.get(x.b);
     let (lo, hi) = (cam.wrapping_add(0x38), cam.wrapping_add(0x68));
     let py = x.u16(Obj::Y);

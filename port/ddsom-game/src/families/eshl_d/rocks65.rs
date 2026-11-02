@@ -35,11 +35,11 @@ fn init<R: Bench>(x: &mut Cx<'_, R>, v: usize) {
     x.set8(Shot::ATTACK_ID, ATTACK[v]);
     let (screen_x, screen_y) = camera(x.b);
     x.set16(Obj::Z, 0x100);
-    let r = random(x) & 0x1ff;
+    let r = x.random() & 0x1ff;
     let dx = if r > 0x180 { (r >> 1) + 0x40 } else { r };
     let left = screen_x.get(x.b);
     x.set16(Obj::X, dx.wrapping_add(left));
-    let r = random(x) & 0x7f;
+    let r = x.random() & 0x7f;
     let dz = if r > 0x50 { (r >> 1) + 0x10 } else { r } + 0x10;
     let top = screen_y.get(x.b);
     x.set16(Obj::Y, dz.wrapping_add(top));
@@ -52,11 +52,6 @@ fn init<R: Bench>(x: &mut Cx<'_, R>, v: usize) {
     let delay = delays.at8(x.b, rank);
     x.set16(TIMER, delay as u16);
     x.anim_start(ANIMS[v], 0);
-}
-
-/// Pseudo-random draw (low word of D0).
-fn random<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
-    x.random()
 }
 
 fn fall<R: Bench>(x: &mut Cx<'_, R>, v: usize) {

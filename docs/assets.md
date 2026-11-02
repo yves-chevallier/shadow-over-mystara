@@ -251,6 +251,23 @@ PC, vue déchiffrée), taille des éléments (1, 2 ou 4 octets) et valeurs.
   (`interface_palettes`, `purse_portraits`...) : les mêmes octets, en attendant que la bibliothèque soit une
   donnée typée du jeu (lot L12).
 
+## Tables des tirs, objets spéciaux, objets et caisses : `data/objects.json`
+
+Tables des familles ESHL, SOBJ, ITEM et BOX (`families/eshl*`, `sobj`, `items*`, `boxes`, lot L7 de [fin.md](fin.md)),
+même forme que `data/effects.json` : 172 tables nommées, préfixées par leur lecteur (`shot15_speeds`,
+`sobj_scene_v0_entries`, `item_scene_icon_sounds`, `chest_sheets`...). Déclarations dans `ddsom-data/src/objects.rs`
+(la macro `tables!` est commune aux deux familles), extraction `extract/src/objects.rs`, lecture par
+`families/shell/tables.rs` (`at8/16/32`, et `held8/16/32` pour une adresse lue dans une autre table ou rangée dans
+l'objet ; `box_byte` pour une boîte de collision désignée par adresse, dans `sprites/tables.json`).
+
+* Les tables de pointeurs (fiches des caisses, positions portées, délais et masques de la main du boss) sont deux
+  tables : les adresses, puis la région qu'elles désignent.
+* Quelques octets sont aussi dans d'autres fichiers : les fiches des caisses, le butin et les chances de chute de
+  l'équipement (`data/boxes.json`), et des extraits de la bibliothèque de palettes (`sobj_palettes`,
+  `shot34_palettes`, `shot17_palette`, `shot41_palette`).
+* Le tir ESHL 5 lit `sprites/tables.json` (`shot5`, `frame_lists`), désormais chargé dans `GameData`
+  (`sprite_tables`).
+
 ## Cartes des décors : `levels.json`
 
 Mêmes tables que les caméras (`scroll.rs`, [video.md](video.md) §B1) et [niveaux.md](niveaux.md).

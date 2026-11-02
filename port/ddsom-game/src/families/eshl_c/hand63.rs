@@ -63,7 +63,7 @@ fn resting_or_attacking<R: Bench>(x: &mut Cx<'_, R>) {
 fn pick_delay<R: Bench>(x: &mut Cx<'_, R>) {
     let players = ram::PLAYERS_ALIVE.get(x.b) as u32;
     let table = tables().hand63_delay_tables.at32(x.b, 4 * players);
-    let r = random(x) & 0x1f;
+    let r = x.random() as u32 & 0x1f;
     let d = held16(x.b, table + 2 * r);
     x.set16(DELAY, d);
 }
@@ -74,7 +74,7 @@ fn gate<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let table = tables().hand63_gate_tables.at32(x.b, 4 * players);
     let index = vars::RANK.get(x.b).wrapping_shl(2) as u32;
     let mask = held32(x.b, table + index);
-    let r = random(x) & 0x1f;
+    let r = x.random() as u32 & 0x1f;
     mask >> r & 1 != 0
 }
 

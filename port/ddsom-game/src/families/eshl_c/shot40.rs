@@ -44,7 +44,7 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
         }
         _ => {}
     }
-    let r = random(x) & 0xf;
+    let r = x.random() as u32 & 0xf;
     let anim = tables().shot40_random_anims.at8(x.b, r);
     x.anim_start(ANIMS.0, (anim as u32) as u16);
 }

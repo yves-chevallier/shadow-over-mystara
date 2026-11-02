@@ -50,7 +50,7 @@ fn variant0<R: Bench>(x: &mut Cx<'_, R>) {
             copy_xyz16(x, src);
             copy_flip(x, src);
             x.add16(Obj::Z, 0x50);
-            let r = random(x);
+            let r = x.random() as u32;
             let row = r & 0x38;
             let (mut vx, mut ax) = (tables().debris45_burst_speeds.at16(x.b, row), tables().debris45_burst_speeds.at16(x.b, row + 2));
             if x.u8(Base::FLIP) == 0 {
@@ -77,7 +77,7 @@ fn variant0<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(Base::SUB_STATE, 2);
                 x.set32(Obj::VX, 0);
                 x.set32(Obj::VY, 0);
-                let r = random(x) & 6;
+                let r = x.random() as u32 & 6;
                 let vz = tables().debris45_hop_vz.at16(x.b, r);
                 x.set16(Obj::VZ, vz);
                 x.set16(Obj::AZ, 0);

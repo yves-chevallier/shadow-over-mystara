@@ -31,11 +31,13 @@ le code d'origine ; leur durée s'ajoute d'elle-même.
   adressages `(table,PC,Dn)`) et `data16/data32/data8` (espace de *données*, pour les adressages
   absolus ou par registre : les deux espaces diffèrent sur CPS2, le programme étant chiffré).
   Macro `handlers!` : table `NATIVES` d'un fichier, `address "name" coût chemin`.
-* `shell.rs` : champs et aides propres à ESHL (`f::OWNER`, `place_in_front`, `blink`...).
-* `eshl.rs`, `eshl_b.rs`, `eshl_c.rs`, `eshl_d.rs` : types ESHL (`creators.rs` : petites routines de création appelées par le code d'origine) ; `set.rs`, `set_b.rs`, `set_c.rs` : types SET ;
-  `sobj.rs` : types SOBJ. Un type = un `mod` avec une fonction `run`, des constantes nommées pour ses
-  états et ses tables, et un commentaire décrivant son rôle. Les tables de données restent dans la ROM
-  (lues par `rom16`/`data16`), seules leurs adresses sont des constantes.
+* `shell/` : aides propres à ESHL (`place_in_front`, `blink`, `camera`...), et pour les familles ESHL, SOBJ, ITEM
+  et BOX les tables (`tables.rs`, `data/objects.json`), les champs (`records.rs` : `Base`, `Shot`, vues partagées,
+  macro `view!`) et les variables de la RAM de travail (`vars.rs`).
+* `eshl/`, `eshl_b/`, `eshl_c/`, `eshl_d/` : un fichier par type ESHL (`eshl_creators.rs` : petites routines de
+  création appelées par les ennemis et boss) ; `sobj/` : types SOBJ ; `set*` : types SET. Un type = un module avec
+  une fonction `run`, des constantes nommées pour ses états, sa vue de champs (`view!`) et un commentaire décrivant
+  son rôle. Les tables de données sont lues par nom (`tables().shot15_speeds.at16(x.b, row)`).
 * `lib.rs::all_natives()` enchaîne `families::natives()`.
 
 La machine à états de l'original est à trois étages : `+4` (état principal), `+5` (sous-état) et

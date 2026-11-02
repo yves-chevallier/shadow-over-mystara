@@ -47,7 +47,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
 
 /// Delay drawn from table 0xa55b2.
 fn random_delay<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0xf;
+    let r = x.random() as u32 & 0xf;
     let d = tables().pickup56_delays.at16(x.b, 2 * r);
     x.set16(COUNTDOWN, d);
 }

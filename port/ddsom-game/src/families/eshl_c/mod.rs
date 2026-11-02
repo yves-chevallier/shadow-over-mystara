@@ -29,11 +29,6 @@ fn ai_step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     crate::families::enemy_lib::step(x)
 }
 
-/// Allocates an ESHL object; `None` if the pool is full. Pseudo-random draw.
-fn random<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
-    x.random() as u32
-}
-
 /// The three 16.16 coordinates (X, Y, Z) of `from`, copied as longs.
 fn copy_xyz32<R: Bench>(x: &mut Cx<'_, R>, from: Obj) {
     for off in [0x8, 0x10, 0xc] {

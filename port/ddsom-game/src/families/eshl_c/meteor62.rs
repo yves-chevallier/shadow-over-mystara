@@ -23,13 +23,13 @@ fn start<R: Bench>(x: &mut Cx<'_, R>) {
     // camera: block of A5+0x4fe (player 1) or A5+0x54e (player 2)
     let (camera_x, camera_y) = camera(x.b);
     x.set16(Obj::Z, 0x100);
-    let mut dx = random(x) as u16 & 0x1ff;
+    let mut dx = x.random() & 0x1ff;
     if s16(dx) > 0x180 {
         dx = (dx >> 1) + 0x40;
     }
     let px = dx.wrapping_add(camera_x.get(x.b));
     x.set16(Obj::X, px);
-    let mut dy = random(x) as u16 & 0x7f;
+    let mut dy = x.random() & 0x7f;
     if s16(dy) > 0x50 {
         dy = (dy >> 1) + 0x10;
     }

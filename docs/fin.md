@@ -63,6 +63,7 @@ Les zones ci-dessous correspondent aux périmètres des lots de la section 3.
 | Effets après L5 (`families/effects/`, `effects_creators/`) | 33 | 13 908 | 0 | 0 | 0 | 311 | 0 | 0 | `effects/d.rs` (881) |
 | SET (`families/set*.rs`, `scenery.rs`) | 10 | 9 911 | 247 | 1 108 | 182 | 346 | 22 | 184 | `set_b.rs` (3 628) |
 | ESHL, SOBJ, objets, caisses | 10 | 15 808 | 274 | 2 378 | 71 | 51 | 91 | 424 | `eshl_c.rs` (3 300), `eshl_b.rs` (3 054) |
+| ESHL, SOBJ, objets, caisses après L7 (`eshl*/`, `sobj/`, `items/`, `boxes/`, `shell/`) | 113 | 16 553 | 0 | 0 | 0 | 39 | 0 | 0 | `boxes/chest.rs` (649) |
 | Ennemis (`families/enemy*`, `reactions.rs`) | 94 | 32 564 | 170 | 1 302 | 18 | 25 | 1 | 205 | `reactions.rs` (2 223) |
 | Boss (`families/boss*`) | 83 | 30 835 | 207 | 3 182 | 171 | 146 | 0 | 114 | `boss_11/` (2 419 en 5 fichiers) |
 | Joueurs (`player/`, `families/player/`, `combat*`) | 57 | 29 048 | 378 | 2 545 | 67 | 383 | 68 | 494 | `player/hurt.rs` (1 761) |
@@ -672,13 +673,50 @@ libre.
 * (c) 1 108 décalages littéraux, 182 `A5 + littéral`.
 * Fin : comme L5.
 
-**L7. ESHL, SOBJ, objets, caisses** (moyen à grand, peut se couper en L7a ESHL et L7b SOBJ/objets/caisses)
+**L7. ESHL, SOBJ, objets, caisses** (moyen à grand) — **fait** (branche `wt-l7-objets`, voir « Résultat »)
 * Périmètre : `families/eshl*.rs`, `sobj.rs`, `items.rs`, `items_b.rs`, `boxes.rs`, `shell.rs`.
 * (a) `eshl_c.rs` (3 300 lignes), `eshl_b.rs` (3 054), `items.rs` (2 397) et `sobj.rs` (2 269) découpés par type.
 * (b) 274 accesseurs ROM, dont le tir ESHL 5 (listes d'images, boîtes, retournements déjà dans `sprites/tables.json`),
   les types d'objets de SET de `sobj.rs` et la table `0xda398` des objets par personnage.
 * (c) 2 378 décalages littéraux, dont 599 dans `sobj.rs` pour 6 nommés : c'est le pire ratio du jeu.
 * Factoriser : `rom32` de `sobj.rs` et `eshl_b.rs`, `random` de `eshl_c.rs` et `eshl_d.rs`.
+* Résultat :
+  * (a) Découpage (388dac6) : `eshl.rs`, `eshl_b.rs`, `eshl_c.rs`, `eshl_d.rs`, `sobj.rs`, `boxes.rs` deviennent des
+    dossiers, un fichier par type (`eshl_c/shot40.rs`... ; `sobj/scene/` coupé en `mod.rs` et `later.rs`, variantes
+    8 à 23) ; `items.rs` est coupé par type d'ITEM (`items/treasure.rs`, `consumable`, `inventory`, `bonus`, `scene`,
+    `reserve`, `escort`, `contact`, `equipment`). Chemins des modules inchangés pour leurs appelants, `examples/names`
+    identique ; plus gros fichier 652 lignes. `measure_end.py` : zone étendue aux dossiers. 308/308 VALID (mode par
+    défaut).
+  * (b) Données (94a2113) : `data/objects.json` (`ddsom-data/src/objects.rs`, `GameData::objects`), 172 tables
+    nommées par leur lecteur. La macro `tables!` de L5 est généralisée (nom de la structure en tête, `load`,
+    `to_map`, `find` dans la macro) et sert aux deux familles ; `extract/src/effects.rs` expose `read_table`
+    (même règle de fin : table suivante de la famille, code exécuté, 0x400 octets), `rebuild::put_named`, test
+    `objects_lossless`, `to_data` (ROM = assets). `sprites/tables.json` est chargé dans `GameData` (`sprite_tables`,
+    `extract::tables::sprite_tables`) : le tir ESHL 5 lit `shot5` et `frame_lists`, les tirs et les objets de contact
+    lisent les boîtes de collision des joueurs par `box_byte`. Le jeu lit par `families/shell/tables.rs` (le trait
+    `Read` de L5, `held8/16/32` pour une adresse lue dans une table ou rangée dans l'objet). Tables d'aiguillage et
+    de routines (`effects::target`, `jump`, effets des consommables, effets spéciaux des caisses, emplacements de
+    l'équipement) : plus lues, `bad_index` pour les cas hors table ; `effects::target` et `outside_table` retirés
+    ([code-mort.md](code-mort.md), « Lot L7 »). `rom32` de `sobj` et `eshl_b`, `random` de `eshl_c` et `eshl_d`
+    supprimés (lectures typées, `x.random()`). Extraits gardés : fiches des caisses, butin et chances de chute
+    (aussi dans `data/boxes.json`) et quelques palettes de la bibliothèque (`sobj_palettes`...), à remplacer par
+    les données typées de L12. 308/308 VALID (mode par défaut) ; résidu de la zone : deux lectures d'origine hors
+    table (débris 45, guide), tables étendues en (c).
+  * (c) Champs (529e5df) : `shell/records.rs` — `Base` (champs communs des quatre pools : sous-états, fractions,
+    palette, orientation, jeu de boîtes, réglage `+0x2f`, indices de boîtes), `Shot` (ESHL : attaque, propriétaire,
+    drapeaux de coup), vues partagées des objets que lisent les tirs et objets (`Host` : ennemi ou boss porteur,
+    `Spawner`, `PlayerView` — à fusionner avec la fiche de joueur de L10, comme celle de L5 —, `SetView`,
+    `EffectView`) ; une vue par type pour ses champs propres, déclarée par `view!` (structure, `at` et `record!`) en
+    fin de fichier (`Shot15`, `Badge`, `Target`, `Element`...) : 56 vues, un sens deviné marqué (h). Les modules de
+    constantes de champs déjà nommés (`chest::f`, `items_b::f`...) restent. Les champs de SOBJ qui ne sont pas des
+    vitesses (décalages par rapport à la caméra, rectangles, compteurs) ont leurs noms propres. Variables de la RAM
+    de travail : `shell/vars.rs` (46 `Byte`/`Word`/`Long`), sinon `crate::ram` ; `shell::camera` choisit la caméra
+    du joueur (`A5+0x36`). Jeux d'animation, tables de vitesses et entrées de scripts en `RomAddr` ; entrées des
+    `handler!` en littéraux. Les modules des types sont `pub mod` (accesseurs des vues sans avertissement).
+  * Mesures (`measure_end.py`, zone `eshl_sobj_items`) : 10 → 113 fichiers, 15 766 → 16 553 lignes, accesseurs ROM
+    274 → 0, décalages littéraux 2 426 → 0, `A5 + littéral` 70 → 0, constantes d'adresses ROM 361 → 0,
+    `rd*`/`wr*` 51 → 39, plus gros fichier 3 289 → 649 lignes.
+  * Validation : VALIDATION_FINALE
 
 **L8. Ennemis** (grand, coupé en deux lots successifs ou parallèles)
 * L8a : `enemy_common.rs`, `enemy_lib.rs`, `enemy.rs` et `reactions.rs` (2 223 lignes, à découper), d'abord seul, car
