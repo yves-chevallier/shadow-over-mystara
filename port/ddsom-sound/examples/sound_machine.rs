@@ -3,14 +3,14 @@
 //! Rust) ; on compare la RAM du 68000 et la RAM partagée à chaque image, et les suites d'écritures
 //! dans la QSound.
 //!
-//! son_machine <roms> <eeprom> <scenario> <images>
+//! sound_machine <roms> <eeprom> <scenario> <images>
 
 use std::path::Path;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames] = &a[..] else {
-        eprintln!("usage : son_machine <roms> <eeprom> <scenario> <images>");
+        eprintln!("usage : sound_machine <roms> <eeprom> <scenario> <images>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();

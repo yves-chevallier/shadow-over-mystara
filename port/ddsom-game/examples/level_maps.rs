@@ -1,9 +1,9 @@
 //! Cartes des niveaux : image complète du décor (scroll 2 et scroll 3) de chaque scène, sans sprites ni
 //! interface, reconstruite depuis les cartes de décor de la ROM. Voir `docs/niveaux.md`.
 //!
-//!   cartes cartes  <roms> <eeprom> <dossier> [scène...]   une image par scène (1 à 82 par défaut)
-//!   cartes planche <dossier> <niveaux.md>                 planche d'aperçu `sheet.png` + index Markdown
-//!   cartes tables  <roms>                                 dimensions des tables de bandes des 115 scènes
+//!   level_maps cartes  <roms> <eeprom> <dossier> [scène...]   une image par scène (1 à 82 par défaut)
+//!   level_maps planche <dossier> <niveaux.md>                 planche d'aperçu `sheet.png` + index Markdown
+//!   level_maps tables  <roms>                                 dimensions des tables de bandes des 115 scènes
 //!
 //! Méthode. Les caméras du jeu (`scroll.rs`) recopient dans leurs couches des colonnes de cases lues dans une
 //! carte de ROM : des *bandes* de 256x256 pixels (indices de blocs 2x2, banques de blocs) que désigne, pour
@@ -518,8 +518,8 @@ fn index(dir: &Path, doc: &Path, views: &[u32]) {
     md += "## Régénérer\n\n```sh\n";
     md += "# depuis port/ ; les ROMs sont lues dans DDSOM_ROMS (dossier des fichiers dd2.*), l'EEPROM en deuxième argument\n";
     md += "export DDSOM_ROMS=$PWD/../rom\n";
-    md += "cargo run --release -p ddsom-game --example cartes -- cartes ../rom ../testdata/eeprom_ddsom.bin ../assets/niveaux\n";
-    md += "cargo run --release -p ddsom-game --example cartes -- planche ../assets/niveaux ../docs/niveaux.md\n";
+    md += "cargo run --release -p ddsom-game --example level_maps -- cartes ../rom ../testdata/eeprom_ddsom.bin ../assets/niveaux\n";
+    md += "cargo run --release -p ddsom-game --example level_maps -- planche ../assets/niveaux ../docs/niveaux.md\n";
     md += "```\n\n";
     md += "La première commande démarre le jeu (pièce, Start, personnage), saute dans chaque scène et relève la\n";
     md += "palette ; elle prend une dizaine de minutes pour les 82 scènes (numéros de scènes en arguments pour n'en\n";
@@ -596,6 +596,6 @@ fn main() {
                 println!("scène {n} : scroll 2 {}, scroll 3 {}", dim(&SCROLL2), dim(&SCROLL3));
             }
         }
-        _ => eprintln!("usage : cartes cartes <roms> <eeprom> <dossier> [scène...] | cartes planche <dossier> <niveaux.md> | cartes tables <roms>"),
+        _ => eprintln!("usage : level_maps cartes <roms> <eeprom> <dossier> [scène...] | cartes planche <dossier> <niveaux.md> | cartes tables <roms>"),
     }
 }

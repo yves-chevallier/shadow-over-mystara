@@ -1,7 +1,7 @@
 //! Fuzz différentiel du changement de zone de la porte de sortie (SET 7, 0xcb29c) : les chemins qui cèdent la
 //! main au fondu 0x1460, que `fuzz families` n'atteint pas (il faut tous les joueurs prêts au même moment).
 //!
-//!   fuzz_porte <roms> <eeprom> <scénario> <chauffe> <essais>
+//!   fuzz_door <roms> <eeprom> <scénario> <chauffe> <essais>
 //!
 //! `DDSOM_PORTE=29` : la porte de passage (SET 29, 0xd8dce) à la place, que les scénarios n'atteignent pas : état 2
 //! avec des joueurs actifs tirés près de la porte (genre de sortie `+0x48` tiré, 0 à 3), ou état 4.
@@ -102,7 +102,7 @@ fn main() {
 fn principal() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, warmup, tests, ..] = &a[..] else {
-        eprintln!("usage : fuzz_porte <roms> <eeprom> <scénario> <chauffe> <essais>");
+        eprintln!("usage : fuzz_door <roms> <eeprom> <scénario> <chauffe> <essais>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();

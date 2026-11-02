@@ -2,7 +2,7 @@
 //! de la QSound et remise à zéro de la RAM), et retard de la routine d'interruption sur la
 //! période de 250 Hz, dans la machine complète.
 //!
-//! son_timing <roms> <eeprom> <scénario> <images>
+//! sound_timing <roms> <eeprom> <scénario> <images>
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -11,7 +11,7 @@ use std::rc::Rc;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames] = &a[..] else {
-        eprintln!("usage : son_timing <roms> <eeprom> <scénario> <images>");
+        eprintln!("usage : sound_timing <roms> <eeprom> <scénario> <images>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();

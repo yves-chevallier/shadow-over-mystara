@@ -247,7 +247,7 @@ pub fn probe_launch(c: &mut Cpu, label: &str, step: &dyn std::fmt::Debug, guard:
     if labels().is_empty() {
         return;
     }
-    // sans espaces ni virgules : le site reste un seul mot d'une liste `DDSOM_POISON` (`tools/bissecte_poison.py`)
+    // sans espaces ni virgules : le site reste un seul mot d'une liste `DDSOM_POISON` (`tools/bisect_poison.py`)
     let site: String = format!("{step:?}").chars().filter(|c| *c != ' ').map(|c| if c == ',' { ';' } else { c }).collect();
     let Some(chosen) = guards(label, &site) else {
         return;

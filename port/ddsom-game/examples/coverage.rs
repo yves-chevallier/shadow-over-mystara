@@ -1,6 +1,6 @@
 //! Couverture des routines natives : combien de fois chaque point d'entrée natif est atteint sur un
 //! scénario (un « adresse nom appels » par ligne, y compris les appels à zéro).
-//!   couverture <roms> <eeprom> <scénario> <images> [index.tsv]
+//!   coverage <roms> <eeprom> <scénario> <images> [index.tsv]
 //! Avec l'index des fonctions (decomp/index.tsv) : code d'origine seul, appels de chaque fonction.
 //! Sert à signaler les routines non exercées (donc non validées) par les scénarios.
 
@@ -34,7 +34,7 @@ fn run_original(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> O
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let (Some(roms), Some(eeprom), Some(scenario), Some(frames)) = (a.get(1), a.get(2), a.get(3), a.get(4)) else {
-        eprintln!("usage : couverture <roms> <eeprom> <scénario> <images> [index.tsv]");
+        eprintln!("usage : coverage <roms> <eeprom> <scénario> <images> [index.tsv]");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();

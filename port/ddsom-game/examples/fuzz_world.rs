@@ -6,7 +6,7 @@
 //! tous les registres et les drapeaux sont comparés) depuis des états tirés au sort : listes d'objets
 //! fabriquées, positions, tables du décor, registres quelconques.
 //!
-//!   fuzz_monde <roms> <eeprom> <scénario> <images de chauffe> <tours> [préfixe de routine]
+//!   fuzz_world <roms> <eeprom> <scénario> <images de chauffe> <tours> [préfixe de routine]
 //!
 //! Variables : `DDSOM_GRAINE`, `DDSOM_VERBOSE`.
 
@@ -134,7 +134,7 @@ fn rng_camera_y(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 6 {
-        eprintln!("usage : fuzz_monde <roms> <eeprom> <scénario> <images de chauffe> <tours> [préfixe]");
+        eprintln!("usage : fuzz_world <roms> <eeprom> <scénario> <images de chauffe> <tours> [préfixe]");
         std::process::exit(2);
     }
     let (roms, eeprom, scenario) = (&a[1], &a[2], &a[3]);

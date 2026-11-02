@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Program ROM zones read by the native routines and not covered by the assets: writes
-port/extract/zones_natives.txt (docs/sans-rom.md).
+port/extract/native_zones.txt (docs/sans-rom.md).
 
-  tools/native_zones.py <covered.bin> <reads.txt>... > port/extract/zones_natives.txt
+  tools/native_zones.py <covered.bin> <reads.txt>... > port/extract/native_zones.txt
 
 <covered.bin>: `couverture_rom <assets> --octets <covered.bin> --sans data/natives.json` (word-by-word coverage
 of the other asset files); <reads.txt>: outputs of `lectures_rom` in no-68000 mode (the default,

@@ -3,12 +3,12 @@
 //! toute la ROM (toutes les musiques et tous les effets, toutes les commandes système) et pas
 //! seulement ce que le scénario du jeu envoie.
 //!
-//! son_fuzz <roms> songs <premier> <dernier> <interruptions>  un essai par numéro de musique/effet
-//! son_fuzz <roms> random <graine> <essais> <interruptions>   suites aléatoires de commandes
-//! son_fuzz <roms> synth <graine> <essais> <interruptions>    sons synthétiques ajoutés à la ROM
-//! son_fuzz <roms> short <graine> <essais> <interruptions>    idem avec des pistes courtes
-//! son_fuzz <roms> one songs <numéro> <interruptions> [de a]            un essai, avec le détail
-//! son_fuzz <roms> one random|synth|short <graine> <essai> <interruptions> [de a]
+//! sound_fuzz <roms> songs <premier> <dernier> <interruptions>  un essai par numéro de musique/effet
+//! sound_fuzz <roms> random <graine> <essais> <interruptions>   suites aléatoires de commandes
+//! sound_fuzz <roms> synth <graine> <essais> <interruptions>    sons synthétiques ajoutés à la ROM
+//! sound_fuzz <roms> short <graine> <essais> <interruptions>    idem avec des pistes courtes
+//! sound_fuzz <roms> one songs <numéro> <interruptions> [de a]            un essai, avec le détail
+//! sound_fuzz <roms> one random|synth|short <graine> <essai> <interruptions> [de a]
 //!
 //! Variables d'environnement : FUZZ_STATE=1 compare aussi la RAM du Z80 à l'état du pilote (quand
 //! le Z80 est au repos) ; FUZZ_COVERAGE=fichier écrit la couverture du programme du Z80 ;
@@ -26,7 +26,7 @@ use support::Report;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 4 {
-        eprintln!("usage : son_fuzz <roms> songs|random|synth|short|one ... (voir l'en-tête du fichier)");
+        eprintln!("usage : sound_fuzz <roms> songs|random|synth|short|one ... (voir l'en-tête du fichier)");
         std::process::exit(2);
     }
     let rom = Rom::load(Path::new(&a[1])).expect("rom son");

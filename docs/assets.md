@@ -72,7 +72,7 @@ les échantillons depuis les ressources (`Machine::load_ddsom_with` : `dd2.11m`.
 lues) ; le programme, le Z80 et le DSP viennent encore des ROMs. Vérification d'une partie :
 
 ```sh
-cargo run --release -p ddsom-assets --example partie_assets -- ../rom ../testdata/eeprom_ddsom.bin \
+cargo run --release -p ddsom-assets --example assets_game -- ../rom ../testdata/eeprom_ddsom.bin \
     <assets> ../scenarios/bot30k.txt 6000 partie.png
 ```
 
@@ -773,12 +773,12 @@ non couverts, les trois premiers appelants dans `ddsom-game/src`.
 
 ```sh
 cd port
-CARGO_TARGET_DIR=/tmp/cible cargo build --release -p ddsom-game --example lectures_rom --features rom-trace
+CARGO_TARGET_DIR=/tmp/cible cargo build --release -p ddsom-game --example rom_reads --features rom-trace
 cargo build --release -p ddsom-assets --examples
-target/release/examples/couverture_rom <assets> --octets /tmp/couvert.bin          # couverture mot par mot
-DDSOM_COUVERT=/tmp/couvert.bin /tmp/cible/release/examples/lectures_rom <roms> <eeprom> lectures.txt \
+target/release/examples/rom_coverage <assets> --octets /tmp/couvert.bin          # couverture mot par mot
+DDSOM_COUVERT=/tmp/couvert.bin /tmp/cible/release/examples/rom_reads <roms> <eeprom> lectures.txt \
     ../scenarios/bot30k.txt:12000 ...                                              # machine hybride, natives Rust
-target/release/examples/couverture_rom <assets> lectures.txt [écart-hexa]          # zones non couvertes
+target/release/examples/rom_coverage <assets> lectures.txt [écart-hexa]          # zones non couvertes
 ```
 
 **Scénarios** (15 x 12 000 images, machine hybride) : `bot30k` (guerrier), `bot_char1`, `bot_char4`, `bot_2p`,

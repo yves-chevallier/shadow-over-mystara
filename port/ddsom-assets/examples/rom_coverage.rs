@@ -1,12 +1,12 @@
 //! Zones de la ROM programme lues par le code Rust (sortie de `lectures_rom` de ddsom-game) que les
 //! ressources ne reconstruisent pas.
 //!
-//!   couverture_rom <assets> <lectures.txt> [écart]
-//!   couverture_rom <assets> --octets <fichier> [--sans <fichier d'assets>]
+//!   rom_coverage <assets> <lectures.txt> [écart]
+//!   rom_coverage <assets> --octets <fichier> [--sans <fichier d'assets>]
 //!
 //! La seconde forme écrit la couverture mot par mot (un octet par mot, données puis programme, 1 = couvert)
 //! pour `DDSOM_COUVERT` de `lectures_rom` ; `--without data/natives.json` l'écrit sans ce fichier (pour
-//! `tools/zones_natives.py`, qui le régénère).
+//! `tools/native_zones.py`, qui le régénère).
 //!
 //! Affiche, par espace (données `d`, programme `p`), le total lu, la part couverte, puis les zones lues non
 //! couvertes (regroupées si moins de `écart` octets les séparent, 0x10 par défaut) : début, fin exclue,
@@ -29,7 +29,7 @@ fn main() {
         return;
     }
     let [_, assets, reads_path, ..] = &a[..] else {
-        eprintln!("usage : couverture_rom <assets> <lectures.txt> [écart]");
+        eprintln!("usage : rom_coverage <assets> <lectures.txt> [écart]");
         std::process::exit(2);
     };
     let gap: u32 = a.get(3).map_or(0x10, |g| u32::from_str_radix(g, 16).unwrap());

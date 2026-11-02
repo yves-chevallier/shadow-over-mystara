@@ -2,7 +2,7 @@
 //! derniers changements de D<r> (PC de l'instruction suivante, valeur) : pour trouver le gestionnaire qui laisse un
 //! registre résiduel relu par un autre (machine de référence ; `1` en dernier argument : machine hybride).
 //!
-//!   registre_ecrit <roms> <eeprom> <scénario> <image> <pc hex> <n° de registre D> [1]
+//!   register_written <roms> <eeprom> <scénario> <image> <pc hex> <n° de registre D> [1]
 use std::sync::Mutex;
 fn main() {
     let a: Vec<String> = std::env::args().collect();

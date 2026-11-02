@@ -1,14 +1,14 @@
 //! Le jeu surcadencé est-il déterminé image par image ? Deux machines d'origine, à deux fréquences
 //! différentes, rejouent le même scénario ; on compare la RAM de travail à chaque image.
 //!
-//! determinisme <roms> <eeprom> <scenario> <images> <k1> <k2>
+//! determinism <roms> <eeprom> <scenario> <images> <k1> <k2>
 
 use std::path::Path;
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames, k1, k2] = &a[..] else {
-        eprintln!("usage : determinisme <roms> <eeprom> <scenario> <images> <k1> <k2>");
+        eprintln!("usage : determinism <roms> <eeprom> <scenario> <images> <k1> <k2>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();

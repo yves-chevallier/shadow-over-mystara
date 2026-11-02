@@ -1,7 +1,7 @@
 //! Contrôle détaillé des gestionnaires des familles ITEM / BOX / EFFCT sur un scénario : chaque appel
 //! est exécuté par l'original et par la routine native sur des copies, puis comparé (RAM, registres
 //! de sortie). Un écart affiche l'objet (type, variante, états, 0x60 octets) avant l'appel.
-//!   familles <roms> <eeprom> <scénario> <images> [nombre d'écarts à afficher]
+//!   families <roms> <eeprom> <scénario> <images> [nombre d'écarts à afficher]
 
 use std::cell::RefCell;
 use std::path::Path;
@@ -81,7 +81,7 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let (Some(roms), Some(eeprom), Some(scenario), Some(frames)) = (a.get(1), a.get(2), a.get(3), a.get(4)) else {
-        eprintln!("usage : familles <roms> <eeprom> <scénario> <images> [écarts]");
+        eprintln!("usage : families <roms> <eeprom> <scénario> <images> [écarts]");
         std::process::exit(2);
     };
     if let Some(n) = a.get(5) {

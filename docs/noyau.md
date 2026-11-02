@@ -330,7 +330,7 @@ couvre sans jamais les appeler. Un moteur sans processeur n'a pas de RAM à test
 le test n'a pas d'équivalent à écrire, seulement ses effets, déjà présents. La remise à zéro logicielle 0x28cd0 (`jmp 0x350` après une
 exception du processeur, K4) est hors périmètre.
 
-**Durée.** Mesurée par `examples/demarrage` (code d'origine à ×16 ; identique sur tous les scénarios : aucun ne donne
+**Durée.** Mesurée par `examples/startup` (code d'origine à ×16 ; identique sur tous les scénarios : aucun ne donne
 d'entrée avant l'image 600, et l'EEPROM est la même) :
 
 | Jalon | Image (0 = première), ligne |

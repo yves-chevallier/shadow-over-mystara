@@ -58,11 +58,11 @@ leur validation : la ligne `quit` d'un scénario ne l'arrête pas, le jeu contin
 
 ```sh
 cd port
-CARGO_TARGET_DIR=target/trace cargo build --release -p ddsom-game --example lectures_rom --features rom-trace
-target/release/examples/couverture_rom <assets> --octets couvert.bin --sans data/natives.json
-DDSOM_COUVERT=couvert.bin target/trace/release/examples/lectures_rom <roms> <eeprom> lectures.txt \
+CARGO_TARGET_DIR=target/trace cargo build --release -p ddsom-game --example rom_reads --features rom-trace
+target/release/examples/rom_coverage <assets> --octets couvert.bin --sans data/natives.json
+DDSOM_COUVERT=couvert.bin target/trace/release/examples/rom_reads <roms> <eeprom> lectures.txt \
     ../scenarios/bot30k.txt:30000 ...
-../tools/native_zones.py couvert.bin lectures*.txt > extract/zones_natives.txt   # puis extract ... data
+../tools/native_zones.py couvert.bin lectures*.txt > extract/native_zones.txt   # puis extract ... data
 ```
 
 **Le code 68000 n'est plus lu.** La première mesure (16 scénarios) trouvait encore 30 000 mots de code lus en
@@ -133,7 +133,7 @@ code déclaré (data/reste.json) : 486399 octets en 5761 plages
 ```
 
 **Mettre à jour.** `tools/code_68k.sh` après l'ajout de scénarios qui exécutent du code nouveau (sans effet sur la
-sûreté : du code non mesuré est rangé en données), puis `extract ... data`. Les zones de `zones_natives.txt` ne sont
+sûreté : du code non mesuré est rangé en données), puis `extract ... data`. Les zones de `native_zones.txt` ne sont
 plus nécessaires hors du code, mais rien n'empêche d'en ajouter (`tools/native_zones.py`). Le fichier reste lu par
 `extract` (`natives.rs`) : ses zones dans le code sont indispensables, et celles hors du code, en double avec `reste.json`
 aujourd'hui, couvrent les octets qui deviendraient du code si `code_68k.txt` grandit (nouveaux scénarios).
@@ -154,7 +154,7 @@ aujourd'hui, couvrent les octets qui deviendraient du code si `code_68k.txt` gra
   des chemins mesurés (voir ci-dessous).
 * **La couverture complète rend les zones ajoutées à la main inutiles** : `cov_cave_tritan` et `cov_objet_tritan`
   (deux parties de l'utilisateur qui divergeaient sans ROM, corrigées sur main en prolongeant 8 zones de
-  `zones_natives.txt`) sont VALIDE avec des assets extraits sans ces prolongements ; et encore VALIDE quand
+  `native_zones.txt`) sont VALIDE avec des assets extraits sans ces prolongements ; et encore VALIDE quand
   `natives.json` est réduit aux 192 zones qui touchent le code (tout le reste venant de `reste.json`). Témoin : les
   mêmes assets avec un `reste.json` vidé de ses blocs échouent (images 1 325 et 562).
 * **Bots longs** (autobot, hors de la validation complète) : deux joueurs avec magies (90 000 images), un joueur
@@ -163,7 +163,7 @@ aujourd'hui, couvrent les octets qui deviendraient du code si `code_68k.txt` gra
   native en 0x4dfe2 (`magic_user.rs`, image 15 318) et 0x20ae (`scene/shop.rs`, image 86 671), divergence de
   natives à l'image 13 279 (trois joueurs) ; ce sont des trous du mode sans 68000, pas des données (corrigés
   depuis : `scenarios/long/`, docs/couverture.md « Bots longs », avec une autre lecture de code par une native, le délai
-  du gel 0x4bd98 + D0.w, déclarée dans `zones_natives.txt`). Seul écart
+  du gel 0x4bd98 + D0.w, déclarée dans `native_zones.txt`). Seul écart
   d'assets trouvé : la lecture hors bornes de la table des boutiques ci-dessous (image 86 640), corrigée. Avec un
   `reste.json` vidé, les trois divergent dès les images 4 370, 4 651 et 5 780.
 * **Sans ROM du tout** : une copie du dépôt (`git archive`) se construit sans dossier `rom/` (`ddsom-rc` vide, avec
@@ -182,7 +182,7 @@ aujourd'hui, couvrent les octets qui deviendraient du code si `code_68k.txt` gra
   `natives.json` qui touchent le code, ou des opérandes trouvés par `extract`). Exemple trouvé par un bot long :
   la table des boutiques enchaînées (0xf7d72, 20 octets suivis de code) lue avec un numéro de boutique hors
   bornes (234, après un saut de scène du bot) prend un octet du code (0xf7e5c), comme l'original ; zone ajoutée à
-  la main à `zones_natives.txt`. La validation avec `DDSOM_ASSETS` montre ces cas ; il suffit alors de relancer
+  la main à `native_zones.txt`. La validation avec `DDSOM_ASSETS` montre ces cas ; il suffit alors de relancer
   `lectures_rom` (avec `DDSOM_COUVERT`) sur ce scénario et d'ajouter la zone. Ranger aussi le code dans les assets
   supprimerait ce dernier risque (au prix de 486 Ko de plus, le programme entier).
 * **Les trous du mode sans 68000** (natives manquantes : arrêt avec diagnostic) sont les mêmes avec ou sans ROM.

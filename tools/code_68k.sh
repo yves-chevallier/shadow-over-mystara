@@ -15,8 +15,8 @@ eeprom=${DDSOM_EEPROM:-testdata/eeprom_ddsom.bin}
 jobs=${DDSOM_JOBS:-$(nproc)}
 work=${1:-$HOME/.cache/ddsom/code_68k}
 mkdir -p "$work"
-DDSOM_ROMS=$roms cargo build --release -q --manifest-path port/Cargo.toml -p ddsom-game --example code_execute
-bin=port/target/release/examples/code_execute
+DDSOM_ROMS=$roms cargo build --release -q --manifest-path port/Cargo.toml -p ddsom-game --example executed_code
+bin=port/target/release/examples/executed_code
 list() {
 	local dir=$1 n=$2 s
 	for s in "$dir"/*.txt; do

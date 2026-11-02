@@ -15,11 +15,11 @@ cps2-gfx = { path = "../cps2-gfx" }
 ddsom-assets = { path = "../ddsom-assets" }
 
 [features]
-# Journal des lectures de la ROM programme par le code Rust (examples/lectures_rom.rs).
+# Journal des lectures de la ROM programme par le code Rust (examples/rom_reads.rs).
 rom-trace = ["cps2/rom-trace"]
 # Pile d'appels des écritures à une adresse (examples/fuzz_couv, FUZZ_SURVEILLE).
 surveille = []
 
 [[example]]
-name = "lectures_rom"
+name = "rom_reads"
 required-features = ["rom-trace"]

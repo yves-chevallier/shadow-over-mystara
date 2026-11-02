@@ -2,7 +2,7 @@
 //! instruction 68000 hors de la plage, ou d'une routine native), l'image, l'adresse et la dernière
 //! instruction 68000 exécutée avant (« natif » si une native s'est exécutée entre les deux).
 //!
-//!   qui <roms> <eeprom> <scénario> <images> <début> <fin> [max]
+//!   who_enters <roms> <eeprom> <scénario> <images> <début> <fin> [max]
 
 use std::path::Path;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
@@ -52,7 +52,7 @@ fn trace(pc: u32) {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames, from, to, rest @ ..] = &a[..] else {
-        eprintln!("usage : qui <roms> <eeprom> <scénario> <images> <début> <fin> [max]");
+        eprintln!("usage : who_enters <roms> <eeprom> <scénario> <images> <début> <fin> [max]");
         std::process::exit(2);
     };
     FROM.store(u32::from_str_radix(from, 16).unwrap(), Ordering::Relaxed);

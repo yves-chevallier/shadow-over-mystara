@@ -2,7 +2,7 @@
 //! `original`) jusqu'à l'image donnée ; si une image exécute plus de 20 millions de blocs, affiche
 //! les PC les plus fréquents et s'arrête.
 //!
-//! bloque <roms> <eeprom> <scénario> <image> [origine|reecrit] [deux]
+//! stuck <roms> <eeprom> <scénario> <image> [origine|reecrit] [deux]
 
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;

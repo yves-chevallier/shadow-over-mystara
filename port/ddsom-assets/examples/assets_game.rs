@@ -1,6 +1,6 @@
 //! Une partie démarre-t-elle avec les graphismes et les échantillons reconstruits depuis les ressources ?
 //!
-//!   partie_assets <roms> <eeprom> <assets> <scénario> <images> <sortie.png>
+//!   assets_game <roms> <eeprom> <assets> <scénario> <images> <sortie.png>
 //!
 //! Deux machines identiques (jeu réécrit en Rust, 68000 surcadencé), l'une avec les ROMs graphiques et
 //! sonores, l'autre avec `ddsom_assets::rebuild` ; le scénario est rejoué sur les deux. Les images
@@ -30,7 +30,7 @@ fn machine(roms: &Path, eeprom: Option<&[u8]>, assets: Option<&Path>) -> Machine
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, assets, scenario, frames, out] = &a[..] else {
-        eprintln!("usage : partie_assets <roms> <eeprom> <assets> <scénario> <images> <sortie.png>");
+        eprintln!("usage : assets_game <roms> <eeprom> <assets> <scénario> <images> <sortie.png>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();

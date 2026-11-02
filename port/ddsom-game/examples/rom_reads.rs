@@ -2,8 +2,8 @@
 //! d'instructions 68000 : `prog8`/`prog16`/`prog32` (espace programme déchiffré), `rd8`/`data16`/`data32`
 //! et lectures du bus (espace données).
 //!
-//!   cargo build --release -p ddsom-game --example lectures_rom --features rom-trace
-//!   lectures_rom <roms> <eeprom> <sortie.txt> <scénario>:<images> ...
+//!   cargo build --release -p ddsom-game --example rom_reads --features rom-trace
+//!   rom_reads <roms> <eeprom> <sortie.txt> <scénario>:<images> ...
 //!
 //! Variables : `DDSOM_MASQUE=n` décale de n bits les numéros de scénario du masque (pour fusionner plusieurs
 //! exécutions) ; `DDSOM_COUVERT=file` (écrit par `couverture_rom`) : pour chaque mot lu hors des zones
@@ -53,7 +53,7 @@ fn original(program: bool, address: u32) {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 5 {
-        eprintln!("usage : lectures_rom <roms> <eeprom> <sortie.txt> <scénario>:<images> ...");
+        eprintln!("usage : rom_reads <roms> <eeprom> <sortie.txt> <scénario>:<images> ...");
         std::process::exit(2);
     }
     let ee = std::fs::read(&a[2]).ok();

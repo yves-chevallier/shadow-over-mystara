@@ -365,7 +365,7 @@ pub fn call_expected(c: &mut Cpu, b: &mut Cps2Bus, address: u32, frame: tasks::t
     tasks::table::returned(b, frame)
 }
 
-/// 68000 trace (`examples/qui`, `recensement`, `fuzz_porte`): function called with the address of each 68000
+/// 68000 trace (`examples/who_enters`, `recensement`, `fuzz_porte`): function called with the address of each 68000
 /// instruction executed outside a native routine.
 static TRACE: OnceLock<fn(u32)> = OnceLock::new();
 
@@ -373,7 +373,7 @@ pub fn set_trace(f: fn(u32)) {
     let _ = TRACE.set(f);
 }
 
-/// Diagnostic (`examples/qui`) : appelée à l'entrée (vrai) et à la sortie (faux) de chaque native exécutée
+/// Diagnostic (`examples/who_enters`) : appelée à l'entrée (vrai) et à la sortie (faux) de chaque native exécutée
 /// par `run_traced`.
 static NATIVE_HOOK: OnceLock<fn(u32, bool)> = OnceLock::new();
 
@@ -536,7 +536,7 @@ pub const GAME_STEP: u32 = 0x1c4b0;
 /// pressé à l'entrée d'une scène ou à l'attract, une tâche auxiliaire (entrée 13 de la table, 0xee080) remet la
 /// tâche principale prête à chaque passage de l'ordonnanceur : le jeu enchaîne ses pas sans attendre l'image
 /// (« avance rapide »). Le nombre de pas par image vaut alors (durée de l'image) / (durée d'un pas) : 5 à 10 sur
-/// l'arcade (mesuré à l'attract : 7-8, `examples/passages` ; en jeu : 5-7 ; entrée de scène : 9-10) mais 128 à
+/// l'arcade (mesuré à l'attract : 7-8, `examples/pc_hits` ; en jeu : 5-7 ; entrée de scène : 9-10) mais 128 à
 /// ×16, et il dépend de la durée des routines, donc diffère entre le code d'origine et les natives.
 ///
 /// Écart volontaire avec le code d'origine surcadencé (pas avec l'arcade) : au plus `MAX_STEPS_PER_FRAME` pas

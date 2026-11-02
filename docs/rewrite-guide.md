@@ -13,7 +13,7 @@ comportement **identique image par image**. Le code vit dans `port/ddsom-game`.
 Le 68000 de la machine est **surcadencé** (×16, `Machine::set_overclock`) : le jeu finit toujours son
 travail avant la fin de l'image, il n'y a plus de ralentissements, et l'état du jeu à chaque image ne
 dépend plus de la durée des routines. On l'a vérifié : à ×8 et ×16, la RAM est identique sur 30 000
-images (`examples/determinisme.rs`). Conséquences :
+images (`examples/determinism.rs`). Conséquences :
 
 - **aucune exactitude au cycle** : une routine Rust n'a pas à reproduire la durée de l'original ;
 - la validation compare l'état du jeu **à chaque image** avec le code d'origine surcadencé ;

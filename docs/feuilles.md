@@ -16,7 +16,7 @@ contrat de registres (ce que les appelants lisent) et mode de validation.
   `c1`, `m2`). Chaque routine du groupe est appelée en mode contrôle ; l'original s'exécute à côté sur une
   copie ; mémoire, registres du contrat et durée (si elle est déclarée exacte) sont comparés. C'est ce
   qui valide les chemins que les scénarios n'atteignent pas.
-* `examples/couverture.rs` : nombre d'appels de chaque routine native (ou, avec `decomp/index.tsv`, de
+* `examples/coverage.rs` : nombre d'appels de chaque routine native (ou, avec `decomp/index.tsv`, de
   chaque fonction d'origine) sur un scénario.
 * `mem::diff_bus` ignore, en plus de la pile, la zone morte sous le pointeur de la pile privée des
   wrappers son (copies de registres sans signification).

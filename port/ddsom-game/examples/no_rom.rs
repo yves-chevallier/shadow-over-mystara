@@ -1,6 +1,6 @@
 //! Le jeu sans ROM : une machine faite des seules ressources extraites joue-t-elle comme celle des ROMs ?
 //!
-//!   sans_rom <roms> <eeprom> <assets> <scénario>:<images> ...
+//!   no_rom <roms> <eeprom> <assets> <scénario>:<images> ...
 //!
 //! Deux machines sans 68000 (`ddsom_game::install_no_68k`) avec le pilote son Rust rejouent chaque scénario :
 //!   R : contenus lus dans les ROMs (`cps2::Contents::from_roms`) ;
@@ -59,7 +59,7 @@ fn gap(r: &Machine, a: &Machine) -> Option<String> {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 5 {
-        eprintln!("usage : sans_rom <roms> <eeprom> <assets> <scénario>:<images> ...");
+        eprintln!("usage : no_rom <roms> <eeprom> <assets> <scénario>:<images> ...");
         std::process::exit(2);
     }
     let ee = std::fs::read(&a[2]).ok();

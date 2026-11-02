@@ -1,6 +1,6 @@
 //! Contrôle bit à bit du rendu et de l'audio (phase d'optimisation, lot F).
 //!
-//! controle_rendu <roms> <eeprom> <scénario> <images> [sortie]
+//! render_check <roms> <eeprom> <scénario> <images> [sortie]
 //!
 //! Fait tourner le jeu sans 68000 avec le rendu et l'audio (`DDSOM_SON_RUST=1` : pilote son Rust ; sinon Z80 émulé)
 //! et imprime une ligne par image : hachage des pixels, hachage des échantillons audio produits. Avec `exit`, écrit
@@ -26,7 +26,7 @@ impl Hasher for Fnv {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 5 {
-        eprintln!("usage : controle_rendu <roms> <eeprom> <scenario> <images> [sortie]");
+        eprintln!("usage : render_check <roms> <eeprom> <scenario> <images> [sortie]");
         std::process::exit(2);
     }
     let ee = std::fs::read(&a[2]).ok();

@@ -2,7 +2,7 @@
 //! une centaine dans la « tempête de pas », voir docs/couverture.md). Natives désactivées par `DDSOM_SANS=` (vide : toutes),
 //! sans quoi le PC n'est vu que s'il est exécuté hors d'une native.
 //!
-//! passages <roms> <eeprom> <scénario> <image début> <image fin> <pc hexa>
+//! pc_hits <roms> <eeprom> <scénario> <image début> <image fin> <pc hexa>
 use std::cell::Cell;
 use std::rc::Rc;
 fn main() {

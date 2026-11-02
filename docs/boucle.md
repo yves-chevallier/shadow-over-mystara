@@ -40,7 +40,7 @@ auxiliaire, sans attendre l'image** (« avance rapide » ; hors bouton, la même
 de fois par image à ×1, sans effet). Le nombre de pas par image vaut donc (cycles de l'image) / (cycles d'un
 pas) :
 
-| Mesure (`examples/passages`, `DDSOM_STEP_CAP=0`) | ×1 (arcade) | ×16 |
+| Mesure (`examples/pc_hits`, `DDSOM_STEP_CAP=0`) | ×1 (arcade) | ×16 |
 |---|---|---|
 | `cov_attract_coin`, images 21302-21305 | 8, 7, 8, 7 | 136, 128, 129, 128 |
 | `cov_tour6_c5`, entrée de scène | 9-10 | 54-170 |

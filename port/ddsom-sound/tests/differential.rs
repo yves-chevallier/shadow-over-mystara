@@ -1,7 +1,7 @@
 //! Le pilote Rust doit faire les mêmes écritures que le programme du Z80 d'origine.
 //!
 //! Les tests lisent les ROMs dans le dossier désigné par `DDSOM_ROMS` (le même que pour compiler
-//! `ddsom-rc`) et s'ignorent sans lui. Version courte de `examples/son_fuzz.rs` ; à lancer en
+//! `ddsom-rc`) et s'ignorent sans lui. Version courte de `examples/sound_fuzz.rs` ; à lancer en
 //! `--release`.
 
 #[path = "../examples/support/mod.rs"]

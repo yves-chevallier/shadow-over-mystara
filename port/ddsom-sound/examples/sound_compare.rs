@@ -3,7 +3,7 @@
 //! QSound et dans la RAM partagée, et on les compare à celles du pilote Rust nourri des mêmes
 //! commandes (c'est-à-dire de ce que le Z80 a lu dans la RAM partagée).
 //!
-//! son_compare <roms> <eeprom> <scenario> <images>
+//! sound_compare <roms> <eeprom> <scenario> <images>
 
 #[path = "support/mod.rs"]
 mod support;
@@ -16,7 +16,7 @@ use support::Report;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, frames] = &a[..] else {
-        eprintln!("usage : son_compare <roms> <eeprom> <scenario> <images>");
+        eprintln!("usage : sound_compare <roms> <eeprom> <scenario> <images>");
         std::process::exit(2);
     };
     let ee = std::fs::read(eeprom).ok();

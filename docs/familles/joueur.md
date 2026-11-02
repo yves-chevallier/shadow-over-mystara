@@ -106,7 +106,7 @@ A1 = l'objet créé, retenue levée si le pool est plein (ou, pour 0x51c06, si l
 ## Validation
 
 * `tools/validate_all.sh 30000`, `DDSOM_COV=1` pour les scénarios `cov/` : voir `docs/couverture.md`.
-* `examples/fuzz_joueur.rs` : chaque gestionnaire est appelé en mode contrôle depuis des états fabriqués (joueur
+* `examples/fuzz_player_shots.rs` : chaque gestionnaire est appelé en mode contrôle depuis des états fabriqués (joueur
   propriétaire aux champs variés, parent et frères factices, compteurs de scène) pendant `DDSOM_PAS` images ;
   `fuzz_joueur <roms> <eeprom> <scénario> <chauffe> <tours> [PSHL|PEFF]`, `DDSOM_ENTREE=<adresse>` pour un seul
   gestionnaire, `DDSOM_ETATS=1` pour tirer aussi des états quelconques (beaucoup sortent des tables de l'original).

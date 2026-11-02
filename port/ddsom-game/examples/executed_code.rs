@@ -2,7 +2,7 @@
 //! comme la machine B de `validate`) : la mesure du code qui sépare, dans la région programme, le code des données
 //! (`port/extract/code_68k.txt`, docs/sans-rom.md « Couverture complète des données »).
 //!
-//!   code_execute <roms> <eeprom> <sortie.txt> <scénario>:<images> ...
+//!   executed_code <roms> <eeprom> <sortie.txt> <scénario>:<images> ...
 //!
 //! Chaque bloc recompilé exécuté est noté par son adresse de tête, puis étendu en ligne droite jusqu'à
 //! l'instruction qui termine un bloc de base (branchement, saut, appel, retour, trap, chk, écriture de SR) : un bloc
@@ -43,7 +43,7 @@ fn block_end(op: &Op) -> bool {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 5 {
-        eprintln!("usage : code_execute <roms> <eeprom> <sortie.txt> <scénario>:<images> ...");
+        eprintln!("usage : executed_code <roms> <eeprom> <sortie.txt> <scénario>:<images> ...");
         std::process::exit(2);
     }
     let ee = std::fs::read(&a[2]).ok();

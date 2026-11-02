@@ -6,7 +6,7 @@
 //! pendant ces appels. Sortie : par type et variante, les sites Rust qui exécutent encore du 68000
 //! (`file:line routine`), avec un exemple d'état ; puis les adresses de la zone EFFCT exécutées.
 //!
-//!   recensement_effct <roms> <eeprom> <scénario> <images de chauffe> [types séparés par des virgules]
+//!   census_effct <roms> <eeprom> <scénario> <images de chauffe> [types séparés par des virgules]
 //!
 //! `RECENS_VARIANTES=n` (16 par défaut), `RECENS_PAS=n` (pas par trajectoire, 40), `RECENS_TOURS=n` (8).
 //! Les combinaisons hors des tables de l'original (variante ou état que la table ne prévoit pas) font
@@ -66,7 +66,7 @@ fn main() {
 fn principal() {
     let a: Vec<String> = std::env::args().collect();
     let (Some(roms), Some(eeprom), Some(scenario), Some(warmup)) = (a.get(1), a.get(2), a.get(3), a.get(4)) else {
-        eprintln!("usage : recensement_effct <roms> <eeprom> <scénario> <images de chauffe> [types]");
+        eprintln!("usage : census_effct <roms> <eeprom> <scénario> <images de chauffe> [types]");
         std::process::exit(2);
     };
     let env = |k: &str, d: u32| std::env::var(k).ok().and_then(|v| v.parse().ok()).unwrap_or(d);

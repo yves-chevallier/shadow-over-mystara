@@ -7,7 +7,7 @@
 //! et frères factices, états de l'automate, compteurs et drapeaux de la scène. L'objet vit ensuite
 //! quelques dizaines d'images (le propriétaire change de geste, le moteur de collisions pose ses drapeaux...).
 //!
-//!   fuzz_joueur <roms> <eeprom> <scénario> <images de chauffe> <tours> [PSHL|PEFF]
+//!   fuzz_player_shots <roms> <eeprom> <scénario> <images de chauffe> <tours> [PSHL|PEFF]
 //!
 //! Variables : `DDSOM_ENTREE=<address>` (un seul gestionnaire), `DDSOM_GRAINE`, `DDSOM_PAS` (images par
 //! objet, 40 par défaut), `DDSOM_VARIANTES` (variantes tirées, 3 par défaut), `DDSOM_VERBOSE`.
@@ -137,7 +137,7 @@ fn valid_variants(class: u8, kind: u8, default: u32) -> u32 {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 6 {
-        eprintln!("usage : fuzz_joueur <roms> <eeprom> <scénario> <images de chauffe> <tours> [PSHL|PEFF]");
+        eprintln!("usage : fuzz_player_shots <roms> <eeprom> <scénario> <images de chauffe> <tours> [PSHL|PEFF]");
         std::process::exit(2);
     }
     let (roms, eeprom, scenario) = (&a[1], &a[2], &a[3]);

@@ -3,7 +3,7 @@
 //! La boucle de dispatch ne fixe que A0, A5, D7, D0 (type × 4) et A1 (adresse du gestionnaire) : les autres
 //! registres sont ceux que le gestionnaire précédent a laissés.
 //!
-//!   restes_statique <roms>
+//!   static_leftovers <roms>
 //!
 //! L'analyse suit les branchements, les tables de sauts et les `bsr`/`jsr` locaux (le corps de la
 //! sous-routine est analysé avec l'état de l'appelant) ; un `jsr` vers une routine commune hors de

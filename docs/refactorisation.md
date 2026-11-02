@@ -188,7 +188,7 @@ goulot : l'optimiser avant les lots n'aurait pas de sens.
 
 ### Lot F : résultats (branche wt-perf)
 
-Contrôle bit à bit : `examples/controle_rendu <roms> <eeprom> <scénario> <images> [sortie]` imprime, par image, le
+Contrôle bit à bit : `examples/render_check <roms> <eeprom> <scénario> <images> [sortie]` imprime, par image, le
 hachage des pixels et celui des échantillons audio (jeu sans 68000, rendu allumé, Z80 émulé ou `DDSOM_SON_RUST=1`).
 Référence enregistrée avec le code d'avant le lot, puis comparée avec `cmp` après chaque optimisation : attract,
 bot30k, boss10_scene65, cov_4p_a, 4 000 images, deux modes de son, soit 8 séries, toutes identiques à chaque étape.
@@ -445,7 +445,7 @@ Périmètre : `families/effects*.rs`, `effects_creators.rs`, `items*.rs`, `boxes
   dispatch : ses reprises sont des étapes (`effects_g::Etape`, ligne ajoutée à `taches::etapes_des_taches!`) au lieu
   de natives à adresse et de `call_at` ; l'abandon de la boucle reste un `Unwound` (la boucle de dispatch n'est pas
   une machine à états). Nouveau scénario `cov/cov_effct_feu` (le chemin n'était exercé par aucun) ; ses lectures de
-  la ROM manquaient aux assets sans ROM : cinq zones ajoutées à `port/extract/zones_natives.txt` (fichier local
+  la ROM manquaient aux assets sans ROM : cinq zones ajoutées à `port/extract/native_zones.txt` (fichier local
   généré) et `natives.json` des assets régénéré.
 * **Nommer.** Variables de la caméra, de la scène et de la phase par `ram.rs` (85 accès) ; constantes d'adresses
   recopiées supprimées avec leurs appels.
@@ -672,7 +672,7 @@ des événements (0x19ae6, 0x19b08, 0x19dce) et des palettes (0x1686, 0x3af8), p
   (D5.w = -1) et trésor (compteur) l'écrivent en clair ; les restes D1-D3 des tests de boîte
   (`target_in_front_68k`, `box_around_68k`, `in_front_68k`) et les registres de la collision avec le décor
   (`terrain::push_68k`) donnent ses vitesses à l'étincelle de 0x103ba (`long_scene_20_2p`). Ces tests de boîte et la
-  collision gardent donc les registres de l'original dans la façade. Outil : `examples/registre_ecrit` compilé sans
+  collision gardent donc les registres de l'original dans la façade. Outil : `examples/register_written` compilé sans
   ROM (interprété, sinon les blocs recompilés ne passent pas par le crochet).
 * **Fuzz.** `examples/fuzz_ia.rs` compare chaque cœur à la routine d'origine (interpréteur seul) sur des états tirés
   d'une partie réelle : 0 écart sur les 70 entrées (skeleton, kobold, hellhound, boss 11, boss 19). Il a corrigé
@@ -917,7 +917,7 @@ total regs 3 686 / 3 455, adr 749 / 545. Natives : 82 `Corps::Gestionnaire`.
 | Lot C : fondu des portes en sous-programme de tâche, J1 dans le lot, registres morts des gestionnaires sans son | e3a49b7 (wt-decors) | complète, 269/269 sans 68000 (30 min 49 s, 8 tâches) et 269/269 depuis les assets (`DDSOM_ASSETS`) ; `fuzz_porte` (portes 7 et 29), `fuzz boutique`, `fuzz petites` sans écart |
 | Lot S : services communs sans registres (sauvegarde fantôme du son, cœurs son/palette/texte/terrain/aides/événements, appelants hors lots A-B) | voir `git log` (wt-services) | complète, 269/269 sans 68000 et 269/269 depuis les assets (`DDSOM_ASSETS`), JOBS=8 ; `fuzz son`, `fuzz video`, `fuzz u1`, `fuzz_monde ia_` |
 | Lot B : créateurs en fonctions Rust, appels directs, replis, registres prouvés morts, étape du feu d'artifice | voir `git log` (wt-effets) | complète, 270/270 sans 68000 et 270/270 depuis les assets ; `DDSOM_POISON=effets` et `restes` 270/270 |
-| Lot A : ennemis et boss (façade `enemy_lib`, noms, variables typées, natives du lot en Rust, routines sans native, registres résiduels prouvés par poison) | voir `git log` (wt-boss) | complète après fusion de main (lots S, B, 9b27479), 272/272 sans 68000 et 272/272 depuis les assets (`DDSOM_ASSETS`, assets réextraits : `zones_natives.txt` de main), JOBS=8 ; poison par site et bissections (boss/, enemy/, cov) |
+| Lot A : ennemis et boss (façade `enemy_lib`, noms, variables typées, natives du lot en Rust, routines sans native, registres résiduels prouvés par poison) | voir `git log` (wt-boss) | complète après fusion de main (lots S, B, 9b27479), 272/272 sans 68000 et 272/272 depuis les assets (`DDSOM_ASSETS`, assets réextraits : `native_zones.txt` de main), JOBS=8 ; poison par site et bissections (boss/, enemy/, cov) |
 | Lot « noyau final » : J3 achevé (appels en cours en étapes, appel attendu, cession notée au lieu de `Unwound`), ordonnanceur, démarrage et VBLANK en machine à états Rust, mode hybride retiré, appels directs de la fin de phase | voir `git log` (wt-noyau) | complète après fusion de main (f8f67af), 272/272 sans 68000 (14 min 55 s, 8 tâches) et 272/272 (10 min 53 s) depuis les assets (`DDSOM_ASSETS`, `data` réextrait par l'`extract` de main : `reste.json`) |
 | Lot IA : cœurs des aides d'IA et services restants, natives retirées, glitches de registres en clair, fuzz_ia | voir `git log` (wt-ia) | complète, 272/272 puis, fusionné avec le lot « trous », 286/286 (DDSOM_LONG=1) sans 68000 et depuis les assets (`trous_assets`), JOBS=8 ; poison par adresse et par registre (sondes), `fuzz_ia` 0 écart |
 | Lot « sortie du Cpu », partie 2 : écrans sans appel par adresse ni registre miroir, contexte des tâches en champs d'étape, `scene::fondu`, sondes `cession`/`retour`/`rendu` | voir `git log` (wt-ecrans2) | complète après fusion de main a911566 : 296/296 (DDSOM_LONG=1) sans 68000 et 296/296 depuis les assets (`sorts_assets`), JOBS=8 ; empoisonnée 296/296 après cette fusion aussi. Avant, après fusion de main (044c685), 296/296 (DDSOM_LONG=1) sans 68000 et 296/296 depuis les assets (`sorts_assets`), JOBS=8 ; empoisonnée (`tout@` les fichiers du lot, cessions et retours de ses tâches, une lecture gardée) 296/296. Étape suivante : prouver le reste des `_68k` des écrans (`construire_68k`, `update_cameras_68k`) avec la sonde `sortie` et `tools/regs_*.py` |

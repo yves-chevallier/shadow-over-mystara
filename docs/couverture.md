@@ -132,7 +132,7 @@ ignorée commence maintenant en FF0900 ; (2) **tempête de pas** (cause élucid�
 de scène fait diverger les machines ») : un bouton pressé en phase 8 (ou à l'attract) fait passer le jeu en
 avance rapide deux images plus tard : une tâche auxiliaire (table des tâches, entrée 13) remet aussitôt la tâche
 principale prête, qui enchaîne ses pas de jeu sans attendre l'IRQ (`world_update` 100 à 140 fois par image au lieu
-d'une, mesurable avec `examples/passages`). Le nombre de pas par image vaut alors (cycles de l'image) / (cycles d'un
+d'une, mesurable avec `examples/pc_hits`). Le nombre de pas par image vaut alors (cycles de l'image) / (cycles d'un
 pas) : il dépend du coût en cycles des natives, donc diffère forcément du code d'origine (écart de `ff806e`, le
 compteur d'images, d'un pas à l'autre). Le code d'origine seul est déterministe. Ces états ne sont comparables que si
 la durée des natives est exacte ; le bot évite ces instants et les scénarios de couverture doivent aussi les éviter
@@ -147,7 +147,7 @@ désormais les entrées avant le bouton fautif et relâche les boutons restés e
 (aucun bouton en entrée de scène). **Résolu** : le nombre de pas par image est maintenant plafonné à 8 (valeur de
 l'arcade : 5 à 10, `ddsom_game::MAX_STEPS_PER_FRAME`) par un crochet de `cps2::Machine` appliqué à l'identique au jeu
 et à la machine de référence (`install`, `install_reference` ; `docs/boucle.md` §1). Les scénarios `cov_tour2/3/6/7`,
-`cov_mortal_late`, `cov_attract_coin` et `boss/boss13_dragon` sont VALIDES sur 30 000 images ; `examples/determinisme`
+`cov_mortal_late`, `cov_attract_coin` et `boss/boss13_dragon` sont VALIDES sur 30 000 images ; `examples/determinism`
 (deux machines d'origine à ×16 et ×32) ne montre plus d'écart que sur les mots ignorés par `validate`. Les
 scénarios n'ont donc plus à éviter les boutons en entrée de scène.
 
@@ -214,8 +214,8 @@ Trous trouvés et corrigés (2026-10-27) ; chacun passait inaperçu des 272 scé
 | Bot (image) | Symptôme | Cause et correction |
 |---|---|---|
 | `long_2p_magies` (15 318) | arrêt : pas de native en 0x4dfe2 (`magic_user.rs`) | effets des sorts du magicien appelés par adresse sans native : vague 0x4dfe2, et du même coup orage 0x4d020, pluie 0x4d660, mur de feu 0x4d2c0 et les lunes de l'elfe 0x4e4de, 0x4e782 (relevé statique des appels par adresse de `player/`). Réécrits dans `player/spawn.rs` (`wave_bolt`, `storm_spell`, `rain_glow`, `wall_spark`, `moon`, `moon_b`), natives pour le fuzz : `fuzz_player spawn` avec `DDSOM_ENTREE`, 300 appels chacun, 0 écart |
-| `long_2p_magies` (59 919) | divergence : position et angle d'un éclat du gel (PEFF type 12) | registre résiduel : le rebond du gel (0x4bda8) indexe sa table par D2, laissé par le gestionnaire précédent, le parent de l'anneau d'équipement (`peff_ring`, 0x4a370 : `move.w (table),D2w`), que le Rust n'écrivait pas. `parent_follow` laisse D0, D1.w, D2.w (et `parent_alive` D0.b) comme l'original ; le suivi recopié dans `ring1` passe par `parent_follow`. Trouvé avec `examples/registre_ecrit` |
-| `long_2p_magies`, avec `DDSOM_ASSETS` (59 932) | délai d'un éclat du gel nul | glitch d'origine : le délai `move.b (0x4bd98,PC,D0.w)` prend l'octet haut de D0.w laissé par le tirage : 256 lectures de 16 octets sur ±32 Ko, souvent dans le code, absent des assets. Zones déclarées dans `tools/native_zones.py` et ajoutées à `zones_natives.txt` (154 lignes dans le code) |
+| `long_2p_magies` (59 919) | divergence : position et angle d'un éclat du gel (PEFF type 12) | registre résiduel : le rebond du gel (0x4bda8) indexe sa table par D2, laissé par le gestionnaire précédent, le parent de l'anneau d'équipement (`peff_ring`, 0x4a370 : `move.w (table),D2w`), que le Rust n'écrivait pas. `parent_follow` laisse D0, D1.w, D2.w (et `parent_alive` D0.b) comme l'original ; le suivi recopié dans `ring1` passe par `parent_follow`. Trouvé avec `examples/register_written` |
+| `long_2p_magies`, avec `DDSOM_ASSETS` (59 932) | délai d'un éclat du gel nul | glitch d'origine : le délai `move.b (0x4bd98,PC,D0.w)` prend l'octet haut de D0.w laissé par le tirage : 256 lectures de 16 octets sur ±32 Ko, souvent dans le code, absent des assets. Zones déclarées dans `tools/native_zones.py` et ajoutées à `native_zones.txt` (154 lignes dans le code) |
 | `long_28_scenes` (86 671) | arrêt : pas de native en 0x20ae (`scene/shop.rs`) | initialisation du pool PEFF à la réouverture d'une boutique enchaînée : native `pools::INIT_PEFF` |
 | `long_3p_mortels` (13 279) | 32 objets ESHL de type 0x1a manquants | glitch d'origine : 0xa17d0 (rangée d'éclats d'une caisse) charge le compte par `move.b (table),D5b` sans effacer D5 (0xa1670 le fait) : l'octet haut de D5.w laissé par la caisse s'ajoute à la boucle `dbf`, qui remplit le pool ; `eshl_creators::row_1a` gardait D5 entier |
 | `long_4p` (24 848) | arrêt : pas de native en 0xe296c (`elf.rs`) | son de la lune de l'elfe qui teste la version (`A5+0x70`) : ajouté à `sound::SELON_VERSION` (seul de ce genre manquant parmi les 7 entrées `tst.w (0x70,A5)` des sons) |
@@ -269,7 +269,7 @@ Trous trouvés et corrigés (chacun dans un commit séparé) :
 | `sorts_nain` (21 306) | un second tir de type 15 (pièce lancée) créé par un ESHL 14 | `families/eshl.rs`, `shot14::attack` : la table de sauts de 0x9fbd4 n'a que deux entrées (`+7` = 0 et 2), le troisième mot mène à 0x9fb1e (fin commune des autres séries) ; la native rejouait la création pour tout `+7` ≥ 2 tant que `+0x33` restait posé. Le cas `+7` = 4 appelle `close(x, 7)` |
 | `sorts_noms_b` (38 138) | les quatre joueurs de la scène 0xb ne sont plus écartés du boss 3 | `families/boss_3/body.rs`, `push_players` : la boucle de 0x818b2 / 0x819b0 appelle les formes 0x818e6 / 0x819e2 avec A1 = le joueur ; la native laissait A1 au reste de l'appel précédent (il vaut 0xff8dde en sortie) |
 | `sorts_magicien` (4 593) | arrêt : pas de native en 0x535f2 | `rod_shot` appelait par adresse les tirs de baguette 0x5336a (flammes), 0x53478 (boule) et 0x535f2 (étoiles). Réécrits dans `player/spawn.rs` (`rod_row`, `rod_ball`) avec leurs natives |
-| `sorts_combattant`, avec `DDSOM_ASSETS` (23 834) | un sprite d'un mot différent | lectures hors bornes du constructeur de sprites en 0x3200 et 0x1ef5c (dans le code, absent des assets) : zones ajoutées à `tools/native_zones.py` et `port/extract/zones_natives.txt` |
+| `sorts_combattant`, avec `DDSOM_ASSETS` (23 834) | un sprite d'un mot différent | lectures hors bornes du constructeur de sprites en 0x3200 et 0x1ef5c (dans le code, absent des assets) : zones ajoutées à `tools/native_zones.py` et `port/extract/native_zones.txt` |
 
 Limites : `fuzz_player spawn` s'arrête sur les trois tirs de baguette (« la routine d'origine ne revient pas » : depuis un état tiré
 au hasard, l'original dépasse la garde du contrôle) ; ils sont validés par les scénarios (les quatre baguettes sont tirées, pleines et épuisées). Les portes de passage SET 27 et 29

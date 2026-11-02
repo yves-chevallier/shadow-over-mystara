@@ -43,7 +43,7 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
 3. ~~**Petites dettes.**~~ Faites (`wt-couv2`) :
    * noms et commentaires des bots `long_*` d'après les personnages relevés en RAM (`long_voleur_mortel`,
      `long_elfe_objets`, `long_nain_57_86`, `long_scene_20`, `long_scene_56`...) ;
-   * `zones_natives.txt` gardé : `extract` l'inclut (`natives.rs`) pour les zones lues dans le code ; ses zones hors du
+   * `native_zones.txt` gardé : `extract` l'inclut (`natives.rs`) pour les zones lues dans le code ; ses zones hors du
      code font double emploi avec `reste.json` aujourd'hui, mais protègent si `code_68k.txt` grandit (docs/sans-rom.md) ;
    * `examples/reste68k`, `tools/reste68k.sh` et `docs/reste68k.md` retirés (`examples/cessions` l'était déjà).
 4. **Puis :** optimisation, documentation finale, et le bug de saisie du nom. Ce bug existe dans d'autres révisions du jeu, pas dans la nôtre (Euro 960619).

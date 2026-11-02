@@ -3,7 +3,7 @@
 //! objets synthétiques et compte le code 68000 que la native exécute encore (sous-états délégués,
 //! sous-routines d'origine), les appels hors contrat (l'original s'exécute à la place) et les cessions.
 //!
-//!   recensement <roms> <eeprom> <scénario> <chauffe> <trajectoires> [CLASS,...]
+//!   census <roms> <eeprom> <scénario> <chauffe> <trajectoires> [CLASS,...]
 //!
 //! Classes : PSHL PEFF ESHL SET SOBJ ITEM BOX (toutes par défaut). `DDSOM_ENTREE=address` : un seul
 //! gestionnaire ; `DDSOM_ETATS=1` : la moitié des trajectoires part d'états `+4..+7` tirés. Une trajectoire crée un objet neuf (état 0, variante 0, ou tirée parmi les `DDSOM_VARIANTES` premières)
@@ -131,7 +131,7 @@ fn main() {
 fn principal() {
     let a: Vec<String> = std::env::args().collect();
     let [_, roms, eeprom, scenario, warmup, tours, ..] = &a[..] else {
-        eprintln!("usage : recensement <roms> <eeprom> <scénario> <chauffe> <trajectoires> [CLASSE,...]");
+        eprintln!("usage : census <roms> <eeprom> <scénario> <chauffe> <trajectoires> [CLASSE,...]");
         std::process::exit(2);
     };
     let wanted: Option<Vec<&str>> = a.get(6).map(|s| s.split(',').collect());

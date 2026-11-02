@@ -12,7 +12,7 @@ cargo build --release -q --manifest-path port/Cargo.toml -p ddsom-game --example
 out=$(mktemp -d)
 (cd "$out" && python3 "$OLDPWD/tools/families_tables.py" tsv > /dev/null)
 for s in scenarios/*.txt; do
-	./port/target/release/examples/couverture "$roms" "$eeprom" "$s" "$frames" "$out/handlers.tsv" > "$out/$(basename "$s" .txt).cov" &
+	./port/target/release/examples/coverage "$roms" "$eeprom" "$s" "$frames" "$out/handlers.tsv" > "$out/$(basename "$s" .txt).cov" &
 done
 wait
 cat "$out"/*.cov | awk '{c[$1]+=$2} END {for (k in c) print k, c[k]}' | sort

@@ -1,7 +1,7 @@
 //! Chronologie du démarrage (reset 0x350, test de RAM 0x182a, poignée de main du Z80, `boot_init` 0x492) :
 //! image, ligne et cycle du premier passage en chaque jalon, puis registres à l'entrée de l'ordonnanceur.
-//!   demarrage <roms> <eeprom> [images] [natives=0]
-//!   demarrage <roms> <eeprom> <images> compare : jeu réécrit et code d'origine côte à côte ; à chaque image, nombre
+//!   startup <roms> <eeprom> [images] [natives=0]
+//!   startup <roms> <eeprom> <images> compare : jeu réécrit et code d'origine côte à côte ; à chaque image, nombre
 //!   de mots différents (RAM hors zones ignorées par `validate`, GFX RAM, objets, palette) et état du son (RAM partagée,
 //!   RAM et registres du Z80), que `validate` ne compare pas.
 

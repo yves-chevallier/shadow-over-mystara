@@ -12,7 +12,7 @@
 //! réels de la même famille dont l'octet de type (`+2`) est remplacé, avec variante et états tirés au
 //! hasard.
 //!
-//!   fuzz_familles <roms> <eeprom> <scénario> <images> [période [essais [graine [FAMILLE:type,...]]]]
+//!   fuzz_families <roms> <eeprom> <scénario> <images> [période [essais [graine [FAMILLE:type,...]]]]
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
@@ -384,7 +384,7 @@ fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let (Some(roms), Some(eeprom), Some(scenario), Some(frames)) = (a.get(1), a.get(2), a.get(3), a.get(4)) else {
-        eprintln!("usage : fuzz_familles <roms> <eeprom> <scénario> <images> [période [essais [graine]]]");
+        eprintln!("usage : fuzz_families <roms> <eeprom> <scénario> <images> [période [essais [graine]]]");
         std::process::exit(2);
     };
     let period: u64 = a.get(5).map_or(16, |s| s.parse().unwrap());

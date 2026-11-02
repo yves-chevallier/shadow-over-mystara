@@ -2,7 +2,7 @@
 //! données ») : tout octet reconstruit égale la ROM, dans les deux espaces, et les seuls octets absents sont le code
 //! 68000 que `data/remainder.json` déclare (`code`). Liste les plages absentes et leur total.
 //!
-//!   programme_complet <assets> <roms> [--liste]
+//!   full_program <assets> <roms> [--liste]
 //!
 //! Sans `--list`, n'affiche que les totaux. Sort en erreur si un octet diffère ou si un octet absent n'est pas du
 //! code déclaré.
@@ -15,7 +15,7 @@ use ddsom_assets::remainder::{ranges, Remainder};
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     if a.len() < 3 {
-        eprintln!("usage : programme_complet <assets> <roms> [--liste]");
+        eprintln!("usage : full_program <assets> <roms> [--liste]");
         std::process::exit(2);
     }
     let (assets, roms) = (Path::new(&a[1]), Path::new(&a[2]));

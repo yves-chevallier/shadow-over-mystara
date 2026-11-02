@@ -4,7 +4,7 @@
 //! leurs bornes, RAM vierge ou aléatoire), compare le code d'origine (68000 recompilé, sans aucune native) à
 //! la version Rust : mémoire complète et registres rendus.
 //!
-//!   fuzz_carte_dev <roms> <eeprom> [essais [graine]]
+//!   fuzz_dev_card <roms> <eeprom> [essais [graine]]
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::Path;
@@ -128,7 +128,7 @@ type Rust = Box<dyn Fn(&mut Cpu, &mut Cps2Bus)>;
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let (Some(roms), Some(eeprom)) = (a.get(1), a.get(2)) else {
-        eprintln!("usage : fuzz_carte_dev <roms> <eeprom> [essais [graine]]");
+        eprintln!("usage : fuzz_dev_card <roms> <eeprom> [essais [graine]]");
         std::process::exit(2);
     };
     let tests: u32 = a.get(3).map_or(2000, |s| s.parse().unwrap());

@@ -343,7 +343,7 @@ Trois feuilles de l'effet « barrière » (EFFCT 0xb9f36) transcrites instructio
 « l'objet A1 est-il dans la boîte de A0 » (0xb9ee6, D0 = 1/0), « un joueur vivant touche-t-il la boîte » (0xb9eba,
 lève `+0x30`), « tous les fils ont-ils fini » (0xba094, drapeau Z). Elles ne servaient qu'au code d'origine de la
 barrière, désormais réécrite dans `effects_c` (`barrier`, `in_box`, interrupteurs) : plus aucun appel par adresse
-ne les atteint (recherche de 0xb9ee6, 0xb9eba, 0xba094 dans `src/` ; seul `examples/fuzz_monde.rs` les citait).
+ne les atteint (recherche de 0xb9ee6, 0xb9eba, 0xba094 dans `src/` ; seul `examples/fuzz_world.rs` les citait).
 Doublon : supprimées, avec leurs entrées de `fuzz_monde`.
 
 ### Guide de scène sans joueur vivant (ITEM 6, variante 1, 0xdcddc ; `items::guide_cible`)

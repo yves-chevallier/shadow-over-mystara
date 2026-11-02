@@ -13,8 +13,8 @@ générées.
 ```sh
 # depuis port/ ; les ROMs sont lues dans DDSOM_ROMS (dossier des fichiers dd2.*), l'EEPROM en deuxième argument
 export DDSOM_ROMS=$PWD/../rom
-cargo run --release -p ddsom-game --example cartes -- cartes ../rom ../testdata/eeprom_ddsom.bin ../assets/niveaux
-cargo run --release -p ddsom-game --example cartes -- planche ../assets/niveaux ../docs/niveaux.md
+cargo run --release -p ddsom-game --example level_maps -- cartes ../rom ../testdata/eeprom_ddsom.bin ../assets/niveaux
+cargo run --release -p ddsom-game --example level_maps -- planche ../assets/niveaux ../docs/niveaux.md
 ```
 
 La première commande démarre le jeu (pièce, Start, personnage), saute dans chaque scène et relève la

@@ -68,12 +68,12 @@ deux `bcs` successifs quand l'appelant teste la retenue après le `bcs` interne.
 - `tools/validate_all.sh` : les huit scénarios, routines en mode contrôle (obligatoire avant commit) ;
 - `examples/types.rs` : appels de chaque gestionnaire des trois tables par scénario ; avec `TYPES_ETATS=1`,
   combinaisons (variante, états `+4/+5/+6`) rencontrées ;
-- `examples/familles.rs` : contrôle détaillé des gestionnaires (RAM, registres, cycles) avec affichage de
+- `examples/families.rs` : contrôle détaillé des gestionnaires (RAM, registres, cycles) avec affichage de
   l'objet fautif et, avec `FAMILLES_TRACE=1`, trace de l'original ; les autres routines natives restent en
   mode contrôle pour suivre exactement la ligne du temps de l'original ; il affiche aussi la **couverture des
   décisions** (`COUV fichier ligne résultat`) : les branchements du Rust jamais pris ou jamais refusés par
   un scénario ne sont pas validés ;
-- `examples/fuzz_familles.rs` : mêmes comparaisons sur des états réels **perturbés** (champs de l'objet, de
+- `examples/fuzz_families.rs` : mêmes comparaisons sur des états réels **perturbés** (champs de l'objet, de
   son joueur et de la scène) et sur des objets **synthétiques** : le dernier argument
   (`ITEM:3,EFFCT:24...`) force des types, en changeant l'octet de type d'objets réels de la même famille
   (variante, états et pointeurs tirés au hasard). C'est ainsi que sont validés les types que les scénarios
@@ -257,7 +257,7 @@ Points délicats rencontrés :
 
 Méthode : chaque entrée de la table et chaque table de sauts des gestionnaires (variante, état, sous-état,
 action, sorte d'achat), bornée par le premier code qu'elle désigne (au-delà, l'original saute dans des
-données : hors contrat) ; `examples/recensement_effct.rs` relève le code d'origine que les natives exécutent
+données : hors contrat) ; `examples/census_effct.rs` relève le code d'origine que les natives exécutent
 encore sur des trajectoires synthétiques ; les créateurs sont recherchés par les appels de l'allocation
 `0x2318`, les scripts d'apparition des scènes (classe EFFCT de `0xf2f38`) et les références aux routines de la
 zone depuis le reste du programme.
@@ -291,7 +291,7 @@ Lot EFFCT sur `Cx` (types 3 à 91 ci-dessus) :
 
 - `tools/validate_all.sh 30000` (90 scénarios) et les 31 scénarios de `scenarios/cov` : tous `VALIDE` ;
   `cargo test --release -p ddsom-game --lib` vert ;
-- `examples/fuzz_familles` (types forcés, 6 scénarios × 8 000 images, 3,3 millions d'essais) : il essaie
+- `examples/fuzz_families` (types forcés, 6 scénarios × 8 000 images, 3,3 millions d'essais) : il essaie
   désormais aussi les gestionnaires écrits sur `Cx` (`families::natives()`) et ne compare plus les durées des
   routines sans durée exacte. Il relève de nombreux écarts, mais ceux examinés viennent tous de combinaisons
   (variante, état, sous-état) **hors des tables** de l'original, où le code d'origine saute dans des données :
@@ -316,8 +316,8 @@ Lots précédents :
   du chemin hors contrat passent par le code d'origine), `effct_scintillement` 4 944, `effct_aura` 4 663,
   `effct_nuage` 1 849, `effct_bandeau` 1 794, `effct_impact` 572, `effct_halo` 450, `effct_eclat` 257,
   `effct_debris` 164, `effct_supprime` 9.
-- `examples/familles` (contrôle appel par appel, 30 000 images, huit scénarios) : 0 écart.
-- `examples/fuzz_familles` (huit scénarios, 8 000 images, 38 types forcés, 750 000 essais sur la dernière
+- `examples/families` (contrôle appel par appel, 30 000 images, huit scénarios) : 0 écart.
+- `examples/fuzz_families` (huit scénarios, 8 000 images, 38 types forcés, 750 000 essais sur la dernière
   série, plusieurs centaines de milliers d'autres lors de la mise au point) : 3 écarts, tous sur ITEM 1 avec
   une variante hors table (12) où l'original saute dans des données ; aucune panique.
 - **Couverture des décisions** (`COUV`, scénarios + fuzz) : sur environ 350 sites de décision, 108 n'ont vu
@@ -335,7 +335,7 @@ Lots précédents :
 ## 6. Recensement des tables d'aiguillage (PSHL, PEFF, ESHL, SET, SOBJ, ITEM, BOX)
 
 Sans 68000, un gestionnaire atteignable par sa table de types mais resté en code d'origine ferait planter le
-jeu, même si aucun scénario ne l'exerce. Outil : `examples/recensement` (natives de toutes les entrées des
+jeu, même si aucun scénario ne l'exerce. Outil : `examples/census` (natives de toutes les entrées des
 tables, puis objets synthétiques : un objet neuf de chaque type, appelé jusqu'à 120 images en perturbant ses
 entrées, et le code 68000 que la native exécute encore est compté, plage par plage) :
 
