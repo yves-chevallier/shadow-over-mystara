@@ -7,11 +7,7 @@ use super::*;
 /// It falls back; on touching the ground, the non-zero variants disappear, variant 0 (outside pause) creates two enemy
 /// shots (ESHL 0x17, modes 0 and 1) before disappearing.
 pub(super) mod shard {
-    pub const ENTRY: u32 = 0xb2cca;
-    pub const TABLE: u32 = 0xb2cd8;
-    pub const POSITIONS: u32 = 0xb2d72;
-    pub const SPEEDS: u32 = 0xb2d52;
-    pub const ANIMATIONS: u32 = 0x193ffe;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x193ffe);
     pub const OFFSET: u32 = 0x5c;
     pub const CREATE_SHOT_A: crate::sound::Sound = crate::sound::CMD_8C;
 }
@@ -24,8 +20,8 @@ pub(super) fn shard_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let flip = o.u8(ctx.b, field::FLIP) ^ 0x20;
     o.set_u8(ctx.b, field::FLIP, flip);
     let rank = (o.u8(ctx.b, Obj::VARIANT) as u32) << 2;
-    let dx = ctx.prog16(shard::POSITIONS + rank);
-    let dz = ctx.prog16(shard::POSITIONS + rank + 2);
+    let dx = tables().shard_positions.at16(ctx.b, rank);
+    let dz = tables().shard_positions.at16(ctx.b, rank + 2);
     o.set_u16(ctx.b, Obj::Y, 0x40);
     let (x, z) = (crate::ram::CAMERA_ALT_X.get(ctx.b), crate::ram::CAMERA_ALT_Y.get(ctx.b));
     o.set_u16(ctx.b, Obj::X, x);
@@ -34,12 +30,12 @@ pub(super) fn shard_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     shifted_u16(ctx, o, Obj::Z, dz);
     let rank = rank << 1;
     for (i, off) in [Obj::VX, Obj::VZ, Obj::AZ].into_iter().enumerate() {
-        let v = ctx.prog16(shard::SPEEDS + rank + 2 * i as u32);
+        let v = tables().shard_speeds.at16(ctx.b, rank + 2 * i as u32);
         o.set_u16(ctx.b, off, v);
     }
     let az = o.u16(ctx.b, Obj::AZ).wrapping_neg();
     o.set_u16(ctx.b, Obj::AZ, az);
-    ctx.anim_start(shard::ANIMATIONS, 0);
+    ctx.anim_start(shard::ANIMATIONS.0, 0);
     ctx.reinsert_foreground();
 }
 
@@ -47,7 +43,7 @@ pub(super) fn shard_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn shard_lands<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variant = o.u8(ctx.b, Obj::VARIANT);
     if !(variant != 0) {
-        let pause = ctx.ram8(0x42) != 0;
+        let pause = vars::FROZEN.get(ctx.b) != 0;
         if !pause {
             crate::sound::play(ctx.b, shard::CREATE_SHOT_A, ctx.obj());
             let shot = ctx.alloc(&pools::ESHL);
@@ -84,13 +80,12 @@ pub(super) fn shard_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn shard<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, shard::TABLE, state as u32);
     match state {
         state::INIT => shard_init(ctx, o),
         state::ACTIVE => shard_active(ctx, o),
         state::FREED => shard_lands(ctx, o),
         state::DESTROYED => ctx.free(&pools::EFFCT),
-        _ => outside_table(target),
+        _ => bad_index(state as u32),
     }
 }
 
@@ -102,17 +97,7 @@ pub(super) fn shard<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// and disappears at the end of the animation. If the target no longer exists or does not fit, the spark goes directly
 /// to state 6 (release).
 pub(super) mod impact {
-    pub const ENTRY: u32 = 0xb1440;
-    pub const TABLE: u32 = 0xb144e;
-    pub const ANIMATIONS: u32 = 0x1908d6;
-    pub const RANDOM_A: u32 = 0xb14a2;
-    pub const RANDOM_B: u32 = 0xb14b2;
-    /// Flags per enemy / boss type (two bytes: forbidden, flag).
-    pub const ENEMIES: u32 = 0xb1544;
-    pub const BOSS: u32 = 0xb1586;
-    /// Impact offsets (dx, dz) per target type (4 bytes), for the enemies then for the rest.
-    pub const OFFSETS_ENEMY: u32 = 0xb165a;
-    pub const OFFSETS_OTHER: u32 = 0xb16de;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x1908d6);
     pub const TARGET: u32 = 0x5c;
     pub const VARIANT_RANDOM: u32 = 0x42;
 }
@@ -129,28 +114,28 @@ pub(super) fn impact_flag<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         return impact_abandon(ctx, o);
     }
     let target = pointer(ctx, o, impact::TARGET);
-    let word = target.u16(ctx.b, 4);
+    let word = target.u16(ctx.b, Carrier::STATE_WORD);
     if word == 0x402 {
         return impact_abandon(ctx, o);
     }
     let class = target.u8(ctx.b, Obj::CLASS);
     let rank = (target.u8(ctx.b, Obj::KIND) as u32) * 2;
     if !(class != 2) {
-        let forbidden = ctx.prog8(impact::ENEMIES + rank);
+        let forbidden = tables().impact_enemies.at8(ctx.b, rank);
         if forbidden != 0 {
             return impact_abandon(ctx, o);
         }
-        let flag = ctx.prog8(impact::ENEMIES + rank + 1);
+        let flag = tables().impact_enemies.at8(ctx.b, rank + 1);
         return o.set_u8(ctx.b, impact::VARIANT_RANDOM, flag);
     }
     if class != 4 {
         return impact_abandon(ctx, o);
     }
-    let forbidden = ctx.prog8(impact::BOSS + rank);
+    let forbidden = tables().impact_boss.at8(ctx.b, rank);
     if forbidden != 0 {
         return impact_abandon(ctx, o);
     }
-    let flag = ctx.prog8(impact::BOSS + rank + 1);
+    let flag = tables().impact_boss.at8(ctx.b, rank + 1);
     o.set_u8(ctx.b, impact::VARIANT_RANDOM, flag);
 }
 
@@ -167,7 +152,7 @@ pub(super) fn impact_position_shifted<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
     let flip = target.u8(ctx.b, field::FLIP);
     o.set_u8(ctx.b, field::FLIP, flip);
-    let (dx, dz) = (o.u16(ctx.b, Obj::VX), o.u16(ctx.b, 0x16));
+    let (dx, dz) = (o.u16(ctx.b, Obj::VX), o.u16(ctx.b, Obj::AX));
     shifted_u16(ctx, o, Obj::X, dx);
     shifted_u16(ctx, o, Obj::Z, dz);
 }
@@ -186,10 +171,10 @@ pub(super) fn impact_position_table<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let flip = target.u8(ctx.b, field::FLIP);
     o.set_u8(ctx.b, field::FLIP, flip);
     let class = target.u8(ctx.b, Obj::CLASS);
-    let table = if class == 2 { impact::OFFSETS_ENEMY } else { impact::OFFSETS_OTHER };
+    let table = if class == 2 { &tables().impact_offsets_enemy } else { &tables().impact_offsets_other };
     let rank = ((target.u8(ctx.b, Obj::KIND) << 2) as u32) & 0xff;
-    let mut dx = ctx.data16(table + rank);
-    let dz = ctx.data16(table + rank + 2);
+    let mut dx = table.at16(ctx.b, rank);
+    let dz = table.at16(ctx.b, rank + 2);
     let turned = target.u8(ctx.b, field::FLIP) != 0;
     if turned {
         dx = dx.wrapping_neg();
@@ -211,9 +196,9 @@ pub(super) fn impact_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let rng = ctx.random();
     let draw = rng & 0xf;
     let flag = o.u8(ctx.b, impact::VARIANT_RANDOM);
-    let table = if flag == 0 { impact::RANDOM_A } else { impact::RANDOM_B };
-    let animation = ctx.prog8(table + draw as u32);
-    ctx.anim_start(impact::ANIMATIONS, animation as u16);
+    let table = if flag == 0 { &tables().impact_random_a } else { &tables().impact_random_b };
+    let animation = table.at8(ctx.b, draw as u32);
+    ctx.anim_start(impact::ANIMATIONS.0, animation as u16);
 }
 
 pub(super) fn impact_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
@@ -227,12 +212,11 @@ pub(super) fn impact_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn impact_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, impact::TABLE, state as u32);
     match state {
         state::INIT => impact_init(ctx, o),
         state::ACTIVE => impact_active(ctx, o),
         state::FREED | 6 => ctx.free(&pools::EFFCT),
-        _ => outside_table(target),
+        _ => bad_index(state as u32),
     }
 }
 
@@ -244,12 +228,7 @@ pub(super) fn impact_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// its speed, orientation, offset and animation from a ROM sheet (variant, mode `+0x2f`), rises and falls back
 /// blinking, then disappears.
 pub(super) mod debris {
-    pub const ENTRY: u32 = 0xab7fa;
-    pub const TABLE: u32 = 0xab808;
-    /// Number of siblings per variant (program space); ROM sheets (data).
-    pub const NUMBERS: u32 = 0xab95e;
-    pub const SHEETS: u32 = 0xab8a2;
-    pub const ANIMATIONS: u32 = 0x18e664;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x18e664);
     pub const CHILD: u32 = 0x42;
     pub const BLINK: u32 = 0x53;
 }
@@ -271,7 +250,7 @@ pub(super) fn created_debris<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, variant: u8)
 pub(super) fn debris_parent<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u8(ctx.b, debris::CHILD, 1);
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    let count = ctx.prog8(debris::NUMBERS + variant as u32);
+    let count = tables().debris_numbers.at8(ctx.b, variant as u32);
     o.set_u8(ctx.b, field::MODE, count.wrapping_add(1));
     let owner = o.u16(ctx.b, field::OWNER);
     for remaining in (0..=count as u16).rev() {
@@ -297,21 +276,21 @@ pub(super) fn debris_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         o.set_u32(ctx.b, off, v);
     }
     o.set_u8(ctx.b, debris::BLINK, 0);
-    o.set_u16(ctx.b, 0x16, 0);
+    o.set_u16(ctx.b, Obj::AX, 0);
     let variant = o.u8(ctx.b, Obj::VARIANT) as u32;
-    let offset = ctx.data16(debris::SHEETS + 2 * variant) as i16 as i32 as u32;
+    let offset = tables().debris_sheets.at16(ctx.b, 2 * variant) as i16 as i32 as u32;
     let mode = (o.u8(ctx.b, field::MODE) as u32) << 4;
-    let mut sheet = debris::SHEETS.wrapping_add(offset).wrapping_add(mode);
-    let vx = ctx.data16(sheet);
+    // the sheets follow the offsets in the same table
+    let sheets = &tables().debris_sheets;
+    let sheet = offset.wrapping_add(mode);
+    let vx = sheets.at16(ctx.b, sheet);
     o.set_u16(ctx.b, Obj::VX, vx);
-    let vz_az = ctx.data32(sheet + 2);
+    let vz_az = sheets.at32(ctx.b, sheet + 2);
     o.set_u32(ctx.b, Obj::VZ, vz_az);
-    let flip = ctx.data8(sheet + 6);
+    let flip = sheets.at8(ctx.b, sheet + 6);
     o.set_u8(ctx.b, field::FLIP, flip);
-    let animation = ctx.data8(sheet + 7);
-    let (mut dx, dz, dy) = (ctx.data16(sheet + 8), ctx.data16(sheet + 10), ctx.data16(sheet + 12));
-    sheet += 14;
-    let _ = sheet;
+    let animation = sheets.at8(ctx.b, sheet + 7);
+    let (mut dx, dz, dy) = (sheets.at16(ctx.b, sheet + 8), sheets.at16(ctx.b, sheet + 10), sheets.at16(ctx.b, sheet + 12));
     let turned = owner.u8(ctx.b, field::FLIP) != 0;
     if turned {
         let flip = o.u8(ctx.b, field::FLIP) ^ 0x20;
@@ -324,7 +303,7 @@ pub(super) fn debris_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     shifted_u16(ctx, o, Obj::X, dx);
     shifted_u16(ctx, o, Obj::Z, dz);
     shifted_u16(ctx, o, 0x12, dy);
-    ctx.anim_start(debris::ANIMATIONS, animation as u16);
+    ctx.anim_start(debris::ANIMATIONS.0, animation as u16);
 }
 
 pub(super) fn debris_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
@@ -369,13 +348,12 @@ pub(super) fn debris_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn debris_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, debris::TABLE, state as u32);
     match state {
         state::INIT => debris_init(ctx, o),
         state::ACTIVE => debris_active(ctx, o),
         state::FREED => debris_end(ctx, o),
         6 => ctx.free(&pools::EFFCT),
-        _ => outside_table(target),
+        _ => bad_index(state as u32),
     }
 }
 
@@ -394,22 +372,19 @@ pub(super) fn removed<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 7: plays the animation (drawn according to the mode `+0x2f`); at the end of the animation it rises by two units
 /// in depth then blinks for 0x1e frames before disappearing. Not exercised.
 pub(super) mod shard_single {
-    pub const ENTRY: u32 = 0xaba4e;
-    pub const TABLE: u32 = 0xaba5c;
-    pub const ANIMATIONS_MODE: u32 = 0xaba84;
     pub const COUNT: u32 = 0x53;
 }
 
 pub(super) fn shard_single_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     add_u8(ctx, o, Obj::STATE, 2);
     let mode = o.u8(ctx.b, field::MODE) as u32;
-    let animation = ctx.prog8(shard_single::ANIMATIONS_MODE + mode);
+    let animation = tables().shard_single_animations_mode.at8(ctx.b, mode);
     ctx.anim_start(0x1bf8fe, animation as u16);
     ctx.reinsert();
 }
 
 pub(super) fn shard_single_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let end = o.u8(ctx.b, 0x32);
+    let end = o.u8(ctx.b, Obj::ANIM_FLAGS);
     if !(end == 0) {
         add_u8(ctx, o, Obj::STATE, 2);
         o.set_u8(ctx.b, shard_single::COUNT, 0x1e);
@@ -432,13 +407,12 @@ pub(super) fn shard_single_blinks<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn shard_single_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, shard_single::TABLE, state as u32);
     match state {
         state::INIT => shard_single_init(ctx, o),
         state::ACTIVE => shard_single_active(ctx, o),
         state::FREED => shard_single_blinks(ctx, o),
         state::DESTROYED => ctx.free(&pools::EFFCT),
-        _ => outside_table(target),
+        _ => bad_index(state as u32),
     }
 }
 
@@ -449,9 +423,7 @@ pub(super) fn shard_single_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// waits for it to be hit (`+0x33` non-zero); it then explodes into nine EFFCT 0x40 objects (and a tenth described by
 /// the mode) then disappears. Not exercised.
 pub(super) mod sheaf {
-    pub const ENTRY: u32 = 0xb77ac;
-    pub const TABLE: u32 = 0xb77ba;
-    pub const ANIMATIONS: u32 = 0x197a5c;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x197a5c);
     pub const CARRIER: u32 = 0x5c;
 }
 
@@ -469,8 +441,8 @@ pub(super) fn sheaf_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let x = o.u16(ctx.b, Obj::X).wrapping_sub(0x48);
     o.set_u16(ctx.b, Obj::X, x);
     o.set_u16(ctx.b, Obj::Z, 0x40);
-    ctx.anim_start(sheaf::ANIMATIONS, 0);
-    o.set_u8(ctx.b, 0x3b, 0);
+    ctx.anim_start(sheaf::ANIMATIONS.0, 0);
+    o.set_u8(ctx.b, Effect::FRAME_ATTRIBUTE, 0);
     ctx.reinsert();
 }
 
@@ -511,12 +483,11 @@ pub(super) fn sheaf_explodes<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn sheaf_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, sheaf::TABLE, state as u32);
     match state {
         state::INIT => sheaf_init(ctx, o),
         state::ACTIVE => {
             let carrier = pointer(ctx, o, sheaf::CARRIER);
-            let key = carrier.u8(ctx.b, 0x33);
+            let key = carrier.u8(ctx.b, Effect::ANIM_EVENT);
             if key == 0 {
                 return;
             }
@@ -524,7 +495,7 @@ pub(super) fn sheaf_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
         }
         state::FREED => sheaf_explodes(ctx, o),
         state::DESTROYED => ctx.free(&pools::EFFCT),
-        _ => outside_table(target),
+        _ => bad_index(state as u32),
     }
 }
 
@@ -534,10 +505,6 @@ pub(super) fn sheaf_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 56: burst thrown into the air from its position (random scatter of ±128 in X and ±32 in depth, speeds drawn
 /// from two tables, animation 0x164 to 0x167); disappears when it falls back below the ground. Not exercised.
 pub(super) mod shards_debris {
-    pub const ENTRY: u32 = 0xb6c6e;
-    pub const TABLE: u32 = 0xb6c7c;
-    pub const SPEEDS_X: u32 = 0xb6d18;
-    pub const SPEEDS_Y: u32 = 0xb6d28;
 }
 
 /// Masked random draw.
@@ -548,9 +515,9 @@ pub(super) fn draw<R: Bench>(ctx: &mut Cx<'_, R>, mask: u16) -> u16 {
 
 pub(super) fn shards_debris_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     add_u8(ctx, o, Obj::STATE, 2);
-    o.set_u16(ctx.b, 0x42, 0x40);
-    o.set_u8(ctx.b, 0x2a, 1);
-    o.set_u8(ctx.b, 0x2b, 0x1d);
+    o.set_u16(ctx.b, Effect::TIMER, 0x40);
+    o.set_u8(ctx.b, Effect::OWN_PALETTE, 1);
+    o.set_u8(ctx.b, Effect::PALETTE, 0x1d);
     let flip = draw(ctx, 0x20);
     o.set_u8(ctx.b, field::FLIP, flip as u8);
     let dx = draw(ctx, 0xff).wrapping_sub(0x80);
@@ -560,13 +527,13 @@ pub(super) fn shards_debris_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u16(ctx.b, Obj::VZ, 0x400);
     o.set_u16(ctx.b, Obj::AZ, 0xffc0);
     let r = draw(ctx, 0x1c) as u32;
-    let vx = ctx.prog16(shards_debris::SPEEDS_X + r);
+    let vx = tables().shards_debris_speeds_x.at16(ctx.b, r);
     o.set_u16(ctx.b, Obj::VX, vx);
     let r = draw(ctx, 0x1c) as u32;
-    let vy = ctx.prog16(shards_debris::SPEEDS_Y + r);
+    let vy = tables().shards_debris_speeds_y.at16(ctx.b, r);
     o.set_u16(ctx.b, Obj::VY, vy);
     let animation = draw(ctx, 3).wrapping_add(0x164);
-    ctx.anim_start(ANIMATIONS_INTERFACE, animation);
+    ctx.anim_start(ANIMATIONS_INTERFACE.0, animation);
     ctx.reinsert();
 }
 
@@ -585,13 +552,12 @@ pub(super) fn shards_debris_end<R: Bench>(ctx: &mut Cx<'_, R>, _o: Obj) {
 pub(super) fn shards_debris_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, shards_debris::TABLE, state as u32);
     match state {
         state::INIT => shards_debris_init(ctx, o),
         state::ACTIVE => shards_debris_active(ctx, o),
         state::FREED => shards_debris_end(ctx, o),
         state::DESTROYED => ctx.free(&pools::EFFCT),
-        _ => outside_table(target),
+        _ => bad_index(state as u32),
     }
 }
 

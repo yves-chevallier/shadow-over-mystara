@@ -157,6 +157,15 @@ fn animations_lossless() {
 }
 
 #[test]
+fn effects_lossless() {
+    if !has("data/effects.json") {
+        return;
+    }
+    let effects = ddsom_assets::EffectTables::load(&assets().join("data/effects.json")).unwrap();
+    check("effects", |p| p.put_effects(&effects));
+}
+
+#[test]
 fn speeds_lossless() {
     if !has("data/speeds.json") {
         return;

@@ -20,6 +20,9 @@ mod gates;
 use gates::*;
 mod attacks;
 use attacks::*;
+use crate::families::effects::tables::{tables, Read};
+use crate::families::effects::records::*;
+use crate::families::effects::vars;
 
 mod f {
     pub const STATE: u32 = 0x04;
@@ -27,12 +30,10 @@ mod f {
     pub const VARIANT: u32 = 0x03;
 }
 
-const ANIM_SET: u32 = 0x1c03a6;
-/// Players: four records of 0x200 bytes.
-const PLAYERS: u32 = A5 + 0x5de;
+const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x1c03a6);
 
 fn players() -> impl DoubleEndedIterator<Item = Obj> {
-    (0..4).map(|k| Obj(PLAYERS + 0x200 * k))
+    (0..4).map(|k| crate::ram::PLAYERS.nth(k))
 }
 
 fn free(x: &mut impl Current) {
@@ -47,7 +48,7 @@ fn scene_running<X: Current>(x: &mut X, suspended: impl FnOnce(&mut X)) -> bool 
         return false;
     }
     let b = x.bus();
-    if rd8(b, A5 + 0x3d) != 0 {
+    if vars::PAUSE.get(b) != 0 {
         return false;
     }
     players().any(|p| p.is_active(b) && (p.u8(b, f::STATE) as i8) <= 2)

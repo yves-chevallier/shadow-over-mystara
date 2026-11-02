@@ -6,9 +6,7 @@ use super::*;
 /// Type 32: places itself 0x10 pixels in front (according to its orientation) and a sub-pixel in front of the owner
 /// (`+0x50`), 0x18 pixels above it, and follows it at each frame (animation 0 of set `0x193fea`).
 pub(super) mod aura {
-    pub const ENTRY: u32 = 0xb2c56;
-    pub const TABLE: u32 = 0xb2c64;
-    pub const ANIMATIONS: u32 = 0x193fea;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x193fea);
 }
 
 /// `0xb2ca4`: position of the owner, one sixteenth of a pixel in front, offset by 0x10 pixels.
@@ -30,7 +28,7 @@ pub(super) fn aura_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let z = player.u32(ctx.b, Obj::Z);
     o.set_u32(ctx.b, Obj::Z, z);
     shifted_u16(ctx, o, Obj::Z, 0x18);
-    ctx.anim_start(aura::ANIMATIONS, 0);
+    ctx.anim_start(aura::ANIMATIONS.0, 0);
     ctx.reinsert();
 }
 
@@ -40,7 +38,7 @@ pub(super) fn aura_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 pub(super) fn aura<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, aura::TABLE, aura_init, aura_active)
+    three_states(ctx, aura_init, aura_active)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -51,9 +49,7 @@ pub(super) fn aura<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// (±0x20 in depth, ±0x60 in abscissa) it stays visible; then it blinks in periods of 0x30 frames, eight times, then
 /// disappears.
 pub(super) mod shimmering {
-    pub const ENTRY: u32 = 0xae428;
-    pub const TABLE: u32 = 0xae436;
-    pub const ANIMATIONS: u32 = 0x18fd48;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x18fd48);
     pub const REPETITIONS: u32 = 0x57;
     pub const DELAY: u32 = 0x58;
     pub const TOGGLE: u32 = 0x5a;
@@ -70,14 +66,14 @@ pub(super) fn shimmering_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let draw = rng & 0x1f;
     o.set_u16(ctx.b, shimmering::DELAY, draw);
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    ctx.anim_start(shimmering::ANIMATIONS, variant as u16);
+    ctx.anim_start(shimmering::ANIMATIONS.0, variant as u16);
     ctx.reinsert();
 }
 
 /// `0xae4e4`: has a player passed near the sparkle?
 pub(super) fn shimmer_player_near<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     for i in 0..4u32 {
-        let player = Obj(PLAYERS + i * STEP_PLAYER);
+        let player = crate::ram::PLAYERS.nth(i);
         let absent = player.u8(ctx.b, Obj::ACTIVE) == 0;
         if !absent {
             let dy = o.u16(ctx.b, Obj::Y).wrapping_sub(player.u16(ctx.b, Obj::Y)).wrapping_add(0x20);
@@ -126,7 +122,7 @@ pub(super) fn shimmer_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 pub(super) fn shimmering<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, shimmering::TABLE, shimmering_init, shimmer_active)
+    three_states(ctx, shimmering_init, shimmer_active)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -135,9 +131,7 @@ pub(super) fn shimmering<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 25: bursts thrown at birth (speed `+0x14` / `+0x1c`, scattered at random according to the mode `+0x2f`,
 /// oriented according to `+0x2c`), then drifting horizontally while blinking until the end of their animation.
 pub(super) mod dust {
-    pub const ENTRY: u32 = 0xb111a;
-    pub const TABLE: u32 = 0xb1128;
-    pub const ANIMATIONS: u32 = 0x1901ba;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x1901ba);
     /// Direction of the drift (`+0x2d`) and on which axis the jump is made (`+0x43`).
     pub const DIRECTION: u32 = 0x2d;
     pub const ON_Z: u32 = 0x43;
@@ -184,7 +178,7 @@ pub(super) fn dust_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         o.set_u16(ctx.b, Obj::VX, v);
     }
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    ctx.anim_start(dust::ANIMATIONS, variant as u16);
+    ctx.anim_start(dust::ANIMATIONS.0, variant as u16);
     ctx.reinsert();
 }
 
@@ -202,7 +196,7 @@ pub(super) fn dust_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 pub(super) fn dust<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, dust::TABLE, dust_init, dust_active)
+    three_states(ctx, dust_init, dust_active)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -211,9 +205,7 @@ pub(super) fn dust<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 27: effect placed on the owner object (`+0x50`, created by `0xb12c0`: pickup) that rises by 0x8000 (half a
 /// pixel) per frame for 0x1c frames. Not exercised.
 pub(super) mod smoke {
-    pub const ENTRY: u32 = 0xb12e6;
-    pub const TABLE: u32 = 0xb12f4;
-    pub const ANIMATIONS: u32 = 0x19046c;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x19046c);
     pub const DURATION: u32 = 0x57;
 }
 
@@ -227,7 +219,7 @@ pub(super) fn smoke_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u16(ctx.b, Obj::Y, y);
     o.set_u16(ctx.b, Obj::Z, 0x10);
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    ctx.anim_start(smoke::ANIMATIONS, variant as u16);
+    ctx.anim_start(smoke::ANIMATIONS.0, variant as u16);
     ctx.reinsert();
 }
 
@@ -242,7 +234,7 @@ pub(super) fn smoke_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 pub(super) fn smoke_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, smoke::TABLE, smoke_init, smoke_active)
+    three_states(ctx, smoke_init, smoke_active)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -251,9 +243,7 @@ pub(super) fn smoke_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 28: spark stuck to an object (`+0x5c`), 0x20 above it; the animation depends on the variant and on `A5+0x70`.
 /// At the end of the animation, it notifies its object (`+0x77` ← 1, except variant 6) then disappears. Not exercised.
 pub(super) mod spark {
-    pub const ENTRY: u32 = 0xb136e;
-    pub const TABLE: u32 = 0xb137c;
-    pub const ANIMATIONS: u32 = 0x190534;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x190534);
     pub const CARRIER: u32 = 0x5c;
 }
 
@@ -265,9 +255,9 @@ pub(super) fn spark_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u16(ctx.b, Obj::Y, y);
     shifted_u16(ctx, o, Obj::Z, 0x20);
     let variant = o.u8(ctx.b, Obj::VARIANT) as u16;
-    let word = ctx.ram16(0x70);
+    let word = vars::DAMAGE_SETTING.get(ctx.b);
     let animation = variant.wrapping_add((word & 0xf) >> 1 << 3);
-    ctx.anim_start(spark::ANIMATIONS, animation);
+    ctx.anim_start(spark::ANIMATIONS.0, animation);
     ctx.reinsert();
 }
 
@@ -282,19 +272,18 @@ pub(super) fn spark_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         return;
     }
     let carrier = pointer(ctx, o, spark::CARRIER);
-    carrier.set_u8(ctx.b, 0x77, 1);
+    carrier.set_u8(ctx.b, Carrier::MARK, 1);
 }
 
 pub(super) fn spark_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, spark::TABLE, state as u32);
     match state {
         state::INIT => spark_init(ctx, o),
         state::ACTIVE => spark_active(ctx, o),
         state::FREED => add_u8(ctx, o, Obj::STATE, 2),
         6 => ctx.free(&pools::EFFCT),
-        _ => outside_table(target),
+        _ => bad_index(state as u32),
     }
 }
 
@@ -305,10 +294,7 @@ pub(super) fn spark_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// and 0x16 in depth, then leaves in an arc (speeds 0x140 and 0x3c0, gravity 0x38) until it touches the ground. Not
 /// exercised.
 pub(super) mod projectile {
-    pub const ENTRY: u32 = 0xb64c8;
-    pub const TABLE: u32 = 0xb64de;
-    pub const SUB_STATES: u32 = 0xb6572;
-    pub const ANIMATIONS: u32 = 0x1733ac;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x1733ac);
     pub const TARGET: u32 = 0x5c;
 }
 
@@ -339,13 +325,12 @@ pub(super) fn projectile_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     shifted_u16(ctx, o, Obj::Y, dy);
     let orientation = o.u8(ctx.b, field::FLIP) ^ 0x20;
     o.set_u8(ctx.b, field::FLIP, orientation);
-    ctx.anim_start(projectile::ANIMATIONS, 0x19);
+    ctx.anim_start(projectile::ANIMATIONS.0, 0x19);
     ctx.reinsert();
 }
 
 pub(super) fn projectile_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let sub_state = o.u8(ctx.b, field::SUB_STATE);
-    let target = target(ctx, projectile::SUB_STATES, sub_state as u32);
     match sub_state {
         0 => {
             let in_flight = ctx.move_xz().gt();
@@ -356,7 +341,7 @@ pub(super) fn projectile_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             ctx.anim_step();
         }
         2 => {}
-        _ => outside_table(target),
+        _ => bad_index(sub_state as u32),
     }
 }
 
@@ -368,12 +353,11 @@ pub(super) fn projectile_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
         return;
     }
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, projectile::TABLE, state as u32);
     match state {
         state::INIT => projectile_init(ctx, o),
         state::ACTIVE => projectile_active(ctx, o),
         state::FREED | 6 => ctx.free(&pools::EFFCT),
-        _ => outside_table(target),
+        _ => bad_index(state as u32),
     }
 }
 
@@ -384,21 +368,18 @@ pub(super) fn projectile_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// event to each present player (`0x19b08`, offset per player) then disappears; it also disappears if it stays behind
 /// the camera. Not exercised.
 pub(super) mod trigger {
-    pub const ENTRY: u32 = 0xb5340;
-    pub const TABLE: u32 = 0xb534e;
-    pub const ANIMATIONS: u32 = 0x1bf5c2;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x1bf5c2);
     pub const PRINCIPAL: i32 = 0x46;
     pub const EFFECT: crate::sound::Sound = crate::sound::CMD_14A_24A;
-    pub const OFFSETS: u32 = 0xb53ec;
 }
 
 /// `0xb53b0`: trigger.
 pub(super) fn trigger_effect<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     crate::sound::play(ctx.b, trigger::EFFECT, ctx.obj());
-    let level = ctx.ram8(0x35) as u32;
-    let mut offset = ctx.prog8(trigger::OFFSETS + level) as u16;
+    let level = crate::ram::PLAYERS_ALIVE.get(ctx.b) as u32;
+    let mut offset = tables().trigger_offsets.at8(ctx.b, level) as u16;
     for i in 0..4u32 {
-        let player = Obj(PLAYERS + i * STEP_PLAYER);
+        let player = crate::ram::PLAYERS.nth(i);
         let absent = player.u8(ctx.b, Obj::ACTIVE) == 0;
         if !absent {
             let variant = o.u8(ctx.b, Obj::VARIANT) as u32;
@@ -430,20 +411,19 @@ pub(super) fn trigger_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn trigger_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     add_u8(ctx, o, Obj::STATE, 2);
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    ctx.anim_start(trigger::ANIMATIONS, variant as u16);
+    ctx.anim_start(trigger::ANIMATIONS.0, variant as u16);
     ctx.reinsert();
 }
 
 pub(super) fn trigger_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, trigger::TABLE, state as u32);
     match state {
         state::INIT => trigger_init(ctx, o),
         state::ACTIVE => trigger_active(ctx, o),
         state::FREED => trigger_effect(ctx, o),
         state::DESTROYED => ctx.free(&pools::EFFCT),
-        _ => outside_table(target),
+        _ => bad_index(state as u32),
     }
 }
 
@@ -453,10 +433,7 @@ pub(super) fn trigger_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 8: trace stuck to an object (`+0x5c`), a sub-pixel in front or behind according to the variant; its animation
 /// depends on the object's type (and its class: BOX); it disappears at the end of the animation. Not exercised.
 pub(super) mod trace {
-    pub const ENTRY: u32 = 0xababa;
-    pub const TABLE: u32 = 0xabac8;
-    pub const ANIMATIONS_TYPE: u32 = 0xabb26;
-    pub const ANIMATIONS: u32 = 0x18e872;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x18e872);
     pub const CARRIER: u32 = 0x5c;
 }
 
@@ -477,8 +454,8 @@ pub(super) fn trace_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         d0 = 0x20;
     }
     d0 = d0.wrapping_add(carrier.u8(ctx.b, Obj::KIND));
-    let animation = ctx.prog8(trace::ANIMATIONS_TYPE + d0 as u32).wrapping_add(variant);
-    ctx.anim_start(trace::ANIMATIONS, animation as u16);
+    let animation = tables().trace_animations_type.at8(ctx.b, d0 as u32).wrapping_add(variant);
+    ctx.anim_start(trace::ANIMATIONS.0, animation as u16);
     ctx.reinsert();
 }
 
@@ -490,6 +467,6 @@ pub(super) fn trace_active<R: Bench>(ctx: &mut Cx<'_, R>, _o: Obj) {
 }
 
 pub(super) fn trace_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, trace::TABLE, trace_init, trace_active)
+    three_states(ctx, trace_init, trace_active)
 }
 

@@ -9,28 +9,16 @@ pub(super) mod fireworks {
     pub const SCENE_STEP: u32 = 0x2e;
     pub const GO: u8 = 0x12;
     pub const BACK: u8 = 0xc;
-    /// Fade in progress (`A5+0x48f`), its settings (`A5+0x48e`, `A5+0x490`) and its palettes (`A5+0x492...`).
-    pub const FADING: u32 = 0x48f;
-    pub const FADE_SPEED: u32 = 0x48e;
-    pub const FADE_MODE: u32 = 0x490;
-    pub const FADE_SOURCES: u32 = 0x492;
     /// Fade tasks (programs of `0x9b6`): toward black, then back.
-    pub const FADE_OUT: u32 = 0x1ccf8;
-    pub const FADE_IN: u32 = 0x1ced4;
-    /// Fireworks camera (`A5+0x5a6`, `A5+0x5aa`).
-    pub const CAMERA_X: u32 = 0x5a6;
-    pub const CAMERA_Y: u32 = 0x5aa;
+    pub const FADE_OUT: crate::data::RomAddr = crate::data::RomAddr(0x1ccf8);
+    pub const FADE_IN: crate::data::RomAddr = crate::data::RomAddr(0x1ced4);
     pub const TIMER: u32 = 0x58;
     pub const DELAY: u32 = 0x5a;
     pub const HOST: u32 = 0x56;
     pub const SCENERY: u32 = 0x42;
-    /// Rockets (type 50): variant, delay and offset (x, y) of each shot (program space).
-    pub const ROCKET_VARIANTS: u32 = 0xb9628;
-    pub const ROCKET_DELAYS: u32 = 0xb9638;
-    pub const ROCKET_PLACES: u32 = 0xb9658;
-    pub const ANIMS_HERO: u32 = 0x1836ec;
-    pub const ANIMS_FIRE: u32 = 0x1824d4;
-    pub const ANIMS_LAST: u32 = 0x18373a;
+    pub const ANIMS_HERO: crate::data::RomAddr = crate::data::RomAddr(0x1836ec);
+    pub const ANIMS_FIRE: crate::data::RomAddr = crate::data::RomAddr(0x1824d4);
+    pub const ANIMS_LAST: crate::data::RomAddr = crate::data::RomAddr(0x18373a);
 }
 
 /// Scene sounds.
@@ -74,7 +62,7 @@ pub(super) fn scene_go<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 pub(super) fn fading<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    x.a5_u8(fireworks::FADING) != 0
+    vars::FADE_STEP.get(x.b) != 0
 }
 
 /// Sets X and Y (and Z) in screen coordinates.
@@ -104,11 +92,11 @@ pub(super) fn fireworks_init<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.set8(f::FACING, 0x20);
             place(x, 0x50, None, 0x160);
-            x.anim_start(fireworks::ANIMS_HERO, 0);
+            x.anim_start(fireworks::ANIMS_HERO.0, 0);
         }
         1 => {
-            x.set8(0x2a, 1);
-            x.set8(0x2b, 0x18);
+            x.set8(Effect::OWN_PALETTE, 1);
+            x.set8(Effect::PALETTE, 0x18);
             place(x, 0x110, None, 0x161);
             x.anim_start(0x17b14e, 0);
         }
@@ -133,28 +121,28 @@ pub(super) fn fireworks_init<R: Bench>(x: &mut Cx<'_, R>) {
                 o.set_u16(x.b, Obj::Y + 2, frac);
                 o.set_u16(x.b, fireworks::HOST, x.o.0 as u16);
             }
-            x.anim_start(fireworks::ANIMS_FIRE, 0);
+            x.anim_start(fireworks::ANIMS_FIRE.0, 0);
         }
         4 => {
-                x.anim_start(fireworks::ANIMS_FIRE, 2);
+                x.anim_start(fireworks::ANIMS_FIRE.0, 2);
             }
         5 => {
-                x.anim_start(fireworks::ANIMS_FIRE, 3);
+                x.anim_start(fireworks::ANIMS_FIRE.0, 3);
             }
         _ => {
-            load_colours(x, 0x253460, 0x91c2e0, 0x20);
-            x.set8(0x2a, 1);
-            x.set8(0x2b, 0x17);
+            load_colours(x, &tables().fireworks_palette_last, 0x91c2e0, 0x20);
+            x.set8(Effect::OWN_PALETTE, 1);
+            x.set8(Effect::PALETTE, 0x17);
             place(x, 0x120, Some(0xe0), 0x160);
-            x.anim_start(fireworks::ANIMS_LAST, 3);
+            x.anim_start(fireworks::ANIMS_LAST.0, 3);
         }
     }
 }
 
-/// Copies `n` colours from the ROM (data space) into the palette, opaque (`| 0xf000`).
-pub(super) fn load_colours<R: Bench>(x: &mut Cx<'_, R>, from: u32, to: u32, n: u32) {
+/// Copies `n` colours of `from` into the palette, opaque (`| 0xf000`).
+pub(super) fn load_colours<R: Bench>(x: &mut Cx<'_, R>, from: &Table, to: u32, n: u32) {
     for k in 0..n {
-        let v = x.data16(from + 2 * k) | 0xf000;
+        let v = from.nth16(x.b, k) | 0xf000;
         crate::mem::wr16(x.b, to + 2 * k, v);
     }
 }
@@ -209,7 +197,7 @@ pub(super) fn fireworks_active<R: Bench>(x: &mut Cx<'_, R>) {
             }
             _ => {
                 x.anim_step();
-                if x.u8(0x33) == 0 && !fading(x) {
+                if x.u8(Effect::ANIM_EVENT) == 0 && !fading(x) {
                     return free(x);
                 }
                 x.move_xz();
@@ -267,10 +255,10 @@ pub(super) fn last_actor<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
                 x.add8(f::SUB_STATE, 2);
                 crate::sound::play(x.b, sfx::LANDING, x.o);
                 x.set16(Obj::Z, 0);
-                x.anim_start(fireworks::ANIMS_LAST, 5);
+                x.anim_start(fireworks::ANIMS_LAST.0, 5);
                 return;
             }
-            if x.u8(0x33) == 0 {
+            if x.u8(Effect::ANIM_EVENT) == 0 {
                 x.anim_step();
             }
         }
@@ -309,15 +297,15 @@ pub(super) fn hero<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
             x.set16(Obj::AX, 0);
             x.set16(Obj::VZ, 0x340);
             x.set16(Obj::AZ, 0xfff0);
-            x.anim_start(fireworks::ANIMS_HERO, 4);
+            x.anim_start(fireworks::ANIMS_HERO.0, 4);
             // the scene goes black: palettes saved, fade
             copy_block(x, 0x91c000, 0x910000);
             copy_block(x, 0x91c800, 0x910400);
             copy_block(x, 0x91cc00, 0x910800);
-            x.set_a5_u16(fireworks::FADE_MODE, 3);
-            x.set_a5_u8(fireworks::FADE_SPEED, 0xf);
-            x.set_a5_u8(fireworks::FADING, 1);
-            fade_task(x, fireworks::FADE_OUT);
+            vars::FADE_DELAY.set(x.b, 3);
+            vars::FADE_PAGES.set(x.b, 0xf);
+            vars::FADE_STEP.set(x.b, 1);
+            fade_task(x, fireworks::FADE_OUT.0);
         }
         2 => {
             x.move_xz();
@@ -328,10 +316,10 @@ pub(super) fn hero<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
             x.add8(f::SUB_STATE, 2);
             x.set16(Obj::X, 0xc0);
             x.set16(Obj::Z, 0);
-            load_colours(x, 0x253260, 0x91c260, 0x10);
+            load_colours(x, &tables().fireworks_palette_hero, 0x91c260, 0x10);
             x.set16(fireworks::TIMER, 0x10);
             x.set16(fireworks::DELAY, 0);
-            x.anim_start(fireworks::ANIMS_HERO, 0);
+            x.anim_start(fireworks::ANIMS_HERO.0, 0);
         }
         4 => hero_rockets(x),
         6 => {
@@ -358,7 +346,7 @@ pub(super) fn hero<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
         }
         10 => {
             let scenery = x.linked(fireworks::SCENERY);
-            if scenery.u8(x.b, 0x22) != 0 {
+            if scenery.u8(x.b, Carrier::HALTED) != 0 {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(fireworks::TIMER, 0xa);
             }
@@ -374,7 +362,7 @@ pub(super) fn hero<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
             x.set16(Obj::AZ, 0);
             x.set32(Obj::VX, 0);
             crate::sound::play(x.b, sfx::LIFT_OFF, x.o);
-            x.anim_start(fireworks::ANIMS_HERO, 6);
+            x.anim_start(fireworks::ANIMS_HERO.0, 6);
         }
         14 => hero_lift_off(x),
         _ => {}
@@ -406,13 +394,13 @@ pub(super) fn hero_rockets<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// After the wait: fade back from the saved palettes.
 pub(super) fn fireworks_fade_back<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set_a5_u16(fireworks::FADE_MODE, 1);
-    x.set_a5_u8(fireworks::FADE_SPEED, 0xf);
-    x.set_a5_u8(fireworks::FADING, 1);
+    vars::FADE_DELAY.set(x.b, 1);
+    vars::FADE_PAGES.set(x.b, 0xf);
+    vars::FADE_STEP.set(x.b, 1);
     for (k, v) in [0x910000u32, 0x25c0c0, 0x910400, 0x910800].into_iter().enumerate() {
-        x.set_a5_u32(fireworks::FADE_SOURCES + 4 * k as u32, v);
+        crate::ram::Long(vars::FADE_SOURCES.0 + 4 * k as u32).set(x.b, v);
     }
-    fade_task(x, fireworks::FADE_IN);
+    fade_task(x, fireworks::FADE_IN.0);
 }
 
 /// `0xb95e8`: a rocket (type 50): variant, delay until the next one and place read for shot `TIMER`.
@@ -421,12 +409,13 @@ pub(super) fn rocket<R: Bench>(x: &mut Cx<'_, R>) {
     o.set_u8(x.b, Obj::ACTIVE, 1);
     o.set_u8(x.b, Obj::KIND, 0x32);
     let n = x.u16(fireworks::TIMER) as i16 as i32 as u32;
-    let variant = x.rom8(fireworks::ROCKET_VARIANTS.wrapping_add(n));
+    let variant = tables().rocket_variants.at8(x.b, n);
     o.set_u8(x.b, Obj::VARIANT, variant);
-    let delay = x.rom16(fireworks::ROCKET_DELAYS.wrapping_add(2 * n));
+    let delay = tables().rocket_delays.at16(x.b, n.wrapping_mul(2));
     x.set16(fireworks::DELAY, delay);
-    let px = x.a5_u16(fireworks::CAMERA_X).wrapping_add(x.rom16(fireworks::ROCKET_PLACES.wrapping_add(4 * n)));
-    let pz = x.a5_u16(fireworks::CAMERA_Y).wrapping_add(x.rom16(fireworks::ROCKET_PLACES.wrapping_add(4 * n + 2)));
+    let places = &tables().rocket_places;
+    let px = vars::CAMERA1_X.get(x.b).wrapping_add(places.at16(x.b, n.wrapping_mul(4)));
+    let pz = vars::CAMERA1_Y.get(x.b).wrapping_add(places.at16(x.b, n.wrapping_mul(4).wrapping_add(2)));
     o.set_u16(x.b, Obj::X, px);
     o.set_u16(x.b, Obj::Z, pz);
 }
@@ -449,21 +438,21 @@ pub(super) fn hero_lift_off<R: Bench>(x: &mut Cx<'_, R>) {
             }
             let y = o.u16(x.b, Obj::Y).wrapping_add(1);
             o.set_u16(x.b, Obj::Y, y);
-            let frame = x.u32(0x34);
-            o.set_u32(x.b, 0x34, frame);
+            let frame = x.u32(Obj::FRAME);
+            o.set_u32(x.b, Obj::FRAME, frame);
             for off in [0x3cu32, 0x3f] {
                 let v = x.u8(off);
                 o.set_u8(x.b, off, v);
             }
-            o.set_u16(x.b, 0x30, 0xe);
+            o.set_u16(x.b, Obj::ANIM_TIMER, 0xe);
         }
     }
     x.move_xz();
-    let top = x.a5_u16(fireworks::CAMERA_Y).wrapping_add(0x100);
+    let top = vars::CAMERA1_Y.get(x.b).wrapping_add(0x100);
     let height = x.u16(Obj::Y).wrapping_add(x.u16(Obj::Z));
     if height as i16 >= top as i16 {
         x.add8(f::SUB_STATE, 2);
-        x.set_a5_u32(0x2c, 0x1000_0000);
+        vars::PHASE_LONG.set(x.b, 0x1000_0000);
         set_hidden(x, true);
     }
 }

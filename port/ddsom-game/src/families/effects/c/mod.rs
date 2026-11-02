@@ -70,6 +70,11 @@ mod screen;
 use screen::*;
 mod paths;
 use paths::*;
+pub mod records;
+use records::*;
+use crate::families::effects::records::*;
+use crate::families::effects::vars;
+use crate::families::effects::tables::{held16, held8, speed_word, tables, Read, Table};
 
 /// Shared fields.
 mod f {
@@ -79,12 +84,9 @@ mod f {
     pub const HIDDEN: u32 = 0x40;
 }
 
-/// Players: four records of 0x200 bytes.
-const PLAYERS: u32 = A5 + 0x5de;
-const PLAYER_STRIDE: u32 = 0x200;
 
 fn players() -> impl Iterator<Item = Obj> {
-    (0..4).map(|k| Obj(PLAYERS + k * PLAYER_STRIDE))
+    (0..4).map(|k| crate::ram::PLAYERS.nth(k))
 }
 
 fn free<R: Bench>(x: &mut Cx<'_, R>) {

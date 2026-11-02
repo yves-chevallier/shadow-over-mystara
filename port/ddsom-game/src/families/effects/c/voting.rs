@@ -6,20 +6,9 @@ use super::*;
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod vote {
-    /// Number of choices per mode `+0x2f` (bytes, data).
-    pub const CHOICES: u32 = 0xafec8;
-    /// Cursor positions: by number of players (`A5+0x72`), offset table per mode, then
-    /// (x, z) per choice and per player (data).
-    pub const CURSOR_PLACES: u32 = 0xb042c;
-    /// Countdown position, same indexing (data).
-    pub const TIMER_PLACES: u32 = 0xb09e0;
-    /// Text zones of the choices to blink (data); save buffer.
-    pub const TEXT_ZONES: u32 = 0xb0a9c;
     pub const TEXT: u32 = 0xff2072;
     pub const SAVE: u32 = 0x910000;
-    /// Modes where the up/down directions also count (bytes, program space).
-    pub const VERTICAL: u32 = 0xb03b6;
-    pub const ANIM_SET: u32 = 0x1c03a6;
+    pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x1c03a6);
     /// Ballot: pointer (creator `+0x50`), remaining voters `+0x42`, living cursors `+0x44`,
     /// counted `+0x53`, duration `+0x54` (zero: time up), votes per choice `+0x58..+0x5b`.
     pub const BALLOT: u32 = 0x50;
@@ -43,47 +32,48 @@ pub(super) fn vote<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// Word of the table indexed by the number of players (`A5+0x72`: 2 or 4).
-pub(super) fn by_players<R: Bench>(x: &mut Cx<'_, R>, table: u32) -> u32 {
-    let k = (x.a5_u16(0x72).wrapping_sub(2).wrapping_mul(2)) as i16 as i32 as u32;
-    x.data32(table.wrapping_add(k))
+/// Part of `table` for the number of players (`A5+0x72`: 2 or 4): the table starts with its addresses (longs), the
+/// parts follow; returns the offset of the part in the table.
+pub(super) fn by_players<R: Bench>(x: &mut Cx<'_, R>, table: &Table) -> u32 {
+    let k = (vars::CABINET_PLAYERS.get(x.b).wrapping_sub(2).wrapping_mul(2)) as i16 as i32 as u32;
+    table.at32(x.b, k).wrapping_sub(table.rom)
 }
 
 pub(super) fn ballot<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
-            x.set8(0x53, 0);
+            x.set8(Ballot::COUNTED, 0);
             x.add8(f::STATE, 2);
-            x.set16(0x54, 0xffff);
-            x.set32(0x58, 0);
-            let mode = x.u8(0x2f) as u32;
-            let choices = x.data8(vote::CHOICES + mode);
-            x.set8(0x43, choices);
+            x.set16(Ballot::DURATION, 0xffff);
+            x.set32(Ballot::VOTES, 0);
+            let mode = x.u8(Ballot::MODE) as u32;
+            let choices = tables().vote_choices.at8(x.b, mode);
+            x.set8(Ballot::LAST_CHOICE, choices);
             // one cursor per player in the game
             let mut voters = 0u8;
             for k in 0..4 {
-                let p = Obj(A5 + 0x5de + 0x200 * k);
+                let p = crate::ram::PLAYERS.nth(k);
                 if !p.is_active(x.b) || (p.u8(x.b, f::STATE) as i8) >= 4 {
                     continue;
                 }
                 if let Some(o) = spawn_vote(x, 1, voters) {
                     wr16(x.b, o.0 + 0x50, x.o.0 as u16);
                     wr16(x.b, o.0 + 0x54, p.0 as u16);
-                    let index = p.u8(x.b, 2);
+                    let index = p.u8(x.b, Obj::KIND);
                     wr8(x.b, o.0 + 0x2f, index);
                     wr8(x.b, o.0 + 0x43, choices);
                     voters += 1;
                 }
             }
-            x.set8(0x42, voters);
-            x.set8(0x44, voters);
+            x.set8(Ballot::VOTERS, voters);
+            x.set8(Ballot::CURSORS, voters);
             if let Some(o) = spawn_vote(x, 2, voters) {
                 wr16(x.b, o.0 + 0x50, x.o.0 as u16);
             }
         }
         2 => {
-            if x.u8(0x42) == 0 {
-                x.set16(0x54, 0);
+            if x.u8(Ballot::VOTERS) == 0 {
+                x.set16(Ballot::DURATION, 0);
                 x.add8(f::STATE, 2);
                 x.set8(f::SUB_STATE, 0);
             }
@@ -96,11 +86,11 @@ pub(super) fn ballot<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0xb01e2: end, when all the cursors have left; notifies the creator.
 pub(super) fn ballot_end<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x44) != 0 {
+    if x.u8(Ballot::CURSORS) != 0 {
         return;
     }
     let creator = x.linked(vote::BALLOT);
-    creator.set_u16(x.b, 0x32, 1);
+    creator.set_u16(x.b, VoteCreator::DONE, 1);
     free(x);
 }
 
@@ -109,72 +99,73 @@ pub(super) fn ballot_count<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             // winning choice: the most votes, at random among ties
             let creator = x.linked(vote::BALLOT);
-            let mut best = x.u8(0x58) as i8;
+            let mut best = x.u8(Ballot::VOTES) as i8;
             for k in 1..4 {
-                best = best.max(x.u8(0x58 + k) as i8);
+                best = best.max(x.u8(Ballot::VOTES + k) as i8);
             }
             for k in 0..4 {
-                let v = if x.u8(0x58 + k) as i8 == best { 0xff } else { 0 };
-                x.set8(0x58 + k, v);
+                let v = if x.u8(Ballot::VOTES + k) as i8 == best { 0xff } else { 0 };
+                x.set8(Ballot::VOTES + k, v);
             }
             let rng = x.random();
             let mut k = rng as u32 & 3;
-            while x.u8(0x58 + k) == 0 {
+            while x.u8(Ballot::VOTES + k) == 0 {
                 k = (k + 1) & 3;
             }
             let choice = k as u8;
-            creator.set_u8(x.b, 0x23, choice);
-            x.set8(0x58, choice);
-            x.set8(0x53, 1);
+            creator.set_u8(x.b, VoteCreator::RESULT, choice);
+            x.set8(Ballot::VOTES, choice);
+            x.set8(Ballot::COUNTED, 1);
             x.add8(f::SUB_STATE, 2);
         }
         2 => {
             x.add8(f::SUB_STATE, 2);
-            let zones = by_players(x, vote::TEXT_ZONES);
-            let mode = x.u8(0x2f) as u32;
-            let mut off = x.data16(zones + 2 * mode);
-            off = off.wrapping_add((x.u8(0x58) as u16) << 4);
-            let level = (x.a5_u8(0x35).wrapping_sub(1) as u16) << 2;
+            let table = &tables().vote_text_zones;
+            let zones = by_players(x, table);
+            let mode = x.u8(Ballot::MODE) as u32;
+            let mut off = table.at16(x.b, zones + 2 * mode);
+            off = off.wrapping_add((x.u8(Ballot::VOTES) as u16) << 4);
+            let level = (crate::ram::PLAYERS_ALIVE.get(x.b).wrapping_sub(1) as u16) << 2;
             off = off.wrapping_add(level);
             let zone = zones.wrapping_add(off as i16 as i32 as u32);
-            let count = x.data16(zone);
-            let size = x.data16(zone + 2);
-            x.set16(0x34, size);
+            let count = table.at16(x.b, zone);
+            let size = table.at16(x.b, zone + 2);
+            x.set16(Ballot::TEXT_SIZE, size);
             ballot_save_text(x, count);
-            x.set8(0x36, 8);
-            x.set8(0x37, 3);
-            x.set8(0x38, 1);
+            x.set8(Ballot::BLINKS, 8);
+            x.set8(Ballot::BLINK_TIMER, 3);
+            x.set8(Ballot::TEXT_SHOWN, 1);
         }
         4 => {
-            let t = x.u8(0x37).wrapping_sub(1);
-            x.set8(0x37, t);
+            let t = x.u8(Ballot::BLINK_TIMER).wrapping_sub(1);
+            x.set8(Ballot::BLINK_TIMER, t);
             if t != 0 {
                 return;
             }
-            x.set8(0x37, 2);
-            let at = x.u32(0x30);
-            let n = x.u16(0x34);
-            let shown = x.u8(0x38) ^ 1;
-            x.set8(0x38, shown);
+            x.set8(Ballot::BLINK_TIMER, 2);
+            let at = x.u32(Ballot::TEXT_AT);
+            let n = x.u16(Ballot::TEXT_SIZE);
+            let shown = x.u8(Ballot::TEXT_SHOWN) ^ 1;
+            x.set8(Ballot::TEXT_SHOWN, shown);
             if shown == 0 {
                 return ballot_erase_text(x, at, n);
             }
-            x.set8(0x37, 3);
+            x.set8(Ballot::BLINK_TIMER, 3);
             let format = text_format(x);
             text_copy(x, format, vote::SAVE, at, n);
-            let left = x.u8(0x36).wrapping_sub(1);
-            x.set8(0x36, left);
+            let left = x.u8(Ballot::BLINKS).wrapping_sub(1);
+            x.set8(Ballot::BLINKS, left);
             if left == 0 {
                 x.add8(f::SUB_STATE, 2);
-                x.set8(0x37, 0x1e);
+                x.set8(Ballot::BLINK_TIMER, 0x1e);
             }
         }
         6 => {
-            let t = x.u8(0x37).wrapping_sub(1);
-            x.set8(0x37, t);
+            let t = x.u8(Ballot::BLINK_TIMER).wrapping_sub(1);
+            x.set8(Ballot::BLINK_TIMER, t);
             if t == 0 {
                 let creator = x.linked(vote::BALLOT);
-                creator.set_u16(x.b, 0x32, 1);
+                creator.set_u16(x.b, VoteCreator::DONE, 1);
                 x.add8(f::STATE, 2);
             }
         }
@@ -193,7 +184,7 @@ pub(super) enum TextFormat {
 }
 
 pub(super) fn text_format<R: Bench>(x: &mut Cx<'_, R>) -> TextFormat {
-    if x.a5_u16(0x72) == 2 { TextFormat::Words } else { TextFormat::Bytes }
+    if vars::CABINET_PLAYERS.get(x.b) == 2 { TextFormat::Words } else { TextFormat::Bytes }
 }
 
 /// Length of the text element at `at`, and whether it is a character.
@@ -244,8 +235,8 @@ pub(super) fn text_copy<R: Bench>(x: &mut Cx<'_, R>, format: TextFormat, from: u
 pub(super) fn ballot_save_text<R: Bench>(x: &mut Cx<'_, R>, count: u16) {
     let format = text_format(x);
     let at = text_walk(x, format, vote::TEXT, count, |_, _, _, _| {});
-    x.set32(0x30, at);
-    let size = x.u16(0x34);
+    x.set32(Ballot::TEXT_AT, at);
+    let size = x.u16(Ballot::TEXT_SIZE);
     text_copy(x, format, at, vote::SAVE, size);
 }
 
@@ -271,11 +262,12 @@ pub(super) fn ballot_erase_text<R: Bench>(x: &mut Cx<'_, R>, at: u32, n: u16) {
 /// 0xb03c6: places the cursor on its choice (`+0x42`), according to the ballot's mode and the player.
 pub(super) fn cursor_place<R: Bench>(x: &mut Cx<'_, R>) {
     let ballot = x.linked(vote::BALLOT);
-    let places = by_players(x, vote::CURSOR_PLACES);
-    let mode = ballot.u8(x.b, 0x2f) as u32;
-    let places = places.wrapping_add(x.data16(places + 2 * mode) as i16 as i32 as u32);
-    let k = ((x.u8(0x42) as u32) << 4) + 4 * x.u8(0x2f) as u32;
-    let (px, pz) = (x.data16(places + k), x.data16(places + k + 2));
+    let table = &tables().vote_cursor_places;
+    let places = by_players(x, table);
+    let mode = ballot.u8(x.b, Ballot::MODE) as u32;
+    let places = places.wrapping_add(table.at16(x.b, places + 2 * mode) as i16 as i32 as u32);
+    let k = ((x.u8(VoteCursor::CHOICE) as u32) << 4) + 4 * x.u8(VoteCursor::PLAYER) as u32;
+    let (px, pz) = (table.at16(x.b, places + k), table.at16(x.b, places + k + 2));
     let (cx_, cz) = if crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 {
         (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b))
     } else {
@@ -289,30 +281,30 @@ pub(super) fn ballot_cursor<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
-            x.set8(0x42, 0);
+            x.set8(VoteCursor::CHOICE, 0);
             x.set32(Obj::Y, 0xffff_ff00);
             cursor_place(x);
-            let player = x.u8(0x2f);
+            let player = x.u8(VoteCursor::PLAYER);
             x.add32(Obj::Y, player as u32);
-            x.set8(0x2a, 1);
-            x.set8(0x2b, 0x12u8.wrapping_add(player));
-            x.anim_start(vote::ANIM_SET, (0x173 + player as u32) as u16);
+            x.set8(VoteCursor::OWN_PALETTE, 1);
+            x.set8(VoteCursor::PALETTE, 0x12u8.wrapping_add(player));
+            x.anim_start(vote::ANIM_SET.0, (0x173 + player as u32) as u16);
             x.reinsert();
         }
         2 => {
             let ballot = x.linked(vote::BALLOT);
-            if ballot.u16(x.b, 0x54) == 0 {
+            if ballot.u16(x.b, Ballot::DURATION) == 0 {
                 return cursor_vote(x);
             }
             x.anim_step();
             // 0xb0390: the player's inputs (left/right, and up/down for some modes)
             let mut mask: u8 = 0xfc;
-            let ballot_mode = ballot.u8(x.b, 0x2f) as u32;
-            if x.rom8(vote::VERTICAL + ballot_mode) != 0 {
+            let ballot_mode = ballot.u8(x.b, Ballot::MODE) as u32;
+            if tables().vote_vertical.at8(x.b, ballot_mode) != 0 {
                 mask = 0xf3;
             }
-            let player = x.u8(0x2f) as u32;
-            let input = x.a5_u8(0xc + player) & mask;
+            let player = x.u8(VoteCursor::PLAYER) as u32;
+            let input = crate::ram::Byte(vars::INPUTS.0 + player).get(x.b) & mask;
             if input == 0 {
                 return cursor_place(x);
             }
@@ -323,12 +315,12 @@ pub(super) fn ballot_cursor<R: Bench>(x: &mut Cx<'_, R>) {
             } else {
                 0
             };
-            x.add8(0x42, step);
-            let last = x.u8(0x43);
-            let choice = x.u8(0x42);
+            x.add8(VoteCursor::CHOICE, step);
+            let last = x.u8(VoteCursor::LAST_CHOICE);
+            let choice = x.u8(VoteCursor::CHOICE);
             if last < choice {
                 // beyond the last choice: back to the first, or to the last below the first
-                x.set8(0x42, if (last.wrapping_sub(choice) as i8) < 0 { 0 } else { last });
+                x.set8(VoteCursor::CHOICE, if (last.wrapping_sub(choice) as i8) < 0 { 0 } else { last });
             }
             if input & 0xf0 == 0 {
                 return cursor_place(x);
@@ -337,11 +329,11 @@ pub(super) fn ballot_cursor<R: Bench>(x: &mut Cx<'_, R>) {
         }
         4 => {
             let ballot = x.linked(vote::BALLOT);
-            if ballot.u8(x.b, 0x53) == 0 {
+            if ballot.u8(x.b, Ballot::COUNTED) == 0 {
                 return cursor_place(x);
             }
-            let n = ballot.u8(x.b, 0x44).wrapping_sub(1);
-            ballot.set_u8(x.b, 0x44, n);
+            let n = ballot.u8(x.b, Ballot::CURSORS).wrapping_sub(1);
+            ballot.set_u8(x.b, Ballot::CURSORS, n);
             free(x);
         }
         _ => {}
@@ -351,11 +343,11 @@ pub(super) fn ballot_cursor<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0xb02b4: the player votes for the current choice.
 pub(super) fn cursor_vote<R: Bench>(x: &mut Cx<'_, R>) {
     let ballot = x.linked(vote::BALLOT);
-    let n = ballot.u8(x.b, 0x42).wrapping_sub(1);
-    ballot.set_u8(x.b, 0x42, n);
-    let choice = x.u8(0x42) as u32;
-    let votes = ballot.u8(x.b, 0x58 + choice).wrapping_add(1);
-    ballot.set_u8(x.b, 0x58 + choice, votes);
+    let n = ballot.u8(x.b, Ballot::VOTERS).wrapping_sub(1);
+    ballot.set_u8(x.b, Ballot::VOTERS, n);
+    let choice = x.u8(VoteCursor::CHOICE) as u32;
+    let votes = ballot.u8(x.b, Ballot::VOTES + choice).wrapping_add(1);
+    ballot.set_u8(x.b, Ballot::VOTES + choice, votes);
     x.add8(f::STATE, 2);
     cursor_place(x);
     x.unlink();
@@ -371,26 +363,27 @@ pub(super) fn timer_place<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
     };
     x.set16(Obj::X, cx_);
     x.set16(Obj::Z, cz);
-    let places = by_players(x, vote::TIMER_PLACES);
-    let k = 4 * ballot.u8(x.b, 0x2f) as u32;
-    let (dx, dz) = (x.data16(places + k), x.data16(places + k + 2));
+    let table = &tables().vote_timer_places;
+    let places = by_players(x, table);
+    let k = 4 * ballot.u8(x.b, Ballot::MODE) as u32;
+    let (dx, dz) = (table.at16(x.b, places + k), table.at16(x.b, places + k + 2));
     x.add16(Obj::X, dx);
     x.add16(Obj::Z, dz);
     ballot
 }
 
-pub(super) fn timer_palette<R: Bench>(x: &mut Cx<'_, R>, src: u32) {
+pub(super) fn timer_palette<R: Bench>(x: &mut Cx<'_, R>, src: &Table) {
     for k in 0..8 {
-        let v = x.data32(src + 4 * k) | 0xf000_f000;
+        let v = src.nth32(x.b, k) | 0xf000_f000;
         wr32(x.b, 0x91c1c0 + 4 * k, v);
     }
 }
 
 /// 0xb0330: countdown digit (seconds remaining, high byte of `+0x54`).
 pub(super) fn timer_show<R: Bench>(x: &mut Cx<'_, R>) {
-    let anim = 0xe3u8.wrapping_sub(x.u8(0x54));
-    x.anim_start(vote::ANIM_SET, (anim as u32) as u16);
-    x.set8(0x3f, 6);
+    let anim = 0xe3u8.wrapping_sub(x.u8(VoteTimer::SECONDS));
+    x.anim_start(vote::ANIM_SET.0, (anim as u32) as u16);
+    x.set8(VoteTimer::FRAME_ATTRIBUTE, 6);
     x.reinsert();
 }
 
@@ -398,33 +391,33 @@ pub(super) fn ballot_timer<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
-            timer_palette(x, 0x28ff20);
-            x.set8(0x2a, 1);
-            x.set8(0x2b, 0xe);
+            timer_palette(x, &tables().vote_timer_palette);
+            x.set8(VoteTimer::OWN_PALETTE, 1);
+            x.set8(VoteTimer::PALETTE, 0xe);
             x.set32(Obj::Y, 0);
             timer_place(x);
-            x.set16(0x54, 0x143c);
+            x.set16(VoteTimer::SECONDS, 0x143c);
             timer_show(x);
         }
         2 => {
             let ballot = timer_place(x);
-            if ballot.u16(x.b, 0x54) == 0 {
+            if ballot.u16(x.b, Ballot::DURATION) == 0 {
                 return ballot_end(x);
             }
-            let t = x.u8(0x55).wrapping_sub(1);
-            x.set8(0x55, t);
+            let t = x.u8(VoteTimer::FRAMES).wrapping_sub(1);
+            x.set8(VoteTimer::FRAMES, t);
             if (t as i8) >= 0 {
                 return;
             }
-            x.set8(0x55, 0x3c);
-            let s = x.u8(0x54).wrapping_sub(1);
-            x.set8(0x54, s);
+            x.set8(VoteTimer::FRAMES, 0x3c);
+            let s = x.u8(VoteTimer::SECONDS).wrapping_sub(1);
+            x.set8(VoteTimer::SECONDS, s);
             if s != 0 {
                 return timer_show(x);
             }
             // time elapsed: the ballot ends
-            ballot.set_u16(x.b, 0x54, 0);
-            timer_palette(x, 0x2531c0);
+            ballot.set_u16(x.b, Ballot::DURATION, 0);
+            timer_palette(x, &tables().vote_timer_palette_end);
             free(x);
         }
         // Original dead code: state 4 (0xb0374), which no step leads to; the original clears word `+0x54` there

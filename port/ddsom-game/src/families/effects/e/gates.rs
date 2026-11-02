@@ -7,8 +7,6 @@ use super::*;
 pub(super) mod raft {
     /// Scroll speed (long, 16.16).
     pub const SPEED: u32 = 0x58;
-    /// Camera mode (`A5+0x51e`): 4 = camera fixed, the raft can no longer be steered.
-    pub const CAMERA_MODE: u32 = 0x51e;
 }
 
 pub(super) fn raft(x: &mut Gx) {
@@ -20,7 +18,7 @@ pub(super) fn raft(x: &mut Gx) {
             x.add8(f::STATE, 2);
             x.set32(raft::SPEED, 0x4_0000);
             x.set16(Obj::Z, 0);
-            x.anim_start(ANIM_SET, 0);
+            x.anim_start(ANIM_SET.0, 0);
             x.reinsert();
         }
         2 => {
@@ -48,7 +46,7 @@ pub(super) fn raft_drift(x: &mut Gx) {
     // Original glitch: without steering (camera fixed), the movement is the D4 left by what precedes (last
     // long of the SET 0 palette animation, raft movement of a previous frame, sprite list...).
     let mut dx = x.leftovers().d4 as i32;
-    if x.a5_u16(raft::CAMERA_MODE) != 4 {
+    if vars::CAMERA_MODE.get(x.b) != 4 {
         let (mut dy, mut sx) = (0i32, 0i32);
         for (k, p) in players().enumerate() {
             if !p.is_active(x.b) {
@@ -98,8 +96,6 @@ pub(super) fn raft_drift(x: &mut Gx) {
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod gate {
-    /// Animation sets per mode `+0x2f` (longs, program space).
-    pub const ANIM_SETS: u32 = 0xad954;
     /// Oscillation: half-period (`+0x42`), counter (`+0x5e`), active (`+0x5f`).
     pub const PERIOD: u32 = 0x42;
     pub const SWING: u32 = 0x43;
@@ -107,9 +103,6 @@ pub(super) mod gate {
     pub const MOVING: u32 = 0x5f;
     /// Curtain step (word).
     pub const CURTAIN: u32 = 0x5c;
-    /// Curtain: (offset in the tiles, address) per step, 6 bytes (data); tiles (data).
-    pub const CURTAIN_STEPS: u32 = 0xadad0;
-    pub const CURTAIN_TILES: u32 = 0xadbf2;
     /// Scene context saved in the object: cameras (longs `+0x44`, `+0x48`, words `+0x4c`,
     /// `+0x4e`), scroll state (`+0x54`, `+0x5a`) and music (`+0x16`).
     pub const CAMERA_X: u32 = 0x44;
@@ -127,8 +120,6 @@ pub(super) mod gate {
     /// (offset from `A5`, slots, size).
     pub const FROZEN: [(u32, u32, u32); 6] =
         [(0x4a9e, 32, 0x50), (0x549e, 38, 0x60), (0x795e, 16, 0x50), (0x3a1e, 3, 0xc0), (0x3c5e, 38, 0x60), (0x179e, 48, 0x60)];
-    /// X offset of the players, per character, on return (words, program space).
-    pub const RETURN_OFFSETS: u32 = 0xae3b4;
     pub const MUSIC_OF_SCENE: crate::sound::Sound = crate::sound::SCENE_MUSIC_OR_STOP;
     pub const PLAY_MUSIC: crate::sound::Sound = crate::sound::FROM_D4;
 }
@@ -173,14 +164,14 @@ pub(super) fn gate_init<R: Bench>(x: &mut Cx<'_, R>) {
         let o = x.o;
         crate::families::creators::sobj_8(x.b, o);
     }
-    let mode = x.u8(0x2f) as u32;
+    let mode = x.u8(Effect::SETTING) as u32;
     if mode == 0 {
-        let v = x.u8(0x2a) | 1;
-        x.set8(0x2a, v);
-        x.set8(0x2b, 0x19);
+        let v = x.u8(Effect::OWN_PALETTE) | 1;
+        x.set8(Effect::OWN_PALETTE, v);
+        x.set8(Effect::PALETTE, 0x19);
     }
-    let set = x.rom16(gate::ANIM_SETS + 4 * mode) as u32;
-    let set = set << 16 | x.rom16(gate::ANIM_SETS + 4 * mode + 2) as u32;
+    let set = tables().gate_anim_sets.at16(x.b, 4 * mode) as u32;
+    let set = set << 16 | tables().gate_anim_sets.at16(x.b, 4 * mode + 2) as u32;
     x.anim_start(set, 0);
     x.reinsert();
 }
@@ -211,43 +202,44 @@ pub(super) fn gate_watch<R: Bench>(x: &mut Cx<'_, R>) {
         // left the screen on the left
         return x.set8(f::STATE, 6);
     }
-    let leader = Obj(x.a5_u16(0x46) as i16 as i32 as u32 & 0xff_ffff);
+    let leader = Obj(vars::LEADER.get(x.b) as i16 as i32 as u32 & 0xff_ffff);
     let dx = leader.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x44);
     let dy = leader.u16(x.b, Obj::Y).wrapping_sub(x.u16(Obj::Y)).wrapping_sub(9);
     if dx > 0x74 || dy > 0x1c {
         return;
     }
-    if !players().any(|p| p.is_active(x.b) && p.u16(x.b, 0x62) != 0) {
+    if !players().any(|p| p.is_active(x.b) && p.u16(x.b, PlayerView::LIFE) != 0) {
         return;
     }
     // a living player enters: start of the transition
-    x.set_a5_u8(0x5f, 0);
+    vars::GATE_ACTIVE.set(x.b, 0);
     wr8(x.b, 0xff2472, 1);
     x.add8(f::SUB_STATE, 2);
-    x.set_a5_u16(0x51e, 4);
-    x.set_a5_u8(0x4e, 1);
+    vars::CAMERA_MODE.set(x.b, 4);
+    vars::SCRIPTED.set(x.b, 1);
 }
 
 /// Substate 2: curtain palette, then two bands of 22 tiles per frame.
 pub(super) fn gate_curtain<R: Bench>(x: &mut Cx<'_, R>) {
     for k in 0..8 {
-        let v = x.data32(0x25c4a0 + 4 * k);
+        let v = tables().gate_curtain_palette.nth32(x.b, k);
         let v = if k < 6 { v | 0xf000_f000 } else { v.wrapping_add(0xf000_f000) };
         wr32(x.b, 0x91c7e0 + 4 * k, v);
     }
     for _ in 0..2 {
         let step = x.u16(gate::CURTAIN);
-        let entry = gate::CURTAIN_STEPS.wrapping_add(step as i16 as i32 as u32);
-        let offset = x.data16(entry);
+        let steps = &tables().gate_curtain_steps;
+        let entry = step as i16 as i32 as u32;
+        let offset = steps.at16(x.b, entry);
         if (offset as i16) < 0 {
             // end of the curtain: entry into the sub-scene
             return gate_enter(x);
         }
-        let mut at = x.data32(entry + 2);
+        let mut at = steps.at32(x.b, entry.wrapping_add(2));
         x.add16(gate::CURTAIN, 6);
-        let mut src = gate::CURTAIN_TILES.wrapping_add(offset as i16 as i32 as u32);
+        let mut src = offset as i16 as i32 as u32;
         for _ in 0..22 {
-            let tile = rd16(x.b, src);
+            let tile = tables().gate_curtain_tiles.at16(x.b, src);
             wr16(x.b, at, tile);
             wr16(x.b, at + 2, 0x1f);
             src += 2;
@@ -260,13 +252,13 @@ pub(super) fn gate_curtain<R: Bench>(x: &mut Cx<'_, R>) {
 /// the object, the objects of the pools are frozen, the variant's scenery is created, then the scene restarts.
 pub(super) fn gate_enter<R: Bench>(x: &mut Cx<'_, R>) {
     let scene = if crate::ram::SCENE.get(x.b) == 7 { 6 } else { 0xc };
-    x.set_a5_u8(0x34, scene);
+    crate::ram::SCENE.set(x.b, scene);
     x.set16(f::STATE, 0x400);
     x.set16(gate::CURTAIN, 0);
-    x.set_a5_u8(0x44, 0);
+    vars::INPUTS_LOCKED.set(x.b, 0);
     x.unlink();
     // 0xae298: context save
-    let (cam_x, cam_y) = (x.a5_u32(0x506), x.a5_u32(0x50a));
+    let (cam_x, cam_y) = (vars::CAMERA_X_LONG.get(x.b), vars::CAMERA_Y_LONG.get(x.b));
     x.set32(gate::CAMERA_X, cam_x);
     x.set32(gate::CAMERA_Y, cam_y);
     let (alt_x, alt_y) = (crate::ram::CAMERA_ALT_X.get(x.b), crate::ram::CAMERA_ALT_Y.get(x.b));
@@ -302,10 +294,10 @@ pub(super) fn gate_enter<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn scene_prop<R: Bench>(x: &mut Cx<'_, R>, variant: u8, setting: u8) {
     for (alloc, kind) in [(&pools::SET, 8), (&pools::SOBJ, 4), (&pools::EFFCT, 0x12)] {
         if let Some(o) = x.alloc(alloc) {
-            o.set_u8(x.b, 0, 1);
-            o.set_u8(x.b, 2, kind);
+            o.set_u8(x.b, Obj::ACTIVE, 1);
+            o.set_u8(x.b, Obj::KIND, kind);
             o.set_u8(x.b, f::VARIANT, variant);
-            o.set_u8(x.b, 0x2f, setting);
+            o.set_u8(x.b, Effect::SETTING, setting);
             return;
         }
     }
@@ -315,41 +307,41 @@ pub(super) fn scene_prop<R: Bench>(x: &mut Cx<'_, R>, variant: u8, setting: u8) 
 /// context saved by `gate_enter`, the living players are repositioned in front of the followed object.
 pub(super) fn gate_leave<R: Bench>(x: &mut Cx<'_, R>) {
     let scene = if crate::ram::SCENE.get(x.b) == 6 { 7 } else { 9 };
-    x.set_a5_u8(0x34, scene);
-    x.set_a5_u8(0x44, 1);
+    crate::ram::SCENE.set(x.b, scene);
+    vars::INPUTS_LOCKED.set(x.b, 1);
     crate::families::scenery::resume_scenery_lit(x, crate::families::scenery::Cameras::Start);
     for p in players() {
-        if p.u8(x.b, 0) == 0 || p.u16(x.b, 0x62) == 0 {
+        if p.u8(x.b, PlayerView::ACTIVE) == 0 || p.u16(x.b, PlayerView::LIFE) == 0 {
             continue;
         }
-        p.set_u8(x.b, 0, 1);
+        p.set_u8(x.b, PlayerView::ACTIVE, 1);
         p.set_u32(x.b, f::STATE, 0x0200_0000);
-        p.set_u8(x.b, 0x66, 0);
-        p.set_u8(x.b, 0x15c, 0);
-        p.set_u8(x.b, 0x7e, 0x50);
+        p.set_u8(x.b, PlayerView::GUARD, 0);
+        p.set_u8(x.b, PlayerView::SPECIAL, 0);
+        p.set_u8(x.b, PlayerView::RETURN_TIMER, 0x50);
         // 0xae388: in front of the followed object, offset according to the character
-        let leader = Obj(x.a5_u16(0x46) as i16 as i32 as u32 & 0xff_ffff);
+        let leader = Obj(vars::LEADER.get(x.b) as i16 as i32 as u32 & 0xff_ffff);
         let (lx, ly) = (leader.u16(x.b, Obj::X), leader.u16(x.b, Obj::Y));
         p.set_u16(x.b, Obj::X, lx);
         p.set_u16(x.b, Obj::Y, ly);
         p.set_u16(x.b, Obj::Z, 0);
-        let k = 2 * p.u8(x.b, 2) as u32;
-        let dx = x.rom16(gate::RETURN_OFFSETS + k);
+        let k = 2 * p.u8(x.b, PlayerView::SLOT) as u32;
+        let dx = tables().gate_return_offsets.at16(x.b, k);
         p.set_u16(x.b, Obj::X, lx.wrapping_add(dx));
         p.set_u16(x.b, Obj::Y, ly.wrapping_sub(0x12));
     }
-    x.set_a5_u16(0x51e, 4);
+    vars::CAMERA_MODE.set(x.b, 4);
     let (cam_x, cam_y) = (x.u32(gate::CAMERA_X), x.u32(gate::CAMERA_Y));
-    x.set_a5_u32(0x506, cam_x);
-    x.set_a5_u32(0x50a, cam_y);
+    vars::CAMERA_X_LONG.set(x.b, cam_x);
+    vars::CAMERA_Y_LONG.set(x.b, cam_y);
     let (alt_x, alt_y) = (x.u16(gate::ALT_X), x.u16(gate::ALT_Y));
-    x.set_a5_u16(0x556, alt_x);
-    x.set_a5_u16(0x55a, alt_y);
+    crate::ram::CAMERA_ALT_X.set(x.b, alt_x);
+    crate::ram::CAMERA_ALT_Y.set(x.b, alt_y);
     // camera targets: aligned to 32 pixels in x, 0x160 higher
-    x.set_a5_u32(0x50e, cam_x & !0x1f_0000);
-    x.set_a5_u32(0x512, cam_y.wrapping_sub(0x160_0000));
-    x.set_a5_u16(0x55e, alt_x & 0xffe0);
-    x.set_a5_u16(0x562, alt_y.wrapping_sub(0x160));
+    vars::CAMERA_TARGET_X.set(x.b, cam_x & !0x1f_0000);
+    vars::CAMERA_TARGET_Y.set(x.b, cam_y.wrapping_sub(0x160_0000));
+    vars::CAMERA_ALT_TARGET_X.set(x.b, alt_x & 0xffe0);
+    vars::CAMERA_ALT_TARGET_Y.set(x.b, alt_y.wrapping_sub(0x160));
     let scroll = x.u32(gate::SCROLL);
     crate::mem::wr32(x.b, gate::SCENE_SCROLL, scroll);
     let step = x.u8(gate::SCROLL_STEP);
@@ -363,13 +355,13 @@ pub(super) fn gate_leave<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// State 4, substate 2: the curtain opens (two columns cleared per frame from the center).
 pub(super) fn gate_open<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set_a5_u16(0x51e, 4);
+    vars::CAMERA_MODE.set(x.b, 4);
     let step = x.u16(gate::CURTAIN);
     if step as i16 > 0xa {
-        x.set_a5_u8(0x5f, 1);
+        vars::GATE_ACTIVE.set(x.b, 1);
         wr8(x.b, 0xff2472, 0);
-        x.set_a5_u8(0x4e, 0);
-        x.set_a5_u16(0x51e, 0);
+        vars::SCRIPTED.set(x.b, 0);
+        vars::CAMERA_MODE.set(x.b, 0);
         return x.set8(f::STATE, 6);
     }
     let shift = (step.wrapping_mul(4)) as i16 as i32 as u32;

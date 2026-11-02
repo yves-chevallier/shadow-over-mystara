@@ -14,15 +14,8 @@ pub(super) mod armour {
     pub const LIFE: u32 = 0x62;
     pub const FULL_LIFE: u32 = 0x60;
     pub const HIT: u32 = 0x33;
-    /// Thresholds (bytes, program space) and animation sets (longs) per piece.
-    pub const THRESHOLDS: u32 = 0xb550e;
-    pub const ANIM_SETS: u32 = 0xb54dc;
-    pub const WORN_ANIMS: u32 = 0x195384;
-    /// Shards of the fallen piece (variant 1): per piece, count minus one then kinds (bytes, data).
-    pub const SHARDS: u32 = 0xb5720;
-    /// Shard (variant 1): per kind, 16-byte sheet (dx, dy, dz, vx, vy, vz and az); bounces.
-    pub const SHARD_LAUNCH: u32 = 0xb55dc;
-    pub const SHARD_ANIMS: u32 = 0x17efe8;
+    pub const WORN_ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x195384);
+    pub const SHARD_ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x17efe8);
     pub const BOUNCE_TIMER: u32 = 0x5c;
     pub const FALLING: u32 = 0x05;
     pub const ROLLING: u32 = 0x06;
@@ -46,7 +39,7 @@ pub(super) fn armour<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::STATE, 2);
             x.set8(armour::LAST_HIT, 0xff);
-            x.anim_start(armour::WORN_ANIMS, 4);
+            x.anim_start(armour::WORN_ANIMS.0, 4);
         }
         2 => armour_worn(x),
         4 => armour_break(x),
@@ -58,7 +51,7 @@ pub(super) fn armour<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn armour_falls<R: Bench>(x: &mut Cx<'_, R>, wearer: Obj) -> bool {
     let quarter = wearer.u16(x.b, armour::FULL_LIFE) >> 2;
     let piece = x.u8(armour::PIECE) as u32;
-    let steps = x.rom8(armour::THRESHOLDS + piece) as u16 + 1;
+    let steps = tables().armour_thresholds.at8(x.b, piece) as u16 + 1;
     let threshold = quarter.wrapping_mul(steps);
     threshold as i16 > wearer.u16(x.b, armour::LIFE) as i16
 }
@@ -87,15 +80,16 @@ pub(super) fn armour_worn<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(armour::LAST_HIT, hit);
     set_hidden(x, false);
     let piece = x.u8(armour::PIECE) as u32;
-    let set = crate::mem::prog32(x.b, armour::ANIM_SETS + 4 * piece);
+    let set = tables().armour_anim_sets.at32(x.b, 4 * piece);
     x.anim_start(set, (hit as u32) as u16);
 }
 
 /// The piece falls: it breaks into shards (variant 1) placed on it.
 pub(super) fn armour_break<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
-    let mut at = armour::SHARDS + 4 * x.u8(armour::PIECE) as u32;
-    let count = x.data8(at);
+    let shards = &tables().armour_shards;
+    let mut at = 4 * x.u8(armour::PIECE) as u32;
+    let count = shards.at8(x.b, at);
     at += 1;
     let mut n = count as u16;
     loop {
@@ -103,7 +97,7 @@ pub(super) fn armour_break<R: Bench>(x: &mut Cx<'_, R>) {
         o.set_u8(x.b, Obj::ACTIVE, 1);
         o.set_u8(x.b, Obj::KIND, 46);
         o.set_u8(x.b, Obj::VARIANT, 1);
-        let kind = x.data8(at);
+        let kind = shards.at8(x.b, at);
         at += 1;
         o.set_u8(x.b, armour::PIECE, kind);
         for off in [Obj::X, Obj::Y, Obj::Z] {
@@ -133,18 +127,19 @@ pub(super) fn armour_shard<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn armour_shard_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(f::SUB_STATE, 0);
-    let sheet = armour::SHARD_LAUNCH + ((x.u8(armour::PIECE) as u16) << 4) as u32;
-    let mut dx = x.data16(sheet);
-    let dy = x.data16(sheet + 2);
+    let launch = &tables().armour_shard_launch;
+    let sheet = ((x.u8(armour::PIECE) as u16) << 4) as u32;
+    let mut dx = launch.at16(x.b, sheet);
+    let dy = launch.at16(x.b, sheet + 2);
     x.add16(Obj::Y, dy);
-    let dz = x.data16(sheet + 4);
+    let dz = launch.at16(x.b, sheet + 4);
     x.add16(Obj::Z, dz);
-    let mut vx = x.data16(sheet + 6);
+    let mut vx = launch.at16(x.b, sheet + 6);
     x.set16(Obj::AX, 0);
-    let vy = x.data16(sheet + 8);
+    let vy = launch.at16(x.b, sheet + 8);
     x.set16(Obj::VY, vy);
     x.set16(Obj::AY, 0);
-    let vz = x.data32(sheet + 10);
+    let vz = launch.at32(x.b, sheet + 10);
     x.set32(Obj::VZ, vz);
     if x.u8(f::FACING) == 0 {
         dx = dx.wrapping_neg();
@@ -152,7 +147,7 @@ pub(super) fn armour_shard_init<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.add16(Obj::X, dx);
     x.set16(Obj::VX, vx);
-    x.anim_start(armour::SHARD_ANIMS, 9);
+    x.anim_start(armour::SHARD_ANIMS.0, 9);
 }
 
 /// New bounce: vertical speed and gravity, randomly drawn delay before stopping.
@@ -165,7 +160,7 @@ pub(super) fn armour_shard_bounce<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 pub(super) fn armour_shard_active<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.a5_u8(0x3d) != 0 {
+    if vars::PAUSE.get(x.b) != 0 {
         return on_screen(x);
     }
     if x.u8(armour::FALLING) == 0 {
@@ -213,13 +208,12 @@ pub(super) mod flyer {
     /// Variante 1 : trajet circulaire, table de (dx, dy) en `+0x4c`, angle en `+0x5c`, position relative
     /// saved in `+0x18` / `+0x1a`.
     pub const PATH: u32 = 0x4c;
-    pub const PATH_TABLE: u32 = 0x1ca4b6;
     pub const ANGLE: u32 = 0x5c;
     pub const REL_X: u32 = 0x18;
     pub const REL_Y: u32 = 0x1a;
     /// Variant 2: a player on the same depth (`+0x2f` = 1).
     pub const PLAYER_IN_LINE: u32 = 0x2f;
-    pub const ANIMS: u32 = 0x17f002;
+    pub const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x17f002);
     /// Enemy shot (ESHL 0x2c) released every fourth frame.
     pub const SHOT: u8 = 0x2c;
 }
@@ -244,7 +238,7 @@ pub(super) fn flyer<R: Bench>(x: &mut Cx<'_, R>) {
     match (x.u8(f::VARIANT), state) {
         (0, 0) => {
             x.add8(f::STATE, 2);
-            x.anim_start(flyer::ANIMS, 0xe);
+            x.anim_start(flyer::ANIMS.0, 0xe);
         }
         (0, _) => flyer_body(x),
         (1, 0) => flyer_gun_init(x),
@@ -255,7 +249,7 @@ pub(super) fn flyer<R: Bench>(x: &mut Cx<'_, R>) {
             let facing = link.u8(x.b, f::FACING);
             x.set8(f::FACING, facing);
             x.set8(flyer::ARMED, 0);
-            x.anim_start(flyer::ANIMS, 8);
+            x.anim_start(flyer::ANIMS.0, 8);
         }
         _ => flyer_sweeper(x),
     }
@@ -263,7 +257,7 @@ pub(super) fn flyer<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Variant 0: body placed on the object followed by the followed object, blinking every other frame.
 pub(super) fn flyer_body<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.a5_u8(0x3d) != 0 {
+    if vars::PAUSE.get(x.b) != 0 {
         return x.reinsert();
     }
     let Some(link) = flyer_link(x) else { return x.add8(f::STATE, 2) };
@@ -281,7 +275,7 @@ pub(super) fn flyer_body<R: Bench>(x: &mut Cx<'_, R>) {
     x.add16(Obj::X, if facing != 0 { 0xfffa } else { 6 });
     x.add16(Obj::Y, 0xffff);
     x.add16(Obj::Z, 0x54);
-    if x.a5_u16(0x6e) & 1 != 0 {
+    if vars::FRAME_LOW.get(x.b) & 1 != 0 {
         x.set8(f::SUB_STATE, 0);
         set_hidden(x, true);
     } else {
@@ -293,7 +287,7 @@ pub(super) fn flyer_body<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Enemy shot (ESHL 0x2c) of variant `variant`, every fourth frame (`0xb5d56`, `0xb5d82`).
 pub(super) fn flyer_shoot<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
-    if x.a5_u16(0x6e) & 3 != 0 {
+    if vars::FRAME_LOW.get(x.b) & 3 != 0 {
         return;
     }
     let Some(o) = x.alloc(&pools::ESHL) else { return };
@@ -318,7 +312,7 @@ pub(super) fn flyer_gun_init<R: Bench>(x: &mut Cx<'_, R>) {
         o.set_u16(x.b, flyer::LINK, x.o.0 as u16);
     }
     x.set8(flyer::ARMED, 0);
-    x.set32(flyer::PATH, flyer::PATH_TABLE);
+    x.set32(flyer::PATH, tables().flyer_path.rom);
     let rel = if x.u8(f::FACING) != 0 { 0xff40 } else { 0xc0 };
     x.set16(flyer::REL_X, rel);
     x.set16(flyer::ANGLE, 0x1000);
@@ -342,7 +336,7 @@ pub(super) fn flyer_wind_down<R: Bench>(x: &mut Cx<'_, R>, keep_while_positive: 
 
 /// Variant 1: cannon that turns around the followed object as long as it is in phase 1, and fires.
 pub(super) fn flyer_gun<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.a5_u8(0x3d) != 0 {
+    if vars::PAUSE.get(x.b) != 0 {
         return;
     }
     let Some(link) = flyer_link(x) else { return x.add8(f::STATE, 2) };
@@ -360,7 +354,7 @@ pub(super) fn flyer_gun<R: Bench>(x: &mut Cx<'_, R>) {
     for (pos, rel, step) in [(Obj::X, flyer::REL_X, 0u32), (Obj::Y, flyer::REL_Y, 2)] {
         let r = x.u16(rel);
         x.set16(pos, r);
-        let d = x.data16(path.wrapping_add(angle + step)) as i16 as i32 as u32;
+        let d = held16(x.b, path.wrapping_add(angle + step)) as i16 as i32 as u32;
         x.add32(pos, d << 8);
         let v = x.u16(pos);
         x.set16(rel, v);
@@ -375,7 +369,7 @@ pub(super) fn flyer_gun<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Variant 2: sweeper placed at the screen edge, at the depth of the followed object (phase 3), which fires.
 pub(super) fn flyer_sweeper<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.a5_u8(0x3d) != 0 {
+    if vars::PAUSE.get(x.b) != 0 {
         return x.add8(f::STATE, 2);
     }
     let Some(link) = flyer_link(x) else { return x.add8(f::STATE, 2) };
@@ -408,7 +402,7 @@ pub(super) fn flyer_sweep<R: Bench>(x: &mut Cx<'_, R>, link: Obj) {
     x.set16(Obj::X, px);
     x.set16(Obj::Z, 0x20);
     for k in 0..4 {
-        let p = Obj(crate::mem::A5 + 0x5de + 0x200 * k);
+        let p = crate::ram::PLAYERS.nth(k);
         if p.u8(x.b, Obj::ACTIVE) == 0 {
             continue;
         }

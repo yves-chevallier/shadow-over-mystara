@@ -7,6 +7,7 @@
 pub mod combat;
 pub mod data;
 pub mod dialogs;
+pub mod effects;
 pub mod gfx;
 pub mod levels;
 pub mod misc;
@@ -44,5 +45,5 @@ pub fn to_data(roms: &Path) -> io::Result<GameData> {
 pub fn to_data_from(rom: &Program) -> io::Result<GameData> {
     let frames = sprites::frames(rom)?;
     let anims = sprites::anims(rom, &frames)?;
-    Ok(GameData { frames, anims, speeds: speeds::speeds(rom) })
+    Ok(GameData { frames, anims, speeds: speeds::speeds(rom), effects: effects::effects(rom) })
 }

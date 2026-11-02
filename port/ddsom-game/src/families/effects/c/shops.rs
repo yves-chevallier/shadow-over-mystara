@@ -5,27 +5,17 @@ use super::*;
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod shop {
-    /// Tables indexed by the variant: zone (4 words, data), price (long), item (word), announcement
-    /// (word, program space), animation (word).
-    pub const ZONES: u32 = 0xaf7d6;
-    pub const PRICES: u32 = 0xaf566;
-    pub const ITEMS: u32 = 0xaf73a;
-    pub const MESSAGES: u32 = 0xaf4ca;
-    pub const ANIMATIONS: u32 = 0xaf69e;
-    /// Stock per difficulty (`A5+0x35`, bytes, program space).
-    pub const STOCK: u32 = 0xaf4c4;
-    pub const ANIM_SET: u32 = 0x1c40c6;
-    /// Purchase (`0xafad0`): per variant, a `bra.w` to the purchase kind (78 entries).
-    pub const PURCHASES: u32 = 0xafade;
+    pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x1c40c6);
+    /// Purchase (`0xafad0`): per variant, a `bra.w` to the purchase kind (78 entries, `shop_purchases`).
     pub const PURCHASE_COUNT: u32 = 78;
-    /// Purchase kinds (targets of the `bra.w`).
-    pub const EXIT: u32 = 0xafc16;
-    pub const MEAL_BIG: u32 = 0xafc34;
-    pub const MEAL: u32 = 0xafc3a;
-    pub const NOT_CLASS_4: u32 = 0xafcb4;
-    pub const NOT_CLASSES_2_4_1: u32 = 0xafcd0;
-    pub const NOT_CLASSES_4_1: u32 = 0xafce8;
-    pub const NOT_CLASS_1: u32 = 0xafd00;
+    /// Purchase kinds: targets of the `bra.w`, as offsets from the start of the branches (`0xafade`).
+    pub const EXIT: u32 = 0x138;
+    pub const MEAL_BIG: u32 = 0x156;
+    pub const MEAL: u32 = 0x15c;
+    pub const NOT_CLASS_4: u32 = 0x1d6;
+    pub const NOT_CLASSES_2_4_1: u32 = 0x1f2;
+    pub const NOT_CLASSES_4_1: u32 = 0x20a;
+    pub const NOT_CLASS_1: u32 = 0x222;
     /// Shop messages (`A5-0x554e`): insufficient gold, class refusal, full life,
     /// object at maximum, inventory full.
     pub const NO_GOLD: u16 = 0x82;
@@ -60,26 +50,26 @@ pub(super) fn shop_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     // scene 0x4c, second pass: items from the second half of the table
     let v = x.u8(f::VARIANT);
-    if crate::ram::SCENE.get(x.b) == 0x4c && (v as i8) < 0x40 && x.a5_u8(0x5e) != 0 && v != 0 {
+    if crate::ram::SCENE.get(x.b) == 0x4c && (v as i8) < 0x40 && vars::SECOND_PASS.get(x.b) != 0 && v != 0 {
         x.set8(f::VARIANT, if v == 0x14 { 0x0d } else { v }.wrapping_add(0x40));
     }
     let v = x.u8(f::VARIANT) as u32;
-    let zone = shop::ZONES + 8 * v;
+    let zone = 8 * v;
     for (k, off) in [0x14, 0x16, 0x54, 0x56].into_iter().enumerate() {
-        let w = x.data16(zone + 2 * k as u32);
+        let w = tables().shop_zones.at16(x.b, zone + 2 * k as u32);
         x.set16(off, w);
     }
-    let level = x.a5_u8(0x35) as u32;
-    let stock = x.rom8(shop::STOCK + level);
+    let level = crate::ram::PLAYERS_ALIVE.get(x.b) as u32;
+    let stock = tables().shop_stock.at8(x.b, level);
     x.set8(shop::STOCK_LEFT, stock);
-    let price = x.data32(shop::PRICES + 4 * v);
+    let price = tables().shop_prices.at32(x.b, 4 * v);
     x.set32(shop::PRICE, price);
-    let message = x.rom16(shop::MESSAGES + 2 * v);
+    let message = tables().shop_messages.at16(x.b, 2 * v);
     x.set16(shop::MESSAGE_ID, message);
-    let item = x.data16(shop::ITEMS + 2 * v);
+    let item = tables().shop_items.at16(x.b, 2 * v);
     x.set16(shop::ITEM, item);
-    let anim = x.data16(shop::ANIMATIONS + 2 * v) as u32;
-    x.anim_start(shop::ANIM_SET, anim as u16);
+    let anim = tables().shop_animations.at16(x.b, 2 * v) as u32;
+    x.anim_start(shop::ANIM_SET.0, anim as u16);
     x.reinsert();
 }
 
@@ -99,7 +89,7 @@ pub(super) fn shop_watch<R: Bench>(x: &mut Cx<'_, R>, buy: fn(&mut Cx<'_, R>, Ob
                     crate::mem::wr16(x.b, shop::MESSAGE, message);
                     x.set8(shop::ANNOUNCED, 1);
                 }
-                if (buyer.u8(x.b, 0x58) as i8) > 0 {
+                if (buyer.u8(x.b, Buyer::PURCHASE) as i8) > 0 {
                     buy(x, buyer, slot);
                 }
             }
@@ -112,7 +102,7 @@ pub(super) fn shop_watch<R: Bench>(x: &mut Cx<'_, R>, buy: fn(&mut Cx<'_, R>, Ob
 
 /// Player of a buyer (`+0x50`).
 pub(super) fn buyer_player<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) -> Obj {
-    let p = buyer.u16(x.b, 0x50);
+    let p = buyer.u16(x.b, Buyer::PLAYER);
     Obj(p as i16 as i32 as u32 & 0xff_ffff)
 }
 
@@ -129,21 +119,22 @@ pub(super) fn shop_buy<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj, slot: u32) {
     if v >= shop::PURCHASE_COUNT {
         return;
     }
-    let at = shop::PURCHASES + 4 * v;
-    let kind = (at + 2).wrapping_add(x.rom16(at + 2) as i16 as i32 as u32);
+    // `bra.w` (opcode, displacement from the displacement word)
+    let at = 4 * v + 2;
+    let kind = at.wrapping_add(tables().shop_purchases.at16(x.b, at) as i16 as i32 as u32);
     match kind {
         shop::EXIT => {
             // the exit: the buyer leaves the list and goes to state 4, the palette comes back
             crate::mem::wr16(x.b, slot, 0);
             buyer.set_u16(x.b, Obj::STATE, 0x400);
-            x.set_a5_u8(0x48e, 0xf);
+            vars::FADE_PAGES.set(x.b, 0xf);
             crate::palette::full_brightness(x.b);
         }
         shop::MEAL_BIG => shop_meal(x, buyer, 0x30),
         shop::MEAL => shop_meal(x, buyer, 0x20),
         _ => {
-            buyer.set_u8(x.b, 0x58, 0xff);
-            let class = buyer_player(x, buyer).u8(x.b, 3) >> 1;
+            buyer.set_u8(x.b, Buyer::PURCHASE, 0xff);
+            let class = buyer_player(x, buyer).u8(x.b, Obj::VARIANT) >> 1;
             let refused: &[(u8, u16)] = match kind {
                 shop::NOT_CLASS_4 => &[(4, shop::WRONG_CLASS)],
                 shop::NOT_CLASSES_2_4_1 => &[(2, shop::TOO_MANY), (4, shop::WRONG_CLASS), (1, shop::WRONG_CLASS)],
@@ -165,7 +156,7 @@ pub(super) fn shop_buy<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj, slot: u32) {
 
 /// Is the player's gold sufficient (or free item: `+0x167` = 9)? Otherwise refusal.
 pub(super) fn shop_can_pay<R: Bench>(x: &mut Cx<'_, R>, player: Obj) -> bool {
-    if player.u8(x.b, 0x167) == 9 || player.u32(x.b, GOLD) as i32 >= x.u32(shop::PRICE) as i32 {
+    if player.u8(x.b, PlayerView::FREE_ITEM) == 9 || player.u32(x.b, GOLD) as i32 >= x.u32(shop::PRICE) as i32 {
         return true;
     }
     shop_refuse(x, shop::NO_GOLD);
@@ -175,17 +166,17 @@ pub(super) fn shop_can_pay<R: Bench>(x: &mut Cx<'_, R>, player: Obj) -> bool {
 /// `0xafd18`: the item joins the inventory (six slots `+0x140`, quantities `+0x148`): same
 /// item, or empty slot (0x56); at most 9.
 pub(super) fn shop_take<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) {
-    buyer.set_u8(x.b, 0x58, 0xff);
+    buyer.set_u8(x.b, Buyer::PURCHASE, 0xff);
     let player = buyer_player(x, buyer);
     if !shop_can_pay(x, player) {
         return;
     }
     let item = x.u16(shop::ITEM) as u8;
-    let slot = match (0..6).find(|&k| player.u8(x.b, 0x140 + k) == item) {
+    let slot = match (0..6).find(|&k| player.u8(x.b, PlayerView::INVENTORY + k) == item) {
         Some(k) => k,
-        None => match (0..6).find(|&k| player.u8(x.b, 0x140 + k) == 0x56) {
+        None => match (0..6).find(|&k| player.u8(x.b, PlayerView::INVENTORY + k) == 0x56) {
             Some(k) => {
-                player.set_u8(x.b, 0x148 + k, 0);
+                player.set_u8(x.b, PlayerView::QUANTITIES + k, 0);
                 k
             }
             None => {
@@ -194,14 +185,14 @@ pub(super) fn shop_take<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) {
             }
         },
     };
-    if player.u8(x.b, 0x148 + slot) as i8 >= 9 {
+    if player.u8(x.b, PlayerView::QUANTITIES + slot) as i8 >= 9 {
         crate::mem::wr16(x.b, shop::MESSAGE, shop::TOO_MANY);
         return crate::sound::play(x.b, shop::SOUND_REFUSED, x.o);
     }
     let id = x.u8(shop::ITEM + 1);
-    player.set_u8(x.b, 0x140 + slot, id);
-    let n = player.u8(x.b, 0x148 + slot).wrapping_add(1);
-    player.set_u8(x.b, 0x148 + slot, n);
+    player.set_u8(x.b, PlayerView::INVENTORY + slot, id);
+    let n = player.u8(x.b, PlayerView::QUANTITIES + slot).wrapping_add(1);
+    player.set_u8(x.b, PlayerView::QUANTITIES + slot, n);
     let collected = x.u8(shop::ITEM) as u32;
     crate::mem::wr8(x.b, A5.wrapping_sub(0x5b88).wrapping_add(collected), 1);
     shop_pay(x, player);
@@ -210,13 +201,13 @@ pub(super) fn shop_take<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) {
 /// `0xafdaa`: the price (six BCD bytes ending at `+0x53`) is subtracted from the player's gold (six bytes
 /// ending at `+0x117`), except for a free item (`+0x167` = 9, reset to 0xff).
 pub(super) fn shop_pay<R: Bench>(x: &mut Cx<'_, R>, player: Obj) {
-    if player.u8(x.b, 0x167) == 9 {
-        player.set_u8(x.b, 0x167, 0xff);
+    if player.u8(x.b, PlayerView::FREE_ITEM) == 9 {
+        player.set_u8(x.b, PlayerView::FREE_ITEM, 0xff);
     } else {
         let mut borrow = false;
         for k in 1..=6 {
-            let (v, b) = crate::game::sbcd(player.u8(x.b, 0x118 - k), x.u8(0x54 - k), borrow);
-            player.set_u8(x.b, 0x118 - k, v);
+            let (v, b) = crate::game::sbcd(player.u8(x.b, PlayerView::GOLD_END - k), x.u8(ShopPrice::PRICE_END - k), borrow);
+            player.set_u8(x.b, PlayerView::GOLD_END - k, v);
             borrow = b;
         }
     }
@@ -226,13 +217,13 @@ pub(super) fn shop_pay<R: Bench>(x: &mut Cx<'_, R>, player: Obj) {
 /// `0xafc3c`: meal (healing `heal`): refused if life is full; the last of the stock moves the
 /// stall back and clears its announcement.
 pub(super) fn shop_meal<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj, heal: u16) {
-    buyer.set_u8(x.b, 0x58, 0xff);
+    buyer.set_u8(x.b, Buyer::PURCHASE, 0xff);
     if x.u8(shop::STOCK_LEFT) == 0 {
         return;
     }
     let player = buyer_player(x, buyer);
-    let full = player.u16(x.b, 0x60);
-    if full as i16 <= player.u16(x.b, 0x62) as i16 {
+    let full = player.u16(x.b, PlayerView::LIFE_MAX);
+    if full as i16 <= player.u16(x.b, PlayerView::LIFE) as i16 {
         crate::mem::wr16(x.b, shop::MESSAGE, shop::FULL_LIFE);
         return crate::sound::play(x.b, shop::SOUND_REFUSED, x.o);
     }
@@ -247,17 +238,17 @@ pub(super) fn shop_meal<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj, heal: u16) {
         x.anim_step();
         x.set16(shop::MESSAGE_ID, 0);
     }
-    let life = player.u16(x.b, 0x62).wrapping_add(heal);
-    player.set_u16(x.b, 0x62, life);
+    let life = player.u16(x.b, PlayerView::LIFE).wrapping_add(heal);
+    player.set_u16(x.b, PlayerView::LIFE, life);
     if (full as i16) < life as i16 {
-        player.set_u16(x.b, 0x62, full);
+        player.set_u16(x.b, PlayerView::LIFE, full);
     }
     shop_pay(x, player);
 }
 
 pub(super) fn shop_in_zone<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) -> bool {
-    let across = x.u16(Obj::X).wrapping_sub(buyer.u16(x.b, Obj::X)).wrapping_add(x.u16(0x14));
-    if across > x.u16(0x16) {
+    let across = x.u16(Obj::X).wrapping_sub(buyer.u16(x.b, Obj::X)).wrapping_add(x.u16(Shop::ZONE_DX));
+    if across > x.u16(Shop::ZONE_HALF_WIDTH) {
         return false;
     }
     let depth = x
@@ -265,8 +256,8 @@ pub(super) fn shop_in_zone<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) -> bool {
         .wrapping_add(x.u16(Obj::Y))
         .wrapping_sub(buyer.u16(x.b, Obj::Z))
         .wrapping_sub(buyer.u16(x.b, Obj::Y))
-        .wrapping_add(x.u16(0x54));
-    depth <= x.u16(0x56)
+        .wrapping_add(x.u16(Shop::ZONE_DY));
+    depth <= x.u16(Shop::ZONE_HALF_DEPTH)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -274,27 +265,9 @@ pub(super) fn shop_in_zone<R: Bench>(x: &mut Cx<'_, R>, buyer: Obj) -> bool {
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod purse {
-    /// Initial offset (x, z) per creation mode `+0x2f`, according to `A5+0x20` (1: two-player game).
-    pub const OFFSETS_2P: u32 = 0xaef98;
-    pub const OFFSETS: u32 = 0xaef88;
-    /// Addresses in the text layer: gold digits (`+0x52`) and gauge (`+0x14`), per player.
-    pub const DIGITS_2P: u32 = 0xaef60;
-    pub const DIGITS: u32 = 0xaef50;
-    pub const GAUGE_2P: u32 = 0xaef7c;
-    pub const GAUGE: u32 = 0xaef6c;
-    /// Player icon (SOBJ 0): variant (bytes) and position (x, y) per player.
-    pub const ICON_VARIANT_2P: u32 = 0xaefa8;
-    pub const ICON_VARIANT: u32 = 0xaefa4;
-    pub const ICON_POS_2P: u32 = 0xaefbc;
-    pub const ICON_POS: u32 = 0xaefac;
-    /// Portrait palette per class (offsets in 0x256000).
-    pub const PORTRAIT: u32 = 0xaefc8;
-    pub const PORTRAITS: u32 = 0x256000;
-    /// End of the gauge: tile according to the remainder (words, indexed from -7 to 0).
-    pub const GAUGE_END: u32 = 0xaefee;
-    pub const ANIM_SET: u32 = 0x1c40c6;
+    pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x1c40c6);
     /// Continuation of the original code when a pool is full: `tst.w (1,A5)` (`effects::address_error`).
-    pub const POOL_FULL: u32 = 0xaf2bc;
+    pub const POOL_FULL: crate::data::RomAddr = crate::data::RomAddr(0xaf2bc);
     /// Nombre de curseurs encore ouverts (`A5-0x5553`).
     pub const OPEN: u32 = 0xff2aad;
     pub const OWNER: u32 = 0x50;
@@ -321,7 +294,7 @@ pub(super) fn leftover<R: Bench>(x: &mut Cx<'_, R>, pool: &pools::Pool) -> Obj {
 pub(super) const GOLD: u32 = 0x114;
 
 pub(super) fn two_players<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    x.a5_u8(0x20) == 1
+    crate::ram::CABINET.get(x.b) == 1
 }
 
 pub(super) fn purse<R: Bench>(x: &mut Cx<'_, R>) {
@@ -336,70 +309,69 @@ pub(super) fn purse<R: Bench>(x: &mut Cx<'_, R>) {
 /// Allocation by an original routine: the slot (A1), or `None` (carry).
 pub(super) fn purse_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
-    x.set16(0x18, 0);
+    x.set16(Purse::GAUGE_LEN, 0);
     let (cx, cy) = (crate::ram::CAMERA_X.get(x.b), crate::ram::CAMERA_Y.get(x.b));
     x.set16(Obj::X, cx);
     x.set16(Obj::Z, cy);
-    let mode = 4 * x.u8(0x2f) as u32;
-    let offsets = if two_players(x) { purse::OFFSETS_2P } else { purse::OFFSETS };
-    let (dx, dz) = (x.data16(offsets + mode), x.data16(offsets + mode + 2));
+    let mode = 4 * x.u8(Effect::SETTING) as u32;
+    let offsets = if two_players(x) { &tables().purse_offsets_2p } else { &tables().purse_offsets };
+    let (dx, dz) = (offsets.at16(x.b, mode), offsets.at16(x.b, mode + 2));
     x.add16(Obj::X, dx);
     x.add16(Obj::Z, dz);
     // 0x1a608 (palette page 1), still on the processor; D7 kept by the original
     crate::families::scenery::palette_page_1(x);
-    x.set8(0x2a, 1);
+    x.set8(Effect::OWN_PALETTE, 1);
     let owner = x.linked(purse::OWNER);
-    let player = owner.u8(x.b, 2);
+    let player = owner.u8(x.b, Obj::KIND);
     let palette = 0x18u8.wrapping_add(player);
-    x.set8(0x2b, palette);
+    x.set8(Effect::PALETTE, palette);
     crate::mem::wr32(x.b, 0x91c54e, 0xf062_f0f6);
     crate::mem::wr32(x.b, 0x91c552, 0xf800_ff33);
     // the original keeps D0 (the palette) across the allocation
-    let Some(item) = x.alloc(&pools::ITEM) else { crate::families::effects::address_error(purse::POOL_FULL) };
+    let Some(item) = x.alloc(&pools::ITEM) else { crate::families::effects::address_error(purse::POOL_FULL.0) };
     wr8(x.b, item.0, 1);
     wr8(x.b, item.0 + 2, 9);
     wr8(x.b, item.0 + 3, player);
     wr16(x.b, item.0 + 0x5c, x.o.0 as u16);
     // portrait: 8 longs of the class palette, with the brightness bit
     let dest = 0x91c000u32.wrapping_add(((palette as u16) << 5) as i16 as i32 as u32);
-    let class = owner.u8(x.b, 3) as u32;
-    let src = purse::PORTRAITS.wrapping_add(x.data16(purse::PORTRAIT + 2 * class) as i16 as i32 as u32);
+    let class = owner.u8(x.b, Obj::VARIANT) as u32;
+    let src = tables().purse_portrait.at16(x.b, 2 * class) as i16 as i32 as u32;
     for k in 0..8 {
-        let v = x.data32(src + 4 * k);
+        let v = tables().purse_portraits.at32(x.b, src.wrapping_add(4 * k));
         let v = if k < 6 { v | 0xf000_f000 } else { v.wrapping_add(0xf000_f000) };
         wr32(x.b, dest + 4 * k, v);
     }
     let p4 = 4 * player as u32;
-    let digits = if two_players(x) { purse::DIGITS_2P } else { purse::DIGITS };
-    let v = x.data32(digits + p4);
+    let digits = if two_players(x) { &tables().purse_digits_2p } else { &tables().purse_digits };
+    let v = digits.at32(x.b, p4);
     x.set32(purse::DIGITS_AT, v);
-    let gauge = if two_players(x) { purse::GAUGE_2P } else { purse::GAUGE };
-    let v = x.data32(gauge + p4);
+    let gauge = if two_players(x) { &tables().purse_gauge_2p } else { &tables().purse_gauge };
+    let v = gauge.at32(x.b, p4);
     x.set32(purse::GAUGE_AT, v);
-    let Some(peff) = x.alloc(&pools::PEFF) else { crate::families::effects::address_error(purse::POOL_FULL) };
+    let Some(peff) = x.alloc(&pools::PEFF) else { crate::families::effects::address_error(purse::POOL_FULL.0) };
     wr8(x.b, peff.0, 1);
     wr8(x.b, peff.0 + 2, 0x18);
     wr16(x.b, peff.0 + 0x5c, x.o.0 as u16);
     let w = x.u16(purse::OWNER);
     wr16(x.b, peff.0 + 0x50, w);
     let (pos, var) = if two_players(x) {
-        (purse::ICON_POS_2P, purse::ICON_VARIANT_2P)
+        (&tables().purse_icon_pos_2p, &tables().purse_icon_variant_2p)
     } else {
-        (purse::ICON_POS, purse::ICON_VARIANT)
+        (&tables().purse_icon_pos, &tables().purse_icon_variant)
     };
-    let (pos, var) = (pos + p4, var + player as u32);
-    let Some(icon) = x.alloc(&pools::SOBJ) else { crate::families::effects::address_error(purse::POOL_FULL) };
+    let Some(icon) = x.alloc(&pools::SOBJ) else { crate::families::effects::address_error(purse::POOL_FULL.0) };
     wr8(x.b, icon.0, 1);
     wr8(x.b, icon.0 + 2, 0);
-    let v = x.data8(var);
+    let v = var.at8(x.b, player as u32);
     wr8(x.b, icon.0 + 3, v);
-    let (px, py) = (x.data16(pos).wrapping_add(cx), x.data16(pos + 2).wrapping_add(cy));
+    let (px, py) = (pos.at16(x.b, p4).wrapping_add(cx), pos.at16(x.b, p4 + 2).wrapping_add(cy));
     wr16(x.b, icon.0 + Obj::X, px);
     wr16(x.b, icon.0 + Obj::Y, py);
     wr16(x.b, icon.0 + Obj::Z, 0);
     // six PEFF 0x11 (D5: the original's counter, kept by the allocation)
     for n in (0..=5u16).rev() {
-        let Some(o) = x.alloc(&pools::PEFF) else { crate::families::effects::address_error(purse::POOL_FULL) };
+        let Some(o) = x.alloc(&pools::PEFF) else { crate::families::effects::address_error(purse::POOL_FULL.0) };
         wr8(x.b, o.0, 1);
         wr8(x.b, o.0 + 2, 0x11);
         wr8(x.b, o.0 + 3, n as u8);
@@ -413,14 +385,14 @@ pub(super) fn purse_init<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn purse_anim<R: Bench>(x: &mut Cx<'_, R>, open: bool) {
     let owner = x.linked(purse::OWNER);
     x.set8(purse::OPENED, open as u8);
-    let class = owner.u8(x.b, 3);
+    let class = owner.u8(x.b, Obj::VARIANT);
     let base: u8 = match (class & 1 != 0, open) {
         (false, false) => 0x17,
         (true, false) => 0x2f,
         (false, true) => 0x18,
         (true, true) => 0x30,
     };
-    x.anim_start(purse::ANIM_SET, ((class & !1).wrapping_add(base) as u32) as u16);
+    x.anim_start(purse::ANIM_SET.0, ((class & !1).wrapping_add(base) as u32) as u16);
     x.reinsert();
 }
 
@@ -428,14 +400,14 @@ pub(super) fn purse_anim<R: Bench>(x: &mut Cx<'_, R>, open: bool) {
 pub(super) fn purse_release_linked<R: Bench>(x: &mut Cx<'_, R>) {
     let linked = x.linked(purse::LINKED);
     x.set16(purse::LINKED, 0);
-    linked.set_u8(x.b, 0x56, 0xff);
+    linked.set_u8(x.b, Linked::RELEASED, 0xff);
 }
 
 pub(super) fn purse_active<R: Bench>(x: &mut Cx<'_, R>) {
     let owner = x.linked(purse::OWNER);
-    let player = owner.u8(x.b, 2) as u32;
+    let player = owner.u8(x.b, Obj::KIND) as u32;
     let moves = A5 + player;
-    let buttons = A5 + 0xc + player;
+    let buttons = vars::INPUTS.0 + player;
     purse_give(x, owner, buttons);
     purse_draw_gauge(x, owner);
     purse_draw_gold(x, owner);
@@ -481,7 +453,7 @@ pub(super) fn purse_give<R: Bench>(x: &mut Cx<'_, R>, owner: Obj, buttons: u32) 
         }
         let amount = amount.min(owner.u32(x.b, GOLD) as i32);
         x.set32(purse::GIFT, amount as u32);
-        let receiver = Obj(other.u16(x.b, 0x50) as i16 as i32 as u32 & 0xff_ffff);
+        let receiver = Obj(other.u16(x.b, Buyer::PLAYER) as i16 as i32 as u32 & 0xff_ffff);
         let mut carry = false;
         for i in (1..4).rev() {
             let (v, c) = crate::ops::abcd(x.u8(purse::GIFT + i), receiver.u8(x.b, GOLD + i), carry);
@@ -505,7 +477,7 @@ pub(super) fn purse_give<R: Bench>(x: &mut Cx<'_, R>, owner: Obj, buttons: u32) 
 pub(super) fn purse_draw_gauge<R: Bench>(x: &mut Cx<'_, R>, owner: Obj) {
     let mut at = x.u32(purse::GAUGE_AT);
     let len = x.u16(purse::GAUGE_LEN);
-    let (mut max, mut cur) = (owner.u16(x.b, 0x60), owner.u16(x.b, 0x62));
+    let (mut max, mut cur) = (owner.u16(x.b, PlayerView::LIFE_MAX), owner.u16(x.b, PlayerView::LIFE));
     if two_players(x) {
         max >>= 1;
         cur >>= 1;
@@ -535,8 +507,9 @@ pub(super) fn purse_draw_gauge<R: Bench>(x: &mut Cx<'_, R>, owner: Obj) {
         wr16(x.b, at + 2, 0xa);
         at = at.wrapping_add(0x80);
     }
-    let end = purse::GAUGE_END.wrapping_add(max.wrapping_mul(2) as i16 as i32 as u32);
-    let tile = x.data16(end).wrapping_add(left);
+    // `max` is now between -7 and 0: the tiles of the gauge end are read backwards from the last one (0xaefee)
+    let end = 0xe_u32.wrapping_add(max.wrapping_mul(2) as i16 as i32 as u32);
+    let tile = tables().purse_gauge_end.at16(x.b, end).wrapping_add(left);
     wr16(x.b, at, tile);
     wr16(x.b, at + 2, 0xa);
 }
@@ -621,11 +594,6 @@ pub(super) fn purse_leave<R: Bench>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod counter {
-    /// Zone (4 words, data: a single entry), announcement per variant (words, program space),
-    /// animation per variant (words, data).
-    pub const ZONE: u32 = 0xb8132;
-    pub const MESSAGES: u32 = 0xb8126;
-    pub const ANIMATIONS: u32 = 0xb812c;
     /// The counter that holds the sale in progress (`A5-0x5542`).
     pub const ACTIVE: u32 = 0xff2abe;
     /// Scene scenery 0x64 (the vendor) created at purchase, kept in `+0x1a`.
@@ -643,7 +611,6 @@ pub(super) mod counter {
         (0x300, 0x1bb80005), (0x304, 0x1bc80005), (0x380, 0x1bb90005), (0x384, 0x1bc90005),
         (0x400, 0x1b7c0005), (0x404, 0x1b8c0005), (0x480, 0x1b7d0005), (0x484, 0x1b8d0005),
     ];
-    pub const GOODS: u32 = 0xb82e0;
 }
 
 /// `0xb83d8`: first buyer in the zone: the counter takes the sale (if there is no other) and
@@ -682,7 +649,7 @@ pub(super) fn counter_sale<R: Bench>(x: &mut Cx<'_, R>) {
                 continue;
             }
             let buyer = Obj(p as i16 as i32 as u32 & 0xff_ffff);
-            if buyer.u8(x.b, 0x58) as i8 <= 0 {
+            if buyer.u8(x.b, Buyer::PURCHASE) as i8 <= 0 {
                 continue;
             }
             let across = buyer.u16(x.b, Obj::X).wrapping_sub(crate::ram::CAMERA_X.get(x.b)).wrapping_sub(0xa8);
@@ -692,8 +659,8 @@ pub(super) fn counter_sale<R: Bench>(x: &mut Cx<'_, R>) {
             let depth = buyer.u16(x.b, Obj::Z).wrapping_add(buyer.u16(x.b, Obj::Y)).wrapping_sub(crate::ram::CAMERA_Y.get(x.b)).wrapping_sub(0x48);
             if depth <= 0x10 {
                 let seller = x.linked(counter::SELLER);
-                if seller.u16(x.b, 0x32) > 1 {
-                    seller.set_u16(x.b, 0x32, 1);
+                if seller.u16(x.b, VoteCreator::DONE) > 1 {
+                    seller.set_u16(x.b, VoteCreator::DONE, 1);
                 }
                 x.add8(counter::STEP, 2);
                 x.set16(counter::TIMER, 0x18);
@@ -711,9 +678,11 @@ pub(super) fn counter_sale<R: Bench>(x: &mut Cx<'_, R>) {
         wr32(x.b, counter::SIGN + off, tile);
     }
     let v = x.u8(f::VARIANT) as u32;
-    let mut at = crate::mem::prog32(x.b, counter::GOODS + 4 * v);
+    // the goods lists, designated by their address
+    let goods = &tables().counter_goods_lists;
+    let mut at = tables().counter_goods.at32(x.b, 4 * v).wrapping_sub(goods.rom);
     loop {
-        let setting = x.data8(at);
+        let setting = goods.at8(x.b, at);
         at += 1;
         if (setting as i8) < 0 {
             return;
@@ -723,11 +692,11 @@ pub(super) fn counter_sale<R: Bench>(x: &mut Cx<'_, R>) {
         wr8(x.b, o.0 + 2, 0x2a);
         wr16(x.b, o.0 + 0x5c, x.o.0 as u16);
         wr8(x.b, o.0 + 0x2f, setting);
-        let variant = x.data8(at);
+        let variant = goods.at8(x.b, at);
         wr8(x.b, o.0 + 3, variant);
-        let px = crate::ram::CAMERA_X.get(x.b).wrapping_add(x.data16(at + 1));
+        let px = crate::ram::CAMERA_X.get(x.b).wrapping_add(goods.at16(x.b, at + 1));
         wr16(x.b, o.0 + Obj::X, px);
-        let (z, y) = (x.data16(at + 3), x.data16(at + 5));
+        let (z, y) = (goods.at16(x.b, at + 3), goods.at16(x.b, at + 5));
         wr16(x.b, o.0 + Obj::Z, z);
         wr16(x.b, o.0 + Obj::Y, y);
         at += 7;
@@ -746,14 +715,14 @@ pub(super) fn counter<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::STATE, 2);
             for (k, off) in [0x14, 0x16, 0x54, 0x56].into_iter().enumerate() {
-                let w = x.data16(counter::ZONE + 2 * k as u32);
+                let w = tables().counter_zone.at16(x.b, 2 * k as u32);
                 x.set16(off, w);
             }
             let v = x.u8(f::VARIANT) as u32;
-            let message = x.rom16(counter::MESSAGES + 2 * v);
+            let message = tables().counter_messages.at16(x.b, 2 * v);
             x.set16(shop::MESSAGE_ID, message);
-            let anim = x.data16(counter::ANIMATIONS + 2 * v) as u32;
-            x.anim_start(shop::ANIM_SET, anim as u16);
+            let anim = tables().counter_animations.at16(x.b, 2 * v) as u32;
+            x.anim_start(shop::ANIM_SET.0, anim as u16);
             x.reinsert();
         }
         2 if x.u8(f::SUB_STATE) != 0 => counter_sale(x),

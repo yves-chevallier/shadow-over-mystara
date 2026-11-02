@@ -5,7 +5,7 @@ use super::*;
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod floater {
-    pub const ANIM_SET: u32 = 0x194062;
+    pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x194062);
     /// Step of the scene sequence (`A5-0x55c8`).
     pub const STEP: u32 = 0xff2a38;
     pub const TIMER: u32 = 0x54;
@@ -29,17 +29,17 @@ pub(super) fn floater<R: Bench>(x: &mut Cx<'_, R>) {
                     1
                 }
             };
-            x.anim_start(floater::ANIM_SET, anim);
+            x.anim_start(floater::ANIM_SET.0, anim);
             x.reinsert();
         }
         2 => match x.u8(f::VARIANT) {
             0 => floater_main(x),
             1 => {
                 // reflection stuck under its creator
-                if x.a5_u8(0x42) != 0 {
+                if vars::FROZEN.get(x.b) != 0 {
                     x.add8(f::STATE, 2);
                 }
-                let creator = x.linked(0x5c);
+                let creator = x.linked(Floater::CREATOR);
                 let z = creator.u16(x.b, Obj::Z).wrapping_add(0x3e);
                 x.set16(Obj::Z, z);
                 x.anim_step();
@@ -52,9 +52,9 @@ pub(super) fn floater<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Vertical undulation: the Z speed follows the current speed table, one step every four frames.
 pub(super) fn floater_wave<R: Bench>(x: &mut Cx<'_, R>) {
-    let k = x.u8(0x2d) as u32;
+    let k = x.u8(Obj::SPEED_INDEX) as u32;
     let table = x.u32(Obj::SPEED_TABLE);
-    let v = x.data16(table + 4 * k + 2);
+    let v = speed_word(x.b, table, 4 * k + 2);
     x.set16(Obj::VZ, v);
     let dz = ((v as u32) << 16) as i32 >> 8;
     x.add32(Obj::Z, dz as u32);
@@ -62,8 +62,8 @@ pub(super) fn floater_wave<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(floater::WAVE_TICK, t);
     if t == 0 {
         x.set16(floater::WAVE_TICK, 4);
-        let k = (x.u8(0x2d) + 1) & 0x1f;
-        x.set8(0x2d, k);
+        let k = (x.u8(Obj::SPEED_INDEX) + 1) & 0x1f;
+        x.set8(Obj::SPEED_INDEX, k);
     }
     x.anim_step();
 }
@@ -71,17 +71,17 @@ pub(super) fn floater_wave<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn floater_start_wave<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(Obj::VZ, 0x100_0000);
     x.set16(floater::WAVE_TICK, 4);
-    x.set8(0x2d, 0);
+    x.set8(Obj::SPEED_INDEX, 0);
     x.select_speed(&crate::objects::motion::SPEEDS_B, 1);
 }
 
 pub(super) fn floater_main<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB_STATE) {
         0 => {
-            if x.a5_u8(0x2e) == 6 {
+            if vars::SUB_STEP.get(x.b) == 6 {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(floater::TIMER, 0xc);
-                x.anim_start(floater::ANIM_SET, 1);
+                x.anim_start(floater::ANIM_SET.0, 1);
             } else {
                 x.anim_step();
             }
@@ -107,7 +107,7 @@ pub(super) fn floater_main<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 let z = rd16(x.b, o.0 + Obj::Z).wrapping_add(0x3e);
                 wr16(x.b, o.0 + Obj::Z, z);
-                x.set16(0x12, 0x8000);
+                x.set16(Effect::Y_LOW, 0x8000);
                 wr16(x.b, o.0 + 0x5c, x.o.0 as u16);
             }
         }
@@ -115,7 +115,7 @@ pub(super) fn floater_main<R: Bench>(x: &mut Cx<'_, R>) {
             if rd8(x.b, floater::STEP) == 0x18 {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(floater::TIMER, 0x80);
-                x.anim_start(floater::ANIM_SET, 3);
+                x.anim_start(floater::ANIM_SET.0, 3);
             } else {
                 floater_wave(x);
             }
@@ -125,23 +125,23 @@ pub(super) fn floater_main<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(floater::TIMER, t);
             if t == 0 {
                 x.add8(f::SUB_STATE, 2);
-                x.anim_start(floater::ANIM_SET, 1);
+                x.anim_start(floater::ANIM_SET.0, 1);
                 return;
             }
             if x.u8(floater::SHAKE) != 0 {
                 let s = x.u8(floater::SHAKE) - 1;
                 x.set8(floater::SHAKE, s);
                 if s == 0 {
-                    x.set_a5_u16(0x4ba, 0);
+                    crate::ram::SCROLL_Y_PLANE1.set(x.b, 0);
                 }
             }
-            if x.u8(0x33) != 0 {
+            if x.u8(Effect::ANIM_EVENT) != 0 {
                 // hit: screen shake
-                x.set8(0x33, 0);
+                x.set8(Effect::ANIM_EVENT, 0);
                 crate::placement::load_effect_palette(x.b, crate::placement::effect_palette::LIGHT);
                 crate::families::effects_creators::pillars(x.b);
                 crate::sound::play(x.b, crate::sound::CMD_357, x.o);
-                x.set_a5_u16(0x4ba, 0x100);
+                crate::ram::SCROLL_Y_PLANE1.set(x.b, 0x100);
                 x.set8(floater::SHAKE, 8);
                 crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
             }
@@ -185,13 +185,13 @@ pub(super) fn floater_rise<R: Bench>(x: &mut Cx<'_, R>) {
             x.anim_step();
         }
         2 => {
-            if x.a5_u8(0x2e) == 0xc {
+            if vars::SUB_STEP.get(x.b) == 0xc {
                 x.add8(f::SUB_STATE, 2);
             }
             floater_wave(x);
         }
         4 => {
-            let hidden = x.a5_u8(0x6f) & 1 != 0;
+            let hidden = vars::FRAME_BYTE.get(x.b) & 1 != 0;
             set_hidden(x, hidden);
             x.add16(Obj::Z, 4);
             if x.u16(Obj::Z) > 0x70 {
@@ -208,7 +208,7 @@ pub(super) fn floater_rise<R: Bench>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod machine {
-    pub const ANIM_SET: u32 = 0x196baa;
+    pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x196baa);
     pub const TIMER: u32 = 0x54;
 }
 
@@ -217,11 +217,11 @@ pub(super) fn machine<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::STATE, 2);
             let anim = if x.u8(f::VARIANT) != 0 { 3 } else { 0 };
-            x.anim_start(machine::ANIM_SET, anim);
+            x.anim_start(machine::ANIM_SET.0, anim);
             x.reinsert();
         }
         2 if x.u8(f::VARIANT) != 0 => {
-            if x.a5_u8(0x42) != 0 {
+            if vars::FROZEN.get(x.b) != 0 {
                 x.add8(f::STATE, 2);
             }
             x.anim_step();
@@ -234,9 +234,9 @@ pub(super) fn machine<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) fn machine_active<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB_STATE) {
         0 => {
-            if x.a5_u8(0x2e) == 6 {
+            if vars::SUB_STEP.get(x.b) == 6 {
                 x.add8(f::SUB_STATE, 2);
-                x.anim_start(machine::ANIM_SET, 2);
+                x.anim_start(machine::ANIM_SET.0, 2);
             } else {
                 x.anim_step();
             }
@@ -245,7 +245,7 @@ pub(super) fn machine_active<R: Bench>(x: &mut Cx<'_, R>) {
             if x.anim_step() {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(machine::TIMER, 0x40);
-                x.anim_start(machine::ANIM_SET, 0);
+                x.anim_start(machine::ANIM_SET.0, 0);
                 // a BOX 0x12 object; the original does not test the allocation failure
                 // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
                 let Obj(o) = x.alloc_unchecked(&pools::BOSS);
@@ -259,13 +259,13 @@ pub(super) fn machine_active<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(machine::TIMER, t);
             if t == 0 {
                 x.add8(f::SUB_STATE, 2);
-                x.anim_start(machine::ANIM_SET, 1);
+                x.anim_start(machine::ANIM_SET.0, 1);
             }
         }
         6 => {
             if x.anim_step() {
                 x.add8(f::SUB_STATE, 2);
-                x.anim_start(machine::ANIM_SET, 0);
+                x.anim_start(machine::ANIM_SET.0, 0);
                 // 0xb6eb0: the reflection (type 58 variant 1)
                 if let Some(o) = x.alloc(&pools::EFFCT) {
                     wr8(x.b, o.0, 1);
@@ -279,11 +279,11 @@ pub(super) fn machine_active<R: Bench>(x: &mut Cx<'_, R>) {
                     wr16(x.b, o.0 + Obj::X, px);
                     let pz = rd16(x.b, o.0 + Obj::Z).wrapping_add(0x1c);
                     wr16(x.b, o.0 + Obj::Z, pz);
-                    x.set16(0x12, 0x8000);
+                    x.set16(Effect::Y_LOW, 0x8000);
                     wr16(x.b, o.0 + 0x5c, x.o.0 as u16);
                 }
-            } else if x.u8(0x33) != 0 {
-                x.set8(0x33, 0);
+            } else if x.u8(Effect::ANIM_EVENT) != 0 {
+                x.set8(Effect::ANIM_EVENT, 0);
                 x.set16(Obj::X, 0x130);
                 x.set16(Obj::Y, 0x180);
             }
@@ -306,7 +306,7 @@ pub(super) fn machine_active<R: Bench>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod fish {
-    pub const ANIM_SET: u32 = 0x190a20;
+    pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x190a20);
     pub const TIMER: u32 = 0x58;
 }
 
@@ -330,15 +330,15 @@ pub(super) fn fish<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(fish::TIMER, 4);
             x.set8(Obj::SPEED_INDEX, 0);
             x.select_speed(&crate::objects::motion::SPEEDS_B, 1);
-            x.anim_start(fish::ANIM_SET, 6);
+            x.anim_start(fish::ANIM_SET.0, 6);
             x.reinsert();
         }
         0 => {
             x.add8(f::STATE, 2);
             x.set16(fish::TIMER, 0xa0);
-            let left = x.u8(0x2c) == 0;
+            let left = x.u8(Effect::FACING) == 0;
             fish_speed(x, left);
-            x.anim_start(fish::ANIM_SET, 1);
+            x.anim_start(fish::ANIM_SET.0, 1);
             x.reinsert();
         }
         2 if v == 0 => {
@@ -346,7 +346,7 @@ pub(super) fn fish<R: Bench>(x: &mut Cx<'_, R>) {
             // undulation in depth, like type 36 but without a noted speed
             let k = x.u8(Obj::SPEED_INDEX) as u32;
             let table = x.u32(Obj::SPEED_TABLE);
-            let w = x.data16(table + 4 * k + 2);
+            let w = speed_word(x.b, table, 4 * k + 2);
             x.add32(Obj::Y, (((w as u32) << 16) as i32 >> 8) as u32);
             let t = x.u16(fish::TIMER).wrapping_sub(1) & 3;
             x.set16(fish::TIMER, t);
@@ -374,7 +374,7 @@ pub(super) fn fish_swim<R: Bench>(x: &mut Cx<'_, R>) {
             if t == 0 {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(fish::TIMER, 0x60);
-                x.anim_start(fish::ANIM_SET, 0);
+                x.anim_start(fish::ANIM_SET.0, 0);
                 return;
             }
             x.move_x();
@@ -389,40 +389,40 @@ pub(super) fn fish_swim<R: Bench>(x: &mut Cx<'_, R>) {
             if turn {
                 let r = random_nibble16(x);
                 let v: u16 = if r & 1 != 0 { 0x180 } else { 0x100 };
-                let facing = x.u8(0x2c) ^ 0x20;
-                x.set8(0x2c, facing);
+                let facing = x.u8(Effect::FACING) ^ 0x20;
+                x.set8(Effect::FACING, facing);
                 x.set16(Obj::VX, if facing == 0 { v.wrapping_neg() } else { v });
             }
             x.anim_step();
         }
         2 => {
-            if x.a5_u8(0x2e) == 6 {
+            if vars::SUB_STEP.get(x.b) == 6 {
                 x.add8(f::SUB_STATE, 2);
-                x.set8(0x2c, 0x20);
-                x.anim_start(fish::ANIM_SET, 2);
+                x.set8(Effect::FACING, 0x20);
+                x.anim_start(fish::ANIM_SET.0, 2);
             }
         }
         4 => {
-            if x.a5_u8(0x2e) == 8 {
+            if vars::SUB_STEP.get(x.b) == 8 {
                 x.add8(f::SUB_STATE, 2);
-                x.anim_start(fish::ANIM_SET, 0);
+                x.anim_start(fish::ANIM_SET.0, 0);
             }
         }
         6 => {
-            if x.a5_u16(0x4ba) == 0 {
+            if crate::ram::SCROLL_Y_PLANE1.get(x.b) == 0 {
                 return;
             }
             // the screen shakes: jump
             x.add8(f::SUB_STATE, 2);
             if random_nibble16(x) & 1 != 0 {
-                let facing = x.u8(0x2c) ^ 0x20;
-                x.set8(0x2c, facing);
+                let facing = x.u8(Effect::FACING) ^ 0x20;
+                x.set8(Effect::FACING, facing);
             }
             x.set16(Obj::VZ, 0x400);
             x.set16(Obj::AZ, 0xffc8);
-            let vx: u16 = if x.u8(0x2c) != 0 { 0x200u16.wrapping_neg() } else { 0x200 };
+            let vx: u16 = if x.u8(Effect::FACING) != 0 { 0x200u16.wrapping_neg() } else { 0x200 };
             x.set16(Obj::VX, vx);
-            x.anim_start(fish::ANIM_SET, 4);
+            x.anim_start(fish::ANIM_SET.0, 4);
         }
         8 => {
             x.move_xz();
@@ -430,7 +430,7 @@ pub(super) fn fish_swim<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB_STATE, 2);
                 x.set32(Obj::Z, 0);
                 x.set16(fish::TIMER, 0x60);
-                x.anim_start(fish::ANIM_SET, 5);
+                x.anim_start(fish::ANIM_SET.0, 5);
             }
         }
         10 => {
@@ -451,7 +451,7 @@ pub(super) fn fish_swim<R: Bench>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod swimmer {
-    pub const ANIM_SET: u32 = 0x197768;
+    pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x197768);
     pub const TIMER: u32 = 0x42;
 }
 
@@ -462,7 +462,7 @@ pub(super) fn swimmer<R: Bench>(x: &mut Cx<'_, R>) {
             let side = random_nibble16(x) as u8 & 1;
             x.set8(f::VARIANT, side);
             let wave = random_nibble16(x) as u8 & 1;
-            x.set8(0x2f, wave);
+            x.set8(Effect::SETTING, wave);
             // 0xb7792: its wake (type 62)
             if let Some(o) = x.alloc(&pools::EFFCT) {
                 wr8(x.b, o.0, 1);
@@ -486,7 +486,7 @@ pub(super) fn swimmer<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 pub(super) fn swimmer_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
-    x.anim_start(swimmer::ANIM_SET, n as u16);
+    x.anim_start(swimmer::ANIM_SET.0, n as u16);
     x.anim_step();
 }
 
@@ -500,10 +500,10 @@ pub(super) fn swimmer_active<R: Bench>(x: &mut Cx<'_, R>) {
                 x.add8(f::SUB_STATE, 4);
                 x.set16(Obj::X, 399);
                 x.set16(Obj::Y, 312);
-                x.set8(0x2a, 1);
-                x.set8(0x2b, 0x1b);
+                x.set8(Effect::OWN_PALETTE, 1);
+                x.set8(Effect::PALETTE, 0x1b);
                 for k in 0..8 {
-                    let v = x.data32(0x253440 + 4 * k);
+                    let v = tables().swimmer_palette.nth32(x.b, k);
                     let v = if k < 6 { v | 0xf000_f000 } else { v.wrapping_add(0xf000_f000) };
                     wr32(x.b, 0x91c360 + 4 * k, v);
                 }
@@ -528,7 +528,7 @@ pub(super) fn swimmer_active<R: Bench>(x: &mut Cx<'_, R>) {
                 // undulation: rise (variant 0) or descent, direction inverted by `+0x2f`
                 let (base, wave): (u32, u32) = if right { (0x2000, 0x4000u32.wrapping_neg()) } else { (0x2000u32.wrapping_neg(), 0x4000) };
                 x.add32(Obj::Y, base);
-                if x.u8(0x2f) != 0 {
+                if x.u8(Effect::SETTING) != 0 {
                     x.add32(Obj::Y, wave);
                 }
                 x.anim_step();
@@ -548,8 +548,8 @@ pub(super) fn swimmer_active<R: Bench>(x: &mut Cx<'_, R>) {
                     return;
                 }
                 x.add8(f::SUB_STATE, 4);
-                let facing = x.u8(0x2c) ^ 0x20;
-                x.set8(0x2c, facing);
+                let facing = x.u8(Effect::FACING) ^ 0x20;
+                x.set8(Effect::FACING, facing);
                 swimmer_anim(x, 0);
             }
             20 => {
@@ -582,36 +582,36 @@ pub(super) fn swimmer_active<R: Bench>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod riser {
-    pub const ANIM_SET: u32 = 0x197208;
+    pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x197208);
     pub const TIMER: u32 = 0x56;
 }
 
 pub(super) fn riser_anim<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
     x.add8(f::SUB_STATE, 2);
-    x.anim_start(riser::ANIM_SET, n as u16);
+    x.anim_start(riser::ANIM_SET.0, n as u16);
 }
 
 /// Rises 3 points per frame and drags the camera along (`A5+0x50a`, 16.16).
 pub(super) fn riser_climb<R: Bench>(x: &mut Cx<'_, R>) {
     x.add16(Obj::Z, 3u16.wrapping_neg());
-    let cam = x.a5_u32(0x50a).wrapping_sub(0x2_1000);
-    x.set_a5_u32(0x50a, cam);
+    let cam = vars::CAMERA_Y_LONG.get(x.b).wrapping_sub(0x2_1000);
+    vars::CAMERA_Y_LONG.set(x.b, cam);
 }
 
 /// A projectile (type 50, variant `variant`) leaves the creator when it is hit (`+0x33`).
 pub(super) fn riser_shoot<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
-    if x.u8(0x33) == 0 {
+    if x.u8(Effect::ANIM_EVENT) == 0 {
         return;
     }
     x.add8(f::SUB_STATE, 2);
-    x.set8(0x33, 0);
+    x.set8(Effect::ANIM_EVENT, 0);
     let Some(o) = x.alloc(&pools::EFFCT) else { return };
     wr8(x.b, o.0, 1);
     wr8(x.b, o.0 + 2, 50);
     wr8(x.b, o.0 + 3, variant);
     if variant == 2 {
         wr16(x.b, o.0 + 0x42, x.o.0 as u16);
-        let facing = x.u8(0x2c);
+        let facing = x.u8(Effect::FACING);
         wr8(x.b, o.0 + 0x2c, facing);
         crate::sound::play(x.b, crate::sound::CMD_368, x.o);
     } else {
@@ -619,7 +619,7 @@ pub(super) fn riser_shoot<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
             let v = x.u16(field);
             wr16(x.b, o.0 + field, v);
         }
-        let dx: u16 = if x.u8(0x2c) != 0 { 0xfff0 } else { 0x10 };
+        let dx: u16 = if x.u8(Effect::FACING) != 0 { 0xfff0 } else { 0x10 };
         let px = rd16(x.b, o.0 + Obj::X).wrapping_add(dx);
         wr16(x.b, o.0 + Obj::X, px);
     }
@@ -631,15 +631,15 @@ pub(super) fn riser<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::STATE, 2);
             x.add16(Obj::Z, 0x32);
             crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
-            x.set_a5_u16(0x4be, 0xa);
+            vars::SHAKE.set(x.b, 0xa);
             crate::sound::play(x.b, crate::sound::CMD_5F, x.o);
             crate::sound::play(x.b, crate::sound::CMD_173, x.o);
-            x.anim_start(riser::ANIM_SET, 9);
+            x.anim_start(riser::ANIM_SET.0, 9);
         }
         2 => riser_active(x),
         _ => return free(x),
     }
-    if x.u8(0) != 0 {
+    if x.u8(Obj::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -677,7 +677,7 @@ pub(super) fn riser_active<R: Bench>(x: &mut Cx<'_, R>) {
         10 => {
             x.add16(Obj::Z, 3u16.wrapping_neg());
             let cam = crate::ram::CAMERA_Y.get(x.b).wrapping_sub(2);
-            x.set_a5_u16(0x50a, cam);
+            crate::ram::CAMERA_Y.set(x.b, cam);
             if (x.u16(Obj::Z) as i16) <= 0 {
                 x.set16(Obj::Z, 0);
                 riser_anim(x, 3);
@@ -686,7 +686,7 @@ pub(super) fn riser_active<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         12 => {
-            let carrier = x.linked(0x42);
+            let carrier = x.linked(Riser::CARRIER);
             if carrier.u32(x.b, f::STATE) == 0x0200_042a {
                 riser_anim(x, 4);
             } else {
@@ -695,7 +695,7 @@ pub(super) fn riser_active<R: Bench>(x: &mut Cx<'_, R>) {
         }
         14 => {
             x.anim_step();
-            if x.u8(0x33) != 0 {
+            if x.u8(Effect::ANIM_EVENT) != 0 {
                 x.add8(f::SUB_STATE, 2);
                 x.set16(riser::TIMER, 0x14);
             }
@@ -716,7 +716,7 @@ pub(super) fn riser_active<R: Bench>(x: &mut Cx<'_, R>) {
             wr8(x.b, o.0 + 2, 39);
             wr8(x.b, o.0 + 3, 9);
             wr16(x.b, o.0 + 0x42, x.o.0 as u16);
-            let facing = x.u8(0x2c);
+            let facing = x.u8(Effect::FACING);
             wr8(x.b, o.0 + 0x2c, facing);
             let (px, py) = (x.u16(Obj::X), x.u16(Obj::Y));
             wr16(x.b, o.0 + Obj::X, px);
@@ -752,7 +752,7 @@ pub(super) fn riser_active<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::VY, 0xfea0);
             x.set16(Obj::AY, 0);
             x.move_xyz();
-            x.anim_start(riser::ANIM_SET, 6);
+            x.anim_start(riser::ANIM_SET.0, 6);
         }
         24 => {
             x.move_xyz();

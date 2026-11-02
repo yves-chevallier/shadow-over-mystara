@@ -51,6 +51,7 @@ fn main() {
         if wanted("data") {
             spawns::extract(roms, &out.join("data/spawns.json"))?;
             speeds::extract(roms, &out.join("data/speeds.json"))?;
+            effects::extract(roms, &out.join("data/effects.json"))?;
             data::extract(roms, &out.join("data"))?;
         }
         if wanted("data") {
@@ -142,6 +143,10 @@ The rest of the program region: `natives.json`, the measured zones that the nati
 ## data/speeds.json
 
 Speed tables of the objects (motion by table): (vx, vy) per index, and the two arrays of tables of the code.
+
+## data/effects.json
+
+Tables of the visual effects (EFFCT family), by name: address, space, element size, values.
 
 ## data/spawns.json
 

@@ -5,12 +5,8 @@ use super::*;
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod attached {
-    pub const ANIM_SET: u32 = 0x19626c;
-    pub const ANIM_SET_B: u32 = 0x162ebc;
-    /// Duration (variant 5) and random offsets, words indexed by 4 bits of the generator (space
-    /// programme).
-    pub const DELAYS: u32 = 0xb6160;
-    pub const JITTER: u32 = 0xb6180;
+    pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x19626c);
+    pub const ANIM_SET_B: crate::data::RomAddr = crate::data::RomAddr(0x162ebc);
     /// L'objet porteur (pointeur de 16 bits).
     pub const CARRIER: u32 = 0x42;
     pub const TIMER: u32 = 0x58;
@@ -26,12 +22,12 @@ pub(super) fn countdown<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> bool {
 
 /// `bchg #1,(1,A0)` : bascule l'affichage.
 pub(super) fn toggle_hidden<R: Bench>(x: &mut Cx<'_, R>) {
-    let v = x.u8(0x01) ^ 2;
-    x.set8(0x01, v);
+    let v = x.u8(Obj::FLAGS) ^ 2;
+    x.set8(Obj::FLAGS, v);
 }
 
 pub(super) fn set_hidden<R: Bench>(x: &mut Cx<'_, R>, on: bool) {
-    x.set_bit(0x01, 1, on);
+    x.set_bit(Obj::FLAGS, 1, on);
 }
 
 /// Draw from the game's generator (0x19a88), 4 bits.
@@ -53,7 +49,7 @@ pub(super) fn attached<R: Bench>(x: &mut Cx<'_, R>) {
         2 => attached_active(x),
         _ => free(x),
     }
-    if x.u8(0) != 0 {
+    if x.u8(Obj::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -70,14 +66,14 @@ pub(super) fn attached_init<R: Bench>(x: &mut Cx<'_, R>) {
             if v == 3 {
                 x.add16(Obj::Y, 4u16.wrapping_neg());
             }
-            x.anim_start(attached::ANIM_SET, (v as u32) as u16);
+            x.anim_start(attached::ANIM_SET.0, (v as u32) as u16);
         }
         4 => {
             // reflection: copies the carrier's sprite frame
             copy_position(x, carrier);
             x.add16(Obj::Y, 1);
-            let frame = carrier.u32(x.b, 0x34);
-            x.set32(0x34, frame);
+            let frame = carrier.u32(x.b, Carrier::FRAME);
+            x.set32(Obj::FRAME, frame);
             for off in [0x3c, 0x3f] {
                 let b = carrier.u8(x.b, off);
                 x.set8(off, b);
@@ -88,41 +84,41 @@ pub(super) fn attached_init<R: Bench>(x: &mut Cx<'_, R>) {
         5 => {
             set_hidden(x, true);
             let k = random_nibble(x);
-            let delay = x.rom16(attached::DELAYS + 2 * k);
+            let delay = tables().attached_delays.at16(x.b, 2 * k);
             x.set16(attached::TIMER, delay);
             let k = random_nibble(x);
-            let dx = x.rom16(attached::JITTER + 2 * k);
+            let dx = tables().attached_jitter.at16(x.b, 2 * k);
             x.add16(Obj::X, dx);
             if (carrier.u8(x.b, f::VARIANT) as i8) < 5 {
                 let k = random_nibble(x);
-                let dy = x.rom16(attached::JITTER + 2 * k);
+                let dy = tables().attached_jitter.at16(x.b, 2 * k);
                 x.add16(Obj::Y, dy);
             }
-            x.anim_start(attached::ANIM_SET, 4);
+            x.anim_start(attached::ANIM_SET.0, 4);
             let carrier = x.linked(attached::CARRIER);
             if matches!(carrier.u8(x.b, f::VARIANT), 4 | 9) {
                 crate::sound::play(x.b, crate::sound::CMD_367_467, x.o);
             }
         }
         6 => {
-                x.anim_start(attached::ANIM_SET, 5);
+                x.anim_start(attached::ANIM_SET.0, 5);
             }
         7 => {}
         8..=11 => {
             const SOUNDS: [crate::sound::Sound; 4] = [crate::sound::CMD_102_202, crate::sound::CMD_10C_20C, crate::sound::CMD_10F_20F, crate::sound::CMD_109_209];
             crate::sound::play(x.b, SOUNDS[v as usize - 8], x.o);
-            x.anim_start(attached::ANIM_SET, (v as u32 - 3) as u16);
+            x.anim_start(attached::ANIM_SET.0, (v as u32 - 3) as u16);
         }
         12 | 13 => {
             set_hidden(x, true);
-            x.anim_start(attached::ANIM_SET, (v as u32 - 3) as u16);
+            x.anim_start(attached::ANIM_SET.0, (v as u32 - 3) as u16);
         }
         14 => {
-                x.anim_start(attached::ANIM_SET_B, 0x16);
+                x.anim_start(attached::ANIM_SET_B.0, 0x16);
             }
         15 => {
             x.set16(attached::TIMER, 0x28);
-            x.anim_start(attached::ANIM_SET, 0xb);
+            x.anim_start(attached::ANIM_SET.0, 0xb);
         }
         _ => {}
     }
@@ -227,9 +223,9 @@ pub(super) fn attached_shake<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
                 if !countdown(x, attached::TIMER) {
                     x.add8(f::SUB_STATE, 2);
                     let carrier = x.linked(attached::CARRIER);
-                    let facing = carrier.u8(x.b, 0x2c);
-                    x.set8(0x2c, facing);
-                    x.anim_start(attached::ANIM_SET_B, 0x17);
+                    let facing = carrier.u8(x.b, Effect::FACING);
+                    x.set8(Effect::FACING, facing);
+                    x.anim_start(attached::ANIM_SET_B.0, 0x17);
                 }
             } else if x.anim_step() {
                 x.add8(f::SUB_STATE, 2);
@@ -256,7 +252,7 @@ pub(super) fn attached_shake<R: Bench>(x: &mut Cx<'_, R>, sub: u8) {
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod prop {
-    pub const ANIM_SET: u32 = 0x1961be;
+    pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x1961be);
     pub const CARRIER: u32 = 0x42;
 }
 
@@ -280,7 +276,7 @@ pub(super) fn carrier_state<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
 pub(super) fn prop_fall<R: Bench>(x: &mut Cx<'_, R>, dz: u32, dx: u32, alt_camera: bool) {
     x.add32(Obj::Z, dz);
     x.add32(Obj::X, dx.wrapping_neg());
-    let top = if alt_camera && crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 { x.a5_u16(0x5b2) } else { x.a5_u16(0x5aa) };
+    let top = if alt_camera && crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 { vars::CAMERA2_Y.get(x.b) } else { vars::CAMERA1_Y.get(x.b) };
     if (top.wrapping_add(0xf0) as i16) <= (x.u16(Obj::Z) as i16) {
         return free(x);
     }
@@ -293,12 +289,12 @@ pub(super) fn prop<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::STATE, 2);
             prop_place(x, 0xffd0);
             let anim = (x.u8(f::VARIANT) != 0) as u32;
-            x.anim_start(prop::ANIM_SET, anim as u16);
+            x.anim_start(prop::ANIM_SET.0, anim as u16);
         }
         2 => prop_active(x),
         _ => free(x),
     }
-    if x.u8(0) != 0 {
+    if x.u8(Obj::ACTIVE) != 0 {
         if x.u8(f::VARIANT) != 0 {
             x.reinsert();
         } else {
@@ -358,11 +354,6 @@ pub(super) fn prop_active<R: Bench>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod double {
-    /// Per variant: arrival x (words), initial direction and speed table (bytes), space
-    /// programme.
-    pub const TARGETS: u32 = 0xae76e;
-    pub const DIRECTIONS: u32 = 0xae756;
-    pub const SPEEDS: u32 = 0xae75a;
     pub const CARRIER: u32 = 0x42;
     pub const TARGET_X: u32 = 0x58;
 }
@@ -370,18 +361,18 @@ pub(super) mod double {
 /// 0xae748 + 0x1b64: speed table of the variant.
 pub(super) fn double_speed_table<R: Bench>(x: &mut Cx<'_, R>) {
     let v = x.u8(f::VARIANT) as u32;
-    let n = (x.rom8(double::SPEEDS + v) as u32) as u16;
+    let n = (tables().double_speeds.at8(x.b, v) as u32) as u16;
     x.select_speed(&crate::objects::motion::SPEEDS_B, n);
 }
 
 /// Copies the carrier's sprite frame (and its height if `with_z`).
 pub(super) fn double_copy_frame<R: Bench>(x: &mut Cx<'_, R>, with_flip: bool, with_z: bool) {
     let carrier = x.linked(double::CARRIER);
-    let frame = carrier.u32(x.b, 0x34);
-    x.set32(0x34, frame);
+    let frame = carrier.u32(x.b, Carrier::FRAME);
+    x.set32(Obj::FRAME, frame);
     if with_flip {
-        let b = carrier.u8(x.b, 0x3b);
-        x.set8(0x3b, b);
+        let b = carrier.u8(x.b, Carrier::FRAME_ATTRIBUTE);
+        x.set8(Effect::FRAME_ATTRIBUTE, b);
     }
     if with_z {
         let z = carrier.u16(x.b, Obj::Z);
@@ -412,7 +403,7 @@ pub(super) fn double_spawn<R: Bench>(x: &mut Cx<'_, R>) {
     wr8(x.b, o.0 + 3, v);
     let carrier = x.u16(double::CARRIER);
     wr16(x.b, o.0 + 0x42, carrier);
-    let facing = x.u8(0x2c);
+    let facing = x.u8(Effect::FACING);
     wr8(x.b, o.0 + 0x2c, facing);
     let (px, py) = (x.u16(Obj::X), x.u16(Obj::Y));
     wr16(x.b, o.0 + Obj::X, px);
@@ -425,16 +416,16 @@ pub(super) fn double<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::STATE, 2);
             let v = x.u8(f::VARIANT) as u32;
-            let target = x.rom16(double::TARGETS + 2 * v);
+            let target = tables().double_targets.at16(x.b, 2 * v);
             x.set16(double::TARGET_X, target);
-            let dir = x.rom8(double::DIRECTIONS + v);
+            let dir = tables().double_directions.at8(x.b, v);
             x.set8(Obj::SPEED_INDEX, dir);
             double_speed_table(x);
             let carrier = x.linked(double::CARRIER);
             copy_position(x, carrier);
-            let frame = carrier.u32(x.b, 0x34);
-            x.set32(0x34, frame);
-            x.set8(0x3b, 0);
+            let frame = carrier.u32(x.b, Carrier::FRAME);
+            x.set32(Obj::FRAME, frame);
+            x.set8(Effect::FRAME_ATTRIBUTE, 0);
             for off in [0x3c, 0x3f] {
                 let b = carrier.u8(x.b, off);
                 x.set8(off, b);
@@ -443,7 +434,7 @@ pub(super) fn double<R: Bench>(x: &mut Cx<'_, R>) {
         2 => double_active(x),
         _ => return free(x),
     }
-    if x.u8(0) != 0 {
+    if x.u8(Obj::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -500,18 +491,15 @@ pub(super) fn double_active<R: Bench>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod double2 {
-    pub const TARGETS: u32 = 0xb7516;
-    pub const DIRECTIONS: u32 = 0xb74fe;
-    pub const SPEEDS: u32 = 0xb7502;
 }
 
 /// 0xb74ea: initial direction of the variant, and its speed table in D0 (D1 = variant).
 /// Direction of the variant; returns the speed table (D0 of the original).
 pub(super) fn double2_direction<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
     let v = x.u8(f::VARIANT) as u32;
-    let dir = x.rom8(double2::DIRECTIONS + v);
+    let dir = tables().double2_directions.at8(x.b, v);
     x.set8(Obj::SPEED_INDEX, dir);
-    x.rom8(double2::SPEEDS + v) as u16
+    tables().double2_speeds.at8(x.b, v) as u16
 }
 
 pub(super) fn double2<R: Bench>(x: &mut Cx<'_, R>) {
@@ -519,16 +507,16 @@ pub(super) fn double2<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::STATE, 2);
             let v = x.u8(f::VARIANT) as u32;
-            let target = x.rom16(double2::TARGETS + 2 * v);
+            let target = tables().double2_targets.at16(x.b, 2 * v);
             x.set16(double::TARGET_X, target);
             let n = double2_direction(x);
             x.select_speed(&crate::objects::motion::SPEEDS_B, n);
             let carrier = x.linked(double::CARRIER);
             copy_position(x, carrier);
             set_hidden(x, true);
-            let frame = carrier.u32(x.b, 0x34);
-            x.set32(0x34, frame);
-            x.set8(0x3b, 0);
+            let frame = carrier.u32(x.b, Carrier::FRAME);
+            x.set32(Obj::FRAME, frame);
+            x.set8(Effect::FRAME_ATTRIBUTE, 0);
             for off in [0x3c, 0x3f] {
                 let b = carrier.u8(x.b, off);
                 x.set8(off, b);
@@ -537,7 +525,7 @@ pub(super) fn double2<R: Bench>(x: &mut Cx<'_, R>) {
         2 => double2_active(x),
         _ => return free(x),
     }
-    if x.u8(0) != 0 {
+    if x.u8(Obj::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -559,7 +547,7 @@ pub(super) fn double2_active<R: Bench>(x: &mut Cx<'_, R>) {
                 let z = carrier.u16(x.b, Obj::Z);
                 x.set16(Obj::Z, z);
                 set_hidden(x, false);
-                x.set8(0x3b, 0);
+                x.set8(Effect::FRAME_ATTRIBUTE, 0);
                 for off in [0x3c, 0x3f] {
                     let b = carrier.u8(x.b, off);
                     x.set8(off, b);
@@ -590,7 +578,7 @@ pub(super) fn double2_active<R: Bench>(x: &mut Cx<'_, R>) {
                             wr8(x.b, o.0 + 2, 50);
                             wr8(x.b, o.0 + 3, 2);
                             wr16(x.b, o.0 + 0x42, x.o.0 as u16);
-                            let facing = x.u8(0x2c);
+                            let facing = x.u8(Effect::FACING);
                             wr8(x.b, o.0 + 0x2c, facing);
                         }
                     }
@@ -603,7 +591,7 @@ pub(super) fn double2_active<R: Bench>(x: &mut Cx<'_, R>) {
                                 let v = x.u16(field);
                                 wr16(x.b, o.0 + field, v);
                             }
-                            let dx: u16 = if x.u8(0x2c) != 0 { 0x10 } else { 0xfff0 };
+                            let dx: u16 = if x.u8(Effect::FACING) != 0 { 0x10 } else { 0xfff0 };
                             let px = rd16(x.b, o.0 + Obj::X).wrapping_add(dx);
                             wr16(x.b, o.0 + Obj::X, px);
                         }
@@ -621,7 +609,7 @@ pub(super) fn double2_active<R: Bench>(x: &mut Cx<'_, R>) {
                         wr8(x.b, o.0 + 3, v);
                         let c = x.u16(double::CARRIER);
                         wr16(x.b, o.0 + 0x42, c);
-                        let facing = x.u8(0x2c);
+                        let facing = x.u8(Effect::FACING);
                         wr8(x.b, o.0 + 0x2c, facing);
                         let (px, py) = (x.u16(Obj::X), x.u16(Obj::Y));
                         wr16(x.b, o.0 + Obj::X, px);

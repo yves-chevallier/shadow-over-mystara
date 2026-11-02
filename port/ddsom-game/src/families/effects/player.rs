@@ -7,13 +7,7 @@ use super::*;
 /// the player's orientation, waits for a delay (byte `+0x18`, a function of byte `+0x7d` of the player) then lives
 /// `0x28` frames before disappearing. Animation 0 of set `0x18e650`.
 pub(super) mod halo {
-    pub const ENTRY: u32 = 0xab726;
-    pub const TABLE: u32 = 0xab734;
-    /// Offsets (dx, dz) per half-variant, words.
-    pub const OFFSETS: u32 = 0xab79a;
-    /// Appearance delays according to `+0x7d` of the player.
-    pub const DELAYS: u32 = 0xab7b2;
-    pub const ANIMATIONS: u32 = 0x18e650;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x18e650);
     pub const DURATION: u32 = 0x14;
     pub const DELAY: u32 = 0x18;
 }
@@ -24,18 +18,18 @@ pub(super) fn halo_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let player = pointer(ctx, o, field::OWNER);
     copy_position(ctx, o, player);
     let rank = ((o.u8(ctx.b, Obj::VARIANT) >> 1) as u32) << 2;
-    let mut dx = ctx.prog16(halo::OFFSETS + rank);
-    let dz = ctx.prog16(halo::OFFSETS + 2 + rank);
+    let mut dx = tables().halo_offsets.at16(ctx.b, rank);
+    let dz = tables().halo_offsets.at16(ctx.b, 2 + rank);
     let turned = player.u8(ctx.b, field::FLIP) != 0;
     if !turned {
         dx = dx.wrapping_neg();
     }
     shifted_u16(ctx, o, Obj::X, dx);
     shifted_u16(ctx, o, Obj::Z, dz);
-    let phase = player.u8(ctx.b, 0x7d) as u32;
-    let delay = ctx.prog8(halo::DELAYS + phase);
+    let phase = player.u8(ctx.b, PlayerView::PHASE) as u32;
+    let delay = tables().halo_delays.at8(ctx.b, phase);
     o.set_u8(ctx.b, halo::DELAY, delay);
-    ctx.anim_start(halo::ANIMATIONS, 0);
+    ctx.anim_start(halo::ANIMATIONS.0, 0);
 }
 
 pub(super) fn halo_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
@@ -53,7 +47,7 @@ pub(super) fn halo_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 pub(super) fn halo<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, halo::TABLE, halo_init, halo_active)
+    three_states(ctx, halo_init, halo_active)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -62,9 +56,7 @@ pub(super) fn halo<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 57: mark placed 0x18 to the right and 0x2d above the owner (`+0x50`) as long as it stays in state `0x0204` /
 /// `+6 = 0x2c`; otherwise it disappears. Not exercised.
 pub(super) mod mark {
-    pub const ENTRY: u32 = 0xb6bca;
-    pub const TABLE: u32 = 0xb6bd8;
-    pub const ANIMATIONS: u32 = 0x196b62;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x196b62);
 }
 
 pub(super) fn mark_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
@@ -78,17 +70,17 @@ pub(super) fn mark_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u32(ctx.b, Obj::Y, y);
     shifted_u16(ctx, o, Obj::X, 0x18);
     shifted_u16(ctx, o, Obj::Z, 0x2d);
-    ctx.anim_start(mark::ANIMATIONS, 0);
+    ctx.anim_start(mark::ANIMATIONS.0, 0);
     ctx.reinsert();
 }
 
 pub(super) fn mark_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let owner = pointer(ctx, o, field::OWNER);
-    let state = owner.u16(ctx.b, 4);
+    let state = owner.u16(ctx.b, Carrier::STATE_WORD);
     if state != 0x204 {
         return ctx.free(&pools::EFFCT);
     }
-    let sub = owner.u8(ctx.b, 6);
+    let sub = owner.u8(ctx.b, Carrier::STEP);
     if sub != 0x2c {
         return ctx.free(&pools::EFFCT);
     }
@@ -98,13 +90,12 @@ pub(super) fn mark_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn mark_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, mark::TABLE, state as u32);
     match state {
         state::INIT => mark_init(ctx, o),
         state::ACTIVE => mark_active(ctx, o),
         state::FREED => ctx.free(&pools::EFFCT),
         state::DESTROYED => ctx.free(&pools::EFFCT),
-        _ => outside_table(target),
+        _ => bad_index(state as u32),
     }
 }
 
@@ -114,9 +105,7 @@ pub(super) fn mark_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 52: variant of the sparkle (type 15) that only watches the players of class 5 still alive (non-zero hit points
 /// `+0x62`); once triggered it blinks eight times, hidden as long as its object (`+0x5c`) is. Not exercised.
 pub(super) mod shimmer_class {
-    pub const ENTRY: u32 = 0xb65e0;
-    pub const TABLE: u32 = 0xb65ee;
-    pub const ANIMATIONS: u32 = 0x1bc77c;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x1bc77c);
     pub const REPETITIONS: u32 = 0x57;
     pub const DELAY: u32 = 0x58;
     pub const TOGGLE: u32 = 0x5a;
@@ -131,19 +120,19 @@ pub(super) fn shimmer_class_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u8(ctx.b, shimmer_class::REPETITIONS, 8);
     let t = draw(ctx, 0x1f);
     o.set_u16(ctx.b, shimmer_class::DELAY, t);
-    ctx.anim_start(shimmer_class::ANIMATIONS, 0);
+    ctx.anim_start(shimmer_class::ANIMATIONS.0, 0);
     ctx.reinsert();
 }
 
 /// `0xb668a`: has a living class 5 player passed near the object?
 pub(super) fn shimmer_class_player<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     for i in 0..4u32 {
-        let player = Obj(PLAYERS + i * STEP_PLAYER);
+        let player = crate::ram::PLAYERS.nth(i);
         let absent = player.u8(ctx.b, Obj::ACTIVE) == 0;
         if !absent {
-            let dead = player.u16(ctx.b, 0x62) == 0;
+            let dead = player.u16(ctx.b, PlayerView::LIFE) == 0;
             if !dead {
-                let class = player.u8(ctx.b, 3) >> 1;
+                let class = player.u8(ctx.b, PlayerView::CLASS) >> 1;
                 if !(class != 5) {
                     let dy = o.u16(ctx.b, Obj::Y).wrapping_sub(player.u16(ctx.b, Obj::Y)).wrapping_add(0x20);
                     if !(dy > 0x40) {
@@ -161,7 +150,7 @@ pub(super) fn shimmer_class_player<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 pub(super) fn shimmer_class_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let carrier = pointer(ctx, o, shimmer_class::CARRIER);
-    let state_carrier = carrier.u16(ctx.b, 4);
+    let state_carrier = carrier.u16(ctx.b, Carrier::STATE_WORD);
     if !(state_carrier == 0x200) {
         add_u8(ctx, o, Obj::STATE, 2);
     }
@@ -199,7 +188,7 @@ pub(super) fn shimmer_class_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 }
 
 pub(super) fn shimmer_class_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
-    three_states(ctx, shimmer_class::TABLE, shimmer_class_init, shimmer_class_active)
+    three_states(ctx, shimmer_class_init, shimmer_class_active)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -208,10 +197,7 @@ pub(super) fn shimmer_class_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// Type 24: accessory stuck to its owner (`+0x50`) at an offset (dx, dy, dz) read according to the variant; active only
 /// when the scene is not frozen (`A5+0x3d`). If the owner has disappeared it goes to state 6. Not exercised.
 pub(super) mod accessory {
-    pub const ENTRY: u32 = 0xb0ff2;
-    pub const TABLE: u32 = 0xb1000;
-    pub const OFFSETS: u32 = 0xb10c0;
-    pub const ANIMATIONS: u32 = 0x16e752;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x16e752);
     pub const END_ANIMATION: u32 = 0x43;
 }
 
@@ -231,10 +217,10 @@ pub(super) fn accessory_follow<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u8(ctx.b, field::FLIP, flip);
     let variant = o.u8(ctx.b, Obj::VARIANT);
     let rank = (variant << 3) as u32; // one-byte offset, like the original
-    let mut dx = ctx.prog16(accessory::OFFSETS + rank);
-    let dy = ctx.prog16(accessory::OFFSETS + rank + 2);
-    let ddepth = ctx.prog16(accessory::OFFSETS + rank + 4) as i16 as i32;
-    let dz = ctx.prog16(accessory::OFFSETS + rank + 6);
+    let mut dx = tables().accessory_offsets.at16(ctx.b, rank);
+    let dy = tables().accessory_offsets.at16(ctx.b, rank + 2);
+    let ddepth = tables().accessory_offsets.at16(ctx.b, rank + 4) as i16 as i32;
+    let dz = tables().accessory_offsets.at16(ctx.b, rank + 6);
     if !(flip == 0) {
         dx = dx.wrapping_neg();
     }
@@ -248,20 +234,19 @@ pub(super) fn accessory_follow<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn accessory_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, accessory::TABLE, state as u32);
     match state {
         state::INIT => {
-            let frozen = ctx.ram8(0x3d) != 0;
+            let frozen = vars::PAUSE.get(ctx.b) != 0;
             if frozen {
                 return;
             }
             add_u8(ctx, o, Obj::STATE, 2);
             o.set_u8(ctx.b, accessory::END_ANIMATION, 0);
             accessory_follow(ctx, o);
-            ctx.anim_start(accessory::ANIMATIONS, 3);
+            ctx.anim_start(accessory::ANIMATIONS.0, 3);
         }
         state::ACTIVE => {
-            let frozen = ctx.ram8(0x3d) != 0;
+            let frozen = vars::PAUSE.get(ctx.b) != 0;
             if frozen {
                 return;
             }
@@ -275,7 +260,7 @@ pub(super) fn accessory_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
         }
         state::FREED => ctx.free(&pools::EFFCT),
         state::DESTROYED => ctx.free(&pools::EFFCT),
-        _ => outside_table(target),
+        _ => bad_index(state as u32),
     }
 }
 
@@ -294,27 +279,9 @@ pub(super) fn accessory_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// State 2 animates the bubble (variant 3: makes it blink and sticks it back to its carrier); state 4 frees; a table
 /// code equal to `0x29` spawns a bubble of variant 3.
 pub(super) mod bubble {
-    pub const ENTRY: u32 = 0xaaac0;
-    pub const STATES: u32 = 0xaaace;
-    pub const VARIANTS: u32 = 0xaaaee;
-    pub const ANIMATIONS: u32 = 0x18d53e;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x18d53e);
     // jump tables according to the action (`+0x3d`)
-    pub const ACTIONS_0: u32 = 0xaab0e;
-    pub const ACTIONS_1: u32 = 0xaab40;
-    pub const ACTIONS_2: u32 = 0xaab5e;
-    pub const ACTIONS_5: u32 = 0xaab84;
-    pub const ACTIONS_6: u32 = 0xaab9c;
     // animation tables (data)
-    pub const TABLE_77: u32 = 0xab4de;
-    pub const TABLE_HIT: u32 = 0xab4f6;
-    pub const TABLE_CHARACTER: u32 = 0xab4f0;
-    pub const TABLE_OBJECT_A: u32 = 0xab4e4;
-    pub const TABLE_OBJECT_B: u32 = 0xab4ea;
-    pub const TABLE_10D_A: u32 = 0xab676;
-    pub const TABLE_10D_B: u32 = 0xab6a6;
-    pub const TABLE_10D_C: u32 = 0xab6d6;
-    /// Offsets of variant 3 (according to the carrier's class, `+0x43` and `+0x86` of the player).
-    pub const OFFSETS_3: u32 = 0xaae2a;
     pub const OWNER: u32 = 0x50;
     pub const DOOR: u32 = 0x54;
     pub const END_ANIMATION: u32 = 0x43;
@@ -326,9 +293,9 @@ pub(super) mod bubble {
 /// `0xaac00`: displays animation `number` of the bubble set, then sorts the object.
 pub(super) fn bubble_shown<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, number: u8) {
     if !(number != 0x2b) {
-        o.set_u16(ctx.b, 0x2a, 0x115);
+        o.set_u16(ctx.b, Effect::OWN_PALETTE, 0x115);
     }
-    ctx.anim_start(bubble::ANIMATIONS, number as u16);
+    ctx.anim_start(bubble::ANIMATIONS.0, number as u16);
     ctx.reinsert();
 }
 
@@ -357,8 +324,8 @@ pub(super) fn bubble_created_next<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 /// `0xaabf4`: reads the animation code in the table `table` (data) at index `index`; code `0x29` creates the
 /// continuation, the others are displayed.
-pub(super) fn bubble_reads<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, table: u32, index: u16) {
-    let code = ctx.data8(table + index as u32);
+pub(super) fn bubble_reads<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, table: &Table, index: u16) {
+    let code = table.at8(ctx.b, index as u32);
     if code == 0x29 {
         return bubble_created_next(ctx, o);
     }
@@ -380,7 +347,7 @@ pub(super) fn foreign_epilogue<R>(ctx: &mut Cx<'_, R>) {
 /// (SP)+,{A1-A4} ; rts`): the effect is reproduced on the stack.
 pub(super) fn bubble_next<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let owner = pointer(ctx, o, bubble::OWNER);
-    let character = (owner.u8(ctx.b, 3) >> 1).wrapping_sub(1);
+    let character = (owner.u8(ctx.b, Obj::VARIANT) >> 1).wrapping_sub(1);
     if character == 0 {
         return foreign_epilogue(ctx);
     }
@@ -395,7 +362,7 @@ pub(super) fn create_impact<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         n.set_u8(ctx.b, Obj::KIND, 0x1d);
         n.set_u8(ctx.b, Obj::VARIANT, 0);
         let door = o.u16(ctx.b, bubble::DOOR);
-        n.set_u16(ctx.b, 0x5c, door);
+        n.set_u16(ctx.b, Effect::LINK, door);
     }
 }
 
@@ -410,24 +377,24 @@ pub(super) fn bubble_random<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 /// Common cases of variant 0: `0xaabc4` (byte `+0x10d` or `+0x10e` of the player in D0).
 pub(super) fn bubble_0_common<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj, d0: u8) {
-    let class = player.u8(ctx.b, 3) >> 1;
-    let mark = player.u8(ctx.b, 0x77);
+    let class = player.u8(ctx.b, PlayerView::CLASS) >> 1;
+    let mark = player.u8(ctx.b, PlayerView::MARK);
     if !(mark == 0) {
-        player.set_u8(ctx.b, 0x77, 0);
-        bubble_reads(ctx, o, bubble::TABLE_77, class as u16);
+        player.set_u8(ctx.b, PlayerView::MARK, 0);
+        bubble_reads(ctx, o, &tables().bubble_table_77, class as u16);
         return bubble_random(ctx, o);
     }
     let index = ((d0 as u16) << 3).wrapping_add(class as u16);
-    bubble_reads(ctx, o, bubble::TABLE_HIT, index);
+    bubble_reads(ctx, o, &tables().bubble_table_hit, index);
     bubble_random(ctx, o);
 }
 
 /// `0xaabac`: animation according to `+0x10d` (or `+0x10e` for character 4).
 pub(super) fn bubble_0_action_10d<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj) {
-    let mut d0 = player.u8(ctx.b, 0x10d);
-    let class = player.u8(ctx.b, 3) >> 1;
+    let mut d0 = player.u8(ctx.b, PlayerView::COUNTER_A);
+    let class = player.u8(ctx.b, PlayerView::CLASS) >> 1;
     if !(class != 4) {
-        d0 = player.u8(ctx.b, 0x10e);
+        d0 = player.u8(ctx.b, PlayerView::COUNTER_B);
     }
     bubble_0_common(ctx, o, player, d0);
 }
@@ -435,51 +402,50 @@ pub(super) fn bubble_0_action_10d<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player:
 /// Tables of variant 0: the player's action `0x3d` leads to one of the ten routines.
 pub(super) fn bubble_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let player = pointer(ctx, o, bubble::OWNER);
-    let action = player.u8(ctx.b, 0x3d);
-    let target = target(ctx, bubble::ACTIONS_0, action as u32);
+    let action = player.u8(ctx.b, PlayerView::ACTION);
     let byte = |ctx: &mut Cx<'_, R>, off: u32| player.u8(ctx.b, off) as u16;
-    let class = player.u8(ctx.b, 3) >> 1;
+    let class = player.u8(ctx.b, PlayerView::CLASS) >> 1;
     match action {
         0 => bubble_0_action_10d(ctx, o, player),
         2 => {
-            let d0 = player.u8(ctx.b, 0x10e);
+            let d0 = player.u8(ctx.b, PlayerView::COUNTER_B);
             bubble_0_common(ctx, o, player, d0);
         }
         4 => {
             let index = byte(ctx, 0x10d);
-            bubble_reads(ctx, o, bubble::TABLE_10D_A, index);
+            bubble_reads(ctx, o, &tables().bubble_table_10d_a, index);
         }
         6 => {
             let index = byte(ctx, 0x10e);
-            bubble_reads(ctx, o, bubble::TABLE_10D_A, index);
+            bubble_reads(ctx, o, &tables().bubble_table_10d_a, index);
         }
         8 => {
             let index = byte(ctx, 0x10d);
-            bubble_reads(ctx, o, bubble::TABLE_10D_C, index);
+            bubble_reads(ctx, o, &tables().bubble_table_10d_c, index);
         }
         10 => {
             let index = byte(ctx, 0x10e);
-            bubble_reads(ctx, o, bubble::TABLE_10D_C, index);
+            bubble_reads(ctx, o, &tables().bubble_table_10d_c, index);
         }
         12 => {
             let mut index = byte(ctx, 0x10d);
             if !(class != 4) {
                 index = byte(ctx, 0x10e);
             }
-            bubble_reads(ctx, o, bubble::TABLE_10D_B, index);
+            bubble_reads(ctx, o, &tables().bubble_table_10d_b, index);
         }
-        14 => bubble_reads(ctx, o, bubble::TABLE_CHARACTER, class as u16),
+        14 => bubble_reads(ctx, o, &tables().bubble_table_character, class as u16),
         16 => {
             let door = pointer(ctx, o, bubble::DOOR);
             let is_box = door.u8(ctx.b, Obj::CLASS) == 0xa;
             if is_box {
                 return bubble_0_action_10d(ctx, o, player);
             }
-            let gauge_inactive = ctx.ram16(0x4be) != 0;
+            let gauge_inactive = vars::SHAKE.get(ctx.b) != 0;
             if !gauge_inactive {
                 crate::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xf0ff);
             }
-            bubble_reads(ctx, o, bubble::TABLE_OBJECT_A, class as u16);
+            bubble_reads(ctx, o, &tables().bubble_table_object_a, class as u16);
             bubble_next(ctx, o);
         }
         // 0xaacba (actions 18 and 20 share the same code)
@@ -489,43 +455,43 @@ pub(super) fn bubble_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             if is_box {
                 return bubble_0_action_10d(ctx, o, player);
             }
-            let gauge_inactive = ctx.ram16(0x4be) != 0;
+            let gauge_inactive = vars::SHAKE.get(ctx.b) != 0;
             if !gauge_inactive {
                 crate::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xf0ff);
             }
-            bubble_reads(ctx, o, bubble::TABLE_OBJECT_B, class as u16);
+            bubble_reads(ctx, o, &tables().bubble_table_object_b, class as u16);
             bubble_next(ctx, o);
         }
         // 0xaac82
         22 => bubble_shown(ctx, o, 0x23),
         // 0xaad12: the player's gauge (`+0x77`) has just been filled
         24 | 26 | 28 | 30 | 32 => {
-            let gauge = player.u8(ctx.b, 0x77) != 0;
+            let gauge = player.u8(ctx.b, PlayerView::MARK) != 0;
             if gauge {
-                player.set_u8(ctx.b, 0x77, 0);
+                player.set_u8(ctx.b, PlayerView::MARK, 0);
                 o.set_u8(ctx.b, field::MODE, 1);
                 crate::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xff00);
                 return bubble_shown(ctx, o, 0x24);
             }
             bubble_shown(ctx, o, 0x10);
         }
-        _ => outside_table(target),
+        _ => bad_index(action as u32),
     }
 }
 
 /// Variants 1, 2, 5 and 6: the action `0x3d` of the carried object (`+0x54`; player for variant 1) chooses a fixed
 /// animation.
-pub(super) fn bubble_by_action<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, offset_pointer: u32, doubler: bool, table: u32, count: u32) {
+pub(super) fn bubble_by_action<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, offset_pointer: u32, doubler: bool, always_0x10: bool, count: u32) {
     let source = pointer(ctx, o, offset_pointer);
-    let action = source.u8(ctx.b, 0x3d) as u32;
+    let action = source.u8(ctx.b, Carrier::ACTION_BYTE) as u32;
     let index = if doubler { action * 2 } else { action };
-    let target = target(ctx, table, index);
     if index >= count || (!doubler && index & 1 != 0) {
         // an action outside the table would lead the original into the code that follows it
-        outside_table(target);
+        bad_index(index);
     }
-    let code = match (table, index / if doubler { 2 } else { 1 }) {
-        (bubble::ACTIONS_1, _) => 0x10,
+    // the jump tables of the variants (`0xaab40` for variant 1, `0xaab5e`, `0xaab84`, `0xaab9c`) lead to these codes
+    let code = match (always_0x10, index / if doubler { 2 } else { 1 }) {
+        (true, _) => 0x10,
         (_, 0) => 0x25,
         (_, 1) => 0x26,
         _ => 0x27,
@@ -551,10 +517,11 @@ pub(super) fn bubble_3_reattach<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let y = door.u32(ctx.b, Obj::Y).wrapping_sub(1);
     o.set_u32(ctx.b, Obj::Y, y);
     let next = (o.u8(ctx.b, bubble::END_ANIMATION) & 1) as u16;
-    let base = bubble::OFFSETS_3 + (((d0 as u16) << 4).wrapping_add(next << 3)) as u32;
-    let index = ((door.u8(ctx.b, 0x86) as u32) << 2) & 0xffff;
-    let mut dx = ctx.data16(base + index);
-    let dz = ctx.data16(base + index + 2);
+    let base = (((d0 as u16) << 4).wrapping_add(next << 3)) as u32;
+    let index = ((door.u8(ctx.b, Carrier::POSE) as u32) << 2) & 0xffff;
+    let offsets = &tables().bubble_offsets_3;
+    let mut dx = offsets.at16(ctx.b, base + index);
+    let dz = offsets.at16(ctx.b, base + index + 2);
     shifted_u16(ctx, o, Obj::Z, dz);
     if !(flip != 0) {
         dx = dx.wrapping_neg();
@@ -565,7 +532,7 @@ pub(super) fn bubble_3_reattach<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn bubble_3_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let end = o.u8(ctx.b, bubble::END_ANIMATION);
     let number = if end == 0 { 0x29 } else { 0x2a };
-    ctx.anim_start(bubble::ANIMATIONS, number);
+    ctx.anim_start(bubble::ANIMATIONS.0, number);
     o.set_u8(ctx.b, bubble::COUNTDOWN_TIMER, 0x1e);
     bubble_3_reattach(ctx, o);
 }
@@ -574,17 +541,16 @@ pub(super) fn bubble_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     add_u8(ctx, o, Obj::STATE, 2);
     o.set_u8(ctx.b, field::MODE, 0);
     let variant = o.u8(ctx.b, Obj::VARIANT);
-    let target = target(ctx, bubble::VARIANTS, 2 * variant as u32);
     match variant {
         0 => bubble_0(ctx, o),
-        1 => bubble_by_action(ctx, o, bubble::OWNER, false, bubble::ACTIONS_1, 6),
-        2 => bubble_by_action(ctx, o, bubble::DOOR, true, bubble::ACTIONS_2, 20),
+        1 => bubble_by_action(ctx, o, bubble::OWNER, false, true, 6),
+        2 => bubble_by_action(ctx, o, bubble::DOOR, true, false, 20),
         3 => bubble_3_init(ctx, o),
         4 => bubble_shown(ctx, o, 0x23),
-        5 => bubble_by_action(ctx, o, bubble::DOOR, true, bubble::ACTIONS_5, 6),
-        6 => bubble_by_action(ctx, o, bubble::DOOR, true, bubble::ACTIONS_6, 6),
+        5 => bubble_by_action(ctx, o, bubble::DOOR, true, false, 6),
+        6 => bubble_by_action(ctx, o, bubble::DOOR, true, false, 6),
         7 => bubble_shown(ctx, o, 4),
-        _ => outside_table(target),
+        _ => bad_index(2 * variant as u32),
     }
 }
 
@@ -612,15 +578,15 @@ pub(super) fn bubble_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let mut value = 0u16;
     let hit = o.u8(ctx.b, bubble::HIT);
     if !(hit == 0) {
-        let gauge = ctx.ram16(0x4be) != 0;
+        let gauge = vars::SHAKE.get(ctx.b) != 0;
         if !gauge {
-            let blocked = ctx.ram8(0x4f) != 0;
+            let blocked = vars::BLOCKED.get(ctx.b) != 0;
             if !blocked {
                 value = 0x100;
             }
         }
     }
-    let address = crate::mem::A5.wrapping_add(0x4ba);
+    let address = crate::ram::SCROLL_Y_PLANE1.0;
     crate::mem::wr16(ctx.b, address, value);
     ctx.reinsert();
 }
@@ -629,7 +595,7 @@ pub(super) fn bubble_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn bubble_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let modified = o.u8(ctx.b, field::MODE);
     if !(modified == 0) {
-        let gauge = ctx.ram16(0x4be) != 0;
+        let gauge = vars::SHAKE.get(ctx.b) != 0;
         if !gauge {
             crate::mem::wr16(ctx.b, bubble::PALETTE_GAUGE, 0xffff);
         }
@@ -640,13 +606,12 @@ pub(super) fn bubble_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn bubble_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     let o = ctx.obj();
     let state = o.u8(ctx.b, Obj::STATE);
-    let target = target(ctx, bubble::STATES, state as u32);
     match state {
         state::INIT => bubble_init(ctx, o),
         state::ACTIVE => bubble_active(ctx, o),
         state::FREED => bubble_end(ctx, o),
         6 => ctx.free(&pools::EFFCT),
-        _ => outside_table(target),
+        _ => bad_index(state as u32),
     }
 }
 

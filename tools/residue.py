@@ -22,7 +22,7 @@ def keys(logs):
     for log in logs:
         for line in open(log):
             if line.startswith("residue:"):
-                for table, key, n in re.findall(r", ([a-z ]+) (0x[0-9a-f]+) ×(\d+)", line):
+                for table, key, n in re.findall(r", ([\w ()]+?) (0x[0-9a-f]+) ×(\d+)", line):
                     reads[(table, int(key, 16))] += int(n)
                     scenarios[(table, int(key, 16))] += 1
     return reads, scenarios

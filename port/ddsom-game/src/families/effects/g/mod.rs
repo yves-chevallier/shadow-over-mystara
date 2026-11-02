@@ -29,6 +29,9 @@ mod enemy;
 use enemy::*;
 mod rockets;
 use rockets::*;
+use crate::families::effects::tables::{held16, tables, Read, Table};
+use crate::families::effects::records::*;
+use crate::families::effects::vars;
 pub use rockets::Step;
 
 /// Shared fields.

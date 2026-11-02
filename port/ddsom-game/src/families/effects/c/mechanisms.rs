@@ -5,11 +5,7 @@ use super::*;
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod switch {
-    /// Positions (x, depth) per variant, program space.
-    pub const POSITIONS: u32 = 0xb9e08;
-    /// Contact box (dx, half-width, dy, half-depth), data.
-    pub const HIT_BOX: u32 = 0xb9f2c;
-    pub const ANIM_SET: u32 = 0x1bebc2;
+    pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x1bebc2);
     /// The controlled barrier (16-bit pointer); its non-zero byte `+0x5a`: already open.
     pub const BARRIER: u32 = 0x42;
     /// "Touched" flag read by the barrier.
@@ -26,15 +22,15 @@ pub(super) fn barrier_switch<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.add8(f::STATE, 2);
             let v = x.u8(f::VARIANT) as u32;
-            let (px, py) = (x.rom16(switch::POSITIONS + 4 * v), x.rom16(switch::POSITIONS + 4 * v + 2));
+            let (px, py) = (tables().switch_positions.at16(x.b, 4 * v), tables().switch_positions.at16(x.b, 4 * v + 2));
             x.set16(Obj::X, px);
             x.set16(Obj::Y, py);
-            x.anim_start(switch::ANIM_SET, 8);
+            x.anim_start(switch::ANIM_SET.0, 8);
         }
         2 => {
             if x.u8(f::SUB_STATE) == 0 {
                 let barrier = x.linked(switch::BARRIER);
-                if barrier.u8(x.b, 0x5a) != 0 {
+                if barrier.u8(x.b, BarrierView::OPEN) != 0 {
                     x.add8(f::SUB_STATE, 2);
                 } else {
                     x.set8(switch::PRESSED, 0);
@@ -45,7 +41,7 @@ pub(super) fn barrier_switch<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {}
         _ => free(x),
     }
-    if x.u8(0) != 0 {
+    if x.u8(Obj::ACTIVE) != 0 {
         x.reinsert_foreground();
     }
 }
@@ -53,10 +49,10 @@ pub(super) fn barrier_switch<R: Bench>(x: &mut Cx<'_, R>) {
 /// A player on the ground, then a barrel (BOX 3 variant 1) on the ground, on the switch.
 pub(super) fn switch_watch<R: Bench>(x: &mut Cx<'_, R>) {
     let hit_box = (
-        x.data16(switch::HIT_BOX),
-        x.data16(switch::HIT_BOX + 2),
-        x.data16(switch::HIT_BOX + 4),
-        x.data16(switch::HIT_BOX + 6),
+        tables().switch_hit_box.at16(x.b, 0),
+        tables().switch_hit_box.at16(x.b, 2),
+        tables().switch_hit_box.at16(x.b, 4),
+        tables().switch_hit_box.at16(x.b, 6),
     );
     for p in players() {
         if p.is_active(x.b) && (p.u16(x.b, Obj::Z) as i16) <= 0 && in_box(x, p, hit_box) {
@@ -69,8 +65,8 @@ pub(super) fn switch_watch<R: Bench>(x: &mut Cx<'_, R>) {
         if rd8(x.b, o.0) != 0
             && o.u8(x.b, f::HIDDEN) == 0
             && (o.u16(x.b, Obj::Z) as i16) <= 0
-            && o.u8(x.b, 2) == 3
-            && o.u8(x.b, 3) == 1
+            && o.u8(x.b, Obj::KIND) == 3
+            && o.u8(x.b, Obj::VARIANT) == 1
             && in_box(x, o, hit_box)
         {
             return x.set8(switch::PRESSED, 1);
@@ -83,11 +79,7 @@ pub(super) fn switch_watch<R: Bench>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod barrier {
-    pub const ANIM_SET: u32 = 0x1c03a6;
-    /// Variant of the SET 7 scenery placed under the barrier (bytes, program space).
-    pub const SET_VARIANTS: u32 = 0xba034;
-    /// Switch variants, four bytes per variant (data); a negative value stops the list.
-    pub const SWITCHES: u32 = 0xba07c;
+    pub const ANIM_SET: crate::data::RomAddr = crate::data::RomAddr(0x1c03a6);
     pub const OPEN_SOUND: crate::sound::Sound = crate::sound::CMD_34E_44E;
     /// Associated SET scenery (16-bit pointer).
     pub const SET: u32 = 0x46;
@@ -119,7 +111,7 @@ pub(super) fn barrier<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(Obj::VX, vx);
                 if (x.u16(Obj::Z) as i16) >= 0x80 {
                     let set = x.linked(barrier::SET);
-                    set.set_u8(x.b, 0x2f, 0);
+                    set.set_u8(x.b, Effect::SETTING, 0);
                     free(x);
                 }
             }
@@ -127,7 +119,7 @@ pub(super) fn barrier<R: Bench>(x: &mut Cx<'_, R>) {
         4 => {}
         _ => free(x),
     }
-    if x.u8(0) != 0 {
+    if x.u8(Obj::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -144,17 +136,18 @@ pub(super) fn barrier_init<R: Bench>(x: &mut Cx<'_, R>) {
     wr8(x.b, set.0, 1);
     wr8(x.b, set.0 + 2, 7);
     wr8(x.b, set.0 + 0x2f, 1);
-    let sv = x.rom8(barrier::SET_VARIANTS + v);
+    let sv = tables().barrier_set_variants.at8(x.b, v);
     wr8(x.b, set.0 + 3, sv);
     x.set16(barrier::SET, set.0 as u16);
     // the switches
-    let list = barrier::SWITCHES + 4 * v;
+    let switches = &tables().barrier_switches;
+    let list = 4 * v;
     let mut slot = barrier::CHILDREN;
     for k in 0..4 {
-        if k > 0 && (x.data8(list + k) as i8) < 0 {
+        if k > 0 && (switches.at8(x.b, list + k) as i8) < 0 {
             break;
         }
-        let variant = x.data8(list + k);
+        let variant = switches.at8(x.b, list + k);
         if let Some(o) = x.alloc(&pools::EFFCT) {
             wr8(x.b, o.0, 1);
             wr8(x.b, o.0 + 2, 87);
@@ -166,7 +159,7 @@ pub(super) fn barrier_init<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     let anim = if matches!(v, 1 | 4) { 0x19 } else { 0x18 };
-    x.anim_start(barrier::ANIM_SET, anim);
+    x.anim_start(barrier::ANIM_SET.0, anim);
 }
 
 /// 0xba094: all the switches are pressed (bit 0 of each one's `+0x30`).
@@ -178,7 +171,7 @@ pub(super) fn barrier_all_pressed<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let mut all = 1u8;
     for k in 0..n as u32 {
         let child = x.linked(barrier::CHILDREN + 2 * k);
-        all &= child.u8(x.b, 0x30);
+        all &= child.u8(x.b, SwitchView::PRESSED);
     }
     all != 0
 }
@@ -193,22 +186,22 @@ pub(super) fn pillar<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
-            let base = x.linked(0x50);
+            let base = x.linked(Pillar::BASE);
             let (bx, by) = (base.u16(x.b, Obj::X), base.u16(x.b, Obj::Y));
             x.set16(Obj::X, bx);
             x.set16(Obj::Y, by);
-            base.set_u16(x.b, 0x12, 0x4000);
-            x.set16(0x12, if v & 2 != 0 { 0x8000 } else { 0 });
+            base.set_u16(x.b, Carrier::Y_LOW, 0x4000);
+            x.set16(Effect::Y_LOW, if v & 2 != 0 { 0x8000 } else { 0 });
             let top = if crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 { crate::ram::CAMERA_ALT_Y.get(x.b) } else { crate::ram::CAMERA_Y.get(x.b) };
             x.set16(Obj::Z, top.wrapping_add(0x100).wrapping_sub(by));
-            let delay = x.rom8(0xb7ea2 + v as u32);
-            x.set8(0x58, delay);
+            let delay = tables().pillar_delays.at8(x.b, v as u32);
+            x.set8(Pillar::DELAY, delay);
             x.anim_start(0x1b67f2, (5u8.wrapping_add(v) as u32) as u16);
         }
         2 => {
-            let delay = x.u8(0x58);
+            let delay = x.u8(Pillar::DELAY);
             if delay != 0 {
-                x.set8(0x58, delay - 1);
+                x.set8(Pillar::DELAY, delay - 1);
             } else {
                 let z = x.u16(Obj::Z);
                 let rising = if v & 1 != 0 { z > 0x60 } else { (z as i16) >= 0 };
@@ -219,9 +212,9 @@ pub(super) fn pillar<R: Bench>(x: &mut Cx<'_, R>) {
             if rd16(x.b, 0xff2a3a) <= 0x40 {
                 x.add8(f::STATE, 2);
                 for k in 0..4 {
-                    let p = Obj(A5 + 0x5de + 0x200 * k);
-                    if p.is_active(x.b) && p.u16(x.b, 0x62) != 0 {
-                        p.set_u8(x.b, 6, 0xe);
+                    let p = crate::ram::PLAYERS.nth(k);
+                    if p.is_active(x.b) && p.u16(x.b, PlayerView::LIFE) != 0 {
+                        p.set_u8(x.b, PlayerView::STEP, 0xe);
                     }
                 }
             }
@@ -240,38 +233,38 @@ pub(super) fn ferry<R: Bench>(x: &mut Cx<'_, R>) {
     if x.suspended() {
         return x.set8(f::STATE, 4);
     }
-    if x.a5_u8(0x3d) != 0 {
+    if vars::PAUSE.get(x.b) != 0 {
         return;
     }
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
-            x.set32(0x58, 0x1_0000);
+            x.set32(Ferry::SPEED, 0x1_0000);
             x.set16(Obj::Z, 0);
-            x.set_a5_u8(0x42, 0);
+            vars::FROZEN.set(x.b, 0);
             x.anim_start(0x1c03a6, 0);
             x.reinsert();
         }
         2 if x.u8(f::SUB_STATE) == 0 => {
-            let v = x.u32(0x58);
+            let v = x.u32(Ferry::SPEED);
             x.add32(Obj::X, v);
             if crate::ram::PHASE.get(x.b) == 0xc {
                 x.add8(f::SUB_STATE, 2);
                 // Original glitch: the allocation failure is not tested, the link takes the A1 left behind.
                 let scenery = scene_set_of(x, 0x63).unwrap_or_else(|| leftover(x, &pools::SET));
-                x.set16(0x5c, scenery.0 as u16);
+                x.set16(Ferry::SCENERY, scenery.0 as u16);
             }
         }
         2 => {
-            let stop = x.linked(0x5c);
-            if stop.u8(x.b, 0x22) != 0 {
-                return x.set_a5_u8(0x42, 1);
+            let stop = x.linked(Ferry::SCENERY);
+            if stop.u8(x.b, Carrier::HALTED) != 0 {
+                return vars::FROZEN.set(x.b, 1);
             }
-            let dx = x.u32(0x58);
+            let dx = x.u32(Ferry::SPEED);
             x.add32(Obj::X, dx);
             let (fx, fy) = (x.u16(Obj::X), x.u16(Obj::Y));
             for k in 0..4 {
-                let p = Obj(A5 + 0x5de + 0x200 * k);
+                let p = crate::ram::PLAYERS.nth(k);
                 if !p.is_active(x.b) {
                     continue;
                 }
@@ -298,11 +291,6 @@ pub(super) fn ferry<R: Bench>(x: &mut Cx<'_, R>) {
 // ---------------------------------------------------------------------------------------------
 
 pub(super) mod tiles {
-    /// X of each slab (words, program space); variants of the SET 6 scenery placed on pressing and
-    /// release (bytes, program space).
-    pub const POSITIONS: u32 = 0xabd28;
-    pub const PRESSED: u32 = 0xabe7e;
-    pub const RELEASED: u32 = 0xabe8e;
     /// Neighbors (16-bit pointers): previous `+0x30`, next `+0x32`; pressed `+0x34`.
     pub const PREVIOUS: u32 = 0x30;
     pub const NEXT: u32 = 0x32;
@@ -316,7 +304,7 @@ pub(super) fn floor_tile<R: Bench>(x: &mut Cx<'_, R>) {
         0 => {
             x.set8(tiles::DOWN, 0);
             x.set16(Obj::Y, 0x70);
-            let px = x.rom16(tiles::POSITIONS + 2 * v as u32);
+            let px = tables().tiles_positions.at16(x.b, 2 * v as u32);
             x.set16(Obj::X, px);
             if (v as i8) < 9 {
                 let Some(o) = x.alloc(&pools::EFFCT) else { return };
@@ -351,7 +339,7 @@ pub(super) fn floor_tile_watch<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     let tx = x.u16(Obj::X);
     let mut stepped = false;
     for k in 0..4 {
-        let p = Obj(A5 + 0x5de + 0x200 * k);
+        let p = crate::ram::PLAYERS.nth(k);
         if !p.is_active(x.b) || p.u16(x.b, Obj::Z) != 0 {
             continue;
         }
@@ -376,8 +364,8 @@ pub(super) fn floor_tile_watch<R: Bench>(x: &mut Cx<'_, R>, v: u8) {
     let a = rd8(x.b, o.0).wrapping_add(1);
     wr8(x.b, o.0, a);
     wr8(x.b, o.0 + 2, 6);
-    let table = if stepped { tiles::PRESSED } else { tiles::RELEASED };
-    let variant = x.rom8(table + v as u32);
+    let table = if stepped { &tables().tiles_pressed } else { &tables().tiles_released };
+    let variant = table.at8(x.b, v as u32);
     wr8(x.b, o.0 + 3, variant);
     wr8(x.b, o.0 + 0x2f, 0);
     if stepped {

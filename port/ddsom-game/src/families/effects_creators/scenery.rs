@@ -71,7 +71,7 @@ pub(crate) fn scenery_4_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) ->
     o.set_u8(b, SETTING, v as u8);
     let high = (v & 4) >> 2;
     r.d_word(0, high);
-    o.set_u8(b, 0x58, high as u8);
+    o.set_u8(b, Effect::BLINK_PHASE, high as u8);
     link(r, b, o, link::SCENERY, creator.0);
     Some(o)
 }
@@ -111,19 +111,19 @@ pub(crate) fn spell_ring_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, s
 /// 0xb3e4e, 0xb3ec6: cries of a boss (scene effect 42, variant `variant`): a randomly drawn sheet (`rng & 0x38`, bytes
 /// in `table`) gives the number of effects minus one, then the setting `+0x2f` of each; linked to the creator by
 /// `+0x46`. A2 follows the reading of the sheet.
-pub(crate) fn shouts_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8, table: u32) -> Option<Obj> {
+pub(crate) fn shouts_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8, table: &Table) -> Option<Obj> {
     let rng = crate::rng::random(b);
-    let mut at = table + and_d0(r, rng, 0x38) as u32;
-    let n = rd8(b, at);
+    let mut at = and_d0(r, rng, 0x38) as u32;
+    let n = table.at8(b, at);
     r.d(1, n as u32);
     at += 1;
     repeats(r, b, 1, n as u16, |r, b, _| {
-        r.a(2, at);
+        r.a(2, table.rom + at);
         let o = spawn(r, b, kind::SCENERY)?;
         o.set_u8(b, Obj::VARIANT, variant);
-        let setting = rd8(b, at);
+        let setting = table.at8(b, at);
         at += 1;
-        r.a(2, at);
+        r.a(2, table.rom + at);
         o.set_u8(b, SETTING, setting);
         link(r, b, o, link::SCENERY, creator.0);
         Some(o)
@@ -188,7 +188,7 @@ pub(crate) fn tile_block(b: &mut Cps2Bus, mut at: u32, mut tile: u16, attr: u16)
 
 /// Fish (type 30) placed on the alternate camera.
 pub(super) fn fish_at_camera(b: &mut Cps2Bus, o: Obj) {
-    let (x, y) = (rd16(b, ALT_CAMERA_X), rd16(b, ALT_CAMERA_Y));
+    let (x, y) = (crate::ram::CAMERA_ALT_X.get(b), crate::ram::CAMERA_ALT_Y.get(b));
     o.set_u16(b, Obj::X, x);
     o.set_u16(b, Obj::Y, y);
 }
@@ -206,11 +206,11 @@ pub(crate) fn fish_school(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
         o.set_u16(b, Obj::Z, 0xffc0);
         let x = o.u16(b, Obj::X).wrapping_sub(0x20);
         o.set_u16(b, Obj::X, x);
-        let dy = prog16(b, 0xb17ae + k as u32);
+        let dy = tables().fish_school.at16(b, k as u32);
         r.d_word(0, dy);
         let y = o.u16(b, Obj::Y).wrapping_add(dy);
         o.set_u16(b, Obj::Y, y);
-        let speed = prog16(b, 0xb17b0 + k as u32);
+        let speed = tables().fish_school.at16(b, k as u32 + 2);
         put16(r, b, o, 0x58, speed);
         k += 4;
         r.d_word(4, k);
@@ -227,7 +227,8 @@ pub(crate) fn fish_swimmers(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
         let o = spawn(r, b, kind::FISH)?;
         o.set_u8(b, Obj::VARIANT, 1);
         fish_at_camera(b, o);
-        let (dx, dy) = (prog16(b, 0xb1808 + k as u32), prog16(b, 0xb180a + k as u32));
+        let swimmers = &tables().fish_swimmers;
+        let (dx, dy) = (swimmers.at16(b, k as u32), swimmers.at16(b, k as u32 + 2));
         r.d_word(0, dx);
         r.d_word(1, dy);
         let x = o.u16(b, Obj::X).wrapping_add(dx);
@@ -256,9 +257,9 @@ pub(crate) fn pillars_via(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
     r.d(6, 3);
     let mut last = None;
     for k in 0..4u16 {
-        let p = Obj(PLAYERS + PLAYER_STRIDE * k as u32);
+        let p = crate::ram::PLAYERS.nth(k as u32);
         r.a(2, p.0);
-        if p.u8(b, Obj::ACTIVE) != 0 && p.u16(b, 0x62) != 0 {
+        if p.u8(b, Obj::ACTIVE) != 0 && p.u16(b, PlayerView::LIFE) != 0 {
             r.d(5, 3);
             last = Some(repeats(r, b, 5, 3, |r, b, n| {
                 let o = spawn(r, b, kind::PILLAR)?;
@@ -269,7 +270,7 @@ pub(crate) fn pillars_via(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
         } else {
             r.flags(0, Size::Byte);
         }
-        r.a(2, p.0 + PLAYER_STRIDE);
+        r.a(2, p.0 + crate::ram::PLAYERS.step);
         r.d_word(6, 2u16.wrapping_sub(k));
     }
     last
@@ -285,14 +286,14 @@ pub(crate) fn trails(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
     r.a(2, SEATS + 8);
     r.d(6, 3);
     for k in 0..4u16 {
-        let p = PLAYERS + PLAYER_STRIDE * k as u32;
+        let p = crate::ram::PLAYERS.nth(k as u32).0;
         if rd8(b, p) & 1 != 0 {
             let seat = (rd8(b, p + 3) & 0xe) as u32;
             r.d(0, seat);
             r.a(2, SEATS);
             wr16(b, SEATS + seat, 0x101);
         }
-        r.a(1, p + PLAYER_STRIDE);
+        r.a(1, p + crate::ram::PLAYERS.step);
         r.d_word(6, 2u16.wrapping_sub(k));
     }
     r.d(0, 0);
@@ -310,8 +311,8 @@ pub(crate) fn trails(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
         o.set_u8(b, Obj::ACTIVE, 1);
         o.set_u8(b, Obj::KIND, kind::TRAIL);
         o.set_u8(b, TURNED, 0x20);
-        o.set_u8(b, 0x2a, 2);
-        o.set_u8(b, 0x52, rank);
+        o.set_u8(b, Effect::OWN_PALETTE, 2);
+        o.set_u8(b, Effect::RANK, rank);
         rank = rank.wrapping_add(1);
         r.d_byte(4, rank);
         while rd8(b, seat) != 0 {
@@ -336,11 +337,13 @@ pub fn set_list(b: &mut Cps2Bus, list: u8) -> Option<Obj> {
 pub(crate) fn set_list_via(r: &mut impl Regs, b: &mut Cps2Bus, list: u8) -> Option<Obj> {
     let k = (list as u16) << 2;
     r.d_word(1, k);
-    let mut at = prog32(b, 0xa8b26 + k as u32);
+    // the lists are designated by their address
+    let lists = &tables().set_lists;
+    let mut at = tables().set_list_addresses.at32(b, k as u32);
     r.a(4, at);
     let mut last = None;
     loop {
-        let kind = rd8(b, at);
+        let kind = lists.at8(b, at.wrapping_sub(lists.rom));
         at += 1;
         r.a(4, at);
         r.d_byte(0, kind);
@@ -351,9 +354,9 @@ pub(crate) fn set_list_via(r: &mut impl Regs, b: &mut Cps2Bus, list: u8) -> Opti
         let o = r.allocated(b, &pools::SET)?;
         o.set_u8(b, Obj::ACTIVE, 1);
         o.set_u8(b, Obj::KIND, kind);
-        let setting = rd8(b, at);
+        let setting = lists.at8(b, at.wrapping_sub(lists.rom));
         o.set_u8(b, SETTING, setting);
-        let word = rd16(b, at + 1);
+        let word = lists.at16(b, at.wrapping_sub(lists.rom) + 1);
         at += 3;
         r.a(4, at);
         r.d_word(0, word);

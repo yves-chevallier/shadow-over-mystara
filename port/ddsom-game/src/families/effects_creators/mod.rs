@@ -9,7 +9,9 @@
 
 use cps2::Cps2Bus;
 
-use crate::mem::{prog16, prog32, rd16, rd32, rd8, wr16, wr32, A5};
+use crate::families::effects::records::{Carrier, Effect, PlayerView};
+use crate::families::effects::tables::{tables, Read, Table};
+use crate::mem::{rd32, rd8, wr16, wr32, A5};
 use crate::objects::pools::{self, Pool};
 use crate::objects::Obj;
 use leftovers::{Pure, Regs};
@@ -29,12 +31,6 @@ pub(crate) mod var {
     pub const PLAYERS_ALIVE: Byte = Byte::a5(0x35);
 }
 
-/// Players: four records of 0x200 bytes.
-const PLAYERS: u32 = A5 + 0x5de;
-const PLAYER_STRIDE: u32 = 0x200;
-/// Alternate camera (x, depth).
-const ALT_CAMERA_X: u32 = A5 + 0x556;
-const ALT_CAMERA_Y: u32 = A5 + 0x55a;
 
 /// Effect types created here.
 pub(crate) mod kind {
@@ -179,7 +175,7 @@ pub fn debris(b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
 pub(crate) fn debris_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
     let o = spawn(r, b, kind::DEBRIS)?;
     o.set_u8(b, Obj::VARIANT, variant);
-    o.set_u8(b, 0x42, 0);
+    o.set_u8(b, Effect::TIMER, 0);
     link(r, b, o, link::OWNER, creator.0);
     Some(o)
 }
@@ -335,7 +331,7 @@ pub(crate) fn camera_shard_via(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj
 /// 0xb2ef6: silhouette and reflection (type 35, variants 0 and 1) of the creator, whose transmitted frame (`+0xa0`) is
 /// reset to zero.
 pub(crate) fn mirrored_pair_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
-    creator.set_u8(b, 0xa0, 0);
+    creator.set_u8(b, Carrier::SCRIPT_STEP, 0);
     let mut last = None;
     for variant in 0..2u8 {
         let o = spawn(r, b, kind::MIRRORED)?;
@@ -407,8 +403,8 @@ pub(crate) fn shimmer_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> O
     let y = o.u16(b, Obj::Y).wrapping_sub(1);
     o.set_u16(b, Obj::Y, y);
     o.set_u16(b, link::CREATOR, creator.word());
-    let k = 2 * creator.u8(b, 0x60) as u32;
-    let lift = prog16(b, 0xb65d6 + k);
+    let k = 2 * creator.u8(b, Carrier::LIFT) as u32;
+    let lift = tables().shimmer_lifts.at16(b, k);
     r.d(0, lift as u32);
     let z = r.addition(lift as u32, o.u16(b, Obj::Z) as u32, Size::Word);
     o.set_u16(b, Obj::Z, z as u16);
@@ -418,7 +414,7 @@ pub(crate) fn shimmer_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> O
 /// 0xb5730: marker (type 47) in place of the creator: setting `+0x46`, same variant.
 pub(crate) fn beacon_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
     let o = spawn(r, b, kind::BEACON)?;
-    let setting = creator.u8(b, 0x46);
+    let setting = creator.u8(b, Carrier::BEACON_SETTING);
     o.set_u8(b, SETTING, setting);
     let v = creator.u8(b, Obj::VARIANT);
     o.set_u8(b, Obj::VARIANT, v);
@@ -518,7 +514,11 @@ pub fn scenery_10(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
 }
 /// 0xb3e4e (`second` false) and 0xb3ec6: cries of a boss.
 pub fn shouts(b: &mut Cps2Bus, creator: Obj, second: bool) -> Option<Obj> {
-    if second { shouts_via(&mut Pure, b, creator, 2, 0xb3f00) } else { shouts_via(&mut Pure, b, creator, 1, 0xb3e86) }
+    if second {
+        shouts_via(&mut Pure, b, creator, 2, &tables().cries_b)
+    } else {
+        shouts_via(&mut Pure, b, creator, 1, &tables().cries_a)
+    }
 }
 /// 0xb2ef6: silhouette and its reflection.
 pub fn mirrored_pair(b: &mut Cps2Bus, creator: Obj) -> Option<Obj> {
@@ -678,7 +678,7 @@ pub fn types_54(b: &mut Cps2Bus) -> Option<Obj> {
 
 /// 0xa8a42: camera 1 in mode 0x60.
 pub fn camera_in_mode_60(b: &mut Cps2Bus) {
-    crate::mem::wr8(b, A5 + 0x4ff, 0);
-    wr16(b, A5 + 0x51e, 0x60);
+    crate::families::effects::vars::SCENE_STEP.set(b, 0);
+    crate::families::effects::vars::CAMERA_MODE.set(b, 0x60);
 }
 use crate::ops::Size;

@@ -9,8 +9,8 @@ pub(super) mod chunk {
     pub const CREATOR: u32 = 0x42;
     pub const TIMER: u32 = 0x58;
     /// Animation sets of variants 0 and 1 (variant 2 reuses that of 1).
-    pub const ANIMS_0: u32 = 0x16abaa;
-    pub const ANIMS_1: u32 = 0x16b762;
+    pub const ANIMS_0: crate::data::RomAddr = crate::data::RomAddr(0x16abaa);
+    pub const ANIMS_1: crate::data::RomAddr = crate::data::RomAddr(0x16b762);
     /// Kind of debris (`0x1172e`) at impact.
     pub const DEBRIS_KIND: u32 = 0xc;
 }
@@ -25,8 +25,8 @@ pub(super) struct Throw {
 }
 
 pub(super) const THROWS: [Throw; 2] = [
-    Throw { vz: 0x4c0, az: 0xffd0, dx: 0xffa0, vx: 0x200, anims: chunk::ANIMS_0 },
-    Throw { vz: 0x500, az: 0xffd8, dx: 0xffc8, vx: 0x280, anims: chunk::ANIMS_1 },
+    Throw { vz: 0x4c0, az: 0xffd0, dx: 0xffa0, vx: 0x200, anims: chunk::ANIMS_0.0 },
+    Throw { vz: 0x500, az: 0xffd8, dx: 0xffc8, vx: 0x280, anims: chunk::ANIMS_1.0 },
 ];
 
 pub(super) fn chunk<R: Bench>(x: &mut Cx<'_, R>) {
@@ -47,7 +47,7 @@ pub(super) fn chunk_init<R: Bench>(x: &mut Cx<'_, R>) {
     let variant = x.u8(f::VARIANT);
     let Some(throw) = THROWS.get(variant as usize) else {
         // variant 2: no throw, only the animation
-        x.anim_start(chunk::ANIMS_1, 0x14);
+        x.anim_start(chunk::ANIMS_1.0, 0x14);
         return;
     };
     let creator = x.linked(chunk::CREATOR);
@@ -88,10 +88,10 @@ pub(super) fn chunk_active<R: Bench>(x: &mut Cx<'_, R>) {
             *x.c.d5() = 0xffff;
             match x.u8(f::VARIANT) {
                 0 => {
-                x.anim_start(chunk::ANIMS_0, 0x15);
+                x.anim_start(chunk::ANIMS_0.0, 0x15);
             }
                 1 => {
-                x.anim_start(chunk::ANIMS_1, 0x15);
+                x.anim_start(chunk::ANIMS_1.0, 0x15);
             }
                 _ => {}
             }
@@ -127,10 +127,8 @@ pub(super) fn chunk_active<R: Bench>(x: &mut Cx<'_, R>) {
 pub(super) mod shard {
     pub const OWNER: u32 = 0x50;
     pub const TIMER: u32 = 0x58;
-    /// Offsets (x, depth) of the hand, per player gesture (`+0x42`): 8-byte sheets.
-    pub const HAND: u32 = 0x11ae86;
     pub const GESTURE: u32 = 0x42;
-    pub const ANIMS: u32 = 0x19844e;
+    pub const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x19844e);
 }
 
 pub(super) fn shard<R: Bench>(x: &mut Cx<'_, R>) {
@@ -158,8 +156,9 @@ pub(super) fn shard_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(Obj::AZ, 0xffc8);
     let owner = x.linked(shard::OWNER);
     let gesture = (owner.u16(x.b, shard::GESTURE) << 3) as i16 as i32 as u32;
-    let mut dx = x.data16(shard::HAND.wrapping_add(gesture).wrapping_add(2));
-    let dz = x.data16(shard::HAND.wrapping_add(gesture).wrapping_add(4));
+    let hand = &tables().hand_offsets;
+    let mut dx = hand.at16(x.b, gesture.wrapping_add(2));
+    let dz = hand.at16(x.b, gesture.wrapping_add(4));
     for off in [Obj::X, Obj::Z, Obj::Y] {
         let v = owner.u16(x.b, off);
         x.set16(off, v);
@@ -174,7 +173,7 @@ pub(super) fn shard_init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add16(Obj::X, dx);
     x.add16(Obj::Z, dz);
     let anim = x.u8(f::VARIANT) as u32 + if facing { 0 } else { 1 };
-    x.anim_start(shard::ANIMS, anim as u16);
+    x.anim_start(shard::ANIMS.0, anim as u16);
     x.reinsert();
 }
 
@@ -190,17 +189,7 @@ pub(super) mod rain {
     /// Reference depth, taken again every other frame.
     pub const SAVED_Y: u32 = 0x1c;
     pub const SPEED_INDEX: u32 = 0x2d;
-    pub const ANIMS: u32 = 0x194c74;
-    /// Tables (program space): animation speed per variant, then draws (X and Z speeds,
-    /// animation) for the rain around the camera and for the creator's sparks.
-    pub const SPEED_BY_VARIANT: u32 = 0xb4d7a;
-    pub const CAMERA_VX: u32 = 0xb4e04;
-    pub const CAMERA_VZ: u32 = 0xb4e24;
-    pub const CAMERA_ANIMS: u32 = 0xb4de4;
-    pub const SHARD_SPEED: u32 = 0xb4e94;
-    pub const SHARD_VX: u32 = 0xb4ea4;
-    pub const SHARD_VZ: u32 = 0xb4ec4;
-    pub const SHARD_ANIMS: u32 = 0xb4ee4;
+    pub const ANIMS: crate::data::RomAddr = crate::data::RomAddr(0x194c74);
 }
 
 pub(super) fn rng<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
@@ -234,9 +223,10 @@ pub(super) fn rain_init<R: Bench>(x: &mut Cx<'_, R>) {
         crate::effects_aids::shock(x.b, o, 5, 0x201, 0, 0);
         x.set16(rain::TIMER, 0x26);
         let variant = x.u8(f::VARIANT) as u32;
-        let speed = x.rom8(rain::SPEED_BY_VARIANT + variant);
+        let speed = tables().rain_speed_by_variant.at8(x.b, variant);
         x.set8(rain::SPEED_INDEX, speed);
-        rain_launch(x, rain::CAMERA_VX, rain::CAMERA_VZ, rain::CAMERA_ANIMS, 0x1f);
+        let t = tables();
+        rain_launch(x, &t.rain_camera_vx, &t.rain_camera_vz, &t.rain_camera_anims, 0x1f);
     } else {
         // spark leaving the creator
         x.add8(f::SUB_STATE, 4);
@@ -248,23 +238,24 @@ pub(super) fn rain_init<R: Bench>(x: &mut Cx<'_, R>) {
         x.set16(Obj::AZ, 0xffd8);
         x.set16(rain::TIMER, 0x14);
         let pick = (rng(x) & 0xf) as u32;
-        let speed = x.rom8(rain::SHARD_SPEED + pick);
+        let speed = tables().rain_shard_speed.at8(x.b, pick);
         x.set8(rain::SPEED_INDEX, speed);
-        rain_launch(x, rain::SHARD_VX, rain::SHARD_VZ, rain::SHARD_ANIMS, 0xf);
+        let t = tables();
+        rain_launch(x, &t.rain_shard_vx, &t.rain_shard_vz, &t.rain_shard_anims, 0xf);
     }
 }
 
 /// X and Z speeds and animation drawn from the tables (words, words, bytes; `anim_mask` bounds the last draw).
-pub(super) fn rain_launch<R: Bench>(x: &mut Cx<'_, R>, vx_table: u32, vz_table: u32, anims: u32, anim_mask: u16) {
+pub(super) fn rain_launch<R: Bench>(x: &mut Cx<'_, R>, vx_table: &Table, vz_table: &Table, anims: &Table, anim_mask: u16) {
     let pick = 2 * (rng(x) & 0xf) as u32;
-    let vx = x.rom16(vx_table + pick);
+    let vx = vx_table.at16(x.b, pick);
     x.set16(Obj::VX, vx);
     let pick = 2 * (rng(x) & 0xf) as u32;
-    let vz = x.rom16(vz_table + pick);
+    let vz = vz_table.at16(x.b, pick);
     x.set16(Obj::VZ, vz);
     let pick = (rng(x) & anim_mask) as u32;
-    let anim = x.rom8(anims + pick);
-    x.anim_start(rain::ANIMS, (anim as u32) as u16);
+    let anim = anims.at8(x.b, pick);
+    x.anim_start(rain::ANIMS.0, (anim as u32) as u16);
 }
 
 /// Countdown of `TIMER`; true when it drops below zero.
@@ -297,7 +288,7 @@ pub(super) fn rain_active<R: Bench>(x: &mut Cx<'_, R>) {
             }
             // every other frame, the rain takes its reference depth again (the draw is lost)
             rng(x);
-            if x.a5_u16(0x6e) & 1 == 0 {
+            if vars::FRAME_LOW.get(x.b) & 1 == 0 {
                 let y = x.u16(rain::SAVED_Y);
                 x.set16(Obj::Y, y);
             }

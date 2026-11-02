@@ -21,4 +21,7 @@ fn rom_and_assets_give_the_same_data() {
     assert!(from_roms.frames == from_assets.frames, "frames differ");
     assert!(from_roms.anims == from_assets.anims, "animations differ");
     assert!(from_roms.speeds == from_assets.speeds, "speeds differ");
+    for (a, b) in from_roms.effects.tables().into_iter().zip(from_assets.effects.tables()) {
+        assert!(a == b, "effect table {} differs", a.name);
+    }
 }
