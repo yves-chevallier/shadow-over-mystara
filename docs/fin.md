@@ -67,6 +67,7 @@ Les zones ci-dessous correspondent aux périmètres des lots de la section 3.
 | ESHL, SOBJ, objets, caisses après L7 (`eshl*/`, `sobj/`, `items/`, `boxes/`, `shell/`) | 113 | 16 543 | 0 | 0 | 0 | 39 | 0 | 0 | `boxes/chest.rs` (649) |
 | Ennemis (`families/enemy*`, `reactions.rs`) | 94 | 32 564 | 170 | 1 302 | 18 | 25 | 1 | 205 | `reactions.rs` (2 223) |
 | Ennemis après L8a (façades `enemy_common/`, `enemy_lib`, `enemy`, `reactions/` : 12 fichiers) | 102 | 32 859 | 135 (façades 0) | 1 132 (façades 0) | 14 (façades 0) | 8 | 0 | 180 (façades 0) | `enemy_riyakaa.rs` (1 051) |
+| Ennemis après L8b (`enemy_*/`, `enemy_*.rs`, façades) | 107 | 33 188 | 0 | 0 | 0 | 8 | 0 | 0 | `enemy_beetle.rs` (793) |
 | Boss (`families/boss*`) | 83 | 30 835 | 207 | 3 182 | 171 | 146 | 0 | 114 | `boss_11/` (2 419 en 5 fichiers) |
 | Joueurs (`player/`, `families/player/`, `combat*`) | 57 | 29 048 | 378 | 2 545 | 67 | 383 | 68 | 494 | `player/hurt.rs` (1 761) |
 | Écrans (`modes/`, `hud/`, `service/`, `scene/`, `credits*`, `text`, `popups`) | 41 | 18 134 | 62 | 15 | 137 | 1 637 | 74 | 437 | `scene/exit.rs` (1 535) |
@@ -760,8 +761,8 @@ libre.
     avertissement, avec et sans `tools`. `rom_reads` (`rom-trace`) n'a pas été relancé : les lectures `rd*`
     restantes de la zone sont toutes en RAM (relevé à la main).
 
-**L8. Ennemis** (grand, coupé en deux lots successifs ou parallèles) — **L8a fait** (branche `wt-l8a-ennemis`, voir
-« Résultat L8a »)
+**L8. Ennemis** (grand, coupé en deux lots successifs ou parallèles) — **fait** (L8a : branche `wt-l8a-ennemis`, voir
+« Résultat L8a » ; L8b : branche `wt-l8b-ennemis`, voir « Résultat L8b »)
 * L8a : `enemy_common.rs`, `enemy_lib.rs`, `enemy.rs` et `reactions.rs` (2 223 lignes, à découper), d'abord seul, car
   ce sont les façades des autres.
 * L8b : `enemy_*/` et `enemy_*.rs`, en 94 fichiers, plus réguliers.
@@ -829,6 +830,49 @@ libre.
     familles, `STRIKE_KIND`/`STRIKE_POWER`, `GROUP`, `AI_SHOT`...) ; un `record!` par famille pour `+0xa0` et
     au-delà ; `f::SUB2`/`f::SUB3` peuvent devenir `Enemy::STEP`/`Enemy::SUB_STEP` ;
   * les `x.prog32(...)` et `(x.random() as u32)` posés mécaniquement sont à reprendre dans chaque famille.
+* Résultat L8b :
+  * (a) Découpage (95c723a) : `enemy_riyakaa.rs` (1 051 lignes) en `enemy_riyakaa/` (`mod` : création, arrivées ;
+    `decide` : sous-état 2 et aides des décisions ; `attacks` : sous-états 4, 6, 8 ; `hit`) et `enemy_double.rs`
+    (818) en `enemy_double/` (`mod` : socle commun, `beasts` : types 22 à 24, `dark_warrior` : type 26).
+    `examples/names` identique. 308/308 VALID (mode par défaut).
+  * (b) Données : 159 tables des familles ajoutées à `data/enemies.json` par `extract/src/enemies.rs`
+    (`families`, une ligne par table, nommée `<famille>/<table>` : `goblin/near_moves`, `trog/blink_delays`,
+    `warmachine/wide_jumps`...). Les tables par rang (16 lignes de 32 octets, `RANK / 2`) passent par `rank(...)` ;
+    une table dont la fin n'est pas connue du code par `upto(...)` (jusqu'à la table suivante du fichier ou au
+    prochain code exécuté, `code_68k.txt`, au plus N octets ; `extract::effects::code_starts` rendu `pub(crate)`) ;
+    une table d'adresses de tables par rang par `lists(...)` (la table et les tables qu'elle désigne, lues par
+    `held8`). Les tables qui se chevauchent dans la ROM (téléportations : les Y débordent sur les X) sont déclarées
+    chacune avec sa longueur lue. Le jeu lit par `enemy_common::tables::table(nom)`, `rank_byte(x, nom)` (octet tiré
+    au hasard dans la ligne du rang ; remplace les `row_byte`/`pick_byte` recopiés dans neuf familles),
+    `tables::speed16` (tables de vitesses de `speeds.json` désignées par adresse, scarabée), et
+    `tables::reactions(clé)` (le double de type 26 lit la table de réactions de son maître). Les tables de sauts
+    relatifs de la machine de guerre restent des mots relatifs à leur table (`table_target` ajoute `Table::rom`) ;
+    les adresses de code qu'elles désignent sont les clés des branches. Lectures sans effet retirées : la table
+    0x71aea de l'ogre (lue puis ignorée, seul le tirage reste) et le saut 0x78fe4 de la machine de guerre (trois
+    blocs identiques). Jeux d'animations, clés de réactions et table de vitesses de la dérive en `RomAddr`.
+    `pick_wait` de la machine de guerre est `enemy_lib::draw_6e` (même code). Résidu de la zone : 0 (scénarios
+    ciblés, puis validation complète).
+  * (c) Champs : `Enemy` complété (paramètres d'IA `+0x68..+0x79` nommés d'après `ai`/`ai_aids` :
+    `AI_WANDER_ROW/AI_WANDER`, `AI_WAIT_*`, `AI_STANCE*`, `AI_DECISION_A/B`, `AI_BOX_*`, `AI_BYTE*`,
+    `AI_POINT_SET` ; `HEADING`, `GROUND_MARK` `+0x3b`, `BOUNDS`/`PRIORITY` `+0x3c/+0x3f`, `BLINK_MASK/COUNT`
+    `+0x42/+0x43`, `HIT_STRENGTH` `+0x57`, `LOOT_ROW`/`LOOT` `+0x80/+0x81` (anciens `FLAG_80/81`),
+    `WEAK_TO_B/C` `+0x82/+0x83` (armes 0xb et 0xc de `combat`), `AI_ROW_8E`, `HP_TIER(S)`/`HP_RANK`
+    `+0xaa..+0xac`, `CHILDREN` `+0xaf` (sur le créateur), `Y_FRACTION`...), vue `Prey` (`HELD` `+0x188` du joueur
+    tenu ; les autres champs du joueur par `player::Player`). Un `record!` par famille dans son `mod.rs` (`Goblin`,
+    `Kobold`, `Trog`, `Riyakaa`, `DisplacerBeast`, `Double`, `Tentacle`, `Harpy`, `HarpyShot`, `OgreArm`...) pour
+    `+0xa0` et au-delà et les champs propres ; les anciens modules `g` sont supprimés (outil
+    `records.py` du scratchpad : un champ de `g` dont le décalage est un champ commun devient `Enemy::…`). Variables
+    `var::FRAME_COUNTER` (`A5+0x6e`, masqué en place par quelques familles comme l'original), `var::LEVEL`
+    (`A5+0x48`). `(x.random() as u32) & m` remplacé par `rand_and(x, m)` ; plus aucun `x.prog32` dans la zone.
+  * Mesures (`measure_end.py`, zone `enemies`) : 102 → 107 fichiers, 32 859 → 33 188 lignes, accesseurs ROM
+    135 → 0, décalages littéraux 1 132 → 0, `A5 + littéral` 14 → 0, constantes d'adresses ROM 180 → 0,
+    `rd*`/`wr*` 8 (façades), plus gros fichier 1 051 → 793 (`enemy_beetle.rs`).
+  * Validation : VALIDATION_L8B
+  * Pour les lots suivants : les boss lisent encore leurs tables de réactions eux-mêmes (`x.prog32(REACTIONS +
+    code)`) : `tables::reactions(clé).at32(x.b, code)` ou `reaction_routine` ; `Prey` et `Enemy` sont à fusionner
+    avec la fiche de joueur (L10) et la vue `Host` de `shell/records.rs` (L7) ; les champs d'IA d'`Enemy`
+    (`AI_*`) sont ceux d'`ai_aids::g`, qui garde ses propres constantes (L12) ; `rank_byte`/`rank_row` servent aux
+    boss qui tirent dans une table par rang.
 
 ### Vague 3 (trois agents)
 

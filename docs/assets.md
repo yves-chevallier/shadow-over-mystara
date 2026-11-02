@@ -649,6 +649,17 @@ Tables ajoutées par le lot L8a (`extract/src/enemies.rs`, lues par `families/en
 | `palette_scripts` | `0x102ba` (données) | 8 x `x32*8` | `enemy_lib::palette_script` : huit longs de couleurs par script |
 | `beetle_nest/…`, `scorpion/…` | `0x65c78`, `0x669d6` (prog, listes en données) | | `enemy_common::spawn_list` : `lists` (adresses des listes), `allocs` (routine d'allocation), puis chaque liste `k.count` (mot n) et `k` (n + 1 entrées `u8*4 u16*3` : routine, type, variante, groupe `+0x2f`, X, hauteur, profondeur) |
 
+Tables des familles ajoutées par le lot L8b (`extract/src/enemies.rs`, fonction `families`, une ligne par table ;
+159 tables nommées `<famille>/<table>`, lues par `enemy_common::tables::table`) :
+
+| Forme | Exemples | Sens |
+|---|---|---|
+| par rang : 16 x `u8*32` (données) | `goblin/near_moves`, `trog/blink_delays`, `owlbear/next_moves`, `scorpion/attack_states` | une ligne de 32 octets par paire de rangs (`A5+0x7f92 / 2`), octet tiré sur 5 bits (`enemy_common::rank_byte`) |
+| listes par profil : n x `addr` + tables par rang | `kobold/near_lists` (et `kobold/near_lists/k`), `hellhound/move_lists`, `dbeast/attack_lists` | adresse de la table par rang de chaque profil `+0x2f` ; les tables désignées sont déclarées une fois (`held8`) |
+| petites tables (prog ou données) | `goblin/teleport_x`, `gargoyle/charge_a`, `beetle/turn_targets`, `harpy/variants`, `warrior/scripts` | décalages, délais, durées, vitesses, scénarios ; une table dont la fin n'est pas lue dans le code s'arrête à la table suivante ou au prochain code exécuté (`upto`) |
+| sauts relatifs (prog) | `warmachine/near_jumps`, `warmachine/wide_blocks_0` | mots relatifs au début de la table : adresse de code désignée (clé de la branche dans `enemy_warmachine/decide.rs`) |
+| adresses de tables de vitesses | `beetle/walk_speeds`, `beetle/fly_speeds` | par rang & 0x1c : table de `speeds.json` (`tables::speed16`) |
+
 Le cercle des tourbillons (`0x1c94b6`, X et profondeur par angle) est une table de vitesses de `data/speeds.json`,
 lue par son adresse (`tables::circle`).
 
