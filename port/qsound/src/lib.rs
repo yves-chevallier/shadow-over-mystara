@@ -35,16 +35,18 @@ const DELAY_BASE_OFFSET2: u16 = 0x53c;
 /// Default 60 MHz clock: sample rate = 60e6 / 2 / 1248.
 pub const SAMPLE_RATE: f64 = 60_000_000.0 / 2.0 / 1248.0;
 
+/// The registers of the 16 PCM voices, one array per register (so that the update of all the voices is
+/// vectorised).
 #[derive(Clone, Copy, Default)]
-struct Voice {
-    bank: u16,
-    addr: i16,
-    phase: u16,
-    rate: u16,
-    loop_len: i16,
-    end_addr: i16,
-    volume: i16,
-    echo: i16,
+struct Voices {
+    bank: [u16; 16],
+    addr: [i16; 16],
+    phase: [u16; 16],
+    rate: [u16; 16],
+    loop_len: [i16; 16],
+    end_addr: [i16; 16],
+    volume: [i16; 16],
+    echo: [i16; 16],
 }
 
 #[derive(Clone, Copy, Default)]
@@ -66,17 +68,54 @@ struct Fir {
     table_pos: u16,
     taps: [i16; 95],
     delay_line: [i16; 95],
+    /// The circular buffer of `apply` written twice in a row (`unrolled[k] = delay_line[k % m]` for `k < 2m`), so
+    /// that the coefficients read it as one contiguous slice from `delay_pos`. Valid for `m = unrolled_len` only
+    /// (0: to be rebuilt from `delay_line`).
+    unrolled: [i16; 190],
+    unrolled_len: usize,
 }
 
 impl Default for Fir {
     fn default() -> Self {
-        Fir { tap_count: 0, delay_pos: 0, table_pos: 0, taps: [0; 95], delay_line: [0; 95] }
+        Fir {
+            tap_count: 0,
+            delay_pos: 0,
+            table_pos: 0,
+            taps: [0; 95],
+            delay_line: [0; 95],
+            unrolled: [0; 190],
+            unrolled_len: 0,
+        }
     }
 }
 
-/// Sum of products (modulo 2^32 arithmetic, like the DSP).
+/// Sum of products (modulo 2^32 arithmetic, like the DSP: the order of the additions does not matter).
+#[cfg(not(target_arch = "x86_64"))]
 fn dot_product(a: &[i16], b: &[i16]) -> i32 {
-    a.iter().zip(b).fold(0i32, |s, (&x, &y)| s.wrapping_add(x as i32 * y as i32))
+    a.iter().zip(b).fold(0i32, |s, (&x, &y)| s.wrapping_add(i32::from(x) * i32::from(y)))
+}
+
+/// Sum of products (modulo 2^32 arithmetic, like the DSP: the order of the additions does not matter), by blocks of 8
+/// with the SSE2 `pmaddwd` instruction (sums of pairs of products, exact modulo 2^32; SSE2 is part of x86_64, and the
+/// compiler does not vectorise the plain loop by itself).
+#[cfg(target_arch = "x86_64")]
+fn dot_product(a: &[i16], b: &[i16]) -> i32 {
+    use std::arch::x86_64::*;
+    let (a8, a_rest) = a.as_chunks::<8>();
+    let (b8, b_rest) = b.as_chunks::<8>();
+    let rest = a_rest.iter().zip(b_rest).fold(0i32, |s, (&x, &y)| s.wrapping_add(i32::from(x) * i32::from(y)));
+    // SAFETY: SSE2 is part of the x86_64 baseline; the intrinsics only compute on values (no memory access).
+    unsafe {
+        let load = |v: &[i16; 8]| _mm_set_epi16(v[7], v[6], v[5], v[4], v[3], v[2], v[1], v[0]);
+        let mut sums = _mm_setzero_si128();
+        for (x, y) in a8.iter().zip(b8) {
+            sums = _mm_add_epi32(sums, _mm_madd_epi16(load(x), load(y)));
+        }
+        // the four lanes added together
+        sums = _mm_add_epi32(sums, _mm_shuffle_epi32::<0b01_00_11_10>(sums));
+        sums = _mm_add_epi32(sums, _mm_shuffle_epi32::<0b10_11_00_01>(sums));
+        rest.wrapping_add(_mm_cvtsi128_si32(sums))
+    }
 }
 
 impl Fir {
@@ -88,17 +127,24 @@ impl Fir {
         // The first m coefficients read the buffer starting from delay_pos, walking it circularly,
         // the last one reads the input. delay_pos returns to its value, receives the input, then advances.
         let (m, p) = (m as usize, self.delay_pos as usize);
-        let line = &self.delay_line[..m];
-        let taps = &self.taps[..m];
-        let mut sum = dot_product(&taps[..m - p], &line[p..]).wrapping_add(dot_product(&taps[m - p..], &line[..p]));
+        if self.unrolled_len != m {
+            for k in 0..2 * m {
+                self.unrolled[k] = self.delay_line[k % m];
+            }
+            self.unrolled_len = m;
+        }
+        let mut sum = dot_product(&self.taps[..m], &self.unrolled[p..p + m]);
         sum = sum.wrapping_add(self.taps[m] as i32 * input as i32);
         self.delay_line[p] = input;
+        self.unrolled[p] = input;
+        self.unrolled[p + m] = input;
         self.delay_pos = if p + 1 >= m { 0 } else { p as i32 + 1 };
         0i32.wrapping_sub(sum << 2)
     }
 
     /// Original version, for abnormal states (uninitialized filter).
     fn apply_general(&mut self, input: i16) -> i32 {
+        self.unrolled_len = 0;
         let mut output: i32 = 0;
         let mut tap = 0;
         while tap < self.tap_count - 1 {
@@ -296,8 +342,10 @@ impl DspTables {
     }
 }
 
-/// Gains of a pan: left dry, left wet, right dry, right wet.
-type PanGains = [i32; 4];
+/// The four paths of a pan: left dry, left wet, right dry, right wet.
+const PATHS: usize = 4;
+/// The 19 voices (16 PCM, 3 ADPCM), padded with 5 silent ones to blocks of 8 for `dot_product`.
+const MIXED: usize = 24;
 
 /// The memory the voices play from: signed 8-bit PCM at the address `bank << 16 | address` written in the voice
 /// registers. Padded with zeros to a power of two, so that an address is masked, never out of bounds (the hardware
@@ -327,12 +375,13 @@ pub struct QSound {
     data_latch: u16,
     /// Last stereo sample produced.
     pub out: [i16; 2],
-    voice: [Voice; 16],
+    voice: Voices,
     adpcm: [Adpcm; 3],
     voice_pan: [u16; 19],
-    /// Gains of each voice's pan (`pan_gains`), read once when the pan is written.
-    voice_gains: [PanGains; 19],
-    voice_output: [i16; 19],
+    /// Gains of the voices' pans on each path (`pan_gains`), read once when a pan is written.
+    path_gains: [[i16; MIXED]; PATHS],
+    /// Outputs of the voices (the padding stays 0).
+    voice_output: [i16; MIXED],
     echo: Echo,
     filter: [Fir; 2],
     alt_filter: [Fir; 2],
@@ -357,11 +406,11 @@ impl QSound {
             regs: register_map(),
             data_latch: 0,
             out: [0; 2],
-            voice: [Voice::default(); 16],
+            voice: Voices::default(),
             adpcm: [Adpcm::default(); 3],
             voice_pan: [0; 19],
-            voice_gains: [PanGains::default(); 19],
-            voice_output: [0; 19],
+            path_gains: [[0; MIXED]; PATHS],
+            voice_output: [0; MIXED],
             echo: Echo::default(),
             filter: [Fir::default(); 2],
             alt_filter: [Fir::default(); 2],
@@ -392,12 +441,15 @@ impl QSound {
     /// Pan of voice `i`, and its gains.
     fn set_pan(&mut self, i: usize, pan: u16) {
         self.voice_pan[i] = pan;
-        self.voice_gains[i] = self.pan_gains(pan);
+        let path_gains = self.pan_gains(pan);
+        for (gains, g) in self.path_gains.iter_mut().zip(path_gains) {
+            gains[i] = g;
+        }
     }
 
-    /// Gains of a pan register value, in the order of `PanGains`.
-    fn pan_gains(&self, pan: u16) -> PanGains {
-        let gain = |ch: u16, path: u16| i32::from(self.dsp.pan_gain(pan.wrapping_add(ch * PAN_TABLE_CH_OFFSET).wrapping_add(path)));
+    /// Gains of a pan register value, in the order of `PATHS`.
+    fn pan_gains(&self, pan: u16) -> [i16; PATHS] {
+        let gain = |ch: u16, path: u16| self.dsp.pan_gain(pan.wrapping_add(ch * PAN_TABLE_CH_OFFSET).wrapping_add(path));
         [gain(0, PAN_TABLE_DRY), gain(0, PAN_TABLE_WET), gain(1, PAN_TABLE_DRY), gain(1, PAN_TABLE_WET)]
     }
 
@@ -423,14 +475,14 @@ impl QSound {
         if let Some(r) = self.regs[address as usize] {
             let s = d as i16;
             match r {
-                Reg::VoiceBank(i) => self.voice[i].bank = d,
-                Reg::VoiceAddr(i) => self.voice[i].addr = s,
-                Reg::VoiceRate(i) => self.voice[i].rate = d,
-                Reg::VoicePhase(i) => self.voice[i].phase = d,
-                Reg::VoiceLoop(i) => self.voice[i].loop_len = s,
-                Reg::VoiceEnd(i) => self.voice[i].end_addr = s,
-                Reg::VoiceVolume(i) => self.voice[i].volume = s,
-                Reg::VoiceEcho(i) => self.voice[i].echo = s,
+                Reg::VoiceBank(i) => self.voice.bank[i] = d,
+                Reg::VoiceAddr(i) => self.voice.addr[i] = s,
+                Reg::VoiceRate(i) => self.voice.rate[i] = d,
+                Reg::VoicePhase(i) => self.voice.phase[i] = d,
+                Reg::VoiceLoop(i) => self.voice.loop_len[i] = s,
+                Reg::VoiceEnd(i) => self.voice.end_addr[i] = s,
+                Reg::VoiceVolume(i) => self.voice.volume[i] = s,
+                Reg::VoiceEcho(i) => self.voice.echo[i] = s,
                 Reg::Pan(i) => self.set_pan(i, d),
                 Reg::AdpcmStart(i) => self.adpcm[i].start_addr = d,
                 Reg::AdpcmEnd(i) => self.adpcm[i].end_addr = d,
@@ -472,7 +524,7 @@ impl QSound {
             self.state_counter += 1;
             return;
         }
-        self.voice = [Voice::default(); 16];
+        self.voice = Voices::default();
         self.adpcm = [Adpcm::default(); 3];
         self.filter = [Fir::default(); 2];
         self.alt_filter = [Fir::default(); 2];
@@ -482,10 +534,8 @@ impl QSound {
         for i in 0..19 {
             self.set_pan(i, DATA_PAN_TAB + 0x10);
         }
-        self.voice_output = [0; 19];
-        for v in self.voice.iter_mut() {
-            v.bank = 0x8000;
-        }
+        self.voice_output = [0; MIXED];
+        self.voice.bank = [0x8000; 16];
         for a in self.adpcm.iter_mut() {
             a.bank = 0x8000;
         }
@@ -549,23 +599,26 @@ impl QSound {
 
     /// The 16 PCM voices for one sample: their outputs go to `voice_output[..16]`; returns the echo input.
     fn update_voices(&mut self) -> i32 {
+        let v = &mut self.voice;
+        // a muted voice reads its sample too (inside the bank, always): its output is null all the same
+        let samples: [i16; 16] = std::array::from_fn(|i| self.samples.read(v.bank[i], v.addr[i] as u16));
         let mut echo_in = 0i32;
-        for (v, out) in self.voice.iter_mut().zip(&mut self.voice_output[..16]) {
-            // muted voice: null output without reading the sample (the phase advances anyway)
-            let output = if v.volume == 0 {
-                0
-            } else {
-                ((v.volume as i32 * self.samples.read(v.bank, v.addr as u16) as i32) >> 14) as i16
-            };
-            echo_in = echo_in.wrapping_add(((output as i32) * v.echo as i32) << 2);
-            let mut new_phase = (v.rate as i32).wrapping_add(((v.addr as i32) << 12) | (v.phase >> 4) as i32);
-            if (new_phase >> 12) >= v.end_addr as i32 {
-                new_phase = new_phase.wrapping_sub((v.loop_len as i32) << 12);
-            }
-            new_phase = new_phase.clamp(-0x8000000, 0x7ffffff);
-            v.addr = (new_phase >> 12) as i16;
-            v.phase = ((new_phase << 4) & 0xffff) as u16;
+        let outputs = self.voice_output[..16].iter_mut().zip(samples).zip(v.volume).zip(v.echo);
+        for (((out, sample), volume), echo) in outputs {
+            let output = ((volume as i32 * sample as i32) >> 14) as i16;
+            echo_in = echo_in.wrapping_add(((output as i32) * echo as i32) << 2);
             *out = output;
+        }
+        // the phase advances, muted or not (on whole arrays, so that it is vectorised)
+        let wide = |a: [i16; 16]| a.map(i32::from);
+        let (addr, end_addr, loop_len) = (wide(v.addr), wide(v.end_addr), wide(v.loop_len));
+        let (rate, phase) = (v.rate.map(i32::from), v.phase.map(i32::from));
+        for i in 0..16 {
+            let mut new_phase = rate[i].wrapping_add((addr[i] << 12) | (phase[i] >> 4));
+            let looped = if (new_phase >> 12) >= end_addr[i] { loop_len[i] << 12 } else { 0 };
+            new_phase = new_phase.wrapping_sub(looped).clamp(-0x8000000, 0x7ffffff);
+            v.addr[i] = (new_phase >> 12) as i16;
+            v.phase[i] = ((new_phase << 4) & 0xffff) as u16;
         }
         echo_in
     }
@@ -620,11 +673,9 @@ impl QSound {
         let echo_output = self.echo.apply(echo_input) as i32;
 
         // the 19 voices through their pans (sums modulo 2^32: their order does not matter)
-        let mut mix: PanGains = [echo_output << 14, 0, 0, echo_output << 14];
-        for (&vo, gains) in self.voice_output.iter().zip(&self.voice_gains) {
-            for (m, &g) in mix.iter_mut().zip(gains) {
-                *m = m.wrapping_sub(vo as i32 * g);
-            }
+        let mut mix: [i32; PATHS] = [echo_output << 14, 0, 0, echo_output << 14];
+        for (m, gains) in mix.iter_mut().zip(&self.path_gains) {
+            *m = m.wrapping_sub(dot_product(&self.voice_output, gains));
         }
         for ch in 0..2 {
             let (mut dry, mut wet) = (mix[2 * ch], mix[2 * ch + 1]);
@@ -647,6 +698,31 @@ impl QSound {
         if self.state_counter > 5 {
             self.state_counter = 0;
             self.state = self.next_state;
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dot_product_wraps_like_the_dsp() {
+        // extreme values (the pairs of -32768 * -32768 overflow an i32) and pseudo-random ones, every length
+        let mut x = 0x1234_5678u32;
+        let mut next = || {
+            x ^= x << 13;
+            x ^= x >> 17;
+            x ^= x << 5;
+            x as i16
+        };
+        for len in 0..100 {
+            for extreme in [false, true] {
+                let a: Vec<i16> = (0..len).map(|_| if extreme { i16::MIN } else { next() }).collect();
+                let b: Vec<i16> = (0..len).map(|_| if extreme { i16::MIN } else { next() }).collect();
+                let plain = a.iter().zip(&b).fold(0i32, |s, (&x, &y)| s.wrapping_add(i32::from(x) * i32::from(y)));
+                assert_eq!(dot_product(&a, &b), plain, "length {len}");
+            }
         }
     }
 }
