@@ -122,7 +122,7 @@ pub struct Shot5 {
     pub mirrored: Vec<[u8; 2]>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct SpriteTables {
     pub box_tables: Vec<BoxTable>,
     /// All the boxes, in contiguous blocks (one per designated address), from `box_tables[..].sets` up to

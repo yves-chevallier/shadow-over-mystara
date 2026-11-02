@@ -1,27 +1,16 @@
 //! Common parts of the ESHL class handlers (enemy shots and attacks): fields of an ESHL object, states, placement
-//! helpers and terrain collision helpers.
+//! helpers and terrain collision helpers. Also the tables ([`tables`]) of the ESHL, SOBJ, ITEM and BOX families.
+
+pub mod records;
+pub mod tables;
+pub mod vars;
+
+pub use records::{Base, Shot};
 
 use crate::families::cx::Bench;
 use super::cx::Cx;
 use crate::objects::Obj;
 use crate::objects::Current;
-
-/// Fields specific to ESHL objects.
-pub mod f {
-    /// Orientation (non-zero: flipped), copied from the owner at creation.
-    pub const FLIP: u32 = 0x2c;
-    /// Collision box set.
-    pub const BOX_SET: u32 = 0x2e;
-    /// Attack power (`+0x44`: attack identifier, `+0x45`: power).
-    pub const ATTACK_ID: u32 = 0x44;
-    pub const ATTACK_POWER: u32 = 0x45;
-    /// Owner (16-bit RAM address).
-    pub const OWNER: u32 = 0x50;
-    /// Flags set by the collision engine (bit 3: hit, bit 5: parried).
-    pub const HIT_FLAGS: u32 = 0x57;
-    /// Per-type countdown.
-    pub const TIMER: u32 = 0x5c;
-}
 
 /// Common main states (`+4`).
 pub mod st {
@@ -30,8 +19,8 @@ pub mod st {
 
 /// Blinking: the object is hidden every other frame (parity of `+0x5c` added to the dispatch loop counter D7).
 pub fn blink<R: Bench>(x: &mut Cx<'_, R>) {
-    let visible = x.u16(f::TIMER).wrapping_add(x.counter()) & 1 != 0;
-    x.set_bit(0x1, 1, !visible);
+    let visible = x.u16(Shot::TIMER).wrapping_add(x.counter()) & 1 != 0;
+    x.set_bit(Obj::FLAGS, 1, !visible);
 }
 
 /// Copies the owner's position (X, Z, Y: integer parts) into the shot.
@@ -46,10 +35,10 @@ pub fn copy_position<R: Bench>(x: &mut Cx<'_, R>, owner: Obj) {
 /// side it faces and by `dz` in height.
 pub fn place_in_front<R: Bench>(x: &mut Cx<'_, R>, owner: Obj, dx: i16, dz: u16) {
     copy_position(x, owner);
-    x.add16(0x10, 0xffff);
-    let side = if owner.u8(x.b, f::FLIP) != 0 { dx } else { -dx };
-    x.add16(0x8, side as u16);
-    x.add16(0xc, dz);
+    x.add16(Obj::Y, 0xffff);
+    let side = if owner.u8(x.b, Base::FLIP) != 0 { dx } else { -dx };
+    x.add16(Obj::X, side as u16);
+    x.add16(Obj::Z, dz);
 }
 
 /// Game pause: true when the object is suspended (byte `+0x40`).
@@ -66,3 +55,14 @@ pub fn blocked_by_terrain<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// Variable `A5+0x3d`: game paused (shots do not move).
 pub const GAME_PAUSED: u32 = 0x3d;
+
+/// The camera the players see: the main one (`A5+0x506`), or the alternate one (`A5+0x556`) when `A5+0x36` is set.
+/// Its x and y words.
+pub fn camera(b: &mut cps2::Cps2Bus) -> (crate::ram::Word, crate::ram::Word) {
+    use crate::ram;
+    if ram::CAMERA_ALT_ACTIVE.get(b) != 0 {
+        (ram::CAMERA_ALT_X, ram::CAMERA_ALT_Y)
+    } else {
+        (ram::CAMERA_X, ram::CAMERA_Y)
+    }
+}

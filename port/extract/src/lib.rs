@@ -13,6 +13,7 @@ pub mod gfx;
 pub mod levels;
 pub mod misc;
 pub mod music;
+pub mod objects;
 pub mod natives;
 pub mod palettes;
 pub mod players;
@@ -57,6 +58,8 @@ pub fn to_data_from(rom: &Program) -> io::Result<GameData> {
         speeds: speeds::speeds(rom),
         effects: effects::effects(rom),
         enemies,
+        objects: objects::objects(rom),
+        sprite_tables: tables::sprite_tables(rom)?,
         set: set::set(rom),
         dialogs,
     })

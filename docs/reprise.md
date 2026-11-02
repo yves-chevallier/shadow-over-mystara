@@ -28,7 +28,7 @@ Point de départ pour la prochaine session. L'historique détaillé des lots est
 * **L6, SET** (branche `wt-l6-set`, 2026-11-02) : SET découpés par type (`families/set/`, `set_b/`, `set_c/`),
   tables dans le nouveau `data/set.json` et `data/dialogs.json` chargés dans `GameData` (**réextraire `data`**),
   vues `record!` (`*/fields.rs`), variables A5 dans `set/vars.rs` ; accesseurs ROM, décalages littéraux et
-  `A5 + littéral` à 0 dans la zone set. Validé 308/308 dans les deux modes après fusion de main 71846a8 ; non
+  `A5 + littéral` à 0 dans la zone set. Validé 308/308 dans les deux modes après fusion de main 334316e ; non
   fusionné. Voir [fin.md](fin.md) (L6, « Résultat »).
 
 Aucune branche ouverte : `wt-pile` (partie 4) et `wt-locales` (partie 5, étapes 1-2 et 11 familles d'ennemis) sont fusionnés dans main (edd4e00), 296/296 VALIDE dans les deux modes.
@@ -119,6 +119,17 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    `rom32` d'`enemy_common` remplacés par `x.random()` et `x.prog32()` chez les appelants (`enemy_*`, `boss_*`).
    Pour L8b : voir « Pour L8b » dans fin.md (une ligne par table dans `extract/src/enemies.rs`, lecture par
    `enemy_common::tables`, champs communs d'`Enemy`).
+
+8. **Lot L7 (ESHL, SOBJ, objets, caisses)** fait (branche `wt-l7-objets`, [fin.md](fin.md) « L7 », « Résultat ») :
+   `families/eshl*/`, `sobj/`, `items/`, `boxes/` découpés par type (plus gros fichier 649 lignes), tables typées
+   `data/objects.json` (172 tables, `ddsom-data/src/objects.rs`), champs en vues `view!`/`record!` et variables
+   nommées (`families/shell/{tables,records,vars}.rs`) : zone à 0 accesseur ROM, 0 décalage littéral,
+   0 `A5 + littéral`, 0 constante d'adresse ROM. **Réextraire les assets** (`data/objects.json`). Pour les lots
+   suivants : la macro `tables!` de `ddsom-data/src/effects.rs` sert à toute famille de tables nommées
+   (`tables! { struct Nom; ... }`, `extract::effects::read_table`, `rebuild::put_named`) ; `GameData::sprite_tables`
+   (`sprites/tables.json`) est chargé (boîtes de collision, tir ESHL 5) ; `effects::target` et `outside_table`
+   n'existent plus (`effects::bad_index`) ; `PlayerView` de `shell/records.rs` (comme celle de L5) est à fusionner
+   avec la fiche de joueur de L10, `Host` avec les fiches d'ennemis et de boss (L8, L9).
 
 ## Méthode qui marche
 

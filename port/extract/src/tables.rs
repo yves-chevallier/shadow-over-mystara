@@ -39,7 +39,20 @@ fn bad(msg: String) -> io::Error {
 }
 
 pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
-    let rom = Program::load(roms)?;
+    let tables = sprite_tables(&Program::load(roms)?)?;
+    eprintln!(
+        "tables: {} box blocks, {} visibility boxes, {} ground marks, {} frame lists ({} frames)",
+        tables.box_blocks.len(),
+        tables.bounds.len(),
+        tables.marks.len(),
+        tables.frame_lists.len(),
+        tables.frame_lists.iter().map(|l| l.frames.len()).sum::<usize>()
+    );
+    json::save(path, &tables, 3)
+}
+
+/// The object tables of the program `rom` (`sprites/tables.json`).
+pub fn sprite_tables(rom: &Program) -> io::Result<SpriteTables> {
     // collision boxes
     let box_tables: Vec<BoxTable> = BOX_TABLES
         .iter()
@@ -106,14 +119,5 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
         mirrored_rom: SHOT5_MIRRORED,
         mirrored: (0..SHOT5_MIRRORED_COUNT).map(|i| [rom.rd8(SHOT5_MIRRORED + 2 * i), rom.rd8(SHOT5_MIRRORED + 2 * i + 1)]).collect(),
     };
-    eprintln!(
-        "tables: {} box blocks, {} visibility boxes, {} ground marks, {} frame lists ({} frames)",
-        box_blocks.len(),
-        BOUNDS_COUNT,
-        MARKS_COUNT,
-        frame_lists.len(),
-        frame_lists.iter().map(|l| l.frames.len()).sum::<usize>()
-    );
-    let tables = SpriteTables { box_tables, box_blocks, box_end: BOX_END, bounds_rom: BOUNDS, bounds, marks_rom: MARKS, marks, frame_lists, shot5 };
-    json::save(path, &tables, 3)
+    Ok(SpriteTables { box_tables, box_blocks, box_end: BOX_END, bounds_rom: BOUNDS, bounds, marks_rom: MARKS, marks, frame_lists, shot5 })
 }

@@ -426,3 +426,31 @@ Les entrées au-delà de la fin des tables (0x3b880, 0x3b8a2, 0x3ba0e : milieu d
 parité puis fait la même chose dans les deux branches. Aucun effet : le paramètre `side` de `cross_turn` (vide depuis
 la réécriture) est retiré, le comportement est documenté dans `families/enemy_beetle.rs`. Hypothèse : tour à gauche ou
 à droite prévu puis unifié.
+
+## Lot L7 (ESHL, SOBJ, objets, caisses ; wt-l7-objets)
+
+### Tables d'aiguillage lues pour les messages d'erreur (`items/`, `boxes/`, `items_b.rs`)
+
+* **Code** : les gestionnaires ITEM (types 0 à 9), la barrière et le décor inerte (BOX 1 et 2), la caisse (BOX 0) et
+  la pièce d'équipement (ITEM 2, `items_b.rs`) lisaient encore leurs tables `move.w (table,PC,Dn.w),D1 ; jmp` (par
+  `effects::target` ou un `jump` local) uniquement pour calculer l'adresse qu'atteindrait l'original quand l'index
+  n'a pas de bras Rust (`outside_table(target)`). Même chose pour les tables de routines d'effets des consommables
+  (0xdafb8 : nourriture 0xdafd0 deux fois, potions 0xdb044 et 0xdb026, rien 0xdb068, compteur 0xdb06a), des effets
+  spéciaux des caisses (0xda06a : créateurs ESHL 0xa1360, 0xa1a40, 0xa1670, 0xa17d0, 0xa1c6a, 0xa1360) et des
+  gestionnaires d'emplacement de l'équipement (0xdb392, huit routines).
+* **Pourquoi jamais atteint** : un index hors table ferait sauter l'original dans des données ou au milieu d'une
+  instruction ; aucune donnée ne le produit (audit du lot B, 308 scénarios).
+* **Décision** : les tables ne sont plus lues ; le cas reste un `unreachable!` par `effects::bad_index(index)`
+  (`effects::target` et `outside_table` retirés). Les tables de routines deviennent un `match` sur l'index (variante,
+  effet spécial, emplacement), l'adresse de chaque routine d'origine est rappelée en commentaire.
+* **Nature** : repli défensif de la conversion.
+
+### Lectures d'origine hors des tables, gardées
+
+* `eshl_c/debris45` (variante 1, 0xa3dc2) : la hauteur est lue à `table + 2 + dx` ; avec un `dx` négatif, la lecture
+  tombe dans le code qui précède la table. La table `debris45_place_offsets` commence donc 0x16 octets plus tôt
+  (0xa3dac), comme `beacon_sheets` au lot L5.
+* `items/scene` (guide, 0xdcbbc) : le mode 0x1e que donne le niveau 0 (`item_scene_guide_animations`) lit l'octet 0xdcbda, dans le code qui suit la table des animations
+  d'arrivée (scénario `scene_end/end_01`) ; la table `item_scene_guide_animations_arrival` va jusqu'à 0xdcbdc.
+
+Les deux cas apparaissent dans le résidu de la validation (une lecture chacun) avant l'extension des tables.

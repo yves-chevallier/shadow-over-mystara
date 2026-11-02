@@ -167,6 +167,15 @@ fn effects_lossless() {
 }
 
 #[test]
+fn objects_lossless() {
+    if !has("data/objects.json") {
+        return;
+    }
+    let objects = ddsom_data::ObjectTables::load(&assets().join("data/objects.json")).unwrap();
+    check("objects", |p| p.put_named(&objects.tables()));
+}
+
+#[test]
 fn speeds_lossless() {
     if !has("data/speeds.json") {
         return;

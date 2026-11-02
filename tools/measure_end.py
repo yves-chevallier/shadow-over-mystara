@@ -38,7 +38,7 @@ ROOT = Path(__file__).resolve().parent.parent
 ZONES = [
     ("effects", r"families/effects[^/]*(/.*)?\.rs$"),
     ("set", r"families/(set[^/]*\.rs|set[^/]*/.*\.rs|scenery\.rs)$"),
-    ("eshl_sobj_items", r"families/(eshl[^/]*|sobj|items|items_b|boxes|shell)\.rs$"),
+    ("eshl_sobj_items", r"families/(eshl[^/]*|sobj|items|items_b|boxes|shell)(/.*)?\.rs$"),
     ("enemies", r"families/(enemy[^/]*(/.*)?|reactions(\.rs|/.*))$"),
     ("bosses", r"families/boss[^/]*(/.*)?$"),
     ("players", r"^(player/|families/player/|combat/|combat\.rs$)"),
