@@ -28,7 +28,7 @@ pub(super) fn init<R: Bench>(x: &mut Cx<'_, R>) {
     lib::clear_all_popups(x);
     lib::sound(x, crate::sound::CMD_20);
     lib::create_set_15(x);
-    let r = random(x);
+    let r = x.random() as u32;
     x.set8(EFFECT_COUNT, r as u8);
     x.set8(f::BOX_SET, 0x22);
     lib::initial_hp_boss(x);
@@ -238,7 +238,7 @@ pub(super) fn slam<R: Bench>(x: &mut Cx<'_, R>) {
             next7(x);
             x.set16(TIMER2, 0x12c);
             x.set8(0x2d, 0);
-            let r = random(x);
+            let r = x.random() as u32;
             if r & 1 == 0 {
                 x.set8(0x2d, 0x10);
             }

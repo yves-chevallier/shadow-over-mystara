@@ -101,7 +101,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
             x.anim_start(SET_MOVE, 0x12);
         }
         2 => {
-            if (x.a5_u8(rom::PAUSE_FLAG) as i8) > 0 {
+            if var::PAUSE.get_i8(x.b) > 0 {
                 return;
             }
             let n = x.u16(0x84).wrapping_sub(1);

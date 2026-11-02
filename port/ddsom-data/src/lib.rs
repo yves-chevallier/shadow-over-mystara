@@ -52,6 +52,8 @@ pub struct GameData {
     pub anims: Anims,
     pub speeds: Speeds,
     pub effects: EffectTables,
+    /// Tables of the enemies (`families/enemy*` and `reactions` of the game; docs/fin.md, L8).
+    pub enemies: DataFile,
     /// Tables of the SET objects (`families/set*` of the game; docs/fin.md, L6).
     pub set: DataFile,
     /// Dialog windows, bubbles and their texts, in the three languages (SET 3, 10, 15 and 24).
@@ -60,11 +62,12 @@ pub struct GameData {
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 6] = [
+    pub const FILES: [&'static str; 7] = [
         "sprites/frames.json",
         "sprites/anims.json",
         "data/speeds.json",
         "data/effects.json",
+        "data/enemies.json",
         "data/set.json",
         "data/dialogs.json",
     ];
@@ -76,8 +79,9 @@ impl GameData {
             anims: Anims::load(&dir.join(Self::FILES[1]))?,
             speeds: Speeds::load(&dir.join(Self::FILES[2]))?,
             effects: EffectTables::load(&dir.join(Self::FILES[3]))?,
-            set: DataFile::load(&dir.join(Self::FILES[4]))?,
-            dialogs: DataFile::load(&dir.join(Self::FILES[5]))?,
+            enemies: DataFile::load(&dir.join(Self::FILES[4]))?,
+            set: DataFile::load(&dir.join(Self::FILES[5]))?,
+            dialogs: DataFile::load(&dir.join(Self::FILES[6]))?,
         })
     }
 }

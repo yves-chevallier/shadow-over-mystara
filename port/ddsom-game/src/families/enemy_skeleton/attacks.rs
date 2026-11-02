@@ -103,7 +103,7 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
 fn thrust<R: Bench>(x: &mut Cx<'_, R>, kind: u8, power: u8, anim: u32) {
     match x.u8(f::SUB3) {
         0 => {
-            let r = random(x) & 0xf;
+            let r = (x.random() as u32) & 0xf;
             if 0xffc0u32 >> r & 1 != 0 {
                 set_state_long(x, STANCE_ALT);
             } else {
@@ -147,7 +147,7 @@ fn combo<R: Bench>(x: &mut Cx<'_, R>) {
             if !step(x) {
                 return;
             }
-            if random(x) & 1 == 0 {
+            if (x.random() as u32) & 1 == 0 {
                 end_attack(x);
             } else {
                 x.add8(f::SUB3, 2);

@@ -36,6 +36,8 @@ pub fn enemies(rom: &Program) -> (Vec<Region>, Vec<Spec>) {
         span("hp_boss", 0x458c, 0x5c8c, false, "u16*16", &[]),
         span("hp_enemy", 0x5c8c, 0x788c, false, "u16*16", &[]),
     ];
+    // ---- tables of the common enemy code (families/enemy_common, reactions, enemy_lib) ----
+    s.extend(crate::enemies::specs(rom));
     // ---- ai.rs: approach points (0xe76c) ----
     const TABLE: u32 = 0xe93e;
     let first = rom.rd32(TABLE);

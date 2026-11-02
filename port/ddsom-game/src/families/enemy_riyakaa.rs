@@ -654,7 +654,7 @@ mod riyakaa {
                 x.set8(0x67, 1);
                 x.set8(0x6b, 0x18);
                 x.set8(0x2d, 0);
-                if random(x) & 1 != 0 {
+                if (x.random() as u32) & 1 != 0 {
                     x.add8(0x2d, 0x10);
                 }
                 speed(x, 0xd);
@@ -840,7 +840,7 @@ mod riyakaa {
     fn retreat<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(0x78, 0xff);
         let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-        let r = random(x) & 0x1f;
+        let r = (x.random() as u32) & 0x1f;
         x.set8(f::SUB, 8);
         let v = x.data8(NEXT_MOVES + row + r);
         x.set8(f::SUB2, v);
@@ -877,7 +877,7 @@ mod riyakaa {
     /// gesture.
     fn choose_attack<R: Bench>(x: &mut Cx<'_, R>) {
         let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
-        let r = random(x) & 0x1f;
+        let r = (x.random() as u32) & 0x1f;
         let pick = x.data8(NEXT_ATTACKS + row + r);
         if pick > 4 {
             return;
@@ -936,7 +936,7 @@ mod riyakaa {
         x.set32(0x58, 0);
         let level = ((var::RANK.get(x.b) >> 2) << 2) as u32;
         let mask = x.data32(MASKS + level);
-        let bit = random(x) & 0x1f;
+        let bit = (x.random() as u32) & 0x1f;
         if mask >> bit & 1 != 0 {
             x.set32(f::STATE, 0x0204_0600);
             lunge_start(x);

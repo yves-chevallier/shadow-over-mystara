@@ -335,7 +335,7 @@ fn breath_in_flight<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             let i = (x.u8(f::KEY_FRAME) & 0x7f) as u32 * 4;
-            let v = rom32(x, 0x82852 + i);
+            let v = x.prog32(0x82852 + i);
             x.add32(0xc, v);
             lib::step(x);
         }

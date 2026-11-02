@@ -65,6 +65,7 @@ Les zones ci-dessous correspondent aux périmètres des lots de la section 3.
 | SET après L6 (`families/set*`, `scenery.rs`) | 52 | 11 094 | 0 | 0 | 0 | 287 | 0 | 196 | `set/name_entry/cursor.rs` (623) |
 | ESHL, SOBJ, objets, caisses | 10 | 15 808 | 274 | 2 378 | 71 | 51 | 91 | 424 | `eshl_c.rs` (3 300), `eshl_b.rs` (3 054) |
 | Ennemis (`families/enemy*`, `reactions.rs`) | 94 | 32 564 | 170 | 1 302 | 18 | 25 | 1 | 205 | `reactions.rs` (2 223) |
+| Ennemis après L8a (façades `enemy_common/`, `enemy_lib`, `enemy`, `reactions/` : 12 fichiers) | 102 | 32 859 | 135 (façades 0) | 1 132 (façades 0) | 14 (façades 0) | 8 | 0 | 180 (façades 0) | `enemy_riyakaa.rs` (1 051) |
 | Boss (`families/boss*`) | 83 | 30 835 | 207 | 3 182 | 171 | 146 | 0 | 114 | `boss_11/` (2 419 en 5 fichiers) |
 | Joueurs (`player/`, `families/player/`, `combat*`) | 57 | 29 048 | 378 | 2 545 | 67 | 383 | 68 | 494 | `player/hurt.rs` (1 761) |
 | Écrans (`modes/`, `hud/`, `service/`, `scene/`, `credits*`, `text`, `popups`) | 41 | 18 134 | 62 | 15 | 137 | 1 637 | 74 | 437 | `scene/exit.rs` (1 535) |
@@ -707,7 +708,8 @@ libre.
 * (c) 2 378 décalages littéraux, dont 599 dans `sobj.rs` pour 6 nommés : c'est le pire ratio du jeu.
 * Factoriser : `rom32` de `sobj.rs` et `eshl_b.rs`, `random` de `eshl_c.rs` et `eshl_d.rs`.
 
-**L8. Ennemis** (grand, coupé en deux lots successifs ou parallèles)
+**L8. Ennemis** (grand, coupé en deux lots successifs ou parallèles) — **L8a fait** (branche `wt-l8a-ennemis`, voir
+« Résultat L8a »)
 * L8a : `enemy_common.rs`, `enemy_lib.rs`, `enemy.rs` et `reactions.rs` (2 223 lignes, à découper), d'abord seul, car
   ce sont les façades des autres.
 * L8b : `enemy_*/` et `enemy_*.rs`, en 94 fichiers, plus réguliers.
@@ -715,6 +717,66 @@ libre.
   0x77634...) et cercle de réactions 0x1c94b6. Elles vont dans `data/enemies.json`.
 * (c) 1 302 décalages littéraux. Un `record!` par famille d'ennemi, avec les champs de [creatures.md](creatures.md).
 * Factoriser : `random` et `rom32` de `enemy_common.rs` sur la version de `world`.
+* Résultat L8a :
+  * (a) Découpage (3936666) : `reactions.rs` en `families/reactions/` — `mod.rs` (aides, aiguillage des routines,
+    natives), `steps.rs` (pas communs : chutes, rebonds, relevé, mort), `throws.rs` (reculs, projections, glissades),
+    `hits.rs` (tenu, étincelles, désintégration, étourdi, culbutes, à terre), `grabs.rs` (saisies, tremblement,
+    pétrification, brûlure), `spins.rs` (tourbillons) ; plus gros fichier 480 lignes. Commentaires restés en
+    français traduits. 308/308 VALID (mode par défaut).
+  * (b) Données : les tables vont dans le `data/enemies.json` existant (format `DataFile` de `data.rs`, comme
+    `set.json` de L6, plutôt que la macro `tables!` de L5 : le fichier existait, ses tables `anim_sets`,
+    `no_grab_down`, `launch_*`, `immunities`, `hp_*`, `approach/*` sont gardées). `extract/src/enemies.rs`
+    (`specs`, appelé par `combat::enemies`) déclare : les 47 tables de réactions (`reactions/<famille>`, 43
+    routines par code `+0x49`, 42 pour le golem), `hit_sounds`, `death_sounds`, `get_up_routines`,
+    `anim_set_routines/<i>` (immédiat du `movea.l` des petites routines de `anim_sets`, types 13, 19, 34, 54),
+    `pop_speeds`, `daze_delays`, `quiver_delays`, `seized_offsets`, `seized_damage`, `seized_hit_speeds`,
+    `rank_masks`, `chance_rows`/`chance_masks`, `palette_scripts`, et les listes de pièces de `spawn_list`
+    (`beetle_nest/…`, `scorpion/…`). `GameData::enemies` (une ligne dans `GameData`, `FILES`), chargé par
+    `DataFile::load` ou construit par `extract::data::build` (même fonction que L6, ajout identique) dans
+    `to_data_from` ; test `to_data` étendu, `enemies_lossless` existant. Le jeu lit par
+    `families/enemy_common/tables.rs` : `table(nom)` ou les accesseurs nommés (`tables::hit_sounds()`...),
+    `at8/16/32` à un décalage en octets comme l'original, `nth32` ; `reactions(adresse)` (la table de réactions
+    reste désignée par son adresse, clé que la famille passe à `react`/`reaction_routine`) ; `held8/16/32`
+    pour une donnée désignée par une adresse lue dans une table (listes de pièces, lignes de masques) ; au-delà
+    des octets extraits, le résidu (`Missing`). Le cercle des tourbillons 0x1c94b6 est une table de vitesses de
+    `speeds.json` (`tables::circle`). Résidu des façades sur les 308 scénarios : 0.
+  * (c) Champs : `families/enemy_common/records.rs`, vue `record!` `Enemy` (champs communs aux ennemis et aux
+    chefs : états, positions et vitesses en mots, palette propre `+0x2a/+0x2b`, `+0x2f` groupe, cible `+0x50`,
+    gel, étourdissement, PV, `VULNERABLE` `+0x67`, réaction `+0x49`, saisie `+0x84..+0x87`, état à reprendre
+    `+0x8a`, compteur `+0x90`, immunités, `ANIM_VARIANT` `+0xbf`, champs du parent d'un ennemi composite
+    marqués (h)...). Les vitesses suivent `Obj` (`+0x16` = `AX`, `+0x1c` = `VY`), pas les anciens noms de
+    `reactions.rs` (`VY` = 0x16, `VX2` = 0x1c). `enemy_common::f` garde ses noms (`SUB2`, `SUB3`...) comme
+    alias des constantes d'`Enemy`. Variables dans `enemy_common/vars.rs` (`var` reste l'alias), plus
+    `BOSS_DOWN` (`A5+0x4f`) et `NAGPA_VISIBLE` (0xff2064). Places libres des pools par
+    `pools::X.free_count`, joueurs par `ram::PLAYERS`, champs du joueur par `Player::…`.
+  * Factorisation : `random` et `rom32` d'`enemy_common` supprimés ; les familles appellent `x.random()` et
+    `x.prog32()` (trait `Machine`, réexporté par `enemy_common` pour les modules qui l'importent en bloc) :
+    remplacement mécanique dans `enemy_*` et `boss_*`. `spawn_list(x, "beetle_nest", liste)` prend le nom de la
+    famille de listes. Le module `enemy_common::rom` (adresses de routines inutilisées, `PAUSE_FLAG`) est retiré
+    (`var::PAUSE`).
+  * Mesures (`measure_end.py`, 12 fichiers des façades) : accesseurs ROM 35 → 0, décalages littéraux 171 → 0,
+    `A5 + littéral` 3 → 0, constantes d'adresses ROM 20 → 0, `rd*`/`wr*` 23 → 6 (écritures de la palette et des
+    liens des pièces), plus gros fichier 2 218 → 683 (`enemy_lib.rs`). Zone `enemies` : 94 → 102 fichiers,
+    accesseurs ROM 170 → 135, décalages 1 303 → 1 132, `A5` 17 → 14, constantes 204 → 180 (regex de la zone
+    étendue au dossier `reactions/`).
+  * Validation : 308/308 VALID après (a) (mode par défaut) ; final (1cfb4b7, main c9881d0 inchangé) : 308/308
+    VALID en mode par défaut et avec `DDSOM_ASSETS` (assets réextraits par la branche), `DDSOM_SCENES=1
+    DDSOM_COV=1 DDSOM_LONG=1` ; résidu identique dans les deux modes à celui de L1 (16 146 lectures, 19 clés,
+    aucune des tables des ennemis) ; tests `ddsom-assets` (`enemies_lossless`),
+    `extract` (`to_data`), `ddsom-game --lib` ; `cargo clippy` sans avertissement, avec et sans `tools`.
+* Pour L8b :
+  * une table d'une famille = une ligne `prog`/`data` dans `extract/src/enemies.rs` (`specs`), nommée
+    `<famille>/<table>` (les tables d'attitudes par niveau : squelette 0x5942a, bête 0x7473e, trog 0x5af66,
+    guerrier 0x77634...) ; la lire par `enemy_common::tables::table("<famille>/<table>").at16(x.b, off)`, ou
+    ajouter un accesseur nommé au `named!` de `tables.rs` ; une donnée pointée par une table, par `held8/16/32` ;
+  * les constantes `REACT_FIRST`... des familles restent des adresses : ce sont les clés des tables
+    `reactions/<famille>` (`react`, `reaction_routine`) ; les familles et chefs qui lisent encore leur table de
+    réactions eux-mêmes (`x.prog32(REACTIONS + code)` : `enemy_double`, boss 0, 1, 3, 4, 7, 8, 11, 16, 19)
+    peuvent passer par `reaction_routine` (leurs tables sont déjà extraites) ;
+  * les champs communs sont ceux d'`Enemy` (`Enemy::VULNERABLE` pour les `VULNERABLE: u32 = 0x67` des
+    familles, `STRIKE_KIND`/`STRIKE_POWER`, `GROUP`, `AI_SHOT`...) ; un `record!` par famille pour `+0xa0` et
+    au-delà ; `f::SUB2`/`f::SUB3` peuvent devenir `Enemy::STEP`/`Enemy::SUB_STEP` ;
+  * les `x.prog32(...)` et `(x.random() as u32)` posés mécaniquement sont à reprendre dans chaque famille.
 
 ### Vague 3 (trois agents)
 

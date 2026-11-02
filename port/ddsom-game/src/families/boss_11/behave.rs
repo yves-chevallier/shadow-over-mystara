@@ -247,7 +247,7 @@ pub(super) fn life_rank<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
 /// 0x8da56: draw according to the life rank (table 0x8da88).
 fn near_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let i = (life_rank(x) & 3) * 4;
-    let mask = rom32(x, 0x8da88 + i as u32);
+    let mask = x.prog32(0x8da88 + i as u32);
     let rng = x.random();
     let r = rng & 1;
     setw(x, 0, r);
@@ -266,7 +266,7 @@ fn near_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// 0x8da98: draw according to the life rank (table 0x8dad2), then a player in the box.
 fn far_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let i = (life_rank(x) & 3) * 4;
-    let mask = rom32(x, 0x8dad2 + i as u32);
+    let mask = x.prog32(0x8dad2 + i as u32);
     let rng = x.random();
     let b = rng & 0x1f;
     setw(x, 0, b);

@@ -8,6 +8,7 @@ pub mod combat;
 pub mod data;
 pub mod dialogs;
 pub mod effects;
+pub mod enemies;
 pub mod gfx;
 pub mod levels;
 pub mod misc;
@@ -46,7 +47,17 @@ pub fn to_data(roms: &Path) -> io::Result<GameData> {
 pub fn to_data_from(rom: &Program) -> io::Result<GameData> {
     let frames = sprites::frames(rom)?;
     let anims = sprites::anims(rom, &frames)?;
+    let (regions, specs) = combat::enemies(rom);
+    let enemies = data::build(rom, regions, &specs, Vec::new());
     let (regions, specs, texts) = dialogs::specs(rom);
     let dialogs = data::build(rom, regions, &specs, texts);
-    Ok(GameData { frames, anims, speeds: speeds::speeds(rom), effects: effects::effects(rom), set: set::set(rom), dialogs })
+    Ok(GameData {
+        frames,
+        anims,
+        speeds: speeds::speeds(rom),
+        effects: effects::effects(rom),
+        enemies,
+        set: set::set(rom),
+        dialogs,
+    })
 }

@@ -194,7 +194,7 @@ pub(super) fn dodge_spot<R: Bench>(x: &mut Cx<'_, R>) {
         (true, false) => 8,
         (true, true) => 0xc,
     };
-    let table = rom32(x, 0x8a6cc + d6);
+    let table = x.prog32(0x8a6cc + d6);
     let rng = x.random();
     let i = ((rng) & 3) << 3;
     let a = table.wrapping_add(i as u32);

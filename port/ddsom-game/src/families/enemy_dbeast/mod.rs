@@ -286,7 +286,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     let profile = match x.u8(PROFILE) {
         0 | 1 => {
             // random offset of this beast's animation series
-            let r = random(x) as u8 & 0xf;
+            let r = (x.random() as u32) as u8 & 0xf;
             let shift = x.rom8(SHIFT_PICK + r as u32);
             x.set8(ANIM_SHIFT, shift);
             if x.u8(PROFILE) == 0 { PROFILE_A } else { PROFILE_B }

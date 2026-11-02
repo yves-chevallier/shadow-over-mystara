@@ -345,7 +345,7 @@ fn bob<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x18 + 2 * k, v.wrapping_neg());
         }
     } else {
-        let pick = (random(x) & 7) * 4;
+        let pick = ((x.random() as u32) & 7) * 4;
         for k in 0..4 {
             let v = x.data16(BOB_TABLE + pick + 2 * k);
             x.set16(BOB_SPEEDS + 2 * k, v);

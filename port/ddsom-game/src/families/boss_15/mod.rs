@@ -131,7 +131,7 @@ fn chase<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x9301e: rest or walk, at random (the small dragon: only the about-face).
 fn wander<R: Bench>(x: &mut Cx<'_, R>) {
-    let mut r = random(x) as u16 & 3;
+    let mut r = (x.random() as u32) as u16 & 3;
     if x.u8(TYPE) != TYPE_BIG {
         r &= 1;
     }

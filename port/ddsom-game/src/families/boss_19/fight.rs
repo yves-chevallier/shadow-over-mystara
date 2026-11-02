@@ -146,7 +146,7 @@ fn probe_back<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// 0x91050: chooses an attack (`+6` = 0 to 10) from the table.
 fn pick_attack_a<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0x1f;
+    let r = (x.random() as u32) & 0x1f;
     let which = x.data8(PICK_A + r);
     x.set8(f::SUB2, which);
     x.set16(f::STATE, 0x0204);
@@ -219,7 +219,7 @@ pub(super) fn pick_attack_b<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let level = (var::RANK.get(x.b) >> 1) as u32;
     let base = PICK_B + (level << 5);
-    let r = random(x) & 0x1f;
+    let r = (x.random() as u32) & 0x1f;
     let which = x.data8(base + r);
     x.set8(f::SUB2, which);
     x.set16(f::STATE, 0x0208);

@@ -76,7 +76,7 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     set_state_long(x, STANCE);
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     if 0x1111u32 >> r & 1 != 0 {
         pick_target(x);
     }

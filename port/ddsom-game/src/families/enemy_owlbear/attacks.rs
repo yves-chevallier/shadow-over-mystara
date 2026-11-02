@@ -128,7 +128,7 @@ fn swipe_begin<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x5f5d8: draws the number of attacks of the series from the difficulty-level table.
 fn roll_series<R: Bench>(x: &mut Cx<'_, R>) {
     let level = (var::RANK.get(x.b) >> 1 << 4) as u32;
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let n = x.data8(SERIES_TABLE + level + r);
     x.set8(SERIES, n);
 }

@@ -436,7 +436,7 @@ fn chase_turn<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 4);
     let n = x.u8(STEPS);
     x.set8(COUNT, n);
-    let r = random(x) as u8 & 2;
+    let r = (x.random() as u32) as u8 & 2;
     x.set8(STEPS, r);
     attack_anim(x, 0x22);
     chase_follow(x);
@@ -528,7 +528,7 @@ fn next_action<R: Bench>(x: &mut Cx<'_, R>) {
     } else {
         0xf0
     };
-    row += random(x) & 0xe;
+    row += (x.random() as u32) & 0xe;
     let a = x.rom8(0x83f4e + row);
     x.set8(Obj::SPEED_INDEX, (a << 1) & 0x1e);
     x.set8(f::SUB, (a & 0xf0) >> 2);
@@ -603,7 +603,7 @@ fn recover<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0, 1);
     x.set8(BLINK, 0x10);
     x.set8(f::STATE, 2);
-    if random(x) & 1 != 0 {
+    if (x.random() as u32) & 1 != 0 {
         return next_action(x);
     }
     x.set8(STEPS, 0x40);
@@ -621,7 +621,7 @@ fn tumble<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(0x18, 0);
             x.set32(0x1c, 0);
             x.set8(SPIN_DELAY, if x.counter() & 1 != 0 { 1 } else { 2 });
-            let a = (random(x) as u16 + 8) & 0x1f;
+            let a = ((x.random() as u32) as u16 + 8) & 0x1f;
             x.set8(Obj::SPEED_INDEX, a as u8);
             fall_anim(x, 0);
         }
@@ -754,7 +754,7 @@ fn dying_burst<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(COUNT, n);
     if n & 0x8000 != 0 {
         x.set_a5_u16(0x4be, 5);
-        let r = (random(x) & 0x1f) as u16 + 0x10;
+        let r = ((x.random() as u32) & 0x1f) as u16 + 0x10;
         x.set16(COUNT, r);
     }
     if step(x) {

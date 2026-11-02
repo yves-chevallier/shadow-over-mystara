@@ -49,7 +49,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     let code = x.u8(0x49) as u32;
-    let routine = rom32(x, REACTIONS + code);
+    let routine = x.prog32(REACTIONS + code);
     if routine == SHAKE_REACTION {
         shake(x)
     } else {
