@@ -306,8 +306,9 @@ pub fn item_curse(g: &mut Ctx, p: Player) -> bool {
         if weapon != 0xe {
             p.set_state(g, 0x0204_2600);
             super::spawn::cursed_weapon(g, p);
-            // Z of the creator's last `move.w` (the link), or of the allocation that fails (zero): always true
-            return g.c.sr & m68k::SR_Z == 0;
+            // Z of the creator's last `move.w` (the link: a non-zero address word), or of the allocation that fails
+            // (Z clear): always true
+            return true;
         }
         let count = ram::CURSE_COUNT.get(g.b).wrapping_add(1);
         ram::CURSE_COUNT.set(g.b, count);

@@ -43,11 +43,9 @@ fn linked(c: &mut Cpu, b: &mut Cps2Bus, pool: &pools::Pool, kind: u8, link: u32)
     rts(c, b);
 }
 
-/// 0x4c930 for the player module, still on the processor: player effect 0x10 (revival) linked to `player`, with the
-/// registers the original leaves (A0 = the player, A1, carry, flags).
-pub fn revive_68k(c: &mut Cpu, b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
-    c.a[0] = player.0;
-    linked_via(c, b, player, &pools::PEFF, 0x10, 0x50)
+/// 0x4c930 for the player module: player effect 0x10 (revival) linked to `player`.
+pub(crate) fn revive(r: &mut impl Regs, b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
+    linked_via(r, b, player, &pools::PEFF, 0x10, 0x50)
 }
 
 /// 0x4f132: player effect 0x21 (second phase of the spell quake), linked to the player by `+0x50`.
@@ -55,14 +53,6 @@ pub fn quake_b(b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
     linked_via(&mut Pure, b, player, &pools::PEFF, 0x21, 0x50)
 }
 
-/// `quake_b` with the original's registers (callers by address: `player/`): A1, carry and flags.
-#[track_caller]
-pub fn quake_b_68k(c: &mut Cpu, b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
-    c.a[0] = player.0;
-    let r = linked_via(c, b, player, &pools::PEFF, 0x21, 0x50);
-    crate::diag::dead_regs(c, "effects", CREATED);
-    r
-}
 
 fn peff_16(c: &mut Cpu, b: &mut Cps2Bus) {
     linked(c, b, &pools::PEFF, 0x10, 0x50);
@@ -590,19 +580,17 @@ fn booted_clear(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0xdd12c: the pickup objects' spawn lock (`A5-0x5ac4`) raised.
-pub(crate) fn item_lock_clear(c: &mut Cpu, b: &mut Cps2Bus) {
+pub(crate) fn item_lock_clear(b: &mut Cps2Bus) {
     wr8(b, A5 - 0x5ac4, 0);
-    moved(c, 0, Size::Byte);
 }
 
-/// 0x3baea: player's `+0x1f0`, from table 0x3baf8 indexed by the quarter of the counter `A5+0x7f92`.
-pub(crate) fn player_table_byte(c: &mut Cpu, b: &mut Cps2Bus, player: Obj) {
-    c.a[0] = player.0;
+/// 0x3baea: player's `+0x1f0`, from table 0x3baf8 indexed by the quarter of the counter `A5+0x7f92`. Returns the
+/// index (the D0.w that the original leaves, which a caller reads as the variant of the effect it creates).
+pub(crate) fn player_table_byte(b: &mut Cps2Bus, player: Obj) -> u16 {
     let i = rd16(b, A5 + 0x7f92) >> 2;
-    set_low_word(&mut c.d[0], i);
     let v = prog8(b, 0x3baf8 + i as u32);
     wr8(b, player.0 + 0x1f0, v);
-    moved(c, v as u32, Size::Byte);
+    i
 }
 
 /// 0x1c44a: the game variables `A5+0x2c..0x6b` set to zero.

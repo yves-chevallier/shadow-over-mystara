@@ -1,8 +1,8 @@
 //! The game without a 68000: natives only and the kernel's frame loop (see `docs/noyau.md`, "towards a loop
 //! without 68000").
 //!
-//! The game does not use the machine's `Cpu` (only its cycle counter, for the machine's schedule): the code still on
-//! the processor runs on a fresh register bench (`bench`). The processor is at a
+//! The game does not use the machine's `Cpu` (only its cycle counter, for the machine's schedule); what remains on a
+//! register bench are the natives called by address by the other modules. The processor is at a
 //! *point* (`kernel::Point`, stored in the task table): a startup step, a scheduler point
 //! (Rust state machine, `kernel`), a task, or the held game step. A task is launched by calling the step of its
 //! stage (`tasks::execute`). A native always runs in full, even when

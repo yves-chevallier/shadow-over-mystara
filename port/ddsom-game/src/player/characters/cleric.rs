@@ -8,8 +8,8 @@
 //! - action 0x10 (0x41f22) is the same slide as the fighter's (`common::dash`).
 //!
 //! The prayers darken the screen, freeze the other players and pause the game until
-//! their end (`common::begin_spell` / `end_spell`). The original routines that create shots, effects and
-//! sounds are still called as they are.
+//! their end (`common::begin_spell` / `end_spell`). The shots, effects and
+//! sounds are created by Rust calls.
 
 use crate::machine::Machine;
 use super::common::{self, field, next_step};
@@ -25,7 +25,7 @@ use crate::objects::pools::{BOSS, ENEMY};
 use crate::objects::Obj;
 use crate::player::external as ext;
 
-/// Original routines called as they are: player effects, sounds and palettes of the cleric.
+/// Identifiers (original addresses) of the routines reached: player effects, sounds and palettes of the cleric.
 mod rom {
     /// Sounds of the strikes.
     pub const SOUND_STRIKE_B: u32 = 0xe8156;
@@ -417,13 +417,12 @@ fn turn_undead(g: &mut Ctx, p: Player) {
                 p.set_u8(g, 0x1eb, 3);
                 p.set_u8(g, 0x1ec, 1);
                 ram::SCROLL1_Y.set(g.b, 0x100);
-                // 0x4b518, 0x3b0c, 0x1ac86, 0x51bb6, 0xe27da, with the registers they leave
-                crate::families::creators::for_players::effect_8_68k(g.c, g.b, p.obj());
-                g.c.a[0] = p.0;
-                crate::placement::load_effect_palette_regs(g.c, g.b, crate::placement::effect_palette::P380);
+                // 0x4b518, 0x3b0c, 0x1ac86, 0x51bb6, 0xe27da; the palette copy leaves its longs 2 to 5 in D2-D5
+                crate::families::creators::for_players::effect_8(&mut g.leftovers, g.b, p.obj());
+                let (longs, _) = crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::P380);
+                (g.leftovers.d2, g.leftovers.d3, g.leftovers.d4, g.leftovers.d5) = (longs[2], longs[3], longs[4], longs[5]);
                 crate::palette::set_flash_color(g.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
-                g.c.flags_logic(crate::palette::FLASH_COLOR_WHITE_VALUE as u32, m68k::decode::Size::Word);
-                crate::families::creators::for_players::effect_2f_68k(g.c, g.b, p.obj());
+                crate::families::creators::for_players::effect_2f(&mut g.leftovers, g.b);
                 g.sound(0xe27da, p);
             }
             animation::step(g, p);
@@ -788,8 +787,9 @@ fn prayer_beam(g: &mut Ctx, p: Player) {
             }
             next_step(g, p);
             if p.u8(g, field::SPELL_CANCELLED) == 0 {
-                spawn::beam(g, p, true);
-                p.set_u16(g, field::SPELL_TARGET, g.c.a[1] as u16);
+                // Original glitch: the target is the A1 left by the creator, also when the pool is full
+                let target = spawn::aimed_beam(g, p);
+                p.set_u16(g, field::SPELL_TARGET, target.word());
             }
         }
         4 => {

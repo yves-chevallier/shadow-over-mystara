@@ -13,7 +13,6 @@
 //! Check mode (`set_check(true)`): each call also runs the original routine on a copy
 //! of the state and compares the two; the differences are counted in `report()`.
 
-pub mod bench;
 pub mod camera_modes;
 pub mod config;
 pub mod credits;

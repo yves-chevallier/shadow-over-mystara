@@ -139,9 +139,8 @@ pub struct Dispatch {
 /// scenarios; the other registers that a handler leaves are reread by nobody. Other routines also write them (sprite
 /// list, cameras, input copy, gauge: `sprites::build_in_game`...).
 ///
-/// They are a game state, stored in the task table (`tasks::table::Table::leftovers`); the code still on the
-/// processor finds them in its register bench (`bench::on_bench`, [`Leftovers::to_bench`] and
-/// [`Leftovers::from_bench`]).
+/// They are a game state, stored in the task table (`tasks::table::Table::leftovers`); the natives called by the
+/// original code (tools) find them in their register bench ([`Leftovers::to_bench`] and [`Leftovers::from_bench`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Leftovers {
     /// D2: what is left by the collision with the terrain (0x33fe4, `terrain::push`), the box tests (0xb5e0,

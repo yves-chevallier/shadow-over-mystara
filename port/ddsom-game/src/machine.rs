@@ -1,7 +1,7 @@
 //! Common context of the native routines: the machine (processor and bus) and the shared services.
 //!
 //! Each subsystem has its own context (`families::cx::Cx`, `player::Ctx`, `scene::Ctx`,
-//! `combat::World`...); all of them hold `c: &mut Cpu` and `b: &mut Cps2Bus`. Rather than a base structure that
+//! `combat::World`...); all of them hold `b: &mut Cps2Bus` (and some still `c: &mut Cpu`). Rather than a base structure that
 //! they would embed (the separate `x.c`, `x.b` accesses, everywhere, would not survive a `Deref`), they implement
 //! the [`Machine`] trait, which gives them the common services once: the random draw, and reads in the
 //! program space and the data space. The work RAM variables are read through their typed views
@@ -58,27 +58,6 @@ pub trait WithCpu: Machine {
     /// The processor and the bus, borrowed together (the `_68k` adapters need both).
     fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus);
 }
-
-/// Implements `Machine` and `WithCpu` for a context that has the fields `c` and `b`.
-macro_rules! machine {
-    ($($t:ty),* $(,)?) => {
-        $(impl Machine for $t {
-            fn bus(&mut self) -> &mut Cps2Bus {
-                &mut *self.b
-            }
-        }
-        impl WithCpu for $t {
-            fn machine(&mut self) -> (&mut Cpu, &mut Cps2Bus) {
-                (&mut *self.c, &mut *self.b)
-            }
-        })*
-    };
-}
-
-machine!(
-    crate::player::Ctx<'_>,
-    crate::combat::World<'_>,
-);
 
 impl Machine for crate::scene::Ctx<'_> {
     fn bus(&mut self) -> &mut Cps2Bus {

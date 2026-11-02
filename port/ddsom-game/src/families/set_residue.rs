@@ -6,8 +6,8 @@ use cps2::Cps2Bus;
 use m68k::decode::Size;
 use m68k::Cpu;
 
-use crate::mem::{prog32, prog8, rd16, rd8, rts, set_low_word, wr16, wr32, wr8, A5};
-use crate::{call, regs, Native};
+use crate::mem::{prog32, prog8, rd16, rd8, rts, wr16, wr32, wr8, A5};
+use crate::{regs, Native};
 use crate::objects::Obj;
 
 /// Tile buffer of layer 3: the columns of 44 longwords cleared by 0xd5f12.
@@ -77,35 +77,10 @@ pub fn two_grids(b: &mut Cps2Bus, character: u16) {
     }
 }
 
-/// `two_grids` (character D0) with the original's registers.
+/// `two_grids` (character D0) for the tools (the game calls `two_grids`).
 fn load_two_grids(c: &mut Cpu, b: &mut Cps2Bus) {
-    const GRIDS: u32 = 0xce686;
-    const LOAD_BLOCKS: u32 = 0x26d4;
-    const DESTINATION: u32 = 0x91_7000;
-    let mut a4 = GRIDS.wrapping_add((c.d[0] as u16).wrapping_mul(4) as u32);
-    c.a[1] = DESTINATION;
-    for _ in 0..2 {
-        set_low_word(&mut c.d[0], rd16(b, a4)); // read through (A4)+: data space
-        a4 += 2;
-        c.a[4] = a4;
-        call(c, b, LOAD_BLOCKS);
-    }
+    two_grids(b, c.d[0] as u16);
     rts(c, b);
-}
-
-/// Routine specific to the generator's variant (`+3`): a byte of the `kinds` table gives the index into the
-/// `routines` routine table; index 0 is a plain RTS.
-fn variant_routine(c: &mut Cpu, b: &mut Cps2Bus, kinds: u32, routines: u32) {
-    const NOTHING: u32 = 0xd99f8;
-    let variant = rd8(b, c.a[0] + 3) as u32;
-    c.d[0] = prog8(b, kinds + variant) as u32;
-    let index = (c.d[0] as u16).wrapping_mul(4);
-    set_low_word(&mut c.d[0], index);
-    c.flags_logic(index as u32, Size::Word);
-    c.a[1] = prog32(b, routines + index as u32);
-    if c.a[1] != NOTHING {
-        call(c, b, c.a[1]);
-    }
 }
 
 /// Core of `variant_routine` for generator `me`: the variant's routine, nothing (0xd99f8) or a scene
@@ -131,16 +106,7 @@ pub fn finish_wave(b: &mut Cps2Bus, me: Obj) {
     variant_sound(b, me, 0xd9976, 0xd996e);
 }
 
-/// 0xd98b8: routine specific to the variant, at the start of a wave (called directly by SET generator 19,
-/// A0 = the generator; the native adds the `rts`).
-pub fn wave_start(c: &mut Cpu, b: &mut Cps2Bus) {
-    variant_routine(c, b, 0xd98d8, 0xd98cc);
-}
 
-/// 0xd995a: routine specific to the variant, at the end of a wave.
-pub fn wave_end(c: &mut Cpu, b: &mut Cps2Bus) {
-    variant_routine(c, b, 0xd9976, 0xd996e);
-}
 
 /// Camera settings set by the "call" entries of the scene scripts (D0 = value): scroll limit
 /// in X (`A5+0x52c`), vertical position (`A5+0x57c`) and camera mode (`A5+0x4ff`); the
@@ -152,22 +118,19 @@ pub(crate) mod camera {
     const POSITION_Y: u32 = 0x57c;
     const MODE: u32 = 0x4ff;
 
-    /// 0x2a24: scroll limit `v`; the flags of the `move.w` for the caller still on the processor.
-    pub fn set_limit_x(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
+    /// 0x2a24: scroll limit `v` (the flags of the `move.w` are reread by nobody).
+    pub fn set_limit_x(b: &mut Cps2Bus, v: u16) {
         wr16(b, A5 + LIMIT_X, v);
-        c.flags_logic(v as u32, Size::Word);
     }
 
     /// 0x2a2a: vertical position `v`.
-    pub fn set_position_y(c: &mut Cpu, b: &mut Cps2Bus, v: u16) {
+    pub fn set_position_y(b: &mut Cps2Bus, v: u16) {
         wr16(b, A5 + POSITION_Y, v);
-        c.flags_logic(v as u32, Size::Word);
     }
 
     /// 0x2a30: camera mode `v`.
-    pub fn set_mode(c: &mut Cpu, b: &mut Cps2Bus, v: u8) {
+    pub fn set_mode(b: &mut Cps2Bus, v: u8) {
         wr8(b, A5 + MODE, v);
-        c.flags_logic(v as u32, Size::Byte);
     }
 }
 
@@ -178,6 +141,6 @@ const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus),
 pub const NATIVES: &[Native] = &[
     native(0xd5f12, "set_clears_columns", erase_columns, regs::ALL),
     native(0xce668, "set_two_grids", load_two_grids, regs::ALL),
-    native(0xd98b8, "set_wave_start", |c, b| { wave_start(c, b); rts(c, b) }, regs::ALL),
-    native(0xd995a, "set_wave_end", |c, b| { wave_end(c, b); rts(c, b) }, regs::ALL),
+    native(0xd98b8, "set_wave_start", |c, b| { begin_wave(b, Obj(c.a[0])); rts(c, b) }, regs::ALL),
+    native(0xd995a, "set_wave_end", |c, b| { finish_wave(b, Obj(c.a[0])); rts(c, b) }, regs::ALL),
 ];

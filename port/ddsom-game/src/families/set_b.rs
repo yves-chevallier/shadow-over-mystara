@@ -47,19 +47,18 @@ fn players() -> impl Iterator<Item = Obj> {
 // ---------------------------------------------------------------------------------------------
 
 /// 0xd40e8, routine of the appearance scripts (scenes 14 and 109): releases the trampoline lock (`A5+0x46`) and creates
-/// the thirteen trampolines of the scene, SET 16 of variants 13 to 1; stops if the pool is full. Leaves like the
-/// original D5 (loop counter), A1 and D6 (from the allocation).
-pub(crate) fn spawn_bumpers(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus) {
+/// the thirteen trampolines of the scene, SET 16 of variants 13 to 1; stops if the pool is full. Returns the D5 that
+/// the original leaves (loop counter: `moveq #12,D5`, high word zero; 0xFFFF after the last), a leftover reread by the
+/// handlers (`dispatch::Leftovers`); A1 and D6 of the allocation are reread by nobody.
+pub(crate) fn spawn_bumpers(b: &mut cps2::Cps2Bus) -> u32 {
     crate::mem::wr16(b, A5 + 0x46, 0);
-    // `moveq #12,D5`: long counter, high word zero
     for counter in (0..13u32).rev() {
-        c.d[5] = counter;
-        let Some(o) = pools::SET.alloc_68k(c, b) else { return };
+        let Some(o) = pools::SET.alloc(b) else { return counter };
         o.set_u8(b, Obj::ACTIVE, 1);
         o.set_u8(b, Obj::KIND, 0x10);
         o.set_u8(b, Obj::VARIANT, counter as u8 + 1);
     }
-    c.d[5] |= 0xffff;
+    0xffff
 }
 
 /// Trampoline / bumper (h): a contact zone (boxes read from the ROM according to `+0x2e` and bytes `+0x38..+0x3a`)

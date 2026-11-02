@@ -155,14 +155,32 @@ fn run_steps(b: &mut Cps2Bus, order_index: u8, from: usize) -> Flow {
     Flow::Done
 }
 
-/// 0x35292: the players (code still on the processor, `player/`).
-pub fn update_players(b: &mut Cps2Bus) {
-    crate::bench::on_bench(b, |c, b| crate::player::update::update_all(&mut crate::player::Ctx::new(c, b)));
+/// The players' code `f` (`player::Ctx`), with the leftovers D2-D5 of the game, which it reads and writes by name.
+fn with_players(b: &mut Cps2Bus, f: fn(&mut crate::player::Ctx)) {
+    let leftovers = table::table(b).leftovers;
+    let mut g = crate::player::Ctx { leftovers, ..crate::player::Ctx::new(b) };
+    f(&mut g);
+    let leftovers = g.leftovers;
+    table::table(b).leftovers = leftovers;
 }
 
-/// 0x392e4: sub-objects of the players (code still on the processor, `player/`).
+/// 0x35292: the players.
+pub fn update_players(b: &mut Cps2Bus) {
+    with_players(b, crate::player::update::update_all);
+}
+
+/// 0x392e4: sub-objects of the players (front and back weapons).
 pub fn update_player_parts(b: &mut Cps2Bus) {
-    crate::bench::on_bench(b, |c, b| crate::player::overlays::update(&mut crate::player::Ctx::new(c, b)));
+    with_players(b, crate::player::overlays::update);
+}
+
+/// 0x260ee: the frame's collisions (`combat`), with the leftovers D2-D5 of the game.
+pub fn update_combat(b: &mut Cps2Bus) {
+    let leftovers = table::table(b).leftovers;
+    let mut w = crate::combat::World { b, a2: 0, leftovers };
+    crate::combat::combat_update(&mut w);
+    let leftovers = w.leftovers;
+    table::table(b).leftovers = leftovers;
 }
 
 /// Length of an absolute `jsr`: the return address is that of the call site + 6.
@@ -492,16 +510,16 @@ pub fn after_world(b: &mut Cps2Bus) {
     // long_28_scenes, frame 10431), see `sprites::build`: the leftover D4 of the game
     crate::sprites::build_in_game(b);
     crate::video::gauge_in_world(b, 0x48_0002);
-    // 0x260ee (code still on the processor, `combat`)
-    crate::bench::on_bench(b, |c, b| crate::combat::combat_update(&mut crate::combat::World { c, b, a2: 0 }));
+    // 0x260ee
+    update_combat(b);
     crate::video::gauge_in_world(b, 0x4f_001e);
     // 0x19e20: pop-ups; 0xf2e5c: spawn script reader
     crate::popups::animate_obj(b);
     crate::scene::script::step(b);
     // 0x1f27c
     crate::objects::rank::tick(b);
-    // 0x28d8 (the players' context is still on the processor: `player::actions::to_stand`)
-    crate::bench::on_bench(b, crate::aids::game_over);
+    // 0x28d8
+    crate::aids::game_over(b);
 }
 
 /// Debug level skip (end of phase 12 and of phase 8, `0x1c74a`): inactive in the production

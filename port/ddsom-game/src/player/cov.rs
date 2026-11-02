@@ -8,25 +8,12 @@ use std::sync::Mutex;
 
 static ON: AtomicBool = AtomicBool::new(false);
 static HITS: Mutex<BTreeMap<&'static str, u64>> = Mutex::new(BTreeMap::new());
-static ROM_CALLS: Mutex<BTreeMap<u32, u64>> = Mutex::new(BTreeMap::new());
 
 /// Counts a call (full name of the function, without the crate path).
 pub fn hit(name: &'static str) {
     if ON.load(Ordering::Relaxed) {
         *HITS.lock().unwrap().entry(name).or_default() += 1;
     }
-}
-
-/// Counts a call of an original routine (not yet rewritten) by the player core.
-pub fn rom_call(addr: u32) {
-    if ON.load(Ordering::Relaxed) {
-        *ROM_CALLS.lock().unwrap().entry(addr).or_default() += 1;
-    }
-}
-
-/// Original routines called from the player core: (address, calls).
-pub fn rom_report() -> Vec<(u32, u64)> {
-    ROM_CALLS.lock().unwrap().iter().map(|(k, v)| (*k, *v)).collect()
 }
 
 /// Enables counting.

@@ -624,7 +624,7 @@ fn step_6(x: &mut Ctx) -> Flow {
         // player of that number (0x2e58, 0x2e6e, 0x2e86, 0x2e9e)
         let kind = rd8(x.b, p + 2) as u32;
         assert!(kind < 4, "selection: player {kind} outside table 0x1d0f6");
-        crate::bench::on_bench(x.b, |c, b| crate::player::init::initialize(c, b, kind));
+        crate::player::init::initialize(x.b, kind);
         if (rd8(x.b, p + 3) & 0x7f) >> 1 == 5 {
             wr8(x.b, p + 0x162, 1);
             wr8(x.b, p + 0x16b, 5);

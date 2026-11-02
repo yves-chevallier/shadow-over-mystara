@@ -6,9 +6,8 @@
 //! - `special` (0x3f0ae): the chosen item or spell (`field::SPECIAL_KIND`);
 //! - `dash` (0x3f9bc): action 0x10, charge then slide.
 //!
-//! Each action is an automaton whose step is `Player::STEP` (even). The original routines that
-//! create shots, effects, sounds and projectiles are still called as they are (see `common::rom` and the
-//! `rom` constants below).
+//! Each action is an automaton whose step is `Player::STEP` (even). The shots, effects, sounds
+//! and projectiles are created by Rust calls (`spawn`, `families`; the sounds by their identifier, `rom` constants).
 
 use super::common::{self, field, next_step, set_forward_motion};
 use super::items;
@@ -24,7 +23,7 @@ use crate::objects::Obj;
 use crate::player::ram;
 use crate::player::external as ext;
 
-/// Original routines called as they are: player effects and sounds of the fighter.
+/// Identifiers (original addresses) of the routines reached: player effects and sounds of the fighter.
 mod rom {
     /// Sounds.
     pub const SOUND_SPIN_B: u32 = 0xe828c;

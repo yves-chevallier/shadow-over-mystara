@@ -3,7 +3,7 @@
 //! (`combos`).
 //!
 //! Like the common actions (`actions`), each is a small automaton whose step is `+7`. The
-//! original routines still called (sounds, effects) go through `Ctx::rom`.
+//! sounds and effects are Rust calls.
 
 use super::actions::to_stand;
 use super::checks::{attack_button, item_curse, jump_button};
@@ -16,12 +16,12 @@ use crate::objects::{pools, Obj};
 use crate::machine::Machine;
 use crate::player::external as ext;
 
-/// Original routines still called as they are.
+/// Identifiers (original addresses) of the routines reached (sounds).
 mod rom {
     /// Push sound.
     pub const PUSH_SOUND: u32 = 0xeae14;
-    /// Rare pose 0x26: sound, flash, creation of a SET object (D0.b = kind; A1 and carry on return).
-    pub const CREATE_SET: u32 = 0xc8312;
+    /// Rare pose 0x26: sound, flash, creation of a SET object of the scene (0xc8312) of this variant.
+    pub const SCENE_SET_VARIANT: u8 = 0x29;
 }
 
 /// Fields specific to these actions.
@@ -62,13 +62,11 @@ fn set_vx_pair(g: &mut Ctx, p: Player, vx: u16, ax: u16) {
     }
 }
 
-/// One frame out of four (depending on the character), dust under the feet: variant D0, settings D1, speeds D2/D3.
+/// One frame out of four (depending on the character), dust under the feet: variant D0, settings D1, speeds D2/D3
+/// (which stay in D2.w and D3.w: leftovers of the original).
 fn dust(g: &mut Ctx, p: Player, d0: u16, d1: u16, d2: u16, d3: u16) {
-    let set = |r: &mut u32, v: u16| *r = *r & 0xffff_0000 | v as u32;
-    set(&mut g.c.d[0], d0);
-    set(&mut g.c.d[1], d1);
-    set(&mut g.c.d[2], d2);
-    set(&mut g.c.d[3], d3);
+    crate::mem::set_low_word(&mut g.leftovers.d2, d2);
+    crate::mem::set_low_word(&mut g.leftovers.d3, d3);
     g.shock(p, d0 as u8, d1, d2, d3);
 }
 
@@ -795,11 +793,10 @@ pub fn curse_drop(g: &mut Ctx, p: Player) {
         return;
     }
     p.set_u8(g, field::GESTURE, 0);
-    crate::families::effects_creators::for_players::posed_flash_b_68k(g.c, g.b, p.obj());
-    crate::mem::set_low_byte(&mut g.c.d[0], 0x29);
-    g.rom(rom::CREATE_SET, p);
-    if g.c.sr & m68k::SR_C == 0 {
-        wr8(g.b, g.c.a[1] + 0x42, 1);
+    crate::families::effects_creators::for_players::posed_flash_b(&mut g.leftovers, g.b, p.obj());
+    // 0xc8312, D0.b = 0x29
+    if let Some(set) = crate::families::creators::scene_set(g.b, rom::SCENE_SET_VARIANT) {
+        wr8(g.b, set.0 + 0x42, 1);
     }
 }
 
@@ -824,16 +821,17 @@ pub fn dust_puffs(g: &mut Ctx, p: Player) {
             }
             let row = PUFFS + 8 * p.u8(g, RARE_TIMER) as u32;
             let height = g.prog16(row + 6);
-            for (r, off) in [(0, 0), (1, 2), (2, 4)] {
-                let v = g.prog16(row + off);
-                crate::mem::set_low_word(&mut g.c.d[r], v);
-            }
-            g.c.d[4] = height as u32;
-            crate::mem::set_low_word(&mut g.c.d[3], 0xffff);
-            let (variant, setting, vx) = (g.c.d[0] as u8, g.c.d[1] as u16, g.c.d[2] as u16);
-            g.shock(p, variant, setting, vx, 0xffff);
-            if g.c.sr & m68k::SR_C == 0 {
-                wr16(g.b, g.c.a[1] + Obj::Z, height);
+            let (variant, setting, vx) = (g.prog16(row) as u8, g.prog16(row + 2), g.prog16(row + 4));
+            // the speeds and the height stay in D2-D4 (leftovers of the original)
+            crate::mem::set_low_word(&mut g.leftovers.d2, vx);
+            g.leftovers.d4 = height as u32;
+            crate::mem::set_low_word(&mut g.leftovers.d3, 0xffff);
+            match g.shock(p, variant, setting, vx, 0xffff) {
+                Some(puff) => wr16(g.b, puff.0 + Obj::Z, height),
+                // Original glitch: only the carry is tested; in the scene without shocks (41: no effect, carry
+                // clear) the height is written through the A1 left by the code before. That A1 is not known here (no
+                // scenario plays it): the write is left out (`docs/code-mort.md`, "Sortie du Cpu, partie 6").
+                None => {}
             }
             p.set_u8(g, Player::TIMER_6F, 6);
             let n = p.u8(g, RARE_TIMER).wrapping_add(1);
@@ -881,7 +879,7 @@ macro_rules! rare_native {
             name: $label,
             run: crate::Body::WithCpu(|c, b| {
                 let p = Player(c.a[0]);
-                $f(&mut Ctx::new(c, b), p);
+                super::on_bench(c, b, |g| $f(g, p));
                 crate::mem::rts(c, b)
             }),
             touches_sound: false,
@@ -1025,7 +1023,9 @@ fn push_dust(g: &mut Ctx, p: Player) {
     }
     let at = 0x36eea + 8 * p.class(g) as u32;
     let (d0, d1, d2, d3) = (g.prog16(at), g.prog16(at + 2), g.prog16(at + 4), g.prog16(at + 6));
-    g.c.d[4] = g.c.d[4] & 0xffff_0000 | 8 * p.class(g) as u32;
+    // D4.w: the offset of the row (leftover of the original)
+    let row_offset = 8 * p.class(g) as u16;
+    crate::mem::set_low_word(&mut g.leftovers.d4, row_offset);
     dust(g, p, d0, d1, d2, d3);
 }
 
@@ -1103,7 +1103,6 @@ fn air_attack(g: &mut Ctx, p: Player) {
     let character = p.u8(g, Player::CHARACTER) as u32;
     let table = if p.u8(g, Player::KEYS_HELD) & 4 != 0 { 0x376e2 } else { 0x376d6 };
     let anim = g.prog8(table + character);
-    g.c.d[6] = anim as u32;
     animation::start_plain(g, p, anim as u16);
     item_curse(g, p);
 }
@@ -1158,7 +1157,7 @@ pub const LEAP: crate::Native = crate::Native {
     name: "leap_attack",
     run: crate::Body::WithCpu(|c, b| {
         let p = Player(c.a[0]);
-        leap_attack(&mut Ctx::new(c, b), p);
+        super::on_bench(c, b, |g| leap_attack(g, p));
         crate::mem::rts(c, b)
     }),
     touches_sound: false,
@@ -1170,7 +1169,7 @@ pub const HOP_BACK: crate::Native = crate::Native {
     name: "magic_user_hop_back",
     run: crate::Body::WithCpu(|c, b| {
         let p = Player(c.a[0]);
-        hop_back(&mut Ctx::new(c, b), p);
+        super::on_bench(c, b, |g| hop_back(g, p));
         crate::mem::rts(c, b)
     }),
     touches_sound: false,

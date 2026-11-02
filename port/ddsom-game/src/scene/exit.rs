@@ -509,7 +509,7 @@ fn run_update(ex: &mut Ex, update: Update) {
         _ => {
             ex.x.world();
             if update == Update::Full {
-                crate::bench::on_bench(ex.x.b, crate::combat::update_cpu);
+                crate::game::update_combat(ex.x.b);
             }
         }
     }

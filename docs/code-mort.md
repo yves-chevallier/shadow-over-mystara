@@ -372,3 +372,48 @@ sont désormais des valeurs fixées, à noter ici.
 * **Natives retirées.** `config_variant` (0x2d648 : rend le bloc de valeurs par défaut en A6 et son déplacement en
   D0) : aucun appelant par adresse, les cœurs Rust prennent le bloc (`config::block_defaults`).
 
+
+## Sortie du Cpu, partie 6 (joueurs, `player/`, `combat`, `creators`, `set_residue` ; wt-cpu-player)
+
+### Replis par adresse des tables du joueur (`player/update.rs`, `scripted.rs`, `cinematics.rs`, `hurt.rs`)
+
+* **Ce que faisait le code.** Quand une entrée des tables d'aiguillage du joueur (sous-états 0x3541c, cinématiques
+  par scène 0x23826 et 0x23f4e, attente 0x23d66, réactions 0x3a0f4 et 0x3b820 et leurs tables de pas, pas des
+  cinématiques de fin) n'avait pas de fonction Rust, `Ctx::rom` appelait l'adresse par `crate::call`.
+* **Pourquoi jamais atteint.** Relevé statique (`cpup_tables`, scratchpad) : toutes les entrées des tables par scène
+  et d'attente sont réécrites ; la table 0x3541c n'a que trois entrées (0, 4, 8), les octets suivants sont du code ;
+  aucune native n'existe dans les plages 0x23000-0x25200 et 0x3a0f4-0x3bb52, donc le jeu sans 68000 s'y arrêtait déjà
+  (`no68k::native`). Aucun de ces appels n'apparaît dans les compteurs des 308 scénarios (seules les baguettes
+  `spawn_rod_*` et des sons étaient appelés par adresse depuis `player/`).
+* **Nature.** Repli défensif. Devenus des `unreachable!` qui nomment la table.
+
+### Tir de joueur de type inconnu (`combat/shots.rs`, table 0x267c4)
+
+* **Ce que faisait le code.** Pour un type de tir hors 0..0x18, appel par adresse de l'entrée de la table 0x267c4
+  (A0 = tir, A1 = victime, A3 = propriétaire, Z = le tir porte).
+* **Pourquoi jamais atteint.** Les tirs de joueur (PSHL) n'ont que les types 0 à 0x18 (gestionnaires `pshl_0` à
+  `pshl_24`) ; un autre type arrêterait déjà la boucle d'aiguillage. Repli défensif : `unreachable!`.
+
+### Étincelle d'objet et bouffées de poussière dans la scène 41 (`common::item_spark`, `moves::dust_puffs`)
+
+* **Ce que fait l'original.** 0xb10c8 ne crée rien dans la scène 41 et rend la retenue nulle ; l'appelant
+  (0x3fb8c, 0x36cb8) ne teste que la retenue et écrit la hauteur à `(0xc,A1)`, A1 étant celui que le code d'avant
+  laisse (l'enveloppe du son 0xe2430 sauve et rend tous les registres : c'est l'A1 de l'entrée de l'action).
+* **Pourquoi non reproduit.** Aucun scénario ne le joue, et cet A1 vient de bien avant l'action (boucle des joueurs,
+  combinaisons) : le Rust ne le connaît pas. L'ancienne version Rust écrivait à l'A1 du banc, qui n'était pas non plus
+  celui de l'original. L'écriture est omise (le son est joué comme dans l'original). À reprendre si un scénario
+  atteint ce cas (objet utilisé dans la scène 41).
+
+### Pas de réactions jamais joués, réécrits (`player/hurt.rs`)
+
+En rendant les replis par adresse `unreachable!`, `fuzz_couv` (cible `players_update`, états perturbés) est tombé sur
+des pas des tables de réactions qui n'avaient ni fonction Rust ni native : le jeu sans 68000 s'y arrêtait déjà
+(main compris), sans qu'aucun des 308 scénarios n'y passe. Relevé statique des tables de pas (`cpup_tables`) :
+pas 0 des réactions 0x3a578, 0x3a890, 0x3a9da, 0x3a9f8 (0x3a59a, 0x3a5a4, 0x3a296, 0x3aa16) et pas 8 de 0x3a9f8
+(0x3aa5e) ; pas 0xa de 0x3af44 (glissade jusqu'à l'arrêt, 0x3aff8) ; réactions entières 0x3b570 (étoiles, perte de
+16 PV, 0x3b592/0x3b5b2/0x3b656), 0x3b72c (agenouillé sous six étoiles, 0x3b740-0x3b7aa), 0x3b7ba (0x3b7ca, 0x3b7e2) ;
+au sol, 0x3b8a6 (0x3aa2e, 0x3aa5e) et 0x3b8c4 (0x3b8d6, 0x3b8e0). **Trou réel** : un joueur au pas lent tué par un
+coup (`hurt_slow`, réaction 0x14) passe par 0x3b8a6 → 0x3aa2e, qui arrêtait le jeu. Tous transcrits de l'original
+(glitch écrit en clair : réglage des étoiles de 0x3b7ca = D1.b, l'offset du pas) et validés par `fuzz_couv`
+(`nom:players_update`, 10 scénarios, ~59 000 essais : plus aucune panique ni écart plausible ; avant : 163 paniques).
+Les entrées au-delà de la fin des tables (0x3b880, 0x3b8a2, 0x3ba0e : milieu d'instruction) ne sont pas des pas.

@@ -56,8 +56,8 @@ crate::steps! {
             crate::events::clear_counter(x.b);
             crate::events::clear_popups(x.b);
             crate::sound::clear_private_stack(x.b);
-            crate::bench::on_bench(x.b, crate::player::init::clear_all_players);
-            crate::bench::on_bench(x.b, crate::player::init::clear_sub_objects);
+            crate::player::init::clear_all_players(x.b);
+            crate::player::init::clear_sub_objects(x.b);
             clear_mode_state(x);
             crate::rng::seed(x.b);
             default_high_scores(x);

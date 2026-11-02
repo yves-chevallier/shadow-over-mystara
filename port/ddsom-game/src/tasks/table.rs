@@ -296,7 +296,8 @@ pub struct Table {
     /// none is in progress at a cession (they are therefore in no task).
     pub calls: Vec<OutsideFrame>,
     /// Leftover registers that the object handlers pass to each other (`dispatch::Leftovers`): a game state.
-    /// The code still on the processor finds them in its register bench (D2-D5, `bench::on_bench`).
+    /// The natives called by the original code (tools) find them in their register bench (D2-D5,
+    /// `dispatch::Leftovers::to_bench`).
     pub leftovers: crate::dispatch::Leftovers,
     /// The A0 that a shared state of the scene exit leaves to the dispatch of its sequence (original glitch:
     /// `scene::exit::set_dispatch_a0`).

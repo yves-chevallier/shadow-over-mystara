@@ -62,21 +62,21 @@ mod entry {
 }
 
 /// The routines called by the `call` entries of the scene scripts (all those of the ROM's scripts: table 0xf2f62),
-/// with their argument (the D0.w of the entry). They are still on the processor (`families/`): the registers they
-/// leave are reread by nobody but the leftovers D2-D5.
+/// with their argument (the D0.w of the entry, of which 0xa8ae8 takes the low byte). The registers they leave are
+/// reread by nobody, except the D5 of the trampolines (a leftover of the game, `dispatch::Leftovers`).
 fn script_routine(b: &mut Cps2Bus, routine: u32, arg: u16) {
     use crate::families::{effects_creators, small, set_b, set_residue::camera};
-    crate::bench::on_bench(b, |c, b| match routine {
-        0x2a24 => camera::set_limit_x(c, b, arg),
-        0x2a2a => camera::set_position_y(c, b, arg),
-        0x2a30 => camera::set_mode(c, b, arg as u8),
+    match routine {
+        0x2a24 => camera::set_limit_x(b, arg),
+        0x2a2a => camera::set_position_y(b, arg),
+        0x2a30 => camera::set_mode(b, arg as u8),
         0xa8ae8 => {
-            effects_creators::set_list_d0_68k(c, b, arg);
+            effects_creators::set_list(b, arg as u8);
         }
-        0xd40e8 => set_b::spawn_bumpers(c, b),
-        0xdd12c => small::item_lock_clear(c, b),
+        0xd40e8 => crate::tasks::table::table(b).leftovers.d5 = set_b::spawn_bumpers(b),
+        0xdd12c => small::item_lock_clear(b),
         r => unreachable!("scene script routine {r:#x}: the ROM's scripts only call 0x2a24, 0x2a2a, 0x2a30, 0xa8ae8, 0xd40e8, 0xdd12c"),
-    })
+    }
 }
 
 /// One reader step (one frame). The registers of the original loop (D0, D1, D6, A1, A4, A6) are reread by nobody.

@@ -9,12 +9,11 @@
 //! Each creator has a Rust function (called by the actions) and a native at the original address for
 //! the callers left in ROM. When the pool is full the allocation fails and nothing is created.
 
-use m68k::decode::Size;
 
 use super::{Ctx, Player};
 use crate::mem::{rd16, rd8, rts, wr16, wr8, A5};
 use crate::objects::Obj;
-use crate::{regs, Native};
+use crate::Native;
 use crate::objects::pools;
 use crate::player::ram;
 use crate::machine::Machine;
@@ -84,22 +83,19 @@ mod kind {
     pub const MOON_B: u8 = 0x1e;
 }
 
-/// Reserves a slot in `pool` and activates it with kind `kind`. The creators are natives called by
-/// address (spell tables, `g.rom`): the allocation keeps its registers (A1 = the object, or the leftover from a
-/// failure; carry), which the callers re-read (`items::lightning`, `items::wall`), and the output flags.
+/// Reserves a slot in `pool` and activates it with kind `kind`.
 fn create(g: &mut Ctx, _p: Player, pool: &pools::Pool, kind: u8) -> Option<Obj> {
     cov!();
-    let o = pool.alloc_68k(g.c, g.b)?;
+    let o = pool.alloc(g.b)?;
     o.set_u8(g.b, Obj::ACTIVE, 1);
     o.set_u8(g.b, Obj::KIND, kind);
     Some(o)
 }
 
-/// Last gesture of a creator: the link to the player. The N and Z flags are those of this `move.w`.
+/// Last gesture of a creator: the link to the player.
 fn link(g: &mut Ctx, o: Obj, p: Player) {
     cov!();
     o.set_u16(g.b, field::LINK, p.0 as u16);
-    g.c.flags_logic(p.0 & 0xffff, Size::Word);
 }
 
 /// Creates an effect linked to the player: kind, variant (`Obj::VARIANT`), then the link. `fill` writes the other
@@ -174,7 +170,7 @@ pub fn holy_light(g: &mut Ctx, p: Player) {
 pub fn beam(g: &mut Ctx, p: Player, aimed: bool) {
     cov!();
     if aimed {
-        effect(g, p, kind::BEAM, Some(1), |_, _| {});
+        aimed_beam(g, p);
         return;
     }
     let step = step_of(g, p);
@@ -187,6 +183,21 @@ pub fn beam(g: &mut Ctx, p: Player, aimed: bool) {
             return;
         }
     }
+}
+
+/// 0x4b5ac with D0 non-zero: the aimed beam (variant 1). Returns the A1 that the original leaves: the beam, or, when the
+/// pool is full, the first slot or the end of the pool (`Pool::alloc_or_leftover`).
+pub fn aimed_beam(g: &mut Ctx, p: Player) -> Obj {
+    cov!();
+    let o = match pools::PEFF.alloc_or_leftover(g.b) {
+        Ok(o) => o,
+        Err(leftover) => return leftover,
+    };
+    o.set_u8(g.b, Obj::ACTIVE, 1);
+    o.set_u8(g.b, Obj::KIND, kind::BEAM);
+    o.set_u8(g.b, Obj::VARIANT, 1);
+    link(g, o, p);
+    o
 }
 
 /// 0x4c19a: blessing, variant `v`.
@@ -290,17 +301,25 @@ pub fn dash(g: &mut Ctx, p: Player) {
     effect(g, p, kind::DASH, None, |g, o| o.set_u8(g.b, 0x5c, sub));
 }
 
-/// 0x50324: wall target; the scene's wall reserve (`A5 - 0x5fbe`) counts one more.
-pub fn wall_target(g: &mut Ctx, p: Player) -> Option<Obj> {
+/// 0x50324: wall target; the scene's wall reserve (`A5 - 0x5fbe`) counts one more. Returns what the caller tests:
+/// Z clear (the counter's `addq.b` does not reach zero) and A1, the target. Original glitch: when the pool is full, the
+/// allocation leaves Z clear and A1 on the first slot or the end of the pool (`Pool::alloc_or_leftover`), which the
+/// caller takes as a created target.
+pub fn wall_target(g: &mut Ctx, p: Player) -> (bool, Obj) {
     cov!();
     let scene = ram::SCENE.get(g.b);
-    let o = effect(g, p, kind::WALL_TARGET, None, |g, o| o.set_u8(g.b, field::SCENE, scene))?;
+    let o = match pools::PEFF.alloc_or_leftover(g.b) {
+        Ok(o) => o,
+        Err(leftover) => return (true, leftover),
+    };
+    o.set_u8(g.b, Obj::ACTIVE, 1);
+    o.set_u8(g.b, Obj::KIND, kind::WALL_TARGET);
+    o.set_u8(g.b, field::SCENE, scene);
+    link(g, o, p);
     let walls = A5.wrapping_sub(0x5fbe);
-    let old = rd8(g.b, walls);
-    // addq.b #1: the flags of this addition are those the callers test
-    let new = g.c.addsub(false, 1, old as u32, false, Size::Byte, false);
-    wr8(g.b, walls, new as u8);
-    Some(o)
+    let new = rd8(g.b, walls).wrapping_add(1);
+    wr8(g.b, walls, new);
+    (new != 0, o)
 }
 
 /// 0x4cdd0: bolt on the target `target`, at its position, 0x40 above.
@@ -483,8 +502,6 @@ pub fn thrown(g: &mut Ctx, p: Player, which: Thrown) -> bool {
     cov!();
     let shot = which.shot();
     let Some(o) = create(g, p, &pools::PSHL, shot.kind) else {
-        g.c.d[0] = 0;
-        g.c.flags_logic(0, Size::Long);
         return false;
     };
     o.set_u8(g.b, 0x2a, 2);
@@ -496,7 +513,6 @@ pub fn thrown(g: &mut Ctx, p: Player, which: Thrown) -> bool {
     }
     o.set_u16(g.b, field::LINK, p.0 as u16);
     let Some(speed) = shot.speed else {
-        g.c.flags_logic(p.0 & 0xffff, Size::Word);
         return true;
     };
     o.set_u16(g.b, Obj::VX, speed);
@@ -507,13 +523,11 @@ pub fn thrown(g: &mut Ctx, p: Player, which: Thrown) -> bool {
     if directional {
         o.set_u8(g.b, Obj::SPEED_INDEX, 2);
     }
-    g.c.flags_logic(facing as u32, Size::Byte);
     if facing == 0 {
         if directional {
             o.set_u8(g.b, Obj::SPEED_INDEX, 6);
         }
-        let reversed = g.c.addsub(true, speed as u32, 0, false, Size::Word, false);
-        o.set_u16(g.b, Obj::VX, reversed as u16);
+        o.set_u16(g.b, Obj::VX, speed.wrapping_neg());
     }
     true
 }
@@ -537,8 +551,7 @@ fn rod_used(g: &mut Ctx, p: Player, rod: &Rod) {
     let left = p.u8(g, rod.reserve).wrapping_sub(1);
     p.set_u8(g, rod.reserve, left);
     if left == 5 {
-        g.c.d[0] = rod.interface;
-        crate::families::creators::set_a_68k(g.c, g.b, p.obj(), rod.interface as u8);
+        crate::families::creators::for_players::set_a(&mut g.leftovers, g.b, p.obj(), rod.interface as u8);
     }
 }
 
@@ -578,6 +591,26 @@ fn rod_row(g: &mut Ctx, p: Player, rod: &Rod, first_offset: u16, counts: u32) {
     rod_used(g, p, rod);
 }
 
+/// The three wand shots (`magic_user::rod_shot`).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum RodShot {
+    /// 0x5336a: a row of flames.
+    Flame,
+    /// 0x53478: a ball.
+    Ball,
+    /// 0x535f2: a row of stars.
+    Star,
+}
+
+/// Shot of the held wand.
+pub fn rod_shot(g: &mut Ctx, p: Player, shot: RodShot) {
+    match shot {
+        RodShot::Flame => rod_row(g, p, &ROD_FLAME, 0x38, 0x533f4),
+        RodShot::Ball => rod_ball(g, p),
+        RodShot::Star => rod_row(g, p, &ROD_STAR, 0x48, 0x5367c),
+    }
+}
+
 /// 0x53478: wand ball (kind 0xf): at most as many alive as the level indicates (bytes at 0x534b8). An allocation
 /// failure does not consume a charge.
 fn rod_ball(g: &mut Ctx, p: Player) {
@@ -608,8 +641,6 @@ pub fn ice_ground(g: &mut Ctx, p: Player) -> bool {
     cov!();
     for v in 0..2 {
         let Some(o) = create(g, p, &pools::PSHL, kind::ICE_GROUND) else {
-            g.c.d[0] = 0;
-            g.c.flags_logic(0, Size::Long);
             return false;
         };
         o.set_u8(g.b, Obj::VARIANT, v);
@@ -622,8 +653,6 @@ pub fn ice_ground(g: &mut Ctx, p: Player) -> bool {
 pub fn knife(g: &mut Ctx, p: Player) -> bool {
     cov!();
     let Some(o) = create(g, p, &pools::PSHL, kind::KNIFE) else {
-        g.c.d[0] = 0;
-        g.c.flags_logic(0, Size::Long);
         return false;
     };
     o.set_u8(g.b, 0x45, 0xa);
@@ -859,179 +888,173 @@ pub fn rain(g: &mut Ctx, p: Player) {
 
 // ---- natives --------------------------------------------------------------------------------------
 
-/// Runs a creator on the 68000 register state (A0 = the player) then returns control.
-fn run(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, f: impl FnOnce(&mut Ctx, Player)) {
-    let p = Player(c.a[0]);
-    f(&mut Ctx::new(c, b), p);
+/// Runs a creator for the tools (`fuzz_player`, `DDSOM_CHECK`; the game calls the Rust functions): A0 = the player,
+/// `f` reads its parameters in the data and address registers `d`, `a`; the leftovers D2-D5 pass through the bench,
+/// the other registers the original leaves (A1, flags) are not reproduced.
+fn run(c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, f: impl FnOnce(&[u32; 8], &[u32; 8], &mut Ctx, Player)) {
+    let (d, a, p) = (c.d, c.a, Player(c.a[0]));
+    super::on_bench(c, b, |g| f(&d, &a, g, p));
     rts(c, b);
 }
 
-/// Declares the native of a creator at its original address; `$body` reads its parameters from the
-/// registers (`g.c.d[0]`...).
+/// Declares the native of a creator at its original address; `$body` reads its parameters in `$d` and `$a`.
 macro_rules! creator {
-    ($name:ident, $entry:expr, $label:expr, $outputs:expr, |$g:ident, $p:ident| $body:expr) => {
+    ($name:ident, $entry:expr, $label:expr, |$d:ident, $a:ident, $g:ident, $p:ident| $body:expr) => {
         pub const $name: Native = Native {
             entry: $entry,
             name: $label,
-            run: crate::Body::WithCpu(|c, b| run(c, b, |$g, $p| $body)),
+            run: crate::Body::WithCpu(|c, b| run(c, b, |$d, $a, $g, $p| { let _ = ($d, $a); $body })),
             touches_sound: false,
-            outputs: $outputs,
+            outputs: 0,
         };
     };
 }
 
-creator!(SLASH, 0x4a99a, "spawn_slash", regs::a(1), |g, p| {
-    let (d0, d1) = (g.c.d[0] as u8, g.c.d[1] as u8);
+creator!(SLASH, 0x4a99a, "spawn_slash", |d, a, g, p| {
+    let (d0, d1) = (d[0] as u8, d[1] as u8);
     slash(g, p, if d0 == 0 { Some(d1) } else { None })
 });
-creator!(BLOOD, 0x4a860, "spawn_blood", regs::a(1), |g, p| blood(g, p));
-creator!(CURE, 0x4ab48, "spawn_cure", regs::a(1), |g, p| {
-    let n = g.c.d[0] as u8;
+creator!(BLOOD, 0x4a860, "spawn_blood", |d, a, g, p| blood(g, p));
+creator!(CURE, 0x4ab48, "spawn_cure", |d, a, g, p| {
+    let n = d[0] as u8;
     cure(g, p, n)
 });
-creator!(POTION, 0x4ab64, "spawn_potion", regs::a(1), |g, p| potion(g, p));
-creator!(HOLY_LIGHT, 0x4aeb2, "spawn_holy_light", regs::a(1), |g, p| holy_light(g, p));
-creator!(BEAM, 0x4b5ac, "spawn_beam", regs::a(1), |g, p| {
-    let aimed = g.c.d[0] as u8 != 0;
+creator!(POTION, 0x4ab64, "spawn_potion", |d, a, g, p| potion(g, p));
+creator!(HOLY_LIGHT, 0x4aeb2, "spawn_holy_light", |d, a, g, p| holy_light(g, p));
+creator!(BEAM, 0x4b5ac, "spawn_beam", |d, a, g, p| {
+    let aimed = d[0] as u8 != 0;
     beam(g, p, aimed)
 });
-creator!(BLESSING, 0x4c19a, "spawn_blessing", regs::a(1), |g, p| {
-    let v = g.c.d[0] as u8;
+creator!(BLESSING, 0x4c19a, "spawn_blessing", |d, a, g, p| {
+    let v = d[0] as u8;
     blessing(g, p, v)
 });
-creator!(BANISH, 0x4c26c, "spawn_banish", regs::a(1), |g, p| {
-    let foe = (g.c.d[0] as u8 != 0).then_some(g.c.a[2]);
+creator!(BANISH, 0x4c26c, "spawn_banish", |d, a, g, p| {
+    let foe = (d[0] as u8 != 0).then_some(a[2]);
     banish(g, p, foe)
 });
-creator!(WEAPON_TRAIL, 0x4c58e, "spawn_weapon_trail", regs::a(1) | regs::d(1), |g, p| {
-    let v = g.c.d[0] as u8;
-    // `moveq 0,D1 ; move.b WEAPON_A,D1b ; subi.b #0x10,D1b`
-    g.c.d[1] = p.u8(g, Player::WEAPON_A).wrapping_sub(0x10) as u32;
+creator!(WEAPON_TRAIL, 0x4c58e, "spawn_weapon_trail", |d, a, g, p| {
+    let v = d[0] as u8;
     weapon_trail(g, p, v)
 });
-creator!(SHOWER, 0x4dcda, "spawn_shower", regs::a(1), |g, p| {
-    let side = g.c.d[0] as u8;
+creator!(SHOWER, 0x4dcda, "spawn_shower", |d, a, g, p| {
+    let side = d[0] as u8;
     shower(g, p, side)
 });
-creator!(AURA, 0x4e6a8, "spawn_aura", regs::a(1), |g, p| {
-    let v = g.c.d[0] as u8;
+creator!(AURA, 0x4e6a8, "spawn_aura", |d, a, g, p| {
+    let v = d[0] as u8;
     aura(g, p, v)
 });
-creator!(LIGHTNING_TARGET, 0x4f004, "spawn_lightning_target", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
-    let v = g.c.d[0] as u8;
-    let found = lightning_target(g, p, v).is_some();
-    g.c.d[0] = found as u32;
-    g.c.flags_logic(found as u32, Size::Long);
+creator!(LIGHTNING_TARGET, 0x4f004, "spawn_lightning_target", |d, a, g, p| {
+    let v = d[0] as u8;
+    lightning_target(g, p, v);
 });
-creator!(SWARM, 0x4f272, "spawn_swarm", regs::a(1), |g, p| {
-    let count = (g.c.d[0] as u16 as u32) + 1;
+creator!(SWARM, 0x4f272, "spawn_swarm", |d, a, g, p| {
+    let count = (d[0] as u16 as u32) + 1;
     swarm(g, p, count)
 });
-creator!(LEAP, 0x4fbde, "spawn_leap", regs::a(1), |g, p| {
-    let v = g.c.d[0] as u8;
+creator!(LEAP, 0x4fbde, "spawn_leap", |d, a, g, p| {
+    let v = d[0] as u8;
     leap(g, p, v)
 });
-creator!(SWAP, 0x4fd2c, "spawn_swap", regs::a(1), |g, p| {
-    let v = g.c.d[0] as u8;
+creator!(SWAP, 0x4fd2c, "spawn_swap", |d, a, g, p| {
+    let v = d[0] as u8;
     swap(g, p, v)
 });
-creator!(DASH, 0x4fe18, "spawn_dash", regs::a(1), |g, p| dash(g, p));
-creator!(WALL_TARGET, 0x50324, "spawn_wall_target", regs::a(1) | regs::CCR, |g, p| {
+creator!(DASH, 0x4fe18, "spawn_dash", |d, a, g, p| dash(g, p));
+creator!(WALL_TARGET, 0x50324, "spawn_wall_target", |d, a, g, p| {
     wall_target(g, p);
 });
-creator!(LIGHTNING, 0x4cdd0, "spawn_lightning", regs::a(1), |g, p| {
-    let target = g.c.a[2];
+creator!(LIGHTNING, 0x4cdd0, "spawn_lightning", |d, a, g, p| {
+    let target = a[2];
     lightning(g, p, target)
 });
-creator!(RING, 0x4e2f4, "spawn_ring", regs::a(1), |g, p| {
-    let v = g.c.d[0] as u8;
+creator!(RING, 0x4e2f4, "spawn_ring", |d, a, g, p| {
+    let v = d[0] as u8;
     ring(g, p, v)
 });
-creator!(BEAM_CAST, 0x4b196, "spawn_beam_cast", regs::a(1), |g, p| {
-    let v = g.c.d[0] as u8;
+creator!(BEAM_CAST, 0x4b196, "spawn_beam_cast", |d, a, g, p| {
+    let v = d[0] as u8;
     beam_cast(g, p, v)
 });
-creator!(STORM, 0x4ec66, "spawn_storm", regs::a(1), |g, p| {
-    let v = g.c.d[0] as u8;
+creator!(STORM, 0x4ec66, "spawn_storm", |d, a, g, p| {
+    let v = d[0] as u8;
     storm(g, p, v)
 });
-creator!(METEORS, 0x5012e, "spawn_meteors", regs::a(1), |g, p| meteors(g, p));
-creator!(ICE_COLUMNS, 0x4bb68, "spawn_ice_columns", regs::a(1), |g, p| ice_columns(g, p));
-creator!(ICE_MIST, 0x4bbbe, "spawn_ice_mist", regs::a(1), |g, p| ice_mist(g, p));
-creator!(ICE_SHARDS, 0x4bbf6, "spawn_ice_shards", regs::a(1), |g, p| ice_shards(g, p));
-creator!(ICE_CROWN, 0x4bc42, "spawn_ice_crown", regs::a(1), |g, p| ice_crown(g, p));
-creator!(FIREBALL, 0x54522, "spawn_fireball", regs::a(1), |g, p| fireball(g, p));
-creator!(ICE_GROUND, 0x52b54, "spawn_ice_ground", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
+creator!(METEORS, 0x5012e, "spawn_meteors", |d, a, g, p| meteors(g, p));
+creator!(ICE_COLUMNS, 0x4bb68, "spawn_ice_columns", |d, a, g, p| ice_columns(g, p));
+creator!(ICE_MIST, 0x4bbbe, "spawn_ice_mist", |d, a, g, p| ice_mist(g, p));
+creator!(ICE_SHARDS, 0x4bbf6, "spawn_ice_shards", |d, a, g, p| ice_shards(g, p));
+creator!(ICE_CROWN, 0x4bc42, "spawn_ice_crown", |d, a, g, p| ice_crown(g, p));
+creator!(FIREBALL, 0x54522, "spawn_fireball", |d, a, g, p| fireball(g, p));
+creator!(ICE_GROUND, 0x52b54, "spawn_ice_ground", |d, a, g, p| {
     ice_ground(g, p);
 });
-creator!(THROWN_A, 0x51d02, "spawn_thrown_a", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
+creator!(THROWN_A, 0x51d02, "spawn_thrown_a", |d, a, g, p| {
     thrown(g, p, Thrown::A);
 });
-creator!(THROWN_B, 0x51d54, "spawn_thrown_b", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
+creator!(THROWN_B, 0x51d54, "spawn_thrown_b", |d, a, g, p| {
     thrown(g, p, Thrown::B);
 });
-creator!(THROWN_C, 0x51f6a, "spawn_thrown_c", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
+creator!(THROWN_C, 0x51f6a, "spawn_thrown_c", |d, a, g, p| {
     thrown(g, p, Thrown::C);
 });
-creator!(THROWN_D, 0x51fb6, "spawn_thrown_d", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
+creator!(THROWN_D, 0x51fb6, "spawn_thrown_d", |d, a, g, p| {
     thrown(g, p, Thrown::D);
 });
-creator!(THROWN_E, 0x52002, "spawn_thrown_e", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
+creator!(THROWN_E, 0x52002, "spawn_thrown_e", |d, a, g, p| {
     thrown(g, p, Thrown::E);
 });
-creator!(THROWN_F, 0x52204, "spawn_thrown_f", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
+creator!(THROWN_F, 0x52204, "spawn_thrown_f", |d, a, g, p| {
     thrown(g, p, Thrown::F);
 });
-creator!(THROWN_G, 0x5308c, "spawn_thrown_g", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
+creator!(THROWN_G, 0x5308c, "spawn_thrown_g", |d, a, g, p| {
     thrown(g, p, Thrown::G);
 });
-creator!(THROWN_H, 0x52394, "spawn_thrown_h", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
+creator!(THROWN_H, 0x52394, "spawn_thrown_h", |d, a, g, p| {
     thrown(g, p, Thrown::H);
 });
-creator!(KNIFE, 0x54426, "spawn_knife", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
+creator!(KNIFE, 0x54426, "spawn_knife", |d, a, g, p| {
     knife(g, p);
 });
-creator!(SHADOWS, 0x52e20, "spawn_shadows", regs::a(1), |g, p| shadows(g, p));
-creator!(FLARE, 0x4cd8e, "spawn_flare", regs::a(1), |g, p| flare(g, p));
-creator!(SUMMON, 0x4ccac, "spawn_summon", regs::a(1), |g, p| summon(g, p));
-creator!(PORTAL, 0x4d3c6, "spawn_portal", regs::a(1), |g, p| {
-    let v = g.c.d[0] as u8;
+creator!(SHADOWS, 0x52e20, "spawn_shadows", |d, a, g, p| shadows(g, p));
+creator!(FLARE, 0x4cd8e, "spawn_flare", |d, a, g, p| flare(g, p));
+creator!(SUMMON, 0x4ccac, "spawn_summon", |d, a, g, p| summon(g, p));
+creator!(PORTAL, 0x4d3c6, "spawn_portal", |d, a, g, p| {
+    let v = d[0] as u8;
     portal(g, p, v)
 });
-creator!(WITCH, 0x53918, "spawn_witch", regs::a(1), |g, p| witch(g, p));
-creator!(CURSED_WEAPON, 0x4fefe, "spawn_cursed_weapon", regs::a(1) | regs::CCR, |g, p| cursed_weapon(g, p));
-creator!(DYING_SHARDS, 0x5009e, "spawn_dying_shards", 0, |g, p| dying_shards(g, p));
-creator!(STORM_CLOUD, 0x51aa4, "spawn_storm_cloud", regs::a(1), |g, p| storm_cloud(g, p));
-creator!(PORTAL_GLOW, 0x51872, "spawn_portal_glow", regs::a(1), |g, p| portal_glow(g, p));
-creator!(PORTAL_SPARKS, 0x4cfee, "spawn_portal_sparks", 0, |g, p| portal_sparks(g, p));
-creator!(PORTAL_BURST, 0x4d064, "spawn_portal_burst", regs::a(1) | regs::d(0) | regs::CCR, |g, p| {
-    let n = g.c.d[0] as u8;
-    let made = portal_burst(g, p, n);
-    // `moveq #0` if the shard is created, `moveq #1` otherwise
-    g.c.d[0] = (!made) as u32;
-    g.c.flags_logic(g.c.d[0], Size::Long);
+creator!(WITCH, 0x53918, "spawn_witch", |d, a, g, p| witch(g, p));
+creator!(CURSED_WEAPON, 0x4fefe, "spawn_cursed_weapon", |d, a, g, p| cursed_weapon(g, p));
+creator!(DYING_SHARDS, 0x5009e, "spawn_dying_shards", |d, a, g, p| dying_shards(g, p));
+creator!(STORM_CLOUD, 0x51aa4, "spawn_storm_cloud", |d, a, g, p| storm_cloud(g, p));
+creator!(PORTAL_GLOW, 0x51872, "spawn_portal_glow", |d, a, g, p| portal_glow(g, p));
+creator!(PORTAL_SPARKS, 0x4cfee, "spawn_portal_sparks", |d, a, g, p| portal_sparks(g, p));
+creator!(PORTAL_BURST, 0x4d064, "spawn_portal_burst", |d, a, g, p| {
+    let n = d[0] as u8;
+    portal_burst(g, p, n);
 });
-creator!(RAIN, 0x54274, "spawn_rain", regs::a(1), |g, p| rain(g, p));
-creator!(MOON, 0x4e4de, "spawn_moon", regs::a(1), |g, p| {
-    let v = g.c.d[0] as u8;
+creator!(RAIN, 0x54274, "spawn_rain", |d, a, g, p| rain(g, p));
+creator!(MOON, 0x4e4de, "spawn_moon", |d, a, g, p| {
+    let v = d[0] as u8;
     moon(g, p, v)
 });
-creator!(MOON_B, 0x4e782, "spawn_moon_b", regs::a(1), |g, p| moon_b(g, p));
-creator!(STORM_SPELL, 0x4d020, "spawn_storm_spell", regs::a(1), |g, p| storm_spell(g, p));
-creator!(RAIN_GLOW, 0x4d660, "spawn_rain_glow", regs::a(1), |g, p| {
-    let v = g.c.d[0] as u8;
+creator!(MOON_B, 0x4e782, "spawn_moon_b", |d, a, g, p| moon_b(g, p));
+creator!(STORM_SPELL, 0x4d020, "spawn_storm_spell", |d, a, g, p| storm_spell(g, p));
+creator!(RAIN_GLOW, 0x4d660, "spawn_rain_glow", |d, a, g, p| {
+    let v = d[0] as u8;
     rain_glow(g, p, v)
 });
-creator!(WALL_SPARK, 0x4d2c0, "spawn_wall_spark", regs::a(1), |g, p| {
-    let v = (g.c.d[0] as u8 != 0) as u8;
+creator!(WALL_SPARK, 0x4d2c0, "spawn_wall_spark", |d, a, g, p| {
+    let v = (d[0] as u8 != 0) as u8;
     wall_spark(g, p, v)
 });
-creator!(WAVE_BOLT, 0x4dfe2, "spawn_wave_bolt", regs::a(1), |g, p| {
-    let columns = g.c.d[0] as u8 != 0;
+creator!(WAVE_BOLT, 0x4dfe2, "spawn_wave_bolt", |d, a, g, p| {
+    let columns = d[0] as u8 != 0;
     wave_bolt(g, p, columns)
 });
-creator!(WITCH_A, 0x53954, "spawn_witch_a", regs::a(1), |g, p| witch_strike(g, p, 1));
-creator!(WITCH_B, 0x539e4, "spawn_witch_b", regs::a(1), |g, p| witch_strike(g, p, 4));
-creator!(ROD_FLAME_SHOT, 0x5336a, "spawn_rod_flame", 0, |g, p| rod_row(g, p, &ROD_FLAME, 0x38, 0x533f4));
-creator!(ROD_BALL_SHOT, 0x53478, "spawn_rod_ball", 0, |g, p| rod_ball(g, p));
-creator!(ROD_STAR_SHOT, 0x535f2, "spawn_rod_star", 0, |g, p| rod_row(g, p, &ROD_STAR, 0x48, 0x5367c));
+creator!(WITCH_A, 0x53954, "spawn_witch_a", |d, a, g, p| witch_strike(g, p, 1));
+creator!(WITCH_B, 0x539e4, "spawn_witch_b", |d, a, g, p| witch_strike(g, p, 4));
+creator!(ROD_FLAME_SHOT, 0x5336a, "spawn_rod_flame", |d, a, g, p| rod_shot(g, p, RodShot::Flame));
+creator!(ROD_BALL_SHOT, 0x53478, "spawn_rod_ball", |d, a, g, p| rod_shot(g, p, RodShot::Ball));
+creator!(ROD_STAR_SHOT, 0x535f2, "spawn_rod_star", |d, a, g, p| rod_shot(g, p, RodShot::Star));

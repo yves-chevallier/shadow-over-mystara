@@ -30,7 +30,4 @@ fn main() {
     for (name, n) in hits {
         println!("{n:>9} {name}");
     }
-    for (addr, n) in ddsom_game::player::cov::rom_report() {
-        println!("{n:>9} ROM {addr:06x}");
-    }
 }

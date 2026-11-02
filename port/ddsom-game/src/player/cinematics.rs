@@ -57,8 +57,7 @@ pub const HANDLERS: &[(u32, Handler)] = &[
 /// Steps of a routine: original address of the step -> Rust routine.
 type Steps = &'static [(u32, Handler)];
 
-/// Dispatches according to `+6` through the offset table `table`; `steps` gives the rewritten steps, the others
-/// run as they are. Reinserts the player into the actor list except at step `last`.
+/// Dispatches according to `+6` through the offset table `table`; `steps` gives the rewritten steps. Reinserts the player into the actor list except at step `last`.
 fn steps(g: &mut Ctx, p: Player, table: u32, last: Option<u8>, steps: Steps) {
     dispatch(g, p, table, steps);
     if last != Some(p.u8(g, Player::ACTION)) {
@@ -73,15 +72,14 @@ fn dispatch(g: &mut Ctx, p: Player, table: u32, steps: Steps) {
     let at = table.wrapping_add(offset as i16 as i32 as u32);
     // like the original dispatch: D0 = step, D1 = offset (some steps pass them as they are to the
     // routines they call, so 0xb378a reads its setting in D1)
-    g.c.d[0] = step as u32;
-    g.c.d[1] = g.c.d[1] & 0xffff_0000 | offset as u32;
+    g.jumped = super::Jumped { index: step, offset };
     match steps.iter().find(|s| s.0 == at) {
         Some(&(_, f)) => f(g, p),
         None if at == IDLE => {}
-        None if at == STRAY_HEX_DUMP => stray_hex_dump(g),
-        None => {
-            g.rom(at, p);
-        }
+        None if at == STRAY_HEX_DUMP => stray_hex_dump(g, offset),
+        // no native at the addresses of these step tables: the game without 68000 already stopped there
+        // (`docs/code-mort.md`, "Sortie du Cpu, partie 6")
+        None => unreachable!("cinematic step {at:06x} not rewritten"),
     }
 }
 
@@ -93,28 +91,30 @@ const IDLE: u32 = 0x2434c;
 /// hexadecimal display routine of the TEST menu (0x2b1d0), after loading its two parameters.
 const STRAY_HEX_DUMP: u32 = 0x2b1da;
 
+/// Routine of the end cinematic whose table the stray jump leaves: the end dispatch (0x23f40) jumps to it with its
+/// address in A1, which the hexadecimal display then takes as its destination.
+const STRAY_ROUTINE: u32 = 0x24aba;
+/// High word of D1 at the stray jump: the marker of the players' charge gauge (`game::G_PLAYER`, D1 of 0xb3e),
+/// which the player loop and the dispatches (`move.w`) leave in place.
+const STRAY_D1_HIGH: u32 = 0x50_0000;
+
 /// 0x2b1da: the hexadecimal display of 0x2b1d0 (eight consecutive longs starting at D1, five digits each, one
-/// tile column per long), as reached by the out-of-table jump: the destination A1 and the value D1 are those
-/// that the registers contain (D1.w = the offset read in the table).
-fn stray_hex_dump(g: &mut Ctx) {
-    let (mut a1, mut d1) = (g.c.a[1], g.c.d[1]);
+/// tile column per long), as reached by the out-of-table jump. Original glitch, written in the clear: the destination
+/// A1 is the address of the routine 0x24aba, and the value D1 is the offset read in the table under the high word left
+/// by the gauge.
+fn stray_hex_dump(g: &mut Ctx, offset: u16) {
+    let (mut a1, mut d1) = (STRAY_ROUTINE, STRAY_D1_HIGH | offset as u32);
     for _ in 0..8 {
         for _ in 0..5 {
-            g.c.d[2] = d1 & 0xf;
+            let digit = d1 & 0xf;
             d1 = d1.rotate_right(4);
-            crate::mem::wr16(g.b, a1, g.c.d[2] as u16);
+            crate::mem::wr16(g.b, a1, digit as u16);
             crate::mem::wr16(g.b, a1.wrapping_add(2), 0x10);
             a1 = a1.wrapping_sub(0x80);
         }
         d1 = d1.rotate_right(12).wrapping_add(0x10) & 0x3ffff;
         a1 = a1.wrapping_add(0x288);
     }
-    g.c.a[1] = a1;
-    g.c.d[1] = d1;
-    // counters of the two exhausted `dbf`
-    g.c.d[3] = 0xffff;
-    g.c.d[4] = 0xffff;
-    g.c.flags_logic(d1, m68k::decode::Size::Long);
 }
 
 // ---- tools ------------------------------------------------------------------------------------
@@ -510,7 +510,7 @@ const END_245EC: Steps = &[
         let delay = g.prog8(0x24660 + k);
         p.set_u8(g, TIMER, delay);
         start_stand(g, p);
-        crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
+        crate::families::effects_creators::for_players::halo(&mut g.leftovers, g.b, p.obj());
     }),
     (0x24664, |g, p| {
         let left = p.u8(g, TIMER).wrapping_sub(1);
@@ -631,9 +631,9 @@ const END_247B2: Steps = &[
         let left = p.u16(g, TIMER).wrapping_sub(1) & 15;
         p.set_u16(g, TIMER, left);
         if left == 0 {
-            g.c.d[0] = 4;
-            let setting = g.c.d[1] as u8;
-            crate::families::effects_creators::for_players::blow_68k(g.c, g.b, p.obj(), 4, setting);
+            // Original glitch: the setting is D1.b, the offset of the step left by the dispatch
+            let setting = g.jumped.offset as u8;
+            crate::families::effects_creators::for_players::blow(&mut g.leftovers, g.b, p.obj(), 4, setting);
         }
         anim_step(g, p);
     }),
@@ -1031,7 +1031,7 @@ const INTRO_24FE2: Steps = &[
             next(g, p);
             let wait = per_rank16(g, p, 0x25066);
             p.set_u16(g, WAIT, wait);
-            crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
+            crate::families::effects_creators::for_players::halo(&mut g.leftovers, g.b, p.obj());
             anim_0(g, p);
         } else {
             anim_step(g, p);
@@ -1276,7 +1276,7 @@ const INTRO_25504: Steps = &[
             next(g, p);
             let wait = per_rank16(g, p, 0x2558e);
             p.set_u16(g, WAIT, wait);
-            crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
+            crate::families::effects_creators::for_players::halo(&mut g.leftovers, g.b, p.obj());
         }
         anim_step(g, p);
     }),
@@ -1505,7 +1505,7 @@ fn intro_25a24(g: &mut Ctx, p: Player) {
 /// footstep effect in water (h).
 fn splash(g: &mut Ctx, p: Player) {
     if ram::SCENE.get(g.b) == 41 && ram::FRAME_COUNTER.get(g.b).wrapping_add(ram::INPUTS_2.get(g.b)) & 15 == 0 {
-        crate::families::effects_creators::for_players::wisp_68k(g.c, g.b, p.obj());
+        crate::families::effects_creators::for_players::wisp(&mut g.leftovers, g.b, p.obj());
     }
 }
 
@@ -1565,7 +1565,7 @@ const INTRO_25BA0: Steps = &[
         walk_right(g, p, TIMER_B, |g, p| {
             let wait = per_rank16(g, p, 0x25c4a);
             p.set_u16(g, WAIT, wait);
-            crate::families::effects_creators::for_players::halo_68k(g.c, g.b, p.obj());
+            crate::families::effects_creators::for_players::halo(&mut g.leftovers, g.b, p.obj());
             anim_0(g, p);
         })
     }),

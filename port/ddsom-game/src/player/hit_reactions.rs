@@ -11,7 +11,6 @@
 
 use crate::machine::Machine;
 use cps2::Cps2Bus;
-use m68k::Cpu;
 
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, rd8, wr8};
@@ -113,8 +112,7 @@ pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
                     if charge != 0 {
                         wr8(g.b, att + f::WAND_CHARGE, charge - 1);
                         if charge - 1 == 5 {
-                            g.c.d[0] = 0xf;
-                            crate::families::creators::set_a_68k(g.c, g.b, a.obj(), 0xf);
+                            crate::families::creators::for_players::set_a(&mut g.leftovers, g.b, a.obj(), 0xf);
                         }
                     }
                 }
@@ -187,12 +185,10 @@ fn set_stun_time(g: &mut Ctx, v: u32) {
     wr8(g.b, v + f::STUN_TIME, time);
 }
 
-/// `enemy_reacts` for the hit resolution (`combat`), still on the processor: the registers are left like the
-/// original leaves them (A0 = the attacker, A1 = the victim, A2 = the threshold table, which the hit resolution reads
-/// back).
-pub fn enemy_reacts_68k(c: &mut Cpu, b: &mut Cps2Bus, a: Player, v: u32) {
+/// 0xf232e, `enemy_reacts` for the hit resolution (`combat`): returns the A2 that the original leaves, the threshold
+/// table, which the hit resolution reads back (original glitch: `combat::World::a2`).
+pub fn enemy_reacts_from_hit(b: &mut Cps2Bus, a: Player, v: u32) -> u32 {
     let is_enemy = rd8(b, v + f::CLASS) == CLASS_ENEMY;
-    enemy_reacts(&mut Ctx::new(c, b), a, v);
-    c.a[2] = if is_enemy { tables::THRESHOLD_ENEMY } else { tables::THRESHOLD_OTHER };
-    (c.a[0], c.a[1]) = (a.0, v);
+    enemy_reacts(&mut Ctx::new(b), a, v);
+    if is_enemy { tables::THRESHOLD_ENEMY } else { tables::THRESHOLD_OTHER }
 }

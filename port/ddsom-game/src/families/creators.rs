@@ -10,7 +10,7 @@ use m68k::Cpu;
 
 use crate::mem::{prog32, prog8, rd16, rd8, rts, wr16, wr8, A5};
 use crate::objects::Obj;
-use crate::{call, regs, Native};
+use crate::{regs, Native};
 use crate::objects::pools;
 use super::effects_creators::leftovers::{Pure, Regs};
 
@@ -83,15 +83,6 @@ pub fn bolt(b: &mut Cps2Bus, player: Obj, variant: u8) -> Option<Obj> {
     bolt_via(&mut Pure, b, player, variant)
 }
 
-/// `bolt` with the original's registers (callers by address: `player/`): A1, carry and flags.
-#[track_caller]
-pub fn bolt_68k(c: &mut Cpu, b: &mut Cps2Bus, player: Obj, variant: u8) -> Option<Obj> {
-    c.a[0] = player.0;
-    let r = bolt_via(c, b, player, variant);
-    crate::diag::dead_regs(c, "effects", CREATED);
-    r
-}
-
 pub(crate) fn bolt_via(r: &mut impl Regs, b: &mut Cps2Bus, player: Obj, variant: u8) -> Option<Obj> {
     let fx = player_effect(r, b, 10)?;
     fx.set_u8(b, Obj::VARIANT, variant);
@@ -104,15 +95,6 @@ pub(crate) fn bolt_via(r: &mut impl Regs, b: &mut Cps2Bus, player: Obj, variant:
 /// 0x4dc9a: two sparks of the spell (PEFF 25, the second with `+0x2f` = 1). Returns the second.
 pub fn sparks(b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
     sparks_via(&mut Pure, b, player)
-}
-
-/// `sparks` with the original's registers (callers by address: `player/`).
-#[track_caller]
-pub fn sparks_68k(c: &mut Cpu, b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
-    c.a[0] = player.0;
-    let r = sparks_via(c, b, player);
-    crate::diag::dead_regs(c, "effects", CREATED);
-    r
 }
 
 pub(crate) fn sparks_via(r: &mut impl Regs, b: &mut Cps2Bus, player: Obj) -> Option<Obj> {
@@ -253,12 +235,11 @@ fn scene_set_native(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0xd981a: end of scene specific to the variant (`+3`, index table 0xd9836, routines 0xd982e: in practice always
 /// 0xd99f8, a plain return).
 fn scene_exit(c: &mut Cpu, b: &mut Cps2Bus) {
-    let variant = rd8(b, c.a[0] + 3) as u32;
+    let scene = Obj(c.a[0]);
+    let variant = scene.u8(b, Obj::VARIANT) as u32;
     let i = 4 * prog8(b, 0xd9836 + variant) as u32;
-    c.d[0] = i;
-    c.a[1] = prog32(b, 0xd982e + i);
-    let target = c.a[1];
-    call(c, b, target);
+    (c.d[0], c.a[1]) = (i, prog32(b, 0xd982e + i));
+    run_scene_exit(b, scene);
     rts(c, b);
 }
 
@@ -288,16 +269,6 @@ pub(crate) fn set_a_via(r: &mut impl Regs, b: &mut Cps2Bus, variant: u8, class: 
 /// 0xcc352: the class is that of the creator.
 pub fn set_a(b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
     set_a_via(&mut Pure, b, variant, |b| creator.u8(b, Obj::VARIANT))
-}
-
-/// `set_a` with the original's registers (callers by address: `player/`): A0 = the creator, D0.b = the variant; A1,
-/// carry and flags.
-#[track_caller]
-pub fn set_a_68k(c: &mut Cpu, b: &mut Cps2Bus, creator: Obj, variant: u8) -> Option<Obj> {
-    c.a[0] = creator.0;
-    let r = set_a_via(c, b, variant, |b| creator.u8(b, Obj::VARIANT));
-    crate::diag::dead_regs(c, "effects", CREATED);
-    r
 }
 
 fn set_a_creator(c: &mut Cpu, b: &mut Cps2Bus) {
@@ -365,12 +336,11 @@ fn scene_item(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0xd9778: music specific to the scene variant (`+3`, index table 0xd9798, routines 0xd978c: nothing (0xd99f8) or the
 /// music of scene 0xe0c5c). D0 = offset in the table, A1 = the routine.
 fn scene_music(c: &mut Cpu, b: &mut Cps2Bus) {
-    let variant = rd8(b, c.a[0] + 3) as u32;
+    let scene = Obj(c.a[0]);
+    let variant = scene.u8(b, Obj::VARIANT) as u32;
     let i = 4 * prog8(b, 0xd9798 + variant) as u32;
-    c.d[0] = i;
-    c.a[1] = prog32(b, 0xd978c + i);
-    let target = c.a[1];
-    call(c, b, target);
+    (c.d[0], c.a[1]) = (i, prog32(b, 0xd978c + i));
+    play_scene_music(b, scene);
     rts(c, b);
 }
 
@@ -550,63 +520,6 @@ fn bonus_sheet(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
-/// The scenery of the scene is restored: cameras (`cameras`: 0x33aa6 at the start of the scene, 0x33b24 on return from
-/// a side zone), scene script (0xf2e56), palette pages (0x1a360, 0x1a678, 0x1a8ac), all the pages to copy back, full
-/// brightness (0x1686). Common start of 0xcc0ca, of the side zone doors (SET 7) and of the passage (EFFCT 14). A0 and
-/// D7 preserved.
-pub(crate) fn resume_scenery(c: &mut Cpu, b: &mut Cps2Bus, cameras: u32) {
-    let (a0, d7) = (c.a[0], c.d[7]);
-    call(c, b, cameras);
-    (c.a[0], c.d[7]) = (a0, d7);
-    call(c, b, crate::scene::script::RESET_ENTRY);
-    for routine in [0x1a360, 0x1a678, 0x1a8ac] {
-        call(c, b, routine);
-    }
-    (c.a[0], c.d[7]) = (a0, d7);
-    wr8(b, A5 + 0x48e, 0xf);
-    crate::palette::full_brightness(b);
-}
-
-/// 0xcc0ca: the scene restarts from its beginning (h): scenery restored (`resume_scenery`); each living player returns
-/// to normal play (hidden and in scripted entry if down or dead), is repositioned (0x20de6) then sorted. A0 and D7
-/// preserved.
-pub(crate) fn restart_scene(c: &mut Cpu, b: &mut Cps2Bus) {
-    resume_scenery(c, b, 0x33aa6);
-    wr16(b, A5 + 0x52, 0);
-    let alive = |b: &mut Cps2Bus, p: u32| rd8(b, p) != 0 && rd16(b, p + 0x62) != 0;
-    for k in 0..4 {
-        let p = A5 + 0x5de + 0x200 * k;
-        if !alive(b, p) {
-            continue;
-        }
-        wr8(b, p, 1);
-        let state = rd8(b, p + 4);
-        c.d[0] = c.d[0] & !0xff | state as u32;
-        crate::mem::wr32(b, p + 4, 0);
-        let flags = rd8(b, p + 1) & !2;
-        wr8(b, p + 1, flags);
-        for off in [0x66, 0x15c, 0x8a, 0x10f] {
-            wr8(b, p + off, 0);
-        }
-        if state as i8 > 2 {
-            wr8(b, p + 1, flags | 2);
-            wr16(b, p + 4, 0x402);
-        }
-    }
-    c.a[1] = A5 + 0x5de + 0x800;
-    call(c, b, 0x20de6);
-    let a0 = c.a[0];
-    for k in 0..4 {
-        let p = A5 + 0x5de + 0x200 * k;
-        if alive(b, p) {
-            c.a[0] = p;
-            crate::objects::lists::ACTORS.reinsert_68k(c, b, Obj(c.a[0]));
-        }
-    }
-    c.a[0] = a0;
-    c.d[6] = 0xffff;
-}
-
 /// Player shot created: resistances `+0x45`/`+0x46` read from two tables (in the clear) according to the player's level
 /// `+0x10c`.
 fn shot_strength_core(b: &mut Cps2Bus, shot: Obj, level: u8, tables: (u32, u32)) {
@@ -653,75 +566,80 @@ pub(crate) fn shot_5(b: &mut Cps2Bus, me: Obj) {
     }
 }
 
-/// Player effect (PEFF) of type `kind`, variant `variant`, linked to the player (`+0x50`).
-fn peff(c: &mut Cpu, b: &mut Cps2Bus, kind: u8, variant: Option<u8>) -> Option<Obj> {
-    let me = c.a[0];
-    let fx = alloc(c, b, &pools::PEFF)?;
+/// Player effect (PEFF) of type `kind`, variant `variant`, linked to the player `me` (`+0x50`).
+fn peff_via(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, variant: Option<u8>) -> Option<Obj> {
+    let fx = r.allocated(b, &pools::PEFF)?;
     fx.set_u8(b, 0x0, 1);
     fx.set_u8(b, 0x2, kind);
     if let Some(v) = variant {
         fx.set_u8(b, 0x3, v);
     }
-    fx.set_u16(b, 0x50, me as u16);
-    moved(c, me & 0xffff, Size::Word);
+    fx.set_u16(b, 0x50, me.word());
+    r.flags(me.0 & 0xffff, Size::Word);
     Some(fx)
 }
 
-/// Player effects created by the player module, still on the processor: the arguments are passed, A0 = the player,
-/// and the registers the original leaves (A1, carry, flags) are written like the native writes them.
+/// 0x51bb6: effect 0x2f (no link).
+fn effect_2f_via(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
+    let fx = r.allocated(b, &pools::PEFF)?;
+    fx.set_u8(b, 0x0, 1);
+    fx.set_u8(b, 0x2, 0x2f);
+    r.flags(0x2f, Size::Byte);
+    Some(fx)
+}
+
+/// Player effects created by the player module (`player/`): cores on `r` (the player's leftovers D2-D5).
 pub(crate) mod for_players {
     use super::*;
 
     /// 0x4b7a0: bolt (PEFF 10) of variant `variant`.
-    pub(crate) fn bolt_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
-        c.a[0] = me.0;
-        bolt_via(c, b, me, variant)
+    pub(crate) fn bolt(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+        bolt_via(r, b, me, variant)
     }
     /// 0x4dc9a: two sparks (PEFF 25).
-    pub(crate) fn sparks_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
-        c.a[0] = me.0;
-        sparks_via(c, b, me)
+    pub(crate) fn sparks(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        sparks_via(r, b, me)
     }
+    /// 0x4b340: quake effects (see `quake`).
+    pub(crate) fn quake(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, pair: bool) -> Option<Obj> {
+        quake_via(r, b, me, pair)
+    }
+    /// 0xcc352: SET object 0xa of variant `variant`, of the class of `me` (see `set_a`).
+    pub(crate) fn set_a(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8) -> Option<Obj> {
+        set_a_via(r, b, variant, |b| me.u8(b, Obj::VARIANT))
+    }
+
     /// 0x4b518: effect 8 linked to `me`.
-    pub(crate) fn effect_8_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
-        c.a[0] = me.0;
-        peff(c, b, 8, None)
+    pub(crate) fn effect_8(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        peff_via(r, b, me, 8, None)
     }
     /// 0x51bb6: effect 0x2f (not linked).
-    pub(crate) fn effect_2f_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
-        c.a[0] = me.0;
-        let fx = alloc(c, b, &pools::PEFF)?;
-        fx.set_u8(b, 0x0, 1);
-        fx.set_u8(b, 0x2, 0x2f);
-        moved(c, 0x2f, Size::Byte);
-        Some(fx)
+    pub(crate) fn effect_2f(r: &mut impl Regs, b: &mut Cps2Bus) -> Option<Obj> {
+        effect_2f_via(r, b)
     }
     /// 0x4b8d0: effect 0xb (variant 0).
-    pub(crate) fn whirl_68k(c: &mut Cpu, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
-        c.a[0] = me.0;
-        peff(c, b, 0xb, Some(0))
+    pub(crate) fn whirl(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+        peff_via(r, b, me, 0xb, Some(0))
     }
 }
 
 /// 0x4b8d0: effect 0xb (variant 0).
 fn peff_b(c: &mut Cpu, b: &mut Cps2Bus) {
-    peff(c, b, 0xb, Some(0));
+    let me = Obj(c.a[0]);
+    peff_via(c, b, me, 0xb, Some(0));
     rts(c, b);
 }
 
 /// 0x4b518: effect 8.
 fn peff_8(c: &mut Cpu, b: &mut Cps2Bus) {
-    peff(c, b, 8, None);
+    let me = Obj(c.a[0]);
+    peff_via(c, b, me, 8, None);
     rts(c, b);
 }
 
 /// 0x51bb6: effect 0x2f (no link).
 fn peff_2f(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(fx) = alloc(c, b, &pools::PEFF) {
-        fx.set_u8(b, 0x0, 1);
-        fx.set_u8(b, 0x2, 0x2f);
-        moved(c, 0x2f, Size::Byte);
-    }
+    effect_2f_via(c, b);
     rts(c, b);
 }
 
@@ -751,16 +669,6 @@ fn peff_13_x4(c: &mut Cpu, b: &mut Cps2Bus) {
 /// The player's step `+7` is copied to `+0x5d`. Returns the last effect created.
 pub fn quake(b: &mut Cps2Bus, player: Obj, pair: bool) -> Option<Obj> {
     quake_via(&mut Pure, b, player, pair)
-}
-
-/// `quake` with the original's registers (callers by address: `player/`): A0 = the player, D0.b zero for the pair; A1,
-/// carry and flags.
-#[track_caller]
-pub fn quake_68k(c: &mut Cpu, b: &mut Cps2Bus, player: Obj, pair: bool) -> Option<Obj> {
-    c.a[0] = player.0;
-    let r = quake_via(c, b, player, pair);
-    crate::diag::dead_regs(c, "effects", CREATED);
-    r
 }
 
 pub(crate) fn quake_via<R: Regs>(r: &mut R, b: &mut Cps2Bus, player: Obj, pair: bool) -> Option<Obj> {
@@ -891,7 +799,11 @@ pub const NATIVES: &[Native] = &[
     native(0xd9778, "music_variant", scene_music, regs::d(0) | regs::a(1)),
     native(0xd99f8, "scene_nothing", nothing, regs::ALL),
     native(0xce00a, "create_set_15", set_15, CREATED),
-    native(0xcc0ca, "scene_repart", |c, b| { restart_scene(c, b); rts(c, b) }, regs::a(0) | regs::d(7)),
+    native(0xcc0ca, "scene_repart", |c, b| {
+        let o = Obj(c.a[0]);
+        super::scenery::restart_scene(&mut super::cx::Cx { c: &mut *c, b: &mut *b, o });
+        rts(c, b)
+    }, regs::a(0) | regs::d(7)),
     native(0x4b8d0, "create_effect_b", peff_b, CREATED),
     native(0x4b518, "create_effect_8", peff_8, CREATED),
     native(0x51bb6, "create_effect_2f", peff_2f, CREATED),

@@ -21,9 +21,9 @@
 //! - `characters`: hook points for the code of the six characters (P5, rewritten elsewhere);
 //! - `cov`: coverage of the Rust functions by `examples/player_coverage`.
 //!
-//! Interface for the characters (P5): see `characters`. The original routines not yet
-//! rewritten are called by `Ctx::rom`, which goes through the executor and hence through the natives: declaring
-//! a `Native` at the address of an original routine is enough to replace it everywhere.
+//! Interface for the characters (P5): see `characters`. Every routine reached through a code table of the original
+//! is called directly; the natives at the original addresses only serve the tools (`fuzz_player`, `DDSOM_CHECK`):
+//! they read their arguments in the 68000 registers and call the Rust function.
 
 /// Counts the call of the enclosing function when coverage is active (`cov`).
 macro_rules! cov {
@@ -54,11 +54,12 @@ pub mod update;
 pub mod walk;
 
 use cps2::Cps2Bus;
-use m68k::{Cpu, SR_Z};
+use m68k::Cpu;
 
+use crate::dispatch::Leftovers;
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::Obj;
-use crate::{call, Native};
+use crate::Native;
 
 /// Native routines of the players.
 pub const NATIVES: &[Native] = &[
@@ -235,46 +236,57 @@ pub mod ram {
     pub const TICK: Word = Word::a5(0x7f92);
 }
 
-/// Execution context of the native routines: registers and memory of the 68000.
+/// Execution context of the players' code: the memory, without registers.
 pub struct Ctx<'a> {
-    pub c: &'a mut Cpu,
     pub b: &'a mut Cps2Bus,
+    /// What the last step dispatch left (see [`Jumped`]).
+    pub jumped: Jumped,
+    /// The leftovers D2-D5 that the players' code leaves to what follows (the object handlers read them:
+    /// `dispatch::Leftovers`): original glitches, written by name where the original writes these registers.
+    pub leftovers: Leftovers,
+}
+
+/// The original reaches the steps of the reactions and cinematics through jump tables of offsets (`move.w
+/// (table,PC,D0.w),D1 ; jmp (table,PC,D1.w)`): the step reached finds the index in D0.b and the offset in D1.w. Some
+/// steps hand D1.b on, as the setting of the effect they create (original glitch, written in the clear).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Jumped {
+    pub index: u8,
+    pub offset: u16,
 }
 
 impl<'a> Ctx<'a> {
-    pub fn new(c: &'a mut Cpu, b: &'a mut Cps2Bus) -> Self {
-        Ctx { c, b }
+    /// Context of a caller whose leftovers are not read afterwards.
+    pub fn new(b: &'a mut Cps2Bus) -> Self {
+        Ctx { b, jumped: Jumped::default(), leftovers: Leftovers::default() }
     }
 
-    /// Calls an original (or native) routine for player `p`: A0 = player, A5 = base of the
-    /// RAM. Returns true if the Z flag is set on return.
-    #[track_caller]
-    pub fn rom(&mut self, addr: u32, p: Player) -> bool {
-        cov::rom_call(addr);
-        self.c.a[0] = p.0;
-        self.c.a[5] = A5;
-        call(self.c, self.b, addr);
-        self.c.sr & SR_Z != 0
-    }
-
-    /// 0xb10c8: shock effect (dust, spark) of `variant` and `setting`, speeds `vx`, `vy`, created for player `p`.
-    /// The registers are left like the original routine leaves them (A0 = the player, A1 = the effect, carry when the
-    /// pool is full, D1, flags).
+    /// 0xb10c8: shock effect (dust, spark) of `variant` and `setting`, speeds `vx`, `vy`, created for player `p`;
+    /// `None` when the pool is full or in the scene without shocks (41).
     pub fn shock(&mut self, p: Player, variant: u8, setting: u16, vx: u16, vy: u16) -> Option<Obj> {
-        self.c.a[5] = A5;
-        crate::effects_aids::shock_68k(self.c, self.b, p.obj(), variant, setting, vx, vy)
+        crate::effects_aids::shock(self.b, p.obj(), variant, setting, vx, vy)
     }
 
     /// Plays sound `sound` for player `p` (panning, character: `sound::play`).
     pub fn sound(&mut self, sound: u32, p: Player) {
         crate::sound::play(self.b, sound, Obj(p.0));
     }
+}
 
-    /// Same with parameter D6 (animation number, effect number...).
-    #[track_caller]
-    pub fn rom_d6(&mut self, addr: u32, p: Player, d6: u32) -> bool {
-        self.c.d[6] = d6;
-        self.rom(addr, p)
+/// Runs the players' code `f` for a caller still on the processor (game loop, natives for the tools): the leftovers
+/// D2-D5 go from the register bench to `Ctx::leftovers` and back; nothing else is read or written there.
+pub fn on_bench<T>(c: &mut Cpu, b: &mut Cps2Bus, f: impl FnOnce(&mut Ctx) -> T) -> T {
+    let leftovers = Leftovers { d2: c.d[2], d3: c.d[3], d4: c.d[4], d5: c.d[5] };
+    let mut g = Ctx { b, jumped: Jumped::default(), leftovers };
+    let r = f(&mut g);
+    let l = g.leftovers;
+    (c.d[2], c.d[3], c.d[4], c.d[5]) = (l.d2, l.d3, l.d4, l.d5);
+    r
+}
+
+impl crate::machine::Machine for Ctx<'_> {
+    fn bus(&mut self) -> &mut Cps2Bus {
+        &mut *self.b
     }
 }
 

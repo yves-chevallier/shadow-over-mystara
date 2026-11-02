@@ -10,22 +10,13 @@
 //! | 4 | on the ground / ejected (`+5` must be 0) |
 //! | 6 | removed: save of the player, clearing of the record and its sub-objects |
 
-use cps2::Cps2Bus;
-use m68k::Cpu;
-
 use super::init::{clear_overlays_of, clear_player, UNLOCKED_FLAGS};
 use super::states::sub;
 use super::{actions, checks, combos, effects, hurt, ram, scripted, Ctx, Player};
-use crate::mem::{rts, wr32, wr8};
+use crate::mem::{wr32, wr8};
 use crate::objects::lists;
 use crate::Native;
 use crate::machine::Machine;
-
-/// Original routines still called as they are.
-mod rom {
-    /// Table (4-byte addresses, in the code) of the `+5` sub-state handlers.
-    pub const SUB_HANDLERS: u32 = 0x3541c;
-}
 
 /// One frame of all the active players.
 pub fn update_all(g: &mut Ctx) {
@@ -93,11 +84,9 @@ fn update_playing(g: &mut Ctx, p: Player) {
             sub::ACTING => actions::act(g, p),
             sub::HURT => hurt::hurt(g, p),
             sub::PARRY => super::moves::parry(g, p),
-            other => {
-                let handler = g.prog32(rom::SUB_HANDLERS + other as u32);
-                g.c.d[0] = other as u32;
-                g.rom(handler, p);
-            }
+            // the table 0x3541c has three entries (0x3553c, 0x3a0a8, 0x39ff0); no code writes another sub-state in the
+            // normal game (`docs/code-mort.md`, "Sortie du Cpu, partie 6")
+            other => unreachable!("normal-game sub-state {other:#x}: table 0x3541c has only 0, 4 and 8"),
         }
         if p.u16(g, Player::HP) == 0 {
             return finish(g, p);
@@ -163,7 +152,7 @@ fn finish(g: &mut Ctx, p: Player) {
         && p.u16(g, 0xc) == 0
         && (ram::FRAME_COUNTER.get(g.b).wrapping_add(p.u8(g, Player::INDEX)) & 0xf) == 0
     {
-        crate::families::effects_creators::for_players::wisp_68k(g.c, g.b, p.obj());
+        crate::families::effects_creators::for_players::wisp(&mut g.leftovers, g.b, p.obj());
     }
     lists::ACTORS.reinsert(g.b, p.obj());
 }
@@ -188,20 +177,14 @@ fn remove(g: &mut Ctx, p: Player) {
     clear_overlays_of(g, k);
 }
 
-/// 0x35292: update of the players.
-pub fn update_cpu(c: &mut Cpu, b: &mut Cps2Bus) {
-    update_all(&mut Ctx::new(c, b));
-}
-
-fn update_players(c: &mut Cpu, b: &mut Cps2Bus) {
-    update_cpu(c, b);
-    rts(c, b);
-}
-
+/// 0x35292: update of the players, for the tools (the game calls `update_all`).
 pub const UPDATE_PLAYERS: Native = Native {
     entry: 0x35292,
     name: "players_update",
-    run: crate::Body::WithCpu(update_players),
+    run: crate::Body::WithCpu(|c, b| {
+        super::on_bench(c, b, update_all);
+        crate::mem::rts(c, b)
+    }),
     touches_sound: false,
     outputs: 0,
 };
