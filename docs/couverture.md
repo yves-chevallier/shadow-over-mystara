@@ -330,3 +330,7 @@ changement d'équipement des icônes de la boutique (PEFF, 0x4cb78), des styles 
 le son 0xea5f0 et, surtout, des parties naturelles comparées par `validate`. F3 hors curseur et noms est entièrement joué, sauf du code mort
 (0x15234, [code-mort.md](code-mort.md)) ; F1 et F7 aussi ; ce qui reste de K1, K2, O1 et F4 est inatteignable
 (même document, « Corps des tâches »).
+
+Validation : `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1 DDSOM_JOBS=8 tools/validate_all.sh 30000` donne 308 VALIDE sur 308
+en mode par défaut et avec `DDSOM_ASSETS` (assets de main, sans réextraction), branche `wt-couv2` 04d7b47 (main 63d95fd
+fusionné).

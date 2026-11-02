@@ -39,6 +39,7 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
      RAM, données) : [code-mort.md](code-mort.md), « Lot couverture » ;
    * boss 15 et 19, sous-états 8 et 0xa : inatteignables, gardés en Rust comme l'original et validés par `fuzz_couv` ;
    * trou trouvé et corrigé : la résurrection d'un joueur qui rejoint pendant que les entrées sont figées (0x23c7a).
+   * validé 308/308 dans les deux modes (04d7b47) ; non fusionné dans main.
 3. ~~**Petites dettes.**~~ Faites (`wt-couv2`) :
    * noms et commentaires des bots `long_*` d'après les personnages relevés en RAM (`long_voleur_mortel`,
      `long_elfe_objets`, `long_nain_57_86`, `long_scene_20`, `long_scene_56`...) ;
