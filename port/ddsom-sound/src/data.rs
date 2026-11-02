@@ -375,7 +375,9 @@ impl SoundData {
             return TrackPos { track: from.track, pos: pos as u16 };
         }
         let addr = (track.addr as i32 + pos) as u32 & 0xff_ffff;
-        self.locate(addr).unwrap_or_else(|| panic!("jump from {:#x} to {addr:#x}: outside the tracks", track.addr))
+        // Only a jump past the end of the Z80 ROM region (synthetic data) lands outside the tracks: the bus then
+        // reads 0xFF, like past the end of a track.
+        self.locate(addr).unwrap_or(TrackPos { track: from.track, pos: u16::MAX })
     }
 
     /// Track position of the Z80 address `addr`, if a track holds it.

@@ -115,7 +115,7 @@ impl Voice {
     pub(crate) fn fetch(&mut self, data: &SoundData) -> u8 {
         let at = self.seq_mut();
         let b = data.track_byte(*at);
-        at.pos += 1;
+        at.pos = at.pos.saturating_add(1);
         b
     }
 
@@ -128,7 +128,8 @@ impl Voice {
 
     /// Skips `n` bytes of the track.
     pub(crate) fn skip(&mut self, n: u16) {
-        self.seq_mut().pos += n;
+        let at = self.seq_mut();
+        at.pos = at.pos.saturating_add(n);
     }
 }
 
