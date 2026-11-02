@@ -198,19 +198,26 @@ fn roar_small(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0xa036e : harpie, créature compagne (ESHL 0x10) : copie la variante, la position décalée de ±0x2f en X
 /// et de -0x78 en Z ; la moitié des PV du créateur (`+0x60 / 4`) va dans `+0x58` du créateur.
 fn harpy_companion(c: &mut Cpu, b: &mut Cps2Bus) {
-    let Some(o) = alloc(c, b, &pools::ESHL) else { return rts(c, b) };
     let me = Obj(c.a[0]);
+    let _ = harpy_companion_par(c, b, me);
+    rts(c, b);
+}
+
+/// Cœur de 0xa036e : rend le compagnon et le mot de PV/4 que l'original laisse dans D2 (reste relu par la suite),
+/// ou, en cas d'échec, l'A1 que laisse l'allocation.
+pub(crate) fn harpy_companion_par(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj) -> Result<(Obj, u16), Obj> {
+    let o = r.alloue_ou_reste(b, &pools::ESHL)?;
     let flip = me.u8(b, 0x2c) != 0;
     let v = me.u8(b, 0x3);
     o.set_u8(b, 0x3, v);
     o.set_u8(b, 0x0, 1);
     o.set_u8(b, 0x2, 0x10);
     o.set_u8(b, 0x2e, 0x3e);
-    o.set_u16(b, 0x50, word(c));
+    o.set_u16(b, 0x50, me.word());
     let v = me.u8(b, 0x43);
     o.set_u8(b, 0x43, v);
     let hp = me.u16(b, 0x60) >> 2;
-    set_low_word(&mut c.d[2], hp);
+    r.d_mot(2, hp);
     me.set_u16(b, 0x58, hp);
     let v = me.u8(b, 0xa2);
     o.set_u8(b, 0x56, v);
@@ -219,8 +226,8 @@ fn harpy_companion(c: &mut Cpu, b: &mut Cps2Bus) {
         o.set_u32(b, off, v);
     }
     let dx: u16 = if flip { 0x2fu16.wrapping_neg() } else { 0x2f };
-    set_low_word(&mut c.d[0], dx);
-    set_low_word(&mut c.d[1], 0x78u16.wrapping_neg());
+    r.d_mot(0, dx);
+    r.d_mot(1, 0x78u16.wrapping_neg());
     let x = o.u16(b, 0x8).wrapping_add(dx);
     o.set_u16(b, 0x8, x);
     let z = o.u16(b, 0xc).wrapping_add(0x78u16.wrapping_neg());
@@ -231,20 +238,26 @@ fn harpy_companion(c: &mut Cpu, b: &mut Cps2Bus) {
     o.set_u32(b, 0xc, z);
     let f = me.u8(b, 0x2c);
     o.set_u8(b, 0x2c, f);
-    moved(c, f as u32, Size::Byte);
-    rts(c, b);
+    r.drapeaux(f as u32, Size::Byte);
+    Ok((o, hp))
 }
 
 /// 0xa0566 : harpie, projectile ESHL 0x11 : D5 va dans `+0x42` du créateur, A2 et le créateur sont les
 /// liens `+0x50` et `+0x56` (longs) ; le créateur remet `+0xa5` à zéro.
 fn harpy_shot(c: &mut Cpu, b: &mut Cps2Bus) {
-    let Some(o) = alloc(c, b, &pools::ESHL) else { return rts(c, b) };
-    let me = Obj(c.a[0]);
-    me.set_u8(b, 0x42, c.d[5] as u8);
+    let (me, d5, a2) = (Obj(c.a[0]), c.d[5] as u8, c.a[2]);
+    let _ = harpy_shot_par(c, b, me, d5, a2);
+    rts(c, b);
+}
+
+/// Cœur de 0xa0566 : `d5` = l'octet posé en `+0x42` du créateur, `cible` = le long A2 lié en `+0x50`.
+pub(crate) fn harpy_shot_par(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj, d5: u8, cible: u32) -> Option<Obj> {
+    let o = r.alloue(b, &pools::ESHL)?;
+    me.set_u8(b, 0x42, d5);
     let v = me.u8(b, 0x43);
     o.set_u8(b, 0x43, v);
-    o.set_u32(b, 0x50, c.a[2]);
-    o.set_u32(b, 0x56, c.a[0]);
+    o.set_u32(b, 0x50, cible);
+    o.set_u32(b, 0x56, me.0);
     me.set_u8(b, 0xa5, 0);
     o.set_u8(b, 0x0, 1);
     o.set_u8(b, 0x2, 0x11);
@@ -256,8 +269,8 @@ fn harpy_shot(c: &mut Cpu, b: &mut Cps2Bus) {
     o.set_u8(b, 0x2c, v);
     let v = me.u8(b, 0x3);
     o.set_u8(b, 0x3, v);
-    moved(c, v as u32, Size::Byte);
-    rts(c, b);
+    r.drapeaux(v as u32, Size::Byte);
+    Some(o)
 }
 
 // ---------------------------------------------------------------------------------------------

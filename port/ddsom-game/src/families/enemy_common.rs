@@ -287,9 +287,14 @@ pub fn reaction_routine<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
 /// `jsr (A1)` avec D0 = le code : la routine lue reste l'index des tables Rust (`reactions`, `petites::own_reaction`).
 pub fn react<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     let routine = reaction_routine(x, table);
+    run_reaction(x, routine);
+}
+
+/// Exécute la routine de réaction `routine` (commune, ou propre au type).
+pub fn run_reaction<R: Banc>(x: &mut Cx<'_, R>, routine: u32) {
     if !super::reactions::run_common(x, routine) {
         super::petites::own_reaction(x, routine)
-            .unwrap_or_else(|| unreachable!("réaction {routine:#x} de la table {table:#x} : ni commune ni propre au type"));
+            .unwrap_or_else(|| unreachable!("réaction {routine:#x} : ni commune ni propre au type"));
     }
 }
 

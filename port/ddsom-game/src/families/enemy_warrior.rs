@@ -44,7 +44,7 @@ mod g {
 }
 use g::*;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -94,7 +94,7 @@ fn body<R: Banc>(x: &mut Cx<'_, R>, n: u8) {
     play(x, 0, n);
 }
 
-fn strike(x: &mut Cx, n: u8) {
+fn strike<R: Banc>(x: &mut Cx<'_, R>, n: u8) {
     play(x, 2, n);
 }
 
@@ -121,7 +121,7 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(0x38, 0);
     if paused(x) {
         return end_part(x);
@@ -298,7 +298,7 @@ fn script_step<R: Banc>(x: &mut Cx<'_, R>, n: u32) -> bool {
 // --- états de l'hôte sans geste (0 à 3, 9 et plus) ----------------------------------------------
 
 /// 0x76ff4 : le bras se tient à côté de l'hôte et ondule.
-fn idle(x: &mut Cx) {
+fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 {
         x.add8(f::SUB, 2);
         body(x, 5);
@@ -344,12 +344,12 @@ fn damp<R: Banc>(x: &mut Cx<'_, R>) {
 // --- états 4 et 5 de l'hôte : coup -----------------------------------------------------------------
 
 /// 0x770e8 : le bras qui frappe (`+5` = 0 approche, 2 élan, 4 coup, 6 retour).
-fn swing(x: &mut Cx) {
+fn swing<R: Banc>(x: &mut Cx<'_, R>) {
     swing_step(x);
     end_part(x);
 }
 
-fn swing_step(x: &mut Cx) {
+fn swing_step<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB) {
         0 => {
             if !converge(x, [0, 0x20, 0]) {
@@ -413,13 +413,17 @@ fn swing_step(x: &mut Cx) {
 }
 
 /// Étincelles de la frappe (0xb10c8) et dispersion de l'effet.
-fn sparks(x: &mut Cx) {
-    lib::shock_68k(x, 3, 0, 0, 0);
-    let e = x.c.a[1] as u16;
-    if e == 0 {
+/// Glitch d'origine : l'objet dispersé est A1 après le choc, testé par son mot (`move.w A1,D0`) : l'emplacement que
+/// laisse l'allocation refusée, ou, en scène 41 (pas de choc, A1 non écrit), l'hôte que `follow_host` (0x774a8) y a
+/// chargé.
+fn sparks<R: Banc>(x: &mut Cx<'_, R>) {
+    let e = match lib::shock(x, 3, 0, 0, 0) {
+        lib::Choc::Cree(o) | lib::Choc::Refuse(o) => o,
+        lib::Choc::Aucun => host(x),
+    };
+    if e.word() == 0 {
         return;
     }
-    let e = Obj(x.c.a[1] & 0xff_ffff);
     e.set_u16(x.b, 0xc, 0);
     let dy = (random(x) & 7) as u16;
     let ny = e.u16(x.b, 0x10).wrapping_add(dy.wrapping_sub(3));
@@ -462,13 +466,13 @@ fn rise_b<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x772d6 : suit le scénario de l'hôte (`+5` = 0 départ, 2 premier scénario, 4 fin, 6 second).
-fn rise(x: &mut Cx) {
+fn rise<R: Banc>(x: &mut Cx<'_, R>) {
     rise_step(x);
     add_offsets(x);
     end_part(x);
 }
 
-fn rise_step(x: &mut Cx) {
+fn rise_step<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB) {
         0 => {
             x.add8(f::SUB, 2);
@@ -516,10 +520,10 @@ fn rise_script_two<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x77470 : mort de l'hôte, les trois pièces de la variante partent.
-fn finale(x: &mut Cx) {
+fn finale<R: Banc>(x: &mut Cx<'_, R>) {
     let base = if x.u8(Obj::VARIANT) == 0 { 0 } else { 3 };
     for k in 0..3 {
-        x.c.d[4] = base + k;
+        *x.c.d4() = base + k;
         crate::families::effects_creators::eshl_slash(x.b, x.o, (base + k) as u8);
     }
 }
@@ -560,5 +564,5 @@ fn hit<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x76f0e "enemy_25" run,
+    0x76f0e "enemy_25" #[sans] run,
 }

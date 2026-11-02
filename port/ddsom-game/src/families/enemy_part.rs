@@ -6,6 +6,7 @@
 //! l'hôte).
 
 use super::cx::{handlers, Cx};
+use crate::families::cx::Banc;
 use super::enemy_common::*;
 use crate::objects::Obj;
 use crate::objects::Courant;
@@ -39,7 +40,7 @@ mod tentacle {
     const DISPLACER_BEAST: u8 = 0x13;
     const TROLL: u8 = 0xe;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -53,7 +54,7 @@ mod tentacle {
     }
 
     /// Hôte vivant, ou `None` : alors la partie passe à l'état 6 (`0x63e96`).
-    fn host(x: &mut Cx) -> Option<Obj> {
+    fn host<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let h = host_ptr(x)?;
         if h.u8(x.b, 0) == 0 {
             x.set8(f::STATE, st::DEAD);
@@ -62,25 +63,25 @@ mod tentacle {
         Some(h)
     }
 
-    /// Hôte désigné par `+0x46`, sans vérifier qu'il est actif (`A1` en garde l'adresse étendue).
-    fn host_ptr(x: &mut Cx) -> Option<Obj> {
+    /// Hôte désigné par `+0x46`, sans vérifier qu'il est actif.
+    fn host_ptr<R: Banc>(x: &mut Cx<'_, R>) -> Option<Obj> {
         let w = x.u16(f::HOST);
         if (w as i16) >= 0 {
             x.set8(f::STATE, st::DEAD);
             return None;
         }
-        x.c.a[1] = w as i16 as i32 as u32;
-        Some(Obj(x.c.a[1] & 0xff_ffff))
+        Some(x.linked(f::HOST))
     }
 
-    /// L'hôte de la dernière lecture de `A1` (registre conservé par les animations).
-    fn a1(x: &mut Cx) -> Obj {
-        Obj(x.c.a[1] & 0xff_ffff)
+    /// L'hôte que l'original garde dans A1 (relu après les animations) : celui de `+0x46`, que `follow` et `host`
+    /// ont lu avant (le lien ne change pas entre-temps).
+    fn a1<R: Banc>(x: &mut Cx<'_, R>) -> Obj {
+        x.linked(f::HOST)
     }
 
     // --- état 0 : création ---------------------------------------------------------------------
 
-    fn init(x: &mut Cx) {
+    fn init<R: Banc>(x: &mut Cx<'_, R>) {
         x.add8(f::STATE, 2);
         let Some(h) = host(x) else { return };
         if h.u8(x.b, 2) == TROLL {
@@ -98,7 +99,7 @@ mod tentacle {
 
     /// Se colle à l'hôte : position, orientation et drapeaux copiés, plus le décalage de la variante
     /// (X inversé quand l'hôte regarde à gauche).
-    fn follow(x: &mut Cx) {
+    fn follow<R: Banc>(x: &mut Cx<'_, R>) {
         let Some(h) = host_ptr(x) else { return };
         for off in [0x8, 0x10, 0xc] {
             let v = h.u32(x.b, off);
@@ -123,23 +124,18 @@ mod tentacle {
     }
 
     /// Démarre l'animation `n` du jeu `sets` (celui du Displacer Beast si l'hôte en est un).
-    fn start(x: &mut Cx, sets: (u32, u32), n: u32) {
-        x.c.d[0] = n;
+    fn start<R: Banc>(x: &mut Cx<'_, R>, sets: (u32, u32), n: u32) {
         let mut set = sets.0;
         let w = x.u16(f::HOST);
-        if (w as i16) < 0 {
-            x.c.a[1] = w as i16 as i32 as u32;
-            if a1(x).u8(x.b, 2) == DISPLACER_BEAST {
-                set = sets.1;
-            }
+        if (w as i16) < 0 && x.linked(f::HOST).u8(x.b, 2) == DISPLACER_BEAST {
+            set = sets.1;
         }
-        let n = x.c.d[0] as u16;
-        x.anim_start(set, n);
+        x.anim_start(set, n as u16);
     }
 
     // --- état 2 : actif ------------------------------------------------------------------------
 
-    fn active(x: &mut Cx) {
+    fn active<R: Banc>(x: &mut Cx<'_, R>) {
         follow(x);
         if paused(x) {
             if x.u8(0x3) != 0 {
@@ -174,7 +170,7 @@ mod tentacle {
     }
 
     /// Fin commune : cachée quand le dernier coup de l'hôte est négatif, puis remise en liste.
-    fn finish(x: &mut Cx) {
+    fn finish<R: Banc>(x: &mut Cx<'_, R>) {
         let Some(h) = host(x) else { return };
         if (h.u8(x.b, HOST_LAST_HIT) as i8) < 0 {
             x.set_bit(0x1, 1, true);
@@ -183,7 +179,7 @@ mod tentacle {
     }
 
     /// Démarre l'animation de repos et tire la durée de l'attente (`+0x30`).
-    fn idle_anim(x: &mut Cx) {
+    fn idle_anim<R: Banc>(x: &mut Cx<'_, R>) {
         start(x, BODY, 2);
         let r = random(x) & 0xe;
         let delay = x.rom16(IDLE_DELAYS + r);
@@ -191,14 +187,14 @@ mod tentacle {
     }
 
     /// Sous-état simple de la variante 1 : démarre l'animation 3 une fois.
-    fn variant1_once(x: &mut Cx) {
+    fn variant1_once<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(f::SUB2) == 0 {
             x.add8(f::SUB2, 2);
             start(x, BODY, 3);
         }
     }
 
-    fn idle(x: &mut Cx) {
+    fn idle<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) != 0 {
             return variant1_once(x);
         }
@@ -220,7 +216,7 @@ mod tentacle {
         }
     }
 
-    fn step2(x: &mut Cx) {
+    fn step2<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) == 0 {
             if x.u8(f::SUB2) == 0 {
                 x.add8(f::SUB2, 2);
@@ -245,7 +241,7 @@ mod tentacle {
         }
     }
 
-    fn step4(x: &mut Cx) {
+    fn step4<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) != 0 {
             return variant1_once(x);
         }
@@ -272,7 +268,7 @@ mod tentacle {
                     x.add8(f::SUB2, 2);
                     start(x, MID, 3);
                 } else {
-                    x.call(0x9ef20);
+                    crate::families::creators::enemy_shot_9_par(&mut crate::families::effects_creators::restes::Pur, x.b, x.o);
                 }
             }
             6 => {
@@ -287,7 +283,7 @@ mod tentacle {
         }
     }
 
-    fn step6(x: &mut Cx) {
+    fn step6<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) != 0 {
             return variant1_once(x);
         }
@@ -297,7 +293,7 @@ mod tentacle {
         }
     }
 
-    fn step8(x: &mut Cx) {
+    fn step8<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) != 0 {
             return variant1_once(x);
         }
@@ -335,7 +331,7 @@ mod tentacle {
         }
     }
 
-    fn step10(x: &mut Cx) {
+    fn step10<R: Banc>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) != 0 {
             return variant1_once(x);
         }
@@ -350,7 +346,7 @@ mod tentacle {
     // --- état 4 : touché -----------------------------------------------------------------------
 
     /// L'hôte a été touché : la partie se synchronise sur ses PV (`+0x60/+0x62/+0x64` à 0x7fff).
-    fn hit(x: &mut Cx) {
+    fn hit<R: Banc>(x: &mut Cx<'_, R>) {
         follow(x);
         if x.u16(0x60) != x.u16(f::HP) {
             for off in [0x60, f::HP, 0x64] {
@@ -363,5 +359,5 @@ mod tentacle {
 }
 
 handlers! {
-    0x63b2a "enemy_7" tentacle::run,
+    0x63b2a "enemy_7" #[sans] tentacle::run,
 }

@@ -68,11 +68,10 @@ const POUNCE: u32 = 0x0206_0000;
 const AFTER_POUNCE: u32 = 0x0204_0200;
 const DEAD: u32 = 0x0600_0000;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
-    x.c.d[0] = 0;
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -211,7 +210,7 @@ fn nest<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     if !paused(x) {
         let freeze = x.u8(f::FREEZE) as i8;
         if freeze > 0 {
@@ -230,7 +229,7 @@ fn active(x: &mut Cx) {
 }
 
 /// Sous-états 0 et 2 : marche avec demi-tours ; sort de l'écran quand il en est trop loin.
-fn march(x: &mut Cx) {
+fn march<R: Banc>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
@@ -284,7 +283,7 @@ fn steer<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x661ce : un joueur devant l'insecte, dans le sol 0xc de l'état 2 : tirage qui le déclenche en bond.
-fn bite_check(x: &mut Cx) {
+fn bite_check<R: Banc>(x: &mut Cx<'_, R>) {
     if !find_player(x, -0x20, 0x20, 8) {
         return x.set8(BITING, 0);
     }
@@ -306,7 +305,7 @@ fn bite_check(x: &mut Cx) {
 
 // --- sous-état 4 : trajectoires -----------------------------------------------------------------
 
-fn routes(x: &mut Cx) {
+fn routes<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) != 0 {
         return turn_back(x);
     }
@@ -328,7 +327,7 @@ fn cross_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Groupes 0 et 1 : traversée, arrêt de la marche puis virage, sortie.
-fn cross(x: &mut Cx) {
+fn cross<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => cross_start(x),
         2 => {
@@ -352,8 +351,7 @@ fn cross(x: &mut Cx) {
 }
 
 /// 0x65f18 : virage jusqu'à l'angle de sortie, `side` = la parité qui oriente le virage.
-fn cross_turn(x: &mut Cx, side: u8) {
-    x.c.d[0] = x.c.d[0] & !0xff | side as u32;
+fn cross_turn<R: Banc>(x: &mut Cx<'_, R>, side: u8) {
     if side & 1 != 0 {
     }
     steer(x);
@@ -366,7 +364,7 @@ fn cross_turn(x: &mut Cx, side: u8) {
 }
 
 /// 0x65f5c : sortie par le bord ; l'insecte est retiré quand il l'a passé.
-fn leave(x: &mut Cx) {
+fn leave<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xy();
     let (cx, _) = camera(x);
     let d5 = x.u16(Obj::X).wrapping_sub(cx);
@@ -379,7 +377,7 @@ fn leave(x: &mut Cx) {
 }
 
 /// Groupes 2 et 3 : dérive latérale constante (`+0xb4`) jusqu'à la sortie de l'écran.
-fn drift(x: &mut Cx) {
+fn drift<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -447,12 +445,12 @@ fn halt_start<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x660e2 : vol jusqu'à l'abscisse d'arrêt ; devant un joueur, s'arrête de rang en rang puis charge.
-fn halt_run(x: &mut Cx) {
+fn halt_run<R: Banc>(x: &mut Cx<'_, R>) {
     x.move_xy();
     let (cx, _) = camera(x);
     let d5 = x.u16(Obj::X).wrapping_sub(cx);
     let stop = x.u16(STOP_X);
-    set_dw(x, 5, d5);
+    *x.c.d5() = *x.c.d5() & 0xffff_0000 | d5 as u32;
     let before = if x.u8(GROUP) & 1 != 0 { (d5 as i16) < stop as i16 } else { (d5 as i16) > stop as i16 };
     if before {
         x.anim_step();
@@ -492,7 +490,7 @@ fn halt_run(x: &mut Cx) {
 }
 
 /// Groupes 4 et 5.
-fn halt_at(x: &mut Cx) {
+fn halt_at<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => halt_start(x),
         2 => halt_run(x),
@@ -503,7 +501,7 @@ fn halt_at(x: &mut Cx) {
 }
 
 /// Groupes 6 et 7 : comme 4 et 5, avec la morsure surveillée à chaque étape.
-fn halt_and_bite(x: &mut Cx) {
+fn halt_and_bite<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             halt_start(x);
@@ -526,7 +524,7 @@ fn halt_and_bite(x: &mut Cx) {
 }
 
 /// 0x65efe : virage de côté (le sens vient de `+0xa4` et de la parité de `+0x2f`).
-fn side_turn(x: &mut Cx) {
+fn side_turn<R: Banc>(x: &mut Cx<'_, R>) {
     let mut d0 = x.u8(SIDE);
     let group = x.u8(GROUP);
     if group & 1 != 0 {
@@ -536,7 +534,7 @@ fn side_turn(x: &mut Cx) {
 }
 
 /// Sous-état 4 avec `+6` non nul (0x6628a) : se tourne vers un joueur puis remonte vers le haut.
-fn turn_back(x: &mut Cx) {
+fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.set8(f::SUB3, 4);
@@ -544,8 +542,7 @@ fn turn_back(x: &mut Cx) {
             let (px, pz) = (player.u16(x.b, Obj::X), player.u16(x.b, Obj::Y));
             x.set16(0xb0, px);
             x.set16(0xb2, pz);
-            x.c.d[0] = lib::aim_to(x, player) as u32;
-            let angle = x.c.d[0] as u8;
+            let angle = lib::aim_to(x, player);
             x.set8(Obj::SPEED_INDEX, angle);
             if angle & 0xf != 0 {
                 let side = (angle.wrapping_add(0x10) & 0x10) << 1;
@@ -575,7 +572,6 @@ fn turn_back(x: &mut Cx) {
             x.move_by_table_xy();
             x.move_z();
             let floor = if x.u8(Obj::VARIANT) == 0 { 0x30 } else { 0x10 };
-            set_dw(x, 0, floor);
             if floor >= x.u16(Obj::Z) {
                 x.set16(Obj::Z, floor);
                 x.set16(Obj::VZ, 0);
@@ -658,12 +654,11 @@ fn dormant<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 4 : touché ----------------------------------------------------------------------------
 
-fn hit(x: &mut Cx) {
+fn hit<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => react_first(x),
             2 => recoil(x),
@@ -675,7 +670,7 @@ fn hit(x: &mut Cx) {
 }
 
 /// Sous-état 0 : un coup de code 0x5c secoue l'insecte quelques images (`+6` = 0, 2) avant le recul.
-fn react_first(x: &mut Cx) {
+fn react_first<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(HIT_CODE) != 0x5c {
         return knock_back(x);
     }
@@ -693,8 +688,7 @@ fn react_first(x: &mut Cx) {
             if n != 0 {
                 return;
             }
-            lib::attack_effect(x, 0, 0);
-            if !x.c.cond(5) {
+            if lib::attack_effect(x, 0, 0) {
                 shake_timer(x);
             } else {
                 x.set8(0xa2, 1);
@@ -706,7 +700,7 @@ fn react_first(x: &mut Cx) {
 }
 
 /// 0x664b4 : durée de la secousse tirée au hasard.
-fn shake_timer(x: &mut Cx) {
+fn shake_timer<R: Banc>(x: &mut Cx<'_, R>) {
     let r = random(x) & 3;
     let t = x.rom8(SHAKE_TIMES + r);
     x.set8(0xa2, t);
@@ -733,7 +727,7 @@ fn knock_back<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 2 : retombée puis clignotement jusqu'à la mort.
-fn recoil(x: &mut Cx) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.move_xz();
@@ -765,7 +759,7 @@ fn recoil(x: &mut Cx) {
 }
 
 /// Sous-état 4 : saisi par un joueur, l'insecte se débat puis quitte l'écran.
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -790,5 +784,5 @@ fn free<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x65ae8 "enemy_9" run,
+    0x65ae8 "enemy_9" #[sans] run,
 }

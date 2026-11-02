@@ -474,7 +474,7 @@ mod dark_warrior_double {
     const ATTACKED: u16 = 0x400;
     const MASTER_ATTACKED: u16 = 0x406;
 
-    pub fn run(x: &mut Cx) {
+    pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
         if suspended(x) {
             return;
         }
@@ -578,7 +578,7 @@ mod dark_warrior_double {
     }
 
     /// Le maître n'a pas fini son pas d'animation (`+0x33` nul) : le double rejoue le déplacement.
-    fn replay(x: &mut Cx, mover: fn(&mut Cx)) {
+    fn replay<'a, R: Banc>(x: &mut Cx<'a, R>, mover: fn(&mut Cx<'a, R>)) {
         let m = x.linked(MASTER);
         if m.u8(x.b, 0x33) == 0 {
             mover(x);
@@ -587,7 +587,7 @@ mod dark_warrior_double {
 
     // --- maître actif (+0xb8 = 0 ou 2) -----------------------------------------------------------
 
-    fn follow(x: &mut Cx) {
+    fn follow<R: Banc>(x: &mut Cx<'_, R>) {
         if !paused(x) {
             let m = x.linked(MASTER);
             match m.u8(x.b, MODE) {
@@ -602,7 +602,7 @@ mod dark_warrior_double {
     }
 
     /// Le maître marche : vitesses inversées, ou déplacement rejoué.
-    fn mode0(x: &mut Cx) {
+    fn mode0<R: Banc>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         match m.u8(x.b, PHASE) {
             0 | 2 | 4 | 6 => mirror_speeds(x),
@@ -619,7 +619,7 @@ mod dark_warrior_double {
     }
 
     /// 0x77842 : le maître est en vol ou saute ; on recopie ou rejoue selon la phase.
-    fn mode2(x: &mut Cx) {
+    fn mode2<R: Banc>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         match m.u8(x.b, PHASE) {
             4 | 6 => {
@@ -709,7 +709,7 @@ mod dark_warrior_double {
     }
 
     /// 0x779da : le maître est dans un état spécial ; seules quelques phases déplacent le double.
-    fn mode4(x: &mut Cx) {
+    fn mode4<R: Banc>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         match m.u8(x.b, PHASE) {
             10 => match m.u8(x.b, STEP) {
@@ -729,12 +729,11 @@ mod dark_warrior_double {
     }
 
     /// 0x77cee : le terrain sous le double renverse-t-il sa vitesse en profondeur ?
-    fn terrain_reverses(x: &mut Cx) -> bool {
+    fn terrain_reverses<R: Banc>(x: &mut Cx<'_, R>) -> bool {
         let t = crate::video::terrain_of(x.b, x.o);
         let terrain = t.numero & 0x3f;
-        x.c.d[2] = x.c.d[2] & !0xffff | terrain as u32;
+        *x.c.d2() = *x.c.d2() & !0xffff | terrain as u32;
         if terrain as u8 >= 9 {
-            x.c.d[0] = 0;
             return false;
         }
         let b = x.rom8(REVERSING_TERRAIN + terrain as u32);
@@ -743,7 +742,7 @@ mod dark_warrior_double {
 
     // --- maître touché (+0xb8 = 4) ---------------------------------------------------------------
 
-    fn struck(x: &mut Cx) {
+    fn struck<R: Banc>(x: &mut Cx<'_, R>) {
         x.set16(f::HP, 0x7fff);
         let m = x.linked(MASTER);
         match m.u8(x.b, MODE) {
@@ -798,23 +797,21 @@ mod dark_warrior_double {
     }
 
     /// 0x77ab6 : le double reprend l'état de réaction du maître et rejoue sa routine de réaction.
-    fn replay_reaction(x: &mut Cx) {
+    fn replay_reaction<R: Banc>(x: &mut Cx<'_, R>) {
         let m = x.linked(MASTER);
         let sub = m.u16(x.b, PHASE);
         x.set16(f::SUB2, sub);
         copy_speeds(x);
         copy_height(x);
         let code = m.u8(x.b, 0x49) as u32;
-        x.c.d[0] = code;
         let routine = rom32(x, REACTIONS + code);
-        x.c.a[1] = routine;
-        x.call(routine);
+        run_reaction(x, routine);
         x.set8(0x3b, 0);
     }
 }
 
 handlers! {
-    0x77736 "enemy_26" dark_warrior_double::run,
+    0x77736 "enemy_26" #[sans] dark_warrior_double::run,
     0x75f42 "enemy_22" #[sans] chimera::run,
     0x76592 "enemy_23" #[sans] spectre::run,
     0x76afc "enemy_24" #[sans] manticore::run,

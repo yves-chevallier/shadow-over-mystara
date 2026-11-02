@@ -60,11 +60,10 @@ const REACH: u32 = 0x0208_0000;
 const HELD: u32 = 0x0404_0000;
 const DEAD: u32 = 0x0600_0000;
 
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
-    x.c.d[0] = 0;
     match x.u8(f::STATE) {
         st::INIT => init(x),
         st::ACTIVE => active(x),
@@ -103,7 +102,7 @@ fn advance<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x6771a : choisit le geste (`+0xa6`) dans la ligne de la difficulté.
-fn pick_move(x: &mut Cx) {
+fn pick_move<R: Banc>(x: &mut Cx<'_, R>) {
     let row = ((var::RANK.get(x.b) >> 2) << 4) as u32;
     let r = rand_and(x, 0xf);
     let v = x.data8(MOVE_PICK + row + r);
@@ -118,7 +117,7 @@ fn set_timer<R: Banc>(x: &mut Cx<'_, R>, d0: u32) {
 }
 
 /// 0x677de : durée tirée au hasard (rang 0 à 3).
-fn random_timer(x: &mut Cx) {
+fn random_timer<R: Banc>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 3);
     set_timer(x, r);
 }
@@ -131,10 +130,9 @@ fn speed_row<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Choix du coup suivant dans la ligne de la difficulté : tire `+6` = 2 + octet de la table.
-fn pick_attack(x: &mut Cx, table: u32) {
+fn pick_attack<R: Banc>(x: &mut Cx<'_, R>, table: u32) {
     x.add8(f::SUB2, 2);
     let row = ((var::RANK.get(x.b) >> 2) << 4) as u32;
-    x.c.d[0] = row;
     let r = rand_and(x, 0xf);
     let v = x.data8(table + row + r);
     x.add8(f::SUB2, v);
@@ -216,13 +214,12 @@ fn init<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(FROZEN, 1);
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else if !paused(x) {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => arrival(x),
             2 => stance(x),
@@ -240,7 +237,7 @@ fn active(x: &mut Cx) {
 }
 
 /// Sous-état 0 : l'arrivée dépend de `+6` (posé à la création selon la variante).
-fn arrival(x: &mut Cx) {
+fn arrival<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         2 => land(x, |x| {
             x.add8(f::SUB, 2);
@@ -263,7 +260,7 @@ fn arrival(x: &mut Cx) {
 }
 
 /// Chute : tant que l'altitude est positive ; à l'atterrissage `done` change de sous-état.
-fn land(x: &mut Cx, done: impl FnOnce(&mut Cx)) {
+fn land<'a, R: Banc>(x: &mut Cx<'a, R>, done: impl FnOnce(&mut Cx<'a, R>)) {
     x.move_xz();
     if (x.u16(Obj::Z) as i16) > 0 {
         return;
@@ -300,7 +297,7 @@ fn fly_in<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 2 : debout. `+6` = 0 libre, 2 enfant d'un parent (`+0x5c`), 4 enfant libre.
-fn stance(x: &mut Cx) {
+fn stance<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => free_stance(x),
         2 => {
@@ -315,7 +312,7 @@ fn stance(x: &mut Cx) {
     }
 }
 
-fn free_stance(x: &mut Cx) {
+fn free_stance<R: Banc>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, HELD);
     }
@@ -329,7 +326,7 @@ fn free_stance(x: &mut Cx) {
 }
 
 /// 0x674ca : tire le prochain sous-état d'attaque dans la ligne de la difficulté.
-fn choose_attack(x: &mut Cx) {
+fn choose_attack<R: Banc>(x: &mut Cx<'_, R>) {
     let row = ((var::RANK.get(x.b) >> 1) << 5) as u32;
     let r = rand_and(x, 0x1f);
     let v = x.data8(ATTACK_TABLE + row + r);
@@ -340,8 +337,7 @@ fn choose_attack(x: &mut Cx) {
 }
 
 /// Marche : aller (animation 1), demi-tour (4), retour.
-fn walk(x: &mut Cx) {
-    x.c.d[0] = x.u8(f::SUB3) as u32;
+fn walk<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
@@ -387,11 +383,10 @@ fn walk(x: &mut Cx) {
 // --- sous-états 4 et 10 : coups ----------------------------------------------------------------
 
 /// Sous-état 4 : `+6` = 0 tirage, 2 et 4 déplacements d'attaque, 6 demi-tour puis charge.
-fn melee(x: &mut Cx) {
+fn melee<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         pick_attack(x, ATTACK_PICK_A);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         2 => {
             if x.u8(f::SUB3) != 0 {
@@ -419,11 +414,10 @@ fn melee(x: &mut Cx) {
 }
 
 /// Sous-état 10 : même tirage avec une autre table ; `+6` = 2, 4, 6 déplacements, 8 pause.
-fn melee_b(x: &mut Cx) {
+fn melee_b<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         pick_attack(x, ATTACK_PICK_B);
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         2 => {
             if x.u8(f::SUB3) != 0 {
@@ -488,7 +482,7 @@ fn attack_tail<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sous-état 4, `+6` = 6 : se tourne vers la cible, puis lance le geste.
-fn turn_and_charge(x: &mut Cx) {
+fn turn_and_charge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => face_target(x),
         2 => wait_turn(x),
@@ -503,10 +497,9 @@ fn turn_and_charge(x: &mut Cx) {
 }
 
 /// 0x67052 : angle vers la cible ; s'il est du côté regardé, animation 4 et attente, sinon étape 4.
-fn face_target(x: &mut Cx) {
+fn face_target<R: Banc>(x: &mut Cx<'_, R>) {
     let target = load_target(x);
-    x.c.d[0] = lib::aim_to(x, target) as u32;
-    let angle = x.c.d[0] as u8;
+    let angle = lib::aim_to(x, target);
     x.set8(Obj::SPEED_INDEX, angle);
     let side = ((angle as u16 & 0x10) * 2) as u8;
     if side != x.u8(f::FLIP) {
@@ -529,7 +522,7 @@ fn wait_turn<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- sous-état 6 : attente ---------------------------------------------------------------------
 
-fn idle(x: &mut Cx) {
+fn idle<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.add8(f::SUB2, 2);
         let r = rand_and(x, 0xf);
@@ -548,7 +541,7 @@ fn idle(x: &mut Cx) {
 
 // --- sous-état 8 : coup spécial ---------------------------------------------------------------
 
-fn charge(x: &mut Cx) {
+fn charge<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => face_target(x),
         2 => wait_turn(x),
@@ -579,12 +572,11 @@ fn charge(x: &mut Cx) {
 
 // --- état 4 : touché ----------------------------------------------------------------------------
 
-fn hit(x: &mut Cx) {
+fn hit<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
     } else {
-        x.c.d[0] = x.u8(f::SUB) as u32;
         match x.u8(f::SUB) {
             0 => knock_back(x),
             2 => recoil(x),
@@ -595,7 +587,7 @@ fn hit(x: &mut Cx) {
     x.reinsert();
 }
 
-fn knock_back(x: &mut Cx) {
+fn knock_back<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     let freeze = x.u8(0x56);
     x.set8(f::FREEZE, freeze);
@@ -614,7 +606,7 @@ fn knock_back(x: &mut Cx) {
     zone_and_terrain(x);
 }
 
-fn recoil(x: &mut Cx) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.move_xz();
@@ -648,16 +640,14 @@ fn recoil(x: &mut Cx) {
 }
 
 /// Sous-état 4 : saisi par un joueur, le scorpion court vers le bord de l'écran le plus proche.
-fn grabbed_flight(x: &mut Cx) {
+fn grabbed_flight<R: Banc>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
-    x.c.d[0] = x.u8(f::SUB2) as u32;
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
             let cam = camera_x(x);
-            set_dw(x, 0, cam);
             x.set16(Obj::VX, 0x300);
             let mut want = 0x20;
             let dx = x.u16(Obj::X).wrapping_sub(cam);
@@ -702,5 +692,5 @@ fn run_off<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 handlers! {
-    0x6681c "enemy_10" run,
+    0x6681c "enemy_10" #[sans] run,
 }

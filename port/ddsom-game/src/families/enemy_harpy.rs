@@ -11,6 +11,7 @@ use crate::families::cx::Banc;
 use super::cx::{handlers, Cx};
 use super::enemy_common::*;
 use crate::objects::Obj;
+use super::effects_creators::restes::Pur;
 
 /// Jeux d'animations : vol et attaques.
 const SET_FLY: u32 = 0x16a10c;
@@ -40,11 +41,7 @@ mod g {
 use g::*;
 use crate::objects::Courant;
 
-mod call {
-    pub const CREATE_COMPANION: u32 = 0xa036e;
-}
-
-pub fn run(x: &mut Cx) {
+pub fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
@@ -89,7 +86,7 @@ fn vanish<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Sortie d'écran : comme `vanish`, en retirant d'abord la créature de la scène (0x27ee).
-fn leave(x: &mut Cx) {
+fn leave<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 4);
     detach_from_host(x);
     release_companion(x);
@@ -120,7 +117,7 @@ fn bank<R: Banc>(x: &mut Cx<'_, R>, reload: u8, clamp: bool) {
 
 // --- état 0 : création --------------------------------------------------------------------------
 
-fn init(x: &mut Cx) {
+fn init<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(0, 1);
     x.set8(f::BOX_SET, 0xe);
@@ -168,18 +165,25 @@ fn init(x: &mut Cx) {
         let vz = x.u16(0x1c);
         x.set16(0x18, vz);
     }
-    x.call(call::CREATE_COMPANION);
-    if x.c.cond(5) {
-        x.add8(f::STATE, 4);
-    }
-    let companion = x.c.a[1] as u16;
-    x.set16(COMPANION, companion);
+    // 0xa036e : compagnon ; sur un échec, l'original range quand même l'A1 laissé par l'allocation.
+    let companion = match super::petites::harpy_companion_par(&mut Pur, x.b, x.o) {
+        Ok((o, hp)) => {
+            // Glitch d'origine : PV/4 reste dans D2.
+            *x.c.d2() = *x.c.d2() & 0xffff_0000 | hp as u32;
+            o
+        }
+        Err(a1) => {
+            x.add8(f::STATE, 4);
+            a1
+        }
+    };
+    x.set16(COMPANION, companion.word());
     reinsert(x);
 }
 
 // --- état 2 : actif -----------------------------------------------------------------------------
 
-fn active(x: &mut Cx) {
+fn active<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE) as i8;
     if freeze > 0 {
         x.set8(f::FREEZE, (freeze - 1) as u8);
@@ -196,7 +200,7 @@ fn active(x: &mut Cx) {
 }
 
 /// +5 = 0 (0x7594a) : vol de la variante.
-fn fly(x: &mut Cx) {
+fn fly<R: Banc>(x: &mut Cx<'_, R>) {
     if grabbed(x) {
         return set_state_long(x, 0x0206_0000);
     }
@@ -266,7 +270,7 @@ fn fly_front<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// Variantes 6 et 7 (0x75980) : traverse l'écran puis fait demi-tour.
-fn turn_back(x: &mut Cx) {
+fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.move_x();
@@ -329,7 +333,7 @@ fn pause<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// +5 = 6 (0x75884) : sortie d'écran selon la variante.
-fn exit_flight(x: &mut Cx) {
+fn exit_flight<R: Banc>(x: &mut Cx<'_, R>) {
     move_xz_table(x);
     step(x);
     match x.u8(Obj::VARIANT) >> 1 {
@@ -361,7 +365,7 @@ fn exit_flight(x: &mut Cx) {
 }
 
 /// +5 = 8 (0x75b40) : fin du vol de la variante 8.
-fn attack_end(x: &mut Cx) {
+fn attack_end<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => attack_start(x),
         2 => attack_aim(x),
@@ -372,7 +376,7 @@ fn attack_end(x: &mut Cx) {
 
 // --- sous-état 2 : attaque ----------------------------------------------------------------------
 
-fn attack(x: &mut Cx) {
+fn attack<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(SERIES) {
         0 => attack_shots(x),
         2 => attack_claws(x),
@@ -381,7 +385,7 @@ fn attack(x: &mut Cx) {
     }
 }
 
-fn attack_shots(x: &mut Cx) {
+fn attack_shots<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => attack_start(x),
         2 => attack_aim(x),
@@ -392,16 +396,13 @@ fn attack_shots(x: &mut Cx) {
 }
 
 /// 0x75b7c : la créature vise un joueur et lance un projectile.
-fn attack_start(x: &mut Cx) {
+fn attack_start<R: Banc>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB2, 2);
     if let Some(target) = lib::pick_target(x) {
-        // A2 = la cible : entrée du créateur 0xa0566
-        x.c.a[2] = target.0;
-        x.c.d[5] = 0;
-        x.call(0xa0566);
-        if !x.c.cond(5) {
-            let shot = x.c.a[1];
-            x.set32(SHOT, shot);
+        // 0xa0566 avec D5 = 0 (laissé en reste) et A2 = la cible
+        *x.c.d5() = 0;
+        if let Some(shot) = super::petites::harpy_shot_par(&mut Pur, x.b, x.o, 0, target.0) {
+            x.set32(SHOT, shot.0);
             let n = x.u8(KIND) as u32;
             x.anim_start(SET_ATTACK, n as u16);
             return lib::sound(x, 0xed5b2);
@@ -438,7 +439,7 @@ fn attack_wait<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x75c36 : retour au vol après le tir.
-fn attack_return(x: &mut Cx) {
+fn attack_return<R: Banc>(x: &mut Cx<'_, R>) {
     let t = x.u8(TIMER_A).wrapping_sub(1);
     x.set8(TIMER_A, t);
     if (t as i8) >= 0 {
@@ -458,7 +459,7 @@ fn attack_return(x: &mut Cx) {
     x.set8(f::SUB2, resume);
 }
 
-fn attack_claws(x: &mut Cx) {
+fn attack_claws<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -491,7 +492,7 @@ fn attack_claws(x: &mut Cx) {
     }
 }
 
-fn attack_fire(x: &mut Cx) {
+fn attack_fire<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
             x.add8(f::SUB2, 2);
@@ -635,13 +636,11 @@ fn hit_dying<R: Banc>(x: &mut Cx<'_, R>) {
 
 // --- état 6 : libération ---------------------------------------------------------------------------
 
-fn dead(x: &mut Cx) {
-    let d = x.u16(0x48) & 0xff00;
-    set_dw(x, 0, d.wrapping_add(0x12));
+fn dead<R: Banc>(x: &mut Cx<'_, R>) {
     detach_from_host(x);
     free(x);
 }
 
 handlers! {
-    0x756c4 "enemy_21" run,
+    0x756c4 "enemy_21" #[sans] run,
 }

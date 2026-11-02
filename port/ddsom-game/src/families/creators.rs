@@ -126,21 +126,25 @@ pub(crate) fn sparks_par(r: &mut impl Registres, b: &mut Cps2Bus, joueur: Obj) -
 
 /// 0x9ef20 : tir ESHL 9 lié à l'ennemi A0, une image sur quatre (compteur `A5+0x6e`).
 fn enemy_shot_9(c: &mut Cpu, b: &mut Cps2Bus) {
-    let phase = rd16(b, A5 + 0x6e) & 3;
-    c.d[0] = c.d[0] & 0xffff_0000 | phase as u32;
-    if phase != 0 {
-        moved(c, phase as u32, Size::Word);
-        return rts(c, b);
-    }
-    let me = c.a[0];
-    if let Some(shot) = alloc(c, b, &pools::ESHL) {
-        shot.set_u8(b, 0x0, 1);
-        shot.set_u8(b, 0x2, 9);
-        shot.set_u8(b, 0x3, 0);
-        wr16(b, shot.0 + 0x50, me as u16);
-        moved(c, me as u16 as u32, Size::Word);
-    }
+    let me = Obj(c.a[0]);
+    enemy_shot_9_par(c, b, me);
     rts(c, b);
+}
+
+pub(crate) fn enemy_shot_9_par(r: &mut impl Registres, b: &mut Cps2Bus, me: Obj) -> Option<Obj> {
+    let phase = rd16(b, A5 + 0x6e) & 3;
+    r.d_mot(0, phase);
+    if phase != 0 {
+        r.drapeaux(phase as u32, Size::Word);
+        return None;
+    }
+    let shot = r.alloue(b, &pools::ESHL)?;
+    shot.set_u8(b, 0x0, 1);
+    shot.set_u8(b, 0x2, 9);
+    shot.set_u8(b, 0x3, 0);
+    wr16(b, shot.0 + 0x50, me.word());
+    r.drapeaux(me.word() as u32, Size::Word);
+    Some(shot)
 }
 
 /// 0xcdedc : objet SET 13 de variante D0.

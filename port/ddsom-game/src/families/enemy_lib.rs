@@ -485,13 +485,6 @@ pub fn clear_all_popups<R: Banc>(x: &mut Cx<'_, R>) {
     crate::popups::effacer_tout(x.b);
 }
 
-/// 0xb10c8 : effet de choc à la position de l'objet : variante, réglage (`+0x2d`, `+0x2f`), vitesses `+0x14`, `+0x1c`.
-#[track_caller]
-pub fn shock_68k(x: &mut Cx, variant: u32, setting: u16, vx: u16, vy: u16) {
-    // A1, D1 et la retenue de l'original restent : un gestionnaire suivant les relit (boss15_scene46, mash_c5)
-    crate::effects_aids::shock_68k(x.c, x.b, x.o, variant as u8, setting, vx, vy);
-}
-
 /// Ce que rend le choc 0xb10c8 : l'effet créé, ou ce que l'original laisse dans A1 et la retenue.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Choc {
