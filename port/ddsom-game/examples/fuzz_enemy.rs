@@ -1261,9 +1261,9 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                     // l'original est sorti des rails (entrée incohérente), ou la native a paniqué : on abandonne la
                     // trajectoire, et la panique est comptée (résumé final)
                     let m = DERNIERE_PANIQUE.lock().unwrap().take().unwrap_or_default();
-                    // les adresses varient d'un appel à l'autre : on les masque pour regrouper
-                    let cle: String = m.chars().map(|ch| if ch.is_ascii_hexdigit() && !ch.is_ascii_alphabetic() { '#' } else { ch }).collect();
-                    let cle = format!("{entree:06x} {}", cle.split(" (").next().unwrap_or(""));
+                    // regroupement par gestionnaire et par cause (le texte après le dernier « : », sans le lieu)
+                    let cause = m.rsplit(" : ").next().unwrap_or("").split(" (").next().unwrap_or("");
+                    let cle = format!("{entree:06x} {cause}");
                     let distinctes = paniques.len();
                     let n = paniques.entry(cle).or_insert(0);
                     if *n == 0 && distinctes < 40 {
