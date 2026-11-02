@@ -22,7 +22,9 @@ struct Sample {
 
 fn table(z80: &[u8]) -> Vec<Sample> {
     z80[TABLE..]
-        .chunks_exact(8)
+        .as_chunks::<8>()
+        .0
+        .iter()
         .map(|e| Sample {
             root: e[0],
             bank: e[1],
@@ -40,7 +42,7 @@ pub fn extract(roms: &Path, dir: &Path) -> io::Result<()> {
     // sample ROM: ROM_LOAD16_WORD_SWAP
     let mut pcm = Vec::new();
     for name in ["dd2.11m", "dd2.12m"] {
-        pcm.extend(std::fs::read(roms.join(name))?.chunks_exact(2).flat_map(|w| [w[1], w[0]]));
+        pcm.extend(std::fs::read(roms.join(name))?.as_chunks::<2>().0.iter().flat_map(|w| [w[1], w[0]]));
     }
     for (i, s) in table(&z80).iter().enumerate() {
         if !(s.bank < 0x40 && s.start <= s.end && (s.start..=s.end).contains(&s.loop_start)) {

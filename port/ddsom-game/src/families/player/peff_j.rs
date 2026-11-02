@@ -274,7 +274,7 @@ mod rain {
                     return;
                 }
                 if x.anim_step() {
-                    let r = (x.rand_and(3) * 2) as u32;
+                    let r = x.rand_and(3) * 2;
                     let d = x.rom16(DELAYS + r);
                     x.set16(0x58, d);
                     x.anim(ANIMS, 1);

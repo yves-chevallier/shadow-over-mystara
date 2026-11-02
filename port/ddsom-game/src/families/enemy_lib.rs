@@ -651,8 +651,7 @@ pub fn roll_78<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let row = x.data32(0xadb0 + 4 * line as u32);
     let tick = var::RANK.get(x.b);
     let mask = x.data32(row.wrapping_add(((tick << 2) as i16) as u32));
-    let hit = roll_bit(x, mask, 0x1f);
-    hit
+    roll_bit(x, mask, 0x1f)
 }
 
 /// 0x10298: palette script `index`: eight longs of table 0x102ba copied into the palette (0x91c380), maximum brightness

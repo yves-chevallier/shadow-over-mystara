@@ -17,6 +17,9 @@ use ddsom_game::mem::{wr16, wr32, wr8, A5};
 
 struct Rng(u64);
 
+/// A group of natives: its random state and the range of their addresses.
+type Group = (fn(&mut Cpu, &mut Bus, &mut Rng), std::ops::Range<u32>);
+
 impl Rng {
     fn next(&mut self) -> u32 {
         self.0 ^= self.0 << 13;
@@ -26,7 +29,7 @@ impl Rng {
     }
     /// True with probability 1/n.
     fn one_chance_in(&mut self, n: u32) -> bool {
-        self.next() % n == 0
+        self.next().is_multiple_of(n)
     }
 }
 
@@ -80,7 +83,7 @@ fn bcd(rng: &mut Rng) -> u32 {
     match rng.next() % 4 {
         0 => 0x0999_9990 + rng.next() % 10,
         1 => rng.next(),
-        _ => (0..8).fold(0, |v, _| v << 4 | rng.next() % 10),
+        _ => (0..8).fold(0, |v, _| (v << 4) | (rng.next() % 10)),
     }
 }
 
@@ -90,7 +93,7 @@ fn ring(b: &mut Bus, rng: &mut Rng, write: u32, cases: u32, read: bool) {
         wr8(b, A5 + write + 1, (rng.next() as u8 & 0x3f) * 2);
     }
     for i in 0..64 {
-        let v = if rng.next() % 3 == 0 { (rng.next() as u16 & 0x37f) | 0x0000 } else { 0xffff };
+        let v = if rng.next().is_multiple_of(3) { rng.next() as u16 & 0x37f } else { 0xffff };
         wr16(b, A5 + cases + 2 * i, v);
     }
 }
@@ -105,16 +108,16 @@ fn rng_u1(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr8(b, A5 + 0x20d, (rng.next() as u8 & 0x1f) * 8);
     for i in 0..32 {
         // plausible entries: type (high byte 0-3), code < 0x18, small parameters
-        let plausible = (rng.next() % 4) as u16 * 0x100 | (rng.next() % 0x18) as u16;
+        let plausible = ((rng.next() % 4) as u16 * 0x100) | (rng.next() % 0x18) as u16;
         let base = A5 + 0x20e + 8 * i;
-        wr16(b, base, if rng.next() % 3 == 0 { plausible } else { 0xffff });
+        wr16(b, base, if rng.next().is_multiple_of(3) { plausible } else { 0xffff });
         wr16(b, base + 2, rng.next() as u16 % 0x100);
         wr16(b, base + 4, if rng.next() & 1 == 0 { 0 } else { rng.next() as u16 % 0x100 });
         wr16(b, base + 6, 0x80);
     }
     // current pop-up: remaining duration 0, 1, 2, 3, 4, 5 or long
     let duration = [0u16, 1, 2, 3, 4, 5, 0x60][rng.next() as usize % 7];
-    wr16(b, 0xff9180, (rng.next() % 4) as u16 * 0x100 | (rng.next() % 0x18) as u16);
+    wr16(b, 0xff9180, ((rng.next() % 4) as u16 * 0x100) | (rng.next() % 0x18) as u16);
     wr16(b, 0xff9182, rng.next() as u16 % 0x100);
     wr16(b, 0xff9184, rng.next() as u16 % 0x100);
     wr16(b, 0xff9186, duration);
@@ -170,9 +173,9 @@ fn rng_m2(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr16(b, A5 - 0x616c, words);
     wr16(b, A5 - 0x6168, start);
     wr32(b, A5 - 0x6172, if rng.next() & 1 == 0 { 0xff1d8e } else { 0xff1e0e });
-    for i in 0..64 {
-        let v = if rng.next() % 4 == 0 { data[i] ^ 1 } else { data[i] };
-        wr16(b, 0xff1d8e + 2 * i as u32, if rng.next() % 3 == 0 { rng.next() as u16 } else { v });
+    for (i, &d) in data.iter().enumerate() {
+        let v = if rng.next().is_multiple_of(4) { d ^ 1 } else { d };
+        wr16(b, 0xff1d8e + 2 * i as u32, if rng.next().is_multiple_of(3) { rng.next() as u16 } else { v });
         wr16(b, 0xff1e0e + 2 * i as u32, rng.next() as u16);
     }
     for (value, image) in [(0x76u32, 0xffff_9deeu32), (0x7a, 0xffff_9df2), (0x7e, 0xffff_9df6), (0x7fd4, 0xffff_9dfa)] {
@@ -190,7 +193,7 @@ fn rng_m2(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     let variant = 2 * (rng.next() as u16 % 6);
     wr16(b, A5 + 0x70, variant);
     for i in 0..0x80u32 {
-        let small = if rng.next() % 3 == 0 { rng.next() as u8 } else { (rng.next() % 20) as u8 };
+        let small = if rng.next().is_multiple_of(3) { rng.next() as u8 } else { (rng.next() % 20) as u8 };
         wr8(b, 0xff1d8e + i, small);
     }
     let block = 0x2d656 + b_prog16(b, 0x2d656 + variant as u32) as i16 as u32;
@@ -220,7 +223,7 @@ fn colour(rng: &mut Rng) -> u16 {
 fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     let entry = ENTRY.load(std::sync::atomic::Ordering::Relaxed);
     for i in 0..0x800u32 {
-        let v = if rng.next() % 5 == 0 { colour(rng) } else { colour(rng) & 0xf0ff | (i as u16 & 0xf00) };
+        let v = if rng.next().is_multiple_of(5) { colour(rng) } else { colour(rng) & 0xf0ff | (i as u16 & 0xf00) };
         wr16(b, 0x91c000 + 2 * i, v);
     }
     // target palettes in RAM (0xff1190, 512 colours)
@@ -241,7 +244,7 @@ fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
         wr32(b, A5 + 0x492, 0x91c3a0);
     }
     wr8(b, A5 + 0x34, [2, 0x14, 0x2f, 0x42, 0x44, 0x45, 0x59, 0x5a, 0x3, 0x8][rng.next() as usize % 10]);
-    if rng.next() % 3 == 0 {
+    if rng.next().is_multiple_of(3) {
         wr8(b, A5 + 0x34, rng.next() as u8 % 0x60);
     }
     wr8(b, A5 + 0x36, rng.one_chance_in(2) as u8);
@@ -257,7 +260,7 @@ fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     regs(c, b, rng);
     c.a[4] = A5 + 0x48e;
     // valid scene / set numbers (the ROM tables stop at scene 0x5a)
-    c.d[0] = if rng.next() % 3 == 0 { rng.next() % 0x5b } else { rng.next() % 12 };
+    c.d[0] = if rng.next().is_multiple_of(3) { rng.next() % 0x5b } else { rng.next() % 12 };
     c.d[1] = if rng.next() & 1 == 0 { 0x1000 } else { 0xffff_f000 };
     if entry == 0x1a60a {
         c.d[0] %= 3; // the page 1 table has only three entries
@@ -282,7 +285,7 @@ fn rng_video(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
         c.d[1] = colour(rng) as u32;
     }
     if matches!(entry, 0x255a | 0x25e8) {
-        c.d[0] = if rng.next() % 3 == 0 { rng.next() } else { rng.next() % 130 };
+        c.d[0] = if rng.next().is_multiple_of(3) { rng.next() } else { rng.next() % 130 };
         c.a[1] = 0x912000 + 0x80 * (rng.next() % 40) + 4 * (rng.next() % 30);
     }
 }
@@ -320,7 +323,7 @@ fn rng_camera(c: &mut Cpu, b: &mut Bus, rng: &mut Rng) {
     wr16(b, cam + 0x14, drawn_y as u16);
     wr16(b, cam + 0x08, x as u16);
     wr16(b, cam + 0x0c, y as u16);
-    wr16(b, cam + 0x20, if rng.next() % 4 == 0 { 4 } else { 0 });
+    wr16(b, cam + 0x20, if rng.next().is_multiple_of(4) { 4 } else { 0 });
     wr16(b, cam + 0x2e, (x - rng.next() as i32 % 0x100) as u16);
     wr16(b, cam + 0x34, (x + (rng.next() as i32 % 0x200) - 0x40) as u16);
     wr8(b, cam + 0x3d, rng.one_chance_in(3) as u8);
@@ -369,7 +372,7 @@ fn eshl_states(kind: u8) -> &'static [(&'static [u8], &'static [u8], &'static [u
 /// autour de l'objet `obj`.
 fn perturb_globals(b: &mut cps2::Cps2Bus, rng: &mut Rng, step: u32, obj: u32) {
     use ddsom_game::mem::{rd16, wr8};
-    if step != 0 && rng.next() % 4 != 0 {
+    if step != 0 && !rng.next().is_multiple_of(4) {
         return;
     }
     // work RAM bytes (A5+) and possible values
@@ -392,50 +395,50 @@ fn perturb_globals(b: &mut cps2::Cps2Bus, rng: &mut Rng, step: u32, obj: u32) {
         (0x70, &[0, 0, 1]),
     ];
     for (off, values) in bytes {
-        if rng.next() % 3 == 0 {
+        if rng.next().is_multiple_of(3) {
             wr8(b, A5 + off, values[rng.next() as usize % values.len()]);
         }
     }
     // cameras, rank
     for off in [0x506u32, 0x556] {
-        if rng.next() % 2 == 0 {
+        if rng.next().is_multiple_of(2) {
             wr16(b, A5 + off, [0, 0x100, 0x180, 0x1c0, 0x200, 0x2b0, 0x300, 0xa00][rng.next() as usize % 8]);
         }
     }
     for off in [0x50au32, 0x55a] {
-        if rng.next() % 2 == 0 {
+        if rng.next().is_multiple_of(2) {
             wr16(b, A5 + off, (rng.next() % 0x200) as u16);
         }
     }
-    if rng.next() % 3 == 0 {
+    if rng.next().is_multiple_of(3) {
         wr16(b, A5 + 0x7f92, (rng.next() % 32) as u16);
     }
     // players: active, state, life, keys, position close to the object
     for j in 0..4u32 {
         let p = 0xff85de + 0x200 * j;
-        if rng.next() % 3 == 0 {
+        if rng.next().is_multiple_of(3) {
             wr8(b, p, [0, 1, 1, 1, 2][rng.next() as usize % 5]);
         }
-        if rng.next() % 4 == 0 {
+        if rng.next().is_multiple_of(4) {
             wr8(b, p + 4, [0, 1, 2, 2, 3, 4][rng.next() as usize % 6]);
             wr8(b, p + 5, 0);
             wr8(b, p + 6, 0);
         }
-        if rng.next() % 3 == 0 {
+        if rng.next().is_multiple_of(3) {
             wr16(b, p + 0x62, [0, 0x08, 0x20, 0x40, 0x80][rng.next() as usize % 5]);
         }
-        if rng.next() % 3 == 0 {
+        if rng.next().is_multiple_of(3) {
             wr8(b, p + 0x6c, rng.next() as u8);
             wr8(b, 0xff800c + j, rng.next() as u8 & 0xf0);
         }
-        if rng.next() % 3 == 0 {
+        if rng.next().is_multiple_of(3) {
             let x = rd16(b, obj + 8).wrapping_add((rng.next() % 0x60) as u16).wrapping_sub(0x30);
             let y = rd16(b, obj + 0x10).wrapping_add((rng.next() % 0x30) as u16).wrapping_sub(0x18);
             wr16(b, p + 8, x);
             wr16(b, p + 0x10, y);
-            wr16(b, p + 0xc, if rng.next() % 4 == 0 { 0x30 } else { 0 });
+            wr16(b, p + 0xc, if rng.next().is_multiple_of(4) { 0x30 } else { 0 });
         }
-        if rng.next() % 4 == 0 {
+        if rng.next().is_multiple_of(4) {
             wr8(b, p + 3, (rng.next() % 12) as u8);
         }
     }
@@ -551,12 +554,8 @@ fn leftovers(c: &Cpu, b: &Bus, entry: u32, rng: &mut Rng) -> ([bool; 10], Option
         v
     };
     fn set(c: &mut Cpu, v: &[u32; 10]) {
-        for i in 0..6 {
-            c.d[i + 1] = v[i];
-        }
-        for i in 0..3 {
-            c.a[i + 2] = v[6 + i];
-        }
+        c.d[1..7].copy_from_slice(&v[..6]);
+        c.a[2..5].copy_from_slice(&v[6..9]);
         c.d[0] = (c.d[0] & 0xffff) | (v[9] << 16);
     }
     let base = draw(rng);
@@ -625,7 +624,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
     for (pool, table, n) in tables {
         for k in 0..n {
             let a = (m.bus.fetch16(table + 4 * k) as u32) << 16 | m.bus.fetch16(table + 4 * k + 2) as u32;
-            if ddsom_game::all_natives().any(|nat| nat.entry == a) && filter.map_or(true, |f| f == a) {
+            if ddsom_game::all_natives().any(|nat| nat.entry == a) && filter.is_none_or(|f| f == a) {
                 inputs.push((a, pool, k as u8));
             }
         }
@@ -660,7 +659,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
             wr8(&mut b, obj.0 + 3, (rng.next() % variants.min(table_variants(entry))) as u8);
             wr8(&mut b, obj.0 + 0x28, pool.class);
             wr8(&mut b, obj.0 + 0x2c, (rng.next() & 1) as u8);
-            wr8(&mut b, obj.0 + 0x2f, if rng.next() % 4 == 0 { rng.next() as u8 % 3 } else { 0 });
+            wr8(&mut b, obj.0 + 0x2f, if rng.next().is_multiple_of(4) { rng.next() as u8 % 3 } else { 0 });
             wr16(&mut b, obj.0 + 0x50, owner as u16);
             wr16(&mut b, obj.0 + 0x46, owner as u16);
             wr16(&mut b, obj.0 + 0x5a, owner as u16);
@@ -668,7 +667,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
             // level variables read by the shots
             if pool.class == 8 && kind >= 15 {
                 wr16(&mut b, obj.0 + 0x5c, owner as u16);
-                if rng.next() % 2 == 0 {
+                if rng.next().is_multiple_of(2) {
                     wr16(&mut b, obj.0 + 0x42, owner as u16);
                 }
                 wr16(&mut b, obj.0 + 0x58, (rng.next() % 6) as u16);
@@ -678,7 +677,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                     wr8(&mut b, obj.0 + 0x43, [0, 1, 0xff][rng.next() as usize % 3]);
                     wr8(&mut b, obj.0 + 0x42, 4 * (rng.next() % 2) as u8);
                 }
-                if std::env::var("DDSOM_ETATS").is_ok() && rng.next() % 2 == 0 {
+                if std::env::var("DDSOM_ETATS").is_ok() && rng.next().is_multiple_of(2) {
                     let hitboxes = eshl_states(kind);
                     let (s4, s5, s6) = hitboxes[rng.next() as usize % hitboxes.len()];
                     wr8(&mut b, obj.0 + 4, s4[rng.next() as usize % s4.len()]);
@@ -686,7 +685,7 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                     wr8(&mut b, obj.0 + 6, s6[rng.next() as usize % s6.len()]);
                 }
                 // most often, the owner is on screen (otherwise the shot is immediately removed by culling)
-                if rng.next() % 4 != 0 {
+                if !rng.next().is_multiple_of(4) {
                     let (cx, cy) = (rd16(&mut b, A5 + 0x506), rd16(&mut b, A5 + 0x50a));
                     wr16(&mut b, owner + 8, cx.wrapping_add(0x60 + (rng.next() % 0x80) as u16));
                     wr16(&mut b, owner + 0x10, cy.wrapping_add(0x60 + (rng.next() % 0x40) as u16));
@@ -716,27 +715,27 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                     break;
                 }
                 if step > 0 {
-                    if pool.class == SET.class && matches!(kind, 2 | 15) && rng.next() % 6 == 0 {
+                    if pool.class == SET.class && matches!(kind, 2 | 15) && rng.next().is_multiple_of(6) {
                         scene_state(&mut b, &mut rng, obj.0, kind, false);
                     }
-                    if rng.next() % 6 == 0 {
+                    if rng.next().is_multiple_of(6) {
                         wr8(&mut b, obj.0 + 0x57, [0x08, 0x20, 0x28, 0x10, 0x02, 0x40][rng.next() as usize % 6]);
                     }
-                    if rng.next() % 8 == 0 {
+                    if rng.next().is_multiple_of(8) {
                         wr8(&mut b, obj.0 + 0x33, rng.next() as u8 & 1);
                     }
-                    if rng.next() % 10 == 0 {
+                    if rng.next().is_multiple_of(10) {
                         wr8(&mut b, owner + 4, (rng.next() % 8) as u8);
                     }
                     // the owner changes state: state-machine states, attack flags, counters
-                    if rng.next() % 3 == 0 {
+                    if rng.next().is_multiple_of(3) {
                         for off in [4u32, 5, 6, 7] {
-                            if rng.next() % 2 == 0 {
+                            if rng.next().is_multiple_of(2) {
                                 wr8(&mut b, owner + off, 2 * (rng.next() % 6) as u8);
                             }
                         }
                         for off in [0x53u32, 0xa0, 0xa1, 0xa8, 0xa9, 0xb0, 0xbd, 0x3e, 0x2f, 0x42, 0x5d] {
-                            if rng.next() % 3 == 0 {
+                            if rng.next().is_multiple_of(3) {
                                 let v = match rng.next() % 4 {
                                     0 => 0,
                                     1 => 1,
@@ -748,10 +747,10 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                         }
                     }
                     // its own variant / control flags
-                    if rng.next() % 12 == 0 {
+                    if rng.next().is_multiple_of(12) {
                         wr8(&mut b, obj.0 + 0x3e, rng.next() as u8 % 6);
                     }
-                    if rng.next() % 10 == 0 {
+                    if rng.next().is_multiple_of(10) {
                         wr8(&mut b, obj.0 + 0x53, (rng.next() % 5) as u8);
                     }
                 }
@@ -761,14 +760,14 @@ fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, 
                     perturb_globals(&mut b, &mut rng, step, obj.0);
                 }
                 // game paused (rare) or not; suspended object (byte +0x40) very rarely
-                wr8(&mut b, A5 + 0x3d, (rng.next() % 10 == 0) as u8);
+                wr8(&mut b, A5 + 0x3d, rng.next().is_multiple_of(10) as u8);
                 if pool.class == 8 && kind >= 15 {
                     wr8(&mut b, A5 + 0x6f, step as u8);
                     wr16(&mut b, A5 + 0x6e, rng.next() as u16);
                     wr8(&mut b, A5 + 0x42, (rng.next() % 2) as u8);
-                    wr8(&mut b, A5 + 0x4e, (rng.next() % 16 == 0) as u8);
+                    wr8(&mut b, A5 + 0x4e, rng.next().is_multiple_of(16) as u8);
                 }
-                wr8(&mut b, obj.0 + 0x40, (rng.next() % 40 == 0) as u8);
+                wr8(&mut b, obj.0 + 0x40, rng.next().is_multiple_of(40) as u8);
                 c.a[0] = obj.0;
                 c.a[5] = A5;
                 c.d[7] = step;
@@ -1027,7 +1026,7 @@ fn main() {
         families(roms, eeprom, scenario, warmup.parse().unwrap(), rounds.parse().unwrap(), std::env::var("DDSOM_ENTREE").ok().and_then(|v| u32::from_str_radix(&v, 16).ok()));
         return;
     }
-    let (rng_state, range): (fn(&mut Cpu, &mut Bus, &mut Rng), std::ops::Range<u32>) = match group.as_str() {
+    let (rng_state, range): Group = match group.as_str() {
         "sound" => (rng_sound, 0x68c..0xee000),
         "u1" => (rng_u1, 0x19a80..0x1a000),
         "c1" => (rng_c1, 0x13c00..0x14e50),
@@ -1111,25 +1110,25 @@ fn main() {
 /// which the generic fuzz does not vary. `start`: initial object state (variant, state).
 fn scene_state(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8, start: bool) {
     use ddsom_game::mem::{rd16, rd32, rd8};
-    wr8(b, A5 + 0x34, if rng.next() % 3 == 0 { 4 } else { 1 + (rng.next() % 7) as u8 });
-    wr8(b, A5 + 0x35, if rng.next() % 10 == 0 { 0 } else { 1 + (rng.next() % 4) as u8 });
+    wr8(b, A5 + 0x34, if rng.next().is_multiple_of(3) { 4 } else { 1 + (rng.next() % 7) as u8 });
+    wr8(b, A5 + 0x35, if rng.next().is_multiple_of(10) { 0 } else { 1 + (rng.next() % 4) as u8 });
     wr8(b, A5 + 0x2c, [0xc, 4, 8, 0, 0x18][rng.next() as usize % 5]);
-    wr8(b, A5 + 0x42, (rng.next() % 8 == 0) as u8);
-    wr8(b, A5 + 0x36, (rng.next() % 4 == 0) as u8);
+    wr8(b, A5 + 0x42, rng.next().is_multiple_of(8) as u8);
+    wr8(b, A5 + 0x36, rng.next().is_multiple_of(4) as u8);
     wr8(b, A5 + 0x50, (rng.next() % 2) as u8);
     wr8(b, A5 + 0x66, (rng.next() % 2) as u8);
     wr16(b, A5 + 0x7f92, (rng.next() % 6) as u16);
     for j in 0..4u32 {
         let p = 0xff85de + 0x200 * j;
-        if rng.next() % 3 == 0 {
+        if rng.next().is_multiple_of(3) {
             wr16(b, p + 4, [0x200, 0x200, 0, 0x600, 0x204][rng.next() as usize % 5]);
-            wr8(b, p + 6, (rng.next() % 3 == 0) as u8);
+            wr8(b, p + 6, rng.next().is_multiple_of(3) as u8);
             wr16(b, p + 0x62, [0, 5, 100][rng.next() as usize % 3]);
         }
     }
     if kind == 15 {
         // variables read by the end screens: fade finished, cameras, score, rng, player objects
-        wr8(b, A5 + 0x48f, (rng.next() % 3 == 0) as u8);
+        wr8(b, A5 + 0x48f, rng.next().is_multiple_of(3) as u8);
         wr8(b, A5 + 0x6d, rng.next() as u8);
         wr16(b, A5 + 0x6e, rng.next() as u16 & [0xf, 0xff, 0][rng.next() as usize % 3]);
         for off in [0x506u32, 0x50a, 0x556, 0x55a] {
@@ -1144,17 +1143,17 @@ fn scene_state(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8, start: bool) {
             wr8(b, p + 0x22, (rng.next() % 2) as u8);
             wr16(b, p + 0x60, [50, 100, 160][rng.next() as usize % 3]);
             wr16(b, p + 0x64, (rng.next() % 20) as u16);
-            if rng.next() % 4 == 0 {
+            if rng.next().is_multiple_of(4) {
                 wr8(b, p + 0x118, [0xff, 0xf9, 0xfa, 0x10, 0][rng.next() as usize % 5]);
             }
         }
         if start {
-            if rng.next() % 4 == 0 {
+            if rng.next().is_multiple_of(4) {
                 wr8(b, obj + 0x29, 0x1f);
                 wr16(b, obj + 0x24, 1 + (rng.next() % 2) as u16);
             }
             for off in [0x14u32, 0x18, 0x22, 0x23, 0x24, 0x2a, 0x2b, 0x30, 0x31, 0x42, 0x43] {
-                if rng.next() % 3 == 0 {
+                if rng.next().is_multiple_of(3) {
                     wr8(b, obj + off, [0, 1, 2, 3, rng.next() as u8][rng.next() as usize % 5]);
                 }
             }
@@ -1209,8 +1208,8 @@ fn scene_state(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8, start: bool) {
         wr32(b, obj + 0x20, script + 2);
     } else if state == 4 {
         wr16(b, obj + 0x24, (rng.next() % 4) as u16);
-        wr16(b, obj + 0x2a, (rng.next() % 4 == 0) as u16);
-        if rng.next() % 2 == 0 {
+        wr16(b, obj + 0x2a, rng.next().is_multiple_of(4) as u16);
+        if rng.next().is_multiple_of(2) {
             // curtain (end action 6): already armed, short countdown, cursor in the table
             wr8(b, obj + 5, 2);
             wr16(b, obj + 0x14, (rng.next() % 3) as u16);

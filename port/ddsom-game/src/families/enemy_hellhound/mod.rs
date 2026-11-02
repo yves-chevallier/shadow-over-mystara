@@ -145,8 +145,7 @@ fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let target = x.linked(f::TARGET);
     let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) as i16;
     let want = if dx > 0 { 0x20 } else { 0 };
-    let turn = want != x.u8(f::FLIP);
-    turn
+    want != x.u8(f::FLIP)
 }
 
 /// 0x63a98: the target is in the same row (depth within 0x30) but far in X (more than 0xf0).
@@ -160,8 +159,7 @@ fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         return false;
     }
     let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0xf0);
-    let far = dx > 0x1e0;
-    far
+    dx > 0x1e0
 }
 
 /// 0x62f1e / 0x62f26: chooses the next attack (`+6`) from the difficulty row of profile `+0x2f`; `bias` = 8 for the far

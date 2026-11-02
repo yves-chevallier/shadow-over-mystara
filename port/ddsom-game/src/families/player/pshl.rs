@@ -568,8 +568,7 @@ mod burst {
         let (mut rank, mut delay) = (0u8, 1u8);
         let mut remaining = n as u16;
         *x.c.d5() = n as u32;
-        loop {
-            let Some(o) = x.alloc(&pools::PSHL) else { break };
+        while let Some(o) = x.alloc(&pools::PSHL) {
             o.set_u8(x.b, 0, 1);
             o.set_u8(x.b, 2, 5);
             o.set_u8(x.b, 3, 1);

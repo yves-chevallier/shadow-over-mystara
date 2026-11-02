@@ -73,14 +73,13 @@ fn row(g: &mut Ctx, table: u32, character: u32, index: u32) -> Row {
     cov!();
     let base = g.data32(table + 4 * character) + 8 * index;
     set_low_word(&mut g.leftovers.d2, (index << 3) as u16);
-    let row = Row {
+    Row {
         anim: g.data16(base),
         dx: g.data16(base + 2) as i16,
         dz: g.data16(base + 4) as i16,
         flip: g.data8(base + 6),
         behind: g.data8(base + 7),
-    };
-    row
+    }
 }
 
 /// The sub-object follows the player's activity state and orientation.

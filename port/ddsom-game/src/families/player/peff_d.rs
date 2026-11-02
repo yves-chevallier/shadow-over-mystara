@@ -261,8 +261,7 @@ mod ray {
         let mut remaining = x.rom8(SHOT_COUNTS + player as u32);
         *x.c.d4() = remaining as u32;
         let mut created = 0u8;
-        loop {
-            let Some(shot) = x.alloc(&pools::PSHL) else { break };
+        while let Some(shot) = x.alloc(&pools::PSHL) {
             shot.set_u8(x.b, 0, 1);
             shot.set_u8(x.b, 2, 6);
             shot.set_u16(x.b, f::OWNER, owner.0 as u16);

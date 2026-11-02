@@ -278,11 +278,10 @@ pub fn follow_up(g: &mut Ctx, p: Player) {
     if p.u16(g, 0x0c) != 0 {
         return;
     }
-    if p.u8(g, Player::KEYS_NEW) & 0x80 != 0 && p.u8(g, 0x15c) == 0 && p.u8(g, field::ITEM) == 0x2d {
-        if turn_attack(g, p) {
+    if p.u8(g, Player::KEYS_NEW) & 0x80 != 0 && p.u8(g, 0x15c) == 0 && p.u8(g, field::ITEM) == 0x2d
+        && turn_attack(g, p) {
             return;
         }
-    }
     let keys = p.u8(g, Player::KEYS_HELD);
     if keys & 3 == 0 {
         return;

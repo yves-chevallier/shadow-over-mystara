@@ -77,7 +77,7 @@ fn main() {
             script.apply(f, &mut mr);
             script.apply(f, &mut ma);
             let (ir, ia) = (image(&mut mr), image(&mut ma));
-            let (sr, sa): (Vec<_>, Vec<_>) = (mr.sound.audio.drain(..).collect(), ma.sound.audio.drain(..).collect());
+            let (sr, sa): (Vec<_>, Vec<_>) = (std::mem::take(&mut mr.sound.audio), std::mem::take(&mut ma.sound.audio));
             let diff = match (&ir, &ia) {
                 (Err(_), Err(_)) => {
                     verdict = format!("IDENTICAL over {f} frames (then both stop without 68000: {})", ir.unwrap_err());

@@ -18,8 +18,6 @@ use crate::machine::Machine;
 const PLAYERS: u32 = A5 + 0x5de;
 const PLAYER_SIZE: u32 = 0x200;
 
-/// Fields of a player record used by the scenery.
-
 /// 0xc8312: SET object of the scene, of variant `variant`. Original glitch: the caller does not test the failure and
 /// writes into the object that A1 leaves (`Pool::alloc_or_leftover`).
 fn scene_set<R: Bench>(x: &mut Cx<'_, R>, variant: u8) -> Obj {
@@ -2684,7 +2682,6 @@ mod dialog {
     /// Opening and closing words of a player name.
     const NAME_OPEN: u32 = 0xfffe_0018;
     const NAME_CLOSE: u32 = 0xfffe_000f;
-    /// Creation / search of linked objects.
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.u8(0x4) {

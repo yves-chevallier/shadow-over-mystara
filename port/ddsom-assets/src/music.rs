@@ -216,7 +216,7 @@ impl Music {
     /// end of the bank.
     pub fn sample_tail_end(&self, i: usize) -> usize {
         let end = self.sample_span(i).1;
-        let limit = (end >> 16) + 1 << 16;
+        let limit = ((end >> 16) + 1) << 16;
         (0..self.samples.len()).filter(|&k| self.sample_valid(k)).map(|k| self.sample_span(k).0).filter(|&s| s > end && s < limit).min().unwrap_or(limit)
     }
 

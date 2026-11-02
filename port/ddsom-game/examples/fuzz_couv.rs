@@ -134,7 +134,7 @@ fn key(b: &Cps2Bus, a: u32) -> u32 {
         }
     }
     if (0xff_85de..0xff_85de + 0x800).contains(&a) {
-        return 0x0200_0000 | (a - 0xff_85de) % 0x200;
+        return 0x0200_0000 | ((a - 0xff_85de) % 0x200);
     }
     a
 }
@@ -442,8 +442,11 @@ fn hot_values(op: &Op) -> Vec<u32> {
     }
 }
 
+/// The reads of a base (address, size) and its hot reads.
+type BaseReads = (Vec<(u32, u8)>, Vec<HotSpot>);
+
 /// Runs the original on the base to log its reads and spot the hot reads.
-fn analyse_base(e: &State, c: &Cpu, b: &Cps2Bus) -> Option<(Vec<(u32, u8)>, Vec<HotSpot>)> {
+fn analyse_base(e: &State, c: &Cpu, b: &Cps2Bus) -> Option<BaseReads> {
     let mut reads = Vec::new();
     let o = run_original(c, b, e.max_step, Some(&mut reads))?;
     // targeted zones (`FUZZ_FOCUS`): the base must go through them
@@ -571,7 +574,7 @@ fn mutate(e: &mut Rng, domains: &Domains, base: &Base, muts: &mut Vec<Mutation>)
         let domain = domains.get(&(key(&base.b, address), size)).filter(|d| d.len() > 1);
         let draw = e.over(10);
         let value = match (&values, domain) {
-            (Some(v), _) if draw >= 5 && draw < 8 => v[e.over(v.len() as u64) as usize],
+            (Some(v), _) if (5..8).contains(&draw) => v[e.over(v.len() as u64) as usize],
             (_, Some(d)) if draw < 8 => d[e.over(d.len() as u64) as usize],
             _ => match e.over(12) {
                 0 => 0,
@@ -934,7 +937,7 @@ fn fuzz_from(e: &mut State, entry: u32, c: &Cpu, b: &Cps2Bus, subst: bool) {
         let (ib, mut muts) = {
             let nb = e.targets[&entry].bases.len() as u64;
             let nc = e.targets[&entry].corpus.len() as u64;
-            if nc > 0 && e.rng() % 3 != 0 {
+            if nc > 0 && !e.rng().is_multiple_of(3) {
                 let k = (e.rng() % nc) as usize;
                 let (ib, m) = &e.targets[&entry].corpus[k];
                 (*ib, m.clone())
@@ -1139,7 +1142,7 @@ fn main() {
             println!("    {x}");
         }
     }
-    let trials: u64 = e.targets.values().map(|c| c.summary.tests as u64).sum();
+    let trials: u64 = e.targets.values().map(|c| c.summary.tests).sum();
     if trials == 0 {
         println!("FUZZ FAILED: no trial compared with the original");
         std::process::exit(1);

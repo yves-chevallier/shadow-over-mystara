@@ -783,22 +783,19 @@ impl Cpu {
     #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_41_bcc<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let Op::Bcc(c, t) = ins.op else { unreachable!() };
-        {
-            if self.cond(c) {
+        if self.cond(c) {
                 self.pc = t;
                 self.cycles += 2;
             } else if ins.opcode & 0xff == 0 {
                 self.cycles += 4;
-            }
-        };
+            };
         false
     }
     #[inline(always)]
     #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_42_dbcc<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let Op::Dbcc(c, n, t) = ins.op else { unreachable!() };
-        {
-            if !self.cond(c) {
+        if !self.cond(c) {
                 let r = &mut self.d[n as usize];
                 let w = (*r as u16).wrapping_sub(1);
                 *r = (*r & 0xffff_0000) | w as u32;
@@ -808,8 +805,7 @@ impl Cpu {
                 } else {
                     self.cycles += 2;
                 }
-            }
-        };
+            };
         false
     }
     #[inline(always)]
@@ -894,13 +890,11 @@ impl Cpu {
     #[allow(unused_variables, unreachable_code, clippy::needless_return)]
     pub fn op_50_trapv<B: Bus>(&mut self, bus: &mut B, ins: &Instr) -> bool {
         let Op::Trapv = ins.op else { unreachable!() };
-        {
-            if self.sr & SR_V != 0 {
+        if self.sr & SR_V != 0 {
                 self.cycles = self.op_start_cycles + 34;
                 self.exception(bus, 7, self.pc);
                 return true;
-            }
-        };
+            };
         false
     }
     #[inline(always)]

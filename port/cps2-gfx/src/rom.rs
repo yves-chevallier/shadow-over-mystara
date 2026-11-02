@@ -22,14 +22,14 @@ pub fn load_gfx(romdir: &Path, chips: &[(&str, usize)], size: usize) -> io::Resu
     let mut region = vec![0u8; size];
     for &(name, offset) in chips {
         let data = std::fs::read(romdir.join(name))?;
-        for (i, w) in data.chunks_exact(2).enumerate() {
+        for (i, w) in data.as_chunks::<2>().0.iter().enumerate() {
             let dst = offset + 8 * i;
             region[dst] = w[0];
             region[dst + 1] = w[1];
         }
     }
     const BANK: usize = 0x200000;
-    for bank in region.chunks_exact_mut(BANK) {
+    for bank in region.as_chunks_mut::<BANK>().0 {
         unshuffle(bank);
     }
     Ok(region)

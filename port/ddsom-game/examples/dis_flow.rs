@@ -20,7 +20,7 @@ fn main() {
     let mut todo: Vec<u32> = a[4..].iter().map(hex).collect();
     let mut seen: BTreeMap<u32, (u16, String, u32)> = BTreeMap::new();
     let mut tables: BTreeSet<(u32, u32)> = BTreeSet::new();
-    let inside = |t: u32| (lo..hi).contains(&t) && t % 2 == 0;
+    let inside = |t: u32| (lo..hi).contains(&t) && t.is_multiple_of(2);
     while let Some(start) = todo.pop() {
         let mut pc = start;
         while inside(pc) && !seen.contains_key(&pc) {

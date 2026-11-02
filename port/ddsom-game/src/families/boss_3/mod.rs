@@ -121,8 +121,7 @@ fn target_behind<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if x.u8(f::FLIP) == 0 {
         d = d.wrapping_neg();
     }
-    let behind = (d as i16) < 0;
-    behind
+    (d as i16) < 0
 }
 
 /// 0x81764: is the target far (more than 0x20 in depth or 0xc0 in width)? With no target: wait, and true.
@@ -133,13 +132,12 @@ fn target_far<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     }
     let t = load_target(x);
     let dz = t.u16(x.b, 0x10).wrapping_sub(x.u16(0x10)).wrapping_add(0x20);
-    let far = if dz <= 0x40 {
+    if dz <= 0x40 {
         false
     } else {
         let dx = t.u16(x.b, 0x8).wrapping_sub(x.u16(0x8)).wrapping_add(0xc0);
         dx > 0x180
-    };
-    far
+    }
 }
 
 /// 0x81722: sixteenths of HP remaining (0 to 15).

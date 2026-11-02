@@ -179,7 +179,7 @@ mod prayer {
             return;
         }
         x.set_bit(0x1, 1, true);
-        let d = x.u16(0x5c).wrapping_add(x.counter() as u16);
+        let d = x.u16(0x5c).wrapping_add(x.counter());
         if d & 1 != 0 {
             x.set_bit(0x1, 1, false);
         }

@@ -47,7 +47,7 @@ fn main() {
             println!("DIFFERENT: frame {f} (graphics)");
             std::process::exit(1);
         }
-        let (sa, sb): (Vec<_>, Vec<_>) = (rom.sound.audio.drain(..).collect(), asset.sound.audio.drain(..).collect());
+        let (sa, sb): (Vec<_>, Vec<_>) = (std::mem::take(&mut rom.sound.audio), std::mem::take(&mut asset.sound.audio));
         if sa != sb {
             println!("DIFFERENT: frame {f} (samples)");
             std::process::exit(1);

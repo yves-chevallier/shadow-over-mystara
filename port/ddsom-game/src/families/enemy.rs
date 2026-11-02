@@ -568,11 +568,9 @@ mod nagpa {
         let range: u16 = if x.u8(0x3) == 0 { 0x30 } else { 0x50 };
         for i in 0..4u32 {
             let player = A5 + 0x5de + 0x200 * i;
-            if x.data8(player) == 1 {
-                if lib::in_box(x, Obj(player), range as i16, 0x14, 0xffe8).found() {
+            if x.data8(player) == 1 && lib::in_box(x, Obj(player), range as i16, 0x14, 0xffe8).found() {
                     return true;
                 }
-            }
         }
         false
     }

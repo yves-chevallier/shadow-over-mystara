@@ -8,7 +8,7 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ee = std::fs::read(&a[2]).ok();
     let mut m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
-    let natives = a.get(7).map_or(false, |v| v == "1");
+    let natives = a.get(7).is_some_and(|v| v == "1");
     if natives { ddsom_game::install(&mut m) } else { ddsom_game::install_reference(&mut m) }
     m.set_overclock(16.0);
     m.idle = Some(ddsom_game::idle);

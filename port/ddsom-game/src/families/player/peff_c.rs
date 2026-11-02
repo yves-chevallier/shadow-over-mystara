@@ -29,11 +29,9 @@ mod halo {
                 if owner.u8(x.b, 0x5) != 0 || owner.u8(x.b, 0x6a) != 0x18 {
                     return x.free_peff();
                 }
-                if x.a5_u8(0x3d) == 0 && owner.u8(x.b, 0x53) == 0 {
-                    if x.anim_step() {
+                if x.a5_u8(0x3d) == 0 && owner.u8(x.b, 0x53) == 0 && x.anim_step() {
                         x.add8(0x4, 2);
                     }
-                }
                 place(x);
                 x.reinsert();
             }
@@ -108,11 +106,9 @@ mod slash {
         if x.u8(0x3) == 0 {
             follow(x, owner, OFFSETS_B);
         }
-        if x.a5_u8(0x3d) == 0 && owner.u8(x.b, 0x53) == 0 {
-            if x.anim_step() {
+        if x.a5_u8(0x3d) == 0 && owner.u8(x.b, 0x53) == 0 && x.anim_step() {
                 x.add8(0x4, 2);
             }
-        }
         x.reinsert();
     }
 }

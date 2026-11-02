@@ -108,20 +108,22 @@ mod shop {
         x.reinsert();
     }
 
-    /// Two rounds over the four players (the dialogue interpreter is called with the player ready in the zone), then
-    /// scroll tracking and animation step.
-    fn active<R: Bench>(x: &mut Cx<'_, R>) {
-        let zones: [(u32, fn(&mut Cx<'_, R>, Obj)); 2] =
-            [(ZONE_A, peff_shop::talk_a), (ZONE_B, peff_shop::talk_b)];
-        for (zone, talk) in zones {
-            for k in 0..4 {
-                if let Some(player) = in_zone(x, zone, k) {
-                    if (player.u8(x.b, PLAYER_READY) as i8) > 0 {
-                        talk(x, player);
-                    }
+    /// One round over the four players: `talk` for each player in `zone` who is ready.
+    fn talk_in<R: Bench>(x: &mut Cx<'_, R>, zone: u32, talk: fn(&mut Cx<'_, R>, Obj)) {
+        for k in 0..4 {
+            if let Some(player) = in_zone(x, zone, k) {
+                if (player.u8(x.b, PLAYER_READY) as i8) > 0 {
+                    talk(x, player);
                 }
             }
         }
+    }
+
+    /// Two rounds over the four players (the dialogue interpreter is called with the player ready in the zone), then
+    /// scroll tracking and animation step.
+    fn active<R: Bench>(x: &mut Cx<'_, R>) {
+        talk_in(x, ZONE_A, peff_shop::talk_a);
+        talk_in(x, ZONE_B, peff_shop::talk_b);
         let [dx, dz] = [0, 1].map(|k| {
             (x.a5_u32(SCROLL[k]).wrapping_sub(x.a5_u32(PREVIOUS_SCROLL[k])) as i32 >> 1) as u32
         });

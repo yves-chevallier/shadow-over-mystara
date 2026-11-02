@@ -723,13 +723,13 @@ fn stack_for_original(n: &Native, c2: &mut Cpu, b2: &mut Cps2Bus) {
 fn checked(n: &Native) -> bool {
     static ONLY: OnceLock<Option<Vec<String>>> = OnceLock::new();
     let only = ONLY.get_or_init(|| std::env::var("DDSOM_CHECK_ONLY").ok().map(|v| v.split(',').map(str::to_owned).collect()));
-    only.as_ref().map_or(true, |p| p.iter().any(|p| n.name.starts_with(p.as_str())))
+    only.as_ref().is_none_or(|p| p.iter().any(|p| n.name.starts_with(p.as_str())))
 }
 
 fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
     // in the game, a native does not set a PC on return
     let by_frame = no68k::active();
-    let pre = if std::env::var("DDSOM_TRACE_ORIG").map_or(false, |v| n.name == v) { Some((c.clone(), b.clone())) } else { None };
+    let pre = if std::env::var("DDSOM_TRACE_ORIG").is_ok_and(|v| n.name == v) { Some((c.clone(), b.clone())) } else { None };
     let mut c2 = c.clone();
     let mut b2 = b.clone();
     stack_for_original(n, &mut c2, &mut b2);

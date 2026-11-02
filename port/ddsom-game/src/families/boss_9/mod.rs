@@ -396,7 +396,7 @@ fn refill_crew<R: Bench>(x: &mut Cx<'_, R>, all: bool) {
 
 /// 0x8c8d2: a target on the ground in front of the vehicle? 1 very close, 0 within firing range, 2 otherwise.
 fn target_range<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
-    let r = if x.u16(f::TARGET) == 0 {
+    if x.u16(f::TARGET) == 0 {
         2
     } else {
         let t = load_target(x);
@@ -409,8 +409,7 @@ fn target_range<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
         } else {
             2
         }
-    };
-    r
+    }
 }
 
 /// 0x8c698 / 0x8c6a0: firing stop drawn by difficulty (`base`: 2 close target, 0xe target in range).

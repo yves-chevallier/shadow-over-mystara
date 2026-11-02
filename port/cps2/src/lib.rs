@@ -72,6 +72,10 @@ pub struct Patch {
     pub apply: fn(&mut Cpu, &mut Cps2Bus) -> bool,
 }
 
+#[cfg(feature = "m68k")]
+/// Callback after each interpreted instruction (diagnostic tools): (cpu, bus, pc).
+pub type StepHook = Box<dyn FnMut(&Cpu, &Cps2Bus, u32)>;
+
 pub struct Machine {
     #[cfg(feature = "m68k")]
     /// Recompiled code (None = everything interpreted).
@@ -84,7 +88,7 @@ pub struct Machine {
     pub interp_steps: u64,
     #[cfg(feature = "m68k")]
     /// Callback after each interpreted instruction (diagnostic tools): (cpu, bus, pc).
-    pub step_hook: Option<Box<dyn FnMut(&Cpu, &Cps2Bus, u32)>>,
+    pub step_hook: Option<StepHook>,
     #[cfg(feature = "m68k")]
     /// Is the program only waiting for an interrupt? (the game's wait loop) The remaining time
     /// of the line is then skipped.
@@ -130,7 +134,7 @@ pub fn load_program(romdir: &Path) -> io::Result<(Vec<u16>, Vec<u16>)> {
     for name in DDSOM_PROG {
         let d = std::fs::read(romdir.join(name))?;
         // ROM_LOAD16_WORD_SWAP: words stored little-endian in the chip
-        rom.extend(d.chunks_exact(2).map(|w| u16::from_le_bytes([w[0], w[1]])));
+        rom.extend(d.as_chunks::<2>().0.iter().map(|w| u16::from_le_bytes([w[0], w[1]])));
     }
     let key = std::fs::read(romdir.join("ddsom.key"))?;
     let (k, lower, upper) = crypt::parse_key(&key);
@@ -179,7 +183,7 @@ impl Contents {
                 let mut samples = Vec::with_capacity(0x400000);
                 for name in ["dd2.11m", "dd2.12m"] {
                     let d = std::fs::read(romdir.join(name))?;
-                    samples.extend(d.chunks_exact(2).flat_map(|w| [w[1], w[0]]));
+                    samples.extend(d.as_chunks::<2>().0.iter().flat_map(|w| [w[1], w[0]]));
                 }
                 samples
             }

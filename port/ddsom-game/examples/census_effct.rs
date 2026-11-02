@@ -25,8 +25,8 @@ const ZONE: std::ops::Range<u32> = 0xa8594..0xba310;
 const BUDGET: u64 = 100_000;
 
 thread_local! {
-    static PCS: RefCell<BTreeSet<u32>> = RefCell::new(BTreeSet::new());
-    static SITES: RefCell<BTreeSet<(String, u32)>> = RefCell::new(BTreeSet::new());
+    static PCS: RefCell<BTreeSet<u32>> = const { RefCell::new(BTreeSet::new()) };
+    static SITES: RefCell<BTreeSet<(String, u32)>> = const { RefCell::new(BTreeSet::new()) };
     static COUNT: RefCell<u64> = const { RefCell::new(0) };
 }
 
@@ -140,7 +140,7 @@ fn principal() {
                             wr8(&mut b, obj + off, rng.pick(&[0, 1, 2, 3, 4, 8]));
                         }
                     }
-                    if rng.next() % 2 == 0 {
+                    if rng.next().is_multiple_of(2) {
                         // owner's action and counters, read by the bubbles and the linked effects
                         wr8(&mut b, owner + 0x3d, 2 * (rng.next() % 0x1a) as u8);
                         for off in [0x10du32, 0x10e, 0x77, 0x86, 0x43] {
@@ -153,7 +153,7 @@ fn principal() {
                         if rd8(&mut b, obj) == 0 || rd8(&mut b, obj + 2) != t as u8 {
                             break;
                         }
-                        if k > 0 && rng.next() % 4 == 0 {
+                        if k > 0 && rng.next().is_multiple_of(4) {
                             // the owner and the world move
                             wr8(&mut b, owner + 4, rng.pick(&[0, 2, 4, 6]));
                             wr8(&mut b, owner + 0x3d, (rng.next() % 0x30) as u8);

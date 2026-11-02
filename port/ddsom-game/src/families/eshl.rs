@@ -949,7 +949,7 @@ mod shot11 {
             let v = owner.u32(x.b, off);
             x.set32(off, v);
         }
-        let row = OFFSETS + (4 * x.u8(0x3) as u32 & 0xff);
+        let row = OFFSETS + ((4 * x.u8(0x3) as u32) & 0xff);
         let (dx, dy) = (x.rom16(row), x.rom16(row + 2));
         x.add16(0x8, dx);
         x.add16(0x10, dy);
@@ -997,7 +997,7 @@ mod shot12 {
             x.set16(off, v);
         }
         x.add32(0x10, u32::MAX);
-        let row = OFFSETS + (4 * x.u8(0x3) as u32 & 0xff);
+        let row = OFFSETS + ((4 * x.u8(0x3) as u32) & 0xff);
         let (dx, dz) = (x.rom16(row), x.rom16(row + 2));
         let flip = anchor.u8(x.b, f::FLIP) != 0;
         x.add16(0x8, if flip { dx } else { dx.wrapping_neg() });
@@ -1065,7 +1065,7 @@ mod shot13 {
         }
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
-        let row = OFFSETS + (8 * x.u8(0x3) as u32 & 0xff);
+        let row = OFFSETS + ((8 * x.u8(0x3) as u32) & 0xff);
         let (dx, dy, dfrac, dz) = (x.rom16(row), x.rom16(row + 2), x.rom16(row + 4), x.rom16(row + 6));
         x.add16(0x8, if flip != 0 { dx.wrapping_neg() } else { dx });
         x.add16(0x10, dy);
@@ -1155,7 +1155,7 @@ mod shot14 {
         }
         let flip = owner.u8(x.b, f::FLIP);
         x.set8(f::FLIP, flip);
-        let row = OFFSETS + (8 * x.u8(0x3) as u32 & 0xff);
+        let row = OFFSETS + ((8 * x.u8(0x3) as u32) & 0xff);
         let (mut dx, mut dy, mut dfrac, dz) = (x.rom16(row), x.rom16(row + 2), x.rom16(row + 4), x.rom16(row + 6));
         if flip != 0 {
             dx = dx.wrapping_neg();

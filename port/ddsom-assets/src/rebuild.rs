@@ -543,7 +543,7 @@ pub fn qsound_dsp(dir: &Path) -> io::Result<Vec<u8>> {
 
 /// Big-endian words of a program ROM image (view of `cps2::Cps2Bus`).
 fn words(img: &Image) -> Vec<u16> {
-    img.bytes.chunks_exact(2).map(|w| u16::from_be_bytes([w[0], w[1]])).collect()
+    img.bytes.as_chunks::<2>().0.iter().map(|&w| u16::from_be_bytes(w)).collect()
 }
 
 /// Everything the machine stores in its chips, rebuilt from the assets folder, without any ROM: 68000

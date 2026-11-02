@@ -3,13 +3,12 @@
 //! Two families, each in two forms: a *task* (created by `0x9b6`, it ends with `0x9f8` at the
 //! end of the fade) and a *subroutine* (called by `jsr` from a sequence, it returns when the fade is finished;
 //! the caller therefore waits for the end). The steps cede control through `jsr 0xa40` (D0.w = delay `A5+0x490`); the
-//! next
-//! step is a stage of the state machine ([`Step`]), which carries the fade in progress.
+//! next step is a stage of the state machine ([`Step`]), which carries the fade in progress.
 //!
 //! * **Brightness**: each step adds ±0x1000 to the colors of the checked pages (`palette::brightness_step`).
-//! The state is at `A5+0x48e` (pages, remaining steps, delay, addresses of the four pages); the direction is a field
-//! of
-//!   the stage (the original keeps it in D1, which the cession saves and restores, and which the context also keeps).
+//!   The state is at `A5+0x48e` (pages, remaining steps, delay, addresses of the four pages); the direction is a field
+//!   of the stage (the original keeps it in D1, which the cession saves and restores, and which the context also
+//!   keeps).
 //! * **Per component**: each step brings each component one notch closer (`palette::component_step`);
 //!   16 steps, `A5-0x65ec` raised during the fade, registers saved on entry (`movem`, kept in the stage) and
 //!   restored at the end.

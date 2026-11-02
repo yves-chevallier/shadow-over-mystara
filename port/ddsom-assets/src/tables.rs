@@ -151,7 +151,7 @@ impl SpriteTables {
         let i = self.box_blocks.partition_point(|b| b.rom <= at).checked_sub(1)?;
         let b = &self.box_blocks[i];
         let off = (at - b.rom) as usize;
-        if off % 8 == 0 && off / 8 < b.boxes.len() {
+        if off.is_multiple_of(8) && off / 8 < b.boxes.len() {
             return Some(b.boxes[off / 8]);
         }
         // box straddling a block and the next one (unaligned blocks)

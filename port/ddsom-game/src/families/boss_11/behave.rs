@@ -75,8 +75,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x8d8bc: waits; a player comes back (life > 0) and the `+0xb6` counter restarts.
 pub(super) fn lone<R: Bench>(x: &mut Cx<'_, R>) {
-    if var::PLAYERS_ALIVE.get(x.b) != 0 {
-        if lib::target_by_criterion(x, lib::LOWEST_HP).is_some() {
+    if var::PLAYERS_ALIVE.get(x.b) != 0 && lib::target_by_criterion(x, lib::LOWEST_HP).is_some() {
             if tst8(x, 0xb6).gt() {
                 sub8(x, 0xb6, 1);
             } else {
@@ -84,7 +83,6 @@ pub(super) fn lone<R: Bench>(x: &mut Cx<'_, R>) {
                 return to_chase(x);
             }
         }
-    }
     if x.u8(f::SUB3) == 0 {
         x.add8(f::SUB3, 2);
         return body(x, 0);
@@ -154,7 +152,7 @@ pub(super) fn chase<R: Bench>(x: &mut Cx<'_, R>) {
         return pick(x, 0x8db78);
     }
     if off_screen(x) {
-        return to_attack_2(x);
+        to_attack_2(x)
     }
 }
 

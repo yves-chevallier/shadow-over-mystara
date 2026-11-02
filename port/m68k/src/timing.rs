@@ -66,9 +66,7 @@ pub fn base_cycles(ins: &Instr) -> u32 {
             }
         }
         Adda(..) | Suba(..) if quick => 8,
-        Adda(sz, s, _) | Suba(sz, s, _) => match s {
-            _ => if sz == Size::Long { (if reg(s) || matches!(s, Ea::Imm(_)) { 8 } else { 6 }) + ea_time(s, sz) } else { 8 + ea_time(s, sz) },
-        },
+        Adda(sz, s, _) | Suba(sz, s, _) => if sz == Size::Long { (if reg(s) || matches!(s, Ea::Imm(_)) { 8 } else { 6 }) + ea_time(s, sz) } else { 8 + ea_time(s, sz) },
         Cmp(sz, s, d) => match d {
             Ea::Dn(_) => (if sz == Size::Long { 6 } else { 4 }) + ea_time(s, sz),
             Ea::PostInc(_) if matches!(s, Ea::PostInc(_)) => if sz == Size::Long { 20 } else { 12 },

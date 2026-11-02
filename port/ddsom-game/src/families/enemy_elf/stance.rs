@@ -115,7 +115,7 @@ pub(super) fn side_box<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// only 0xa4b4.
 fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     let found = lib::target_in_box(x, d0, d1, d2);
-    let ok = found && {
+    found && {
         let target = load_target(x);
         let theirs = target.u8(x.b, f::FLIP);
         let same = theirs == x.u8(f::FLIP);
@@ -126,8 +126,7 @@ fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
         }) && {
             lib::decision_a(x)
         }
-    };
-    ok
+    }
 }
 
 /// 0x6a706 / 0x6a70c: the attack to play after the approach is drawn from the difficulty row; it is returned (D0.b of
@@ -150,8 +149,7 @@ pub(super) fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let target = load_target(x);
     let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    let turn = want != x.u8(f::FLIP) as u32;
-    turn
+    want != x.u8(f::FLIP) as u32
 }
 
 /// `+6 = 2`: turn-around (animation 2, then orientation inversion).

@@ -406,9 +406,7 @@ fn ai_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> Option<u32>
 fn combo_count<R: Bench>(x: &mut Cx<'_, R>) {
     let level = (var::RANK.get(x.b) & 0x1e) * 2;
     let mut players = var::PLAYERS_ALIVE.get(x.b) as u16;
-    if players != 0 {
-        players -= 1;
-    }
+    players = players.saturating_sub(1);
     let i = level.wrapping_add(players);
     let n = x.rom8(0x7c49a + i as u32);
     x.set8(COMBO, n);

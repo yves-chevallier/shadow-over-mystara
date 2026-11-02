@@ -58,7 +58,7 @@ fn main() {
         let mut miss: Vec<(u32, u32, u64, u32)> = Vec::new();
         for l in std::fs::read_to_string(reads_path).unwrap().lines() {
             let f: Vec<&str> = l.split(' ').collect();
-            if f[0].chars().next() != Some(view) {
+            if !f[0].starts_with(view) {
                 continue;
             }
             let (s, e) = (u32::from_str_radix(f[1], 16).unwrap(), u32::from_str_radix(f[2], 16).unwrap());

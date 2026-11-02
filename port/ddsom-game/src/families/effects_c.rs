@@ -1079,7 +1079,7 @@ fn paused<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// The followed object, if it exists (negative pointer), with no activity test.
 fn scenery_target<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     let p = x.u16(scenery::TARGET);
-    ((p as i16) < 0).then(|| Obj(p as i16 as i32 as u32 & 0xff_ffff))
+    ((p as i16) < 0).then_some(Obj(p as i16 as i32 as u32 & 0xff_ffff))
 }
 
 /// The followed object, if it exists and is active.

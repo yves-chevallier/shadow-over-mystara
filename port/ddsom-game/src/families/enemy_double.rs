@@ -163,8 +163,8 @@ fn mirror<R: Bench>(x: &mut Cx<'_, R>, dy: u32) {
 // Type 24 (0x76afc): "Manticore" (h)
 // ---------------------------------------------------------------------------------------------
 
-/// Graphical double of an enemy of type 25. It sits one pixel lower than its master (depth
-/// + 1) and picks its animation with `choose_active` (master in state 0 or 2, outside pause) or
+/// Graphical double of an enemy of type 25. It sits one pixel lower than its master
+/// (depth + 1) and picks its animation with `choose_active` (master in state 0 or 2, outside pause) or
 /// `choose_hit` (master hit).
 mod manticore {
     use super::*;

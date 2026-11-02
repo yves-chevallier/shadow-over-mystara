@@ -161,8 +161,7 @@ fn pickup_ready<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
         return true;
     }
     let player = pointer(ctx, o, field::OWNER);
-    let ready = player.u8(ctx.b, 0x33) != 0;
-    ready
+    player.u8(ctx.b, 0x33) != 0
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -300,7 +299,7 @@ mod consumable {
 }
 
 fn consumable_params<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let base = consumable::PARAMS + ((o.u8(ctx.b, Obj::VARIANT) as u32) * 2 & 0xff);
+    let base = consumable::PARAMS + (((o.u8(ctx.b, Obj::VARIANT) as u32) * 2) & 0xff);
     let shimmering = ctx.prog8(base);
     o.set_u8(ctx.b, field::SHIMMER, shimmering);
     let index = ctx.prog8(base + 1);
@@ -1774,8 +1773,7 @@ fn contact_facing<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 /// Has the SET object finished? (`+0x22` of the SET object non-zero.)
 fn contact_set_finished<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
     let set = pointer(ctx, o, contact::SET_CREATED);
-    let finished = set.u8(ctx.b, 0x22) != 0;
-    finished
+    set.u8(ctx.b, 0x22) != 0
 }
 
 /// Variant 0, end of the scene (`0xdd22e`): lifts the lock and goes to the flee substate.

@@ -104,7 +104,7 @@ struct Scan<'a> {
 impl Scan<'_> {
     /// An animation entry can start at `a`: its frame is a frame start, its duration non-null.
     fn plausible(&self, a: u32) -> bool {
-        a % 2 == 0 && a + 24 <= self.rom.len() && self.starts.contains(&self.rom.rd32(a + 4)) && self.rom.rd16(a) != 0
+        a.is_multiple_of(2) && a + 24 <= self.rom.len() && self.starts.contains(&self.rom.rd32(a + 4)) && self.rom.rd16(a) != 0
     }
 
     fn entry(&self, a: u32, long: bool, guessed: bool) -> Entry {

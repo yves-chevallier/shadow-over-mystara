@@ -164,7 +164,7 @@ fn main() {
     ddsom_game::set_check(true);
     let only = std::env::var("DDSOM_ENTREE").ok().and_then(|v| u32::from_str_radix(&v, 16).ok());
     let entries: Vec<(u32, &'static str)> = ddsom_game::all_natives()
-        .filter(|n| n.name.starts_with(who.as_str()) && only.map_or(true, |e| e == n.entry))
+        .filter(|n| n.name.starts_with(who.as_str()) && only.is_none_or(|e| e == n.entry))
         .map(|n| (n.entry, n.name))
         .collect();
     let (c, b) = (&mut m.cpu, &mut m.bus);
@@ -327,7 +327,7 @@ fn main() {
             if who == "thief" {
                 wr8(b, p + 0x5a, rng.pick(&[0u8, 0, 1, 2]));
                 wr8(b, p + 0x1ef, rng.below(2) as u8);
-                wr16(b, p + 0x50, 0x299e + 0xc0 * rng.below(5) as u16 | 0x8000);
+                wr16(b, p + 0x50, (0x299e + 0xc0 * rng.below(5) as u16) | 0x8000);
             }
             // other players: sometimes in play, in front or behind
             for k in 1..4u32 {
@@ -368,7 +368,7 @@ fn main() {
             }
             // the target of the lightning and the wall: any object
             if matches!(who.as_str(), "fighter" | "cleric" | "dwarf" | "thief") {
-                wr16(b, p + 0x1ea, 0x299e + 0xc0 * rng.below(5) as u16 | 0x8000);
+                wr16(b, p + 0x1ea, (0x299e + 0xc0 * rng.below(5) as u16) | 0x8000);
             }
             let before = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
             let snapshot = (rd8(b, p + 7), rd8(b, p + 0x6a));

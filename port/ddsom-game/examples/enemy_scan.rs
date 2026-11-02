@@ -17,7 +17,7 @@ fn main() {
     let rd8 = |m: &cps2::Machine, ad: u32| {
         let o = (ad - 0xff0000) as usize;
         let w = m.bus.ram[o / 2];
-        if o % 2 == 0 { (w >> 8) as u8 } else { w as u8 }
+        if o.is_multiple_of(2) { (w >> 8) as u8 } else { w as u8 }
     };
     let mut f = 0;
     while f < 2400 {

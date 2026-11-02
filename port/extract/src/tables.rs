@@ -58,7 +58,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
             let end = starts.get(i + 1).copied().unwrap_or(BOX_END);
             let bytes: Vec<u8> = (at..end).map(|a| rom.rd8(a)).collect();
             let n = bytes.len() / 8;
-            BoxBlock { rom: at, boxes: bytes[..8 * n].chunks_exact(8).map(HitBox::from_bytes).collect(), tail: bytes[8 * n..].to_vec() }
+            BoxBlock { rom: at, boxes: bytes[..8 * n].as_chunks::<8>().0.iter().map(|b| HitBox::from_bytes(b)).collect(), tail: bytes[8 * n..].to_vec() }
         })
         .collect::<Vec<_>>();
     let bounds = (0..BOUNDS_COUNT)
@@ -75,7 +75,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     let list = |at: u32, end: Option<u32>| -> FrameList {
         let mut frames = Vec::new();
         let mut a = at;
-        while end.map_or(true, |e| a < e) {
+        while end.is_none_or(|e| a < e) {
             match index(rom.rd32(a)) {
                 Some(f) => frames.push(f),
                 None if end.is_none() => break,

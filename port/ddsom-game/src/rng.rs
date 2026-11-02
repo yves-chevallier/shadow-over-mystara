@@ -33,7 +33,7 @@ impl Rng {
 
     /// Next draw: returns the new state and the carry of the byte addition (X flag that
     /// the original leaves behind).
-    pub fn next(&mut self) -> (u16, bool) {
+    pub fn advance(&mut self) -> (u16, bool) {
         let t = ((self.0.wrapping_mul(3)) >> 8) as u8;
         let (low, carry) = (self.0 as u8).overflowing_add(t);
         self.0 = (t as u16) << 8 | low as u16;
@@ -48,7 +48,7 @@ pub fn random(b: &mut Cps2Bus) -> u16 {
 
 pub(crate) fn draw(b: &mut Cps2Bus) -> (u16, bool) {
     let mut rng = Rng(RNG_SEED.get(b));
-    let r = rng.next();
+    let r = rng.advance();
     RNG_SEED.set(b, r.0);
     r
 }

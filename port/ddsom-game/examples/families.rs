@@ -12,7 +12,7 @@ use m68k::Cpu;
 thread_local! {
     static REMAINDER: RefCell<u32> = const { RefCell::new(5) };
     static CALLS: RefCell<std::collections::BTreeMap<&'static str, (u64, u64)>> =
-        RefCell::new(std::collections::BTreeMap::new());
+        const { RefCell::new(std::collections::BTreeMap::new()) };
 }
 
 fn run(pc: u32, c: &mut Cpu, b: &mut Cps2Bus, dl: u64) -> Option<u32> {

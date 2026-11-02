@@ -139,8 +139,7 @@ fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let target = load_target(x);
     let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    let turn = want != x.u8(f::FLIP) as u32;
-    turn
+    want != x.u8(f::FLIP) as u32
 }
 
 /// Decision by mask (0xa4c2 for the same orientation, 0xa4b4 otherwise) for the current target.

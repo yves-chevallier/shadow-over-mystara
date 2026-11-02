@@ -39,12 +39,12 @@ const FAMILIES: &[(&str, u32, u32)] = &[("ITEM", 0x39f5a, 10), ("BOX", 0x39e76, 
 
 thread_local! {
     /// entry address of a handler -> family
-    static INPUTS: RefCell<BTreeMap<u32, usize>> = RefCell::new(BTreeMap::new());
+    static INPUTS: RefCell<BTreeMap<u32, usize>> = const { RefCell::new(BTreeMap::new()) };
     /// forced types: (family, type, entry address)
     static FORCES: RefCell<Vec<(usize, u32, u32)>> = const { RefCell::new(Vec::new()) };
-    static FAMILY_CALLS: RefCell<BTreeMap<usize, u64>> = RefCell::new(BTreeMap::new());
-    static SUMMARY: RefCell<BTreeMap<&'static str, Summary>> = RefCell::new(BTreeMap::new());
-    static CALLS: RefCell<BTreeMap<u32, u64>> = RefCell::new(BTreeMap::new());
+    static FAMILY_CALLS: RefCell<BTreeMap<usize, u64>> = const { RefCell::new(BTreeMap::new()) };
+    static SUMMARY: RefCell<BTreeMap<&'static str, Summary>> = const { RefCell::new(BTreeMap::new()) };
+    static CALLS: RefCell<BTreeMap<u32, u64>> = const { RefCell::new(BTreeMap::new()) };
     static RNG: RefCell<u64> = const { RefCell::new(0x9e37_79b9_7f4a_7c15) };
     static PARAMS: RefCell<(u64, u32)> = const { RefCell::new((16, 8)) };
 }
@@ -198,12 +198,12 @@ fn perturbs(b: &mut Cps2Bus, obj: u32) -> String {
                     notes.push(format!("joueur+{off:02x}={v:02x}"));
                 }
             }
-            9 if rng() % 2 == 0 => {
+            9 if rng().is_multiple_of(2) => {
                 // the object is placed on a player (box overlap, proximity...)
                 let player = 0xff_85de + 0x200 * (rng() % 4) as u32;
                 let delta = chooses(&[0u16, 0, 4, 0xfffc, 0x10, 0xfff0, 0x40, 0xffc0]);
                 for off in [0x08u32, 0x0c, 0x10] {
-                    let v = rd16(b, player + off).wrapping_add(if rng() % 3 == 0 { delta } else { 0 });
+                    let v = rd16(b, player + off).wrapping_add(if rng().is_multiple_of(3) { delta } else { 0 });
                     wr16(b, obj + off, v);
                 }
                 notes.push(format!("pos=joueur@{player:06x}{delta:+#x}"));
@@ -275,25 +275,22 @@ fn test(n: &'static ddsom_game::Native, c: &Cpu, b: &Cps2Bus, perturbation: bool
     // native routine on the perturbed copy (same starting state as the original)
     let result = catch_unwind(AssertUnwindSafe(|| n.execute(&mut c1, &mut b1)));
     let mut diffs = Vec::new();
-    match result {
-        Err(e) => {
-            let msg = e
-                .downcast_ref::<String>()
-                .cloned()
-                .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
-                .unwrap_or_default();
-            SUMMARY.with(|m| {
-                let mut m = m.borrow_mut();
-                let summary = m.entry(n.name).or_default();
-                summary.tests += 1;
-                summary.panics += 1;
-                if summary.examples.len() < 3 {
-                    summary.examples.push(format!("PANIQUE {msg} ; {notes} ; objet {obj:06x} {}", dump(&before)));
-                }
-            });
-            return;
-        }
-        Ok(()) => {}
+    if let Err(e) = result {
+        let msg = e
+            .downcast_ref::<String>()
+            .cloned()
+            .or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string()))
+            .unwrap_or_default();
+        SUMMARY.with(|m| {
+            let mut m = m.borrow_mut();
+            let summary = m.entry(n.name).or_default();
+            summary.tests += 1;
+            summary.panics += 1;
+            if summary.examples.len() < 3 {
+                summary.examples.push(format!("PANIQUE {msg} ; {notes} ; objet {obj:06x} {}", dump(&before)));
+            }
+        });
+        return;
     }
     if c1.d[7] != c2.d[7] {
         diffs.push(format!("d7={:08x} instead of {:08x}", c1.d[7], c2.d[7]));

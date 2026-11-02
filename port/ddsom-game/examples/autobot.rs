@@ -35,6 +35,7 @@
 //! * `--cast N`, `--charges V`: frequent spells and items (see `Magic`).
 //! * `--offset N`: the game starts N frames later (attract first): the plan's scene is written at
 //!   frame 2400 + N and the bot only plays after 2600 + N (base produced with `bot_lib.build(offset=N)`).
+//!
 //! It runs like `validate` (68000 overclocked x16, machine B): the scenario is therefore reproduced exactly.
 use std::path::Path;
 
@@ -72,7 +73,7 @@ impl Bot {
     fn rd8(&self, a: u32) -> u32 {
         let o = (a - 0xff0000) as usize;
         let w = self.m.bus.ram[o / 2] as u32;
-        if o % 2 == 0 { w >> 8 } else { w & 0xff }
+        if o.is_multiple_of(2) { w >> 8 } else { w & 0xff }
     }
     fn rd16(&self, a: u32) -> u32 {
         self.rd8(a) << 8 | self.rd8(a + 1)
@@ -323,7 +324,7 @@ fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32, ma
         return;
     }
     let f = b.f + 7 * pl;
-    if magic.charges != 0 && f % 50 == 0 {
+    if magic.charges != 0 && f.is_multiple_of(50) {
         // three 16-byte rows at +0x120: identifier (0x56: empty), byte +8 = reserve index
         for line in 0..3 {
             let row = base + 0x120 + 16 * line;
@@ -355,7 +356,7 @@ fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32, ma
             b.poke(base + flag, [1, 6, 0][(n as usize / 4) % 3], 1);
         }
     }
-    if b.frail != 0 && pl >= 2 && b.f % b.frail == 0 && b.rd8(base + 4) < 4 && b.rd16(base + 0x62) > 1 {
+    if b.frail != 0 && pl >= 2 && b.f.is_multiple_of(b.frail) && b.rd8(base + 4) < 4 && b.rd16(base + 0x62) > 1 {
         b.poke(base + 0x62, 1, 2);
     }
     let hp = b.rd16(base + 0x62);
@@ -398,7 +399,7 @@ fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32, ma
             best = None;
         }
     }
-    if pl == 0 && b.f % 200 == 0 && std::env::var("BOTDEBUG").is_ok() {
+    if pl == 0 && b.f.is_multiple_of(200) && std::env::var("BOTDEBUG").is_ok() {
         eprintln!("f {} pos {px},{py} hp {hp} target {best:?}", b.f);
     }
     let (mut right, mut left, mut up, mut down, mut b1, mut b2, mut b3, mut b4) = (false, false, false, false, false, false, false, false);
@@ -409,7 +410,7 @@ fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32, ma
             if dx > range { right = true } else if dx < -range { left = true }
             if dy.abs() > 6 { if dy > 0 { up = true } else { down = true } }
             if hostile && dx.abs() <= range + 16 && dy.abs() <= 12 {
-                b1 = (f / 4) % 2 == 0;
+                b1 = (f / 4).is_multiple_of(2);
                 // turns towards the target one frame in 16
                 if f % 16 < 2 { if dx > 0 { right = true } else { left = true } }
                 if f % 500 == 120 { b2 = true } // jump
@@ -421,7 +422,7 @@ fn policy(b: &mut Bot, pl: usize, rnd: &mut impl FnMut(u32) -> u32, god: u32, ma
         None => {
             right = true;
             if f % 90 < 4 { b1 = true }
-            if f % 150 < 3 { if (f / 150) % 2 == 0 { up = true } else { down = true } }
+            if f % 150 < 3 { if (f / 150).is_multiple_of(2) { up = true } else { down = true } }
             if f % 700 < 4 { b2 = true }
         }
     }

@@ -153,7 +153,7 @@ pub fn extract(roms: &Path, path: &Path) -> io::Result<()> {
     // sample ROM (ROM_LOAD16_WORD_SWAP): what follows the end of each sample
     let mut pcm = Vec::new();
     for name in ["dd2.11m", "dd2.12m"] {
-        pcm.extend(std::fs::read(roms.join(name))?.chunks_exact(2).flat_map(|w| [w[1], w[0]]));
+        pcm.extend(std::fs::read(roms.join(name))?.as_chunks::<2>().0.iter().flat_map(|w| [w[1], w[0]]));
     }
     music.sample_tails = (0..music.samples.len())
         .map(|i| {

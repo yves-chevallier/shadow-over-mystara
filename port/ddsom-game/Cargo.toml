@@ -29,3 +29,12 @@ watch_writes = []
 [[example]]
 name = "rom_reads"
 required-features = ["rom-trace"]
+
+# Clippy rules switched off for the whole crate (examples included), because they would hurt readability here:
+[lints.clippy]
+# The state machines dispatch on the state, then test their condition inside the arm, like the original: merging the
+# test into a match guard would mix the two levels and make the arm order depend on guards.
+collapsible_match = "allow"
+# The routines keep the parameters of the original routine (positions, tables, flags) as named arguments; grouping
+# them in a struct used by a single function would only hide them.
+too_many_arguments = "allow"

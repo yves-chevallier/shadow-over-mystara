@@ -322,7 +322,7 @@ fn step_0(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
 fn prep_0(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     wr8(b, obj + 3, (rng.next() % 2) as u8);
-    wr8(b, obj + 0x2c, if rng.next() % 2 == 0 { 0 } else { 0x20 });
+    wr8(b, obj + 0x2c, if rng.next().is_multiple_of(2) { 0 } else { 0x20 });
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     wr8(b, obj + 7, step_0(rng, s.0, s.1, s.2));
     wr8(b, obj + 0xaa, (rng.next() % 3) as u8);
@@ -331,7 +331,7 @@ fn prep_0(b: &mut Bus, rng: &mut Rng, obj: u32) {
     }
     // the other half: another BOSS slot, in one of the states the original expects
     wr16(b, obj + 0xba, 0);
-    if rng.next() % 4 != 0 {
+    if !rng.next().is_multiple_of(4) {
         let k = BOSS.slot((rng.next() % BOSS.slots + 1) % BOSS.slots).0;
         if k != obj {
             wr8(b, k, 1);
@@ -393,15 +393,15 @@ fn step_16(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
 fn prep_16(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     wr8(b, obj + 3, pick(rng, &[0, 0, 1, 1, 2]));
-    wr8(b, obj + 0x2c, if rng.next() % 2 == 0 { 0 } else { 0x20 });
+    wr8(b, obj + 0x2c, if rng.next().is_multiple_of(2) { 0 } else { 0x20 });
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     wr8(b, obj + 7, step_16(rng, s.0, s.1, s.2));
     let t = 0xff85de + 0x200 * (rng.next() % 4);
-    wr16(b, obj + 0x50, if rng.next() % 10 == 0 { 0 } else { t as u16 });
+    wr16(b, obj + 0x50, if rng.next().is_multiple_of(10) { 0 } else { t as u16 });
     wr8(b, t, 1);
     wr8(b, t + 0x188, pick(rng, &[0, 1, 1]));
     wr8(b, t + 0x6f, 0);
-    if rng.next() % 3 == 0 {
+    if rng.next().is_multiple_of(3) {
         wr32(b, t + 4, 0x0200_0e00);
     }
     let (bx, by) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
@@ -473,7 +473,7 @@ fn step_22(rng: &mut Rng, two: bool, s4: u8, s5: u8, s6: u8) -> u8 {
 fn prep_22(b: &mut Bus, rng: &mut Rng, obj: u32, two: bool) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     wr8(b, obj + 3, 0);
-    wr8(b, obj + 0x2c, if rng.next() % 2 == 0 { 0 } else { 0x20 });
+    wr8(b, obj + 0x2c, if rng.next().is_multiple_of(2) { 0 } else { 0x20 });
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     wr8(b, obj + 7, step_22(rng, two, s.0, s.1, s.2));
     wr8(b, obj + 0xb5, pick(rng, &[0, 0, 1]));
@@ -501,7 +501,7 @@ fn prep_22(b: &mut Bus, rng: &mut Rng, obj: u32, two: bool) {
         wr16(b, obj + 0x42, k as u16);
     }
     let t = 0xff85de + 0x200 * (rng.next() % 4);
-    wr16(b, obj + 0x50, if rng.next() % 10 == 0 { 0 } else { t as u16 });
+    wr16(b, obj + 0x50, if rng.next().is_multiple_of(10) { 0 } else { t as u16 });
     wr8(b, t, 1);
     wr8(b, t + 0x188, pick(rng, &[0, 1, 1]));
     wr8(b, t + 0x6f, 0);
@@ -632,7 +632,7 @@ fn prep_4(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 0xaf, (rng.next() % 3) as u8);
     wr8(b, obj + 0xad, (rng.next() % 2) as u8);
     wr8(b, obj + 0x30, (rng.next() % 2) as u8);
-    wr8(b, A5 + 0x30, (rng.next() % 6 != 0) as u8);
+    wr8(b, A5 + 0x30, !rng.next().is_multiple_of(6) as u8);
     wr16(b, obj + 0x60, [0x40u16, 0x100, 0x300][rng.next() as usize % 3]);
     wr32(b, obj + 0xa2, [0x0202_0000u32, 0x0202_0400, 0x0202_0600][rng.next() as usize % 3]);
     wr8(b, obj + 0x33, pick(rng, &[0, 1, 3, 4, 0x80, 0x81, 0x84]));
@@ -743,8 +743,6 @@ fn step_17(rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     2 * (rng.next() % n) as u8
 }
 
-/// Type-specific preparation (fields that the creator or another routine sets).
-
 /// Valid `+7` steps of bosses 1, 3 and 9 (number of jump table entries).
 fn step_139(kind: u8, rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
     let n: u32 = match (kind, s4, s5, s6) {
@@ -779,7 +777,7 @@ fn step_139(kind: u8, rng: &mut Rng, s4: u8, s5: u8, s6: u8) -> u8 {
 fn prep_1(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     wr8(b, obj + 3, 0);
-    wr8(b, obj + 0x2c, if rng.next() % 2 == 0 { 0 } else { 0x20 });
+    wr8(b, obj + 0x2c, if rng.next().is_multiple_of(2) { 0 } else { 0x20 });
     wr16(b, obj + 0x50, (0x85de + 0x200 * (rng.next() % 4)) as u16);
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     wr8(b, obj + 7, step_139(1, rng, s.0, s.1, s.2));
@@ -789,7 +787,7 @@ fn prep_1(b: &mut Bus, rng: &mut Rng, obj: u32) {
         wr8(b, obj + off, pick(rng, &[0, 0, 1, 2, 5]));
     }
     wr8(b, obj + 0xb4, pick(rng, &[7, 0xf]));
-    wr16(b, obj + 0xb0, if rng.next() % 3 == 0 { ENEMY.slot(rng.next() % ENEMY.slots).0 as u16 } else { 0 });
+    wr16(b, obj + 0xb0, if rng.next().is_multiple_of(3) { ENEMY.slot(rng.next() % ENEMY.slots).0 as u16 } else { 0 });
     let x = rd16(b, obj + 8).wrapping_add((rng.next() % 0x100) as u16).wrapping_sub(0x80);
     wr16(b, obj + 0xbc, x);
     let v = rd16(b, obj + 0x10).wrapping_add((rng.next() % 0x40) as u16).wrapping_sub(0x20);
@@ -812,8 +810,8 @@ fn prep_1(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr16(b, obj + 0xc, [0u16, 1, 0x30, 0x80][rng.next() as usize % 4]);
     wr16(b, obj + 0x62, [0u16, 1, 10, 40][rng.next() as usize % 4]);
     wr16(b, obj + 0x60, 0x100);
-    wr16(b, obj + 0x54, if rng.next() % 2 == 0 { 0 } else { (0x85de + 0x200 * (rng.next() % 4)) as u16 });
-    if rng.next() % 2 == 0 {
+    wr16(b, obj + 0x54, if rng.next().is_multiple_of(2) { 0 } else { (0x85de + 0x200 * (rng.next() % 4)) as u16 });
+    if rng.next().is_multiple_of(2) {
         let t = 0xff85de + 0x200 * (rng.next() % 4);
         wr16(b, obj + 0x50, t as u16);
         wr8(b, t, 1);
@@ -824,8 +822,8 @@ fn prep_1(b: &mut Bus, rng: &mut Rng, obj: u32) {
 fn prep_3(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     wr8(b, obj + 3, pick(rng, &[0, 0, 1]));
-    wr8(b, obj + 0x2c, if rng.next() % 2 == 0 { 0 } else { 0x20 });
-    wr16(b, obj + 0x50, if rng.next() % 8 == 0 { 0 } else { (0x85de + 0x200 * (rng.next() % 4)) as u16 });
+    wr8(b, obj + 0x2c, if rng.next().is_multiple_of(2) { 0 } else { 0x20 });
+    wr16(b, obj + 0x50, if rng.next().is_multiple_of(8) { 0 } else { (0x85de + 0x200 * (rng.next() % 4)) as u16 });
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     wr8(b, obj + 7, step_139(3, rng, s.0, s.1, s.2));
     for off in [0xa2u32, 0xa5, 0xb5] {
@@ -851,7 +849,7 @@ fn prep_3(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr16(b, obj + 0xc, [0u16, 8, 0x30, 0x50, 0x70, 0xc0, 0xff80][rng.next() as usize % 7]);
     wr16(b, obj + 0x62, [0u16, 1, 10, 40, 0x100][rng.next() as usize % 5]);
     wr16(b, obj + 0x60, 0x100);
-    if rng.next() % 2 == 0 {
+    if rng.next().is_multiple_of(2) {
         let t = 0xff85de + 0x200 * (rng.next() % 4);
         wr16(b, obj + 0x50, t as u16);
         wr8(b, t, 1);
@@ -861,12 +859,12 @@ fn prep_3(b: &mut Bus, rng: &mut Rng, obj: u32) {
 
 fn prep_9(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
-    wr8(b, obj + 0x2c, if rng.next() % 2 == 0 { 0 } else { 0x20 });
-    wr16(b, obj + 0x50, if rng.next() % 8 == 0 { 0 } else { (0x85de + 0x200 * (rng.next() % 4)) as u16 });
+    wr8(b, obj + 0x2c, if rng.next().is_multiple_of(2) { 0 } else { 0x20 });
+    wr16(b, obj + 0x50, if rng.next().is_multiple_of(8) { 0 } else { (0x85de + 0x200 * (rng.next() % 4)) as u16 });
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     wr8(b, obj + 7, step_139(9, rng, s.0, s.1, s.2));
     for l in [0xacu32, 0xae, 0xb0, 0xb2, 0xb4] {
-        let d = if rng.next() % 4 == 0 { 0 } else { ENEMY.slot(rng.next() % ENEMY.slots).0 };
+        let d = if rng.next().is_multiple_of(4) { 0 } else { ENEMY.slot(rng.next() % ENEMY.slots).0 };
         wr16(b, obj + l, d as u16);
         if d != 0 {
             wr16(b, d + 4, [0x0200u16, 0x0200, 0x0400, 0][rng.next() as usize % 4]);
@@ -892,13 +890,13 @@ fn prep_9(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr16(b, obj + 0x10, [0x40u16, 0x48, 0x60, 0x78][rng.next() as usize % 4]);
     wr16(b, obj + 0x62, [0u16, 1, 10, 40, 0x100][rng.next() as usize % 5]);
     wr16(b, obj + 0x60, 0x100);
-    wr16(b, obj + 0x54, if rng.next() % 2 == 0 { 0 } else { (0x85de + 0x200 * (rng.next() % 4)) as u16 });
+    wr16(b, obj + 0x54, if rng.next().is_multiple_of(2) { 0 } else { (0x85de + 0x200 * (rng.next() % 4)) as u16 });
     let v = rd16(b, obj + 8).wrapping_sub((rng.next() % 0x200) as u16);
     wr16(b, A5 + 0x556, v);
     wr16(b, A5 + 0x70, (rng.next() % 2) as u16);
     wr16(b, obj + 0x62, (rng.next() % 0x110) as u16);
     wr8(b, obj + 0xab, pick(rng, &[0, 1, 2]));
-    if rng.next() % 2 == 0 {
+    if rng.next().is_multiple_of(2) {
         // full crew
         for k in 0..4u32 {
             let d = ENEMY.slot(k).0;
@@ -952,7 +950,7 @@ fn prep(kind: u8, b: &mut Bus, rng: &mut Rng, obj: u32) {
     if kind == 7 {
         let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
         wr8(b, obj + 7, step_7(rng, s.0, s.1, s.2));
-        wr8(b, A5 + 0x30, (rng.next() % 6 != 0) as u8);
+        wr8(b, A5 + 0x30, !rng.next().is_multiple_of(6) as u8);
         wr16(b, obj + 0x60, [0x40u16, 0x100, 0x300][rng.next() as usize % 3]);
     }
     if kind == 11 || kind == 12 {
@@ -967,7 +965,7 @@ fn prep(kind: u8, b: &mut Bus, rng: &mut Rng, obj: u32) {
         wr8(b, obj + 0xa5, (rng.next() % 2) as u8);
         wr8(b, obj + 7, 2 * (rng.next() % 2) as u8);
         wr8(b, obj + 0x42, (rng.next() % 4) as u8);
-        wr16(b, obj + 0xb0, if rng.next() % 2 == 0 { 0 } else { ENEMY.slot(rng.next() % ENEMY.slots).0 as u16 });
+        wr16(b, obj + 0xb0, if rng.next().is_multiple_of(2) { 0 } else { ENEMY.slot(rng.next() % ENEMY.slots).0 as u16 });
     }
 }
 
@@ -975,7 +973,7 @@ fn prep(kind: u8, b: &mut Bus, rng: &mut Rng, obj: u32) {
 fn prep_17(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     wr8(b, obj + 3, (rng.next() % 3) as u8);
-    wr8(b, obj + 0x2c, if rng.next() % 2 == 0 { 0 } else { 0x20 });
+    wr8(b, obj + 0x2c, if rng.next().is_multiple_of(2) { 0 } else { 0x20 });
     wr16(b, obj + 0x50, (0x85de + 0x200 * (rng.next() % 4)) as u16);
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     wr8(b, obj + 7, step_17(rng, s.0, s.1, s.2));
@@ -985,7 +983,7 @@ fn prep_17(b: &mut Bus, rng: &mut Rng, obj: u32) {
     for off in [0xb2u32, 0xb3, 0xb4, 0xaf] {
         wr8(b, obj + off, pick(rng, &[0, 1, 2, 5, 0xff]));
     }
-    wr8(b, obj + 0xad, (rng.next() % 4 == 0) as u8);
+    wr8(b, obj + 0xad, rng.next().is_multiple_of(4) as u8);
     wr8(b, obj + 0xbb, pick(rng, &[0, 0, 0, 1, 2]));
     wr8(b, obj + 0xba, (rng.next() % 4) as u8);
     wr16(b, obj + 0xb8, (rng.next() % 4) as u16);
@@ -1017,11 +1015,11 @@ fn prep_17(b: &mut Bus, rng: &mut Rng, obj: u32) {
         wr8(b, m + 0x22, (rng.next() % 2) as u8);
         wr16(b, m + 4, [0x020a, 0x021e, 0x0202, 0][rng.next() as usize % 4]);
     }
-    wr16(b, obj + 0x54, if rng.next() % 3 == 0 { 0x85de + 0x200 * (rng.next() % 4) as u16 } else { 0 });
+    wr16(b, obj + 0x54, if rng.next().is_multiple_of(3) { 0x85de + 0x200 * (rng.next() % 4) as u16 } else { 0 });
     // scene variables
     wr8(b, A5 + 0x34, pick(rng, &[13, 0x2c, 0x6f, 5]));
     wr8(b, A5 + 0x35, (rng.next() % 5) as u8);
-    wr8(b, A5 + 0x36, (rng.next() % 4 == 0) as u8);
+    wr8(b, A5 + 0x36, rng.next().is_multiple_of(4) as u8);
     wr8(b, A5 + 0x2c, pick(rng, &[0, 0xc, 4]));
     wr8(b, A5 + 0x500, (rng.next() % 2) as u8);
     wr16(b, A5 + 0x7f92, (rng.next() % 32) as u16);
@@ -1036,7 +1034,7 @@ fn prep_17(b: &mut Bus, rng: &mut Rng, obj: u32) {
     for j in 0..4u32 {
         let q = 0xff85de + 0x200 * j;
         let dx = (rng.next() % 0x200) as u16;
-        wr8(b, q, (rng.next() % 4 != 0) as u8);
+        wr8(b, q, !rng.next().is_multiple_of(4) as u8);
         wr16(b, q + 8, ox.wrapping_add(dx).wrapping_sub(0x100));
         wr16(b, q + 0x10, oy.wrapping_add((rng.next() % 0x20) as u16).wrapping_sub(0x10));
         wr16(b, q + 0xc, (rng.next() % 4) as u16);
@@ -1047,7 +1045,7 @@ fn prep_17(b: &mut Bus, rng: &mut Rng, obj: u32) {
 fn prep_6(b: &mut Bus, rng: &mut Rng, obj: u32) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     prep_17(b, rng, obj);
-    wr8(b, obj + 3, if rng.next() % 4 == 0 { 1 } else { 0 });
+    wr8(b, obj + 3, if rng.next().is_multiple_of(4) { 1 } else { 0 });
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     wr8(b, obj + 7, step_6(rng, s.0, s.1, s.2));
     wr8(b, obj + 0xaa, (rng.next() % 3) as u8);
@@ -1063,7 +1061,7 @@ fn prep_6(b: &mut Bus, rng: &mut Rng, obj: u32) {
     // a linked shot for the attacks that drive it
     let shot = ddsom_game::objects::pools::ESHL.slot(rng.next() % 4).0;
     wr16(b, obj + 0xb0, shot as u16);
-    wr8(b, shot, (rng.next() % 4 != 0) as u8);
+    wr8(b, shot, !rng.next().is_multiple_of(4) as u8);
     wr8(b, shot + 0x5a, (rng.next() % 2) as u8);
 }
 
@@ -1099,7 +1097,7 @@ fn prep_5(b: &mut Bus, rng: &mut Rng, obj: u32) {
 fn prep_19(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8) {
     let pick = |a: &mut Rng, v: &[u8]| v[a.next() as usize % v.len()];
     prep_17(b, rng, obj);
-    let variant = if kind == 19 { (rng.next() % 3 == 0) as u8 } else { 0 };
+    let variant = if kind == 19 { rng.next().is_multiple_of(3) as u8 } else { 0 };
     wr8(b, obj + 3, variant);
     // the death of Nagpa's dragon has only two steps
     if variant != 0 && rd8(b, obj + 4) == 4 && rd8(b, obj + 5) == 6 && rd8(b, obj + 6) == 4 {
@@ -1111,7 +1109,7 @@ fn prep_19(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8) {
     }
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     wr8(b, obj + 7, step_19(rng, s.0, s.1, s.2));
-    wr8(b, A5 + 0x30, (rng.next() % 4 != 0) as u8);
+    wr8(b, A5 + 0x30, !rng.next().is_multiple_of(4) as u8);
     wr8(b, A5 + 0x2c, pick(rng, &[0, 4, 0xc, 0xd]));
     wr16(b, obj + 0x60, [40u16, 100, 700][rng.next() as usize % 3]);
     wr8(b, obj + 0x49, pick(rng, &[0, 4, 0x60, 0x68, 0x70, 0x78, 0x80, 0x90, 0x94, 0xa8, 0xa8]));
@@ -1133,12 +1131,12 @@ fn prep_19(b: &mut Bus, rng: &mut Rng, obj: u32, kind: u8) {
     wr8(b, obj + 0xb0, (rng.next() % 5) as u8);
     wr8(b, obj + 0xb1, (rng.next() % 3) as u8);
     // remembered state: the breath (attack 4) one time in three
-    let saved = if rng.next() % 3 == 0 { 0x0204_0400 } else { 0x0202_0000 };
+    let saved = if rng.next().is_multiple_of(3) { 0x0204_0400 } else { 0x0202_0000 };
     wr32(b, obj + 0xa8, saved);
     // host: a living enemy or not, with or without HP
     let host = ENEMY.slot(rng.next() % ENEMY.slots).0;
-    wr16(b, obj + 0x46, if rng.next() % 4 == 0 { 0 } else { host as u16 });
-    wr8(b, host, (rng.next() % 4 != 0) as u8);
+    wr16(b, obj + 0x46, if rng.next().is_multiple_of(4) { 0 } else { host as u16 });
+    wr8(b, host, !rng.next().is_multiple_of(4) as u8);
     wr16(b, host + 0x62, [0u16, 1, 50][rng.next() as usize % 3]);
     if s.0 == 4 && s.1 == 0 && (s.2 == 2) {
         // step 2 of the reaction is only used for the slide (code 0x68, 0x80, 0xa8 or ordinary)
@@ -1175,10 +1173,10 @@ fn prep_15(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 0xb7, (rng.next() % 3) as u8);
     wr8(b, obj + 0xb8, pick(rng, &[0, 0, 1, 2, 0x10]));
     wr8(b, obj + 0x33, pick(rng, &[0, 0, 1, 0xff]));
-    wr8(b, obj + 0x43, (rng.next() % 4 == 0) as u8);
+    wr8(b, obj + 0x43, rng.next().is_multiple_of(4) as u8);
     wr8(b, obj + 0x2d, (rng.next() % 32) as u8);
     // breath vector table (+0x4c): null or the ROM's angle table
-    wr32(b, obj + 0x4c, if rng.next() % 2 == 0 { 0 } else { 0x1c6636 });
+    wr32(b, obj + 0x4c, if rng.next().is_multiple_of(2) { 0 } else { 0x1c6636 });
     wr8(b, A5 + 0x42, (rng.next() % 4) as u8);
     // previous frame state: active (02) or other
     let saved = [0x0202_0000u32, 0x0202_0400, 0x0204_0200, 0x0000_0000][rng.next() as usize % 4];
@@ -1189,7 +1187,7 @@ fn prep_15(b: &mut Bus, rng: &mut Rng, obj: u32) {
     for j in 0..4u32 {
         wr8(b, 0xff85de + 0x200 * j + 0x188, (rng.next() % 2) as u8);
     }
-    if (s.0, s.1, s.2) == (2, 4, 10) && rng.next() % 2 == 0 {
+    if (s.0, s.1, s.2) == (2, 4, 10) && rng.next().is_multiple_of(2) {
         let edge = if rd8(b, obj + 0x2c) != 0 { 0x48u16 } else { 0x138 };
         let scroll = rd16(b, A5 + 0x506);
         wr16(b, obj + 8, scroll.wrapping_add(edge));
@@ -1218,7 +1216,7 @@ fn prep_11(b: &mut Bus, rng: &mut Rng, obj: u32) {
             wr16(b, o + 0xc, [0u16, 3, 0x0f, 0xfffd, 0xfff0, 0xffe0][rng.next() as usize % 6]);
             wr16(b, o + 0x10, by.wrapping_add((rng.next() % 0x20) as u16).wrapping_sub(0x10));
             wr8(b, o + 0x42, (rng.next() % 32) as u8);
-            wr8(b, o + 0x43, if rng.next() % 3 == 0 { (rng.next() % 32) as u8 } else { 0 });
+            wr8(b, o + 0x43, if rng.next().is_multiple_of(3) { (rng.next() % 32) as u8 } else { 0 });
             wr8(b, o + 3, (rng.next() % 3) as u8);
         } else {
             wr8(b, o, 0);
@@ -1240,7 +1238,7 @@ fn prep_11(b: &mut Bus, rng: &mut Rng, obj: u32) {
         2 => thr.wrapping_add(1),
         _ => (rng.next() % 12) as u8,
     };
-    wr8(b, obj + 0xa8, if rng.next() % 10 == 0 { 0 } else { seg % 12 });
+    wr8(b, obj + 0xa8, if rng.next().is_multiple_of(10) { 0 } else { seg % 12 });
     wr8(b, obj + 0x2d, (rng.next() % 32) as u8);
     let (bx, by) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
     wr16(b, obj + 0xa2, bx.wrapping_add((rng.next() % 8) as u16));
@@ -1256,7 +1254,7 @@ fn prep_11(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 0xb8, (rng.next() % 5) as u8);
     wr8(b, obj + 0xb9, pick(rng, &[0, 0, 1, 2]));
     wr16(b, obj + 0xb0, (rng.next() % 5) as u16);
-    if rng.next() % 2 == 0 {
+    if rng.next().is_multiple_of(2) {
         wr8(b, obj + 0xb0, 1 + (rng.next() % 4) as u8);
     }
     wr8(b, obj + 0xb1, (rng.next() % 4) as u8);
@@ -1267,8 +1265,8 @@ fn prep_11(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 0xad, (rng.next() % 2) as u8);
     let tgt = ENEMY.slot(rng.next() % ENEMY.slots).0;
     wr8(b, tgt, 1);
-    wr8(b, tgt + 2, if rng.next() % 2 == 0 { 0x47 } else { 2 });
-    wr16(b, obj + 0x5c, if rng.next() % 2 == 0 { 0 } else { tgt as u16 });
+    wr8(b, tgt + 2, if rng.next().is_multiple_of(2) { 0x47 } else { 2 });
+    wr16(b, obj + 0x5c, if rng.next().is_multiple_of(2) { 0 } else { tgt as u16 });
     wr16(b, obj + 0x60, [0x40u16, 0x100, 0x300][rng.next() as usize % 3]);
     wr16(b, obj + 0x62, [0u16, 1, 0x20, 0x60, 0x100, 0x2ff][rng.next() as usize % 6]);
     wr16(b, obj + 0x84, (rng.next() % 4) as u16);
@@ -1310,11 +1308,11 @@ fn prep_8(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 7, step_8(rng, s.0, s.1, s.2));
     wr8(b, A5 + 0x5a, (rng.next() % 4) as u8);
     wr8(b, obj + 0xad, 1 + (rng.next() % 3) as u8);
-    wr8(b, obj + 0x42, (rng.next() % 4 == 0) as u8);
-    wr8(b, obj + 0x43, (rng.next() % 4 == 0) as u8);
+    wr8(b, obj + 0x42, rng.next().is_multiple_of(4) as u8);
+    wr8(b, obj + 0x43, rng.next().is_multiple_of(4) as u8);
     wr16(b, obj + 0x62, [0u16, 1, 10, 40, 100, 0x160][rng.next() as usize % 6]);
     wr16(b, obj + 0x18, [0u16, 0x100, 0xfd00, 0xfc00, 0x300][rng.next() as usize % 5]);
-    wr8(b, obj + 0x3e, (rng.next() % 3 == 0) as u8);
+    wr8(b, obj + 0x3e, rng.next().is_multiple_of(3) as u8);
     wr8(b, obj + 0x4a, pick(rng, &[0, 0x20]));
     wr8(b, obj + 0x46, (rng.next() % 2) as u8);
     wr8(b, obj + 0x87, (rng.next() % 2) as u8);
@@ -1359,7 +1357,7 @@ fn prep_18(b: &mut Bus, rng: &mut Rng, obj: u32) {
     prep_17(b, rng, obj);
     let s = (rd8(b, obj + 4), rd8(b, obj + 5), rd8(b, obj + 6));
     wr8(b, obj + 7, step_18(rng, s.0, s.1, s.2));
-    wr8(b, A5 + 0x30, (rng.next() % 5 != 0) as u8);
+    wr8(b, A5 + 0x30, !rng.next().is_multiple_of(5) as u8);
     wr8(b, obj + 0xaa, (rng.next() % 3) as u8);
     wr8(b, obj + 0xab, 2);
     for off in [0xb2u32, 0xb3, 0xb4, 0xb5, 0xb6, 0xb7, 0xae, 0xaf] {
@@ -1388,14 +1386,14 @@ fn prep_18(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 0x49, pick(rng, codes));
     let shot = ddsom_game::objects::pools::ESHL.slot(rng.next() % 4).0;
     wr16(b, obj + 0xb0, shot as u16);
-    wr8(b, shot, (rng.next() % 4 != 0) as u8);
+    wr8(b, shot, !rng.next().is_multiple_of(4) as u8);
     wr8(b, shot + 0x5a, (rng.next() % 2) as u8);
     close_players(b, rng, obj);
     for j in 0..4u32 {
         let q = 0xff85de + 0x200 * j;
         wr16(b, q + 0xc, [0u16, 0, 0x10][rng.next() as usize % 3]);
         wr32(b, q + 4, [0x0202_0000u32, 0x0200_2200, 0x0200_1400, 0x0204_0e00][rng.next() as usize % 4]);
-        wr8(b, q + 0x66, (rng.next() % 3 == 0) as u8);
+        wr8(b, q + 0x66, rng.next().is_multiple_of(3) as u8);
         wr8(b, q + 0x8b, (rng.next() % 6) as u8);
     }
 }
@@ -1412,7 +1410,7 @@ fn prep_21(b: &mut Bus, rng: &mut Rng, obj: u32) {
     }
     let host = ENEMY.slot(rng.next() % ENEMY.slots).0;
     wr16(b, obj + 0x46, host as u16);
-    wr16(b, host + 4, if rng.next() % 6 == 0 { 0x0406 } else { 0x0202 });
+    wr16(b, host + 4, if rng.next().is_multiple_of(6) { 0x0406 } else { 0x0202 });
     wr8(b, obj + 0x33, pick(rng, &[0, 0, 1, 0x81, 0xff]));
     wr16(b, obj + 0x84, (rng.next() % 4) as u16);
     wr8(b, obj + 0x90, (rng.next() % 20) as u8);
@@ -1423,14 +1421,14 @@ fn prep_21(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, A5 + 0x2e, pick(rng, &[0, 4]));
     let shot = ddsom_game::objects::pools::ESHL.slot(rng.next() % 4).0;
     wr16(b, obj + 0xb0, shot as u16);
-    wr8(b, shot, (rng.next() % 4 != 0) as u8);
+    wr8(b, shot, !rng.next().is_multiple_of(4) as u8);
     wr8(b, shot + 0x5a, (rng.next() % 2) as u8);
     close_players(b, rng, obj);
 }
 
 /// Players very close to the boss (one time in two) to reach the attack choices depending on range.
 fn close_players(b: &mut Bus, rng: &mut Rng, obj: u32) {
-    if rng.next() % 2 == 0 {
+    if rng.next().is_multiple_of(2) {
         return;
     }
     let (ox, oy) = (rd16(b, obj + 8), rd16(b, obj + 0x10));
@@ -1463,39 +1461,39 @@ fn prep_10(b: &mut Bus, rng: &mut Rng, obj: u32) {
     wr8(b, obj + 0x33, pick(rng, &[0, 0, 1, 0xff]));
     let shot = ddsom_game::objects::pools::ESHL.slot(rng.next() % 4).0;
     wr16(b, obj + 0xa8, shot as u16);
-    wr8(b, shot, (rng.next() % 4 != 0) as u8);
+    wr8(b, shot, !rng.next().is_multiple_of(4) as u8);
     wr8(b, shot + 0x5a, (rng.next() % 2) as u8);
 }
 
 /// Global variables that the game loop modifies between two calls.
 fn perturb(b: &mut Bus, rng: &mut Rng, obj: u32, leader: u32) {
     for (off, values) in [(0x4eu32, &[0u8, 0, 0, 0, 1][..]), (0x3d, &[0, 0, 0, 1]), (0x35, &[0, 1, 2, 3]), (0x36, &[0, 1])] {
-        if rng.next() % 3 == 0 {
+        if rng.next().is_multiple_of(3) {
             wr8(b, A5 + off, values[rng.next() as usize % values.len()]);
         }
     }
     wr8(b, 0xff0ec6, [0u8, 0, 0, 0, 1][rng.next() as usize % 5]);
-    if rng.next() % 3 == 0 {
+    if rng.next().is_multiple_of(3) {
         wr16(b, A5 + 0x506, [0u16, 0x100, 0x2e0, 0xe00, 0xf00, 0x1000, 0x1e00, 0x2d00, 0x3c00][rng.next() as usize % 9]);
     }
-    if rng.next() % 4 == 0 {
+    if rng.next().is_multiple_of(4) {
         wr16(b, A5 + 0x51e, [0u16, 4, 8][rng.next() as usize % 3]);
     }
     // the camera leader: position around the boss, speed
-    if rng.next() % 3 == 0 {
+    if rng.next().is_multiple_of(3) {
         let x = rd16(b, obj + 8).wrapping_add((rng.next() % 0x300) as u16).wrapping_sub(0x100);
         wr16(b, leader + 8, x);
         wr16(b, leader + 0x10, (rng.next() % 0x100) as u16 + 0x60);
         wr16(b, leader + 0x58, [0u16, 1, 2, 0xffff, 0xfffe][rng.next() as usize % 5]);
     }
     for j in 0..4u32 {
-        if rng.next() % 4 == 0 {
+        if rng.next().is_multiple_of(4) {
             wr8(b, 0xff85de + 0x200 * j, [0u8, 1, 1][rng.next() as usize % 3]);
         }
     }
     // byte 0x22 of the cutscene message: finished or not
     let msg = rd16(b, obj + 0xb0) as u32 | 0xff0000;
-    if rd16(b, obj + 0xb0) != 0 && rng.next() % 3 == 0 {
+    if rd16(b, obj + 0xb0) != 0 && rng.next().is_multiple_of(3) {
         wr8(b, msg + 0x22, (rng.next() % 2) as u8);
     }
 }
@@ -1527,7 +1525,7 @@ fn main() {
     {
         for k in 0..23u32 {
             let e = (m.bus.fetch16(0x39b12 + 4 * k) as u32) << 16 | m.bus.fetch16(0x39b12 + 4 * k + 2) as u32;
-            if ddsom_game::all_natives().any(|n| n.entry == e) && filter.map_or(true, |f| f == e) {
+            if ddsom_game::all_natives().any(|n| n.entry == e) && filter.is_none_or(|f| f == e) {
                 inputs.push((e, k as u8));
             }
         }
@@ -1544,7 +1542,7 @@ fn main() {
             }
             // the camera leader: a player, or any enemy
             let leader = 0xff85de + 0x200 * (rng.next() % 4);
-            wr16(&mut b, A5 + 0x46, if rng.next() % 8 == 0 { 0 } else { leader as u16 });
+            wr16(&mut b, A5 + 0x46, if rng.next().is_multiple_of(8) { 0 } else { leader as u16 });
             wr8(&mut b, obj.0, 1);
             wr8(&mut b, obj.0 + 2, kind);
             wr8(&mut b, obj.0 + 3, 0);
@@ -1554,7 +1552,7 @@ fn main() {
                 let v = (rd16(&mut b, leader + off) as u32) << 16 | (rng.next() & 0xffff);
                 wr32(&mut b, obj.0 + off, v);
             }
-            if states && rng.next() % 2 == 0 {
+            if states && rng.next().is_multiple_of(2) {
                 let hitboxes = boss_states(kind);
                 let (s4, s5, s6) = hitboxes[rng.next() as usize % hitboxes.len()];
                 wr8(&mut b, obj.0 + 4, s4[rng.next() as usize % s4.len()]);
@@ -1568,7 +1566,7 @@ fn main() {
                 }
                 if step > 0 {
                     perturb(&mut b, &mut rng, obj.0, leader);
-                    if states && rng.next() % 3 == 0 {
+                    if states && rng.next().is_multiple_of(3) {
                         let hitboxes = boss_states(kind);
                         let (s4, s5, s6) = hitboxes[rng.next() as usize % hitboxes.len()];
                         wr8(&mut b, obj.0 + 4, s4[rng.next() as usize % s4.len()]);
@@ -1582,7 +1580,7 @@ fn main() {
                     let free = (0..q.slots).filter(|&i| rd8(&mut b, q.slot(i).0) == 0).count();
                     wr16(&mut b, A5 + q.free, free as u16);
                 }
-                wr8(&mut b, obj.0 + 0x40, (rng.next() % 40 == 0) as u8);
+                wr8(&mut b, obj.0 + 0x40, rng.next().is_multiple_of(40) as u8);
                 // the X flag is meaningless for a handler; the native sound routines keep it whereas
                 // the original recomputes it: it is cleared so that this known mismatch does not mask the others
                 c.sr &= !0x10;
@@ -1621,9 +1619,9 @@ fn main() {
                 let after = ddsom_game::report().values().map(|s| s.mismatches).sum::<u64>();
                 // `DDSOM_SEULS=prefix`: only show the mismatches of routines whose name starts that way
                 let only = std::env::var("DDSOM_SEULS").ok();
-                let concerns = only.as_deref().map_or(true, |p| {
+                let concerns = only.as_deref().is_none_or(|p| {
                     ddsom_game::report().iter().any(|(n, s)| {
-                        n.starts_with(p) && s.mismatches > before_names.get(&n.to_string()).copied().unwrap_or(0)
+                        n.starts_with(p) && s.mismatches > before_names.get(*n).copied().unwrap_or(0)
                     })
                 });
                 if after > before && concerns && shown < 12 {
@@ -1631,7 +1629,7 @@ fn main() {
                     // routines whose mismatch count increased during this call
                     let faulty: Vec<String> = ddsom_game::report()
                         .iter()
-                        .filter(|(n, s)| s.mismatches > before_names.get(&n.to_string()).copied().unwrap_or(0))
+                        .filter(|(n, s)| s.mismatches > before_names.get(**n).copied().unwrap_or(0))
                         .map(|(n, s)| format!("{n} : {}", s.last.clone().unwrap_or_default()))
                         .collect();
                     println!("mismatch at {entry:06x} type {kind} step {step} object {:06x}: {}", obj.0, faulty.join(" ; "));

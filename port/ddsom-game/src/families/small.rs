@@ -100,8 +100,7 @@ pub(crate) fn roar_via(r: &mut impl Regs, b: &mut Cps2Bus, creator: Obj, big: bo
     r.d(1, total as u32);
     let mut n = (total as u16).wrapping_sub(1);
     r.d_word(1, n);
-    loop {
-        let Some(o) = r.allocated(b, &pools::ESHL) else { break };
+    while let Some(o) = r.allocated(b, &pools::ESHL) {
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0x41);
         o.set_u8(b, 0x3, variant);
@@ -240,8 +239,7 @@ pub(crate) fn pshl_stones(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
     r.d(3, 0);
     r.d_word(4, delay);
     r.d_word(5, n);
-    loop {
-        let Some(o) = r.allocated(b, &pools::PSHL) else { break };
+    while let Some(o) = r.allocated(b, &pools::PSHL) {
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0x11);
         let v = me.u8(b, 0x2c);

@@ -98,7 +98,7 @@ pub fn alloc<R: Bench>(x: &mut Cx<'_, R>, pool: &pools::Pool) -> Obj {
 /// Allocates an active ESHL shot of type `kind`, with variant `variant`, linked to the current object by the word
 /// `link` (`None` if the pool is full). The creators below are the small routines 0x9ddee..0xa6824 of the original.
 fn spawn_eshl<R: Bench>(x: &mut Cx<'_, R>, kind: u8, variant: u8, link: u32) -> Option<Obj> {
-    let Some(o) = x.alloc(&pools::ESHL) else { return None };
+    let o = x.alloc(&pools::ESHL)?;
     o.set_u8(x.b, 0, 1);
     o.set_u8(x.b, 2, kind);
     o.set_u8(x.b, 3, variant);

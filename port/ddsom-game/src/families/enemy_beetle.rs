@@ -341,19 +341,15 @@ fn cross<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.anim_step();
         }
-        4 => {
-            let group = x.u8(GROUP);
-            cross_turn(x, group)
-        }
+        4 => cross_turn(x),
         6 => leave(x),
         _ => {}
     }
 }
 
-/// 0x65f18: turn until the exit angle, `side` = the parity that orients the turn.
-fn cross_turn<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
-    if side & 1 != 0 {
-    }
+/// 0x65f18: turn until the exit angle. The original tests the parity of a side passed in D0 but does the same on both
+/// branches.
+fn cross_turn<R: Bench>(x: &mut Cx<'_, R>) {
     steer(x);
     let wanted = if x.u8(GROUP) & 1 != 0 { 0x18 } else { 8 };
     if x.u8(Obj::SPEED_INDEX) == wanted {
@@ -523,14 +519,10 @@ fn halt_and_bite<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x65efe: sideways turn (the direction comes from `+0xa4` and the parity of `+0x2f`).
+/// 0x65efe: sideways turn. The original computes a side from `+0xa4` and the parity of `+0x2f` for 0x65f18, which does
+/// not use it.
 fn side_turn<R: Bench>(x: &mut Cx<'_, R>) {
-    let mut d0 = x.u8(SIDE);
-    let group = x.u8(GROUP);
-    if group & 1 != 0 {
-        d0 ^= group;
-    }
-    cross_turn(x, d0);
+    cross_turn(x);
 }
 
 /// Substate 4 with `+6` non-zero (0x6628a): turns toward a player then climbs back up.

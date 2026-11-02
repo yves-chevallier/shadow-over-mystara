@@ -207,8 +207,7 @@ fn peff_2f(c: &mut Cpu, b: &mut Cps2Bus) {
 fn peff_13_x4(c: &mut Cpu, b: &mut Cps2Bus) {
     let me = c.a[0];
     c.d[5] = 3;
-    loop {
-        let Some(fx) = alloc(c, b, &pools::PEFF) else { break };
+    while let Some(fx) = alloc(c, b, &pools::PEFF) {
         fx.set_u8(b, 0x0, 1);
         fx.set_u8(b, 0x2, 0x13);
         fx.set_u8(b, 0x3, 1);

@@ -320,7 +320,7 @@ fn decode_op<F: Fetch>(r: &mut Reader<F>, op: u16) -> Option<Op> {
                 _ => return None,
             }
         }
-        0x1 | 0x2 | 0x3 => {
+        0x1..=0x3 => {
             let size = match op >> 12 {
                 1 => Size::Byte,
                 3 => Size::Word,

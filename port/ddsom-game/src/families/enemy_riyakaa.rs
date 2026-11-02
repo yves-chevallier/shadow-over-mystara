@@ -260,11 +260,9 @@ mod riyakaa {
             }
             2 => {
                 x.anim_step();
-                if lib::pick_target(x).is_some() {
-                    if lib::target_in_box(x, 0, 0x80, 0x20) {
+                if lib::pick_target(x).is_some() && lib::target_in_box(x, 0, 0x80, 0x20) {
                         x.add8(f::SUB2, 2);
                     }
-                }
                 return true;
             }
             4 => {
@@ -804,11 +802,10 @@ mod riyakaa {
         x.set8(0x67, 1);
         let v = x.u8(0xa0);
         x.set8(0xa1, v);
-        let shift;
-        if lib::target_in_box(x, -0x28, 0x28, 0xc) {
+        let shift = if lib::target_in_box(x, -0x28, 0x28, 0xc) {
             x.set32(f::STATE, 0x0204_0c00);
             x.set8(0xa3, 6);
-            shift = 0xf6u8;
+            0xf6u8
         } else {
             if !want_attack(x) {
                 walk(x);
@@ -816,8 +813,8 @@ mod riyakaa {
                 return look_begin(x);
             }
             choose_attack(x);
-            shift = x.u8(0xa3).wrapping_add(0xf0);
-        }
+            x.u8(0xa3).wrapping_add(0xf0)
+        };
         x.set8(0xa0, shift);
         if shift != x.u8(0xa1) {
             x.set8(0xac, 0xff);

@@ -50,8 +50,7 @@ fn scan<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
 
 /// 0x87c9a (`far`) and 0x87ccc: is a living player in the box? D0 = 0 or 1.
 pub(super) fn player_near<R: Bench>(x: &mut Cx<'_, R>, far: bool) -> bool {
-    let found = if far { scan(x, -0x130, 0x40, 0x20) } else { scan(x, -0x20, 0x20, 8) };
-    found
+    if far { scan(x, -0x130, 0x40, 0x20) } else { scan(x, -0x20, 0x20, 8) }
 }
 
 /// 0x87b86: true if the boss is not facing its opponent (`+0x50`) and an animation is in progress (`+0xa3`).

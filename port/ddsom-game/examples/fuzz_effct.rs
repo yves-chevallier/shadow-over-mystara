@@ -37,7 +37,7 @@ impl Rng {
         v[self.next() as usize % v.len()]
     }
     fn one_in(&mut self, n: u32) -> bool {
-        self.next() % n == 0
+        self.next().is_multiple_of(n)
     }
 }
 
@@ -48,7 +48,7 @@ const PLAYERS: u32 = 0xff85de;
 fn reachable(b: &mut Cps2Bus, entry: u32, range: std::ops::Range<u32>) -> BTreeSet<u32> {
     let mut seen = BTreeSet::new();
     let mut todo = vec![entry];
-    let inside = |t: u32| range.contains(&t) && t % 2 == 0;
+    let inside = |t: u32| range.contains(&t) && t.is_multiple_of(2);
     while let Some(start) = todo.pop() {
         let mut pc = start;
         while inside(pc) && !seen.contains(&pc) {

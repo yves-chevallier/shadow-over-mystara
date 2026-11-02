@@ -271,7 +271,7 @@ fn sweep<R: Bench>(x: &mut Cx<'_, R>) {
         let w = x.data16(table + 2 + k);
         let mut y = x.u32(0x10).wrapping_add((((w as u32) << 16) as i32 >> 8) as u32);
         x.set32(0x10, y);
-        y = y >> 16;
+        y >>= 16;
         let lo = var::SCROLL_Y.get(x.b).wrapping_add(0x20);
         let mut yw = y as u16;
         if !Fl::sub16(yw, lo).ge() {

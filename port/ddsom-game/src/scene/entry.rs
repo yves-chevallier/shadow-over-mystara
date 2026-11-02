@@ -1414,6 +1414,14 @@ fn scene_105(x: &mut Ctx) {
     x.world();
 }
 
+/// 0xb9aa0: finale object (type 74). Original glitch: it is linked to the "object" A0 left by the game loop (the
+/// address of the phase handler), and the failure of the allocation is not tested (the A1 left is stored).
+fn finale(x: &mut Ctx) -> Obj {
+    let creator = Obj(x.phase_handler);
+    let o = creators::finale(x.b, creator);
+    creators::or_rest(x.b, o)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1425,12 +1433,4 @@ mod tests {
             let _ = sequence(scene);
         }
     }
-}
-
-/// 0xb9aa0: finale object (type 74). Original glitch: it is linked to the "object" A0 left by the game loop (the
-/// address of the phase handler), and the failure of the allocation is not tested (the A1 left is stored).
-fn finale(x: &mut Ctx) -> Obj {
-    let creator = Obj(x.phase_handler);
-    let o = creators::finale(x.b, creator);
-    creators::or_rest(x.b, o)
 }

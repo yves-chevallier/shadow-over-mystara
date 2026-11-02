@@ -113,11 +113,9 @@ pub(super) fn pick_attack_close<R: Bench>(x: &mut Cx<'_, R>) {
     let table = if x.u8(SERIES) != 0 { CLOSE_ATTACKS_ARMED } else { CLOSE_ATTACKS };
     let mv = pick_byte(x, table);
     *x.c.d4() = *x.c.d4() & !0xff | mv as u32;
-    if mv <= 8 {
-        if lib::chance_10_16(x) {
+    if mv <= 8 && lib::chance_10_16(x) {
             return x.set8(AI_SHOT, 0x15);
         }
-    }
     blink_if_running(x);
     x.set8(f::SUB, 4);
     x.set8(RESUME, mv);

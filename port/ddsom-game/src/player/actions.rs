@@ -212,11 +212,9 @@ fn walk_magic_user(g: &mut Ctx, p: Player) {
 /// 0x358dc: turn.
 fn turn(g: &mut Ctx, p: Player) {
     cov!();
-    if p.u8(g, Player::STEP) == 0 {
-        if attack_button(g, p) || jump_button(g, p) {
+    if p.u8(g, Player::STEP) == 0 && (attack_button(g, p) || jump_button(g, p)) {
             return;
         }
-    }
     if animation::step(g, p) {
         to_stand(g, p);
     }

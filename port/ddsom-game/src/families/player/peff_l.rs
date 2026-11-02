@@ -43,8 +43,7 @@ mod slot_icon {
     fn slot<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
         let owner = x.linked(f::OWNER);
         let rank = x.u8(0x3) as u32;
-        let at = Obj(owner.0 + rank);
-        at
+        Obj(owner.0 + rank)
     }
 
     fn init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -78,7 +77,7 @@ mod slot_icon {
         let item = at.u8(x.b, 0x140) as u32;
         let count = at.u8(x.b, 0x148) as u32;
         let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ICONS_ALT } else { ICONS };
-        x.anim_start(set, ((item << 4) + count & 0xffff) as u16);
+        x.anim_start(set, (((item << 4) + count) & 0xffff) as u16);
     }
 
     fn active<R: Bench>(x: &mut Cx<'_, R>) {

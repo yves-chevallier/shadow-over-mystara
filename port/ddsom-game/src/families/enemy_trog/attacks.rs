@@ -276,11 +276,10 @@ fn special<R: Bench>(x: &mut Cx<'_, R>) {
     if step(x) {
         return end_attack(x);
     }
-    if x.u8(f::KEY_FRAME) != 0 {
-        if crate::families::eshl_creators::above_4(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o).is_none() {
+    if x.u8(f::KEY_FRAME) != 0
+        && crate::families::eshl_creators::above_4(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o).is_none() {
             set_state_long(x, IDLE);
         }
-    }
 }
 
 /// 22: announcement of the attack, then switch to the planned attack `+0xa3` (or turn-around if the target is behind).

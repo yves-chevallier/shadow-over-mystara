@@ -154,7 +154,7 @@ impl Walk<'_> {
 
     /// Is the gap `[a, b)` a sequence of plausible definitions?
     fn defs_fit(&self, a: u32, b: u32) -> bool {
-        (b - a) % DEF_SIZE == 0
+        (b - a).is_multiple_of(DEF_SIZE)
             && (a..b).step_by(DEF_SIZE as usize).all(|p| {
                 let (col, row, kind) = (self.rom.rd8(p), self.rom.rd8(p + 1), self.rom.rd8(p + 12));
                 col < 0x40 && row < 0x20 && kind < 24 && (matches!(kind, 2 | 4 | 12) || self.inside(self.rom.rd32(p + 4)))

@@ -64,12 +64,12 @@ impl Sprite {
     }
 
     fn opaque(&self) -> usize {
-        self.rgba.chunks_exact(4).filter(|p| p[3] != 0).count()
+        self.rgba.as_chunks::<4>().0.iter().filter(|p| p[3] != 0).count()
     }
 
     /// Palette missing (not loaded yet): pure blue dominates the opaque pixels.
     fn garbage(&self) -> bool {
-        let blue = self.rgba.chunks_exact(4).filter(|p| p[3] != 0 && p[0] < 40 && p[1] < 40 && p[2] > 200).count();
+        let blue = self.rgba.as_chunks::<4>().0.iter().filter(|p| p[3] != 0 && p[0] < 40 && p[1] < 40 && p[2] > 200).count();
         blue * 10 > self.opaque() * 3
     }
 
@@ -131,7 +131,7 @@ fn emit(b: &mut Cps2Bus, f: u32, x: u16, y: u16, palette: Option<u8>, out: &mut 
 }
 
 fn plausible(b: &mut Cps2Bus, f: u32) -> bool {
-    (0x1000..0x400000).contains(&f) && f % 2 == 0 && {
+    (0x1000..0x400000).contains(&f) && f.is_multiple_of(2) && {
         let n = rd16(b, f);
         (1..=0x80).contains(&n) && rd32(b, f + 6) < 0x400000
     }
@@ -495,7 +495,7 @@ struct Sheet {
 impl Sheet {
     fn new(w: usize, h: usize) -> Self {
         let mut px = vec![0u8; w * h * 4];
-        for p in px.chunks_exact_mut(4) {
+        for p in px.as_chunks_mut::<4>().0 {
             p.copy_from_slice(&[40, 40, 52, 255]);
         }
         Sheet { w, h, px }

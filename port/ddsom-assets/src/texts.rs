@@ -75,7 +75,7 @@ impl TextDesc {
                 for w in self.words.iter().flatten() {
                     b.extend(w.to_be_bytes());
                 }
-                b.extend([b'@', b'@']);
+                b.extend(*b"@@");
             }
             TextKind::Box => b.extend(self.size.unwrap_or_default()),
         }

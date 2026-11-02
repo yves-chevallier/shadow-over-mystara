@@ -115,7 +115,7 @@ mod storm {
                 x.set_bit(0x1, 1, hidden);
                 let owner = x.linked(f::OWNER);
                 let d0 = owner.u16(x.b, 0x168);
-                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, d0 as u16);
+                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, d0);
                 crate::sound::play(x.b, SFX_RUMBLE, x.o);
             }
             4 => {
@@ -124,7 +124,7 @@ mod storm {
                 }
                 let owner = x.linked(f::OWNER);
                 let d0 = owner.u16(x.b, 0x168);
-                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, d0 as u16);
+                crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, d0);
                 if x.u8(0x5a) != 0 {
                     return;
                 }
@@ -140,7 +140,7 @@ mod storm {
                     x.add8(0x5, 4);
                     let owner = x.linked(f::OWNER);
                     let d0 = owner.u16(x.b, 0x168);
-                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, d0 as u16);
+                    crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, d0);
                     spawn_sparks(x);
                     shake_tail(x);
                 }

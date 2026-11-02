@@ -72,7 +72,7 @@ fn tables(rom: &Program, g: &Geometry) -> io::Result<(Vec<StripTable>, Vec<usize
     ptrs.dedup();
     let valid = |head: u32, p: u32| {
         let w = rom.rd16(head) as u32;
-        (1..=64).contains(&w) && p >= head + 2 && (p - head - 2) % (2 * w) == 0
+        (1..=64).contains(&w) && p >= head + 2 && (p - head - 2).is_multiple_of(2 * w)
     };
     let mut tables = Vec::new();
     let mut head = g.first_table;

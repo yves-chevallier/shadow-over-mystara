@@ -826,12 +826,11 @@ pub fn dust_puffs(g: &mut Ctx, p: Player) {
             crate::mem::set_low_word(&mut g.leftovers.d2, vx);
             g.leftovers.d4 = height as u32;
             crate::mem::set_low_word(&mut g.leftovers.d3, 0xffff);
-            match g.shock(p, variant, setting, vx, 0xffff) {
-                Some(puff) => wr16(g.b, puff.0 + Obj::Z, height),
-                // Original glitch: only the carry is tested; in the scene without shocks (41: no effect, carry
-                // clear) the height is written through the A1 left by the code before. That A1 is not known here (no
-                // scenario plays it): the write is left out (`docs/code-mort.md`, "Sortie du Cpu, partie 6").
-                None => {}
+            // Original glitch: only the carry is tested; in the scene without shocks (41: no effect, carry clear) the
+            // height is written through the A1 left by the code before. That A1 is not known here (no scenario plays
+            // it): the write is left out (`docs/code-mort.md`, "Sortie du Cpu, partie 6").
+            if let Some(puff) = g.shock(p, variant, setting, vx, 0xffff) {
+                wr16(g.b, puff.0 + Obj::Z, height);
             }
             p.set_u8(g, Player::TIMER_6F, 6);
             let n = p.u8(g, RARE_TIMER).wrapping_add(1);

@@ -450,11 +450,9 @@ use crate::objects::Current;
         }
         let special = x.u8(f::SPECIAL);
         if special != 0 {
-            if x.u8(f::EFFECT_CREATED) == 0 {
-                if spark_placed(x, special).is_some() {
+            if x.u8(f::EFFECT_CREATED) == 0 && spark_placed(x, special).is_some() {
                     x.set8(f::EFFECT_CREATED, 1);
                 }
-            }
             if x.u8(f::HITTABLE) == 0 {
                 return;
             }
@@ -527,7 +525,7 @@ use crate::objects::Current;
         if pose == 0 {
             return;
         }
-        let i = (4 * ((4 * class & 0xff00) | pose as u32)) & 0xffff;
+        let i = (4 * (((4 * class) & 0xff00) | pose as u32)) & 0xffff;
         let mut dx = x.data16(taken + i);
         let dz = x.data16(taken + i + 2);
         let turned = player.u8(x.b, j::TURNED);

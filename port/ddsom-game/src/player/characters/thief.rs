@@ -707,11 +707,9 @@ fn throw_knife(g: &mut Ctx, p: Player, anim: u16) {
         to_stand(g, p);
         return;
     }
-    if common::take_event(g, p) {
-        if spawn::knife(g, p) {
+    if common::take_event(g, p) && spawn::knife(g, p) {
             g.sound(rom::KNIFE_SOUND, p);
         }
-    }
 }
 
 // ---- slide (0x49d46) ----------------------------------------------------------------------

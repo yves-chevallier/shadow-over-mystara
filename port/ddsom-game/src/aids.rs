@@ -196,11 +196,10 @@ pub fn game_over(b: &mut Cps2Bus) {
     for p in crate::ram::PLAYERS.iter() {
         let p = p.0;
         if rd8(b, p + player::ACTIVE) != 0 && rd16(b, p + player::HP) != 0 {
-            if stage != STAGE_SKIP_CHECK {
-                if rd16(b, p + player::ALTITUDE) != 0 || rd32(b, p + player::STATE) & 0xffff_ff00 == STATE_WAITING {
+            if stage != STAGE_SKIP_CHECK
+                && (rd16(b, p + player::ALTITUDE) != 0 || rd32(b, p + player::STATE) & 0xffff_ff00 == STATE_WAITING) {
                     return;
                 }
-            }
             downed = downed.wrapping_add(1);
             for off in player::CLEARED {
                 wr8(b, p + off, 0);

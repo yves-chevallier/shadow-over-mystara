@@ -51,7 +51,7 @@ fn fixed_screen(x: &mut Ctx) -> Flow {
         wr8(x.b, mode::STEP, 2);
         wr8(x.b, mode::BOOTED, 1);
         crate::families::small::reset_fixed_screen(x.b);
-        crate::kernel::create_task(x.b, FIXED_SCREEN_SLOT as u32, FIXED_SCREEN_TASK);
+        crate::kernel::create_task(x.b, FIXED_SCREEN_SLOT, FIXED_SCREEN_TASK);
         return Flow::Done;
     }
     if rd8(x.b, SCREEN_READY) == 0 {

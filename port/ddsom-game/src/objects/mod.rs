@@ -120,7 +120,7 @@ impl Link {
 
     /// The designated object, except for 0 and the end markers.
     pub fn obj(self) -> Option<Obj> {
-        (self.0 & 0x8000 != 0).then(|| Obj(0xff_0000 | self.0 as u32))
+        (self.0 & 0x8000 != 0).then_some(Obj(0xff_0000 | self.0 as u32))
     }
 
     /// Designated object, the address being sign-extended as the 68000 does (`movea.w`).

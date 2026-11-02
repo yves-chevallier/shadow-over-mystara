@@ -121,8 +121,7 @@ pub(crate) fn fragments_45(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
 fn series(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, last: u8, index: u8) {
     let mut n = last as u16;
     r.d(5, n as u32);
-    loop {
-        let Some(o) = spawn(r, b, kind) else { break };
+    while let Some(o) = spawn(r, b, kind) {
         o.set_u8(b, f::VARIANT, n as u8);
         o.set_u8(b, f::INDEX, index);
         o.set_u16(b, f::LINK, me.word());

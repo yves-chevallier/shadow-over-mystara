@@ -605,7 +605,7 @@ fn release_prey<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0xffda: draw whose chances (one bit per result, word of table 0xfff4 chosen by difficulty) decide whether the
 /// transformation chains into a counterattack.
 fn flee_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let row = (((var::RANK.get(x.b) >> 3) << 1)) as u32;
+    let row = ((var::RANK.get(x.b) >> 3) << 1) as u32;
     let chances = x.rom16(0xfff4 + row);
     let r = rand_and(x, 0xf);
     (chances >> r) & 1 != 0

@@ -77,7 +77,7 @@ fn main() {
         }
         // DUMP_FIRST=n: first frame contained in the dump (default 1)
         let first: usize = std::env::var("DUMP_FIRST").ok().and_then(|v| v.parse().ok()).unwrap_or(1);
-        if f + 1 < first || (f + 1 - first) % stride != 0 {
+        if f + 1 < first || !(f + 1 - first).is_multiple_of(stride) {
             continue;
         }
         let k = (f + 1 - first) / stride;

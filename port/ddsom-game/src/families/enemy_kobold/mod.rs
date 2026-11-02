@@ -131,8 +131,7 @@ fn must_turn<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let target = x.linked(f::TARGET);
     let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)) as i16;
     let want = if dx > 0 { 0x20 } else { 0 };
-    let turn = want != x.u8(f::FLIP);
-    turn
+    want != x.u8(f::FLIP)
 }
 
 /// 0x57bee: the target is more than 0x30 away in depth and more than 0xa0 in X.
@@ -146,8 +145,7 @@ fn target_far_in_line<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         return false;
     }
     let dx = target.u16(x.b, Obj::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0xa0);
-    let far = dx > 0x140;
-    far
+    dx > 0x140
 }
 
 /// 0x57c34: strength of the attack (`+0x45`) from the attack type `+0x44` and profile `+0x2f` (table 0x57c52).
@@ -162,8 +160,7 @@ fn set_power<R: Bench>(x: &mut Cx<'_, R>) {
 fn on_right_half<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let cam = if var::CAMERA_SELECT.get(x.b) != 0 { var::CAMERA_ALT_X.get(x.b) } else { var::SCROLL_X.get(x.b) };
     let d1 = cam.wrapping_add(0xc0).wrapping_sub(x.u16(Obj::X));
-    let right = (d1 as i16) <= 0;
-    right
+    (d1 as i16) <= 0
 }
 
 /// 0x56c70 / 0x56c78: chooses the next attack (`+6`) from the difficulty row of profile `+0x2f`; `bias` = 0x14 for the

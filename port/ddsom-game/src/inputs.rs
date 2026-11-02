@@ -89,7 +89,7 @@ pub fn read_panel(b: &mut Cps2Bus) -> InputsRead {
         wr16(b, 0x804040, v);
         Last::Word(v)
     };
-    InputsRead { d: [d0, cur[3], pressed[2], pressed[3]], four_players: four_players, last }
+    InputsRead { d: [d0, cur[3], pressed[2], pressed[3]], four_players, last }
 }
 
 /// Last value tested by 0x80c (flags of the original).
@@ -139,7 +139,7 @@ pub fn copy(b: &mut Cps2Bus) -> InputCopy {
                 regs[2 + j] = new;
             }
         }
-        InputCopy::Masked { mask: mask, d: regs }
+        InputCopy::Masked { mask, d: regs }
     }
 }
 

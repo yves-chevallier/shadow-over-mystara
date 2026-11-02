@@ -15,13 +15,13 @@ fn main() {
     let rd8 = |m: &cps2::Machine, ad: u32| {
         let o = (ad - 0xff0000) as usize;
         let w = m.bus.ram[o / 2];
-        if o % 2 == 0 { (w >> 8) as u8 } else { w as u8 }
+        if o.is_multiple_of(2) { (w >> 8) as u8 } else { w as u8 }
     };
     let mut last = [(0u8, [0u8; 4], 0u16); 3];
     for f in 0..frames {
         script.apply(f, &mut m);
         m.run_frame();
-        for k in 0..3usize {
+        for (k, last) in last.iter_mut().enumerate() {
             let o = 0xffba1e + 0xc0 * k as u32;
             let now = if rd8(&m, o) != 0 {
                 let hp = (rd8(&m, o + 0x62) as u16) << 8 | rd8(&m, o + 0x63) as u16;
@@ -29,9 +29,9 @@ fn main() {
             } else {
                 (0, [0; 4], 0)
             };
-            if now != last[k] {
+            if now != *last {
                 println!("frame {f}: slot {k} type {} states {:02x?} (+3 variant) HP {}", now.0.wrapping_sub(1), now.1, now.2);
-                last[k] = now;
+                *last = now;
             }
         }
     }

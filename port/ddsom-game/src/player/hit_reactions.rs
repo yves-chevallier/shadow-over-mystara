@@ -164,7 +164,7 @@ fn maybe_stun(g: &mut Ctx, a: Player, v: u32) {
     if chance == 0 {
         return;
     }
-    let tick = ((ram::TICK.get(g.b) & 0x1e) * 2) as u16;
+    let tick = (ram::TICK.get(g.b) & 0x1e) * 2;
     let offset = (((chance - 1) as u16) << 10).wrapping_add(tick);
     let mask = g.data16(tables::STUN_MASKS.wrapping_add(offset as i16 as i32 as u32)) as u32;
     let roll = (g.random() & 0x1f) as u32;

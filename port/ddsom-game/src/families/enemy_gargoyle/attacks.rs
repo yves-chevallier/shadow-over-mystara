@@ -408,7 +408,7 @@ fn aim_dive<R: Bench>(x: &mut Cx<'_, R>) {
         speed = speed2;
     }
     let mut remaining = dist << 16;
-    let step = ((speed << 16) as i32) >> 8;
+    let step = (speed << 16) >> 8;
     let mut frames = 0u16;
     let mut guard = 0;
     loop {

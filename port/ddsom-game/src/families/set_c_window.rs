@@ -705,7 +705,10 @@ fn name<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, defaults: Defau
 }
 
 /// Copy of a text up to 0xfd: `special(c, src)` first handles a byte (true if it did).
-fn copy_until_end<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, special: &mut dyn FnMut(&mut Cx<'_, R>, &mut Text, u8, &mut u32) -> bool) -> u32 {
+fn copy_until_end<R: Bench, F>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, mut special: F) -> u32
+where
+    F: FnMut(&mut Cx<'_, R>, &mut Text, u8, &mut u32) -> bool,
+{
     loop {
         let c = rd8(x.b, src);
         src += 1;
@@ -727,7 +730,7 @@ fn copy_until_end<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, speci
 /// 0xc87de: the text as is.
 fn copy_text<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text) {
     let src = x.u32(f::TEXT);
-    copy_until_end(x, t, src, &mut |_, _, _, _| false);
+    copy_until_end(x, t, src, |_, _, _, _| false);
 }
 
 /// Code 7 followed by `arg`: insertion (name...) in its place.
@@ -801,7 +804,7 @@ fn compose<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot: u32) {
                 return wr32(x.b, slot, v);
             };
             let src = rd32(x.b, text + 4);
-            copy_until_end(x, t, src, &mut |x, t, c, src| {
+            copy_until_end(x, t, src, |x, t, c, src| {
                 if !is_insert(x, c, *src, 4) {
                     return false;
                 }
@@ -814,7 +817,7 @@ fn compose<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot: u32) {
         // 0xc8c86: text with the saved name, framed
         13 => {
             let src = x.u32(f::TEXT);
-            copy_until_end(x, t, src, &mut |x, t, c, src| {
+            copy_until_end(x, t, src, |x, t, c, src| {
                 if !is_insert(x, c, *src, 5) {
                     return false;
                 }
@@ -973,7 +976,7 @@ fn words<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, slot: u32) {
 /// starts over on the next frame.
 fn linked_message<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text) {
     let src = x.u32(f::TEXT);
-    copy_until_end(x, t, src, &mut |x, t, c, src| {
+    copy_until_end(x, t, src, |x, t, c, src| {
         if c != 7 || (rd8(x.b, *src) as i8) < 6 {
             return false;
         }

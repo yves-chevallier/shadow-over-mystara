@@ -145,8 +145,7 @@ fn flap<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// `moveq #0,D0 ; move.w (off,A0),D0 ; swap D0 ; asr.l #8,D0`: speed (word) as a long with 8 fractional bits.
 fn speed_long<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> u32 {
-    let v = ((x.u16(off) as i16 as i32) << 8) as u32;
-    v
+    ((x.u16(off) as i16 as i32) << 8) as u32
 }
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {

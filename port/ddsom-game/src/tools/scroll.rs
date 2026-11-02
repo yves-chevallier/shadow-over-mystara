@@ -18,7 +18,7 @@ fn move_object_68k(c: &mut Cpu, b: &mut Cps2Bus, field: u32, d: i32) {
 }
 
 /// Natives of the two parallaxes (object A0; flags of the last addition).
-fn parallax_68k(c: &mut Cpu, b: &mut Cps2Bus, f: (fn(i32) -> i32, fn(i32) -> i32)) {
+fn parallax_68k(c: &mut Cpu, b: &mut Cps2Bus, f: Parallax) {
     let (dx, dy) = parallax(b, f.0, f.1);
     move_object_68k(c, b, OBJECT_X, dx);
     move_object_68k(c, b, OBJECT_Y, dy);
@@ -101,8 +101,8 @@ fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
     let y = cam_y(c, b);
     sub_to(c, 6, y);
     sub_to(c, 6, FOLLOW_BELOW);
-    let step_down; // 0x316ca: D2 = D6; otherwise D2 = D5 is already set
-    if c.cond(cc::LE) {
+    // 0x316ca: D2 = D6; otherwise D2 = D5 is already set
+    let step_down = if c.cond(cc::LE) {
         // the players are not too low: brings the camera back up if they are too high
         let y = cam_y(c, b);
         sub_to(c, 5, y);
@@ -125,7 +125,7 @@ fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
         if !c.cond(cc::GT) {
             return rts(c, b);
         }
-        step_down = true;
+        true
     } else {
         let y = cam_y(c, b);
         sub_to(c, 5, y);
@@ -136,8 +136,8 @@ fn follow_players_y(c: &mut Cpu, b: &mut Cps2Bus) {
         { let v = c.d[5] as u16; set_low_word(&mut c.d[2], v); }
         let (d6, d5) = (c.d[6] & 0xffff, c.d[5]);
         crate::tools::ops::cmp(c, d6, d5, Size::Word);
-        step_down = !c.cond(cc::LE);
-    }
+        !c.cond(cc::LE)
+    };
     if step_down {
         { let v = c.d[6] as u16; set_low_word(&mut c.d[2], v); }
     }

@@ -26,7 +26,7 @@ fn main() {
         Some(u32::from_str_radix(a, 16).ok()?..u32::from_str_radix(b, 16).ok()?)
     });
     m.step_hook = Some(Box::new(move |c: &m68k::Cpu, _: &cps2::Cps2Bus, pc: u32| {
-        if !skip.contains(&pc) && only.as_ref().map_or(true, |r| r.contains(&pc)) {
+        if !skip.contains(&pc) && only.as_ref().is_none_or(|r| r.contains(&pc)) {
             let d: Vec<String> = c.d.iter().chain(&c.a[..7]).map(|r| format!("{r:08x}")).collect();
             println!("{pc:06x} {} sr={:02x}", d.join(" "), c.sr & 0x1f);
         }

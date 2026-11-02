@@ -660,8 +660,10 @@ pub(crate) fn move_object(b: &mut Cps2Bus, o: Obj, field: u32, d: i32) -> (u32, 
 pub(crate) fn parallax(b: &mut Cps2Bus, fx: fn(i32) -> i32, fy: fn(i32) -> i32) -> (i32, i32) {
     (fx(scroll_delta(b, A5, 0)), fy(scroll_delta(b, A5, 1)))
 }
-pub(crate) const QUARTER: (fn(i32) -> i32, fn(i32) -> i32) = (|dx| dx >> 2, |dy| dy >> 1);
-pub(crate) const THREE_QUARTERS: (fn(i32) -> i32, fn(i32) -> i32) = (|dx| dx >> 1, |dy| (dy >> 1) + (dy >> 2));
+/// Share of the scroll delta that a parallax scenery follows, in x and in y.
+pub(crate) type Parallax = (fn(i32) -> i32, fn(i32) -> i32);
+pub(crate) const QUARTER: Parallax = (|dx| dx >> 2, |dy| dy >> 1);
+pub(crate) const THREE_QUARTERS: Parallax = (|dx| dx >> 1, |dy| (dy >> 1) + (dy >> 2));
 
 /// 0x33178: scenery `o` follows a quarter of the scroll in x and half in y.
 pub(crate) fn parallax_quarter(b: &mut Cps2Bus, o: Obj) {

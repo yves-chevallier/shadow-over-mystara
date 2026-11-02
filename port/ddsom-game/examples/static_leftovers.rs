@@ -123,7 +123,7 @@ fn main() {
                 continue;
             }
             let range_end = all.iter().copied().find(|&e| e > entry).unwrap_or(hi);
-            let inside = |t: u32| (entry..range_end).contains(&t) && t % 2 == 0;
+            let inside = |t: u32| (entry..range_end).contains(&t) && t.is_multiple_of(2);
             // minimal "definitely written" state per address, fixed point
             let mut state: BTreeMap<u32, u16> = BTreeMap::new();
             let mut todo = vec![(entry, initial)];

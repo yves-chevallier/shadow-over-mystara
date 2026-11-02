@@ -9,3 +9,8 @@ description = "Graphics ROM decoding and CPS2 video rendering (after MAME cps1_v
 
 [dev-dependencies]
 png = "0.17"
+
+[lints.clippy]
+# The tile row renderer takes the hardware state, the tile, its position and the output buffers as separate arguments
+# (hot path of the renderer, after MAME's): a struct would only rename them.
+too_many_arguments = "allow"

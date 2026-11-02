@@ -60,7 +60,7 @@ impl Eeprom93c46 {
     /// Contents in MAME's nvram file format (little-endian words, native x86 order).
     pub fn from_bytes(b: &[u8]) -> Self {
         let mut d = [0xffffu16; 64];
-        for (i, w) in b.chunks_exact(2).take(64).enumerate() {
+        for (i, w) in b.as_chunks::<2>().0.iter().take(64).enumerate() {
             d[i] = u16::from_le_bytes([w[0], w[1]]);
         }
         Self::new(d)
@@ -119,7 +119,7 @@ impl Eeprom93c46 {
             State::ReadingData => {
                 let i = self.bits;
                 self.bits += 1;
-                if i % DATA_BITS == 0 && i == 0 {
+                if i.is_multiple_of(DATA_BITS) && i == 0 {
                     let a = (self.address + self.bits / DATA_BITS) & ((1 << ADDRESS_BITS) - 1);
                     self.shift = (self.data[a as usize] as u32) << (32 - DATA_BITS);
                 } else {

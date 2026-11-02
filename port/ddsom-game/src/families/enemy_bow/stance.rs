@@ -59,12 +59,10 @@ fn advance<R: Bench>(x: &mut Cx<'_, R>) {
                 waiting = false;
             }
         }
-        if waiting {
-            if lib::maybe_draw_6e(x) {
+        if waiting && lib::maybe_draw_6e(x) {
                 set_state_long(x, IDLE);
                 return check_facing(x);
             }
-        }
     }
     lib::approach_target(x);
     x.move_by_table_xy();

@@ -168,7 +168,7 @@ fn main() {
         }
         for k in 0..n {
             let e = (m.bus.fetch16(table + 4 * k) as u32) << 16 | m.bus.fetch16(table + 4 * k + 2) as u32;
-            if ddsom_game::all_natives().any(|nat| nat.entry == e) && filter.map_or(true, |f| f == e) {
+            if ddsom_game::all_natives().any(|nat| nat.entry == e) && filter.is_none_or(|f| f == e) {
                 inputs.push((e, pool, k as u8));
             }
         }

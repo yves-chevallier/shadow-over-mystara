@@ -141,7 +141,7 @@ fn principal() {
         }
         wr16(&mut b, A5 + 0x52, 0);
         ddsom_game::call(&mut c, &mut b, entry);
-        let state4 = rng.next() % 3 == 0;
+        let state4 = rng.next().is_multiple_of(3);
         if state4 {
             wr8(&mut b, door + 4, 4);
             for off in [0x30u32, 0x34, 0x38, 0x3c, 0x4a] {
@@ -181,12 +181,12 @@ fn principal() {
             wr8(&mut b, A5 + 0x35, rng.among(&[1, 2, 3, 4]));
             wr16(&mut b, door + 0x20, 5);
         }
-        wr16(&mut b, A5 + 0x52, if rng.next() % 2 == 0 { 0 } else { door as u16 });
+        wr16(&mut b, A5 + 0x52, if rng.next().is_multiple_of(2) { 0 } else { door as u16 });
         // a few objects of the other pools suspended or not (wake-up, release)
         for pool in ddsom_game::objects::pools::POOLS {
             for i in 0..pool.slots {
                 let o = pool.slot(i).0;
-                if ddsom_game::mem::rd8(&mut b, o) != 0 && rng.next() % 3 == 0 {
+                if ddsom_game::mem::rd8(&mut b, o) != 0 && rng.next().is_multiple_of(3) {
                     wr8(&mut b, o + 0x40, rng.among(&[0, 1, 2]));
                 }
             }

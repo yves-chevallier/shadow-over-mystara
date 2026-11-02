@@ -137,13 +137,12 @@ fn walk_speed<R: Bench>(x: &mut Cx<'_, R>, idx: u32) {
 
 /// A player in the box? Both mask decisions (0xa4c2, 0xa4b4) must accept.
 fn box_attack<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
-    let ok = lib::target_in_box(x, d0, d1, d2) && {
+    lib::target_in_box(x, d0, d1, d2) && {
         load_target(x);
         lib::decision_b(x)
     } && {
         lib::decision_a(x)
-    };
-    ok
+    }
 }
 
 /// 0x5afa0: target in front, at short range.
@@ -164,8 +163,7 @@ fn needs_turn_around<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let target = load_target(x);
     let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    let turn = want != x.u8(f::FLIP) as u32;
-    turn
+    want != x.u8(f::FLIP) as u32
 }
 
 /// 0x5af78: back to standing; if decision 0x79ce wants it, to rest.

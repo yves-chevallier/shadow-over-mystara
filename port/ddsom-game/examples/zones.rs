@@ -7,8 +7,8 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 thread_local! {
-    static ZONES: RefCell<Vec<(u32, u32)>> = RefCell::new(Vec::new());
-    static HITS: RefCell<BTreeMap<u32, u64>> = RefCell::new(BTreeMap::new());
+    static ZONES: RefCell<Vec<(u32, u32)>> = const { RefCell::new(Vec::new()) };
+    static HITS: RefCell<BTreeMap<u32, u64>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 fn run(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u32> {

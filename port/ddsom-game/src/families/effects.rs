@@ -734,8 +734,7 @@ fn interface_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             let carrier_absent = carrier.u8(ctx.b, 0x1c) == 0;
             let player = pointer(ctx, o, interface::PLAYER);
             if carrier_absent || {
-                let absent = player.u8(ctx.b, Obj::ACTIVE) == 0;
-                absent
+                player.u8(ctx.b, Obj::ACTIVE) == 0
             } {
                 if game_finished(ctx) {
                     ctx.free(&pools::EFFCT);
@@ -1935,7 +1934,7 @@ fn trigger_effect<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         let absent = player.u8(ctx.b, Obj::ACTIVE) == 0;
         if !absent {
             let variant = o.u8(ctx.b, Obj::VARIANT) as u32;
-            crate::events::enqueue_counter(ctx.b, (variant as u16).wrapping_add(offset as u16));
+            crate::events::enqueue_counter(ctx.b, (variant as u16).wrapping_add(offset));
         }
         offset = offset.wrapping_add(0x100);
     }

@@ -449,7 +449,7 @@ fn chase_follow<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(target) = lib::target_by_criterion(x, criterion) else {
         return chase_stop(x);
     };
-    let angle = lib::aim_to(x, target) as u8;
+    let angle = lib::aim_to(x, target);
     let mine = x.u8(Obj::SPEED_INDEX);
     let diff = angle.wrapping_sub(mine) & 0x1f;
     if diff != 0 {

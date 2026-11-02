@@ -44,8 +44,7 @@ fn proximity<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     if (best as i16) >= 0x1ff {
         return 0;
     }
-    let level = x.rom8(0x93562 + (best >> 4) as u32);
-    level
+    x.rom8(0x93562 + (best >> 4) as u32)
 }
 
 /// 0x93470: variant 0, crouched: turns around when a player approaches, and attacks when the wake-up animation
@@ -78,13 +77,11 @@ fn wake_low<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(NEAR, level);
                 changed = true;
             }
-            if changed {
-                if x.u16(ANIM_SET) != 7 {
+            if changed && x.u16(ANIM_SET) != 7 {
                     let side = x.u8(f::FLIP) ^ 0x20;
                     x.set8(f::FLIP, side);
                     return anim_a(x, 7);
                 }
-            }
             if lib::step(x) {
                 x.set8(0, 1);
                 lib::set_immunities(x);
@@ -110,7 +107,7 @@ fn wake_high<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(TIMER, 0x7f);
             anim_a(x, 8);
             lib::palette_script(x, 0);
-            return wake_high_wait(x);
+            wake_high_wait(x)
         }
         2 => wake_high_wait(x),
         _ => {}

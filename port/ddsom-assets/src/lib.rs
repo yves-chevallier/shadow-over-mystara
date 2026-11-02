@@ -76,10 +76,12 @@ impl Palettes {
         let mut buf = vec![0; r.output_buffer_size()];
         r.next_frame(&mut buf)?;
         let colors: Vec<u16> = buf
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .map(|p| [p[3], p[0], p[1], p[2]].iter().fold(0, |c, &v| c << 4 | (v / 17) as u16))
             .collect();
-        Ok(Palettes(colors.chunks_exact(16).map(|p| p.try_into().unwrap()).collect()))
+        Ok(Palettes(colors.as_chunks::<16>().0.to_vec()))
     }
 }
 

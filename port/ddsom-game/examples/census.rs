@@ -247,7 +247,7 @@ fn trajectory(
     wr8(&mut b, obj.0 + 0x28, pool.class);
     wr8(&mut b, obj.0 + 0x2c, (rng.next() & 1) as u8);
     for off in [0x50u32, 0x46, 0x5a, 0x5c, 0x42, 0x54, 0x1e] {
-        if rng.next() % 4 != 0 {
+        if !rng.next().is_multiple_of(4) {
             wr16(&mut b, obj.0 + off, owner as u16);
         }
     }
@@ -257,7 +257,7 @@ fn trajectory(
     }
     wr16(&mut b, obj.0 + 0xc, (rng.next() % 0x60) as u16);
     wr16(&mut b, A5 + pool.free, (pool.slots / 2) as u16);
-    if std::env::var_os("DDSOM_ETATS").is_some() && rng.next() % 2 == 0 {
+    if std::env::var_os("DDSOM_ETATS").is_some() && rng.next().is_multiple_of(2) {
         // drawn starting states (pairs): reaches the delegated sub-states; may leave the original's tables
         for off in [4u32, 5, 6, 7] {
             wr8(&mut b, obj.0 + off, rng.among(&[0, 0, 2, 4, 6, 8, 0xa]));
@@ -274,25 +274,25 @@ fn trajectory(
             break;
         }
         if step > 0 {
-            if rng.next() % 6 == 0 {
+            if rng.next().is_multiple_of(6) {
                 wr8(&mut b, obj.0 + 0x57, rng.among(&[0x08, 0x20, 0x28, 0x10, 0x02, 0x40]));
             }
-            if rng.next() % 8 == 0 {
+            if rng.next().is_multiple_of(8) {
                 wr8(&mut b, obj.0 + 0x33, rng.next() as u8 & 1);
             }
-            if rng.next() % 10 == 0 {
+            if rng.next().is_multiple_of(10) {
                 wr8(&mut b, owner + 4, (rng.next() % 8) as u8);
             }
-            if rng.next() % 5 == 0 {
+            if rng.next().is_multiple_of(5) {
                 for off in [0x53u32, 0xa0, 0xa1, 0xa8, 0xa9, 0x3e, 0x2f, 0x42, 0x5d] {
-                    if rng.next() % 3 == 0 {
+                    if rng.next().is_multiple_of(3) {
                         wr8(&mut b, owner + off, rng.among(&[0, 1, 2, 3, 0xff]));
                     }
                 }
             }
         }
-        wr8(&mut b, A5 + 0x3d, (rng.next() % 10 == 0) as u8);
-        wr8(&mut b, obj.0 + 0x40, (rng.next() % 40 == 0) as u8);
+        wr8(&mut b, A5 + 0x3d, rng.next().is_multiple_of(10) as u8);
+        wr8(&mut b, obj.0 + 0x40, rng.next().is_multiple_of(40) as u8);
         c.a[0] = obj.0;
         c.a[5] = A5;
         c.d[7] = step;

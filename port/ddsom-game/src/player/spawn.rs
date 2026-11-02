@@ -567,8 +567,7 @@ fn rod_row(g: &mut Ctx, p: Player, rod: &Rod, first_offset: u16, counts: u32) {
     let level = p.u8(g, 0x10c) as u32;
     // `subq.w #1` on a zero count would give 65,536 iterations: the full pool stops them
     let mut left = (g.prog8(counts + level) as u16).wrapping_sub(1);
-    loop {
-        let Some(o) = create(g, p, &pools::PSHL, rod.kind) else { break };
+    while let Some(o) = create(g, p, &pools::PSHL, rod.kind) {
         let alive = rd16(g.b, rod.counter);
         wr16(g.b, rod.counter, alive.wrapping_add(1));
         let (facing, x, y) = (p.u8(g, 0x2c), p.u16(g, Obj::X), p.u16(g, Obj::Y));

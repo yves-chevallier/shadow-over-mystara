@@ -12,14 +12,17 @@ use m68k::Bus;
 /// (family name, jump table, number of types)
 const FAMILIES: &[(&str, u32, u32)] = &[("ITEM", 0x39f5a, 10), ("BOX", 0x39e76, 4), ("EFFCT", 0x39ce0, 64), ("ENEMY", 0x39a78, 29), ("PSHL", 0x39908, 25), ("PEFF", 0x39992, 48)];
 
+/// (handler, type, states `+4`, `+5`, `+6`).
+type StateKey = (u32, u8, u8, u8, u8);
+
 thread_local! {
-    static CALLS: RefCell<BTreeMap<u32, u64>> = RefCell::new(BTreeMap::new());
+    static CALLS: RefCell<BTreeMap<u32, u64>> = const { RefCell::new(BTreeMap::new()) };
     static IMAGE: RefCell<u32> = const { RefCell::new(0) };
-    static FIRST: RefCell<BTreeMap<u32, u32>> = RefCell::new(BTreeMap::new());
+    static FIRST: RefCell<BTreeMap<u32, u32>> = const { RefCell::new(BTreeMap::new()) };
     /// (handler, variant, states +4 +5 +6) -> calls
     /// handler -> scene (`FF8034`) -> calls
-    static SCENES: RefCell<BTreeMap<u32, BTreeMap<u8, u64>>> = RefCell::new(BTreeMap::new());
-    static STATES: RefCell<BTreeMap<(u32, u8, u8, u8, u8), u64>> = RefCell::new(BTreeMap::new());
+    static SCENES: RefCell<BTreeMap<u32, BTreeMap<u8, u64>>> = const { RefCell::new(BTreeMap::new()) };
+    static STATES: RefCell<BTreeMap<StateKey, u64>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 fn run(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u32> {

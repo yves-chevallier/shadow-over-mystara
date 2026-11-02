@@ -171,7 +171,7 @@ mod ring0 {
         let count = x.u8(g::COUNT) as u32;
         let count = if x.u8(0x2d) != 0 { 0xa } else { count };
         let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ICONS_ALT } else { ICONS };
-        x.anim_start(set, ((item << 4) + count & 0xffff) as u16);
+        x.anim_start(set, (((item << 4) + count) & 0xffff) as u16);
     }
 
     fn parent_init<R: Bench>(x: &mut Cx<'_, R>) {
@@ -399,26 +399,22 @@ mod ring1 {
     fn icon<R: Bench>(x: &mut Cx<'_, R>) {
         let item = x.u8(g::ITEM) as u32;
         let count = x.u8(g::COUNT) as u32;
-        let d0;
-        let d1;
-        if x.u8(MODE) == 2 {
-            d0 = item << 4 & 0xffff;
-            d1 = if x.u8(0x2d) != 0 { 0xa } else { count };
+        let (d0, d1) = if x.u8(MODE) == 2 {
+            (item << 4 & 0xffff, if x.u8(0x2d) != 0 { 0xa } else { count })
         } else {
             let player = x.linked(f::OWNER);
             let kind = player.u8(x.b, 0x3) >> 1;
             let item = if kind == 2 && item == 0xf { 0x57 } else { item };
-            let d0w = ((item as u32) << 4) & 0xffff;
+            let d0w = (item << 4) & 0xffff;
             let stock = player.u8(x.b, 0x150 + count);
-            d0 = d0w;
-            d1 = if x.u8(0x2d) != 0 {
+            (d0w, if x.u8(0x2d) != 0 {
                 if stock == 0 { 0xb } else { 0xa }
             } else {
                 stock as u32
-            };
-        }
+            })
+        };
         let set = if x.a5_u16(a5::ALT_PALETTE) != 0 { ICONS_ALT } else { ICONS };
-        x.anim_start(set, (d0 + d1 & 0xffff) as u16);
+        x.anim_start(set, ((d0 + d1) & 0xffff) as u16);
     }
 
     fn parent<R: Bench>(x: &mut Cx<'_, R>) {

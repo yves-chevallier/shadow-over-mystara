@@ -440,7 +440,7 @@ pub fn reset_card(b: &mut Cps2Bus) {
 
 /// Is the counter counted (its condition byte, if any, is non-zero)?
 pub(crate) fn counted(b: &mut Cps2Bus, k: &Counter) -> bool {
-    k.condition.map_or(true, |cond| rd8(b, a5(cond)) != 0)
+    k.condition.is_none_or(|cond| rd8(b, a5(cond)) != 0)
 }
 
 /// Increments the counter and, if it changed from its image, writes it to the EEPROM (0x2d8aa, not on the

@@ -214,8 +214,7 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(f::TARGET) == 0 {
         lib::pick_target(x);
     }
-    if tst8(x, SPAWNED).eq() {
-        if sub16(x, SPAWN_TIME, 1).mi() {
+    if tst8(x, SPAWNED).eq() && sub16(x, SPAWN_TIME, 1).mi() {
             if let Some(e) = x.alloc(&pools::SET) {
                 e.set_u8(x.b, 0, 1);
                 e.set_u8(x.b, 3, 0x72);
@@ -223,7 +222,6 @@ fn active<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(SPAWNED, 1);
             }
         }
-    }
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
     } else if var::PAUSE.get(x.b) == 0 {

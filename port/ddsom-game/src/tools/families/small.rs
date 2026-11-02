@@ -74,8 +74,7 @@ fn copy_56_to_53(c: &mut Cpu, b: &mut Cps2Bus) {
 fn eshl_volley(c: &mut Cpu, b: &mut Cps2Bus) {
     let row = 0xa66e2u32.wrapping_add(c.d[2] as i16 as i32 as u32);
     c.d[5] = prog8(b, row) as u32;
-    loop {
-        let Some(o) = alloc(c, b, &pools::ESHL) else { break };
+    while let Some(o) = alloc(c, b, &pools::ESHL) {
         o.set_u8(b, 0x0, 1);
         o.set_u8(b, 0x2, 0x3e);
         o.set_u8(b, 0x3, c.d[5] as u8);

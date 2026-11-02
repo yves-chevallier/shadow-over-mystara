@@ -109,7 +109,7 @@ pub fn set_dispatch_a0(b: &mut Cps2Bus, a0: u32) {
 /// The A0 that the world update leaves (end of the last dispatch loop: the one past the last SOBJ slot).
 fn a0_after_world() -> u32 {
     let pool = &crate::objects::pools::SOBJ;
-    pool.slot(0).0.wrapping_add(pool.stride * pool.slots as u32)
+    pool.slot(0).0.wrapping_add(pool.stride * pool.slots)
 }
 
 impl<'a> Ex<'a> {
@@ -1507,6 +1507,12 @@ fn seq35_boss(ex: &mut Ex) {
     }
 }
 
+/// Shared state 0xf792e (end-of-level screen): after the message, 0xf7b62 picks the continuation from byte `+0xc` of
+/// its block (A6) via a 20-byte table (0xf7b88). For demo scenes 109 to 114, the byte is outside
+/// the table and the original jumps to an address read from code: it crashes and restarts. Outside the table: no
+/// continuation (zero table byte, branch at 0xf792c). Same fix in the original code (reference machine).
+pub const SHARED_NEXT_ENTRY: u32 = 0xf7b62;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1527,9 +1533,3 @@ mod tests {
         }
     }
 }
-
-/// Shared state 0xf792e (end-of-level screen): after the message, 0xf7b62 picks the continuation from byte `+0xc` of
-/// its block (A6) via a 20-byte table (0xf7b88). For demo scenes 109 to 114, the byte is outside
-/// the table and the original jumps to an address read from code: it crashes and restarts. Outside the table: no
-/// continuation (zero table byte, branch at 0xf792c). Same fix in the original code (reference machine).
-pub const SHARED_NEXT_ENTRY: u32 = 0xf7b62;

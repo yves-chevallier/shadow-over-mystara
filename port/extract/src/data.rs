@@ -40,7 +40,7 @@ pub fn row_size(format: &str) -> usize {
 pub fn span(name: &str, rom: u32, end: u32, program: bool, format: &'static str, fields: &'static [&'static str]) -> Spec {
     let size = row_size(format);
     let len = (end - rom) as usize;
-    assert!(len % size == 0, "{name}: {len:#x} bytes for rows of {size}");
+    assert!(len.is_multiple_of(size), "{name}: {len:#x} bytes for rows of {size}");
     Spec { name: name.into(), rom, program, format, fields, rows: len / size }
 }
 

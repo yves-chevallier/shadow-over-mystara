@@ -119,11 +119,9 @@ fn box_check<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> bool {
     }
     let target = load_target(x);
     let facing = target.u8(x.b, 0x2c);
-    if facing == x.u8(f::FLIP) {
-        if !lib::decision_b(x) {
+    if facing == x.u8(f::FLIP) && !lib::decision_b(x) {
             return false;
         }
-    }
     if !lib::decision_a(x) {
         return false;
     }
@@ -148,8 +146,7 @@ fn faces_wrong<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let target = load_target(x);
     let dx = x.u16(Obj::X).wrapping_sub(target.u16(x.b, Obj::X));
     let want = if (dx as i16) < 0 { 0x20 } else { 0 };
-    let wrong = want as u8 != x.u8(f::FLIP);
-    wrong
+    want as u8 != x.u8(f::FLIP)
 }
 
 const NEAR_TABLE: u32 = 0x6d620;

@@ -118,16 +118,15 @@ mod coins {
         if code == 0 {
             return;
         }
-        let repeats: u16;
-        if code == 1 {
-            repeats = (crate::mem::rd8(x.b, slot + 0x148) as u16).wrapping_sub(1);
+        let repeats: u16 = if code == 1 {
+            (crate::mem::rd8(x.b, slot + 0x148) as u16).wrapping_sub(1)
         } else if (code as i8) > 1 {
-            repeats = 0;
+            0
         } else {
             wr8(x.b, slot + 0x140, 0x56);
             wr8(x.b, slot + 0x148, 0);
             return;
-        }
+        };
         let price = PRICES + (id << 2);
         let mut left = repeats;
         loop {

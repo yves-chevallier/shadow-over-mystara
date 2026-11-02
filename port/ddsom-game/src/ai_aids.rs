@@ -14,8 +14,6 @@ use crate::objects::pools;
 
 /// Counter of the current frame, used as an index in the stance tables.
 const TICK: u32 = A5 + 0x7f92;
-/// State of the pseudo-random generator.
-
 /// Fields of the enemy (A0).
 pub(crate) mod f {
     pub const X: u32 = 0x08;
@@ -117,30 +115,30 @@ pub fn in_front(b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Hitbox) -> bool {
     in_front_leftovers(b, o.0, strict, hitbox).0
 }
 
-/// (result, leftovers, opponent read (A1), table read (A4), D2 and D0 longs of the draw).
-pub(crate) fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox: Hitbox) -> (bool, Leftovers, Option<u32>, Option<u32>, Option<(u32, u32)>) {
+/// (result, leftovers, mask of the probability draw: the D2 left, reread by the caller).
+fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox: Hitbox) -> (bool, Leftovers, Option<u32>) {
     let mut r = Leftovers::default();
     let target = rd16(b, me + f::TARGET);
     if target == 0 {
-        return (false, r, None, None, None);
+        return (false, r, None);
     }
     let other = object(target);
     let state = rd8(b, other + f::SUB_STATE);
     let refuse = if strict { rd16(b, other + 0x0c) != 0 || (state != 12 && state != 14) } else { state != 12 };
     if refuse {
-        return (false, r, Some(other), None, None);
+        return (false, r, None);
     }
     let facing = rd8(b, me + f::FACING);
     r.d3_byte = Some(facing);
     if facing == rd8(b, other + f::FACING) {
-        return (false, r, Some(other), None, None);
+        return (false, r, None);
     }
     let gap = rd16(b, me + f::X).wrapping_sub(rd16(b, other + f::X));
     r.d3 = Some(gap);
     let side = if (gap as i16) >= 0 { 0 } else { 32 };
     r.d4_byte = Some(side);
     if side != facing || !in_hitbox(b, me, other, hitbox, &mut r) {
-        return (false, r, Some(other), None, None);
+        return (false, r, None);
     }
     let number = rd8(b, me + f::BOX_CHANCE);
     let chances = crate::mem::rd32(b, BOX_CHANCE_POINTERS + 4 * number as u32);
@@ -148,7 +146,7 @@ pub(crate) fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox:
     let mask = rd32(b, chances.wrapping_add(offset(tick << 2)));
     let roll = rng::random(b) as u32 & 31;
     if mask >> roll & 1 == 0 {
-        return (false, r, Some(other), Some(chances), Some((mask, roll)));
+        return (false, r, Some(mask));
     }
     let number = rd8(b, me + f::BOX_ANIMATION);
     // byte `+0x75` is already a multiple of 4: no shift
@@ -158,7 +156,7 @@ pub(crate) fn in_front_leftovers(b: &mut Cps2Bus, me: u32, strict: bool, hitbox:
     let v = rd8(b, animations.wrapping_add(pick));
     wr8(b, me + f::SUB_STATE, v);
     wr8(b, me + f::SUB_STEP, 0);
-    (true, r, Some(other), Some(animations), Some((mask, roll)))
+    (true, r, Some(mask))
 }
 
 /// Position of the object relative to the box in front of another (0x7f19c).
@@ -245,8 +243,8 @@ pub fn box_around_leftovers(b: &mut Cps2Bus, me: Obj, other: Obj, hitbox: Hitbox
 
 /// 0x7f0c / 0x7ef4 (`in_front`), with the leftovers reread.
 pub fn in_front_with_leftovers(b: &mut Cps2Bus, o: Obj, strict: bool, hitbox: Hitbox) -> (bool, HitboxLeftovers) {
-    let (yes, leftovers, _, _, draw) = in_front_leftovers(b, o.0, strict, hitbox);
-    (yes, HitboxLeftovers { leftovers, mask: draw.map(|(m, _)| m) })
+    let (yes, leftovers, mask) = in_front_leftovers(b, o.0, strict, hitbox);
+    (yes, HitboxLeftovers { leftovers, mask })
 }
 
 /// Push profiles: byte table (indexed by the x gap / 16) in program space, then

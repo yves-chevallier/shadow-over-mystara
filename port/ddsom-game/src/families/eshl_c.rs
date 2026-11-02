@@ -1181,7 +1181,7 @@ mod bullet50 {
         let host = x.linked(HOST);
         copy_xyz16(x, host);
         let flip = x.u8(f::FLIP);
-        x.add16(0x8, if flip != 0 { dx as u16 } else { neg(dx as u16) });
+        x.add16(0x8, if flip != 0 { dx } else { neg(dx) });
         x.add16(0xc, dz);
         x.add32(0x10, 2);
         x.set16(0x18, vz);
@@ -2141,7 +2141,7 @@ mod fall55 {
         }
         if s16(x.u16(TIMER)) <= 0x20 {
             x.set_bit(0x1, 1, true);
-            let visible = x.u16(TIMER).wrapping_add(x.counter() as u16) & 1 != 0;
+            let visible = x.u16(TIMER).wrapping_add(x.counter()) & 1 != 0;
             if visible {
                 x.set_bit(0x1, 1, false);
             }

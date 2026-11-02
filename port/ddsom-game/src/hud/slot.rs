@@ -566,11 +566,10 @@ fn lock_mode(b: &mut Cps2Bus, s: Slot) {
     let mut choice = character;
     for k in 0..4 {
         let other = Slot::new(k);
-        if other.g8(b, player::ACTIVE) != 0 && other.g8(b, player::CHARACTER) & 0x80 != 0 {
-            if choice == other.g8(b, player::CHARACTER) & 0x7f {
+        if other.g8(b, player::ACTIVE) != 0 && other.g8(b, player::CHARACTER) & 0x80 != 0
+            && choice == other.g8(b, player::CHARACTER) & 0x7f {
                 choice += 1;
             }
-        }
     }
     if choice == s.p8(b, panel::FLAG_27) {
         return;

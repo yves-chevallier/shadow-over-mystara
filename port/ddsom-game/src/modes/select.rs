@@ -463,14 +463,12 @@ fn cursor(x: &mut Ctx, a0: u32) {
     // validation
     d0 = 0;
     let mut lock = true;
-    if rd16(x.b, var::COUNTDOWN) != 0 {
-        if d1 as u8 & 0xf0 == 0 {
+    if rd16(x.b, var::COUNTDOWN) != 0 && d1 & 0xf0 == 0 {
             let s = slot as u32;
             d0 = 1;
             let held = !rd8(x.b, var::BUTTONS_B) & rd8(x.b, var::BUTTONS_A);
             lock = (held >> s) & 1 != 0;
         }
-    }
     if lock {
         let mut taken = rd16(x.b, var::TAKEN) as u32;
         taken |= 1 << (d3 & 31);

@@ -130,8 +130,7 @@ const FOLLOW_TABLE: u32 = 0x5ce72;
 fn shoot_roll<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let r = rand_and(x, 0xf);
     let mask = x.rom16(0x5cde0);
-    let hit = (mask >> r) & 1 != 0;
-    hit
+    (mask >> r) & 1 != 0
 }
 
 /// Range boxes (0xb5e0); D5 is set as in the original.

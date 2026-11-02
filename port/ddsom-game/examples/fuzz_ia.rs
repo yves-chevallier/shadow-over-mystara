@@ -185,8 +185,8 @@ fn none(_: &mut Cpu, _: &mut Bus, _: &mut Rng) {}
 
 fn hitbox(c: &mut Cpu, _: &mut Bus, a: &mut Rng) {
     c.d[0] = c.d[0] & !0xffff | (a.below(0x80) as u16).wrapping_sub(0x40) as u32;
-    c.d[1] = c.d[1] & !0xffff | a.below(0xa0) + 4;
-    c.d[2] = c.d[2] & !0xffff | a.below(0x80) + 2;
+    c.d[1] = c.d[1] & !0xffff | (a.below(0xa0) + 4);
+    c.d[2] = c.d[2] & !0xffff | (a.below(0x80) + 2);
 }
 
 fn criterion(c: &mut Cpu, _: &mut Bus, a: &mut Rng) {
@@ -205,7 +205,7 @@ fn margin(c: &mut Cpu, _: &mut Bus, a: &mut Rng) {
 
 fn band(c: &mut Cpu, _: &mut Bus, a: &mut Rng) {
     c.d[0] = c.d[0] & !0xffff | (a.below(0x100) as u16).wrapping_sub(0x80) as u32;
-    c.d[1] = c.d[1] & !0xffff | 0x100 + a.below(0x100);
+    c.d[1] = c.d[1] & !0xffff | (0x100 + a.below(0x100));
 }
 
 /// Tier table (A1): a known boss table (0x83... ), or a RAM zone.

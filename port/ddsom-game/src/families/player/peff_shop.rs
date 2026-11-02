@@ -438,19 +438,15 @@ mod talk {
                 }
                 GIVE_WEAPON => {
                     let player = player_of(x, customer);
-                    if player.u8(x.b, p::SHOP) == 8 {
-                        if give_weapon(x, s, player) {
+                    if player.u8(x.b, p::SHOP) == 8 && give_weapon(x, s, player) {
                             return;
                         }
-                    }
                 }
                 GIVE_ITEM_2B => {
                     let player = player_of(x, customer);
-                    if player.u8(x.b, p::SHOP) == 5 {
-                        if give_item_2b(x, s, player) {
+                    if player.u8(x.b, p::SHOP) == 5 && give_item_2b(x, s, player) {
                             return;
                         }
-                    }
                 }
                 FREE => return x.free_peff(),
                 _ => unreachable!("commande de dialogue {op:#x}"),

@@ -568,7 +568,7 @@ mod scene {
 
     /// Creates a SOBJ object of type 6 (routine 0xddeaa), of variant `variant`; nothing on failure.
     fn spawn<R: Bench>(x: &mut Cx<'_, R>, variant: u8) -> Option<Obj> {
-        let Some(child) = x.alloc(&pools::SOBJ) else { return None };
+        let child = x.alloc(&pools::SOBJ)?;
         child.set_u8(x.b, 0, 1);
         child.set_u8(x.b, 2, 6);
         child.set_u8(x.b, 3, variant);
@@ -1604,7 +1604,7 @@ mod frame {
             let who = x.a5_u16(TRACKED);
             let ok = who != 0 && {
                 let depth = Obj(who as i16 as i32 as u32 & 0xff_ffff).u16(x.b, 0x10) as i16;
-                depth < 0x260 && depth >= 0x170
+                (0x170..0x260).contains(&depth)
             };
             if !ok {
                 return x.set16(0x4, LEAVE_6_0);
@@ -1757,7 +1757,7 @@ mod badge {
 
     /// Creates a SOBJ object of type 11 of variant `variant` and parameter `param` (`+0x2c`).
     fn spawn<R: Bench>(x: &mut Cx<'_, R>, variant: u8, param: u8) -> Option<Obj> {
-        let Some(o) = x.alloc(&pools::SOBJ) else { return None };
+        let o = x.alloc(&pools::SOBJ)?;
         o.set_u8(x.b, 0, 1);
         o.set_u8(x.b, 2, 0xb);
         o.set_u8(x.b, 3, variant);

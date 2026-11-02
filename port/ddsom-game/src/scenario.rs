@@ -10,6 +10,7 @@
 //!     apply the same write. Invalid address or value: line ignored.
 //!     MAME ignores these lines.
 //!   * Empty lines and those starting with `#` are ignored.
+//!
 //! Scenarios only contain inputs and RAM addresses/values, never ROM data.
 
 use std::io;
@@ -73,7 +74,7 @@ pub fn poke(m: &mut cps2::Machine, addr: u32, val: u32, size: u8) {
         let a = (addr + k - 0xff0000) as usize;
         let byte = (val >> (8 * (size as u32 - 1 - k))) as u8;
         let w = &mut m.bus.ram[a / 2];
-        *w = if a % 2 == 0 { *w & 0x00ff | (byte as u16) << 8 } else { *w & 0xff00 | byte as u16 };
+        *w = if a.is_multiple_of(2) { *w & 0x00ff | (byte as u16) << 8 } else { *w & 0xff00 | byte as u16 };
     }
 }
 

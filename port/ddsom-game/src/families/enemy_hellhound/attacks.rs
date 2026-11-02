@@ -1,7 +1,7 @@
 //! Type 6, substates 4 to 12.
 //!
 //! * 4: attacks (`+6` = 0 run and bite, 2 and 4 bite in place, 6 paw strike, 8 leap and bite,
-//! 10 to 14 short paw strike, 16 fire breath);
+//!   10 to 14 short paw strike, 16 fire breath);
 //! * 6: lying-in-wait moves (`+6` = 0 to 12);
 //! * 8: fallback moves (`+6` = 0, 2, 4, 6);
 //! * 10: stroll as long as no player is alive;

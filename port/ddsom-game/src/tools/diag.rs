@@ -132,7 +132,7 @@ fn selection(names: &[&str], site: &str) -> Option<u32> {
             Some((n, r)) => (n, mask_of(r)),
             None => (name, ALL),
         };
-        if !(names.contains(&name) || name == "all") || !pattern.map_or(true, |m| site.contains(m)) {
+        if !(names.contains(&name) || name == "all") || !pattern.is_none_or(|m| site.contains(m)) {
             continue;
         }
         if excluded {

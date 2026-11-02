@@ -1096,7 +1096,7 @@ pub fn results_panel<R: Bench>(x: &mut Cx<'_, R>) {
             load_blocks(x, rom::LOAD_SMALL, end, 8);
             for i in 0..8 {
                 let v = rd32(x.b, 0x91cc00 + 4 * i);
-                x.set32(0x30 + 4 * i as u32, v);
+                x.set32(0x30 + 4 * i, v);
             }
             x.set8(0x20, 0);
             x.set_a5_u16(a5::BG_X, 0x200);

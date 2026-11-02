@@ -612,9 +612,7 @@ fn triple_strike<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(INVULNERABLE, 0);
             let level = (var::RANK.get(x.b) & 0x1e) * 2;
             let mut players = var::PLAYERS_ALIVE.get(x.b);
-            if players != 0 {
-                players -= 1;
-            }
+            players = players.saturating_sub(1);
             let i = level.wrapping_add(players as u16);
             let n = x.rom8(0x7a1ca + i as u32);
             x.set8(COMBO, n);

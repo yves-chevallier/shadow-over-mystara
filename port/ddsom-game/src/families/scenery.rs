@@ -125,8 +125,7 @@ pub(crate) fn restart_scene<R: Bench>(x: &mut Cx<'_, R>) {
 pub(crate) fn eshl_volley<R: Bench>(x: &mut Cx<'_, R>, row: u32) {
     let at = 0xa66e2u32.wrapping_add(row as i16 as i32 as u32);
     let mut d5 = crate::mem::prog8(x.b, at) as u32;
-    loop {
-        let Some(o) = pools::ESHL.alloc(x.b) else { break };
+    while let Some(o) = pools::ESHL.alloc(x.b) {
         o.set_u8(x.b, 0x0, 1);
         o.set_u8(x.b, 0x2, 0x3e);
         o.set_u8(x.b, 0x3, d5 as u8);

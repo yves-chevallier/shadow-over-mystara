@@ -24,8 +24,6 @@ use crate::objects::Obj;
 use crate::player::ram;
 use crate::player::external as ext;
 
-/// Identifiers (original addresses) of the routines reached: shots, player effects, sounds, palettes and screen effects.
-
 /// Magic-user table (ROM data): jump speeds (four words per jump type).
 const JUMP_SPEEDS: u32 = 0x10_459e;
 

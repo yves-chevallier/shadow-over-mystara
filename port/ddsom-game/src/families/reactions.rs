@@ -492,15 +492,13 @@ fn resume_after_slide<R: Bench>(x: &mut Cx<'_, R>) {
     if saved != 0 {
         x.set32(0x58, 0);
         x.set8(f::ACTIVE, 1);
-        if x.u16(f::RESUME_STATE) == 0x205 {
-            if lib::roll_78(x) {
+        if x.u16(f::RESUME_STATE) == 0x205 && lib::roll_78(x) {
                 x.set32(f::STATE, saved);
                 x.set8(f::SUB_STEP, 0);
                 x.set32(f::RESUME_STATE, 0);
                 x.set8(0x78, 0xff);
                 return;
             }
-        }
     }
     x.set32(f::STATE, 0x0202_0000);
     x.set8(0x78, 0xff);
@@ -2194,6 +2192,17 @@ pub const NATIVES: &[Native] = reaction_natives![
     0x3da86, 0x3dab0, 0x3dd72, 0x3ddf6,
 ];
 
+/// Runs the common reaction routine `entry` if it is one (false otherwise): direct call from
+/// `enemy_common::react`, without going through the native.
+pub fn run_common<R: Bench>(x: &mut Cx<'_, R>, entry: u32) -> bool {
+    if !NATIVES.iter().any(|n| n.entry == entry) {
+        return false;
+    }
+    let step = x.u8(f::STEP);
+    assert!(run_entry_flag(x, entry), "reaction {entry:#x}: step {step:#x} outside the original table");
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2206,15 +2215,4 @@ mod tests {
         }
         assert_eq!(NATIVES.len(), REACTIONS.len() + 6);
     }
-}
-
-/// Runs the common reaction routine `entry` if it is one (false otherwise): direct call from
-/// `enemy_common::react`, without going through the native.
-pub fn run_common<R: Bench>(x: &mut Cx<'_, R>, entry: u32) -> bool {
-    if !NATIVES.iter().any(|n| n.entry == entry) {
-        return false;
-    }
-    let step = x.u8(f::STEP);
-    assert!(run_entry_flag(x, entry), "reaction {entry:#x}: step {step:#x} outside the original table");
-    true
 }

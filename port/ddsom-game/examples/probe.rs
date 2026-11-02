@@ -23,7 +23,7 @@ fn main() {
         (0..n).fold(0, |v, k| {
             let o = (ad + k - 0xff0000) as usize;
             let w = m.bus.ram[o / 2];
-            v << 8 | if o % 2 == 0 { w >> 8 } else { w & 0xff } as u32
+            v << 8 | if o.is_multiple_of(2) { w >> 8 } else { w & 0xff } as u32
         })
     };
     let mut last = String::new();

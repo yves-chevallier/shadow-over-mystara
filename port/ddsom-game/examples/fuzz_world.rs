@@ -72,7 +72,7 @@ fn depth(rng: &mut Rng) -> u32 {
 fn list(c: &mut Cpu, b: &mut Bus, rng: &mut Rng, head: u32, queue: u32, end: u16) {
     let n = rng.below(7);
     let mut ys: Vec<u32> = (0..n).map(|_| depth(rng)).collect();
-    ys.sort_by(|a, b| (*b as i32).cmp(&(*a as i32)));
+    ys.sort_by_key(|&y| std::cmp::Reverse(y as i32));
     for (i, &y) in ys.iter().enumerate() {
         let o = object(i as u32);
         pose_y(b, o, y);
