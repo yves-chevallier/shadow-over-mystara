@@ -502,7 +502,7 @@ fn sneak_gen<R: Bench>(x: &mut Cx<'_, R>, throw: fn(&mut cps2::Cps2Bus, crate::o
     const DELAYS: u32 = 0x72a6e;
     match x.u8(0x7) {
         0 => {
-            let r = random(x) & 0xf;
+            let r = (x.random() as u32) & 0xf;
             let delay = x.rom16(DELAYS + 2 * r);
             slide_start(x, 8, delay);
         }

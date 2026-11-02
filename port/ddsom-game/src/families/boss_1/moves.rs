@@ -63,7 +63,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0xc, 0);
             spawn_double(x);
             x.set16(0x1c, 0x100);
-            if random(x) & 1 != 0 {
+            if (x.random() as u32) & 1 != 0 {
                 negate(x, 0x1c);
             }
             x.set32(0x14, 0);
@@ -627,7 +627,7 @@ fn split<R: Bench>(x: &mut Cx<'_, R>) {
             next7(x);
             spawn_double(x);
             x.set16(0x1c, 0x100);
-            if random(x) & 1 != 0 {
+            if (x.random() as u32) & 1 != 0 {
                 negate(x, 0x1c);
             }
             x.set32(0x14, 0);

@@ -208,7 +208,7 @@ fn aim_choice<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     x.set8(TIMER, 0x10);
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let pick = x.rom8(AIM_PICK + r) as u32;
     let routine = (AIM_ROUTINES as i32 + x.rom16(AIM_ROUTINES + pick) as i16 as i32) as u32;
     let found = match routine {
@@ -270,7 +270,7 @@ impl AbsKeep for i16 {
 /// 0x90524: walks through the players in a randomly drawn order (rotation table) until a usable player is found.
 /// Same destroyed loop counter as `nearest`.
 fn in_random_order<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
-    let mut order = PLAYER_ORDERS + (random(x) & 0xc);
+    let mut order = PLAYER_ORDERS + ((x.random() as u32) & 0xc);
     let mut counter: u16;
     loop {
         let offset = x.data32(order);

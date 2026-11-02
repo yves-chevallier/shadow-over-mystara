@@ -195,13 +195,13 @@ pub(super) fn walk_delay_slow<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x98d06, 0x98d18: number of steps of a walk.
 pub(super) fn walk_steps_fast<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0x1f;
+    let r = (x.random() as u32) & 0x1f;
     let v = table8(x, 0x98d2a, r);
     x.set8(WALK_STEPS, v);
 }
 
 pub(super) fn walk_steps_slow<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0x1f;
+    let r = (x.random() as u32) & 0x1f;
     let v = table8(x, 0x98d4a, r);
     x.set8(WALK_STEPS, v);
 }
@@ -233,7 +233,7 @@ fn go<R: Bench>(x: &mut Cx<'_, R>, routine: u32) {
 
 /// 0x98da2: a player is very close.
 pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let pick = table8(x, 0x98db8, r);
     let routine = target(x, 0x98dc8, pick as u32);
     go(x, routine);
@@ -241,7 +241,7 @@ pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x98dcc: a player is ahead (box 0 / 0x2c / 0xc); the phase sets the choice.
 pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let phase = x.u8(PHASE) as i8 as i32;
     let kind = target(x, 0x98de6, (2 * phase) as u32);
     let table = match kind {
@@ -257,7 +257,7 @@ pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x98e3c: a player is at mid-distance; `side` = 1 or 2.
 pub(super) fn choose_mid<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let table = if side == 1 { 0x98e6e } else { 0x98e7e };
     let pick = table8(x, table, r);
     let routine = target(x, 0x98e8e, pick as u32);
@@ -266,7 +266,7 @@ pub(super) fn choose_mid<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
 
 /// 0x98e96: a player is far; `side` = 1 or 2.
 pub(super) fn choose_far<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let phase = x.u8(PHASE) as i8 as i32;
     let entry = (side as i32 - 1) * 2 + 4 * phase;
     let routine = target(x, 0x98eba, entry as u32);

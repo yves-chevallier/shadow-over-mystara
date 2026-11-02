@@ -47,7 +47,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     sub16(x, IDLE_WAIT, 1);
     let code = x.u8(REACTION) as u32;
     // routines communes seulement (table 0x86c3a)
-    let routine = rom32(x, 0x86c3a + code);
+    let routine = x.prog32(0x86c3a + code);
     run_reaction(x, routine);
     if x.u8(f::FREEZE) != 0 && x.u8(0x46) != 0 {
         addq8(x, f::FREEZE, 1);
@@ -94,7 +94,7 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(0x58, 0);
             x.set32(0x14, 0);
             let n = var::PLAYERS_ALIVE.get(x.b) as u32;
-            let mask = rom32(x, 0x86dd6 + ((n as u16) << 2) as u32);
+            let mask = x.prog32(0x86dd6 + ((n as u16) << 2) as u32);
             // D5 = the mask (leftover)
             *x.c.d5() = mask;
             let rng = x.random();

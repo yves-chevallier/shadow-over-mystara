@@ -460,7 +460,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     if var::PAUSE.get(x.b) != 0 {
         return;
     }
-    let r = random(x);
+    let r = x.random() as u32;
     x.set8(PUFFS, r as u8);
     if (x.a5_u16(ESHL_FREE) as i16) < 0xa || (x.a5_u16(ENEMY_FREE) as i16) < 5 {
         return;

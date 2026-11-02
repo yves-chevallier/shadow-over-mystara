@@ -28,4 +28,12 @@ fn rom_and_assets_give_the_same_data() {
     for (a, b) in from_roms.objects.tables().into_iter().zip(from_assets.objects.tables()) {
         assert!(a == b, "object table {} differs", a.name);
     }
+    let enemy_tables = |d: &ddsom_data::DataFile| -> Vec<_> {
+        d.tables.iter().map(|t| (t.name.clone(), t.rom, t.program, t.bytes().unwrap())).collect()
+    };
+    let (a, b) = (enemy_tables(&from_roms.enemies), enemy_tables(&from_assets.enemies));
+    if let Some((x, y)) = a.iter().zip(&b).find(|(x, y)| x != y) {
+        panic!("enemy tables differ: {} {:#x} / {} {:#x}", x.0, x.1, y.0, y.1);
+    }
+    assert!(a.len() == b.len(), "enemy tables differ in number");
 }

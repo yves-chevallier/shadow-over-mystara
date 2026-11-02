@@ -49,7 +49,7 @@ fn reaction<R: Bench>(x: &mut Cx<'_, R>) {
     }
     sub16(x, IDLE_WAIT, 1);
     let code = x.u8(REACTION) as u32;
-    let routine = rom32(x, 0x89330 + code);
+    let routine = x.prog32(0x89330 + code);
     run_reaction(x, routine);
     if x.u8(f::FREEZE) != 0 && x.u8(0x46) != 0 {
         addq8(x, f::FREEZE, 1);
@@ -99,7 +99,7 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
             // D5 = the index (leftover re-read by the following handlers, `dispatch::Leftovers`)
             let i = ((n as u16) << 2) as u32;
             *x.c.d5() = i;
-            let mask = rom32(x, 0x894cc + i);
+            let mask = x.prog32(0x894cc + i);
             let rng = x.random();
             let i = rng & 0x1f;
             if mask >> i & 1 == 0 {

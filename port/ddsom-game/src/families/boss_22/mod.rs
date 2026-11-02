@@ -387,7 +387,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     set_palette(x);
-    let r = random(x);
+    let r = x.random() as u32;
     x.set8(EFFECT_COUNT, r as u8);
     x.set8(f::BOX_SET, 0x22);
     lib::create_life_bar(x);

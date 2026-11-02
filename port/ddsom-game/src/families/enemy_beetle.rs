@@ -58,9 +58,6 @@ const STOP_XS: u32 = 0x660d6;
 const SPEED_Y_ROW: u32 = 0x66666;
 const BITE_ODDS: u32 = 0x6623a;
 const SHAKE_TIMES: u32 = 0x664c6;
-/// Nest piece lists (pointers by `+0x42`) and table of allocation routines.
-const NEST_LISTS: u32 = 0x65c78;
-const NEST_ALLOCS: u32 = 0x65c88;
 
 const STANCE: u32 = 0x0200_0000;
 const HELD: u32 = 0x0404_0000;
@@ -205,7 +202,7 @@ fn nest<R: Bench>(x: &mut Cx<'_, R>) {
     if list == 3 {
         x.set16(Obj::Z, 0x60);
     }
-    spawn_list(x, NEST_LISTS, NEST_ALLOCS, list);
+    spawn_list(x, "beetle_nest", list);
 }
 
 // --- state 2: active -----------------------------------------------------------------------------
@@ -290,9 +287,9 @@ fn bite_check<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(BITING) == 0 {
         let player = x.linked(f::TARGET);
         if player.u16(x.b, 4) == 0x200 && player.u8(x.b, 6) == 0xc {
-            let roll = random(x) & 0x1f;
+            let roll = (x.random() as u32) & 0x1f;
             let row = ((var::RANK.get(x.b) >> 1) as u32) << 2;
-            let odds = rom32(x, BITE_ODDS + row);
+            let odds = x.prog32(BITE_ODDS + row);
             if odds >> roll & 1 != 0 {
                 let state = x.u32(f::STATE);
                 x.set32(SAVED_STATE, state);
@@ -693,7 +690,7 @@ fn react_first<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x664b4: randomly drawn duration of the shake.
 fn shake_timer<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 3;
+    let r = (x.random() as u32) & 3;
     let t = x.rom8(SHAKE_TIMES + r);
     x.set8(0xa2, t);
 }

@@ -314,7 +314,7 @@ fn end_frame<R: Bench>(x: &mut Cx<'_, R>, margin: u16) {
 /// attack 24 (rush along the ground).
 /// Returns the draw (D0 of the original, `andi.l #0xf`) and the mask (D1.w) for the native's contract.
 pub(crate) fn counter_reaction<R: Bench>(x: &mut Cx<'_, R>) -> (u32, u16) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let level = (var::RANK.get(x.b) >> 1).wrapping_mul(4);
     // index `(d8,PC,D1.w)`: sign-extended word
     let mask = x.rom16(0x81b1a_u32.wrapping_add(level as i16 as i32 as u32));

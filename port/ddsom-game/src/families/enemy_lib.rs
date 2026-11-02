@@ -8,6 +8,7 @@
 use crate::families::cx::Bench;
 use super::cx::Cx;
 use super::enemy_common::*;
+use super::enemy_common::tables;
 use crate::ai;
 use crate::ai_aids;
 use crate::machine::Machine;
@@ -15,8 +16,8 @@ use crate::objects::{Current, Obj};
 
 /// 0x1046c: the hit type `+0x44` follows the animation key `+0x3e`.
 fn copy_strike_kind<R: Bench>(x: &mut Cx<'_, R>) {
-    let k = x.u8(0x3e);
-    x.set8(0x44, k);
+    let k = x.u8(Enemy::STRIKE_KEY);
+    x.set8(Enemy::STRIKE_KIND, k);
 }
 
 /// 0x103d6: starts script `n` of set `set`.
@@ -560,7 +561,7 @@ fn alloc_eshl<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
 /// X position, not that of the allocation, when the shot could be created.
 pub fn eshl_12<R: Bench>(x: &mut Cx<'_, R>) -> (Option<Obj>, bool) {
     let Some(o) = alloc_eshl(x) else { return (None, true) };
-    o.set_u8(x.b, 0, 1);
+    o.set_active(x.b, 1);
     o.set_u8(x.b, Obj::KIND, 0x12);
     let flip = x.u8(f::FLIP);
     o.set_u8(x.b, f::FLIP, flip);
@@ -572,15 +573,19 @@ pub fn eshl_12<R: Bench>(x: &mut Cx<'_, R>) -> (Option<Obj>, bool) {
     (Some(o), old.checked_add(d2).is_none())
 }
 
+/// Launcher of an ESHL shot 0x13 (long, RAM address).
+const SHOT_LAUNCHER: u32 = 0x54;
+
 /// 0xa0ae0: ESHL shot 0x13 aiming at `target` (long `+0x50`), launched by the object (`+0x54`), at its position.
 pub fn eshl_13<R: Bench>(x: &mut Cx<'_, R>, target: u32) -> Option<Obj> {
     let o = alloc_eshl(x)?;
-    let link = x.u16(0x42);
-    o.set_u16(x.b, 0x42, link);
-    o.set_u32(x.b, 0x50, target);
-    o.set_u32(x.b, 0x54, x.o.0);
+    let shot = Enemy(o);
+    let link = x.u16(Enemy::CREATOR);
+    shot.set_creator(x.b, link);
+    shot.set_target_long(x.b, target);
+    o.set_u32(x.b, SHOT_LAUNCHER, x.o.0);
     o.set_u8(x.b, f::BOX_SET, 0);
-    o.set_u8(x.b, 0, 1);
+    o.set_active(x.b, 1);
     o.set_u8(x.b, Obj::KIND, 0x13);
     copy_place(x, o, true);
     let flip = x.u8(f::FLIP);
@@ -591,21 +596,21 @@ pub fn eshl_13<R: Bench>(x: &mut Cx<'_, R>, target: u32) -> Option<Obj> {
 /// 0xa114a: ESHL shot 0x16 of variant `variant` at the object's position (`+0x2f` = its frame mark `+0x33`).
 pub fn eshl_16<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
     let Some(o) = alloc_eshl(x) else { return };
-    o.set_u8(x.b, 0, 1);
+    o.set_active(x.b, 1);
     o.set_u8(x.b, Obj::KIND, 0x16);
     copy_place(x, o, true);
     let flip = x.u8(f::FLIP);
     o.set_u8(x.b, f::FLIP, flip);
     o.set_u8(x.b, Obj::VARIANT, variant);
     let mark = x.u8(f::KEY_FRAME);
-    o.set_u8(x.b, 0x2f, mark);
+    Enemy(o).set_group(x.b, mark);
 }
 
 /// 0x9f346: ESHL shot 0xa launched by the object (`+0x50`), at its position, oriented the opposite way.
 pub fn eshl_0a<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     let o = alloc_eshl(x)?;
-    o.set_u16(x.b, 0x50, x.o.0 as u16);
-    o.set_u8(x.b, 0, 1);
+    Enemy(o).set_target(x.b, x.o.0 as u16);
+    o.set_active(x.b, 1);
     o.set_u8(x.b, Obj::KIND, 0xa);
     copy_place(x, o, false);
     let flip = x.u8(f::FLIP) ^ 0x20;
@@ -617,11 +622,11 @@ pub fn eshl_0a<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
 pub fn eshl_burst_26<R: Bench>(x: &mut Cx<'_, R>) {
     for n in (0..=5u8).rev() {
         let Some(o) = alloc_eshl(x) else { return };
-        o.set_u8(x.b, 0, 1);
+        o.set_active(x.b, 1);
         o.set_u8(x.b, Obj::KIND, 0x26);
         o.set_u8(x.b, Obj::VARIANT, 0);
-        o.set_u8(x.b, 0x2f, n);
-        o.set_u16(x.b, 0x46, x.o.0 as u16);
+        Enemy(o).set_group(x.b, n);
+        Enemy(o).set_host(x.b, x.o.0 as u16);
     }
 }
 
@@ -631,40 +636,40 @@ fn roll_bit<R: Bench>(x: &mut Cx<'_, R>, mask: u32, bits: u32) -> bool {
     mask >> r & 1 != 0
 }
 
-/// 0xffda: draw of a bit in the mask (word) of table 0xfff4, chosen by rank / 8. (Batch A read the table at 0xffd8:
+/// 0xffda: draw of a bit in the mask (word) of the table `rank_masks` (0xfff4), chosen by rank / 8. (Batch A read the table at 0xffd8:
 /// fixed by `fuzz_ia`.)
 pub fn roll_ffda<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let i = (var::RANK.get(x.b) >> 3) << 1;
-    let mask = x.rom16(0xfff4u32.wrapping_add(i as i16 as u32));
+    let mask = tables::rank_masks().at16(x.b, i as i16 as u32);
     // leftover: the mask in D2.w (`dispatch::Leftovers::d2`)
     *x.c.d2() = *x.c.d2() & !0xffff | mask as u32;
     roll_bit(x, mask as u32, 0xf)
 }
 
-/// 0xad7c: if `+0x78` is positive, draw of a bit in the mask (long) of its row of table 0xadb0, chosen by the frame
-/// counter; false otherwise.
+/// 0xad7c: if `+0x78` is positive, draw of a bit in the mask (long) of its row of the table `chance_rows` (0xadb0),
+/// chosen by the rank; false otherwise.
 pub fn roll_78<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let line = x.u8(0x78);
+    let line = x.u8(Enemy::AI_SHOT);
     if (line as i8) < 0 {
         return false;
     }
-    let row = x.data32(0xadb0 + 4 * line as u32);
+    let row = tables::chance_rows().nth32(x.b, line as u32);
     let tick = var::RANK.get(x.b);
-    let mask = x.data32(row.wrapping_add(((tick << 2) as i16) as u32));
+    let mask = tables::held32(x.b, row.wrapping_add(((tick << 2) as i16) as u32));
     roll_bit(x, mask, 0x1f)
 }
 
-/// 0x10298: palette script `index`: eight longs of table 0x102ba copied into the palette (0x91c380), maximum brightness
-/// (`ori.l #0xf000f000`).
+/// 0x10298: palette script `index`: eight longs of the table `palette_scripts` (0x102ba) copied into the palette
+/// (0x91c380), maximum brightness (`ori.l #0xf000f000`).
 pub fn palette_script<R: Bench>(x: &mut Cx<'_, R>, index: u16) {
     const PALETTE: u32 = 0x91c380;
-    let from = 0x102bau32.wrapping_add((index << 5) as i16 as u32);
+    let from = ((index << 5) as i16) as u32;
     // movem.l (A2),{D0-D6,A3} then movem.l ...,(A1)
     let mut longs = [0u32; 8];
+    let scripts = tables::palette_scripts();
     for (k, v) in longs.iter_mut().enumerate() {
-        let a = from + 4 * k as u32;
         // `movem.l (A2)`: data read (batch A read the program space: fixed by `fuzz_ia`)
-        *v = x.data32(a);
+        *v = scripts.at32(x.b, from.wrapping_add(4 * k as u32));
     }
     for (k, &v) in longs.iter().enumerate() {
         crate::mem::wr32(x.b, PALETTE + 4 * k as u32, v);

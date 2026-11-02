@@ -205,14 +205,14 @@ pub(super) fn walk_delay_slow<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x9a8a8: number of steps of a walk.
 pub(super) fn walk_steps_fast<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0x1f;
+    let r = (x.random() as u32) & 0x1f;
     let v = table8(x, 0x9a8cc, r);
     x.set8(WALK_STEPS, v);
 }
 
 /// 0x9a8ba.
 pub(super) fn walk_steps_slow<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0x1f;
+    let r = (x.random() as u32) & 0x1f;
     let v = table8(x, 0x9a8ec, r);
     x.set8(WALK_STEPS, v);
 }
@@ -245,7 +245,7 @@ pub(super) fn pick_slow_mode<R: Bench>(x: &mut Cx<'_, R>) {
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
     let row = players.saturating_sub(1) << 3;
     let level = ((var::RANK.get(x.b) & 0x18) >> 2) as u32;
-    let bit = random(x) & 0x1f & 7;
+    let bit = (x.random() as u32) & 0x1f & 7;
     let set = table8(x, 0x9ad74, row + level) >> bit & 1 != 0;
     x.set8(SLOW, if set { 2 } else { 1 });
 }
@@ -301,7 +301,7 @@ fn go<R: Bench>(x: &mut Cx<'_, R>, routine: u32) {
 
 /// 0x9a944: a player is ahead, at short range: the charge.
 pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let pick = table8(x, 0x9a95a, r);
     let routine = target(x, 0x9a96a, pick as u32);
     go(x, routine);
@@ -309,7 +309,7 @@ pub(super) fn choose_close<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x9a96c: a player is ahead; the phase sets the choice.
 pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let phase = x.u8(PHASE) as i8 as i32;
     let entry = table16(x, 0x9a986, (2 * phase) as u32) as i16 as i32;
     let kind = 0x9a986 + entry;
@@ -324,7 +324,7 @@ pub(super) fn choose_front<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x9a9d8: a player is at mid-distance (both sides read the same tables).
 pub(super) fn choose_mid<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let pick = table8(x, 0x9aa0a, r);
     let routine = target(x, 0x9aa1a, pick as u32);
     go(x, routine);
@@ -332,7 +332,7 @@ pub(super) fn choose_mid<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0x9aa20: a player is far; `side` = 1 or 2.
 pub(super) fn choose_far<R: Bench>(x: &mut Cx<'_, R>, side: u8) {
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     let phase = x.u8(PHASE) as i8 as i32;
     let entry = (side as i32 - 1) * 2 + 4 * phase;
     let which = table16(x, 0x9aa44, entry as u32) as i16 as i32;

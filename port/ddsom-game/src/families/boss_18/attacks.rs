@@ -173,7 +173,7 @@ fn gesture<R: Bench>(x: &mut Cx<'_, R>) {
             if players == 0 {
                 return decide::wait(x);
             }
-            let r = random(x) & 0xf;
+            let r = (x.random() as u32) & 0xf;
             let pick = x.rom8(0x97d9c + ((players - 1) << 4) + r);
             if pick == 0 {
                 return decide::stand(x);

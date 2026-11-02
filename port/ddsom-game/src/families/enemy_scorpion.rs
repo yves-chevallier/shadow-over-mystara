@@ -43,8 +43,6 @@ use crate::objects::pools;
 use crate::objects::Current;
 
 /// ROM tables (the suffix tells the read space: opcodes for the `(table,PC,Dn)`, data otherwise).
-const SPAWN_LISTS: u32 = 0x669d6;
-const SPAWN_ALLOCS: u32 = 0x669ea;
 const ATTACK_PICK_A: u32 = 0x66e48;
 const ATTACK_PICK_B: u32 = 0x67146;
 const MOVE_PICK: u32 = 0x6773c;
@@ -206,7 +204,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(f::SUB2, 8);
             anim_play(x, 0);
             let list = x.u8(GROUP) as u32;
-            spawn_list(x, SPAWN_LISTS, SPAWN_ALLOCS, list);
+            spawn_list(x, "scorpion", list);
         }
         _ => {}
     }

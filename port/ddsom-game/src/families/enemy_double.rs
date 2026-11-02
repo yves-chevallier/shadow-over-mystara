@@ -804,7 +804,7 @@ mod dark_warrior_double {
         copy_speeds(x);
         copy_height(x);
         let code = m.u8(x.b, 0x49) as u32;
-        let routine = rom32(x, REACTIONS + code);
+        let routine = x.prog32(REACTIONS + code);
         run_reaction(x, routine);
         x.set8(0x3b, 0);
     }

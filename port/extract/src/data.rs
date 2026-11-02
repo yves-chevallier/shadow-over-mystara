@@ -63,6 +63,14 @@ pub fn text(rom: &Program, name: &str, start: u32, end: u32, cut: u8) -> TextBlo
 }
 
 pub fn save(rom: &Program, path: &Path, regions: Vec<Region>, specs: &[Spec], texts: Vec<TextBlock>) -> io::Result<()> {
+    let file = build(rom, regions, specs, texts);
+    eprintln!("{}: {} tables, {} texts", path.display(), file.tables.len(), file.texts.len());
+    std::fs::create_dir_all(path.parent().unwrap())?;
+    json::save(path, &file, 4)
+}
+
+/// The tables of `specs` read from the ROM, with the regions they must cover exactly and the texts.
+pub fn build(rom: &Program, regions: Vec<Region>, specs: &[Spec], texts: Vec<TextBlock>) -> DataFile {
     let tables: Vec<Table> = specs.iter().map(|s| read(rom, s)).collect();
     for r in &regions {
         let mut inside: Vec<(u32, u32, &str)> = tables
@@ -80,9 +88,7 @@ pub fn save(rom: &Program, path: &Path, regions: Vec<Region>, specs: &[Spec], te
         }
         assert_eq!(at, r.end, "region {}: end", r.name);
     }
-    eprintln!("{}: {} tables, {} texts", path.display(), tables.len(), texts.len());
-    std::fs::create_dir_all(path.parent().unwrap())?;
-    json::save(path, &DataFile { regions, tables, texts }, 4)
+    DataFile { regions, tables, texts }
 }
 
 pub fn extract(roms: &Path, dir: &Path) -> io::Result<()> {

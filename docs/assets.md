@@ -629,8 +629,27 @@ ENEMY (chefs), soit 55 entrées (32 ennemis, 23 chefs).
 | `approach_tables` | `0xe93e` (données) | 65 x `addr` | par type de trajectoire `+0x79` : liste de points d'approche (0xe76c, `ai.rs`) |
 | `approach/k.count`, `approach/k` | `0xea42`… | 1 x `u16`, n + 1 x `i16*2` | une liste (k = première trajectoire qui la désigne) : mot n, puis n + 1 décalages (dx, dy) autour de la cible ; région `approach` 0xe93e-0xeff2, 52 listes |
 
-Code, pas des données : sons de coup et de mort par type `0x3e2ac` / `0x3e3a4` (62 adresses de routines
-chacune, `rts` 0x3e2aa = rien), relevé par type `0x3e000`.
+Tables ajoutées par le lot L8a (`extract/src/enemies.rs`, lues par `families/enemy_common/tables.rs` du jeu,
+`data().enemies`) :
+
+| Nom | Adresse | Lignes x format | Sens |
+|---|---|---|---|
+| `reactions/<famille>` | `0x56816`… (prog) | 43 x `addr` | table de réactions d'une famille ou d'un chef : routine commune (`0x3bb9c`..`0x3dd72`) ou propre au type par code de coup `+0x49` (0 à 0xa8, pas de 4) ; clé : son adresse, que la famille passe à `enemy_common::react`. 47 tables (`kobold_first`, `kobold_second`... `boss_22_second`) ; celles du golem n'ont que 42 entrées (le code 0xa8 lirait le code qui suit) |
+| `hit_sounds`, `death_sounds` | `0x3e2ac`, `0x3e3a4` (prog) | 55 x `addr` | son de coup, de mort par type (enveloppe de son ; `0x3e2aa` = rien) |
+| `get_up_routines` | `0x3e000` (prog) | 55 x `addr` | relevé propre au type (`0x3bb9a` = rien) |
+| `anim_set_routines/<i>` | `0x3df42`… (prog) | 1 x `addr` | jeu d'animations des types 13, 19, 34 et 54 : l'immédiat du `movea.l` de leur petite routine (`anim_sets`) |
+| `pop_speeds` | `0x3c5f2` (prog) | 2 x `i16*2` | projection par code de réaction 68 et 72 : (vz, gravité) |
+| `daze_delays`, `quiver_delays` | `0x3c904`, `0x3d42a` (prog) | 4 x `u8` | délais tirés au hasard (étourdi, tremblement) |
+| `seized_offsets` | `0x3d07e` (prog) | 23 x `i16*2` | décalage X d'un objet saisi devant le joueur, par type (seul le premier mot est lu) |
+| `seized_damage` | `0x3d0da` (prog) | 14 x `u8` | dégâts d'un coup du personnage 5 sur un objet saisi, par niveau - 11 |
+| `seized_hit_speeds` | `0x3d198` (prog) | 23 x `i16*2` | vitesses (vx, ax) de l'étincelle de ce coup, par type |
+| `rank_masks` | `0xfff4` (prog) | 4 x `x16` | `enemy_lib::roll_ffda` : masque de décision par rang / 8 |
+| `chance_rows`, `chance_masks` | `0xadb0`, `0xadc8` (données) | 6 x `addr`, 5 x `x32*32` | `enemy_lib::roll_78` : ligne de masques par `+0x78`, un masque par rang |
+| `palette_scripts` | `0x102ba` (données) | 8 x `x32*8` | `enemy_lib::palette_script` : huit longs de couleurs par script |
+| `beetle_nest/…`, `scorpion/…` | `0x65c78`, `0x669d6` (prog, listes en données) | | `enemy_common::spawn_list` : `lists` (adresses des listes), `allocs` (routine d'allocation), puis chaque liste `k.count` (mot n) et `k` (n + 1 entrées `u8*4 u16*3` : routine, type, variante, groupe `+0x2f`, X, hauteur, profondeur) |
+
+Le cercle des tourbillons (`0x1c94b6`, X et profondeur par angle) est une table de vitesses de `data/speeds.json`,
+lue par son adresse (`tables::circle`).
 
 ### Caisses : `data/boxes.json`
 

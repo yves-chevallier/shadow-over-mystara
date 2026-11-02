@@ -105,6 +105,14 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    table, `items.rs` l'appelle encore) ; `Missing::byte_in/word_in/long_in` dans `data.rs` ; `PlayerView`
    (`effects/records.rs`) est à fusionner avec la fiche de joueur de L10 ; les extraits de palettes de
    `effects.json` sont à remplacer par la bibliothèque typée (L12).
+8. **Lot L8a (façades des ennemis)** fait (branche `wt-l8a-ennemis`, [fin.md](fin.md) « L8 », « Résultat L8a ») :
+   `reactions.rs` découpé en `families/reactions/` (plus gros fichier des façades 683 lignes), `enemy_common/`
+   (`records.rs` : vue `Enemy`, `tables.rs`, `vars.rs`), tables ajoutées à `data/enemies.json`
+   (`extract/src/enemies.rs`, `GameData::enemies`) : façades à 0 accesseur ROM, 0 décalage littéral,
+   0 `A5 + littéral`, 0 constante d'adresse ROM. **Réextraire les assets** (`data/enemies.json`). `random` et
+   `rom32` d'`enemy_common` remplacés par `x.random()` et `x.prog32()` chez les appelants (`enemy_*`, `boss_*`).
+   Pour L8b : voir « Pour L8b » dans fin.md (une ligne par table dans `extract/src/enemies.rs`, lecture par
+   `enemy_common::tables`, champs communs d'`Enemy`).
 
 8. **Lot L7 (ESHL, SOBJ, objets, caisses)** fait (branche `wt-l7-objets`, [fin.md](fin.md) « L7 », « Résultat ») :
    `families/eshl*/`, `sobj/`, `items/`, `boxes/` découpés par type (plus gros fichier 649 lignes), tables typées

@@ -446,7 +446,7 @@ fn attack_return<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     set_state_long(x, 0x0202_0000);
-    if random(x) & 1 != 0 {
+    if (x.random() as u32) & 1 != 0 {
         let n = x.u8(0xa4).wrapping_sub(1);
         x.set8(0xa4, n);
         if (n as i8) >= 0 {

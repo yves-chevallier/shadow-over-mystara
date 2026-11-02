@@ -37,7 +37,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         x.set8(f::FLIP, flip);
-        let mask = rom32(x, 0x61a00);
+        let mask = x.prog32(0x61a00);
         let r = rand_and(x, 0x1f);
         let next = if mask >> r & 1 != 0 { 0x0202_0600 } else { 0x0202_0a00 };
         return set_state_long(x, next);
@@ -119,7 +119,7 @@ fn front_attack<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::target_in_box(x, -0x40, 0x40, 0x10) || x.u16(f::TARGET) == 0 || !gate(x) {
         return false;
     }
-    let r = random(x) & 0xf;
+    let r = (x.random() as u32) & 0xf;
     if (0xffc0u32 >> r) & 1 != 0 {
         set_state_long(x, 0x0202_0800);
     } else {

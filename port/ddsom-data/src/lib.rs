@@ -54,6 +54,8 @@ pub struct GameData {
     pub anims: Anims,
     pub speeds: Speeds,
     pub effects: EffectTables,
+    /// Tables of the enemies (`families/enemy*` and `reactions` of the game; docs/fin.md, L8).
+    pub enemies: DataFile,
     /// Tables of the ESHL, SOBJ, ITEM and BOX families (docs/fin.md, L7).
     pub objects: ObjectTables,
     /// Object tables tied to the sprites: collision and visibility boxes, ground marks, frame lists, ESHL 5 shot.
@@ -62,11 +64,12 @@ pub struct GameData {
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 6] = [
+    pub const FILES: [&'static str; 7] = [
         "sprites/frames.json",
         "sprites/anims.json",
         "data/speeds.json",
         "data/effects.json",
+        "data/enemies.json",
         "data/objects.json",
         "sprites/tables.json",
     ];
@@ -78,8 +81,9 @@ impl GameData {
             anims: Anims::load(&dir.join(Self::FILES[1]))?,
             speeds: Speeds::load(&dir.join(Self::FILES[2]))?,
             effects: EffectTables::load(&dir.join(Self::FILES[3]))?,
-            objects: ObjectTables::load(&dir.join(Self::FILES[4]))?,
-            sprite_tables: SpriteTables::load(&dir.join(Self::FILES[5]))?,
+            enemies: DataFile::load(&dir.join(Self::FILES[4]))?,
+            objects: ObjectTables::load(&dir.join(Self::FILES[5]))?,
+            sprite_tables: SpriteTables::load(&dir.join(Self::FILES[6]))?,
         })
     }
 }
