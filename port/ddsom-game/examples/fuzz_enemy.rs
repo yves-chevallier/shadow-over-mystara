@@ -859,7 +859,15 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
         m.run_frame();
     }
     ddsom_game::set_check(true);
-    std::panic::set_hook(Box::new(|_| {}));
+    // les paniques sont comptées et résumées à la fin (message et lieu), pas affichées une à une
+    std::panic::set_hook(Box::new(|info| {
+        let msg = info.payload().downcast_ref::<String>().cloned()
+            .or_else(|| info.payload().downcast_ref::<&str>().map(|s| s.to_string()))
+            .unwrap_or_default();
+        let lieu = info.location().map(|l| format!("{}:{}", l.file(), l.line())).unwrap_or_default();
+        *DERNIERE_PANIQUE.lock().unwrap() = Some(format!("{msg} ({lieu})"));
+    }));
+    let mut paniques: std::collections::BTreeMap<String, u32> = Default::default();
     let graine: u64 = std::env::var("DDSOM_GRAINE").ok().and_then(|v| v.parse().ok()).unwrap_or(0);
     let mut alea = Alea(0x1234_5678_9abc_def1 ^ graine.wrapping_mul(0x9e37_79b9_7f4a_7c15));
     let tables: [(&Pool, u32, u32); 4] = [(&ESHL, 0x39b96, 64), (&SET, 0x39eac, 34), (&SOBJ, 0x39fa8, 16), (&ENEMY, 0x39a78, 29)];
@@ -1250,7 +1258,18 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
                     println!("   après : {apres:02x?}");
                 }
                 if r.is_err() {
-                    // l'original est sorti des rails (entrée incohérente) : on abandonne la trajectoire
+                    // l'original est sorti des rails (entrée incohérente), ou la native a paniqué : on abandonne la
+                    // trajectoire, et la panique est comptée (résumé final)
+                    let m = DERNIERE_PANIQUE.lock().unwrap().take().unwrap_or_default();
+                    // les adresses varient d'un appel à l'autre : on les masque pour regrouper
+                    let cle: String = m.chars().map(|ch| if ch.is_ascii_hexdigit() && !ch.is_ascii_alphabetic() { '#' } else { ch }).collect();
+                    let cle = format!("{entree:06x} {}", cle.split(" (").next().unwrap_or(""));
+                    let distinctes = paniques.len();
+                    let n = paniques.entry(cle).or_insert(0);
+                    if *n == 0 && distinctes < 40 {
+                        println!("panique en {entree:06x} type {kind} pas {pas} : {m}");
+                    }
+                    *n += 1;
                     let _ = (cs, bs);
                     break;
                 }
@@ -1296,13 +1315,22 @@ fn familles(roms: &str, eeprom: &str, scenario: &str, chauffe: u32, tours: u32, 
         println!("  {name:28} {:>7} appels {:>5} écarts{}", st.calls, st.mismatches,
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
-    println!("{essais} appels de gestionnaires");
+    let compares: u64 = ddsom_game::report().values().map(|s| s.calls).sum();
+    let n_paniques: u32 = paniques.values().sum();
+    println!("{essais} appels de gestionnaires, {compares} appels de natives comparés à l'original, {n_paniques} paniques");
+    for (cle, n) in &paniques {
+        println!("  {n:6} × {cle}");
+    }
     if let Ok(fichier) = std::env::var("DDSOM_COUVERTURE") {
         let texte: Vec<String> = vus.iter().map(|a| format!("{a:06x}")).collect();
         std::fs::write(fichier, texte.join("\n")).expect("écriture couverture");
     }
-    println!("{}", if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
+    // rien de comparé (chaque appel a paniqué) : ce n'est pas une validation
+    println!("{}", if compares == 0 { "ÉCHEC : aucun appel comparé" } else if total == 0 { "VALIDE : aucun écart" } else { "ÉCHEC" });
 }
+
+/// Message et lieu de la dernière panique (le crochet de panique est muet).
+static DERNIERE_PANIQUE: std::sync::Mutex<Option<String>> = std::sync::Mutex::new(None);
 
 fn main() {
     let a: Vec<String> = std::env::args().collect();

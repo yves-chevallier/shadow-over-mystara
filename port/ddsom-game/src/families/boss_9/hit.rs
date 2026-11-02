@@ -5,7 +5,7 @@ use super::moves::{restart, roll};
 use super::*;
 use crate::objects::Courant;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB) == 0 {
         shaken(x)
     } else {
@@ -16,18 +16,16 @@ pub(super) fn run(x: &mut Cx) {
 // --- groupe 0 : coup reçu --------------------------------------------------------------------------
 
 /// 0x8b49c : gel, puis secousse (`+6` = 0 à 4) ; remise en liste.
-fn shaken(x: &mut Cx) {
+fn shaken<R: Banc>(x: &mut Cx<'_, R>) {
     let freeze = x.u8(f::FREEZE);
     if freeze != 0 && (freeze as i8) > 0 {
         x.set8(f::FREEZE, freeze - 1);
     } else {
-        x.c.d[0] = x.u8(f::SUB2) as u32;
         match x.u8(f::SUB2) {
             0 => struck(x),
             2 => {
-                x.c.d[0] = 4;
                 if x.u8(SHAKE) != 0 {
-                    shake(x);
+                    shake(x, 4);
                 } else {
                     next6(x);
                 }
@@ -39,7 +37,7 @@ fn shaken(x: &mut Cx) {
 }
 
 /// 0x8b4c2 : le coup : avaries, gel ; plus de PV : détruit ; sinon secousse et recul à l'opposé de l'attaquant.
-fn struck(x: &mut Cx) {
+fn struck<R: Banc>(x: &mut Cx<'_, R>) {
     lib::sound(x, 0xea984);
     damage_bits(x);
     let f = x.u8(0x56);
@@ -60,11 +58,8 @@ fn struck(x: &mut Cx) {
     lib::debris_spray(x, 4);
     let away_left = x.u16(0x54) != 0 && {
         let a = x.linked(0x54);
-        x.c.a[1] = a.0;
         let ax = a.u16(x.b, 0x8);
-        set_dw(x, 0, ax);
         let d = x.u16(0x8).wrapping_sub(ax);
-        set_dw(x, 1, d);
         (d as i16) < 0
     };
     let (vx, vz) = if away_left { ((-0x280i16) as u16, 0x28u16) } else { (0x280, (-0x28i16) as u16) };
@@ -72,23 +67,22 @@ fn struck(x: &mut Cx) {
     x.set16(0x16, vz);
 }
 
-/// 0x8b9ca : secousse de ±D0 (alternée, dans le sens de l'engin).
-fn shake(x: &mut Cx) {
+/// 0x8b9ca : secousse de ±`amplitude` (D0 de l'original ; alternée, dans le sens de l'engin).
+fn shake<R: Banc>(x: &mut Cx<'_, R>, amplitude: u16) {
     let n = x.u8(SHAKE).wrapping_sub(1);
     x.set8(SHAKE, n);
-    let mut d = x.c.d[0] as u16;
+    let mut d = amplitude;
     if n & 1 != 0 {
         d = d.wrapping_neg();
     }
     if x.u8(f::FLIP) != 0 {
         d = d.wrapping_neg();
     }
-    set_dw(x, 0, d);
     x.add16(0x8, d);
 }
 
 /// 0x8b55e : recul jusqu'à l'arrêt (octet fort de la vitesse nul), puis reprise de l'état mémorisé.
-fn recoil(x: &mut Cx) {
+fn recoil<R: Banc>(x: &mut Cx<'_, R>) {
     if every(x, 3) {
         smoke_pair(x, 0, 2);
     }
@@ -126,7 +120,7 @@ fn clear_hit<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8b628 : détruit : la scène est prévenue (0x900 : boss 9 vaincu), l'équipage saute.
-fn destroyed(x: &mut Cx) {
+fn destroyed<R: Banc>(x: &mut Cx<'_, R>) {
     damage_bits(x);
     count_crew(x);
     x.add8(f::SUB, 2);
@@ -141,13 +135,11 @@ fn destroyed(x: &mut Cx) {
     lib::flash_and_shake(x);
     for k in 0..4u32 {
         let m = x.linked(CREW + 2 * k);
-        x.c.a[3] = m.0;
         if m.u8(x.b, 0) != 0 {
             m.set_u8(x.b, 0, 2);
         }
     }
-    x.c.d[5] = 0xffff;
-    x.c.a[2] = x.o.0 + CREW + 8;
+    *x.c.d5() = 0xffff;
 }
 
 /// Boss vaincu : type et variante (mot), score (`A5-0x557c..`), lus par la fin de scène.
@@ -156,7 +148,7 @@ const A5_DEATH: u32 = 0xff8000 - 0x557c;
 // --- groupe 2 : détruit ------------------------------------------------------------------------------
 
 /// 0x8b67c : l'épave sort de l'écran, revient, l'équipage est éjecté, dialogue, puis chute hors de l'écran.
-fn wreck(x: &mut Cx) {
+fn wreck<R: Banc>(x: &mut Cx<'_, R>) {
     x.set_a5_u16(0x51e, 0);
     if var::PAUSE.get(x.b) != 0 {
         return;
@@ -181,7 +173,6 @@ fn wreck(x: &mut Cx) {
             jolt(x);
             let a = x.u16(0x8).wrapping_add(0x80);
             let cam = x.a5_u16(CAM_X);
-            set_dw(x, 0, a.wrapping_sub(cam));
             if !Fl::sub16(a, cam).gt() {
                 count_crew(x);
                 if (x.a5_u16(ENEMY_FREE) as i16) >= 4 {
@@ -209,8 +200,6 @@ fn wreck(x: &mut Cx) {
             smoke_every(x, 3);
             let edge = x.a5_u16(CAM_X).wrapping_add(0x180);
             let a = x.u16(0x8).wrapping_add(0x90);
-            set_dw(x, 1, edge);
-            set_dw(x, 0, a.wrapping_sub(edge));
             if Fl::sub16(a, edge).gt() {
                 next6(x);
                 let n = x.a5_u8(0x4ff).wrapping_add(4);
@@ -227,7 +216,6 @@ fn wreck(x: &mut Cx) {
                 if x.u16(DRIVER) != 0 {
                     next6(x);
                     let d = x.linked(DRIVER);
-                    x.c.a[1] = d.0;
                     d.set_u32(x.b, f::STATE, 0x020c_0000);
                 }
             } else {
@@ -237,7 +225,6 @@ fn wreck(x: &mut Cx) {
         }
         16 => {
             let cam = x.a5_u16(CAM_X);
-            set_dw(x, 1, cam);
             if cam != 0x500 {
                 anim(x);
                 x.set8(0x3b, 9);
@@ -256,7 +243,6 @@ fn wreck(x: &mut Cx) {
             }
             if x.u16(MESSAGE) != 0 {
                 let m = x.linked(MESSAGE);
-                x.c.a[1] = m.0;
                 if m.u8(x.b, 0x22) != 0 {
                     next6(x);
                     x.set16(0x18, (-0x600i16) as u16);
@@ -266,7 +252,6 @@ fn wreck(x: &mut Cx) {
                     for off in [DRIVER, CREW, CREW + 2, CREW + 4, CREW + 6] {
                         if x.u16(off) != 0 {
                             let m = x.linked(off);
-                            x.c.a[1] = m.0;
                             m.set_u32(x.b, f::STATE, 0x020c_0400);
                         }
                     }
@@ -275,7 +260,6 @@ fn wreck(x: &mut Cx) {
         }
         _ => {
             let d = x.u16(0xc).wrapping_add(0x50).wrapping_sub(x.a5_u16(CAM_Y));
-            set_dw(x, 0, d);
             if d >= 0x100 {
                 x.set32(f::STATE, 0x0600_0000);
             }
@@ -291,7 +275,7 @@ fn wreck(x: &mut Cx) {
 }
 
 /// 0x8b6c8 : l'épave part vers le bord (en remplaçant l'équipage tant qu'il en manque).
-fn leaving(x: &mut Cx) {
+fn leaving<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(CREW_LOST) != 0 {
         x.set8(GAIT, 2);
         count_crew(x);

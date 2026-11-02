@@ -7,7 +7,7 @@ use super::*;
 use crate::objects::Courant;
 use crate::machine::Machine;
 
-pub(super) fn run(x: &mut Cx) {
+pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(HIT_ACK, 0);
     if tst8(x, f::FREEZE).gt() {
         sub8(x, f::FREEZE, 1);
@@ -24,7 +24,7 @@ pub(super) fn run(x: &mut Cx) {
     lib::collide_terrain(x);
 }
 
-fn step(x: &mut Cx, table: u32) -> u32 {
+fn step<R: Banc>(x: &mut Cx<'_, R>, table: u32) -> u32 {
     dispatch(x, table, f::SUB2)
 }
 
@@ -33,7 +33,7 @@ fn paused<R: Banc>(x: &mut Cx<'_, R>) -> bool {
 }
 
 /// 0x892ce : le coup est traité par la routine commune ; sans PV le boss meurt.
-fn reaction(x: &mut Cx) {
+fn reaction<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         x.set_bit(0x1, 1, false);
     }
@@ -49,11 +49,8 @@ fn reaction(x: &mut Cx) {
     }
     sub16(x, IDLE_WAIT, 1);
     let code = x.u8(REACTION) as u32;
-    // D0 = le code : 0x10112 (`set_68`) a laissé le reste de D0 à zéro. Relu par la routine de réaction.
-    x.c.d[0] = code;
     let routine = rom32(x, 0x89330 + code);
-    x.c.a[1] = routine;
-    x.call(routine);
+    run_reaction(x, routine);
     if x.u8(f::FREEZE) != 0 && x.u8(0x46) != 0 {
         addq8(x, f::FREEZE, 1);
         x.set8(0x46, 0);
@@ -61,7 +58,7 @@ fn reaction(x: &mut Cx) {
 }
 
 /// 0x893dc : le boss est projeté en arrière, rebondit, puis se relève ou riposte.
-fn thrown(x: &mut Cx) {
+fn thrown<R: Banc>(x: &mut Cx<'_, R>) {
     if paused(x) {
         return;
     }
@@ -99,8 +96,10 @@ fn thrown(x: &mut Cx) {
             x.set32(0x58, 0);
             x.set32(0x14, 0);
             let n = var::PLAYERS_ALIVE.get(x.b) as u32;
-            x.c.d[5] = ((n as u16) << 2) as u32;
-            let mask = rom32(x, 0x894cc + x.c.d[5]);
+            // D5 = l'index (reste relu par les gestionnaires suivants, `dispatch::Restes`)
+            let i = ((n as u16) << 2) as u32;
+            *x.c.d5() = i;
+            let mask = rom32(x, 0x894cc + i);
             let alea = x.random();
             let i = alea & 0x1f;
             if mask >> i & 1 == 0 {
@@ -123,7 +122,7 @@ fn thrown(x: &mut Cx) {
 }
 
 /// 0x894f4 : chute, attente au sol, relevé.
-fn fall(x: &mut Cx) {
+fn fall<R: Banc>(x: &mut Cx<'_, R>) {
     match step(x, 0x89500) {
         0x8950a => {
             x.add8(f::SUB2, 2);
@@ -177,7 +176,7 @@ fn fall(x: &mut Cx) {
 }
 
 /// 0x895c2 : mort (chute, effets, attente, clignotement, libération).
-fn death(x: &mut Cx) {
+fn death<R: Banc>(x: &mut Cx<'_, R>) {
     match dispatch(x, 0x895d0, f::SUB2) {
         0x895da => {
             x.add8(f::SUB2, 2);
@@ -195,13 +194,10 @@ fn death(x: &mut Cx) {
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);
             let side = x.u8(0x4a) ^ 0x20;
-            x.c.d[0] = x.c.d[0] & !0xff | side as u32;
             x.set8(f::FLIP, side);
             let mut v = (-0x300i16) as u16;
-            setw(x, 0, v);
             if x.u8(f::FLIP) == 0 {
                 v = v.wrapping_neg();
-                setw(x, 0, v);
             }
             x.set16(0x14, v);
             x.move_xz();
@@ -249,7 +245,6 @@ fn death(x: &mut Cx) {
             }
             x.set_bit(0x1, 1, false);
             let b = x.u16(TIMER) & 1;
-            setw(x, 0, b);
             if b != 0 {
                 x.set_bit(0x1, 1, true);
             }

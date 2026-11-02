@@ -513,9 +513,15 @@ fn scroll_1_on_with(c: &mut Cpu, b: &mut Cps2Bus, mode: u16) {
 fn scroll_1_on(c: &mut Cpu, b: &mut Cps2Bus) {
     scroll_1_on_with(c, b, 0x18);
 }
+/// 0x2a42 : `A5+0x548` = `valeur` (D0.w de l'original), fond 1 réglé sur 0x34.
+pub fn fond_1_allume_a(b: &mut Cps2Bus, valeur: u16) {
+    wr16(b, A5 + 0x548, valeur);
+    fond_1_en_mode(b, 0x34);
+}
 fn scroll_1_on_at_d0(c: &mut Cpu, b: &mut Cps2Bus) {
-    wr16(b, A5 + 0x548, c.d[0] as u16);
-    scroll_1_on_with(c, b, 0x34);
+    fond_1_allume_a(b, c.d[0] as u16);
+    moved(c, 0x34, Size::Word);
+    rts(c, b);
 }
 
 /// 0x133f6 / 0x133f0 : l'indicateur « démarrage fait » (`A5-0x715e`) levé / baissé.

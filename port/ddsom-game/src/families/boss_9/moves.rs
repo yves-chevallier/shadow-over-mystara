@@ -8,7 +8,7 @@ use crate::objects::Courant;
 // --- groupe 0 : entrée en scène --------------------------------------------------------------------
 
 /// 0x8a96a : l'équipage monte, dialogue, l'engin traverse l'écran puis revient en marche arrière.
-pub(super) fn intro(x: &mut Cx) {
+pub(super) fn intro<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         2 => board(x),
         4 => {
@@ -25,7 +25,6 @@ pub(super) fn intro(x: &mut Cx) {
         6 => {
             if x.u16(MESSAGE) != 0 {
                 let m = x.linked(MESSAGE);
-                x.c.a[1] = m.0;
                 if m.u8(x.b, 0x22) == 0 {
                     return;
                 }
@@ -121,15 +120,14 @@ pub(super) fn roll<R: Banc>(x: &mut Cx<'_, R>) {
 }
 
 /// 0x8a992 : l'équipage monte (quatre servants ENEMY 0x13, variante 2 : `+0xbc` = 5 à 2), s'il y a la place.
-fn board(x: &mut Cx) {
+fn board<R: Banc>(x: &mut Cx<'_, R>) {
     if (x.a5_u16(ENEMY_FREE) as i16) < 4 {
         return;
     }
     x.set8(CREW_LOST, 0);
     for k in 0..4u32 {
         let slot = 5 - k as u8;
-        x.c.d[5] = slot as u32;
-        x.c.a[2] = x.o.0 + CREW + 2 * k;
+        *x.c.d5() = slot as u32;
         let Some(m) = x.alloc(&pools::ENEMY) else { return };
         let active = x.u8(0);
         m.set_u8(x.b, 0, active);
@@ -138,7 +136,6 @@ fn board(x: &mut Cx) {
         m.set_u8(x.b, 2, 0x13);
         m.set_u16(x.b, 0x42, x.o.0 as u16);
         x.set16(CREW + 2 * k, m.0 as u16);
-        x.c.a[2] = x.o.0 + CREW + 2 * k + 2;
         if slot == 2 {
             break;
         }
@@ -150,7 +147,7 @@ fn board(x: &mut Cx) {
 // --- groupe 2 : départ ---------------------------------------------------------------------------
 
 /// 0x8abc2 : panache de fumée (SET 2, variante 0xe), puis départ du premier passage.
-pub(super) fn start(x: &mut Cx) {
+pub(super) fn start<R: Banc>(x: &mut Cx<'_, R>) {
     if let Some(s) = x.alloc(&pools::SET) {
         s.set_u8(x.b, 0, 1);
         s.set_u8(x.b, 3, 0xe);
@@ -160,7 +157,7 @@ pub(super) fn start(x: &mut Cx) {
 }
 
 /// 0x8abdc : (re)départ : premier passage (`+5` = 4).
-pub(super) fn restart(x: &mut Cx) {
+pub(super) fn restart<R: Banc>(x: &mut Cx<'_, R>) {
     lib::set_immunities(x);
     x.set8(0, 1);
     x.add8(f::SUB, 2);
@@ -177,7 +174,7 @@ pub(super) fn restart(x: &mut Cx) {
 // --- groupe 4 : passages et arrêts ------------------------------------------------------------
 
 /// 0x8ac14 : fumée de l'avarie (une fois) ; sans servants, l'engin attend leur remplacement ; sinon l'étape `+6`.
-pub(super) fn fight(x: &mut Cx) {
+pub(super) fn fight<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(SMOKE_DONE) == 0 && sub16(x, SMOKE_DELAY, 1).mi() {
         x.set8(SMOKE_DONE, 1);
         if let Some(s) = x.alloc(&pools::SET) {
@@ -211,7 +208,7 @@ pub(super) fn fight(x: &mut Cx) {
 }
 
 /// 0x8acaa : un passage d'un bord à l'autre (après `+0x6e` images d'attente).
-fn pass(x: &mut Cx) {
+fn pass<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         if sub8(x, WAIT, 1).pl() {
             return;
@@ -261,14 +258,14 @@ fn pass(x: &mut Cx) {
 }
 
 /// Au bord : demi-tour, et l'équipage perdu est remplacé.
-fn turn_back(x: &mut Cx) {
+fn turn_back<R: Banc>(x: &mut Cx<'_, R>) {
     let side = x.u8(f::FLIP) ^ 0x20;
     x.set8(f::FLIP, side);
     refill_crew(x, false);
 }
 
 /// 0x8adfc : roule jusqu'à l'abscisse d'arrêt, attend `+0xbe` images, puis s'arrête pour tirer selon la cible.
-fn approach(x: &mut Cx) {
+fn approach<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -292,7 +289,6 @@ fn approach(x: &mut Cx) {
                 crew_smoke(x);
             }
             let d = x.u16(STOP_X).wrapping_sub(x.u16(0x8)).wrapping_add(8);
-            set_dw(x, 0, d);
             if d > 0x20 {
                 x.move_x();
                 return;
@@ -325,7 +321,7 @@ fn approach(x: &mut Cx) {
 }
 
 /// 0x8aed8 / 0x8af4c : arrêt de tir selon la portée de la cible ; hors de portée, nouveau passage.
-fn choose_halt(x: &mut Cx) {
+fn choose_halt<R: Banc>(x: &mut Cx<'_, R>) {
     match target_range(x) {
         0 => draw_halt(x, 0xe),
         2 => steps(x, 0, 2),
@@ -334,29 +330,25 @@ fn choose_halt(x: &mut Cx) {
 }
 
 /// 0x8c952 : avarie de tir (bit 0 de `+0xa8`) : l'arrêt est sauté ; vrai.
-fn cannon_broken(x: &mut Cx) -> bool {
+fn cannon_broken<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.bit(DAMAGE, 0) {
         steps(x, 2, 4);
-        x.c.d[0] = 1;
         return true;
     }
-    x.c.d[0] = 0;
     false
 }
 
 /// 0x8c960 : avarie de bombardement (bits 3 ou 4) ; vrai.
-fn bombard_broken(x: &mut Cx) -> bool {
+fn bombard_broken<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     if x.bit(DAMAGE, 3) || x.bit(DAMAGE, 4) {
         steps(x, 2, 4);
-        x.c.d[0] = 1;
         return true;
     }
-    x.c.d[0] = 0;
     false
 }
 
 /// 0x8af74 : arrêt, ordre de tir aux parties (bit 0 de `+0xa9`).
-fn fire_order(x: &mut Cx) {
+fn fire_order<R: Banc>(x: &mut Cx<'_, R>) {
     if cannon_broken(x) {
         return;
     }
@@ -367,7 +359,7 @@ fn fire_order(x: &mut Cx) {
 }
 
 /// 0x8af94 : attend la fin du tir, puis repart.
-fn fire_wait(x: &mut Cx) {
+fn fire_wait<R: Banc>(x: &mut Cx<'_, R>) {
     if !x.bit(ORDERS, 0) {
         if crew_gone(x) {
             return;
@@ -378,7 +370,7 @@ fn fire_wait(x: &mut Cx) {
 }
 
 /// 0x8af62 / 0x8b3bc : tir.
-fn fire(x: &mut Cx) {
+fn fire<R: Banc>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         fire_order(x)
     } else {
@@ -387,7 +379,7 @@ fn fire(x: &mut Cx) {
 }
 
 /// Monte et descend en profondeur (`+0x1c`) entre 0x40 et 0x70 pendant que l'équipage tient.
-fn sway(x: &mut Cx) {
+fn sway<R: Banc>(x: &mut Cx<'_, R>) {
     count_crew(x);
     if x.u8(CREW_COUNT) != 0 {
         let z = x.u16(0x10) as i16;
@@ -405,7 +397,7 @@ fn sway(x: &mut Cx) {
 }
 
 /// 0x8afd6 : tir en se déplaçant en profondeur.
-fn bob(x: &mut Cx) {
+fn bob<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             if cannon_broken(x) {
@@ -445,16 +437,13 @@ fn bob(x: &mut Cx) {
 }
 
 /// 0x8b100 : vers la profondeur de la cible (`+0x1c`), et nombre de bombardements.
-fn aim_lane(x: &mut Cx) {
+fn aim_lane<R: Banc>(x: &mut Cx<'_, R>) {
     x.set16(0x14, 0);
     x.set16(0x16, 0);
     x.set8(COUNT, 0);
     x.set16(0x1c, (-0x120i16) as u16);
     let t = load_target(x);
     let tz = t.u16(x.b, 0x10);
-    set_dw(x, 0, tz);
-    let d = x.u16(0x10).wrapping_sub(tz);
-    set_dw(x, 1, d);
     if !Fl::sub16(x.u16(0x10), tz).gt() {
         x.set8(COUNT, 1);
         x.set16(0x1c, 0x120);
@@ -464,7 +453,7 @@ fn aim_lane(x: &mut Cx) {
 }
 
 /// 0x8b13e : ordre de bombardement (bits 3 et 4 de `+0xa9`).
-fn bomb_order(x: &mut Cx) {
+fn bomb_order<R: Banc>(x: &mut Cx<'_, R>) {
     if bombard_broken(x) {
         return;
     }
@@ -477,7 +466,7 @@ fn bomb_order(x: &mut Cx) {
 }
 
 /// 0x8b0ea : bombardements répétés en se déplaçant en profondeur.
-fn bomb(x: &mut Cx) {
+fn bomb<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => aim_lane(x),
         2 => bomb_order(x),
@@ -501,7 +490,7 @@ fn bomb(x: &mut Cx) {
 }
 
 /// 0x8b226 / 0x8b454 : bombardement puis tir.
-fn bomb_then_fire(x: &mut Cx) {
+fn bomb_then_fire<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => bomb_order(x),
         2 => {
@@ -516,7 +505,7 @@ fn bomb_then_fire(x: &mut Cx) {
 }
 
 /// 0x8b328 / 0x8b33a : arrêt de `ticks` images.
-fn halt(x: &mut Cx, ticks: u16) {
+fn halt<R: Banc>(x: &mut Cx<'_, R>, ticks: u16) {
     if x.u8(0x7) == 0 {
         next7(x);
         x.set16(TIMER, ticks);
@@ -533,7 +522,7 @@ fn halt(x: &mut Cx, ticks: u16) {
 }
 
 /// 0x8b3ce : tirs répétés (`+0xb9` salves).
-fn volley(x: &mut Cx) {
+fn volley<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             next7(x);
@@ -555,7 +544,7 @@ fn volley(x: &mut Cx) {
 // --- groupe 6 : attente --------------------------------------------------------------------------
 
 /// 0x8b46a : un joueur revient : départ.
-pub(super) fn wait_for_players(x: &mut Cx) {
+pub(super) fn wait_for_players<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(GAIT, 2);
     if var::PLAYERS_ALIVE.get(x.b) == 0 {
         return anim(x);
