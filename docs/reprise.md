@@ -16,6 +16,11 @@ Point de départ pour la prochaine session. L'historique détaillé des lots est
 
 ## Lots en cours (mise à jour du 2026-11-01)
 
+* **L3, son en tableaux indexés** (branche `wt-l3-son`, 2026-11-02) : `ddsom_sound::SoundData` remplace la région
+  d'octets du pilote, `music.json` change de format (**réextraire `music`**), `qsound::DspTables` ; validé 308/308
+  dans les deux modes après fusion de main 39be0e4, non fusionné. Voir [fin.md](fin.md) (L3) et [son.md](son.md)
+  « Tableaux indexés ».
+
 Aucune branche ouverte : `wt-pile` (partie 4) et `wt-locales` (partie 5, étapes 1-2 et 11 familles d'ennemis) sont fusionnés dans main (edd4e00), 296/296 VALIDE dans les deux modes.
 
 Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 5 » de refactorisation.md) :
