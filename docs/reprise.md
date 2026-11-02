@@ -20,8 +20,8 @@ Aucune branche ouverte : `wt-pile` (partie 4) et `wt-locales` (partie 5, étapes
 
 Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 5 » de refactorisation.md) :
 * **Partie 4, point 5** (branche `wt-restes`, validée 296/296 dans les deux modes et empoisonnée `reprise,neuve,pile` sans exemption, non fusionnée) : `ram_du_noyau` resserré aux piles ; `dispatch::Restes` dans `Table::restes` ; `Contexte` supprimé (A0, D4, D7 en champs des étapes, SR utilisateur sans masque).
-* **Partie 5, suite** : familles d'ennemis à vraie lecture de registre (squelette D1, trog A1, gargouille D0, golem D0, bête de l'ombre D0), familles pas encore tentées (scarabée, scorpion, harpie, Riyakaa, guerrier, double, part), puis boss, `joueur/`, `set_b`, `effects_c`, enfin `registres_generique.py` et `registres_sans.py`.
-* Outils de la partie 5 : `tools/registres/` (`lecteurs.py` liste les lecteurs de registres d'entrée, `generique.py`/`nettoie.py`/`famille.sh` rendent une famille générique, `fuzz.sh`/`compare_fuzz.py` comparent fuzz_couv branche/main ; variables `SCRATCH` et `W`).
+* **Partie 5, suite** (branche `wt-familles2`) : toutes les familles d'ennemis et les boss 0, 1, 2/22, 4, 6, 7, 10, 13, 16, 17, 18, 21 sont en gestionnaires `#[sans]` (voir la ligne « partie 5 »). Restent les boss 3, 5, 8, 9, 11, 15, 19, puis `joueur/`, `set_b`, `effects_c`, enfin `registres_generique.py` et `registres_sans.py`.
+* Outils de la partie 5 : `tools/registres/` (`lecteurs.py` liste les lecteurs de registres d'entrée, `generique.py`/`nettoie.py`/`famille.sh` rendent une famille générique, `fuzz.sh`/`compare_fuzz.py` comparent fuzz_couv branche/main ; variables `SCRATCH`, `W` et `P` (préfixe des fichiers temporaires)). Exporter `DDSOM_ROMS` pour tout `cargo` (sinon `ddsom_rc` se recompile, ~12 min).
 
 ## Après ces lots
 

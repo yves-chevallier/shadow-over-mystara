@@ -3292,23 +3292,22 @@ mod double2 {
 }
 
 /// 0xb74ea : direction initiale de la variante, et sa table de vitesses dans D0 (D1 = variante).
-fn double2_direction(x: &mut Cx) {
+/// Direction de la variante ; rend la table de vitesses (D0 de l'original).
+fn double2_direction<R: Banc>(x: &mut Cx<'_, R>) -> u16 {
     let v = x.u8(f::VARIANT) as u32;
     let dir = x.rom8(double2::DIRECTIONS + v);
     x.set8(Obj::SPEED_INDEX, dir);
-    x.c.d[0] = x.rom8(double2::SPEEDS + v) as u32;
-    x.c.d[1] = v;
+    x.rom8(double2::SPEEDS + v) as u16
 }
 
-fn double2(x: &mut Cx) {
+fn double2<R: Banc>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
             let v = x.u8(f::VARIANT) as u32;
             let target = x.rom16(double2::TARGETS + 2 * v);
             x.set16(double::TARGET_X, target);
-            double2_direction(x);
-            let n = x.c.d[0] as u16;
+            let n = double2_direction(x);
             x.select_speed(&crate::objects::motion::SPEEDS_B, n);
             let carrier = x.linked(double::CARRIER);
             copy_position(x, carrier);
@@ -3329,7 +3328,7 @@ fn double2(x: &mut Cx) {
     }
 }
 
-fn double2_active(x: &mut Cx) {
+fn double2_active<R: Banc>(x: &mut Cx<'_, R>) {
     let carrier = x.linked(double::CARRIER);
     let sub = x.u8(f::SUB_STATE);
     let awaited = |sub: u8| match sub {
@@ -3419,10 +3418,9 @@ fn double2_active(x: &mut Cx) {
                         // retour : demi-tour vers le porteur
                         let cx_ = carrier.u16(x.b, Obj::X);
                         x.set16(double::TARGET_X, cx_);
-                        double2_direction(x);
+                        let n = double2_direction(x);
                         let dir = (x.u8(Obj::SPEED_INDEX).wrapping_add(0x10)) & 0x1f;
                         x.set8(Obj::SPEED_INDEX, dir);
-                        let n = x.c.d[0] as u16;
                         x.select_speed(&crate::objects::motion::SPEEDS_B, n);
                     }
                 }
@@ -5153,7 +5151,7 @@ handlers! {
     0xb5fb6 "effct_attache" attached,
     0xb6d48 "effct_machine" #[sans] machine,
     0xb6ef2 "effct_surgissant" #[sans] riser,
-    0xb7248 "effct_double_b" double2,
+    0xb7248 "effct_double_b" #[sans] double2,
     0xb751e "effct_nageur" swimmer,
     0xb7a14 "effct_eclat_tombant" #[sans] spark_fall,
     0xb7ac8 "effct_messager" #[sans] courier,
