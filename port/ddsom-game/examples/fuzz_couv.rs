@@ -1139,5 +1139,10 @@ fn main() {
             println!("    {x}");
         }
     }
+    let trials: u64 = e.targets.values().map(|c| c.summary.tests as u64).sum();
+    if trials == 0 {
+        println!("FUZZ FAILED: no trial compared with the original");
+        std::process::exit(1);
+    }
     println!("{}", if total == 0 { "FUZZ OK" } else { "FUZZ MISMATCHES" });
 }

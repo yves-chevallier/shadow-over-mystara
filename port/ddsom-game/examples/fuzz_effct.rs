@@ -19,7 +19,7 @@ use std::collections::BTreeSet;
 use std::path::Path;
 
 use cps2::Cps2Bus;
-use m68k::decode::{Ea, Fetch, Op};
+use m68k::decode::{Ea, Op};
 use m68k::Cpu;
 
 use ddsom_game::mem::{rd16, rd8, wr16, wr32, wr8, A5};

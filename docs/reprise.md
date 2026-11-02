@@ -11,8 +11,8 @@ Point de départ pour la prochaine session. L'historique détaillé des lots est
   * Fonctions et branches jouées : [couverture-fonctions.md](couverture-fonctions.md) et `coverage-branches.tsv`.
   * Chemins non joués : fuzz différentiel `examples/fuzz_couv.rs` (section « Validation par fuzz »).
 * **Refactorisation.** Lots 0a, 0b, A à E, S, F, IA, noyau final, puis sortie du Cpu parties 1 et 3, tous fusionnés.
-  * Le `Cpu` sert encore de banc de registres à la plupart des natives.
-  * Ce qui bloque sa suppression : [refactorisation.md](refactorisation.md) § 18, « Ce qu'il faut encore pour supprimer `m68k::Cpu` ».
+  * Sortie du Cpu achevée (parties 1 à 7, étape finale § 20, `wt-sans-cpu`) : le jeu n'a plus de `m68k::Cpu` ; le
+    68000 ne sert plus qu'à la machine de référence et aux outils (`ddsom_game::tools`).
 
 ## Lots en cours (mise à jour du 2026-11-01)
 
@@ -41,11 +41,12 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
      générés par `examples/creatures.rs` et `examples/level_maps.rs` (docs/creatures.md, docs/niveaux.md restent en
      français), renvois aux fichiers de docs/. Validé 308/308 dans les deux modes (8812560, DDSOM_LONG=1) ; non fusionné.
 
-1. **Retirer `m68k::Cpu` du jeu.** Plus de `Body::WithCpu` : la machine de référence garde son 68000, le jeu n'en a plus.
-   `wt-cpu-player` (partie 6 : joueurs, combat) est fusionné ; `wt-cpu-core` (partie 7 : noyau, tâches, écrans,
-   aiguillage, refactorisation.md § 19) : le jeu n'a plus de banc de registres. Reste : retirer `Body::WithCpu`/`CpuIn`
-   et les natives qui ne servent plus qu'au code d'origine des outils (arguments en registres), puis le type `Cpu` du
-   jeu (`no68k::line`, `Native::execute`).
+1. ~~**Retirer `m68k::Cpu` du jeu.**~~ Fait (branche `wt-sans-cpu`, refactorisation.md § 20) : le jeu n'a plus de
+   processeur. Les natives à arguments en registres, la machine de référence, l'exécution des natives par le 68000,
+   `DDSOM_CHECK` et les sondes de registres sont dans `ddsom_game::tools` (fonctionnalité cargo `tools`, active pour
+   les exemples) ; `ddsom-game` sans `tools` et le binaire `ddsom` ne dépendent plus de `m68k` ni de `ddsom-rc`
+   (`cargo tree -p ddsom`). `DDSOM_CHECK=1` compare chaque gestionnaire d'objet à son original (et échoue s'il ne
+   compare rien). Non fusionné.
 2. ~~**Le reste de la couverture.**~~ Fait par le lot « couverture » (`wt-couv2`, [couverture.md](couverture.md),
    « Votes, boutiques, interface et démarrage ») :
    * votes de chemin (sorties des scènes 2, 13, 33 et 38, en décimal : les « routes 0x14/0x38 » étaient les scènes 20
@@ -64,7 +65,7 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    * `native_zones.txt` gardé : `extract` l'inclut (`natives.rs`) pour les zones lues dans le code ; ses zones hors du
      code font double emploi avec `reste.json` aujourd'hui, mais protègent si `code_68k.txt` grandit (docs/sans-rom.md) ;
    * `examples/reste68k`, `tools/reste68k.sh` et `docs/reste68k.md` retirés (`examples/cessions` l'était déjà).
-4. **Puis :** optimisation, documentation finale, et le bug de saisie du nom. Ce bug existe dans d'autres révisions du jeu, pas dans la nôtre (Euro 960619).
+4. **Suite :** optimisation (base : `examples/bench`, refactorisation.md « Performance »), documentation finale, et le bug de saisie du nom. Ce bug existe dans d'autres révisions du jeu, pas dans la nôtre (Euro 960619).
 
 ## Méthode qui marche
 

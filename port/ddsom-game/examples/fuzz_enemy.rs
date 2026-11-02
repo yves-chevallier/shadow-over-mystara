@@ -849,7 +849,6 @@ fn perturb_globals(b: &mut cps2::Cps2Bus, rng: &mut Rng, step: u32, obj: u32) {
 fn families(roms: &str, eeprom: &str, scenario: &str, warmup: u32, rounds: u32, filter: Option<u32>) {
     use ddsom_game::mem::{rd16, rd8};
     use ddsom_game::objects::pools::{Pool, ENEMY, ESHL, SET, SOBJ};
-    use m68k::decode::Fetch;
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
     ddsom_game::install(&mut m);
@@ -1403,13 +1402,14 @@ fn main() {
             }
         }
     }
-    let mut total = 0;
+    let (mut total, mut compared) = (0, 0);
     for (name, st) in ddsom_game::report() {
         total += st.mismatches;
+        compared += st.calls;
         println!("  {name:28} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches,
             st.first.map(|f| format!(" — {f}")).unwrap_or_default());
     }
-    println!("{}", if total == 0 { "VALID: no mismatch" } else { "FAILED" });
+    println!("{}", if compared == 0 { "FAILED: no call compared" } else if total == 0 { "VALID: no mismatch" } else { "FAILED" });
 }
 
 /// Scene controller (SET 2) and end-of-level screens (SET 15): they depend on

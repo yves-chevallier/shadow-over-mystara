@@ -958,6 +958,55 @@ encore sur le processeur des autres périmètres).
   `tools/validate_all.sh` : le total des appels par routine est vide, `grep` sans résultat ne fait plus échouer le
   script.
 
+## 20. Lot « sortie du Cpu », étape finale : le jeu sans `m68k::Cpu` (wt-sans-cpu)
+
+But : que le jeu n'ait plus de processeur du tout ; la machine de référence (`validate`, outils) garde son 68000.
+
+* **Décision : natives d'entrée réservées aux outils, pas retirées.** Les outils de fuzz (`fuzz_couv`, `fuzz_enemy`,
+  `fuzz_player`, `fuzz_*`) comparent une native *à l'adresse d'origine* avec l'original, sur l'état réel où le code
+  d'origine l'appelle (registres compris) : c'est ce qui les rend génériques (cibles par zone, nom, adresse). Viser la
+  fonction Rust directement obligerait à réécrire chaque outil pour chaque famille de signatures, et perdrait la
+  comparaison des registres que l'original relit. Les natives à arguments en registres (enveloppes du noyau,
+  `palette`, `video`, `sound` et ses 532 enveloppes, phases et états de scène, boucles d'aiguillage, `PLACE_PLAYERS`,
+  écrans de test, créateurs, `set_residue`, natives de combat) sont donc **déplacées** dans le module
+  `ddsom_game::tools` (fonctionnalité cargo `tools`), en sous-modules calqués sur ceux du jeu (`tools/sound.rs`,
+  `tools/families/creators.rs`...), avec leurs adaptateurs (`_68k`, `*_regs`, `on_bench`, `Cx<&mut Cpu>`,
+  `impl Regs for Cpu`, `impl Bench for &mut Cpu`), l'exécution des natives par le processeur (`Native::execute`,
+  `call`, `run`, `run_traced`), la machine de référence (`install_reference`, `idle`, correctifs `cps2::Patch`), les
+  sondes de registres (`diag::dead_regs`, `probe_call`) et les retours vers le code d'origine (`tools::frames`).
+  **Retirées** quand l'outil peut s'en passer : les natives d'actions des personnages, des poses rares et des réactions
+  des ennemis ne lisaient que A0 et les restes D2-D5 : elles deviennent des natives `Body::Handler` du jeu (sans
+  registres, `player::Ctx::on_player`, `reactions::run_entry`), que `Native::execute` des outils appelle comme un
+  gestionnaire ; le handler générique sur processeur (`cx::handler`, `#[without]`) disparaît, tous les gestionnaires
+  sont des `Body::Handler`. `clear_picked_68k` (plus appelé) est supprimé.
+* **Plus de `Cpu` dans le jeu.** `Body::WithCpu`/`CpuIn` n'existent qu'avec `tools` ; `Native::execute` (paramètre
+  `Cpu`) est dans `tools` ; `no68k::line(bus, plafond)` n'a plus de `Cpu` ni de compteur de cycles (`cps2::LineWork`
+  ne reçoit plus que le bus ; la machine avance elle-même le compteur de son 68000, quand elle en a un). Les
+  transcriptions instruction par instruction qui calculaient encore des drapeaux sur un `Cpu::default()` (la poussée
+  hors du terrain `terrain::Push`, dont le jeu relit Z ; la remise en liste `lists::Reinsert`, dont il relit D2) sont
+  écrites sur le trait `ops::Alu` : `ops::Registers` dans le jeu (D, A, Z, C), le `Cpu` dans les outils (tous les
+  drapeaux, `tools::ops`). `palette::load_all_with` remplace `load_all_by(b, Option<&mut Cpu>)`. `ops::Size` remplace
+  `m68k::decode::Size` dans les créateurs génériques (`effects_creators::leftovers::Regs`). Le bus a des accès sans
+  processeur (`Cps2Bus::read16`, `fetch16`, `irq_ack`...), que l'implémentation `m68k::Bus` relaie.
+* **Le binaire `ddsom` ne lie plus le 68000.** `cps2` : fonctionnalité `m68k` (par défaut) ; sans elle, la machine n'a
+  ni `cpu`, ni exécuteur, ni `idle`, ni correctifs. `ddsom-game` : `m68k`, `ddsom-rc` et `cps2/m68k` seulement avec
+  `tools` (par défaut, pour les exemples). `ddsom` dépend de `ddsom-game`, `cps2` et `ddsom-assets` sans fonctionnalités
+  par défaut ; `--features original` rajoute `ddsom-rc` pour `DDSOM_ORIGINE`/`DDSOM_INTERP`.
+* **`DDSOM_CHECK` compare de nouveau.** Depuis les parties 6 et 7, le jeu n'exécutait plus aucune native par adresse :
+  `DDSOM_CHECK=1` dans `validate` ne comparait plus rien. Désormais chaque gestionnaire d'objet appelé par la boucle
+  d'aiguillage est aussi exécuté dans sa version d'origine sur une copie de la machine (A0 = l'objet, D7 = le
+  compteur, D2-D5 = les restes, A5), la mémoire comparée (`tools::check_handler`, rapport par gestionnaire avec
+  `skipped` pour ceux qui cèdent) ; `validate` échoue (« FAILED: DDSOM_CHECK compared nothing ») s'il n'a rien comparé.
+  `bot30k`, 3 000 images : 28 120 appels comparés, 0 écart.
+* **Mesures.** Lignes de `ddsom-game/src` qui nomment `Cpu` ou `m68k` : 460 dans 64 fichiers avant ; après, 0 ligne de
+  code hors de `tools/` (13 lignes, toutes des commentaires ou les deux variantes de `Body` sous `cfg`), 482 dans les 66
+  fichiers de `tools/` (≈ 7 000 lignes). Natives (`examples/names`, qui dit désormais `game`/`tools`) : 1 473 avant et
+  après, mêmes adresses et noms ; `P` 550 → 460, `E` 532, `M` 47, `G` 344 → 434 ; côté jeu 481 (`G` + `M`), côté
+  outils 992 (`P` + `E`). `cargo tree -p ddsom -e normal` : `m68k`, `ddsom-rc` et `recomp` avant ; aucun après
+  (`cps2`, `cps2-gfx`, `ddsom-assets`, `ddsom-game`, `ddsom-sound`, `qsound`, `z80` pour le pilote son émulé).
+  `examples/bench` (état final haché) compilé sans `tools` (machine sans 68000) et avec : même empreinte (bot30k,
+  20 000 images).
+
 ## Avancement
 
 | Étape | Commit | Validation |

@@ -46,7 +46,6 @@ fn main() {
                             let mut at = base;
                             while at < end && at < base + 0x200 {
                                 let w = {
-                                    use m68k::decode::Fetch;
                                     m.bus.fetch16(at) as i16 as i32
                                 };
                                 let t = (base as i32 + w) as u32;

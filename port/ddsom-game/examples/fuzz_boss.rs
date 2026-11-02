@@ -1525,7 +1525,6 @@ fn main() {
     let mut seen: std::collections::BTreeSet<u32> = Default::default();
     let mut inputs: Vec<(u32, u8)> = Vec::new();
     {
-        use m68k::decode::Fetch;
         for k in 0..23u32 {
             let e = (m.bus.fetch16(0x39b12 + 4 * k) as u32) << 16 | m.bus.fetch16(0x39b12 + 4 * k + 2) as u32;
             if ddsom_game::all_natives().any(|n| n.entry == e) && filter.map_or(true, |f| f == e) {

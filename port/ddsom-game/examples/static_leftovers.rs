@@ -10,7 +10,7 @@
 //! the range is not followed (its possible reads escape: the dynamic check
 //! `DDSOM_RESTES=1 fuzz families` covers them). A call is assumed to define D0, D1 and A1 (results).
 
-use m68k::decode::{Ea, Fetch, Op, ShiftCount};
+use m68k::decode::{Ea, Op, ShiftCount};
 use std::collections::BTreeMap;
 use std::path::Path;
 

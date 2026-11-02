@@ -17,7 +17,6 @@ use std::path::Path;
 
 use ddsom_game::mem::{rd8, wr16, wr32, wr8, A5};
 use ddsom_game::objects::pools::{self, Pool};
-use m68k::decode::Fetch;
 
 struct Rng(u64);
 

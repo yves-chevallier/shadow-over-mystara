@@ -79,14 +79,18 @@ impl Native {
                 frames::rts(c, b);
             }
             Body::Handler(f) => {
-                // called from the processor (dispatch loop): the leftovers go from the bench to the table, the
-                // handler reads and writes them by name, then they return to the bench
-                crate::dispatch::Leftovers::from_bench(c, b);
-                let leftovers = tasks::table::table(b).leftovers;
-                let mut a = crate::dispatch::Dispatch { object: crate::objects::Obj(c.a[0]), counter: c.d[7] as u16, leftovers };
+                // called from the processor: the object (A0), the counter (D7) and the leftovers (D2-D5) come from the
+                // registers and the leftovers return there; on the game machine they are also those of the task
+                // table. No table is created on a machine without one (the original's returns stay on its stack).
+                let mut a = crate::dispatch::Dispatch::from_cpu(c);
+                if let Some(t) = tasks::table::table_if(b) {
+                    t.leftovers = a.leftovers;
+                }
                 f(b, &mut a);
-                tasks::table::table(b).leftovers = a.leftovers;
-                crate::dispatch::Leftovers::to_bench(c, b);
+                if let Some(t) = tasks::table::table_if(b) {
+                    t.leftovers = a.leftovers;
+                }
+                a.give_back(c);
                 frames::rts(c, b);
             }
         }
@@ -414,7 +418,14 @@ pub fn call(c: &mut Cpu, b: &mut Cps2Bus, addr: u32) {
     c.pc = addr;
     while !(c.pc == RETURN && c.a[7] == sp) {
         if tasks::has_ceded() || c.pc == TASK_SWITCH || c.sr & 0x2000 == 0 && c.a[7] > sp && c.a[7] - sp < 0x1000 {
-            panic!("call of {addr:06x} ({site}): the routine ceded control or returned higher than its caller (PC {:06x})", c.pc);
+            panic!(
+                "call of {addr:06x} ({site}): the routine ceded control or returned higher than its caller (PC {:06x}, A7 \
+                 {:06x} for {sp:06x}, SR {:04x}, ceded {})",
+                c.pc,
+                c.a[7],
+                c.sr,
+                tasks::has_ceded()
+            );
         }
         one_step(c, b);
     }
@@ -761,6 +772,15 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
         diffs.push(format!("pc={:06x} instead of {:06x}", c.pc, c2.pc));
     }
     let sp = c2.a[7] & 0xff_ffff;
+    if by_frame {
+        // the game keeps its tasks in its Rust table and never writes the kernel RAM of the original (stale on its
+        // machine): the kernel RAM is not compared (the tasks that a routine creates are not compared either)
+        for i in 0..0xe66 / 2 {
+            if tasks::table::kernel_ram(2 * i as u32) {
+                b2.ram[i] = b.ram[i];
+            }
+        }
+    }
     mem::diff_bus(b, &b2, sp.saturating_sub(0x400)..sp, &mut diffs);
     // The real duration of the original is taken. The registers outside the contract keep the values of the native
     // routine: if a caller depended on them (incomplete contract), the continuation will diverge and validation will
@@ -792,9 +812,12 @@ fn check(n: &Native, c: &mut Cpu, b: &mut Cps2Bus) {
             s.first = Some(diffs.join(", "));
         }
         s.last = Some(diffs.join(", "));
-        // the original state is kept so as not to propagate the difference
-        *c = c2;
-        *b = b2;
+        // the original state is kept so as not to propagate the difference (with the tools only: the game keeps its own
+        // state, its task table and the call in progress are not in the copy's RAM)
+        if !by_frame {
+            *c = c2;
+            *b = b2;
+        }
     }
 }
 

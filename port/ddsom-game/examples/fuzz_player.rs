@@ -395,10 +395,15 @@ fn main() {
             }
         }
     }
-    let mut total = 0;
+    let (mut total, mut compared) = (0, 0);
     for (name, st) in ddsom_game::report() {
         total += st.mismatches;
+        compared += st.calls;
         println!("  {name:28} {:>7} calls {:>5} mismatches{}", st.calls, st.mismatches, st.first.map(|f| format!(" — {f}")).unwrap_or_default());
+    }
+    if compared == 0 {
+        println!("FAILED: no call compared with the original");
+        std::process::exit(1);
     }
     println!("{}", if total == 0 { "VALID: no mismatch" } else { "FAILED" });
 }
