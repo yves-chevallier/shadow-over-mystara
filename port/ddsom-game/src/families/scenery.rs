@@ -83,8 +83,7 @@ pub(crate) fn resume_scenery_lit<R: Bench>(x: &mut Cx<'_, R>, cameras: Cameras) 
 /// 0x20de6: every player in game placed in front of the camera. Original glitch: the rank of the last one stays in
 /// D2.
 pub(crate) fn place_players<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = crate::scene::entry::place_players_leftovers(x.b);
-    *x.c.d2() = r.rank as u32;
+    *x.c.d2() = crate::scene::entry::place_players(x.b) as u32;
 }
 
 /// 0xcc0ca: the scene starts again (scenery resumed); each living player goes back to normal play (hidden and in a

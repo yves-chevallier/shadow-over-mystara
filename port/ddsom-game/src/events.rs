@@ -44,7 +44,7 @@ pub(crate) const POPUP_INPUTS: u32 = 0x20e;
 /// Current pop-up (4 longs at `A5-0x6e80`).
 pub(crate) const CURRENT_POPUP: u32 = 0xffff_9180;
 /// Non-zero byte: no more new pop-ups.
-const POPUP_INHIBITED: u32 = 0x50;
+pub(crate) const POPUP_INHIBITED: u32 = 0x50;
 
 /// Player records: the first and the size (0x200).
 const PLAYER_1: u32 = 0x5de;
@@ -97,34 +97,32 @@ pub fn clear_current_popup(b: &mut Cps2Bus) {
 // ---------------------------------------------------------------------------------------------
 // Enqueuing a score event
 
-/// Outcome of an enqueue: the write index read, and the content of the cell if it was not free.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
-pub(crate) struct Queued {
-    pub(crate) index: u8,
-    pub(crate) busy: Option<u16>,
+/// Write cell of `ring`: its index and its address.
+pub(crate) fn write_cell(b: &mut Cps2Bus, ring: &Ring) -> (u8, u32) {
+    let index = rd8(b, a5(ring.write));
+    (index, a5(ring.cases).wrapping_add(index as u32))
 }
 
-pub(crate) fn enqueue(b: &mut Cps2Bus, ring: &Ring, event: u16) -> Queued {
-    let index = rd8(b, a5(ring.write));
-    let case = a5(ring.cases).wrapping_add(index as u32);
-    let content = rd16(b, case);
-    if content != EMPTY {
-        return Queued { index, busy: Some(content) };
+/// Enqueues `event` in the write cell if it is free; returns true if enqueued.
+pub(crate) fn enqueue(b: &mut Cps2Bus, ring: &Ring, event: u16) -> bool {
+    let (index, case) = write_cell(b, ring);
+    if rd16(b, case) != EMPTY {
+        return false;
     }
     wr16(b, case, event);
     wr8(b, a5(ring.write), index.wrapping_add(2) & MASK);
-    Queued { index, busy: None }
+    true
 }
 
 /// 0x19ae6: enqueues the score event `event` (`(player << 8) | type`) if the write cell is free;
 /// returns true if enqueued.
 pub fn enqueue_points(b: &mut Cps2Bus, event: u16) -> bool {
-    enqueue(b, &POINTS, event).busy.is_none()
+    enqueue(b, &POINTS, event)
 }
 
 /// 0x19b08: same in the second counter ring.
 pub fn enqueue_counter(b: &mut Cps2Bus, event: u16) -> bool {
-    enqueue(b, &COUNTER, event).busy.is_none()
+    enqueue(b, &COUNTER, event)
 }
 
 /// Score event of object `o`: type `+0x7e`, player `+0x48` bits 8-9.
@@ -170,19 +168,17 @@ pub(crate) const CREDIT_COUNTER: Credit = Credit {
     cap: 0x0009_9999,
 };
 
-/// What the processing of an event leaves in the registers.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
-pub(crate) struct Handled {
-    pub(crate) player: u32,
-    pub(crate) line: u32,
+/// Player record and line of the value table (type x 4) of an event.
+pub(crate) fn credited(event: u16) -> (u32, u32) {
+    let player = a5(PLAYER_1) + (((event & 0x300) as u32) << 1);
+    (player, (event as u32 & 0xff) << 2)
 }
 
 /// Processes the event of cell `index`: empties the cell, adds the BCD value of the type to the player's
 /// counter, caps it, advances the read index.
-fn handle(b: &mut Cps2Bus, k: &Credit, index: u8, event: u16) -> Handled {
+fn handle(b: &mut Cps2Bus, k: &Credit, index: u8, event: u16) {
     wr16(b, a5(k.ring.cases).wrapping_add(index as u32), EMPTY);
-    let player = a5(PLAYER_1) + (((event & 0x300) as u32) << 1);
-    let line = (event as u32 & 0xff) << 2;
+    let (player, line) = credited(event);
     let (table, counter) = (k.table + line, player + k.counter);
     // abcd -(A3),-(A4) ×4: low-order byte first, chained carry, initial X zero
     let mut carry = false;
@@ -197,7 +193,6 @@ fn handle(b: &mut Cps2Bus, k: &Credit, index: u8, event: u16) -> Handled {
         wr32(b, counter, k.cap);
     }
     wr8(b, a5(k.read), index.wrapping_add(2) & MASK);
-    Handled { player, line }
 }
 
 /// Event waiting at the read index, if there is one.
@@ -207,20 +202,11 @@ fn pending(b: &mut Cps2Bus, k: &Credit) -> Option<(u8, u16)> {
     (event != EMPTY).then_some((index, event))
 }
 
-/// Last event processed by a credit: enough to rebuild the registers of the original.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
-pub(crate) struct Last {
-    pub(crate) index: u8,
-    pub(crate) handled: Handled,
-}
-
-pub(crate) fn credit(b: &mut Cps2Bus, k: &Credit) -> Option<Last> {
-    let mut last = None;
+/// Credits every waiting event, in order.
+pub(crate) fn credit(b: &mut Cps2Bus, k: &Credit) {
     while let Some((index, event)) = pending(b, k) {
-        let handled = handle(b, k, index, event);
-        last = Some(Last { index, handled });
+        handle(b, k, index, event);
     }
-    last
 }
 
 /// 0x19b2a: credits the waiting events to each player's points counter.
@@ -248,24 +234,21 @@ pub struct Popup {
     pub raw: bool,
 }
 
-/// Outcome of 0x19dce: nothing (pop-ups inhibited), cell occupied, or enqueued.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
-pub(crate) enum Creation {
-    Inhibited(u8),
-    Busy { index: u8, content: u16 },
-    Done { index: u8, header: u16 },
+/// Write entry of the pop-up queue: its index and its address.
+pub(crate) fn popup_write_entry(b: &mut Cps2Bus) -> (u8, u32) {
+    let index = rd8(b, a5(POPUP_WRITE));
+    (index, a5(POPUP_INPUTS).wrapping_add(index as u32))
 }
 
-pub(crate) fn create(b: &mut Cps2Bus, p: Popup) -> Creation {
-    let inhibited = rd8(b, a5(POPUP_INHIBITED));
-    if inhibited != 0 {
-        return Creation::Inhibited(inhibited);
+/// 0x19dce: enqueues a pop-up in the write cell if it is free and pop-ups are not inhibited;
+/// returns true if enqueued.
+pub fn create_popup(b: &mut Cps2Bus, p: Popup) -> bool {
+    if rd8(b, a5(POPUP_INHIBITED)) != 0 {
+        return false;
     }
-    let index = rd8(b, a5(POPUP_WRITE));
-    let case = a5(POPUP_INPUTS).wrapping_add(index as u32);
-    let content = rd16(b, case);
-    if content != EMPTY {
-        return Creation::Busy { index, content };
+    let (index, case) = popup_write_entry(b);
+    if rd16(b, case) != EMPTY {
+        return false;
     }
     let header = if p.raw { p.header } else { p.header & 0xff00 | (p.header as u8).wrapping_add(0x20) as u16 };
     for (offset, value) in [(0, header), (2, p.max), (4, p.value), (6, 0x80)] {
@@ -273,7 +256,7 @@ pub(crate) fn create(b: &mut Cps2Bus, p: Popup) -> Creation {
     }
     // the index advances by 8 without a mask: it goes around the 32 entries by overflowing its byte
     wr8(b, a5(POPUP_WRITE), index.wrapping_add(8));
-    Creation::Done { index, header }
+    true
 }
 
 /// Are pop-ups inhibited (`A5+0x50`)? 0x19dce then writes nothing and leaves A2 intact; otherwise it leaves
@@ -284,9 +267,3 @@ pub fn popups_inhibited(b: &mut Cps2Bus) -> bool {
 
 /// First entry of the pop-up queue (A2 left by 0x19dce).
 pub const POPUP_INPUTS_ADDR: u32 = a5(POPUP_INPUTS);
-
-/// 0x19dce: enqueues a pop-up in the write cell if it is free and pop-ups are not inhibited;
-/// returns true if enqueued.
-pub fn create_popup(b: &mut Cps2Bus, p: Popup) -> bool {
-    matches!(create(b, p), Creation::Done { .. })
-}

@@ -9,18 +9,25 @@ use crate::sound::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 use std::sync::OnceLock;
-use crate::mem::rd32;
+use crate::mem::{rd16, rd32};
 use crate::objects::Obj;
 
-/// Reproduces D0, A1 and the flags left by 0xe0848.
-fn finish_enqueue(c: &mut Cpu, e: &Queueing) {
-    c.d[0] = c.d[0] & 0xffff_0000 | e.d0 as u32;
-    match e.written {
-        Some(end) => {
-            c.a[1] = end;
-            c.flags_logic(e.d0 as u32, Size::Word);
-        }
-        None => c.sr = c.sr & 0xff00 | SR_C, // move #1,CCR: only the carry is raised
+/// Read and write heads of the sound queue.
+fn heads(b: &mut Cps2Bus) -> (u16, u16) {
+    (rd16(b, a5(ram::READ_HEAD)), rd16(b, a5(ram::WRITE_HEAD)))
+}
+
+/// Reproduces D0, A1 and the flags left by 0xe0848, from the heads before the enqueue: D0.w = the new write head and
+/// A1 = the end of the cell written; queue full, D0.w = the head computed for the test.
+fn finish_enqueue(c: &mut Cpu, (read, write): (u16, u16), enqueued: bool) {
+    if enqueued {
+        let next = write.wrapping_add(ENTRY) & MASK_HEAD;
+        c.d[0] = c.d[0] & 0xffff_0000 | next as u32;
+        c.a[1] = a5(ram::FILE).wrapping_add(write as i16 as u32) + 8;
+        c.flags_logic(next as u32, Size::Word);
+    } else {
+        c.d[0] = c.d[0] & 0xffff_0000 | (read.wrapping_sub(ENTRY) & MASK_HEAD) as u32;
+        c.sr = c.sr & 0xff00 | SR_C; // move #1,CCR: only the carry is raised
     }
 }
 
@@ -30,8 +37,9 @@ fn register_command(c: &Cpu) -> Command {
 
 /// 0xe0848: enqueues D1, D2, D3 (C raised if the queue is full).
 fn enqueue_direct(c: &mut Cpu, b: &mut Cps2Bus) {
-    let e = enqueue(b, register_command(c));
-    finish_enqueue(c, &e);
+    let before = heads(b);
+    let enqueued = enqueue(b, register_command(c));
+    finish_enqueue(c, before, enqueued);
     rts(c, b);
 }
 
@@ -94,9 +102,10 @@ pub(crate) fn native_wrappers() -> &'static [Native] {
 /// Native of a service command: all registers are returned (movem on the stack), only the flags of
 /// 0xe0848 remain.
 fn service_native_run(c: &mut Cpu, b: &mut Cps2Bus, s: Service) {
-    let e = service_enqueue(b, s);
+    let before = heads(b);
+    let enqueued = service_enqueue(b, s);
     let (d0, a1) = (c.d[0], c.a[1]);
-    finish_enqueue(c, &e);
+    finish_enqueue(c, before, enqueued);
     c.d[0] = d0;
     c.a[1] = a1;
     rts(c, b);

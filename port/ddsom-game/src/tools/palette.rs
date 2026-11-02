@@ -46,6 +46,28 @@ const fn native(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus))
     Native { entry, name, run: crate::Body::WithCpu(run), touches_sound: false, outputs: 0 }
 }
 
+/// End of the scene palette loader 0x1a36c: enough to rebuild the registers of the original.
+struct StageEnd {
+    /// Next destination (A4).
+    dst: u32,
+    /// End of the displacement list read (A6).
+    list: u32,
+    /// Last palette copied (destination), whose eight longs remain in D1-D6, A1, A2.
+    last: Option<u32>,
+    /// Address of the extra palettes (D1 if zero, A3 = address + 96 otherwise).
+    extra: u32,
+}
+
+/// Where `load_stage_palettes(b, a5, d0, dst)` ends (read before the load: the lists do not change).
+fn stage_end(b: &mut Cps2Bus, a5: u32, d0: u32, dst: u32) -> StageEnd {
+    let (list, count) = (stage_list(d0), stage_count(d0 as u8));
+    let listed = (0..count).rev().find(|&i| rd16(b, list + 2 * i) & 0x8000 == 0);
+    let extra = stage_extra(b, a5);
+    let end = dst + (count + if extra != 0 { EXTRA_PALETTES } else { 0 }) * PALETTE_BYTES;
+    let last = if extra != 0 { Some(end - PALETTE_BYTES) } else { listed.map(|i| dst + i * PALETTE_BYTES) };
+    StageEnd { dst: end, list: list + 2 * count, last, extra }
+}
+
 /// Registers that 0x1a36c leaves: D0 = current scene x 4, D1-D6/A1/A2 = last palette copied
 /// (D1 = 0 if there are no extra palettes), A3, A4, A6, D7 = 0xffff.
 fn stage_regs(c: &mut Cpu, b: &mut Cps2Bus, end: &StageEnd) {
@@ -82,7 +104,8 @@ fn stage_args(b: &mut Cps2Bus, c: &Cpu, entry: u32) -> (u32, u32) {
 
 fn stage_run(c: &mut Cpu, b: &mut Cps2Bus, entry: u32) {
     let (d0, dst) = stage_args(b, c, entry);
-    let end = load_stage_palettes(b, c.a[5], d0, dst);
+    let end = stage_end(b, c.a[5], d0, dst);
+    load_stage_palettes(b, c.a[5], d0, dst);
     stage_regs(c, b, &end);
     rts(c, b);
 }
@@ -153,12 +176,18 @@ fn page_run(c: &mut Cpu, b: &mut Cps2Bus, k: usize, entry: u32) {
     rts(c, b);
 }
 
+/// 0x1a296. Of the registers that the scene loader leaves, the following steps (the three pages) only keep A6 (end
+/// of its list) and the high word of D7 (zero); the flags are those of the final `clr.w`.
 fn load_all(c: &mut Cpu, b: &mut Cps2Bus) {
-    load_all_with(b, |b, step| match step {
-        Loaded::Stage(end) => stage_regs(c, b, end),
-        Loaded::Page(k, source) => page_regs(c, b, k, source),
-        Loaded::Cleared => c.flags_logic(0, Size::Word),
-    });
+    let stage = rd8(b, c.a[5] + STAGE_VAR);
+    load_all_palettes(b);
+    c.a[6] = stage_list(stage as u32) + 2 * stage_count(stage);
+    c.d[7] = 0xffff;
+    for (k, d0) in [(0, 0), (1, stage as u32), (2, stage as u32)] {
+        let source = page_source(b, k, d0);
+        page_regs(c, b, k, source);
+    }
+    c.flags_logic(0, Size::Word);
     rts(c, b);
 }
 

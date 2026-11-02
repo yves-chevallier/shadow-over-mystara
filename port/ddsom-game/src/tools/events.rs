@@ -55,17 +55,17 @@ fn clear_popup_68k(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// Registers and flags of 0x19ae6 / 0x19b08: D6 (index), A4 (start of the cells).
 fn enqueue_68k(c: &mut Cpu, b: &mut Cps2Bus, ring: &Ring, event: u16) {
-    let e = enqueue(b, ring, event);
-    c.d[6] = e.index as u32;
+    let (index, case) = write_cell(b, ring);
+    let content = rd16(b, case);
+    c.d[6] = index as u32;
     c.a[4] = a5(ring.cases);
-    match e.busy {
-        Some(content) => crate::tools::ops::cmp(c, EMPTY as u32, content as u32, Size::Word),
-        None => {
-            crate::tools::ops::add(c, 2, e.index as u32, Size::Byte);
-            let reduced = e.index.wrapping_add(2) & MASK;
-            set_word(&mut c.d[6], reduced as u16);
-            crate::tools::ops::logic(c, reduced as u32, Size::Byte);
-        }
+    if enqueue(b, ring, event) {
+        crate::tools::ops::add(c, 2, index as u32, Size::Byte);
+        let reduced = index.wrapping_add(2) & MASK;
+        set_word(&mut c.d[6], reduced as u16);
+        crate::tools::ops::logic(c, reduced as u32, Size::Byte);
+    } else {
+        crate::tools::ops::cmp(c, EMPTY as u32, content as u32, Size::Word);
     }
 }
 
@@ -92,25 +92,43 @@ fn object_event_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     rts(c, b);
 }
 
+/// The last event that `credit` will process (index, event): the waiting cells from the read index, each emptied
+/// when it is processed (a cell met again is empty).
+fn last_credited(b: &mut Cps2Bus, k: &Credit) -> Option<(u8, u16)> {
+    let mut index = rd8(b, a5(k.read));
+    let mut seen = [false; 256];
+    let mut last = None;
+    while !std::mem::replace(&mut seen[index as usize], true) {
+        let event = rd16(b, a5(k.ring.cases).wrapping_add(index as u32));
+        if event == EMPTY {
+            break;
+        }
+        last = Some((index, event));
+        index = index.wrapping_add(2) & MASK;
+    }
+    last
+}
+
 /// Registers of 0x19b2a / 0x19b9c: leftovers of the last iteration, D0 = final read index.
 fn credit_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Credit) {
     c.d[1] = 0;
     c.d[2] = 0;
     c.a[2] = a5(k.ring.cases);
-    let last = credit(b, k);
-    if let Some(d) = &last {
-        c.d[0] = d.index as u32;
-        c.d[1] = d.handled.line;
-        c.a[0] = d.handled.player;
-        c.a[3] = k.table + d.handled.line;
-        c.a[4] = d.handled.player + k.counter;
+    let last = last_credited(b, k);
+    credit(b, k);
+    if let Some((_, event)) = last {
+        let (player, line) = credited(event);
+        c.d[1] = line;
+        c.a[0] = player;
+        c.a[3] = k.table + line;
+        c.a[4] = player + k.counter;
         c.d[6] = 0xffff;
     }
     c.d[0] = rd8(b, a5(k.read)) as u32;
     // last cmpi.w #-1: equality; X: carry of the `addq.b #2` on the read index of the last iteration
     crate::tools::ops::cmp(c, EMPTY as u32, EMPTY as u32, Size::Word);
-    if let Some(d) = last {
-        crate::tools::ops::flags(c, SR_X, if d.index as u16 + 2 > 0xff { SR_X } else { 0 });
+    if let Some((index, _)) = last {
+        crate::tools::ops::flags(c, SR_X, if index as u16 + 2 > 0xff { SR_X } else { 0 });
     }
     rts(c, b);
 }
@@ -118,24 +136,27 @@ fn credit_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Credit) {
 /// Registers and flags of 0x19dce: D6 (index), A2 (entries), D0.b (header), flags of the last test.
 fn create_popup_68k(c: &mut Cpu, b: &mut Cps2Bus) {
     let p = Popup { header: c.d[0] as u16, max: c.d[1] as u16, value: c.d[2] as u16, raw: c.d[3] as u8 == 2 };
-    match create(b, p) {
-        Creation::Inhibited(inhibited) => crate::tools::ops::logic(c, inhibited as u32, Size::Byte),
-        Creation::Busy { index, content } => {
-            c.d[6] = index as u32;
-            c.a[2] = a5(POPUP_INPUTS);
-            crate::tools::ops::cmp(c, EMPTY as u32, content as u32, Size::Word);
+    let inhibited = rd8(b, a5(POPUP_INHIBITED));
+    let (index, case) = popup_write_entry(b);
+    let content = rd16(b, case);
+    let created = create_popup(b, p);
+    if inhibited != 0 {
+        crate::tools::ops::logic(c, inhibited as u32, Size::Byte);
+    } else if !created {
+        c.d[6] = index as u32;
+        c.a[2] = a5(POPUP_INPUTS);
+        crate::tools::ops::cmp(c, EMPTY as u32, content as u32, Size::Word);
+    } else {
+        let header = rd16(b, case);
+        c.a[2] = a5(POPUP_INPUTS);
+        crate::tools::ops::cmp(c, 2, c.d[3] & 0xff, Size::Byte);
+        if !p.raw {
+            crate::tools::ops::add(c, 0x20, c.d[0] & 0xff, Size::Byte);
+            set_low_byte(&mut c.d[0], header as u8);
         }
-        Creation::Done { index, header } => {
-            c.a[2] = a5(POPUP_INPUTS);
-            crate::tools::ops::cmp(c, 2, c.d[3] & 0xff, Size::Byte);
-            if !p.raw {
-                crate::tools::ops::add(c, 0x20, c.d[0] & 0xff, Size::Byte);
-                set_low_byte(&mut c.d[0], header as u8);
-            }
-            let next = crate::tools::ops::add(c, 8, index as u32, Size::Byte) as u8;
-            c.d[6] = next as u32;
-            crate::tools::ops::logic(c, next as u32, Size::Byte);
-        }
+        let next = crate::tools::ops::add(c, 8, index as u32, Size::Byte) as u8;
+        c.d[6] = next as u32;
+        crate::tools::ops::logic(c, next as u32, Size::Byte);
     }
     rts(c, b);
 }

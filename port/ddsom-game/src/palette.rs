@@ -158,51 +158,46 @@ fn table_entry(b: &mut Cps2Bus, table: u32, n: u32, program: bool) -> u32 {
     }
 }
 
-/// End of the scene palette loader: enough to rebuild the registers of the original.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
-pub(crate) struct StageEnd {
-    /// Next destination (A4).
-    pub(crate) dst: u32,
-    /// End of the displacement list read (A6).
-    pub(crate) list: u32,
-    /// Last palette copied (destination), whose eight longs remain in D1-D6, A1, A2.
-    pub(crate) last: Option<u32>,
-    /// Address of the extra palettes (D1 if zero, A3 = address + 96 otherwise).
-    pub(crate) extra: u32,
+/// Number of palettes in the list of scene `stage`: 32 for the scenes of `FULL_RANGE`, 29 for the others (the lower
+/// bound is compared signed, the upper one unsigned, like the original).
+pub(crate) fn stage_count(stage: u8) -> u32 {
+    if (stage as i8) < FULL_RANGE.start as i8 || stage >= FULL_RANGE.end {
+        29
+    } else {
+        32
+    }
+}
+
+/// Displacement list (words, 64 bytes per scene) of the scene in the low word of `d0`.
+pub(crate) fn stage_list(d0: u32) -> u32 {
+    STAGE_PALETTES + ((d0 as u16) << 6) as i16 as u32
+}
+
+/// Address of the extra palettes of the current scene (`A5 + 0x34`), 0 if it has none.
+pub(crate) fn stage_extra(b: &mut Cps2Bus, a5: u32) -> u32 {
+    let current = rd8(b, a5 + STAGE_VAR) as u32;
+    table_entry(b, STAGE_EXTRA, current, false)
 }
 
 /// 0x1a36c: palettes of scene `d0` (low byte) starting at `dst`, then the extra palettes
 /// of the current scene (`A5 + 0x34`).
-pub(crate) fn load_stage_palettes(b: &mut Cps2Bus, a5: u32, d0: u32, mut dst: u32) -> StageEnd {
-    let stage = d0 as u8;
-    let count = if (stage as i8) < FULL_RANGE.start as i8 {
-        29
-    } else if stage >= FULL_RANGE.end {
-        29
-    } else {
-        32
-    };
-    let mut list = STAGE_PALETTES + ((d0 as u16) << 6) as i16 as u32;
-    let mut last = None;
-    for _ in 0..count {
+pub(crate) fn load_stage_palettes(b: &mut Cps2Bus, a5: u32, d0: u32, mut dst: u32) {
+    let mut list = stage_list(d0);
+    for _ in 0..stage_count(d0 as u8) {
         let offset = rd16(b, list);
         list += 2;
-        if !(offset & 0x8000 != 0) {
+        if offset & 0x8000 == 0 {
             copy_palette(b, LIBRARY + offset as i16 as u32, dst);
-            last = Some(dst);
         }
         dst += PALETTE_BYTES;
     }
-    let current = rd8(b, a5 + STAGE_VAR) as u32;
-    let extra = table_entry(b, STAGE_EXTRA, current, false);
-    if !(extra == 0) {
+    let extra = stage_extra(b, a5);
+    if extra != 0 {
         for i in 0..EXTRA_PALETTES {
             copy_palette(b, extra + i * PALETTE_BYTES, dst);
-            last = Some(dst);
             dst += PALETTE_BYTES;
         }
     }
-    StageEnd { dst, list, last, extra }
 }
 
 /// The eight longs of a palette, as `movem.l (A),{D1-D6,A1,A2}` loads them.
@@ -244,9 +239,14 @@ pub fn load_palette_set(b: &mut Cps2Bus, n: u16) {
 /// Pages 1 to 3: code table (address per scene), "current scene" entry, "given D0" entry.
 pub(crate) const PAGE_TABLES: [(u32, u32, u32); 3] = [(0x1a62c, 0x1a608, 0x1a60a), (0x1a6a0, 0x1a678, 0x1a67e), (0x1a8d4, 0x1a8ac, 0x1a8b2)];
 
+/// Source of page `k + 1`: entry `d0` of the page table.
+pub(crate) fn page_source(b: &mut Cps2Bus, k: usize, d0: u32) -> u32 {
+    table_entry(b, PAGE_TABLES[k].0, d0, true)
+}
+
 /// The 32 palettes of page `k + 1` according to the page table, entry `d0`.
 pub(crate) fn load_page(b: &mut Cps2Bus, k: usize, d0: u32) -> u32 {
-    let source = table_entry(b, PAGE_TABLES[k].0, d0, true);
+    let source = page_source(b, k, d0);
     let page = PALETTES + PAGE_SIZE * (k as u32 + 1);
     for i in 0..PAGE_PALETTES {
         copy_palette(b, source + i * PALETTE_BYTES, page + i * PALETTE_BYTES);
@@ -288,43 +288,23 @@ fn special_sources(stage: u8) -> Option<[u32; 4]> {
     }
 }
 
-/// A step of `load_all_palettes` after which the original leaves registers (the tools write them:
-/// `tools::palette`).
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
-pub(crate) enum Loaded<'a> {
-    /// The scene palettes are loaded (0x1a350).
-    Stage(&'a StageEnd),
-    /// Page `k` is loaded from `source`.
-    Page(usize, u32),
-    /// The cleared word is written (`clr.w`: flags of zero).
-    Cleared,
-}
-
-/// `load_all_palettes`; `step` sees each step after which the original leaves registers.
-pub(crate) fn load_all_with(b: &mut Cps2Bus, mut step: impl FnMut(&mut Cps2Bus, Loaded)) {
+/// 0x1a296: all the palettes of the current scene. Returns the D0 that the original leaves: the first long of the
+/// last palette of page 3 (the configuration menu rereads it).
+pub fn load_all_palettes(b: &mut Cps2Bus) -> u32 {
     let a5 = crate::mem::A5;
     let stage = rd8(b, a5 + STAGE_VAR);
     let special = special_sources(stage);
     let dst = if special.is_some() { hw::SCROLL1 } else { PALETTES };
-    let end = load_stage_palettes(b, a5, stage as u32, dst);
-    step(b, Loaded::Stage(&end));
+    load_stage_palettes(b, a5, stage as u32, dst);
     for (k, d0) in [(0, 0), (1, stage as u32), (2, stage as u32)] {
-        let source = load_page(b, k, d0);
-        step(b, Loaded::Page(k, source));
+        load_page(b, k, d0);
     }
     wr16(b, CLEARED_WORD, 0);
-    step(b, Loaded::Cleared);
     if let Some(sources) = special {
         for (k, source) in sources.into_iter().enumerate() {
             wr32(b, a5 + FADE_SOURCES + 4 * k as u32, source);
         }
     }
-}
-
-/// 0x1a296: all the palettes of the current scene. Returns the D0 that the original leaves: the first long of the
-/// last palette of page 3 (the configuration menu rereads it).
-pub fn load_all_palettes(b: &mut Cps2Bus) -> u32 {
-    load_all_with(b, |_, _| {});
     rd32(b, PALETTES + 3 * PAGE_SIZE + (PAGE_PALETTES - 1) * PALETTE_BYTES)
 }
 

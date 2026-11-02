@@ -7,18 +7,41 @@ use m68k::Cpu;
 use crate::placement::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::mem::set_low_word;
+use crate::mem::{rd16, set_low_word};
 use crate::objects::Obj;
+
+/// The search of `place_on_free_ground` replayed (it reads the terrain only): the last terrain examined and the
+/// `dbf` counters D5 (shifts in x, from 4) and D6 (shifts in depth, from 9) at its end; a counter whose loop ran out
+/// has a low word of -1.
+fn search_end(b: &mut Cps2Bus, o: Obj) -> (crate::video::Terrain, u32, u32) {
+    let x0 = start_x(b, o);
+    let mut last = None;
+    for i in 0..5u16 {
+        let mut x = if i == 0 { x0 } else { x0.wrapping_add(16) };
+        let y0 = start_y(b, o);
+        for j in 0..10u16 {
+            let t = crate::video::terrain(b, x, if j == 0 { y0 } else { y0.wrapping_add(16) });
+            if is_free(&t) {
+                return (t, (4 - i) as u32, (9 - j) as u32);
+            }
+            x = t.x;
+            last = Some(t);
+        }
+    }
+    (last.expect("at least one attempt"), 0xffff, 0xffff)
+}
 
 /// Native of 0x3668 (calls by address): leaves the registers of the original (D0, D1: height and depth
 /// found, D2-D4, A1: last terrain examined, D5, D6: search counters).
 fn place_on_free_ground_native(c: &mut Cpu, b: &mut Cps2Bus) {
-    let r = search(b, Obj(c.a[0]));
-    crate::video::terrain_regs(c, &r.last);
-    c.d[5] = r.d5;
-    c.d[6] = r.d6;
-    set_low_word(&mut c.d[1], r.y);
-    set_low_word(&mut c.d[0], r.height);
+    let o = Obj(c.a[0]);
+    let (last, d5, d6) = search_end(b, o);
+    place_on_free_ground(b, o);
+    crate::video::terrain_regs(c, &last);
+    c.d[5] = d5;
+    c.d[6] = d6;
+    set_low_word(&mut c.d[1], rd16(b, o.0 + 0x10));
+    set_low_word(&mut c.d[0], rd16(b, o.0 + 0x0c));
     rts(c, b);
 }
 

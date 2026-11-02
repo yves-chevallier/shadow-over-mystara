@@ -53,8 +53,8 @@ pub(crate) mod ram {
 }
 
 /// Size of the queue: 64 entries of 16 bytes.
-const MASK_HEAD: u16 = 0x3f0;
-const ENTRY: u16 = 0x10;
+pub(crate) const MASK_HEAD: u16 = 0x3f0;
+pub(crate) const ENTRY: u16 = 0x10;
 /// Pan table (one byte per 8-pixel slice of screen), in ROM.
 const TABLE_PAN: u32 = 0xee04e;
 
@@ -142,15 +142,6 @@ pub struct Command {
     pub d3: u32,
 }
 
-/// Outcome of an enqueue, with the contents of the registers that the original leaves behind.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
-pub(crate) struct Queueing {
-    /// Low word of D0 on return (new write head, or computed head if the queue is full).
-    pub(crate) d0: u16,
-    /// Cell written (A1 = end of the write), if the command was enqueued.
-    pub(crate) written: Option<u32>,
-}
-
 /// Can the command be emitted? (sound allowed: 0xe0836)
 pub(crate) fn sound_allowed(b: &mut Cps2Bus) -> bool {
     rd16(b, a5(ram::SOUND_WORD)) != 0
@@ -165,12 +156,11 @@ fn queue_full(b: &mut Cps2Bus) -> bool {
     read.wrapping_sub(ENTRY) & MASK_HEAD == write
 }
 
-/// Enqueues a command (0xe0848, without the permission test).
-pub(crate) fn enqueue(b: &mut Cps2Bus, cmd: Command) -> Queueing {
-    let read = rd16(b, a5(ram::READ_HEAD));
+/// Enqueues a command (0xe0848, without the permission test); returns false if the queue is full.
+pub(crate) fn enqueue(b: &mut Cps2Bus, cmd: Command) -> bool {
     let write = rd16(b, a5(ram::WRITE_HEAD));
     if queue_full(b) {
-        return Queueing { d0: read.wrapping_sub(ENTRY) & MASK_HEAD, written: None };
+        return false;
     }
     let case = a5(ram::FILE).wrapping_add(write as i16 as u32);
     wr32(b, case, cmd.d1);
@@ -178,13 +168,13 @@ pub(crate) fn enqueue(b: &mut Cps2Bus, cmd: Command) -> Queueing {
     wr32(b, case + 8, cmd.d3);
     let next = write.wrapping_add(ENTRY) & MASK_HEAD;
     wr16(b, a5(ram::WRITE_HEAD), next);
-    Queueing { d0: next, written: Some(case + 8) }
+    true
 }
 
 /// 0xe0836: enqueues the command if sound is allowed; returns `false` if nothing is enqueued (sound forbidden, queue
 /// full).
 pub fn emit(b: &mut Cps2Bus, cmd: Command) -> bool {
-    sound_allowed(b) && enqueue(b, cmd).written.is_some()
+    sound_allowed(b) && enqueue(b, cmd)
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -584,7 +574,7 @@ pub fn service(b: &mut Cps2Bus, s: Service) {
     service_enqueue(b, s);
 }
 
-pub(crate) fn service_enqueue(b: &mut Cps2Bus, s: Service) -> Queueing {
+pub(crate) fn service_enqueue(b: &mut Cps2Bus, s: Service) -> bool {
     let simple = |d1: u32| Command { d1, d2: 0, d3: 0 };
     let cmd = match s {
         Service::GeneralStop => simple(0xff00),

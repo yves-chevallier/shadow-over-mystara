@@ -8,7 +8,7 @@ use m68k::{Cpu, SR_X};
 use crate::eeprom::*;
 use crate::tools::frames::*;
 use crate::{regs, Native};
-use crate::mem::rd8;
+use crate::mem::{rd32, rd8};
 
 macro_rules! native_counter {
     ($fn:ident, $k:expr) => {
@@ -60,16 +60,18 @@ fn native_read_verify(c: &mut Cpu, b: &mut Cps2Bus) {
     give_back(c, b, ok);
 }
 
-/// `count` with the registers of the original.
+/// `count` with the registers of the original: D0 = 0 or -1 after an EEPROM write, the new value if it was counted
+/// without a write (unchanged from its image), intact otherwise (condition false, development card).
 fn count_68k(c: &mut Cpu, b: &mut Cps2Bus, k: &Counter) {
+    let counted = counted(b, k) && rd8(b, a5(ram::NO_ACCOUNTING)) == 0;
     match count(b, k) {
-        Count::Nothing => {}
-        Count::Value(v) => c.d[0] = v,
-        Count::Written(ok) => {
+        Some(ok) => {
             c.d[0] = if ok { 0 } else { u32::MAX };
             c.flags_logic(c.d[0], Size::Long);
             c.sr &= !SR_X;
         }
+        None if counted => c.d[0] = rd32(b, a5(k.value)),
+        None => {}
     }
 }
 

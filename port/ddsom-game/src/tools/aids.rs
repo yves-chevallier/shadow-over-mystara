@@ -10,13 +10,35 @@ use crate::tools::frames::*;
 use crate::{regs, Native};
 use crate::mem::{rd16, rd8};
 
+/// D1 that 0x1386 leaves: the smaller of the two differences (its biased coordinate, low word = the absolute
+/// difference).
+fn smaller_difference(d1: u32, d2: u32, d3: u32, d4: u32) -> u32 {
+    let biased = |to: u32, from: u32| {
+        let (to, from) = (to.wrapping_add(0x8000), from.wrapping_add(0x8000));
+        to & 0xffff_0000 | (to as u16).abs_diff(from as u16) as u32
+    };
+    let (dx, dy) = (biased(d1, d3), biased(d2, d4));
+    if (dy as u16) < dx as u16 { dy } else { dx }
+}
+
+/// D6 that 0x1386 leaves: the `dbf` counter of the estimation loop (from 2), set only if the loop ran (step ≥ 1);
+/// at step 4 the counter ran out (low word -1).
+fn loop_counter(step: u32) -> Option<u32> {
+    match step {
+        0 => None,
+        4 => Some(0xffff),
+        s => Some(3 - s),
+    }
+}
+
 /// Native of 0x1386: work registers as the original leaves them (D1 to D4 and D6), D0 = the direction.
 fn direction_native(c: &mut Cpu, b: &mut Cps2Bus) {
+    let d1 = smaller_difference(c.d[1], c.d[2], c.d[3], c.d[4]);
     let r = compute(b, c.d[1], c.d[2], c.d[3], c.d[4]);
-    if let Some(d6) = r.d6 {
+    if let Some(d6) = loop_counter(r.d3) {
         c.d[6] = d6;
     }
-    c.d[1] = r.d1;
+    c.d[1] = d1;
     c.d[2] = r.d2;
     c.d[3] = r.d3;
     // `add.l #0x8000,D4` (carry in the high word), then the unit in D4.w

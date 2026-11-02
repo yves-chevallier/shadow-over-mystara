@@ -22,17 +22,15 @@ fn set_low_byte(r: &mut u32, v: u8) {
 /// Direction table, in program ROM: indexed by (octant << 3) | step.
 const DIRECTIONS: u32 = 0x140c;
 
-/// Computation of 0x1386 on the registers of the original (D1-D4), with the work registers it leaves.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
+/// Computation of 0x1386 on the registers of the original (D1-D4), with the work registers D2-D4 it leaves (read
+/// again by the boss 15 and the handlers that follow it: `dispatch::Leftovers`).
 pub(crate) struct Compute {
     pub direction: u8,
-    pub d1: u32,
     pub d2: u32,
+    /// D3: the step (0 to 4) of the estimation.
     pub d3: u32,
     /// D4.w: unit of the comparison.
     pub unit: u16,
-    /// D6: counter of the estimation loop, if it was set.
-    pub d6: Option<u32>,
 }
 
 /// Direction from point (D3, D4) to point (D1, D2). The differences are taken as absolute values (16 bits,
@@ -67,7 +65,6 @@ pub(crate) fn compute(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Co
     let high = (dy as u16) >> 3;
     set_low_word(&mut dy, high);
     let unit = (dy as u16).wrapping_mul(2);
-    let mut d6 = None;
     if (dy as u16) < dx as u16 {
         let mut counter = 2u32;
         loop {
@@ -85,11 +82,10 @@ pub(crate) fn compute(b: &mut Cps2Bus, d1: u32, d2: u32, d3: u32, d4: u32) -> Co
                 break;
             }
         }
-        d6 = Some(counter);
     }
     let index = (octant << 3 | step) as u32;
     let direction = prog8(b, DIRECTIONS + index);
-    Compute { direction, d1: dx, d2: dy, d3: step as u32, unit: unit, d6 }
+    Compute { direction, d2: dy, d3: step as u32, unit }
 }
 
 /// 0x1386: direction (0 to 31) from point `de` to point `to` (x, z).

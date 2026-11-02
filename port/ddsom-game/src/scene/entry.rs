@@ -35,7 +35,7 @@ mod sfx {
 }
 
 /// ROM tables (data), indexed by scene number.
-mod table {
+pub(crate) mod table {
     /// One byte per scene copied to `A5+0x48` / `A5+0x49` (scene palette parameters).
     pub const PALETTE_A: u32 = 0x21b38;
     pub const PALETTE_B: u32 = 0x21bb0;
@@ -148,29 +148,14 @@ fn clear_player(x: &mut Ctx, p: u32) {
     }
 }
 
-/// What the player placement leaves in the original's registers: D0/D1 = the camera (or the shifted
-/// scene), D2 = the rank, A2/A3 = the ends of the tables.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
-pub(crate) struct PlacementLeftovers {
-    pub(crate) d0: u32,
-    pub(crate) d1: u32,
-    pub(crate) rank: u8,
-    pub(crate) positions: u32,
-    pub(crate) states: u32,
-}
-
 /// 0x20de6: places each player in the game in front of the camera, from the scene tables (consumed in the order
-/// of the players in the game).
-pub fn place_players(b: &mut Cps2Bus) {
-    place_players_leftovers(b);
-}
-
-pub(crate) fn place_players_leftovers(b: &mut Cps2Bus) -> PlacementLeftovers {
+/// of the players in the game). Returns the number of players placed: the rank of the next one (D2, that the original
+/// leaves to its callers).
+pub fn place_players(b: &mut Cps2Bus) -> u8 {
     let scene = rd8(b, A5 + var::SCENE) as u32;
     let mut positions = table::START_POSITIONS + (scene << 4);
     let mut states = table::START_STATES + (scene << 2);
     let camera = A5 + if rd8(b, A5 + var::USE_ALT_CAMERA) != 0 { 0x556 } else { 0x506 };
-    let (mut d0, mut d1) = (scene << 4, scene << 2);
     let mut rank = 0u8;
     for k in 0..4 {
         let p = PLAYERS + k * PLAYER_STRIDE;
@@ -178,7 +163,6 @@ pub(crate) fn place_players_leftovers(b: &mut Cps2Bus) -> PlacementLeftovers {
             continue;
         }
         let (dx, dy) = (rd16(b, camera), rd16(b, camera + 4));
-        (d0, d1) = (dx as u32, dy as u32);
         let (px, py) = (rd16(b, positions), rd16(b, positions + 2));
         positions += 4;
         wr16(b, p + 8, px.wrapping_add(dx));
@@ -190,7 +174,7 @@ pub(crate) fn place_players_leftovers(b: &mut Cps2Bus) -> PlacementLeftovers {
         wr8(b, p + 0x7d, rank);
         rank += 1;
     }
-    PlacementLeftovers { d0, d1, rank: rank, positions, states: states }
+    rank
 }
 
 // ---------------------------------------------------------------------------------------------

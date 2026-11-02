@@ -22,18 +22,21 @@ fn camera(b: &mut Cps2Bus) -> (u16, u16) {
     (rd16(b, A5 + x), rd16(b, A5 + y))
 }
 
-/// End of the 0x3668 search, enough to rebuild the registers of the original.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
-pub(crate) struct Search {
-    /// Loop counters (D5, D6) at the time of exit.
-    pub(crate) d5: u32,
-    pub(crate) d6: u32,
-    /// Last terrain examined (D0-D4, A1).
-    pub(crate) last: crate::video::Terrain,
-    /// Height set (D0).
-    pub(crate) height: u16,
-    /// Depth set (D1).
-    pub(crate) y: u16,
+/// Starting point of the search for player `o` (per player `+2`, relative to the camera): x.
+pub(crate) fn start_x(b: &mut Cps2Bus, o: Obj) -> u16 {
+    let player = 2 * rd8(b, o.0 + 2) as u32;
+    camera(b).0.wrapping_add(prog16(b, START_X + player))
+}
+
+/// Starting point of the search for player `o`: depth.
+pub(crate) fn start_y(b: &mut Cps2Bus, o: Obj) -> u16 {
+    let player = 2 * rd8(b, o.0 + 2) as u32;
+    camera(b).1.wrapping_add(prog16(b, START_Y + player))
+}
+
+/// Can a player be placed on terrain `t`?
+pub(crate) fn is_free(t: &crate::video::Terrain) -> bool {
+    t.number < FREE_TERRAIN
 }
 
 /// 0x3668: places player `o` at resurrection. From a player-specific starting point, looks for a free terrain
@@ -41,48 +44,31 @@ pub(crate) struct Search {
 /// then in x); failing that, the screen centre (+192, +80). The height makes the player fall from the top of the
 /// screen (camera + 256 - depth).
 pub fn place_on_free_ground(b: &mut Cps2Bus, o: Obj) {
-    search(b, o);
-}
-
-pub(crate) fn search(b: &mut Cps2Bus, o: Obj) -> Search {
-    let me = o.0;
-    let player = 2 * rd8(b, me + 2) as u32;
-    let (cam_x, _) = camera(b);
-    let x0 = cam_x.wrapping_add(prog16(b, START_X + player));
+    let x0 = start_x(b, o);
     wr16(b, LAST_X, x0);
     let mut found = None;
-    let (mut d5, mut d6) = (0, 0);
-    let mut last = None;
-    'search: for i in 0..5u16 {
-        d5 = (4 - i) as u32;
+    'search: for i in 0..5 {
         // x of the attempt: the search resumes with the coordinate corrected by the previous terrain (D0 of 0x24b0)
         let mut x = if i == 0 { x0 } else { x0.wrapping_add(16) };
-        let (_, cam_y) = camera(b);
-        let y0 = cam_y.wrapping_add(prog16(b, START_Y + player));
+        let y0 = start_y(b, o);
         wr16(b, LAST_Y, y0);
-        for j in 0..10u16 {
-            d6 = (9 - j) as u32;
+        for j in 0..10 {
             let t = crate::video::terrain(b, x, if j == 0 { y0 } else { y0.wrapping_add(16) });
-            last = Some(t);
-            if t.number < FREE_TERRAIN {
+            if is_free(&t) {
                 found = Some((t.x, t.y));
                 break 'search;
             }
             x = t.x;
         }
-        d6 = d6 & 0xffff_0000 | 0xffff;
     }
     let (x, y) = found.unwrap_or_else(|| {
-        d5 = d5 & 0xffff_0000 | 0xffff;
         let (cam_x, cam_y) = camera(b);
         (cam_x.wrapping_add(192), cam_y.wrapping_add(80))
     });
-    wr16(b, me + 8, x);
-    wr16(b, me + 0x10, y);
+    wr16(b, o.0 + 8, x);
+    wr16(b, o.0 + 0x10, y);
     let (_, cam_y) = camera(b);
-    let height = cam_y.wrapping_add(256).wrapping_sub(y);
-    wr16(b, me + 0x0c, height);
-    Search { d5, d6, last: last.expect("at least one attempt"), height, y }
+    wr16(b, o.0 + 0x0c, cam_y.wrapping_add(256).wrapping_sub(y));
 }
 
 /// 16-colour palettes (data) copied into the palette 0x91c1e0 by 0x3af8..0x3b14.

@@ -340,17 +340,6 @@ pub(crate) const STARTS: Counter = Counter { condition: None, value: 0x7a, image
 pub(crate) const CONTINUES: Counter =
     Counter { condition: Some(0x25), value: 0x7e, image: 0xffff_9df6, place: 0x68 };
 
-/// What a counter leaves in D0 (and the flags) of the original.
-#[cfg_attr(not(feature = "tools"), allow(dead_code))] // fields read by the tools (registers of the original)
-pub(crate) enum Count {
-    /// No counting (condition false, or bookkeeping on the development card): D0 intact.
-    Nothing,
-    /// D0 = the new value (unchanged from its image: no write).
-    Value(u32),
-    /// The EEPROM was written (0x2d8aa): D0 = 0 or -1 depending on success.
-    Written(Success),
-}
-
 // ---------------------------------------------------------------------------------------------
 // Full bookkeeping: EEPROM then extra RAM counters
 
@@ -449,23 +438,24 @@ pub fn reset_card(b: &mut Cps2Bus) {
     }
 }
 
-/// Increments the counter and, if it changed from its image, writes it to the EEPROM (0x2d8aa).
-pub(crate) fn count(b: &mut Cps2Bus, k: &Counter) -> Count {
-    if let Some(cond) = k.condition {
-        if rd8(b, a5(cond)) == 0 {
-            return Count::Nothing;
-        }
+/// Is the counter counted (its condition byte, if any, is non-zero)?
+pub(crate) fn counted(b: &mut Cps2Bus, k: &Counter) -> bool {
+    k.condition.map_or(true, |cond| rd8(b, a5(cond)) != 0)
+}
+
+/// Increments the counter and, if it changed from its image, writes it to the EEPROM (0x2d8aa, not on the
+/// development card); returns the success of that write, if there was one.
+pub(crate) fn count(b: &mut Cps2Bus, k: &Counter) -> Option<Success> {
+    if !counted(b, k) {
+        return None;
     }
     let value = rd32(b, a5(k.value)).wrapping_add(1);
     wr32(b, a5(k.value), value);
-    if rd8(b, a5(ram::NO_ACCOUNTING)) != 0 {
-        return Count::Nothing;
-    }
-    if value == rd32(b, a5(k.image)) {
-        return Count::Value(value);
+    if rd8(b, a5(ram::NO_ACCOUNTING)) != 0 || value == rd32(b, a5(k.image)) {
+        return None;
     }
     wr32(b, a5(k.image), value);
     wr16(b, a5(ram::WORDS), 1);
     wr16(b, a5(ram::START), k.place);
-    Count::Written(write_verify(b))
+    Some(write_verify(b))
 }
