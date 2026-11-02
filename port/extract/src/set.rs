@@ -336,10 +336,10 @@ fn set_b(t: &mut Tables) {
     t.prog("life_bar_pieces", 0xd61b2, "u16", Some(9));
     t.pointed("life_bar_frames", 0xd6232, false, 21, "u8");
     // continue_countdown: prompt per stage, palette
-    t.prog("continue_prompt", 0xd6464, "u8", None);
+    t.prog("continue_prompt", 0xd6464, "u8", Some(116));
     t.palette(0x25c0e0, 0x20);
     // rank_adjust: rank deltas per variant
-    t.pointed("rank_deltas", 0xd6aa0, false, 8, "i16");
+    t.pointed("rank_deltas", 0xd6aa0, false, 11, "i16");
     // rearguard: depth offsets
     t.prog("rearguard_offsets", 0xd80fe, "i16", None);
     // idle_hunter: waiting frames, active hunters per player count
@@ -354,7 +354,9 @@ fn set_b(t: &mut Tables) {
     t.prog("door_a_placement", 0xd89be, "i16*8", None);
     t.prog("door_b_placement", 0xd9052, "i16", None);
     // dialog: offsets of the kind 5 definitions, owner tokens, palettes
-    t.prog("dialog_kind5_steps", 0xd7218, "u8", None);
+    t.prog("dialog_kind5_steps", 0xd7218, "u8", Some(0x40));
+    // predefined names designated past the five of `dialogs.json` (codes 0xf9 and up)
+    t.data("dialog_names_extra", 0xd7700, "u8", None);
     t.prog("dialog_owner_tokens", 0xd7988, "u16", Some(4));
     t.palette(0x292200, 0x80);
 }
@@ -406,6 +408,7 @@ fn set_c(t: &mut Tables) {
     t.prog("reward_ids", 0xcfe98, "u16", None);
     t.data("reward_icons", 0xcfec8, "u8", None);
     t.prog("reward_tests", 0xcff10, "u16", None);
+    t.data("reward_test_lists", 0xcffb8, "u8", None);
     t.prog("marker_positions", 0xcf974, "i16*2", Some(8));
     t.prog("firework_order", 0xcfa3c, "u8", Some(16));
     t.prog("results_attrs", 0xd0854, "u8", Some(4));
@@ -419,6 +422,13 @@ fn set_c(t: &mut Tables) {
 /// Shared with other families (`scenery.rs`, `set_residue.rs`): ESHL volleys, palette page 1.
 fn shared(t: &mut Tables) {
     t.prog("eshl_volleys", 0xa66e2, "u8", None);
+    // wave generators (`set_residue::begin_wave`, `finish_wave`): routine and its index per variant
+    t.prog("wave_begin_routines", 0xd98cc, "addr", Some(3));
+    t.prog("wave_begin_kinds", 0xd98d8, "u8", None);
+    t.prog("wave_finish_routines", 0xd996e, "addr", Some(2));
+    t.prog("wave_finish_kinds", 0xd9976, "u8", None);
+    // level-up messages: the word before the table, read by an index of -1 (h)
+    t.prog("levelup_tables_before", 0xceaa0, "x16", Some(1));
     // restoring palette page 1 (`scenery::restore_palette_page`): 32 blocks, then eight colours stored in the code
     t.palette(0x285280, 0x400);
     t.data("palette_page_1_colors", 0x1ad4a, "x16", Some(16));
