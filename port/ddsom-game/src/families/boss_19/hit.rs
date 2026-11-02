@@ -45,7 +45,11 @@ fn dispatch<R: Banc>(x: &mut Cx<'_, R>) {
         0 | 4 => reaction(x),
         2 => pushed_back(x),
         6 => death(x),
-        _ => {}
+        // table 0x90970 has six entries: 8 (0x8fae2, `rts`) and 0xa (0x9101a, back to the fight) are never chosen
+        // (no writer sets `+5` = 8 or 0xa in state 4: docs/code-mort.md), kept like the original
+        8 => {}
+        0xa => chase(x),
+        s => unreachable!("boss 19 hit: sub-state {s:#x} outside table 0x90970"),
     }
     if tst8(x, SHIELD).gt() {
         sub8(x, SHIELD, 1);

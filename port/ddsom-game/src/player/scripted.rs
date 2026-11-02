@@ -31,30 +31,32 @@ mod rom {
     pub const INTRO_ACTION: u32 = 0xe1330;
 }
 
-/// Tables du code.
+/// Code tables.
 mod tables {
-    /// Cinématiques par scène : une adresse de routine (long) par numéro de scène.
+    /// Cinematics by scene: one routine address (long) per scene number.
     pub const BY_SCENE: u32 = 0x23826;
-    /// Résurrection : décalages (mots) relatifs à la table, indexés par le pas `+6`.
+    /// Revival: offsets (words) relative to the table, indexed by step `+6`.
     pub const REVIVE_STEPS: u32 = 0x23b98;
-    /// Attente des commandes : adresses de routine, indexées par `+6`.
+    /// Waiting for the controls: routine addresses, indexed by `+6`.
     pub const WAIT_STEPS: u32 = 0x23d66;
-    /// Cinématiques de fin par scène.
+    /// End cinematics by scene.
     pub const END_BY_SCENE: u32 = 0x23f4e;
-    /// Pas de la cinématique de la scène 1.
+    /// Steps of the scene 1 cinematic.
     pub const SCENE1_STEPS: u32 = 0x24eae;
-    /// Marche d'entrée : pas.
+    /// Walk-in: steps.
     pub const WALK_IN_STEPS: u32 = 0x23a00;
-    /// Pas de l'attente des commandes (`+7`).
+    /// Steps of the wait for the controls (`+7`).
     pub const WAIT_SUBSTEPS: u32 = 0x23d7a;
-    /// Durées (mots) de l'entrée en scène selon le joueur.
+    /// Durations (words) of the scene entry by player.
     pub const WALK_IN_WAIT: u32 = 0x23a56;
     pub const SCENE1_WAIT: u32 = 0x24f38;
     pub const WAIT_DELAYS: u32 = 0x23dac;
-    /// Attente des commandes, pas 4 (`+7`) : marche jusqu'à la place, puis projeté par le boss.
+    /// Waiting for the controls, step 4 (`+7`): walks to the spot, then thrown by the boss.
     pub const THROWN_SUBSTEPS: u32 = 0x23e0e;
-    /// Profondeur visée (mots) selon le joueur.
+    /// Target depth (words) by player.
     pub const THROWN_ROWS: u32 = 0x23e58;
+    /// Revival while the inputs are frozen: x offsets (words) by player.
+    pub const FROZEN_OFFSETS: u32 = 0x23d04;
 }
 
 // Signal de la cinématique partagé avec le boss 21 (`ram::BOSS_SIGNAL`) : 0x5c quand il projette les
@@ -86,6 +88,7 @@ const HANDLERS: &[(u32, Handler)] = &[
     (0x23c16, revive_fall),
     (0x23c3c, revive_land),
     (0x23c58, revive_end),
+    (0x23c7a, revive_frozen),
     (0x23d0c, revive_in_place),
     (0x23d6e, |g, p| substep_table(g, p, tables::WAIT_SUBSTEPS)),
     (0x23d82, wait_start),
@@ -422,9 +425,9 @@ pub fn idle(g: &mut Ctx, p: Player) {
     }
 }
 
-// ---- résurrection -------------------------------------------------------------------------------
+// ---- revival ------------------------------------------------------------------------------------
 
-/// 0x23ba6 : le joueur tombe du ciel à sa place.
+/// 0x23ba6: the player falls from the sky at its spot.
 fn revive_start(g: &mut Ctx, p: Player) {
     cov!();
     next_action(g, p);
@@ -448,7 +451,7 @@ fn revive_start(g: &mut Ctx, p: Player) {
     crate::terrain::push(g.b, p.obj());
 }
 
-/// 0x23c16 : chute jusqu'au sol.
+/// 0x23c16: falls to the ground.
 fn revive_fall(g: &mut Ctx, p: Player) {
     cov!();
     move_z(g, p);
@@ -462,7 +465,7 @@ fn revive_fall(g: &mut Ctx, p: Player) {
     animation::start(g, p, 0xe);
 }
 
-/// 0x23c3c : atterrissage, puis l'animation 0x23 et le son de résurrection.
+/// 0x23c3c: landing, then animation 0x23 and the revival sound.
 fn revive_land(g: &mut Ctx, p: Player) {
     cov!();
     if !animation::step(g, p) {
@@ -473,7 +476,7 @@ fn revive_land(g: &mut Ctx, p: Player) {
     g.son(ext::son::FANFARE, p);
 }
 
-/// 0x23c58 : fin de l'animation : le joueur reprend la main, invulnérable 150 images.
+/// 0x23c58: end of the animation: the player gets control back, invulnerable for 150 frames.
 fn revive_end(g: &mut Ctx, p: Player) {
     cov!();
     if !animation::step(g, p) {
@@ -485,8 +488,34 @@ fn revive_end(g: &mut Ctx, p: Player) {
     start_stand(g, p);
 }
 
-/// 0x23d0c (pas 12) : le joueur réapparaît directement à sa place, debout et sans arme en main : il
-/// reprend la main (état de jeu normal) avec l'animation 0x35.
+/// 0x23c7a (step 8, state 0x00040800: the player joins the game while the inputs are frozen, `ram::INPUT_RAW`):
+/// appears on the ground in front of the object followed by the camera, shifted by its number, and directly plays
+/// the revival animation (0x23) with its fanfare; step 10 (0x23c58) gives control back.
+fn revive_frozen(g: &mut Ctx, p: Player) {
+    cov!();
+    next_action(g, p);
+    p.set_u8(g, Player::ACTIVE, 2);
+    p.set_u8(g, 0x68, 1);
+    p.set_u8(g, Player::INVULN, 0x96);
+    let flags = p.u8(g, Player::FLAGS) & !2;
+    p.set_u8(g, Player::FLAGS, flags);
+    for field in [Player::SLOW, 0x15c, Player::POWERUP, Player::AURA, Player::AURA_B, Player::AURA_C, Player::FACING] {
+        p.set_u8(g, field, 0);
+    }
+    cinematics::place_by_focus(g, p, tables::FROZEN_OFFSETS);
+    let y = p.u16(g, Obj::Y).wrapping_sub(1);
+    p.set_u16(g, Obj::Y, y);
+    g.rom(rom::REVIVE_SETUP, p);
+    animation::start(g, p, 0x23);
+    g.son(ext::son::FANFARE, p);
+    restore_palette(g, p);
+    ram::FADE_PAGES.set(g.b, 0xf);
+    crate::palette::full_brightness(g.b);
+    crate::objects::rank::raise(g.b);
+}
+
+/// 0x23d0c (step 12): the player reappears directly at its spot, standing and empty-handed: it gets
+/// control back (normal game state) with animation 0x35.
 fn revive_in_place(g: &mut Ctx, p: Player) {
     cov!();
     p.set_state(g, State::pack(2, 0, 0, 0).0);

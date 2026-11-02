@@ -8,8 +8,8 @@ scénarios ne contiennent que des entrées et des écritures RAM (`poke`, voir `
 
 * `FF8034` = numéro de scène (`A5+0x34`), 1 à 114 (0x72) :
   1-68 les stages (dont les boss : 24 Manticore, 26, 32 Black Dragon, 40/42 salamandres, 44, 46, 54 Tel'Arin,
-  58, 64, 66-67…) et leurs scènes intermédiaires (choix de route : 14 et 38 ; scènes à décor propre 43, 47, 4b, 4d, 4f,
-  50, 52 atteintes par progression naturelle), 69-82 boutiques, 83-89 écrans à graphismes non initialisés quand on
+  58, 64, 66-67…) et leurs scènes intermédiaires (votes de chemin à la sortie des scènes 2, 13, 33 et 38, en décimal comme
+  les `poke8 ff8034` ; scènes à décor propre 0x43, 0x47, 0x4b, 0x4d, 0x4f, 0x50, 0x52 atteintes par progression naturelle), 69-82 boutiques, 83-89 écrans à graphismes non initialisés quand on
   y entre directement, 90-114 scènes de démonstration de l'attract (jouées par l'IA du mode démo).
   Un `poke8 ff8034 N` pendant la sélection du personnage (image 2400) lance la partie dans la scène N ;
   vérifié par captures d'écran pour les 114 scènes (aucun plantage, le jeu se déroule normalement).
@@ -185,7 +185,7 @@ images dans une boucle (compteur FF806E qui avance par à-coups) est un comporte
 ## Bots longs (`scenarios/long/`, `DDSOM_LONG=1`)
 
 Parties longues jouées par `examples/autobot.rs` (40 000 à 90 000 images chacune) : plusieurs joueurs, magies et
-objets fréquents, routes des choix 0x14 et 0x38, boutiques, difficultés 0, 3 et 7, langue 4, joueurs mortels. Elles
+objets fréquents, scènes 20 et 56 (0x14 et 0x38, prises à tort pour les choix de route), boutiques, difficultés 0, 3 et 7, langue 4, joueurs mortels. Elles
 sortent des chemins des scénarios de 30 000 images et ont trouvé des trous du mode sans 68000. Génération :
 `tools/gen_long.py [nom...]` (écrit `<nom>.txt` et `<nom>.images`, le nombre d'images du scénario). Validation :
 `DDSOM_LONG=1 tools/validate_all.sh` les ajoute (en tête de liste : chacune dure 1 à 3 minutes) ; sans la variable,
@@ -194,20 +194,20 @@ scenarios/long/<nom>.images)`.
 
 | Scénario | Images | Contenu |
 |---|---|---|
-| `long_2p_magies` | 90 000 | clerc et magicien, magies et objets très fréquents (scènes 1, 2, 4, 0xb, 0xd, 0xe, 0x10, boutique 0x45) |
-| `long_28_scenes` | 90 000 | nain seul, 28 scènes (1, 5, 9… 109), difficulté 7, langue 4, boutique enchaînée |
+| `long_2p_magies` | 90 000 | deux magiciens, magies et objets très fréquents (scènes 1, 2, 4, 0xb, 0xd, 0xe, 0x10, boutique 0x45) |
+| `long_28_scenes` | 90 000 | voleur seul, 28 scènes (1, 5, 9… 109), difficulté 7, langue 4, boutique enchaînée |
 | `long_3p_mortels` | 60 000 | combattant, elfe et nain mortels |
-| `long_4p` | 60 000 | combattant, elfe, magicien, voleur (scènes 1-0xc, boutique 0x45) |
-| `long_route_14` | 60 000 | elfe depuis le choix de route 0x14 (0x18, boutique 0x4c, 0x6a) |
-| `long_route_38` | 60 000 | voleur et nain au choix de route 0x38 |
-| `long_boutiques` | 40 000 | clerc, les 14 boutiques 0x45-0x52, difficulté 0 |
+| `long_4p` | 60 000 | combattant, elfe, elfe bis, voleur (scènes 1-0xc, boutique 0x45) |
+| `long_scene_20` | 60 000 | clerc depuis la scène 20 (0x14) (0x18, boutique 0x4c, 0x6a) |
+| `long_scene_56` | 60 000 | elfe et combattant depuis la scène 56 (0x38) |
+| `long_boutiques` | 40 000 | magicien, les 14 boutiques 0x45-0x52, difficulté 0 |
 | `long_2p_d3_mortels` | 60 000 | combattant et magicien mortels, difficulté 3, scènes 0x1d-0x38 |
-| `long_nain_mortel` | 60 000 | nain seul mortel, jeu naturel (game over) |
-| `long_voleur_objets` | 60 000 | voleur, objets et magies très fréquents, scènes 1-56 |
-| `long_magicien_57_86` | 60 000 | magicien, magies très fréquentes, scènes 57-86 |
-| `long_2p_d7_mortels` | 60 000 | clerc et elfe mortels, difficulté 7 |
-| `long_4p_route_38` | 60 000 | quatre joueurs au choix de route 0x38 |
-| `long_route_14_2p` | 60 000 | combattant et clerc depuis le choix de route 0x14 |
+| `long_voleur_mortel` | 60 000 | voleur seul mortel, jeu naturel (game over) |
+| `long_elfe_objets` | 60 000 | elfe, objets et magies très fréquents, scènes 1-56 |
+| `long_nain_57_86` | 60 000 | nain, magies très fréquentes, scènes 57-86 |
+| `long_2p_d7_mortels` | 60 000 | magicien et elfe mortels, difficulté 7 |
+| `long_4p_scene_56` | 60 000 | magicien, clerc, elfe, voleur depuis la scène 56 (0x38) |
+| `long_scene_20_2p` | 60 000 | combattant et nain depuis la scène 20 (0x14) |
 
 Trous trouvés et corrigés (2026-10-27) ; chacun passait inaperçu des 272 scénarios de la validation complète :
 
@@ -232,9 +232,11 @@ Ils sont rangés dans `scenarios/long/` (validés avec `DDSOM_LONG=1`) et géné
 (`examples/autobot.rs`) gagne `--spells`, `--spell-period`, `--rods` et `--door`, et `tools/bot_lib.py` l'argument `late`.
 
 **Numéros de sélection.** L'ordre réel des personnages du choix est : 0 combattant, 1 magicien, 2 clerc, 3 voleur, 4 nain,
-5 elfe (octet `+3` du joueur : 0, 8, 2, 0xa, 6, 4 ; classe = `+3 >> 1`). Les commentaires et les noms des bots
-`long_*` plus haut suivent un ordre erroné (« clerc » pour le 1, « magicien » pour le 4...) : les noms des `sorts_*`
-sont les bons.
+5 elfe (octet `+3` du joueur : 0, 8, 2, 0xa, 6, 4 ; classe = `+3 >> 1`). Les personnages des bots `long_*` du tableau
+précédent sont ceux relevés en RAM (`+3` des joueurs à l'image 4700) ; trois bots ont été renommés en conséquence
+(`long_voleur_mortel`, `long_elfe_objets` et `long_nain_57_86`, ex-`long_nain_mortel`, `long_voleur_objets` et
+`long_magicien_57_86`). Les joueurs 2 à 4 n'ont pas le numéro de `chars` (curseur décalé, personnages pris sautés) ;
+deux joueurs peuvent avoir le même personnage (« bis » : second jeu de couleurs, `+3` impair).
 
 **Méthode des magies.** Le bouton 4 (attaque spéciale, `checks::special_attack`) lit l'identifiant de la ligne
 d'équipement choisie (`+0x120 + 16 × (+0x15d)`) et la table 0x372e4 le convertit en numéro de sort (`+0x15e`, identifiant
@@ -272,10 +274,63 @@ Trous trouvés et corrigés (chacun dans un commit séparé) :
 Limites : `fuzz_player spawn` s'arrête sur les trois tirs de baguette (« la routine d'origine ne revient pas » : depuis un état tiré
 au hasard, l'original dépasse la garde du contrôle) ; ils sont validés par les scénarios (les quatre baguettes sont tirées, pleines et épuisées). Les portes de passage SET 27 et 29
 (0xd8458, 0xd8dce) étaient déjà exécutées presque en entier par les scénarios (restent 0xd8316, 0xd8366, 0xd83b8, 0xd840a,
-helpers de suspension) ; les boutiques et les routes 0x14 et 0x38 ne reçoivent pas de bot nouveau ici.
+helpers de suspension) ; les boutiques et les votes de chemin ont leurs bots dans la section suivante.
 
 Résultat (après les quatre corrections et les trois zones) : `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1 DDSOM_JOBS=8
 tools/validate_all.sh 30000` donne 296 scénarios VALIDE sur 296, en mode par défaut et avec `DDSOM_ASSETS` (assets
 réextraits avec les zones ci-dessus : `extract <roms> <assets> data`). Régénération : `tools/gen_long.py sorts_<nom>` (environ
 5 à 10 minutes chacun) ; sélection `late` de `bot_lib.build` et option `--door` documentées dans leurs en-têtes.
 
+
+## Votes, boutiques, interface et démarrage (lot « couverture », wt-couv2, 2026-11-02)
+
+**Les votes de chemin** ont lieu à la sortie des scènes 2, 13, 33 et 38 (numéros décimaux, comme les `poke8 ff8034`) :
+réponse au dialogue 13, question 136 à 138, dialogue 40, dialogue 70 vers 39, 41 ou 43 (EFFCT 23, `effects_c::vote`).
+Les anciens `long_route_14` et `long_route_38` jouaient les scènes 20 et 56 (0x14 et 0x38) et ne votaient jamais ; ils
+sont renommés `long_scene_20` et `long_scene_56`. Les scénarios existants ne votaient qu'à l'abstention (sorties forcées
+de `scene_end/`) ou avec les touches fixes du bot.
+
+Nouveautés d'`examples/autobot.rs` : `--wander` (dans les boutiques et pendant un vote, gestes au hasard : direction
+tenue 20 à 90 images, bouton tapé ; à chaque vote, un joueur sur quatre s'abstient), `--frail N` (joueurs 3 et 4 ramenés
+à 1 PV toutes les N images), entrées de plan `scène:durée:f` et `scène:durée:t` (sortie de scène forcée comme
+`end_*` ou script de transition comme `trans_*`, puis attente de la scène choisie par le jeu). `tools/gen_long.py`
+gagne `events` (entrées brutes ajoutées à la base) et `coin_period`.
+
+| Scénario | Images | Contenu |
+|---|---|---|
+| `long_votes_4p` | 50 000 | quatre joueurs, langue 2, trois tours des votes 2, 13, 33, 38 (suites jouées : 4, 6, 7, 0x22, 0x27, 0x2b) |
+| `long_votes_3p_l4` | 50 000 | borne à trois joueurs (FF8020 = 1 : colonnes étroites de F3), langue 4 (textes des choix en octets) |
+| `long_votes_2p_l6` | 50 000 | deux joueurs, langue 6 |
+| `long_boutiques_4p` | 34 000 | les 14 boutiques à quatre, curseurs au hasard (articles, dons d'or, sortie), or remis à 99 999 puis à 0 (refus) |
+| `long_boutiques_3p_l6` | 34 000 | idem, borne à trois joueurs, langue 6 |
+| `long_boutiques_2p_l4` | 34 000 | idem, deux joueurs, langue 4 |
+| `long_credits_prix2` | 24 000 | deux joueurs dans une borne à trois ; 2 pièces par crédit (`A5+0x1e`) ; pièces glissées une à une dans le monnayeur 3 (bannière « pièces manquantes », 0x155e2) |
+| `long_credits_deux` | 24 000 | deux joueurs dans une borne à quatre ; parties à deux crédits (`A5+0x457`...) ; pièces une à une dans les monnayeurs 3 et 4 (0x155c2) |
+| `long_boss_4p_frail` | 40 000 | quatre joueurs mortels dans neuf scènes de boss, joueurs 3 et 4 fragiles : cadre effacé quand ils tombent devant un boss (`A5+0x50`, 0x16f54) |
+| `long_noms_embleme` | 30 000 | quatre joueurs passés « par la scène 46 » (`+0x193`) qui entrent au tableau des scores et finissent la partie : emblème EFFCT 0x5b de l'écran des scores (F4, 0x18a1c) |
+| `long_rejoint_fige` | 40 000 | premier essai du précédent, avec pièces périodiques : un joueur rejoint pendant que les entrées sont figées (voir plus bas) |
+| `cov/cov_demarrage_boutons` | 30 000 | bouton 1 tenu pendant les avertissements du démarrage et Start à la fin (F1) ; pool SOBJ vu plein à l'écran titre (F7, 0xfa774 : le texte n'est pas créé) |
+
+Le choix de la langue 0 (japonais, sautée par le menu de réglages) fait redémarrer la machine d'origine dans la scène
+33 : réglage impossible, écarté des bots.
+
+**Trou trouvé et corrigé** (commit séparé de la série) :
+
+| Bot (image) | Symptôme | Cause et correction |
+|---|---|---|
+| `long_rejoint_fige` (19 260) | arrêt sans 68000 : pas de native en 0x23c7a (`player/scripted.rs`) | un joueur qui rejoint la partie pendant que les entrées sont figées (`A5+0x44`) arrive dans l'état 0x00040800 : pas 8 de la résurrection (table 0x23b98), qui le pose devant l'objet suivi par la caméra et joue directement l'animation 0x23. Réécrit (`revive_frozen`) |
+
+**Couverture** (exemple `cov`, union des scénarios de la validation complète) : avant, 296 scénarios de main 3bec3f5,
+131 669 instructions distinctes, 2 321 fonctions exécutées sur 2 559, et dans les fonctions exécutées des zones de jeu
+2 909 instructions jamais exécutées et 991 sauts pris d'un seul côté ; après, 308 scénarios, 132 152 instructions, 2 323
+fonctions (0xcffd0, SET ; 0xea5f0, son de la boutique), 2 835 instructions jamais exécutées et 974 sauts d'un seul côté
+(détail : [couverture-fonctions.md](couverture-fonctions.md), `couverture-branches.tsv`). Le code des boutiques et
+des votes était déjà exécuté presque en entier ; les bots y ajoutent les textes de choix en octets (0xb0174), le
+changement d'équipement des icônes de la boutique (PEFF, 0x4cb78), des styles de fenêtres de 0xc8430 (37 instructions),
+le son 0xea5f0 et, surtout, des parties naturelles comparées par `validate`. F3 hors curseur et noms est entièrement joué, sauf du code mort
+(0x15234, [code-mort.md](code-mort.md)) ; F1 et F7 aussi ; ce qui reste de K1, K2, O1 et F4 est inatteignable
+(même document, « Corps des tâches »).
+
+Validation : `DDSOM_SCENES=1 DDSOM_COV=1 DDSOM_LONG=1 DDSOM_JOBS=8 tools/validate_all.sh 30000` donne 308 VALIDE sur 308
+en mode par défaut et avec `DDSOM_ASSETS` (assets de main, sans réextraction), branche `wt-couv2` 04d7b47 (main 63d95fd
+fusionné).

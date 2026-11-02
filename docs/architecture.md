@@ -128,7 +128,8 @@ la tâche des crédits est du Rust (`tache_credits.rs`, `ecran_credits.rs`). La 
 registres d'une tâche qui cède sont rangés dans la table au lieu de sa pile. Une tâche est encore « du code qui reprend
 à une adresse avec le contexte du 68000 sauvé » ; c'est l'adresse de reprise qui devient une native quand la tâche est
 réécrite. (Depuis : toutes les reprises sont des étapes Rust et l'ordonnanceur est une machine à états Rust, voir
-[noyau.md](noyau.md).) `tools/reste68k.sh` mesure ce qui tourne encore en 68000 ([reste68k.md](reste68k.md)).
+[noyau.md](noyau.md).) Le jeu n'exécute plus aucune instruction 68000 ; l'inventaire qui la mesurait (`tools/reste68k.sh`,
+`docs/reste68k.md`, retirés avec le mode hybride) reste dans l'historique git.
 
 Plan pour supprimer la machine 68000 :
 
@@ -153,9 +154,9 @@ Plan pour supprimer la machine 68000 :
    « Vers une boucle sans 68000 ».
 3. **Appels des anciens sous-programmes** : `ddsom_game::call` n'a plus d'appelant quand toutes les
    routines appelées sont natives ; alors plus aucune instruction 68000 ne s'exécute
-   (`tools/reste68k.sh` : zéro sur tous les scénarios). Les fonctions « jamais atteintes » du rapport
-   sont soit du code mort à supprimer, soit des chemins à couvrir par de nouveaux scénarios avant leur
-   réécriture.
+   (mesuré à zéro sur tous les scénarios par l'ancien inventaire `reste68k`). Les fonctions jamais exécutées
+   ([couverture-fonctions.md](couverture-fonctions.md)) sont soit du code mort ([code-mort.md](code-mort.md)), soit des
+   chemins à couvrir par des scénarios ou par le fuzz.
 4. **Supprimer la machine** : la boucle d'image devient `vblank(); ordonnanceur()` appelés directement
    (plus d'interruption, plus de `STOP`, plus de surcadencement : l'« avance rapide » reste plafonnée à
    `MAX_STEPS_PER_FRAME` pas par image) ; le CPU 68000 et le recompilateur (`ddsom-rc`) quittent le

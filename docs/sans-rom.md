@@ -134,7 +134,9 @@ code déclaré (data/reste.json) : 486399 octets en 5761 plages
 
 **Mettre à jour.** `tools/code_68k.sh` après l'ajout de scénarios qui exécutent du code nouveau (sans effet sur la
 sûreté : du code non mesuré est rangé en données), puis `extract ... data`. Les zones de `zones_natives.txt` ne sont
-plus nécessaires hors du code, mais rien n'empêche d'en ajouter (`tools/zones_natives.py`).
+plus nécessaires hors du code, mais rien n'empêche d'en ajouter (`tools/zones_natives.py`). Le fichier reste lu par
+`extract` (`natives.rs`) : ses zones dans le code sont indispensables, et celles hors du code, en double avec `reste.json`
+aujourd'hui, couvrent les octets qui deviendraient du code si `code_68k.txt` grandit (nouveaux scénarios).
 
 ## Vérifications
 

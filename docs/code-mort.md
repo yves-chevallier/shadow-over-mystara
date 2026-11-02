@@ -282,6 +282,59 @@ rend la palette du minuteur (0x2531c0) et libère l'objet. Hypothèse : reste d'
 passait par un état propre, l'objet du scrutin étant tenu dans A6. Sans registres, A6 n'existe plus : l'entrée
 est devenue un `unreachable!` (repli défensif ; l'A6 de l'original y désignerait un objet quelconque).
 
+## Lot « couverture » (wt-couv2)
+
+### Boss 15 et 19 : sous-états 8 et 0xa de l'état 4 « touché » (tables 0x929b8 et 0x90970)
+
+* **Ce que fait le code.** L'état 4 de chacun des deux dragons aiguille par `+5` dans une table de six mots :
+  0 réaction, 2 recul, 4 relevé (boss 15) ou réaction (boss 19), 6 mort, puis 8 et 0xa. L'entrée 8 est un `rts`
+  (0x9152e pour le boss 15, 0x8fae2 pour le 19) ; l'entrée 0xa ramène au combat, marche vers un joueur
+  (0x92ce0 → 0x9300c : `+0xa2` effacé, état 0x02020400, animation de repos ; 0x9101a → 0x913e8 pour le boss 19).
+* **Pourquoi jamais atteint.** Les écrivains de l'état d'un de ces boss qui mènent à l'état 4 sont : les coups
+  (`move.l #0x04000000,(4,A1)`, 0x10074 et les collisions 0x264e4...), la mort du boss 19 (0x9141a : 0x04060000),
+  les écritures de `+5` dans l'état 4 lui-même (6 seulement : 0x9290c, 0x92a92 ; 0x90a5e, 0x90b18, 0x90b3e) et
+  les retours à un état sauvé : `+0xb0` (0x9292e, seulement si l'octet sauvé vaut 2), `+0xa8` (0x90916, seulement
+  0x0204 04xx) et `+0x8a` (0x92b04, 0x90c84), copie de l'état au moment du coup (0x10092, 0x263c2...). Aucun
+  `addq.b #2,(5,A0)` dans les routines de l'état 4 (0x928ee-0x92ce0, 0x908ea-0x91010). Par récurrence, `+5` ne vaut
+  donc que 0, 2, 4 ou 6 dans l'état 4. (Le constat du lot fuzz citait 0x9101a comme table du boss 19 : c'est
+  l'entrée 0xa de la table 0x90970.)
+* **Nature.** Entrées de table jamais choisies, mais un vrai comportement de jeu (retour au combat).
+* **Décision.** Gardées en Rust comme l'original (`boss_15/hit.rs`, `boss_19/hit.rs` : `8 => {}`, `0xa => chase`),
+  au lieu du `_ => {}` qui ignorait aussi 0xa ; au-delà de la table, `unreachable!`. Validées par `fuzz_couv`
+  (`boss/boss15_scene46` et `boss/boss19_scene32`, 12 000 images, un appel sur 4, 48 essais par appel : environ
+  14 300 essais chacun, les deux entrées sont atteintes par des essais sans écart).
+||||||| 3bec3f5
+
+### Interface des joueurs (F3) : 0x15234-0x1523e après le `bra.w` de 0x15230
+
+* **Ce que fait le code.** `tst.b (0x21,A5) ; beq ; lea (0x44e,A5),A4` : choisir le compteur de pièces commun selon
+  le nombre de monnayeurs.
+* **Pourquoi jamais atteint.** Ces trois instructions suivent le `bra.w 0x1525c` de 0x15230 et aucun saut ni aucune
+  table n'y mène (le listing ne les désassemble même pas) ; le choix du compteur passe par la table 0x1526e indexée
+  par le mode des monnayeurs (`A5+0x1d`). Reste d'une version antérieure.
+* **Décision.** Code mort de l'original, non réécrit (`hud::slot`).
+
+### Corps des tâches K1, K2, F1, F4, F7, O1 : ce que les scénarios n'exécutent toujours pas
+
+Mesure du lot (union des scénarios de la validation complète, docs/couverture-fonctions.md) ; les chemins atteignables
+de F1, F4 et F7 sont désormais joués (`cov_demarrage_boutons`, `long_noms_embleme`) :
+
+* **Drapeaux de mise au point de l'en-tête de la ROM** (octets 0xc4, 0xc5 et 0xc7 de l'espace données, nuls dans cette
+  ROM ; le mot 0xc0, nul aussi, garde l'affichage des verrous du son) : 0x514 (`boot_init`), 0x5b4-0x5c0 et 0x5d0
+  (`irq2_vblank` : attente d'un bit de 0x804021, copie de 0x8040b0), 0x664-0x686 (combinaison de touches lue au
+  démarrage), 0x11bd2-0x11be0 (tâche de démarrage : autres textes d'avertissement). Inatteignables : la ROM ne change
+  pas. `vblank.rs` les omet (commentaire d'en-tête) ; `demarrage.rs` et `modes/boot.rs` lisent l'octet 0xc4 comme
+  l'original.
+* **Registre 0x804030** (`reset`, 0x456-0x48a : lecture de la configuration 0x2dc9a, puis réinitialisation 0x2e8e4
+  sur une combinaison de 0x804020, quand le bit 14 est nul) : la carte émulée rend 0xe021 (bit 14 levé ;
+  `demarrage.rs`, `CARTE`).
+* **Erreurs de RAM** (K2, `ram_test_block`, 0x1940-0x19ae : écran « RAM ERROR » et boucle sans fin) : la RAM émulée
+  ne se trompe jamais.
+* **Données** prises pour du code par `decomp/index.tsv` : 0x980 (fin de l'ordonnanceur), 0x1fa2-0x1fb6 (table après
+  `obj_on_screen`, O1), 0x19aa.
+* **Écran 0x19068** (F4, 0x196ae et la fin de 0x19038) : tâche jamais créée, déjà consignée plus haut (« Tâche de
+  l'écran 0x19068 »).
+
 ## Lot « sortie du Cpu », partie 5 (ESHL, SOBJ, SET, ITEM, BOX, EFFCT restants en gestionnaires sans registres, wt-familles3)
 
 ### Aides de la barrière en natives (0xb9ee6, 0xb9eba, 0xba094 ; `effects.rs`, module `barriere`)
@@ -300,3 +353,4 @@ Doublon : supprimées, avec leurs entrées de `fuzz_monde`.
 guide 1, c'est l'A2 laissé par les gestionnaires précédents de la boucle (aucun n'est tenu sans registres). Le
 guide 1 naît du script de la scène, joueurs présents ; aucun scénario ne le voit naître sans joueur vivant.
 Hypothèse : cas impossible en jeu (repli de l'original sans sens). Devenu un `unreachable!`.
+||||||| a00e694

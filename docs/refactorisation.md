@@ -671,7 +671,7 @@ des événements (0x19ae6, 0x19b08, 0x19dce) et des palettes (0x1686, 0x3af8), p
   caisse (0xa17d0, glitch de `row_1a`) : tests de zone (`ai::keep_on_screen_d5`), cibles (D5 = 0 / 2), débris
   (D5.w = -1) et trésor (compteur) l'écrivent en clair ; les restes D1-D3 des tests de boîte
   (`target_in_front_68k`, `box_around_68k`, `in_front_68k`) et les registres de la collision avec le décor
-  (`terrain::push_68k`) donnent ses vitesses à l'étincelle de 0x103ba (`long_route_14_2p`). Ces tests de boîte et la
+  (`terrain::push_68k`) donnent ses vitesses à l'étincelle de 0x103ba (`long_scene_20_2p`). Ces tests de boîte et la
   collision gardent donc les registres de l'original dans la façade. Outil : `examples/registre_ecrit` compilé sans
   ROM (interprété, sinon les blocs recompilés ne passent pas par le crochet).
 * **Fuzz.** `examples/fuzz_ia.rs` compare chaque cœur à la routine d'origine (interpréteur seul) sur des états tirés
@@ -715,7 +715,7 @@ But : lever, hors de `families/`, ce qui empêche le `Cpu` de quitter le chemin 
   (0x3f/0x40, 0x1f/0xe0) : relu par un gestionnaire d'objet (`boss13_dragon`, image 7241) — `update_cameras` le
   rend (`[RestesD4; 2]`), `update_cameras_68k` le pose. D4 de la liste de sprites (attributs du dernier morceau,
   relu par 0xad7b0) — `sprites::Restes::d4`. D2.w = 0x400 laissé par la jauge masquée (test de DSW), écrit par un
-  gestionnaire dans un champ d'objet (`long_magicien_57_86`, image 13398, `ram ffd692`) — `video::jauge_68k`.
+  gestionnaire dans un champ d'objet (`long_nain_57_86`, image 13398, `ram ffd692`) — `video::jauge_68k`.
 * **Preuve.** Sonde générique `DDSOM_POISON=appel_<adresse>` dans `crate::call` (registres changés par l'appelé,
   inversés au retour, au site d'appel) et étiquettes des adaptateurs restreintes hors des familles
   (`alloc,!alloc@families/`...). Faux positifs écartés : enchaînement des blocs de tuiles (A1 = fin du bloc
@@ -725,7 +725,7 @@ But : lever, hors de `families/`, ce qui empêche le `Cpu` de quitter le chemin 
   scénarios), passés au cœur : allocations des modes, scènes, boutique, tableau des scores, crédits et phase 0 (16),
   `rank::reset/lower/tick` et `charger_preset` (12), `lists::unlink_all` (3), `rng::seed` (3), pop-ups et
   effacement de la couche 1 de la phase 12, A0 des caméras. Registres relus, gardés et documentés (glitches
-  d'origine) : copie des entrées 0x2aec (`inputs::recopier_68k`, D0-D4 relus : `long_voleur_objets`, image 13133),
+  d'origine) : copie des entrées 0x2aec (`inputs::recopier_68k`, D0-D4 relus : `long_elfe_objets`, image 13133),
   pas d'animation des personnages (`step_keeping_regs`, D0.b relu : `long_3p_mortels`, image 22018), jauge (D2),
   sprites (D4), caméras (D4). Contrats de natives appelées par adresse (restent tant que leurs appelants le
   sont) : créateurs (`effects_aids.rs`, `player/spawn.rs` : A1 relu par `modes/title.rs`), terrain

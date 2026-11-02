@@ -270,7 +270,7 @@ appels en cours ne sont plus sur la pile 68000, le code d'origine ne peut plus p
 d'une tâche. `install` installe le jeu sans 68000, et `DDSOM_HYBRIDE=1` arrête `validate`, `bench`, `lectures_rom` et
 l'application avec un message (`ddsom_game::refuser_hybride`). `DDSOM_CHECK` et `DDSOM_ADOPT_REGS` (l'original exécuté sur
 une copie, à chaque native) marchent sans lui ; `examples/cessions` et `reste68k`, qui mesuraient le 68000 restant du
-mode hybride, n'ont plus d'objet.
+mode hybride, sont retirés (historique git).
 
 * **Exécuteur.** La boucle d'image exécute les points (`kernel::Point`) ; au point `Tache`, `sans68k::pas` cherche la
   native posée au PC (`lookup`) et l'exécute, comme `call` (plus de `c.step`, plus de `ddsom_rc`). Le `Cpu` ne sert
@@ -358,7 +358,7 @@ test de l'original, le mot en cours de test peut porter un motif à la fin de l'
 reste (autres mots, objets, palette) est comparé dès l'image 1, et tout dès l'image 6. Seules les images 1 et 2 ont
 ce mot (test de la GFX RAM) ; aux images 3 à 5, la fin d'image tombe entre deux mots du test de la RAM de travail.
 
-## Bilan de l'inventaire (`tools/reste68k.sh`, `docs/reste68k.md`)
+## Bilan de l'inventaire (`tools/reste68k.sh`, `docs/reste68k.md`, retirés depuis avec le mode hybride)
 
 `examples/reste68k.rs` rejoue des scénarios sur la machine hybride (natives Rust, 68000 interprété pour le
 reste) et compte chaque instruction 68000 exécutée hors native (code appelé par `call` compris), par adresse,

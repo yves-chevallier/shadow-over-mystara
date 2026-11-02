@@ -1,0 +1,12 @@
+# Boot (F1, task 0x11b16): player 1 button 1 held during the two warning screens (shortened waits, 0x11c14 and
+# 0x11c58) and Start held at the end (0x11c76: A5+0x7fc6 = 1, debug display of the sound locks, which ROM word 0xc0,
+# zero, does not enable). Then the title screen (F7, 0xfa762) sees the SOBJ pool as full (counter A5+0x7e70 set to 0
+# from frame 1600 to 1720, then restored to its value, 10): the title text is not created (the original retries one
+# frame later through the countdown, which wraps around), the attract goes on.
+20 P1 Button 1 1
+50 1 Player Start 1
+600 P1 Button 1 0
+600 1 Player Start 0
+1600 poke16 fffe70 0
+1720 poke16 fffe70 10
+30001 quit

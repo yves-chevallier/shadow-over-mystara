@@ -121,6 +121,13 @@ pub(self) fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     rest(x);
 }
 
+/// 0x9300c: walks towards a player (only through sub-state 0xa of state 4, never set: docs/code-mort.md).
+pub(self) fn chase<R: Banc>(x: &mut Cx<'_, R>) {
+    x.set8(HURT_BOX, 0);
+    x.set32(f::STATE, CHASE);
+    rest(x);
+}
+
 /// 0x9301e : repos ou marche, au hasard (le petit dragon : seulement le demi-tour).
 pub(self) fn wander<R: Banc>(x: &mut Cx<'_, R>) {
     let mut r = random(x) as u16 & 3;
