@@ -427,8 +427,8 @@ fn shared(t: &mut Tables) {
     t.prog("wave_begin_kinds", 0xd98d8, "u8", None);
     t.prog("wave_finish_routines", 0xd996e, "addr", Some(2));
     t.prog("wave_finish_kinds", 0xd9976, "u8", None);
-    // level-up messages: the word before the table, read by an index of -1 (h)
-    t.prog("levelup_tables_before", 0xceaa0, "x16", Some(1));
+    // level-up messages: the long that starts two bytes before the table, read as data by an index of -1 (h)
+    t.data("levelup_tables_before", 0xceaa0, "x16", Some(2));
     // restoring palette page 1 (`scenery::restore_palette_page`): 32 blocks, then eight colours stored in the code
     t.palette(0x285280, 0x400);
     t.data("palette_page_1_colors", 0x1ad4a, "x16", Some(16));
