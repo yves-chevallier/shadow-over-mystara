@@ -7,11 +7,13 @@
 //! original leaves (A1 = the last object allocated, carry set if the pool is full, flags of the last write, loop
 //! counters: `dbf` leaves the low word at -1).
 
+use crate::families::shell::records::view;
 use cps2::Cps2Bus;
 
 use super::effects_creators::leftovers::Regs;
-use crate::mem::{rd16, wr16, wr32, wr8, A5};
+use crate::mem::{rd16, wr16, wr32, wr8};
 use super::shell::tables::{held8, tables, Read};
+use super::shell::vars;
 use ddsom_data::effects::Table;
 use crate::objects::pools;
 use crate::objects::Obj;
@@ -37,10 +39,6 @@ mod f {
     pub const LINK: u32 = 0x5c;
 }
 
-/// Dynamic rank (`A5+0x7f92`, word): chooses the number of bursts of the rows.
-const RANK: u32 = A5 + 0x7f92;
-/// Number of type 5 shots beyond which 0x9e426 creates no more (`A5+0x7e64`, word).
-const LIMIT_TWELVE: u32 = A5 + 0x7e64;
 
 /// Allocates an ESHL of type `kind` (active); `None` (carry set) if the pool is full.
 fn spawn(r: &mut impl Regs, b: &mut Cps2Bus, kind: u8) -> Option<Obj> {
@@ -355,7 +353,7 @@ pub(crate) fn shot_0(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj>
 /// `A5+0x7e64`; true (D0 = 1) if they are created.
 pub(crate) fn twelve_5(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, count: u16) -> bool {
     r.d(1, 12);
-    let limit = rd16(b, LIMIT_TWELVE);
+    let limit = vars::LIMIT_TWELVE.get(b);
     if (count as i16) >= limit as i16 {
         r.d(0, 0);
         r.flags(0, Size::Long);
@@ -393,7 +391,7 @@ fn row(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, mut count: u16, mu
             r.a(2, *at);
             o.set_u8(b, f::DIRECTION, d);
         }
-        o.set_u16(b, 0x58, n4);
+        o.set_u16(b, Creator::LABEL, n4);
         n3 = n3.wrapping_add(1);
         n4 = n4.wrapping_add(8);
         r.d_byte(3, n3);
@@ -411,7 +409,7 @@ fn row(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u8, mut count: u16, mu
 
 /// Number of bursts minus one, read from a (program) table indexed by rank / 2.
 fn count_by_rank(r: &mut impl Regs, b: &mut Cps2Bus, table: &Table) -> u8 {
-    let i = rd16(b, RANK) >> 1;
+    let i = vars::RANK.get(b) >> 1;
     r.d_word(0, i);
     table.at8(b, i as i16 as i32 as u32)
 }
@@ -428,7 +426,7 @@ pub(crate) fn row_19(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) -> Option<Obj>
 /// without `moveq #0,D5` (unlike 0xa1670): the high byte of the word D5 left by the caller (`d5`, the crate
 /// `boxes::effect_special`) is added to the count of the `dbf D5.w` loop, which can then fill the ESHL pool.
 pub(crate) fn row_1a(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u16, d5: u16) -> Option<Obj> {
-    me.set_u16(b, 0x56, kind);
+    me.set_u16(b, Creator::KIND, kind);
     let n = count_by_rank(r, b, &tables().bursts_1a_counts);
     r.d_byte(5, n);
     // the four direction tables of `bursts_1a_directions`, 0x20 bytes each; the row reads them by address (A2)
@@ -437,7 +435,7 @@ pub(crate) fn row_1a(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u16, d5:
         1 => 0,
         2 => 0x20,
         _ => {
-            let target = me.u16(b, 0x6c) as i16 as i32 as u32;
+            let target = me.u16(b, Creator::TARGET) as i16 as i32 as u32;
             r.a(1, target);
             let tx = rd16(b, target + f::X);
             r.d_word(1, tx);
@@ -551,10 +549,10 @@ pub(crate) fn single_18(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj) {
 /// (`+0x6c` -> `+0x50`).
 pub(crate) fn single_1b(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, kind: u16) -> Option<Obj> {
     let o = spawn(r, b, 0x1b)?;
-    me.set_u16(b, 0x56, kind);
+    me.set_u16(b, Creator::KIND, kind);
     let link = me.u16(b, f::LINK);
     o.set_u16(b, f::LINK, link);
-    let target = me.u16(b, 0x6c);
+    let target = me.u16(b, Creator::TARGET);
     o.set_u16(b, f::OWNER, target);
     r.flags(target as u32, Size::Word);
     Some(o)
@@ -596,4 +594,16 @@ pub(crate) fn chasers(r: &mut impl Regs, b: &mut Cps2Bus, me: Obj, variant: u8, 
     r.d(0, 1);
     r.flags(1, Size::Long);
     last
+}
+
+view! {
+    /// Fields of the objects that create rows of shots.
+    Creator {
+        /// Kind of the row.
+        kind, set_kind, KIND: u16 @ 0x56;
+        /// Label of each created shot (h).
+        label, set_label, LABEL: u16 @ 0x58;
+        /// Target (16-bit pointer).
+        target, set_target, TARGET: u16 @ 0x6c;
+    }
 }

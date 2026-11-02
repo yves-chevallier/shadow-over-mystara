@@ -130,8 +130,10 @@ tables! {
     debris45_hop_vz: prog 2 @ 0xa3c94;
     /// `eshl_c/debris45`: Mirror of `+0x2f` for the flipped object.
     debris45_mirror: prog 1 @ 0xa3d10;
-    /// `eshl_c/debris45`: Offsets of variant 1 by `+0x2f`: X, then Z by a read shifted by two bytes and by X.
-    debris45_place_offsets: prog 2 @ 0xa3dc2;
+    /// `eshl_c/debris45`: Offsets of variant 1 by `+0x2f` (from offset 0x16): X, then Z by a read shifted by two bytes
+    /// and by X. The table starts 0x16 bytes early: with a negative X the Z read reaches into the code before it
+    /// (glitch of the original).
+    debris45_place_offsets: prog 2 @ 0xa3dac .. 0xa3de2;
     /// `eshl_c/debris45`: Rows of 4 words (VX, AX, VZ, VY) for variant 0 (data space).
     debris45_burst_speeds: data 2 @ 0xa3e30;
     /// `eshl_c/spawn47`: Tables of 16 words of offsets: in X (inside the band / outside the band), in Y (same), delays.
@@ -281,8 +283,9 @@ tables! {
     item_scene_stop_sounds: prog 1 @ 0xdcaa0;
     /// `items/scene`: Guide: (animation, mode) per level.
     item_scene_guide_animations: prog 1 @ 0xdcb6e;
-    /// `items/scene`: Guide: arrival animation per mode.
-    item_scene_guide_animations_arrival: prog 1 @ 0xdcbbc;
+    /// `items/scene`: Guide: arrival animation per mode; the modes past 3 read the code that follows (glitch of the
+    /// original).
+    item_scene_guide_animations_arrival: prog 1 @ 0xdcbbc .. 0xdcbcc;
     /// `items/scene`: Guide 3: its 16-color palette, copied to the palette page 0x91c300.
     item_scene_guide_3_palette: data 4 @ 0xdccec .. 0xdcd0c;
     /// `items/scene`: X offset from the player, facing right then left.

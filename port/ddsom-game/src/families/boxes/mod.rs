@@ -1,6 +1,7 @@
 //! BOX family (class 0xA): destructible crates, barrels and chests. Dispatch `0x39e50`, type table
 //! `0x39e76` (4 types). 21 slots of 0x80 bytes. See `docs/familles.md`.
 
+use crate::families::shell::records::{SetView, view};
 use crate::objects::pools;
 use crate::objects::Obj;
 use super::shell::tables::{tables, Read};
@@ -27,7 +28,7 @@ mod field {
 }
 
 mod rom {
-    pub const ANIMATIONS: u32 = 0x1bebc2;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x1bebc2);
 }
 
 const SHADOWS: u8 = 0x35;
@@ -49,7 +50,6 @@ pub mod chest;
 /// Type 2: scenery element with no behavior (animation 5 of the BOX set); the object initializes itself,
 /// then just sorts itself every frame until its release. Not exercised by the scenarios.
 mod scenery {
-    pub const ENTRY: u32 = 0xda7ac;
     pub const ANIMATION: u16 = 5;
 }
 
@@ -65,7 +65,7 @@ fn box_2<R: Bench>(ctx: &mut Cx<'_, R>) {
             add_u8(ctx, o, Obj::STATE, 2);
             o.set_u8(ctx.b, Obj::ACTIVE, 2);
             o.set_u8(ctx.b, field::GAME_SHADOWS, SHADOWS);
-            ctx.anim_start(rom::ANIMATIONS, scenery::ANIMATION);
+            ctx.anim_start(rom::ANIMATIONS.0, scenery::ANIMATION);
             ctx.reinsert();
         }
         state::ACTIVE => ctx.reinsert(),
@@ -83,9 +83,8 @@ fn box_2<R: Bench>(ctx: &mut Cx<'_, R>) {
 /// variant 3 like 0 at initialization. The object disappears when the camera has passed it by 0x200.
 /// Not exercised.
 mod barrier {
-    pub const ENTRY: u32 = 0xda578;
-    pub const ANIMATIONS_0: u32 = 0x1bed06;
-    pub const ANIMATIONS_1: u32 = 0x1712d4;
+    pub const ANIMATIONS_0: crate::data::RomAddr = crate::data::RomAddr(0x1bed06);
+    pub const ANIMATIONS_1: crate::data::RomAddr = crate::data::RomAddr(0x1712d4);
     pub const SOUND: crate::sound::Sound = crate::sound::CMD_37C_47C;
     pub const HITTER: u32 = 0x6c;
     pub const SET_CREATED: u32 = 0x7c;
@@ -96,11 +95,11 @@ fn barrier_created_set<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let Some(new) = super::creators::scene_set(ctx.b, 0x8b) else { return };
     let hitter = pointer(ctx, o, barrier::HITTER);
     let mode = (o.u8(ctx.b, field::MODE) as u32) << 3;
-    let class = ((hitter.u8(ctx.b, 3) & 0xf) >> 1) as u32;
+    let class = ((hitter.u8(ctx.b, Obj::VARIANT) & 0xf) >> 1) as u32;
     let position = tables().barrier_positions.at8(ctx.b, (mode + class) & 0xffff);
-    new.set_u8(ctx.b, 0x42, position);
-    let character = hitter.u8(ctx.b, 2);
-    new.set_u8(ctx.b, 0x43, character);
+    new.set_u8(ctx.b, SetView::PARAM_A, position);
+    let character = hitter.u8(ctx.b, Obj::KIND);
+    new.set_u8(ctx.b, SetView::PARAM_B, character);
     o.set_u16(ctx.b, barrier::SET_CREATED, new.0 as u16);
 }
 
@@ -110,14 +109,14 @@ fn barrier_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         0 | 3 => {
             add_u8(ctx, o, Obj::STATE, 2);
             o.set_u8(ctx.b, field::GAME_SHADOWS, SHADOWS);
-            o.set_u32(ctx.b, 0x78, 0);
-            ctx.anim_start(barrier::ANIMATIONS_0, 0);
+            o.set_u32(ctx.b, Barrier::ORIGIN, 0);
+            ctx.anim_start(barrier::ANIMATIONS_0.0, 0);
         }
         1 => {
             add_u8(ctx, o, Obj::STATE, 2);
             o.set_u8(ctx.b, field::GAME_SHADOWS, SHADOWS);
             super::eshl_creators::single_3c(&mut crate::families::effects_creators::leftovers::Pure, ctx.b, o);
-            ctx.anim_start(barrier::ANIMATIONS_1, 4);
+            ctx.anim_start(barrier::ANIMATIONS_1.0, 4);
         }
         _ => crate::families::effects::bad_index(2 * variant as u32),
     }
@@ -138,7 +137,7 @@ fn barrier_active_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         }
         2 => {
             let set = pointer(ctx, o, barrier::SET_CREATED);
-            let finished = set.u8(ctx.b, 0x22) != 0;
+            let finished = set.u8(ctx.b, SetView::FINISHED) != 0;
             if finished {
                 o.set_u8(ctx.b, field::SUB_STATE, 0);
                 o.set_u8(ctx.b, field::HIT_B, 0);
@@ -165,7 +164,7 @@ fn barrier_active_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             let hitter = pointer(ctx, o, barrier::HITTER);
             hitter.set_u32(ctx.b, Obj::STATE, 0x0200_3000);
             let animation = if sub_state == 0 { 5 } else { 6 };
-            ctx.anim_start(barrier::ANIMATIONS_1, animation);
+            ctx.anim_start(barrier::ANIMATIONS_1.0, animation);
         }
         2 | 6 => {
             let end = ctx.anim_step();
@@ -206,14 +205,22 @@ fn barrier_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
     }
 }
 
-handler!(BOX_1, barrier::ENTRY, "box_barrier", barrier_handler);
-handler!(BOX_2, scenery::ENTRY, "box_scenery", box_2);
+handler!(BOX_1, 0xda578, "box_barrier", barrier_handler);
+handler!(BOX_2, 0xda7ac, "box_scenery", box_2);
 
 // ---------------------------------------------------------------------------------------------
-// Type 3 : bloc poussable (0xda7f2)
+// Type 3: pushed block (0xda7f2)
 
 /// Type 3: block that a player pushes (action 0x2e, registered by the player in `+0x6c`). Variant 0: slides
 /// in X between two bounds, accompanied by a SET (type 7, variant 0xc); out of the bounds, it stops (substate
 /// 2) and notifies its SET. Variant 1: slides in height (`+0x10`) and realigns itself with the terrain at each step.
 /// The pushing player is placed back against the block (offset per character and direction).
 pub mod pushes;
+
+view! {
+    /// Fields of the barrier.
+    Barrier {
+        /// Original position (h).
+        origin, set_origin, ORIGIN: u32 @ 0x78;
+    }
+}

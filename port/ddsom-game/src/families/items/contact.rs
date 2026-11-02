@@ -1,21 +1,14 @@
 use super::*;
+use crate::data::RomAddr;
+use crate::families::shell::vars;
+use crate::families::shell::records::{Base, PlayerView, SetView};
 use crate::families::shell::tables::{box_byte, held8, tables, Read};
 use ddsom_data::effects::Table;
 
 // ---------------------------------------------------------------------------------------------
 // Type 8: contact objects (0xdd132)
 
-/// Type 8, objects picked up by simple contact (box test with the four players, `0xdd470`) that trigger a scene effect
-/// through a SET object (`0xc8312`): three variants.
-///
-/// - 0: placed bonus that waits for `+0x58` (touched by a player), creates a SET (`+0x42`) and follows it;
-/// - 1: bonus that oscillates horizontally (speed `+0x14`, about-turn every 0x3c frames) until a
-///   player touches it;
-/// - 2: same principle as 0, without oscillation.
-///
-/// `A5-0x5ac4` is non-zero as long as a player is picking one up: only one at a time.
-pub const ENTRY: u32 = 0xdd132;
-pub const ANIMATIONS: u32 = 0x1bf8fe;
+pub const ANIMATIONS: RomAddr = RomAddr(0x1bf8fe);
 // variant 0
 // variant 1
 // variant 2
@@ -28,11 +21,11 @@ pub const PLAYERS: u32 = 0xff85de;
 /// `0xdd470`: does a player touch the object? If so, the substate advances, the lock is lifted and the player becomes
 /// the owner.
 pub(super) fn contact_player<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
-    let busy = ctx.ram8(BUSY) != 0;
+    let busy = vars::PICKUP_LOCK.get(ctx.b) != 0;
     if busy {
         return false;
     }
-    let hitbox = o.u8(ctx.b, 0x39) as u32;
+    let hitbox = o.u8(ctx.b, Base::PUSH_BOX) as u32;
     if hitbox == 0 {
         return false;
     }
@@ -42,7 +35,7 @@ pub(super) fn contact_player<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
         let player = Obj(PLAYERS + i * 0x200);
         if player_key(ctx, o, player, my_box) {
             add_u8(ctx, o, field::SUB_STATE, 2);
-            ctx.set_ram8(BUSY, 1);
+            vars::PICKUP_LOCK.set(ctx.b, 1);
             o.set_u16(ctx.b, field::OWNER, player.0 as u16);
             return true;
         }
@@ -60,15 +53,15 @@ pub(super) fn player_key<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj, my_
     if dead {
         return false;
     }
-    let busy = player.u8(ctx.b, 0x182) != 0;
+    let busy = player.u8(ctx.b, PlayerView::BUSY) != 0;
     if busy {
         return false;
     }
-    let number = player.u8(ctx.b, 0x38) as u32;
+    let number = player.u8(ctx.b, Base::BODY_BOX) as u32;
     if number == 0 {
         return false;
     }
-    let class = (player.u8(ctx.b, 3) >> 1) as u32;
+    let class = (player.u8(ctx.b, Obj::VARIANT) >> 1) as u32;
     let table = tables().item_contact_boxes_player.at32(ctx.b, class << 2);
     let its_box = table + (number << 3);
     overlaps(ctx, o, player, my_box, its_box)
@@ -110,7 +103,7 @@ pub(super) fn overlaps<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj, a: u3
 
 /// `0xdd16e`: starts animation `animation`, then sorts the object.
 pub(super) fn contact_animate<R: Bench>(ctx: &mut Cx<'_, R>, animation: u8) {
-    ctx.anim_start(ANIMATIONS, animation as u16);
+    ctx.anim_start(ANIMATIONS.0, animation as u16);
     ctx.reinsert();
 }
 
@@ -133,8 +126,8 @@ pub(super) fn contact_created_set<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool
     };
     o.set_u16(ctx.b, SET_CREATED, new.0 as u16);
     let owner = pointer(ctx, o, field::OWNER);
-    let character = owner.u8(ctx.b, 2);
-    new.set_u8(ctx.b, 0x37, character);
+    let character = owner.u8(ctx.b, Obj::KIND);
+    new.set_u8(ctx.b, SetView::CHARACTER, character);
     true
 }
 
@@ -149,12 +142,12 @@ pub(super) fn contact_facing<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 /// Has the SET object finished? (`+0x22` of the SET object non-zero.)
 pub(super) fn contact_set_finished<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
     let set = pointer(ctx, o, SET_CREATED);
-    set.u8(ctx.b, 0x22) != 0
+    set.u8(ctx.b, SetView::FINISHED) != 0
 }
 
 /// Variant 0, end of the scene (`0xdd22e`): lifts the lock and goes to the flee substate.
 pub(super) fn contact_0_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ctx.set_ram8(BUSY, 0);
+    vars::PICKUP_LOCK.set(ctx.b, 0);
     o.set_u8(ctx.b, field::SUB_STATE, 6);
     contact_animate_mode(ctx, o, &tables().item_contact_v0_animations_end);
 }
@@ -183,19 +176,19 @@ pub(super) fn contact_0<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                     if pickup == 0 {
                         return;
                     }
-                    let busy = ctx.ram8(BUSY) != 0;
+                    let busy = vars::PICKUP_LOCK.get(ctx.b) != 0;
                     if busy {
                         o.set_u8(ctx.b, field::PICKUP, 0);
                         return;
                     }
-                    ctx.set_ram8(BUSY, 1);
+                    vars::PICKUP_LOCK.set(ctx.b, 1);
                     add_u8(ctx, o, field::SUB_STATE, 2);
                     shard(ctx, o);
                     contact_animate_mode(ctx, o, &tables().item_contact_v0_animations_key);
                 }
                 2 => {
                     ctx.anim_step();
-                    let key = o.u8(ctx.b, 0x33);
+                    let key = o.u8(ctx.b, Base::ANIM_EVENT);
                     if key == 1 {
                         return;
                     }
@@ -253,7 +246,7 @@ pub(super) fn contact_1_speed<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 /// Variant 1, scene exit (`0xdd37c`): the lock is lifted, the bonus moves away.
 pub(super) fn contact_1_exit<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     contact_1_speed(ctx, o);
-    ctx.set_ram8(BUSY, 0);
+    vars::PICKUP_LOCK.set(ctx.b, 0);
     o.set_u8(ctx.b, field::SUB_STATE, 6);
     contact_1_animate(ctx);
 }
@@ -275,8 +268,8 @@ pub(super) fn contact_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                     let key = contact_player(ctx, o);
                     if key {
                         // no next contact: the substates advance by themselves
-                        ctx.set_ram8(0x5e, 1);
-                        ctx.anim_start(ANIMATIONS, 0x19);
+                        vars::SECOND_PASS.set(ctx.b, 1);
+                        ctx.anim_start(ANIMATIONS.0, 0x19);
                         return;
                     }
                     contact_1_advance(ctx, o);
@@ -303,7 +296,7 @@ pub(super) fn contact_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 }
                 4 => {
                     let set = pointer(ctx, o, SET_CREATED);
-                    let in_progress = set.u8(ctx.b, 0x22) == 0;
+                    let in_progress = set.u8(ctx.b, SetView::FINISHED) == 0;
                     if !in_progress {
                         contact_1_exit(ctx, o);
                     }
@@ -324,7 +317,7 @@ pub(super) fn contact_1<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 
 /// Variant 2, end of the scene (`0xdd44e`).
 pub(super) fn contact_2_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    ctx.set_ram8(BUSY, 0);
+    vars::PICKUP_LOCK.set(ctx.b, 0);
     add_u8(ctx, o, field::SUB_STATE, 2);
 }
 
@@ -346,12 +339,12 @@ pub(super) fn contact_2<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                     if pickup == 0 {
                         return;
                     }
-                    let busy = ctx.ram8(BUSY) != 0;
+                    let busy = vars::PICKUP_LOCK.get(ctx.b) != 0;
                     if busy {
                         o.set_u8(ctx.b, field::PICKUP, 0);
                         return;
                     }
-                    ctx.set_ram8(BUSY, 1);
+                    vars::PICKUP_LOCK.set(ctx.b, 1);
                     add_u8(ctx, o, field::SUB_STATE, 2);
                     if !contact_created_set(ctx, o) {
                         contact_2_end(ctx, o);

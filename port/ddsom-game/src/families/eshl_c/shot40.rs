@@ -1,16 +1,16 @@
 use super::*;
+use crate::data::RomAddr;
+use crate::families::shell::vars;
 use crate::families::shell::tables::{tables, Read};
 
-const ANIMS: u32 = 0x16ff94;
+const ANIMS: RomAddr = RomAddr(0x16ff94);
 const CREATOR: u32 = 0x5c;
 const LIFETIME: u32 = 0x42;
 const PALETTE_COUNTDOWN: u32 = 0x46;
 const PALETTE_INDEX: u32 = 0x47;
-/// Variable `A5+0x6e`: bit 0 = global blinking phase.
-const BLINK_PHASE: u32 = 0x6e;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => spawn(x),
         2 => live(x),
         _ => x.free_eshl(),
@@ -21,45 +21,45 @@ fn spawn<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u16(CREATOR) == 0 {
         return;
     }
-    x.add8(0x4, 2);
+    x.add8(Obj::STATE, 2);
     crate::sound::play(x.b, crate::sound::CMD_346, x.o);
-    x.set8(f::BOX_SET, 7);
-    x.set8(f::ATTACK_POWER, 5);
-    x.set8(f::ATTACK_ID, 0x1e);
+    x.set8(Base::BOX_SET, 7);
+    x.set8(Shot::ATTACK_POWER, 5);
+    x.set8(Shot::ATTACK_ID, 0x1e);
     x.set16(LIFETIME, 0x5a);
     x.set8(PALETTE_COUNTDOWN, 4);
     let creator = x.linked(CREATOR);
     copy_xyz32(x, creator);
     copy_flip(x, creator);
     let owner = creator.u16(x.b, CREATOR);
-    x.set16(f::OWNER, owner);
-    match x.u8(0x3) {
+    x.set16(Shot::OWNER, owner);
+    match x.u8(Obj::VARIANT) {
         1 => {
-            x.add16(0x8, neg(0xa));
-            x.add16(0xc, 0xa);
+            x.add16(Obj::X, neg(0xa));
+            x.add16(Obj::Z, 0xa);
         }
         2 => {
-            x.add16(0x8, 0xa);
-            x.add16(0xc, 0xa);
+            x.add16(Obj::X, 0xa);
+            x.add16(Obj::Z, 0xa);
         }
         _ => {}
     }
     let r = random(x) & 0xf;
     let anim = tables().shot40_random_anims.at8(x.b, r);
-    x.anim_start(ANIMS, (anim as u32) as u16);
+    x.anim_start(ANIMS.0, (anim as u32) as u16);
 }
 
 fn live<R: Bench>(x: &mut Cx<'_, R>) {
     cycle_palette(x);
-    if x.linked(f::OWNER).u16(x.b, 0x4) == 0x406 {
+    if x.linked(Shot::OWNER).u16(x.b, Obj::STATE) == 0x406 {
         return x.free_eshl();
     }
-    if x.u8(0x5) == 0 {
+    if x.u8(Base::SUB_STATE) == 0 {
         x.anim_step();
         let t = x.u16(LIFETIME).wrapping_sub(1);
         x.set16(LIFETIME, t);
         if s16(t) < 0 {
-            x.add8(0x4, 2);
+            x.add8(Obj::STATE, 2);
             crate::sound::play(x.b, crate::sound::CMD_337, x.o);
         }
     }
@@ -75,16 +75,16 @@ fn cycle_palette<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.set8(PALETTE_COUNTDOWN, 4);
-    x.set8(0x2a, 1);
+    x.set8(Base::OWN_PALETTE, 1);
     let i = x.u8(PALETTE_INDEX).wrapping_add(1) & 7;
     x.set8(PALETTE_INDEX, i);
     // the bytes of the frames of shot 39 (`shot39_frames`) serve as palettes
     let p = tables().shot39_frames.at8(x.b, i as u32);
-    x.set8(0x2b, p);
+    x.set8(Base::PALETTE, p);
 }
 
 /// Hidden when the variant's parity differs from the global phase.
 fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
-    let hidden = (x.u8(0x3) & 1) as u16 != x.a5_u16(BLINK_PHASE) & 1;
-    x.set_bit(0x1, 1, hidden);
+    let hidden = (x.u8(Obj::VARIANT) & 1) as u16 != vars::FRAME_LOW.get(x.b) & 1;
+    x.set_bit(Obj::FLAGS, 1, hidden);
 }

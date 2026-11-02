@@ -1,21 +1,21 @@
 use super::*;
+use crate::data::RomAddr;
+use crate::ram;
 
-const ANIMS: u32 = 0x1703e6;
-/// Left edge of the screen (variable `A5+0x506`).
-const SCREEN_LEFT: u32 = 0x506;
+const ANIMS: RomAddr = RomAddr(0x1703e6);
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
-            x.add8(0x4, 2);
-            let variant = x.u8(0x3) as u32;
-            x.anim_start(ANIMS, variant as u16);
+            x.add8(Obj::STATE, 2);
+            let variant = x.u8(Obj::VARIANT) as u32;
+            x.anim_start(ANIMS.0, variant as u16);
             x.reinsert();
         }
         2 => {
-            x.add16(0x8, neg(4));
-            let edge = x.a5_u16(SCREEN_LEFT).wrapping_sub(0x50);
-            if s16(edge) > s16(x.u16(0x8)) {
+            x.add16(Obj::X, neg(4));
+            let edge = ram::CAMERA_X.get(x.b).wrapping_sub(0x50);
+            if s16(edge) > s16(x.u16(Obj::X)) {
                 x.free_eshl();
             }
         }

@@ -1,9 +1,9 @@
 use crate::families::cx::Bench;
 use crate::objects::Current;
 use crate::families::cx::{handlers, Cx};
-use crate::mem::A5;
 use crate::objects::{pools, Obj};
 use crate::families::shell::tables::{held16, held8, tables, Read};
+use crate::families::shell::vars;
 use crate::families::effects_creators;
 use crate::machine::Machine;
 
@@ -83,7 +83,7 @@ mod j {
 
 /// Tables and subroutines.
 mod rom {
-    pub const ANIMATIONS: u32 = 0x1bebc2;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x1bebc2);
     // subroutines not rewritten, or native
     pub const SOUND_HIT: crate::sound::Sound = crate::sound::CMD_139_239;
     pub const SOUND_BROKEN: crate::sound::Sound = crate::sound::CMD_146_246;
@@ -92,9 +92,7 @@ mod rom {
 }
 
 /// Crates broken in the scene (byte, `A5-0x5b21`).
-const BROKEN: u32 = A5 - 0x5b21;
 /// Players' keys (byte, `A5+0x45`).
-const KEYS: u32 = A5 + 0x45;
 const SHADOWS: u8 = 0x35;
 const DURATION_BLINK: u8 = 0x1e;
 
@@ -118,8 +116,8 @@ fn class<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
 }
 
 fn count_broken<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = crate::mem::rd8(x.b, BROKEN).wrapping_add(1);
-    crate::mem::wr8(x.b, BROKEN, n);
+    let n = vars::BROKEN.get(x.b).wrapping_add(1);
+    vars::BROKEN.set(x.b, n);
 }
 
 /// `0xda082`: copies the kind's sheet (10 bytes) and draws two random loots.
@@ -155,7 +153,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
         effects_creators::shimmer(x.b, x.o);
     }
     let kind = x.u8(f::KIND) as u32;
-    x.anim(rom::ANIMATIONS, kind);
+    x.anim(rom::ANIMATIONS.0, kind);
 }
 
 fn active<R: Bench>(x: &mut Cx<'_, R>) {
@@ -254,7 +252,7 @@ fn created_loot<R: Bench>(x: &mut Cx<'_, R>, loot: u8, vx: u16, vy: u16) -> Opti
     let rank = 2 * loot as u32;
     n.set_u8(x.b, f::ACTIVE, 1);
     let kind = tables().chest_loots.at8(x.b, rank);
-    n.set_u8(x.b, 0x2, kind);
+    n.set_u8(x.b, Obj::KIND, kind);
     let variant = tables().chest_loots.at8(x.b, rank + 1);
     n.set_u8(x.b, f::VARIANT, variant);
     for off in [f::X, f::Z, f::Y] {
@@ -369,14 +367,14 @@ fn tremble<R: Bench>(x: &mut Cx<'_, R>) {
 /// loot on the first hit.
 fn opening<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::LOCK) != 0 && class(x) != 5 {
-        let keys = crate::mem::rd8(x.b, KEYS);
+        let keys = vars::KEYS.get(x.b);
         if keys == 0 {
             x.set32(f::STATE, 0x0200_0000);
             x.set8(f::ACTIVE, 1);
             spark_placed(x, 6);
             return;
         }
-        crate::mem::wr8(x.b, KEYS, keys - 1);
+        vars::KEYS.set(x.b, keys - 1);
         x.set8(f::LOCK, 0);
     }
     let special = x.u8(f::SPECIAL);
@@ -590,8 +588,7 @@ fn launched_lands<R: Bench>(x: &mut Cx<'_, R>) {
 /// `0xd9f06`: the crate stays between the screen edges (camera X + 0x18 to + 0x168); its
 /// position becomes its new origin.
 fn stays_on_screen<R: Bench>(x: &mut Cx<'_, R>) {
-    let cam2 = crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0;
-    let cam_x = x.a5_u16(if cam2 { 0x556 } else { 0x506 });
+    let cam_x = crate::families::shell::camera(x.b).0.get(x.b);
     let left = cam_x.wrapping_add(0x18);
     let px = x.u16(f::X);
     if (left as i16) > px as i16 {

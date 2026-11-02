@@ -1,17 +1,12 @@
 use super::*;
+use crate::data::RomAddr;
+use crate::families::shell::records::Base;
 use crate::families::shell::tables::{tables, Read};
 
 // ---------------------------------------------------------------------------------------------
 // Type 4: inventory objects (0xdbdf6)
 
-/// Type 4, inventory objects (vials, secondary weapons, keys...). The player carries six slots (identifiers at
-/// `+0x140`, quantities at `+0x148`; 0x56: empty slot). On pickup: refusal if the player's class cannot carry the
-/// object (eight-byte table per variant); otherwise quantity + `+0x5a` (capped at 9, or 1 for variants 7, 0x10 and
-/// 0x11), empty slot, or swap with the first slot, whose replaced object is recreated in the air (mode 1). A refused
-/// object is thrown off in the air then becomes pickable again. The creation mode `+0x2f` is 1 for an object thrown by
-/// a player: it waits `+0x59` frames before appearing.
-pub const ENTRY: u32 = 0xdbdf6;
-pub const ANIMATIONS: u32 = 0x1bf3c6;
+pub const ANIMATIONS: RomAddr = RomAddr(0x1bf3c6);
 pub const DURATION_TO_GROUND: u16 = 0x4b0;
 pub const EMPTY: u8 = 0x56;
 /// Player fields.
@@ -56,7 +51,7 @@ pub(super) fn pickup_refused<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
 
 /// Score event and sound of an object that changes nothing else (`0xdc124`).
 pub(super) fn event_inventory<R: Bench>(ctx: &mut Cx<'_, R>, player: Obj) {
-    let character = player.u8(ctx.b, 2) as u32;
+    let character = player.u8(ctx.b, Obj::KIND) as u32;
     crate::events::enqueue_points(ctx.b, ((character << 8) + 0x11) as u16);
     effect_pickup(ctx, ctx.obj(), 5);
 }
@@ -66,7 +61,7 @@ pub(super) fn inventory_add<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
     let player = pointer(ctx, o, field::OWNER);
     let line = (o.u8(ctx.b, Obj::VARIANT) as u32) << 3 & 0xffff;
     let id = tables().item_inventory_sheets.at8(ctx.b, line);
-    let class = player.u8(ctx.b, 3) >> 1;
+    let class = player.u8(ctx.b, Obj::VARIANT) >> 1;
     let forbidden = tables().item_inventory_sheets.at8(ctx.b, 1 + (class.wrapping_add(line as u8)) as u32);
     if forbidden != 0 {
         return pickup_refused(ctx, o);
@@ -136,7 +131,7 @@ pub(super) fn inventory_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         o.set_u8(ctx.b, field::GAME_SHADOWS, SHADOWS);
         let index = tables().item_inventory_indices.at8(ctx.b, variant as u32);
         o.set_u8(ctx.b, field::INDEX, index);
-        animate_and_sort(ctx, ANIMATIONS, variant);
+        animate_and_sort(ctx, ANIMATIONS.0, variant);
         return;
     }
     if airborne(ctx, o) {
@@ -158,7 +153,7 @@ pub(super) fn inventory_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         o.set_u8(ctx.b, field::INDEX, index);
         shimmer(ctx, o);
     }
-    animate_and_sort(ctx, ANIMATIONS, variant);
+    animate_and_sort(ctx, ANIMATIONS.0, variant);
 }
 
 /// Substate 6: the refused object is thrown off in an arc toward the outside of the screen then falls back.
@@ -228,7 +223,7 @@ pub(super) fn inventory_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         }
         sub::PICKUP => {
             let player = pointer(ctx, o, field::OWNER);
-            let ready = player.u8(ctx.b, 0x33) != 0;
+            let ready = player.u8(ctx.b, Base::ANIM_EVENT) != 0;
             if !ready {
                 return;
             }

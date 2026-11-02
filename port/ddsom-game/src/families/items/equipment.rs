@@ -1,16 +1,13 @@
 use super::*;
+use crate::data::RomAddr;
+use crate::families::shell::vars;
+use crate::families::shell::records::{Base, PlayerView};
 use crate::families::shell::tables::{tables, Read};
 
 // ---------------------------------------------------------------------------------------------
 // Type 3: equipment (0xdb7de)
 
-/// Type 3, equipment (weapons, protections and accessories, identifiers `0x2e` and above; below, inventory objects). An
-/// eight-byte sheet per variant (`0xdbc8c`) gives six "usable by the class" flags then the equipment identifier and its
-/// group. Pickup: the equipment is added to the player's six slots (`+0x140`), replaces an equipment of the same group
-/// if it is better, or takes a free slot; refused if the class cannot carry it or if the first slot is locked (thrown
-/// off in an arc). Variants 0x24 to 0x27 also give the player a temporary bonus (`+0x18b..0x191`).
-pub const ENTRY: u32 = 0xdb7de;
-pub const ANIMATIONS: u32 = 0x1bf156;
+pub const ANIMATIONS: RomAddr = RomAddr(0x1bf156);
 pub const FIRST_EQUIPPED: u32 = 0x10d;
 pub const SECOND_EQUIPPED: u32 = 0x10e;
 
@@ -19,23 +16,23 @@ pub(super) fn equipment_bonus<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let player = pointer(ctx, o, field::OWNER);
     let variant = o.u8(ctx.b, Obj::VARIANT);
     if !(variant != 0x24) {
-        return player.set_u8(ctx.b, 0x18c, 0x14);
+        return player.set_u8(ctx.b, PlayerView::GLOW_SHIELD, 0x14);
     }
     if !(variant != 0x25) {
-        return player.set_u8(ctx.b, 0x18b, 0x14);
+        return player.set_u8(ctx.b, PlayerView::GLOW_WEAPON, 0x14);
     }
     if !(variant != 0x26) {
-        player.set_u8(ctx.b, 0x18d, 0x14);
+        player.set_u8(ctx.b, PlayerView::GLOW_RING, 0x14);
     }
     if !(variant != 0x27) {
-        player.set_u8(ctx.b, 0x191, 0x14);
+        player.set_u8(ctx.b, PlayerView::GLOW_OTHER, 0x14);
     }
 }
 
 /// `0xdbb0e`: successful pickup: bonus, score event and sound. Returns false (accepted).
 pub(super) fn equipment_accepted<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, player: Obj) -> bool {
     equipment_bonus(ctx, o);
-    let event = 0x11 + ((player.u8(ctx.b, 2) as u16) << 8);
+    let event = 0x11 + ((player.u8(ctx.b, Obj::KIND) as u16) << 8);
     crate::events::enqueue_points(ctx.b, event);
     effect_pickup(ctx, ctx.obj(), 5);
     false
@@ -59,7 +56,7 @@ pub(super) fn equipment_group<R: Bench>(ctx: &mut Cx<'_, R>, id: u8) -> u8 {
 pub(super) fn equipment_add<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
     let player = pointer(ctx, o, field::OWNER);
     let line = ((o.u8(ctx.b, Obj::VARIANT) as u32) << 3) & 0xffff;
-    let class = (player.u8(ctx.b, 3) >> 1) as u32;
+    let class = (player.u8(ctx.b, Obj::VARIANT) >> 1) as u32;
     let allowed = tables().item_equipment_sheets.at8(ctx.b, line + class);
     if !(allowed != 0) {
         return equipment_refused(ctx, o);
@@ -98,7 +95,7 @@ pub(super) fn equipment_add<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> bool {
     }
     // equipment held in hand (byte 0x10d, or 0x10e for class 4)
     let mut door = player.u8(ctx.b, FIRST_EQUIPPED);
-    let class_main = player.u8(ctx.b, 3) >> 1;
+    let class_main = player.u8(ctx.b, Obj::VARIANT) >> 1;
     if !(class_main != 4) {
         door = player.u8(ctx.b, SECOND_EQUIPPED);
     }
@@ -160,7 +157,7 @@ pub(super) fn equipment_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variant = o.u8(ctx.b, Obj::VARIANT);
     let index = tables().item_equipment_indices.at8(ctx.b, variant as u32);
     o.set_u8(ctx.b, field::INDEX, index);
-    animate_and_sort(ctx, ANIMATIONS, variant);
+    animate_and_sort(ctx, ANIMATIONS.0, variant);
 }
 
 /// Substate 6: the refused equipment is thrown off in an arc; on landing, a variant 0x0f picked up by class 1 more than
@@ -200,7 +197,7 @@ pub(super) fn equipment_reject<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     o.set_u32(ctx.b, Obj::Z, 0);
     o.set_u8(ctx.b, field::PICKUP, 0);
     let player = pointer(ctx, o, field::OWNER);
-    let class = player.u8(ctx.b, 3) >> 1;
+    let class = player.u8(ctx.b, Obj::VARIANT) >> 1;
     if class != 1 {
         return;
     }
@@ -208,17 +205,17 @@ pub(super) fn equipment_reject<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     if variant != 0xf {
         return;
     }
-    let n = ctx.ram8(0x57).wrapping_add(1);
-    ctx.set_ram8(0x57, n);
+    let n = vars::SECRET_PICKUPS.get(ctx.b).wrapping_add(1);
+    vars::SECRET_PICKUPS.set(ctx.b, n);
     if n <= 7 {
         return;
     }
     o.set_u16(ctx.b, field::DURATION, 0x4b0);
     o.set_u8(ctx.b, Obj::FLAGS, 1);
     o.set_u8(ctx.b, Obj::VARIANT, 0xc);
-    ctx.anim_start(ANIMATIONS, 0xc);
+    ctx.anim_start(ANIMATIONS.0, 0xc);
     effects_creators::posed_flash(ctx.b, o);
-    ctx.set_ram8(-0x5b83, 1);
+    vars::PICKED_5.set(ctx.b, 1);
     scene_set_of(ctx, 0x29);
 }
 
@@ -241,7 +238,7 @@ pub(super) fn equipment_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         sub::WAIT => reserve_wait(ctx, o),
         sub::PICKUP => {
             let player = pointer(ctx, o, field::OWNER);
-            let ready = player.u8(ctx.b, 0x33) != 0;
+            let ready = player.u8(ctx.b, Base::ANIM_EVENT) != 0;
             if !ready {
                 return;
             }

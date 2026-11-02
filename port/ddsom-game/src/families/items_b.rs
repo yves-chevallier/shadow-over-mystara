@@ -7,9 +7,9 @@
 //! in an arc, like an ITEM 2 thrown by the player (mode `+0x2f` = 1, delay `+0x59`) that falls back and waits to be
 //! picked up again. If already worn, it yields only a score event.
 
+use crate::families::shell::records::PlayerView;
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
-use crate::mem::A5;
 use super::shell::tables::{tables, Read};
 use crate::objects::Obj;
 use crate::objects::pools;
@@ -59,11 +59,10 @@ mod p {
 }
 
 mod rom {
-    pub const ANIMATIONS: u32 = 0x1bee82;
+    pub const ANIMATIONS: crate::data::RomAddr = crate::data::RomAddr(0x1bee82);
 }
 
 /// Table of collected objects picked up (bytes).
-const COLLECTED: u32 = A5 - 0x5b88;
 const SHADOW_SET: u8 = 0x3c;
 const LIFETIME: u16 = 0x4b0;
 
@@ -95,7 +94,7 @@ fn load_sheet<R: Bench>(x: &mut Cx<'_, R>, sparkle: bool) {
 
 fn start_animation<R: Bench>(x: &mut Cx<'_, R>) {
     let variant = x.u8(f::VARIANT) as u32;
-    x.anim(rom::ANIMATIONS, variant);
+    x.anim(rom::ANIMATIONS.0, variant);
     x.reinsert();
 }
 
@@ -226,8 +225,7 @@ fn thrown<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(f::VZ, 0);
     x.set16(f::AZ, 0xffc0);
     x.set32(f::VX, 0x0200_0000);
-    let cam2 = crate::ram::CAMERA_ALT_ACTIVE.get(x.b) != 0;
-    let cam_x = x.a5_u16(if cam2 { 0x556 } else { 0x506 });
+    let cam_x = crate::families::shell::camera(x.b).0.get(x.b);
     let middle = cam_x.wrapping_add(0xc0);
     if middle as i16 <= x.u16(f::X) as i16 {
         let v = x.u32(f::VX).wrapping_neg();
@@ -256,7 +254,7 @@ fn equip<R: Bench>(x: &mut Cx<'_, R>) {
         _ => crate::families::effects::bad_index(slot),
     }
     let collection = x.u8(f::COLLECTION) as u32;
-    crate::mem::wr8(x.b, COLLECTED + collection, 1);
+    crate::mem::wr8(x.b, crate::families::shell::vars::PICKED.0 + collection, 1);
     let announce = x.u8(f::ANNOUNCE);
     if announce != 0 {
         let o = x.o;
@@ -304,11 +302,11 @@ fn slot_4<R: Bench>(x: &mut Cx<'_, R>, player: Obj, id: u8) {
         let variant = x.u8(f::VARIANT);
         return drop_old(x, player, variant);
     }
-    let old = player.u8(x.b, 0x164);
+    let old = player.u8(x.b, PlayerView::SLOT_4);
     if old == id {
         return already_worn(x);
     }
-    player.set_u8(x.b, 0x164, id);
+    player.set_u8(x.b, PlayerView::SLOT_4, id);
     if (old as i8) < 0 {
         return;
     }

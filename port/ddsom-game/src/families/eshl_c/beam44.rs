@@ -1,6 +1,8 @@
 use super::*;
+use crate::data::RomAddr;
+use crate::families::shell::vars;
 
-const ANIMS: u32 = 0x17f002;
+const ANIMS: RomAddr = RomAddr(0x17f002);
 const CREATOR: u32 = 0x46;
 /// Step count of the beam.
 const STEP: u32 = 0x14;
@@ -13,7 +15,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
-    match x.u8(0x3) {
+    match x.u8(Obj::VARIANT) {
         0 => variant0(x),
         1 => variant1(x),
         _ => {}
@@ -26,13 +28,13 @@ fn live_link<R: Bench>(x: &mut Cx<'_, R>, word: u16) -> Option<Obj> {
         return None;
     }
     let o = obj_of(word);
-    (o.u8(x.b, 0) != 0).then_some(o)
+    (o.u8(x.b, Obj::ACTIVE) != 0).then_some(o)
 }
 
 /// The beam is finished: next state.
 fn end<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x4, 2);
-    x.set8(0x5, 0);
+    x.add8(Obj::STATE, 2);
+    x.set8(Base::SUB_STATE, 0);
 }
 
 /// The two ends (creator and creator of the creator).
@@ -51,16 +53,16 @@ fn count_beam<R: Bench>(x: &mut Cx<'_, R>, a1: Obj) {
 }
 
 fn variant0<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             end(x);
             x.set8(STEP, 0);
-            x.set8(f::BOX_SET, 7);
-            x.set8(f::ATTACK_POWER, 0x20);
+            x.set8(Base::BOX_SET, 7);
+            x.set8(Shot::ATTACK_POWER, 0x20);
             let w = x.u16(CREATOR);
             let Some(a1) = live_link(x, w) else { return end(x) };
             count_beam(x, a1);
-            ai_anim(x, ANIMS, 0xd);
+            ai_anim(x, ANIMS.0, 0xd);
         }
         2 => beam(x, 0xf, false),
         4 => release(x),
@@ -70,7 +72,7 @@ fn variant0<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn variant1<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             end(x);
             x.set8(STEP, 0);
@@ -79,16 +81,16 @@ fn variant1<R: Bench>(x: &mut Cx<'_, R>) {
             count_beam(x, a1);
             let w = a1.u16(x.b, CREATOR);
             let Some(a2) = live_link(x, w) else { return end(x) };
-            let (px, py, pz) = (a2.u16(x.b, 0x8), a2.u16(x.b, 0x10), a2.u16(x.b, 0xc));
-            x.set16(0x8, px);
-            x.set16(0x10, py);
-            x.set16(0xc, pz.wrapping_add(RAISE_Z));
+            let (px, py, pz) = (a2.u16(x.b, Obj::X), a2.u16(x.b, Obj::Y), a2.u16(x.b, Obj::Z));
+            x.set16(Obj::X, px);
+            x.set16(Obj::Y, py);
+            x.set16(Obj::Z, pz.wrapping_add(RAISE_Z));
             copy_flip(x, a2);
-            x.set8(0x2f, 0);
-            let anim = if a1.u8(x.b, 0x2f) != 0 { 0x1a } else { 0x18 };
-            ai_anim(x, ANIMS, anim);
-            x.set8(f::BOX_SET, 7);
-            x.set8(f::ATTACK_POWER, 0x20);
+            x.set8(Base::SETTING, 0);
+            let anim = if a1.u8(x.b, Base::SETTING) != 0 { 0x1a } else { 0x18 };
+            ai_anim(x, ANIMS.0, anim);
+            x.set8(Base::BOX_SET, 7);
+            x.set8(Shot::ATTACK_POWER, 0x20);
         }
         2 => beam(x, 0x1b, true),
         4 => release(x),
@@ -100,18 +102,18 @@ fn variant1<R: Bench>(x: &mut Cx<'_, R>) {
 /// State 2. `hit_anim`: end animation launched on contact; `lingers`: variant 1, where the end of the end animation
 /// keeps the beam (and where the running animation ends it).
 fn beam<R: Bench>(x: &mut Cx<'_, R>, hit_anim: u32, lingers: bool) {
-    if x.a5_u8(GAME_PAUSED) != 0 {
+    if vars::GAME_PAUSED.get(x.b) != 0 {
         return x.reinsert();
     }
-    if x.u8(0x5) != 0 {
+    if x.u8(Base::SUB_STATE) != 0 {
         if ai_step(x) == lingers {
             return x.reinsert();
         }
         return end(x);
     }
-    if x.u8(f::HIT_FLAGS) & 0x8 != 0 {
-        x.add8(0x5, 2);
-        return ai_anim(x, ANIMS, hit_anim);
+    if x.u8(Shot::HIT_FLAGS) & 0x8 != 0 {
+        x.add8(Base::SUB_STATE, 2);
+        return ai_anim(x, ANIMS.0, hit_anim);
     }
     let Some((a1, a2)) = ends(x) else { return end(x) };
     interpolate(x, a1, a2);
@@ -145,5 +147,5 @@ fn release<R: Bench>(x: &mut Cx<'_, R>) {
         let n = a1.u8(x.b, BEAM_COUNT).wrapping_sub(1);
         a1.set_u8(x.b, BEAM_COUNT, n);
     }
-    x.add8(0x4, 2);
+    x.add8(Obj::STATE, 2);
 }

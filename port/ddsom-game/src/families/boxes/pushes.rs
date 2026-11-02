@@ -1,10 +1,13 @@
+use crate::data::RomAddr;
+use crate::families::shell::vars;
+use crate::families::shell::records::Base;
 use crate::families::cx::Bench;
 use crate::objects::Current;
 use crate::families::cx::{handlers, Cx};
 use crate::objects::{pools, Obj};
 use crate::families::shell::tables::{tables, Read};
 
-const ANIMATIONS: u32 = 0x1bebc2;
+const ANIMATIONS: RomAddr = RomAddr(0x1bebc2);
 /// Realignment of the object after the collision with the terrain (`terrain::push_68k`).
 /// Rows of `pushes_against` (offset of the player against the block, per character) by push direction.
 const AGAINST_HIGH: u32 = 0;
@@ -52,17 +55,17 @@ fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::HIDDEN) != 0 {
         return;
     }
-    let state = x.u8(0x4);
+    let state = x.u8(Obj::STATE);
     match state {
         0 => {
-            let v = 2 * x.u8(0x3) as u32;
+            let v = 2 * x.u8(Obj::VARIANT) as u32;
             if v == 0 { init_0(x) } else { init_1(x) }
             x.reinsert();
         }
         2 => {
-            if x.a5_u8(0x3d) == 0 {
-                let v = 2 * x.u8(0x3) as u32;
-                if x.u8(0x5) == 0 {
+            if vars::GAME_PAUSED.get(x.b) == 0 {
+                let v = 2 * x.u8(Obj::VARIANT) as u32;
+                if x.u8(Base::SUB_STATE) == 0 {
                     if v == 0 { active_0(x) } else { active_1(x) }
                 }
             }
@@ -73,30 +76,30 @@ fn run<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn init_common<R: Bench>(x: &mut Cx<'_, R>, mobile: u8) {
-    x.add8(0x4, 2);
-    x.set8(0x0, 1);
-    x.set8(0x2e, 0x35);
+    x.add8(Obj::STATE, 2);
+    x.set8(Obj::ACTIVE, 1);
+    x.set8(Base::BOX_SET, 0x35);
     x.set8(f::MOBILE, mobile);
 }
 
 fn init_0<R: Bench>(x: &mut Cx<'_, R>) {
     init_common(x, 1);
-    x.set16(0x8, 0x234);
-    x.set16(0x10, 0x290);
+    x.set16(Obj::X, 0x234);
+    x.set16(Obj::Y, 0x290);
     x.set16(f::X_MAX, 0x290);
     x.set16(f::X_MIN, 0x1d8);
-    x.anim_start(ANIMATIONS, 7);
+    x.anim_start(ANIMATIONS.0, 7);
     let Some(set) = x.alloc(&pools::SET) else { return };
-    set.set_u8(x.b, 0x0, 1);
-    set.set_u8(x.b, 0x2, 7);
-    set.set_u8(x.b, 0x3, 0xc);
-    set.set_u8(x.b, 0x2f, 1);
+    set.set_u8(x.b, Obj::ACTIVE, 1);
+    set.set_u8(x.b, Obj::KIND, 7);
+    set.set_u8(x.b, Obj::VARIANT, 0xc);
+    set.set_u8(x.b, Base::SETTING, 1);
     x.set16(f::SET, set.0 as u16);
 }
 
 fn init_1<R: Bench>(x: &mut Cx<'_, R>) {
     init_common(x, 0);
-    x.anim_start(ANIMATIONS, 6);
+    x.anim_start(ANIMATIONS.0, 6);
 }
 
 /// The pushing player (A1), if still pushing; otherwise the block forgets them.
@@ -128,12 +131,12 @@ fn realign_player<R: Bench>(x: &mut Cx<'_, R>, axe: u32, table: u32) {
 
 /// Variant 0: sliding in X between the bounds.
 fn active_0<R: Bench>(x: &mut Cx<'_, R>) {
-    let px = x.u16(0x8);
+    let px = x.u16(Obj::X);
     if px > x.u16(f::X_MAX) || px <= x.u16(f::X_MIN) {
-        x.add8(0x5, 2);
+        x.add8(Base::SUB_STATE, 2);
         x.set8(f::STOPS, 1);
         let set = x.linked(f::SET);
-        set.set_u8(x.b, 0x2f, 0);
+        set.set_u8(x.b, Base::SETTING, 0);
         return;
     }
     let Some(player) = pusher(x) else { return };
@@ -143,10 +146,10 @@ fn active_0<R: Bench>(x: &mut Cx<'_, R>) {
         _ => return,
     };
     if player.u8(x.b, j::MOMENTUM) & 0x10 != 0 {
-        x.add16(0x8, (2 * sign) as u16);
+        x.add16(Obj::X, (2 * sign) as u16);
     }
     if player.u8(x.b, j::FORCE) != 0 {
-        x.add16(0x8, sign as u16);
+        x.add16(Obj::X, sign as u16);
     }
     realign_player(x, 0x8, table);
 }

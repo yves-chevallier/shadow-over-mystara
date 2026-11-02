@@ -1,14 +1,12 @@
 use super::*;
+use crate::data::RomAddr;
+use crate::families::shell::records::view;
 use crate::families::shell::tables::{tables, Read};
 
 // ---------------------------------------------------------------------------------------------
 // Type 5: animated bonuses (0xdc382)
 
-/// Type 5, animated bonuses: thrown in the air according to a creation mode (`+0x2f`: initial speeds read from an
-/// eight-byte table per mode), they fall back, wait 0x4b0 frames blinking and give on pickup a score event (`0x19b08`,
-/// variant + player).
-pub const ENTRY: u32 = 0xdc382;
-pub const ANIMATIONS: u32 = 0x1bf5c2;
+pub const ANIMATIONS: RomAddr = RomAddr(0x1bf5c2);
 pub const DURATION_TO_GROUND: u16 = 0x4b0;
 /// Gap between the falling animation and the ground animation, and ground animation of a placed object.
 pub const ANIMATION_GROUND: u8 = 6;
@@ -27,12 +25,12 @@ pub(super) fn bonus_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 o.set_u16(ctx.b, off, v);
             }
         }
-        animate_and_sort(ctx, ANIMATIONS, variant);
+        animate_and_sort(ctx, ANIMATIONS.0, variant);
     } else {
         state_next(ctx, o, sub::WAIT);
         o.set_u16(ctx.b, field::DURATION, DURATION_TO_GROUND);
         o.set_u8(ctx.b, field::GAME_SHADOWS, SHADOWS);
-        animate_and_sort(ctx, ANIMATIONS, variant.wrapping_add(ANIMATION_POSE));
+        animate_and_sort(ctx, ANIMATIONS.0, variant.wrapping_add(ANIMATION_POSE));
     }
 }
 
@@ -47,7 +45,7 @@ pub(super) fn bonus_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 o.set_u16(ctx.b, field::DURATION, DURATION_TO_GROUND);
                 o.set_u32(ctx.b, Obj::Z, 0);
                 let variant = o.u8(ctx.b, Obj::VARIANT);
-                ctx.anim_start(ANIMATIONS, variant.wrapping_add(ANIMATION_GROUND) as u16);
+                ctx.anim_start(ANIMATIONS.0, variant.wrapping_add(ANIMATION_GROUND) as u16);
                 in_view(ctx, o);
             }
             fall_end(ctx);
@@ -65,7 +63,7 @@ pub(super) fn bonus_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
                 return;
             }
             add_u8(ctx, o, Obj::STATE, 2);
-            let player_bits = o.u16(ctx.b, 0x48) & 0x300;
+            let player_bits = o.u16(ctx.b, Bonus::PLAYER_BITS) & 0x300;
             let event = (o.u8(ctx.b, Obj::VARIANT) as u16).wrapping_add(player_bits);
             crate::events::enqueue_counter(ctx.b, event);
         }
@@ -85,5 +83,13 @@ pub(super) fn bonus_handler<R: Bench>(ctx: &mut Cx<'_, R>) {
         state::ACTIVE => bonus_active(ctx, o),
         state::FREED | state::OUTSIDE_SCREEN => ctx.free(&pools::ITEM),
         _ => crate::families::effects::bad_index(state as u32),
+    }
+}
+
+view! {
+    /// Fields of the animated bonus.
+    Bonus {
+        /// Bits of the players (0x300) (h).
+        player_bits, set_player_bits, PLAYER_BITS: u16 @ 0x48;
     }
 }

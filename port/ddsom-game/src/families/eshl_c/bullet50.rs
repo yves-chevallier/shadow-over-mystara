@@ -1,7 +1,8 @@
 use super::*;
+use crate::data::RomAddr;
 use crate::families::shell::tables::{tables, Read};
 
-const ANIMS: u32 = 0x170468;
+const ANIMS: RomAddr = RomAddr(0x170468);
 const HOST: u32 = 0x42;
 const SOUND: crate::sound::Sound = crate::sound::CMD_35B_45B;
 const PHASE: u32 = 0x5a;
@@ -14,18 +15,18 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if suspended(x) {
         return;
     }
-    match x.u8(0x4) {
-        0 => match x.u8(0x3) {
+    match x.u8(Obj::STATE) {
+        0 => match x.u8(Obj::VARIANT) {
             0 => launch(x, 0x12, 0x70, 0x1e, neg(0x380), true),
             _ => launch(x, 0x17, 0x76, 0x2b, 0x40, false),
         },
-        2 => match x.u8(0x3) {
+        2 => match x.u8(Obj::VARIANT) {
             0 => lob(x),
             _ => slow(x),
         },
         _ => x.free_eshl(),
     }
-    if x.u8(0) != 0 {
+    if x.u8(Obj::ACTIVE) != 0 {
         x.keep_in_zone();
         x.push_terrain();
         x.reinsert();
@@ -34,20 +35,20 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Creation: variant 0 (`lob = true`) or 1.
 fn launch<R: Bench>(x: &mut Cx<'_, R>, speed: u32, dx: u16, dz: u16, vz: u16, lob: bool) {
-    x.add8(0x4, 2);
+    x.add8(Obj::STATE, 2);
     if !lob {
         x.set16(FALL_TIMER, 0x28);
     }
-    x.set8(f::BOX_SET, 7);
-    x.set8(f::ATTACK_POWER, 0x14);
+    x.set8(Base::BOX_SET, 7);
+    x.set8(Shot::ATTACK_POWER, 0x14);
     x.select_speed(&crate::objects::motion::SPEEDS_B, speed as u16);
     let host = x.linked(HOST);
     copy_xyz16(x, host);
-    let flip = x.u8(f::FLIP);
-    x.add16(0x8, if flip != 0 { dx } else { neg(dx) });
-    x.add16(0xc, dz);
-    x.add32(0x10, 2);
-    x.set16(0x18, vz);
+    let flip = x.u8(Base::FLIP);
+    x.add16(Obj::X, if flip != 0 { dx } else { neg(dx) });
+    x.add16(Obj::Z, dz);
+    x.add32(Obj::Y, 2);
+    x.set16(Obj::VZ, vz);
     crate::sound::play(x.b, SOUND, x.o);
     start_phase(x);
 }
@@ -71,63 +72,63 @@ fn start_phase<R: Bench>(x: &mut Cx<'_, R>) {
     let phase = x.u8(PHASE);
     let len = tables().bullet50_phase_lengths.at8(x.b, phase as u32);
     x.set8(PHASE_TIMER, len);
-    ai_anim(x, ANIMS, phase as u32 + 3);
-    let p = x.u8(0x3b);
+    ai_anim(x, ANIMS.0, phase as u32 + 3);
+    let p = x.u8(Base::GROUND_MARK);
     x.set8(SAVED_PRIORITY, p);
     step_phase(x);
 }
 
 fn step_phase<R: Bench>(x: &mut Cx<'_, R>) {
     ai_step(x);
-    let p = x.u8(0x3b);
+    let p = x.u8(Base::GROUND_MARK);
     x.set8(SAVED_PRIORITY, p);
 }
 
 fn restore_priority<R: Bench>(x: &mut Cx<'_, R>) {
     let p = x.u8(SAVED_PRIORITY);
-    x.set8(0x3b, p);
+    x.set8(Base::GROUND_MARK, p);
 }
 
 /// The host is stunned: goes to the end animation (`phase + 6`), substate 4 for variant 0 (state 2, substate 4),
 /// next substate for variant 1.
 fn host_stunned<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     let host = x.linked(HOST);
-    host.u8(x.b, 4) == 4
+    host.u8(x.b, Obj::STATE) == 4
 }
 
 fn end_animation<R: Bench>(x: &mut Cx<'_, R>) {
     let phase = x.u8(PHASE) as u32;
-    ai_anim(x, ANIMS, phase + 6);
+    ai_anim(x, ANIMS.0, phase + 6);
 }
 
 fn lob<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x5) {
+    match x.u8(Base::SUB_STATE) {
         0 => {
             if host_stunned(x) {
-                x.set16(0x4, 0x204);
+                x.set16(Obj::STATE, 0x204);
                 return end_animation(x);
             }
             x.move_xyz();
             phase_tick(x);
-            if s16(x.u16(0xc)) > 0 {
+            if s16(x.u16(Obj::Z)) > 0 {
                 return restore_priority(x);
             }
-            x.add8(0x5, 2);
+            x.add8(Base::SUB_STATE, 2);
             x.select_speed(&crate::objects::motion::SPEEDS_B, 0x17);
             x.set16(FALL_TIMER, 0x1a);
-            x.set16(0xc, 0);
+            x.set16(Obj::Z, 0);
             restore_priority(x);
         }
         2 => {
             if host_stunned(x) {
-                x.set16(0x4, 0x204);
+                x.set16(Obj::STATE, 0x204);
                 return end_animation(x);
             }
             x.move_xy();
             let t = x.u16(FALL_TIMER).wrapping_sub(1);
             x.set16(FALL_TIMER, t);
             if s16(t) <= 0 {
-                x.set16(0x4, 0x204);
+                x.set16(Obj::STATE, 0x204);
                 return end_animation(x);
             }
             phase_tick(x);
@@ -143,7 +144,7 @@ fn lob<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn slow<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x5) {
+    match x.u8(Base::SUB_STATE) {
         0 => {
             if host_stunned(x) {
                 return end_slow(x);
@@ -168,6 +169,6 @@ fn slow<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn end_slow<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x5, 2);
+    x.add8(Base::SUB_STATE, 2);
     end_animation(x);
 }

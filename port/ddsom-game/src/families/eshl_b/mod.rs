@@ -4,6 +4,9 @@
 //! state, `+5` and `+6` substates (even bytes, indices into the original's jump tables);
 //! `+0x50` designates the owner (16-bit word, or long for a few types).
 
+use crate::families::shell::vars;
+use crate::ram;
+use crate::families::shell::records::view;
 use crate::families::cx::Bench;
 use super::cx::{handlers, Cx};
 use super::shell::*;
@@ -35,7 +38,7 @@ fn ptr<R: Bench>(x: &mut Cx<'_, R>, off: u32) -> Obj {
 /// Reserves an object in the pool whose allocation routine is `alloc`; `None` if the pool is full.
 /// The object is marked to be released on the next frame.
 fn kill<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set32(0x4, DEAD);
+    x.set32(Obj::STATE, DEAD);
 }
 
 /// Value of the low word of an address register, to store in a field (`move.w A0w,(off,A1)`).
@@ -68,7 +71,7 @@ fn speed_table<R: Bench>(x: &mut Cx<'_, R>, n: u32) {
 /// (`+0x50`) is a type 14 shot whose owner is itself the enemy. Variant 0: projectile
 /// that leaves in an arc toward the player (speeds chosen according to the distance between the enemy and its
 /// target); variant 1: weapon stuck to the owner, which follows the attack animation.
-mod shot15;
+pub mod shot15;
 
 // ---------------------------------------------------------------------------------------------
 // Type 16 (0xa03e0): picked-up / carried object (h), placed in the foreground list
@@ -77,7 +80,7 @@ mod shot15;
 /// Object attached to its owner (an enemy: HP in `+0x62`). As long as it is "carried"
 /// (`+0x5a` zero) it follows the owner; otherwise it is thrown in an arc (speed table 0x18),
 /// spins (`+0x2d` varies by 1 every 25 frames) and goes to state 4 when falling below Z = 0x100.
-mod shot16;
+pub mod shot16;
 
 // ---------------------------------------------------------------------------------------------
 // Type 17 (0xa05ce): projectile with aimed trajectory, three modes according to +0x43 (h)
@@ -88,7 +91,7 @@ mod shot16;
 /// the angle by table (`1386`), < 0 fire flat toward the target, > 0 aim in depth. The parent
 /// (`+0x56`, long pointer) maintains it: if it goes to state >= 4 the projectile dies. At
 /// startup it brightens palette 0x91c300 (copy of 0x25a660 tinted by 0x91c000).
-mod shot17;
+pub mod shot17;
 
 // ---------------------------------------------------------------------------------------------
 // Type 18 (0xa0a06): oblique projectile with speed taken from a table (h)
@@ -96,7 +99,7 @@ mod shot17;
 
 /// Projectile whose direction depends on the orientation, speed table 1b64 chosen by a global variable
 /// (A5+0x7f92); destroyed on contact, on certain terrains, or off screen.
-mod shot18;
+pub mod shot18;
 
 // ---------------------------------------------------------------------------------------------
 // Type 19 (0xa0b20): projectile thrown toward the player, sprite depending on the angle (h)
@@ -105,7 +108,7 @@ mod shot18;
 /// Projectile that chooses its direction (8 sprites) from the angle toward the target (`+0x50`, long
 /// pointer), is launched with speed table 0x40 (VZ = VY), falls until Z < 0 then stays 48
 /// images en animation d'impact.
-mod shot19;
+pub mod shot19;
 
 // ---------------------------------------------------------------------------------------------
 // Helper shared by types 20 and 21: sticking to the owner through an offset table
@@ -114,25 +117,25 @@ mod shot19;
 /// Sticks to the owner with the offset of row `variant` of a table (8 bytes per row:
 /// X, integer Y, signed fractional Y, Z). With no owner, the object is released on the next frame.
 fn attach<R: Bench>(x: &mut Cx<'_, R>, table: &Table) {
-    if x.u16(f::OWNER) == 0 {
+    if x.u16(Shot::OWNER) == 0 {
         return kill(x);
     }
-    let owner = x.linked(f::OWNER);
+    let owner = x.linked(Shot::OWNER);
     copy_position32(x, owner);
-    let flip = owner.u8(x.b, f::FLIP);
-    x.set8(f::FLIP, flip);
-    let row = (x.u8(0x3) << 3) as u32;
+    let flip = owner.u8(x.b, Base::FLIP);
+    x.set8(Base::FLIP, flip);
+    let row = (x.u8(Obj::VARIANT) << 3) as u32;
     let mut dx = table.at16(x.b, row);
     if flip != 0 {
         dx = dx.wrapping_neg();
     }
-    x.add16(0x8, dx);
+    x.add16(Obj::X, dx);
     let dy = table.at16(x.b, row + 2);
-    x.add16(0x10, dy);
+    x.add16(Obj::Y, dy);
     let dy_fraction = table.at16(x.b, row + 4) as i16 as i32 as u32;
-    x.add32(0x10, dy_fraction);
+    x.add32(Obj::Y, dy_fraction);
     let dz = table.at16(x.b, row + 6);
-    x.add16(0xc, dz);
+    x.add16(Obj::Z, dz);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -143,7 +146,7 @@ fn attach<R: Bench>(x: &mut Cx<'_, R>, table: &Table) {
 /// when the owner arms its attack (`+0xa5` bit 0), state 2 substate 2: hit animation
 /// that creates a type 21 shot; variant 1: delayed weapon (`+0x5c` frames), which strikes
 /// too. The states frozen by the pause (`A5+0x3d`, `A5+0x4e`) or the suspended object freeze it.
-mod shot20;
+pub mod shot20;
 
 // ---------------------------------------------------------------------------------------------
 // Type 21 (0xa0f96): wave / breath attached to a weapon (h)
@@ -153,7 +156,7 @@ mod shot20;
 /// (`+0x42`) during which it creates an effect (EFFCT 0x18, saved in `+0x46`), then
 /// end animation. It disappears if the game is frozen (`A5+0x4e`) or if the holder of its
 /// owner is in state `+0xb2`.
-mod shot21;
+pub mod shot21;
 
 // ---------------------------------------------------------------------------------------------
 // Type 22 (0xa1180): spark thrown by an enemy (h)
@@ -161,7 +164,7 @@ mod shot21;
 
 /// Spark that leaves the creator's position with a speed drawn from a per-variant table
 /// (speeds in X and Z), falls until Z <= 0 then blinks for 30 frames.
-mod shot22;
+pub mod shot22;
 
 // ---------------------------------------------------------------------------------------------
 // Type 23 (0xa1292): scenery object that slides in front of the camera (h)
@@ -169,7 +172,7 @@ mod shot22;
 
 /// Object placed at the camera's border (`A5+0x556`), which moves according to speed table 0xd
 /// for 48 frames, waits for the signal `A5+0x42` then leaves again with table 2.
-mod shot23;
+pub mod shot23;
 
 // ---------------------------------------------------------------------------------------------
 // Type 24 (0xa137e): wave of enemies / shots launched by a creator (h)
@@ -179,7 +182,7 @@ mod shot23;
 /// launches a type 24 shot (variant 1) every 2 frames and, at `+0x58 == 0x20`, spawns
 /// a group of enemies (ENEMY type 1, number and positions according to `A5+0x7f92` and `A5+0x35`).
 /// Variant 1: effect that it launches, at one of the 16 positions of table 0xa1438 (`+0x56`).
-mod shot24;
+pub mod shot24;
 
 // ---------------------------------------------------------------------------------------------
 // Type 25 (0xa16bc): projectile that falls from the sky onto a target (h)
@@ -188,7 +191,7 @@ mod shot24;
 /// After a delay (`+0x58` frames), falls from the camera height + 0x100 above the
 /// creator's position (`+0x5c`), with a random offset for non-zero variants.
 /// On impact (Z < 0): sounds and effects, then it sets its shadow (`+0x5a`) to state 6.
-mod shot25;
+pub mod shot25;
 
 // ---------------------------------------------------------------------------------------------
 // Type 26 (0xa18dc): projectile thrown in an arc by a creator, with shadow (h)
@@ -197,7 +200,7 @@ mod shot25;
 /// After a delay, leaves the creator's position (`+0x5c`) at a height from table 0xa1968 (according to
 /// the creator's `+0x60`), with speed table 3 (or 2). Falls back (Z < 0), stays 128 frames
 /// on the ground then 96 blinking, before disappearing.
-mod shot26;
+pub mod shot26;
 
 // ---------------------------------------------------------------------------------------------
 // Type 27 (0xa1a64): curtain of sparks from a creator, two variants (h)
@@ -206,7 +209,7 @@ mod shot26;
 /// Variant 0: epicenter (animation 0, 96 frames) placed on the creator (`+0x5c`); at 80 frames
 /// it creates a row of type 27 shots variant 1 on either side (`spawn_row`) and the
 /// sound. Variant 1: an element of the row, blinking, which disappears with the epicenter.
-mod shot27;
+pub mod shot27;
 
 // ---------------------------------------------------------------------------------------------
 // Type 28 (0xa1c96): fragment spinning around a creator (h)
@@ -215,7 +218,7 @@ mod shot27;
 /// Fragment (4 variants, `+3`) thrown from the creator (`+0x5c`), at a height from table
 /// 0xa1d18 according to the creator's `+0x60`, with speed table 0x3f; it advances and disappears
 /// off screen (test one frame out of 4).
-mod shot28;
+pub mod shot28;
 
 // ---------------------------------------------------------------------------------------------
 // Helpers for types 29 to 39
@@ -233,7 +236,7 @@ fn ai_step<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 
 /// Left abscissa of the current camera (`A5+0x506`, or `0x556` if the alternate camera is active).
 fn camera_x<R: Bench>(x: &mut Cx<'_, R>) -> u16 {
-    if x.a5_u8(0x36) != 0 { x.a5_u16(0x556) } else { x.a5_u16(0x506) }
+    if ram::CAMERA_ALT_ACTIVE.get(x.b) != 0 { ram::CAMERA_ALT_X.get(x.b) } else { ram::CAMERA_X.get(x.b) }
 }
 
 /// Copies the position (X, Z, Y: integer parts) of an object.
@@ -250,16 +253,16 @@ fn spawn_row<R: Bench>(x: &mut Cx<'_, R>, kind: u8, mut px: u16, rightwards: boo
     let mut label: u16 = 1;
     loop {
         let Some(e) = x.alloc(&pools::ESHL) else { return };
-        e.set_u8(x.b, 0, 1);
-        e.set_u8(x.b, 2, kind);
-        e.set_u8(x.b, 3, 1);
-        e.set_u16(x.b, 0x8, px);
-        let (z, y) = (x.u16(0xc), x.u16(0x10));
-        e.set_u16(x.b, 0xc, z.wrapping_sub(1));
-        e.set_u16(x.b, 0x10, y.wrapping_add(1));
-        e.set_u16(x.b, 0x58, label);
+        e.set_u8(x.b, Obj::ACTIVE, 1);
+        e.set_u8(x.b, Obj::KIND, kind);
+        e.set_u8(x.b, Obj::VARIANT, 1);
+        e.set_u16(x.b, Obj::X, px);
+        let (z, y) = (x.u16(Obj::Z), x.u16(Obj::Y));
+        e.set_u16(x.b, Obj::Z, z.wrapping_sub(1));
+        e.set_u16(x.b, Obj::Y, y.wrapping_add(1));
+        e.set_u16(x.b, ShotB::LABEL, label);
         label = label.wrapping_add(1);
-        e.set_u16(x.b, 0x5c, low16(x.o));
+        e.set_u16(x.b, ShotB::SOURCE, low16(x.o));
         let camera = camera_x(x);
         if rightwards {
             px = px.wrapping_add(0x38);
@@ -277,8 +280,8 @@ fn spawn_row<R: Bench>(x: &mut Cx<'_, R>, kind: u8, mut px: u16, rightwards: boo
 
 /// Blinking according to the parity of `A5+0x6e` and of the variant: hidden when they differ.
 fn blink_by_parity<R: Bench>(x: &mut Cx<'_, R>) {
-    let hidden = (x.u8(0x3) ^ x.a5_u16(0x6e) as u8) & 1 != 0;
-    x.set_bit(0x1, 1, hidden);
+    let hidden = (x.u8(Obj::VARIANT) ^ vars::FRAME_LOW.get(x.b) as u8) & 1 != 0;
+    x.set_bit(Obj::FLAGS, 1, hidden);
 }
 
 /// Template of types 32, 33, 35, 36 and 38: pause (suspended object), state, then, if the object still
@@ -288,7 +291,7 @@ fn guarded<R: Bench>(x: &mut Cx<'_, R>, state: fn(&mut Cx<'_, R>)) {
         return;
     }
     state(x);
-    if x.u8(0x0) != 0 {
+    if x.u8(Obj::ACTIVE) != 0 {
         x.reinsert();
     }
 }
@@ -301,7 +304,7 @@ fn guarded<R: Bench>(x: &mut Cx<'_, R>, state: fn(&mut Cx<'_, R>)) {
 /// to arm its attack (`+0xaf`) then creates a row of variant 1 elements (on either side,
 /// `spawn_row`); 1 = element of the row, blinking, which goes out with the epicenter; 2 = the
 /// delayed version (30 frames). All disappear with the creator (state >= 4 or 0x20a).
-mod shot29;
+pub mod shot29;
 
 // ---------------------------------------------------------------------------------------------
 // Type 30 (0xa2060): hit delivered by an enemy, with sound (h)
@@ -309,7 +312,7 @@ mod shot29;
 
 /// Sticks a hit to the owner (inverted orientation): waits for the owner to arm its attack
 /// (`+0xaf`), plays the hit (animation 1, 48 frames), the return (animation 2), then cedes control.
-mod shot30;
+pub mod shot30;
 
 // ---------------------------------------------------------------------------------------------
 // Type 31 (0xa21b6): homing ball from a creator (h)
@@ -319,7 +322,7 @@ mod shot30;
 /// 48 frames (`+0x42`), then every 10 frames orients its direction (`+0x2d`) toward it (angle +
 /// `+0x58`, sign depending on the height of its target) and explodes on contact (0x20 box around the
 /// creator). When the creator goes to state >= 0x406, it flies straight and leaves the screen.
-mod shot31;
+pub mod shot31;
 
 // ---------------------------------------------------------------------------------------------
 // Types 32 and 33: shots of a host (+0x42), AI animations (0x103d6 / 0x1040c)
@@ -327,8 +330,8 @@ mod shot31;
 
 /// True when the object's host (`+0x42`) is in state 4: the shot must disappear (0xa2510).
 fn host_dead<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let host = x.linked(0x42);
-    host.u8(x.b, 0x4) == 4
+    let host = x.linked(ShotB::HOST);
+    host.u8(x.b, Obj::STATE) == 4
 }
 
 /// Type 32 (0xa239a): homing projectile fired at the host's position (h)
@@ -338,14 +341,14 @@ fn host_dead<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 /// computed to reach the target in a number of steps proportional to the distance. Then it flies
 /// (state 2 substate 0: waits for flag `+0x58`), falls (substate 2) playing a sound if
 /// its fall crosses the visible area, and ends with its animation (substate 4).
-mod shot32;
+pub mod shot32;
 
 /// Type 33 (0xa2524): three-stage shot tied to its host (h)
 ///
 /// Same template as type 32 (suspension, dead host = host state 4). Animation 0 then, when
 /// the animation raises `+0x58`, sound and animation 1; when it raises `+0x59`, animation 2 until
 /// `+0x32` empties (`+0x5a` = 1), then end at the end of the script.
-mod shot33;
+pub mod shot33;
 
 // ---------------------------------------------------------------------------------------------
 // Type 34 (0xa2630): staging of a boss attack, three variants (h)
@@ -356,7 +359,7 @@ mod shot33;
 /// variant 1: same idea next to the creator (400 frames, a single scenery, exit animation);
 /// variant 2: placed on the creator. On the first pass variant 0 loads four palettes
 /// (0x91c2e0...) from the ROM, tinted by 0xf000f000.
-mod shot34;
+pub mod shot34;
 
 // ---------------------------------------------------------------------------------------------
 // Type 35 (0xa28d2): falling spark with shadow, 16 variants (h)
@@ -365,7 +368,7 @@ mod shot34;
 /// Decorative spark: speed table 0xb with direction `+0x2d` according to the variant (0, 2, ... 30),
 /// flies 90 frames (`+0x58`), then animates its end. Its shadow is drawn by 0x33fe4; it blinks
 /// according to the parity of `A5+0x6e` and of the variant.
-mod shot35;
+pub mod shot35;
 
 // ---------------------------------------------------------------------------------------------
 // Type 36 (0xa29cc): debris thrown into the air, falls back onto the scene (h)
@@ -374,7 +377,7 @@ mod shot35;
 /// Appears at a random position on the screen (tables 0xa2b0a / 0xa2b2a) at height 0x100 - Y,
 /// with a randomly drawn vertical speed; falls back (Z <= 0), plays an impact sound then animates
 /// its end.
-mod shot36;
+pub mod shot36;
 
 // ---------------------------------------------------------------------------------------------
 // Type 37 (0xa2b62): meteorite thrown by a creator, falls back and explodes (h)
@@ -383,7 +386,7 @@ mod shot36;
 /// Falls from the sky at a random position on the screen (tables 0xa2ce0 / 0xa2d00), random vertical speed
 /// (0xa2c7e) and random start animation (0xa2c9e). On the ground (Z <= 0) it triggers
 /// effect 0xb10c8 / 0xb4bcc, blinks 25 frames and disappears; it disappears with the creator.
-mod shot37;
+pub mod shot37;
 
 // ---------------------------------------------------------------------------------------------
 // Type 38 (0xa2d48): projectile oriented toward its target (16 sprites), thrown by an effect (h)
@@ -393,7 +396,7 @@ mod shot37;
 /// (+0x30 in altitude), speeds from row `+0x2f` of table 0xa2ed4 (or 0xa2f32 for non-zero
 /// variants), and its sprite from the angle toward the creator's target, bounded to 0x14..0x16
 /// (mirrored if flipped). Then it flies (speed table + gravity) down to the ground.
-mod shot38;
+pub mod shot38;
 
 // ---------------------------------------------------------------------------------------------
 // Type 39 (0xa2fb8): fireball thrown into the air by a creator, 8 variants (h)
@@ -402,7 +405,7 @@ mod shot38;
 /// Leaves the creator (`+0x5c`) upward (VZ = -5, speed table 0x13), falls back spinning
 /// (`+0x2d` varies), ignites on the ground (end animation) then signals the creator (`+0xae`).
 /// Disappears with the creator (state 0x406).
-mod shot39;
+pub mod shot39;
 handlers! {
     0x9fe0a "eshl_15" shot15::run,
     0xa03e0 "eshl_16" shot16::run,
@@ -429,4 +432,16 @@ handlers! {
     0xa2b62 "eshl_37" shot37::run,
     0xa2d48 "eshl_38" shot38::run,
     0xa2fb8 "eshl_39" shot39::run,
+}
+
+view! {
+    /// Fields of the ESHL shots of types 15 to 39 shared by their helpers.
+    ShotB {
+        /// Host object (16-bit pointer).
+        host, set_host, HOST: u16 @ 0x42;
+        /// Label of the enemy created (h).
+        label, set_label, LABEL: u16 @ 0x58;
+        /// Source object (16-bit pointer).
+        source, set_source, SOURCE: u16 @ 0x5c;
+    }
 }

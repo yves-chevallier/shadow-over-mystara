@@ -1,6 +1,9 @@
 use super::*;
+use crate::data::RomAddr;
+use crate::families::shell::vars;
+use crate::families::shell::records::{Host, view};
 
-const ANIMS: u32 = 0x17b9c2;
+const ANIMS: RomAddr = RomAddr(0x17b9c2);
 const HOST: u32 = 0x46;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -11,49 +14,49 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         return vanish(x);
     }
     let host = x.linked(HOST);
-    if host.u8(x.b, 0) == 0 {
+    if host.u8(x.b, Obj::ACTIVE) == 0 {
         return vanish(x);
     }
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
-            x.add8(0x4, 2);
-            x.set8(0x5, 0);
-            x.set8(0x42, 0);
-            x.set8(0x43, 0);
-            x.set8(0x2d, 0);
-            x.anim_start(ANIMS, 0);
-            let kind = host.u8(x.b, 0x2);
-            x.set8(f::ATTACK_ID, if kind == 0xc { 0x29 } else { 0x2a });
-            x.set8(f::BOX_SET, 7);
+            x.add8(Obj::STATE, 2);
+            x.set8(Base::SUB_STATE, 0);
+            x.set8(Shot5::RING_X, 0);
+            x.set8(Shot5::RING_Y, 0);
+            x.set8(Obj::SPEED_INDEX, 0);
+            x.anim_start(ANIMS.0, 0);
+            let kind = host.u8(x.b, Obj::KIND);
+            x.set8(Shot::ATTACK_ID, if kind == 0xc { 0x29 } else { 0x2a });
+            x.set8(Base::BOX_SET, 7);
             boxes(x, host);
         }
         2 => {
-            if x.a5_u8(GAME_PAUSED) == 0 {
-                x.set8(0x56, 0);
-                x.set8(0x53, 0);
+            if vars::GAME_PAUSED.get(x.b) == 0 {
+                x.set8(Shot5::CLEARED, 0);
+                x.set8(Obj::COUNTER_53, 0);
                 select_frame(x);
                 boxes(x, host);
             }
-            let flags = host.u8(x.b, 0x1);
-            x.set8(0x1, flags);
+            let flags = host.u8(x.b, Obj::FLAGS);
+            x.set8(Obj::FLAGS, flags);
             x.reinsert();
         }
-        4 => x.add8(0x4, 2),
+        4 => x.add8(Obj::STATE, 2),
         _ => x.free_eshl(),
     }
 }
 
 fn vanish<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set8(0x4, st::FREE);
-    x.set8(0x5, 0);
+    x.set8(Obj::STATE, st::FREE);
+    x.set8(Base::SUB_STATE, 0);
 }
 
 /// Collision boxes according to the enemy's attack state: disarmed (0) for some states.
 fn boxes<R: Bench>(x: &mut Cx<'_, R>, host: Obj) {
-    let row = x.u8(0x2f) as u32;
+    let row = x.u8(Base::SETTING) as u32;
     let index = box_index(x, row, 3);
-    x.set8(0x3b, index);
-    let (kind, detail) = (host.u16(x.b, 0xa0), host.u8(x.b, 0xa1));
+    x.set8(Base::GROUND_MARK, index);
+    let (kind, detail) = (host.u16(x.b, Host::ATTACK), host.u8(x.b, Host::ATTACK_DETAIL));
     let special = matches!(kind, 0x200 | 0x224 | 0x225 | 0x226) || kind >> 8 == 4;
     let armed = if kind >> 8 == 0 {
         match detail {
@@ -66,7 +69,7 @@ fn boxes<R: Bench>(x: &mut Cx<'_, R>, host: Obj) {
     };
     for i in 0..3 {
         let v = if armed { box_index(x, row, i) } else { 0 };
-        x.set8(0x38 + i, v);
+        x.set8(Base::BODY_BOX + i, v);
     }
 }
 
@@ -121,24 +124,36 @@ fn mirrored<R: Bench>(x: &mut Cx<'_, R>, i: u32) -> [u8; 2] {
 
 /// Chooses the sprite frame (`+0x34`); `+0x2d` is a counter 1..=0x11.
 fn select_frame<R: Bench>(x: &mut Cx<'_, R>) {
-    let mut n = x.u8(0x2d) as u16;
+    let mut n = x.u8(Obj::SPEED_INDEX) as u16;
     if n >= 0x11 {
         n = 0;
     }
     n += 1;
-    x.set8(0x2d, n as u8);
+    x.set8(Obj::SPEED_INDEX, n as u8);
     let host = x.linked(HOST);
-    let set = x.u8(0x2f) as u32;
-    if host.u8(x.b, 0xb2) != 0 || n & 1 == 0 {
+    let set = x.u8(Base::SETTING) as u32;
+    if host.u8(x.b, Host::FROZEN) != 0 || n & 1 == 0 {
         let frame = list_frame(x, set, false, (n / 2) as u32);
-        x.set32(0x34, frame);
+        x.set32(Obj::FRAME, frame);
     } else if (x.u16(HOST) as i16) < 0 {
-        let row = (x.u8(0x42) as u32 >> 1 << 4) + (x.u8(0x43) as u32 >> 1);
+        let row = (x.u8(Shot5::RING_X) as u32 >> 1 << 4) + (x.u8(Shot5::RING_Y) as u32 >> 1);
         let [_, flip] = mirrored(x, row);
-        x.set8(f::FLIP, flip);
+        x.set8(Base::FLIP, flip);
         // the original clears D0 before this read: the frame always comes from the first row
         let [slot, _] = mirrored(x, 0);
         let frame = list_frame(x, set, true, slot as u32);
-        x.set32(0x34, frame);
+        x.set32(Obj::FRAME, frame);
+    }
+}
+
+view! {
+    /// Fields of shot 5.
+    Shot5 {
+        /// Selects the odd frame, first index (h).
+        ring_x, set_ring_x, RING_X: u8 @ 0x42;
+        /// Selects the odd frame, second index (h).
+        ring_y, set_ring_y, RING_Y: u8 @ 0x43;
+        /// Cleared each frame (h).
+        cleared, set_cleared, CLEARED: u8 @ 0x56;
     }
 }

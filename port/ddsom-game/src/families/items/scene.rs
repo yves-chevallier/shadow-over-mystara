@@ -1,28 +1,18 @@
 use super::*;
+use crate::data::RomAddr;
+use crate::families::shell::vars;
+use crate::families::shell::records::{Base, PlayerView, SetView};
 use crate::families::shell::tables::{tables, Read};
 
 // ---------------------------------------------------------------------------------------------
 // Type 6: scene objects (0xdc624)
 
-/// Type 6, scene objects attached to a player (`+0x50`). Four variants, three automata:
-///
-/// - variants 0 and 2, "player icon" (h): follows the player (player position offset by
-///   0x20 pixels, or 0x18 if flipped, one pixel in front of it, 0x18 above), plays a randomly
-///   drawn animation (4) and a sound every 0x3c frames (outside pause `A5+0x42`);
-/// - variant 1, "guide" (h): chooses the closest living player, walks toward a point 0x20
-///   pixels from it through a speed table, stops, creates SET objects (`0xc8312`) and drives the
-///   counter `A5-0x55c8`;
-/// - variant 3: see the original code (not exercised, delegated).
-///
-/// Common states: 0 initialization, 2 active, 4 end (variant 1), 6 release. Substates 2 and 4 of the icon (flight,
-/// pickup) and state 4 of the icon are not exercised: they stay in original code.
-pub const ENTRY: u32 = 0xdc624;
-pub const ANIMATIONS: u32 = 0x1bf8fe;
+pub const ANIMATIONS: RomAddr = RomAddr(0x1bf8fe);
 // icon
 pub const OWNER_2: u32 = 0x46;
 pub const DELAY_SOUND: u8 = 0x3c;
 // guide
-pub const TABLE_SPEEDS: u32 = 0x1c65b6;
+pub const TABLE_SPEEDS: RomAddr = RomAddr(0x1c65b6);
 /// Champs.
 pub const DELAY: u32 = 0x4c;
 pub const TARGET_X: u32 = 0x52;
@@ -48,7 +38,7 @@ pub(super) fn follow_owner<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) -> Obj {
     o.set_u32(ctx.b, Obj::Y, y);
     let y = o.u16(ctx.b, Obj::Y).wrapping_sub(1);
     o.set_u16(ctx.b, Obj::Y, y);
-    let turned = o.u8(ctx.b, 0x2c) != 0;
+    let turned = o.u8(ctx.b, Base::FLIP) != 0;
     let offset = if !turned { 0 } else { 2 };
     let dx = tables().item_scene_offsets_x.at16(ctx.b, offset);
     let x = o.u16(ctx.b, Obj::X).wrapping_add(dx);
@@ -70,13 +60,13 @@ pub(super) fn icon_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let draw = rng & 3;
     o.set_u8(ctx.b, field::MODE, draw as u8);
     let animation = tables().item_scene_icon_animations.at8(ctx.b, draw as u32);
-    ctx.anim_start(ANIMATIONS, animation as u16);
+    ctx.anim_start(ANIMATIONS.0, animation as u16);
 }
 
 /// `0xdc6e8`: every 0x3c frames (outside pause), plays the icon's sound drawn from the table (`base`: 0 or 0x10
 /// depending on the caller, first or second series of sounds).
 pub(super) fn icon_sound<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, base: u32) {
-    let paused = ctx.ram8(PAUSE) != 0;
+    let paused = vars::FROZEN.get(ctx.b) != 0;
     if paused {
         return;
     }
@@ -95,7 +85,7 @@ pub(super) fn icon_sound<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, base: u32) {
 pub(super) fn icon_followed<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     follow_owner(ctx, o);
     ctx.anim_step();
-    o.set_u8(ctx.b, 0x3b, 0);
+    o.set_u8(ctx.b, Base::GROUND_MARK, 0);
     ctx.reinsert();
     icon_sound(ctx, o, 0);
 }
@@ -153,7 +143,7 @@ pub(super) fn icon_takeoff<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn icon_wait<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let pickup = o.u8(ctx.b, field::PICKUP);
     if pickup == 1 {
-        let pause = ctx.ram8(PAUSE) != 0;
+        let pause = vars::FROZEN.get(ctx.b) != 0;
         if pause {
             o.set_u8(ctx.b, field::PICKUP, 0);
         } else {
@@ -162,7 +152,7 @@ pub(super) fn icon_wait<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             let owner = pointer(ctx, o, OWNER_2);
             let variant = o.u8(ctx.b, Obj::VARIANT);
             if !(variant != 2) {
-                let reserve = owner.u8(ctx.b, 0x31);
+                let reserve = owner.u8(ctx.b, PlayerView::RESERVE);
                 if !(reserve == 0) {
                     o.set_u8(ctx.b, Obj::VARIANT, 0);
                 }
@@ -175,7 +165,7 @@ pub(super) fn icon_wait<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let variant = o.u8(ctx.b, Obj::VARIANT);
     if !(variant != 2) {
         let owner = pointer(ctx, o, OWNER_2);
-        let reserve = owner.u8(ctx.b, 0x31);
+        let reserve = owner.u8(ctx.b, PlayerView::RESERVE);
         if !(reserve == 0) {
             o.set_u16(ctx.b, COUNTDOWN_TIMER, 1);
         }
@@ -223,13 +213,13 @@ pub(super) fn start_launches<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             crate::sound::play(ctx.b, crate::sound::Sound::at(sound), o);
         }
     }
-    if o.u8(ctx.b, 0x2c) == 0 {
+    if o.u8(ctx.b, Base::FLIP) == 0 {
         let v = o.u16(ctx.b, Obj::VX).wrapping_neg();
         o.set_u16(ctx.b, Obj::VX, v);
     }
     let mode = o.u8(ctx.b, field::MODE) as u32;
     let animation = tables().item_scene_start_animations.at8(ctx.b, mode);
-    ctx.anim_start(ANIMATIONS, animation as u16);
+    ctx.anim_start(ANIMATIONS.0, animation as u16);
 }
 
 /// One scene object fewer for the object `+0x46`.
@@ -264,7 +254,7 @@ pub(super) fn start_stop<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         crate::sound::play(ctx.b, start::SOUND_STOP, ctx.obj());
     }
     let animation = tables().item_scene_stop_animations.at8(ctx.b, mode);
-    ctx.anim_start(ANIMATIONS, animation as u16);
+    ctx.anim_start(ANIMATIONS.0, animation as u16);
     add_u8(ctx, o, field::SUB_STATE, 2);
     start_countdown(ctx, o);
     o.set_u16(ctx.b, CREATED, 0);
@@ -273,11 +263,11 @@ pub(super) fn start_stop<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     }
     let player = pointer(ctx, o, field::OWNER);
     if o.u16(ctx.b, Obj::X) <= player.u16(ctx.b, Obj::X) {
-        o.set_u8(ctx.b, 0x2c, 0x20);
+        o.set_u8(ctx.b, Base::FLIP, 0x20);
     }
-    if o.u8(ctx.b, 0x2c) == player.u8(ctx.b, 0x2c) {
-        let v = player.u8(ctx.b, 0x2c) ^ 0x20;
-        player.set_u8(ctx.b, 0x2c, v);
+    if o.u8(ctx.b, Base::FLIP) == player.u8(ctx.b, Base::FLIP) {
+        let v = player.u8(ctx.b, Base::FLIP) ^ 0x20;
+        player.set_u8(ctx.b, Base::FLIP, v);
     }
     ctx.anim_step();
 }
@@ -292,13 +282,13 @@ pub(super) fn icon_start<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         8 => guide_second_object(ctx, o),
         0xa => {
             let set = pointer(ctx, o, CREATED);
-            if set.u8(ctx.b, 0x22) != 0 {
+            if set.u8(ctx.b, SetView::FINISHED) != 0 {
                 add_u8(ctx, o, field::SUB_STATE, 2);
             }
         }
         0xc => {
-            let n = ctx.ram8(COUNTER).wrapping_add(4);
-            ctx.set_ram8(COUNTER, n);
+            let n = vars::SCENE_ICONS.get(ctx.b).wrapping_add(4);
+            vars::SCENE_ICONS.set(ctx.b, n);
         }
         _ => crate::families::effects::bad_index(sub_state as u32),
     }
@@ -333,7 +323,7 @@ pub(super) fn guide_target<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, a2: Option<u32
     o.set_u16(ctx.b, Obj::X, cam_x.wrapping_add(0x1a0));
     o.set_u16(ctx.b, Obj::Y, cam_y.wrapping_add(0x40));
     o.set_u32(ctx.b, Obj::Z, 0);
-    o.set_u8(ctx.b, 0x2c, 0);
+    o.set_u8(ctx.b, Base::FLIP, 0);
     let mut best: u16 = 0xffff;
     let mut chosen = None;
     for i in 0..4u32 {
@@ -375,12 +365,12 @@ pub(super) fn guide_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     add_u8(ctx, o, Obj::STATE, 2);
     o.set_u8(ctx.b, field::SUB_STATE, 0);
     guide_target(ctx, o, None);
-    o.set_u32(ctx.b, Obj::SPEED_TABLE, TABLE_SPEEDS);
-    let level = ctx.ram8(LEVEL) as u32;
+    o.set_u32(ctx.b, Obj::SPEED_TABLE, TABLE_SPEEDS.0);
+    let level = vars::LEVEL.get(ctx.b) as u32;
     let animation = tables().item_scene_guide_animations.at8(ctx.b, 2 * level);
     let mode = tables().item_scene_guide_animations.at8(ctx.b, 2 * level + 1);
     o.set_u8(ctx.b, field::MODE, mode);
-    ctx.anim_start(ANIMATIONS, animation as u16);
+    ctx.anim_start(ANIMATIONS.0, animation as u16);
 }
 
 /// `0xdcb9a`: animation of the guide according to its mode (0x12 for variant 3).
@@ -391,7 +381,7 @@ pub(super) fn guide_animation<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         let mode = o.u8(ctx.b, field::MODE) as u32;
         animation = tables().item_scene_guide_animations_arrival.at8(ctx.b, mode);
     }
-    ctx.anim_start(ANIMATIONS, animation as u16);
+    ctx.anim_start(ANIMATIONS.0, animation as u16);
 }
 
 /// Creates a SET object of type `type_set`; returns its address, or `None` if the pool is full.
@@ -423,12 +413,12 @@ pub(super) fn guide_running<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         let x = o.u16(ctx.b, Obj::X);
         let x_owner = owner.u16(ctx.b, Obj::X);
         if !(x > x_owner) {
-            o.set_u8(ctx.b, 0x2c, 0x20);
+            o.set_u8(ctx.b, Base::FLIP, 0x20);
         }
-        let (a, b) = (o.u8(ctx.b, 0x2c), owner.u8(ctx.b, 0x2c));
+        let (a, b) = (o.u8(ctx.b, Base::FLIP), owner.u8(ctx.b, Base::FLIP));
         if !(a != b) {
-            let v = owner.u8(ctx.b, 0x2c) ^ 0x20;
-            owner.set_u8(ctx.b, 0x2c, v);
+            let v = owner.u8(ctx.b, Base::FLIP) ^ 0x20;
+            owner.set_u8(ctx.b, Base::FLIP, v);
         }
     }
     ctx.anim_step();
@@ -439,7 +429,7 @@ pub(super) fn guide_wait<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let created = o.u16(ctx.b, CREATED);
     if !(created == 0) {
         let set = pointer(ctx, o, CREATED);
-        let finished = set.u8(ctx.b, 0x22) != 0;
+        let finished = set.u8(ctx.b, SetView::FINISHED) != 0;
         if !finished {
             return;
         }
@@ -451,13 +441,13 @@ pub(super) fn guide_wait<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         }
     }
     add_u8(ctx, o, field::SUB_STATE, 2);
-    let n = ctx.ram8(COUNTER).wrapping_add(4);
-    ctx.set_ram8(COUNTER, n);
+    let n = vars::SCENE_ICONS.get(ctx.b).wrapping_add(4);
+    vars::SCENE_ICONS.set(ctx.b, n);
 }
 
 /// Substate 4 of the guide: when the scene counter reaches 0x10, creates a second SET.
 pub(super) fn guide_second_object<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let counter = ctx.ram8(COUNTER);
+    let counter = vars::SCENE_ICONS.get(ctx.b);
     if counter != 0x10 {
         return;
     }
@@ -466,21 +456,21 @@ pub(super) fn guide_second_object<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         add_u8(ctx, o, field::SUB_STATE, 2);
         o.set_u16(ctx.b, CREATED, n.0 as u16);
         let mode = o.u8(ctx.b, field::MODE);
-        n.set_u8(ctx.b, 0x42, mode);
+        n.set_u8(ctx.b, SetView::PARAM_A, mode);
     }
 }
 
 /// Substate 6 of the guide: waits for the end of the SET object, then goes to state 4.
 pub(super) fn guide_end<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     let set = pointer(ctx, o, CREATED);
-    let in_progress = set.u8(ctx.b, 0x22) == 0;
+    let in_progress = set.u8(ctx.b, SetView::FINISHED) == 0;
     if !in_progress {
         add_u8(ctx, o, Obj::STATE, 2);
     }
 }
 
 pub(super) fn guide_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
-    let frozen = ctx.ram8(SCENE_FROZEN) != 0;
+    let frozen = vars::GAME_PAUSED.get(ctx.b) != 0;
     if !frozen {
         let sub_state = o.u8(ctx.b, field::SUB_STATE);
         match sub_state {
@@ -500,8 +490,8 @@ pub(super) fn guide<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         state::INIT => guide_init(ctx, o),
         state::ACTIVE => guide_active(ctx, o),
         state::FREED => {
-            let n = ctx.ram8(COUNTER).wrapping_add(4);
-            ctx.set_ram8(COUNTER, n);
+            let n = vars::SCENE_ICONS.get(ctx.b).wrapping_add(4);
+            vars::SCENE_ICONS.set(ctx.b, n);
         }
         state::OUTSIDE_SCREEN => ctx.free(&pools::ITEM),
         _ => crate::families::effects::bad_index(state as u32),
@@ -516,7 +506,6 @@ mod guide_3 {
     /// First color of palette 0: its brightness bits (0xf000f000) are copied.
     pub const REFERENCE: u32 = 0x91c000;
     pub const ANIMATION: u16 = 0x13;
-    pub const RESULT: i32 = -0x551c;
 }
 
 pub(super) fn guide_3_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
@@ -537,10 +526,10 @@ pub(super) fn guide_3_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     add_u8(ctx, o, Obj::STATE, 2);
     // A2: the end of the palette copy
     guide_target(ctx, o, Some(guide_3::PALETTE_DEST + 0x20));
-    o.set_u32(ctx.b, Obj::SPEED_TABLE, TABLE_SPEEDS);
-    o.set_u8(ctx.b, 0x2a, 1);
-    o.set_u8(ctx.b, 0x2b, 0x18);
-    ctx.anim_start(ANIMATIONS, guide_3::ANIMATION);
+    o.set_u32(ctx.b, Obj::SPEED_TABLE, TABLE_SPEEDS.0);
+    o.set_u8(ctx.b, Base::OWN_PALETTE, 1);
+    o.set_u8(ctx.b, Base::PALETTE, 0x18);
+    ctx.anim_start(ANIMATIONS.0, guide_3::ANIMATION);
     ctx.reinsert();
 }
 
@@ -548,11 +537,11 @@ pub(super) fn guide_3_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
 pub(super) fn guide_3_wait<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
     if o.u16(ctx.b, CREATED) != 0 {
         let set = pointer(ctx, o, CREATED);
-        if set.u8(ctx.b, 0x22) == 0 {
+        if set.u8(ctx.b, SetView::FINISHED) == 0 {
             return;
         }
-        let result = set.u8(ctx.b, 0x23);
-        ctx.set_ram8(guide_3::RESULT, result);
+        let result = set.u8(ctx.b, SetView::RESULT);
+        vars::GUIDE_RESULT.set(ctx.b, result);
     } else {
         let remainder = o.u16(ctx.b, COUNTDOWN_TIMER).wrapping_sub(1);
         o.set_u16(ctx.b, COUNTDOWN_TIMER, remainder);
@@ -561,8 +550,8 @@ pub(super) fn guide_3_wait<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         }
     }
     add_u8(ctx, o, field::SUB_STATE, 2);
-    let n = ctx.ram8(COUNTER).wrapping_add(4);
-    ctx.set_ram8(COUNTER, n);
+    let n = vars::SCENE_ICONS.get(ctx.b).wrapping_add(4);
+    vars::SCENE_ICONS.set(ctx.b, n);
 }
 
 pub(super) fn guide_3<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {

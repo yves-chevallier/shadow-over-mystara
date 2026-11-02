@@ -1,16 +1,13 @@
 use super::*;
+use crate::data::RomAddr;
+use crate::families::shell::vars;
+use crate::families::shell::records::view;
 use crate::families::shell::tables::{tables, Read};
 
 // ---------------------------------------------------------------------------------------------
 // Type 0: treasures (0xdabca)
 
-/// Type 0, "treasure": coins and gems picked up for points. Variants 0 to 5; an eight-byte table per variant gives
-/// sparkle (+0x54), a specific byte (+0x55), score event (+0x56), sound (+0x57) and pickup index (+0x5d).
-///
-/// States: 0 init (in the air: fall; on the ground: wait 0x4b0 frames + sparkle), 2 active (fall, wait with blinking,
-/// picked up: sound + score), 4/6 release.
-pub const ENTRY: u32 = 0xdabca;
-pub const ANIMATIONS: u32 = 0x1bed1a;
+pub const ANIMATIONS: RomAddr = RomAddr(0x1bed1a);
 pub const DURATION_TO_GROUND: u16 = 0x4b0;
 pub const SCORE: u32 = 0x56;
 pub const SOUND: u32 = 0x57;
@@ -37,7 +34,7 @@ pub(super) fn treasure_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         treasure_params(ctx, o);
         shimmer(ctx, o);
     }
-    animate_and_sort(ctx, ANIMATIONS, variant);
+    animate_and_sort(ctx, ANIMATIONS.0, variant);
 }
 
 pub(super) fn treasure_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
@@ -57,7 +54,7 @@ pub(super) fn treasure_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         }
         sub::WAIT => {
             // during a cutscene, an object left at the left of the screen disappears
-            let cutscene = ctx.ram8(0x44) != 0;
+            let cutscene = vars::INPUTS_LOCKED.get(ctx.b) != 0;
             if cutscene {
                 let limit = crate::ram::CAMERA_X.get(ctx.b).wrapping_sub(0x40);
                 let x = o.u16(ctx.b, Obj::X);
@@ -79,7 +76,7 @@ pub(super) fn treasure_active<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
             add_u8(ctx, o, Obj::STATE, 2);
             let sound = o.u8(ctx.b, SOUND);
             effect_pickup(ctx, o, sound);
-            let player_bits = o.u16(ctx.b, 0x48) & 0x300;
+            let player_bits = o.u16(ctx.b, Treasure::PLAYER_BITS) & 0x300;
             let event = (o.u8(ctx.b, SCORE) as u16).wrapping_add(player_bits);
             crate::events::enqueue_points(ctx.b, event);
             mark_pickup(ctx, o);
@@ -100,5 +97,13 @@ pub(super) fn treasure<R: Bench>(ctx: &mut Cx<'_, R>) {
         state::ACTIVE => treasure_active(ctx, o),
         state::FREED | state::OUTSIDE_SCREEN => ctx.free(&pools::ITEM),
         _ => crate::families::effects::bad_index(state as u32),
+    }
+}
+
+view! {
+    /// Fields of the treasure.
+    Treasure {
+        /// Bits of the players (0x300) (h).
+        player_bits, set_player_bits, PLAYER_BITS: u16 @ 0x48;
     }
 }
