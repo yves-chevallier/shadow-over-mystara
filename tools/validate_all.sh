@@ -91,6 +91,6 @@ for log in "$out"/*.log; do
 	[[ $verdict == VALID* ]] || status=1
 done
 echo "--- calls per routine (total) ---"
-grep -h -E '^  \S+ +[0-9]+ (appels|calls)' "$out"/*.log | awk '{c[$1]+=$2} END {for (k in c) printf "  %-28s %8d calls\n", k, c[k]}' | sort
+{ grep -h -E '^  \S+ +[0-9]+ (appels|calls)' "$out"/*.log || true; } | awk '{c[$1]+=$2} END {for (k in c) printf "  %-28s %8d calls\n", k, c[k]}' | sort
 rm -rf "$out"
 exit $status
