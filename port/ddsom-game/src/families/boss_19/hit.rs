@@ -45,11 +45,11 @@ fn dispatch<R: Banc>(x: &mut Cx<'_, R>) {
         0 | 4 => reaction(x),
         2 => pushed_back(x),
         6 => death(x),
-        // la table 0x90970 a six entrées : 8 (0x8fae2, `rts`) et 0xa (0x9101a, retour au combat) ne sont jamais
-        // choisies (aucun écrivain ne pose `+5` = 8 ou 0xa dans l'état 4 : docs/code-mort.md), gardées comme l'original
+        // table 0x90970 has six entries: 8 (0x8fae2, `rts`) and 0xa (0x9101a, back to the fight) are never chosen
+        // (no writer sets `+5` = 8 or 0xa in state 4: docs/code-mort.md), kept like the original
         8 => {}
         0xa => chase(x),
-        s => unreachable!("boss 19 touché : sous-état {s:#x} hors de la table 0x90970"),
+        s => unreachable!("boss 19 hit: sub-state {s:#x} outside table 0x90970"),
     }
     if tst8(x, SHIELD).gt() {
         sub8(x, SHIELD, 1);

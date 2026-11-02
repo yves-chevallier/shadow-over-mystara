@@ -47,11 +47,11 @@ pub(super) fn run<R: Banc>(x: &mut Cx<'_, R>) {
         2 => pushed_back(x),
         4 => get_up(x),
         6 => death(x),
-        // la table 0x929b8 a six entrées : 8 (`rts`) et 0xa (0x92ce0, retour au combat) ne sont jamais choisies (aucun
-        // écrivain ne pose `+5` = 8 ou 0xa dans l'état 4 : docs/code-mort.md), gardées comme l'original
+        // table 0x929b8 has six entries: 8 (`rts`) and 0xa (0x92ce0, back to the fight) are never chosen (no writer
+        // sets `+5` = 8 or 0xa in state 4: docs/code-mort.md), kept like the original
         8 => {}
         0xa => chase(x),
-        s => unreachable!("boss 15 touché : sous-état {s:#x} hors de la table 0x929b8"),
+        s => unreachable!("boss 15 hit: sub-state {s:#x} outside table 0x929b8"),
     }
     keep_position(x);
     if tst8(x, SHIELD).gt() {

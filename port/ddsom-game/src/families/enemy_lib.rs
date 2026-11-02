@@ -132,10 +132,10 @@ pub fn keep_in_zone<R: Banc>(x: &mut Cx<'_, R>) -> bool {
     x.keep_in_zone()
 }
 
-/// 0x33fe4 : collision avec le décor (`terrain.rs`) : l'objet est repoussé hors d'un obstacle.
-/// Glitch d'origine : D2, D3 et D5 (1 en cas de choc) de la recherche du terrain traversent les gestionnaires ;
-/// l'étincelle de `flash_and_shake` en tire ses vitesses (D2, D3 : `long_scene_20_2p`), le squelette relit D5 : ils
-/// sont rendus dans les restes (`Cx::push_terrain`).
+/// 0x33fe4: collision with the scenery (`terrain.rs`): the object is pushed out of an obstacle.
+/// Original glitch: D2, D3 and D5 (1 on impact) of the terrain search leak through the handlers; the spark of
+/// `flash_and_shake` takes its speeds from them (D2, D3: `long_scene_20_2p`), the skeleton rereads D5: they are
+/// returned in the leftovers (`Cx::push_terrain`).
 pub fn collide_terrain<R: Banc>(x: &mut Cx<'_, R>) {
     x.push_terrain();
 }
@@ -227,11 +227,11 @@ fn boite(dx: i16, half_w: u16, half_d: u16) -> ai_aids::Boite {
     ai_aids::Boite { decalage: dx as u16, demi_largeur: half_w, demi_profondeur: half_d }
 }
 
-/// 0xb5e0 : la cible `+0x50` (au sol) est-elle dans la boîte devant l'objet ?
+/// 0xb5e0: is the target `+0x50` (on the ground) inside the box in front of the object?
 ///
-/// Glitch d'origine : les tests de boîte laissent D2 et D3 (et l'octet bas de D4), qui traversent les gestionnaires
-/// et donnent ses vitesses à l'étincelle de `flash_and_shake` (vu sur `long_scene_20_2p`) ; le boss 11 relit D2
-/// (`roll`). Ils sont rendus dans les restes.
+/// Original glitch: the box tests leave D2 and D3 (and the low byte of D4), which leak through the handlers and give
+/// their speeds to the spark of `flash_and_shake` (seen on `long_scene_20_2p`); boss 11 rereads D2 (`roll`). They are
+/// returned in the leftovers.
 pub fn target_in_front<R: Banc>(x: &mut Cx<'_, R>, dx: i16, half_w: u16, half_d: u16) -> InBox {
     let (found, restes) = ai_aids::target_in_front_restes(x.b, x.o, boite(dx, half_w, half_d));
     poser_restes(x, restes);

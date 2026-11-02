@@ -121,7 +121,7 @@ pub(self) fn stand<R: Banc>(x: &mut Cx<'_, R>) {
     rest(x);
 }
 
-/// 0x9300c : marche vers un joueur (seulement par le sous-état 0xa de l'état 4, jamais posé : docs/code-mort.md).
+/// 0x9300c: walks towards a player (only through sub-state 0xa of state 4, never set: docs/code-mort.md).
 pub(self) fn chase<R: Banc>(x: &mut Cx<'_, R>) {
     x.set8(HURT_BOX, 0);
     x.set32(f::STATE, CHASE);

@@ -972,8 +972,8 @@ fn draw_weapon_after_wait(g: &mut Ctx, p: Player) {
     }
 }
 
-/// Le joueur se place devant l'objet suivi par la caméra (`A5+0x46`), décalé selon son numéro (`+2`) ;
-/// `table` : décalages en x (mots).
+/// The player stands in front of the object followed by the camera (`A5+0x46`), shifted by its number (`+2`);
+/// `table`: x offsets (words).
 pub(super) fn place_by_focus(g: &mut Ctx, p: Player, table: u32) -> u32 {
     let focus = ram::CAMERA_FOCUS.get(g.b) as i16 as i32 as u32;
     let (x, y) = (rd16(g.b, focus + 8), rd16(g.b, focus + 0x10));
