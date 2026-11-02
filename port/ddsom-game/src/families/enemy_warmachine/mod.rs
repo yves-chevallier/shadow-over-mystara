@@ -191,7 +191,7 @@ mod go {
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
-    x.set8(0xab, 2);
+    x.set8(Enemy::HP_TIERS, 2);
     x.set8(f::BOX_SET, 0x20);
     lib::initial_hp(x);
     lib::spread_index(x);

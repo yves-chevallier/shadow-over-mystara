@@ -25,8 +25,8 @@ fn strike_hit<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Releases the grabbed victim (`+0x54`): its grab flags drop back.
 fn release_victim<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u16(Gargoyle::VICTIM) != 0 {
-        let v = x.linked(Gargoyle::VICTIM);
+    if x.u16(Enemy::HOLDER) != 0 {
+        let v = x.linked(Enemy::HOLDER);
         v.set_u8(x.b, Enemy::EVENT_KIND, 0);
         v.set_u8(x.b, Enemy::FREEZE, 0);
     }
@@ -527,7 +527,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
                 return dismount(x);
             }
             let rank = x.u8(Gargoyle::PHASE) as i8 as i16 as u16;
-            let t = x.rom16(0x650ba + 2 * rank as u32);
+            let t = tables::table("gargoyle/ride_times").at16(x.b, 2 * rank as u32);
             x.set16(Gargoyle::TIMER2, t);
             lib::step(x);
         }

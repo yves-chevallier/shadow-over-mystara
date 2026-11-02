@@ -9,10 +9,10 @@ use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Delay tables (bytes) read by `charge_delay` and `wander_delay`.
-const CHARGE_A: u32 = 0x78e8c;
-const CHARGE_B: u32 = 0x78eac;
-const WANDER_A: u32 = 0x78ef0;
-const WANDER_B: u32 = 0x78f10;
+const CHARGE_A: &str = "warmachine/charge_a";
+const CHARGE_B: &str = "warmachine/charge_b";
+const WANDER_A: &str = "warmachine/wander_a";
+const WANDER_B: &str = "warmachine/wander_b";
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -67,17 +67,9 @@ fn wait<R: Bench>(x: &mut Cx<'_, R>) {
     lib::step(x);
 }
 
-/// 0x79f6: sets the wait delay `+0x6e` from the difficulty and returns control (D0 = 1).
+/// 0x79f6: sets the wait delay `+0x6e` from the difficulty and returns control (D0 = 1): `enemy_lib::draw_6e`.
 fn pick_wait<R: Bench>(x: &mut Cx<'_, R>) {
-    if !x.in_arena(0) {
-        x.set8(Enemy::AI_WAIT, 1);
-        return;
-    }
-    let group = x.u8(Enemy::AI_WAIT_ROW) as u32;
-    let list = x.data32(0x7a50 + group * 4);
-    let r = rand_and(x, 0x1f);
-    let v = x.data8(list + r);
-    x.set8(Enemy::AI_WAIT, v);
+    lib::draw_6e(x);
 }
 
 /// 0x78142 : demi-tour.

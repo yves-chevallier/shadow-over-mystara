@@ -46,26 +46,26 @@ fn switch_flight_set<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x6563c / 0x65648: pursuit pace read according to difficulty.
 fn charge_a<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
-    let v = x.rom8(0x65654 + level);
+    let v = tables::table("gargoyle/charge_a").at8(x.b, level);
     x.set8(Enemy::AI_STANCE, v);
 }
 
 fn charge_b<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
-    let v = x.rom8(0x65674 + level);
+    let v = tables::table("gargoyle/charge_b").at8(x.b, level);
     x.set8(Enemy::AI_STANCE, v);
 }
 
 /// 0x65694 / 0x656a6: number of passes before changing gesture.
 fn wander_a<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
-    let v = x.rom8(0x656b8 + r);
+    let v = tables::table("gargoyle/wander_a").at8(x.b, r);
     x.set8(Enemy::AI_WANDER, v);
 }
 
 fn wander_b<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
-    let v = x.rom8(0x656d8 + r);
+    let v = tables::table("gargoyle/wander_b").at8(x.b, r);
     x.set8(Enemy::AI_WANDER, v);
 }
 
@@ -222,8 +222,8 @@ fn near_box<R: Bench>(x: &mut Cx<'_, R>, d0: i16, d1: u16, d2: u16) -> u32 {
 /// 0x6575a: chooses the next attack move (table by HP threshold `+0xaa`).
 fn pick_a<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
-    let table = [0x65792, 0x657a2, 0x657b2][x.u8(Gargoyle::PHASE).min(2) as usize];
-    let v = x.rom8(table + r);
+    let phase = x.u8(Gargoyle::PHASE).min(2) as u32;
+    let v = tables::table("gargoyle/near_moves").at8(x.b, 0x10 * phase + r);
     match v {
         0 => go::strike_0(x, false),
         2 => go::strike_0(x, true),
@@ -236,8 +236,8 @@ fn pick_a<R: Bench>(x: &mut Cx<'_, R>) {
 fn pick_a2<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     *x.c.d2() = *x.c.d2() & !0xffff | gate;
     let r = rand_and(x, 0xf);
-    let table = if gate == 1 { 0x65822 } else { 0x65832 };
-    let v = x.rom8(table + r);
+    let row = if gate == 1 { 0 } else { 0x10 };
+    let v = tables::table("gargoyle/side_moves").at8(x.b, row + r);
     match v {
         0 => go::strike_2(x, false),
         2 => go::strike_2(x, true),
@@ -250,8 +250,8 @@ fn pick_a2<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
 fn pick_b<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     *x.c.d2() = *x.c.d2() & !0xffff | gate;
     let r = rand_and(x, 0xf);
-    let table = 0x658a2 + 0x10 * x.u8(Gargoyle::PHASE).min(2) as u32;
-    let v = x.rom8(table + r);
+    let phase = x.u8(Gargoyle::PHASE).min(2) as u32;
+    let v = tables::table("gargoyle/fallback_moves").at8(x.b, 0x10 * phase + r);
     match v {
         0 => go::strike_10(x),
         2 => go::strike_6(x),

@@ -53,6 +53,8 @@ record! {
         height_long, set_height_long, HEIGHT_LONG: u32 @ 0x0c;
         /// Depth, whole pixels (high word of `Obj::Y`).
         y, set_y, Y: u16 @ 0x10;
+        /// Fraction of the depth (low word of `Obj::Y`).
+        y_fraction, set_y_fraction, Y_FRACTION: u16 @ 0x12;
         /// X speed (8.8); as a long with the X acceleration.
         vx, set_vx, VX: u16 @ 0x14;
         vx_long, set_vx_long, VX_LONG: u32 @ 0x14;

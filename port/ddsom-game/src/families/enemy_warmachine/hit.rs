@@ -134,7 +134,7 @@ pub(crate) fn recover<R: Bench>(x: &mut Cx<'_, R>) {
     if !pick_target(x) {
         return go::idle(x);
     }
-    let table = if x.a5_u8(0x48) > 5 { 0x109e2 } else { 0x108e2 };
+    let table = if var::LEVEL.get(x.b) > 5 { 0x109e2 } else { 0x108e2 };
     lib::next_threshold(x, table);
     if lib::target_in_box(x, 0, 0x38, 0xc) {
         return go::attack(x, 6, true);

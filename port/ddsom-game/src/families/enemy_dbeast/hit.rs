@@ -241,7 +241,7 @@ fn leave_screen<R: Bench>(x: &mut Cx<'_, R>) {
         return step(x);
     }
     set_state_long(x, 0x0600_0000);
-    if x.u8(DisplacerBeast::PARENT) != 0 {
+    if x.u8(Enemy::CREATOR) != 0 {
         var::FROZEN.set(x.b, 1);
     }
     detach_from_host(x);

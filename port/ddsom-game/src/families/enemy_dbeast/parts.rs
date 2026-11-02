@@ -135,7 +135,7 @@ fn attached<R: Bench>(x: &mut Cx<'_, R>) {
         let d = x.u16(Obj::X).wrapping_sub(cam) as i16;
         if d <= 0x140 {
             x.add8(Enemy::SUB_STEP, 2);
-            let p = x.linked(DisplacerBeast::PARENT);
+            let p = x.linked(Enemy::CREATOR);
             if p.u8(x.b, Obj::VARIANT) != 1 {
                 x.set8(Enemy::ACTIVE, 1);
                 x.set32(f::IMMUNITY, 0);
@@ -196,7 +196,7 @@ fn arm<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     step(x);
-    let p = x.linked(DisplacerBeast::PARENT);
+    let p = x.linked(Enemy::CREATOR);
     if (p.u32(x.b, f::STATE) as i32) >= 0x0402_0c00 {
         x.set8(DisplacerBeast::LAYER, 3);
     }

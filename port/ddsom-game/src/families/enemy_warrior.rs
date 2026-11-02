@@ -38,7 +38,6 @@ impl Warrior {
 
 record! {
     impl Warrior {
-        host, set_host, HOST: u8 @ 0x46;
         anim_set, set_anim_set, ANIM_SET: u8 @ 0xa0;
         anim_num, set_anim_num, ANIM_NUM: u8 @ 0xa1;
         host_state, set_host_state, HOST_STATE: u8 @ 0xa2;
@@ -76,11 +75,11 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// The host (`+0x46`) if it is still active.
 fn live_host<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
-    let w = x.u16(Warrior::HOST);
+    let w = x.u16(Enemy::HOST);
     if (w as i16) >= 0 {
         return None;
     }
-    let h = x.linked(Warrior::HOST);
+    let h = x.linked(Enemy::HOST);
     if h.u8(x.b, Enemy::ACTIVE) == 0 {
         return None;
     }
@@ -88,7 +87,7 @@ fn live_host<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
 }
 
 fn host<R: Bench>(x: &mut Cx<'_, R>) -> Obj {
-    x.linked(Warrior::HOST)
+    x.linked(Enemy::HOST)
 }
 
 /// Starts animation `n` of the body set (0x776fe) or the hit set (0x77708) if it is not already

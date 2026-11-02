@@ -40,7 +40,6 @@ impl Scorpion {
 
 record! {
     impl Scorpion {
-        parent, set_parent, PARENT: u8 @ 0x5c;
         timer, set_timer, TIMER: u8 @ 0xa2;
         start_x, set_start_x, START_X: u16 @ 0xa4;
         move_kind, set_move_kind, MOVE: u8 @ 0xa6;
@@ -308,7 +307,7 @@ fn stance<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => free_stance(x),
         2 => {
-            let parent = x.linked(Scorpion::PARENT);
+            let parent = x.linked(Enemy::SPAWNER);
             if parent.u8(x.b, Enemy::STATE) == 4 {
                 return set_state_long(x, HELD);
             }

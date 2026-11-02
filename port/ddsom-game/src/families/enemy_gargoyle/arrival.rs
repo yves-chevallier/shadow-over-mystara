@@ -105,8 +105,8 @@ fn landed<R: Bench>(x: &mut Cx<'_, R>) {
                 shadow.set_u16(x.b, Obj::X, px);
                 let depth = x.u32(Obj::Y);
                 shadow.set_u32(x.b, Obj::Y, depth);
-                let n = shadow.u16(x.b, 0x12).wrapping_add(1);
-                shadow.set_u16(x.b, 0x12, n);
+                let n = shadow.u16(x.b, Enemy::Y_FRACTION).wrapping_add(1);
+                shadow.set_u16(x.b, Enemy::Y_FRACTION, n);
                 shadow.set_u16(x.b, Enemy::CREATOR, x.o.0 as u16);
                 x.set16(Obj::Z, 0x28);
             }

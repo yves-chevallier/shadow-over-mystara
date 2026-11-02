@@ -46,7 +46,7 @@ record! {
         passes, set_passes, PASSES: u8 @ 0xa3;
         shot_done, set_shot_done, SHOT_DONE: u8 @ 0xa5;
         shot, set_shot, SHOT: u32 @ 0xa6;
-        companion, set_companion, COMPANION: u8 @ 0xaa;
+        companion, set_companion, COMPANION: u16 @ 0xaa;
         exit_limit, set_exit_limit, EXIT_LIMIT: u16 @ 0xae;
         turn_z, set_turn_z, TURN_Z: u16 @ 0xb0;
         resume, set_resume, RESUME: u8 @ 0xb1;

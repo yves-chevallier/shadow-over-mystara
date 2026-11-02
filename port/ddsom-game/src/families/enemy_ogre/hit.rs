@@ -129,7 +129,7 @@ pub(crate) fn regroup<R: Bench>(x: &mut Cx<'_, R>) {
     }
     let table = if (x.u8(Obj::VARIANT) as i8) < 0 {
         0x10de2
-    } else if x.a5_u8(0x48) > 5 {
+    } else if var::LEVEL.get(x.b) > 5 {
         0x107e2
     } else {
         0x106e2

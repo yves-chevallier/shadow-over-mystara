@@ -5,10 +5,11 @@ use crate::families::cx::Bench;
 use super::*;
 use crate::objects::Obj;
 
-/// Jump through a word table: `base + word(base + index)` (addressing `(base,PC,Dn)`, opcode space).
-fn table_target<R: Bench>(x: &mut Cx<'_, R>, base: u32, index: u32) -> u32 {
-    let w = x.rom16(base.wrapping_add(index)) as i16 as i32;
-    (base as i32).wrapping_add(w) as u32
+/// Jump through the word table `name`: its address plus the word at `index` (addressing `(base,PC,Dn)`).
+fn table_target<R: Bench>(x: &mut Cx<'_, R>, name: &str, index: u32) -> u32 {
+    let t = tables::table(name);
+    let w = t.at16(x.b, index) as i16 as i32;
+    (t.rom as i32).wrapping_add(w) as u32
 }
 
 /// Executes the state stub at address `target` (those that the jump tables of this type designate).
@@ -25,41 +26,37 @@ fn stub<R: Bench>(x: &mut Cx<'_, R>, target: u32) {
     }
 }
 
-/// Draws `r = rand & 0xf`, reads byte `bytes[r]` then jumps through word table `words`.
-fn pick<R: Bench>(x: &mut Cx<'_, R>, bytes: u32, words: u32) {
+/// Draws `r = rand & 0xf`, reads byte `r` of the row `row` (16 bytes) of the table `bytes`, then jumps through the
+/// word table `words`.
+fn pick<R: Bench>(x: &mut Cx<'_, R>, bytes: &str, row: u32, words: &str) {
     let r = rand_and(x, 0xf);
-    let b = x.rom8(bytes + r) as u32;
+    let b = tables::table(bytes).at8(x.b, 0x10 * row + r) as u32;
     let target = table_target(x, words, b);
     stub(x, target);
 }
 
-/// 0x78fa2: shot when the player is very close (table 0x78fb8).
+/// 0x78fa2: shot when the player is very close.
 pub(super) fn point_blank<R: Bench>(x: &mut Cx<'_, R>) {
-    pick(x, 0x78fb8, 0x78fc8);
+    pick(x, "warmachine/point_blank_picks", 0, "warmachine/point_blank_jumps");
 }
 
 /// 0x78fca: shot at a target hit by the box (−0x10, 0x10, 8); three identical blocks according to `+0xaa`.
 pub(super) fn pick_by_phase<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = rand_and(x, 0xf);
-    let phase = x.u8(WarMachine::PHASE) as i8 as i32 as u32;
-    let block = table_target(x, 0x78fe4, phase.wrapping_mul(2));
-    // 0x78fea, 0x78ff0 and 0x78ff6 read the same table
-    let _ = block;
-    let b = x.rom8(0x79002 + r) as u32;
-    let target = table_target(x, 0x79012, b);
-    stub(x, target);
+    // the original jumps through the table 0x78fe4 by `+0xaa` to one of three blocks (0x78fea, 0x78ff0, 0x78ff6)
+    // that read the same tables: the jump is left out
+    pick(x, "warmachine/phase_picks", 0, "warmachine/phase_jumps");
 }
 
 /// 0x79014: decision after the shot box (0x78f30); `gate` = result of `ai_gate` (1 or 2).
 pub(super) fn near_decision<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
-    let bytes = if x.u8(Enemy::GROUP) == 0 {
-        0x7907e
+    let row = if x.u8(Enemy::GROUP) == 0 {
+        0
     } else if gate as u8 == 1 {
-        0x7908e
+        1
     } else {
-        0x7909e
+        2
     };
-    pick(x, bytes, 0x790ae);
+    pick(x, "warmachine/near_picks", row, "warmachine/near_jumps");
 }
 
 /// 0x790b4: decision after the wide box (0x78f4e): block chosen according to the draw, `+0xaa` and the profile.
@@ -68,17 +65,18 @@ pub(super) fn wide_decision<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     let d2 = (gate.wrapping_sub(1) as u16).wrapping_mul(2);
     let d1 = (x.u8(WarMachine::PHASE) as i8 as i16 as u16).wrapping_mul(4);
     let index = d2.wrapping_add(d1) as u32;
-    let words = if x.u8(Enemy::GROUP) == 0 { 0x790e6 } else { 0x790f2 };
+    let words = if x.u8(Enemy::GROUP) == 0 { "warmachine/wide_blocks_0" } else { "warmachine/wide_blocks_1" };
     let block = table_target(x, words, index);
-    let bytes = match block {
-        0x790fe | 0x79106 | 0x7910e | 0x79116 => 0x79158,
-        0x7911e | 0x79126 => 0x79168,
-        0x7912e | 0x79134 | 0x7913a | 0x79140 => 0x79178,
-        0x79146 | 0x7914c => 0x79188,
+    // the blocks the table designates (code addresses), each reading one row of `wide_picks`
+    let row = match block {
+        0x790fe | 0x79106 | 0x7910e | 0x79116 => 0,
+        0x7911e | 0x79126 => 1,
+        0x7912e | 0x79134 | 0x7913a | 0x79140 => 2,
+        0x79146 | 0x7914c => 3,
         _ => return,
     };
-    let b = x.rom8(bytes + r) as u32;
-    let target = table_target(x, 0x79198, b);
+    let b = tables::table("warmachine/wide_picks").at8(x.b, 0x10 * row + r) as u32;
+    let target = table_target(x, "warmachine/wide_jumps", b);
     stub(x, target);
 }
 
@@ -106,15 +104,15 @@ pub(super) fn gate_wide<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
 }
 
 /// 0x78e74 / 0x78e80: charge delay `+0x71` from the difficulty.
-pub(super) fn charge_delay<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
+pub(super) fn charge_delay<R: Bench>(x: &mut Cx<'_, R>, table: &str) {
     let level = var::RANK.get(x.b) as u32;
-    let v = x.rom8(table + level);
+    let v = tables::table(table).at8(x.b, level);
     x.set8(Enemy::AI_STANCE, v);
 }
 
 /// 0x78ecc / 0x78ede: walk delay `+0x6b` drawn from a row.
-pub(super) fn wander_delay<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
+pub(super) fn wander_delay<R: Bench>(x: &mut Cx<'_, R>, table: &str) {
     let r = rand_and(x, 0x1f);
-    let v = x.rom8(table + r);
+    let v = tables::table(table).at8(x.b, r);
     x.set8(Enemy::AI_WANDER, v);
 }

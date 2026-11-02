@@ -194,7 +194,7 @@ fn volley<R: Bench>(x: &mut Cx<'_, R>) {
             let level = (var::RANK.get(x.b) & 0x1e) * 2;
             let players = var::PLAYERS_ALIVE.get(x.b);
             let rank = if players == 0 { 0 } else { players - 1 } as u16;
-            let v = x.rom8(0x78856 + (level + rank) as u32);
+            let v = tables::table("warmachine/shot_counts").at8(x.b, (level + rank) as u32);
             x.set8(WarMachine::COUNT, v);
         }
         4 => {

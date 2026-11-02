@@ -10,7 +10,7 @@ use crate::objects::Current;
 use crate::objects::Obj;
 
 /// Table of the ogre's climbs following its arm, indexed by the animation key (longs).
-const RISE: u32 = 0x713e8;
+const RISE: &str = "ogre/rise_steps";
 
 pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
@@ -199,7 +199,7 @@ fn fly_loop<R: Bench>(x: &mut Cx<'_, R>) {
         x.set8(Ogre::INVULNERABLE, 1);
         x.set_bit(Enemy::DISPLAY, 1, true);
         let arm = x.linked(Ogre::ARM);
-        arm.set_u8(x.b, 0x58, 1);
+        arm.set_u8(x.b, OgreArm::RAISE, 1);
         return;
     }
     lib::push_players(x);
@@ -375,7 +375,7 @@ fn arm_swing<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(Ogre::TIMER2, 0x48);
             } else {
                 let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
-                let d = x.prog32(RISE + idx);
+                let d = tables::table(RISE).at32(x.b, idx);
                 x.add32(Obj::Z, d);
             }
             lib::step(x);
@@ -388,7 +388,7 @@ fn arm_swing<R: Bench>(x: &mut Cx<'_, R>) {
             if !count_down(x, Ogre::TIMER) {
                 x.add8(f::SUB3, 2);
                 let arm = x.linked(Ogre::ARM);
-                arm.set_u8(x.b, 0x58, 1);
+                arm.set_u8(x.b, OgreArm::RAISE, 1);
             }
         }
         6 => {
@@ -399,7 +399,7 @@ fn arm_swing<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(Enemy::ANIM_END_BYTE) != 0 {
                 x.add8(f::SUB3, 2);
                 let arm = x.linked(Ogre::ARM);
-                arm.set_u8(x.b, 0x59, 1);
+                arm.set_u8(x.b, OgreArm::SWING, 1);
             }
         }
         8 => {
@@ -408,7 +408,7 @@ fn arm_swing<R: Bench>(x: &mut Cx<'_, R>) {
             bob(x);
             lib::push_players(x);
             let arm = x.linked(Ogre::ARM);
-            if arm.u8(x.b, Enemy::ACTIVE) == 0 || (arm.u8(x.b, 0x5a) != 0 && x.u8(f::KEY_FRAME) == 4) {
+            if arm.u8(x.b, Enemy::ACTIVE) == 0 || (arm.u8(x.b, OgreArm::DONE) != 0 && x.u8(f::KEY_FRAME) == 4) {
                 x.add8(f::SUB3, 2);
             }
         }

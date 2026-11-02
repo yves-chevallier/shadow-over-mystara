@@ -38,25 +38,25 @@ fn switch_flight_set<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn charge_a<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
-    let v = x.rom8(0x719f6 + level);
+    let v = tables::table("ogre/charge_a").at8(x.b, level);
     x.set8(Enemy::AI_STANCE, v);
 }
 
 fn charge_b<R: Bench>(x: &mut Cx<'_, R>) {
     let level = var::RANK.get(x.b) as u32;
-    let v = x.rom8(0x71a16 + level);
+    let v = tables::table("ogre/charge_b").at8(x.b, level);
     x.set8(Enemy::AI_STANCE, v);
 }
 
 fn wander_a<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
-    let v = x.rom8(0x71a5a + r);
+    let v = tables::table("ogre/wander_a").at8(x.b, r);
     x.set8(Enemy::AI_WANDER, v);
 }
 
 fn wander_b<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0x1f);
-    let v = x.rom8(0x71a7a + r);
+    let v = tables::table("ogre/wander_b").at8(x.b, r);
     x.set8(Enemy::AI_WANDER, v);
 }
 
@@ -218,15 +218,15 @@ fn near_box<R: Bench>(x: &mut Cx<'_, R>, which: u32) -> u32 {
 
 /// 0x71ad4: circle around the player (the choice table has only one entry).
 fn pick_a<R: Bench>(x: &mut Cx<'_, R>) {
-    let r = rand_and(x, 0xf);
-    let _ = x.rom8(0x71aea + r);
+    // the move drawn in the table 0x71aea is not looked at: only the random draw remains
+    rand_and(x, 0xf);
     go::leap(x);
 }
 
-/// 0x71afc: chooses a move from series 0x71b34 (side dive, attack 6 or 8).
+/// 0x71afc: chooses a move from the series `side_moves` (side dive, attack 6 or 8).
 fn pick_a2<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
-    let v = x.rom8(0x71b34 + r);
+    let v = tables::table("ogre/side_moves").at8(x.b, r);
     match v {
         0 => go::dive_side(x),
         2 => strike_6_quiet(x),
@@ -241,13 +241,13 @@ fn strike_6_quiet<R: Bench>(x: &mut Cx<'_, R>) {
     set_state_long(x, 0x0204_0600);
 }
 
-/// 0x71b4a: move of the series in front, by threshold `+0xaa` (tables 0x71ba4, 0x71bb4, 0x71bc4).
+/// 0x71b4a: move of the series in front, by threshold `+0xaa` (rows of `front_moves`).
 fn pick_b<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(Ogre::PHASE).min(2) as usize;
     // decision 1 (target in front): one table per threshold; decision 2: always the first
-    let table = if gate == 1 { [0x71ba4u32, 0x71bb4, 0x71bc4][phase] } else { 0x71ba4 };
-    let v = x.rom8(table + r);
+    let row = if gate == 1 { 0x10 * phase as u32 } else { 0 };
+    let v = tables::table("ogre/front_moves").at8(x.b, row + r);
     match v {
         0 => go::strike_0(x),
         2 => go::dive_side(x),
@@ -259,8 +259,7 @@ fn pick_b<R: Bench>(x: &mut Cx<'_, R>, gate: u32) {
 fn pick_c<R: Bench>(x: &mut Cx<'_, R>) {
     let r = rand_and(x, 0xf);
     let phase = x.u8(Ogre::PHASE).min(2) as usize;
-    let table = [0x71c32u32, 0x71c42, 0x71c52][phase];
-    let v = x.rom8(table + r);
+    let v = tables::table("ogre/back_moves").at8(x.b, 0x10 * phase as u32 + r);
     match v {
         0 => go::dive_side(x),
         2 => go::strike_2(x),
@@ -417,7 +416,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::AX, vy as u16);
             x.move_x();
             let arm = x.linked(Ogre::ARM);
-            arm.set_u8(x.b, 0x58, 1);
+            arm.set_u8(x.b, OgreArm::RAISE, 1);
             mv(x, 7);
         }
         8 => {

@@ -46,8 +46,6 @@ record! {
     impl DisplacerBeast {
         /// Display priority.
         layer, set_layer, LAYER: u8 @ 0x3b;
-        /// Parent (word, RAM address) and target (word, player).
-        parent, set_parent, PARENT: u8 @ 0x42;
         /// Timer of the current step (byte or word).
         timer, set_timer, TIMER: u8 @ 0xa0;
         cur_anim, set_cur_anim, CUR_ANIM: u8 @ 0xa2;
@@ -174,10 +172,10 @@ fn set_state_long<R: Bench>(x: &mut Cx<'_, R>, v: u32) {
 
 /// The parent (`+0x42`) or `None` if there is none.
 fn parent<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
-    if x.u16(DisplacerBeast::PARENT) == 0 {
+    if x.u16(Enemy::CREATOR) == 0 {
         return None;
     }
-    Some(x.linked(DisplacerBeast::PARENT))
+    Some(x.linked(Enemy::CREATOR))
 }
 
 /// 0x725c8: part without a parent, it becomes a standing beast again and plays animation 8.
@@ -195,7 +193,7 @@ fn camera<R: Bench>(x: &mut Cx<'_, R>) -> (u16, u16) {
 /// left).
 fn follow_offset<R: Bench>(x: &mut Cx<'_, R>) {
     const OFFSETS: u32 = 0x7202a;
-    let p = x.linked(DisplacerBeast::PARENT);
+    let p = x.linked(Enemy::CREATOR);
     let (px, py) = (p.u16(x.b, Obj::X), p.u16(x.b, Obj::Y));
     x.set16(Obj::X, px);
     x.set16(Obj::Y, py);

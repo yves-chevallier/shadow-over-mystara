@@ -55,8 +55,8 @@ fn first<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::SUB2) == 0 {
         let mut dismissed = true;
         if x.u8(Gargoyle::HIT_FLAGS) & 1 != 0 {
-            let victim = x.linked(Gargoyle::VICTIM);
-            let code = victim.u8(x.b, 0x10d) as i8;
+            let victim = x.linked(Enemy::HOLDER);
+            let code = victim.u8(x.b, crate::player::Player::WEAPON_A) as i8;
             dismissed = code == 0xd || (0x10..=0x13).contains(&code);
             if !dismissed {
                 return resume(x);

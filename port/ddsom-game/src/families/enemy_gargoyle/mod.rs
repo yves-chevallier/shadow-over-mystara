@@ -41,7 +41,6 @@ impl Gargoyle {
 
 record! {
     impl Gargoyle {
-        victim, set_victim, VICTIM: u8 @ 0x54;
         hit_flags, set_hit_flags, HIT_FLAGS: u8 @ 0x57;
         look, set_look, LOOK: u8 @ 0xa0;
         look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa1;
@@ -136,10 +135,10 @@ fn face_target<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::FLIP, flip as u8);
 }
 
-/// 0x65a30: vertical undulation in flight according to the animation key (table of longs `0x65a5a`).
+/// 0x65a30: vertical undulation in flight according to the animation key (table of longs `bob_steps`).
 fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
-    let mut d = x.prog32(0x65a5a + idx) as i32;
+    let mut d = tables::table("gargoyle/bob_steps").at32(x.b, idx) as i32;
     if (x.u16(Gargoyle::TIMER2) as i16) <= 0x24 {
         d = d.wrapping_neg();
     }
@@ -149,10 +148,10 @@ fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     }
 }
 
-/// 0x65a72: progressive climb (table of longs `0x65a86`).
+/// 0x65a72: progressive climb (table of longs `rise_steps`).
 fn rise<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = (x.u8(f::KEY_FRAME) as u32) << 2;
-    let d = x.prog32(0x65a86 + idx);
+    let d = tables::table("gargoyle/rise_steps").at32(x.b, idx);
     x.add32(Obj::Z, d);
 }
 
@@ -241,7 +240,7 @@ mod go {
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
-    x.set8(0xab, 2);
+    x.set8(Enemy::HP_TIERS, 2);
     x.set8(f::BOX_SET, 0x14);
     lib::initial_hp(x);
     lib::spread_index(x);
@@ -318,7 +317,7 @@ fn cooldown<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     if !count_down(x, Gargoyle::COOLDOWN) {
-        x.set8(0x58, 0);
+        x.set8(Enemy::HIT_LOCK, 0);
     }
 }
 

@@ -41,18 +41,42 @@ impl Ogre {
 
 record! {
     impl Ogre {
-        arm_of, set_arm_of, ARM_OF: u8 @ 0x46;
         look, set_look, LOOK: u8 @ 0xa0;
         look_prev, set_look_prev, LOOK_PREV: u8 @ 0xa1;
         saved_state, set_saved_state, SAVED_STATE: u32 @ 0xa2;
+        /// Rounds of wait left before a new arrival (byte of `SAVED_STATE`) (h).
+        wait_rounds, set_wait_rounds, WAIT_ROUNDS: u8 @ 0xa4;
         timer, set_timer, TIMER: u16 @ 0xa6;
         timer2, set_timer2, TIMER2: u16 @ 0xa8;
         phase, set_phase, PHASE: u8 @ 0xaa;
         invulnerable, set_invulnerable, INVULNERABLE: u8 @ 0xad;
-        arm, set_arm, ARM: u8 @ 0xb0;
+        arm, set_arm, ARM: u16 @ 0xb0;
+        /// Step to resume after a wait (low byte of `ARM`) (h).
+        resume_step, set_resume_step, RESUME_STEP: u8 @ 0xb1;
         side_turn, set_side_turn, SIDE_TURN: u8 @ 0xb2;
         flash, set_flash, FLASH: u8 @ 0xb3;
         goal_x, set_goal_x, GOAL_X: u16 @ 0xbc;
+    }
+}
+
+/// The arm of the ogre (object `Ogre::ARM`): the signals that the ogre sends it (h).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct OgreArm(pub Obj);
+
+impl OgreArm {
+    pub fn at(self, off: u32) -> u32 {
+        self.0.at(off)
+    }
+}
+
+record! {
+    impl OgreArm {
+        /// Set when the ogre rises or lands: the arm follows (h).
+        raise, set_raise, RAISE: u8 @ 0x58;
+        /// Set at the end of the wind-up of a strike: the arm swings (h).
+        swing, set_swing, SWING: u8 @ 0x59;
+        /// Set by the arm at the end of its swing (h).
+        done, set_done, DONE: u8 @ 0x5a;
     }
 }
 use crate::objects::pools;
@@ -90,7 +114,7 @@ fn arm_dies_with_ogre<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(Obj::VARIANT) as i8) >= 0 || x.u16(f::STATE) == 0x0406 {
         return;
     }
-    let owner = x.linked(Ogre::ARM_OF);
+    let owner = x.linked(Enemy::HOST);
     if (owner.u16(x.b, f::HP) as i16) > 0 {
         return;
     }
@@ -159,10 +183,10 @@ fn nobody_left<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     true
 }
 
-/// 0x71d98: vertical undulation in flight according to the animation key (table of longs `0x71dc6`).
+/// 0x71d98: vertical undulation in flight according to the animation key (table of longs `bob_steps`).
 fn bob<R: Bench>(x: &mut Cx<'_, R>) {
     let idx = ((x.u8(f::KEY_FRAME) & 0x7f) as u32) << 2;
-    let mut d = x.prog32(0x71dc6 + idx) as i32;
+    let mut d = tables::table("ogre/bob_steps").at32(x.b, idx) as i32;
     if (x.u16(Ogre::TIMER2) as i16) <= 0x24 {
         d = d.wrapping_neg();
     }
@@ -268,7 +292,7 @@ fn initial_hp<R: Bench>(x: &mut Cx<'_, R>) {
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
-    x.set8(0xab, 2);
+    x.set8(Enemy::HP_TIERS, 2);
     x.set8(f::BOX_SET, 0x26);
     initial_hp(x);
     lib::spread_index(x);

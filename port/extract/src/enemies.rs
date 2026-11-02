@@ -222,6 +222,44 @@ fn families(rom: &Program, s: &mut Vec<Spec>, bounded: &mut Bounded) {
     rank(s, "hellhound/follow_moves", 0x637fe);
     s.push(prog("hellhound/turn_mask", 0x61a00, "x32", &[], 1));
     upto(s, "hellhound/flame_script", 0x62284, false, "u8*2", 0x20);
+    // ---- gargoyle (type 8) ----
+    s.push(prog("gargoyle/charge_a", 0x65654, "u8", &[], 32));
+    s.push(prog("gargoyle/charge_b", 0x65674, "u8", &[], 32));
+    s.push(prog("gargoyle/wander_a", 0x656b8, "u8", &[], 32));
+    s.push(prog("gargoyle/wander_b", 0x656d8, "u8", &[], 32));
+    s.push(prog("gargoyle/near_moves", 0x65792, "u8*16", &[], 3));
+    s.push(prog("gargoyle/side_moves", 0x65822, "u8*16", &[], 2));
+    s.push(prog("gargoyle/fallback_moves", 0x658a2, "u8*16", &[], 3));
+    upto(s, "gargoyle/bob_steps", 0x65a5a, true, "i32", 0x40);
+    upto(s, "gargoyle/rise_steps", 0x65a86, true, "i32", 0x40);
+    upto(s, "gargoyle/ride_times", 0x650ba, true, "u16", 0x10);
+    // ---- ogre (type 18) ----
+    s.push(prog("ogre/charge_a", 0x719f6, "u8", &[], 32));
+    s.push(prog("ogre/charge_b", 0x71a16, "u8", &[], 32));
+    s.push(prog("ogre/wander_a", 0x71a5a, "u8", &[], 32));
+    s.push(prog("ogre/wander_b", 0x71a7a, "u8", &[], 32));
+    s.push(prog("ogre/side_moves", 0x71b34, "u8", &[], 16));
+    s.push(prog("ogre/front_moves", 0x71ba4, "u8*16", &[], 3));
+    s.push(prog("ogre/back_moves", 0x71c32, "u8*16", &[], 3));
+    upto(s, "ogre/bob_steps", 0x71dc6, true, "i32", 0x80);
+    upto(s, "ogre/rise_steps", 0x713e8, true, "i32", 0x40);
+    // ---- war machine (type 27) ----
+    s.push(prog("warmachine/charge_a", 0x78e8c, "u8", &[], 32));
+    s.push(prog("warmachine/charge_b", 0x78eac, "u8", &[], 32));
+    s.push(prog("warmachine/wander_a", 0x78ef0, "u8", &[], 32));
+    s.push(prog("warmachine/wander_b", 0x78f10, "u8", &[], 32));
+    s.push(prog("warmachine/shot_counts", 0x78856, "u8", &[], 64));
+    // decisions: bytes drawn by 16 (even offsets), then words relative to their table (jumps to code)
+    s.push(prog("warmachine/point_blank_picks", 0x78fb8, "u8*16", &[], 1));
+    upto(s, "warmachine/point_blank_jumps", 0x78fc8, true, "i16", 0x20);
+    s.push(prog("warmachine/phase_picks", 0x79002, "u8*16", &[], 1));
+    upto(s, "warmachine/phase_jumps", 0x79012, true, "i16", 0x20);
+    s.push(prog("warmachine/near_picks", 0x7907e, "u8*16", &[], 3));
+    upto(s, "warmachine/near_jumps", 0x790ae, true, "i16", 0x20);
+    s.push(prog("warmachine/wide_blocks_0", 0x790e6, "i16", &[], 6));
+    s.push(prog("warmachine/wide_blocks_1", 0x790f2, "i16", &[], 6));
+    s.push(prog("warmachine/wide_picks", 0x79158, "u8*16", &[], 4));
+    upto(s, "warmachine/wide_jumps", 0x79198, true, "i16", 0x20);
 }
 
 /// A table of `count` addresses of tables by difficulty level (data space), and the tables it points to, named

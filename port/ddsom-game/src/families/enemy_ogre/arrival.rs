@@ -223,15 +223,15 @@ fn waiting_out<R: Bench>(x: &mut Cx<'_, R>) {
     }
     set_state_long(x, 0x0202_0000);
     if rand_and(x, 1) != 0 {
-        let m = x.u8(0xa4).wrapping_sub(1);
-        x.set8(0xa4, m);
+        let m = x.u8(Ogre::WAIT_ROUNDS).wrapping_sub(1);
+        x.set8(Ogre::WAIT_ROUNDS, m);
         if (m as i8) >= 0 {
             return;
         }
-        x.set8(0xa4, 2);
+        x.set8(Ogre::WAIT_ROUNDS, 2);
     }
     set_state_long(x, 0x0200_0000);
-    let back = x.u8(0xb1);
+    let back = x.u8(Ogre::RESUME_STEP);
     x.set8(f::SUB2, back);
 }
 
