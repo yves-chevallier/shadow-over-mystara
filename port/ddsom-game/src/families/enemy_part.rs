@@ -208,9 +208,9 @@ mod tentacle {
         }
         x.set8(0x33, 0);
         if x.u8(2) == TROLL {
-            lib::sound(x, 0xe50fe);
+            lib::sound(x, crate::sound::CMD_311_411_B);
         } else {
-            lib::sound(x, 0xe4e5a);
+            lib::sound(x, crate::sound::CMD_311_411);
         }
     }
 
@@ -256,7 +256,7 @@ mod tentacle {
                 x.set16(0xa4, 0x168);
                 start(x, MID, 2);
                 if var::GAME_ON.get(x.b) != 0 {
-                    lib::sound(x, 0xe525a);
+                    lib::sound(x, crate::sound::CMD_377_377);
                 }
             }
             4 => {
@@ -308,8 +308,8 @@ mod tentacle {
                 x.set16(0xa4, 0x168);
                 start(x, MID, 10);
                 crate::families::eshl_creators::pair_9(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
-                lib::sound(x, 0xe4fb6);
-                lib::sound(x, 0xe4e5a);
+                lib::sound(x, crate::sound::CMD_379);
+                lib::sound(x, crate::sound::CMD_311_411);
             }
             4 => {
                 let n = (x.u16(0xa4) as i16).wrapping_sub(1);

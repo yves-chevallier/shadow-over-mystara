@@ -188,7 +188,7 @@ fn get_up<R: Bench>(x: &mut Cx<'_, R>) {
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
-            lib::sound(x, 0xe5416);
+            lib::sound(x, crate::sound::CMD_390);
             x.set_a5_u8(0x42, 1);
             x.set_a5_u8(0x50, 0);
             crate::mem::wr16(x.b, 0xff2a84, 0x0f00);
@@ -196,7 +196,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             set_abs8(x, 0xff2a86, bar);
             lib::drop_rewards(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
-            lib::sound(x, 0xe3b6c);
+            lib::sound(x, crate::sound::CMD_FF);
             lib::flash_and_shake(x);
             x.add8(f::SUB2, 2);
             x.set8(0, 2);

@@ -18,6 +18,7 @@ pub mod startup;
 pub mod diag;
 pub mod dispatch;
 pub mod credits_screen;
+pub mod data;
 pub mod effects_aids;
 pub mod eeprom;
 pub mod events;
@@ -40,6 +41,7 @@ pub mod placement;
 pub mod player;
 pub mod popups;
 pub mod ram;
+pub mod record;
 pub mod rng;
 pub mod no68k;
 pub mod scene;
@@ -300,8 +302,22 @@ pub fn refuse_hybrid() {
 /// Game without a 68000: Rust functions run by the kernel frame loop (`no68k`). The machine's `Cpu` is not used; an
 /// address without a native stops the game with a diagnostic.
 pub fn install_no_68k(m: &mut cps2::Machine) {
+    install_data(m);
     cap_steps(m);
     no68k::install(m);
+}
+
+/// The game data must be installed before the game runs (`ddsom_data::install`): the application loads them from the
+/// assets or extracts them from the ROMs. The tools extract them from the machine's program when none are installed
+/// (machines loaded from the ROMs).
+pub fn install_data(m: &cps2::Machine) {
+    #[cfg(feature = "tools")]
+    ddsom_data::install_with(|| {
+        let program = extract::Program::from_words(m.bus.rom.to_vec(), m.bus.rom_dec.to_vec());
+        extract::to_data_from(&program).expect("game data: extraction from the machine's program")
+    });
+    #[cfg(not(feature = "tools"))]
+    let _ = (m, data::data());
 }
 
 #[cfg(test)]

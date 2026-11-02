@@ -614,6 +614,8 @@ fn patches() -> Vec<cps2::Patch> {
 
 /// Validation reference machine: original code only, with the same step cap as `install`.
 pub fn install_reference(m: &mut cps2::Machine) {
+    // the natives compared with the original on this machine (fuzz, coverage) read the game data
+    crate::install_data(m);
     ddsom_rc::install(m);
     m.idle = Some(idle);
     crate::cap_steps(m);

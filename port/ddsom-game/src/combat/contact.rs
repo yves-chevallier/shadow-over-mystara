@@ -98,7 +98,7 @@ pub(super) fn parry(w: &mut World, p: Obj, other: Obj) {
     w.set_bit(p, f::HIT_MARK, 5);
     w.set_bit(other, f::HIT_FLAGS, 5);
     w.spark(Spark::Linked, p, other, 0);
-    crate::sound::play(w.b, 0xe75b0, p);
+    crate::sound::play(w.b, crate::sound::CMD_128_228, p);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -229,7 +229,7 @@ pub(super) fn enemy_hits_player(w: &mut World, p: Obj, e: Obj) {
         }
     }
     w.spark(Spark::Between { owner_first: true }, p, e, 2);
-    crate::sound::play_with(w.b, 0xec046, crate::sound::Source { object: Some(p), a1: Some(e.0), d4: None });
+    crate::sound::play_with(w.b, crate::sound::CONTACT_ENEMY, crate::sound::Source { object: Some(p), a1: Some(e.0), d4: None });
 }
 
 /// 0x2756c: an enemy shot hits a player; certain equipment or states cancel it.
@@ -267,7 +267,7 @@ pub(super) fn enemy_shot_hits_player(w: &mut World, p: Obj, s: Obj) {
     p.set_u8(w.b, f::ACTION, action);
     player_loses_hp(w, p, s);
     w.spark(Spark::Between { owner_first: true }, p, s, 5);
-    crate::sound::play_with(w.b, 0xec200, crate::sound::Source { object: Some(p), a1: Some(s.0), d4: None });
+    crate::sound::play_with(w.b, crate::sound::CONTACT_OBJECT, crate::sound::Source { object: Some(p), a1: Some(s.0), d4: None });
 }
 
 /// 0x276e0: removes HP from the player (damage from 0x4002 minus armour); at 0 HP, one player

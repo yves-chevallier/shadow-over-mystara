@@ -28,7 +28,7 @@ type Handler = fn(&mut Ctx, Player);
 
 /// Identifiers (original addresses) of the routines reached (sounds).
 mod rom {
-    pub const INTRO_ACTION: u32 = 0xe1330;
+    pub const INTRO_ACTION: crate::sound::Sound = crate::sound::CMD_20;
 }
 
 /// Code tables.

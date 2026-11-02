@@ -73,7 +73,7 @@ fn end_shot<'a, R: Bench>(x: &mut Cx<'a, R>, to: fn(&mut Cx<'a, R>)) {
 fn step_with_spark<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     if !lib::step(x) {
         if key_bit0(x) {
-            lib::sound(x, 0xe5e2a);
+            lib::sound(x, crate::sound::CMD_68_68);
         }
         return false;
     }
@@ -86,7 +86,7 @@ fn strike_0<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            lib::sound(x, 0xe5e2a);
+            lib::sound(x, crate::sound::CMD_68_68);
             strike_anim(x, 0x10, 0);
         }
         2 => {
@@ -119,7 +119,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(0x7, 2);
             x.set16(TIMER, 0x14);
             x.set16(0x16, 0);
-            lib::sound(x, 0xe5e2a);
+            lib::sound(x, crate::sound::CMD_68_68);
             let a = x.u8(Obj::SPEED_INDEX) ^ 0x10;
             x.set8(Obj::SPEED_INDEX, a);
             speed(x, 0x35);
@@ -269,7 +269,7 @@ fn hop_back<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(0x7, 2);
             x.set16(0x16, 0);
-            lib::sound(x, 0xe5e2a);
+            lib::sound(x, crate::sound::CMD_68_68);
             strike(x, 7);
         }
         4 => {
@@ -344,7 +344,7 @@ fn ball<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(TIMER, 0xa);
             let shot = x.linked(CHILD);
             shot.set_u8(x.b, 0x58, 1);
-            lib::sound(x, 0xe5ffa);
+            lib::sound(x, crate::sound::CMD_6C_6C);
             step_only(x);
         }
         6 => {
@@ -401,7 +401,7 @@ fn beam<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(TIMER, 0x5a);
             let shot = x.linked(CHILD);
             shot.set_u8(x.b, 0x58, 1);
-            lib::sound(x, 0xe606e);
+            lib::sound(x, crate::sound::CMD_6D_6D);
             step_only(x);
         }
         6 => {
@@ -479,7 +479,7 @@ fn spawn_blast<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(SPAWNED) as i8) > 0 {
         return;
     }
-    lib::sound(x, 0xe6156);
+    lib::sound(x, crate::sound::CMD_6F_6F);
     x.set8(SPAWNED, 0);
     let level = (var::RANK.get(x.b) & 0x1e) as u32 * 2;
     let players = var::PLAYERS_ALIVE.get(x.b) as u32;
@@ -508,7 +508,7 @@ fn shockwave<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            lib::sound(x, 0xe5e9e);
+            lib::sound(x, crate::sound::CMD_69_69);
             set_abs8(x, 0xff8043, 0x7f);
             sub8(x, BUDGET_C, 1);
             x.set16(TIMER, 6);
@@ -609,7 +609,7 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(0x7) {
         0 => {
             x.add8(0x7, 2);
-            lib::sound(x, 0xe60e2);
+            lib::sound(x, crate::sound::CMD_6E_6E);
             strike_anim(x, 0x18, 0xd);
         }
         2 => {
@@ -627,7 +627,7 @@ fn teleport<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(0x7, 2);
             place_after_teleport(x);
             x.set_bit(0x1, 1, false);
-            lib::sound(x, 0xecf10);
+            lib::sound(x, crate::sound::CMD_331);
             strike(x, 0xe);
         }
         6 => {
@@ -657,7 +657,7 @@ fn rain<R: Bench>(x: &mut Cx<'_, R>) {
             set_abs8(x, 0xff8043, 0x7f);
             sub8(x, BUDGET_E, 1);
             x.set16(TIMER, 0xa);
-            lib::sound(x, 0xe5e9e);
+            lib::sound(x, crate::sound::CMD_69_69);
             strike_anim(x, 0x19, 0xb);
         }
         2 => {
@@ -721,7 +721,7 @@ fn volley<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(COUNT, n);
             x.set16(TIMER, 0xe);
             dust(x);
-            lib::sound(x, 0xe5e9e);
+            lib::sound(x, crate::sound::CMD_69_69);
             strike_anim(x, 0x1a, 0xb);
         }
         2 => {

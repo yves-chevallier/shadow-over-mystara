@@ -26,7 +26,7 @@ use crate::player::external as ext;
 /// Identifiers (original addresses) of the routines reached: player effects and sounds of the fighter.
 mod rom {
     /// Sounds.
-    pub const SOUND_SPIN_B: u32 = 0xe828c;
+    pub const SOUND_SPIN_B: crate::sound::Sound = crate::sound::CMD_140_240;
 }
 
 /// Fighter table (ROM data): jump speeds (four words per jump type).

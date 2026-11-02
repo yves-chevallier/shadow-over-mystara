@@ -32,7 +32,7 @@ mod ice {
     const ANIMS: u32 = 0x1b6350;
     const OFFSETS: u32 = 0x4bd0e;
     const DELAYS: u32 = 0x4bd98;
-    const SFX: u32 = 0xe87f4;
+    const SFX: crate::sound::Sound = crate::sound::CMD_165_265;
     const SCATTER_X: u32 = 0x4c016;
     const SCATTER_Y: u32 = 0x4c036;
     const SPREAD: u32 = 0x4c0ae;
@@ -388,7 +388,7 @@ mod banish {
     const ALT_BANK: u32 = 0x4c3a4;
     const FRAMES_A: u32 = 0x4c3a8;
     const FRAMES_B: u32 = 0x4c3d6;
-    const SFX: u32 = 0xe9e9e;
+    const SFX: crate::sound::Sound = crate::sound::CMD_18E;
     const POWER_TABLE: u32 = 0x1042e2;
     const POWER_TABLE_BOSS: u32 = 0x104300;
 

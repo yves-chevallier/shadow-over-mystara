@@ -139,8 +139,8 @@ fn velocity(speed: u16) -> u32 {
 /// Variant 0 (0xce066): initializes two routines (0x3525c, 0x1ac86), then, from time to time (rng
 /// and frame parity), toggles `+0x43` and launches one of two sound/video routines.
 fn title_blink<R: Bench>(x: &mut Cx<'_, R>) {
-    const ON: u32 = 0xea22c;
-    const OFF: u32 = 0xea1d0;
+    const ON: crate::sound::Sound = crate::sound::CMD_1FB;
+    const OFF: crate::sound::Sound = crate::sound::CMD_1FD;
     const FLASH: u32 = 0x4ba;
     match x.u8(0x4) {
         0 => {

@@ -23,10 +23,10 @@ mod storm {
     const ANIMS: u32 = 0x1bbe14;
     const OFFSETS_A: u32 = 0x4e8ee;
     const OFFSETS_B: u32 = 0x4eae6;
-    const SFX_RUMBLE: u32 = 0xe996c;
-    const SFX_BOLT: u32 = 0xe99c8;
-    const SFX_BEGIN: u32 = 0xe9a32;
-    const SFX_END: u32 = 0xea032;
+    const SFX_RUMBLE: crate::sound::Sound = crate::sound::CMD_188;
+    const SFX_BOLT: crate::sound::Sound = crate::sound::CMD_189;
+    const SFX_BEGIN: crate::sound::Sound = crate::sound::CMD_18A;
+    const SFX_END: crate::sound::Sound = crate::sound::CMD_194;
     const KIND: u8 = 0x1e;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -305,8 +305,8 @@ mod whirl {
     const FLIPS: u32 = 0x4eda6;
     const SPAWN_TABLE: u32 = 0x4eebe;
     const POWER: u32 = 0x4efea;
-    const SFX_START: u32 = 0xe9d3e;
-    const SFX_LOOP: u32 = 0xe9da8;
+    const SFX_START: crate::sound::Sound = crate::sound::CMD_187;
+    const SFX_LOOP: crate::sound::Sound = crate::sound::CMD_173_C;
     const KIND: u8 = 0x1f;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {

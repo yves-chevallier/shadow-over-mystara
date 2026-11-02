@@ -211,8 +211,8 @@ mod flash {
     const CORNERS: u32 = 0x4ceb2;
     const FLIPS: u32 = 0x4ceae;
     const DELAYS: u32 = 0x4cec2;
-    const SFX_BODY: u32 = 0xe981e;
-    const SFX_CORNER: u32 = 0xe9888;
+    const SFX_BODY: crate::sound::Sound = crate::sound::CMD_182;
+    const SFX_CORNER: crate::sound::Sound = crate::sound::CMD_183_283;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;

@@ -184,14 +184,14 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match i {
         0 => {
             x.add8(f::SUB2, 2);
-            lib::sound(x, 0xe43ae);
+            lib::sound(x, crate::sound::CMD_344_344);
             x.set8(0, 2);
             let stun = x.u8(STUN);
             x.set8(f::FREEZE, stun);
             x.set_a5_u8(0x42, 1);
             x.set_a5_u8(0x50, 0);
             lib::flash_and_shake(x);
-            lib::sound(x, 0xe3b6c);
+            lib::sound(x, crate::sound::CMD_FF);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
             lib::drop_rewards(x);
             x.set16(0x16, 0);
@@ -222,7 +222,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             } else {
                 aids::burst_front(x);
             }
-            lib::sound(x, 0xec9e8);
+            lib::sound(x, crate::sound::CMD_35D);
             body(x, 0xb);
         }
         4 => {

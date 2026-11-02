@@ -101,7 +101,7 @@ fn green_enter_b<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x1a, 0);
     set_anim(x, 0, 4);
     crate::families::effects_creators::scenery_3(x.b, x.o);
-    lib::sound(x, 0xe508a);
+    lib::sound(x, crate::sound::CMD_38F_48F);
 }
 
 fn green_descend<R: Bench>(x: &mut Cx<'_, R>) {
@@ -150,7 +150,7 @@ fn announce<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(BUBBLES, 4);
     x.set8(BUBBLE_TICK, 0);
     open_list(x, 0x14de);
-    lib::sound(x, 0xe50fe);
+    lib::sound(x, crate::sound::CMD_311_411_B);
 }
 
 /// 0x8fe68: one more bubble every 15 to 78 frames.
@@ -164,7 +164,7 @@ fn bubble_tick<R: Bench>(x: &mut Cx<'_, R>) {
         let r = (random(x) & 0x3f) as u8 + 0xf;
         x.set8(BUBBLE_TICK, r);
         sub8(x, BUBBLES, 1);
-        lib::sound(x, 0xead04);
+        lib::sound(x, crate::sound::CMD_5F);
     }
 }
 
@@ -174,7 +174,7 @@ fn bubbles<R: Bench>(x: &mut Cx<'_, R>) {
         t if t < 0x64 => { crate::families::effects_creators::scenery_10(x.b, x.o); }
         0x64 => {
             lib::shake_58(x, 0xa0);
-            lib::sound(x, 0xe50fe);
+            lib::sound(x, crate::sound::CMD_311_411_B);
             crate::families::effects_creators::scenery_10(x.b, x.o);
         }
         _ => {}
@@ -228,7 +228,7 @@ fn fly<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.add8(f::SUB2, 2);
     x.set_a5_u8(0x2e, 6);
-    lib::sound(x, 0xe50fe);
+    lib::sound(x, crate::sound::CMD_311_411_B);
     x.set32(0x14, 0);
     x.set32(0x18, 0);
     x.set32(0x1c, 0);

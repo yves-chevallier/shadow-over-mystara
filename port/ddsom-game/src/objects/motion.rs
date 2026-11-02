@@ -11,7 +11,7 @@
 use cps2::Cps2Bus;
 
 use super::Obj;
-use crate::mem::rd16;
+use crate::data::{data, Missing, RomAddr};
 use crate::regs;
 
 /// One axis of motion: offsets of the speed, the acceleration and the position.
@@ -47,12 +47,22 @@ pub fn advance(b: &mut Cps2Bus, obj: Obj, axis: Axis) -> (u32, u32) {
     (displace(b, obj, axis, delta), delta)
 }
 
+/// Speed word at byte `offset` of the speed table `table` (the original reads `table + offset`, past the end of the
+/// table if the index goes beyond it).
+fn speed(b: &mut Cps2Bus, table: u32, offset: u32) -> u16 {
+    let a = table.wrapping_add(offset);
+    match data().speeds.at(RomAddr(a)) {
+        Some(v) => v,
+        None => Missing { table: "speed table", key: table }.read16(b, a),
+    }
+}
+
 /// Motion by table: speed = table value + acceleration, position += speed.
 /// `entry`: 0 for the speed in X, 2 for that in Y or Z. Returns (old position, displacement).
 pub fn advance_by_table(b: &mut Cps2Bus, obj: Obj, axis: Axis, entry: u32) -> (u32, u32) {
-    let table = obj.u32(b, Obj::SPEED_TABLE);
-    let index = (obj.u8(b, Obj::SPEED_INDEX) as u32) << 2;
-    let base = rd16(b, table.wrapping_add(index + entry));
+    let table = obj.speed_table(b);
+    let index = (obj.speed_index(b) as u32) << 2;
+    let base = speed(b, table, index + entry);
     let vel = base.wrapping_add(obj.u16(b, axis.acc));
     obj.set_u16(b, axis.vel, vel);
     let delta = to_displacement(vel);
@@ -62,12 +72,12 @@ pub fn advance_by_table(b: &mut Cps2Bus, obj: Obj, axis: Axis, entry: u32) -> (u
 /// Selects the speed table `table` (address) for the object and takes its first speed (current
 /// index) in X and in Y.
 pub fn select_speed_table(b: &mut Cps2Bus, obj: Obj, table: u32) {
-    obj.set_u32(b, Obj::SPEED_TABLE, table);
-    let index = (obj.u8(b, Obj::SPEED_INDEX) as u32) << 2;
-    let vx = rd16(b, table.wrapping_add(index));
-    let vy = rd16(b, table.wrapping_add(index + 2));
-    obj.set_u16(b, Obj::VX, vx);
-    obj.set_u16(b, Obj::VY, vy);
+    obj.set_speed_table(b, table);
+    let index = (obj.speed_index(b) as u32) << 2;
+    let vx = speed(b, table, index);
+    let vy = speed(b, table, index + 2);
+    obj.set_vx(b, vx);
+    obj.set_vy(b, vy);
 }
 
 /// Last addition `add.l D0,(position)` of a motion: the original handlers test its flags right
@@ -162,34 +172,33 @@ pub const SPEEDS_B: SpeedTables = SpeedTables { routine: 0x1b64, pointers: 0x1b8
 
 /// Selects the speed table `n` of the array `tables` and takes its current speed in X and in Y.
 pub fn select_speed(b: &mut Cps2Bus, obj: Obj, tables: &SpeedTables, n: u16) {
-    let table = prog32(b, tables.pointers.wrapping_add((n << 2) as i16 as i32 as u32));
+    let index = (n << 2) as i16 as i32;
+    let table = match data().speeds.array(RomAddr(tables.pointers)).and_then(|p| p.get(index / 4)) {
+        Some(t) => t.0,
+        None => Missing { table: "speed array", key: tables.pointers }.prog32(b, tables.pointers.wrapping_add(index as u32)),
+    };
     select_speed_table(b, obj, table);
 }
 
 /// 0x29ea: extension point left empty by the game; only tests the byte `Obj::HIDDEN`. True: object
 /// suspended (the original caller chains on `bne`).
 pub fn suspended(b: &mut Cps2Bus, obj: Obj) -> bool {
-    obj.u8(b, Obj::HIDDEN) != 0
+    obj.hidden(b) != 0
 }
 
 /// 0xf1bfc: end-of-handler counters. A negative byte in `COUNTER_53` is reset to zero; the
 /// countdown `COUNTDOWN` decreases and, when it reaches zero (or less), clears `COUNTDOWN_FLAG`.
 pub fn tick_counters(b: &mut Cps2Bus, obj: Obj) {
-    if (obj.u8(b, Obj::COUNTER_53) as i8) < 0 {
-        obj.set_u8(b, Obj::COUNTER_53, 0);
+    if (obj.counter_53(b) as i8) < 0 {
+        obj.set_counter_53(b, 0);
     }
-    let left = obj.u8(b, Obj::COUNTDOWN);
+    let left = obj.countdown(b);
     if left != 0 {
-        obj.set_u8(b, Obj::COUNTDOWN, left.wrapping_sub(1));
+        obj.set_countdown(b, left.wrapping_sub(1));
         if left as i8 <= 1 {
-            obj.set_u8(b, Obj::COUNTDOWN_FLAG, 0);
+            obj.set_countdown_flag(b, 0);
         }
     }
-}
-
-/// Reading of a long in program space (tables embedded in the code, read PC-relative).
-pub(crate) fn prog32(b: &mut Cps2Bus, a: u32) -> u32 {
-    (b.fetch16(a & 0xff_ffff) as u32) << 16 | b.fetch16(a.wrapping_add(2) & 0xff_ffff) as u32
 }
 
 // ---- 68000 flags ----

@@ -27,11 +27,11 @@ use crate::player::external as ext;
 
 /// Identifiers (original addresses) of the routines reached: player effects, created objects and sounds of the thief.
 mod rom {
-    pub const KNIFE_SOUND: u32 = 0xeb8bc;
+    pub const KNIFE_SOUND: crate::sound::Sound = crate::sound::CMD_11D_21D;
     /// Sounds.
-    pub const SOUND_SHADOW: u32 = 0xe2578;
-    pub const SOUND_STAB_A: u32 = 0xe25f2;
-    pub const SOUND_STAB_B: u32 = 0xe7304;
+    pub const SOUND_SHADOW: crate::sound::Sound = crate::sound::CMD_B9_BY_PLAYER;
+    pub const SOUND_STAB_A: crate::sound::Sound = crate::sound::CMD_BD_BY_PLAYER;
+    pub const SOUND_STAB_B: crate::sound::Sound = crate::sound::CMD_11E_21E;
 }
 
 /// Thief jump speed table (ROM data): a row of four words (vx, ax, vz, az)
@@ -118,7 +118,7 @@ fn takeoff(g: &mut Ctx, p: Player) {
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = common::by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
-    g.sound(ext::sound::JUMP_VOICE, p);
+    g.sound(crate::sound::JUMP_VOICE, p);
     let kind = p.u8(g, 0x67);
     common::launch_jump(g, p, JUMP_SPEEDS, kind);
 }
@@ -263,7 +263,7 @@ fn wall_kick(g: &mut Ctx, p: Player) {
     p.set_u16(g, Obj::VX, vx as u16);
     p.set_u16(g, Obj::AX, 0);
     animation::start(g, p, 0x10);
-    g.sound(ext::sound::JUMP_VOICE, p);
+    g.sound(crate::sound::JUMP_VOICE, p);
 }
 
 /// 0x48ca0: in the air, a screen edge touched with the jump button held makes the thief cling to the edge
@@ -297,7 +297,7 @@ fn air_options(g: &mut Ctx, p: Player) -> bool {
         }
     }
     animation::start(g, p, 3);
-    g.sound(ext::sound::JUMP_VOICE, p);
+    g.sound(crate::sound::JUMP_VOICE, p);
     true
 }
 
@@ -770,7 +770,7 @@ pub fn roll(g: &mut Ctx, p: Player) {
     if p.u8(g, Player::STEP) == 0 {
         next_step(g, p);
         common::roll_start(g, p, 0x600);
-        g.sound(0xe266c, p);
+        g.sound(crate::sound::CMD_C3_BY_PLAYER, p);
         return;
     }
     if animation::step(g, p) {

@@ -10,10 +10,12 @@ use std::io;
 use std::path::Path;
 
 use crate::data::DataFile;
+use crate::pointers::Pointers;
+use crate::sprites::Frame;
 use crate::remainder::Remainder;
 use crate::texts;
 use crate::{
-    Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, SpriteTables, Terrain, Texts,
+    Anims, Cells, Frames, Levels, Music, Palettes, Sample, ScenePalettes, Spawns, Speeds, SpriteTables, Terrain, Texts,
 };
 
 /// Size of the program ROM (space 0x000000-0x3fffff).
@@ -108,7 +110,7 @@ impl Program {
     }
 
     /// Files (paths relative to `dir`) used to rebuild the program.
-    pub const FILES: [&'static str; 19] = [
+    pub const FILES: [&'static str; 20] = [
         "palettes.png",
         "sprites/frames.json",
         "sprites/anims.json",
@@ -118,6 +120,7 @@ impl Program {
         "scene_palettes.json",
         "texts.json",
         "data/spawns.json",
+        "data/speeds.json",
         "data/players.json",
         "data/combat.json",
         "data/enemies.json",
@@ -180,7 +183,10 @@ impl Program {
         if need(&mut p, "data/spawns.json") {
             p.put_spawns(&Spawns::load(&dir.join("data/spawns.json"))?);
         }
-        for rel in &Self::FILES[9..18] {
+        if need(&mut p, "data/speeds.json") {
+            p.put_speeds(&Speeds::load(&dir.join("data/speeds.json"))?);
+        }
+        for rel in &Self::FILES[10..19] {
             if need(&mut p, rel) {
                 p.put_data(&DataFile::load(&dir.join(rel))?).map_err(io::Error::other)?;
             }
@@ -202,27 +208,35 @@ impl Program {
         self.data.put_words(0x253000, &words);
     }
 
-    /// Table of frame addresses and frames (header, pieces), plus their offset tables.
+    /// Table of frame addresses and frames (header, pieces), plus their offset tables; then the frames outside the
+    /// table.
     pub fn put_frames(&mut self, f: &Frames) {
         for (i, fr) in f.frames.iter().enumerate() {
             self.data.put32(f.table + 4 * i as u32, fr.rom);
-            let mut bytes = Vec::new();
-            bytes.extend(fr.cost.to_be_bytes());
-            bytes.extend(fr.attr.to_be_bytes());
-            bytes.extend([fr.bank, fr.mode]);
-            bytes.extend(fr.offsets.to_be_bytes());
-            let mut table = Vec::new();
-            for p in &fr.pieces {
-                bytes.extend(p.code().to_be_bytes());
-                if fr.per_piece() {
-                    bytes.extend(p.attr().to_be_bytes());
-                }
-                table.extend(p.dx().to_be_bytes());
-                table.extend(p.dy().to_be_bytes());
-            }
-            self.data.put(fr.rom, &bytes);
-            self.data.put(fr.offsets, &table);
+            self.put_frame(fr);
         }
+        for fr in &f.extra {
+            self.put_frame(fr);
+        }
+    }
+
+    fn put_frame(&mut self, fr: &Frame) {
+        let mut bytes = Vec::new();
+        bytes.extend(fr.cost.to_be_bytes());
+        bytes.extend(fr.attr.to_be_bytes());
+        bytes.extend([fr.bank, fr.mode]);
+        bytes.extend(fr.offsets.to_be_bytes());
+        let mut table = Vec::new();
+        for p in &fr.pieces {
+            bytes.extend(p.code().to_be_bytes());
+            if fr.per_piece() {
+                bytes.extend(p.attr().to_be_bytes());
+            }
+            table.extend(p.dx().to_be_bytes());
+            table.extend(p.dy().to_be_bytes());
+        }
+        self.data.put(fr.rom, &bytes);
+        self.data.put(fr.offsets, &table);
     }
 
     /// Viewer families, animation sets and animation entries.
@@ -249,12 +263,33 @@ impl Program {
             let mut b = Vec::new();
             b.extend(e.time.to_be_bytes());
             b.extend(e.flags.to_be_bytes());
-            b.extend(frames.frames[e.frame as usize].rom.to_be_bytes());
+            b.extend(frames.number(e.frame).rom.to_be_bytes());
             b.extend(&e.data);
             if let Some(n) = e.next {
                 b.extend(n.to_be_bytes());
             }
             self.data.put(e.rom, &b);
+        }
+        for p in &a.character_sets {
+            self.put_pointers(p);
+        }
+    }
+
+    /// Array of addresses in the program space (stored in the code).
+    pub fn put_pointers(&mut self, p: &Pointers) {
+        for (i, &t) in p.targets.iter().enumerate() {
+            self.prog.put32(p.rom + 4 * i as u32, t);
+        }
+    }
+
+    /// Speed tables (data space) and their arrays (program space).
+    pub fn put_speeds(&mut self, s: &Speeds) {
+        for a in &s.arrays {
+            self.put_pointers(a);
+        }
+        for t in &s.tables {
+            let words: Vec<u16> = t.speeds.iter().flat_map(|&(vx, vy)| [vx as u16, vy as u16]).collect();
+            self.data.put_words(t.rom, &words);
         }
     }
 

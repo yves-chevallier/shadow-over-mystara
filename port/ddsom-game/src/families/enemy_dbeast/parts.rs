@@ -386,7 +386,7 @@ fn bound_y_start<R: Bench>(x: &mut Cx<'_, R>, vy: i16, anim_marker: u8, anim: u8
 /// Landing of a leap in depth (0x728d4 / 0x728f0).
 pub(super) fn bound_y_wait<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
-        lib::sound(x, 0xeb9a0);
+        lib::sound(x, crate::sound::CMD_36F_46F);
         x.add8(0x7, 2);
         x.set8(VULNERABLE, 0);
     }

@@ -1118,7 +1118,7 @@ pub fn ground_debris(b: &mut Cps2Bus, o: Obj, second: bool) {
         let depth = rd16(b, fx + 0x10).wrapping_add(ddepth);
         wr16(b, fx + 0x10, depth);
     }
-    crate::sound::play(b, 0xede08, o);
+    crate::sound::play(b, crate::sound::CMD_380, o);
 }
 
 /// Object dropped only once per type by 0xb648 (kind 2; 0: nothing), and luck masks.

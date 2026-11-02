@@ -115,8 +115,8 @@ mod over {
     pub const GAME_OVER_FRAMES: u16 = 0x3c;
     pub const PHASE_GAME_OVER: u8 = 0x14;
     /// Original routines: countdown start music, end music, exit to the modes.
-    pub const MUSIC_START: u32 = 0xe12b8;
-    pub const MUSIC_STOP: u32 = 0xe12f4;
+    pub const MUSIC_START: crate::sound::Sound = crate::sound::CMD_05;
+    pub const MUSIC_STOP: crate::sound::Sound = crate::sound::MEMO_REPLAY;
 }
 
 /// All the panels (even those that do not exist in the current layout).

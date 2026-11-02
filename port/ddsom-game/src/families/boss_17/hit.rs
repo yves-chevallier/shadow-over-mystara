@@ -126,7 +126,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(ANIM_KIND, 0x20);
             x.set8(ANIM_LAST, 0x20);
             x.add8(f::SUB2, 2);
-            lib::sound(x, 0xec73c);
+            lib::sound(x, crate::sound::CMD_126_226_B);
             body(x, 0xb);
         }
         2 => {
@@ -295,8 +295,8 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(f::IMMUNITY, 0xffff_ffff);
             lib::flash_and_shake(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
-            lib::sound(x, 0xe3b6c);
-            lib::sound(x, 0xe5966);
+            lib::sound(x, crate::sound::CMD_FF);
+            lib::sound(x, crate::sound::CMD_83_83);
             lib::drop_rewards(x);
             x.set8(0, 2);
             x.set8(SLOW, 0);
@@ -342,7 +342,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB2, 2);
             x.set16(0xc, 0);
-            lib::sound(x, 0xecabc);
+            lib::sound(x, crate::sound::CMD_AA);
             x.anim_start(SET_BODY, 0x15);
         }
         8 => {

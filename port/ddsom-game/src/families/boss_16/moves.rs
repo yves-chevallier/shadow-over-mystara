@@ -540,7 +540,7 @@ fn hold_bite<R: Bench>(x: &mut Cx<'_, R>, prey: crate::objects::Obj) {
         return lib::release_player(x, prey);
     }
     add16(x, prey, f::HP, 0xffff);
-    lib::sound(x, 0xedd96);
+    lib::sound(x, crate::sound::CMD_341_441);
     let mut dx = 0x18u16;
     if x.u8(f::FLIP) == 0 {
         dx = dx.wrapping_neg();

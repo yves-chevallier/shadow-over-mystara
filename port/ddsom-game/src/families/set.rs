@@ -1024,7 +1024,7 @@ mod exit_gate {
         let v = x.u8(0x26);
         x.set_a5_u8(0x58, v);
         let music = x.u16(0x1c);
-        crate::sound::play_with(x.b, 0xe17a4, crate::sound::Source { d4: Some(music as u32), ..Default::default() });
+        crate::sound::play_with(x.b, crate::sound::FROM_D4, crate::sound::Source { d4: Some(music as u32), ..Default::default() });
         for p in players() {
             if p.u8(x.b, P_ACTIVE) != 0 {
                 place(x, p);

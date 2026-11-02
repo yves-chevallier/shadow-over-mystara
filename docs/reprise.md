@@ -81,7 +81,12 @@ Suite de la sortie du Cpu (détails dans les lignes « partie 4 » et « partie 
    restes de registres lus par les seuls outils sont reconstruits dans `tools`, `cargo build` et `cargo clippy` sans
    avertissement (avec et sans `tools`), `fuzz_enemy families` sans écart. Reste à factoriser les exemples de fuzz
    recopiés (`fuzz.rs`, `fuzz_enemy.rs`, `fuzz_eshl_c.rs`, `fuzz_set_a.rs` partagent l'essentiel de leur code).
-6. **Suite : la fin** — plan détaillé et lots ordonnés dans [fin.md](fin.md) (données typées, jeu sans image ROM, découpage, optimisation, cœur de jeu en bibliothèque + façade de présentation, pack HD, documentation finale, saisie du nom).
+6. **Suite : la fin** — plan détaillé et lots ordonnés dans [fin.md](fin.md). **Série 0 faite** (branche
+   `wt-serie0`, non fusionnée) : L0 (`tools/measure_end.py`, mesure par lecteur `tools/rom_readers.py`), L1 (crate
+   `ddsom-data`, `GameData`/`data()`, `extract` en bibliothèque, images, animations et vitesses typées, résidu
+   compté `tools/residue.py`, macro `record!`), L2 (sons nommés `sound::Sound`). Les vagues suivantes partent de là :
+   voir les paragraphes « Résultat » de L0-L2 dans fin.md. Réextraire les assets (`speeds.json`, `extra` de
+   `frames.json`, `character_sets` d'`anims.json`). Suite (données typées, jeu sans image ROM, découpage, optimisation, cœur de jeu en bibliothèque + façade de présentation, pack HD, documentation finale, saisie du nom).
 
 ## Méthode qui marche
 

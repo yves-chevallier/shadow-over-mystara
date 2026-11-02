@@ -60,7 +60,7 @@ fn recoil<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(WANT_ANIM, 0x1e);
             let want = x.u8(WANT_ANIM);
             x.set8(CUR_ANIM, want);
-            lib::sound(x, 0xec658);
+            lib::sound(x, crate::sound::CMD_350_450);
             x.set16(0x14, 0x300);
             x.set16(0x16, (-0x28i16) as u16);
             let flip = x.u8(0x4a) ^ 0x20;

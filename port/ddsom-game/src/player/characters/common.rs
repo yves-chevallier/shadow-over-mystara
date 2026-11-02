@@ -73,9 +73,7 @@ const NO_SHOCK_SCENE: u8 = 41;
 /// Original routines called by these tools.
 pub mod rom {
     /// Sound associated with the spark of `item_spark`.
-    pub const SPARK_SOUND: u32 = 0xea166;
-    /// Voice of the character with the held weapon (D4 = weapon number).
-    pub const WEAPON_VOICE: u32 = 0xe7e10;
+    pub const SPARK_SOUND: crate::sound::Sound = crate::sound::CMD_18C;
     /// Creation of a player effect (PEFF pool) of the type given by D0, according to the weapon.
     pub const SPAWN_EFFECT: u32 = 0x4c58e;
     /// Task slot (offset in the task table, D0 of 0x9b6) of the spell's screen tasks.
@@ -127,14 +125,14 @@ pub fn step_with_d0(g: &mut Ctx, p: Player, d0: u8) -> (bool, u8) {
 pub fn weapon_voice(g: &mut Ctx, p: Player) {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_A) as u32;
-    crate::sound::play_with(g.b, rom::WEAPON_VOICE, crate::sound::Source { object: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
+    crate::sound::play_with(g.b, crate::sound::WEAPON_VOICE, crate::sound::Source { object: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
 }
 
 /// Plays the voice of the weapon held in the left hand (D4 = `WEAPON_B`, magic-user).
 pub fn weapon_voice_b(g: &mut Ctx, p: Player) {
     cov!();
     let weapon = p.u8(g, Player::WEAPON_B) as u32;
-    crate::sound::play_with(g.b, rom::WEAPON_VOICE, crate::sound::Source { object: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
+    crate::sound::play_with(g.b, crate::sound::WEAPON_VOICE, crate::sound::Source { object: Some(Obj(p.0)), a1: None, d4: Some(weapon) });
 }
 
 /// Starts animation `n`, then plays the voice of the left-hand weapon (`WEAPON_B`, magic-user).
@@ -668,7 +666,7 @@ fn jump_takeoff(g: &mut Ctx, p: Player, kit: &JumpKit) {
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
-    g.sound(ext::sound::JUMP_VOICE, p);
+    g.sound(crate::sound::JUMP_VOICE, p);
     let kind = p.u8(g, 0x67);
     launch_jump(g, p, kit.speeds, kind);
 }

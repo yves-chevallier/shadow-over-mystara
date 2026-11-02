@@ -10,6 +10,9 @@ cps2 = { path = "../cps2", default-features = false }
 ddsom-rc = { path = "../ddsom-rc", optional = true }
 ddsom-game = { path = "../ddsom-game", default-features = false }
 ddsom-assets = { path = "../ddsom-assets" }
+ddsom-data = { path = "../ddsom-data" }
+# The game data of the mode with ROMs, extracted in memory (without the 68000 decoder of the `extract` program).
+extract = { path = "../extract", default-features = false }
 libloading = "0.8"
 qsound = { path = "../qsound" }
 

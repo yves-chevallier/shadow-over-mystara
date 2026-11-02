@@ -22,14 +22,12 @@ type Handler = fn(&mut Ctx, Player);
 
 /// Identifiers (original addresses) of the routines reached (sounds).
 mod rom {
-    pub const BEFORE_HURT_A: u32 = 0xe2100;
+    pub const BEFORE_HURT_A: crate::sound::Sound = crate::sound::CMD_A3_BY_CHARACTER;
     /// Death effects (sound, points).
-    pub const DEATH_EFFECT: u32 = 0xe21a0;
-    /// Dust and sound on landing.
-    pub const LANDING_EFFECT: u32 = 0xe7a12;
+    pub const DEATH_EFFECT: crate::sound::Sound = crate::sound::CMD_A4_BY_CHARACTER;
     /// Get-up sounds.
-    pub const GET_UP_SOUND_A: u32 = 0xe22e8;
-    pub const GET_UP_SOUND_B: u32 = 0xe2240;
+    pub const GET_UP_SOUND_A: crate::sound::Sound = crate::sound::GET_UP_A;
+    pub const GET_UP_SOUND_B: crate::sound::Sound = crate::sound::GET_UP_B;
 }
 
 /// Step tables (words: offsets relative to the table, indexed by `+7`).
@@ -267,7 +265,7 @@ const HANDLERS: &[(u32, Handler)] = &[
                 p.set_u32(g, Obj::Z, 0);
                 next_step(g, p);
                 hurt_animation(g, p, 9);
-                g.sound(rom::LANDING_EFFECT, p);
+                g.sound(crate::sound::LANDING_EFFECT, p);
                 return;
             }
         }
@@ -913,7 +911,7 @@ fn land(g: &mut Ctx, p: Player, anim: u16) {
     p.set_u32(g, Obj::Z, 0);
     next_step(g, p);
     hurt_animation(g, p, anim);
-    g.sound(rom::LANDING_EFFECT, p);
+    g.sound(crate::sound::LANDING_EFFECT, p);
 }
 
 /// 0x3a522: end of the fall, small bounce (vz 0x240).
@@ -949,7 +947,7 @@ fn land_with_effect(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     next_step(g, p);
     hurt_animation(g, p, 9);
-    g.sound(rom::LANDING_EFFECT, p);
+    g.sound(crate::sound::LANDING_EFFECT, p);
 }
 
 /// 0x3a544: start of the slide on the ground (vx 0x300 in the recoil direction).
@@ -1036,7 +1034,7 @@ pub fn fall(g: &mut Ctx, p: Player) {
                 p.set_u32(g, Obj::Z, 0);
                 next_step(g, p);
                 hurt_animation(g, p, 9);
-                g.sound(rom::LANDING_EFFECT, p);
+                g.sound(crate::sound::LANDING_EFFECT, p);
             }
         }
         12 => {
@@ -1197,7 +1195,7 @@ fn crash_landing(g: &mut Ctx, p: Player) {
     }
     next_step(g, p);
     hurt_animation(g, p, 9);
-    g.sound(rom::LANDING_EFFECT, p);
+    g.sound(crate::sound::LANDING_EFFECT, p);
 }
 
 // ---- reaction 0x3e (0x3a62a): thrown far away -------------------------------------------------------
@@ -1266,7 +1264,7 @@ fn hurled_landing(g: &mut Ctx, p: Player, anim: u16, effect: bool) {
         next_step(g, p);
         hurt_animation(g, p, anim);
         if effect {
-            g.sound(rom::LANDING_EFFECT, p);
+            g.sound(crate::sound::LANDING_EFFECT, p);
         }
         return;
     }
@@ -1317,7 +1315,7 @@ fn shock_start(g: &mut Ctx, p: Player) {
     p.set_u8(g, Player::TIMER_6F, 30);
     p.set_u8(g, Player::HITSTOP, 1);
     hurt_animation(g, p, 27);
-    g.sound(0xebbda, p);
+    g.sound(crate::sound::CMD_31E_41E_B, p);
 }
 
 /// 0x3ae0e: falls back (without animation).
@@ -1575,8 +1573,8 @@ fn struggle_out(g: &mut Ctx, p: Player) -> bool {
 
 /// Sounds of the reaction: 0xe21a0 (death), 0xe7b3c (hit); 0xb6ba8 (`effects_creators::for_players::type_57`)
 /// creates the step-end effect.
-const FROZEN_DEATH_SOUND: u32 = 0xe21a0;
-const FROZEN_SOUND: u32 = 0xe7b3c;
+const FROZEN_DEATH_SOUND: crate::sound::Sound = crate::sound::CMD_A4_BY_CHARACTER;
+const FROZEN_SOUND: crate::sound::Sound = crate::sound::CMD_13E_23E;
 /// Comparison bytes of the wait steps (`+0x6c`, `+0x6d`) and animation counter (`+0x1f0`).
 const WAIT_LEFT: u32 = 0x6c;
 const WAIT_RIGHT: u32 = 0x6d;

@@ -177,7 +177,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     } else {
         x.add8(f::STATE, 2);
         x.add16(0xc, 0x50);
-        lib::sound(x, 0xe13f0);
+        lib::sound(x, crate::sound::CMD_23);
     }
     x.set_a5_u8(0x50, 1);
     lib::clear_popup(x);

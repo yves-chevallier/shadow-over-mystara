@@ -37,8 +37,6 @@ const FRAME_COUNT: u32 = A5 + 0x7e68;
 const VIDEO: u32 = A5 + 0x14;
 const CPS_REG_4: u32 = 0x400004;
 
-/// Music of the screen.
-const SOUND_E172C: u32 = 0xe172c;
 
 /// Return from the step at `0xfc584`: A0 goes back to the mode machine block.
 const RETURN: u32 = 0xfc584;
@@ -186,7 +184,7 @@ fn scroll(x: &mut Ctx) -> Speed {
 fn s0_prepare(x: &mut Ctx) -> Flow {
     next_step(x);
     wr16(x.b, STATE + f::TIMER, 300);
-    crate::sound::play_global(x.b, SOUND_E172C);
+    crate::sound::play_global(x.b, crate::sound::CMD_27_B);
     reset_objects(x);
     x.wait(1, Step::S0Video)
 }

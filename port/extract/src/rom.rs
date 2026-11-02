@@ -14,8 +14,17 @@ impl Program {
         Ok(Program { data, prog })
     }
 
+    /// The program of a machine already loaded: data view and decrypted program view, in words.
+    pub fn from_words(data: Vec<u16>, prog: Vec<u16>) -> Self {
+        Program { data, prog }
+    }
+
     pub fn len(&self) -> u32 {
         2 * self.data.len() as u32
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.data.is_empty()
     }
 
     pub fn rd8(&self, a: u32) -> u8 {

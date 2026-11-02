@@ -8,7 +8,7 @@ use crate::mem::{rd16, rd32, wr16};
 use crate::objects::Obj;
 use crate::objects::Current;
 
-const SFX_BITE: u32 = 0xe8ba2;
+const SFX_BITE: crate::sound::Sound = crate::sound::CMD_16C;
 const ANIMS: u32 = 0x1bc346;
 const SPEEDS: u32 = 0x1c7836;
 /// Table of collision box frames (one pointer per box set).

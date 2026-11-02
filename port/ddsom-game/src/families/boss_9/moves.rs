@@ -33,7 +33,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x14, 0);
             x.set16(0x16, 0x28);
             x.set8(GAIT, 0);
-            lib::sound(x, 0xea91a);
+            lib::sound(x, crate::sound::CMD_93);
             let n = x.a5_u8(0x4ff).wrapping_add(4);
             x.set_a5_u8(0x4ff, n);
         }
@@ -60,7 +60,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             next6(x);
             x.set16(0x14, 0x800);
             x.set8(GAIT, 1);
-            lib::sound(x, 0xe45ca);
+            lib::sound(x, crate::sound::CMD_92);
         }
         16 => {
             jolt(x);
@@ -86,7 +86,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(0x2d, 0x18);
             x.set16(0x14, 0);
             x.set16(0x16, (-8i16) as u16);
-            lib::sound(x, 0xe4626);
+            lib::sound(x, crate::sound::CMD_92_B);
         }
         20 => {
             jolt(x);
@@ -94,7 +94,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             if sub16(x, TIMER, 1).mi() {
                 next6(x);
                 x.set8(GAIT, 2);
-                lib::sound(x, 0xea984);
+                lib::sound(x, crate::sound::CMD_94);
                 lib::create_set_14(x);
             }
             roll(x);
@@ -214,7 +214,7 @@ fn pass<R: Bench>(x: &mut Cx<'_, R>) {
             return;
         }
         next7(x);
-        lib::sound(x, 0xea8be);
+        lib::sound(x, crate::sound::CMD_92_D);
         x.set8(0x45, 0xa);
         x.set8(0x44, 0x2d);
         count_crew(x);
@@ -297,7 +297,7 @@ fn approach<R: Bench>(x: &mut Cx<'_, R>) {
             if sub8(x, COUNT, 1).pl() {
                 return;
             }
-            lib::sound(x, 0xea984);
+            lib::sound(x, crate::sound::CMD_94);
             reset_lives(x);
             reset_count(x);
             retarget(x);

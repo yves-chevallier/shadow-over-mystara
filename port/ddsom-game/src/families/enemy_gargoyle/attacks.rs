@@ -19,7 +19,7 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
 fn strike_hit<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(f::KEY_FRAME) != 0 {
         x.set8(f::KEY_FRAME, 0);
-        lib::sound(x, 0xebfdc);
+        lib::sound(x, crate::sound::CMD_361);
     }
 }
 
@@ -146,7 +146,7 @@ fn sidestep<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(Obj::SPEED_INDEX, angle);
             x.set16(Obj::AX, vy as u16);
             set_speed(x, 0x40);
-            lib::sound(x, 0xece9e);
+            lib::sound(x, crate::sound::CMD_363_363);
         }
         4 => {
             if !count_down(x, TIMER2) {
@@ -432,7 +432,7 @@ fn aim_dive<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(Obj::AX, 0);
     x.set16(Obj::AZ, 0);
     x.set16(Obj::AY, 0);
-    lib::sound(x, 0xe3776);
+    lib::sound(x, crate::sound::CMD_373_473);
     x.set16(TIMER, 0x5a);
     strike(x, 0xe);
 }
@@ -515,7 +515,7 @@ pub(super) fn grab<R: Bench>(x: &mut Cx<'_, R>) {
             *x.c.d3() = d3 as u32;
             *x.c.d4() = d4 as u32;
             crate::families::effects_creators::spark_at(x.b, x.o, victim.0, 2, (d2, d3, d4));
-            lib::sound(x, 0xedd96);
+            lib::sound(x, crate::sound::CMD_341_441);
             let victim = x.linked(f::TARGET);
             let hp = victim.u16(x.b, f::HP).wrapping_sub(4);
             victim.set_u16(x.b, f::HP, hp);

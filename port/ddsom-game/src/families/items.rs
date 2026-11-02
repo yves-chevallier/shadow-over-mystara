@@ -56,7 +56,7 @@ const PICKED: i32 = -0x5b88;
 /// Subroutines not rewritten.
 mod call {
     /// Common end of the potion effects.
-    pub const END_EFFECT: u32 = 0xebaf6;
+    pub const END_EFFECT: crate::sound::Sound = crate::sound::CMD_132_232;
 }
 
 /// `0xae3ec`: sparkle (EFFCT 15) above the object, according to `SHIMMER`.
@@ -895,7 +895,7 @@ fn icon_sound<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj, base: u32) {
     o.set_u8(ctx.b, scene::DELAY, scene::DELAY_SOUND);
     let draw = o.u8(ctx.b, field::MODE) as u32;
     let sound = ctx.prog32(scene::ICON_SOUNDS + base + draw * 4);
-    crate::sound::play(ctx.b, sound, ctx.obj());
+    crate::sound::play(ctx.b, crate::sound::Sound::at(sound), ctx.obj());
 }
 
 /// Substate 0 of the icon: follows the player, animates, sorts, and plays the sound drawn every 0x3c frames.
@@ -1008,7 +1008,7 @@ mod start {
     pub const ANIMATIONS: u32 = 0xdca60;
     pub const SOUNDS_STOP: u32 = 0xdcaa0;
     pub const ANIMATIONS_STOP: u32 = 0xdca9c;
-    pub const SOUND_STOP: u32 = 0xe1d60;
+    pub const SOUND_STOP: crate::sound::Sound = crate::sound::CMD_4B;
     /// Icon counter of the object `+0x46`.
     pub const ICONS: u32 = 0x30;
     /// Stop requested (`+0x33`).
@@ -1034,7 +1034,7 @@ fn start_launches<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
         // departure sound of the mode (0xe1da0, 0xe1d60), played on the icon
         let sound = ctx.prog32(start::ROUTINES + 4 * mode);
         if sound != 0 {
-            crate::sound::play(ctx.b, sound, o);
+            crate::sound::play(ctx.b, crate::sound::Sound::at(sound), o);
         }
     }
     if o.u8(ctx.b, 0x2c) == 0 {

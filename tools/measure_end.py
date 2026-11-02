@@ -77,7 +77,9 @@ def zone_of(rel: str) -> str:
     raise AssertionError(rel)
 
 
-def measure_file(text: str, u32_names: set) -> dict:
+def measure_file(text: str) -> dict:
+    """Counts of one file. A sound argument by name counts if the file declares that name as a `u32`."""
+    u32_names = {n for line in code_lines(text) for n, _ in U32_CONST.findall(line)}
     m = defaultdict(int)
     m["files"] = 1
     m["lines"] = len(text.splitlines())
@@ -102,11 +104,10 @@ def game_files(root: Path):
 
 def zones(root: Path) -> dict:
     files = list(game_files(root))
-    u32_names = {n for _, text in files for line in code_lines(text) for n, _ in U32_CONST.findall(line)}
     out = {}
     for rel, text in files:
         z = out.setdefault(zone_of(rel), {k: 0 for k in COLUMNS} | {"largest": ["", 0]})
-        m = measure_file(text, u32_names)
+        m = measure_file(text)
         for k in COLUMNS:
             z[k] += m[k]
         if m["lines"] > z["largest"][1]:

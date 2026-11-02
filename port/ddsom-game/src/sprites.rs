@@ -7,6 +7,9 @@
 
 use cps2::Cps2Bus;
 
+use ddsom_data::sprites::Piece;
+
+use crate::data::{data, Missing, RomAddr};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::Native;
 
@@ -371,18 +374,64 @@ struct Frame {
     second: u16,
     bank: u8,
     per_piece: bool,
-    offsets: u32,
-    pieces: u32,
+    pieces: Pieces,
+}
+
+/// Pieces of a frame: from the frame table, or read by address in the residue for a frame address the table does not
+/// know.
+enum Pieces {
+    Typed(&'static [Piece]),
+    Residue { offsets: u32, pieces: u32 },
+}
+
+/// Piece `i` of a frame: offset (dx, dy) from the anchor, sprite code and attributes (own attributes only when the
+/// frame has per-piece attributes).
+struct PieceWords {
+    dx: u16,
+    dy: u16,
+    code: u16,
+    attr: u16,
+}
+
+impl Frame {
+    fn piece(&self, b: &mut Cps2Bus, i: u32) -> PieceWords {
+        match self.pieces {
+            Pieces::Typed(pieces) => {
+                let p = pieces[i as usize];
+                PieceWords { dx: p.dx() as u16, dy: p.dy() as u16, code: p.code(), attr: p.attr() }
+            }
+            Pieces::Residue { offsets, pieces } => {
+                let missing = Missing { table: "frame", key: pieces - 10 };
+                let at = pieces + if self.per_piece { 4 } else { 2 } * i;
+                PieceWords {
+                    dx: missing.read16(b, offsets + 4 * i),
+                    dy: missing.read16(b, offsets + 4 * i + 2),
+                    code: missing.read16(b, at),
+                    attr: if self.per_piece { missing.read16(b, at + 2) } else { 0 },
+                }
+            }
+        }
+    }
 }
 
 fn frame_at(b: &mut Cps2Bus, f: u32) -> Frame {
+    if let Some(fr) = data().frames.at(RomAddr(f)) {
+        return Frame {
+            count: fr.cost,
+            second: fr.attr,
+            bank: fr.bank,
+            per_piece: fr.per_piece(),
+            pieces: Pieces::Typed(&fr.pieces),
+        };
+    }
+    let missing = Missing { table: "frame", key: f };
+    let (count, second, bank_mode) = (missing.read16(b, f), missing.read16(b, f + 2), missing.read16(b, f + 4));
     Frame {
-        count: rd16(b, f),
-        second: rd16(b, f + 2),
-        bank: rd8(b, f + 4),
-        per_piece: rd8(b, f + 5) != 0,
-        offsets: rd32(b, f + 6),
-        pieces: f + 10,
+        count,
+        second,
+        bank: (bank_mode >> 8) as u8,
+        per_piece: bank_mode as u8 != 0,
+        pieces: Pieces::Residue { offsets: missing.read32(b, f + 6), pieces: f + 10 },
     }
 }
 
@@ -427,14 +476,9 @@ fn emit_frame(p: &mut Painter, fr: &Frame, x: u16, y: u16, bits: u32, st: Style,
     } else {
         p.set_d4_low(fr.second);
     }
-    let mut off = fr.offsets;
-    let mut piece = fr.pieces;
-    for _ in 0..n {
-        let dx = rd16(p.b, off);
-        let dy = rd16(p.b, off + 2);
-        off += 4;
-        let code = rd16(p.b, piece);
-        let mut attr = if fr.per_piece { rd16(p.b, piece + 2) } else { common };
+    for i in 0..n as u32 {
+        let PieceWords { dx, dy, code, attr } = fr.piece(p.b, i);
+        let mut attr = if fr.per_piece { attr } else { common };
         let width = (attr & 0xf00) >> 4;
         if fr.per_piece && st.flip {
             p.set_d4_low(width);
@@ -456,7 +500,6 @@ fn emit_frame(p: &mut Painter, fr: &Frame, x: u16, y: u16, bits: u32, st: Style,
         }
         let pos = ((px as u32) << 16 | y.wrapping_add(dy) as u32) & 0x3ff_03ff | bits;
         p.sprite((pos >> 16) as u16, pos as u16, code, attr);
-        piece += if fr.per_piece { 4 } else { 2 };
     }
 }
 

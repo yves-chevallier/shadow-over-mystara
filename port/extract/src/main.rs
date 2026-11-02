@@ -6,28 +6,7 @@
 //! exactly the original data (`cargo test -p ddsom-assets`, see docs/assets.md).
 //! The produced files derive from the ROMs: they stay local, never committed.
 
-mod combat;
-mod data;
-mod dialogs;
-mod gfx;
-mod levels;
-mod misc;
-mod music;
-mod natives;
-mod palettes;
-mod players;
-mod rest;
-mod remainder;
-mod rom;
-mod scene_palettes;
-mod scenes;
-mod sounds;
-mod spawns;
-mod sprites;
-mod tables;
-mod terrain;
-mod texts;
-
+use extract::*;
 use std::path::Path;
 
 const CATEGORIES: [&str; 9] = ["gfx", "palettes", "sounds", "sprites", "levels", "terrain", "texts", "music", "data"];
@@ -71,6 +50,7 @@ fn main() {
         }
         if wanted("data") {
             spawns::extract(roms, &out.join("data/spawns.json"))?;
+            speeds::extract(roms, &out.join("data/speeds.json"))?;
             data::extract(roms, &out.join("data"))?;
         }
         if wanted("data") {
@@ -158,6 +138,10 @@ The rest of the program region: `natives.json`, the measured zones that the nati
 `reste.json`, everything no other file describes, except the executed 68000 code (ranges listed in
 `code`), as blocks of hexadecimal bytes. With them, the rebuilt program region equals the ROM outside code
 (docs/sans-rom.md 'full data coverage').
+
+## data/speeds.json
+
+Speed tables of the objects (motion by table): (vx, vy) per index, and the two arrays of tables of the code.
 
 ## data/spawns.json
 

@@ -5,25 +5,23 @@
 /// Sounds ("wrappers" of `sound`, A0 = the player for the panning).
 pub mod sound {
     /// Wind-up of a charged hit, in two stages.
-    pub const CHARGE_A: u32 = 0xe792e;
-    pub const CHARGE_B: u32 = 0xe1fc0;
+    pub const CHARGE_A: crate::sound::Sound = crate::sound::CMD_129_229;
+    pub const CHARGE_B: crate::sound::Sound = crate::sound::CMD_A1_BY_CHARACTER_C;
     /// Landed hit: heavy weapons (fighter, dwarf; second strike of the elf and the magic-user) and light ones (cleric,
     /// elf, magic-user) (h).
-    pub const STRIKE_HEAVY: u32 = 0xe1de0;
-    pub const STRIKE_LIGHT: u32 = 0xe1e80;
+    pub const STRIKE_HEAVY: crate::sound::Sound = crate::sound::CMD_A0_BY_CHARACTER;
+    pub const STRIKE_LIGHT: crate::sound::Sound = crate::sound::CMD_A1_BY_CHARACTER;
     /// Attack jump (start, end) (h).
-    pub const LEAP: u32 = 0xe1f20;
-    pub const LEAP_END: u32 = 0xe7668;
+    pub const LEAP: crate::sound::Sound = crate::sound::CMD_A1_BY_CHARACTER_B;
+    pub const LEAP_END: crate::sound::Sound = crate::sound::CMD_113_213;
     /// Spinning attack.
-    pub const SPIN: u32 = 0xe2060;
+    pub const SPIN: crate::sound::Sound = crate::sound::CMD_A2_BY_CHARACTER;
     /// Resurrection, victory, cursed weapon falling (h).
-    pub const FANFARE: u32 = 0xe24d8;
-    /// Jump voice, landing sound, slide sound (per-character dispatches).
-    pub const JUMP_VOICE: u32 = 0xe7622;
-    pub const LANDING: u32 = 0xe774c;
-    pub const SLIDE: u32 = 0xe78e8;
+    pub const FANFARE: crate::sound::Sound = crate::sound::CMD_A9_BY_CHARACTER;
+    pub const LANDING: crate::sound::Sound = crate::sound::LANDING_VOICE;
+    pub const SLIDE: crate::sound::Sound = crate::sound::SLIDE_VOICE;
     /// Cleric's healing prayer, elf's earthquake (h).
-    pub const PRAYER_QUAKE: u32 = 0xe8db4;
+    pub const PRAYER_QUAKE: crate::sound::Sound = crate::sound::CMD_16A;
 }
 
 /// Effects created by other subsystems (`families`, `effects_aids`).

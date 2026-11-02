@@ -41,7 +41,7 @@ fn back_to_walk<R: Bench>(x: &mut Cx<'_, R>) {
 fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     if x.u8(0x7) == 0 {
         x.add8(0x7, 2);
-        lib::sound(x, 0xe3f76);
+        lib::sound(x, crate::sound::CMD_30C);
         kind(x, 0x10);
         return air(x, 0);
     }
@@ -135,7 +135,7 @@ fn dive<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0xc, 0);
             lib::shake_58(x, 0x1e);
             lib::debris(x, 5);
-            lib::sound(x, 0xecc0a);
+            lib::sound(x, crate::sound::CMD_328_428_B);
             air(x, 3);
         }
         _ => {
@@ -162,7 +162,7 @@ fn swoop<R: Bench>(x: &mut Cx<'_, R>) {
             if !pick_target(x) {
                 return decide::wait(x);
             }
-            lib::sound(x, 0xe3f76);
+            lib::sound(x, crate::sound::CMD_30C);
             kind(x, 0x12);
             take_off(x);
         }
@@ -186,7 +186,7 @@ fn swoop<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x18, 0xf700);
             x.set16(0x16, 0);
             x.set16(0x1a, 0);
-            lib::sound(x, 0xe3f76);
+            lib::sound(x, crate::sound::CMD_30C);
             air(x, 5);
         }
         6 => {
@@ -220,8 +220,8 @@ fn swoop<R: Bench>(x: &mut Cx<'_, R>) {
 /// Landing: shake for `shake` frames, dust, flight animation `n`.
 fn landing<R: Bench>(x: &mut Cx<'_, R>, shake: u16, n: u32) {
     lib::shake_54(x, shake);
-    lib::sound(x, 0xec976);
-    lib::sound(x, 0xecdba);
+    lib::sound(x, crate::sound::CMD_328_428);
+    lib::sound(x, crate::sound::CMD_329_429);
     air(x, n);
 }
 
@@ -255,7 +255,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set16(0x18, vz);
             x.set16(0x1a, (-0x38i16) as u16);
-            lib::sound(x, 0xe3f76);
+            lib::sound(x, crate::sound::CMD_30C);
             kind(x, 0x13);
             air(x, 7);
         }

@@ -6,6 +6,7 @@ use m68k::decode::Size;
 use m68k::{Cpu, SR_C, SR_N, SR_X, SR_Z};
 
 use crate::objects::motion::*;
+use crate::mem::prog32;
 use crate::tools::frames::*;
 use crate::{regs, Native};
 use crate::objects::Obj;

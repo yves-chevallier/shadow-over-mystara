@@ -272,7 +272,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(0x2e, 0x2c);
     x.set8(0x79, 0x3f);
     x.set8(0x8e, 3);
-    lib::sound(x, 0xe1330);
+    lib::sound(x, crate::sound::CMD_20);
     lib::empty_popups(x);
     lib::clear_popup(x);
     x.set_a5_u8(0x50, 1);

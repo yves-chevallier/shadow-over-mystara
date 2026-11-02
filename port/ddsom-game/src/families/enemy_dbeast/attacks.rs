@@ -363,7 +363,7 @@ pub(super) fn pounce_repeat<R: Bench>(x: &mut Cx<'_, R>) {
         let r = random(x) & 0xf;
         let sound = x.rom8(SOUNDS + r);
         if sound != 0 {
-            lib::sound(x, 0xe38d2);
+            lib::sound(x, crate::sound::CMD_31B_41B);
         }
     }
     if x.anim_step() {

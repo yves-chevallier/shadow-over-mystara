@@ -84,7 +84,7 @@ mod man_scorpion {
         lib::set_immunities(x);
         x.anim_start(ANIMS, 0);
         lib::initial_hp(x);
-        lib::sound(x, 0xea8be);
+        lib::sound(x, crate::sound::CMD_92_D);
     }
 
     /// Creates the parts; `flame_kind` is the variant of the flames; variant 1 also creates the arms.
@@ -388,7 +388,7 @@ mod man_scorpion {
             parent.set_u8(x.b, 0x21, v);
             parent.set_u8(x.b, 0x24, 0);
         }
-        lib::sound(x, 0xeb4ba);
+        lib::sound(x, crate::sound::CMD_131_231);
         for off in [p::LIMBS, p::LIMBS + 2, p::SHADOW] {
             let o = x.linked(off);
             o.set_u32(x.b, f::STATE, st::DEAD_LONG);
@@ -436,7 +436,7 @@ mod man_scorpion {
 
     fn death_start_b<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB2, 2);
-        lib::sound(x, 0xeb4ba);
+        lib::sound(x, crate::sound::CMD_131_231);
         let parent = x.linked(f::OWNER);
         let v = parent.u8(x.b, 0x21).wrapping_add(1);
         parent.set_u8(x.b, 0x21, v);
@@ -586,7 +586,7 @@ mod nagpa {
         if !player_near(x) {
             return;
         }
-        lib::sound(x, 0xe5632);
+        lib::sound(x, crate::sound::CMD_34C_44C);
         mark_visible(x, true);
         x.add8(f::SUB, 2);
         x.set_bit(0x1, 1, false);
@@ -604,7 +604,7 @@ mod nagpa {
             return;
         }
         x.add8(f::SUB, 2);
-        lib::sound(x, 0xe5632);
+        lib::sound(x, crate::sound::CMD_34C_44C);
         mark_visible(x, false);
         let n = 2 + (x.u8(0x3) != 0) as u32;
         x.anim_start(ANIMS, n as u16);

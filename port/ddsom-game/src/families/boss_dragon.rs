@@ -203,7 +203,7 @@ fn wait_stop<R: Bench>(x: &mut Cx<'_, R>) {
         if let Some(bubble) = crate::families::creators::scene_set(x.b, 0xe) {
             x.set16(MESSAGE, bubble.word());
             x.add8(f::SUB2, 2);
-            lib::sound(x, 0xe0d8c);
+            lib::sound(x, crate::sound::SCENE_MUSIC_OR_STOP);
             x.set8(TALKING, 1);
             x.set_bit(CUTSCENE, 0, false);
         }
@@ -284,7 +284,7 @@ fn leave<R: Bench>(x: &mut Cx<'_, R>) {
     let Some(lead) = leader(x) else { return };
     let left = scroll_x(x).wrapping_sub(0x80);
     if x.u16(0x8).wrapping_sub(left) >= 0x200 {
-        lib::sound(x, 0xe0c5c);
+        lib::sound(x, crate::sound::SCENE_MUSIC);
         x.set8(TALKING, 0);
         x.set_bit(HOLD, 0, false);
         x.set8(SLOW, 0);

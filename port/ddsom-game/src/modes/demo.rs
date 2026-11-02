@@ -261,7 +261,7 @@ fn next_operation(x: &mut Ctx) -> Flow {
             // 0xe1024), called by `jsr (A6)`
             let index = rd8(x.b, script + 1) as u32;
             let routine = prog32(x, table::COMMANDS + index);
-            crate::sound::play_global(x.b, routine);
+            crate::sound::play_global(x.b, crate::sound::Sound::at(routine));
             scene_start(x, script + 3)
         }
         _ => presentation(x, script + 1),

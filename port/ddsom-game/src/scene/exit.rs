@@ -53,8 +53,6 @@ mod blk {
 const SEQUENCE_OF_SCENE: u32 = 0xf3170;
 const SEQUENCE_JUMPS: u32 = 0xf31ea;
 
-/// Sound command from the exit to the end of the game.
-const SOUND_E57D6: u32 = 0xe57d6;
 
 /// Dispatch loops of the object classes, in the order of the reduced update (without the bosses).
 const CLASSES: [&dispatch::Class; 9] = [
@@ -293,7 +291,7 @@ pub(crate) struct Leave {
     next_scene: NextScene,
     phase: u32,
     /// Sound played before the yield.
-    extra_sound: Option<u32>,
+    extra_sound: Option<crate::sound::Sound>,
     frames: u32,
     tail: Tail,
 }
@@ -1014,7 +1012,7 @@ static SEQ_35: Sequence = Sequence {
         St::Custom(seq35_fade),
         St::Custom(seq35_message),
         St::Custom(seq35_boss),
-        St::Leave(Leave { phase: PHASE_ENDING, extra_sound: Some(SOUND_E57D6), ..LEAVE }),
+        St::Leave(Leave { phase: PHASE_ENDING, extra_sound: Some(crate::sound::CMD_9B), ..LEAVE }),
     ],
 };
 
@@ -1233,7 +1231,7 @@ fn seq2_countdown(ex: &mut Ex) {
         ex.next();
         ex.set_b16(blk::TIMER, 128);
         crate::camera_modes::start_shake(ex.x.b, crate::camera_modes::shake::B, 30);
-        crate::sound::play_global(ex.x.b, 0xe4830);
+        crate::sound::play_global(ex.x.b, crate::sound::CMD_98);
     }
 }
 
@@ -1318,7 +1316,7 @@ fn seq14_countdown(ex: &mut Ex) {
     if ex.countdown() {
         ex.next();
         ex.message(36);
-        crate::sound::play_global(ex.x.b, 0xe61ca);
+        crate::sound::play_global(ex.x.b, crate::sound::CMD_89_89);
     }
 }
 
@@ -1429,7 +1427,7 @@ fn seq30_effect(ex: &mut Ex) {
     if ex.b16(blk::TIMER) == 32 {
         let e = ex.x.spawn(&pools::EFFCT, 75);
         e.set_u8(ex.x.b, Obj::VARIANT, 1);
-        crate::sound::play_global(ex.x.b, 0xed0c0);
+        crate::sound::play_global(ex.x.b, crate::sound::CMD_38E);
     }
     if ex.countdown() {
         ex.next();
@@ -1495,7 +1493,7 @@ fn seq35_message(ex: &mut Ex) {
     let set = crate::families::creators::set_15_pure(ex.x.b, 24).unwrap_or_else(|a1| a1);
     ex.set_b16(blk::OBJECT, set.0 as u16);
     crate::camera_modes::start_shake(ex.x.b, crate::camera_modes::shake::B, 0x7fff);
-    crate::sound::play_global(ex.x.b, 0xe5776);
+    crate::sound::play_global(ex.x.b, crate::sound::CMD_9A);
 }
 
 fn seq35_boss(ex: &mut Ex) {

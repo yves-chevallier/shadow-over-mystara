@@ -10,19 +10,6 @@ use super::cx::{handlers, Cx};
 use super::shell::*;
 use crate::objects::Obj;
 
-/// Sounds (wrappers of the 0xe0836-0xee080 area).
-mod sfx {
-    pub const E7376: u32 = 0xe7376;
-    pub const E73E8: u32 = 0xe73e8;
-    pub const EBE86: u32 = 0xebe86;
-    pub const E46DE: u32 = 0xe46de;
-    pub const E47BC: u32 = 0xe47bc;
-    pub const EBF6A: u32 = 0xebf6a;
-    pub const ECE2C: u32 = 0xece2c;
-    pub const EBCBE: u32 = 0xebcbe;
-    pub const EBD30: u32 = 0xebd30;
-}
-
 use crate::objects::pools;
 use crate::objects::Current;
 
@@ -75,7 +62,7 @@ mod shot0 {
         x.set8(f::ATTACK_POWER, power);
         x.set8(f::ATTACK_ID, id);
         x.anim_start(ANIMS, anim);
-        crate::sound::play(x.b, sfx::EBE86, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_322_422, x.o);
         true
     }
 
@@ -83,7 +70,7 @@ mod shot0 {
     fn fly<R: Bench>(x: &mut Cx<'_, R>) {
         let hit = x.u8(f::HIT_FLAGS);
         if hit & 0x08 != 0 {
-            crate::sound::play(x.b, sfx::E7376, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_122_222, x.o);
             x.free_eshl();
             return;
         }
@@ -108,7 +95,7 @@ mod shot0 {
         match x.u8(0x6) {
             FALL_START => {
                 x.add8(0x6, 2);
-                crate::sound::play(x.b, sfx::E73E8, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_123_223, x.o);
                 x.set16(0x18, -0xc0i16 as u16);
                 x.set16(0x1a, -0x10i16 as u16);
                 x.set16(0x14, 0);
@@ -206,14 +193,14 @@ mod shot1 {
                     x.add8(0x5, 2);
                     x.set16(f::TIMER, 0x50);
                     x.set32(0xc, 0);
-                    crate::sound::play(x.b, sfx::EBCBE, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_320_420, x.o);
                     x.anim_start(ANIMS, 1);
                 }
             }
             LANDED => {
                 if x.u8(0x33) != 0 {
                     x.set8(0x33, 0);
-                    crate::sound::play(x.b, sfx::EBD30, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_321_421, x.o);
                 }
                 let t = x.u16(f::TIMER).wrapping_sub(1);
                 x.set16(f::TIMER, t);
@@ -268,7 +255,7 @@ mod shot2 {
                 let (anim, id) = if owner.u8(x.b, 0x2) != 0 { (1, 0xa) } else { (0, 9) };
                 x.set8(f::ATTACK_ID, id);
                 x.anim_start(ANIMS, anim);
-                crate::sound::play(x.b, sfx::EBF6A, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_323_423, x.o);
                 fly(x);
             }
             2 => fly(x),
@@ -278,7 +265,7 @@ mod shot2 {
 
     fn fly<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(f::HIT_FLAGS) & 0x28 != 0 {
-            crate::sound::play(x.b, sfx::E7376, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_122_222, x.o);
             return x.free_eshl();
         }
         if blocked_by_terrain(x) {
@@ -400,7 +387,7 @@ mod shot4 {
         x.anim_step();
         x.cull_offscreen();
         if (x.u16(0xc) as i16) < 0 {
-            crate::sound::play(x.b, sfx::ECE2C, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_352_452, x.o);
             x.set16(0xc, 0);
             x.add8(0x5, 2);
             let (vx, ax) = (x.u16(f::OWNER), x.u16(0x42));
@@ -421,7 +408,7 @@ mod shot4 {
         x.set8(f::TIMER, t);
         if (t as i8) < 0 {
             x.add8(0x5, 2);
-            crate::sound::play(x.b, sfx::EBD30, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_321_421, x.o);
             x.anim_start(ANIMS, 1);
         }
     }
@@ -1301,7 +1288,7 @@ mod shot14 {
                     x.add8(0x7, 2);
                     x.set8(f::ATTACK_POWER, 8);
                     x.set8(f::ATTACK_ID, 0xf);
-                    crate::sound::play(x.b, sfx::E46DE, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_32A_42A, x.o);
                     breath_anim(x);
                 }
                 _ => {
@@ -1328,7 +1315,7 @@ mod shot14 {
                 }
                 2 => {
                     if x.u8(0x33) != 0 {
-                        crate::sound::play(x.b, sfx::E47BC, x.o);
+                        crate::sound::play(x.b, crate::sound::CMD_32C_42C, x.o);
                         x.add8(0x7, 2);
                         let child = spawn_child(x, 0);
                         x.set16(0x42, child.0 as u16);

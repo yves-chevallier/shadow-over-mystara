@@ -58,10 +58,6 @@ mod f {
     pub const HIDDEN: u32 = 0x40;
 }
 
-/// Original routines used.
-mod rom {
-}
-
 /// Players: four records of 0x200 bytes.
 const PLAYERS: u32 = A5 + 0x5de;
 const PLAYER_STRIDE: u32 = 0x200;
@@ -119,8 +115,8 @@ mod shop {
     pub const FULL_LIFE: u16 = 0x85;
     pub const TOO_MANY: u16 = 0x86;
     pub const NO_ROOM: u16 = 0x87;
-    pub const SOUND_REFUSED: u32 = 0xea5f0;
-    pub const SOUND_BOUGHT: u32 = 0xea57e;
+    pub const SOUND_REFUSED: crate::sound::Sound = crate::sound::CMD_136_236;
+    pub const SOUND_BOUGHT: crate::sound::Sound = crate::sound::CMD_135_235;
     /// Pointers (words) of the four possible buyers.
     pub const BUYERS: u32 = 0xff2aa4;
     /// Annonce en cours (`A5-0x554e`).
@@ -881,7 +877,7 @@ fn attached_init<R: Bench>(x: &mut Cx<'_, R>) {
             x.anim_start(attached::ANIM_SET, 4);
             let carrier = x.linked(attached::CARRIER);
             if matches!(carrier.u8(x.b, f::VARIANT), 4 | 9) {
-                crate::sound::play(x.b, 0xe5d36, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_367_467, x.o);
             }
         }
         6 => {
@@ -889,7 +885,7 @@ fn attached_init<R: Bench>(x: &mut Cx<'_, R>) {
             }
         7 => {}
         8..=11 => {
-            const SOUNDS: [u32; 4] = [0xe6a8e, 0xe6fe6, 0xe713c, 0xe6e90];
+            const SOUNDS: [crate::sound::Sound; 4] = [crate::sound::CMD_102_202, crate::sound::CMD_10C_20C, crate::sound::CMD_10F_20F, crate::sound::CMD_109_209];
             crate::sound::play(x.b, SOUNDS[v as usize - 8], x.o);
             x.anim_start(attached::ANIM_SET, (v as u32 - 3) as u16);
         }
@@ -1565,7 +1561,7 @@ mod barrier {
     pub const SET_VARIANTS: u32 = 0xba034;
     /// Switch variants, four bytes per variant (data); a negative value stops the list.
     pub const SWITCHES: u32 = 0xba07c;
-    pub const OPEN_SOUND: u32 = 0xeaf6a;
+    pub const OPEN_SOUND: crate::sound::Sound = crate::sound::CMD_34E_44E;
     /// Associated SET scenery (16-bit pointer).
     pub const SET: u32 = 0x46;
     /// Switches (up to four 16-bit pointers) and their number.
@@ -1800,7 +1796,7 @@ fn floater_main<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(0x33, 0);
                 crate::placement::load_effect_palette(x.b, crate::placement::effect_palette::LIGHT);
                 super::effects_creators::pillars(x.b);
-                crate::sound::play(x.b, 0xe637c, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_357, x.o);
                 x.set_a5_u16(0x4ba, 0x100);
                 x.set8(floater::SHAKE, 8);
                 crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
@@ -1940,7 +1936,7 @@ fn prop_active<R: Bench>(x: &mut Cx<'_, R>) {
         (1, 2) => {
             if matches!(carrier_state(x), 0x0200_060c | 0x0200_080c) {
                 x.add8(f::SUB_STATE, 2);
-                crate::sound::play(x.b, 0xe4e5a, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_311_411, x.o);
             }
             x.anim_step();
         }
@@ -1956,7 +1952,7 @@ fn prop_active<R: Bench>(x: &mut Cx<'_, R>) {
         (2, 2) => {
             if carrier_state(x) == 0x0200_000c {
                 x.add8(f::SUB_STATE, 2);
-                crate::sound::play(x.b, 0xe4e5a, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_311_411, x.o);
             }
             x.anim_step();
         }
@@ -2740,7 +2736,7 @@ fn lob_active<R: Bench>(x: &mut Cx<'_, R>) {
             };
             x.set_a5_u16(0x4be, shake);
             crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_RED);
-            crate::sound::play(x.b, 0xe5d36, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_367_467, x.o);
         }
         4 => {
             if x.anim_step() {
@@ -2772,7 +2768,7 @@ fn ending_piece<R: Bench>(x: &mut Cx<'_, R>) {
             0 => {
                 if x.a5_u8(0x42) != 0 && rd8(x.b, floater::STEP) == 0xc {
                     x.add8(f::SUB_STATE, 2);
-                    crate::sound::play(x.b, 0xead60, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_34C_44C_B, x.o);
                 }
             }
             2 => {
@@ -4053,7 +4049,7 @@ fn riser_shoot<R: Bench>(x: &mut Cx<'_, R>, variant: u8) {
         wr16(x.b, o.0 + 0x42, x.o.0 as u16);
         let facing = x.u8(0x2c);
         wr8(x.b, o.0 + 0x2c, facing);
-        crate::sound::play(x.b, 0xe5dea, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_368, x.o);
     } else {
         for field in [Obj::X, Obj::Y, Obj::Z] {
             let v = x.u16(field);
@@ -4072,8 +4068,8 @@ fn riser<R: Bench>(x: &mut Cx<'_, R>) {
             x.add16(Obj::Z, 0x32);
             crate::palette::set_flash_color(x.b, crate::palette::FLASH_COLOR_WHITE_VALUE);
             x.set_a5_u16(0x4be, 0xa);
-            crate::sound::play(x.b, 0xead04, x.o);
-            crate::sound::play(x.b, 0xe5daa, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_5F, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_173, x.o);
             x.anim_start(riser::ANIM_SET, 9);
         }
         2 => riser_active(x),
@@ -4162,14 +4158,14 @@ fn riser_active<R: Bench>(x: &mut Cx<'_, R>) {
             wr16(x.b, o.0 + Obj::X, px);
             wr16(x.b, o.0 + Obj::Y, py);
             wr16(x.b, o.0 + Obj::Z, 0x66);
-            crate::sound::play(x.b, 0xe5c7a, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_365, x.o);
         }
         18 => {
             if countdown(x, riser::TIMER) {
                 return;
             }
             x.set16(riser::TIMER, 0x3c);
-            crate::sound::play(x.b, 0xe5cd6, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_366_B, x.o);
             riser_anim(x, 5);
         }
         20 => {
@@ -4333,7 +4329,7 @@ fn spell<R: Bench>(x: &mut Cx<'_, R>) {
                     }
                     x.set8(0x2a, 1);
                     x.set8(0x2b, 0x17);
-                    crate::sound::play(x.b, 0xed2c4, x.o);
+                    crate::sound::play(x.b, crate::sound::CMD_353, x.o);
                     x.anim_start(spell::ANIM_SET, 6);
                 }
                 _ => return,
@@ -4366,7 +4362,7 @@ fn spell<R: Bench>(x: &mut Cx<'_, R>) {
                         if mode == 1 && x.u8(0x33) == 1 {
                             x.set8(0x33, 0);
                             super::eshl_creators::ring_28(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
-                            crate::sound::play(x.b, 0xed186, x.o);
+                            crate::sound::play(x.b, crate::sound::CMD_346, x.o);
                         }
                         if x.anim_step() {
                             match mode {
@@ -4400,7 +4396,7 @@ fn spell<R: Bench>(x: &mut Cx<'_, R>) {
 fn title_card<R: Bench>(x: &mut Cx<'_, R>) {
     let creator = x.linked(0x42);
     let gone = |x: &mut Cx<'_, R>| {
-        crate::sound::play(x.b, 0xed90a, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_337, x.o);
         free(x);
     };
     if creator.u8(x.b, f::STATE) == 4 {
@@ -4409,7 +4405,7 @@ fn title_card<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
-            crate::sound::play(x.b, 0xed11c, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_333, x.o);
             x.anim_start(0x1942b2, 0);
         }
         2 => {
@@ -4448,7 +4444,7 @@ fn result_card<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(Obj::Y, cy);
             x.set16(Obj::Z, 0x80);
             x.set16(Obj::VZ, 0xf000);
-            crate::sound::play(x.b, 0xed11c, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_333, x.o);
             x.anim_start(0x19431a, 0);
         }
         2 => {
@@ -4466,7 +4462,7 @@ fn result_card<R: Bench>(x: &mut Cx<'_, R>) {
                     if creator.u32(x.b, f::STATE) == 0x0200_0200 {
                         x.add8(f::SUB_STATE, 2);
                         blink_frames(x);
-                        crate::sound::play(x.b, 0xed056, x.o);
+                        crate::sound::play(x.b, crate::sound::CMD_332, x.o);
                         x.anim_start(0x19431a, 1);
                     } else {
                         x.anim_step();
@@ -4476,7 +4472,7 @@ fn result_card<R: Bench>(x: &mut Cx<'_, R>) {
                     blink_frames(x);
                     if creator.u32(x.b, f::STATE) == 0x0200_0600 {
                         x.add8(f::SUB_STATE, 2);
-                        crate::sound::play(x.b, 0xed90a, x.o);
+                        crate::sound::play(x.b, crate::sound::CMD_337, x.o);
                         x.anim_start(0x19431a, 2);
                     } else {
                         x.anim_step();
@@ -4518,7 +4514,7 @@ fn toss_sound<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let k = 4 * x.u8(f::VARIANT) as u32;
     let routine = (x.rom16(table + k) as u32) << 16 | x.rom16(table + k + 2) as u32;
     if routine != 0 {
-        crate::sound::play(x.b, routine, x.o);
+        crate::sound::play(x.b, crate::sound::Sound::at(routine), x.o);
     }
 }
 
@@ -4632,7 +4628,7 @@ fn scene_timer<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::STATE) {
         0 => {
             x.add8(f::STATE, 2);
-            let (delay, sound) = if v == 0 { (0x168, 0xeac08) } else { (0x10e, 0xeabac) };
+            let (delay, sound) = if v == 0 { (0x168, crate::sound::CMD_9D) } else { (0x10e, crate::sound::CMD_8F) };
             x.set16(0x30, delay);
             crate::sound::play(x.b, sound, x.o);
         }
@@ -4643,7 +4639,7 @@ fn scene_timer<R: Bench>(x: &mut Cx<'_, R>) {
             let music = if v == 0 { 0x15 } else { 0x14 };
             // Original glitch: D4 = the music stays for the following handlers (`dispatch::Leftovers`)
             *x.c.d4() = music;
-            crate::sound::play_with(x.b, 0xe17a4, crate::sound::Source { object: Some(x.o), d4: Some(music), ..Default::default() });
+            crate::sound::play_with(x.b, crate::sound::FROM_D4, crate::sound::Source { object: Some(x.o), d4: Some(music), ..Default::default() });
             free(x);
         }
         _ => free(x),
@@ -4766,7 +4762,7 @@ fn finale_step<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB_STATE, 4);
-            crate::sound::play(x.b, 0xe633c, x.o);
+            crate::sound::play(x.b, crate::sound::CMD_8A, x.o);
             x.set_a5_u16(0x490, 1);
             x.set_a5_u8(0x48e, 8);
             x.set_a5_u16(0x49e, 0xf20);

@@ -73,7 +73,7 @@ fn pushed_back<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(ANIM_ID, 0x1e);
             x.set8(ANIM_LAST, 0x1e);
             lib::set_68(x);
-            lib::sound(x, 0xec6ca);
+            lib::sound(x, crate::sound::CMD_127_227_B);
             let side = x.u8(0x4a);
             x.set8(f::FLIP, side);
             let side = x.u8(f::FLIP) ^ 0x20;
@@ -174,7 +174,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
 fn death<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB2) {
         0 => {
-            lib::sound(x, 0xe3b6c);
+            lib::sound(x, crate::sound::CMD_FF);
             x.set32(f::IMMUNITY, 0xffff_ffff);
             x.set8(0, 2);
             let freeze = x.u8(0x56);
@@ -199,7 +199,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set8(0x93, 1);
                 x.set_a5_u8(0x4f, 0xff);
                 crate::sound::service(x.b, crate::sound::Service::Ff05);
-                lib::sound(x, 0xe3b6c);
+                lib::sound(x, crate::sound::CMD_FF);
                 lib::flash_and_shake(x);
             } else {
                 lib::object_event(x);
@@ -228,7 +228,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0xc, 0);
             let right = x.u8(f::FLIP) != 0;
             dust_trail(x, right);
-            lib::sound(x, 0xec9e8);
+            lib::sound(x, crate::sound::CMD_35D);
             if !second_form(x) {
                 effct_33(x);
             }

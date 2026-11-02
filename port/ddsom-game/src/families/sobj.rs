@@ -636,7 +636,7 @@ mod scene {
         x.set32(0xc, 0xd0_0000);
         x.set32(0x10, 0);
         start(x, 0xee);
-        crate::sound::play(x.b, 0xea662, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_96, x.o);
     }
 
     fn v1_step<R: Bench>(x: &mut Cx<'_, R>) {
@@ -695,7 +695,7 @@ mod scene {
         }
         x.set16(0x48, 0);
         start(x, 0xf1);
-        crate::sound::play(x.b, 0xea6a2, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_97, x.o);
     }
 
     fn v3_step<R: Bench>(x: &mut Cx<'_, R>) {
@@ -960,7 +960,7 @@ mod scene {
         x.set32(0x10, 0);
         x.add16(0xc, 0xf0);
         start(x, 0x113);
-        crate::sound::play(x.b, 0xea2e8, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_8E, x.o);
     }
 
     fn v9_step<R: Bench>(x: &mut Cx<'_, R>) {
@@ -982,7 +982,7 @@ mod scene {
         x.set32(0xc, 0x70_0000);
         x.set32(0x10, 0);
         start(x, 0x114);
-        crate::sound::play(x.b, 0xea77e, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_3C, x.o);
     }
 
     fn v10_step<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1018,7 +1018,7 @@ mod scene {
                     return;
                 }
                 x.add8(0x5, 2);
-                crate::sound::play(x.b, 0xea87e, x.o);
+                crate::sound::play(x.b, crate::sound::CMD_40, x.o);
             }
             8 => {
                 x.add32(0xc, 0u32.wrapping_sub(0x4000));
@@ -1047,7 +1047,7 @@ mod scene {
         x.add16(0xc, 0xc0);
         x.set16(0x8, 0x30);
         start(x, 0x115);
-        crate::sound::play(x.b, 0xea7fe, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_3E, x.o);
     }
 
     /// Variant 12: sprite that crosses the screen (1 pixel per frame to the right, or to the
@@ -1166,7 +1166,7 @@ mod scene {
         x.add8(0x4, 2);
         random_flip(x);
         start(x, 0x1a2);
-        crate::sound::play(x.b, 0xea7be, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_3D, x.o);
     }
 
     fn v16_step<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1190,7 +1190,7 @@ mod scene {
         // `move.w #0x1a3,D0w ; add.b (0x2f,A0),D0b`: the addition does not overflow into the high byte
         let n = 0x100 | (0xa3 + x.u8(0x2f) as u32) & 0xff;
         start(x, n);
-        crate::sound::play(x.b, 0xea83e, x.o);
+        crate::sound::play(x.b, crate::sound::CMD_3F, x.o);
     }
 
     fn v17_step<R: Bench>(x: &mut Cx<'_, R>) {
@@ -1392,7 +1392,7 @@ mod hint {
     const FIRST_ADVICE: u32 = 0x118;
     const LAST_ADVICE: u16 = 0x136;
     const ADVICE_FRAMES: u8 = 0x50;
-    const LEAVE_SOUND: u32 = 0xea49a;
+    const LEAVE_SOUND: crate::sound::Sound = crate::sound::CMD_137_237;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let owner = x.linked(0x46);
@@ -1745,7 +1745,7 @@ mod badge {
 
     const KILL: u32 = 0x0600_0000;
     const BADGE_VARIANT: u8 = 1;
-    const SOUND: u32 = 0xea428;
+    const SOUND: crate::sound::Sound = crate::sound::CMD_356_456;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if x.u8(0x3) == 0 {
@@ -2151,7 +2151,7 @@ mod target {
 
     const RECTS: u32 = 0xe02c6;
     const HITS_TO_BREAK: u8 = 3;
-    const SOUND: u32 = 0xea57e;
+    const SOUND: crate::sound::Sound = crate::sound::CMD_135_235;
     const SHOOTER_CODE: u32 = 0xff_2ab2;
     const FLAG_A: u32 = 0xff_2ac0;
     const FLAG_B: u32 = 0xff_2ac1;

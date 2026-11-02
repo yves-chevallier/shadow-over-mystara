@@ -30,7 +30,7 @@ mod jet {
 
     const OFFSETS: u32 = 0x53150;
     const ANIMS: u32 = 0x15c698;
-    const SFX: u32 = 0xeb364;
+    const SFX: crate::sound::Sound = crate::sound::CMD_13C_23C;
     const KIND: u8 = 0xc;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
@@ -161,7 +161,7 @@ mod flame {
     use super::*;
 
     const ANIMS: u32 = 0x15c7a6;
-    const SFX: u32 = 0xe83e2;
+    const SFX: crate::sound::Sound = crate::sound::CMD_14E_24E;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x53420) {
@@ -259,7 +259,7 @@ mod star {
 
     const COLORS: u32 = 0x53734;
     const ANIMS: u32 = 0x15c8a2;
-    const SFX: u32 = 0xe8454;
+    const SFX: crate::sound::Sound = crate::sound::CMD_14F_24F;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x536a8) {
@@ -309,7 +309,7 @@ mod stone {
     use super::*;
 
     const ANIMS: u32 = 0x15c90a;
-    const SFX: u32 = 0xe8ab8;
+    const SFX: crate::sound::Sound = crate::sound::CMD_169;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x53808) {

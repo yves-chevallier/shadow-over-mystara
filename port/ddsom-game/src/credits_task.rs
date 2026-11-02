@@ -31,9 +31,9 @@ use crate::video::{load_grid, Grid};
 
 /// Sounds of the credits screen.
 mod sound {
-    pub const SCREEN_A: u32 = 0xe1060;
-    pub const SCREEN_B: u32 = 0xe18b8;
-    pub const START: u32 = 0xe181c;
+    pub const SCREEN_A: crate::sound::Sound = crate::sound::CMD_01;
+    pub const SCREEN_B: crate::sound::Sound = crate::sound::CMD_4E;
+    pub const START: crate::sound::Sound = crate::sound::CMD_4C;
 }
 
 /// Entry of the game task, and of the players' interface task.

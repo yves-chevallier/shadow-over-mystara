@@ -66,7 +66,7 @@ fn variant_sound(b: &mut Cps2Bus, me: Obj, kinds: u32, routines: u32) {
     let index = (prog8(b, kinds + variant) as u16).wrapping_mul(4);
     match prog32(b, routines + index as u32) {
         NOTHING => {}
-        sound @ (0xe0c5c | 0xe0d8c) => crate::sound::play(b, sound, me),
+        sound @ (0xe0c5c | 0xe0d8c) => crate::sound::play(b, crate::sound::Sound::at(sound), me),
         r => unreachable!("wave routine {r:#x}: tables 0xd98cc and 0xd996e only have 0xd99f8, 0xe0c5c, 0xe0d8c"),
     }
 }

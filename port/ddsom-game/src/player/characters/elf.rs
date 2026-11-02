@@ -27,26 +27,26 @@ use crate::player::external as ext;
 /// Identifiers (original addresses) of the routines reached: player effects, sounds, palettes and screen effects.
 mod rom {
     /// Whirl sounds (the effect: `creators::for_players::whirl`).
-    pub const WHIRL_SOUND_A: u32 = 0xe82fe;
+    pub const WHIRL_SOUND_A: crate::sound::Sound = crate::sound::CMD_141_241;
     /// Sounds of the spells, in the call order of each spell.
-    pub const WARD_SOUNDS: [u32; 2] = [0xe28e4, 0xe96e0];
-    pub const WARD_END_SOUNDS: [u32; 2] = [0xe2e3a, 0xe8e88];
-    pub const SHIELD_SOUNDS: [u32; 2] = [0xe28e4, 0xe8e1e];
-    pub const SHIELD_SECOND_SOUNDS: [u32; 2] = [0xe2e7a, 0xe8e88];
-    pub const BEAM_SOUND: u32 = 0xe8ce0;
-    pub const BEAM_SECOND_SOUND: u32 = 0xe2eba;
-    pub const SPARK_SOUND: u32 = 0xe84c6;
-    pub const SPARK_END_SOUND: u32 = 0xe2d3a;
-    pub const BOLT_SOUND: u32 = 0xe28e4;
-    pub const BOLT_SECOND_SOUND: u32 = 0xe88d0;
-    pub const BOLT_END_SOUNDS: [u32; 2] = [0xe893a, 0xe2d7a];
-    pub const FROST_SOUNDS: [u32; 2] = [0xe28e4, 0xe860c];
-    pub const FROST_START_SOUND: u32 = 0xe2dba;
-    pub const QUAKE_START_SOUND: u32 = 0xe2dfa;
-    pub const QUAKE_SECOND_SOUND: u32 = 0xe8b22;
-    pub const MOON_START_SOUNDS: [u32; 2] = [0xe910c, 0xe296c];
-    pub const MOON_SOUND: u32 = 0xe2efa;
-    pub const MOON_SOUND_B: u32 = 0xe9a88;
+    pub const WARD_SOUNDS: [crate::sound::Sound; 2] = [crate::sound::CMD_E8, crate::sound::CMD_17F];
+    pub const WARD_END_SOUNDS: [crate::sound::Sound; 2] = [crate::sound::CMD_64, crate::sound::CMD_172];
+    pub const SHIELD_SOUNDS: [crate::sound::Sound; 2] = [crate::sound::CMD_E8, crate::sound::CMD_171];
+    pub const SHIELD_SECOND_SOUNDS: [crate::sound::Sound; 2] = [crate::sound::CMD_65, crate::sound::CMD_172];
+    pub const BEAM_SOUND: crate::sound::Sound = crate::sound::CMD_16F;
+    pub const BEAM_SECOND_SOUND: crate::sound::Sound = crate::sound::CMD_66;
+    pub const SPARK_SOUND: crate::sound::Sound = crate::sound::CMD_160;
+    pub const SPARK_END_SOUND: crate::sound::Sound = crate::sound::CMD_60;
+    pub const BOLT_SOUND: crate::sound::Sound = crate::sound::CMD_E8;
+    pub const BOLT_SECOND_SOUND: crate::sound::Sound = crate::sound::CMD_167;
+    pub const BOLT_END_SOUNDS: [crate::sound::Sound; 2] = [crate::sound::CMD_168, crate::sound::CMD_61];
+    pub const FROST_SOUNDS: [crate::sound::Sound; 2] = [crate::sound::CMD_E8, crate::sound::CMD_163];
+    pub const FROST_START_SOUND: crate::sound::Sound = crate::sound::CMD_62;
+    pub const QUAKE_START_SOUND: crate::sound::Sound = crate::sound::CMD_63;
+    pub const QUAKE_SECOND_SOUND: crate::sound::Sound = crate::sound::CMD_16B;
+    pub const MOON_START_SOUNDS: [crate::sound::Sound; 2] = [crate::sound::CMD_177, crate::sound::MOON];
+    pub const MOON_SOUND: crate::sound::Sound = crate::sound::CMD_67;
+    pub const MOON_SOUND_B: crate::sound::Sound = crate::sound::CMD_18B;
 }
 
 /// Field that keeps the ally blessed by spell 0x15 (word: address of its record).
@@ -628,7 +628,7 @@ fn timed_throw(g: &mut Ctx, p: Player) {
 
 
 /// Plays ROM sounds.
-fn sounds(g: &mut Ctx, p: Player, list: &[u32]) {
+fn sounds(g: &mut Ctx, p: Player, list: &[crate::sound::Sound]) {
     for &sound in list {
         g.sound(sound, p);
     }

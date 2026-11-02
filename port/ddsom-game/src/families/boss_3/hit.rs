@@ -134,7 +134,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             set_abs8(x, A5_DEATH + 2, score);
             lib::drop_rewards(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
-            lib::sound(x, 0xe3b6c);
+            lib::sound(x, crate::sound::CMD_FF);
             lib::flash_and_shake(x);
             x.set8(0, 2);
             let f = x.u8(0x56);
@@ -177,7 +177,7 @@ fn falling<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x18, 0);
     next6(x);
     x.anim_start(SET_DEATH, 0x10);
-    lib::sound(x, 0xecabc);
+    lib::sound(x, crate::sound::CMD_AA);
 }
 
 /// Defeated boss: type and variant (word), score (`A5-0x557c..`), read by the end of the stage.

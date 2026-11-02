@@ -416,7 +416,7 @@ mod shard {
     pub const SPEEDS: u32 = 0xb2d52;
     pub const ANIMATIONS: u32 = 0x193ffe;
     pub const OFFSET: u32 = 0x5c;
-    pub const CREATE_SHOT_A: u32 = 0xeab50;
+    pub const CREATE_SHOT_A: crate::sound::Sound = crate::sound::CMD_8C;
 }
 
 fn shard_init<R: Bench>(ctx: &mut Cx<'_, R>, o: Obj) {
@@ -673,8 +673,8 @@ mod interface {
     pub const PLAYER: u32 = 0x1a;
     pub const CHARACTER: u32 = 0x42;
     // subroutines not rewritten
-    pub const CHANGE_CHARACTER: u32 = 0xea344;
-    pub const SOUND_GAUGE: u32 = 0xea3b6;
+    pub const CHANGE_CHARACTER: crate::sound::Sound = crate::sound::CMD_134_234;
+    pub const SOUND_GAUGE: crate::sound::Sound = crate::sound::CMD_13B_23B;
 }
 
 /// Game phase: 8 or more, the game is over.
@@ -1920,7 +1920,7 @@ mod trigger {
     pub const TABLE: u32 = 0xb534e;
     pub const ANIMATIONS: u32 = 0x1bf5c2;
     pub const PRINCIPAL: i32 = 0x46;
-    pub const EFFECT: u32 = 0xea50c;
+    pub const EFFECT: crate::sound::Sound = crate::sound::CMD_14A_24A;
     pub const OFFSETS: u32 = 0xb53ec;
 }
 

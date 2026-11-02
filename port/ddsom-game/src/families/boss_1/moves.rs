@@ -68,7 +68,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set32(0x14, 0);
             x.set16(0x1e, 0);
-            lib::sound(x, 0xec820);
+            lib::sound(x, crate::sound::CMD_35F_45F);
             x.set16(0x18, 0x480);
             x.set16(0x1a, (-0x40i16) as u16);
             dust(x, 6);
@@ -103,7 +103,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             next6(x);
             x.set16(0xc, 0);
             dust(x, 6);
-            lib::sound(x, 0xec820);
+            lib::sound(x, crate::sound::CMD_35F_45F);
             body(x, 0xe);
         }
         _ => {
@@ -290,7 +290,7 @@ fn hop_walk<R: Bench>(x: &mut Cx<'_, R>, second: bool) {
             next7(x);
             x.set16(0xc, 0);
             dust(x, 6);
-            lib::sound(x, 0xec820);
+            lib::sound(x, crate::sound::CMD_35F_45F);
             hop_anim(x, 3);
         }
         8 => {
@@ -430,7 +430,7 @@ fn leap_attack<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0xc, 0);
             lib::shake_54(x, 0xa);
             dust(x, 6);
-            lib::sound(x, 0xec820);
+            lib::sound(x, crate::sound::CMD_35F_45F);
             body(x, 0x16);
         }
         8 => {
@@ -511,8 +511,8 @@ fn backing<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set16(0x16, v);
             x.move_x();
-            lib::sound(x, 0xec820);
-            lib::sound(x, 0xecdba);
+            lib::sound(x, crate::sound::CMD_35F_45F);
+            lib::sound(x, crate::sound::CMD_329_429);
             body(x, 0x18);
         }
         _ => {
@@ -553,7 +553,7 @@ pub(super) fn attacks<R: Bench>(x: &mut Cx<'_, R>) {
 fn strike<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
     if x.u8(0x7) == 0 {
         next7(x);
-        lib::sound(x, 0xe3da6);
+        lib::sound(x, crate::sound::CMD_30C_40C);
         kind(x, 0x10 + k);
         return attack(x, k as u32);
     }
@@ -562,7 +562,7 @@ fn strike<R: Bench>(x: &mut Cx<'_, R>, k: u8) {
             return;
         }
         x.set8(f::KEY_FRAME, 0);
-        lib::sound(x, 0xe3f02);
+        lib::sound(x, crate::sound::CMD_35C_45C);
         return dust(x, 7);
     }
     // 0x7b7ba: end of the hit; the chain continues if the hit connected
@@ -665,7 +665,7 @@ fn split<R: Bench>(x: &mut Cx<'_, R>) {
             next7(x);
             x.set16(0xc, 0);
             dust(x, 6);
-            lib::sound(x, 0xec820);
+            lib::sound(x, crate::sound::CMD_35F_45F);
             body(x, 0xe);
         }
         _ => {
@@ -718,7 +718,7 @@ pub(super) fn holding<R: Bench>(x: &mut Cx<'_, R>) {
         }
         2 => {
             if !sub16(x, TIMER2, 1).gt() {
-                lib::sound(x, 0xedd96);
+                lib::sound(x, crate::sound::CMD_341_441);
                 // puff of blood at the mouth (0xaaa40)
                 let mut dx = (-0x69i16) as u16;
                 if x.u8(f::FLIP) != 0 {

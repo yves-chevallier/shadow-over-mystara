@@ -429,7 +429,7 @@ pub(super) fn breath_tick<R: Bench>(x: &mut Cx<'_, R>) {
         let r = rand_and(x, 0xf);
         let flag = x.rom8(0x55e50 + r);
         if flag != 0 {
-            lib::sound(x, 0xe327a);
+            lib::sound(x, crate::sound::CMD_300_400);
         }
     }
     if !x.anim_step() {

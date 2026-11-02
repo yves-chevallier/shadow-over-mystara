@@ -22,8 +22,8 @@ mod ground {
     const POSE_B: u32 = 0x52dd8;
     const POWER: u32 = 0x10422e;
     const POWER2: u32 = 0x10424c;
-    const SFX_RIGHT: u32 = 0xe86e0;
-    const SFX_LEFT: u32 = 0xe876a;
+    const SFX_RIGHT: crate::sound::Sound = crate::sound::CMD_164_B;
+    const SFX_LEFT: crate::sound::Sound = crate::sound::CMD_164_C;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         let child = x.u8(0x3) != 0;
@@ -159,8 +159,8 @@ mod shadow {
     const ANIMS: u32 = 0x15c4a8;
     const ANGLES: u32 = 0x52eda;
     const PICK: u32 = 0x52ed4;
-    const SFX_FALL: u32 = 0xeb2f2;
-    const SFX_STRIKE: u32 = 0xeb364;
+    const SFX_FALL: crate::sound::Sound = crate::sound::CMD_13A_23A;
+    const SFX_STRIKE: crate::sound::Sound = crate::sound::CMD_13C_23C;
 
     pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         match x.state(0x52e50) {

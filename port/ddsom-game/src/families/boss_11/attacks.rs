@@ -34,9 +34,9 @@ pub(super) fn run<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x8dc30: tail hit (the effect depends on the type).
 fn sting<R: Bench>(x: &mut Cx<'_, R>) {
     if is_12(x) {
-        lib::sound(x, 0xe4de6)
+        lib::sound(x, crate::sound::CMD_387_487)
     } else {
-        lib::sound(x, 0xe4d72)
+        lib::sound(x, crate::sound::CMD_386_486)
     }
 }
 
@@ -79,7 +79,7 @@ fn spit<R: Bench>(x: &mut Cx<'_, R>) {
             if x.anim_step() {
                 x.add8(f::SUB3, 2);
                 act(x, 0x25);
-                return lib::sound(x, 0xe4b4c);
+                return lib::sound(x, crate::sound::CMD_411);
             }
             sync(x);
             if x.u8(f::KEY_FRAME) == 0 {
@@ -145,7 +145,7 @@ fn landing<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     x.set16(0xc, 0);
     body(x, 7);
     lib::shake_58(x, 8);
-    lib::sound(x, 0xecc0a);
+    lib::sound(x, crate::sound::CMD_328_428_B);
     true
 }
 
@@ -156,7 +156,7 @@ fn leap<R: Bench>(x: &mut Cx<'_, R>) {
         0x8dd36 => {
             x.add8(f::SUB3, 2);
             jump_side(x, -0x400, 0x600, (-0x40i16) as u16);
-            lib::sound(x, 0xe4cfe)
+            lib::sound(x, crate::sound::CMD_385_485)
         }
         0x8dd84 => {
             landing(x);
@@ -177,7 +177,7 @@ fn leap_c<R: Bench>(x: &mut Cx<'_, R>) {
         0x8e304 => {
             x.add8(f::SUB3, 2);
             jump_side(x, -0x100, 0x800, (-0x80i16) as u16);
-            lib::sound(x, 0xe4cfe)
+            lib::sound(x, crate::sound::CMD_385_485)
         }
         0x8e352 => {
             landing(x);
@@ -202,7 +202,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(TIMER, 0x20);
             act(x, 0x20);
             sync(x);
-            lib::sound(x, 0xe4cfe)
+            lib::sound(x, crate::sound::CMD_385_485)
         }
         0x8de0c => {
             x.anim_step();
@@ -263,7 +263,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(0x2d, d0 as u8);
             stop(x);
             speed(x, 0x34);
-            lib::sound(x, 0xe4cfe)
+            lib::sound(x, crate::sound::CMD_385_485)
         }
         0x8dee2 => {
             if !sub8(x, 0xb1, 1).gt() {
@@ -274,7 +274,7 @@ fn charge<R: Bench>(x: &mut Cx<'_, R>) {
                     return charge_end(x);
                 }
                 pause_tick(x);
-                lib::sound(x, 0xe4cfe);
+                lib::sound(x, crate::sound::CMD_385_485);
             }
             // D0: `moveq #0`, then the low byte = the gap
             let diff = x.u8(0xb3).wrapping_sub(x.u8(0x2d));
@@ -510,7 +510,7 @@ fn spit_c<R: Bench>(x: &mut Cx<'_, R>) {
             if x.anim_step() {
                 x.add8(f::SUB3, 2);
                 act(x, 0x25);
-                return lib::sound(x, 0xe4b4c);
+                return lib::sound(x, crate::sound::CMD_411);
             }
             sync(x);
             if x.u8(f::KEY_FRAME) == 0 {

@@ -72,10 +72,6 @@ mod state {
     pub const IDLE_PAUSED: u32 = 0x020a_0200;
 }
 
-/// Engine routines called by this boss.
-mod call {
-}
-
 // --- animations --------------------------------------------------------------------------------
 
 /// 0x95256: starts animation `n` of set `set` (of kind `kind`) via the AI, unless it is already the current one.
@@ -275,7 +271,7 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     effct_trio_2e(x);
     x.set16(ANIM_SET, 0xffff);
     anim_a(x, 0);
-    lib::sound(x, 0xe1470);
+    lib::sound(x, crate::sound::CMD_25);
 }
 
 // --- state 2: active -----------------------------------------------------------------------------

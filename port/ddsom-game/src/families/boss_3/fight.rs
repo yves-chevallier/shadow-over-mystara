@@ -53,7 +53,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
                 return end_frame(x, 0x50);
             }
             next6(x);
-            lib::sound(x, 0xe1370);
+            lib::sound(x, crate::sound::CMD_21);
             x.set_bit(0x1, 1, false);
             descend(x);
         }

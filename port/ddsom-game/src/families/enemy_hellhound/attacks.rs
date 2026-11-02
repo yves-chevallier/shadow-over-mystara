@@ -20,7 +20,7 @@ const FLAME_SCRIPT: u32 = 0x62284;
 fn bite_effect<R: Bench>(x: &mut Cx<'_, R>, kind: u32) {
     x.set8(f::KEY_FRAME, 0);
     crate::families::eshl_creators::shot_6(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o, kind as u8);
-    lib::sound(x, 0xebd30);
+    lib::sound(x, crate::sound::CMD_321_421);
 }
 
 /// 0x61c88: prepares the wait (look 0, animation 0).
@@ -151,7 +151,7 @@ fn lunge<R: Bench>(x: &mut Cx<'_, R>) {
         }
         6 => {
             if x.u8(f::KEY_FRAME) != 0 {
-                lib::sound(x, 0xe361a);
+                lib::sound(x, crate::sound::CMD_30F_40F);
                 if let Some(player) = lib::attack_hits_a_player(x, 3) {
                     return lib::seize_player(x, player, 0);
                 }
@@ -325,7 +325,7 @@ fn flame_tick<R: Bench>(x: &mut Cx<'_, R>, both: bool) -> bool {
         return false;
     }
     if both {
-        lib::sound(x, 0xed398);
+        lib::sound(x, crate::sound::CMD_35B_45B);
     }
     crate::families::eshl_creators::sweeping_8(&mut crate::families::effects_creators::leftovers::Pure, x.b, x.o);
     true
@@ -751,7 +751,7 @@ fn bite_victim<R: Bench>(x: &mut Cx<'_, R>, which: u8) {
     if (victim.u16(x.b, f::HP) as i16) <= 1 {
         return release(x);
     }
-    lib::sound(x, 0xedd96);
+    lib::sound(x, crate::sound::CMD_341_441);
     let hp = victim.u16(x.b, f::HP).wrapping_sub(3);
     victim.set_u16(x.b, f::HP, hp);
     if (hp as i16) <= 0 {

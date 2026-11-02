@@ -25,7 +25,7 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB2, 2);
             x.set_bit(0x1, 1, false);
-            lib::sound(x, 0xecf7a);
+            lib::sound(x, crate::sound::CMD_349);
             body(x, 5);
         }
         0x88308 => {
@@ -47,13 +47,13 @@ pub(super) fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0xc, 0);
             x.add8(f::SUB2, 2);
             body(x, 0xc);
-            lib::sound(x, 0xecc0a);
+            lib::sound(x, crate::sound::CMD_328_428_B);
             lib::shake_54(x, 0x1e);
         }
         _ => {
             if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(f::KEY_FRAME, 0);
-                lib::sound(x, 0xe42c6);
+                lib::sound(x, crate::sound::CMD_342_342);
             }
             if x.anim_step() {
                 lib::set_immunities(x);
@@ -142,7 +142,7 @@ fn near_checks<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if x.u8(0x3e) != 0 {
         x.set8(0x3e, 0);
-        lib::sound(x, 0xec502);
+        lib::sound(x, crate::sound::CMD_326_426);
     }
     if x.u16(f::TARGET) == 0 {
         return;

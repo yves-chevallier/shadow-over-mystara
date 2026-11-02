@@ -166,7 +166,7 @@ fn dying<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             x.set8(0, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            lib::sound(x, 0xe385e);
+            lib::sound(x, crate::sound::CMD_375_475);
             lib::object_event(x);
             detach_from_host(x);
             lib::drop_rewards(x);
@@ -273,7 +273,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
                 return;
             }
             x.add8(f::SUB2, 2);
-            lib::sound(x, 0xe3776);
+            lib::sound(x, crate::sound::CMD_373_473);
             play(x, SET_FLY, 5);
         }
         6 => {

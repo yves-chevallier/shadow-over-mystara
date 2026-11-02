@@ -300,7 +300,7 @@ fn reward_active<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(f::VARIANT, mode);
     x.set8(0x02, kind);
     // the variant is kept in D0.b during the sound, then put back
-    crate::sound::play(x.b, 0xe24d8, x.o);
+    crate::sound::play(x.b, crate::sound::CMD_A9_BY_CHARACTER, x.o);
     x.set8(f::VARIANT, variant);
     x.set8(0x02, 31);
     x.add8(f::SUB_STATE, 2);

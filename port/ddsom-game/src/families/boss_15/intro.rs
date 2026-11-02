@@ -65,7 +65,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::SUB, 2);
     x.set16(f::SUB2, 0);
     if x.u8(TYPE) != TYPE_BIG {
-        lib::sound(x, 0xe13f0);
+        lib::sound(x, crate::sound::CMD_23);
     }
     x.set8(0, 1);
     lib::set_immunities(x);

@@ -275,7 +275,7 @@ impl<'a> Ctx<'a> {
     }
 
     /// Plays sound `sound` for player `p` (panning, character: `sound::play`).
-    pub fn sound(&mut self, sound: u32, p: Player) {
+    pub fn sound(&mut self, sound: crate::sound::Sound, p: Player) {
         crate::sound::play(self.b, sound, Obj(p.0));
     }
 }

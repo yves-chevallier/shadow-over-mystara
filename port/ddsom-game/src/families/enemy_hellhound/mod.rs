@@ -113,7 +113,7 @@ fn land<R: Bench>(x: &mut Cx<'_, R>) {
 /// 0x62478: dust, back to the ground, next step.
 fn land_dust<R: Bench>(x: &mut Cx<'_, R>) {
     dust(x);
-    lib::sound(x, 0xec820);
+    lib::sound(x, crate::sound::CMD_35F_45F);
     x.set32(Obj::Z, 0);
     x.add8(f::SUB3, 2);
     x.set8(VULNERABLE, 1);

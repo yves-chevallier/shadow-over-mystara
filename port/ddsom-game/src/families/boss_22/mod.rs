@@ -139,9 +139,6 @@ mod state {
     pub const IDLE: u32 = 0x020a_0000;
 }
 
-mod call {
-}
-
 // --- animations --------------------------------------------------------------------------------
 
 /// Animation number `id` (+0xa2); starts animation `n` of set `set` if it is not the last one started (+0xa3).

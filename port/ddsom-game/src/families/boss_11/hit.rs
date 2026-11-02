@@ -79,7 +79,7 @@ fn hit_a<R: Bench>(x: &mut Cx<'_, R>) {
         }
         x.set16(0xc, 0);
         x.add8(f::SUB2, 2);
-        lib::sound(x, 0xe4bb6);
+        lib::sound(x, crate::sound::CMD_412);
         if x.u8(REACTION) == 0x78 {
             lib::attack_effect(x, 1, 0);
         }
@@ -154,7 +154,7 @@ fn generic<R: Bench>(x: &mut Cx<'_, R>) {
                 return dying(x);
             }
             x.add8(f::SUB2, 2);
-            lib::sound(x, 0xe4bb6);
+            lib::sound(x, crate::sound::CMD_412);
             x.set8(0x87, 0);
             paused(x);
             let stun = x.u8(STUN);
@@ -185,7 +185,7 @@ fn generic<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             stop(x);
             lib::shake_58(x, 8);
-            lib::sound(x, 0xec892);
+            lib::sound(x, crate::sound::CMD_360_460);
             hurt(x, 2)
         }
         _ => {
@@ -226,7 +226,7 @@ fn stun<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             let v = x.u16(0x84).wrapping_sub(8);
             x.set16(0x84, v);
-            lib::sound(x, 0xe4bb6);
+            lib::sound(x, crate::sound::CMD_412);
             paused(x);
             let stun = x.u8(STUN);
             x.set8(f::FREEZE, stun);
@@ -297,7 +297,7 @@ fn throw<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             x.set32(0xc, 0);
             x.set32(0x18, 0);
-            lib::sound(x, 0xec892);
+            lib::sound(x, crate::sound::CMD_360_460);
             if (x.u16(f::HP) as i16) > 0 {
                 return arc_end(x);
             }
@@ -427,7 +427,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(TIMER, 0x10);
             lib::drop_rewards(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
-            lib::sound(x, 0xe3b6c);
+            lib::sound(x, crate::sound::CMD_FF);
             lib::flash_and_shake(x);
             let mut d0 = 0x500u16;
             setw(x, 0, d0);
@@ -439,7 +439,7 @@ fn death<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x18, 0x600);
             x.set16(0x1a, (-0x80i16) as u16);
             hurt(x, 1);
-            lib::sound(x, 0xe4c20)
+            lib::sound(x, crate::sound::CMD_413)
         }
         0x8ea6e => {
             x.anim_step();

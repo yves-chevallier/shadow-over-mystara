@@ -41,7 +41,7 @@ fn roar<R: Bench>(x: &mut Cx<'_, R>) {
     match x.u8(f::SUB3) {
         0 => {
             x.add8(f::SUB3, 2);
-            lib::sound(x, 0xe3da6);
+            lib::sound(x, crate::sound::CMD_30C_40C);
             look(x, 0x10);
             act(x, 0);
         }
@@ -105,7 +105,7 @@ fn fly_up_b<R: Bench>(x: &mut Cx<'_, R>) {
             if !pick_target(x) {
                 return go::retire(x);
             }
-            lib::sound(x, 0xe3da6);
+            lib::sound(x, crate::sound::CMD_30C_40C);
             look(x, 0x12);
             if !throw_arm(x, Some(1)) {
                 return end_with(x, true);
@@ -133,7 +133,7 @@ fn fly_up_b<R: Bench>(x: &mut Cx<'_, R>) {
                 x.set16(Obj::VZ, -0x680i16 as u16);
                 x.set16(Obj::AX, 0);
                 x.set16(Obj::AZ, 0);
-                lib::sound(x, 0xe3da6);
+                lib::sound(x, crate::sound::CMD_30C_40C);
                 x.set8(INVULNERABLE, 0);
                 act(x, 5);
             }
@@ -150,8 +150,8 @@ fn fly_up_b<R: Bench>(x: &mut Cx<'_, R>) {
             let vy = if x.u8(f::FLIP) != 0 { -0x38i16 } else { 0x38 };
             x.set16(Obj::AX, vy as u16);
             lib::shake_54(x, 0x1e);
-            lib::sound(x, 0xec976);
-            lib::sound(x, 0xecdba);
+            lib::sound(x, crate::sound::CMD_328_428);
+            lib::sound(x, crate::sound::CMD_329_429);
             act(x, 6);
         }
         8 => {
@@ -260,7 +260,7 @@ fn land_heavily<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(Obj::Z, 0);
     lib::shake_58(x, 0x1e);
     spark(x, 5);
-    lib::sound(x, 0xecc0a);
+    lib::sound(x, crate::sound::CMD_328_428_B);
     act(x, 3);
 }
 
@@ -296,7 +296,7 @@ fn crash<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.set16(Obj::VZ, d1);
             x.set16(Obj::AZ, -0x38i16 as u16);
-            lib::sound(x, 0xe3da6);
+            lib::sound(x, crate::sound::CMD_30C_40C);
             look(x, 0x13);
             act(x, 7);
         }
@@ -331,8 +331,8 @@ fn crash<R: Bench>(x: &mut Cx<'_, R>) {
             let vy = if x.u8(f::FLIP) != 0 { -0x5ci16 } else { 0x5c };
             x.set16(Obj::AX, vy as u16);
             lib::shake_54(x, 0x14);
-            lib::sound(x, 0xec976);
-            lib::sound(x, 0xecdba);
+            lib::sound(x, crate::sound::CMD_328_428);
+            lib::sound(x, crate::sound::CMD_329_429);
             act(x, 0xa);
         }
         8 => {

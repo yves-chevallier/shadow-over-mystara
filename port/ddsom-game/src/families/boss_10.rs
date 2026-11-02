@@ -190,7 +190,7 @@ fn intro<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             x.set16(TIMER, 0x20);
             x.anim_start(SET_BODY, 6);
-            lib::sound(x, 0xe4a18);
+            lib::sound(x, crate::sound::CMD_5D);
         }
         2 => {
             if sub16(x, TIMER, 1).ne() {
@@ -394,7 +394,7 @@ fn jump<R: Bench>(x: &mut Cx<'_, R>) {
             let xx = x.u16(JUMP_X).wrapping_add(d2);
             x.set16(JUMP_X, xx);
             body(x, 7);
-            lib::sound(x, 0xecf10);
+            lib::sound(x, crate::sound::CMD_331);
         }
         2 => {
             if x.anim_step() {
@@ -407,7 +407,7 @@ fn jump<R: Bench>(x: &mut Cx<'_, R>) {
                     x.set8(f::FLIP, 0x20);
                 }
                 body(x, 8);
-                lib::sound(x, 0xecf10);
+                lib::sound(x, crate::sound::CMD_331);
             } else if x.u8(f::KEY_FRAME) != 0 {
                 x.set8(f::KEY_FRAME, 0);
                 x.set8(0x2b, 0x16);
@@ -434,7 +434,7 @@ fn shoot<R: Bench>(x: &mut Cx<'_, R>) {
             0 => {
                 x.add8(0x7, 2);
                 x.anim_start(SET_SHOT, 0);
-                lib::sound(x, 0xe48da);
+                lib::sound(x, crate::sound::CMD_5A);
             }
             2 => {
                 if x.anim_step() {
@@ -463,7 +463,7 @@ fn cinematic_shot<R: Bench>(x: &mut Cx<'_, R>) {
             set_abs8(x, 0xff8043, 0x7f);
             x.set8(0, 2);
             x.anim_start(SET_SHOT, 1);
-            lib::sound(x, 0xe48da);
+            lib::sound(x, crate::sound::CMD_5A);
         }
         2 => {
             x.anim_step();
@@ -499,7 +499,7 @@ fn cinematic_shot<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(TIMER, 0x20);
             let shot = x.linked(SHOT);
             shot.set_u8(x.b, 0x58, 1);
-            lib::sound(x, 0xe4a82);
+            lib::sound(x, crate::sound::CMD_5E);
             x.anim_step();
         }
         6 => {
@@ -537,7 +537,7 @@ fn wait_state<R: Bench>(x: &mut Cx<'_, R>) {
         x.add8(f::SUB2, 2);
         x.set8(WAIT_BLINK, 0xfa);
         x.anim_start(SET_BODY, 6);
-        return lib::sound(x, 0xe4a18);
+        return lib::sound(x, crate::sound::CMD_5D);
     }
     if var::PLAYERS_ALIVE.get(x.b) != 0 {
         lib::pick_target_any(x);
@@ -548,7 +548,7 @@ fn wait_state<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     x.set8(WAIT_BLINK, 0xfa);
-    lib::sound(x, 0xe4a18);
+    lib::sound(x, crate::sound::CMD_5D);
     x.anim_step();
 }
 
@@ -608,7 +608,7 @@ fn stun<R: Bench>(x: &mut Cx<'_, R>) {
             x.set8(f::FREEZE, stun);
             x.set8(SHAKE, 0x10);
             x.anim_start(SET_DIE, 8);
-            lib::sound(x, 0xe4944);
+            lib::sound(x, crate::sound::CMD_5B);
         }
         2 => {
             if x.u8(SHAKE) == 0 {
@@ -686,7 +686,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             x.set32(f::IMMUNITY, 0x0fff_ffff);
             lib::flash_and_shake(x);
             crate::sound::service(x.b, crate::sound::Service::Ff05);
-            lib::sound(x, 0xe3b6c);
+            lib::sound(x, crate::sound::CMD_FF);
             x.set16(0x16, 0);
             x.set16(0x18, 0x500);
             x.set16(0x1a, (-0x38i16) as u16);
@@ -700,7 +700,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x14, vx as u16);
             x.set8(f::FLIP, side);
             x.anim_start(SET_DIE, 0x15);
-            lib::sound(x, 0xe49ae);
+            lib::sound(x, crate::sound::CMD_5C);
         }
         2 => {
             x.move_xz();
@@ -725,7 +725,7 @@ fn down<R: Bench>(x: &mut Cx<'_, R>) {
             }
             x.add8(f::SUB2, 2);
             x.set16(0xc, 0);
-            lib::sound(x, 0xecabc);
+            lib::sound(x, crate::sound::CMD_AA);
             x.anim_start(SET_DIE, 0x18);
         }
         8 => {

@@ -149,7 +149,7 @@ fn dying<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             x.set8(0, 2);
             x.set32(f::IMMUNITY, 0xffff_ffff);
-            lib::sound(x, 0xe3e8e);
+            lib::sound(x, crate::sound::CMD_30E_40E);
             lib::object_event(x);
             lib::drop_rewards(x);
             if (x.u8(Obj::VARIANT) as i8) >= 0 {
@@ -176,7 +176,7 @@ fn dying<R: Bench>(x: &mut Cx<'_, R>) {
             x.add8(f::SUB2, 2);
             x.set16(Obj::Z, 0);
             spark(x, 5);
-            lib::sound(x, 0xec904);
+            lib::sound(x, crate::sound::CMD_327_427_B);
             x.anim_start(SET_A, 0xb);
         }
         4 => {
@@ -222,7 +222,7 @@ fn flee<R: Bench>(x: &mut Cx<'_, R>) {
             }
             if x.u8(f::KEY_FRAME) == 3 {
                 x.set8(f::KEY_FRAME, 0);
-                lib::sound(x, 0xecdba);
+                lib::sound(x, crate::sound::CMD_329_429);
                 spark(x, 4);
                 lib::shake_54(x, 0xa);
             }

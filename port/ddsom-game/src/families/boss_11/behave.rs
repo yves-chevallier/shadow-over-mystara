@@ -68,7 +68,7 @@ fn fall<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(0x14, v);
     body(x, 7);
     lib::shake_58(x, 8);
-    lib::sound(x, 0xecc0a);
+    lib::sound(x, crate::sound::CMD_328_428_B);
 }
 
 // --- group 6: no player ----------------------------------------------------------------------------------
