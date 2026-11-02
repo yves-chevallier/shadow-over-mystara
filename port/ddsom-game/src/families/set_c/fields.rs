@@ -279,3 +279,15 @@ record! {
         signal, set_signal, SIGNAL: u8 @ 0x08;
     }
 }
+
+view! {
+    /// An effect created by a SET 15 screen (handover, ranking), numbered by the screen.
+    ScreenEffect;
+}
+
+record! {
+    impl ScreenEffect {
+        /// Order or mark given by the screen.
+        order, set_order, ORDER: u8 @ 0x42;
+    }
+}

@@ -8,6 +8,7 @@ use crate::families::set::tables as set_tables;
 use crate::families::set::vars;
 use crate::objects::Obj;
 use crate::families::set::fields::SetObj;
+use crate::families::set_c::fields::ScreenEffect;
 use crate::families::set_c::fields::RefillObj;
 use crate::families::set_c::fields::Conductor;
 
@@ -256,7 +257,7 @@ fn handover_step<R: Bench>(x: &mut Cx<'_, R>, mark: u8) {
         return;
     }
     if let Some(o) = spawn_finale(x, 0x17) {
-        o.set_u8(x.b, RefillObj::MARK, mark);
+        o.set_u8(x.b, ScreenEffect::ORDER, mark);
     }
     next_substate(x);
     x.set8(RefillObj::PHASE, 1);

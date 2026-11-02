@@ -332,9 +332,9 @@ fn set_b(t: &mut Tables) {
     t.prog("wave_start_kind", 0xd4a0e, "u8", Some(20));
     t.prog("wave_end_kind", 0xd4bdc, "u8", Some(20));
     t.data("wave_creators", 0xd4b92, "addr", None);
-    // life_bar: pieces per points, frame tile lists per character
+    // life_bar: pieces per points, frame tile lists per boss kind (21, the names of `texts.json`)
     t.prog("life_bar_pieces", 0xd61b2, "u16", Some(9));
-    t.pointed("life_bar_frames", 0xd6232, false, 6, "u8");
+    t.pointed("life_bar_frames", 0xd6232, false, 21, "u8");
     // continue_countdown: prompt per stage, palette
     t.prog("continue_prompt", 0xd6464, "u8", None);
     t.palette(0x25c0e0, 0x20);
@@ -394,10 +394,12 @@ fn set_c(t: &mut Tables) {
     t.data("window_class_titles", 0xc91c6, "addr", None);
     t.data("window_glyphs", 0xc9216, "u16", None);
     // finale: shakes, delays, camera script, scenes, grids
-    t.data("finale_shake", 0xd0b10, "i16*2", Some(16));
+    // shakes: two of four steps (0xd0b10, 0xd0b20), the opening shake (0xd0b30), the four-component shakes
+    // (0xd0b50, 0xd0b70: eight bytes per step)
+    t.data("finale_shakes", 0xd0b10, "i16*2", Some(32));
     t.prog("finale_delays", 0xce138, "u8", None);
     t.data("finale_camera", 0xce37a, "u16*8", None);
-    t.prog("finale_scenes", 0xce4ea, "addr", None);
+    t.pointed("finale_scenes", 0xce4ea, true, 12, "u16");
     t.data("finale_grids", 0xce686, "u16*2", None);
     // later variants: rewards, credits, markers, fireworks
     t.prog("reward_palettes", 0xcfdd2, "u16", None);
@@ -408,6 +410,7 @@ fn set_c(t: &mut Tables) {
     t.prog("firework_order", 0xcfa3c, "u8", Some(16));
     t.prog("results_attrs", 0xd0854, "u8", Some(4));
     t.prog("results_dest", 0xd0858, "i16", None);
+    t.data("credits_text", 0xd01de, "u8", Some(0xd06e5 - 0xd01de));
     t.data("results_tiles", 0xb2920, "u16", None);
     t.data("results_patterns", 0xb2a24, "u16", None);
     t.palette(0x253280, 0x20);

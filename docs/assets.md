@@ -16,7 +16,7 @@ Catégories de l'outil (sans argument : toutes) : `gfx`, `palettes` (`palettes.p
 `scene_palettes.json`), `sounds`, `sprites` (`sprites/frames.json`, `anims.json`, `tables.json`), `levels`,
 `terrain`, `texts`, `music` (`sound/music.json`), `data` (`data/spawns.json` et les tables de données
 `data/players.json`, `combat.json`, `enemies.json`, `boxes.json`, `scenes.json`, `misc.json`,
-`dialogs.json`, `rest.json`, `natives.json`, puis en dernier `reste.json` : tout le reste de la région programme
+`dialogs.json`, `rest.json`, `natives.json`, `data/set.json`, puis en dernier `reste.json` : tout le reste de la région programme
 hors code 68000, voir [sans-rom.md](sans-rom.md) « Couverture complète des données »).
 
 Les tests relisent les fichiers et réencodent chaque table au format de la ROM : ils échouent au premier
@@ -41,6 +41,7 @@ octet différent (ROMs lues dans `DDSOM_ROMS`, sinon `rom/` à la racine ; test 
 | Réactions aux coups | `data/combat.json` | `combat_lossless` |
 | Tables des ennemis | `data/enemies.json` | `enemies_lossless` |
 | Tables lues par le Rust, hors des précédentes | `data/rest.json` | `leftovers_lossless` |
+| Tables des objets SET (lot L6) | `data/set.json` | `set_lossless` |
 | Tout le reste de la région programme, hors code 68000 | `data/reste.json` | `full_program_outside_code` (`tests/rebuild.rs`), exemple `programme_complet` |
 | Tout le programme, graphismes, échantillons | tous | `rebuilt_program`, `rebuilt_graphics`, `rebuilt_samples` (`tests/rebuild.rs`) |
 
@@ -609,7 +610,7 @@ Code, pas des données : effets spéciaux des caisses `0xda06a` (6 adresses de r
 Tables par scène (0 à 114) ou par boutique, lues par les sorties de scène, les caméras et l'interface.
 Espace données sauf mention (prog). Régions couvertes : `entry` 0x21156-0x21c28, `camera1`
 0x2ef22-0x2f576, `camera2` 0x32484-0x3281c, `counters` 0x51176-0x513e6, `banner` 0xf6fec-0xf71fa,
-`bonus` 0x3f6c08-0x3f8e9c, `waves` 0xd4c5e-0xd5ef6.
+`bonus` 0x3f6c08-0x3f8e9c. Les portes et les vagues des SET B sont dans `data/set.json` depuis le lot L6.
 
 | Nom | Adresse | Lignes x format | Sens (consommateur) |
 |---|---|---|---|
@@ -643,10 +644,6 @@ Espace données sauf mention (prog). Régions couvertes : `entry` 0x21156-0x21c2
 | `camera2_start` | `0x32484` | 115 x `i16*2` | position de départ de la caméra 2 |
 | `popup_origins` (prog), `popup_bottoms` (prog) | `0x19f6c`, `0x1a25e` | 8 x `i16`, 9 x `u16` | origine des bulles par emplacement (4 grands, 4 réduits) ; tuiles du bord bas par reste de hauteur |
 | `markers`, `markers_alt` | `0x1eb48`, `0x1eb58` | 4, 3 x `x16 u16` | (x, y) des marqueurs « 1P »... ; la disposition alternative (bit 1 de `FOUR_PLAYERS`) n'a que 3 entrées |
-| `door_a`, `door_b` (prog) | `0xd84e8`, `0xd8e5e` | 3 x `i16*3 u8*10` | portes de passage SET B 27 et 29 par variante : X, Z, Y, `+0x48`, `+0x46`, scène d'arrivée `+0x4f`, `+0x1b`, 6 octets non lus |
-| `wave_start_kind`, `wave_end_kind` (prog) | `0xd4a0e`, `0xd4bdc` | 20 x `u8` | forme du démarrage et de la fin des générateurs de vagues, par variante (15 employées) |
-| `wave_scripts` | `0xd4c5e` | 15 x `addr` | script de chaque variante du générateur de vagues SET B |
-| `wave/k.timer`, `wave/k`, `wave/k.end` | `0xd4c9a`… | `u16` ; n x `i16 u16 i16*3 u8*6 u16 u16` ; `x16` | délai initial ; entrées (délai > 0 ou attente du nombre de vivants si < 0, rang minimal, X, Z, Y, joueurs minimum, routine de création, type, variante, deux paramètres, `+0x42`, position absolue) ; mot `0x8000` |
 | `bonus_backdrop_alt`, `bonus_backdrop` (`.size`, `.end`) | `0x3f6c08`, `0x3f7e0e` | (lignes, colonnes), puis cases `u16*2` (code, attributs) par colonnes, puis `0xffff` | décors de la partie bonus selon `A5+0x70` (`bonus.rs`, 0xf67fa) |
 
 Code, pas des données (documentés, restent dans le moteur) : allocateurs des classes d'apparition
@@ -678,6 +675,29 @@ l'interpréteur A, alternés), puis `demo_script/k.n` (entrée n du script k ; k
 | fin (négatif) | `x8` | suivie d'un octet de bourrage `0xff` |
 
 Reste à relever le lecteur des entrées enregistrées (seul l'enregistreur est identifié).
+
+### Objets SET : `data/set.json`
+
+Toutes les tables de la ROM que lisent les types SET (`families/set*`, `families/scenery.rs`), extraites par
+`extract/src/set.rs` et lues par le jeu dans `data().set` (`families/set/tables.rs`, lecture par adresse dans les
+tables ; une adresse hors des tables passe par le résidu, clé « set »). Les fenêtres et textes des SET 3, 10, 15 et
+24 restent dans `data/dialogs.json`, chargé lui aussi (`data().dialogs`). Espace données sauf mention (prog).
+
+* Formes connues, nombre de lignes fixe : scripts de palettes des SET 0 (`palette_script_table` 0xba57a,
+  `palette_script/<script>.*`, `palette_script_transition`, `palette_script_end`) et de cases des SET 4 et 6
+  (`tile_anim_entries/4` et `/6`, `tile_anim/<script>.*`), repris de `rest.json` ; scripts d'objets des scènes
+  (SET 2, `scene_scripts` 0xbd276, 116 scripts : la table finit où commence le premier) et des vagues (SET 21,
+  `wave_scripts` 0xd4c5e, 15 scripts), entrées de 0x14 octets `i16 u16 i16*3 u8*6 u16 u16` jusqu'au mot 0x8000 ;
+  portes 27 et 29 (`door_a`, `door_b`, repris de `scenes.json`) ; rideau (`curtain` 0xbcea4, prog : décalage de
+  couleurs, adresse, jusqu'au décalage négatif ; `curtain_colors@<a>` : 22 couleurs depuis 0xbcfc6) ; actions de
+  début et de fin des scènes (120 octets chacune) ; secousses, positions, ordres des écrans de fin de niveau.
+* Tables à étendue automatique : jusqu'à la table suivante du même espace ou à la prochaine instruction exécutée
+  par la référence (`code_68k.txt`), au plus 0x400 octets ; ainsi les lectures au-delà de la forme supposée (index
+  hors bornes) restent dans la table. Exemples : `exit_gates` (portes SET 7, 0xcb344, 16 octets par variante),
+  tables de la saisie du nom (`name_*`, à partir de 0xc9abe), boîtes des trampolines (`bumper_hit`...), deltas de rang.
+* Couleurs lues comme données dans la bibliothèque de palettes (`palette@<a>`, `x16`) : sources des scripts de
+  palettes, cadres de bulles et de fenêtres, page 1 de la scène (`scenery::restore_palette_page`), etc. Ces octets
+  sont aussi dans `palettes.png` ; la reconstruction les écrit deux fois, identiques.
 
 ### Dialogues : `data/dialogs.json`
 
@@ -843,7 +863,8 @@ Octets lus et couverts, par fichier d'assets (données ; programme) : `sprites/f
 `data/dialogs.json` 2 594 ; `scene_palettes.json` 2 266 ; 324 ; `data/players.json` 1 680 ; 410 ; `data/scenes.json`
 1 498 ; 76 ; `data/boxes.json` 446 ; `data/enemies.json` 736 ; 116 ; `terrain.json` 508 ; `data/combat.json` 168.
 
-**Ajoutées par cette mesure** (`data/rest.json`, `extract/src/rest.rs`, 1 497 tables, test `leftovers_lossless`) :
+**Ajoutées par cette mesure** (`data/rest.json`, `extract/src/rest.rs`, 1 497 tables, test `leftovers_lossless` ;
+les scripts des SET 0, 4 et 6 sont passés dans `data/set.json` au lot L6) :
 scripts de cases de tuiles des SET 4 et 6 (`tile_anim_entries/4` et `/6`, 53 + 32 entrées de 16 octets en
 espace programme ; `tile_anim/<script>.<n>` : durée, colonnes, lignes, puis un long par case ; 0x3ec70a-0x3f5448) ;
 scripts de palettes des SET 0 (`palette_script_table` 0xba57a, 79 entrées ; `palette_script/<script>.*` : en-tête,

@@ -61,6 +61,7 @@ Les zones ci-dessous correspondent aux périmètres des lots de la section 3.
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---|
 | Effets (`families/effects*.rs`) | 8 | 13 267 | 292 | 525 | 135 | 322 | 58 | 358 | `effects_c.rs` (5 162) |
 | SET (`families/set*.rs`, `scenery.rs`) | 10 | 9 911 | 247 | 1 108 | 182 | 346 | 22 | 184 | `set_b.rs` (3 628) |
+| SET après L6 (`families/set*`, `scenery.rs`) | 52 | 11 094 | 0 | 0 | 0 | 287 | 0 | 196 | `set/name_entry/cursor.rs` (623) |
 | ESHL, SOBJ, objets, caisses | 10 | 15 808 | 274 | 2 378 | 71 | 51 | 91 | 424 | `eshl_c.rs` (3 300), `eshl_b.rs` (3 054) |
 | Ennemis (`families/enemy*`, `reactions.rs`) | 94 | 32 564 | 170 | 1 302 | 18 | 25 | 1 | 205 | `reactions.rs` (2 223) |
 | Boss (`families/boss*`) | 83 | 30 835 | 207 | 3 182 | 171 | 146 | 0 | 114 | `boss_11/` (2 419 en 5 fichiers) |
@@ -581,13 +582,39 @@ libre.
 
 ### Vague 2 (trois agents)
 
-**L6. SET** (moyen)
+**L6. SET** (moyen) — **fait** (branche `wt-l6-set`, voir « Résultat »)
 * Périmètre : `families/set.rs`, `set_b.rs`, `set_c*.rs`, `set_residue.rs`, `scenery.rs`.
 * (a) `set_b.rs` (3 628 lignes) et `set.rs` (2 500) découpés par type de SET.
 * (b) 247 accesseurs ROM. Tables par variante des scènes de SET C (`set_c_scene.rs`, 0xbcfc6-0xc821c), finales
   (0xce51a), positions (0xd4198), table du rideau (0xbcea4).
 * (c) 1 108 décalages littéraux, 182 `A5 + littéral`.
 * Fin : comme L5.
+* Résultat :
+  * (a) Découpage : `set.rs` et `set_b.rs` deviennent des racines de modules (`set/`, `set_b/`), un fichier par
+    type ; `set_c_*.rs` rangés dans `set_c/` (`scene`, `window`, `window/text`, `finale`, `finale/later` et ses
+    trois sous-modules, `finale/status`), sans `#[path]` ; plus gros fichier 623 lignes. `examples/names`
+    identique ; 308/308 en mode par défaut (10b7b88). `measure_end.py` compte les sous-dossiers dans la zone set.
+  * (b) Données : `GameData.set` (**nouveau `data/set.json`**, `extract/src/set.rs`, test `set_lossless`) et
+    `GameData.dialogs` (`data/dialogs.json`, déjà extrait, désormais chargé). Les scripts des SET 0, 4 et 6 quittent
+    `rest.json`, les portes et vagues des SET B quittent `scenes.json`. Tables de forme connue (scripts de scène et
+    de vagues, rideau, portes...) et tables à étendue automatique (jusqu'au code exécuté ou à la table suivante :
+    les lectures hors bornes de l'original restent dedans) ; couleurs lues dans la bibliothèque de palettes en
+    tables `palette@<a>`. Le jeu lit par adresse dans ces tables (`families/set/tables.rs` : `byte`/`word`/`long`,
+    `pc_*` en espace programme ; une adresse de RAM passe au bus, une adresse hors tables au résidu clé « set »).
+    247 accesseurs → 0, et les lectures `rd*` de la ROM du périmètre (scripts de cases et de palettes, définitions
+    et textes des fenêtres...) converties. Résidu sur les 308 scénarios : aucune clé « set » (seules restent les 16
+    clés d'images et d'animations de L1).
+  * (c) Vues : macro `view!` et `record!` dans `set/fields.rs`, `set_b/fields.rs`, `set_c/fields.rs` (`SetObj`
+    commun : sous-état, attribut, paramètre, argument, propriétaire, phase de suspension ; `DoorObj` partagé par
+    les portes 7, 25, 27, 29 ; `DialogObj`, `LifeBarObj`, `ContinueObj`, vues par variante de SET 15...) ;
+    `PlayerFields` pour les champs de joueur que `player::Player` ne nomme pas encore (0x7d, 0x140, 0x15c) ;
+    variables A5 dans `set/vars.rs` ; le `Pool` en double de `set_b` remplacé par `pools::Pool`. Décalages
+    littéraux 1 141 → 0, `A5 + littéral` 180 → 0 (`measure_end.py`).
+  * Décisions pour les lots suivants : un lot de données peut charger un fichier `data/*.json` déjà extrait dans
+    `GameData` (comme `dialogs`) plutôt que de le recopier ; les champs nommés ici que d'autres familles lisent
+    (`SetObj::OWNER`/`PARAM`/`ARG` des objets créés par les scripts, `PlayerFields`, `WindowEffect`) sont à
+    reprendre dans les API communes au lot L12 (et `PlayerFields` dans `player::Player` au lot L10). Les constantes
+    de champ déjà nommées des modules (avant L6) restent des constantes `u32` à côté des vues.
 
 **L7. ESHL, SOBJ, objets, caisses** (moyen à grand, peut se couper en L7a ESHL et L7b SOBJ/objets/caisses)
 * Périmètre : `families/eshl*.rs`, `sobj.rs`, `items.rs`, `items_b.rs`, `boxes.rs`, `shell.rs`.

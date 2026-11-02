@@ -3,6 +3,7 @@ use crate::families::set::tables as set_tables;
 use crate::families::set::vars;
 use crate::objects::Obj;
 use crate::families::set::fields::SetObj;
+use crate::families::set_c::fields::ScreenEffect;
 use crate::families::set_c::fields::ScreenObj;
 use crate::families::set_c::fields::IntroObj;
 use crate::families::set_c::fields::FireworksObj;
@@ -274,7 +275,7 @@ pub fn ranking_start<R: Bench>(x: &mut Cx<'_, R>) {
             let Some(fx) = spawn_effct(x, 7, n) else { return };
             fx.set_u8(x.b, SetObj::PARAM, n as u8);
             let order = x.u8(RankingObj::ORDER);
-            fx.set_u8(x.b, RankingObj::ORDER, order);
+            fx.set_u8(x.b, ScreenEffect::ORDER, order);
             fx.set_u16(x.b, SetObj::OWNER, x.o.0 as u16);
             x.add8(RankingObj::ORDER, 1);
             x.add8(RankingObj::SHOWN, 1);
