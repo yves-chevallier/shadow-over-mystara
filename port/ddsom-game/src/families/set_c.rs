@@ -4,11 +4,8 @@
 
 use super::cx::handlers;
 
-#[path = "set_c_scene.rs"]
 mod scene;
-#[path = "set_c_finale.rs"]
 mod finale;
-#[path = "set_c_window.rs"]
 mod window;
 
 handlers! {

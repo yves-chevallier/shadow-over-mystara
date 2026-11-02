@@ -355,7 +355,7 @@ fn level_text_end(rom: &Program, at: u32, tiles: bool) -> u32 {
     p
 }
 
-/// Level transition (SET C 7, `families/set_c_finale_c.rs`): per class, three message lists (one
+/// Level transition (SET C 7, `families/set_c/finale/status.rs`): per class, three message lists (one
 /// per language: English in tiles, French, German), then a 20-byte record per level
 /// reached; the message lists follow.
 fn levelup(rom: &Program, specs: &mut Vec<Spec>, texts: &mut Vec<TextBlock>) -> Vec<Region> {

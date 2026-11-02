@@ -461,7 +461,5 @@ fn block_loader_for<R: Bench>(x: &mut Cx<'_, R>, index: u32) {
     load_blocks(x, rom::LOAD_BLOCKS, end, g1);
 }
 
-#[path = "set_c_finale_b.rs"]
 mod later;
-#[path = "set_c_finale_c.rs"]
 mod status;
