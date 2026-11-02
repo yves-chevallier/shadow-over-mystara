@@ -167,7 +167,7 @@ pub struct Restes {
 /// dont l'original ne remplace parfois que le mot bas.
 /// Glitch d'origine : D4 garde les attributs du dernier morceau dessiné, et des gestionnaires le relisent plus tard
 /// (0xad7b0 l'additionne à une position) : les appelants le rendent au processeur (`Restes::d4`).
-pub fn construire(b: &mut Cps2Bus, d4: u32) -> Option<Restes> {
+pub fn build(b: &mut Cps2Bus, d4: u32) -> Option<Restes> {
     let a5 = crate::mem::A5;
     if rd16(b, a5 + ram::BUILT) != 0 {
         return None;
@@ -200,15 +200,15 @@ pub fn construire(b: &mut Cps2Bus, d4: u32) -> Option<Restes> {
     }
 }
 
-/// `construire` avec les registres de l'original (D4, A4, A6 quand la table est construite).
-pub fn construire_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    if let Some(r) = construire(b, c.d[4]) {
+/// `build` avec les registres de l'original (D4, A4, A6 quand la table est construite).
+pub fn build_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    if let Some(r) = build(b, c.d[4]) {
         (c.d[4], c.a[4], c.a[6]) = (r.d4, r.fin, r.camera);
     }
 }
 
 fn build_sprite_list(c: &mut Cpu, b: &mut Cps2Bus) {
-    construire_68k(c, b);
+    build_68k(c, b);
     rts(c, b);
 }
 
@@ -665,7 +665,7 @@ pub fn vider_listes(b: &mut Cps2Bus) {
 pub const RESET_LISTS: Native = Native {
     entry: 0x1de7c,
     name: "sprites_vide_les_listes",
-    run: crate::Corps::Memoire(vider_listes),
+    run: crate::Corps::Memory(vider_listes),
     touches_sound: false,
     outputs: 0,
 };

@@ -62,7 +62,7 @@ CARGO_TARGET_DIR=target/trace cargo build --release -p ddsom-game --example lect
 target/release/examples/couverture_rom <assets> --octets couvert.bin --sans data/natives.json
 DDSOM_COUVERT=couvert.bin target/trace/release/examples/lectures_rom <roms> <eeprom> lectures.txt \
     ../scenarios/bot30k.txt:30000 ...
-../tools/zones_natives.py couvert.bin lectures*.txt > extract/zones_natives.txt   # puis extract ... data
+../tools/native_zones.py couvert.bin lectures*.txt > extract/zones_natives.txt   # puis extract ... data
 ```
 
 **Le code 68000 n'est plus lu.** La première mesure (16 scénarios) trouvait encore 30 000 mots de code lus en
@@ -134,7 +134,7 @@ code déclaré (data/reste.json) : 486399 octets en 5761 plages
 
 **Mettre à jour.** `tools/code_68k.sh` après l'ajout de scénarios qui exécutent du code nouveau (sans effet sur la
 sûreté : du code non mesuré est rangé en données), puis `extract ... data`. Les zones de `zones_natives.txt` ne sont
-plus nécessaires hors du code, mais rien n'empêche d'en ajouter (`tools/zones_natives.py`). Le fichier reste lu par
+plus nécessaires hors du code, mais rien n'empêche d'en ajouter (`tools/native_zones.py`). Le fichier reste lu par
 `extract` (`natives.rs`) : ses zones dans le code sont indispensables, et celles hors du code, en double avec `reste.json`
 aujourd'hui, couvrent les octets qui deviendraient du code si `code_68k.txt` grandit (nouveaux scénarios).
 

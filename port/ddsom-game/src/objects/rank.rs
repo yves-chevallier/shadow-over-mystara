@@ -59,7 +59,7 @@ pub fn load_preset(b: &mut Cps2Bus, row: u8) {
 }
 
 /// 0x1f238 : les réglages de la ligne `A5+0x2a`, puis `reset`.
-pub fn charger_preset(b: &mut Cps2Bus) {
+pub fn load_current_preset(b: &mut Cps2Bus) {
     let row = rd8(b, A5 + PRESET_ROW);
     load_preset(b, row);
     reset(b);

@@ -16,7 +16,7 @@ use m68k::Cpu;
 use super::{ram, Ctx, Player};
 use crate::mem::{rd16, rd8, rts, wr8};
 use crate::Native;
-use crate::player::externes as ext;
+use crate::player::external as ext;
 
 mod tables {
     /// Par classe de l'attaquant (pointeurs) puis type de victime (pointeurs) : lignes de réaction.
@@ -116,7 +116,7 @@ pub fn enemy_reacts(g: &mut Ctx, a: Player, v: u32) {
                         wr8(g.b, att + f::WAND_CHARGE, charge - 1);
                         if charge - 1 == 5 {
                             g.c.d[0] = 0xf;
-                            g.rom(ext::effet::WAND, a);
+                            g.rom(ext::effect::WAND, a);
                         }
                     }
                 }

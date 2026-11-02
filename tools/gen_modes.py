@@ -1,12 +1,12 @@
-"""Génère le scénario du générique de fin (scenarios/modes/ending.txt) avec le bot réactif autobot.
+"""Generates the end credits scenario (scenarios/modes/ending.txt) with the reactive bot autobot.
 
-    python3 tools/gen_modes.py [images]
+    python3 tools/gen_modes.py [frames]
 
-Le scénario saute dans la dernière scène (105, saut de `FF8034` pendant la sélection du personnage), le bot y
-combat le boss final, dont les PV sont affaiblis après 1 500 images ; la scène finie, la phase 28 (générique)
-commence vers l'image 7 900. Les scénarios `attract.txt` (aucune entrée) et `gameover.txt` (début de
-`bot_char4.txt` jusqu'à l'écran de classement) se font à la main. Prérequis : `cargo build --release -p
-ddsom-game --examples`, DDSOM_ROMS / DDSOM_EEPROM. Voir docs/modes.md.
+The scenario jumps to the last scene (105, `FF8034` jump during character select), where the bot
+fights the final boss, whose HP are weakened after 1,500 frames; once the scene is over, phase 28 (credits)
+starts around frame 7,900. The `attract.txt` (no input) and `gameover.txt` (start of `bot_char4.txt`
+up to the ranking screen) scenarios are made by hand. Prerequisites: `cargo build --release -p
+ddsom-game --examples`, DDSOM_ROMS / DDSOM_EEPROM. See docs/modes.md.
 """
 import os
 import subprocess

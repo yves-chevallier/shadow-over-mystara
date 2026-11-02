@@ -22,7 +22,7 @@ use super::super::{animation, Ctx, Player};
 use crate::objects::Obj;
 use crate::player::ram;
 use crate::machine::Machine;
-use crate::player::externes as ext;
+use crate::player::external as ext;
 
 /// Routines d'origine appelées telles quelles : effets joueur, sons, palettes et effets d'écran.
 mod rom {
@@ -257,7 +257,7 @@ fn combo(g: &mut Ctx, p: Player) {
         }
         2 => {
             if common::combo_follow(g, p, 0x1a) {
-                g.son(ext::son::STRIKE_LIGHT, p);
+                g.sound(ext::sound::STRIKE_LIGHT, p);
             }
         }
         4 => hop_wait(g, p),
@@ -322,7 +322,7 @@ fn after_jump(g: &mut Ctx, p: Player) {
             p.set_u8(g, field::MOVE_STATE, 0);
             animation::start_plain(g, p, 0xf);
             clear_recognizers(g, p);
-            g.son(ext::son::STRIKE_HEAVY, p);
+            g.sound(ext::sound::STRIKE_HEAVY, p);
         }
         2 => common::wait_then_stand(g, p),
         _ => {}
@@ -353,7 +353,7 @@ fn charge(g: &mut Ctx, p: Player) {
             if take_event(g, p) {
                 spawn::slash(g, p, Some(0));
                 spawn::slash(g, p, None);
-                g.son(ext::son::CHARGE_B, p);
+                g.sound(ext::sound::CHARGE_B, p);
             }
         }),
         _ => {}
@@ -371,7 +371,7 @@ fn run_strike(g: &mut Ctx, p: Player) {
             animation::start_plain(g, p, 0x10);
             clear_recognizers(g, p);
             common::weapon_voice(g, p);
-            g.son(ext::son::CHARGE_A, p);
+            g.sound(ext::sound::CHARGE_A, p);
         }
         2 => {
             common::run_strike_slide(g, p, 0x11);
@@ -415,7 +415,7 @@ fn retreat_shot(g: &mut Ctx, p: Player) {
                     common::negate_horizontal_speed(g, p);
                 }
                 animation::start_plain(g, p, 0x18);
-                g.son(ext::son::LEAP, p);
+                g.sound(ext::sound::LEAP, p);
             } else {
                 move_x(g, p);
             }
@@ -454,8 +454,8 @@ fn whirl(g: &mut Ctx, p: Player) {
             animation::step(g, p);
             if take_event(g, p) {
                 g.rom(rom::WHIRL_EFFECT, p);
-                g.son(rom::WHIRL_SOUND_A, p);
-                g.son(ext::son::SPIN, p);
+                g.sound(rom::WHIRL_SOUND_A, p);
+                g.sound(ext::sound::SPIN, p);
             }
             let left = p.u8(g, 0x1e8).wrapping_sub(1);
             p.set_u8(g, 0x1e8, left);
@@ -482,7 +482,7 @@ fn hop_strike(g: &mut Ctx, p: Player) {
             next_step(g, p);
             p.set_u8(g, field::MOVE_STATE, 0);
             animation::start_plain(g, p, 0x1a);
-            g.son(ext::son::STRIKE_LIGHT, p);
+            g.sound(ext::sound::STRIKE_LIGHT, p);
         }
         2 => hop_wait(g, p),
         4 => hop_flight(g, p),
@@ -788,7 +788,7 @@ fn beam(g: &mut Ctx, p: Player) {
             if take_event(g, p) {
                 spawn::beam_cast(g, p, 0);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
-                g.son(rom::BEAM_SOUND, p);
+                g.sound(rom::BEAM_SOUND, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -804,7 +804,7 @@ fn beam(g: &mut Ctx, p: Player) {
                     common::item_spark(g, p, 0xc);
                 } else {
                     spawn::beam_cast(g, p, 1);
-                    g.son(rom::BEAM_SECOND_SOUND, p);
+                    g.sound(rom::BEAM_SECOND_SOUND, p);
                 }
             }
             if countdown(g, p) {
@@ -826,8 +826,8 @@ fn sparks(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.rom(ext::effet::SPARKS, p);
-                g.son(rom::SPARK_SOUND, p);
+                g.rom(ext::effect::SPARKS, p);
+                g.sound(rom::SPARK_SOUND, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -835,7 +835,7 @@ fn sparks(g: &mut Ctx, p: Player) {
                 let level = p.u8(g, Player::LEVEL) as u32;
                 let gesture = g.prog8(SPARK_GESTURES + level) as u16;
                 animation::start_plain(g, p, 0x34 + gesture);
-                g.son(rom::SPARK_END_SOUND, p);
+                g.sound(rom::SPARK_END_SOUND, p);
             }
         }
         4 => {
@@ -869,9 +869,9 @@ fn bolt(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, ext::effet::BOLT, &[(0, 0)]);
+                call(g, p, ext::effect::BOLT, &[(0, 0)]);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::LIGHT);
-                g.son(rom::BOLT_SOUND, p);
+                g.sound(rom::BOLT_SOUND, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -882,14 +882,14 @@ fn bolt(g: &mut Ctx, p: Player) {
         4 => {
             animation::step(g, p);
             if take_event(g, p) {
-                g.son(rom::BOLT_SECOND_SOUND, p);
+                g.sound(rom::BOLT_SECOND_SOUND, p);
                 if is_cancelled(g, p) {
                     next_step(g, p);
                     p.set_u16(g, field::TIMER, 0x10);
                     common::item_spark(g, p, 6);
                     return wind_down(g, p, 2);
                 }
-                call(g, p, ext::effet::BOLT, &[(0, 1)]);
+                call(g, p, ext::effect::BOLT, &[(0, 1)]);
             }
             if countdown(g, p) {
                 next_step(g, p);
@@ -937,7 +937,7 @@ fn frost(g: &mut Ctx, p: Player) {
             p.set_u8(g, 0x1e8, 0x10);
             p.set_u8(g, 0x1e9, 2);
             animation::start_plain(g, p, 0x2f + 2);
-            g.son(rom::FROST_START_SOUND, p);
+            g.sound(rom::FROST_START_SOUND, p);
             if is_cancelled(g, p) {
                 p.set_u8(g, Player::STEP, 8);
                 p.set_u16(g, field::TIMER, 0x10);
@@ -995,24 +995,24 @@ fn quake(g: &mut Ctx, p: Player) {
         2 => {
             animation::step(g, p);
             if take_event(g, p) {
-                call(g, p, ext::effet::QUAKE, &[(0, 0)]);
+                call(g, p, ext::effect::QUAKE, &[(0, 0)]);
                 crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
-                g.son(ext::son::PRAYER_QUAKE, p);
+                g.sound(ext::sound::PRAYER_QUAKE, p);
             }
             if countdown(g, p) {
                 next_step(g, p);
                 let duration = by_level(g, p, QUAKE_DURATIONS);
                 p.set_u16(g, field::TIMER, duration);
                 animation::start_plain(g, p, 0x2c);
-                g.son(rom::QUAKE_START_SOUND, p);
+                g.sound(rom::QUAKE_START_SOUND, p);
                 if is_cancelled(g, p) {
                     common::item_spark(g, p, 9);
                     p.set_u16(g, field::TIMER, 0x10);
                     return quake_rumble(g, p);
                 }
-                call(g, p, ext::effet::QUAKE, &[(0, 1)]);
-                g.rom(ext::effet::QUAKE_B, p);
-                g.son(rom::QUAKE_SECOND_SOUND, p);
+                call(g, p, ext::effect::QUAKE, &[(0, 1)]);
+                g.rom(ext::effect::QUAKE_B, p);
+                g.sound(rom::QUAKE_SECOND_SOUND, p);
             }
         }
         4 => quake_rumble(g, p),
@@ -1074,7 +1074,7 @@ fn moonlight(g: &mut Ctx, p: Player) {
                         spawn::moon(g, p, color as u8);
                     }
                     crate::placement::load_effect_palette(g.b, crate::placement::effect_palette::NORMAL);
-                    g.son(rom::MOON_SOUND_B, p);
+                    g.sound(rom::MOON_SOUND_B, p);
                 }
                 { crate::palette::flash(g.b, crate::palette::Flash::D); };
             }
@@ -1089,7 +1089,7 @@ fn moonlight(g: &mut Ctx, p: Player) {
                     return moon_finish(g, p);
                 }
                 spawn::moon(g, p, 1);
-                g.son(rom::MOON_SOUND, p);
+                g.sound(rom::MOON_SOUND, p);
                 items::meteor_damage(g, p);
             }
             if countdown(g, p) {
@@ -1108,7 +1108,7 @@ fn moonlight(g: &mut Ctx, p: Player) {
                     common::item_spark(g, p, 0xe);
                 }
                 animation::start_plain(g, p, 0x40);
-                g.son(rom::MOON_SOUND, p);
+                g.sound(rom::MOON_SOUND, p);
             } else if p.u16(g, field::TIMER) == 0x20 {
                 if !is_cancelled(g, p) {
                     spawn::moon_b(g, p);

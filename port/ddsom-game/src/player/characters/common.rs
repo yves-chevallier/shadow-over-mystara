@@ -21,7 +21,7 @@ use super::super::{animation, ram, Ctx, Player};
 use crate::mem::{wr16, wr8, A5};
 use crate::objects::Obj;
 use crate::machine::Machine;
-use crate::player::externes as ext;
+use crate::player::external as ext;
 
 /// Octets de l'enregistrement joueur propres aux actions des personnages.
 pub mod field {
@@ -442,7 +442,7 @@ fn dust(g: &mut Ctx, p: Player, table: u32) {
     let class = (p.u8(g, Player::CHARACTER) >> 1) as u32;
     let vx = g.prog16(table + 4 * class) as u32;
     let vy = g.prog16(table + 2 + 4 * class) as u32;
-    call(g, p, ext::effet::DUST, &[(0, 0), (1, 0x101), (2, vx), (3, vy)]);
+    call(g, p, ext::effect::DUST, &[(0, 0), (1, 0x101), (2, vx), (3, vy)]);
 }
 
 /// 0x3fa7c : poussière du freinage ou de la marche (une image sur quatre).
@@ -484,7 +484,7 @@ pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
     let (d0, d1, d2, height) = (g.prog16(row), g.prog16(row + 2), g.prog16(row + 4), g.prog16(row + 6));
     g.c.d[3] = g.c.d[3] & 0xffff_0000 | 0xffff;
     g.c.d[4] = height as u32;
-    let z = call(g, p, ext::effet::DUST, &[(0, d0 as i16 as u32), (1, d1 as u32), (2, d2 as u32)]);
+    let z = call(g, p, ext::effect::DUST, &[(0, d0 as i16 as u32), (1, d1 as u32), (2, d2 as u32)]);
     let failed = g.c.sr & m68k::SR_C != 0;
     let _ = z;
     if failed {
@@ -492,7 +492,7 @@ pub fn item_spark(g: &mut Ctx, p: Player, kind: u16) {
     }
     let spark = g.c.a[1];
     wr16(g.b, spark + 0x0c, height);
-    g.son(rom::SPARK_SOUND, p);
+    g.sound(rom::SPARK_SOUND, p);
 }
 
 // ---- soins (clerc, potion de soin du combattant) -----------------------------------------------
@@ -674,7 +674,7 @@ fn jump_takeoff(g: &mut Ctx, p: Player, kit: &JumpKit) {
     p.set_u16(g, field::TAKEOFF_X, x);
     let anim = by_jump_kind(g, p, 0x15, 0x10, 0xb);
     animation::start(g, p, anim);
-    g.son(ext::son::JUMP_VOICE, p);
+    g.sound(ext::sound::JUMP_VOICE, p);
     let kind = p.u8(g, 0x67);
     launch_jump(g, p, kit.speeds, kind);
 }
@@ -739,7 +739,7 @@ pub fn land(g: &mut Ctx, p: Player) {
     p.set_u32(g, Obj::Z, 0);
     let anim = by_jump_kind(g, p, 0x18, 0x13, 0xe);
     animation::start(g, p, anim);
-    g.son(ext::son::LANDING, p);
+    g.sound(ext::sound::LANDING, p);
 }
 
 /// Pas 8 : récupération, puis retour à l'état immobile.
@@ -790,7 +790,7 @@ pub fn dash(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u8(g, 0x1e8, 8);
                 animation::start(g, p, 0x1d);
-                g.son(ext::son::SLIDE, p);
+                g.sound(ext::sound::SLIDE, p);
             }
         }
         4 => {

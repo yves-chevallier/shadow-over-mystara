@@ -1,12 +1,12 @@
-"""Génère les scénarios d'entrée de scène (scenarios/scene/scene_NN.txt) avec le bot réactif autobot.
+"""Generates the scene entry scenarios (scenarios/scene/scene_NN.txt) with the reactive bot autobot.
 
-    python3 tools/gen_scene.py [numéro de scène ...]        (une scène représentative par séquence si aucun)
+    python3 tools/gen_scene.py [scene number ...]        (one representative scene per sequence if none)
 
-Chaque scénario entre directement dans la scène (FF8034 écrit pendant la sélection du personnage) : le bot
-joue ensuite avec un joueur invincible. Ils exercent la phase 8 (séquence d'ouverture de chaque scène,
-`port/ddsom-game/src/scene/entry.rs`) et le lecteur de script d'apparition. Prérequis : `cargo build --release
--p ddsom-game --examples`, DDSOM_ROMS / DDSOM_EEPROM. Les scénarios produits ne contiennent que des entrées
-et des écritures RAM (`poke`). Voir docs/scenes.md.
+Each scenario enters the scene directly (FF8034 written during character select): the bot
+then plays with an invincible player. They exercise phase 8 (opening sequence of each scene,
+`port/ddsom-game/src/scene/entry.rs`) and the spawn script reader. Prerequisites: `cargo build --release
+-p ddsom-game --examples`, DDSOM_ROMS / DDSOM_EEPROM. The produced scenarios only contain inputs
+and RAM writes (`poke`). See docs/scenes.md.
 """
 import os
 import subprocess
@@ -21,7 +21,7 @@ ROMS = os.environ.get("DDSOM_ROMS", os.path.join(ROOT, "rom"))
 EEPROM = os.environ.get("DDSOM_EEPROM", os.path.join(ROOT, "testdata/eeprom_ddsom.bin"))
 FRAMES = 6500
 
-# une scène par fonction de séquence d'ouverture (la table complète est dans docs/scenes.md)
+# one scene per opening sequence function (the full table is in docs/scenes.md)
 SCENES = [1, 2, 3, 4, 5, 7, 8, 9, 10, 11, 14, 24, 25, 26, 27, 28, 32, 33, 34, 35, 38, 39, 40, 41, 42, 44, 47, 54, 58,
           59, 64, 65, 66, 67, 90, 105, 109, 110, 111]
 
@@ -45,4 +45,4 @@ def generate(scene):
 
 if __name__ == "__main__":
     for s in [int(a) for a in sys.argv[1:]] or SCENES:
-        print(s, "ok" if generate(s) == 0 else "ECHEC", flush=True)
+        print(s, "ok" if generate(s) == 0 else "FAILED", flush=True)

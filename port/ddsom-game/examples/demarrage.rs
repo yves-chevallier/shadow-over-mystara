@@ -8,7 +8,7 @@
 use std::cell::RefCell;
 
 /// Jalons du démarrage (adresses de début de bloc).
-const JALONS: &[(u32, &str)] = &[
+const MILESTONES: &[(u32, &str)] = &[
     (0x350, "reset"),
     (0x182a, "test de RAM"),
     (0x1884, "test GFX 0x914000"),
@@ -24,23 +24,23 @@ const JALONS: &[(u32, &str)] = &[
 ];
 
 thread_local! {
-    static VUS: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
+    static SEEN: RefCell<Vec<u32>> = const { RefCell::new(Vec::new()) };
     static IMAGE: RefCell<u64> = const { RefCell::new(0) };
-    static SUIVANT: RefCell<Option<cps2::BlockExecutor>> = const { RefCell::new(None) };
+    static NEXT: RefCell<Option<cps2::BlockExecutor>> = const { RefCell::new(None) };
 }
 
-fn noter(pc: u32, c: &m68k::Cpu, b: &cps2::Cps2Bus) {
-    if let Some(&(_, nom)) = JALONS.iter().find(|j| j.0 == pc) {
-        let nouveau = VUS.with(|v| {
+fn note(pc: u32, c: &m68k::Cpu, b: &cps2::Cps2Bus) {
+    if let Some(&(_, name)) = MILESTONES.iter().find(|j| j.0 == pc) {
+        let new = SEEN.with(|v| {
             let mut v = v.borrow_mut();
             !v.contains(&pc) && {
                 v.push(pc);
                 true
             }
         });
-        if nouveau {
+        if new {
             let f = IMAGE.with(|i| *i.borrow());
-            println!("{pc:06x} {nom:36} image {f} ligne {} cycle {}", b.scanline, c.cycles);
+            println!("{pc:06x} {name:36} image {f} ligne {} cycle {}", b.scanline, c.cycles);
             if pc == 0x928 || pc == 0x492 {
                 let r: Vec<String> = c.d.iter().chain(&c.a).map(|r| format!("{r:08x}")).collect();
                 println!("    D0-D7 A0-A7 {} sr={:04x} usp={:08x}", r.join(" "), c.sr, c.other_sp);
@@ -49,36 +49,36 @@ fn noter(pc: u32, c: &m68k::Cpu, b: &cps2::Cps2Bus) {
     }
 }
 
-fn executeur(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u32> {
-    noter(pc, c, b);
-    SUIVANT.with(|s| s.borrow().unwrap())(pc, c, b, dl)
+fn executor(pc: u32, c: &mut m68k::Cpu, b: &mut cps2::Cps2Bus, dl: u64) -> Option<u32> {
+    note(pc, c, b);
+    NEXT.with(|s| s.borrow().unwrap())(pc, c, b, dl)
 }
 
 fn ignored(word: usize) -> bool {
     let a = 2 * word;
-    ddsom_game::taches::table::ram_du_noyau(a as u32) || (0x2900..0x2a1a).contains(&a)
+    ddsom_game::taches::table::kernel_ram(a as u32) || (0x2900..0x2a1a).contains(&a)
 }
 
-fn differents(x: &[u16], y: &[u16]) -> usize {
+fn different(x: &[u16], y: &[u16]) -> usize {
     x.iter().zip(y).filter(|(p, q)| p != q).count()
 }
 
-fn comparer(roms: &str, ee: Option<&[u8]>, images: u64) {
-    let charger = || {
+fn compare(roms: &str, ee: Option<&[u8]>, images: u64) {
+    let load = || {
         let mut m = cps2::Machine::load_ddsom(std::path::Path::new(roms), ee).unwrap();
         m.set_overclock(16.0);
         m
     };
-    let (mut ma, mut mb) = (charger(), charger());
+    let (mut ma, mut mb) = (load(), load());
     ddsom_game::install(&mut ma);
     ddsom_game::install_reference(&mut mb);
     for f in 0..images {
         ma.run_frame();
         mb.run_frame();
         let ram = (0..0x8000).filter(|&i| ma.bus.ram[i] != mb.bus.ram[i] && !ignored(i)).count();
-        let gfx = differents(&ma.bus.gfxram, &mb.bus.gfxram);
-        let obj = differents(&ma.obj_buffer, &mb.obj_buffer) + (0..2).map(|k| differents(&ma.bus.objram[k], &mb.bus.objram[k])).sum::<usize>();
-        let pal = differents(&ma.bus.palette, &mb.bus.palette);
+        let gfx = different(&ma.bus.gfxram, &mb.bus.gfxram);
+        let obj = different(&ma.obj_buffer, &mb.obj_buffer) + (0..2).map(|k| different(&ma.bus.objram[k], &mb.bus.objram[k])).sum::<usize>();
+        let pal = different(&ma.bus.palette, &mb.bus.palette);
         let qram = ma.bus.qram.iter().zip(&mb.bus.qram).filter(|(p, q)| p != q).count();
         let zram = ma.sound.ram.iter().zip(&mb.sound.ram).filter(|(p, q)| p != q).count();
         let z80 = format!("{:?}", ma.sound.z80) == format!("{:?}", mb.sound.z80);
@@ -90,7 +90,7 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     let ee = std::fs::read(&a[2]).ok();
     if a.get(4).is_some_and(|v| v == "compare") {
-        return comparer(&a[1], ee.as_deref(), a[3].parse().unwrap());
+        return compare(&a[1], ee.as_deref(), a[3].parse().unwrap());
     }
     let mut m = cps2::Machine::load_ddsom(std::path::Path::new(&a[1]), ee.as_deref()).unwrap();
     let images: u64 = a.get(3).and_then(|v| v.parse().ok()).unwrap_or(12);
@@ -100,9 +100,9 @@ fn main() {
         ddsom_game::install_reference(&mut m);
     }
     m.set_overclock(16.0);
-    SUIVANT.with(|s| *s.borrow_mut() = m.executor);
-    m.executor = Some(executeur);
-    m.step_hook = Some(Box::new(|c, b, pc| noter(pc, c, b)));
+    NEXT.with(|s| *s.borrow_mut() = m.executor);
+    m.executor = Some(executor);
+    m.step_hook = Some(Box::new(|c, b, pc| note(pc, c, b)));
     println!("SSP initial {:08x} PC initial {:06x}", m.cpu.a[7], m.cpu.pc);
     for f in 0..images {
         IMAGE.with(|i| *i.borrow_mut() = f);

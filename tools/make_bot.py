@@ -1,9 +1,9 @@
-"""Génère un scénario « bot » pour mame/scenario.lua et la validation Rust.
+"""Generates a "bot" scenario for mame/scenario.lua and the Rust validation.
 
-    python3 tools/make_bot.py <sortie> [--frames N] [--seed S] [--char K] [--players P]
+    python3 tools/make_bot.py <output> [--frames N] [--seed S] [--char K] [--players P]
 
-Le bot met une pièce, démarre, déplace le curseur de sélection de K crans vers la droite,
-valide, puis avance en combattant (attaques, sauts, magie, déplacements) et remet des pièces.
+The bot inserts a coin, starts, moves the selection cursor K steps to the right,
+confirms, then moves on fighting (attacks, jumps, magic, moves) and inserts more coins.
 """
 import argparse
 import random
@@ -14,8 +14,8 @@ p.add_argument("--frames", type=int, default=30000)
 p.add_argument("--seed", type=int, default=1)
 p.add_argument("--char", type=int, default=0)
 p.add_argument("--players", type=int, default=1)
-p.add_argument("--mash", action="store_true", help="écrase les boutons et les directions au hasard (exerce les actions rares)")
-p.add_argument("--dir", default="Right", choices=["Right", "Left", "Up", "Down"], help="sens de déplacement du curseur")
+p.add_argument("--mash", action="store_true", help="mashes buttons and directions at random (exercises rare actions)")
+p.add_argument("--dir", default="Right", choices=["Right", "Left", "Up", "Down"], help="cursor move direction")
 a = p.parse_args()
 random.seed(a.seed)
 
@@ -28,7 +28,7 @@ def press(f, name, dur=4):
 
 
 def mash(f, q, frames):
-    """Directions et boutons tirés au hasard toutes les 3 images pendant `frames` images."""
+    """Directions and buttons drawn at random every 3 frames for `frames` frames."""
     names = ["Right", "Left", "Down", "Up", "Button 1", "Button 2", "Button 3", "Button 4"]
     weights = [0.35, 0.2, 0.15, 0.15, 0.35, 0.2, 0.08, 0.12]
     state = {n: 0 for n in names}

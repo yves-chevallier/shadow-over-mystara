@@ -6,22 +6,22 @@
 //! (sans dossier) lit `../assets`.
 //! Le jeu tourne sans 68000 : seulement les routines réécrites en Rust (`docs/noyau.md`). Avec `--assets`
 //! sans dossier de ROMs, il se joue **sans aucune ROM** : tout vient du dossier d'assets (tables du programme,
-//! graphismes, données du pilote son, tables du DSP, échantillons ; `docs/sans-rom.md`), le pilote son est
+//! graphismes, données du pilote son, tables du DSP, échantillons ; `docs/without-rom.md`), le pilote son est
 //! celui en Rust, et aucun fichier ROM n'est ouvert.
 //! Diagnostic : `DDSOM_ORIGINE=1` (code d'origine à la vitesse de l'arcade), `DDSOM_INTERP=1` (tout interprété) ; ces modes
 //! lisent les ROMs.
 //! Touches (comme MAME) : 5 pièce, 1 Start, flèches, Ctrl/Alt/Espace/Maj = boutons 1-4
 //! (ou W X C V), 6 pièce J2 / 2 Start J2, F2 test, P pause, Tab avance rapide, F11 plein écran, Échap quitter ;
-//! à changer dans touches.cfg (`touches.rs`), manettes Xbox comprises sous Windows (`manette.rs`).
+//! à changer dans touches.cfg (`keys.rs`), manettes Xbox comprises sous Windows (`gamepad.rs`).
 //! L'EEPROM (réglages, compteurs) est conservée dans nvram/ddsom.eeprom.
-//! F5 sauvegarde la partie dans sauvegardes/rapide.txt, F9 la reprend (`sauvegarde.rs` : rejeu des entrées).
-//! `DDSOM_ENREGISTRE=partie.txt` écrit de même la partie en quittant : `validate <roms> partie.txt.eeprom
+//! F5 sauvegarde la partie dans sauvegardes/rapide.txt, F9 la reprend (`save.rs` : rejeu des entrées).
+//! `DDSOM_ENREGISTRE=game.txt` écrit de même la partie en quittant : `validate <roms> partie.txt.eeprom
 //! partie.txt <images>` la rejoue.
 
 mod audio;
-mod manette;
-mod sauvegarde;
-mod touches;
+mod gamepad;
+mod save;
+mod keys;
 
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
@@ -34,21 +34,21 @@ const FRAME_HZ: f64 = 8_000_000.0 / 512.0 / 262.0;
 fn main() {
     let (romdir, assets) = arguments(std::env::args().skip(1).collect());
     let nvram = PathBuf::from("nvram/ddsom.eeprom");
-    let mut touches = touches::Touches::charge("touches.cfg".as_ref());
+    let mut keys = keys::Keys::charge("touches.cfg".as_ref());
     let eeprom = std::fs::read(&nvram).ok();
     // le jeu : sans 68000, routines Rust seules (il s'arrête sur une adresse qui n'en a pas). Diagnostic :
     // DDSOM_ORIGINE=1 : code d'origine à la vitesse de l'arcade ; DDSOM_INTERP=1 : tout interprété. (Le mode hybride,
     // DDSOM_HYBRIDE=1, est retiré.)
-    ddsom_game::refuser_hybride();
-    let mut sans_68k = !(std::env::var_os("DDSOM_ORIGINE").is_some() || std::env::var_os("DDSOM_INTERP").is_some());
+    ddsom_game::refuse_hybrid();
+    let mut no_68k = !(std::env::var_os("DDSOM_ORIGINE").is_some() || std::env::var_os("DDSOM_INTERP").is_some());
     // sans ROM : assets seuls, ce qui demande le jeu sans 68000 (le programme 68000 n'est pas dans les assets)
     let romdir = match (&assets, romdir) {
-        (Some(_), None) if !sans_68k && !PathBuf::from(DEFAULT_ROMS).is_dir() => {
+        (Some(_), None) if !no_68k && !PathBuf::from(DEFAULT_ROMS).is_dir() => {
             eprintln!("Pas de dossier de ROMs : jeu sans ROM, depuis les assets seuls (sans 68000, pas de diagnostic).");
-            sans_68k = true;
+            no_68k = true;
             None
         }
-        (Some(_), None) if sans_68k => None,
+        (Some(_), None) if no_68k => None,
         (_, r) => Some(r.unwrap_or_else(|| DEFAULT_ROMS.into())),
     };
     let contenus = match (&assets, &romdir) {
@@ -70,11 +70,11 @@ fn main() {
             std::process::exit(1);
         }
     };
-    // une machine neuve : au démarrage, et à chaque reprise d'une sauvegarde (`sauvegarde.rs`)
+    // une machine neuve : au démarrage, et à chaque reprise d'une sauvegarde (`save.rs`)
     let machine = |eeprom: Option<&[u8]>| {
         let mut m = Machine::ddsom(contenus.clone(), eeprom);
-        if sans_68k {
-            ddsom_game::install_sans_68k(&mut m);
+        if no_68k {
+            ddsom_game::install_no_68k(&mut m);
         } else if std::env::var_os("DDSOM_ORIGINE").is_some() {
             ddsom_rc::install(&mut m);
         }
@@ -87,8 +87,8 @@ fn main() {
     };
     let mut m = machine(eeprom.as_deref());
 
-    let mut plein_ecran = false;
-    let mut win = fenetre(plein_ecran);
+    let mut full_screen = false;
+    let mut win = window(full_screen);
 
     let audio = audio::Audio::open(qsound::SAMPLE_RATE.round() as u32);
     if audio.is_none() {
@@ -98,37 +98,37 @@ fn main() {
     let frame_time = Duration::from_secs_f64(1.0 / FRAME_HZ);
     let mut next = Instant::now();
     let mut paused = false;
-    let mut partie = sauvegarde::Partie::nouvelle(&m);
-    let sauve = |partie: &sauvegarde::Partie, fichier: &Path| match partie.sauve(fichier) {
-        Ok(()) => eprintln!("Partie sauvegardée dans {} (image {}).", fichier.display(), partie.images()),
-        Err(e) => eprintln!("Sauvegarde dans {} impossible : {e}", fichier.display()),
+    let mut game = save::Game::new(&m);
+    let saved = |game: &save::Game, file: &Path| match game.saved(file) {
+        Ok(()) => eprintln!("Partie sauvegardée dans {} (image {}).", file.display(), game.images()),
+        Err(e) => eprintln!("Sauvegarde dans {} impossible : {e}", file.display()),
     };
     let mut buf = vec![0u32; 384 * 224];
 
     while win.is_open() {
-        let t = touches.lit(&win);
-        if t.quitter {
+        let t = keys.lit(&win);
+        if t.quit {
             break;
         }
-        if t.plein_ecran {
-            plein_ecran = !plein_ecran;
-            win = fenetre(plein_ecran);
+        if t.full_screen {
+            full_screen = !full_screen;
+            win = window(full_screen);
         }
         if t.pause {
             paused = !paused;
         }
-        if t.sauver {
-            sauve(&partie, SAUVEGARDE.as_ref());
+        if t.save {
+            saved(&game, SAVE.as_ref());
         }
-        if t.charger {
+        if t.load {
             let debut = Instant::now();
-            match sauvegarde::Partie::charge(SAUVEGARDE.as_ref(), |ee| machine(Some(ee))) {
-                Ok((nouvelle, p)) => {
+            match save::Game::charge(SAVE.as_ref(), |ee| machine(Some(ee))) {
+                Ok((new, p)) => {
                     eprintln!("Partie reprise à l'image {} ({:.1} s).", p.images(), debut.elapsed().as_secs_f64());
-                    (m, partie) = (nouvelle, p);
+                    (m, game) = (new, p);
                     next = Instant::now();
                 }
-                Err(e) => eprintln!("Reprise de {} impossible : {e}", SAUVEGARDE),
+                Err(e) => eprintln!("Reprise de {} impossible : {e}", SAVE),
             }
         }
         if paused {
@@ -139,13 +139,13 @@ fn main() {
         }
         m.bus.inputs.in0 = t.in0;
         m.bus.inputs.in2 = t.in2;
-        partie.image(&m);
+        game.image(&m);
         let img = match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| m.run_frame())) {
             Ok(img) => img,
             // sans 68000 : arrêt sur une adresse sans routine Rust (diagnostic déjà affiché par la panique)
-            Err(e) if sans_68k => {
+            Err(e) if no_68k => {
                 let m = e.downcast_ref::<String>().cloned().unwrap_or_default();
-                eprintln!("Le jeu sans 68000 s'arrête : {}", m.trim_start_matches(ddsom_game::sans68k::ARRET));
+                eprintln!("Le jeu sans 68000 s'arrête : {}", m.trim_start_matches(ddsom_game::no68k::STOP));
                 break;
             }
             Err(e) => std::panic::resume_unwind(e),
@@ -156,7 +156,7 @@ fn main() {
         win.update_with_buffer(&buf, 384, 224).expect("affichage");
 
         let samples: Vec<i16> = m.sound.audio.drain(..).flat_map(|s| s).collect();
-        let fast = t.rapide;
+        let fast = t.fast;
         if let (Some(a), false) = (&audio, fast) {
             a.push(samples);
         }
@@ -173,7 +173,7 @@ fn main() {
     }
 
     if let Some(f) = std::env::var_os("DDSOM_ENREGISTRE") {
-        sauve(&partie, f.as_ref());
+        saved(&game, f.as_ref());
     }
     if let Some(dir) = nvram.parent() {
         let _ = std::fs::create_dir_all(dir);
@@ -183,22 +183,22 @@ fn main() {
     }
 }
 
-const TITRE: &str = "Dungeons & Dragons: Shadow over Mystara (port Rust)";
+const TITLE: &str = "Dungeons & Dragons: Shadow over Mystara (port Rust)";
 
 /// Fenêtre de jeu, ou fenêtre sans bord couvrant l'écran (image étirée sans déformation) en plein écran.
-fn fenetre(plein_ecran: bool) -> Window {
-    let mut win = if plein_ecran {
+fn window(full_screen: bool) -> Window {
+    let mut win = if full_screen {
         let opts = WindowOptions { none: true, scale_mode: ScaleMode::AspectRatioStretch, ..WindowOptions::default() };
-        match taille_ecran() {
-            Some((l, h)) => Window::new(TITRE, l, h, opts),
+        match screen_size() {
+            Some((l, h)) => Window::new(TITLE, l, h, opts),
             // taille de l'écran inconnue : plus grand multiple entier qui y tient
-            None => Window::new(TITRE, 384, 224, WindowOptions { scale: Scale::FitScreen, ..opts }),
+            None => Window::new(TITLE, 384, 224, WindowOptions { scale: Scale::FitScreen, ..opts }),
         }
     } else {
-        Window::new(TITRE, 384, 224, WindowOptions { scale: Scale::X2, ..WindowOptions::default() })
+        Window::new(TITLE, 384, 224, WindowOptions { scale: Scale::X2, ..WindowOptions::default() })
     }
     .expect("fenêtre");
-    if plein_ecran {
+    if full_screen {
         win.set_position(0, 0);
         win.set_cursor_visibility(false);
     }
@@ -207,7 +207,7 @@ fn fenetre(plein_ecran: bool) -> Window {
 
 /// Taille de l'écran principal en pixels (Windows : `GetSystemMetrics` de user32).
 #[cfg(windows)]
-fn taille_ecran() -> Option<(usize, usize)> {
+fn screen_size() -> Option<(usize, usize)> {
     type GetSystemMetricsFn = unsafe extern "system" fn(index: i32) -> i32;
     // SAFETY : signature conforme à <winuser.h> ; la bibliothèque reste chargée pendant les appels.
     unsafe {
@@ -219,12 +219,12 @@ fn taille_ecran() -> Option<(usize, usize)> {
 }
 
 #[cfg(not(windows))]
-fn taille_ecran() -> Option<(usize, usize)> {
+fn screen_size() -> Option<(usize, usize)> {
     None
 }
 
 /// Fichier de la sauvegarde rapide (F5 / F9).
-const SAUVEGARDE: &str = "sauvegardes/rapide.txt";
+const SAVE: &str = "sauvegardes/rapide.txt";
 
 /// Dossier des ROMs par défaut.
 const DEFAULT_ROMS: &str = "../rom";

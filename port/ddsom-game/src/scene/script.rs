@@ -200,7 +200,7 @@ pub const SPAWN_SCRIPT: Native = Native {
 pub const SCRIPT_RESET: Native = Native {
     entry: RESET_ENTRY,
     name: "scene_script_reset",
-    run: crate::Corps::Memoire(reset),
+    run: crate::Corps::Memory(reset),
     touches_sound: false,
     outputs: 0,
 };

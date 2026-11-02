@@ -535,7 +535,7 @@ fn rod_used(g: &mut Ctx, p: Player, rod: &Rod) {
     p.set_u8(g, rod.reserve, left);
     if left == 5 {
         g.c.d[0] = rod.interface;
-        g.rom(crate::player::externes::effet::WAND, p);
+        g.rom(crate::player::external::effect::WAND, p);
     }
 }
 

@@ -1,4 +1,4 @@
-//! Aperçu en couleur : `preview <assets> <première_cellule> <palette> <sortie.png>`.
+//! Aperçu en couleur : `preview <assets> <première_cellule> <palette> <exit.png>`.
 //! Rend 32x16 cellules avec la palette de la bibliothèque, comme le matériel (luminosité comprise).
 
 use std::path::Path;

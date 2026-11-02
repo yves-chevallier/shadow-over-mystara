@@ -23,115 +23,115 @@ use crate::mem::{prog16, rd16, rd8, rts, wr16, wr32, wr8, A5};
 use crate::text::clear_cells;
 use crate::Native;
 
-const VIDE: u16 = 0xffff;
+const EMPTY: u16 = 0xffff;
 /// Pop-up courant (4 mots) ; la durée restante est le dernier.
-const COURANT: u32 = 0xffff_9180;
-const DUREE: u32 = 6;
-const ENTREES: u32 = 0x20e;
-const LECTURE: u32 = 0x20d;
-const ENTREE_TAILLE: u8 = 8;
+const CURRENT: u32 = 0xffff_9180;
+const DURATION: u32 = 6;
+const INPUTS: u32 = 0x20e;
+const READ: u32 = 0x20d;
+const ENTRY_SIZE: u8 = 8;
 /// Durée par défaut d'un pop-up sans second paramètre (images), et durée raccourcie.
-const DUREE_DEFAUT: u16 = 0x60;
-const DUREE_RACCOURCIE: u16 = 4;
+const DEFAULT_DURATION: u16 = 0x60;
+const SHORT_DURATION: u16 = 4;
 /// Bit 0 : bulles réduites.
-const REDUIT: u32 = 0x20;
+const REDUCED: u32 = 0x20;
 
 /// Données de la ROM programme.
 mod rom {
     /// Rectangles à effacer (colonne, ligne, largeur, hauteur), un par emplacement : grands, puis réduits.
-    pub const EFFACEMENTS: [u32; 2] = [0x19f02, 0x19f12];
+    pub const CLEARS: [u32; 2] = [0x19f02, 0x19f12];
     /// Origine de la bulle dans la couche de texte, par emplacement (4 grands, puis 4 réduits) : lue
     /// comme une table relative au PC, donc dans le programme déchiffré.
-    pub const ORIGINES: u32 = 0x19f6c;
+    pub const ORIGINALS: u32 = 0x19f6c;
     /// Déplacements des textes (par numéro) vers des chaînes d'indices de tuiles terminées par `/`.
-    pub const TEXTES: u32 = 0x1a01a;
+    pub const TEXTS: u32 = 0x1a01a;
     /// Tuiles du bord bas du cadre (par reste de hauteur de 1 à 8 pixels).
-    pub const BORDS: u32 = 0x1a25e;
+    pub const EDGES: u32 = 0x1a25e;
 }
 
-const COUCHE_TEXTE: u32 = 0x912000;
-const COLONNE: u32 = 0x80;
+const TEXT_LAYER: u32 = 0x912000;
+const COLUMN: u32 = 0x80;
 /// Fin de chaîne d'un texte.
-const FIN_TEXTE: u8 = 0x2f;
+const TEXT_END: u8 = 0x2f;
 /// Cases du cadre (tuile, attribut 0xd) : bord de la dernière colonne, bord plein, et base de la case d'angle.
-const BORD_COURANT: u32 = 0x1318_000d;
-const BORD_PLEIN: u32 = 0x1310_000d;
-const BORD_COIN: u16 = 0x1310;
-const ATTRIBUT_CADRE: u16 = 0xd;
-const ATTRIBUT_TEXTE: u16 = 2;
+const EDGE_CURRENT: u32 = 0x1318_000d;
+const EDGE_FULL: u32 = 0x1310_000d;
+const EDGE_COIN: u16 = 0x1310;
+const ATTR_FRAME: u16 = 0xd;
+const ATTR_TEXT: u16 = 2;
 
-fn reduit(b: &mut Cps2Bus, a5: u32) -> bool {
-    rd8(b, a5 + REDUIT) & 1 != 0
+fn reduced(b: &mut Cps2Bus, a5: u32) -> bool {
+    rd8(b, a5 + REDUCED) & 1 != 0
 }
 
-/// 0x19ee0 : efface la bulle du pop-up `entree`.
-fn effacer(b: &mut Cps2Bus, a5: u32, entree: u32) {
-    let table = rom::EFFACEMENTS[reduit(b, a5) as usize];
-    let case = table + 4 * rd8(b, entree) as u32;
-    let (col, row, largeur, hauteur) = (rd8(b, case), rd8(b, case + 1), rd8(b, case + 2), rd8(b, case + 3));
-    clear_cells(b, col, row, largeur, hauteur);
+/// 0x19ee0 : efface la bulle du pop-up `entry`.
+fn clear(b: &mut Cps2Bus, a5: u32, entry: u32) {
+    let table = rom::CLEARS[reduced(b, a5) as usize];
+    let case = table + 4 * rd8(b, entry) as u32;
+    let (col, row, width, height) = (rd8(b, case), rd8(b, case + 1), rd8(b, case + 2), rd8(b, case + 3));
+    clear_cells(b, col, row, width, height);
 }
 
-/// 0x19f24 : dessine la bulle du pop-up `entree`.
-fn dessiner(b: &mut Cps2Bus, a5: u32, entree: u32) {
-    let id = rd16(b, entree);
-    let mut largeur = rd16(b, entree + 2);
-    let mut hauteur = rd16(b, entree + 4);
-    if (hauteur as i16) < 0 {
+/// 0x19f24 : dessine la bulle du pop-up `entry`.
+fn draw(b: &mut Cps2Bus, a5: u32, entry: u32) {
+    let id = rd16(b, entry);
+    let mut width = rd16(b, entry + 2);
+    let mut height = rd16(b, entry + 4);
+    if (height as i16) < 0 {
         // paramètre absent
-        hauteur = 0;
+        height = 0;
     }
-    let mut emplacement = (id >> 8) << 1;
-    if largeur as i16 > 0xa8 {
-        largeur >>= 1;
-        hauteur >>= 1;
+    let mut slot = (id >> 8) << 1;
+    if width as i16 > 0xa8 {
+        width >>= 1;
+        height >>= 1;
     }
-    let petit = reduit(b, a5);
-    if petit {
-        emplacement += 8;
-        largeur >>= 1;
-        hauteur >>= 1;
+    let small = reduced(b, a5);
+    if small {
+        slot += 8;
+        width >>= 1;
+        height >>= 1;
     }
-    let origine = prog16(b, rom::ORIGINES + emplacement as u32) as i16 as i32 as u32;
-    let a4 = COUCHE_TEXTE.wrapping_add(origine);
-    texte(b, a4, id, petit);
-    cadre(b, a4, id, petit, largeur as i16, hauteur as i16);
+    let original = prog16(b, rom::ORIGINALS + slot as u32) as i16 as i32 as u32;
+    let a4 = TEXT_LAYER.wrapping_add(original);
+    text(b, a4, id, small);
+    frame(b, a4, id, small, width as i16, height as i16);
 }
 
 /// Colonne du texte et du cadre : décalée d'une case quand le bit 9 de l'identifiant est posé.
-fn decale(id: u16, petit: bool) -> bool {
-    !petit && id & 0x200 != 0
+fn shifted(id: u16, small: bool) -> bool {
+    !small && id & 0x200 != 0
 }
 
 /// 0x19fd2 : le texte, une tuile par case, en colonne.
-fn texte(b: &mut Cps2Bus, a4: u32, id: u16, petit: bool) {
-    let mut case = a4 + 0x100 + if decale(id, petit) { 4 } else { 0 };
-    let depart = prog16(b, rom::TEXTES + 2 * (id & 0xff) as u32) as i16 as i32 as u32;
-    let mut s = rom::TEXTES.wrapping_add(depart);
+fn text(b: &mut Cps2Bus, a4: u32, id: u16, small: bool) {
+    let mut case = a4 + 0x100 + if shifted(id, small) { 4 } else { 0 };
+    let start = prog16(b, rom::TEXTS + 2 * (id & 0xff) as u32) as i16 as i32 as u32;
+    let mut s = rom::TEXTS.wrapping_add(start);
     loop {
-        let tuile = rd8(b, s);
+        let tile = rd8(b, s);
         s += 1;
-        if tuile == FIN_TEXTE {
+        if tile == TEXT_END {
             return;
         }
-        wr16(b, case, tuile as u16);
-        wr16(b, case + 2, ATTRIBUT_TEXTE);
-        case += COLONNE;
+        wr16(b, case, tile as u16);
+        wr16(b, case + 2, ATTR_TEXT);
+        case += COLUMN;
     }
 }
 
-/// 0x1a20e : le cadre sous le texte. `largeur` et `hauteur` en pixels : des colonnes entières de bord, puis
+/// 0x1a20e : le cadre sous le texte. `width` et `height` en pixels : des colonnes entières de bord, puis
 /// la colonne du reste (une tuile choisie par le nombre de pixels restants).
-fn cadre(b: &mut Cps2Bus, a4: u32, id: u16, petit: bool, mut d1: i16, mut d2: i16) {
-    let mut case = a4 + 0x104 - if decale(id, petit) { 4 } else { 0 };
+fn frame(b: &mut Cps2Bus, a4: u32, id: u16, small: bool, mut d1: i16, mut d2: i16) {
+    let mut case = a4 + 0x104 - if shifted(id, small) { 4 } else { 0 };
     loop {
         d1 = d1.wrapping_sub(8);
         d2 = d2.wrapping_sub(8);
         if d2 < 0 {
             break;
         }
-        wr32(b, case, BORD_COURANT);
-        case += COLONNE;
+        wr32(b, case, EDGE_CURRENT);
+        case += COLUMN;
     }
     loop {
         d2 = d2.wrapping_add(8);
@@ -140,14 +140,14 @@ fn cadre(b: &mut Cps2Bus, a4: u32, id: u16, petit: bool, mut d1: i16, mut d2: i1
             return;
         }
         if d1 <= 8 {
-            let bord = prog16(b, rom::BORDS.wrapping_add_signed(2 * d1 as i32));
-            wr16(b, case, bord.wrapping_add(d2 as u16));
-            wr16(b, case + 2, ATTRIBUT_CADRE);
+            let edge = prog16(b, rom::EDGES.wrapping_add_signed(2 * d1 as i32));
+            wr16(b, case, edge.wrapping_add(d2 as u16));
+            wr16(b, case + 2, ATTR_FRAME);
             return;
         }
-        wr16(b, case, BORD_COIN.wrapping_add(d2 as u16));
-        wr16(b, case + 2, ATTRIBUT_CADRE);
-        case += COLONNE;
+        wr16(b, case, EDGE_COIN.wrapping_add(d2 as u16));
+        wr16(b, case + 2, ATTR_FRAME);
+        case += COLUMN;
         d1 = d1.wrapping_sub(8);
         d2 = -8;
         loop {
@@ -155,62 +155,62 @@ fn cadre(b: &mut Cps2Bus, a4: u32, id: u16, petit: bool, mut d1: i16, mut d2: i1
             if d1 < 0 {
                 break;
             }
-            wr32(b, case, BORD_PLEIN);
-            case += COLONNE;
+            wr32(b, case, EDGE_FULL);
+            case += COLUMN;
         }
     }
 }
 
 /// Fait du prochain pop-up de la file le pop-up courant (s'il y en a un) et lance son dessin. Rend l'index de
 /// lecture lu.
-fn suivant(b: &mut Cps2Bus, courant: u32) -> u8 {
-    let index = rd8(b, A5 + LECTURE);
-    let case = A5 + ENTREES + index as u32;
-    if rd16(b, case) == VIDE {
+fn next(b: &mut Cps2Bus, current: u32) -> u8 {
+    let index = rd8(b, A5 + READ);
+    let case = A5 + INPUTS + index as u32;
+    if rd16(b, case) == EMPTY {
         return index;
     }
     for decalage in [0, 2, 4, 6] {
-        let mot = rd16(b, case + decalage);
-        wr16(b, courant + decalage, mot);
-        wr16(b, case + decalage, VIDE);
+        let word = rd16(b, case + decalage);
+        wr16(b, current + decalage, word);
+        wr16(b, case + decalage, EMPTY);
     }
-    if rd16(b, courant + 4) == 0 {
-        wr16(b, courant + DUREE, DUREE_DEFAUT);
+    if rd16(b, current + 4) == 0 {
+        wr16(b, current + DURATION, DEFAULT_DURATION);
     }
-    dessiner(b, A5, courant);
-    wr8(b, A5 + LECTURE, index.wrapping_add(ENTREE_TAILLE));
+    draw(b, A5, current);
+    wr8(b, A5 + READ, index.wrapping_add(ENTRY_SIZE));
     index
 }
 
 /// 0x19e20 : un pas de la machine à états des pop-ups. Rend l'index de lecture de la file s'il a été lu (le D0.b de
 /// l'original). Cœur.
 pub fn animer(b: &mut Cps2Bus) -> Option<u8> {
-    let courant = A5.wrapping_add(COURANT);
-    let duree = rd16(b, courant + DUREE);
-    if duree != 0 {
-        let duree = duree - 1;
-        wr16(b, courant + DUREE, duree);
-        if duree != 0 {
+    let current = A5.wrapping_add(CURRENT);
+    let duration = rd16(b, current + DURATION);
+    if duration != 0 {
+        let duration = duration - 1;
+        wr16(b, current + DURATION, duration);
+        if duration != 0 {
             // le pop-up courant continue ; s'il y en a un autre en attente, on abrège
-            if duree < DUREE_RACCOURCIE {
+            if duration < SHORT_DURATION {
                 return None;
             }
-            let index = rd8(b, A5 + LECTURE);
-            if rd16(b, A5 + ENTREES + index as u32) != VIDE {
-                wr16(b, courant + DUREE, DUREE_RACCOURCIE);
+            let index = rd8(b, A5 + READ);
+            if rd16(b, A5 + INPUTS + index as u32) != EMPTY {
+                wr16(b, current + DURATION, SHORT_DURATION);
             }
             return Some(index);
         }
-        effacer(b, A5, courant);
+        clear(b, A5, current);
     }
-    Some(suivant(b, courant))
+    Some(next(b, current))
 }
 
 /// `animer` avec les registres de l'original : A0 = le pop-up courant, A2 = la file, D0 = l'index lu.
 /// `animer` avec les registres de l'original (A0 = le pop-up courant, A2 = la file, D0 = l'index lu).
 pub fn animer_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    c.a[0] = A5.wrapping_add(COURANT);
-    c.a[2] = A5 + ENTREES;
+    c.a[0] = A5.wrapping_add(CURRENT);
+    c.a[2] = A5 + INPUTS;
     if let Some(index) = animer(b) {
         c.d[0] = index as u32;
     }
@@ -219,13 +219,13 @@ pub fn animer_68k(c: &mut Cpu, b: &mut Cps2Bus) {
 /// 0x19eb0 : efface les bulles de tous les emplacements (4, ou 3 réduits), du dernier au premier. Rend la table
 /// des effacements lue (l'A2 de l'original). Cœur.
 pub fn effacer_tout(b: &mut Cps2Bus) -> u32 {
-    let petit = reduit(b, A5);
-    let table = rom::EFFACEMENTS[petit as usize];
-    let dernier = if petit { 2 } else { 3 };
-    for emplacement in (0..=dernier).rev() {
-        let case = table + 4 * emplacement;
-        let (col, row, largeur, hauteur) = (rd8(b, case), rd8(b, case + 1), rd8(b, case + 2), rd8(b, case + 3));
-        clear_cells(b, col, row, largeur, hauteur);
+    let small = reduced(b, A5);
+    let table = rom::CLEARS[small as usize];
+    let last = if small { 2 } else { 3 };
+    for slot in (0..=last).rev() {
+        let case = table + 4 * slot;
+        let (col, row, width, height) = (rd8(b, case), rd8(b, case + 1), rd8(b, case + 2), rd8(b, case + 3));
+        clear_cells(b, col, row, width, height);
     }
     table
 }
@@ -246,9 +246,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn decalage_des_bulles() {
-        assert!(decale(0x0200, false));
-        assert!(!decale(0x0200, true));
-        assert!(!decale(0x0100, false));
+    fn bubble_offset() {
+        assert!(shifted(0x0200, false));
+        assert!(!shifted(0x0200, true));
+        assert!(!shifted(0x0100, false));
     }
 }

@@ -14,8 +14,8 @@ use crate::scene::fondu;
 use crate::effects_aids::decor_6;
 use crate::families::creators::set_15_pur;
 use crate::families::effects_creators::ecran_de_fin;
-use crate::palette::{charger_ensemble, charger_page};
-use crate::video::{charger_grille, effacer_couche, Couche, Grille};
+use crate::palette::{load_palette_set, load_palette_page};
+use crate::video::{charger_grille, clear_layer, Layer, Grille};
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::scene::Ctx;
 use crate::Native;
@@ -103,21 +103,21 @@ crate::etapes! {
             x.wait(4, Etape::S00Palette)
         },
         S00Palette = S00_PALETTE => |x| {
-            crate::palette::charger_page_de_la_scene(x.b, 1);
-            charger_page(x.b, 2, 89);
-            charger_page(x.b, 3, 86);
+            crate::palette::load_scene_page(x.b, 1);
+            load_palette_page(x.b, 2, 89);
+            load_palette_page(x.b, 3, 86);
             fondu::PAGES.set(x.b, 12);
             crate::palette::full_brightness(x.b);
             s02_clear(x)
         },
         S02Cleared = S02_CLEARED => |x| {
-            clear_layers(x, &[Couche::Deux, Couche::Trois]);
+            clear_layers(x, &[Layer::Two, Layer::Three]);
             Flow::Done
         },
         S04Fade = S04_FADE => |x| {
             crate::sound::jouer_global(x.b, ext::SOUND_E1528);
             fade_settings(x, 3, 4);
-            x.sous_programme(crate::taches::fondu::montee, Etape::S04Timer)
+            x.sous_programme(crate::taches::fondu::rise, Etape::S04Timer)
         },
         S04Timer = S04_TIMER => |x| {
             wr16(x.b, BLOCK + f::TIMER, 60);
@@ -135,9 +135,9 @@ crate::etapes! {
             x.wait(4, Etape::S08Picture)
         },
         S08Picture = S08_PICTURE => |x| {
-            charger_page(x.b, 3, 87);
-            charger_ensemble(x.b, 6);
-            tile_blocks(x, 0x91b800, 350, 351, Grille::Couche3);
+            load_palette_page(x.b, 3, 87);
+            load_palette_set(x.b, 6);
+            tile_blocks(x, 0x91b800, 350, 351, Grille::Layer3);
             tile_blocks(x, 0x917000, 548, 549, Grille::Couche2);
             wr8(x.b, BLOCK + f::SIGNAL, 0);
             s08_object(x)
@@ -169,7 +169,7 @@ crate::etapes! {
             wr16(x.b, BLOCK + f::TIMER, 180);
             fade_settings(x, 3, FADE_ALL);
             // `jmp 0x9b6` : la tâche de fondu, puis le retour
-            crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::MONTEE);
+            crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::RISE);
             Flow::Done
         },
         S10Retry = S10_RETRY => |x| {
@@ -193,7 +193,7 @@ crate::etapes! {
             x.wait(4, Etape::S1cPalette)
         },
         S1cPalette = S1C_PALETTE => |x| {
-            crate::palette::charger_palettes_de_la_scene(x.b);
+            crate::palette::load_scene_palettes(x.b);
             // sauvegarde les 1024 octets de palette en 0x910000, puis les remplit de blanc
             for i in 0..256u32 {
                 let v = rd32(x.b, 0x91c000 + 4 * i);
@@ -202,21 +202,21 @@ crate::etapes! {
             for i in 0..256u32 {
                 wr32(x.b, 0x91c000 + 4 * i, 0xffff_ffff);
             }
-            fondu::DELAI.set(x.b, 1);
+            fondu::DELAY.set(x.b, 1);
             fondu::PAGES.set(x.b, FADE_ALL);
             wr32(x.b, A5 + 0x492, 0x910000);
             wr32(x.b, A5 + 0x496, 0x25c0c0);
             wr32(x.b, A5 + 0x49a, 0x269120);
             wr32(x.b, A5 + 0x49e, 0x27e600);
-            crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::DEPUIS_LE_BLANC);
+            crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::FROM_WHITE);
             crate::sound::jouer_global(x.b, ext::SOUND_E16F0);
-            fondu::PAS.set(x.b, 1);
+            fondu::STEP.set(x.b, 1);
             x.c.a[0] = BLOCK;
             s1c_wait_fade(x)
         },
         S1cFadeLoop = S1C_FADE_LOOP => |x| {
             render_scroll(x);
-            if fondu::PAS.get(x.b) != 0 {
+            if fondu::STEP.get(x.b) != 0 {
                 return s1c_wait_fade(x);
             }
             wr16(x.b, BLOCK + f::TIMER, 30);
@@ -224,7 +224,7 @@ crate::etapes! {
         },
         S1eLoop = S1E_LOOP => |x| {
             render_scroll(x);
-            if fondu::PAS.get(x.b) != 0 {
+            if fondu::STEP.get(x.b) != 0 {
                 return s1e_loop(x);
             }
             next_step(x);
@@ -232,7 +232,7 @@ crate::etapes! {
         },
         S1eRetry = S1E_RETRY => s1e_object,
         S22Loop = S22_LOOP => |x| {
-            if fondu::PAS.get(x.b) != 0 {
+            if fondu::STEP.get(x.b) != 0 {
                 return s22_wait(x);
             }
             next_step(x);
@@ -250,7 +250,7 @@ crate::etapes! {
         S28Loop = S28_LOOP => |x| {
             x.c.a[0] = BLOCK;
             render_scroll(x);
-            if fondu::PAS.get(x.b) != 0 {
+            if fondu::STEP.get(x.b) != 0 {
                 return s28_loop(x);
             }
             Flow::Done
@@ -262,15 +262,15 @@ crate::etapes! {
             x.wait(1, Etape::S2aScrolls)
         },
         S2aScrolls = S2A_SCROLLS => |x| {
-            clear_layers(x, &[Couche::Deux, Couche::Trois]);
+            clear_layers(x, &[Layer::Two, Layer::Three]);
             wr8(x.b, var::CAMERA_MODE, 4);
             for v in [var::CAMERA, var::CAMERA_Y, var::CAMERA_2, var::CAMERA_2_Y] {
                 wr16(x.b, v, 0);
             }
             next_step(x);
             wr16(x.b, BLOCK + f::TIMER, 4);
-            charger_page(x.b, 3, 87);
-            charger_ensemble(x.b, 6);
+            load_palette_page(x.b, 3, 87);
+            load_palette_set(x.b, 6);
             s2a_wait(x)
         },
         S2aWait = S2A_WAIT => |x| {
@@ -278,7 +278,7 @@ crate::etapes! {
                 return s2a_wait(x);
             }
             wr16(x.b, BLOCK + f::TIMER, 600);
-            tile_blocks(x, 0x91b800, 354, 355, Grille::Couche3);
+            tile_blocks(x, 0x91b800, 354, 355, Grille::Layer3);
             wr8(x.b, BLOCK + f::SIGNAL, 0);
             s2a_object(x)
         },
@@ -287,18 +287,18 @@ crate::etapes! {
             wr16(x.b, var::VIDEO, 0x12ce);
             render(x);
             fade_settings(x, 3, 13);
-            crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::MONTEE);
+            crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::RISE);
             Flow::Done
         },
         S2cLoop = S2C_LOOP => |x| {
-            if fondu::PAS.get(x.b) != 0 {
+            if fondu::STEP.get(x.b) != 0 {
                 return s2c_loop(x);
             }
             wr8(x.b, BLOCK + f::SIGNAL, 0xff);
             unlink_and_clear_lists(x);
             crate::objects::pools::EFFCT.reset(x.b);
             crate::objects::pools::SOBJ.reset(x.b);
-            crate::video::vider_objets(x.b);
+            crate::video::clear_objects(x.b);
             x.wait(1, Etape::S2cPlanes)
         },
         S2cPlanes = S2C_PLANES => |x| {
@@ -307,7 +307,7 @@ crate::etapes! {
             x.wait(1, Etape::S2cCleared)
         },
         S2cCleared = S2C_CLEARED => |x| {
-            clear_layers(x, &[Couche::Trois, Couche::Un]);
+            clear_layers(x, &[Layer::Three, Layer::One]);
             wr16(x.b, BLOCK + f::TIMER, 4);
             let o = link(x);
             wr32(x.b, o + 4, 0x0600_0000);
@@ -326,8 +326,8 @@ crate::etapes! {
             if !timer_tick(x) {
                 return s2c_wait_timer(x);
             }
-            charger_page(x.b, 2, 84);
-            charger_page(x.b, 3, 84);
+            load_palette_page(x.b, 2, 84);
+            load_palette_page(x.b, 3, 84);
             fondu::PAGES.set(x.b, 12);
             crate::palette::no_brightness(x.b);
             crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
@@ -396,17 +396,17 @@ crate::etapes! {
             wr16(x.b, var::VIDEO, 0x12ce);
             wr16(x.b, BLOCK + f::TIMER, 240);
             fade_settings(x, 3, FADE_ALL);
-            crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::MONTEE);
+            crate::kernel::creer_tache(x.b, 0x10, crate::scene::fondu::RISE);
             Flow::Done
         },
         S32Faded = S32_FADED => |x| {
             unlink_and_clear_lists(x);
             reset_pools(x);
-            crate::video::vider_objets(x.b);
+            crate::video::clear_objects(x.b);
             x.wait(1, Etape::S32Cleared)
         },
         S32Cleared = S32_CLEARED => |x| {
-            clear_layers(x, &[Couche::Un, Couche::Deux, Couche::Trois]);
+            clear_layers(x, &[Layer::One, Layer::Two, Layer::Three]);
             // le score (long BCD à +0x110) reçoit la récompense (+0x114, sans son quartet faible), plafonné à 9 999 999
             for k in 0..4u32 {
                 let p = var::PLAYERS + 0x200 * k;
@@ -419,9 +419,9 @@ crate::etapes! {
                 let score = bcd_add(rd32(x.b, p + 0x110), reward);
                 wr32(x.b, p + 0x110, if score as i32 > 0x0999_9999 { 0x0999_9999 } else { score });
             }
-            crate::player::update::mettre_a_jour(x.c, x.b);
+            crate::player::update::update_cpu(x.c, x.b);
             wr8(x.b, var::PHASE, 20);
-            crate::sound::service(x.b, crate::sound::Service::ArretGeneral);
+            crate::sound::service(x.b, crate::sound::Service::GeneralStop);
             // `jmp 0x133f6` : le démarrage noté fait, puis le retour à l'appelant
             crate::families::petites::demarrage_fait(x.b, true);
             Flow::Done
@@ -471,9 +471,9 @@ fn next_step(x: &mut Ctx) {
 /// `0xfc4ea` : décor (SET, SOBJ) et sprites ; A0 est conservé.
 fn render(x: &mut Ctx) {
     let a0 = x.c.a[0];
-    crate::dispatch::SET.update_sans_suite(x.c, x.b);
-    crate::dispatch::SOBJ.update_sans_suite(x.c, x.b);
-    crate::sprites::construire_68k(x.c, x.b);
+    crate::dispatch::SET.update_no_next(x.c, x.b);
+    crate::dispatch::SOBJ.update_no_next(x.c, x.b);
+    crate::sprites::build_68k(x.c, x.b);
     x.c.a[0] = a0;
 }
 
@@ -481,19 +481,19 @@ fn render(x: &mut Ctx) {
 /// `scroll::update_cameras_68k`).
 fn render_scroll(x: &mut Ctx) -> Flow {
     let a0 = x.c.a[0];
-    crate::dispatch::SET.update_sans_suite(x.c, x.b);
-    crate::dispatch::EFFCT.update_sans_suite(x.c, x.b);
+    crate::dispatch::SET.update_no_next(x.c, x.b);
+    crate::dispatch::EFFCT.update_no_next(x.c, x.b);
     crate::scroll::update_cameras_68k(x.c, x.b);
-    crate::dispatch::SOBJ.update_sans_suite(x.c, x.b);
-    crate::sprites::construire_68k(x.c, x.b);
+    crate::dispatch::SOBJ.update_no_next(x.c, x.b);
+    crate::sprites::build_68k(x.c, x.b);
     x.c.a[0] = a0;
     Flow::Done
 }
 
 /// Couches effacées (0xca8, 0xcc8, 0xce8).
-fn clear_layers(x: &mut Ctx, couches: &[Couche]) {
-    for &couche in couches {
-        effacer_couche(x.b, couche);
+fn clear_layers(x: &mut Ctx, layers: &[Layer]) {
+    for &layer in layers {
+        clear_layer(x.b, layer);
     }
 }
 
@@ -521,7 +521,7 @@ fn link(x: &mut Ctx) -> u32 {
 }
 
 fn fade_settings(x: &mut Ctx, delay: u16, pages: u8) {
-    fondu::DELAI.set(x.b, delay);
+    fondu::DELAY.set(x.b, delay);
     fondu::PAGES.set(x.b, pages);
 }
 
@@ -530,10 +530,10 @@ fn fade_task(x: &mut Ctx, entry: u32) {
     crate::kernel::creer_tache(x.b, 0x10, entry);
 }
 
-/// Deux blocs de tuiles de la grille `grille` à la suite l'un de l'autre à partir de `destination`.
-fn tile_blocks(x: &mut Ctx, destination: u32, first: u16, second: u16, grille: Grille) {
-    let fin = charger_grille(x.b, grille, first, destination);
-    charger_grille(x.b, grille, second, fin.destination);
+/// Deux blocs de tuiles de la grille `grid` à la suite l'un de l'autre à partir de `destination`.
+fn tile_blocks(x: &mut Ctx, destination: u32, first: u16, second: u16, grid: Grille) {
+    let fin = charger_grille(x.b, grid, first, destination);
+    charger_grille(x.b, grid, second, fin.destination);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -542,11 +542,11 @@ fn tile_blocks(x: &mut Ctx, destination: u32, first: u16, second: u16, grille: G
 /// État 0 : vide tout, copie les récompenses des joueurs, puis tombe dans l'état 2.
 fn s00_reset(x: &mut Ctx) -> Flow {
     next_step(x);
-    crate::kernel::tuer_tache(x.b, 0x30);
+    crate::kernel::kill_task(x.b, 0x30);
     reset_pools(x);
-    crate::video::ecran_noir(x.b);
+    crate::video::black_screen(x.b);
     unlink_and_clear_lists(x);
-    crate::video::vider_objets(x.b);
+    crate::video::clear_objects(x.b);
     for k in 0..4u32 {
         let p = var::PLAYERS + 0x200 * k;
         if rd8(x.b, p) != 0
@@ -632,7 +632,7 @@ fn s08_object(x: &mut Ctx) -> Flow {
     let v = rd16(x.b, var::VIDEO) | 0xe;
     wr16(x.b, var::VIDEO, v);
     fade_settings(x, 3, FADE_ALL);
-    crate::taches::fondu::montee(x)
+    crate::taches::fondu::rise(x)
 }
 /// Réessai de la création de l'objet : `bra 0xfb982` (la remise à zéro du signal n'est pas refaite).
 const S08_RETRY: u32 = 0xfb996;
@@ -685,15 +685,15 @@ fn s0e_wait_timer(x: &mut Ctx) -> Flow {
     }
     next_step(x);
     fade_settings(x, 3, FADE_ALL);
-    fondu::PAS.set(x.b, 1);
-    fade_task(x, crate::scene::fondu::DESCENTE);
+    fondu::STEP.set(x.b, 1);
+    fade_task(x, crate::scene::fondu::DESCENT);
     s0e_wait_fade(x)
 }
 fn s0e_wait_fade(x: &mut Ctx) -> Flow {
-    if fondu::PAS.get(x.b) != 0 {
+    if fondu::STEP.get(x.b) != 0 {
         return x.wait(1, Etape::S0eLoop);
     }
-    tile_blocks(x, 0x91b000, 352, 353, Grille::Couche3);
+    tile_blocks(x, 0x91b000, 352, 353, Grille::Layer3);
     tile_blocks(x, 0x916000, 543, 0, Grille::Couche2);
     wr16(x.b, var::CAMERA_2_Y, 256);
     wr16(x.b, var::CAMERA_2, 0);
@@ -773,14 +773,14 @@ fn s1a_wait_signal(x: &mut Ctx) -> Flow {
     }
     next_step(x);
     crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 4 });
-    fondu::PAS.set(x.b, 1);
-    fondu::DELAI.set(x.b, 4);
+    fondu::STEP.set(x.b, 1);
+    fondu::DELAY.set(x.b, 4);
     fondu::PAGES.set(x.b, FADE_ALL);
-    fade_task(x, crate::scene::fondu::VERS_LE_BLANC);
+    fade_task(x, crate::scene::fondu::TO_WHITE);
     s1a_wait_fade(x)
 }
 fn s1a_wait_fade(x: &mut Ctx) -> Flow {
-    if fondu::PAS.get(x.b) != 0 {
+    if fondu::STEP.get(x.b) != 0 {
         return x.wait(1, Etape::S1aLoop);
     }
     wr16(x.b, BLOCK + f::TIMER, 120);
@@ -788,10 +788,10 @@ fn s1a_wait_fade(x: &mut Ctx) -> Flow {
     render(x);
     unlink_and_clear_lists(x);
     reset_pools(x);
-    crate::video::effacer_debut_couche1(x.b);
+    crate::video::clear_layer1_start(x.b);
     wr16(x.b, var::SCROLL_2, 256);
     // `jmp 0xc58`
-    crate::video::vider_objets(x.b);
+    crate::video::clear_objects(x.b);
     Flow::Done
 }
 const S1A_LOOP: u32 = 0xfbc92;
@@ -803,7 +803,7 @@ fn s1c_wait(x: &mut Ctx) -> Flow {
     }
     next_step(x);
     wr16(x.b, var::VIDEO, 0x138e);
-    tile_blocks(x, 0x91b900, 115, 116, Grille::Couche3);
+    tile_blocks(x, 0x91b900, 115, 116, Grille::Layer3);
     wr8(x.b, var::SCREEN_ID, 1);
     wr16(x.b, var::CAMERA_2, 384);
     wr16(x.b, var::CAMERA_2_Y, 0);
@@ -887,7 +887,7 @@ fn s1e_fade(x: &mut Ctx) -> Flow {
     if !timer_tick(x) {
         return Flow::Done;
     }
-    fondu::PAS.set(x.b, 8);
+    fondu::STEP.set(x.b, 8);
     fade_settings(x, 3, FADE_ALL);
     fade_task(x, crate::scene::fondu::DESCENTE_PAS);
     s1e_loop(x)
@@ -913,9 +913,9 @@ fn s22_object(x: &mut Ctx) -> Flow {
     if set_15_pur(x.b, 16).is_err() {
         return Flow::Done;
     }
-    fondu::PAS.set(x.b, 8);
+    fondu::STEP.set(x.b, 8);
     fade_settings(x, 3, FADE_ALL);
-    fade_task(x, crate::scene::fondu::MONTEE_PAS);
+    fade_task(x, crate::scene::fondu::RISE_STEP);
     s22_wait(x)
 }
 fn s22_wait(x: &mut Ctx) -> Flow {
@@ -943,9 +943,9 @@ fn s28_fade(x: &mut Ctx) -> Flow {
         return Flow::Done;
     }
     next_step(x);
-    fondu::PAS.set(x.b, 1);
+    fondu::STEP.set(x.b, 1);
     fade_settings(x, 3, 13);
-    fade_task(x, crate::scene::fondu::DESCENTE);
+    fade_task(x, crate::scene::fondu::DESCENT);
     s28_loop(x)
 }
 fn s28_loop(x: &mut Ctx) -> Flow {
@@ -959,7 +959,7 @@ fn s2a_clear(x: &mut Ctx) -> Flow {
     unlink_and_clear_lists(x);
     crate::objects::pools::EFFCT.reset(x.b);
     crate::objects::pools::SOBJ.reset(x.b);
-    crate::video::vider_objets(x.b);
+    crate::video::clear_objects(x.b);
     x.wait(1, Etape::S2aPlanes)
 }
 const S2A_PLANES: u32 = 0xfc022;
@@ -993,8 +993,8 @@ fn s2c_wait(x: &mut Ctx) -> Flow {
     }
     next_step(x);
     fade_settings(x, 3, 13);
-    fondu::PAS.set(x.b, 1);
-    fade_task(x, crate::scene::fondu::DESCENTE);
+    fondu::STEP.set(x.b, 1);
+    fade_task(x, crate::scene::fondu::DESCENT);
     s2c_loop(x)
 }
 fn s2c_loop(x: &mut Ctx) -> Flow {
@@ -1020,7 +1020,7 @@ fn s2e_dialogue(x: &mut Ctx) -> Flow {
     let o = link(x);
     if rd8(x.b, o + 5) == 6 {
         fade_settings(x, 3, FADE_ALL);
-        return x.sous_programme(crate::taches::fondu::montee, Etape::S2eOpened);
+        return x.sous_programme(crate::taches::fondu::rise, Etape::S2eOpened);
     }
     if rd8(x.b, o + 5) != 10 {
         return render_flow(x);
@@ -1115,7 +1115,7 @@ mod tests {
     use super::bcd_add;
 
     #[test]
-    fn addition_decimale() {
+    fn addition_decimal() {
         assert_eq!(bcd_add(0x0000_0199, 0x0000_0001), 0x0000_0200);
         assert_eq!(bcd_add(0x0123_4567, 0x0876_5430), 0x0999_9997);
         // la retenue finale est perdue

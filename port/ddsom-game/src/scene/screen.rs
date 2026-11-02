@@ -68,7 +68,7 @@ macro_rules! clear_native {
         pub const $name: Native = Native {
             entry: $entry,
             name: $label,
-            run: crate::Corps::Memoire(|b| clear_longs(b, $at, $n)),
+            run: crate::Corps::Memory(|b| clear_longs(b, $at, $n)),
             touches_sound: false,
             outputs: 0,
         };
@@ -80,7 +80,7 @@ macro_rules! clear_native {
 pub const RESET_EXIT: Native = Native {
     entry: 0xf3130,
     name: "scene_exit_reset",
-    run: crate::Corps::Memoire(|b| clear_longs(b, blocks::EXIT, 8)),
+    run: crate::Corps::Memory(|b| clear_longs(b, blocks::EXIT, 8)),
     touches_sound: false,
     outputs: 0,
 };
@@ -88,7 +88,7 @@ clear_native!(RESET_SHOP, 0xf7916, "scene_shop_reset", blocks::SHOP, 5);
 pub const RESET_TRANSITION: Native = Native {
     entry: 0xf7ee0,
     name: "scene_transition_reset",
-    run: crate::Corps::Memoire(|b| clear_longs(b, blocks::TRANSITION, 4)),
+    run: crate::Corps::Memory(|b| clear_longs(b, blocks::TRANSITION, 4)),
     touches_sound: false,
     outputs: 0,
 };
@@ -97,7 +97,7 @@ clear_native!(RESET_RANKING, 0xfc562, "ranking_reset", blocks::RANKING, 4);
 pub const CLEAR_TEXT: Native = Native {
     entry: 0xf683c,
     name: "scene_clear_text",
-    run: crate::Corps::Memoire(clear_text),
+    run: crate::Corps::Memory(clear_text),
     touches_sound: false,
     outputs: 0,
 };
@@ -111,7 +111,7 @@ mod tests {
     use crate::mem::A5;
 
     #[test]
-    fn adresses_des_blocs() {
+    fn block_addresses() {
         assert_eq!(blocks::EXIT, 0xff2a36);
         assert_eq!(blocks::RANKING, 0xff2b10);
         assert_eq!(A5 - 0x5520, 0xff2ae0);

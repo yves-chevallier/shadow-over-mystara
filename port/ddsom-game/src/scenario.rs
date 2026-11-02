@@ -1,7 +1,7 @@
 //! Scénarios d'entrées (format de mame/scenario.lua : « image champ valeur »).
 //! Comme dans MAME, une entrée posée après l'image n prend effet à l'image n + 2.
 //!
-//! Format : une action par ligne, `image champ valeur`.
+//! Format : une action par ligne, `image field valeur`.
 //!   * `900 Coin 1 1` / `906 Coin 1 0` : entrée MAME (appuyée = 1, relâchée = 0).
 //!   * `quit` : ligne finale ignorée ici (utilisée par MAME).
 //!   * **`2000 poke8 ff8034 5`**, `poke16`, `poke32` : écrit `valeur` (décimal ou `0x…`) à
@@ -67,7 +67,7 @@ impl Scenario {
     }
 }
 
-/// Écrit `valeur` (big-endian, `taille` octets) en RAM de travail (FF0000-FFFFFF).
+/// Écrit `valeur` (big-endian, `size` octets) en RAM de travail (FF0000-FFFFFF).
 pub fn poke(m: &mut cps2::Machine, addr: u32, val: u32, size: u8) {
     for k in 0..size as u32 {
         let a = (addr + k - 0xff0000) as usize;
@@ -98,37 +98,37 @@ pub fn set_input(m: &mut cps2::Machine, name: &str, down: bool) -> bool {
 }
 
 /// Enregistre les entrées d'une partie en scénario : une ligne par entrée qui change, rejouable par `validate`.
-pub struct Enregistreur<W: io::Write = std::fs::File> {
+pub struct Recorder<W: io::Write = std::fs::File> {
     out: W,
-    entrees: Vec<(String, u8, u16)>,
-    avant: [u16; 3],
+    inputs: Vec<(String, u8, u16)>,
+    before: [u16; 3],
     image: usize,
 }
 
-impl Enregistreur {
-    pub fn cree(path: &Path) -> io::Result<Self> {
-        Ok(Enregistreur::new(std::fs::File::create(path)?))
+impl Recorder {
+    pub fn created(path: &Path) -> io::Result<Self> {
+        Ok(Recorder::new(std::fs::File::create(path)?))
     }
 }
 
-impl<W: io::Write> Enregistreur<W> {
+impl<W: io::Write> Recorder<W> {
     pub fn new(out: W) -> Self {
-        let mut entrees = Vec::new();
+        let mut inputs = Vec::new();
         for p in 1..=4 {
             for what in ["Right", "Left", "Down", "Up", "Button 1", "Button 2", "Button 3", "Button 4"] {
-                entrees.push(format!("P{p} {what}"));
+                inputs.push(format!("P{p} {what}"));
             }
         }
-        entrees.extend(SYSTEME.map(String::from));
-        let entrees = entrees.into_iter().filter_map(|n| input_bit(&n).map(|(port, bit)| (n, port, bit))).collect();
-        Enregistreur { out, entrees, avant: [0xffff; 3], image: 0 }
+        inputs.extend(SYSTEM.map(String::from));
+        let inputs = inputs.into_iter().filter_map(|n| input_bit(&n).map(|(port, bit)| (n, port, bit))).collect();
+        Recorder { out, inputs, before: [0xffff; 3], image: 0 }
     }
 
     /// Reprend l'enregistrement d'une partie rejouée jusqu'à l'image `image` (déjà écrite dans `out`) : les entrées
     /// de `m` sont celles de la dernière image rejouée.
-    pub fn reprend(out: W, image: usize, m: &cps2::Machine) -> Self {
-        let mut e = Enregistreur::new(out);
-        e.avant = [m.bus.inputs.in0, m.bus.inputs.in1, m.bus.inputs.in2];
+    pub fn resumes(out: W, image: usize, m: &cps2::Machine) -> Self {
+        let mut e = Recorder::new(out);
+        e.before = [m.bus.inputs.in0, m.bus.inputs.in1, m.bus.inputs.in2];
         e.image = image;
         e
     }
@@ -138,7 +138,7 @@ impl<W: io::Write> Enregistreur<W> {
         self.image
     }
 
-    pub fn sortie(&self) -> &W {
+    pub fn exit(&self) -> &W {
         &self.out
     }
 
@@ -146,19 +146,19 @@ impl<W: io::Write> Enregistreur<W> {
     pub fn image(&mut self, m: &cps2::Machine) -> io::Result<()> {
         let ports = [m.bus.inputs.in0, m.bus.inputs.in1, m.bus.inputs.in2];
         let f = self.image.saturating_sub(1);
-        for (nom, port, bit) in &self.entrees {
-            let (a, b) = (self.avant[*port as usize] & bit, ports[*port as usize] & bit);
+        for (name, port, bit) in &self.inputs {
+            let (a, b) = (self.before[*port as usize] & bit, ports[*port as usize] & bit);
             if a != b {
-                writeln!(self.out, "{f} {nom} {}", (b == 0) as u8)?;
+                writeln!(self.out, "{f} {name} {}", (b == 0) as u8)?;
             }
         }
-        self.avant = ports;
+        self.before = ports;
         self.image += 1;
         Ok(())
     }
 }
 
-const SYSTEME: [&str; 10] = [
+const SYSTEM: [&str; 10] = [
     "Coin 1",
     "Coin 2",
     "Coin 3",

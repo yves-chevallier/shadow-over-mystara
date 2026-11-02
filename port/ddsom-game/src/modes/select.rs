@@ -26,7 +26,7 @@ use crate::families::effects_creators::{bandeau, element_d_interface};
 use crate::mem::{rd16, rd32, rd8, rts, wr16, wr32, wr8, A5};
 use crate::objects::{pools, Obj};
 use crate::scene::{Ctx, PLAYERS, PLAYER_STRIDE};
-use crate::video::{charger_grille, effacer_couche, Couche, Grille};
+use crate::video::{charger_grille, clear_layer, Layer, Grille};
 use crate::Native;
 
 /// Variables de la RAM de travail (adresses absolues).
@@ -80,7 +80,7 @@ mod ext {
 }
 
 /// Tables en ROM : octets de variante par personnage (code), annonces, déplacements du curseur (données). Les
-/// routines d'initialisation des quatre joueurs (0x1d0f6) sont celles de `player::init::initialiser`.
+/// routines d'initialisation des quatre joueurs (0x1d0f6) sont celles de `player::init::initialize`.
 mod table {
     pub const VARIANT: u32 = 0x1d118;
     pub const BANNERS: u32 = 0x1d3aa;
@@ -106,16 +106,16 @@ fn player(k: u32) -> u32 {
 
 /// Aiguillage des objets des classes données, puis la liste de sprites (`jsr 0x39cba`... `jsr 0x1de96`).
 fn render(x: &mut Ctx, classes: &[&dispatch::Class]) {
-    for classe in classes {
-        classe.update_sans_suite(x.c, x.b);
+    for class in classes {
+        class.update_no_next(x.c, x.b);
     }
-    crate::sprites::construire_68k(x.c, x.b);
+    crate::sprites::build_68k(x.c, x.b);
 }
 
 /// Deux blocs de tuiles (`n`, `n + 1`) à la suite l'un de l'autre à partir de `destination`.
-fn two_blocks(x: &mut Ctx, grille: Grille, n: u16, destination: u32) {
-    let fin = charger_grille(x.b, grille, n, destination);
-    charger_grille(x.b, grille, n + 1, fin.destination);
+fn two_blocks(x: &mut Ctx, grid: Grille, n: u16, destination: u32) {
+    let fin = charger_grille(x.b, grid, n, destination);
+    charger_grille(x.b, grid, n + 1, fin.destination);
 }
 
 pub const PHASE_4: Native = Native {
@@ -155,7 +155,7 @@ fn step_0(x: &mut Ctx) -> Flow {
     let s = rd8(x.b, var::STEP).wrapping_add(2);
     wr8(x.b, var::STEP, s);
     wr8(x.b, var::SUB, 0);
-    crate::video::vider_objets(x.b);
+    crate::video::clear_objects(x.b);
     for pool in [&crate::objects::pools::EFFCT, &crate::objects::pools::SET, &crate::objects::pools::SOBJ] {
         pool.reset(x.b);
     }
@@ -246,41 +246,41 @@ crate::etapes! {
     /// Étapes (points de reprise) de la machine à états.
     pub enum Etape {
         FadeStart = FADE_START => |x| {
-            fondu::DELAI.set(x.b, 1);
+            fondu::DELAY.set(x.b, 1);
             fondu::PAGES.set(x.b, 0xf);
             wr32(x.b, var::FADE_SOURCES, 0x28ff00);
             wr32(x.b, var::FADE_SOURCES + 4, 0x25c0c0);
             wr32(x.b, var::FADE_SOURCES + 8, 0x279460);
             wr32(x.b, var::FADE_SOURCES + 12, 0x28c6e0);
-            create_task(x, crate::scene::fondu::DEPUIS_LE_BLANC, 0x10);
-            fondu::PAS.set(x.b, 1);
+            create_task(x, crate::scene::fondu::FROM_WHITE, 0x10);
+            fondu::STEP.set(x.b, 1);
             two_blocks(x, Grille::Couche2, 0x203, 0x917000);
-            two_blocks(x, Grille::Couche3, 0xfc, 0x91b800);
+            two_blocks(x, Grille::Layer3, 0xfc, 0x91b800);
             wr16(x.b, var::VIDEO, 0x12ce);
             fade_wait(x)
         },
         FadeLoop = FADE_LOOP => fade_wait,
         Step6Faded = STEP_6_FADED => |x| {
-            dispatch::EFFCT.update_sans_suite(x.c, x.b);
+            dispatch::EFFCT.update_no_next(x.c, x.b);
             crate::objects::pools::EFFCT.reset(x.b);
             crate::sprites::vider_listes(x.b);
-            crate::sprites::construire_68k(x.c, x.b);
+            crate::sprites::build_68k(x.c, x.b);
             let v = rd16(x.b, var::VIDEO) & !0xe;
             wr16(x.b, var::VIDEO, v);
             x.wait(1, Etape::Step6Clear)
         },
         Step6Clear = STEP_6_CLEAR => |x| {
             wr8(x.b, var::SCREEN_ID, 0xff);
-            crate::video::vider_objets(x.b);
+            crate::video::clear_objects(x.b);
             clear_layers(x);
             x.wait(4, Etape::Step6Palette)
         },
         Step6Palette = STEP_6_PALETTE => |x| {
             // 0x1a608 (la page 1 prend l'entrée 0), 0x1a67e, 0x1a8b2, 0x1a3d4
-            crate::palette::charger_page_de_la_scene(x.b, 1);
-            crate::palette::charger_page(x.b, 2, 0x56);
-            crate::palette::charger_page(x.b, 3, 0x56);
-            crate::palette::charger_ensemble(x.b, 3);
+            crate::palette::load_scene_page(x.b, 1);
+            crate::palette::load_palette_page(x.b, 2, 0x56);
+            crate::palette::load_palette_page(x.b, 3, 0x56);
+            crate::palette::load_palette_set(x.b, 3);
             for i in 0..8 {
                 for j in 0..8 {
                     wr32(x.b, 0x91c000 + 0x20 * i + 4 * j, 0);
@@ -297,13 +297,13 @@ crate::etapes! {
             let v = rd16(x.b, var::VIDEO) | 0xe;
             wr16(x.b, var::VIDEO, v);
             x.c.d[0] = 1;
-            crate::taches::attendre_puis_revenir(x)
+            crate::taches::wait_then_return(x)
         },
         StepEFaded = STEP_E_FADED => |x| {
             crate::objects::pools::SET.reset(x.b);
             crate::objects::pools::SOBJ.reset(x.b);
             crate::sprites::vider_listes(x.b);
-            crate::video::vider_objets(x.b);
+            crate::video::clear_objects(x.b);
             x.wait(1, Etape::StepEHide)
         },
         StepEHide = STEP_E_HIDE => |x| {
@@ -316,16 +316,16 @@ crate::etapes! {
             x.wait(4, Etape::StepEFade)
         },
         StepEFade = STEP_E_FADE => |x| {
-            fondu::DELAI.set(x.b, 3);
+            fondu::DELAY.set(x.b, 3);
             fondu::PAGES.set(x.b, 0xf);
-            create_task(x, crate::scene::fondu::MONTEE, 0x10);
+            create_task(x, crate::scene::fondu::RISE, 0x10);
             Flow::Done
         },
     }
 }
 /// Attend la fin du fondu d'ouverture (une image par tour), puis allume les curseurs.
 fn fade_wait(x: &mut Ctx) -> Flow {
-    if fondu::PAS.get(x.b) != 0 {
+    if fondu::STEP.get(x.b) != 0 {
         render(x, &[&dispatch::EFFCT]);
         return x.wait(1, Etape::FadeLoop);
     }
@@ -339,8 +339,8 @@ fn fade_wait(x: &mut Ctx) -> Flow {
 
 /// Les trois couches effacées.
 fn clear_layers(x: &mut Ctx) {
-    for couche in [Couche::Un, Couche::Deux, Couche::Trois] {
-        effacer_couche(x.b, couche);
+    for layer in [Layer::One, Layer::Two, Layer::Three] {
+        clear_layer(x.b, layer);
     }
 }
 const FADE_LOOP: u32 = 0x1cca4;
@@ -432,7 +432,7 @@ fn cursor(x: &mut Ctx, a0: u32) {
         return;
     }
     dedupe(x, a0);
-    let d1 = crate::inputs::entrees_du_joueur(x.b, a0).nouvelles;
+    let d1 = crate::inputs::player_inputs(x.b, a0).fresh;
     let mut d3 = rd8(x.b, a0 + 3) as u32;
     let slot = rd8(x.b, a0 + 2);
     let mut d0: u8 = 0;
@@ -499,7 +499,7 @@ fn cursor(x: &mut Ctx, a0: u32) {
         // 0x2e630 : statistique du personnage (carte de développement seulement). Glitch d'origine : elle reçoit
         // D0.w, dont seul l'octet bas est le choix ; l'octet haut est un reste des appels précédents
         let d0 = (x.c.d[0] as u16 & 0xff00) | (d3 & 0xff) as u16;
-        crate::eeprom::stat_personnage_choisi(x.b, d0);
+        crate::eeprom::stat_chosen_character(x.b, d0);
         d3 |= 0x80;
         wr8(x.b, var::LOCKED_FLAG, 1);
     }
@@ -625,7 +625,7 @@ fn step_6(x: &mut Ctx) -> Flow {
         // ce numéro (0x2e58, 0x2e6e, 0x2e86, 0x2e9e)
         let kind = rd8(x.b, p + 2) as u32;
         assert!(kind < 4, "sélection : joueur {kind} hors de la table 0x1d0f6");
-        crate::player::init::initialiser(x.c, x.b, kind);
+        crate::player::init::initialize(x.c, x.b, kind);
         if (rd8(x.b, p + 3) & 0x7f) >> 1 == 5 {
             wr8(x.b, p + 0x162, 1);
             wr8(x.b, p + 0x16b, 5);
@@ -633,7 +633,7 @@ fn step_6(x: &mut Ctx) -> Flow {
         }
     }
     crate::sound::service(x.b, crate::sound::Service::Ff07 { verrou: 0, ligne: 0x1c });
-    fondu::DELAI.set(x.b, 1);
+    fondu::DELAY.set(x.b, 1);
     fondu::PAGES.set(x.b, 0xf);
     x.sous_programme(crate::taches::fondu::descente, Etape::Step6Faded)
 }
@@ -650,7 +650,7 @@ fn step_8(x: &mut Ctx) -> Flow {
     crate::sound::service(x.b, crate::sound::Service::Ff06 { verrou: 0xff, ligne: 4 });
     crate::sound::jouer_global(x.b, ext::SOUND_E109C);
     two_blocks(x, Grille::Couche2, 0x208, 0x917000);
-    two_blocks(x, Grille::Couche3, 0x14a, 0x91b800);
+    two_blocks(x, Grille::Layer3, 0x14a, 0x91b800);
     let mut count = 0u8;
     for counter in (0..2u8).rev() {
         // la variante du panneau est le compteur de la boucle `dbf` (D0)
@@ -711,9 +711,9 @@ fn step_a(x: &mut Ctx) -> Flow {
     wr16(x.b, var::BANNER_Y, 0xc0);
     wr8(x.b, var::PLAYERS_PRESENT, 0);
     wr8(x.b, var::LOCKED_FLAG, 0);
-    fondu::DELAI.set(x.b, 3);
+    fondu::DELAY.set(x.b, 3);
     fondu::PAGES.set(x.b, 0xf);
-    fondu::PAS.set(x.b, 7);
+    fondu::STEP.set(x.b, 7);
     create_task(x, crate::scene::fondu::DESCENTE_PAS, 0x10);
     Flow::Done
 }
@@ -754,7 +754,7 @@ fn finish_c(x: &mut Ctx) -> Flow {
 
 fn step_e(x: &mut Ctx) -> Flow {
     render(x, &[&dispatch::SET, &dispatch::SOBJ]);
-    if fondu::PAS.get(x.b) != 0 {
+    if fondu::STEP.get(x.b) != 0 {
         return Flow::Done;
     }
     if any_button(x) {
@@ -770,10 +770,10 @@ fn step_e(x: &mut Ctx) -> Flow {
     wr8(x.b, var::PHASE, phase);
     wr8(x.b, var::STEP, 0);
     wr16(x.b, var::SUB, 0);
-    fondu::DELAI.set(x.b, 1);
+    fondu::DELAY.set(x.b, 1);
     x.c.d[0] = 8;
     fondu::PAGES.set(x.b, 0xf);
-    x.sous_programme(crate::taches::fondu::descente_d0, Etape::StepEFaded)
+    x.sous_programme(crate::taches::fondu::descent_d0, Etape::StepEFaded)
 }
 const STEP_E_FADED: u32 = 0x1d498;
 const STEP_E_HIDE: u32 = 0x1d4b8;

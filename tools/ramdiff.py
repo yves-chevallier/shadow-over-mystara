@@ -1,5 +1,5 @@
-# Cherche dans un dump RAM (FF0000-FFFFFF, une image de 64 Ko par frame) les mots 16 bits
-# dont la variation suit une fenêtre d'entrée : usage ramdiff.py ram.bin premiere_frame debut fin [signe]
+# Searches a RAM dump (FF0000-FFFFFF, one 64 KB image per frame) for the 16-bit words
+# whose variation follows an input window: usage ramdiff.py ram.bin first_frame start end [sign]
 import sys, struct
 path, first, a, b = sys.argv[1], int(sys.argv[2]), int(sys.argv[3]), int(sys.argv[4])
 sign = int(sys.argv[5]) if len(sys.argv) > 5 else -1
@@ -20,4 +20,4 @@ for i in range(32768):
         res.append((moving, still, 0xff0000 + 2 * i, seq[0], seq[-1]))
 res.sort(reverse=True)
 for m, s, addr, v0, v1 in res[:25]:
-    print(f"{addr:06x}  {v0:04x} -> {v1:04x}  ({m} frames en mouvement, immobile avant: {s})")
+    print(f"{addr:06x}  {v0:04x} -> {v1:04x}  ({m} frames moving, still before: {s})")

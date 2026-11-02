@@ -5,7 +5,7 @@ pub mod json;
 pub mod levels;
 pub mod music;
 pub mod rebuild;
-pub mod reste;
+pub mod remainder;
 pub mod scene_palettes;
 pub mod spawns;
 pub mod sprites;

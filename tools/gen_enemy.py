@@ -1,12 +1,12 @@
-"""Génère les scénarios de validation des ennemis (scenarios/enemy/*.txt) avec le bot réactif autobot.
+"""Generates the enemy validation scenarios (scenarios/enemy/*.txt) with the reactive bot autobot.
 
-    python3 tools/gen_enemy.py [nom ...]        (tous si aucun nom)
+    python3 tools/gen_enemy.py [name ...]        (all if no name)
 
-Chaque scénario entre directement dans une scène où le type d'ennemi apparaît (FF8034 écrit pendant la
-sélection du personnage), puis enchaîne d'autres scènes ; le joueur est invincible et le bot combat les
-ennemis qu'il rencontre. Prérequis : `cargo build --release -p ddsom-game --examples`, DDSOM_ROMS / DDSOM_EEPROM.
-Les scénarios produits ne contiennent que des entrées et des écritures RAM (`poke`). Voir docs/familles/enemy.md.
-Les scènes se trouvent avec `TYPES_SCENES=1 examples/types` sur les scénarios de `scenarios/cov/`.
+Each scenario enters directly a scene where the enemy type appears (FF8034 written during
+character select), then chains other scenes; the player is invincible and the bot fights the
+enemies it meets. Prerequisites: `cargo build --release -p ddsom-game --examples`, DDSOM_ROMS / DDSOM_EEPROM.
+The produced scenarios only contain inputs and RAM writes (`poke`). See docs/familles/enemy.md.
+The scenes are found with `TYPES_SCENES=1 examples/types` on the `scenarios/cov/` scenarios.
 """
 import os
 import subprocess
@@ -21,8 +21,8 @@ ROMS = os.environ.get("DDSOM_ROMS", os.path.join(ROOT, "rom"))
 EEPROM = os.environ.get("DDSOM_EEPROM", os.path.join(ROOT, "testdata/eeprom_ddsom.bin"))
 FRAMES = 12000
 
-# nom -> (scènes "scène:images,..." en décimal, crans du curseur de personnage, PV du joueur remis à, dossier)
-# dossier "ko" : le scénario diverge à cause d'une autre routine (voir scenarios/ko/README.md)
+# name -> (scenes "scene:frames,..." in decimal, character cursor steps, player HP reset to, folder)
+# folder "ko": the scenario diverges because of another routine (see scenarios/ko/README.md)
 SPECS = {
     "skeleton_scene13": ("13:20000", 0, "0x70", "enemy"),
     "skeleton_scene58": ("58:20000", 1, "0x70", "enemy"),
@@ -86,4 +86,4 @@ def generate(name):
 
 if __name__ == "__main__":
     for n in sys.argv[1:] or SPECS:
-        print(n, "ok" if generate(n) == 0 else "ECHEC")
+        print(n, "ok" if generate(n) == 0 else "FAILED")

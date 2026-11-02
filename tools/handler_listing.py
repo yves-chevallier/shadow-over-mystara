@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
-"""Listing lisible du code atteignable d'un gestionnaire 68000, tables de sauts résolues.
+"""Readable listing of the reachable code of a 68000 handler, with jump tables resolved.
 
-    python3 tools/handler_listing.py <début> <fin> [entrée_supplémentaire ...]     (adresses en hexadécimal)
+    python3 tools/handler_listing.py <start> <end> [extra_entry ...]     (addresses in hexadecimal)
 
-Prépare la réécriture d'un type d'objet : suit le code par descente récursive (`examples/dis_flow`, qui
-suit aussi les `lea (6,PC),A6` + `jmp (A6)` des préambules) et affiche chaque instruction avec le texte de
-`listing.txt` quand il le connaît (sinon la forme `Debug` du décodeur, entiers en hexadécimal, marquée `??`).
-Puis, pour chaque `jmp/jsr (table,PC,Dn)`, la table : `décalage:cible`, `!` pour une cible qui n'est pas une
-instruction connue. **Une table s'arrête au premier code qui la suit** : le nombre d'entrées est
-(adresse du premier code - base) / 2, les entrées au-delà sont des octets de code.
+Prepares the rewrite of an object type: follows the code by recursive descent (`examples/dis_flow`, which
+also follows the `lea (6,PC),A6` + `jmp (A6)` of preambles) and prints each instruction with the text of
+`listing.txt` when it knows it (otherwise the decoder's `Debug` form, integers in hexadecimal, marked `??`).
+Then, for each `jmp/jsr (table,PC,Dn)`, the table: `offset:target`, `!` for a target that is not a
+known instruction. **A table stops at the first code that follows it**: the number of entries is
+(address of the first code - base) / 2, entries beyond that are code bytes.
 
-Variables d'environnement : DDSOM_ROMS (défaut `rom`), SOM_ROOT (dossier du dépôt principal, qui contient
-`listing.txt` et `prog_dec.bin` : défaut le dossier courant). Prérequis : `cargo build --release -p ddsom-game
---examples`. Les lectures `(table,PC,Dn)` se font dans `prog_dec.bin` (espace des opcodes) ; les autres
-lectures de tables (A4 chargé par `lea`) lisent les données en clair (`Cx::data8/data16`).
+Environment variables: DDSOM_ROMS (default `rom`), SOM_ROOT (main repository folder, holding
+`listing.txt` and `prog_dec.bin`: default the current folder). Prerequisite: `cargo build --release -p ddsom-game
+--examples`. `(table,PC,Dn)` reads are done in `prog_dec.bin` (opcode space); the other
+table reads (A4 loaded by `lea`) read the plain data (`Cx::data8/data16`).
 """
 import os
 import re
@@ -66,7 +66,7 @@ for a in sorted(addrs):
     if a in listing:
         text[a] = listing[a]
     else:
-        text[a] = fmt(re.sub(r"\b\d+\b", lambda m: hex(int(m.group(0))), addrs[a])) + "   ; (hors listing)"
+        text[a] = fmt(re.sub(r"\b\d+\b", lambda m: hex(int(m.group(0))), addrs[a])) + "   ; (not in listing)"
     print(a, text[a])
 print("---- tables (jmp/jsr (x,PC,Dn))")
 bases = set()

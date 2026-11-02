@@ -231,7 +231,7 @@ const CABINET: u32 = 0x20;
 crate::etapes! {
     /// Étapes de la tâche (le haut de la boucle, `0x15178`, n'est jamais une reprise : l'entrée y enchaîne).
     pub enum Etape {
-        Entree = 0x150ac => entry,
+        Entry = 0x150ac => entry,
         /// Attente du début de la partie.
         Starting = 0x15146 => starting,
         /// Après la cession d'un tour.
@@ -261,7 +261,7 @@ fn entry(x: &mut Ctx) -> Flow {
     for k in 1..4 {
         x.set_v8(var::PANELS + k * panel::SIZE + panel::INDEX, k as u8);
     }
-    crate::taches::une_image(x, Etape::Starting)
+    crate::taches::one_frame(x, Etape::Starting)
 }
 
 /// 0x15146 : disposition selon la borne ; hors partie, panneaux affichés en disposition 0 ; en partie, attente de
@@ -275,7 +275,7 @@ fn starting(x: &mut Ctx) -> Flow {
         x.set_v8(var::LAYOUT, 0);
         slot::forget_displayed(x.b);
     } else if (x.v8(var::PHASE) as i8) < 4 {
-        return crate::taches::une_image(x, Etape::Starting);
+        return crate::taches::one_frame(x, Etape::Starting);
     }
     tour(x)
 }
@@ -284,7 +284,7 @@ fn starting(x: &mut Ctx) -> Flow {
 pub const FORGET_DISPLAYED: Native = Native {
     entry: 0x1507a,
     name: "hud_forget_displayed",
-    run: crate::Corps::Memoire(slot::forget_displayed),
+    run: crate::Corps::Memory(slot::forget_displayed),
     touches_sound: false,
     outputs: 0,
 };
@@ -313,9 +313,9 @@ fn tour(x: &mut Ctx) -> Flow {
         status::countdown(x);
     }
     // 0x19b2a, 0x19b9c : les événements en attente crédités aux compteurs des joueurs
-    crate::evenements::crediter_points(x.b);
-    crate::evenements::crediter_compteur(x.b);
-    crate::taches::une_image(x, Etape::AfterWait)
+    crate::evenements::credit_points(x.b);
+    crate::evenements::credit_counter(x.b);
+    crate::taches::one_frame(x, Etape::AfterWait)
 }
 
 /// Routines natives de l'interface des joueurs.
@@ -323,7 +323,7 @@ pub const NATIVES: &[Native] = &[FORGET_DISPLAYED];
 
 /// Sous-programmes d'origine réécrits dans le corps de la tâche, présentés comme des natives pour le fuzz
 /// différentiel (`examples/fuzz_couv`) ; le jeu ne les appelle pas par leur adresse.
-pub const NATIVES_DE_TEST: &[Native] = &[Native {
+pub const TEST_NATIVES: &[Native] = &[Native {
     // 0x15216 : un emplacement (A0 panneau, A6 joueur, A4 compteur de pièces)
     entry: 0x15216,
     name: "hud_emplacement",

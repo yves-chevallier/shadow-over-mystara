@@ -94,7 +94,7 @@ Voir la section « Couverture » en bas : fuzz `familles` (essais sur objets syn
   milliers d'appels par type, variantes 0 à 24 ou plus).
 * Le fuzz crée un objet générique, perturbe les entrées des gestionnaires et, pour SET et SOBJ, les variables
   globales (mode de jeu, nombre de joueurs, caméras, rang, joueurs : `perturber_globales` dans `examples/fuzz.rs`).
-* Instructions jamais atteintes (`tools/familles_non_vus.py`, avant l'ajout de `perturber_globales`) : type 6,
+* Instructions jamais atteintes (`tools/families_unseen.py`, avant l'ajout de `perturber_globales`) : type 6,
   348 instructions sur 941 (sous-états tardifs de plusieurs variantes, échecs d'allocation) ; type 7 : fin de
   l'aide (0xdf5a2-0xdf63c) ; type 13 : libération des quatre joueurs (0xdfdd0-0xdfe3a) ; type 14 : niveaux 7 et
   0x2b (0xdff98, 0xe0078-0xe0120) ; type 15 : chemin des coups (0xe030a-0xe03fc). Une partie des « non vus »

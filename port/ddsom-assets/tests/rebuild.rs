@@ -35,7 +35,7 @@ fn same(name: &str, img: &Image, rom: &[u8]) {
 }
 
 #[test]
-fn programme_reconstruit() {
+fn rebuilt_program() {
     if !available() {
         return;
     }
@@ -49,17 +49,17 @@ fn programme_reconstruit() {
     assert!(p.data.covered_len() > 0x200000, "{}", p.data.covered_len());
 }
 
-/// Avec `data/reste.json`, la région programme est complète : les seuls octets absents (dans les deux espaces)
+/// Avec `data/remainder.json`, la région programme est complète : les seuls octets absents (dans les deux espaces)
 /// sont du code 68000 déclaré par ce fichier (docs/sans-rom.md « Couverture complète des données »).
 #[test]
-fn programme_complet_hors_code() {
+fn full_program_outside_code() {
     if !available() {
         return;
     }
     let p = Program::load(&assets()).unwrap();
-    let reste = ddsom_assets::reste::Reste::load(&assets().join("data/reste.json")).unwrap();
+    let remainder = ddsom_assets::remainder::Remainder::load(&assets().join("data/reste.json")).unwrap();
     let mut code = vec![false; rebuild::PROGRAM_SIZE];
-    for (d, f) in reste.plages_de_code().unwrap() {
+    for (d, f) in remainder.code_ranges().unwrap() {
         code[d as usize..f as usize].fill(true);
     }
     for (name, img) in [("espace données", &p.data), ("espace programme", &p.prog)] {
@@ -69,7 +69,7 @@ fn programme_complet_hors_code() {
 }
 
 #[test]
-fn graphismes_reconstruits() {
+fn rebuilt_graphics() {
     if !available() {
         return;
     }
@@ -79,7 +79,7 @@ fn graphismes_reconstruits() {
 }
 
 #[test]
-fn echantillons_reconstruits() {
+fn rebuilt_samples() {
     if !available() {
         return;
     }

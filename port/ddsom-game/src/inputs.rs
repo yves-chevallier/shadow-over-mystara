@@ -51,8 +51,8 @@ fn set_nz_byte(c: &mut Cpu, v: u8) {
     c.flags_logic(v as u32, Size::Byte);
 }
 
-/// 0x080c (VBLANK) : lecture du panneau. Rend ce que l'original laisse dans ses registres (`EntreesLues`).
-pub fn lire_panneau(b: &mut Cps2Bus) -> EntreesLues {
+/// 0x080c (VBLANK) : lecture du panneau. Rend ce que l'original laisse dans ses registres (`InputsRead`).
+pub fn read_panel(b: &mut Cps2Bus) -> InputsRead {
     let a5 = A5;
     let four_players = rd8(b, a5 + ram::FOUR_PLAYERS) != 0;
     let layers_on = rd8(b, a5.wrapping_add(ram::LAYERS_OFF)) == 0;
@@ -89,19 +89,19 @@ pub fn lire_panneau(b: &mut Cps2Bus) -> EntreesLues {
     }
     let layer_ctrl = rd16(b, a5 + ram::LAYER_CTRL);
     wr16(b, 0x804166, layer_ctrl);
-    let dernier = if eeprom_busy {
-        Dernier::Octet(rd8(b, a5 + ram::EEPROM_BUSY))
+    let last = if eeprom_busy {
+        Last::Octet(rd8(b, a5 + ram::EEPROM_BUSY))
     } else {
         let v = rd16(b, a5 + ram::EEPROM_PORT);
         wr16(b, 0x804040, v);
-        Dernier::Mot(v)
+        Last::Mot(v)
     };
-    EntreesLues { d: [d0, cur[3], pressed[2], pressed[3]], quatre_joueurs: four_players, dernier }
+    InputsRead { d: [d0, cur[3], pressed[2], pressed[3]], four_players: four_players, last }
 }
 
 /// Dernière valeur testée par 0x80c (drapeaux de l'original).
 #[derive(Clone, Copy)]
-pub enum Dernier {
+pub enum Last {
     Octet(u8),
     Mot(u16),
 }
@@ -109,24 +109,24 @@ pub enum Dernier {
 /// Restes de 0x80c dans les registres de l'original : octets bas de D0-D3, X effacé (cabinet à deux joueurs),
 /// drapeaux de la dernière valeur testée.
 #[derive(Clone, Copy)]
-pub struct EntreesLues {
+pub struct InputsRead {
     pub d: [u8; 4],
-    pub quatre_joueurs: bool,
-    pub dernier: Dernier,
+    pub four_players: bool,
+    pub last: Last,
 }
 
 fn read_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
-    let r = lire_panneau(b);
+    let r = read_panel(b);
     for (n, v) in r.d.into_iter().enumerate() {
         set_low_byte(&mut c.d[n], v);
     }
-    if !r.quatre_joueurs {
+    if !r.four_players {
         // lsl.b #3 sur (cur2 & 0x10) : le dernier bit sorti vaut 0, X et C passent à 0
         c.sr &= !SR_X;
     }
-    match r.dernier {
-        Dernier::Octet(v) => set_nz_byte(c, v),
-        Dernier::Mot(v) => c.flags_logic(v as u32, Size::Word),
+    match r.last {
+        Last::Octet(v) => set_nz_byte(c, v),
+        Last::Mot(v) => c.flags_logic(v as u32, Size::Word),
     }
     rts(c, b);
 }
@@ -139,8 +139,8 @@ pub const READ_INPUTS: Native = Native {
     outputs: crate::regs::ALL,
 };
 
-/// 0x2aec : recopie les entrées dans les enregistrements des joueurs. Rend les restes de l'original (`Recopie`).
-pub fn recopier(b: &mut Cps2Bus) -> Recopie {
+/// 0x2aec : recopie les entrées dans les enregistrements des joueurs. Rend les restes de l'original (`InputCopy`).
+pub fn copy(b: &mut Cps2Bus) -> InputCopy {
     let a5 = A5;
     let player = |k: u32| a5 + ram::PLAYER1 + ram::PLAYER_STRIDE * k;
     if rd8(b, a5 + ram::INPUT_RAW) != 0 {
@@ -154,7 +154,7 @@ pub fn recopier(b: &mut Cps2Bus) -> Recopie {
         for k in 0..4 {
             wr8(b, player(k) + ram::P_NEW, 0);
         }
-        Recopie::Gelees
+        InputCopy::Frozen
     } else {
         let mask = rd8(b, a5 + ram::INPUT_MASK);
         let mut regs = [0u8; 4];
@@ -170,26 +170,26 @@ pub fn recopier(b: &mut Cps2Bus) -> Recopie {
                 regs[2 + j] = new;
             }
         }
-        Recopie::Masquees { masque: mask, d: regs }
+        InputCopy::Masked { mask: mask, d: regs }
     }
 }
 
 /// Restes de 0x2aec dans les registres de l'original.
 #[derive(Clone, Copy)]
-pub enum Recopie {
+pub enum InputCopy {
     /// Entrées gelées : drapeaux du `clr.b` final.
-    Gelees,
+    Frozen,
     /// D4.b = masque, D0-D3.b = entrées et nouveaux appuis de la dernière paire de joueurs ; drapeaux de D3.b.
-    Masquees { masque: u8, d: [u8; 4] },
+    Masked { mask: u8, d: [u8; 4] },
 }
 
-/// `recopier` avec les registres de l'original.
-pub fn recopier_68k(c: &mut Cpu, b: &mut Cps2Bus) {
-    match recopier(b) {
+/// `copy` avec les registres de l'original.
+pub fn copy_68k(c: &mut Cpu, b: &mut Cps2Bus) {
+    match copy(b) {
         // clr.b final
-        Recopie::Gelees => c.sr = (c.sr & !(SR_N | SR_V | SR_C)) | SR_Z,
-        Recopie::Masquees { masque, d } => {
-            set_low_byte(&mut c.d[4], masque);
+        InputCopy::Frozen => c.sr = (c.sr & !(SR_N | SR_V | SR_C)) | SR_Z,
+        InputCopy::Masked { mask, d } => {
+            set_low_byte(&mut c.d[4], mask);
             for (n, v) in d.into_iter().enumerate() {
                 set_low_byte(&mut c.d[n], v);
             }
@@ -200,7 +200,7 @@ pub fn recopier_68k(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 fn copy_inputs_to_players(c: &mut Cpu, b: &mut Cps2Bus) {
-    recopier_68k(c, b);
+    copy_68k(c, b);
     rts(c, b);
 }
 
@@ -214,15 +214,15 @@ pub const COPY_INPUTS_TO_PLAYERS: Native = Native {
 
 /// Entrées d'un joueur : touches maintenues et nouveaux appuis.
 #[derive(Clone, Copy)]
-pub struct Entrees {
-    pub maintenues: u8,
-    pub nouvelles: u8,
+pub struct Inputs {
+    pub held: u8,
+    pub fresh: u8,
 }
 
 /// 0x2bfe : entrées du joueur de l'objet `objet` (son numéro en `+2`).
-pub fn entrees_du_joueur(b: &mut Cps2Bus, objet: u32) -> Entrees {
+pub fn player_inputs(b: &mut Cps2Bus, objet: u32) -> Inputs {
     let player = rd8(b, objet + 2) as u32;
-    Entrees { maintenues: rd8(b, A5 + player), nouvelles: rd8(b, A5 + ram::NEW + player) }
+    Inputs { held: rd8(b, A5 + player), fresh: rd8(b, A5 + ram::NEW + player) }
 }
 
 /// 0x2bfe : entrées du joueur de l'objet A0. Sortie : D0 = maintenues, D1 = nouveaux appuis.
@@ -248,7 +248,7 @@ pub const GET_PLAYER_INPUT: Native = Native {
 };
 
 /// 0x2bdc : entrées des quatre joueurs effacées (mot des touches maintenues `+0x6c`, octet `+0x6e`).
-pub fn effacer_entrees(b: &mut Cps2Bus) {
+pub fn clear_inputs(b: &mut Cps2Bus) {
     for k in 0..4 {
         let player = 0xff85de + 0x200 * k;
         crate::mem::wr16(b, player + 0x6c, 0);
@@ -256,9 +256,9 @@ pub fn effacer_entrees(b: &mut Cps2Bus) {
     }
 }
 
-/// `effacer_entrees`, drapeaux du dernier `clr.b`.
+/// `clear_inputs`, drapeaux du dernier `clr.b`.
 fn clear_player_inputs(c: &mut Cpu, b: &mut Cps2Bus) {
-    effacer_entrees(b);
+    clear_inputs(b);
     c.sr = c.sr & !0xf | m68k::SR_Z;
     rts(c, b);
 }

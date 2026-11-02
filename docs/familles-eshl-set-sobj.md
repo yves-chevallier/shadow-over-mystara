@@ -70,10 +70,10 @@ si bien que la validation globale n'est pas affectée.
    Variables : `DDSOM_ENTREE=<adresse>` (un seul type), `DDSOM_VARIANTES=n` (variantes tirées, 3 par
    défaut), `DDSOM_VERBOSE=1`, `DDSOM_TRACE_ORIG=1` (trace de l'original à l'écart) et
    `DDSOM_COUVERTURE=fichier` (écrit les instructions de l'original exécutées).
-3. `python3 tools/familles_non_vus.py fichier...` liste, par type, les instructions du listing que le
+3. `python3 tools/families_unseen.py fichier...` liste, par type, les instructions du listing que le
    fuzz n'a pas atteintes (à interpréter : tables de données mal désassemblées et fonctions de
    création appelées par d'autres objets y figurent aussi).
-4. `tools/familles_couverture.sh` compte les appels de chaque gestionnaire dans les scénarios.
+4. `tools/families_coverage.sh` compte les appels de chaque gestionnaire dans les scénarios.
 
 Pièges rencontrés : le listing est incomplet par endroits (utiliser `examples/dis`) ; les tables
 `(tbl,PC,Dn)` se lisent dans l'espace programme (`prog_dec.bin`), les lectures absolues dans l'espace de
@@ -83,8 +83,8 @@ vers du code qui rappelle le même sous-programme.
 
 ## 6. Procédure pour réécrire un lot de types
 
-1. **Repérer le type** : `python3 tools/familles_tables.py` donne l'adresse de chaque type ;
-   `python3 tools/dis_plage.py <début> <fin>` affiche le listing de la plage avec les tables de sauts
+1. **Repérer le type** : `python3 tools/families_tables.py` donne l'adresse de chaque type ;
+   `python3 tools/dis_range.py <début> <fin>` affiche le listing de la plage avec les tables de sauts
    `(tbl,PC,Dn)` résolues. Le listing est incomplet par endroits (instructions manquantes, tables de
    données décodées en instructions absurdes comme `ori.b #0x0,D0b`) : pour un doute, `examples/dis
    <roms> <début> <fin>` ou les mots bruts de `prog_dec.bin`. Les fonctions placées entre deux
@@ -112,7 +112,7 @@ vers du code qui rappelle le même sous-programme.
      écarte, `DDSOM_ENTREE=<adresse> DDSOM_TRACE_ORIG=1 DDSOM_VERBOSE=1` ; essayer aussi
      `DDSOM_VARIANTES=8` (les variantes hors table font sortir l'original des rails : ces écarts-là
      ne sont pas des erreurs, vérifier dans la trace que l'original saute en pleine donnée),
-   * `DDSOM_COUVERTURE=fichier` + `tools/familles_non_vus.py fichier` : les instructions non vues sont
+   * `DDSOM_COUVERTURE=fichier` + `tools/families_unseen.py fichier` : les instructions non vues sont
      du code non validé ; si possible, enrichir le fuzz (il est dans `examples/fuzz.rs`, fonction
      `familles`) pour les atteindre, sinon les signaler,
    * `tools/validate_all.sh 30000` : les 8 scénarios doivent être VALIDE, et `cargo test --release

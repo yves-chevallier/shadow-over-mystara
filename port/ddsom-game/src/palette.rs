@@ -138,11 +138,11 @@ fn selected_pages(b: &mut Cps2Bus, state: u32) -> Vec<(usize, u32)> {
     (0..4).filter(|k| flags >> k & 1 != 0).map(|k| (k, rd32(b, state + fade::PAGE_PTR + 4 * k as u32))).collect()
 }
 
-/// Un pas de fondu de luminosité (`0x158e`, ou `0x15c8` si `partiel`) sur les pages de l'état du fondu
+/// Un pas de fondu de luminosité (`0x158e`, ou `0x15c8` si `partial`) sur les pages de l'état du fondu
 /// (`A5 + 0x48e`), avec le pas `delta` (±0x1000).
-pub fn brightness_step(b: &mut Cps2Bus, delta: u32, partiel: bool) {
+pub fn brightness_step(b: &mut Cps2Bus, delta: u32, partial: bool) {
     for (k, page) in selected_pages(b, crate::mem::A5 + PAGES) {
-        if partiel && k == 0 {
+        if partial && k == 0 {
             fade_partial_page(b, page, delta);
         } else {
             fade_page(b, page, delta);
@@ -286,13 +286,13 @@ fn stage_run(c: &mut Cpu, b: &mut Cps2Bus, entry: u32) {
 }
 
 /// 0x1a360 : palettes de la scène en cours dans la page 0.
-pub fn charger_palettes_de_la_scene(b: &mut Cps2Bus) {
+pub fn load_scene_palettes(b: &mut Cps2Bus) {
     let stage = rd8(b, crate::mem::A5 + STAGE_VAR) as u32;
     load_stage_palettes(b, crate::mem::A5, stage, PALETTES);
 }
 
 /// 0x1a366 : palettes de la scène `scene` dans la page 0 (puis les supplémentaires de la scène en cours).
-pub fn charger_palettes_de_scene(b: &mut Cps2Bus, scene: u8) {
+pub fn load_scene_palettes_of(b: &mut Cps2Bus, scene: u8) {
     load_stage_palettes(b, crate::mem::A5, scene as u32, PALETTES);
 }
 
@@ -337,7 +337,7 @@ fn set_run(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// 0x1a3d4 : les 32 palettes de l'ensemble `n` dans la page 0 (rien si l'ensemble est absent).
-pub fn charger_ensemble(b: &mut Cps2Bus, n: u16) {
+pub fn load_palette_set(b: &mut Cps2Bus, n: u16) {
     load_set(b, n as u32);
 }
 
@@ -397,22 +397,22 @@ fn page_run(c: &mut Cpu, b: &mut Cps2Bus, k: usize, entry: u32) {
 
 /// Pages de palettes 1 à 3 (0x1a608/0x1a60a, 0x1a678/0x1a67e, 0x1a8ac/0x1a8b2) : les 32 palettes de l'entrée `n`
 /// de la table de la page.
-pub fn charger_page(b: &mut Cps2Bus, page: usize, n: u16) {
+pub fn load_palette_page(b: &mut Cps2Bus, page: usize, n: u16) {
     assert!((1..=3).contains(&page), "page de palettes {page}");
     load_page(b, page - 1, n as u32);
 }
 
 /// 0x1a678, 0x1a8ac : la page 2 ou 3 d'après la scène en cours (0x1a608 : la page 1 prend toujours l'entrée 0).
-pub fn charger_page_de_la_scene(b: &mut Cps2Bus, page: usize) {
+pub fn load_scene_page(b: &mut Cps2Bus, page: usize) {
     let n = if page == 1 { 0 } else { rd8(b, crate::mem::A5 + STAGE_VAR) as u16 };
-    charger_page(b, page, n);
+    load_palette_page(b, page, n);
 }
 
 macro_rules! page_native {
-    ($name:ident, $nom:literal, $k:literal, $entry:expr) => {
+    ($name:ident, $ident:literal, $k:literal, $entry:expr) => {
         pub const $name: Native = native(
             $entry,
-            $nom,
+            $ident,
             |c, b| page_run(c, b, $k, $entry),
         );
     };
@@ -442,13 +442,13 @@ fn special_sources(stage: u8) -> Option<[u32; 4]> {
 
 /// 0x1a296 : toutes les palettes de la scène en cours. Rend le D0 que laisse l'original : le premier long de la
 /// dernière palette de la page 3 (le menu de configuration le relit).
-pub fn charger_tout(b: &mut Cps2Bus) -> u32 {
-    charger_tout_par(b, None);
+pub fn load_all_palettes(b: &mut Cps2Bus) -> u32 {
+    load_all_by(b, None);
     rd32(b, PALETTES + 3 * PAGE_SIZE + (PAGE_PALETTES - 1) * PALETTE_BYTES)
 }
 
-/// `charger_tout`, et les registres de l'original si `c` est donné.
-fn charger_tout_par(b: &mut Cps2Bus, mut c: Option<&mut Cpu>) {
+/// `load_all_palettes`, et les registres de l'original si `c` est donné.
+fn load_all_by(b: &mut Cps2Bus, mut c: Option<&mut Cpu>) {
     let a5 = crate::mem::A5;
     let stage = rd8(b, a5 + STAGE_VAR);
     let special = special_sources(stage);
@@ -475,7 +475,7 @@ fn charger_tout_par(b: &mut Cps2Bus, mut c: Option<&mut Cpu>) {
 }
 
 fn load_all(c: &mut Cpu, b: &mut Cps2Bus) {
-    charger_tout_par(b, Some(c));
+    load_all_by(b, Some(c));
     rts(c, b);
 }
 
@@ -589,26 +589,26 @@ fn fade_to_white(c: &mut Cpu, b: &mut Cps2Bus) {
 
 /// Cible d'un fondu par composante.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub enum Cible {
+pub enum Target {
     /// Le blanc (`0x1cd32`).
-    Blanc,
+    White,
     /// Une couleur par page, le mot `A5 + 0x492 + 4 k` (`0x1cdd6`).
-    Couleurs,
+    Colours,
     /// Une palette complète par page, à l'adresse `A5 + 0x492 + 4 k` (`0x1cd7c`).
     Palettes,
 }
 
-/// Un pas de fondu par composante des pages cochées (`A5 + 0x48e`) vers `cible`.
-pub fn component_step(b: &mut Cps2Bus, cible: Cible) {
+/// Un pas de fondu par composante des pages cochées (`A5 + 0x48e`) vers `target`.
+pub fn component_step(b: &mut Cps2Bus, target: Target) {
     for (k, page) in flagged_pages(b, crate::mem::A5) {
         let source = crate::mem::A5 + SOURCES + 4 * k as u32;
-        match cible {
-            Cible::Blanc => brighten_page(b, page),
-            Cible::Couleurs => {
+        match target {
+            Target::White => brighten_page(b, page),
+            Target::Colours => {
                 let goal = rd16(b, source);
                 approach_constant(b, page, goal);
             }
-            Cible::Palettes => {
+            Target::Palettes => {
                 let target = rd32(b, source);
                 approach_page(b, page, target);
             }
@@ -765,8 +765,8 @@ pub fn restore_flash(b: &mut Cps2Bus) {
 
 /// Éclair : met les palettes en réserve puis les remplace par des gris teintés. Rend la dernière couleur traitée
 /// (d'où l'original tire ses registres de travail).
-pub fn flash(b: &mut Cps2Bus, teinte: Flash) -> u16 {
-    let (base, mask) = teinte.tint();
+pub fn flash(b: &mut Cps2Bus, tint: Flash) -> u16 {
+    let (base, mask) = tint.tint();
     copy_flash_palettes(b, false);
     let mut last = 0;
     for (start, colors) in [(flash::PAGE, flash::PAGE_COLORS), (flash::SPARE, flash::SPARE_COLORS)] {
@@ -796,9 +796,9 @@ fn restore_flash_native(c: &mut Cpu, b: &mut Cps2Bus) {
 }
 
 /// Native d'un éclair : les registres de travail comme l'original les laisse (dernière couleur traitée).
-fn flash_native_run(c: &mut Cpu, b: &mut Cps2Bus, teinte: Flash) {
-    let last = flash(b, teinte);
-    let (base, mask) = teinte.tint();
+fn flash_native_run(c: &mut Cpu, b: &mut Cps2Bus, tint: Flash) {
+    let last = flash(b, tint);
+    let (base, mask) = tint.tint();
     let level = flash_level(last);
     let (red, green) = (last >> 8 & 0xf, last >> 4 & 0xf);
     c.a[1] = flash::SPARE + 2 * flash::SPARE_COLORS;

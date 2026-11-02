@@ -446,7 +446,7 @@ fn scan(w: &mut World, list: List, counter: u32, mut body: impl FnMut(&mut World
 
 /// Les 4 enregistrements joueur.
 fn players() -> impl Iterator<Item = Obj> {
-    crate::ram::JOUEURS.iter()
+    crate::ram::PLAYERS.iter()
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -553,7 +553,7 @@ fn player_blow_on_enemy(w: &mut World, p: Obj, e: Obj) {
     }
     w.set_bit(p, f::HIT_MARK, 0);
     // un même coup (ATTACK_ID) ne touche qu'une fois chaque victime : la victime retient le
-    // dernier coup reçu de chaque joueur (octet `HIT_MARK + n° du joueur`)
+    // dernier coup reçu de chaque joueur (octet `HIT_MARK + n° du player`)
     let id = p.u8(w.b, f::ATTACK_ID);
     let slot = e.0 + f::HIT_MARK + p.u8(w.b, f::KIND) as u32;
     if rd8(w.b, slot) == id {
@@ -666,13 +666,13 @@ fn show_enemy_hp(w: &mut World, attacker: Obj, e: Obj) {
     cov::hit("show_enemy_hp");
     let key = ((attacker.u8(w.b, f::KIND) as u32) << 8) + e.u8(w.b, f::KIND) as u32;
     let (hp_max, hp, class) = (e.u16(w.b, f::HP_MAX), e.u16(w.b, f::HP), e.u8(w.b, f::CLASS));
-    let barre = crate::evenements::Popup { entete: key as u16, max: hp_max, valeur: hp, brut: class == 2 };
+    let bar = crate::evenements::Popup { entete: key as u16, max: hp_max, valeur: hp, brut: class == 2 };
     // Glitch d'origine : 0x19dce laisse A2 sur la file des pop-ups (sauf s'ils sont inhibés), et A2 est la boîte
     // d'attaque du joueur pour les ennemis suivants de `player_hits_enemies`
-    if !crate::evenements::popups_inhibes(w.b) {
-        w.a2 = crate::evenements::ENTREES_POPUPS;
+    if !crate::evenements::popups_inhibited(w.b) {
+        w.a2 = crate::evenements::POPUP_INPUTS_ADDR;
     }
-    crate::evenements::creer_popup(w.b, barre);
+    crate::evenements::creer_popup(w.b, bar);
 }
 
 /// Fin de 0x2630e (0x264e4) : la victime passe en réaction "touchée", l'étincelle est créée et le
@@ -714,7 +714,7 @@ fn count_combo(w: &mut World, p: Obj, e: Obj) {
 // Routines natives
 
 /// 0x260ee : les collisions de l'image.
-pub fn mettre_a_jour(c: &mut Cpu, b: &mut Cps2Bus) {
+pub fn update_cpu(c: &mut Cpu, b: &mut Cps2Bus) {
     combat_update(&mut World { c, b, a2: 0 });
 }
 

@@ -363,17 +363,17 @@ fn camera(b: &mut Cps2Bus) -> Camera1<'_> {
 
 /// D4 que laisse la recopie d'une colonne ou d'une ligne de décor : valeur et bits remplacés (`D4 & !masque |
 /// valeur`).
-pub type RestesD4 = Option<(u32, u32)>;
+pub type D4Leftovers = Option<(u32, u32)>;
 
 /// 0x2f81c : suite du script de mode de la caméra 1, après le script.
-pub(crate) fn after_mode(b: &mut Cps2Bus) -> RestesD4 {
+pub(crate) fn after_mode(b: &mut Cps2Bus) -> D4Leftovers {
     let mut cam = camera(b);
     cam.after_mode();
     cam.d4.map(|v| (v, u32::MAX))
 }
 
 /// 0x2f86e : écarts cible - dessiné de la caméra 1, puis recopie des colonnes et lignes manquantes.
-pub(crate) fn draw1(b: &mut Cps2Bus) -> RestesD4 {
+pub(crate) fn draw1(b: &mut Cps2Bus) -> D4Leftovers {
     let mut cam = camera(b);
     cam.draw();
     cam.d4.map(|v| (v, u32::MAX))
@@ -627,7 +627,7 @@ impl Camera2<'_> {
 }
 
 /// 0x328a8 : écarts cible - dessiné de la caméra 2, puis recopie des colonnes et lignes manquantes.
-pub(crate) fn draw2(b: &mut Cps2Bus) -> RestesD4 {
+pub(crate) fn draw2(b: &mut Cps2Bus) -> D4Leftovers {
     let mut cam = Camera2 { x: Exec::real(b), a5: A5, cam: A5 + CAMERA_2, d4: None };
     cam.draw();
     cam.d4
@@ -668,29 +668,29 @@ fn move_object_68k(c: &mut Cpu, b: &mut Cps2Bus, field: u32, d: i32) {
 }
 
 /// Défilement de l'image pour un décor qui suit `(fx, fy)` du défilement (x, y).
-fn parallaxe(b: &mut Cps2Bus, fx: fn(i32) -> i32, fy: fn(i32) -> i32) -> (i32, i32) {
+fn parallax(b: &mut Cps2Bus, fx: fn(i32) -> i32, fy: fn(i32) -> i32) -> (i32, i32) {
     (fx(scroll_delta(b, A5, 0)), fy(scroll_delta(b, A5, 1)))
 }
-const QUART: (fn(i32) -> i32, fn(i32) -> i32) = (|dx| dx >> 2, |dy| dy >> 1);
-const TROIS_QUARTS: (fn(i32) -> i32, fn(i32) -> i32) = (|dx| dx >> 1, |dy| (dy >> 1) + (dy >> 2));
+const QUARTER: (fn(i32) -> i32, fn(i32) -> i32) = (|dx| dx >> 2, |dy| dy >> 1);
+const THREE_QUARTERS: (fn(i32) -> i32, fn(i32) -> i32) = (|dx| dx >> 1, |dy| (dy >> 1) + (dy >> 2));
 
 /// 0x33178 : le décor `o` suit le quart du défilement en x et la moitié en y.
 pub(crate) fn parallax_quarter(b: &mut Cps2Bus, o: Obj) {
-    let (dx, dy) = parallaxe(b, QUART.0, QUART.1);
+    let (dx, dy) = parallax(b, QUARTER.0, QUARTER.1);
     move_object(b, o, OBJECT_X, dx);
     move_object(b, o, OBJECT_Y, dy);
 }
 
 /// 0x33196 : le décor `o` suit la moitié du défilement en x et les trois quarts en y.
 pub(crate) fn parallax_three_quarters(b: &mut Cps2Bus, o: Obj) {
-    let (dx, dy) = parallaxe(b, TROIS_QUARTS.0, TROIS_QUARTS.1);
+    let (dx, dy) = parallax(b, THREE_QUARTERS.0, THREE_QUARTERS.1);
     move_object(b, o, OBJECT_X, dx);
     move_object(b, o, OBJECT_Y, dy);
 }
 
 /// Natives des deux parallaxes (objet A0 ; drapeaux de la dernière addition).
-fn parallaxe_68k(c: &mut Cpu, b: &mut Cps2Bus, f: (fn(i32) -> i32, fn(i32) -> i32)) {
-    let (dx, dy) = parallaxe(b, f.0, f.1);
+fn parallax_68k(c: &mut Cpu, b: &mut Cps2Bus, f: (fn(i32) -> i32, fn(i32) -> i32)) {
+    let (dx, dy) = parallax(b, f.0, f.1);
     move_object_68k(c, b, OBJECT_X, dx);
     move_object_68k(c, b, OBJECT_Y, dy);
 }
@@ -718,13 +718,13 @@ const fn leaf(entry: u32, name: &'static str, run: fn(&mut Cpu, &mut Cps2Bus)) -
 
 pub const PARALLAX_QUARTER: Native = Native {
     ..leaf(0x33178, "decor_parallaxe_quart", |c, b| {
-        parallaxe_68k(c, b, QUART);
+        parallax_68k(c, b, QUARTER);
         rts(c, b)
     })
 };
 pub const PARALLAX_THREE_QUARTERS: Native = Native {
     ..leaf(0x33196, "decor_parallaxe_trois_quarts", |c, b| {
-        parallaxe_68k(c, b, TROIS_QUARTS);
+        parallax_68k(c, b, THREE_QUARTERS);
         rts(c, b)
     })
 };
@@ -857,7 +857,7 @@ pub const FOLLOW_PLAYERS_Y: Native = Native {
 /// 0x33e20 : met à jour les deux caméras. La première mémorise sa cible précédente (+0x26, +0x2a)
 /// avant que son script de mode (0x2ede0) la déplace ; la seconde est traitée par 0x32108.
 /// Rend le D4 que laissent les recopies de décor des deux caméras (dans l'ordre).
-pub fn update_cameras(b: &mut Cps2Bus) -> [RestesD4; 2] {
+pub fn update_cameras(b: &mut Cps2Bus) -> [D4Leftovers; 2] {
     let camera = A5 + CAMERA_1;
     let (x, y) = (rd32(b, camera + cam::X), rd32(b, camera + cam::Y));
     wr32(b, camera + cam::PREVIOUS_X, x);
@@ -886,15 +886,15 @@ const STARTS: u32 = 0x33c54;
 /// 0x33aa6 : caméras de la scène à leur position de départ. Les deux caméras (`A5+0x4fe`, `A5+0x54e`)
 /// sont remises à zéro, le début de la couche 1 effacé (0x3525c) ; la scène (`A5+0x34`) choisit la caméra
 /// en service (`A5+0x36`, table 0x33bdc) et la position de départ de la première (table 0x33c54 : x, y),
-/// puis les caméras sont mises à jour (0x33e20, par l'appelant : `cameras_depart` ne fait que la remise à zéro).
-pub fn cameras_depart(b: &mut Cps2Bus) {
+/// puis les caméras sont mises à jour (0x33e20, par l'appelant : `cameras_start` ne fait que la remise à zéro).
+pub fn cameras_start(b: &mut Cps2Bus) {
     for off in [0x54e, 0x556, 0x55a, 0x55e, 0x562, 0x56a, 0x4fe, 0x506, 0x50a, 0x50e, 0x512, 0x51a] {
         wr32(b, A5 + off, 0);
     }
     wr16(b, A5 + 0x566, 0);
     wr8(b, 0xff858b, 0);
     wr8(b, A5 + 0x53a, 0);
-    crate::video::effacer_debut_couche1(b);
+    crate::video::clear_layer1_start(b);
     let stage = rd8(b, A5 + STAGE) as u32;
     let service = rd8(b, SERVICE + stage);
     wr8(b, A5 + 0x36, service);
@@ -911,8 +911,8 @@ pub fn cameras_depart(b: &mut Cps2Bus) {
 /// Native de 0x33aa6 : registres de l'effacement de la couche 1, D0 = 4 x scène, A1 = table des départs, A0 = la
 /// caméra 2.
 fn reset_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
-    cameras_depart(b);
-    crate::video::restes_effacer_debut_couche1(c);
+    cameras_start(b);
+    crate::video::leftovers_clear_layer1_start(c);
     c.d[0] = 4 * rd8(b, A5 + STAGE) as u32;
     c.a[1] = STARTS;
     update_cameras_68k(c, b);
@@ -932,7 +932,7 @@ pub const RESET_CAMERAS: Native = Native {
 /// 0x33bdc), une limite (`A5+0x532`), le mot de contrôle vidéo 0x400004 et les couches affichées (0xbc6),
 /// puis les caméras sont remises à leur position initiale (0x200) et leurs bornes rechargées (tables par
 /// scène, espace données), avant leur mise à jour (0x33e20, par l'appelant).
-pub fn cameras_retour(b: &mut Cps2Bus) {
+pub fn cameras_return(b: &mut Cps2Bus) {
     use crate::camera_modes::tables::{
         FROZEN as MODES, HOLD_MIN as PRIORITIES, LAYERS, MAX_X_1 as LIMITS, OUTPUT as VIDEO_CONTROL,
         ROW_STEP_1 as BOUNDS_A, ROW_STEP_2 as BOUNDS_B,
@@ -945,9 +945,9 @@ pub fn cameras_retour(b: &mut Cps2Bus) {
     wr16(b, A5 + 0x532, limit);
     let control = rd16(b, VIDEO_CONTROL + 2 * stage);
     wr16(b, VIDEO_CONTROL_PORT, control);
-    let couches = rd16(b, LAYERS + 2 * stage);
+    let layers = rd16(b, LAYERS + 2 * stage);
     wr16(b, A5 + 0x14, 0);
-    crate::video::activer_couches(b, couches);
+    crate::video::turn_layers_on(b, layers);
     let priority = rd8(b, PRIORITIES + stage);
     wr8(b, A5 + 0x53b, priority);
     wr16(b, A5 + 0x4fe, 0x200);
@@ -972,7 +972,7 @@ pub fn cameras_retour(b: &mut Cps2Bus) {
 
 /// Native de 0x33b24 : D0 = scène, A1 = table du contrôle vidéo, A4 = table des modes, A0 = la caméra 2.
 fn return_cameras(c: &mut Cpu, b: &mut Cps2Bus) {
-    cameras_retour(b);
+    cameras_return(b);
     c.d[0] = rd8(b, A5 + STAGE) as u32;
     c.a[1] = crate::camera_modes::tables::OUTPUT;
     c.a[4] = crate::camera_modes::tables::FROZEN;

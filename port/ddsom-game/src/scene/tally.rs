@@ -194,9 +194,9 @@ fn start(x: &mut Ctx) -> Flow {
     next_sub_step(x);
     x.set_v8(a5::HOLD, 1);
     crate::sound::jouer_global(x.b, sub::MUSIC);
-    fondu::PAS.set(x.b, 8);
+    fondu::STEP.set(x.b, 8);
     // 0xf68c8 : la tâche de fondu (A0 gardé)
-    fondu::DELAI.set(x.b, 1);
+    fondu::DELAY.set(x.b, 1);
     fondu::PAGES.set(x.b, 13);
     crate::kernel::creer_tache(x.b, 16, fondu::DESCENTE_PAS);
     x.push_return(Etape::AfterFade);

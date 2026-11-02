@@ -6,7 +6,7 @@ played by `examples/autobot.rs` (several players, spells, route votes, shops, di
 
 Writes scenarios/long/<name>.txt (the input scenario produced by the bot) and <name>.images (its frame count).
 Variables: DDSOM_ROMS (rom), DDSOM_EEPROM (testdata/eeprom_ddsom.bin), GEN_LONG_LOG (file: bot log). See
-docs/couverture.md ("Bots longs").
+docs/couverture.md (long bots section).
 """
 import os
 import subprocess
@@ -68,7 +68,7 @@ SPECS = {
 
 # spell bots: each character's valid spells and items, cast in turn (--spells: identifier put in the first equipment
 # row, the game's special attack converts it to a spell number through table 0x372e4), magic-user rods (--rods); see
-# docs/couverture.md ("Sorts et objets")
+# docs/couverture.md (spells and items section)
 
 
 def row_ident(spell):

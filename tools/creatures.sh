@@ -1,10 +1,10 @@
 #!/bin/sh
-# Génère les images des créatures dans assets/creatures/ (dossier ignoré par git : images tirées des ROMs).
-#   DDSOM_ROMS=rom tools/creatures.sh [scan|spawn|build]     (sans argument : les trois étapes)
-# scan : rejoue les scénarios de couverture et échantillonne les créatures rencontrées ;
-# spawn : fait apparaître à la main les types que ces scénarios ne rencontrent jamais ;
-# build : choisit les poses, écrit les PNG, les planches et docs/creatures.md. Voir docs/creatures.md.
-# Au plus 4 processus en parallèle.
+# Generates the creature images in assets/creatures/ (git-ignored folder: images extracted from the ROMs).
+#   DDSOM_ROMS=rom tools/creatures.sh [scan|spawn|build]     (no argument: all three steps)
+# scan: replays the coverage scenarios and samples the creatures met;
+# spawn: spawns by hand the types these scenarios never meet;
+# build: picks the poses, writes the PNGs, the sheets and docs/creatures.md. See docs/creatures.md.
+# At most 4 processes in parallel.
 set -e
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 ROMS=${DDSOM_ROMS:-$ROOT/rom}
@@ -13,7 +13,7 @@ OUT=${DDSOM_CREATURES_OUT:-$ROOT/assets/creatures}
 BIN=$ROOT/port/target/release/examples/creatures
 FRAMES=${CREATURES_FRAMES:-30000}
 SCENARIOS="cov_tour1_c0 cov_tour2_c1 cov_tour3_c2 cov_tour4_c3 cov_tour5_c4 cov_tour6_c5 cov_tour7_c0 cov_tour8_c1 cov_natural_c0 ${CREATURES_EXTRA:-}"
-# scène famille type variante : types jamais vus en partie (la palette est celle de la scène choisie)
+# scene family type variant: types never seen in play (the palette is that of the chosen scene)
 SPAWNS=${CREATURES_SPAWNS:-"1 enemy 3 0  1 enemy 11 0  1 enemy 13 0  1 enemy 14 0  1 enemy 15 0  1 enemy 27 0  64 enemy 26 0  66 enemy 28 0  42 boss 11 0"}
 STEP=${1:-all}
 

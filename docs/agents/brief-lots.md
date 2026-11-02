@@ -9,7 +9,7 @@ Dans ton périmètre, dans cet ordre de priorité :
 2. J2 : plus de registre ni de drapeau hors frontière : arguments et retours Rust (`Option<Obj>`, `bool`, structs) ; prouver avec `DDSOM_POISON` qu'un registre est mort avant de retirer son écriture ; garder un adaptateur `_68k` documenté là où un lecteur hors périmètre relit encore un registre (ex. boucle de dispatch, `reinsert`).
 3. Plus de cession par `call_at`/`Unwound`/cadres là où ton périmètre en a (voir § 7 lot E : appelants restants), en suivant le modèle `Etape` du lot E.
 4. Nommer l'état : champs d'objet (vues typées `Obj`, constantes de champ nommées), variables RAM (`ram.rs`), constantes de ROM nommées ; supprimer les adresses déclarées en double dans ton périmètre.
-5. Factoriser : les familles/sous-modules qui se dupliquent (mesure : tools/mesure_refacto.py) partagent des fonctions communes dans ton périmètre.
+5. Factoriser : les familles/sous-modules qui se dupliquent (mesure : tools/measure_refactor.py) partagent des fonctions communes dans ton périmètre.
 6. Supprimer le code mort et les replis vers l'original jamais atteints (g.rom, x.call de repli, `_ =>` vers l'original) : un cas impossible devient un `unreachable!`/panic avec message expliquant pourquoi.
 
 Règles de périmètre : ne modifie que tes fichiers. API communes (objects/, families/cx.rs, families/mod.rs, rng.rs, ram.rs, machine.rs, taches/, mem.rs, lib.rs hors tes lignes NATIVES) : ne pas les changer ; un besoin nouveau va d'abord en privé dans ton module et se signale dans le rapport. Listes NATIVES de lib.rs : ne retire que tes lignes. Deux autres agents travaillent en parallèle sur d'autres lots.
@@ -18,7 +18,7 @@ Validation : ciblée pendant le travail (scénarios de ton périmètre ; `exampl
 
 Fractionne : commit + push par sous-ensemble validé (une famille, un sous-module), avancement noté dans docs/refactorisation.md (ta ligne). Rapport d'étape si plus de 4 h. Avant ton dernier commit, fusionne main (d'autres lots auront fusionné).
 
-Rapport final court : ce qui est converti, mesures tools/mesure_refacto.py de ton périmètre avant/après (lignes, regs, drap, adr, pile, brut, doublons), adaptateurs `_68k` restants et pourquoi, besoins d'API commune, glitches documentés, validation exacte, hash poussé.
+Rapport final court : ce qui est converti, mesures tools/measure_refactor.py de ton périmètre avant/après (lignes, regs, drap, adr, pile, brut, doublons), adaptateurs `_68k` restants et pourquoi, besoins d'API commune, glitches documentés, validation exacte, hash poussé.
 
 ## Code mort : le consigner avant de le retirer (demande de l'utilisateur)
 Avant de supprimer du code mort ou un repli jamais atteint, établis ce qu'il faisait et consigne-le dans docs/code-mort.md (une entrée par cas, section de ton lot) : adresse(s) d'origine, ce que fait le code, pourquoi il n'est jamais atteint (aucune référence, condition jamais vraie, valeur de table jamais produite, réglage DIP/EEPROM, version/région), et l'hypothèse sur sa nature (fonction cachée, mode debug, comportement abandonné ou corrigé, reste d'une autre version, simple repli défensif). Cite tes preuves (recherche de références, fuzz, scénario).

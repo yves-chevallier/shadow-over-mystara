@@ -123,6 +123,6 @@ connu et hors contrat (variante 18, `choose_reward` : quand plus de 24 candidats
 saute dans des données, 0xd5ef8, via la table 0xcff10 ; la réécriture refuse alors sans écart de
 principe). Non couvert : les chemins où l'allocation d'objet échoue, les parcours très longs des
 variantes 18 et 20 (fin de texte 0xfe), les sous-routines 0xceb46 / 0xcf182 (hors du type : appelées
-par d'autres objets), et, pour les instructions comptées par `familles_non_vus.py`, les boucles de
+par d'autres objets), et, pour les instructions comptées par `families_unseen.py`, les boucles de
 l'original plus longues que la limite de 20 000 instructions du traceur (0xca8, 0xcc8) qui cachent des
 chemins pourtant exécutés et comparés.

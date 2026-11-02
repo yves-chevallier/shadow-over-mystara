@@ -17,7 +17,7 @@ mod natives;
 mod palettes;
 mod players;
 mod rest;
-mod reste;
+mod remainder;
 mod rom;
 mod scene_palettes;
 mod scenes;
@@ -75,7 +75,7 @@ fn main() {
         }
         if wanted("data") {
             // en dernier : tout ce que les autres fichiers ne décrivent pas, hors code 68000
-            reste::extract(roms, out)?;
+            remainder::extract(roms, out)?;
         }
         std::fs::write(out.join("README.md"), README)?;
         Ok(())

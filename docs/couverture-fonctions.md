@@ -20,12 +20,12 @@ instruction est ventilée plus bas, « Branches des fonctions exécutées »). L
 des données mal désassemblées.
 
 Reproduire : `cov <roms> <eeprom> <scénario> <images> <sortie.bin>` (exemple de `ddsom-game`) sur chaque scénario
-(4 tâches : 45 min), `names > natives.txt`, puis `tools/couverture_fonctions.py decomp/index.tsv docs/atlas.md natives.txt
+(4 tâches : 45 min), `names > natives.txt`, puis `tools/coverage_functions.py decomp/index.tsv docs/atlas.md natives.txt
 docs/code-mort.md <bitmaps>...`.
 
 ## Branches des fonctions exécutées
 
-Même mesure, au niveau des instructions (`tools/couverture_branches.py`, zones de débogage et de test K4, M1, M2, M3
+Même mesure, au niveau des instructions (`tools/coverage_branches.py`, zones de débogage et de test K4, M1, M2, M3
 écartées) : pour chaque fonction exécutée, les instructions jamais exécutées et les sauts conditionnels (`bcc`,
 `dbcc`) pris d'un seul côté (cible ou instruction suivante jamais exécutée ; approximation : un côté peut avoir été
 atteint par un autre chemin). Une ligne par fonction, avec l'adresse et le côté manquant de chaque saut :
@@ -520,7 +520,7 @@ reconstruite depuis FF0064 puis comparée par `taches::table::ecarts`), mémoire
   d'appels Rust de chaque écriture de la native dans la plage, et les écritures de l'original avec leur PC ;
   `FUZZ_PC=adresse,...` montre les registres de l'original à ces PC.
 
-Bilan : `tools/couverture_fuzz.py <listing> <index.tsv> <atlas.md> <union des scénarios> <bitmaps de fuzz_couv>...
+Bilan : `tools/coverage_fuzz.py <listing> <index.tsv> <atlas.md> <union des scénarios> <bitmaps de fuzz_couv>...
 [--detail ZONE]` ; la sortie `<sortie>.identiques` de `fuzz_couv` ne garde que les essais sans écart.
 
 Par zone : 6 à 16 scénarios choisis pour couvrir les sauts de la frontière de la zone, un appel retenu sur 8 (les

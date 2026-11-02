@@ -1,5 +1,5 @@
 //! Cartes des décors (scroll 2 et scroll 3) : banques de blocs, bandes, tables de bandes des scènes.
-//! Mêmes tables que les caméras du jeu (`ddsom-game/src/scroll.rs`) et `examples/cartes.rs`.
+//! Mêmes tables que les caméras du jeu (`ddsom-game/src/scroll.rs`) et `examples/cards.rs`.
 
 use std::io;
 use std::path::Path;
@@ -63,7 +63,7 @@ fn bad(msg: String) -> io::Error {
 
 /// Tables de bandes : elles se suivent en ROM ; chacune est un mot de largeur `W` puis des lignes de `W` mots,
 /// et le pointeur de scène désigne sa ligne d'ordonnée 0. Le nombre de lignes sous 0 est celui qui amène à un
-/// en-tête suivant cohérent avec le pointeur suivant (même lecture que `examples/cartes.rs`) ; la dernière
+/// en-tête suivant cohérent avec le pointeur suivant (même lecture que `examples/cards.rs`) ; la dernière
 /// table s'arrête à la table des banques, qui suit.
 fn tables(rom: &Program, g: &Geometry) -> io::Result<(Vec<StripTable>, Vec<usize>)> {
     let scene_ptrs: Vec<u32> = (0..SCENES).map(|s| rom.prog32(g.scenes + 4 * s)).collect();

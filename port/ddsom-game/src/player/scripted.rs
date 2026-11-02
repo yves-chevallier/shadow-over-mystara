@@ -22,7 +22,7 @@ use super::{animation, cinematics, ram, Ctx, Player};
 use crate::objects::lists::ACTORS;
 use crate::objects::Obj;
 use crate::machine::Machine;
-use crate::player::externes as ext;
+use crate::player::external as ext;
 
 type Handler = fn(&mut Ctx, Player);
 
@@ -287,7 +287,7 @@ fn scene1_wait_progress(g: &mut Ctx, p: Player) {
         let k = p.u8(g, 0x7d) as u32;
         let delay = g.prog16(tables::SCENE1_WAIT + 2 * k);
         p.set_u16(g, 0x1e0, delay);
-        g.rom(ext::effet::HALO, p);
+        g.rom(ext::effect::HALO, p);
     }
     animation::step(g, p);
 }
@@ -474,7 +474,7 @@ fn revive_land(g: &mut Ctx, p: Player) {
     }
     next_action(g, p);
     animation::start(g, p, 0x23);
-    g.son(ext::son::FANFARE, p);
+    g.sound(ext::sound::FANFARE, p);
 }
 
 /// 0x23c58: end of the animation: the player gets control back, invulnerable for 150 frames.
@@ -508,7 +508,7 @@ fn revive_frozen(g: &mut Ctx, p: Player) {
     p.set_u16(g, Obj::Y, y);
     g.rom(rom::REVIVE_SETUP, p);
     animation::start(g, p, 0x23);
-    g.son(ext::son::FANFARE, p);
+    g.sound(ext::sound::FANFARE, p);
     restore_palette(g, p);
     ram::FADE_PAGES.set(g.b, 0xf);
     crate::palette::full_brightness(g.b);
@@ -543,9 +543,9 @@ fn wait_start(g: &mut Ctx, p: Player) {
     let k = p.u8(g, 0x7d) as u32;
     let delay = g.prog16(tables::WAIT_DELAYS + 2 * k);
     p.set_u16(g, 0x1e0, delay);
-    g.rom(ext::effet::HALO, p);
+    g.rom(ext::effect::HALO, p);
     animation::step(g, p);
-    g.son(rom::INTRO_ACTION, p);
+    g.sound(rom::INTRO_ACTION, p);
 }
 
 /// 0x23db4 : attend, puis se tourne vers la droite si nécessaire.

@@ -1,13 +1,13 @@
-"""Génère le jeu de scénarios de couverture (scenarios/cov/*.txt) avec le bot réactif autobot.
+"""Generates the coverage scenario set (scenarios/cov/*.txt) with the reactive bot autobot.
 
-    python3 tools/gen_scenarios.py [nom ...]        (tous si aucun nom)
+    python3 tools/gen_scenarios.py [name ...]        (all if no name)
 
-Prérequis : `cargo build --release -p ddsom-game --examples` et DDSOM_ROMS / DDSOM_EEPROM
-(le bot lit la RAM de la machine pour jouer ; les scénarios produits ne contiennent que des
-entrées et des écritures RAM `poke`, aucune donnée de ROM). Voir docs/couverture.md.
+Prerequisites: `cargo build --release -p ddsom-game --examples` and DDSOM_ROMS / DDSOM_EEPROM
+(the bot reads the machine's RAM to play; the produced scenarios only contain
+inputs and `poke` RAM writes, no ROM data). See docs/couverture.md.
 
-Accès aux scènes : `autobot --plan scène:durée,...` écrit le numéro de scène (FF8034) pendant la
-sélection du personnage, puis saute de scène en scène (FF8034 ← n-1, phase FF802C ← 0x10).
+Scene access: `autobot --plan scene:duration,...` writes the scene number (FF8034) during
+character select, then jumps from scene to scene (FF8034 ← n-1, phase FF802C ← 0x10).
 """
 import os
 import subprocess
@@ -23,17 +23,17 @@ ROMS = os.environ.get("DDSOM_ROMS", os.path.join(ROOT, "rom"))
 EEPROM = os.environ.get("DDSOM_EEPROM", os.path.join(ROOT, "testdata/eeprom_ddsom.bin"))
 FRAMES = 30000
 
-# Curseur de sélection : nombre de crans pour obtenir chaque personnage seul
-# (0 fighter, 1 cleric, 2 elf, 3 dwarf, 4 magic-user, 5 thief : ordre des tables du jeu).
+# Selection cursor: number of steps to get each character alone
+# (0 fighter, 1 cleric, 2 elf, 3 dwarf, 4 magic-user, 5 thief: order of the game's tables).
 SOLO_K = {0: 0, 1: 2, 2: 5, 3: 4, 4: 1, 5: 3}
-# Combinaisons à plusieurs joueurs donnant des personnages distincts (étalonnées sur le jeu).
+# Multiplayer combinations giving distinct characters (calibrated on the game).
 MULTI = {
     "2a": ((0, 1), [0, 3]), "2b": ((1, 2), [4, 2]), "2c": ((2, 3), [1, 0]),
     "2d": ((3, 4), [5, 4]), "2e": ((4, 5), [3, 1]), "2f": ((5, 0), [2, 5]),
     "4a": ((0, 1, 2, 3), [0, 3, 5, 4]), "4b": ((2, 3, 4, 5), [1, 0, 2, 5]), "4c": ((4, 5, 0, 1), [3, 1, 4, 2]),
 }
 
-# Scènes (FF8034) : 1-114 valides ; 69-82 boutiques ; 83-89 écrans à graphismes non initialisés (entrée directe).
+# Scenes (FF8034): 1-114 valid; 69-82 shops; 83-89 screens with uninitialized graphics (direct entry).
 NORMAL, SHORT = 350, 200
 
 
@@ -44,7 +44,7 @@ def plan(first, last, dur=NORMAL):
     return ",".join(out)
 
 
-# nom -> (joueurs/personnages, plan, god, images, options)
+# name -> (players/characters, plan, god, frames, options)
 SPECS = {}
 
 
@@ -53,13 +53,13 @@ def add(name, players, plan_s="", god="0x70", frames=FRAMES, weaken=450, coin_pe
                        coin_period=coin_period, seed=seed)
 
 
-# 1. parcours des 114 scènes en 4 tronçons, les 6 personnages seuls
+# 1. tour of the 114 scenes in 4 chunks, the 6 characters alone
 CHUNKS = [(1, 28), (29, 56), (57, 86), (87, 114)]
-TOURS = [(0, 0), (1, 1), (2, 2), (3, 3), (4, 0), (5, 1), (0, 2), (1, 3)]  # (personnage, tronçon)
+TOURS = [(0, 0), (1, 1), (2, 2), (3, 3), (4, 0), (5, 1), (0, 2), (1, 3)]  # (character, chunk)
 for i, (c, t) in enumerate(TOURS):
     a, b = CHUNKS[t]
     add(f"cov_tour{i + 1}_c{c}", ("solo", c), plan(a, b), seed=i + 1)
-# 2. plusieurs joueurs sur d'autres tronçons
+# 2. several players on other chunks
 add("cov_2p_a", ("multi", "2a"), plan(*CHUNKS[1]), seed=11)
 add("cov_2p_b", ("multi", "2e"), plan(*CHUNKS[0]), seed=12)
 add("cov_2p_c", ("multi", "2d"), plan(*CHUNKS[3]), seed=13)
@@ -67,7 +67,7 @@ add("cov_3p", ("multi", "4a3"), plan(*CHUNKS[2]), seed=14)
 add("cov_4p_a", ("multi", "4a"), plan(*CHUNKS[0]), seed=15)
 add("cov_4p_b", ("multi", "4b"), plan(*CHUNKS[2]), seed=16)
 add("cov_4p_c", ("multi", "4c"), plan(*CHUNKS[1]), seed=17)
-# 3. parties naturelles, sans saut de scène : début du jeu complet, mortelles (continue / game over)
+# 3. natural games, without scene jumps: full game start, mortal (continue / game over)
 add("cov_natural_c0", ("solo", 0), "", seed=21)
 add("cov_mortal_c1", ("solo", 1), "1:99999", god="0", seed=22)
 add("cov_mortal_late", ("solo", 3), "40:99999", god="0", seed=23)
@@ -76,7 +76,7 @@ add("cov_mortal_2p", ("multi", "2c"), "60:99999", god="0", seed=25)
 
 
 def gen_script(name):
-    """Scénarios sans bot : attract seul, menu TEST (Service Mode) parcouru au hasard."""
+    """Scenarios without bot: attract mode alone, TEST menu (Service Mode) browsed at random."""
     import random
     rnd = random.Random(7)
     lines = []
@@ -86,14 +86,14 @@ def gen_script(name):
         lines.append((f + d, f"{n} 0"))
 
     if name == "cov_service":
-        lines.append((600, "Service Mode 1"))  # reste enfoncé : le jeu entre dans le menu TEST
+        lines.append((600, "Service Mode 1"))  # stays held: the game enters the TEST menu
         f = 900
         while f < FRAMES:
             n = rnd.choice(["P1 Down", "P1 Down", "P1 Up", "P1 Button 1", "P1 Button 1", "P1 Button 2", "P1 Right", "P1 Left", "P2 Button 1", "Service 1"])
             press(f, n, rnd.choice([4, 4, 20]))
             f += rnd.choice([40, 60, 120])
     elif name == "cov_attract_coin":
-        # attract jusqu'à 20000 images, puis une partie courte sans bot (pièce, Start, sélection par défaut)
+        # attract mode up to 20000 frames, then a short game without bot (coin, Start, default selection)
         press(20000, "Coin 1", 6)
         press(20100, "1 Player Start", 6)
         for k in range(40):
@@ -143,4 +143,4 @@ if __name__ == "__main__":
     names = sys.argv[1:] or list(SPECS) + SCRIPTS
     with ThreadPoolExecutor(int(os.environ.get("JOBS", "8"))) as ex:
         for name, rc in ex.map(lambda n: gen_script(n) if n in SCRIPTS else generate(n), names):
-            print(name, "ok" if rc == 0 else f"ECHEC {rc}")
+            print(name, "ok" if rc == 0 else f"FAILED {rc}")

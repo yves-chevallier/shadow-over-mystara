@@ -31,7 +31,7 @@ const OBJ_TERRAIN: u32 = 0x29;
 /// Champs d'un type de terrain (entrée de 16 octets, mots).
 mod kind {
     /// 0 : franchissable ; 1 : obstacle plein ; plus : pente.
-    pub const GENRE: u32 = 0;
+    pub const CATEGORY: u32 = 0;
     /// Sous-programme de l'obstacle (0, 4, 8 ou 12).
     pub const ROUTINE: u32 = 2;
     /// Pente : sens (0 ou autre).
@@ -138,9 +138,9 @@ impl Push<'_> {
         ops::drapeaux(self.c, SR_C | SR_X, if carry { SR_C | SR_X } else { 0 });
         let a2 = self.variant.types.wrapping_add((d2 << 4) as i16 as u32);
         self.c.a[2] = a2;
-        let genre = self.field(a2, kind::GENRE);
-        ops::cmp(self.c, 1, genre as u32, Size::Word);
-        match genre {
+        let category = self.field(a2, kind::CATEGORY);
+        ops::cmp(self.c, 1, category as u32, Size::Word);
+        match category {
             0 => self.free(),
             1 => self.solid(a2),
             _ => {

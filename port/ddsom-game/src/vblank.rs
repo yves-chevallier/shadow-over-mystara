@@ -25,8 +25,8 @@ mod cps_a {
     pub const PLAN3_X: u32 = BASE + 0x14;
     pub const PLAN3_Y: u32 = BASE + 0x16;
     /// Défilement par ligne du plan 2 (décalage).
-    pub const LIGNES: u32 = BASE + 0x20;
-    pub const CONTROLE: u32 = BASE + 0x22;
+    pub const LINES: u32 = BASE + 0x20;
+    pub const CONTROL: u32 = BASE + 0x22;
     /// Registre de page du plan 1 (bit 3 basculé à chaque image en mode 1).
     pub const PAGE_PLAN_1: u32 = BASE + 0x08;
 }
@@ -34,7 +34,7 @@ mod cps_a {
 /// Ports d'E/S écrits par le VBLANK.
 mod port {
     /// Tampon de sortie (0x8040e1) : copie de `A5+0x5bc`.
-    pub const SORTIE: u32 = 0x8040e1;
+    pub const EXIT: u32 = 0x8040e1;
     /// Registre de verrouillage de la table de sprites (0x804170) et valeur écrite.
     pub const CPS_B_REG: u32 = 0x804170;
     /// Entrées de service et affichage (0x804166 : bit de jeu, 0x804040 : voir `inputs.rs`).
@@ -46,47 +46,47 @@ mod var {
     /// Compteur d'images du VBLANK.
     pub const IMAGES: u32 = 0x6c;
     /// Valeur de la sortie 0x8040e1.
-    pub const SORTIE: u32 = 0x5bc;
+    pub const EXIT: u32 = 0x5bc;
     /// Mot remis à zéro à chaque image.
     pub const RAZ: u32 = 0x7fce;
     /// Mot de réglages (DSW).
     pub const DSW: u32 = 0x7fd0;
     /// Décompte de ralentissement des tâches (octet) : une image sur quatre pour la première examinée.
-    pub const RALENTI: u32 = 0x4f;
+    pub const SLOWDOWN: u32 = 0x4f;
     /// Contrôle vidéo et ombres.
-    pub const CONTROLE: u32 = 0x12;
-    pub const OMBRES: u32 = 0x26;
+    pub const CONTROL: u32 = 0x12;
+    pub const SHADOWS: u32 = 0x26;
         /// Mode de défilement : 1 et 2 alternent les pages / les lignes d'un plan à l'autre.
-    pub const MODE_DEFILEMENT: u32 = 0x53c;
+    pub const SCROLL_MODE: u32 = 0x53c;
     /// Page du plan 1 (bit 3 basculé à chaque image en mode 1).
     pub const PAGE: u32 = 0x534;
     /// Tremblement : nombre d'images restantes (mot ; le bit 0 de l'octet bas donne la phase).
-    pub const TREMBLEMENT: u32 = 0x4be;
+    pub const QUAKE: u32 = 0x4be;
     /// Alternance du mode 2.
-    pub const ALTERNANCE: u32 = 0x54c;
+    pub const ALTERNATION: u32 = 0x54c;
     /// Défilement par ligne affiché (mot).
-    pub const LIGNES: u32 = 0x7fb2;
+    pub const LINES: u32 = 0x7fb2;
 }
 
 /// Défilement d'un plan : le long (X, Y) voulu par le jeu, sa copie d'une image à l'autre (la valeur
 /// écrite dans le registre est celle de l'image précédente) et le registre.
 struct Plan {
-    voulu: u32,
-    copie: u32,
-    registre: u32,
+    wanted: u32,
+    copy: u32,
+    register: u32,
 }
 
-const PLAN_1: Plan = Plan { voulu: 0x4b6, copie: 0x59e, registre: cps_a::PLAN1_X };
-const PLAN_2: Plan = Plan { voulu: 0x506, copie: 0x5a6, registre: cps_a::PLAN2_X };
-const PLAN_3: Plan = Plan { voulu: 0x556, copie: 0x5ae, registre: cps_a::PLAN3_X };
+const PLAN_1: Plan = Plan { wanted: 0x4b6, copy: 0x59e, register: cps_a::PLAN1_X };
+const PLAN_2: Plan = Plan { wanted: 0x506, copy: 0x5a6, register: cps_a::PLAN2_X };
+const PLAN_3: Plan = Plan { wanted: 0x556, copy: 0x5ae, register: cps_a::PLAN3_X };
 /// Les longs voulus à +4 de chaque plan portent le défilement vertical affiché dans les registres Y.
-const Y_1: Plan = Plan { voulu: 0x4ba, copie: 0x5a2, registre: cps_a::PLAN1_Y };
-const Y_2: Plan = Plan { voulu: 0x50a, copie: 0x5aa, registre: cps_a::PLAN2_Y };
-const Y_3: Plan = Plan { voulu: 0x55a, copie: 0x5b2, registre: cps_a::PLAN3_Y };
+const Y_1: Plan = Plan { wanted: 0x4ba, copy: 0x5a2, register: cps_a::PLAN1_Y };
+const Y_2: Plan = Plan { wanted: 0x50a, copy: 0x5aa, register: cps_a::PLAN2_Y };
+const Y_3: Plan = Plan { wanted: 0x55a, copy: 0x5b2, register: cps_a::PLAN3_Y };
 
-const NOUVELLE_IMAGE: u32 = 0xff0164;
-/// Octet remis à zéro par le VBLANK, relu par la boucle de partie (avance rapide, `docs/boucle.md` §1).
-const AVANCE_RAPIDE: u32 = A5 - 0x660e;
+const NEW_FRAME: u32 = 0xff0164;
+/// Octet remis à zéro par le VBLANK, relu par la boucle de partie (avance rapide, `docs/looped.md` §1).
+const FAST_FORWARD: u32 = A5 - 0x660e;
 
 fn a5(off: u32) -> u32 {
     A5 + off
@@ -94,112 +94,112 @@ fn a5(off: u32) -> u32 {
 
 /// Écrit dans le registre X du plan la copie précédente moins la marge de 0x40 pixels, puis copie
 /// la valeur voulue.
-fn avancer_x(b: &mut Cps2Bus, p: &Plan) {
-    let precedent = rd16(b, a5(p.copie));
-    wr16(b, p.registre, precedent.wrapping_sub(0x40));
-    let voulu = rd32(b, a5(p.voulu));
-    wr32(b, a5(p.copie), voulu);
+fn advance_x(b: &mut Cps2Bus, p: &Plan) {
+    let previous = rd16(b, a5(p.copy));
+    wr16(b, p.register, previous.wrapping_sub(0x40));
+    let wanted = rd32(b, a5(p.wanted));
+    wr32(b, a5(p.copy), wanted);
 }
 
-/// Idem pour le défilement vertical : le registre reçoit `origine` moins la copie précédente.
-fn avancer_y(b: &mut Cps2Bus, p: &Plan, origine: u16) {
-    let precedent = rd16(b, a5(p.copie));
-    wr16(b, p.registre, origine.wrapping_sub(precedent));
-    let voulu = rd32(b, a5(p.voulu));
-    wr32(b, a5(p.copie), voulu);
+/// Idem pour le défilement vertical : le registre reçoit `original` moins la copie précédente.
+fn advance_y(b: &mut Cps2Bus, p: &Plan, original: u16) {
+    let previous = rd16(b, a5(p.copy));
+    wr16(b, p.register, original.wrapping_sub(previous));
+    let wanted = rd32(b, a5(p.wanted));
+    wr32(b, a5(p.copy), wanted);
 }
 
 /// 0x722 : registres de défilement CPS-A, avec une image de retard, tremblement d'écran et modes
-/// d'alternance (`MODE_DEFILEMENT` = 1 : pages ; 2 : lignes).
-fn registres_affichage(b: &mut Cps2Bus) {
-    let reste = rd16(b, a5(var::TREMBLEMENT));
-    if reste != 0 {
-        wr16(b, a5(Y_1.voulu), 0x100);
-        wr16(b, a5(var::TREMBLEMENT), reste - 1);
-        if rd8(b, a5(var::TREMBLEMENT + 1)) & 1 == 0 {
-            wr16(b, a5(Y_1.voulu), 0);
+/// d'alternance (`SCROLL_MODE` = 1 : pages ; 2 : lignes).
+fn display_regs(b: &mut Cps2Bus) {
+    let remainder = rd16(b, a5(var::QUAKE));
+    if remainder != 0 {
+        wr16(b, a5(Y_1.wanted), 0x100);
+        wr16(b, a5(var::QUAKE), remainder - 1);
+        if rd8(b, a5(var::QUAKE + 1)) & 1 == 0 {
+            wr16(b, a5(Y_1.wanted), 0);
         }
     }
-    avancer_x(b, &PLAN_1);
-    let mode = rd8(b, a5(var::MODE_DEFILEMENT));
+    advance_x(b, &PLAN_1);
+    let mode = rd8(b, a5(var::SCROLL_MODE));
     if mode == 1 {
-        let x = rd16(b, a5(PLAN_2.copie)).wrapping_sub(0x90);
-        wr16(b, a5(PLAN_2.copie), x);
+        let x = rd16(b, a5(PLAN_2.copy)).wrapping_sub(0x90);
+        wr16(b, a5(PLAN_2.copy), x);
         let page = rd16(b, a5(var::PAGE)) ^ 8;
         wr16(b, a5(var::PAGE), page);
         wr16(b, cps_a::PAGE_PLAN_1, page);
     }
-    avancer_x(b, &PLAN_2);
-    avancer_x(b, &PLAN_3);
-    avancer_y(b, &Y_1, 0x100);
-    avancer_y(b, &Y_2, 0x300);
-    avancer_y(b, &Y_3, 0x700);
-    let lignes = rd16(b, a5(var::LIGNES));
-    wr16(b, cps_a::LIGNES, lignes);
+    advance_x(b, &PLAN_2);
+    advance_x(b, &PLAN_3);
+    advance_y(b, &Y_1, 0x100);
+    advance_y(b, &Y_2, 0x300);
+    advance_y(b, &Y_3, 0x700);
+    let lines = rd16(b, a5(var::LINES));
+    wr16(b, cps_a::LINES, lines);
     if mode == 2 {
-        wr16(b, a5(var::LIGNES), 0);
-        wr16(b, a5(Y_2.voulu), 0x28);
-        let ancien = rd8(b, a5(var::ALTERNANCE));
-        wr8(b, a5(var::ALTERNANCE), ancien ^ 1);
-        if ancien & 1 == 0 {
-            wr16(b, a5(Y_2.voulu), 0x128);
-            wr16(b, a5(var::LIGNES), 0x100);
+        wr16(b, a5(var::LINES), 0);
+        wr16(b, a5(Y_2.wanted), 0x28);
+        let old = rd8(b, a5(var::ALTERNATION));
+        wr8(b, a5(var::ALTERNATION), old ^ 1);
+        if old & 1 == 0 {
+            wr16(b, a5(Y_2.wanted), 0x128);
+            wr16(b, a5(var::LINES), 0x100);
         }
     }
 }
 
 /// 0x902 : registre de contrôle vidéo (bit 15 : ombres) et sortie de service.
-fn controle_video(b: &mut Cps2Bus) {
-    let mut controle = rd16(b, a5(var::CONTROLE));
-    let mut sortie = 0x807d;
-    if rd8(b, a5(var::OMBRES)) != 0 {
-        controle |= 0x8000;
-        sortie = 0x808e;
+fn video_control(b: &mut Cps2Bus) {
+    let mut control = rd16(b, a5(var::CONTROL));
+    let mut exit = 0x807d;
+    if rd8(b, a5(var::SHADOWS)) != 0 {
+        control |= 0x8000;
+        exit = 0x808e;
     }
-    wr16(b, cps_a::CONTROLE, controle);
-    wr16(b, port::OUTPUT, sortie);
+    wr16(b, cps_a::CONTROL, control);
+    wr16(b, port::OUTPUT, exit);
 }
 
 /// Réveille les tâches dont le compte d'attente tombe à zéro (table Rust, `taches::table`).
-fn reveiller_taches(b: &mut Cps2Bus) {
-    let mut ralenti = rd8(b, a5(var::RALENTI));
-    crate::taches::table::table(b).decompter_image(&mut ralenti);
-    wr8(b, a5(var::RALENTI), ralenti);
+fn wake_tasks(b: &mut Cps2Bus) {
+    let mut slowdown = rd8(b, a5(var::SLOWDOWN));
+    crate::taches::table::table(b).count_down_frame(&mut slowdown);
+    wr8(b, a5(var::SLOWDOWN), slowdown);
 }
 
-/// L'interruption de VBLANK (niveau `niveau`, autovecteur `0x574`), prise par le noyau entre deux points
-/// (`kernel::interrompre`) : acquittement, puis le traitement. Ni registre ni pile : l'original passe en superviseur,
+/// L'interruption de VBLANK (niveau `level`, autovecteur `0x574`), prise par le noyau entre deux points
+/// (`kernel::interrupt`) : acquittement, puis le traitement. Ni registre ni pile : l'original passe en superviseur,
 /// empile PC et SR et relève son masque, mais son traitement sauve et rend tous les registres et ne peut être
-/// interrompu ; le `rte` rend le SR. Le point où revenir est gardé par le noyau (`Table::interrompu`).
+/// interrompu ; le `rte` rend le SR. Le point où revenir est gardé par le noyau (`Table::interrupted`).
 ///
 /// Écart assumé : PC et SR ne sont plus écrits sur la pile courante (pile de la tâche interrompue, FF01A6-FF0DA5, ou
-/// du superviseur, sous FF0E66). `validate` ignore ces mots (`taches::table::ram_du_noyau`), et le jeu ne les relit pas
+/// du superviseur, sous FF0E66). `validate` ignore ces mots (`taches::table::kernel_ram`), et le jeu ne les relit pas
 /// (preuve : docs/refactorisation.md, lot « sortie du Cpu », partie 4).
-pub fn interruption(b: &mut Cps2Bus, niveau: u8) {
-    m68k::Bus::irq_ack(b, niveau);
+pub fn interruption(b: &mut Cps2Bus, level: u8) {
+    m68k::Bus::irq_ack(b, level);
     vblank(b);
 }
 
 /// 0x574 : le traitement de l'interruption. L'original sauve et rend tous les registres : ce qu'y laissent ses
 /// services ne sort pas.
 fn vblank(b: &mut Cps2Bus) {
-    let sortie = rd8(b, a5(var::SORTIE));
-    wr8(b, port::SORTIE, sortie);
+    let exit = rd8(b, a5(var::EXIT));
+    wr8(b, port::EXIT, exit);
     wr16(b, a5(var::RAZ), 0);
     wr16(b, port::CPS_B_REG, 0x3f);
     wr16(b, cps_a::PALETTE, 0x91c0);
     wr16(b, a5(var::DSW), 0xffff);
     let images = rd16(b, a5(var::IMAGES)).wrapping_add(1);
     wr16(b, a5(var::IMAGES), images);
-    wr8(b, NOUVELLE_IMAGE, 0xff);
-    wr8(b, AVANCE_RAPIDE, 0);
-    registres_affichage(b);
+    wr8(b, NEW_FRAME, 0xff);
+    wr8(b, FAST_FORWARD, 0);
+    display_regs(b);
     // les services rendent des valeurs que l'original laisse dans ses registres ; le VBLANK les rend tous
-    crate::inputs::lire_panneau(b); // 0x80c
-    controle_video(b);
-    crate::sound::envoyer(b); // 0x68c : commandes du Z80
-    crate::credits::lire_monnayeurs(b); // 0x143da
+    crate::inputs::read_panel(b); // 0x80c
+    video_control(b);
+    crate::sound::send(b); // 0x68c : commandes du Z80
+    crate::credits::read_coin_slots(b); // 0x143da
     crate::eeprom::vblank(b); // 0x2dcf6 : comptabilité
-    reveiller_taches(b);
+    wake_tasks(b);
     // le code d'origine finit par la jauge de charge (0xb3e), inactive tant que DSW a son bit 0x400
 }

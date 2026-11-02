@@ -37,7 +37,7 @@ reste vrai à la frontière, mais le but est maintenant de **faire disparaître 
 | méthode de contexte | `Cx::alloc(&mut self, pool)` | raccourci pour les gestionnaires ; appelle le cœur une fois les registres prouvés morts |
 | native | `pools::ALLOC_SET` (`entry: 0x2348`) | appels par adresse restants : adaptateur puis `rts` ; jamais empoisonnée |
 
-`tools/mesure_refacto.py` compte `regs`, `drap`, `adr`... par zone : un lot les fait baisser ; compter aussi
+`tools/measure_refactor.py` compte `regs`, `drap`, `adr`... par zone : un lot les fait baisser ; compter aussi
 `rtk proxy grep -rn "_68k(" src | wc -l`.
 
 ## L'API commune (lot 0b) : ce que les lots A à D utilisent
@@ -164,7 +164,7 @@ appelle le cœur et n'a plus à garder ses registres pour lui.
   (`ParD4`, `DuD4`) prend `jouer_avec(x.b, SON, Source { objet: Some(x.o), d4: Some(valeur), ..Default::default() })`
   avec la valeur que l'appelant posait dans D4, et la pose de D4 disparaît. Un son appelé avec un objet absent
   ou sans D4 qu'il lit s'arrête (panique avec le message « ce son lit … ») : la validation le montre aussitôt.
-  Conversion mécanique : `tools/convertir_sons.py <fichiers>` (constantes résolues ; motifs `x.call`, `g.rom`,
+  Conversion mécanique : `tools/convert_sounds.py <fichiers>` (constantes résolues ; motifs `x.call`, `g.rom`,
   `call(c, b, …)`, `w.call_ao`), puis relire le diff, retirer les constantes devenues inutiles, valider.
 * **La sauvegarde fantôme n'existe plus** ([son-68000.md](son-68000.md)) : un gestionnaire qui joue un son n'a plus
   à garder ses registres « pour le son ». Les registres que le gestionnaire **suivant** relit (fin ordinaire,
@@ -236,7 +236,7 @@ qui les fait tourner. Les drapeaux sont inversés en deux parts (`nzvc` et `x`) 
 connue, écrite en clair, comme l'objet rendu par un créateur) ; précédée de `=`, elle épargne ces registres sans
 empoisonner le site (à ajouter à une liste large : `tout@modes/,=appel_ddeaa@modes/#a1+nzvc`).
 
-**Bissection.** `tools/bissecte_poison.py <validate> <scénario> <images> <liste>` relance le scénario avec la trace
+**Bissection.** `tools/bisect_poison.py <validate> <scénario> <images> <liste>` relance le scénario avec la trace
 (`DDSOM_POISON_TRACE`), cherche par dichotomie l'entrée responsable parmi les sites empoisonnés avant l'écart, puis le
 ou les registres relus, l'épargne et recommence jusqu'à VALIDE ; il imprime les lecteurs trouvés et la ligne
 `GARDES` à ajouter. Méthode du lot « écrans » : une validation complète du code d'origine (avant conversion) avec
@@ -391,7 +391,7 @@ n'admet plus de cession : il s'arrête sur une panique qui nomme le site.
 
 ## Check-list d'un lot
 
-1. Mesurer avant : `tools/mesure_refacto.py` (zones du lot), `--consts`, `--doublons 6` ; noter dans la doc du lot.
+1. Mesurer avant : `tools/measure_refactor.py` (zones du lot), `--consts`, `--doublons 6` ; noter dans la doc du lot.
 2. Lister les appels par adresse du lot et leurs cibles (`rtk proxy grep -rn "call(" <rép>`), les replis `_ =>`, les
    `deleguer`, les contextes et helpers dupliqués.
 3. Pour chaque routine cible appelée par le lot : cœur et adaptateur `_68k` existent-ils (lot 0) ? Sinon, les créer dans

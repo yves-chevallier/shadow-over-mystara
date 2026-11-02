@@ -1,9 +1,9 @@
-"""Mesure la couverture d'instructions 68000 de scénarios (exemple `cov`, en parallèle).
+"""Measures the 68000 instruction coverage of scenarios (example `cov`, in parallel).
 
-    python3 tools/run_cov.py <dossier_sortie> scenarios/a.txt scenarios/b.txt ...
+    python3 tools/run_cov.py <output_dir> scenarios/a.txt scenarios/b.txt ...
 
-Écrit <dossier_sortie>/<nom>.bin (bitmap) ; fusion et rapport : tools/cov_report.py.
-DDSOM_ROMS / DDSOM_EEPROM comme pour validate_all.sh ; JOBS = nombre de processus.
+Writes <output_dir>/<name>.bin (bitmap); merge and report: tools/cov_report.py.
+DDSOM_ROMS / DDSOM_EEPROM as for validate_all.sh; JOBS = number of processes.
 """
 import os
 import subprocess

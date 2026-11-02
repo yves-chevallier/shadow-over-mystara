@@ -1,12 +1,12 @@
-"""Fusionne les bitmaps de couverture de l'exemple `cov` et affiche un rapport.
+"""Merges the coverage bitmaps of the `cov` example and prints a report.
 
     python3 tools/cov_report.py [--index decomp/index.tsv] [--listing listing.txt] [--regions] A.bin B.bin ...
 
-Chaque .bin : 1 bit par mot du programme 0x000000-0x0FFFFF (instruction exécutée à cette adresse).
-Le premier fichier est la référence (« bot initial ») ; le rapport donne pour chacun et pour
-l'union : instructions distinctes, fonctions de index.tsv touchées (au moins une instruction),
-part des instructions du listing (dénominateur approximatif : toutes les lignes d'instruction de
-listing.txt, données mal désassemblées comprises).
+Each .bin: 1 bit per program word 0x000000-0x0FFFFF (instruction executed at that address).
+The first file is the reference ("initial bot"); the report gives, for each one and for
+the union: distinct instructions, index.tsv functions touched (at least one instruction),
+share of the listing's instructions (approximate denominator: all instruction lines of
+listing.txt, badly disassembled data included).
 """
 import argparse
 import os
@@ -28,8 +28,8 @@ def main():
     ap.add_argument("files", nargs="+")
     ap.add_argument("--index", default="/home/ycr/som/decomp/index.tsv")
     ap.add_argument("--listing", default="/home/ycr/som/listing.txt")
-    ap.add_argument("--regions", action="store_true", help="carte par blocs de 4 Ko")
-    ap.add_argument("--missed", metavar="OUT", help="liste des fonctions de index.tsv jamais touchées")
+    ap.add_argument("--regions", action="store_true", help="map by 4 KB blocks")
+    ap.add_argument("--missed", metavar="OUT", help="list of the index.tsv functions never touched")
     a = ap.parse_args()
 
     funcs = []
@@ -63,13 +63,13 @@ def main():
         inl = sum(1 for x in listing if bit(bm, x))
         return n, fh, inl
 
-    print(f"{'scénario':32} {'instr.':>8} {'fonctions':>10} {'% listing':>10}")
+    print(f"{'scenario':32} {'instr.':>8} {'functions':>10} {'% listing':>10}")
     for name, bm in maps:
         n, fh, inl = stats(bm)
         pct = 100.0 * inl / len(listing) if listing else 0
         print(f"{name[:32]:32} {n:8d} {fh:5d}/{len(funcs):<4d} {pct:9.1f}")
     if a.regions:
-        print("\nCouverture de l'union par bloc de 4 Ko (instructions exécutées / lignes du listing) :")
+        print("\nUnion coverage by 4 KB block (executed instructions / listing lines):")
         for base in range(0, 0x100000, 0x1000):
             tot = sum(1 for x in listing if base <= x < base + 0x1000)
             hit = sum(1 for x in listing if base <= x < base + 0x1000 and bit(union, x))

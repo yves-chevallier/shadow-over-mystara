@@ -259,7 +259,7 @@ pub fn cast(g: &mut Ctx, p: Player, spell: &Cast, style: Style) {
     (spell.every_frame)(g, p);
     if p.u8(g, field::EVENT) != 0 {
         p.set_u8(g, field::EVENT, 0);
-        g.son(rom::SOUND_ITEM, p);
+        g.sound(rom::SOUND_ITEM, p);
         if p.u8(g, field::SPELL_CANCELLED) != 0 {
             common::item_spark(g, p, style.spark);
             p.set_u16(g, field::TIMER, 0xa);
@@ -422,7 +422,7 @@ pub fn meteor(g: &mut Ctx, p: Player, style: Style) {
     animation::step(g, p);
     if p.u8(g, field::EVENT) != 0 {
         p.set_u8(g, field::EVENT, 0);
-        g.son(rom::SOUND_ITEM, p);
+        g.sound(rom::SOUND_ITEM, p);
         if p.u8(g, field::SPELL_CANCELLED) != 0 {
             common::item_spark(g, p, style.spark);
             p.set_u16(g, field::TIMER, 0xa);

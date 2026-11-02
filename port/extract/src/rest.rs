@@ -5,7 +5,7 @@
 //! * scripts d'animation de palettes des SET de type 0 (`families/set.rs`, `palette_script`) ;
 //! * sous-objets des joueurs, arme et bouclier (`player/overlays.rs`) ;
 //! * palettes d'aura des personnages (`player/effects.rs`) ;
-//! * piles initiales des tâches (`demarrage.rs`) et table de panoramique du son (`sound.rs`).
+//! * piles initiales des tâches (`startup.rs`) et table de panoramique du son (`sound.rs`).
 
 use ddsom_assets::data::Region;
 

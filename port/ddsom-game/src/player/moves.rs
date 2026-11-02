@@ -14,7 +14,7 @@ use super::{animation, ram, Ctx, Player};
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
 use crate::objects::{pools, Obj};
 use crate::machine::Machine;
-use crate::player::externes as ext;
+use crate::player::external as ext;
 
 /// Routines d'origine encore appelées telles quelles.
 mod rom {
@@ -70,7 +70,7 @@ fn dust(g: &mut Ctx, p: Player, d0: u16, d1: u16, d2: u16, d3: u16) {
     set(&mut g.c.d[1], d1);
     set(&mut g.c.d[2], d2);
     set(&mut g.c.d[3], d3);
-    g.rom(ext::effet::DUST, p);
+    g.rom(ext::effect::DUST, p);
 }
 
 fn dust_turn(g: &mut Ctx, p: Player) -> bool {
@@ -137,7 +137,7 @@ fn run_steer(g: &mut Ctx, p: Player) -> bool {
     } else {
         start_skid(g, p, 6, 56, 27);
     }
-    g.son(ext::son::SLIDE, p);
+    g.sound(ext::sound::SLIDE, p);
     true
 }
 
@@ -781,7 +781,7 @@ pub fn curse_drop(g: &mut Ctx, p: Player) {
         next_step(g, p);
         p.set_u8(g, RARE_TIMER, 0xc0);
         animation::start(g, p, 0x23);
-        g.son(ext::son::FANFARE, p);
+        g.sound(ext::sound::FANFARE, p);
         return;
     }
     animation::step(g, p);
@@ -831,7 +831,7 @@ pub fn dust_puffs(g: &mut Ctx, p: Player) {
             }
             g.c.d[4] = height as u32;
             crate::mem::set_low_word(&mut g.c.d[3], 0xffff);
-            g.rom(ext::effet::DUST, p);
+            g.rom(ext::effect::DUST, p);
             if g.c.sr & m68k::SR_C == 0 {
                 wr16(g.b, g.c.a[1] + Obj::Z, height);
             }
@@ -961,7 +961,7 @@ pub fn fall_in(g: &mut Ctx, p: Player) {
             next_step(g, p);
             p.set_u32(g, Obj::Z, 0);
             animation::start(g, p, 14);
-            g.son(ext::son::LANDING, p);
+            g.sound(ext::sound::LANDING, p);
         }
         6 => {
             if animation::step(g, p) {
@@ -1014,7 +1014,7 @@ pub fn push(g: &mut Ctx, p: Player) {
     }
     if p.u8(g, field::ANIM_EVENT) != 0 {
         p.set_u8(g, field::ANIM_EVENT, 0);
-        g.son(rom::PUSH_SOUND, p);
+        g.sound(rom::PUSH_SOUND, p);
     }
 }
 
@@ -1066,7 +1066,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 p.set_u16(g, Obj::VX, (-0x200i16) as u16);
             }
             animation::start(g, p, 31);
-            g.son(ext::son::JUMP_VOICE, p);
+            g.sound(ext::sound::JUMP_VOICE, p);
         }
         2 => {
             animation::step(g, p);
@@ -1076,7 +1076,7 @@ pub fn leap_attack(g: &mut Ctx, p: Player) {
                 next_step(g, p);
                 p.set_u32(g, Obj::Z, 0);
                 animation::start(g, p, 14);
-                g.son(ext::son::LANDING, p);
+                g.sound(ext::sound::LANDING, p);
             }
         }
         4 => {

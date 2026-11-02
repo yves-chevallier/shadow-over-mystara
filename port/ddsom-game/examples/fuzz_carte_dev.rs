@@ -1,4 +1,4 @@
-//! Fuzz différentiel de la RAM supplémentaire de la carte de développement (`eeprom/carte_dev.rs`).
+//! Fuzz différentiel de la RAM supplémentaire de la carte de développement (`eeprom/dev_card.rs`).
 //!
 //! Sur des états aléatoires de la RAM 0x660000 (zones valides, exemplaires corrompus, compteurs près de
 //! leurs bornes, RAM vierge ou aléatoire), compare le code d'origine (68000 recompilé, sans aucune native) à
@@ -14,10 +14,10 @@ use m68k::Cpu;
 
 use ddsom_game::mem::{rd32, rd8, wr16, wr32, wr8, A5};
 
-struct Alea(u64);
+struct Rng(u64);
 
-impl Alea {
-    fn suivant(&mut self) -> u64 {
+impl Rng {
+    fn next(&mut self) -> u64 {
         let mut x = self.0;
         x ^= x << 13;
         x ^= x >> 7;
@@ -25,11 +25,11 @@ impl Alea {
         self.0 = x;
         x
     }
-    fn dans(&mut self, n: u64) -> u64 {
-        self.suivant() % n
+    fn below(&mut self, n: u64) -> u64 {
+        self.next() % n
     }
-    fn parmi<T: Copy>(&mut self, v: &[T]) -> T {
-        v[self.dans(v.len() as u64) as usize]
+    fn among<T: Copy>(&mut self, v: &[T]) -> T {
+        v[self.below(v.len() as u64) as usize]
     }
 }
 
@@ -38,85 +38,85 @@ const RAM: u32 = 0x66_0000;
 const ZONES: &[(u32, u32)] =
     &[(0x1140, 32), (0x1020, 4), (0x1028, 4), (0x1030, 4), (0x1038, 4), (0x1040, 4), (0x1048, 4), (0x1200, 48), (0x1260, 8), (0x1270, 2)];
 
-fn ecrire_long(b: &mut Cps2Bus, a: u32, v: u32) {
+fn write_long(b: &mut Cps2Bus, a: u32, v: u32) {
     for i in 0..4 {
         wr8(b, a + 1 + 2 * i, (v >> (24 - 8 * i)) as u8);
     }
 }
 
 /// Un état plausible de la RAM supplémentaire pour la région `r`.
-fn etat(b: &mut Cps2Bus, a: &mut Alea, r: u32) {
-    let valeurs: [u32; 12] = [0, 1, 5, 999_998, 999_999, 1_000_000, 0x127a_3980, 0x127a_3981, 0x4f_5880, 0x4f_5881, 0xffff_ffff, 0x1234_5678];
+fn state(b: &mut Cps2Bus, a: &mut Rng, r: u32) {
+    let values: [u32; 12] = [0, 1, 5, 999_998, 999_999, 1_000_000, 0x127a_3980, 0x127a_3981, 0x4f_5880, 0x4f_5881, 0xffff_ffff, 0x1234_5678];
     for k in 0..3 {
-        for &(debut, mots) in ZONES {
+        for &(debut, words) in ZONES {
             let base = RAM + debut + 0x1000 * k;
-            for i in 0..mots {
+            for i in 0..words {
                 wr16(b, base + 2 * i, 0);
             }
         }
     }
-    let mode = a.dans(10);
-    for &(debut, mots) in ZONES {
+    let mode = a.below(10);
+    for &(debut, words) in ZONES {
         // une valeur commune aux trois exemplaires
-        let mut octets = vec![0u8; mots as usize];
-        for (i, o) in octets.iter_mut().enumerate() {
+        let mut bytes = vec![0u8; words as usize];
+        for (i, o) in bytes.iter_mut().enumerate() {
             *o = match debut {
                 0x1140 => ddsom_game::mem::rd8(b, 0x2ebfc + ((r << 4) as u16 as u32) + i as u32),
                 _ => {
-                    if i % 4 == 0 && mots == 4 {
+                    if i % 4 == 0 && words == 4 {
                         0
                     } else {
-                        { let r = a.suivant() as u8; a.parmi(&[0, 0, 1, 2, 0xff, r]) }
+                        { let r = a.next() as u8; a.among(&[0, 0, 1, 2, 0xff, r]) }
                     }
                 }
             };
         }
-        if mots == 4 {
-            let v = if a.dans(3) == 0 { a.suivant() as u32 } else { a.parmi(&valeurs) };
-            for (i, o) in octets.iter_mut().enumerate() {
+        if words == 4 {
+            let v = if a.below(3) == 0 { a.next() as u32 } else { a.among(&values) };
+            for (i, o) in bytes.iter_mut().enumerate() {
                 *o = (v >> (24 - 8 * i as u32)) as u8;
             }
         }
         for k in 0..3 {
             let base = RAM + debut + 0x1000 * k;
-            for (i, &o) in octets.iter().enumerate() {
+            for (i, &o) in bytes.iter().enumerate() {
                 match mode {
-                    0 => wr16(b, base + 2 * i as u32, a.suivant() as u16),
+                    0 => wr16(b, base + 2 * i as u32, a.next() as u16),
                     1 => {}
-                    _ => wr16(b, base + 2 * i as u32, if a.dans(4) == 0 { (a.suivant() as u16) & 0xff00 | o as u16 } else { o as u16 }),
+                    _ => wr16(b, base + 2 * i as u32, if a.below(4) == 0 { (a.next() as u16) & 0xff00 | o as u16 } else { o as u16 }),
                 }
             }
         }
         // corruption : un exemplaire, parfois deux, quelques octets
-        if mode >= 2 && a.dans(2) == 0 {
-            for _ in 0..1 + a.dans(3) {
-                let k = a.dans(3) as u32;
-                let i = a.dans(mots as u64 * 2) as u32;
-                let v = a.suivant() as u8;
+        if mode >= 2 && a.below(2) == 0 {
+            for _ in 0..1 + a.below(3) {
+                let k = a.below(3) as u32;
+                let i = a.below(words as u64 * 2) as u32;
+                let v = a.next() as u8;
                 wr8(b, RAM + debut + 0x1000 * k + i, v);
             }
         }
     }
     // variables de travail
     for off in [0x6164u32, 0x6160, 0x615c, 0x6158, 0x6154, 0x6150, 0x611c, 0x6118] {
-        let v = a.parmi(&valeurs);
+        let v = a.among(&values);
         wr32(b, A5 - off, v);
     }
     for i in 0..48 {
-        wr8(b, A5 - 0x614c + i, a.suivant() as u8);
+        wr8(b, A5 - 0x614c + i, a.next() as u8);
     }
 }
 
-fn execute_origine(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
+fn run_original_code(c: &mut Cpu, b: &mut Cps2Bus) -> bool {
     let ret = ddsom_game::mem::rd32(b, c.a[7]);
-    let sp_apres = c.a[7].wrapping_add(4);
-    let mut garde = 0;
-    while !(c.pc == ret && c.a[7] == sp_apres) {
+    let sp_after = c.a[7].wrapping_add(4);
+    let mut guard = 0;
+    while !(c.pc == ret && c.a[7] == sp_after) {
         if ddsom_rc::run_block(c.pc, c, b, u64::MAX).is_none() {
             c.step(b);
         }
-        garde += 1;
-        if garde > 200_000 {
+        guard += 1;
+        if guard > 200_000 {
             return false;
         }
     }
@@ -131,8 +131,8 @@ fn main() {
         eprintln!("usage : fuzz_carte_dev <roms> <eeprom> [essais [graine]]");
         std::process::exit(2);
     };
-    let essais: u32 = a.get(3).map_or(2000, |s| s.parse().unwrap());
-    let mut alea = Alea(0x9e37_79b9_7f4a_7c15 ^ a.get(4).map_or(1, |s| s.parse::<u64>().unwrap()).wrapping_mul(0x1000_0000_01b3));
+    let tests: u32 = a.get(3).map_or(2000, |s| s.parse().unwrap());
+    let mut rng = Rng(0x9e37_79b9_7f4a_7c15 ^ a.get(4).map_or(1, |s| s.parse::<u64>().unwrap()).wrapping_mul(0x1000_0000_01b3));
     std::panic::set_hook(Box::new(|_| {}));
     let ee = std::fs::read(eeprom).ok();
     let mut m = cps2::Machine::load_ddsom(Path::new(roms), ee.as_deref()).expect("roms");
@@ -142,18 +142,18 @@ fn main() {
         m.run_frame();
     }
     // (nom, entrée d'origine, routine Rust, registre D0 aléatoire ?)
-    let natives = |entree: u32| -> Rust {
-        let n = ddsom_game::all_natives().find(|n| n.entry == entree).expect("native");
-        Box::new(move |c, b| n.executer(c, b))
+    let natives = |entry: u32| -> Rust {
+        let n = ddsom_game::all_natives().find(|n| n.entry == entry).expect("native");
+        Box::new(move |c, b| n.execute(c, b))
     };
-    let cas: Vec<(&str, u32, Rust)> = vec![
+    let case: Vec<(&str, u32, Rust)> = vec![
         ("démarrage 0x2dc9a", 0x2dc9a, natives(0x2dc9a)),
         ("réinitialisation 0x2e8e4", 0x2e8e4, Box::new(|c, b| {
-            ddsom_game::eeprom::reinitialiser_carte(c, b);
+            ddsom_game::eeprom::reset_card(c, b);
             ddsom_game::mem::rts(c, b);
         })),
         ("temps de jeu 0x2e540", 0x2e540, Box::new(|c, b| {
-            ddsom_game::eeprom::carte_dev::temps_de_jeu(b);
+            ddsom_game::eeprom::dev_card::play_time(b);
             ddsom_game::mem::rts(c, b);
         })),
         ("pièce 0x2e448", 0x2e448, natives(0x2e448)),
@@ -163,22 +163,22 @@ fn main() {
         ("durée 0x2e696", 0x2e696, natives(0x2e696)),
     ];
     let mut total = 0;
-    for (nom, entree, rust) in &cas {
-        let (mut ecarts, mut paniques, mut abandons) = (0, 0, 0);
-        let mut exemples = Vec::new();
-        for _ in 0..essais {
+    for (name, entry, rust) in &case {
+        let (mut gaps, mut panics, mut abandons) = (0, 0, 0);
+        let mut examples = Vec::new();
+        for _ in 0..tests {
             let mut c = m.cpu.clone();
             let mut b = m.bus.clone();
-            let region = alea.dans(7) as u32;
+            let region = rng.below(7) as u32;
             wr16(&mut b, A5 + 0x70, region as u16);
             wr8(&mut b, A5 + 0x82, 1);
-            wr8(&mut b, A5 + 0x25, alea.dans(2) as u8);
-            etat(&mut b, &mut alea, region);
-            c.d[0] = match *entree {
-                0x2e630 => alea.parmi(&[0, 1, 2, 3, 4, 5, 6, 11, 0xffff, 0x1234_0005]),
+            wr8(&mut b, A5 + 0x25, rng.below(2) as u8);
+            state(&mut b, &mut rng, region);
+            c.d[0] = match *entry {
+                0x2e630 => rng.among(&[0, 1, 2, 3, 4, 5, 6, 11, 0xffff, 0x1234_0005]),
                 0x2e696 => {
-                    let (p, q) = (alea.suivant() as u32 & 0xffff, alea.suivant() as u32);
-                    alea.parmi(&[0, 59, 60, 61, 3600, 0x7fff_ffff, 0x8000_0000, 0xffff_ffff, p, q])
+                    let (p, q) = (rng.next() as u32 & 0xffff, rng.next() as u32);
+                    rng.among(&[0, 59, 60, 61, 3600, 0x7fff_ffff, 0x8000_0000, 0xffff_ffff, p, q])
                 }
                 _ => c.d[0],
             };
@@ -186,16 +186,16 @@ fn main() {
             c.a[7] = 0xff_f000;
             c.a[7] -= 4;
             wr32(&mut b, c.a[7], 0xfffe);
-            c.pc = *entree;
+            c.pc = *entry;
             let (mut c2, mut b2) = (c.clone(), b.clone());
-            let avant = b.clone();
-            if !execute_origine(&mut c2, &mut b2) {
+            let before = b.clone();
+            if !run_original_code(&mut c2, &mut b2) {
                 abandons += 1;
                 continue;
             }
             let r = catch_unwind(AssertUnwindSafe(|| rust(&mut c, &mut b)));
             if r.is_err() {
-                paniques += 1;
+                panics += 1;
                 continue;
             }
             let mut diffs = Vec::new();
@@ -215,26 +215,26 @@ fn main() {
                 diffs.push(format!("pc={:06x} au lieu de {:06x}", c.pc, c2.pc));
             }
             if !diffs.is_empty() {
-                ecarts += 1;
-                if std::env::var_os("FUZZ_DUMP").is_some() && exemples.is_empty() {
-                    for (nom, bus) in [("avant", &avant), ("rust", &b), ("origine", &b2)] {
+                gaps += 1;
+                if std::env::var_os("FUZZ_DUMP").is_some() && examples.is_empty() {
+                    for (name, bus) in [("avant", &before), ("rust", &b), ("origine", &b2)] {
                         for k in 0..3usize {
                             let i = (0x1020 + 0x1000 * k) / 2;
                             let sig = (0x1140 + 0x1000 * k) / 2;
-                            println!("{nom} {k}: {:04x?} sig {:04x?}", &bus.extra_ram[i..i + 4], &bus.extra_ram[sig..sig + 4]);
+                            println!("{name} {k}: {:04x?} sig {:04x?}", &bus.extra_ram[i..i + 4], &bus.extra_ram[sig..sig + 4]);
                         }
                     }
                 }
-                if exemples.len() < 3 {
-                    exemples.push(format!("région {region} d0={:08x} : {}", c2.d[0], diffs.join(", ")));
+                if examples.len() < 3 {
+                    examples.push(format!("région {region} d0={:08x} : {}", c2.d[0], diffs.join(", ")));
                 }
             }
         }
-        println!("{nom:28} {essais} essais, {ecarts} écarts, {paniques} paniques, {abandons} abandons");
-        for e in exemples {
+        println!("{name:28} {tests} essais, {gaps} écarts, {panics} paniques, {abandons} abandons");
+        for e in examples {
             println!("    {e}");
         }
-        total += ecarts + paniques;
+        total += gaps + panics;
     }
     let _ = rd32;
     let _ = rd8;

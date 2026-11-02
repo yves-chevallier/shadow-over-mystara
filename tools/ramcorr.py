@@ -1,5 +1,5 @@
-# Mots RAM qui montent pendant la fenêtre A et descendent pendant la fenêtre B (et immobiles hors fenêtres).
-# usage : ramcorr.py ram.bin premiere_frame a0 a1 b0 b1
+# RAM words that rise during window A and fall during window B (and stay still outside the windows).
+# usage: ramcorr.py ram.bin first_frame a0 a1 b0 b1
 import sys, struct
 p, first, a0, a1, b0, b1 = sys.argv[1], *map(int, sys.argv[2:7])
 d = open(p, 'rb').read()

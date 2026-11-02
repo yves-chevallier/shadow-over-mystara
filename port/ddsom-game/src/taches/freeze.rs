@@ -1,0 +1,138 @@
+//! Tâche du gel (`0xee080`, emplacement 14 de la table) : attente active et « avance rapide ».
+//!
+//! À chaque passage de l'ordonnanceur elle fait ce que fait le VBLANK pour les tâches qui dorment, mais
+//! seulement pour la tâche principale (emplacement 0), et seulement quand un joueur présent presse un bouton
+//! pendant une partie : le jeu enchaîne alors ses pas sans attendre l'image (voir `docs/looped.md` §1). Dans tous
+//! les autres cas elle cède la main sans rien faire (`Wait::Ready`) : c'est l'attente active qui occupe le
+//! processeur surcadencé ([`idle_wait`] la reconnaît).
+//!
+//! Le pas est le même à l'entrée (`0xee080`, tâche neuve) et après chacune des deux cessions (`0xee0fa`,
+//! `0xee16a` : l'original reboucle par un `bra 0xee080`) : trois étapes ([`Etape`]), un seul pas.
+
+use super::table::{record, table, State, Resume, Table, SLOTS};
+use super::{cede, Wait};
+use crate::mem::{set_low_byte, set_low_word, A5};
+use crate::modes::Flow;
+use crate::scene::Ctx;
+
+/// Variables de la RAM de travail (décalages depuis A5).
+mod var {
+    /// Mot de réglages (DSW) : le bit 7 vaut 1 en marche normale.
+    pub const DSW: u32 = 0x7fd0;
+    /// Partie en cours, et écran de jeu actif.
+    pub const GAME: u32 = 0x30;
+    pub const SCREEN: u32 = 0x33;
+    /// Boutons des quatre joueurs (`A5+0..3`) et leurs drapeaux de présence.
+    pub const BUTTONS: u32 = 0;
+    pub const PRESENT: [u32; 4] = [0x5de, 0x7de, 0x9de, 0xbde];
+}
+
+/// Emplacement de la tâche du gel, et celui de la tâche principale.
+pub const SLOT: usize = 14;
+const MAIN: usize = 0;
+/// Bits de bouton qui comptent.
+const BUTTON_MASK: u8 = 0x16;
+/// Bit du mot de réglages qui désigne la marche normale.
+const NORMAL: u16 = 0x80;
+
+crate::etapes! {
+    /// Étapes de la tâche : son entrée, et les retours de ses deux cessions.
+    pub enum Etape {
+        Entry = 0xee080 => step,
+        /// Après une cession sans effet.
+        AfterCession = 0xee0fa => step,
+        /// Après une cession qui a décompté la tâche principale.
+        AfterCountdown = 0xee16a => step,
+    }
+}
+
+/// Un pas : l'effet du passage, puis la cession.
+fn step(x: &mut Ctx) -> Flow {
+    let normal = x.v16(var::DSW) & NORMAL;
+    set_low_word(&mut x.c.d[0], normal);
+    let resume = if normal == 0 {
+        wake_all(x);
+        Etape::AfterCession
+    } else if x.v8(var::SCREEN) != 0 && x.v8(var::GAME) != 0 {
+        fast_forward(x)
+    } else {
+        Etape::AfterCession
+    };
+    cede(x, Wait::Ready, resume)
+}
+
+/// `0xee0ce` (réglages sans le bit 7, jamais vus dans ce jeu) : décompte comme le VBLANK, pour toutes les tâches.
+fn wake_all(x: &mut Ctx) {
+    let tasks = table(x.b);
+    for slot in 0..SLOTS {
+        tasks.count_down(slot);
+    }
+    x.c.a[0] = record(SLOTS);
+    set_low_word(&mut x.c.d[0], 0xffff);
+}
+
+/// `0xee0fc` : si un joueur présent presse un bouton, la tâche principale perd une image d'attente. Rend
+/// l'étape qui suit la cession.
+fn fast_forward(x: &mut Ctx) -> Etape {
+    x.c.d[0] = 0;
+    for (player, present) in var::PRESENT.into_iter().enumerate() {
+        if x.v8(present) != 0 {
+            let pressed = x.v8(var::BUTTONS + player as u32) & BUTTON_MASK;
+            set_low_byte(&mut x.c.d[1], pressed);
+            let seen = x.c.d[0] as u8 | pressed;
+            set_low_byte(&mut x.c.d[0], seen);
+        }
+    }
+    if x.c.d[0] as u8 == 0 {
+        return Etape::AfterCession;
+    }
+    table(x.b).count_down(MAIN);
+    Etape::AfterCountdown
+}
+
+/// L'ordonnanceur tourne à vide : la tâche du gel est la seule prête, elle vient de céder la main, et son prochain
+/// pas ne ferait rien. L'état du jeu ne peut plus changer avant la prochaine interruption : `idle` (`lib.rs`) peut
+/// avancer jusqu'à elle. `ram` est la RAM de travail (FF0000-FFFFFF).
+pub fn idle_wait(tasks: &Table, ram: &[u16]) -> bool {
+    let ready = |slot: usize| tasks.slots[slot].state.castable();
+    if !ready(SLOT) || (0..SLOTS).any(|slot| slot != SLOT && ready(slot)) {
+        return false;
+    }
+    // elle a cédé par `jsr 0xa86` depuis l'une de ses deux cessions, et c'est la dernière tâche lancée
+    // (l'état de l'ordonnanceur est alors celui de chaque passage suivant)
+    let ceded = matches!(tasks.slots[SLOT].resume, Resume::Etape(super::Etape::Freeze(Etape::AfterCession | Etape::AfterCountdown)));
+    let main_waiting = tasks.slots[MAIN].state == State::Waiting;
+    ceded && tasks.current == SLOT && !step_would_act(ram, main_waiting)
+}
+
+/// Même test sur la table de la RAM d'une machine d'origine (enregistrements FF0064 : état, PC de reprise `0xa8c`
+/// de l'enveloppe, pile où l'adresse de retour suit les 15 registres sauvés ; tâche courante en FF0056).
+pub fn idle_wait_original(ram: &[u16]) -> bool {
+    let byte = |a: u32| (ram[(a as usize & 0xffff) / 2] >> if a & 1 == 0 { 8 } else { 0 }) as u8;
+    let long = |a: u32| (ram[(a as usize & 0xffff) / 2] as u32) << 16 | ram[(a as usize & 0xffff) / 2 + 1] as u32;
+    let ready = |slot: usize| byte(record(slot)) >= State::Ready.byte();
+    let freeze = record(SLOT);
+    if !ready(SLOT) || (0..SLOTS).any(|slot| slot != SLOT && ready(slot)) {
+        return false;
+    }
+    let after_yield = [Etape::AfterCession.adresse(), Etape::AfterCountdown.adresse()];
+    if long(freeze + 4) != 0xa8c || !after_yield.contains(&long(long(freeze + 8) + 60)) || long(0xff_0056) != freeze {
+        return false;
+    }
+    let main_waiting = byte(record(MAIN)) == State::Waiting.byte();
+    !step_would_act(ram, main_waiting)
+}
+
+/// Le prochain pas ferait quelque chose : réglages sans le bit 7 (tout décompter), ou un joueur présent presse un
+/// bouton en partie alors que la tâche principale attend.
+fn step_would_act(ram: &[u16], main_waiting: bool) -> bool {
+    let byte = |a: u32| (ram[(a as usize & 0xffff) / 2] >> if a & 1 == 0 { 8 } else { 0 }) as u8;
+    let var = |offset: u32| A5.wrapping_add(offset);
+    if ram[(var(var::DSW) as usize & 0xffff) / 2] & NORMAL == 0 {
+        return true;
+    }
+    byte(var(var::SCREEN)) != 0
+        && byte(var(var::GAME)) != 0
+        && main_waiting
+        && (0..4).any(|player| byte(var(var::PRESENT[player])) != 0 && byte(var(var::BUTTONS + player as u32)) & BUTTON_MASK != 0)
+}

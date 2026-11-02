@@ -1,11 +1,11 @@
-"""Génère les scénarios de validation des boss (scenarios/boss/*.txt) avec le bot réactif autobot.
+"""Generates the boss validation scenarios (scenarios/boss/*.txt) with the reactive bot autobot.
 
-    python3 tools/gen_boss.py [nom ...]        (tous si aucun nom)
+    python3 tools/gen_boss.py [name ...]        (all if no name)
 
-Chaque scénario entre directement dans la scène du boss (FF8034 écrit pendant la sélection du personnage)
-et le bot le combat jusqu'à ses dernières phases ; sans `weaken`, les PV du boss ne sont pas touchés.
-Prérequis : `cargo build --release -p ddsom-game --examples`, DDSOM_ROMS / DDSOM_EEPROM. Les scénarios produits
-ne contiennent que des entrées et des écritures RAM (`poke`). Voir docs/familles/boss.md.
+Each scenario enters the boss scene directly (FF8034 written during character select)
+and the bot fights it up to its last phases; without `weaken`, the boss HP are not touched.
+Prerequisites: `cargo build --release -p ddsom-game --examples`, DDSOM_ROMS / DDSOM_EEPROM. The produced scenarios
+only contain inputs and RAM writes (`poke`). See docs/familles/boss.md.
 """
 import os
 import subprocess
@@ -19,10 +19,10 @@ AUTOBOT = os.path.join(ROOT, "port/target/release/examples/autobot")
 ROMS = os.environ.get("DDSOM_ROMS", os.path.join(ROOT, "rom"))
 EEPROM = os.environ.get("DDSOM_EEPROM", os.path.join(ROOT, "testdata/eeprom_ddsom.bin"))
 FRAMES = 12000
-# scénarios tronqués : après la mort du boss, un bouton pressé ou maintenu pendant la fin de scène déclenche l'avance
-# rapide (« tempête de pas », voir docs/couverture.md), dont le nombre de pas dépend de la durée des routines natives ;
-# on garde les entrées jusqu'à l'image indiquée, avant que le bot ne touche aux boutons à ce moment
-TRONQUE = {
+# truncated scenarios: after the boss dies, a button pressed or held during the end of the scene triggers the fast
+# forward ("step storm", see docs/couverture.md), whose number of steps depends on the duration of the native routines;
+# the inputs are kept up to the given frame, before the bot touches the buttons at that point
+TRUNCATED = {
     "boss18_scene26": 10900,
     "boss18_scene26_mort": 7738,
     "boss19_scene32_mort": 6208,
@@ -34,10 +34,10 @@ TRONQUE = {
     "boss8_scene64_mort": 6649,
 }
 
-# nom -> (type de boss, scènes "scène:images,...", crans du curseur, PV du joueur remis à, affaiblissement, dossier)
-# 7e élément facultatif "type:variante:image[:joueurs]" : boss créé à la main (autobot --spawn) à cette image, pour un type que
-# les scènes du jeu ne font pas apparaître dans les durées jouées
-# dossier "ko" : le scénario diverge à cause d'une autre routine (voir scenarios/ko/LISEZMOI.txt)
+# name -> (boss type, scenes "scene:frames,...", cursor steps, player HP reset to, weakening, folder)
+# optional 7th element "type:variant:frame[:players]": boss spawned by hand (autobot --spawn) at that frame, for a type that
+# the game's scenes do not bring in within the played durations
+# folder "ko": the scenario diverges because of another routine (see scenarios/ko/README.md)
 SPECS = {
     "boss17_scene13": (17, "13:11000", 0, "0x70", 0, "boss"),
     "boss6_scene24": (6, "24:11000", 0, "0x70", 0, "ko"),
@@ -70,54 +70,54 @@ SPECS = {
 }
 
 
-def tronquer(lines, fin):
-    """Garde les entrées jusqu'à l'image `fin`, puis relâche (image fin + 1) les boutons restés enfoncés : un bouton
-    maintenu à l'entrée de la scène suivante suffit à déclencher l'avance rapide."""
-    gardees, enfonces = [], {}
+def truncate(lines, end):
+    """Keeps the inputs up to frame `end`, then releases (frame end + 1) the buttons still held: a button
+    held when the next scene starts is enough to trigger the fast forward."""
+    kept, held = [], {}
     for l in lines:
-        mots = l.split()
-        if mots and mots[0].isnumeric():
-            if int(mots[0]) > fin:
+        words = l.split()
+        if words and words[0].isnumeric():
+            if int(words[0]) > end:
                 continue
-            if mots[1] in ("P1", "P2", "P3", "P4", "Coin", "Service") and mots[-1] in ("0", "1"):
-                enfonces[" ".join(mots[1:-1])] = mots[-1]
-        gardees.append(l)
-    while gardees and not gardees[-1]:
-        gardees.pop()
-    gardees += [f"{fin + 1} {entree} 0" for entree, etat in enfonces.items() if etat == "1"]
-    return "\n".join(gardees) + "\n"
+            if words[1] in ("P1", "P2", "P3", "P4", "Coin", "Service") and words[-1] in ("0", "1"):
+                held[" ".join(words[1:-1])] = words[-1]
+        kept.append(l)
+    while kept and not kept[-1]:
+        kept.pop()
+    kept += [f"{end + 1} {inp} 0" for inp, state in held.items() if state == "1"]
+    return "\n".join(kept) + "\n"
 
 
 def generate(name):
-    _, plan, k, god, weaken, folder, *apparition = SPECS[name]
+    _, plan, k, god, weaken, folder, *spawn = SPECS[name]
     base = os.path.join(ROOT, "work", name + ".base")
     os.makedirs(os.path.dirname(base), exist_ok=True)
-    joueurs = 1
-    if apparition:
-        champs = apparition[0].split(":")
-        joueurs = int(champs[3]) if len(champs) > 3 else 1
-    lines = make_bot.build(frames=FRAMES, players=joueurs, chars=(k,) * joueurs, coin_period=1500, base_only=True)
+    players = 1
+    if spawn:
+        fields = spawn[0].split(":")
+        players = int(fields[3]) if len(fields) > 3 else 1
+    lines = make_bot.build(frames=FRAMES, players=players, chars=(k,) * players, coin_period=1500, base_only=True)
     with open(base, "w") as f:
         f.write("\n".join(lines) + "\n")
     out = os.path.join(ROOT, "scenarios", folder, name + ".txt")
     os.makedirs(os.path.dirname(out), exist_ok=True)
-    cmd = [AUTOBOT, ROMS, EEPROM, base, str(FRAMES), out, "--players", str(joueurs), "--seed", "1", "--god", god, "--plan", plan]
+    cmd = [AUTOBOT, ROMS, EEPROM, base, str(FRAMES), out, "--players", str(players), "--seed", "1", "--god", god, "--plan", plan]
     if weaken:
         cmd += ["--weaken", str(weaken)]
-    if apparition:
-        # objet créé à la main (type:variante:image) pour un boss que les scènes du jeu ne montrent pas
-        kind, variant, image = apparition[0].split(":")[:3]
-        cmd += ["--spawn", f"boss:{kind}:{variant}:{image}"]
+    if spawn:
+        # object spawned by hand (type:variant:frame) for a boss that the game's scenes do not show
+        kind, variant, frame = spawn[0].split(":")[:3]
+        cmd += ["--spawn", f"boss:{kind}:{variant}:{frame}"]
     log = subprocess.run(cmd, capture_output=True, text=True)
     with open(os.path.join(ROOT, "work", name + ".log"), "w") as f:
         f.write(log.stderr)
-    if name in TRONQUE:
-        texte = tronquer(open(out).read().split("\n"), TRONQUE[name])
+    if name in TRUNCATED:
+        text = truncate(open(out).read().split("\n"), TRUNCATED[name])
         with open(out, "w") as f:
-            f.write(texte)
+            f.write(text)
     return log.returncode
 
 
 if __name__ == "__main__":
     for n in sys.argv[1:] or SPECS:
-        print(n, "ok" if generate(n) == 0 else "ECHEC")
+        print(n, "ok" if generate(n) == 0 else "FAILED")

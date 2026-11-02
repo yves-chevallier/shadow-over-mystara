@@ -1,4 +1,4 @@
-//! Aperçu d'une image de sprite : `frame <assets> <numéro> <palette> <sortie.png>`.
+//! Aperçu d'une image de sprite : `frame <assets> <numéro> <palette> <exit.png>`.
 //! Assemble les morceaux de l'image (cellules 16x16, miroirs) et les peint avec une palette de la
 //! bibliothèque (la même pour tous les morceaux : en jeu, la palette dépend de l'objet).
 

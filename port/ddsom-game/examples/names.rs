@@ -3,12 +3,12 @@
 //! d'objet sans registres).
 fn main() {
     for n in ddsom_game::all_natives() {
-        let forme = match n.run {
+        let shape = match n.run {
             ddsom_game::Corps::Processeur(_) => 'P',
-            ddsom_game::Corps::ProcesseurEn(_) => 'E',
-            ddsom_game::Corps::Memoire(_) => 'M',
+            ddsom_game::Corps::CpuIn(_) => 'E',
+            ddsom_game::Corps::Memory(_) => 'M',
             ddsom_game::Corps::Gestionnaire(_) => 'G',
         };
-        println!("{:06x} {} {forme}", n.entry, n.name);
+        println!("{:06x} {} {shape}", n.entry, n.name);
     }
 }
