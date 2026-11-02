@@ -1,5 +1,7 @@
 use super::*;
-use crate::mem::{rd16, rd32, wr32};
+use crate::mem::{rd32, wr32};
+use crate::families::set::tables as set_tables;
+use crate::objects::Obj;
 
 /// Script table (data space): script then source palettes, 8 bytes per variant.
 const TABLE: u32 = 0xba57a;
@@ -25,11 +27,11 @@ const ALWAYS_RUNS: u8 = 0x4e;
 const NEXT_VARIANTS: [(u8, u8); 3] = [(0x48, 0), (0x4c, 0), (0x4d, 1)];
 
 pub fn run(x: &mut Gx) {
-    let variant = x.u8(0x3);
-    if variant != ALWAYS_RUNS && (x.a5_u8(GAME_PAUSED) != 0 || x.u8(0x40) != 0) {
+    let variant = x.u8(Obj::VARIANT);
+    if variant != ALWAYS_RUNS && (x.a5_u8(GAME_PAUSED) != 0 || x.u8(Obj::HIDDEN) != 0) {
         return;
     }
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => start(x),
         2 => play(x),
         4 => finish(x),
@@ -38,15 +40,15 @@ pub fn run(x: &mut Gx) {
 }
 
 fn start(x: &mut Gx) {
-    x.add8(0x4, 2);
-    let entry = TABLE.wrapping_add((((x.u8(0x3) as u16) << 3) as i16) as u32);
-    let (script, source) = (x.data32(entry), x.data32(entry + 4));
+    x.add8(Obj::STATE, 2);
+    let entry = TABLE.wrapping_add((((x.u8(Obj::VARIANT) as u16) << 3) as i16) as u32);
+    let (script, source) = (set_tables::long(x.b, entry), set_tables::long(x.b, entry + 4));
     x.set32(SOURCE, source);
     x.set32(SCRIPT, script);
     let page = PALETTE_PAGES[x.u8(PAGE).min(3) as usize];
-    let first_line = x.data16(script) as i16;
+    let first_line = set_tables::word(x.b, script) as i16;
     x.set32(DEST, page.wrapping_add(((first_line as u16) << 5) as i16 as i32 as u32));
-    let timer = x.data16(script + 2);
+    let timer = set_tables::word(x.b, script + 2);
     x.set16(TIMER, timer);
     let dest = x.u32(DEST);
     copy_lines(x, script + 4, source, dest);
@@ -54,13 +56,13 @@ fn start(x: &mut Gx) {
 
 fn play(x: &mut Gx) {
     if x.a5_u8(TRANSITION) != 0 {
-        let variant = x.u8(0x3) as u32;
-        let action = x.rom8(TRANSITION_ACTION + variant);
+        let variant = x.u8(Obj::VARIANT) as u32;
+        let action = set_tables::pc_byte(x.b, TRANSITION_ACTION + variant);
         match action {
             0 => {}
             1 => return,
             2 => {
-                x.set16(0x4, STATE_FINISH);
+                x.set16(Obj::STATE, STATE_FINISH);
                 return finish(x);
             }
             _ => return finish(x),
@@ -73,19 +75,19 @@ fn play(x: &mut Gx) {
     }
     let mut script = x.u32(SCRIPT);
     let source = x.u32(SOURCE);
-    let duration = x.data16(script);
+    let duration = set_tables::word(x.b, script);
     script += 2;
     x.set16(TIMER, duration);
     if (duration as i16) < 0 {
         if duration == 0xffff {
-            x.set16(0x4, 0);
+            x.set16(Obj::STATE, 0);
             start(x);
         } else {
-            let target = x.data32(script);
+            let target = set_tables::long(x.b, script);
             x.set32(SCRIPT, target);
         }
     } else if duration == 0 {
-        x.set16(0x4, STATE_FINISH);
+        x.set16(Obj::STATE, STATE_FINISH);
         finish(x);
     } else {
         let dest = x.u32(DEST);
@@ -98,15 +100,15 @@ fn play(x: &mut Gx) {
 /// Original glitch: the last long copied (with the brightness) stays in D4, which the unsteered raft
 /// (0xad7b0) adds to the players' position: it is a leftover from the dispatch loop (`Leftovers::d4`).
 fn copy_lines(x: &mut Gx, mut script: u32, source: u32, mut dest: u32) {
-    let count = rd16(x.b, script).wrapping_sub(1);
+    let count = set_tables::word(x.b, script).wrapping_sub(1);
     script += 2;
     let mut last = 0;
     for _ in 0..=count as u32 {
-        let line = (rd16(x.b, script) << 5) as u32;
+        let line = (set_tables::word(x.b, script) << 5) as u32;
         script += 2;
         let keep = rd32(x.b, dest) & KEEP_BRIGHTNESS;
         for i in (0..LINE_BYTES).step_by(4) {
-            last = rd32(x.b, source + line + i) | keep;
+            last = set_tables::long(x.b, source + line + i) | keep;
             wr32(x.b, dest + i, last);
         }
         dest += LINE_BYTES;
@@ -116,14 +118,14 @@ fn copy_lines(x: &mut Gx, mut script: u32, source: u32, mut dest: u32) {
 }
 
 fn finish(x: &mut Gx) {
-    let variant = x.u8(0x3) as u32;
-    match x.rom8(END_ACTION + variant) {
-        0 => x.set8(0x4, 6),
+    let variant = x.u8(Obj::VARIANT) as u32;
+    match set_tables::pc_byte(x.b, END_ACTION + variant) {
+        0 => x.set8(Obj::STATE, 6),
         n @ 1..=3 => {
             let (next, page) = NEXT_VARIANTS[n as usize - 1];
-            x.set8(0x3, next);
+            x.set8(Obj::VARIANT, next);
             x.set8(PAGE, page);
-            x.set32(0x4, 0);
+            x.set32(Obj::STATE, 0);
         }
         _ => {}
     }

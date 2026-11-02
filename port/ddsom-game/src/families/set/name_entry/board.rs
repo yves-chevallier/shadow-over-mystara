@@ -1,9 +1,13 @@
 use super::*;
+use crate::families::set::tables as set_tables;
+use crate::objects::Obj;
+use crate::player::Player;
+use crate::families::set::fields::NameBoardObj;
 
 /// 0xc979e: state 0. Resets the records to zero and loads four palettes (with the
 /// brightness of the page's first color).
 pub fn init<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x4, 2);
+    x.add8(Obj::STATE, 2);
     for off in [0x30, 0x34, 0x38, 0x3c] {
         x.set32(off, 0);
     }
@@ -14,7 +18,7 @@ pub fn init<R: Bench>(x: &mut Cx<'_, R>) {
     let keep = rd32(x.b, 0x91c000) & KEEP_BRIGHTNESS;
     for i in 0..4u32 {
         for j in (0..PALETTE_ENTRY).step_by(4) {
-            let v = x.data32(PALETTE_SOURCE + i * 0x100 + j);
+            let v = set_tables::long(x.b, PALETTE_SOURCE + i * 0x100 + j);
             wr32(x.b, PALETTE_BANK + i * PALETTE_ENTRY + j, v | keep);
         }
     }
@@ -24,7 +28,7 @@ pub fn init<R: Bench>(x: &mut Cx<'_, R>) {
 pub fn release<R: Bench>(x: &mut Cx<'_, R>) {
     for i in 0..4 {
         let slave = at(x, SLAVES + 2 * i);
-        slave.set_u32(x.b, 4, FREE_ON_NEXT);
+        slave.set_u32(x.b, Obj::STATE, FREE_ON_NEXT);
     }
     x.free(&pools::SET);
 }
@@ -40,11 +44,11 @@ pub fn update<R: Bench>(x: &mut Cx<'_, R>) {
     }
     if x.u8(PAIRS) != 2 {
         if x.u8(PAIRS) == 0 {
-            x.set32(0x40, u32::MAX);
-            x.set32(0x44, u32::MAX);
+            x.set32(PREV_RECORDS, u32::MAX);
+            x.set32(NameBoardObj::PREV_RECORD_1, u32::MAX);
         }
-        x.set32(0x48, u32::MAX);
-        x.set32(0x4c, u32::MAX);
+        x.set32(NameBoardObj::PREV_RECORD_2, u32::MAX);
+        x.set32(NameBoardObj::PREV_RECORD_3, u32::MAX);
     }
     for off in [0x30, 0x34, 0x38, 0x3c] {
         x.set32(off, 0);
@@ -192,7 +196,7 @@ fn count_cursors<R: Bench>(x: &mut Cx<'_, R>) {
     for i in 0..4 {
         let slave = at(x, SLAVES + 2 * i);
         let player = Obj(slave.u16(x.b, OWNER) as i16 as i32 as u32 & 0xff_ffff);
-        if player.u8(x.b, 0) != 0 && (player.u8(x.b, 4) as i8) < 4 {
+        if player.u8(x.b, Player::ACTIVE) != 0 && (player.u8(x.b, Player::MAIN) as i8) < 4 {
             active += 1;
             if slave.u8(x.b, TYPED) != 0 {
                 typed += 1;

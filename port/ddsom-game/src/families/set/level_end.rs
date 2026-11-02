@@ -1,5 +1,10 @@
 use super::*;
 use util::*;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::player::Player;
+use crate::families::set::fields::PlayerFields;
+use crate::families::set::fields::WeaponObj;
 
 const PROGRESS: u32 = 0x556;
 const PROGRESS_LIMIT: i16 = 0x320;
@@ -12,9 +17,9 @@ const P_WEAPON: u32 = 0x8a;
 const P_WEAPON_OBJ: u32 = 0x86;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
-            x.add8(0x4, 2);
+            x.add8(Obj::STATE, 2);
             wait_players(x);
         }
         2 => wait_players(x),
@@ -26,9 +31,9 @@ fn wait_players<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(IN_GAME) == 0 || (x.a5_u16(PROGRESS) as i16) <= PROGRESS_LIMIT {
         return;
     }
-    x.set_a5_u8(0x43, 0);
-    x.set_a5_u16(0x51e, 0);
-    x.set_a5_u8(0x4ff, 4);
+    x.set_a5_u8(vars::INPUT_MASK, 0);
+    x.set_a5_u16(vars::SCROLL_STOP, 0);
+    x.set_a5_u8(vars::BONUS_END, 4);
     for p in players() {
         if alive(x, p) && (p.u16(x.b, P_STATE) != 0x200 || p.u8(x.b, P_SUBSTATE) != 0) {
             return;
@@ -40,17 +45,17 @@ fn wait_players<R: Bench>(x: &mut Cx<'_, R>) {
             continue;
         }
         p.set_u32(x.b, P_STATE, RESET_STATE);
-        p.set_u8(x.b, 0x66, 0);
-        p.set_u8(x.b, 0x15c, 0);
+        p.set_u8(x.b, Player::SLOW, 0);
+        p.set_u8(x.b, PlayerFields::SPECIAL_ACTIVE, 0);
         if p.u8(x.b, P_WEAPON) != 0 {
             p.set_u8(x.b, P_WEAPON, 0);
             let weapon = Obj(p.u32(x.b, P_WEAPON_OBJ));
-            weapon.set_u8(x.b, 5, 8);
-            weapon.set_u16(x.b, 6, 0);
+            weapon.set_u8(x.b, WeaponObj::SUBSTATE, 8);
+            weapon.set_u16(x.b, WeaponObj::ACTION, 0);
         }
         p.set_u8(x.b, P_ORDER, order);
         order += 1;
     }
-    x.set_a5_u32(0x2c, END_FLAGS);
-    x.add8(0x4, 2);
+    x.set_a5_u32(vars::PHASE, END_FLAGS);
+    x.add8(Obj::STATE, 2);
 }

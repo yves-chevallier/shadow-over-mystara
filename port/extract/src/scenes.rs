@@ -1,6 +1,6 @@
 //! Scene tables: `data/scenes.json` (`scene/entry.rs`, `scene/exit.rs`, `scene/blackout.rs`,
 //! `scene/tally.rs`, `scene/shop.rs`, `scene/bonus.rs`, `camera_modes.rs`, `popups.rs`, `sprites.rs`,
-//! `families/player/peff.rs`, `families/set_b.rs`).
+//! `families/player/peff.rs`; the SET tables are in `data/set.json`, `set.rs`).
 
 use ddsom_assets::data::Region;
 
@@ -24,31 +24,6 @@ fn glyphs_end(rom: &Program, at: u32) -> u32 {
 fn glyphs(rom: &Program, name: &str, at: u32) -> (Spec, u32) {
     let end = glyphs_end(rom, at);
     (span(name, at, end, false, "u16", &[]), end)
-}
-
-/// Scripts of the SET B wave generators (0xd4c5e): initial delay word, entries of 0x14 bytes, final
-/// word 0x8000.
-fn waves(rom: &Program, s: &mut Vec<Spec>) -> Region {
-    const TABLE: u32 = 0xd4c5e;
-    const COUNT: u32 = 15;
-    const ENTRY: &[&str] =
-        &["delay", "rank", "x", "z", "y", "players", "creator", "kind", "variant", "p0", "p1", "f42", "absolute"];
-    s.push(data("wave_scripts", TABLE, "addr", &[], COUNT as usize));
-    let mut starts: Vec<u32> = (0..COUNT).map(|i| rom.rd32(TABLE + 4 * i)).collect();
-    starts.sort();
-    starts.dedup();
-    let mut end = 0;
-    for (k, &at) in starts.iter().enumerate() {
-        let mut p = at + 2;
-        while rom.rd16(p) != 0x8000 {
-            p += 0x14;
-        }
-        s.push(data(&format!("wave/{k}.timer"), at, "u16", &[], 1));
-        s.push(span(&format!("wave/{k}"), at + 2, p, false, "i16 u16 i16*3 u8*6 u16 u16", ENTRY));
-        s.push(data(&format!("wave/{k}.end"), p, "x16", &[], 1));
-        end = p + 2;
-    }
-    region("waves", TABLE, end)
 }
 
 pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>) {
@@ -113,11 +88,6 @@ pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>) {
         prog("popup_bottoms", 0x1a25e, "u16", &[], 9),
         data("markers", 0x1eb48, "x16 u16", &["x", "y"], 4),
         data("markers_alt", 0x1eb58, "x16 u16", &["x", "y"], 3),
-        // ---- set_b.rs: passage doors ----
-        prog("door_a", 0xd84e8, "i16*3 u8*10", &["x", "z", "y", "mode", "key", "stage", "f1b", "u0", "u1", "u2", "u3", "u4", "u5"], 3),
-        prog("door_b", 0xd8e5e, "i16*3 u8*10", &["x", "z", "y", "mode", "key", "stage", "f1b", "u0", "u1", "u2", "u3", "u4", "u5"], 3),
-        prog("wave_start_kind", 0xd4a0e, "u8", &[], 20),
-        prog("wave_end_kind", 0xd4bdc, "u8", &[], 20),
     ];
     regions.push(region("entry", 0x21156, 0x21c28));
     regions.push(region("counters", 0x51176, 0x513e6));
@@ -151,6 +121,5 @@ pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>) {
         at = end + 2;
     }
     regions.push(region("bonus", 0x3f6c08, at));
-    regions.push(waves(rom, &mut s));
     (regions, s)
 }

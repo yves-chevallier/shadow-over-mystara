@@ -1,5 +1,8 @@
 use super::*;
 use crate::mem::{wr32, wr8, A5};
+use crate::families::set::tables as set_tables;
+use crate::objects::Obj;
+use crate::families::set::fields::SetObj;
 
 /// Text tables per game mode (longs, program space), then per variant (longs ×4).
 const TEXT_TABLES: u32 = 0xcc438;
@@ -23,7 +26,7 @@ const FRAME_FREE_STATE: u32 = 0x6000000;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if crate::mem::rd8(x.b, STOP) == 0 {
-        if x.u8(0x4) == 0 {
+        if x.u8(Obj::STATE) == 0 {
             return create(x);
         }
         let t = x.u8(TIMER).wrapping_sub(1);
@@ -42,25 +45,25 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn create<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x4, 2);
+    x.add8(Obj::STATE, 2);
     x.set8(TIMER, LIFETIME);
-    let variant = (x.u8(0x3) << 2) as u32;
+    let variant = (x.u8(Obj::VARIANT) << 2) as u32;
     let mode = x.a5_u16(GAME_MODE).wrapping_sub(2).wrapping_mul(2) as i16 as i32 as u32;
-    let table = (x.rom16(TEXT_TABLES.wrapping_add(mode)) as u32) << 16 | x.rom16(TEXT_TABLES.wrapping_add(mode) + 2) as u32;
-    let text = x.data32(table + variant);
-    let width = x.data16(text);
+    let table = set_tables::pc_long(x.b, TEXT_TABLES.wrapping_add(mode));
+    let text = set_tables::long(x.b, table + variant);
+    let width = set_tables::word(x.b, text);
     x.set16(FRAME, 0);
-    let variant = x.u8(0x2f);
+    let variant = x.u8(SetObj::PARAM);
     if let Ok(frame) = crate::families::creators::sobj_12_pure(x.b, variant) {
         frame.set_u16(x.b, FRAME_WIDTH, width);
         x.set16(FRAME, frame.0 as u16);
     }
-    let size = x.data16(text + 2);
+    let size = set_tables::word(x.b, text + 2);
     x.set_a5_u16(TEXT_SIZE, size);
     x.set_a5_u16(TEXT_WIDTH, TEXT_WIDTH_VALUE);
     x.set_a5_u32(TEXT_ADDR, text + 4);
     for i in (0..32).step_by(4) {
-        let v = x.data32(PALETTE_SRC + i);
+        let v = set_tables::long(x.b, PALETTE_SRC + i);
         wr32(x.b, PALETTE_DST + i, v);
     }
 }

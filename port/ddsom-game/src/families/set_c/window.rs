@@ -17,8 +17,9 @@
 use crate::families::cx::Bench;
 use crate::objects::Current;
 use crate::families::cx::Cx;
-use crate::mem::{prog32, rd16, rd32, rd8, wr16, wr32, wr8, A5};
+use crate::mem::{rd32, rd8, wr16, wr32, wr8, A5};
 use crate::objects::{pools, Obj};
+use crate::families::set::tables as set_tables;
 
 /// Champs de l'objet.
 mod f {
@@ -140,8 +141,8 @@ fn start<R: Bench>(x: &mut Cx<'_, R>) {
     x.add8(f::STATE, 2);
     x.set8(f::TICK_RELOAD, 3);
     let table = if x.a5_u16(ram::LANGUAGE) == 4 { WINDOWS_LANG4 } else { WINDOWS_OTHER };
-    let variant = x.u8(0x3) as u32;
-    let desc = rd32(x.b, table + 4 * variant);
+    let variant = x.u8(Obj::VARIANT) as u32;
+    let desc = set_tables::long(x.b, table + 4 * variant);
     load(x, desc);
     let scene = x.a5_u8(ram::SCENE);
     let palette = if (0x45..0x5a).contains(&scene) { PALETTE_ALT } else { PALETTE };
@@ -177,7 +178,7 @@ fn dim_palette<R: Bench>(x: &mut Cx<'_, R>, palette: u32) -> u32 {
 /// Seize couleurs (`movem.l` de 8 longs).
 fn copy_palette<R: Bench>(x: &mut Cx<'_, R>, src: u32, dst: u32) {
     for i in 0..8 {
-        let v = rd32(x.b, src + 4 * i);
+        let v = set_tables::long(x.b, src + 4 * i);
         wr32(x.b, dst + 4 * i, v);
     }
 }
@@ -212,25 +213,25 @@ fn load<R: Bench>(x: &mut Cx<'_, R>, mut desc: u32) -> Loaded {
     let mut regs = Loaded { a1: 0, d6: None, a6: None };
     let done = |regs: Loaded, a1: u32| Loaded { a1, ..regs };
     loop {
-        let col = rd8(x.b, desc) as u16;
-        let row = rd8(x.b, desc + 1) as u16;
-        let v = rd8(x.b, desc + 2);
+        let col = set_tables::byte(x.b, desc) as u16;
+        let row = set_tables::byte(x.b, desc + 1) as u16;
+        let v = set_tables::byte(x.b, desc + 2);
         x.set8(f::BIG, v);
-        let v = rd8(x.b, desc + 3);
+        let v = set_tables::byte(x.b, desc + 3);
         x.set8(f::ROWS, v);
-        let v = rd32(x.b, desc + 4);
+        let v = set_tables::long(x.b, desc + 4);
         x.set32(f::TEXT, v);
-        let v = rd16(x.b, desc + 8);
+        let v = set_tables::word(x.b, desc + 8);
         x.set16(f::X, v);
-        let v = rd16(x.b, desc + 10);
+        let v = set_tables::word(x.b, desc + 10);
         x.set16(f::Y, v);
-        let v = rd8(x.b, desc + 12);
+        let v = set_tables::byte(x.b, desc + 12);
         x.set8(f::STYLE, v);
-        let v = rd8(x.b, desc + 13);
+        let v = set_tables::byte(x.b, desc + 13);
         x.set8(f::CHAIN, v);
-        let v = rd16(x.b, desc + 14);
+        let v = set_tables::word(x.b, desc + 14);
         x.set16(f::DURATION, v);
-        let v = rd16(x.b, desc + 16);
+        let v = set_tables::word(x.b, desc + 16);
         x.set16(f::PARAM, v);
         x.set32(f::NEXT, desc + 18);
         let offset = (col << 7).wrapping_add(row << 2) as i16 as i32 as u32;
@@ -245,7 +246,7 @@ fn load<R: Bench>(x: &mut Cx<'_, R>, mut desc: u32) -> Loaded {
             // a window depending on the number of players
             1 => {
                 let k = if x.a5_u8(ram::PLAYER_COUNT) == 1 { 0 } else { 4 };
-                desc = rd32(x.b, text + k);
+                desc = set_tables::long(x.b, text + k);
             }
             // enlarged frame depending on the number of players
             2 | 4 => {
@@ -257,7 +258,7 @@ fn load<R: Bench>(x: &mut Cx<'_, R>, mut desc: u32) -> Loaded {
             }
             5 => {
                 let i = x.u8(f::CHOICE).wrapping_mul(2).wrapping_add(x.a5_u8(ram::FRAME_PARITY) & 1);
-                desc = text + x.rom8(STYLE5_OFFSETS + i as u32) as u32;
+                desc = text + set_tables::pc_byte(x.b, STYLE5_OFFSETS + i as u32) as u32;
             }
             9 => {
                 frameless(x, 2);
@@ -268,11 +269,11 @@ fn load<R: Bench>(x: &mut Cx<'_, R>, mut desc: u32) -> Loaded {
             10 => return done(regs, find_player(x, |p| p == 5, false).map_or(A5 + ram::PLAYERS + 4 * PLAYER_SIZE, |p| p.0)),
             11 => {
                 let k = x.u8(f::INDEX).wrapping_mul(4) as u32;
-                desc = rd32(x.b, text + k);
+                desc = set_tables::long(x.b, text + k);
             }
             13 => {
                 copy_palette_b(x);
-                regs.d6 = Some(rd32(x.b, PALETTE_SRC_B + 24));
+                regs.d6 = Some(set_tables::long(x.b, PALETTE_SRC_B + 24));
                 return done(regs, PALETTE_B + 0x20);
             }
             14 => {
@@ -291,7 +292,7 @@ fn load<R: Bench>(x: &mut Cx<'_, R>, mut desc: u32) -> Loaded {
                         wr32(x.b, base + 4 * i, v);
                     }
                 }
-                regs.d6 = Some(rd32(x.b, PALETTE_SRC + 24));
+                regs.d6 = Some(set_tables::long(x.b, PALETTE_SRC + 24));
                 return done(regs, PALETTE + 0x20);
             }
             19 => {
@@ -314,7 +315,7 @@ fn load<R: Bench>(x: &mut Cx<'_, R>, mut desc: u32) -> Loaded {
                 }
                 frameless(x, 2);
                 copy_palette(x, PALETTE_SRC, PALETTE_C);
-                regs.d6 = Some(rd32(x.b, PALETTE_SRC + 24));
+                regs.d6 = Some(set_tables::long(x.b, PALETTE_SRC + 24));
                 let a1 = dim_palette(x, PALETTE_C);
                 return done(regs, a1);
             }
@@ -336,8 +337,8 @@ fn load<R: Bench>(x: &mut Cx<'_, R>, mut desc: u32) -> Loaded {
 /// different from 4 if `not_four`), and whose class (`+3 >> 1`) satisfies `class`.
 fn find_player<R: Bench>(x: &mut Cx<'_, R>, class: impl Fn(u8) -> bool, not_four: bool) -> Option<Obj> {
     (0..4).map(|k| Obj(A5 + ram::PLAYERS + k * PLAYER_SIZE)).find(|&p| {
-        let state = p.u8(x.b, 4);
-        p.u8(x.b, 0) != 0 && (if not_four { state != 4 } else { (state as i8) < 4 }) && class(p.u8(x.b, 3) >> 1)
+        let state = p.u8(x.b, Player::MAIN);
+        p.u8(x.b, Player::ACTIVE) != 0 && (if not_four { state != 4 } else { (state as i8) < 4 }) && class(p.u8(x.b, Player::CHARACTER) >> 1)
     })
 }
 
@@ -521,7 +522,7 @@ fn shown<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// 0xc9068: newly pressed buttons (high nibble) of the players in game concerned.
 fn buttons<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
-    let filter = if x.u8(0x3) == 0x8b {
+    let filter = if x.u8(Obj::VARIANT) == 0x8b {
         x.u8(f::PLAYER_ALT)
     } else {
         let p = x.u8(f::PLAYER);
@@ -533,7 +534,7 @@ fn buttons<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     let mut pressed = 0;
     for k in 0..4 {
         let p = Obj(A5 + ram::PLAYERS + k * PLAYER_SIZE);
-        if p.u8(x.b, 0) != 0 && (p.u8(x.b, 4) as i8) < 4 && ((filter as i8) < 0 || filter == p.u8(x.b, 2)) {
+        if p.u8(x.b, Player::ACTIVE) != 0 && (p.u8(x.b, Player::MAIN) as i8) < 4 && ((filter as i8) < 0 || filter == p.u8(x.b, Player::INDEX)) {
             pressed |= x.a5_u8(ram::BUTTONS + k);
         }
     }
@@ -589,3 +590,4 @@ fn free<R: Bench>(x: &mut Cx<'_, R>) {
 /// Text composition: names, titles, equipment and linked messages written into the text buffer.
 mod text;
 use text::{compose, Text};
+use crate::player::Player;

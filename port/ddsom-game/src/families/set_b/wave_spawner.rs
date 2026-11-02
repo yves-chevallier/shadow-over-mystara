@@ -1,4 +1,8 @@
 use super::*;
+use crate::families::set::tables as set_tables;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::families::set::fields::SetObj;
 
 /// Script pointers, per variant (data space).
 const SCRIPTS: u32 = 0xd4c5e;
@@ -26,10 +30,10 @@ const ABORT: u32 = 0x2d;
 const WAIT_ALL: u32 = 0x2e;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x40) != 0 {
+    if x.u8(Obj::HIDDEN) != 0 {
         return;
     }
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => start(x),
         2 => play(x),
         4 => finish(x),
@@ -43,11 +47,11 @@ fn player_near<R: Bench>(x: &mut Cx<'_, R>) -> bool {
         if p.u8(x.b, pl::ACTIVE) == 0 || p.u16(x.b, pl::HEALTH) == 0 {
             continue;
         }
-        let dx = p.u16(x.b, pl::X).wrapping_sub(x.u16(0x8)).wrapping_add(0xc0);
+        let dx = p.u16(x.b, pl::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0xc0);
         if dx > 0x180 {
             continue;
         }
-        let dy = p.u16(x.b, pl::Y).wrapping_sub(x.u16(0x10)).wrapping_add(0x30);
+        let dy = p.u16(x.b, pl::Y).wrapping_sub(x.u16(Obj::Y)).wrapping_add(0x30);
         if dy <= 0x60 {
             return true;
         }
@@ -65,19 +69,19 @@ fn start<R: Bench>(x: &mut Cx<'_, R>) {
     x.set16(ALIVE, 0);
     x.set8(DONE, 0);
     x.set8(ABORT, 0);
-    let variant = x.u8(0x3) as u32;
-    let script = x.data32(SCRIPTS + 4 * variant);
-    let timer = x.data16(script);
+    let variant = x.u8(Obj::VARIANT) as u32;
+    let script = set_tables::long(x.b, SCRIPTS + 4 * variant);
+    let timer = set_tables::word(x.b, script);
     x.set16(TIMER, timer);
     x.set32(CURSOR, script + 2);
     let me = x.o;
     crate::families::set_residue::begin_wave(x.b, me);
-    match x.rom8(START_KIND + variant) {
+    match set_tables::pc_byte(x.b, START_KIND + variant) {
         0 => x.set_a5_u16(SCROLL_LIMIT, 0x20),
         2 => x.set_a5_u16(SCROLL_LIMIT, 4),
         _ => {}
     }
-    x.add8(0x4, 2);
+    x.add8(Obj::STATE, 2);
 }
 
 /// End of the run (stop requested, time elapsed or script finished).
@@ -87,7 +91,7 @@ fn stop<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn end_script<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x4, 2);
+    x.add8(Obj::STATE, 2);
     x.set16(DELAY, 0);
 }
 
@@ -95,7 +99,7 @@ fn play<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(GAME_MODE) != PLAYING {
         return;
     }
-    if x.a5_u8(0x42) != 0 || x.u8(ABORT) != 0 {
+    if x.a5_u8(vars::FROZEN) != 0 || x.u8(ABORT) != 0 {
         return stop(x);
     }
     let n = x.u16(TIMER).wrapping_sub(1);
@@ -123,13 +127,13 @@ fn play<R: Bench>(x: &mut Cx<'_, R>) {
 fn next_entry<R: Bench>(x: &mut Cx<'_, R>) {
     let mut e = x.u32(CURSOR);
     loop {
-        let head = x.data16(e);
+        let head = set_tables::word(x.b, e);
         if head == SCRIPT_END {
             return end_script(x);
         }
-        let players_needed = x.data8(e + 0xa) as i8;
-        let rank_needed = x.data16(e + 2) as i16;
-        if players_needed > x.a5_u8(0x35) as i8 || rank_needed > x.a5_u16(0x7f92) as i16 {
+        let players_needed = set_tables::byte(x.b, e + 0xa) as i8;
+        let rank_needed = set_tables::word(x.b, e + 2) as i16;
+        if players_needed > x.a5_u8(vars::PLAYERS_ALIVE) as i8 || rank_needed > x.a5_u16(vars::RANK) as i16 {
             e += ENTRY_SIZE;
             x.set32(CURSOR, e);
             continue;
@@ -149,8 +153,8 @@ fn run_entry<R: Bench>(x: &mut Cx<'_, R>, e: u32, head: u16) {
         }
         x.set16(THRESHOLD, low);
     }
-    let index = x.data8(e + 0xb) as u32;
-    let pool = match x.data32(CREATORS + index) {
+    let index = set_tables::byte(x.b, e + 0xb) as u32;
+    let pool = match set_tables::long(x.b, CREATORS + index) {
         0x22bc => &pools::ENEMY,
         0x23a8 => &pools::BOSS,
         0x2348 => &pools::SET,
@@ -161,34 +165,34 @@ fn run_entry<R: Bench>(x: &mut Cx<'_, R>, e: u32, head: u16) {
         x.set16(DELAY, 0);
         return;
     };
-    o.set_u8(x.b, 0, 1);
-    let v = x.data8(e + 0xc);
-    o.set_u8(x.b, 2, v);
-    let v = x.data8(e + 0xd);
-    o.set_u8(x.b, 3, v);
-    let v = x.data8(e + 0xe);
-    o.set_u8(x.b, 0x2f, v);
-    let v = x.data8(e + 0xf);
-    o.set_u8(x.b, 0x2c, v);
-    let v = x.data16(e + 4);
-    o.set_u16(x.b, 0x8, v);
-    let v = x.data16(e + 6);
-    o.set_u16(x.b, 0xc, v);
-    let v = x.data16(e + 8);
-    o.set_u16(x.b, 0x10, v);
-    let v = x.data16(e + 0x10);
-    o.set_u16(x.b, 0x42, v);
+    o.set_u8(x.b, Obj::ACTIVE, 1);
+    let v = set_tables::byte(x.b, e + 0xc);
+    o.set_u8(x.b, Obj::KIND, v);
+    let v = set_tables::byte(x.b, e + 0xd);
+    o.set_u8(x.b, Obj::VARIANT, v);
+    let v = set_tables::byte(x.b, e + 0xe);
+    o.set_u8(x.b, SetObj::PARAM, v);
+    let v = set_tables::byte(x.b, e + 0xf);
+    o.set_u8(x.b, SetObj::ATTR, v);
+    let v = set_tables::word(x.b, e + 4);
+    o.set_u16(x.b, Obj::X, v);
+    let v = set_tables::word(x.b, e + 6);
+    o.set_u16(x.b, Obj::Z, v);
+    let v = set_tables::word(x.b, e + 8);
+    o.set_u16(x.b, Obj::Y, v);
+    let v = set_tables::word(x.b, e + 0x10);
+    o.set_u16(x.b, SetObj::ARG, v);
     x.add16(ALIVE, 1);
     let me = x.o.0 as u16;
-    o.set_u16(x.b, 0x46, me);
-    if x.data8(e + 0x12) == 0 {
+    o.set_u16(x.b, SetObj::OWNER, me);
+    if set_tables::byte(x.b, e + 0x12) == 0 {
         // position relative to the camera
-        let camera = if x.a5_u8(0x36) != 0 { 0x54e } else { 0x4fe };
+        let camera = if x.a5_u8(vars::CAMERA_ALT_ACTIVE) != 0 { 0x54e } else { 0x4fe };
         let cam = Obj(A5 + camera);
-        let v = o.u16(x.b, 0x8).wrapping_add(cam.u16(x.b, 0x8));
-        o.set_u16(x.b, 0x8, v);
-        let v = o.u16(x.b, 0x10).wrapping_add(cam.u16(x.b, 0xc));
-        o.set_u16(x.b, 0x10, v);
+        let v = o.u16(x.b, Obj::X).wrapping_add(cam.u16(x.b, Obj::X));
+        o.set_u16(x.b, Obj::X, v);
+        let v = o.u16(x.b, Obj::Y).wrapping_add(cam.u16(x.b, Obj::Z));
+        o.set_u16(x.b, Obj::Y, v);
     }
     x.set32(CURSOR, e + ENTRY_SIZE);
 }
@@ -208,16 +212,16 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u8(ACTIVE_COUNT, if (n as i8) < 0 { 0 } else { n });
     let me = x.o;
     crate::families::set_residue::finish_wave(x.b, me);
-    let variant = x.u8(0x3) as u32;
-    match x.rom8(END_KIND + variant) {
+    let variant = x.u8(Obj::VARIANT) as u32;
+    match set_tables::pc_byte(x.b, END_KIND + variant) {
         0 => {
             // sets the scroll limit at the current camera
             let v = x.a5_u16(ram::CAMERA_X);
-            x.set_a5_u16(0x52c, v);
+            x.set_a5_u16(vars::CAMERA_MAX_X, v);
             x.set_a5_u16(SCROLL_LIMIT, 0);
         }
         2 => x.set_a5_u16(SCROLL_LIMIT, 0),
         _ => {}
     }
-    x.add8(0x4, 2);
+    x.add8(Obj::STATE, 2);
 }

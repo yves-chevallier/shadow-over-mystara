@@ -1,4 +1,6 @@
 use super::*;
+use crate::families::set::tables as set_tables;
+use crate::player::Player;
 
 /// Write into the buffer (register A4 of the original) and number of characters written (D6).
 pub(super) struct Text {
@@ -26,7 +28,7 @@ impl Text {
     fn plain<R>(&mut self, x: &mut Cx<'_, R>, c: u8, src: &mut u32) {
         self.byte(x, c);
         if c <= 15 {
-            let arg = rd8(x.b, *src);
+            let arg = set_tables::byte(x.b, *src);
             *src += 1;
             self.byte(x, arg);
         }
@@ -41,7 +43,7 @@ impl Text {
             *src += 1;
             self.count = 0;
         }
-        let arg = rd8(x.b, *src);
+        let arg = set_tables::byte(x.b, *src);
         *src += 1;
         self.byte(x, arg);
     }
@@ -74,7 +76,7 @@ enum Defaults {
 /// Name of 6 coded characters (0x51 = first glyph, 0xff end) at `src`, or default name, written
 /// with the glyphs of table 0xc9216.
 fn name<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, defaults: Defaults, glyph: Glyph) {
-    let first = rd8(x.b, src);
+    let first = set_tables::byte(x.b, src);
     let default = match defaults {
         Defaults::High if first.wrapping_add(1) >= 250 => Some(first.wrapping_neg().wrapping_sub(3).wrapping_mul(4)),
         Defaults::Codes if first >= 130 => Some(match first {
@@ -88,26 +90,26 @@ fn name<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, mut src: u32, defaults: Defau
     };
     let mut n: u16 = 5;
     if let Some(index) = default {
-        let table = rd32(x.b, DEFAULT_NAMES + index as u32);
-        n = rd16(x.b, table);
+        let table = set_tables::long(x.b, DEFAULT_NAMES + index as u32);
+        n = set_tables::word(x.b, table);
         src = table + 2;
     }
     loop {
-        let c = rd8(x.b, src);
+        let c = set_tables::byte(x.b, src);
         src += 1;
         if c == 0xff {
             return;
         }
         let index = c.wrapping_sub(0x51) as u32 * 2;
-        let mut g = GLYPHS.wrapping_add(rd16(x.b, GLYPHS + index) as i16 as i32 as u32);
-        let v = rd8(x.b, g);
+        let mut g = GLYPHS.wrapping_add(set_tables::word(x.b, GLYPHS + index) as i16 as i32 as u32);
+        let v = set_tables::byte(x.b, g);
         if v <= 15 {
             t.byte(x, v);
             if glyph == Glyph::Pair {
                 g += 1;
             }
         }
-        let v = rd8(x.b, g);
+        let v = set_tables::byte(x.b, g);
         t.byte(x, v);
         t.char();
         n = n.wrapping_sub(1);
@@ -123,7 +125,7 @@ where
     F: FnMut(&mut Cx<'_, R>, &mut Text, u8, &mut u32) -> bool,
 {
     loop {
-        let c = rd8(x.b, src);
+        let c = set_tables::byte(x.b, src);
         src += 1;
         if c == 0xfd {
             t.end(x, c);
@@ -148,7 +150,7 @@ fn copy_text<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text) {
 
 /// Code 7 followed by `arg`: insertion (name...) in its place.
 fn is_insert<R: Bench>(x: &mut Cx<'_, R>, c: u8, src: u32, arg: u8) -> bool {
-    c == 7 && rd8(x.b, src) == arg
+    c == 7 && set_tables::byte(x.b, src) == arg
 }
 
 pub(super) fn compose<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot: u32) {
@@ -159,7 +161,7 @@ pub(super) fn compose<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot
             copy_palette_b(x);
             for k in 0..4 {
                 let p = Obj(A5 + ram::PLAYERS + k * PLAYER_SIZE);
-                if p.u8(x.b, 0) != 0 && p.u8(x.b, 4) != 4 {
+                if p.u8(x.b, Player::ACTIVE) != 0 && p.u8(x.b, Player::MAIN) != 4 {
                     t.count = 0;
                     title_and_name(x, t, p);
                 }
@@ -173,20 +175,20 @@ pub(super) fn compose<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot
             let mut left = x.a5_u8(ram::PLAYER_COUNT);
             for k in 0..4 {
                 let p = Obj(A5 + ram::PLAYERS + k * PLAYER_SIZE);
-                if p.u8(x.b, 0) == 0 || (p.u8(x.b, 4) as i8) >= 4 {
+                if p.u8(x.b, Player::ACTIVE) == 0 || (p.u8(x.b, Player::MAIN) as i8) >= 4 {
                     continue;
                 }
                 t.count = 0;
                 prefixed_name(x, t, p.0 + NAME);
                 left = left.wrapping_sub(1);
                 if left != 0 {
-                    let sep = rd8(x.b, SEPARATOR);
+                    let sep = set_tables::byte(x.b, SEPARATOR);
                     t.byte(x, sep);
                     t.char();
                     t.counted(x);
                 }
             }
-            let sep = rd8(x.b, SEPARATOR);
+            let sep = set_tables::byte(x.b, SEPARATOR);
             t.byte(x, sep);
             t.end(x, 0xfd);
         }
@@ -195,7 +197,7 @@ pub(super) fn compose<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot
         8 => {
             let mut src = x.u32(f::TEXT);
             loop {
-                let c = rd8(x.b, src);
+                let c = set_tables::byte(x.b, src);
                 src += 1;
                 if c == 0xfd {
                     return t.end(x, c);
@@ -212,11 +214,11 @@ pub(super) fn compose<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot
         10 => {
             let text = x.u32(f::TEXT);
             let Some(p) = find_player(x, |c| c == 5, false) else {
-                let v = rd32(x.b, text);
+                let v = set_tables::long(x.b, text);
                 let slot = self::slot(x);
                 return wr32(x.b, slot, v);
             };
-            let src = rd32(x.b, text + 4);
+            let src = set_tables::long(x.b, text + 4);
             copy_until_end(x, t, src, |x, t, c, src| {
                 if !is_insert(x, c, *src, 4) {
                     return false;
@@ -247,7 +249,7 @@ pub(super) fn compose<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot
         15 => {
             let table = x.u32(f::TEXT);
             let k = if x.a5_u8(ram::PLAYER_COUNT) == 1 { 0 } else { 4 };
-            let v = rd32(x.b, table + k);
+            let v = set_tables::long(x.b, table + k);
             x.set32(f::TEXT, v);
             linked_effect(x, t);
         }
@@ -279,12 +281,12 @@ pub(super) fn compose<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot
             t.count = 0;
             let mut src = x.u32(f::TEXT);
             loop {
-                let c = rd8(x.b, src);
+                let c = set_tables::byte(x.b, src);
                 src += 1;
                 match c {
                     0xfd => return t.end(x, c),
                     0xff => t.escape(x, c, &mut src),
-                    7 if rd8(x.b, src) == 5 => {
+                    7 if set_tables::byte(x.b, src) == 5 => {
                         src += 1;
                         name(x, t, SAVED_NAME, Defaults::Codes, Glyph::Pair);
                     }
@@ -299,17 +301,17 @@ pub(super) fn compose<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, style: u8, slot
 
 /// 0xc8844: title of the player's class, their framed name, and the count.
 fn title_and_name<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, p: Obj) {
-    let class = (p.u8(x.b, 3) >> 1).wrapping_mul(4);
-    let mut src = rd32(x.b, CLASS_TITLES + class as u32);
+    let class = (p.u8(x.b, Player::CHARACTER) >> 1).wrapping_mul(4);
+    let mut src = set_tables::long(x.b, CLASS_TITLES + class as u32);
     loop {
-        let c = rd8(x.b, src);
+        let c = set_tables::byte(x.b, src);
         if c == 0xfd {
             break;
         }
         src += 1;
         t.byte(x, c);
         if c <= 15 {
-            let arg = rd8(x.b, src);
+            let arg = set_tables::byte(x.b, src);
             src += 1;
             t.byte(x, arg);
         }
@@ -358,7 +360,7 @@ fn words<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, slot: u32) {
     let mut src = x.u32(f::TEXT);
     let mut list = slot;
     loop {
-        let w = rd16(x.b, src);
+        let w = set_tables::word(x.b, src);
         src += 2;
         if w == 0 {
             return wr16(x.b, t.at, 0);
@@ -367,9 +369,9 @@ fn words<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, slot: u32) {
             t.escape(x, w as u8, &mut src);
         } else if w == 0x7001 || w == 0x7002 {
             let k = x.a5_u8(ram::PLAYER_COUNT).wrapping_sub(1) as u32 * 4;
-            list = rd32(x.b, list + k);
+            list = set_tables::long(x.b, list + k);
             loop {
-                let v = rd16(x.b, list);
+                let v = set_tables::word(x.b, list);
                 if v == 0 {
                     break;
                 }
@@ -390,10 +392,10 @@ fn words<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, slot: u32) {
 fn linked_message<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text) {
     let src = x.u32(f::TEXT);
     copy_until_end(x, t, src, |x, t, c, src| {
-        if c != 7 || (rd8(x.b, *src) as i8) < 6 {
+        if c != 7 || (set_tables::byte(x.b, *src) as i8) < 6 {
             return false;
         }
-        let k = rd8(x.b, *src);
+        let k = set_tables::byte(x.b, *src);
         *src += 1;
         let linked = x.linked(f::LINKED);
         match k {
@@ -419,7 +421,7 @@ fn linked_message<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text) {
 /// 0xc8d88: message of the first piece of equipment of player `p` recognized in the lists of their
 /// class (two weapon slots, then six items).
 fn equipment_message<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, p: Obj) {
-    let (main, items) = EQUIP_LISTS[(p.u8(x.b, 3) >> 1 != 0) as usize];
+    let (main, items) = EQUIP_LISTS[(p.u8(x.b, Player::CHARACTER) >> 1 != 0) as usize];
     let candidates = [(main, p.u8(x.b, EQUIP_A)), (main, p.u8(x.b, EQUIP_B))]
         .into_iter()
         .chain((0..6).map(|i| (items, p.u8(x.b, ITEMS + i))));
@@ -433,7 +435,7 @@ fn equipment_message<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, p: Obj) {
 /// 0xc8e24: rank of `item` in the byte list `list` (ended by a negative byte).
 fn find_in_list<R: Bench>(x: &mut Cx<'_, R>, list: u32, item: u8) -> Option<u32> {
     (0..).map_while(|i| {
-        let c = rd8(x.b, list + i);
+        let c = set_tables::byte(x.b, list + i);
         ((c as i8) >= 0).then_some((i, c))
     })
     .find(|&(_, c)| c == item)
@@ -443,9 +445,9 @@ fn find_in_list<R: Bench>(x: &mut Cx<'_, R>, list: u32, item: u8) -> Option<u32>
 /// 0xc8e5c: message no. `i` (two tables depending on the language), up to 0xfd excluded.
 fn message<R: Bench>(x: &mut Cx<'_, R>, t: &mut Text, i: u32) {
     let table = if x.a5_u16(ram::LANGUAGE) == 4 { MESSAGES_LANG4 } else { MESSAGES_OTHER };
-    let mut src = prog32(x.b, table + 4 * i);
+    let mut src = set_tables::pc_long(x.b, table + 4 * i);
     loop {
-        let c = rd8(x.b, src);
+        let c = set_tables::byte(x.b, src);
         src += 1;
         if c == 0xfd {
             return;

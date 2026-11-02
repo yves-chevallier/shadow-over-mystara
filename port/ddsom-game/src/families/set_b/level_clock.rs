@@ -1,4 +1,8 @@
 use super::*;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::families::set::fields::SetObj;
+use crate::families::set_b::fields::LevelClockObj;
 
 const ON: crate::sound::Sound = crate::sound::CMD_9A_B;
 const OFF: crate::sound::Sound = crate::sound::CMD_9B_B;
@@ -8,12 +12,12 @@ const TICK: u32 = 0x1c;
 const FAR: i16 = 0xa00;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
-            x.add8(0x4, 2);
+            x.add8(Obj::STATE, 2);
             x.set16(TIME, 0);
             let v = x.a5_u16(ram::CAMERA_X);
-            x.set16(0x1e, v);
+            x.set16(LevelClockObj::START_X, v);
         }
         2 => step(x),
         _ => x.free(&pools::SET),
@@ -42,23 +46,23 @@ fn countdown<R: Bench>(x: &mut Cx<'_, R>, reset: u16, kind: u32) {
 }
 
 fn step<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.a5_u8(0x35) != 0 {
+    if x.a5_u8(vars::PLAYERS_ALIVE) != 0 {
         x.add16(TIME, 1);
     }
-    if x.u8(0x5) != 6 {
-        let far = x.a5_u16(ram::CAMERA_X).wrapping_sub(x.u16(0x1e)) as i16;
+    if x.u8(SetObj::SUBSTATE) != 6 {
+        let far = x.a5_u16(ram::CAMERA_X).wrapping_sub(x.u16(LevelClockObj::START_X)) as i16;
         if far >= FAR {
             x.set16(CUE, 0x78);
-            x.set8(0x5, 6);
+            x.set8(SetObj::SUBSTATE, 6);
         }
     }
     let time = x.u16(TIME) as i16;
-    match x.u8(0x5) {
+    match x.u8(SetObj::SUBSTATE) {
         0 => {
             if time < 0x258 {
                 return;
             }
-            x.add8(0x5, 2);
+            x.add8(SetObj::SUBSTATE, 2);
             show_message(x, 2);
             x.set16(TICK, 0x50);
             speech(x, 0);
@@ -71,7 +75,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             if time < 0x4b0 {
                 return;
             }
-            x.add8(0x5, 2);
+            x.add8(SetObj::SUBSTATE, 2);
             show_message(x, 2);
             x.set16(TICK, 0x3c);
             speech(x, 1);
@@ -83,7 +87,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             if time < 0x708 {
                 return;
             }
-            x.add8(0x5, 2);
+            x.add8(SetObj::SUBSTATE, 2);
             speech(x, 2);
             x.set16(CUE, 0x78);
             crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::C, 0x78);
@@ -95,8 +99,8 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             if n != 0 {
                 return;
             }
-            x.add8(0x4, 2);
-            x.set_a5_u8(0x42, 1);
+            x.add8(Obj::STATE, 2);
+            x.set_a5_u8(vars::FROZEN, 1);
             crate::sound::play(x.b, OFF, x.o);
         }
         _ => {}

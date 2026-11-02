@@ -1,4 +1,8 @@
 use super::*;
+use crate::families::set::tables as set_tables;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::families::set::fields::SetObj;
 
 const STEP: u32 = 0x42;
 const BLAST: u32 = 0x46;
@@ -8,13 +12,13 @@ const BLAST_DX: u32 = 0xd4910;
 const BLAST_DY: u32 = 0xd4930;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
-            x.add8(0x4, 2);
+            x.add8(Obj::STATE, 2);
             x.set8(BLAST, 0x14);
         }
         2 => step(x),
-        4 => x.add8(0x4, 2),
+        4 => x.add8(Obj::STATE, 2),
         _ => x.free(&pools::SET),
     }
 }
@@ -26,7 +30,7 @@ fn camera_x<R: Bench>(x: &mut Cx<'_, R>) -> i16 {
 /// Goes to the next step and arms the step's countdown.
 fn next<R: Bench>(x: &mut Cx<'_, R>, frames: u8) {
     x.set8(STEP, frames);
-    x.add8(0x5, 2);
+    x.add8(SetObj::SUBSTATE, 2);
 }
 
 fn countdown<R: Bench>(x: &mut Cx<'_, R>) -> bool {
@@ -36,15 +40,15 @@ fn countdown<R: Bench>(x: &mut Cx<'_, R>) -> bool {
 }
 
 fn step<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x5) {
+    match x.u8(SetObj::SUBSTATE) {
         0 => {
-            x.add8(0x5, 2);
+            x.add8(SetObj::SUBSTATE, 2);
             freeze_and_show(x);
         }
         2 => {
             if camera_x(x) >= 0x100 {
                 crate::sound::play(x.b, crate::sound::CMD_9A_B, x.o);
-                x.add8(0x5, 2);
+                x.add8(SetObj::SUBSTATE, 2);
                 crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::A, 0x1e);
             }
         }
@@ -68,7 +72,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
         }
         10 => {
             if countdown(x) {
-                x.add8(0x5, 2);
+                x.add8(SetObj::SUBSTATE, 2);
                 crate::sound::play(x.b, crate::sound::CMD_9B_B, x.o);
             }
         }
@@ -89,7 +93,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
         16 => explosions(x),
         18 => {
             if countdown(x) {
-                x.add8(0x5, 2);
+                x.add8(SetObj::SUBSTATE, 2);
                 crate::sound::play(x.b, crate::sound::CMD_9B_B, x.o);
             }
         }
@@ -110,7 +114,7 @@ fn step<R: Bench>(x: &mut Cx<'_, R>) {
             let n = x.u8(STEP).wrapping_sub(1);
             x.set8(STEP, n);
             if (n as i8) < 0 {
-                x.add8(0x4, 2);
+                x.add8(Obj::STATE, 2);
             }
         }
         _ => {}
@@ -136,7 +140,7 @@ fn explosions<R: Bench>(x: &mut Cx<'_, R>) {
         random_blast(x);
     }
     if countdown(x) {
-        x.add8(0x5, 2);
+        x.add8(SetObj::SUBSTATE, 2);
         crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, 0x32);
     }
 }
@@ -144,10 +148,10 @@ fn explosions<R: Bench>(x: &mut Cx<'_, R>) {
 fn random_blast<R: Bench>(x: &mut Cx<'_, R>) {
     let rng = x.random();
     let i = (rng as u32 & 0xf) << 1;
-    let dx = x.rom16(BLAST_DX + i);
+    let dx = set_tables::pc_word(x.b, BLAST_DX + i);
     let rng = x.random();
     let i = (rng as u32 & 0xf) << 1;
-    let dy = x.rom16(BLAST_DY + i);
+    let dy = set_tables::pc_word(x.b, BLAST_DY + i);
     let px = dx.wrapping_add(x.a5_u16(ram::CAMERA_X));
     let py = dy.wrapping_add(x.a5_u16(ram::CAMERA_Y));
     crate::families::enemy_common::enemy_blast_at(x, px, py);
@@ -163,12 +167,12 @@ fn spawn_boss<R: Bench>(x: &mut Cx<'_, R>) {
         crate::families::effects_creators::debris_rain(x.b, x.o, n, 0);
     }
     crate::sound::play(x.b, crate::sound::CMD_9C, x.o);
-    x.set_a5_u8(0x48e, 0xf);
+    x.set_a5_u8(vars::FADE_PAGES, 0xf);
     crate::palette::full_brightness(x.b);
     let Some(boss) = x.alloc(&pools::BOSS) else { return };
-    boss.set_u8(x.b, 0, 1);
-    boss.set_u8(x.b, 2, 2);
-    x.add8(0x5, 2);
+    boss.set_u8(x.b, Obj::ACTIVE, 1);
+    boss.set_u8(x.b, Obj::KIND, 2);
+    x.add8(SetObj::SUBSTATE, 2);
     x.set8(STEP, 0x3c);
     x.set8(BLAST, 0x28);
 }

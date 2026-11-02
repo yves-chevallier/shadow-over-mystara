@@ -2,6 +2,12 @@ use super::super::set_b;
 use super::*;
 use crate::mem::{rd16, rd8, wr8, A5};
 use cps2::Cps2Bus;
+use crate::families::set::tables as set_tables;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::player::Player;
+use crate::families::set_b::fields::DoorObj;
+use crate::families::set::fields::SetObj;
 
 // --- ROM table (program space) ---
 const GATES: u32 = 0xcb344;
@@ -67,7 +73,7 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if !gate_active(x.b, x.o) {
         return;
     }
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => init(x),
         2 => watch(x),
         4 => arrive(x),
@@ -125,8 +131,8 @@ fn change_zone<R: Bench>(x: &mut Cx<'_, R>) {
         KIND_GAME_OVER => x.set_a5_u8(GAME_OVER, 1),
         _ => {
             x.set_a5_u16(OWNER_GATE, 0);
-            if MARKING_VARIANTS.contains(&x.u8(0x3)) {
-                x.set_a5_u8(0x4a, 1);
+            if MARKING_VARIANTS.contains(&x.u8(Obj::VARIANT)) {
+                x.set_a5_u8(vars::PAUSE, 1);
             }
             exit_fading::fade_to_black(x, exit_fading::Step::Zone)
         }
@@ -141,7 +147,7 @@ pub fn after_fade<R: Bench>(x: &mut Cx<'_, R>) {
         return leave_annex(x);
     }
     save_and_suspend(x);
-    x.set16(0x4, 0x400);
+    x.set16(Obj::STATE, 0x400);
     enter_annex(x);
 }
 
@@ -162,12 +168,10 @@ pub fn next_scene<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Pools suspended on entering a side zone, in the original's order (the players' effects,
 /// between the enemy shots and the players' shots, are released instead of suspended).
-const SUSPENDED: [&set_b::Pool; 8] = [
-    &set_b::SET_POOL, &set_b::SOBJ_POOL, &set_b::ENEMY_POOL, &set_b::EFFCT_POOL, &set_b::BOX_POOL,
-    &set_b::ITEM_POOL, &set_b::BOSS_POOL, &set_b::ESHL_POOL,
+const SUSPENDED: [&pools::Pool; 8] = [
+    &pools::SET, &pools::SOBJ, &pools::ENEMY, &pools::EFFCT, &pools::BOX,
+    &pools::ITEM, &pools::BOSS, &pools::ESHL,
 ];
-const PEFF_POOL: set_b::Pool = set_b::Pool { base: A5 + 0x179e, size: 0x60, count: 48 };
-const PSHL_POOL: set_b::Pool = set_b::Pool { base: A5 + 0x10de, size: 0x60, count: 18 };
 /// Scenery of type 0x13 released on entering the doors of variant 8 and 0xa.
 const FREED_KIND: u8 = 0x13;
 /// Cameras imposed by variants 8 and 0xa (`+0x30..+0x3c`).
@@ -177,25 +181,24 @@ const CAMERA_VARIANT_A: [u32; 4] = [0x400_0000, 0x1fe_0000, 0x200_0000, 0x7b_000
 /// Saves the scene state in the door and suspends the world (0xcbcba).
 fn save_and_suspend<R: crate::families::cx::Bench>(x: &mut Cx<'_, R>) {
     set_b::save_camera(x);
-    let v = x.a5_u16(0x52c);
-    x.set16(0x22, v);
+    let v = x.a5_u16(vars::CAMERA_MAX_X);
+    x.set16(DoorObj::CAMERA_MAX_X_SAVED, v);
     let v = x.a5_u8(NEXT_SCENE_FLAG);
-    x.set8(0x25, v);
+    x.set8(DoorObj::NEXT_SCENE_FLAG_SAVED, v);
     x.set_a5_u8(NEXT_SCENE_FLAG, 0);
-    let v = x.a5_u8(0x58);
-    x.set8(0x26, v);
-    let camera = match x.u8(0x3) {
+    let v = x.a5_u8(vars::TRANSITION);
+    x.set8(DoorObj::TRANSITION_SAVED, v);
+    let camera = match x.u8(Obj::VARIANT) {
         0xa => Some(CAMERA_VARIANT_A),
         0x8 => Some(CAMERA_VARIANT_8),
         _ => None,
     };
     if let Some(camera) = camera {
         for (i, v) in camera.into_iter().enumerate() {
-            x.set32(0x30 + 4 * i as u32, v);
+            x.set32(DoorObj::CAMERAS_SAVED + 4 * i as u32, v);
         }
-        for i in 0..set_b::SET_POOL.count {
-            let o = Obj(set_b::SET_POOL.base + i * set_b::SET_POOL.size);
-            if o.u8(x.b, 0) != 0 && o.u8(x.b, 2) == FREED_KIND {
+        for o in pools::SET.iter() {
+            if o.u8(x.b, Obj::ACTIVE) != 0 && o.u8(x.b, Obj::KIND) == FREED_KIND {
                 pools::SET.release(x.b, o);
             }
         }
@@ -204,14 +207,13 @@ fn save_and_suspend<R: crate::families::cx::Bench>(x: &mut Cx<'_, R>) {
         set_b::suspend(x, pool);
     }
     free_player_effects(x);
-    set_b::suspend(x, &PSHL_POOL);
+    set_b::suspend(x, &pools::PSHL);
 }
 
 fn free_player_effects<R: Bench>(x: &mut Cx<'_, R>) {
-    for i in 0..PEFF_POOL.count {
-        let o = Obj(PEFF_POOL.base + i * PEFF_POOL.size);
-        if o.u8(x.b, 0) != 0 {
-            o.set_u8(x.b, 0x4, 6);
+    for o in pools::PEFF.iter() {
+        if o.u8(x.b, Obj::ACTIVE) != 0 {
+            o.set_u8(x.b, Obj::STATE, 6);
         }
     }
 }
@@ -233,12 +235,12 @@ fn leave_annex<R: Bench>(x: &mut Cx<'_, R>) {
         for off in [P_BLOCK_A, P_BLOCK_B, P_BLOCK_C, P_RESET] {
             p.set_u8(x.b, off, 0);
         }
-        p.set_u8(x.b, 0x7e, 0x46);
+        p.set_u8(x.b, Player::INVULN, 0x46);
     }
-    x.set8(0x4, 6);
+    x.set8(Obj::STATE, 6);
     // the other woken doors run immediately (the original's recursive `bsr`)
-    set_b::resume_with(x, &set_b::SET_POOL, |x, o| {
-        if o.u8(x.b, 2) == 7 {
+    set_b::resume_with(x, &pools::SET, |x, o| {
+        if o.u8(x.b, Obj::KIND) == 7 {
             set_b::run_on(x, o, run);
         }
     });
@@ -246,7 +248,7 @@ fn leave_annex<R: Bench>(x: &mut Cx<'_, R>) {
         set_b::resume(x, pool);
     }
     free_player_effects(x);
-    set_b::resume(x, &PSHL_POOL);
+    set_b::resume(x, &pools::PSHL);
 }
 
 /// State 4 (0xcba48): return from the side zone, the previous scene is reloaded.
@@ -255,20 +257,20 @@ fn arrive<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u16(OWNER_GATE, 0);
     crate::text::clear_box(x.b, CLEARED_TEXT_BOX);
     set_b::restore_camera(x);
-    let v = x.u16(0x22);
-    x.set_a5_u16(0x52c, v);
-    let v = x.u8(0x25);
+    let v = x.u16(DoorObj::CAMERA_MAX_X_SAVED);
+    x.set_a5_u16(vars::CAMERA_MAX_X, v);
+    let v = x.u8(DoorObj::NEXT_SCENE_FLAG_SAVED);
     x.set_a5_u8(NEXT_SCENE_FLAG, v);
-    let v = x.u8(0x26);
-    x.set_a5_u8(0x58, v);
-    let music = x.u16(0x1c);
+    let v = x.u8(DoorObj::TRANSITION_SAVED);
+    x.set_a5_u8(vars::TRANSITION, v);
+    let music = x.u16(DoorObj::MUSIC);
     crate::sound::play_with(x.b, crate::sound::FROM_D4, crate::sound::Source { d4: Some(music as u32), ..Default::default() });
     for p in players() {
         if p.u8(x.b, P_ACTIVE) != 0 {
             place(x, p);
         }
     }
-    x.set8(0x4, 6);
+    x.set8(Obj::STATE, 6);
 }
 
 /// Placement row per variant (byte, program space) then X, Y offsets per row and per
@@ -290,11 +292,11 @@ fn place<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
     let flags = p.u8(x.b, P_FLAGS) & !P_HIDDEN;
     p.set_u8(x.b, P_FLAGS, flags);
     p.set_u8(x.b, P_ACTIVE, 1);
-    let variant = x.u8(0x3) as u32;
-    let row = (x.rom8(PLACEMENT_ROW + variant) as u16) << 4;
-    let index = row.wrapping_add(4 * p.u8(x.b, 2) as u16) as u32;
-    let (dx, dy) = (x.rom16(PLACEMENT + index), x.rom16(PLACEMENT + 2 + index));
-    let (gx, gy) = (x.u16(0x8), x.u16(0x10));
+    let variant = x.u8(Obj::VARIANT) as u32;
+    let row = (set_tables::pc_byte(x.b, PLACEMENT_ROW + variant) as u16) << 4;
+    let index = row.wrapping_add(4 * p.u8(x.b, Player::INDEX) as u16) as u32;
+    let (dx, dy) = (set_tables::pc_word(x.b, PLACEMENT + index), set_tables::pc_word(x.b, PLACEMENT + 2 + index));
+    let (gx, gy) = (x.u16(Obj::X), x.u16(Obj::Y));
     p.set_u16(x.b, P_X, gx.wrapping_add(dx));
     p.set_u16(x.b, P_Y, gy.wrapping_add(dy));
     p.set_u16(x.b, P_Z, 0);
@@ -308,7 +310,7 @@ fn alive(b: &mut Cps2Bus, p: Obj) -> bool {
 
 /// Conditions of 0xcb2a0-0xcb2d8: does the door act on this frame?
 fn gate_active(b: &mut Cps2Bus, me: Obj) -> bool {
-    if me.u8(b, 0x2f) != 0 || me.u8(b, 0x40) != 0 {
+    if me.u8(b, SetObj::PARAM) != 0 || me.u8(b, Obj::HIDDEN) != 0 {
         return false;
     }
     if rd8(b, A5 + PAUSED) != 0 || rd8(b, A5 + EXIT_LOCK) != 0 || rd8(b, A5 + TRANSITION) != 0 {
@@ -334,14 +336,14 @@ fn in_reach(b: &mut Cps2Bus, me: Obj, p: Obj) -> bool {
     if state >> 24 != 2 || !WALKING_STATES.contains(&(state & !0xff)) || p.u16(b, P_Z) != 0 {
         return false;
     }
-    let dx = p.u16(b, P_X).wrapping_sub(me.u16(b, 0x8)).wrapping_add(REACH_X);
+    let dx = p.u16(b, P_X).wrapping_sub(me.u16(b, Obj::X)).wrapping_add(REACH_X);
     if dx > 2 * REACH_X {
         return false;
     }
     if me.u8(b, IGNORE_DEPTH) != 0 {
         return true;
     }
-    let dy = p.u16(b, P_Y).wrapping_sub(me.u16(b, 0x10)).wrapping_add(REACH_Y);
+    let dy = p.u16(b, P_Y).wrapping_sub(me.u16(b, Obj::Y)).wrapping_add(REACH_Y);
     dy <= 2 * REACH_Y
 }
 
@@ -374,18 +376,18 @@ fn refresh_player_count<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x4, 2);
+    x.add8(Obj::STATE, 2);
     for off in [NEAR_COUNTERS, NEAR_COUNTERS + 1, NEAR_COUNTERS + 2, NEAR_COUNTERS + 3, ARRIVED, TRIGGERED] {
         x.set8(off, 0);
     }
-    let row = GATES + (((x.u8(0x3) as u16) << GATE_SHIFT) as i16 as i32 as u32);
-    let (gx, gz, gy) = (x.rom16(row + GATE_X), x.rom16(row + GATE_Z), x.rom16(row + GATE_Y));
-    x.set16(0x8, gx);
-    x.set16(0xc, gz);
-    x.set16(0x10, gy);
+    let row = GATES + (((x.u8(Obj::VARIANT) as u16) << GATE_SHIFT) as i16 as i32 as u32);
+    let (gx, gz, gy) = (set_tables::pc_word(x.b, row + GATE_X), set_tables::pc_word(x.b, row + GATE_Z), set_tables::pc_word(x.b, row + GATE_Y));
+    x.set16(Obj::X, gx);
+    x.set16(Obj::Z, gz);
+    x.set16(Obj::Y, gy);
     let fields = [(EXIT_KIND, GATE_EXIT_KIND), (ZONE, GATE_ZONE), (NEXT_SCENE, GATE_SCENE), (IGNORE_DEPTH, GATE_IGNORE_DEPTH), (BONUS, GATE_BONUS)];
     for (field, entry) in fields {
-        let v = x.rom8(row + entry);
+        let v = set_tables::pc_byte(x.b, row + entry);
         x.set8(field, v);
     }
 }
@@ -435,11 +437,11 @@ fn trigger<R: Bench>(x: &mut Cx<'_, R>, p: Obj, bit: u8) {
     let me = x.o.0 as u16;
     x.set_a5_u16(OWNER_GATE, me);
     let zone = x.u8(ZONE) as u32;
-    let state = (x.rom16(PLAYER_STATES + 4 * zone) as u32) << 16 | x.rom16(PLAYER_STATES + 4 * zone + 2) as u32;
+    let state = set_tables::pc_long(x.b, PLAYER_STATES + 4 * zone);
     p.set_u32(x.b, P_STATE, state);
     p.set_u8(x.b, P_ACTIVE, STATE_DONE);
     p.set_u8(x.b, P_RESET, 1);
-    match x.u8(0x3) {
+    match x.u8(Obj::VARIANT) {
         0xa | 0xe => p.set_u32(x.b, P_STATE, 0x2002008),
         0x8 => p.set_u32(x.b, P_STATE, 0x200200a),
         0x28 => {

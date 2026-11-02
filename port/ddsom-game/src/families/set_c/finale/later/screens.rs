@@ -1,4 +1,8 @@
 use super::*;
+use crate::families::set::tables as set_tables;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::families::set::fields::SetObj;
 
 // --- variant 20: credits scroll ---------------------------------------------------------------------------------
 
@@ -7,13 +11,13 @@ use super::*;
 /// 0x2f: end of page). The background (`A5+0x4ba`) scrolls by 0x4000/65536 pixel per frame.
 pub fn credits_scroll<R: Bench>(x: &mut Cx<'_, R>) {
     const TEXT: u32 = 0xd01de;
-    if x.u8(0x4) == 6 {
+    if x.u8(Obj::STATE) == 6 {
         return x.free(&pools::SET);
     }
-    if x.u8(0x4) == 0 {
+    if x.u8(Obj::STATE) == 0 {
         next_state(x);
         crate::video::clear_layer(x.b, crate::video::Layer::One);
-        x.set_a5_u8(0x48e, 2);
+        x.set_a5_u8(vars::FADE_PAGES, 2);
         crate::palette::full_brightness(x.b);
         x.set32(0x20, 0);
         x.set32(0x24, TEXT);
@@ -26,11 +30,11 @@ pub fn credits_scroll<R: Bench>(x: &mut Cx<'_, R>) {
     x.set32(0x20, v);
     let scroll = x.u16(0x20) & 0x1ff;
     x.set16(0x20, scroll);
-    x.set_a5_u16(0x4ba, scroll);
-    if x.u8(0x5) != 0 {
+    x.set_a5_u16(vars::SCROLL_Y_PLANE1, scroll);
+    if x.u8(SetObj::SUBSTATE) != 0 {
         return;
     }
-    let phase = (x.a5_u16(0x4ba) & 8) as u8;
+    let phase = (x.a5_u16(vars::SCROLL_Y_PLANE1) & 8) as u8;
     if x.u8(0x2a) == phase {
         return;
     }
@@ -51,12 +55,12 @@ pub fn credits_scroll<R: Bench>(x: &mut Cx<'_, R>) {
     // cell cleared at the same time: the one on the opposite page (0x2000 further), set once
     let erase = 0x910000u32 + ((dest as u16).wrapping_add(0x2000) & 0x3fff) as u32;
     loop {
-        let c = x.data8(text);
+        let c = set_tables::byte(x.b, text);
         text += 1;
         match c {
             0xfe => return next_substate(x),
             0xff => {
-                let a = x.data8(text);
+                let a = set_tables::byte(x.b, text);
                 text += 1;
                 x.set8(0x2e, a);
                 attr = a as u16;
@@ -85,7 +89,7 @@ pub fn credits_scroll<R: Bench>(x: &mut Cx<'_, R>) {
 pub fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
     const COLOR: u32 = 0x91cfb2;
     const REFERENCE: u32 = 0x91cc00;
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
             x.set8(0x20, 0);
@@ -96,7 +100,7 @@ pub fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
         _ => return,
     }
     if (conductor(x).u8(x.b, 8) as i8) < 0 {
-        return x.set8(0x4, 6);
+        return x.set8(Obj::STATE, 6);
     }
     if x.u8(0x20) != 0 {
         x.set8(0x20, 0);
@@ -121,21 +125,21 @@ pub fn flicker<R: Bench>(x: &mut Cx<'_, R>) {
 /// (list of tiles at `+0x118` of the player, written by 0xb230e on a background of 0x912000), waits 0x78
 /// frames, removes the object and moves on to the next. Ends with 0xca8 and 0xcc8.
 pub fn name_entry<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x4) == 0 {
+    if x.u8(Obj::STATE) == 0 {
         next_state(x);
         x.set16(0x20, PLAYERS as u16);
         x.set8(0x22, 4);
-    } else if x.u8(0x4) != 2 {
+    } else if x.u8(Obj::STATE) != 2 {
         return;
     }
-    match x.u8(0x5) {
+    match x.u8(SetObj::SUBSTATE) {
         0 => {
             let mut a1 = adr16(x.u16(0x20));
             loop {
                 if x.u8(0x22) == 0 {
                     next_state(x);
-                    let v = x.a5_u8(0x2d).wrapping_add(2);
-                    x.set_a5_u8(0x2d, v);
+                    let v = x.a5_u8(vars::STEP).wrapping_add(2);
+                    x.set_a5_u8(vars::STEP, v);
                     crate::video::clear_layer(x.b, crate::video::Layer::One);
                     return crate::video::clear_layer(x.b, crate::video::Layer::Two);
                 }
@@ -157,9 +161,9 @@ pub fn name_entry<R: Bench>(x: &mut Cx<'_, R>) {
             x.set16(0x24, o.0 as u16);
             let character = rd8(x.b, player + 3);
             o.set_u8(x.b, 0x2f, character);
-            let dest = 0x912000u32.wrapping_add(x.rom16(0xd0858 + 2 * character as u32) as i16 as i32 as u32);
+            let dest = 0x912000u32.wrapping_add(set_tables::pc_word(x.b, 0xd0858 + 2 * character as u32) as i16 as i32 as u32);
             let kind = rd8(x.b, player + 2) as u32;
-            let attr = x.rom8(0xd0854 + kind) as u16;
+            let attr = set_tables::pc_byte(x.b, 0xd0854 + kind) as u16;
             write_name(x, player + 0x118, dest, attr);
             block_loader_for(x, character as u32);
         }
@@ -179,7 +183,7 @@ pub fn name_entry<R: Bench>(x: &mut Cx<'_, R>) {
         0xc => {
             next_substate(x);
             let o = Obj(adr16(x.u16(0x24)));
-            o.set_u32(x.b, 4, 0x0600_0000);
+            o.set_u32(x.b, Obj::STATE, 0x0600_0000);
         }
         0xe => {
             next_substate(x);
@@ -191,7 +195,7 @@ pub fn name_entry<R: Bench>(x: &mut Cx<'_, R>) {
         0x10 => {
             x.add16(0x26, 0xffff);
             if x.u16(0x26) == 0 {
-                x.set8(0x5, 0);
+                x.set8(SetObj::SUBSTATE, 0);
             }
         }
         _ => {}
@@ -205,9 +209,9 @@ fn write_name<R: Bench>(x: &mut Cx<'_, R>, list: u32, mut at: u32, attr: u16) {
     const TILES: u32 = 0xb2920;
     const PATTERNS: u32 = 0xb2a24;
     let mut p = list;
-    if x.data8(p) >= 0xf9 {
-        let code = (x.data8(p) as i8 as i16).wrapping_neg().wrapping_sub(2) as u16;
-        let mut tile = x.data16(PATTERNS.wrapping_add(code.wrapping_mul(2) as i16 as i32 as u32));
+    if set_tables::byte(x.b, p) >= 0xf9 {
+        let code = (set_tables::byte(x.b, p) as i8 as i16).wrapping_neg().wrapping_sub(2) as u16;
+        let mut tile = set_tables::word(x.b, PATTERNS.wrapping_add(code.wrapping_mul(2) as i16 as i32 as u32));
         for _ in 0..6 {
             // 0xb230e leaves D0 = tile + 0x11; the pattern advances by two (D0 - 0xf)
             at = crate::families::effects_creators::tile_block(x.b, at, tile, attr).0;
@@ -216,12 +220,12 @@ fn write_name<R: Bench>(x: &mut Cx<'_, R>, list: u32, mut at: u32, attr: u16) {
         return;
     }
     loop {
-        let c = x.data8(p);
+        let c = set_tables::byte(x.b, p);
         p += 1;
         if c == 0xff {
             return;
         }
-        let tile = x.data16(TILES + 2 * c as u32);
+        let tile = set_tables::word(x.b, TILES + 2 * c as u32);
         at = crate::families::effects_creators::tile_block(x.b, at, tile, attr).0;
     }
 }
@@ -232,10 +236,10 @@ fn write_name<R: Bench>(x: &mut Cx<'_, R>, list: u32, mut at: u32, attr: u16) {
 /// 0x91cc00 into the object, background at 0x200), then blinks the palette and from time to time launches a
 /// SOBJ (variant 0x16) tied to the object. State 4 turns the blinking off.
 pub fn results_panel<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
-            x.set_a5_u16(0x56e, 4);
+            x.set_a5_u16(vars::TITLE_CARD, 4);
             let end = load_blocks(x, rom::LOAD_SMALL, 0x91ba00, 8);
             load_blocks(x, rom::LOAD_SMALL, end, 8);
             for i in 0..8 {

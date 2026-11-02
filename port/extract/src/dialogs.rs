@@ -449,8 +449,8 @@ pub fn specs(rom: &Program) -> (Vec<Region>, Vec<Spec>, Vec<TextBlock>) {
             w.end = w.items.values().map(|&(e, _)| e).max().unwrap();
         }
         let end = w.end;
-        let (gaps, raw) = w.fill();
-        eprintln!("dialogs {}: {} elements, {gaps} gaps, of which {raw} raw", lang.code, w.items.len());
+        // the gaps between the elements (raw words among them); no message: the game loads these tables too
+        w.fill();
         // tables: contiguous definitions grouped
         let mut run: Option<(u32, u32)> = None;
         let flush = |run: &mut Option<(u32, u32)>, specs: &mut Vec<Spec>| {

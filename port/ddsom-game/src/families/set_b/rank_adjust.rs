@@ -1,4 +1,7 @@
 use super::*;
+use crate::families::set::tables as set_tables;
+use crate::families::set::vars;
+use crate::objects::Obj;
 
 /// Table pointers (data space), per variant.
 const TABLES: u32 = 0xd6aa0;
@@ -11,14 +14,14 @@ const RANK_SAVED: u32 = 0x7fa4;
 const THRESHOLDS: [(u16, u16); 3] = [(0x30, 2), (0x50, 4), (0xffff, 6)];
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         // state 0 continues into state 2: twice +2
         0 => {
-            x.add8(0x4, 4);
+            x.add8(Obj::STATE, 4);
             adjust(x);
         }
         2 => {
-            x.add8(0x4, 2);
+            x.add8(Obj::STATE, 2);
             adjust(x);
         }
         _ => x.free(&pools::SET),
@@ -26,12 +29,12 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn adjust<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.a5_u8(0x30) == 0 {
+    if x.a5_u8(vars::GAME) == 0 {
         return;
     }
-    let variant = x.u8(0x3) as u32;
-    let table = x.data32(TABLES + 4 * variant);
-    let count = x.a5_u8(0x35) as u32;
+    let variant = x.u8(Obj::VARIANT) as u32;
+    let table = set_tables::long(x.b, TABLES + 4 * variant);
+    let count = x.a5_u8(vars::PLAYERS_ALIVE) as u32;
     if count == 0 {
         return;
     }
@@ -52,7 +55,7 @@ fn adjust<R: Bench>(x: &mut Cx<'_, R>) {
         }
     }
     let at = table.wrapping_add(row.wrapping_add(category as u32) as u16 as i16 as i32 as u32);
-    let delta = x.data16(at) as i16;
+    let delta = set_tables::word(x.b, at) as i16;
     if delta == 0 {
         return;
     }

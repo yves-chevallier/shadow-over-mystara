@@ -1,7 +1,11 @@
 use super::*;
+use crate::families::set::tables as set_tables;
+use crate::objects::Obj;
+use crate::player::Player;
+use crate::families::set::fields::NameCursorObj;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => init(x),
         2 => step(x),
         4 => {}
@@ -20,21 +24,21 @@ fn init<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(ACTIVE, 0);
     x.set8(DONE, 0);
     x.set8(HELD_FRAMES, 0);
-    if player.u8(x.b, 0) == 0 || (player.u8(x.b, 4) as i8) >= 4 {
+    if player.u8(x.b, Player::ACTIVE) == 0 || (player.u8(x.b, Player::MAIN) as i8) >= 4 {
         return;
     }
     if x.a5_u8(GAME_MODE) != 1 && !(player.u32(x.b, BUFFER) == u32::MAX && player.u32(x.b, BUFFER + 4) == u32::MAX) {
         x.set8(DONE, 1);
-        x.set8(0x4, 4);
+        x.set8(Obj::STATE, 4);
         return;
     }
     let wide = x.a5_u16(WIDE_FLAG) != 0;
     x.set8(WIDE, wide as u8);
     let index = ((x.u8(PLAYER) << 2) as u16).wrapping_add((wide as u16) << 4) as u32;
-    let (col, row) = (x.rom16(START_CELLS + index), x.rom16(START_CELLS + 2 + index));
+    let (col, row) = (set_tables::pc_word(x.b, START_CELLS + index), set_tables::pc_word(x.b, START_CELLS + 2 + index));
     x.set16(COL, col);
     x.set16(ROW, row);
-    x.add8(0x4, 2);
+    x.add8(Obj::STATE, 2);
     x.set8(ACTIVE, 1);
     x.set8(LENGTH, 0);
     x.set8(VOICED_PENDING, 0);
@@ -107,7 +111,7 @@ fn step_cursor<R: Bench>(x: &mut Cx<'_, R>, dir: u32, repeat: u8) {
 
 /// Movement routines (table 0xc9f26): `slot` = direction × 2 (+ 8 in the wide grid).
 fn move_cursor<R: Bench>(x: &mut Cx<'_, R>, slot: u16, col: u16, row: u16) {
-    let width = |x: &mut Cx<'_, R>, table: u32, row: u16| x.data16(table.wrapping_add(row.wrapping_mul(2) as i16 as i32 as u32));
+    let width = |x: &mut Cx<'_, R>, table: u32, row: u16| set_tables::word(x.b, table.wrapping_add(row.wrapping_mul(2) as i16 as i32 as u32));
     match slot {
         // to the right, narrow grid
         0 => {
@@ -202,7 +206,7 @@ fn move_cursor<R: Bench>(x: &mut Cx<'_, R>, slot: u16, col: u16, row: u16) {
 /// Brings the column back within the width of the current row (wide grid).
 fn clamp_wide<R: Bench>(x: &mut Cx<'_, R>) {
     let r = x.u16(ROW);
-    let w = x.data16(ROW_WIDTH_WIDE.wrapping_add(r.wrapping_mul(2) as i16 as i32 as u32));
+    let w = set_tables::word(x.b, ROW_WIDTH_WIDE.wrapping_add(r.wrapping_mul(2) as i16 as i32 as u32));
     if w < x.u16(COL) {
         x.set16(COL, w);
     }
@@ -228,7 +232,7 @@ fn confirm_button<R: Bench>(x: &mut Cx<'_, R>) {
 fn char_under_cursor<R: Bench>(x: &mut Cx<'_, R>) -> u8 {
     let index = x.u16(COL).wrapping_add(x.u16(ROW) << 4);
     let table = if wide(x) { GRID_WIDE } else { GRID_NARROW };
-    x.rom8(table.wrapping_add(index as i16 as i32 as u32))
+    set_tables::pc_byte(x.b, table.wrapping_add(index as i16 as i32 as u32))
 }
 
 /// 0xc9cd8: command of the special column according to the row: 1 confirm (0x81), 2 default
@@ -262,7 +266,7 @@ fn enter_char<R: Bench>(x: &mut Cx<'_, R>, mut ch: u8, buffer: u32, len: u8) {
         if previous == 0x6f {
             return;
         }
-        let converted = x.data8(table + previous as u32);
+        let converted = set_tables::byte(x.b, table + previous as u32);
         if converted == 0 {
             return;
         }
@@ -317,13 +321,13 @@ fn erase_button<R: Bench>(x: &mut Cx<'_, R>) {
 fn load_default_name<R: Bench>(x: &mut Cx<'_, R>) {
     x.set8(NO_NAME, 0);
     let player = owner(x);
-    let mut offset = (player.u8(x.b, 3) as u16) << 3;
+    let mut offset = (player.u8(x.b, Player::CHARACTER) as u16) << 3;
     if wide(x) {
         offset += 0x60;
     }
     let mut length = 0u8;
     for i in 0..8u32 {
-        let mut c = x.data8(DEFAULT_NAMES + offset as u32 + i);
+        let mut c = set_tables::byte(x.b, DEFAULT_NAMES + offset as u32 + i);
         wr8(x.b, player.0 + BUFFER + i, c);
         length = length.wrapping_add(1);
         if c == NAME_END {
@@ -430,13 +434,13 @@ fn find_code<R: Bench>(x: &mut Cx<'_, R>, buffer: u32, table: u32, trailer: u32)
                 step = Phase::ReadLength;
             }
             Phase::ReadLength => {
-                let length = x.data8(a4);
+                let length = set_tables::byte(x.b, a4);
                 a4 += 1;
                 if (length as i8) < 0 {
                     return None;
                 }
                 left = length as u16;
-                first = x.data8(a4);
+                first = set_tables::byte(x.b, a4);
                 a4 += 1;
                 step = Phase::Search;
             }
@@ -462,7 +466,7 @@ fn find_code<R: Bench>(x: &mut Cx<'_, R>, buffer: u32, table: u32, trailer: u32)
                     step = Phase::NextPattern;
                     continue;
                 }
-                let want = x.data8(a4);
+                let want = set_tables::byte(x.b, a4);
                 a4 += 1;
                 let c = rd8(x.b, a1);
                 a1 += 1;
@@ -474,7 +478,7 @@ fn find_code<R: Bench>(x: &mut Cx<'_, R>, buffer: u32, table: u32, trailer: u32)
             }
             Phase::NextPattern => {
                 a4 = a3;
-                let length = x.data8(a4) as u32;
+                let length = set_tables::byte(x.b, a4) as u32;
                 a4 += 1 + length + trailer;
                 step = Phase::Start;
             }
@@ -499,9 +503,9 @@ fn special_codes<R: Bench>(x: &mut Cx<'_, R>) -> bool {
     match find_code(x, buffer, SPECIAL_CODES, 1) {
         None => true,
         Some(after) => {
-            let action = x.data8(after) as u32;
+            let action = set_tables::byte(x.b, after) as u32;
             let src = SPECIAL_REPLACEMENTS + (action << 3);
-            let (a, b) = (x.data32(src), x.data32(src + 4));
+            let (a, b) = (set_tables::long(x.b, src), set_tables::long(x.b, src + 4));
             wr32(x.b, buffer, a);
             wr32(x.b, buffer + 4, b);
             (b as i32) < 0
@@ -515,8 +519,8 @@ fn check_digit<R: Bench>(x: &mut Cx<'_, R>) {
     let first = rd8(x.b, buffer) as i8 as i16;
     let d0 = (-first).wrapping_sub(2) as u16;
     if d0 < 0x10 {
-        let v = x.rom8(DEFAULT_CHECK + (d0 & 0xff) as u32);
-        x.set8(0x2b, v);
+        let v = set_tables::pc_byte(x.b, DEFAULT_CHECK + (d0 & 0xff) as u32);
+        x.set8(NameCursorObj::CHECK, v);
         return;
     }
     for i in 0..6 {
@@ -524,34 +528,34 @@ fn check_digit<R: Bench>(x: &mut Cx<'_, R>) {
         if c == 0xff {
             continue;
         }
-        x.set8(0x2c, 0);
-        let digit = x.data8(CHAR_DIGITS + c as u32);
-        x.set8(0x2d, digit);
+        x.set8(NameCursorObj::ADDEND_HIGH, 0);
+        let digit = set_tables::byte(x.b, CHAR_DIGITS + c as u32);
+        x.set8(NameCursorObj::ADDEND, digit);
         add_bcd(x);
     }
-    while x.u8(0x2a) != 0 {
-        let carry_in = x.u8(0x2a);
-        x.set8(0x2d, carry_in);
-        x.set8(0x2c, 0);
-        x.set8(0x2a, 0);
+    while x.u8(NameCursorObj::CARRY) != 0 {
+        let carry_in = x.u8(NameCursorObj::CARRY);
+        x.set8(NameCursorObj::ADDEND, carry_in);
+        x.set8(NameCursorObj::ADDEND_HIGH, 0);
+        x.set8(NameCursorObj::CARRY, 0);
         add_bcd(x);
     }
-    while x.u8(0x2b) >= 0x10 {
-        let high = x.u8(0x2b) >> 4;
-        let low = x.u8(0x2b) & 0xf;
-        x.set8(0x2b, low);
-        x.set8(0x2d, high);
-        let (v, _) = abcd(x.u8(0x2d), x.u8(0x2b), false);
-        x.set8(0x2b, v);
+    while x.u8(NameCursorObj::CHECK) >= 0x10 {
+        let high = x.u8(NameCursorObj::CHECK) >> 4;
+        let low = x.u8(NameCursorObj::CHECK) & 0xf;
+        x.set8(NameCursorObj::CHECK, low);
+        x.set8(NameCursorObj::ADDEND, high);
+        let (v, _) = abcd(x.u8(NameCursorObj::ADDEND), x.u8(NameCursorObj::CHECK), false);
+        x.set8(NameCursorObj::CHECK, v);
     }
 }
 
 /// Adds the BCD value (`+0x2c:+0x2d`) to (`+0x2a:+0x2b`) with carry (two ABCD).
 fn add_bcd<R: Bench>(x: &mut Cx<'_, R>) {
-    let (low, carry) = abcd(x.u8(0x2d), x.u8(0x2b), false);
-    x.set8(0x2b, low);
-    let (high, _) = abcd(x.u8(0x2c), x.u8(0x2a), carry);
-    x.set8(0x2a, high);
+    let (low, carry) = abcd(x.u8(NameCursorObj::ADDEND), x.u8(NameCursorObj::CHECK), false);
+    x.set8(NameCursorObj::CHECK, low);
+    let (high, _) = abcd(x.u8(NameCursorObj::ADDEND_HIGH), x.u8(NameCursorObj::CARRY), carry);
+    x.set8(NameCursorObj::CARRY, high);
 }
 
 /// ABCD: `dst + src + carry` in BCD; returns (result, carry).
@@ -572,12 +576,12 @@ fn abcd(src: u8, dst: u8, carry: bool) -> (u8, bool) {
 /// (validated name, check digit), the cursor goes to state 4.
 fn commit_name<R: Bench>(x: &mut Cx<'_, R>) {
     let player = owner(x);
-    let kind = player.u8(x.b, 2) as u16;
+    let kind = player.u8(x.b, Player::INDEX) as u16;
     let mut index = kind.wrapping_mul(2);
     if x.a5_u8(BLINK_FLAGS) & 1 != 0 {
         index = index.wrapping_add(8);
     }
-    let offset = x.rom16(FINISH_POSITIONS.wrapping_add(index as i16 as i32 as u32));
+    let offset = set_tables::pc_word(x.b, FINISH_POSITIONS.wrapping_add(index as i16 as i32 as u32));
     let mut a1 = TILEMAP.wrapping_add(offset as i16 as i32 as u32);
     let mut tile: u32 = 0x6700013;
     tile = tile & !0xff | (tile as u8).wrapping_add(kind as u8) as u32;
@@ -587,19 +591,19 @@ fn commit_name<R: Bench>(x: &mut Cx<'_, R>) {
         tile = tile.wrapping_add(0x10000);
     }
     let swapped = tile.rotate_left(16);
-    let swapped = swapped & !0xff | (swapped as u8).wrapping_add(x.u8(0x2b)) as u32;
+    let swapped = swapped & !0xff | (swapped as u8).wrapping_add(x.u8(NameCursorObj::CHECK)) as u32;
     wr32(x.b, a1, swapped.rotate_left(16));
-    x.set32(0x4, 0x4000000);
+    x.set32(Obj::STATE, 0x4000000);
     x.set8(DONE, 1);
     x.set8(ACTIVE, 0);
-    let check = (x.u8(0x2b) << 2) as u32;
+    let check = (x.u8(NameCursorObj::CHECK) << 2) as u32;
     let record = {
         let at = FINISH_RECORDS + check;
-        (x.rom16(at) as u32) << 16 | x.rom16(at + 2) as u32
+        set_tables::pc_long(x.b, at)
     };
-    let variant = (player.u8(x.b, 3) >> 1) as u32;
+    let variant = (player.u8(x.b, Player::CHARACTER) >> 1) as u32;
     let a1 = record + variant * 5;
-    let (i0, v0, i1, v1, flag) = (x.data8(a1) as u32, x.data8(a1 + 1), x.data8(a1 + 2) as u32, x.data8(a1 + 3), x.data8(a1 + 4) as u32);
+    let (i0, v0, i1, v1, flag) = (set_tables::byte(x.b, a1) as u32, set_tables::byte(x.b, a1 + 1), set_tables::byte(x.b, a1 + 2) as u32, set_tables::byte(x.b, a1 + 3), set_tables::byte(x.b, a1 + 4) as u32);
     wr8(x.b, player.0 + 0x160 + i0, v0);
     if (i1 as u8 as i8) >= 0 {
         wr8(x.b, player.0 + 0x16b + i1, v1);
@@ -611,7 +615,7 @@ fn commit_name<R: Bench>(x: &mut Cx<'_, R>) {
 /// then release.
 fn finish_and_free<R: Bench>(x: &mut Cx<'_, R>) {
     let player = owner(x);
-    if player.u8(x.b, 0) != 0 && (player.u8(x.b, 4) as i8) < 4 && x.u8(DONE) == 0 {
+    if player.u8(x.b, Player::ACTIVE) != 0 && (player.u8(x.b, Player::MAIN) as i8) < 4 && x.u8(DONE) == 0 {
         x.set8(DONE, 1);
         finish(x);
     }

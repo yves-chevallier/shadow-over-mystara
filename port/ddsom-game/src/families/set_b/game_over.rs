@@ -1,19 +1,22 @@
 use super::*;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::families::set_b::fields::GameOverObj;
 
 const WAIT_FRAMES: u16 = 0x80;
 /// Per-component fade-to-white task.
 const FADE_TO_WHITE_TASK: u32 = 0x1ccf8;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 | 2 => {
-            if x.a5_u8(0x42) == 0 {
+            if x.a5_u8(vars::FROZEN) == 0 {
                 return;
             }
             // 0xa8ae8 (D0 = 7): scenery list 7
             crate::families::effects_creators::set_list_via(&mut OnBench(&mut x.c), x.b, 7);
-            x.add8(0x4, 2);
-            x.set16(0x4c, WAIT_FRAMES);
+            x.add8(Obj::STATE, 2);
+            x.set16(GameOverObj::WAIT, WAIT_FRAMES);
             crate::families::scenery::save_palette_page_1(x);
             // the original chains onto the countdown (0xd9458) from this very frame: 0x80 becomes 0x7f
             countdown(x);
@@ -24,14 +27,14 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn countdown<R: Bench>(x: &mut Cx<'_, R>) {
-    let n = x.u16(0x4c).wrapping_sub(1);
-    x.set16(0x4c, n);
+    let n = x.u16(GameOverObj::WAIT).wrapping_sub(1);
+    x.set16(GameOverObj::WAIT, n);
     if (n as i16) >= 0 {
         return;
     }
-    x.set_a5_u16(0x490, 1);
-    x.set_a5_u8(0x48e, 0xd);
-    x.set_a5_u8(0x48f, 1);
+    x.set_a5_u16(vars::FADE_DELAY, 1);
+    x.set_a5_u8(vars::FADE_PAGES, 0xd);
+    x.set_a5_u8(vars::FADE_STEPS, 1);
     start_fade_task(x, FADE_TO_WHITE_TASK);
     x.free(&pools::SET);
 }

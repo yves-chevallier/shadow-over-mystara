@@ -10,6 +10,9 @@
 use crate::families::cx::Bench;
 use super::*;
 use crate::mem::{rd8, wr16, wr32, wr8};
+use crate::families::set::tables as set_tables;
+use crate::objects::Obj;
+use crate::families::set::fields::SetObj;
 
 /// ROM tables (program space: PC-relative accesses).
 const LEVEL_RANGE: u32 = 0xce728;
@@ -32,20 +35,20 @@ const LANGUAGE: u32 = 0x73;
 const MESSAGE_PAGE: u32 = 0x72;
 
 pub fn status_window<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
             open(x);
         }
         2 => {
-            x.add8(0x10, 0xff);
-            if x.u8(0x10) != 0 {
+            x.add8(Obj::Y, 0xff);
+            if x.u8(Obj::Y) != 0 {
                 return;
             }
-            if x.u8(0x5) != 0 {
+            if x.u8(SetObj::SUBSTATE) != 0 {
                 return next_state(x);
             }
-            x.set8(0x10, 0x1e);
+            x.set8(Obj::Y, 0x1e);
             compose_message(x, 0);
         }
         _ => {}
@@ -53,7 +56,7 @@ pub fn status_window<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn next_state<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x4, 2);
+    x.add8(Obj::STATE, 2);
 }
 
 /// State 0: computes the player's tier, creates the window object, draws the frame and displays the first message.
@@ -62,7 +65,7 @@ fn open<R: Bench>(x: &mut Cx<'_, R>) {
     let half = rd8(x.b, player + 3) >> 1;
     x.set8(0x37, half);
     let at = LEVEL_RANGE + 2 * half as u32;
-    let (min, max) = (x.rom8(at) as i8, x.rom8(at + 1) as i8);
+    let (min, max) = (set_tables::pc_byte(x.b, at) as i8, set_tables::pc_byte(x.b, at + 1) as i8);
     let mut level = rd8(x.b, player + 0x10c).wrapping_add(1) as i8;
     if level > max {
         level = max;
@@ -70,9 +73,9 @@ fn open<R: Bench>(x: &mut Cx<'_, R>) {
     wr8(x.b, player + 0x10c, level as u8);
     let step = level.wrapping_sub(min) as u8;
     x.set8(0x36, step);
-    let base = x.rom16(FRAME_BY_LEVEL + 2 * half as u32);
+    let base = set_tables::pc_word(x.b, FRAME_BY_LEVEL + 2 * half as u32);
     let low = (base as u8).wrapping_add(step);
-    let frame = x.rom8(FRAME_BY_LEVEL + (base & 0xff00 | low as u16) as i16 as i32 as u32);
+    let frame = set_tables::pc_byte(x.b, FRAME_BY_LEVEL + (base & 0xff00 | low as u16) as i16 as i32 as u32);
     x.set_a5_u16(BOX_TOP, 0xb8u16.wrapping_sub(0x18 * frame as u16));
     // 0xddeaa: scenery 6 of variant 0xd, which keeps the frame
     if let Ok(scenery) = crate::effects_aids::scenery_6(x.b, 0xd) {
@@ -91,8 +94,8 @@ fn adr(v: u16) -> u32 {
 /// columns (42 lines of 0x80 bytes) and a background.
 fn draw_frame<R: Bench>(x: &mut Cx<'_, R>, frame: u8) {
     let entry = FRAMES + 8 * frame as u32;
-    let origin = (x.rom16(entry) as u32) << 16 | x.rom16(entry + 2) as u32;
-    let width = x.rom16(entry + 4);
+    let origin = set_tables::pc_long(x.b, entry);
+    let width = set_tables::pc_word(x.b, entry + 4);
     let longs = width as u32 + 1;
     let row = |x: &mut Cx<'_, R>, at: u32, value: u32, count: u32, stride: u32| {
         for i in 0..count {
@@ -123,31 +126,31 @@ fn pick_message<R: Bench>(x: &mut Cx<'_, R>, player: u32) {
     let half = x.u8(0x37) as u32;
     let tables = {
         let at = MESSAGE_TABLES + 4 * half;
-        (x.rom16(at) as u32) << 16 | x.rom16(at + 2) as u32
+        set_tables::pc_long(x.b, at)
     };
     let page = (x.a5_u16(MESSAGE_PAGE).wrapping_sub(2)).wrapping_mul(2);
-    let messages = x.data32(tables.wrapping_add(page as i16 as i32 as u32));
+    let messages = set_tables::long(x.b, tables.wrapping_add(page as i16 as i32 as u32));
     let step = x.u8(0x36) as u16;
     let record = tables + 0xc + step.wrapping_mul(20) as i16 as i32 as u32;
-    let hp = x.data16(record);
+    let hp = set_tables::word(x.b, record);
     wr16(x.b, player + 0x60, hp);
-    let choice = if rd8(x.b, player + 3) & 1 != 0 { x.data16(record + 4) } else { x.data16(record + 2) };
-    let pointer = x.data32(messages.wrapping_add(choice as i16 as i32 as u32));
-    x.set32(0x8, pointer);
+    let choice = if rd8(x.b, player + 3) & 1 != 0 { set_tables::word(x.b, record + 4) } else { set_tables::word(x.b, record + 2) };
+    let pointer = set_tables::long(x.b, messages.wrapping_add(choice as i16 as i32 as u32));
+    x.set32(Obj::X, pointer);
     let next = merge_statistics(x, player, record + 6);
     equip(x, player, next);
     let count = compose_header(x, player);
-    x.set8(0x10, 0x1e);
+    x.set8(Obj::Y, 0x1e);
     compose_message(x, count);
 }
 
 /// 0xceb20: takes the maximum, byte by byte, of nine ROM values and of the player's statistics `+0x151..` (unless the
 /// record starts with a negative byte). Returns the continuation.
 fn merge_statistics<R: Bench>(x: &mut Cx<'_, R>, player: u32, at: u32) -> u32 {
-    let skip = x.data8(at) as i8 <= -1;
+    let skip = set_tables::byte(x.b, at) as i8 <= -1;
     if !skip {
         for i in 0..9 {
-            let v = x.data8(at + 1 + i) as i8;
+            let v = set_tables::byte(x.b, at + 1 + i) as i8;
             let current = rd8(x.b, player + 0x151 + i) as i8;
             if v > current {
                 wr8(x.b, player + 0x151 + i, v as u8);
@@ -160,13 +163,13 @@ fn merge_statistics<R: Bench>(x: &mut Cx<'_, R>, player: u32, at: u32) -> u32 {
 /// 0xceb6c: changes a piece of the player's equipment. The record gives (new value, old value) for `+0x10d` or,
 /// otherwise, for the slot of `+0x140..` that holds the old value; then 0x3552 recomputes the player's characteristics.
 fn equip<R: Bench>(x: &mut Cx<'_, R>, player: u32, at: u32) {
-    if x.data8(at) as i8 <= -1 {
+    if set_tables::byte(x.b, at) as i8 <= -1 {
         return;
     }
-    let (new, old) = (x.data8(at), x.data8(at + 1));
+    let (new, old) = (set_tables::byte(x.b, at), set_tables::byte(x.b, at + 1));
     let kind = rd8(x.b, player + 0x10e).wrapping_sub(4);
     if kind <= 3 || old != rd8(x.b, player + 0x10d) {
-        let (new, old) = (x.data8(at + 2), x.data8(at + 3));
+        let (new, old) = (set_tables::byte(x.b, at + 2), set_tables::byte(x.b, at + 3));
         let mut slot = player + 0x140;
         loop {
             let found = rd8(x.b, slot) == old;
@@ -188,14 +191,14 @@ fn equip<R: Bench>(x: &mut Cx<'_, R>, player: u32, at: u32) {
 fn compose_header<R: Bench>(x: &mut Cx<'_, R>, player: u32) -> u16 {
     for (from, to, blocks) in PALETTE_SOURCES {
         for i in 0..8 * blocks {
-            let v = x.data32(from + 4 * i);
+            let v = set_tables::long(x.b, from + 4 * i);
             wr32(x.b, to + 4 * i, v);
         }
     }
     x.set_a5_u32(TEXT_POINTER, TEXT_BUFFER);
     x.set_a5_u16(TEXT_WIDTH, 0x60);
     let (end, count) = write_name(x, player, TEXT_BUFFER);
-    x.set32(0xc, end);
+    x.set32(Obj::Z, end);
     count
 }
 
@@ -216,40 +219,40 @@ fn write_name<R: Bench>(x: &mut Cx<'_, R>, player: u32, buffer: u32) -> (u32, u1
         out += 2;
     }
     // a code >= 0xf9 replaces the source with a list of the table (its codes then 0xff)
-    let first = rd8(x.b, src).wrapping_add(1);
+    let first = set_tables::byte(x.b, src).wrapping_add(1);
     if first >= 0xfa {
         let index = if japanese {
             (first.wrapping_neg().wrapping_sub(2)).wrapping_mul(4)
         } else {
-            (rd8(x.b, src).wrapping_neg().wrapping_sub(3)).wrapping_mul(4)
+            (set_tables::byte(x.b, src).wrapping_neg().wrapping_sub(3)).wrapping_mul(4)
         };
-        src = x.data32(HEADER_PAGES + index as u32);
-        left = x.data16(src) as i32;
+        src = set_tables::long(x.b, HEADER_PAGES + index as u32);
+        left = set_tables::word(x.b, src) as i32;
         src += 2;
     }
     while left >= 0 {
         left -= 1;
-        let code = x.data8(src);
+        let code = set_tables::byte(x.b, src);
         src += 1;
         if code == 0xff {
             break;
         }
         if japanese {
-            let glyph = x.data16(GLYPHS_JP + 2 * code as u32);
+            let glyph = set_tables::word(x.b, GLYPHS_JP + 2 * code as u32);
             wr16(x.b, out, glyph);
             out += 2;
         } else {
             let index = code.wrapping_sub(0x51) as u32;
             let table = GLYPHS_LATIN;
-            let at = table.wrapping_add(x.data16(table + 2 * index) as i16 as i32 as u32);
+            let at = table.wrapping_add(set_tables::word(x.b, table + 2 * index) as i16 as i32 as u32);
             let mut p = at;
-            if x.data8(p) <= 0xf {
-                let byte = x.data8(p);
+            if set_tables::byte(x.b, p) <= 0xf {
+                let byte = set_tables::byte(x.b, p);
                 wr8(x.b, out, byte);
                 out += 1;
                 p += 1;
             }
-            let byte = x.data8(p);
+            let byte = set_tables::byte(x.b, p);
             wr8(x.b, out, byte);
             out += 1;
         }
@@ -269,16 +272,16 @@ fn write_name<R: Bench>(x: &mut Cx<'_, R>, player: u32, buffer: u32) -> (u32, u1
 /// Composition of the rest of the message (0xce9ea): copies into the buffer (`+0xc`) the characters of the source
 /// (`+8`) up to a page end mark; `count` = glyphs already written on the line.
 fn compose_message<R: Bench>(x: &mut Cx<'_, R>, mut count: u16) {
-    let mut src = x.u32(0x8);
-    let mut out = x.u32(0xc);
+    let mut src = x.u32(Obj::X);
+    let mut out = x.u32(Obj::Z);
     if x.a5_u8(LANGUAGE) == 2 {
         loop {
-            let w = x.data16(src);
+            let w = set_tables::word(x.b, src);
             src += 2;
             if (w as i16) < 0 {
                 if w == 0xfffe {
                     wr16(x.b, out, w);
-                    let next = x.data16(src);
+                    let next = set_tables::word(x.b, src);
                     wr16(x.b, out + 2, next);
                     out += 4;
                     src += 2;
@@ -288,19 +291,19 @@ fn compose_message<R: Bench>(x: &mut Cx<'_, R>, mut count: u16) {
                 wr16(x.b, out + 2, count.wrapping_shl(3).wrapping_neg());
                 out += 4;
                 src += 2;
-                let tail = x.data16(src);
+                let tail = set_tables::word(x.b, src);
                 src += 2;
                 wr16(x.b, out, tail);
                 out += 2;
-                x.set32(0x8, src);
-                x.set32(0xc, out);
+                x.set32(Obj::X, src);
+                x.set32(Obj::Z, out);
                 wr16(x.b, out, 0);
                 return;
             }
             if w == 0 {
                 wr16(x.b, out, 0);
                 next_substate(x);
-                x.set16(0x10, 0xb4);
+                x.set16(Obj::Y, 0xb4);
                 return;
             }
             wr16(x.b, out, w);
@@ -309,12 +312,12 @@ fn compose_message<R: Bench>(x: &mut Cx<'_, R>, mut count: u16) {
         }
     } else {
         loop {
-            let c = x.data8(src);
+            let c = set_tables::byte(x.b, src);
             src += 1;
             if c >= 0xfe {
                 if c == 0xfe {
                     wr8(x.b, out, c);
-                    let next = x.data8(src);
+                    let next = set_tables::byte(x.b, src);
                     src += 1;
                     wr8(x.b, out + 1, next);
                     out += 2;
@@ -324,19 +327,19 @@ fn compose_message<R: Bench>(x: &mut Cx<'_, R>, mut count: u16) {
                 wr8(x.b, out + 1, count as u8);
                 out += 2;
                 src += 1;
-                let tail = x.data8(src);
+                let tail = set_tables::byte(x.b, src);
                 src += 1;
                 wr8(x.b, out, tail);
                 out += 1;
-                x.set32(0x8, src);
-                x.set32(0xc, out);
+                x.set32(Obj::X, src);
+                x.set32(Obj::Z, out);
                 wr8(x.b, out, 0xfd);
                 return;
             }
             if c == 0xfd {
                 wr8(x.b, out, c);
                 next_substate(x);
-                x.set16(0x10, 0xb4);
+                x.set16(Obj::Y, 0xb4);
                 return;
             }
             if c > 0xf {
@@ -344,7 +347,7 @@ fn compose_message<R: Bench>(x: &mut Cx<'_, R>, mut count: u16) {
                 out += 1;
             } else {
                 wr8(x.b, out, c);
-                let next = x.data8(src);
+                let next = set_tables::byte(x.b, src);
                 src += 1;
                 wr8(x.b, out + 1, next);
                 out += 2;
@@ -355,5 +358,5 @@ fn compose_message<R: Bench>(x: &mut Cx<'_, R>, mut count: u16) {
 }
 
 fn next_substate<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x5, 2);
+    x.add8(SetObj::SUBSTATE, 2);
 }

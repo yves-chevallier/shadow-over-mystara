@@ -49,11 +49,16 @@ pub struct GameData {
     pub frames: Frames,
     pub anims: Anims,
     pub speeds: Speeds,
+    /// Tables of the SET objects (`families/set*` of the game; docs/fin.md, L6).
+    pub set: DataFile,
+    /// Dialog windows, bubbles and their texts, in the three languages (SET 3, 10, 15 and 24).
+    pub dialogs: DataFile,
 }
 
 impl GameData {
     /// Files of the assets folder that make up the game data.
-    pub const FILES: [&'static str; 3] = ["sprites/frames.json", "sprites/anims.json", "data/speeds.json"];
+    pub const FILES: [&'static str; 5] =
+        ["sprites/frames.json", "sprites/anims.json", "data/speeds.json", "data/set.json", "data/dialogs.json"];
 
     /// Loads the game data from an assets folder (written by `extract`).
     pub fn load(dir: &Path) -> io::Result<Self> {
@@ -61,6 +66,8 @@ impl GameData {
             frames: Frames::load(&dir.join(Self::FILES[0]))?,
             anims: Anims::load(&dir.join(Self::FILES[1]))?,
             speeds: Speeds::load(&dir.join(Self::FILES[2]))?,
+            set: DataFile::load(&dir.join(Self::FILES[3]))?,
+            dialogs: DataFile::load(&dir.join(Self::FILES[4]))?,
         })
     }
 }

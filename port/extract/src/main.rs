@@ -51,6 +51,7 @@ fn main() {
         if wanted("data") {
             spawns::extract(roms, &out.join("data/spawns.json"))?;
             speeds::extract(roms, &out.join("data/speeds.json"))?;
+            set::extract(roms, &out.join("data/set.json"))?;
             data::extract(roms, &out.join("data"))?;
         }
         if wanted("data") {

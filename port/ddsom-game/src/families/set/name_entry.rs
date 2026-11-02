@@ -1,5 +1,7 @@
 use super::*;
 use crate::mem::{rd16, rd32, rd8, wr16, wr32, wr8};
+use crate::families::set::tables as set_tables;
+use crate::objects::Obj;
 
 // --- video RAM and tables ---
 const TILEMAP: u32 = 0x912000;
@@ -88,10 +90,10 @@ const GRID_COLS: u16 = 11;
 const GRID_ROWS: u16 = 6;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x3) != 0 {
+    if x.u8(Obj::VARIANT) != 0 {
         return cursor::run(x);
     }
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             board::init(x);
             board::update(x);
@@ -121,10 +123,10 @@ fn inputs<R: Bench>(x: &mut Cx<'_, R>, player: u32) -> (u8, u8) {
 /// `row`). Rend (adresse, D0 = taille).
 fn cell_region<R: Bench>(x: &mut Cx<'_, R>, col: u16, row: u16) -> (u32, u16) {
     let (row_offsets, cells) = if wide(x) { (WIDE_ROW_OFFSETS, WIDE_CELLS) } else { (NARROW_ROW_OFFSETS, NARROW_CELLS) };
-    let row_off = x.rom16(row_offsets.wrapping_add((row.wrapping_mul(2)) as i16 as i32 as u32));
+    let row_off = set_tables::pc_word(x.b, row_offsets.wrapping_add((row.wrapping_mul(2)) as i16 as i32 as u32));
     let index = col.wrapping_mul(4).wrapping_add(row_off);
     let at = |o: u32| cells.wrapping_add(o).wrapping_add(index as i16 as i32 as u32);
-    let (offset, size) = (x.rom16(at(0)), x.rom16(at(2)));
+    let (offset, size) = (set_tables::pc_word(x.b, at(0)), set_tables::pc_word(x.b, at(2)));
     (TILEMAP + 2 + offset as i16 as i32 as u32, size)
 }
 
@@ -150,10 +152,10 @@ fn redraw_cell<R: Bench>(x: &mut Cx<'_, R>, col: u16, row: u16) {
     let mut tile: u16 = 0x1c;
     if !wide(x) {
         if col == 0xa {
-            tile = x.rom8(SPECIAL_TILES.wrapping_add(row.wrapping_sub(1) as i16 as i32 as u32)) as u16;
+            tile = set_tables::pc_byte(x.b, SPECIAL_TILES.wrapping_add(row.wrapping_sub(1) as i16 as i32 as u32)) as u16;
         }
     } else if row == 4 && (col as i16) >= 3 {
-        tile = x.rom8(SPECIAL_TILES.wrapping_add(row.wrapping_sub(3) as i16 as i32 as u32)) as u16;
+        tile = set_tables::pc_byte(x.b, SPECIAL_TILES.wrapping_add(row.wrapping_sub(3) as i16 as i32 as u32)) as u16;
     }
     fill_tiles(x, a1, size, tile);
 }

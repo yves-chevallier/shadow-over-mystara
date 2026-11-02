@@ -1,5 +1,10 @@
 use super::*;
 use crate::mem::{wr8, A5};
+use crate::families::set::tables as set_tables;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::families::set::fields::SetObj;
+use crate::families::set::fields::WaveLeaderObj;
 
 /// Delays between two waves (bytes, program space), indexed by a 4-bit draw.
 const DELAYS: u32 = 0xbc63e;
@@ -54,13 +59,13 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u8(util::IN_GAME) == 0 {
         return;
     }
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
-            x.add8(0x4, 2);
+            x.add8(Obj::STATE, 2);
             x.set16(DEFEATED_A, 0);
             x.set16(BUSY, 0);
-            x.set8(0x5, 0);
-            x.set16(0x6, 0);
+            x.set8(SetObj::SUBSTATE, 0);
+            x.set16(WaveLeaderObj::WAVE_STATE, 0);
             x.set8(LIMIT, 0);
             x.set8(FLAG, 0);
             x.set8(DIFF, 0);
@@ -69,32 +74,32 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
             substate(x);
         }
         2 => substate(x),
-        4 => x.add8(0x4, 2),
+        4 => x.add8(Obj::STATE, 2),
         _ => x.free(&pools::SET),
     }
 }
 
 fn substate<R: Bench>(x: &mut Cx<'_, R>) {
     let boss = x.linked(BOSS);
-    match x.u8(0x5) {
+    match x.u8(SetObj::SUBSTATE) {
         0 => {
             let w = x.u8(WAIT).wrapping_sub(1);
             x.set8(WAIT, w);
             if w > WAIT_END {
                 return;
             }
-            x.add8(0x5, 2);
+            x.add8(SetObj::SUBSTATE, 2);
             crate::camera_modes::start_shake(x.b, crate::camera_modes::shake::B, CAMERA_LOCK_PARAM as u16);
         }
         2 => {
             let (a, b) = (x.u8(DEFEATED_A), x.u8(DEFEATED_B));
             let finished = |x: &mut Cx<'_, R>| {
-                x.add8(0x5, 2);
+                x.add8(SetObj::SUBSTATE, 2);
                 boss.set_u16(x.b, BOSS_DONE, 1);
                 x.set8(DIFF, a.wrapping_sub(b));
             };
             if b == DEFEATED_TARGET {
-                x.add8(0x5, 2);
+                x.add8(SetObj::SUBSTATE, 2);
                 boss.set_u16(x.b, BOSS_DONE, 1);
             } else if a == DEFEATED_TARGET {
                 if boss.u8(x.b, BOSS_STATE) == BOSS_STATE_READY {
@@ -107,13 +112,13 @@ fn substate<R: Bench>(x: &mut Cx<'_, R>) {
                 { let w = x.u8(WAIT); x.set8(WAIT, w - 1); }
             } else if spawn_wave(x).is_some() {
                 let rng = x.random();
-                let delay = x.rom8(DELAYS + (rng as u32 & 0xf));
+                let delay = set_tables::pc_byte(x.b, DELAYS + (rng as u32 & 0xf));
                 x.set8(WAIT, delay);
             }
         }
         4 => {
             if boss.u16(x.b, BOSS_COUNT) == 1 {
-                x.add8(0x5, 2);
+                x.add8(SetObj::SUBSTATE, 2);
             }
         }
         6 => {
@@ -124,10 +129,10 @@ fn substate<R: Bench>(x: &mut Cx<'_, R>) {
             wr8(x.b, WAVE_RESULT, flag);
             if flag != 0 {
                 release_one(x, boss);
-                x.set_a5_u8(0x42, 1);
-                x.add8(0x4, 2);
+                x.set_a5_u8(vars::FROZEN, 1);
+                x.add8(Obj::STATE, 2);
             } else {
-                x.add8(0x5, 2);
+                x.add8(SetObj::SUBSTATE, 2);
                 final_wave(x);
             }
         }
@@ -135,7 +140,7 @@ fn substate<R: Bench>(x: &mut Cx<'_, R>) {
         0xa => {
             if x.u8(BUSY) == 0 {
                 x.set16(WAIT, FINAL_WAIT);
-                x.add8(0x5, 2);
+                x.add8(SetObj::SUBSTATE, 2);
             }
         }
         0xc => {
@@ -147,13 +152,13 @@ fn substate<R: Bench>(x: &mut Cx<'_, R>) {
                 }
                 wr8(x.b, WAVE_RESULT, 1);
             }
-            x.set_a5_u8(0x42, 1);
-            x.add8(0x5, 2);
+            x.set_a5_u8(vars::FROZEN, 1);
+            x.add8(SetObj::SUBSTATE, 2);
         }
         0xe => {
             if x.u8(LIMIT) == 0 {
                 release_one(x, boss);
-                x.add8(0x4, 2);
+                x.add8(Obj::STATE, 2);
             }
         }
         _ => {}
@@ -169,8 +174,8 @@ fn release_one<R: Bench>(x: &mut Cx<'_, R>, boss: Obj) {
 /// Final wave: the leader is of variant 2 and the wave verdict goes to 0xff.
 fn final_wave<R: Bench>(x: &mut Cx<'_, R>) {
     if let Some(lead) = spawn_wave(x) {
-        lead.set_u8(x.b, 3, FINAL_VARIANT);
-        x.add8(0x5, 2);
+        lead.set_u8(x.b, Obj::VARIANT, FINAL_VARIANT);
+        x.add8(SetObj::SUBSTATE, 2);
         wr8(x.b, WAVE_RESULT, WAVE_RESULT_FINAL);
     }
 }
@@ -187,7 +192,7 @@ fn spawn_wave<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     for (i, slot) in slots.iter_mut().enumerate() {
         // Original glitch: the allocation failure is not tested (see `Pool::alloc_unchecked`).
         *slot = x.alloc_unchecked(&pools::ENEMY);
-        slot.set_u8(x.b, 0, 1);
+        slot.set_u8(x.b, Obj::ACTIVE, 1);
         x.set16(WINGS + 2 * i as u32, slot.0 as u16);
     }
     let low = |o: Obj| o.0 as u16;
@@ -195,11 +200,11 @@ fn spawn_wave<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     let boss = x.u16(BOSS);
     lead.set_u16(x.b, BOSS, boss);
     for (wing, side, link) in [(wing_a, 0, E_LINK_A), (wing_b, 1, E_LINK_B)] {
-        wing.set_u8(x.b, 0, 1);
+        wing.set_u8(x.b, Obj::ACTIVE, 1);
         wing.set_u8(x.b, E_WING_SIDE, side);
-        wing.set_u8(x.b, 3, 0);
-        wing.set_u8(x.b, 0x2f, 1);
-        wing.set_u8(x.b, 2, KIND_WING);
+        wing.set_u8(x.b, Obj::VARIANT, 0);
+        wing.set_u8(x.b, SetObj::PARAM, 1);
+        wing.set_u8(x.b, Obj::KIND, KIND_WING);
         wing.set_u16(x.b, E_PARENT, low(lead));
         wing.set_u16(x.b, BOSS, boss);
         lead.set_u16(x.b, link, low(wing));
@@ -208,14 +213,14 @@ fn spawn_wave<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
     let owner = x.linked(BOSS);
     let n = owner.u16(x.b, BOSS_COUNT).wrapping_add(3);
     owner.set_u16(x.b, BOSS_COUNT, n);
-    lead.set_u8(x.b, 0, 1);
-    lead.set_u8(x.b, 2, KIND_LEAD);
-    lead.set_u8(x.b, 3, 0);
+    lead.set_u8(x.b, Obj::ACTIVE, 1);
+    lead.set_u8(x.b, Obj::KIND, KIND_LEAD);
+    lead.set_u8(x.b, Obj::VARIANT, 0);
     lead.set_u16(x.b, E_ANCHOR, low(x.o));
     let camera = x.a5_u16(CAMERA_X);
-    lead.set_u16(x.b, 8, camera.wrapping_add(SPAWN_OFFSET_X));
-    lead.set_u32(x.b, 0xc, 0);
-    lead.set_u16(x.b, 0x10, SPAWN_Y);
+    lead.set_u16(x.b, Obj::X, camera.wrapping_add(SPAWN_OFFSET_X));
+    lead.set_u32(x.b, Obj::Z, 0);
+    lead.set_u16(x.b, Obj::Y, SPAWN_Y);
     // arrival side: drawn at random the first time, then alternated
     let mut side = x.u8(SIDE);
     if (side as i8) < 0 {
@@ -224,8 +229,8 @@ fn spawn_wave<R: Bench>(x: &mut Cx<'_, R>) -> Option<Obj> {
         x.set8(SIDE, side ^ 0x20);
     }
     lead.set_u8(x.b, E_SIDE, side);
-    let y = lead.u8(x.b, 0x11).wrapping_add(side.wrapping_add(0x10));
-    lead.set_u8(x.b, 0x11, y);
+    let y = lead.u8(x.b, WaveLeaderObj::DEPTH_LOW).wrapping_add(side.wrapping_add(0x10));
+    lead.set_u8(x.b, WaveLeaderObj::DEPTH_LOW, y);
     x.add8(DEFEATED_A, 1);
     x.set8(BUSY, 1);
     x.add8(WAVE_COUNT, 1);

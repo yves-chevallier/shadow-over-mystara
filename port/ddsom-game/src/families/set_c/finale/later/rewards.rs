@@ -1,4 +1,8 @@
 use super::*;
+use crate::families::set::tables as set_tables;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::families::set::fields::SetObj;
 
 
 // --- variant 18: choice of end-of-level bonuses ----------------------------------------------------------------
@@ -7,7 +11,7 @@ use super::*;
 /// table 0xcff10, depending on the character and the turn), shows the reward (creation of a SET by
 /// 0xc8312), animates the player's palette and starts over until all players are served (`+0x25`).
 pub fn bonus_selection<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
             x.set32(0x20, 0xff00_0000);
@@ -28,7 +32,7 @@ pub fn bonus_selection<R: Bench>(x: &mut Cx<'_, R>) {
 const REWARD_PALETTE_ROM: u32 = 0xcfdd2;
 
 fn bonus_step<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x5) {
+    match x.u8(SetObj::SUBSTATE) {
         0 => {
             let Some(o) = crate::families::creators::scene_set(x.b, 0x94) else { return };
             next_substate(x);
@@ -72,14 +76,14 @@ fn bonus_step<R: Bench>(x: &mut Cx<'_, R>) {
             if x.u8(0x25) == 0 {
                 next_substate(x);
             } else {
-                x.set8(0x5, 4);
+                x.set8(SetObj::SUBSTATE, 4);
             }
         }
         0x10 => {
             next_state(x);
-            let v = x.a5_u8(0x2d).wrapping_add(2);
-            x.set_a5_u8(0x2d, v);
-            x.set_a5_u16(0x2e, 0);
+            let v = x.a5_u8(vars::STEP).wrapping_add(2);
+            x.set_a5_u8(vars::STEP, v);
+            x.set_a5_u16(vars::SUB_STEPS, 0);
         }
         _ => {}
     }
@@ -94,7 +98,7 @@ fn palette_pulse<R: Bench>(x: &mut Cx<'_, R>, delta: u32) {
     x.set8(0x2a, 4);
     let player = adr16(x.u16(0x26));
     let character = rd8(x.b, player + 3) as u32;
-    let offset = adr16(x.rom16(REWARD_PALETTE_ROM + 2 * character));
+    let offset = adr16(set_tables::pc_word(x.b, REWARD_PALETTE_ROM + 2 * character));
     let base = 0x91c000u32.wrapping_add(offset);
     for i in 0..8 {
         let v = rd32(x.b, base + 4 * i).wrapping_add(delta);
@@ -113,12 +117,12 @@ fn reward_blocked<R: Bench>(x: &mut Cx<'_, R>, player: u32, rank: u32) -> bool {
     const TESTS: u32 = 0xcff10;
     let character = (rd8(x.b, player + 3) & !1) as u32;
     let index = (character << 2) + 2 * rank;
-    let target = TESTS + x.rom16(TESTS + index) as u32;
+    let target = TESTS + set_tables::pc_word(x.b, TESTS + index) as u32;
     // lists of objects (bytes, end = negative) compared with a byte of the player
     let listed = |x: &mut Cx<'_, R>, list: u32, value: u8| {
         let mut p = list;
         loop {
-            let b = x.data8(p);
+            let b = set_tables::byte(x.b, p);
             p += 1;
             if b as i8 <= -1 && b & 0x80 != 0 {
                 return false;
@@ -145,7 +149,7 @@ fn reward_blocked<R: Bench>(x: &mut Cx<'_, R>, player: u32, rank: u32) -> bool {
         }
         0xcfff6 => rd8(x.b, player + 0x18a) == 0,
         0xd0006 => (rd32(x.b, player + 0x114) as i32) < 0x3000,
-        0xd0016 => x.a5_u8(0x5d) == 0,
+        0xd0016 => x.a5_u8(vars::NO_THIRD_BONUS) == 0,
         0xcffdc => !(0..0x66).any(|i| rd8(x.b, 0xff2478 + i) == 0),
         _ => false,
     }
@@ -171,7 +175,7 @@ fn choose_reward<R: Bench>(x: &mut Cx<'_, R>) {
     taken |= 1 << (candidate & 31);
     taken &= 0xff77_7777;
     x.set32(0x20, taken);
-    let id = x.rom16(REWARD_IDS + 2 * candidate);
+    let id = set_tables::pc_word(x.b, REWARD_IDS + 2 * candidate);
     let Some(o) = crate::families::creators::scene_set(x.b, id as u8) else { return };
     next_substate(x);
     x.set16(0x46, o.0 as u16);
@@ -181,7 +185,7 @@ fn choose_reward<R: Bench>(x: &mut Cx<'_, R>) {
     let icons = REWARD_ICONS.wrapping_add((candidate & 0x1c) << 1);
     let mut at = 0x912224;
     for i in 0..7 {
-        let tile = x.data8(icons + i) as u16;
+        let tile = set_tables::byte(x.b, icons + i) as u16;
         wr16(x.b, at, tile);
         wr16(x.b, at + 2, 0);
         at += 0x80;

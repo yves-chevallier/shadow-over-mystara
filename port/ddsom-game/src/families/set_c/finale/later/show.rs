@@ -1,4 +1,8 @@
 use super::*;
+use crate::families::set::tables as set_tables;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::families::set::fields::SetObj;
 
 // --- variant 10: opening shake ------------------------------------------------------------------------
 
@@ -8,16 +12,16 @@ use super::*;
 pub fn shaking_intro<R: Bench>(x: &mut Cx<'_, R>) {
     const SHAKE: u32 = 0xd0b30;
     const SCROLL_SHAKE: u32 = 0xd0b50;
-    if x.u8(0x4) == 0 {
+    if x.u8(Obj::STATE) == 0 {
         next_state(x);
         x.set8(0x18, 0);
-    } else if x.u8(0x4) != 2 {
+    } else if x.u8(Obj::STATE) != 2 {
         return;
     }
-    match x.u8(0x5) {
+    match x.u8(SetObj::SUBSTATE) {
         0 => {
             shake4(x, SHAKE);
-            if x.a5_u8(0x48f) != 0 {
+            if x.a5_u8(vars::FADE_STEPS) != 0 {
                 return;
             }
             next_substate(x);
@@ -66,7 +70,7 @@ pub fn shaking_intro<R: Bench>(x: &mut Cx<'_, R>) {
 /// absent character (like variant 9), then a last one (variant 0, `+0x2f = 0xb`) at (0x108, 0x100,
 /// -0x80). The object then goes to state 6.
 pub fn spawn_player_markers<R: Bench>(x: &mut Cx<'_, R>) {
-    if !matches!(x.u8(0x4), 0 | 2) {
+    if !matches!(x.u8(Obj::STATE), 0 | 2) {
         return;
     }
     let boss = x.u32(0x4c);
@@ -91,9 +95,9 @@ pub fn spawn_player_markers<R: Bench>(x: &mut Cx<'_, R>) {
     retire(x);
     let Some(m) = spawn_sobj(x, 0) else { return };
     m.set_u8(x.b, 0x2f, 0xb);
-    m.set_u16(x.b, 8, 0x108);
-    m.set_u16(x.b, 0x10, 0x100);
-    m.set_u16(x.b, 0xc, 0xff80);
+    m.set_u16(x.b, Obj::X, 0x108);
+    m.set_u16(x.b, Obj::Y, 0x100);
+    m.set_u16(x.b, Obj::Z, 0xff80);
     m.set_u32(x.b, 0x4c, boss);
 }
 
@@ -106,11 +110,11 @@ pub fn fireworks<R: Bench>(x: &mut Cx<'_, R>) {
     const PALETTE_ROM: u32 = 0x253280;
     const PALETTE: u32 = 0x91c280;
     const POSITIONS: u32 = 0xcf974;
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
             for i in 0..8 {
-                let v = x.data32(PALETTE_ROM + 4 * i);
+                let v = set_tables::long(x.b, PALETTE_ROM + 4 * i);
                 wr32(x.b, PALETTE + 4 * i, v);
             }
             for i in 0..8 {
@@ -132,10 +136,10 @@ pub fn fireworks<R: Bench>(x: &mut Cx<'_, R>) {
     let owner = x.u32(0x4c);
     o.set_u32(x.b, 0x4c, owner);
     let pick = ((rng(x) & 7) as u32) << 2;
-    let (px, pz) = (x.rom16(POSITIONS + pick), x.rom16(POSITIONS + pick + 2));
-    o.set_u16(x.b, 8, px);
-    o.set_u16(x.b, 0xc, pz);
-    o.set_u32(x.b, 0x10, 0);
+    let (px, pz) = (set_tables::pc_word(x.b, POSITIONS + pick), set_tables::pc_word(x.b, POSITIONS + pick + 2));
+    o.set_u16(x.b, Obj::X, px);
+    o.set_u16(x.b, Obj::Z, pz);
+    o.set_u32(x.b, Obj::Y, 0);
     if x.u8(0x42) != 0 {
         return;
     }
@@ -153,7 +157,7 @@ pub fn fireworks<R: Bench>(x: &mut Cx<'_, R>) {
 pub fn lightning<R: Bench>(x: &mut Cx<'_, R>) {
     const ORDER: u32 = 0xcfa3c;
     const SOUND: crate::sound::Sound = crate::sound::CMD_3F;
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
             x.set8(0x30, 1);
@@ -167,19 +171,19 @@ pub fn lightning<R: Bench>(x: &mut Cx<'_, R>) {
     if x.a5_u16(a5::BG_Y) == 0 {
         return next_state(x);
     }
-    if x.u8(0x5) == 0 && x.a5_u16(a5::CAM_X) == 0 {
+    if x.u8(SetObj::SUBSTATE) == 0 && x.a5_u16(a5::CAM_X) == 0 {
         next_substate(x);
         x.set_bit(0x30, 0, false);
     }
     if x.u8(0x30) == 0x1f {
         return;
     }
-    if x.a5_u16(0x6e) & 0xf != 0 {
+    if x.a5_u16(vars::FRAMES_WORD) & 0xf != 0 {
         return;
     }
     let Some(o) = spawn_sobj(x, 0x11) else { return };
     let pick = (rng(x) & 0xf) as u32;
-    let mut bit = x.rom8(ORDER + pick);
+    let mut bit = set_tables::pc_byte(x.b, ORDER + pick);
     while x.u8(0x30) >> (bit & 7) & 1 != 0 {
         bit = bit.wrapping_sub(1);
         if bit & 0x80 != 0 {
@@ -195,7 +199,7 @@ pub fn lightning<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Variant 15 (0xcfa4c): shakes the background (table 0xd0b70) as long as the conductor has `+8 >= 0`.
 pub fn quake_light<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
             x.set8(0x18, 0);
@@ -216,7 +220,7 @@ pub fn quake_light<R: Bench>(x: &mut Cx<'_, R>) {
 /// effects launched, `+0x23` those still alive. When everything has left, goes to state 4 and advances
 /// `A5+0x2d`.
 pub fn ranking_start<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
             let mut taken: u32 = 0xf000;
@@ -241,13 +245,13 @@ pub fn ranking_start<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
         2 => {
-            if x.u8(0x5) != 0 {
+            if x.u8(SetObj::SUBSTATE) != 0 {
                 if x.u8(0x23) != 0 {
                     return;
                 }
                 next_state(x);
-                let v = x.a5_u8(0x2d).wrapping_add(2);
-                x.set_a5_u8(0x2d, v);
+                let v = x.a5_u8(vars::STEP).wrapping_add(2);
+                x.set_a5_u8(vars::STEP, v);
                 return;
             }
             x.add16(0x24, 0xffff);
@@ -285,11 +289,11 @@ pub fn ranking_start<R: Bench>(x: &mut Cx<'_, R>) {
 /// 4 darkens the same way then sets `+0x32 = 1` on object `+0x46`.
 pub fn palette_fade<R: Bench>(x: &mut Cx<'_, R>) {
     const LINES: [u32; 3] = [0x91c1e0, 0x91c300, 0x91c400];
-    if x.u8(0x4) == 0 {
+    if x.u8(Obj::STATE) == 0 {
         next_state(x);
         x.set8(0x20, 4);
         x.set8(0x21, 0xf);
-    } else if x.u8(0x4) != 2 {
+    } else if x.u8(Obj::STATE) != 2 {
         return;
     }
     let fade = |x: &mut Cx<'_, R>, delta: u32| {
@@ -300,7 +304,7 @@ pub fn palette_fade<R: Bench>(x: &mut Cx<'_, R>) {
             }
         }
     };
-    match x.u8(0x5) {
+    match x.u8(SetObj::SUBSTATE) {
         0 => {
             x.add8(0x20, 0xff);
             if x.u8(0x20) != 0 {

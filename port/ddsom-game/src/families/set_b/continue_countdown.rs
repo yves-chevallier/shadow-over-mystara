@@ -1,5 +1,12 @@
 use super::*;
 use crate::mem::{rd8, wr16, wr32};
+use crate::families::set::tables as set_tables;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::player::Player;
+use crate::families::set::fields::{SetObj, WeaponObj};
+use crate::families::set_b::fields::ContinueObj;
+use crate::families::set_b::fields::CameraFields;
 
 const PALETTE_SRC: u32 = 0x25c0e0;
 const PALETTE_DST: u32 = 0x91c420;
@@ -36,21 +43,21 @@ const DOOMED: u32 = 0x0204_0600;
 const SAFE_STATE: u32 = 0x0200_2000;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    let now = x.u8(0x40) as i8;
-    if now > x.u8(0x1c) as i8 {
-        x.add8(0x14, 1);
+    let now = x.u8(Obj::HIDDEN) as i8;
+    if now > x.u8(ContinueObj::LAST_SUSPEND) as i8 {
+        x.add8(ContinueObj::MINUTES, 1);
         hide(x);
     }
-    x.set8(0x1c, now as u8);
-    if x.u8(0x3) != 2 && x.a5_u8(0x50) != 0 {
+    x.set8(ContinueObj::LAST_SUSPEND, now as u8);
+    if x.u8(Obj::VARIANT) != 2 && x.a5_u8(vars::EXIT_LOCK) != 0 {
         return hide(x);
     }
-    if x.a5_u8(0x42) != 0 || x.a5_u8(GAME_PAUSED) != 0 {
+    if x.a5_u8(vars::FROZEN) != 0 || x.a5_u8(GAME_PAUSED) != 0 {
         return hide(x);
     }
-    let camera = if x.a5_u8(0x36) != 0 { 0x54e } else { 0x4fe };
+    let camera = if x.a5_u8(vars::CAMERA_ALT_ACTIVE) != 0 { 0x54e } else { 0x4fe };
     let camera = Obj(A5 + camera);
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => init(x, camera),
         2 => counting(x, camera),
         4 => finish(x),
@@ -62,10 +69,10 @@ const GAME_PAUSED: u32 = 0x3d;
 
 /// Removes the announcement (once) and cuts the display.
 fn hide<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x18) == 0 {
+    if x.u8(ContinueObj::SHOWN) == 0 {
         return;
     }
-    x.set8(0x18, 0);
+    x.set8(ContinueObj::SHOWN, 0);
     if rd8(x.b, MUTED) != 0 {
         return;
     }
@@ -81,58 +88,58 @@ fn rows<R: Bench>(x: &mut Cx<'_, R>, base: u32, rows: &[(u16, u16)]) {
 }
 
 fn init<R: Bench>(x: &mut Cx<'_, R>, camera: Obj) {
-    x.add8(0x4, 2);
-    x.set16(0x4c, 0x400);
-    let v = camera.u16(x.b, 0x8);
-    x.set16(0x4e, v);
-    x.set8(0x17, 0);
-    let v = x.a5_u8(0x35);
-    x.set8(0x1b, v);
-    if x.u8(0x5) == 0 {
-        let stage = x.a5_u8(0x34) as u32;
-        let v = x.rom8(PROMPT_BY_STAGE + stage);
-        x.set8(0x2c, v);
+    x.add8(Obj::STATE, 2);
+    x.set16(ContinueObj::DELAY, 0x400);
+    let v = camera.u16(x.b, Obj::X);
+    x.set16(ContinueObj::CAMERA_X, v);
+    x.set8(ContinueObj::TICK, 0);
+    let v = x.a5_u8(vars::PLAYERS_ALIVE);
+    x.set8(ContinueObj::PLAYERS, v);
+    if x.u8(SetObj::SUBSTATE) == 0 {
+        let stage = x.a5_u8(vars::SCENE) as u32;
+        let v = set_tables::pc_byte(x.b, PROMPT_BY_STAGE + stage);
+        x.set8(ContinueObj::PROMPT, v);
     }
-    x.set8(0x5, 0);
+    x.set8(SetObj::SUBSTATE, 0);
     // palette: six longs forced to maximum brightness, the last two added
     for i in 0..8 {
-        let v = x.data32(PALETTE_SRC + 4 * i);
+        let v = set_tables::long(x.b, PALETTE_SRC + 4 * i);
         let v = if i < 6 { v | BRIGHT } else { v.wrapping_add(BRIGHT) };
         wr32(x.b, PALETTE_DST + 4 * i, v);
     }
-    let v = x.u8(0x42);
-    x.set8(0x14, v);
-    let packed = x.u8(0x43);
-    x.set8(0x16, packed);
-    x.set8(0x15, packed >> 4);
-    x.set8(0x16, packed & 0xf);
+    let v = x.u8(ContinueObj::START_MINUTES);
+    x.set8(ContinueObj::MINUTES, v);
+    let packed = x.u8(ContinueObj::START_SECONDS);
+    x.set8(ContinueObj::UNITS, packed);
+    x.set8(ContinueObj::TENS, packed >> 4);
+    x.set8(ContinueObj::UNITS, packed & 0xf);
 }
 
 fn counting<R: Bench>(x: &mut Cx<'_, R>, camera: Obj) {
-    let players = x.a5_u8(0x35);
-    let known = x.u8(0x1b);
+    let players = x.a5_u8(vars::PLAYERS_ALIVE);
+    let known = x.u8(ContinueObj::PLAYERS);
     if players != known {
         if (players as i8) < (known as i8) {
-            x.set8(0x1b, players);
+            x.set8(ContinueObj::PLAYERS, players);
         } else {
-            x.set16(0x4, 0x401);
-            x.set16(0x4c, 0);
+            x.set16(Obj::STATE, 0x401);
+            x.set16(ContinueObj::DELAY, 0);
             return;
         }
     }
     if players == 0 {
         return hide(x);
     }
-    if x.a5_u8(0x51) != 0 {
-        x.set16(0x4c, 0);
+    if x.a5_u8(vars::SCENES) != 0 {
+        x.set16(ContinueObj::DELAY, 0);
         return hide(x);
     }
-    if x.u8(0x3) != 1 {
+    if x.u8(Obj::VARIANT) != 1 {
         if !tick(x) {
             return;
         }
-        if camera.u16(x.b, 0x20) == 4 {
-            x.set16(0x4c, 0x200);
+        if camera.u16(x.b, CameraFields::MODE) == 4 {
+            x.set16(ContinueObj::DELAY, 0x200);
             return;
         }
     }
@@ -141,23 +148,23 @@ fn counting<R: Bench>(x: &mut Cx<'_, R>, camera: Obj) {
 
 /// One-frame countdown; false if the time has elapsed (the players are then condemned).
 fn tick<R: Bench>(x: &mut Cx<'_, R>) -> bool {
-    let n = x.u8(0x17).wrapping_sub(1);
-    x.set8(0x17, n);
+    let n = x.u8(ContinueObj::TICK).wrapping_sub(1);
+    x.set8(ContinueObj::TICK, n);
     if (n as i8) < 0 {
-        x.set8(0x17, 0x3c);
-        if x.u8(0x14) == 0 {
-            x.set8(0x18, 1);
+        x.set8(ContinueObj::TICK, 0x3c);
+        if x.u8(ContinueObj::MINUTES) == 0 {
+            x.set8(ContinueObj::SHOWN, 1);
         }
-        let n = x.u8(0x16).wrapping_sub(1);
-        x.set8(0x16, n);
+        let n = x.u8(ContinueObj::UNITS).wrapping_sub(1);
+        x.set8(ContinueObj::UNITS, n);
         if (n as i8) < 0 {
-            x.set8(0x16, 9);
-            let n = x.u8(0x15).wrapping_sub(1);
-            x.set8(0x15, n);
+            x.set8(ContinueObj::UNITS, 9);
+            let n = x.u8(ContinueObj::TENS).wrapping_sub(1);
+            x.set8(ContinueObj::TENS, n);
             if (n as i8) < 0 {
-                x.set8(0x15, 5);
-                let n = x.u8(0x14).wrapping_sub(1);
-                x.set8(0x14, n);
+                x.set8(ContinueObj::TENS, 5);
+                let n = x.u8(ContinueObj::MINUTES).wrapping_sub(1);
+                x.set8(ContinueObj::MINUTES, n);
                 if (n as i8) < 0 {
                     time_out(x);
                     return false;
@@ -165,7 +172,7 @@ fn tick<R: Bench>(x: &mut Cx<'_, R>) -> bool {
             }
         }
     }
-    if x.u8(0x18) != 0 {
+    if x.u8(ContinueObj::SHOWN) != 0 {
         draw(x);
     }
     true
@@ -182,38 +189,38 @@ fn time_out<R: Bench>(x: &mut Cx<'_, R>) {
         }
         p.set_u16(x.b, pl::HEALTH, 0);
         p.set_u32(x.b, pl::STATE, DOOMED);
-        let n = x.a5_u8(0x35).wrapping_sub(1);
-        x.set_a5_u8(0x35, n);
-        if p.u8(x.b, 0x8a) != 0 {
-            p.set_u8(x.b, 0x8a, 0);
-            let a2 = Obj(p.u32(x.b, 0x86) & 0xff_ffff);
-            a2.set_u8(x.b, 5, 8);
-            a2.set_u16(x.b, 6, 0);
+        let n = x.a5_u8(vars::PLAYERS_ALIVE).wrapping_sub(1);
+        x.set_a5_u8(vars::PLAYERS_ALIVE, n);
+        if p.u8(x.b, Player::SLOW_8A) != 0 {
+            p.set_u8(x.b, Player::SLOW_8A, 0);
+            let a2 = Obj(p.u32(x.b, Player::LINK) & 0xff_ffff);
+            a2.set_u8(x.b, WeaponObj::SUBSTATE, 8);
+            a2.set_u16(x.b, WeaponObj::ACTION, 0);
         }
     }
-    x.set16(0x4, 0x400);
-    x.set_a5_u8(0x43, 0xff);
-    x.set_a5_u16(0x4ba, 0);
+    x.set16(Obj::STATE, 0x400);
+    x.set_a5_u8(vars::INPUT_MASK, 0xff);
+    x.set_a5_u16(vars::SCROLL_Y_PLANE1, 0);
 }
 
 /// Displays the digits and makes the inscription blink.
 fn draw<R: Bench>(x: &mut Cx<'_, R>) {
-    let (d0, d1, d2) = (x.u8(0x14) as u16, x.u8(0x15) as u16, x.u8(0x16) as u16);
+    let (d0, d1, d2) = (x.u8(ContinueObj::MINUTES) as u16, x.u8(ContinueObj::TENS) as u16, x.u8(ContinueObj::UNITS) as u16);
     for (i, tile) in [0, d0, COLON, d1, d2].into_iter().enumerate() {
         wr16(x.b, DIGITS + ROW * i as u32, tile);
         wr16(x.b, DIGITS + ROW * i as u32 + 2, ATTR as u16);
     }
-    let n = x.u8(0x19).wrapping_sub(1);
-    x.set8(0x19, n);
+    let n = x.u8(ContinueObj::BLINK).wrapping_sub(1);
+    x.set8(ContinueObj::BLINK, n);
     if n != 0 {
         return;
     }
-    x.set8(0x19, 0x80);
-    if x.u8(0x15) == 0 {
-        x.set8(0x19, 0x10);
+    x.set8(ContinueObj::BLINK, 0x80);
+    if x.u8(ContinueObj::TENS) == 0 {
+        x.set8(ContinueObj::BLINK, 0x10);
     }
-    let was = x.bit(0x1a, 0);
-    x.set_bit(0x1a, 0, !was);
+    let was = x.bit(ContinueObj::BLINK_PHASE, 0);
+    x.set_bit(ContinueObj::BLINK_PHASE, 0, !was);
     if !was {
         rows(x, GET_READY, &GET_READY_ROWS);
     } else if rd8(x.b, MUTED) == 0 {
@@ -224,32 +231,32 @@ fn draw<R: Bench>(x: &mut Cx<'_, R>) {
 /// Periodic invitation (h): as long as the camera does not move, creates an invitation SOBJ object every 256
 /// frames.
 fn prompt<R: Bench>(x: &mut Cx<'_, R>, camera: Obj) {
-    if x.u8(0x40) != 0 {
+    if x.u8(Obj::HIDDEN) != 0 {
         return;
     }
-    if x.a5_u8(0x58) != 0 {
-        return x.set16(0x4c, 0);
+    if x.a5_u8(vars::TRANSITION) != 0 {
+        return x.set16(ContinueObj::DELAY, 0);
     }
-    let here = camera.u16(x.b, 0x8);
-    if here != x.u16(0x4e) {
-        x.set16(0x4e, here);
-        return x.set16(0x4c, 0x200);
+    let here = camera.u16(x.b, Obj::X);
+    if here != x.u16(ContinueObj::CAMERA_X) {
+        x.set16(ContinueObj::CAMERA_X, here);
+        return x.set16(ContinueObj::DELAY, 0x200);
     }
-    let n = x.u16(0x4c).wrapping_sub(1);
-    x.set16(0x4c, n);
-    if (n as i16) >= 0 || x.u8(0x3) == 2 {
+    let n = x.u16(ContinueObj::DELAY).wrapping_sub(1);
+    x.set16(ContinueObj::DELAY, n);
+    if (n as i16) >= 0 || x.u8(Obj::VARIANT) == 2 {
         return;
     }
-    x.set16(0x4c, 0x100);
-    let orientation = x.u8(0x2c);
+    x.set16(ContinueObj::DELAY, 0x100);
+    let orientation = x.u8(ContinueObj::PROMPT);
     let _ = crate::effects_aids::scenery_11(x.b, 0, orientation);
 }
 
 /// State 4: final inscription then return to state 0 (substate 1) after 0x80 frames.
 fn finish<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x5) == 0 {
-        x.add8(0x5, 1);
-        x.set16(0x4c, 0x80);
+    if x.u8(SetObj::SUBSTATE) == 0 {
+        x.add8(SetObj::SUBSTATE, 1);
+        x.set16(ContinueObj::DELAY, 0x80);
         if rd8(x.b, MUTED) != 0 {
             return;
         }
@@ -257,14 +264,14 @@ fn finish<R: Bench>(x: &mut Cx<'_, R>) {
         rows(x, GAME_OVER, &GAME_OVER_ROWS);
         return;
     }
-    let n = x.u16(0x4c).wrapping_sub(1);
-    x.set16(0x4c, n);
+    let n = x.u16(ContinueObj::DELAY).wrapping_sub(1);
+    x.set16(ContinueObj::DELAY, n);
     if (n as i16) >= 0 {
         return;
     }
-    x.set8(0x4, 0);
-    x.set8(0x5, 1);
-    x.set8(0x18, 0);
+    x.set8(Obj::STATE, 0);
+    x.set8(SetObj::SUBSTATE, 1);
+    x.set8(ContinueObj::SHOWN, 0);
     if rd8(x.b, MUTED) != 0 {
         return;
     }

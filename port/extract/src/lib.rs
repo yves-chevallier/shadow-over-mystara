@@ -20,6 +20,7 @@ pub mod remainder;
 pub mod rom;
 pub mod scene_palettes;
 pub mod scenes;
+pub mod set;
 pub mod sounds;
 pub mod spawns;
 pub mod speeds;
@@ -44,5 +45,7 @@ pub fn to_data(roms: &Path) -> io::Result<GameData> {
 pub fn to_data_from(rom: &Program) -> io::Result<GameData> {
     let frames = sprites::frames(rom)?;
     let anims = sprites::anims(rom, &frames)?;
-    Ok(GameData { frames, anims, speeds: speeds::speeds(rom) })
+    let (regions, specs, texts) = dialogs::specs(rom);
+    let dialogs = data::build(rom, regions, &specs, texts);
+    Ok(GameData { frames, anims, speeds: speeds::speeds(rom), set: set::set(rom), dialogs })
 }

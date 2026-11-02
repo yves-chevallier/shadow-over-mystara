@@ -110,7 +110,7 @@ impl Program {
     }
 
     /// Files (paths relative to `dir`) used to rebuild the program.
-    pub const FILES: [&'static str; 20] = [
+    pub const FILES: [&'static str; 21] = [
         "palettes.png",
         "sprites/frames.json",
         "sprites/anims.json",
@@ -130,6 +130,7 @@ impl Program {
         "data/dialogs.json",
         "data/rest.json",
         "data/natives.json",
+        "data/set.json",
         "data/reste.json",
     ];
 
@@ -186,7 +187,7 @@ impl Program {
         if need(&mut p, "data/speeds.json") {
             p.put_speeds(&Speeds::load(&dir.join("data/speeds.json"))?);
         }
-        for rel in &Self::FILES[10..19] {
+        for rel in &Self::FILES[10..20] {
             if need(&mut p, rel) {
                 p.put_data(&DataFile::load(&dir.join(rel))?).map_err(io::Error::other)?;
             }

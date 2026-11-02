@@ -21,4 +21,9 @@ fn rom_and_assets_give_the_same_data() {
     assert!(from_roms.frames == from_assets.frames, "frames differ");
     assert!(from_roms.anims == from_assets.anims, "animations differ");
     assert!(from_roms.speeds == from_assets.speeds, "speeds differ");
+    let tables = |d: &ddsom_data::DataFile| -> Vec<_> {
+        d.tables.iter().map(|t| (t.name.clone(), t.rom, t.program, t.bytes().unwrap())).collect()
+    };
+    assert!(tables(&from_roms.set) == tables(&from_assets.set), "SET tables differ");
+    assert!(tables(&from_roms.dialogs) == tables(&from_assets.dialogs), "dialogs differ");
 }

@@ -1,14 +1,16 @@
 use super::*;
 use util::*;
+use crate::families::set::vars;
+use crate::objects::Obj;
 
 const CAMERA_X: u32 = 0x506;
 const CAMERA_LIMIT: u16 = 0x1c80;
 const PLAYER_MODE_DONE: u8 = 2;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
-            x.add8(0x4, 2);
+            x.add8(Obj::STATE, 2);
             trigger(x);
         }
         2 => trigger(x),
@@ -30,8 +32,8 @@ fn trigger<R: Bench>(x: &mut Cx<'_, R>) {
     if count == 0 {
         return;
     }
-    x.add8(0x4, 2);
-    x.set_a5_u8(0x42, 1);
-    x.set_a5_u8(0x4a, 1);
-    x.set_a5_u32(0x2c, 0x10000000);
+    x.add8(Obj::STATE, 2);
+    x.set_a5_u8(vars::FROZEN, 1);
+    x.set_a5_u8(vars::PAUSE, 1);
+    x.set_a5_u32(vars::PHASE, 0x10000000);
 }

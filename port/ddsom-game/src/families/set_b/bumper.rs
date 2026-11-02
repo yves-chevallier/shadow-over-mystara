@@ -1,4 +1,9 @@
 use super::*;
+use crate::families::set::tables as set_tables;
+use crate::objects::Obj;
+use crate::player::Player;
+use crate::families::set_b::fields::BumperObj;
+use crate::families::set_b::fields::LaunchedPlayer;
 
 const ANIMS: u32 = 0x1c4738;
 /// RAM word (A5+0x46): occupied trampoline (address of the object).
@@ -53,16 +58,16 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
         if lock != x.o.0 as u16 {
             return;
         }
-        let n = x.u16(0x14).wrapping_sub(1);
-        x.set16(0x14, n);
+        let n = x.u16(BumperObj::LOCK_DELAY).wrapping_sub(1);
+        x.set16(BumperObj::LOCK_DELAY, n);
         if (n as i16) < 0 {
             x.set_a5_u16(LOCK, 0);
         }
     }
-    if x.u8(0x40) != 0 || x.a5_u8(FROZEN) != 0 {
+    if x.u8(Obj::HIDDEN) != 0 || x.a5_u8(FROZEN) != 0 {
         return;
     }
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => init(x),
         2 => watch(x),
         _ => x.free(&pools::SET),
@@ -70,18 +75,18 @@ pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
 }
 
 fn init<R: Bench>(x: &mut Cx<'_, R>) {
-    x.add8(0x4, 2);
-    x.set8(0x2e, BOX_SET);
-    let variant = x.u8(0x3) as u32;
-    let kind = x.rom8(KIND + variant);
-    x.set8(0x42, kind);
-    let px = x.rom16(POSITION + 4 * variant);
-    x.set16(0x8, px);
-    let py = x.rom16(POSITION + 4 * variant + 2);
-    x.set16(0x10, py);
-    x.set16(0xc, 0);
+    x.add8(Obj::STATE, 2);
+    x.set8(BumperObj::BOX_SET, BOX_SET);
+    let variant = x.u8(Obj::VARIANT) as u32;
+    let kind = set_tables::pc_byte(x.b, KIND + variant);
+    x.set8(BumperObj::KIND, kind);
+    let px = set_tables::pc_word(x.b, POSITION + 4 * variant);
+    x.set16(Obj::X, px);
+    let py = set_tables::pc_word(x.b, POSITION + 4 * variant + 2);
+    x.set16(Obj::Y, py);
+    x.set16(Obj::Z, 0);
     x.anim_start(ANIMS, variant as u16);
-    x.set32(0x34, 0);
+    x.set32(BumperObj::PLAYER, 0);
     x.reinsert();
 }
 
@@ -103,8 +108,8 @@ fn watch<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Address of the box of row `selector` of the set `+0x2e` of the table `table`.
 fn box_of<R: Bench>(x: &mut Cx<'_, R>, table: u32, selector: u32) -> u32 {
-    let set = x.u8(0x2e) as u32;
-    let boxes = x.data32(table + 4 * set);
+    let set = x.u8(BumperObj::BOX_SET) as u32;
+    let boxes = set_tables::long(x.b, table + 4 * set);
     boxes.wrapping_add(8 * x.u8(selector) as u32)
 }
 
@@ -120,25 +125,25 @@ fn in_range(delta: u16, half: u8, shift: Option<i8>) -> bool {
 /// The player is in a presence box (box offset by two offset bytes).
 fn within<R: Bench>(x: &mut Cx<'_, R>, p: Obj, table: u32, selector: u32) -> bool {
     let b = box_of(x, table, selector);
-    let dx = p.u16(x.b, pl::X).wrapping_sub(x.u16(0x8));
-    let shift_x = x.data8(b) as i8;
-    let half_x = x.data8(b + 1);
+    let dx = p.u16(x.b, pl::X).wrapping_sub(x.u16(Obj::X));
+    let shift_x = set_tables::byte(x.b, b) as i8;
+    let half_x = set_tables::byte(x.b, b + 1);
     if !in_range(dx, half_x, Some(shift_x)) {
         return false;
     }
-    let dy = p.u16(x.b, pl::Y).wrapping_sub(x.u16(0x10));
-    let shift_y = x.data8(b + 2) as i8;
-    let half_y = x.data8(b + 3);
+    let dy = p.u16(x.b, pl::Y).wrapping_sub(x.u16(Obj::Y));
+    let shift_y = set_tables::byte(x.b, b + 2) as i8;
+    let half_y = set_tables::byte(x.b, b + 3);
     in_range(dy, half_y, Some(shift_y))
 }
 
 /// The player is in the contact box and in a state that allows it.
 fn keys<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
     let b = box_of(x, BOXES_HIT, HIT_SELECTOR);
-    if p.u8(x.b, 5) != 0 || p.u8(x.b, 0x8a) != 0 {
+    if p.u8(x.b, Player::SUB) != 0 || p.u8(x.b, Player::SLOW_8A) != 0 {
         return false;
     }
-    if p.u8(x.b, 6) == 0x22 || p.u16(x.b, pl::STATE) == 0x204 || p.u8(x.b, 6) == 0xe {
+    if p.u8(x.b, Player::ACTION) == 0x22 || p.u16(x.b, pl::STATE) == 0x204 || p.u8(x.b, Player::ACTION) == 0xe {
         return false;
     }
     if p.u16(x.b, pl::HEALTH) == 0 {
@@ -147,17 +152,17 @@ fn keys<R: Bench>(x: &mut Cx<'_, R>, p: Obj) -> bool {
     if p.u32(x.b, pl::STATE) & 0xffff_ff00 == 0x0200_2000 {
         return false;
     }
-    let dx = p.u16(x.b, pl::X).wrapping_sub(x.u16(0x8));
-    if !in_range(dx, x.data8(b + 1), None) {
+    let dx = p.u16(x.b, pl::X).wrapping_sub(x.u16(Obj::X));
+    if !in_range(dx, set_tables::byte(x.b, b + 1), None) {
         return false;
     }
-    let dy = p.u16(x.b, pl::Y).wrapping_sub(x.u16(0x10));
-    in_range(dy, x.data8(b + 3), None)
+    let dy = p.u16(x.b, pl::Y).wrapping_sub(x.u16(Obj::Y));
+    in_range(dy, set_tables::byte(x.b, b + 3), None)
 }
 
 /// Launches the player according to the trampoline kind (`+0x42`).
 fn launch<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
-    let kind = x.u8(0x42) as usize;
+    let kind = x.u8(BumperObj::KIND) as usize;
     if kind >= LAUNCHES.len() {
         return;
     }
@@ -165,20 +170,20 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
         return kick_up(x, p);
     }
     let l = &LAUNCHES[kind];
-    if p.u8(x.b, 0x6e) & 0x20 == 0 || (p.u16(x.b, pl::Z) as i16) > 0 || p.u8(x.b, 0x6c) >> l.button & 1 == 0 {
+    if p.u8(x.b, Player::KEYS_NEW) & 0x20 == 0 || (p.u16(x.b, pl::Z) as i16) > 0 || p.u8(x.b, Player::KEYS_HELD) >> l.button & 1 == 0 {
         return;
     }
     grab(x);
-    p.set_u8(x.b, 0x66, 0);
+    p.set_u8(x.b, Player::SLOW, 0);
     p.set_u32(x.b, pl::Z, l.z);
-    p.set_u16(x.b, 0x16, 0);
-    p.set_u16(x.b, 0x18, 0);
-    p.set_u16(x.b, 0x14, l.vx as u16);
-    p.set_u16(x.b, 0x1c, l.vy as u16);
-    p.set_u16(x.b, 0x1a, 0xffff);
-    p.set_u16(x.b, 0x1e, l.drag as u16);
+    p.set_u16(x.b, LaunchedPlayer::AX, 0);
+    p.set_u16(x.b, LaunchedPlayer::VZ, 0);
+    p.set_u16(x.b, LaunchedPlayer::VX, l.vx as u16);
+    p.set_u16(x.b, LaunchedPlayer::VY, l.vy as u16);
+    p.set_u16(x.b, LaunchedPlayer::AZ, 0xffff);
+    p.set_u16(x.b, LaunchedPlayer::DRAG, l.drag as u16);
     if l.reset_flip {
-        p.set_u8(x.b, 0x2c, 0);
+        p.set_u8(x.b, Player::FACING, 0);
     }
     p.set_u32(x.b, pl::STATE, l.state);
 }
@@ -186,13 +191,13 @@ fn launch<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
 /// Takes the lock and arms the release delay.
 fn grab<R: Bench>(x: &mut Cx<'_, R>) {
     x.set_a5_u16(LOCK, x.o.0 as u16);
-    x.set16(0x14, LOCK_FRAMES);
+    x.set16(BumperObj::LOCK_DELAY, LOCK_FRAMES);
 }
 
 /// Kind 3: pushes a player who presses key 3 and whose height is at least 0x28: the player is moved by 0x28 in
 /// depth and lowered by as much.
 fn kick_up<R: Bench>(x: &mut Cx<'_, R>, p: Obj) {
-    if p.u8(x.b, 0x6c) & 8 == 0 || (p.u16(x.b, pl::Z) as i16) < 0x28 {
+    if p.u8(x.b, Player::KEYS_HELD) & 8 == 0 || (p.u16(x.b, pl::Z) as i16) < 0x28 {
         return;
     }
     grab(x);

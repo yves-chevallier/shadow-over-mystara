@@ -1,4 +1,11 @@
 use super::*;
+use crate::families::set::tables as set_tables;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::player::Player;
+use crate::families::set::fields::SetObj;
+use crate::families::set_b::fields::DialogObj;
+use crate::families::set::fields::PlayerFields;
 
 // --- token output ----------------------------------------------------------------------
 
@@ -28,21 +35,21 @@ impl Out {
 fn command<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, a6: &mut u32, tok: u16) {
     o.put(x, tok);
     if tok == TOK_LINK_A {
-        let w = x.data16(*a6);
+        let w = set_tables::word(x.b, *a6);
         *a6 += 2;
         return o.put(x, w);
     }
     o.put(x, (o.n << 3).wrapping_neg());
     o.n = 0;
     *a6 += 2;
-    let w = x.data16(*a6);
+    let w = set_tables::word(x.b, *a6);
     *a6 += 2;
     o.put(x, w);
 }
 
 /// Reads the next word of the text.
 fn next<R: Bench>(x: &mut Cx<'_, R>, a6: &mut u32) -> u16 {
-    let w = x.data16(*a6);
+    let w = set_tables::word(x.b, *a6);
     *a6 += 2;
     w
 }
@@ -57,7 +64,7 @@ fn plain<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, a6: &mut u32) {
         if (tok as i16) < 0 {
             command(x, o, a6, tok);
         } else if tok == 0x7000 {
-            if x.a5_u8(0x35) != 1 {
+            if x.a5_u8(vars::PLAYERS_ALIVE) != 1 {
                 o.put(x, 0x18f3);
                 o.n += 1;
             }
@@ -72,20 +79,20 @@ fn plain<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, a6: &mut u32) {
 /// >= 0xf9 designate a predefined name of the table 0xd7604.
 fn name<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a1: u32) {
     let mut remaining: u16 = 5;
-    let first = x.data8(a1);
+    let first = set_tables::byte(x.b, a1);
     if first.wrapping_add(1) >= 0xfa {
         let index = (0u8.wrapping_sub(first).wrapping_sub(3)).wrapping_mul(4) as u32;
-        a1 = x.data32(NAME_TABLE + index);
-        remaining = x.data16(a1);
+        a1 = set_tables::long(x.b, NAME_TABLE + index);
+        remaining = set_tables::word(x.b, a1);
         a1 += 2;
     }
     loop {
-        let c = x.data8(a1);
+        let c = set_tables::byte(x.b, a1);
         a1 += 1;
         if c == 0xff {
             return;
         }
-        let tile = x.data16(CHARS + 2 * c as u32);
+        let tile = set_tables::word(x.b, CHARS + 2 * c as u32);
         o.put(x, tile);
         o.n += 1;
         remaining = remaining.wrapping_sub(1);
@@ -99,7 +106,7 @@ fn name<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a1: u32) {
 /// text in the table 0xd7604).
 fn name_category<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a1: u32) {
     let mut remaining: u16 = 5;
-    let first = x.data8(a1);
+    let first = set_tables::byte(x.b, a1);
     if first >= 0x82 {
         let mut d0 = 0u32;
         for probe in [0x88, 0x90, 0x82, 0xa0] {
@@ -108,17 +115,17 @@ fn name_category<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a1: u32) {
             }
             d0 += 4;
         }
-        a1 = x.data32(NAME_TABLE + d0);
-        remaining = x.data16(a1);
+        a1 = set_tables::long(x.b, NAME_TABLE + d0);
+        remaining = set_tables::word(x.b, a1);
         a1 += 2;
     }
     loop {
-        let c = x.data8(a1);
+        let c = set_tables::byte(x.b, a1);
         a1 += 1;
         if c == 0xff {
             return;
         }
-        let tile = x.data16(CHARS + 2 * c as u32);
+        let tile = set_tables::word(x.b, CHARS + 2 * c as u32);
         o.put(x, tile);
         o.n += 1;
         remaining = remaining.wrapping_sub(1);
@@ -143,10 +150,10 @@ fn player_name<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, p: Obj) {
 
 /// Complete block of a kind 1 player (routine 0xd7536): title, name, end.
 fn player_block<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, p: Obj) {
-    let index = ((p.u8(x.b, 3) >> 1).wrapping_mul(4)) as u32;
-    let mut a1 = x.data32(PLAYER_TITLES + index);
+    let index = ((p.u8(x.b, Player::CHARACTER) >> 1).wrapping_mul(4)) as u32;
+    let mut a1 = set_tables::long(x.b, PLAYER_TITLES + index);
     loop {
-        let w = x.data16(a1);
+        let w = set_tables::word(x.b, a1);
         if w == 0 {
             break;
         }
@@ -165,12 +172,12 @@ fn player_block<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, p: Obj) {
 /// the `k`-th entry of the table 0xd7466; kind 0 is handled before).
 pub(super) fn build<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
     let mut o = Out { at: BUFFER, n: 0 };
-    let mut a6 = x.u32(0x24);
+    let mut a6 = x.u32(DialogObj::TEXT);
     match kind {
         2 => {
             copy_palette(x, PALETTE_ALT, 0x91c300);
             for p in players() {
-                if p.u8(x.b, pl::ACTIVE) != 0 && p.u8(x.b, 4) != 4 {
+                if p.u8(x.b, pl::ACTIVE) != 0 && p.u8(x.b, Player::MAIN) != 4 {
                     o.n = 0;
                     player_block(x, &mut o, p);
                 }
@@ -178,20 +185,20 @@ pub(super) fn build<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
             o.end(x);
         }
         3 => {
-            let setting = x.u8(0x34);
+            let setting = x.u8(DialogObj::SETTING);
             let Some(other) = crate::families::effects_creators::vote(x.b, 0, setting) else {
-                x.add8(0x5, 0xfe);
+                x.add8(SetObj::SUBSTATE, 0xfe);
                 return;
             };
-            other.set_u16(x.b, 0x50, x.o.0 as u16);
-            x.set16(0x32, 0xffff);
+            other.set_u16(x.b, DialogObj::WINDOW, x.o.0 as u16);
+            x.set16(DialogObj::WAIT, 0xffff);
             build(x, 1);
         }
         4 => {
             copy_palette(x, PALETTE_ALT, 0x91c300);
-            let mut left = x.a5_u8(0x35);
+            let mut left = x.a5_u8(vars::PLAYERS_ALIVE);
             for p in players() {
-                if p.u8(x.b, pl::ACTIVE) == 0 || (p.u8(x.b, 4) as i8) >= 4 {
+                if p.u8(x.b, pl::ACTIVE) == 0 || (p.u8(x.b, Player::MAIN) as i8) >= 4 {
                     continue;
                 }
                 o.n = 0;
@@ -200,12 +207,12 @@ pub(super) fn build<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
                 if left == 0 {
                     continue;
                 }
-                let sep = x.data16(SEPARATOR);
+                let sep = set_tables::word(x.b, SEPARATOR);
                 o.put(x, sep);
                 o.n += 1;
                 name_tail(x, &mut o);
             }
-            let sep = x.data16(SEPARATOR);
+            let sep = set_tables::word(x.b, SEPARATOR);
             o.put(x, sep);
             o.end(x);
         }
@@ -228,10 +235,10 @@ pub(super) fn build<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
                         continue;
                     }
                 };
-                let index = ((x.a5_u8(0x35).wrapping_sub(1)) as u16).wrapping_mul(4) as u32;
-                let mut a1 = x.data32(table + index);
+                let index = ((x.a5_u8(vars::PLAYERS_ALIVE).wrapping_sub(1)) as u16).wrapping_mul(4) as u32;
+                let mut a1 = set_tables::long(x.b, table + index);
                 loop {
-                    let w = x.data16(a1);
+                    let w = set_tables::word(x.b, a1);
                     if w == 0 {
                         break;
                     }
@@ -251,7 +258,7 @@ pub(super) fn build<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
                 if (tok as i16) < 0 {
                     command(x, &mut o, &mut a6, tok);
                 } else if tok == 0x7003 {
-                    let w = if x.a5_u8(0x35) == 1 { 0x2013 } else { 0x2018 };
+                    let w = if x.a5_u8(vars::PLAYERS_ALIVE) == 1 { 0x2013 } else { 0x2018 };
                     o.put(x, w);
                     o.n += 1;
                 } else {
@@ -262,38 +269,38 @@ pub(super) fn build<R: Bench>(x: &mut Cx<'_, R>, kind: u8) {
             o.end(x);
         }
         10 => build_9(x, &mut o, a6),
-        12 => x.set16(0x32, 0xffff),
+        12 => x.set16(DialogObj::WAIT, 0xffff),
         13 => text_with_name(x, &mut o, a6, 0x7005, false),
         15 => {
-            let a1 = x.u32(0x24);
-            let first = x.data32(a1);
-            x.set32(0x24, first);
-            if x.a5_u8(0x35) != 1 {
-                let second = x.data32(a1 + 4);
-                x.set32(0x24, second);
+            let a1 = x.u32(DialogObj::TEXT);
+            let first = set_tables::long(x.b, a1);
+            x.set32(DialogObj::TEXT, first);
+            if x.a5_u8(vars::PLAYERS_ALIVE) != 1 {
+                let second = set_tables::long(x.b, a1 + 4);
+                x.set32(DialogObj::TEXT, second);
             }
             build(x, 3);
         }
         16 => {
-            x.set8(0x23, 1);
-            let slot = x.linked(0x3a);
-            let v = x.u32(0x24);
-            slot.set_u32(x.b, 0, v);
+            x.set8(DialogObj::PLAYER_TEXT, 1);
+            let slot = x.linked(DialogObj::SLOT);
+            let v = x.u32(DialogObj::TEXT);
+            slot.set_u32(x.b, Obj::ACTIVE, v);
         }
         17 => build_16(x, &mut o, a6),
         18 => {
             build(x, 1);
             if let Ok(child) = crate::effects_aids::scenery_6(x.b, 0x13) {
-                child.set_u16(x.b, 0x46, x.o.0 as u16);
-                let v = x.u8(0x34);
-                child.set_u8(x.b, 0x2f, v);
+                child.set_u16(x.b, SetObj::OWNER, x.o.0 as u16);
+                let v = x.u8(DialogObj::SETTING);
+                child.set_u8(x.b, SetObj::PARAM, v);
             }
         }
         21 => build_20(x, &mut o, a6),
         1 | 5 | 9 | 11 | 14 | 19 | 20 | 22 | 23 => {
             plain(x, &mut o, &mut a6);
             let v = rd16(x.b, BUFFER);
-            x.set16(0x30, v);
+            x.set16(DialogObj::TOKENS, v);
         }
         _ => {}
     }
@@ -324,21 +331,21 @@ fn text_with_name<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a6: u32, special
 fn build_9<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, a6: u32) {
     let mut found = None;
     for p in players() {
-        if p.u8(x.b, pl::ACTIVE) == 0 || (p.u8(x.b, 4) as i8) >= 4 {
+        if p.u8(x.b, pl::ACTIVE) == 0 || (p.u8(x.b, Player::MAIN) as i8) >= 4 {
             continue;
         }
-        if p.u8(x.b, 3) >> 1 == 5 {
+        if p.u8(x.b, Player::CHARACTER) >> 1 == 5 {
             found = Some(p);
             break;
         }
     }
     let Some(player) = found else {
-        let slot = x.linked(0x3a);
-        let v = x.data32(a6);
-        slot.set_u32(x.b, 0, v);
+        let slot = x.linked(DialogObj::SLOT);
+        let v = set_tables::long(x.b, a6);
+        slot.set_u32(x.b, Obj::ACTIVE, v);
         return;
     };
-    let mut a6 = x.data32(a6 + 4);
+    let mut a6 = set_tables::long(x.b, a6 + 4);
     loop {
         let tok = next(x, &mut a6);
         if tok == 0 {
@@ -363,11 +370,11 @@ fn build_16<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a6: u32) {
             // end: looks for a test piece (0xce00a, type 17) to link to this text
             wr16(x.b, o.at, tok);
             if let Ok(created) = crate::families::creators::set_15_pure(x.b, 0x11) {
-                created.set_u16(x.b, 0x46, x.o.0 as u16);
-                let v = x.u16(0x34);
-                created.set_u16(x.b, 0x42, v);
+                created.set_u16(x.b, SetObj::OWNER, x.o.0 as u16);
+                let v = x.u16(DialogObj::SETTING);
+                created.set_u16(x.b, SetObj::ARG, v);
             } else {
-                x.add8(0x5, 0xfe);
+                x.add8(SetObj::SUBSTATE, 0xfe);
             }
             return;
         }
@@ -380,12 +387,12 @@ fn build_16<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a6: u32) {
             o.n += 1;
             continue;
         }
-        let entry = x.rom16(0xd7988 + 2 * (tok - 0x7006) as u32) as u32;
+        let entry = set_tables::pc_word(x.b, 0xd7988 + 2 * (tok - 0x7006) as u32) as u32;
         match 0xd7988 + entry {
             0xd7990 => owner_name(x, o),
             0xd799c => equipped_item(x, o),
             0xd7a72 => {
-                if x.u16(0x46) != 0 {
+                if x.u16(DialogObj::OWNER) != 0 {
                     owner_name(x, o)
                 }
             }
@@ -396,7 +403,7 @@ fn build_16<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a6: u32) {
 
 /// Name of the window's owner (`+0x46`) with its openings (routine 0xd75ba).
 fn owner_name<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out) {
-    let owner = x.linked(0x46);
+    let owner = x.linked(DialogObj::OWNER);
     o.put32(x, NAME_OPEN);
     name(x, o, owner.0 + 0x118);
 }
@@ -404,22 +411,22 @@ fn owner_name<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out) {
 /// First equipped object of the owner that appears in one of the lists of kind 16 (routines 0xd799c, 0xd7a38 and
 /// 0xd7a5c): copies the object's text.
 fn equipped_item<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out) {
-    let owner = x.linked(0x46);
-    let (a, b, c) = if owner.u8(x.b, 3) >> 1 == 0 {
+    let owner = x.linked(DialogObj::OWNER);
+    let (a, b, c) = if owner.u8(x.b, Obj::VARIANT) >> 1 == 0 {
         (0xd7a20, 0xd7a20, 0xd7a26)
     } else {
         (0xd7a2c, 0xd7a2c, 0xd7a32)
     };
-    let mut candidates = vec![(a, owner.u8(x.b, 0x10d)), (b, owner.u8(x.b, 0x10e))];
+    let mut candidates = vec![(a, owner.u8(x.b, Player::WEAPON_A)), (b, owner.u8(x.b, Player::WEAPON_B))];
     for i in 0..6 {
-        candidates.push((c, owner.u8(x.b, 0x140 + i)));
+        candidates.push((c, owner.u8(x.b, PlayerFields::ITEMS + i)));
     }
     for (list, value) in candidates {
         let mut index = None;
         let mut at = list;
         let mut i = 0;
         loop {
-            let e = x.data8(at);
+            let e = set_tables::byte(x.b, at);
             at += 1;
             if (e as i8) < 0 {
                 break;
@@ -431,10 +438,10 @@ fn equipped_item<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out) {
             i += 1;
         }
         if let Some(i) = index {
-            let text = x.rom16(0xd7a48 + 4 * i);
-            let mut text = (text as u32) << 16 | x.rom16(0xd7a48 + 4 * i + 2) as u32;
+            let text = set_tables::pc_word(x.b, 0xd7a48 + 4 * i);
+            let mut text = (text as u32) << 16 | set_tables::pc_word(x.b, 0xd7a48 + 4 * i + 2) as u32;
             loop {
-                let w = x.data16(text);
+                let w = set_tables::word(x.b, text);
                 if w == 0 {
                     return;
                 }
@@ -450,7 +457,7 @@ fn equipped_item<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out) {
 /// skipped in solo or replaced by 0x2003.
 fn build_20<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a6: u32) {
     o.put32(x, 0xfffe_000c);
-    if x.a5_u8(0x50) != 0 && x.a5_u8(0x42) != 0 {
+    if x.a5_u8(vars::EXIT_LOCK) != 0 && x.a5_u8(vars::FROZEN) != 0 {
         o.at -= 4;
         copy_palette(x, 0x292260, 0x91c260);
     }
@@ -462,7 +469,7 @@ fn build_20<R: Bench>(x: &mut Cx<'_, R>, o: &mut Out, mut a6: u32) {
         if (tok as i16) < 0 {
             command(x, o, &mut a6, tok);
         } else if tok == 0x7000 {
-            if x.a5_u8(0x35) != 1 {
+            if x.a5_u8(vars::PLAYERS_ALIVE) != 1 {
                 o.put(x, 0x2003);
                 o.n += 1;
             }

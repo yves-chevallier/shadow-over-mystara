@@ -13,9 +13,16 @@ use crate::objects::Obj;
 use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
+use crate::families::set::vars;
+
+/// Typed views of the SET B objects.
+pub mod fields;
+use crate::player::Player;
+use crate::families::set_b::fields::DoorObj;
+use crate::families::set::fields::PlayerFields;
 
 /// The four player records: A5+0x5de, 0x200 bytes each.
-const PLAYERS: u32 = A5 + 0x5de;
+const PLAYERS: u32 = crate::ram::PLAYERS.base;
 const PLAYER_SIZE: u32 = 0x200;
 
 /// 0xc8312: SET object of the scene, of variant `variant`. Original glitch: the caller does not test the failure and
@@ -49,7 +56,7 @@ fn players() -> impl Iterator<Item = Obj> {
 /// the original leaves (loop counter: `moveq #12,D5`, high word zero; 0xFFFF after the last), a leftover reread by the
 /// handlers (`dispatch::Leftovers`); A1 and D6 of the allocation are reread by nobody.
 pub(crate) fn spawn_bumpers(b: &mut cps2::Cps2Bus) -> u32 {
-    crate::mem::wr16(b, A5 + 0x46, 0);
+    crate::mem::wr16(b, A5 + vars::CAMERA_FOCUS, 0);
     for counter in (0..13u32).rev() {
         let Some(o) = pools::SET.alloc(b) else { return counter };
         o.set_u8(b, Obj::ACTIVE, 1);
@@ -76,9 +83,9 @@ mod ram {
 /// Freezes the game and darkens the screen: `A5+0x490` = 1, `A5+0x48e` = 0xc, `A5+0x48f` = `flag` steps, palettes
 /// whitened (0x1686) then fade task 0x14de (`tasks/fading.rs`).
 fn show_message<R: Bench>(x: &mut Cx<'_, R>, flag: u8) {
-    x.set_a5_u16(0x490, 1);
-    x.set_a5_u8(0x48e, 0xc);
-    x.set_a5_u8(0x48f, flag);
+    x.set_a5_u16(vars::FADE_DELAY, 1);
+    x.set_a5_u8(vars::FADE_PAGES, 0xc);
+    x.set_a5_u8(vars::FADE_STEPS, flag);
     crate::palette::full_brightness(x.b);
     start_fade_task(x, FADE_TO_BLACK_TASK);
 }
@@ -197,22 +204,6 @@ mod idle_hunter;
 // Types 27 and 29: passage doors (h)
 // ---------------------------------------------------------------------------------------------
 
-/// Pools of objects suspended or freed during a door passage: start, size of an object, number of slots.
-pub(super) struct Pool {
-    pub(super) base: u32,
-    pub(super) size: u32,
-    pub(super) count: u32,
-}
-
-pub(super) const SET_POOL: Pool = Pool { base: A5 + 0x4a9e, size: 0x50, count: 32 };
-pub(super) const SOBJ_POOL: Pool = Pool { base: A5 + 0x795e, size: 0x50, count: 16 };
-pub(super) const EFFCT_POOL: Pool = Pool { base: A5 + 0x549e, size: 0x60, count: 38 };
-pub(super) const BOX_POOL: Pool = Pool { base: A5 + 0x6ede, size: 0x80, count: 21 };
-pub(super) const ITEM_POOL: Pool = Pool { base: A5 + 0x62de, size: 0x60, count: 32 };
-pub(super) const ENEMY_POOL: Pool = Pool { base: A5 + 0x299e, size: 0xc0, count: 22 };
-pub(super) const BOSS_POOL: Pool = Pool { base: A5 + 0x3a1e, size: 0xc0, count: 3 };
-pub(super) const ESHL_POOL: Pool = Pool { base: A5 + 0x3c5e, size: 0x60, count: 38 };
-
 /// Fields of a dispatch loop object common to all the pools.
 mod obj {
     pub const SUSPEND: u32 = 0x40;
@@ -230,10 +221,9 @@ pub(super) fn run_on<R: Bench>(x: &mut Cx<'_, R>, other: Obj, run: fn(&mut Cx<'_
 }
 
 /// Suspends the objects of a pool (counter `+0x40` + 1, phase reset to zero).
-pub(super) fn suspend<R: Bench>(x: &mut Cx<'_, R>, pool: &Pool) {
-    for i in 0..pool.count {
-        let o = Obj(pool.base + i * pool.size);
-        if o.u8(x.b, 0) != 0 {
+pub(super) fn suspend<R: Bench>(x: &mut Cx<'_, R>, pool: &pools::Pool) {
+    for o in pool.iter() {
+        if o.u8(x.b, Obj::ACTIVE) != 0 {
             let v = o.u8(x.b, obj::SUSPEND).wrapping_add(1);
             o.set_u8(x.b, obj::SUSPEND, v);
             o.set_u8(x.b, obj::SUSPEND_PHASE, 0);
@@ -242,14 +232,13 @@ pub(super) fn suspend<R: Bench>(x: &mut Cx<'_, R>, pool: &Pool) {
 }
 
 /// Wakes up the objects of a pool; those whose suspension counter becomes negative are deleted (state 6).
-pub(super) fn resume<R: Bench>(x: &mut Cx<'_, R>, pool: &Pool) {
+pub(super) fn resume<R: Bench>(x: &mut Cx<'_, R>, pool: &pools::Pool) {
     resume_with(x, pool, |_, _| ());
 }
 
-pub(super) fn resume_with<'a, R: Bench>(x: &mut Cx<'a, R>, pool: &Pool, mut when_awake: impl FnMut(&mut Cx<'a, R>, Obj)) {
-    for i in 0..pool.count {
-        let o = Obj(pool.base + i * pool.size);
-        if o.u8(x.b, 0) == 0 {
+pub(super) fn resume_with<'a, R: Bench>(x: &mut Cx<'a, R>, pool: &pools::Pool, mut when_awake: impl FnMut(&mut Cx<'a, R>, Obj)) {
+    for o in pool.iter() {
+        if o.u8(x.b, Obj::ACTIVE) == 0 {
             continue;
         }
         let n = o.u8(x.b, obj::SUSPEND).wrapping_sub(1);
@@ -275,15 +264,15 @@ pub(super) fn save_camera<R: Bench>(x: &mut Cx<'_, R>) {
         x.set32(dst, v);
     }
     let v = rd32(x.b, SCROLL_STATE);
-    x.set32(0x4a, v);
-    let v = x.a5_u16(0x57c);
-    x.set16(0x18, v);
-    let v = x.a5_u16(0x51e);
-    x.set16(0x14, v);
+    x.set32(DoorObj::SCROLL_STATE_SAVED, v);
+    let v = x.a5_u16(vars::SCROLL_MODE);
+    x.set16(DoorObj::SCROLL_MODE_SAVED, v);
+    let v = x.a5_u16(vars::SCROLL_STOP);
+    x.set16(DoorObj::SCROLL_STOP_SAVED, v);
     let v = rd8(x.b, STAGE_FLAG);
-    x.set8(0x49, v);
-    let v = x.a5_u16(0x7fc4);
-    x.set16(0x1c, v);
+    x.set8(DoorObj::STAGE_FLAG_SAVED, v);
+    let v = x.a5_u16(vars::MUSIC);
+    x.set16(DoorObj::MUSIC, v);
 }
 
 /// Restores the camera and the scroll stored by `save_camera`.
@@ -292,29 +281,29 @@ pub(super) fn restore_camera<R: Bench>(x: &mut Cx<'_, R>) {
         let v = x.u32(src);
         x.set_a5_u32(dst, v);
     }
-    let v = x.a5_u32(0x506);
-    x.set_a5_u32(0x50e, v);
-    let v = x.a5_u32(0x50a);
-    x.set_a5_u32(0x512, v);
-    let v = x.a5_u16(0x556);
-    x.set_a5_u16(0x55e, v);
-    let v = x.a5_u16(0x55a);
-    x.set_a5_u16(0x562, v);
-    let v = x.a5_u16(0x50e) & !0x1f;
-    x.set_a5_u16(0x50e, v);
-    let v = x.a5_u16(0x55e) & !0x1f;
-    x.set_a5_u16(0x55e, v);
-    let v = x.a5_u16(0x512).wrapping_sub(0x160);
-    x.set_a5_u16(0x512, v);
-    let v = x.a5_u16(0x562).wrapping_sub(0x160);
-    x.set_a5_u16(0x562, v);
-    let v = x.u32(0x4a);
+    let v = x.a5_u32(vars::CAMERA_X);
+    x.set_a5_u32(vars::CAMERA_X_PREV, v);
+    let v = x.a5_u32(vars::CAMERA_Y);
+    x.set_a5_u32(vars::CAMERA_Y_PREV, v);
+    let v = x.a5_u16(vars::CAMERA_ALT_X);
+    x.set_a5_u16(vars::CAMERA_ALT_X_PREV, v);
+    let v = x.a5_u16(vars::CAMERA_ALT_Y);
+    x.set_a5_u16(vars::CAMERA_ALT_Y_PREV, v);
+    let v = x.a5_u16(vars::CAMERA_X_PREV) & !0x1f;
+    x.set_a5_u16(vars::CAMERA_X_PREV, v);
+    let v = x.a5_u16(vars::CAMERA_ALT_X_PREV) & !0x1f;
+    x.set_a5_u16(vars::CAMERA_ALT_X_PREV, v);
+    let v = x.a5_u16(vars::CAMERA_Y_PREV).wrapping_sub(0x160);
+    x.set_a5_u16(vars::CAMERA_Y_PREV, v);
+    let v = x.a5_u16(vars::CAMERA_ALT_Y_PREV).wrapping_sub(0x160);
+    x.set_a5_u16(vars::CAMERA_ALT_Y_PREV, v);
+    let v = x.u32(DoorObj::SCROLL_STATE_SAVED);
     wr32(x.b, SCROLL_STATE, v);
-    let v = x.u16(0x18);
-    x.set_a5_u16(0x57c, v);
-    let v = x.u16(0x14);
-    x.set_a5_u16(0x51e, v);
-    let v = x.u8(0x49);
+    let v = x.u16(DoorObj::SCROLL_MODE_SAVED);
+    x.set_a5_u16(vars::SCROLL_MODE, v);
+    let v = x.u16(DoorObj::SCROLL_STOP_SAVED);
+    x.set_a5_u16(vars::SCROLL_STOP, v);
+    let v = x.u8(DoorObj::STAGE_FLAG_SAVED);
     wr8(x.b, STAGE_FLAG, v);
 }
 
@@ -328,14 +317,14 @@ pub(super) fn reset_players_after_exit<R: Bench>(x: &mut Cx<'_, R>) {
         p.set_u8(x.b, pl::ACTIVE, 1);
         let before = p.u8(x.b, pl::STATE);
         p.set_u32(x.b, pl::STATE, 0);
-        let v = p.u8(x.b, 1) & !2;
-        p.set_u8(x.b, 1, v);
+        let v = p.u8(x.b, Player::FLAGS) & !2;
+        p.set_u8(x.b, Player::FLAGS, v);
         for off in [0x66, 0x15c, 0x8a, 0x10f] {
             p.set_u8(x.b, off, 0);
         }
         if (before as i8) > 2 {
-            let v = p.u8(x.b, 1) | 2;
-            p.set_u8(x.b, 1, v);
+            let v = p.u8(x.b, Player::FLAGS) | 2;
+            p.set_u8(x.b, Player::FLAGS, v);
             p.set_u16(x.b, pl::STATE, 0x402);
         }
     }
@@ -348,12 +337,12 @@ fn release_players<R: Bench>(x: &mut Cx<'_, R>) {
             continue;
         }
         p.set_u8(x.b, pl::ACTIVE, 1);
-        let v = p.u8(x.b, 1) & !2;
-        p.set_u8(x.b, 1, v);
+        let v = p.u8(x.b, Player::FLAGS) & !2;
+        p.set_u8(x.b, Player::FLAGS, v);
         for off in [0x66, 0x15c, 0x8a, 0x10f] {
             p.set_u8(x.b, off, 0);
         }
-        p.set_u8(x.b, 0x7e, 0x20);
+        p.set_u8(x.b, Player::INVULN, 0x20);
     }
 }
 
@@ -361,12 +350,12 @@ fn release_players<R: Bench>(x: &mut Cx<'_, R>) {
 /// (`+0x66`, `+0x15c`, `+0x8a`), key `bit` of `input`, state 2 (walking or stopped), on the ground, within 0x10 in X
 /// and 8 in depth (except `+0x1b`).
 fn at_gate<R: Bench>(x: &mut Cx<'_, R>, p: Obj, input: u32, counter: u32) {
-    let busy = p.u8(x.b, 0x66).wrapping_add(p.u8(x.b, 0x15c)).wrapping_add(p.u8(x.b, 0x8a));
-    let bit = x.u8(0x46) as u32 & 31;
+    let busy = p.u8(x.b, Player::SLOW).wrapping_add(p.u8(x.b, PlayerFields::SPECIAL_ACTIVE)).wrapping_add(p.u8(x.b, Player::SLOW_8A));
+    let bit = x.u8(DoorObj::KEY) as u32 & 31;
     let state = p.u32(x.b, pl::STATE) & 0xffff_ff00;
-    let dx = p.u16(x.b, pl::X).wrapping_sub(x.u16(0x8)).wrapping_add(0x10);
-    let dy = p.u16(x.b, pl::Y).wrapping_sub(x.u16(0x10)).wrapping_add(8);
-    let aligned = dx <= 0x20 && (x.u8(0x1b) != 0 || dy <= 0x10);
+    let dx = p.u16(x.b, pl::X).wrapping_sub(x.u16(Obj::X)).wrapping_add(0x10);
+    let dy = p.u16(x.b, pl::Y).wrapping_sub(x.u16(Obj::Y)).wrapping_add(8);
+    let aligned = dx <= 0x20 && (x.u8(DoorObj::IGNORE_DEPTH) != 0 || dy <= 0x10);
     if busy == 0
         && input >> bit & 1 != 0
         && p.u8(x.b, pl::STATE) == 2

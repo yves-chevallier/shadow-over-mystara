@@ -2,11 +2,15 @@
 
 use crate::families::cx::Bench;
 use super::*;
-use crate::mem::{rd16, rd32, rd8, wr32, A5};
+use crate::mem::{rd16, rd32, rd8, wr32};
 use crate::objects::pools;
+use crate::families::set::tables as set_tables;
+use crate::families::set::vars;
+use crate::objects::Obj;
+use crate::families::set::fields::SetObj;
 
 /// Players: four records of 0x200 bytes.
-const PLAYERS: u32 = A5 + 0x5de;
+const PLAYERS: u32 = crate::ram::PLAYERS.base;
 const PLAYER_STRIDE: u32 = 0x200;
 /// Pause handler of the linked objects (word A5+0x14: activity bits of the background tasks).
 const TASK_FLAGS: u32 = 0x14;
@@ -22,7 +26,7 @@ fn present<R: Bench>(x: &mut Cx<'_, R>, p: u32) -> bool {
 
 /// Releases the object on the next pass: `+4 = 6` and the next three bytes at zero.
 fn retire<R: Bench>(x: &mut Cx<'_, R>) {
-    x.set32(0x4, 0x0600_0000);
+    x.set32(Obj::STATE, 0x0600_0000);
 }
 
 /// RAM address stored on 16 bits (`movea.w`: sign extension).
@@ -51,7 +55,7 @@ fn shake4<R: Bench>(x: &mut Cx<'_, R>, table: u32) {
     let at = table + 8 * (x.u8(0x18) & 3) as u32;
     x.add8(0x18, 1);
     for (i, var) in [a5::CAM_X, a5::CAM_Y, a5::BG_X, a5::BG_Y].into_iter().enumerate() {
-        let d = x.data16(at + 2 * i as u32);
+        let d = set_tables::word(x.b, at + 2 * i as u32);
         let v = x.a5_u16(var).wrapping_add(d);
         x.set_a5_u16(var, v);
     }
@@ -75,7 +79,7 @@ fn mask_tasks<R: Bench>(x: &mut Cx<'_, R>, keep: u16) {
 /// Prepares the list (player, reserve): `+0x30 + 4 i` = player's address, `+0x32 + 4 i` = HP given back
 /// automatically; the base step depends on the score `A5+0x38`, increased (variant 23) by the player's `+0x64`.
 fn refill_setup<R: Bench>(x: &mut Cx<'_, R>, with_player_bonus: bool) {
-    let score = x.a5_u16(0x38) as i16;
+    let score = x.a5_u16(vars::LEVEL_SCORE) as i16;
     let mut step: u16 = 0x14;
     for (limit, add) in [(0x100, 8), (0x130, 4), (0x200, 8), (0x230, 8)] {
         if score <= limit {
@@ -102,7 +106,7 @@ fn refill_setup<R: Bench>(x: &mut Cx<'_, R>, with_player_bonus: bool) {
 fn refill_step<R: Bench>(x: &mut Cx<'_, R>, variant_b: bool) -> bool {
     let mut slot = 0x30;
     let mut gave = 0u8;
-    let count = (x.a5_u8(0x35) as u16).wrapping_sub(1) as u32 + 1;
+    let count = (x.a5_u8(vars::PLAYERS_ALIVE) as u16).wrapping_sub(1) as u32 + 1;
     for _ in 0..count {
         let p = adr16(x.u16(slot));
         let max = rd16(x.b, p + 0x60) as i16;
@@ -129,7 +133,7 @@ fn refill_step<R: Bench>(x: &mut Cx<'_, R>, variant_b: bool) -> bool {
 
 /// Variant 8 (0xcf3a8): end of level, the HP climb back up.
 pub fn hp_refill_a<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
             refill_setup(x, false);
@@ -145,7 +149,7 @@ pub fn hp_refill_a<R: Bench>(x: &mut Cx<'_, R>) {
 
 /// Variant 23 (0xd0932): same with the bonus specific to each player.
 pub fn hp_refill_b<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
             refill_setup(x, true);
@@ -202,15 +206,15 @@ fn characters_present<R: Bench>(x: &mut Cx<'_, R>) -> u32 {
 /// Variant 9 (0xcf476): launches six effects (one per player, then per absent character), notifies the
 /// conductor (`+8 = 1`), waits for the end, then hands control back to it (`+8 = 0xff`).
 pub fn spawn_player_effects<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => {
             next_state(x);
             x.set8(0x30, 0);
             player_effects(x);
         }
-        2 => match x.u8(0x5) {
+        2 => match x.u8(SetObj::SUBSTATE) {
             0 => {
-                if x.a5_u8(0x48f) != 0 {
+                if x.a5_u8(vars::FADE_STEPS) != 0 {
                     return;
                 }
                 handover_step(x, 0)
@@ -240,7 +244,7 @@ fn player_effects<R: Bench>(x: &mut Cx<'_, R>) {
     }
     x.set16(0x42, 0x3c);
     let boss = conductor(x);
-    boss.set_u8(x.b, 8, 1);
+    boss.set_u8(x.b, Obj::X, 1);
 }
 
 /// First phase: after the delay `+0x42`, creates the bonus screen (type 15 variant 0x17).
@@ -255,14 +259,14 @@ fn handover_step<R: Bench>(x: &mut Cx<'_, R>, mark: u8) {
     next_substate(x);
     x.set8(0x30, 1);
     x.set8(0x31, 6);
-    x.set_a5_u8(0x33, 1);
+    x.set_a5_u8(vars::BONUS_SCREEN, 1);
 }
 
 fn handover_step2<R: Bench>(x: &mut Cx<'_, R>) {
     if (x.u8(0x31) as i8) >= 0 {
         return;
     }
-    x.set_a5_u8(0x33, 0);
+    x.set_a5_u8(vars::BONUS_SCREEN, 0);
     next_substate(x);
     x.set16(0x42, 1);
 }
@@ -273,7 +277,7 @@ fn handover_step3<R: Bench>(x: &mut Cx<'_, R>) {
         return;
     }
     let boss = conductor(x);
-    boss.set_u8(x.b, 8, 0xff);
+    boss.set_u8(x.b, Obj::X, 0xff);
     x.set8(0x30, 2);
     next_state(x);
 }
@@ -281,9 +285,9 @@ fn handover_step3<R: Bench>(x: &mut Cx<'_, R>) {
 /// Variant 11 (0xcf6e8): like 9 for state 0; then it waits for the conductor
 /// to go to 2 before launching the bonus screen (`+0x42 = 1`).
 pub fn handover_effects<R: Bench>(x: &mut Cx<'_, R>) {
-    match x.u8(0x4) {
+    match x.u8(Obj::STATE) {
         0 => spawn_player_effects(x),
-        2 => match x.u8(0x5) {
+        2 => match x.u8(SetObj::SUBSTATE) {
             0 => {
                 if conductor(x).u8(x.b, 8) != 2 {
                     return;

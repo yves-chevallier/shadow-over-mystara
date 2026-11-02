@@ -8,6 +8,14 @@ use crate::objects::pools;
 use crate::objects::Current;
 use crate::machine::Machine;
 
+/// The ROM tables that the SET types read (`data/set.json`, `data/dialogs.json`).
+pub(crate) mod tables;
+/// The work RAM variables that the SET types use.
+pub(crate) mod vars;
+/// Typed views of the SET objects of this module.
+pub mod fields;
+
+
 /// Type 8 (0xcc25a), shared by the SET (8), SOBJ (4) and EFFCT (18) tables: scene controller
 /// generator. On the first frame it waits; on the next it creates a SET object of
 /// type 2 (the controller, of variant `+0x2f`) then goes to state 6. In states 4 and 6 it
@@ -21,10 +29,10 @@ mod scene_spawner;
 /// Helpers shared by the types of the SET class.
 mod util {
     use super::*;
-    use crate::mem::{rd16, wr16, A5};
+    use crate::mem::{rd16, wr16};
 
-    /// First player record (A5 + 0x5de), four players spaced 0x200 bytes apart.
-    pub const PLAYERS: u32 = A5 + 0x5de;
+    /// First player record, four players spaced 0x200 bytes apart.
+    pub const PLAYERS: u32 = crate::ram::PLAYERS.base;
     pub const PLAYER_STRIDE: u32 = 0x200;
     /// Fields of a player: active (byte), hit points (word).
     pub const P_ACTIVE: u32 = 0x0;

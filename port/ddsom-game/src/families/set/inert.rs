@@ -1,11 +1,12 @@
 use super::*;
+use crate::objects::Obj;
 
 pub fn run<R: Bench>(x: &mut Cx<'_, R>) {
-    if x.u8(0x40) != 0 {
+    if x.u8(Obj::HIDDEN) != 0 {
         return;
     }
-    match x.u8(0x4) {
-        0 => x.add8(0x4, 2),
+    match x.u8(Obj::STATE) {
+        0 => x.add8(Obj::STATE, 2),
         2 => {}
         _ => x.free(&pools::SET),
     }
