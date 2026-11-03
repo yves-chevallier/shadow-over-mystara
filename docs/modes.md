@@ -125,8 +125,67 @@ Scénarios (`scenarios/modes/`, ≤ 12 000 images, branchés dans `tools/validat
 | `gameover.txt` | début de `bot_char4` : sélection, partie, mort, écran de classement, retour à l'attract |
 | `ending.txt` | saut dans la scène 105 (`tools/gen_modes.py`), boss final affaibli : générique jusqu'à l'état 36 |
 | `ending_end.txt` | comme `ending.txt`, puis saut à l'état 38 : fin du générique, classement |
+| `name_entry_overflow.txt` | saisie du nom après la scène 1 avec la manipulation du débordement des autres révisions (§6) |
 
 Les scénarios par défaut (`bot*`, `mash*`, `boss/`) traversent le démarrage, le titre et la sélection ; `cov_attract_coin`,
 `cov_service`, `cov_gameover_c4` et `cov_mortal_*` le reste. Non réécrits : la tâche des crédits (`0x13c0a`), le menu
 TEST (M1, `0x29162`) et le « Secret Test » (M3), la boucle des phases (`0x1c45a`), et la fin de la phase 28
 au-delà de ce qu'exercent les deux scénarios ci-dessus.
+
+## 6. Saisie du nom : le débordement des autres révisions
+
+**Où.** Le nom (six lettres, tampon `+0x118..+0x11f` du joueur, 0xff = vide) se saisit sur l'écran de bonus de la fin
+de la scène 1 (état partagé `0xf5938`, `scene/bonus.rs`, voir `scenes.md`), seulement pour un joueur dont le tampon
+est vide. Le tableau (SET 5 variante 0) et un curseur par joueur (SET 5 variante non nulle) sont décrits dans
+`familles/set.md` ; code : `families/set/name_entry/`. Compte à rebours : 20 s, reparti de 20 s quand le nombre de
+joueurs actifs change (`+0x17` du tableau), remis à 10 s quand il reste moins de 10 s et qu'un curseur vient
+d'écrire une lettre (`+0x14`), fin quand tous les curseurs ont fini (`+0x16`) ou après 90 s. En Europe (`A5+0x70`
+non nul) la grille est la grille latine (« large ») : lettres sur les lignes 0 à 4, commandes en ligne 4,
+colonnes 3 (valider), 4 (nom par défaut), 5 (effacer) et 6 (fin).
+
+**Le bug connu.** La fiche du jeu de l'International Arcade Museum (KLOV,
+<https://www.arcade-museum.com/Videogame/dungeons-dragons-shadow-over-mystara>) décrit, pour une révision plus
+ancienne : choisir un personnage dont le nom par défaut a six lettres, appuyer sur le bouton du nom (le nom par
+défaut), puis entrer des lettres ; on peut en entrer plus que prévu et l'on écrase les données du personnage et
+son inventaire ; le délai de saisie repart tant qu'on entre des lettres ; selon les lettres on reprend la partie au
+début du niveau suivant, avec de fréquents plantages (« essayez environ 110 M ») ; « corrigé dans la révision
+suivante ». La page n'en dit pas plus (le texte parle aussi d'« effacer » le nom, sans préciser).
+
+**Le mécanisme dans notre code.** Trois routines tiennent la longueur (octet `+0x18` du curseur) :
+* `0xc9c90` (`store_char`) écrit la lettre en `tampon + longueur`, incrémente la longueur et, **seulement si elle
+  vaut alors exactement 6**, verrouille la saisie (octet `+0x19`) et place le curseur sur « fin » ;
+* `0xcab86` (`enter_char`) n'écrit rien tant que `+0x19` est posé ; l'effacement (`0xc9e6a`) décrémente la longueur
+  et lève le verrou ;
+* `0xc9d16` (`load_default_name`) recopie les huit octets du nom par défaut (table `0xc9daa`, `+0x60` en grille
+  large), compte les lettres et, en `0xc9d5c-0xc9d62`, **pose le verrou si le nom a six lettres**
+  (`cmpi.b #6,D1b ; bne ; move.b #1,(0x19,A0)`).
+
+Le nom par défaut est le seul chemin qui porte la longueur à 6 sans passer par le test de `store_char`. Sans les
+trois instructions de `0xc9d5c`, un nom par défaut de six lettres laisserait la saisie ouverte : la lettre suivante
+s'écrirait à l'indice 6, la longueur passerait à 7 et le test « = 6 » ne serait plus jamais vrai ; l'indice (un
+octet) monterait jusqu'à 255 avant de repasser à 0, soit des écritures de `+0x11e` à `+0x217` du joueur :
+inventaire (`+0x140`), pièces portées (`+0x160`), boutique (`+0x16b`)…, puis au-delà de `+0x200` le début de la fiche
+du joueur suivant. Chaque lettre lèverait aussi `+0x21` (lettre écrite), donc remettrait le compte à rebours à 10 s :
+c'est exactement la description (personnage à six lettres, bouton du nom, débordement sur le personnage et son
+inventaire, délai qui repart, une centaine de lettres pour atteindre les zones sensibles). **Hypothèse (h)** : les
+révisions affectées n'ont pas ce test et notre révision (Euro 960619) est corrigée. Elle n'est pas vérifiable ici :
+le dépôt n'a que les ROM de cette révision (aucune autre révision n'est disponible pour comparer le code). Avec ce
+mécanisme, effacer une lettre avant de taper ramène à 5 et la sixième lettre reverrouille : l'« effacement » de la
+description n'est pas nécessaire au débordement (il l'empêcherait), ou désigne autre chose.
+
+Noms par défaut de six lettres, grille large : JARRED (personnage `+3` = 1), HENDEL (7) et MORIAH (10 : le voleur, à trois pas à
+droite du curseur de départ de la sélection) ; grille japonaise : l'entrée 1. Les autres ont cinq lettres ou sont
+un code 0xf9..0xfe (nom long dessiné d'un seul glyphe : longueur 1, saisie bloquée par `+0x1b`).
+
+**Scénario** `scenarios/modes/name_entry_overflow.txt` (12 000 images, branché par `scenarios/modes/`) : d'après
+`scene_end/end_01.txt` (fin forcée de la scène 1, PV entretenus), le joueur 1 choisit le voleur (trois fois droite) ; sur l'écran de
+bonus (curseur actif à l'image 4 223) : haut, quatre fois droite, bouton 1 sur « nom par défaut » (MORIAH, longueur 6,
+verrou, curseur sur « fin »), deux fois bas et cinq fois gauche jusqu'au M, **110 appuis sur le bouton 1** (images
+4 470 à 5 130), bouton 2 (efface le H), bouton 1 (M), bouton 1 sur « fin ».
+
+**Ce que fait notre révision** (relevé par `probe` sur la machine de référence) : les 110 appuis n'écrivent rien
+(tampon `MORIAH`, octets suivants intacts, longueur 6) et ne remettent pas le délai (il continue de 16 à 6 s) ;
+l'effacement ramène à 5 et lève le verrou ; le M donne `MORIAM`, reverrouille, met le curseur sur « fin » et remet le
+délai à 10 s ; le bouton 1 suivant termine la saisie. Le scénario est **VALIDE** : le port fait comme l'original.
+Pas de correction à faire dans cette révision ; reproduire le comportement des anciennes révisions (sauter le verrou
+de `0xc9d5c`) ne se ferait que derrière une option `DDSOM_*`, hors validation, sur décision de l'utilisateur.

@@ -230,6 +230,6 @@ la prime de la scène 31 est commune (le même long est décompté pour chaque j
 * Les scénarios `scene_05`, `07`, `08`, `11`, `67`, `110` et `end_01`, longtemps en écart (`scenarios/ko/README.md`),
   sont VALIDES : leurs écarts venaient d'autres modules (harpie, fenêtres de dialogue, appel de fondu de la porte 29,
   registres du constructeur de sprites) et de comportements indéfinis de l'original (`docs/boucle.md` §9).
-* Non exercé : la phase 24 (aucun scénario n'y entre), la phase 28 (réécrite : `docs/modes.md`), la saisie du nom et le
+* Non exercé : la phase 24 (aucun scénario n'y entre), la phase 28 (réécrite : `docs/modes.md`), le
   générique de fin, et quelques reprises des états partagés (boutique enchaînée, retentatives de création d'objets de
   l'intermède, fin de l'écran de bonus de la scène 1).
